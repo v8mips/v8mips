@@ -459,7 +459,6 @@ class Instruction {
   }
 
   inline int FunctionFieldRaw() const {
-    ASSERT(instrType() == kRegisterType || instrType() == kImmediateType);
     return InstructionBits() & kFunctionFieldMask;
   }
 
