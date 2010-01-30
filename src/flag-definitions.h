@@ -120,7 +120,7 @@ DEFINE_bool(enable_vfp3, true,
 // bootstrapper.cc
 DEFINE_string(expose_natives_as, NULL, "expose natives in global object")
 DEFINE_string(expose_debug_as, NULL, "expose debug in global object")
-DEFINE_string(natives_file, NULL, "alternative natives file")
+DEFINE_string(natives_file, "", "alternative natives file")
 DEFINE_bool(expose_gc, false, "expose gc extension")
 DEFINE_int(stack_trace_limit, 10, "number of stack frames to capture")
 
@@ -218,8 +218,8 @@ DEFINE_bool(allow_natives_syntax, false, "allow natives syntax")
 // rewriter.cc
 DEFINE_bool(optimize_ast, true, "optimize the ast")
 
-// simulator-arm.cc
-DEFINE_bool(trace_sim, false, "trace simulator execution")
+// simulator-arm.cc and simulator-mips.cc
+DEFINE_bool(trace_sim, true, "trace simulator execution")
 DEFINE_int(stop_sim_at, 0, "Simulator stop after x number of instructions")
 
 // top.cc

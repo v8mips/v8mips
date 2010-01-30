@@ -1029,8 +1029,7 @@ MapWord HeapObject::map_word() {
 
 
 void HeapObject::set_map_word(MapWord map_word) {
-  // WRITE_FIELD does not update the remembered set, but there is no need
-  // here.
+  // WRITE_FIELD does not update the remembered set, but there is no need here.
   WRITE_FIELD(this, kMapOffset, reinterpret_cast<Object*>(map_word.value_));
 }
 
