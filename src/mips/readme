@@ -1,0 +1,7 @@
+/*****************************************************************************/
+Comments may indicate references to external documentation. here are the
+acronyms used:
+
+SMRL        See Mips Run Linux (Second Edition), Dominic Sweetman
+MIPS32_IS   MIPS32 Architecture For Programmers, Volume II: The MIPS32 Instruction Set, (Revision 2.61)
+ARM_Ref     ARM Architecture Reference Manual
