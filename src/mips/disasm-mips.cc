@@ -442,6 +442,12 @@ void Decoder::DecodeTypeRegister(Instruction* instr) {
       break;
     case SPECIAL:
       switch (instr->FunctionFieldRaw()) {
+        case JR:
+          Format(instr, "jr   'rs");
+          break;
+        case JALR:
+          Format(instr, "jalr 'rs");
+          break;
         case SLL:
           if ( 0x0 == static_cast<int>(instr->InstructionBits()))
             Format(instr, "nop");
@@ -656,19 +662,6 @@ void Decoder::DecodeTypeImmediate(Instruction* instr) {
 
 void Decoder::DecodeTypeJump(Instruction* instr) {
   switch (instr->OpcodeFieldRaw()) {
-    case SPECIAL:
-      switch (instr->FunctionFieldRaw()) {
-        case JR:
-          Format(instr, "jr   'rs");
-          break;
-        case JALR:
-          Format(instr, "jalr 'rs");
-          break;
-        default:
-          UNREACHABLE();
-          break;
-      }
-      break;
     case J:
       Format(instr, "j    'imm26");
       break;

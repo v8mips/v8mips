@@ -883,6 +883,12 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
   // For break and trap instructions.
   bool do_interrupt = false;
 
+  // For jr and jalr
+  // Get current pc.
+  int32_t current_pc = get_pc();
+  // Next pc
+  int32_t next_pc;
+
   // ---------- Configuration
   switch (op) {
     case COP1:    // Coprocessor instructions
@@ -915,6 +921,10 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
       break;
     case SPECIAL:
       switch (instr->FunctionFieldRaw()) {
+        case JR:
+        case JALR:
+          next_pc = get_register(instr->RsField());
+          break;
         case SLL:
           alu_out = rt << sa;
           break;
@@ -1113,6 +1123,23 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
       break;
     case SPECIAL:
       switch (instr->FunctionFieldRaw()) {
+        case JR: {
+          Instruction* branch_delay_instr = reinterpret_cast<Instruction*>(
+              current_pc+Instruction::kInstructionSize);
+          BranchDelayInstructionDecode(branch_delay_instr);
+          set_pc(next_pc);
+          pc_modified_ = true;
+          break;
+        }
+        case JALR: {
+          Instruction* branch_delay_instr = reinterpret_cast<Instruction*>(
+              current_pc+Instruction::kInstructionSize);
+          BranchDelayInstructionDecode(branch_delay_instr);
+          set_register(31, current_pc + 2* Instruction::kInstructionSize);
+          set_pc(next_pc);
+          pc_modified_ = true;
+          break;
+        }
         // Instructions using HI and LO registers.
         case MULT:
         case MULTU:
@@ -1419,25 +1446,13 @@ void Simulator::DecodeTypeJump(Instruction* instr) {
   // Get unchanged bits of pc.
   int32_t pc_high_bits = current_pc & 0xf0000000;
   // Next pc
-  int32_t next_pc;
-
-  // Compute new pc.
-  switch (instr->OpcodeFieldRaw()) {
-    case SPECIAL:
-      // Jump instructions from the SPECIAL class are JR and JALR.
-      next_pc = get_register(instr->RsField());
-      break;
-    default:
-      next_pc = pc_high_bits | (instr->Imm26Field()<<2);
-      break;
-  };
-
+  int32_t next_pc = pc_high_bits | (instr->Imm26Field()<<2);
 
   // Execute branch delay slot
   // We don't check for end_sim_pc. First it should not be met as the current pc
   // is valid. Secondly a jump should always execute its branch delay slot.
   Instruction* branch_delay_instr =
-      reinterpret_cast<Instruction*>(current_pc+Instruction::kInstructionSize);
+    reinterpret_cast<Instruction*>(current_pc+Instruction::kInstructionSize);
   BranchDelayInstructionDecode(branch_delay_instr);
 
   // Update pc and ra if necessary.

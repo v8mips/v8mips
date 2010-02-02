@@ -232,7 +232,6 @@ Instruction::IType Instruction::instrType() const {
       switch (FunctionFieldRaw()) {
         case JR:
         case JALR:
-          return kJumpType;
         case BREAK:
         case SLL:
         case SRL:
