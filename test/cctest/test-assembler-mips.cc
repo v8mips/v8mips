@@ -181,6 +181,7 @@ TEST(MIPS2) {
   __ sub(v0, v0, t0);   // 0x00001234
   __ Branch(ne, &error, v0, Operand(0x00001234));
   __ nop();
+  __ addu(v1, t3, t0);
   __ Branch(ne, &error, v1, Operand(0x80000003));
   __ nop();
   __ subu(v1, t7, t0);  // 0x7ffffffc
