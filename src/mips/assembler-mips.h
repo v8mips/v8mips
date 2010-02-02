@@ -363,20 +363,6 @@ class Assembler : public Malloced {
 
   void nop() { sll(zero_reg, zero_reg, 0); }
 
-// Define register type instructions.
-#define DEFINE_INSTRUCTION_R_(instr)                                           \
-  void instr(Register rd, Register rs, const Operand& rt);                     \
-  void instr(Register rd, Register rs, Register rt) {                          \
-    instr(rd, rs, Operand(rt));                                                \
-  }
-
-// Define immediate type instructions.
-#define DEFINE_INSTRUCTION_I_(instr)                                           \
-  void instr(Register rs, Register rt, const Operand& j);                      \
-  void instr(Register rs, Register rt, int32_t j) {                            \
-    instr(rs, rt, Operand(j));                                                 \
-  }
-
 
   //------- Branch and jump  instructions --------
   // We don't use likely variant of instructions
@@ -672,9 +658,6 @@ class Assembler : public Malloced {
   friend class RegExpMacroAssemblerMIPS;
   friend class RelocInfo;
 };
-
-#undef DEFINE_INSTRUCTION_R_
-#undef DEFINE_INSTRUCTION_I_
 
 } }  // namespace v8::internal
 

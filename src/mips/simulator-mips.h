@@ -217,11 +217,11 @@ class Simulator {
 
   // Operations depending on endianness.
   // Get Double Higher / Lower word.
-  inline int32_t getDoubleHIW(double* addr);
-  inline int32_t getDoubleLOW(double* addr);
+  inline int32_t GetDoubleHIW(double* addr);
+  inline int32_t GetDoubleLOW(double* addr);
   // Set Double Higher / Lower word.
-  inline int32_t setDoubleHIW(double* addr);
-  inline int32_t setDoubleLOW(double* addr);
+  inline int32_t SetDoubleHIW(double* addr);
+  inline int32_t SetDoubleLOW(double* addr);
 
 
   // Executing is handled based on the instruction type.
@@ -246,9 +246,9 @@ class Simulator {
 
   enum Exception {
     none,
-    integerOverflow,
-    integerUnderflow,
-    divideByZero,
+    kIntegerOverflow,
+    kIntegerUnderflow,
+    kDivideByZero,
     kNumExceptions
   };
   int16_t exceptions[kNumExceptions];
@@ -268,7 +268,7 @@ class Simulator {
   // Registers
   int32_t registers_[kNumSimuRegisters];
   // Coprocessor Registers
-  double FPUregisters_[kNumFPURegisters];
+  int32_t FPUregisters_[kNumFPURegisters];
 
   // simulator support
   char* stack_;

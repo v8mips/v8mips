@@ -1,4 +1,4 @@
-// Copyright 2006-2008 the V8 project authors. All rights reserved.
+// Copyright 2006-2010 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -71,12 +71,12 @@ TEST(MIPS0) {
   InitializeVM();
   v8::HandleScope scope;
 
-  Assembler assm(NULL, 0);
+  MacroAssembler assm(NULL, 0);
 
   // addition
   __ addu(v0, a0, a1);
   __ jr(ra);
-  __ sllv(zero_reg, zero_reg, zero_reg);   // nop
+  __ nop();
 
   CodeDesc desc;
   assm.GetCode(&desc);
@@ -181,9 +181,6 @@ TEST(MIPS2) {
   __ sub(v0, v0, t0);   // 0x00001234
   __ Branch(ne, &error, v0, Operand(0x00001234));
   __ nop();
-  //  __ add(v1, t0, t3);   // overflow
-  //  __ sub(v1, t7, t0);   // underflow
-  __ addu(v1, t3, t0);  // 0x80000003
   __ Branch(ne, &error, v1, Operand(0x80000003));
   __ nop();
   __ subu(v1, t7, t0);  // 0x7ffffffc
@@ -210,7 +207,6 @@ TEST(MIPS2) {
   __ addiu(v0, v0, -0x20);  // 0x00007400
   __ Branch(ne, &error, v0, Operand(0x00007400));
   __ nop();
-  //  __ addi(v0, t3, 0x1);    // overflow
   __ addiu(v1, t3, 0x1);     // 0x80000000
   __ Branch(ne, &error, v1, Operand(0x80000000));
   __ nop();

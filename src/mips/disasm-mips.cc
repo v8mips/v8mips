@@ -253,7 +253,7 @@ void Decoder::PrintCode(Instruction* instr) {
     case BREAK: {
       int32_t code = instr->Bits(25, 6);
       out_buffer_pos_ +=
-        v8i::OS::SNPrintF(out_buffer_ + out_buffer_pos_, "0x%05x", code);
+          v8i::OS::SNPrintF(out_buffer_ + out_buffer_pos_, "0x%05x", code);
       break;
                 }
     case TGE:
@@ -264,11 +264,11 @@ void Decoder::PrintCode(Instruction* instr) {
     case TNE: {
       int32_t code = instr->Bits(15, 6);
       out_buffer_pos_ +=
-        v8i::OS::SNPrintF(out_buffer_ + out_buffer_pos_, "0x%03x", code);
+          v8i::OS::SNPrintF(out_buffer_ + out_buffer_pos_, "0x%03x", code);
       break;
     }
     default:  // Not a break or trap instruction.
-      break;
+    break;
   };
 }
 
@@ -416,12 +416,12 @@ void Decoder::DecodeTypeRegister(Instruction* instr) {
           break;
         case S:
         case D:
-          UNIMPLEMENTED();
+          UNIMPLEMENTED_MIPS();
           break;
         case W:
           switch (instr->FunctionFieldRaw()) {
             case CVT_S_W:
-              UNIMPLEMENTED();
+              UNIMPLEMENTED_MIPS();
               break;
             case CVT_D_W:   // Convert word to double.
               Format(instr, "cvt.d.w  'fd, 'fs");
@@ -432,12 +432,11 @@ void Decoder::DecodeTypeRegister(Instruction* instr) {
           break;
         case L:
         case PS:
-          UNIMPLEMENTED();
+          UNIMPLEMENTED_MIPS();
           break;
           break;
         default:
           UNREACHABLE();
-          break;
       };
       break;
     case SPECIAL:
@@ -546,7 +545,6 @@ void Decoder::DecodeTypeRegister(Instruction* instr) {
           break;
         default:
           UNREACHABLE();
-          break;
       };
       break;
     case SPECIAL2:
@@ -555,12 +553,10 @@ void Decoder::DecodeTypeRegister(Instruction* instr) {
           break;
         default:
           UNREACHABLE();
-          break;
       };
       break;
     default:
       UNREACHABLE();
-      break;
   };
 }
 
@@ -584,7 +580,6 @@ void Decoder::DecodeTypeImmediate(Instruction* instr) {
           break;
         default:
           UNREACHABLE();
-          break;
       };
     break;  // case REGIMM
     // ------------- Branch instructions
@@ -670,7 +665,6 @@ void Decoder::DecodeTypeJump(Instruction* instr) {
       break;
     default:
       UNREACHABLE();
-      break;
   }
 }
 
@@ -682,7 +676,7 @@ int Decoder::InstructionDecode(byte_* instr_ptr) {
   out_buffer_pos_ += v8i::OS::SNPrintF(out_buffer_ + out_buffer_pos_,
                                        "%08x       ",
                                        instr->InstructionBits());
-  switch (instr->instrType()) {
+  switch (instr->InstructionType()) {
     case Instruction::kRegisterType: {
       DecodeTypeRegister(instr);
       break;
@@ -697,7 +691,6 @@ int Decoder::InstructionDecode(byte_* instr_ptr) {
     }
     default: {
       UNSUPPORTED_MIPS();
-      break;
     }
   }
   return Instruction::kInstructionSize;
@@ -767,7 +760,7 @@ int Disassembler::InstructionDecode(v8::internal::Vector<char> buffer,
 
 
 int Disassembler::ConstantPoolSizeAt(byte_* instruction) {
-  UNIMPLEMENTED();
+  UNIMPLEMENTED_MIPS();
   return -1;
 }
 

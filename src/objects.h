@@ -1102,7 +1102,6 @@ class HeapNumber: public HeapObject {
   static const int kExponentOffset = kValueOffset;
 # define BIG_ENDIAN_FLOATING_POINT 1
 #endif
-
   static const int kSize = kValueOffset + kDoubleSize;
   static const uint32_t kSignMask = 0x80000000u;
   static const uint32_t kExponentMask = 0x7ff00000u;

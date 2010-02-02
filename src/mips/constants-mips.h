@@ -31,16 +31,11 @@
 #include "checks.h"
 
 // UNIMPLEMENTED_ macro for MIPS.
-#ifdef DEBUG
 #define UNIMPLEMENTED_MIPS()                                                  \
   v8::internal::PrintF("%s, \tline %d: \tfunction %s not implemented. \n",    \
                        __FILE__, __LINE__, __func__)
 #define UNSUPPORTED_MIPS() v8::internal::PrintF("Unsupported instruction.\n")
 
-#else
-#define UNIMPLEMENTED_MIPS()
-#define UNSUPPORTED_MIPS()
-#endif
 
 // Defines constants and accessor classes to assemble, disassemble and
 // simulate MIPS32 instructions.
@@ -347,7 +342,9 @@ enum FPUCondition {
 
 
 // break 0xfffff, reserved for redirected real time call
-const Instr rtCallRedirInstr = SPECIAL | BREAK | call_rt_redirected<<6;
+const Instr rtCallRedirInstr = SPECIAL | BREAK | call_rt_redirected << 6;
+// A nop instruction. (Encoding of sll 0 0 0)
+const Instr nopInstr = 0;
 
 class Instruction {
  public:
@@ -380,7 +377,7 @@ class Instruction {
   }
 
   // Instruction type.
-  enum IType {
+  enum Type {
     kRegisterType,
     kImmediateType,
     kJumpType,
@@ -388,7 +385,7 @@ class Instruction {
   };
 
   // Get the encoding type of the instruction.
-  IType instrType() const;
+  Type InstructionType() const;
 
 
   // Accessors for the different named fields used in the MIPS encoding.
@@ -401,27 +398,27 @@ class Instruction {
   }
 
   inline int RsField() const {
-    ASSERT(instrType() == kRegisterType || instrType() == kImmediateType);
+    ASSERT(InstructionType() == kRegisterType || InstructionType() == kImmediateType);
     return Bits(kRsShift + kRsBits - 1, kRsShift);
   }
 
   inline int RtField() const {
-    ASSERT(instrType() == kRegisterType || instrType() == kImmediateType);
+    ASSERT(InstructionType() == kRegisterType || InstructionType() == kImmediateType);
     return Bits(kRtShift + kRtBits - 1, kRtShift);
   }
 
   inline int RdField() const {
-    ASSERT(instrType() == kRegisterType);
+    ASSERT(InstructionType() == kRegisterType);
     return Bits(kRdShift + kRdBits - 1, kRdShift);
   }
 
   inline int SaField() const {
-    ASSERT(instrType() == kRegisterType);
+    ASSERT(InstructionType() == kRegisterType);
     return Bits(kSaShift + kSaBits - 1, kSaShift);
   }
 
   inline int FunctionField() const {
-    ASSERT(instrType() == kRegisterType || instrType() == kImmediateType);
+    ASSERT(InstructionType() == kRegisterType || InstructionType() == kImmediateType);
     return Bits(kFunctionShift + kFunctionBits - 1, kFunctionShift);
   }
 
@@ -439,22 +436,22 @@ class Instruction {
   }
 
   inline int RsFieldRaw() const {
-    ASSERT(instrType() == kRegisterType || instrType() == kImmediateType);
+    ASSERT(InstructionType() == kRegisterType || InstructionType() == kImmediateType);
     return InstructionBits() & kRsFieldMask;
   }
 
   inline int RtFieldRaw() const {
-    ASSERT(instrType() == kRegisterType || instrType() == kImmediateType);
+    ASSERT(InstructionType() == kRegisterType || InstructionType() == kImmediateType);
     return InstructionBits() & kRtFieldMask;
   }
 
   inline int RdFieldRaw() const {
-    ASSERT(instrType() == kRegisterType);
+    ASSERT(InstructionType() == kRegisterType);
     return InstructionBits() & kRdFieldMask;
   }
 
   inline int SaFieldRaw() const {
-    ASSERT(instrType() == kRegisterType);
+    ASSERT(InstructionType() == kRegisterType);
     return InstructionBits() & kSaFieldMask;
   }
 
@@ -479,12 +476,12 @@ class Instruction {
   }
 
   inline int32_t Imm16Field() const {
-    ASSERT(instrType() == kImmediateType);
+    ASSERT(InstructionType() == kImmediateType);
     return Bits(kImm16Shift + kImm16Bits - 1, kImm16Shift);
   }
 
   inline int32_t Imm26Field() const {
-    ASSERT(instrType() == kJumpType);
+    ASSERT(InstructionType() == kJumpType);
     return Bits(kImm16Shift + kImm26Bits - 1, kImm26Shift);
   }
 
@@ -516,6 +513,9 @@ static const int kArgsSlotsSize  = 4 * Instruction::kInstructionSize;
 static const int kArgsSlotsNum   = 4;
 
 static const int kBranchReturnOffset = 2 * Instruction::kInstructionSize;
+
+static const int kDoubleAlignment = 2 * 8;
+static const int kDoubleAlignmentMask = kDoubleAlignmentMask - 1;
 
 
 } }   // namespace assembler::mips

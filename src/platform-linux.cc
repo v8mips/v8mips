@@ -748,6 +748,7 @@ static void ProfilerSignalHandler(int signal, siginfo_t* info, void* context) {
 #endif
 #elif V8_HOST_ARCH_MIPS
 // Implement this on MIPS.
+    UNIMPLEMENTED();
 #endif
     if (IsVmThread())
       active_sampler_->SampleStack(&sample);

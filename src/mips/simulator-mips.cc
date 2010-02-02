@@ -50,7 +50,7 @@ using ::v8::internal::ReadLine;
 using ::v8::internal::DeleteArray;
 
 // Utils functions
-bool haveSameSign(int32_t a, int32_t b) {
+bool HaveSameSign(int32_t a, int32_t b) {
   return ((a ^ b) > 0);
 }
 
@@ -598,13 +598,13 @@ void Simulator::set_register(int reg, int32_t value) {
 }
 
 void Simulator::set_fpu_register(int fpureg, int32_t value) {
-  ASSERT((fpureg >= 0) && (fpureg < kNumFPURegisters) && (fpureg%2 == 0));
+  ASSERT((fpureg >= 0) && (fpureg < kNumFPURegisters));
   FPUregisters_[fpureg] = value;
 }
 
 void Simulator::set_fpu_register_double(int fpureg, double value) {
-  ASSERT((fpureg >= 0) && (fpureg < kNumFPURegisters) && (fpureg%2 == 0));
-  *reinterpret_cast<double*>(&FPUregisters_[fpureg]) = value;
+  ASSERT((fpureg >= 0) && (fpureg < kNumFPURegisters) && ((fpureg % 2) == 0));
+  *v8i::bit_cast<double*, int32_t*>(&FPUregisters_[fpureg]) = value;
 }
 
 
@@ -625,8 +625,8 @@ int32_t Simulator::get_fpu_register(int fpureg) const {
 
 double Simulator::get_fpu_register_double(int fpureg) const {
   ASSERT((fpureg >= 0) && (fpureg < kNumFPURegisters) && ((fpureg % 2) == 0));
-  return *reinterpret_cast<double*>(
-      const_cast<double*>(&FPUregisters_[fpureg]));
+  return *v8i::bit_cast<double*, int32_t*>(
+      const_cast<int32_t*>(&FPUregisters_[fpureg]));
 }
 
 // Raw access to the PC register.
@@ -650,7 +650,7 @@ int32_t Simulator::get_pc() const {
 // get the correct MIPS-like behaviour on unaligned accesses.
 
 int Simulator::ReadW(int32_t addr, Instruction* instr) {
-  if ((addr & 3) == 0) {
+  if ((addr & v8i::kPointerAlignmentMask) == 0) {
     intptr_t* ptr = reinterpret_cast<intptr_t*>(addr);
     return *ptr;
   }
@@ -661,7 +661,7 @@ int Simulator::ReadW(int32_t addr, Instruction* instr) {
 
 
 void Simulator::WriteW(int32_t addr, int value, Instruction* instr) {
-  if ((addr & 3) == 0) {
+  if ((addr & v8i::kPointerAlignmentMask) == 0) {
     intptr_t* ptr = reinterpret_cast<intptr_t*>(addr);
     *ptr = value;
     return;
@@ -672,7 +672,7 @@ void Simulator::WriteW(int32_t addr, int value, Instruction* instr) {
 
 
 double Simulator::ReadD(int32_t addr, Instruction* instr) {
-  if ((addr & 3) == 0) {
+  if ((addr & kDoubleAlignmentMask) == 0) {
     double* ptr = reinterpret_cast<double*>(addr);
     return *ptr;
   }
@@ -683,7 +683,7 @@ double Simulator::ReadD(int32_t addr, Instruction* instr) {
 
 
 void Simulator::WriteD(int32_t addr, double value, Instruction* instr) {
-  if ((addr & 3) == 0) {
+  if ((addr & kDoubleAlignmentMask) == 0) {
     double* ptr = reinterpret_cast<double*>(addr);
     *ptr = value;
     return;
@@ -745,7 +745,7 @@ uint32_t Simulator::ReadBU(int32_t addr) {
 
 int32_t Simulator::ReadB(int32_t addr) {
   int8_t* ptr = reinterpret_cast<int8_t*>(addr);
-  return ((*ptr<<24)>>24) & 0xff;
+  return ((*ptr << 24) >> 24) & 0xff;
 }
 
 
@@ -861,15 +861,15 @@ void Simulator::SignalExceptions() {
 // Handle execution based on instruction types.
 void Simulator::DecodeTypeRegister(Instruction* instr) {
   // Instruction fields
-  Opcode  op    = instr->OpcodeFieldRaw();
-  int32_t rs_reg= instr->RsField();
-  int32_t rs    = get_register(rs_reg);
-  uint32_t rs_u  = static_cast<uint32_t>(rs);
-  int32_t rt_reg= instr->RtField();
-  int32_t rt    = get_register(rt_reg);
-  uint32_t rt_u  = static_cast<uint32_t>(rt);
-  int32_t rd_reg= instr->RdField();
-  uint32_t sa   = instr->SaField();
+  Opcode   op     = instr->OpcodeFieldRaw();
+  int32_t  rs_reg = instr->RsField();
+  int32_t  rs     = get_register(rs_reg);
+  uint32_t rs_u   = static_cast<uint32_t>(rs);
+  int32_t  rt_reg = instr->RtField();
+  int32_t  rt     = get_register(rt_reg);
+  uint32_t rt_u   = static_cast<uint32_t>(rt);
+  int32_t  rd_reg = instr->RdField();
+  uint32_t sa     = instr->SaField();
 
   int32_t fs_reg= instr->FsField();
 
@@ -916,7 +916,6 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
           break;
         default:
           UNIMPLEMENTED_MIPS();
-          break;
       };
       break;
     case SPECIAL:
@@ -957,14 +956,14 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
           break;
         case DIV:
         case DIVU:
-            exceptions[divideByZero] = rt == 0;
+            exceptions[kDivideByZero] = rt == 0;
           break;
         case ADD:
-          if (haveSameSign(rs, rt)) {
+          if (HaveSameSign(rs, rt)) {
             if (rs > 0) {
-              exceptions[integerOverflow] = rs > (Registers::kMaxValue - rt);
+              exceptions[kIntegerOverflow] = rs > (Registers::kMaxValue - rt);
             } else if (rs < 0) {
-              exceptions[integerUnderflow] = rs < (Registers::kMinValue - rt);
+              exceptions[kIntegerUnderflow] = rs < (Registers::kMinValue - rt);
             }
           }
           alu_out = rs + rt;
@@ -973,11 +972,11 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
           alu_out = rs + rt;
           break;
         case SUB:
-          if (!haveSameSign(rs, rt)) {
+          if (!HaveSameSign(rs, rt)) {
             if (rs > 0) {
-              exceptions[integerOverflow] = rs > (Registers::kMaxValue + rt);
+              exceptions[kIntegerOverflow] = rs > (Registers::kMaxValue + rt);
             } else if (rs < 0) {
-              exceptions[integerUnderflow] = rs < (Registers::kMinValue + rt);
+              exceptions[kIntegerUnderflow] = rs < (Registers::kMinValue + rt);
             }
           }
           alu_out = rs - rt;
@@ -1027,7 +1026,6 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
           break;
         default:
           UNREACHABLE();
-          break;
       };
       break;
     case SPECIAL2:
@@ -1037,12 +1035,10 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
           break;
         default:
           UNREACHABLE();
-          break;
       }
       break;
     default:
       UNREACHABLE();
-      break;
   };
 
   // ---------- Raise exceptions triggered.
@@ -1118,7 +1114,6 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
           break;
         default:
           UNREACHABLE();
-          break;
       };
       break;
     case SPECIAL:
@@ -1146,12 +1141,12 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
           break;
         case DIV:
           // Divide by zero was checked in the configuration step.
-          set_register(LO, rs/rt);
-          set_register(HI, rs%rt);
+          set_register(LO, rs / rt);
+          set_register(HI, rs % rt);
           break;
         case DIVU:
-          set_register(LO, rs_u/rt_u);
-          set_register(HI, rs_u%rt_u);
+          set_register(LO, rs_u / rt_u);
+          set_register(HI, rs_u % rt_u);
           break;
         // Break and trap instructions
         case BREAK:
@@ -1167,7 +1162,6 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
           break;
         default:  // For other special opcodes we do the default operation.
           set_register(rd_reg, alu_out);
-          break;
       };
       break;
     case SPECIAL2:
@@ -1180,7 +1174,6 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
           break;
         default:
           UNREACHABLE();
-          break;
       }
       break;
     // Unimplemented opcodes raised an error in the configuration step before,
@@ -1188,22 +1181,21 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
     // cases.
     default:
       set_register(rd_reg, alu_out);
-      break;
   };
 }
 
 // Type 2: instructions using a 16 bytes immediate. (eg: addi, beq)
 void Simulator::DecodeTypeImmediate(Instruction* instr) {
   // Instruction fields
-  Opcode  op    = instr->OpcodeFieldRaw();
-  int32_t rs    = get_register(instr->RsField());
-  uint32_t rs_u = static_cast<uint32_t>(rs);
-  int32_t rt_reg= instr->RtField();  // destination register
-  int32_t rt    = get_register(rt_reg);
-  int16_t imm16 = instr->Imm16Field();
+  Opcode   op     = instr->OpcodeFieldRaw();
+  int32_t  rs     = get_register(instr->RsField());
+  uint32_t rs_u   = static_cast<uint32_t>(rs);
+  int32_t  rt_reg = instr->RtField();  // destination register
+  int32_t  rt     = get_register(rt_reg);
+  int16_t  imm16  = instr->Imm16Field();
 
-  int32_t ft_reg= instr->FtField();  // destination register
-  int32_t ft    = get_register(ft_reg);
+  int32_t  ft_reg = instr->FtField();  // destination register
+  int32_t  ft     = get_register(ft_reg);
 
   // zero extended immediate
   uint32_t  oe_imm16 = 0xffff & imm16;
@@ -1237,7 +1229,6 @@ void Simulator::DecodeTypeImmediate(Instruction* instr) {
           break;
         default:
           UNREACHABLE();
-          break;
       };
       break;
     // ------------- REGIMM class
@@ -1267,7 +1258,7 @@ void Simulator::DecodeTypeImmediate(Instruction* instr) {
           execute_branch_delay_instruction = true;
           // Set next_pc
           if (do_branch) {
-            next_pc = current_pc + (imm16<<2) + Instruction::kInstructionSize;
+            next_pc = current_pc + (imm16 << 2) + Instruction::kInstructionSize;
             if (instr->IsLinkingInstruction()) {
               set_register(31, current_pc + kBranchReturnOffset);
             }
@@ -1295,11 +1286,11 @@ void Simulator::DecodeTypeImmediate(Instruction* instr) {
       break;
     // ------------- Arithmetic instructions
     case ADDI:
-      if (haveSameSign(rs, se_imm16)) {
+      if (HaveSameSign(rs, se_imm16)) {
         if (rs > 0) {
-          exceptions[integerOverflow] = rs > (Registers::kMaxValue - se_imm16);
+          exceptions[kIntegerOverflow] = rs > (Registers::kMaxValue - se_imm16);
         } else if (rs < 0) {
-          exceptions[integerUnderflow] = rs < (Registers::kMinValue - se_imm16);
+          exceptions[kIntegerUnderflow] = rs < (Registers::kMinValue - se_imm16);
         }
       }
       alu_out = rs + se_imm16;
@@ -1323,7 +1314,7 @@ void Simulator::DecodeTypeImmediate(Instruction* instr) {
         alu_out = rs ^ oe_imm16;
       break;
     case LUI:
-        alu_out = (oe_imm16<<16);
+        alu_out = (oe_imm16 << 16);
       break;
     // ------------- Memory instructions
     case LB:
@@ -1374,7 +1365,7 @@ void Simulator::DecodeTypeImmediate(Instruction* instr) {
       execute_branch_delay_instruction = true;
       // Set next_pc
       if (do_branch) {
-        next_pc = current_pc + (imm16<<2) + Instruction::kInstructionSize;
+        next_pc = current_pc + (imm16 << 2) + Instruction::kInstructionSize;
         if (instr->IsLinkingInstruction()) {
           set_register(31, current_pc + 2* Instruction::kInstructionSize);
         }
@@ -1446,7 +1437,7 @@ void Simulator::DecodeTypeJump(Instruction* instr) {
   // Get unchanged bits of pc.
   int32_t pc_high_bits = current_pc & 0xf0000000;
   // Next pc
-  int32_t next_pc = pc_high_bits | (instr->Imm26Field()<<2);
+  int32_t next_pc = pc_high_bits | (instr->Imm26Field() << 2);
 
   // Execute branch delay slot
   // We don't check for end_sim_pc. First it should not be met as the current pc
@@ -1477,7 +1468,7 @@ void Simulator::InstructionDecode(Instruction* instr) {
     PrintF("  0x%08x  %s\n", instr, buffer.start());
   }
 
-  switch (instr->instrType()) {
+  switch (instr->InstructionType()) {
     case Instruction::kRegisterType:
       DecodeTypeRegister(instr);
       break;
@@ -1628,6 +1619,7 @@ int32_t Simulator::Call(byte_* entry, int argument_count, ...) {
   int32_t result = get_register(v0);
   return result;
 }
+
 
 uintptr_t Simulator::PushAddress(uintptr_t address) {
   int new_sp = get_register(sp) - sizeof(uintptr_t);

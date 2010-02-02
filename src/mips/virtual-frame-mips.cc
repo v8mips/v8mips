@@ -88,17 +88,17 @@ void VirtualFrame::AllocateStackSlots() {
 
 
 void VirtualFrame::SaveContextRegister() {
-  UNIMPLEMENTED();
+  UNIMPLEMENTED_MIPS();
 }
 
 
 void VirtualFrame::RestoreContextRegister() {
-  UNIMPLEMENTED();
+  UNIMPLEMENTED_MIPS();
 }
 
 
 void VirtualFrame::PushReceiverSlotAddress() {
-  UNIMPLEMENTED();
+  UNIMPLEMENTED_MIPS();
 }
 
 
@@ -108,12 +108,12 @@ int VirtualFrame::InvalidateFrameSlotAt(int index) {
 
 
 void VirtualFrame::TakeFrameSlotAt(int index) {
-  UNIMPLEMENTED();
+  UNIMPLEMENTED_MIPS();
 }
 
 
 void VirtualFrame::StoreToFrameSlotAt(int index) {
-  UNIMPLEMENTED();
+  UNIMPLEMENTED_MIPS();
 }
 
 

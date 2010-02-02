@@ -119,9 +119,6 @@ void MacroAssembler::LoadRoot(Register destination,
 }
 
 
-// Will clobber 4 registers: object, offset, scratch, ip.  The
-// register 'object' contains a heap object pointer.  The heap object
-// tag is shifted away.
 void MacroAssembler::RecordWrite(Register object, Register offset,
                                  Register scratch) {
   UNIMPLEMENTED_MIPS();
@@ -384,7 +381,7 @@ void MacroAssembler::MultiPush(RegList regs) {
 }
 
 
-void MacroAssembler::MultiPush_reversed(RegList regs) {
+void MacroAssembler::MultiPushReversed(RegList regs) {
   int16_t NumSaved = 0;
   int16_t NumToPush = NumberOfBitsSet(regs);
 
@@ -410,7 +407,7 @@ void MacroAssembler::MultiPop(RegList regs) {
 }
 
 
-void MacroAssembler::MultiPop_reversed(RegList regs) {
+void MacroAssembler::MultiPopReversed(RegList regs) {
   int16_t NumSaved = 0;
 
   for (int16_t i = 0; i< kNumRegisters; i++) {

@@ -37,12 +37,12 @@ namespace internal {
 // Result implementation.
 
 void Result::ToRegister() {
-  UNIMPLEMENTED();
+  UNIMPLEMENTED_MIPS();
 }
 
 
 void Result::ToRegister(Register target) {
-  UNIMPLEMENTED();
+  UNIMPLEMENTED_MIPS();
 }
 
 

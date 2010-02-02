@@ -166,7 +166,7 @@ bool StubCompiler::GenerateLoadCallback(JSObject* object,
                                         String* name,
                                         Label* miss,
                                         Failure** failure) {
-  UNIMPLEMENTED();
+  UNIMPLEMENTED_MIPS();
   __ break_(0x470);
   return false;   // UNIMPLEMENTED RETURN
 }
@@ -181,7 +181,7 @@ void StubCompiler::GenerateLoadInterceptor(JSObject* object,
                                            Register scratch2,
                                            String* name,
                                            Label* miss) {
-  UNIMPLEMENTED();
+  UNIMPLEMENTED_MIPS();
   __ break_(0x505);
 }
 
@@ -214,7 +214,7 @@ Object* CallStubCompiler::CompileCallConstant(Object* object,
 Object* CallStubCompiler::CompileCallInterceptor(Object* object,
                                                  JSObject* holder,
                                                  String* name) {
-  UNIMPLEMENTED();
+  UNIMPLEMENTED_MIPS();
   __ break_(0x782);
   return GetCode(INTERCEPTOR, name);
 }
@@ -242,7 +242,7 @@ Object* StoreStubCompiler::CompileStoreField(JSObject* object,
 Object* StoreStubCompiler::CompileStoreCallback(JSObject* object,
                                                 AccessorInfo* callback,
                                                 String* name) {
-  UNIMPLEMENTED();
+  UNIMPLEMENTED_MIPS();
   __ break_(0x906);
   return reinterpret_cast<Object*>(NULL);   // UNIMPLEMENTED RETURN
 }
@@ -250,7 +250,7 @@ Object* StoreStubCompiler::CompileStoreCallback(JSObject* object,
 
 Object* StoreStubCompiler::CompileStoreInterceptor(JSObject* receiver,
                                                    String* name) {
-  UNIMPLEMENTED();
+  UNIMPLEMENTED_MIPS();
   return reinterpret_cast<Object*>(NULL);   // UNIMPLEMENTED RETURN
 }
 
@@ -267,7 +267,7 @@ Object* LoadStubCompiler::CompileLoadField(JSObject* object,
                                            JSObject* holder,
                                            int index,
                                            String* name) {
-  UNIMPLEMENTED();
+  UNIMPLEMENTED_MIPS();
   return reinterpret_cast<Object*>(NULL);   // UNIMPLEMENTED RETURN
 }
 
@@ -276,7 +276,7 @@ Object* LoadStubCompiler::CompileLoadCallback(String* name,
                                               JSObject* object,
                                               JSObject* holder,
                                               AccessorInfo* callback) {
-  UNIMPLEMENTED();
+  UNIMPLEMENTED_MIPS();
   return reinterpret_cast<Object*>(NULL);   // UNIMPLEMENTED RETURN
 }
 
@@ -285,7 +285,7 @@ Object* LoadStubCompiler::CompileLoadConstant(JSObject* object,
                                               JSObject* holder,
                                               Object* value,
                                               String* name) {
-  UNIMPLEMENTED();
+  UNIMPLEMENTED_MIPS();
   return reinterpret_cast<Object*>(NULL);   // UNIMPLEMENTED RETURN
 }
 
@@ -293,7 +293,7 @@ Object* LoadStubCompiler::CompileLoadConstant(JSObject* object,
 Object* LoadStubCompiler::CompileLoadInterceptor(JSObject* object,
                                                  JSObject* holder,
                                                  String* name) {
-  UNIMPLEMENTED();
+  UNIMPLEMENTED_MIPS();
   return reinterpret_cast<Object*>(NULL);   // UNIMPLEMENTED RETURN
 }
 
@@ -350,14 +350,14 @@ Object* KeyedLoadStubCompiler::CompileLoadArrayLength(String* name) {
 
 
 Object* KeyedLoadStubCompiler::CompileLoadStringLength(String* name) {
-  UNIMPLEMENTED();
+  UNIMPLEMENTED_MIPS();
   return reinterpret_cast<Object*>(NULL);   // UNIMPLEMENTED RETURN
 }
 
 
 // TODO(1224671): implement the fast case.
 Object* KeyedLoadStubCompiler::CompileLoadFunctionPrototype(String* name) {
-  UNIMPLEMENTED();
+  UNIMPLEMENTED_MIPS();
   return reinterpret_cast<Object*>(NULL);   // UNIMPLEMENTED RETURN
 }
 
@@ -366,14 +366,14 @@ Object* KeyedStoreStubCompiler::CompileStoreField(JSObject* object,
                                                   int index,
                                                   Map* transition,
                                                   String* name) {
-  UNIMPLEMENTED();
+  UNIMPLEMENTED_MIPS();
   return reinterpret_cast<Object*>(NULL);   // UNIMPLEMENTED RETURN
 }
 
 
 Object* ConstructStubCompiler::CompileConstructStub(
     SharedFunctionInfo* shared) {
-  UNIMPLEMENTED();
+  UNIMPLEMENTED_MIPS();
   return reinterpret_cast<Object*>(NULL);   // UNIMPLEMENTED RETURN
 }
 

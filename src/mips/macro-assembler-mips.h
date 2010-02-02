@@ -205,7 +205,7 @@ class MacroAssembler: public Assembler {
   // |-----------------------|
   // |                       |
   void MultiPush(RegList regs);
-  void MultiPush_reversed(RegList regs);
+  void MultiPushReversed(RegList regs);
   void Push(Register src) {
     Addu(sp, sp, Operand(-kPointerSize));
     sw(src, MemOperand(sp, 0));
@@ -223,7 +223,7 @@ class MacroAssembler: public Assembler {
   // Pops multiple values from the stack and load them in the
   // registers specified in regs. Pop order is the opposite as in MultiPush.
   void MultiPop(RegList regs);
-  void MultiPop_reversed(RegList regs);
+  void MultiPopReversed(RegList regs);
   void Pop(Register dst) {
     lw(dst, MemOperand(sp, 0));
     Addu(sp, sp, Operand(kPointerSize));
@@ -251,6 +251,7 @@ class MacroAssembler: public Assembler {
 
   inline void BranchOnSmi(Register value, Label* smi_label,
                           Register scratch = at) {
+    ASSERT_EQ(0, kSmiTag);
     andi(scratch, value, kSmiTagMask);
     Branch(eq, smi_label, scratch, Operand(zero_reg));
   }
@@ -258,6 +259,7 @@ class MacroAssembler: public Assembler {
 
   inline void BranchOnNotSmi(Register value, Label* not_smi_label,
                              Register scratch = at) {
+    ASSERT_EQ(0, kSmiTag);
     andi(scratch, value, kSmiTagMask);
     Branch(ne, not_smi_label, scratch, Operand(zero_reg));
   }

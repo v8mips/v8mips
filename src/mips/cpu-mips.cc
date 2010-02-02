@@ -48,7 +48,7 @@ void CPU::FlushICache(void* start, size_t size) {
 #ifdef __mips
   int res;
 
-// See http://www.linux-mips.org/wiki/Cacheflush_Syscall
+  // See http://www.linux-mips.org/wiki/Cacheflush_Syscall
   res = syscall(__NR_cacheflush, start, size, ICACHE);
 
   if (res)

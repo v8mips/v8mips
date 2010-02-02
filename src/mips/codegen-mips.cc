@@ -185,7 +185,7 @@ void CodeGenerator::VisitTryFinallyStatement(TryFinallyStatement* node) {
 
 
 void CodeGenerator::VisitDebuggerStatement(DebuggerStatement* node) {
-  UNIMPLEMENTED();
+  UNIMPLEMENTED_MIPS();
 }
 
 
@@ -221,7 +221,7 @@ void CodeGenerator::VisitLiteral(Literal* node) {
 
 
 void CodeGenerator::VisitRegExpLiteral(RegExpLiteral* node) {
-  UNIMPLEMENTED();
+  UNIMPLEMENTED_MIPS();
 }
 
 
@@ -271,7 +271,7 @@ void CodeGenerator::GenerateClassOf(ZoneList<Expression*>* args) {
 
 
 void CodeGenerator::GenerateValueOf(ZoneList<Expression*>* args) {
-  UNIMPLEMENTED();
+  UNIMPLEMENTED_MIPS();
 }
 
 
@@ -286,7 +286,7 @@ void CodeGenerator::GenerateIsSmi(ZoneList<Expression*>* args) {
 
 
 void CodeGenerator::GenerateLog(ZoneList<Expression*>* args) {
-  UNIMPLEMENTED();
+  UNIMPLEMENTED_MIPS();
 }
 
 

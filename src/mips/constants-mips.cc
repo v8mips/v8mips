@@ -226,7 +226,7 @@ bool Instruction::IsTrap() {
 }
 
 
-Instruction::IType Instruction::instrType() const {
+Instruction::Type Instruction::InstructionType() const {
   switch (OpcodeFieldRaw()) {
     case SPECIAL:
       switch (FunctionFieldRaw()) {
