@@ -887,7 +887,7 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
   // Get current pc.
   int32_t current_pc = get_pc();
   // Next pc
-  int32_t next_pc;
+  int32_t next_pc = 0;
 
   // ---------- Configuration
   switch (op) {
