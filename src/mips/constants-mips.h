@@ -398,12 +398,14 @@ class Instruction {
   }
 
   inline int RsField() const {
-    ASSERT(InstructionType() == kRegisterType || InstructionType() == kImmediateType);
+    ASSERT(InstructionType() == kRegisterType ||
+           InstructionType() == kImmediateType);
     return Bits(kRsShift + kRsBits - 1, kRsShift);
   }
 
   inline int RtField() const {
-    ASSERT(InstructionType() == kRegisterType || InstructionType() == kImmediateType);
+    ASSERT(InstructionType() == kRegisterType ||
+           InstructionType() == kImmediateType);
     return Bits(kRtShift + kRtBits - 1, kRtShift);
   }
 
@@ -418,7 +420,8 @@ class Instruction {
   }
 
   inline int FunctionField() const {
-    ASSERT(InstructionType() == kRegisterType || InstructionType() == kImmediateType);
+    ASSERT(InstructionType() == kRegisterType ||
+           InstructionType() == kImmediateType);
     return Bits(kFunctionShift + kFunctionBits - 1, kFunctionShift);
   }
 
@@ -436,12 +439,14 @@ class Instruction {
   }
 
   inline int RsFieldRaw() const {
-    ASSERT(InstructionType() == kRegisterType || InstructionType() == kImmediateType);
+    ASSERT(InstructionType() == kRegisterType ||
+           InstructionType() == kImmediateType);
     return InstructionBits() & kRsFieldMask;
   }
 
   inline int RtFieldRaw() const {
-    ASSERT(InstructionType() == kRegisterType || InstructionType() == kImmediateType);
+    ASSERT(InstructionType() == kRegisterType ||
+           InstructionType() == kImmediateType);
     return InstructionBits() & kRtFieldMask;
   }
 

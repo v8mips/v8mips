@@ -1290,7 +1290,8 @@ void Simulator::DecodeTypeImmediate(Instruction* instr) {
         if (rs > 0) {
           exceptions[kIntegerOverflow] = rs > (Registers::kMaxValue - se_imm16);
         } else if (rs < 0) {
-          exceptions[kIntegerUnderflow] = rs < (Registers::kMinValue - se_imm16);
+          exceptions[kIntegerUnderflow] =
+              rs < (Registers::kMinValue - se_imm16);
         }
       }
       alu_out = rs + se_imm16;

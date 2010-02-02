@@ -70,7 +70,7 @@ void FullCodeGenerator::ApplyTOS(Expression::Context context) {
 void FullCodeGenerator::DropAndApply(int count,
                                      Expression::Context context,
                                      Register reg) {
-
+  UNIMPLEMENTED_MIPS();
 }
 
 

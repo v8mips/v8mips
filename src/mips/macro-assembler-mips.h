@@ -357,7 +357,6 @@ class MacroAssembler: public Assembler {
   // Get the code for the given builtin. Returns if able to resolve
   // the function in the 'resolved' flag.
   Handle<Code> ResolveBuiltin(Builtins::JavaScript id, bool* resolved);
-
 };
 
 
