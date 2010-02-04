@@ -1,4 +1,4 @@
-// Copyright 2006-2010 the V8 project authors. All rights reserved.
+// Copyright 2010 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -29,13 +29,9 @@
 
 #include "disassembler.h"
 #include "factory.h"
+#include "macro-assembler.h"
+#include "mips/macro-assembler-mips.h"
 #include "mips/simulator-mips.h"
-#include "mips/assembler-mips-inl.h"
-// For macro-assembler support
-#include "bootstrapper.h"
-#include "codegen-inl.h"
-#include "debug.h"
-#include "runtime.h"
 
 #include "cctest.h"
 
@@ -51,12 +47,12 @@ typedef Object* (*F3)(void* p, int p1, int p2, int p3, int p4);
 static v8::Persistent<v8::Context> env;
 
 
-// The test framework does not accept flags on the command line, so we set them
+// The test framework does not accept flags on the command line, so we set them.
 static void InitializeVM() {
-  // disable compilation of natives by specifying an empty natives file
+  // Disable compilation of natives by specifying an empty natives file.
   FLAG_natives_file = "";
 
-  // enable generation of comments
+  // Enable generation of comments.
   FLAG_debug_code = true;
 
   if (env.IsEmpty()) {
@@ -73,7 +69,7 @@ TEST(MIPS0) {
 
   MacroAssembler assm(NULL, 0);
 
-  // addition
+  // Addition.
   __ addu(v0, a0, a1);
   __ jr(ra);
   __ nop();
@@ -157,7 +153,7 @@ TEST(MIPS2) {
   __ addiu(t1, t0, 1);
   __ addiu(t2, t1, -0x10);
 
-  // Load values in temporary registers
+  // Load values in temporary registers.
   __ li(t0, 0x00000004);
   __ li(t1, 0x00001234);
   __ li(t2, 0x12345678);
@@ -167,7 +163,7 @@ TEST(MIPS2) {
   __ li(t6, 0xedcba988);
   __ li(t7, 0x80000000);
 
-  ///// SPECIAL class
+  // SPECIAL class.
   __ srl(v0, t2, 8);    // 0x00123456
   __ sll(v0, v0, 11);   // 0x91a2b000
   __ sra(v0, v0, 3);    // 0xf2345600
@@ -201,14 +197,14 @@ TEST(MIPS2) {
   __ sltu(v0, t7, t3);
   __ Branch(ne, &error, v0, Operand(0x0));
   __ nop();
-  ///// end of SPECIAL class
+  // End of SPECIAL class.
 
   __ addi(v0, zero_reg, 0x7421);  // 0x00007421
-  __ addi(v0, v0, -0x1);    // 0x00007420
+  __ addi(v0, v0, -0x1);  // 0x00007420
   __ addiu(v0, v0, -0x20);  // 0x00007400
   __ Branch(ne, &error, v0, Operand(0x00007400));
   __ nop();
-  __ addiu(v1, t3, 0x1);     // 0x80000000
+  __ addiu(v1, t3, 0x1);  // 0x80000000
   __ Branch(ne, &error, v1, Operand(0x80000000));
   __ nop();
 
@@ -222,15 +218,13 @@ TEST(MIPS2) {
   __ nop();
 
   __ andi(v0, t1, 0xf0f0);  // 0x00001030
-  __ ori(v0, v0, 0x8a00);   // 0x00009a30
+  __ ori(v0, v0, 0x8a00);  // 0x00009a30
   __ xori(v0, v0, 0x83cc);  // 0x000019fc
   __ Branch(ne, &error, v0, Operand(0x000019fc));
   __ nop();
-  __ lui(v1, 0x8123);       // 0x81230000
+  __ lui(v1, 0x8123);  // 0x81230000
   __ Branch(ne, &error, v1, Operand(0x81230000));
   __ nop();
-
-
 
   // Everything was correctly executed. Load the expected result.
   __ li(v0, 0x31415926);
@@ -243,7 +237,6 @@ TEST(MIPS2) {
   __ bind(&exit);
   __ jr(ra);
   __ nop();
-
 
   CodeDesc desc;
   assm.GetCode(&desc);
@@ -262,4 +255,3 @@ TEST(MIPS2) {
 }
 
 #undef __
-

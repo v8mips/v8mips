@@ -747,7 +747,7 @@ static void ProfilerSignalHandler(int signal, siginfo_t* info, void* context) {
     sample.fp = reinterpret_cast<Address>(mcontext.arm_fp);
 #endif
 #elif V8_HOST_ARCH_MIPS
-// Implement this on MIPS.
+    // Implement this on MIPS.
     UNIMPLEMENTED();
 #endif
     if (IsVmThread())

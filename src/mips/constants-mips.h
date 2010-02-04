@@ -1,4 +1,4 @@
-// Copyright 2006-2010 the V8 project authors. All rights reserved.
+// Copyright 2010 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -40,28 +40,27 @@
 // Defines constants and accessor classes to assemble, disassemble and
 // simulate MIPS32 instructions.
 //
-// See  MIPS32 Architecture For Programmers
-//     Volume II: The MIPS32 Instruction Set
-// Try www.cs.cornell.edu/courses/cs3410/2008fa/MIPS_Vol2.pdf  .
-// Else e quick Google search and you'll find it.
+// See: MIPS32 Architecture For Programmers
+//      Volume II: The MIPS32 Instruction Set
+// Try www.cs.cornell.edu/courses/cs3410/2008fa/MIPS_Vol2.pdf.
 
 namespace assembler {
 namespace mips {
 
 // -----------------------------------------------------------------------------
-// Registers and FPURegister
+// Registers and FPURegister.
 
-// Number of general purpose registers
+// Number of general purpose registers.
 static const int kNumRegisters = 32;
 static const int kInvalidRegister = -1;
 
 // Number of registers with HI, LO, and pc.
 static const int kNumSimuRegisters = 35;
 
-// In the simulator, the PC register is simulated as the 34th register
+// In the simulator, the PC register is simulated as the 34th register.
 static const int kPCRegister = 34;
 
-// Number coprocessor registers
+// Number coprocessor registers.
 static const int kNumFPURegister = 32;
 static const int kInvalidFPURegister = -1;
 
@@ -117,10 +116,10 @@ typedef int32_t Instr;
 
 typedef unsigned char byte_;
 
-// Special Software Interrupt codes when used in the presence of the ARM
+// Special Software Interrupt codes when used in the presence of the MIPS
 // simulator.
 enum SoftwareInterruptCodes {
-  // transition to C code
+  // Transition to C code.
   call_rt_redirected = 0xfffff
 };
 
@@ -149,7 +148,7 @@ static const int kFtShift       = 16;
 static const int kFtBits        = 5;
 
 // ----- Miscellianous useful masks.
-// Instruction bit masks
+// Instruction bit masks.
 static const int  kOpcodeMask   = ((1 << kOpcodeBits) - 1) << kOpcodeShift;
 static const int  kImm16Mask    = ((1 << kImm16Bits) - 1) << kImm16Shift;
 static const int  kImm26Mask    = ((1 << kImm26Bits) - 1) << kImm26Shift;
@@ -159,15 +158,15 @@ static const int  kRdFieldMask  = ((1 << kRdBits) - 1) << kRdShift;
 static const int  kSaFieldMask  = ((1 << kSaBits) - 1) << kSaShift;
 static const int  kFunctionFieldMask =
     ((1 << kFunctionBits) - 1) << kFunctionShift;
-// Misc masks
+// Misc masks.
 static const int  HIMask        =   0xffff << 16;
 static const int  LOMask        =   0xffff;
 static const int  signMask      =   0x80000000;
 
 
-// ----- MIPS Opcodes and Function Fields
+// ----- MIPS Opcodes and Function Fields.
 // We use this presentation to stay close to the table representation in
-// MIPS32 Architecture For Programmers, Volume II: The MIPS32 Instruction Set
+// MIPS32 Architecture For Programmers, Volume II: The MIPS32 Instruction Set.
 enum Opcode {
   SPECIAL   =   0 << kOpcodeShift,
   REGIMM    =   1 << kOpcodeShift,
@@ -210,7 +209,7 @@ enum Opcode {
 };
 
 enum SecondaryField {
-  // SPECIAL Encoding of Function Field
+  // SPECIAL Encoding of Function Field.
   SLL       =   ((0 << 3) + 0),
   SRL       =   ((0 << 3) + 2),
   SRA       =   ((0 << 3) + 3),
@@ -249,16 +248,16 @@ enum SecondaryField {
   TEQ       =   ((6 << 3) + 4),
   TNE       =   ((6 << 3) + 6),
 
-  // SPECIAL2 Encoding of Function Field
+  // SPECIAL2 Encoding of Function Field.
   MUL       =   ((0 << 3) + 2),
 
-  // REGIMM  encoding of rt Field
+  // REGIMM  encoding of rt Field.
   BLTZ      =   ((0 << 3) + 0) << 16,
   BGEZ      =   ((0 << 3) + 1) << 16,
   BLTZAL    =   ((2 << 3) + 0) << 16,
   BGEZAL    =   ((2 << 3) + 1) << 16,
 
-  // COP1 Encoding of rs Field
+  // COP1 Encoding of rs Field.
   MFC1      =   ((0 << 3) + 0) << 21,
   MFHC1     =   ((0 << 3) + 3) << 21,
   MTC1      =   ((0 << 3) + 4) << 21,
@@ -269,31 +268,31 @@ enum SecondaryField {
   W         =   ((2 << 3) + 4) << 21,
   L         =   ((2 << 3) + 5) << 21,
   PS        =   ((2 << 3) + 6) << 21,
-  // COP1 Encoding of Function Field When rs=S
+  // COP1 Encoding of Function Field When rs=S.
   CVT_D_S   =   ((4 << 3) + 1),
   CVT_W_S   =   ((4 << 3) + 4),
   CVT_L_S   =   ((4 << 3) + 5),
   CVT_PS_S  =   ((4 << 3) + 6),
-  // COP1 Encoding of Function Field When rs=D
+  // COP1 Encoding of Function Field When rs=D.
   CVT_S_D   =   ((4 << 3) + 0),
   CVT_W_D   =   ((4 << 3) + 4),
   CVT_L_D   =   ((4 << 3) + 5),
-  // COP1 Encoding of Function Field When rs=W or L
+  // COP1 Encoding of Function Field When rs=W or L.
   CVT_S_W   =   ((4 << 3) + 0),
   CVT_D_W   =   ((4 << 3) + 1),
   CVT_S_L   =   ((4 << 3) + 0),
   CVT_D_L   =   ((4 << 3) + 1),
-  // COP1 Encoding of Function Field When rs=PS
+  // COP1 Encoding of Function Field When rs=PS.
 
   NULLSF    =   0
 };
 
 
-// ----- Emulated conditions
+// ----- Emulated conditions.
 // On MIPS we use this enum to abstract from conditionnal branch instructions.
 // the 'U' prefix is used to specify unsigned comparisons.
 enum Condition {
-  // any value < 0 is considered no_condition
+  // Any value < 0 is considered no_condition.
   no_condition  = -1,
 
   overflow      =  0,
@@ -328,7 +327,7 @@ enum Condition {
   cc_default    = no_condition
 };
 
-// ----- Coprocessor conditions
+// ----- Coprocessor conditions.
 enum FPUCondition {
   F,    // False
   UN,   // Unordered
@@ -341,9 +340,9 @@ enum FPUCondition {
 };
 
 
-// break 0xfffff, reserved for redirected real time call
+// Break 0xfffff, reserved for redirected real time call.
 const Instr rtCallRedirInstr = SPECIAL | BREAK | call_rt_redirected << 6;
-// A nop instruction. (Encoding of sll 0 0 0)
+// A nop instruction. (Encoding of sll 0 0 0).
 const Instr nopInstr = 0;
 
 class Instruction {
@@ -389,9 +388,6 @@ class Instruction {
 
 
   // Accessors for the different named fields used in the MIPS encoding.
-  // Generally applicable fields
-
-  // Fields used in Data processing instructions
   inline Opcode OpcodeField() const {
     return static_cast<Opcode>(
         Bits(kOpcodeShift + kOpcodeBits - 1, kOpcodeShift));
@@ -492,7 +488,7 @@ class Instruction {
 
   // Say if the instruction should not be used in a branch delay slot.
   bool IsForbiddenInBranchDelay();
-  // Say if the instruction 'links'. eg: jal, bal
+  // Say if the instruction 'links'. eg: jal, bal.
   bool IsLinkingInstruction();
   // Say if the instruction is a break or a trap.
   bool IsTrap();
@@ -512,7 +508,7 @@ class Instruction {
 
 
 // -----------------------------------------------------------------------------
-// MIPS assembly various constants
+// MIPS assembly various constants.
 
 static const int kArgsSlotsSize  = 4 * Instruction::kInstructionSize;
 static const int kArgsSlotsNum   = 4;

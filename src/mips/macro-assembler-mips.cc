@@ -1,4 +1,4 @@
-// Copyright 2006-2008 the V8 project authors. All rights reserved.
+// Copyright 2010 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -371,10 +371,10 @@ void MacroAssembler::MultiPush(RegList regs) {
   int16_t NumSaved = 0;
   int16_t NumToPush = NumberOfBitsSet(regs);
 
-  addiu(sp, sp, -4*NumToPush);
-  for (int16_t i = kNumRegisters; --i >= 0;) {
+  addiu(sp, sp, -4 * NumToPush);
+  for (int16_t i = 0; i < kNumRegisters; i++) {
     if ((regs & (1 << i)) != 0) {
-      sw(ToRegister(i), MemOperand(sp, 4*(NumToPush - ++NumSaved)));
+      sw(ToRegister(i), MemOperand(sp, 4 * (NumToPush - ++NumSaved)));
     }
   }
 }
@@ -384,10 +384,10 @@ void MacroAssembler::MultiPushReversed(RegList regs) {
   int16_t NumSaved = 0;
   int16_t NumToPush = NumberOfBitsSet(regs);
 
-  addiu(sp, sp, -4*NumToPush);
-  for (int16_t i = 0; i < kNumRegisters; i++) {
+  addiu(sp, sp, -4 * NumToPush);
+  for (int16_t i = kNumRegisters; i > 0; i--) {
     if ((regs & (1 << i)) != 0) {
-      sw(ToRegister(i), MemOperand(sp, 4*(NumToPush - ++NumSaved)));
+      sw(ToRegister(i), MemOperand(sp, 4 * (NumToPush - ++NumSaved)));
     }
   }
 }
@@ -396,24 +396,24 @@ void MacroAssembler::MultiPushReversed(RegList regs) {
 void MacroAssembler::MultiPop(RegList regs) {
   int16_t NumSaved = 0;
 
-  for (int16_t i = 0; i< kNumRegisters; i++) {
+  for (int16_t i = kNumRegisters; i > 0; i--) {
     if ((regs & (1 << i)) != 0) {
-      lw(ToRegister(i), MemOperand(sp, 4*(NumSaved++)));
+      lw(ToRegister(i), MemOperand(sp, 4 * (NumSaved++)));
     }
   }
-  addiu(sp, sp, 4*NumSaved);
+  addiu(sp, sp, 4 * NumSaved);
 }
 
 
 void MacroAssembler::MultiPopReversed(RegList regs) {
   int16_t NumSaved = 0;
 
-  for (int16_t i = kNumRegisters; --i >= 0;) {
+  for (int16_t i = 0; i < kNumRegisters; i++) {
     if ((regs & (1 << i)) != 0) {
-      lw(ToRegister(i), MemOperand(sp, 4*(NumSaved++)));
+      lw(ToRegister(i), MemOperand(sp, 4 * (NumSaved++)));
     }
   }
-  addiu(sp, sp, 4*NumSaved);
+  addiu(sp, sp, 4 * NumSaved);
 }
 
 
@@ -422,7 +422,7 @@ void MacroAssembler::MultiPopReversed(RegList regs) {
 // Trashes the at register if no scratch register is provided.
 void MacroAssembler::Branch(Condition cond, int16_t offset, Register rs,
                             const Operand& rt, Register scratch) {
-  Register r2 = no_reg;
+  Register r2;
   if (rt.is_reg()) {
     // We don't want any other register but scratch clobbered.
     ASSERT(!scratch.is(rs) && !scratch.is(rt.rm_));
@@ -489,7 +489,7 @@ void MacroAssembler::Branch(Condition cond, int16_t offset, Register rs,
 
 void MacroAssembler::Branch(Condition cond,  Label* L, Register rs,
                             const Operand& rt, Register scratch) {
-  Register r2 = no_reg;
+  Register r2;
   if (rt.is_reg()) {
     r2 = rt.rm_;
   } else if (cond != cc_always) {
@@ -559,7 +559,7 @@ void MacroAssembler::Branch(Condition cond,  Label* L, Register rs,
 // cases, so we keep slt and add an intermediate third instruction.
 void MacroAssembler::BranchAndLink(Condition cond, int16_t offset, Register rs,
                                    const Operand& rt, Register scratch) {
-  Register r2 = no_reg;
+  Register r2;
   if (rt.is_reg()) {
     r2 = rt.rm_;
   } else if (cond != cc_always) {
@@ -634,7 +634,7 @@ void MacroAssembler::BranchAndLink(Condition cond, int16_t offset, Register rs,
 
 void MacroAssembler::BranchAndLink(Condition cond, Label* L, Register rs,
                                    const Operand& rt, Register scratch) {
-  Register r2 = no_reg;
+  Register r2;
   if (rt.is_reg()) {
     r2 = rt.rm_;
   } else if (cond != cc_always) {

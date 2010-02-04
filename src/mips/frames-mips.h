@@ -1,4 +1,4 @@
-// Copyright 2006-2010 the V8 project authors. All rights reserved.
+// Copyright 2010 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -34,8 +34,9 @@
 namespace v8 {
 namespace internal {
 
-// Register lists
-// Note that the bit values must match those used in actual instruction encoding
+// Register lists.
+// Note that the bit values must match those used in actual instruction
+// encoding.
 static const int kNumRegs = 32;
 
 static const RegList kJSCallerSaved =
@@ -48,13 +49,13 @@ static const int kNumJSCallerSaved = 4;
 
 
 // Return the code of the n-th caller-saved register available to JavaScript
-// e.g. JSCallerSavedReg(0) returns r0.code() == 0
+// e.g. JSCallerSavedReg(0) returns r0.code() == 0.
 int JSCallerSavedCode(int n);
 
 
-// Callee-saved registers preserved when switching from C to JavaScript
+// Callee-saved registers preserved when switching from C to JavaScript.
 static const RegList kCalleeSaved =
-  // Saved temporaries
+  // Saved temporaries.
   1 << 16 | 1 << 17 | 1 << 18 | 1 << 19 |
   1 << 20 | 1 << 21 | 1 << 22 | 1 << 23 |
   // gp, sp, fp
@@ -121,9 +122,9 @@ class StandardFrameConstants : public AllStatic {
   static const int kRArgsSlotsSize = 4 * kPointerSize;
   static const int kRegularArgsSlotsSize = kRArgsSlotsSize;
 
-  // C/C++ argument slots size
+  // C/C++ argument slots size.
   static const int kCArgsSlotsSize = 4 * kPointerSize;
-  // JS argument slots size
+  // JS argument slots size.
   static const int kJSArgsSlotsSize = 0 * kPointerSize;
 };
 
@@ -161,4 +162,3 @@ inline Object* JavaScriptFrame::function_slot_object() const {
 } }  // namespace v8::internal
 
 #endif
-

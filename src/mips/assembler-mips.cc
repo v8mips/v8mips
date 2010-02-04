@@ -30,7 +30,7 @@
 
 // The original source code covered by the above license above has been
 // modified significantly by Google Inc.
-// Copyright 2006-2010 the V8 project authors. All rights reserved.
+// Copyright 2010 the V8 project authors. All rights reserved.
 
 
 #include "v8.h"
@@ -174,7 +174,7 @@ Register ToRegister(int num) {
 
 
 // -----------------------------------------------------------------------------
-// Implementation of RelocInfo
+// Implementation of RelocInfo.
 
 const int RelocInfo::kApplyMask = 0;
 
@@ -200,8 +200,8 @@ void RelocInfo::PatchCodeWithCall(Address target, int guard_bytes) {
 
 
 // -----------------------------------------------------------------------------
-// Implementation of Operand and MemOperand
-// See assembler-mips-inl.h for inlined constructors
+// Implementation of Operand and MemOperand.
+// See assembler-mips-inl.h for inlined constructors.
 
 Operand::Operand(Handle<Object> handle) {
   rm_ = no_reg;
@@ -212,7 +212,7 @@ Operand::Operand(Handle<Object> handle) {
     imm32_ = reinterpret_cast<intptr_t>(handle.location());
     rmode_ = RelocInfo::EMBEDDED_OBJECT;
   } else {
-    // no relocation needed
+    // No relocation needed.
     imm32_ = reinterpret_cast<intptr_t>(obj);
     rmode_ = RelocInfo::NONE;
   }
@@ -224,14 +224,14 @@ MemOperand::MemOperand(Register rm, int16_t offset) : Operand(rm) {
 
 
 // -----------------------------------------------------------------------------
-// Implementation of Assembler
+// Implementation of Assembler.
 
 static const int kMinimalBufferSize = 4*KB;
 static byte* spare_buffer_ = NULL;
 
 Assembler::Assembler(void* buffer, int buffer_size) {
   if (buffer == NULL) {
-    // do our own buffer management
+    // Do our own buffer management.
     if (buffer_size <= kMinimalBufferSize) {
       buffer_size = kMinimalBufferSize;
 
@@ -249,14 +249,14 @@ Assembler::Assembler(void* buffer, int buffer_size) {
     own_buffer_ = true;
 
   } else {
-    // use externally provided buffer instead
+    // Use externally provided buffer instead.
     ASSERT(buffer_size > 0);
     buffer_ = static_cast<byte*>(buffer);
     buffer_size_ = buffer_size;
     own_buffer_ = false;
   }
 
-  // setup buffer pointers
+  // Setup buffer pointers.
   ASSERT(buffer_ != NULL);
   pc_ = buffer_;
   reloc_info_writer.Reposition(buffer_ + buffer_size, pc_);
@@ -280,7 +280,7 @@ Assembler::~Assembler() {
 
 void Assembler::GetCode(CodeDesc* desc) {
   ASSERT(pc_ <= reloc_info_writer.pos());  // no overlap
-  // setup desc
+  // Setup code descriptor.
   desc->buffer = buffer_;
   desc->buffer_size = buffer_size_;
   desc->instr_size = pc_offset();
@@ -307,19 +307,17 @@ bool Assembler::is_branch(Instr instr) {
   uint32_t rt_field = ((instr & kRtFieldMask));
   uint32_t rs_field = ((instr & kRsFieldMask));
   // Checks if the instruction is a branch.
-  return    opcode == BEQ
-         || opcode == BNE
-         || opcode == BLEZ
-         || opcode == BGTZ
-         || opcode == BEQL
-         || opcode == BNEL
-         || opcode == BLEZL
-         || opcode == BGTZL
-         || (opcode == REGIMM &&  (rt_field == BLTZ
-                                || rt_field == BGEZ
-                                || rt_field == BLTZAL
-                                || rt_field == BGEZAL))
-         || (opcode == COP1 && rs_field == BC1);    // Coprocessor branch
+  return opcode == BEQ ||
+      opcode == BNE ||
+      opcode == BLEZ ||
+      opcode == BGTZ ||
+      opcode == BEQL ||
+      opcode == BNEL ||
+      opcode == BLEZL ||
+      opcode == BGTZL||
+      (opcode == REGIMM && (rt_field == BLTZ || rt_field == BGEZ ||
+                            rt_field == BLTZAL || rt_field == BGEZAL)) ||
+      (opcode == COP1 && rs_field == BC1);  // Coprocessor branch.
 }
 
 
@@ -333,7 +331,8 @@ int Assembler::target_at(int32_t pos) {
   ASSERT(is_branch(instr));
   // Do NOT change this to <<2. We rely on arithmetic shifts here, assuming
   // the compiler uses arithmectic shifts for signed integers.
-  int32_t imm18 = (((int32_t)instr & (int32_t)kImm16Mask) << 16) >> 14;
+  int32_t imm18 = ((instr &
+                    static_cast<int32_t>(kImm16Mask)) << 16) >> 14;
 
   return pos + kBranchPCOffset + imm18;
 }
@@ -404,7 +403,7 @@ void Assembler::bind_to(Label* L, int pos) {
 void Assembler::link_to(Label* L, Label* appendix) {
   if (appendix->is_linked()) {
     if (L->is_linked()) {
-      // append appendix to L's list
+      // Append appendix to L's list.
       int fixup_pos;
       int link = L->pos();
       do {
@@ -462,7 +461,7 @@ void Assembler::GenInstrRegister(Opcode opcode,
                                  SecondaryField func) {
   ASSERT(rd.is_valid() && rs.is_valid() && rt.is_valid() && is_uint5(sa));
   Instr instr = opcode | (rs.code() << kRsShift) | (rt.code() << kRtShift)
-                       | (rd.code() << kRdShift) | (sa << kSaShift) | func;
+      | (rd.code() << kRdShift) | (sa << kSaShift) | func;
   emit(instr);
 }
 
@@ -475,7 +474,7 @@ void Assembler::GenInstrRegister(Opcode opcode,
                                  SecondaryField func) {
   ASSERT(fd.is_valid() && fs.is_valid() && ft.is_valid());
   Instr instr = opcode | fmt | (ft.code() << 16) | (fs.code() << kFsShift)
-                             | (fd.code() << 6)   | func;
+      | (fd.code() << 6) | func;
   emit(instr);
 }
 
@@ -487,21 +486,21 @@ void Assembler::GenInstrRegister(Opcode opcode,
                                  FPURegister fd,
                                  SecondaryField func) {
   ASSERT(fd.is_valid() && fs.is_valid() && rt.is_valid());
-  Instr instr = opcode | fmt | (rt.code() << kRtShift) | (fs.code() << kFsShift)
-                             | (fd.code() << 6)   | func;
+  Instr instr = opcode | fmt | (rt.code() << kRtShift)
+      | (fs.code() << kFsShift) | (fd.code() << 6) | func;
   emit(instr);
 }
 
 
-// Instructions with immediate value
+// Instructions with immediate value.
 // Registers are in the order of the instruction encoding, from left to right.
 void Assembler::GenInstrImmediate(Opcode opcode,
                                   Register rs,
                                   Register rt,
                                   int32_t j) {
   ASSERT(rs.is_valid() && rt.is_valid() && (is_int16(j) || is_uint16(j)));
-  Instr instr = opcode | (rs.code() << kRsShift)
-                       | (rt.code() << kRtShift) | (j & kImm16Mask);
+  Instr instr = opcode | (rs.code() << kRsShift) | (rt.code() << kRtShift)
+      | (j & kImm16Mask);
   emit(instr);
 }
 
@@ -521,8 +520,8 @@ void Assembler::GenInstrImmediate(Opcode opcode,
                                   FPURegister ft,
                                   int32_t j) {
   ASSERT(rs.is_valid() && ft.is_valid() && (is_int16(j) || is_uint16(j)));
-  Instr instr = opcode | (rs.code() << kRsShift)
-                       | (ft.code() << kFtShift) | (j & kImm16Mask);
+  Instr instr = opcode | (rs.code() << kRsShift) | (ft.code() << kFtShift)
+      | (j & kImm16Mask);
   emit(instr);
 }
 
@@ -646,7 +645,7 @@ void Assembler::jalr(Register rs, Register rd) {
 
 //-------Data-processing-instructions---------
 
-// Arithmetic
+// Arithmetic.
 
 void Assembler::add(Register rd, Register rs, Register rt) {
   GenInstrRegister(SPECIAL, rs, rt, rd, 0, ADD);
@@ -703,7 +702,7 @@ void Assembler::divu(Register rs, Register rt) {
 }
 
 
-// Logical
+// Logical.
 
 void Assembler::and_(Register rd, Register rs, Register rt) {
   GenInstrRegister(SPECIAL, rs, rt, rd, 0, AND);
@@ -740,7 +739,7 @@ void Assembler::nor(Register rd, Register rs, Register rt) {
 }
 
 
-// Shifts
+// Shifts.
 void Assembler::sll(Register rd, Register rt, uint16_t sa) {
   GenInstrRegister(SPECIAL, zero_reg, rt, rd, sa, SLL);
 }
@@ -805,7 +804,7 @@ void Assembler::lui(Register rd, int32_t j) {
 
 //-------------Misc-instructions--------------
 
-// Break / Trap instructions
+// Break / Trap instructions.
 void Assembler::break_(uint32_t code) {
   ASSERT((code & ~0xfffff) == 0);
   Instr break_instr = SPECIAL | BREAK | (code << 6);
@@ -839,8 +838,8 @@ void Assembler::tlt(Register rs, Register rt, uint16_t code) {
 
 void Assembler::tltu(Register rs, Register rt, uint16_t code) {
   ASSERT(is_uint10(code));
-  Instr instr = SPECIAL | TLTU | rs.code() << kRsShift |
-      rt.code() << kRtShift | code << 6;
+  Instr instr = SPECIAL | TLTU | rs.code() << kRsShift
+      | rt.code() << kRtShift | code << 6;
   emit(instr);
 }
 
@@ -861,7 +860,7 @@ void Assembler::tne(Register rs, Register rt, uint16_t code) {
 }
 
 
-// Move from HI/LO register
+// Move from HI/LO register.
 
 void Assembler::mfhi(Register rd) {
   GenInstrRegister(SPECIAL, zero_reg, zero_reg, rd, 0, MFHI);
@@ -873,7 +872,7 @@ void Assembler::mflo(Register rd) {
 }
 
 
-// Set on less than instructions
+// Set on less than instructions.
 void Assembler::slt(Register rd, Register rs, Register rt) {
   GenInstrRegister(SPECIAL, rs, rt, rd, 0, SLT);
 }
@@ -896,7 +895,7 @@ void Assembler::sltiu(Register rt, Register rs, int32_t j) {
 
 //--------Coprocessor-instructions----------------
 
-// Load, store, move
+// Load, store, move.
 void Assembler::lwc1(FPURegister fd, const MemOperand& src) {
   GenInstrImmediate(LWC1, src.rm(), fd, src.offset_);
 }
@@ -937,7 +936,7 @@ void Assembler::mfhc1(FPURegister fs, Register rt) {
 }
 
 
-// Conversions
+// Conversions.
 
 void Assembler::cvt_w_s(FPURegister fd, FPURegister fs) {
   GenInstrRegister(COP1, S, f0, fs, fd, CVT_W_S);
@@ -989,13 +988,13 @@ void Assembler::cvt_d_s(FPURegister fd, FPURegister fs) {
 }
 
 
-// Conditions
+// Conditions.
 void Assembler::c(FPUCondition cond, SecondaryField fmt,
     FPURegister ft, FPURegister fs, uint16_t cc) {
   ASSERT(is_uint3(cc));
   ASSERT((fmt & ~(31 << kRsShift)) == 0);
-  Instr instr = COP1 | fmt | ft.code() << 16 | fs.code() << kFsShift |
-    cc << 8 | 3 << 4 | cond;
+  Instr instr = COP1 | fmt | ft.code() << 16 | fs.code() << kFsShift
+      | cc << 8 | 3 << 4 | cond;
   emit(instr);
 }
 
@@ -1014,7 +1013,7 @@ void Assembler::bc1t(int16_t offset, uint16_t cc) {
 }
 
 
-// Debugging
+// Debugging.
 void Assembler::RecordJSReturn() {
   WriteRecordedPositions();
   CheckBuffer();
@@ -1067,7 +1066,7 @@ void Assembler::WriteRecordedPositions() {
 void Assembler::GrowBuffer() {
   if (!own_buffer_) FATAL("external code buffer is too small");
 
-  // compute new buffer size
+  // Compute new buffer size.
   CodeDesc desc;  // the new buffer
   if (buffer_size_ < 4*KB) {
     desc.buffer_size = 4*KB;
@@ -1078,20 +1077,20 @@ void Assembler::GrowBuffer() {
   }
   CHECK_GT(desc.buffer_size, 0);  // no overflow
 
-  // setup new buffer
+  // Setup new buffer.
   desc.buffer = NewArray<byte>(desc.buffer_size);
 
   desc.instr_size = pc_offset();
   desc.reloc_size = (buffer_ + buffer_size_) - reloc_info_writer.pos();
 
-  // copy the data
+  // Copy the data.
   int pc_delta = desc.buffer - buffer_;
   int rc_delta = (desc.buffer + desc.buffer_size) - (buffer_ + buffer_size_);
   memmove(desc.buffer, buffer_, desc.instr_size);
   memmove(reloc_info_writer.pos() + rc_delta,
           reloc_info_writer.pos(), desc.reloc_size);
 
-  // switch buffers
+  // Switch buffers.
   DeleteArray(buffer_);
   buffer_ = desc.buffer;
   buffer_size_ = desc.buffer_size;
@@ -1100,7 +1099,7 @@ void Assembler::GrowBuffer() {
                                reloc_info_writer.last_pc() + pc_delta);
 
 
-  // On ia32 or ARM pc relative addressing is used, and we thus need to apply a
+  // On ia32 and ARM pc relative addressing is used, and we thus need to apply a
   // shift by pc_delta. But on MIPS the target address it directly loaded, so
   // we do not need to relocate here.
 
@@ -1111,11 +1110,11 @@ void Assembler::GrowBuffer() {
 void Assembler::RecordRelocInfo(RelocInfo::Mode rmode, intptr_t data) {
   RelocInfo rinfo(pc_, rmode, data);  // we do not try to reuse pool constants
   if (rmode >= RelocInfo::JS_RETURN && rmode <= RelocInfo::STATEMENT_POSITION) {
-    // Adjust code for new modes
+    // Adjust code for new modes.
     ASSERT(RelocInfo::IsJSReturn(rmode)
            || RelocInfo::IsComment(rmode)
            || RelocInfo::IsPosition(rmode));
-    // these modes do not need an entry in the constant pool
+    // These modes do not need an entry in the constant pool.
   }
   if (rinfo.rmode() != RelocInfo::NONE) {
     // Don't record external references unless the heap will be serialized.
@@ -1136,7 +1135,7 @@ Address Assembler::target_address_at(Address pc) {
   // Check we have 2 instructions generated by li.
   ASSERT(((instr1 & kOpcodeMask) == LUI && (instr2 & kOpcodeMask) == ORI) ||
          ((instr1 == nopInstr) && ((instr2 & kOpcodeMask) == ADDI ||
-                            (instr2 & kOpcodeMask) == ORI  ||
+                            (instr2 & kOpcodeMask) == ORI ||
                             (instr2 & kOpcodeMask) == LUI)));
   // Interpret these 2 instructions.
   if (instr1 == nopInstr) {
@@ -1162,15 +1161,15 @@ Address Assembler::target_address_at(Address pc) {
 void Assembler::set_target_address_at(Address pc, Address target) {
   // On MIPS we need to patch the code to generate.
 
-  // First check we have a li
+  // First check we have a li.
   Instr instr2 = instr_at(pc + kInstrSize);
 #ifdef DEBUG
   Instr instr1 = instr_at(pc);
 
   // Check we have indeed the result from a li with MustUseAt true.
   CHECK(((instr1 & kOpcodeMask) == LUI && (instr2 & kOpcodeMask) == ORI) ||
-        ((instr1 == 0) && ((instr2 & kOpcodeMask)== ADDIU    ||
-                           (instr2 & kOpcodeMask)== ORI      ||
+        ((instr1 == 0) && ((instr2 & kOpcodeMask)== ADDIU ||
+                           (instr2 & kOpcodeMask)== ORI ||
                            (instr2 & kOpcodeMask)== LUI)));
 #endif
 
@@ -1179,32 +1178,29 @@ void Assembler::set_target_address_at(Address pc, Address target) {
   uint32_t* p = reinterpret_cast<uint32_t*>(pc);
   uint32_t itarget = reinterpret_cast<uint32_t>(target);
 
-    if (is_int16(itarget)) {
-      // nop
-      // addiu rt zero_reg j
-      *p       = nopInstr;
-      *(p+1)   = ADDIU | rt_code | (itarget & LOMask);
-    } else if (!(itarget & HIMask)) {
-      // nop
-      // ori rt zero_reg j
-      *p       = nopInstr;
-      *(p+1)   = ORI | rt_code | (itarget & LOMask);
-    } else if (!(itarget & LOMask)) {
-      // nop
-      // lui rt (HIMask & itarget)>>16
-      *p       = nopInstr;
-      *(p+1)   = LUI | rt_code | ((itarget & HIMask)>>16);
-    } else {
-      // lui rt (HIMask & itarget)>>16
-      // ori rt rt, (LOMask & itarget)
-      *p       = LUI | rt_code | ((itarget & HIMask)>>16);
-      *(p+1)   = ORI | rt_code | (rt_code << 5) | (itarget & LOMask);
-    }
+  if (is_int16(itarget)) {
+    // nop
+    // addiu rt zero_reg j
+    *p = nopInstr;
+    *(p+1) = ADDIU | rt_code | (itarget & LOMask);
+  } else if (!(itarget & HIMask)) {
+    // nop
+    // ori rt zero_reg j
+    *p = nopInstr;
+    *(p+1) = ORI | rt_code | (itarget & LOMask);
+  } else if (!(itarget & LOMask)) {
+    // nop
+    // lui rt (HIMask & itarget)>>16
+    *p = nopInstr;
+    *(p+1) = LUI | rt_code | ((itarget & HIMask)>>16);
+  } else {
+    // lui rt (HIMask & itarget)>>16
+    // ori rt rt, (LOMask & itarget)
+    *p = LUI | rt_code | ((itarget & HIMask)>>16);
+    *(p+1) = ORI | rt_code | (rt_code << 5) | (itarget & LOMask);
+  }
 
-  CPU::FlushICache(pc, 2* sizeof(int32_t));
-
-#undef instr1
-#undef instr2
+  CPU::FlushICache(pc, 2 * sizeof(int32_t));
 }
 
 

@@ -1,4 +1,4 @@
-// Copyright 2006-2010 the V8 project authors. All rights reserved.
+// Copyright 2010 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -263,7 +263,7 @@ Instruction::Type Instruction::InstructionType() const {
         case TNE:
           return kRegisterType;
         default:
-          break;
+          UNREACHABLE();
       };
       break;
     case SPECIAL2:
@@ -271,7 +271,7 @@ Instruction::Type Instruction::InstructionType() const {
         case MUL:
           return kRegisterType;
         default:
-          break;
+          UNREACHABLE();
       };
       break;
     case COP1:    // Coprocessor instructions
@@ -315,10 +315,9 @@ Instruction::Type Instruction::InstructionType() const {
     case JAL:
       return kJumpType;
     default:
-      break;
+      UNREACHABLE();
   };
   return kUnsupported;
 }
 
 } }   // namespace assembler::mips
-

@@ -1,4 +1,4 @@
-// Copyright 2006-2010 the V8 project authors. All rights reserved.
+// Copyright 2010 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -111,8 +111,8 @@ class Decoder {
   void PrintSImm16(Instruction* instr);
   void PrintXImm16(Instruction* instr);
   void PrintImm26(Instruction* instr);
-  void PrintCode(Instruction* instr);   // For break and trap instructions
-  // Printing of instruction name
+  void PrintCode(Instruction* instr);   // For break and trap instructions.
+  // Printing of instruction name.
   void PrintInstructionName(Instruction* instr);
 
   // Handle formatting of instructions and their options.
@@ -273,7 +273,7 @@ void Decoder::PrintCode(Instruction* instr) {
 }
 
 
-// Printing of instruction name
+// Printing of instruction name.
 void Decoder::PrintInstructionName(Instruction* instr) {
 }
 
@@ -563,7 +563,7 @@ void Decoder::DecodeTypeRegister(Instruction* instr) {
 
 void Decoder::DecodeTypeImmediate(Instruction* instr) {
   switch (instr->OpcodeFieldRaw()) {
-    // ------------- REGIMM class
+    // ------------- REGIMM class.
     case REGIMM:
       switch (instr->RtFieldRaw()) {
         case BLTZ:
@@ -582,7 +582,7 @@ void Decoder::DecodeTypeImmediate(Instruction* instr) {
           UNREACHABLE();
       };
     break;  // case REGIMM
-    // ------------- Branch instructions
+    // ------------- Branch instructions.
     case BEQ:
       Format(instr, "beq  'rs, 'rt, 'imm16u");
       break;
@@ -595,7 +595,7 @@ void Decoder::DecodeTypeImmediate(Instruction* instr) {
     case BGTZ:
       Format(instr, "bgtz 'rs, 'imm16u");
       break;
-    // ------------- Arithmetic instructions
+    // ------------- Arithmetic instructions.
     case ADDI:
       Format(instr, "addi   'rt, 'rs, 'imm16s");
       break;
@@ -620,7 +620,7 @@ void Decoder::DecodeTypeImmediate(Instruction* instr) {
     case LUI:
       Format(instr, "lui    'rt, 'imm16x");
       break;
-    // ------------- Memory instructions
+    // ------------- Memory instructions.
     case LB:
       Format(instr, "lb     'rt, 'imm16s('rs)");
       break;
@@ -774,7 +774,7 @@ void Disassembler::Disassemble(FILE* f, byte_* begin, byte_* end) {
     byte_* prev_pc = pc;
     pc += d.InstructionDecode(buffer, pc);
     fprintf(f, "%p    %08x      %s\n",
-        prev_pc, *reinterpret_cast<int32_t*>(prev_pc), buffer.start());
+            prev_pc, *reinterpret_cast<int32_t*>(prev_pc), buffer.start());
   }
 }
 

@@ -1,4 +1,4 @@
-// Copyright 2006-2010 the V8 project authors. All rights reserved.
+// Copyright 2010 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -54,16 +54,7 @@ class MacroAssembler: public Assembler {
  public:
   MacroAssembler(void* buffer, int size);
 
-  // ---------------------------------------------------------------------------
-  // Low-level helpers for compiler
-
-  // Jump, Call, and Ret pseudo instructions implementing inter-working
- private:
-  void Jump(intptr_t target, RelocInfo::Mode rmode, Condition cond = cc_always,
-            Register r1 = zero_reg, const Operand& r2 = Operand(zero_reg));
-  void Call(intptr_t target, RelocInfo::Mode rmode, Condition cond = cc_always,
-            Register r1 = zero_reg, const Operand& r2 = Operand(zero_reg));
- public:
+  // Jump, Call, and Ret pseudo instructions implementing inter-working.
   void Jump(const Operand& target,
             Condition cond = cc_always,
             Register r1 = zero_reg, const Operand& r2 = Operand(zero_reg));
@@ -124,7 +115,11 @@ class MacroAssembler: public Assembler {
                 Heap::RootListIndex index,
                 Condition cond, Register src1, const Operand& src2);
 
-  // Sets the remembered set bit for [address+offset].
+  // Sets the remembered set bit for [address+offset], where address is the
+  // address of the heap object 'object'.  The address must be in the first 8K
+  // of an allocated page. The 'scratch' register is used in the
+  // implementation and all 3 registers are clobbered by the operation, as
+  // well as the ip register.
   void RecordWrite(Register object, Register offset, Register scratch);
 
 
@@ -187,8 +182,19 @@ class MacroAssembler: public Assembler {
 
 
   // Push multiple registers on the stack.
-  // Registers are saved in numerical order, with high-er numbered registers
-  // saved in higher memory addresses
+  // With MultiPush, lower registers are pushed first on the stack.
+  // For example if you push t0, t1, s0, and ra you get:
+  // |                       |
+  // |-----------------------|
+  // |         t0            |                     +
+  // |-----------------------|                    |
+  // |         t1            |                    |
+  // |-----------------------|                    |
+  // |         s0            |                    v
+  // |-----------------------|                     -
+  // |         ra            |
+  // |-----------------------|
+  // |                       |
   void MultiPush(RegList regs);
   void MultiPushReversed(RegList regs);
   void Push(Register src) {
@@ -333,15 +339,20 @@ class MacroAssembler: public Assembler {
   bool allow_stub_calls() { return allow_stub_calls_; }
 
  private:
-  List<Unresolved> unresolved_;
-  bool generating_stub_;
-  bool allow_stub_calls_;
-  Handle<Object> code_object_;  // This handle will be patched with the code
-                                // object on installation.
+  void Jump(intptr_t target, RelocInfo::Mode rmode, Condition cond = cc_always,
+            Register r1 = zero_reg, const Operand& r2 = Operand(zero_reg));
+  void Call(intptr_t target, RelocInfo::Mode rmode, Condition cond = cc_always,
+            Register r1 = zero_reg, const Operand& r2 = Operand(zero_reg));
 
   // Get the code for the given builtin. Returns if able to resolve
   // the function in the 'resolved' flag.
   Handle<Code> ResolveBuiltin(Builtins::JavaScript id, bool* resolved);
+
+  List<Unresolved> unresolved_;
+  bool generating_stub_;
+  bool allow_stub_calls_;
+  // This handle will be patched with the code object on installation.
+  Handle<Object> code_object_;
 };
 
 

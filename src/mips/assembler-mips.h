@@ -30,7 +30,7 @@
 
 // The original source code covered by the above license above has been
 // modified significantly by Google Inc.
-// Copyright 2006-2010 the V8 project authors. All rights reserved.
+// Copyright 2010 the V8 project authors. All rights reserved.
 
 
 #ifndef V8_MIPS_ASSEMBLER_MIPS_H_
@@ -71,12 +71,10 @@ namespace internal {
 // -----------------------------------------------------------------------------
 // Implementation of Register and FPURegister
 
-// Core register
+// Core register.
 struct Register {
   bool is_valid() const  { return 0 <= code_ && code_ < kNumRegisters; }
   bool is(Register reg) const  { return code_ == reg.code_; }
-  // The byte-register distinction of ai32 has dissapeared.
-  bool is_byte_register() const  { return false; }
   int code() const  {
     ASSERT(is_valid());
     return code_;
@@ -86,7 +84,7 @@ struct Register {
     return 1 << code_;
   }
 
-  // (unfortunately we can't make this private in a struct)
+  // Unfortunately we can't make this private in a struct.
   int code_;
 };
 
@@ -129,7 +127,7 @@ int ToNumber(Register reg);
 
 Register ToRegister(int num);
 
-// Coprocessor register
+// Coprocessor register.
 struct FPURegister {
   bool is_valid() const  { return 0 <= code_ && code_ < kNumFPURegister ; }
   bool is(FPURegister creg) const  { return code_ == creg.code_; }
@@ -142,7 +140,7 @@ struct FPURegister {
     return 1 << code_;
   }
 
-  // (unfortunately we can't make this private in a struct)
+  // Unfortunately we can't make this private in a struct.
   int code_;
 };
 
@@ -222,9 +220,9 @@ inline Hint NegateHint(Hint hint) {
 
 
 // -----------------------------------------------------------------------------
-// Machine instruction Operands
+// Machine instruction Operands.
 
-// Class Operand represents a shifter operand in data processing instructions
+// Class Operand represents a shifter operand in data processing instructions.
 class Operand BASE_EMBEDDED {
  public:
   // Immediate.
@@ -292,7 +290,7 @@ class Assembler : public Malloced {
   // Assembler functions are invoked in between GetCode() calls.
   void GetCode(CodeDesc* desc);
 
-  // Label operations & relative jumps (PPUM Appendix D)
+  // Label operations & relative jumps (PPUM Appendix D).
   //
   // Takes a branch opcode (cc) and a label (L) and generates
   // either a backward branch or a forward branch and links it
@@ -350,7 +348,7 @@ class Assembler : public Malloced {
   static const int kExternalTargetSize = 3 * kPointerSize;
 
   // Distance between the instruction referring to the address of the call
-  // target and the return address
+  // target and the return address.
   static const int kCallTargetAddressOffset = 4 * kInstrSize;
 
   // Distance between start of patched return sequence and the emitted address
@@ -359,13 +357,13 @@ class Assembler : public Malloced {
 
 
   // ---------------------------------------------------------------------------
-  // Code generation
+  // Code generation.
 
   void nop() { sll(zero_reg, zero_reg, 0); }
 
 
   //------- Branch and jump  instructions --------
-  // We don't use likely variant of instructions
+  // We don't use likely variant of instructions.
   void b(int16_t offset);
   void b(Label* L) { b(branch_offset(L, false)>>2); }
   void bal(int16_t offset);
@@ -398,7 +396,7 @@ class Assembler : public Malloced {
 
   //-------Data-processing-instructions---------
 
-  // Arithmetic
+  // Arithmetic.
   void add(Register rd, Register rs, Register rt);
   void addu(Register rd, Register rs, Register rt);
   void sub(Register rd, Register rs, Register rt);
@@ -412,7 +410,7 @@ class Assembler : public Malloced {
   void addi(Register rd, Register rs, int32_t j);
   void addiu(Register rd, Register rs, int32_t j);
 
-  // Logical
+  // Logical.
   void and_(Register rd, Register rs, Register rt);
   void or_(Register rd, Register rs, Register rt);
   void xor_(Register rd, Register rs, Register rt);
@@ -423,7 +421,7 @@ class Assembler : public Malloced {
   void xori(Register rd, Register rs, int32_t j);
   void lui(Register rd, int32_t j);
 
-  // Shifts
+  // Shifts.
   void sll(Register rd, Register rt, uint16_t sa);
   void sllv(Register rd, Register rt, Register rs);
   void srl(Register rd, Register rt, uint16_t sa);
@@ -443,7 +441,7 @@ class Assembler : public Malloced {
 
   //-------------Misc-instructions--------------
 
-  // Break / Trap instructions
+  // Break / Trap instructions.
   void break_(uint32_t code);
   void tge(Register rs, Register rt, uint16_t code);
   void tgeu(Register rs, Register rt, uint16_t code);
@@ -452,11 +450,11 @@ class Assembler : public Malloced {
   void teq(Register rs, Register rt, uint16_t code);
   void tne(Register rs, Register rt, uint16_t code);
 
-  // Move from HI/LO register
+  // Move from HI/LO register.
   void mfhi(Register rd);
   void mflo(Register rd);
 
-  // Set on less than
+  // Set on less than.
   void slt(Register rd, Register rs, Register rt);
   void sltu(Register rd, Register rs, Register rt);
   void slti(Register rd, Register rs, int32_t j);
@@ -465,7 +463,7 @@ class Assembler : public Malloced {
 
   //--------Coprocessor-instructions----------------
 
-  // Load, store, and move
+  // Load, store, and move.
   void lwc1(FPURegister fd, const MemOperand& src);
   void ldc1(FPURegister fd, const MemOperand& src);
 
@@ -479,7 +477,7 @@ class Assembler : public Malloced {
   void mfc1(FPURegister fs, Register rt);
   void mfhc1(FPURegister fs, Register rt);
 
-  // Conversion
+  // Conversion.
   void cvt_w_s(FPURegister fd, FPURegister fs);
   void cvt_w_d(FPURegister fd, FPURegister fs);
 
@@ -494,7 +492,7 @@ class Assembler : public Malloced {
   void cvt_d_l(FPURegister fd, FPURegister fs);
   void cvt_d_s(FPURegister fd, FPURegister fs);
 
-  // Conditions and branches
+  // Conditions and branches.
   void c(FPUCondition cond, SecondaryField fmt,
          FPURegister ft, FPURegister fs, uint16_t cc = 0);
 
@@ -509,7 +507,7 @@ class Assembler : public Malloced {
     return (pc_offset() - l->pos()) / kInstrSize;
   }
 
-  // Debugging
+  // Debugging.
 
   // Mark address of the ExitJSFrame code.
   void RecordJSReturn();
@@ -537,7 +535,7 @@ class Assembler : public Malloced {
  protected:
   int32_t buffer_space() const { return reloc_info_writer.pos() - pc_; }
 
-  // Read/patch instructions
+  // Read/patch instructions.
   static Instr instr_at(byte* pc) { return *reinterpret_cast<Instr*>(pc); }
   void instr_at_put(byte* pc, Instr instr) {
     *reinterpret_cast<Instr*>(pc) = instr;
@@ -550,16 +548,16 @@ class Assembler : public Malloced {
   // Check if an instruction is a branch of some kind.
   bool is_branch(Instr instr);
 
-  // Decode branch instruction at pos and return branch target pos
+  // Decode branch instruction at pos and return branch target pos.
   int target_at(int32_t pos);
 
-  // Patch branch instruction at pos to branch to given branch target pos
+  // Patch branch instruction at pos to branch to given branch target pos.
   void target_at_put(int32_t pos, int32_t target_pos);
 
   // Say if we need to relocate with this mode.
   bool MustUseAt(RelocInfo::Mode rmode);
 
-  // Record reloc info for current pc_
+  // Record reloc info for current pc_.
   void RecordRelocInfo(RelocInfo::Mode rmode, intptr_t data = 0);
 
  private:
@@ -571,37 +569,37 @@ class Assembler : public Malloced {
   bool own_buffer_;
 
   // Buffer size and constant pool distance are checked together at regular
-  // intervals of kBufferCheckInterval emitted bytes
+  // intervals of kBufferCheckInterval emitted bytes.
   static const int kBufferCheckInterval = 1*KB/2;
 
-  // Code generation
-  // The relocation writer's position is at least kGap bytes Uless the end of
+  // Code generation.
+  // The relocation writer's position is at least kGap bytes below the end of
   // the generated instructions. This is so that multi-instruction sequences do
   // not have to check for overflow. The same is true for writes of large
   // relocation info entries.
   static const int kGap = 32;
-  byte* pc_;  // the program counter; moves forward
+  byte* pc_;  // The program counter - moves forward.
 
-  // Relocation information generation
-  // Each relocation is encoded as a variable size value
+  // Relocation information generation.
+  // Each relocation is encoded as a variable size value.
   static const int kMaxRelocSize = RelocInfoWriter::kMaxSize;
   RelocInfoWriter reloc_info_writer;
 
   // The bound position, before this we cannot do instruction elimination.
   int last_bound_pos_;
 
-  // source position information
+  // Source position information.
   int current_position_;
   int current_statement_position_;
   int written_position_;
   int written_statement_position_;
 
-  // Code emission
+  // Code emission.
   inline void CheckBuffer();
   void GrowBuffer();
   inline void emit(Instr x);
 
-  // Instruction generation
+  // Instruction generation.
   // We have 3 different kind of encoding layout on MIPS.
   // However due to many different types of objects encoded in the same fields
   // we have quite a few aliases for each mode.
@@ -649,7 +647,7 @@ class Assembler : public Malloced {
                      uint32_t address);
 
 
-  // Labels
+  // Labels.
   void print(Label* L);
   void bind_to(Label* L, int pos);
   void link_to(Label* L, Label* appendix);

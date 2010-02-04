@@ -1,4 +1,4 @@
-// Copyright 2009 the V8 project authors. All rights reserved.
+// Copyright 2010 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -238,8 +238,8 @@ class Simulator {
   void BranchDelayInstructionDecode(Instruction* instr) {
     if (instr->IsForbiddenInBranchDelay()) {
       V8_Fatal(__FILE__, __LINE__,
-          "Eror:Unexpected %i opcode in a branch delay slot.",
-                            instr->OpcodeField());
+               "Eror:Unexpected %i opcode in a branch delay slot.",
+               instr->OpcodeField());
     }
     InstructionDecode(instr);
   }
@@ -253,7 +253,7 @@ class Simulator {
   };
   int16_t exceptions[kNumExceptions];
 
-  // Exceptions
+  // Exceptions.
   void SignalExceptions();
 
   // Runtime call support.
@@ -264,19 +264,19 @@ class Simulator {
   // returns a double.
   void SetFpResult(double result);
 
-  // architecture state
-  // Registers
+  // Architecture state.
+  // Registers.
   int32_t registers_[kNumSimuRegisters];
-  // Coprocessor Registers
+  // Coprocessor Registers.
   int32_t FPUregisters_[kNumFPURegisters];
 
-  // simulator support
+  // Simulator support.
   char* stack_;
   bool pc_modified_;
   int icount_;
   static bool initialized_;
 
-  // registered breakpoints
+  // Registered breakpoints.
   Instruction* break_pc_;
   Instr break_instr_;
 };
