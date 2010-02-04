@@ -447,6 +447,10 @@ void CEntryStub::Generate(MacroAssembler* masm) {
 
 void JSEntryStub::GenerateBody(MacroAssembler* masm, bool is_construct) {
   UNIMPLEMENTED_MIPS();
+
+  __ MultiPush(kCalleeSaved | ra.bit());
+
+
   // Load a result.
   __ li(v0, Operand(0x1234));
   __ jr(ra);

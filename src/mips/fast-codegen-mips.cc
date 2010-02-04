@@ -35,20 +35,6 @@ namespace internal {
 
 #define __ ACCESS_MASM(masm_)
 
-// Generate code for a JS function.  On entry to the function the receiver
-// and arguments have been pushed on the stack left to right.  The actual
-// argument count matches the formal parameter count expected by the
-// function.
-//
-// The live registers are:
-//   - a1: the JS function object being called (ie, ourselves)
-//   - cp: our context
-//   - fp: our caller's frame pointer
-//   - sp: stack pointer
-//   - ra: return address
-//
-// The function builds a JS frame.  Please see JavaScriptFrameConstants in
-// frames-arm.h for its layout.
 void FastCodeGenerator::Generate(CompilationInfo* info) {
   UNIMPLEMENTED_MIPS();
 }
