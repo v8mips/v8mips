@@ -94,21 +94,26 @@ class CodeGenState BASE_EMBEDDED {
 
 class CodeGenerator: public AstVisitor {
  public:
+  // Compilation mode.  Either the compiler is used as the primary
+  // compiler and needs to setup everything or the compiler is used as
+  // the secondary compiler for split compilation and has to handle
+  // bailouts.
+  enum Mode {
+    PRIMARY,
+    SECONDARY
+  };
+
   // Takes a function literal, generates code for it. This function should only
   // be called by compiler.cc.
-  static Handle<Code> MakeCode(FunctionLiteral* fun,
-                               Handle<Script> script,
-                               bool is_eval,
-                               CompilationInfo* info);
+  static Handle<Code> MakeCode(CompilationInfo* info);
 
   // Printing of AST, etc. as requested by flags.
-  static void MakeCodePrologue(FunctionLiteral* fun);
+  static void MakeCodePrologue(CompilationInfo* info);
 
   // Allocate and install the code.
-  static Handle<Code> MakeCodeEpilogue(FunctionLiteral* fun,
-                                       MacroAssembler* masm,
+  static Handle<Code> MakeCodeEpilogue(MacroAssembler* masm,
                                        Code::Flags flags,
-                                       Handle<Script> script);
+                                       CompilationInfo* info);
 
 #ifdef ENABLE_LOGGING_AND_PROFILING
   static bool ShouldGenerateLog(Expression* type);
@@ -124,7 +129,7 @@ class CodeGenerator: public AstVisitor {
   // Accessors
   MacroAssembler* masm() { return masm_; }
   VirtualFrame* frame() const { return frame_; }
-  Handle<Script> script() { return script_; }
+  inline Handle<Script> script();
 
   bool has_valid_frame() const { return frame_ != NULL; }
 
@@ -151,16 +156,15 @@ class CodeGenerator: public AstVisitor {
 
  private:
   // Construction/Destruction
-  CodeGenerator(int buffer_size, Handle<Script> script, bool is_eval);
+  CodeGenerator(MacroAssembler* masm);
   virtual ~CodeGenerator() { delete masm_; }
 
   // Accessors
+  inline bool is_eval();
   Scope* scope() const { return scope_; }
 
   // Generating deferred code.
   void ProcessDeferred();
-
-  bool is_eval() { return is_eval_; }
 
   // State
   bool has_cc() const  { return cc_reg_ != cc_always; }
@@ -180,7 +184,7 @@ class CodeGenerator: public AstVisitor {
 #undef DEF_VISIT
 
   // Main code generation function
-  void GenCode(FunctionLiteral* fun, CompilationInfo* info);
+  void Generate(CompilationInfo* info, Mode mode);
 
   struct InlineRuntimeLUT {
     void (CodeGenerator::*method)(ZoneList<Expression*>*);
@@ -272,6 +276,8 @@ class CodeGenerator: public AstVisitor {
   // Assembler
   MacroAssembler* masm_;  // to generate code
 
+  CompilationInfo* info_;
+
   // Code generation state
   Scope* scope_;
   VirtualFrame* frame_;
@@ -292,6 +298,7 @@ class CodeGenerator: public AstVisitor {
   friend class VirtualFrame;
   friend class JumpTarget;
   friend class Reference;
+  friend class FastCodeGenerator;
   friend class FullCodeGenerator;
   friend class FullCodeGenSyntaxChecker;
 

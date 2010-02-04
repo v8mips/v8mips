@@ -139,6 +139,7 @@ SOURCES = {
     mips/cpu-mips.cc
     mips/debug-mips.cc
     mips/disasm-mips.cc
+    mips/fast-codegen-mips.cc
     mips/full-codegen-mips.cc
     mips/frames-mips.cc
     mips/ic-mips.cc

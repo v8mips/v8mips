@@ -38,7 +38,7 @@ namespace internal {
 
 #define __ ACCESS_MASM(masm_)
 
-void FullCodeGenerator::Generate(FunctionLiteral* fun) {
+void FullCodeGenerator::Generate(CompilationInfo* info, Mode mode) {
   UNIMPLEMENTED_MIPS();
 }
 

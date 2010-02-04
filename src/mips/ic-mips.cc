@@ -177,13 +177,11 @@ void StoreIC::GenerateExtendStorage(MacroAssembler* masm) {
 }
 
 
-void StoreIC::Generate(MacroAssembler* masm, const ExternalReference& f) {
+void StoreIC::GenerateMiss(MacroAssembler* masm) {
   UNIMPLEMENTED_MIPS();
 }
 
-
 #undef __
-
 
 } }  // namespace v8::internal
 

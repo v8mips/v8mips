@@ -63,12 +63,9 @@ void DeferredCode::RestoreRegisters() {
 // -------------------------------------------------------------------------
 // CodeGenerator implementation
 
-CodeGenerator::CodeGenerator(int buffer_size, Handle<Script> script,
-                             bool is_eval)
-    : is_eval_(is_eval),
-      script_(script),
-      deferred_(8),
-      masm_(new MacroAssembler(NULL, buffer_size)),
+CodeGenerator::CodeGenerator(MacroAssembler* masm)
+    : deferred_(8),
+      masm_(masm),
       scope_(NULL),
       frame_(NULL),
       allocator_(NULL),
@@ -84,7 +81,7 @@ CodeGenerator::CodeGenerator(int buffer_size, Handle<Script> script,
 // a1: called JS function
 // cp: callee's context
 
-void CodeGenerator::GenCode(FunctionLiteral* fun, CompilationInfo* info) {
+void CodeGenerator::Generate(CompilationInfo* info, Mode mode) {
   UNIMPLEMENTED_MIPS();
 }
 
@@ -421,12 +418,6 @@ void StackCheckStub::Generate(MacroAssembler* masm) {
 }
 
 
-int CEntryStub::MinorKey() {
-  UNIMPLEMENTED_MIPS();
-  return 0;
-}
-
-
 void CEntryStub::GenerateThrowTOS(MacroAssembler* masm) {
   UNIMPLEMENTED_MIPS();
   __ break_(0x808);
@@ -443,14 +434,13 @@ void CEntryStub::GenerateCore(MacroAssembler* masm,
                               Label* throw_normal_exception,
                               Label* throw_termination_exception,
                               Label* throw_out_of_memory_exception,
-                              ExitFrame::Mode mode,
                               bool do_gc,
                               bool always_allocate) {
   UNIMPLEMENTED_MIPS();
   __ break_(0x826);
 }
 
-void CEntryStub::GenerateBody(MacroAssembler* masm, bool is_debug_break) {
+void CEntryStub::Generate(MacroAssembler* masm) {
   UNIMPLEMENTED_MIPS();
   __ break_(0x831);
 }
