@@ -448,8 +448,31 @@ void CEntryStub::Generate(MacroAssembler* masm) {
 void JSEntryStub::GenerateBody(MacroAssembler* masm, bool is_construct) {
   UNIMPLEMENTED_MIPS();
 
+  // Save callee saved registers on the stack.
   __ MultiPush(kCalleeSaved | ra.bit());
 
+  // ********** State **********
+  //
+  // * Registers:
+  // a0: entry_address
+  // a1: function
+  // a2: reveiver_pointer
+  // a3: argc
+  //
+  // * Stack:
+  // ---------------------------
+  // args
+  // ---------------------------
+  // 4 args slots
+  // ---------------------------
+  // callee saved registers + ra
+  // ---------------------------
+  //
+  // ***************************
+
+  
+  // Restore callee saved registers from the stack.
+   __ MultiPop(kCalleeSaved | ra.bit());
 
   // Load a result.
   __ li(v0, Operand(0x1234));
