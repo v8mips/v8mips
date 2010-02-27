@@ -719,6 +719,7 @@ static inline bool IsVmThread() {
   return false;
 }
 
+
 static void ProfilerSignalHandler(int signal, siginfo_t* info, void* context) {
 #ifndef V8_HOST_ARCH_MIPS
   USE(info);

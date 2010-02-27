@@ -182,19 +182,8 @@ class MacroAssembler: public Assembler {
 
 
   // Push multiple registers on the stack.
-  // With MultiPush, lower registers are pushed first on the stack.
-  // For example if you push t0, t1, s0, and ra you get:
-  // |                       |
-  // |-----------------------|
-  // |         t0            |                     +
-  // |-----------------------|                    |
-  // |         t1            |                    |
-  // |-----------------------|                    |
-  // |         s0            |                    v
-  // |-----------------------|                     -
-  // |         ra            |
-  // |-----------------------|
-  // |                       |
+  // Registers are saved in numerical order, with higher numbered registers
+  // saved in higher memory addresses
   void MultiPush(RegList regs);
   void MultiPushReversed(RegList regs);
   void Push(Register src) {
