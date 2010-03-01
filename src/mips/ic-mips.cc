@@ -184,16 +184,6 @@ void KeyedLoadIC::GenerateExternalArray(MacroAssembler* masm,
 }
 
 
-void KeyedLoadIC::GenerateIndexedInterceptor(MacroAssembler* masm) {
-  UNIMPLEMENTED_MIPS();
-}
-
-
-void KeyedStoreIC::GenerateMiss(MacroAssembler* masm) {
-  UNIMPLEMENTED_MIPS();
-}
-
-
 void KeyedStoreIC::GenerateGeneric(MacroAssembler* masm) {
   UNIMPLEMENTED_MIPS();
 }
@@ -201,6 +191,16 @@ void KeyedStoreIC::GenerateGeneric(MacroAssembler* masm) {
 
 void KeyedStoreIC::GenerateExternalArray(MacroAssembler* masm,
                                          ExternalArrayType array_type) {
+  UNIMPLEMENTED_MIPS();
+}
+
+
+void KeyedLoadIC::GenerateIndexedInterceptor(MacroAssembler* masm) {
+  UNIMPLEMENTED_MIPS();
+}
+
+
+void KeyedStoreIC::GenerateMiss(MacroAssembler* masm) {
   UNIMPLEMENTED_MIPS();
 }
 

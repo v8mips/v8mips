@@ -1239,7 +1239,6 @@ void CEntryStub::Generate(MacroAssembler* masm) {
 }
 
 void JSEntryStub::GenerateBody(MacroAssembler* masm, bool is_construct) {
-
   Label invoke, exit;
 
   // ********** State **********

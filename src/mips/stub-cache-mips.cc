@@ -105,19 +105,6 @@ void StubCompiler::GenerateLoadMiss(MacroAssembler* masm, Code::Kind kind) {
 #define __ ACCESS_MASM(masm())
 
 
-Register StubCompiler::CheckPrototypes(JSObject* object,
-                                       Register object_reg,
-                                       JSObject* holder,
-                                       Register holder_reg,
-                                       Register scratch,
-                                       String* name,
-                                       int save_at_depth,
-                                       Label* miss) {
-  UNIMPLEMENTED_MIPS();
-  return at;    // UNIMPLEMENTED RETURN
-}
-
-
 void StubCompiler::GenerateLoadField(JSObject* object,
                                      JSObject* holder,
                                      Register receiver,

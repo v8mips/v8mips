@@ -527,6 +527,10 @@ class VirtualFrame : public ZoneObject {
   // PrepareForCall).
   void RawCallStub(CodeStub* stub);
 
+  // Calls a code object which has already been prepared for calling
+  // (via PrepareForCall).
+  void RawCallCodeObject(Handle<Code> code, RelocInfo::Mode rmode);
+
   inline bool Equals(VirtualFrame* other);
 
   // Classes that need raw access to the elements_ array.
