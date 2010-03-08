@@ -74,7 +74,107 @@ void Builtins::Generate_JSConstructStubApi(MacroAssembler* masm) {
 
 static void Generate_JSEntryTrampolineHelper(MacroAssembler* masm,
                                              bool is_construct) {
-  UNIMPLEMENTED_MIPS();
+  // Called from JSEntryStub::GenerateBody
+
+  // ********** State **********
+  // * Registers:
+  // a0: entry_address
+  // a1: function
+  // a2: reveiver_pointer
+  // a3: argc
+  // s0: argv
+  //
+  // * Stack:
+  // args
+  // 4 args slots
+  // callee saved registers + ra
+  // entry frame
+  // handler frame
+  // arguments slots
+  // ***************************
+
+  // Clear the context before we push it when entering the JS frame.
+  __ li(cp, Operand(0));
+  
+  // Enter an internal frame.
+  __ EnterInternalFrame();
+
+  // Set up the context from the function argument.
+  __ lw(cp, FieldMemOperand(a1, JSFunction::kContextOffset));
+
+  // Set up the roots register.
+  ExternalReference roots_address = ExternalReference::roots_address();
+  __ li(s6, Operand(roots_address));
+
+  // Push the function and the receiver onto the stack.
+  __ MultiPushReversed(a1.bit() | a2.bit());
+
+  // Copy arguments to the stack in a loop.
+  // a3: argc
+  // s0: argv, ie points to first arg
+  Label loop, entry;
+  __ sll(t0, a3, kPointerSizeLog2);
+  __ b(&entry);
+  __ add(t2, s0, t0);
+  // t2 points past last arg.
+  __ bind(&loop);
+  __ lw(t0, MemOperand(s0));  // read next parameter
+  __ addiu(s0, s0, kPointerSize);
+  __ lw(t0, MemOperand(t0));  // dereference handle
+  __ push(t0);  // push parameter
+  __ bind(&entry);
+  __ Branch(ne, &loop, s0, Operand(t2));
+  __ nop();
+
+  // ********** State **********
+  // * Registers:
+  // a0: entry_address
+  // a1: function
+  // a2: reveiver_pointer
+  // a3: argc
+  // s0: argv
+  // s6: roots_address
+  //
+  // * Stack:
+  // args
+  // 4 args slots
+  // callee saved registers + ra
+  // entry frame
+  // handler frame
+  // arguments slots
+  // function
+  // receiver
+  // arguments
+  // ***************************
+
+  // Initialize all JavaScript callee-saved registers, since they will be seen
+  // by the garbage collector as part of handlers.
+  __ LoadRoot(t4, Heap::kUndefinedValueRootIndex);
+  __ mov(s1, t4);
+  __ mov(s2, t4);
+  __ mov(s3, t4);
+  __ mov(s4, s4); 
+  __ mov(s5, t4);
+  // s6 holds the root address. Do not clobber.
+  // s7 is cp. Do not init.
+
+  // Invoke the code and pass argc as a0.
+  __ mov(a0, a3);
+  if (is_construct) {
+    UNIMPLEMENTED_MIPS();
+    __ break_(0x164);
+  } else {
+    ParameterCount actual(a0);
+    __ InvokeFunction(a1, actual, CALL_FUNCTION);
+    __ nop();
+  }
+
+  // Exit the JS frame and remove the parameters (except function), and return.
+  // Respect ABI stack constraint.
+  __ LeaveInternalFrame();
+
+  __ Jump(ra);
+  __ addiu(sp, sp, StandardFrameConstants::kRArgsSlotsSize);
 }
 
 
@@ -100,6 +200,7 @@ void Builtins::Generate_FunctionApply(MacroAssembler* masm) {
 
 void Builtins::Generate_ArgumentsAdaptorTrampoline(MacroAssembler* masm) {
   UNIMPLEMENTED_MIPS();
+  __ break_(0x201);
 }
 
 

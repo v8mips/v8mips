@@ -356,15 +356,15 @@ class VirtualFrame : public ZoneObject {
   // emit a corresponding pop instruction.
   void EmitPop(Register reg);
   // Same but for multiple registers
-  void EmitMultiPop(RegList regs);  // higher indexed registers popped first
-  void EmitMultiPopReversed(RegList regs);  // lower first
+  void EmitMultiPop(RegList regs); 
+  void EmitMultiPopReversed(RegList regs);
 
   // Push an element on top of the expression stack and emit a
   // corresponding push instruction.
   void EmitPush(Register reg);
   // Same but for multiple registers.
-  void EmitMultiPush(RegList regs);  // lower indexed registers are pushed first
-  void EmitMultiPushReversed(RegList regs);  // higher first
+  void EmitMultiPush(RegList regs);
+  void EmitMultiPushReversed(RegList regs);
 
   // Push an element on the virtual frame.
   inline void Push(Register reg, NumberInfo::Type info = NumberInfo::kUnknown);

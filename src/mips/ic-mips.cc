@@ -170,7 +170,6 @@ void StoreIC::GenerateArrayLength(MacroAssembler* masm) {
   UNIMPLEMENTED_MIPS();
 }
 
-
 #undef __
 
 } }  // namespace v8::internal
