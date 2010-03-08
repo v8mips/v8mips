@@ -727,7 +727,7 @@ void MacroAssembler::Jump(const Operand& target,
         j(target.imm32_);  // will generate only one instruction.
       }
     } else {  // MustUseAt(target)
-      li(at, rt);
+      li(at, target);
       if (cond == cc_always) {
         jr(at);
       } else {
@@ -760,7 +760,7 @@ void MacroAssembler::Call(const Operand& target,
         jal(target.imm32_);  // will generate only one instruction.
       }
     } else {  // MustUseAt(target)
-      li(at, rt);
+      li(at, target);
       if (cond == cc_always) {
         jalr(at);
       } else {
@@ -887,6 +887,26 @@ void MacroAssembler::PopTryHandler() {
 
 // -----------------------------------------------------------------------------
 // Activation frames
+
+void MacroAssembler::SetupAlignedCall(Register scratch, int arg_count) {
+  andi(scratch, sp, 7);
+  // Store sp on the stack. If necessary allocate some extra space to preserve
+  // arguments' 8-byte alignment.
+    sw(sp, MemOperand(sp, -4));
+    sw(sp, MemOperand(sp, -8));
+  if(((arg_count + 1) % 2) == 0) {
+    beq(scratch, zero_reg, 2);
+  } else {  // ((arg_count + 1) % 2) == 1
+    bne(scratch, zero_reg, 2);
+  }
+    addiu(sp, sp, -4);
+    addiu(sp, sp, -4);
+}
+
+
+void MacroAssembler::ReturnFromAlignedCall() {
+  lw(sp, MemOperand(sp));
+}
 
 
 // -----------------------------------------------------------------------------

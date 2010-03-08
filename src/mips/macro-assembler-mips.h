@@ -220,6 +220,9 @@ class MacroAssembler: public Assembler {
   void EnterInternalFrame() { EnterFrame(StackFrame::INTERNAL); }
   void LeaveInternalFrame() { LeaveFrame(StackFrame::INTERNAL); }
 
+  void SetupAlignedCall(Register scratch, int arg_count = 0);
+  void ReturnFromAlignedCall();
+
 
   // ---------------------------------------------------------------------------
   // JavaScript invokes
