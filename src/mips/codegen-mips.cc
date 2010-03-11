@@ -31,6 +31,7 @@
 #include "codegen-inl.h"
 #include "compiler.h"
 #include "debug.h"
+#include "ic-inl.h"
 #include "parser.h"
 #include "register-allocator-inl.h"
 #include "runtime.h"
@@ -843,6 +844,16 @@ void CodeGenerator::GenerateMathPow(ZoneList<Expression*>* args) {
 }
 
 
+void CodeGenerator::GenerateMathCos(ZoneList<Expression*>* args) {
+  UNIMPLEMENTED_MIPS();
+}
+
+
+void CodeGenerator::GenerateMathSin(ZoneList<Expression*>* args) {
+  UNIMPLEMENTED_MIPS();
+}
+
+
 void CodeGenerator::GenerateMathSqrt(ZoneList<Expression*>* args) {
   UNIMPLEMENTED_MIPS();
 }
@@ -881,7 +892,7 @@ void CodeGenerator::GenerateArgumentsLength(ZoneList<Expression*>* args) {
 }
 
 
-void CodeGenerator::GenerateArgumentsAccess(ZoneList<Expression*>* args) {
+void CodeGenerator::GenerateArguments(ZoneList<Expression*>* args) {
   UNIMPLEMENTED_MIPS();
 }
 

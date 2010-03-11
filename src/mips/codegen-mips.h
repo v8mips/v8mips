@@ -215,6 +215,10 @@ class CodeGenerator: public AstVisitor {
   // used by the debugger to patch the JS return sequence.
   static const int kJSReturnSequenceLength = 7;
 
+  // If the name is an inline runtime function call return the number of
+  // expected arguments. Otherwise return -1.
+  static int InlineRuntimeCallArgumentsCount(Handle<String> name);
+
  private:
   // Construction/Destruction.
   explicit CodeGenerator(MacroAssembler* masm);
@@ -291,6 +295,7 @@ class CodeGenerator: public AstVisitor {
   struct InlineRuntimeLUT {
     void (CodeGenerator::*method)(ZoneList<Expression*>*);
     const char* name;
+    int nargs;
   };
 
   static InlineRuntimeLUT* FindInlineRuntimeLUT(Handle<String> name);
@@ -319,7 +324,7 @@ class CodeGenerator: public AstVisitor {
 
   // Support for arguments.length and arguments[?].
   void GenerateArgumentsLength(ZoneList<Expression*>* args);
-  void GenerateArgumentsAccess(ZoneList<Expression*>* args);
+  void GenerateArguments(ZoneList<Expression*>* args);
 
   // Support for accessing the class and value fields of an object.
   void GenerateClassOf(ZoneList<Expression*>* args);
@@ -349,15 +354,11 @@ class CodeGenerator: public AstVisitor {
   void GenerateRegExpExec(ZoneList<Expression*>* args);
   void GenerateNumberToString(ZoneList<Expression*>* args);
 
-  // Fast support for Math.pow().
+  // Fast call to math functions.
   void GenerateMathPow(ZoneList<Expression*>* args);
-  // Fast support for Math.sqrt().
-  void GenerateMathPow(ZoneList<Expression*>* args);
-
-
-  // Fast support for Math.sin and Math.cos.
-  inline void GenerateMathSin(ZoneList<Expression*>* args);
-  inline void GenerateMathCos(ZoneList<Expression*>* args);
+  void GenerateMathSin(ZoneList<Expression*>* args);
+  void GenerateMathCos(ZoneList<Expression*>* args);
+  void GenerateMathSqrt(ZoneList<Expression*>* args);
 
   // Simple condition analysis.
   enum ConditionAnalysis {
