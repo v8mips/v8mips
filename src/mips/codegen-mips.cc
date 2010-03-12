@@ -109,7 +109,6 @@ CodeGenerator::CodeGenerator(MacroAssembler* masm)
 // cp: callee's context
 
 void CodeGenerator::Generate(CompilationInfo* info) {
-  UNIMPLEMENTED_MIPS();
   // Record the position for debugging purposes.
   CodeForFunctionPosition(info->function());
 
@@ -147,6 +146,37 @@ void CodeGenerator::Generate(CompilationInfo* info) {
     function_return_.set_direction(JumpTarget::BIDIRECTIONAL);
     function_return_is_shadowed_ = false;
 
+    VirtualFrame::SpilledScope spilled_scope;
+    if (scope()->num_heap_slots() > 0) {
+      UNIMPLEMENTED_MIPS();
+    }
+
+    {
+      Comment cmnt2(masm_, "[ copy context parameters into .context");
+
+      // Note that iteration order is relevant here! If we have the same
+      // parameter twice (e.g., function (x, y, x)), and that parameter
+      // needs to be copied into the context, it must be the last argument
+      // passed to the parameter that needs to be copied. This is a rare
+      // case so we don't check for it, instead we rely on the copying
+      // order: such a parameter is copied repeatedly into the same
+      // context location and thus the last value is what is seen inside
+      // the function.
+      for (int i = 0; i < scope()->num_parameters(); i++) {
+        UNIMPLEMENTED_MIPS();
+      }
+    }
+
+    // Store the arguments object.  This must happen after context
+    // initialization because the arguments object may be stored in the
+    // context.
+    if (scope()->arguments() != NULL) {
+      UNIMPLEMENTED_MIPS();
+    }
+
+    // Generate code to 'execute' declarations and initialize functions
+    // (source elements). In case of an illegal redeclaration we need to
+    // handle that instead of processing the declarations.
     if (scope()->HasIllegalRedeclaration()) {
       Comment cmnt(masm_, "[ illegal redeclarations");
       scope()->VisitIllegalRedeclaration(this);
@@ -158,7 +188,25 @@ void CodeGenerator::Generate(CompilationInfo* info) {
       if (HasStackOverflow()) return;
     }
 
-    VisitStatementsAndSpill(info->function()->body());
+    if (FLAG_trace) {
+      UNIMPLEMENTED_MIPS();
+    }
+
+    // Compile the body of the function in a vanilla state. Don't
+    // bother compiling all the code if the scope has an illegal
+    // redeclaration.
+    if (!scope()->HasIllegalRedeclaration()) {
+      Comment cmnt(masm_, "[ function body");
+#ifdef DEBUG
+      bool is_builtin = Bootstrapper::IsActive();
+      bool should_trace =
+          is_builtin ? FLAG_trace_builtin_calls : FLAG_trace_calls;
+      if (should_trace) {
+        UNIMPLEMENTED_MIPS();
+      }
+#endif
+      VisitStatementsAndSpill(info->function()->body());
+    }
   }
 
   if (has_valid_frame() || function_return_.is_linked()) {
@@ -176,6 +224,9 @@ void CodeGenerator::Generate(CompilationInfo* info) {
     __ LoadRoot(v0, Heap::kUndefinedValueRootIndex);
 
     function_return_.Bind();
+    if (FLAG_trace) {
+      UNIMPLEMENTED_MIPS();
+    }
 
     // Add a label for checking the size of the code used for returning.
     Label check_exit_codesize;
@@ -188,6 +239,7 @@ void CodeGenerator::Generate(CompilationInfo* info) {
 
     // Here we use masm_-> instead of the __ macro to avoid the code coverage
     // tool from instrumenting as we rely on the code size here.
+    // TODO(MIPS): Should we be able to use more than 0x1ffe parameters?
     masm_->addiu(sp, sp, (scope()->num_parameters() + 1)*kPointerSize);
     masm_->Jump(ra);
     masm_->nop();
@@ -215,12 +267,41 @@ void CodeGenerator::Generate(CompilationInfo* info) {
 
 
 void CodeGenerator::LoadReference(Reference* ref) {
-  UNIMPLEMENTED_MIPS();
+  VirtualFrame::SpilledScope spilled_scope;
+  Comment cmnt(masm_, "[ LoadReference");
+  Expression* e = ref->expression();
+  Property* property = e->AsProperty();
+  Variable* var = e->AsVariableProxy()->AsVariable();
+
+  if (property != NULL) {
+    UNIMPLEMENTED_MIPS();
+  } else if (var != NULL) {
+    // The expression is a variable proxy that does not rewrite to a
+    // property.  Global variables are treated as named property references.
+    if (var->is_global()) {
+      LoadGlobal();
+      ref->set_type(Reference::NAMED);
+    } else {
+      ASSERT(var->slot() != NULL);
+      ref->set_type(Reference::SLOT);
+    }
+  } else {
+    UNIMPLEMENTED_MIPS();
+  }
 }
 
 
 void CodeGenerator::UnloadReference(Reference* ref) {
-  UNIMPLEMENTED_MIPS();
+  VirtualFrame::SpilledScope spilled_scope;
+  // Pop a reference from the stack while preserving TOS.
+  Comment cmnt(masm_, "[ UnloadReference");
+  int size = ref->size();
+  if (size > 0) {
+    frame_->EmitPop(a0);
+    frame_->Drop(size);
+    frame_->EmitPush(a0);
+  }
+  ref->set_unloaded();
 }
 
 
@@ -320,6 +401,13 @@ void CodeGenerator::Load(Expression* x) {
 }
 
 
+void CodeGenerator::LoadGlobal() {
+  VirtualFrame::SpilledScope spilled_scope;
+  __ lw(a0, GlobalObject());
+  frame_->EmitPush(a0);
+}
+
+
 void CodeGenerator::LoadFromSlot(Slot* slot, TypeofState typeof_state) {
   VirtualFrame::SpilledScope spilled_scope;
   if (slot->type() == Slot::LOOKUP) {
@@ -385,7 +473,15 @@ void CodeGenerator::VisitBlock(Block* node) {
 
 
 void CodeGenerator::DeclareGlobals(Handle<FixedArray> pairs) {
-  UNIMPLEMENTED_MIPS();
+  VirtualFrame::SpilledScope spilled_scope;
+  frame_->EmitPush(cp);
+  __ li(t0, Operand(pairs));
+  frame_->EmitPush(t0);
+  __ li(t0, Operand(Smi::FromInt(is_eval() ? 1 : 0)));
+  frame_->EmitPush(t0);
+  frame_->CallRuntime(Runtime::kDeclareGlobals, 3);
+  __ nop(); // NOP_ADDED
+  // The result is discarded.
 }
 
 
@@ -636,7 +732,74 @@ void CodeGenerator::VisitProperty(Property* node) {
 
 
 void CodeGenerator::VisitCall(Call* node) {
-  UNIMPLEMENTED_MIPS();
+#ifdef DEBUG
+  int original_height = frame_->height();
+#endif
+  VirtualFrame::SpilledScope spilled_scope;
+  Comment cmnt(masm_, "[ Call");
+
+  Expression* function = node->expression();
+  ZoneList<Expression*>* args = node->arguments();
+
+  // Standard function call.
+  // Check if the function is a variable or a property.
+  Variable* var = function->AsVariableProxy()->AsVariable();
+  Property* property = function->AsProperty();
+
+  // ------------------------------------------------------------------------
+  // Fast-case: Use inline caching.
+  // ---
+  // According to ECMA-262, section 11.2.3, page 44, the function to call
+  // must be resolved after the arguments have been evaluated. The IC code
+  // automatically handles this by loading the arguments before the function
+  // is resolved in cache misses (this also holds for megamorphic calls).
+  // ------------------------------------------------------------------------
+
+  if (var != NULL && var->is_possibly_eval()) {
+    UNIMPLEMENTED_MIPS();
+  } else if (var != NULL && !var->is_this() && var->is_global()) {
+    // ----------------------------------
+    // JavaScript example: 'foo(1, 2, 3)'  // foo is global
+    // ----------------------------------
+
+    int arg_count = args->length();
+
+    // We need sp to be 8 bytes aligned when calling the stub.
+    __ SetupAlignedCall(t0, arg_count);
+
+    // Pass the global object as the receiver and let the IC stub
+    // patch the stack to use the global proxy as 'this' in the
+    // invoked function.
+    LoadGlobal();
+
+    // Load the arguments.
+    for (int i = 0; i < arg_count; i++) {
+      LoadAndSpill(args->at(i));
+    }
+
+    // Setup the receiver register and call the IC initialization code.
+    __ li(a2, Operand(var->name()));
+    InLoopFlag in_loop = loop_nesting() > 0 ? IN_LOOP : NOT_IN_LOOP;
+    Handle<Code> stub = ComputeCallInitialize(arg_count, in_loop);
+    CodeForSourcePosition(node->position());
+    frame_->CallCodeObject(stub, RelocInfo::CODE_TARGET_CONTEXT,
+                           arg_count + 1);
+    __ nop();
+    __ ReturnFromAlignedCall();
+    __ lw(cp, frame_->Context());
+    // Remove the function from the stack.
+    frame_->EmitPush(v0);
+
+  } else if (var != NULL && var->slot() != NULL &&
+             var->slot()->type() == Slot::LOOKUP) {
+    UNIMPLEMENTED_MIPS();
+  } else if (property != NULL) {
+    UNIMPLEMENTED_MIPS();
+  } else {
+    UNIMPLEMENTED_MIPS();
+  }
+
+  ASSERT(frame_->height() == original_height + 1);
 }
 
 
@@ -940,12 +1103,139 @@ void CEntryStub::GenerateCore(MacroAssembler* masm,
                               bool do_gc,
                               bool always_allocate) {
   UNIMPLEMENTED_MIPS();
-  __ break_(0x826);
+  // a0: result parameter for PerformGC, if any
+  // s0: number of arguments including receiver (C callee-saved)
+  // s1: pointer to builtin function            (C callee-saved)
+  // s2: pointer to the first argument          (C callee-saved)
+
+  if (do_gc) {
+    UNIMPLEMENTED_MIPS();
+  }
+
+  ExternalReference scope_depth =
+      ExternalReference::heap_always_allocate_scope_depth();
+  if (always_allocate) {
+    UNIMPLEMENTED_MIPS();
+  }
+
+  // Call C built-in.
+  // a0 = argc, a1 = argv
+  __ mov(a0, s0);
+  __ mov(a1, s2);
+
+  __ CallBuiltin(s1);
+
+  if (always_allocate) {
+    UNIMPLEMENTED_MIPS();
+  }
+
+  // check for failure result
+  Label failure_returned;
+  ASSERT(((kFailureTag + 1) & kFailureTagMask) == 0);
+  __ addiu(a2, v0, 1);
+  __ andi(t0, a2, kFailureTagMask);
+  __ Branch(eq, &failure_returned, t0, Operand(zero_reg));
+  __ nop();
+
+  // Exit C frame and return.
+  // v0:v1: result
+  // sp: stack pointer
+  // fp: frame pointer
+  __ LeaveExitFrame(mode_);
+
+  // check if we should retry or throw exception
+  Label retry;
+  __ bind(&failure_returned);
+  ASSERT(Failure::RETRY_AFTER_GC == 0);
+  __ andi(t0, v0, ((1 << kFailureTypeTagSize) - 1) << kFailureTagSize);
+  __ Branch(eq, &retry, t0, Operand(zero_reg));
+  __ nop(); // NOP_ADDED
+
+  // Special handling of out of memory exceptions.
+  Failure* out_of_memory = Failure::OutOfMemoryException();
+  __ Branch(eq, throw_out_of_memory_exception,
+            v0, Operand(reinterpret_cast<int32_t>(out_of_memory)));
+  __ nop(); // NOP_ADDED
+
+  // Retrieve the pending exception and clear the variable.
+  __ li(t0, Operand(ExternalReference::the_hole_value_location()));
+  __ lw(a3, MemOperand(t0));
+  __ li(t0, Operand(ExternalReference(Top::k_pending_exception_address)));
+  __ lw(v0, MemOperand(t0));
+  __ sw(a3, MemOperand(t0));
+
+  // Special handling of termination exceptions which are uncatchable
+  // by javascript code.
+  __ Branch(eq, throw_termination_exception,
+            v0, Operand(Factory::termination_exception()));
+  __ nop(); // NOP_ADDED
+
+  // Handle normal exception.
+  __ b(throw_normal_exception);
+  __ nop(); // NOP_ADDED
+
+  __ bind(&retry);  // pass last failure (r0) as parameter (r0) when retrying
 }
 
 void CEntryStub::Generate(MacroAssembler* masm) {
   UNIMPLEMENTED_MIPS();
-  __ break_(0x831);
+  // Called from JavaScript; parameters are on stack as if calling JS function
+  // a0: number of arguments including receiver
+  // a1: pointer to builtin function
+  // fp: frame pointer    (restored after C call)
+  // sp: stack pointer    (restored as callee's sp after C call)
+  // cp: current context  (C callee-saved)
+
+  // NOTE: Invocations of builtins may return failure objects
+  // instead of a proper result. The builtin entry handles
+  // this by performing a garbage collection and retrying the
+  // builtin once.
+
+  // Enter the exit frame that transitions from JavaScript to C++.
+  __ EnterExitFrame(mode_);
+
+  // s0: number of arguments (C callee-saved)
+  // s1: pointer to builtin function (C callee-saved)
+  // s2: pointer to first argument (C callee-saved)
+
+  Label throw_normal_exception;
+  Label throw_termination_exception;
+  Label throw_out_of_memory_exception;
+
+  // Call into the runtime system.
+  GenerateCore(masm,
+               &throw_normal_exception,
+               &throw_termination_exception,
+               &throw_out_of_memory_exception,
+               false,
+               false);
+
+  // Do space-specific GC and retry runtime call.
+  GenerateCore(masm,
+               &throw_normal_exception,
+               &throw_termination_exception,
+               &throw_out_of_memory_exception,
+               true,
+               false);
+
+  // Do full GC and retry runtime call one final time.
+  Failure* failure = Failure::InternalError();
+  __ li(v0, Operand(reinterpret_cast<int32_t>(failure)));
+  GenerateCore(masm,
+               &throw_normal_exception,
+               &throw_termination_exception,
+               &throw_out_of_memory_exception,
+               true,
+               true);
+
+  __ bind(&throw_out_of_memory_exception);
+  GenerateThrowUncatchable(masm, OUT_OF_MEMORY);
+
+  __ bind(&throw_termination_exception);
+  GenerateThrowUncatchable(masm, TERMINATION);
+
+  __ bind(&throw_normal_exception);
+  GenerateThrowTOS(masm);
 }
 
 void JSEntryStub::GenerateBody(MacroAssembler* masm, bool is_construct) {

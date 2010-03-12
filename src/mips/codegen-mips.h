@@ -261,13 +261,23 @@ class CodeGenerator: public AstVisitor {
   void LoadReference(Reference* ref);
   void UnloadReference(Reference* ref);
 
+  MemOperand ContextOperand(Register context, int index) const {
+    return MemOperand(context, Context::SlotOffset(index));
+  }
+
   MemOperand SlotOperand(Slot* slot, Register tmp);
+
+  // Expressions
+  MemOperand GlobalObject() const  {
+    return ContextOperand(cp, Context::GLOBAL_INDEX);
+  }
 
   void LoadCondition(Expression* x,
                      JumpTarget* true_target,
                      JumpTarget* false_target,
                      bool force_cc);
   void Load(Expression* x);
+  void LoadGlobal();
 
   // Generate code to push the value of an expression on top of the frame
   // and then spill the frame fully to memory.  This function is used

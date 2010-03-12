@@ -1048,6 +1048,14 @@ void MacroAssembler::InvokeFunction(Register function,
 // ---------------------------------------------------------------------------
 // Support functions.
 
+  void MacroAssembler::GetObjectType(Register function,
+                                      Register map,
+                                      Register type_reg) {
+    lw(map, FieldMemOperand(function, HeapObject::kMapOffset));
+    lbu(type_reg, FieldMemOperand(map, Map::kInstanceTypeOffset));
+  }
+
+
   void MacroAssembler::CallBuiltin(ExternalReference builtin_entry) {
     // Load builtin address.
     li(t9, Operand(builtin_entry));
@@ -1056,14 +1064,16 @@ void MacroAssembler::InvokeFunction(Register function,
     // Call and allocate arguments slots.
     jalr(t9);
     addiu(sp, sp, -StandardFrameConstants::kRArgsSlotsSize);
+    addiu(sp, sp, StandardFrameConstants::kRArgsSlotsSize);
   }
 
 
   void MacroAssembler::CallBuiltin(Register target) {
-    // t9 already holds target address.
+    // target already holds target address.
     // Call and allocate arguments slots.
-    jalr(t9);
+    jalr(target);
     addiu(sp, sp, -StandardFrameConstants::kRArgsSlotsSize);
+    addiu(sp, sp, StandardFrameConstants::kRArgsSlotsSize);
   }
 
 
@@ -1229,6 +1239,91 @@ void MacroAssembler::LeaveFrame(StackFrame::Type type) {
   lw(fp, MemOperand(sp, 0 * kPointerSize));
   lw(ra, MemOperand(sp, 1 * kPointerSize));
   addiu(sp, sp, 2 * kPointerSize);
+}
+
+
+void MacroAssembler::EnterExitFrame(ExitFrame::Mode mode) {
+  // Compute the argv pointer and keep it in a callee-saved register.
+  // a0 is argc.
+  sll(t0, a0, kPointerSizeLog2);
+  add(s2, sp, t0);
+  addi(s2, s2, -kPointerSize);
+
+  // Compute callee's stack pointer before making changes and save it as
+  // t1 register so that it is restored as sp register on exit, thereby
+  // popping the args.
+  // t1 = sp + kPointerSize * #args;
+  add(t1, sp, t0);
+
+  // Align the stack at this point.
+  AlignStack(0);
+
+  // Save registers.
+  addiu(sp, sp, -12);
+  sw(t1, MemOperand(sp, 8));
+  sw(ra, MemOperand(sp, 4));
+  sw(fp, MemOperand(sp, 0));
+  mov(fp, sp);  // setup new frame pointer
+
+  // Push debug marker.
+  if (mode == ExitFrame::MODE_DEBUG) {
+    Push(zero_reg);
+  } else {
+    li(t0, Operand(CodeObject()));
+    Push(t0);
+  }
+
+  // Save the frame pointer and the context in top.
+  li(t0, Operand(ExternalReference(Top::k_c_entry_fp_address)));
+  sw(fp, MemOperand(t0));
+  li(t0, Operand(ExternalReference(Top::k_context_address)));
+  sw(cp, MemOperand(t0));
+
+  // Setup argc and the builtin function in callee-saved registers.
+  mov(s0, a0);
+  mov(s1, a1);
+
+}
+
+
+void MacroAssembler::LeaveExitFrame(ExitFrame::Mode mode) {
+  // Clear top frame.
+  li(t0, Operand(ExternalReference(Top::k_c_entry_fp_address)));
+  sw(zero_reg, MemOperand(t0));
+
+  // Restore current context from top and clear it in debug mode.
+  li(t0, Operand(ExternalReference(Top::k_context_address)));
+  lw(cp, MemOperand(t0));
+#ifdef DEBUG
+  sw(a3, MemOperand(t0));
+#endif
+
+  // Pop the arguments, restore registers, and return.
+  mov(sp, fp);  // respect ABI stack constraint
+  lw(fp, MemOperand(sp, 0));
+  lw(ra, MemOperand(sp, 4));
+  lw(sp, MemOperand(sp, 8));
+  jr(ra);
+  nop();    // NOP_ADDED
+}
+
+
+void MacroAssembler::AlignStack(int offset) {
+  // On MIPS an offset of 0 aligns to 0(8) bytes,
+  //     and an offset of 1 aligns to 4(8) bytes.
+  int activation_frame_alignment = OS::ActivationFrameAlignment();
+  if (activation_frame_alignment != kPointerSize) {
+    // This code needs to be made more general if this assert doesn't hold.
+    ASSERT(activation_frame_alignment == 2 * kPointerSize);
+    if (offset == 0) {
+      andi(t0, sp,  activation_frame_alignment - 1);
+      Push(zero_reg, eq, t0, zero_reg );
+    } else {
+      andi(t0, sp,  activation_frame_alignment - 1);
+      addiu(t0, t0, -4);
+      Push(zero_reg, eq, t0, zero_reg );
+    }
+  }
 }
 
 } }  // namespace v8::internal

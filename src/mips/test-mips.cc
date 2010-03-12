@@ -147,7 +147,9 @@ bool LExecuteString(v8::Handle<v8::String> source,
         LReportException(&try_catch);
       return false;
     } else {
-      if (print_result && !result->IsUndefined()) {
+      // Always print the result.
+      // if (print_result && !result->IsUndefined()) {
+      if (!result->IsUndefined()) {
         printf("\nresult: 0x%x\n", *reinterpret_cast<int*>(*result));
       }
       return true;

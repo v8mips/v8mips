@@ -220,6 +220,17 @@ class MacroAssembler: public Assembler {
   void EnterInternalFrame() { EnterFrame(StackFrame::INTERNAL); }
   void LeaveInternalFrame() { LeaveFrame(StackFrame::INTERNAL); }
 
+  // Enter specific kind of exit frame; either EXIT or
+  // EXIT_DEBUG. Expects the number of arguments in register a0 and
+  // the builtin function to call in register a1.
+  void EnterExitFrame(ExitFrame::Mode mode);
+
+  // Leave the current exit frame. Expects the return value in v0.
+  void LeaveExitFrame(ExitFrame::Mode mode);
+
+  // Align the stack by optionally pushing a Smi zero.
+  void AlignStack(int offset);
+
   void SetupAlignedCall(Register scratch, int arg_count = 0);
   void ReturnFromAlignedCall();
 
@@ -274,6 +285,10 @@ class MacroAssembler: public Assembler {
 
   // ---------------------------------------------------------------------------
   // Support functions.
+
+  void GetObjectType(Register function,
+                     Register map,
+                     Register type_reg);
 
   inline void BranchOnSmi(Register value, Label* smi_label,
                           Register scratch = at) {

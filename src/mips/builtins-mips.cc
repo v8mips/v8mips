@@ -169,12 +169,10 @@ static void Generate_JSEntryTrampolineHelper(MacroAssembler* masm,
     __ nop();
   }
 
-  // Exit the JS frame and remove the parameters (except function), and return.
-  // Respect ABI stack constraint.
   __ LeaveInternalFrame();
 
   __ Jump(ra);
-  __ addiu(sp, sp, StandardFrameConstants::kRArgsSlotsSize);
+  __ nop();
 }
 
 
