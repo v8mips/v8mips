@@ -210,20 +210,6 @@ class MacroAssembler: public Assembler {
   }
 
 
-#ifdef ENABLE_DEBUGGER_SUPPORT
-  // ---------------------------------------------------------------------------
-  // Debugger Support
-
-  void SaveRegistersToMemory(RegList regs);
-  void RestoreRegistersFromMemory(RegList regs);
-  void CopyRegistersFromMemoryToStack(Register base, RegList regs);
-  void CopyRegistersFromStackToMemory(Register base,
-                                      Register scratch,
-                                      RegList regs);
-  void DebugBreak();
-#endif
-
-
   // ---------------------------------------------------------------------------
   // Activation frames
 

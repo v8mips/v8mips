@@ -59,16 +59,6 @@ void CodeGenerator::LoadAndSpill(Expression* expression) {
 }
 
 
-void CodeGenerator::GenerateMathSin(ZoneList<Expression*>* args) {
-  UNIMPLEMENTED_MIPS();
-}
-
-
-void CodeGenerator::GenerateMathCos(ZoneList<Expression*>* args) {
-  UNIMPLEMENTED_MIPS();
-}
-
-
 #undef __
 
 } }  // namespace v8::internal

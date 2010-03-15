@@ -1094,6 +1094,12 @@ void CompareStub::Generate(MacroAssembler* masm) {
 }
 
 
+Handle<Code> GetBinaryOpStub(int key, BinaryOpIC::TypeInfo type_info) {
+  UNIMPLEMENTED_MIPS();
+  return Handle<Code>::null();
+}
+
+
 void StackCheckStub::Generate(MacroAssembler* masm) {
   UNIMPLEMENTED_MIPS();
   __ break_(0x790);

@@ -5679,7 +5679,7 @@ static inline void DateYMDFromTimeSlow(int date,
 
   ASSERT(date >= -1);
   ASSERT(is_leap || date >= 0);
-  ASSERT(date < 365 || is_leap && date < 366);
+  ASSERT((date < 365) || (is_leap && date < 366));
   ASSERT(is_leap == (year % 4 == 0 && (year % 100 || (year % 400 == 0))));
   ASSERT(is_leap || MakeDay(year, 0, 1) + date == save_date);
   ASSERT(!is_leap || MakeDay(year, 0, 1) + date + 1 == save_date);
