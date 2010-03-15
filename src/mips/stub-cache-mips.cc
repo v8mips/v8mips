@@ -201,6 +201,26 @@ Object* CallStubCompiler::CompileCallField(JSObject* object,
 }
 
 
+Object* CallStubCompiler::CompileArrayPushCall(Object* object,
+                                               JSObject* holder,
+                                               JSFunction* function,
+                                               String* name,
+                                               CheckType check) {
+  UNIMPLEMENTED_MIPS();
+  return reinterpret_cast<Object*>(NULL);   // UNIMPLEMENTED RETURN
+}
+
+
+Object* CallStubCompiler::CompileArrayPopCall(Object* object,
+                                              JSObject* holder,
+                                              JSFunction* function,
+                                              String* name,
+                                              CheckType check) {
+  UNIMPLEMENTED_MIPS();
+  return reinterpret_cast<Object*>(NULL);   // UNIMPLEMENTED RETURN
+}
+
+
 Object* CallStubCompiler::CompileCallConstant(Object* object,
                                               JSObject* holder,
                                               JSFunction* function,
