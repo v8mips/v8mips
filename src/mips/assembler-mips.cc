@@ -473,8 +473,8 @@ void Assembler::GenInstrRegister(Opcode opcode,
                                  FPURegister fd,
                                  SecondaryField func) {
   ASSERT(fd.is_valid() && fs.is_valid() && ft.is_valid());
-  Instr instr = opcode | fmt | (ft.code() << 16) | (fs.code() << kFsShift)
-      | (fd.code() << 6) | func;
+  Instr instr = opcode | fmt | (ft.code() << kFtShift) | (fs.code() << kFsShift)
+      | (fd.code() << kFdShift) | func;
   emit(instr);
 }
 
@@ -487,7 +487,7 @@ void Assembler::GenInstrRegister(Opcode opcode,
                                  SecondaryField func) {
   ASSERT(fd.is_valid() && fs.is_valid() && rt.is_valid());
   Instr instr = opcode | fmt | (rt.code() << kRtShift)
-      | (fs.code() << kFsShift) | (fd.code() << 6) | func;
+      | (fs.code() << kFsShift) | (fd.code() << kFdShift) | func;
   emit(instr);
 }
 
@@ -916,23 +916,44 @@ void Assembler::sdc1(FPURegister fd, const MemOperand& src) {
 }
 
 
-void Assembler::mtc1(FPURegister fs, Register rt) {
+void Assembler::mtc1(Register rt, FPURegister fs) {
   GenInstrRegister(COP1, MTC1, rt, fs, f0);
 }
 
 
-void Assembler::mthc1(FPURegister fs, Register rt) {
-  GenInstrRegister(COP1, MTHC1, rt, fs, f0);
-}
-
-
-void Assembler::mfc1(FPURegister fs, Register rt) {
+void Assembler::mfc1(Register rt, FPURegister fs) {
   GenInstrRegister(COP1, MFC1, rt, fs, f0);
 }
 
 
-void Assembler::mfhc1(FPURegister fs, Register rt) {
-  GenInstrRegister(COP1, MFHC1, rt, fs, f0);
+// Arithmetic.
+
+void Assembler::add_d(FPURegister fd, FPURegister fs, FPURegister ft) {
+  GenInstrRegister(COP1, D, ft, fs, fd, ADD_D);
+}
+
+void Assembler::sub_d(FPURegister fd, FPURegister fs, FPURegister ft) {
+  GenInstrRegister(COP1, D, ft, fs, fd, SUB_D);
+}
+
+void Assembler::mul_d(FPURegister fd, FPURegister fs, FPURegister ft) {
+  GenInstrRegister(COP1, D, ft, fs, fd, MUL_D);
+}
+
+void Assembler::div_d(FPURegister fd, FPURegister fs, FPURegister ft) {
+  GenInstrRegister(COP1, D, ft, fs, fd, DIV_D);
+}
+
+void Assembler::abs_d(FPURegister fd, FPURegister fs) {
+  GenInstrRegister(COP1, D, f0, fs, fd, ABS_D);
+}
+
+void Assembler::mov_d(FPURegister fd, FPURegister fs) {
+  GenInstrRegister(COP1, D, f0, fs, fd, MOV_D);
+}
+
+void Assembler::neg_d(FPURegister fd, FPURegister fs) {
+  GenInstrRegister(COP1, D, f0, fs, fd, NEG_D);
 }
 
 

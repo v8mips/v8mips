@@ -470,12 +470,17 @@ class Assembler : public Malloced {
   void swc1(FPURegister fs, const MemOperand& dst);
   void sdc1(FPURegister fs, const MemOperand& dst);
 
-  // When paired with MTC1 to write a value to a 64-bit FPR, the MTC1 must be
-  // executed first, followed by the MTHC1.
-  void mtc1(FPURegister fs, Register rt);
-  void mthc1(FPURegister fs, Register rt);
-  void mfc1(FPURegister fs, Register rt);
-  void mfhc1(FPURegister fs, Register rt);
+  void mtc1(Register rt, FPURegister fs);
+  void mfc1(Register rt, FPURegister fs);
+
+  // Arithmetic.
+  void add_d(FPURegister fd, FPURegister fs, FPURegister ft);
+  void sub_d(FPURegister fd, FPURegister fs, FPURegister ft);
+  void mul_d(FPURegister fd, FPURegister fs, FPURegister ft);
+  void div_d(FPURegister fd, FPURegister fs, FPURegister ft);
+  void abs_d(FPURegister fd, FPURegister fs);
+  void mov_d(FPURegister fd, FPURegister fs);
+  void neg_d(FPURegister fd, FPURegister fs);
 
   // Conversion.
   void cvt_w_s(FPURegister fd, FPURegister fs);

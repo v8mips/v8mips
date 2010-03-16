@@ -871,7 +871,9 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
   int32_t  rd_reg = instr->RdField();
   uint32_t sa     = instr->SaField();
 
-  int32_t fs_reg= instr->FsField();
+  int32_t  fs_reg = instr->FsField();
+  int32_t  ft_reg = instr->FtField();
+  int32_t  fd_reg = instr->FdField();
 
   // ALU output
   // It should not be used as is. Instructions using it should always initialize
@@ -900,8 +902,7 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
           alu_out = get_fpu_register(fs_reg);
           break;
         case MFHC1:
-          fp_out = get_fpu_register_double(fs_reg);
-          alu_out = *v8i::BitCast<int32_t*, double*>(&fp_out);
+          UNIMPLEMENTED_MIPS();
           break;
         case MTC1:
         case MTHC1:
@@ -1052,18 +1053,16 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
           UNREACHABLE();
           break;
         case MFC1:
-        case MFHC1:
           set_register(rt_reg, alu_out);
           break;
+        case MFHC1:
+          UNIMPLEMENTED_MIPS();
+          break;
         case MTC1:
-          // We don't need to set the higher bits to 0, because MIPS ISA says
-          // they are in an unpredictable state after executing MTC1.
           FPUregisters_[fs_reg] = registers_[rt_reg];
-          FPUregisters_[fs_reg+1] = Unpredictable;
           break;
         case MTHC1:
-          // Here we need to keep the lower bits unchanged.
-          FPUregisters_[fs_reg+1] = registers_[rt_reg];
+          UNIMPLEMENTED_MIPS();
           break;
         case S:
           switch (instr->FunctionFieldRaw()) {
@@ -1078,9 +1077,38 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
           }
           break;
         case D:
+          double ft, fs;
+          fs = get_fpu_register_double(fs_reg);
           switch (instr->FunctionFieldRaw()) {
+            case ADD_D:
+              ft = get_fpu_register_double(ft_reg);
+              set_fpu_register_double(fd_reg, fs + ft);
+              break;
+            case SUB_D:
+              ft = get_fpu_register_double(ft_reg);
+              set_fpu_register_double(fd_reg, fs - ft);
+              break;
+            case MUL_D:
+              ft = get_fpu_register_double(ft_reg);
+              set_fpu_register_double(fd_reg, fs * ft);
+              break;
+            case DIV_D:
+              ft = get_fpu_register_double(ft_reg);
+              set_fpu_register_double(fd_reg, fs / ft);
+              break;
+            case ABS_D:
+              set_fpu_register_double(fd_reg, fs < 0 ? -fs : fs);
+              break;
+            case MOV_D:
+              set_fpu_register_double(fd_reg, fs);
+              break;
+            case NEG_D:
+              set_fpu_register_double(fd_reg, -fs);
+              break;
+            case CVT_W_D:   // Convert double to word
+              set_fpu_register(fd_reg, static_cast<int32_t>(fs));
+              break;
             case CVT_S_D:
-            case CVT_W_D:
             case CVT_L_D:
               UNIMPLEMENTED_MIPS();
               break;
@@ -1094,7 +1122,8 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
               UNIMPLEMENTED_MIPS();
               break;
             case CVT_D_W:   // Convert word to double.
-              set_fpu_register(rd_reg, static_cast<double>(rs));
+              alu_out = get_fpu_register(fs_reg);
+              set_fpu_register_double(fd_reg, static_cast<double>(alu_out));
               break;
             default:
               UNREACHABLE();
@@ -1195,7 +1224,6 @@ void Simulator::DecodeTypeImmediate(Instruction* instr) {
   int16_t  imm16  = instr->Imm16Field();
 
   int32_t  ft_reg = instr->FtField();  // destination register
-  int32_t  ft     = get_register(ft_reg);
 
   // zero extended immediate
   uint32_t  oe_imm16 = 0xffff & imm16;
@@ -1409,7 +1437,7 @@ void Simulator::DecodeTypeImmediate(Instruction* instr) {
       break;
     case SDC1:
       addr = rs + se_imm16;
-      WriteD(addr, ft, instr);
+      WriteD(addr, get_fpu_register_double(ft_reg), instr);
       break;
     default:
       break;

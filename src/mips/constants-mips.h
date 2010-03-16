@@ -146,6 +146,8 @@ static const int kFsShift       = 11;
 static const int kFsBits        = 5;
 static const int kFtShift       = 16;
 static const int kFtBits        = 5;
+static const int kFdShift       = 6;
+static const int kFdBits        = 5;
 
 // ----- Miscellianous useful masks.
 // Instruction bit masks.
@@ -274,6 +276,14 @@ enum SecondaryField {
   CVT_L_S   =   ((4 << 3) + 5),
   CVT_PS_S  =   ((4 << 3) + 6),
   // COP1 Encoding of Function Field When rs=D.
+  ADD_D     =   ((0 << 3) + 0),
+  SUB_D     =   ((0 << 3) + 1),
+  MUL_D     =   ((0 << 3) + 2),
+  DIV_D     =   ((0 << 3) + 3),
+  SQRT_D    =   ((0 << 3) + 4),
+  ABS_D     =   ((0 << 3) + 5),
+  MOV_D     =   ((0 << 3) + 6),
+  NEG_D     =   ((0 << 3) + 7),
   CVT_S_D   =   ((4 << 3) + 0),
   CVT_W_D   =   ((4 << 3) + 4),
   CVT_L_D   =   ((4 << 3) + 5),
@@ -421,12 +431,16 @@ class Instruction {
     return Bits(kFunctionShift + kFunctionBits - 1, kFunctionShift);
   }
 
+  inline int FdField() const {
+    return Bits(kFdShift + kFdBits - 1, kFdShift);
+  }
+
   inline int FsField() const {
-    return Bits(kFsShift + kRsBits - 1, kFsShift);
+    return Bits(kFsShift + kFsBits - 1, kFsShift);
   }
 
   inline int FtField() const {
-    return Bits(kFtShift + kRsBits - 1, kFtShift);
+    return Bits(kFtShift + kFtBits - 1, kFtShift);
   }
 
   // Return the fields at their original place in the instruction encoding.

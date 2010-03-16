@@ -305,15 +305,15 @@ int Decoder::FormatRegister(Instruction* instr, const char* format) {
 int Decoder::FormatFPURegister(Instruction* instr, const char* format) {
   ASSERT(format[0] == 'f');
   if (format[1] == 's') {  // 'fs: fs register
-    int reg = instr->RdField(); // Fs field overlays int Rd field (not Rs)
+    int reg = instr->FsField();
     PrintFPURegister(reg);
     return 2;
   } else if (format[1] == 't') {  // 'ft: ft register
-    int reg = instr->RtField();
+    int reg = instr->FtField();
     PrintFPURegister(reg);
     return 2;
   } else if (format[1] == 'd') {  // 'fd: fd register
-    int reg = instr->RdField();
+    int reg = instr->FdField();
     PrintFPURegister(reg);
     return 2;
   }
@@ -414,8 +414,41 @@ void Decoder::DecodeTypeRegister(Instruction* instr) {
         case MTHC1:
           Format(instr, "mthc1  'rt, 'fs");
           break;
-        case S:
         case D:
+          switch (instr->FunctionFieldRaw()) {
+            case ADD_D:
+              Format(instr, "add.d  'fd, 'fs, 'ft");
+              break;
+            case SUB_D:
+              Format(instr, "sub.d  'fd, 'fs, 'ft");
+              break;
+            case MUL_D:
+              Format(instr, "mul.d  'fd, 'fs, 'ft");
+              break;
+            case DIV_D:
+              Format(instr, "div.d  'fd, 'fs, 'ft");
+              break;
+            case ABS_D:
+              Format(instr, "abs.d  'fd, 'fs");
+              break;
+            case MOV_D:
+              Format(instr, "mov.d  'fd, 'fs");
+              break;
+            case NEG_D:
+              Format(instr, "neg.d  'fd, 'fs");
+              break;
+            case CVT_W_D:
+              Format(instr, "cvt.w.d 'fd, 'fs");
+              break;
+            case CVT_L_D:
+            case CVT_S_D:
+              UNIMPLEMENTED_MIPS();
+              break;
+            default:
+              UNREACHABLE();
+          };
+          break;
+        case S:
           UNIMPLEMENTED_MIPS();
           break;
         case W:
@@ -424,7 +457,7 @@ void Decoder::DecodeTypeRegister(Instruction* instr) {
               UNIMPLEMENTED_MIPS();
               break;
             case CVT_D_W:   // Convert word to double.
-              Format(instr, "cvt.d.w  'fd, 'fs");
+              Format(instr, "cvt.d.w 'fd, 'fs");
               break;
             default:
               UNREACHABLE();
@@ -433,7 +466,6 @@ void Decoder::DecodeTypeRegister(Instruction* instr) {
         case L:
         case PS:
           UNIMPLEMENTED_MIPS();
-          break;
           break;
         default:
           UNREACHABLE();
@@ -758,9 +790,8 @@ int Disassembler::InstructionDecode(v8::internal::Vector<char> buffer,
   return d.InstructionDecode(instruction);
 }
 
-
+// The MIPS assembler does not currently use constant pools.
 int Disassembler::ConstantPoolSizeAt(byte_* instruction) {
-  UNIMPLEMENTED_MIPS();
   return -1;
 }
 
