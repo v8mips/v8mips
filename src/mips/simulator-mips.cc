@@ -676,7 +676,7 @@ double Simulator::ReadD(int32_t addr, Instruction* instr) {
     double* ptr = reinterpret_cast<double*>(addr);
     return *ptr;
   }
-  PrintF("Unaligned read at 0x%08x, pc=%p\n", addr, instr);
+  PrintF("Unaligned (double) read at 0x%08x, pc=%p\n", addr, instr);
   OS::Abort();
   return 0;
 }
@@ -688,7 +688,7 @@ void Simulator::WriteD(int32_t addr, double value, Instruction* instr) {
     *ptr = value;
     return;
   }
-  PrintF("Unaligned write at 0x%08x, pc=%p\n", addr, instr);
+  PrintF("Unaligned (double) write at 0x%08x, pc=%p\n", addr, instr);
   OS::Abort();
 }
 

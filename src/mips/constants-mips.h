@@ -515,8 +515,9 @@ static const int kArgsSlotsNum   = 4;
 
 static const int kBranchReturnOffset = 2 * Instruction::kInstructionSize;
 
-static const int kDoubleAlignment = 2 * 8;
-static const int kDoubleAlignmentMask = kDoubleAlignmentMask - 1;
+static const int kDoubleAlignmentBits = 3;
+static const int kDoubleAlignment = (1 << kDoubleAlignmentBits);
+static const int kDoubleAlignmentMask = kDoubleAlignment - 1;
 
 
 } }   // namespace assembler::mips
