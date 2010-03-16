@@ -1289,7 +1289,19 @@ void MacroAssembler::LeaveExitFrame(ExitFrame::Mode mode) {
 void MacroAssembler::AlignStack(int offset) {
   // On MIPS an offset of 0 aligns to 0(8) bytes,
   //     and an offset of 1 aligns to 4(8) bytes.
+#if defined(V8_HOST_ARCH_MIPS)
+  // Running on the real platform. Use the alignment as mandated by the local
+  // environment.
+  // Note: This will break if we ever start generating snapshots on one MIPS
+  // platform for another MIPS platform with a different alignment.
   int activation_frame_alignment = OS::ActivationFrameAlignment();
+#else  // defined(V8_HOST_ARCH_MIPS)
+  // If we are using the simulator then we should always align to the expected
+  // alignment. As the simulator is used to generate snapshots we do not know
+  // if the target platform will need alignment, so we will always align at
+  // this point here.
+  int activation_frame_alignment = 2 * kPointerSize;
+#endif  // defined(V8_HOST_ARCH_MIPS)
   if (activation_frame_alignment != kPointerSize) {
     // This code needs to be made more general if this assert doesn't hold.
     ASSERT(activation_frame_alignment == 2 * kPointerSize);
