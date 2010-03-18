@@ -469,7 +469,19 @@ void CodeGenerator::VisitStatements(ZoneList<Statement*>* statements) {
 
 
 void CodeGenerator::VisitBlock(Block* node) {
-  UNIMPLEMENTED_MIPS();
+#ifdef DEBUG
+  int original_height = frame_->height();
+#endif
+  VirtualFrame::SpilledScope spilled_scope;
+  Comment cmnt(masm_, "[ Block");
+  CodeForStatementPosition(node);
+  node->break_target()->set_direction(JumpTarget::FORWARD_ONLY);
+  VisitStatementsAndSpill(node->statements());
+  if (node->break_target()->is_linked()) {
+    node->break_target()->Bind();
+  }
+  node->break_target()->Unuse();
+  ASSERT(!has_valid_frame() || frame_->height() == original_height);
 }
 
 
@@ -487,7 +499,46 @@ void CodeGenerator::DeclareGlobals(Handle<FixedArray> pairs) {
 
 
 void CodeGenerator::VisitDeclaration(Declaration* node) {
-  UNIMPLEMENTED_MIPS();
+#ifdef DEBUG
+  int original_height = frame_->height();
+#endif
+  VirtualFrame::SpilledScope spilled_scope;
+  Comment cmnt(masm_, "[ Declaration");
+  Variable* var = node->proxy()->var();
+  ASSERT(var != NULL);  // Must have been resolved.
+  Slot* slot = var->slot();
+
+  // If it was not possible to allocate the variable at compile time,
+  // we need to "declare" it at runtime to make sure it actually
+  // exists in the local context.
+  if (slot != NULL && slot->type() == Slot::LOOKUP) {
+    UNIMPLEMENTED_MIPS();
+    return;
+  }
+
+  ASSERT(!var->is_global());
+
+  // If we have a function or a constant, we need to initialize the variable.
+  Expression* val = NULL;
+  if (node->mode() == Variable::CONST) {
+    UNIMPLEMENTED_MIPS();
+  } else {
+    val = node->fun();  // NULL if we don't have a function.
+  }
+
+  if (val != NULL) {
+    {
+      // Set initial value.
+      Reference target(this, node->proxy());
+      LoadAndSpill(val);
+      target.SetValue(NOT_CONST_INIT);
+      // The reference is removed from the stack (preserving TOS) when
+      // it goes out of scope.
+    }
+    // Get rid of the assigned value (declarations are statements).
+    frame_->Drop();
+  }
+  ASSERT(frame_->height() == original_height);
 }
 
 

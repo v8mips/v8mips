@@ -136,7 +136,6 @@ void BreakTarget::Jump(Result* arg) {
 
 
 void BreakTarget::Bind() {
-  UNIMPLEMENTED_MIPS();
 #ifdef DEBUG
   // All the forward-reaching frames should have been adjusted at the
   // jumps to this target.
