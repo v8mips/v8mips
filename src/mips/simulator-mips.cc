@@ -879,8 +879,6 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
   // It should not be used as is. Instructions using it should always initialize
   // it first.
   int32_t alu_out = 0x12345678;
-  // Output or temporary for floating point.
-  double fp_out = 0.0;
 
   // For break and trap instructions.
   bool do_interrupt = false;
