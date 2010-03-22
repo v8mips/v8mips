@@ -352,7 +352,7 @@ class VirtualFrame : public ZoneObject {
   // emit a corresponding pop instruction.
   void EmitPop(Register reg);
   // Same but for multiple registers
-  void EmitMultiPop(RegList regs); 
+  void EmitMultiPop(RegList regs);
   void EmitMultiPopReversed(RegList regs);
 
   // Push an element on top of the expression stack and emit a

@@ -76,26 +76,24 @@ static void Generate_JSEntryTrampolineHelper(MacroAssembler* masm,
                                              bool is_construct) {
   // Called from JSEntryStub::GenerateBody
 
-  // ********** State **********
-  // * Registers:
+  // Registers:
   // a0: entry_address
   // a1: function
   // a2: reveiver_pointer
   // a3: argc
   // s0: argv
   //
-  // * Stack:
-  // args
-  // 4 args slots
-  // callee saved registers + ra
-  // entry frame
-  // handler frame
+  // Stack:
   // arguments slots
-  // ***************************
+  // handler frame
+  // entry frame
+  // callee saved registers + ra
+  // 4 args slots
+  // args
 
   // Clear the context before we push it when entering the JS frame.
   __ li(cp, Operand(0));
-  
+
   // Enter an internal frame.
   __ EnterInternalFrame();
 
@@ -114,20 +112,19 @@ static void Generate_JSEntryTrampolineHelper(MacroAssembler* masm,
   // s0: argv, ie points to first arg
   Label loop, entry;
   __ sll(t0, a3, kPointerSizeLog2);
-  __ b(&entry);
   __ add(t2, s0, t0);
+  __ b(&entry);
+  __ nop();   // Branch delay slot nop.
   // t2 points past last arg.
   __ bind(&loop);
-  __ lw(t0, MemOperand(s0));  // read next parameter
+  __ lw(t0, MemOperand(s0));  // Read next parameter.
   __ addiu(s0, s0, kPointerSize);
-  __ lw(t0, MemOperand(t0));  // dereference handle
-  __ push(t0);  // push parameter
+  __ lw(t0, MemOperand(t0));  // Dereference handle.
+  __ push(t0);  // Push parameter.
   __ bind(&entry);
   __ Branch(ne, &loop, s0, Operand(t2));
-  __ nop();
 
-  // ********** State **********
-  // * Registers:
+  // Registers:
   // a0: entry_address
   // a1: function
   // a2: reveiver_pointer
@@ -135,17 +132,16 @@ static void Generate_JSEntryTrampolineHelper(MacroAssembler* masm,
   // s0: argv
   // s6: roots_address
   //
-  // * Stack:
-  // args
-  // 4 args slots
-  // callee saved registers + ra
-  // entry frame
-  // handler frame
-  // arguments slots
-  // function
-  // receiver
+  // Stack:
   // arguments
-  // ***************************
+  // receiver
+  // function
+  // arguments slots
+  // handler frame
+  // entry frame
+  // callee saved registers + ra
+  // 4 args slots
+  // args
 
   // Initialize all JavaScript callee-saved registers, since they will be seen
   // by the garbage collector as part of handlers.
@@ -153,7 +149,7 @@ static void Generate_JSEntryTrampolineHelper(MacroAssembler* masm,
   __ mov(s1, t4);
   __ mov(s2, t4);
   __ mov(s3, t4);
-  __ mov(s4, s4); 
+  __ mov(s4, s4);
   __ mov(s5, t4);
   // s6 holds the root address. Do not clobber.
   // s7 is cp. Do not init.
@@ -166,13 +162,11 @@ static void Generate_JSEntryTrampolineHelper(MacroAssembler* masm,
   } else {
     ParameterCount actual(a0);
     __ InvokeFunction(a1, actual, CALL_FUNCTION);
-    __ nop();
   }
 
   __ LeaveInternalFrame();
 
   __ Jump(ra);
-  __ nop();
 }
 
 

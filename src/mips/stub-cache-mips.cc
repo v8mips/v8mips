@@ -160,33 +160,29 @@ void StubCompiler::GenerateLoadInterceptor(JSObject* object,
 
 
 Object* StubCompiler::CompileLazyCompile(Code::Flags flags) {
-  // ********** State **********
-  // * Registers:
+  // Registers:
   // a1: function
   // ra: return address
-  // ***************************
 
   // Enter an internal frame.
   __ EnterInternalFrame();
   // Preserve the function.
   __ Push(a1);
   // Setup aligned call.
-  __ SetupAlignedCall(t0, 1);
+  __ SetupAlignedCall(1);
   // Push the function on the stack as the argument to the runtime function.
   __ Push(a1);
   // Call the runtime function
   __ CallRuntime(Runtime::kLazyCompile, 1);
-  __ nop(); // NOP_ADDED
   __ ReturnFromAlignedCall();
   // Calculate the entry point.
   __ addiu(t9, v0, Code::kHeaderSize - kHeapObjectTag);
-  // Restore saved function. 
+  // Restore saved function.
   __ Pop(a1);
   // Tear down temporary frame.
   __ LeaveInternalFrame();
   // Do a tail-call of the compiled function.
   __ Jump(t9);
-  __ nop();
 
   return GetCodeWithFlags(flags, "LazyCompileStub");
 }

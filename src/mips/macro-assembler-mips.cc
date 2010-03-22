@@ -114,7 +114,6 @@ void MacroAssembler::LoadRoot(Register destination,
                               Condition cond,
                               Register src1, const Operand& src2) {
   Branch(NegateCondition(cond), 2, src1, src2);
-  nop();
   lw(destination, MemOperand(s6, index << kPointerSizeLog2));
 }
 
@@ -320,7 +319,6 @@ void MacroAssembler::movn(Register rd, Register rt) {
 }
 
 
-// load wartd in a register
 void MacroAssembler::li(Register rd, Operand j, bool gen2instr) {
   ASSERT(!j.is_reg());
 
@@ -484,6 +482,8 @@ void MacroAssembler::Branch(Condition cond, int16_t offset, Register rs,
     default:
       UNREACHABLE();
   }
+  // Emit a nop in the branch delay slot.
+  nop();
 }
 
 
@@ -550,6 +550,8 @@ void MacroAssembler::Branch(Condition cond,  Label* L, Register rs,
     default:
       UNREACHABLE();
   }
+  // Emit a nop in the branch delay slot.
+  nop();
 }
 
 
@@ -629,6 +631,8 @@ void MacroAssembler::BranchAndLink(Condition cond, int16_t offset, Register rs,
     default:
       UNREACHABLE();
   }
+  // Emit a nop in the branch delay slot.
+  nop();
 }
 
 
@@ -704,6 +708,8 @@ void MacroAssembler::BranchAndLink(Condition cond, Label* L, Register rs,
     default:
       UNREACHABLE();
   }
+  // Emit a nop in the branch delay slot.
+  nop();
 }
 
 
@@ -714,7 +720,6 @@ void MacroAssembler::Jump(const Operand& target,
       jr(target.rm());
     } else {
       Branch(NegateCondition(cond), 2, rs, rt);
-      nop();
       jr(target.rm());
     }
   } else {    // !target.is_reg()
@@ -723,8 +728,7 @@ void MacroAssembler::Jump(const Operand& target,
         j(target.imm32_);
       } else {
         Branch(NegateCondition(cond), 2, rs, rt);
-        nop();
-        j(target.imm32_);  // will generate only one instruction.
+        j(target.imm32_);  // Will generate only one instruction.
       }
     } else {  // MustUseAt(target)
       li(at, target);
@@ -732,11 +736,12 @@ void MacroAssembler::Jump(const Operand& target,
         jr(at);
       } else {
         Branch(NegateCondition(cond), 2, rs, rt);
-        nop();
-        jr(at);  // will generate only one instruction.
+        jr(at);  // Will generate only one instruction.
       }
     }
   }
+  // Emit a nop in the branch delay slot.
+  nop();
 }
 
 
@@ -747,7 +752,6 @@ void MacroAssembler::Call(const Operand& target,
       jalr(target.rm());
     } else {
       Branch(NegateCondition(cond), 2, rs, rt);
-      nop();
       jalr(target.rm());
     }
   } else {    // !target.is_reg()
@@ -756,8 +760,7 @@ void MacroAssembler::Call(const Operand& target,
         jal(target.imm32_);
       } else {
         Branch(NegateCondition(cond), 2, rs, rt);
-        nop();
-        jal(target.imm32_);  // will generate only one instruction.
+        jal(target.imm32_);  // Will generate only one instruction.
       }
     } else {  // MustUseAt(target)
       li(at, target);
@@ -765,11 +768,12 @@ void MacroAssembler::Call(const Operand& target,
         jalr(at);
       } else {
         Branch(NegateCondition(cond), 2, rs, rt);
-        nop();
-        jalr(at);  // will generate only one instruction.
+        jalr(at);  // Will generate only one instruction.
       }
     }
   }
+  // Emit a nop in the branch delay slot.
+  nop();
 }
 
 void MacroAssembler::StackLimitCheck(Label* on_stack_overflow) {
@@ -816,15 +820,15 @@ void MacroAssembler::PushTryHandler(CodeLocation try_location,
            && StackHandlerConstants::kPCOffset == 3 * kPointerSize
            && StackHandlerConstants::kNextOffset == 0 * kPointerSize);
     // Save the current handler as the next handler.
-    li(t2, Operand(ExternalReference(Top::k_handler_address)));
+    LoadExternalReference(t2, ExternalReference(Top::k_handler_address));
     lw(t1, MemOperand(t2));
-   
+
     addiu(sp, sp, -StackHandlerConstants::kSize);
     sw(ra, MemOperand(sp, 12));
     sw(fp, MemOperand(sp, 8));
     sw(t0, MemOperand(sp, 4));
     sw(t1, MemOperand(sp, 0));
-    
+
     // Link this handler as the new current one.
     sw(sp, MemOperand(t2));
 
@@ -842,7 +846,7 @@ void MacroAssembler::PushTryHandler(CodeLocation try_location,
     li(t0, Operand(StackHandler::ENTRY));
 
     // Save the current handler as the next handler.
-    li(t2, Operand(ExternalReference(Top::k_handler_address)));
+    LoadExternalReference(t2, ExternalReference(Top::k_handler_address));
     lw(t1, MemOperand(t2));
 
     addiu(sp, sp, -StackHandlerConstants::kSize);
@@ -866,19 +870,23 @@ void MacroAssembler::PopTryHandler() {
 // -----------------------------------------------------------------------------
 // Activation frames
 
-void MacroAssembler::SetupAlignedCall(Register scratch, int arg_count) {
-  andi(scratch, sp, 7);
+void MacroAssembler::SetupAlignedCall(int arg_count) {
+  // We use 'at' register here because we are certain the Assembler or
+  // MacroAssembler won't mess with it.
+  andi(at, sp, 7);
   // Store sp on the stack. If necessary allocate some extra space to preserve
   // arguments' 8-byte alignment.
-    sw(sp, MemOperand(sp, -4));
-    sw(sp, MemOperand(sp, -8));
-  if(((arg_count + 1) % 2) == 0) {
-    beq(scratch, zero_reg, 2);
+  sw(sp, MemOperand(sp, -4));
+  sw(sp, MemOperand(sp, -8));
+  // We check for args and receiver size on the stack, all of them word sized.
+  // We add one for sp, that we also want to store on the stack.
+  if (((arg_count + 1) % kPointerSizeLog2) == 0) {
+    beq(at, zero_reg, kPointerSizeLog2);
   } else {  // ((arg_count + 1) % 2) == 1
-    bne(scratch, zero_reg, 2);
+    bne(at, zero_reg, kPointerSizeLog2);
   }
-    addiu(sp, sp, -4);
-    addiu(sp, sp, -4);
+  addiu(sp, sp, -4);  // Use branch delay slot.
+  addiu(sp, sp, -4);
 }
 
 
@@ -896,7 +904,6 @@ void MacroAssembler::InvokePrologue(const ParameterCount& expected,
                                     Register code_reg,
                                     Label* done,
                                     InvokeFlag flag) {
-
   bool definitely_matches = false;
   Label regular_invoke;
 
@@ -933,11 +940,9 @@ void MacroAssembler::InvokePrologue(const ParameterCount& expected,
     }
   } else if (actual.is_immediate()) {
     Branch(eq, &regular_invoke, expected.reg(), Operand(actual.immediate()));
-    nop();
     li(a0, Operand(actual.immediate()));
   } else {
     Branch(eq, &regular_invoke, expected.reg(), Operand(actual.reg()));
-    nop();
   }
 
   if (!definitely_matches) {
@@ -949,12 +954,10 @@ void MacroAssembler::InvokePrologue(const ParameterCount& expected,
     ExternalReference adaptor(Builtins::ArgumentsAdaptorTrampoline);
     if (flag == CALL_FUNCTION) {
       CallBuiltin(adaptor);
-      nop();
       b(done);
       nop();
     } else {
       JumpToBuiltin(adaptor);
-      nop();
     }
     bind(&regular_invoke);
   }
@@ -966,8 +969,7 @@ void MacroAssembler::InvokeCode(Register code,
                                 InvokeFlag flag) {
   Label done;
 
-  InvokePrologue(expected, actual, Handle<Code>::null(), code,
-                      &done, flag);
+  InvokePrologue(expected, actual, Handle<Code>::null(), code, &done, flag);
   if (flag == CALL_FUNCTION) {
     Call(code);
   } else {
@@ -987,8 +989,7 @@ void MacroAssembler::InvokeCode(Handle<Code> code,
                                 InvokeFlag flag) {
   Label done;
 
-  InvokePrologue(expected, actual, code, no_reg,
-                      &done, flag);
+  InvokePrologue(expected, actual, code, no_reg, &done, flag);
   if (flag == CALL_FUNCTION) {
     Call(code, rmode);
   } else {
@@ -1019,7 +1020,6 @@ void MacroAssembler::InvokeFunction(Register function,
 
   ParameterCount expected(expected_reg);
   InvokeCode(code_reg, expected, actual, flag);
-  // We want the branch delay slot to be free.
 }
 
 
@@ -1027,8 +1027,8 @@ void MacroAssembler::InvokeFunction(Register function,
 // Support functions.
 
   void MacroAssembler::GetObjectType(Register function,
-                                      Register map,
-                                      Register type_reg) {
+                                     Register map,
+                                     Register type_reg) {
     lw(map, FieldMemOperand(function, HeapObject::kMapOffset));
     lbu(type_reg, FieldMemOperand(map, Map::kInstanceTypeOffset));
   }
@@ -1036,20 +1036,22 @@ void MacroAssembler::InvokeFunction(Register function,
 
   void MacroAssembler::CallBuiltin(ExternalReference builtin_entry) {
     // Load builtin address.
-    li(t9, Operand(builtin_entry));
-    lw(t9, MemOperand(t9));  // deref address
+    LoadExternalReference(t9, builtin_entry);
+    lw(t9, MemOperand(t9));  // Deref address.
     addiu(t9, t9, Code::kHeaderSize - kHeapObjectTag);
     // Call and allocate arguments slots.
     jalr(t9);
+    // Use the branch delay slot to allocated argument slots.
     addiu(sp, sp, -StandardFrameConstants::kRArgsSlotsSize);
     addiu(sp, sp, StandardFrameConstants::kRArgsSlotsSize);
   }
 
 
   void MacroAssembler::CallBuiltin(Register target) {
-    // target already holds target address.
+    // Target already holds target address.
     // Call and allocate arguments slots.
     jalr(target);
+    // Use the branch delay slot to allocated argument slots.
     addiu(sp, sp, -StandardFrameConstants::kRArgsSlotsSize);
     addiu(sp, sp, StandardFrameConstants::kRArgsSlotsSize);
   }
@@ -1057,11 +1059,12 @@ void MacroAssembler::InvokeFunction(Register function,
 
   void MacroAssembler::JumpToBuiltin(ExternalReference builtin_entry) {
     // Load builtin address.
-    li(t9, Operand(builtin_entry));
-    lw(t9, MemOperand(t9));  // deref address
+    LoadExternalReference(t9, builtin_entry);
+    lw(t9, MemOperand(t9));  // Deref address.
     addiu(t9, t9, Code::kHeaderSize - kHeapObjectTag);
     // Call and allocate arguments slots.
     jr(t9);
+    // Use the branch delay slot to allocated argument slots.
     addiu(sp, sp, -StandardFrameConstants::kRArgsSlotsSize);
   }
 
@@ -1070,6 +1073,7 @@ void MacroAssembler::InvokeFunction(Register function,
     // t9 already holds target address.
     // Call and allocate arguments slots.
     jr(t9);
+    // Use the branch delay slot to allocated argument slots.
     addiu(sp, sp, -StandardFrameConstants::kRArgsSlotsSize);
   }
 
@@ -1079,7 +1083,7 @@ void MacroAssembler::InvokeFunction(Register function,
 
 void MacroAssembler::CallStub(CodeStub* stub, Condition cond,
                               Register r1, const Operand& r2) {
-  ASSERT(allow_stub_calls());  // stub calls are not allowed in some stubs
+  ASSERT(allow_stub_calls());  // Stub calls are not allowed in some stubs.
   Call(stub->GetCode(), RelocInfo::CODE_TARGET, cond, r1, r2);
 }
 
@@ -1098,7 +1102,7 @@ void MacroAssembler::IllegalOperation(int num_arguments) {
 
 
 void MacroAssembler::CallRuntime(Runtime::Function* f, int num_arguments) {
-  // All parameters are on the stack.  r0->v0 has the return value after call.
+  // All parameters are on the stack. v0 has the return value after call.
 
   // If the expected number of arguments of the runtime function is
   // constant, we check that the actual number of arguments match the
@@ -1113,7 +1117,7 @@ void MacroAssembler::CallRuntime(Runtime::Function* f, int num_arguments) {
   // should remove this need and make the runtime routine entry code
   // smarter.
   li(a0, num_arguments);
-  li(a1, Operand(ExternalReference(f)));
+  LoadExternalReference(a1, ExternalReference(f));
   CEntryStub stub(1);
   CallStub(&stub);
 }
@@ -1220,17 +1224,20 @@ void MacroAssembler::LeaveFrame(StackFrame::Type type) {
 }
 
 
-void MacroAssembler::EnterExitFrame(ExitFrame::Mode mode) {
+void MacroAssembler::EnterExitFrame(ExitFrame::Mode mode,
+                                    Register hold_argc,
+                                    Register hold_argv,
+                                    Register hold_function) {
   // Compute the argv pointer and keep it in a callee-saved register.
   // a0 is argc.
   sll(t0, a0, kPointerSizeLog2);
-  add(s2, sp, t0);
-  addi(s2, s2, -kPointerSize);
+  add(hold_argv, sp, t0);
+  addi(hold_argv, hold_argv, -kPointerSize);
 
   // Compute callee's stack pointer before making changes and save it as
   // t1 register so that it is restored as sp register on exit, thereby
   // popping the args.
-  // t1 = sp + kPointerSize * #args;
+  // t1 = sp + kPointerSize * #args
   add(t1, sp, t0);
 
   // Align the stack at this point.
@@ -1241,7 +1248,7 @@ void MacroAssembler::EnterExitFrame(ExitFrame::Mode mode) {
   sw(t1, MemOperand(sp, 8));
   sw(ra, MemOperand(sp, 4));
   sw(fp, MemOperand(sp, 0));
-  mov(fp, sp);  // setup new frame pointer
+  mov(fp, sp);  // Setup new frame pointer.
 
   // Push debug marker.
   if (mode == ExitFrame::MODE_DEBUG) {
@@ -1252,43 +1259,42 @@ void MacroAssembler::EnterExitFrame(ExitFrame::Mode mode) {
   }
 
   // Save the frame pointer and the context in top.
-  li(t0, Operand(ExternalReference(Top::k_c_entry_fp_address)));
+  LoadExternalReference(t0, ExternalReference(Top::k_c_entry_fp_address));
   sw(fp, MemOperand(t0));
-  li(t0, Operand(ExternalReference(Top::k_context_address)));
+  LoadExternalReference(t0, ExternalReference(Top::k_context_address));
   sw(cp, MemOperand(t0));
 
   // Setup argc and the builtin function in callee-saved registers.
-  mov(s0, a0);
-  mov(s1, a1);
-
+  mov(hold_argc, a0);
+  mov(hold_argv, a1);
 }
 
 
 void MacroAssembler::LeaveExitFrame(ExitFrame::Mode mode) {
   // Clear top frame.
-  li(t0, Operand(ExternalReference(Top::k_c_entry_fp_address)));
+  LoadExternalReference(t0, ExternalReference(Top::k_c_entry_fp_address));
   sw(zero_reg, MemOperand(t0));
 
   // Restore current context from top and clear it in debug mode.
-  li(t0, Operand(ExternalReference(Top::k_context_address)));
+  LoadExternalReference(t0, ExternalReference(Top::k_context_address));
   lw(cp, MemOperand(t0));
 #ifdef DEBUG
   sw(a3, MemOperand(t0));
 #endif
 
   // Pop the arguments, restore registers, and return.
-  mov(sp, fp);  // respect ABI stack constraint
+  mov(sp, fp);  // Respect ABI stack constraint.
   lw(fp, MemOperand(sp, 0));
   lw(ra, MemOperand(sp, 4));
   lw(sp, MemOperand(sp, 8));
   jr(ra);
-  nop();    // NOP_ADDED
+  nop();  // Branch delay slot nop.
 }
 
 
 void MacroAssembler::AlignStack(int offset) {
-  // On MIPS an offset of 0 aligns to 0(8) bytes,
-  //     and an offset of 1 aligns to 4(8) bytes.
+  // On MIPS an offset of 0 aligns to 0 modulo 8 bytes,
+  //     and an offset of 1 aligns to 4 modulo 8 bytes.
 #if defined(V8_HOST_ARCH_MIPS)
   // Running on the real platform. Use the alignment as mandated by the local
   // environment.
@@ -1306,12 +1312,12 @@ void MacroAssembler::AlignStack(int offset) {
     // This code needs to be made more general if this assert doesn't hold.
     ASSERT(activation_frame_alignment == 2 * kPointerSize);
     if (offset == 0) {
-      andi(t0, sp,  activation_frame_alignment - 1);
-      Push(zero_reg, eq, t0, zero_reg );
+      andi(t0, sp, activation_frame_alignment - 1);
+      Push(zero_reg, eq, t0, zero_reg);
     } else {
-      andi(t0, sp,  activation_frame_alignment - 1);
+      andi(t0, sp, activation_frame_alignment - 1);
       addiu(t0, t0, -4);
-      Push(zero_reg, eq, t0, zero_reg );
+      Push(zero_reg, eq, t0, zero_reg);
     }
   }
 }

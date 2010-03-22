@@ -103,10 +103,10 @@ class MacroAssembler: public Assembler {
   // Jump unconditionally to given label.
   // We NEED a nop in the branch delay slot, as it used by v8, for example in
   // CodeGenerator::ProcessDeferred().
+  // Currently the branch delay slot is filled by the MacroAssembler.
   // Use rather b(Label) for code generation.
   void jmp(Label* L) {
     Branch(cc_always, L);
-    nop();
   }
 
   // Load an object from the root table.
@@ -115,6 +115,11 @@ class MacroAssembler: public Assembler {
   void LoadRoot(Register destination,
                 Heap::RootListIndex index,
                 Condition cond, Register src1, const Operand& src2);
+
+  // Load an external reference.
+  void LoadExternalReference(Register reg, ExternalReference ext) {
+    li(reg, Operand(ext));
+  }
 
   // Sets the remembered set bit for [address+offset].
   void RecordWrite(Register object, Register offset, Register scratch);
@@ -192,7 +197,6 @@ class MacroAssembler: public Assembler {
   void Push(Register src, Condition cond, Register tst1, Register tst2) {
     // Since we don't have conditionnal execution we use a Branch.
     Branch(cond, 3, tst1, Operand(tst2));
-    nop();
     Addu(sp, sp, Operand(-kPointerSize));
     sw(src, MemOperand(sp, 0));
   }
@@ -219,7 +223,11 @@ class MacroAssembler: public Assembler {
   // Enter specific kind of exit frame; either EXIT or
   // EXIT_DEBUG. Expects the number of arguments in register a0 and
   // the builtin function to call in register a1.
-  void EnterExitFrame(ExitFrame::Mode mode);
+  // On output hold_argc, hold_function, and hold_argv are setup.
+  void EnterExitFrame(ExitFrame::Mode mode,
+                      Register hold_argc,
+                      Register hold_argv,
+                      Register hold_function);
 
   // Leave the current exit frame. Expects the return value in v0.
   void LeaveExitFrame(ExitFrame::Mode mode);
@@ -227,7 +235,7 @@ class MacroAssembler: public Assembler {
   // Align the stack by optionally pushing a Smi zero.
   void AlignStack(int offset);
 
-  void SetupAlignedCall(Register scratch, int arg_count = 0);
+  void SetupAlignedCall(int arg_count = 0);
   void ReturnFromAlignedCall();
 
 

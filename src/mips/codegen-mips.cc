@@ -125,18 +125,16 @@ void CodeGenerator::Generate(CompilationInfo* info) {
   {
     CodeGenState state(this);
 
-    // ********** State **********
-    // * Registers:
+    // Registers:
     // a1: called JS function
     // ra: return address
     // fp: caller's frame pointer
     // sp: stack pointer
     // cp: callee's context
     //
-    // * Stack:
-    // receiver
+    // Stack:
     // arguments
-    // ***************************
+    // receiver
 
     frame_->Enter();
 
@@ -214,13 +212,11 @@ void CodeGenerator::Generate(CompilationInfo* info) {
     if (!function_return_.is_linked()) {
       CodeForReturnPosition(info->function());
     }
-    // ********** State **********
-    // * Registers:
+    // Registers:
     // v0: result
     // sp: stack pointer
     // fp: frame pointer
     // cp: callee's context
-    // ***************************
 
     __ LoadRoot(v0, Heap::kUndefinedValueRootIndex);
 
@@ -236,14 +232,14 @@ void CodeGenerator::Generate(CompilationInfo* info) {
     masm_->mov(sp, fp);
     masm_->lw(fp, MemOperand(sp, 0));
     masm_->lw(ra, MemOperand(sp, 4));
-    masm_->addiu(sp,sp,8); 
+    masm_->addiu(sp, sp, 8);
 
     // Here we use masm_-> instead of the __ macro to avoid the code coverage
     // tool from instrumenting as we rely on the code size here.
     // TODO(MIPS): Should we be able to use more than 0x1ffe parameters?
-    masm_->addiu(sp, sp, (scope()->num_parameters() + 1)*kPointerSize);
+    masm_->addiu(sp, sp, (scope()->num_parameters() + 1) * kPointerSize);
     masm_->Jump(ra);
-    masm_->nop();
+    // The Jump automatically generates a nop in the branch delay slot.
 
     // Check that the size of the code used for returning matches what is
     // expected by the debugger.
@@ -367,7 +363,6 @@ void CodeGenerator::LoadCondition(Expression* x,
         !has_cc() &&
         frame_->height() == original_height) {
       true_target->Jump();
-      __ nop();
     }
   }
   if (force_cc && frame_ != NULL && !has_cc()) {
@@ -493,7 +488,6 @@ void CodeGenerator::DeclareGlobals(Handle<FixedArray> pairs) {
   __ li(t0, Operand(Smi::FromInt(is_eval() ? 1 : 0)));
   frame_->EmitPush(t0);
   frame_->CallRuntime(Runtime::kDeclareGlobals, 3);
-  __ nop(); // NOP_ADDED
   // The result is discarded.
 }
 
@@ -586,7 +580,6 @@ void CodeGenerator::VisitReturnStatement(ReturnStatement* node) {
   if (function_return_is_shadowed_) {
     frame_->EmitPop(v0);
     function_return_.Jump();
-    __ nop();
   } else {
     // Pop the result from the frame and prepare the frame for
     // returning thus making it easier to merge.
@@ -594,7 +587,6 @@ void CodeGenerator::VisitReturnStatement(ReturnStatement* node) {
     frame_->PrepareForReturn();
 
     function_return_.Jump();
-    __ nop();
   }
 }
 
@@ -817,7 +809,7 @@ void CodeGenerator::VisitCall(Call* node) {
     int arg_count = args->length();
 
     // We need sp to be 8 bytes aligned when calling the stub.
-    __ SetupAlignedCall(t0, arg_count);
+    __ SetupAlignedCall(arg_count);
 
     // Pass the global object as the receiver and let the IC stub
     // patch the stack to use the global proxy as 'this' in the
@@ -836,7 +828,6 @@ void CodeGenerator::VisitCall(Call* node) {
     CodeForSourcePosition(node->position());
     frame_->CallCodeObject(stub, RelocInfo::CODE_TARGET_CONTEXT,
                            arg_count + 1);
-    __ nop();
     __ ReturnFromAlignedCall();
     __ lw(cp, frame_->Context());
     // Remove the function from the stack.
@@ -1175,11 +1166,9 @@ void CEntryStub::GenerateCore(MacroAssembler* masm,
                               Label* throw_out_of_memory_exception,
                               bool do_gc,
                               bool always_allocate) {
-  UNIMPLEMENTED_MIPS();
-  // a0: result parameter for PerformGC, if any
   // s0: number of arguments including receiver (C callee-saved)
-  // s1: pointer to builtin function            (C callee-saved)
-  // s2: pointer to the first argument          (C callee-saved)
+  // s1: pointer to the first argument          (C callee-saved)
+  // s2: pointer to builtin function            (C callee-saved)
 
   if (do_gc) {
     UNIMPLEMENTED_MIPS();
@@ -1194,21 +1183,20 @@ void CEntryStub::GenerateCore(MacroAssembler* masm,
   // Call C built-in.
   // a0 = argc, a1 = argv
   __ mov(a0, s0);
-  __ mov(a1, s2);
+  __ mov(a1, s1);
 
-  __ CallBuiltin(s1);
+  __ CallBuiltin(s2);
 
   if (always_allocate) {
     UNIMPLEMENTED_MIPS();
   }
 
-  // check for failure result
+  // Check for failure result.
   Label failure_returned;
   ASSERT(((kFailureTag + 1) & kFailureTagMask) == 0);
   __ addiu(a2, v0, 1);
   __ andi(t0, a2, kFailureTagMask);
   __ Branch(eq, &failure_returned, t0, Operand(zero_reg));
-  __ nop();
 
   // Exit C frame and return.
   // v0:v1: result
@@ -1216,24 +1204,23 @@ void CEntryStub::GenerateCore(MacroAssembler* masm,
   // fp: frame pointer
   __ LeaveExitFrame(mode_);
 
-  // check if we should retry or throw exception
+  // Check if we should retry or throw exception.
   Label retry;
   __ bind(&failure_returned);
   ASSERT(Failure::RETRY_AFTER_GC == 0);
   __ andi(t0, v0, ((1 << kFailureTypeTagSize) - 1) << kFailureTagSize);
   __ Branch(eq, &retry, t0, Operand(zero_reg));
-  __ nop(); // NOP_ADDED
 
   // Special handling of out of memory exceptions.
   Failure* out_of_memory = Failure::OutOfMemoryException();
   __ Branch(eq, throw_out_of_memory_exception,
             v0, Operand(reinterpret_cast<int32_t>(out_of_memory)));
-  __ nop(); // NOP_ADDED
 
   // Retrieve the pending exception and clear the variable.
-  __ li(t0, Operand(ExternalReference::the_hole_value_location()));
+  __ LoadExternalReference(t0, ExternalReference::the_hole_value_location());
   __ lw(a3, MemOperand(t0));
-  __ li(t0, Operand(ExternalReference(Top::k_pending_exception_address)));
+  __ LoadExternalReference(t0,
+      ExternalReference(Top::k_pending_exception_address));
   __ lw(v0, MemOperand(t0));
   __ sw(a3, MemOperand(t0));
 
@@ -1241,17 +1228,15 @@ void CEntryStub::GenerateCore(MacroAssembler* masm,
   // by javascript code.
   __ Branch(eq, throw_termination_exception,
             v0, Operand(Factory::termination_exception()));
-  __ nop(); // NOP_ADDED
 
   // Handle normal exception.
   __ b(throw_normal_exception);
-  __ nop(); // NOP_ADDED
+  __ nop();   // Branch delay slot nop.
 
   __ bind(&retry);  // pass last failure (r0) as parameter (r0) when retrying
 }
 
 void CEntryStub::Generate(MacroAssembler* masm) {
-  UNIMPLEMENTED_MIPS();
   // Called from JavaScript; parameters are on stack as if calling JS function
   // a0: number of arguments including receiver
   // a1: pointer to builtin function
@@ -1265,11 +1250,10 @@ void CEntryStub::Generate(MacroAssembler* masm) {
   // builtin once.
 
   // Enter the exit frame that transitions from JavaScript to C++.
-  __ EnterExitFrame(mode_);
-
-  // s0: number of arguments (C callee-saved)
-  // s1: pointer to builtin function (C callee-saved)
-  // s2: pointer to first argument (C callee-saved)
+  __ EnterExitFrame(mode_,
+                    s0,   // s0: number of arguments (C callee-saved)
+                    s1,   // s1: pointer to first argument (C callee-saved)
+                    s2);  // s2: pointer to builtin function (C callee-saved)
 
   Label throw_normal_exception;
   Label throw_termination_exception;
@@ -1314,17 +1298,15 @@ void CEntryStub::Generate(MacroAssembler* masm) {
 void JSEntryStub::GenerateBody(MacroAssembler* masm, bool is_construct) {
   Label invoke, exit;
 
-  // ********** State **********
-  // * Registers:
-  // a0: entry_address
+  // Registers:
+  // a0: entry address
   // a1: function
   // a2: reveiver_pointer
   // a3: argc
   //
-  // * Stack:
-  // args
+  // Stack:
   // 4 args slots
-  // ***************************
+  // args
 
   // Save callee saved registers on the stack.
   __ MultiPush((kCalleeSaved | ra.bit()) & ~sp.bit());
@@ -1334,7 +1316,7 @@ void JSEntryStub::GenerateBody(MacroAssembler* masm, bool is_construct) {
   int marker = is_construct ? StackFrame::ENTRY_CONSTRUCT : StackFrame::ENTRY;
   __ li(t2, Operand(Smi::FromInt(marker)));
   __ li(t1, Operand(Smi::FromInt(marker)));
-  __ li(t0, Operand(ExternalReference(Top::k_c_entry_fp_address)));
+  __ LoadExternalReference(t0, ExternalReference(Top::k_c_entry_fp_address));
   __ lw(t0, MemOperand(t0));
   __ MultiPush(t0.bit() | t1.bit() | t2.bit() | t3.bit());
 
@@ -1342,40 +1324,39 @@ void JSEntryStub::GenerateBody(MacroAssembler* masm, bool is_construct) {
   __ addiu(fp, sp, -EntryFrameConstants::kCallerFPOffset);
 
   // Load argv in s0 register.
-  __ lw(s0, MemOperand(sp,(kNumCalleeSaved + 1)*kPointerSize +
+  __ lw(s0, MemOperand(sp, (kNumCalleeSaved + 1) * kPointerSize +
                            StandardFrameConstants::kCArgsSlotsSize));
 
-  // ********** State **********
-  // * Registers:
+  // Registers:
   // a0: entry_address
   // a1: function
   // a2: reveiver_pointer
   // a3: argc
   // s0: argv
   //
-  // * Stack:
-  // args
-  // 4 args slots
-  // callee saved registers + ra
-  // bad fp (0xff...f)  |
-  // context slot       | entry frame
-  // function slot      |
+  // Stack:
   // caller fp          |
-  // ***************************
+  // function slot      | entry frame
+  // context slot       |
+  // bad fp (0xff...f)  |
+  // callee saved registers + ra
+  // 4 args slots
+  // args
 
   // Call a faked try-block that does the invoke.
   __ bal(&invoke);
-  __ nop(); // NOP_ADDED
+  __ nop();   // Branch delay slot nop.
 
   // Caught exception: Store result (exception) in the pending
   // exception field in the JSEnv and return a failure sentinel.
   // Coming in here the fp will be invalid because the PushTryHandler below
   // sets it to 0 to signal the existence of the JSEntry frame.
-  __ li(t0, Operand(ExternalReference(Top::k_pending_exception_address)));
-  __ sw(v0, MemOperand(t0));    // We come back from 'invoke'. result is in v0.
+  __ LoadExternalReference(t0,
+      ExternalReference(Top::k_pending_exception_address));
+  __ sw(v0, MemOperand(t0));  // We come back from 'invoke'. result is in v0.
   __ li(v0, Operand(reinterpret_cast<int32_t>(Failure::Exception())));
   __ b(&exit);
-  __ nop();
+  __ nop();   // Branch delay slot nop.
 
   // Invoke: Link this frame into the handler chain.
   __ bind(&invoke);
@@ -1386,37 +1367,36 @@ void JSEntryStub::GenerateBody(MacroAssembler* masm, bool is_construct) {
   // saved values before returning a failure to C.
 
   // Clear any pending exceptions.
-  __ li(t0, Operand(ExternalReference::the_hole_value_location()));
+  __ LoadExternalReference(t0, ExternalReference::the_hole_value_location());
   __ lw(t1, MemOperand(t0));
-  __ li(t0, Operand(ExternalReference(Top::k_pending_exception_address)));
+  __ LoadExternalReference(t0,
+      ExternalReference(Top::k_pending_exception_address));
   __ sw(t1, MemOperand(t0));
 
   // Invoke the function by calling through JS entry trampoline builtin.
   // Notice that we cannot store a reference to the trampoline code directly in
   // this stub, because runtime stubs are not traversed when doing GC.
 
-  // ********** State **********
-  // * Registers:
+  // Registers:
   // a0: entry_address
   // a1: function
   // a2: reveiver_pointer
   // a3: argc
   // s0: argv
   //
-  // * Stack:
-  // args
-  // 4 args slots
-  // callee saved registers + ra
-  // entry frame
+  // Stack:
   // handler frame
-  // ***************************
+  // entry frame
+  // callee saved registers + ra
+  // 4 args slots
+  // args
 
   if (is_construct) {
     ExternalReference construct_entry(Builtins::JSConstructEntryTrampoline);
-    __ li(t0, Operand(construct_entry));
+    __ LoadExternalReference(t0, construct_entry);
   } else {
     ExternalReference entry(Builtins::JSEntryTrampoline);
-    __ li(t0, Operand(entry));
+    __ LoadExternalReference(t0, entry);
   }
   __ lw(t9, MemOperand(t0));  // deref address
 
@@ -1429,7 +1409,7 @@ void JSEntryStub::GenerateBody(MacroAssembler* masm, bool is_construct) {
   // displacement since the current stack pointer (sp) points directly
   // to the stack handler.
   __ lw(t1, MemOperand(sp, StackHandlerConstants::kNextOffset));
-  __ li(t0, Operand(ExternalReference(Top::k_handler_address)));
+  __ LoadExternalReference(t0, ExternalReference(Top::k_handler_address));
   __ sw(t1, MemOperand(t0));
 
   // This restores sp to its position before PushTryHandler.
@@ -1438,7 +1418,7 @@ void JSEntryStub::GenerateBody(MacroAssembler* masm, bool is_construct) {
   __ bind(&exit);  // v0 holds result
   // Restore the top frame descriptors from the stack.
   __ Pop(t1);
-  __ li(t0, Operand(ExternalReference(Top::k_c_entry_fp_address)));
+  __ LoadExternalReference(t0, ExternalReference(Top::k_c_entry_fp_address));
   __ sw(t1, MemOperand(t0));
 
   // Reset the stack to the callee saved registers.
@@ -1447,8 +1427,7 @@ void JSEntryStub::GenerateBody(MacroAssembler* masm, bool is_construct) {
   // Restore callee saved registers from the stack.
   __ MultiPop((kCalleeSaved | ra.bit()) & ~sp.bit());
   // Return.
-  __ jr(ra);
-  __ nop();
+  __ Jump(ra);
 }
 
 

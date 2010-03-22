@@ -126,6 +126,12 @@ void LRunShell(v8::Handle<v8::Context> context) {
 }
 
 
+// Extracts a C string from a V8 Utf8Value.
+const char* ToCString(const v8::String::Utf8Value& value) {
+  return *value ? *value : "<string conversion failed>";
+}
+
+
 // Executes a string within the current v8 context.
 bool LExecuteString(v8::Handle<v8::String> source,
                    v8::Handle<v8::Value> name,
@@ -150,7 +156,14 @@ bool LExecuteString(v8::Handle<v8::String> source,
       // Always print the result.
       // if (print_result && !result->IsUndefined()) {
       if (!result->IsUndefined()) {
+        // If all went well and the result wasn't undefined then print
+        // the returned value.
+//        v8::String::Utf8Value str(result);
+//        const char* cstr = ToCString(str);
+//        printf("___ %s\n", cstr);
+        printf("_____________________________ \n");
         printf("\nresult: 0x%x\n", *reinterpret_cast<int*>(*result));
+        printf("_____________________________ \n");
       }
       return true;
     }

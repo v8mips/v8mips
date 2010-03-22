@@ -71,7 +71,7 @@ void JumpTarget::DoJump() {
     }
   }
   __ b(&entry_label_);
-  __ nop(); // NOP_ADDED
+  __ nop();   // Branch delay slot nop.
 }
 
 
