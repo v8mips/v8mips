@@ -120,7 +120,7 @@ static void Generate_JSEntryTrampolineHelper(MacroAssembler* masm,
   __ lw(t0, MemOperand(s0));  // Read next parameter.
   __ addiu(s0, s0, kPointerSize);
   __ lw(t0, MemOperand(t0));  // Dereference handle.
-  __ push(t0);  // Push parameter.
+  __ Push(t0);  // Push parameter.
   __ bind(&entry);
   __ Branch(ne, &loop, s0, Operand(t2));
 

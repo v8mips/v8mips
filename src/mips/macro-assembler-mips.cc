@@ -1266,7 +1266,7 @@ void MacroAssembler::EnterExitFrame(ExitFrame::Mode mode,
 
   // Setup argc and the builtin function in callee-saved registers.
   mov(hold_argc, a0);
-  mov(hold_argv, a1);
+  mov(hold_function, a1);
 }
 
 

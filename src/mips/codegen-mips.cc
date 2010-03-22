@@ -1250,10 +1250,11 @@ void CEntryStub::Generate(MacroAssembler* masm) {
   // builtin once.
 
   // Enter the exit frame that transitions from JavaScript to C++.
-  __ EnterExitFrame(mode_,
-                    s0,   // s0: number of arguments (C callee-saved)
-                    s1,   // s1: pointer to first argument (C callee-saved)
-                    s2);  // s2: pointer to builtin function (C callee-saved)
+  __ EnterExitFrame(mode_, s0, s1, s2);
+
+  // s0: number of arguments (C callee-saved)
+  // s1: pointer to first argument (C callee-saved)
+  // s2: pointer to builtin function (C callee-saved)
 
   Label throw_normal_exception;
   Label throw_termination_exception;
@@ -1301,7 +1302,7 @@ void JSEntryStub::GenerateBody(MacroAssembler* masm, bool is_construct) {
   // Registers:
   // a0: entry address
   // a1: function
-  // a2: reveiver_pointer
+  // a2: reveiver
   // a3: argc
   //
   // Stack:
