@@ -8,7 +8,7 @@ V8_COMMIT_PATH=../v8_commit
 TRACKED_FILES='SConstruct compile_mips-test.sh compile_all.sh'
 TRACKED_FILES_SRC='src/SConscript src/*.h src/*.cc src/*.c'
 TRACKED_FILES_MIPS='src/mips/*.h src/mips/*.cc src/mips/readme'
-TRACKED_FILES_MIPS_CCTEST=' test/cctest/SConscript test/cctest/test-regexp.cc test/cctest/test-assembler-mips.cc'
+TRACKED_FILES_MIPS_CCTEST=' test/cctest/SConscript test/cctest/test-regexp.cc test/cctest/test-assembler-mips.cc test/cctest/test-mips.cc'
 
 echo "Copying files to ${V8_COMMIT_PATH}"
 cp ${TRACKED_FILES} ${V8_COMMIT_PATH}

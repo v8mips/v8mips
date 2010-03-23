@@ -74,12 +74,9 @@ void CallIC::GenerateNormal(MacroAssembler* masm, int argc) {
 
 void CallIC::GenerateMiss(MacroAssembler* masm, int argc) {
   UNIMPLEMENTED_MIPS();
-    // ********** State **********
-    // * Registers:
+    // Registers:
     // a2: name
     // ra: return address
-    // ***************************
-
 
   // Get the receiver of the function from the stack.
   __ lw(a3, MemOperand(sp, argc*kPointerSize));
