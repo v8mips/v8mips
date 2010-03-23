@@ -48,4 +48,3 @@ TEST(MIPSFunctionCalls) {
   Local<Script> script = ::v8::Script::Compile(source);
   CHECK_EQ(0x80,  script->Run()->Int32Value());
 }
-

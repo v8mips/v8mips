@@ -125,6 +125,7 @@ DEFINE_string(expose_debug_as, NULL, "expose debug in global object")
 DEFINE_string(natives_file, "", "alternative natives file")
 DEFINE_bool(expose_gc, false, "expose gc extension")
 DEFINE_int(stack_trace_limit, 10, "number of stack frames to capture")
+DEFINE_bool(disable_native_files, false, "disable builtin natives files")
 
 // builtins-ia32.cc
 DEFINE_bool(inline_new, true, "use fast inline allocation")

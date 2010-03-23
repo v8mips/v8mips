@@ -318,7 +318,6 @@ MemOperand CodeGenerator::SlotOperand(Slot* slot, Register tmp) {
   ASSERT(slot != NULL);
   int index = slot->index();
   switch (slot->type()) {
-
     case Slot::PARAMETER:
       return frame_->ParameterAt(index);
 
@@ -650,8 +649,8 @@ void CodeGenerator::VisitFunctionLiteral(FunctionLiteral* node) {
 }
 
 
-void CodeGenerator::VisitFunctionBoilerplateLiteral(
-    FunctionBoilerplateLiteral* node) {
+void CodeGenerator::VisitSharedFunctionInfoLiteral(
+    SharedFunctionInfoLiteral* node) {
   UNIMPLEMENTED_MIPS();
 }
 
