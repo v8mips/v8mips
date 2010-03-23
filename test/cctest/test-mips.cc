@@ -35,18 +35,17 @@ using ::v8::Local;
 using ::v8::String;
 using ::v8::Script;
 
-TEST(MIPS_function_calls) {
+TEST(MIPSFunctionCalls) {
   v8::HandleScope scope;
   LocalContext env;  // from cctest.h
 
-//  const char* c_source = "function foo() { return 0x1234; }; foo();";
   const char* c_source = "\
     function foo(arg1, arg2, arg3, arg4, arg5) {\
     return arg4;\
     };\
     foo(0x10, 0x20, 0x40, 0x80, 0x100);";
-  ::v8::Local<String> source = ::v8::String::New(c_source);
-  ::v8::Local<Script> script = ::v8::Script::Compile(source);
+  Local<String> source = ::v8::String::New(c_source);
+  Local<Script> script = ::v8::Script::Compile(source);
   CHECK_EQ(0x80,  script->Run()->Int32Value());
 }
 

@@ -813,7 +813,7 @@ void CodeGenerator::VisitCall(Call* node) {
     int arg_count = args->length();
 
     // We need sp to be 8 bytes aligned when calling the stub.
-    __ SetupAlignedCall(arg_count);
+    __ SetupAlignedCall(t0, arg_count);
 
     // Pass the global object as the receiver and let the IC stub
     // patch the stack to use the global proxy as 'this' in the

@@ -871,23 +871,32 @@ void MacroAssembler::PopTryHandler() {
 // -----------------------------------------------------------------------------
 // Activation frames
 
-void MacroAssembler::SetupAlignedCall(int arg_count) {
-  // We use 'at' register here because we are certain the Assembler or
-  // MacroAssembler won't mess with it.
-  andi(at, sp, 7);
-  // Store sp on the stack. If necessary allocate some extra space to preserve
-  // arguments' 8-byte alignment.
-  sw(sp, MemOperand(sp, -4));
-  sw(sp, MemOperand(sp, -8));
+void MacroAssembler::SetupAlignedCall(Register scratch, int arg_count) {
+  Label extra_push, end;
+
+  andi(scratch, sp, 7);
+
   // We check for args and receiver size on the stack, all of them word sized.
   // We add one for sp, that we also want to store on the stack.
   if (((arg_count + 1) % kPointerSizeLog2) == 0) {
-    beq(at, zero_reg, kPointerSizeLog2);
+    Branch(ne, &extra_push, at, Operand(zero_reg));
   } else {  // ((arg_count + 1) % 2) == 1
-    bne(at, zero_reg, kPointerSizeLog2);
+    Branch(eq, &extra_push, at, Operand(zero_reg));
   }
-  addiu(sp, sp, -4);  // Use branch delay slot.
-  addiu(sp, sp, -4);
+
+  // Save sp on the stack.
+  mov(scratch, sp);
+  Push(scratch);
+  b(&end);
+
+  // Align before saving sp on the stack.
+  bind(&extra_push);
+  mov(scratch, sp);
+  addiu(sp, sp, -8);
+  sw(scratch, MemOperand(sp));
+
+  // The stack is aligned and sp is stored on the top.
+  bind(&end);
 }
 
 

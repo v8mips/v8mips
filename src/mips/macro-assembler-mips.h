@@ -235,7 +235,7 @@ class MacroAssembler: public Assembler {
   // Align the stack by optionally pushing a Smi zero.
   void AlignStack(int offset);
 
-  void SetupAlignedCall(int arg_count = 0);
+  void SetupAlignedCall(Register scratch, int arg_count = 0);
   void ReturnFromAlignedCall();
 
 

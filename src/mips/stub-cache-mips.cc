@@ -169,7 +169,7 @@ Object* StubCompiler::CompileLazyCompile(Code::Flags flags) {
   // Preserve the function.
   __ Push(a1);
   // Setup aligned call.
-  __ SetupAlignedCall(1);
+  __ SetupAlignedCall(t0, 1);
   // Push the function on the stack as the argument to the runtime function.
   __ Push(a1);
   // Call the runtime function
