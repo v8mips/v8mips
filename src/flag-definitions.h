@@ -225,7 +225,7 @@ DEFINE_bool(allow_natives_syntax, false, "allow natives syntax")
 DEFINE_bool(optimize_ast, true, "optimize the ast")
 
 // simulator-arm.cc and simulator-mips.cc
-DEFINE_bool(trace_sim, true, "trace simulator execution")
+DEFINE_bool(trace_sim, false, "trace simulator execution")
 DEFINE_int(stop_sim_at, 0, "Simulator stop after x number of instructions")
 
 // top.cc

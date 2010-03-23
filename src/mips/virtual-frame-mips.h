@@ -257,8 +257,7 @@ class VirtualFrame : public ZoneObject {
     // Index -1 corresponds to the receiver.
     ASSERT(-1 <= index);  // -1 is the receiver.
     ASSERT(index <= parameter_count());
-    uint16_t a = 0;   // Number of argument slots.
-    return MemOperand(s8_fp, (1 + parameter_count() + a - index) *kPointerSize);
+    return MemOperand(fp, (1 + parameter_count() - index) * kPointerSize);
   }
 
   // Push a copy of the value of a parameter frame slot on top of the frame.

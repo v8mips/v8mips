@@ -118,7 +118,8 @@ void MacroAssembler::LoadRoot(Register destination,
 }
 
 
-void MacroAssembler::RecordWrite(Register object, Register offset,
+void MacroAssembler::RecordWrite(Register object,
+                                 Register offset,
                                  Register scratch) {
   UNIMPLEMENTED_MIPS();
 }
