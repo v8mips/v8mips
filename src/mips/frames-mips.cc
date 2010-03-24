@@ -79,8 +79,24 @@ int JavaScriptFrame::GetProvidedParametersCount() const {
 
 
 Address JavaScriptFrame::GetCallerStackPointer() const {
-  UNIMPLEMENTED_MIPS();
-  return static_cast<Address>(NULL);  // UNIMPLEMENTED RETURN
+  int arguments;
+  if (Heap::gc_state() != Heap::NOT_IN_GC || disable_heap_access_) {
+    // The arguments for cooked frames are traversed as if they were
+    // expression stack elements of the calling frame. The reason for
+    // this rather strange decision is that we cannot access the
+    // function during mark-compact GCs when the stack is cooked.
+    // In fact accessing heap objects (like function->shared() below)
+    // at all during GC is problematic.
+    arguments = 0;
+  } else {
+    // Compute the number of arguments by getting the number of formal
+    // parameters of the function. We must remember to take the
+    // receiver into account (+1).
+    JSFunction* function = JSFunction::cast(this->function());
+    arguments = function->shared()->formal_parameter_count() + 1;
+  }
+  const int offset = StandardFrameConstants::kCallerSPOffset;
+  return fp() + offset + (arguments * kPointerSize);
 }
 
 

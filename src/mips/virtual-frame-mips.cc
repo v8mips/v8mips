@@ -132,7 +132,9 @@ void VirtualFrame::PushTryHandler(HandlerType type) {
 
 
 void VirtualFrame::RawCallStub(CodeStub* stub) {
-  UNIMPLEMENTED_MIPS();
+  // UNIMPLEMENTED_MIPS();
+  ASSERT(cgen()->HasValidEntryRegisters());
+  __ CallStub(stub);
 }
 
 
@@ -301,6 +303,18 @@ void VirtualFrame::EmitMultiPush(RegList regs) {
     }
   }
   __ MultiPush(regs);
+}
+
+
+void VirtualFrame::EmitMultiPushReversed(RegList regs) {
+  ASSERT(stack_pointer_ == element_count() - 1);
+  for (int16_t i = 0; i< RegisterAllocatorConstants::kNumRegisters; i++) {
+    if((regs & (1<<i)) != 0 ) {
+      elements_.Add(FrameElement::MemoryElement(NumberInfo::Unknown()));
+      stack_pointer_++;
+    }
+  }
+  __ MultiPushReversed(regs);
 }
 
 

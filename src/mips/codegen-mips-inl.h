@@ -42,6 +42,11 @@ void DeferredCode::Jump() {
 }
 
 
+void DeferredCode::Branch(Condition cond, Register src1, const Operand& src2) {
+  __ Branch(cond, &entry_label_, src1, src2);
+}
+
+
 void Reference::GetValueAndSpill() {
   GetValue();
 }

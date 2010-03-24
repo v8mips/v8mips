@@ -169,6 +169,22 @@ void MacroAssembler::Addu(Register rd, Register rs, const Operand& rt) {
 }
 
 
+void MacroAssembler::Subu(Register rd, Register rs, const Operand& rt) {
+  if (rt.is_reg()) {
+    subu(rd, rs, rt.rm());
+  } else {
+    if (is_int16(rt.imm32_) && !MustUseAt(rt.rmode_)) {
+      addiu(rd, rs, -rt.imm32_);  // No subiu instr, use addiu(x, y, -imm).
+    } else {
+      // li handles the relocation.
+      ASSERT(!rs.is(at));
+      li(at, rt);
+      subu(rd, rs, at);
+    }
+  }
+}
+
+
 void MacroAssembler::Mul(Register rd, Register rs, const Operand& rt) {
   if (rt.is_reg()) {
     mul(rd, rs, rt.rm());
@@ -882,6 +898,149 @@ void MacroAssembler::PopTryHandler() {
 }
 
 
+void MacroAssembler::AllocateInNewSpace(int object_size,
+                                              Register result,
+                                              Register scratch1,
+                                              Register scratch2,
+                                              Label* gc_required,
+                                              AllocationFlags flags) {
+  ASSERT(!result.is(scratch1));
+  ASSERT(!scratch1.is(scratch2));
+
+  // Load address of new object into result and allocation top address into
+  // scratch1.
+  ExternalReference new_space_allocation_top =
+      ExternalReference::new_space_allocation_top_address();
+  li(scratch1, Operand(new_space_allocation_top));
+  if ((flags & RESULT_CONTAINS_TOP) == 0) {
+    lw(result, MemOperand(scratch1));
+  } else {
+#ifdef DEBUG
+    // Assert that result actually contains top on entry. scratch2 is used
+    // immediately below so this use of scratch2 does not cause difference with
+    // respect to register content between debug and release mode.
+    lw(scratch2, MemOperand(scratch1));
+    Check(eq, "Unexpected allocation top", result, Operand(scratch2));
+#endif
+  }
+
+  // Calculate new top and bail out if new space is exhausted. Use result
+  // to calculate the new top.
+  ExternalReference new_space_allocation_limit =
+      ExternalReference::new_space_allocation_limit_address();
+//  mov(scratch2, Operand(new_space_allocation_limit));
+//  ldr(scratch2, MemOperand(scratch2));
+//  add(result, result, Operand(object_size * kPointerSize));
+//  cmp(result, Operand(scratch2));
+//  b(hi, gc_required);
+  li(scratch2, Operand(new_space_allocation_limit));
+  lw(scratch2, MemOperand(scratch2));
+  Addu(result, result, Operand(object_size * kPointerSize));
+  Branch(Ugreater, gc_required, result, Operand(scratch2));
+  nop(); // NOP_ADDED
+
+  // Update allocation top. result temporarily holds the new top,
+//  str(result, MemOperand(scratch1));
+  sw(result, MemOperand(scratch1));
+
+  // Tag and adjust back to start of new object.
+  if ((flags & TAG_OBJECT) != 0) {
+    Addu(result, result, Operand(-(object_size * kPointerSize) +
+                                kHeapObjectTag));
+  } else {
+    Addu(result, result, Operand(-object_size * kPointerSize));
+  }
+}
+
+
+void MacroAssembler::AllocateInNewSpace(Register object_size,
+                                        Register result,
+                                        Register scratch1,
+                                        Register scratch2,
+                                        Label* gc_required,
+                                        AllocationFlags flags) {
+  ASSERT(!result.is(scratch1));
+  ASSERT(!scratch1.is(scratch2));
+
+  // Load address of new object into result and allocation top address into
+  // scratch1.
+  ExternalReference new_space_allocation_top =
+      ExternalReference::new_space_allocation_top_address();
+//  mov(scratch1, Operand(new_space_allocation_top));
+  li(scratch1, Operand(new_space_allocation_top));
+  if ((flags & RESULT_CONTAINS_TOP) == 0) {
+//    ldr(result, MemOperand(scratch1));
+    lw(result, MemOperand(scratch1));
+  } else {
+#ifdef DEBUG
+    // Assert that result actually contains top on entry. scratch2 is used
+    // immediately below so this use of scratch2 does not cause difference with
+    // respect to register content between debug and release mode.
+//    ldr(scratch2, MemOperand(scratch1));
+//    cmp(result, scratch2);
+//    Check(eq, "Unexpected allocation top");
+    lw(scratch2, MemOperand(scratch1));
+    Check(eq, "Unexpected allocation top", result, Operand(scratch2));
+#endif
+  }
+
+  // Calculate new top and bail out if new space is exhausted. Use result
+  // to calculate the new top. Object size is in words so a shift is required to
+  // get the number of bytes
+  ExternalReference new_space_allocation_limit =
+      ExternalReference::new_space_allocation_limit_address();
+//  mov(scratch2, Operand(new_space_allocation_limit));
+//  ldr(scratch2, MemOperand(scratch2));
+//  add(result, result, Operand(object_size, LSL, kPointerSizeLog2));
+//  cmp(result, Operand(scratch2));
+//  b(hi, gc_required);
+  li(scratch2, Operand(new_space_allocation_limit));
+  lw(scratch2, MemOperand(scratch2));
+  sll(ip, object_size, kPointerSizeLog2);
+  Addu(result, result, Operand(ip));
+  Branch(Ugreater, gc_required, result, Operand(scratch2));
+  nop(); // NOP_ADDED
+
+  // Update allocation top. result temporarily holds the new top,
+//  str(result, MemOperand(scratch1));
+  sw(result, MemOperand(scratch1));
+
+  // Adjust back to start of new object.
+//  sub(result, result, Operand(object_size, LSL, kPointerSizeLog2));
+  Subu(result, result, Operand(ip));
+
+  // Tag object if requested.
+  if ((flags & TAG_OBJECT) != 0) {
+//    add(result, result, Operand(kHeapObjectTag));
+    Addu(result, result, Operand(kHeapObjectTag));
+  }
+}
+
+
+void MacroAssembler::UndoAllocationInNewSpace(Register object,
+                                              Register scratch) {
+  ExternalReference new_space_allocation_top =
+      ExternalReference::new_space_allocation_top_address();
+
+  // Make sure the object has no tag before resetting top.
+  And(object, object, Operand(~kHeapObjectTagMask));
+#ifdef DEBUG
+  // Check that the object un-allocated is below the current top.
+//  mov(scratch, Operand(new_space_allocation_top));
+//  ldr(scratch, MemOperand(scratch));
+//  cmp(object, scratch);
+//  Check(lt, "Undo allocation of non allocated memory");
+  li(scratch, Operand(new_space_allocation_top));
+  lw(scratch, MemOperand(scratch));
+  Check(less, "Undo allocation of non allocated memory", object, Operand(scratch));
+#endif
+  // Write the address of the object to un-allocate as the current top.
+  li(scratch, Operand(new_space_allocation_top));
+  sw(object, MemOperand(scratch));
+}
+
+
+
 
 // -----------------------------------------------------------------------------
 // Activation frames
@@ -1172,21 +1331,29 @@ void MacroAssembler::JumpToExternalReference(const ExternalReference& builtin) {
 }
 
 
-Handle<Code> MacroAssembler::ResolveBuiltin(Builtins::JavaScript id,
-                                            bool* resolved) {
-  UNIMPLEMENTED_MIPS();
-  return Handle<Code>(reinterpret_cast<Code*>(NULL));   // UNIMPLEMENTED RETURN
-}
-
-
 void MacroAssembler::InvokeBuiltin(Builtins::JavaScript id,
                                    InvokeJSFlags flags) {
-  UNIMPLEMENTED_MIPS();
+  GetBuiltinEntry(a2, id);
+  if (flags == CALL_JS) {
+    Call(a2);
+  } else {
+    ASSERT(flags == JUMP_JS);
+    Jump(a2);
+  }
 }
 
 
 void MacroAssembler::GetBuiltinEntry(Register target, Builtins::JavaScript id) {
-  UNIMPLEMENTED_MIPS();
+  // Load the JavaScript builtin function from the builtins object.
+  lw(a1, MemOperand(cp, Context::SlotOffset(Context::GLOBAL_INDEX)));
+  lw(a1, FieldMemOperand(a1, GlobalObject::kBuiltinsOffset));
+  int builtins_offset =
+      JSBuiltinsObject::kJSBuiltinsOffset + (id * kPointerSize);
+  lw(a1, FieldMemOperand(a1, builtins_offset));
+  // Load the code entry point from the function into the target register.
+  lw(target, FieldMemOperand(a1, JSFunction::kSharedFunctionInfoOffset));
+  lw(target, FieldMemOperand(target, SharedFunctionInfo::kCodeOffset));
+  Add(target, target, Operand(Code::kHeaderSize - kHeapObjectTag));
 }
 
 

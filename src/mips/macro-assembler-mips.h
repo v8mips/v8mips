@@ -38,12 +38,14 @@ namespace internal {
 class JumpTarget;
 
 // Register at is used for instruction generation. So it is not safe to use it
-// unless we know exactly what we do.
+// unless we know exactly what we do. Therefore we create another scratch reg.
+const Register ip = t8;  // Alias ip (equivalent to arm ip scratch register).
 
 // Registers aliases
 // cp is assumed to be a callee saved register.
-const Register cp = s7;     // JavaScript context pointer
-const Register fp = s8_fp;  // Alias fp
+const Register cp = s7;     // JavaScript context pointer.
+const Register roots = s6;  // Roots array pointer.
+const Register fp = s8_fp;  // Alias fp.
 // Register used for condition evaluation.
 const Register condReg1 = s4;
 const Register condReg2 = s5;
@@ -139,6 +141,32 @@ class MacroAssembler: public Assembler {
   // Sets the remembered set bit for [address+offset].
   void RecordWrite(Register object, Register offset, Register scratch);
 
+  // ---------------------------------------------------------------------------
+  // Allocation support
+
+  // Allocate an object in new space. The object_size is specified in words (not
+  // bytes). If the new space is exhausted control continues at the gc_required
+  // label. The allocated object is returned in result. If the flag
+  // tag_allocated_object is true the result is tagged as as a heap object.
+  void AllocateInNewSpace(int object_size,
+                                Register result,
+                                Register scratch1,
+                                Register scratch2,
+                                Label* gc_required,
+                                AllocationFlags flags);
+  void AllocateInNewSpace(Register object_size,
+                                Register result,
+                                Register scratch1,
+                                Register scratch2,
+                                Label* gc_required,
+                                AllocationFlags flags);
+
+  // Undo allocation in new space. The object passed and objects allocated after
+  // it will no longer be allocated. The caller must make sure that no pointers
+  // are left to the object(s) no longer allocated as they would be invalid when
+  // allocation is undone.
+  void UndoAllocationInNewSpace(Register object, Register scratch);
+
 
   // ---------------------------------------------------------------------------
   // Instruction macros
@@ -163,6 +191,7 @@ class MacroAssembler: public Assembler {
 
   DEFINE_INSTRUCTION(Add);
   DEFINE_INSTRUCTION(Addu);
+  DEFINE_INSTRUCTION(Subu);
   DEFINE_INSTRUCTION(Mul);
   DEFINE_INSTRUCTION2(Mult);
   DEFINE_INSTRUCTION2(Multu);
@@ -369,7 +398,7 @@ class MacroAssembler: public Assembler {
   void InvokeBuiltin(Builtins::JavaScript id, InvokeJSFlags flags);
 
   // Store the code object for the given builtin in the target register and
-  // setup the function in r1.
+  // setup the function in a1.
   void GetBuiltinEntry(Register target, Builtins::JavaScript id);
 
   struct Unresolved {

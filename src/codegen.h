@@ -203,7 +203,12 @@ class DeferredCode: public ZoneObject {
 #endif
 
   inline void Jump();
+#ifndef V8_TARGET_ARCH_MIPS
   inline void Branch(Condition cc);
+#else
+  inline void Branch(Condition cc, Register src1 = zero_reg,
+                                  const Operand& src2 = Operand(zero_reg));
+#endif
   void BindExit() { masm_->bind(&exit_label_); }
 
   void SaveRegisters();

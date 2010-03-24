@@ -313,9 +313,20 @@ class CodeGenerator: public AstVisitor {
                   Expression* right,
                   bool strict = false);
 
+  void ToBoolean(JumpTarget* true_target, JumpTarget* false_target);
+
+  void GenericBinaryOperation(Token::Value op,
+                              OverwriteMode overwrite_mode,
+                              int known_rhs = kUnknownIntValue);
+
+  void SmiOperation(Token::Value op,
+                    Handle<Object> value,
+                    bool reversed,
+                    OverwriteMode mode);
+
   // Control flow
   void Branch(bool if_true, JumpTarget* target);
-
+  
   struct InlineRuntimeLUT {
     void (CodeGenerator::*method)(ZoneList<Expression*>*);
     const char* name;
@@ -440,6 +451,83 @@ class CodeGenerator: public AstVisitor {
   friend class FullCodeGenSyntaxChecker;
 
   DISALLOW_COPY_AND_ASSIGN(CodeGenerator);
+};
+
+
+class GenericBinaryOpStub : public CodeStub {
+ public:
+  GenericBinaryOpStub(Token::Value op,
+                      OverwriteMode mode,
+                      int constant_rhs = CodeGenerator::kUnknownIntValue)
+      : op_(op),
+        mode_(mode),
+        constant_rhs_(constant_rhs),
+        specialized_on_rhs_(RhsIsOneWeWantToOptimizeFor(op, constant_rhs)),
+        name_(NULL) { }
+
+ private:
+  Token::Value op_;
+  OverwriteMode mode_;
+  int constant_rhs_;
+  bool specialized_on_rhs_;
+  char* name_;
+
+  static const int kMaxKnownRhs = 0x40000000;
+
+  // Minor key encoding in 16 bits.
+  class ModeBits: public BitField<OverwriteMode, 0, 2> {};
+  class OpBits: public BitField<Token::Value, 2, 6> {};
+  class KnownIntBits: public BitField<int, 8, 8> {};
+
+  Major MajorKey() { return GenericBinaryOp; }
+  int MinorKey() {
+    // Encode the parameters in a unique 16 bit value.
+    return OpBits::encode(op_)
+           | ModeBits::encode(mode_)
+           | KnownIntBits::encode(MinorKeyForKnownInt());
+  }
+
+  void Generate(MacroAssembler* masm);
+  void HandleNonSmiBitwiseOp(MacroAssembler* masm);
+
+  static bool RhsIsOneWeWantToOptimizeFor(Token::Value op, int constant_rhs) {
+    if (constant_rhs == CodeGenerator::kUnknownIntValue) return false;
+    if (op == Token::DIV) return constant_rhs >= 2 && constant_rhs <= 3;
+    if (op == Token::MOD) {
+      if (constant_rhs <= 1) return false;
+      if (constant_rhs <= 10) return true;
+      if (constant_rhs <= kMaxKnownRhs && IsPowerOf2(constant_rhs)) return true;
+      return false;
+    }
+    return false;
+  }
+
+  int MinorKeyForKnownInt() {
+    if (!specialized_on_rhs_) return 0;
+    if (constant_rhs_ <= 10) return constant_rhs_ + 1;
+    ASSERT(IsPowerOf2(constant_rhs_));
+    int key = 12;
+    int d = constant_rhs_;
+    while ((d & 1) == 0) {
+      key++;
+      d >>= 1;
+    }
+    return key;
+  }
+
+  const char* GetName();
+
+#ifdef DEBUG
+  void Print() {
+    if (!specialized_on_rhs_) {
+      PrintF("GenericBinaryOpStub (%s)\n", Token::String(op_));
+    } else {
+      PrintF("GenericBinaryOpStub (%s by %d)\n",
+             Token::String(op_),
+             constant_rhs_);
+    }
+  }
+#endif
 };
 
 
