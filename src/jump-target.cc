@@ -432,8 +432,8 @@ void BreakTarget::Branch(Condition cc, Hint hint) {
   }
 }
 #else
-void BreakTarget::Branch(Condition cc, Register src1, const Operand& src2
-    , Hint hint) {
+void BreakTarget::Branch(Condition cc, Register src1, const Operand& src2,
+    Hint hint) {
   ASSERT(cgen()->has_valid_frame());
 
   int count = cgen()->frame()->height() - expected_height_;
