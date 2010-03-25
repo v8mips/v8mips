@@ -75,7 +75,8 @@ void JumpTarget::DoJump() {
 }
 
 
-void JumpTarget::DoBranch(Condition cc, Hint ignored) {
+void JumpTarget::DoBranch(Condition cc, Hint ignored,
+    Register src1, const Operand& src2) {
   UNIMPLEMENTED_MIPS();
 }
 
