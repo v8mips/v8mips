@@ -56,43 +56,55 @@ class MacroAssembler: public Assembler {
   MacroAssembler(void* buffer, int size);
 
   // Jump, Call, and Ret pseudo instructions implementing inter-working.
+  // By default branch delay slot are protected with an inserted nop.
   void Jump(const Operand& target,
             Condition cond = cc_always,
-            Register r1 = zero_reg, const Operand& r2 = Operand(zero_reg));
+            Register r1 = zero_reg, const Operand& r2 = Operand(zero_reg),
+            bool ProtectBranchDelaySlot = true);
   void Call(const Operand& target,
             Condition cond = cc_always,
-            Register r1 = zero_reg, const Operand& r2 = Operand(zero_reg));
+            Register r1 = zero_reg, const Operand& r2 = Operand(zero_reg),
+            bool ProtectBranchDelaySlot = true);
   void Jump(Register target,
             Condition cond = cc_always,
-            Register r1 = zero_reg, const Operand& r2 = Operand(zero_reg));
+            Register r1 = zero_reg, const Operand& r2 = Operand(zero_reg),
+            bool ProtectBranchDelaySlot = true);
   void Jump(byte* target, RelocInfo::Mode rmode,
             Condition cond = cc_always,
-            Register r1 = zero_reg, const Operand& r2 = Operand(zero_reg));
+            Register r1 = zero_reg, const Operand& r2 = Operand(zero_reg),
+            bool ProtectBranchDelaySlot = true);
   void Jump(Handle<Code> code, RelocInfo::Mode rmode,
             Condition cond = cc_always,
-            Register r1 = zero_reg, const Operand& r2 = Operand(zero_reg));
+            Register r1 = zero_reg, const Operand& r2 = Operand(zero_reg),
+            bool ProtectBranchDelaySlot = true);
   void Call(Register target,
             Condition cond = cc_always,
-            Register r1 = zero_reg, const Operand& r2 = Operand(zero_reg));
+            Register r1 = zero_reg, const Operand& r2 = Operand(zero_reg),
+            bool ProtectBranchDelaySlot = true);
   void Call(byte* target, RelocInfo::Mode rmode,
             Condition cond = cc_always,
-            Register r1 = zero_reg, const Operand& r2 = Operand(zero_reg));
+            Register r1 = zero_reg, const Operand& r2 = Operand(zero_reg),
+            bool ProtectBranchDelaySlot = true);
   void Call(Handle<Code> code, RelocInfo::Mode rmode,
             Condition cond = cc_always,
-            Register r1 = zero_reg, const Operand& r2 = Operand(zero_reg));
+            Register r1 = zero_reg, const Operand& r2 = Operand(zero_reg),
+            bool ProtectBranchDelaySlot = true);
   void Ret(Condition cond = cc_always,
-           Register r1 = zero_reg, const Operand& r2 = Operand(zero_reg));
+           Register r1 = zero_reg, const Operand& r2 = Operand(zero_reg),
+           bool ProtectBranchDelaySlot = true);
   void Branch(Condition cond, int16_t offset, Register rs = zero_reg,
-              const Operand& rt = Operand(zero_reg), Register scratch = at);
+              const Operand& rt = Operand(zero_reg), Register scratch = at,
+              bool ProtectBranchDelaySlot = true);
   void Branch(Condition cond, Label* L, Register rs = zero_reg,
-              const Operand& rt = Operand(zero_reg), Register scratch = at);
+              const Operand& rt = Operand(zero_reg), Register scratch = at,
+              bool ProtectBranchDelaySlot = true);
   // conditionnal branch and link
   void BranchAndLink(Condition cond, int16_t offset, Register rs = zero_reg,
                      const Operand& rt = Operand(zero_reg),
-                     Register scratch = at);
+                     Register scratch = at, bool ProtectBranchDelaySlot = true);
   void BranchAndLink(Condition cond, Label* L, Register rs = zero_reg,
                      const Operand& rt = Operand(zero_reg),
-                     Register scratch = at);
+                     Register scratch = at, bool ProtectBranchDelaySlot = true);
 
   // Emit code to discard a non-negative number of pointer-sized elements
   // from the stack, clobbering only the sp register.
@@ -413,9 +425,11 @@ class MacroAssembler: public Assembler {
   Handle<Object> code_object_;
 
   void Jump(intptr_t target, RelocInfo::Mode rmode, Condition cond = cc_always,
-            Register r1 = zero_reg, const Operand& r2 = Operand(zero_reg));
+            Register r1 = zero_reg, const Operand& r2 = Operand(zero_reg),
+            bool ProtectBranchDelaySlot = true);
   void Call(intptr_t target, RelocInfo::Mode rmode, Condition cond = cc_always,
-            Register r1 = zero_reg, const Operand& r2 = Operand(zero_reg));
+            Register r1 = zero_reg, const Operand& r2 = Operand(zero_reg),
+            bool ProtectBranchDelaySlot = true);
 
   // Helper functions for generating invokes.
   void InvokePrologue(const ParameterCount& expected,
