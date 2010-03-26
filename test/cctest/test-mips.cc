@@ -54,3 +54,26 @@ TEST(MIPSFunctionCalls) {
   Local<Script> script = ::v8::Script::Compile(source);
   CHECK_EQ(0x80,  script->Run()->Int32Value());
 }
+
+
+TEST(MIPSIfThenElse) {
+  // Disable compilation of natives.
+  i::FLAG_disable_native_files = true;
+  i::FLAG_full_compiler = false;
+
+  v8::HandleScope scope;
+  LocalContext env;  // from cctest.h
+
+  const char* c_source = ""
+    "if (1 < 9) {"
+    "  if (555 <= 555)"
+    "    if (999 > 998)"
+    "      if (0 >= 0)"
+    "        0x1111;"
+    "} else {"
+    "  0x4444;"
+    "}";
+  Local<String> source = ::v8::String::New(c_source);
+  Local<Script> script = ::v8::Script::Compile(source);
+  CHECK_EQ(0x1111,  script->Run()->Int32Value());
+}

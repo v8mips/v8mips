@@ -282,6 +282,14 @@ class CodeGenerator: public AstVisitor {
   void Load(Expression* x);
   void LoadGlobal();
 
+  // Call LoadCondition and then spill the virtual frame unless control flow
+  // cannot reach the end of the expression (ie, by emitting only
+  // unconditional jumps to the control targets).
+  inline void LoadConditionAndSpill(Expression* expression,
+                                    JumpTarget* true_target,
+                                    JumpTarget* false_target,
+                                    bool force_control);
+
   // Generate code to push the value of an expression on top of the frame
   // and then spill the frame fully to memory.  This function is used
   // temporarily while the code generator is being transformed.
@@ -296,6 +304,9 @@ class CodeGenerator: public AstVisitor {
                   Expression* left,
                   Expression* right,
                   bool strict = false);
+
+  // Control flow
+  void Branch(bool if_true, JumpTarget* target);
 
   struct InlineRuntimeLUT {
     void (CodeGenerator::*method)(ZoneList<Expression*>*);

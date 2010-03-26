@@ -473,8 +473,8 @@ void CodeGenerator::Comparison(Condition cc,
   if (right != NULL) LoadAndSpill(right);
 
   VirtualFrame::SpilledScope spilled_scope;
-  // sp[0] : y
-  // sp[1] : x
+  // sp[0] : y  (right)
+  // sp[1] : x  (left)
 
   // Strict only makes sense for equality comparisons.
   ASSERT(!strict || cc == eq);
@@ -506,7 +506,6 @@ void CodeGenerator::Comparison(Condition cc,
   smi.Bind();
   __ mov(condReg1, a0);
   __ mov(condReg2, a1);
-  __ break_(0x511);
 
   exit.Bind();
   cc_reg_ = cc;
@@ -518,6 +517,15 @@ void CodeGenerator::VisitStatements(ZoneList<Statement*>* statements) {
   for (int i = 0; frame_ != NULL && i < statements->length(); i++) {
     VisitAndSpill(statements->at(i));
   }
+}
+
+
+void CodeGenerator::Branch(bool if_true, JumpTarget* target) {
+  VirtualFrame::SpilledScope spilled_scope;
+  ASSERT(has_cc());
+  Condition cc = if_true ? cc_reg_ : NegateCondition(cc_reg_);
+  target->Branch(cc, condReg1, Operand(condReg2), no_hint);
+  cc_reg_ = cc_always;
 }
 
 
@@ -615,7 +623,95 @@ void CodeGenerator::VisitEmptyStatement(EmptyStatement* node) {
 
 
 void CodeGenerator::VisitIfStatement(IfStatement* node) {
-  UNIMPLEMENTED_MIPS();
+#ifdef DEBUG
+  int original_height = frame_->height();
+#endif
+  VirtualFrame::SpilledScope spilled_scope;
+  Comment cmnt(masm_, "[ IfStatement");
+  // Generate different code depending on which parts of the if statement
+  // are present or not.
+  bool has_then_stm = node->HasThenStatement();
+  bool has_else_stm = node->HasElseStatement();
+
+  CodeForStatementPosition(node);
+
+  JumpTarget exit;
+  if (has_then_stm && has_else_stm) {
+    Comment cmnt(masm_, "[ IfThenElse");
+    JumpTarget then;
+    JumpTarget else_;
+    // if (cond)
+    LoadConditionAndSpill(node->condition(),
+                          &then, &else_, true);
+    if (frame_ != NULL) {
+      Branch(false, &else_);
+    }
+    // then
+    if (frame_ != NULL || then.is_linked()) {
+      then.Bind();
+      VisitAndSpill(node->then_statement());
+    }
+    if (frame_ != NULL) {
+      exit.Jump();
+    }
+    // else
+    if (else_.is_linked()) {
+      else_.Bind();
+      VisitAndSpill(node->else_statement());
+    }
+
+  } else if (has_then_stm) {
+    Comment cmnt(masm_, "[ IfThen");
+    ASSERT(!has_else_stm);
+    JumpTarget then;
+    // if (cond)
+    LoadConditionAndSpill(node->condition(),
+                          &then, &exit, true);
+    if (frame_ != NULL) {
+      Branch(false, &exit);
+    }
+    // then
+    if (frame_ != NULL || then.is_linked()) {
+      then.Bind();
+      VisitAndSpill(node->then_statement());
+    }
+
+  } else if (has_else_stm) {
+    Comment cmnt(masm_, "[ IfElse");
+    ASSERT(!has_then_stm);
+    JumpTarget else_;
+    // if (!cond)
+    LoadConditionAndSpill(node->condition(),
+                          &exit, &else_, true);
+    if (frame_ != NULL) {
+      Branch(true, &exit);
+    }
+    // else
+    if (frame_ != NULL || else_.is_linked()) {
+      else_.Bind();
+      VisitAndSpill(node->else_statement());
+    }
+
+  } else {
+    Comment cmnt(masm_, "[ If");
+    ASSERT(!has_then_stm && !has_else_stm);
+    // if (cond)
+    LoadConditionAndSpill(node->condition(),
+                          &exit, &exit, false);
+    if (frame_ != NULL) {
+      if (has_cc()) {
+        cc_reg_ = cc_always;
+      } else {
+        frame_->Drop();
+      }
+    }
+  }
+
+  // end
+  if (exit.is_linked()) {
+    exit.Bind();
+  }
+  ASSERT(!has_valid_frame() || frame_->height() == original_height);
 }
 
 
