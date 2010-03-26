@@ -492,56 +492,6 @@ void CodeGenerator::StoreToSlot(Slot* slot, InitState init_state) {
 }
 
 
-// On MIPS we load registers condReg1 and condReg2 with the values which should
-// be compared. With the CodeGenerator::cc_reg_ condition, functions will be
-// able to evaluate correctly the condition. (eg CodeGenerator::Branch)
-void CodeGenerator::Comparison(Condition cc,
-                               Expression* left,
-                               Expression* right,
-                               bool strict) {
-  if (left != NULL) LoadAndSpill(left);
-  if (right != NULL) LoadAndSpill(right);
-
-  VirtualFrame::SpilledScope spilled_scope;
-  // sp[0] : y  (right)
-  // sp[1] : x  (left)
-
-  // Strict only makes sense for equality comparisons.
-  ASSERT(!strict || cc == eq);
-
-  JumpTarget exit;
-  JumpTarget smi;
-  // Implement '>' and '<=' by reversal to obtain ECMA-262 conversion order.
-  if (cc == greater || cc == less_equal) {
-    cc = ReverseCondition(cc);
-    frame_->EmitPop(a0);
-    frame_->EmitPop(a1);
-  } else {
-    frame_->EmitPop(a1);
-    frame_->EmitPop(a0);
-  }
-  __ Or(t0, a0, a1);
-  __ And(t1, t0, kSmiTagMask);
-  smi.Branch(eq, t1, Operand(zero_reg), no_hint);
-
-  // Perform non-smi comparison by stub.
-  // CompareStub takes arguments in a0 and a1, returns <0, >0 or 0 in v0.
-  // We call with 0 args because there are 0 on the stack.
-  UNIMPLEMENTED_MIPS();
-  // This is not implemented on MIPS yet. Break.
-  __ break_(0x504);
-  exit.Jump();
-
-  // Do smi comparison.
-  smi.Bind();
-  __ mov(condReg1, a0);
-  __ mov(condReg2, a1);
-
-  exit.Bind();
-  cc_reg_ = cc;
-}
-
-
 // ECMA-262, section 9.2, page 30: ToBoolean(). Convert the given
 // register to a boolean in the condition code register. The code
 // may jump to 'false_target' in case the register converts to 'false'.
@@ -907,6 +857,57 @@ void CodeGenerator::SmiOperation(Token::Value op,
   }
 
   exit.Bind();
+}
+
+
+// On MIPS we load registers condReg1 and condReg2 with the values which should
+// be compared. With the CodeGenerator::cc_reg_ condition, functions will be
+// able to evaluate correctly the condition. (eg CodeGenerator::Branch)
+void CodeGenerator::Comparison(Condition cc,
+                               Expression* left,
+                               Expression* right,
+                               bool strict) {
+  if (left != NULL) LoadAndSpill(left);
+  if (right != NULL) LoadAndSpill(right);
+
+  VirtualFrame::SpilledScope spilled_scope;
+  // sp[0] : y
+  // sp[1] : x
+
+  // Strict only makes sense for equality comparisons.
+  ASSERT(!strict || cc == eq);
+
+  JumpTarget exit;
+  JumpTarget smi;
+  // Implement '>' and '<=' by reversal to obtain ECMA-262 conversion order.
+  if (cc == greater || cc == less_equal) {
+    cc = ReverseCondition(cc);
+    frame_->EmitPop(a0);
+    frame_->EmitPop(a1);
+  } else {
+    frame_->EmitPop(a1);
+    frame_->EmitPop(a0);
+  }
+  __ Or(t0, a0, a1);
+  __ And(t1, t0, kSmiTagMask);
+  smi.Branch(eq, t1, Operand(zero_reg), no_hint);
+
+  // Perform non-smi comparison by stub.
+  // CompareStub takes arguments in a0 and a1, returns <0, >0 or 0 in v0.
+  // We call with 0 args because there are 0 on the stack.
+  UNIMPLEMENTED_MIPS();
+  // This is not implemented on MIPS yet. Break.
+  __ break_(0x504);
+  exit.Jump();
+
+  // Do smi comparison.
+  smi.Bind();
+  __ mov(condReg1, a0);
+  __ mov(condReg2, a1);
+  __ break_(0x511);
+
+  exit.Bind();
+  cc_reg_ = cc;
 }
 
 

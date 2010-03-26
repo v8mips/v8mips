@@ -43,8 +43,8 @@ const Register ip = t8;  // Alias ip (equivalent to arm ip scratch register).
 
 // Registers aliases
 // cp is assumed to be a callee saved register.
-const Register cp = s7;     // JavaScript context pointer.
 const Register roots = s6;  // Roots array pointer.
+const Register cp = s7;     // JavaScript context pointer.
 const Register fp = s8_fp;  // Alias fp.
 // Register used for condition evaluation.
 const Register condReg1 = s4;
