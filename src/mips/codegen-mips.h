@@ -535,6 +535,49 @@ class GenericBinaryOpStub : public CodeStub {
 };
 
 
+// This stub can convert a signed int32 to a heap number (double).  It does
+// not work for int32s that are in Smi range!  No GC occurs during this stub
+// so you don't have to set up the frame.
+class WriteInt32ToHeapNumberStub : public CodeStub {
+ public:
+  WriteInt32ToHeapNumberStub(Register the_int,
+                             Register the_heap_number,
+                             Register scratch,
+                             Register scratch2)
+      : the_int_(the_int),
+        the_heap_number_(the_heap_number),
+        scratch_(scratch),
+        sign_(scratch2) { }
+
+ private:
+  Register the_int_;
+  Register the_heap_number_;
+  Register scratch_;
+  Register sign_;
+
+  // Minor key encoding in 16 bits.
+  class IntRegisterBits: public BitField<int, 0, 4> {};
+  class HeapNumberRegisterBits: public BitField<int, 4, 4> {};
+  class ScratchRegisterBits: public BitField<int, 8, 4> {};
+
+  Major MajorKey() { return WriteInt32ToHeapNumber; }
+  int MinorKey() {
+    // Encode the parameters in a unique 16 bit value.
+    return IntRegisterBits::encode(the_int_.code())
+           | HeapNumberRegisterBits::encode(the_heap_number_.code())
+           | ScratchRegisterBits::encode(scratch_.code());
+  }
+
+  void Generate(MacroAssembler* masm);
+
+  const char* GetName() { return "WriteInt32ToHeapNumberStub"; }
+
+#ifdef DEBUG
+  void Print() { PrintF("WriteInt32ToHeapNumberStub\n"); }
+#endif
+};
+
+
 } }  // namespace v8::internal
 
 #endif  // V8_MIPS_CODEGEN_MIPS_H_

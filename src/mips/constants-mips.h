@@ -342,6 +342,14 @@ enum Condition {
   ne            = not_equal,
   sign          = negative,
   not_sign      = positive,
+  mi            = negative,
+  pl            = positive,
+  hi            = Ugreater,
+  ls            = Uless_equal,
+  ge            = greater_equal,
+  lt            = less,
+  gt            = greater,
+  le            = less_equal,
 
   cc_default    = no_condition
 };

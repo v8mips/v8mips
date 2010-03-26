@@ -781,15 +781,16 @@ void Simulator::Format(Instruction* instr, const char* format) {
 // Note: To be able to return two values from some calls the code in runtime.cc
 // uses the ObjectPair which is essentially two 32-bit values stuffed into a
 // 64-bit value. With the code below we assume that all runtime calls return
-// 64 bits of result. If they don't, the r1 result register contains a bogus
+// 64 bits of result. If they don't, the v1 result register contains a bogus
 // value, which is fine because it is caller-saved.
 typedef int64_t (*SimulatorRuntimeCall)(int32_t arg0,
                                         int32_t arg1,
                                         int32_t arg2,
                                         int32_t arg3);
-typedef double (*SimulatorRuntimeFPCall)(double fparg0,
-                                         double fparg1);
-
+typedef double (*SimulatorRuntimeFPCall)(int32_t arg0,
+                                        int32_t arg1,
+                                        int32_t arg2,
+                                        int32_t arg3);
 
 // Software interrupt instructions are used by the simulator to call into the
 // C-based V8 runtime.
@@ -801,10 +802,7 @@ void Simulator::SoftwareInterrupt(Instruction* instr) {
     int32_t arg1 = get_register(a1);
     int32_t arg2 = get_register(a2);
     int32_t arg3 = get_register(a3);
-    // fp args are (not always) in f12 and f14.
-    // See MIPS conventions for more details.
-    double fparg0 = get_fpu_register_double(f12);
-    double fparg1 = get_fpu_register_double(f14);
+    int32_t result_l, result_h;
     // This is dodgy but it works because the C entry stubs are never moved.
     // See comment in codegen-arm.cc and bug 1242173.
     int32_t saved_ra = get_register(ra);
@@ -835,38 +833,22 @@ void Simulator::SoftwareInterrupt(Instruction* instr) {
     // and cannot be cast from one type to the other. However, the calling
     // arguments are passed the same way in both cases.
     if (redirection->fp_return()) {
-      intptr_t external =
-          reinterpret_cast<intptr_t>(redirection->external_function());
       SimulatorRuntimeFPCall target =
           reinterpret_cast<SimulatorRuntimeFPCall>(external);
-      if (::v8::internal::FLAG_trace_sim) {
-        PrintF("Call to host function at %p with args %f, %f\n",
-               FUNCTION_ADDR(target), fparg0, fparg1);
-      }
-      double result = target(fparg0, fparg1);
-      set_fpu_register_double(f0, result);
+      double result = target(arg0, arg1, arg2, arg3);
+      uint64_t u64;
+      u64 = *v8i::BitCast<uint64_t*, double*>(const_cast<double*>(&result));
+      result_h = static_cast<uint32_t>(u64 >> 32);
+      result_l = static_cast<uint32_t>(u64 & 0xffffffff);
     } else {
-      intptr_t external =
-          reinterpret_cast<int32_t>(redirection->external_function());
-      SimulatorRuntimeCall target =
-          reinterpret_cast<SimulatorRuntimeCall>(external);
-      if (::v8::internal::FLAG_trace_sim) {
-        PrintF(
-            "Call to host function at %p with args %08x, %08x, %08x, %08x\n",
-            FUNCTION_ADDR(target),
-            arg0,
-            arg1,
-            arg2,
-            arg3);
-      }
       int64_t result = target(arg0, arg1, arg2, arg3);
-      int32_t lo_res = static_cast<int32_t>(result);
-      int32_t hi_res = static_cast<int32_t>(result >> 32);
-      if (::v8::internal::FLAG_trace_sim) {
-        PrintF("Returned %08x\n", lo_res);
-      }
-      set_register(v0, lo_res);
-      set_register(v1, hi_res);
+      result_l = static_cast<int32_t>(result);
+      result_h = static_cast<int32_t>(result >> 32);
+    }
+    set_register(v0, result_l);
+    set_register(v1, result_h);
+    if (::v8::internal::FLAG_trace_sim) {
+      PrintF("Returned %08x : %08x\n", result_h, result_l);
     }
     set_register(ra, saved_ra);
     set_pc(get_register(ra));
@@ -900,11 +882,8 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
   int32_t  fs_reg = instr->FsField();
   int32_t  ft_reg = instr->FtField();
   int32_t  fd_reg = instr->FdField();
-<<<<<<< HEAD
-=======
   int64_t  i64hilo = 0;
   uint64_t u64hilo = 0;
->>>>>>> 3f8ca3a... Merge branch 'ra-dev' into integraton
 
   // ALU output
   // It should not be used as is. Instructions using it should always initialize
@@ -979,10 +958,10 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
           alu_out = get_register(LO);
           break;
         case MULT:
-          UNIMPLEMENTED_MIPS();
+          i64hilo = static_cast<int64_t>(rs) * static_cast<int64_t>(rt);
           break;
         case MULTU:
-          UNIMPLEMENTED_MIPS();
+          u64hilo = static_cast<uint64_t>(rs_u) * static_cast<uint64_t>(rt_u);
           break;
         case DIV:
         case DIVU:
@@ -1228,7 +1207,12 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
         }
         // Instructions using HI and LO registers.
         case MULT:
+          set_register(LO, static_cast<int32_t>(i64hilo & 0xffffffff));
+          set_register(HI, static_cast<int32_t>(i64hilo >> 32));
+          break;
         case MULTU:
+          set_register(LO, static_cast<int32_t>(u64hilo & 0xffffffff));
+          set_register(HI, static_cast<int32_t>(u64hilo >> 32));
           break;
         case DIV:
           // Divide by zero was checked in the configuration step.

@@ -139,7 +139,10 @@ struct FPURegister {
     ASSERT(is_valid());
     return 1 << code_;
   }
-
+  void setcode(int f) {
+    code_ = f;
+    ASSERT(is_valid());
+  }
   // Unfortunately we can't make this private in a struct.
   int code_;
 };

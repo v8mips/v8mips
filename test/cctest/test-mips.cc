@@ -345,12 +345,59 @@ TEST(MIPSBinaryAdd) {
   i::FLAG_full_compiler = false;
   v8::HandleScope scope;
   LocalContext env;  // from cctest.h
+  const char* js;
+  Local<String> source;
+  Local<Script> script;
 
-  const char* c_source =
-    "function foo() { var a=1023; var b=22249; return a + b; }; foo();";
-  Local<String> source = ::v8::String::New(c_source);
-  Local<Script> script = ::v8::Script::Compile(source);
-  CHECK_EQ(23272, script->Run()->Int32Value());
+  js = "function f() { var a=1023; var b=22249; return a + b; }; f();";
+  source = ::v8::String::New(js);
+  script  = ::v8::Script::Compile(source);
+  CHECK_EQ(23272,  script->Run()->Int32Value());
+
+  // Use of Literal
+  js = "function f() { var a=1023; return a + 22249; }; f();";
+  source = ::v8::String::New(js);
+  script  = ::v8::Script::Compile(source);
+  CHECK_EQ(23272,  script->Run()->Int32Value());
+
+  // Use of Literal, with near-max Smi value (2^30 = 1073741824)
+  js = "function f() { var a=1073741822; return a + 1; }; f();";
+  source = ::v8::String::New(js);
+  script  = ::v8::Script::Compile(source);
+  CHECK_EQ(1073741823,  script->Run()->Int32Value());
+
+  // Use of Literal, near-max Smi value, overflow to Number
+  js = "function f() { var a=1073741822; return a + 2; }; f();";
+  source = ::v8::String::New(js);
+  script  = ::v8::Script::Compile(source);
+  CHECK_EQ(1073741824.0,  script->Run()->NumberValue());
+
+  // Use of negative Literal, with near-min Smi value (2^30 = 1073741824)
+  js = "function f() { var a=-1073741823; return a + -1; }; f();";
+  source = ::v8::String::New(js);
+  script  = ::v8::Script::Compile(source);
+  CHECK_EQ(-1073741824,  script->Run()->Int32Value());
+
+  // Use of negative Literal, near-min Smi, with underflow
+  js = "function f() { var a=-1073741823; return a + -2; }; f();";
+  source = ::v8::String::New(js);
+  script  = ::v8::Script::Compile(source);
+  CHECK_EQ(-1073741825.0,  script->Run()->NumberValue());
+
+  // test add with result which overflows an Smi value.
+  js = "function f() {"
+       "  var a=0x20000000; var b=0x30000000; return a + b;"
+       "};"
+       "f();";
+  source = ::v8::String::New(js);
+  script  = ::v8::Script::Compile(source);
+  // result 0x50000000 == 1,342,177,280, convert to Number (double).
+  CHECK_EQ(1342177280.0,  script->Run()->NumberValue());
+
+  js = "function f() { var a=1.0; var b=2.2; return a + b; }; f();";
+  source = ::v8::String::New(js);
+  script = ::v8::Script::Compile(source);
+  CHECK_EQ(3.2,  script->Run()->NumberValue());
 }
 
 
@@ -360,12 +407,51 @@ TEST(MIPSBinarySub) {
   i::FLAG_full_compiler = false;
   v8::HandleScope scope;
   LocalContext env;  // from cctest.h
+  const char* js;
+  Local<String> source;
+  Local<Script> script;
 
-  const char* c_source =
-    "function foo() { var a=1023; var b=734; return a - b; }; foo();";
-  Local<String> source = ::v8::String::New(c_source);
-  Local<Script> script = ::v8::Script::Compile(source);
+  js = "function f() { var a=1023; var b=734; return a - b; }; f();";
+  source = ::v8::String::New(js);
+  script = ::v8::Script::Compile(source);
   CHECK_EQ(289, script->Run()->Int32Value());
+
+  // Check large negative numbers, all Smi.
+  js = "function f() {"
+       "  var a=-500000123; var b=400000000; return a - b;"
+       "};"
+       "f();";
+  source = ::v8::String::New(js);
+  script = ::v8::Script::Compile(source);
+  CHECK_EQ(-900000123, script->Run()->Int32Value());
+
+  // Check result overflows Smi, convert to HeapNumber.
+  js = "function f() {"
+       "  var a=-800000123; var b=600000000; return a - b;"
+       "};"
+       "f();";
+  source = ::v8::String::New(js);
+  script = ::v8::Script::Compile(source);
+  CHECK_EQ(-1400000123.0, script->Run()->NumberValue());
+
+  // Use of Literal, with near-min Smi value (2^30 = 1073741824)
+  js = "function f() { var a=-1073741823; return a - 1; }; f();";
+  source = ::v8::String::New(js);
+  script  = ::v8::Script::Compile(source);
+  CHECK_EQ(-1073741824,  script->Run()->Int32Value());
+
+  // Use of Literal, near-min Smi, underflow, convert to Number
+  js = "function f() { var a=-1073741823; return a - 2; }; f();";
+  source = ::v8::String::New(js);
+  script  = ::v8::Script::Compile(source);
+  CHECK_EQ(-1073741825.0,  script->Run()->NumberValue());
+
+
+  // Check doubles.
+  js = "function f() { var a=14778.223; var b=278.220; return a - b; }; f();";
+  source = ::v8::String::New(js);
+  script = ::v8::Script::Compile(source);
+  CHECK_EQ(14500.003, script->Run()->NumberValue());
 }
 
 
@@ -375,12 +461,47 @@ TEST(MIPSBinaryMul) {
   i::FLAG_full_compiler = false;
   v8::HandleScope scope;
   LocalContext env;  // from cctest.h
+  const char* js;
+  Local<String> source;
+  Local<Script> script;
 
-  const char* c_source =
-    "function foo() { var a=1023; var b=9936; return a * b; }; foo();";
-  Local<String> source = ::v8::String::New(c_source);
-  Local<Script> script = ::v8::Script::Compile(source);
+  // Check basic Smi multiply.
+  js = "function f() { var a=1023; var b=9936; return a * b; }; f();";
+  source = ::v8::String::New(js);
+  script = ::v8::Script::Compile(source);
   CHECK_EQ(10164528, script->Run()->Int32Value());
+
+  // Check basic Smi multiply, with negative result.
+  js = "function f() { var a=1023; var b=-2244; return a * b; }; f();";
+  source = ::v8::String::New(js);
+  script = ::v8::Script::Compile(source);
+  CHECK_EQ(-2295612, script->Run()->Int32Value());
+
+  // Check positive Smi multiply by 0.
+  js = "function f() { var a=112233; var b=0; return a * b; }; f();";
+  source = ::v8::String::New(js);
+  script = ::v8::Script::Compile(source);
+  CHECK_EQ(0, script->Run()->Int32Value());
+
+  // Check negative Smi multiply by 0.
+  // Per float rules, result is -0, which requires slow-path handling,
+  // and therefore converts our Smi result to a HeapNumber.
+  js = "function f() { var a=-112233; var b=0; return a * b; }; f();";
+  source = ::v8::String::New(js);
+  script = ::v8::Script::Compile(source);
+  CHECK_EQ(0.0, script->Run()->NumberValue());
+
+  // Check result overflows Smi, convert to HeapNumber.
+  js = "function f() { var a=325000000; var b=-4; return a * b; }; f();";
+  source = ::v8::String::New(js);
+  script = ::v8::Script::Compile(source);
+  CHECK_EQ(-1300000000.0, script->Run()->NumberValue());
+
+  // Check basic float multiply.
+  js = "function f() { var a=1745.34; var b=37.1; return a * b; }; f();";
+  source = ::v8::String::New(js);
+  script = ::v8::Script::Compile(source);
+  CHECK_EQ(64752.114, script->Run()->NumberValue());
 }
 
 
@@ -432,6 +553,15 @@ TEST(MIPSBinaryMod) {
   i::FLAG_full_compiler = false;
   v8::HandleScope scope;
   LocalContext env;  // from cctest.h
+  const char* js;
+  Local<String> source;
+  Local<Script> script;
+
+  // Check basic Smi modulo.
+  js = "function f() { var a=40015; var b=100; return a % b; }; f();";
+  source = ::v8::String::New(js);
+  script = ::v8::Script::Compile(source);
+  CHECK_EQ(15, script->Run()->Int32Value());
 
   js = "function f() { var a=-44; var b=10; return a % b; }; f();";
   source = ::v8::String::New(js);
@@ -457,12 +587,30 @@ TEST(MIPSBinaryOr) {
   i::FLAG_full_compiler = false;
   v8::HandleScope scope;
   LocalContext env;  // from cctest.h
+  const char* js;
+  Local<String> source;
+  Local<Script> script;
 
-  const char* c_source =
-    "function foo() { var a=0xf0101; var b=0x948282; return a | b; }; foo();";
-  Local<String> source = ::v8::String::New(c_source);
-  Local<Script> script = ::v8::Script::Compile(source);
-  CHECK_EQ(0x9f8383, script->Run()->Int32Value());
+  js = "function f() { var a=0xf0101; var b=0x948282; return a | b; }; f();";
+  source = ::v8::String::New(js);
+  script = ::v8::Script::Compile(source);
+  CHECK_EQ(0x9f8383,  script->Run()->Int32Value());
+
+  // Check that non-Smi int32 values work, converted to Number
+  js = "function f() { var a=0x55555555; var b=0x66666666; return a | b; }; f();";
+  source = ::v8::String::New(js);
+  script = ::v8::Script::Compile(source);
+  // 0x77777777 = 2004318071.
+  CHECK_EQ(2004318071.0,  script->Run()->NumberValue());
+
+  // Check that negative non-Smi int32 values work, returned as Smi.
+  // -0x55555555 is too big for Smi, is Number with int32 value 0xaaaaaaab.
+  // -0x22222222 has int value 0xddddddde, which is Smi 0xbbbbbbbc.
+  // Or'ing these together gives 0xffffffff (-1), which is returned as Smi.
+  js = "function f() { var a=-0x55555555; var b=-0x22222222; return a | b; }; f();";
+  source = ::v8::String::New(js);
+  script = ::v8::Script::Compile(source);
+  CHECK_EQ(-1,  script->Run()->Int32Value());
 }
 
 
@@ -472,13 +620,21 @@ TEST(MIPSBinaryAnd) {
   i::FLAG_full_compiler = false;
   v8::HandleScope scope;
   LocalContext env;  // from cctest.h
+  const char* js;
+  Local<String> source;
+  Local<Script> script;
 
-  const char* c_source =
-    "function foo() { var a=0x0f0f0f0f; var b=0x11223344; return a & b; };"
-    "foo();";
-  Local<String> source = ::v8::String::New(c_source);
-  Local<Script> script = ::v8::Script::Compile(source);
-  CHECK_EQ(0x01020304, script->Run()->Int32Value());
+  js = "function f() { var a=0x0f0f0f0f; var b=0x11223344; return a & b; }; f();";
+  source = ::v8::String::New(js);
+  script = ::v8::Script::Compile(source);
+  CHECK_EQ(0x01020304,  script->Run()->Int32Value());
+
+  // Check that non-Smi values work OK, returned as Number.
+  js = "function f() { var a=0x7f0f0f0f; var b=0x61223344; return a & b; }; f();";
+  source = ::v8::String::New(js);
+  script = ::v8::Script::Compile(source);
+  // 0x61020304 = 1627521796
+  CHECK_EQ(1627521796.0, script->Run()->NumberValue());
 }
 
 
@@ -488,12 +644,23 @@ TEST(MIPSBinaryXor) {
   i::FLAG_full_compiler = false;
   v8::HandleScope scope;
   LocalContext env;  // from cctest.h
+  const char* js;
+  Local<String> source;
+  Local<Script> script;
 
-  const char* c_source =
-    "function foo() { var a=0x0f0f0f0f; var b=0x11223344; return a ^ b; };"
-    "foo();";
-  Local<String> source = ::v8::String::New(c_source);
-  Local<Script> script = ::v8::Script::Compile(source);
+  js = 
+  "function f() { var a=0x0f0f0f0f; var b=0x11223344; return a ^ b; };"
+  "f();";
+  source = ::v8::String::New(js);
+  script = ::v8::Script::Compile(source);
+  CHECK_EQ(0x1e2d3c4b, script->Run()->Int32Value());
+
+  // Check two non-Smi int32's, with result returned as Smi.
+  js = 
+  "function f() { var a=0x5f0f0f0f; var b=0x41223344; return a ^ b; };"
+  "f();";
+  source = ::v8::String::New(js);
+  script = ::v8::Script::Compile(source);
   CHECK_EQ(0x1e2d3c4b, script->Run()->Int32Value());
 }
 
@@ -506,7 +673,7 @@ TEST(MIPSBinaryShl) {
   LocalContext env;  // from cctest.h
 
   const char* c_source =
-    "function foo() { var a=0x400; var b=0x4; return a << b; }; foo();";
+    "function f() { var a=0x400; var b=0x4; return a << b; }; f();";
   Local<String> source = ::v8::String::New(c_source);
   Local<Script> script = ::v8::Script::Compile(source);
   CHECK_EQ(0x4000, script->Run()->Int32Value());
@@ -521,7 +688,7 @@ TEST(MIPSBinarySar) {
   LocalContext env;  // from cctest.h
 
   const char* c_source =
-    "function foo() { var a=-16; var b=4; return a >> b; }; foo();";
+    "function f() { var a=-16; var b=4; return a >> b; }; f();";
   Local<String> source = ::v8::String::New(c_source);
   Local<Script> script = ::v8::Script::Compile(source);
   CHECK_EQ(-1, script->Run()->Int32Value());
@@ -536,7 +703,7 @@ TEST(MIPSBinaryShr) {
   LocalContext env;  // from cctest.h
 
   const char* c_source =
-    "function foo() { var a=-1; var b=0x4; return a >>> b; }; foo();";
+    "function f() { var a=-1; var b=0x4; return a >>> b; }; f();";
   Local<String> source = ::v8::String::New(c_source);
   Local<Script> script = ::v8::Script::Compile(source);
   CHECK_EQ(268435455, script->Run()->Int32Value());
