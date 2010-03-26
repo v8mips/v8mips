@@ -260,7 +260,6 @@ void JumpTarget::Branch(Condition cc, Hint hint) {
   DoBranch(cc, hint);
 }
 #else
-// By default, condReg1 and condReg2 registers are used for condition evaluation.
 void JumpTarget::Branch(Condition cc, Register src1, const Operand& src2, Hint hint) {
   DoBranch(cc, hint, src1, src2);
 }

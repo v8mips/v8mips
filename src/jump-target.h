@@ -120,12 +120,12 @@ class JumpTarget : public ZoneObject {  // Shadows are dynamically allocated.
   virtual void Branch(Condition cc, Result* arg, Hint hint = no_hint);
 #else
   virtual void Branch(Condition cc,
-                      Register src1 = condReg1,
-                      const Operand& src2 = Operand(condReg2),
+                      Register src1 = zero_reg,
+                      const Operand& src2 = Operand(zero_reg),
                       Hint hint = no_hint);
   virtual void Branch(Condition cc, Result* arg,
-                      Register src1 = condReg1,
-                      const Operand& src2 = Operand(condReg2),
+                      Register src1 = zero_reg,
+                      const Operand& src2 = Operand(zero_reg),
                       Hint hint = no_hint);
 #endif
 
@@ -233,12 +233,12 @@ class BreakTarget : public JumpTarget {
   virtual void Branch(Condition cc, Result* arg, Hint hint = no_hint);
 #else
   virtual void Branch(Condition cc,
-                      Register src1 = condReg1,
-                      const Operand& src2 = Operand(condReg2),
+                      Register src1 = zero_reg,
+                      const Operand& src2 = Operand(zero_reg),
                       Hint hint = no_hint);
   virtual void Branch(Condition cc, Result* arg,
-                      Register src1 = condReg1,
-                      const Operand& src2 = Operand(condReg2),
+                      Register src1 = zero_reg,
+                      const Operand& src2 = Operand(zero_reg),
                       Hint hint = no_hint);
 #endif
 
