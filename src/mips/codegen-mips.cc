@@ -871,8 +871,8 @@ void CodeGenerator::Comparison(Condition cc,
   if (right != NULL) LoadAndSpill(right);
 
   VirtualFrame::SpilledScope spilled_scope;
-  // sp[0] : y
-  // sp[1] : x
+  // sp[0] : y  (right)
+  // sp[1] : x  (left)
 
   // Strict only makes sense for equality comparisons.
   ASSERT(!strict || cc == eq);
@@ -904,7 +904,6 @@ void CodeGenerator::Comparison(Condition cc,
   smi.Bind();
   __ mov(condReg1, a0);
   __ mov(condReg2, a1);
-  __ break_(0x511);
 
   exit.Bind();
   cc_reg_ = cc;
