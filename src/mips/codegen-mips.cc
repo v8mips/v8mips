@@ -381,7 +381,18 @@ void CodeGenerator::Load(Expression* x) {
   LoadCondition(x, &true_target, &false_target, false);
 
   if (has_cc()) {
-    UNIMPLEMENTED_MIPS();
+    // Convert cc_reg_ into a boolean value.
+    JumpTarget loaded;
+    JumpTarget materialize_true;
+    
+    materialize_true.Branch(cc_reg_);
+    __ LoadRoot(t0, Heap::kFalseValueRootIndex);
+    loaded.Jump();
+    materialize_true.Bind();
+    __ LoadRoot(t0, Heap::kTrueValueRootIndex);
+    loaded.Bind();
+    frame_->EmitPush(t0);
+    cc_reg_ = cc_always;
   }
 
   if (true_target.is_linked() || false_target.is_linked()) {
@@ -448,6 +459,57 @@ void CodeGenerator::StoreToSlot(Slot* slot, InitState init_state) {
       exit.Bind();
     }
   }
+}
+
+
+// On MIPS we load registers condReg1 and condReg2 with the values which should
+// be compared. With the CodeGenerator::cc_reg_ condition, functions will be
+// able to evaluate correctly the condition. (eg CodeGenerator::Branch)
+void CodeGenerator::Comparison(Condition cc,
+                               Expression* left,
+                               Expression* right,
+                               bool strict) {
+  if (left != NULL) LoadAndSpill(left);
+  if (right != NULL) LoadAndSpill(right);
+
+  VirtualFrame::SpilledScope spilled_scope;
+  // sp[0] : y
+  // sp[1] : x
+
+  // Strict only makes sense for equality comparisons.
+  ASSERT(!strict || cc == eq);
+
+  JumpTarget exit;
+  JumpTarget smi;
+  // Implement '>' and '<=' by reversal to obtain ECMA-262 conversion order.
+  if (cc == greater || cc == less_equal) {
+    cc = ReverseCondition(cc);
+    frame_->EmitPop(a0);
+    frame_->EmitPop(a1);
+  } else {
+    frame_->EmitPop(a1);
+    frame_->EmitPop(a0);
+  }
+  __ Or(t0, a0, a1);
+  __ And(t1, t0, kSmiTagMask);
+  smi.Branch(eq, t1, Operand(zero_reg), no_hint);
+
+  // Perform non-smi comparison by stub.
+  // CompareStub takes arguments in a0 and a1, returns <0, >0 or 0 in v0.
+  // We call with 0 args because there are 0 on the stack.
+  UNIMPLEMENTED_MIPS();
+  // This is not implemented on MIPS yet. Break.
+  __ break_(0x504);
+  exit.Jump();
+
+  // Do smi comparison.
+  smi.Bind();
+  __ mov(condReg1, a0);
+  __ mov(condReg2, a1);
+  __ break_(0x511);
+
+  exit.Bind();
+  cc_reg_ = cc;
 }
 
 
@@ -1011,7 +1073,76 @@ void CodeGenerator::VisitThisFunction(ThisFunction* node) {
 
 
 void CodeGenerator::VisitCompareOperation(CompareOperation* node) {
-  UNIMPLEMENTED_MIPS();
+#ifdef DEBUG
+  int original_height = frame_->height();
+#endif
+  VirtualFrame::SpilledScope spilled_scope;
+  Comment cmnt(masm_, "[ CompareOperation");
+
+  // Get the expressions from the node.
+  Expression* left = node->left();
+  Expression* right = node->right();
+  Token::Value op = node->op();
+
+  // To make null checks efficient, we check if either left or right is the
+  // literal 'null'. If so, we optimize the code by inlining a null check
+  // instead of calling the (very) general runtime routine for checking
+  // equality.
+  if (op == Token::EQ || op == Token::EQ_STRICT) {
+    UNIMPLEMENTED_MIPS();
+  }
+
+  // To make typeof testing for natives implemented in JavaScript really
+  // efficient, we generate special code for expressions of the form:
+  // 'typeof <expression> == <string>'.
+  UnaryOperation* operation = left->AsUnaryOperation();
+  if ((op == Token::EQ || op == Token::EQ_STRICT) &&
+      (operation != NULL && operation->op() == Token::TYPEOF) &&
+      (right->AsLiteral() != NULL &&
+       right->AsLiteral()->handle()->IsString())) {
+    UNIMPLEMENTED_MIPS();
+  }
+
+  switch (op) {
+    case Token::EQ:
+      Comparison(eq, left, right, false);
+      break;
+
+    case Token::LT:
+      Comparison(less, left, right);
+      break;
+
+    case Token::GT:
+      Comparison(greater, left, right);
+      break;
+
+    case Token::LTE:
+      Comparison(less_equal, left, right);
+      break;
+
+    case Token::GTE:
+      Comparison(greater_equal, left, right);
+      break;
+
+    case Token::EQ_STRICT:
+      Comparison(eq, left, right, true);
+      break;
+
+    case Token::IN: {
+      UNIMPLEMENTED_MIPS();
+      break;
+    }
+
+    case Token::INSTANCEOF: {
+      UNIMPLEMENTED_MIPS();
+      break;
+    }
+
+    default:
+      UNREACHABLE();
+  }
+  ASSERT((has_cc() && frame_->height() == original_height) ||
+         (!has_cc() && frame_->height() == original_height + 1));
 }
 
 

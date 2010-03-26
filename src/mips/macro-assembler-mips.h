@@ -44,6 +44,9 @@ class JumpTarget;
 // cp is assumed to be a callee saved register.
 const Register cp = s7;     // JavaScript context pointer
 const Register fp = s8_fp;  // Alias fp
+// Register used for condition evaluation.
+const Register condReg1 = s4;
+const Register condReg2 = s5;
 
 enum InvokeJSFlags {
   CALL_JS,

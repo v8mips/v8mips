@@ -77,7 +77,27 @@ void JumpTarget::DoJump() {
 
 void JumpTarget::DoBranch(Condition cc, Hint ignored,
     Register src1, const Operand& src2) {
-  UNIMPLEMENTED_MIPS();
+  ASSERT(cgen()->has_valid_frame());
+
+  if (is_bound()) {
+    ASSERT(direction_ == BIDIRECTIONAL);
+    // Backward branch.  We have an expected frame to merge to on the
+    // backward edge.
+    cgen()->frame()->MergeTo(entry_frame_);
+  } else {
+    // Clone the current frame to use as the expected one at the target if
+    // necessary.
+    if (entry_frame_ == NULL) {
+      entry_frame_ = new VirtualFrame(cgen()->frame());
+    }
+    // The predicate is_linked() should be made true.  Its implementation
+    // detects the presence of a frame pointer in the reaching_frames_ list.
+    if (!is_linked()) {
+      reaching_frames_.Add(NULL);
+      ASSERT(is_linked());
+    }
+  }
+  __ Branch(cc, &entry_label_, src1, src2);
 }
 
 
