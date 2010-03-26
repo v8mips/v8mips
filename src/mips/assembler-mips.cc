@@ -42,6 +42,34 @@ namespace v8 {
 namespace internal {
 
 
+// Safe default is no features.
+unsigned CpuFeatures::supported_ = 0;
+unsigned CpuFeatures::enabled_ = 0;
+unsigned CpuFeatures::found_by_runtime_probing_ = 0;
+
+void CpuFeatures::Probe() {
+  // If the compiler is allowed to use fpu then we can use fpu too in our
+  // code generation.
+#if !defined(__mips__)
+  // For the simulator=mips build, use FPU when FLAG_enable_fpu is enabled.
+  if (FLAG_enable_fpu) {
+      supported_ |= 1u << FPU;
+  }
+#else
+  if (Serializer::enabled()) {
+    supported_ |= OS::CpuFeaturesImpliedByPlatform();
+    return;  // No features if we might serialize.
+  }
+
+  if (OS::MipsCpuHasFeature(FPU)) {
+    // This implementation also sets the FPU flags if
+    // runtime detection of FPU returns true.
+    supported_ |= 1u << FPU;
+    found_by_runtime_probing_ |= 1u << FPU;
+  }
+#endif
+}
+
 
 const Register no_reg = { -1 };
 

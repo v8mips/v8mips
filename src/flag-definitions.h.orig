@@ -118,6 +118,8 @@ DEFINE_bool(enable_vfp3, true,
             "enable use of VFP3 instructions if available (ARM only)")
 DEFINE_bool(enable_armv7, true,
             "enable use of ARMv7 instructions if available (ARM only)")
+DEFINE_bool(enable_fpu, false,
+            "enable use of MIPS FPU instructions if available (MIPS only)")
 
 // bootstrapper.cc
 DEFINE_string(expose_natives_as, NULL, "expose natives in global object")

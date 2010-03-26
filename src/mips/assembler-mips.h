@@ -267,6 +267,52 @@ class MemOperand : public Operand {
 };
 
 
+// CpuFeatures keeps track of which features are supported by the target CPU.
+// Supported features must be enabled by a Scope before use.
+class CpuFeatures : public AllStatic {
+ public:
+  // Detect features of the target CPU. Set safe defaults if the serializer
+  // is enabled (snapshots must be portable).
+  static void Probe();
+
+  // Check whether a feature is supported by the target CPU.
+  static bool IsSupported(CpuFeature f) {
+    if (f == FPU && !FLAG_enable_fpu) return false;
+    return (supported_ & (1u << f)) != 0;
+  }
+
+  // Check whether a feature is currently enabled.
+  static bool IsEnabled(CpuFeature f) {
+    return (enabled_ & (1u << f)) != 0;
+  }
+
+  // Enable a specified feature within a scope.
+  class Scope BASE_EMBEDDED {
+#ifdef DEBUG
+   public:
+    explicit Scope(CpuFeature f) {
+      ASSERT(CpuFeatures::IsSupported(f));
+      ASSERT(!Serializer::enabled() ||
+             (found_by_runtime_probing_ & (1u << f)) == 0);
+      old_enabled_ = CpuFeatures::enabled_;
+      CpuFeatures::enabled_ |= 1u << f;
+    }
+    ~Scope() { CpuFeatures::enabled_ = old_enabled_; }
+   private:
+    unsigned old_enabled_;
+#else
+   public:
+    explicit Scope(CpuFeature f) {}
+#endif
+  };
+
+ private:
+  static unsigned supported_;
+  static unsigned enabled_;
+  static unsigned found_by_runtime_probing_;
+};
+
+
 class Assembler : public Malloced {
  public:
   // Create an assembler. Instructions and relocation information are emitted
