@@ -184,8 +184,6 @@ class MacroAssembler: public Assembler {
   //------------Pseudo-instructions-------------
 
   void mov(Register rd, Register rt) { or_(rd, rt, zero_reg); }
-  // Move the logical ones complement of source to dest.
-  void movn(Register rd, Register rt);
 
 
   // load int32 in the rd register

@@ -1023,6 +1023,10 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
         case TNE:
           do_interrupt = rs != rt;
           break;
+        case MOVN:
+        case MOVZ:
+          // No action taken on decode.
+          break;
         default:
           UNREACHABLE();
       };
@@ -1032,9 +1036,34 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
         case MUL:
           alu_out = rs_u * rt_u;  // Only the lower 32 bits are kept.
           break;
+        case CLZ:
+          alu_out = __builtin_clz(rs_u);
+          break;
         default:
           UNREACHABLE();
-      }
+      };
+      break;
+    case SPECIAL3:
+      switch (instr->FunctionFieldRaw()) {
+        case INS: { // mips32r2 instruction.
+            uint16_t msb = rd_reg;  // Interpret Rd field as 5-bit msb of insert.
+            uint16_t lsb = sa;      // Interpret sa field as 5-bit lsb of insert.
+            uint16_t size = msb - lsb + 1;
+            uint16_t mask = (1 << size) - 1;
+            alu_out = (rt_u & ~(mask << lsb)) | ((rs_u & mask) << lsb);  
+          }
+          break;
+        case EXT: { // mips32r2 instruction.
+            uint16_t msb = rd_reg;  // Interpret Rd field as 5-bit msb of extract.
+            uint16_t lsb = sa;      // Interpret sa field as 5-bit lsb of extract.
+            uint16_t size = msb - lsb + 1;
+            uint16_t mask = (1 << size) - 1;
+            alu_out = (rs_u & (mask << lsb)) >> lsb;
+          }
+          break;
+        default:
+          UNREACHABLE();
+      };
       break;
     default:
       UNREACHABLE();
@@ -1175,7 +1204,7 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
           set_register(LO, rs_u / rt_u);
           set_register(HI, rs_u % rt_u);
           break;
-        // Break and trap instructions
+        // Break and trap instructions.
         case BREAK:
         case TGE:
         case TGEU:
@@ -1186,6 +1215,13 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
           if (do_interrupt) {
             SoftwareInterrupt(instr);
           }
+          break;
+        // Conditional moves.
+        case MOVN:
+          if (rt) set_register(rd_reg, rs);
+          break;
+        case MOVZ:
+          if (!rt) set_register(rd_reg, rs);
           break;
         default:  // For other special opcodes we do the default operation.
           set_register(rd_reg, alu_out);
@@ -1199,9 +1235,23 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
           set_register(LO, Unpredictable);
           set_register(HI, Unpredictable);
           break;
+        default: // For other special2 opcodes we do the default operation.
+          set_register(rd_reg, alu_out);
+      }
+      break;
+    case SPECIAL3:
+      switch (instr->FunctionFieldRaw()) {
+        case INS:
+          // Ins instr leaves result in Rt, rather than Rd.
+          set_register(rt_reg, alu_out);
+          break;
+        case EXT:
+          // Ext instr leaves result in Rt, rather than Rd.
+          set_register(rt_reg, alu_out);
+          break;
         default:
           UNREACHABLE();
-      }
+      };
       break;
     // Unimplemented opcodes raised an error in the configuration step before,
     // so we can use the default here to set the destination register in common

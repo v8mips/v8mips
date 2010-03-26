@@ -467,6 +467,19 @@ void Assembler::GenInstrRegister(Opcode opcode,
 
 
 void Assembler::GenInstrRegister(Opcode opcode,
+                                 Register rs,
+                                 Register rt,
+                                 uint16_t msb,
+                                 uint16_t lsb,
+                                 SecondaryField func) {
+  ASSERT(rs.is_valid() && rt.is_valid() && is_uint5(msb) && is_uint5(lsb));
+  Instr instr = opcode | (rs.code() << kRsShift) | (rt.code() << kRtShift)
+      | (msb << kRdShift) | (lsb << kSaShift) | func;
+  emit(instr);
+}
+
+
+void Assembler::GenInstrRegister(Opcode opcode,
                                  SecondaryField fmt,
                                  FPURegister ft,
                                  FPURegister fs,
@@ -890,6 +903,34 @@ void Assembler::slti(Register rt, Register rs, int32_t j) {
 
 void Assembler::sltiu(Register rt, Register rs, int32_t j) {
   GenInstrImmediate(SLTIU, rs, rt, j);
+}
+
+// Conditional move.
+void Assembler::movz(Register rd, Register rs, Register rt) {
+  GenInstrRegister(SPECIAL, rs, rt, rd, 0, MOVZ);
+}
+
+
+void Assembler::movn(Register rd, Register rs, Register rt) {
+  GenInstrRegister(SPECIAL, rs, rt, rd, 0, MOVN);
+}
+
+// Bit twiddling.
+void Assembler::clz(Register rd, Register rs) {
+  // Clz instr requires same GPR number in 'rd' and 'rt' fields.
+  GenInstrRegister(SPECIAL2, rs, rd, rd, 0, CLZ);
+}
+
+
+void Assembler::ins(Register rt, Register rs, uint16_t pos, uint16_t size) {
+  // Ins instr has 'rt' field as dest, and two uint5: msb, lsb
+  GenInstrRegister(SPECIAL3, rs, rt, pos + size - 1, pos, INS);
+}
+
+
+void Assembler::ext(Register rt, Register rs, uint16_t pos, uint16_t size) {
+  // Ext instr has 'rt' field as dest, and two uint5: msb, lsb
+  GenInstrRegister(SPECIAL3, rs, rt, pos + size - 1, pos, EXT);  
 }
 
 

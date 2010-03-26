@@ -196,6 +196,7 @@ enum Opcode {
   BGTZL     =   ((2 << 3) + 7) << kOpcodeShift,
 
   SPECIAL2  =   ((3 << 3) + 4) << kOpcodeShift,
+  SPECIAL3  =   ((3 << 3) + 7) << kOpcodeShift,
 
   LB        =   ((4 << 3) + 0) << kOpcodeShift,
   LW        =   ((4 << 3) + 3) << kOpcodeShift,
@@ -221,6 +222,8 @@ enum SecondaryField {
 
   JR        =   ((1 << 3) + 0),
   JALR      =   ((1 << 3) + 1),
+  MOVZ      =   ((1 << 3) + 2),
+  MOVN      =   ((1 << 3) + 3),
   BREAK     =   ((1 << 3) + 5),
 
   MFHI      =   ((2 << 3) + 0),
@@ -252,6 +255,12 @@ enum SecondaryField {
 
   // SPECIAL2 Encoding of Function Field.
   MUL       =   ((0 << 3) + 2),
+  CLZ       =   ((4 << 3) + 0),
+  CLO       =   ((4 << 3) + 1),
+
+  // SPECIAL3 Encoding of Function Field.
+  EXT       =   ((0 << 3) + 0),
+  INS       =   ((0 << 3) + 4),
 
   // REGIMM  encoding of rt Field.
   BLTZ      =   ((0 << 3) + 0) << 16,

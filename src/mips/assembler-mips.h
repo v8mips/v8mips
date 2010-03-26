@@ -460,6 +460,14 @@ class Assembler : public Malloced {
   void slti(Register rd, Register rs, int32_t j);
   void sltiu(Register rd, Register rs, int32_t j);
 
+  // Conditional move.
+  void movz(Register rd, Register rs, Register rt);
+  void movn(Register rd, Register rs, Register rt);
+  
+  // Bit twiddling.
+  void clz(Register rd, Register rs);
+  void ins(Register rt, Register rs, uint16_t pos, uint16_t size);
+  void ext(Register rt, Register rs, uint16_t pos, uint16_t size);
 
   //--------Coprocessor-instructions----------------
 
@@ -618,6 +626,13 @@ class Assembler : public Malloced {
                         Register rd,
                         uint16_t sa = 0,
                         SecondaryField func = NULLSF);
+
+  void GenInstrRegister(Opcode opcode,
+                        Register rs,
+                        Register rt,
+                        uint16_t msb,
+                        uint16_t lsb,
+                        SecondaryField func);
 
   void GenInstrRegister(Opcode opcode,
                         SecondaryField fmt,

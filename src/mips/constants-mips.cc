@@ -261,6 +261,8 @@ Instruction::Type Instruction::InstructionType() const {
         case TLTU:
         case TEQ:
         case TNE:
+        case MOVZ:
+        case MOVN:
           return kRegisterType;
         default:
           UNREACHABLE();
@@ -269,6 +271,16 @@ Instruction::Type Instruction::InstructionType() const {
     case SPECIAL2:
       switch (FunctionFieldRaw()) {
         case MUL:
+        case CLZ:
+          return kRegisterType;
+        default:
+          UNREACHABLE();
+      };
+      break;
+    case SPECIAL3:
+      switch (FunctionFieldRaw()) {
+        case INS:
+        case EXT:
           return kRegisterType;
         default:
           UNREACHABLE();

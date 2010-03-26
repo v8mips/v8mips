@@ -323,12 +323,6 @@ void MacroAssembler::Sltu(Register rd, Register rs, const Operand& rt) {
 
 //------------Pseudo-instructions-------------
 
-void MacroAssembler::movn(Register rd, Register rt) {
-  addiu(at, zero_reg, -1);  // Fill at with ones.
-  xor_(rd, rt, at);
-}
-
-
 void MacroAssembler::li(Register rd, Operand j, bool gen2instr) {
   ASSERT(!j.is_reg());
 

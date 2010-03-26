@@ -226,6 +226,25 @@ TEST(MIPS2) {
   __ Branch(ne, &error, v1, Operand(0x81230000));
   __ nop();
 
+  // Bit twiddling instructions & conditional moves.
+  // Uses t0-t7 as set above.
+  __ clz(v0, t0);       // 29
+  __ clz(v1, t1);       // 19
+  __ addu(v0, v0, v1);  // 48
+  __ clz(v1, t2);       // 3
+  __ addu(v0, v0, v1);  // 51
+  __ clz(v1, t7);       // 0
+  __ addu(v0, v0, v1);  // 51
+  __ Branch(ne, &error, v0, Operand(51));
+  __ movn(a0, t3, t0);  // move a0<-t3 (t0 is NOT 0)
+  __ ins(a0, t1, 12, 8);  // 0x7ff34fff
+  __ Branch(ne, &error, a0, Operand(0x7ff34fff));
+  __ movz(a0, t6, t7);    // a0 not updated (t7 is NOT 0)
+  __ ext(a1, a0, 8, 12);  // 0x34f
+  __ Branch(ne, &error, a1, Operand(0x34f));
+  __ movz(a0, t6, v1);    // a0<-t6, v0 is 0, from 8 instr back
+  __ Branch(ne, &error, a0, Operand(t6));
+  
   // Everything was correctly executed. Load the expected result.
   __ li(v0, 0x31415926);
   __ b(&exit);
@@ -233,6 +252,7 @@ TEST(MIPS2) {
 
   __ bind(&error);
   // Got an error. Return a wrong result.
+  __ li(v0, 666);
 
   __ bind(&exit);
   __ jr(ra);
