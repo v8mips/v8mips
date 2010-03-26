@@ -411,6 +411,31 @@ void CodeGenerator::LoadGlobal() {
 }
 
 
+void CodeGenerator::LoadTypeofExpression(Expression* x) {
+  // Special handling of identifiers as subxessions of typeof.
+  VirtualFrame::SpilledScope spilled_scope;
+  Variable* variable = x->AsVariableProxy()->AsVariable();
+  if (variable != NULL && !variable->is_this() && variable->is_global()) {
+    // For a global variable we build the property reference
+    // <global>.<variable> and perform a (regular non-contextual) property
+    // load to make sure we do not get reference errors.
+    Slot global(variable, Slot::CONTEXT, Context::GLOBAL_INDEX);
+    Literal key(variable->name());
+    Property property(&global, &key, RelocInfo::kNoPosition);
+    Reference ref(this, &property);
+    ref.GetValueAndSpill();
+  } else if (variable != NULL && variable->slot() != NULL) {
+    // For a variable that rewrites to a slot, we signal it is the immediate
+    // subxession of a typeof.
+    LoadFromSlot(variable->slot(), INSIDE_TYPEOF);
+    frame_->SpillAll();
+  } else {
+    // Anything else can be handled normally.
+    LoadAndSpill(x);
+  }
+}
+
+
 void CodeGenerator::LoadFromSlot(Slot* slot, TypeofState typeof_state) {
   VirtualFrame::SpilledScope spilled_scope;
   if (slot->type() == Slot::LOOKUP) {

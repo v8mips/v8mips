@@ -295,6 +295,14 @@ class CodeGenerator: public AstVisitor {
                                     JumpTarget* false_target,
                                     bool force_control);
 
+  // Special code for typeof expressions: Unfortunately, we must
+  // be careful when loading the expression in 'typeof'
+  // expressions. We are not allowed to throw reference errors for
+  // non-existing properties of the global object, so we must make it
+  // look like an explicit property access, instead of an access
+  // through the context chain.
+  void LoadTypeofExpression(Expression* x);
+
   // Read a value from a slot and leave it on top of the expression stack.
   void LoadFromSlot(Slot* slot, TypeofState typeof_state);
   // Store the value on top of the stack to a slot.
