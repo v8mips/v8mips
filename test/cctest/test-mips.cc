@@ -114,169 +114,169 @@ TEST(MIPSIfThenElse) {
 
 
 // The binary-op tests are currently simple tests, with well-behaved Smi values.
-// Corner cases, doubles, and overflows are not yet tested (because we know 
+// Corner cases, doubles, and overflows are not yet tested (because we know
 // they don't work).
 
-TEST(MIPS_binary_add) {
+TEST(MIPSBinaryAdd) {
   // Disable compilation of natives.
   i::FLAG_disable_native_files = true;
   i::FLAG_full_compiler = false;
   v8::HandleScope scope;
   LocalContext env;  // from cctest.h
 
-  const char* c_source = 
-        "function foo() { var a=1023; var b=22249; return a + b; }; foo();";
-  ::v8::Local<String> source = ::v8::String::New(c_source);
-  ::v8::Local<Script> script = ::v8::Script::Compile(source);
+  const char* c_source =
+    "function foo() { var a=1023; var b=22249; return a + b; }; foo();";
+  Local<String> source = ::v8::String::New(c_source);
+  Local<Script> script = ::v8::Script::Compile(source);
   CHECK_EQ(23272,  script->Run()->Int32Value());
 }
 
 
-TEST(MIPS_binary_sub) {
+TEST(MIPSBinarySub) {
   // Disable compilation of natives.
   i::FLAG_disable_native_files = true;
   i::FLAG_full_compiler = false;
   v8::HandleScope scope;
   LocalContext env;  // from cctest.h
 
-  const char* c_source = 
-        "function foo() { var a=1023; var b=734; return a - b; }; foo();";
-  ::v8::Local<String> source = ::v8::String::New(c_source);
-  ::v8::Local<Script> script = ::v8::Script::Compile(source);
+  const char* c_source =
+    "function foo() { var a=1023; var b=734; return a - b; }; foo();";
+  Local<String> source = ::v8::String::New(c_source);
+  Local<Script> script = ::v8::Script::Compile(source);
   CHECK_EQ(289,  script->Run()->Int32Value());
 }
 
 
-TEST(MIPS_binary_mul) {
+TEST(MIPSBinaryMul) {
   // Disable compilation of natives.
   i::FLAG_disable_native_files = true;
   i::FLAG_full_compiler = false;
   v8::HandleScope scope;
   LocalContext env;  // from cctest.h
 
-  const char* c_source = 
-        "function foo() { var a=1023; var b=9936; return a * b; }; foo();";
-  ::v8::Local<String> source = ::v8::String::New(c_source);
-  ::v8::Local<Script> script = ::v8::Script::Compile(source);
+  const char* c_source =
+    "function foo() { var a=1023; var b=9936; return a * b; }; foo();";
+  Local<String> source = ::v8::String::New(c_source);
+  Local<Script> script = ::v8::Script::Compile(source);
   CHECK_EQ(10164528,  script->Run()->Int32Value());
 }
 
 
-TEST(MIPS_binary_div) {
+TEST(MIPSBinaryDiv) {
   // Disable compilation of natives.
   i::FLAG_disable_native_files = true;
   i::FLAG_full_compiler = false;
   v8::HandleScope scope;
   LocalContext env;  // from cctest.h
 
-  const char* c_source = 
-        "function foo() { var a=499998015; var b=4455; return a / b; }; foo();";
-  ::v8::Local<String> source = ::v8::String::New(c_source);
-  ::v8::Local<Script> script = ::v8::Script::Compile(source);
+  const char* c_source =
+    "function foo() { var a=499998015; var b=4455; return a / b; }; foo();";
+  Local<String> source = ::v8::String::New(c_source);
+  Local<Script> script = ::v8::Script::Compile(source);
   CHECK_EQ(112233,  script->Run()->Int32Value());
 }
 
 
-TEST(MIPS_binary_mod) {
+TEST(MIPSBinaryMod) {
   // Disable compilation of natives.
   i::FLAG_disable_native_files = true;
   i::FLAG_full_compiler = false;
   v8::HandleScope scope;
   LocalContext env;  // from cctest.h
 
-  const char* c_source = 
-        "function foo() { var a=40015; var b=100; return a % b; }; foo();";
-  ::v8::Local<String> source = ::v8::String::New(c_source);
-  ::v8::Local<Script> script = ::v8::Script::Compile(source);
+  const char* c_source =
+    "function foo() { var a=40015; var b=100; return a % b; }; foo();";
+  Local<String> source = ::v8::String::New(c_source);
+  Local<Script> script = ::v8::Script::Compile(source);
   CHECK_EQ(15,  script->Run()->Int32Value());
 }
 
 
-TEST(MIPS_binary_or) {
+TEST(MIPSBinaryOr) {
   // Disable compilation of natives.
   i::FLAG_disable_native_files = true;
   i::FLAG_full_compiler = false;
   v8::HandleScope scope;
   LocalContext env;  // from cctest.h
 
-  const char* c_source = 
-        "function foo() { var a=0xf0101; var b=0x948282; return a | b; }; foo();";
-  ::v8::Local<String> source = ::v8::String::New(c_source);
-  ::v8::Local<Script> script = ::v8::Script::Compile(source);
+  const char* c_source =
+    "function foo() { var a=0xf0101; var b=0x948282; return a | b; }; foo();";
+  Local<String> source = ::v8::String::New(c_source);
+  Local<Script> script = ::v8::Script::Compile(source);
   CHECK_EQ(0x9f8383,  script->Run()->Int32Value());
 }
 
 
-TEST(MIPS_binary_and) {
+TEST(MIPSBinaryAnd) {
   // Disable compilation of natives.
   i::FLAG_disable_native_files = true;
   i::FLAG_full_compiler = false;
   v8::HandleScope scope;
   LocalContext env;  // from cctest.h
 
-  const char* c_source = 
-        "function foo() { var a=0x0f0f0f0f; var b=0x11223344; return a & b; }; foo();";
-  ::v8::Local<String> source = ::v8::String::New(c_source);
-  ::v8::Local<Script> script = ::v8::Script::Compile(source);
+  const char* c_source =
+    "function foo() { var a=0x0f0f0f0f; var b=0x11223344; return a & b; }; foo();";
+  Local<String> source = ::v8::String::New(c_source);
+  Local<Script> script = ::v8::Script::Compile(source);
   CHECK_EQ(0x01020304,  script->Run()->Int32Value());
 }
 
 
-TEST(MIPS_binary_xor) {
+TEST(MIPSBinaryXor) {
   // Disable compilation of natives.
   i::FLAG_disable_native_files = true;
   i::FLAG_full_compiler = false;
   v8::HandleScope scope;
   LocalContext env;  // from cctest.h
 
-  const char* c_source = 
-        "function foo() { var a=0x0f0f0f0f; var b=0x11223344; return a ^ b; }; foo();";
-  ::v8::Local<String> source = ::v8::String::New(c_source);
-  ::v8::Local<Script> script = ::v8::Script::Compile(source);
+  const char* c_source =
+    "function foo() { var a=0x0f0f0f0f; var b=0x11223344; return a ^ b; }; foo();";
+  Local<String> source = ::v8::String::New(c_source);
+  Local<Script> script = ::v8::Script::Compile(source);
   CHECK_EQ(0x1e2d3c4b,  script->Run()->Int32Value());
 }
 
 
-TEST(MIPS_binary_shl) {
+TEST(MIPSBinaryShl) {
   // Disable compilation of natives.
   i::FLAG_disable_native_files = true;
   i::FLAG_full_compiler = false;
   v8::HandleScope scope;
   LocalContext env;  // from cctest.h
 
-  const char* c_source = 
-        "function foo() { var a=0x400; var b=0x4; return a << b; }; foo();";
-  ::v8::Local<String> source = ::v8::String::New(c_source);
-  ::v8::Local<Script> script = ::v8::Script::Compile(source);
+  const char* c_source =
+    "function foo() { var a=0x400; var b=0x4; return a << b; }; foo();";
+  Local<String> source = ::v8::String::New(c_source);
+  Local<Script> script = ::v8::Script::Compile(source);
   CHECK_EQ(0x4000,  script->Run()->Int32Value());
 }
 
 
-TEST(MIPS_binary_sar) {
+TEST(MIPSBinarySar) {
   // Disable compilation of natives.
   i::FLAG_disable_native_files = true;
   i::FLAG_full_compiler = false;
   v8::HandleScope scope;
   LocalContext env;  // from cctest.h
 
-  const char* c_source = 
-        "function foo() { var a=-16; var b=4; return a >> b; }; foo();";
-  ::v8::Local<String> source = ::v8::String::New(c_source);
-  ::v8::Local<Script> script = ::v8::Script::Compile(source);
+  const char* c_source =
+    "function foo() { var a=-16; var b=4; return a >> b; }; foo();";
+  Local<String> source = ::v8::String::New(c_source);
+  Local<Script> script = ::v8::Script::Compile(source);
   CHECK_EQ(-1,  script->Run()->Int32Value());
 }
 
 
-TEST(MIPS_binary_shr) {
+TEST(MIPSBinaryShr) {
   // Disable compilation of natives.
   i::FLAG_disable_native_files = true;
   i::FLAG_full_compiler = false;
   v8::HandleScope scope;
   LocalContext env;  // from cctest.h
 
-  const char* c_source = 
-        "function foo() { var a=-1; var b=0x4; return a >>> b; }; foo();";
-  ::v8::Local<String> source = ::v8::String::New(c_source);
-  ::v8::Local<Script> script = ::v8::Script::Compile(source);
+  const char* c_source =
+    "function foo() { var a=-1; var b=0x4; return a >>> b; }; foo();";
+  Local<String> source = ::v8::String::New(c_source);
+  Local<Script> script = ::v8::Script::Compile(source);
   CHECK_EQ(268435455,  script->Run()->Int32Value());
 }

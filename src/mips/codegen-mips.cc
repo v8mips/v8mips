@@ -389,7 +389,7 @@ void CodeGenerator::Load(Expression* x) {
     // Convert cc_reg_ into a boolean value.
     JumpTarget loaded;
     JumpTarget materialize_true;
-    
+
     materialize_true.Branch(cc_reg_);
     __ LoadRoot(t0, Heap::kFalseValueRootIndex);
     loaded.Jump();
@@ -528,8 +528,8 @@ void CodeGenerator::ToBoolean(JumpTarget* true_target,
   // Convert the result (v0) to a condition code.
 //  __ cmp(r0, ip);                                   // plind: likely need comparison here ....
   // __ LoadRoot(s6, Heap::kFalseValueRootIndex);     // plind: highly suspect code here....................................
-  __ LoadRoot(s4, Heap::kFalseValueRootIndex);        // plind: highly suspect code here.I think we designate s4,s5 for `
-  __ mov(s5, v0);
+  __ LoadRoot(condReg1, Heap::kFalseValueRootIndex);        // plind: highly suspect code here.I think we designate s4,s5 for `
+  __ mov(condReg2, v0);
 
   cc_reg_ = ne;
 }
@@ -1689,7 +1689,7 @@ void CodeGenerator::VisitBinaryOperation(BinaryOperation* node) {
                    rliteral->handle(),
                    false,
                    overwrite_right ? OVERWRITE_RIGHT : NO_OVERWRITE);
-    
+
     } else if (lliteral != NULL && lliteral->handle()->IsSmi()) {
       LoadAndSpill(node->right());
       SmiOperation(node->op(),
@@ -2419,9 +2419,9 @@ static void HandleBinaryOpSlowCases(MacroAssembler* masm,
   Label slow, do_the_call;
   Label a0_is_smi, a1_is_smi, finished_loading_a0, finished_loading_a1;
   // Smi-smi case (overflow).
-  
+
   // plind, implement this case....and correct the comments for mips
-  
+
   // Since both are Smis there is no heap number to overwrite, so allocate.
   // The new heap number is in r5.  r6 and r7 are scratch.
   // We should not meet this case yet, as we do not check for smi-smi overflows
@@ -2493,7 +2493,7 @@ static void HandleBinaryOpSlowCases(MacroAssembler* masm,
   if (mode == OVERWRITE_LEFT) {
     __ mov(t5, a1);  // Overwrite this heap number.
   }
-  
+
   __ ldc1(f12, FieldMemOperand(a1, HeapNumber::kValueOffset));
   __ b(&finished_loading_a1);
   __ nop(); // Branch delay slot nop.
@@ -2548,7 +2548,7 @@ static void HandleBinaryOpSlowCases(MacroAssembler* masm,
 // On entry the operands are in r0 and r1.  On exit the answer is in r0.
 void GenericBinaryOpStub::HandleNonSmiBitwiseOp(MacroAssembler* masm) {
   UNIMPLEMENTED_MIPS();
-  __ break_(0x888); // plind 
+  __ break_(0x888); // plind
 }
 
 
@@ -2631,7 +2631,7 @@ void GenericBinaryOpStub::Generate(MacroAssembler* masm) {
       __ Branch(ne, &not_smi, t3, Operand(zero_reg));
       __ Addu(v0, a1, Operand(a0));  // Add Y Optimistically.
       __ Ret();
-      
+
       HandleBinaryOpSlowCases(masm,
                               &not_smi,
                               Builtins::ADD,

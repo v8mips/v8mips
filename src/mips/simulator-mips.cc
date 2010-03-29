@@ -1050,7 +1050,7 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
             uint16_t lsb = sa;      // Interpret sa field as 5-bit lsb of insert.
             uint16_t size = msb - lsb + 1;
             uint16_t mask = (1 << size) - 1;
-            alu_out = (rt_u & ~(mask << lsb)) | ((rs_u & mask) << lsb);  
+            alu_out = (rt_u & ~(mask << lsb)) | ((rs_u & mask) << lsb);
           }
           break;
         case EXT: { // mips32r2 instruction.
