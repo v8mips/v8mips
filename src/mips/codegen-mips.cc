@@ -1737,7 +1737,40 @@ void CodeGenerator::VisitCompareOperation(CompareOperation* node) {
   // instead of calling the (very) general runtime routine for checking
   // equality.
   if (op == Token::EQ || op == Token::EQ_STRICT) {
-    UNIMPLEMENTED_MIPS();
+    bool left_is_null =
+        left->AsLiteral() != NULL && left->AsLiteral()->IsNull();
+    bool right_is_null =
+        right->AsLiteral() != NULL && right->AsLiteral()->IsNull();
+    // The 'null' value can only be equal to 'null' or 'undefined'.
+    if (left_is_null || right_is_null) {
+      LoadAndSpill(left_is_null ? right : left);
+      frame_->EmitPop(condReg1);
+      __ LoadRoot(condReg2, Heap::kNullValueRootIndex);
+
+      // The 'null' value is only equal to 'undefined' if using non-strict
+      // comparisons.
+      if (op != Token::EQ_STRICT) {
+        true_target()->Branch(eq, condReg1, Operand(condReg2), no_hint);
+
+        __ LoadRoot(condReg2, Heap::kUndefinedValueRootIndex);
+        true_target()->Branch(eq, condReg1, Operand(condReg2), no_hint);
+
+        __ And(condReg2, condReg1, kSmiTagMask);
+        false_target()->Branch(eq, condReg2, Operand(zero_reg), no_hint);
+
+        // It can be an undetectable object.
+        __ lw(condReg1, FieldMemOperand(condReg1, HeapObject::kMapOffset));
+        __ lbu(condReg1, FieldMemOperand(condReg1, Map::kBitFieldOffset));
+        __ And(condReg1, condReg1, 1 << Map::kIsUndetectable);
+        __ li(condReg2, Operand(1 << Map::kIsUndetectable));
+      }
+
+      // We don't need to load anyting in condReg1 and condReg2 as they are
+      // already correctly loaded.
+      cc_reg_ = eq;
+      ASSERT(has_cc() && frame_->height() == original_height);
+      return;
+    }
   }
 
   // To make typeof testing for natives implemented in JavaScript really
@@ -1748,7 +1781,70 @@ void CodeGenerator::VisitCompareOperation(CompareOperation* node) {
       (operation != NULL && operation->op() == Token::TYPEOF) &&
       (right->AsLiteral() != NULL &&
        right->AsLiteral()->handle()->IsString())) {
-    UNIMPLEMENTED_MIPS();
+    Handle<String> check(String::cast(*right->AsLiteral()->handle()));
+
+    // Load the operand, move it to register condReg1.
+    LoadTypeofExpression(operation->expression());
+    frame_->EmitPop(condReg1);
+
+    if (check->Equals(Heap::number_symbol())) {
+      __ And(condReg2, condReg1, kSmiTagMask);
+      true_target()->Branch(eq, condReg2, Operand(zero_reg), no_hint);
+      __ lw(condReg1, FieldMemOperand(condReg1, HeapObject::kMapOffset));
+      __ LoadRoot(condReg2, Heap::kHeapNumberMapRootIndex);
+      cc_reg_ = eq;
+
+    } else if (check->Equals(Heap::string_symbol())) {
+      __ And(condReg2, condReg1, kSmiTagMask);
+      false_target()->Branch(eq, condReg2, Operand(zero_reg), no_hint);
+
+      __ lw(condReg1, FieldMemOperand(condReg1, HeapObject::kMapOffset));
+
+      // It can be an undetectable string object.
+      __ lbu(condReg2, FieldMemOperand(condReg1, Map::kBitFieldOffset));
+      __ And(condReg2, condReg2, 1 << Map::kIsUndetectable);
+      false_target()->Branch(eq, condReg2, Operand(1 << Map::kIsUndetectable),
+          no_hint);
+
+      __ lbu(condReg1, FieldMemOperand(condReg1, Map::kInstanceTypeOffset));
+      __ li(condReg2, Operand(FIRST_NONSTRING_TYPE));
+      cc_reg_ = less;
+
+    } else if (check->Equals(Heap::boolean_symbol())) {
+      __ LoadRoot(condReg2, Heap::kTrueValueRootIndex);
+      true_target()->Branch(eq, condReg1, Operand(condReg2), no_hint);
+      __ LoadRoot(condReg2, Heap::kFalseValueRootIndex);
+      cc_reg_ = eq;
+
+    } else if (check->Equals(Heap::undefined_symbol())) {
+      __ LoadRoot(condReg2, Heap::kUndefinedValueRootIndex);
+      true_target()->Branch(eq, condReg1, Operand(condReg2), no_hint);
+
+      __ And(condReg2, condReg1, kSmiTagMask);
+      false_target()->Branch(eq, condReg2, Operand(zero_reg), no_hint);
+
+      // It can be an undetectable object.
+      __ lw(condReg1, FieldMemOperand(condReg1, HeapObject::kMapOffset));
+      __ lbu(condReg1, FieldMemOperand(condReg1, Map::kBitFieldOffset));
+      __ And(condReg1, condReg1, 1 << Map::kIsUndetectable);
+      __ li(condReg2, Operand(1 << Map::kIsUndetectable));
+
+      cc_reg_ = eq;
+
+    } else if (check->Equals(Heap::function_symbol())) {
+      UNIMPLEMENTED_MIPS();
+
+    } else if (check->Equals(Heap::object_symbol())) {
+      UNIMPLEMENTED_MIPS();
+
+    } else {
+      // Uncommon case: typeof testing against a string literal that is
+      // never returned from the typeof operator.
+      false_target()->Jump();
+    }
+    ASSERT(!has_valid_frame() ||
+           (has_cc() && frame_->height() == original_height));
+    return;
   }
 
   switch (op) {

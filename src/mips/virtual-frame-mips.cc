@@ -61,7 +61,8 @@ void VirtualFrame::SyncRange(int begin, int end) {
 
 
 void VirtualFrame::MergeTo(VirtualFrame* expected) {
-  UNIMPLEMENTED_MIPS();
+  // MIPS frames are currently always in memory.
+  ASSERT(Equals(expected));
 }
 
 

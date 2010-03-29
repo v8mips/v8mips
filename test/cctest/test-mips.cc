@@ -56,6 +56,40 @@ TEST(MIPSFunctionCalls) {
 }
 
 
+TEST(MIPSComparisons) {
+  // Disable compilation of natives.
+  i::FLAG_disable_native_files = true;
+  i::FLAG_full_compiler = false;
+
+  v8::HandleScope scope;
+  LocalContext env;  // from cctest.h
+
+  const char* c_source = ""
+    "function foo() {"
+    ""
+    "  var nothing;"
+    "  var n = 1234;"
+    "  var s = '1234';"
+    "  var bt = true;"
+    "  var bf = false;"
+    ""
+    "  if (nothing == null)"
+    "  if (typeof n == 'number')"
+    "  if (typeof s == 'string')"
+    "  if (typeof bt == 'boolean')"
+    "  if (typeof bf == 'boolean')"
+    "    return 0;"
+    ""
+    "  return 1;"
+    "}"
+    ""
+    "foo();";
+  Local<String> source = ::v8::String::New(c_source);
+  Local<Script> script = ::v8::Script::Compile(source);
+  CHECK_EQ(0,  script->Run()->Int32Value());
+}
+
+
 TEST(MIPSIfThenElse) {
   // Disable compilation of natives.
   i::FLAG_disable_native_files = true;
