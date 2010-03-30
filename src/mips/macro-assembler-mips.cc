@@ -477,7 +477,7 @@ void MacroAssembler::And(Register rd, Register rs, const Operand& rt) {
   if (rt.is_reg()) {
     and_(rd, rs, rt.rm());
   } else {
-    if (is_int16(rt.imm32_) && !MustUseAt(rt.rmode_)) {
+    if (is_uint16(rt.imm32_) && !MustUseAt(rt.rmode_)) {
       andi(rd, rs, rt.imm32_);
     } else {
       // li handles the relocation.
@@ -493,7 +493,7 @@ void MacroAssembler::Or(Register rd, Register rs, const Operand& rt) {
   if (rt.is_reg()) {
     or_(rd, rs, rt.rm());
   } else {
-    if (is_int16(rt.imm32_) && !MustUseAt(rt.rmode_)) {
+    if (is_uint16(rt.imm32_) && !MustUseAt(rt.rmode_)) {
       ori(rd, rs, rt.imm32_);
     } else {
       // li handles the relocation.
@@ -509,7 +509,7 @@ void MacroAssembler::Xor(Register rd, Register rs, const Operand& rt) {
   if (rt.is_reg()) {
     xor_(rd, rs, rt.rm());
   } else {
-    if (is_int16(rt.imm32_) && !MustUseAt(rt.rmode_)) {
+    if (is_uint16(rt.imm32_) && !MustUseAt(rt.rmode_)) {
       xori(rd, rs, rt.imm32_);
     } else {
       // li handles the relocation.
@@ -553,7 +553,7 @@ void MacroAssembler::Sltu(Register rd, Register rs, const Operand& rt) {
   if (rt.is_reg()) {
     sltu(rd, rs, rt.rm());
   } else {
-    if (is_int16(rt.imm32_) && !MustUseAt(rt.rmode_)) {
+    if (is_uint16(rt.imm32_) && !MustUseAt(rt.rmode_)) {
       sltiu(rd, rs, rt.imm32_);
     } else {
       // li handles the relocation.
