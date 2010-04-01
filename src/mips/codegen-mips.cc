@@ -56,12 +56,28 @@ static bool IsEasyToMultiplyBy(int x);
 
 
 void DeferredCode::SaveRegisters() {
-  UNIMPLEMENTED_MIPS();
+  for (int i = 0; i < RegisterAllocator::kNumRegisters; i++) {
+    int action = registers_[i];
+    if (action == kPush) {
+      __ Push(RegisterAllocator::ToRegister(i));
+    } else if (action != kIgnore && (action & kSyncedFlag) == 0) {
+      __ sw(RegisterAllocator::ToRegister(i), MemOperand(fp, action));
+    }
+  }
 }
 
 
 void DeferredCode::RestoreRegisters() {
-  UNIMPLEMENTED_MIPS();
+  // Restore registers in reverse order due to the stack.
+  for (int i = RegisterAllocator::kNumRegisters - 1; i >= 0; i--) {
+    int action = registers_[i];
+    if (action == kPush) {
+      __ Pop(RegisterAllocator::ToRegister(i));
+    } else if (action != kIgnore) {
+      action &= ~kSyncedFlag;
+      __ lw(RegisterAllocator::ToRegister(i), MemOperand(fp, action));
+    }
+  }
 }
 
 
