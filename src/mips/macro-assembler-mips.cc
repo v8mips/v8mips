@@ -130,7 +130,85 @@ void MacroAssembler::LoadRoot(Register destination,
 void MacroAssembler::RecordWrite(Register object,
                                  Register offset,
                                  Register scratch) {
-  UNIMPLEMENTED_MIPS();
+  // The compiled code assumes that record write doesn't change the
+  // context register, so we check that none of the clobbered
+  // registers are cp.
+  ASSERT(!object.is(cp) && !offset.is(cp) && !scratch.is(cp));
+
+  // This is how much we shift the remembered set bit offset to get the
+  // offset of the word in the remembered set. We divide by kBitsPerInt (32,
+  // shift right 5) and then multiply by kIntSize (4, shift left 2).
+  const int kRSetWordShift = 3;
+
+  Label fast, done;
+
+  // First, test that the object is not in the new space.  We cannot set
+  // remembered set bits in the new space.
+  // object: heap object pointer (with tag)
+  // offset: offset to store location from the object
+  And(scratch, object, Operand(Heap::NewSpaceMask()));
+  Branch(eq, &done, scratch, Operand(ExternalReference::new_space_start()));
+
+  // Compute the bit offset in the remembered set.
+  // object: heap object pointer (with tag)
+  // offset: offset to store location from the object
+  li(at, Operand(Page::kPageAlignmentMask));    // load mask only once
+  And(scratch, object, Operand(at));  // offset into page of the object
+  Addu(offset, scratch, Operand(offset));  // add offset into the object
+  srl(offset, offset, kObjectAlignmentBits);
+
+  // Compute the page address from the heap object pointer.
+  // object: heap object pointer (with tag)
+  // offset: bit offset of store position in the remembered set
+  And(object, object, Operand(~Page::kPageAlignmentMask));
+
+  // If the bit offset lies beyond the normal remembered set range, it is in
+  // the extra remembered set area of a large object.
+  // object: page start
+  // offset: bit offset of store position in the remembered set
+  Branch(less, &fast, offset, Operand(Page::kPageSize / kPointerSize));
+
+  // Adjust the bit offset to be relative to the start of the extra
+  // remembered set and the start address to be the address of the extra
+  // remembered set.
+  Addu(offset, offset, - Page::kPageSize / kPointerSize);
+  // Load the array length into 'scratch' and multiply by four to get the
+  // size in bytes of the elements.
+  lw(scratch, MemOperand(object, Page::kObjectStartOffset
+                                  + FixedArray::kLengthOffset));
+  sll(scratch, scratch, kObjectAlignmentBits);
+  // Add the page header (including remembered set), array header, and array
+  // body size to the page address.
+  Addu(object, object, Page::kObjectStartOffset + FixedArray::kHeaderSize);
+  Addu(object, object, scratch);
+
+  bind(&fast);
+  // Get address of the rset word.
+  // object: start of the remembered set (page start for the fast case)
+  // offset: bit offset of store position in the remembered set
+  And(object, object, Operand(~(kBitsPerInt - 1)));
+  sll(scratch, scratch, kRSetWordShift);
+  Addu(object, object, scratch);
+  // Get bit offset in the rset word.
+  // object: address of remembered set word
+  // offset: bit offset of store position
+  And(offset, offset, Operand(kBitsPerInt - 1));
+
+  lw(scratch, MemOperand(object));
+  li(ip, Operand(1));
+  sllv(ip, ip, offset);
+  Or(scratch, scratch, Operand(ip));
+  sw(scratch, MemOperand(object));
+
+  bind(&done);
+
+  // Clobber all input registers when running with the debug-code flag
+  // turned on to provoke errors.
+  if (FLAG_debug_code) {
+    li(object, Operand(BitCast<int32_t>(kZapValue)));
+    li(offset, Operand(BitCast<int32_t>(kZapValue)));
+    li(scratch, Operand(BitCast<int32_t>(kZapValue)));
+  }
 }
 
 
