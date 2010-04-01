@@ -443,8 +443,10 @@ class MacroAssembler: public Assembler {
 
   void CallBuiltin(ExternalReference builtin_entry);
   void CallBuiltin(Register target);
+  void CallBuiltin(Handle<Code> code, RelocInfo::Mode rmode);
   void JumpToBuiltin(ExternalReference builtin_entry);
   void JumpToBuiltin(Register target);
+  void JumpToBuiltin(Handle<Code> code, RelocInfo::Mode rmode);
 
   // Generates code for reporting that an illegal operation has
   // occurred.

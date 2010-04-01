@@ -1241,6 +1241,16 @@ void MacroAssembler::InvokeFunction(Register function,
   }
 
 
+  void MacroAssembler::CallBuiltin(Handle<Code> code, RelocInfo::Mode rmode) {
+    ASSERT(RelocInfo::IsCodeTarget(rmode));
+    // Jump but do not protect the branch delay slot.
+    Call(false, code, rmode);
+    // Use the branch delay slot to allocated argument slots.
+    addiu(sp, sp, -StandardFrameConstants::kRArgsSlotsSize);
+    addiu(sp, sp, StandardFrameConstants::kRArgsSlotsSize);
+  }
+
+
   void MacroAssembler::JumpToBuiltin(ExternalReference builtin_entry) {
     // Load builtin address.
     LoadExternalReference(t9, builtin_entry);
@@ -1257,6 +1267,15 @@ void MacroAssembler::InvokeFunction(Register function,
     // t9 already holds target address.
     // Call and allocate arguments slots.
     jr(t9);
+    // Use the branch delay slot to allocated argument slots.
+    addiu(sp, sp, -StandardFrameConstants::kRArgsSlotsSize);
+  }
+
+
+  void MacroAssembler::JumpToBuiltin(Handle<Code> code, RelocInfo::Mode rmode) {
+    ASSERT(RelocInfo::IsCodeTarget(rmode));
+    // Jump but do not protect the branch delay slot.
+    Jump(false, code, rmode);
     // Use the branch delay slot to allocated argument slots.
     addiu(sp, sp, -StandardFrameConstants::kRArgsSlotsSize);
   }
