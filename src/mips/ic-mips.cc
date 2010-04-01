@@ -73,7 +73,6 @@ void CallIC::GenerateNormal(MacroAssembler* masm, int argc) {
 }
 
 void CallIC::GenerateMiss(MacroAssembler* masm, int argc) {
-  UNIMPLEMENTED_MIPS();
     // Registers:
     // a2: name
     // ra: return address

@@ -183,7 +183,19 @@ void CodeGenerator::Generate(CompilationInfo* info) {
       // context location and thus the last value is what is seen inside
       // the function.
       for (int i = 0; i < scope()->num_parameters(); i++) {
-        UNIMPLEMENTED_MIPS();
+        Variable* par = scope()->parameter(i);
+        Slot* slot = par->slot();
+        if (slot != NULL && slot->type() == Slot::CONTEXT) {
+          ASSERT(!scope()->is_global_scope());  // no parameters in global scope
+          __ lw(a1, frame_->ParameterAt(i));
+          // Loads a2 with context; used below in RecordWrite.
+          __ sw(a1, SlotOperand(slot, a2));
+          // Load the offset into a3.
+          int slot_offset =
+              FixedArray::kHeaderSize + slot->index() * kPointerSize;
+          __ li(a3, Operand(slot_offset));
+          __ RecordWrite(a2, a3, a1);
+        }
       }
     }
 

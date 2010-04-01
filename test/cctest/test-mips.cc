@@ -47,12 +47,20 @@ TEST(MIPSFunctionCalls) {
 
   const char* c_source = ""
     "function foo(arg1, arg2, arg3, arg4, arg5) {"
-    "  return arg4;"
-    "};"
-    "foo(0x10, 0x20, 0x40, 0x80, 0x100);";
+    "	return foo2(arg1, foo2(arg3, arg4));"
+    "}"
+    ""
+    "function foo2(arg1, arg2) {"
+    "	return arg2;"
+    "}"
+    // We call the function twice because it needs more code.
+    // TODO(MIPS): Detail what more is needed.
+    "foo(1, 2, 3, 4, 5);"
+    "foo(1, 2, 3, 4, 5);";
+
   Local<String> source = ::v8::String::New(c_source);
   Local<Script> script = ::v8::Script::Compile(source);
-  CHECK_EQ(0x80,  script->Run()->Int32Value());
+  CHECK_EQ(4, script->Run()->Int32Value());
 }
 
 
@@ -86,7 +94,7 @@ TEST(MIPSComparisons) {
     "foo();";
   Local<String> source = ::v8::String::New(c_source);
   Local<Script> script = ::v8::Script::Compile(source);
-  CHECK_EQ(0,  script->Run()->Int32Value());
+  CHECK_EQ(0, script->Run()->Int32Value());
 }
 
 
@@ -109,7 +117,7 @@ TEST(MIPSIfThenElse) {
     "}";
   Local<String> source = ::v8::String::New(c_source);
   Local<Script> script = ::v8::Script::Compile(source);
-  CHECK_EQ(0x1111,  script->Run()->Int32Value());
+  CHECK_EQ(0x1111, script->Run()->Int32Value());
 }
 
 
@@ -128,7 +136,7 @@ TEST(MIPSGlobalVariables) {
     "gb;";
   Local<String> source = ::v8::String::New(c_source);
   Local<Script> script = ::v8::Script::Compile(source);
-  CHECK_EQ(0x5678,  script->Run()->Int32Value());
+  CHECK_EQ(0x5678, script->Run()->Int32Value());
 }
 
 
@@ -147,7 +155,7 @@ TEST(MIPSBinaryAdd) {
     "function foo() { var a=1023; var b=22249; return a + b; }; foo();";
   Local<String> source = ::v8::String::New(c_source);
   Local<Script> script = ::v8::Script::Compile(source);
-  CHECK_EQ(23272,  script->Run()->Int32Value());
+  CHECK_EQ(23272, script->Run()->Int32Value());
 }
 
 
@@ -162,7 +170,7 @@ TEST(MIPSBinarySub) {
     "function foo() { var a=1023; var b=734; return a - b; }; foo();";
   Local<String> source = ::v8::String::New(c_source);
   Local<Script> script = ::v8::Script::Compile(source);
-  CHECK_EQ(289,  script->Run()->Int32Value());
+  CHECK_EQ(289, script->Run()->Int32Value());
 }
 
 
@@ -177,7 +185,7 @@ TEST(MIPSBinaryMul) {
     "function foo() { var a=1023; var b=9936; return a * b; }; foo();";
   Local<String> source = ::v8::String::New(c_source);
   Local<Script> script = ::v8::Script::Compile(source);
-  CHECK_EQ(10164528,  script->Run()->Int32Value());
+  CHECK_EQ(10164528, script->Run()->Int32Value());
 }
 
 
@@ -192,7 +200,7 @@ TEST(MIPSBinaryDiv) {
     "function foo() { var a=499998015; var b=4455; return a / b; }; foo();";
   Local<String> source = ::v8::String::New(c_source);
   Local<Script> script = ::v8::Script::Compile(source);
-  CHECK_EQ(112233,  script->Run()->Int32Value());
+  CHECK_EQ(112233, script->Run()->Int32Value());
 }
 
 
@@ -207,7 +215,7 @@ TEST(MIPSBinaryMod) {
     "function foo() { var a=40015; var b=100; return a % b; }; foo();";
   Local<String> source = ::v8::String::New(c_source);
   Local<Script> script = ::v8::Script::Compile(source);
-  CHECK_EQ(15,  script->Run()->Int32Value());
+  CHECK_EQ(15, script->Run()->Int32Value());
 }
 
 
@@ -222,7 +230,7 @@ TEST(MIPSBinaryOr) {
     "function foo() { var a=0xf0101; var b=0x948282; return a | b; }; foo();";
   Local<String> source = ::v8::String::New(c_source);
   Local<Script> script = ::v8::Script::Compile(source);
-  CHECK_EQ(0x9f8383,  script->Run()->Int32Value());
+  CHECK_EQ(0x9f8383, script->Run()->Int32Value());
 }
 
 
@@ -237,7 +245,7 @@ TEST(MIPSBinaryAnd) {
     "function foo() { var a=0x0f0f0f0f; var b=0x11223344; return a & b; }; foo();";
   Local<String> source = ::v8::String::New(c_source);
   Local<Script> script = ::v8::Script::Compile(source);
-  CHECK_EQ(0x01020304,  script->Run()->Int32Value());
+  CHECK_EQ(0x01020304, script->Run()->Int32Value());
 }
 
 
@@ -252,7 +260,7 @@ TEST(MIPSBinaryXor) {
     "function foo() { var a=0x0f0f0f0f; var b=0x11223344; return a ^ b; }; foo();";
   Local<String> source = ::v8::String::New(c_source);
   Local<Script> script = ::v8::Script::Compile(source);
-  CHECK_EQ(0x1e2d3c4b,  script->Run()->Int32Value());
+  CHECK_EQ(0x1e2d3c4b, script->Run()->Int32Value());
 }
 
 
@@ -267,7 +275,7 @@ TEST(MIPSBinaryShl) {
     "function foo() { var a=0x400; var b=0x4; return a << b; }; foo();";
   Local<String> source = ::v8::String::New(c_source);
   Local<Script> script = ::v8::Script::Compile(source);
-  CHECK_EQ(0x4000,  script->Run()->Int32Value());
+  CHECK_EQ(0x4000, script->Run()->Int32Value());
 }
 
 
@@ -282,7 +290,7 @@ TEST(MIPSBinarySar) {
     "function foo() { var a=-16; var b=4; return a >> b; }; foo();";
   Local<String> source = ::v8::String::New(c_source);
   Local<Script> script = ::v8::Script::Compile(source);
-  CHECK_EQ(-1,  script->Run()->Int32Value());
+  CHECK_EQ(-1, script->Run()->Int32Value());
 }
 
 
@@ -297,5 +305,5 @@ TEST(MIPSBinaryShr) {
     "function foo() { var a=-1; var b=0x4; return a >>> b; }; foo();";
   Local<String> source = ::v8::String::New(c_source);
   Local<Script> script = ::v8::Script::Compile(source);
-  CHECK_EQ(268435455,  script->Run()->Int32Value());
+  CHECK_EQ(268435455, script->Run()->Int32Value());
 }

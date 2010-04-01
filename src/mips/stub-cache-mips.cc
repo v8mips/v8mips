@@ -291,8 +291,60 @@ Object* CallStubCompiler::CompileCallGlobal(JSObject* object,
                                             JSGlobalPropertyCell* cell,
                                             JSFunction* function,
                                             String* name) {
-  UNIMPLEMENTED_MIPS();
-  return reinterpret_cast<Object*>(NULL);   // UNIMPLEMENTED RETURN
+  // r2    : name
+  // ra: return address
+  Label miss;
+
+  // Get the number of arguments.
+  const int argc = arguments().immediate();
+
+  // Get the receiver from the stack.
+  __ lw(a0, MemOperand(sp, argc * kPointerSize));
+
+  // If the object is the holder then we know that it's a global
+  // object which can only happen for contextual calls. In this case,
+  // the receiver cannot be a smi.
+  if (object != holder) {
+    __ And(t0, a0, Operand(kSmiTagMask));
+    __ Branch(eq, &miss, t0, Operand(zero_reg));
+  }
+
+  // Check that the maps haven't changed.
+  CheckPrototypes(object, a0, holder, a3, a2, name, &miss);
+
+  // Get the value from the cell.
+  __ li(a3, Operand(Handle<JSGlobalPropertyCell>(cell)));
+  __ lw(a1, FieldMemOperand(a3, JSGlobalPropertyCell::kValueOffset));
+
+  // Check that the cell contains the same function.
+  __ Branch(ne, &miss, a1, Operand(Handle<JSFunction>(function)));
+
+  // Patch the receiver on the stack with the global proxy if
+  // necessary.
+  if (object->IsGlobalObject()) {
+    __ lw(a3, FieldMemOperand(a0, GlobalObject::kGlobalReceiverOffset));
+    __ sw(a3, MemOperand(sp, argc * kPointerSize));
+  }
+
+  // Setup the context (function already in r1).
+  __ lw(cp, FieldMemOperand(a1, JSFunction::kContextOffset));
+
+  // Jump to the cached code (tail call).
+  __ IncrementCounter(&Counters::call_global_inline, 1, a2, a3);
+  ASSERT(function->is_compiled());
+  Handle<Code> code(function->code());
+  ParameterCount expected(function->shared()->formal_parameter_count());
+  __ InvokeCode(code, expected, arguments(),
+                RelocInfo::CODE_TARGET, JUMP_FUNCTION);
+
+  // Handle call cache miss.
+  __ bind(&miss);
+  __ IncrementCounter(&Counters::call_global_inline_miss, 1, a1, a3);
+  Handle<Code> ic = ComputeCallMiss(arguments().immediate());
+  __ Jump(ic, RelocInfo::CODE_TARGET);
+
+  // Return the generated code.
+  return GetCode(NORMAL, name);
 }
 
 
