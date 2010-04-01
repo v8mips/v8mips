@@ -140,22 +140,28 @@ TEST(MIPSControlFlow) {
 
   const char* c_source =
     "var res = 0;"
-    "var count = 99;"
+    "var count = 100;"
     ""
-    "if (1 < 9) {"
+    "if (1 < 9)"
     "  if (555 <= 555)"
     "    if (999 > 998)"
     "      if (0 >= 0)"
-    "        res = 9;"
+    "        res = 0xa;"
     ""
     "while (count > 90) {"
     "  count = count - 1;"
-    "  res = res + 10;"
+    "  res = res + 0x10;"
     "}"
+    ""
+    "do {"
+    "  count = count - 1;"
+    "  res = res + 0x100;"
+    "} while (count > 80);"
+    ""
     "res;";
   Local<String> source = ::v8::String::New(c_source);
   Local<Script> script = ::v8::Script::Compile(source);
-  CHECK_EQ(99, script->Run()->Int32Value());
+  CHECK_EQ(0xaaa, script->Run()->Int32Value());
 }
 
 

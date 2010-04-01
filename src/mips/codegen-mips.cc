@@ -1232,7 +1232,73 @@ void CodeGenerator::VisitSwitchStatement(SwitchStatement* node) {
 
 
 void CodeGenerator::VisitDoWhileStatement(DoWhileStatement* node) {
-  UNIMPLEMENTED_MIPS();
+#ifdef DEBUG
+  int original_height = frame_->height();
+#endif
+  VirtualFrame::SpilledScope spilled_scope;
+  Comment cmnt(masm_, "[ DoWhileStatement");
+  CodeForStatementPosition(node);
+  node->break_target()->set_direction(JumpTarget::FORWARD_ONLY);
+  JumpTarget body(JumpTarget::BIDIRECTIONAL);
+
+  // Label the top of the loop for the backward CFG edge.  If the test
+  // is always true we can use the continue target, and if the test is
+  // always false there is no need.
+  ConditionAnalysis info = AnalyzeCondition(node->cond());
+  switch (info) {
+    case ALWAYS_TRUE:
+      node->continue_target()->set_direction(JumpTarget::BIDIRECTIONAL);
+      node->continue_target()->Bind();
+      break;
+    case ALWAYS_FALSE:
+      node->continue_target()->set_direction(JumpTarget::FORWARD_ONLY);
+      break;
+    case DONT_KNOW:
+      node->continue_target()->set_direction(JumpTarget::FORWARD_ONLY);
+      body.Bind();
+      break;
+  }
+
+  CheckStack();  // TODO(1222600): ignore if body contains calls.
+  VisitAndSpill(node->body());
+
+      // Compile the test.
+  switch (info) {
+    case ALWAYS_TRUE:
+      // If control can fall off the end of the body, jump back to the
+      // top.
+      if (has_valid_frame()) {
+        node->continue_target()->Jump();
+      }
+      break;
+    case ALWAYS_FALSE:
+      // If we have a continue in the body, we only have to bind its
+      // jump target.
+      if (node->continue_target()->is_linked()) {
+        node->continue_target()->Bind();
+      }
+      break;
+    case DONT_KNOW:
+      // We have to compile the test expression if it can be reached by
+      // control flow falling out of the body or via continue.
+      if (node->continue_target()->is_linked()) {
+        node->continue_target()->Bind();
+      }
+      if (has_valid_frame()) {
+        LoadConditionAndSpill(node->cond(), &body, node->break_target(), true);
+        if (has_valid_frame()) {
+          // A invalid frame here indicates that control did not
+          // fall out of the test expression.
+          Branch(true, &body);
+        }
+      }
+      break;
+  }
+
+  if (node->break_target()->is_linked()) {
+    node->break_target()->Bind();
+  }
+  ASSERT(!has_valid_frame() || frame_->height() == original_height);
 }
 
 
