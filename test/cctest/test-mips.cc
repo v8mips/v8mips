@@ -45,7 +45,7 @@ TEST(MIPSFunctionCalls) {
   v8::HandleScope scope;
   LocalContext env;  // from cctest.h
 
-  const char* c_source = ""
+  const char* c_source =
     "function foo(arg1, arg2, arg3, arg4, arg5) {"
     "	return foo2(arg1, foo2(arg3, arg4));"
     "}"
@@ -72,7 +72,7 @@ TEST(MIPSComparisons) {
   v8::HandleScope scope;
   LocalContext env;  // from cctest.h
 
-  const char* c_source = ""
+  const char* c_source =
     "function foo() {"
     ""
     "  var nothing;"
@@ -106,22 +106,27 @@ TEST(MIPSGlobalVariables) {
   v8::HandleScope scope;
   LocalContext env;  // from cctest.h
 
-  const char* c_source = ""
+  const char* c_source =
     "var nothing;"
     "var n = 1234;"
     "var s = '1234';"
     "var bt = true;"
     "var bf = false;"
     ""
+    "var a = 0x0;"
+    "var b = 0x123;"
+    ""
     "if (nothing == null)"
     "if (typeof n == 'number')"
     "if (typeof s == 'string')"
     "if (typeof bt == 'boolean')"
-    "if (typeof bf == 'boolean')"
-    "    1234;";
+    "if (typeof bf == 'boolean') {"
+    "  a = b;"
+    "  a;"
+    "}";
   Local<String> source = ::v8::String::New(c_source);
   Local<Script> script = ::v8::Script::Compile(source);
-  CHECK_EQ(1234, script->Run()->Int32Value());
+  CHECK_EQ(0x123, script->Run()->Int32Value());
 }
 
 
@@ -133,7 +138,7 @@ TEST(MIPSIfThenElse) {
   v8::HandleScope scope;
   LocalContext env;  // from cctest.h
 
-  const char* c_source = ""
+  const char* c_source =
     "if (1 < 9) {"
     "  if (555 <= 555)"
     "    if (999 > 998)"
@@ -250,7 +255,8 @@ TEST(MIPSBinaryAnd) {
   LocalContext env;  // from cctest.h
 
   const char* c_source =
-    "function foo() { var a=0x0f0f0f0f; var b=0x11223344; return a & b; }; foo();";
+    "function foo() { var a=0x0f0f0f0f; var b=0x11223344; return a & b; };"
+    "foo();";
   Local<String> source = ::v8::String::New(c_source);
   Local<Script> script = ::v8::Script::Compile(source);
   CHECK_EQ(0x01020304, script->Run()->Int32Value());
@@ -265,7 +271,8 @@ TEST(MIPSBinaryXor) {
   LocalContext env;  // from cctest.h
 
   const char* c_source =
-    "function foo() { var a=0x0f0f0f0f; var b=0x11223344; return a ^ b; }; foo();";
+    "function foo() { var a=0x0f0f0f0f; var b=0x11223344; return a ^ b; };"
+    "foo();";
   Local<String> source = ::v8::String::New(c_source);
   Local<Script> script = ::v8::Script::Compile(source);
   CHECK_EQ(0x1e2d3c4b, script->Run()->Int32Value());

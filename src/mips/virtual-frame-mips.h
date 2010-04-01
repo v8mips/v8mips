@@ -317,16 +317,6 @@ class VirtualFrame : public ZoneObject {
   void CallCodeObject(Handle<Code> ic,
                       RelocInfo::Mode rmode,
                       int dropped_args);
-  void CallCodeObject(Handle<Code> ic,
-                      RelocInfo::Mode rmode,
-                      Result* arg,
-                      int dropped_args);
-  void CallCodeObject(Handle<Code> ic,
-                      RelocInfo::Mode rmode,
-                      Result* arg0,
-                      Result* arg1,
-                      int dropped_args,
-                      bool set_auto_args_slots = false);
 
   // Drop a number of elements from the top of the expression stack. May
   // emit code to affect the physical frame. Does not clobber any registers

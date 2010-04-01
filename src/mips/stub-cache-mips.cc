@@ -376,8 +376,31 @@ Object* StoreStubCompiler::CompileStoreInterceptor(JSObject* receiver,
 Object* StoreStubCompiler::CompileStoreGlobal(GlobalObject* object,
                                               JSGlobalPropertyCell* cell,
                                               String* name) {
-  UNIMPLEMENTED_MIPS();
-  return reinterpret_cast<Object*>(NULL);   // UNIMPLEMENTED RETURN
+  // a0    : value
+  // a1    : receiver
+  // a2    : name
+  // ra    : return address
+  Label miss;
+
+  // Check that the map of the global has not changed.
+  __ lw(a3, FieldMemOperand(a1, HeapObject::kMapOffset));
+  __ Branch(ne, &miss, a3, Operand(Handle<Map>(object->map())));
+
+  // Store the value in the cell.
+  __ li(a2, Operand(Handle<JSGlobalPropertyCell>(cell)));
+  __ sw(a0, FieldMemOperand(a2, JSGlobalPropertyCell::kValueOffset));
+
+  __ IncrementCounter(&Counters::named_store_global_inline, 1, a1, a3);
+  __ Ret();
+
+  // Handle store cache miss.
+  __ bind(&miss);
+  __ IncrementCounter(&Counters::named_store_global_inline_miss, 1, a1, a3);
+  Handle<Code> ic(Builtins::builtin(Builtins::StoreIC_Miss));
+  __ JumpToBuiltin(ic, RelocInfo::CODE_TARGET);
+
+  // Return the generated code.
+  return GetCode(NORMAL, name);
 }
 
 

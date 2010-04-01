@@ -200,7 +200,7 @@ void VirtualFrame::CallCodeObject(Handle<Code> code,
       UNIMPLEMENTED_MIPS();
       break;
     case Code::STORE_IC:
-      UNIMPLEMENTED_MIPS();
+      ASSERT(dropped_args == 0);
       break;
     case Code::BUILTIN:
       UNIMPLEMENTED_MIPS();
@@ -212,24 +212,6 @@ void VirtualFrame::CallCodeObject(Handle<Code> code,
   Forget(dropped_args);
   ASSERT(cgen()->HasValidEntryRegisters());
   __ Call(code, rmode);
-}
-
-
-void VirtualFrame::CallCodeObject(Handle<Code> code,
-                                  RelocInfo::Mode rmode,
-                                  Result* arg,
-                                  int dropped_args) {
-  UNIMPLEMENTED_MIPS();
-}
-
-
-void VirtualFrame::CallCodeObject(Handle<Code> code,
-                                  RelocInfo::Mode rmode,
-                                  Result* arg0,
-                                  Result* arg1,
-                                  int dropped_args,
-                                  bool set_auto_args_slots) {
-  UNIMPLEMENTED_MIPS();
 }
 
 

@@ -209,16 +209,30 @@ void KeyedStoreIC::GenerateMiss(MacroAssembler* masm) {
 
 void StoreIC::GenerateMegamorphic(MacroAssembler* masm) {
   UNIMPLEMENTED_MIPS();
+  __ break_(0x212);
 }
 
 
 void StoreIC::GenerateMiss(MacroAssembler* masm) {
-  UNIMPLEMENTED_MIPS();
+  // a0    : value
+  // a1    : receiver
+  // a2    : name
+  // ra    : return address
+
+  __ addiu(sp, sp, -3 * kPointerSize);
+  __ sw(a1, MemOperand(sp, 2 * kPointerSize));
+  __ sw(a2, MemOperand(sp, 1 * kPointerSize));
+  __ sw(a0, MemOperand(sp, 0 * kPointerSize));
+
+  // Perform tail call to the entry.
+  ExternalReference ref = ExternalReference(IC_Utility(kStoreIC_Miss));
+  __ TailCallExternalReference(ref, 3, 1);
 }
 
 
 void StoreIC::GenerateArrayLength(MacroAssembler* masm) {
   UNIMPLEMENTED_MIPS();
+  __ break_(0x224);
 }
 
 #undef __

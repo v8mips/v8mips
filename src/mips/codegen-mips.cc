@@ -2099,18 +2099,15 @@ void Reference::SetValue(InitState init_state) {
       Handle<Code> ic(Builtins::builtin(Builtins::StoreIC_Initialize));
       Handle<String> name(GetName());
 
-      Result value(a0);
       frame->EmitPop(a0);
+      frame->EmitPop(a1);
 
       // Setup the name register.
       Result property_name(a2);
       __ li(a2, Operand(name));
-      frame->CallCodeObject(ic,
-                            RelocInfo::CODE_TARGET,
-                            &value,
-                            &property_name,
-                            0);
+      frame->CallCodeObject(ic, RelocInfo::CODE_TARGET, 0);
       frame->EmitPush(v0);
+      set_unloaded();
       break;
     }
 
