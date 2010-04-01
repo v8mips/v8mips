@@ -1315,7 +1315,12 @@ void MacroAssembler::CallRuntime(Runtime::FunctionId fid, int num_arguments) {
 void MacroAssembler::TailCallExternalReference(const ExternalReference& ext,
                                                int num_arguments,
                                                int result_size) {
-  UNIMPLEMENTED_MIPS();
+  // TODO(1236192): Most runtime routines don't need the number of
+  // arguments passed in because it is constant. At some point we
+  // should remove this need and make the runtime routine entry code
+  // smarter.
+  li(a0, Operand(num_arguments));
+  JumpToExternalReference(ext);
 }
 
 
@@ -1327,7 +1332,9 @@ void MacroAssembler::TailCallRuntime(Runtime::FunctionId fid,
 
 
 void MacroAssembler::JumpToExternalReference(const ExternalReference& builtin) {
-  UNIMPLEMENTED_MIPS();
+  li(a1, Operand(builtin));
+  CEntryStub stub(1);
+  Jump(stub.GetCode(), RelocInfo::CODE_TARGET);
 }
 
 

@@ -111,6 +111,96 @@ class MacroAssembler: public Assembler {
                      const Operand& rt = Operand(zero_reg),
                      Register scratch = at, bool ProtectBranchDelaySlot = true);
 
+  // Convenient template with the boolean as first argument.
+  inline void Jump(bool ProtectBranchDelaySlot,
+                   const Operand& target,
+                   Condition cond = cc_always,
+                   Register r1 = zero_reg,
+                   const Operand& r2 = Operand(zero_reg)) {
+  Jump(target, cond, r1, r2, ProtectBranchDelaySlot);
+}
+  inline void Call(bool ProtectBranchDelaySlot,
+                   const Operand& target,
+                   Condition cond = cc_always,
+                   Register r1 = zero_reg,
+                   const Operand& r2 = Operand(zero_reg)) {
+  Call(target, cond, r1, r2, ProtectBranchDelaySlot);
+}
+  inline void Jump(bool ProtectBranchDelaySlot,
+                   Register target,
+                   Condition cond = cc_always,
+                   Register r1 = zero_reg,
+                   const Operand& r2 = Operand(zero_reg)) {
+  Jump(target, cond, r1, r2, ProtectBranchDelaySlot);
+}
+  inline void Jump(bool ProtectBranchDelaySlot,
+                   byte* target, RelocInfo::Mode rmode,
+                   Condition cond = cc_always,
+                   Register r1 = zero_reg,
+                   const Operand& r2 = Operand(zero_reg)) {
+  Jump(target, rmode, cond, r1, r2, ProtectBranchDelaySlot);
+}
+  inline void Jump(bool ProtectBranchDelaySlot,
+                   Handle<Code> code, RelocInfo::Mode rmode,
+                   Condition cond = cc_always,
+                   Register r1 = zero_reg,
+                   const Operand& r2 = Operand(zero_reg)) {
+  Jump(code, rmode, cond, r1, r2, ProtectBranchDelaySlot);
+}
+  inline void Call(bool ProtectBranchDelaySlot,
+                   Register target,
+                   Condition cond = cc_always,
+                   Register r1 = zero_reg,
+                   const Operand& r2 = Operand(zero_reg)) {
+  Call(target, cond, r1, r2, ProtectBranchDelaySlot);
+}
+  inline void Call(bool ProtectBranchDelaySlot,
+                   byte* target, RelocInfo::Mode rmode,
+                   Condition cond = cc_always,
+                   Register r1 = zero_reg,
+                   const Operand& r2 = Operand(zero_reg)) {
+  Call(target, rmode, cond, r1, r2, ProtectBranchDelaySlot);
+}
+  inline void Call(bool ProtectBranchDelaySlot,
+                   Handle<Code> code, RelocInfo::Mode rmode,
+                   Condition cond = cc_always,
+                   Register r1 = zero_reg,
+                   const Operand& r2 = Operand(zero_reg)) {
+  Call(code, rmode, cond, r1, r2, ProtectBranchDelaySlot);
+}
+  inline void Ret(bool ProtectBranchDelaySlot,
+                  Condition cond = cc_always,
+                  Register r1 = zero_reg,
+                  const Operand& r2 = Operand(zero_reg)) {
+  Ret(cond, r1, r2, ProtectBranchDelaySlot);
+}
+  inline void Branch(bool ProtectBranchDelaySlot,
+                     Condition cond, int16_t offset, Register rs = zero_reg,
+                     const Operand& rt = Operand(zero_reg),
+                     Register scratch = at) {
+  Branch(cond, offset, rs, rt, scratch = at, ProtectBranchDelaySlot);
+}
+  inline void Branch(bool ProtectBranchDelaySlot,
+                     Condition cond, Label* L, Register rs = zero_reg,
+                     const Operand& rt = Operand(zero_reg),
+                     Register scratch = at) {
+  Branch(cond, L, rs, rt, scratch = at, ProtectBranchDelaySlot);
+}
+  // conditionnal branch and link
+  inline void BranchAndLink(bool ProtectBranchDelaySlot,
+                            Condition cond, int16_t offset,
+                            Register rs = zero_reg,
+                            const Operand& rt = Operand(zero_reg),
+                            Register scratch = at) {
+  BranchAndLink(cond, offset, rs, rt, at, ProtectBranchDelaySlot);
+}
+  inline void BranchAndLink(bool ProtectBranchDelaySlot,
+                            Condition cond, Label* L, Register rs = zero_reg,
+                            const Operand& rt = Operand(zero_reg),
+                            Register scratch = at) {
+  BranchAndLink(cond, L, rs, rt, at, ProtectBranchDelaySlot);
+}
+
   // Emit code to discard a non-negative number of pointer-sized elements
   // from the stack, clobbering only the sp register.
   void Drop(int count, Condition cond = cc_always);
