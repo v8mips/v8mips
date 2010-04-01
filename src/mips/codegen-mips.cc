@@ -276,7 +276,15 @@ void CodeGenerator::LoadReference(Reference* ref) {
   Variable* var = e->AsVariableProxy()->AsVariable();
 
   if (property != NULL) {
-    UNIMPLEMENTED_MIPS();
+    // The expression is either a property or a variable proxy that rewrites
+    // to a property.
+    LoadAndSpill(property->obj());
+    if (property->key()->IsPropertyName()) {
+      ref->set_type(Reference::NAMED);
+    } else {
+      LoadAndSpill(property->key());
+      ref->set_type(Reference::KEYED);
+    }
   } else if (var != NULL) {
     // The expression is a variable proxy that does not rewrite to a
     // property.  Global variables are treated as named property references.
@@ -321,12 +329,36 @@ MemOperand CodeGenerator::SlotOperand(Slot* slot, Register tmp) {
   switch (slot->type()) {
     case Slot::PARAMETER:
       return frame_->ParameterAt(index);
+
     case Slot::LOCAL:
       return frame_->LocalAt(index);
+    
     case Slot::CONTEXT: {
-      UNIMPLEMENTED_MIPS();
-      return MemOperand(no_reg, 0);
+      ASSERT(!tmp.is(cp));  // do not overwrite context register
+      Register context = cp;
+      int chain_length = scope()->ContextChainLength(slot->var()->scope());
+      for (int i = 0; i < chain_length; i++) {
+        // Load the closure.
+        // (All contexts, even 'with' contexts, have a closure,
+        // and it is the same for all contexts inside a function.
+        // There is no need to go to the function context first.)
+//        __ ldr(tmp, ContextOperand(context, Context::CLOSURE_INDEX));
+        __ lw(tmp, ContextOperand(context, Context::CLOSURE_INDEX));
+        // Load the function context (which is the incoming, outer context).
+        __ lw(tmp, FieldMemOperand(tmp, JSFunction::kContextOffset));
+        context = tmp;
+      }
+      // We may have a 'with' context now. Get the function context.
+      // (In fact this mov may never be the needed, since the scope analysis
+      // may not permit a direct context access in this case and thus we are
+      // always at a function context. However it is safe to dereference be-
+      // cause the function context of a function context is itself. Before
+      // deleting this mov we should try to create a counter-example first,
+      // though...)
+      __ lw(tmp, ContextOperand(context, Context::FCONTEXT_INDEX));
+      return ContextOperand(tmp, index);
     }
+    
     default:
       UNREACHABLE();
       return MemOperand(no_reg, 0);
@@ -1543,7 +1575,39 @@ void CodeGenerator::GenerateNumberToString(ZoneList<Expression*>* args) {
 
 
 void CodeGenerator::VisitCallRuntime(CallRuntime* node) {
-  UNIMPLEMENTED_MIPS();
+#ifdef DEBUG
+  int original_height = frame_->height();
+#endif
+  VirtualFrame::SpilledScope spilled_scope;
+  if (CheckForInlineRuntimeCall(node)) {
+    ASSERT((has_cc() && frame_->height() == original_height) ||
+           (!has_cc() && frame_->height() == original_height + 1));
+    return;
+  }
+
+  ZoneList<Expression*>* args = node->arguments();
+  Comment cmnt(masm_, "[ CallRuntime");
+  Runtime::Function* function = node->function();
+
+  int arg_count = args->length();
+
+  if (function == NULL) {
+    UNIMPLEMENTED_MIPS();
+  }
+
+  // Push the arguments ("left-to-right").
+  for (int i = 0; i < arg_count; i++) {
+    LoadAndSpill(args->at(i));
+  }
+
+  if (function == NULL) {
+    UNIMPLEMENTED_MIPS();
+  } else {
+    // Call the C runtime function.
+    frame_->CallRuntime(function, arg_count);
+    frame_->EmitPush(v0);
+  }
+  ASSERT(frame_->height() == original_height + 1);
 }
 
 
@@ -1938,6 +2002,7 @@ void Reference::GetValue() {
   ASSERT(cgen_->HasValidEntryRegisters());
   ASSERT(!is_illegal());
   ASSERT(!cgen_->has_cc());
+  MacroAssembler* masm = cgen_->masm();
   Property* property = expression_->AsProperty();
   if (property != NULL) {
     cgen_->CodeForSourcePosition(property->position());
@@ -1950,7 +2015,19 @@ void Reference::GetValue() {
     }
 
     case NAMED: {
-      UNIMPLEMENTED_MIPS();
+      VirtualFrame* frame = cgen_->frame();
+      Comment cmnt(masm, "[ Load from named Property");
+      Handle<String> name(GetName());
+      Variable* var = expression_->AsVariableProxy()->AsVariable();
+      Handle<Code> ic(Builtins::builtin(Builtins::LoadIC_Initialize));
+      // Setup the name register.
+      __ li(a2, Operand(name));
+      ASSERT(var == NULL || var->is_global());
+      RelocInfo::Mode rmode = (var == NULL)
+                            ? RelocInfo::CODE_TARGET
+                            : RelocInfo::CODE_TARGET_CONTEXT;
+      frame->CallCodeObject(ic, rmode, 0);
+      frame->EmitPush(v0);
       break;
     }
 
@@ -1961,6 +2038,10 @@ void Reference::GetValue() {
 
     default:
       UNREACHABLE();
+  }
+
+  if (!persist_after_get_) {
+    cgen_->UnloadReference(this);
   }
 }
 
@@ -1985,7 +2066,6 @@ void Reference::SetValue(InitState init_state) {
     }
 
     case NAMED: {
-      //UNIMPLEMENTED_MIPS();
       Comment cmnt(masm, "[ Store to named Property");
       // Call the appropriate IC code.
       Handle<Code> ic(Builtins::builtin(Builtins::StoreIC_Initialize));
@@ -2075,7 +2155,11 @@ void CEntryStub::GenerateCore(MacroAssembler* masm,
   __ mov(a0, s0);
   __ mov(a1, s1);
 
-  __ CallBuiltin(s2);
+  // We are calling compiled C/C++ code. a0 and a1 hold our two arguments. We
+  // also need the argument slots.
+  __ jalr(s2);
+  __ addiu(sp, sp, -StandardFrameConstants::kRArgsSlotsSize);
+  __ addiu(sp, sp, StandardFrameConstants::kRArgsSlotsSize);
 
   if (always_allocate) {
     UNIMPLEMENTED_MIPS();

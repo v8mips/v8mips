@@ -122,16 +122,27 @@ Object* LoadIC_Miss(Arguments args);
 
 void LoadIC::GenerateMegamorphic(MacroAssembler* masm) {
   UNIMPLEMENTED_MIPS();
+  __ break_(0x125);
 }
 
 
 void LoadIC::GenerateNormal(MacroAssembler* masm) {
   UNIMPLEMENTED_MIPS();
+  __ break_(0x131);
 }
 
 
 void LoadIC::GenerateMiss(MacroAssembler* masm) {
-  UNIMPLEMENTED_MIPS();
+  // a2    : name
+  // ra    : return address
+  // [sp]  : receiver
+
+  __ lw(a3, MemOperand(sp));
+  __ MultiPush(a2.bit() | a3.bit());
+
+  // Perform tail call to the entry.
+  ExternalReference ref = ExternalReference(IC_Utility(kLoadIC_Miss));
+  __ TailCallExternalReference(ref, 2, 1);
 }
 
 

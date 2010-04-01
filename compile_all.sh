@@ -42,7 +42,7 @@ if [ $? != 0 ]; then
 	exit
 fi
 
-echo "########## Starting test-assembler-mips"
+echo "########## Starting mips tests..."
 tools/test.py --simulator=mips -S regexp=interpreted cctest/test-assembler-mips cctest/test-mips
 if [ $? != 0 ]; then
 	echo "Error running test-assembler-mips."

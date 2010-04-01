@@ -194,7 +194,7 @@ void VirtualFrame::CallCodeObject(Handle<Code> code,
       UNIMPLEMENTED_MIPS();
       break;
     case Code::LOAD_IC:
-      UNIMPLEMENTED_MIPS();
+      ASSERT(dropped_args == 0);
       break;
     case Code::KEYED_STORE_IC:
       UNIMPLEMENTED_MIPS();
