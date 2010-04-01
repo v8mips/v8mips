@@ -130,7 +130,7 @@ TEST(MIPSGlobalVariables) {
 }
 
 
-TEST(MIPSIfThenElse) {
+TEST(MIPSControlFlow) {
   // Disable compilation of natives.
   i::FLAG_disable_native_files = true;
   i::FLAG_full_compiler = false;
@@ -139,17 +139,23 @@ TEST(MIPSIfThenElse) {
   LocalContext env;  // from cctest.h
 
   const char* c_source =
+    "var res = 0;"
+    "var count = 99;"
+    ""
     "if (1 < 9) {"
     "  if (555 <= 555)"
     "    if (999 > 998)"
     "      if (0 >= 0)"
-    "        0x1111;"
-    "} else {"
-    "  0x4444;"
-    "}";
+    "        res = 9;"
+    ""
+    "while (count > 90) {"
+    "  count = count - 1;"
+    "  res = res + 10;"
+    "}"
+    "res;";
   Local<String> source = ::v8::String::New(c_source);
   Local<Script> script = ::v8::Script::Compile(source);
-  CHECK_EQ(0x1111, script->Run()->Int32Value());
+  CHECK_EQ(99, script->Run()->Int32Value());
 }
 
 

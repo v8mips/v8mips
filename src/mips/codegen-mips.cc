@@ -991,12 +991,12 @@ void CodeGenerator::CheckStack() {
   VirtualFrame::SpilledScope spilled_scope;
   Comment cmnt(masm_, "[ check stack");
 
-  __ LoadRoot(at, Heap::kStackLimitRootIndex);
+  __ LoadRoot(t0, Heap::kStackLimitRootIndex);
   StackCheckStub stub;
   // Call the stub if lower.
   __ Call(Operand(reinterpret_cast<intptr_t>(stub.GetCode().location()),
           RelocInfo::CODE_TARGET),
-          Uless, sp, Operand(at));
+          Uless, sp, Operand(t0));
 }
 
 
@@ -1237,7 +1237,52 @@ void CodeGenerator::VisitDoWhileStatement(DoWhileStatement* node) {
 
 
 void CodeGenerator::VisitWhileStatement(WhileStatement* node) {
-  UNIMPLEMENTED_MIPS();
+#ifdef DEBUG
+  int original_height = frame_->height();
+#endif
+  VirtualFrame::SpilledScope spilled_scope;
+  Comment cmnt(masm_, "[ WhileStatement");
+  CodeForStatementPosition(node);
+
+  // If the test is never true and has no side effects there is no need
+  // to compile the test or body.
+  ConditionAnalysis info = AnalyzeCondition(node->cond());
+  if (info == ALWAYS_FALSE) return;
+
+  node->break_target()->set_direction(JumpTarget::FORWARD_ONLY);
+
+  // Label the top of the loop with the continue target for the backward
+  // CFG edge.
+  node->continue_target()->set_direction(JumpTarget::BIDIRECTIONAL);
+  node->continue_target()->Bind();
+
+
+  if (info == DONT_KNOW) {
+    JumpTarget body;
+    LoadConditionAndSpill(node->cond(), &body, node->break_target(), true);
+    if (has_valid_frame()) {
+      // A NULL frame indicates that control did not fall out of the
+      // test expression.
+      Branch(false, node->break_target());
+    }
+    if (has_valid_frame() || body.is_linked()) {
+      body.Bind();
+    }
+  }
+
+  if (has_valid_frame()) {
+    CheckStack();  // TODO(1222600): ignore if body contains calls.
+    VisitAndSpill(node->body());
+
+    // If control flow can fall out of the body, jump back to the top.
+    if (has_valid_frame()) {
+      node->continue_target()->Jump();
+    }
+  }
+  if (node->break_target()->is_linked()) {
+    node->break_target()->Bind();
+  }
+  ASSERT(!has_valid_frame() || frame_->height() == original_height);
 }
 
 
