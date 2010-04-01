@@ -97,12 +97,62 @@ void StubCompiler::GenerateStoreField(MacroAssembler* masm,
 
 
 void StubCompiler::GenerateLoadMiss(MacroAssembler* masm, Code::Kind kind) {
-  UNIMPLEMENTED_MIPS();
+  ASSERT(kind == Code::LOAD_IC || kind == Code::KEYED_LOAD_IC);
+  Code* code = NULL;
+  if (kind == Code::LOAD_IC) {
+    code = Builtins::builtin(Builtins::LoadIC_Miss);
+  } else {
+    code = Builtins::builtin(Builtins::KeyedLoadIC_Miss);
+  }
+
+  Handle<Code> ic(code);
+  __ JumpToBuiltin(ic, RelocInfo::CODE_TARGET);
 }
 
 
 #undef __
 #define __ ACCESS_MASM(masm())
+
+
+Register StubCompiler::CheckPrototypes(JSObject* object,
+                                       Register object_reg,
+                                       JSObject* holder,
+                                       Register holder_reg,
+                                       Register scratch,
+                                       String* name,
+                                       int save_at_depth,
+                                       Label* miss) {
+  // TODO(602): support object saving.
+  ASSERT(save_at_depth == kInvalidProtoDepth);
+
+  // Check that the maps haven't changed.
+  Register result =
+      masm()->CheckMaps(object, object_reg, holder, holder_reg, scratch, miss);
+
+  // If we've skipped any global objects, it's not enough to verify
+  // that their maps haven't changed.
+  while (object != holder) {
+    if (object->IsGlobalObject()) {
+      GlobalObject* global = GlobalObject::cast(object);
+      Object* probe = global->EnsurePropertyCell(name);
+      if (probe->IsFailure()) {
+        set_failure(Failure::cast(probe));
+        return result;
+      }
+      JSGlobalPropertyCell* cell = JSGlobalPropertyCell::cast(probe);
+      ASSERT(cell->value()->IsTheHole());
+      __ li(scratch, Operand(Handle<Object>(cell)));
+      __ lw(scratch,
+             FieldMemOperand(scratch, JSGlobalPropertyCell::kValueOffset));
+      __ LoadRoot(at, Heap::kTheHoleValueRootIndex);
+      __ Branch(ne, miss, scratch, Operand(at));
+    }
+    object = JSObject::cast(object->GetPrototype());
+  }
+
+  // Return the register containing the holder.
+  return result;
+}
 
 
 void StubCompiler::GenerateLoadField(JSObject* object,
@@ -319,8 +369,44 @@ Object* LoadStubCompiler::CompileLoadGlobal(JSObject* object,
                                             JSGlobalPropertyCell* cell,
                                             String* name,
                                             bool is_dont_delete) {
-  UNIMPLEMENTED_MIPS();
-  return reinterpret_cast<Object*>(NULL);   // UNIMPLEMENTED RETURN
+  // a2    : name
+  // ra    : return address
+  // [sp]  : receiver
+  Label miss;
+
+  // Get the receiver from the stack.
+  __ lw(a1, MemOperand(sp));
+
+  // If the object is the holder then we know that it's a global
+  // object which can only happen for contextual calls. In this case,
+  // the receiver cannot be a smi.
+  if (object != holder) {
+    __ And(t0, a1, Operand(kSmiTagMask));
+    __ Branch(eq, &miss, t0, Operand(zero_reg));
+  }
+
+  // Check that the map of the global has not changed.
+  CheckPrototypes(object, a1, holder, a3, a0, name, &miss);
+
+  // Get the value from the cell.
+  __ li(a3, Operand(Handle<JSGlobalPropertyCell>(cell)));
+  __ lw(v0, FieldMemOperand(a3, JSGlobalPropertyCell::kValueOffset));
+
+  // Check for deleted property if property can actually be deleted.
+  if (!is_dont_delete) {
+    __ LoadRoot(t0, Heap::kTheHoleValueRootIndex);
+    __ Branch(eq, &miss, v0, Operand(t0));
+  }
+
+  __ IncrementCounter(&Counters::named_load_global_inline, 1, a1, a3);
+  __ Ret();
+
+  __ bind(&miss);
+  __ IncrementCounter(&Counters::named_load_global_inline_miss, 1, a1, a3);
+  GenerateLoadMiss(masm(), Code::LOAD_IC);
+
+  // Return the generated code.
+  return GetCode(NORMAL, name);
 }
 
 

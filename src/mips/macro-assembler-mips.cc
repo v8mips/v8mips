@@ -134,6 +134,156 @@ void MacroAssembler::RecordWrite(Register object,
 }
 
 
+// -----------------------------------------------------------------------------
+// Allocation support
+
+
+Register MacroAssembler::CheckMaps(JSObject* object, Register object_reg,
+                                   JSObject* holder, Register holder_reg,
+                                   Register scratch,
+                                   Label* miss) {
+  // Make sure there's no overlap between scratch and the other
+  // registers.
+  ASSERT(!scratch.is(object_reg) && !scratch.is(holder_reg));
+
+  // Keep track of the current object in register reg.
+  Register reg = object_reg;
+  int depth = 1;
+
+  // Check the maps in the prototype chain.
+  // Traverse the prototype chain from the object and do map checks.
+  while (object != holder) {
+    depth++;
+
+    // Only global objects and objects that do not require access
+    // checks are allowed in stubs.
+    ASSERT(object->IsJSGlobalProxy() || !object->IsAccessCheckNeeded());
+
+    // Get the map of the current object.
+    lw(scratch, FieldMemOperand(reg, HeapObject::kMapOffset));
+
+    // Branch on the result of the map check.
+    Branch(ne, miss, scratch, Operand(Handle<Map>(object->map())));
+
+    // Check access rights to the global object.  This has to happen
+    // after the map check so that we know that the object is
+    // actually a global object.
+    if (object->IsJSGlobalProxy()) {
+      CheckAccessGlobalProxy(reg, scratch, miss);
+      // Restore scratch register to be the map of the object.  In the
+      // new space case below, we load the prototype from the map in
+      // the scratch register.
+      lw(scratch, FieldMemOperand(reg, HeapObject::kMapOffset));
+    }
+
+    reg = holder_reg;  // From now the object is in holder_reg.
+    JSObject* prototype = JSObject::cast(object->GetPrototype());
+    if (Heap::InNewSpace(prototype)) {
+      // The prototype is in new space; we cannot store a reference
+      // to it in the code. Load it from the map.
+      lw(reg, FieldMemOperand(scratch, Map::kPrototypeOffset));
+    } else {
+      // The prototype is in old space; load it directly.
+      li(reg, Operand(Handle<JSObject>(prototype)));
+    }
+
+    // Go to the next object in the prototype chain.
+    object = prototype;
+  }
+
+  // Check the holder map.
+  lw(scratch, FieldMemOperand(reg, HeapObject::kMapOffset));
+  Branch(ne, miss, scratch, Operand(Handle<Map>(object->map())));
+
+  // Log the check depth.
+  LOG(IntEvent("check-maps-depth", depth));
+
+  // Perform security check for access to the global object and return
+  // the holder register.
+  ASSERT(object == holder);
+  ASSERT(object->IsJSGlobalProxy() || !object->IsAccessCheckNeeded());
+  if (object->IsJSGlobalProxy()) {
+    CheckAccessGlobalProxy(reg, scratch, miss);
+  }
+  return reg;
+}
+
+
+void MacroAssembler::CheckAccessGlobalProxy(Register holder_reg,
+                                            Register scratch,
+                                            Label* miss) {
+  Label same_contexts;
+
+  ASSERT(!holder_reg.is(scratch));
+  ASSERT(!holder_reg.is(at));
+  ASSERT(!scratch.is(at));
+
+  // Load current lexical context from the stack frame.
+  lw(scratch, MemOperand(fp, StandardFrameConstants::kContextOffset));
+  // In debug mode, make sure the lexical context is set.
+#ifdef DEBUG
+  Check(ne, "we should not have an empty lexical context",
+      scratch, Operand(zero_reg));
+#endif
+
+  // Load the global context of the current context.
+  int offset = Context::kHeaderSize + Context::GLOBAL_INDEX * kPointerSize;
+  lw(scratch, FieldMemOperand(scratch, offset));
+  lw(scratch, FieldMemOperand(scratch, GlobalObject::kGlobalContextOffset));
+
+  // Check the context is a global context.
+  if (FLAG_debug_code) {
+    // TODO(119): Avoid push(holder_reg)/pop(holder_reg).
+    // Cannot use at as a temporary in this verification code. Due to the fact
+    // that at is clobbered as part of cmp with an object Operand.
+    Push(holder_reg);  // Temporarily save holder on the stack.
+    // Read the first word and compare to the global_context_map.
+    lw(holder_reg, FieldMemOperand(scratch, HeapObject::kMapOffset));
+    LoadRoot(at, Heap::kGlobalContextMapRootIndex);
+    Check(eq, "JSGlobalObject::global_context should be a global context.",
+          holder_reg, Operand(at));
+    Pop(holder_reg);  // Restore holder.
+  }
+
+  // Check if both contexts are the same.
+  lw(at, FieldMemOperand(holder_reg, JSGlobalProxy::kContextOffset));
+  Branch(eq, &same_contexts, scratch, Operand(at));
+
+  // Check the context is a global context.
+  if (FLAG_debug_code) {
+    // TODO(119): Avoid push(holder_reg)/pop(holder_reg).
+    // Cannot use ip as a temporary in this verification code. Due to the fact
+    // that ip is clobbered as part of cmp with an object Operand.
+    push(holder_reg);  // Temporarily save holder on the stack.
+    mov(holder_reg, at);  // Move ip to its holding place.
+    LoadRoot(at, Heap::kNullValueRootIndex);
+    Check(ne, "JSGlobalProxy::context() should not be null.",
+          holder_reg, Operand(at));
+
+    lw(holder_reg, FieldMemOperand(holder_reg, HeapObject::kMapOffset));
+    LoadRoot(at, Heap::kGlobalContextMapRootIndex);
+    Check(eq, "JSGlobalObject::global_context should be a global context.",
+          holder_reg, Operand(at));
+    // Restore at is not needed. at is reloaded below.
+    Pop(holder_reg);  // Restore holder.
+    // Restore at to holder's context.
+    lw(at, FieldMemOperand(holder_reg, JSGlobalProxy::kContextOffset));
+  }
+
+  // Check that the security token in the calling global object is
+  // compatible with the security token in the receiving global
+  // object.
+  int token_offset = Context::kHeaderSize +
+                     Context::SECURITY_TOKEN_INDEX * kPointerSize;
+
+  lw(scratch, FieldMemOperand(scratch, token_offset));
+  lw(at, FieldMemOperand(at, token_offset));
+  Branch(ne, miss, scratch, Operand(at));
+
+  bind(&same_contexts);
+}
+
+
 // ---------------------------------------------------------------------------
 // Instruction macros
 
@@ -1391,7 +1541,13 @@ void MacroAssembler::SetCounter(StatsCounter* counter, int value,
 
 void MacroAssembler::IncrementCounter(StatsCounter* counter, int value,
                                       Register scratch1, Register scratch2) {
-  UNIMPLEMENTED_MIPS();
+  ASSERT(value > 0);
+  if (FLAG_native_code_counters && counter->Enabled()) {
+    li(scratch2, Operand(ExternalReference(counter)));
+    lw(scratch1, MemOperand(scratch2));
+    Add(scratch1, scratch1, Operand(value));
+    sw(scratch1, MemOperand(scratch2));
+  }
 }
 
 

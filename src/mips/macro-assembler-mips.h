@@ -231,6 +231,31 @@ class MacroAssembler: public Assembler {
   // Sets the remembered set bit for [address+offset].
   void RecordWrite(Register object, Register offset, Register scratch);
 
+
+  // ---------------------------------------------------------------------------
+  // Inline caching support
+
+  // Generates code that verifies that the maps of objects in the
+  // prototype chain of object hasn't changed since the code was
+  // generated and branches to the miss label if any map has. If
+  // necessary the function also generates code for security check
+  // in case of global object holders. The scratch and holder
+  // registers are always clobbered, but the object register is only
+  // clobbered if it the same as the holder register. The function
+  // returns a register containing the holder - either object_reg or
+  // holder_reg.
+  Register CheckMaps(JSObject* object, Register object_reg,
+                     JSObject* holder, Register holder_reg,
+                     Register scratch, Label* miss);
+
+  // Generate code for checking access rights - used for security checks
+  // on access to global objects across environments. The holder register
+  // is left untouched, whereas both scratch registers are clobbered.
+  void CheckAccessGlobalProxy(Register holder_reg,
+                              Register scratch,
+                              Label* miss);
+
+
   // ---------------------------------------------------------------------------
   // Allocation support
 
