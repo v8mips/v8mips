@@ -1520,7 +1520,10 @@ void MacroAssembler::CallStub(CodeStub* stub, Condition cond,
 
 
 void MacroAssembler::StubReturn(int argc) {
-  UNIMPLEMENTED_MIPS();
+  ASSERT(argc >= 1 && generating_stub());
+  if (argc > 1)
+    addiu(sp, sp, (argc - 1) * kPointerSize);
+  Ret();
 }
 
 

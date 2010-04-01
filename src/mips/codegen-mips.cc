@@ -987,6 +987,19 @@ void CodeGenerator::Branch(bool if_true, JumpTarget* target) {
 }
 
 
+void CodeGenerator::CheckStack() {
+  VirtualFrame::SpilledScope spilled_scope;
+  Comment cmnt(masm_, "[ check stack");
+
+  __ LoadRoot(at, Heap::kStackLimitRootIndex);
+  StackCheckStub stub;
+  // Call the stub if lower.
+  __ Call(Operand(reinterpret_cast<intptr_t>(stub.GetCode().location()),
+          RelocInfo::CODE_TARGET),
+          Uless, sp, Operand(at));
+}
+
+
 void CodeGenerator::VisitBlock(Block* node) {
 #ifdef DEBUG
   int original_height = frame_->height();
@@ -2137,8 +2150,11 @@ Handle<Code> GetBinaryOpStub(int key, BinaryOpIC::TypeInfo type_info) {
 
 
 void StackCheckStub::Generate(MacroAssembler* masm) {
-  UNIMPLEMENTED_MIPS();
-  __ break_(0x790);
+  // Do tail-call to runtime routine.  Runtime routines expect at least one
+  // argument, so give it a Smi.
+  __ Push(zero_reg);
+  __ TailCallRuntime(Runtime::kStackGuard, 1, 1);
+  __ StubReturn(1);
 }
 
 
