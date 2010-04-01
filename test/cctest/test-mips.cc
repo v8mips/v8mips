@@ -98,6 +98,33 @@ TEST(MIPSComparisons) {
 }
 
 
+TEST(MIPSGlobalVariables) {
+  // Disable compilation of natives.
+  i::FLAG_disable_native_files = true;
+  i::FLAG_full_compiler = false;
+
+  v8::HandleScope scope;
+  LocalContext env;  // from cctest.h
+
+  const char* c_source = ""
+    "var nothing;"
+    "var n = 1234;"
+    "var s = '1234';"
+    "var bt = true;"
+    "var bf = false;"
+    ""
+    "if (nothing == null)"
+    "if (typeof n == 'number')"
+    "if (typeof s == 'string')"
+    "if (typeof bt == 'boolean')"
+    "if (typeof bf == 'boolean')"
+    "    1234;";
+  Local<String> source = ::v8::String::New(c_source);
+  Local<Script> script = ::v8::Script::Compile(source);
+  CHECK_EQ(1234, script->Run()->Int32Value());
+}
+
+
 TEST(MIPSIfThenElse) {
   // Disable compilation of natives.
   i::FLAG_disable_native_files = true;
@@ -118,25 +145,6 @@ TEST(MIPSIfThenElse) {
   Local<String> source = ::v8::String::New(c_source);
   Local<Script> script = ::v8::Script::Compile(source);
   CHECK_EQ(0x1111, script->Run()->Int32Value());
-}
-
-
-TEST(MIPSGlobalVariables) {
-  // Disable compilation of natives.
-  i::FLAG_disable_native_files = true;
-  i::FLAG_full_compiler = false;
-
-  v8::HandleScope scope;
-  LocalContext env;  // from cctest.h
-
-  const char* c_source = ""
-    "var ga = 0x1234;"
-    "var gb = 0x5678;"
-    "var gc = -0x4321;"
-    "gb;";
-  Local<String> source = ::v8::String::New(c_source);
-  Local<Script> script = ::v8::Script::Compile(source);
-  CHECK_EQ(0x5678, script->Run()->Int32Value());
 }
 
 
