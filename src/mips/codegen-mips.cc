@@ -2490,7 +2490,17 @@ void Reference::GetValue() {
     }
 
     case KEYED: {
-      UNIMPLEMENTED_MIPS();
+      VirtualFrame* frame = cgen_->frame();
+      Comment cmnt(masm, "[ Load from keyed Property");
+      ASSERT(property != NULL);
+      Handle<Code> ic(Builtins::builtin(Builtins::KeyedLoadIC_Initialize));
+      Variable* var = expression_->AsVariableProxy()->AsVariable();
+      ASSERT(var == NULL || var->is_global());
+      RelocInfo::Mode rmode = (var == NULL)
+                            ? RelocInfo::CODE_TARGET
+                            : RelocInfo::CODE_TARGET_CONTEXT;
+      frame->CallCodeObject(ic, rmode, 0);
+      frame->EmitPush(v0);
       break;
     }
 
@@ -2542,7 +2552,17 @@ void Reference::SetValue(InitState init_state) {
     }
 
     case KEYED: {
-      UNIMPLEMENTED_MIPS();
+      Comment cmnt(masm, "[ Store to keyed Property");
+      Property* property = expression_->AsProperty();
+      ASSERT(property != NULL);
+      cgen_->CodeForSourcePosition(property->position());
+
+      // Call IC code.
+      Handle<Code> ic(Builtins::builtin(Builtins::KeyedStoreIC_Initialize));
+      frame->EmitPop(a0);
+      frame->CallCodeObject(ic, RelocInfo::CODE_TARGET, 0);
+      frame->EmitPush(v0);
+      cgen_->UnloadReference(this);
       break;
     }
 
