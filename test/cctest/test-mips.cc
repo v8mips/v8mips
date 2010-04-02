@@ -200,6 +200,30 @@ TEST(MIPSControlFlow) {
 }
 
 
+TEST(MIPSUnaryOperations) {
+  // Disable compilation of natives.
+  i::FLAG_disable_native_files = true;
+  i::FLAG_full_compiler = false;
+  v8::HandleScope scope;
+  LocalContext env;  // from cctest.h
+
+  const char* c_source =
+    "var res = 0x1233;"
+    "var b = false;"
+    "var qwerty;"
+    ""
+    "if (!qwerty)"
+    "  res = res + 0x1;"
+    ""
+    "typeof res;"
+    ""
+    "~res;";
+  Local<String> source = ::v8::String::New(c_source);
+  Local<Script> script = ::v8::Script::Compile(source);
+  CHECK_EQ(0xffffedcb, script->Run()->Int32Value());
+}
+
+
 // The binary-op tests are currently simple tests, with well-behaved Smi values.
 // Corner cases, doubles, and overflows are not yet tested (because we know
 // they don't work).

@@ -428,7 +428,7 @@ void CodeGenerator::LoadCondition(Expression* x,
   }
   if (force_cc && frame_ != NULL && !has_cc()) {
     // Convert the TOS value to a boolean in the condition code register.
-    UNIMPLEMENTED_MIPS();
+    ToBoolean(true_target, false_target);
   }
   ASSERT(!force_cc || !has_valid_frame() || has_cc());
   ASSERT(!has_valid_frame() ||
@@ -577,7 +577,6 @@ void CodeGenerator::ToBoolean(JumpTarget* true_target,
   false_target->Branch(eq, t0, Operand(t3), no_hint);
 
   // Check if the value is a smi.
- // __ cmp(r0, Operand(Smi::FromInt(0)));             // plind: need comparison here ....
   false_target->Branch(eq, t0, Operand(Smi::FromInt(0)), no_hint);
   __ And(t4, t0, Operand(kSmiTagMask));
   true_target->Branch(eq, t4, Operand(zero_reg), no_hint);
@@ -586,9 +585,7 @@ void CodeGenerator::ToBoolean(JumpTarget* true_target,
   frame_->EmitPush(t0);
   frame_->CallRuntime(Runtime::kToBool, 1);
   // Convert the result (v0) to a condition code.
-//  __ cmp(r0, ip);                                   // plind: likely need comparison here ....
-  // __ LoadRoot(s6, Heap::kFalseValueRootIndex);     // plind: highly suspect code here....................................
-  __ LoadRoot(condReg1, Heap::kFalseValueRootIndex);        // plind: highly suspect code here.I think we designate s4,s5 for `
+  __ LoadRoot(condReg1, Heap::kFalseValueRootIndex);
   __ mov(condReg2, v0);
 
   cc_reg_ = ne;
@@ -1924,7 +1921,85 @@ void CodeGenerator::VisitCallRuntime(CallRuntime* node) {
 
 
 void CodeGenerator::VisitUnaryOperation(UnaryOperation* node) {
-  UNIMPLEMENTED_MIPS();
+#ifdef DEBUG
+  int original_height = frame_->height();
+#endif
+  VirtualFrame::SpilledScope spilled_scope;
+  Comment cmnt(masm_, "[ UnaryOperation");
+
+  Token::Value op = node->op();
+
+  if (op == Token::NOT) {
+    // LoadConditionAndSpill reversing the false and true targets.
+    LoadConditionAndSpill(node->expression(),
+                          false_target(),
+                          true_target(),
+                          true);
+    // LoadCondition may (and usually does) leave a test and branch to
+    // be emitted by the caller.  In that case, negate the condition.
+    if (has_cc()) cc_reg_ = NegateCondition(cc_reg_);
+
+  } else if (op == Token::DELETE) {
+    UNIMPLEMENTED_MIPS();
+  
+  } else if (op == Token::TYPEOF) {
+    // Special case for loading the typeof expression; see comment on
+    // LoadTypeofExpression().
+    LoadTypeofExpression(node->expression());
+    frame_->CallRuntime(Runtime::kTypeof, 1);
+    frame_->EmitPush(v0);  // v0 holds the result.
+
+  } else {
+    bool overwrite =
+        (node->expression()->AsBinaryOperation() != NULL &&
+         node->expression()->AsBinaryOperation()->ResultOverwriteAllowed());
+    LoadAndSpill(node->expression());
+    frame_->EmitPop(a0);
+    switch (op) {
+      case Token::NOT:
+      case Token::DELETE:
+      case Token::TYPEOF:
+        UNREACHABLE();  // Handled above.
+        break;
+
+      case Token::SUB: {
+        UNIMPLEMENTED_MIPS();
+        break;
+      }
+
+      case Token::BIT_NOT: {
+        JumpTarget smi_label;
+        JumpTarget continue_label;
+        __ And(t0, a0, Operand(kSmiTagMask));
+        smi_label.Branch(eq, t0, Operand(zero_reg));
+
+        GenericUnaryOpStub stub(Token::BIT_NOT, overwrite);
+        frame_->CallStub(&stub, 0);
+        continue_label.Jump();
+
+        smi_label.Bind();
+        // We have a smi. Invert all bits except bit 0.
+        __ Xor(v0, a0, 0xfffffffe);
+        continue_label.Bind();
+        break;
+      }
+
+      case Token::VOID:
+        UNIMPLEMENTED_MIPS();
+        break;
+
+      case Token::ADD: {
+        UNIMPLEMENTED_MIPS();
+        break;
+      }
+      default:
+        UNREACHABLE();
+    }
+    frame_->EmitPush(v0);  // v0 holds the result.
+  }
+  ASSERT(!has_valid_frame() ||
+         (has_cc() && frame_->height() == original_height) ||
+         (!has_cc() && frame_->height() == original_height + 1));
 }
 
 
@@ -2426,6 +2501,38 @@ void StackCheckStub::Generate(MacroAssembler* masm) {
   __ Push(zero_reg);
   __ TailCallRuntime(Runtime::kStackGuard, 1, 1);
   __ StubReturn(1);
+}
+
+
+void GenericUnaryOpStub::Generate(MacroAssembler* masm) {
+  Label slow, done;
+
+  if (op_ == Token::SUB) {
+    UNIMPLEMENTED_MIPS();
+
+  } else if (op_ == Token::BIT_NOT) {
+    UNIMPLEMENTED_MIPS();
+
+  } else {
+    UNIMPLEMENTED();
+  }
+
+  __ bind(&done);
+  __ StubReturn(1);
+
+  // Handle the slow case by jumping to the JavaScript builtin.
+  __ bind(&slow);
+  __ push(a0);
+  switch (op_) {
+    case Token::SUB:
+      __ InvokeBuiltin(Builtins::UNARY_MINUS, JUMP_JS);
+      break;
+    case Token::BIT_NOT:
+      __ InvokeBuiltin(Builtins::BIT_NOT, JUMP_JS);
+      break;
+    default:
+      UNREACHABLE();
+  }
 }
 
 
