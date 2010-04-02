@@ -2004,7 +2004,78 @@ void CodeGenerator::VisitUnaryOperation(UnaryOperation* node) {
 
 
 void CodeGenerator::VisitCountOperation(CountOperation* node) {
-  UNIMPLEMENTED_MIPS();
+#ifdef DEBUG
+  int original_height = frame_->height();
+#endif
+  VirtualFrame::SpilledScope spilled_scope;
+  Comment cmnt(masm_, "[ CountOperation");
+
+  bool is_postfix = node->is_postfix();
+  bool is_increment = node->op() == Token::INC;
+
+  Variable* var = node->expression()->AsVariableProxy()->AsVariable();
+  bool is_const = (var != NULL && var->mode() == Variable::CONST);
+
+  // Postfix: Make room for the result.
+  if (is_postfix) {
+    __ mov(v0, zero_reg);
+    frame_->EmitPush(v0);
+  }
+
+  { Reference target(this, node->expression(), !is_const);
+    if (target.is_illegal()) {
+      // Spoof the virtual frame to have the expected height (one higher
+      // than on entry).
+      if (!is_postfix) {
+        __ mov(v0, zero_reg);
+        frame_->EmitPush(v0);
+      }
+      ASSERT(frame_->height() == original_height + 1);
+      return;
+    }
+    // Get the old value in a0.
+    target.GetValueAndSpill();
+    frame_->EmitPop(a0);
+
+    JumpTarget slow;
+    JumpTarget exit;
+
+    // Check for smi operand.
+    __ And(t0, a0, Operand(kSmiTagMask));
+    slow.Branch(ne, t0, Operand(zero_reg), no_hint);
+
+    // Postfix: Store the old value as the result.
+    if (is_postfix) {
+      __ sw(a0, frame_->ElementAt(target.size()));
+    }
+
+    // Perform optimistic increment/decrement and check for overflow.
+    // If we don't overflow we are done.
+    if (is_increment) {
+      __ Add(v0, a0, Operand(Smi::FromInt(1)));
+      exit.Branch(ne, a0, Operand(Smi::kMaxValue), no_hint);
+    } else {
+      __ Add(v0, a0, Operand((Smi::FromInt(-1))));
+      exit.Branch(ne, a0, Operand(Smi::kMinValue), no_hint);
+    }
+
+    // We had an overflow. Revert optimistic increment/decrement.
+    __ mov(v0, a0);
+
+    // Slow case: Convert to number.
+    slow.Bind();
+    UNIMPLEMENTED_MIPS();
+    __ break_(0x09001); // We should not come here yet.
+
+    // Store the new value in the target if not const.
+    exit.Bind();
+    frame_->EmitPush(v0);
+    if (!is_const) target.SetValue(NOT_CONST_INIT);
+  }
+
+  // Postfix: Discard the new value and use the old.
+  if (is_postfix) frame_->EmitPop(v0);
+  ASSERT(frame_->height() == original_height + 1);
 }
 
 
@@ -2522,7 +2593,7 @@ void GenericUnaryOpStub::Generate(MacroAssembler* masm) {
 
   // Handle the slow case by jumping to the JavaScript builtin.
   __ bind(&slow);
-  __ push(a0);
+  __ Push(a0);
   switch (op_) {
     case Token::SUB:
       __ InvokeBuiltin(Builtins::UNARY_MINUS, JUMP_JS);
