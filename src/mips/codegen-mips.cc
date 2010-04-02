@@ -1195,7 +1195,10 @@ void CodeGenerator::VisitContinueStatement(ContinueStatement* node) {
 
 
 void CodeGenerator::VisitBreakStatement(BreakStatement* node) {
-  UNIMPLEMENTED_MIPS();
+  VirtualFrame::SpilledScope spilled_scope;
+  Comment cmnt(masm_, "[ BreakStatement");
+  CodeForStatementPosition(node);
+  node->target()->break_target()->Jump();
 }
 
 

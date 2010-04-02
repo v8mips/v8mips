@@ -165,10 +165,33 @@ TEST(MIPSControlFlow) {
     "  res = res + 0x1000;"
     "}"
     ""
+    "while (count > 40) {"
+    "  count = count - 1;"
+    "  res = res + 0x10000;"
+    "  if (count <= 50)"
+    "    break;"
+    "}"
+    ""
+    "while (count > 30) {"
+    "  switch (count) {"
+    "    case 39:"
+    "      count = count - 1;"
+    "      res = res + 0x100000;"
+    "      break;"
+    ""
+    "    case 33:"
+    "      count = count - 1;"
+    "      res = res + 0x900000;"
+    ""
+    "    default:"
+    "      count = count - 1;"
+    "  }"
+    "}"
+    ""
     "res;";
   Local<String> source = ::v8::String::New(c_source);
   Local<Script> script = ::v8::Script::Compile(source);
-  CHECK_EQ(0xaaaa, script->Run()->Int32Value());
+  CHECK_EQ(0xaaaaa, script->Run()->Int32Value());
 }
 
 
