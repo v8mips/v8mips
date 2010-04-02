@@ -1443,7 +1443,77 @@ void CodeGenerator::VisitWhileStatement(WhileStatement* node) {
 
 
 void CodeGenerator::VisitForStatement(ForStatement* node) {
-  UNIMPLEMENTED_MIPS();
+#ifdef DEBUG
+  int original_height = frame_->height();
+#endif
+  VirtualFrame::SpilledScope spilled_scope;
+  Comment cmnt(masm_, "[ ForStatement");
+  CodeForStatementPosition(node);
+  if (node->init() != NULL) {
+    VisitAndSpill(node->init());
+  }
+
+  // If the test is never true there is no need to compile the test or
+  // body.
+  ConditionAnalysis info = AnalyzeCondition(node->cond());
+  if (info == ALWAYS_FALSE) return;
+
+  node->break_target()->set_direction(JumpTarget::FORWARD_ONLY);
+
+  // If there is no update statement, label the top of the loop with the
+  // continue target, otherwise with the loop target.
+  JumpTarget loop(JumpTarget::BIDIRECTIONAL);
+  if (node->next() == NULL) {
+    node->continue_target()->set_direction(JumpTarget::BIDIRECTIONAL);
+    node->continue_target()->Bind();
+  } else {
+    node->continue_target()->set_direction(JumpTarget::FORWARD_ONLY);
+    loop.Bind();
+  }
+
+  // If the test is always true, there is no need to compile it.
+  if (info == DONT_KNOW) {
+    JumpTarget body;
+    LoadConditionAndSpill(node->cond(), &body, node->break_target(), true);
+    if (has_valid_frame()) {
+      Branch(false, node->break_target());
+    }
+    if (has_valid_frame() || body.is_linked()) {
+      body.Bind();
+    }
+  }
+
+  if (has_valid_frame()) {
+    CheckStack();  // TODO(1222600): ignore if body contains calls.
+    VisitAndSpill(node->body());
+
+    if (node->next() == NULL) {
+      // If there is no update statement and control flow can fall out
+      // of the loop, jump directly to the continue label.
+      if (has_valid_frame()) {
+        node->continue_target()->Jump();
+      }
+    } else {
+      // If there is an update statement and control flow can reach it
+      // via falling out of the body of the loop or continuing, we
+      // compile the update statement.
+      if (node->continue_target()->is_linked()) {
+        node->continue_target()->Bind();
+      }
+      if (has_valid_frame()) {
+        // Record source position of the statement as this code which is
+        // after the code for the body actually belongs to the loop
+        // statement and not the body.
+        CodeForStatementPosition(node);
+        VisitAndSpill(node->next());
+        loop.Jump();
+      }
+    }
+  }
+  if (node->break_target()->is_linked()) {
+    node->break_target()->Bind();
+  }
+  ASSERT(!has_valid_frame() || frame_->height() == original_height);
 }
 
 

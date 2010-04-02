@@ -188,10 +188,15 @@ TEST(MIPSControlFlow) {
     "  }"
     "}"
     ""
+    "for (var i = 0; i < 10; i = i + 1) {"
+    "  count = count - 1;"
+    "  res = res + 0x1000000;"
+    "}"
+    ""
     "res;";
   Local<String> source = ::v8::String::New(c_source);
   Local<Script> script = ::v8::Script::Compile(source);
-  CHECK_EQ(0xaaaaaa, script->Run()->Int32Value());
+  CHECK_EQ(0xaaaaaaa, script->Run()->Int32Value());
 }
 
 
