@@ -242,6 +242,25 @@ TEST(MIPSCountOperation) {
 }
 
 
+TEST(MIPSArrays) {
+  // Disable compilation of natives.
+  i::FLAG_disable_native_files = true;
+  i::FLAG_full_compiler = false;
+  v8::HandleScope scope;
+  LocalContext env;  // from cctest.h
+
+  const char* c_source =
+    "myArray = [];"
+    "myArray[1] = 0x10;"
+    "myArray[2] = 0x20;"
+    "myArray[3] = 0x30;"
+    "myArray[2];";
+  Local<String> source = ::v8::String::New(c_source);
+  Local<Script> script = ::v8::Script::Compile(source);
+  CHECK_EQ(0x20, script->Run()->Int32Value());
+}
+
+
 // The binary-op tests are currently simple tests, with well-behaved Smi values.
 // Corner cases, doubles, and overflows are not yet tested (because we know
 // they don't work).

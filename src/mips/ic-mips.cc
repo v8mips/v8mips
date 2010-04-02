@@ -166,7 +166,16 @@ Object* KeyedLoadIC_Miss(Arguments args);
 
 
 void KeyedLoadIC::GenerateMiss(MacroAssembler* masm) {
-  UNIMPLEMENTED_MIPS();
+  // ra     : return address
+  // sp[0]  : key
+  // sp[4]  : receiver
+
+  __ lw(a2, MemOperand(sp, 0));
+  __ lw(a3, MemOperand(sp, 4));
+  __ MultiPush(a2.bit() | a3.bit());
+
+  ExternalReference ref = ExternalReference(IC_Utility(kKeyedLoadIC_Miss));
+  __ TailCallExternalReference(ref, 2, 1);
 }
 
 
@@ -188,28 +197,41 @@ void KeyedLoadIC::GenerateExternalArray(MacroAssembler* masm,
 
 void KeyedStoreIC::GenerateGeneric(MacroAssembler* masm) {
   UNIMPLEMENTED_MIPS();
+  __ break_(0x191);
 }
 
 
 void KeyedStoreIC::GenerateExternalArray(MacroAssembler* masm,
                                          ExternalArrayType array_type) {
   UNIMPLEMENTED_MIPS();
+  __ break_(0x197);
 }
 
 
 void KeyedLoadIC::GenerateIndexedInterceptor(MacroAssembler* masm) {
   UNIMPLEMENTED_MIPS();
+  __ break_(0x204);
 }
 
 
 void KeyedStoreIC::GenerateMiss(MacroAssembler* masm) {
-  UNIMPLEMENTED_MIPS();
+  // a0     : value
+  // ra     : return address
+  // sp[0]  : key
+  // sp[1]  : receiver
+
+  __ lw(a3, MemOperand(sp, 1 * kPointerSize));
+  __ lw(a2, MemOperand(sp, 0 * kPointerSize));
+  __ MultiPush(a0.bit() | a2.bit() | a3.bit());
+
+  ExternalReference ref = ExternalReference(IC_Utility(kKeyedStoreIC_Miss));
+  __ TailCallExternalReference(ref, 3, 1);
 }
 
 
 void StoreIC::GenerateMegamorphic(MacroAssembler* masm) {
   UNIMPLEMENTED_MIPS();
-  __ break_(0x212);
+  __ break_(0x216);
 }
 
 

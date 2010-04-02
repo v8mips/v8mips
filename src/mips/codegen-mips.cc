@@ -1604,7 +1604,61 @@ void CodeGenerator::VisitObjectLiteral(ObjectLiteral* node) {
 
 
 void CodeGenerator::VisitArrayLiteral(ArrayLiteral* node) {
-  UNIMPLEMENTED_MIPS();
+#ifdef DEBUG
+  int original_height = frame_->height();
+#endif
+  VirtualFrame::SpilledScope spilled_scope;
+  Comment cmnt(masm_, "[ ArrayLiteral");
+
+  // Load the function of this activation.
+  __ lw(a2, frame_->Function());
+  // Load the literals array of the function.
+  __ lw(a2, FieldMemOperand(a2, JSFunction::kLiteralsOffset));
+  __ li(a1, Operand(Smi::FromInt(node->literal_index())));
+  __ li(a0, Operand(node->constant_elements()));
+  frame_->EmitMultiPush(a2.bit() | a1.bit() | a0.bit());
+  int length = node->values()->length();
+  if (node->depth() > 1) {
+    UNIMPLEMENTED_MIPS();
+  } else if (length > FastCloneShallowArrayStub::kMaximumLength) {
+    UNIMPLEMENTED_MIPS();
+  } else {
+    FastCloneShallowArrayStub stub(length);
+    frame_->CallStub(&stub, 3);
+  }
+  frame_->EmitPush(v0);  // Save the result.
+  // v0: created object literal
+
+  // Generate code to set the elements in the array that are not
+  // literals.
+  for (int i = 0; i < node->values()->length(); i++) {
+    Expression* value = node->values()->at(i);
+
+    // If value is a literal the property value is already set in the
+    // boilerplate object.
+    if (value->AsLiteral() != NULL) continue;
+    // If value is a materialized literal the property value is already set
+    // in the boilerplate object if it is simple.
+    if (CompileTimeValue::IsCompileTimeValue(value)) continue;
+
+    // The property must be set by generated code.
+    LoadAndSpill(value);
+    frame_->EmitPop(a0);
+
+    // Fetch the object literal.
+    __ lw(a1, frame_->Top());
+    // Get the elements array.
+    __ lw(a1, FieldMemOperand(a1, JSObject::kElementsOffset));
+
+    // Write to the indexed properties array.
+    int offset = i * kPointerSize + FixedArray::kHeaderSize;
+    __ sw(a0, FieldMemOperand(a1, offset));
+
+    // Update the write barrier for the array address.
+    __ li(a3, Operand(offset));
+    __ RecordWrite(a1, a3, a2);
+  }
+  ASSERT(frame_->height() == original_height + 1);
 }
 
 
@@ -1665,7 +1719,16 @@ void CodeGenerator::VisitThrow(Throw* node) {
 
 
 void CodeGenerator::VisitProperty(Property* node) {
-  UNIMPLEMENTED_MIPS();
+#ifdef DEBUG
+  int original_height = frame_->height();
+#endif
+  VirtualFrame::SpilledScope spilled_scope;
+  Comment cmnt(masm_, "[ Property");
+
+  { Reference property(this, node);
+    property.GetValueAndSpill();
+  }
+  ASSERT(frame_->height() == original_height + 1);
 }
 
 
@@ -2569,6 +2632,68 @@ void Reference::SetValue(InitState init_state) {
     default:
       UNREACHABLE();
   }
+}
+
+
+void FastCloneShallowArrayStub::Generate(MacroAssembler* masm) {
+  // Stack layout on entry:
+  // [sp]: constant elements.
+  // [sp + kPointerSize]: literal index.
+  // [sp + (2 * kPointerSize)]: literals array.
+
+  // All sizes here are multiples of kPointerSize.
+  int elements_size = (length_ > 0) ? FixedArray::SizeFor(length_) : 0;
+  int size = JSArray::kSize + elements_size;
+
+  // Load boilerplate object into r3 and check if we need to create a
+  // boilerplate.
+  Label slow_case;
+  __ lw(a3, MemOperand(sp, 2 * kPointerSize));
+  __ lw(a0, MemOperand(sp, 1 * kPointerSize));
+  __ Add(a3, a3, Operand(FixedArray::kHeaderSize - kHeapObjectTag));
+  __ sll(t0, a0, kPointerSizeLog2 - kSmiTagSize);
+  __ Add(t0, a3, t0);
+  __ lw(a3, MemOperand(t0));
+  __ LoadRoot(t1, Heap::kUndefinedValueRootIndex);
+  __ Branch(eq, &slow_case, a3, Operand(t1));
+
+  // Allocate both the JS array and the elements array in one big
+  // allocation. This avoids multiple limit checks.
+  __ AllocateInNewSpace(size / kPointerSize,
+                        a0,
+                        a1,
+                        a2,
+                        &slow_case,
+                        TAG_OBJECT);
+
+  // Copy the JS array part.
+  for (int i = 0; i < JSArray::kSize; i += kPointerSize) {
+    if ((i != JSArray::kElementsOffset) || (length_ == 0)) {
+      __ lw(a1, FieldMemOperand(a3, i));
+      __ sw(a1, FieldMemOperand(a0, i));
+    }
+  }
+
+  if (length_ > 0) {
+    // Get hold of the elements array of the boilerplate and setup the
+    // elements pointer in the resulting object.
+    __ lw(a3, FieldMemOperand(a3, JSArray::kElementsOffset));
+    __ Add(a2, a0, Operand(JSArray::kSize));
+    __ sw(a2, FieldMemOperand(a0, JSArray::kElementsOffset));
+
+    // Copy the elements array.
+    for (int i = 0; i < elements_size; i += kPointerSize) {
+      __ lw(a1, FieldMemOperand(a3, i));
+      __ sw(a1, FieldMemOperand(a2, i));
+    }
+  }
+
+  // Return and remove the on-stack parameters.
+  __ Add(sp, sp, Operand(3 * kPointerSize));
+  __ Ret();
+
+  __ bind(&slow_case);
+  __ TailCallRuntime(Runtime::kCreateArrayLiteralShallow, 3, 1);
 }
 
 
