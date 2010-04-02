@@ -1187,7 +1187,10 @@ void CodeGenerator::VisitIfStatement(IfStatement* node) {
 
 
 void CodeGenerator::VisitContinueStatement(ContinueStatement* node) {
-  UNIMPLEMENTED_MIPS();
+  VirtualFrame::SpilledScope spilled_scope;
+  Comment cmnt(masm_, "[ ContinueStatement");
+  CodeForStatementPosition(node);
+  node->target()->continue_target()->Jump();
 }
 
 

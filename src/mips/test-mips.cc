@@ -162,7 +162,11 @@ bool LExecuteString(v8::Handle<v8::String> source,
 //        const char* cstr = ToCString(str);
 //        printf("___ %s\n", cstr);
         printf("_____________________________ \n");
-        printf("\nresult = 0x%x = %d\n", *reinterpret_cast<int*>(*result), *reinterpret_cast<int*>(*result));
+        printf("\nresult = 0x%x (0x%x) = %d (%d)\n",
+               *reinterpret_cast<int*>(*result),
+               *reinterpret_cast<int*>(*result) / 2,
+               *reinterpret_cast<int*>(*result),
+               *reinterpret_cast<int*>(*result) / 2);
         printf("_____________________________ \n");
       }
       return true;

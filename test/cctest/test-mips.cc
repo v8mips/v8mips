@@ -158,10 +158,17 @@ TEST(MIPSControlFlow) {
     "  res = res + 0x100;"
     "} while (count > 80);"
     ""
+    "while (count > 60) {"
+    "  count = count - 1;"
+    "  if (count >= 70)"
+    "    continue;"
+    "  res = res + 0x1000;"
+    "}"
+    ""
     "res;";
   Local<String> source = ::v8::String::New(c_source);
   Local<Script> script = ::v8::Script::Compile(source);
-  CHECK_EQ(0xaaa, script->Run()->Int32Value());
+  CHECK_EQ(0xaaaa, script->Run()->Int32Value());
 }
 
 
