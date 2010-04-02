@@ -195,9 +195,9 @@ void MacroAssembler::RecordWrite(Register object,
   And(offset, offset, Operand(kBitsPerInt - 1));
 
   lw(scratch, MemOperand(object));
-  li(ip, Operand(1));
-  sllv(ip, ip, offset);
-  Or(scratch, scratch, Operand(ip));
+  li(t8, Operand(1));
+  sllv(t8, t8, offset);
+  Or(scratch, scratch, Operand(t8));
   sw(scratch, MemOperand(object));
 
   bind(&done);
@@ -312,8 +312,6 @@ void MacroAssembler::CheckAccessGlobalProxy(Register holder_reg,
   // Check the context is a global context.
   if (FLAG_debug_code) {
     // TODO(119): Avoid push(holder_reg)/pop(holder_reg).
-    // Cannot use at as a temporary in this verification code. Due to the fact
-    // that at is clobbered as part of cmp with an object Operand.
     Push(holder_reg);  // Temporarily save holder on the stack.
     // Read the first word and compare to the global_context_map.
     lw(holder_reg, FieldMemOperand(scratch, HeapObject::kMapOffset));
@@ -330,10 +328,8 @@ void MacroAssembler::CheckAccessGlobalProxy(Register holder_reg,
   // Check the context is a global context.
   if (FLAG_debug_code) {
     // TODO(119): Avoid push(holder_reg)/pop(holder_reg).
-    // Cannot use ip as a temporary in this verification code. Due to the fact
-    // that ip is clobbered as part of cmp with an object Operand.
-    push(holder_reg);  // Temporarily save holder on the stack.
-    mov(holder_reg, at);  // Move ip to its holding place.
+    Push(holder_reg);  // Temporarily save holder on the stack.
+    mov(holder_reg, at);  // Move at to its holding place.
     LoadRoot(at, Heap::kNullValueRootIndex);
     Check(ne, "JSGlobalProxy::context() should not be null.",
           holder_reg, Operand(at));
@@ -1660,13 +1656,13 @@ void MacroAssembler::Abort(const char* msg) {
 
 void MacroAssembler::EnterFrame(StackFrame::Type type) {
   addiu(sp, sp, -5 * kPointerSize);
-  li(t0, Operand(Smi::FromInt(type)));
-  li(t1, Operand(CodeObject()));
+  li(t8, Operand(Smi::FromInt(type)));
+  li(t9, Operand(CodeObject()));
   sw(ra, MemOperand(sp, 4 * kPointerSize));
   sw(fp, MemOperand(sp, 3 * kPointerSize));
   sw(cp, MemOperand(sp, 2 * kPointerSize));
-  sw(t0, MemOperand(sp, 1 * kPointerSize));
-  sw(t1, MemOperand(sp, 0 * kPointerSize));
+  sw(t8, MemOperand(sp, 1 * kPointerSize));
+  sw(t9, MemOperand(sp, 0 * kPointerSize));
   addiu(fp, sp, 3 * kPointerSize);
 }
 
@@ -1685,22 +1681,22 @@ void MacroAssembler::EnterExitFrame(ExitFrame::Mode mode,
                                     Register hold_function) {
   // Compute the argv pointer and keep it in a callee-saved register.
   // a0 is argc.
-  sll(t0, a0, kPointerSizeLog2);
-  add(hold_argv, sp, t0);
+  sll(t8, a0, kPointerSizeLog2);
+  add(hold_argv, sp, t8);
   addi(hold_argv, hold_argv, -kPointerSize);
 
   // Compute callee's stack pointer before making changes and save it as
-  // t1 register so that it is restored as sp register on exit, thereby
+  // t9 register so that it is restored as sp register on exit, thereby
   // popping the args.
-  // t1 = sp + kPointerSize * #args
-  add(t1, sp, t0);
+  // t9 = sp + kPointerSize * #args
+  add(t9, sp, t8);
 
   // Align the stack at this point.
   AlignStack(0);
 
   // Save registers.
   addiu(sp, sp, -12);
-  sw(t1, MemOperand(sp, 8));
+  sw(t9, MemOperand(sp, 8));
   sw(ra, MemOperand(sp, 4));
   sw(fp, MemOperand(sp, 0));
   mov(fp, sp);  // Setup new frame pointer.
@@ -1709,15 +1705,15 @@ void MacroAssembler::EnterExitFrame(ExitFrame::Mode mode,
   if (mode == ExitFrame::MODE_DEBUG) {
     Push(zero_reg);
   } else {
-    li(t0, Operand(CodeObject()));
-    Push(t0);
+    li(t8, Operand(CodeObject()));
+    Push(t8);
   }
 
   // Save the frame pointer and the context in top.
-  LoadExternalReference(t0, ExternalReference(Top::k_c_entry_fp_address));
-  sw(fp, MemOperand(t0));
-  LoadExternalReference(t0, ExternalReference(Top::k_context_address));
-  sw(cp, MemOperand(t0));
+  LoadExternalReference(t8, ExternalReference(Top::k_c_entry_fp_address));
+  sw(fp, MemOperand(t8));
+  LoadExternalReference(t8, ExternalReference(Top::k_context_address));
+  sw(cp, MemOperand(t8));
 
   // Setup argc and the builtin function in callee-saved registers.
   mov(hold_argc, a0);
@@ -1727,14 +1723,14 @@ void MacroAssembler::EnterExitFrame(ExitFrame::Mode mode,
 
 void MacroAssembler::LeaveExitFrame(ExitFrame::Mode mode) {
   // Clear top frame.
-  LoadExternalReference(t0, ExternalReference(Top::k_c_entry_fp_address));
-  sw(zero_reg, MemOperand(t0));
+  LoadExternalReference(t8, ExternalReference(Top::k_c_entry_fp_address));
+  sw(zero_reg, MemOperand(t8));
 
   // Restore current context from top and clear it in debug mode.
-  LoadExternalReference(t0, ExternalReference(Top::k_context_address));
-  lw(cp, MemOperand(t0));
+  LoadExternalReference(t8, ExternalReference(Top::k_context_address));
+  lw(cp, MemOperand(t8));
 #ifdef DEBUG
-  sw(a3, MemOperand(t0));
+  sw(a3, MemOperand(t8));
 #endif
 
   // Pop the arguments, restore registers, and return.
@@ -1767,12 +1763,12 @@ void MacroAssembler::AlignStack(int offset) {
     // This code needs to be made more general if this assert doesn't hold.
     ASSERT(activation_frame_alignment == 2 * kPointerSize);
     if (offset == 0) {
-      andi(t0, sp, activation_frame_alignment - 1);
-      Push(zero_reg, eq, t0, zero_reg);
+      andi(t8, sp, activation_frame_alignment - 1);
+      Push(zero_reg, eq, t8, zero_reg);
     } else {
-      andi(t0, sp, activation_frame_alignment - 1);
-      addiu(t0, t0, -4);
-      Push(zero_reg, eq, t0, zero_reg);
+      andi(t8, sp, activation_frame_alignment - 1);
+      addiu(t8, t8, -4);
+      Push(zero_reg, eq, t8, zero_reg);
     }
   }
 }

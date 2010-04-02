@@ -360,7 +360,7 @@ MemOperand CodeGenerator::SlotOperand(Slot* slot, Register tmp) {
 
     case Slot::LOCAL:
       return frame_->LocalAt(index);
-    
+
     case Slot::CONTEXT: {
       ASSERT(!tmp.is(cp));  // do not overwrite context register
       Register context = cp;
@@ -386,7 +386,7 @@ MemOperand CodeGenerator::SlotOperand(Slot* slot, Register tmp) {
       __ lw(tmp, ContextOperand(context, Context::FCONTEXT_INDEX));
       return ContextOperand(tmp, index);
     }
-    
+
     default:
       UNREACHABLE();
       return MemOperand(no_reg, 0);
@@ -1546,7 +1546,7 @@ void CodeGenerator::VisitCall(Call* node) {
     int arg_count = args->length();
 
     // We need sp to be 8 bytes aligned when calling the stub.
-    __ SetupAlignedCall(t0, arg_count);
+    __ SetupAlignedCall(t0, arg_count + 1);
 
     // Pass the global object as the receiver and let the IC stub
     // patch the stack to use the global proxy as 'this' in the
