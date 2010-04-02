@@ -191,7 +191,7 @@ TEST(MIPSControlFlow) {
     "res;";
   Local<String> source = ::v8::String::New(c_source);
   Local<Script> script = ::v8::Script::Compile(source);
-  CHECK_EQ(0xaaaaa, script->Run()->Int32Value());
+  CHECK_EQ(0xaaaaaa, script->Run()->Int32Value());
 }
 
 

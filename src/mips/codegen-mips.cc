@@ -1233,7 +1233,91 @@ void CodeGenerator::VisitWithExitStatement(WithExitStatement* node) {
 
 
 void CodeGenerator::VisitSwitchStatement(SwitchStatement* node) {
-  UNIMPLEMENTED_MIPS();
+#ifdef DEBUG
+  int original_height = frame_->height();
+#endif
+  VirtualFrame::SpilledScope spilled_scope;
+  Comment cmnt(masm_, "[ SwitchStatement");
+  CodeForStatementPosition(node);
+  node->break_target()->set_direction(JumpTarget::FORWARD_ONLY);
+
+  LoadAndSpill(node->tag());
+
+  JumpTarget next_test;
+  JumpTarget fall_through;
+  JumpTarget default_entry;
+  JumpTarget default_exit(JumpTarget::BIDIRECTIONAL);
+  ZoneList<CaseClause*>* cases = node->cases();
+  int length = cases->length();
+  CaseClause* default_clause = NULL;
+
+  for (int i = 0; i < length; i++) {
+    CaseClause* clause = cases->at(i);
+    if (clause->is_default()) {
+      // Remember the default clause and compile it at the end.
+      default_clause = clause;
+      continue;
+    }
+
+    Comment cmnt(masm_, "[ Case clause");
+    // Compile the test.
+    next_test.Bind();
+    next_test.Unuse();
+    // Duplicate TOS.
+    __ lw(t0, frame_->Top());
+    frame_->EmitPush(t0);
+    Comparison(eq, NULL, clause->label(), true);
+    Branch(false, &next_test);
+
+    // Before entering the body from the test, remove the switch value from
+    // the stack.
+    frame_->Drop();
+
+    // Label the body so that fall through is enabled.
+    if (i > 0 && cases->at(i - 1)->is_default()) {
+      default_exit.Bind();
+    } else {
+      fall_through.Bind();
+      fall_through.Unuse();
+    }
+    VisitStatementsAndSpill(clause->statements());
+
+    // If control flow can fall through from the body, jump to the next body
+    // or the end of the statement.
+    if (frame_ != NULL) {
+      if (i < length - 1 && cases->at(i + 1)->is_default()) {
+        default_entry.Jump();
+      } else {
+        fall_through.Jump();
+      }
+    }
+  }
+
+  // The final "test" removes the switch value.
+  next_test.Bind();
+  frame_->Drop();
+
+  // If there is a default clause, compile it.
+  if (default_clause != NULL) {
+    Comment cmnt(masm_, "[ Default clause");
+    default_entry.Bind();
+    VisitStatementsAndSpill(default_clause->statements());
+    // If control flow can fall out of the default and there is a case after
+    // it, jup to that case's body.
+    if (frame_ != NULL && default_exit.is_bound()) {
+      default_exit.Jump();
+    }
+  }
+
+  if (fall_through.is_linked()) {
+    fall_through.Bind();
+  }
+
+  if (node->break_target()->is_linked()) {
+    node->break_target()->Bind();
+  }
+  node->break_target()->Unuse();
+  ASSERT(!has_valid_frame() || frame_->height() == original_height);
 }
 
 
