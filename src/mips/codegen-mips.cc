@@ -3896,8 +3896,8 @@ void GenericBinaryOpStub::HandleNonSmiBitwiseOp(MacroAssembler* masm) {
 
   // If all else failed then we go to the runtime system.
   __ bind(&slow);
-  __ break_(0x4441);
   UNIMPLEMENTED_MIPS(); // MIPS does not support builtins yet.
+  __ break_(0x4441);
 
   __ push(a1);  // restore stack
   __ push(a0);

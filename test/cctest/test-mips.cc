@@ -596,8 +596,10 @@ TEST(MIPSBinaryOr) {
   script = ::v8::Script::Compile(source);
   CHECK_EQ(0x9f8383,  script->Run()->Int32Value());
 
-  // Check that non-Smi int32 values work, converted to Number
-  js = "function f() { var a=0x55555555; var b=0x66666666; return a | b; }; f();";
+  // Check that non-Smi int32 values work, converted to Number.
+  js = 
+  "function f() { var a=0x55555555; var b=0x66666666; return a | b; };"
+  "f();";
   source = ::v8::String::New(js);
   script = ::v8::Script::Compile(source);
   // 0x77777777 = 2004318071.
@@ -607,7 +609,9 @@ TEST(MIPSBinaryOr) {
   // -0x55555555 is too big for Smi, is Number with int32 value 0xaaaaaaab.
   // -0x22222222 has int value 0xddddddde, which is Smi 0xbbbbbbbc.
   // Or'ing these together gives 0xffffffff (-1), which is returned as Smi.
-  js = "function f() { var a=-0x55555555; var b=-0x22222222; return a | b; }; f();";
+  js = 
+  "function f() { var a=-0x55555555; var b=-0x22222222; return a | b; };"
+  "f();";
   source = ::v8::String::New(js);
   script = ::v8::Script::Compile(source);
   CHECK_EQ(-1,  script->Run()->Int32Value());
@@ -624,13 +628,17 @@ TEST(MIPSBinaryAnd) {
   Local<String> source;
   Local<Script> script;
 
-  js = "function f() { var a=0x0f0f0f0f; var b=0x11223344; return a & b; }; f();";
+  js = 
+  "function f() { var a=0x0f0f0f0f; var b=0x11223344; return a & b; };"
+  "f();";
   source = ::v8::String::New(js);
   script = ::v8::Script::Compile(source);
   CHECK_EQ(0x01020304,  script->Run()->Int32Value());
 
   // Check that non-Smi values work OK, returned as Number.
-  js = "function f() { var a=0x7f0f0f0f; var b=0x61223344; return a & b; }; f();";
+  js = 
+  "function f() { var a=0x7f0f0f0f; var b=0x61223344; return a & b; };"
+  "f();";
   source = ::v8::String::New(js);
   script = ::v8::Script::Compile(source);
   // 0x61020304 = 1627521796
@@ -671,12 +679,23 @@ TEST(MIPSBinaryShl) {
   i::FLAG_full_compiler = false;
   v8::HandleScope scope;
   LocalContext env;  // from cctest.h
+  const char* js;
+  Local<String> source;
+  Local<Script> script;
 
-  const char* c_source =
+  js = 
     "function f() { var a=0x400; var b=0x4; return a << b; }; f();";
-  Local<String> source = ::v8::String::New(c_source);
-  Local<Script> script = ::v8::Script::Compile(source);
+  source = ::v8::String::New(js);
+  script = ::v8::Script::Compile(source);
   CHECK_EQ(0x4000, script->Run()->Int32Value());
+
+  // Check left shift turning Smi to non-smi int32, returned as Number.
+  js = 
+    "function f() { var a=0x30000000; var b=1; return a << b; }; f();";
+  source = ::v8::String::New(js);
+  script = ::v8::Script::Compile(source);
+  // 0x60000000 is 1610612736.
+  CHECK_EQ(1610612736.0, script->Run()->NumberValue());
 }
 
 
@@ -686,12 +705,24 @@ TEST(MIPSBinarySar) {
   i::FLAG_full_compiler = false;
   v8::HandleScope scope;
   LocalContext env;  // from cctest.h
+  const char* js;
+  Local<String> source;
+  Local<Script> script;
 
-  const char* c_source =
+  js =
     "function f() { var a=-16; var b=4; return a >> b; }; f();";
-  Local<String> source = ::v8::String::New(c_source);
-  Local<Script> script = ::v8::Script::Compile(source);
+  source = ::v8::String::New(js);
+  script = ::v8::Script::Compile(source);
   CHECK_EQ(-1, script->Run()->Int32Value());
+
+  // Check that negative non-Smi int32 values work, returned as Smi.
+  // -0x55555555 is too big for Smi, is Number with int32 value 0xaaaaaaab.
+  // Right arithmetic shift of 8 gives 0xffaaaaaa, which is -5592406.
+  js =
+    "function f() { var a=-0x55555555; var b=8; return a >> b; }; f();";
+  source = ::v8::String::New(js);
+  script = ::v8::Script::Compile(source);
+  CHECK_EQ(-5592406, script->Run()->Int32Value());
 }
 
 
@@ -701,10 +732,24 @@ TEST(MIPSBinaryShr) {
   i::FLAG_full_compiler = false;
   v8::HandleScope scope;
   LocalContext env;  // from cctest.h
+  const char* js;
+  Local<String> source;
+  Local<Script> script;
 
-  const char* c_source =
+  js =
     "function f() { var a=-1; var b=0x4; return a >>> b; }; f();";
-  Local<String> source = ::v8::String::New(c_source);
-  Local<Script> script = ::v8::Script::Compile(source);
-  CHECK_EQ(268435455, script->Run()->Int32Value());
+  source = ::v8::String::New(js);
+  script = ::v8::Script::Compile(source);
+  CHECK_EQ(0x0fffffff, script->Run()->Int32Value());
+  
+  // Check that almost-max negative non-Smi int32, shifted by 1, is
+  // properly returned as number, since the positive value 0x40000000
+  // cannot be represented as Smi. (we use 0x80000001, since due to
+  // implementation detail, 0x80000000 is handled by 'Builtins').
+  js =
+    "function f() { var a=-2147483647; var b=1; return a >>> b; }; f();";
+  source = ::v8::String::New(js);
+  script = ::v8::Script::Compile(source);
+  // -2147483647 is 0x80000001, we >>> 1, to get -1073741824
+  CHECK_EQ(1073741824.0, script->Run()->NumberValue());
 }
