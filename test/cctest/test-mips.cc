@@ -47,11 +47,11 @@ TEST(MIPSFunctionCalls) {
 
   const char* c_source =
     "function foo(arg1, arg2, arg3, arg4, arg5) {"
-    "	return foo2(arg1, foo2(arg3, arg4));"
+    "  return foo2(arg1, foo2(arg3, arg4));"
     "}"
     ""
     "function foo2(arg1, arg2) {"
-    "	return arg2;"
+    "  return arg2;"
     "}"
     // We call the function twice because it needs more code.
     // TODO(MIPS): Detail what more is needed.
@@ -320,7 +320,8 @@ TEST(MIPSObjects) {
     "myCircle2.r = 0xa000;"
     ""
 // Compute a result involving all previous aspects.
-    "res = res + myGeom.inObj + myCircle.r + myCircle2.r + myNewObj.newProperty;"
+    "res = res + myGeom.inObj + myCircle.r"
+    "+ myCircle2.r + myNewObj.newProperty;"
     "if (mySquare.retArea() == 100)"
     "  if (mySquare.retPerim() == 40)"
     "    res = res + mySquare.c;"

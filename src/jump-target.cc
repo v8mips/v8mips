@@ -260,7 +260,8 @@ void JumpTarget::Branch(Condition cc, Hint hint) {
   DoBranch(cc, hint);
 }
 #else
-void JumpTarget::Branch(Condition cc, Register src1, const Operand& src2, Hint hint) {
+void JumpTarget::Branch(Condition cc,
+    Register src1, const Operand& src2, Hint hint) {
   DoBranch(cc, hint, src1, src2);
 }
 #endif

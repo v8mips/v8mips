@@ -684,7 +684,8 @@ Object* ConstructStubCompiler::CompileConstructStub(
   // a2: initial map
   // t7: undefined
   __ lbu(a3, FieldMemOperand(a2, Map::kInstanceTypeOffset));
-  __ Check(ne, "Function constructed by construct stub.", a3, Operand(JS_FUNCTION_TYPE));
+  __ Check(ne, "Function constructed by construct stub.",
+      a3, Operand(JS_FUNCTION_TYPE));
 #endif
 
   // Now allocate the JSObject in new space.

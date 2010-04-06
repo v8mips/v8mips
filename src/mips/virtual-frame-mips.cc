@@ -186,26 +186,41 @@ void VirtualFrame::CallCodeObject(Handle<Code> code,
                                   int dropped_args) {
   switch (code->kind()) {
     case Code::CALL_IC:
+      Forget(dropped_args);
+      ASSERT(cgen()->HasValidEntryRegisters());
+      __ Call(code, rmode);
       break;
+
     case Code::FUNCTION:
       UNIMPLEMENTED_MIPS();
       break;
+
     case Code::KEYED_LOAD_IC:
     case Code::LOAD_IC:
     case Code::KEYED_STORE_IC:
     case Code::STORE_IC:
       ASSERT(dropped_args == 0);
+      Forget(dropped_args);
+      ASSERT(cgen()->HasValidEntryRegisters());
+      __ Call(code, rmode);
       break;
+
     case Code::BUILTIN:
-      UNIMPLEMENTED_MIPS();
+      // The only builtin called through this function is JSConstructCall.
+      ASSERT(*code == Builtins::builtin(Builtins::JSConstructCall));
+      Forget(dropped_args);
+      ASSERT(cgen()->HasValidEntryRegisters());
+      // This is a builtin and it expects argument slots.
+      // Don't protect the branch delay slot and use it to allocate args slots.
+      __ Call(false, code, rmode);
+      __ addiu(sp, sp, -StandardFrameConstants::kRArgsSlotsSize);
+      __ addiu(sp, sp, StandardFrameConstants::kRArgsSlotsSize);
       break;
+
     default:
       UNREACHABLE();
       break;
   }
-  Forget(dropped_args);
-  ASSERT(cgen()->HasValidEntryRegisters());
-  __ Call(code, rmode);
 }
 
 
@@ -286,7 +301,7 @@ void VirtualFrame::EmitMultiPush(RegList regs) {
 void VirtualFrame::EmitMultiPushReversed(RegList regs) {
   ASSERT(stack_pointer_ == element_count() - 1);
   for (int16_t i = 0; i< RegisterAllocatorConstants::kNumRegisters; i++) {
-    if((regs & (1<<i)) != 0 ) {
+    if ((regs & (1<<i)) != 0) {
       elements_.Add(FrameElement::MemoryElement(NumberInfo::Unknown()));
       stack_pointer_++;
     }

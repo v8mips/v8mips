@@ -40,7 +40,7 @@ class JumpTarget;
 // Register at is used for instruction generation. So it is not always safe to
 // use it. Instead t8 and t9 registers are used by the MacroAssembler when
 // necessary.
-// The programmer should know that the MacroAssembler may clobber these two, 
+// The programmer should know that the MacroAssembler may clobber these two,
 // but won't touch other registers except in special cases.
 
 // Unless we know exactly what we do. Therefore we create another scratch reg.
@@ -371,7 +371,7 @@ class MacroAssembler: public Assembler {
     lw(dst, MemOperand(sp, 0));
     Addu(sp, sp, Operand(kPointerSize));
   }
-  void Pop( uint32_t count = 1) {
+  void Pop(uint32_t count = 1) {
     Add(sp, sp, Operand(count * kPointerSize));
   }
 

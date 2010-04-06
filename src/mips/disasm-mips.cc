@@ -262,7 +262,8 @@ void Decoder::PrintCode(Instruction* instr) {
     case BREAK: {
       int32_t code = instr->Bits(25, 6);
       out_buffer_pos_ +=
-          v8i::OS::SNPrintF(out_buffer_ + out_buffer_pos_, "0x%05x", code);
+          v8i::OS::SNPrintF(out_buffer_ + out_buffer_pos_, "0x%05x (%d)",
+              code, code);
       break;
                 }
     case TGE:

@@ -244,7 +244,7 @@ TEST(MIPS2) {
   __ Branch(ne, &error, a1, Operand(0x34f));
   __ movz(a0, t6, v1);    // a0<-t6, v0 is 0, from 8 instr back
   __ Branch(ne, &error, a0, Operand(t6));
-  
+
   // Everything was correctly executed. Load the expected result.
   __ li(v0, 0x31415926);
   __ b(&exit);

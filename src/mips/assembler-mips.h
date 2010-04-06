@@ -463,7 +463,7 @@ class Assembler : public Malloced {
   // Conditional move.
   void movz(Register rd, Register rs, Register rt);
   void movn(Register rd, Register rs, Register rt);
-  
+
   // Bit twiddling.
   void clz(Register rd, Register rs);
   void ins(Register rt, Register rs, uint16_t pos, uint16_t size);

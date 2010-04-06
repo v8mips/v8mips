@@ -65,7 +65,8 @@ void MacroAssembler::Jump(byte* target, RelocInfo::Mode rmode,
                           Condition cond, Register r1, const Operand& r2,
                           bool ProtectBranchDelaySlot) {
   ASSERT(!RelocInfo::IsCodeTarget(rmode));
-  Jump(reinterpret_cast<intptr_t>(target), rmode, cond, r1, r2, ProtectBranchDelaySlot);
+  Jump(reinterpret_cast<intptr_t>(target), rmode,
+      cond, r1, r2, ProtectBranchDelaySlot);
 }
 
 
@@ -73,7 +74,8 @@ void MacroAssembler::Jump(Handle<Code> code, RelocInfo::Mode rmode,
                           Condition cond, Register r1, const Operand& r2,
                           bool ProtectBranchDelaySlot) {
   ASSERT(RelocInfo::IsCodeTarget(rmode));
-  Jump(reinterpret_cast<intptr_t>(code.location()), rmode, cond, r1, r2, ProtectBranchDelaySlot);
+  Jump(reinterpret_cast<intptr_t>(code.location()), rmode,
+      cond, r1, r2, ProtectBranchDelaySlot);
 }
 
 
@@ -95,7 +97,8 @@ void MacroAssembler::Call(byte* target, RelocInfo::Mode rmode,
                           Condition cond, Register r1, const Operand& r2,
                           bool ProtectBranchDelaySlot) {
   ASSERT(!RelocInfo::IsCodeTarget(rmode));
-  Call(reinterpret_cast<intptr_t>(target), rmode, cond, r1, r2, ProtectBranchDelaySlot);
+  Call(reinterpret_cast<intptr_t>(target), rmode,
+      cond, r1, r2, ProtectBranchDelaySlot);
 }
 
 
@@ -103,7 +106,8 @@ void MacroAssembler::Call(Handle<Code> code, RelocInfo::Mode rmode,
                           Condition cond, Register r1, const Operand& r2,
                           bool ProtectBranchDelaySlot) {
   ASSERT(RelocInfo::IsCodeTarget(rmode));
-  Call(reinterpret_cast<intptr_t>(code.location()), rmode, cond, r1, r2, ProtectBranchDelaySlot);
+  Call(reinterpret_cast<intptr_t>(code.location()), rmode,
+      cond, r1, r2, ProtectBranchDelaySlot);
 }
 
 
@@ -1161,7 +1165,7 @@ void MacroAssembler::AllocateInNewSpace(int object_size,
   lw(scratch2, MemOperand(scratch2));
   Addu(result, result, Operand(object_size * kPointerSize));
   Branch(Ugreater, gc_required, result, Operand(scratch2));
-  nop(); // NOP_ADDED
+  nop();  // NOP_ADDED
 
   // Update allocation top. result temporarily holds the new top,
 //  str(result, MemOperand(scratch1));
@@ -1223,7 +1227,7 @@ void MacroAssembler::AllocateInNewSpace(Register object_size,
   sll(ip, object_size, kPointerSizeLog2);
   Addu(result, result, Operand(ip));
   Branch(Ugreater, gc_required, result, Operand(scratch2));
-  nop(); // NOP_ADDED
+  nop();  // NOP_ADDED
 
   // Update allocation top. result temporarily holds the new top,
 //  str(result, MemOperand(scratch1));
@@ -1256,7 +1260,8 @@ void MacroAssembler::UndoAllocationInNewSpace(Register object,
 //  Check(lt, "Undo allocation of non allocated memory");
   li(scratch, Operand(new_space_allocation_top));
   lw(scratch, MemOperand(scratch));
-  Check(less, "Undo allocation of non allocated memory", object, Operand(scratch));
+  Check(less, "Undo allocation of non allocated memory",
+      object, Operand(scratch));
 #endif
   // Write the address of the object to un-allocate as the current top.
   li(scratch, Operand(new_space_allocation_top));

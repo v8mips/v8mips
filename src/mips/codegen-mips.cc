@@ -258,26 +258,15 @@ void CodeGenerator::Generate(CompilationInfo* info) {
       UNIMPLEMENTED_MIPS();
     }
 
-    // Add a label for checking the size of the code used for returning.
-    Label check_exit_codesize;
-    masm_->bind(&check_exit_codesize);
+    // We don't check for the return code size. It may differ if the number of
+    // arguments is too big.
+    __ mov(sp, fp);
+    __ lw(fp, MemOperand(sp, 0));
+    __ lw(ra, MemOperand(sp, 4));
+    __ addiu(sp, sp, 8);
 
-    masm_->mov(sp, fp);
-    masm_->lw(fp, MemOperand(sp, 0));
-    masm_->lw(ra, MemOperand(sp, 4));
-    masm_->addiu(sp, sp, 8);
-
-    // Here we use masm_-> instead of the __ macro to avoid the code coverage
-    // tool from instrumenting as we rely on the code size here.
-    // TODO(MIPS): Should we be able to use more than 0x1ffe parameters?
-    masm_->addiu(sp, sp, (scope()->num_parameters() + 1) * kPointerSize);
-    masm_->Jump(ra);
-    // The Jump automatically generates a nop in the branch delay slot.
-
-    // Check that the size of the code used for returning matches what is
-    // expected by the debugger.
-    ASSERT_EQ(kJSReturnSequenceLength,
-              masm_->InstructionsGeneratedSince(&check_exit_codesize));
+    __ Addu(sp, sp, Operand((scope()->num_parameters() + 1) * kPointerSize));
+    __ Ret();
   }
 
   // Code generation state must be reset.
@@ -724,7 +713,6 @@ void CodeGenerator::SmiOperation(Token::Value op,
                                  Handle<Object> value,
                                  bool reversed,
                                  OverwriteMode mode) {
-
   VirtualFrame::SpilledScope spilled_scope;
   // NOTE: This is an attempt to inline (a bit) more of the code for
   // some possible smi operations (like + and -) when (at least) one
@@ -2112,7 +2100,7 @@ void CodeGenerator::VisitUnaryOperation(UnaryOperation* node) {
 
   } else if (op == Token::DELETE) {
     UNIMPLEMENTED_MIPS();
-  
+
   } else if (op == Token::TYPEOF) {
     // Special case for loading the typeof expression; see comment on
     // LoadTypeofExpression().
@@ -2223,20 +2211,19 @@ void CodeGenerator::VisitCountOperation(CountOperation* node) {
     // Perform optimistic increment/decrement and check for overflow.
     // If we don't overflow we are done.
     if (is_increment) {
-      __ Add(v0, a0, Operand(Smi::FromInt(1)));
+      __ Addu(v0, a0, Operand(Smi::FromInt(1)));
       exit.Branch(ne, a0, Operand(Smi::kMaxValue), no_hint);
     } else {
-      __ Add(v0, a0, Operand((Smi::FromInt(-1))));
+      __ Addu(v0, a0, Operand((Smi::FromInt(-1))));
       exit.Branch(ne, a0, Operand(Smi::kMinValue), no_hint);
     }
 
-    // We had an overflow. Revert optimistic increment/decrement.
-    __ mov(v0, a0);
-
+    // We had an overflow.
     // Slow case: Convert to number.
+    // a0 still holds the original value.
     slow.Bind();
     UNIMPLEMENTED_MIPS();
-    __ break_(0x09001); // We should not come here yet.
+    __ break_(0x09001);   // We should not come here yet.
 
     // Store the new value in the target if not const.
     exit.Bind();
@@ -2365,8 +2352,8 @@ void CodeGenerator::VisitBinaryOperation(BinaryOperation* node) {
   } else {
     // Optimize for the case where (at least) one of the expressions
     // is a literal small integer.
-   Literal* lliteral = node->left()->AsLiteral();
-   Literal* rliteral = node->right()->AsLiteral();
+    Literal* lliteral = node->left()->AsLiteral();
+    Literal* rliteral = node->right()->AsLiteral();
     // NOTE: The code below assumes that the slow cases (calls to runtime)
     // never return a constant/immutable object.
     bool overwrite_left =
@@ -3389,7 +3376,8 @@ static void HandleBinaryOpSlowCases(MacroAssembler* masm,
 
   // Check if a0 is smi or not.
   __ And(t0, a0, Operand(kSmiTagMask));
-  __ Branch(eq, &a0_is_smi, t0, Operand(zero_reg));  // It's a Smi so don't check it's a heap number.
+  // If it is a Smi don't check if it is a heap number.
+  __ Branch(eq, &a0_is_smi, t0, Operand(zero_reg));
   __ GetObjectType(a0, t0, t0);
   __ Branch(ne, &slow, t0, Operand(HEAP_NUMBER_TYPE));
   if (mode == OVERWRITE_RIGHT) {
@@ -3399,7 +3387,7 @@ static void HandleBinaryOpSlowCases(MacroAssembler* masm,
   // and f14 (a0) coprocessor registers.
   __ ldc1(f14, FieldMemOperand(a0, HeapNumber::kValueOffset));
   __ b(&finished_loading_a0);
-  __ nop(); // Branch delay slot nop.
+  __ nop();   // Branch delay slot nop.
   __ bind(&a0_is_smi);
   if (mode == OVERWRITE_RIGHT) {
     // We can't overwrite a Smi so get address of new heap number into t5.
@@ -3413,7 +3401,8 @@ static void HandleBinaryOpSlowCases(MacroAssembler* masm,
 
   // Check if a1 is smi or not.
   __ And(t1, a1, Operand(kSmiTagMask));
-  __ Branch(eq, &a1_is_smi, t1, Operand(zero_reg));  // It's a Smi so don't check it's a heap number.
+  // If it is a Smi don't check if it is a heap number.
+  __ Branch(eq, &a1_is_smi, t1, Operand(zero_reg));
   __ GetObjectType(a1, t1, t1);
   __ Branch(ne, &slow, t1, Operand(HEAP_NUMBER_TYPE));
   if (mode == OVERWRITE_LEFT) {
@@ -3422,7 +3411,7 @@ static void HandleBinaryOpSlowCases(MacroAssembler* masm,
 
   __ ldc1(f12, FieldMemOperand(a1, HeapNumber::kValueOffset));
   __ b(&finished_loading_a1);
-  __ nop(); // Branch delay slot nop.
+  __ nop();   // Branch delay slot nop.
   __ bind(&a1_is_smi);
   if (mode == OVERWRITE_LEFT) {
     // We can't overwrite a Smi so get address of new heap number into t5.
@@ -3461,7 +3450,7 @@ static void HandleBinaryOpSlowCases(MacroAssembler* masm,
   __ lw(ra, MemOperand(sp, 4));
   __ lw(s3, MemOperand(sp, 8));
   __ Jump(ra);
-  __ addiu(sp, sp, 12); // Restore sp.
+  __ addiu(sp, sp, 12);   // Restore sp.
 }
 
 
@@ -3474,7 +3463,7 @@ static void HandleBinaryOpSlowCases(MacroAssembler* masm,
 // On entry the operands are in r0 and r1.  On exit the answer is in r0.
 void GenericBinaryOpStub::HandleNonSmiBitwiseOp(MacroAssembler* masm) {
   UNIMPLEMENTED_MIPS();
-  __ break_(0x888); // plind
+  __ break_(0x888);   // plind
 }
 
 
