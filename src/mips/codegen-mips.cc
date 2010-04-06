@@ -2506,7 +2506,14 @@ void CodeGenerator::VisitCompareOperation(CompareOperation* node) {
     }
 
     case Token::INSTANCEOF: {
-      UNIMPLEMENTED_MIPS();
+      LoadAndSpill(left);
+      LoadAndSpill(right);
+      InstanceofStub stub;
+      frame_->CallStub(&stub, 2);
+      // At this point if instanceof succeeded then v0 == 0.
+      __ mov(condReg1, v0);
+      __ mov(condReg2, zero_reg);
+      cc_reg_ = eq;
       break;
     }
 
@@ -3089,8 +3096,54 @@ void JSEntryStub::GenerateBody(MacroAssembler* masm, bool is_construct) {
 // necessary. Uses a1 for the object, a0 for the function that it may
 // be an instance of (these are fetched from the stack).
 void InstanceofStub::Generate(MacroAssembler* masm) {
-  UNIMPLEMENTED_MIPS();
-  __ break_(0x845);
+  // Get the object - slow case for smis (we may need to throw an exception
+  // depending on the rhs).
+  Label slow, loop, is_instance, is_not_instance;
+  __ lw(a0, MemOperand(sp, 1 * kPointerSize));
+  __ BranchOnSmi(a0, &slow);
+
+  // Check that the left hand is a JS object and put map in a3.
+  __ GetObjectType(a0, a3, a2);
+  __ Branch(less, &slow, a2, Operand(FIRST_JS_OBJECT_TYPE));
+  __ Branch(greater, &slow, a2, Operand(LAST_JS_OBJECT_TYPE));
+
+  // Get the prototype of the function (t0 is result, a2 is scratch).
+  __ lw(a1, MemOperand(sp, 0 * kPointerSize));
+  __ TryGetFunctionPrototype(a1, t0, a2, &slow);
+
+  // Check that the function prototype is a JS object.
+  __ BranchOnSmi(t0, &slow);
+  __ GetObjectType(t0, t1, t1);
+  __ Branch(less, &slow, t1, Operand(FIRST_JS_OBJECT_TYPE));
+  __ Branch(greater, &slow, t1, Operand(LAST_JS_OBJECT_TYPE));
+
+  // Register mapping: a3 is object map and t0 is function prototype.
+  // Get prototype of object into a2.
+  __ lw(a2, FieldMemOperand(a3, Map::kPrototypeOffset));
+
+  __ LoadRoot(t1, Heap::kNullValueRootIndex);
+  // Loop through the prototype chain looking for the function prototype.
+  __ bind(&loop);
+  __ Branch(eq, &is_instance, a2, Operand(t0));
+  __ Branch(eq, &is_not_instance, a2, Operand(t1));
+  __ lw(a2, FieldMemOperand(a2, HeapObject::kMapOffset));
+  __ lw(a2, FieldMemOperand(a2, Map::kPrototypeOffset));
+  __ jmp(&loop);
+
+  __ bind(&is_instance);
+  __ li(v0, Operand(Smi::FromInt(0)));
+  __ Pop(2);
+  __ Ret();
+
+  __ bind(&is_not_instance);
+  __ li(v0, Operand(Smi::FromInt(1)));
+  __ Pop(2);
+  __ Ret();
+
+  // Slow-case. Tail call builtin.
+  __ bind(&slow);
+  // TODO(MIPS): instanceof slow case. Need JS builtins.
+  __ break_(0x3137);
 }
 
 

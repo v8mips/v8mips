@@ -72,6 +72,7 @@ TEST(MIPSComparisons) {
   v8::HandleScope scope;
   LocalContext env;  // from cctest.h
 
+  // The "instanceof" statement is tested with objects in MIPSObjects.
   const char* c_source =
     "function foo() {"
     ""
@@ -269,10 +270,14 @@ TEST(MIPSObjects) {
   LocalContext env;  // from cctest.h
 
   const char* c_source =
+    // Global variable to store the result.
+    "var res = 0;"
+    ""
+    // Constructors.
     "function GeomObject() {}"
     ""
-    "function Square() {"
-    "  this.c = 0xa;"
+    "function Square(c_) {"
+    "  this.c = c_;"
     "}"
     ""
     "function Circle() {"
@@ -287,14 +292,21 @@ TEST(MIPSObjects) {
     "  this.newProperty = 0xa0000;"
     "}"
     ""
+    "LastGeomObject.prototype = new NewGeomObject;"
+    "LastGeomObject.prototype.constructor = LastGeomObject;"
+    "function LastGeomObject() {"
+    "  this.lastProperty = 0xa00000;"
+    "}"
+    ""
     // Instantiate objects.
     "myGeom = new GeomObject;"
-    "mySquare = new Square;"
+    "mySquare = new Square(0xa);"
     "myCircle = new Circle;"
     "myCircle2 = new Circle;"
     "myNewObj = new NewGeomObject;"
+    "myLastObj = new LastGeomObject;"
     ""
-    // Change object prototype
+    // Change object prototype.
     "GeomObject.prototype.inObj = 0xa0;"
     ""
     // Change object properties.
@@ -302,11 +314,13 @@ TEST(MIPSObjects) {
     "myCircle2.r = 0xa000;"
     ""
     // Compute a result involving all previous aspects.
-    "mySquare.c + myGeom.inObj + myCircle.r + myCircle2.r"
-    "+ myNewObj.newProperty;";
+    "res = mySquare.c + myGeom.inObj + myCircle.r + myCircle2.r"
+    "+ myNewObj.newProperty;"
+    "if (myLastObj instanceof LastGeomObject)"
+    "  res = res + myLastObj.lastProperty;";
   Local<String> source = ::v8::String::New(c_source);
   Local<Script> script = ::v8::Script::Compile(source);
-  CHECK_EQ(0xaaaaa, script->Run()->Int32Value());
+  CHECK_EQ(0xaaaaaa, script->Run()->Int32Value());
 }
 
 

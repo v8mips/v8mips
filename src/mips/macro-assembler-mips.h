@@ -371,8 +371,8 @@ class MacroAssembler: public Assembler {
     lw(dst, MemOperand(sp, 0));
     Addu(sp, sp, Operand(kPointerSize));
   }
-  void Pop() {
-    Add(sp, sp, Operand(kPointerSize));
+  void Pop( uint32_t count = 1) {
+    Add(sp, sp, Operand(count * kPointerSize));
   }
 
 
@@ -455,6 +455,16 @@ class MacroAssembler: public Assembler {
 
   // ---------------------------------------------------------------------------
   // Support functions.
+
+  // Try to get function prototype of a function and puts the value in
+  // the result register. Checks that the function really is a
+  // function and jumps to the miss label if the fast checks fail. The
+  // function register will be untouched; the other registers may be
+  // clobbered.
+  void TryGetFunctionPrototype(Register function,
+                               Register result,
+                               Register scratch,
+                               Label* miss);
 
   void GetObjectType(Register function,
                      Register map,
