@@ -943,7 +943,13 @@ void Assembler::lwc1(FPURegister fd, const MemOperand& src) {
 
 
 void Assembler::ldc1(FPURegister fd, const MemOperand& src) {
-  GenInstrImmediate(LDC1, src.rm(), fd, src.offset_);
+  // Workaround for non-8-byte alignment of HeapNumber, convert 64-bit
+  // load to two 32-bit loads. This really should be done in macro-assembler.
+  // GenInstrImmediate(LDC1, src.rm(), fd, src.offset_);
+  GenInstrImmediate(LWC1, src.rm(), fd, src.offset_);
+  FPURegister nextfpreg;
+  nextfpreg.setcode(fd.code() + 1);
+  GenInstrImmediate(LWC1, src.rm(), nextfpreg, src.offset_ + 4);
 }
 
 
@@ -953,7 +959,13 @@ void Assembler::swc1(FPURegister fd, const MemOperand& src) {
 
 
 void Assembler::sdc1(FPURegister fd, const MemOperand& src) {
-  GenInstrImmediate(SDC1, src.rm(), fd, src.offset_);
+  // Workaround for non-8-byte alignment of HeapNumber, convert 64-bit
+  // store to two 32-bit stores. This really should be done in macro-assembler.
+  // GenInstrImmediate(SDC1, src.rm(), fd, src.offset_);
+  GenInstrImmediate(SWC1, src.rm(), fd, src.offset_);
+  FPURegister nextfpreg;
+  nextfpreg.setcode(fd.code() + 1);
+  GenInstrImmediate(SWC1, src.rm(), nextfpreg, src.offset_ + 4);
 }
 
 

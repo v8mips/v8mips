@@ -333,9 +333,11 @@ TEST(MIPSObjects) {
 }
 
 
-// The binary-op tests are currently simple tests, with well-behaved Smi values.
-// Corner cases, doubles, and overflows are not yet tested (because we know
-// they don't work).
+
+// Binary op tests start with well-behaved Smi values, then step thru
+// corner cases, such as overflow from Smi value, to one Smi, one
+// non-Smi, then to float cases.
+
 
 TEST(MIPSBinaryAdd) {
   // Disable compilation of natives.
@@ -388,12 +390,39 @@ TEST(MIPSBinaryDiv) {
   i::FLAG_full_compiler = false;
   v8::HandleScope scope;
   LocalContext env;  // from cctest.h
+  const char* js;
+  Local<String> source;
+  Local<Script> script;
 
-  const char* c_source =
-    "function foo() { var a=499998015; var b=4455; return a / b; }; foo();";
-  Local<String> source = ::v8::String::New(c_source);
-  Local<Script> script = ::v8::Script::Compile(source);
+  // Check basic Smi divide.
+  js = "function f() { var a=10; var b=5; return a / b; }; f();";
+  source = ::v8::String::New(js);
+  script = ::v8::Script::Compile(source);
+  CHECK_EQ(2, script->Run()->Int32Value());
+
+  js = "function f() { var a=499998015; var b=4455; return a / b; }; f();";
+  source = ::v8::String::New(js);
+  script = ::v8::Script::Compile(source);
   CHECK_EQ(112233, script->Run()->Int32Value());
+
+  // Check negative 0 result causes conversion to HeapNumber.
+  js = "function f() { var a=0; var b=-74; return a / b; }; f();";
+  source = ::v8::String::New(js);
+  script = ::v8::Script::Compile(source);
+  CHECK_EQ(0.0, script->Run()->NumberValue());
+
+  // Check division of most-negative Smi by -1, to make illegal Smi.
+  // results in conversion to legal HeapNumber.
+  js = "function f() { var a=-1073741820; var b=-1; return a / b; }; f();";
+  // js = "function f() { var a=10; var b=-2; return a / b; }; f();";
+  source = ::v8::String::New(js);
+  script = ::v8::Script::Compile(source);
+  CHECK_EQ(1073741820.0, script->Run()->NumberValue());
+
+  js = "function f() { var a=173.5; var b=2.5; return a / b; }; f();";
+  source = ::v8::String::New(js);
+  script = ::v8::Script::Compile(source);
+  CHECK_EQ(69.4, script->Run()->NumberValue());
 }
 
 
@@ -404,11 +433,21 @@ TEST(MIPSBinaryMod) {
   v8::HandleScope scope;
   LocalContext env;  // from cctest.h
 
-  const char* c_source =
-    "function foo() { var a=40015; var b=100; return a % b; }; foo();";
-  Local<String> source = ::v8::String::New(c_source);
-  Local<Script> script = ::v8::Script::Compile(source);
-  CHECK_EQ(15, script->Run()->Int32Value());
+  js = "function f() { var a=-44; var b=10; return a % b; }; f();";
+  source = ::v8::String::New(js);
+  script = ::v8::Script::Compile(source);
+  CHECK_EQ(-4, script->Run()->Int32Value());
+
+  // Check negative 0 result causes conversion to HeapNumber.
+  js = "function f() { var a=-44; var b=11; return a % b; }; f();";
+  source = ::v8::String::New(js);
+  script = ::v8::Script::Compile(source);
+  CHECK_EQ(0.0, script->Run()->NumberValue());
+
+  js = "function f() { var a=10.5; var b=3.0; return a % b; }; f();";
+  source = ::v8::String::New(js);
+  script = ::v8::Script::Compile(source);
+  CHECK_EQ(1.5, script->Run()->NumberValue());
 }
 
 

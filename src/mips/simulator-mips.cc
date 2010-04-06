@@ -808,6 +808,32 @@ void Simulator::SoftwareInterrupt(Instruction* instr) {
     // This is dodgy but it works because the C entry stubs are never moved.
     // See comment in codegen-arm.cc and bug 1242173.
     int32_t saved_ra = get_register(ra);
+
+    intptr_t external =
+        reinterpret_cast<int32_t>(redirection->external_function());
+    SimulatorRuntimeCall target =
+        reinterpret_cast<SimulatorRuntimeCall>(external);
+
+    if (::v8::internal::FLAG_trace_sim) {
+      PrintF(
+          "Call to host function at %p with args %08x, %08x, %08x, %08x\n",
+          FUNCTION_ADDR(target),
+          arg0,
+          arg1,
+          arg2,
+          arg3);
+    }
+
+    // Based on CpuFeatures::IsSupported(FPU), Mips will use either hardware
+    // FPU, or gcc soft-float routines. Hardware FPU is simulated in this
+    // simulator. Soft-float has additional abstraction of ExternalReference,
+    // to support serialization. Finally, when simulated on x86 host, the
+    // x86 softfloat routines are used, and this Redirection infrastructure
+    // lets simulated-mips make calls into x86 C code.
+    // When doing that, the 'double' return type must be handled differently
+    // than the usual int64_t return. The data is returned in different registers
+    // and cannot be cast from one type to the other. However, the calling
+    // arguments are passed the same way in both cases.
     if (redirection->fp_return()) {
       intptr_t external =
           reinterpret_cast<intptr_t>(redirection->external_function());
@@ -874,6 +900,11 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
   int32_t  fs_reg = instr->FsField();
   int32_t  ft_reg = instr->FtField();
   int32_t  fd_reg = instr->FdField();
+<<<<<<< HEAD
+=======
+  int64_t  i64hilo = 0;
+  uint64_t u64hilo = 0;
+>>>>>>> 3f8ca3a... Merge branch 'ra-dev' into integraton
 
   // ALU output
   // It should not be used as is. Instructions using it should always initialize
