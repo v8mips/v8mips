@@ -355,6 +355,7 @@ enum Condition {
   le            = less_equal,
   hs            = Ugreater_equal,
   lo            = Uless,
+  al            = cc_always,
 
   cc_default    = no_condition
 };

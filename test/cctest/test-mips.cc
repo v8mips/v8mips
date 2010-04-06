@@ -34,6 +34,8 @@
 using ::v8::Local;
 using ::v8::String;
 using ::v8::Script;
+using ::v8::Value;
+using ::v8::internal::StrLength;
 
 namespace i = ::v8::internal;
 
@@ -597,7 +599,7 @@ TEST(MIPSBinaryOr) {
   CHECK_EQ(0x9f8383,  script->Run()->Int32Value());
 
   // Check that non-Smi int32 values work, converted to Number.
-  js = 
+  js =
   "function f() { var a=0x55555555; var b=0x66666666; return a | b; };"
   "f();";
   source = ::v8::String::New(js);
@@ -609,7 +611,7 @@ TEST(MIPSBinaryOr) {
   // -0x55555555 is too big for Smi, is Number with int32 value 0xaaaaaaab.
   // -0x22222222 has int value 0xddddddde, which is Smi 0xbbbbbbbc.
   // Or'ing these together gives 0xffffffff (-1), which is returned as Smi.
-  js = 
+  js =
   "function f() { var a=-0x55555555; var b=-0x22222222; return a | b; };"
   "f();";
   source = ::v8::String::New(js);
@@ -628,7 +630,7 @@ TEST(MIPSBinaryAnd) {
   Local<String> source;
   Local<Script> script;
 
-  js = 
+  js =
   "function f() { var a=0x0f0f0f0f; var b=0x11223344; return a & b; };"
   "f();";
   source = ::v8::String::New(js);
@@ -636,7 +638,7 @@ TEST(MIPSBinaryAnd) {
   CHECK_EQ(0x01020304,  script->Run()->Int32Value());
 
   // Check that non-Smi values work OK, returned as Number.
-  js = 
+  js =
   "function f() { var a=0x7f0f0f0f; var b=0x61223344; return a & b; };"
   "f();";
   source = ::v8::String::New(js);
@@ -656,7 +658,7 @@ TEST(MIPSBinaryXor) {
   Local<String> source;
   Local<Script> script;
 
-  js = 
+  js =
   "function f() { var a=0x0f0f0f0f; var b=0x11223344; return a ^ b; };"
   "f();";
   source = ::v8::String::New(js);
@@ -664,7 +666,7 @@ TEST(MIPSBinaryXor) {
   CHECK_EQ(0x1e2d3c4b, script->Run()->Int32Value());
 
   // Check two non-Smi int32's, with result returned as Smi.
-  js = 
+  js =
   "function f() { var a=0x5f0f0f0f; var b=0x41223344; return a ^ b; };"
   "f();";
   source = ::v8::String::New(js);
@@ -683,14 +685,14 @@ TEST(MIPSBinaryShl) {
   Local<String> source;
   Local<Script> script;
 
-  js = 
+  js =
     "function f() { var a=0x400; var b=0x4; return a << b; }; f();";
   source = ::v8::String::New(js);
   script = ::v8::Script::Compile(source);
   CHECK_EQ(0x4000, script->Run()->Int32Value());
 
   // Check left shift turning Smi to non-smi int32, returned as Number.
-  js = 
+  js =
     "function f() { var a=0x30000000; var b=1; return a << b; }; f();";
   source = ::v8::String::New(js);
   script = ::v8::Script::Compile(source);
@@ -741,7 +743,7 @@ TEST(MIPSBinaryShr) {
   source = ::v8::String::New(js);
   script = ::v8::Script::Compile(source);
   CHECK_EQ(0x0fffffff, script->Run()->Int32Value());
-  
+
   // Check that almost-max negative non-Smi int32, shifted by 1, is
   // properly returned as number, since the positive value 0x40000000
   // cannot be represented as Smi. (we use 0x80000001, since due to
@@ -752,4 +754,46 @@ TEST(MIPSBinaryShr) {
   script = ::v8::Script::Compile(source);
   // -2147483647 is 0x80000001, we >>> 1, to get -1073741824
   CHECK_EQ(1073741824.0, script->Run()->NumberValue());
+}
+
+TEST(MIPSAddString) {
+  // Disable compilation of natives.
+  i::FLAG_disable_native_files = true;
+  i::FLAG_full_compiler = false;
+  v8::HandleScope scope;
+  LocalContext env;  // from cctest.h
+  const char *js1, *js2, *js3;
+
+  // Check adding two string variables.
+  js1 = "function f() { var a='foo'; var b='bari'; return a + b; }; f();";
+  Local<Value> result = CompileRun(js1);
+  CHECK(result->IsString());
+  String::AsciiValue ascii1(result);
+  CHECK_EQ("foobari", *ascii1);
+
+  // Check adding string variables and literals.
+  js2 = "function f() {   "
+        "  var a = 'foo'; "
+        "  var b = 'doo'; "
+        "  return a + 'bargooba' + b; "
+        "}; "
+        "f();";
+  result = CompileRun(js2);
+  CHECK(result->IsString());
+  String::AsciiValue ascii2(result);
+  CHECK_EQ("foobargoobadoo", *ascii2);
+
+  // Check strings longer than the internal 13-char limit.
+  js3 = "function f() {"
+        "  var a = 'this is a longer string ';"
+        "  var b = 'which will get beyond the 13 char flat-string limit';"
+        "  return a + b;"
+        "}; "
+        " f(); ";
+  result = CompileRun(js3);
+  CHECK(result->IsString());
+  String::AsciiValue ascii3(result);
+  const char* expected = "this is a longer string which will "
+                         "get beyond the 13 char flat-string limit";
+  CHECK_EQ(expected, *ascii3);
 }

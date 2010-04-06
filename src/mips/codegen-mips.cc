@@ -566,6 +566,7 @@ void CodeGenerator::ToBoolean(JumpTarget* true_target,
   false_target->Branch(eq, t0, Operand(t3), no_hint);
 
   // Check if the value is a smi.
+  // __ cmp(r0, Operand(Smi::FromInt(0)));             // plind:
   false_target->Branch(eq, t0, Operand(Smi::FromInt(0)), no_hint);
   __ And(t4, t0, Operand(kSmiTagMask));
   true_target->Branch(eq, t4, Operand(zero_reg), no_hint);
@@ -574,7 +575,9 @@ void CodeGenerator::ToBoolean(JumpTarget* true_target,
   frame_->EmitPush(t0);
   frame_->CallRuntime(Runtime::kToBool, 1);
   // Convert the result (v0) to a condition code.
-  __ LoadRoot(condReg1, Heap::kFalseValueRootIndex);
+  //  __ cmp(r0, ip);                                 // plind
+  // __ LoadRoot(s6, Heap::kFalseValueRootIndex);     // plind
+  __ LoadRoot(condReg1, Heap::kFalseValueRootIndex);  // plind: highly suspect
   __ mov(condReg2, v0);
 
   cc_reg_ = ne;
@@ -2814,7 +2817,7 @@ void ConvertToDoubleStub::Generate(MacroAssembler* masm) {
       HeapNumber::kExponentBias << HeapNumber::kExponentShift;
   // Safe to use 'at' as dest reg here.
   __ Or(at, exponent, Operand(exponent_word_for_1));
-  __ movn(exponent, at, source_); // Write exp when source not 0.
+  __ movn(exponent, at, source_);  // Write exp when source not 0.
   // 1, 0 and -1 all have 0 for the second word.
   __ mov(mantissa, zero_reg);
   __ Ret();
@@ -2886,9 +2889,11 @@ void WriteInt32ToHeapNumberStub::Generate(MacroAssembler* masm) {
   // significant 1 bit is not stored.
   non_smi_exponent += 1 << HeapNumber::kExponentShift;
   __ li(scratch_, Operand(HeapNumber::kSignMask | non_smi_exponent));
-  __ sw(scratch_, FieldMemOperand(the_heap_number_, HeapNumber::kExponentOffset));
+  __ sw(scratch_,
+        FieldMemOperand(the_heap_number_, HeapNumber::kExponentOffset));
   __ li(scratch_, Operand(0));
-  __ sw(scratch_, FieldMemOperand(the_heap_number_, HeapNumber::kMantissaOffset));
+  __ sw(scratch_,
+        FieldMemOperand(the_heap_number_, HeapNumber::kMantissaOffset));
   __ Ret();
 }
 
@@ -3043,6 +3048,9 @@ void GenericUnaryOpStub::Generate(MacroAssembler* masm) {
   // Handle the slow case by jumping to the JavaScript builtin.
   __ bind(&slow);
   __ Push(a0);
+
+  __ break_(0x4442);  // MIPS does not support builtins yet.
+
   switch (op_) {
     case Token::SUB:
       __ InvokeBuiltin(Builtins::UNARY_MINUS, JUMP_JS);
@@ -3432,48 +3440,6 @@ int CompareStub::MinorKey() {
 }
 
 
-
-// Allocates a heap number or jumps to the label if the young space is full and
-// a scavenge is needed.
-static void AllocateHeapNumber(
-    MacroAssembler* masm,
-    Label* need_gc,       // Jump here if young space is full.
-    Register result,      // The tagged address of the new heap number.
-    Register scratch1,    // A scratch register.
-    Register scratch2) {  // Another scratch register.
-
-  // Allocate an object in the heap for the heap number and tag it as a heap
-  // object.
-  // We ask for four more bytes to align it as we need and align the result.
-  // (HeapNumber::kSize is modified to be 4-byte bigger)
-  __ AllocateInNewSpace((HeapNumber::kSize) / kPointerSize,
-                        result,
-                        scratch1,
-                        scratch2,
-                        need_gc,
-                        TAG_OBJECT);
-
-  // Align to 8 bytes.
-  __ addiu(result, result, 7-1);  // -1 because result is tagged
-  __ And(result, result, Operand(~7));
-  __ Or(result, result, Operand(1));  // Tag it back.
-
-#ifdef DEBUG
-////// TODO(MIPS.6)
-//  // Check that the result is 8-byte aligned.
-//  __ andi(scratch2, result, Operand(7));
-//  __ xori(scratch2, scratch2, Operand(1));  // Fail if the tag is missing.
-//  __ Check(eq,
-//          "Error in HeapNumber allocation (not 8-byte aligned or tag missing)",
-//          scratch2, Operand(zero_reg));
-#endif
-
-  // Get heap number map and store it in the allocated object.
-  __ LoadRoot(scratch1, Heap::kHeapNumberMapRootIndex);
-  __ sw(scratch1, FieldMemOperand(result, HeapObject::kMapOffset));
-}
-
-
 // We fall into this code if the operands were Smis, but the result was
 // not (eg. overflow).  We branch into this code (to the not_smi label) if
 // the operands were not both Smi.  The operands are in a1 (x) and a0 (y).
@@ -3486,14 +3452,13 @@ static void HandleBinaryOpSlowCases(MacroAssembler* masm,
                                     const Builtins::JavaScript& builtin,
                                     Token::Value operation,
                                     OverwriteMode mode) {
-
   Label slow, slow_pop_2_first, do_the_call;
   Label a0_is_smi, a1_is_smi, finished_loading_a0, finished_loading_a1;
 
   // Smi-smi case (overflow).
   // Since both are Smis there is no heap number to overwrite, so allocate.
   // The new heap number is in t0. t1 and t2 are scratch.
-  AllocateHeapNumber(masm, &slow, t0, t1, t2);
+  __ AllocateHeapNumber(t0, t1, t2, &slow);
 
   // If we have floating point hardware, inline ADD, SUB, MUL, and DIV,
   // using registers f12 and f14 for the double values.
@@ -3531,6 +3496,72 @@ static void HandleBinaryOpSlowCases(MacroAssembler* masm,
   // sort or new-space allocation fails).
   __ bind(&slow);
 
+  // Push arguments to the stack
+  __ push(a1);
+  __ push(a0);
+
+  if (Token::ADD == operation) {
+    // Test for string arguments before calling runtime.
+    // a1 : first argument
+    // a0 : second argument
+    // sp[0] : second argument
+    // sp[4] : first argument
+
+    Label not_strings, not_string1, string1, string1_smi2;
+    __ And(t0, a1, Operand(kSmiTagMask));
+    __ Branch(eq, &not_string1, t0, Operand(zero_reg));
+
+    __ GetObjectType(a1, t0, t0);
+    __ Branch(ge, &not_string1, t0, Operand(FIRST_NONSTRING_TYPE));
+
+    // First argument is a a string, test second.
+    __ And(t0, a0, Operand(kSmiTagMask));
+    __ Branch(eq, &string1_smi2, t0, Operand(zero_reg));
+
+    __ GetObjectType(a0, t0, t0);
+    __ Branch(ge, &string1, t0, Operand(FIRST_NONSTRING_TYPE));
+
+    // First and second argument are strings.
+    StringAddStub string_add_stub(NO_STRING_CHECK_IN_STUB);
+    __ TailCallStub(&string_add_stub);
+
+    __ bind(&string1_smi2);
+    // First argument is a string, second is a smi. Try to lookup the number
+    // string for the smi in the number string cache.
+
+    // Comment this out till we get the basics working.
+    // It seems that NumberStringCache is only populated via runtime,
+    // which we are not using yet.
+
+    // NumberToStringStub::GenerateLookupNumberStringCache(
+    //     masm, a0, a2, t0, t1, true, &string1);
+    //
+    // // Replace second argument on stack and tailcall string add stub to make
+    // // the result.
+    // __ sw(a2, MemOperand(sp, 0));
+    // __ TailCallStub(&string_add_stub);
+
+    // Only first argument is a string.
+    __ bind(&string1);
+    __ break_(0x3350);  // Cannot call builtins yet.
+    __ InvokeBuiltin(Builtins::STRING_ADD_LEFT, JUMP_JS);
+
+    // First argument was not a string, test second.
+    __ bind(&not_string1);
+    __ And(t0, a0, Operand(kSmiTagMask));
+    __ Branch(eq, &not_strings, t0, Operand(zero_reg));
+
+    __ GetObjectType(a0, t0, t0);
+    __ Branch(ge, &not_strings, t0, Operand(FIRST_NONSTRING_TYPE));
+
+    // Only second argument is a string.
+    __ break_(0x3351);  // Cannot call builtins yet.
+    __ InvokeBuiltin(Builtins::STRING_ADD_RIGHT, JUMP_JS);
+
+    __ bind(&not_strings);
+  }
+  __ break_(0x3352);  // Cannot call builtins yet.
+  __ InvokeBuiltin(builtin, JUMP_JS);  // Tail call.  No return.
 
   // We branch here if at least one of a0 and a1 is not a Smi.
   __ bind(not_smi);
@@ -3538,8 +3569,7 @@ static void HandleBinaryOpSlowCases(MacroAssembler* masm,
   if (mode == NO_OVERWRITE) {
     // In the case where there is no chance of an overwritable float we may as
     // well do the allocation immediately while a0 and a1 are untouched.
-    AllocateHeapNumber(masm, &slow, t0, t1, t2);
-
+    __ AllocateHeapNumber(t0, t1, t2, &slow);
   }
 
   // Move a0 (y) to a double in a2-a3.
@@ -3548,7 +3578,6 @@ static void HandleBinaryOpSlowCases(MacroAssembler* masm,
   __ Branch(eq, &a0_is_smi, t1, Operand(zero_reg));
   __ GetObjectType(a0, t1, t1);
   __ Branch(ne, &slow, t1, Operand(HEAP_NUMBER_TYPE));
-
 
   if (mode == OVERWRITE_RIGHT) {
     __ mov(t0, a0);  // Overwrite this heap number.
@@ -3567,7 +3596,7 @@ static void HandleBinaryOpSlowCases(MacroAssembler* masm,
   __ bind(&a0_is_smi);
   if (mode == OVERWRITE_RIGHT) {
     // We can't overwrite a Smi so get address of new heap number into t0.
-    AllocateHeapNumber(masm, &slow, t0, t1, t2);
+    __ AllocateHeapNumber(t0, t1, t2, &slow);
   }
 
   if (use_fp_registers) {
@@ -3609,7 +3638,7 @@ static void HandleBinaryOpSlowCases(MacroAssembler* masm,
   __ bind(&a1_is_smi);
   if (mode == OVERWRITE_LEFT) {
     // We can't overwrite a Smi so get address of new heap number into t0.
-    AllocateHeapNumber(masm, &slow, t0, t1, t2);
+    __ AllocateHeapNumber(t0, t1, t2, &slow);
   }
 
   if (use_fp_registers) {
@@ -3664,12 +3693,12 @@ static void HandleBinaryOpSlowCases(MacroAssembler* masm,
 
   __ push(ra);
   __ push(t0);    // Address of heap number that is answer.
-  __ mov(s3, sp); // Save sp.
+  __ mov(s3, sp);  // Save sp.
   __ AlignStack(0);
   // Call C routine that may not cause GC or other trouble.
   __ li(t0, Operand(ExternalReference::double_fp_operation(operation)));
   __ Call(t0);
-  __ mov(sp,s3);  // Restore stack pointer.
+  __ mov(sp, s3);  // Restore stack pointer.
   __ Pop(t0);  // Address of heap number.
   // Store answer in the overwritable heap number.
   // Double returned in registers v0 and v1.
@@ -3868,7 +3897,7 @@ void GenericBinaryOpStub::HandleNonSmiBitwiseOp(MacroAssembler* masm) {
     }
     case NO_OVERWRITE: {
       // Get a new heap number in t5.  t6 and t7 are scratch.
-      AllocateHeapNumber(masm, &slow, t5, t6, t7);
+      __ AllocateHeapNumber(t5, t6, t7, &slow);
     }
     default: break;
   }
@@ -3889,19 +3918,19 @@ void GenericBinaryOpStub::HandleNonSmiBitwiseOp(MacroAssembler* masm) {
   if (mode_ != NO_OVERWRITE) {
     __ bind(&have_to_allocate);
     // Get a new heap number in t5.  t6 and t7 are scratch.
-    AllocateHeapNumber(masm, &slow, t5, t6, t7);
+    __ AllocateHeapNumber(t5, t6, t7, &slow);
     __ b(&got_a_heap_number);
     __ nop();   // NOP_ADDED
   }
 
   // If all else failed then we go to the runtime system.
   __ bind(&slow);
-  UNIMPLEMENTED_MIPS(); // MIPS does not support builtins yet.
-  __ break_(0x4441);
 
   __ push(a1);  // restore stack
   __ push(a0);
   __ li(a0, Operand(1));  // 1 argument (not counting receiver).
+
+  __ break_(0x4441);  // MIPS does not support builtins yet.
 
   switch (op_) {
     case Token::BIT_OR:
@@ -4209,6 +4238,372 @@ void GenericBinaryOpStub::Generate(MacroAssembler* masm) {
   // This code should be unreachable.
   __ stop("Unreachable");
 }
+
+
+void StringStubBase::GenerateCopyCharacters(MacroAssembler* masm,
+                                            Register dest,
+                                            Register src,
+                                            Register count,
+                                            Register scratch,
+                                            bool ascii) {
+  Label loop;
+  Label done;
+  // This loop just copies one character at a time, as it is only used for
+  // very short strings.
+  if (!ascii) {
+    __ addu(count, count, count);
+  }
+  __ Branch(eq, &done, count, Operand(zero_reg));
+  __ addu(count, dest, count);  // Count now points to the last dest byte.
+
+  __ bind(&loop);
+  __ lbu(scratch, MemOperand(src));
+  __ addiu(src, src, 1);
+  __ sb(scratch, MemOperand(dest));
+  __ addiu(dest, dest, 1);
+  __ Branch(lt, &loop, dest, Operand(count));
+
+  __ bind(&done);
+}
+
+
+enum CopyCharactersFlags {
+  COPY_ASCII = 1,
+  DEST_ALWAYS_ALIGNED = 2
+};
+
+
+void StringStubBase::GenerateCopyCharactersLong(MacroAssembler* masm,
+                                                Register dest,
+                                                Register src,
+                                                Register count,
+                                                Register scratch1,
+                                                Register scratch2,
+                                                Register scratch3,
+                                                Register scratch4,
+                                                Register scratch5,
+                                                int flags) {
+  // Postpone coding of optimized (long) version, until basics work.
+  bool ascii = (flags & COPY_ASCII) != 0;
+  GenerateCopyCharacters(masm, dest, src, count, scratch1, ascii);
+}
+
+
+void StringStubBase::GenerateTwoCharacterSymbolTableProbe(MacroAssembler* masm,
+                                                          Register c1,
+                                                          Register c2,
+                                                          Register scratch1,
+                                                          Register scratch2,
+                                                          Register scratch3,
+                                                          Register scratch4,
+                                                          Register scratch5,
+                                                          Label* not_found) {
+  UNIMPLEMENTED_MIPS();
+}
+
+
+void StringStubBase::GenerateHashInit(MacroAssembler* masm,
+                                      Register hash,
+                                      Register character) {
+  // hash = character + (character << 10);
+  __ sll(hash, character, 10);
+  __ addu(hash, hash, character);
+  // hash ^= hash >> 6;
+  __ sra(at, hash, 6);
+  __ xor_(hash, hash, at);
+}
+
+
+void StringStubBase::GenerateHashAddCharacter(MacroAssembler* masm,
+                                              Register hash,
+                                              Register character) {
+  // hash += character;
+  __ addu(hash, hash, character);
+  // hash += hash << 10;
+  __ sll(at, hash, 10);
+  __ addu(hash, hash, at);
+  // hash ^= hash >> 6;
+  __ sra(at, hash, 6);
+  __ xor_(hash, hash, at);
+}
+
+
+void StringStubBase::GenerateHashGetHash(MacroAssembler* masm,
+                                         Register hash) {
+  // hash += hash << 3;
+  __ sll(at, hash, 3);
+  __ addu(hash, hash, at);
+  // hash ^= hash >> 11;
+  __ sra(at, hash, 11);
+  __ xor_(hash, hash, at);
+  // hash += hash << 15;
+  __ sll(at, hash, 15);
+  __ addu(hash, hash, at);
+
+  // if (hash == 0) hash = 27;
+  __ ori(at, zero_reg, 27);
+  __ movz(hash, at, hash);
+}
+
+
+void StringAddStub::Generate(MacroAssembler* masm) {
+  Label string_add_runtime;
+  // Stack on entry:
+  // sp[0]: second argument.
+  // sp[4]: first argument.
+
+  // Load the two arguments.
+  __ lw(a0, MemOperand(sp, 1 * kPointerSize));  // First argument.
+  __ lw(a1, MemOperand(sp, 0 * kPointerSize));  // Second argument.
+
+  // Make sure that both arguments are strings if not known in advance.
+  if (string_check_) {
+    ASSERT_EQ(0, kSmiTag);
+    __ JumpIfEitherSmi(a0, a1, &string_add_runtime);
+    // Load instance types.
+    __ lw(t0, FieldMemOperand(a0, HeapObject::kMapOffset));
+    __ lw(t1, FieldMemOperand(a1, HeapObject::kMapOffset));
+    __ lbu(t0, FieldMemOperand(t0, Map::kInstanceTypeOffset));
+    __ lbu(t1, FieldMemOperand(t1, Map::kInstanceTypeOffset));
+    ASSERT_EQ(0, kStringTag);
+    // If either is not a string, go to runtime.
+    __ Or(t4, t0, Operand(t1));
+    __ And(t4, t4, Operand(kIsNotStringMask));
+    __ Branch(ne, &string_add_runtime, t4, Operand(zero_reg));
+  }
+
+  // Both arguments are strings.
+  // a0: first string
+  // a1: second string
+  // t0: first string instance type (if string_check_)
+  // t1: second string instance type (if string_check_)
+  {
+    Label strings_not_empty;
+    // Check if either of the strings are empty. In that case return the other.
+    __ lw(a2, FieldMemOperand(a0, String::kLengthOffset));
+    __ lw(a3, FieldMemOperand(a1, String::kLengthOffset));
+    __ mov(v0, a0);       // Assume we'll return first string (from a0).
+    __ movz(v0, a1, a2);  // If first is empty, return second (from a1).
+    __ slt(t4, zero_reg, a2);   // if (a2 > 0) t4 = 1.
+    __ slt(t5, zero_reg, a3);   // if (a3 > 0) t5 = 1.
+    __ and_(t4, t4, t5);        // Branch if both strings were non-empty.
+    __ Branch(ne, &strings_not_empty, t0, Operand(zero_reg));
+
+    __ IncrementCounter(&Counters::string_add_native, 1, a2, a3);
+    __ Add(sp, sp, Operand(2 * kPointerSize));
+    __ Ret();
+
+    __ bind(&strings_not_empty);
+  }
+
+  // Both strings are non-empty.
+  // a0: first string
+  // a1: second string
+  // a2: length of first string
+  // a3: length of second string
+  // t0: first string instance type (if string_check_)
+  // t1: second string instance type (if string_check_)
+  // Look at the length of the result of adding the two strings.
+  Label string_add_flat_result, longer_than_two;
+  // Adding two lengths can't overflow.
+  ASSERT(String::kMaxLength * 2 > String::kMaxLength);
+  __ Add(t2, a2, Operand(a3));
+  // Use the runtime system when adding two one character strings, as it
+  // contains optimizations for this specific case using the symbol table.
+  __ Branch(ne, &longer_than_two, t2, Operand(2));
+
+  // Check that both strings are non-external ascii strings.
+  if (!string_check_) {
+    __ lw(t0, FieldMemOperand(a0, HeapObject::kMapOffset));
+    __ lw(t1, FieldMemOperand(a1, HeapObject::kMapOffset));
+    __ lbu(t0, FieldMemOperand(t0, Map::kInstanceTypeOffset));
+    __ lbu(t1, FieldMemOperand(t1, Map::kInstanceTypeOffset));
+  }
+  __ JumpIfBothInstanceTypesAreNotSequentialAscii(t0, t1, t2, t3,
+                                                  &string_add_runtime);
+
+  // Get the two characters forming the sub string.
+  __ lbu(a2, FieldMemOperand(a0, SeqAsciiString::kHeaderSize));
+  __ lbu(a3, FieldMemOperand(a1, SeqAsciiString::kHeaderSize));
+
+  // Try to lookup two character string in symbol table. If it is not found
+  // just allocate a new one.
+  Label make_two_character_string;
+  GenerateTwoCharacterSymbolTableProbe(masm, a2, a3, t2, t3, t0, t1, t4,
+                                       &make_two_character_string);
+  __ IncrementCounter(&Counters::string_add_native, 1, a2, a3);
+  __ Add(sp, sp, Operand(2 * kPointerSize));
+  __ Ret();
+
+  __ bind(&make_two_character_string);
+  // Resulting string has length 2 and first chars of two strings
+  // are combined into single halfword in a2 register.
+  // So we can fill resulting string without two loops by a single
+  // halfword store instruction (which assumes that processor is
+  // in a little endian mode)
+  __ li(t2, Operand(2));
+  __ AllocateAsciiString(a0, t2, t0, t1, t4, &string_add_runtime);
+  __ sh(a2, FieldMemOperand(a0, SeqAsciiString::kHeaderSize));
+  __ IncrementCounter(&Counters::string_add_native, 1, a2, a3);
+  __ Add(sp, sp, Operand(2 * kPointerSize));
+  __ Ret();
+
+  __ bind(&longer_than_two);
+  // Check if resulting string will be flat.
+  __ Branch(lt, &string_add_flat_result, t2,
+            Operand(String::kMinNonFlatLength));
+  // Handle exceptionally long strings in the runtime system.
+  ASSERT((String::kMaxLength & 0x80000000) == 0);
+  ASSERT(IsPowerOf2(String::kMaxLength + 1));
+  // kMaxLength + 1 is representable as shifted literal, kMaxLength is not.
+  __ Branch(hs, &string_add_runtime, t2, Operand(String::kMaxLength + 1));
+
+  // If result is not supposed to be flat, allocate a cons string object.
+  // If both strings are ascii the result is an ascii cons string.
+  if (!string_check_) {
+    __ lw(t0, FieldMemOperand(a0, HeapObject::kMapOffset));
+    __ lw(t1, FieldMemOperand(a1, HeapObject::kMapOffset));
+    __ lbu(t0, FieldMemOperand(t0, Map::kInstanceTypeOffset));
+    __ lbu(t1, FieldMemOperand(t1, Map::kInstanceTypeOffset));
+  }
+  Label non_ascii, allocated;
+  ASSERT_EQ(0, kTwoByteStringTag);
+  // Branch to non_ascii if either string-encoding field is zero (non-ascii).
+  __ And(t4, t2, Operand(t3));
+  __ And(t4, t4, Operand(kStringEncodingMask));
+  __ Branch(eq, &non_ascii, t4, Operand(zero_reg));
+
+  // Allocate an ASCII cons string.
+  __ AllocateAsciiConsString(t3, t2, t0, t1, &string_add_runtime);
+  __ bind(&allocated);
+  // Fill the fields of the cons string.
+  __ sw(a0, FieldMemOperand(t3, ConsString::kFirstOffset));
+  __ sw(a1, FieldMemOperand(t3, ConsString::kSecondOffset));
+  __ mov(v0, t3);
+  __ IncrementCounter(&Counters::string_add_native, 1, a2, a3);
+  __ Add(sp, sp, Operand(2 * kPointerSize));
+  __ Ret();
+
+  __ bind(&non_ascii);
+  // Allocate a two byte cons string.
+  __ AllocateTwoByteConsString(t3, t2, t0, t1, &string_add_runtime);
+  __ Branch(al, &allocated);
+
+  // Handle creating a flat result. First check that both strings are
+  // sequential and that they have the same encoding.
+  // a0: first string
+  // a1: second string
+  // a2: length of first string
+  // a3: length of second string
+  // t0: first string instance type (if string_check_)
+  // t1: second string instance type (if string_check_)
+  // t2: sum of lengths.
+  __ bind(&string_add_flat_result);
+  if (!string_check_) {
+    __ lw(t0, FieldMemOperand(a0, HeapObject::kMapOffset));
+    __ lw(t1, FieldMemOperand(a1, HeapObject::kMapOffset));
+    __ lbu(t0, FieldMemOperand(t0, Map::kInstanceTypeOffset));
+    __ lbu(t1, FieldMemOperand(t1, Map::kInstanceTypeOffset));
+  }
+  // Check that both strings are sequential, meaning that we
+  // branch to runtime if either string tag is non-zero.
+  ASSERT_EQ(0, kSeqStringTag);
+  __ Or(t4, t0, Operand(t1));
+  __ And(t4, t4, Operand(kStringRepresentationMask));
+  __ Branch(ne, &string_add_runtime, t4, Operand(zero_reg));
+
+  // Now check if both strings have the same encoding (ASCII/Two-byte).
+  // a0: first string
+  // a1: second string
+  // a2: length of first string
+  // a3: length of second string
+  // t0: first string instance type
+  // t1: second string instance type
+  // t2: sum of lengths.
+  Label non_ascii_string_add_flat_result;
+  ASSERT(IsPowerOf2(kStringEncodingMask));  // Just one bit to test.
+  __ xor_(t3, t1, t0);
+  __ And(t3, t3, Operand(kStringEncodingMask));
+  __ Branch(ne, &string_add_runtime, t3, Operand(zero_reg));
+  // And see if it's ASCII (0) or two-byte (1).
+  __ And(t3, t0, Operand(kStringEncodingMask));
+  __ Branch(eq, &non_ascii_string_add_flat_result, t3, Operand(zero_reg));
+
+  // Both strings are sequential ASCII strings. We also know that they are
+  // short (since the sum of the lengths is less than kMinNonFlatLength).
+  // t2: length of resulting flat string
+  __ AllocateAsciiString(t3, t2, t0, t1, t4, &string_add_runtime);
+  // Locate first character of result.
+  __ Add(t2, t3, Operand(SeqAsciiString::kHeaderSize - kHeapObjectTag));
+  // Locate first character of first argument.
+  __ Add(a0, a0, Operand(SeqAsciiString::kHeaderSize - kHeapObjectTag));
+  // a0: first character of first string.
+  // a1: second string.
+  // a2: length of first string.
+  // a3: length of second string.
+  // t2: first character of result.
+  // t3: result string.
+  GenerateCopyCharacters(masm, t2, a0, a2, t0, true);
+
+  // Load second argument and locate first character.
+  __ Add(a1, a1, Operand(SeqAsciiString::kHeaderSize - kHeapObjectTag));
+  // a1: first character of second string.
+  // a3: length of second string.
+  // t2: next character of result.
+  // t3: result string.
+  GenerateCopyCharacters(masm, t2, a1, a3, t0, true);
+  __ mov(v0, t3);
+  __ IncrementCounter(&Counters::string_add_native, 1, a2, a3);
+  __ Add(sp, sp, Operand(2 * kPointerSize));
+  __ Ret();
+
+  __ bind(&non_ascii_string_add_flat_result);
+  // Both strings are sequential two byte strings.
+  // a0: first string.
+  // a1: second string.
+  // a2: length of first string.
+  // a3: length of second string.
+  // t2: sum of length of strings.
+  __ AllocateTwoByteString(t3, t2, t0, t1, t4, &string_add_runtime);
+  // a0: first string.
+  // a1: second string.
+  // a2: length of first string.
+  // a3: length of second string.
+  // t3: result string.
+
+  // Locate first character of result.
+  __ Add(t2, t3, Operand(SeqTwoByteString::kHeaderSize - kHeapObjectTag));
+  // Locate first character of first argument.
+  __ Add(a0, a0, Operand(SeqTwoByteString::kHeaderSize - kHeapObjectTag));
+
+  // a0: first character of first string.
+  // a1: second string.
+  // a2: length of first string.
+  // a3: length of second string.
+  // t2: first character of result.
+  // t3: result string.
+  GenerateCopyCharacters(masm, t2, a0, a2, t0, false);
+
+  // Locate first character of second argument.
+  __ Add(a1, a1, Operand(SeqTwoByteString::kHeaderSize - kHeapObjectTag));
+
+  // a1: first character of second string.
+  // a3: length of second string.
+  // t2: next character of result (after copy of first string).
+  // t3: result string.
+  GenerateCopyCharacters(masm, t2, a1, a3, t0, false);
+
+  __ mov(v0, t3);
+  __ IncrementCounter(&Counters::string_add_native, 1, a2, a3);
+  __ Add(sp, sp, Operand(2 * kPointerSize));
+  __ Ret();
+
+  // Just jump to runtime to add the two strings.
+  __ bind(&string_add_runtime);
+  __ break_(0x3340);  // We cannot do runtime calls yet.
+  __ TailCallRuntime(Runtime::kStringAdd, 2, 1);
+}
+
 
 #undef __
 

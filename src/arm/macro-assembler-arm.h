@@ -421,22 +421,6 @@ class MacroAssembler: public Assembler {
   // ---------------------------------------------------------------------------
   // String utilities
 
-  // Checks if both objects are sequential ASCII strings and jumps to label
-  // if either is not. Assumes that neither object is a smi.
-  void JumpIfNonSmisNotBothSequentialAsciiStrings(Register object1,
-                                                  Register object2,
-                                                  Register scratch1,
-                                                  Register scratch2,
-                                                  Label* failure);
-
-  // Checks if both objects are sequential ASCII strings and jumps to label
-  // if either is not.
-  void JumpIfNotBothSequentialAsciiStrings(Register first,
-                                           Register second,
-                                           Register scratch1,
-                                           Register scratch2,
-                                           Label* not_flat_ascii_strings);
-
   // Checks if both instance types are sequential ASCII strings and jumps to
   // label if either is not.
   void JumpIfBothInstanceTypesAreNotSequentialAscii(

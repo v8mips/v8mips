@@ -1127,11 +1127,11 @@ void MacroAssembler::PopTryHandler() {
 
 
 void MacroAssembler::AllocateInNewSpace(int object_size,
-                                              Register result,
-                                              Register scratch1,
-                                              Register scratch2,
-                                              Label* gc_required,
-                                              AllocationFlags flags) {
+                                        Register result,
+                                        Register scratch1,
+                                        Register scratch2,
+                                        Label* gc_required,
+                                        AllocationFlags flags) {
   ASSERT(!result.is(scratch1));
   ASSERT(!scratch1.is(scratch2));
 
@@ -1156,19 +1156,12 @@ void MacroAssembler::AllocateInNewSpace(int object_size,
   // to calculate the new top.
   ExternalReference new_space_allocation_limit =
       ExternalReference::new_space_allocation_limit_address();
-//  mov(scratch2, Operand(new_space_allocation_limit));
-//  ldr(scratch2, MemOperand(scratch2));
-//  add(result, result, Operand(object_size * kPointerSize));
-//  cmp(result, Operand(scratch2));
-//  b(hi, gc_required);
   li(scratch2, Operand(new_space_allocation_limit));
   lw(scratch2, MemOperand(scratch2));
   Addu(result, result, Operand(object_size * kPointerSize));
   Branch(Ugreater, gc_required, result, Operand(scratch2));
-  nop();  // NOP_ADDED
 
-  // Update allocation top. result temporarily holds the new top,
-//  str(result, MemOperand(scratch1));
+  // Update allocation top. Result temporarily holds the new top.
   sw(result, MemOperand(scratch1));
 
   // Tag and adjust back to start of new object.
@@ -1194,19 +1187,14 @@ void MacroAssembler::AllocateInNewSpace(Register object_size,
   // scratch1.
   ExternalReference new_space_allocation_top =
       ExternalReference::new_space_allocation_top_address();
-//  mov(scratch1, Operand(new_space_allocation_top));
   li(scratch1, Operand(new_space_allocation_top));
   if ((flags & RESULT_CONTAINS_TOP) == 0) {
-//    ldr(result, MemOperand(scratch1));
     lw(result, MemOperand(scratch1));
   } else {
 #ifdef DEBUG
     // Assert that result actually contains top on entry. scratch2 is used
     // immediately below so this use of scratch2 does not cause difference with
     // respect to register content between debug and release mode.
-//    ldr(scratch2, MemOperand(scratch1));
-//    cmp(result, scratch2);
-//    Check(eq, "Unexpected allocation top");
     lw(scratch2, MemOperand(scratch1));
     Check(eq, "Unexpected allocation top", result, Operand(scratch2));
 #endif
@@ -1217,29 +1205,20 @@ void MacroAssembler::AllocateInNewSpace(Register object_size,
   // get the number of bytes
   ExternalReference new_space_allocation_limit =
       ExternalReference::new_space_allocation_limit_address();
-//  mov(scratch2, Operand(new_space_allocation_limit));
-//  ldr(scratch2, MemOperand(scratch2));
-//  add(result, result, Operand(object_size, LSL, kPointerSizeLog2));
-//  cmp(result, Operand(scratch2));
-//  b(hi, gc_required);
   li(scratch2, Operand(new_space_allocation_limit));
   lw(scratch2, MemOperand(scratch2));
   sll(ip, object_size, kPointerSizeLog2);
   Addu(result, result, Operand(ip));
   Branch(Ugreater, gc_required, result, Operand(scratch2));
-  nop();  // NOP_ADDED
 
   // Update allocation top. result temporarily holds the new top,
-//  str(result, MemOperand(scratch1));
   sw(result, MemOperand(scratch1));
 
   // Adjust back to start of new object.
-//  sub(result, result, Operand(object_size, LSL, kPointerSizeLog2));
   Subu(result, result, Operand(ip));
 
   // Tag object if requested.
   if ((flags & TAG_OBJECT) != 0) {
-//    add(result, result, Operand(kHeapObjectTag));
     Addu(result, result, Operand(kHeapObjectTag));
   }
 }
@@ -1254,10 +1233,6 @@ void MacroAssembler::UndoAllocationInNewSpace(Register object,
   And(object, object, Operand(~kHeapObjectTagMask));
 #ifdef DEBUG
   // Check that the object un-allocated is below the current top.
-//  mov(scratch, Operand(new_space_allocation_top));
-//  ldr(scratch, MemOperand(scratch));
-//  cmp(object, scratch);
-//  Check(lt, "Undo allocation of non allocated memory");
   li(scratch, Operand(new_space_allocation_top));
   lw(scratch, MemOperand(scratch));
   Check(less, "Undo allocation of non allocated memory",
@@ -1268,6 +1243,149 @@ void MacroAssembler::UndoAllocationInNewSpace(Register object,
   sw(object, MemOperand(scratch));
 }
 
+
+void MacroAssembler::AllocateTwoByteString(Register result,
+                                           Register length,
+                                           Register scratch1,
+                                           Register scratch2,
+                                           Register scratch3,
+                                           Label* gc_required) {
+  // Calculate the number of bytes needed for the characters in the string while
+  // observing object alignment.
+  ASSERT((SeqTwoByteString::kHeaderSize & kObjectAlignmentMask) == 0);
+  sll(scratch1, scratch1, 1);  // Length in bytes, not chars.
+  addiu(scratch1, scratch1,
+       kObjectAlignmentMask + SeqTwoByteString::kHeaderSize);
+  // AllocateInNewSpace expects the size in words, so we can round down
+  // to kObjectAlignment and divide by kPointerSize in the same shift.
+  ASSERT_EQ(kPointerSize, kObjectAlignmentMask + 1);
+  sra(scratch1, scratch1, kPointerSizeLog2);
+
+  // Allocate two-byte string in new space.
+  AllocateInNewSpace(scratch1,
+                     result,
+                     scratch2,
+                     scratch3,
+                     gc_required,
+                     TAG_OBJECT);
+
+  // Set the map, length and hash field.
+  LoadRoot(scratch1, Heap::kStringMapRootIndex);
+  sw(length, FieldMemOperand(result, String::kLengthOffset));
+  sw(scratch1, FieldMemOperand(result, HeapObject::kMapOffset));
+  li(scratch2, Operand(String::kEmptyHashField));
+  sw(scratch2, FieldMemOperand(result, String::kHashFieldOffset));
+}
+
+
+void MacroAssembler::AllocateAsciiString(Register result,
+                                         Register length,
+                                         Register scratch1,
+                                         Register scratch2,
+                                         Register scratch3,
+                                         Label* gc_required) {
+  // Calculate the number of bytes needed for the characters in the string
+  // while observing object alignment.
+  ASSERT((SeqAsciiString::kHeaderSize & kObjectAlignmentMask) == 0);
+  ASSERT(kCharSize == 1);
+  addiu(scratch1, length, kObjectAlignmentMask + SeqAsciiString::kHeaderSize);
+  // AllocateInNewSpace expects the size in words, so we can round down
+  // to kObjectAlignment and divide by kPointerSize in the same shift.
+  ASSERT_EQ(kPointerSize, kObjectAlignmentMask + 1);
+  sra(scratch1, scratch1, kPointerSizeLog2);
+
+  // Allocate ASCII string in new space.
+  AllocateInNewSpace(scratch1,
+                     result,
+                     scratch2,
+                     scratch3,
+                     gc_required,
+                     TAG_OBJECT);
+
+  // Set the map, length and hash field.
+  LoadRoot(scratch1, Heap::kAsciiStringMapRootIndex);
+  li(scratch1, Operand(Factory::ascii_string_map()));
+  sw(length, FieldMemOperand(result, String::kLengthOffset));
+  sw(scratch1, FieldMemOperand(result, HeapObject::kMapOffset));
+  li(scratch2, Operand(String::kEmptyHashField));
+  sw(scratch2, FieldMemOperand(result, String::kHashFieldOffset));
+}
+
+
+void MacroAssembler::AllocateTwoByteConsString(Register result,
+                                               Register length,
+                                               Register scratch1,
+                                               Register scratch2,
+                                               Label* gc_required) {
+  AllocateInNewSpace(ConsString::kSize / kPointerSize,
+                     result,
+                     scratch1,
+                     scratch2,
+                     gc_required,
+                     TAG_OBJECT);
+  LoadRoot(scratch1, Heap::kConsStringMapRootIndex);
+  li(scratch2, Operand(String::kEmptyHashField));
+  sw(length, FieldMemOperand(result, String::kLengthOffset));
+  sw(scratch1, FieldMemOperand(result, HeapObject::kMapOffset));
+  sw(scratch2, FieldMemOperand(result, String::kHashFieldOffset));
+}
+
+
+void MacroAssembler::AllocateAsciiConsString(Register result,
+                                             Register length,
+                                             Register scratch1,
+                                             Register scratch2,
+                                             Label* gc_required) {
+  AllocateInNewSpace(ConsString::kSize / kPointerSize,
+                     result,
+                     scratch1,
+                     scratch2,
+                     gc_required,
+                     TAG_OBJECT);
+  LoadRoot(scratch1, Heap::kConsAsciiStringMapRootIndex);
+  li(scratch2, Operand(String::kEmptyHashField));
+  sw(length, FieldMemOperand(result, String::kLengthOffset));
+  sw(scratch1, FieldMemOperand(result, HeapObject::kMapOffset));
+  sw(scratch2, FieldMemOperand(result, String::kHashFieldOffset));
+}
+
+
+// Allocates a heap number or jumps to the label if the young space is full and
+// a scavenge is needed.
+void MacroAssembler::AllocateHeapNumber(Register result,
+                               Register scratch1,
+                               Register scratch2,
+                               Label* need_gc) {
+  // Allocate an object in the heap for the heap number and tag it as a heap
+  // object.
+  // We ask for four more bytes to align it as we need and align the result.
+  // (HeapNumber::kSize is modified to be 4-byte bigger)
+  AllocateInNewSpace((HeapNumber::kSize) / kPointerSize,
+                        result,
+                        scratch1,
+                        scratch2,
+                        need_gc,
+                        TAG_OBJECT);
+
+  // Align to 8 bytes. [Commented out pending code review.]
+  // __ addiu(result, result, 7-1);  // -1 because result is tagged.
+  // __ And(result, result, Operand(~7));
+  // __ Or(result, result, Operand(1));  // Tag it back.
+
+#ifdef DEBUG
+////// TODO(MIPS.6)
+//  // Check that the result is 8-byte aligned.
+//  andi(scratch2, result, Operand(7));
+//  xori(scratch2, scratch2, Operand(1));  // Fail if the tag is missing.
+//  Check(eq,
+//          "Error in HeapNumber alloc (not 8-byte aligned or tag missing)",
+//          scratch2, Operand(zero_reg));
+#endif
+
+  // Get heap number map and store it in the allocated object.
+  LoadRoot(scratch1, Heap::kHeapNumberMapRootIndex);
+  sw(scratch1, FieldMemOperand(result, HeapObject::kMapOffset));
+}
 
 
 
@@ -1566,6 +1684,12 @@ void MacroAssembler::CallStub(CodeStub* stub, Condition cond,
 }
 
 
+void MacroAssembler::TailCallStub(CodeStub* stub) {
+  ASSERT(allow_stub_calls());  // stub calls are not allowed in some stubs
+  Jump(stub->GetCode(), RelocInfo::CODE_TARGET);
+}
+
+
 void MacroAssembler::StubReturn(int argc) {
   ASSERT(argc >= 1 && generating_stub());
   if (argc > 1)
@@ -1847,6 +1971,47 @@ void MacroAssembler::AlignStack(int offset) {
     }
   }
 }
+
+
+void MacroAssembler::JumpIfNotBothSmi(Register reg1,
+                                      Register reg2,
+                                      Label* on_not_both_smi) {
+  ASSERT_EQ(0, kSmiTag);
+  ASSERT_EQ(1, kSmiTagMask);
+  or_(at, reg1, reg2);
+  andi(at, at, kSmiTagMask);
+  Branch(ne, on_not_both_smi, at, Operand(zero_reg));
+}
+
+
+void MacroAssembler::JumpIfEitherSmi(Register reg1,
+                                     Register reg2,
+                                     Label* on_either_smi) {
+  ASSERT_EQ(0, kSmiTag);
+  ASSERT_EQ(1, kSmiTagMask);
+  // Both Smi tags must be 1 (not Smi).
+  and_(at, reg1, reg2);
+  andi(at, at, kSmiTagMask);
+  Branch(eq, on_either_smi, at, Operand(zero_reg));
+}
+
+
+void MacroAssembler::JumpIfBothInstanceTypesAreNotSequentialAscii(
+    Register first,
+    Register second,
+    Register scratch1,
+    Register scratch2,
+    Label* failure) {
+  int kFlatAsciiStringMask =
+      kIsNotStringMask | kStringEncodingMask | kStringRepresentationMask;
+  int kFlatAsciiStringTag = ASCII_STRING_TYPE;
+  ASSERT(kFlatAsciiStringTag <= 0xffff);  // Ensure this fits 16-bit immed.
+  andi(scratch1, first, kFlatAsciiStringMask);
+  Branch(ne, failure, scratch1, Operand(kFlatAsciiStringTag));
+  andi(scratch2, second, kFlatAsciiStringMask);
+  Branch(ne, failure, scratch2, Operand(kFlatAsciiStringTag));
+}
+
 
 } }  // namespace v8::internal
 

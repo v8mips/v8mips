@@ -287,11 +287,40 @@ class MacroAssembler: public Assembler {
   // allocation is undone.
   void UndoAllocationInNewSpace(Register object, Register scratch);
 
+  void AllocateTwoByteString(Register result,
+                             Register length,
+                             Register scratch1,
+                             Register scratch2,
+                             Register scratch3,
+                             Label* gc_required);
+  void AllocateAsciiString(Register result,
+                           Register length,
+                           Register scratch1,
+                           Register scratch2,
+                           Register scratch3,
+                           Label* gc_required);
+  void AllocateTwoByteConsString(Register result,
+                                 Register length,
+                                 Register scratch1,
+                                 Register scratch2,
+                                 Label* gc_required);
+  void AllocateAsciiConsString(Register result,
+                               Register length,
+                               Register scratch1,
+                               Register scratch2,
+                               Label* gc_required);
+
+  // Allocates a heap number or jumps to the need_gc label if the young space
+  // is full and a scavenge is needed.
+  void AllocateHeapNumber(Register result,
+                          Register scratch1,
+                          Register scratch2,
+                          Label* gc_required);
 
   // ---------------------------------------------------------------------------
   // Instruction macros
 
-#define DEFINE_INSTRUCTION(instr)                                       \
+#define DEFINE_INSTRUCTION(instr)                                              \
   void instr(Register rd, Register rs, const Operand& rt);                     \
   void instr(Register rd, Register rs, Register rt) {                          \
     instr(rd, rs, Operand(rt));                                                \
@@ -300,7 +329,7 @@ class MacroAssembler: public Assembler {
     instr(rs, rt, Operand(j));                                                 \
   }
 
-#define DEFINE_INSTRUCTION2(instr)                                      \
+#define DEFINE_INSTRUCTION2(instr)                                             \
   void instr(Register rs, const Operand& rt);                                  \
   void instr(Register rs, Register rt) {                                       \
     instr(rs, Operand(rt));                                                    \
@@ -503,6 +532,10 @@ class MacroAssembler: public Assembler {
   // Call a code stub.
   void CallStub(CodeStub* stub, Condition cond = cc_always,
                 Register r1 = zero_reg, const Operand& r2 = Operand(zero_reg));
+
+  // Tail call a code stub (jump).
+  void TailCallStub(CodeStub* stub);
+
   void CallJSExitStub(CodeStub* stub);
 
   // Return from a code stub after popping its arguments.
@@ -582,6 +615,26 @@ class MacroAssembler: public Assembler {
   bool generating_stub() { return generating_stub_; }
   void set_allow_stub_calls(bool value) { allow_stub_calls_ = value; }
   bool allow_stub_calls() { return allow_stub_calls_; }
+
+  // ---------------------------------------------------------------------------
+  // Smi utilities
+
+  // Jump if either of the registers contain a non-smi.
+  void JumpIfNotBothSmi(Register reg1, Register reg2, Label* on_not_both_smi);
+  // Jump if either of the registers contain a smi.
+  void JumpIfEitherSmi(Register reg1, Register reg2, Label* on_either_smi);
+
+  // ---------------------------------------------------------------------------
+  // String utilities
+
+  // Checks if both instance types are sequential ASCII strings and jumps to
+  // label if either is not.
+  void JumpIfBothInstanceTypesAreNotSequentialAscii(
+      Register first_object_instance_type,
+      Register second_object_instance_type,
+      Register scratch1,
+      Register scratch2,
+      Label* failure);
 
  private:
   List<Unresolved> unresolved_;

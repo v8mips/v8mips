@@ -535,6 +535,91 @@ class GenericBinaryOpStub : public CodeStub {
 };
 
 
+class StringStubBase: public CodeStub {
+ public:
+  // Generate code for copying characters using a simple loop. This should only
+  // be used in places where the number of characters is small and the
+  // additional setup and checking in GenerateCopyCharactersLong adds too much
+  // overhead. Copying of overlapping regions is not supported.
+  // Dest register ends at the position after the last character written.
+  void GenerateCopyCharacters(MacroAssembler* masm,
+                              Register dest,
+                              Register src,
+                              Register count,
+                              Register scratch,
+                              bool ascii);
+
+  // Generate code for copying a large number of characters. This function
+  // is allowed to spend extra time setting up conditions to make copying
+  // faster. Copying of overlapping regions is not supported.
+  // Dest register ends at the position after the last character written.
+  void GenerateCopyCharactersLong(MacroAssembler* masm,
+                                  Register dest,
+                                  Register src,
+                                  Register count,
+                                  Register scratch1,
+                                  Register scratch2,
+                                  Register scratch3,
+                                  Register scratch4,
+                                  Register scratch5,
+                                  int flags);
+
+
+  // Probe the symbol table for a two character string. If the string is
+  // not found by probing a jump to the label not_found is performed. This jump
+  // does not guarantee that the string is not in the symbol table. If the
+  // string is found the code falls through with the string in register r0.
+  // Contents of both c1 and c2 registers are modified. At the exit c1 is
+  // guaranteed to contain halfword with low and high bytes equal to
+  // initial contents of c1 and c2 respectively.
+  void GenerateTwoCharacterSymbolTableProbe(MacroAssembler* masm,
+                                            Register c1,
+                                            Register c2,
+                                            Register scratch1,
+                                            Register scratch2,
+                                            Register scratch3,
+                                            Register scratch4,
+                                            Register scratch5,
+                                            Label* not_found);
+
+  // Generate string hash.
+  void GenerateHashInit(MacroAssembler* masm,
+                        Register hash,
+                        Register character);
+
+  void GenerateHashAddCharacter(MacroAssembler* masm,
+                                Register hash,
+                                Register character);
+
+  void GenerateHashGetHash(MacroAssembler* masm,
+                           Register hash);
+};
+
+
+// Flag that indicates how to generate code for the stub StringAddStub.
+enum StringAddFlags {
+  NO_STRING_ADD_FLAGS = 0,
+  NO_STRING_CHECK_IN_STUB = 1 << 0  // Omit string check in stub.
+};
+
+
+class StringAddStub: public StringStubBase {
+ public:
+  explicit StringAddStub(StringAddFlags flags) {
+    string_check_ = ((flags & NO_STRING_CHECK_IN_STUB) == 0);
+  }
+
+ private:
+  Major MajorKey() { return StringAdd; }
+  int MinorKey() { return string_check_ ? 0 : 1; }
+
+  void Generate(MacroAssembler* masm);
+
+  // Should the stub check whether arguments are strings?
+  bool string_check_;
+};
+
+
 // This stub can convert a signed int32 to a heap number (double).  It does
 // not work for int32s that are in Smi range!  No GC occurs during this stub
 // so you don't have to set up the frame.
