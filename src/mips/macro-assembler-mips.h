@@ -382,6 +382,9 @@ class MacroAssembler: public Assembler {
   void EnterInternalFrame() { EnterFrame(StackFrame::INTERNAL); }
   void LeaveInternalFrame() { LeaveFrame(StackFrame::INTERNAL); }
 
+  void EnterConstructFrame() { EnterFrame(StackFrame::CONSTRUCT); }
+  void LeaveConstructFrame() { LeaveFrame(StackFrame::CONSTRUCT); }
+
   // Enter specific kind of exit frame; either EXIT or
   // EXIT_DEBUG. Expects the number of arguments in register a0 and
   // the builtin function to call in register a1.

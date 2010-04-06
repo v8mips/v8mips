@@ -92,7 +92,87 @@ void StubCompiler::GenerateStoreField(MacroAssembler* masm,
                                       Register name_reg,
                                       Register scratch,
                                       Label* miss_label) {
-  UNIMPLEMENTED_MIPS();
+  // a0 : value
+  Label exit;
+
+  __ break_(0x98);
+
+  // Check that the receiver isn't a smi.
+  __ And(t0, receiver_reg, Operand(kSmiTagMask));
+  __ Branch(eq, miss_label, t0, Operand(zero_reg));
+
+  // Check that the map of the receiver hasn't changed.
+  __ lw(scratch, FieldMemOperand(receiver_reg, HeapObject::kMapOffset));
+  __ Branch(ne, miss_label, scratch, Operand(Handle<Map>(object->map())));
+
+  // Perform global security token check if needed.
+  if (object->IsJSGlobalProxy()) {
+    __ CheckAccessGlobalProxy(receiver_reg, scratch, miss_label);
+  }
+
+  // Stub never generated for non-global objects that require access
+  // checks.
+  ASSERT(object->IsJSGlobalProxy() || !object->IsAccessCheckNeeded());
+
+  // Perform map transition for the receiver if necessary.
+  if ((transition != NULL) && (object->map()->unused_property_fields() == 0)) {
+    // The properties must be extended before we can store the value.
+    // We jump to a runtime call that extends the properties array.
+    __ Push(receiver_reg);
+    __ li(a2, Operand(Handle<Map>(transition)));
+    __ MultiPush(a2.bit() | a0.bit());
+    __ TailCallExternalReference(
+           ExternalReference(IC_Utility(IC::kSharedStoreIC_ExtendStorage)),
+           3, 1);
+    return;
+  }
+
+  if (transition != NULL) {
+    // Update the map of the object; no write barrier updating is
+    // needed because the map is never in new space.
+    __ li(t0, Operand(Handle<Map>(transition)));
+    __ sw(t0, FieldMemOperand(receiver_reg, HeapObject::kMapOffset));
+  }
+
+  // Adjust for the number of properties stored in the object. Even in the
+  // face of a transition we can use the old map here because the size of the
+  // object and the number of in-object properties is not going to change.
+  index -= object->map()->inobject_properties();
+
+  if (index < 0) {
+    // Set the property straight into the object.
+    int offset = object->map()->instance_size() + (index * kPointerSize);
+    __ sw(a0, FieldMemOperand(receiver_reg, offset));
+
+    // Skip updating write barrier if storing a smi.
+    __ And(t0, a0, kSmiTagMask);
+    __ Branch(eq, &exit, t0, Operand(zero_reg));
+
+    // Update the write barrier for the array address.
+    // Pass the value being stored in the now unused name_reg.
+    __ li(name_reg, Operand(offset));
+    __ RecordWrite(receiver_reg, name_reg, scratch);
+  } else {
+    // Write to the properties array.
+    int offset = index * kPointerSize + FixedArray::kHeaderSize;
+    // Get the properties array
+    __ lw(scratch, FieldMemOperand(receiver_reg, JSObject::kPropertiesOffset));
+    __ sw(a0, FieldMemOperand(scratch, offset));
+
+    // Skip updating write barrier if storing a smi.
+    __ And(t0, a0, Operand(kSmiTagMask));
+    __ Branch(eq, &exit, t0, Operand(zero_reg));
+
+    // Update the write barrier for the array address.
+    // Ok to clobber receiver_reg and name_reg, since we return.
+    __ li(name_reg, Operand(offset));
+    __ RecordWrite(scratch, name_reg, receiver_reg);
+  }
+
+  // Return the value (register v0).
+  __ bind(&exit);
+  __ mov(v0, a0);
+  __ Ret();
 }
 
 
@@ -352,8 +432,28 @@ Object* StoreStubCompiler::CompileStoreField(JSObject* object,
                                              int index,
                                              Map* transition,
                                              String* name) {
-  UNIMPLEMENTED_MIPS();
-  return reinterpret_cast<Object*>(NULL);   // UNIMPLEMENTED RETURN
+  // a0    : value
+  // a1    : receiver
+  // a2    : name
+  // ra    : return address
+  // [sp]  : receiver
+  Label miss;
+
+  // name register might be clobbered.
+  GenerateStoreField(masm(),
+                     object,
+                     index,
+                     transition,
+                     a1, a2, a3,
+                     &miss);
+  __ bind(&miss);
+  __ li(a2, Operand(Handle<String>(name)));  // Restore name.
+  Handle<Code> ic(Builtins::builtin(Builtins::StoreIC_Miss));
+  __ break_(0x452);
+  __ JumpToBuiltin(ic, RelocInfo::CODE_TARGET);
+
+  // Return the generated code.
+  return GetCode(transition == NULL ? FIELD : MAP_TRANSITION, name);
 }
 
 
@@ -550,8 +650,157 @@ Object* KeyedStoreStubCompiler::CompileStoreField(JSObject* object,
 
 Object* ConstructStubCompiler::CompileConstructStub(
     SharedFunctionInfo* shared) {
-  UNIMPLEMENTED_MIPS();
-  return reinterpret_cast<Object*>(NULL);   // UNIMPLEMENTED RETURN
+  // a0    : argc
+  // a1    : constructor
+  // ra    : return address
+  // [sp]  : last argument
+  Label generic_stub_call;
+
+  // Use t7 for holding undefined which is used in several places below.
+  __ LoadRoot(t7, Heap::kUndefinedValueRootIndex);
+
+#ifdef ENABLE_DEBUGGER_SUPPORT
+  // Check to see whether there are any break points in the function code. If
+  // there are jump to the generic constructor stub which calls the actual
+  // code for the function thereby hitting the break points.
+  __ lw(t5, FieldMemOperand(a1, JSFunction::kSharedFunctionInfoOffset));
+  __ lw(a2, FieldMemOperand(t5, SharedFunctionInfo::kDebugInfoOffset));
+  __ Branch(ne, &generic_stub_call, a2, Operand(t7));
+#endif
+
+  // Load the initial map and verify that it is in fact a map.
+  // a1: constructor function
+  // t7: undefined
+  __ lw(a2, FieldMemOperand(a1, JSFunction::kPrototypeOrInitialMapOffset));
+  __ And(t0, a2, Operand(kSmiTagMask));
+  __ Branch(eq, &generic_stub_call, t0, Operand(zero_reg));
+  __ GetObjectType(a2, a3, t0);
+  __ Branch(ne, &generic_stub_call, t0, Operand(MAP_TYPE));
+
+#ifdef DEBUG
+  // Cannot construct functions this way.
+  // a0: argc
+  // a1: constructor function
+  // a2: initial map
+  // t7: undefined
+  __ lbu(a3, FieldMemOperand(a2, Map::kInstanceTypeOffset));
+  __ Check(ne, "Function constructed by construct stub.", a3, Operand(JS_FUNCTION_TYPE));
+#endif
+
+  // Now allocate the JSObject in new space.
+  // a0: argc
+  // a1: constructor function
+  // a2: initial map
+  // t7: undefined
+  __ lbu(a3, FieldMemOperand(a2, Map::kInstanceSizeOffset));
+  __ AllocateInNewSpace(a3,
+                        t4,
+                        t5,
+                        t6,
+                        &generic_stub_call,
+                        NO_ALLOCATION_FLAGS);
+
+  // Allocated the JSObject, now initialize the fields. Map is set to initial
+  // map and properties and elements are set to empty fixed array.
+  // a0: argc
+  // a1: constructor function
+  // a2: initial map
+  // a3: object size (in words)
+  // t4: JSObject (not tagged)
+  // r7: undefined
+  __ LoadRoot(t6, Heap::kEmptyFixedArrayRootIndex);
+  __ mov(t5, t4);
+  __ sw(a2, MemOperand(t5, JSObject::kMapOffset));
+  __ sw(t6, MemOperand(t5, JSObject::kPropertiesOffset));
+  __ sw(t6, MemOperand(t5, JSObject::kElementsOffset));
+  __ Addu(t5, t5, Operand(3 * kPointerSize));
+  ASSERT_EQ(0 * kPointerSize, JSObject::kMapOffset);
+  ASSERT_EQ(1 * kPointerSize, JSObject::kPropertiesOffset);
+  ASSERT_EQ(2 * kPointerSize, JSObject::kElementsOffset);
+
+
+  // Calculate the location of the first argument. The stack contains only the
+  // argc arguments.
+  __ sll(a1, a0, kPointerSizeLog2);
+  __ Addu(a1, a1, sp);
+
+  // We need to add the 4 args slots size because they need to be setup when we
+  // call the real time function the first time this kind of object is
+  // initialized (cf Builtins::Generate_JSConstructStubGeneric).
+  // TOCHECK: This need is maybe just because I first implemented it with args
+  // slots. Try to do it without: we should not need this as the real time
+  // function called has the stack setup just before it is called.
+  __ Addu(a1, a1, StandardFrameConstants::kRArgsSlotsSize);
+
+  // Fill all the in-object properties with undefined.
+  // a0: argc
+  // a1: first argument
+  // a3: object size (in words)
+  // t4: JSObject (not tagged)
+  // t5: First in-object property of JSObject (not tagged)
+  // t7: undefined
+  // Fill the initialized properties with a constant value or a passed argument
+  // depending on the this.x = ...; assignment in the function.
+  for (int i = 0; i < shared->this_property_assignments_count(); i++) {
+    if (shared->IsThisPropertyAssignmentArgument(i)) {
+      Label not_passed, next;
+      // Check if the argument assigned to the property is actually passed.
+      int arg_number = shared->GetThisPropertyAssignmentArgument(i);
+      __ Branch(less_equal, &not_passed, a0, Operand(arg_number));
+      // Argument passed - find it on the stack.
+      __ lw(a2, MemOperand(a1, (arg_number + 1) * -kPointerSize));
+      __ sw(a2, MemOperand(t5));
+      __ Addu(t5, t5, kPointerSize);
+      __ jmp(&next);
+      __ bind(&not_passed);
+      // Set the property to undefined.
+      __ sw(t7, MemOperand(t5));
+      __ Addu(t5, t5, Operand(kPointerSize));
+      __ bind(&next);
+    } else {
+      // Set the property to the constant value.
+      Handle<Object> constant(shared->GetThisPropertyAssignmentConstant(i));
+      __ li(a2, Operand(constant));
+      __ sw(a2, MemOperand(t5));
+      __ Addu(t5, t5, kPointerSize);
+    }
+  }
+
+  // Fill the unused in-object property fields with undefined.
+  for (int i = shared->this_property_assignments_count();
+       i < shared->CalculateInObjectProperties();
+       i++) {
+      __ sw(t7, MemOperand(t5));
+      __ Addu(t5, t5, kPointerSize);
+  }
+
+  // a0: argc
+  // t4: JSObject (not tagged)
+  // Move argc to a1 and the JSObject to return to v0 and tag it.
+  __ mov(a1, a0);
+  __ mov(v0, t4);
+  __ Or(v0, v0, Operand(kHeapObjectTag));
+
+  // v0: JSObject
+  // a1: argc
+  // Remove caller arguments and receiver from the stack and return.
+  __ sll(t0, a1, kPointerSizeLog2);
+  __ Addu(sp, sp, t0);
+  __ Addu(sp, sp, Operand(kPointerSize));
+  __ IncrementCounter(&Counters::constructed_objects, 1, a1, a2);
+  __ IncrementCounter(&Counters::constructed_objects_stub, 1, a1, a2);
+  __ Ret();
+
+  // Jump to the generic stub in case the specialized code cannot handle the
+  // construction.
+  __ bind(&generic_stub_call);
+  Code* code = Builtins::builtin(Builtins::JSConstructStubGeneric);
+  Handle<Code> generic_construct_stub(code);
+  __ break_(0x701);
+  __ JumpToBuiltin(generic_construct_stub, RelocInfo::CODE_TARGET);
+
+  // Return the generated code.
+  return GetCode();
 }
 
 

@@ -1804,7 +1804,50 @@ void CodeGenerator::VisitCall(Call* node) {
 
 
 void CodeGenerator::VisitCallNew(CallNew* node) {
-  UNIMPLEMENTED_MIPS();
+#ifdef DEBUG
+  int original_height = frame_->height();
+#endif
+  VirtualFrame::SpilledScope spilled_scope;
+  Comment cmnt(masm_, "[ CallNew");
+
+  // According to ECMA-262, section 11.2.2, page 44, the function
+  // expression in new calls must be evaluated before the
+  // arguments. This is different from ordinary calls, where the
+  // actual function to call is resolved after the arguments have been
+  // evaluated.
+
+  ZoneList<Expression*>* args = node->arguments();
+  int arg_count = args->length();
+
+  // Compute function to call and use the global object as the
+  // receiver. There is no need to use the global proxy here because
+  // it will always be replaced with a newly allocated object.
+  LoadAndSpill(node->expression());
+  LoadGlobal();
+
+  // Push the arguments ("left-to-right") on the stack.
+  for (int i = 0; i < arg_count; i++) {
+    LoadAndSpill(args->at(i));
+  }
+
+  // a0: the number of arguments.
+  Result num_args(a0);
+  __ li(a0, Operand(arg_count));
+
+  // Load the function into a1 as per calling convention.
+  Result function(a1);
+  __ lw(a1, frame_->ElementAt(arg_count + 1));
+
+  // Call the construct call builtin that handles allocation and
+  // constructor invocation.
+  CodeForSourcePosition(node->position());
+  Handle<Code> ic(Builtins::builtin(Builtins::JSConstructCall));
+  frame_->CallCodeObject(ic,
+                         RelocInfo::CONSTRUCT_CALL,
+                         arg_count + 1);
+  // Discard old TOS value and push r0 on the stack (same as Pop(), push(r0)).
+  __ sw(v0, frame_->Top());
+  ASSERT(frame_->height() == original_height + 1);
 }
 
 

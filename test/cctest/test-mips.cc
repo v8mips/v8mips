@@ -261,6 +261,55 @@ TEST(MIPSArrays) {
 }
 
 
+TEST(MIPSObjects) {
+  // Disable compilation of natives.
+  i::FLAG_disable_native_files = true;
+  i::FLAG_full_compiler = false;
+  v8::HandleScope scope;
+  LocalContext env;  // from cctest.h
+
+  const char* c_source =
+    "function GeomObject() {}"
+    ""
+    "function Square() {"
+    "  this.c = 0xa;"
+    "}"
+    ""
+    "function Circle() {"
+    "  this.x = 0;"
+    "  this.y = 0;"
+    "  this.r = 0;"
+    "}"
+    ""
+    "NewGeomObject.prototype = new GeomObject;"
+    "NewGeomObject.prototype.constructor = NewGeomObject;"
+    "function NewGeomObject() {"
+    "  this.newProperty = 0xa0000;"
+    "}"
+    ""
+    // Instantiate objects.
+    "myGeom = new GeomObject;"
+    "mySquare = new Square;"
+    "myCircle = new Circle;"
+    "myCircle2 = new Circle;"
+    "myNewObj = new NewGeomObject;"
+    ""
+    // Change object prototype
+    "GeomObject.prototype.inObj = 0xa0;"
+    ""
+    // Change object properties.
+    "myCircle.r = 0xa00;"
+    "myCircle2.r = 0xa000;"
+    ""
+    // Compute a result involving all previous aspects.
+    "mySquare.c + myGeom.inObj + myCircle.r + myCircle2.r"
+    "+ myNewObj.newProperty;";
+  Local<String> source = ::v8::String::New(c_source);
+  Local<Script> script = ::v8::Script::Compile(source);
+  CHECK_EQ(0xaaaaa, script->Run()->Int32Value());
+}
+
+
 // The binary-op tests are currently simple tests, with well-behaved Smi values.
 // Corner cases, doubles, and overflows are not yet tested (because we know
 // they don't work).
