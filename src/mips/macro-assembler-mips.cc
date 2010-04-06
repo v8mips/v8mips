@@ -1639,18 +1639,42 @@ void MacroAssembler::DecrementCounter(StatsCounter* counter, int value,
 
 void MacroAssembler::Assert(Condition cc, const char* msg,
                             Register rs, Operand rt) {
-  UNIMPLEMENTED_MIPS();
+  if (FLAG_debug_code)
+    Check(cc, msg, rs, rt);
 }
 
 
 void MacroAssembler::Check(Condition cc, const char* msg,
                            Register rs, Operand rt) {
-  UNIMPLEMENTED_MIPS();
+  Label L;
+  Branch(cc, &L, rs, rt);
+  Abort(msg);
+  // will not return here
+  bind(&L);
 }
 
 
 void MacroAssembler::Abort(const char* msg) {
-  UNIMPLEMENTED_MIPS();
+  // We want to pass the msg string like a smi to avoid GC
+  // problems, however msg is not guaranteed to be aligned
+  // properly. Instead, we pass an aligned pointer that is
+  // a proper v8 smi, but also pass the alignment difference
+  // from the real pointer as a smi.
+  intptr_t p1 = reinterpret_cast<intptr_t>(msg);
+  intptr_t p0 = (p1 & ~kSmiTagMask) + kSmiTag;
+  ASSERT(reinterpret_cast<Object*>(p0)->IsSmi());
+#ifdef DEBUG
+  if (msg != NULL) {
+    RecordComment("Abort message: ");
+    RecordComment(msg);
+  }
+#endif
+  li(a0, Operand(p0));
+  push(a0);
+  li(a0, Operand(Smi::FromInt(p1 - p0)));
+  push(a0);
+  CallRuntime(Runtime::kAbort, 2);
+  // will not return here
 }
 
 
