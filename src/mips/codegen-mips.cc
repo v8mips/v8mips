@@ -1794,6 +1794,7 @@ void CodeGenerator::VisitCall(Call* node) {
 
   if (var != NULL && var->is_possibly_eval()) {
     UNIMPLEMENTED_MIPS();
+
   } else if (var != NULL && !var->is_this() && var->is_global()) {
     // ----------------------------------
     // JavaScript example: 'foo(1, 2, 3)'  // foo is global
@@ -1829,8 +1830,36 @@ void CodeGenerator::VisitCall(Call* node) {
   } else if (var != NULL && var->slot() != NULL &&
              var->slot()->type() == Slot::LOOKUP) {
     UNIMPLEMENTED_MIPS();
+
   } else if (property != NULL) {
-    UNIMPLEMENTED_MIPS();
+    // Check if the key is a literal string.
+    Literal* literal = property->key()->AsLiteral();
+
+    if (literal != NULL && literal->handle()->IsSymbol()) {
+      // ------------------------------------------------------------------
+      // JavaScript example: 'object.foo(1, 2, 3)' or 'map["key"](1, 2, 3)'
+      // ------------------------------------------------------------------
+
+      LoadAndSpill(property->obj());  // Receiver.
+      // Load the arguments.
+      int arg_count = args->length();
+      for (int i = 0; i < arg_count; i++) {
+        LoadAndSpill(args->at(i));
+      }
+
+      // Set the name register and call the IC initialization code.
+      __ li(a2, Operand(literal->handle()));
+      InLoopFlag in_loop = loop_nesting() > 0 ? IN_LOOP : NOT_IN_LOOP;
+      Handle<Code> stub = ComputeCallInitialize(arg_count, in_loop);
+      CodeForSourcePosition(node->position());
+      frame_->CallCodeObject(stub, RelocInfo::CODE_TARGET, arg_count + 1);
+      __ lw(cp, frame_->Context());
+      frame_->EmitPush(v0);
+
+    } else {
+      UNIMPLEMENTED_MIPS();
+    }
+
   } else {
     UNIMPLEMENTED_MIPS();
   }

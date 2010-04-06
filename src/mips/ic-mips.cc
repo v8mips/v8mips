@@ -47,16 +47,19 @@ namespace internal {
 
 void LoadIC::GenerateArrayLength(MacroAssembler* masm) {
   UNIMPLEMENTED_MIPS();
+  __ break_(__LINE__);
 }
 
 
 void LoadIC::GenerateStringLength(MacroAssembler* masm) {
   UNIMPLEMENTED_MIPS();
+  __ break_(__LINE__);
 }
 
 
 void LoadIC::GenerateFunctionPrototype(MacroAssembler* masm) {
   UNIMPLEMENTED_MIPS();
+  __ break_(0x60);
 }
 
 
@@ -65,11 +68,13 @@ Object* CallIC_Miss(Arguments args);
 
 void CallIC::GenerateMegamorphic(MacroAssembler* masm, int argc) {
   UNIMPLEMENTED_MIPS();
+  __ break_(0x69);
 }
 
 
 void CallIC::GenerateNormal(MacroAssembler* masm, int argc) {
   UNIMPLEMENTED_MIPS();
+  __ break_(0x75);
 }
 
 void CallIC::GenerateMiss(MacroAssembler* masm, int argc) {
@@ -181,17 +186,20 @@ void KeyedLoadIC::GenerateMiss(MacroAssembler* masm) {
 
 void KeyedLoadIC::GenerateGeneric(MacroAssembler* masm) {
   UNIMPLEMENTED_MIPS();
+  __ break_(__LINE__);
 }
 
 
 void KeyedLoadIC::GenerateString(MacroAssembler* masm) {
   UNIMPLEMENTED_MIPS();
+  __ break_(__LINE__);
 }
 
 
 void KeyedLoadIC::GenerateExternalArray(MacroAssembler* masm,
                                         ExternalArrayType array_type) {
   UNIMPLEMENTED_MIPS();
+  __ break_(__LINE__);
 }
 
 

@@ -270,14 +270,20 @@ TEST(MIPSObjects) {
   LocalContext env;  // from cctest.h
 
   const char* c_source =
-    // Global variable to store the result.
+// Global variable to store the result.
     "var res = 0;"
     ""
-    // Constructors.
+// Constructors.
     "function GeomObject() {}"
     ""
     "function Square(c_) {"
     "  this.c = c_;"
+    "  this.retArea = getSquareArea;"
+    "  this.retPerim = function () {return 4 * this.c;}"
+    "}"
+    ""
+    "function getSquareArea() {"
+    "  return this.c * this.c;"
     "}"
     ""
     "function Circle() {"
@@ -298,7 +304,7 @@ TEST(MIPSObjects) {
     "  this.lastProperty = 0xa00000;"
     "}"
     ""
-    // Instantiate objects.
+// Instantiate objects.
     "myGeom = new GeomObject;"
     "mySquare = new Square(0xa);"
     "myCircle = new Circle;"
@@ -306,16 +312,18 @@ TEST(MIPSObjects) {
     "myNewObj = new NewGeomObject;"
     "myLastObj = new LastGeomObject;"
     ""
-    // Change object prototype.
+// Change object prototype.
     "GeomObject.prototype.inObj = 0xa0;"
     ""
-    // Change object properties.
+// Change object properties.
     "myCircle.r = 0xa00;"
     "myCircle2.r = 0xa000;"
     ""
-    // Compute a result involving all previous aspects.
-    "res = mySquare.c + myGeom.inObj + myCircle.r + myCircle2.r"
-    "+ myNewObj.newProperty;"
+// Compute a result involving all previous aspects.
+    "res = res + myGeom.inObj + myCircle.r + myCircle2.r + myNewObj.newProperty;"
+    "if (mySquare.retArea() == 100)"
+    "  if (mySquare.retPerim() == 40)"
+    "    res = res + mySquare.c;"
     "if (myLastObj instanceof LastGeomObject)"
     "  res = res + myLastObj.lastProperty;";
   Local<String> source = ::v8::String::New(c_source);
