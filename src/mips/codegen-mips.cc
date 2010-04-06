@@ -1534,8 +1534,44 @@ void CodeGenerator::VisitDebuggerStatement(DebuggerStatement* node) {
 }
 
 
+void CodeGenerator::InstantiateFunction(
+    Handle<SharedFunctionInfo> function_info) {
+  VirtualFrame::SpilledScope spilled_scope;
+  __ li(a0, Operand(function_info));
+  // Use the fast case closure allocation code that allocates in new
+  // space for nested functions that don't need literals cloning.
+  if (scope()->is_function_scope() && function_info->num_literals() == 0) {
+    FastNewClosureStub stub;
+    frame_->EmitPush(a0);
+    frame_->CallStub(&stub, 1);
+    frame_->EmitPush(v0);
+  } else {
+    // Create a new closure.
+    frame_->EmitPush(cp);
+    frame_->EmitPush(a0);
+    frame_->CallRuntime(Runtime::kNewClosure, 2);
+    frame_->EmitPush(v0);
+  }
+}
+
+
 void CodeGenerator::VisitFunctionLiteral(FunctionLiteral* node) {
-  UNIMPLEMENTED_MIPS();
+#ifdef DEBUG
+  int original_height = frame_->height();
+#endif
+  VirtualFrame::SpilledScope spilled_scope;
+  Comment cmnt(masm_, "[ FunctionLiteral");
+
+  // Build the function info and instantiate it.
+  Handle<SharedFunctionInfo> function_info =
+      Compiler::BuildFunctionInfo(node, script(), this);
+  // Check for stack-overflow exception.
+  if (HasStackOverflow()) {
+    ASSERT(frame_->height() == original_height);
+    return;
+  }
+  InstantiateFunction(function_info);
+  ASSERT(frame_->height() == original_height + 1);
 }
 
 
@@ -2682,6 +2718,52 @@ void Reference::SetValue(InitState init_state) {
     default:
       UNREACHABLE();
   }
+}
+
+
+void FastNewClosureStub::Generate(MacroAssembler* masm) {
+  // Create a new closure from the given function info in new
+  // space. Set the context to the current context in cp.
+  Label gc;
+
+  // Pop the function info from the stack.
+  __ Pop(a3);
+
+  // Attempt to allocate new JSFunction in new space.
+  __ AllocateInNewSpace(JSFunction::kSize / kPointerSize,
+                        v0,
+                        a1,
+                        a2,
+                        &gc,
+                        TAG_OBJECT);
+
+  // Compute the function map in the current global context and set that
+  // as the map of the allocated object.
+  __ lw(a2, MemOperand(cp, Context::SlotOffset(Context::GLOBAL_INDEX)));
+  __ lw(a2, FieldMemOperand(a2, GlobalObject::kGlobalContextOffset));
+  __ lw(a2, MemOperand(a2, Context::SlotOffset(Context::FUNCTION_MAP_INDEX)));
+  __ sw(a2, FieldMemOperand(v0, HeapObject::kMapOffset));
+
+  // Initialize the rest of the function. We don't have to update the
+  // write barrier because the allocated object is in new space.
+  __ LoadRoot(a1, Heap::kEmptyFixedArrayRootIndex);
+  __ LoadRoot(a2, Heap::kTheHoleValueRootIndex);
+  __ sw(a1, FieldMemOperand(v0, JSObject::kPropertiesOffset));
+  __ sw(a1, FieldMemOperand(v0, JSObject::kElementsOffset));
+  __ sw(a2, FieldMemOperand(v0, JSFunction::kPrototypeOrInitialMapOffset));
+  __ sw(a3, FieldMemOperand(v0, JSFunction::kSharedFunctionInfoOffset));
+  __ sw(cp, FieldMemOperand(v0, JSFunction::kContextOffset));
+  __ sw(a1, FieldMemOperand(v0, JSFunction::kLiteralsOffset));
+
+  // Return result. The argument function info has been popped already.
+  __ Ret();
+
+  // Create a new closure through the slower runtime call.
+  __ bind(&gc);
+  __ addiu(sp, sp, 2 * kPointerSize);
+  __ sw(cp, MemOperand(sp, 1 * kPointerSize));
+  __ sw(a3, MemOperand(sp, 0 * kPointerSize));
+  __ TailCallRuntime(Runtime::kNewClosure, 2, 1);
 }
 
 

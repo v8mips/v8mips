@@ -349,6 +349,9 @@ class CodeGenerator: public AstVisitor {
   // name/value pairs.
   void DeclareGlobals(Handle<FixedArray> pairs);
 
+  // Instantiate the function based on the shared function info.
+  void InstantiateFunction(Handle<SharedFunctionInfo> function_info);
+
   // Support for type checks.
   void GenerateIsSmi(ZoneList<Expression*>* args);
   void GenerateIsNonNegativeSmi(ZoneList<Expression*>* args);
