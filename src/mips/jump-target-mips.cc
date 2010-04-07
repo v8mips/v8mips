@@ -102,7 +102,30 @@ void JumpTarget::DoBranch(Condition cc, Hint ignored,
 
 
 void JumpTarget::Call() {
-  UNIMPLEMENTED_MIPS();
+  // Call is used to push the address of the catch block on the stack as
+  // a return address when compiling try/catch and try/finally.  We
+  // fully spill the frame before making the call.  The expected frame
+  // at the label (which should be the only one) is the spilled current
+  // frame plus an in-memory return address.  The "fall-through" frame
+  // at the return site is the spilled current frame.
+  ASSERT(cgen()->has_valid_frame());
+  // There are no non-frame references across the call.
+  ASSERT(cgen()->HasValidEntryRegisters());
+  ASSERT(!is_linked());
+
+  // Calls are always 'forward' so we use a copy of the current frame (plus
+  // one for a return address) as the expected frame.
+  ASSERT(entry_frame_ == NULL);
+  VirtualFrame* target_frame = new VirtualFrame(cgen()->frame());
+  target_frame->Adjust(1);
+  entry_frame_ = target_frame;
+
+  // The predicate is_linked() should now be made true.  Its implementation
+  // detects the presence of a frame pointer in the reaching_frames_ list.
+  reaching_frames_.Add(NULL);
+  ASSERT(is_linked());
+
+  __ Call(&entry_label_);
 }
 
 
