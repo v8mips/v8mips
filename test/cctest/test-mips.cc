@@ -335,6 +335,25 @@ TEST(MIPSObjects) {
 }
 
 
+TEST(MIPSSpecialAssignment) {
+  // Disable compilation of natives.
+  i::FLAG_disable_native_files = true;
+  i::FLAG_full_compiler = false;
+  v8::HandleScope scope;
+  LocalContext env;  // from cctest.h
+
+  // TODO(MIPS): "/=" not working yet.
+  const char* c_source =
+    "var a = 1;"
+    "a += 2;"
+    "a *= 9;"
+    "a -= 2;"
+    "a;";
+  Local<String> source = ::v8::String::New(c_source);
+  Local<Script> script = ::v8::Script::Compile(source);
+  CHECK_EQ(25, script->Run()->Int32Value());
+}
+
 
 // Binary op tests start with well-behaved Smi values, then step thru
 // corner cases, such as overflow from Smi value, to one Smi, one

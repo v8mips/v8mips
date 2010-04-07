@@ -1704,7 +1704,7 @@ void CodeGenerator::VisitAssignment(Assignment* node) {
   VirtualFrame::SpilledScope spilled_scope;
   Comment cmnt(masm_, "[ Assignment");
 
-  { Reference target(this, node->target());
+  { Reference target(this, node->target(), node->is_compound());
     if (target.is_illegal()) {
       // Fool the virtual frame into thinking that we left the assignment's
       // value on the frame.
@@ -1717,8 +1717,27 @@ void CodeGenerator::VisitAssignment(Assignment* node) {
         node->op() == Token::INIT_VAR ||
         node->op() == Token::INIT_CONST) {
       LoadAndSpill(node->value());
-    } else {
-      UNIMPLEMENTED_MIPS();
+
+    } else {  // Assignment is a compound assignment.
+      // Get the old value of the lhs.
+      target.GetValueAndSpill();
+      Literal* literal = node->value()->AsLiteral();
+      bool overwrite =
+          (node->value()->AsBinaryOperation() != NULL &&
+           node->value()->AsBinaryOperation()->ResultOverwriteAllowed());
+      if (literal != NULL && literal->handle()->IsSmi()) {
+        SmiOperation(node->binary_op(),
+                     literal->handle(),
+                     false,
+                     overwrite ? OVERWRITE_RIGHT : NO_OVERWRITE);
+        frame_->EmitPush(v0);
+
+      } else {
+        LoadAndSpill(node->value());
+        GenericBinaryOperation(node->binary_op(),
+                               overwrite ? OVERWRITE_RIGHT : NO_OVERWRITE);
+        frame_->EmitPush(v0);
+      }
     }
 
     Variable* var = node->target()->AsVariableProxy()->AsVariable();
@@ -1726,6 +1745,7 @@ void CodeGenerator::VisitAssignment(Assignment* node) {
         (var->mode() == Variable::CONST) &&
         node->op() != Token::INIT_VAR && node->op() != Token::INIT_CONST) {
       // Assignment ignored - leave the value on the stack.
+      UnloadReference(&target);
     } else {
       CodeForSourcePosition(node->position());
       if (node->op() == Token::INIT_CONST) {
@@ -2711,9 +2731,7 @@ void Reference::SetValue(InitState init_state) {
 
       frame->EmitPop(a0);
       frame->EmitPop(a1);
-
       // Setup the name register.
-      Result property_name(a2);
       __ li(a2, Operand(name));
       frame->CallCodeObject(ic, RelocInfo::CODE_TARGET, 0);
       frame->EmitPush(v0);
