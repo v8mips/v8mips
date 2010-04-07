@@ -823,6 +823,16 @@ void Assembler::lbu(Register rd, const MemOperand& rs) {
 }
 
 
+void Assembler::lh(Register rd, const MemOperand& rs) {
+  GenInstrImmediate(LH, rs.rm(), rd, rs.offset_);
+}
+
+
+void Assembler::lhu(Register rd, const MemOperand& rs) {
+  GenInstrImmediate(LHU, rs.rm(), rd, rs.offset_);
+}
+
+
 void Assembler::lw(Register rd, const MemOperand& rs) {
   GenInstrImmediate(LW, rs.rm(), rd, rs.offset_);
 }
@@ -830,6 +840,11 @@ void Assembler::lw(Register rd, const MemOperand& rs) {
 
 void Assembler::sb(Register rd, const MemOperand& rs) {
   GenInstrImmediate(SB, rs.rm(), rd, rs.offset_);
+}
+
+
+void Assembler::sh(Register rd, const MemOperand& rs) {
+  GenInstrImmediate(SH, rs.rm(), rd, rs.offset_);
 }
 
 

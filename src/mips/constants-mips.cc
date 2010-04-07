@@ -313,9 +313,12 @@ Instruction::Type Instruction::InstructionType() const {
     case BLEZL:
     case BGTZL:
     case LB:
+    case LH:
     case LW:
     case LBU:
+    case LHU:
     case SB:
+    case SH:
     case SW:
     case LWC1:
     case LDC1:

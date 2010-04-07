@@ -697,14 +697,23 @@ void Decoder::DecodeTypeImmediate(Instruction* instr) {
     case LB:
       Format(instr, "lb     'rt, 'imm16s('rs)");
       break;
+    case LH:
+      Format(instr, "lh     'rt, 'imm16s('rs)");
+      break;
     case LW:
       Format(instr, "lw     'rt, 'imm16s('rs)");
       break;
     case LBU:
       Format(instr, "lbu    'rt, 'imm16s('rs)");
       break;
+    case LHU:
+      Format(instr, "lhu    'rt, 'imm16s('rs)");
+      break;
     case SB:
       Format(instr, "sb     'rt, 'imm16s('rs)");
+      break;
+    case SH:
+      Format(instr, "sh     'rt, 'imm16s('rs)");
       break;
     case SW:
       Format(instr, "sw     'rt, 'imm16s('rs)");

@@ -199,9 +199,12 @@ enum Opcode {
   SPECIAL3  =   ((3 << 3) + 7) << kOpcodeShift,
 
   LB        =   ((4 << 3) + 0) << kOpcodeShift,
+  LH        =   ((4 << 3) + 1) << kOpcodeShift,
   LW        =   ((4 << 3) + 3) << kOpcodeShift,
   LBU       =   ((4 << 3) + 4) << kOpcodeShift,
+  LHU       =   ((4 << 3) + 5) << kOpcodeShift,
   SB        =   ((5 << 3) + 0) << kOpcodeShift,
+  SH        =   ((5 << 3) + 1) << kOpcodeShift,
   SW        =   ((5 << 3) + 3) << kOpcodeShift,
 
   LWC1      =   ((6 << 3) + 1) << kOpcodeShift,
@@ -350,6 +353,8 @@ enum Condition {
   lt            = less,
   gt            = greater,
   le            = less_equal,
+  hs            = Ugreater_equal,
+  lo            = Uless,
 
   cc_default    = no_condition
 };

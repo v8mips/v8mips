@@ -483,8 +483,11 @@ class Assembler : public Malloced {
 
   void lb(Register rd, const MemOperand& rs);
   void lbu(Register rd, const MemOperand& rs);
+  void lh(Register rd, const MemOperand& rs);
+  void lhu(Register rd, const MemOperand& rs);
   void lw(Register rd, const MemOperand& rs);
   void sb(Register rd, const MemOperand& rs);
+  void sh(Register rd, const MemOperand& rs);
   void sw(Register rd, const MemOperand& rs);
 
 

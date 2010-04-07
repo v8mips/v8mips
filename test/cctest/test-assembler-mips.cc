@@ -475,4 +475,80 @@ TEST(MIPS5) {
   CHECK_EQ(275000000, t.j);
 }
 
+
+TEST(MIPS6) {
+  // Test simple memory loads and stores
+  InitializeVM();
+  v8::HandleScope scope;
+
+  typedef struct {
+    uint32_t ui;
+    int32_t si;
+    int32_t r1;
+    int32_t r2;
+    int32_t r3;
+    int32_t r4;
+    int32_t r5;
+    int32_t r6;
+  } T;
+  T t;
+
+  Assembler assm(NULL, 0);
+  Label L, C;
+
+  // basic word load/store
+  __ lw(t0, MemOperand(a0, OFFSET_OF(T, ui)) );
+  __ sw(t0, MemOperand(a0, OFFSET_OF(T, r1)) );
+
+  // lh with positive data
+  __ lh(t1, MemOperand(a0, OFFSET_OF(T, ui)) );
+  __ sw(t1, MemOperand(a0, OFFSET_OF(T, r2)) );
+
+  // lh with negative data
+  __ lh(t2, MemOperand(a0, OFFSET_OF(T, si)) );
+  __ sw(t2, MemOperand(a0, OFFSET_OF(T, r3)) );
+
+  // lhu with negative data
+  __ lhu(t3, MemOperand(a0, OFFSET_OF(T, si)) );
+  __ sw(t3, MemOperand(a0, OFFSET_OF(T, r4)) );
+
+  // lb with negative data
+  __ lb(t4, MemOperand(a0, OFFSET_OF(T, si)) );
+  __ sw(t4, MemOperand(a0, OFFSET_OF(T, r5)) );
+
+  // sh writes only 1/2 of word
+  __ lui(t5, 0x3333);
+  __ ori(t5, t5, 0x3333);
+  __ sw(t5, MemOperand(a0, OFFSET_OF(T, r6)) );
+  __ lhu(t5, MemOperand(a0, OFFSET_OF(T, si)) );
+  __ sh(t5, MemOperand(a0, OFFSET_OF(T, r6)) );
+
+
+  __ jr(ra);
+  __ nop();
+
+  CodeDesc desc;
+  assm.GetCode(&desc);
+  Object* code = Heap::CreateCode(desc,
+                                  NULL,
+                                  Code::ComputeFlags(Code::STUB),
+                                  Handle<Object>(Heap::undefined_value()));
+  CHECK(code->IsCode());
+#ifdef DEBUG
+  Code::cast(code)->Print();
+#endif
+  F3 f = FUNCTION_CAST<F3>(Code::cast(code)->entry());
+  t.ui = 0x11223344;
+  t.si = 0x99aabbcc;
+  Object* dummy = CALL_GENERATED_CODE(f, &t, 0, 0, 0, 0);
+  USE(dummy);
+
+  CHECK_EQ(0x11223344, t.r1);
+  CHECK_EQ(0x3344, t.r2);
+  CHECK_EQ(0xffffbbcc, t.r3);
+  CHECK_EQ(0x0000bbcc, t.r4);
+  CHECK_EQ(0xffffffcc, t.r5);
+  CHECK_EQ(0x3333bbcc, t.r6);
+}
+
 #undef __

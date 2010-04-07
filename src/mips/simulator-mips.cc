@@ -745,7 +745,7 @@ uint32_t Simulator::ReadBU(int32_t addr) {
 
 int32_t Simulator::ReadB(int32_t addr) {
   int8_t* ptr = reinterpret_cast<int8_t*>(addr);
-  return ((*ptr << 24) >> 24) & 0xff;
+  return *ptr;
 }
 
 
@@ -829,9 +829,9 @@ void Simulator::SoftwareInterrupt(Instruction* instr) {
     // x86 softfloat routines are used, and this Redirection infrastructure
     // lets simulated-mips make calls into x86 C code.
     // When doing that, the 'double' return type must be handled differently
-    // than the usual int64_t return. The data is returned in different registers
-    // and cannot be cast from one type to the other. However, the calling
-    // arguments are passed the same way in both cases.
+    // than the usual int64_t return. The data is returned in different
+    // registers and cannot be cast from one type to the other. However, the
+    // calling arguments are passed the same way in both cases.
     if (redirection->fp_return()) {
       SimulatorRuntimeFPCall target =
           reinterpret_cast<SimulatorRuntimeFPCall>(external);
@@ -1417,6 +1417,10 @@ void Simulator::DecodeTypeImmediate(Instruction* instr) {
       addr = rs + se_imm16;
       alu_out = ReadB(addr);
       break;
+    case LH:
+      addr = rs + se_imm16;
+      alu_out = ReadH(addr, instr);
+      break;
     case LW:
       addr = rs + se_imm16;
       alu_out = ReadW(addr, instr);
@@ -1425,7 +1429,14 @@ void Simulator::DecodeTypeImmediate(Instruction* instr) {
       addr = rs + se_imm16;
       alu_out = ReadBU(addr);
       break;
+    case LHU:
+      addr = rs + se_imm16;
+      alu_out = ReadHU(addr, instr);
+      break;
     case SB:
+      addr = rs + se_imm16;
+      break;
+    case SH:
       addr = rs + se_imm16;
       break;
     case SW:
@@ -1482,12 +1493,17 @@ void Simulator::DecodeTypeImmediate(Instruction* instr) {
       break;
     // ------------- Memory instructions
     case LB:
+    case LH:
     case LW:
     case LBU:
+    case LHU:
       set_register(rt_reg, alu_out);
       break;
     case SB:
       WriteB(addr, static_cast<int8_t>(rt));
+      break;
+    case SH:
+      WriteH(addr, static_cast<uint16_t>(rt), instr);
       break;
     case SW:
       WriteW(addr, rt, instr);
