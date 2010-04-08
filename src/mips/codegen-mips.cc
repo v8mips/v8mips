@@ -3172,7 +3172,7 @@ void CEntryStub::GenerateCore(MacroAssembler* masm,
   __ b(throw_normal_exception);
   __ nop();   // Branch delay slot nop.
 
-  __ bind(&retry);  // pass last failure (v0) as parameter (a0) when retrying
+  __ bind(&retry);  // Pass last failure (v0) as parameter (a0) when retrying.
   __ mov(a0, v0);
 }
 

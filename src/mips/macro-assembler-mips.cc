@@ -1485,8 +1485,7 @@ void MacroAssembler::InvokePrologue(const ParameterCount& expected,
     ExternalReference adaptor(Builtins::ArgumentsAdaptorTrampoline);
     if (flag == CALL_FUNCTION) {
       CallBuiltin(adaptor);
-      b(done);
-      nop();
+      jmp(done);
     } else {
       JumpToBuiltin(adaptor);
     }

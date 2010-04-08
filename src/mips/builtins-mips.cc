@@ -537,9 +537,143 @@ void Builtins::Generate_FunctionApply(MacroAssembler* masm) {
 }
 
 
+static void EnterArgumentsAdaptorFrame(MacroAssembler* masm) {
+  __ sll(a0, a0, kSmiTagSize);
+  __ li(t0, Operand(Smi::FromInt(StackFrame::ARGUMENTS_ADAPTOR)));
+  __ MultiPush(a0.bit() | a1.bit() | t0.bit() | fp.bit() | ra.bit());
+  __ Add(fp, sp, Operand(3 * kPointerSize));
+}
+
+
+static void LeaveArgumentsAdaptorFrame(MacroAssembler* masm) {
+  // v0 : result being passed through
+  // Get the number of arguments passed (as a smi), tear down the frame and
+  // then tear down the parameters.
+  __ lw(a1, MemOperand(fp, -3 * kPointerSize));
+  __ mov(sp, fp);
+  __ MultiPop(fp.bit() | ra.bit());
+  __ sll(t0, a1, kPointerSizeLog2 - kSmiTagSize);
+  __ Addu(sp, sp, t0);
+  // Adjust for the receiver and arguments slots.
+  __ Addu(sp, sp,
+    // Use the branch delay slot.
+      Operand(kPointerSize + StandardFrameConstants::kRArgsSlotsSize));
+}
+
+
 void Builtins::Generate_ArgumentsAdaptorTrampoline(MacroAssembler* masm) {
-  UNIMPLEMENTED_MIPS();
-  __ break_(0x543);
+  // State setup as expected by MacroAssembler::InvokePrologue.
+  // a0: actual arguments count
+  // a1: function (passed through to callee)
+  // a2: expected arguments count
+  // a3: callee code entry
+
+  Label invoke, dont_adapt_arguments;
+
+  Label enough, too_few;
+  __ Branch(Uless, &too_few, a0, Operand(a2));
+  __ Branch(eq, &dont_adapt_arguments, a2, Operand(SharedFunctionInfo::kDontAdaptArgumentsSentinel));
+
+  {  // Enough parameters: actual >= expected.
+    // a0: actual number of arguments as a smi
+    // a1: function
+    // a2: expected number of arguments
+    // a3: code entry to call
+    __ bind(&enough);
+    EnterArgumentsAdaptorFrame(masm);
+
+    // Calculate copy start address into a0 and copy end address into a2.
+    __ sll(a0, a0, kPointerSizeLog2 - kSmiTagSize);
+    __ Addu(a0, a0, StandardFrameConstants::kRArgsSlotsSize);
+    __ Addu(a0, fp, a0);
+    // Adjust for return address and receiver.
+    __ Addu(a0, a0, Operand(2 * kPointerSize));
+    // Compute copy end address.
+    __ sll(a2, a2, kPointerSizeLog2);
+    __ subu(a2, a0, a2);
+
+    // Copy the arguments (including the receiver) to the new stack frame.
+    // a0: copy start address
+    // a1: function
+    // a2: copy end address
+    // a3: code entry to call
+
+    Label copy;
+    __ bind(&copy);
+    __ lw(t0, MemOperand(a0));
+    __ Push(t0);
+    // Use the branch delay slot to update a0.
+    __ Branch(false, ne, &copy, a0, Operand(a2));
+    __ addiu(a0, a0, -kPointerSize);
+
+    __ jmp(&invoke);
+  }
+
+  {  // Too few parameters: Actual < expected
+    __ bind(&too_few);
+    EnterArgumentsAdaptorFrame(masm);
+
+    // TODO(MIPS): Optimize these loops.
+
+    // Calculate copy start address into a0.
+    // Copy end address is not in fp, as we have allocated arguments slots.
+    // a0: actual number of arguments as a smi
+    // a1: function
+    // a2: expected number of arguments
+    // a3: code entry to call
+    __ sll(a0, a0, kPointerSizeLog2 - kSmiTagSize);
+    __ Addu(a0, a0, StandardFrameConstants::kRArgsSlotsSize);
+    __ Addu(a0, fp, a0);
+    // Adjust for return address and receiver.
+    __ Addu(a0, a0, Operand(2 * kPointerSize));
+    // Compute copy end address. Also adjust for return address.
+    __ Addu(t1, fp, StandardFrameConstants::kRArgsSlotsSize + kPointerSize);
+
+    // Copy the arguments (including the receiver) to the new stack frame.
+    // a0: copy start address
+    // a1: function
+    // a2: expected number of arguments
+    // a3: code entry to call
+    // t1: copy end address
+    Label copy;
+    __ bind(&copy);
+    // Adjust load for return address and receiver.
+    __ lw(t0, MemOperand(a0));
+    __ Push(t0);
+    // Use the branch delay slot to update a0.
+    __ Branch(false, ne, &copy, a0, Operand(t1));
+    __ addiu(a0, a0, -kPointerSize);
+
+    // Fill the remaining expected arguments with undefined.
+    // a1: function
+    // a2: expected number of arguments
+    // a3: code entry to call
+    __ LoadRoot(t0, Heap::kUndefinedValueRootIndex);
+    __ sll(a2, a2, kPointerSizeLog2);
+    __ Subu(a2, fp, Operand(a2));
+    __ Addu(a2, a2, Operand(-4 * kPointerSize));  // Adjust for frame.
+
+    Label fill;
+    __ bind(&fill);
+    __ Push(t0);
+    __ Branch(ne, &fill, sp, Operand(a2));
+  }
+
+  // Call the entry point.
+  __ bind(&invoke);
+
+  __ Call(a3);
+
+  // Exit frame and return.
+  LeaveArgumentsAdaptorFrame(masm);
+  __ Ret();
+
+
+  // -------------------------------------------
+  // Dont adapt arguments.
+  // -------------------------------------------
+  __ bind(&dont_adapt_arguments);
+  __ Jump(a3);
 }
 
 
