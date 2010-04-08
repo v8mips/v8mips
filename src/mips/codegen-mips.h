@@ -305,6 +305,12 @@ class CodeGenerator: public AstVisitor {
 
   // Read a value from a slot and leave it on top of the expression stack.
   void LoadFromSlot(Slot* slot, TypeofState typeof_state);
+  void LoadFromGlobalSlotCheckExtensions(Slot* slot,
+                                         TypeofState typeof_state,
+                                         Register tmp,
+                                         Register tmp2,
+                                         JumpTarget* slow);
+
   // Store the value on top of the stack to a slot.
   void StoreToSlot(Slot* slot, InitState init_state);
 

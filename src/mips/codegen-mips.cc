@@ -493,14 +493,118 @@ void CodeGenerator::LoadTypeofExpression(Expression* x) {
 void CodeGenerator::LoadFromSlot(Slot* slot, TypeofState typeof_state) {
   VirtualFrame::SpilledScope spilled_scope;
   if (slot->type() == Slot::LOOKUP) {
-    UNIMPLEMENTED_MIPS();
+    ASSERT(slot->var()->is_dynamic());
+
+    JumpTarget slow;
+    JumpTarget done;
+
+    // Generate fast-case code for variables that might be shadowed by
+    // eval-introduced variables.  Eval is used a lot without
+    // introducing variables.  In those cases, we do not want to
+    // perform a runtime call for all variables in the scope
+    // containing the eval.
+    if (slot->var()->mode() == Variable::DYNAMIC_GLOBAL) {
+      LoadFromGlobalSlotCheckExtensions(slot, typeof_state, a1, a2, &slow);
+      // If there was no control flow to slow, we can exit early.
+      if (!slow.is_linked()) {
+        frame_->EmitPush(a0);
+        return;
+      }
+
+      done.Jump();
+
+    } else if (slot->var()->mode() == Variable::DYNAMIC_LOCAL) {
+      UNIMPLEMENTED_MIPS();
+      __ break_(__LINE__);
+    }
+
+    slow.Bind();
+    frame_->EmitPush(cp);
+    __ li(a0, Operand(slot->var()->name()));
+    frame_->EmitPush(a0);
+
+    if (typeof_state == INSIDE_TYPEOF) {
+      frame_->CallRuntime(Runtime::kLoadContextSlotNoReferenceError, 2);
+    } else {
+      frame_->CallRuntime(Runtime::kLoadContextSlot, 2);
+    }
+    done.Bind();
+    frame_->EmitPush(v0);
+
   } else {
     __ lw(a0, SlotOperand(slot, a2));
     frame_->EmitPush(a0);
     if (slot->var()->mode() == Variable::CONST) {
       UNIMPLEMENTED_MIPS();
+      __ break_(__LINE__);
     }
   }
+}
+
+
+void CodeGenerator::LoadFromGlobalSlotCheckExtensions(Slot* slot,
+                                                      TypeofState typeof_state,
+                                                      Register tmp,
+                                                      Register tmp2,
+                                                      JumpTarget* slow) {
+  // Check that no extension objects have been created by calls to
+  // eval from the current scope to the global scope.
+  Register context = cp;
+  Scope* s = scope();
+  while (s != NULL) {
+    if (s->num_heap_slots() > 0) {
+      if (s->calls_eval()) {
+        // Check that extension is NULL.
+        __ lw(tmp2, ContextOperand(context, Context::EXTENSION_INDEX));
+        slow->Branch(ne, tmp2, Operand(zero_reg));
+      }
+      // Load next context in chain.
+      __ lw(tmp, ContextOperand(context, Context::CLOSURE_INDEX));
+      __ lw(tmp, FieldMemOperand(tmp, JSFunction::kContextOffset));
+      context = tmp;
+    }
+    // If no outer scope calls eval, we do not need to check more
+    // context extensions.
+    if (!s->outer_scope_calls_eval() || s->is_eval_scope()) break;
+    s = s->outer_scope();
+  }
+
+  if (s->is_eval_scope()) {
+    Label next, fast;
+    if (!context.is(tmp)) {
+      __ li(tmp, Operand(context));
+    }
+    __ bind(&next);
+    // Terminate at global context.
+    __ lw(tmp2, FieldMemOperand(tmp, HeapObject::kMapOffset));
+    __ LoadRoot(t8, Heap::kGlobalContextMapRootIndex);
+    __ Branch(eq, &fast, tmp2, Operand(t8));
+    // Check that extension is NULL.
+    __ lw(tmp2, ContextOperand(tmp, Context::EXTENSION_INDEX));
+    slow->Branch(ne, tmp2, Operand(zero_reg));
+    // Load next context in chain.
+    __ lw(tmp, ContextOperand(tmp, Context::CLOSURE_INDEX));
+    __ lw(tmp, FieldMemOperand(tmp, JSFunction::kContextOffset));
+    __ jmp(&next);
+    __ bind(&fast);
+  }
+
+  // All extension objects were empty and it is safe to use a global
+  // load IC call.
+  Handle<Code> ic(Builtins::builtin(Builtins::LoadIC_Initialize));
+  // Load the global object.
+  LoadGlobal();
+  // Setup the name register.
+  __ li(a2, Operand(slot->var()->name()));
+  // Call IC stub.
+  if (typeof_state == INSIDE_TYPEOF) {
+    frame_->CallCodeObject(ic, RelocInfo::CODE_TARGET, 0);
+  } else {
+    frame_->CallCodeObject(ic, RelocInfo::CODE_TARGET_CONTEXT, 0);
+  }
+
+  // Drop the global object. The result is in r0.
+  frame_->Drop();
 }
 
 
