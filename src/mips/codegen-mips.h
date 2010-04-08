@@ -330,6 +330,10 @@ class CodeGenerator: public AstVisitor {
                   Expression* right,
                   bool strict = false);
 
+  void CallWithArguments(ZoneList<Expression*>* arguments,
+                         CallFunctionFlags flags,
+                         int position);
+
   // Control flow
   void Branch(bool if_true, JumpTarget* target);
   void CheckStack();

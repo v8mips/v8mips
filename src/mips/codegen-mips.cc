@@ -1073,6 +1073,30 @@ void CodeGenerator::VisitStatements(ZoneList<Statement*>* statements) {
 }
 
 
+void CodeGenerator::CallWithArguments(ZoneList<Expression*>* args,
+                                      CallFunctionFlags flags,
+                                      int position) {
+  VirtualFrame::SpilledScope spilled_scope;
+  // Push the arguments ("left-to-right") on the stack.
+  int arg_count = args->length();
+  for (int i = 0; i < arg_count; i++) {
+    LoadAndSpill(args->at(i));
+  }
+
+  // Record the position for debugging purposes.
+  CodeForSourcePosition(position);
+
+  // Use the shared code stub to call the function.
+  InLoopFlag in_loop = loop_nesting() > 0 ? IN_LOOP : NOT_IN_LOOP;
+  CallFunctionStub call_function(arg_count, in_loop, flags);
+  frame_->CallStub(&call_function, arg_count + 1);
+
+  // Restore context and pop function from the stack.
+  __ lw(cp, frame_->Context());
+  frame_->Drop();  // Discard the TOS.
+}
+
+
 void CodeGenerator::Branch(bool if_true, JumpTarget* target) {
   VirtualFrame::SpilledScope spilled_scope;
   ASSERT(has_cc());
@@ -1913,9 +1937,9 @@ void CodeGenerator::VisitCall(Call* node) {
     UNIMPLEMENTED_MIPS();
 
   } else if (var != NULL && !var->is_this() && var->is_global()) {
-    // ----------------------------------
-    // JavaScript example: 'foo(1, 2, 3)'  // foo is global
-    // ----------------------------------
+    // -----------------------------------------------------
+    // JavaScript example: 'foo(1, 2, 3)'  // foo is global.
+    // -----------------------------------------------------
 
     int arg_count = args->length();
 
@@ -1946,7 +1970,24 @@ void CodeGenerator::VisitCall(Call* node) {
 
   } else if (var != NULL && var->slot() != NULL &&
              var->slot()->type() == Slot::LOOKUP) {
-    UNIMPLEMENTED_MIPS();
+    // ----------------------------------------------------------------
+    // JavaScript example: 'with (obj) foo(1, 2, 3)'  // foo is in obj.
+    // ----------------------------------------------------------------
+
+    // Load the function
+    frame_->EmitPush(cp);
+    __ li(a0, Operand(var->name()));
+    frame_->EmitPush(a0);
+    frame_->CallRuntime(Runtime::kLoadContextSlot, 2);
+    // v0: slot value; a1: receiver
+
+    // Load the receiver.
+    // Push the function and receiver on the stack.
+    frame_->EmitMultiPushReversed(v0.bit() | a1.bit());
+
+    // Call the function.
+    CallWithArguments(args, NO_CALL_FUNCTION_FLAGS, node->position());
+    frame_->EmitPush(v0);
 
   } else if (property != NULL) {
     // Check if the key is a literal string.
@@ -4760,6 +4801,66 @@ void StringAddStub::Generate(MacroAssembler* masm) {
   __ bind(&string_add_runtime);
   __ break_(0x3340);  // We cannot do runtime calls yet.
   __ TailCallRuntime(Runtime::kStringAdd, 2, 1);
+}
+
+
+void CallFunctionStub::Generate(MacroAssembler* masm) {
+  Label slow;
+
+  // If the receiver might be a value (string, number or boolean) check for this
+  // and box it if it is.
+  if (ReceiverMightBeValue()) {
+    // Get the receiver from the stack.
+    // function, receiver [, arguments]
+    Label receiver_is_value, receiver_is_js_object;
+    __ lw(a1, MemOperand(sp, argc_ * kPointerSize));
+
+    // Check if receiver is a smi (which is a number value).
+    __ BranchOnSmi(a1, &receiver_is_value);
+
+    // Check if the receiver is a valid JS object.
+    __ GetObjectType(a1, a2, a2);
+    __ Branch(greater_equal, &receiver_is_js_object, a2, Operand(FIRST_JS_OBJECT_TYPE));
+
+    // Call the runtime to box the value.
+    __ bind(&receiver_is_value);
+    // We need natives to execute this.
+    __ break_(0x4664);
+    __ EnterInternalFrame();
+    __ Push(a1);
+    __ InvokeBuiltin(Builtins::TO_OBJECT, CALL_JS);
+    __ LeaveInternalFrame();
+    __ sw(a0, MemOperand(sp, argc_ * kPointerSize));
+
+    __ bind(&receiver_is_js_object);
+  }
+
+  // Get the function to call from the stack.
+  // function, receiver [, arguments]
+  __ lw(a1, MemOperand(sp, (argc_ + 1) * kPointerSize));
+
+  // Check that the function is really a JavaScript function.
+  // a1: pushed function (to be verified)
+  __ BranchOnSmi(a1, &slow);
+  // Get the map of the function object.
+  __ GetObjectType(a1, a2, a2);
+  __ Branch(ne, &slow, a2, Operand(JS_FUNCTION_TYPE));
+
+  // Fast-case: Invoke the function now.
+  // a1: pushed function
+  ParameterCount actual(argc_);
+  __ InvokeFunction(a1, actual, JUMP_FUNCTION);
+
+  // Slow-case: Non-function called.
+  __ bind(&slow);
+  // CALL_NON_FUNCTION expects the non-function callee as receiver (instead
+  // of the original receiver from the call site).
+  __ sw(a1, MemOperand(sp, argc_ * kPointerSize));
+  __ li(a0, Operand(argc_));  // Setup the number of arguments.
+  __ mov(a2, zero_reg);
+  __ GetBuiltinEntry(a3, Builtins::CALL_NON_FUNCTION);
+  __ Jump(Handle<Code>(Builtins::builtin(Builtins::ArgumentsAdaptorTrampoline)),
+          RelocInfo::CODE_TARGET);
 }
 
 
