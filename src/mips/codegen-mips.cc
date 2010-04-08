@@ -1638,21 +1638,201 @@ void CodeGenerator::VisitForStatement(ForStatement* node) {
 
 void CodeGenerator::VisitForInStatement(ForInStatement* node) {
   UNIMPLEMENTED_MIPS();
+  __ break_(__LINE__);
 }
 
 
 void CodeGenerator::VisitTryCatchStatement(TryCatchStatement* node) {
   UNIMPLEMENTED_MIPS();
+  __ break_(__LINE__);
 }
 
 
 void CodeGenerator::VisitTryFinallyStatement(TryFinallyStatement* node) {
-  UNIMPLEMENTED_MIPS();
+#ifdef DEBUG
+  int original_height = frame_->height();
+#endif
+  VirtualFrame::SpilledScope spilled_scope;
+  Comment cmnt(masm_, "[ TryFinallyStatement");
+  CodeForStatementPosition(node);
+
+  // State: Used to keep track of reason for entering the finally
+  // block. Should probably be extended to hold information for
+  // break/continue from within the try block.
+  enum { FALLING, THROWING, JUMPING };
+
+  JumpTarget try_block;
+  JumpTarget finally_block;
+
+  try_block.Call();
+  __ break_(__LINE__);
+
+  frame_->EmitPush(v0);  // Save exception object on the stack.
+  // In case of thrown exceptions, this is where we continue.
+  __ li(a2, Operand(Smi::FromInt(THROWING)));
+  finally_block.Jump();
+
+  // --- Try block ---
+  try_block.Bind();
+
+  frame_->PushTryHandler(TRY_FINALLY_HANDLER);
+  int handler_height = frame_->height();
+
+  // Shadow the labels for all escapes from the try block, including
+  // returns.  Shadowing hides the original label as the LabelShadow and
+  // operations on the original actually affect the shadowing label.
+
+  // We should probably try to unify the escaping labels and the return
+  // label.
+  int nof_escapes = node->escaping_targets()->length();
+  List<ShadowTarget*> shadows(1 + nof_escapes);
+
+  // Add the shadow target for the function return.
+  static const int kReturnShadowIndex = 0;
+  shadows.Add(new ShadowTarget(&function_return_));
+  bool function_return_was_shadowed = function_return_is_shadowed_;
+  function_return_is_shadowed_ = true;
+  ASSERT(shadows[kReturnShadowIndex]->other_target() == &function_return_);
+
+  // Add the remaining shadow targets.
+  for (int i = 0; i < nof_escapes; i++) {
+    shadows.Add(new ShadowTarget(node->escaping_targets()->at(i)));
+  }
+
+  // Generate code for the statements in the try block.
+  VisitStatementsAndSpill(node->try_block()->statements());
+
+  // Stop the introduced shadowing and count the number of required unlinks.
+  // After shadowing stops, the original labels are unshadowed and the
+  // LabelShadows represent the formerly shadowing labels.
+  int nof_unlinks = 0;
+  for (int i = 0; i < shadows.length(); i++) {
+    shadows[i]->StopShadowing();
+    if (shadows[i]->is_linked()) nof_unlinks++;
+  }
+  function_return_is_shadowed_ = function_return_was_shadowed;
+
+  // Get an external reference to the handler address.
+  ExternalReference handler_address(Top::k_handler_address);
+
+  // If we can fall off the end of the try block, unlink from the try
+  // chain and set the state on the frame to FALLING.
+  if (has_valid_frame()) {
+    // The next handler address is on top of the frame.
+    ASSERT(StackHandlerConstants::kNextOffset == 0);
+    frame_->EmitPop(a1);
+    __ li(a3, Operand(handler_address));
+    __ sw(a1, MemOperand(a3));
+    frame_->Drop(StackHandlerConstants::kSize / kPointerSize - 1);
+
+    // Fake a top of stack value (unneeded when FALLING) and set the
+    // state in r2, then jump around the unlink blocks if any.
+    __ LoadRoot(a0, Heap::kUndefinedValueRootIndex);
+    frame_->EmitPush(a0);
+    __ li(a2, Operand(Smi::FromInt(FALLING)));
+    if (nof_unlinks > 0) {
+      finally_block.Jump();
+    }
+  }
+
+  // Generate code to unlink and set the state for the (formerly)
+  // shadowing targets that have been jumped to.
+  for (int i = 0; i < shadows.length(); i++) {
+    if (shadows[i]->is_linked()) {
+      // If we have come from the shadowed return, the return value is
+      // in (a non-refcounted reference to) r0.  We must preserve it
+      // until it is pushed.
+      //
+      // Because we can be jumping here (to spilled code) from
+      // unspilled code, we need to reestablish a spilled frame at
+      // this block.
+      shadows[i]->Bind();
+      frame_->SpillAll();
+
+      // Reload sp from the top handler, because some statements that
+      // we break from (eg, for...in) may have left stuff on the
+      // stack.
+      __ li(a3, Operand(handler_address));
+      __ lw(sp, MemOperand(a3));
+      frame_->Forget(frame_->height() - handler_height);
+
+      // Unlink this handler and drop it from the frame.  The next
+      // handler address is currently on top of the frame.
+      ASSERT(StackHandlerConstants::kNextOffset == 0);
+      frame_->EmitPop(a1);
+      __ sw(a1, MemOperand(a3));
+      frame_->Drop(StackHandlerConstants::kSize / kPointerSize - 1);
+
+      if (i == kReturnShadowIndex) {
+        // If this label shadowed the function return, materialize the
+        // return value on the stack.
+        frame_->EmitPush(v0);
+      } else {
+        // Fake TOS for targets that shadowed breaks and continues.
+        __ LoadRoot(v0, Heap::kUndefinedValueRootIndex);
+        frame_->EmitPush(v0);
+      }
+      if (--nof_unlinks > 0) {
+        // If this is not the last unlink block, jump around the next.
+        finally_block.Jump();
+      }
+    }
+  }
+
+  // --- Finally block ---
+  finally_block.Bind();
+
+  // Push the state on the stack.
+  frame_->EmitPush(a2);
+
+  // We keep two elements on the stack - the (possibly faked) result
+  // and the state - while evaluating the finally block.
+  //
+  // Generate code for the statements in the finally block.
+  VisitStatementsAndSpill(node->finally_block()->statements());
+
+  if (has_valid_frame()) {
+    // Restore state and return value or faked TOS.
+    frame_->EmitPop(a2);
+    frame_->EmitPop(a0);
+  }
+
+  // Generate code to jump to the right destination for all used
+  // formerly shadowing targets.  Deallocate each shadow target.
+  for (int i = 0; i < shadows.length(); i++) {
+    if (has_valid_frame() && shadows[i]->is_bound()) {
+      JumpTarget* original = shadows[i]->other_target();
+      if (!function_return_is_shadowed_ && i == kReturnShadowIndex) {
+        JumpTarget skip;
+        skip.Branch(ne, a2, Operand(Smi::FromInt(JUMPING + i)), no_hint);
+        frame_->PrepareForReturn();
+        original->Jump();
+        skip.Bind();
+      } else {
+        original->Branch(eq, a2, Operand(Smi::FromInt(JUMPING + i)), no_hint);
+      }
+    }
+  }
+
+  if (has_valid_frame()) {
+    // Check if we need to rethrow the exception.
+    JumpTarget exit;
+    exit.Branch(ne, a2, Operand(Smi::FromInt(THROWING)), no_hint);
+
+    // Rethrow exception.
+    frame_->EmitPush(a0);
+    frame_->CallRuntime(Runtime::kReThrow, 1);
+
+    // Done.
+    exit.Bind();
+  }
+  ASSERT(!has_valid_frame() || frame_->height() == original_height);
 }
 
 
 void CodeGenerator::VisitDebuggerStatement(DebuggerStatement* node) {
   UNIMPLEMENTED_MIPS();
+  __ break_(__LINE__);
 }
 
 
@@ -1821,7 +2001,18 @@ void CodeGenerator::VisitArrayLiteral(ArrayLiteral* node) {
 
 
 void CodeGenerator::VisitCatchExtensionObject(CatchExtensionObject* node) {
-  UNIMPLEMENTED_MIPS();
+#ifdef DEBUG
+  int original_height = frame_->height();
+#endif
+  VirtualFrame::SpilledScope spilled_scope;
+  // Call runtime routine to allocate the catch extension object and
+  // assign the exception value to the catch variable.
+  Comment cmnt(masm_, "[ CatchExtensionObject");
+  LoadAndSpill(node->key());
+  LoadAndSpill(node->value());
+  frame_->CallRuntime(Runtime::kCreateCatchExtensionObject, 2);
+  frame_->EmitPush(v0);
+  ASSERT(frame_->height() == original_height + 1);
 }
 
 
@@ -4849,10 +5040,13 @@ void CallFunctionStub::Generate(MacroAssembler* masm) {
   // Fast-case: Invoke the function now.
   // a1: pushed function
   ParameterCount actual(argc_);
+//  __ break_(__LINE__);
   __ InvokeFunction(a1, actual, JUMP_FUNCTION);
+//  __ break_(__LINE__);
 
   // Slow-case: Non-function called.
   __ bind(&slow);
+  __ break_(__LINE__);
   // CALL_NON_FUNCTION expects the non-function callee as receiver (instead
   // of the original receiver from the call site).
   __ sw(a1, MemOperand(sp, argc_ * kPointerSize));

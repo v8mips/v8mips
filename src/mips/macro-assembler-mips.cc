@@ -1047,7 +1047,7 @@ void MacroAssembler::Drop(int count, Condition cond) {
 
 
 void MacroAssembler::Call(Label* target) {
-  UNIMPLEMENTED_MIPS();
+  BranchAndLink(cc_always, target);
 }
 
 

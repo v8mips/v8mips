@@ -50,11 +50,13 @@ void Builtins::Generate_Adaptor(MacroAssembler* masm,
 
 void Builtins::Generate_ArrayCode(MacroAssembler* masm) {
   UNIMPLEMENTED_MIPS();
+  __ break_(__LINE__);
 }
 
 
 void Builtins::Generate_ArrayConstructCode(MacroAssembler* masm) {
   UNIMPLEMENTED_MIPS();
+  __ break_(__LINE__);
 }
 
 
@@ -529,11 +531,13 @@ void Builtins::Generate_JSConstructEntryTrampoline(MacroAssembler* masm) {
 
 void Builtins::Generate_FunctionCall(MacroAssembler* masm) {
   UNIMPLEMENTED_MIPS();
+  __ break_(__LINE__);
 }
 
 
 void Builtins::Generate_FunctionApply(MacroAssembler* masm) {
   UNIMPLEMENTED_MIPS();
+  __ break_(__LINE__);
 }
 
 
