@@ -3083,8 +3083,39 @@ void GenericUnaryOpStub::Generate(MacroAssembler* masm) {
 
 
 void CEntryStub::GenerateThrowTOS(MacroAssembler* masm) {
-  UNIMPLEMENTED_MIPS();
-  __ break_(0x808);
+  // v0 holds the exception.
+
+  // Adjust this code if not the case.
+  ASSERT(StackHandlerConstants::kSize == 4 * kPointerSize);
+
+  // Drop the sp to the top of the handler.
+  __ li(a3, Operand(ExternalReference(Top::k_handler_address)));
+  __ lw(sp, MemOperand(a3));
+  
+  // Restore the next handler and frame pointer, discard handler state.
+  ASSERT(StackHandlerConstants::kNextOffset == 0);
+  __ Pop(a2);
+  __ sw(a2, MemOperand(a3));
+  ASSERT(StackHandlerConstants::kFPOffset == 2 * kPointerSize);
+  __ MultiPop(a3.bit() | fp.bit());
+
+  // Before returning we restore the context from the frame pointer if
+  // not NULL.  The frame pointer is NULL in the exception handler of a
+  // JS entry frame.
+  // Set cp to NULL if fp is NULL.
+  Label dont_touch_cp;
+  __ Branch(eq, &dont_touch_cp, fp, Operand(zero_reg));
+  __ mov(cp, zero_reg);
+  __ bind(&dont_touch_cp);
+  __ lw(cp, MemOperand(fp, StandardFrameConstants::kContextOffset));
+
+#ifdef DEBUG
+  // TODO(MIPS): Implement debug code.
+#endif
+
+  ASSERT(StackHandlerConstants::kPCOffset == 3 * kPointerSize);
+  __ Pop(t9);
+  __ Jump(t9);
 }
 
 

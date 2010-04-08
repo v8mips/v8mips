@@ -48,7 +48,10 @@ TEST(MIPSFunctionCalls) {
   LocalContext env;  // from cctest.h
 
   const char* c_source =
-    "function foo(arg1, arg2, arg3, arg4, arg5) {"
+    "function foo() {"
+    "  return 0xabc0;"
+    "}"
+    "function foo1(arg1, arg2, arg3, arg4, arg5) {"
     "  return foo2(arg1, foo2(arg3, arg4));"
     "}"
     ""
@@ -57,12 +60,12 @@ TEST(MIPSFunctionCalls) {
     "}"
     // We call the function twice because it needs more code.
     // TODO(MIPS): Detail what more is needed.
-    "foo(1, 2, 3, 4, 5);"
-    "foo(1, 2, 3, 4, 5);";
+    "foo1(1, 2, 3, 4, 5);"
+    "foo() + foo1(0xa, 0xb, 0xc, 0xd, 0xe);";
 
   Local<String> source = ::v8::String::New(c_source);
   Local<Script> script = ::v8::Script::Compile(source);
-  CHECK_EQ(4, script->Run()->Int32Value());
+  CHECK_EQ(0xabcd, script->Run()->Int32Value());
 }
 
 
