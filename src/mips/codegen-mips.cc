@@ -1372,12 +1372,43 @@ void CodeGenerator::VisitReturnStatement(ReturnStatement* node) {
 
 
 void CodeGenerator::VisitWithEnterStatement(WithEnterStatement* node) {
-  UNIMPLEMENTED_MIPS();
+#ifdef DEBUG
+  int original_height = frame_->height();
+#endif
+  VirtualFrame::SpilledScope spilled_scope;
+  Comment cmnt(masm_, "[ WithEnterStatement");
+  CodeForStatementPosition(node);
+  LoadAndSpill(node->expression());
+  if (node->is_catch_block()) {
+    __ break_(__LINE__);
+    frame_->CallRuntime(Runtime::kPushCatchContext, 1);
+  } else {
+    frame_->CallRuntime(Runtime::kPushContext, 1);
+  }
+#ifdef DEBUG
+  JumpTarget verified_true;
+  verified_true.Branch(eq, v0, Operand(cp), no_hint);
+  __ stop("PushContext: v0 is expected to be the same as cp");
+  verified_true.Bind();
+#endif
+  // Update context local.
+  __ sw(cp, frame_->Context());
+  ASSERT(frame_->height() == original_height);
 }
 
 
 void CodeGenerator::VisitWithExitStatement(WithExitStatement* node) {
-  UNIMPLEMENTED_MIPS();
+#ifdef DEBUG
+  int original_height = frame_->height();
+#endif
+  VirtualFrame::SpilledScope spilled_scope;
+  Comment cmnt(masm_, "[ WithExitStatement");
+  CodeForStatementPosition(node);
+  // Pop context.
+  __ lw(cp, ContextOperand(cp, Context::PREVIOUS_INDEX));
+  // Update context local.
+  __ sw(cp, frame_->Context());
+  ASSERT(frame_->height() == original_height);
 }
 
 
@@ -1576,7 +1607,7 @@ void CodeGenerator::VisitWhileStatement(WhileStatement* node) {
   }
 
   if (has_valid_frame()) {
-    CheckStack();  // TODO(1222600): ignore if body contains calls.
+    CheckStack();  // TODO(1222600): Ignore if body contains calls.
     VisitAndSpill(node->body());
 
     // If control flow can fall out of the body, jump back to the top.
@@ -2156,6 +2187,7 @@ void CodeGenerator::VisitCall(Call* node) {
 
   if (var != NULL && var->is_possibly_eval()) {
     UNIMPLEMENTED_MIPS();
+    __ break_(__LINE__);
 
   } else if (var != NULL && !var->is_this() && var->is_global()) {
     // -----------------------------------------------------
@@ -5031,6 +5063,7 @@ void CallFunctionStub::Generate(MacroAssembler* masm) {
   // If the receiver might be a value (string, number or boolean) check for this
   // and box it if it is.
   if (ReceiverMightBeValue()) {
+    __ break_(__LINE__);
     // Get the receiver from the stack.
     // function, receiver [, arguments]
     Label receiver_is_value, receiver_is_js_object;

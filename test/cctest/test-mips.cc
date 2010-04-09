@@ -358,6 +358,43 @@ TEST(MIPSSpecialAssignment) {
 }
 
 
+TEST(MIPSWith) {
+  // Disable compilation of natives.
+  i::FLAG_disable_native_files = true;
+  i::FLAG_full_compiler = false;
+  v8::HandleScope scope;
+  LocalContext env;  // from cctest.h
+
+  // TODO(MIPS): foo1 and foo4 does not work properly when called in the "with"
+  // statement.
+  // More generally we fail accessing "this" in the with block code.
+  const char* c_source_1 =
+    "var globalVar = 0xb00;"
+    ""
+    "function Obj(prop1_) {"
+    "  this.prop1 = prop1_;"
+    "  this.foo1 = function () {return this.prop1;};"
+    "  this.foo2 = function () {return globalVar;};"
+    "  this.foo3 = function (arg) {return arg;};"
+    "  this.foo4 = globalFoo4;"
+    "}"
+    ""
+    "function globalFoo4() {"
+    "  return this.prop1;"
+    "}"
+    ""
+    "myObj = new Obj(0xbad);"
+    ""
+    "with(myObj) {"
+    "  prop1 = 0xd;"
+    "  prop1 + foo2() +  foo3(0xa000);"
+    "}";
+  Local<String> source_1 = ::v8::String::New(c_source_1);
+  Local<Script> script_1 = ::v8::Script::Compile(source_1);
+  CHECK_EQ(0xab0d, script_1->Run()->Int32Value());
+}
+
+
 // Binary op tests start with well-behaved Smi values, then step thru
 // corner cases, such as overflow from Smi value, to one Smi, one
 // non-Smi, then to float cases.

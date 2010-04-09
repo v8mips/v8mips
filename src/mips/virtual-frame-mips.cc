@@ -136,7 +136,6 @@ void VirtualFrame::PushTryHandler(HandlerType type) {
 
 
 void VirtualFrame::RawCallStub(CodeStub* stub) {
-  // UNIMPLEMENTED_MIPS();
   ASSERT(cgen()->HasValidEntryRegisters());
   __ CallStub(stub);
 }
@@ -153,14 +152,14 @@ void VirtualFrame::CallStub(CodeStub* stub, Result* arg0, Result* arg1) {
 
 
 void VirtualFrame::CallRuntime(Runtime::Function* f, int arg_count) {
-  PrepareForCall(arg_count, arg_count);
+  Forget(arg_count);
   ASSERT(cgen()->HasValidEntryRegisters());
   __ CallRuntime(f, arg_count);
 }
 
 
 void VirtualFrame::CallRuntime(Runtime::FunctionId id, int arg_count) {
-  PrepareForCall(arg_count, arg_count);
+  Forget(arg_count);
   ASSERT(cgen()->HasValidEntryRegisters());
   __ CallRuntime(id, arg_count);
 }
