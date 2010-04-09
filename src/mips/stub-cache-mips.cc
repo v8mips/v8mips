@@ -44,6 +44,7 @@ void StubCache::GenerateProbe(MacroAssembler* masm,
                               Register scratch,
                               Register extra) {
   UNIMPLEMENTED_MIPS();
+  __ break_(__LINE__);
 }
 
 
@@ -51,6 +52,7 @@ void StubCompiler::GenerateLoadGlobalFunctionPrototype(MacroAssembler* masm,
                                                        int index,
                                                        Register prototype) {
   UNIMPLEMENTED_MIPS();
+  __ break_(__LINE__);
 }
 
 
@@ -61,6 +63,7 @@ void StubCompiler::GenerateFastPropertyLoad(MacroAssembler* masm,
                                             Register dst, Register src,
                                             JSObject* holder, int index) {
   UNIMPLEMENTED_MIPS();
+  __ break_(__LINE__);
 }
 
 
@@ -69,6 +72,7 @@ void StubCompiler::GenerateLoadArrayLength(MacroAssembler* masm,
                                            Register scratch,
                                            Label* miss_label) {
   UNIMPLEMENTED_MIPS();
+  __ break_(__LINE__);
 }
 
 
@@ -78,6 +82,7 @@ void StubCompiler::GenerateLoadFunctionPrototype(MacroAssembler* masm,
                                                  Register scratch2,
                                                  Label* miss_label) {
   UNIMPLEMENTED_MIPS();
+  __ break_(__LINE__);
 }
 
 
@@ -244,6 +249,7 @@ void StubCompiler::GenerateLoadField(JSObject* object,
                                      String* name,
                                      Label* miss) {
   UNIMPLEMENTED_MIPS();
+  __ break_(__LINE__);
 }
 
 
@@ -256,6 +262,7 @@ void StubCompiler::GenerateLoadConstant(JSObject* object,
                                         String* name,
                                         Label* miss) {
   UNIMPLEMENTED_MIPS();
+  __ break_(__LINE__);
 }
 
 
@@ -270,7 +277,7 @@ bool StubCompiler::GenerateLoadCallback(JSObject* object,
                                         Label* miss,
                                         Failure** failure) {
   UNIMPLEMENTED_MIPS();
-  __ break_(0x470);
+  __ break_(__LINE__);
   return false;   // UNIMPLEMENTED RETURN
 }
 
@@ -285,7 +292,7 @@ void StubCompiler::GenerateLoadInterceptor(JSObject* object,
                                            String* name,
                                            Label* miss) {
   UNIMPLEMENTED_MIPS();
-  __ break_(0x505);
+  __ break_(__LINE__);
 }
 
 
@@ -323,6 +330,7 @@ Object* CallStubCompiler::CompileCallField(JSObject* object,
                                            int index,
                                            String* name) {
   UNIMPLEMENTED_MIPS();
+  __ break_(__LINE__);
   return reinterpret_cast<Object*>(NULL);   // UNIMPLEMENTED RETURN
 }
 
@@ -333,6 +341,7 @@ Object* CallStubCompiler::CompileArrayPushCall(Object* object,
                                                String* name,
                                                CheckType check) {
   UNIMPLEMENTED_MIPS();
+  __ break_(__LINE__);
   return reinterpret_cast<Object*>(NULL);   // UNIMPLEMENTED RETURN
 }
 
@@ -343,6 +352,7 @@ Object* CallStubCompiler::CompileArrayPopCall(Object* object,
                                               String* name,
                                               CheckType check) {
   UNIMPLEMENTED_MIPS();
+  __ break_(__LINE__);
   return reinterpret_cast<Object*>(NULL);   // UNIMPLEMENTED RETURN
 }
 
@@ -353,6 +363,7 @@ Object* CallStubCompiler::CompileCallConstant(Object* object,
                                               String* name,
                                               CheckType check) {
   UNIMPLEMENTED_MIPS();
+  __ break_(__LINE__);
   return reinterpret_cast<Object*>(NULL);   // UNIMPLEMENTED RETURN
 }
 
@@ -361,7 +372,7 @@ Object* CallStubCompiler::CompileCallInterceptor(JSObject* object,
                                                  JSObject* holder,
                                                  String* name) {
   UNIMPLEMENTED_MIPS();
-  __ break_(0x782);
+  __ break_(__LINE__);
   return GetCode(INTERCEPTOR, name);
 }
 
@@ -461,7 +472,7 @@ Object* StoreStubCompiler::CompileStoreCallback(JSObject* object,
                                                 AccessorInfo* callback,
                                                 String* name) {
   UNIMPLEMENTED_MIPS();
-  __ break_(0x906);
+  __ break_(__LINE__);
   return reinterpret_cast<Object*>(NULL);   // UNIMPLEMENTED RETURN
 }
 
@@ -469,6 +480,7 @@ Object* StoreStubCompiler::CompileStoreCallback(JSObject* object,
 Object* StoreStubCompiler::CompileStoreInterceptor(JSObject* receiver,
                                                    String* name) {
   UNIMPLEMENTED_MIPS();
+  __ break_(__LINE__);
   return reinterpret_cast<Object*>(NULL);   // UNIMPLEMENTED RETURN
 }
 
@@ -509,6 +521,7 @@ Object* LoadStubCompiler::CompileLoadField(JSObject* object,
                                            int index,
                                            String* name) {
   UNIMPLEMENTED_MIPS();
+  __ break_(__LINE__);
   return reinterpret_cast<Object*>(NULL);   // UNIMPLEMENTED RETURN
 }
 
@@ -518,6 +531,7 @@ Object* LoadStubCompiler::CompileLoadCallback(String* name,
                                               JSObject* holder,
                                               AccessorInfo* callback) {
   UNIMPLEMENTED_MIPS();
+  __ break_(__LINE__);
   return reinterpret_cast<Object*>(NULL);   // UNIMPLEMENTED RETURN
 }
 
@@ -527,6 +541,7 @@ Object* LoadStubCompiler::CompileLoadConstant(JSObject* object,
                                               Object* value,
                                               String* name) {
   UNIMPLEMENTED_MIPS();
+  __ break_(__LINE__);
   return reinterpret_cast<Object*>(NULL);   // UNIMPLEMENTED RETURN
 }
 
@@ -535,6 +550,7 @@ Object* LoadStubCompiler::CompileLoadInterceptor(JSObject* object,
                                                  JSObject* holder,
                                                  String* name) {
   UNIMPLEMENTED_MIPS();
+  __ break_(__LINE__);
   return reinterpret_cast<Object*>(NULL);   // UNIMPLEMENTED RETURN
 }
 
@@ -590,6 +606,7 @@ Object* KeyedLoadStubCompiler::CompileLoadField(String* name,
                                                 JSObject* holder,
                                                 int index) {
   UNIMPLEMENTED_MIPS();
+  __ break_(__LINE__);
   return reinterpret_cast<Object*>(NULL);   // UNIMPLEMENTED RETURN
 }
 
@@ -599,6 +616,7 @@ Object* KeyedLoadStubCompiler::CompileLoadCallback(String* name,
                                                    JSObject* holder,
                                                    AccessorInfo* callback) {
   UNIMPLEMENTED_MIPS();
+  __ break_(__LINE__);
   return reinterpret_cast<Object*>(NULL);   // UNIMPLEMENTED RETURN
 }
 
@@ -608,6 +626,7 @@ Object* KeyedLoadStubCompiler::CompileLoadConstant(String* name,
                                                    JSObject* holder,
                                                    Object* value) {
   UNIMPLEMENTED_MIPS();
+  __ break_(__LINE__);
   return reinterpret_cast<Object*>(NULL);   // UNIMPLEMENTED RETURN
 }
 
@@ -616,18 +635,21 @@ Object* KeyedLoadStubCompiler::CompileLoadInterceptor(JSObject* receiver,
                                                       JSObject* holder,
                                                       String* name) {
   UNIMPLEMENTED_MIPS();
+  __ break_(__LINE__);
   return reinterpret_cast<Object*>(NULL);   // UNIMPLEMENTED RETURN
 }
 
 
 Object* KeyedLoadStubCompiler::CompileLoadArrayLength(String* name) {
   UNIMPLEMENTED_MIPS();
+  __ break_(__LINE__);
   return reinterpret_cast<Object*>(NULL);   // UNIMPLEMENTED RETURN
 }
 
 
 Object* KeyedLoadStubCompiler::CompileLoadStringLength(String* name) {
   UNIMPLEMENTED_MIPS();
+  __ break_(__LINE__);
   return reinterpret_cast<Object*>(NULL);   // UNIMPLEMENTED RETURN
 }
 
@@ -635,6 +657,7 @@ Object* KeyedLoadStubCompiler::CompileLoadStringLength(String* name) {
 // TODO(1224671): implement the fast case.
 Object* KeyedLoadStubCompiler::CompileLoadFunctionPrototype(String* name) {
   UNIMPLEMENTED_MIPS();
+  __ break_(__LINE__);
   return reinterpret_cast<Object*>(NULL);   // UNIMPLEMENTED RETURN
 }
 
@@ -644,6 +667,7 @@ Object* KeyedStoreStubCompiler::CompileStoreField(JSObject* object,
                                                   Map* transition,
                                                   String* name) {
   UNIMPLEMENTED_MIPS();
+  __ break_(__LINE__);
   return reinterpret_cast<Object*>(NULL);   // UNIMPLEMENTED RETURN
 }
 
@@ -797,7 +821,7 @@ Object* ConstructStubCompiler::CompileConstructStub(
   __ bind(&generic_stub_call);
   Code* code = Builtins::builtin(Builtins::JSConstructStubGeneric);
   Handle<Code> generic_construct_stub(code);
-  __ break_(0x701);
+  __ break_(__LINE__);
   __ JumpToBuiltin(generic_construct_stub, RelocInfo::CODE_TARGET);
 
   // Return the generated code.

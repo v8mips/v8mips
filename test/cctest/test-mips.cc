@@ -61,6 +61,7 @@ TEST(MIPSFunctionCalls) {
     // We call the function twice because it needs more code.
     // TODO(MIPS): Detail what more is needed.
     "foo1(1, 2, 3, 4, 5);"
+    "foo1(1, 2, 3, 4, 5);"
     "foo() + foo1(0xa, 0xb, 0xc, 0xd, 0xe);";
 
   Local<String> source = ::v8::String::New(c_source);
@@ -387,7 +388,7 @@ TEST(MIPSWith) {
     ""
     "with(myObj) {"
     "  prop1 = 0xd;"
-    "  prop1 + foo2() +  foo3(0xa000);"
+    "  prop1 + foo2() + foo3(0xa000);"
     "}";
   Local<String> source_1 = ::v8::String::New(c_source_1);
   Local<Script> script_1 = ::v8::Script::Compile(source_1);
