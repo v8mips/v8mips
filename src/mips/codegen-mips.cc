@@ -2161,8 +2161,17 @@ void CodeGenerator::VisitAssignment(Assignment* node) {
 
 
 void CodeGenerator::VisitThrow(Throw* node) {
-  UNIMPLEMENTED_MIPS();
-  __ break_(__LINE__);
+#ifdef DEBUG
+  int original_height = frame_->height();
+#endif
+  VirtualFrame::SpilledScope spilled_scope;
+  Comment cmnt(masm_, "[ Throw");
+
+  LoadAndSpill(node->exception());
+  CodeForSourcePosition(node->position());
+  frame_->CallRuntime(Runtime::kThrow, 1);
+  frame_->EmitPush(v0);
+  ASSERT(frame_->height() == original_height + 1);
 }
 
 
