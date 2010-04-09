@@ -783,7 +783,6 @@ void CodeGenerator::SmiOperation(Token::Value op,
         new DeferredInlineSmiOperation(op, int_value, reversed, mode);
       __ And(t0, a1, Operand(kSmiTagMask));
       deferred->Branch(ne, t0, Operand(zero_reg));
-      deferred->BindExit();
       switch (op) {
         case Token::BIT_OR:  __ Or(v0, a1, Operand(value)); break;
         case Token::BIT_XOR: __ Xor(v0, a1, Operand(value)); break;
@@ -896,12 +895,13 @@ void CodeGenerator::SmiOperation(Token::Value op,
   }
 
   if (!something_to_inline) {
+    // Smi operand in a1, load literal value in a0.
     if (!reversed) {
-      __ li(a1, Operand(value));
+      __ li(a0, Operand(value));
       frame_->EmitMultiPush(a0.bit() | a1.bit());
       GenericBinaryOperation(op, mode, int_value);
     } else {
-      __ li(a1, Operand(value));
+      __ li(a0, Operand(value));
       frame_->EmitMultiPushReversed(a1.bit() | a0.bit());
       GenericBinaryOperation(op, mode, kUnknownIntValue);
     }
@@ -4022,7 +4022,7 @@ static void MultiplyByKnownInt(MacroAssembler* masm,
 void GenericBinaryOpStub::Generate(MacroAssembler* masm) {
   // a1 : x
   // a0 : y
-  // result : v0
+  // result : v0 = x op y
 
   // All ops need to know whether we are dealing with two Smis.  Set up t2 to
   // tell us that.
@@ -4112,6 +4112,7 @@ void GenericBinaryOpStub::Generate(MacroAssembler* masm) {
     case Token::DIV: {
       Label not_smi, slow;
       ASSERT(kSmiTag == 0);  // Adjust code below.
+
       // t2 = x | y at entry.
       __ And(t3, t2, Operand(kSmiTagMask));
       __ Branch(ne, &not_smi, t3, Operand(zero_reg));
@@ -4121,13 +4122,17 @@ void GenericBinaryOpStub::Generate(MacroAssembler* masm) {
       // Check for divisor of 0.
       __ Branch(eq, &slow, t0, Operand(zero_reg));
       // Divide x by y.
-  // __ break_(0x3333);
       __ Div(t1, Operand(t0));
       __ mflo(v1);    // Integer (un-tagged) quotient.
-      __ sll(v0, v1, kSmiTagSize);  // Smi tag return value.
+      __ mfhi(v0);    // Integer remainder.
+
+      // Go to slow (float) case if remainder is not 0.
+      __ Branch(ne, &slow, v0, Operand(zero_reg));
+
+      ASSERT(kSmiTag == 0 && kSmiTagSize == 1);
+      __ sll(v0, v1, kSmiTagSize);  // Smi tag return value in v0.
 
       // Check for the corner case of dividing the most negative smi by -1.
-      ASSERT(kSmiTag == 0 && kSmiTagSize == 1);
       __ Branch(eq, &slow, v1, Operand(0x40000000));
       // Check for negative zero result.
       __ Ret(ne, v0, Operand(zero_reg));  // OK if result was non-zero.
