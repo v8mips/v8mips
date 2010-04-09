@@ -2369,20 +2369,22 @@ void CodeGenerator::VisitCall(Call* node) {
     // JavaScript example: 'with (obj) foo(1, 2, 3)'  // foo is in obj.
     // ----------------------------------------------------------------
 
+  Comment cmnt1(masm_, "[ ______________________________________________________ Call in with statement");
     // Load the function
     frame_->EmitPush(cp);
     __ li(a0, Operand(var->name()));
     frame_->EmitPush(a0);
     frame_->CallRuntime(Runtime::kLoadContextSlot, 2);
-    // v0: slot value; a1: receiver
+    // v0: slot value; v1: receiver
 
     // Load the receiver.
     // Push the function and receiver on the stack.
-    frame_->EmitMultiPushReversed(v0.bit() | a1.bit());
+    frame_->EmitMultiPushReversed(v0.bit() | v1.bit());
 
     // Call the function.
     CallWithArguments(args, NO_CALL_FUNCTION_FLAGS, node->position());
     frame_->EmitPush(v0);
+  Comment cmnt2(masm_, "[ ______________________________________________________ END: Call in with statement");
 
   } else if (property != NULL) {
     // Check if the key is a literal string.
@@ -5248,6 +5250,7 @@ void StringAddStub::Generate(MacroAssembler* masm) {
 void CallFunctionStub::Generate(MacroAssembler* masm) {
   Label slow;
 
+  Comment cmnt(masm, "[ ______________________________________________________ CallFunctionStub");
   // If the receiver might be a value (string, number or boolean) check for this
   // and box it if it is.
   if (ReceiverMightBeValue()) {
@@ -5291,9 +5294,7 @@ void CallFunctionStub::Generate(MacroAssembler* masm) {
   // Fast-case: Invoke the function now.
   // a1: pushed function
   ParameterCount actual(argc_);
-//  __ break_(__LINE__);
   __ InvokeFunction(a1, actual, JUMP_FUNCTION);
-//  __ break_(__LINE__);
 
   // Slow-case: Non-function called.
   __ bind(&slow);
@@ -5306,6 +5307,7 @@ void CallFunctionStub::Generate(MacroAssembler* masm) {
   __ GetBuiltinEntry(a3, Builtins::CALL_NON_FUNCTION);
   __ Jump(Handle<Code>(Builtins::builtin(Builtins::ArgumentsAdaptorTrampoline)),
           RelocInfo::CODE_TARGET);
+  Comment cmnt1(masm, "[ ______________________________________________________ END: CallFunctionStub");
 }
 
 
