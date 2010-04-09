@@ -396,6 +396,31 @@ TEST(MIPSWith) {
 }
 
 
+TEST(MIPSTryCatchFinally) {
+  // Disable compilation of natives.
+  i::FLAG_disable_native_files = true;
+  i::FLAG_full_compiler = false;
+  v8::HandleScope scope;
+  LocalContext env;  // from cctest.h
+
+  const char* c_source =
+    "var res = 0x0;"
+    ""
+    "try {"
+    "  res = 0x123;"
+    "  throw 0x3333;"
+    "  res = 0xbad;"
+    "} catch (e) {"
+    "  res;"
+    "}"
+    ""
+    "res;";
+  Local<String> source = ::v8::String::New(c_source);
+  Local<Script> script = ::v8::Script::Compile(source);
+  CHECK_EQ(0x123, script->Run()->Int32Value());
+}
+
+
 // Binary op tests start with well-behaved Smi values, then step thru
 // corner cases, such as overflow from Smi value, to one Smi, one
 // non-Smi, then to float cases.

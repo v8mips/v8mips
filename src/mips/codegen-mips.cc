@@ -1392,7 +1392,6 @@ void CodeGenerator::VisitWithEnterStatement(WithEnterStatement* node) {
   CodeForStatementPosition(node);
   LoadAndSpill(node->expression());
   if (node->is_catch_block()) {
-    __ break_(__LINE__);
     frame_->CallRuntime(Runtime::kPushCatchContext, 1);
   } else {
     frame_->CallRuntime(Runtime::kPushContext, 1);
@@ -1716,8 +1715,124 @@ void CodeGenerator::VisitForInStatement(ForInStatement* node) {
 
 
 void CodeGenerator::VisitTryCatchStatement(TryCatchStatement* node) {
-  UNIMPLEMENTED_MIPS();
-  __ break_(__LINE__);
+#ifdef DEBUG
+  int original_height = frame_->height();
+#endif
+  VirtualFrame::SpilledScope spilled_scope;
+  Comment cmnt(masm_, "[ TryCatchStatement");
+  CodeForStatementPosition(node);
+
+  JumpTarget try_block;
+  JumpTarget exit;
+
+  try_block.Call();
+  // --- Catch block ---
+  frame_->EmitPush(v0);
+
+  // Store the caught exception in the catch variable.
+  Variable* catch_var = node->catch_var()->var();
+  ASSERT(catch_var != NULL && catch_var->slot() != NULL);
+  StoreToSlot(catch_var->slot(), NOT_CONST_INIT);
+
+  // Remove the exception from the stack.
+  frame_->Drop();
+
+  VisitStatementsAndSpill(node->catch_block()->statements());
+  if (frame_ != NULL) {
+    exit.Jump();
+  }
+
+
+  // --- Try block ---
+  try_block.Bind();
+
+  frame_->PushTryHandler(TRY_CATCH_HANDLER);
+  int handler_height = frame_->height();
+
+  // Shadow the labels for all escapes from the try block, including
+  // returns. During shadowing, the original label is hidden as the
+  // LabelShadow and operations on the original actually affect the
+  // shadowing label.
+  //
+  // We should probably try to unify the escaping labels and the return
+  // label.
+  int nof_escapes = node->escaping_targets()->length();
+  List<ShadowTarget*> shadows(1 + nof_escapes);
+
+  // Add the shadow target for the function return.
+  static const int kReturnShadowIndex = 0;
+  shadows.Add(new ShadowTarget(&function_return_));
+  bool function_return_was_shadowed = function_return_is_shadowed_;
+  function_return_is_shadowed_ = true;
+  ASSERT(shadows[kReturnShadowIndex]->other_target() == &function_return_);
+
+  // Add the remaining shadow targets.
+  for (int i = 0; i < nof_escapes; i++) {
+    shadows.Add(new ShadowTarget(node->escaping_targets()->at(i)));
+  }
+
+  // Generate code for the statements in the try block.
+
+  VisitStatementsAndSpill(node->try_block()->statements());
+
+  // Stop the introduced shadowing and count the number of required unlinks.
+  // After shadowing stops, the original labels are unshadowed and the
+  // LabelShadows represent the formerly shadowing labels.
+  bool has_unlinks = false;
+  for (int i = 0; i < shadows.length(); i++) {
+    shadows[i]->StopShadowing();
+    has_unlinks = has_unlinks || shadows[i]->is_linked();
+  }
+  function_return_is_shadowed_ = function_return_was_shadowed;
+
+  // Get an external reference to the handler address.
+  ExternalReference handler_address(Top::k_handler_address);
+
+  // If we can fall off the end of the try block, unlink from try chain.
+  if (has_valid_frame()) {
+    // The next handler address is on top of the frame. Unlink from
+    // the handler list and drop the rest of this handler from the
+    // frame.
+    ASSERT(StackHandlerConstants::kNextOffset == 0);
+    frame_->EmitPop(a1);
+    __ li(a3, Operand(handler_address));
+    __ sw(a1, MemOperand(a3));
+    frame_->Drop(StackHandlerConstants::kSize / kPointerSize - 1);
+    if (has_unlinks) {
+      exit.Jump();
+    }
+  }
+
+  // Generate unlink code for the (formerly) shadowing labels that have been
+  // jumped to.  Deallocate each shadow target.
+  for (int i = 0; i < shadows.length(); i++) {
+    if (shadows[i]->is_linked()) {
+      // Unlink from try chain;
+      shadows[i]->Bind();
+      // Because we can be jumping here (to spilled code) from unspilled
+      // code, we need to reestablish a spilled frame at this block.
+      frame_->SpillAll();
+
+      // Reload sp from the top handler, because some statements that we
+      // break from (eg, for...in) may have left stuff on the stack.
+      __ li(a3, Operand(handler_address));
+      __ lw(sp, MemOperand(a3));
+      frame_->Forget(frame_->height() - handler_height);
+
+      ASSERT(StackHandlerConstants::kNextOffset == 0);
+      frame_->EmitPop(a1);
+      __ sw(a1, MemOperand(a3));
+      frame_->Drop(StackHandlerConstants::kSize / kPointerSize - 1);
+
+      if (!function_return_is_shadowed_ && i == kReturnShadowIndex) {
+        frame_->PrepareForReturn();
+      }
+      shadows[i]->other_target()->Jump();
+    }
+  }
+
+  exit.Bind();
+  ASSERT(!has_valid_frame() || frame_->height() == original_height);
 }
 
 
@@ -1738,7 +1853,6 @@ void CodeGenerator::VisitTryFinallyStatement(TryFinallyStatement* node) {
   JumpTarget finally_block;
 
   try_block.Call();
-  __ break_(__LINE__);
 
   frame_->EmitPush(v0);  // Save exception object on the stack.
   // In case of thrown exceptions, this is where we continue.
@@ -3568,11 +3682,11 @@ void CEntryStub::GenerateThrowTOS(MacroAssembler* masm) {
   __ MultiPop(a3.bit() | fp.bit());
 
   // Before returning we restore the context from the frame pointer if
-  // not NULL.  The frame pointer is NULL in the exception handler of a
+  // not NULL. The frame pointer is NULL in the exception handler of a
   // JS entry frame.
   // Set cp to NULL if fp is NULL.
   Label dont_touch_cp;
-  __ Branch(eq, &dont_touch_cp, fp, Operand(zero_reg));
+  __ Branch(ne, &dont_touch_cp, fp, Operand(zero_reg));
   __ mov(cp, zero_reg);
   __ bind(&dont_touch_cp);
   __ lw(cp, MemOperand(fp, StandardFrameConstants::kContextOffset));
