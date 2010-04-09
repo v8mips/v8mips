@@ -611,7 +611,37 @@ void CodeGenerator::LoadFromGlobalSlotCheckExtensions(Slot* slot,
 void CodeGenerator::StoreToSlot(Slot* slot, InitState init_state) {
   ASSERT(slot != NULL);
   if (slot->type() == Slot::LOOKUP) {
-      UNIMPLEMENTED_MIPS();
+    ASSERT(slot->var()->is_dynamic());
+
+    // For now, just do a runtime call.
+    frame_->EmitPush(cp);
+    __ li(a0, Operand(slot->var()->name()));
+    frame_->EmitPush(a0);
+
+    if (init_state == CONST_INIT) {
+      // Same as the case for a normal store, but ignores attribute
+      // (e.g. READ_ONLY) of context slot so that we can initialize
+      // const properties (introduced via eval("const foo = (some
+      // expr);")). Also, uses the current function context instead of
+      // the top context.
+      //
+      // Note that we must declare the foo upon entry of eval(), via a
+      // context slot declaration, but we cannot initialize it at the
+      // same time, because the const declaration may be at the end of
+      // the eval code (sigh...) and the const variable may have been
+      // used before (where its value is 'undefined'). Thus, we can only
+      // do the initialization when we actually encounter the expression
+      // and when the expression operands are defined and valid, and
+      // thus we need the split into 2 operations: declaration of the
+      // context slot followed by initialization.
+      frame_->CallRuntime(Runtime::kInitializeConstContextSlot, 3);
+    } else {
+      frame_->CallRuntime(Runtime::kStoreContextSlot, 3);
+    }
+    // Storing a variable must keep the (new) value on the expression
+    // stack. This is necessary for compiling assignment expressions.
+    frame_->EmitPush(v0);
+
   } else {
     ASSERT(!slot->var()->is_dynamic());
 
