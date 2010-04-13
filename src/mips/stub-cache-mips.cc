@@ -71,8 +71,17 @@ void StubCompiler::GenerateLoadArrayLength(MacroAssembler* masm,
                                            Register receiver,
                                            Register scratch,
                                            Label* miss_label) {
-  UNIMPLEMENTED_MIPS();
-  __ break_(__LINE__);
+  // Check that the receiver isn't a smi.
+  __ And(scratch, receiver, Operand(kSmiTagMask));
+  __ Branch(eq, miss_label, scratch, Operand(zero_reg));
+
+  // Check that the object is a JS array.
+  __ GetObjectType(receiver, scratch, scratch);
+  __ Branch(ne, miss_label, scratch, Operand(JS_ARRAY_TYPE));
+
+  // Load length directly from the JS array.
+  __ lw(v0, FieldMemOperand(receiver, JSArray::kLengthOffset));
+  __ Ret();
 }
 
 
