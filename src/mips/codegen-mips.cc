@@ -2072,8 +2072,31 @@ void CodeGenerator::VisitSharedFunctionInfoLiteral(
 
 
 void CodeGenerator::VisitConditional(Conditional* node) {
-  UNIMPLEMENTED_MIPS();
-  __ break_(__LINE__);
+#ifdef DEBUG
+  int original_height = frame_->height();
+#endif
+  VirtualFrame::SpilledScope spilled_scope;
+  Comment cmnt(masm_, "[ Conditional");
+  JumpTarget then;
+  JumpTarget else_;
+  LoadConditionAndSpill(node->condition(), &then, &else_, true);
+  if (has_valid_frame()) {
+    Branch(false, &else_);
+  }
+  if (has_valid_frame() || then.is_linked()) {
+    then.Bind();
+    LoadAndSpill(node->then_expression());
+  }
+  if (else_.is_linked()) {
+    JumpTarget exit;
+    if (has_valid_frame()) {
+      exit.Jump();
+    }
+    else_.Bind();
+    LoadAndSpill(node->else_expression());
+    if (exit.is_linked()) exit.Bind();
+  }
+  ASSERT(frame_->height() == original_height + 1);
 }
 
 
