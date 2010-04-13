@@ -48,6 +48,12 @@ static void EmitIdenticalObjectComparison(MacroAssembler* masm,
                                           Label* slow,
                                           Condition cc,
                                           bool never_nan_nan);
+static void EmitSmiNonsmiComparison(MacroAssembler* masm,
+                                    Label* rhs_not_nan,
+                                    Label* slow,
+                                    bool strict);
+static void EmitTwoNonNanDoubleComparison(MacroAssembler* masm, Condition cc);
+static void EmitStrictTwoHeapObjectCompare(MacroAssembler* masm);
 static void MultiplyByKnownInt(MacroAssembler* masm,
                                Register source,
                                Register destination,
@@ -1170,7 +1176,6 @@ void CodeGenerator::Comparison(Condition cc,
   // Perform non-smi comparison by stub.
   // CompareStub takes arguments in a0 and a1, returns <0, >0 or 0 in v0.
   // We call with 0 args because there are 0 on the stack.
-  UNIMPLEMENTED_MIPS();
   CompareStub stub(cc, strict);
   frame_->CallStub(&stub, 0);
   __ mov(condReg1, v0);
@@ -3922,15 +3927,12 @@ static void EmitIdenticalObjectComparison(MacroAssembler* masm,
                                           bool never_nan_nan) {
   Label not_identical;
   Label heap_number, return_equal;
-  Register exp_mask_reg = t5;
 
   __ Branch(ne, &not_identical, a0, Operand(a1));
 
   // The two objects are identical. If we know that one of them isn't NaN then
   // we now know they test equal.
   if (cc != eq || !never_nan_nan) {
-    __ li(exp_mask_reg, Operand(HeapNumber::kExponentMask));
-  
     // Test for NaN. Sadly, we can't just compare to Factory::nan_value(),
     // so we do the second best thing - test it ourselves.
     // They are both equal and they are not both Smis so both of them are not
@@ -4096,6 +4098,179 @@ void FastCloneShallowArrayStub::Generate(MacroAssembler* masm) {
 }
 
 
+static void EmitSmiNonsmiComparison(MacroAssembler* masm,
+                                    Label* both_loaded_as_doubles,
+                                    Label* slow,
+                                    bool strict) {
+  Label lhs_is_smi;
+  __ And(t0, a0, Operand(kSmiTagMask));
+  __ Branch(eq, &lhs_is_smi, t0, Operand(zero_reg));
+
+  // Rhs is a Smi.
+  // Check whether the non-smi is a heap number.
+  __ GetObjectType(a0, t4, t4);
+  if (strict) {
+    // If lhs was not a number and rhs was a Smi then strict equality cannot
+    // succeed. Return non-equal (a0 is already not zero)
+    __ mov(v0, a0);
+    __ Ret(ne, t4, Operand(HEAP_NUMBER_TYPE));
+  } else {
+    // Smi compared non-strictly with a non-Smi non-heap-number.  Call
+    // the runtime.
+    __ Branch(ne, slow, t4, Operand(HEAP_NUMBER_TYPE));
+  }
+
+  // Rhs is a smi, lhs is a number.
+  // Convert a1 to double.
+  __ mtc1(a1, f12);
+  __ cvt_d_s(f12, f12);
+  __ ldc1(f14, FieldMemOperand(a0, HeapNumber::kValueOffset));
+
+  // We now have both loaded as doubles.
+  __ jmp(both_loaded_as_doubles);
+
+  __ bind(&lhs_is_smi);
+  // Lhs is a Smi.  Check whether the non-smi is a heap number.
+  __ GetObjectType(a1, t4, t4);
+  if (strict) {
+    // If lhs was not a number and rhs was a Smi then strict equality cannot
+    // succeed.  Return non-equal.
+    __ li(v0, Operand(1));
+    __ Ret(ne, t4, Operand(HEAP_NUMBER_TYPE));
+  } else {
+    // Smi compared non-strictly with a non-Smi non-heap-number.  Call
+    // the runtime.
+    __ Branch(ne, slow, t4, Operand(HEAP_NUMBER_TYPE));
+  }
+
+  // Lhs is a smi, rhs is a number.
+  // a0 is Smi and a1 is heap number.
+  // Convert a1 to double.
+  __ mtc1(a0, f14);
+  __ cvt_d_s(f14, f14);
+  __ ldc1(f12, FieldMemOperand(a1, HeapNumber::kValueOffset));
+  // Fall through to both_loaded_as_doubles.
+}
+
+
+void EmitNanCheck(MacroAssembler* masm, Condition cc) {
+  // We use the coprocessor c.cond instructions.
+  Label one_is_nan, neither_is_nan;
+
+  // Test the Unordered condition on both doubles. This is false if any of them
+  // is Nan.
+  __ c(UN, D, f12, f14);
+  __ bc1f(&neither_is_nan);
+  __ nop();
+  __ bc1t(&one_is_nan);
+  __ nop();
+
+  // At least one is nan
+  __ bind(&one_is_nan);
+  // NaN comparisons always fail.
+  // Load whatever we need in r0 to make the comparison fail.
+  if (cc == less || cc == less_equal) {
+    __ li(v0, Operand(GREATER));
+  } else {
+    __ li(v0, Operand(LESS));
+  }
+  __ Ret();
+
+  __ bind(&neither_is_nan);
+}
+
+
+static void EmitTwoNonNanDoubleComparison(MacroAssembler* masm, Condition cc) {
+  // f12 and f14 have the two doubles.  Neither is a NaN.
+  // Call a native function to do a comparison between two non-NaNs.
+  // Call C routine that may not cause GC or other trouble.
+  // We use a call_was and return manually because we need arguments slots to
+  // be freed.
+  
+  __ li(t9, Operand(ExternalReference::compare_doubles()));
+  __ SetupAlignedCall(t0, 0);
+  __ Call(t9);  // Call the code
+  __ Addu(sp, sp, Operand(-StandardFrameConstants::kCArgsSlotsSize));
+  __ Addu(sp, sp, Operand(StandardFrameConstants::kCArgsSlotsSize));
+  __ ReturnFromAlignedCall();
+  
+  __ Ret();
+}
+
+
+static void EmitStrictTwoHeapObjectCompare(MacroAssembler* masm) {
+    // If either operand is a JSObject or an oddball value, then they are
+    // not equal since their pointers are different.
+    // There is no test for undetectability in strict equality.
+    ASSERT(LAST_TYPE == JS_FUNCTION_TYPE);
+    Label first_non_object;
+    // Get the type of the first operand into a2 and compare it with
+    // FIRST_JS_OBJECT_TYPE.
+    __ GetObjectType(a0, a2, a2);
+    __ Branch(less, &first_non_object, a2, Operand(FIRST_JS_OBJECT_TYPE));
+
+    // Return non-zero.
+    Label return_not_equal;
+    __ bind(&return_not_equal);
+    __ li(v0, Operand(1));
+    __ Ret();
+
+    __ bind(&first_non_object);
+    // Check for oddballs: true, false, null, undefined.
+    __ Branch(eq, &return_not_equal, a2, Operand(ODDBALL_TYPE));
+
+    __ GetObjectType(a1, a3, a3);
+    __ Branch(greater, &return_not_equal, a3, Operand(FIRST_JS_OBJECT_TYPE));
+
+    // Check for oddballs: true, false, null, undefined.
+    __ Branch(eq, &return_not_equal, a3, Operand(ODDBALL_TYPE));
+
+    // Now that we have the types we might as well check for symbol-symbol.
+    // Ensure that no non-strings have the symbol bit set.
+    ASSERT(kNotStringTag + kIsSymbolMask > LAST_TYPE);
+    ASSERT(kSymbolTag != 0);
+    __ And(t2, a2, Operand(a3));
+    __ And(t0, t2, Operand(kIsSymbolMask));
+    __ Branch(ne, &return_not_equal, t0, Operand(zero_reg));
+}
+
+
+static void EmitCheckForTwoHeapNumbers(MacroAssembler* masm,
+                                       Label* both_loaded_as_doubles,
+                                       Label* not_heap_numbers,
+                                       Label* slow) {
+  __ GetObjectType(a0, a2, a2);
+  __ Branch(ne, not_heap_numbers, a2, Operand(HEAP_NUMBER_TYPE));
+  __ GetObjectType(a1, a3, a3);
+  // First was a heap number, second wasn't. Go slow case.
+  __ Branch(ne, not_heap_numbers, a3, Operand(HEAP_NUMBER_TYPE));
+
+  // Both are heap numbers. Load them up then jump to the code we have
+  // for that.
+  __ ldc1(f12, FieldMemOperand(a0, HeapNumber::kValueOffset));
+  __ ldc1(f14, FieldMemOperand(a1, HeapNumber::kValueOffset));
+  __ jmp(both_loaded_as_doubles);
+}
+
+
+static void EmitCheckForSymbols(MacroAssembler* masm, Label* slow) {
+  // a2 is object type of a0.
+  __ And(t4, a2, Operand(kIsNotStringMask));
+  __ Branch(ne, slow, t4, Operand(zero_reg));
+  __ And(t4, a2, Operand(kIsSymbolMask));
+  __ Branch(ne, slow, t4, Operand(zero_reg));
+  __ GetObjectType(a1, t3, t3);
+  __ Branch(greater, slow, t3, Operand(FIRST_JS_OBJECT_TYPE));
+  __ And(t5, t3, Operand(kIsSymbolMask));
+  __ Branch(ne, slow, t5, Operand(zero_reg));
+
+  // Both are symbols. We already checked they weren't the same pointer
+  // so they are not equal.
+  __ li(v0, Operand(1));   // Non-zero indicates not equal.
+  __ Ret();
+}
+
+
 // On entry a0 and a1 are the things to be compared. On exit v0 is 0,
 // positive or negative to indicate the result of the comparison.
 void CompareStub::Generate(MacroAssembler* masm) {
@@ -4109,21 +4284,91 @@ void CompareStub::Generate(MacroAssembler* masm) {
   // or goes to slow.  Only falls through if the objects were not identical.
   EmitIdenticalObjectComparison(masm, &slow, cc_, never_nan_nan_);
 
-  // We fall through, id objects are not identical.
-  UNIMPLEMENTED_MIPS();
-  __ break_(__LINE__);
+  // If either is a Smi (we know that not both are), then they can only
+  // be strictly equal if the other is a HeapNumber.
+  ASSERT_EQ(0, kSmiTag);
+  ASSERT_EQ(0, Smi::FromInt(0));
+  __ And(t2, a0, Operand(a1));
+  __ BranchOnNotSmi(t2, &not_smis, t0);
+  // One operand is a smi. EmitSmiNonsmiComparison generates code that can:
+  // 1) Return the answer.
+  // 2) Go to slow.
+  // 3) Fall through to both_loaded_as_doubles.
+  // 4) Jump to rhs_not_nan.
+  // In cases 3 and 4 we have found out we were dealing with a number-number
+  // comparison and the numbers have been loaded into f12 and f14 as doubles.
+  EmitSmiNonsmiComparison(masm, &both_loaded_as_doubles, &slow, strict_);
 
   __ bind(&both_loaded_as_doubles);
-  UNIMPLEMENTED_MIPS();
-  __ break_(__LINE__);
+  // f12, f14 are the double representations of the left hand side
+  // and the right hand side.
+
+  // Checks for NaN in the doubles we have loaded.  Can return the answer or
+  // fall through if neither is a NaN.  Also binds rhs_not_nan.
+  EmitNanCheck(masm, cc_);
+
+  // Compares two doubles that are not NaNs. Returns the answer.
+  // Never falls through.
+  EmitTwoNonNanDoubleComparison(masm, cc_);
 
   __ bind(&not_smis);
+  // At this point we know we are dealing with two different objects,
+  // and neither of them is a Smi. The objects are in a0 and a1.
+  if (strict_) {
+    // This returns non-equal for some object types, or falls through if it
+    // was not lucky.
+    EmitStrictTwoHeapObjectCompare(masm);
+  }
+
+  Label check_for_symbols;
+  Label flat_string_check;
+  // Check for heap-number-heap-number comparison. Can jump to slow case,
+  // or load both doubles and jump to the code that handles
+  // that case. If the inputs are not doubles then jumps to check_for_symbols.
+  // In this case a2 will contain the type of a0.
+  EmitCheckForTwoHeapNumbers(masm,
+                             &both_loaded_as_doubles,
+                             &check_for_symbols,
+                             &flat_string_check);
+
+  __ bind(&check_for_symbols);
+  if (cc_ == eq) {
+    // Either jumps to slow or returns the answer. Assumes that a2 is the type
+    // of a0 on entry.
+//    EmitCheckForSymbols(masm, &flat_string_check);
+    EmitCheckForSymbols(masm, &slow);
+  }
+
+  // Check for both being sequential ASCII strings, and inline if that is the
+  // case.
+  __ bind(&flat_string_check);
   UNIMPLEMENTED_MIPS();
   __ break_(__LINE__);
 
   __ bind(&slow);
   UNIMPLEMENTED_MIPS();
-  __ break_(__LINE__);
+  // TOCHECK: Check push order. In Comparison() we pop in the reverse order.
+  __ MultiPushReversed(a1.bit() | a0.bit());
+  // Figure out which native to call and setup the arguments.
+  Builtins::JavaScript native;
+  if (cc_ == eq) {
+    native = strict_ ? Builtins::STRICT_EQUALS : Builtins::EQUALS;
+  } else {
+    native = Builtins::COMPARE;
+    int ncr;  // NaN compare result
+    if (cc_ == lt || cc_ == le) {
+      ncr = GREATER;
+    } else {
+      ASSERT(cc_ == gt || cc_ == ge);  // remaining cases
+      ncr = LESS;
+    }
+    __ li(a0, Operand(Smi::FromInt(ncr)));
+    __ Push(a0);
+  }
+
+  // Call the native; it returns -1 (less), 0 (equal), or 1 (greater)
+  // tagged as a small integer.
+  __ InvokeBuiltin(native, JUMP_JS);
 }
 
 
@@ -5557,6 +5802,18 @@ void StringStubBase::GenerateHashGetHash(MacroAssembler* masm,
   // if (hash == 0) hash = 27;
   __ ori(at, zero_reg, 27);
   __ movz(hash, at, hash);
+}
+
+
+void StringCompareStub::GenerateCompareFlatAsciiStrings(MacroAssembler* masm,
+                                                        Register left,
+                                                        Register right,
+                                                        Register scratch1,
+                                                        Register scratch2,
+                                                        Register scratch3,
+                                                        Register scratch4) {
+  UNIMPLEMENTED_MIPS();
+  __ break_(__LINE__);
 }
 
 
