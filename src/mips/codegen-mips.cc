@@ -2686,8 +2686,15 @@ void CodeGenerator::GenerateSubString(ZoneList<Expression*>* args) {
 
 
 void CodeGenerator::GenerateStringCompare(ZoneList<Expression*>* args) {
-  UNIMPLEMENTED_MIPS();
+  ASSERT_EQ(2, args->length());
+
+  Load(args->at(0));
+  Load(args->at(1));
+
+  StringCompareStub stub;
   __ break_(__LINE__);
+  frame_->CallStub(&stub, 2);
+  frame_->EmitPush(v0);
 }
 
 
@@ -5058,6 +5065,34 @@ void StringStubBase::GenerateHashGetHash(MacroAssembler* masm,
   // if (hash == 0) hash = 27;
   __ ori(at, zero_reg, 27);
   __ movz(hash, at, hash);
+}
+
+
+void StringCompareStub::Generate(MacroAssembler* masm) {
+  Label runtime;
+
+  // Stack frame on entry.
+  //  sp[0]: right string
+  //  sp[4]: left string
+  __ lw(a0, MemOperand(sp, 1 * kPointerSize));  // left
+  __ lw(a1, MemOperand(sp, 0 * kPointerSize));  // right
+
+  Label not_same;
+  __ Branch(ne, &not_same, a0, Operand(a1));
+  ASSERT_EQ(0, EQUAL);
+  ASSERT_EQ(0, kSmiTag);
+  __ li(a0, Operand(Smi::FromInt(EQUAL)));
+  __ IncrementCounter(&Counters::string_compare_native, 1, a1, a2);
+  __ Add(sp, sp, Operand(2 * kPointerSize));
+  __ Ret();
+
+  __ bind(&not_same);
+  UNIMPLEMENTED_MIPS();
+  __ break_(__LINE__);
+
+  __ bind(&runtime);
+  UNIMPLEMENTED_MIPS();
+  __ break_(__LINE__);
 }
 
 

@@ -630,6 +630,28 @@ class StringAddStub: public StringStubBase {
 };
 
 
+class StringCompareStub: public CodeStub {
+ public:
+  StringCompareStub() { }
+
+  // Compare two flat ASCII strings and returns result in r0.
+  // Does not use the stack.
+  static void GenerateCompareFlatAsciiStrings(MacroAssembler* masm,
+                                              Register left,
+                                              Register right,
+                                              Register scratch1,
+                                              Register scratch2,
+                                              Register scratch3,
+                                              Register scratch4);
+
+ private:
+  Major MajorKey() { return StringCompare; }
+  int MinorKey() { return 0; }
+
+  void Generate(MacroAssembler* masm);
+};
+
+
 // This stub can convert a signed int32 to a heap number (double).  It does
 // not work for int32s that are in Smi range!  No GC occurs during this stub
 // so you don't have to set up the frame.
