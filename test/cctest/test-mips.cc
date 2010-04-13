@@ -41,7 +41,6 @@ namespace i = ::v8::internal;
 
 TEST(MIPSFunctionCalls) {
   // Disable compilation of natives.
-  i::FLAG_disable_native_files = true;
   i::FLAG_full_compiler = false;
 
   v8::HandleScope scope;
@@ -72,7 +71,6 @@ TEST(MIPSFunctionCalls) {
 
 TEST(MIPSComparisons) {
   // Disable compilation of natives.
-  i::FLAG_disable_native_files = true;
   i::FLAG_full_compiler = false;
 
   v8::HandleScope scope;
@@ -107,7 +105,6 @@ TEST(MIPSComparisons) {
 
 TEST(MIPSGlobalVariables) {
   // Disable compilation of natives.
-  i::FLAG_disable_native_files = true;
   i::FLAG_full_compiler = false;
 
   v8::HandleScope scope;
@@ -139,7 +136,6 @@ TEST(MIPSGlobalVariables) {
 
 TEST(MIPSControlFlow) {
   // Disable compilation of natives.
-  i::FLAG_disable_native_files = true;
   i::FLAG_full_compiler = false;
 
   v8::HandleScope scope;
@@ -209,7 +205,6 @@ TEST(MIPSControlFlow) {
 
 TEST(MIPSUnaryOperations) {
   // Disable compilation of natives.
-  i::FLAG_disable_native_files = true;
   i::FLAG_full_compiler = false;
   v8::HandleScope scope;
   LocalContext env;  // from cctest.h
@@ -233,7 +228,6 @@ TEST(MIPSUnaryOperations) {
 
 TEST(MIPSCountOperation) {
   // Disable compilation of natives.
-  i::FLAG_disable_native_files = true;
   i::FLAG_full_compiler = false;
   v8::HandleScope scope;
   LocalContext env;  // from cctest.h
@@ -251,7 +245,6 @@ TEST(MIPSCountOperation) {
 
 TEST(MIPSArrays) {
   // Disable compilation of natives.
-  i::FLAG_disable_native_files = true;
   i::FLAG_full_compiler = false;
   v8::HandleScope scope;
   LocalContext env;  // from cctest.h
@@ -283,7 +276,6 @@ TEST(MIPSArrays) {
 
 TEST(MIPSObjects) {
   // Disable compilation of natives.
-  i::FLAG_disable_native_files = true;
   i::FLAG_full_compiler = false;
   v8::HandleScope scope;
   LocalContext env;  // from cctest.h
@@ -354,7 +346,6 @@ TEST(MIPSObjects) {
 
 TEST(MIPSSpecialAssignment) {
   // Disable compilation of natives.
-  i::FLAG_disable_native_files = true;
   i::FLAG_full_compiler = false;
   v8::HandleScope scope;
   LocalContext env;  // from cctest.h
@@ -375,7 +366,6 @@ TEST(MIPSSpecialAssignment) {
 
 TEST(MIPSWith) {
   // Disable compilation of natives.
-  i::FLAG_disable_native_files = true;
   i::FLAG_full_compiler = false;
   v8::HandleScope scope;
   LocalContext env;  // from cctest.h
@@ -412,7 +402,6 @@ TEST(MIPSWith) {
 
 TEST(MIPSTryCatchFinally) {
   // Disable compilation of natives.
-  i::FLAG_disable_native_files = true;
   i::FLAG_full_compiler = false;
   v8::HandleScope scope;
   LocalContext env;  // from cctest.h
@@ -442,7 +431,6 @@ TEST(MIPSTryCatchFinally) {
 
 TEST(MIPSBinaryAdd) {
   // Disable compilation of natives.
-  i::FLAG_disable_native_files = true;
   i::FLAG_full_compiler = false;
   v8::HandleScope scope;
   LocalContext env;  // from cctest.h
@@ -504,7 +492,6 @@ TEST(MIPSBinaryAdd) {
 
 TEST(MIPSBinarySub) {
   // Disable compilation of natives.
-  i::FLAG_disable_native_files = true;
   i::FLAG_full_compiler = false;
   v8::HandleScope scope;
   LocalContext env;  // from cctest.h
@@ -570,7 +557,6 @@ TEST(MIPSBinarySub) {
 
 TEST(MIPSBinaryMul) {
   // Disable compilation of natives.
-  i::FLAG_disable_native_files = true;
   i::FLAG_full_compiler = false;
   v8::HandleScope scope;
   LocalContext env;  // from cctest.h
@@ -626,7 +612,6 @@ TEST(MIPSBinaryMul) {
 
 TEST(MIPSBinaryDiv) {
   // Disable compilation of natives.
-  i::FLAG_disable_native_files = true;
   i::FLAG_full_compiler = false;
   v8::HandleScope scope;
   LocalContext env;  // from cctest.h
@@ -686,7 +671,6 @@ TEST(MIPSBinaryDiv) {
 
 TEST(MIPSBinaryMod) {
   // Disable compilation of natives.
-  i::FLAG_disable_native_files = true;
   i::FLAG_full_compiler = false;
   v8::HandleScope scope;
   LocalContext env;  // from cctest.h
@@ -726,7 +710,6 @@ TEST(MIPSBinaryMod) {
 
 TEST(MIPSBinaryOr) {
   // Disable compilation of natives.
-  i::FLAG_disable_native_files = true;
   i::FLAG_full_compiler = false;
   v8::HandleScope scope;
   LocalContext env;  // from cctest.h
@@ -769,7 +752,6 @@ TEST(MIPSBinaryOr) {
 
 TEST(MIPSBinaryAnd) {
   // Disable compilation of natives.
-  i::FLAG_disable_native_files = true;
   i::FLAG_full_compiler = false;
   v8::HandleScope scope;
   LocalContext env;  // from cctest.h
@@ -804,7 +786,6 @@ TEST(MIPSBinaryAnd) {
 
 TEST(MIPSBinaryXor) {
   // Disable compilation of natives.
-  i::FLAG_disable_native_files = true;
   i::FLAG_full_compiler = false;
   v8::HandleScope scope;
   LocalContext env;  // from cctest.h
@@ -838,7 +819,6 @@ TEST(MIPSBinaryXor) {
 
 TEST(MIPSBinaryShl) {
   // Disable compilation of natives.
-  i::FLAG_disable_native_files = true;
   i::FLAG_full_compiler = false;
   v8::HandleScope scope;
   LocalContext env;  // from cctest.h
@@ -874,7 +854,6 @@ TEST(MIPSBinaryShl) {
 
 TEST(MIPSBinarySar) {
   // Disable compilation of natives.
-  i::FLAG_disable_native_files = true;
   i::FLAG_full_compiler = false;
   v8::HandleScope scope;
   LocalContext env;  // from cctest.h
@@ -912,7 +891,6 @@ TEST(MIPSBinarySar) {
 
 TEST(MIPSBinaryShr) {
   // Disable compilation of natives.
-  i::FLAG_disable_native_files = true;
   i::FLAG_full_compiler = false;
   v8::HandleScope scope;
   LocalContext env;  // from cctest.h
@@ -951,7 +929,6 @@ TEST(MIPSBinaryShr) {
 
 TEST(MIPSAddString) {
   // Disable compilation of natives.
-  i::FLAG_disable_native_files = true;
   i::FLAG_full_compiler = false;
   v8::HandleScope scope;
   LocalContext env;  // from cctest.h
