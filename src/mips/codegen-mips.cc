@@ -3440,8 +3440,10 @@ void Reference::GetValue() {
 
   switch (type_) {
     case SLOT: {
-      UNIMPLEMENTED_MIPS();
-      __ break_(__LINE__);
+      Comment cmnt(masm, "[ Load from Slot");
+      Slot* slot = expression_->AsVariableProxy()->AsVariable()->slot();
+      ASSERT(slot != NULL);
+      cgen_->LoadFromSlot(slot, NOT_INSIDE_TYPEOF);
       break;
     }
 
