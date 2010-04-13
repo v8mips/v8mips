@@ -284,9 +284,11 @@ void Debugger::Debug() {
                         "%" XSTR(ARG_SIZE) "s",
                         cmd, arg1, arg2);
       if ((strcmp(cmd, "si") == 0) || (strcmp(cmd, "stepi") == 0)) {
-        if (!(reinterpret_cast<Instruction*>(sim_->get_pc())->IsTrap())) {
+        Instruction* instr = reinterpret_cast<Instruction*>(sim_->get_pc());
+        if (!(instr->IsTrap()) ||
+            instr->InstructionBits() == rtCallRedirInstr) {
           sim_->InstructionDecode(
-                                reinterpret_cast<Instruction*>(sim_->get_pc()));
+              reinterpret_cast<Instruction*>(sim_->get_pc()));
         } else {
           // Allow si to jump over generated breakpoints.
           PrintF("/!\\ Jumping over generated breakpoint.\n");
