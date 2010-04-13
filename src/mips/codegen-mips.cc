@@ -2979,8 +2979,17 @@ void CodeGenerator::GenerateIsFunction(ZoneList<Expression*>* args) {
 
 
 void CodeGenerator::GenerateIsUndetectableObject(ZoneList<Expression*>* args) {
-  UNIMPLEMENTED_MIPS();
-  __ break_(__LINE__);
+  VirtualFrame::SpilledScope spilled_scope;
+  ASSERT(args->length() == 1);
+  LoadAndSpill(args->at(0));
+  frame_->EmitPop(a0);
+  __ And(t0, a0, Operand(kSmiTagMask));
+  false_target()->Branch(eq, t0, Operand(zero_reg));
+  __ lw(a1, FieldMemOperand(a0, HeapObject::kMapOffset));
+  __ lbu(a1, FieldMemOperand(a1, Map::kBitFieldOffset));
+  __ And(condReg1, a1, Operand(1 << Map::kIsUndetectable));
+  __ mov(condReg2, zero_reg);
+  cc_reg_ = ne;
 }
 
 
