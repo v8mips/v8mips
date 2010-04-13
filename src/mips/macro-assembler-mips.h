@@ -640,6 +640,12 @@ class MacroAssembler: public Assembler {
       Register scratch2,
       Label* failure);
 
+  // Check if instance type is sequential ASCII string and jump to label if
+  // it is not.
+  void JumpIfInstanceTypeIsNotSequentialAscii(Register type,
+                                              Register scratch,
+                                              Label* failure);
+
  private:
   List<Unresolved> unresolved_;
   bool generating_stub_;

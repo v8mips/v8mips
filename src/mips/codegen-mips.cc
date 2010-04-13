@@ -3016,13 +3016,17 @@ void CodeGenerator::GenerateIsUndetectableObject(ZoneList<Expression*>* args) {
 
 
 void CodeGenerator::GenerateStringAdd(ZoneList<Expression*>* args) {
+  Comment cmnt(masm_, "[ GenerateStringAdd");
   ASSERT_EQ(2, args->length());
 
+  __ break_(__LINE__);
   Load(args->at(0));
   Load(args->at(1));
 
   StringAddStub stub(NO_STRING_ADD_FLAGS);
+  __ break_(__LINE__);
   frame_->CallStub(&stub, 2);
+  __ break_(__LINE__);
   frame_->EmitPush(v0);
 }
 
@@ -5063,11 +5067,13 @@ static void HandleBinaryOpSlowCases(MacroAssembler* masm,
 
     // First and second argument are strings.
     StringAddStub string_add_stub(NO_STRING_CHECK_IN_STUB);
+//  __ break_(__LINE__);
     __ TailCallStub(&string_add_stub);
 
     __ bind(&string1_smi2);
     // First argument is a string, second is a smi. Try to lookup the number
     // string for the smi in the number string cache.
+    __ break_(__LINE__);
 
     // Comment this out till we get the basics working.
     // It seems that NumberStringCache is only populated via runtime,
@@ -5843,8 +5849,127 @@ void StringStubBase::GenerateTwoCharacterSymbolTableProbe(MacroAssembler* masm,
                                                           Register scratch4,
                                                           Register scratch5,
                                                           Label* not_found) {
-  UNIMPLEMENTED_MIPS();
-  __ break_(__LINE__);
+  // Register scratch3 is the general scratch register in this function.
+  Register scratch = scratch3;
+
+//  __ break_(__LINE__);
+  // Make sure that both characters are not digits as such strings has a
+  // different hash algorithm. Don't try to look for these in the symbol table.
+  Label not_array_index;
+  __ Subu(scratch, c1, Operand(static_cast<int>('0')));
+  __ Branch(Ugreater, &not_array_index, scratch, Operand(static_cast<int>('9' - '0')));
+  __ Subu(scratch, c2, Operand(static_cast<int>('0')));
+
+  // If check failed combine both characters into single halfword.
+  // This is required by the contract of the method: code at the
+  // not_found branch expects this combination in c1 register
+  Label tmp;
+  __ sll(scratch1, c2, kBitsPerByte);
+  __ Branch(Ugreater, &tmp, scratch, Operand(static_cast<int>('9' - '0')));
+  __ Or(c1, c1, scratch1);
+  __ bind(&tmp);
+  __ Branch(Uless_equal, not_found, scratch, Operand(static_cast<int>('9' - '0')));
+
+  __ bind(&not_array_index);
+//  __ break_(__LINE__);
+  // Calculate the two character string hash.
+  Register hash = scratch1;
+  GenerateHashInit(masm, hash, c1);
+  GenerateHashAddCharacter(masm, hash, c2);
+  GenerateHashGetHash(masm, hash);
+//  __ break_(__LINE__);
+
+  // Collect the two characters in a register.
+  Register chars = c1;
+  __ sll(scratch, c2, kBitsPerByte);
+  __ Or(chars, chars, scratch);
+
+  // chars: two character string, char 1 in byte 0 and char 2 in byte 1.
+  // hash:  hash of two character string.
+
+  // Load symbol table
+  // Load address of first element of the symbol table.
+  Register symbol_table = c2;
+  __ LoadRoot(symbol_table, Heap::kSymbolTableRootIndex);
+
+  // Load undefined value
+  Register undefined = scratch4;
+  __ LoadRoot(undefined, Heap::kUndefinedValueRootIndex);
+
+  // Calculate capacity mask from the symbol table capacity.
+  Register mask = scratch2;
+  __ lw(mask, FieldMemOperand(symbol_table, SymbolTable::kCapacityOffset));
+  __ sra(mask, mask, 1);
+  __ Addu(mask, mask, -1);
+
+  // Calculate untagged address of the first element of the symbol table.
+  Register first_symbol_table_element = symbol_table;
+  __ Add(first_symbol_table_element, symbol_table,
+         Operand(SymbolTable::kElementsStartOffset - kHeapObjectTag));
+
+//  __ break_(__LINE__);
+  // Registers
+  // chars: two character string, char 1 in byte 0 and char 2 in byte 1.
+  // hash:  hash of two character string
+  // mask:  capacity mask
+  // first_symbol_table_element: address of the first element of
+  //                             the symbol table
+  // scratch: -
+
+  // Perform a number of probes in the symbol table.
+  static const int kProbes = 4;
+  Label found_in_symbol_table;
+  Label next_probe[kProbes];
+  for (int i = 0; i < kProbes; i++) {
+    Register candidate = scratch5;  // Scratch register contains candidate.
+
+    // Calculate entry in symbol table.
+    if (i > 0) {
+      __ Add(candidate, hash, Operand(SymbolTable::GetProbeOffset(i)));
+    } else {
+      __ mov(candidate, hash);
+    }
+
+    __ And(candidate, candidate, Operand(mask));
+
+    // Load the entry from the symble table.
+    ASSERT_EQ(1, SymbolTable::kEntrySize);
+    __ sll(scratch, candidate, kPointerSizeLog2);
+    __ Add(scratch, scratch, first_symbol_table_element);
+    __ lw(candidate, MemOperand(scratch));
+
+//  __ break_(__LINE__);
+    // If entry is undefined no string with this hash can be found.
+    __ Branch(eq, not_found, candidate, Operand(undefined));
+
+//  __ break_(__LINE__);
+    // If length is not 2 the string is not a candidate.
+    __ lw(scratch, FieldMemOperand(candidate, String::kLengthOffset));
+    __ Branch(ne, &next_probe[i], scratch, Operand(2));
+
+    // Check that the candidate is a non-external ascii string.
+    __ lw(scratch, FieldMemOperand(candidate, HeapObject::kMapOffset));
+    __ lbu(scratch, FieldMemOperand(scratch, Map::kInstanceTypeOffset));
+//  __ break_(__LINE__);
+    __ JumpIfInstanceTypeIsNotSequentialAscii(scratch, scratch, &next_probe[i]);
+
+    // Check if the two characters match.
+    // Assumes that word load is little endian.
+    __ lhu(scratch, FieldMemOperand(candidate, SeqAsciiString::kHeaderSize));
+    __ Branch(eq, &found_in_symbol_table, chars, Operand(scratch));
+    __ bind(&next_probe[i]);
+  }
+
+//  __ break_(__LINE__);
+  // No matching 2 character string found by probing.
+  __ jmp(not_found);
+
+  // Scratch register contains result when we fall through to here.
+  Register result = scratch;
+  __ bind(&found_in_symbol_table);
+  if (!result.is(v0)) {
+    __ mov(v0, result);
+  }
 }
 
 

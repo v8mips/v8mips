@@ -2029,5 +2029,16 @@ void MacroAssembler::JumpIfBothInstanceTypesAreNotSequentialAscii(
 }
 
 
+void MacroAssembler::JumpIfInstanceTypeIsNotSequentialAscii(Register type,
+                                                            Register scratch,
+                                                            Label* failure) {
+  int kFlatAsciiStringMask =
+      kIsNotStringMask | kStringEncodingMask | kStringRepresentationMask;
+  int kFlatAsciiStringTag = ASCII_STRING_TYPE;
+  And(scratch, type, Operand(kFlatAsciiStringMask));
+  Branch(ne, failure, scratch, Operand(kFlatAsciiStringTag));
+}
+
+
 } }  // namespace v8::internal
 
