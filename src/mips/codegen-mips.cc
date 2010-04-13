@@ -2651,8 +2651,19 @@ void CodeGenerator::GenerateIsObject(ZoneList<Expression*>* args) {
 
 
 void CodeGenerator::GenerateIsFunction(ZoneList<Expression*>* args) {
-  UNIMPLEMENTED_MIPS();
-  __ break_(__LINE__);
+  // This generates a fast version of:
+  // (%_ClassOf(arg) === 'Function')
+  VirtualFrame::SpilledScope spilled_scope;
+  ASSERT(args->length() == 1);
+  LoadAndSpill(args->at(0));
+  frame_->EmitPop(a0);
+  __ And(t0, a0, Operand(kSmiTagMask));
+  false_target()->Branch(eq, t0, Operand(zero_reg));
+  Register map_reg = a2;
+  __ GetObjectType(a0, map_reg, a1);
+  __ mov(condReg1, a1);
+  __ li(condReg2, Operand(JS_FUNCTION_TYPE));
+  cc_reg_ = eq;
 }
 
 
