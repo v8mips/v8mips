@@ -2556,8 +2556,21 @@ void CodeGenerator::GenerateClassOf(ZoneList<Expression*>* args) {
 
 
 void CodeGenerator::GenerateValueOf(ZoneList<Expression*>* args) {
-  UNIMPLEMENTED_MIPS();
-  __ break_(__LINE__);
+  VirtualFrame::SpilledScope spilled_scope;
+  ASSERT(args->length() == 1);
+  JumpTarget leave;
+  LoadAndSpill(args->at(0));
+  frame_->EmitPop(a0);  // r0 contains object.
+  // if (object->IsSmi()) return the object.
+  __ And(t0, a0, Operand(kSmiTagMask));
+  leave.Branch(eq, t0, Operand(zero_reg));
+  // It is a heap object - get map. If (!object->IsJSValue()) return the object.
+  __ GetObjectType(a0, a1, a1);
+  leave.Branch(ne, a1, Operand(JS_VALUE_TYPE));
+  // Load the value.
+  __ lw(v0, FieldMemOperand(a0, JSValue::kValueOffset));
+  leave.Bind();
+  frame_->EmitPush(v0);
 }
 
 
@@ -2776,6 +2789,7 @@ void CodeGenerator::GenerateRegExpExec(ZoneList<Expression*>* args) {
 void CodeGenerator::GenerateNumberToString(ZoneList<Expression*>* args) {
   UNIMPLEMENTED_MIPS();
   __ break_(__LINE__);
+  frame_->EmitPush(zero_reg);
 }
 
 
