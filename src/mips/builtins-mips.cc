@@ -691,7 +691,6 @@ void Builtins::Generate_ArgumentsAdaptorTrampoline(MacroAssembler* masm) {
 
     Label fill;
     __ bind(&fill);
-    __ break_(__LINE__);
     __ Push(t0);
     __ Branch(ne, &fill, sp, Operand(a2));
   }

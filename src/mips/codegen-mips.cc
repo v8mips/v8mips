@@ -173,7 +173,7 @@ void CodeGenerator::Generate(CompilationInfo* info) {
 
 #ifdef DEBUG
       JumpTarget verified_true;
-      verified_true.Branch(eq, no_hint, v0, Operand(cp));
+      verified_true.Branch(eq, v0, Operand(cp), no_hint);
       __ stop("NewContext: v0 is expected to be the same as cp");
       verified_true.Bind();
 #endif
@@ -2227,9 +2227,87 @@ void CodeGenerator::VisitRegExpLiteral(RegExpLiteral* node) {
 
 
 void CodeGenerator::VisitObjectLiteral(ObjectLiteral* node) {
-  UNIMPLEMENTED_MIPS();
-  __ break_(__LINE__);
-  frame_->EmitPush(zero_reg);
+#ifdef DEBUG
+  int original_height = frame_->height();
+#endif
+  VirtualFrame::SpilledScope spilled_scope;
+  Comment cmnt(masm_, "[ ObjectLiteral");
+
+  // Load the function of this activation.
+  __ lw(a3, frame_->Function());
+  // Literal array.
+  __ lw(t3, FieldMemOperand(a3, JSFunction::kLiteralsOffset));
+  // Literal index.
+  __ li(t2, Operand(Smi::FromInt(node->literal_index())));
+  // Constant properties.
+  __ li(t1, Operand(node->constant_properties()));
+  // Should the object literal have fast elements?
+  __ li(t0, Operand(Smi::FromInt(node->fast_elements() ? 1 : 0)));
+  frame_->EmitMultiPush(t3.bit() | t2.bit() | t1.bit() | t0.bit());
+
+  if (node->depth() > 1) {
+    frame_->CallRuntime(Runtime::kCreateObjectLiteral, 4);
+  } else {
+    frame_->CallRuntime(Runtime::kCreateObjectLiteralShallow, 4);
+  }
+  frame_->EmitPush(v0);  // Save the result.
+
+
+
+  for (int i = 0; i < node->properties()->length(); i++) {
+    // At the start of each iteration, the top of stack contains
+    // the newly created object literal.
+    ObjectLiteral::Property* property = node->properties()->at(i);
+    Literal* key = property->key();
+    Expression* value = property->value();
+    switch (property->kind()) {
+      case ObjectLiteral::Property::CONSTANT:
+        break;
+      case ObjectLiteral::Property::MATERIALIZED_LITERAL:
+        if (CompileTimeValue::IsCompileTimeValue(property->value())) break;
+        // Else fall through
+      case ObjectLiteral::Property::COMPUTED:
+        if (key->handle()->IsSymbol()) {
+          Handle<Code> ic(Builtins::builtin(Builtins::StoreIC_Initialize));
+          LoadAndSpill(value);
+          frame_->EmitPop(a0);
+          __ li(a2, Operand(key->handle()));
+          __ lw(a1, frame_->Top());  // Load the receiver.
+          frame_->CallCodeObject(ic, RelocInfo::CODE_TARGET, 0);
+          break;
+        }
+        // Else fall through.
+      case ObjectLiteral::Property::PROTOTYPE: {
+        __ lw(a0, frame_->Top());
+        frame_->EmitPush(a0);  // Dup the result.
+        LoadAndSpill(key);
+        LoadAndSpill(value);
+        frame_->CallRuntime(Runtime::kSetProperty, 3);
+        break;
+      }
+      case ObjectLiteral::Property::SETTER: {
+        __ lw(a0, frame_->Top());
+        frame_->EmitPush(v0);
+        LoadAndSpill(key);
+        __ li(a0, Operand(Smi::FromInt(1)));
+        frame_->EmitPush(a0);
+        LoadAndSpill(value);
+        frame_->CallRuntime(Runtime::kDefineAccessor, 4);
+        break;
+      }
+      case ObjectLiteral::Property::GETTER: {
+        __ lw(a0, frame_->Top());
+        frame_->EmitPush(v0);
+        LoadAndSpill(key);
+        __ li(a0, Operand(Smi::FromInt(0)));
+        frame_->EmitPush(a0);
+        LoadAndSpill(value);
+        frame_->CallRuntime(Runtime::kDefineAccessor, 4);
+        break;
+      }
+    }
+  }
+  ASSERT(frame_->height() == original_height + 1);
 }
 
 
