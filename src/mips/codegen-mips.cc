@@ -2679,8 +2679,14 @@ void CodeGenerator::GenerateIsUndetectableObject(ZoneList<Expression*>* args) {
 
 
 void CodeGenerator::GenerateStringAdd(ZoneList<Expression*>* args) {
-  UNIMPLEMENTED_MIPS();
-  __ break_(__LINE__);
+  ASSERT_EQ(2, args->length());
+
+  Load(args->at(0));
+  Load(args->at(1));
+
+  StringAddStub stub(NO_STRING_ADD_FLAGS);
+  frame_->CallStub(&stub, 2);
+  frame_->EmitPush(v0);
 }
 
 
