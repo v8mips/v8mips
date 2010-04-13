@@ -5007,7 +5007,7 @@ static void HandleBinaryOpSlowCases(MacroAssembler* masm,
 
     // Only first argument is a string.
     __ bind(&string1);
-    __ break_(0x3350);  // Cannot call builtins yet.
+//    __ break_(0x3350);  // Cannot call builtins yet.
     __ InvokeBuiltin(Builtins::STRING_ADD_LEFT, JUMP_JS);
 
     // First argument was not a string, test second.
