@@ -193,9 +193,92 @@ void KeyedLoadIC::GenerateMiss(MacroAssembler* masm) {
 }
 
 
+void KeyedLoadIC::GenerateRuntimeGetProperty(MacroAssembler* masm) {
+  // ra     : return address
+  // sp[0]  : key
+  // sp[4]  : receiver
+
+  __ lw(a2, MemOperand(sp, 0));
+  __ lw(a3, MemOperand(sp, 4));
+  __ MultiPush(a2.bit() | a3.bit());
+  // Do a tail-call to runtime routine.
+
+  __ TailCallRuntime(Runtime::kGetProperty, 2, 1);
+}
+
+
 void KeyedLoadIC::GenerateGeneric(MacroAssembler* masm) {
-  UNIMPLEMENTED_MIPS();
-  __ break_(__LINE__);
+  // ra     : return address
+  // sp[0]  : key
+  // sp[4]  : receiver
+  Label slow, fast, check_pixel_array;
+
+  // Get the key and receiver object from the stack.
+  __ lw(a0, MemOperand(sp, 0));
+  __ lw(a1, MemOperand(sp, 4));
+
+  // Check that the object isn't a smi.
+  __ BranchOnSmi(a1, &slow, t0);
+
+  // Get the map of the receiver.
+  __ lw(a2, FieldMemOperand(a1, HeapObject::kMapOffset));
+  // Check that the receiver does not require access checks.  We need
+  // to check this explicitly since this generic stub does not perform
+  // map checks.
+  __ lbu(a3, FieldMemOperand(a2, Map::kBitFieldOffset));
+  __ And(t3, a3, Operand(kSlowCaseBitFieldMask));
+  __ Branch(ne, &slow, t3, Operand(zero_reg));
+  // Check that the object is some kind of JS object EXCEPT JS Value type.
+  // In the case that the object is a value-wrapper object,
+  // we enter the runtime system to make sure that indexing into string
+  // objects work as intended.
+  ASSERT(JS_OBJECT_TYPE > JS_VALUE_TYPE);
+  __ lbu(a2, FieldMemOperand(a2, Map::kInstanceTypeOffset));
+  __ Branch(less, &slow, a2, Operand(JS_OBJECT_TYPE));
+
+  // Check that the key is a smi.
+  __ BranchOnNotSmi(a0, &slow, t0);
+  __ sra(a0, a0, kSmiTagSize);
+
+  // Get the elements array of the object.
+  __ lw(a1, FieldMemOperand(a1, JSObject::kElementsOffset));
+  // Check that the object is in fast mode (not dictionary).
+  __ lw(t3, FieldMemOperand(a1, HeapObject::kMapOffset));
+  __ LoadRoot(t0, Heap::kFixedArrayMapRootIndex);
+  __ Branch(ne, &slow, t3, Operand(t0));
+  // Check that the key (index) is within bounds.
+  __ lw(t3, FieldMemOperand(a1, Array::kLengthOffset));
+  __ Branch(Uless, &fast, a0, Operand(t3));
+
+  // Check whether the elements is a pixel array.
+  __ bind(&check_pixel_array);
+  __ LoadRoot(t0, Heap::kPixelArrayMapRootIndex);
+  __ Branch(ne, &slow, t3, Operand(t0));
+  __ lw(t0, FieldMemOperand(a1, PixelArray::kLengthOffset));
+  __ Branch(Ugreater_equal, &slow, a0, Operand(t0));
+  __ lw(t0, FieldMemOperand(a1, PixelArray::kExternalPointerOffset));
+  __ Add(t0, a0, t0);
+  __ lbu(a0, MemOperand(t0));
+  __ sll(a0, a0, kSmiTagSize);  // Tag result as smi.
+  __ Ret();
+
+  // Slow case: Push extra copies of the arguments (2).
+  __ bind(&slow);
+  __ IncrementCounter(&Counters::keyed_load_generic_slow, 1, a0, a1);
+  GenerateRuntimeGetProperty(masm);
+
+  // Fast case: Do the load.
+  __ bind(&fast);
+  __ Addu(a3, a1, Operand(FixedArray::kHeaderSize - kHeapObjectTag));
+  __ sll(t3, a0, kPointerSizeLog2);
+  __ Addu(a0, a3, Operand(t3));
+  __ lw(v0, MemOperand(a0));
+  __ LoadRoot(t0, Heap::kTheHoleValueRootIndex);
+  // In case the loaded value is the_hole we have to consult GetProperty
+  // to ensure the prototype chain is searched.
+  __ Branch(eq, &slow, v0, Operand(t0));
+
+  __ Ret();
 }
 
 
