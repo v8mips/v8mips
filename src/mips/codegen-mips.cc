@@ -2497,8 +2497,61 @@ void CodeGenerator::VisitCallNew(CallNew* node) {
 
 
 void CodeGenerator::GenerateClassOf(ZoneList<Expression*>* args) {
-  UNIMPLEMENTED_MIPS();
-  __ break_(__LINE__);
+  VirtualFrame::SpilledScope spilled_scope;
+  ASSERT(args->length() == 1);
+  JumpTarget leave, null, function, non_function_constructor;
+
+  // Load the object into a0.
+  LoadAndSpill(args->at(0));
+  frame_->EmitPop(a0);
+
+  // If the object is a smi, we return null.
+  __ And(t0, a0, Operand(kSmiTagMask));
+  null.Branch(eq, t0, Operand(zero_reg), no_hint);
+
+  // Check that the object is a JS object but take special care of JS
+  // functions to make sure they have 'Function' as their class.
+  __ GetObjectType(a0, a0, a1);
+  null.Branch(less, a1, Operand(FIRST_JS_OBJECT_TYPE), no_hint);
+
+  // As long as JS_FUNCTION_TYPE is the last instance type and it is
+  // right after LAST_JS_OBJECT_TYPE, we can avoid checking for
+  // LAST_JS_OBJECT_TYPE.
+  ASSERT(LAST_TYPE == JS_FUNCTION_TYPE);
+  ASSERT(JS_FUNCTION_TYPE == LAST_JS_OBJECT_TYPE + 1);
+  function.Branch(eq, a1, Operand(JS_FUNCTION_TYPE), no_hint);
+
+  // Check if the constructor in the map is a function.
+  __ lw(a0, FieldMemOperand(a0, Map::kConstructorOffset));
+  __ GetObjectType(a0, a1, a1);
+  non_function_constructor.Branch(ne, a1, Operand(JS_FUNCTION_TYPE), no_hint);
+
+  // The a0 register now contains the constructor function. Grab the
+  // instance class name from there.
+  __ lw(a0, FieldMemOperand(a0, JSFunction::kSharedFunctionInfoOffset));
+  __ lw(v0, FieldMemOperand(a0, SharedFunctionInfo::kInstanceClassNameOffset));
+  frame_->EmitPush(v0);
+  leave.Jump();
+
+  // Functions have class 'Function'.
+  function.Bind();
+  __ li(v0, Operand(Factory::function_class_symbol()));
+  frame_->EmitPush(v0);
+  leave.Jump();
+
+  // Objects with a non-function constructor have class 'Object'.
+  non_function_constructor.Bind();
+  __ li(v0, Operand(Factory::Object_symbol()));
+  frame_->EmitPush(v0);
+  leave.Jump();
+
+  // Non-JS objects have class null.
+  null.Bind();
+  __ LoadRoot(v0, Heap::kNullValueRootIndex);
+  frame_->EmitPush(v0);
+
+  // All done.
+  leave.Bind();
 }
 
 
