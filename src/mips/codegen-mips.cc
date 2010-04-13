@@ -2623,8 +2623,30 @@ void CodeGenerator::GenerateObjectEquals(ZoneList<Expression*>* args) {
 
 
 void CodeGenerator::GenerateIsObject(ZoneList<Expression*>* args) {
-  UNIMPLEMENTED_MIPS();
-  __ break_(__LINE__);
+  // This generates a fast version of:
+  // (typeof(arg) === 'object' || %_ClassOf(arg) == 'RegExp')
+  VirtualFrame::SpilledScope spilled_scope;
+  ASSERT(args->length() == 1);
+  LoadAndSpill(args->at(0));
+  frame_->EmitPop(a1);
+  __ And(t1, a1, Operand(kSmiTagMask));
+  false_target()->Branch(eq);
+
+  __ LoadRoot(t0, Heap::kNullValueRootIndex);
+  true_target()->Branch(eq, t1, Operand(t0));
+
+  Register map_reg = a2;
+  __ lw(map_reg, FieldMemOperand(a1, HeapObject::kMapOffset));
+  // Undetectable objects behave like undefined when tested with typeof.
+  __ lbu(a1, FieldMemOperand(map_reg, Map::kBitFieldOffset));
+  __ And(t1, a1, Operand(1 << Map::kIsUndetectable));
+  false_target()->Branch(eq, t1, Operand(1 << Map::kIsUndetectable));
+
+  __ lbu(t1, FieldMemOperand(map_reg, Map::kInstanceTypeOffset));
+  false_target()->Branch(less, t1, Operand(FIRST_JS_OBJECT_TYPE));
+  __ mov(condReg1, t1);
+  __ li(condReg2, Operand(LAST_JS_OBJECT_TYPE));
+  cc_reg_ = less_equal;
 }
 
 
