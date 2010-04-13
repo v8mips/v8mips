@@ -2532,8 +2532,13 @@ void CodeGenerator::GenerateLog(ZoneList<Expression*>* args) {
 
 
 void CodeGenerator::GenerateIsNonNegativeSmi(ZoneList<Expression*>* args) {
-  UNIMPLEMENTED_MIPS();
-  __ break_(__LINE__);
+  VirtualFrame::SpilledScope spilled_scope;
+  ASSERT(args->length() == 1);
+  LoadAndSpill(args->at(0));
+  frame_->EmitPop(t0);
+  __ And(condReg1, a0, Operand(kSmiTagMask | 0x80000000u));
+  __ mov(condReg2, zero_reg);
+  cc_reg_ = eq;
 }
 
 
