@@ -1650,7 +1650,7 @@ int32_t Simulator::Call(byte_* entry, int argument_count, ...) {
   int original_stack = get_register(sp);
   // Compute position of stack on entry to generated code.
   int entry_stack = (original_stack - (argument_count - 4) * sizeof(int32_t)
-                                    - kArgsSlotsSize);
+                                    - kCArgsSlotsSize);
   if (OS::ActivationFrameAlignment() != 0) {
     entry_stack &= -OS::ActivationFrameAlignment();
   }

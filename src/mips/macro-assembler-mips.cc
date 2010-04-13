@@ -1619,8 +1619,8 @@ void MacroAssembler::TryGetFunctionPrototype(Register function,
     // Call and allocate arguments slots.
     jalr(t9);
     // Use the branch delay slot to allocated argument slots.
-    addiu(sp, sp, -StandardFrameConstants::kRArgsSlotsSize);
-    addiu(sp, sp, StandardFrameConstants::kRArgsSlotsSize);
+    addiu(sp, sp, -StandardFrameConstants::kBArgsSlotsSize);
+    addiu(sp, sp, StandardFrameConstants::kBArgsSlotsSize);
   }
 
 
@@ -1629,8 +1629,8 @@ void MacroAssembler::TryGetFunctionPrototype(Register function,
     // Call and allocate arguments slots.
     jalr(target);
     // Use the branch delay slot to allocated argument slots.
-    addiu(sp, sp, -StandardFrameConstants::kRArgsSlotsSize);
-    addiu(sp, sp, StandardFrameConstants::kRArgsSlotsSize);
+    addiu(sp, sp, -StandardFrameConstants::kBArgsSlotsSize);
+    addiu(sp, sp, StandardFrameConstants::kBArgsSlotsSize);
   }
 
 
@@ -1639,8 +1639,8 @@ void MacroAssembler::TryGetFunctionPrototype(Register function,
     // Jump but do not protect the branch delay slot.
     Call(false, code, rmode);
     // Use the branch delay slot to allocated argument slots.
-    addiu(sp, sp, -StandardFrameConstants::kRArgsSlotsSize);
-    addiu(sp, sp, StandardFrameConstants::kRArgsSlotsSize);
+    addiu(sp, sp, -StandardFrameConstants::kBArgsSlotsSize);
+    addiu(sp, sp, StandardFrameConstants::kBArgsSlotsSize);
   }
 
 
@@ -1652,7 +1652,7 @@ void MacroAssembler::TryGetFunctionPrototype(Register function,
     // Call and allocate arguments slots.
     jr(t9);
     // Use the branch delay slot to allocated argument slots.
-    addiu(sp, sp, -StandardFrameConstants::kRArgsSlotsSize);
+    addiu(sp, sp, -StandardFrameConstants::kBArgsSlotsSize);
   }
 
 
@@ -1661,7 +1661,7 @@ void MacroAssembler::TryGetFunctionPrototype(Register function,
     // Call and allocate arguments slots.
     jr(t9);
     // Use the branch delay slot to allocated argument slots.
-    addiu(sp, sp, -StandardFrameConstants::kRArgsSlotsSize);
+    addiu(sp, sp, -StandardFrameConstants::kBArgsSlotsSize);
   }
 
 
@@ -1670,7 +1670,7 @@ void MacroAssembler::TryGetFunctionPrototype(Register function,
     // Jump but do not protect the branch delay slot.
     Jump(false, code, rmode);
     // Use the branch delay slot to allocated argument slots.
-    addiu(sp, sp, -StandardFrameConstants::kRArgsSlotsSize);
+    addiu(sp, sp, -StandardFrameConstants::kBArgsSlotsSize);
   }
 
 

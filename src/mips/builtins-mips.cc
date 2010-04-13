@@ -119,7 +119,7 @@ void Builtins::Generate_JSConstructCall(MacroAssembler* masm) {
   // (instead of the original receiver from the call site). The receiver is
   // stack element argc.
   __ sll(t0, a0, kPointerSizeLog2);
-  __ Add(t0, t0, StandardFrameConstants::kRArgsSlotsSize);
+  __ Add(t0, t0, StandardFrameConstants::kBArgsSlotsSize);
   __ Add(t0, t0, sp);
   __ sw(a1, MemOperand(t0));
   // Set expected number of arguments to zero (not changing a0).
@@ -349,7 +349,7 @@ static void Generate_JSConstructStubHelper(MacroAssembler* masm,
 
   // Setup pointer to last argument.
   __ Add(a2, fp, Operand(StandardFrameConstants::kCallerSPOffset
-                          + StandardFrameConstants::kRegularArgsSlotsSize));
+                          + StandardFrameConstants::kBArgsSlotsSize));
 
   // Setup number of arguments for function call below
   __ srl(a0, a3, kSmiTagSize);
@@ -592,8 +592,7 @@ static void LeaveArgumentsAdaptorFrame(MacroAssembler* masm) {
   __ Addu(sp, sp, t0);
   // Adjust for the receiver and arguments slots.
   __ Addu(sp, sp,
-    // Use the branch delay slot.
-      Operand(kPointerSize + StandardFrameConstants::kRArgsSlotsSize));
+      Operand(kPointerSize + StandardFrameConstants::kBArgsSlotsSize));
 }
 
 
@@ -622,7 +621,7 @@ void Builtins::Generate_ArgumentsAdaptorTrampoline(MacroAssembler* masm) {
 
     // Calculate copy start address into a0 and copy end address into a2.
     __ sll(a0, a0, kPointerSizeLog2 - kSmiTagSize);
-    __ Addu(a0, a0, StandardFrameConstants::kRArgsSlotsSize);
+    __ Addu(a0, a0, StandardFrameConstants::kBArgsSlotsSize);
     __ Addu(a0, fp, a0);
     // Adjust for return address and receiver.
     __ Addu(a0, a0, Operand(2 * kPointerSize));
@@ -660,12 +659,12 @@ void Builtins::Generate_ArgumentsAdaptorTrampoline(MacroAssembler* masm) {
     // a2: expected number of arguments
     // a3: code entry to call
     __ sll(a0, a0, kPointerSizeLog2 - kSmiTagSize);
-    __ Addu(a0, a0, StandardFrameConstants::kRArgsSlotsSize);
+    __ Addu(a0, a0, StandardFrameConstants::kBArgsSlotsSize);
     __ Addu(a0, fp, a0);
     // Adjust for return address and receiver.
     __ Addu(a0, a0, Operand(2 * kPointerSize));
     // Compute copy end address. Also adjust for return address.
-    __ Addu(t1, fp, StandardFrameConstants::kRArgsSlotsSize + kPointerSize);
+    __ Addu(t1, fp, StandardFrameConstants::kBArgsSlotsSize + kPointerSize);
 
     // Copy the arguments (including the receiver) to the new stack frame.
     // a0: copy start address
@@ -711,6 +710,7 @@ void Builtins::Generate_ArgumentsAdaptorTrampoline(MacroAssembler* masm) {
   // Dont adapt arguments.
   // -------------------------------------------
   __ bind(&dont_adapt_arguments);
+  __ Add(sp,  sp,  StandardFrameConstants::kBArgsSlotsSize);
   __ Jump(a3);
 }
 

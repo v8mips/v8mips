@@ -126,6 +126,8 @@ class StandardFrameConstants : public AllStatic {
   static const int kCArgsSlotsSize = 4 * kPointerSize;
   // JS argument slots size.
   static const int kJSArgsSlotsSize = 0 * kPointerSize;
+  // Assembly builtins argument slots size.
+  static const int kBArgsSlotsSize = 0 * kPointerSize;
 };
 
 

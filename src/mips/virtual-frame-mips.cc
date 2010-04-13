@@ -215,8 +215,8 @@ void VirtualFrame::CallCodeObject(Handle<Code> code,
       // This is a builtin and it expects argument slots.
       // Don't protect the branch delay slot and use it to allocate args slots.
       __ Call(false, code, rmode);
-      __ addiu(sp, sp, -StandardFrameConstants::kRArgsSlotsSize);
-      __ addiu(sp, sp, StandardFrameConstants::kRArgsSlotsSize);
+      __ addiu(sp, sp, -StandardFrameConstants::kBArgsSlotsSize);
+      __ addiu(sp, sp, StandardFrameConstants::kBArgsSlotsSize);
       break;
 
     default:

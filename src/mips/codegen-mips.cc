@@ -3740,8 +3740,8 @@ void CEntryStub::GenerateCore(MacroAssembler* masm,
   // We are calling compiled C/C++ code. a0 and a1 hold our two arguments. We
   // also need the argument slots.
   __ jalr(s2);
-  __ addiu(sp, sp, -StandardFrameConstants::kRArgsSlotsSize);
-  __ addiu(sp, sp, StandardFrameConstants::kRArgsSlotsSize);
+  __ addiu(sp, sp, -StandardFrameConstants::kCArgsSlotsSize);
+  __ addiu(sp, sp, StandardFrameConstants::kCArgsSlotsSize);
 
   if (always_allocate) {
     UNIMPLEMENTED_MIPS();
