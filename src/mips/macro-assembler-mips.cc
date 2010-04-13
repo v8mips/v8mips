@@ -1554,6 +1554,22 @@ void MacroAssembler::InvokeFunction(Register function,
 }
 
 
+void MacroAssembler::InvokeFunction(JSFunction* function,
+                                    const ParameterCount& actual,
+                                    InvokeFlag flag) {
+  ASSERT(function->is_compiled());
+
+  // Get the function and setup the context.
+  li(a1, Operand(Handle<JSFunction>(function)));
+  lw(cp, FieldMemOperand(a1, JSFunction::kContextOffset));
+
+  // Invoke the cached code.
+  Handle<Code> code(function->code());
+  ParameterCount expected(function->shared()->formal_parameter_count());
+  InvokeCode(code, expected, actual, RelocInfo::CODE_TARGET, flag);
+}
+
+
 // ---------------------------------------------------------------------------
 // Support functions.
 

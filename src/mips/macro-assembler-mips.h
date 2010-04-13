@@ -454,6 +454,10 @@ class MacroAssembler: public Assembler {
                       const ParameterCount& actual,
                       InvokeFlag flag);
 
+  void InvokeFunction(JSFunction* function,
+                      const ParameterCount& actual,
+                      InvokeFlag flag);
+
 
 #ifdef ENABLE_DEBUGGER_SUPPORT
   // ---------------------------------------------------------------------------
