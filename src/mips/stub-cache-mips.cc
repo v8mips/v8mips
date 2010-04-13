@@ -371,9 +371,107 @@ Object* CallStubCompiler::CompileCallConstant(Object* object,
                                               JSFunction* function,
                                               String* name,
                                               CheckType check) {
-  UNIMPLEMENTED_MIPS();
-  __ break_(__LINE__);
-  return reinterpret_cast<Object*>(NULL);   // UNIMPLEMENTED RETURN
+  // r2: name
+  // ra: return address
+  SharedFunctionInfo* function_info = function->shared();
+  if (function_info->HasCustomCallGenerator()) {
+    CustomCallGenerator generator =
+        ToCData<CustomCallGenerator>(function_info->function_data());
+    return generator(this, object, holder, function, name, check);
+  }
+
+  Label miss;
+
+  // Get the receiver from the stack
+  const int argc = arguments().immediate();
+  __ lw(a1, MemOperand(sp, argc * kPointerSize));
+
+  // Check that the receiver isn't a smi.
+  if (check != NUMBER_CHECK) {
+    __ And(t1, a1, Operand(kSmiTagMask));
+    __ Branch(eq, &miss, t1, Operand(zero_reg));
+  }
+
+  // Make sure that it's okay not to patch the on stack receiver
+  // unless we're doing a receiver map check.
+  ASSERT(!object->IsGlobalObject() || check == RECEIVER_MAP_CHECK);
+
+  switch (check) {
+    case RECEIVER_MAP_CHECK:
+      // Check that the maps haven't changed.
+      CheckPrototypes(JSObject::cast(object), a1, holder, a3, a2, name, &miss);
+
+      // Patch the receiver on the stack with the global proxy if
+      // necessary.
+      if (object->IsGlobalObject()) {
+        __ lw(a3, FieldMemOperand(a1, GlobalObject::kGlobalReceiverOffset));
+        __ sw(a3, MemOperand(sp, argc * kPointerSize));
+      }
+      break;
+
+    case STRING_CHECK:
+      // Check that the object is a two-byte string or a symbol.
+      __ GetObjectType(a1, a2, a2);
+      __ Branch(Ugreater_equal, &miss, a2, Operand(FIRST_NONSTRING_TYPE));
+      // Check that the maps starting from the prototype haven't changed.
+      GenerateLoadGlobalFunctionPrototype(masm(),
+                                          Context::STRING_FUNCTION_INDEX,
+                                          a2);
+      CheckPrototypes(JSObject::cast(object->GetPrototype()), a2, holder, a3,
+                      a1, name, &miss);
+      break;
+
+    case NUMBER_CHECK: {
+      Label fast;
+      // Check that the object is a smi or a heap number.
+      __ And(t1, a1, Operand(kSmiTagMask));
+      __ Branch(eq, &fast, t1, Operand(zero_reg));
+      __ GetObjectType(a1, a2, a2);
+      __ Branch(ne, &miss, a2, Operand(HEAP_NUMBER_TYPE));
+      __ bind(&fast);
+      // Check that the maps starting from the prototype haven't changed.
+      GenerateLoadGlobalFunctionPrototype(masm(),
+                                          Context::NUMBER_FUNCTION_INDEX,
+                                          a2);
+      CheckPrototypes(JSObject::cast(object->GetPrototype()), a2, holder, a3,
+                      a1, name, &miss);
+      break;
+    }
+//
+    case BOOLEAN_CHECK: {
+      Label fast;
+      // Check that the object is a boolean.
+      __ LoadRoot(t0, Heap::kTrueValueRootIndex);
+      __ Branch(eq, &fast, a1, Operand(t0));
+      __ LoadRoot(t0, Heap::kFalseValueRootIndex);
+      __ Branch(ne, &miss, a1, Operand(t0));
+      __ bind(&fast);
+      // Check that the maps starting from the prototype haven't changed.
+      GenerateLoadGlobalFunctionPrototype(masm(),
+                                          Context::BOOLEAN_FUNCTION_INDEX,
+                                          a2);
+      CheckPrototypes(JSObject::cast(object->GetPrototype()), a2, holder, a3,
+                      a1, name, &miss);
+      break;
+    }
+
+    default:
+      UNREACHABLE();
+  }
+
+  __ InvokeFunction(function, arguments(), JUMP_FUNCTION);
+
+  // Handle call cache miss.
+  __ bind(&miss);
+  Handle<Code> ic = ComputeCallMiss(arguments().immediate());
+  __ Jump(ic, RelocInfo::CODE_TARGET);
+
+  // Return the generated code.
+  String* function_name = NULL;
+  if (function->shared()->name()->IsString()) {
+    function_name = String::cast(function->shared()->name());
+  }
+  return GetCode(CONSTANT_FUNCTION, function_name);
 }
 
 
