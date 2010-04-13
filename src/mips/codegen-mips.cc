@@ -3019,14 +3019,11 @@ void CodeGenerator::GenerateStringAdd(ZoneList<Expression*>* args) {
   Comment cmnt(masm_, "[ GenerateStringAdd");
   ASSERT_EQ(2, args->length());
 
-  __ break_(__LINE__);
   Load(args->at(0));
   Load(args->at(1));
 
   StringAddStub stub(NO_STRING_ADD_FLAGS);
-  __ break_(__LINE__);
   frame_->CallStub(&stub, 2);
-  __ break_(__LINE__);
   frame_->EmitPush(v0);
 }
 
@@ -5071,21 +5068,13 @@ static void HandleBinaryOpSlowCases(MacroAssembler* masm,
     __ TailCallStub(&string_add_stub);
 
     __ bind(&string1_smi2);
-    // First argument is a string, second is a smi. Try to lookup the number
-    // string for the smi in the number string cache.
-    __ break_(__LINE__);
-
-    // Comment this out till we get the basics working.
-    // It seems that NumberStringCache is only populated via runtime,
-    // which we are not using yet.
-
-    // NumberToStringStub::GenerateLookupNumberStringCache(
-    //     masm, a0, a2, t0, t1, true, &string1);
-    //
-    // // Replace second argument on stack and tailcall string add stub to make
-    // // the result.
-    // __ sw(a2, MemOperand(sp, 0));
-    // __ TailCallStub(&string_add_stub);
+    NumberToStringStub::GenerateLookupNumberStringCache(
+        masm, a0, a2, t0, t1, true, &string1);
+    
+    // Replace second argument on stack and tailcall string add stub to make
+    // the result.
+    __ sw(a2, MemOperand(sp, 0));
+    __ TailCallStub(&string_add_stub);
 
     // Only first argument is a string.
     __ bind(&string1);
