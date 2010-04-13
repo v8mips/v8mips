@@ -2515,8 +2515,13 @@ void CodeGenerator::GenerateSetValueOf(ZoneList<Expression*>* args) {
 
 
 void CodeGenerator::GenerateIsSmi(ZoneList<Expression*>* args) {
-  UNIMPLEMENTED_MIPS();
-  __ break_(__LINE__);
+  VirtualFrame::SpilledScope spilled_scope;
+  ASSERT(args->length() == 1);
+  LoadAndSpill(args->at(0));
+  frame_->EmitPop(t0);
+  __ And(condReg1, t0, Operand(kSmiTagMask));
+  __ mov(condReg2, zero_reg);
+  cc_reg_ = eq;
 }
 
 
