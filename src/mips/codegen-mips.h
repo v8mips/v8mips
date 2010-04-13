@@ -281,6 +281,7 @@ class CodeGenerator: public AstVisitor {
                      bool force_cc);
   void Load(Expression* x);
   void LoadGlobal();
+  void LoadGlobalReceiver(Register scratch);
 
   // Generate code to push the value of an expression on top of the frame
   // and then spill the frame fully to memory.  This function is used

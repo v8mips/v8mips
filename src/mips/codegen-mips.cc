@@ -522,6 +522,15 @@ void CodeGenerator::LoadGlobal() {
 }
 
 
+void CodeGenerator::LoadGlobalReceiver(Register scratch) {
+  VirtualFrame::SpilledScope spilled_scope;
+  __ lw(scratch, ContextOperand(cp, Context::GLOBAL_INDEX));
+  __ lw(scratch,
+         FieldMemOperand(scratch, GlobalObject::kGlobalReceiverOffset));
+  frame_->EmitPush(scratch);
+}
+
+
 void CodeGenerator::LoadTypeofExpression(Expression* x) {
   // Special handling of identifiers as subxessions of typeof.
   VirtualFrame::SpilledScope spilled_scope;
@@ -2491,8 +2500,19 @@ void CodeGenerator::VisitCall(Call* node) {
     }
 
   } else {
-    UNIMPLEMENTED_MIPS();
-    __ break_(__LINE__);
+    // --------------------------------------------------------
+    // JavaScript example: 'foo(1, 2, 3)'  // foo is not global
+    // --------------------------------------------------------
+
+    // Load the function.
+    LoadAndSpill(function);
+
+    // Pass the global proxy as the receiver.
+    LoadGlobalReceiver(a0);
+
+    // Call the function (and allocate args slots).
+    CallWithArguments(args, NO_CALL_FUNCTION_FLAGS, node->position());
+    frame_->EmitPush(v0);
   }
 
   ASSERT(frame_->height() == original_height + 1);
