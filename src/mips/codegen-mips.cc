@@ -2661,6 +2661,7 @@ void CodeGenerator::GenerateMathSqrt(ZoneList<Expression*>* args) {
 void CodeGenerator::GenerateFastCharCodeAt(ZoneList<Expression*>* args) {
   UNIMPLEMENTED_MIPS();
   __ break_(__LINE__);
+  frame_->EmitPush(zero_reg);
 }
 
 
