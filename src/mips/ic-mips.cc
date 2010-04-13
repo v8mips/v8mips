@@ -295,9 +295,130 @@ void KeyedLoadIC::GenerateExternalArray(MacroAssembler* masm,
 }
 
 
+void KeyedStoreIC::GenerateRuntimeSetProperty(MacroAssembler* masm) {
+  // r0     : value
+  // lr     : return address
+  // sp[0]  : key
+  // sp[1]  : receiver
+  __ lw(a1, MemOperand(sp, 0));
+  __ lw(a3, MemOperand(sp, 4));
+  __ MultiPush(a0.bit() | a1.bit() | a3.bit());
+
+  __ TailCallRuntime(Runtime::kSetProperty, 3, 1);
+}
+
+
 void KeyedStoreIC::GenerateGeneric(MacroAssembler* masm) {
+  // a0     : value
+  // ra     : return address
+  // sp[0]  : key
+  // sp[1]  : receiver
+  Label slow, fast, array, extra, exit, check_pixel_array;
+  // Get the key and the object from the stack.
+  // a1 = key, a3 = receiver
+  __ lw(a1, MemOperand(sp, 0));
+  __ lw(a3, MemOperand(sp, 4));
+  // Check that the key is a smi.
+  __ BranchOnNotSmi(a1, &slow, t0);
+  // Check that the object isn't a smi.
+  __ BranchOnSmi(a3, &slow, t0);
+  // Get the map of the object.
+  __ lw(a2, FieldMemOperand(a3, HeapObject::kMapOffset));
+  // Check that the receiver does not require access checks. We need
+  // to do this because this generic stub does not perform map checks.
+  __ lbu(t0, FieldMemOperand(a2, Map::kBitFieldOffset));
+  __ And(t0, t0, Operand(1 << Map::kIsAccessCheckNeeded));
+  __ Branch(ne, &slow, t3, Operand(zero_reg));
+  // Check if the object is a JS array or not.
+  __ lbu(t2, FieldMemOperand(a2, Map::kInstanceTypeOffset));
+  // a1 == key.
+  __ Branch(eq, &array, t2, Operand(JS_ARRAY_TYPE));
+  // Check that the object is some kind of JS object.
+  __ Branch(less, &slow, t2, Operand(FIRST_JS_OBJECT_TYPE));
+
+
+  // Object case: Check key against length in the elements array.
+  __ lw(t3, FieldMemOperand(a3, JSObject::kElementsOffset));
+  // Check that the object is in fast mode (not dictionary).
+  __ lw(t2, FieldMemOperand(t3, HeapObject::kMapOffset));
+  __ LoadRoot(t0, Heap::kFixedArrayMapRootIndex);
+  __ Branch(ne, &check_pixel_array, t2, Operand(t0));
+  // Untag the key (for checking against untagged length in the fixed array).
+  __ sra(a1, a1, kSmiTagSize);
+  // Compute address to store into and check array bounds.
+  __ Add(t2, t3, Operand(FixedArray::kHeaderSize - kHeapObjectTag));
+  __ sll(t1, a1, kPointerSizeLog2);
+  __ add(t2, t2, t1);
+  __ lw(t0, FieldMemOperand(a3, FixedArray::kLengthOffset));
+  __ Branch(Uless, &fast, a1, Operand(t0));
+
+
+  // Slow case: Push extra copies of the arguments (3).
+  __ bind(&slow);
+  GenerateRuntimeSetProperty(masm);
+
+  // Check whether the elements is a pixel array.
+  // a0: value
+  // a1: index (as a smi), zero-extended.
+  // a3: elements array
+  // t2: map
+  __ bind(&check_pixel_array);
+  __ break_(__LINE__);
+  __ LoadRoot(t0, Heap::kPixelArrayMapRootIndex);
+  __ Branch(ne, &slow, t2, Operand(t0));
+  // Check that the value is a smi. If a conversion is needed call into the
+  // runtime to convert and clamp.
+  __ BranchOnNotSmi(a0, &slow);
+  __ sra(t1, a1, kSmiTagSize);  // Untag the key.
+  __ lw(t0, FieldMemOperand(t3, PixelArray::kLengthOffset));
+  __ Branch(Ugreater_equal, &slow, t1, Operand(t0));
+  // We eventually want to return a0. Move it to v0 already so save it and allow
+  // use of a0.
+  __ mov(v0, a0);  // Save the value.
+  __ sra(a0, a0, kSmiTagSize);  // Untag the value.
+  {  // Clamp the value to [0..255].
+    Label done;
+    __ And(t0, a0, Operand(0xFFFFFF00));
+    __ Branch(eq, &done, t0, Operand(zero_reg));
+    __ Branch(greater_equal, 2, t0, Operand(zero_reg));
+    __ li(a0, Operand(255));  // 255 if positive.
+    __ li(a0, Operand(0));  // 0 if negative.
+    __ bind(&done);
+  }
+  __ lw(t2, FieldMemOperand(t3, PixelArray::kExternalPointerOffset));
+  __ addu(t0, t2, t1);
+  __ sb(a0, MemOperand(t0));
+  __ Ret();
+
+
+  // Extra capacity case: Check if there is extra capacity to
+  // perform the store and update the length. Used for adding one
+  // element to the array by writing to array[array.length].
+  // r0 == value, r1 == key, r2 == elements, r3 == object
+  __ bind(&extra);
   UNIMPLEMENTED_MIPS();
   __ break_(__LINE__);
+
+
+  // Array case: Get the length and the elements array from the JS
+  // array. Check that the array is in fast mode; if it is the
+  // length is always a smi.
+  // a0 == value, t2 == address to store into, t3 == elements
+  __ bind(&array);
+  UNIMPLEMENTED_MIPS();
+  __ break_(__LINE__);
+
+  __ bind(&fast);
+  __ sw(a0, MemOperand(t2));
+  // Skip write barrier if the written value is a smi.
+  __ And(t0, a0, Operand(kSmiTagMask));
+  __ Branch(eq, &exit, t0, Operand(zero_reg));
+  // Update write barrier for the elements array address.
+  __ subu(t1, t2, t3);
+  __ RecordWrite(t3, t1, t2);
+
+  __ bind(&exit);
+  __ Ret();
 }
 
 
