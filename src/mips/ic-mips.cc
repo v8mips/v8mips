@@ -59,7 +59,7 @@ void LoadIC::GenerateStringLength(MacroAssembler* masm) {
 
 void LoadIC::GenerateFunctionPrototype(MacroAssembler* masm) {
   UNIMPLEMENTED_MIPS();
-  __ break_(0x60);
+  __ break_(__LINE__);
 }
 
 
@@ -68,13 +68,13 @@ Object* CallIC_Miss(Arguments args);
 
 void CallIC::GenerateMegamorphic(MacroAssembler* masm, int argc) {
   UNIMPLEMENTED_MIPS();
-  __ break_(0x69);
+  __ break_(__LINE__);
 }
 
 
 void CallIC::GenerateNormal(MacroAssembler* masm, int argc) {
   UNIMPLEMENTED_MIPS();
-  __ break_(0x75);
+  __ break_(__LINE__);
 }
 
 void CallIC::GenerateMiss(MacroAssembler* masm, int argc) {
@@ -126,13 +126,13 @@ Object* LoadIC_Miss(Arguments args);
 
 void LoadIC::GenerateMegamorphic(MacroAssembler* masm) {
   UNIMPLEMENTED_MIPS();
-  __ break_(0x125);
+  __ break_(__LINE__);
 }
 
 
 void LoadIC::GenerateNormal(MacroAssembler* masm) {
   UNIMPLEMENTED_MIPS();
-  __ break_(0x131);
+  __ break_(__LINE__);
 }
 
 
@@ -205,20 +205,20 @@ void KeyedLoadIC::GenerateExternalArray(MacroAssembler* masm,
 
 void KeyedStoreIC::GenerateGeneric(MacroAssembler* masm) {
   UNIMPLEMENTED_MIPS();
-  __ break_(0x191);
+  __ break_(__LINE__);
 }
 
 
 void KeyedStoreIC::GenerateExternalArray(MacroAssembler* masm,
                                          ExternalArrayType array_type) {
   UNIMPLEMENTED_MIPS();
-  __ break_(0x197);
+  __ break_(__LINE__);
 }
 
 
 void KeyedLoadIC::GenerateIndexedInterceptor(MacroAssembler* masm) {
   UNIMPLEMENTED_MIPS();
-  __ break_(0x204);
+  __ break_(__LINE__);
 }
 
 
@@ -239,7 +239,7 @@ void KeyedStoreIC::GenerateMiss(MacroAssembler* masm) {
 
 void StoreIC::GenerateMegamorphic(MacroAssembler* masm) {
   UNIMPLEMENTED_MIPS();
-  __ break_(0x216);
+  __ break_(__LINE__);
 }
 
 
@@ -262,7 +262,7 @@ void StoreIC::GenerateMiss(MacroAssembler* masm) {
 
 void StoreIC::GenerateArrayLength(MacroAssembler* masm) {
   UNIMPLEMENTED_MIPS();
-  __ break_(0x224);
+  __ break_(__LINE__);
 }
 
 #undef __

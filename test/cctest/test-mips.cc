@@ -351,11 +351,12 @@ TEST(MIPSSpecialAssignment) {
     "var a = 1;"
     "a += 2;"
     "a *= 9;"
+    "a /= 3;"
     "a -= 2;"
     "a;";
   Local<String> source = ::v8::String::New(c_source);
   Local<Script> script = ::v8::Script::Compile(source);
-  CHECK_EQ(25, script->Run()->Int32Value());
+  CHECK_EQ(7, script->Run()->Int32Value());
 }
 
 
