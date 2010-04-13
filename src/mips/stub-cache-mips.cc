@@ -732,9 +732,23 @@ Object* KeyedLoadStubCompiler::CompileLoadConstant(String* name,
                                                    JSObject* receiver,
                                                    JSObject* holder,
                                                    Object* value) {
-  UNIMPLEMENTED_MIPS();
-  __ break_(__LINE__);
-  return reinterpret_cast<Object*>(NULL);   // UNIMPLEMENTED RETURN
+  // ra    : return address
+  // sp[0] : key
+  // sp[4] : receiver
+  Label miss;
+
+  // Check the key is the cached one
+  __ lw(a2, MemOperand(sp, 0));
+  __ lw(a0, MemOperand(sp, kPointerSize));
+
+  __ Branch(ne, &miss, a2, Operand(Handle<String>(name)));
+
+  GenerateLoadConstant(receiver, holder, a0, a3, a1, value, name, &miss);
+  __ bind(&miss);
+  GenerateLoadMiss(masm(), Code::KEYED_LOAD_IC);
+
+  // Return the generated code.
+  return GetCode(CONSTANT_FUNCTION, name);
 }
 
 
