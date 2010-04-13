@@ -1488,6 +1488,7 @@ void MacroAssembler::InvokePrologue(const ParameterCount& expected,
       jmp(done);
     } else {
       JumpToBuiltin(adaptor);
+      break_(__LINE__);
     }
     bind(&regular_invoke);
   }

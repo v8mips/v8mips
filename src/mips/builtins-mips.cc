@@ -43,20 +43,52 @@ namespace internal {
 void Builtins::Generate_Adaptor(MacroAssembler* masm,
                                 CFunctionId id,
                                 BuiltinExtraArguments extra_args) {
-  UNIMPLEMENTED_MIPS();
-  __ break_(0x47);
+  // a0                 : number of arguments excluding receiver
+  // a1                 : called function (only guaranteed when
+  //                      extra_args requires it)
+  // cp                 : context
+  // sp[0]              : last argument
+  // ...
+  // sp[4 * (argc - 1) + arguments slots] : first argument (argc == a0)
+  // sp[4 * argc + arguments slots]       : receiver
+
+  // Insert extra arguments.
+  int num_extra_args = 0;
+  if (extra_args == NEEDS_CALLED_FUNCTION) {
+    __ break_(__LINE__);
+    // We need to push a1 after the original arguments and before the arguments
+    // slots.
+    num_extra_args = 1;
+    __ Add(sp, sp, -4);
+    __ sw(a1, MemOperand(sp, StandardFrameConstants::kRArgsSlotsSize));
+  } else {
+    ASSERT(extra_args == NO_EXTRA_ARGUMENTS);
+  }
+
+  // JumpToExternalReference expects a0 to contain the number of arguments
+  // including the receiver and the extra arguments.
+  __ Add(a0, a0, Operand(num_extra_args + 1));
+  __ JumpToExternalReference(ExternalReference(id));
 }
 
 
 void Builtins::Generate_ArrayCode(MacroAssembler* masm) {
-  UNIMPLEMENTED_MIPS();
-  __ break_(__LINE__);
+  // Just jump to the generic array code.
+  Code* code = Builtins::builtin(Builtins::ArrayCodeGeneric);
+  Handle<Code> array_code(code);
+  // We are already in a builtin and did not touch to the stack, so use a simple
+  // Jump to call Builtins::ArrayCodeGeneric.
+  __ Jump(array_code, RelocInfo::CODE_TARGET);
 }
 
 
 void Builtins::Generate_ArrayConstructCode(MacroAssembler* masm) {
-  UNIMPLEMENTED_MIPS();
-  __ break_(__LINE__);
+  // Just jump to the generic construct code.
+  Code* code = Builtins::builtin(Builtins::JSConstructStubGeneric);
+  Handle<Code> generic_construct_stub(code);
+  // We are already in a builtin and did not touch to the stack, so use a simple
+  // Jump to call Builtins::JSConstructStubGeneric.
+  __ Jump(generic_construct_stub, RelocInfo::CODE_TARGET);
 }
 
 
@@ -348,7 +380,7 @@ static void Generate_JSConstructStubHelper(MacroAssembler* masm,
   // a1: constructor function
   if (is_api_function) {
     UNIMPLEMENTED_MIPS();
-    __ break_(0x348);
+    __ break_(__LINE__);
 //    __ lw(cp, FieldMemOperand(a1, JSFunction::kContextOffset));
 //    Handle<Code> code = Handle<Code>(
 //        Builtins::builtin(Builtins::HandleApiCallConstruct));
@@ -575,8 +607,10 @@ void Builtins::Generate_ArgumentsAdaptorTrampoline(MacroAssembler* masm) {
   Label invoke, dont_adapt_arguments;
 
   Label enough, too_few;
+  __ Branch(eq, &dont_adapt_arguments,
+      a2, Operand(SharedFunctionInfo::kDontAdaptArgumentsSentinel));
+  // We use Uless as the number of argument should always be greater than 0.
   __ Branch(Uless, &too_few, a0, Operand(a2));
-  __ Branch(eq, &dont_adapt_arguments, a2, Operand(SharedFunctionInfo::kDontAdaptArgumentsSentinel));
 
   {  // Enough parameters: actual >= expected.
     // a0: actual number of arguments as a smi
