@@ -2656,8 +2656,11 @@ void CodeGenerator::VisitCallRuntime(CallRuntime* node) {
   int arg_count = args->length();
 
   if (function == NULL) {
-    UNIMPLEMENTED_MIPS();
-    __ break_(__LINE__);
+    // Prepare stack for calling JS runtime function.
+    // Push the builtins object found in the current global object.
+    __ lw(a1, GlobalObject());
+    __ lw(a0, FieldMemOperand(a1, GlobalObject::kBuiltinsOffset));
+    frame_->EmitPush(a0);
   }
 
   // Push the arguments ("left-to-right").
@@ -2666,8 +2669,13 @@ void CodeGenerator::VisitCallRuntime(CallRuntime* node) {
   }
 
   if (function == NULL) {
-    UNIMPLEMENTED_MIPS();
-    __ break_(__LINE__);
+    // Call the JS runtime function.
+    __ li(a2, Operand(node->name()));
+    InLoopFlag in_loop = loop_nesting() > 0 ? IN_LOOP : NOT_IN_LOOP;
+    Handle<Code> stub = ComputeCallInitialize(arg_count, in_loop);
+    frame_->CallCodeObject(stub, RelocInfo::CODE_TARGET, arg_count + 1);
+    __ lw(cp, frame_->Context());
+    frame_->EmitPush(v0);
   } else {
     // Call the C runtime function.
     frame_->CallRuntime(function, arg_count);
