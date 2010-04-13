@@ -67,8 +67,18 @@ void LoadIC::GenerateStringLength(MacroAssembler* masm) {
 
 
 void LoadIC::GenerateFunctionPrototype(MacroAssembler* masm) {
-  UNIMPLEMENTED_MIPS();
-  __ break_(__LINE__);
+  // r2    : name
+  // lr    : return address
+  // [sp]  : receiver
+
+  Label miss;
+
+  // Load receiver.
+  __ lw(a0, MemOperand(sp, 0));
+
+  StubCompiler::GenerateLoadFunctionPrototype(masm, a0, a1, a3, &miss);
+  __ bind(&miss);
+  StubCompiler::GenerateLoadMiss(masm, Code::LOAD_IC);
 }
 
 

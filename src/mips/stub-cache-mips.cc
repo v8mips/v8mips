@@ -90,8 +90,9 @@ void StubCompiler::GenerateLoadFunctionPrototype(MacroAssembler* masm,
                                                  Register scratch1,
                                                  Register scratch2,
                                                  Label* miss_label) {
-  UNIMPLEMENTED_MIPS();
-  __ break_(__LINE__);
+  __ TryGetFunctionPrototype(receiver, scratch1, scratch2, miss_label);
+  __ mov(v0, scratch1);
+  __ Ret();
 }
 
 
@@ -109,11 +110,8 @@ void StubCompiler::GenerateStoreField(MacroAssembler* masm,
   // a0 : value
   Label exit;
 
-  __ break_(0x98);
-
   // Check that the receiver isn't a smi.
-  __ And(t0, receiver_reg, Operand(kSmiTagMask));
-  __ Branch(eq, miss_label, t0, Operand(zero_reg));
+  __ BranchOnSmi(receiver_reg, miss_label, scratch);
 
   // Check that the map of the receiver hasn't changed.
   __ lw(scratch, FieldMemOperand(receiver_reg, HeapObject::kMapOffset));
@@ -159,8 +157,7 @@ void StubCompiler::GenerateStoreField(MacroAssembler* masm,
     __ sw(a0, FieldMemOperand(receiver_reg, offset));
 
     // Skip updating write barrier if storing a smi.
-    __ And(t0, a0, kSmiTagMask);
-    __ Branch(eq, &exit, t0, Operand(zero_reg));
+    __ BranchOnSmi(a0, &exit, scratch);
 
     // Update the write barrier for the array address.
     // Pass the value being stored in the now unused name_reg.
@@ -174,8 +171,7 @@ void StubCompiler::GenerateStoreField(MacroAssembler* masm,
     __ sw(a0, FieldMemOperand(scratch, offset));
 
     // Skip updating write barrier if storing a smi.
-    __ And(t0, a0, Operand(kSmiTagMask));
-    __ Branch(eq, &exit, t0, Operand(zero_reg));
+    __ BranchOnSmi(a0, &exit, scratch);
 
     // Update the write barrier for the array address.
     // Ok to clobber receiver_reg and name_reg, since we return.
