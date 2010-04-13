@@ -46,8 +46,17 @@ namespace internal {
 
 
 void LoadIC::GenerateArrayLength(MacroAssembler* masm) {
-  UNIMPLEMENTED_MIPS();
-  __ break_(__LINE__);
+  // a2    : name
+  // ra    : return address
+  // [sp]  : receiver
+
+  Label miss;
+
+  __ lw(a0, MemOperand(sp, 0));
+
+  StubCompiler::GenerateLoadArrayLength(masm, a0, a3, &miss);
+  __ bind(&miss);
+  StubCompiler::GenerateLoadMiss(masm, Code::LOAD_IC);
 }
 
 
