@@ -162,10 +162,6 @@ void CodeGenerator::Generate(CompilationInfo* info) {
     // Allocate space for locals and initialize them.
     frame_->AllocateStackSlots();
 
-    // Initialize the function return target.
-    function_return_.set_direction(JumpTarget::BIDIRECTIONAL);
-    function_return_is_shadowed_ = false;
-
     VirtualFrame::SpilledScope spilled_scope;
     if (scope()->num_heap_slots() > 0) {
       UNIMPLEMENTED_MIPS();
@@ -204,9 +200,39 @@ void CodeGenerator::Generate(CompilationInfo* info) {
     // initialization because the arguments object may be stored in the
     // context.
     if (scope()->arguments() != NULL) {
-      UNIMPLEMENTED_MIPS();
-      __ break_(__LINE__);
+      ASSERT(scope()->arguments_shadow() != NULL);
+      Comment cmnt(masm_, "[ allocate arguments object");
+      { Reference shadow_ref(this, scope()->arguments_shadow());
+        { Reference arguments_ref(this, scope()->arguments());
+          ArgumentsAccessStub stub(ArgumentsAccessStub::NEW_OBJECT);
+          __ lw(a2, frame_->Function());
+          // The receiver is below the arguments (and args slots), the return address,
+          // and the frame pointer on the stack.
+          const int kReceiverDisplacement = 2 + 4 + scope()->num_parameters();
+          __ Addu(a1, fp, Operand(kReceiverDisplacement * kPointerSize));
+          __ li(a0, Operand(Smi::FromInt(scope()->num_parameters())));
+          frame_->Adjust(3);
+          __ MultiPush(a0.bit() | a1.bit() | a2.bit());
+          frame_->CallStub(&stub, 3);
+          frame_->EmitPush(v0);
+          arguments_ref.SetValue(NOT_CONST_INIT);
+        }
+        shadow_ref.SetValue(NOT_CONST_INIT);
+      }
+      frame_->Drop();  // Value is no longer needed.
     }
+
+    // Initialize ThisFunction reference if present.
+    if (scope()->is_function_scope() && scope()->function() != NULL) {
+      __ li(t0, Operand(Factory::the_hole_value()));
+      frame_->EmitPush(t0);
+      StoreToSlot(scope()->function()->slot(), NOT_CONST_INIT);
+    }
+
+    // Initialize the function return target after the locals are set
+    // up, because it needs the expected frame height from the frame.
+    function_return_.set_direction(JumpTarget::BIDIRECTIONAL);
+    function_return_is_shadowed_ = false;
 
     // Generate code to 'execute' declarations and initialize functions
     // (source elements). In case of an illegal redeclaration we need to
@@ -2632,9 +2658,6 @@ void CodeGenerator::GenerateMathSqrt(ZoneList<Expression*>* args) {
 }
 
 
-// This should generate code that performs a charCodeAt() call or returns
-// undefined in order to trigger the slow case, Runtime_StringCharCodeAt.
-// It is not yet implemented on ARM, so it always goes to the slow case.
 void CodeGenerator::GenerateFastCharCodeAt(ZoneList<Expression*>* args) {
   UNIMPLEMENTED_MIPS();
   __ break_(__LINE__);
