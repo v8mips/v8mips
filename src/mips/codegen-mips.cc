@@ -482,8 +482,32 @@ void CodeGenerator::Load(Expression* x) {
   }
 
   if (true_target.is_linked() || false_target.is_linked()) {
-    UNIMPLEMENTED_MIPS();
-      __ break_(__LINE__);
+    // We have at least one condition value that has been "translated"
+    // into a branch, thus it needs to be loaded explicitly.
+    JumpTarget loaded;
+    if (frame_ != NULL) {
+      loaded.Jump();  // Don't lose the current TOS.
+    }
+    bool both = true_target.is_linked() && false_target.is_linked();
+    // Load "true" if necessary.
+    if (true_target.is_linked()) {
+      true_target.Bind();
+      __ LoadRoot(v0, Heap::kTrueValueRootIndex);
+      frame_->EmitPush(v0);
+    }
+    // If both "true" and "false" need to be loaded jump across the code for
+    // "false".
+    if (both) {
+      loaded.Jump();
+    }
+    // Load "false" if necessary.
+    if (false_target.is_linked()) {
+      false_target.Bind();
+      __ LoadRoot(v0, Heap::kFalseValueRootIndex);
+      frame_->EmitPush(v0);
+    }
+    // A value is loaded on all paths reaching this point.
+    loaded.Bind();
   }
   ASSERT(has_valid_frame());
   ASSERT(!has_cc());
