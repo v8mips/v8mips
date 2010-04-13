@@ -163,9 +163,22 @@ void CodeGenerator::Generate(CompilationInfo* info) {
     frame_->AllocateStackSlots();
 
     VirtualFrame::SpilledScope spilled_scope;
-    if (scope()->num_heap_slots() > 0) {
-      UNIMPLEMENTED_MIPS();
-      __ break_(__LINE__);
+    int heap_slots = scope()->num_heap_slots();
+    if (heap_slots > 0) {
+      // Allocate local context.
+      // Get outer context and create a new context based on it.
+      __ lw(a0, frame_->Function());
+      frame_->EmitPush(a0);
+      frame_->CallRuntime(Runtime::kNewContext, 1);  // v0 holds the result
+
+#ifdef DEBUG
+      JumpTarget verified_true;
+      verified_true.Branch(eq, no_hint, v0, Operand(cp));
+      __ stop("NewContext: v0 is expected to be the same as cp");
+      verified_true.Bind();
+#endif
+      // Update context local.
+      __ sw(cp, frame_->Context());
     }
 
     {
