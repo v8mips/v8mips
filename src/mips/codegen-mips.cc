@@ -2608,8 +2608,17 @@ void CodeGenerator::GenerateRandomPositiveSmi(ZoneList<Expression*>* args) {
 
 
 void CodeGenerator::GenerateObjectEquals(ZoneList<Expression*>* args) {
-  UNIMPLEMENTED_MIPS();
-  __ break_(__LINE__);
+  VirtualFrame::SpilledScope spilled_scope;
+  ASSERT(args->length() == 2);
+
+  // Load the two objects into registers and perform the comparison.
+  LoadAndSpill(args->at(0));
+  LoadAndSpill(args->at(1));
+  frame_->EmitPop(a0);
+  frame_->EmitPop(a1);
+  __ mov(condReg1, a0);
+  __ mov(condReg2, a1);
+  cc_reg_ = eq;
 }
 
 
