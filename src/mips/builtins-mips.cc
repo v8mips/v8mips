@@ -677,21 +677,21 @@ void Builtins::Generate_ArgumentsAdaptorTrampoline(MacroAssembler* masm) {
     // Adjust load for return address and receiver.
     __ lw(t0, MemOperand(a0));
     __ Push(t0);
-    // Use the branch delay slot to update a0.
-    __ Branch(false, ne, &copy, a0, Operand(t1));
-    __ addiu(a0, a0, -kPointerSize);
+    __ Addu(a0, a0, -kPointerSize);
+    __ Branch(ne, &copy, a0, Operand(t1));
 
     // Fill the remaining expected arguments with undefined.
     // a1: function
     // a2: expected number of arguments
     // a3: code entry to call
     __ LoadRoot(t0, Heap::kUndefinedValueRootIndex);
-    __ sll(a2, a2, kPointerSizeLog2);
-    __ Subu(a2, fp, Operand(a2));
+    __ sll(t2, a2, kPointerSizeLog2);
+    __ Subu(a2, fp, Operand(t2));
     __ Addu(a2, a2, Operand(-4 * kPointerSize));  // Adjust for frame.
 
     Label fill;
     __ bind(&fill);
+    __ break_(__LINE__);
     __ Push(t0);
     __ Branch(ne, &fill, sp, Operand(a2));
   }
@@ -707,7 +707,7 @@ void Builtins::Generate_ArgumentsAdaptorTrampoline(MacroAssembler* masm) {
 
 
   // -------------------------------------------
-  // Dont adapt arguments.
+  // Don't adapt arguments.
   // -------------------------------------------
   __ bind(&dont_adapt_arguments);
   __ Add(sp,  sp,  StandardFrameConstants::kBArgsSlotsSize);
