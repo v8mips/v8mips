@@ -2698,8 +2698,24 @@ void CodeGenerator::GenerateIsRegExp(ZoneList<Expression*>* args) {
 
 
 void CodeGenerator::GenerateIsConstructCall(ZoneList<Expression*>* args) {
-  UNIMPLEMENTED_MIPS();
-  __ break_(__LINE__);
+  VirtualFrame::SpilledScope spilled_scope;
+  ASSERT(args->length() == 0);
+
+  // Get the frame pointer for the calling frame.
+  __ lw(a2, MemOperand(fp, StandardFrameConstants::kCallerFPOffset));
+
+  // Skip the arguments adaptor frame if it exists.
+  Label check_frame_marker;
+  __ lw(a1, MemOperand(a2, StandardFrameConstants::kContextOffset));
+  __ Branch(ne, &check_frame_marker,
+              a1, Operand(Smi::FromInt(StackFrame::ARGUMENTS_ADAPTOR)));
+  __ lw(a2, MemOperand(a2, StandardFrameConstants::kCallerFPOffset));
+
+  // Check the marker in the calling frame.
+  __ bind(&check_frame_marker);
+  __ lw(condReg1, MemOperand(a2, StandardFrameConstants::kMarkerOffset));
+  __ li(condReg2, Operand(Smi::FromInt(StackFrame::CONSTRUCT)));
+  cc_reg_ = eq;
 }
 
 
