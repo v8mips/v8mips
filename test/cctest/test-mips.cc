@@ -256,15 +256,28 @@ TEST(MIPSArrays) {
   v8::HandleScope scope;
   LocalContext env;  // from cctest.h
 
-  const char* c_source =
+  const char* c_source_1 =
     "myArray = [];"
     "myArray[1] = 0x10;"
     "myArray[2] = 0x20;"
     "myArray[3] = 0x30;"
     "myArray[2];";
-  Local<String> source = ::v8::String::New(c_source);
-  Local<Script> script = ::v8::Script::Compile(source);
-  CHECK_EQ(0x20, script->Run()->Int32Value());
+  Local<String> source_1 = ::v8::String::New(c_source_1);
+  Local<Script> script_1 = ::v8::Script::Compile(source_1);
+  CHECK_EQ(0x20, script_1->Run()->Int32Value());
+
+  const char* c_source_2 =
+    "var myArr = new Array();"
+    ""
+    "myArr[1] = 0xa;"
+    "myArr[2] = 0xb;"
+    "myArr[3] = 0xc;"
+    "myArr[4] = 0xd;"
+    "myArr[100] = 0xabc0;"
+    "myArr[100] + myArr[4];";
+  Local<String> source_2 = ::v8::String::New(c_source_2);
+  Local<Script> script_2 = ::v8::Script::Compile(source_2);
+  CHECK_EQ(0xabcd, script_2->Run()->Int32Value());
 }
 
 

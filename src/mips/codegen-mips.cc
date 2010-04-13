@@ -44,6 +44,10 @@ namespace internal {
 
 #define __ ACCESS_MASM(masm_)
 
+static void EmitIdenticalObjectComparison(MacroAssembler* masm,
+                                          Label* slow,
+                                          Condition cc,
+                                          bool never_nan_nan);
 static void MultiplyByKnownInt(MacroAssembler* masm,
                                Register source,
                                Register destination,
@@ -1167,8 +1171,10 @@ void CodeGenerator::Comparison(Condition cc,
   // CompareStub takes arguments in a0 and a1, returns <0, >0 or 0 in v0.
   // We call with 0 args because there are 0 on the stack.
   UNIMPLEMENTED_MIPS();
-  // This is not implemented on MIPS yet. Break.
-  __ break_(__LINE__);
+  CompareStub stub(cc, strict);
+  frame_->CallStub(&stub, 0);
+  __ mov(condReg1, v0);
+  __ li(condReg2, Operand(0));
   exit.Jump();
 
   // Do smi comparison.
@@ -3907,6 +3913,81 @@ void WriteInt32ToHeapNumberStub::Generate(MacroAssembler* masm) {
 }
 
 
+// Handle the case where the lhs and rhs are the same object.
+// Equality is almost reflexive (everything but NaN), so this is a test
+// for "identity and not NaN".
+static void EmitIdenticalObjectComparison(MacroAssembler* masm,
+                                          Label* slow,
+                                          Condition cc,
+                                          bool never_nan_nan) {
+  Label not_identical;
+  Label heap_number, return_equal;
+  Register exp_mask_reg = t5;
+
+  __ Branch(ne, &not_identical, a0, Operand(a1));
+
+  // The two objects are identical. If we know that one of them isn't NaN then
+  // we now know they test equal.
+  if (cc != eq || !never_nan_nan) {
+    __ li(exp_mask_reg, Operand(HeapNumber::kExponentMask));
+  
+    // Test for NaN. Sadly, we can't just compare to Factory::nan_value(),
+    // so we do the second best thing - test it ourselves.
+    // They are both equal and they are not both Smis so both of them are not
+    // Smis. If it's not a heap number, then return equal.
+    if (cc == less || cc == greater) {
+      __ GetObjectType(a0, t4, t4);
+      __ Branch(greater, slow, t4, Operand(FIRST_JS_OBJECT_TYPE));
+    } else {
+      __ GetObjectType(a0, t4, t4);
+      __ Branch(eq, &heap_number, t4, Operand(HEAP_NUMBER_TYPE));
+      // Comparing JS objects with <=, >= is complicated.
+      if (cc != eq) {
+      __ Branch(greater, slow, t4, Operand(FIRST_JS_OBJECT_TYPE));
+        // Normally here we fall through to return_equal, but undefined is
+        // special: (undefined == undefined) == true, but
+        // (undefined <= undefined) == false!  See ECMAScript 11.8.5.
+        if (cc == less_equal || cc == greater_equal) {
+          __ Branch(ne, &return_equal, t4, Operand(ODDBALL_TYPE));
+          __ LoadRoot(t2, Heap::kUndefinedValueRootIndex);
+          __ Branch(ne, &return_equal, a0, Operand(t2));
+          if (cc == le) {
+            // undefined <= undefined should fail.
+            __ li(v0, Operand(GREATER));
+          } else  {
+            // undefined >= undefined should fail.
+            __ li(v0, Operand(LESS));
+          }
+          __ Ret();
+        }
+      }
+    }
+  }
+
+  __ bind(&return_equal);
+  if (cc == less) {
+    __ li(v0, Operand(GREATER));  // Things aren't less than themselves.
+  } else if (cc == greater) {
+    __ li(v0, Operand(LESS));     // Things aren't greater than themselves.
+  } else {
+    __ li(v0, Operand(0));        // Things are <=, >=, ==, === themselves.
+  }
+  __ Ret();
+
+  // For less and greater we don't have to check for NaN since the result of
+  // x < x is false regardless. For the others here is some code to check
+  // for NaN.
+  if (cc != less && cc != greater) {
+    __ bind(&heap_number);
+    UNIMPLEMENTED_MIPS();
+    __ break_(__LINE__);
+  }
+  // No fall through here.
+
+  __ bind(&not_identical);
+}
+
+
 void FastNewClosureStub::Generate(MacroAssembler* masm) {
   // Create a new closure from the given function info in new
   // space. Set the context to the current context in cp.
@@ -4018,8 +4099,31 @@ void FastCloneShallowArrayStub::Generate(MacroAssembler* masm) {
 // On entry a0 and a1 are the things to be compared. On exit v0 is 0,
 // positive or negative to indicate the result of the comparison.
 void CompareStub::Generate(MacroAssembler* masm) {
+  Label slow;  // Call builtin.
+  Label not_smis, both_loaded_as_doubles;
+
+  // NOTICE! This code is only reached after a smi-fast-case check, so
+  // it is certain that at least one operand isn't a smi.
+
+  // Handle the case where the objects are identical.  Either returns the answer
+  // or goes to slow.  Only falls through if the objects were not identical.
+  EmitIdenticalObjectComparison(masm, &slow, cc_, never_nan_nan_);
+
+  // We fall through, id objects are not identical.
   UNIMPLEMENTED_MIPS();
-  __ break_(0x765);
+  __ break_(__LINE__);
+
+  __ bind(&both_loaded_as_doubles);
+  UNIMPLEMENTED_MIPS();
+  __ break_(__LINE__);
+
+  __ bind(&not_smis);
+  UNIMPLEMENTED_MIPS();
+  __ break_(__LINE__);
+
+  __ bind(&slow);
+  UNIMPLEMENTED_MIPS();
+  __ break_(__LINE__);
 }
 
 
