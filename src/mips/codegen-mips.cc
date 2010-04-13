@@ -2765,9 +2765,17 @@ void CodeGenerator::GenerateIsConstructCall(ZoneList<Expression*>* args) {
 
 
 void CodeGenerator::GenerateArgumentsLength(ZoneList<Expression*>* args) {
-  UNIMPLEMENTED_MIPS();
-  __ break_(__LINE__);
-  frame_->EmitPush(zero_reg);
+  VirtualFrame::SpilledScope spilled_scope;
+  ASSERT(args->length() == 0);
+
+  // Seed the result with the formal parameters count, which will be used
+  // in case no arguments adaptor frame is found below the current frame.
+  __ li(a0, Operand(Smi::FromInt(scope()->num_parameters())));
+
+  // Call the shared stub to get to arguments[key].
+  ArgumentsAccessStub stub(ArgumentsAccessStub::READ_LENGTH);
+  frame_->CallStub(&stub, 0);
+  frame_->EmitPush(v0);
 }
 
 
@@ -4311,14 +4319,73 @@ void InstanceofStub::Generate(MacroAssembler* masm) {
 
 
 void ArgumentsAccessStub::GenerateReadLength(MacroAssembler* masm) {
-  UNIMPLEMENTED_MIPS();
-  __ break_(__LINE__);
+  // Check if the calling frame is an arguments adaptor frame.
+  Label adaptor;
+  __ lw(a2, MemOperand(fp, StandardFrameConstants::kCallerFPOffset));
+  __ lw(a3, MemOperand(a2, StandardFrameConstants::kContextOffset));
+  __ Branch(eq, &adaptor, a3, Operand(Smi::FromInt(StackFrame::ARGUMENTS_ADAPTOR)));
+
+  // Nothing to do: The formal number of parameters has already been
+  // passed in register v0 by calling function. Just return it.
+  __ mov(v0,a0);
+  __ Ret();
+
+  // Arguments adaptor case: Read the arguments length from the
+  // adaptor frame and return it.
+  __ bind(&adaptor);
+  __ lw(v0, MemOperand(a2, ArgumentsAdaptorFrameConstants::kLengthOffset));
+  __ Ret();
 }
 
 
 void ArgumentsAccessStub::GenerateReadElement(MacroAssembler* masm) {
-  UNIMPLEMENTED_MIPS();
+  // The displacement is the offset of the last parameter (if any)
+  // relative to the frame pointer.
+  static const int kDisplacement =
+      StandardFrameConstants::kCallerSPOffset - kPointerSize;
+
+  // Check that the key is a smiGenerateReadElement.
+  Label slow;
+  __ BranchOnNotSmi(a1, &slow);
+
+  // Check if the calling frame is an arguments adaptor frame.
+  Label adaptor;
+  __ lw(a2, MemOperand(fp, StandardFrameConstants::kCallerFPOffset));
+  __ lw(a3, MemOperand(a2, StandardFrameConstants::kContextOffset));
+  __ Branch(eq, &adaptor, a3, Operand(Smi::FromInt(StackFrame::ARGUMENTS_ADAPTOR)));
+
+  // Check index against formal parameters count limit passed in
+  // through register a0. Use unsigned comparison to get negative
+  // check for free.
   __ break_(__LINE__);
+  __ Branch(Ugreater_equal, &slow, a0, Operand(a1));
+
+  // Read the argument from the stack and return it.
+  __ sub(a0, a0, a1);
+  __ sll(t3, a3, kPointerSizeLog2 - kSmiTagSize);
+  __ Addu(a3, fp, Operand(t3));
+  __ lw(v0, MemOperand(a3, kDisplacement));
+  __ Ret();
+
+  // Arguments adaptor case: Check index against actual arguments
+  // limit found in the arguments adaptor frame. Use unsigned
+  // comparison to get negative check for free.
+  __ bind(&adaptor);
+  __ lw(a0, MemOperand(a2, ArgumentsAdaptorFrameConstants::kLengthOffset));
+  __ Branch(greater_equal, &slow, a1, Operand(a0));
+
+  // Read the argument from the adaptor frame and return it.
+  __ sub(a3, a0, a1);
+  __ sll(t3, a3, kPointerSizeLog2 - kSmiTagSize);
+  __ Addu(a3, a2, Operand(t3));
+  __ lw(v0, MemOperand(a3, kDisplacement));
+  __ Ret();
+
+  // Slow-case: Handle non-smi or out-of-bounds access to arguments
+  // by calling the runtime system.
+  __ bind(&slow);
+  __ Push(a1);
+  __ TailCallRuntime(Runtime::kGetArgumentsProperty, 1, 1);
 }
 
 
