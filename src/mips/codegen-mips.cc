@@ -2780,8 +2780,19 @@ void CodeGenerator::GenerateArgumentsLength(ZoneList<Expression*>* args) {
 
 
 void CodeGenerator::GenerateArguments(ZoneList<Expression*>* args) {
-  UNIMPLEMENTED_MIPS();
-  __ break_(__LINE__);
+  VirtualFrame::SpilledScope spilled_scope;
+  ASSERT(args->length() == 1);
+
+  // Satisfy contract with ArgumentsAccessStub:
+  // Load the key into r1 and the formal parameters count into r0.
+  LoadAndSpill(args->at(0));
+  frame_->EmitPop(a1);
+  __ li(a0, Operand(Smi::FromInt(scope()->num_parameters())));
+
+  // Call the shared stub to get to arguments[key].
+  ArgumentsAccessStub stub(ArgumentsAccessStub::READ_ELEMENT);
+  frame_->CallStub(&stub, 0);
+  frame_->EmitPush(v0);
 }
 
 
