@@ -730,8 +730,13 @@ void CodeGenerator::StoreToSlot(Slot* slot, InitState init_state) {
     __ sw(a0, SlotOperand(slot, a2));
     frame_->EmitPush(a0);
     if (slot->type() == Slot::CONTEXT) {
-      UNIMPLEMENTED_MIPS();
-      __ break_(__LINE__);
+      // Skip write barrier if the written value is a smi.
+      __ And(t0, a0, Operand(kSmiTagMask));
+      exit.Branch(eq, t0, Operand(zero_reg));
+      // r2 is loaded with context when calling SlotOperand above.
+      int offset = FixedArray::kHeaderSize + slot->index() * kPointerSize;
+      __ li(a3, Operand(offset));
+      __ RecordWrite(a2, a3, a1);
     }
     // If we definitely did not jump over the assignment, we do not need
     // to bind the exit label. Doing so can defeat peephole
