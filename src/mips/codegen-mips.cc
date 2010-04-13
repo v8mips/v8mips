@@ -2862,8 +2862,21 @@ void CodeGenerator::GenerateIsArray(ZoneList<Expression*>* args) {
 
 
 void CodeGenerator::GenerateIsRegExp(ZoneList<Expression*>* args) {
-  UNIMPLEMENTED_MIPS();
-  __ break_(__LINE__);
+  VirtualFrame::SpilledScope spilled_scope;
+  ASSERT(args->length() == 1);
+  LoadAndSpill(args->at(0));
+  JumpTarget answer;
+  // We need the condition to be not_equal is the object is a smi.
+  frame_->EmitPop(a0);
+  __ And(t0, a0, Operand(kSmiTagMask));
+  __ Xor(condReg1, t0, Operand(kSmiTagMask));
+  __ mov(condReg2, zero_reg);
+  answer.Branch(eq, t0, Operand(zero_reg));
+  // It is a heap object - get the map. Check if the object is a regexp.
+  __ GetObjectType(a0, t1, condReg1);
+  __ li(condReg2, Operand(JS_REGEXP_TYPE));
+  answer.Bind();
+  cc_reg_ = eq;
 }
 
 
