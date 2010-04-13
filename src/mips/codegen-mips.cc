@@ -2338,11 +2338,9 @@ void CodeGenerator::VisitArrayLiteral(ArrayLiteral* node) {
   frame_->EmitMultiPush(a2.bit() | a1.bit() | a0.bit());
   int length = node->values()->length();
   if (node->depth() > 1) {
-    UNIMPLEMENTED_MIPS();
-    __ break_(__LINE__);
+    frame_->CallRuntime(Runtime::kCreateArrayLiteral, 3);
   } else if (length > FastCloneShallowArrayStub::kMaximumLength) {
-    UNIMPLEMENTED_MIPS();
-    __ break_(__LINE__);
+    frame_->CallRuntime(Runtime::kCreateArrayLiteralShallow, 3);
   } else {
     FastCloneShallowArrayStub stub(length);
     frame_->CallStub(&stub, 3);
@@ -3243,7 +3241,7 @@ void CodeGenerator::VisitCountOperation(CountOperation* node) {
     // a0 still holds the original value.
     slow.Bind();
     UNIMPLEMENTED_MIPS();
-    __ break_(0x09001);   // We should not come here yet.
+    __ break_(__LINE__);   // We should not come here yet.
 
     // Store the new value in the target if not const.
     exit.Bind();
