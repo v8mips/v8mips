@@ -3588,8 +3588,10 @@ void CodeGenerator::VisitCompareOperation(CompareOperation* node) {
       break;
 
     case Token::IN: {
-      UNIMPLEMENTED_MIPS();
-      __ break_(__LINE__);
+      LoadAndSpill(left);
+      LoadAndSpill(right);
+      frame_->InvokeBuiltin(Builtins::IN, CALL_JS, 2);
+      frame_->EmitPush(v0);
       break;
     }
 
