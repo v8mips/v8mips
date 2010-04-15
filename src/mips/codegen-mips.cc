@@ -4963,8 +4963,32 @@ void ArgumentsAccessStub::GenerateReadElement(MacroAssembler* masm) {
 
 
 void ArgumentsAccessStub::GenerateNewObject(MacroAssembler* masm) {
-  UNIMPLEMENTED_MIPS();
+  // sp[0] : number of parameters
+  // sp[4] : receiver displacement
+  // sp[8] : function
+
+  // Check if the calling frame is an arguments adaptor frame.
+  Label adaptor_frame, runtime;
+  __ lw(t2, MemOperand(fp, StandardFrameConstants::kCallerFPOffset));
+  __ lw(t3, MemOperand(t2, StandardFrameConstants::kContextOffset));
+  __ Branch(ne,
+      &runtime,
+      t3,
+      Operand(Smi::FromInt(StackFrame::ARGUMENTS_ADAPTOR)));
+
+  // Patch the arguments.length and the parameters pointer.
+  __ bind(&adaptor_frame);
   __ break_(__LINE__);
+  __ lw(t1, MemOperand(t2, ArgumentsAdaptorFrameConstants::kLengthOffset));
+  __ sw(t1, MemOperand(sp));
+  __ sll(t0, t1, kPointerSizeLog2 - kSmiTagSize);
+  __ Addu(t3, t2, t0);
+  __ Addu(t3, t3, Operand(StandardFrameConstants::kCallerSPOffset));
+  __ sw(t3, MemOperand(sp, 1 * kPointerSize));
+
+  // Do the runtime call to allocate the arguments object.
+  __ bind(&runtime);
+  __ TailCallRuntime(Runtime::kNewArgumentsFast, 3, 1);
 }
 
 
