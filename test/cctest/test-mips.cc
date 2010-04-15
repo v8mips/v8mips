@@ -350,17 +350,24 @@ TEST(MIPSSpecialAssignment) {
   v8::HandleScope scope;
   LocalContext env;  // from cctest.h
 
-  // TODO(MIPS): "/=" not working yet.
-  const char* c_source =
+  const char* c_source_1 =
     "var a = 1;"
     "a += 2;"
     "a *= 9;"
     "a /= 3;"
     "a -= 2;"
     "a;";
-  Local<String> source = ::v8::String::New(c_source);
-  Local<Script> script = ::v8::Script::Compile(source);
-  CHECK_EQ(7, script->Run()->Int32Value());
+  Local<String> source_1 = ::v8::String::New(c_source_1);
+  Local<Script> script_1 = ::v8::Script::Compile(source_1);
+  CHECK_EQ(7, script_1->Run()->Int32Value());
+
+  const char* c_source_2 =
+    "var a = 123;"
+    "var b = 456;"
+    "var max = a > b ? a : b;";
+  Local<String> source_2 = ::v8::String::New(c_source_2);
+  Local<Script> script_2 = ::v8::Script::Compile(source_2);
+  CHECK_EQ(456, script_2->Run()->Int32Value());
 }
 
 

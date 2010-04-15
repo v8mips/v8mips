@@ -3078,6 +3078,7 @@ void CodeGenerator::VisitCallRuntime(CallRuntime* node) {
   int arg_count = args->length();
 
   if (function == NULL) {
+__ break_(__LINE__);
     // Prepare stack for calling JS runtime function.
     // Push the builtins object found in the current global object.
     __ lw(a1, GlobalObject());
@@ -3091,6 +3092,7 @@ void CodeGenerator::VisitCallRuntime(CallRuntime* node) {
   }
 
   if (function == NULL) {
+__ break_(__LINE__);
     // Call the JS runtime function.
     __ li(a2, Operand(node->name()));
     InLoopFlag in_loop = loop_nesting() > 0 ? IN_LOOP : NOT_IN_LOOP;
