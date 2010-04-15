@@ -596,7 +596,7 @@ void CodeGenerator::LoadFromSlot(Slot* slot, TypeofState typeof_state) {
       LoadFromGlobalSlotCheckExtensions(slot, typeof_state, a1, a2, &slow);
       // If there was no control flow to slow, we can exit early.
       if (!slow.is_linked()) {
-        frame_->EmitPush(a0);
+        frame_->EmitPush(v0);
         return;
       }
 
@@ -609,8 +609,8 @@ void CodeGenerator::LoadFromSlot(Slot* slot, TypeofState typeof_state) {
 
     slow.Bind();
     frame_->EmitPush(cp);
-    __ li(a0, Operand(slot->var()->name()));
-    frame_->EmitPush(a0);
+    __ li(v0, Operand(slot->var()->name()));
+    frame_->EmitPush(v0);
 
     if (typeof_state == INSIDE_TYPEOF) {
       frame_->CallRuntime(Runtime::kLoadContextSlotNoReferenceError, 2);
@@ -621,8 +621,8 @@ void CodeGenerator::LoadFromSlot(Slot* slot, TypeofState typeof_state) {
     frame_->EmitPush(v0);
 
   } else {
-    __ lw(a0, SlotOperand(slot, a2));
-    frame_->EmitPush(a0);
+    __ lw(v0, SlotOperand(slot, a2));
+    frame_->EmitPush(v0);
     if (slot->var()->mode() == Variable::CONST) {
       UNIMPLEMENTED_MIPS();
       __ break_(__LINE__);
@@ -692,7 +692,7 @@ void CodeGenerator::LoadFromGlobalSlotCheckExtensions(Slot* slot,
     frame_->CallCodeObject(ic, RelocInfo::CODE_TARGET_CONTEXT, 0);
   }
 
-  // Drop the global object. The result is in r0.
+  // Drop the global object. The result is in v0.
   frame_->Drop();
 }
 
@@ -2095,6 +2095,7 @@ void CodeGenerator::VisitTryFinallyStatement(TryFinallyStatement* node) {
     exit.Branch(ne, a2, Operand(Smi::FromInt(THROWING)), no_hint);
 
     // Rethrow exception.
+    __ break_(__LINE__);
     frame_->EmitPush(a0);
     frame_->CallRuntime(Runtime::kReThrow, 1);
 
@@ -2524,10 +2525,6 @@ void CodeGenerator::VisitCall(Call* node) {
     // JavaScript example: 'foo(1, 2, 3)'  // foo is global.
     // -----------------------------------------------------
 
-    int arg_count = args->length();
-
-    // We need sp to be 8 bytes aligned when calling the stub.
-    __ SetupAlignedCall(t0, arg_count + 1);
 
     // Pass the global object as the receiver and let the IC stub
     // patch the stack to use the global proxy as 'this' in the
@@ -2535,6 +2532,7 @@ void CodeGenerator::VisitCall(Call* node) {
     LoadGlobal();
 
     // Load the arguments.
+    int arg_count = args->length();
     for (int i = 0; i < arg_count; i++) {
       LoadAndSpill(args->at(i));
     }
@@ -2546,7 +2544,6 @@ void CodeGenerator::VisitCall(Call* node) {
     CodeForSourcePosition(node->position());
     frame_->CallCodeObject(stub, RelocInfo::CODE_TARGET_CONTEXT,
                            arg_count + 1);
-    __ ReturnFromAlignedCall();
     __ lw(cp, frame_->Context());
     // Remove the function from the stack.
     frame_->EmitPush(v0);
@@ -2557,7 +2554,6 @@ void CodeGenerator::VisitCall(Call* node) {
     // JavaScript example: 'with (obj) foo(1, 2, 3)'  // foo is in obj.
     // ----------------------------------------------------------------
 
-  Comment cmnt1(masm_, "[ ______________________________________________________ Call in with statement");
     // Load the function
     frame_->EmitPush(cp);
     __ li(a0, Operand(var->name()));
@@ -2572,7 +2568,6 @@ void CodeGenerator::VisitCall(Call* node) {
     // Call the function.
     CallWithArguments(args, NO_CALL_FUNCTION_FLAGS, node->position());
     frame_->EmitPush(v0);
-  Comment cmnt2(masm_, "[ ______________________________________________________ END: Call in with statement");
 
   } else if (property != NULL) {
     // Check if the key is a literal string.
@@ -3618,6 +3613,16 @@ void CodeGenerator::VisitCompareOperation(CompareOperation* node) {
 }
 
 
+void CodeGenerator::EmitKeyedLoad(bool is_global) {
+  Comment cmnt(masm_, "[ Load from keyed Property");
+  Handle<Code> ic(Builtins::builtin(Builtins::KeyedLoadIC_Initialize));
+  RelocInfo::Mode rmode = is_global
+                          ? RelocInfo::CODE_TARGET_CONTEXT
+                          : RelocInfo::CODE_TARGET;
+  frame_->CallCodeObject(ic, rmode, 0);
+}
+
+
 #ifdef DEBUG
 bool CodeGenerator::HasValidEntryRegisters() { return true; }
 #endif
@@ -3699,17 +3704,11 @@ void Reference::GetValue() {
     }
 
     case KEYED: {
-      VirtualFrame* frame = cgen_->frame();
-      Comment cmnt(masm, "[ Load from keyed Property");
       ASSERT(property != NULL);
-      Handle<Code> ic(Builtins::builtin(Builtins::KeyedLoadIC_Initialize));
       Variable* var = expression_->AsVariableProxy()->AsVariable();
       ASSERT(var == NULL || var->is_global());
-      RelocInfo::Mode rmode = (var == NULL)
-                            ? RelocInfo::CODE_TARGET
-                            : RelocInfo::CODE_TARGET_CONTEXT;
-      frame->CallCodeObject(ic, rmode, 0);
-      frame->EmitPush(v0);
+      cgen_->EmitKeyedLoad(var != NULL);
+      cgen_->frame()->EmitPush(v0);
       break;
     }
 
@@ -4533,11 +4532,11 @@ void CEntryStub::GenerateThrowTOS(MacroAssembler* masm) {
   // not NULL. The frame pointer is NULL in the exception handler of a
   // JS entry frame.
   // Set cp to NULL if fp is NULL.
-  Label dont_touch_cp;
-  __ Branch(ne, &dont_touch_cp, fp, Operand(zero_reg));
-  __ mov(cp, zero_reg);
-  __ bind(&dont_touch_cp);
+  Label done;
+  __ Branch(false, eq, &done, fp, Operand(zero_reg));
+  __ mov(cp, zero_reg);   // Use the branch delay slot.
   __ lw(cp, MemOperand(fp, StandardFrameConstants::kContextOffset));
+  __ bind(&done);
 
 #ifdef DEBUG
   // TODO(MIPS): Implement debug code.
@@ -4633,8 +4632,7 @@ void CEntryStub::GenerateCore(MacroAssembler* masm,
             v0, Operand(Factory::termination_exception()));
 
   // Handle normal exception.
-  __ b(throw_normal_exception);
-  __ nop();   // Branch delay slot nop.
+  __ jmp(throw_normal_exception);
 
   __ bind(&retry);  // Pass last failure (v0) as parameter (a0) when retrying.
   __ mov(a0, v0);
@@ -4716,6 +4714,10 @@ void JSEntryStub::GenerateBody(MacroAssembler* masm, bool is_construct) {
   // Save callee saved registers on the stack.
   __ MultiPush((kCalleeSaved | ra.bit()) & ~sp.bit());
 
+  // Load argv in s0 register.
+  __ lw(s0, MemOperand(sp, kNumCalleeSaved * kPointerSize +
+                           StandardFrameConstants::kCArgsSlotsSize));
+
   // We build an EntryFrame.
   __ li(t3, Operand(-1));  // Push a bad frame pointer to fail if it is used.
   int marker = is_construct ? StackFrame::ENTRY_CONSTRUCT : StackFrame::ENTRY;
@@ -4727,10 +4729,6 @@ void JSEntryStub::GenerateBody(MacroAssembler* masm, bool is_construct) {
 
   // Setup frame pointer for the frame to be pushed.
   __ addiu(fp, sp, -EntryFrameConstants::kCallerFPOffset);
-
-  // Load argv in s0 register.
-  __ lw(s0, MemOperand(sp, (kNumCalleeSaved + 1) * kPointerSize +
-                           StandardFrameConstants::kCArgsSlotsSize));
 
   // Registers:
   // a0: entry_address
@@ -5038,8 +5036,8 @@ static void HandleBinaryOpSlowCases(MacroAssembler* masm,
   __ bind(&slow);
 
   // Push arguments to the stack
-  __ push(a1);
-  __ push(a0);
+  __ Push(a1);
+  __ Push(a0);
 
   if (Token::ADD == operation) {
     // Test for string arguments before calling runtime.
@@ -5461,8 +5459,8 @@ void GenericBinaryOpStub::HandleNonSmiBitwiseOp(MacroAssembler* masm) {
   // If all else failed then we go to the runtime system.
   __ bind(&slow);
 
-  __ push(a1);  // restore stack
-  __ push(a0);
+  __ Push(a1);  // restore stack
+  __ Push(a0);
   __ li(a0, Operand(1));  // 1 argument (not counting receiver).
 
   __ break_(0x4441);  // MIPS does not support builtins yet.
@@ -6308,7 +6306,6 @@ void StringAddStub::Generate(MacroAssembler* masm) {
 void CallFunctionStub::Generate(MacroAssembler* masm) {
   Label slow;
 
-  Comment cmnt(masm, "[ ______________________________________________________ CallFunctionStub");
   // If the receiver might be a value (string, number or boolean) check for this
   // and box it if it is.
   if (ReceiverMightBeValue()) {
@@ -6328,7 +6325,7 @@ void CallFunctionStub::Generate(MacroAssembler* masm) {
     // Call the runtime to box the value.
     __ bind(&receiver_is_value);
     // We need natives to execute this.
-    __ break_(0x4664);
+    __ break_(__LINE__);
     __ EnterInternalFrame();
     __ Push(a1);
     __ InvokeBuiltin(Builtins::TO_OBJECT, CALL_JS);
@@ -6365,7 +6362,6 @@ void CallFunctionStub::Generate(MacroAssembler* masm) {
   __ GetBuiltinEntry(a3, Builtins::CALL_NON_FUNCTION);
   __ Jump(Handle<Code>(Builtins::builtin(Builtins::ArgumentsAdaptorTrampoline)),
           RelocInfo::CODE_TARGET);
-  Comment cmnt1(masm, "[ ______________________________________________________ END: CallFunctionStub");
 }
 
 

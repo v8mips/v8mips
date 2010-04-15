@@ -1400,15 +1400,15 @@ void MacroAssembler::SetupAlignedCall(Register scratch, int arg_count) {
   // We check for args and receiver size on the stack, all of them word sized.
   // We add one for sp, that we also want to store on the stack.
   if (((arg_count + 1) % kPointerSizeLog2) == 0) {
-    Branch(ne, &extra_push, at, Operand(zero_reg));
+    Branch(ne, &extra_push, scratch, Operand(zero_reg));
   } else {  // ((arg_count + 1) % 2) == 1
-    Branch(eq, &extra_push, at, Operand(zero_reg));
+    Branch(eq, &extra_push, scratch, Operand(zero_reg));
   }
 
   // Save sp on the stack.
   mov(scratch, sp);
   Push(scratch);
-  b(&end);
+  jmp(&end);
 
   // Align before saving sp on the stack.
   bind(&extra_push);
@@ -1861,9 +1861,9 @@ void MacroAssembler::Abort(const char* msg) {
   }
 #endif
   li(a0, Operand(p0));
-  push(a0);
+  Push(a0);
   li(a0, Operand(Smi::FromInt(p1 - p0)));
-  push(a0);
+  Push(a0);
   CallRuntime(Runtime::kAbort, 2);
   // will not return here
 }

@@ -872,7 +872,7 @@ Object* ConstructStubCompiler::CompileConstructStub(
   // TOCHECK: This need is maybe just because I first implemented it with args
   // slots. Try to do it without: we should not need this as the real time
   // function called has the stack setup just before it is called.
-  __ Addu(a1, a1, StandardFrameConstants::kRArgsSlotsSize);
+//  __ Addu(a1, a1, StandardFrameConstants::kRArgsSlotsSize);
 
   // Fill all the in-object properties with undefined.
   // a0: argc

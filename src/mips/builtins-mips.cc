@@ -60,7 +60,7 @@ void Builtins::Generate_Adaptor(MacroAssembler* masm,
     // slots.
     num_extra_args = 1;
     __ Add(sp, sp, -4);
-    __ sw(a1, MemOperand(sp, StandardFrameConstants::kRArgsSlotsSize));
+    __ sw(a1, MemOperand(sp, StandardFrameConstants::kBArgsSlotsSize));
   } else {
     ASSERT(extra_args == NO_EXTRA_ARGUMENTS);
   }
@@ -493,7 +493,7 @@ static void Generate_JSEntryTrampolineHelper(MacroAssembler* masm,
   // s0: argv, ie points to first arg
   Label loop, entry;
   __ sll(t0, a3, kPointerSizeLog2);
-  __ add(t2, s0, t0);
+  __ addu(t2, s0, t0);
   __ b(&entry);
   __ nop();   // Branch delay slot nop.
   // t2 points past last arg.
@@ -526,12 +526,12 @@ static void Generate_JSEntryTrampolineHelper(MacroAssembler* masm,
 
   // Initialize all JavaScript callee-saved registers, since they will be seen
   // by the garbage collector as part of handlers.
-  __ LoadRoot(t4, Heap::kUndefinedValueRootIndex);
-  __ mov(s1, t4);
-  __ mov(s2, t4);
-  __ mov(s3, t4);
-  __ mov(s4, s4);
-  __ mov(s5, t4);
+  __ LoadRoot(t0, Heap::kUndefinedValueRootIndex);
+  __ mov(s1, t0);
+  __ mov(s2, t0);
+  __ mov(s3, t0);
+  __ mov(s4, s0);
+  __ mov(s5, t0);
   // s6 holds the root address. Do not clobber.
   // s7 is cp. Do not init.
 
@@ -539,7 +539,7 @@ static void Generate_JSEntryTrampolineHelper(MacroAssembler* masm,
   __ mov(a0, a3);
   if (is_construct) {
     UNIMPLEMENTED_MIPS();
-    __ break_(0x164);
+    __ break_(__LINE__);
   } else {
     ParameterCount actual(a0);
     __ InvokeFunction(a1, actual, CALL_FUNCTION);

@@ -101,8 +101,9 @@ Address JavaScriptFrame::GetCallerStackPointer() const {
 
 
 Address ArgumentsAdaptorFrame::GetCallerStackPointer() const {
-  UNIMPLEMENTED_MIPS();
-  return static_cast<Address>(NULL);  // UNIMPLEMENTED RETURN
+  const int arguments = Smi::cast(GetExpression(0))->value();
+  const int offset = StandardFrameConstants::kCallerSPOffset;
+  return fp() + offset + (arguments + 1) * kPointerSize;
 }
 
 

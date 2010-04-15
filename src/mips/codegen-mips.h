@@ -314,6 +314,9 @@ class CodeGenerator: public AstVisitor {
 
   // Store the value on top of the stack to a slot.
   void StoreToSlot(Slot* slot, InitState init_state);
+  // Load a keyed property, leaving it in v0. The receiver and key are
+  // passed on the stack, and remain there.
+  void EmitKeyedLoad(bool is_global);
 
   void ToBoolean(JumpTarget* true_target, JumpTarget* false_target);
 
