@@ -50,7 +50,7 @@ void Builtins::Generate_Adaptor(MacroAssembler* masm,
   // sp[0]              : last argument
   // ...
   // sp[4 * (argc - 1) + builtins arguments slots] : first argument
-  // sp[4 * argc + builtins arguments slots]       : receiver
+  // sp[4 * agc + builtins arguments slots]       : receiver
 
   // Insert extra arguments.
   int num_extra_args = 0;

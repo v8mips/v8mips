@@ -1240,9 +1240,11 @@ void CodeGenerator::CheckStack() {
   __ LoadRoot(t0, Heap::kStackLimitRootIndex);
   StackCheckStub stub;
   // Call the stub if lower.
+  __ Push(ra);
   __ Call(Operand(reinterpret_cast<intptr_t>(stub.GetCode().location()),
           RelocInfo::CODE_TARGET),
           Uless, sp, Operand(t0));
+  __ Pop(ra);
 }
 
 
@@ -2663,6 +2665,7 @@ void CodeGenerator::VisitCallNew(CallNew* node) {
 
 
 void CodeGenerator::GenerateClassOf(ZoneList<Expression*>* args) {
+  __ break_(__LINE__);
   VirtualFrame::SpilledScope spilled_scope;
   ASSERT(args->length() == 1);
   JumpTarget leave, null, function, non_function_constructor;
@@ -2991,6 +2994,7 @@ void CodeGenerator::GenerateIsFunction(ZoneList<Expression*>* args) {
   __ GetObjectType(a0, map_reg, a1);
   __ mov(condReg1, a1);
   __ li(condReg2, Operand(JS_FUNCTION_TYPE));
+__ break_(__LINE__);
   cc_reg_ = eq;
 }
 
@@ -4491,6 +4495,7 @@ void GenericUnaryOpStub::Generate(MacroAssembler* masm) {
 
   } else {
     UNIMPLEMENTED();
+    __ break_(__LINE__);
   }
 
   __ bind(&done);
@@ -4500,7 +4505,7 @@ void GenericUnaryOpStub::Generate(MacroAssembler* masm) {
   __ bind(&slow);
   __ Push(a0);
 
-  __ break_(0x4442);  // MIPS does not support builtins yet.
+  __ break_(__LINE__);  // MIPS does not support builtins yet.
 
   switch (op_) {
     case Token::SUB:
@@ -5048,7 +5053,7 @@ static void HandleBinaryOpSlowCases(MacroAssembler* masm,
   } else {
     // Write Smi from a0 to a3 and a2 in double format. t1 is scratch.
     ConvertToDoubleStub stub1(a3, a2, a0, t1);
-    __ push(ra);
+    __ Push(ra);
     __ Call(stub1.GetCode(), RelocInfo::CODE_TARGET);
 
     // Write Smi from a1 to a1 and a0 in double format. t1 is scratch.
@@ -5171,7 +5176,7 @@ static void HandleBinaryOpSlowCases(MacroAssembler* masm,
     // Write Smi from a0 to a3 and a2 in double format.
     __ mov(t1, a0);
     ConvertToDoubleStub stub3(a3, a2, t1, t2);
-    __ push(ra);
+    __ Push(ra);
     __ Call(stub3.GetCode(), RelocInfo::CODE_TARGET);
     __ Pop(ra);
   }
@@ -5214,7 +5219,7 @@ static void HandleBinaryOpSlowCases(MacroAssembler* masm,
     // Write Smi from a1 to a0 and a1 in double format.
     __ mov(t1, a1);
     ConvertToDoubleStub stub4(a1, a0, t1, t2);
-    __ push(ra);
+    __ Push(ra);
     __ Call(stub4.GetCode(), RelocInfo::CODE_TARGET);
     __ Pop(ra);
   }
@@ -5253,8 +5258,8 @@ static void HandleBinaryOpSlowCases(MacroAssembler* masm,
   // a3: Right value (sign, exponent, top of mantissa).
   // t0: Address of heap number for result.
 
-  __ push(ra);
-  __ push(t0);    // Address of heap number that is answer.
+  __ Push(ra);
+  __ Push(t0);    // Address of heap number that is answer.
   __ mov(s3, sp);  // Save sp.
   __ AlignStack(0);
   // Call C routine that may not cause GC or other trouble.
