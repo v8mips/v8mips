@@ -2961,7 +2961,7 @@ __ break_(__LINE__);
   LoadAndSpill(args->at(0));
   frame_->EmitPop(a1);
   __ And(t1, a1, Operand(kSmiTagMask));
-  false_target()->Branch(eq);
+  false_target()->Branch(eq, t1, Operand(zero_reg));
 
   __ LoadRoot(t0, Heap::kNullValueRootIndex);
   true_target()->Branch(eq, t1, Operand(t0));
