@@ -223,26 +223,26 @@ void CodeGenerator::Generate(CompilationInfo* info) {
     // initialization because the arguments object may be stored in the
     // context.
     if (scope()->arguments() != NULL) {
-      ASSERT(scope()->arguments_shadow() != NULL);
-      Comment cmnt(masm_, "[ allocate arguments object");
-      { Reference shadow_ref(this, scope()->arguments_shadow());
-        { Reference arguments_ref(this, scope()->arguments());
-          ArgumentsAccessStub stub(ArgumentsAccessStub::NEW_OBJECT);
-          __ lw(a2, frame_->Function());
-          // The receiver is below the arguments (and args slots), the return address,
-          // and the frame pointer on the stack.
-          const int kReceiverDisplacement = 2 + 4 + scope()->num_parameters();
-          __ Addu(a1, fp, Operand(kReceiverDisplacement * kPointerSize));
-          __ li(a0, Operand(Smi::FromInt(scope()->num_parameters())));
-          frame_->Adjust(3);
-          __ MultiPush(a0.bit() | a1.bit() | a2.bit());
-          frame_->CallStub(&stub, 3);
-          frame_->EmitPush(v0);
-          arguments_ref.SetValue(NOT_CONST_INIT);
-        }
-        shadow_ref.SetValue(NOT_CONST_INIT);
-      }
-      frame_->Drop();  // Value is no longer needed.
+        Comment cmnt(masm_, "[ allocate arguments object");
+        ASSERT(scope()->arguments_shadow() != NULL);
+        Variable* arguments = scope()->arguments()->var();
+        Variable* shadow = scope()->arguments_shadow()->var();
+        ASSERT(arguments != NULL && arguments->slot() != NULL);
+        ASSERT(shadow != NULL && shadow->slot() != NULL);
+        ArgumentsAccessStub stub(ArgumentsAccessStub::NEW_OBJECT);
+        __ lw(a2, frame_->Function());
+        // The receiver is below the arguments, the return address, and the
+        // frame pointer on the stack.
+        const int kReceiverDisplacement = 2 + scope()->num_parameters();
+        __ Add(a1, fp, Operand(kReceiverDisplacement * kPointerSize));
+        __ li(a0, Operand(Smi::FromInt(scope()->num_parameters())));
+        frame_->Adjust(3);
+        __ MultiPush(a0.bit() | a1.bit() | a2.bit());
+        frame_->CallStub(&stub, 3);
+        frame_->EmitPush(v0);
+        StoreToSlot(arguments->slot(), NOT_CONST_INIT);
+        StoreToSlot(shadow->slot(), NOT_CONST_INIT);
+        frame_->Drop();  // Value is no longer needed.
     }
 
     // Initialize ThisFunction reference if present.
@@ -406,7 +406,7 @@ MemOperand CodeGenerator::SlotOperand(Slot* slot, Register tmp) {
       return frame_->LocalAt(index);
 
     case Slot::CONTEXT: {
-      ASSERT(!tmp.is(cp));  // do not overwrite context register
+      ASSERT(!tmp.is(cp));  // Do not overwrite context register.
       Register context = cp;
       int chain_length = scope()->ContextChainLength(slot->var()->scope());
       for (int i = 0; i < chain_length; i++) {
@@ -414,7 +414,6 @@ MemOperand CodeGenerator::SlotOperand(Slot* slot, Register tmp) {
         // (All contexts, even 'with' contexts, have a closure,
         // and it is the same for all contexts inside a function.
         // There is no need to go to the function context first.)
-//        __ ldr(tmp, ContextOperand(context, Context::CLOSURE_INDEX));
         __ lw(tmp, ContextOperand(context, Context::CLOSURE_INDEX));
         // Load the function context (which is the incoming, outer context).
         __ lw(tmp, FieldMemOperand(tmp, JSFunction::kContextOffset));
@@ -490,17 +489,19 @@ void CodeGenerator::Load(Expression* x) {
   LoadCondition(x, &true_target, &false_target, false);
 
   if (has_cc()) {
+    __ break_(__LINE__);
     // Convert cc_reg_ into a boolean value.
     JumpTarget loaded;
     JumpTarget materialize_true;
 
     materialize_true.Branch(cc_reg_);
-    __ LoadRoot(t0, Heap::kFalseValueRootIndex);
+    __ LoadRoot(v0, Heap::kFalseValueRootIndex);
+    frame_->EmitPush(v0);
     loaded.Jump();
     materialize_true.Bind();
-    __ LoadRoot(t0, Heap::kTrueValueRootIndex);
+    __ LoadRoot(v0, Heap::kTrueValueRootIndex);
+    frame_->EmitPush(v0);
     loaded.Bind();
-    frame_->EmitPush(t0);
     cc_reg_ = cc_always;
   }
 
@@ -756,7 +757,7 @@ void CodeGenerator::StoreToSlot(Slot* slot, InitState init_state) {
       // Skip write barrier if the written value is a smi.
       __ And(t0, a0, Operand(kSmiTagMask));
       exit.Branch(eq, t0, Operand(zero_reg));
-      // r2 is loaded with context when calling SlotOperand above.
+      // a2 is loaded with context when calling SlotOperand above.
       int offset = FixedArray::kHeaderSize + slot->index() * kPointerSize;
       __ li(a3, Operand(offset));
       __ RecordWrite(a2, a3, a1);
@@ -2264,8 +2265,6 @@ void CodeGenerator::VisitObjectLiteral(ObjectLiteral* node) {
   }
   frame_->EmitPush(v0);  // Save the result.
 
-
-
   for (int i = 0; i < node->properties()->length(); i++) {
     // At the start of each iteration, the top of stack contains
     // the newly created object literal.
@@ -2632,8 +2631,6 @@ void CodeGenerator::VisitCallNew(CallNew* node) {
   // actual function to call is resolved after the arguments have been
   // evaluated.
 
-  ZoneList<Expression*>* args = node->arguments();
-  int arg_count = args->length();
 
   // Compute function to call and use the global object as the
   // receiver. There is no need to use the global proxy here because
@@ -2641,17 +2638,16 @@ void CodeGenerator::VisitCallNew(CallNew* node) {
   LoadAndSpill(node->expression());
   LoadGlobal();
 
+  ZoneList<Expression*>* args = node->arguments();
+  int arg_count = args->length();
   // Push the arguments ("left-to-right") on the stack.
   for (int i = 0; i < arg_count; i++) {
     LoadAndSpill(args->at(i));
   }
 
   // a0: the number of arguments.
-  Result num_args(a0);
   __ li(a0, Operand(arg_count));
-
   // Load the function into a1 as per calling convention.
-  Result function(a1);
   __ lw(a1, frame_->ElementAt(arg_count + 1));
 
   // Call the construct call builtin that handles allocation and
@@ -2661,7 +2657,7 @@ void CodeGenerator::VisitCallNew(CallNew* node) {
   frame_->CallCodeObject(ic,
                          RelocInfo::CONSTRUCT_CALL,
                          arg_count + 1);
-  // Discard old TOS value and push r0 on the stack (same as Pop(), push(r0)).
+  // Discard old TOS value and push v0 on the stack (same as Pop(), push(v0)).
   __ sw(v0, frame_->Top());
   ASSERT(frame_->height() == original_height + 1);
 }
@@ -2727,6 +2723,7 @@ void CodeGenerator::GenerateClassOf(ZoneList<Expression*>* args) {
 
 
 void CodeGenerator::GenerateValueOf(ZoneList<Expression*>* args) {
+__ break_(__LINE__);
   VirtualFrame::SpilledScope spilled_scope;
   ASSERT(args->length() == 1);
   JumpTarget leave;
@@ -2771,6 +2768,7 @@ void CodeGenerator::GenerateSetValueOf(ZoneList<Expression*>* args) {
 
 
 void CodeGenerator::GenerateIsSmi(ZoneList<Expression*>* args) {
+__ break_(__LINE__);
   VirtualFrame::SpilledScope spilled_scope;
   ASSERT(args->length() == 1);
   LoadAndSpill(args->at(0));
@@ -2788,6 +2786,7 @@ void CodeGenerator::GenerateLog(ZoneList<Expression*>* args) {
 
 
 void CodeGenerator::GenerateIsNonNegativeSmi(ZoneList<Expression*>* args) {
+__ break_(__LINE__);
   VirtualFrame::SpilledScope spilled_scope;
   ASSERT(args->length() == 1);
   LoadAndSpill(args->at(0));
@@ -2837,6 +2836,7 @@ void CodeGenerator::GenerateCharFromCode(ZoneList<Expression*>* args) {
 
 
 void CodeGenerator::GenerateIsArray(ZoneList<Expression*>* args) {
+  __ break_(__LINE__);
   VirtualFrame::SpilledScope spilled_scope;
   ASSERT(args->length() == 1);
   LoadAndSpill(args->at(0));
@@ -2857,6 +2857,7 @@ void CodeGenerator::GenerateIsArray(ZoneList<Expression*>* args) {
 
 
 void CodeGenerator::GenerateIsRegExp(ZoneList<Expression*>* args) {
+  __ break_(__LINE__);
   VirtualFrame::SpilledScope spilled_scope;
   ASSERT(args->length() == 1);
   LoadAndSpill(args->at(0));
@@ -2936,6 +2937,7 @@ void CodeGenerator::GenerateRandomPositiveSmi(ZoneList<Expression*>* args) {
 
 
 void CodeGenerator::GenerateObjectEquals(ZoneList<Expression*>* args) {
+__ break_(__LINE__);
   VirtualFrame::SpilledScope spilled_scope;
   ASSERT(args->length() == 2);
 
@@ -2951,6 +2953,7 @@ void CodeGenerator::GenerateObjectEquals(ZoneList<Expression*>* args) {
 
 
 void CodeGenerator::GenerateIsObject(ZoneList<Expression*>* args) {
+__ break_(__LINE__);
   // This generates a fast version of:
   // (typeof(arg) === 'object' || %_ClassOf(arg) == 'RegExp')
   VirtualFrame::SpilledScope spilled_scope;
@@ -2996,6 +2999,7 @@ void CodeGenerator::GenerateIsFunction(ZoneList<Expression*>* args) {
 
 
 void CodeGenerator::GenerateIsUndetectableObject(ZoneList<Expression*>* args) {
+__ break_(__LINE__);
   VirtualFrame::SpilledScope spilled_scope;
   ASSERT(args->length() == 1);
   LoadAndSpill(args->at(0));
@@ -3030,6 +3034,7 @@ void CodeGenerator::GenerateSubString(ZoneList<Expression*>* args) {
 
 
 void CodeGenerator::GenerateStringCompare(ZoneList<Expression*>* args) {
+__ break_(__LINE__);
   ASSERT_EQ(2, args->length());
 
   Load(args->at(0));
@@ -4352,9 +4357,9 @@ void NumberToStringStub::Generate(MacroAssembler* masm) {
   __ lw(a1, MemOperand(sp, 0));
 
   // Generate code to lookup number in the number string cache.
-  GenerateLookupNumberStringCache(masm, a1, a0, a2, a3, false, &runtime);
-  __ Add(sp, sp, Operand(1 * kPointerSize));
-  __ Ret();
+//  GenerateLookupNumberStringCache(masm, a1, a0, a2, a3, false, &runtime);
+//  __ Add(sp, sp, Operand(1 * kPointerSize));
+//  __ Ret();
 
   __ bind(&runtime);
   // Handle number to string in the runtime system if not found in the cache.
@@ -4901,7 +4906,7 @@ void ArgumentsAccessStub::GenerateReadLength(MacroAssembler* masm) {
   __ Branch(eq, &adaptor, a3, Operand(Smi::FromInt(StackFrame::ARGUMENTS_ADAPTOR)));
 
   // Nothing to do: The formal number of parameters has already been
-  // passed in register v0 by calling function. Just return it.
+  // passed in register a0 by calling function. Just return it.
   __ mov(v0,a0);
   __ Ret();
 
@@ -4914,6 +4919,7 @@ void ArgumentsAccessStub::GenerateReadLength(MacroAssembler* masm) {
 
 
 void ArgumentsAccessStub::GenerateReadElement(MacroAssembler* masm) {
+__ break_(__LINE__);
   // The displacement is the offset of the last parameter (if any)
   // relative to the frame pointer.
   static const int kDisplacement =

@@ -195,6 +195,7 @@ void VirtualFrame::CallCodeObject(Handle<Code> code,
 
     case Code::FUNCTION:
       UNIMPLEMENTED_MIPS();
+      __ break_(__LINE__);
       break;
 
     case Code::KEYED_LOAD_IC:

@@ -364,7 +364,8 @@ TEST(MIPSSpecialAssignment) {
   const char* c_source_2 =
     "var a = 123;"
     "var b = 456;"
-    "var max = a > b ? a : b;";
+    "var max = a > b ? a : b;"
+    "max;";
   Local<String> source_2 = ::v8::String::New(c_source_2);
   Local<Script> script_2 = ::v8::Script::Compile(source_2);
   CHECK_EQ(456, script_2->Run()->Int32Value());

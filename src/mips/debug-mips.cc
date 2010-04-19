@@ -66,41 +66,49 @@ bool Debug::IsDebugBreakAtReturn(RelocInfo* rinfo) {
 
 void Debug::GenerateLoadICDebugBreak(MacroAssembler* masm) {
   UNIMPLEMENTED_MIPS();
+  __ break_(__LINE__);
 }
 
 
 void Debug::GenerateStoreICDebugBreak(MacroAssembler* masm) {
   UNIMPLEMENTED_MIPS();
+  __ break_(__LINE__);
 }
 
 
 void Debug::GenerateKeyedLoadICDebugBreak(MacroAssembler* masm) {
   UNIMPLEMENTED_MIPS();
+  __ break_(__LINE__);
 }
 
 
 void Debug::GenerateKeyedStoreICDebugBreak(MacroAssembler* masm) {
   UNIMPLEMENTED_MIPS();
+  __ break_(__LINE__);
 }
 
 
 void Debug::GenerateCallICDebugBreak(MacroAssembler* masm) {
   UNIMPLEMENTED_MIPS();
+  __ break_(__LINE__);
 }
 
 
 void Debug::GenerateConstructCallDebugBreak(MacroAssembler* masm) {
   UNIMPLEMENTED_MIPS();
+  __ break_(__LINE__);
 }
 
 
 void Debug::GenerateReturnDebugBreak(MacroAssembler* masm) {
   UNIMPLEMENTED_MIPS();
+  __ break_(__LINE__);
 }
 
 
 void Debug::GenerateStubNoRegistersDebugBreak(MacroAssembler* masm) {
   UNIMPLEMENTED_MIPS();
+  __ break_(__LINE__);
 }
 
 
