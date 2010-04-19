@@ -49,13 +49,12 @@ void Builtins::Generate_Adaptor(MacroAssembler* masm,
   // cp                 : context
   // sp[0]              : last argument
   // ...
-  // sp[4 * (argc - 1) + arguments slots] : first argument (argc == a0)
-  // sp[4 * argc + arguments slots]       : receiver
+  // sp[4 * (argc - 1) + builtins arguments slots] : first argument
+  // sp[4 * argc + builtins arguments slots]       : receiver
 
   // Insert extra arguments.
   int num_extra_args = 0;
   if (extra_args == NEEDS_CALLED_FUNCTION) {
-    __ break_(__LINE__);
     // We need to push a1 after the original arguments and before the arguments
     // slots.
     num_extra_args = 1;
@@ -379,14 +378,12 @@ static void Generate_JSConstructStubHelper(MacroAssembler* masm,
   // a0: number of arguments
   // a1: constructor function
   if (is_api_function) {
-    UNIMPLEMENTED_MIPS();
-    __ break_(__LINE__);
-//    __ lw(cp, FieldMemOperand(a1, JSFunction::kContextOffset));
-//    Handle<Code> code = Handle<Code>(
-//        Builtins::builtin(Builtins::HandleApiCallConstruct));
-//    ParameterCount expected(0);
-//    __ InvokeCode(code, expected, expected,
-//                  RelocInfo::CODE_TARGET, CALL_FUNCTION);
+    __ lw(cp, FieldMemOperand(a1, JSFunction::kContextOffset));
+    Handle<Code> code = Handle<Code>(
+        Builtins::builtin(Builtins::HandleApiCallConstruct));
+    ParameterCount expected(0);
+    __ InvokeCode(code, expected, expected,
+                  RelocInfo::CODE_TARGET, CALL_FUNCTION);
   } else {
     ParameterCount actual(a0);
     __ InvokeFunction(a1, actual, CALL_FUNCTION);

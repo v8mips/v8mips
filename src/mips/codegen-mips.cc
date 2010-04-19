@@ -489,7 +489,6 @@ void CodeGenerator::Load(Expression* x) {
   LoadCondition(x, &true_target, &false_target, false);
 
   if (has_cc()) {
-    __ break_(__LINE__);
     // Convert cc_reg_ into a boolean value.
     JumpTarget loaded;
     JumpTarget materialize_true;
@@ -2786,7 +2785,6 @@ void CodeGenerator::GenerateLog(ZoneList<Expression*>* args) {
 
 
 void CodeGenerator::GenerateIsNonNegativeSmi(ZoneList<Expression*>* args) {
-__ break_(__LINE__);
   VirtualFrame::SpilledScope spilled_scope;
   ASSERT(args->length() == 1);
   LoadAndSpill(args->at(0));
@@ -2953,7 +2951,6 @@ __ break_(__LINE__);
 
 
 void CodeGenerator::GenerateIsObject(ZoneList<Expression*>* args) {
-__ break_(__LINE__);
   // This generates a fast version of:
   // (typeof(arg) === 'object' || %_ClassOf(arg) == 'RegExp')
   VirtualFrame::SpilledScope spilled_scope;
@@ -3083,7 +3080,6 @@ void CodeGenerator::VisitCallRuntime(CallRuntime* node) {
   int arg_count = args->length();
 
   if (function == NULL) {
-__ break_(__LINE__);
     // Prepare stack for calling JS runtime function.
     // Push the builtins object found in the current global object.
     __ lw(a1, GlobalObject());
@@ -3097,7 +3093,6 @@ __ break_(__LINE__);
   }
 
   if (function == NULL) {
-__ break_(__LINE__);
     // Call the JS runtime function.
     __ li(a2, Operand(node->name()));
     InLoopFlag in_loop = loop_nesting() > 0 ? IN_LOOP : NOT_IN_LOOP;
