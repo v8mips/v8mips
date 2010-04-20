@@ -167,6 +167,14 @@ void CodeGenerator::Generate(CompilationInfo* info) {
     // arguments
     // receiver
 
+#ifdef DEBUG
+    if (strlen(FLAG_stop_at) > 0 &&
+        info->function()->name()->IsEqualTo(CStrVector(FLAG_stop_at))) {
+      frame_->SpillAll();
+      __ stop("stop-at");
+    }
+#endif
+
     frame_->Enter();
 
     // Allocate space for locals and initialize them.
@@ -272,8 +280,8 @@ void CodeGenerator::Generate(CompilationInfo* info) {
     }
 
     if (FLAG_trace) {
-      UNIMPLEMENTED_MIPS();
-      __ break_(__LINE__);
+      frame_->CallRuntime(Runtime::kTraceEnter, 0);
+      // Ignore the return value.
     }
 
     // Compile the body of the function in a vanilla state. Don't
@@ -286,8 +294,8 @@ void CodeGenerator::Generate(CompilationInfo* info) {
       bool should_trace =
           is_builtin ? FLAG_trace_builtin_calls : FLAG_trace_calls;
       if (should_trace) {
-        UNIMPLEMENTED_MIPS();
-      __ break_(__LINE__);
+        frame_->CallRuntime(Runtime::kDebugTrace, 0);
+        // Ignore the return value.
       }
 #endif
       VisitStatementsAndSpill(info->function()->body());
@@ -308,8 +316,10 @@ void CodeGenerator::Generate(CompilationInfo* info) {
 
     function_return_.Bind();
     if (FLAG_trace) {
-      UNIMPLEMENTED_MIPS();
-      __ break_(__LINE__);
+      // Push the return value on the stack as the parameter.
+      // Runtime::TraceExit returns the parameter as it is.
+      frame_->EmitPush(v0);
+      frame_->CallRuntime(Runtime::kTraceExit, 1);
     }
 
     // We don't check for the return code size. It may differ if the number of

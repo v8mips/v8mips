@@ -67,7 +67,22 @@ void VirtualFrame::MergeTo(VirtualFrame* expected) {
 
 
 void VirtualFrame::Enter() {
-  // TODO(MIPS): Implement DEBUG
+  Comment cmnt(masm(), "[ Enter JS frame");
+
+#ifdef DEBUG
+  // Verify that r1 contains a JS function.  The following code relies
+  // on r2 being available for use.
+  if (FLAG_debug_code) {
+    Label map_check, done;
+    __ BranchOnNotSmi(a1, &map_check, t1);
+    __ stop("VirtualFrame::Enter - a1 is not a function (smi check).");
+    __ bind(&map_check);
+    __ GetObjectType(a1, a2, a2);
+    __ Branch(eq, &done, a2, Operand(JS_FUNCTION_TYPE));
+    __ stop("VirtualFrame::Enter - a1 is not a function (map check).");
+    __ bind(&done);
+  }
+#endif  // DEBUG
 
   // We are about to push four values to the frame.
   Adjust(4);
