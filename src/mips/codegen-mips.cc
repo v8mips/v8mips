@@ -503,7 +503,7 @@ void CodeGenerator::Load(Expression* x) {
     JumpTarget loaded;
     JumpTarget materialize_true;
 
-    materialize_true.Branch(cc_reg_);
+    materialize_true.Branch(cc_reg_, condReg1, Operand(condReg2));
     __ LoadRoot(v0, Heap::kFalseValueRootIndex);
     frame_->EmitPush(v0);
     loaded.Jump();
@@ -2013,9 +2013,9 @@ void CodeGenerator::VisitTryFinallyStatement(TryFinallyStatement* node) {
     frame_->Drop(StackHandlerConstants::kSize / kPointerSize - 1);
 
     // Fake a top of stack value (unneeded when FALLING) and set the
-    // state in r2, then jump around the unlink blocks if any.
-    __ LoadRoot(a0, Heap::kUndefinedValueRootIndex);
-    frame_->EmitPush(a0);
+    // state in a2, then jump around the unlink blocks if any.
+    __ LoadRoot(v0, Heap::kUndefinedValueRootIndex);
+    frame_->EmitPush(v0);
     __ li(a2, Operand(Smi::FromInt(FALLING)));
     if (nof_unlinks > 0) {
       finally_block.Jump();
@@ -2059,6 +2059,7 @@ void CodeGenerator::VisitTryFinallyStatement(TryFinallyStatement* node) {
         __ LoadRoot(v0, Heap::kUndefinedValueRootIndex);
         frame_->EmitPush(v0);
       }
+      __ li(a2, Operand(Smi::FromInt(JUMPING + i)));
       if (--nof_unlinks > 0) {
         // If this is not the last unlink block, jump around the next.
         finally_block.Jump();
@@ -2108,7 +2109,7 @@ void CodeGenerator::VisitTryFinallyStatement(TryFinallyStatement* node) {
 
     // Rethrow exception.
     __ break_(__LINE__);
-    frame_->EmitPush(a0);
+    frame_->EmitPush(v0);
     frame_->CallRuntime(Runtime::kReThrow, 1);
 
     // Done.
@@ -2130,18 +2131,18 @@ void CodeGenerator::InstantiateFunction(
   __ li(a0, Operand(function_info));
   // Use the fast case closure allocation code that allocates in new
   // space for nested functions that don't need literals cloning.
-  if (scope()->is_function_scope() && function_info->num_literals() == 0) {
-    FastNewClosureStub stub;
-    frame_->EmitPush(a0);
-    frame_->CallStub(&stub, 1);
-    frame_->EmitPush(v0);
-  } else {
+//  if (scope()->is_function_scope() && function_info->num_literals() == 0) {
+//    FastNewClosureStub stub;
+//    frame_->EmitPush(a0);
+//    frame_->CallStub(&stub, 1);
+//    frame_->EmitPush(v0);
+//  } else {
     // Create a new closure.
     frame_->EmitPush(cp);
     frame_->EmitPush(a0);
     frame_->CallRuntime(Runtime::kNewClosure, 2);
     frame_->EmitPush(v0);
-  }
+//  }
 }
 
 
@@ -2675,7 +2676,7 @@ void CodeGenerator::VisitCallNew(CallNew* node) {
 
 
 void CodeGenerator::GenerateClassOf(ZoneList<Expression*>* args) {
-  __ break_(__LINE__);
+//  __ break_(__LINE__);
   VirtualFrame::SpilledScope spilled_scope;
   ASSERT(args->length() == 1);
   JumpTarget leave, null, function, non_function_constructor;
@@ -2974,7 +2975,7 @@ void CodeGenerator::GenerateIsObject(ZoneList<Expression*>* args) {
   false_target()->Branch(eq, t1, Operand(zero_reg));
 
   __ LoadRoot(t0, Heap::kNullValueRootIndex);
-  true_target()->Branch(eq, t1, Operand(t0));
+  true_target()->Branch(eq, a1, Operand(t0));
 
   Register map_reg = a2;
   __ lw(map_reg, FieldMemOperand(a1, HeapObject::kMapOffset));
@@ -3004,7 +3005,6 @@ void CodeGenerator::GenerateIsFunction(ZoneList<Expression*>* args) {
   __ GetObjectType(a0, map_reg, a1);
   __ mov(condReg1, a1);
   __ li(condReg2, Operand(JS_FUNCTION_TYPE));
-__ break_(__LINE__);
   cc_reg_ = eq;
 }
 
@@ -4149,7 +4149,7 @@ static void EmitSmiNonsmiComparison(MacroAssembler* masm,
     __ mov(v0, a0);
     __ Ret(ne, t4, Operand(HEAP_NUMBER_TYPE));
   } else {
-    // Smi compared non-strictly with a non-Smi non-heap-number.  Call
+    // Smi compared non-strictly with a non-Smi non-heap-number. Call
     // the runtime.
     __ Branch(ne, slow, t4, Operand(HEAP_NUMBER_TYPE));
   }
@@ -4168,11 +4168,11 @@ static void EmitSmiNonsmiComparison(MacroAssembler* masm,
   __ GetObjectType(a1, t4, t4);
   if (strict) {
     // If lhs was not a number and rhs was a Smi then strict equality cannot
-    // succeed.  Return non-equal.
+    // succeed. Return non-equal.
     __ li(v0, Operand(1));
     __ Ret(ne, t4, Operand(HEAP_NUMBER_TYPE));
   } else {
-    // Smi compared non-strictly with a non-Smi non-heap-number.  Call
+    // Smi compared non-strictly with a non-Smi non-heap-number. Call
     // the runtime.
     __ Branch(ne, slow, t4, Operand(HEAP_NUMBER_TYPE));
   }
@@ -4289,14 +4289,15 @@ static void EmitCheckForTwoHeapNumbers(MacroAssembler* masm,
 
 static void EmitCheckForSymbols(MacroAssembler* masm, Label* slow) {
   // a2 is object type of a0.
-  __ And(t4, a2, Operand(kIsNotStringMask));
-  __ Branch(ne, slow, t4, Operand(zero_reg));
-  __ And(t4, a2, Operand(kIsSymbolMask));
-  __ Branch(ne, slow, t4, Operand(zero_reg));
-  __ GetObjectType(a1, t3, t3);
-  __ Branch(greater, slow, t3, Operand(FIRST_JS_OBJECT_TYPE));
-  __ And(t5, t3, Operand(kIsSymbolMask));
-  __ Branch(ne, slow, t5, Operand(zero_reg));
+  // Ensure that no non-strings have the symbol bit set.
+  ASSERT(kNotStringTag + kIsSymbolMask > LAST_TYPE);
+  ASSERT(kSymbolTag != 0);
+  __ And(t2, a2, Operand(kIsSymbolMask));
+  __ Branch(eq, slow, t2, Operand(zero_reg));
+  __ lw(a3, FieldMemOperand(a1, HeapObject::kMapOffset));
+  __ lbu(a3, FieldMemOperand(a3, Map::kInstanceTypeOffset));
+  __ And(t3, a3, Operand(kIsSymbolMask));
+  __ Branch(eq, slow, t3, Operand(zero_reg));
 
   // Both are symbols. We already checked they weren't the same pointer
   // so they are not equal.
@@ -4440,8 +4441,8 @@ void CompareStub::Generate(MacroAssembler* masm) {
   if (cc_ == eq) {
     // Either jumps to slow or returns the answer. Assumes that a2 is the type
     // of a0 on entry.
-//    EmitCheckForSymbols(masm, &flat_string_check);
-    EmitCheckForSymbols(masm, &slow);
+    EmitCheckForSymbols(masm, &flat_string_check);
+//    EmitCheckForSymbols(masm, &slow);
   }
 
   // Check for both being sequential ASCII strings, and inline if that is the
@@ -4453,7 +4454,7 @@ void CompareStub::Generate(MacroAssembler* masm) {
   __ bind(&slow);
   UNIMPLEMENTED_MIPS();
   // TOCHECK: Check push order. In Comparison() we pop in the reverse order.
-  __ MultiPushReversed(a1.bit() | a0.bit());
+  __ MultiPush(a1.bit() | a0.bit());
   // Figure out which native to call and setup the arguments.
   Builtins::JavaScript native;
   if (cc_ == eq) {

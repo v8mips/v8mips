@@ -695,7 +695,7 @@ Object* LoadStubCompiler::CompileLoadConstant(JSObject* object,
 
   __ lw(a0, MemOperand(sp, 0));
 
-  __ break_(__LINE__);
+//  __ break_(__LINE__);
   GenerateLoadConstant(object, holder, a0, a3, a1, value, name, &miss);
   __ bind(&miss);
   __ break_(__LINE__);

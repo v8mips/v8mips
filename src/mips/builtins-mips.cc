@@ -535,8 +535,8 @@ static void Generate_JSEntryTrampolineHelper(MacroAssembler* masm,
   // Invoke the code and pass argc as a0.
   __ mov(a0, a3);
   if (is_construct) {
-    UNIMPLEMENTED_MIPS();
-    __ break_(__LINE__);
+    __ CallBuiltin(Handle<Code>(Builtins::builtin(Builtins::JSConstructCall)),
+            RelocInfo::CODE_TARGET);
   } else {
     ParameterCount actual(a0);
     __ InvokeFunction(a1, actual, CALL_FUNCTION);
