@@ -664,11 +664,18 @@ void MacroAssembler::MultiPopReversed(RegList regs) {
 
 
 // Emulated condtional branches do not emit a nop in the branch delay slot.
+//
+// BRANCH_ARGS_CHECK checks that conditional jump arguments are correct.
+#define BRANCH_ARGS_CHECK(cond, rs, rt) ASSERT(                                \
+    (cond == cc_always && rs.is(zero_reg) && rt.rm().is(zero_reg)) ||          \
+    (cond != cc_always && (!rs.is(zero_reg) || !rt.rm().is(zero_reg)))) 
 
 // Trashes the at register if no scratch register is provided.
 void MacroAssembler::Branch(Condition cond, int16_t offset, Register rs,
                             const Operand& rt, Register scratch,
                             bool ProtectBranchDelaySlot) {
+  BRANCH_ARGS_CHECK(cond, rs, rt);
+  ASSERT(!rs.is(zero_reg));
   Register r2 = no_reg;
   if (rt.is_reg()) {
     // We don't want any other register but scratch clobbered.
@@ -740,6 +747,7 @@ void MacroAssembler::Branch(Condition cond, int16_t offset, Register rs,
 void MacroAssembler::Branch(Condition cond,  Label* L, Register rs,
                             const Operand& rt, Register scratch,
                             bool ProtectBranchDelaySlot) {
+  BRANCH_ARGS_CHECK(cond, rs, rt);
   Register r2 = no_reg;
   if (rt.is_reg()) {
     r2 = rt.rm_;
@@ -814,6 +822,7 @@ void MacroAssembler::Branch(Condition cond,  Label* L, Register rs,
 void MacroAssembler::BranchAndLink(Condition cond, int16_t offset, Register rs,
                                    const Operand& rt, Register scratch,
                                    bool ProtectBranchDelaySlot) {
+  BRANCH_ARGS_CHECK(cond, rs, rt);
   Register r2 = no_reg;
   if (rt.is_reg()) {
     r2 = rt.rm_;
@@ -893,6 +902,7 @@ void MacroAssembler::BranchAndLink(Condition cond, int16_t offset, Register rs,
 void MacroAssembler::BranchAndLink(Condition cond, Label* L, Register rs,
                                    const Operand& rt, Register scratch,
                                    bool ProtectBranchDelaySlot) {
+  BRANCH_ARGS_CHECK(cond, rs, rt);
   Register r2 = no_reg;
   if (rt.is_reg()) {
     r2 = rt.rm_;
@@ -972,6 +982,7 @@ void MacroAssembler::BranchAndLink(Condition cond, Label* L, Register rs,
 void MacroAssembler::Jump(const Operand& target,
                           Condition cond, Register rs, const Operand& rt,
                           bool ProtectBranchDelaySlot) {
+  BRANCH_ARGS_CHECK(cond, rs, rt);
   if (target.is_reg()) {
     if (cond == cc_always) {
       jr(target.rm());
@@ -1006,6 +1017,7 @@ void MacroAssembler::Jump(const Operand& target,
 void MacroAssembler::Call(const Operand& target,
                           Condition cond, Register rs, const Operand& rt,
                           bool ProtectBranchDelaySlot) {
+  BRANCH_ARGS_CHECK(cond, rs, rt);
   if (target.is_reg()) {
     if (cond == cc_always) {
       jalr(target.rm());
@@ -2039,6 +2051,7 @@ void MacroAssembler::JumpIfInstanceTypeIsNotSequentialAscii(Register type,
   Branch(ne, failure, scratch, Operand(kFlatAsciiStringTag));
 }
 
+#undef BRANCH_ARGS_CHECK
 
 } }  // namespace v8::internal
 
