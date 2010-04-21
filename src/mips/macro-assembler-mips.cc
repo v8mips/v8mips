@@ -668,7 +668,7 @@ void MacroAssembler::MultiPopReversed(RegList regs) {
 // BRANCH_ARGS_CHECK checks that conditional jump arguments are correct.
 #define BRANCH_ARGS_CHECK(cond, rs, rt) ASSERT(                                \
     (cond == cc_always && rs.is(zero_reg) && rt.rm().is(zero_reg)) ||          \
-    (cond != cc_always && (!rs.is(zero_reg) || !rt.rm().is(zero_reg)))) 
+    (cond != cc_always && (!rs.is(zero_reg) || !rt.rm().is(zero_reg))))
 
 // Trashes the at register if no scratch register is provided.
 void MacroAssembler::Branch(Condition cond, int16_t offset, Register rs,
@@ -1500,7 +1500,7 @@ void MacroAssembler::InvokePrologue(const ParameterCount& expected,
       jmp(done);
     } else {
       JumpToBuiltin(adaptor);
-      break_(__LINE__);
+      // break_(__LINE__);
     }
     bind(&regular_invoke);
   }

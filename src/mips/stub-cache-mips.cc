@@ -414,7 +414,7 @@ Object* CallStubCompiler::CompileCallConstant(Object* object,
       break;
 
     case STRING_CHECK:
-  __ break_(__LINE__);
+      // __ break_(__LINE__);
       if (!function->IsBuiltin()) {
         // Calling non-builtins with a value as receiver requires boxing.
         __ jmp(&miss);
@@ -432,7 +432,7 @@ Object* CallStubCompiler::CompileCallConstant(Object* object,
       break;
 
     case NUMBER_CHECK: {
-  __ break_(__LINE__);
+      // __ break_(__LINE__);
       if (!function->IsBuiltin()) {
         // Calling non-builtins with a value as receiver requires boxing.
         __ jmp(&miss);
@@ -455,7 +455,7 @@ Object* CallStubCompiler::CompileCallConstant(Object* object,
     }
 
     case BOOLEAN_CHECK: {
-  __ break_(__LINE__);
+      // __ break_(__LINE__);
       if (!function->IsBuiltin()) {
         // Calling non-builtins with a value as receiver requires boxing.
         __ jmp(&miss);
@@ -577,7 +577,7 @@ Object* CallStubCompiler::CompileCallGlobal(JSObject* object,
 
   // Handle call cache miss.
   __ bind(&miss);
-  __ break_(__LINE__);
+  // __ break_(__LINE__);
   __ IncrementCounter(&Counters::call_global_inline_miss, 1, a1, a3);
   Handle<Code> ic = ComputeCallMiss(arguments().immediate());
   __ Jump(ic, RelocInfo::CODE_TARGET);
@@ -608,7 +608,7 @@ Object* StoreStubCompiler::CompileStoreField(JSObject* object,
   __ bind(&miss);
   __ li(a2, Operand(Handle<String>(name)));  // Restore name.
   Handle<Code> ic(Builtins::builtin(Builtins::StoreIC_Miss));
-  __ break_(0x452);
+  // __ break_(0x452);
   __ JumpToBuiltin(ic, RelocInfo::CODE_TARGET);
 
   // Return the generated code.
@@ -996,7 +996,7 @@ Object* ConstructStubCompiler::CompileConstructStub(
   __ bind(&generic_stub_call);
   Code* code = Builtins::builtin(Builtins::JSConstructStubGeneric);
   Handle<Code> generic_construct_stub(code);
-  __ break_(__LINE__);
+  // __ break_(__LINE__);
   __ JumpToBuiltin(generic_construct_stub, RelocInfo::CODE_TARGET);
 
   // Return the generated code.

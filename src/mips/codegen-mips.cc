@@ -2108,7 +2108,7 @@ void CodeGenerator::VisitTryFinallyStatement(TryFinallyStatement* node) {
     exit.Branch(ne, a2, Operand(Smi::FromInt(THROWING)), no_hint);
 
     // Rethrow exception.
-    __ break_(__LINE__);
+    // __ break_(__LINE__);  // Alexandre - looks ok to me (plind), removing.
     frame_->EmitPush(v0);
     frame_->CallRuntime(Runtime::kReThrow, 1);
 
@@ -2676,7 +2676,6 @@ void CodeGenerator::VisitCallNew(CallNew* node) {
 
 
 void CodeGenerator::GenerateClassOf(ZoneList<Expression*>* args) {
-//  __ break_(__LINE__);
   VirtualFrame::SpilledScope spilled_scope;
   ASSERT(args->length() == 1);
   JumpTarget leave, null, function, non_function_constructor;
@@ -2736,7 +2735,6 @@ void CodeGenerator::GenerateClassOf(ZoneList<Expression*>* args) {
 
 
 void CodeGenerator::GenerateValueOf(ZoneList<Expression*>* args) {
-__ break_(__LINE__);
   VirtualFrame::SpilledScope spilled_scope;
   ASSERT(args->length() == 1);
   JumpTarget leave;
@@ -2781,7 +2779,6 @@ void CodeGenerator::GenerateSetValueOf(ZoneList<Expression*>* args) {
 
 
 void CodeGenerator::GenerateIsSmi(ZoneList<Expression*>* args) {
-__ break_(__LINE__);
   VirtualFrame::SpilledScope spilled_scope;
   ASSERT(args->length() == 1);
   LoadAndSpill(args->at(0));
@@ -2848,7 +2845,6 @@ void CodeGenerator::GenerateCharFromCode(ZoneList<Expression*>* args) {
 
 
 void CodeGenerator::GenerateIsArray(ZoneList<Expression*>* args) {
-  __ break_(__LINE__);
   VirtualFrame::SpilledScope spilled_scope;
   ASSERT(args->length() == 1);
   LoadAndSpill(args->at(0));
@@ -2869,7 +2865,6 @@ void CodeGenerator::GenerateIsArray(ZoneList<Expression*>* args) {
 
 
 void CodeGenerator::GenerateIsRegExp(ZoneList<Expression*>* args) {
-  __ break_(__LINE__);
   VirtualFrame::SpilledScope spilled_scope;
   ASSERT(args->length() == 1);
   LoadAndSpill(args->at(0));
@@ -2949,7 +2944,6 @@ void CodeGenerator::GenerateRandomPositiveSmi(ZoneList<Expression*>* args) {
 
 
 void CodeGenerator::GenerateObjectEquals(ZoneList<Expression*>* args) {
-__ break_(__LINE__);
   VirtualFrame::SpilledScope spilled_scope;
   ASSERT(args->length() == 2);
 
@@ -3010,7 +3004,6 @@ void CodeGenerator::GenerateIsFunction(ZoneList<Expression*>* args) {
 
 
 void CodeGenerator::GenerateIsUndetectableObject(ZoneList<Expression*>* args) {
-__ break_(__LINE__);
   VirtualFrame::SpilledScope spilled_scope;
   ASSERT(args->length() == 1);
   LoadAndSpill(args->at(0));
@@ -4220,14 +4213,14 @@ static void EmitTwoNonNanDoubleComparison(MacroAssembler* masm, Condition cc) {
   // Call C routine that may not cause GC or other trouble.
   // We use a call_was and return manually because we need arguments slots to
   // be freed.
-  
+
   __ li(t9, Operand(ExternalReference::compare_doubles()));
   __ SetupAlignedCall(t0, 0);
   __ Call(t9);  // Call the code
   __ Addu(sp, sp, Operand(-StandardFrameConstants::kCArgsSlotsSize));
   __ Addu(sp, sp, Operand(StandardFrameConstants::kCArgsSlotsSize));
   __ ReturnFromAlignedCall();
-  
+
   __ Ret();
 }
 
@@ -4496,6 +4489,8 @@ void StackCheckStub::Generate(MacroAssembler* masm) {
 void GenericUnaryOpStub::Generate(MacroAssembler* masm) {
   Label slow, done;
 
+  __ Branch(al, &slow);  // Do everything with slow-case for now.
+
   if (op_ == Token::SUB) {
     UNIMPLEMENTED_MIPS();
     __ break_(__LINE__);
@@ -4515,8 +4510,6 @@ void GenericUnaryOpStub::Generate(MacroAssembler* masm) {
   // Handle the slow case by jumping to the JavaScript builtin.
   __ bind(&slow);
   __ Push(a0);
-
-  __ break_(__LINE__);  // MIPS does not support builtins yet.
 
   switch (op_) {
     case Token::SUB:
@@ -4540,7 +4533,7 @@ void CEntryStub::GenerateThrowTOS(MacroAssembler* masm) {
   // Drop the sp to the top of the handler.
   __ li(a3, Operand(ExternalReference(Top::k_handler_address)));
   __ lw(sp, MemOperand(a3));
-  
+
   // Restore the next handler and frame pointer, discard handler state.
   ASSERT(StackHandlerConstants::kNextOffset == 0);
   __ Pop(a2);
@@ -4904,8 +4897,7 @@ void InstanceofStub::Generate(MacroAssembler* masm) {
 
   // Slow-case. Tail call builtin.
   __ bind(&slow);
-  // TODO(MIPS): instanceof slow case. Need JS builtins.
-  __ break_(0x3137);
+  __ InvokeBuiltin(Builtins::INSTANCE_OF, JUMP_JS);
 }
 
 
@@ -4930,7 +4922,6 @@ void ArgumentsAccessStub::GenerateReadLength(MacroAssembler* masm) {
 
 
 void ArgumentsAccessStub::GenerateReadElement(MacroAssembler* masm) {
-__ break_(__LINE__);
   // The displacement is the offset of the last parameter (if any)
   // relative to the frame pointer.
   static const int kDisplacement =
@@ -4949,7 +4940,6 @@ __ break_(__LINE__);
   // Check index against formal parameters count limit passed in
   // through register a0. Use unsigned comparison to get negative
   // check for free.
-  __ break_(__LINE__);
   __ Branch(Ugreater_equal, &slow, a0, Operand(a1));
 
   // Read the argument from the stack and return it.
@@ -5107,13 +5097,12 @@ static void HandleBinaryOpSlowCases(MacroAssembler* masm,
 
     // First and second argument are strings.
     StringAddStub string_add_stub(NO_STRING_CHECK_IN_STUB);
-//  __ break_(__LINE__);
     __ TailCallStub(&string_add_stub);
 
     __ bind(&string1_smi2);
     NumberToStringStub::GenerateLookupNumberStringCache(
         masm, a0, a2, t0, t1, true, &string1);
-    
+
     // Replace second argument on stack and tailcall string add stub to make
     // the result.
     __ sw(a2, MemOperand(sp, 0));
@@ -5121,7 +5110,6 @@ static void HandleBinaryOpSlowCases(MacroAssembler* masm,
 
     // Only first argument is a string.
     __ bind(&string1);
-//    __ break_(0x3350);  // Cannot call builtins yet.
     __ InvokeBuiltin(Builtins::STRING_ADD_LEFT, JUMP_JS);
 
     // First argument was not a string, test second.
@@ -5133,12 +5121,10 @@ static void HandleBinaryOpSlowCases(MacroAssembler* masm,
     __ Branch(ge, &not_strings, t0, Operand(FIRST_NONSTRING_TYPE));
 
     // Only second argument is a string.
-    __ break_(0x3351);  // Cannot call builtins yet.
     __ InvokeBuiltin(Builtins::STRING_ADD_RIGHT, JUMP_JS);
 
     __ bind(&not_strings);
   }
-  __ break_(0x3352);  // Cannot call builtins yet.
   __ InvokeBuiltin(builtin, JUMP_JS);  // Tail call.  No return.
 
   // We branch here if at least one of a0 and a1 is not a Smi.
@@ -5507,8 +5493,6 @@ void GenericBinaryOpStub::HandleNonSmiBitwiseOp(MacroAssembler* masm) {
   __ Push(a1);  // restore stack
   __ Push(a0);
   __ li(a0, Operand(1));  // 1 argument (not counting receiver).
-
-  __ break_(0x4441);  // MIPS does not support builtins yet.
 
   switch (op_) {
     case Token::BIT_OR:
@@ -5884,7 +5868,6 @@ void StringStubBase::GenerateTwoCharacterSymbolTableProbe(MacroAssembler* masm,
   // Register scratch3 is the general scratch register in this function.
   Register scratch = scratch3;
 
-//  __ break_(__LINE__);
   // Make sure that both characters are not digits as such strings has a
   // different hash algorithm. Don't try to look for these in the symbol table.
   Label not_array_index;
@@ -5903,13 +5886,11 @@ void StringStubBase::GenerateTwoCharacterSymbolTableProbe(MacroAssembler* masm,
   __ Branch(Uless_equal, not_found, scratch, Operand(static_cast<int>('9' - '0')));
 
   __ bind(&not_array_index);
-//  __ break_(__LINE__);
   // Calculate the two character string hash.
   Register hash = scratch1;
   GenerateHashInit(masm, hash, c1);
   GenerateHashAddCharacter(masm, hash, c2);
   GenerateHashGetHash(masm, hash);
-//  __ break_(__LINE__);
 
   // Collect the two characters in a register.
   Register chars = c1;
@@ -5939,7 +5920,6 @@ void StringStubBase::GenerateTwoCharacterSymbolTableProbe(MacroAssembler* masm,
   __ Add(first_symbol_table_element, symbol_table,
          Operand(SymbolTable::kElementsStartOffset - kHeapObjectTag));
 
-//  __ break_(__LINE__);
   // Registers
   // chars: two character string, char 1 in byte 0 and char 2 in byte 1.
   // hash:  hash of two character string
@@ -5970,11 +5950,9 @@ void StringStubBase::GenerateTwoCharacterSymbolTableProbe(MacroAssembler* masm,
     __ Add(scratch, scratch, first_symbol_table_element);
     __ lw(candidate, MemOperand(scratch));
 
-//  __ break_(__LINE__);
     // If entry is undefined no string with this hash can be found.
     __ Branch(eq, not_found, candidate, Operand(undefined));
 
-//  __ break_(__LINE__);
     // If length is not 2 the string is not a candidate.
     __ lw(scratch, FieldMemOperand(candidate, String::kLengthOffset));
     __ Branch(ne, &next_probe[i], scratch, Operand(2));
@@ -5982,7 +5960,6 @@ void StringStubBase::GenerateTwoCharacterSymbolTableProbe(MacroAssembler* masm,
     // Check that the candidate is a non-external ascii string.
     __ lw(scratch, FieldMemOperand(candidate, HeapObject::kMapOffset));
     __ lbu(scratch, FieldMemOperand(scratch, Map::kInstanceTypeOffset));
-//  __ break_(__LINE__);
     __ JumpIfInstanceTypeIsNotSequentialAscii(scratch, scratch, &next_probe[i]);
 
     // Check if the two characters match.
@@ -5992,7 +5969,6 @@ void StringStubBase::GenerateTwoCharacterSymbolTableProbe(MacroAssembler* masm,
     __ bind(&next_probe[i]);
   }
 
-//  __ break_(__LINE__);
   // No matching 2 character string found by probing.
   __ jmp(not_found);
 
@@ -6080,12 +6056,13 @@ void StringCompareStub::Generate(MacroAssembler* masm) {
   __ Ret();
 
   __ bind(&not_same);
-  UNIMPLEMENTED_MIPS();
-  __ break_(__LINE__);
+  // TODO(MIPS): Implement flat ascii compare code.
+  // But for now, fall thru to runtime.
+  // UNIMPLEMENTED_MIPS();
+  // __ break_(__LINE__);
 
   __ bind(&runtime);
-  UNIMPLEMENTED_MIPS();
-  __ break_(__LINE__);
+  __ TailCallRuntime(Runtime::kStringCompare, 2, 1);
 }
 
 
@@ -6343,7 +6320,6 @@ void StringAddStub::Generate(MacroAssembler* masm) {
 
   // Just jump to runtime to add the two strings.
   __ bind(&string_add_runtime);
-  __ break_(0x3340);  // We cannot do runtime calls yet.
   __ TailCallRuntime(Runtime::kStringAdd, 2, 1);
 }
 
@@ -6354,7 +6330,7 @@ void CallFunctionStub::Generate(MacroAssembler* masm) {
   // If the receiver might be a value (string, number or boolean) check for this
   // and box it if it is.
   if (ReceiverMightBeValue()) {
-    __ break_(__LINE__);
+    // __ break_(__LINE__);   // Alexandre - looks ok to me (plind), removing.
     // Get the receiver from the stack.
     // function, receiver [, arguments]
     Label receiver_is_value, receiver_is_js_object;
@@ -6370,7 +6346,7 @@ void CallFunctionStub::Generate(MacroAssembler* masm) {
     // Call the runtime to box the value.
     __ bind(&receiver_is_value);
     // We need natives to execute this.
-    __ break_(__LINE__);
+    // __ break_(__LINE__);   // Alexandre - looks ok to me (plind), removing.
     __ EnterInternalFrame();
     __ Push(a1);
     __ InvokeBuiltin(Builtins::TO_OBJECT, CALL_JS);
@@ -6398,7 +6374,7 @@ void CallFunctionStub::Generate(MacroAssembler* masm) {
 
   // Slow-case: Non-function called.
   __ bind(&slow);
-  __ break_(__LINE__);
+  // __ break_(__LINE__);   // Alexandre - looks ok to me (plind), removing.
   // CALL_NON_FUNCTION expects the non-function callee as receiver (instead
   // of the original receiver from the call site).
   __ sw(a1, MemOperand(sp, argc_ * kPointerSize));
