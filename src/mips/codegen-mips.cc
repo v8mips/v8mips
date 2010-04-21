@@ -3160,8 +3160,8 @@ void CodeGenerator::VisitUnaryOperation(UnaryOperation* node) {
         break;
 
       case Token::SUB: {
-        UNIMPLEMENTED_MIPS();
-        __ break_(__LINE__);
+        GenericUnaryOpStub stub(Token::SUB, overwrite);
+        frame_->CallStub(&stub, 0);
         break;
       }
 
@@ -4579,8 +4579,10 @@ void CEntryStub::GenerateCore(MacroAssembler* masm,
   // s2: pointer to builtin function            (C callee-saved)
 
   if (do_gc) {
-    UNIMPLEMENTED_MIPS();
-    __ break_(__LINE__);
+    // Move result passed in v0 into a0 to call PerformGC.
+    __ mov(a0, v0);
+    ExternalReference gc_reference = ExternalReference::perform_gc_function();
+    __ Call(gc_reference.address(), RelocInfo::RUNTIME_ENTRY);
   }
 
   ExternalReference scope_depth =

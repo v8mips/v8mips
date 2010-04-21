@@ -62,8 +62,18 @@ void StubCompiler::GenerateLoadGlobalFunctionPrototype(MacroAssembler* masm,
 void StubCompiler::GenerateFastPropertyLoad(MacroAssembler* masm,
                                             Register dst, Register src,
                                             JSObject* holder, int index) {
-  UNIMPLEMENTED_MIPS();
-  __ break_(__LINE__);
+  // Adjust for the number of properties stored in the holder.
+  index -= holder->map()->inobject_properties();
+  if (index < 0) {
+    // Get the property straight out of the holder.
+    int offset = holder->map()->instance_size() + (index * kPointerSize);
+    __ lw(dst, FieldMemOperand(src, offset));
+  } else {
+    // Calculate the offset into the properties array.
+    int offset = index * kPointerSize + FixedArray::kHeaderSize;
+    __ lw(dst, FieldMemOperand(src, JSObject::kPropertiesOffset));
+    __ lw(dst, FieldMemOperand(dst, offset));
+  }
 }
 
 
@@ -253,8 +263,15 @@ void StubCompiler::GenerateLoadField(JSObject* object,
                                      int index,
                                      String* name,
                                      Label* miss) {
-  UNIMPLEMENTED_MIPS();
-  __ break_(__LINE__);
+  // Check that the receiver isn't a smi.
+  __ And(scratch1, receiver, Operand(kSmiTagMask));
+  __ Branch(eq, miss, scratch1, Operand(zero_reg));
+
+  // Check that the maps haven't changed.
+  Register reg =
+      CheckPrototypes(object, receiver, holder, scratch1, scratch2, name, miss);
+  GenerateFastPropertyLoad(masm(), v0, reg, holder, index);
+  __ Ret();
 }
 
 
@@ -668,9 +685,21 @@ Object* LoadStubCompiler::CompileLoadField(JSObject* object,
                                            JSObject* holder,
                                            int index,
                                            String* name) {
-  UNIMPLEMENTED_MIPS();
-  __ break_(__LINE__);
-  return reinterpret_cast<Object*>(NULL);   // UNIMPLEMENTED RETURN
+  // ----------- S t a t e -------------
+  //  -- a2    : name
+  //  -- ra    : return address
+  //  -- [sp]  : receiver
+  // -----------------------------------
+  Label miss;
+
+  __ lw(v0, MemOperand(sp, 0));
+
+  GenerateLoadField(object, holder, v0, a3, a1, index, name, &miss);
+  __ bind(&miss);
+  GenerateLoadMiss(masm(), Code::LOAD_IC);
+
+  // Return the generated code.
+  return GetCode(FIELD, name);
 }
 
 
