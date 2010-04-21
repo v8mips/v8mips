@@ -419,7 +419,9 @@ void Decoder::DecodeTypeRegister(Instruction* instr) {
     case COP1:    // Coprocessor instructions
       switch (instr->RsFieldRaw()) {
         case BC1:   // branch on coprocessor condition
-          UNREACHABLE();
+          // UNREACHABLE();
+          // hack for debugging the code ..........................................................
+          Format(instr, "unknown.bc1");
           break;
         case MFC1:
           Format(instr, "mfc1   'rt, 'fs");
@@ -464,7 +466,9 @@ void Decoder::DecodeTypeRegister(Instruction* instr) {
               UNIMPLEMENTED_MIPS();
               break;
             default:
-              UNREACHABLE();
+            // UNREACHABLE();
+            // hack for debugging the code ........................................................
+            Format(instr, "unknown.cop1.d");
           };
           break;
         case S:
