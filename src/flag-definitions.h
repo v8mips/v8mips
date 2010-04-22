@@ -118,7 +118,7 @@ DEFINE_bool(enable_vfp3, true,
             "enable use of VFP3 instructions if available (ARM only)")
 DEFINE_bool(enable_armv7, true,
             "enable use of ARMv7 instructions if available (ARM only)")
-DEFINE_bool(enable_fpu, false,
+DEFINE_bool(enable_fpu, true,
             "enable use of MIPS FPU instructions if available (MIPS only)")
 
 // bootstrapper.cc
