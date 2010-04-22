@@ -646,6 +646,14 @@ class MacroAssembler: public Assembler {
                                               Register scratch,
                                               Label* failure);
 
+  // Test that both first and second are sequential ASCII strings.
+  // Assume that they are non-smis.
+  void JumpIfNonSmisNotBothSequentialAsciiStrings(Register first,
+                                                  Register second,
+                                                  Register scratch1,
+                                                  Register scratch2,
+                                                  Label* failure);
+
  private:
   List<Unresolved> unresolved_;
   bool generating_stub_;

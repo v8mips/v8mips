@@ -2024,6 +2024,27 @@ void MacroAssembler::JumpIfEitherSmi(Register reg1,
 }
 
 
+void MacroAssembler::JumpIfNonSmisNotBothSequentialAsciiStrings(
+    Register first,
+    Register second,
+    Register scratch1,
+    Register scratch2,
+    Label* failure) {
+  // Test that both first and second are sequential ASCII strings.
+  // Assume that they are non-smis.
+  lw(scratch1, FieldMemOperand(first, HeapObject::kMapOffset));
+  lw(scratch2, FieldMemOperand(second, HeapObject::kMapOffset));
+  lbu(scratch1, FieldMemOperand(scratch1, Map::kInstanceTypeOffset));
+  lbu(scratch2, FieldMemOperand(scratch2, Map::kInstanceTypeOffset));
+
+  JumpIfBothInstanceTypesAreNotSequentialAscii(scratch1,
+                                               scratch2,
+                                               scratch1,
+                                               scratch2,
+                                               failure);
+}
+
+
 void MacroAssembler::JumpIfBothInstanceTypesAreNotSequentialAscii(
     Register first,
     Register second,

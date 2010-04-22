@@ -2829,11 +2829,14 @@ void CodeGenerator::GenerateMathSqrt(ZoneList<Expression*>* args) {
   __ break_(__LINE__);
 }
 
-
+// This should generate code that performs a charCodeAt() call or returns
+// undefined in order to trigger the slow case, Runtime_StringCharCodeAt.
+// It is not yet implemented on MIPS, so it always goes to the slow case.
 void CodeGenerator::GenerateFastCharCodeAt(ZoneList<Expression*>* args) {
-  UNIMPLEMENTED_MIPS();
-  __ break_(__LINE__);
-  frame_->EmitPush(zero_reg);
+  VirtualFrame::SpilledScope spilled_scope;
+  ASSERT(args->length() == 2);
+  __ LoadRoot(v0, Heap::kUndefinedValueRootIndex);
+  frame_->EmitPush(v0);
 }
 
 
@@ -3251,6 +3254,7 @@ void CodeGenerator::VisitCountOperation(CountOperation* node) {
 
     // Perform optimistic increment/decrement and check for overflow.
     // If we don't overflow we are done.
+    // plind -- I think there is an overflow window here if entry value already Min or Max ..............
     if (is_increment) {
       __ Addu(v0, a0, Operand(Smi::FromInt(1)));
       exit.Branch(ne, a0, Operand(Smi::kMaxValue), no_hint);
@@ -3263,8 +3267,25 @@ void CodeGenerator::VisitCountOperation(CountOperation* node) {
     // Slow case: Convert to number.
     // a0 still holds the original value.
     slow.Bind();
-    UNIMPLEMENTED_MIPS();
-    __ break_(__LINE__);   // We should not come here yet.
+    {
+      // Convert the operand to a number.
+      frame_->EmitPush(a0);
+      frame_->InvokeBuiltin(Builtins::TO_NUMBER, CALL_JS, 1);
+    }
+    if (is_postfix) {
+      // Postfix: store to result (on the stack).
+      __ sw(a0, frame_->ElementAt(target.size()));
+    }
+
+    // Compute the new value.
+    __ li(a1, Operand(Smi::FromInt(1)));
+    frame_->EmitPush(a0);
+    frame_->EmitPush(a1);
+    if (is_increment) {
+      frame_->CallRuntime(Runtime::kNumberAdd, 2);
+    } else {
+      frame_->CallRuntime(Runtime::kNumberSub, 2);
+    }
 
     // Store the new value in the target if not const.
     exit.Bind();
@@ -4150,7 +4171,7 @@ static void EmitSmiNonsmiComparison(MacroAssembler* masm,
   // Rhs is a smi, lhs is a number.
   // Convert a1 to double.
   __ mtc1(a1, f12);
-  __ cvt_d_s(f12, f12);
+  __ cvt_d_w(f12, f12);
   __ ldc1(f14, FieldMemOperand(a0, HeapNumber::kValueOffset));
 
   // We now have both loaded as doubles.
@@ -4174,7 +4195,7 @@ static void EmitSmiNonsmiComparison(MacroAssembler* masm,
   // a0 is Smi and a1 is heap number.
   // Convert a1 to double.
   __ mtc1(a0, f14);
-  __ cvt_d_s(f14, f14);
+  __ cvt_d_w(f14, f14);
   __ ldc1(f12, FieldMemOperand(a1, HeapNumber::kValueOffset));
   // Fall through to both_loaded_as_doubles.
 }
@@ -4214,14 +4235,35 @@ static void EmitTwoNonNanDoubleComparison(MacroAssembler* masm, Condition cc) {
   // We use a call_was and return manually because we need arguments slots to
   // be freed.
 
-  __ li(t9, Operand(ExternalReference::compare_doubles()));
-  __ SetupAlignedCall(t0, 0);
-  __ Call(t9);  // Call the code
-  __ Addu(sp, sp, Operand(-StandardFrameConstants::kCArgsSlotsSize));
-  __ Addu(sp, sp, Operand(StandardFrameConstants::kCArgsSlotsSize));
-  __ ReturnFromAlignedCall();
+  // Something similar to this should be used when we support CPUFeature(FPU)
+  // But in the non-CPU case, the doubles must be passed in GP regs.
+  // __ li(t9, Operand(ExternalReference::compare_doubles()));
+  // __ SetupAlignedCall(t0, 0);
+  // __ Addu(sp, sp, Operand(-StandardFrameConstants::kCArgsSlotsSize));
+  // __ Call(t9);  // Call the code
+  // __ Addu(sp, sp, Operand(StandardFrameConstants::kCArgsSlotsSize));
+  // __ ReturnFromAlignedCall();
+  // __ Ret();
 
+  Label equal, less_than;
+  __ c(EQ, D, f12, f14);
+  __ bc1t(&equal);
+
+  __ c(OLT, D, f12, f14);
+  __ bc1t(&less_than);
+
+  // Not equal, not less, not NaN, must be greater.
+  __ li(v0, Operand(EQUAL));
   __ Ret();
+
+  __ bind(&equal);
+  __ li(v0, Operand(EQUAL));
+  __ Ret();
+
+  __ bind(&less_than);
+  __ li(v0, Operand(LESS));
+  __ Ret();
+
 }
 
 
@@ -4431,22 +4473,30 @@ void CompareStub::Generate(MacroAssembler* masm) {
                              &flat_string_check);
 
   __ bind(&check_for_symbols);
-  if (cc_ == eq) {
+  if (cc_ == eq && !strict_) {
     // Either jumps to slow or returns the answer. Assumes that a2 is the type
     // of a0 on entry.
     EmitCheckForSymbols(masm, &flat_string_check);
-//    EmitCheckForSymbols(masm, &slow);
   }
 
   // Check for both being sequential ASCII strings, and inline if that is the
   // case.
   __ bind(&flat_string_check);
-  UNIMPLEMENTED_MIPS();
-  __ break_(__LINE__);
+
+  __ JumpIfNonSmisNotBothSequentialAsciiStrings(a0, a1, a2, a3, &slow);
+
+  __ IncrementCounter(&Counters::string_compare_native, 1, a2, a3);
+  StringCompareStub::GenerateCompareFlatAsciiStrings(masm,
+                                                     a1,
+                                                     a0,
+                                                     a2,
+                                                     a3,
+                                                     t0,
+                                                     t1);
+  // Never falls through to here.
 
   __ bind(&slow);
-  UNIMPLEMENTED_MIPS();
-  // TOCHECK: Check push order. In Comparison() we pop in the reverse order.
+  // TOCHECK: Check push order. In Comparison() we pop in the reverse order.......................
   __ MultiPush(a1.bit() | a0.bit());
   // Figure out which native to call and setup the arguments.
   Builtins::JavaScript native;
