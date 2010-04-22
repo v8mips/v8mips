@@ -100,6 +100,18 @@ class SimulatorStack : public v8::internal::AllStatic {
 namespace assembler {
 namespace mips {
 
+// -----------------------------------------------------------------------------
+// Utility functions
+
+static inline bool is_uintn(int x, int n) {
+  return (x & -(1 << n)) == 0;
+}
+
+static inline bool is_uint3(int x)  { return is_uintn(x, 3); }
+
+
+
+
 class Simulator {
  public:
   friend class Debugger;
@@ -155,7 +167,9 @@ class Simulator {
   void set_fpu_register_double(int fpureg, double value);
   int32_t get_fpu_register(int fpureg) const;
   double get_fpu_register_double(int fpureg) const;
-
+  void set_fpu_ccr_bit(uint32_t cc, bool value);
+  bool test_fpu_ccr_bit(uint32_t cc);
+  
   // Special case of set_register and get_register to access the raw PC value.
   void set_pc(int32_t value);
   int32_t get_pc() const;
@@ -269,6 +283,8 @@ class Simulator {
   int32_t registers_[kNumSimuRegisters];
   // Coprocessor Registers.
   int32_t FPUregisters_[kNumFPURegisters];
+  // FPU Condition Code register.
+  int32_t FPUccr_;
 
   // Simulator support.
   char* stack_;

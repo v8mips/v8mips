@@ -502,6 +502,10 @@ Simulator::Simulator() {
   for (int i = 0; i < kNumSimuRegisters; i++) {
     registers_[i] = 0;
   }
+  for (int i = 0; i < kNumFPURegisters; i++) {
+    FPUregisters_[i] = 0;
+  }
+  FPUccr_ = 0;
 
   // The sp is initialized to point to the bottom (high address) of the
   // allocated stack area. To be safe in potential stack underflows we leave
@@ -630,6 +634,22 @@ double Simulator::get_fpu_register_double(int fpureg) const {
   return *v8i::BitCast<double*, int32_t*>(
       const_cast<int32_t*>(&FPUregisters_[fpureg]));
 }
+
+// Helper functions for setting and testing the FPU condition code bits.
+void Simulator::set_fpu_ccr_bit(uint32_t cc, bool value) {
+  ASSERT(is_uint3(cc));
+  if (value) {
+    FPUccr_ |= (1 << cc);
+  } else {
+    FPUccr_ &= ~(1 << cc);
+  }
+}
+
+bool Simulator::test_fpu_ccr_bit(uint32_t cc) {
+  ASSERT(is_uint3(cc));
+  return FPUccr_ & (1 << cc);
+}
+
 
 // Raw access to the PC register.
 void Simulator::set_pc(int32_t value) {
@@ -870,7 +890,7 @@ void Simulator::SignalExceptions() {
 
 // Handle execution based on instruction types.
 void Simulator::DecodeTypeRegister(Instruction* instr) {
-  // Instruction fields
+  // Instruction fields.
   Opcode   op     = instr->OpcodeFieldRaw();
   int32_t  rs_reg = instr->RsField();
   int32_t  rs     = get_register(rs_reg);
@@ -888,7 +908,7 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
   uint64_t u64hilo = 0;
 
   // ALU output
-  // It should not be used as is. Instructions using it should always initialize
+  // It should not be used as is. Instructions using it should always initialize.
   // it first.
   int32_t alu_out = 0x12345678;
 
@@ -905,7 +925,7 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
   switch (op) {
     case COP1:    // Coprocessor instructions
       switch (instr->RsFieldRaw()) {
-        case BC1:   // branch on coprocessor condition
+        case BC1:   // Handled in DecodeTypeImmed, should never come here.
           UNREACHABLE();
           break;
         case MFC1:
@@ -1121,22 +1141,21 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
           break;
         case D:
           double ft, fs;
+          uint32_t cc;
           fs = get_fpu_register_double(fs_reg);
+          ft = get_fpu_register_double(ft_reg);
+          cc = instr->FCccField();
           switch (instr->FunctionFieldRaw()) {
             case ADD_D:
-              ft = get_fpu_register_double(ft_reg);
               set_fpu_register_double(fd_reg, fs + ft);
               break;
             case SUB_D:
-              ft = get_fpu_register_double(ft_reg);
               set_fpu_register_double(fd_reg, fs - ft);
               break;
             case MUL_D:
-              ft = get_fpu_register_double(ft_reg);
               set_fpu_register_double(fd_reg, fs * ft);
               break;
             case DIV_D:
-              ft = get_fpu_register_double(ft_reg);
               set_fpu_register_double(fd_reg, fs / ft);
               break;
             case ABS_D:
@@ -1151,6 +1170,28 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
             case CVT_W_D:   // Convert double to word
               set_fpu_register(fd_reg, static_cast<int32_t>(fs));
               break;
+            case C_UN_D:
+              set_fpu_ccr_bit(cc, isnan(fs) || isnan(ft));
+              break;
+            case C_EQ_D:
+              set_fpu_ccr_bit(cc, (fs == ft));
+              break;
+            case C_UEQ_D:
+              set_fpu_ccr_bit(cc, (fs == ft) || (isnan(fs) || isnan(ft)));
+              break;
+            case C_OLT_D:
+              set_fpu_ccr_bit(cc, (fs < ft));
+              break;
+            case C_ULT_D:
+              set_fpu_ccr_bit(cc, (fs < ft) || (isnan(fs) || isnan(ft)));
+              break;
+            case C_OLE_D:
+              set_fpu_ccr_bit(cc, (fs <= ft));
+              break;
+            case C_ULE_D:
+              set_fpu_ccr_bit(cc, (fs <= ft) || (isnan(fs) || isnan(ft)));
+              break;
+            case C_F_D:
             case CVT_S_D:
             case CVT_L_D:
               UNIMPLEMENTED_MIPS();
@@ -1284,7 +1325,7 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
 
 // Type 2: instructions using a 16 bytes immediate. (eg: addi, beq)
 void Simulator::DecodeTypeImmediate(Instruction* instr) {
-  // Instruction fields
+  // Instruction fields.
   Opcode   op     = instr->OpcodeFieldRaw();
   int32_t  rs     = get_register(instr->RsField());
   uint32_t rs_u   = static_cast<uint32_t>(rs);
@@ -1294,9 +1335,9 @@ void Simulator::DecodeTypeImmediate(Instruction* instr) {
 
   int32_t  ft_reg = instr->FtField();  // destination register
 
-  // zero extended immediate
+  // Zero extended immediate.
   uint32_t  oe_imm16 = 0xffff & imm16;
-  // sign extended immediate
+  // Sign extended immediate.
   int32_t   se_imm16 = imm16;
 
   // Get current pc.
@@ -1304,25 +1345,35 @@ void Simulator::DecodeTypeImmediate(Instruction* instr) {
   // Next pc.
   int32_t next_pc = bad_ra;
 
-  // Used for conditional branch instructions
+  // Used for conditional branch instructions.
   bool do_branch = false;
   bool execute_branch_delay_instruction = false;
 
-  // Used for arithmetic instructions
+  // Used for arithmetic instructions.
   int32_t alu_out = 0;
-  // Floating point
+  // Floating point.
   double fp_out = 0.0;
+  uint32_t cc, cc_value;
 
-  // Used for memory instructions
+  // Used for memory instructions.
   int32_t addr = 0x0;
 
   // ---------- Configuration (and execution for REGIMM)
   switch (op) {
-    // ------------- COP1. Coprocessor instructions
+    // ------------- COP1. Coprocessor instructions.
     case COP1:
       switch (instr->RsFieldRaw()) {
-        case BC1:   // branch on coprocessor condition
-          UNIMPLEMENTED_MIPS();
+        case BC1:   // Branch on coprocessor condition.
+          cc = instr->FBccField();
+          cc_value = test_fpu_ccr_bit(cc);
+          do_branch = (instr->FBtrueField()) ? cc_value : !cc_value;
+          execute_branch_delay_instruction = true;
+          // Set next_pc
+          if (do_branch) {
+            next_pc = current_pc + (imm16 << 2) + Instruction::kInstructionSize;
+          } else {
+            next_pc = current_pc + kBranchReturnOffset;
+          }
           break;
         default:
           UNREACHABLE();

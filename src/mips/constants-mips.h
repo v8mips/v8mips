@@ -148,6 +148,12 @@ static const int kFtShift       = 16;
 static const int kFtBits        = 5;
 static const int kFdShift       = 6;
 static const int kFdBits        = 5;
+static const int kFCccShift     = 8;
+static const int kFCccBits      = 3;
+static const int kFBccShift     = 18;
+static const int kFBccBits      = 3;
+static const int kFBtrueShift   = 16;
+static const int kFBtrueBits    = 1;
 
 // ----- Miscellianous useful masks.
 // Instruction bit masks.
@@ -299,6 +305,14 @@ enum SecondaryField {
   CVT_S_D   =   ((4 << 3) + 0),
   CVT_W_D   =   ((4 << 3) + 4),
   CVT_L_D   =   ((4 << 3) + 5),
+  C_F_D     =   ((6 << 3) + 0),
+  C_UN_D    =   ((6 << 3) + 1),
+  C_EQ_D    =   ((6 << 3) + 2),
+  C_UEQ_D   =   ((6 << 3) + 3),
+  C_OLT_D   =   ((6 << 3) + 4),
+  C_ULT_D   =   ((6 << 3) + 5),
+  C_OLE_D   =   ((6 << 3) + 6),
+  C_ULE_D   =   ((6 << 3) + 7),
   // COP1 Encoding of Function Field When rs=W or L.
   CVT_S_W   =   ((4 << 3) + 0),
   CVT_D_W   =   ((4 << 3) + 1),
@@ -466,6 +480,21 @@ class Instruction {
     return Bits(kFtShift + kFtBits - 1, kFtShift);
   }
 
+  // Float Compare condition code instruction bits.
+  inline int FCccField() const {
+    return Bits(kFCccShift + kFCccBits - 1, kFCccShift);
+  }
+
+  // Float Branch condition code instruction bits.
+  inline int FBccField() const {
+    return Bits(kFBccShift + kFBccBits - 1, kFBccShift);
+  }
+
+  // Float Branch true/false instruction bit.
+  inline int FBtrueField() const {
+    return Bits(kFBtrueShift + kFBtrueBits - 1, kFBtrueShift);
+  }
+
   // Return the fields at their original place in the instruction encoding.
   inline Opcode OpcodeFieldRaw() const {
     return static_cast<Opcode>(InstructionBits() & kOpcodeMask);
@@ -474,6 +503,11 @@ class Instruction {
   inline int RsFieldRaw() const {
     ASSERT(InstructionType() == kRegisterType ||
            InstructionType() == kImmediateType);
+    return InstructionBits() & kRsFieldMask;
+  }
+
+  // Same as above function, but safe to call within InstructionType().
+  inline int RsFieldRawNoAssert() const {
     return InstructionBits() & kRsFieldMask;
   }
 

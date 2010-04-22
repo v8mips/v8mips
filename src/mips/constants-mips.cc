@@ -292,7 +292,7 @@ Instruction::Type Instruction::InstructionType() const {
       };
       break;
     case COP1:    // Coprocessor instructions
-      switch (FunctionFieldRaw()) {
+      switch (RsFieldRawNoAssert()) {
         case BC1:   // branch on coprocessor condition
           return kImmediateType;
         default:

@@ -106,6 +106,8 @@ class Decoder {
   void PrintFd(Instruction* instr);
   void PrintSa(Instruction* instr);
   void PrintSd(Instruction* instr);
+  void PrintBc(Instruction* instr);
+  void PrintCc(Instruction* instr);
   void PrintFunction(Instruction* instr);
   void PrintSecondaryField(Instruction* instr);
   void PrintUImm16(Instruction* instr);
@@ -219,6 +221,22 @@ void Decoder::PrintSd(Instruction* instr) {
   int sd = instr->RdField();
   out_buffer_pos_ += v8i::OS::SNPrintF(out_buffer_ + out_buffer_pos_,
                                        "%d", sd);
+}
+
+
+// Print the integer value of the cc field for the bc1t/f instructions.
+void Decoder::PrintBc(Instruction* instr) {
+  int cc = instr->FBccField();
+  out_buffer_pos_ += v8i::OS::SNPrintF(out_buffer_ + out_buffer_pos_,
+                                       "%d", cc);
+}
+
+
+// Print the integer value of the cc field for the FP compare instructions.
+void Decoder::PrintCc(Instruction* instr) {
+  int cc = instr->FCccField();
+  out_buffer_pos_ += v8i::OS::SNPrintF(out_buffer_ + out_buffer_pos_,
+                                       "cc(%d)", cc);
 }
 
 
@@ -384,6 +402,16 @@ int Decoder::FormatOption(Instruction* instr, const char* format) {
         }
       }
     }
+    case 'b': {   // 'bc - Special for bc1 cc field.
+      ASSERT(STRING_STARTS_WITH(format, "bc"));
+      PrintBc(instr);
+      return 2;
+    }
+    case 'C': {   // 'Cc - Special for c.xx.d cc field.
+      ASSERT(STRING_STARTS_WITH(format, "Cc"));
+      PrintCc(instr);
+      return 2;
+    }
   };
   UNREACHABLE();
   return -1;
@@ -418,10 +446,8 @@ void Decoder::DecodeTypeRegister(Instruction* instr) {
   switch (instr->OpcodeFieldRaw()) {
     case COP1:    // Coprocessor instructions
       switch (instr->RsFieldRaw()) {
-        case BC1:   // branch on coprocessor condition
-          // UNREACHABLE();
-          // hack for debugging the code ..........................................................
-          Format(instr, "unknown.bc1");
+        case BC1:   // bc1 handled in DecodeTypeImmediate.
+          UNREACHABLE();
           break;
         case MFC1:
           Format(instr, "mfc1   'rt, 'fs");
@@ -438,37 +464,60 @@ void Decoder::DecodeTypeRegister(Instruction* instr) {
         case D:
           switch (instr->FunctionFieldRaw()) {
             case ADD_D:
-              Format(instr, "add.d  'fd, 'fs, 'ft");
+              Format(instr, "add.d   'fd, 'fs, 'ft");
               break;
             case SUB_D:
-              Format(instr, "sub.d  'fd, 'fs, 'ft");
+              Format(instr, "sub.d   'fd, 'fs, 'ft");
               break;
             case MUL_D:
-              Format(instr, "mul.d  'fd, 'fs, 'ft");
+              Format(instr, "mul.d   'fd, 'fs, 'ft");
               break;
             case DIV_D:
-              Format(instr, "div.d  'fd, 'fs, 'ft");
+              Format(instr, "div.d   'fd, 'fs, 'ft");
               break;
             case ABS_D:
-              Format(instr, "abs.d  'fd, 'fs");
+              Format(instr, "abs.d   'fd, 'fs");
               break;
             case MOV_D:
-              Format(instr, "mov.d  'fd, 'fs");
+              Format(instr, "mov.d   'fd, 'fs");
               break;
             case NEG_D:
-              Format(instr, "neg.d  'fd, 'fs");
+              Format(instr, "neg.d   'fd, 'fs");
               break;
             case CVT_W_D:
               Format(instr, "cvt.w.d 'fd, 'fs");
+              break;
+            case C_F_D:
+              Format(instr, "c.f.d   'fs, 'ft, 'Cc");
+              break;
+            case C_UN_D:
+              Format(instr, "c.un.d  'fs, 'ft, 'Cc");
+              break;
+            case C_EQ_D:
+              Format(instr, "c.eq.d  'fs, 'ft, 'Cc");
+              break;
+            case C_UEQ_D:
+              Format(instr, "c.ueq.d 'fs, 'ft, 'Cc");
+              break;
+            case C_OLT_D:
+              Format(instr, "c.olt.d 'fs, 'ft, 'Cc");
+              break;
+            case C_ULT_D:
+              Format(instr, "c.ult.d 'fs, 'ft, 'Cc");
+              break;
+            case C_OLE_D:
+              Format(instr, "c.ole.d 'fs, 'ft, 'Cc");
+              break;
+            case C_ULE_D:
+              Format(instr, "c.ule.d 'fs, 'ft, 'Cc");
               break;
             case CVT_L_D:
             case CVT_S_D:
               UNIMPLEMENTED_MIPS();
               break;
             default:
-            // UNREACHABLE();
-            // hack for debugging the code ........................................................
-            Format(instr, "unknown.cop1.d");
+              Format(instr, "unknown.cop1.d");
+              break;
           };
           break;
         case S:
@@ -641,6 +690,19 @@ void Decoder::DecodeTypeRegister(Instruction* instr) {
 void Decoder::DecodeTypeImmediate(Instruction* instr) {
   switch (instr->OpcodeFieldRaw()) {
     // ------------- REGIMM class.
+    case COP1:
+      switch (instr->RsFieldRaw()) {
+        case BC1:
+          if (instr->FBtrueField()) {
+            Format(instr, "bc1t    'bc, 'imm16u");
+          } else {
+            Format(instr, "bc1f    'bc, 'imm16u");
+          }
+          break;
+        default:
+          UNREACHABLE();
+      };
+      break; // Case COP1.
     case REGIMM:
       switch (instr->RtFieldRaw()) {
         case BLTZ:
@@ -658,7 +720,7 @@ void Decoder::DecodeTypeImmediate(Instruction* instr) {
         default:
           UNREACHABLE();
       };
-    break;  // case REGIMM
+    break;  // Case REGIMM.
     // ------------- Branch instructions.
     case BEQ:
       Format(instr, "beq  'rs, 'rt, 'imm16u");
@@ -723,16 +785,16 @@ void Decoder::DecodeTypeImmediate(Instruction* instr) {
       Format(instr, "sw     'rt, 'imm16s('rs)");
       break;
     case LWC1:
-      Format(instr, "lwc1   'ft, 'imm16s('rs)");
+      Format(instr, "lwc1    'ft, 'imm16s('rs)");
       break;
     case LDC1:
-      Format(instr, "ldc1   'ft, 'imm16s('rs)");
+      Format(instr, "ldc1    'ft, 'imm16s('rs)");
       break;
     case SWC1:
-      Format(instr, "swc1   'ft, 'imm16s('rs)");
+      Format(instr, "swc1    'ft, 'imm16s('rs)");
       break;
     case SDC1:
-      Format(instr, "sdc1   'ft, 'imm16s('rs)");
+      Format(instr, "sdc1    'ft, 'imm16s('rs)");
       break;
     default:
       UNREACHABLE();

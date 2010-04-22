@@ -1107,7 +1107,7 @@ void Assembler::cvt_d_s(FPURegister fd, FPURegister fs) {
 
 // Conditions.
 void Assembler::c(FPUCondition cond, SecondaryField fmt,
-    FPURegister ft, FPURegister fs, uint16_t cc) {
+    FPURegister fs, FPURegister ft, uint16_t cc) {
   ASSERT(is_uint3(cc));
   ASSERT((fmt & ~(31 << kRsShift)) == 0);
   Instr instr = COP1 | fmt | ft.code() << 16 | fs.code() << kFsShift

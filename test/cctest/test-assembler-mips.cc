@@ -551,4 +551,98 @@ TEST(MIPS6) {
   CHECK_EQ(0x3333bbcc, t.r6);
 }
 
+
+TEST(MIPS7) {
+  // Test floating point compare and branch instructions.
+  InitializeVM();
+  v8::HandleScope scope;
+
+  typedef struct {
+    double a;
+    double b;
+    double c;
+    double d;
+    double e;
+    double f;
+    int32_t result;
+  } T;
+  T t;
+
+  // Create a function that accepts &t, and loads, manipulates, and stores
+  // the doubles t.a ... t.f.
+  MacroAssembler assm(NULL, 0);
+  Label neither_is_nan, less_than, outa_here;
+
+  __ ldc1(f4, MemOperand(a0, OFFSET_OF(T, a)) );
+  __ ldc1(f6, MemOperand(a0, OFFSET_OF(T, b)) );
+  __ c(UN, D, f4, f6);
+  __ bc1f(&neither_is_nan);
+  __ nop();
+  __ sw(zero_reg, MemOperand(a0, OFFSET_OF(T, result)) );
+  __ Branch(&outa_here, al);
+
+  __ bind(&neither_is_nan);
+
+  __ c(OLT, D, f6, f4, 2);
+  __ bc1t(&less_than, 2);
+  __ nop();
+  __ sw(zero_reg, MemOperand(a0, OFFSET_OF(T, result)) );
+  __ Branch(&outa_here, al);
+
+  __ bind(&less_than);
+  __ Add(t0, zero_reg, Operand(1));
+  __ sw(t0, MemOperand(a0, OFFSET_OF(T, result)) ); // set true
+
+
+  // __ add_d(f8, f4, f6);
+  // __ sdc1(f8, MemOperand(a0, OFFSET_OF(T, c)) );   // c = a + b
+  //
+  // __ mov_d(f10, f8);  // c
+  // __ neg_d(f12, f6);  // -b
+  // __ sub_d(f10, f10, f12);
+  // __ sdc1(f10, MemOperand(a0, OFFSET_OF(T, d)) );   // d = c - (-b)
+  //
+  // __ sdc1(f4, MemOperand(a0, OFFSET_OF(T, b)) );  // b = a
+  //
+  // __ li(t0, 120);
+  // __ mtc1(t0, f14);
+  // __ cvt_d_w(f14, f14);   // f14 = 120.0
+  // __ mul_d(f10, f10, f14);
+  // __ sdc1(f10, MemOperand(a0, OFFSET_OF(T, e)) );   // e = d * 120 = 1.8066e16
+  //
+  // __ div_d(f12, f10, f4);
+  // __ sdc1(f12, MemOperand(a0, OFFSET_OF(T, f)) );   // f = e / a = 120.44
+
+  __ bind(&outa_here);
+
+  __ jr(ra);
+  __ nop();
+
+  CodeDesc desc;
+  assm.GetCode(&desc);
+  Object* code = Heap::CreateCode(desc,
+                                  NULL,
+                                  Code::ComputeFlags(Code::STUB),
+                                  Handle<Object>(Heap::undefined_value()));
+  CHECK(code->IsCode());
+#ifdef DEBUG
+  Code::cast(code)->Print();
+#endif
+  F3 f = FUNCTION_CAST<F3>(Code::cast(code)->entry());
+  t.a = 1.5e14;
+  t.b = 2.75e11;
+  t.c = 2.0;
+  t.d = -4.0;
+  t.e = 0.0;
+  t.f = 0.0;
+  t.result = 0;
+  Object* dummy = CALL_GENERATED_CODE(f, &t, 0, 0, 0, 0);
+  USE(dummy);
+  CHECK_EQ(1.5e14, t.a);
+  CHECK_EQ(2.75e11, t.b);
+  CHECK_EQ(1, t.result);
+}
+
+
+
 #undef __
