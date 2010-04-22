@@ -109,7 +109,7 @@ TEST(MIPS1) {
 
   __ bind(&C);
   __ xori(v1, a1, 0);
-  __ Branch(ne, &L, v1, Operand(0));
+  __ Branch(&L, ne, v1, Operand(0));
   __ nop();
 
   __ jr(ra);
@@ -170,60 +170,60 @@ TEST(MIPS2) {
   __ srav(v0, v0, t0);  // 0xff234560
   __ sllv(v0, v0, t0);  // 0xf2345600
   __ srlv(v0, v0, t0);  // 0x0f234560
-  __ Branch(ne, &error, v0, Operand(0x0f234560));
+  __ Branch(&error, ne, v0, Operand(0x0f234560));
   __ nop();
 
   __ add(v0, t0, t1);   // 0x00001238
   __ sub(v0, v0, t0);   // 0x00001234
-  __ Branch(ne, &error, v0, Operand(0x00001234));
+  __ Branch(&error, ne, v0, Operand(0x00001234));
   __ nop();
   __ addu(v1, t3, t0);
-  __ Branch(ne, &error, v1, Operand(0x80000003));
+  __ Branch(&error, ne, v1, Operand(0x80000003));
   __ nop();
   __ subu(v1, t7, t0);  // 0x7ffffffc
-  __ Branch(ne, &error, v1, Operand(0x7ffffffc));
+  __ Branch(&error, ne, v1, Operand(0x7ffffffc));
   __ nop();
 
   __ and_(v0, t1, t2);  // 0x00001230
   __ or_(v0, v0, t1);   // 0x00001234
   __ xor_(v0, v0, t2);  // 0x1234444c
   __ nor(v0, v0, t2);   // 0xedcba987
-  __ Branch(ne, &error, v0, Operand(0xedcba983));
+  __ Branch(&error, ne, v0, Operand(0xedcba983));
   __ nop();
 
   __ slt(v0, t7, t3);
-  __ Branch(ne, &error, v0, Operand(0x1));
+  __ Branch(&error, ne, v0, Operand(0x1));
   __ nop();
   __ sltu(v0, t7, t3);
-  __ Branch(ne, &error, v0, Operand(0x0));
+  __ Branch(&error, ne, v0, Operand(0x0));
   __ nop();
   // End of SPECIAL class.
 
   __ addi(v0, zero_reg, 0x7421);  // 0x00007421
   __ addi(v0, v0, -0x1);  // 0x00007420
   __ addiu(v0, v0, -0x20);  // 0x00007400
-  __ Branch(ne, &error, v0, Operand(0x00007400));
+  __ Branch(&error, ne, v0, Operand(0x00007400));
   __ nop();
   __ addiu(v1, t3, 0x1);  // 0x80000000
-  __ Branch(ne, &error, v1, Operand(0x80000000));
+  __ Branch(&error, ne, v1, Operand(0x80000000));
   __ nop();
 
   __ slti(v0, t1, 0x00002000);  // 0x1
   __ slti(v0, v0, 0xffff8000);  // 0x0
-  __ Branch(ne, &error, v0, Operand(0x0));
+  __ Branch(&error, ne, v0, Operand(0x0));
   __ nop();
   __ sltiu(v0, t1, 0x00002000);  // 0x1
   __ sltiu(v0, v0, 0x00008000);  // 0x1
-  __ Branch(ne, &error, v0, Operand(0x1));
+  __ Branch(&error, ne, v0, Operand(0x1));
   __ nop();
 
   __ andi(v0, t1, 0xf0f0);  // 0x00001030
   __ ori(v0, v0, 0x8a00);  // 0x00009a30
   __ xori(v0, v0, 0x83cc);  // 0x000019fc
-  __ Branch(ne, &error, v0, Operand(0x000019fc));
+  __ Branch(&error, ne, v0, Operand(0x000019fc));
   __ nop();
   __ lui(v1, 0x8123);  // 0x81230000
-  __ Branch(ne, &error, v1, Operand(0x81230000));
+  __ Branch(&error, ne, v1, Operand(0x81230000));
   __ nop();
 
   // Bit twiddling instructions & conditional moves.
@@ -235,15 +235,15 @@ TEST(MIPS2) {
   __ addu(v0, v0, v1);  // 51
   __ clz(v1, t7);       // 0
   __ addu(v0, v0, v1);  // 51
-  __ Branch(ne, &error, v0, Operand(51));
+  __ Branch(&error, ne, v0, Operand(51));
   __ movn(a0, t3, t0);  // move a0<-t3 (t0 is NOT 0)
   __ ins(a0, t1, 12, 8);  // 0x7ff34fff
-  __ Branch(ne, &error, a0, Operand(0x7ff34fff));
+  __ Branch(&error, ne, a0, Operand(0x7ff34fff));
   __ movz(a0, t6, t7);    // a0 not updated (t7 is NOT 0)
   __ ext(a1, a0, 8, 12);  // 0x34f
-  __ Branch(ne, &error, a1, Operand(0x34f));
+  __ Branch(&error, ne, a1, Operand(0x34f));
   __ movz(a0, t6, v1);    // a0<-t6, v0 is 0, from 8 instr back
-  __ Branch(ne, &error, a0, Operand(t6));
+  __ Branch(&error, ne, a0, Operand(t6));
 
   // Everything was correctly executed. Load the expected result.
   __ li(v0, 0x31415926);

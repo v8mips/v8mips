@@ -83,11 +83,11 @@ void StubCompiler::GenerateLoadArrayLength(MacroAssembler* masm,
                                            Label* miss_label) {
   // Check that the receiver isn't a smi.
   __ And(scratch, receiver, Operand(kSmiTagMask));
-  __ Branch(eq, miss_label, scratch, Operand(zero_reg));
+  __ Branch(miss_label, eq, scratch, Operand(zero_reg));
 
   // Check that the object is a JS array.
   __ GetObjectType(receiver, scratch, scratch);
-  __ Branch(ne, miss_label, scratch, Operand(JS_ARRAY_TYPE));
+  __ Branch(miss_label, ne, scratch, Operand(JS_ARRAY_TYPE));
 
   // Load length directly from the JS array.
   __ lw(v0, FieldMemOperand(receiver, JSArray::kLengthOffset));
@@ -125,7 +125,7 @@ void StubCompiler::GenerateStoreField(MacroAssembler* masm,
 
   // Check that the map of the receiver hasn't changed.
   __ lw(scratch, FieldMemOperand(receiver_reg, HeapObject::kMapOffset));
-  __ Branch(ne, miss_label, scratch, Operand(Handle<Map>(object->map())));
+  __ Branch(miss_label, ne, scratch, Operand(Handle<Map>(object->map())));
 
   // Perform global security token check if needed.
   if (object->IsJSGlobalProxy()) {
@@ -245,7 +245,7 @@ Register StubCompiler::CheckPrototypes(JSObject* object,
       __ lw(scratch,
              FieldMemOperand(scratch, JSGlobalPropertyCell::kValueOffset));
       __ LoadRoot(at, Heap::kTheHoleValueRootIndex);
-      __ Branch(ne, miss, scratch, Operand(at));
+      __ Branch(miss, ne, scratch, Operand(at));
     }
     object = JSObject::cast(object->GetPrototype());
   }
@@ -265,7 +265,7 @@ void StubCompiler::GenerateLoadField(JSObject* object,
                                      Label* miss) {
   // Check that the receiver isn't a smi.
   __ And(scratch1, receiver, Operand(kSmiTagMask));
-  __ Branch(eq, miss, scratch1, Operand(zero_reg));
+  __ Branch(miss, eq, scratch1, Operand(zero_reg));
 
   // Check that the maps haven't changed.
   Register reg =
@@ -386,7 +386,7 @@ Object* CallStubCompiler::CompileArrayPushCall(Object* object,
 
   // Check that the receiver isn't a smi.
   __ And(at, a1, Operand(kSmiTagMask));
-  __ Branch(eq, &miss, at, Operand(zero_reg));
+  __ Branch(&miss, eq, at, Operand(zero_reg));
 
   // Check that the maps haven't changed.
   CheckPrototypes(JSObject::cast(object), a1, holder, a3, a0, name, &miss);
@@ -448,7 +448,7 @@ Object* CallStubCompiler::CompileCallConstant(Object* object,
   // Check that the receiver isn't a smi.
   if (check != NUMBER_CHECK) {
     __ And(t1, a1, Operand(kSmiTagMask));
-    __ Branch(eq, &miss, t1, Operand(zero_reg));
+    __ Branch(&miss, eq, t1, Operand(zero_reg));
   }
 
   // Make sure that it's okay not to patch the on stack receiver
@@ -476,7 +476,7 @@ Object* CallStubCompiler::CompileCallConstant(Object* object,
       } else {
         // Check that the object is a two-byte string or a symbol.
         __ GetObjectType(a1, a3, a3);
-        __ Branch(Ugreater_equal, &miss, a3, Operand(FIRST_NONSTRING_TYPE));
+        __ Branch(&miss, Ugreater_equal, a3, Operand(FIRST_NONSTRING_TYPE));
         // Check that the maps starting from the prototype haven't changed.
         GenerateLoadGlobalFunctionPrototype(masm(),
                                             Context::STRING_FUNCTION_INDEX,
@@ -495,9 +495,9 @@ Object* CallStubCompiler::CompileCallConstant(Object* object,
       Label fast;
         // Check that the object is a smi or a heap number.
         __ And(t1, a1, Operand(kSmiTagMask));
-        __ Branch(eq, &fast, t1, Operand(zero_reg));
+        __ Branch(&fast, eq, t1, Operand(zero_reg));
         __ GetObjectType(a1, a0, a0);
-        __ Branch(ne, &miss, a0, Operand(HEAP_NUMBER_TYPE));
+        __ Branch(&miss, ne, a0, Operand(HEAP_NUMBER_TYPE));
         __ bind(&fast);
         // Check that the maps starting from the prototype haven't changed.
         GenerateLoadGlobalFunctionPrototype(masm(),
@@ -518,9 +518,9 @@ Object* CallStubCompiler::CompileCallConstant(Object* object,
         Label fast;
         // Check that the object is a boolean.
         __ LoadRoot(t0, Heap::kTrueValueRootIndex);
-        __ Branch(eq, &fast, a1, Operand(t0));
+        __ Branch(&fast, eq, a1, Operand(t0));
         __ LoadRoot(t0, Heap::kFalseValueRootIndex);
-        __ Branch(ne, &miss, a1, Operand(t0));
+        __ Branch(&miss, ne, a1, Operand(t0));
         __ bind(&fast);
         // Check that the maps starting from the prototype haven't changed.
         GenerateLoadGlobalFunctionPrototype(masm(),
@@ -581,7 +581,7 @@ Object* CallStubCompiler::CompileCallGlobal(JSObject* object,
   // the receiver cannot be a smi.
   if (object != holder) {
     __ And(t0, a0, Operand(kSmiTagMask));
-    __ Branch(eq, &miss, t0, Operand(zero_reg));
+    __ Branch(&miss, eq, t0, Operand(zero_reg));
   }
 
   // Check that the maps haven't changed.
@@ -600,14 +600,14 @@ Object* CallStubCompiler::CompileCallGlobal(JSObject* object,
     // function, we have to verify that it still is a function.
     __ BranchOnSmi(a1, &miss, t0);
     __ GetObjectType(a1, a3, a3);
-    __ Branch(ne, &miss, a3, Operand(JS_FUNCTION_TYPE));
+    __ Branch(&miss, ne, a3, Operand(JS_FUNCTION_TYPE));
 
     // Check the shared function info. Make sure it hasn't changed.
     __ li(a3, Operand(Handle<SharedFunctionInfo>(function->shared())));
     __ lw(t0, FieldMemOperand(a1, JSFunction::kSharedFunctionInfoOffset));
-    __ Branch(ne, &miss, t0, Operand(a3));
+    __ Branch(&miss, ne, t0, Operand(a3));
   } else {
-    __ Branch(ne, &miss, a1, Operand(Handle<JSFunction>(function)));
+    __ Branch(&miss, ne, a1, Operand(Handle<JSFunction>(function)));
   }
 
   // Patch the receiver on the stack with the global proxy if
@@ -699,7 +699,7 @@ Object* StoreStubCompiler::CompileStoreGlobal(GlobalObject* object,
 
   // Check that the map of the global has not changed.
   __ lw(a3, FieldMemOperand(a1, HeapObject::kMapOffset));
-  __ Branch(ne, &miss, a3, Operand(Handle<Map>(object->map())));
+  __ Branch(&miss, ne, a3, Operand(Handle<Map>(object->map())));
 
   // Store the value in the cell.
   __ li(a2, Operand(Handle<JSGlobalPropertyCell>(cell)));
@@ -800,7 +800,7 @@ Object* LoadStubCompiler::CompileLoadGlobal(JSObject* object,
   // the receiver cannot be a smi.
   if (object != holder) {
     __ And(t0, a1, Operand(kSmiTagMask));
-    __ Branch(eq, &miss, t0, Operand(zero_reg));
+    __ Branch(&miss, eq, t0, Operand(zero_reg));
   }
 
   // Check that the map of the global has not changed.
@@ -813,7 +813,7 @@ Object* LoadStubCompiler::CompileLoadGlobal(JSObject* object,
   // Check for deleted property if property can actually be deleted.
   if (!is_dont_delete) {
     __ LoadRoot(t0, Heap::kTheHoleValueRootIndex);
-    __ Branch(eq, &miss, v0, Operand(t0));
+    __ Branch(&miss, eq, v0, Operand(t0));
   }
 
   __ IncrementCounter(&Counters::named_load_global_inline, 1, a1, a3);
@@ -861,7 +861,7 @@ Object* KeyedLoadStubCompiler::CompileLoadConstant(String* name,
   __ lw(a2, MemOperand(sp, 0));
   __ lw(a0, MemOperand(sp, kPointerSize));
 
-  __ Branch(ne, &miss, a2, Operand(Handle<String>(name)));
+  __ Branch(&miss, ne, a2, Operand(Handle<String>(name)));
 
   __ break_(__LINE__);
   GenerateLoadConstant(receiver, holder, a0, a3, a1, value, name, &miss);
@@ -931,7 +931,7 @@ Object* ConstructStubCompiler::CompileConstructStub(
   // code for the function thereby hitting the break points.
   __ lw(t5, FieldMemOperand(a1, JSFunction::kSharedFunctionInfoOffset));
   __ lw(a2, FieldMemOperand(t5, SharedFunctionInfo::kDebugInfoOffset));
-  __ Branch(ne, &generic_stub_call, a2, Operand(t7));
+  __ Branch(&generic_stub_call, ne, a2, Operand(t7));
 #endif
 
   // Load the initial map and verify that it is in fact a map.
@@ -939,9 +939,9 @@ Object* ConstructStubCompiler::CompileConstructStub(
   // t7: undefined
   __ lw(a2, FieldMemOperand(a1, JSFunction::kPrototypeOrInitialMapOffset));
   __ And(t0, a2, Operand(kSmiTagMask));
-  __ Branch(eq, &generic_stub_call, t0, Operand(zero_reg));
+  __ Branch(&generic_stub_call, eq, t0, Operand(zero_reg));
   __ GetObjectType(a2, a3, t0);
-  __ Branch(ne, &generic_stub_call, t0, Operand(MAP_TYPE));
+  __ Branch(&generic_stub_call, ne, t0, Operand(MAP_TYPE));
 
 #ifdef DEBUG
   // Cannot construct functions this way.
@@ -1013,7 +1013,7 @@ Object* ConstructStubCompiler::CompileConstructStub(
       Label not_passed, next;
       // Check if the argument assigned to the property is actually passed.
       int arg_number = shared->GetThisPropertyAssignmentArgument(i);
-      __ Branch(less_equal, &not_passed, a0, Operand(arg_number));
+      __ Branch(&not_passed, less_equal, a0, Operand(arg_number));
       // Argument passed - find it on the stack.
       __ lw(a2, MemOperand(a1, (arg_number + 1) * -kPointerSize));
       __ sw(a2, MemOperand(t5));

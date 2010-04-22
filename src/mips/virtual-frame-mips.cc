@@ -78,7 +78,7 @@ void VirtualFrame::Enter() {
     __ stop("VirtualFrame::Enter - a1 is not a function (smi check).");
     __ bind(&map_check);
     __ GetObjectType(a1, a2, a2);
-    __ Branch(eq, &done, a2, Operand(JS_FUNCTION_TYPE));
+    __ Branch(&done, eq, a2, Operand(JS_FUNCTION_TYPE));
     __ stop("VirtualFrame::Enter - a1 is not a function (map check).");
     __ bind(&done);
   }

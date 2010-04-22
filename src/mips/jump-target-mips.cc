@@ -104,7 +104,7 @@ void JumpTarget::DoBranch(Condition cc, Hint ignored,
       ASSERT(is_linked());
     }
   }
-  __ Branch(cc, &entry_label_, src1, src2);
+  __ Branch(&entry_label_, cc, src1, src2);
 }
 
 

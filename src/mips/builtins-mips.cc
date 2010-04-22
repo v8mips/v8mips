@@ -100,10 +100,10 @@ void Builtins::Generate_JSConstructCall(MacroAssembler* masm) {
   Label non_function_call;
   // Check that the function is not a smi.
   __ And(t0, a1, Operand(kSmiTagMask));
-  __ Branch(eq, &non_function_call, t0, Operand(zero_reg));
+  __ Branch(&non_function_call, eq, t0, Operand(zero_reg));
   // Check that the function is a JSFunction.
   __ GetObjectType(a1, a2, a2);
-  __ Branch(ne, &non_function_call, a2, Operand(JS_FUNCTION_TYPE));
+  __ Branch(&non_function_call, ne, a2, Operand(JS_FUNCTION_TYPE));
 
   // Jump to the function-specific construct stub.
   __ lw(a2, FieldMemOperand(a1, JSFunction::kSharedFunctionInfoOffset));
@@ -162,9 +162,9 @@ static void Generate_JSConstructStubHelper(MacroAssembler* masm,
     // t7: undefined
     __ lw(a2, FieldMemOperand(a1, JSFunction::kPrototypeOrInitialMapOffset));
     __ And(t0, a2, Operand(kSmiTagMask));
-    __ Branch(eq, &rt_call, t0, Operand(zero_reg));
+    __ Branch(&rt_call, eq, t0, Operand(zero_reg));
     __ GetObjectType(a2, a3, t4);
-    __ Branch(ne, &rt_call, t4, Operand(MAP_TYPE));
+    __ Branch(&rt_call, ne, t4, Operand(MAP_TYPE));
 
     // Check that the constructor is not constructing a JSFunction (see comments
     // in Runtime_NewObject in runtime.cc). In which case the initial map's
@@ -173,7 +173,7 @@ static void Generate_JSConstructStubHelper(MacroAssembler* masm,
     // a2: initial map
     // t7: undefined
     __ lbu(a3, FieldMemOperand(a2, Map::kInstanceTypeOffset));
-    __ Branch(eq, &rt_call, a3, Operand(JS_FUNCTION_TYPE));
+    __ Branch(&rt_call, eq, a3, Operand(JS_FUNCTION_TYPE));
 
     // Now allocate the JSObject on the heap.
     // constructor function
@@ -215,7 +215,7 @@ static void Generate_JSConstructStubHelper(MacroAssembler* masm,
       __ sw(t7, MemOperand(t5, 0));
       __ addiu(t5, t5, kPointerSize);
       __ bind(&entry);
-      __ Branch(Uless, &loop, t5, Operand(t6));
+      __ Branch(&loop, Uless, t5, Operand(t6));
     }
 
     // Add the object tag to make the JSObject real, so that we can continue and
@@ -244,7 +244,7 @@ static void Generate_JSConstructStubHelper(MacroAssembler* masm,
     __ sub(a3, a3, t0);
 
     // Done if no extra properties are to be allocated.
-    __ Branch(eq, &allocated, a3, Operand(zero_reg));
+    __ Branch(&allocated, eq, a3, Operand(zero_reg));
     __ Assert(greater_equal, "Property allocation count failed.",
         a3, Operand(zero_reg));
 
@@ -294,7 +294,7 @@ static void Generate_JSConstructStubHelper(MacroAssembler* masm,
       __ sw(t7, MemOperand(a2));
       __ addiu(a2, a2, kPointerSize);
       __ bind(&entry);
-      __ Branch(less, &loop, a2, Operand(t6));
+      __ Branch(&loop, less, a2, Operand(t6));
     }
 
     // Store the initialized FixedArray into the properties field of
@@ -372,7 +372,7 @@ static void Generate_JSConstructStubHelper(MacroAssembler* masm,
   __ Push(t1);
   __ bind(&entry);
   __ Addu(a3, a3, Operand(-2));
-  __ Branch(greater_equal, &loop, a3, Operand(zero_reg));
+  __ Branch(&loop, greater_equal, a3, Operand(zero_reg));
 
   // Call the function.
   // a0: number of arguments
@@ -411,12 +411,12 @@ static void Generate_JSConstructStubHelper(MacroAssembler* masm,
   // sp[1]: constructor function
   // sp[2]: number of arguments (smi-tagged)
   __ And(t0, v0, Operand(kSmiTagMask));
-  __ Branch(eq, &use_receiver, t0, Operand(zero_reg));
+  __ Branch(&use_receiver, eq, t0, Operand(zero_reg));
 
   // If the type of the result (stored in its map) is less than
   // FIRST_JS_OBJECT_TYPE, it is not an object in the ECMA sense.
   __ GetObjectType(v0, a3, a3);
-  __ Branch(greater_equal, &exit, a3, Operand(FIRST_JS_OBJECT_TYPE));
+  __ Branch(&exit, greater_equal, a3, Operand(FIRST_JS_OBJECT_TYPE));
 
   // Throw away the result of the constructor invocation and use the
   // on-stack receiver as the result.
@@ -500,7 +500,7 @@ static void Generate_JSEntryTrampolineHelper(MacroAssembler* masm,
   __ lw(t0, MemOperand(t0));  // Dereference handle.
   __ Push(t0);  // Push parameter.
   __ bind(&entry);
-  __ Branch(ne, &loop, s0, Operand(t2));
+  __ Branch(&loop, ne, s0, Operand(t2));
 
   // Registers:
   // a0: entry_address
@@ -603,10 +603,10 @@ void Builtins::Generate_ArgumentsAdaptorTrampoline(MacroAssembler* masm) {
   Label invoke, dont_adapt_arguments;
 
   Label enough, too_few;
-  __ Branch(eq, &dont_adapt_arguments,
+  __ Branch(&dont_adapt_arguments, eq,
       a2, Operand(SharedFunctionInfo::kDontAdaptArgumentsSentinel));
   // We use Uless as the number of argument should always be greater than 0.
-  __ Branch(Uless, &too_few, a0, Operand(a2));
+  __ Branch(&too_few, Uless, a0, Operand(a2));
 
   {  // Enough parameters: actual >= expected.
     // a0: actual number of arguments as a smi
@@ -637,7 +637,7 @@ void Builtins::Generate_ArgumentsAdaptorTrampoline(MacroAssembler* masm) {
     __ lw(t0, MemOperand(a0));
     __ Push(t0);
     // Use the branch delay slot to update a0.
-    __ Branch(false, ne, &copy, a0, Operand(a2));
+    __ Branch(false, &copy, ne, a0, Operand(a2));
     __ addiu(a0, a0, -kPointerSize);
 
     __ jmp(&invoke);
@@ -675,7 +675,7 @@ void Builtins::Generate_ArgumentsAdaptorTrampoline(MacroAssembler* masm) {
     __ lw(t0, MemOperand(a0));
     __ Push(t0);
     __ Addu(a0, a0, -kPointerSize);
-    __ Branch(ne, &copy, a0, Operand(t1));
+    __ Branch(&copy, ne, a0, Operand(t1));
 
     // Fill the remaining expected arguments with undefined.
     // a1: function
@@ -689,7 +689,7 @@ void Builtins::Generate_ArgumentsAdaptorTrampoline(MacroAssembler* masm) {
     Label fill;
     __ bind(&fill);
     __ Push(t0);
-    __ Branch(ne, &fill, sp, Operand(a2));
+    __ Branch(&fill, ne, sp, Operand(a2));
   }
 
   // Call the entry point.

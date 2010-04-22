@@ -124,10 +124,10 @@ void CallIC::GenerateMiss(MacroAssembler* masm, int argc) {
   Label invoke, global;
   __ lw(a2, MemOperand(sp, argc * kPointerSize));
   __ andi(t0, a2, kSmiTagMask);
-  __ Branch(eq, &invoke, t0, Operand(zero_reg));
+  __ Branch(&invoke, eq, t0, Operand(zero_reg));
   __ GetObjectType(a2, a3, a3);
-  __ Branch(eq, &global, a3, Operand(JS_GLOBAL_OBJECT_TYPE));
-  __ Branch(ne, &invoke, a3, Operand(JS_BUILTINS_OBJECT_TYPE));
+  __ Branch(&global, eq, a3, Operand(JS_GLOBAL_OBJECT_TYPE));
+  __ Branch(&invoke, ne, a3, Operand(JS_BUILTINS_OBJECT_TYPE));
 
   // Patch the receiver on the stack.
   __ bind(&global);

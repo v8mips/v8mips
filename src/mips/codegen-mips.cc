@@ -677,7 +677,7 @@ void CodeGenerator::LoadFromGlobalSlotCheckExtensions(Slot* slot,
     // Terminate at global context.
     __ lw(tmp2, FieldMemOperand(tmp, HeapObject::kMapOffset));
     __ LoadRoot(t8, Heap::kGlobalContextMapRootIndex);
-    __ Branch(eq, &fast, tmp2, Operand(t8));
+    __ Branch(&fast, eq, tmp2, Operand(t8));
     // Check that extension is NULL.
     __ lw(tmp2, ContextOperand(tmp, Context::EXTENSION_INDEX));
     slow->Branch(ne, tmp2, Operand(zero_reg));
@@ -2896,7 +2896,7 @@ void CodeGenerator::GenerateIsConstructCall(ZoneList<Expression*>* args) {
   // Skip the arguments adaptor frame if it exists.
   Label check_frame_marker;
   __ lw(a1, MemOperand(a2, StandardFrameConstants::kContextOffset));
-  __ Branch(ne, &check_frame_marker,
+  __ Branch(&check_frame_marker, ne,
               a1, Operand(Smi::FromInt(StackFrame::ARGUMENTS_ADAPTOR)));
   __ lw(a2, MemOperand(a2, StandardFrameConstants::kCallerFPOffset));
 
@@ -3878,7 +3878,7 @@ void ConvertToDoubleStub::Generate(MacroAssembler* masm) {
   // We have -1, 0 or 1, which we treat specially. Register source_ contains
   // absolute value: it is either equal to 1 (special case of -1 and 1),
   // greater than 1 (not a special case) or less than 1 (special case of 0).
-  __ Branch(gt, &not_special, source_, Operand(1));
+  __ Branch(&not_special, gt, source_, Operand(1));
 
   // For 1 or -1 we need to or in the 0 exponent (biased to 1023).
   static const uint32_t exponent_word_for_1 =
@@ -3923,7 +3923,7 @@ void WriteInt32ToHeapNumberStub::Generate(MacroAssembler* masm) {
   ASSERT(HeapNumber::kSignMask == 0x80000000u);
   // Test sign, and save for later conditionals.
   __ And(sign_, the_int_, Operand(0x80000000u));
-  __ Branch(eq, &max_negative_int, the_int_, Operand(0x80000000u));
+  __ Branch(&max_negative_int, eq, the_int_, Operand(0x80000000u));
 
   // Set up the correct exponent in scratch_.  All non-Smi int32s have the same.
   // A non-Smi integer is 1.xxx * 2^30 so the exponent is 30 (biased).
@@ -3976,7 +3976,7 @@ static void EmitIdenticalObjectComparison(MacroAssembler* masm,
   Label not_identical;
   Label heap_number, return_equal;
 
-  __ Branch(ne, &not_identical, a0, Operand(a1));
+  __ Branch(&not_identical, ne, a0, Operand(a1));
 
   // The two objects are identical. If we know that one of them isn't NaN then
   // we now know they test equal.
@@ -3987,20 +3987,20 @@ static void EmitIdenticalObjectComparison(MacroAssembler* masm,
     // Smis. If it's not a heap number, then return equal.
     if (cc == less || cc == greater) {
       __ GetObjectType(a0, t4, t4);
-      __ Branch(greater, slow, t4, Operand(FIRST_JS_OBJECT_TYPE));
+      __ Branch(slow, greater, t4, Operand(FIRST_JS_OBJECT_TYPE));
     } else {
       __ GetObjectType(a0, t4, t4);
-      __ Branch(eq, &heap_number, t4, Operand(HEAP_NUMBER_TYPE));
+      __ Branch(&heap_number, eq, t4, Operand(HEAP_NUMBER_TYPE));
       // Comparing JS objects with <=, >= is complicated.
       if (cc != eq) {
-      __ Branch(greater, slow, t4, Operand(FIRST_JS_OBJECT_TYPE));
+      __ Branch(slow, greater, t4, Operand(FIRST_JS_OBJECT_TYPE));
         // Normally here we fall through to return_equal, but undefined is
         // special: (undefined == undefined) == true, but
         // (undefined <= undefined) == false!  See ECMAScript 11.8.5.
         if (cc == less_equal || cc == greater_equal) {
-          __ Branch(ne, &return_equal, t4, Operand(ODDBALL_TYPE));
+          __ Branch(&return_equal, ne, t4, Operand(ODDBALL_TYPE));
           __ LoadRoot(t2, Heap::kUndefinedValueRootIndex);
-          __ Branch(ne, &return_equal, a0, Operand(t2));
+          __ Branch(&return_equal, ne, a0, Operand(t2));
           if (cc == le) {
             // undefined <= undefined should fail.
             __ li(v0, Operand(GREATER));
@@ -4104,7 +4104,7 @@ void FastCloneShallowArrayStub::Generate(MacroAssembler* masm) {
   __ Add(t0, a3, t0);
   __ lw(a3, MemOperand(t0));
   __ LoadRoot(t1, Heap::kUndefinedValueRootIndex);
-  __ Branch(eq, &slow_case, a3, Operand(t1));
+  __ Branch(&slow_case, eq, a3, Operand(t1));
 
   // Allocate both the JS array and the elements array in one big
   // allocation. This avoids multiple limit checks.
@@ -4152,7 +4152,7 @@ static void EmitSmiNonsmiComparison(MacroAssembler* masm,
                                     bool strict) {
   Label lhs_is_smi;
   __ And(t0, a0, Operand(kSmiTagMask));
-  __ Branch(eq, &lhs_is_smi, t0, Operand(zero_reg));
+  __ Branch(&lhs_is_smi, eq, t0, Operand(zero_reg));
 
   // Rhs is a Smi.
   // Check whether the non-smi is a heap number.
@@ -4165,7 +4165,7 @@ static void EmitSmiNonsmiComparison(MacroAssembler* masm,
   } else {
     // Smi compared non-strictly with a non-Smi non-heap-number. Call
     // the runtime.
-    __ Branch(ne, slow, t4, Operand(HEAP_NUMBER_TYPE));
+    __ Branch(slow, ne, t4, Operand(HEAP_NUMBER_TYPE));
   }
 
   // Rhs is a smi, lhs is a number.
@@ -4188,7 +4188,7 @@ static void EmitSmiNonsmiComparison(MacroAssembler* masm,
   } else {
     // Smi compared non-strictly with a non-Smi non-heap-number. Call
     // the runtime.
-    __ Branch(ne, slow, t4, Operand(HEAP_NUMBER_TYPE));
+    __ Branch(slow, ne, t4, Operand(HEAP_NUMBER_TYPE));
   }
 
   // Lhs is a smi, rhs is a number.
@@ -4278,7 +4278,7 @@ static void EmitStrictTwoHeapObjectCompare(MacroAssembler* masm) {
     // Get the type of the first operand into a2 and compare it with
     // FIRST_JS_OBJECT_TYPE.
     __ GetObjectType(a0, a2, a2);
-    __ Branch(less, &first_non_object, a2, Operand(FIRST_JS_OBJECT_TYPE));
+    __ Branch(&first_non_object, less, a2, Operand(FIRST_JS_OBJECT_TYPE));
 
     // Return non-zero.
     Label return_not_equal;
@@ -4288,13 +4288,13 @@ static void EmitStrictTwoHeapObjectCompare(MacroAssembler* masm) {
 
     __ bind(&first_non_object);
     // Check for oddballs: true, false, null, undefined.
-    __ Branch(eq, &return_not_equal, a2, Operand(ODDBALL_TYPE));
+    __ Branch(&return_not_equal, eq, a2, Operand(ODDBALL_TYPE));
 
     __ GetObjectType(a1, a3, a3);
-    __ Branch(greater, &return_not_equal, a3, Operand(FIRST_JS_OBJECT_TYPE));
+    __ Branch(&return_not_equal, greater, a3, Operand(FIRST_JS_OBJECT_TYPE));
 
     // Check for oddballs: true, false, null, undefined.
-    __ Branch(eq, &return_not_equal, a3, Operand(ODDBALL_TYPE));
+    __ Branch(&return_not_equal, eq, a3, Operand(ODDBALL_TYPE));
 
     // Now that we have the types we might as well check for symbol-symbol.
     // Ensure that no non-strings have the symbol bit set.
@@ -4302,7 +4302,7 @@ static void EmitStrictTwoHeapObjectCompare(MacroAssembler* masm) {
     ASSERT(kSymbolTag != 0);
     __ And(t2, a2, Operand(a3));
     __ And(t0, t2, Operand(kIsSymbolMask));
-    __ Branch(ne, &return_not_equal, t0, Operand(zero_reg));
+    __ Branch(&return_not_equal, ne, t0, Operand(zero_reg));
 }
 
 
@@ -4311,10 +4311,10 @@ static void EmitCheckForTwoHeapNumbers(MacroAssembler* masm,
                                        Label* not_heap_numbers,
                                        Label* slow) {
   __ GetObjectType(a0, a2, a2);
-  __ Branch(ne, not_heap_numbers, a2, Operand(HEAP_NUMBER_TYPE));
+  __ Branch(not_heap_numbers, ne, a2, Operand(HEAP_NUMBER_TYPE));
   __ GetObjectType(a1, a3, a3);
   // First was a heap number, second wasn't. Go slow case.
-  __ Branch(ne, not_heap_numbers, a3, Operand(HEAP_NUMBER_TYPE));
+  __ Branch(not_heap_numbers, ne, a3, Operand(HEAP_NUMBER_TYPE));
 
   // Both are heap numbers. Load them up then jump to the code we have
   // for that.
@@ -4330,11 +4330,11 @@ static void EmitCheckForSymbols(MacroAssembler* masm, Label* slow) {
   ASSERT(kNotStringTag + kIsSymbolMask > LAST_TYPE);
   ASSERT(kSymbolTag != 0);
   __ And(t2, a2, Operand(kIsSymbolMask));
-  __ Branch(eq, slow, t2, Operand(zero_reg));
+  __ Branch(slow, eq, t2, Operand(zero_reg));
   __ lw(a3, FieldMemOperand(a1, HeapObject::kMapOffset));
   __ lbu(a3, FieldMemOperand(a3, Map::kInstanceTypeOffset));
   __ And(t3, a3, Operand(kIsSymbolMask));
-  __ Branch(eq, slow, t3, Operand(zero_reg));
+  __ Branch(slow, eq, t3, Operand(zero_reg));
 
   // Both are symbols. We already checked they weren't the same pointer
   // so they are not equal.
@@ -4385,7 +4385,7 @@ void NumberToStringStub::GenerateLookupNumberStringCache(MacroAssembler* masm,
   // Check if the entry is the smi we are looking for.
   Register object1 = scratch1;
   __ lw(object1, FieldMemOperand(scratch, FixedArray::kHeaderSize));
-  __ Branch(ne, not_found, object, Operand(object1));
+  __ Branch(not_found, ne, object, Operand(object1));
 
   // Get the result from the cache.
   __ lw(result,
@@ -4598,7 +4598,7 @@ void CEntryStub::GenerateThrowTOS(MacroAssembler* masm) {
   // JS entry frame.
   // Set cp to NULL if fp is NULL.
   Label done;
-  __ Branch(false, eq, &done, fp, Operand(zero_reg));
+  __ Branch(false, &done, eq, fp, Operand(zero_reg));
   __ mov(cp, zero_reg);   // Use the branch delay slot.
   __ lw(cp, MemOperand(fp, StandardFrameConstants::kContextOffset));
   __ bind(&done);
@@ -4665,7 +4665,7 @@ void CEntryStub::GenerateCore(MacroAssembler* masm,
   ASSERT(((kFailureTag + 1) & kFailureTagMask) == 0);
   __ addiu(a2, v0, 1);
   __ andi(t0, a2, kFailureTagMask);
-  __ Branch(eq, &failure_returned, t0, Operand(zero_reg));
+  __ Branch(&failure_returned, eq, t0, Operand(zero_reg));
 
   // Exit C frame and return.
   // v0:v1: result
@@ -4678,11 +4678,11 @@ void CEntryStub::GenerateCore(MacroAssembler* masm,
   __ bind(&failure_returned);
   ASSERT(Failure::RETRY_AFTER_GC == 0);
   __ andi(t0, v0, ((1 << kFailureTypeTagSize) - 1) << kFailureTagSize);
-  __ Branch(eq, &retry, t0, Operand(zero_reg));
+  __ Branch(&retry, eq, t0, Operand(zero_reg));
 
   // Special handling of out of memory exceptions.
   Failure* out_of_memory = Failure::OutOfMemoryException();
-  __ Branch(eq, throw_out_of_memory_exception,
+  __ Branch(throw_out_of_memory_exception, eq,
             v0, Operand(reinterpret_cast<int32_t>(out_of_memory)));
 
   // Retrieve the pending exception and clear the variable.
@@ -4695,7 +4695,7 @@ void CEntryStub::GenerateCore(MacroAssembler* masm,
 
   // Special handling of termination exceptions which are uncatchable
   // by javascript code.
-  __ Branch(eq, throw_termination_exception,
+  __ Branch(throw_termination_exception, eq,
             v0, Operand(Factory::termination_exception()));
 
   // Handle normal exception.
@@ -4913,8 +4913,8 @@ void InstanceofStub::Generate(MacroAssembler* masm) {
 
   // Check that the left hand is a JS object and put map in a3.
   __ GetObjectType(a0, a3, a2);
-  __ Branch(less, &slow, a2, Operand(FIRST_JS_OBJECT_TYPE));
-  __ Branch(greater, &slow, a2, Operand(LAST_JS_OBJECT_TYPE));
+  __ Branch(&slow, less, a2, Operand(FIRST_JS_OBJECT_TYPE));
+  __ Branch(&slow, greater, a2, Operand(LAST_JS_OBJECT_TYPE));
 
   // Get the prototype of the function (t0 is result, a2 is scratch).
   __ lw(a1, MemOperand(sp, 0 * kPointerSize));
@@ -4923,8 +4923,8 @@ void InstanceofStub::Generate(MacroAssembler* masm) {
   // Check that the function prototype is a JS object.
   __ BranchOnSmi(t0, &slow);
   __ GetObjectType(t0, t1, t1);
-  __ Branch(less, &slow, t1, Operand(FIRST_JS_OBJECT_TYPE));
-  __ Branch(greater, &slow, t1, Operand(LAST_JS_OBJECT_TYPE));
+  __ Branch(&slow, less, t1, Operand(FIRST_JS_OBJECT_TYPE));
+  __ Branch(&slow, greater, t1, Operand(LAST_JS_OBJECT_TYPE));
 
   // Register mapping: a3 is object map and t0 is function prototype.
   // Get prototype of object into a2.
@@ -4933,8 +4933,8 @@ void InstanceofStub::Generate(MacroAssembler* masm) {
   __ LoadRoot(t1, Heap::kNullValueRootIndex);
   // Loop through the prototype chain looking for the function prototype.
   __ bind(&loop);
-  __ Branch(eq, &is_instance, a2, Operand(t0));
-  __ Branch(eq, &is_not_instance, a2, Operand(t1));
+  __ Branch(&is_instance, eq, a2, Operand(t0));
+  __ Branch(&is_not_instance, eq, a2, Operand(t1));
   __ lw(a2, FieldMemOperand(a2, HeapObject::kMapOffset));
   __ lw(a2, FieldMemOperand(a2, Map::kPrototypeOffset));
   __ jmp(&loop);
@@ -4960,7 +4960,7 @@ void ArgumentsAccessStub::GenerateReadLength(MacroAssembler* masm) {
   Label adaptor;
   __ lw(a2, MemOperand(fp, StandardFrameConstants::kCallerFPOffset));
   __ lw(a3, MemOperand(a2, StandardFrameConstants::kContextOffset));
-  __ Branch(eq, &adaptor, a3, Operand(Smi::FromInt(StackFrame::ARGUMENTS_ADAPTOR)));
+  __ Branch(&adaptor, eq, a3, Operand(Smi::FromInt(StackFrame::ARGUMENTS_ADAPTOR)));
 
   // Nothing to do: The formal number of parameters has already been
   // passed in register a0 by calling function. Just return it.
@@ -4989,12 +4989,12 @@ void ArgumentsAccessStub::GenerateReadElement(MacroAssembler* masm) {
   Label adaptor;
   __ lw(a2, MemOperand(fp, StandardFrameConstants::kCallerFPOffset));
   __ lw(a3, MemOperand(a2, StandardFrameConstants::kContextOffset));
-  __ Branch(eq, &adaptor, a3, Operand(Smi::FromInt(StackFrame::ARGUMENTS_ADAPTOR)));
+  __ Branch(&adaptor, eq, a3, Operand(Smi::FromInt(StackFrame::ARGUMENTS_ADAPTOR)));
 
   // Check index against formal parameters count limit passed in
   // through register a0. Use unsigned comparison to get negative
   // check for free.
-  __ Branch(Ugreater_equal, &slow, a0, Operand(a1));
+  __ Branch(&slow, Ugreater_equal, a0, Operand(a1));
 
   // Read the argument from the stack and return it.
   __ sub(a0, a0, a1);
@@ -5008,7 +5008,7 @@ void ArgumentsAccessStub::GenerateReadElement(MacroAssembler* masm) {
   // comparison to get negative check for free.
   __ bind(&adaptor);
   __ lw(a0, MemOperand(a2, ArgumentsAdaptorFrameConstants::kLengthOffset));
-  __ Branch(greater_equal, &slow, a1, Operand(a0));
+  __ Branch(&slow, greater_equal, a1, Operand(a0));
 
   // Read the argument from the adaptor frame and return it.
   __ sub(a3, a0, a1);
@@ -5034,8 +5034,8 @@ void ArgumentsAccessStub::GenerateNewObject(MacroAssembler* masm) {
   Label adaptor_frame, runtime;
   __ lw(t2, MemOperand(fp, StandardFrameConstants::kCallerFPOffset));
   __ lw(t3, MemOperand(t2, StandardFrameConstants::kContextOffset));
-  __ Branch(ne,
-      &runtime,
+  __ Branch(&runtime,
+      ne,
       t3,
       Operand(Smi::FromInt(StackFrame::ARGUMENTS_ADAPTOR)));
 
@@ -5137,17 +5137,17 @@ static void HandleBinaryOpSlowCases(MacroAssembler* masm,
 
     Label not_strings, not_string1, string1, string1_smi2;
     __ And(t0, a1, Operand(kSmiTagMask));
-    __ Branch(eq, &not_string1, t0, Operand(zero_reg));
+    __ Branch(&not_string1, eq, t0, Operand(zero_reg));
 
     __ GetObjectType(a1, t0, t0);
-    __ Branch(ge, &not_string1, t0, Operand(FIRST_NONSTRING_TYPE));
+    __ Branch(&not_string1, ge, t0, Operand(FIRST_NONSTRING_TYPE));
 
     // First argument is a a string, test second.
     __ And(t0, a0, Operand(kSmiTagMask));
-    __ Branch(eq, &string1_smi2, t0, Operand(zero_reg));
+    __ Branch(&string1_smi2, eq, t0, Operand(zero_reg));
 
     __ GetObjectType(a0, t0, t0);
-    __ Branch(ge, &string1, t0, Operand(FIRST_NONSTRING_TYPE));
+    __ Branch(&string1, ge, t0, Operand(FIRST_NONSTRING_TYPE));
 
     // First and second argument are strings.
     StringAddStub string_add_stub(NO_STRING_CHECK_IN_STUB);
@@ -5169,10 +5169,10 @@ static void HandleBinaryOpSlowCases(MacroAssembler* masm,
     // First argument was not a string, test second.
     __ bind(&not_string1);
     __ And(t0, a0, Operand(kSmiTagMask));
-    __ Branch(eq, &not_strings, t0, Operand(zero_reg));
+    __ Branch(&not_strings, eq, t0, Operand(zero_reg));
 
     __ GetObjectType(a0, t0, t0);
-    __ Branch(ge, &not_strings, t0, Operand(FIRST_NONSTRING_TYPE));
+    __ Branch(&not_strings, ge, t0, Operand(FIRST_NONSTRING_TYPE));
 
     // Only second argument is a string.
     __ InvokeBuiltin(Builtins::STRING_ADD_RIGHT, JUMP_JS);
@@ -5193,9 +5193,9 @@ static void HandleBinaryOpSlowCases(MacroAssembler* masm,
   // Move a0 (y) to a double in a2-a3.
   __ And(t1, a0, Operand(kSmiTagMask));
   // If it is an Smi, don't check if it is a heap number.
-  __ Branch(eq, &a0_is_smi, t1, Operand(zero_reg));
+  __ Branch(&a0_is_smi, eq, t1, Operand(zero_reg));
   __ GetObjectType(a0, t1, t1);
-  __ Branch(ne, &slow, t1, Operand(HEAP_NUMBER_TYPE));
+  __ Branch(&slow, ne, t1, Operand(HEAP_NUMBER_TYPE));
 
   if (mode == OVERWRITE_RIGHT) {
     __ mov(t0, a0);  // Overwrite this heap number.
@@ -5237,9 +5237,9 @@ static void HandleBinaryOpSlowCases(MacroAssembler* masm,
   // Move a1 (x) to a double in a0-a1.
   __ And(t1, a1, Operand(kSmiTagMask));
   // If it is an Smi, don't check if it is a heap number.
-  __ Branch(eq, &a1_is_smi, t1, Operand(zero_reg));
+  __ Branch(&a1_is_smi, eq, t1, Operand(zero_reg));
   __ GetObjectType(a1, t1, t1);
-  __ Branch(ne, &slow, t1, Operand(HEAP_NUMBER_TYPE));
+  __ Branch(&slow, ne, t1, Operand(HEAP_NUMBER_TYPE));
   if (mode == OVERWRITE_LEFT) {
     __ mov(t0, a1);  // Overwrite this heap number.
   }
@@ -5356,10 +5356,10 @@ static void GetInt32(MacroAssembler* masm,
   const uint32_t non_smi_exponent =
       (HeapNumber::kExponentBias + 30) << HeapNumber::kExponentShift;
   // If we have a match of the int32-but-not-Smi exponent then skip some logic.
-  __ Branch(eq, &right_exponent, scratch2, Operand(non_smi_exponent));
+  __ Branch(&right_exponent, eq, scratch2, Operand(non_smi_exponent));
   // If the exponent is higher than that then go to slow case.  This catches
   // numbers that don't fit in a signed int32, infinities and NaNs.
-  __ Branch(gt, slow, scratch2, Operand(non_smi_exponent));
+  __ Branch(slow, gt, scratch2, Operand(non_smi_exponent));
 
   // We know the exponent is smaller than 30 (biased).  If it is less than
   // 0 (biased) then the number is smaller in magnitude than 1.0 * 2^0, ie
@@ -5368,7 +5368,7 @@ static void GetInt32(MacroAssembler* masm,
       (HeapNumber::kExponentBias + 0) << HeapNumber::kExponentShift;
   __ Subu(scratch2, scratch2, Operand(zero_exponent));
   // Dest already has a Smi zero.
-  __ Branch(lt, &done, scratch2, Operand(zero_exponent));
+  __ Branch(&done, lt, scratch2, Operand(zero_exponent));
   if (!CpuFeatures::IsSupported(FPU)) {
     // We have a shifted exponent between 0 and 30 in scratch2.
     __ srl(dest, scratch2, HeapNumber::kExponentShift);
@@ -5443,9 +5443,9 @@ void GenericBinaryOpStub::HandleNonSmiBitwiseOp(MacroAssembler* masm) {
   Label done_checking_a0, done_checking_a1;
 
   __ And(t1, a1, Operand(kSmiTagMask));
-  __ Branch(eq, &a1_is_smi, t1, Operand(zero_reg));
+  __ Branch(&a1_is_smi, eq, t1, Operand(zero_reg));
   __ GetObjectType(a1, t4, t4);
-  __ Branch(ne, &slow, t4, Operand(HEAP_NUMBER_TYPE));
+  __ Branch(&slow, ne, t4, Operand(HEAP_NUMBER_TYPE));
   GetInt32(masm, a1, a3, t2, t3, &slow);  // Convert HeapNum a1 to integer a3.
   __ b(&done_checking_a1);
   __ nop();   // NOP_ADDED
@@ -5455,9 +5455,9 @@ void GenericBinaryOpStub::HandleNonSmiBitwiseOp(MacroAssembler* masm) {
   __ bind(&done_checking_a1);
 
   __ And(t0, a0, Operand(kSmiTagMask));
-  __ Branch(eq, &a0_is_smi, t0, Operand(zero_reg));
+  __ Branch(&a0_is_smi, eq, t0, Operand(zero_reg));
   __ GetObjectType(a0, t4, t4);
-  __ Branch(ne, &slow, t4, Operand(HEAP_NUMBER_TYPE));
+  __ Branch(&slow, ne, t4, Operand(HEAP_NUMBER_TYPE));
   GetInt32(masm, a0, a2, t2, t3, &slow);  // Convert HeapNum a0 to integer a2.
   __ b(&done_checking_a0);
   __ nop();   // NOP_ADDED
@@ -5483,7 +5483,7 @@ void GenericBinaryOpStub::HandleNonSmiBitwiseOp(MacroAssembler* masm) {
       // the register as an unsigned int so we go to slow case if we hit this
       // case.
       __ And(t3, v1, Operand(0x80000000));
-      __ Branch(ne, &slow, t3, Operand(zero_reg));
+      __ Branch(&slow, ne, t3, Operand(zero_reg));
       break;
     case Token::SHL:
         __ sllv(v1, a3, a2);
@@ -5493,7 +5493,7 @@ void GenericBinaryOpStub::HandleNonSmiBitwiseOp(MacroAssembler* masm) {
   // check that the *signed* result fits in a smi
   __ Addu(t3, v1, Operand(0x40000000));
   __ And(t3, t3, Operand(0x80000000));
-  __ Branch(ne, &result_not_a_smi, t3, Operand(zero_reg));
+  __ Branch(&result_not_a_smi, ne, t3, Operand(zero_reg));
   // Smi tag result.
   __ sll(v0, v1, kSmiTagMask);
   __ Ret();
@@ -5503,13 +5503,13 @@ void GenericBinaryOpStub::HandleNonSmiBitwiseOp(MacroAssembler* masm) {
   switch (mode_) {
     case OVERWRITE_RIGHT: {
       // t0 has not been changed since  __ andi(t0, a0, Operand(kSmiTagMask));
-      __ Branch(eq, &have_to_allocate, t0, Operand(zero_reg));
+      __ Branch(&have_to_allocate, eq, t0, Operand(zero_reg));
       __ mov(t5, a0);
       break;
     }
     case OVERWRITE_LEFT: {
       // t1 has not been changed since  __ andi(t1, a1, Operand(kSmiTagMask));
-      __ Branch(eq, &have_to_allocate, t1, Operand(zero_reg));
+      __ Branch(&have_to_allocate, eq, t1, Operand(zero_reg));
       __ mov(t5, a1);
       break;
     }
@@ -5650,7 +5650,7 @@ void GenericBinaryOpStub::Generate(MacroAssembler* masm) {
       // Fast path.
       ASSERT(kSmiTag == 0);  // Adjust code below.
       __ And(t3, t2, Operand(kSmiTagMask));
-      __ Branch(ne, &not_smi, t3, Operand(zero_reg));
+      __ Branch(&not_smi, ne, t3, Operand(zero_reg));
       __ addu(v0, a1, a0);    // Add y.
       // Check for overflow.
       __ xor_(t0, v0, a0);
@@ -5672,7 +5672,7 @@ void GenericBinaryOpStub::Generate(MacroAssembler* masm) {
       // Fast path.
       ASSERT(kSmiTag == 0);  // Adjust code below.
       __ And(t3, t2, Operand(kSmiTagMask));
-      __ Branch(ne, &not_smi, t3, Operand(zero_reg));
+      __ Branch(&not_smi, ne, t3, Operand(zero_reg));
       __ subu(v0, a1, a0);  // Subtract y.
       // Check for overflow.
       __ xor_(t0, v0, a1);
@@ -5693,7 +5693,7 @@ void GenericBinaryOpStub::Generate(MacroAssembler* masm) {
       Label not_smi, slow;
       ASSERT(kSmiTag == 0);  // Adjust code below.
       __ And(t3, t2, Operand(kSmiTagMask));
-      __ Branch(ne, &not_smi, t3, Operand(zero_reg));
+      __ Branch(&not_smi, ne, t3, Operand(zero_reg));
       // Remove tag from one operand (but keep sign), so that result is Smi.
       __ sra(t0, a0, kSmiTagSize);
       // Do multiplication.
@@ -5703,7 +5703,7 @@ void GenericBinaryOpStub::Generate(MacroAssembler* masm) {
 
       // Go 'slow' on overflow, detected if top 33 bits are not same.
       __ sra(t0, v0, 31);
-      __ Branch(ne, &slow, t0, Operand(v1));
+      __ Branch(&slow, ne, t0, Operand(v1));
 
       // Return if non-zero Smi result.
       __ Ret(ne, v0, Operand(zero_reg));
@@ -5731,30 +5731,30 @@ void GenericBinaryOpStub::Generate(MacroAssembler* masm) {
 
       // t2 = x | y at entry.
       __ And(t3, t2, Operand(kSmiTagMask));
-      __ Branch(ne, &not_smi, t3, Operand(zero_reg));
+      __ Branch(&not_smi, ne, t3, Operand(zero_reg));
       // Remove tags, preserving sign.
       __ sra(t0, a0, kSmiTagSize);
       __ sra(t1, a1, kSmiTagSize);
       // Check for divisor of 0.
-      __ Branch(eq, &slow, t0, Operand(zero_reg));
+      __ Branch(&slow, eq, t0, Operand(zero_reg));
       // Divide x by y.
       __ Div(t1, Operand(t0));
       __ mflo(v1);    // Integer (un-tagged) quotient.
       __ mfhi(v0);    // Integer remainder.
 
       // Go to slow (float) case if remainder is not 0.
-      __ Branch(ne, &slow, v0, Operand(zero_reg));
+      __ Branch(&slow, ne, v0, Operand(zero_reg));
 
       ASSERT(kSmiTag == 0 && kSmiTagSize == 1);
       __ sll(v0, v1, kSmiTagSize);  // Smi tag return value in v0.
 
       // Check for the corner case of dividing the most negative smi by -1.
-      __ Branch(eq, &slow, v1, Operand(0x40000000));
+      __ Branch(&slow, eq, v1, Operand(0x40000000));
       // Check for negative zero result.
       __ Ret(ne, v0, Operand(zero_reg));  // OK if result was non-zero.
       __ li(t0, Operand(0x80000000));
       __ And(t2, t2, Operand(t0));
-      __ Branch(eq, &slow, t2, Operand(t0));  // Go slow if operands negative.
+      __ Branch(&slow, eq, t2, Operand(t0));  // Go slow if operands negative.
       __ Ret();
 
       __ bind(&slow);
@@ -5771,9 +5771,9 @@ void GenericBinaryOpStub::Generate(MacroAssembler* masm) {
       ASSERT(kSmiTag == 0);  // Adjust code below.
       // t2 = x | y at entry.
       __ And(t3, t2, Operand(kSmiTagMask));
-      __ Branch(ne, &not_smi, t3, Operand(zero_reg));
+      __ Branch(&not_smi, ne, t3, Operand(zero_reg));
       // Check for divisor of 0.
-      __ Branch(eq, &slow, t0, Operand(zero_reg));
+      __ Branch(&slow, eq, t0, Operand(zero_reg));
       // Remove tags, preserving sign.
       __ sra(t0, a0, kSmiTagSize);
       __ sra(t1, a1, kSmiTagSize);
@@ -5784,7 +5784,7 @@ void GenericBinaryOpStub::Generate(MacroAssembler* masm) {
       __ Ret(ne, v0, Operand(zero_reg));  // OK if result was non-zero.
       __ li(t0, Operand(0x80000000));
       __ And(t2, t2, Operand(t0));
-      __ Branch(eq, &slow, t2, Operand(t0));  // Go slow if operands negative.
+      __ Branch(&slow, eq, t2, Operand(t0));  // Go slow if operands negative.
       __ Ret();
 
       __ bind(&slow);
@@ -5806,7 +5806,7 @@ void GenericBinaryOpStub::Generate(MacroAssembler* masm) {
       Label slow;
       ASSERT(kSmiTag == 0);  // Adjust code below.
       __ And(t3, t2, Operand(kSmiTagMask));
-      __ Branch(ne, &slow, t3, Operand(zero_reg));
+      __ Branch(&slow, ne, t3, Operand(zero_reg));
       switch (op_) {
         case Token::BIT_OR:  __ Or(v0, a0, Operand(a1)); break;
         case Token::BIT_AND: __ And(v0, a0, Operand(a1)); break;
@@ -5829,7 +5829,7 @@ void GenericBinaryOpStub::Generate(MacroAssembler* masm) {
           // Unsigned shift is not allowed to produce a negative number, so
           // check the sign bit and the sign bit after Smi tagging.
           __ And(t3, v0, Operand(0xc0000000));
-          __ Branch(ne, &slow, t3, Operand(zero_reg));
+          __ Branch(&slow, ne, t3, Operand(zero_reg));
           // Smi tag result.
           __ sll(v0, v0, kSmiTagMask);
           break;
@@ -5842,7 +5842,7 @@ void GenericBinaryOpStub::Generate(MacroAssembler* masm) {
           // Check that the signed result fits in a Smi.
           __ Addu(t3, v0, Operand(0x40000000));
           __ And(t3, t3, Operand(0x80000000));
-          __ Branch(ne, &slow, t3, Operand(zero_reg));
+          __ Branch(&slow, ne, t3, Operand(zero_reg));
           // Smi tag result.
           __ sll(v0, v0, kSmiTagMask);
           break;
@@ -5874,7 +5874,7 @@ void StringStubBase::GenerateCopyCharacters(MacroAssembler* masm,
   if (!ascii) {
     __ addu(count, count, count);
   }
-  __ Branch(eq, &done, count, Operand(zero_reg));
+  __ Branch(&done, eq, count, Operand(zero_reg));
   __ addu(count, dest, count);  // Count now points to the last dest byte.
 
   __ bind(&loop);
@@ -5882,7 +5882,7 @@ void StringStubBase::GenerateCopyCharacters(MacroAssembler* masm,
   __ addiu(src, src, 1);
   __ sb(scratch, MemOperand(dest));
   __ addiu(dest, dest, 1);
-  __ Branch(lt, &loop, dest, Operand(count));
+  __ Branch(&loop, lt, dest, Operand(count));
 
   __ bind(&done);
 }
@@ -5926,7 +5926,7 @@ void StringStubBase::GenerateTwoCharacterSymbolTableProbe(MacroAssembler* masm,
   // different hash algorithm. Don't try to look for these in the symbol table.
   Label not_array_index;
   __ Subu(scratch, c1, Operand(static_cast<int>('0')));
-  __ Branch(Ugreater, &not_array_index, scratch, Operand(static_cast<int>('9' - '0')));
+  __ Branch(&not_array_index, Ugreater, scratch, Operand(static_cast<int>('9' - '0')));
   __ Subu(scratch, c2, Operand(static_cast<int>('0')));
 
   // If check failed combine both characters into single halfword.
@@ -5934,10 +5934,10 @@ void StringStubBase::GenerateTwoCharacterSymbolTableProbe(MacroAssembler* masm,
   // not_found branch expects this combination in c1 register
   Label tmp;
   __ sll(scratch1, c2, kBitsPerByte);
-  __ Branch(Ugreater, &tmp, scratch, Operand(static_cast<int>('9' - '0')));
+  __ Branch(&tmp, Ugreater, scratch, Operand(static_cast<int>('9' - '0')));
   __ Or(c1, c1, scratch1);
   __ bind(&tmp);
-  __ Branch(Uless_equal, not_found, scratch, Operand(static_cast<int>('9' - '0')));
+  __ Branch(not_found, Uless_equal, scratch, Operand(static_cast<int>('9' - '0')));
 
   __ bind(&not_array_index);
   // Calculate the two character string hash.
@@ -6005,11 +6005,11 @@ void StringStubBase::GenerateTwoCharacterSymbolTableProbe(MacroAssembler* masm,
     __ lw(candidate, MemOperand(scratch));
 
     // If entry is undefined no string with this hash can be found.
-    __ Branch(eq, not_found, candidate, Operand(undefined));
+    __ Branch(not_found, eq, candidate, Operand(undefined));
 
     // If length is not 2 the string is not a candidate.
     __ lw(scratch, FieldMemOperand(candidate, String::kLengthOffset));
-    __ Branch(ne, &next_probe[i], scratch, Operand(2));
+    __ Branch(&next_probe[i], ne, scratch, Operand(2));
 
     // Check that the candidate is a non-external ascii string.
     __ lw(scratch, FieldMemOperand(candidate, HeapObject::kMapOffset));
@@ -6019,7 +6019,7 @@ void StringStubBase::GenerateTwoCharacterSymbolTableProbe(MacroAssembler* masm,
     // Check if the two characters match.
     // Assumes that word load is little endian.
     __ lhu(scratch, FieldMemOperand(candidate, SeqAsciiString::kHeaderSize));
-    __ Branch(eq, &found_in_symbol_table, chars, Operand(scratch));
+    __ Branch(&found_in_symbol_table, eq, chars, Operand(scratch));
     __ bind(&next_probe[i]);
   }
 
@@ -6101,7 +6101,7 @@ void StringCompareStub::Generate(MacroAssembler* masm) {
   __ lw(a1, MemOperand(sp, 0 * kPointerSize));  // right
 
   Label not_same;
-  __ Branch(ne, &not_same, a0, Operand(a1));
+  __ Branch(&not_same, ne, a0, Operand(a1));
   ASSERT_EQ(0, EQUAL);
   ASSERT_EQ(0, kSmiTag);
   __ li(a0, Operand(Smi::FromInt(EQUAL)));
@@ -6143,7 +6143,7 @@ void StringAddStub::Generate(MacroAssembler* masm) {
     // If either is not a string, go to runtime.
     __ Or(t4, t0, Operand(t1));
     __ And(t4, t4, Operand(kIsNotStringMask));
-    __ Branch(ne, &string_add_runtime, t4, Operand(zero_reg));
+    __ Branch(&string_add_runtime, ne, t4, Operand(zero_reg));
   }
 
   // Both arguments are strings.
@@ -6161,7 +6161,7 @@ void StringAddStub::Generate(MacroAssembler* masm) {
     __ slt(t4, zero_reg, a2);   // if (a2 > 0) t4 = 1.
     __ slt(t5, zero_reg, a3);   // if (a3 > 0) t5 = 1.
     __ and_(t4, t4, t5);        // Branch if both strings were non-empty.
-    __ Branch(ne, &strings_not_empty, t0, Operand(zero_reg));
+    __ Branch(&strings_not_empty, ne, t0, Operand(zero_reg));
 
     __ IncrementCounter(&Counters::string_add_native, 1, a2, a3);
     __ Add(sp, sp, Operand(2 * kPointerSize));
@@ -6184,7 +6184,7 @@ void StringAddStub::Generate(MacroAssembler* masm) {
   __ Add(t2, a2, Operand(a3));
   // Use the runtime system when adding two one character strings, as it
   // contains optimizations for this specific case using the symbol table.
-  __ Branch(ne, &longer_than_two, t2, Operand(2));
+  __ Branch(&longer_than_two, ne, t2, Operand(2));
 
   // Check that both strings are non-external ascii strings.
   if (!string_check_) {
@@ -6224,13 +6224,13 @@ void StringAddStub::Generate(MacroAssembler* masm) {
 
   __ bind(&longer_than_two);
   // Check if resulting string will be flat.
-  __ Branch(lt, &string_add_flat_result, t2,
+  __ Branch(&string_add_flat_result, lt, t2,
             Operand(String::kMinNonFlatLength));
   // Handle exceptionally long strings in the runtime system.
   ASSERT((String::kMaxLength & 0x80000000) == 0);
   ASSERT(IsPowerOf2(String::kMaxLength + 1));
   // kMaxLength + 1 is representable as shifted literal, kMaxLength is not.
-  __ Branch(hs, &string_add_runtime, t2, Operand(String::kMaxLength + 1));
+  __ Branch(&string_add_runtime, hs, t2, Operand(String::kMaxLength + 1));
 
   // If result is not supposed to be flat, allocate a cons string object.
   // If both strings are ascii the result is an ascii cons string.
@@ -6245,7 +6245,7 @@ void StringAddStub::Generate(MacroAssembler* masm) {
   // Branch to non_ascii if either string-encoding field is zero (non-ascii).
   __ And(t4, t2, Operand(t3));
   __ And(t4, t4, Operand(kStringEncodingMask));
-  __ Branch(eq, &non_ascii, t4, Operand(zero_reg));
+  __ Branch(&non_ascii, eq, t4, Operand(zero_reg));
 
   // Allocate an ASCII cons string.
   __ AllocateAsciiConsString(t3, t2, t0, t1, &string_add_runtime);
@@ -6284,7 +6284,7 @@ void StringAddStub::Generate(MacroAssembler* masm) {
   ASSERT_EQ(0, kSeqStringTag);
   __ Or(t4, t0, Operand(t1));
   __ And(t4, t4, Operand(kStringRepresentationMask));
-  __ Branch(ne, &string_add_runtime, t4, Operand(zero_reg));
+  __ Branch(&string_add_runtime, ne, t4, Operand(zero_reg));
 
   // Now check if both strings have the same encoding (ASCII/Two-byte).
   // a0: first string
@@ -6298,10 +6298,10 @@ void StringAddStub::Generate(MacroAssembler* masm) {
   ASSERT(IsPowerOf2(kStringEncodingMask));  // Just one bit to test.
   __ xor_(t3, t1, t0);
   __ And(t3, t3, Operand(kStringEncodingMask));
-  __ Branch(ne, &string_add_runtime, t3, Operand(zero_reg));
+  __ Branch(&string_add_runtime, ne, t3, Operand(zero_reg));
   // And see if it's ASCII (0) or two-byte (1).
   __ And(t3, t0, Operand(kStringEncodingMask));
-  __ Branch(eq, &non_ascii_string_add_flat_result, t3, Operand(zero_reg));
+  __ Branch(&non_ascii_string_add_flat_result, eq, t3, Operand(zero_reg));
 
   // Both strings are sequential ASCII strings. We also know that they are
   // short (since the sum of the lengths is less than kMinNonFlatLength).
@@ -6395,7 +6395,7 @@ void CallFunctionStub::Generate(MacroAssembler* masm) {
 
     // Check if the receiver is a valid JS object.
     __ GetObjectType(a1, a2, a2);
-    __ Branch(greater_equal, &receiver_is_js_object, a2, Operand(FIRST_JS_OBJECT_TYPE));
+    __ Branch(&receiver_is_js_object, greater_equal, a2, Operand(FIRST_JS_OBJECT_TYPE));
 
     // Call the runtime to box the value.
     __ bind(&receiver_is_value);
@@ -6419,7 +6419,7 @@ void CallFunctionStub::Generate(MacroAssembler* masm) {
   __ BranchOnSmi(a1, &slow);
   // Get the map of the function object.
   __ GetObjectType(a1, a2, a2);
-  __ Branch(ne, &slow, a2, Operand(JS_FUNCTION_TYPE));
+  __ Branch(&slow, ne, a2, Operand(JS_FUNCTION_TYPE));
 
   // Fast-case: Invoke the function now.
   // a1: pushed function
