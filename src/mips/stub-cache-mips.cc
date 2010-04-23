@@ -570,9 +570,44 @@ Object* CallStubCompiler::CompileArrayPopCall(Object* object,
                                               JSFunction* function,
                                               String* name,
                                               CheckType check) {
-  UNIMPLEMENTED_MIPS();
-  __ break_(__LINE__);
-  return reinterpret_cast<Object*>(NULL);   // UNIMPLEMENTED RETURN
+  // a2    : name
+  // ra    : return address
+
+  // TODO(642): faster implementation.
+  ASSERT(check == RECEIVER_MAP_CHECK);
+
+  Label miss;
+
+  // Get the receiver from the stack
+  const int argc = arguments().immediate();
+  __ lw(a1, MemOperand(sp, argc * kPointerSize));
+
+  // Check that the receiver isn't a smi.
+  __ BranchOnSmi(a1, &miss, t1);
+
+  // Check that the maps haven't changed.
+  CheckPrototypes(JSObject::cast(object), a1, holder, a3, a0, name, &miss);
+
+  if (object->IsGlobalObject()) {
+    __ lw(a3, FieldMemOperand(a1, GlobalObject::kGlobalReceiverOffset));
+    __ sw(a3, MemOperand(sp, argc * kPointerSize));
+  }
+
+  __ TailCallExternalReference(ExternalReference(Builtins::c_ArrayPop),
+                               argc + 1,
+                               1);
+
+  // Handle call cache miss.
+  __ bind(&miss);
+  Handle<Code> ic = ComputeCallMiss(arguments().immediate());
+  __ Jump(ic, RelocInfo::CODE_TARGET);
+
+  // Return the generated code.
+  String* function_name = NULL;
+  if (function->shared()->name()->IsString()) {
+    function_name = String::cast(function->shared()->name());
+  }
+  return GetCode(CONSTANT_FUNCTION, function_name);
 }
 
 
