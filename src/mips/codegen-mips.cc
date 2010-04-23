@@ -2246,8 +2246,46 @@ void CodeGenerator::VisitLiteral(Literal* node) {
 
 
 void CodeGenerator::VisitRegExpLiteral(RegExpLiteral* node) {
-  UNIMPLEMENTED_MIPS();
-  __ break_(__LINE__);
+#ifdef DEBUG
+  int original_height = frame_->height();
+#endif
+  VirtualFrame::SpilledScope spilled_scope;
+  Comment cmnt(masm_, "[ RexExp Literal");
+
+  // Retrieve the literal array and check the allocated entry.
+
+  // Load the function of this activation.
+  __ lw(a1, frame_->Function());
+
+  // Load the literals array of the function.
+  __ lw(a1, FieldMemOperand(a1, JSFunction::kLiteralsOffset));
+
+  // Load the literal at the ast saved index.
+  int literal_offset =
+      FixedArray::kHeaderSize + node->literal_index() * kPointerSize;
+  __ lw(a2, FieldMemOperand(a1, literal_offset));
+
+  JumpTarget done;
+  __ LoadRoot(a0, Heap::kUndefinedValueRootIndex);
+  done.Branch(ne, a2, Operand(a0));
+
+  // If the entry is undefined we call the runtime system to computed
+  // the literal.
+  __ li(t1, Operand(Smi::FromInt(node->literal_index())));
+  __ li(t2, Operand(node->pattern()));
+  __ li(t3, Operand(node->flags()));
+  // a1 : literal array  (0)
+  // t1 : literal index  (1)
+  // t2 : RegExp pattern (2)
+  // t3 : RegExp flags (3)
+  frame_->EmitMultiPushReversed(a1.bit() | t1.bit() | t2.bit() | t3.bit());
+  frame_->CallRuntime(Runtime::kMaterializeRegExpLiteral, 4);
+  __ mov(a2, v0);
+
+  done.Bind();
+  // Push the literal.
+  frame_->EmitPush(a2);
+  ASSERT(frame_->height() == original_height + 1);
 }
 
 
