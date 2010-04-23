@@ -61,8 +61,17 @@ void LoadIC::GenerateArrayLength(MacroAssembler* masm) {
 
 
 void LoadIC::GenerateStringLength(MacroAssembler* masm) {
-  UNIMPLEMENTED_MIPS();
-  __ break_(__LINE__);
+  // a2    : name
+  // lr    : return address
+  // [sp]  : receiver
+  Label miss;
+
+  __ lw(a0, MemOperand(sp, 0));
+
+  StubCompiler::GenerateLoadStringLength(masm, a0, a1, a3, &miss);
+  // Cache miss: Jump to runtime.
+  __ bind(&miss);
+  StubCompiler::GenerateLoadMiss(masm, Code::LOAD_IC);
 }
 
 
@@ -286,8 +295,11 @@ void KeyedLoadIC::GenerateGeneric(MacroAssembler* masm) {
 
 
 void KeyedLoadIC::GenerateString(MacroAssembler* masm) {
-  UNIMPLEMENTED_MIPS();
-  __ break_(__LINE__);
+  // ra     : return address
+  // sp[0]  : key
+  // sp[4]  : receiver
+
+  GenerateGeneric(masm);
 }
 
 
