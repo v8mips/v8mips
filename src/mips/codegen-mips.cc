@@ -2895,9 +2895,17 @@ void CodeGenerator::GenerateFastCharCodeAt(ZoneList<Expression*>* args) {
 
 
 void CodeGenerator::GenerateCharFromCode(ZoneList<Expression*>* args) {
-  UNIMPLEMENTED_MIPS();
-  __ break_(__LINE__);
-  frame_->EmitPush(zero_reg);
+  Comment(masm_, "[ GenerateCharFromCode");
+  ASSERT(args->length() == 1);
+
+  LoadAndSpill(args->at(0));
+  frame_->EmitPop(a0);
+
+  // Always use slow case for now.
+
+  frame_->EmitPush(a0);
+  frame_->CallRuntime(Runtime::kCharFromCode, 1);
+  frame_->EmitPush(v0);
 }
 
 
