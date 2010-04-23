@@ -2807,26 +2807,37 @@ void CodeGenerator::GenerateIsNonNegativeSmi(ZoneList<Expression*>* args) {
 
 
 void CodeGenerator::GenerateMathPow(ZoneList<Expression*>* args) {
-  UNIMPLEMENTED_MIPS();
-  __ break_(__LINE__);
-}
-
-
-void CodeGenerator::GenerateMathCos(ZoneList<Expression*>* args) {
-  UNIMPLEMENTED_MIPS();
-  __ break_(__LINE__);
+  ASSERT(args->length() == 2);
+  Load(args->at(0));
+  Load(args->at(1));
+  frame_->CallRuntime(Runtime::kMath_pow, 2);
+  frame_->EmitPush(v0);
 }
 
 
 void CodeGenerator::GenerateMathSin(ZoneList<Expression*>* args) {
-  UNIMPLEMENTED_MIPS();
-  __ break_(__LINE__);
+  ASSERT_EQ(args->length(), 1);
+  // Load the argument on the stack and jump to the runtime.
+  Load(args->at(0));
+  frame_->CallRuntime(Runtime::kMath_sin, 1);
+  frame_->EmitPush(v0);
+}
+
+
+void CodeGenerator::GenerateMathCos(ZoneList<Expression*>* args) {
+  ASSERT_EQ(args->length(), 1);
+  // Load the argument on the stack and jump to the runtime.
+  Load(args->at(0));
+  frame_->CallRuntime(Runtime::kMath_cos, 1);
+  frame_->EmitPush(v0);
 }
 
 
 void CodeGenerator::GenerateMathSqrt(ZoneList<Expression*>* args) {
-  UNIMPLEMENTED_MIPS();
-  __ break_(__LINE__);
+  ASSERT(args->length() == 1);
+  Load(args->at(0));
+  frame_->CallRuntime(Runtime::kMath_sqrt, 1);
+  frame_->EmitPush(v0);
 }
 
 // This should generate code that performs a charCodeAt() call or returns

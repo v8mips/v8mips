@@ -37,22 +37,119 @@ namespace internal {
 #define __ ACCESS_MASM(masm)
 
 
+static void ProbeTable(MacroAssembler* masm,
+                       Code::Flags flags,
+                       StubCache::Table table,
+                       Register name,
+                       Register offset) {
+  ExternalReference key_offset(SCTableReference::keyReference(table));
+  ExternalReference value_offset(SCTableReference::valueReference(table));
+
+  Label miss;
+
+  // Save the offset on the stack.
+  __ Push(offset);
+
+  // Check that the key in the entry matches the name.
+  __ li(t8, Operand(key_offset));
+  __ sll(t9, offset, 1);
+  __ add(t9, t8, t9);
+  __ lw(t8, MemOperand(t9));
+  __ Branch(&miss, ne, name, Operand(t8));
+
+  // Get the code entry from the cache.
+  __ li(t8, Operand(value_offset));
+  __ sll(t9, offset, 1);
+  __ add(t9, t8, t9);
+  __ lw(offset, MemOperand(t9));
+
+  // Check that the flags match what we're looking for.
+  __ lw(offset, FieldMemOperand(offset, Code::kFlagsOffset));
+  __ And(offset, offset, Operand(~Code::kFlagsNotUsedInLookup));
+  __ Branch(&miss, ne, offset, Operand(flags));
+
+  // Restore offset and re-load code entry from cache.
+  __ Pop(offset);
+  __ li(t8, Operand(value_offset));
+  __ sll(t9, offset, 1);
+  __ add(t9, t8, t9);
+  __ lw(offset, MemOperand(t9));
+
+  // Jump to the first instruction in the code stub.
+  __ Add(offset, offset, Operand(Code::kHeaderSize - kHeapObjectTag));
+  __ Jump(offset);
+
+  // Miss: Restore offset and fall through.
+  __ bind(&miss);
+  __ Pop(offset);
+}
+
+
 void StubCache::GenerateProbe(MacroAssembler* masm,
                               Code::Flags flags,
                               Register receiver,
                               Register name,
                               Register scratch,
                               Register extra) {
-  UNIMPLEMENTED_MIPS();
-  __ break_(__LINE__);
+  Label miss;
+
+  // Make sure that code is valid. The shifting code relies on the
+  // entry size being 8.
+  ASSERT(sizeof(Entry) == 8);
+
+  // Make sure the flags does not name a specific type.
+  ASSERT(Code::ExtractTypeFromFlags(flags) == 0);
+
+  // Make sure that there are no register conflicts.
+  ASSERT(!scratch.is(receiver));
+  ASSERT(!scratch.is(name));
+
+  // Check that the receiver isn't a smi.
+  __ BranchOnSmi(receiver, &miss, t0);
+
+  // Get the map of the receiver and compute the hash.
+  __ lw(scratch, FieldMemOperand(name, String::kHashFieldOffset));
+  __ lw(t8, FieldMemOperand(receiver, HeapObject::kMapOffset));
+  __ Addu(scratch, scratch, Operand(t8));
+  __ Xor(scratch, scratch, Operand(flags));
+  __ And(scratch,
+         scratch,
+         Operand((kPrimaryTableSize - 1) << kHeapObjectTagSize));
+
+  // Probe the primary table.
+  ProbeTable(masm, flags, kPrimary, name, scratch);
+
+  // Primary miss: Compute hash for secondary probe.
+  __ Subu(scratch, scratch, Operand(name));
+  __ Addu(scratch, scratch, Operand(flags));
+  __ And(scratch,
+         scratch,
+         Operand((kSecondaryTableSize - 1) << kHeapObjectTagSize));
+
+  // Probe the secondary table.
+  ProbeTable(masm, flags, kSecondary, name, scratch);
+
+  // Cache miss: Fall-through and let caller handle the miss by
+  // entering the runtime system.
+  __ bind(&miss);
 }
 
 
 void StubCompiler::GenerateLoadGlobalFunctionPrototype(MacroAssembler* masm,
                                                        int index,
                                                        Register prototype) {
-  UNIMPLEMENTED_MIPS();
-  __ break_(__LINE__);
+  // Load the global or builtins object from the current context.
+  __ lw(prototype, MemOperand(cp, Context::SlotOffset(Context::GLOBAL_INDEX)));
+  // Load the global context from the global or builtins object.
+  __ lw(prototype,
+         FieldMemOperand(prototype, GlobalObject::kGlobalContextOffset));
+  // Load the function from the global context.
+  __ lw(prototype, MemOperand(prototype, Context::SlotOffset(index)));
+  // Load the initial map.  The global functions all have initial maps.
+  __ lw(prototype,
+         FieldMemOperand(prototype, JSFunction::kPrototypeOrInitialMapOffset));
+  // Load the prototype from the initial map.
+  __ lw(prototype, FieldMemOperand(prototype, Map::kPrototypeOffset));
 }
 
 

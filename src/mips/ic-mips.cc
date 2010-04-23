@@ -86,8 +86,58 @@ void LoadIC::GenerateFunctionPrototype(MacroAssembler* masm) {
 Object* CallIC_Miss(Arguments args);
 
 void CallIC::GenerateMegamorphic(MacroAssembler* masm, int argc) {
-  UNIMPLEMENTED_MIPS();
-  __ break_(__LINE__);
+  // r2    : name
+  // lr: return address
+
+  Label number, non_number, non_string, boolean, probe, miss;
+
+  // Get the receiver of the function from the stack into r1.
+  __ lw(a1, MemOperand(sp, argc * kPointerSize));
+
+  // Probe the stub cache.
+  Code::Flags flags =
+      Code::ComputeFlags(Code::CALL_IC, NOT_IN_LOOP, MONOMORPHIC, NORMAL, argc);
+  StubCache::GenerateProbe(masm, flags, a1, a2, a3, no_reg);
+
+  // If the stub cache probing failed, the receiver might be a value.
+  // For value objects, we use the map of the prototype objects for
+  // the corresponding JSValue for the cache and that is what we need
+  // to probe.
+  //
+  // Check for number.
+  __ BranchOnSmi(a1, &number, t1);
+  __ GetObjectType(a1, a3, a3);
+  __ Branch(&non_number, ne, a3, Operand(HEAP_NUMBER_TYPE));
+  __ bind(&number);
+  StubCompiler::GenerateLoadGlobalFunctionPrototype(
+      masm, Context::NUMBER_FUNCTION_INDEX, a1);
+  __ Branch(&probe);
+
+  // Check for string.
+  __ bind(&non_number);
+  __ Branch(&non_string, Ugreater_equal, a3, Operand(FIRST_NONSTRING_TYPE));
+  StubCompiler::GenerateLoadGlobalFunctionPrototype(
+      masm, Context::STRING_FUNCTION_INDEX, a1);
+  __ Branch(&probe);
+
+
+  // Check for boolean.
+  __ bind(&non_string);
+  __ LoadRoot(t0, Heap::kTrueValueRootIndex);
+  __ Branch(&boolean, eq, a1, Operand(t0));
+  __ LoadRoot(t1, Heap::kFalseValueRootIndex);
+  __ Branch(&miss, ne, a1, Operand(t1));
+  __ bind(&boolean);
+  StubCompiler::GenerateLoadGlobalFunctionPrototype(
+      masm, Context::BOOLEAN_FUNCTION_INDEX, a1);
+
+  // Probe the stub cache for the value object.
+  __ bind(&probe);
+  StubCache::GenerateProbe(masm, flags, a1, a2, a3, no_reg);
+
+  // Cache miss: Jump to runtime.
+  __ bind(&miss);
+  GenerateMiss(masm, argc);
 }
 
 
