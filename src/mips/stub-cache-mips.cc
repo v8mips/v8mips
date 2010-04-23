@@ -976,9 +976,22 @@ Object* LoadStubCompiler::CompileLoadCallback(String* name,
                                               JSObject* object,
                                               JSObject* holder,
                                               AccessorInfo* callback) {
-  UNIMPLEMENTED_MIPS();
-  __ break_(__LINE__);
-  return reinterpret_cast<Object*>(NULL);   // UNIMPLEMENTED RETURN
+  // a2    : name
+  // ra    : return address
+  // [sp]  : receiver
+  Label miss;
+
+  __ lw(a0, MemOperand(sp, 0));
+  Failure* failure = Failure::InternalError();
+  bool success = GenerateLoadCallback(object, holder, a0, a2, a3, a1,
+                                      callback, name, &miss, &failure);
+  if (!success) return failure;
+
+  __ bind(&miss);
+  GenerateLoadMiss(masm(), Code::LOAD_IC);
+
+  // Return the generated code.
+  return GetCode(CALLBACKS, name);
 }
 
 
