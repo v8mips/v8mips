@@ -203,8 +203,19 @@ void CallIC::GenerateMiss(MacroAssembler* masm, int argc) {
 Object* LoadIC_Miss(Arguments args);
 
 void LoadIC::GenerateMegamorphic(MacroAssembler* masm) {
-  UNIMPLEMENTED_MIPS();
-  __ break_(__LINE__);
+  // a2    : name
+  // ra    : return address
+  // [sp]  : receiver
+
+  __ lw(a0, MemOperand(sp, 0));
+  // Probe the stub cache.
+  Code::Flags flags = Code::ComputeFlags(Code::LOAD_IC,
+                                         NOT_IN_LOOP,
+                                         MONOMORPHIC);
+  StubCache::GenerateProbe(masm, flags, a0, a2, a3, no_reg);
+
+  // Cache miss: Jump to runtime.
+  GenerateMiss(masm);
 }
 
 
