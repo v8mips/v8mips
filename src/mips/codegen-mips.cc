@@ -2995,8 +2995,11 @@ void CodeGenerator::GenerateArguments(ZoneList<Expression*>* args) {
 
 
 void CodeGenerator::GenerateRandomPositiveSmi(ZoneList<Expression*>* args) {
-  UNIMPLEMENTED_MIPS();
-  __ break_(__LINE__);
+  VirtualFrame::SpilledScope spilled_scope;
+  ASSERT(args->length() == 0);
+  __ Call(ExternalReference::random_positive_smi_function().address(),
+          RelocInfo::RUNTIME_ENTRY);
+  frame_->EmitPush(v0);
 }
 
 
