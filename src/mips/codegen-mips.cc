@@ -4141,12 +4141,15 @@ static void EmitIdenticalObjectComparison(MacroAssembler* masm,
                                           bool never_nan_nan) {
   Label not_identical;
   Label heap_number, return_equal;
+  Register exp_mask_reg = t5;
 
   __ Branch(&not_identical, ne, a0, Operand(a1));
 
   // The two objects are identical. If we know that one of them isn't NaN then
   // we now know they test equal.
   if (cc != eq || !never_nan_nan) {
+    __ li(exp_mask_reg, Operand(HeapNumber::kExponentMask));
+    
     // Test for NaN. Sadly, we can't just compare to Factory::nan_value(),
     // so we do the second best thing - test it ourselves.
     // They are both equal and they are not both Smis so both of them are not
@@ -4190,15 +4193,46 @@ static void EmitIdenticalObjectComparison(MacroAssembler* masm,
   }
   __ Ret();
 
-  // For less and greater we don't have to check for NaN since the result of
-  // x < x is false regardless. For the others here is some code to check
-  // for NaN.
-  if (cc != less && cc != greater) {
-    __ bind(&heap_number);
-    UNIMPLEMENTED_MIPS();
-    __ break_(__LINE__);
+  if (cc != eq || !never_nan_nan) {
+    // For less and greater we don't have to check for NaN since the result of
+    // x < x is false regardless.  For the others here is some code to check
+    // for NaN.
+    if (cc != lt && cc != gt) {
+      __ bind(&heap_number);
+      // It is a heap number, so return non-equal if it's NaN and equal if it's
+      // not NaN.
+
+      // The representation of NaN values has all exponent bits (52..62) set,
+      // and not all mantissa bits (0..51) clear.
+      // Read top bits of double representation (second word of value).
+      __ lw(t2, FieldMemOperand(a0, HeapNumber::kExponentOffset));
+      // Test that exponent bits are all set.
+      __ And(t3, t2, Operand(exp_mask_reg));
+      // If all bits not set (ne cond), then not a NaN, objects are equal.
+      __ Branch(&return_equal, ne, t3, Operand(exp_mask_reg));
+
+      // Shift out flag and all exponent bits, retaining only mantissa.
+      __ sll(t2, t2, HeapNumber::kNonMantissaBitsInTopWord);
+      // Or with all low-bits of mantissa.
+      __ lw(t3, FieldMemOperand(a0, HeapNumber::kMantissaOffset));
+      __ Or(v0, t3, Operand(t2));
+      // For equal we already have the right value in v0:  Return zero (equal)
+      // if all bits in mantissa are zero (it's an Infinity) and non-zero if
+      // not (it's a NaN).  For <= and >= we need to load v0 with the failing
+      // value if it's a NaN.
+      if (cc != eq) {
+        // All-zero means Infinity means equal.
+        __ Ret(eq, v0, Operand(zero_reg));
+        if (cc == le) {
+          __ li(v0, Operand(GREATER));  // NaN <= NaN should fail.
+        } else {
+          __ li(v0, Operand(LESS));     // NaN >= NaN should fail.
+        }
+      }
+      __ Ret();
+    }
+    // No fall through here.
   }
-  // No fall through here.
 
   __ bind(&not_identical);
 }
