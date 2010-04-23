@@ -1815,8 +1815,232 @@ void CodeGenerator::VisitForStatement(ForStatement* node) {
 
 
 void CodeGenerator::VisitForInStatement(ForInStatement* node) {
-  UNIMPLEMENTED_MIPS();
-  __ break_(__LINE__);
+#ifdef DEBUG
+  int original_height = frame_->height();
+#endif
+  VirtualFrame::SpilledScope spilled_scope;
+  Comment cmnt(masm_, "[ ForInStatement");
+  CodeForStatementPosition(node);
+
+  JumpTarget primitive;
+  JumpTarget jsobject;
+  JumpTarget fixed_array;
+  JumpTarget entry(JumpTarget::BIDIRECTIONAL);
+  JumpTarget end_del_check;
+  JumpTarget exit;
+
+  // Get the object to enumerate over (converted to JSObject).
+  LoadAndSpill(node->enumerable());
+
+  // Both SpiderMonkey and kjs ignore null and undefined in contrast
+  // to the specification.  12.6.4 mandates a call to ToObject.
+  frame_->EmitPop(a0);
+  __ LoadRoot(t2, Heap::kUndefinedValueRootIndex);
+  exit.Branch(eq, a0, Operand(t2), no_hint);
+  __ LoadRoot(t2, Heap::kNullValueRootIndex);
+  exit.Branch(eq, a0, Operand(t2), no_hint);
+
+  // Stack layout in body:
+  // [iteration counter (Smi)]
+  // [length of array]
+  // [FixedArray]
+  // [Map or 0]
+  // [Object]
+
+  // Check if enumerable is already a JSObject
+  __ And(t0, a0, Operand(kSmiTagMask));
+  primitive.Branch(eq, t0, Operand(zero_reg), no_hint);
+  __ GetObjectType(a0, a1, a1);
+  jsobject.Branch(hs, a1, Operand(FIRST_JS_OBJECT_TYPE), no_hint);
+
+  primitive.Bind();
+  frame_->EmitPush(a0);
+  frame_->InvokeBuiltin(Builtins::TO_OBJECT, CALL_JS, 1);
+  __ mov(a0, v0);
+
+  jsobject.Bind();
+  // Get the set of properties (as a FixedArray or Map).
+  // r0: value to be iterated over
+  frame_->EmitPush(a0);  // Push the object being iterated over.
+
+  // Check cache validity in generated code. This is a fast case for
+  // the JSObject::IsSimpleEnum cache validity checks. If we cannot
+  // guarantee cache validity, call the runtime system to check cache
+  // validity or get the property names in a fixed array.
+  JumpTarget call_runtime;
+  JumpTarget loop(JumpTarget::BIDIRECTIONAL);
+  JumpTarget check_prototype;
+  JumpTarget use_cache;
+  __ mov(a1, a0);
+  loop.Bind();
+  // Check that there are no elements.
+  __ lw(a2, FieldMemOperand(a1, JSObject::kElementsOffset));
+  __ LoadRoot(t0, Heap::kEmptyFixedArrayRootIndex);
+  call_runtime.Branch(ne, a2, Operand(t0), no_hint);
+  // Check that instance descriptors are not empty so that we can
+  // check for an enum cache.  Leave the map in a3 for the subsequent
+  // prototype load.
+  __ lw(a3, FieldMemOperand(a1, HeapObject::kMapOffset));
+  __ lw(a2, FieldMemOperand(a3, Map::kInstanceDescriptorsOffset));
+  __ LoadRoot(t2, Heap::kEmptyDescriptorArrayRootIndex);
+  call_runtime.Branch(eq, a2, Operand(t2), no_hint);
+  // Check that there in an enum cache in the non-empty instance
+  // descriptors.  This is the case if the next enumeration index
+  // field does not contain a smi.
+  __ lw(a2, FieldMemOperand(a2, DescriptorArray::kEnumerationIndexOffset));
+  __ And(t1, a2, Operand(kSmiTagMask));
+  call_runtime.Branch(eq, t1, Operand(zero_reg), no_hint);
+  // For all objects but the receiver, check that the cache is empty.
+  // t0: empty fixed array root.
+  check_prototype.Branch(eq, a1, Operand(a0), no_hint);
+  __ lw(a2, FieldMemOperand(a2, DescriptorArray::kEnumCacheBridgeCacheOffset));
+  call_runtime.Branch(ne, a2, Operand(t0), no_hint);
+  check_prototype.Bind();
+  // Load the prototype from the map and loop if non-null.
+  __ lw(a1, FieldMemOperand(a3, Map::kPrototypeOffset));
+  __ LoadRoot(t2, Heap::kNullValueRootIndex);
+  loop.Branch(ne, a1, Operand(t2), no_hint);
+  // The enum cache is valid.  Load the map of the object being
+  // iterated over and use the cache for the iteration.
+  __ lw(a0, FieldMemOperand(a0, HeapObject::kMapOffset));
+  use_cache.Jump();
+
+  call_runtime.Bind();
+  // Call the runtime to get the property names for the object.
+  frame_->EmitPush(a0);  // push the object (slot 4) for the runtime call
+  frame_->CallRuntime(Runtime::kGetPropertyNamesFast, 1);
+  __ mov(a0, v0);
+
+  // If we got a map from the runtime call, we can do a fast
+  // modification check. Otherwise, we got a fixed array, and we have
+  // to do a slow check.
+  // a0: map or fixed array (result from call to
+  // Runtime::kGetPropertyNamesFast)
+  __ mov(a2, a0);
+  __ lw(a1, FieldMemOperand(a2, HeapObject::kMapOffset));
+  __ LoadRoot(t2, Heap::kMetaMapRootIndex);
+  fixed_array.Branch(ne, a1, Operand(t2), no_hint);
+
+  use_cache.Bind();
+
+  // Get enum cache
+  // v0: map (either the result from a call to
+  // Runtime::kGetPropertyNamesFast or has been fetched directly from
+  // the object)
+  __ mov(a1, a0);
+  __ lw(a1, FieldMemOperand(a1, Map::kInstanceDescriptorsOffset));
+  __ lw(a1, FieldMemOperand(a1, DescriptorArray::kEnumerationIndexOffset));
+  __ lw(a2,
+         FieldMemOperand(a1, DescriptorArray::kEnumCacheBridgeCacheOffset));
+
+  frame_->EmitPush(a0);  // map
+  frame_->EmitPush(a2);  // enum cache bridge cache
+  __ lw(a0, FieldMemOperand(a2, FixedArray::kLengthOffset));
+  __ sll(a0, a0, kSmiTagSize);
+  frame_->EmitPush(a0);
+  __ li(a0, Operand(Smi::FromInt(0)));
+  frame_->EmitPush(a0);
+  entry.Jump();
+
+  fixed_array.Bind();
+  __ li(a1, Operand(Smi::FromInt(0)));
+  frame_->EmitPush(a1);  // insert 0 in place of Map
+  frame_->EmitPush(a0);
+
+  // Push the length of the array and the initial index onto the stack.
+  __ lw(a0, FieldMemOperand(a0, FixedArray::kLengthOffset));
+  __ sll(a0, a0, kSmiTagSize);
+  frame_->EmitPush(a0);
+  __ li(a0, Operand(Smi::FromInt(0)));  // init index
+  frame_->EmitPush(a0);
+
+  // Condition.
+  entry.Bind();
+  // sp[0] : index
+  // sp[1] : array/enum cache length
+  // sp[2] : array or enum cache
+  // sp[3] : 0 or map
+  // sp[4] : enumerable
+  // Grab the current frame's height for the break and continue
+  // targets only after all the state is pushed on the frame.
+  node->break_target()->set_direction(JumpTarget::FORWARD_ONLY);
+  node->continue_target()->set_direction(JumpTarget::FORWARD_ONLY);
+
+  __ lw(a0, frame_->ElementAt(0));  // load the current count
+  __ lw(a1, frame_->ElementAt(1));  // load the length
+  node->break_target()->Branch(hs, a0, Operand(a1));
+
+  __ lw(a0, frame_->ElementAt(0));
+
+  // Get the i'th entry of the array.
+  __ lw(a2, frame_->ElementAt(2));
+  __ Add(a2, a2, Operand(FixedArray::kHeaderSize - kHeapObjectTag));
+  __ sll(t2, a0, kPointerSizeLog2 - kSmiTagSize); // Scale index.
+  __ addu(t2, t2, a2);  // Base + index.
+  __ lw(a3, MemOperand(t2));
+
+  // Get Map or 0.
+  __ lw(a2, frame_->ElementAt(3));
+  // Check if this (still) matches the map of the enumerable.
+  // If not, we have to filter the key.
+  __ lw(a1, frame_->ElementAt(4));
+  __ lw(a1, FieldMemOperand(a1, HeapObject::kMapOffset));
+  end_del_check.Branch(eq, a1, Operand(a2), no_hint);
+
+  // Convert the entry to a string (or null if it isn't a property anymore).
+  __ lw(a0, frame_->ElementAt(4));  // push enumerable
+  frame_->EmitPush(a0);
+  frame_->EmitPush(a3);  // push entry
+  frame_->InvokeBuiltin(Builtins::FILTER_KEY, CALL_JS, 2);
+  __ mov(a3, v0);
+
+  // If the property has been removed while iterating, we just skip it.
+  __ LoadRoot(t2, Heap::kNullValueRootIndex);
+  node->continue_target()->Branch(eq, a3, Operand(t2));
+
+  end_del_check.Bind();
+  // Store the entry in the 'each' expression and take another spin in the
+  // loop.  a3: i'th entry of the enum cache (or string there of)
+  frame_->EmitPush(a3);  // push entry
+  { Reference each(this, node->each());
+    if (!each.is_illegal()) {
+      if (each.size() > 0) {
+        __ lw(a0, frame_->ElementAt(each.size()));
+        frame_->EmitPush(a0);
+        each.SetValue(NOT_CONST_INIT);
+        frame_->Drop(2);
+      } else {
+        // If the reference was to a slot we rely on the convenient property
+        // that it doesn't matter whether a value (eg, a3 pushed above) is
+        // right on top of or right underneath a zero-sized reference.
+        each.SetValue(NOT_CONST_INIT);
+        frame_->Drop();
+      }
+    }
+  }
+  // Body.
+  CheckStack();  // TODO(1222600): ignore if body contains calls.
+  VisitAndSpill(node->body());
+
+  // Next.  Reestablish a spilled frame in case we are coming here via
+  // a continue in the body.
+  node->continue_target()->Bind();
+  frame_->SpillAll();
+  frame_->EmitPop(a0);
+  __ Add(a0, a0, Operand(Smi::FromInt(1)));
+  frame_->EmitPush(a0);
+  entry.Jump();
+
+  // Cleanup.  No need to spill because VirtualFrame::Drop is safe for
+  // any frame.
+  node->break_target()->Bind();
+  frame_->Drop(5);
+
+  // Exit.
+  exit.Bind();
+  node->continue_target()->Unuse();
+  node->break_target()->Unuse();
+  ASSERT(frame_->height() == original_height);
 }
 
 
@@ -4149,7 +4373,7 @@ static void EmitIdenticalObjectComparison(MacroAssembler* masm,
   // we now know they test equal.
   if (cc != eq || !never_nan_nan) {
     __ li(exp_mask_reg, Operand(HeapNumber::kExponentMask));
-    
+
     // Test for NaN. Sadly, we can't just compare to Factory::nan_value(),
     // so we do the second best thing - test it ourselves.
     // They are both equal and they are not both Smis so both of them are not

@@ -67,4 +67,4 @@ string-indexof-2: PASS, SKIP if $mode == debug
 [ $arch == mips ]
 
 # Skip all tests on MIPS.
-*: SKIP
+# *: SKIP

@@ -432,10 +432,35 @@ TEST(MIPSTryCatchFinally) {
 }
 
 
+TEST(MIPSForIn) {
+  i::FLAG_full_compiler = false;
+  v8::HandleScope scope;
+  LocalContext env;  // from cctest.h
+
+  const char* c_source =
+    "var c;"
+    "var cars = [];"
+    "cars[0] = 'Saab';"
+    "cars[1] = 'Volvo';"
+    "cars[2] = 'BMW';"
+    "cars[3] = 'Aston-Martin';"
+    "var names = '';"
+    " "
+    "for (c in cars) {"
+    "  names += cars[c] + ' ';"
+    "}"
+    " "
+    "names;" ;
+  Local<Value> result = CompileRun(c_source);
+  CHECK(result->IsString());
+  String::AsciiValue ascii1(result);
+  CHECK_EQ("Saab Volvo BMW Aston-Martin ", *ascii1);
+}
+
+
 // Binary op tests start with well-behaved Smi values, then step thru
 // corner cases, such as overflow from Smi value, to one Smi, one
 // non-Smi, then to float cases.
-
 
 TEST(MIPSBinaryAdd) {
   // Disable compilation of natives.
