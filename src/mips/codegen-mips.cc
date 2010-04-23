@@ -3512,8 +3512,13 @@ void CodeGenerator::VisitBinaryOperation(BinaryOperation* node) {
 
 
 void CodeGenerator::VisitThisFunction(ThisFunction* node) {
-  UNIMPLEMENTED_MIPS();
-  __ break_(__LINE__);
+#ifdef DEBUG
+  int original_height = frame_->height();
+#endif
+  VirtualFrame::SpilledScope spilled_scope;
+  __ lw(a0, frame_->Function());
+  frame_->EmitPush(a0);
+  ASSERT(frame_->height() == original_height + 1);
 }
 
 
@@ -5095,7 +5100,6 @@ void ArgumentsAccessStub::GenerateNewObject(MacroAssembler* masm) {
 
   // Patch the arguments.length and the parameters pointer.
   __ bind(&adaptor_frame);
-  __ break_(__LINE__);
   __ lw(t1, MemOperand(t2, ArgumentsAdaptorFrameConstants::kLengthOffset));
   __ sw(t1, MemOperand(sp));
   __ sll(t0, t1, kPointerSizeLog2 - kSmiTagSize);
