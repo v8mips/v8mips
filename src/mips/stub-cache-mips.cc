@@ -361,6 +361,30 @@ void StubCompiler::GenerateLoadMiss(MacroAssembler* masm, Code::Kind kind) {
 }
 
 
+static void GenerateCallFunction(MacroAssembler* masm,
+                                 Object* object,
+                                 const ParameterCount& arguments,
+                                 Label* miss) {
+  // a0: receiver
+  // a1: function to call
+
+  // Check that the function really is a function.
+  __ BranchOnSmi(a1, miss);
+  __ GetObjectType(a1, a3, a3);
+  __ Branch(miss, ne, a3, Operand(JS_FUNCTION_TYPE));
+
+  // Patch the receiver on the stack with the global proxy if
+  // necessary.
+  if (object->IsGlobalObject()) {
+    __ lw(a3, FieldMemOperand(a0, GlobalObject::kGlobalReceiverOffset));
+    __ sw(a3, MemOperand(sp, arguments.immediate() * kPointerSize));
+  }
+
+  // Invoke the function.
+  __ InvokeFunction(a1, arguments, JUMP_FUNCTION);
+}
+
+
 #undef __
 #define __ ACCESS_MASM(masm())
 
@@ -510,9 +534,30 @@ Object* CallStubCompiler::CompileCallField(JSObject* object,
                                            JSObject* holder,
                                            int index,
                                            String* name) {
-  UNIMPLEMENTED_MIPS();
-  __ break_(__LINE__);
-  return reinterpret_cast<Object*>(NULL);   // UNIMPLEMENTED RETURN
+  // a2    : name
+  // ra    : return address
+  Label miss;
+
+  const int argc = arguments().immediate();
+
+  // Get the receiver of the function from the stack into r0.
+  __ lw(a0, MemOperand(sp, argc * kPointerSize));
+  // Check that the receiver isn't a smi.
+  __ BranchOnSmi(a0, &miss, t0);
+
+  // Do the right check and compute the holder register.
+  Register reg = CheckPrototypes(object, a0, holder, a1, a3, name, &miss);
+  GenerateFastPropertyLoad(masm(), a1, reg, holder, index);
+
+  GenerateCallFunction(masm(), object, arguments(), &miss);
+
+  // Handle call cache miss.
+  __ bind(&miss);
+  Handle<Code> ic = ComputeCallMiss(arguments().immediate());
+  __ Jump(ic, RelocInfo::CODE_TARGET);
+
+  // Return the generated code.
+  return GetCode(FIELD, name);
 }
 
 
