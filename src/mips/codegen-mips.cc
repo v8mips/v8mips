@@ -3679,8 +3679,25 @@ void CodeGenerator::VisitCompareOperation(CompareOperation* node) {
       __ break_(__LINE__);
 
     } else if (check->Equals(Heap::object_symbol())) {
-      UNIMPLEMENTED_MIPS();
-      __ break_(__LINE__);
+      __ And(t1, condReg1, Operand(kSmiTagMask));
+      false_target()->Branch(eq, t1, Operand(zero_reg));
+
+      __ LoadRoot(t0, Heap::kNullValueRootIndex);
+      true_target()->Branch(eq, condReg1, Operand(t0));
+
+      Register map_reg = a2;
+      __ GetObjectType(condReg1, map_reg, condReg1);
+      false_target()->Branch(eq, condReg1, Operand(JS_REGEXP_TYPE));
+
+      // It can be an undetectable object.
+      __ lbu(condReg1, FieldMemOperand(map_reg, Map::kBitFieldOffset));
+      __ And(condReg1, condReg1, Operand(1 << Map::kIsUndetectable));
+      false_target()->Branch(eq, condReg1, Operand(1 << Map::kIsUndetectable));
+
+      __ lbu(condReg1, FieldMemOperand(map_reg, Map::kInstanceTypeOffset));
+      false_target()->Branch(lt, condReg1, Operand(FIRST_JS_OBJECT_TYPE));
+      __ li(condReg2, Operand(LAST_JS_OBJECT_TYPE));
+      cc_reg_ = le;
 
     } else {
       // Uncommon case: typeof testing against a string literal that is

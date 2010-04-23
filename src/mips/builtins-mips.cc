@@ -671,7 +671,7 @@ __ break_(__LINE__);
   { Label loop;
     // Calculate the copy start address (destination). Copy end address is sp.
     // function_location register already holds the start address.
-    __ mov(scratch1, t1);
+    __ mov(scratch1, function_location);
 
     __ bind(&loop);
     __ lw(scratch2, MemOperand(scratch1, -kPointerSize));
