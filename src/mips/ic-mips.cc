@@ -354,8 +354,19 @@ void KeyedStoreIC::GenerateMiss(MacroAssembler* masm) {
 
 
 void StoreIC::GenerateMegamorphic(MacroAssembler* masm) {
-  UNIMPLEMENTED_MIPS();
-  __ break_(__LINE__);
+  // a0    : value
+  // a1    : receiver
+  // a2    : name
+  // ra    : return address
+
+  // Get the receiver from the stack and probe the stub cache.
+  Code::Flags flags = Code::ComputeFlags(Code::STORE_IC,
+                                         NOT_IN_LOOP,
+                                         MONOMORPHIC);
+  StubCache::GenerateProbe(masm, flags, a1, a2, a3, no_reg);
+
+  // Cache miss: Jump to runtime.
+  GenerateMiss(masm);
 }
 
 
