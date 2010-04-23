@@ -634,6 +634,18 @@ class StringAddStub: public StringStubBase {
 };
 
 
+class SubStringStub: public StringStubBase {
+ public:
+  SubStringStub() {}
+
+ private:
+  Major MajorKey() { return SubString; }
+  int MinorKey() { return 0; }
+
+  void Generate(MacroAssembler* masm);
+};
+
+
 class StringCompareStub: public CodeStub {
  public:
   StringCompareStub() { }

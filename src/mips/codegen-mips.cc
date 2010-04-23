@@ -3117,8 +3117,15 @@ void CodeGenerator::GenerateStringAdd(ZoneList<Expression*>* args) {
 
 
 void CodeGenerator::GenerateSubString(ZoneList<Expression*>* args) {
-  UNIMPLEMENTED_MIPS();
-  __ break_(__LINE__);
+  ASSERT_EQ(3, args->length());
+
+  Load(args->at(0));
+  Load(args->at(1));
+  Load(args->at(2));
+
+  SubStringStub stub;
+  frame_->CallStub(&stub, 3);
+  frame_->EmitPush(v0);
 }
 
 
@@ -6162,6 +6169,21 @@ void StringStubBase::GenerateHashGetHash(MacroAssembler* masm,
   // if (hash == 0) hash = 27;
   __ ori(at, zero_reg, 27);
   __ movz(hash, at, hash);
+}
+
+
+void SubStringStub::Generate(MacroAssembler* masm) {
+  Label runtime;
+
+  // Stack frame on entry.
+  //  ra: return address
+  //  sp[0]: to
+  //  sp[4]: from
+  //  sp[8]: string
+
+  // Just call the runtime for now.
+
+  __ TailCallRuntime(Runtime::kSubString, 3, 1);
 }
 
 
