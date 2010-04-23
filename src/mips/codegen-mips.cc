@@ -746,8 +746,14 @@ void CodeGenerator::StoreToSlot(Slot* slot, InitState init_state) {
 
     JumpTarget exit;
     if (init_state == CONST_INIT) {
-      UNIMPLEMENTED_MIPS();
-      __ break_(__LINE__);
+      ASSERT(slot->var()->mode() == Variable::CONST);
+      // Only the first const initialization must be executed (the slot
+      // still contains 'the hole' value). When the assignment is
+      // executed, the code is identical to a normal store (see below).
+      Comment cmnt(masm_, "[ Init const");
+      __ lw(a2, SlotOperand(slot, a2));
+      __ LoadRoot(t8, Heap::kTheHoleValueRootIndex);
+      exit.Branch(ne, a2, Operand(t8));
     }
 
     // We must execute the store. Storing a variable must keep the
