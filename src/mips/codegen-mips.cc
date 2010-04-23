@@ -2168,8 +2168,13 @@ void CodeGenerator::VisitFunctionLiteral(FunctionLiteral* node) {
 
 void CodeGenerator::VisitSharedFunctionInfoLiteral(
     SharedFunctionInfoLiteral* node) {
-  UNIMPLEMENTED_MIPS();
-  __ break_(__LINE__);
+#ifdef DEBUG
+  int original_height = frame_->height();
+#endif
+  VirtualFrame::SpilledScope spilled_scope;
+  Comment cmnt(masm_, "[ SharedFunctionInfoLiteral");
+  InstantiateFunction(node->shared_function_info());
+  ASSERT(frame_->height() == original_height + 1);
 }
 
 
