@@ -2839,8 +2839,19 @@ void CodeGenerator::GenerateIsSmi(ZoneList<Expression*>* args) {
 
 
 void CodeGenerator::GenerateLog(ZoneList<Expression*>* args) {
-  UNIMPLEMENTED_MIPS();
+  VirtualFrame::SpilledScope spilled_scope;
+  // See comment in CodeGenerator::GenerateLog in codegen-ia32.cc.
+  ASSERT_EQ(args->length(), 3);
   __ break_(__LINE__);
+#ifdef ENABLE_LOGGING_AND_PROFILING
+  if (ShouldGenerateLog(args->at(0))) {
+    LoadAndSpill(args->at(1));
+    LoadAndSpill(args->at(2));
+    __ CallRuntime(Runtime::kLog, 2);
+  }
+#endif
+  __ LoadRoot(v0, Heap::kUndefinedValueRootIndex);
+  frame_->EmitPush(v0);
 }
 
 
