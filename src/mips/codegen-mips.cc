@@ -2577,8 +2577,57 @@ void CodeGenerator::VisitCall(Call* node) {
   // ------------------------------------------------------------------------
 
   if (var != NULL && var->is_possibly_eval()) {
-    UNIMPLEMENTED_MIPS();
-    __ break_(__LINE__);
+    // ----------------------------------
+    // JavaScript example: 'eval(arg)'  // eval is not known to be shadowed
+    // ----------------------------------
+
+    // In a call to eval, we first call %ResolvePossiblyDirectEval to
+    // resolve the function we need to call and the receiver of the
+    // call.  Then we call the resolved function using the given
+    // arguments.
+    // Prepare stack for call to resolved function.
+
+    LoadAndSpill(function);
+    __ LoadRoot(t2, Heap::kUndefinedValueRootIndex);
+    frame_->EmitPush(t2);  // Slot for receiver
+
+    int arg_count = args->length();
+    for (int i = 0; i < arg_count; i++) {
+      LoadAndSpill(args->at(i));
+    }
+
+    // Prepare stack for call to ResolvePossiblyDirectEval.
+    __ lw(a1, MemOperand(sp, arg_count * kPointerSize + kPointerSize));
+    frame_->EmitPush(a1);
+    if (arg_count > 0) {
+      __ lw(a1, MemOperand(sp, arg_count * kPointerSize));
+      frame_->EmitPush(a1);
+    } else {
+      frame_->EmitPush(t2);
+    }
+
+    // Push the receiver.
+    __ lw(a1, frame_->Receiver());
+    frame_->EmitPush(a1);
+
+    // Resolve the call.
+    frame_->CallRuntime(Runtime::kResolvePossiblyDirectEval, 2);
+
+    // Touch up stack with the right values for the function and the receiver.
+    __ sw(a0, MemOperand(sp, (arg_count + 1) * kPointerSize));
+    __ sw(a1, MemOperand(sp, arg_count * kPointerSize));
+
+    // Call the function.
+    CodeForSourcePosition(node->position());
+
+    InLoopFlag in_loop = loop_nesting() > 0 ? IN_LOOP : NOT_IN_LOOP;
+    CallFunctionStub call_function(arg_count, in_loop, RECEIVER_MIGHT_BE_VALUE);
+    frame_->CallStub(&call_function, arg_count + 1);
+
+    __ lw(cp, frame_->Context());
+    // Remove the function from the stack.
+    frame_->Drop();
+    frame_->EmitPush(v0);
 
   } else if (var != NULL && !var->is_this() && var->is_global()) {
     // -----------------------------------------------------
