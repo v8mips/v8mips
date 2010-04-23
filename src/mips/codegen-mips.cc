@@ -4600,11 +4600,11 @@ void StackCheckStub::Generate(MacroAssembler* masm) {
 void GenericUnaryOpStub::Generate(MacroAssembler* masm) {
   Label slow, done;
 
-  __ Branch(al, &slow);  // Do everything with slow-case for now.
+//  __ Branch(&slow);  // Do everything with slow-case for now.
 
   if (op_ == Token::SUB) {
-    UNIMPLEMENTED_MIPS();
-    __ break_(__LINE__);
+    UNIMPLEMENTED_MIPS();   // Aleays go to slow case for now.
+    __ Branch(&slow);
 
   } else if (op_ == Token::BIT_NOT) {
     UNIMPLEMENTED_MIPS();
