@@ -340,11 +340,6 @@ void KeyedStoreIC::GenerateGeneric(MacroAssembler* masm) {
   // ra     : return address
   // sp[0]  : key
   // sp[1]  : receiver
-  Label slow, fast, array, extra, exit, check_pixel_array;
-  // Get the key and the object from the stack.
-  // a1 = key, a3 = receiver
-  __ lw(a1, MemOperand(sp, 0));
-  __ lw(a3, MemOperand(sp, 4));
   GenerateRuntimeSetProperty(masm);
 }
 
