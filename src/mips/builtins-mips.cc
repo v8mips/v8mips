@@ -559,8 +559,159 @@ void Builtins::Generate_JSConstructEntryTrampoline(MacroAssembler* masm) {
 
 
 void Builtins::Generate_FunctionCall(MacroAssembler* masm) {
-  UNIMPLEMENTED_MIPS();
-  __ break_(__LINE__);
+  // CAREFUL! : Implemented without Builtins args slots.
+
+  // 1. Make sure we have at least one argument.
+  // a0: actual number of arguments
+  { Label done;
+    __ Branch(&done, ne, a0, Operand(zero_reg));
+    __ LoadRoot(t2, Heap::kUndefinedValueRootIndex);
+    __ Push(t2);
+    __ Add(a0, a0, Operand(1));
+    __ bind(&done);
+  }
+
+  Register shifted_actual_args = t0;
+  Register function_location = t1;
+  MemOperand receiver_memop = MemOperand(function_location, -kPointerSize);
+  Register scratch1 = t2;
+  Register scratch2 = t3;
+
+  // Setup shifted_actual_args and function_location.
+  __ sll(shifted_actual_args, a0, kPointerSizeLog2);
+  __ Addu(function_location, sp, shifted_actual_args);
+
+  // 2. Get the function to call (passed as receiver) from the stack, check
+  //    if it is a function.
+  // a0: actual number of arguments
+  Label non_function;
+  __ lw(a1, MemOperand(function_location));
+  __ And(scratch1, a1, Operand(kSmiTagMask));
+  __ Branch(&non_function, eq, scratch1, Operand(zero_reg));
+  __ GetObjectType(a1, a2, a2);
+  __ Branch(&non_function, ne, a2, Operand(JS_FUNCTION_TYPE));
+
+  // 3a. Patch the first argument if necessary when calling a function.
+  // a0: actual number of arguments
+  // a1: function
+  Label shift_arguments;
+  { Label convert_to_object, use_global_receiver, patch_receiver;
+    // Change context eagerly in case we need the global receiver.
+    __ lw(cp, FieldMemOperand(a1, JSFunction::kContextOffset));
+
+    // Load first argument in a2. a2 = -kPointerSize(sp + n_args << 2)
+    __ lw(a2, receiver_memop);   
+    // a0: actual number of arguments
+    // a1: function
+    // a2: first argument
+    __ BranchOnSmi(a2, &convert_to_object, t2);
+
+    __ LoadRoot(t3, Heap::kNullValueRootIndex);
+    __ Branch(&use_global_receiver, eq, a2, Operand(t3));
+    __ LoadRoot(t3, Heap::kUndefinedValueRootIndex);
+    __ Branch(&use_global_receiver, eq, a2, Operand(t3));
+
+    __ GetObjectType(a2, a3, a3);
+    __ Branch(&convert_to_object, lt, a3, Operand(FIRST_JS_OBJECT_TYPE));
+    __ Branch(&shift_arguments, le, a3, Operand(LAST_JS_OBJECT_TYPE));
+
+    __ bind(&convert_to_object);
+    __ EnterInternalFrame();  // In order to preserve argument count.
+    // Preserve shifted_actual_args and function_location over the builtin call.
+    __ MultiPush(a0.bit() | shifted_actual_args.bit() | function_location.bit());  
+    __ mov(a0, shifted_actual_args);   // Setup a0 for the builtin.
+
+    __ Push(a2);
+    __ InvokeBuiltin(Builtins::TO_OBJECT, CALL_JS);
+    __ mov(a2, v0);
+
+    // Restore shifted_actual_args and function_location.
+    __ MultiPop(a0.bit() | shifted_actual_args.bit() | function_location.bit());
+    __ LeaveInternalFrame();
+    // Restore the function to a1.
+    __ lw(a1, MemOperand(function_location));
+    __ Branch(&patch_receiver);
+
+    // Use the global receiver object from the called function as the
+    // receiver.
+    __ bind(&use_global_receiver);
+__ break_(__LINE__);
+    const int kGlobalIndex =
+        Context::kHeaderSize + Context::GLOBAL_INDEX * kPointerSize;
+    __ lw(a2, FieldMemOperand(cp, kGlobalIndex));
+    __ lw(a2, FieldMemOperand(a2, GlobalObject::kGlobalContextOffset));
+    __ lw(a2, FieldMemOperand(a2, kGlobalIndex));
+    __ lw(a2, FieldMemOperand(a2, GlobalObject::kGlobalReceiverOffset));
+
+    __ bind(&patch_receiver);
+    __ sw(a2, receiver_memop);
+
+    __ Branch(&shift_arguments);
+  }
+
+  // 3b. Patch the first argument when calling a non-function.  The
+  //     CALL_NON_FUNCTION builtin expects the non-function callee as
+  //     receiver, so overwrite the first argument which will ultimately
+  //     become the receiver.
+  // a0: actual number of arguments
+  // a1: function
+  __ bind(&non_function);
+__ break_(__LINE__);
+  // Restore the function in case it has been modified.
+  __ sw(a1, MemOperand(t1));
+  // Clear a1 to indicate a non-function being called.
+  __ mov(a1, zero_reg);
+
+  // 4. Shift arguments and return address one slot down on the stack
+  //    (overwriting the original receiver).  Adjust argument count to make
+  //    the original first argument the new receiver.
+  // a0: actual number of arguments
+  // a1: function
+  __ bind(&shift_arguments);
+  { Label loop;
+    // Calculate the copy start address (destination). Copy end address is sp.
+    // function_location register already holds the start address.
+    __ mov(scratch1, t1);
+
+    __ bind(&loop);
+    __ lw(scratch2, MemOperand(scratch1, -kPointerSize));
+    __ sw(scratch2, MemOperand(scratch1));
+    __ Subu(scratch1, scratch1, Operand(kPointerSize));
+    __ Branch(&loop, ne, scratch1, Operand(sp));
+    // Adjust the actual number of arguments and remove the top element
+    // (which is a copy of the last argument).
+    __ Subu(a0, a0, Operand(1));
+    __ Pop();
+  }
+
+  // 5a. Call non-function via tail call to CALL_NON_FUNCTION builtin.
+  // a0: actual number of arguments
+  // a1: function
+  { Label function;
+    __ Branch(&function, ne, a1, Operand(zero_reg));
+    __ mov(a2, zero_reg);  // expected arguments is 0 for CALL_NON_FUNCTION
+    __ GetBuiltinEntry(a3, Builtins::CALL_NON_FUNCTION);
+    __ Jump(Handle<Code>(builtin(ArgumentsAdaptorTrampoline)),
+                         RelocInfo::CODE_TARGET);
+    __ bind(&function);
+  }
+
+  // 5b. Get the code to call from the function and check that the number of
+  //     expected arguments matches what we're providing.  If so, jump
+  //     (tail-call) to the code in register edx without checking arguments.
+  // a0: actual number of arguments
+  // a1: function
+  __ lw(a3, FieldMemOperand(a1, JSFunction::kSharedFunctionInfoOffset));
+  __ lw(a2,
+         FieldMemOperand(a3, SharedFunctionInfo::kFormalParameterCountOffset));
+  __ lw(a3, FieldMemOperand(a3, SharedFunctionInfo::kCodeOffset));
+  __ Add(a3, a3, Operand(Code::kHeaderSize - kHeapObjectTag));
+  // Check formal and actual parameter counts.
+  __ Jump(Handle<Code>(builtin(ArgumentsAdaptorTrampoline)),
+          RelocInfo::CODE_TARGET, ne, a2, Operand(a0));
+
+  ParameterCount expected(0);
+  __ InvokeCode(a3, expected, expected, JUMP_FUNCTION);
 }
 
 
