@@ -3143,8 +3143,15 @@ __ break_(__LINE__);
 
 
 void CodeGenerator::GenerateRegExpExec(ZoneList<Expression*>* args) {
-  UNIMPLEMENTED_MIPS();
-  __ break_(__LINE__);
+  ASSERT_EQ(4, args->length());
+
+  Load(args->at(0));
+  Load(args->at(1));
+  Load(args->at(2));
+  Load(args->at(3));
+
+  frame_->CallRuntime(Runtime::kRegExpExec, 4);
+  frame_->EmitPush(v0);
 }
 
 
@@ -4634,11 +4641,11 @@ void StackCheckStub::Generate(MacroAssembler* masm) {
 void GenericUnaryOpStub::Generate(MacroAssembler* masm) {
   Label slow, done;
 
-//  __ Branch(&slow);  // Do everything with slow-case for now.
+  __ Branch(&slow);  // Do everything with slow-case for now.
 
   if (op_ == Token::SUB) {
-    UNIMPLEMENTED_MIPS();   // Aleays go to slow case for now.
-    __ Branch(&slow);
+    UNIMPLEMENTED_MIPS();
+    __ break_(__LINE__);
 
   } else if (op_ == Token::BIT_NOT) {
     UNIMPLEMENTED_MIPS();
