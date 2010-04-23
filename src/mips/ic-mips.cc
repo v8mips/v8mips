@@ -322,12 +322,13 @@ void KeyedLoadIC::GenerateExternalArray(MacroAssembler* masm,
 
 
 void KeyedStoreIC::GenerateRuntimeSetProperty(MacroAssembler* masm) {
-  // r0     : value
-  // lr     : return address
+  // a0     : value
+  // ra     : return address
   // sp[0]  : key
   // sp[1]  : receiver
   __ lw(a1, MemOperand(sp, 0));
   __ lw(a3, MemOperand(sp, 4));
+//  __ teq(a0, a1, __LINE__);
   __ MultiPush(a0.bit() | a1.bit() | a3.bit());
 
   __ TailCallRuntime(Runtime::kSetProperty, 3, 1);
@@ -377,6 +378,7 @@ void KeyedStoreIC::GenerateMiss(MacroAssembler* masm) {
 
 
 void StoreIC::GenerateMegamorphic(MacroAssembler* masm) {
+__ break_(__LINE__);
   // a0    : value
   // a1    : receiver
   // a2    : name

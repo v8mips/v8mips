@@ -635,7 +635,7 @@ void Builtins::Generate_FunctionCall(MacroAssembler* masm) {
     // Use the global receiver object from the called function as the
     // receiver.
     __ bind(&use_global_receiver);
-__ break_(__LINE__);
+//__ break_(__LINE__);
     const int kGlobalIndex =
         Context::kHeaderSize + Context::GLOBAL_INDEX * kPointerSize;
     __ lw(a2, FieldMemOperand(cp, kGlobalIndex));
@@ -701,6 +701,7 @@ __ break_(__LINE__);
   //     (tail-call) to the code in register edx without checking arguments.
   // a0: actual number of arguments
   // a1: function
+//__ break_(__LINE__);
   __ lw(a3, FieldMemOperand(a1, JSFunction::kSharedFunctionInfoOffset));
   __ lw(a2,
          FieldMemOperand(a3, SharedFunctionInfo::kFormalParameterCountOffset));
@@ -710,6 +711,7 @@ __ break_(__LINE__);
   __ Jump(Handle<Code>(builtin(ArgumentsAdaptorTrampoline)),
           RelocInfo::CODE_TARGET, ne, a2, Operand(a0));
 
+//__ break_(__LINE__);
   ParameterCount expected(0);
   __ InvokeCode(a3, expected, expected, JUMP_FUNCTION);
 }
