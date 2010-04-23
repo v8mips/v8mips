@@ -2928,9 +2928,31 @@ void CodeGenerator::VisitCall(Call* node) {
       frame_->EmitPush(v0);
 
     } else {
-      UNIMPLEMENTED_MIPS();
-      __ break_(__LINE__);
+      // -------------------------------------------
+      // JavaScript example: 'array[index](1, 2, 3)'
+      // -------------------------------------------
+
+      LoadAndSpill(property->obj());
+      LoadAndSpill(property->key());
+      EmitKeyedLoad(false);
+      frame_->Drop();  // key
+      // Put the function below the receiver.
+      if (property->is_synthetic()) {
+        // Use the global receiver.
+        frame_->Drop();
+        frame_->EmitPush(a0);
+        LoadGlobalReceiver(a0);
+      } else {
+        frame_->EmitPop(a1);  // receiver
+        frame_->EmitPush(a0);  // function
+        frame_->EmitPush(a1);  // receiver
+      }
+
+      // Call the function.
+      CallWithArguments(args, RECEIVER_MIGHT_BE_VALUE, node->position());
+      frame_->EmitPush(v0);
     }
+
 
   } else {
     // --------------------------------------------------------
