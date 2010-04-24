@@ -3525,8 +3525,46 @@ void CodeGenerator::VisitUnaryOperation(UnaryOperation* node) {
     if (has_cc()) cc_reg_ = NegateCondition(cc_reg_);
 
   } else if (op == Token::DELETE) {
-    UNIMPLEMENTED_MIPS();
-    __ break_(__LINE__);
+    Property* property = node->expression()->AsProperty();
+    Variable* variable = node->expression()->AsVariableProxy()->AsVariable();
+    if (property != NULL) {
+      LoadAndSpill(property->obj());
+      LoadAndSpill(property->key());
+      frame_->InvokeBuiltin(Builtins::DELETE, CALL_JS, 2);
+
+    } else if (variable != NULL) {
+      Slot* slot = variable->slot();
+      if (variable->is_global()) {
+        LoadGlobal();
+        __ li(a0, Operand(variable->name()));
+        frame_->EmitPush(a0);
+        frame_->InvokeBuiltin(Builtins::DELETE, CALL_JS, 2);
+
+      } else if (slot != NULL && slot->type() == Slot::LOOKUP) {
+        // lookup the context holding the named variable
+        frame_->EmitPush(cp);
+        __ li(a0, Operand(variable->name()));
+        frame_->EmitPush(a0);
+        frame_->CallRuntime(Runtime::kLookupContext, 2);
+        // v0: context
+        frame_->EmitPush(v0);
+        __ li(a0, Operand(variable->name()));
+        frame_->EmitPush(a0);
+        frame_->InvokeBuiltin(Builtins::DELETE, CALL_JS, 2);
+
+      } else {
+        // Default: Result of deleting non-global, not dynamically
+        // introduced variables is false.
+        __ LoadRoot(v0, Heap::kFalseValueRootIndex);
+      }
+
+    } else {
+      // Default: Result of deleting expressions is true.
+      LoadAndSpill(node->expression());  // may have side-effects
+      frame_->Drop();
+      __ LoadRoot(v0, Heap::kTrueValueRootIndex);
+    }
+    frame_->EmitPush(v0);
 
   } else if (op == Token::TYPEOF) {
     // Special case for loading the typeof expression; see comment on
@@ -3577,8 +3615,15 @@ void CodeGenerator::VisitUnaryOperation(UnaryOperation* node) {
         break;
 
       case Token::ADD: {
-        UNIMPLEMENTED_MIPS();
-        __ break_(__LINE__);
+        // Smi check.
+        JumpTarget continue_label;
+        __ mov(v0, a0);   // In case Smi test passes, move param to result.
+                          // TODO: move this instr into branch delay slot.
+        __ And(t0, a0, Operand(kSmiTagMask));
+        continue_label.Branch(eq, t0, Operand(zero_reg));
+        frame_->EmitPush(a0);
+        frame_->InvokeBuiltin(Builtins::TO_NUMBER, CALL_JS, 1);
+        continue_label.Bind();
         break;
       }
       default:
@@ -4965,59 +5010,6 @@ void CompareStub::Generate(MacroAssembler* masm) {
 }
 
 
-Handle<Code> GetBinaryOpStub(int key, BinaryOpIC::TypeInfo type_info) {
-  UNIMPLEMENTED_MIPS();
-  return Handle<Code>::null();
-}
-
-
-void StackCheckStub::Generate(MacroAssembler* masm) {
-  // Do tail-call to runtime routine.  Runtime routines expect at least one
-  // argument, so give it a Smi.
-  __ Push(zero_reg);
-  __ TailCallRuntime(Runtime::kStackGuard, 1, 1);
-  __ StubReturn(1);
-}
-
-
-void GenericUnaryOpStub::Generate(MacroAssembler* masm) {
-  Label slow, done;
-
-  __ Branch(&slow);  // Do everything with slow-case for now.
-
-  if (op_ == Token::SUB) {
-    UNIMPLEMENTED_MIPS();
-    __ break_(__LINE__);
-
-  } else if (op_ == Token::BIT_NOT) {
-    UNIMPLEMENTED_MIPS();
-    __ break_(__LINE__);
-
-  } else {
-    UNIMPLEMENTED();
-    __ break_(__LINE__);
-  }
-
-  __ bind(&done);
-  __ StubReturn(1);
-
-  // Handle the slow case by jumping to the JavaScript builtin.
-  __ bind(&slow);
-  __ Push(a0);
-
-  switch (op_) {
-    case Token::SUB:
-      __ InvokeBuiltin(Builtins::UNARY_MINUS, JUMP_JS);
-      break;
-    case Token::BIT_NOT:
-      __ InvokeBuiltin(Builtins::BIT_NOT, JUMP_JS);
-      break;
-    default:
-      UNREACHABLE();
-  }
-}
-
-
 void CEntryStub::GenerateThrowTOS(MacroAssembler* masm) {
   // v0 holds the exception.
 
@@ -6299,6 +6291,124 @@ void GenericBinaryOpStub::Generate(MacroAssembler* masm) {
   }
   // This code should be unreachable.
   __ stop("Unreachable");
+}
+
+
+
+
+Handle<Code> GetBinaryOpStub(int key, BinaryOpIC::TypeInfo type_info) {
+  UNIMPLEMENTED_MIPS();
+  return Handle<Code>::null();
+}
+
+
+void StackCheckStub::Generate(MacroAssembler* masm) {
+  // Do tail-call to runtime routine.  Runtime routines expect at least one
+  // argument, so give it a Smi.
+  __ Push(zero_reg);
+  __ TailCallRuntime(Runtime::kStackGuard, 1, 1);
+  __ StubReturn(1);
+}
+
+
+void GenericUnaryOpStub::Generate(MacroAssembler* masm) {
+  Label slow, done;
+
+  if (op_ == Token::SUB) {
+    // Check whether the value is a smi.
+    Label try_float;
+    __ And(t0, a0, Operand(kSmiTagMask));
+    __ Branch(&try_float, ne, t0, Operand(zero_reg));
+
+    // Go slow case if the value of the expression is zero
+    // to make sure that we switch between 0 and -0.
+    __ Branch(&slow, eq, a0, Operand(0));
+
+    // The value of the expression is a smi that is not zero.  Try
+    // optimistic subtraction '0 - value'.
+    __ subu(v0, zero_reg, a0);
+    // Check for overflow. For v=0-x, overflow only occurs on x=0x80000000.
+    __ Branch(&slow, eq, a0, Operand(0x80000000));  // Go slow on overflow.
+
+    // Return v0 result if no overflow.
+    __ StubReturn(1);
+
+    __ bind(&try_float);
+    __ GetObjectType(a0, a1, a1);
+    __ Branch(&slow, ne, a1, Operand(HEAP_NUMBER_TYPE));
+    // a0 is a heap number.  Get a new heap number in r1.
+    if (overwrite_) {
+      __ lw(a2, FieldMemOperand(a0, HeapNumber::kExponentOffset));
+      __ Xor(a2, a2, Operand(HeapNumber::kSignMask));  // Flip sign.
+      __ sw(a2, FieldMemOperand(a0, HeapNumber::kExponentOffset));
+    } else {
+      __ AllocateHeapNumber(a1, a2, s3, &slow);
+      __ lw(a3, FieldMemOperand(a0, HeapNumber::kMantissaOffset));
+      __ lw(a2, FieldMemOperand(a0, HeapNumber::kExponentOffset));
+      __ sw(a3, FieldMemOperand(a1, HeapNumber::kMantissaOffset));
+      __ Xor(a2, a2, Operand(HeapNumber::kSignMask));  // Flip sign.
+      __ sw(a2, FieldMemOperand(a1, HeapNumber::kExponentOffset));
+      __ mov(v0, a1);
+    }
+  } else if (op_ == Token::BIT_NOT) {
+    // Check if the operand is a heap number.
+    __ GetObjectType(a0, a1, a1);
+    __ Branch(&slow, ne, a1, Operand(HEAP_NUMBER_TYPE));
+
+    // Convert the heap number in a0 to an untagged integer in a1.
+    // Go slow if HeapNumber won't fit in 32-bit (untagged) int.
+    GetInt32(masm, a0, a1, a2, a3, &slow);
+
+    // Do the bitwise operation (use NOR) and check if the result
+    // fits in a smi.
+    Label try_float;
+    __ nor(a1, a1, zero_reg);
+    // check that the *signed* result fits in a smi
+    __ Addu(a2, a1, Operand(0x40000000));
+    __ And(a2, a2, Operand(0x80000000));
+    __ Branch(&try_float, ne, a2, Operand(zero_reg));
+    // Smi tag result.
+    __ sll(v0, a1, kSmiTagMask);
+    __ StubReturn(1);
+
+    __ bind(&try_float);
+    if (!overwrite_) {
+      // Allocate a fresh heap number, but don't overwrite r0 until
+      // we're sure we can do it without going through the slow case
+      // that needs the value in r0.
+      __ AllocateHeapNumber(a2, a3, t0, &slow);
+      __ mov(a0, a2);
+    }
+
+    // WriteInt32ToHeapNumberStub does not trigger GC, so we do not
+    // have to set up a frame.
+    WriteInt32ToHeapNumberStub stub(a1, a0, a2, a3);
+    __ Push(ra);
+    __ Call(stub.GetCode(), RelocInfo::CODE_TARGET);
+    __ Pop(ra);
+    // Fall thru to done.
+  } else {
+    UNIMPLEMENTED();
+    __ break_(__LINE__);
+  }
+
+  __ bind(&done);
+  __ StubReturn(1);
+
+  // Handle the slow case by jumping to the JavaScript builtin.
+  __ bind(&slow);
+  __ Push(a0);
+
+  switch (op_) {
+    case Token::SUB:
+      __ InvokeBuiltin(Builtins::UNARY_MINUS, JUMP_JS);
+      break;
+    case Token::BIT_NOT:
+      __ InvokeBuiltin(Builtins::BIT_NOT, JUMP_JS);
+      break;
+    default:
+      UNREACHABLE();
+  }
 }
 
 
