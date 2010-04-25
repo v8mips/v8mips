@@ -53,14 +53,14 @@ static void ProbeTable(MacroAssembler* masm,
   // Check that the key in the entry matches the name.
   __ li(t8, Operand(key_offset));
   __ sll(t9, offset, 1);
-  __ add(t9, t8, t9);
+  __ addu(t9, t8, t9);
   __ lw(t8, MemOperand(t9));
   __ Branch(&miss, ne, name, Operand(t8));
 
   // Get the code entry from the cache.
   __ li(t8, Operand(value_offset));
   __ sll(t9, offset, 1);
-  __ add(t9, t8, t9);
+  __ addu(t9, t8, t9);
   __ lw(offset, MemOperand(t9));
 
   // Check that the flags match what we're looking for.
@@ -72,11 +72,11 @@ static void ProbeTable(MacroAssembler* masm,
   __ Pop(offset);
   __ li(t8, Operand(value_offset));
   __ sll(t9, offset, 1);
-  __ add(t9, t8, t9);
+  __ addu(t9, t8, t9);
   __ lw(offset, MemOperand(t9));
 
   // Jump to the first instruction in the code stub.
-  __ Add(offset, offset, Operand(Code::kHeaderSize - kHeapObjectTag));
+  __ Addu(offset, offset, Operand(Code::kHeaderSize - kHeapObjectTag));
   __ Jump(offset);
 
   // Miss: Restore offset and fall through.

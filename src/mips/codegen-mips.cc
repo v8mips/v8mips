@@ -242,7 +242,7 @@ void CodeGenerator::Generate(CompilationInfo* info) {
         // The receiver is below the arguments, the return address, and the
         // frame pointer on the stack.
         const int kReceiverDisplacement = 2 + scope()->num_parameters();
-        __ Add(a1, fp, Operand(kReceiverDisplacement * kPointerSize));
+        __ Addu(a1, fp, Operand(kReceiverDisplacement * kPointerSize));
         __ li(a0, Operand(Smi::FromInt(scope()->num_parameters())));
         frame_->Adjust(3);
         __ MultiPush(a0.bit() | a1.bit() | a2.bit());
@@ -1974,7 +1974,7 @@ void CodeGenerator::VisitForInStatement(ForInStatement* node) {
 
   // Get the i'th entry of the array.
   __ lw(a2, frame_->ElementAt(2));
-  __ Add(a2, a2, Operand(FixedArray::kHeaderSize - kHeapObjectTag));
+  __ Addu(a2, a2, Operand(FixedArray::kHeaderSize - kHeapObjectTag));
   __ sll(t2, a0, kPointerSizeLog2 - kSmiTagSize); // Scale index.
   __ addu(t2, t2, a2);  // Base + index.
   __ lw(a3, MemOperand(t2));
@@ -2027,7 +2027,7 @@ void CodeGenerator::VisitForInStatement(ForInStatement* node) {
   node->continue_target()->Bind();
   frame_->SpillAll();
   frame_->EmitPop(a0);
-  __ Add(a0, a0, Operand(Smi::FromInt(1)));
+  __ Addu(a0, a0, Operand(Smi::FromInt(1)));
   frame_->EmitPush(a0);
   entry.Jump();
 
@@ -4545,9 +4545,9 @@ void FastCloneShallowArrayStub::Generate(MacroAssembler* masm) {
   Label slow_case;
   __ lw(a3, MemOperand(sp, 2 * kPointerSize));
   __ lw(a0, MemOperand(sp, 1 * kPointerSize));
-  __ Add(a3, a3, Operand(FixedArray::kHeaderSize - kHeapObjectTag));
+  __ Addu(a3, a3, Operand(FixedArray::kHeaderSize - kHeapObjectTag));
   __ sll(t0, a0, kPointerSizeLog2 - kSmiTagSize);
-  __ Add(t0, a3, t0);
+  __ Addu(t0, a3, t0);
   __ lw(a3, MemOperand(t0));
   __ LoadRoot(t1, Heap::kUndefinedValueRootIndex);
   __ Branch(&slow_case, eq, a3, Operand(t1));
@@ -4573,7 +4573,7 @@ void FastCloneShallowArrayStub::Generate(MacroAssembler* masm) {
     // Get hold of the elements array of the boilerplate and setup the
     // elements pointer in the resulting object.
     __ lw(a3, FieldMemOperand(a3, JSArray::kElementsOffset));
-    __ Add(a2, a0, Operand(JSArray::kSize));
+    __ Addu(a2, a0, Operand(JSArray::kSize));
     __ sw(a2, FieldMemOperand(a0, JSArray::kElementsOffset));
 
     // Copy the elements array.
@@ -4584,7 +4584,7 @@ void FastCloneShallowArrayStub::Generate(MacroAssembler* masm) {
   }
 
   // Return and remove the on-stack parameters.
-  __ Add(sp, sp, Operand(3 * kPointerSize));
+  __ Addu(sp, sp, Operand(3 * kPointerSize));
   __ Ret();
 
   __ bind(&slow_case);
@@ -4851,7 +4851,7 @@ void NumberToStringStub::Generate(MacroAssembler* masm) {
 
   // Generate code to lookup number in the number string cache.
 //  GenerateLookupNumberStringCache(masm, a1, a0, a2, a3, false, &runtime);
-//  __ Add(sp, sp, Operand(1 * kPointerSize));
+//  __ Addu(sp, sp, Operand(1 * kPointerSize));
 //  __ Ret();
 
   __ bind(&runtime);
@@ -5443,7 +5443,7 @@ void ArgumentsAccessStub::GenerateReadElement(MacroAssembler* masm) {
   __ Branch(&slow, Ugreater_equal, a0, Operand(a1));
 
   // Read the argument from the stack and return it.
-  __ sub(a0, a0, a1);
+  __ subu(a0, a0, a1);
   __ sll(t3, a3, kPointerSizeLog2 - kSmiTagSize);
   __ Addu(a3, fp, Operand(t3));
   __ lw(v0, MemOperand(a3, kDisplacement));
@@ -5457,7 +5457,7 @@ void ArgumentsAccessStub::GenerateReadElement(MacroAssembler* masm) {
   __ Branch(&slow, greater_equal, a1, Operand(a0));
 
   // Read the argument from the adaptor frame and return it.
-  __ sub(a3, a0, a1);
+  __ subu(a3, a0, a1);
   __ sll(t3, a3, kPointerSizeLog2 - kSmiTagSize);
   __ Addu(a3, a2, Operand(t3));
   __ lw(v0, MemOperand(a3, kDisplacement));
@@ -6416,7 +6416,7 @@ void StringStubBase::GenerateTwoCharacterSymbolTableProbe(MacroAssembler* masm,
 
   // Calculate untagged address of the first element of the symbol table.
   Register first_symbol_table_element = symbol_table;
-  __ Add(first_symbol_table_element, symbol_table,
+  __ Addu(first_symbol_table_element, symbol_table,
          Operand(SymbolTable::kElementsStartOffset - kHeapObjectTag));
 
   // Registers
@@ -6436,7 +6436,7 @@ void StringStubBase::GenerateTwoCharacterSymbolTableProbe(MacroAssembler* masm,
 
     // Calculate entry in symbol table.
     if (i > 0) {
-      __ Add(candidate, hash, Operand(SymbolTable::GetProbeOffset(i)));
+      __ Addu(candidate, hash, Operand(SymbolTable::GetProbeOffset(i)));
     } else {
       __ mov(candidate, hash);
     }
@@ -6446,7 +6446,7 @@ void StringStubBase::GenerateTwoCharacterSymbolTableProbe(MacroAssembler* masm,
     // Load the entry from the symble table.
     ASSERT_EQ(1, SymbolTable::kEntrySize);
     __ sll(scratch, candidate, kPointerSizeLog2);
-    __ Add(scratch, scratch, first_symbol_table_element);
+    __ Addu(scratch, scratch, first_symbol_table_element);
     __ lw(candidate, MemOperand(scratch));
 
     // If entry is undefined no string with this hash can be found.
@@ -6566,7 +6566,7 @@ void StringCompareStub::Generate(MacroAssembler* masm) {
   ASSERT_EQ(0, kSmiTag);
   __ li(a0, Operand(Smi::FromInt(EQUAL)));
   __ IncrementCounter(&Counters::string_compare_native, 1, a1, a2);
-  __ Add(sp, sp, Operand(2 * kPointerSize));
+  __ Addu(sp, sp, Operand(2 * kPointerSize));
   __ Ret();
 
   __ bind(&not_same);
@@ -6624,7 +6624,7 @@ void StringAddStub::Generate(MacroAssembler* masm) {
 //    __ Branch(&strings_not_empty, ne, t0, Operand(zero_reg));
 //
 //    __ IncrementCounter(&Counters::string_add_native, 1, a2, a3);
-//    __ Add(sp, sp, Operand(2 * kPointerSize));
+//    __ Addu(sp, sp, Operand(2 * kPointerSize));
 //    __ Ret();
 //
 //    __ bind(&strings_not_empty);
@@ -6641,7 +6641,7 @@ void StringAddStub::Generate(MacroAssembler* masm) {
 //  Label string_add_flat_result, longer_than_two;
 //  // Adding two lengths can't overflow.
 //  ASSERT(String::kMaxLength * 2 > String::kMaxLength);
-//  __ Add(t2, a2, Operand(a3));
+//  __ Addu(t2, a2, Operand(a3));
 //  // Use the runtime system when adding two one character strings, as it
 //  // contains optimizations for this specific case using the symbol table.
 //  __ Branch(&longer_than_two, ne, t2, Operand(2));
@@ -6666,7 +6666,7 @@ void StringAddStub::Generate(MacroAssembler* masm) {
 //  GenerateTwoCharacterSymbolTableProbe(masm, a2, a3, t2, t3, t0, t1, t4,
 //                                       &make_two_character_string);
 //  __ IncrementCounter(&Counters::string_add_native, 1, a2, a3);
-//  __ Add(sp, sp, Operand(2 * kPointerSize));
+//  __ Addu(sp, sp, Operand(2 * kPointerSize));
 //  __ break_(__LINE__);
 //  __ Ret();
 //
@@ -6680,7 +6680,7 @@ void StringAddStub::Generate(MacroAssembler* masm) {
 //  __ AllocateAsciiString(a0, t2, t0, t1, t4, &string_add_runtime);
 //  __ sh(a2, FieldMemOperand(a0, SeqAsciiString::kHeaderSize));
 //  __ IncrementCounter(&Counters::string_add_native, 1, a2, a3);
-//  __ Add(sp, sp, Operand(2 * kPointerSize));
+//  __ Addu(sp, sp, Operand(2 * kPointerSize));
 //  __ Ret();
 //
 //  __ bind(&longer_than_two);
@@ -6716,7 +6716,7 @@ void StringAddStub::Generate(MacroAssembler* masm) {
 //  __ sw(a1, FieldMemOperand(t3, ConsString::kSecondOffset));
 //  __ mov(v0, t3);
 //  __ IncrementCounter(&Counters::string_add_native, 1, a2, a3);
-//  __ Add(sp, sp, Operand(2 * kPointerSize));
+//  __ Addu(sp, sp, Operand(2 * kPointerSize));
 //  __ Ret();
 //
 //  __ bind(&non_ascii);
@@ -6769,9 +6769,9 @@ void StringAddStub::Generate(MacroAssembler* masm) {
 //  // t2: length of resulting flat string
 //  __ AllocateAsciiString(t3, t2, t0, t1, t4, &string_add_runtime);
 //  // Locate first character of result.
-//  __ Add(t2, t3, Operand(SeqAsciiString::kHeaderSize - kHeapObjectTag));
+//  __ Addu(t2, t3, Operand(SeqAsciiString::kHeaderSize - kHeapObjectTag));
 //  // Locate first character of first argument.
-//  __ Add(a0, a0, Operand(SeqAsciiString::kHeaderSize - kHeapObjectTag));
+//  __ Addu(a0, a0, Operand(SeqAsciiString::kHeaderSize - kHeapObjectTag));
 //  // a0: first character of first string.
 //  // a1: second string.
 //  // a2: length of first string.
@@ -6781,7 +6781,7 @@ void StringAddStub::Generate(MacroAssembler* masm) {
 //  GenerateCopyCharacters(masm, t2, a0, a2, t0, true);
 //
 //  // Load second argument and locate first character.
-//  __ Add(a1, a1, Operand(SeqAsciiString::kHeaderSize - kHeapObjectTag));
+//  __ Addu(a1, a1, Operand(SeqAsciiString::kHeaderSize - kHeapObjectTag));
 //  // a1: first character of second string.
 //  // a3: length of second string.
 //  // t2: next character of result.
@@ -6789,7 +6789,7 @@ void StringAddStub::Generate(MacroAssembler* masm) {
 //  GenerateCopyCharacters(masm, t2, a1, a3, t0, true);
 //  __ mov(v0, t3);
 //  __ IncrementCounter(&Counters::string_add_native, 1, a2, a3);
-//  __ Add(sp, sp, Operand(2 * kPointerSize));
+//  __ Addu(sp, sp, Operand(2 * kPointerSize));
 //  __ Ret();
 //
 //  __ bind(&non_ascii_string_add_flat_result);
@@ -6807,9 +6807,9 @@ void StringAddStub::Generate(MacroAssembler* masm) {
 //  // t3: result string.
 //
 //  // Locate first character of result.
-//  __ Add(t2, t3, Operand(SeqTwoByteString::kHeaderSize - kHeapObjectTag));
+//  __ Addu(t2, t3, Operand(SeqTwoByteString::kHeaderSize - kHeapObjectTag));
 //  // Locate first character of first argument.
-//  __ Add(a0, a0, Operand(SeqTwoByteString::kHeaderSize - kHeapObjectTag));
+//  __ Addu(a0, a0, Operand(SeqTwoByteString::kHeaderSize - kHeapObjectTag));
 //
 //  // a0: first character of first string.
 //  // a1: second string.
@@ -6820,7 +6820,7 @@ void StringAddStub::Generate(MacroAssembler* masm) {
 //  GenerateCopyCharacters(masm, t2, a0, a2, t0, false);
 //
 //  // Locate first character of second argument.
-//  __ Add(a1, a1, Operand(SeqTwoByteString::kHeaderSize - kHeapObjectTag));
+//  __ Addu(a1, a1, Operand(SeqTwoByteString::kHeaderSize - kHeapObjectTag));
 //
 //  // a1: first character of second string.
 //  // a3: length of second string.
@@ -6830,7 +6830,7 @@ void StringAddStub::Generate(MacroAssembler* masm) {
 //
 //  __ mov(v0, t3);
 //  __ IncrementCounter(&Counters::string_add_native, 1, a2, a3);
-//  __ Add(sp, sp, Operand(2 * kPointerSize));
+//  __ Addu(sp, sp, Operand(2 * kPointerSize));
 //  __ Ret();
 //
 //  // Just jump to runtime to add the two strings.

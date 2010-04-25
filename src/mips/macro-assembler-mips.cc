@@ -364,22 +364,6 @@ void MacroAssembler::CheckAccessGlobalProxy(Register holder_reg,
 // ---------------------------------------------------------------------------
 // Instruction macros
 
-void MacroAssembler::Add(Register rd, Register rs, const Operand& rt) {
-  if (rt.is_reg()) {
-    add(rd, rs, rt.rm());
-  } else {
-    if (is_int16(rt.imm32_) && !MustUseAt(rt.rmode_)) {
-      addi(rd, rs, rt.imm32_);
-    } else {
-      // li handles the relocation.
-      ASSERT(!rs.is(at));
-      li(at, rt);
-      add(rd, rs, at);
-    }
-  }
-}
-
-
 void MacroAssembler::Addu(Register rd, Register rs, const Operand& rt) {
   if (rt.is_reg()) {
     addu(rd, rs, rt.rm());
@@ -1892,7 +1876,7 @@ void MacroAssembler::GetBuiltinEntry(Register target, Builtins::JavaScript id) {
   // Load the code entry point from the function into the target register.
   lw(target, FieldMemOperand(a1, JSFunction::kSharedFunctionInfoOffset));
   lw(target, FieldMemOperand(target, SharedFunctionInfo::kCodeOffset));
-  Add(target, target, Operand(Code::kHeaderSize - kHeapObjectTag));
+  Addu(target, target, Operand(Code::kHeaderSize - kHeapObjectTag));
 }
 
 
@@ -1908,7 +1892,7 @@ void MacroAssembler::IncrementCounter(StatsCounter* counter, int value,
   if (FLAG_native_code_counters && counter->Enabled()) {
     li(scratch2, Operand(ExternalReference(counter)));
     lw(scratch1, MemOperand(scratch2));
-    Add(scratch1, scratch1, Operand(value));
+    Addu(scratch1, scratch1, Operand(value));
     sw(scratch1, MemOperand(scratch2));
   }
 }
@@ -1992,14 +1976,14 @@ void MacroAssembler::EnterExitFrame(ExitFrame::Mode mode,
   // Compute the argv pointer and keep it in a callee-saved register.
   // a0 is argc.
   sll(t8, a0, kPointerSizeLog2);
-  add(hold_argv, sp, t8);
-  addi(hold_argv, hold_argv, -kPointerSize);
+  addu(hold_argv, sp, t8);
+  addiu(hold_argv, hold_argv, -kPointerSize);
 
   // Compute callee's stack pointer before making changes and save it as
   // t9 register so that it is restored as sp register on exit, thereby
   // popping the args.
   // t9 = sp + kPointerSize * #args
-  add(t9, sp, t8);
+  addu(t9, sp, t8);
 
   // Align the stack at this point.
   AlignStack(0);

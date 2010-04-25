@@ -58,7 +58,7 @@ void Builtins::Generate_Adaptor(MacroAssembler* masm,
     // We need to push a1 after the original arguments and before the arguments
     // slots.
     num_extra_args = 1;
-    __ Add(sp, sp, -4);
+    __ Addu(sp, sp, -4);
     __ sw(a1, MemOperand(sp, StandardFrameConstants::kBArgsSlotsSize));
   } else {
     ASSERT(extra_args == NO_EXTRA_ARGUMENTS);
@@ -66,7 +66,7 @@ void Builtins::Generate_Adaptor(MacroAssembler* masm,
 
   // JumpToExternalReference expects a0 to contain the number of arguments
   // including the receiver and the extra arguments.
-  __ Add(a0, a0, Operand(num_extra_args + 1));
+  __ Addu(a0, a0, Operand(num_extra_args + 1));
   __ JumpToExternalReference(ExternalReference(id));
 }
 
@@ -108,7 +108,7 @@ void Builtins::Generate_JSConstructCall(MacroAssembler* masm) {
   // Jump to the function-specific construct stub.
   __ lw(a2, FieldMemOperand(a1, JSFunction::kSharedFunctionInfoOffset));
   __ lw(a2, FieldMemOperand(a2, SharedFunctionInfo::kConstructStubOffset));
-  __ Add(t9, a2, Operand(Code::kHeaderSize - kHeapObjectTag));
+  __ Addu(t9, a2, Operand(Code::kHeaderSize - kHeapObjectTag));
   __ Jump(Operand(t9));
 
   // a0: number of arguments
@@ -118,8 +118,8 @@ void Builtins::Generate_JSConstructCall(MacroAssembler* masm) {
   // (instead of the original receiver from the call site). The receiver is
   // stack element argc.
   __ sll(t0, a0, kPointerSizeLog2);
-  __ Add(t0, t0, StandardFrameConstants::kBArgsSlotsSize);
-  __ Add(t0, t0, sp);
+  __ Addu(t0, t0, StandardFrameConstants::kBArgsSlotsSize);
+  __ Addu(t0, t0, sp);
   __ sw(a1, MemOperand(t0));
   // Set expected number of arguments to zero (not changing a0).
   __ li(a2, Operand(0));
@@ -207,7 +207,7 @@ static void Generate_JSConstructStubHelper(MacroAssembler* masm,
     // t5: First in-object property of JSObject (not tagged)
     // t7: undefined
     __ sll(t0, a3, kPointerSizeLog2);
-    __ add(t6, t4, t0);   // End of object.
+    __ addu(t6, t4, t0);   // End of object.
     ASSERT_EQ(3 * kPointerSize, JSObject::kHeaderSize);
     { Label loop, entry;
       __ jmp(&entry);
@@ -222,7 +222,7 @@ static void Generate_JSConstructStubHelper(MacroAssembler* masm,
     // jump into the continuation code at any time from now on. Any failures
     // need to undo the allocation, so that the heap is in a consistent state
     // and verifiable.
-    __ Add(t4, t4, Operand(kHeapObjectTag));
+    __ Addu(t4, t4, Operand(kHeapObjectTag));
 
     // Check if a non-empty properties array is needed. Continue with allocated
     // object if not fall through to runtime call if it is.
@@ -241,7 +241,7 @@ static void Generate_JSConstructStubHelper(MacroAssembler* masm,
     __ Addu(a3, a3, Operand(t0));
     __ And(t6, a0, Operand(0x000000FF << Map::kInObjectPropertiesByte * 8));
     __ srl(t0, t6, Map::kInObjectPropertiesByte * 8);
-    __ sub(a3, a3, t0);
+    __ subu(a3, a3, t0);
 
     // Done if no extra properties are to be allocated.
     __ Branch(&allocated, eq, a3, Operand(zero_reg));
@@ -302,7 +302,7 @@ static void Generate_JSConstructStubHelper(MacroAssembler* masm,
     // a1: constructor function
     // t4: JSObject
     // t5: FixedArray (not tagged)
-    __ Add(t5, t5, Operand(kHeapObjectTag));  // Add the heap tag.
+    __ Addu(t5, t5, Operand(kHeapObjectTag));  // Add the heap tag.
     __ sw(t5, FieldMemOperand(t4, JSObject::kPropertiesOffset));
 
     // Continue with JSObject being successfully allocated
@@ -347,7 +347,7 @@ static void Generate_JSConstructStubHelper(MacroAssembler* masm,
   __ lw(a3, MemOperand(sp, 4 * kPointerSize));
 
   // Setup pointer to last argument.
-  __ Add(a2, fp, Operand(StandardFrameConstants::kCallerSPOffset
+  __ Addu(a2, fp, Operand(StandardFrameConstants::kCallerSPOffset
                           + StandardFrameConstants::kBArgsSlotsSize));
 
   // Setup number of arguments for function call below
@@ -433,8 +433,8 @@ static void Generate_JSConstructStubHelper(MacroAssembler* masm,
   __ lw(a1, MemOperand(sp, 2 * kPointerSize));
   __ LeaveConstructFrame();
   __ sll(t0, a1, kPointerSizeLog2 - 1);
-  __ Add(sp, sp, t0);
-  __ Add(sp, sp, kPointerSize);
+  __ Addu(sp, sp, t0);
+  __ Addu(sp, sp, kPointerSize);
   __ IncrementCounter(&Counters::constructed_objects, 1, a1, a2);
   __ Ret();
 }
@@ -567,7 +567,7 @@ void Builtins::Generate_FunctionCall(MacroAssembler* masm) {
     __ Branch(&done, ne, a0, Operand(zero_reg));
     __ LoadRoot(t2, Heap::kUndefinedValueRootIndex);
     __ Push(t2);
-    __ Add(a0, a0, Operand(1));
+    __ Addu(a0, a0, Operand(1));
     __ bind(&done);
   }
 
@@ -706,7 +706,7 @@ __ break_(__LINE__);
   __ lw(a2,
          FieldMemOperand(a3, SharedFunctionInfo::kFormalParameterCountOffset));
   __ lw(a3, FieldMemOperand(a3, SharedFunctionInfo::kCodeOffset));
-  __ Add(a3, a3, Operand(Code::kHeaderSize - kHeapObjectTag));
+  __ Addu(a3, a3, Operand(Code::kHeaderSize - kHeapObjectTag));
   // Check formal and actual parameter counts.
   __ Jump(Handle<Code>(builtin(ArgumentsAdaptorTrampoline)),
           RelocInfo::CODE_TARGET, ne, a2, Operand(a0));
@@ -727,7 +727,7 @@ static void EnterArgumentsAdaptorFrame(MacroAssembler* masm) {
   __ sll(a0, a0, kSmiTagSize);
   __ li(t0, Operand(Smi::FromInt(StackFrame::ARGUMENTS_ADAPTOR)));
   __ MultiPush(a0.bit() | a1.bit() | t0.bit() | fp.bit() | ra.bit());
-  __ Add(fp, sp, Operand(3 * kPointerSize));
+  __ Addu(fp, sp, Operand(3 * kPointerSize));
 }
 
 
@@ -859,7 +859,7 @@ void Builtins::Generate_ArgumentsAdaptorTrampoline(MacroAssembler* masm) {
   // Don't adapt arguments.
   // -------------------------------------------
   __ bind(&dont_adapt_arguments);
-  __ Add(sp,  sp,  StandardFrameConstants::kBArgsSlotsSize);
+  __ Addu(sp,  sp,  StandardFrameConstants::kBArgsSlotsSize);
   __ Jump(a3);
 }
 

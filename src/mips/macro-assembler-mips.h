@@ -264,7 +264,6 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
     instr(rs, Operand(j));                                                     \
   }
 
-  DEFINE_INSTRUCTION(Add);
   DEFINE_INSTRUCTION(Addu);
   DEFINE_INSTRUCTION(Subu);
   DEFINE_INSTRUCTION(Mul);
@@ -327,7 +326,7 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
     Addu(sp, sp, Operand(kPointerSize));
   }
   void Pop(uint32_t count = 1) {
-    Add(sp, sp, Operand(count * kPointerSize));
+    Addu(sp, sp, Operand(count * kPointerSize));
   }
 
 

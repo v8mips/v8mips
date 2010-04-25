@@ -688,28 +688,13 @@ void Assembler::jalr(Register rs, Register rd) {
 
 // Arithmetic.
 
-void Assembler::add(Register rd, Register rs, Register rt) {
-  GenInstrRegister(SPECIAL, rs, rt, rd, 0, ADD);
-}
-
-
 void Assembler::addu(Register rd, Register rs, Register rt) {
   GenInstrRegister(SPECIAL, rs, rt, rd, 0, ADDU);
 }
 
 
-void Assembler::addi(Register rd, Register rs, int32_t j) {
-  GenInstrImmediate(ADDI, rs, rd, j);
-}
-
-
 void Assembler::addiu(Register rd, Register rs, int32_t j) {
   GenInstrImmediate(ADDIU, rs, rd, j);
-}
-
-
-void Assembler::sub(Register rd, Register rs, Register rt) {
-  GenInstrRegister(SPECIAL, rs, rt, rd, 0, SUB);
 }
 
 
