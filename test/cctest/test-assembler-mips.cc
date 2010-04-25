@@ -104,7 +104,7 @@ TEST(MIPS1) {
   __ nop();
 
   __ bind(&L);
-  __ add(v0, v0, a1);
+  __ addu(v0, v0, a1);
   __ addiu(a1, a1, -1);
 
   __ bind(&C);
@@ -173,8 +173,8 @@ TEST(MIPS2) {
   __ Branch(&error, ne, v0, Operand(0x0f234560));
   __ nop();
 
-  __ add(v0, t0, t1);   // 0x00001238
-  __ sub(v0, v0, t0);   // 0x00001234
+  __ addu(v0, t0, t1);   // 0x00001238
+  __ subu(v0, v0, t0);  // 0x00001234
   __ Branch(&error, ne, v0, Operand(0x00001234));
   __ nop();
   __ addu(v1, t3, t0);
@@ -199,8 +199,8 @@ TEST(MIPS2) {
   __ nop();
   // End of SPECIAL class.
 
-  __ addi(v0, zero_reg, 0x7421);  // 0x00007421
-  __ addi(v0, v0, -0x1);  // 0x00007420
+  __ addiu(v0, zero_reg, 0x7421);  // 0x00007421
+  __ addiu(v0, v0, -0x1);  // 0x00007420
   __ addiu(v0, v0, -0x20);  // 0x00007400
   __ Branch(&error, ne, v0, Operand(0x00007400));
   __ nop();
@@ -590,7 +590,7 @@ TEST(MIPS7) {
   __ Branch(&outa_here, al);
 
   __ bind(&less_than);
-  __ Add(t0, zero_reg, Operand(1));
+  __ Addu(t0, zero_reg, Operand(1));
   __ sw(t0, MemOperand(a0, OFFSET_OF(T, result)) ); // Set true.
 
 
