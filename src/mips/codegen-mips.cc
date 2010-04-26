@@ -2338,7 +2338,7 @@ void CodeGenerator::VisitTryFinallyStatement(TryFinallyStatement* node) {
     exit.Branch(ne, a2, Operand(Smi::FromInt(THROWING)), no_hint);
 
     // Rethrow exception.
-    // __ break_(__LINE__);  // Alexandre - looks ok to me (plind), removing.
+    // __ break_(__LINE__);  // Alexandre - looks ok to me (plind), removing...................
     frame_->EmitPush(v0);
     frame_->CallRuntime(Runtime::kReThrow, 1);
 
@@ -2802,7 +2802,7 @@ void CodeGenerator::VisitCall(Call* node) {
 
   if (var != NULL && var->is_possibly_eval()) {
     // ----------------------------------
-    // JavaScript example: 'eval(arg)'  // eval is not known to be shadowed
+    // JavaScript example: 'eval(arg)'  // eval is not known to be shadowed.
     // ----------------------------------
 
     // In a call to eval, we first call %ResolvePossiblyDirectEval to
@@ -2810,7 +2810,6 @@ void CodeGenerator::VisitCall(Call* node) {
     // call.  Then we call the resolved function using the given
     // arguments.
     // Prepare stack for call to resolved function.
-
     LoadAndSpill(function);
     __ LoadRoot(t2, Heap::kUndefinedValueRootIndex);
     frame_->EmitPush(t2);  // Slot for receiver
@@ -2835,10 +2834,10 @@ void CodeGenerator::VisitCall(Call* node) {
     frame_->EmitPush(a1);
 
     // Resolve the call.
-    frame_->CallRuntime(Runtime::kResolvePossiblyDirectEval, 2);
+    frame_->CallRuntime(Runtime::kResolvePossiblyDirectEval, 3);
 
     // Touch up stack with the right values for the function and the receiver.
-    __ sw(a0, MemOperand(sp, (arg_count + 1) * kPointerSize));
+    __ sw(v0, MemOperand(sp, (arg_count + 1) * kPointerSize));
     __ sw(a1, MemOperand(sp, arg_count * kPointerSize));
 
     // Call the function.
@@ -2857,8 +2856,6 @@ void CodeGenerator::VisitCall(Call* node) {
     // -----------------------------------------------------
     // JavaScript example: 'foo(1, 2, 3)'  // foo is global.
     // -----------------------------------------------------
-
-
     // Pass the global object as the receiver and let the IC stub
     // patch the stack to use the global proxy as 'this' in the
     // invoked function.
@@ -2952,7 +2949,6 @@ void CodeGenerator::VisitCall(Call* node) {
       CallWithArguments(args, RECEIVER_MIGHT_BE_VALUE, node->position());
       frame_->EmitPush(v0);
     }
-
 
   } else {
     // --------------------------------------------------------
@@ -6843,10 +6839,9 @@ void StringAddStub::Generate(MacroAssembler* masm) {
 void CallFunctionStub::Generate(MacroAssembler* masm) {
   Label slow;
 
-  // If the receiver might be a value (string, number or boolean) check for this
-  // and box it if it is.
+  // If the receiver might be a value (string, number or boolean) check
+  // for this and box it if it is.
   if (ReceiverMightBeValue()) {
-    // __ break_(__LINE__);   // Alexandre - looks ok to me (plind), removing.
     // Get the receiver from the stack.
     // function, receiver [, arguments]
     Label receiver_is_value, receiver_is_js_object;
@@ -6857,12 +6852,14 @@ void CallFunctionStub::Generate(MacroAssembler* masm) {
 
     // Check if the receiver is a valid JS object.
     __ GetObjectType(a1, a2, a2);
-    __ Branch(&receiver_is_js_object, greater_equal, a2, Operand(FIRST_JS_OBJECT_TYPE));
+    __ Branch(&receiver_is_js_object,
+              ge,
+              a2,
+              Operand(FIRST_JS_OBJECT_TYPE));
 
     // Call the runtime to box the value.
     __ bind(&receiver_is_value);
     // We need natives to execute this.
-    // __ break_(__LINE__);   // Alexandre - looks ok to me (plind), removing.
     __ EnterInternalFrame();
     __ Push(a1);
     __ InvokeBuiltin(Builtins::TO_OBJECT, CALL_JS);
@@ -6870,6 +6867,7 @@ void CallFunctionStub::Generate(MacroAssembler* masm) {
     __ sw(a0, MemOperand(sp, argc_ * kPointerSize));
 
     __ bind(&receiver_is_js_object);
+
   }
 
   // Get the function to call from the stack.
@@ -6890,7 +6888,6 @@ void CallFunctionStub::Generate(MacroAssembler* masm) {
 
   // Slow-case: Non-function called.
   __ bind(&slow);
-  // __ break_(__LINE__);   // Alexandre - looks ok to me (plind), removing.
   // CALL_NON_FUNCTION expects the non-function callee as receiver (instead
   // of the original receiver from the call site).
   __ sw(a1, MemOperand(sp, argc_ * kPointerSize));
