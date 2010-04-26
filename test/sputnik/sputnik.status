@@ -319,5 +319,3 @@ S15.10.7_A3_T1: FAIL_OK
 
 [ $arch == mips ]
 
-# Skip all tests on MIPS.
-*: SKIP

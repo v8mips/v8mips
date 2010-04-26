@@ -274,5 +274,3 @@ chapter15/15.12: UNIMPLEMENTED
 
 [ $arch == mips ]
 
-# Skip all tests on MIPS.
-*: SKIP
