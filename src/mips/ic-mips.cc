@@ -373,7 +373,7 @@ void KeyedStoreIC::GenerateMiss(MacroAssembler* masm) {
 
 
 void StoreIC::GenerateMegamorphic(MacroAssembler* masm) {
-__ break_(__LINE__);
+// __ break_(__LINE__);  //  ....................................... plind, this was hear, trying removal ..........
   // a0    : value
   // a1    : receiver
   // a2    : name
@@ -408,8 +408,50 @@ void StoreIC::GenerateMiss(MacroAssembler* masm) {
 
 
 void StoreIC::GenerateArrayLength(MacroAssembler* masm) {
-  UNIMPLEMENTED_MIPS();
-  __ break_(__LINE__);
+  // ----------- S t a t e -------------
+  //  -- a0    : value
+  //  -- a1    : receiver
+  //  -- a2    : name
+  //  -- ra    : return address
+  // -----------------------------------
+  //
+  // This accepts as a receiver anything JSObject::SetElementsLength accepts
+  // (currently anything except for external and pixel arrays which means
+  // anything with elements of FixedArray type.), but currently is restricted
+  // to JSArray.
+  // Value must be a number, but only smis are accepted as the most common case.
+
+  Label miss;
+
+  Register receiver = a1;
+  Register value = a0;
+  Register scratch = a3;
+
+  // Check that the receiver isn't a smi.
+  __ BranchOnSmi(receiver, &miss);
+
+  // Check that the object is a JS array.
+  __ GetObjectType(receiver, scratch, scratch);
+  __ Branch(&miss, ne, scratch, Operand(JS_ARRAY_TYPE));
+
+  // Check that elements are FixedArray.
+  __ lw(scratch, FieldMemOperand(receiver, JSArray::kElementsOffset));
+  __ GetObjectType(scratch, scratch, scratch);
+  __ Branch(&miss, ne, scratch, Operand(FIXED_ARRAY_TYPE));
+
+  // Check that value is a smi.
+  __ BranchOnNotSmi(value, &miss);
+
+  // Prepare tail call to StoreIC_ArrayLength.
+  __ push(receiver);
+  __ push(value);
+
+  ExternalReference ref = ExternalReference(IC_Utility(kStoreIC_ArrayLength));
+  __ TailCallExternalReference(ref, 2, 1);
+
+  __ bind(&miss);
+
+  GenerateMiss(masm);
 }
 
 #undef __
