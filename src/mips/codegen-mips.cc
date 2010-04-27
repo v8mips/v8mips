@@ -1307,8 +1307,34 @@ void CodeGenerator::VisitDeclaration(Declaration* node) {
   // we need to "declare" it at runtime to make sure it actually
   // exists in the local context.
   if (slot != NULL && slot->type() == Slot::LOOKUP) {
-    UNIMPLEMENTED_MIPS();
-    __ break_(__LINE__);
+    // Variables with a "LOOKUP" slot were introduced as non-locals
+    // during variable resolution and must have mode DYNAMIC.
+    ASSERT(var->is_dynamic());
+    // For now, just do a runtime call.
+    frame_->EmitPush(cp);
+    __ li(a0, Operand(var->name()));
+    frame_->EmitPush(a0);
+    // Declaration nodes are always declared in only two modes.
+    ASSERT(node->mode() == Variable::VAR || node->mode() == Variable::CONST);
+    PropertyAttributes attr = node->mode() == Variable::VAR ? NONE : READ_ONLY;
+    __ li(a0, Operand(Smi::FromInt(attr)));
+    frame_->EmitPush(a0);
+    // Push initial value, if any.
+    // Note: For variables we must not push an initial value (such as
+    // 'undefined') because we may have a (legal) redeclaration and we
+    // must not destroy the current value.
+    if (node->mode() == Variable::CONST) {
+      __ LoadRoot(a0, Heap::kTheHoleValueRootIndex);
+      frame_->EmitPush(a0);
+    } else if (node->fun() != NULL) {
+      LoadAndSpill(node->fun());
+    } else {
+      __ li(a0, Operand(0));  // no initial value!
+      frame_->EmitPush(a0);
+    }
+    frame_->CallRuntime(Runtime::kDeclareContextSlot, 4);
+    // Ignore the return value (declarations are statements).
+    ASSERT(frame_->height() == original_height);
     return;
   }
 
@@ -1317,8 +1343,7 @@ void CodeGenerator::VisitDeclaration(Declaration* node) {
   // If we have a function or a constant, we need to initialize the variable.
   Expression* val = NULL;
   if (node->mode() == Variable::CONST) {
-    UNIMPLEMENTED_MIPS();
-    __ break_(__LINE__);
+    val = new Literal(Factory::the_hole_value());
   } else {
     val = node->fun();  // NULL if we don't have a function.
   }
