@@ -377,8 +377,9 @@ void CodeGenerator::LoadReference(Reference* ref) {
       ref->set_type(Reference::SLOT);
     }
   } else {
-    UNIMPLEMENTED_MIPS();
-      __ break_(__LINE__);
+    // Anything else is a runtime error.
+    LoadAndSpill(e);
+    frame_->CallRuntime(Runtime::kThrowReferenceError, 1);
   }
 }
 
@@ -1380,8 +1381,14 @@ void CodeGenerator::VisitExpressionStatement(ExpressionStatement* node) {
 
 
 void CodeGenerator::VisitEmptyStatement(EmptyStatement* node) {
-  UNIMPLEMENTED_MIPS();
-  __ break_(__LINE__);
+#ifdef DEBUG
+  int original_height = frame_->height();
+#endif
+  VirtualFrame::SpilledScope spilled_scope;
+  Comment cmnt(masm_, "// EmptyStatement");
+  CodeForStatementPosition(node);
+  // nothing to do
+  ASSERT(frame_->height() == original_height);
 }
 
 
