@@ -718,8 +718,125 @@ __ break_(__LINE__);
 
 
 void Builtins::Generate_FunctionApply(MacroAssembler* masm) {
-  UNIMPLEMENTED_MIPS();
-  __ break_(__LINE__);
+  const int kIndexOffset    = -5 * kPointerSize;
+  const int kLimitOffset    = -4 * kPointerSize;
+  const int kArgsOffset     =  2 * kPointerSize;
+  const int kRecvOffset     =  3 * kPointerSize;
+  const int kFunctionOffset =  4 * kPointerSize;
+
+  __ EnterInternalFrame();
+
+  __ lw(a0, MemOperand(fp, kFunctionOffset));  // get the function
+  __ push(a0);
+  __ lw(a0, MemOperand(fp, kArgsOffset));  // get the args array
+  __ push(a0);
+  // Returns (in v0) number of arguments to copy to stack as Smi.
+  __ InvokeBuiltin(Builtins::APPLY_PREPARE, CALL_JS);
+
+  // Check the stack for overflow. We are not trying need to catch
+  // interruptions (e.g. debug break and preemption) here, so the "real stack
+  // limit" is checked.
+  Label okay;
+  __ LoadRoot(a2, Heap::kRealStackLimitRootIndex);
+  // Make a2 the space we have left. The stack might already be overflowed
+  // here which will cause a2 to become negative.
+  __ subu(a2, sp, a2);
+  // Check if the arguments will overflow the stack.
+  __ sll(t0, v0, kPointerSizeLog2 - kSmiTagSize);
+  __ Branch(&okay, gt, a2, Operand(t0));  // Signed comparison.
+
+  // Out of stack space.
+  __ lw(a1, MemOperand(fp, kFunctionOffset));
+  __ push(a1);
+  __ push(v0);
+  __ InvokeBuiltin(Builtins::APPLY_OVERFLOW, CALL_JS);
+  // End of stack check.
+
+  // Push current limit and index.
+  __ bind(&okay);
+  __ push(v0);  // Limit.
+  __ li(a1, Operand(0));  // Initial index.
+  __ push(a1);
+
+  // Change context eagerly to get the right global object if necessary.
+  __ lw(a0, MemOperand(fp, kFunctionOffset));
+  __ lw(cp, FieldMemOperand(a0, JSFunction::kContextOffset));
+
+  // Compute the receiver.
+  Label call_to_object, use_global_receiver, push_receiver;
+  __ lw(a0, MemOperand(fp, kRecvOffset));
+  __ And(t0, a0, Operand(kSmiTagMask));
+  __ Branch(&call_to_object, eq, t0, Operand(zero_reg));
+  __ LoadRoot(a1, Heap::kNullValueRootIndex);
+  __ Branch(&use_global_receiver, eq, a0, Operand(a1));
+  __ LoadRoot(a1, Heap::kUndefinedValueRootIndex);
+  __ Branch(&use_global_receiver, eq, a0, Operand(a1));
+
+  // Check if the receiver is already a JavaScript object.
+  // a0: receiver
+  __ GetObjectType(a0, a1, a1);
+  __ Branch(&call_to_object, lt, a1, Operand(FIRST_JS_OBJECT_TYPE));
+  __ Branch(&push_receiver, le, a1, Operand(LAST_JS_OBJECT_TYPE));
+
+  // Convert the receiver to a regular object.
+  // a0: receiver
+  __ bind(&call_to_object);
+  __ push(a0);
+  __ InvokeBuiltin(Builtins::TO_OBJECT, CALL_JS);
+  __ mov(a0, v0);  // Put object in a0 to match other paths to push_receiver.
+  __ b(&push_receiver);
+
+  // Use the current global receiver object as the receiver.
+  __ bind(&use_global_receiver);
+  const int kGlobalOffset =
+      Context::kHeaderSize + Context::GLOBAL_INDEX * kPointerSize;
+  __ lw(a0, FieldMemOperand(cp, kGlobalOffset));
+  __ lw(a0, FieldMemOperand(a0, GlobalObject::kGlobalContextOffset));
+  __ lw(a0, FieldMemOperand(a0, kGlobalOffset));
+  __ lw(a0, FieldMemOperand(a0, GlobalObject::kGlobalReceiverOffset));
+
+  // Push the receiver.
+  // a0: receiver
+  __ bind(&push_receiver);
+  __ push(a0);
+
+  // Copy all arguments from the array to the stack.
+  Label entry, loop;
+  __ lw(a0, MemOperand(fp, kIndexOffset));
+  __ Branch(&entry);
+
+  // Load the current argument from the arguments array and push it to the
+  // stack.
+  // a0: current argument index
+  __ bind(&loop);
+  __ lw(a1, MemOperand(fp, kArgsOffset));
+  __ push(a1);
+  __ push(a0);
+
+  // Call the runtime to access the property in the arguments array.
+  __ CallRuntime(Runtime::kGetProperty, 2);
+  __ push(v0);
+
+  // Use inline caching to access the arguments.
+  __ lw(a0, MemOperand(fp, kIndexOffset));
+  __ Addu(a0, a0, Operand(1 << kSmiTagSize));
+  __ sw(a0, MemOperand(fp, kIndexOffset));
+
+  // Test if the copy loop has finished copying all the elements from the
+  // arguments object.
+  __ bind(&entry);
+  __ lw(a1, MemOperand(fp, kLimitOffset));
+  __ Branch(&loop, ne, a0, Operand(a1));
+  // Invoke the function.
+  ParameterCount actual(a0);
+  __ sra(a0, a0, kSmiTagSize);
+  __ lw(a1, MemOperand(fp, kFunctionOffset));
+  __ InvokeFunction(a1, actual, CALL_FUNCTION);
+
+  // Tear down the internal frame and remove function, receiver and args.
+  __ LeaveInternalFrame();
+  __ Addu(sp, sp, Operand(3 * kPointerSize));
+  __ Ret();
 }
 
 
