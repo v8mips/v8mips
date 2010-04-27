@@ -448,6 +448,35 @@ MemOperand CodeGenerator::SlotOperand(Slot* slot, Register tmp) {
 }
 
 
+MemOperand CodeGenerator::ContextSlotOperandCheckExtensions(
+    Slot* slot,
+    Register tmp,
+    Register tmp2,
+    JumpTarget* slow) {
+  ASSERT(slot->type() == Slot::CONTEXT);
+  Register context = cp;
+
+  for (Scope* s = scope(); s != slot->var()->scope(); s = s->outer_scope()) {
+    if (s->num_heap_slots() > 0) {
+      if (s->calls_eval()) {
+        // Check that extension is NULL.
+        __ lw(tmp2, ContextOperand(context, Context::EXTENSION_INDEX));
+        slow->Branch(ne, tmp2, Operand(zero_reg));
+      }
+      __ lw(tmp, ContextOperand(context, Context::CLOSURE_INDEX));
+      __ lw(tmp, FieldMemOperand(tmp, JSFunction::kContextOffset));
+      context = tmp;
+    }
+  }
+  // Check that last extension is NULL.
+  __ lw(tmp2, ContextOperand(context, Context::EXTENSION_INDEX));
+  slow->Branch(ne, tmp2, Operand(zero_reg));
+  __ lw(tmp, ContextOperand(context, Context::FCONTEXT_INDEX));
+  return ContextOperand(tmp, slot->index());
+}
+
+
+
 // Loads a value on TOS. If it is a boolean value, the result may have been
 // (partially) translated into branches, or it may have set the condition
 // code register. If force_cc is set, the value is forced to set the
@@ -614,8 +643,26 @@ void CodeGenerator::LoadFromSlot(Slot* slot, TypeofState typeof_state) {
       done.Jump();
 
     } else if (slot->var()->mode() == Variable::DYNAMIC_LOCAL) {
-      UNIMPLEMENTED_MIPS();
-      __ break_(__LINE__);
+      Slot* potential_slot = slot->var()->local_if_not_shadowed()->slot();
+      // Only generate the fast case for locals that rewrite to slots.
+      // This rules out argument loads.
+      if (potential_slot != NULL) {
+        __ lw(v0,
+               ContextSlotOperandCheckExtensions(potential_slot,
+                                                 a1,
+                                                 a2,
+                                                 &slow));
+        if (potential_slot->var()->mode() == Variable::CONST) {
+          __ LoadRoot(a1, Heap::kTheHoleValueRootIndex);
+          __ subu(a1, v0, a1);
+          __ LoadRoot(a0, Heap::kUndefinedValueRootIndex);
+          __ movz(v0, a0, a1);  // Cond move Undef if v0 was 'the hole'.
+        }
+        // There is always control flow to slow from
+        // ContextSlotOperandCheckExtensions so we have to jump around
+        // it.
+        done.Jump();
+      }
     }
 
     slow.Bind();
@@ -635,8 +682,16 @@ void CodeGenerator::LoadFromSlot(Slot* slot, TypeofState typeof_state) {
     __ lw(v0, SlotOperand(slot, a2));
     frame_->EmitPush(v0);
     if (slot->var()->mode() == Variable::CONST) {
-      UNIMPLEMENTED_MIPS();
-      __ break_(__LINE__);
+      // Const slots may contain 'the hole' value (the constant hasn't been
+      // initialized yet) which needs to be converted into the 'undefined'
+      // value.
+      Comment cmnt(masm_, "[ Unhole const");
+      frame_->EmitPop(v0);
+      __ LoadRoot(a0, Heap::kTheHoleValueRootIndex);
+      __ subu(a1, v0, a0);
+      __ LoadRoot(a2, Heap::kUndefinedValueRootIndex);
+      __ movz(v0, a2, a1);  // Conditional move if v0 was the hole.
+      frame_->EmitPush(v0);
     }
   }
 }

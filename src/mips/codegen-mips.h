@@ -270,6 +270,11 @@ class CodeGenerator: public AstVisitor {
 
   MemOperand SlotOperand(Slot* slot, Register tmp);
 
+  MemOperand ContextSlotOperandCheckExtensions(Slot* slot,
+                                               Register tmp,
+                                               Register tmp2,
+                                               JumpTarget* slow);
+
   // Expressions
   MemOperand GlobalObject() const  {
     return ContextOperand(cp, Context::GLOBAL_INDEX);
