@@ -671,7 +671,7 @@ void CodeGenerator::LoadFromGlobalSlotCheckExtensions(Slot* slot,
   if (s->is_eval_scope()) {
     Label next, fast;
     if (!context.is(tmp)) {
-      __ li(tmp, Operand(context));
+      __ mov(tmp, context);
     }
     __ bind(&next);
     // Terminate at global context.
