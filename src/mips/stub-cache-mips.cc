@@ -1074,9 +1074,23 @@ Object* KeyedLoadStubCompiler::CompileLoadField(String* name,
                                                 JSObject* receiver,
                                                 JSObject* holder,
                                                 int index) {
-  UNIMPLEMENTED_MIPS();
-  __ break_(__LINE__);
-  return reinterpret_cast<Object*>(NULL);   // UNIMPLEMENTED RETURN
+  // ----------- S t a t e -------------
+  //  -- ra    : return address
+  //  -- sp[0] : key
+  //  -- sp[4] : receiver
+  // -----------------------------------
+  Label miss;
+
+  __ lw(a2, MemOperand(sp, 0));
+  __ lw(a0, MemOperand(sp, kPointerSize));
+
+  __ Branch(&miss, ne, a2, Operand(Handle<String>(name)));
+
+  GenerateLoadField(receiver, holder, a0, a3, a1, index, name, &miss);
+  __ bind(&miss);
+  GenerateLoadMiss(masm(), Code::KEYED_LOAD_IC);
+
+  return GetCode(FIELD, name);
 }
 
 
