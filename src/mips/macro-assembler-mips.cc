@@ -2112,6 +2112,25 @@ void MacroAssembler::JumpIfNonSmisNotBothSequentialAsciiStrings(
 }
 
 
+void MacroAssembler::JumpIfNotBothSequentialAsciiStrings(Register first,
+                                                         Register second,
+                                                         Register scratch1,
+                                                         Register scratch2,
+                                                         Label* failure) {
+  // Check that neither is a smi.
+  ASSERT_EQ(0, kSmiTag);
+  break_(0x4444);
+  Or(scratch1, first, Operand(second));
+  And(scratch1, scratch1, Operand(kSmiTagMask));
+  Branch(failure, eq, scratch1, Operand(zero_reg));
+  JumpIfNonSmisNotBothSequentialAsciiStrings(first,
+                                             second,
+                                             scratch1,
+                                             scratch2,
+                                             failure);
+}
+
+
 void MacroAssembler::JumpIfBothInstanceTypesAreNotSequentialAscii(
     Register first,
     Register second,

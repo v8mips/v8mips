@@ -650,7 +650,7 @@ class StringCompareStub: public CodeStub {
  public:
   StringCompareStub() { }
 
-  // Compare two flat ASCII strings and returns result in r0.
+  // Compare two flat ASCII strings and returns result in v0.
   // Does not use the stack.
   static void GenerateCompareFlatAsciiStrings(MacroAssembler* masm,
                                               Register left,

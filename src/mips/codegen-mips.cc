@@ -6678,14 +6678,72 @@ void SubStringStub::Generate(MacroAssembler* masm) {
 
 
 void StringCompareStub::GenerateCompareFlatAsciiStrings(MacroAssembler* masm,
-                                                        Register left,
                                                         Register right,
+                                                        Register left,
                                                         Register scratch1,
                                                         Register scratch2,
                                                         Register scratch3,
                                                         Register scratch4) {
-  UNIMPLEMENTED_MIPS();
-  __ break_(__LINE__);
+  Label compare_lengths;
+  // Find minimum length and length difference.
+  __ lw(scratch1, FieldMemOperand(left, String::kLengthOffset));
+  __ lw(scratch2, FieldMemOperand(right, String::kLengthOffset));
+  Register length_delta = v0;   // This will later become result.
+  // __ break_(0x9991);
+  __ subu(length_delta, scratch1, scratch2);
+  Register min_length = scratch1;
+  // set min_length to the smaller of the two string lengths.
+  __ slt(scratch3, scratch1, scratch2);
+  __ movz(min_length, scratch2, scratch3);
+  // __ Branch(&compare_lengths, eq, min_length, Operand(zero_reg));
+
+ // Setup registers left and right to point to character[0].
+  __ Addu(left, left, Operand(SeqAsciiString::kHeaderSize - kHeapObjectTag));
+  __ Addu(right, right, Operand(SeqAsciiString::kHeaderSize - kHeapObjectTag));
+
+  {
+    // Compare loop.
+    Label loop;
+    __ bind(&loop);
+    // Exit if remaining length is 0.
+    __ Branch(&compare_lengths, eq, min_length, Operand(zero_reg));
+    
+    // Load chars.
+    __ lbu(scratch2, MemOperand(left));
+    __ addiu(left, left, 1);
+    __ lbu(scratch4, MemOperand(right));
+    __ addiu(right, right, 1);
+    
+    // Repeat loop while chars are equal. Use Branch-delay slot.
+    __ Branch(false, &loop, eq, scratch2, Operand(scratch4));
+    __ addiu(min_length, min_length, -1);  // In delay-slot.
+  }
+
+  // We fall thru here when the chars are not equal.
+  // The result is <, =, >,  based on non-matching char, or 
+  // non-matching length.
+  // Re-purpose the length_delta reg for char diff.
+  Register result = length_delta;   // This is v0.
+  __ subu(result, scratch2, scratch4);
+  
+  // We branch here when all 'min-length' chars are equal, and there is
+  // a string-length difference in 'result' reg.
+  // We fall in here when there is a character difference in 'result'.
+  
+  // A zero 'difference' is directly returned as EQUAL.
+  ASSERT(Smi::FromInt(EQUAL) == static_cast<Smi*>(0));
+  
+  __ bind(&compare_lengths);
+  
+  // Branchless code converts negative value to LESS,
+  // postive value to GREATER.
+  __ li(scratch1, Operand(Smi::FromInt(LESS)));
+  __ slt(scratch2, result, zero_reg);
+  __ movn(result, scratch1, scratch2);
+  __ li(scratch1, Operand(Smi::FromInt(GREATER)));
+  __ slt(scratch2, zero_reg, result);
+  __ movn(result, scratch1, scratch2);
+  __ Ret();  // Result is (in) register v0.
 }
 
 
@@ -6708,10 +6766,14 @@ void StringCompareStub::Generate(MacroAssembler* masm) {
   __ Ret();
 
   __ bind(&not_same);
-  // TODO(MIPS): Implement flat ascii compare code.
-  // But for now, fall thru to runtime.
-  // UNIMPLEMENTED_MIPS();
-  // __ break_(__LINE__);
+  
+  // Check that both objects are sequential ascii strings.
+  __ JumpIfNotBothSequentialAsciiStrings(a0, a1, a2, a3, &runtime);
+
+  // Compare flat ascii strings natively. Remove arguments from stack first.
+  __ IncrementCounter(&Counters::string_compare_native, 1, a2, a3);
+  __ Addu(sp, sp, Operand(2 * kPointerSize));
+  GenerateCompareFlatAsciiStrings(masm, a0, a1, a2, a3, t0, t1);
 
   __ bind(&runtime);
   __ TailCallRuntime(Runtime::kStringCompare, 2, 1);

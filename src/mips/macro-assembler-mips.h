@@ -81,7 +81,7 @@ class MacroAssembler: public Assembler {
 
 // * Prototypes for functions with a target.
 
-// Cases when relocation may be needed. 
+// Cases when relocation may be needed.
 #define DECLARE_RELOC_PROTOTYPE(Name, target_type) \
   void Name(target_type target, RelocInfo::Mode rmode, bool ProtectBranchDelaySlot = true); \
   inline void Name(bool ProtectBranchDelaySlot, target_type target, RelocInfo::Mode rmode) { \
@@ -92,7 +92,7 @@ class MacroAssembler: public Assembler {
     Name(target, rmode, COND_ARGS, ProtectBranchDelaySlot); \
   }
 
-// Cases when relocation is not needed. 
+// Cases when relocation is not needed.
 #define DECLARE_NORELOC_PROTOTYPE(Name, target_type) \
   void Name(target_type target, bool ProtectBranchDelaySlot = true); \
   inline void Name(bool ProtectBranchDelaySlot, target_type target) { \
@@ -578,6 +578,14 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
                                                   Register scratch1,
                                                   Register scratch2,
                                                   Label* failure);
+
+  // Test that both first and second are sequential ASCII strings.
+  // Check that they are non-smis.
+  void JumpIfNotBothSequentialAsciiStrings(Register first,
+                                           Register second,
+                                           Register scratch1,
+                                           Register scratch2,
+                                           Label* failure);
 
  private:
   List<Unresolved> unresolved_;
