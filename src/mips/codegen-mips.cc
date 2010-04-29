@@ -4043,8 +4043,16 @@ void CodeGenerator::VisitCompareOperation(CompareOperation* node) {
       cc_reg_ = eq;
 
     } else if (check->Equals(Heap::function_symbol())) {
-      UNIMPLEMENTED_MIPS();
-      __ break_(__LINE__);
+      __ And(t1, condReg1, Operand(kSmiTagMask));
+      false_target()->Branch(eq, t1, Operand(zero_reg));
+
+      Register map_reg = a2;
+      __ GetObjectType(condReg1, map_reg, condReg1);
+      true_target()->Branch(eq, condReg1, Operand(JS_FUNCTION_TYPE));
+      // Regular expressions are callable so typeof == 'function'.
+      __ lbu(condReg1, FieldMemOperand(map_reg, Map::kInstanceTypeOffset));
+      __ li(condReg2, Operand(JS_REGEXP_TYPE));
+      cc_reg_ = eq;
 
     } else if (check->Equals(Heap::object_symbol())) {
       __ And(t1, condReg1, Operand(kSmiTagMask));
@@ -6707,34 +6715,34 @@ void StringCompareStub::GenerateCompareFlatAsciiStrings(MacroAssembler* masm,
     __ bind(&loop);
     // Exit if remaining length is 0.
     __ Branch(&compare_lengths, eq, min_length, Operand(zero_reg));
-    
+
     // Load chars.
     __ lbu(scratch2, MemOperand(left));
     __ addiu(left, left, 1);
     __ lbu(scratch4, MemOperand(right));
     __ addiu(right, right, 1);
-    
+
     // Repeat loop while chars are equal. Use Branch-delay slot.
     __ Branch(false, &loop, eq, scratch2, Operand(scratch4));
     __ addiu(min_length, min_length, -1);  // In delay-slot.
   }
 
   // We fall thru here when the chars are not equal.
-  // The result is <, =, >,  based on non-matching char, or 
+  // The result is <, =, >,  based on non-matching char, or
   // non-matching length.
   // Re-purpose the length_delta reg for char diff.
   Register result = length_delta;   // This is v0.
   __ subu(result, scratch2, scratch4);
-  
+
   // We branch here when all 'min-length' chars are equal, and there is
   // a string-length difference in 'result' reg.
   // We fall in here when there is a character difference in 'result'.
-  
+
   // A zero 'difference' is directly returned as EQUAL.
   ASSERT(Smi::FromInt(EQUAL) == static_cast<Smi*>(0));
-  
+
   __ bind(&compare_lengths);
-  
+
   // Branchless code converts negative value to LESS,
   // postive value to GREATER.
   __ li(scratch1, Operand(Smi::FromInt(LESS)));
@@ -6766,7 +6774,7 @@ void StringCompareStub::Generate(MacroAssembler* masm) {
   __ Ret();
 
   __ bind(&not_same);
-  
+
   // Check that both objects are sequential ascii strings.
   __ JumpIfNotBothSequentialAsciiStrings(a0, a1, a2, a3, &runtime);
 
