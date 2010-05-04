@@ -330,7 +330,7 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
   }
 
 
-  // ---------------------------------------------------------------------------
+  // -------------------------------------------------------------------------
   // Activation frames
 
   void EnterInternalFrame() { EnterFrame(StackFrame::INTERNAL); }
@@ -358,7 +358,7 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
   void ReturnFromAlignedCall();
 
 
-  // ---------------------------------------------------------------------------
+  // -------------------------------------------------------------------------
   // JavaScript invokes
 
   // Invoke the JavaScript function code by either calling or jumping.
@@ -385,7 +385,7 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
 
 
 #ifdef ENABLE_DEBUGGER_SUPPORT
-  // ---------------------------------------------------------------------------
+  // -------------------------------------------------------------------------
   // Debugger Support
 
   void SaveRegistersToMemory(RegList regs);
@@ -398,7 +398,7 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
 #endif
 
 
-  // ---------------------------------------------------------------------------
+  // -------------------------------------------------------------------------
   // Exception handling
 
   // Push a new try handler and link into try handler chain.
@@ -411,7 +411,7 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
   void PopTryHandler();
 
 
-  // ---------------------------------------------------------------------------
+  // -------------------------------------------------------------------------
   // Support functions.
 
   // Try to get function prototype of a function and puts the value in
@@ -455,7 +455,7 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
   void IllegalOperation(int num_arguments);
 
 
-  // ---------------------------------------------------------------------------
+  // -------------------------------------------------------------------------
   // Runtime calls
 
   // Call a code stub.
@@ -509,13 +509,13 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
   Handle<Object> CodeObject() { return code_object_; }
 
 
-  // ---------------------------------------------------------------------------
+  // -------------------------------------------------------------------------
   // Stack limit support
 
   void StackLimitCheck(Label* on_stack_limit_hit);
 
 
-  // ---------------------------------------------------------------------------
+  // -------------------------------------------------------------------------
   // StatsCounter support
 
   void SetCounter(StatsCounter* counter, int value,
@@ -526,7 +526,7 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
                         Register scratch1, Register scratch2);
 
 
-  // ---------------------------------------------------------------------------
+  // -------------------------------------------------------------------------
   // Debugging
 
   // Calls Abort(msg) if the condition cc is not satisfied.
@@ -545,7 +545,7 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
   void set_allow_stub_calls(bool value) { allow_stub_calls_ = value; }
   bool allow_stub_calls() { return allow_stub_calls_; }
 
-  // ---------------------------------------------------------------------------
+  // -------------------------------------------------------------------------
   // Smi utilities
 
   // Jump if either of the registers contain a non-smi.
@@ -553,7 +553,7 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
   // Jump if either of the registers contain a smi.
   void JumpIfEitherSmi(Register reg1, Register reg2, Label* on_either_smi);
 
-  // ---------------------------------------------------------------------------
+  // -------------------------------------------------------------------------
   // String utilities
 
   // Checks if both instance types are sequential ASCII strings and jumps to

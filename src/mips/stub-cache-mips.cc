@@ -209,7 +209,10 @@ static void GenerateStringCheck(MacroAssembler* masm,
   __ lbu(scratch1, FieldMemOperand(scratch1, Map::kInstanceTypeOffset));
   __ And(scratch2, scratch1, Operand(kIsNotStringMask));
   // The cast is to resolve the overload for the argument of 0x0.
-  __ Branch(non_string_object, ne, scratch2, Operand(static_cast<int32_t>(kStringTag)));
+  __ Branch(non_string_object,
+            ne,
+            scratch2,
+            Operand(static_cast<int32_t>(kStringTag)));
 }
 
 

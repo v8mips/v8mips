@@ -1452,7 +1452,7 @@ void MacroAssembler::AllocateHeapNumber(Register result,
   // __ Or(result, result, Operand(1));  // Tag it back.
 
 #ifdef DEBUG
-////// TODO(MIPS.6)
+//  // TODO(MIPS.6)
 //  // Check that the result is 8-byte aligned.
 //  andi(scratch2, result, Operand(7));
 //  xori(scratch2, scratch2, Operand(1));  // Fail if the tag is missing.

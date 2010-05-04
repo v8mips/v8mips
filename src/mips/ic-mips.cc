@@ -373,7 +373,6 @@ void KeyedStoreIC::GenerateMiss(MacroAssembler* masm) {
 
 
 void StoreIC::GenerateMegamorphic(MacroAssembler* masm) {
-// __ break_(__LINE__);  //  ....................................... plind, this was hear, trying removal ..........
   // a0    : value
   // a1    : receiver
   // a2    : name

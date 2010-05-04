@@ -169,7 +169,7 @@ class Simulator {
   double get_fpu_register_double(int fpureg) const;
   void set_fpu_ccr_bit(uint32_t cc, bool value);
   bool test_fpu_ccr_bit(uint32_t cc);
-  
+
   // Special case of set_register and get_register to access the raw PC value.
   void set_pc(int32_t value);
   int32_t get_pc() const;

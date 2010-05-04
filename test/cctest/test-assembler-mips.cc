@@ -591,7 +591,7 @@ TEST(MIPS7) {
 
   __ bind(&less_than);
   __ Addu(t0, zero_reg, Operand(1));
-  __ sw(t0, MemOperand(a0, OFFSET_OF(T, result)) ); // Set true.
+  __ sw(t0, MemOperand(a0, OFFSET_OF(T, result)) );  // Set true.
 
 
   // This test-case needs additional tests, this is not quite sufficient.

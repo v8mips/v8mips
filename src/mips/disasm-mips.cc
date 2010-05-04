@@ -702,7 +702,7 @@ void Decoder::DecodeTypeImmediate(Instruction* instr) {
         default:
           UNREACHABLE();
       };
-      break; // Case COP1.
+      break;  // Case COP1.
     case REGIMM:
       switch (instr->RtFieldRaw()) {
         case BLTZ:

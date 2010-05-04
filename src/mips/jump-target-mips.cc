@@ -43,7 +43,7 @@ namespace internal {
 // BRANCH_ARGS_CHECK checks that conditional jump arguments are correct.
 #define BRANCH_ARGS_CHECK(cond, rs, rt) ASSERT(                                \
     (cond == cc_always && rs.is(zero_reg) && rt.rm().is(zero_reg)) ||          \
-    (cond != cc_always && (!rs.is(zero_reg) || !rt.rm().is(zero_reg)))) 
+    (cond != cc_always && (!rs.is(zero_reg) || !rt.rm().is(zero_reg))))
 
 
 void JumpTarget::DoJump() {

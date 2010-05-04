@@ -868,7 +868,6 @@ void CodeGenerator::ToBoolean(JumpTarget* true_target,
   false_target->Branch(eq, t0, Operand(t3), no_hint);
 
   // Check if the value is a smi.
-  // __ cmp(r0, Operand(Smi::FromInt(0)));             // plind:
   false_target->Branch(eq, t0, Operand(Smi::FromInt(0)), no_hint);
   __ And(t4, t0, Operand(kSmiTagMask));
   true_target->Branch(eq, t4, Operand(zero_reg), no_hint);
@@ -877,9 +876,7 @@ void CodeGenerator::ToBoolean(JumpTarget* true_target,
   frame_->EmitPush(t0);
   frame_->CallRuntime(Runtime::kToBool, 1);
   // Convert the result (v0) to a condition code.
-  //  __ cmp(r0, ip);                                 // plind
-  // __ LoadRoot(s6, Heap::kFalseValueRootIndex);     // plind
-  __ LoadRoot(condReg1, Heap::kFalseValueRootIndex);  // plind: highly suspect
+  __ LoadRoot(condReg1, Heap::kFalseValueRootIndex);
   __ mov(condReg2, v0);
 
   cc_reg_ = ne;
@@ -2062,7 +2059,7 @@ void CodeGenerator::VisitForInStatement(ForInStatement* node) {
   // Get the i'th entry of the array.
   __ lw(a2, frame_->ElementAt(2));
   __ Addu(a2, a2, Operand(FixedArray::kHeaderSize - kHeapObjectTag));
-  __ sll(t2, a0, kPointerSizeLog2 - kSmiTagSize); // Scale index.
+  __ sll(t2, a0, kPointerSizeLog2 - kSmiTagSize);  // Scale index.
   __ addu(t2, t2, a2);  // Base + index.
   __ lw(a3, MemOperand(t2));
 
@@ -2446,6 +2443,7 @@ void CodeGenerator::InstantiateFunction(
     Handle<SharedFunctionInfo> function_info) {
   VirtualFrame::SpilledScope spilled_scope;
   __ li(a0, Operand(function_info));
+  // ....................................................... Alexandre ... should this be in or out? 
   // Use the fast case closure allocation code that allocates in new
   // space for nested functions that don't need literals cloning.
 //  if (scope()->is_function_scope() && function_info->num_literals() == 0) {
@@ -3705,7 +3703,7 @@ void CodeGenerator::VisitUnaryOperation(UnaryOperation* node) {
         // Smi check.
         JumpTarget continue_label;
         __ mov(v0, a0);   // In case Smi test passes, move param to result.
-                          // TODO: move this instr into branch delay slot.
+                          // TODO(plind): move this instr into branch delay slot.......
         __ And(t0, a0, Operand(kSmiTagMask));
         continue_label.Branch(eq, t0, Operand(zero_reg));
         frame_->EmitPush(a0);
@@ -3772,7 +3770,7 @@ void CodeGenerator::VisitCountOperation(CountOperation* node) {
 
     // Perform optimistic increment/decrement and check for overflow.
     // If we don't overflow we are done.
-    // plind -- I think there is an overflow window here if entry value already Min or Max ..............
+    // TDOD(plind) -- There is an overflow window here if entry value already Min or Max .........
     if (is_increment) {
       __ Addu(v0, a0, Operand(Smi::FromInt(1)));
       exit.Branch(ne, a0, Operand(Smi::kMaxValue), no_hint);
@@ -4847,7 +4845,6 @@ static void EmitTwoNonNanDoubleComparison(MacroAssembler* masm, Condition cc) {
   __ bind(&less_than);
   __ li(v0, Operand(LESS));
   __ Ret();
-
 }
 
 
@@ -5080,7 +5077,7 @@ void CompareStub::Generate(MacroAssembler* masm) {
   // Never falls through to here.
 
   __ bind(&slow);
-  // TOCHECK: Check push order. In Comparison() we pop in the reverse order.......................
+  // TOCHECK: Check push order. In Comparison() we pop in the reverse order.................Alexandre....
   __ MultiPush(a1.bit() | a0.bit());
   // Figure out which native to call and setup the arguments.
   Builtins::JavaScript native;
@@ -5489,11 +5486,14 @@ void ArgumentsAccessStub::GenerateReadLength(MacroAssembler* masm) {
   Label adaptor;
   __ lw(a2, MemOperand(fp, StandardFrameConstants::kCallerFPOffset));
   __ lw(a3, MemOperand(a2, StandardFrameConstants::kContextOffset));
-  __ Branch(&adaptor, eq, a3, Operand(Smi::FromInt(StackFrame::ARGUMENTS_ADAPTOR)));
+  __ Branch(&adaptor,
+            eq,
+            a3,
+            Operand(Smi::FromInt(StackFrame::ARGUMENTS_ADAPTOR)));
 
   // Nothing to do: The formal number of parameters has already been
   // passed in register a0 by calling function. Just return it.
-  __ mov(v0,a0);
+  __ mov(v0, a0);
   __ Ret();
 
   // Arguments adaptor case: Read the arguments length from the
@@ -5518,7 +5518,10 @@ void ArgumentsAccessStub::GenerateReadElement(MacroAssembler* masm) {
   Label adaptor;
   __ lw(a2, MemOperand(fp, StandardFrameConstants::kCallerFPOffset));
   __ lw(a3, MemOperand(a2, StandardFrameConstants::kContextOffset));
-  __ Branch(&adaptor, eq, a3, Operand(Smi::FromInt(StackFrame::ARGUMENTS_ADAPTOR)));
+  __ Branch(&adaptor,
+            eq,
+            a3,
+            Operand(Smi::FromInt(StackFrame::ARGUMENTS_ADAPTOR)));
 
   // Check index against formal parameters count limit passed in
   // through register a0. Use unsigned comparison to get negative
@@ -6572,7 +6575,10 @@ void StringStubBase::GenerateTwoCharacterSymbolTableProbe(MacroAssembler* masm,
   // different hash algorithm. Don't try to look for these in the symbol table.
   Label not_array_index;
   __ Subu(scratch, c1, Operand(static_cast<int>('0')));
-  __ Branch(&not_array_index, Ugreater, scratch, Operand(static_cast<int>('9' - '0')));
+  __ Branch(&not_array_index,
+            Ugreater,
+            scratch,
+            Operand(static_cast<int>('9' - '0')));
   __ Subu(scratch, c2, Operand(static_cast<int>('0')));
 
   // If check failed combine both characters into single halfword.
@@ -6583,7 +6589,10 @@ void StringStubBase::GenerateTwoCharacterSymbolTableProbe(MacroAssembler* masm,
   __ Branch(&tmp, Ugreater, scratch, Operand(static_cast<int>('9' - '0')));
   __ Or(c1, c1, scratch1);
   __ bind(&tmp);
-  __ Branch(not_found, Uless_equal, scratch, Operand(static_cast<int>('9' - '0')));
+  __ Branch(not_found,
+            Uless_equal,
+            scratch,
+            Operand(static_cast<int>('9' - '0')));
 
   __ bind(&not_array_index);
   // Calculate the two character string hash.
@@ -6760,7 +6769,7 @@ void StringCompareStub::GenerateCompareFlatAsciiStrings(MacroAssembler* masm,
   __ movz(min_length, scratch2, scratch3);
   // __ Branch(&compare_lengths, eq, min_length, Operand(zero_reg));
 
- // Setup registers left and right to point to character[0].
+  // Setup registers left and right to point to character[0].
   __ Addu(left, left, Operand(SeqAsciiString::kHeaderSize - kHeapObjectTag));
   __ Addu(right, right, Operand(SeqAsciiString::kHeaderSize - kHeapObjectTag));
 
@@ -7134,7 +7143,6 @@ void CallFunctionStub::Generate(MacroAssembler* masm) {
     __ sw(a0, MemOperand(sp, argc_ * kPointerSize));
 
     __ bind(&receiver_is_js_object);
-
   }
 
   // Get the function to call from the stack.
