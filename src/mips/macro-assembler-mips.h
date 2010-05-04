@@ -83,12 +83,22 @@ class MacroAssembler: public Assembler {
 
 // Cases when relocation may be needed.
 #define DECLARE_RELOC_PROTOTYPE(Name, target_type) \
-  void Name(target_type target, RelocInfo::Mode rmode, bool ProtectBranchDelaySlot = true); \
-  inline void Name(bool ProtectBranchDelaySlot, target_type target, RelocInfo::Mode rmode) { \
+  void Name(target_type target, \
+            RelocInfo::Mode rmode, \
+            bool ProtectBranchDelaySlot = true); \
+  inline void Name(bool ProtectBranchDelaySlot, \
+                   target_type target, \
+                   RelocInfo::Mode rmode) { \
     Name(target, rmode, ProtectBranchDelaySlot); \
   } \
-  void Name(target_type target, RelocInfo::Mode rmode, COND_TYPED_ARGS, bool ProtectBranchDelaySlot = true); \
-  inline void Name(bool ProtectBranchDelaySlot, target_type target, RelocInfo::Mode rmode, COND_TYPED_ARGS) { \
+  void Name(target_type target, \
+            RelocInfo::Mode rmode, \
+            COND_TYPED_ARGS, \
+            bool ProtectBranchDelaySlot = true); \
+  inline void Name(bool ProtectBranchDelaySlot, \
+                   target_type target, \
+                   RelocInfo::Mode rmode, \
+                   COND_TYPED_ARGS) { \
     Name(target, rmode, COND_ARGS, ProtectBranchDelaySlot); \
   }
 
@@ -98,8 +108,12 @@ class MacroAssembler: public Assembler {
   inline void Name(bool ProtectBranchDelaySlot, target_type target) { \
     Name(target, ProtectBranchDelaySlot); \
   } \
-  void Name(target_type target, COND_TYPED_ARGS, bool ProtectBranchDelaySlot = true); \
-  inline void Name(bool ProtectBranchDelaySlot, target_type target, COND_TYPED_ARGS) { \
+  void Name(target_type target, \
+            COND_TYPED_ARGS, \
+            bool ProtectBranchDelaySlot = true); \
+  inline void Name(bool ProtectBranchDelaySlot, \
+                   target_type target, \
+                   COND_TYPED_ARGS) { \
     Name(target, COND_ARGS, ProtectBranchDelaySlot); \
   }
 

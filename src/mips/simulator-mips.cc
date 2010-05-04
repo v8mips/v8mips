@@ -908,7 +908,7 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
   uint64_t u64hilo = 0;
 
   // ALU output
-  // It should not be used as is. Instructions using it should always 
+  // It should not be used as is. Instructions using it should always
   // initialize it first.
   int32_t alu_out = 0x12345678;
 

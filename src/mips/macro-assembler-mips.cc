@@ -64,7 +64,9 @@ void MacroAssembler::Name(intptr_t target, RelocInfo::Mode rmode, \
                           bool ProtectBranchDelaySlot) { \
   Name(Operand(target, rmode), ProtectBranchDelaySlot); \
 } \
-void MacroAssembler::Name(intptr_t target, RelocInfo::Mode rmode, COND_TYPED_ARGS, \
+void MacroAssembler::Name(intptr_t target, \
+                          RelocInfo::Mode rmode, \
+                          COND_TYPED_ARGS, \
                           bool ProtectBranchDelaySlot) { \
   Name(Operand(target, rmode), COND_ARGS, ProtectBranchDelaySlot); \
 }
@@ -74,19 +76,30 @@ void MacroAssembler::Name(byte* target, RelocInfo::Mode rmode, \
                           bool ProtectBranchDelaySlot) { \
   Name(reinterpret_cast<intptr_t>(target), rmode, ProtectBranchDelaySlot); \
 } \
-void MacroAssembler::Name(byte* target, RelocInfo::Mode rmode, COND_TYPED_ARGS, \
+void MacroAssembler::Name(byte* target, \
+                          RelocInfo::Mode rmode, \
+                          COND_TYPED_ARGS, \
                           bool ProtectBranchDelaySlot) { \
-  Name(reinterpret_cast<intptr_t>(target), rmode, COND_ARGS, ProtectBranchDelaySlot); \
+  Name(reinterpret_cast<intptr_t>(target), \
+       rmode, \
+       COND_ARGS, \
+       ProtectBranchDelaySlot); \
 }
 
 #define CODE_TARGET_BODY(Name) \
 void MacroAssembler::Name(Handle<Code> target, RelocInfo::Mode rmode, \
                           bool ProtectBranchDelaySlot) { \
-  Name(reinterpret_cast<intptr_t>(target.location()), rmode, ProtectBranchDelaySlot); \
+  Name(reinterpret_cast<intptr_t>(target.location()), \
+       rmode, ProtectBranchDelaySlot); \
 } \
-void MacroAssembler::Name(Handle<Code> target, RelocInfo::Mode rmode, COND_TYPED_ARGS, \
+void MacroAssembler::Name(Handle<Code> target, \
+                          RelocInfo::Mode rmode, \
+                          COND_TYPED_ARGS, \
                           bool ProtectBranchDelaySlot) { \
-  Name(reinterpret_cast<intptr_t>(target.location()), rmode, COND_ARGS, ProtectBranchDelaySlot); \
+  Name(reinterpret_cast<intptr_t>(target.location()), \
+       rmode, \
+       COND_ARGS, \
+       ProtectBranchDelaySlot); \
 }
 
 REGISTER_TARGET_BODY(Jump)

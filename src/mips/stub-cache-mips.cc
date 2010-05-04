@@ -851,8 +851,6 @@ Object* CallStubCompiler::CompileCallGlobal(JSObject* object,
     __ sw(a3, MemOperand(sp, argc * kPointerSize));
   }
 
-  __ nop(); __ nop(); __ nop(); __ nop(); __ nop(); __ nop(); __ nop();
-
   // Setup the context (function already in r1).
   __ lw(cp, FieldMemOperand(a1, JSFunction::kContextOffset));
 

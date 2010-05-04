@@ -618,7 +618,8 @@ void Builtins::Generate_FunctionCall(MacroAssembler* masm) {
     __ bind(&convert_to_object);
     __ EnterInternalFrame();  // In order to preserve argument count.
     // Preserve shifted_actual_args and function_location over the builtin call.
-    __ MultiPush(a0.bit() | shifted_actual_args.bit() | function_location.bit());
+    __ MultiPush(a0.bit() |
+        shifted_actual_args.bit() | function_location.bit());
     __ mov(a0, shifted_actual_args);   // Setup a0 for the builtin.
 
     __ Push(a2);

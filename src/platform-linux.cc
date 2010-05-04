@@ -91,7 +91,7 @@ uint64_t OS::CpuFeaturesImpliedByPlatform() {
   return 1u << VFP3;
 #elif CAN_USE_ARMV7_INSTRUCTIONS
   return 1u << ARMv7;
-#elif (defined(__mips_hard_float) && __mips_hard_float != 0)
+#elif(defined(__mips_hard_float) && __mips_hard_float != 0)
     // Here gcc is telling us that we are on an MIPS and gcc is assuming that we
     // have FPU instructions.  If gcc can assume it then so can we.
     return 1u << FPU;
@@ -170,13 +170,13 @@ bool OS::MipsCpuHasFeature(CpuFeature feature) {
   // on Linux, it's reading from a (non-mmap-able)
   // character special device.
 
-  // -----------------------------------------------------------------------------------------------
+  // ---------------------------------------------------------------------------
 
   // HACK plind, due to issue 6, force FPU test true for now, with side-
   // effect of using kernel FPU emulation.
   return true;
 
-  // -----------------------------------------------------------------------------------------------
+  // ---------------------------------------------------------------------------
 
   switch (feature) {
     case FPU:
