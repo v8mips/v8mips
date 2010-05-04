@@ -31,9 +31,14 @@
 #include "checks.h"
 
 // UNIMPLEMENTED_ macro for MIPS.
+#ifdef DEBUG
 #define UNIMPLEMENTED_MIPS()                                                  \
   v8::internal::PrintF("%s, \tline %d: \tfunction %s not implemented. \n",    \
                        __FILE__, __LINE__, __func__)
+#else
+#define UNIMPLEMENTED_MIPS()
+#endif
+
 #define UNSUPPORTED_MIPS() v8::internal::PrintF("Unsupported instruction.\n")
 
 

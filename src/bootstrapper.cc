@@ -1135,9 +1135,7 @@ bool Genesis::InstallNatives() {
        i < Natives::GetBuiltinsCount();
        i++) {
     Vector<const char> name = Natives::GetScriptName(i);
-    printf("Compiling builtin %d...\n", i);
     if (!CompileBuiltin(i)) return false;
-    printf("done.\n");
     // TODO(ager): We really only need to install the JS builtin
     // functions on the builtins object after compiling and running
     // runtime.js.
