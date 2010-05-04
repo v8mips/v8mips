@@ -1112,12 +1112,36 @@ void HeapObject::ClearOverflow() {
 
 
 double HeapNumber::value() {
+#ifndef V8_TARGET_ARCH_MIPS
   return READ_DOUBLE_FIELD(this, kValueOffset);
+#else // V8_TARGET_ARCH_MIPS
+  // Work-around prevents gcc from using load-double (mips ldc1) on
+  // (possibly) unaligned HeapNumber::value.
+  union conversion {
+    double d;
+    uint32_t u[2];
+  } c;
+  c.u[0] = (*reinterpret_cast<uint32_t*>(FIELD_ADDR(this, kValueOffset)));
+  c.u[1] = (*reinterpret_cast<uint32_t*>(FIELD_ADDR(this, kValueOffset + 4)));
+  return c.d;
+#endif // V8_TARGET_ARCH_MIPS
 }
 
 
 void HeapNumber::set_value(double value) {
+#ifndef V8_TARGET_ARCH_MIPS
   WRITE_DOUBLE_FIELD(this, kValueOffset, value);
+#else // V8_TARGET_ARCH_MIPS
+  // Work-around prevents gcc from using store-double (mips sdc1) on
+  // (possibly) unaligned HeapNumber::value.
+  union conversion {
+    double d;
+    uint32_t u[2];
+  } c;
+  c.d = value;
+  (*reinterpret_cast<uint32_t*>(FIELD_ADDR(this, kValueOffset))) = c.u[0];
+  (*reinterpret_cast<uint32_t*>(FIELD_ADDR(this, kValueOffset + 4))) = c.u[1];
+#endif // V8_TARGET_ARCH_MIPS
 }
 
 
