@@ -125,7 +125,7 @@ void Builtins::Generate_JSConstructCall(MacroAssembler* masm) {
   __ li(a2, Operand(0));
   __ GetBuiltinEntry(a3, Builtins::CALL_NON_FUNCTION_AS_CONSTRUCTOR);
   // ra-dev: Already inside builtin, so don't need args slots?
-  __ break_(0x94);
+  // __ break_(__LINE__);
   __ JumpToBuiltin(Handle<Code>(builtin(ArgumentsAdaptorTrampoline)),
           RelocInfo::CODE_TARGET);
 }
@@ -656,7 +656,6 @@ void Builtins::Generate_FunctionCall(MacroAssembler* masm) {
   // a0: actual number of arguments
   // a1: function
   __ bind(&non_function);
-__ break_(__LINE__);
   // Restore the function in case it has been modified.
   __ sw(a1, MemOperand(t1));
   // Clear a1 to indicate a non-function being called.
