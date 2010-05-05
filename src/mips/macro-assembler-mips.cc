@@ -767,6 +767,8 @@ void MacroAssembler::Branch(Label* L, Condition cond, Register rs,
                             const Operand& rt,
                             bool ProtectBranchDelaySlot) {
   BRANCH_ARGS_CHECK(cond, rs, rt);
+
+  int32_t offset;
   Register r2 = no_reg;
   Register scratch = at;
   if (rt.is_reg()) {
@@ -776,59 +778,74 @@ void MacroAssembler::Branch(Label* L, Condition cond, Register rs,
     li(r2, rt);
   }
 
-  // We use branch_offset as an argument for the branch instructions to be sure
-  // it is called just before generating the branch instruction, as needed.
+  // Be careful to always use shifted_branch_offset only just before the branch
+  // instruction, as the location will be remember for patching the target.
 
   switch (cond) {
     case cc_always:
-      b(shifted_branch_offset(L, false));
+      offset = shifted_branch_offset(L, false);
+      b(offset);
       break;
     case eq:
-      beq(rs, r2, shifted_branch_offset(L, false));
+      offset = shifted_branch_offset(L, false);
+      beq(rs, r2, offset);
       break;
     case ne:
-      bne(rs, r2, shifted_branch_offset(L, false));
+      offset = shifted_branch_offset(L, false);
+      bne(rs, r2, offset);
       break;
 
     // Signed comparison
     case greater:
       slt(scratch, r2, rs);
-      bne(scratch, zero_reg, shifted_branch_offset(L, false));
+      offset = shifted_branch_offset(L, false);
+      bne(scratch, zero_reg, offset);
       break;
     case greater_equal:
       slt(scratch, rs, r2);
-      beq(scratch, zero_reg, shifted_branch_offset(L, false));
+      offset = shifted_branch_offset(L, false);
+      beq(scratch, zero_reg, offset);
       break;
     case less:
       slt(scratch, rs, r2);
-      bne(scratch, zero_reg, shifted_branch_offset(L, false));
+      offset = shifted_branch_offset(L, false);
+      bne(scratch, zero_reg, offset);
       break;
     case less_equal:
       slt(scratch, r2, rs);
-      beq(scratch, zero_reg, shifted_branch_offset(L, false));
+      offset = shifted_branch_offset(L, false);
+      beq(scratch, zero_reg, offset);
       break;
 
     // Unsigned comparison.
     case Ugreater:
       sltu(scratch, r2, rs);
-      bne(scratch, zero_reg, shifted_branch_offset(L, false));
+      offset = shifted_branch_offset(L, false);
+      bne(scratch, zero_reg, offset);
       break;
     case Ugreater_equal:
       sltu(scratch, rs, r2);
-      beq(scratch, zero_reg, shifted_branch_offset(L, false));
+      offset = shifted_branch_offset(L, false);
+      beq(scratch, zero_reg, offset);
       break;
     case Uless:
       sltu(scratch, rs, r2);
-      bne(scratch, zero_reg, shifted_branch_offset(L, false));
+      offset = shifted_branch_offset(L, false);
+      bne(scratch, zero_reg, offset);
       break;
     case Uless_equal:
       sltu(scratch, r2, rs);
-      beq(scratch, zero_reg, shifted_branch_offset(L, false));
+      offset = shifted_branch_offset(L, false);
+      beq(scratch, zero_reg, offset);
       break;
 
     default:
       UNREACHABLE();
   }
+
+  // Check that offset could actually hold on an int16_t.
+  ASSERT(is_int16(offset));
+
   // Emit a nop in the branch delay slot if required.
   if (ProtectBranchDelaySlot)
     nop();
@@ -943,6 +960,8 @@ void MacroAssembler::BranchAndLink(Label* L, Condition cond, Register rs,
                                    const Operand& rt,
                                    bool ProtectBranchDelaySlot) {
   BRANCH_ARGS_CHECK(cond, rs, rt);
+
+  int32_t offset;
   Register r2 = no_reg;
   Register scratch = at;
   if (rt.is_reg()) {
@@ -954,66 +973,81 @@ void MacroAssembler::BranchAndLink(Label* L, Condition cond, Register rs,
 
   switch (cond) {
     case cc_always:
-      bal(shifted_branch_offset(L, false));
+      offset = shifted_branch_offset(L, false);
+      bal(offset);
       break;
     case eq:
       bne(rs, r2, 2);
       nop();
-      bal(shifted_branch_offset(L, false));
+      offset = shifted_branch_offset(L, false);
+      bal(offset);
       break;
     case ne:
       beq(rs, r2, 2);
       nop();
-      bal(shifted_branch_offset(L, false));
+      offset = shifted_branch_offset(L, false);
+      bal(offset);
       break;
 
     // Signed comparison
     case greater:
       slt(scratch, r2, rs);
       addiu(scratch, scratch, -1);
-      bgezal(scratch, shifted_branch_offset(L, false));
+      offset = shifted_branch_offset(L, false);
+      bgezal(scratch, offset);
       break;
     case greater_equal:
       slt(scratch, rs, r2);
       addiu(scratch, scratch, -1);
-      bltzal(scratch, shifted_branch_offset(L, false));
+      offset = shifted_branch_offset(L, false);
+      bltzal(scratch, offset);
       break;
     case less:
       slt(scratch, rs, r2);
       addiu(scratch, scratch, -1);
-      bgezal(scratch, shifted_branch_offset(L, false));
+      offset = shifted_branch_offset(L, false);
+      bgezal(scratch, offset);
       break;
     case less_equal:
       slt(scratch, r2, rs);
       addiu(scratch, scratch, -1);
-      bltzal(scratch, shifted_branch_offset(L, false));
+      offset = shifted_branch_offset(L, false);
+      bltzal(scratch, offset);
       break;
 
     // Unsigned comparison.
     case Ugreater:
       sltu(scratch, r2, rs);
       addiu(scratch, scratch, -1);
-      bgezal(scratch, shifted_branch_offset(L, false));
+      offset = shifted_branch_offset(L, false);
+      bgezal(scratch, offset);
       break;
     case Ugreater_equal:
       sltu(scratch, rs, r2);
       addiu(scratch, scratch, -1);
-      bltzal(scratch, shifted_branch_offset(L, false));
+      offset = shifted_branch_offset(L, false);
+      bltzal(scratch, offset);
       break;
     case Uless:
       sltu(scratch, rs, r2);
       addiu(scratch, scratch, -1);
-      bgezal(scratch, shifted_branch_offset(L, false));
+      offset = shifted_branch_offset(L, false);
+      bgezal(scratch, offset);
       break;
     case Uless_equal:
       sltu(scratch, r2, rs);
       addiu(scratch, scratch, -1);
-      bltzal(scratch, shifted_branch_offset(L, false));
+      offset = shifted_branch_offset(L, false);
+      bltzal(scratch, offset);
       break;
 
     default:
       UNREACHABLE();
   }
+
+  // Check that offset could actually hold on an int16_t.
+  ASSERT(is_int16(offset));
+
   // Emit a nop in the branch delay slot if required.
   if (ProtectBranchDelaySlot)
     nop();

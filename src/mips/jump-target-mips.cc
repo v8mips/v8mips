@@ -158,9 +158,9 @@ void JumpTarget::DoBind() {
     cgen()->SetFrame(new VirtualFrame(entry_frame_), &empty);
   }
 
-  // The predicate is_linked() should be made false.  Its implementation
+  // The predicate is_linked() should be made false. Its implementation
   // detects the presence (or absence) of frame pointers in the
-  // reaching_frames_ list.  If we inserted a bogus frame to make
+  // reaching_frames_ list. If we inserted a bogus frame to make
   // is_linked() true, remove it now.
   if (is_linked()) {
     reaching_frames_.Clear();

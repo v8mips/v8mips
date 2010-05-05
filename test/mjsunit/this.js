@@ -28,19 +28,33 @@
 function f() { return this; }
 
 assertFalse(this == null);  // the global object shouldn't be null or undefined
+print("31")
 assertEquals('[object global]', String(this));
+print("33")
 
 assertTrue(this === this);
+print("36")
 assertTrue(this === (function() { return this; })());
+print("38")
 assertTrue(this === f());
+print("40")
 
 var x = {}, y = {};
 x.f = y.f = f;
 assertFalse(x === f());
+print("45")
 assertFalse(y === f());
+print("47")
 assertTrue(x === x.f());
+print("49")
 assertTrue(x === x[new String('f')]());
+print("51")
 assertTrue(y === y.f(), "y.f()");
+print("53")
 assertTrue(y === y[new String('f')]());
+print("55")
 assertFalse(x === y.f());
+print("57")
 assertFalse(y === x.f());
+print("59")
+
