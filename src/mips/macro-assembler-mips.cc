@@ -1933,7 +1933,11 @@ void MacroAssembler::GetBuiltinEntry(Register target, Builtins::JavaScript id) {
 
 void MacroAssembler::SetCounter(StatsCounter* counter, int value,
                                 Register scratch1, Register scratch2) {
-  UNIMPLEMENTED_MIPS();
+  if (FLAG_native_code_counters && counter->Enabled()) {
+    li(scratch1, Operand(value));
+    li(scratch2, Operand(ExternalReference(counter)));
+    sw(scratch1, MemOperand(scratch2));
+  }
 }
 
 
@@ -1951,7 +1955,13 @@ void MacroAssembler::IncrementCounter(StatsCounter* counter, int value,
 
 void MacroAssembler::DecrementCounter(StatsCounter* counter, int value,
                                       Register scratch1, Register scratch2) {
-  UNIMPLEMENTED_MIPS();
+  ASSERT(value > 0);
+  if (FLAG_native_code_counters && counter->Enabled()) {
+    li(scratch2, Operand(ExternalReference(counter)));
+    lw(scratch1, MemOperand(scratch2));
+    Subu(scratch1, scratch1, Operand(value));
+    sw(scratch1, MemOperand(scratch2));
+  }
 }
 
 

@@ -484,9 +484,28 @@ bool StubCompiler::GenerateLoadCallback(JSObject* object,
                                         String* name,
                                         Label* miss,
                                         Failure** failure) {
-  UNIMPLEMENTED_MIPS();
-  __ break_(__LINE__);
-  return false;   // UNIMPLEMENTED RETURN
+  // Check that the receiver isn't a smi.
+  __ BranchOnSmi(receiver, miss, scratch1);
+
+  // Check that the maps haven't changed.
+  Register reg =
+    CheckPrototypes(object, receiver, holder, scratch1, scratch2, name, miss);
+
+  // Push the arguments on the JS stack of the caller.
+  __ Push(receiver);  // Receiver.
+  __ Push(reg);  // Holder.
+  __ li(scratch1, Operand(Handle<AccessorInfo>(callback)));  // Callback data.
+  __ push(scratch1);
+  __ lw(reg, FieldMemOperand(scratch1, AccessorInfo::kDataOffset));
+  __ Push(reg);
+  __ Push(name_reg);  // Name.
+
+  // Do tail-call to the runtime system.
+  ExternalReference load_callback_property =
+      ExternalReference(IC_Utility(IC::kLoadCallbackProperty));
+  __ TailCallExternalReference(load_callback_property, 5, 1);
+
+  return true;
 }
 
 
@@ -864,7 +883,6 @@ Object* CallStubCompiler::CompileCallGlobal(JSObject* object,
 
   // Handle call cache miss.
   __ bind(&miss);
-  // __ break_(__LINE__);
   __ IncrementCounter(&Counters::call_global_inline_miss, 1, a1, a3);
   Handle<Code> ic = ComputeCallMiss(arguments().immediate());
   __ Jump(ic, RelocInfo::CODE_TARGET);
@@ -1099,9 +1117,27 @@ Object* KeyedLoadStubCompiler::CompileLoadCallback(String* name,
                                                    JSObject* receiver,
                                                    JSObject* holder,
                                                    AccessorInfo* callback) {
-  UNIMPLEMENTED_MIPS();
-  __ break_(__LINE__);
-  return reinterpret_cast<Object*>(NULL);   // UNIMPLEMENTED RETURN
+  // ----------- S t a t e -------------
+  //  -- ra    : return address
+  //  -- sp[0] : key
+  //  -- sp[4] : receiver
+  // -----------------------------------
+  Label miss;
+
+  __ lw(a2, MemOperand(sp, 0));
+  __ lw(a0, MemOperand(sp, kPointerSize));
+
+  __ Branch(&miss, ne, a2, Operand(Handle<String>(name)));
+
+  Failure* failure = Failure::InternalError();
+  bool success = GenerateLoadCallback(receiver, holder, a0, a2, a3, a1,
+                                      callback, name, &miss, &failure);
+  if (!success) return failure;
+
+  __ bind(&miss);
+  GenerateLoadMiss(masm(), Code::KEYED_LOAD_IC);
+
+  return GetCode(CALLBACKS, name);
 }
 
 
@@ -1140,24 +1176,61 @@ Object* KeyedLoadStubCompiler::CompileLoadInterceptor(JSObject* receiver,
 
 
 Object* KeyedLoadStubCompiler::CompileLoadArrayLength(String* name) {
-  UNIMPLEMENTED_MIPS();
-  __ break_(__LINE__);
-  return reinterpret_cast<Object*>(NULL);   // UNIMPLEMENTED RETURN
+  // ----------- S t a t e -------------
+  //  -- ra    : return address
+  //  -- sp[0] : key
+  //  -- sp[4] : receiver
+  // -----------------------------------
+  Label miss;
+
+  // Check the key is the cached one
+  __ lw(a2, MemOperand(sp, 0));
+  __ lw(a0, MemOperand(sp, kPointerSize));
+
+  __ Branch(&miss, ne, a2, Operand(Handle<String>(name)));
+
+  GenerateLoadArrayLength(masm(), a0, a3, &miss);
+  __ bind(&miss);
+  GenerateLoadMiss(masm(), Code::KEYED_LOAD_IC);
+
+  return GetCode(CALLBACKS, name);
 }
 
 
 Object* KeyedLoadStubCompiler::CompileLoadStringLength(String* name) {
-  UNIMPLEMENTED_MIPS();
-  __ break_(__LINE__);
-  return reinterpret_cast<Object*>(NULL);   // UNIMPLEMENTED RETURN
+  // ----------- S t a t e -------------
+  //  -- ra    : return address
+  //  -- sp[0] : key
+  //  -- sp[4] : receiver
+  // -----------------------------------
+  Label miss;
+  __ IncrementCounter(&Counters::keyed_load_string_length, 1, a1, a3);
+
+  __ lw(a2, MemOperand(sp));
+  __ lw(a0, MemOperand(sp, kPointerSize));  // Receiver.
+
+  __ Branch(&miss, ne, a2, Operand(Handle<String>(name)));
+
+  GenerateLoadStringLength(masm(), a0, a1, a3, &miss);
+  __ bind(&miss);
+  __ DecrementCounter(&Counters::keyed_load_string_length, 1, a1, a3);
+
+  GenerateLoadMiss(masm(), Code::KEYED_LOAD_IC);
+
+  return GetCode(CALLBACKS, name);
 }
 
 
 // TODO(1224671): implement the fast case.
 Object* KeyedLoadStubCompiler::CompileLoadFunctionPrototype(String* name) {
-  UNIMPLEMENTED_MIPS();
-  __ break_(__LINE__);
-  return reinterpret_cast<Object*>(NULL);   // UNIMPLEMENTED RETURN
+  // ----------- S t a t e -------------
+  //  -- ra    : return address
+  //  -- sp[0] : key
+  //  -- sp[4] : receiver
+  // -----------------------------------
+  GenerateLoadMiss(masm(), Code::KEYED_LOAD_IC);
+
+  return GetCode(CALLBACKS, name);
 }
 
 
@@ -1165,9 +1238,36 @@ Object* KeyedStoreStubCompiler::CompileStoreField(JSObject* object,
                                                   int index,
                                                   Map* transition,
                                                   String* name) {
-  UNIMPLEMENTED_MIPS();
-  __ break_(__LINE__);
-  return reinterpret_cast<Object*>(NULL);   // UNIMPLEMENTED RETURN
+  // ----------- S t a t e -------------
+  //  -- a0    : value
+  //  -- a2    : name
+  //  -- ra    : return address
+  //  -- [sp]  : receiver
+  // -----------------------------------
+  Label miss;
+
+  __ IncrementCounter(&Counters::keyed_store_field, 1, a1, a3);
+
+  // Check that the name has not changed.
+  __ Branch(&miss, ne, a2, Operand(Handle<String>(name)));
+  // Load receiver from the stack.
+  __ lw(a3, MemOperand(sp));
+  // a1 is used as scratch register, a3 and a2 might be clobbered.
+  GenerateStoreField(masm(),
+                     object,
+                     index,
+                     transition,
+                     a3, a2, a1,
+                     &miss);
+  __ bind(&miss);
+
+  __ DecrementCounter(&Counters::keyed_store_field, 1, a1, a3);
+  __ li(a2, Operand(Handle<String>(name)));  // Restore name register.
+  Handle<Code> ic(Builtins::builtin(Builtins::KeyedStoreIC_Miss));
+  __ JumpToBuiltin(ic, RelocInfo::CODE_TARGET);
+
+  // Return the generated code.
+  return GetCode(transition == NULL ? FIELD : MAP_TRANSITION, name);
 }
 
 
