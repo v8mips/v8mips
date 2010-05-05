@@ -300,6 +300,10 @@ class VirtualFrame : public ZoneObject {
   void CallRuntime(Runtime::Function* f, int arg_count);
   void CallRuntime(Runtime::FunctionId id, int arg_count);
 
+#ifdef ENABLE_DEBUGGER_SUPPORT
+  void DebugBreak();
+#endif
+
   // Call runtime with sp aligned to 8 bytes.
   void CallAlignedRuntime(Runtime::Function* f, int arg_count);
   void CallAlignedRuntime(Runtime::FunctionId id, int arg_count);

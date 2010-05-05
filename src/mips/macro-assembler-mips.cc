@@ -1181,9 +1181,13 @@ void MacroAssembler::Call(Label* target) {
   // ---------------------------------------------------------------------------
   // Debugger Support
 
-  void MacroAssembler::DebugBreak() {
-    UNIMPLEMENTED_MIPS();
-  }
+void MacroAssembler::DebugBreak() {
+  ASSERT(allow_stub_calls());
+  mov(a0, zero_reg);
+  li(a1, Operand(ExternalReference(Runtime::kDebugBreak)));
+  CEntryStub ces(1);
+  Call(ces.GetCode(), RelocInfo::DEBUG_BREAK);
+}
 #endif
 
 

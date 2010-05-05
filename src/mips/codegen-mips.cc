@@ -2433,8 +2433,17 @@ void CodeGenerator::VisitTryFinallyStatement(TryFinallyStatement* node) {
 
 
 void CodeGenerator::VisitDebuggerStatement(DebuggerStatement* node) {
-  UNIMPLEMENTED_MIPS();
-  __ break_(__LINE__);
+#ifdef DEBUG
+  int original_height = frame_->height();
+#endif
+  VirtualFrame::SpilledScope spilled_scope;
+  Comment cmnt(masm_, "[ DebuggerStatament");
+  CodeForStatementPosition(node);
+#ifdef ENABLE_DEBUGGER_SUPPORT
+  frame_->DebugBreak();
+#endif
+  // Ignore the return value.
+  ASSERT(frame_->height() == original_height);
 }
 
 
