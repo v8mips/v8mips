@@ -45,6 +45,109 @@ namespace internal {
 #define __ ACCESS_MASM(masm)
 
 
+// Helper function used from LoadIC/CallIC GenerateNormal.
+static void GenerateDictionaryLoad(MacroAssembler* masm,
+                                   Label* miss,
+                                   Register reg0,
+                                   Register reg1) {
+  // Register use:
+  //
+  // reg0 - used to hold the property dictionary.
+  //
+  // reg1 - initially the receiver
+  //    - used for the index into the property dictionary
+  //    - holds the result on exit.
+  //
+  // a3 - used as temporary and to hold the capacity of the property
+  //      dictionary.
+  //
+  // a2 - holds the name of the property and is unchanged.
+  //
+  // t0 - scratch
+
+  Label done;
+
+  // Check for the absence of an interceptor.
+  // Load the map into reg0.
+  __ lw(reg0, FieldMemOperand(reg1, JSObject::kMapOffset));
+  // Test the has_named_interceptor bit in the map.
+  __ lw(a3, FieldMemOperand(reg0, Map::kInstanceAttributesOffset));
+  __ And(a3, a3, Operand(1 << (Map::kHasNamedInterceptor + (3 * 8))));
+  // Jump to miss if the interceptor bit is set.
+  __ Branch(miss, ne, t0, Operand(zero_reg));
+
+  // Bail out if we have a JS global proxy object.
+  __ lbu(a3, FieldMemOperand(reg0, Map::kInstanceTypeOffset));
+  __ Branch(miss, eq, a3, Operand(JS_GLOBAL_PROXY_TYPE));
+
+  // Possible work-around for http://crbug.com/16276.
+  // See also: http://codereview.chromium.org/155418.
+  __ Branch(miss, eq, a3, Operand(JS_GLOBAL_OBJECT_TYPE));
+  __ Branch(miss, eq, a3, Operand(JS_BUILTINS_OBJECT_TYPE));
+
+  // Check that the properties array is a dictionary.
+  __ lw(reg0, FieldMemOperand(reg1, JSObject::kPropertiesOffset));
+  __ lw(a3, FieldMemOperand(reg0, HeapObject::kMapOffset));
+  __ LoadRoot(t0, Heap::kHashTableMapRootIndex);
+  __ Branch(miss, ne, a3, Operand(t0));
+
+  // Compute the capacity mask.
+  const int kCapacityOffset = StringDictionary::kHeaderSize +
+      StringDictionary::kCapacityIndex * kPointerSize;
+  __ lw(a3, FieldMemOperand(reg0, kCapacityOffset));
+  __ sra(a3, a3, kSmiTagSize);  // Convert smi to int.
+  __ Subu(a3, a3, Operand(1));
+
+  const int kElementsStartOffset = StringDictionary::kHeaderSize +
+      StringDictionary::kElementsStartIndex * kPointerSize;
+
+  // Generate an unrolled loop that performs a few probes before
+  // giving up. Measurements done on Gmail indicate that 2 probes
+  // cover ~93% of loads from dictionaries.
+  static const int kProbes = 4;
+  for (int i = 0; i < kProbes; i++) {
+    // Compute the masked index: (hash + i + i * i) & mask.
+    __ lw(reg1, FieldMemOperand(a2, String::kHashFieldOffset));
+    if (i > 0) {
+      // Add the probe offset (i + i * i) left shifted to avoid right shifting
+      // the hash in a separate instruction. The value hash + i + i * i is right
+      // shifted in the following and instruction.
+      ASSERT(StringDictionary::GetProbeOffset(i) <
+             1 << (32 - String::kHashFieldOffset));
+      __ Addu(reg1, reg1, Operand(
+          StringDictionary::GetProbeOffset(i) << String::kHashShift));
+    }
+
+    __ srl(reg1, reg1, String::kHashShift);
+    __ And(reg1, a3, reg1);
+
+    // Scale the index by multiplying by the element size.
+    ASSERT(StringDictionary::kEntrySize == 3);
+    __ sll(at, reg1, 1);  // at = reg1 * 2.
+    __ addu(reg1, reg1, at);  // reg1 = reg1 * 3.
+
+    // Check if the key is identical to the name.
+    __ sll(at, reg1, 2);
+    __ addu(reg1, reg0, at);
+    __ lw(t0, FieldMemOperand(reg1, kElementsStartOffset));
+    if (i != kProbes - 1) {
+      __ Branch(&done, eq, a2, Operand(t0));
+    } else {
+      __ Branch(miss, ne, a2, Operand(t0));
+    }
+  }
+
+  // Check that the value is a normal property.
+  __ bind(&done);  // reg1 == reg0 + 4*index
+  __ lw(a3, FieldMemOperand(reg1, kElementsStartOffset + 2 * kPointerSize));
+  __ And(a3, a3, Operand(PropertyDetails::TypeField::mask() << kSmiTagSize));
+  __ Branch(miss, ne, a3, Operand(zero_reg));
+
+  // Get the value at the masked, scaled index and return.
+  __ lw(reg1, FieldMemOperand(reg1, kElementsStartOffset + 1 * kPointerSize));
+}
+
+
 void LoadIC::GenerateArrayLength(MacroAssembler* masm) {
   // a2    : name
   // ra    : return address
@@ -220,8 +323,46 @@ void LoadIC::GenerateMegamorphic(MacroAssembler* masm) {
 
 
 void LoadIC::GenerateNormal(MacroAssembler* masm) {
-  UNIMPLEMENTED_MIPS();
-  __ break_(__LINE__);
+  // ----------- S t a t e -------------
+  //  -- a2    : name
+  //  -- lr    : return address
+  //  -- [sp]  : receiver
+  // -----------------------------------
+  Label miss, probe, global;
+
+  __ lw(a0, MemOperand(sp, 0));
+  // Check that the receiver isn't a smi.
+  __ BranchOnSmi(a0, &miss);
+
+  // Check that the receiver is a valid JS object.  Put the map in a3.
+  __ GetObjectType(a0, a3, a1);
+  __ Branch(&miss, lt, a1, Operand(FIRST_JS_OBJECT_TYPE));
+
+  // If this assert fails, we have to check upper bound too.
+  ASSERT(LAST_TYPE == JS_FUNCTION_TYPE);
+
+  // Check for access to global object (unlikely).
+  __ Branch(&global, eq, a1, Operand(JS_GLOBAL_PROXY_TYPE));
+
+  // Check for non-global object that requires access check.
+  // Note that we trash map pointer (a3) here.
+  __ lbu(a3, FieldMemOperand(a3, Map::kBitFieldOffset));
+  __ And(a3, a3, Operand(1 << Map::kIsAccessCheckNeeded));
+  __ Branch(&miss, ne, a3, Operand(zero_reg));
+
+  __ bind(&probe);
+  // This function uses name in a2, and trashes a3.
+  GenerateDictionaryLoad(masm, &miss, a1, a0);
+  __ Ret();
+
+  // Global object access: Check access rights.
+  __ bind(&global);
+  __ CheckAccessGlobalProxy(a0, a1, &miss);
+  __ Branch(&probe);
+
+  // Cache miss: Restore receiver from stack and jump to runtime.
+  __ bind(&miss);
+  GenerateMiss(masm);
 }
 
 
