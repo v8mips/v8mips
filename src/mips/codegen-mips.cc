@@ -4834,7 +4834,7 @@ static void EmitTwoNonNanDoubleComparison(MacroAssembler* masm, Condition cc) {
   __ nop();
 
   // Not equal, not less, not NaN, must be greater.
-  __ li(v0, Operand(EQUAL));
+  __ li(v0, Operand(GREATER));
   __ Ret();
 
   __ bind(&equal);
