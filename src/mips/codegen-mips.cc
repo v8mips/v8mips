@@ -4749,9 +4749,9 @@ static void EmitSmiNonsmiComparison(MacroAssembler* masm,
 
   // Rhs is a smi, lhs is a number.
   // Convert a1 to double.
-  __ mtc1(a1, f12);
-  __ cvt_d_w(f12, f12);
-  __ ldc1(f14, FieldMemOperand(a0, HeapNumber::kValueOffset));
+  __ mtc1(a1, f14);
+  __ cvt_d_w(f14, f14);
+  __ ldc1(f12, FieldMemOperand(a0, HeapNumber::kValueOffset));
 
   // We now have both loaded as doubles.
   __ jmp(both_loaded_as_doubles);
@@ -4773,9 +4773,9 @@ static void EmitSmiNonsmiComparison(MacroAssembler* masm,
   // Lhs is a smi, rhs is a number.
   // a0 is Smi and a1 is heap number.
   // Convert a1 to double.
-  __ mtc1(a0, f14);
-  __ cvt_d_w(f14, f14);
-  __ ldc1(f12, FieldMemOperand(a1, HeapNumber::kValueOffset));
+  __ mtc1(a0, f12);
+  __ cvt_d_w(f12, f12);
+  __ ldc1(f14, FieldMemOperand(a1, HeapNumber::kValueOffset));
   // Fall through to both_loaded_as_doubles.
 }
 
@@ -6414,11 +6414,11 @@ void GenericUnaryOpStub::Generate(MacroAssembler* masm) {
   if (op_ == Token::SUB) {
     // Check whether the value is a smi.
     Label try_float;
-    __ And(t0, a0, Operand(kSmiTagMask));
-    __ Branch(&try_float, ne, t0, Operand(zero_reg));
+    __ BranchOnNotSmi(a0, &try_float);
 
     // Go slow case if the value of the expression is zero
     // to make sure that we switch between 0 and -0.
+    __ teq(a0, zero_reg, 0x123);
     __ Branch(&slow, eq, a0, Operand(0));
 
     // The value of the expression is a smi that is not zero.  Try
