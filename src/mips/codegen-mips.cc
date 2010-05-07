@@ -5620,8 +5620,11 @@ static void HandleBinaryOpSlowCases(MacroAssembler* masm,
 
   // If we have floating point hardware, inline ADD, SUB, MUL, and DIV,
   // using registers f12 and f14 for the double values.
-  bool use_fp_registers = CpuFeatures::IsSupported(FPU) &&
-    Token::MOD != operation;
+
+// plind debug - implement fmod in fpu instructions.
+  bool use_fp_registers = CpuFeatures::IsSupported(FPU);
+  // bool use_fp_registers = CpuFeatures::IsSupported(FPU) &&
+  //   Token::MOD != operation;
 
   if (use_fp_registers) {
     CpuFeatures::Scope scope(FPU);
@@ -5822,6 +5825,14 @@ static void HandleBinaryOpSlowCases(MacroAssembler* masm,
       __ add_d(f0, f12, f14);
     } else if (Token::SUB == operation) {
       __ sub_d(f0, f12, f14);
+    } else if (Token::MOD == operation) {
+      // result = x - y * floor(x / y);
+      // Use int-conversion for floor function.
+      __ div_d(f2, f12, f14);
+      __ cvt_w_d(f2, f2);  // Convert to int with current rounding mode.
+      __ cvt_d_w(f2, f2);  // Convert to double (floor of original number).
+      __ mul_d(f2, f2, f14);
+      __ sub_d(f0, f12, f2);
     } else {
       UNREACHABLE();
     }
