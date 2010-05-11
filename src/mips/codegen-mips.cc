@@ -6418,7 +6418,7 @@ void GenericUnaryOpStub::Generate(MacroAssembler* masm) {
 
     // Go slow case if the value of the expression is zero
     // to make sure that we switch between 0 and -0.
-    __ teq(a0, zero_reg, 0x123);
+// __ teq(a0, zero_reg, 0x123);   // plind, investigate.
     __ Branch(&slow, eq, a0, Operand(0));
 
     // The value of the expression is a smi that is not zero.  Try
