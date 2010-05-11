@@ -335,7 +335,7 @@ void StubCompiler::GenerateStoreField(MacroAssembler* masm,
     __ sw(a0, FieldMemOperand(scratch, offset));
 
     // Skip updating write barrier if storing a smi.
-    __ BranchOnSmi(a0, &exit, scratch);
+    __ BranchOnSmi(a0, &exit);
 
     // Update the write barrier for the array address.
     // Ok to clobber receiver_reg and name_reg, since we return.
