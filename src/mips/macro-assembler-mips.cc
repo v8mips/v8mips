@@ -202,8 +202,8 @@ void MacroAssembler::RecordWrite(Register object,
   // Get address of the rset word.
   // object: start of the remembered set (page start for the fast case)
   // offset: bit offset of store position in the remembered set
-  And(object, object, Operand(~(kBitsPerInt - 1)));
-  sll(scratch, scratch, kRSetWordShift);
+  And(scratch, offset, Operand(~(kBitsPerInt - 1)));
+  srl(scratch, scratch, kRSetWordShift);
   Addu(object, object, scratch);
   // Get bit offset in the rset word.
   // object: address of remembered set word
