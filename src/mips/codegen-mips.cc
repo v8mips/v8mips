@@ -4687,8 +4687,9 @@ void FastCloneShallowArrayStub::Generate(MacroAssembler* masm) {
 
   // Allocate both the JS array and the elements array in one big
   // allocation. This avoids multiple limit checks.
+  // Return new object in v0.
   __ AllocateInNewSpace(size / kPointerSize,
-                        a0,
+                        v0,
                         a1,
                         a2,
                         &slow_case,
@@ -4698,7 +4699,7 @@ void FastCloneShallowArrayStub::Generate(MacroAssembler* masm) {
   for (int i = 0; i < JSArray::kSize; i += kPointerSize) {
     if ((i != JSArray::kElementsOffset) || (length_ == 0)) {
       __ lw(a1, FieldMemOperand(a3, i));
-      __ sw(a1, FieldMemOperand(a0, i));
+      __ sw(a1, FieldMemOperand(v0, i));
     }
   }
 
@@ -4706,8 +4707,8 @@ void FastCloneShallowArrayStub::Generate(MacroAssembler* masm) {
     // Get hold of the elements array of the boilerplate and setup the
     // elements pointer in the resulting object.
     __ lw(a3, FieldMemOperand(a3, JSArray::kElementsOffset));
-    __ Addu(a2, a0, Operand(JSArray::kSize));
-    __ sw(a2, FieldMemOperand(a0, JSArray::kElementsOffset));
+    __ Addu(a2, v0, Operand(JSArray::kSize));
+    __ sw(a2, FieldMemOperand(v0, JSArray::kElementsOffset));
 
     // Copy the elements array.
     for (int i = 0; i < elements_size; i += kPointerSize) {
