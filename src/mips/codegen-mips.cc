@@ -1046,7 +1046,7 @@ void CodeGenerator::SmiOperation(Token::Value op,
       __ xor_(t0, v0, a1);
       __ Xor(t1, v0, Operand(value));
       __ and_(t0, t0, t1);    // Overflow occurred if result is negative.
-      deferred->Branch(lt, t0);
+      deferred->Branch(lt, t0, Operand(zero_reg));
       __ And(t0, v0, Operand(kSmiTagMask));
       deferred->Branch(ne, t0, Operand(zero_reg));
       deferred->BindExit();
@@ -1067,7 +1067,7 @@ void CodeGenerator::SmiOperation(Token::Value op,
       }
       __ xor_(t1, t0, a1);
       __ and_(t2, t2, t1);    // Overflow occurred if result is negative.
-      deferred->Branch(lt, t2);
+      deferred->Branch(lt, t2, Operand(zero_reg));
       __ And(t0, v0, Operand(kSmiTagMask));
       deferred->Branch(ne, t0, Operand(zero_reg));
       deferred->BindExit();
@@ -1107,20 +1107,14 @@ void CodeGenerator::SmiOperation(Token::Value op,
       __ sra(a2, a1, kSmiTagSize);  // Remove tag.
       switch (op) {
         case Token::SHL: {
-          if (shift_value != 0) {
-            __ sll(v0, a2, shift_value);
-          }
+          __ sll(v0, a2, shift_value);
           // Check that the *unsigned* result fits in a Smi.
           __ Addu(t3, v0, Operand(0x40000000));
-          __ And(t3, t3, Operand(0x80000000));
-          deferred->Branch(ne, t3, Operand(zero_reg));
+          deferred->Branch(lt, t3, Operand(zero_reg));
           break;
         }
         case Token::SHR: {
-          // LSR by immediate 0 means shifting 32 bits.
-          if (shift_value != 0) {
-            __ srl(v0, a2, shift_value);
-          }
+          __ srl(v0, a2, shift_value);
           // Check that the *unsigned* result fits in a smi.
           // Neither of the two high-order bits can be set:
           // - 0x80000000: high bit would be lost when smi tagging
@@ -1133,10 +1127,7 @@ void CodeGenerator::SmiOperation(Token::Value op,
           break;
         }
         case Token::SAR: {
-          if (shift_value != 0) {
-            // ASR by immediate 0 means shifting 32 bits.
-            __ sra(v0, a2, shift_value);
-          }
+          __ sra(v0, a2, shift_value);
           break;
         }
         default: UNREACHABLE();
@@ -6394,15 +6385,13 @@ void GenericBinaryOpStub::Generate(MacroAssembler* masm) {
            // Remove tags from operands.
           __ sra(a2, a0, kSmiTagSize);  // y.
           __ sra(a3, a1, kSmiTagSize);  // x.
-          // Shift
+          // Shift.
           __ sllv(v0, a3, a2);
           // Check that the signed result fits in a Smi.
           __ Addu(t3, v0, Operand(0x40000000));
           __ Branch(&slow, lt, t3, Operand(zero_reg));
           // Smi tag result.
           __ sll(v0, v0, kSmiTagMask);
-
-      __ break_(9001);
           break;
         default: UNREACHABLE();
       }
