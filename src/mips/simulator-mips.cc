@@ -70,6 +70,8 @@ class Debugger {
 
   void Stop(Instruction* instr);
   void Debug();
+  // Print all registers with a nice formatting.
+  void PrintAllRegs();
 
  private:
   // We set the breakpoint code to 0xfffff to easily recognize it.
@@ -89,9 +91,6 @@ class Debugger {
   // execution to skip past breakpoints when run from the debugger.
   void UndoBreakpoints();
   void RedoBreakpoints();
-
-  // Print all registers with a nice formatting.
-  void PrintAllRegs();
 };
 
 Debugger::Debugger(Simulator* sim) {
@@ -531,6 +530,7 @@ Simulator::Simulator() {
   stack_ = reinterpret_cast<char*>(malloc(stack_size));
   pc_modified_ = false;
   icount_ = 0;
+  break_count_ = 0;
   break_pc_ = NULL;
   break_instr_ = 0;
 
@@ -862,8 +862,14 @@ typedef double (*SimulatorRuntimeFPCall)(int32_t arg0,
                                         int32_t arg3);
 
 // Software interrupt instructions are used by the simulator to call into the
-// C-based V8 runtime.
+// C-based V8 runtime. They are also used for debugging with simulator.
 void Simulator::SoftwareInterrupt(Instruction* instr) {
+  // There are several instructions that could get us here,
+  // the break_ instruction, or several variants of traps. All
+  // Are "SPECIAL" class opcode, and are distinuished by function.
+  int32_t func = instr->FunctionFieldRaw();
+  int32_t code = (func == BREAK) ? instr->Bits(25, 6) : -1;
+
   // We first check if we met a call_rt_redirected.
   if (instr->InstructionBits() == rtCallRedirInstr) {
     Redirection* redirection = Redirection::FromSwiInstruction(instr);
@@ -921,7 +927,17 @@ void Simulator::SoftwareInterrupt(Instruction* instr) {
     }
     set_register(ra, saved_ra);
     set_pc(get_register(ra));
+
+  } else if (func == BREAK && code >= 0 && code < 16) {
+    // First 16 break_ codes interpreted as debug markers.
+    Debugger dbg(this);
+    ++break_count_;
+    PrintF("\n---- break %d marker: %3d  (instr count: %8d) ----------"
+           "----------------------------------",
+           code, break_count_, icount_);
+    dbg.PrintAllRegs();  // Print registers and continue running.
   } else {
+    // All remaining break_ codes, and all traps are handled here.
     Debugger dbg(this);
     dbg.Debug();
   }
@@ -1100,6 +1116,7 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
           break;
         // Break and trap instructions
         case BREAK:
+
           do_interrupt = true;
           break;
         case TGE:
