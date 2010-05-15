@@ -4749,8 +4749,9 @@ static void EmitSmiNonsmiComparison(MacroAssembler* masm,
   }
 
   // Rhs is a smi, lhs is a number.
-  // Convert a1 to double.
-  __ mtc1(a1, f14);
+  // Convert smi a1 to double.
+  __ sra(at, a1, kSmiTagSize);
+  __ mtc1(at, f14);
   __ cvt_d_w(f14, f14);
   __ ldc1(f12, FieldMemOperand(a0, HeapNumber::kValueOffset));
 
@@ -4773,8 +4774,9 @@ static void EmitSmiNonsmiComparison(MacroAssembler* masm,
 
   // Lhs is a smi, rhs is a number.
   // a0 is Smi and a1 is heap number.
-  // Convert a1 to double.
-  __ mtc1(a0, f12);
+  // Convert smi a0 to double.
+  __ sra(at, a0, kSmiTagSize);
+  __ mtc1(at, f12);
   __ cvt_d_w(f12, f12);
   __ ldc1(f14, FieldMemOperand(a1, HeapNumber::kValueOffset));
   // Fall through to both_loaded_as_doubles.
