@@ -293,6 +293,7 @@ class Simulator {
   bool pc_modified_;
   int icount_;
   static bool initialized_;
+  int break_count_;
 
   // Registered breakpoints.
   Instruction* break_pc_;
