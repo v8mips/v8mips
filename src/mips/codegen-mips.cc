@@ -3769,15 +3769,25 @@ void CodeGenerator::VisitCountOperation(CountOperation* node) {
 
     // Perform optimistic increment/decrement and check for overflow.
     // If we don't overflow we are done.
-    // TDOD(plind) -- There is an overflow window here if entry value already Min or Max .........
     if (is_increment) {
-      __ Addu(v0, a0, Operand(Smi::FromInt(1)));
-      exit.Branch(ne, a0, Operand(Smi::kMaxValue), no_hint);
+      // Load Smi 1 to reg, since we need it for overflow-check,
+      // and there is not an xor-immediate instruction.
+      __ li(a1, Operand(Smi::FromInt(1)));
+      __ addu(v0, a0, a1);
+      // Check for overflow of a0 + a1.
+      __ xor_(t0, v0, a0);
+      __ xor_(t1, v0, a1);
+      __ and_(t0, t0, t1);    // Overflow occurred if result is negative.
+      exit.Branch(ge, t0, Operand(zero_reg));  // Exit on NO overflow (ge 0).
     } else {
-      __ Addu(v0, a0, Operand((Smi::FromInt(-1))));
-      exit.Branch(ne, a0, Operand(Smi::kMinValue), no_hint);
+      __ li(a1, Operand(Smi::FromInt(1)));
+      __ subu(v0, a0, a1);
+      // Check for overflow of a0 - a1.
+      __ xor_(t0, v0, a0);
+      __ xor_(t1, a1, a0);
+      __ and_(t0, t0, t1);    // Overflow occurred if result is negative.
+      exit.Branch(ge, t0, Operand(zero_reg));  // Exit on NO overflow (ge 0).
     }
-
     // We had an overflow.
     // Slow case: Convert to number.
     // a0 still holds the original value.
@@ -3786,6 +3796,7 @@ void CodeGenerator::VisitCountOperation(CountOperation* node) {
       // Convert the operand to a number.
       frame_->EmitPush(a0);
       frame_->InvokeBuiltin(Builtins::TO_NUMBER, CALL_JS, 1);
+      __ mov(a0, v0);  // Move result back to a0 as parameter.
     }
     if (is_postfix) {
       // Postfix: store to result (on the stack).
