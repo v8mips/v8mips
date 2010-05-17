@@ -5923,7 +5923,7 @@ static void GetInt32(MacroAssembler* masm,
       (HeapNumber::kExponentBias + 0) << HeapNumber::kExponentShift;
   __ Subu(scratch2, scratch2, Operand(zero_exponent));
   // Dest already has a Smi zero.
-  __ Branch(&done, lt, scratch2, Operand(zero_exponent));
+  __ Branch(&done, lt, scratch2, Operand(zero_reg));
   if (!CpuFeatures::IsSupported(FPU)) {
     // We have a shifted exponent between 0 and 30 in scratch2.
     __ srl(dest, scratch2, HeapNumber::kExponentShift);
@@ -6229,7 +6229,7 @@ void GenericBinaryOpStub::Generate(MacroAssembler* masm) {
       __ And(t3, t2, Operand(kSmiTagMask));
       __ Branch(&not_smi, ne, t3, Operand(zero_reg));
       __ subu(v0, a1, a0);  // Subtract y.
-      // Check for overflow.
+      // Check for overflow of a1 - a0.
       __ xor_(t0, v0, a1);
       __ xor_(t1, a0, a1);
       __ and_(t0, t0, t1);    // Overflow occurred if result is negative.
@@ -6358,6 +6358,8 @@ void GenericBinaryOpStub::Generate(MacroAssembler* masm) {
     case Token::SAR:
     case Token::SHR:
     case Token::SHL: {
+      // Result (v0) = x (a1) op y (a0).
+      // Untaged x: a3, untagged y: a2.
       Label slow;
       ASSERT(kSmiTag == 0);  // Adjust code below.
       __ And(t3, t2, Operand(kSmiTagMask));
@@ -6368,8 +6370,8 @@ void GenericBinaryOpStub::Generate(MacroAssembler* masm) {
         case Token::BIT_XOR: __ Xor(v0, a0, Operand(a1)); break;
         case Token::SAR:
           // Remove tags from operands.
-          __ sra(a2, a0, kSmiTagSize);
-          __ sra(a3, a1, kSmiTagSize);
+          __ sra(a2, a0, kSmiTagSize);  // y.
+          __ sra(a3, a1, kSmiTagSize);  // x.
           // Shift.
           __ srav(v0, a3, a2);
           // Smi tag result.
@@ -6377,8 +6379,8 @@ void GenericBinaryOpStub::Generate(MacroAssembler* masm) {
           break;
         case Token::SHR:
           // Remove tags from operands.
-          __ sra(a2, a0, kSmiTagSize);
-          __ sra(a3, a1, kSmiTagSize);
+          __ sra(a2, a0, kSmiTagSize);  // y.
+          __ sra(a3, a1, kSmiTagSize);  // x.
           // Shift.
           __ srlv(v0, a3, a2);
           // Unsigned shift is not allowed to produce a negative number, so
@@ -6389,17 +6391,18 @@ void GenericBinaryOpStub::Generate(MacroAssembler* masm) {
           __ sll(v0, v0, kSmiTagMask);
           break;
         case Token::SHL:
-          // Remove tags from operands.
-          __ sra(a2, a0, kSmiTagSize);
-          __ sra(a3, a1, kSmiTagSize);
+           // Remove tags from operands.
+          __ sra(a2, a0, kSmiTagSize);  // y.
+          __ sra(a3, a1, kSmiTagSize);  // x.
           // Shift
           __ sllv(v0, a3, a2);
           // Check that the signed result fits in a Smi.
           __ Addu(t3, v0, Operand(0x40000000));
-          __ And(t3, t3, Operand(0x80000000));
-          __ Branch(&slow, ne, t3, Operand(zero_reg));
+          __ Branch(&slow, lt, t3, Operand(zero_reg));
           // Smi tag result.
           __ sll(v0, v0, kSmiTagMask);
+
+      __ break_(9001);
           break;
         default: UNREACHABLE();
       }
