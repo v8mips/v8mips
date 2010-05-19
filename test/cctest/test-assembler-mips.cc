@@ -640,7 +640,7 @@ TEST(MIPS8) {
   __ ori(t3, zero_reg, 0);
   __ ori(t4, zero_reg, 0);
   __ rotr(t3, t2, 0x000F);
-  __ rotrv(t4, t2, t1);
+  __ rotrv(v0, t2, t1);
   __ nop();
 
   CodeDesc desc;
@@ -654,9 +654,9 @@ TEST(MIPS8) {
   Code::cast(code)->Print();
 //#endif
   F2 f = FUNCTION_CAST<F2>(Code::cast(code)->entry());
-  int res = reinterpret_cast<int>(CALL_GENERATED_CODE(f, 0xab0, 0xc, 0, 0, 0));
-  ::printf("f() = %d\n", res);
-  CHECK_EQ(0xabc, res);
+  int res = reinterpret_cast<int>(CALL_GENERATED_CODE(f, 0x0, 0x0, 0, 0, 0));
+  ::printf("ROTRV return value is: f() = %d\n", res);
+  CHECK_EQ(0x81234567, res);
 }
 
 #undef __
