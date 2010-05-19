@@ -626,6 +626,37 @@ TEST(MIPS7) {
   CHECK_EQ(1, t.result);
 }
 
+TEST(MIPS8) {
+  InitializeVM();
+  v8::HandleScope scope;
 
+  MacroAssembler assm(NULL, 0);
+
+  // Addition.
+  __ break_(0x9999);
+  __ li(t0, 0x00000000);
+  __ li(t1, 0x00000008);
+  __ li(t2, 0x12345678);
+  __ ori(t3, zero_reg, 0);
+  __ ori(t4, zero_reg, 0);
+  __ rotr(t3, t2, 0x000F);
+  __ rotrv(t4, t2, t1);
+  __ nop();
+
+  CodeDesc desc;
+  assm.GetCode(&desc);
+  Object* code = Heap::CreateCode(desc,
+                                  NULL,
+                                  Code::ComputeFlags(Code::STUB),
+                                  Handle<Object>(Heap::undefined_value()));
+  CHECK(code->IsCode());
+//#ifdef DEBUG
+  Code::cast(code)->Print();
+//#endif
+  F2 f = FUNCTION_CAST<F2>(Code::cast(code)->entry());
+  int res = reinterpret_cast<int>(CALL_GENERATED_CODE(f, 0xab0, 0xc, 0, 0, 0));
+  ::printf("f() = %d\n", res);
+  CHECK_EQ(0xabc, res);
+}
 
 #undef __
