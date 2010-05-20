@@ -2387,7 +2387,7 @@ void CodeGenerator::VisitTryFinallyStatement(TryFinallyStatement* node) {
   if (has_valid_frame()) {
     // Restore state and return value or faked TOS.
     frame_->EmitPop(a2);
-    frame_->EmitPop(a0);
+    frame_->EmitPop(v0);
   }
 
   // Generate code to jump to the right destination for all used
