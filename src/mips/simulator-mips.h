@@ -42,7 +42,7 @@
 
 // When running without a simulator we call the entry directly.
 #define CALL_GENERATED_CODE(entry, p0, p1, p2, p3, p4) \
-  entry(p0, p1, p2, p3, p4);
+  entry(p0, p1, p2, p3, p4)
 
 // The stack limit beyond which we will throw stack overflow errors in
 // generated code. Because generated code on mips uses the C stack, we

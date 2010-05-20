@@ -194,13 +194,13 @@ LIBRARY_FLAGS = {
     'arch:mips': {
       'CPPDEFINES':   ['V8_TARGET_ARCH_MIPS'],
       'simulator:none': {
-        'CCFLAGS':      ['-EL', '-mips32r2', '-Wa,-mips32r2', '-fno-inline'],
-        'LDFLAGS':      ['-EL']
+        'CCFLAGS':      ['-EL', '-mips32r2', '-Wa,-mips32r2', '-fno-inline', '-mhard-float'],
+        'LDFLAGS':      ['-EL', '-static', '-static-libgcc']
       }
     },
     'simulator:mips': {
-      'CCFLAGS':      ['-m32'],
-      'LINKFLAGS':    ['-m32']
+      'CCFLAGS':      [],
+      'LINKFLAGS':    []
     },
     'arch:x64': {
       'CPPDEFINES':   ['V8_TARGET_ARCH_X64'],
@@ -385,6 +385,10 @@ CCTEST_EXTRA_FLAGS = {
     'os:freebsd': {
       'LIBS':         ['execinfo', 'pthread']
     },
+    'arch:mips': {
+      'CCFLAGS':      ['-EL'],
+      'LINKFLAGS':      ['-EL'],
+    },
     'os:solaris': {
       'LIBS':         ['m', 'pthread', 'socket', 'nsl', 'rt'],
       'LINKFLAGS':    ['-mt']
@@ -483,9 +487,9 @@ SAMPLE_FLAGS = {
     'arch:mips': {
       'CPPDEFINES':   ['V8_TARGET_ARCH_MIPS'],
       'simulator:none': {
-        'CCFLAGS':      ['-EL', '-mips32r2', '-Wa,-mips32r2', '-fno-inline'],
-        'LINKFLAGS':    ['-EL'],
-        'LDFLAGS':      ['-EL']
+        'CCFLAGS':      ['-EL', '-mips32r2', '-Wa,-mips32r2', '-fno-inline', '-mhard-float'],
+        'LINKFLAGS':    ['-EL', '-static', '-static-libgcc'],
+        'LDFLAGS':      ['-EL', '-static', '-static-libgcc']
       }
     },
     'simulator:arm': {
@@ -493,8 +497,8 @@ SAMPLE_FLAGS = {
       'LINKFLAGS':    ['-m32']
     },
     'simulator:mips': {
-      'CCFLAGS':      ['-m32'],
-      'LINKFLAGS':    ['-m32']
+      'CCFLAGS':      [],
+      'LINKFLAGS':    []
     },
     'mode:release': {
       'CCFLAGS':      ['-O2']
@@ -647,7 +651,7 @@ SIMPLE_OPTIONS = {
   'arch': {
     'values':['arm', 'ia32', 'x64', 'mips'],
     'default': ARCH_GUESS,
-    'help': 'the architecture to build for (' + ARCH_GUESS + ')'
+    'help': 'the architecture to build for (who knows)'
   },
   'regexp': {
     'values': ['native', 'interpreted'],
