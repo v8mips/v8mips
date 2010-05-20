@@ -558,7 +558,11 @@ void Decoder::DecodeTypeRegister(Instruction* instr) {
             Format(instr, "sll  'rd, 'rt, 'sa");
           break;
         case SRL:
-          Format(instr, "srl  'rd, 'rt, 'sa");
+        	if(instr->RsField() == 0) {
+          	Format(instr, "srl  'rd, 'rt, 'sa");
+          } else {
+          	Format(instr, "rotr  'rd, 'rt, 'sa");
+          }
           break;
         case SRA:
           Format(instr, "sra  'rd, 'rt, 'sa");
@@ -567,7 +571,11 @@ void Decoder::DecodeTypeRegister(Instruction* instr) {
           Format(instr, "sllv 'rd, 'rt, 'rs");
           break;
         case SRLV:
-          Format(instr, "srlv 'rd, 'rt, 'rs");
+        	if(instr->SaField() == 0) {
+          	Format(instr, "srlv 'rd, 'rt, 'rs");
+        	} else {
+        		Format(instr, "rotrv 'rd, 'rt, 'rs");
+        	}
           break;
         case SRAV:
           Format(instr, "srav 'rd, 'rt, 'rs");

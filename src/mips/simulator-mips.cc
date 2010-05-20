@@ -1006,7 +1006,11 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
           alu_out = rt << sa;
           break;
         case SRL:
-          alu_out = rt_u >> sa;
+        	if(rs_reg == 0){
+          	alu_out = rt_u >> sa;
+        	} else {
+        		alu_out = (rt_u >> sa) | (rt_u << (32 - sa));
+        	}
           break;
         case SRA:
           alu_out = rt >> sa;
@@ -1015,7 +1019,11 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
           alu_out = rt << rs;
           break;
         case SRLV:
-          alu_out = rt_u >> rs;
+        	if(sa == 0){
+          	alu_out = rt_u >> rs;
+          } else {
+          	alu_out = (rt_u >> rs_u) | (rt_u << (32 - rs_u));
+          }
           break;
         case SRAV:
           alu_out = rt >> rs;

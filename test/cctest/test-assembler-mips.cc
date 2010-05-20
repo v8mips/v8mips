@@ -633,14 +633,10 @@ TEST(MIPS8) {
   MacroAssembler assm(NULL, 0);
 
   // Addition.
-  __ break_(0x9999);
-  __ li(t0, 0x00000000);
-  __ li(t1, 0x00000008);
-  __ li(t2, 0x12345678);
-  __ ori(t3, zero_reg, 0);
-  __ ori(t4, zero_reg, 0);
-  __ rotr(t3, t2, 0x000F);
-  __ rotrv(v0, t2, t1);
+  //__ break_(0x9999);
+  __ li(t0, 0x12345678);
+  __ rotrv(v0, t0, a0);
+  __ jr(ra);
   __ nop();
 
   CodeDesc desc;
@@ -650,13 +646,42 @@ TEST(MIPS8) {
                                   Code::ComputeFlags(Code::STUB),
                                   Handle<Object>(Heap::undefined_value()));
   CHECK(code->IsCode());
-//#ifdef DEBUG
+#ifdef DEBUG
   Code::cast(code)->Print();
-//#endif
+#endif
+  F2 f = FUNCTION_CAST<F2>(Code::cast(code)->entry());
+  int res = reinterpret_cast<int>(CALL_GENERATED_CODE(f, 0x8, 0x0, 0, 0, 0));
+  ::printf("ROTRV return value is: f() = %x\n", res);
+  CHECK_EQ(0x78123456, res);
+}
+
+TEST(MIPS9) {
+  InitializeVM();
+  v8::HandleScope scope;
+
+  MacroAssembler assm(NULL, 0);
+
+  // Addition.
+  //__ break_(0x9999);
+  __ li(t0, 0x12345678);
+  __ rotr(v0, t0, 0x0008);
+  __ jr(ra);
+  __ nop();
+
+  CodeDesc desc;
+  assm.GetCode(&desc);
+  Object* code = Heap::CreateCode(desc,
+                                  NULL,
+                                  Code::ComputeFlags(Code::STUB),
+                                  Handle<Object>(Heap::undefined_value()));
+  CHECK(code->IsCode());
+#ifdef DEBUG
+  Code::cast(code)->Print();
+#endif
   F2 f = FUNCTION_CAST<F2>(Code::cast(code)->entry());
   int res = reinterpret_cast<int>(CALL_GENERATED_CODE(f, 0x0, 0x0, 0, 0, 0));
-  ::printf("ROTRV return value is: f() = %d\n", res);
-  CHECK_EQ(0x81234567, res);
+  ::printf("ROTRV return value is: f() = %x\n", res);
+  CHECK_EQ(0x78123456, res);
 }
 
 #undef __

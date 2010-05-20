@@ -795,21 +795,19 @@ void Assembler::srav(Register rd, Register rt, Register rs) {
   GenInstrRegister(SPECIAL, rs, rt, rd, 0, SRAV);
 }
 
-//RT-RK
 void Assembler::rotr(Register rd, Register rt, uint16_t sa) {
   ASSERT(rd.is_valid() && rt.is_valid() && is_uint5(sa));
-  Instr instr = SPECIAL | (zero_reg.code() << kRsShift) | (rt.code() << kRtShift)
-      | (rd.code() << kRdShift) | (sa << kSaShift) | SRL | (1 << kRsShift);
+  Instr instr = SPECIAL | (1 << kRsShift) | (rt.code() << kRtShift)
+      | (rd.code() << kRdShift) | (sa << kSaShift) | SRL;
   emit(instr);
 }
 
 void Assembler::rotrv(Register rd, Register rt, Register rs){
   ASSERT(rd.is_valid() && rt.is_valid() && rs.is_valid() );
   Instr instr = SPECIAL | (rs.code() << kRsShift) | (rt.code() << kRtShift)
-      | (rd.code() << kRdShift) | (zero_reg.code() << kSaShift) | SRLV | (1 << kSaShift);
+      | (rd.code() << kRdShift) | (1 << kSaShift) | SRLV;
   emit(instr);
 }
-//
 
 //------------Memory-instructions-------------
 
