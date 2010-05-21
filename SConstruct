@@ -386,6 +386,11 @@ CCTEST_EXTRA_FLAGS = {
       'LIBS':         ['execinfo', 'pthread']
     },
     'arch:mips': {
+      'simulator:none': {
+        'CCFLAGS':      ['-EL', '-mips32r2', '-Wa,-mips32r2', '-fno-inline', '-mhard-float'],
+        'LINKFLAGS':    ['-EL', '-static', '-static-libgcc'],
+        'LDFLAGS':      ['-EL', '-static', '-static-libgcc']
+      }
     },
     'os:solaris': {
       'LIBS':         ['m', 'pthread', 'socket', 'nsl', 'rt'],
