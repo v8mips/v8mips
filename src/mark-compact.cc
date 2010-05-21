@@ -231,15 +231,7 @@ static inline HeapObject* ShortCircuitConsString(Object** p) {
   //   (ConsString::cast(object)->second() == Heap::empty_string())
   // except the maps for the object and its possible substrings might be
   // marked.
-
-// this is a hack for MIPS ... must be fixed down the road.....................................
-#ifndef V8_TARGET_ARCH_MIPS
   HeapObject* object = HeapObject::cast(*p);
-#else  // V8_TARGET_ARCH_MIPS
-  Object* object_address  = reinterpret_cast<Object*>(
-      assembler::mips::ISA_utils_target_address_at((int32_t*)p));
-  HeapObject* object = HeapObject::cast(object_address);
-#endif // V8_TARGET_ARCH_MIPS
   MapWord map_word = object->map_word();
   map_word.ClearMark();
   InstanceType type = map_word.ToMap()->instance_type();
