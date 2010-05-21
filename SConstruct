@@ -386,8 +386,6 @@ CCTEST_EXTRA_FLAGS = {
       'LIBS':         ['execinfo', 'pthread']
     },
     'arch:mips': {
-      'CCFLAGS':      ['-EL'],
-      'LINKFLAGS':      ['-EL'],
     },
     'os:solaris': {
       'LIBS':         ['m', 'pthread', 'socket', 'nsl', 'rt'],
