@@ -627,15 +627,77 @@ TEST(MIPS7) {
 }
 
 TEST(MIPS8) {
+	// Test ROTR and ROTRV instructions.
   InitializeVM();
   v8::HandleScope scope;
+  	
+  typedef struct {
+    int32_t input;
+    int32_t result_rotr_4;
+    int32_t result_rotr_8;
+    int32_t result_rotr_12;
+    int32_t result_rotr_16;
+    int32_t result_rotr_20;
+    int32_t result_rotr_24;
+    int32_t result_rotr_28;
+    int32_t result_rotrv_4;
+    int32_t result_rotrv_8;
+    int32_t result_rotrv_12;
+    int32_t result_rotrv_16;
+    int32_t result_rotrv_20;
+    int32_t result_rotrv_24;
+    int32_t result_rotrv_28;
+  } T;
+  T t;
 
   MacroAssembler assm(NULL, 0);
 
-  // Addition.
-  //__ break_(0x9999);
-  __ li(t0, 0x12345678);
-  __ rotrv(v0, t0, a0);
+  // basic word load
+  __ lw(t0, MemOperand(a0, OFFSET_OF(T, input)) );
+  
+  // ROTR instruction
+  __ rotr(t1, t0, 0x0004);
+  __ rotr(t2, t0, 0x0008);
+  __ rotr(t3, t0, 0x000c);
+  __ rotr(t4, t0, 0x0010);
+  __ rotr(t5, t0, 0x0014);
+  __ rotr(t6, t0, 0x0018);
+  __ rotr(t7, t0, 0x001c);
+  
+  // basic word store  
+  __ sw(t1, MemOperand(a0, OFFSET_OF(T, result_rotr_4)) );
+  __ sw(t2, MemOperand(a0, OFFSET_OF(T, result_rotr_8)) );
+  __ sw(t3, MemOperand(a0, OFFSET_OF(T, result_rotr_12)) );
+  __ sw(t4, MemOperand(a0, OFFSET_OF(T, result_rotr_16)) );
+  __ sw(t5, MemOperand(a0, OFFSET_OF(T, result_rotr_20)) );
+  __ sw(t6, MemOperand(a0, OFFSET_OF(T, result_rotr_24)) );
+  __ sw(t7, MemOperand(a0, OFFSET_OF(T, result_rotr_28)) );
+  
+  // ROTRV instruction  
+  __ li(t7, 0x0004);
+  __ rotrv(t1, t0, t7);
+  __ li(t7, 0x0008);
+  __ rotrv(t2, t0, t7);
+  __ li(t7, 0x000C);
+  __ rotrv(t3, t0, t7);
+  __ li(t7, 0x0010);
+  __ rotrv(t4, t0, t7);
+  __ li(t7, 0x0014);
+  __ rotrv(t5, t0, t7);
+  __ li(t7, 0x0018);
+  __ rotrv(t6, t0, t7);
+  __ li(t7, 0x001C);
+  __ rotrv(t7, t0, t7);
+  
+  // basic word store  
+  __ sw(t1, MemOperand(a0, OFFSET_OF(T, result_rotrv_4)) );
+  __ sw(t2, MemOperand(a0, OFFSET_OF(T, result_rotrv_8)) );
+  __ sw(t3, MemOperand(a0, OFFSET_OF(T, result_rotrv_12)) );
+  __ sw(t4, MemOperand(a0, OFFSET_OF(T, result_rotrv_16)) );
+  __ sw(t5, MemOperand(a0, OFFSET_OF(T, result_rotrv_20)) );
+  __ sw(t6, MemOperand(a0, OFFSET_OF(T, result_rotrv_24)) );
+  __ sw(t7, MemOperand(a0, OFFSET_OF(T, result_rotrv_28)) );
+    
   __ jr(ra);
   __ nop();
 
@@ -649,39 +711,25 @@ TEST(MIPS8) {
 #ifdef DEBUG
   Code::cast(code)->Print();
 #endif
-  F2 f = FUNCTION_CAST<F2>(Code::cast(code)->entry());
-  int res = reinterpret_cast<int>(CALL_GENERATED_CODE(f, 0x8, 0x0, 0, 0, 0));
-  ::printf("ROTRV return value is: f() = %x\n", res);
-  CHECK_EQ(0x78123456, res);
-}
-
-TEST(MIPS9) {
-  InitializeVM();
-  v8::HandleScope scope;
-
-  MacroAssembler assm(NULL, 0);
-
-  // Addition.
-  //__ break_(0x9999);
-  __ li(t0, 0x12345678);
-  __ rotr(v0, t0, 0x0008);
-  __ jr(ra);
-  __ nop();
-
-  CodeDesc desc;
-  assm.GetCode(&desc);
-  Object* code = Heap::CreateCode(desc,
-                                  NULL,
-                                  Code::ComputeFlags(Code::STUB),
-                                  Handle<Object>(Heap::undefined_value()));
-  CHECK(code->IsCode());
-#ifdef DEBUG
-  Code::cast(code)->Print();
-#endif
-  F2 f = FUNCTION_CAST<F2>(Code::cast(code)->entry());
-  int res = reinterpret_cast<int>(CALL_GENERATED_CODE(f, 0x0, 0x0, 0, 0, 0));
-  ::printf("ROTRV return value is: f() = %x\n", res);
-  CHECK_EQ(0x78123456, res);
+  F3 f = FUNCTION_CAST<F3>(Code::cast(code)->entry());
+  t.input = 0x12345678;	
+  Object* dummy = CALL_GENERATED_CODE(f, &t, 0x0, 0, 0, 0);
+  USE(dummy);
+  CHECK_EQ(0x81234567, t.result_rotr_4);
+  CHECK_EQ(0x78123456, t.result_rotr_8);
+  CHECK_EQ(0x67812345, t.result_rotr_12);
+  CHECK_EQ(0x56781234, t.result_rotr_16);
+  CHECK_EQ(0x45678123, t.result_rotr_20);
+  CHECK_EQ(0x34567812, t.result_rotr_24);
+  CHECK_EQ(0x23456781, t.result_rotr_28);
+  
+  CHECK_EQ(0x81234567, t.result_rotrv_4);
+  CHECK_EQ(0x78123456, t.result_rotrv_8);
+  CHECK_EQ(0x67812345, t.result_rotrv_12);
+  CHECK_EQ(0x56781234, t.result_rotrv_16);
+  CHECK_EQ(0x45678123, t.result_rotrv_20);
+  CHECK_EQ(0x34567812, t.result_rotrv_24);
+  CHECK_EQ(0x23456781, t.result_rotrv_28);
 }
 
 #undef __

@@ -199,8 +199,8 @@ LIBRARY_FLAGS = {
       }
     },
     'simulator:mips': {
-      'CCFLAGS':      [],
-      'LINKFLAGS':    []
+      'CCFLAGS':      ['-m32'],
+      'LINKFLAGS':    ['-m32']
     },
     'arch:x64': {
       'CPPDEFINES':   ['V8_TARGET_ARCH_X64'],
@@ -497,8 +497,8 @@ SAMPLE_FLAGS = {
       'LINKFLAGS':    ['-m32']
     },
     'simulator:mips': {
-      'CCFLAGS':      [],
-      'LINKFLAGS':    []
+      'CCFLAGS':      ['-m32'],
+      'LINKFLAGS':    ['-m32']
     },
     'mode:release': {
       'CCFLAGS':      ['-O2']
