@@ -130,8 +130,12 @@ Handle<Object> RelocInfo::target_object_handle(Assembler *origin) {
 
 
 Object** RelocInfo::target_object_address() {
+  // Provide a "natural pointer" to the embedded object, 
+  // which can be de-referenced during heap iteration.
   ASSERT(IsCodeTarget(rmode_) || rmode_ == EMBEDDED_OBJECT);
-  return reinterpret_cast<Object**>(pc_);
+  reconstructed_obj_ptr_ =
+    reinterpret_cast<Object*>(Assembler::target_address_at(pc_));
+  return &reconstructed_obj_ptr_;
 }
 
 
