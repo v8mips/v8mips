@@ -603,13 +603,6 @@ static const int kDoubleAlignment = (1 << kDoubleAlignmentBits);
 static const int kDoubleAlignmentMask = kDoubleAlignment - 1;
 
 
-// -----------------------------------------------------------------------------
-// MIPS Assembly utils.
-
-int32_t ISA_utils_instr_at(int32_t* pc);
-int32_t* ISA_utils_target_address_at(int32_t* pc);
-
-
 } }   // namespace assembler::mips
 
 #endif    // #ifndef V8_MIPS_CONSTANTS_H_

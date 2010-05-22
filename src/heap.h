@@ -1266,7 +1266,6 @@ class LinearAllocationScope {
 // above the allocation pointer.
 class VerifyPointersVisitor: public ObjectVisitor {
  public:
-#ifndef V8_TARGET_ARCH_MIPS
   void VisitPointers(Object** start, Object** end) {
     for (Object** current = start; current < end; current++) {
       if ((*current)->IsHeapObject()) {
@@ -1276,22 +1275,6 @@ class VerifyPointersVisitor: public ObjectVisitor {
       }
     }
   }
-#else
-  void VisitPointers(Object** start, Object** end) {
-    for (Object** current = start; current < end; current++) {
-          // If we are looking at the location of a li pseudo-instruction which
-          // loads the actual address to a register.
-          // Use Assembler functions to get the actual value.
-      Object* object_address  = reinterpret_cast<Object*>(
-          assembler::mips::ISA_utils_target_address_at((int32_t*)current));
-      if ((object_address)->IsHeapObject()) {
-        HeapObject* object = HeapObject::cast(object_address);
-        ASSERT(Heap::Contains(object));
-        ASSERT(object->map()->IsMap());
-      }
-    }
-  }
-#endif
 };
 
 

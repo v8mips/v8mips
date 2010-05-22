@@ -69,10 +69,7 @@ StackFrame::Type ExitFrame::GetStateForFramePointer(Address fp, State* state) {
 
 
 void ExitFrame::Iterate(ObjectVisitor* v) const {
-//  printf("___________ExitFrame::Iterate");
-//  v->VisitPointer(&code_slot());
-//  // The arguments are traversed as part of the expression stack of
-//  // the calling frame.
+  // Do nothing
 }
 
 
