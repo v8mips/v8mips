@@ -665,7 +665,7 @@ TEST(MIPS8) {
   __ rotr(t7, t0, 0x001c);
 
   // basic word store
-. __ sw(t1, MemOperand(a0, OFFSET_OF(T, result_rotr_4)) );
+  __ sw(t1, MemOperand(a0, OFFSET_OF(T, result_rotr_4)) );
   __ sw(t2, MemOperand(a0, OFFSET_OF(T, result_rotr_8)) );
   __ sw(t3, MemOperand(a0, OFFSET_OF(T, result_rotr_12)) );
   __ sw(t4, MemOperand(a0, OFFSET_OF(T, result_rotr_16)) );
