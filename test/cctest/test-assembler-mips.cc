@@ -732,4 +732,32 @@ TEST(MIPS8) {
   CHECK_EQ(0x23456781, t.result_rotrv_28);
 }
 
+TEST(MIPS9) {
+	// Test BRANCH improvements.
+  InitializeVM();
+  v8::HandleScope scope;
+  	
+  MacroAssembler assm(NULL, 0);
+  Label jlabel, exit;
+
+  
+  __ Branch(&jlabel, ge, a0, Operand(0x00));
+
+	__ bind(&jlabel);
+  __ bind(&exit);
+  __ jr(ra);
+  __ nop();
+
+  CodeDesc desc;
+  assm.GetCode(&desc);
+  Object* code = Heap::CreateCode(desc,
+                                  NULL,
+                                  Code::ComputeFlags(Code::STUB),
+                                  Handle<Object>(Heap::undefined_value()));
+  CHECK(code->IsCode());
+#ifdef DEBUG
+  Code::cast(code)->Print();
+#endif
+}
+
 #undef __
