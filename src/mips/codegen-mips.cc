@@ -6787,16 +6787,209 @@ void StringStubBase::GenerateHashGetHash(MacroAssembler* masm,
 
 
 void SubStringStub::Generate(MacroAssembler* masm) {
-  Label runtime;
-
+  Label sub_string_runtime;
   // Stack frame on entry.
   //  ra: return address
   //  sp[0]: to
   //  sp[4]: from
   //  sp[8]: string
 
-  // Just call the runtime for now.
+  // This stub is called from the native-call %_SubString(...), so
+  // nothing can be assumed about the arguments. It is tested that:
+  //  "string" is a sequential string,
+  //  both "from" and "to" are smis, and
+  //  0 <= from <= to <= string.length.
+  // If any of these assumptions fail, we call the runtime system.
 
+  static const int kToOffset = 0 * kPointerSize;
+  static const int kFromOffset = 1 * kPointerSize;
+  static const int kStringOffset = 2 * kPointerSize;
+
+
+  // Check bounds and smi-ness.
+  __ lw(t3, MemOperand(sp, kToOffset));
+  __ lw(t2, MemOperand(sp, kFromOffset));
+  ASSERT_EQ(0, kSmiTag);
+  ASSERT_EQ(1, kSmiTagSize + kSmiShiftSize);
+
+  __ BranchOnNotSmi(t3, &sub_string_runtime);
+  __ BranchOnNotSmi(t2, &sub_string_runtime);
+
+  __ sra(a3, t2, kSmiTagSize);  // Remove smi tag.
+  __ sra(t5, t3, kSmiTagSize);  // Remove smi tag.
+
+  // a3: from index (untagged smi)
+  // t5: to index (untaged smi)
+
+  __ Branch(&sub_string_runtime, lt, a3, Operand(zero_reg));  // From < 0
+
+  __ subu(a2, t5, a3);
+  __ Branch(&sub_string_runtime, le, a3, Operand(t5));  // Fail if from > to.
+
+  // Special handling of sub-strings of length 1 and 2. One character strings
+  // are handled in the runtime system (looked up in the single character
+  // cache). Two character strings are looked for in the symbol cache.
+  __ Branch(&sub_string_runtime, lt, a2, Operand(2));
+
+  // a2: result string length
+  // a3: from index (untaged smi)
+  // t2: from (smi)
+  // t3: to (smi)
+  // t5: to index (untagged smi)
+
+  // Make sure first argument is a sequential (or flat) string.
+  __ lw(t1, MemOperand(sp, kStringOffset));
+  __ Branch(&sub_string_runtime, eq, t1, Operand(kSmiTagMask));
+
+  __ lw(a1, FieldMemOperand(t1, HeapObject::kMapOffset));
+  __ lbu(a1, FieldMemOperand(a1, Map::kInstanceTypeOffset));
+
+  __ Branch(&sub_string_runtime, ne, a1, Operand(kIsNotStringMask));
+
+  // a1: instance type
+  // a2: result string length
+  // a3: from index (untaged smi)
+  // t1: string
+  // t2: from (smi)
+  // t3: to (smi)
+  // t5: to index (untagged smi)
+
+  Label seq_string;
+  __ And(t0, a1, Operand(kStringRepresentationMask));
+  ASSERT(kSeqStringTag < kConsStringTag);
+  ASSERT(kExternalStringTag > kConsStringTag);
+
+  // External strings go to runtime.
+  __ Branch(&sub_string_runtime, gt, t0, Operand(kConsStringTag));
+  // Sequential strings are handled directly.
+  __ Branch(&seq_string, lt, t0, Operand(kConsStringTag));
+
+  // Cons string. Try to recurse (once) on the first substring.
+  // (This adds a little more generality than necessary to handle flattened
+  // cons strings, but not much).
+  __ lw(t1, FieldMemOperand(t1, ConsString::kFirstOffset));
+  __ lw(t0, FieldMemOperand(t1, HeapObject::kMapOffset));
+  __ lbu(a1, FieldMemOperand(t0, Map::kInstanceTypeOffset));
+  ASSERT_EQ(0, kSeqStringTag);
+  // Cons and External strings go to runtime.
+  __ Branch(&sub_string_runtime, ne, a1, Operand(kStringRepresentationMask));
+
+  // Definitly a sequential string.
+  __ bind(&seq_string);
+
+  // a1: instance type
+  // a2: result string length
+  // a3: from index (untaged smi)
+  // t1: string
+  // t2: from (smi)
+  // t3: to (smi)
+  // t5: to index (untagged smi)
+
+  __ lw(t0, FieldMemOperand(t1, String::kLengthOffset));
+  __ Branch(&sub_string_runtime, lt, t0, Operand(t5));  // Fail if to > length.
+
+  // a1: instance type
+  // a2: result string length
+  // a3: from index (untaged smi)
+  // t1: string
+  // t2: from (smi)
+  // t3: to (smi)
+  // t5: to index (untagged smi)
+
+  // Check for flat ascii string.
+  Label non_ascii_flat;
+  ASSERT_EQ(0, kTwoByteStringTag);
+  __ Branch(&non_ascii_flat, eq, a1, Operand(kStringEncodingMask));
+
+  Label result_longer_than_two;
+  __ Branch(&result_longer_than_two, gt, a2, Operand(2));
+
+  // Sub string of length 2 requested.
+  // Get the two characters forming the sub string.
+  __ Addu(t1, t1, Operand(a3));
+  __ lbu(a3, FieldMemOperand(t1, SeqAsciiString::kHeaderSize));
+  __ lbu(t0, FieldMemOperand(t1, SeqAsciiString::kHeaderSize + 1));
+
+
+
+  // Try to lookup two character string in symbol table.
+  Label make_two_character_string;
+  GenerateTwoCharacterSymbolTableProbe(masm, a3, t0, a1, t1, t2, t3, t4,
+                                       &make_two_character_string);
+  __ IncrementCounter(&Counters::sub_string_native, 1, a3, t0);
+  __ Addu(sp, sp, Operand(3 * kPointerSize));
+  __ Ret();
+
+
+  // a2: result string length.
+  // a3: two characters combined into halfword in little endian byte order.
+  __ bind(&make_two_character_string);
+  __ AllocateAsciiString(v0, a2, t0, t1, t4, &sub_string_runtime);
+  __ sh(a3, FieldMemOperand(v0, SeqAsciiString::kHeaderSize));
+  __ IncrementCounter(&Counters::sub_string_native, 1, a3, t0);
+  __ Addu(sp, sp, Operand(3 * kPointerSize));
+  __ Ret();
+
+  __ bind(&result_longer_than_two);
+
+  // Allocate the result.
+  __ AllocateAsciiString(v0, a2, a3, t0, a1, &sub_string_runtime);
+
+  // v0: result string.
+  // a2: result string length.
+  // a3: from index (untagged smi)
+  // t1: string.
+  // t2: from offset (smi)
+  // Locate first character of result.
+  __ Addu(a1, v0, Operand(SeqAsciiString::kHeaderSize - kHeapObjectTag));
+  // Locate 'from' character of string.
+  __ Addu(t1, t1, Operand(SeqAsciiString::kHeaderSize - kHeapObjectTag));
+  __ Addu(t1, t1, Operand(a3));
+
+  // v0: result string.
+  // a1: first character of result string.
+  // a2: result string length.
+  // t1: first character of sub string to copy.
+  ASSERT_EQ(0, SeqAsciiString::kHeaderSize & kObjectAlignmentMask);
+  GenerateCopyCharactersLong(masm, a1, t1, a2, a3, t0, t2, t3, t4,
+                             COPY_ASCII | DEST_ALWAYS_ALIGNED);
+  __ IncrementCounter(&Counters::sub_string_native, 1, a3, t0);
+  __ Addu(sp, sp, Operand(3 * kPointerSize));
+  __ Ret();
+
+  __ bind(&non_ascii_flat);
+  // a2: result string length.
+  // t1: string.
+  // t2: from offset (smi)
+  // Check for flat two byte string.
+
+  // Allocate the result.
+  __ AllocateTwoByteString(v0, a2, a1, a3, t0, &sub_string_runtime);
+
+  // v0: result string.
+  // a2: result string length.
+  // t1: string.
+  // Locate first character of result.
+  __ Addu(a1, v0, Operand(SeqTwoByteString::kHeaderSize - kHeapObjectTag));
+  // Locate 'from' character of string.
+    __ Addu(t1, t1, Operand(SeqTwoByteString::kHeaderSize - kHeapObjectTag));
+  // As "from" is a smi it is 2 times the value which matches the size of a two
+  // byte character.
+  __ Addu(t1, t1, Operand(t2));
+
+  // v0: result string.
+  // a1: first character of result.
+  // a2: result length.
+  // t1: first character of string to copy.
+  ASSERT_EQ(0, SeqTwoByteString::kHeaderSize & kObjectAlignmentMask);
+  GenerateCopyCharactersLong(masm, a1, t1, a2, a3, t0, t2, t3, t4,
+                             DEST_ALWAYS_ALIGNED);
+  __ IncrementCounter(&Counters::sub_string_native, 1, a3, t0);
+  __ Addu(sp, sp, Operand(3 * kPointerSize));
+  __ Ret();
+
+  // Just jump to runtime to create the sub string.
+  __ bind(&sub_string_runtime);
   __ TailCallRuntime(Runtime::kSubString, 3, 1);
 }
 
