@@ -802,7 +802,7 @@ void Assembler::rotr(Register rd, Register rt, uint16_t sa) {
   emit(instr);
 }
 
-void Assembler::rotrv(Register rd, Register rt, Register rs){
+void Assembler::rotrv(Register rd, Register rt, Register rs) {
   ASSERT(rd.is_valid() && rt.is_valid() && rs.is_valid() );
   Instr instr = SPECIAL | (rs.code() << kRsShift) | (rt.code() << kRtShift)
       | (rd.code() << kRdShift) | (1 << kSaShift) | SRLV;

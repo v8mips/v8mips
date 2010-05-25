@@ -627,10 +627,10 @@ TEST(MIPS7) {
 }
 
 TEST(MIPS8) {
-	// Test ROTR and ROTRV instructions.
+  // Test ROTR and ROTRV instructions.
   InitializeVM();
   v8::HandleScope scope;
-  	
+
   typedef struct {
     int32_t input;
     int32_t result_rotr_4;
@@ -654,7 +654,7 @@ TEST(MIPS8) {
 
   // basic word load
   __ lw(t0, MemOperand(a0, OFFSET_OF(T, input)) );
-  
+
   // ROTR instruction
   __ rotr(t1, t0, 0x0004);
   __ rotr(t2, t0, 0x0008);
@@ -663,17 +663,17 @@ TEST(MIPS8) {
   __ rotr(t5, t0, 0x0014);
   __ rotr(t6, t0, 0x0018);
   __ rotr(t7, t0, 0x001c);
-  
-  // basic word store  
-  __ sw(t1, MemOperand(a0, OFFSET_OF(T, result_rotr_4)) );
+
+  // basic word store
+. __ sw(t1, MemOperand(a0, OFFSET_OF(T, result_rotr_4)) );
   __ sw(t2, MemOperand(a0, OFFSET_OF(T, result_rotr_8)) );
   __ sw(t3, MemOperand(a0, OFFSET_OF(T, result_rotr_12)) );
   __ sw(t4, MemOperand(a0, OFFSET_OF(T, result_rotr_16)) );
   __ sw(t5, MemOperand(a0, OFFSET_OF(T, result_rotr_20)) );
   __ sw(t6, MemOperand(a0, OFFSET_OF(T, result_rotr_24)) );
   __ sw(t7, MemOperand(a0, OFFSET_OF(T, result_rotr_28)) );
-  
-  // ROTRV instruction  
+
+  // ROTRV instruction
   __ li(t7, 0x0004);
   __ rotrv(t1, t0, t7);
   __ li(t7, 0x0008);
@@ -688,8 +688,8 @@ TEST(MIPS8) {
   __ rotrv(t6, t0, t7);
   __ li(t7, 0x001C);
   __ rotrv(t7, t0, t7);
-  
-  // basic word store  
+
+  // basic word store
   __ sw(t1, MemOperand(a0, OFFSET_OF(T, result_rotrv_4)) );
   __ sw(t2, MemOperand(a0, OFFSET_OF(T, result_rotrv_8)) );
   __ sw(t3, MemOperand(a0, OFFSET_OF(T, result_rotrv_12)) );
@@ -697,7 +697,7 @@ TEST(MIPS8) {
   __ sw(t5, MemOperand(a0, OFFSET_OF(T, result_rotrv_20)) );
   __ sw(t6, MemOperand(a0, OFFSET_OF(T, result_rotrv_24)) );
   __ sw(t7, MemOperand(a0, OFFSET_OF(T, result_rotrv_28)) );
-    
+
   __ jr(ra);
   __ nop();
 
@@ -712,7 +712,7 @@ TEST(MIPS8) {
   Code::cast(code)->Print();
 #endif
   F3 f = FUNCTION_CAST<F3>(Code::cast(code)->entry());
-  t.input = 0x12345678;	
+  t.input = 0x12345678;
   Object* dummy = CALL_GENERATED_CODE(f, &t, 0x0, 0, 0, 0);
   USE(dummy);
   CHECK_EQ(0x81234567, t.result_rotr_4);
@@ -722,7 +722,7 @@ TEST(MIPS8) {
   CHECK_EQ(0x45678123, t.result_rotr_20);
   CHECK_EQ(0x34567812, t.result_rotr_24);
   CHECK_EQ(0x23456781, t.result_rotr_28);
-  
+
   CHECK_EQ(0x81234567, t.result_rotrv_4);
   CHECK_EQ(0x78123456, t.result_rotrv_8);
   CHECK_EQ(0x67812345, t.result_rotrv_12);
@@ -733,17 +733,16 @@ TEST(MIPS8) {
 }
 
 TEST(MIPS9) {
-	// Test BRANCH improvements.
+  // Test BRANCH improvements.
   InitializeVM();
   v8::HandleScope scope;
-  	
+
   MacroAssembler assm(NULL, 0);
   Label jlabel, exit;
 
-  
   __ Branch(&jlabel, ge, a0, Operand(0x00));
 
-	__ bind(&jlabel);
+  __ bind(&jlabel);
   __ bind(&exit);
   __ jr(ra);
   __ nop();
