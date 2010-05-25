@@ -6465,7 +6465,6 @@ void GenericUnaryOpStub::Generate(MacroAssembler* masm) {
 
     // Go slow case if the value of the expression is zero
     // to make sure that we switch between 0 and -0.
-// __ teq(a0, zero_reg, 0x123);   // plind, investigate.
     __ Branch(&slow, eq, a0, Operand(0));
 
     // The value of the expression is a smi that is not zero.  Try
@@ -6480,7 +6479,7 @@ void GenericUnaryOpStub::Generate(MacroAssembler* masm) {
     __ bind(&try_float);
     __ GetObjectType(a0, a1, a1);
     __ Branch(&slow, ne, a1, Operand(HEAP_NUMBER_TYPE));
-    // a0 is a heap number.  Get a new heap number in r1.
+    // a0 is a heap number.  Get a new heap number in a1.
     if (overwrite_) {
       __ lw(a2, FieldMemOperand(a0, HeapNumber::kExponentOffset));
       __ Xor(a2, a2, Operand(HeapNumber::kSignMask));  // Flip sign.
@@ -6509,24 +6508,23 @@ void GenericUnaryOpStub::Generate(MacroAssembler* masm) {
     __ nor(a1, a1, zero_reg);
     // check that the *signed* result fits in a smi
     __ Addu(a2, a1, Operand(0x40000000));
-    __ And(a2, a2, Operand(0x80000000));
-    __ Branch(&try_float, ne, a2, Operand(zero_reg));
+    __ Branch(&try_float, lt, a2, Operand(zero_reg));
+
     // Smi tag result.
     __ sll(v0, a1, kSmiTagMask);
     __ StubReturn(1);
 
     __ bind(&try_float);
     if (!overwrite_) {
-      // Allocate a fresh heap number, but don't overwrite r0 until
-      // we're sure we can do it without going through the slow case
-      // that needs the value in r0.
+      // Allocate a fresh heap number, but don't overwrite a0 in-case
+      // we need to go slow. Return new heap number in v0.
       __ AllocateHeapNumber(a2, a3, t0, &slow);
-      __ mov(a0, a2);
+      __ mov(v0, a2);
     }
 
     // WriteInt32ToHeapNumberStub does not trigger GC, so we do not
     // have to set up a frame.
-    WriteInt32ToHeapNumberStub stub(a1, a0, a2, a3);
+    WriteInt32ToHeapNumberStub stub(a1, v0, a2, a3);
     __ Push(ra);
     __ Call(stub.GetCode(), RelocInfo::CODE_TARGET);
     __ Pop(ra);
