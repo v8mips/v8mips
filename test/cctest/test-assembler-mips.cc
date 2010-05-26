@@ -738,12 +738,15 @@ TEST(MIPS9) {
   v8::HandleScope scope;
 
   MacroAssembler assm(NULL, 0);
-  Label jlabel, exit;
+  Label exit, exit2, exit3;
 
-  __ Branch(&jlabel, ge, a0, Operand(0x00));
+  __ Branch(&exit, ge, a0, Operand(0x00000000));
+  __ Branch(&exit2, ge, a0, Operand(0x00001FFF));
+  __ Branch(&exit3, ge, a0, Operand(0x0001FFFF));
 
-  __ bind(&jlabel);
   __ bind(&exit);
+  __ bind(&exit2);
+  __ bind(&exit3);
   __ jr(ra);
   __ nop();
 
