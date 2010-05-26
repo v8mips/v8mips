@@ -6819,12 +6819,12 @@ void SubStringStub::Generate(MacroAssembler* masm) {
   __ sra(t5, t3, kSmiTagSize);  // Remove smi tag.
 
   // a3: from index (untagged smi)
-  // t5: to index (untaged smi)
+  // t5: to index (untagged smi)
 
   __ Branch(&sub_string_runtime, lt, a3, Operand(zero_reg));  // From < 0
 
   __ subu(a2, t5, a3);
-  __ Branch(&sub_string_runtime, le, a3, Operand(t5));  // Fail if from > to.
+  __ Branch(&sub_string_runtime, gt, a3, Operand(t5));  // Fail if from > to.
 
   // Special handling of sub-strings of length 1 and 2. One character strings
   // are handled in the runtime system (looked up in the single character
@@ -6832,7 +6832,7 @@ void SubStringStub::Generate(MacroAssembler* masm) {
   __ Branch(&sub_string_runtime, lt, a2, Operand(2));
 
   // a2: result string length
-  // a3: from index (untaged smi)
+  // a3: from index (untagged smi)
   // t2: from (smi)
   // t3: to (smi)
   // t5: to index (untagged smi)
@@ -6843,12 +6843,13 @@ void SubStringStub::Generate(MacroAssembler* masm) {
 
   __ lw(a1, FieldMemOperand(t1, HeapObject::kMapOffset));
   __ lbu(a1, FieldMemOperand(a1, Map::kInstanceTypeOffset));
+  __ And(t4, a1, Operand(kIsNotStringMask));
 
-  __ Branch(&sub_string_runtime, ne, a1, Operand(kIsNotStringMask));
+  __ Branch(&sub_string_runtime, ne, t4, Operand(zero_reg));
 
   // a1: instance type
   // a2: result string length
-  // a3: from index (untaged smi)
+  // a3: from index (untagged smi)
   // t1: string
   // t2: from (smi)
   // t3: to (smi)
@@ -6861,6 +6862,7 @@ void SubStringStub::Generate(MacroAssembler* masm) {
 
   // External strings go to runtime.
   __ Branch(&sub_string_runtime, gt, t0, Operand(kConsStringTag));
+
   // Sequential strings are handled directly.
   __ Branch(&seq_string, lt, t0, Operand(kConsStringTag));
 
@@ -6879,7 +6881,7 @@ void SubStringStub::Generate(MacroAssembler* masm) {
 
   // a1: instance type
   // a2: result string length
-  // a3: from index (untaged smi)
+  // a3: from index (untagged smi)
   // t1: string
   // t2: from (smi)
   // t3: to (smi)
@@ -6890,7 +6892,7 @@ void SubStringStub::Generate(MacroAssembler* masm) {
 
   // a1: instance type
   // a2: result string length
-  // a3: from index (untaged smi)
+  // a3: from index (untagged smi)
   // t1: string
   // t2: from (smi)
   // t3: to (smi)
@@ -6933,7 +6935,7 @@ void SubStringStub::Generate(MacroAssembler* masm) {
   __ bind(&result_longer_than_two);
 
   // Allocate the result.
-  __ AllocateAsciiString(v0, a2, a3, t0, a1, &sub_string_runtime);
+  __ AllocateAsciiString(v0, a2, t4, t0, a1, &sub_string_runtime);
 
   // v0: result string.
   // a2: result string length.
@@ -6972,7 +6974,7 @@ void SubStringStub::Generate(MacroAssembler* masm) {
   // Locate first character of result.
   __ Addu(a1, v0, Operand(SeqTwoByteString::kHeaderSize - kHeapObjectTag));
   // Locate 'from' character of string.
-    __ Addu(t1, t1, Operand(SeqTwoByteString::kHeaderSize - kHeapObjectTag));
+  __ Addu(t1, t1, Operand(SeqTwoByteString::kHeaderSize - kHeapObjectTag));
   // As "from" is a smi it is 2 times the value which matches the size of a two
   // byte character.
   __ Addu(t1, t1, Operand(t2));
