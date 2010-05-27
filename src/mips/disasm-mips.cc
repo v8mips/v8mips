@@ -487,6 +487,12 @@ void Decoder::DecodeTypeRegister(Instruction* instr) {
             case CVT_W_D:
               Format(instr, "cvt.w.d 'fd, 'fs");
               break;
+            case CVT_L_D:
+              Format(instr, "cvt.l.d 'fd, 'fs");
+              break;
+            case CVT_S_D:
+              Format(instr, "cvt.s.d 'fd, 'fs");
+              break;
             case C_F_D:
               Format(instr, "c.f.d   'fs, 'ft, 'Cc");
               break;
@@ -511,10 +517,6 @@ void Decoder::DecodeTypeRegister(Instruction* instr) {
             case C_ULE_D:
               Format(instr, "c.ule.d 'fs, 'ft, 'Cc");
               break;
-            case CVT_L_D:
-            case CVT_S_D:
-              UNIMPLEMENTED_MIPS();
-              break;
             default:
               Format(instr, "unknown.cop1.d");
               break;
@@ -525,8 +527,8 @@ void Decoder::DecodeTypeRegister(Instruction* instr) {
           break;
         case W:
           switch (instr->FunctionFieldRaw()) {
-            case CVT_S_W:
-              UNIMPLEMENTED_MIPS();
+            case CVT_S_W:   // Convert word to float (single).
+              Format(instr, "cvt.s.w 'fd, 'fs");
               break;
             case CVT_D_W:   // Convert word to double.
               Format(instr, "cvt.d.w 'fd, 'fs");
@@ -536,6 +538,17 @@ void Decoder::DecodeTypeRegister(Instruction* instr) {
           };
           break;
         case L:
+          switch (instr->FunctionFieldRaw()) {
+            case CVT_D_L:
+              Format(instr, "cvt.d.l 'fd, 'fs");
+              break;
+            case CVT_S_L:
+              Format(instr, "cvt.s.l 'fd, 'fs");
+              break;
+            default:
+              UNREACHABLE();
+          }
+          break;
         case PS:
           UNIMPLEMENTED_MIPS();
           break;
@@ -805,16 +818,16 @@ void Decoder::DecodeTypeImmediate(Instruction* instr) {
       Format(instr, "swr    'rt, 'imm16s('rs)");
       break;
     case LWC1:
-      Format(instr, "lwc1    'ft, 'imm16s('rs)");
+      Format(instr, "lwc1   'ft, 'imm16s('rs)");
       break;
     case LDC1:
-      Format(instr, "ldc1    'ft, 'imm16s('rs)");
+      Format(instr, "ldc1   'ft, 'imm16s('rs)");
       break;
     case SWC1:
-      Format(instr, "swc1    'ft, 'imm16s('rs)");
+      Format(instr, "swc1   'ft, 'imm16s('rs)");
       break;
     case SDC1:
-      Format(instr, "sdc1    'ft, 'imm16s('rs)");
+      Format(instr, "sdc1   'ft, 'imm16s('rs)");
       break;
     default:
       UNREACHABLE();

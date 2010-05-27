@@ -762,110 +762,51 @@ TEST(MIPS9) {
 #endif
 }
 
+
 TEST(MIPS10) {
-  // Test LWL, LWR, SWL and SWR instructions.
+  // Test conversions between doubles and long integers.
+  // Test hos the long ints map to FP regs pairs.
   InitializeVM();
   v8::HandleScope scope;
 
   typedef struct {
-    int32_t reg_init;
-    int32_t mem_init;
-    int32_t lwl_0;
-    int32_t lwl_1;
-    int32_t lwl_2;
-    int32_t lwl_3;
-    int32_t lwr_0;
-    int32_t lwr_1;
-    int32_t lwr_2;
-    int32_t lwr_3;
-    int32_t swl_0;
-    int32_t swl_1;
-    int32_t swl_2;
-    int32_t swl_3;
-    int32_t swr_0;
-    int32_t swr_1;
-    int32_t swr_2;
-    int32_t swr_3;
+    double a;
+    double b;
+    int32_t dbl_mant;
+    int32_t dbl_exp;
+    int32_t long_hi;
+    int32_t long_lo;
+    int32_t b_long_hi;
+    int32_t b_long_lo;
   } T;
   T t;
 
   Assembler assm(NULL, 0);
+  Label L, C;
 
-  // Test all combinations of LWL and vAddr
-  __ lw(t0, MemOperand(a0, OFFSET_OF(T, reg_init)) );
-  __ lwl(t0, MemOperand(a0, OFFSET_OF(T, mem_init)) );
-  __ sw(t0, MemOperand(a0, OFFSET_OF(T, lwl_0)) );
+  // Load all structure elements to registers
+  __ ldc1(f0, MemOperand(a0, OFFSET_OF(T, a)));
 
-  __ lw(t1, MemOperand(a0, OFFSET_OF(T, reg_init)) );
-  __ lwl(t1, MemOperand(a0, OFFSET_OF(T, mem_init) + 1) );
-  __ sw(t1, MemOperand(a0, OFFSET_OF(T, lwl_1)) );
+  // Save the raw bits of the double.
+  __ mfc1(t0, f0);
+  __ mfc1(t1, f1);
+  __ sw(t0, MemOperand(a0, OFFSET_OF(T, dbl_mant)));
+  __ sw(t1, MemOperand(a0, OFFSET_OF(T, dbl_exp)));
 
-  __ lw(t2, MemOperand(a0, OFFSET_OF(T, reg_init)) );
-  __ lwl(t2, MemOperand(a0, OFFSET_OF(T, mem_init) + 2) );
-  __ sw(t2, MemOperand(a0, OFFSET_OF(T, lwl_2)) );
+  // Convert double in f0 to long, save hi/lo parts.
+  __ cvt_l_d(f0, f0);
+  __ mfc1(t0, f0);  // f0 has LS 32 bits of long.
+  __ mfc1(t1, f1);  // f1 has MS 32 bits of long.
+  __ sw(t0, MemOperand(a0, OFFSET_OF(T, long_lo)));
+  __ sw(t1, MemOperand(a0, OFFSET_OF(T, long_hi)));
 
-  __ lw(t3, MemOperand(a0, OFFSET_OF(T, reg_init)) );
-  __ lwl(t3, MemOperand(a0, OFFSET_OF(T, mem_init) + 3) );
-  __ sw(t3, MemOperand(a0, OFFSET_OF(T, lwl_3)) );
-
-  // Test all combinations of LWR and vAddr
-  __ lw(t0, MemOperand(a0, OFFSET_OF(T, reg_init)) );
-  __ lwr(t0, MemOperand(a0, OFFSET_OF(T, mem_init)) );
-  __ sw(t0, MemOperand(a0, OFFSET_OF(T, lwr_0)) );
-
-  __ lw(t1, MemOperand(a0, OFFSET_OF(T, reg_init)) );
-  __ lwr(t1, MemOperand(a0, OFFSET_OF(T, mem_init) + 1) );
-  __ sw(t1, MemOperand(a0, OFFSET_OF(T, lwr_1)) );
-
-  __ lw(t2, MemOperand(a0, OFFSET_OF(T, reg_init)) );
-  __ lwr(t2, MemOperand(a0, OFFSET_OF(T, mem_init) + 2) );
-  __ sw(t2, MemOperand(a0, OFFSET_OF(T, lwr_2)) );
-
-  __ lw(t3, MemOperand(a0, OFFSET_OF(T, reg_init)) );
-  __ lwr(t3, MemOperand(a0, OFFSET_OF(T, mem_init) + 3) );
-  __ sw(t3, MemOperand(a0, OFFSET_OF(T, lwr_3)) );
-
-  // Test all combinations of SWL and vAddr
-  __ lw(t0, MemOperand(a0, OFFSET_OF(T, mem_init)) );
-  __ sw(t0, MemOperand(a0, OFFSET_OF(T, swl_0)) );
-  __ lw(t0, MemOperand(a0, OFFSET_OF(T, reg_init)) );
-  __ swl(t0, MemOperand(a0, OFFSET_OF(T, swl_0)) );
-
-  __ lw(t1, MemOperand(a0, OFFSET_OF(T, mem_init)) );
-  __ sw(t1, MemOperand(a0, OFFSET_OF(T, swl_1)) );
-  __ lw(t1, MemOperand(a0, OFFSET_OF(T, reg_init)) );
-  __ swl(t1, MemOperand(a0, OFFSET_OF(T, swl_1) + 1) );
-
-  __ lw(t2, MemOperand(a0, OFFSET_OF(T, mem_init)) );
-  __ sw(t2, MemOperand(a0, OFFSET_OF(T, swl_2)) );
-  __ lw(t2, MemOperand(a0, OFFSET_OF(T, reg_init)) );
-  __ swl(t2, MemOperand(a0, OFFSET_OF(T, swl_2) + 2) );
-
-  __ lw(t3, MemOperand(a0, OFFSET_OF(T, mem_init)) );
-  __ sw(t3, MemOperand(a0, OFFSET_OF(T, swl_3)) );
-  __ lw(t3, MemOperand(a0, OFFSET_OF(T, reg_init)) );
-  __ swl(t3, MemOperand(a0, OFFSET_OF(T, swl_3) + 3) );
-
-  // Test all combinations of SWR and vAddr
-  __ lw(t0, MemOperand(a0, OFFSET_OF(T, mem_init)) );
-  __ sw(t0, MemOperand(a0, OFFSET_OF(T, swr_0)) );
-  __ lw(t0, MemOperand(a0, OFFSET_OF(T, reg_init)) );
-  __ swr(t0, MemOperand(a0, OFFSET_OF(T, swr_0)) );
-
-  __ lw(t1, MemOperand(a0, OFFSET_OF(T, mem_init)) );
-  __ sw(t1, MemOperand(a0, OFFSET_OF(T, swr_1)) );
-  __ lw(t1, MemOperand(a0, OFFSET_OF(T, reg_init)) );
-  __ swr(t1, MemOperand(a0, OFFSET_OF(T, swr_1) + 1) );
-
-  __ lw(t2, MemOperand(a0, OFFSET_OF(T, mem_init)) );
-  __ sw(t2, MemOperand(a0, OFFSET_OF(T, swr_2)) );
-  __ lw(t2, MemOperand(a0, OFFSET_OF(T, reg_init)) );
-  __ swr(t2, MemOperand(a0, OFFSET_OF(T, swr_2) + 2) );
-
-  __ lw(t3, MemOperand(a0, OFFSET_OF(T, mem_init)) );
-  __ sw(t3, MemOperand(a0, OFFSET_OF(T, swr_3)) );
-  __ lw(t3, MemOperand(a0, OFFSET_OF(T, reg_init)) );
-  __ swr(t3, MemOperand(a0, OFFSET_OF(T, swr_3) + 3) );
+  // Convert the b long integers to double b.
+  __ lw(t0, MemOperand(a0, OFFSET_OF(T, b_long_lo)));
+  __ lw(t1, MemOperand(a0, OFFSET_OF(T, b_long_hi)));
+  __ mtc1(t0, f8);  // f8 has LS 32-bits.
+  __ mtc1(t1, f9);  // f9 has MS 32-bits.
+  __ cvt_d_l(f10, f8);
+  __ sdc1(f10, MemOperand(a0, OFFSET_OF(T, b)));
 
   __ jr(ra);
   __ nop();
@@ -881,30 +822,16 @@ TEST(MIPS10) {
   Code::cast(code)->Print();
 #endif
   F3 f = FUNCTION_CAST<F3>(Code::cast(code)->entry());
-  t.reg_init = 0xaabbccdd;
-  t.mem_init = 0x11223344;
-
+  t.a = 2.147483647e9;       // 0x7fffffff -> 0x41DFFFFFFFC00000 as double.
+  t.b_long_hi = 0x000000ff;  // 0xFF00FF00FF -> 0x426FE01FE01FE000 as double.
+  t.b_long_lo = 0x00ff00ff;
   Object* dummy = CALL_GENERATED_CODE(f, &t, 0, 0, 0, 0);
   USE(dummy);
 
-  CHECK_EQ(0x44bbccdd, t.lwl_0);
-  CHECK_EQ(0x3344ccdd, t.lwl_1);
-  CHECK_EQ(0x223344dd, t.lwl_2);
-  CHECK_EQ(0x11223344, t.lwl_3);
-
-  CHECK_EQ(0x11223344, t.lwr_0);
-  CHECK_EQ(0xaa112233, t.lwr_1);
-  CHECK_EQ(0xaabb1122, t.lwr_2);
-  CHECK_EQ(0xaabbcc11, t.lwr_3);
-
-  CHECK_EQ(0x112233aa, t.swl_0);
-  CHECK_EQ(0x1122aabb, t.swl_1);
-  CHECK_EQ(0x11aabbcc, t.swl_2);
-  CHECK_EQ(0xaabbccdd, t.swl_3);
-
-  CHECK_EQ(0xaabbccdd, t.swr_0);
-  CHECK_EQ(0xbbccdd44, t.swr_1);
-  CHECK_EQ(0xccdd3344, t.swr_2);
-  CHECK_EQ(0xdd223344, t.swr_3);
+  CHECK_EQ(0x41DFFFFF, t.dbl_exp);
+  CHECK_EQ(0xFFC00000, t.dbl_mant);
+  CHECK_EQ(0, t.long_hi);
+  CHECK_EQ(0x7fffffff, t.long_lo);
+  CHECK_EQ(1.095233372415e12, t.b); // 0xFF00FF00FF -> 1.095233372415e12.
 }
 #undef __
