@@ -645,6 +645,11 @@ void Simulator::set_fpu_register(int fpureg, int32_t value) {
   FPUregisters_[fpureg] = value;
 }
 
+void Simulator::set_fpu_register_float(int fpureg, float value) {
+  ASSERT((fpureg >= 0) && (fpureg < kNumFPURegisters));
+  *v8i::BitCast<float*, int32_t*>(&FPUregisters_[fpureg]) = value;
+}
+
 void Simulator::set_fpu_register_double(int fpureg, double value) {
   ASSERT((fpureg >= 0) && (fpureg < kNumFPURegisters) && ((fpureg % 2) == 0));
   *v8i::BitCast<double*, int32_t*>(&FPUregisters_[fpureg]) = value;
@@ -664,6 +669,12 @@ int32_t Simulator::get_register(int reg) const {
 int32_t Simulator::get_fpu_register(int fpureg) const {
   ASSERT((fpureg >= 0) && (fpureg < kNumFPURegisters));
   return FPUregisters_[fpureg];
+}
+
+float Simulator::get_fpu_register_float(int fpureg) const {
+  ASSERT((fpureg >= 0) && (fpureg < kNumFPURegisters));
+  return *v8i::BitCast<float*, int32_t*>(
+      const_cast<int32_t*>(&FPUregisters_[fpureg]));
 }
 
 double Simulator::get_fpu_register_double(int fpureg) const {
@@ -1193,8 +1204,12 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
           UNIMPLEMENTED_MIPS();
           break;
         case S:
+          float f;
           switch (instr->FunctionFieldRaw()) {
             case CVT_D_S:
+              f = get_fpu_register_float(fs_reg);
+              set_fpu_register_double(fd_reg, static_cast<double>(f));
+              break;
             case CVT_W_S:
             case CVT_L_S:
             case CVT_PS_S:
@@ -1207,6 +1222,7 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
         case D:
           double ft, fs;
           uint32_t cc;
+          int64_t  i64;
           fs = get_fpu_register_double(fs_reg);
           ft = get_fpu_register_double(ft_reg);
           cc = instr->FCccField();
@@ -1232,7 +1248,7 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
             case NEG_D:
               set_fpu_register_double(fd_reg, -fs);
               break;
-            case CVT_W_D:   // Convert double to word
+            case CVT_W_D:   // Convert double to word.
               set_fpu_register(fd_reg, static_cast<int32_t>(fs));
               break;
             case C_UN_D:
@@ -1256,9 +1272,14 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
             case C_ULE_D:
               set_fpu_ccr_bit(cc, (fs <= ft) || (isnan(fs) || isnan(ft)));
               break;
-            case C_F_D:
-            case CVT_S_D:
+            case CVT_S_D:  // Convert double to float (single).
+              set_fpu_register(fd_reg, static_cast<float>(fs));
+              break;
             case CVT_L_D:
+              i64 = static_cast<int64_t>(fs);
+              set_fpu_register(fd_reg, i64 & 0xffffffff);
+              set_fpu_register(fd_reg + 1, i64 >> 32);
+            case C_F_D:
               UNIMPLEMENTED_MIPS();
               break;
             default:
@@ -1267,8 +1288,9 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
           break;
         case W:
           switch (instr->FunctionFieldRaw()) {
-            case CVT_S_W:
-              UNIMPLEMENTED_MIPS();
+            case CVT_S_W:   // Convert word to float (single).
+              alu_out = get_fpu_register(fs_reg);
+              set_fpu_register(fd_reg, static_cast<float>(alu_out));
               break;
             case CVT_D_W:   // Convert word to double.
               alu_out = get_fpu_register(fs_reg);

@@ -487,6 +487,12 @@ void Decoder::DecodeTypeRegister(Instruction* instr) {
             case CVT_W_D:
               Format(instr, "cvt.w.d 'fd, 'fs");
               break;
+            case CVT_L_D:
+              Format(instr, "cvt.l.d 'fd, 'fs");
+              break;
+            case CVT_S_D:
+              Format(instr, "cvt.s.d 'fd, 'fs");
+              break;
             case C_F_D:
               Format(instr, "c.f.d   'fs, 'ft, 'Cc");
               break;
@@ -511,10 +517,6 @@ void Decoder::DecodeTypeRegister(Instruction* instr) {
             case C_ULE_D:
               Format(instr, "c.ule.d 'fs, 'ft, 'Cc");
               break;
-            case CVT_L_D:
-            case CVT_S_D:
-              UNIMPLEMENTED_MIPS();
-              break;
             default:
               Format(instr, "unknown.cop1.d");
               break;
@@ -525,8 +527,8 @@ void Decoder::DecodeTypeRegister(Instruction* instr) {
           break;
         case W:
           switch (instr->FunctionFieldRaw()) {
-            case CVT_S_W:
-              UNIMPLEMENTED_MIPS();
+            case CVT_S_W:   // Convert word to float (single).
+              Format(instr, "cvt.s.w 'fd, 'fs");
               break;
             case CVT_D_W:   // Convert word to double.
               Format(instr, "cvt.d.w 'fd, 'fs");
