@@ -6973,7 +6973,9 @@ void SubStringStub::Generate(MacroAssembler* masm) {
   // Check for flat ascii string.
   Label non_ascii_flat;
   ASSERT_EQ(0, kTwoByteStringTag);
-  __ Branch(&non_ascii_flat, eq, a1, Operand(kStringEncodingMask));
+
+  __ And(t4, a1, Operand(kStringEncodingMask));
+  __ Branch(&non_ascii_flat, eq, t4, Operand(zero_reg));
 
   Label result_longer_than_two;
   __ Branch(&result_longer_than_two, gt, a2, Operand(2));
