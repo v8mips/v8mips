@@ -786,7 +786,6 @@ static inline bool IsVmThread() {
 
 
 static void ProfilerSignalHandler(int signal, siginfo_t* info, void* context) {
-#ifndef V8_HOST_ARCH_MIPS
   USE(info);
   if (signal != SIGPROF) return;
   if (active_sampler_ == NULL) return;
@@ -821,15 +820,15 @@ static void ProfilerSignalHandler(int signal, siginfo_t* info, void* context) {
     sample.fp = reinterpret_cast<Address>(mcontext.arm_fp);
 #endif
 #elif V8_HOST_ARCH_MIPS
-    // Implement this on MIPS.
-    UNIMPLEMENTED();
+    sample.pc = reinterpret_cast<Address>(mcontext.pc);
+    sample.sp = reinterpret_cast<Address>(mcontext.gregs[29]);
+    sample.fp = reinterpret_cast<Address>(mcontext.gregs[30]);
 #endif
     if (IsVmThread())
       active_sampler_->SampleStack(&sample);
   }
 
   active_sampler_->Tick(&sample);
-#endif
 }
 
 
