@@ -211,12 +211,16 @@ enum Opcode {
 
   LB        =   ((4 << 3) + 0) << kOpcodeShift,
   LH        =   ((4 << 3) + 1) << kOpcodeShift,
+  LWL       =   ((4 << 3) + 2) << kOpcodeShift,
   LW        =   ((4 << 3) + 3) << kOpcodeShift,
   LBU       =   ((4 << 3) + 4) << kOpcodeShift,
   LHU       =   ((4 << 3) + 5) << kOpcodeShift,
+  LWR       =   ((4 << 3) + 6) << kOpcodeShift,
   SB        =   ((5 << 3) + 0) << kOpcodeShift,
   SH        =   ((5 << 3) + 1) << kOpcodeShift,
+  SWL       =   ((5 << 3) + 2) << kOpcodeShift,
   SW        =   ((5 << 3) + 3) << kOpcodeShift,
+  SWR       =   ((5 << 3) + 6) << kOpcodeShift,
 
   LWC1      =   ((6 << 3) + 1) << kOpcodeShift,
   LDC1      =   ((6 << 3) + 5) << kOpcodeShift,

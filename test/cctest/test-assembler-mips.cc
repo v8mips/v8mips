@@ -762,4 +762,149 @@ TEST(MIPS9) {
 #endif
 }
 
+TEST(MIPS10) {
+  // Test LWL, LWR, SWL and SWR instructions.
+  InitializeVM();
+  v8::HandleScope scope;
+
+  typedef struct {
+    int32_t reg_init;
+    int32_t mem_init;
+    int32_t lwl_0;
+    int32_t lwl_1;
+    int32_t lwl_2;
+    int32_t lwl_3;
+    int32_t lwr_0;
+    int32_t lwr_1;
+    int32_t lwr_2;
+    int32_t lwr_3;
+    int32_t swl_0;
+    int32_t swl_1;
+    int32_t swl_2;
+    int32_t swl_3;
+    int32_t swr_0;
+    int32_t swr_1;
+    int32_t swr_2;
+    int32_t swr_3;
+  } T;
+  T t;
+
+  Assembler assm(NULL, 0);
+
+  // Test all combinations of LWL and vAddr
+  __ lw(t0, MemOperand(a0, OFFSET_OF(T, reg_init)) );
+  __ lwl(t0, MemOperand(a0, OFFSET_OF(T, mem_init)) );
+  __ sw(t0, MemOperand(a0, OFFSET_OF(T, lwl_0)) );
+
+  __ lw(t1, MemOperand(a0, OFFSET_OF(T, reg_init)) );
+  __ lwl(t1, MemOperand(a0, OFFSET_OF(T, mem_init) + 1) );
+  __ sw(t1, MemOperand(a0, OFFSET_OF(T, lwl_1)) );
+
+  __ lw(t2, MemOperand(a0, OFFSET_OF(T, reg_init)) );
+  __ lwl(t2, MemOperand(a0, OFFSET_OF(T, mem_init) + 2) );
+  __ sw(t2, MemOperand(a0, OFFSET_OF(T, lwl_2)) );
+
+  __ lw(t3, MemOperand(a0, OFFSET_OF(T, reg_init)) );
+  __ lwl(t3, MemOperand(a0, OFFSET_OF(T, mem_init) + 3) );
+  __ sw(t3, MemOperand(a0, OFFSET_OF(T, lwl_3)) );
+
+  // Test all combinations of LWR and vAddr
+  __ lw(t0, MemOperand(a0, OFFSET_OF(T, reg_init)) );
+  __ lwr(t0, MemOperand(a0, OFFSET_OF(T, mem_init)) );
+  __ sw(t0, MemOperand(a0, OFFSET_OF(T, lwr_0)) );
+
+  __ lw(t1, MemOperand(a0, OFFSET_OF(T, reg_init)) );
+  __ lwr(t1, MemOperand(a0, OFFSET_OF(T, mem_init) + 1) );
+  __ sw(t1, MemOperand(a0, OFFSET_OF(T, lwr_1)) );
+
+  __ lw(t2, MemOperand(a0, OFFSET_OF(T, reg_init)) );
+  __ lwr(t2, MemOperand(a0, OFFSET_OF(T, mem_init) + 2) );
+  __ sw(t2, MemOperand(a0, OFFSET_OF(T, lwr_2)) );
+
+  __ lw(t3, MemOperand(a0, OFFSET_OF(T, reg_init)) );
+  __ lwr(t3, MemOperand(a0, OFFSET_OF(T, mem_init) + 3) );
+  __ sw(t3, MemOperand(a0, OFFSET_OF(T, lwr_3)) );
+
+  // Test all combinations of SWL and vAddr
+  __ lw(t0, MemOperand(a0, OFFSET_OF(T, mem_init)) );
+  __ sw(t0, MemOperand(a0, OFFSET_OF(T, swl_0)) );
+  __ lw(t0, MemOperand(a0, OFFSET_OF(T, reg_init)) );
+  __ swl(t0, MemOperand(a0, OFFSET_OF(T, swl_0)) );
+
+  __ lw(t1, MemOperand(a0, OFFSET_OF(T, mem_init)) );
+  __ sw(t1, MemOperand(a0, OFFSET_OF(T, swl_1)) );
+  __ lw(t1, MemOperand(a0, OFFSET_OF(T, reg_init)) );
+  __ swl(t1, MemOperand(a0, OFFSET_OF(T, swl_1) + 1) );
+
+  __ lw(t2, MemOperand(a0, OFFSET_OF(T, mem_init)) );
+  __ sw(t2, MemOperand(a0, OFFSET_OF(T, swl_2)) );
+  __ lw(t2, MemOperand(a0, OFFSET_OF(T, reg_init)) );
+  __ swl(t2, MemOperand(a0, OFFSET_OF(T, swl_2) + 2) );
+
+  __ lw(t3, MemOperand(a0, OFFSET_OF(T, mem_init)) );
+  __ sw(t3, MemOperand(a0, OFFSET_OF(T, swl_3)) );
+  __ lw(t3, MemOperand(a0, OFFSET_OF(T, reg_init)) );
+  __ swl(t3, MemOperand(a0, OFFSET_OF(T, swl_3) + 3) );
+
+  // Test all combinations of SWR and vAddr
+  __ lw(t0, MemOperand(a0, OFFSET_OF(T, mem_init)) );
+  __ sw(t0, MemOperand(a0, OFFSET_OF(T, swr_0)) );
+  __ lw(t0, MemOperand(a0, OFFSET_OF(T, reg_init)) );
+  __ swr(t0, MemOperand(a0, OFFSET_OF(T, swr_0)) );
+
+  __ lw(t1, MemOperand(a0, OFFSET_OF(T, mem_init)) );
+  __ sw(t1, MemOperand(a0, OFFSET_OF(T, swr_1)) );
+  __ lw(t1, MemOperand(a0, OFFSET_OF(T, reg_init)) );
+  __ swr(t1, MemOperand(a0, OFFSET_OF(T, swr_1) + 1) );
+
+  __ lw(t2, MemOperand(a0, OFFSET_OF(T, mem_init)) );
+  __ sw(t2, MemOperand(a0, OFFSET_OF(T, swr_2)) );
+  __ lw(t2, MemOperand(a0, OFFSET_OF(T, reg_init)) );
+  __ swr(t2, MemOperand(a0, OFFSET_OF(T, swr_2) + 2) );
+
+  __ lw(t3, MemOperand(a0, OFFSET_OF(T, mem_init)) );
+  __ sw(t3, MemOperand(a0, OFFSET_OF(T, swr_3)) );
+  __ lw(t3, MemOperand(a0, OFFSET_OF(T, reg_init)) );
+  __ swr(t3, MemOperand(a0, OFFSET_OF(T, swr_3) + 3) );
+
+  __ jr(ra);
+  __ nop();
+
+  CodeDesc desc;
+  assm.GetCode(&desc);
+  Object* code = Heap::CreateCode(desc,
+                                  NULL,
+                                  Code::ComputeFlags(Code::STUB),
+                                  Handle<Object>(Heap::undefined_value()));
+  CHECK(code->IsCode());
+#ifdef DEBUG
+  Code::cast(code)->Print();
+#endif
+  F3 f = FUNCTION_CAST<F3>(Code::cast(code)->entry());
+  t.reg_init = 0xaabbccdd;
+  t.mem_init = 0x11223344;
+
+  Object* dummy = CALL_GENERATED_CODE(f, &t, 0, 0, 0, 0);
+  USE(dummy);
+
+  CHECK_EQ(0x44bbccdd, t.lwl_0);
+  CHECK_EQ(0x3344ccdd, t.lwl_1);
+  CHECK_EQ(0x223344dd, t.lwl_2);
+  CHECK_EQ(0x11223344, t.lwl_3);
+
+  CHECK_EQ(0x11223344, t.lwr_0);
+  CHECK_EQ(0xaa112233, t.lwr_1);
+  CHECK_EQ(0xaabb1122, t.lwr_2);
+  CHECK_EQ(0xaabbcc11, t.lwr_3);
+
+  CHECK_EQ(0x112233aa, t.swl_0);
+  CHECK_EQ(0x1122aabb, t.swl_1);
+  CHECK_EQ(0x11aabbcc, t.swl_2);
+  CHECK_EQ(0xaabbccdd, t.swl_3);
+
+  CHECK_EQ(0xaabbccdd, t.swr_0);
+  CHECK_EQ(0xbbccdd44, t.swr_1);
+  CHECK_EQ(0xccdd3344, t.swr_2);
+  CHECK_EQ(0xdd223344, t.swr_3);
+}
 #undef __

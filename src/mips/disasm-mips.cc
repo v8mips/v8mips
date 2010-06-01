@@ -776,6 +776,9 @@ void Decoder::DecodeTypeImmediate(Instruction* instr) {
     case LH:
       Format(instr, "lh     'rt, 'imm16s('rs)");
       break;
+    case LWL:
+      Format(instr, "lwl    'rt, 'imm16s('rs)");
+      break;
     case LW:
       Format(instr, "lw     'rt, 'imm16s('rs)");
       break;
@@ -785,14 +788,23 @@ void Decoder::DecodeTypeImmediate(Instruction* instr) {
     case LHU:
       Format(instr, "lhu    'rt, 'imm16s('rs)");
       break;
+    case LWR:
+      Format(instr, "lwr    'rt, 'imm16s('rs)");
+      break;
     case SB:
       Format(instr, "sb     'rt, 'imm16s('rs)");
       break;
     case SH:
       Format(instr, "sh     'rt, 'imm16s('rs)");
       break;
+    case SWL:
+      Format(instr, "swl    'rt, 'imm16s('rs)");
+      break;
     case SW:
       Format(instr, "sw     'rt, 'imm16s('rs)");
+      break;
+    case SWR:
+      Format(instr, "swr    'rt, 'imm16s('rs)");
       break;
     case LWC1:
       Format(instr, "lwc1    'ft, 'imm16s('rs)");
