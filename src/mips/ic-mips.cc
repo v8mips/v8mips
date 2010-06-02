@@ -506,20 +506,86 @@ void KeyedLoadIC::GenerateRuntimeGetProperty(MacroAssembler* masm) {
 
 
 void KeyedLoadIC::GenerateGeneric(MacroAssembler* masm) {
-  // ra     : return address
-  // sp[0]  : key
-  // sp[4]  : receiver
-  Label slow, fast, check_pixel_array;
+  // ---------- S t a t e --------------
+  //  -- ra     : return address
+  //  -- sp[0]  : key
+  //  -- sp[4]  : receiver
+  // -----------------------------------
+  Label slow, check_pixel_array;
 
-  // Get the key and receiver object from the stack.
+  // Modified slightly from in-tree arm version, see
+  // ic-arm.cc: 6a579d9fd7.
+
+  // Get the key and receiver object from the stack (don't pop).
   __ lw(a0, MemOperand(sp, 0));
   __ lw(a1, MemOperand(sp, 4));
 
+  // a0: key
+  // a1: receiver object
+
+  // Check that the object isn't a smi.
+  __ BranchOnSmi(a1, &slow);
+  // Get the map of the receiver.
+  __ lw(a2, FieldMemOperand(a1, HeapObject::kMapOffset));
+  // Check bit field.
+  __ lbu(a3, FieldMemOperand(a2, Map::kBitFieldOffset));
+  __ And(a3, a3, Operand(kSlowCaseBitFieldMask));
+  __ Branch(&slow, ne, a3, Operand(zero_reg));
+  // Check that the object is some kind of JS object EXCEPT JS Value type.
+  // In the case that the object is a value-wrapper object,
+  // we enter the runtime system to make sure that indexing into string
+  // objects work as intended.
+  ASSERT(JS_OBJECT_TYPE > JS_VALUE_TYPE);
+  __ lbu(a2, FieldMemOperand(a2, Map::kInstanceTypeOffset));
+  __ Branch(&slow, lt, a2, Operand(JS_OBJECT_TYPE));
+
+  // Check that the key is a smi.
+  __ BranchOnNotSmi(a0, &slow);
+  __ sra(a0, a0, kSmiTagSize);  // Untag the key.
+
+  // Get the elements array of the object.
+  __ lw(a1, FieldMemOperand(a1, JSObject::kElementsOffset));
+  // Check that the object is in fast mode (not dictionary).
+  __ lw(a3, FieldMemOperand(a1, HeapObject::kMapOffset));
+  __ LoadRoot(t0, Heap::kFixedArrayMapRootIndex);
+  __ Branch(&check_pixel_array, ne, a3, Operand(t0));
+  // Check that the key (index) is within bounds.
+  __ lw(a3, FieldMemOperand(a1, Array::kLengthOffset));
+  __ Branch(&slow, hs, a0, Operand(a3));
+
+  // Fast case: Do the load.
+  // a0: key (un-tagged integer).
+  // a1: elements array of the object.
+  __ Addu(a3, a1, Operand(FixedArray::kHeaderSize - kHeapObjectTag));
+  __ sll(t0, a0, kPointerSizeLog2);  // Scale index for words.
+  __ Addu(t0, t0, Operand(a3));  // Index + base.
+  __ lw(v0, MemOperand(t0, 0));
+  __ LoadRoot(t1, Heap::kTheHoleValueRootIndex);
+  // In case the loaded value is the_hole we have to consult GetProperty
+  // to ensure the prototype chain is searched.
+  __ Branch(&slow, eq, v0, Operand(t1));
+  __ Ret();
+
+  // Check whether the elements is a pixel array.
+  // a0: key (untagged integer).
+  // a1: elements array of the object.
+  // a3: map of elements array.
+  __ bind(&check_pixel_array);
+  __ LoadRoot(t0, Heap::kPixelArrayMapRootIndex);
+  __ Branch(&slow, ne, a3, Operand(t0));
+  // Check that the key (index) is within bounds.
+  __ lw(t0, FieldMemOperand(a1, PixelArray::kLengthOffset));
+  __ Branch(&slow, hs, a0, Operand(t0));
+  __ lw(t0, FieldMemOperand(a1, PixelArray::kExternalPointerOffset));
+  __ Addu(t0, t0, Operand(a0));
+  __ lbu(v0, MemOperand(t0, 0));
+  __ sll(v0, v0, kSmiTagSize);  // Tag result as smi.
+  __ Ret();
+
+  // Slow case: Push extra copies of the arguments (2).
   __ bind(&slow);
   __ IncrementCounter(&Counters::keyed_load_generic_slow, 1, a0, a1);
   GenerateRuntimeGetProperty(masm);
-
-  __ Ret();
 }
 
 
@@ -798,11 +864,149 @@ void KeyedStoreIC::GenerateRuntimeSetProperty(MacroAssembler* masm) {
 
 
 void KeyedStoreIC::GenerateGeneric(MacroAssembler* masm) {
-  // a0     : value
-  // ra     : return address
-  // sp[0]  : key
-  // sp[1]  : receiver
+  // ---------- S t a t e --------------
+  //  -- a0     : value
+  //  -- ra     : return address
+  //  -- sp[0]  : key
+  //  -- sp[1]  : receiver
+  // -----------------------------------
+  Label slow, fast, array, extra, exit, check_pixel_array;
+
+  // Get the key and receiver object from the stack (don't pop).
+  __ lw(a1, MemOperand(sp, 0));   // a1 = key.
+  __ lw(a3, MemOperand(sp, 4));   // a3 = receiver.
+  // Check that the key is a smi.
+  __ BranchOnNotSmi(a1, &slow);
+  // Check that the object isn't a smi.
+  __ BranchOnSmi(a3, &slow);
+  
+  // Get the map of the object.
+  __ lw(a2, FieldMemOperand(a3, HeapObject::kMapOffset));
+  // Check that the receiver does not require access checks.  We need
+  // to do this because this generic stub does not perform map checks.
+  __ lbu(t0, FieldMemOperand(a2, Map::kBitFieldOffset));
+  __ And(t0, t0, Operand(1 << Map::kIsAccessCheckNeeded));
+  __ Branch(&slow, ne, t0, Operand(zero_reg));
+  // Check if the object is a JS array or not.
+  __ lbu(a2, FieldMemOperand(a2, Map::kInstanceTypeOffset));
+  // r1 == key.
+  __ Branch(&array, eq, a2, Operand(JS_ARRAY_TYPE));
+  // Check that the object is some kind of JS object.
+  __ Branch(&slow, lt, a2, Operand(FIRST_JS_OBJECT_TYPE));
+
+  // Object case: Check key against length in the elements array.
+  __ lw(a3, FieldMemOperand(a3, JSObject::kElementsOffset));
+  // Check that the object is in fast mode (not dictionary).
+  __ lw(a2, FieldMemOperand(a3, HeapObject::kMapOffset));
+  __ LoadRoot(t0, Heap::kFixedArrayMapRootIndex);
+  __ Branch(&check_pixel_array, ne, a2, Operand(t0));
+  // Untag the key (for checking against untagged length in the fixed array).
+  __ sra(a1, a1, kSmiTagSize);
+  // Compute address to store into and check array bounds.
+  __ Addu(a2, a3, Operand(FixedArray::kHeaderSize - kHeapObjectTag));
+  __ sll(t0, a1, kPointerSizeLog2);  // Scale index for words.
+  __ Addu(a2, a2, Operand(t0));  // Base + index.
+  __ lw(t0, FieldMemOperand(a3, FixedArray::kLengthOffset));
+  __ Branch(&fast, lo, a1, Operand(t0));
+  // Fall thru to slow if un-tagged index >= length.
+
+  // Slow case:
+  __ bind(&slow);
   GenerateRuntimeSetProperty(masm);
+
+  // Check whether the elements is a pixel array.
+  // a0: value.
+  // a1: index (as a smi), zero-extended.
+  // a2: map of elements array.
+  // a3: elements array.
+  __ bind(&check_pixel_array);
+  __ LoadRoot(t0, Heap::kPixelArrayMapRootIndex);
+  __ Branch(&slow, ne, a2, Operand(t0));
+  // Check that the value is a smi. If a conversion is needed call into the
+  // runtime to convert and clamp.
+  __ BranchOnNotSmi(a0, &slow);
+  __ sra(a1, a1, kSmiTagSize);  // Untag the key.
+  __ lw(t0, FieldMemOperand(a3, PixelArray::kLengthOffset));
+  __ Branch(&slow, hs, a1, Operand(t0));
+  __ mov(t0, a0);  // Save the value.
+  __ sra(a0, a0, kSmiTagSize);  // Untag the value.
+  {  // Clamp the value to [0..255].
+    Label done;
+    __ li(v0, Operand(255));
+    __ Branch(&done, gt, a0, Operand(v0));  // Normal: nop in delay slot.
+    __ Branch(false, &done, lt, a0, Operand(zero_reg));  // Use delay slot.
+    __ mov(v0, zero_reg);  // In delay slot.
+    __ mov(v0, a0);  // Value is in range 0..255.
+    __ bind(&done);
+  }
+  __ lw(a2, FieldMemOperand(a3, PixelArray::kExternalPointerOffset));
+  __ Addu(a0, a2, a1);  // Base + index.
+  __ sb(v0, MemOperand(a0, 0));
+  __ mov(v0, t0);  // Return the original value.
+  __ Ret();
+
+
+  // Extra capacity case: Check if there is extra capacity to
+  // perform the store and update the length. Used for adding one
+  // element to the array by writing to array[array.length].
+  // r0 == value, r1 == key, r2 == elements, r3 == object
+  // t0 == current array len
+  __ bind(&extra);
+  // Do not leave holes in the array. 
+  __ Branch(&slow, ne, a1, Operand(t0));
+  // Check for room in the elements backing store.
+  __ sra(a1, a1, kSmiTagSize);  // Untag key.
+  __ lw(t0, FieldMemOperand(a2, Array::kLengthOffset));
+  __ Branch(&slow, hs, a1, Operand(t0));
+  __ sll(a1, a1, kSmiTagSize);  // Restore key tag.
+  __ Addu(a1, a1, Operand(Smi::FromInt(1)));  // Increment key as Smi.
+  __ sw(a1, FieldMemOperand(a3, JSArray::kLengthOffset));  // New length.
+  __ mov(a3, a2);
+  // NOTE: Computing the address to store into must take the fact
+  // that the key has been incremented into account.
+  int displacement = FixedArray::kHeaderSize - kHeapObjectTag -
+      ((1 << kSmiTagSize) * 2);
+  __ Addu(a2, a2, Operand(displacement));
+  __ sll(t0, a1, kPointerSizeLog2 - kSmiTagSize); // Scale smi to word index.
+  __ Addu(a2, a2, Operand(t0));  // Base + index.
+  __ Branch(&fast, al);
+
+
+  // Array case: Get the length and the elements array from the JS
+  // array. Check that the array is in fast mode; if it is the
+  // length is always a smi.
+  // r0 == value, r3 == object
+  __ bind(&array);
+  __ lw(a2, FieldMemOperand(a3, JSObject::kElementsOffset));
+  __ lw(a1, FieldMemOperand(a2, HeapObject::kMapOffset));
+  __ LoadRoot(t0, Heap::kFixedArrayMapRootIndex);
+  __ Branch(&slow, ne, a1, Operand(t0));
+  
+  // Check the key against the length in the array, compute the
+  // address to store into and fall through to fast case.
+  __ lw(a1, MemOperand(sp));  // restore key
+  // r0 == value, r1 == key, r2 == elements, r3 == object.
+  __ lw(t0, FieldMemOperand(a3, JSArray::kLengthOffset));
+  __ Branch(&extra, hs, a1, Operand(t0));
+  __ mov(a3, a2);
+  __ Addu(a2, a2, Operand(FixedArray::kHeaderSize - kHeapObjectTag));
+  __ sll(t0, a1, kPointerSizeLog2 - kSmiTagSize); // Scale smi to word index.
+  __ Addu(a2, a2, Operand(t0));  // Base + index
+
+
+  // Fast case: Do the store.
+  // r0 == value, r2 == address to store into, r3 == elements
+  __ bind(&fast);
+  __ sw(a0, MemOperand(a2, 0));
+  // Skip write barrier if the written value is a smi.
+  __ BranchOnSmi(a0, &exit);
+  // Update write barrier for the elements array address.
+  __ Subu(a1, a2, Operand(a3));
+  __ RecordWrite(a3, a1, a2);
+
+  __ bind(&exit);
+  __ mov(v0, a0);  // Return the value written.
+  __ Ret();
 }
 
 
@@ -1064,7 +1268,7 @@ void KeyedStoreIC::GenerateExternalArray(MacroAssembler* masm,
   } else {
     // FPU is not available,  do manual conversions.
     // TODO(mips) - convert following code to mips
-    
+
     // __ ldr(r3, FieldMemOperand(r0, HeapNumber::kExponentOffset));
     // __ ldr(r4, FieldMemOperand(r0, HeapNumber::kMantissaOffset));
     //
