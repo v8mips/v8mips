@@ -103,14 +103,35 @@ void VirtualFrame::AllocateStackSlots() {
   if (count > 0) {
     Comment cmnt(masm(), "[ Allocate space for locals");
     Adjust(count);
-      // Initialize stack slots with 'undefined' value.
+    // Initialize stack slots with 'undefined' value.
     __ LoadRoot(t0, Heap::kUndefinedValueRootIndex);
     __ addiu(sp, sp, -count * kPointerSize);
-    for (int i = 0; i < count; i++) {
-      __ sw(t0, MemOperand(sp, (count-i-1)*kPointerSize));
+    if (count < kLocalVarBound) {
+      // For less locals the unrolled loop is more compact.
+      for (int i = 0; i < count; i++) {
+        __ sw(t0, MemOperand(sp, (count-i-1)*kPointerSize));
+      }
+    } else {
+      // For more locals a loop in generated code is more compact.
+      Label alloc_locals_loop;
+      __ li(a1, Operand(count));
+      __ mov(a2, sp);
+      __ bind(&alloc_locals_loop);
+      __ sw(t0, MemOperand(a2, 0));
+      __ Subu(a1, a1, Operand(1));
+      __ Branch(false, &alloc_locals_loop, gt, a1, Operand(zero_reg));
+      __ Addu(a2, a2, Operand(kPointerSize)); // Use branch-delay slot.
     }
   }
-  __ tge(t2, sp, __LINE__);
+  // Call the stub if lower.
+  Label stack_ok;
+  __ Branch(&stack_ok, Uless, t2, Operand(sp));
+  StackCheckStub stub;
+  __ Push(ra);
+  __ Call(Operand(reinterpret_cast<intptr_t>(stub.GetCode().location()),
+          RelocInfo::CODE_TARGET));
+  __ Pop(ra);
+  __ bind(&stack_ok);
 }
 
 
