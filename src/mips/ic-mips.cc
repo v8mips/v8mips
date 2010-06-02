@@ -253,9 +253,86 @@ void CallIC::GenerateMegamorphic(MacroAssembler* masm, int argc) {
 }
 
 
+static void GenerateNormalHelper(MacroAssembler* masm,
+                                 int argc,
+                                 bool is_global_object,
+                                 Label* miss) {
+  // Search dictionary - put result in register a1.
+  // This function uses name in a2, and trashes a3.
+  GenerateDictionaryLoad(masm, miss, a0, a1);
+
+  // Check that the value isn't a smi.
+  __ BranchOnSmi(a1, miss);
+
+  // Check that the value is a JSFunction.
+  __ GetObjectType(a1, a0, a0);
+  __ Branch(miss, ne, a0, Operand(JS_FUNCTION_TYPE));
+
+  // Patch the receiver with the global proxy if necessary.
+  if (is_global_object) {
+    __ lw(a0, MemOperand(sp, argc * kPointerSize));
+    __ lw(a0, FieldMemOperand(a0, GlobalObject::kGlobalReceiverOffset));
+    __ sw(a0, MemOperand(sp, argc * kPointerSize));
+  }
+
+  // Invoke the function.
+  ParameterCount actual(argc);
+  __ InvokeFunction(a1, actual, JUMP_FUNCTION);
+}
+
+
 void CallIC::GenerateNormal(MacroAssembler* masm, int argc) {
-  UNIMPLEMENTED_MIPS();
-  __ break_(__LINE__);
+  // ----------- S t a t e -------------
+  //  -- a2    : name
+  //  -- ra    : return address
+  // -----------------------------------
+  Label miss, global_object, non_global_object;
+
+  // Get the receiver of the function from the stack into a1.
+  __ lw(a1, MemOperand(sp, argc * kPointerSize));
+
+  // Check that the receiver isn't a smi.
+  __ BranchOnSmi(a1, &miss);
+
+  // Check that the receiver is a valid JS object.  Put the map in a3.
+  __ GetObjectType(a1, a3, a0);
+  __ Branch(&miss, lt, a0, Operand(FIRST_JS_OBJECT_TYPE));
+
+  // If this assert fails, we have to check upper bound too.
+  ASSERT(LAST_TYPE == JS_FUNCTION_TYPE);
+
+  // Check for access to global object.
+  __ Branch(&global_object, eq, a0, Operand(JS_GLOBAL_OBJECT_TYPE));
+  __ Branch(&non_global_object, ne, a0, Operand(JS_BUILTINS_OBJECT_TYPE));
+
+  // Accessing global object: Load and invoke.
+  __ bind(&global_object);
+  // Check that the global object does not require access checks.
+  __ lbu(a3, FieldMemOperand(a3, Map::kBitFieldOffset));
+  __ And(a3, a3, Operand(1 << Map::kIsAccessCheckNeeded));
+  __ Branch(&miss, ne, a3, Operand(zero_reg));
+  GenerateNormalHelper(masm, argc, true, &miss);
+
+  // Accessing non-global object: Check for access to global proxy.
+  Label global_proxy, invoke;
+  __ bind(&non_global_object);
+  __ Branch(&global_proxy, eq, a0, Operand(JS_GLOBAL_PROXY_TYPE));
+  // Check that the non-global, non-global-proxy object does not
+  // require access checks.
+  __ lbu(a3, FieldMemOperand(a3, Map::kBitFieldOffset));
+  __ And(a3, a3, Operand(1 << Map::kIsAccessCheckNeeded));
+  __ Branch(&miss, ne, a3, Operand(zero_reg));
+  __ bind(&invoke);
+  GenerateNormalHelper(masm, argc, false, &miss);
+
+  // Global object access: Check access rights.
+  __ bind(&global_proxy);
+  __ CheckAccessGlobalProxy(a1, a0, &miss);
+  __ Branch(&invoke, al);
+
+  // Cache miss: Jump to runtime.
+  __ bind(&miss);
+  GenerateMiss(masm, argc);
 }
 
 void CallIC::GenerateMiss(MacroAssembler* masm, int argc) {
