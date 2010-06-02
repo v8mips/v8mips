@@ -490,6 +490,10 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
   // Convenience function: Same as above, but takes the fid instead.
   void CallRuntime(Runtime::FunctionId fid, int num_arguments);
 
+  // Convenience function: call an external reference.
+  void CallExternalReference(const ExternalReference& ext,
+                             int num_arguments);
+
   // Tail call of a runtime routine (jump).
   // Like JumpToExternalReference, but also takes care of passing the number
   // of parameters.
