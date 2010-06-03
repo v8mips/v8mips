@@ -164,10 +164,8 @@ class Simulator {
   int32_t get_register(int reg) const;
   // Same for FPURegisters
   void set_fpu_register(int fpureg, int32_t value);
-  void set_fpu_register_float(int fpureg, float value);
   void set_fpu_register_double(int fpureg, double value);
   int32_t get_fpu_register(int fpureg) const;
-  float get_fpu_register_float(int fpureg) const;
   double get_fpu_register_double(int fpureg) const;
   void set_fpu_ccr_bit(uint32_t cc, bool value);
   bool test_fpu_ccr_bit(uint32_t cc);
