@@ -5140,8 +5140,72 @@ void CEntryStub::GenerateThrowTOS(MacroAssembler* masm) {
 
 void CEntryStub::GenerateThrowUncatchable(MacroAssembler* masm,
                                           UncatchableExceptionType type) {
-  UNIMPLEMENTED_MIPS();
-  __ break_(__LINE__);
+  // Adjust this code if not the case.
+  ASSERT(StackHandlerConstants::kSize == 4 * kPointerSize);
+
+  // Drop sp to the top stack handler.
+  __ li(a3, Operand(ExternalReference(Top::k_handler_address)));
+  __ lw(sp, MemOperand(a3));
+
+  // Unwind the handlers until the ENTRY handler is found.
+  Label loop, done;
+  __ bind(&loop);
+  // Load the type of the current stack handler.
+  const int kStateOffset = StackHandlerConstants::kStateOffset;
+  __ lw(a2, MemOperand(sp, kStateOffset));
+  __ Branch(&done, eq, a2, Operand(StackHandler::ENTRY));
+  // Fetch the next handler in the list.
+  const int kNextOffset = StackHandlerConstants::kNextOffset;
+  __ lw(sp, MemOperand(sp, kNextOffset));
+  __ jmp(&loop);
+  __ bind(&done);
+
+  // Set the top handler address to next handler past the current ENTRY handler.
+  ASSERT(StackHandlerConstants::kNextOffset == 0);
+  __ Pop(a2);
+  __ sw(a2, MemOperand(a3));
+
+  if (type == OUT_OF_MEMORY) {
+    // Set external caught exception to false.
+    ExternalReference external_caught(Top::k_external_caught_exception_address);
+    __ li(a0, Operand(false));
+    __ li(a2, Operand(external_caught));
+    __ sw(a0, MemOperand(a2));
+
+    // Set pending exception and v0 to out of memory exception.
+    Failure* out_of_memory = Failure::OutOfMemoryException();
+    __ li(v0, Operand(reinterpret_cast<int32_t>(out_of_memory)));
+    __ li(a2, Operand(ExternalReference(Top::k_pending_exception_address)));
+    __ sw(a0, MemOperand(a2));
+  }
+
+  // Stack layout at this point. See also StackHandlerConstants.
+  // sp ->   state (ENTRY)
+  //         fp
+  //         lr
+
+  // Discard handler state (r2 is not used) and restore frame pointer.
+  ASSERT(StackHandlerConstants::kFPOffset == 2 * kPointerSize);
+  __ MultiPop(a2.bit() | fp.bit());  // a2: discarded state.
+  // Before returning we restore the context from the frame pointer if
+  // not NULL.  The frame pointer is NULL in the exception handler of a
+  // JS entry frame.
+  // Set cp to NULL if fp is NULL, else restore cp.
+  Label cp_null;
+  __ Branch(false, &cp_null, eq, fp, Operand(zero_reg));
+  __ mov(cp, zero_reg);   // Use the branch delay slot.
+  __ lw(cp, MemOperand(fp, StandardFrameConstants::kContextOffset));
+  __ bind(&cp_null);
+
+#ifdef DEBUG
+  // TODO(MIPS): Implement debug code.
+  // if (FLAG_debug_code) {
+  //   __ mov(lr, Operand(pc));
+  // }
+#endif
+  ASSERT(StackHandlerConstants::kPCOffset == 3 * kPointerSize);
+  __ Pop(t9);
+  __ Jump(t9);
 }
 
 void CEntryStub::GenerateCore(MacroAssembler* masm,
@@ -5165,8 +5229,10 @@ void CEntryStub::GenerateCore(MacroAssembler* masm,
   ExternalReference scope_depth =
       ExternalReference::heap_always_allocate_scope_depth();
   if (always_allocate) {
-    UNIMPLEMENTED_MIPS();
-    __ break_(__LINE__);
+    __ li(a0, Operand(scope_depth));
+    __ lw(a1, MemOperand(a0));
+    __ Addu(a1, a1, Operand(1));
+    __ sw(a1, MemOperand(a0));
   }
 
   // Call C built-in.
@@ -5174,15 +5240,21 @@ void CEntryStub::GenerateCore(MacroAssembler* masm,
   __ mov(a0, s0);
   __ mov(a1, s1);
 
+  // TODO(MIPS): As of 26May10, Arm code has frame-alignment checks
+  // and modification code here.
+  
   // We are calling compiled C/C++ code. a0 and a1 hold our two arguments. We
   // also need the argument slots.
-  __ jalr(s2);
+  __ jalr(s2);  // Use delay slot for sp adjustment.
   __ addiu(sp, sp, -StandardFrameConstants::kCArgsSlotsSize);
   __ addiu(sp, sp, StandardFrameConstants::kCArgsSlotsSize);
 
   if (always_allocate) {
-    UNIMPLEMENTED_MIPS();
-    __ break_(__LINE__);
+    // It's okay to clobber a2 and a3 here. v0 & v1 contain result.
+    __ li(a2, Operand(scope_depth));
+    __ lw(a3, MemOperand(a2));
+    __ Subu(a3, a3, Operand(1));
+    __ sw(a3, MemOperand(a2));
   }
 
   // Check for failure result.
