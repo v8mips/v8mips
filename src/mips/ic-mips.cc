@@ -493,41 +493,8 @@ void KeyedStoreIC::GenerateExternalArray(MacroAssembler* masm,
 
 
 void KeyedLoadIC::GenerateIndexedInterceptor(MacroAssembler* masm) {
-  // ---------- S t a t e --------------
-  //  -- ra     : return address
-  //  -- sp[0]  : key
-  //  -- sp[4]  : receiver
-  // -----------------------------------
-  Label slow;
-
-  // Get the key and receiver object from the stack.
-  __ lw(a0, MemOperand(sp, 0));
-  __ lw(a1, MemOperand(sp, 4));
-
-  // Check that the receiver isn't a smi.
-  __ BranchOnSmi(a1, &slow);
-
-  // Check that the key is a smi.
-  __ BranchOnNotSmi(a0, &slow);
-
-  // Get the map of the receiver.
-  __ lw(a2, FieldMemOperand(a1, HeapObject::kMapOffset));
-
-  // Check that it has indexed interceptor and access checks
-  // are not enabled for this object.
-  __ lbu(a3, FieldMemOperand(a2, Map::kBitFieldOffset));
-  __ And(a3, a3, Operand(kSlowCaseBitFieldMask));
-  __ Branch(&slow, ne, a3, Operand(1 << Map::kHasIndexedInterceptor));
-  // Everything is fine, call runtime.
-  __ Push(a1);  // receiver
-  __ Push(a0);  // key
-
-  // Perform tail call to the entry.
-  __ TailCallExternalReference(ExternalReference(
-        IC_Utility(kKeyedLoadPropertyWithInterceptor)), 2, 1);
-
-  __ bind(&slow);
-  GenerateMiss(masm);
+  UNIMPLEMENTED_MIPS();
+  __ break_(__LINE__);
 }
 
 
