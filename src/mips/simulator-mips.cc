@@ -70,8 +70,6 @@ class Debugger {
 
   void Stop(Instruction* instr);
   void Debug();
-  // Print all registers with a nice formatting.
-  void PrintAllRegs();
 
  private:
   // We set the breakpoint code to 0xfffff to easily recognize it.
@@ -91,6 +89,9 @@ class Debugger {
   // execution to skip past breakpoints when run from the debugger.
   void UndoBreakpoints();
   void RedoBreakpoints();
+
+  // Print all registers with a nice formatting.
+  void PrintAllRegs();
 };
 
 Debugger::Debugger(Simulator* sim) {
@@ -530,7 +531,6 @@ Simulator::Simulator() {
   stack_ = reinterpret_cast<char*>(malloc(stack_size));
   pc_modified_ = false;
   icount_ = 0;
-  break_count_ = 0;
   break_pc_ = NULL;
   break_instr_ = 0;
 
@@ -932,14 +932,6 @@ void Simulator::SoftwareInterrupt(Instruction* instr) {
     }
     set_register(ra, saved_ra);
     set_pc(get_register(ra));
-  } else if ((instr->InstructionBits() & ~(7 << 6)) == (printRegsInstr & ~(7<<6))) {
-    Debugger dbg(this);
-    int marker_num = (instr->InstructionBits() >> 6) & 7;
-    ++break_count_;
-    PrintF("---- break %d marker: %3d  (instr count: %8d) ----------"
-           "----------------------------------",
-           marker_num, break_count_, icount_);
-    dbg.PrintAllRegs();    
   } else {
     Debugger dbg(this);
     dbg.Debug();
@@ -1119,7 +1111,6 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
           break;
         // Break and trap instructions
         case BREAK:
-          
           do_interrupt = true;
           break;
         case TGE:

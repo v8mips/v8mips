@@ -398,7 +398,6 @@ enum FPUCondition {
 
 // Break 0xfffff, reserved for redirected real time call.
 const Instr rtCallRedirInstr = SPECIAL | BREAK | call_rt_redirected << 6;
-const Instr printRegsInstr = SPECIAL | BREAK | 0x00001 << 6;
 // A nop instruction. (Encoding of sll 0 0 0).
 const Instr nopInstr = 0;
 
