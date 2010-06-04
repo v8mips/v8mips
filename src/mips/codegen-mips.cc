@@ -175,7 +175,7 @@ void CodeGenerator::Generate(CompilationInfo* info) {
     }
 #endif
 
-    // Arm codegen supports secondary mode, which mips doesn't support yet. 
+    // Arm codegen supports secondary mode, which mips doesn't support yet.
     // For now, make sure we're always called as primary.
     ASSERT(info->mode() == CompilationInfo::PRIMARY);
     frame_->Enter();
@@ -327,7 +327,7 @@ void CodeGenerator::Generate(CompilationInfo* info) {
 
     // We don't check for the return code size. It may differ if the number of
     // arguments is too big.
-    
+
     // Tear down the frame which will restore the caller's frame pointer and
     // the link register.
     frame_->Exit();
@@ -3009,17 +3009,17 @@ void CodeGenerator::VisitCall(Call* node) {
 
       LoadAndSpill(property->obj());
       LoadAndSpill(property->key());
-      EmitKeyedLoad(false);
+      EmitKeyedLoad(false);  // Load from Keyed Property: result in v0.
       frame_->Drop();  // key
       // Put the function below the receiver.
       if (property->is_synthetic()) {
         // Use the global receiver.
         frame_->Drop();
-        frame_->EmitPush(a0);
+        frame_->EmitPush(v0);
         LoadGlobalReceiver(a0);
       } else {
         frame_->EmitPop(a1);  // receiver
-        frame_->EmitPush(a0);  // function
+        frame_->EmitPush(v0);  // function
         frame_->EmitPush(a1);  // receiver
       }
 
@@ -7557,7 +7557,7 @@ void CallFunctionStub::Generate(MacroAssembler* masm) {
     __ Push(a1);
     __ InvokeBuiltin(Builtins::TO_OBJECT, CALL_JS);
     __ LeaveInternalFrame();
-    __ sw(a0, MemOperand(sp, argc_ * kPointerSize));
+    __ sw(v0, MemOperand(sp, argc_ * kPointerSize));
 
     __ bind(&receiver_is_js_object);
   }
