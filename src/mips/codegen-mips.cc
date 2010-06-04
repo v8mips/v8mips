@@ -175,6 +175,9 @@ void CodeGenerator::Generate(CompilationInfo* info) {
     }
 #endif
 
+    // Arm codegen supports secondary mode, which mips doesn't support yet. 
+    // For now, make sure we're always called as primary.
+    ASSERT(info->mode() == CompilationInfo::PRIMARY);
     frame_->Enter();
 
     // Allocate space for locals and initialize them.
@@ -324,10 +327,10 @@ void CodeGenerator::Generate(CompilationInfo* info) {
 
     // We don't check for the return code size. It may differ if the number of
     // arguments is too big.
-    __ mov(sp, fp);
-    __ lw(fp, MemOperand(sp, 0));
-    __ lw(ra, MemOperand(sp, 4));
-    __ addiu(sp, sp, 8);
+    
+    // Tear down the frame which will restore the caller's frame pointer and
+    // the link register.
+    frame_->Exit();
 
     __ Addu(sp, sp, Operand((scope()->num_parameters() + 1) * kPointerSize));
     __ Ret();
@@ -5242,7 +5245,7 @@ void CEntryStub::GenerateCore(MacroAssembler* masm,
 
   // TODO(MIPS): As of 26May10, Arm code has frame-alignment checks
   // and modification code here.
-  
+
   // We are calling compiled C/C++ code. a0 and a1 hold our two arguments. We
   // also need the argument slots.
   __ jalr(s2);  // Use delay slot for sp adjustment.

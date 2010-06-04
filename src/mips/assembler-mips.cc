@@ -618,6 +618,7 @@ void Assembler::b(int16_t offset) {
 
 
 void Assembler::bal(int16_t offset) {
+  WriteRecordedPositions();
   bgezal(zero_reg, offset);
 }
 
@@ -633,6 +634,7 @@ void Assembler::bgez(Register rs, int16_t offset) {
 
 
 void Assembler::bgezal(Register rs, int16_t offset) {
+  WriteRecordedPositions();
   GenInstrImmediate(REGIMM, rs, BGEZAL, offset);
 }
 
@@ -653,6 +655,7 @@ void Assembler::bltz(Register rs, int16_t offset) {
 
 
 void Assembler::bltzal(Register rs, int16_t offset) {
+  WriteRecordedPositions();
   GenInstrImmediate(REGIMM, rs, BLTZAL, offset);
 }
 
@@ -669,17 +672,22 @@ void Assembler::j(int32_t target) {
 
 
 void Assembler::jr(Register rs) {
+  if (rs.is(ra)) {
+    WriteRecordedPositions();
+  }
   GenInstrRegister(SPECIAL, rs, zero_reg, zero_reg, 0, JR);
 }
 
 
 void Assembler::jal(int32_t target) {
+  WriteRecordedPositions();
   ASSERT(is_uint28(target) && ((target & 3) == 0));
   GenInstrJump(JAL, target >> 2);
 }
 
 
 void Assembler::jalr(Register rs, Register rd) {
+  WriteRecordedPositions();
   GenInstrRegister(SPECIAL, rs, zero_reg, rd, 0, JALR);
 }
 

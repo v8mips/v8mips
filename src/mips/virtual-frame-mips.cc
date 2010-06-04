@@ -93,7 +93,17 @@ void VirtualFrame::Enter() {
 
 
 void VirtualFrame::Exit() {
-  UNIMPLEMENTED_MIPS();
+  Comment cmnt(masm(), "[ Exit JS frame");
+  // Record the location of the JS exit code for patching when setting
+  // break point.
+  __ RecordJSReturn();
+
+  // Drop the execution stack down to the frame pointer and restore the caller
+  // frame pointer and return address.
+  __ mov(sp, fp);
+  __ lw(fp, MemOperand(sp, 0));
+  __ lw(ra, MemOperand(sp, 4));
+  __ addiu(sp, sp, 8);
 }
 
 
