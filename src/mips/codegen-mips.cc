@@ -6026,7 +6026,7 @@ static void GetInt32(MacroAssembler* masm,
       (HeapNumber::kExponentBias + 0) << HeapNumber::kExponentShift;
   __ Subu(scratch2, scratch2, Operand(zero_exponent));
   // Dest already has a Smi zero.
-  __ Branch(&done, lt, scratch2, Operand(zero_reg));
+  __ Branch(&done, lt, scratch2, Operand(zero_exponent));
   if (!CpuFeatures::IsSupported(FPU)) {
     // We have a shifted exponent between 0 and 30 in scratch2.
     __ srl(dest, scratch2, HeapNumber::kExponentShift);
