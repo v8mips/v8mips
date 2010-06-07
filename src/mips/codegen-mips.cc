@@ -6044,7 +6044,7 @@ static void GetInt32(MacroAssembler* masm,
     // The original 'Exponent' word is still in scratch.
     __ lwc1(f12, FieldMemOperand(source, HeapNumber::kMantissaOffset));
     __ mtc1(scratch, f13);
-    __ cvt_w_d(f0, f12);
+    __ trunc_w_d(f0, f12);
     __ mfc1(dest, f0);
   } else {
     // On entry, dest has final downshift, scratch has original sign/exp/mant.

@@ -1227,10 +1227,10 @@ void KeyedStoreIC::GenerateExternalArray(MacroAssembler* masm,
 
       // Not infinity or NaN simply convert to int.
       if (IsElementTypeSigned(array_type)) {
-        __ cvt_w_d(f0, f0);
+        __ trunc_w_d(f0, f0);
         __ mfc1(a3, f0);
       } else {
-        __ cvt_l_d(f0, f0);  // Convert double to 64-bit int.
+        __ trunc_l_d(f0, f0);  // Convert double to 64-bit int.
         __ mfc1(a3, f0);  // Keep the LS 32-bits.
       }
 
