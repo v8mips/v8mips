@@ -548,9 +548,13 @@ class Assembler : public Malloced {
   // Conversion.
   void cvt_w_s(FPURegister fd, FPURegister fs);
   void cvt_w_d(FPURegister fd, FPURegister fs);
+  void trunc_w_s(FPURegister fd, FPURegister fs);
+  void trunc_w_d(FPURegister fd, FPURegister fs);
 
   void cvt_l_s(FPURegister fd, FPURegister fs);
   void cvt_l_d(FPURegister fd, FPURegister fs);
+  void trunc_l_s(FPURegister fd, FPURegister fs);
+  void trunc_l_d(FPURegister fd, FPURegister fs);
 
   void cvt_s_w(FPURegister fd, FPURegister fs);
   void cvt_s_l(FPURegister fd, FPURegister fs);

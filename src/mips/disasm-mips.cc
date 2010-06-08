@@ -490,6 +490,12 @@ void Decoder::DecodeTypeRegister(Instruction* instr) {
             case CVT_L_D:
               Format(instr, "cvt.l.d 'fd, 'fs");
               break;
+            case TRUNC_W_D:
+              Format(instr, "trunc.w.d 'fd, 'fs");
+              break;
+            case TRUNC_L_D:
+              Format(instr, "trunc.l.d 'fd, 'fs");
+              break;
             case CVT_S_D:
               Format(instr, "cvt.s.d 'fd, 'fs");
               break;

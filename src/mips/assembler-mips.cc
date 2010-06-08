@@ -1091,6 +1091,16 @@ void Assembler::cvt_w_d(FPURegister fd, FPURegister fs) {
 }
 
 
+void Assembler::trunc_w_s(FPURegister fd, FPURegister fs) {
+  GenInstrRegister(COP1, S, f0, fs, fd, TRUNC_W_S);
+}
+
+
+void Assembler::trunc_w_d(FPURegister fd, FPURegister fs) {
+  GenInstrRegister(COP1, D, f0, fs, fd, TRUNC_W_D);
+}
+
+
 void Assembler::cvt_l_s(FPURegister fd, FPURegister fs) {
   GenInstrRegister(COP1, S, f0, fs, fd, CVT_L_S);
 }
@@ -1098,6 +1108,16 @@ void Assembler::cvt_l_s(FPURegister fd, FPURegister fs) {
 
 void Assembler::cvt_l_d(FPURegister fd, FPURegister fs) {
   GenInstrRegister(COP1, D, f0, fs, fd, CVT_L_D);
+}
+
+
+void Assembler::trunc_l_s(FPURegister fd, FPURegister fs) {
+  GenInstrRegister(COP1, S, f0, fs, fd, TRUNC_L_S);
+}
+
+
+void Assembler::trunc_l_d(FPURegister fd, FPURegister fs) {
+  GenInstrRegister(COP1, D, f0, fs, fd, TRUNC_L_D);
 }
 
 

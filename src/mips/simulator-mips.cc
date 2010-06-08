@@ -1229,6 +1229,8 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
               break;
             case CVT_W_S:
             case CVT_L_S:
+            case TRUNC_W_S:
+            case TRUNC_L_S:
             case CVT_PS_S:
               UNIMPLEMENTED_MIPS();
               break;
@@ -1265,9 +1267,6 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
             case NEG_D:
               set_fpu_register_double(fd_reg, -fs);
               break;
-            case CVT_W_D:   // Convert double to word.
-              set_fpu_register(fd_reg, static_cast<int32_t>(fs));
-              break;
             case C_UN_D:
               set_fpu_ccr_bit(cc, isnan(fs) || isnan(ft));
               break;
@@ -1289,10 +1288,23 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
             case C_ULE_D:
               set_fpu_ccr_bit(cc, (fs <= ft) || (isnan(fs) || isnan(ft)));
               break;
+            case CVT_W_D:   // Convert double to word.
+              // Warning: does not follow rouding modes, just truncates.
+              set_fpu_register(fd_reg, static_cast<int32_t>(fs));
+              break;
+            case TRUNC_W_D: // Truncate double to word.
+              set_fpu_register(fd_reg, static_cast<int32_t>(fs));
+              break;
             case CVT_S_D:  // Convert double to float (single).
               set_fpu_register_float(fd_reg, static_cast<float>(fs));
               break;
-            case CVT_L_D:
+            case CVT_L_D:  // Truncate double to 64-bit long-word.
+              // Does not follow rounding modes, just truncates.
+              i64 = static_cast<int64_t>(fs);
+              set_fpu_register(fd_reg, i64 & 0xffffffff);
+              set_fpu_register(fd_reg + 1, i64 >> 32);
+              break;
+            case TRUNC_L_D:
               i64 = static_cast<int64_t>(fs);
               set_fpu_register(fd_reg, i64 & 0xffffffff);
               set_fpu_register(fd_reg + 1, i64 >> 32);

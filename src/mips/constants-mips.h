@@ -298,6 +298,8 @@ enum SecondaryField {
   L         =   ((2 << 3) + 5) << 21,
   PS        =   ((2 << 3) + 6) << 21,
   // COP1 Encoding of Function Field When rs=S.
+  TRUNC_L_S =   ((1 << 3) + 1),
+  TRUNC_W_S =   ((1 << 3) + 5),
   CVT_D_S   =   ((4 << 3) + 1),
   CVT_W_S   =   ((4 << 3) + 4),
   CVT_L_S   =   ((4 << 3) + 5),
@@ -311,6 +313,8 @@ enum SecondaryField {
   ABS_D     =   ((0 << 3) + 5),
   MOV_D     =   ((0 << 3) + 6),
   NEG_D     =   ((0 << 3) + 7),
+  TRUNC_L_D =   ((1 << 3) + 1),
+  TRUNC_W_D =   ((1 << 3) + 5),
   CVT_S_D   =   ((4 << 3) + 0),
   CVT_W_D   =   ((4 << 3) + 4),
   CVT_L_D   =   ((4 << 3) + 5),
