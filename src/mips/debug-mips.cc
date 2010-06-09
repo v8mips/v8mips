@@ -36,19 +36,59 @@ namespace v8 {
 namespace internal {
 
 #ifdef ENABLE_DEBUGGER_SUPPORT
+
 bool BreakLocationIterator::IsDebugBreakAtReturn() {
   return Debug::IsDebugBreakAtReturn(rinfo());
 }
 
 
 void BreakLocationIterator::SetDebugBreakAtReturn() {
-  UNIMPLEMENTED_MIPS();
+  
+  // ..................................................clean this crappy comment up .........
+  
+  // Patch the code changing the return from JS function sequence from
+  //   mov sp, fp
+  //   ldmia sp!, {fp, lr}
+  //   add sp, sp, #4
+  //   bx lr
+  // to a call to the debug break return code.
+  // #if USE_BLX
+  //   ldr ip, [pc, #0]
+  //   blx ip
+  // #else
+  //   mov lr, pc
+  //   ldr pc, [pc, #-4]
+  // #endif
+  //   <debug break return code entry point address>
+  //   bktp 0
+  
+  // Mips return sequence:
+  // mov sp, fp
+  // lw fp, sp(0)
+  // lw ra, sp(4)
+  // addiu sp, sp, 8
+  // addiu sp, sp, N
+  // jr ra
+  // nop (in branch delay slot)
+  //
+  CodePatcher patcher(rinfo()->pc(), 7);   // Assembler::kJSReturnSequenceLength
+  patcher.masm()->li(v8::internal::at, 
+              Operand(reinterpret_cast<int32_t>(Debug::debug_break_return()->entry())));
+  patcher.masm()->Call(v8::internal::at);
+  patcher.masm()->nop();
+  patcher.masm()->nop();
+  patcher.masm()->nop();
+  
+  
+  // patcher.Emit(Debug::debug_break_return()->entry());
+  // patcher.masm()->bkpt(0);
 }
 
 
 // Restore the JS frame exit code.
 void BreakLocationIterator::ClearDebugBreakAtReturn() {
-  UNIMPLEMENTED_MIPS();
+  rinfo()->PatchCode(original_rinfo()->pc(),
+                     Assembler::kJSReturnSequenceLength);
 }
 
 
@@ -63,52 +103,134 @@ bool Debug::IsDebugBreakAtReturn(RelocInfo* rinfo) {
 
 
 
+static void Generate_DebugBreakCallHelper(MacroAssembler* masm,
+                                          RegList pointer_regs) {
+  // Save the content of all general purpose registers in memory. This copy in
+  // memory is later pushed onto the JS expression stack for the fake JS frame
+  // generated and also to the C frame generated on top of that. In the JS
+  // frame ONLY the registers containing pointers will be pushed on the
+  // expression stack. This causes the GC to update these  pointers so that
+  // they will have the correct value when returning from the debugger.
+  __ SaveRegistersToMemory(kJSCallerSaved);
+
+  __ EnterInternalFrame();
+
+  // Store the registers containing object pointers on the expression stack to
+  // make sure that these are correctly updated during GC.
+  // Use sp as base to push.
+  __ CopyRegistersFromMemoryToStack(sp, pointer_regs);
+
+#ifdef DEBUG
+  __ RecordComment("// Calling from debug break to runtime - come in - over");
+#endif
+  __ mov(a0, zero_reg);  // no arguments
+  __ li(a1, Operand(ExternalReference::debug_break()));
+
+  CEntryStub ceb(1, ExitFrame::MODE_DEBUG);
+  __ CallStub(&ceb);
+
+  // Restore the register values containing object pointers from the expression
+  // stack in the reverse order as they where pushed.
+  // Use sp as base to pop.
+  __ CopyRegistersFromStackToMemory(sp, a3, pointer_regs);
+
+  __ LeaveInternalFrame();
+
+  // Finally restore all registers.
+  __ RestoreRegistersFromMemory(kJSCallerSaved);
+
+  // Now that the break point has been handled, resume normal execution by
+  // jumping to the target address intended by the caller and that was
+  // overwritten by the address of DebugBreakXXX.
+  __ li(at, Operand(ExternalReference(Debug_Address::AfterBreakTarget())));
+  __ lw(at, MemOperand(at));
+  __ Jump(at);
+}
+
 
 void Debug::GenerateLoadICDebugBreak(MacroAssembler* masm) {
-  UNIMPLEMENTED_MIPS();
-  __ break_(__LINE__);
+  // Calling convention for IC load (from ic-mips.cc).
+  // ----------- S t a t e -------------
+  //  -- a0    : receiver
+  //  -- a2    : name
+  //  -- ra    : return address
+  //  -- [sp]  : receiver
+  // -----------------------------------
+  // Registers a0 and a2 contain objects that need to be pushed on the
+  // expression stack of the fake JS frame.
+  Generate_DebugBreakCallHelper(masm, a0.bit() | a2.bit());
 }
 
 
 void Debug::GenerateStoreICDebugBreak(MacroAssembler* masm) {
-  UNIMPLEMENTED_MIPS();
-  __ break_(__LINE__);
+  // Calling convention for IC store (from ic-mips.cc).
+  // ----------- S t a t e -------------
+  //  -- a0    : value
+  //  -- a1    : receiver
+  //  -- a2    : name
+  //  -- ra    : return address
+  // -----------------------------------
+  // Registers a0, a1, and a2 contain objects that need to be pushed on the
+  // expression stack of the fake JS frame.
+  Generate_DebugBreakCallHelper(masm, a0.bit() | a1.bit() | a2.bit());
 }
 
 
 void Debug::GenerateKeyedLoadICDebugBreak(MacroAssembler* masm) {
-  UNIMPLEMENTED_MIPS();
-  __ break_(__LINE__);
+  // ---------- S t a t e --------------
+  //  -- ra     : return address
+  //  -- sp[0]  : key
+  //  -- sp[4]  : receiver
+  Generate_DebugBreakCallHelper(masm, 0);
 }
 
 
 void Debug::GenerateKeyedStoreICDebugBreak(MacroAssembler* masm) {
-  UNIMPLEMENTED_MIPS();
-  __ break_(__LINE__);
+  // ---------- S t a t e --------------
+  //  -- ra     : return address
+  //  -- sp[0]  : key
+  //  -- sp[4]  : receiver
+  Generate_DebugBreakCallHelper(masm, 0);
 }
 
 
 void Debug::GenerateCallICDebugBreak(MacroAssembler* masm) {
-  UNIMPLEMENTED_MIPS();
-  __ break_(__LINE__);
+  // Calling convention for IC call (from ic-mips.cc)
+  // ----------- S t a t e -------------
+  //  -- a0: number of arguments
+  //  -- a1: receiver
+  //  -- ra: return address
+  // -----------------------------------
+  // Register a1 contains an object that needs to be pushed on the expression
+  // stack of the fake JS frame. a0 is the actual number of arguments not
+  // encoded as a smi, therefore it cannot be on the expression stack of the
+  // fake JS frame as it can easily be an invalid pointer (e.g. 1). a0 will be
+  // pushed on the stack of the C frame and restored from there.
+  Generate_DebugBreakCallHelper(masm, a1.bit());
 }
 
 
 void Debug::GenerateConstructCallDebugBreak(MacroAssembler* masm) {
-  UNIMPLEMENTED_MIPS();
-  __ break_(__LINE__);
+  // In places other than IC call sites it is expected that a0 is TOS which
+  // is an object - this is not generally the case so this should be used with
+  // care.
+  Generate_DebugBreakCallHelper(masm, a0.bit());
 }
 
 
 void Debug::GenerateReturnDebugBreak(MacroAssembler* masm) {
-  UNIMPLEMENTED_MIPS();
-  __ break_(__LINE__);
+  // In places other than IC call sites it is expected that a0 is TOS which
+  // is an object - this is not generally the case so this should be used with
+  // care.
+  Generate_DebugBreakCallHelper(masm, a0.bit());
 }
 
 
 void Debug::GenerateStubNoRegistersDebugBreak(MacroAssembler* masm) {
-  UNIMPLEMENTED_MIPS();
-  __ break_(__LINE__);
+  // ----------- S t a t e -------------
+  //  No registers used on entry.
+  // -----------------------------------
+  Generate_DebugBreakCallHelper(masm, 0);
 }
 
 

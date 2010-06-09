@@ -211,10 +211,6 @@ class CodeGenerator: public AstVisitor {
 
   static const int kUnknownIntValue = -1;
 
-  // Number of instructions used for the JS return sequence. The constant is
-  // used by the debugger to patch the JS return sequence.
-  static const int kJSReturnSequenceLength = 7;
-
   // If the name is an inline runtime function call return the number of
   // expected arguments. Otherwise return -1.
   static int InlineRuntimeCallArgumentsCount(Handle<String> name);

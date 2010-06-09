@@ -404,6 +404,10 @@ class Assembler : public Malloced {
   // to jump to.
   static const int kPatchReturnSequenceAddressOffset = kInstrSize;
 
+  // Number of instructions used for the JS return sequence. The constant is
+  // used by the debugger to patch the JS return sequence.
+  static const int kJSReturnSequenceLength = 7;
+
 
   // ---------------------------------------------------------------------------
   // Code generation.
@@ -734,6 +738,7 @@ class Assembler : public Malloced {
 
   friend class RegExpMacroAssemblerMIPS;
   friend class RelocInfo;
+  friend class CodePatcher;
 };
 
 } }  // namespace v8::internal

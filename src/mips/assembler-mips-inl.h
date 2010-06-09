@@ -186,13 +186,19 @@ void RelocInfo::set_call_object(Object* target) {
 
 
 bool RelocInfo::IsPatchedReturnSequence() {
-#ifdef DEBUG
-  PrintF("%s - %d - %s : Checking for jal(r)",
-      __FILE__, __LINE__, __func__);
-#endif
-  return ((Assembler::instr_at(pc_) & kOpcodeMask) == SPECIAL) &&
-         (((Assembler::instr_at(pc_) & kFunctionFieldMask) == JAL) ||
-          ((Assembler::instr_at(pc_) & kFunctionFieldMask) == JALR));
+  Instr current_instr = Assembler::instr_at(pc_);
+  Instr third_instr = Assembler::instr_at(pc_ + 2 * Assembler::kInstrSize);
+// #ifdef DEBUG
+//   PrintF("%s - %d - %s : Checking for jal(r)",
+//       __FILE__, __LINE__, __func__);
+// #endif
+  //return 
+  bool prs = (((current_instr & 0xffff0000) == 0x3c010000) &&   // plind -- really UGLY HACK .......
+          ((third_instr & kOpcodeMask) == SPECIAL) &&
+          ((third_instr & kFunctionFieldMask) == JALR));
+        // PrintF("%08x, %08x : Checking for patched ret sequence: lui, ori, jalr: %d\n",
+        //   current_instr, third_instr, prs);
+        return prs;
 }
 
 
