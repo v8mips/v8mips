@@ -99,20 +99,20 @@ int Registers::Number(const char* name) {
 }
 
 
-const char* FPURegister::names_[kNumFPURegister] = {
+const char* FPURegisters::names_[kNumFPURegisters] = {
   "f0", "f1", "f2", "f3", "f4", "f5", "f6", "f7", "f8", "f9", "f10", "f11",
   "f12", "f13", "f14", "f15", "f16", "f17", "f18", "f19", "f20", "f21",
   "f22", "f23", "f24", "f25", "f26", "f27", "f28", "f29", "f30", "f31"
 };
 
 // List of alias names which can be used when referring to MIPS registers.
-const FPURegister::RegisterAlias FPURegister::aliases_[] = {
+const FPURegisters::RegisterAlias FPURegisters::aliases_[] = {
   {kInvalidRegister, NULL}
 };
 
-const char* FPURegister::Name(int creg) {
+const char* FPURegisters::Name(int creg) {
   const char* result;
-  if ((0 <= creg) && (creg < kNumFPURegister)) {
+  if ((0 <= creg) && (creg < kNumFPURegisters)) {
     result = names_[creg];
   } else {
     result = "nocreg";
@@ -121,7 +121,7 @@ const char* FPURegister::Name(int creg) {
 }
 
 
-int FPURegister::Number(const char* name) {
+int FPURegisters::Number(const char* name) {
   // Look through the canonical names.
   for (int i = 0; i < kNumSimuRegisters; i++) {
     if (strcmp(names_[i], name) == 0) {

@@ -81,6 +81,8 @@ class Debugger {
   Simulator* sim_;
 
   int32_t GetRegisterValue(int regnum);
+  int32_t GetFPURegisterValueInt(int regnum);
+  float GetFPURegisterValueFloat(int regnum);
   bool GetValue(const char* desc, int32_t* value);
 
   // Set or delete a breakpoint. Returns true if successful.
@@ -149,11 +151,30 @@ int32_t Debugger::GetRegisterValue(int regnum) {
   }
 }
 
+int32_t Debugger::GetFPURegisterValueInt(int regnum) {
+  if (regnum == kNumFPURegisters) {
+    return sim_->get_pc();
+  } else {
+    return sim_->get_fpu_register(regnum);
+  }
+}
+
+float Debugger::GetFPURegisterValueFloat(int regnum) {
+  if (regnum == kNumFPURegisters) {
+    return sim_->get_pc();
+  } else {
+    return sim_->get_fpu_register_float(regnum);
+  }
+}
 
 bool Debugger::GetValue(const char* desc, int32_t* value) {
   int regnum = Registers::Number(desc);
+  int fpuregnum = FPURegisters::Number(desc);
   if (regnum != kInvalidRegister) {
     *value = GetRegisterValue(regnum);
+    return true;
+  } else if (fpuregnum != kInvalidFPURegister) {
+    *value = GetFPURegisterValueInt(fpuregnum);
     return true;
   } else {
     return SScanF(desc, "%i", value) == 1;
@@ -203,6 +224,8 @@ void Debugger::RedoBreakpoints() {
 
 void Debugger::PrintAllRegs() {
 #define REG_INFO(n) Registers::Name(n), GetRegisterValue(n), GetRegisterValue(n)
+#define FPU_REG_INFO(n) FPURegisters::Name(n), GetFPURegisterValueInt(n), \
+                        GetFPURegisterValueFloat(n)
 
   PrintF("\n");
   // at, v0, a0
@@ -234,7 +257,44 @@ void Debugger::PrintAllRegs() {
   // pc
   PrintF("%3s: 0x%08x %10d\t%3s: 0x%08x %10d\n",
          REG_INFO(31), REG_INFO(34));
+
+  PrintF("\n\n");
+  // f0, f1, f2, ... f31
+  PrintF("%3s: 0x%08x %10e\t%3s: 0x%08x %10e\n",
+         FPU_REG_INFO(0), FPU_REG_INFO(1));
+  PrintF("%3s: 0x%08x %10e\t%3s: 0x%08x %10e\n",
+         FPU_REG_INFO(2), FPU_REG_INFO(3));
+  PrintF("%3s: 0x%08x %10e\t%3s: 0x%08x %10e\n",
+         FPU_REG_INFO(4), FPU_REG_INFO(5));
+  PrintF("%3s: 0x%08x %10e\t%3s: 0x%08x %10e\n",
+         FPU_REG_INFO(6), FPU_REG_INFO(7));
+  PrintF("%3s: 0x%08x %10e\t%3s: 0x%08x %10e\n",
+         FPU_REG_INFO(8), FPU_REG_INFO(9));
+  PrintF("%3s: 0x%08x %10e\t%3s: 0x%08x %10e\n",
+         FPU_REG_INFO(10), FPU_REG_INFO(11));
+  PrintF("%3s: 0x%08x %10e\t%3s: 0x%08x %10e\n",
+         FPU_REG_INFO(12), FPU_REG_INFO(13));
+  PrintF("%3s: 0x%08x %10e\t%3s: 0x%08x %10e\n",
+         FPU_REG_INFO(14), FPU_REG_INFO(15));
+  PrintF("%3s: 0x%08x %10e\t%3s: 0x%08x %10e\n",
+         FPU_REG_INFO(16), FPU_REG_INFO(17));
+  PrintF("%3s: 0x%08x %10e\t%3s: 0x%08x %10e\n",
+         FPU_REG_INFO(18), FPU_REG_INFO(19));
+  PrintF("%3s: 0x%08x %10e\t%3s: 0x%08x %10e\n",
+         FPU_REG_INFO(20), FPU_REG_INFO(21));
+  PrintF("%3s: 0x%08x %10e\t%3s: 0x%08x %10e\n",
+         FPU_REG_INFO(22), FPU_REG_INFO(23));
+  PrintF("%3s: 0x%08x %10e\t%3s: 0x%08x %10e\n",
+         FPU_REG_INFO(24), FPU_REG_INFO(25));
+  PrintF("%3s: 0x%08x %10e\t%3s: 0x%08x %10e\n",
+         FPU_REG_INFO(26), FPU_REG_INFO(27));
+  PrintF("%3s: 0x%08x %10e\t%3s: 0x%08x %10e\n",
+         FPU_REG_INFO(28), FPU_REG_INFO(29));
+  PrintF("%3s: 0x%08x %10e\t%3s: 0x%08x %10e\n",
+         FPU_REG_INFO(30), FPU_REG_INFO(31));
+
 #undef REG_INFO
+#undef FPU_REG_INFO
 }
 
 void Debugger::Debug() {
@@ -302,11 +362,19 @@ void Debugger::Debug() {
       } else if ((strcmp(cmd, "p") == 0) || (strcmp(cmd, "print") == 0)) {
         if (argc == 2) {
           int32_t value;
+          float fvalue;
           if (strcmp(arg1, "all") == 0) {
             PrintAllRegs();
           } else {
-            if (GetValue(arg1, &value)) {
+            int regnum = Registers::Number(arg1);
+            int fpuregnum = FPURegisters::Number(arg1);
+            if (regnum != kInvalidRegister) {
+              value = GetRegisterValue(regnum);
               PrintF("%s: 0x%08x %d \n", arg1, value, value);
+            } else if (fpuregnum != kInvalidFPURegister) {
+              value = GetFPURegisterValueInt(fpuregnum);
+              fvalue = GetFPURegisterValueFloat(fpuregnum);
+              PrintF("%s: 0x%08x %10e\n", arg1, value, fvalue);
             } else {
               PrintF("%s unrecognized\n", arg1);
             }

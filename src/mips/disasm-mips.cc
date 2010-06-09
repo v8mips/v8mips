@@ -913,7 +913,7 @@ const char* NameConverter::NameOfCPURegister(int reg) const {
 
 
 const char* NameConverter::NameOfXMMRegister(int reg) const {
-  return assembler::mips::FPURegister::Name(reg);
+  return assembler::mips::FPURegisters::Name(reg);
 }
 
 

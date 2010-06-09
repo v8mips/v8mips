@@ -66,7 +66,7 @@ static const int kNumSimuRegisters = 35;
 static const int kPCRegister = 34;
 
 // Number coprocessor registers.
-static const int kNumFPURegister = 32;
+static const int kNumFPURegisters = 32;
 static const int kInvalidFPURegister = -1;
 
 // Helper functions for converting between register numbers and names.
@@ -93,7 +93,7 @@ class Registers {
 };
 
 // Helper functions for converting between register numbers and names.
-class FPURegister {
+class FPURegisters {
  public:
   // Return the name of the register.
   static const char* Name(int reg);
@@ -108,7 +108,7 @@ class FPURegister {
 
  private:
 
-  static const char* names_[kNumFPURegister];
+  static const char* names_[kNumFPURegisters];
   static const RegisterAlias aliases_[];
 };
 
