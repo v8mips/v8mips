@@ -82,7 +82,9 @@ class Debugger {
 
   int32_t GetRegisterValue(int regnum);
   int32_t GetFPURegisterValueInt(int regnum);
+  int64_t GetFPURegisterValueLong(int regnum);
   float GetFPURegisterValueFloat(int regnum);
+  double GetFPURegisterValueDouble(int regnum);
   bool GetValue(const char* desc, int32_t* value);
 
   // Set or delete a breakpoint. Returns true if successful.
@@ -159,11 +161,27 @@ int32_t Debugger::GetFPURegisterValueInt(int regnum) {
   }
 }
 
+int64_t Debugger::GetFPURegisterValueLong(int regnum) {
+  if (regnum == kNumFPURegisters) {
+    return sim_->get_pc();
+  } else {
+    return sim_->get_fpu_register_long(regnum);
+  }
+}
+
 float Debugger::GetFPURegisterValueFloat(int regnum) {
   if (regnum == kNumFPURegisters) {
     return sim_->get_pc();
   } else {
     return sim_->get_fpu_register_float(regnum);
+  }
+}
+
+double Debugger::GetFPURegisterValueDouble(int regnum) {
+  if (regnum == kNumFPURegisters) {
+    return sim_->get_pc();
+  } else {
+    return sim_->get_fpu_register_double(regnum);
   }
 }
 
@@ -380,7 +398,26 @@ void Debugger::Debug() {
             }
           }
         } else {
-          PrintF("print <register>\n");
+          if (argc == 3) {
+            if (strcmp(arg2, "pair") == 0) {
+              int64_t lvalue;
+              double dfvalue;
+              int fpuregnum = FPURegisters::Number(arg1);
+              if (fpuregnum != kInvalidFPURegister) {
+                fpuregnum >>= 1;
+                fpuregnum <<= 1;
+                lvalue = GetFPURegisterValueLong(fpuregnum);
+                dfvalue = GetFPURegisterValueDouble(fpuregnum);
+                PrintF("%s,%s: 0x%016x %10e\n", FPURegisters::Name(fpuregnum), FPURegisters::Name(fpuregnum+1), lvalue, dfvalue);
+              } else {
+                PrintF("%s %s unrecognized\n", arg1, arg2);
+              }
+            } else {
+              PrintF("print <fpu register> pair, fpu register must be even\n");
+            }
+          } else {
+            PrintF("print <register> or print <fpu register> pair\n");
+          }
         }
       } else if ((strcmp(cmd, "po") == 0)
                  || (strcmp(cmd, "printobject") == 0)) {
@@ -737,6 +774,12 @@ int32_t Simulator::get_register(int reg) const {
 int32_t Simulator::get_fpu_register(int fpureg) const {
   ASSERT((fpureg >= 0) && (fpureg < kNumFPURegisters));
   return FPUregisters_[fpureg];
+}
+
+int64_t Simulator::get_fpu_register_long(int fpureg) const {
+  ASSERT((fpureg >= 0) && (fpureg < kNumFPURegisters) && ((fpureg % 2) == 0));
+  return *v8i::BitCast<int64_t*, int32_t*>(
+      const_cast<int32_t*>(&FPUregisters_[fpureg]));
 }
 
 float Simulator::get_fpu_register_float(int fpureg) const {

@@ -123,7 +123,7 @@ const char* FPURegisters::Name(int creg) {
 
 int FPURegisters::Number(const char* name) {
   // Look through the canonical names.
-  for (int i = 0; i < kNumSimuRegisters; i++) {
+  for (int i = 0; i < kNumFPURegisters; i++) {
     if (strcmp(names_[i], name) == 0) {
       return i;
     }
