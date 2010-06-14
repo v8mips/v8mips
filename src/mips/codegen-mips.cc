@@ -4726,7 +4726,6 @@ void FastCloneShallowArrayStub::Generate(MacroAssembler* masm) {
   __ TailCallRuntime(Runtime::kCreateArrayLiteralShallow, 3, 1);
 }
 
-
 static void EmitSmiNonsmiComparison(MacroAssembler* masm,
                                     Label* both_loaded_as_doubles,
                                     Label* slow,
@@ -4734,7 +4733,6 @@ static void EmitSmiNonsmiComparison(MacroAssembler* masm,
   Label lhs_is_smi;
   __ And(t0, a0, Operand(kSmiTagMask));
   __ Branch(&lhs_is_smi, eq, t0, Operand(zero_reg));
-
   // Rhs is a Smi.
   // Check whether the non-smi is a heap number.
   __ GetObjectType(a0, t4, t4);
@@ -4751,10 +4749,26 @@ static void EmitSmiNonsmiComparison(MacroAssembler* masm,
 
   // Rhs is a smi, lhs is a number.
   // Convert smi a1 to double.
+  if (CpuFeatures::IsSupported(FPU)){
+    CpuFeatures::Scope scope(FPU);
+
   __ sra(at, a1, kSmiTagSize);
   __ mtc1(at, f14);
   __ cvt_d_w(f14, f14);
   __ ldc1(f12, FieldMemOperand(a0, HeapNumber::kValueOffset));
+  } else {
+    // Load lhs to a double in a2, a3.
+    __ lw(a3, FieldMemOperand(a0, HeapNumber::kValueOffset + 4));
+    __ lw(a2, FieldMemOperand(a0, HeapNumber::kValueOffset));
+
+    // Write Smi from a1 to a1 and a0 in double format. t5 is scratch.
+    __ mov(t6, a1);
+    ConvertToDoubleStub stub1(a1, a0, t6, t5);
+    __ Push(ra);
+    __ Call(stub1.GetCode(), RelocInfo::CODE_TARGET);
+
+    __ Pop(ra);
+  }
 
   // We now have both loaded as doubles.
   __ jmp(both_loaded_as_doubles);
@@ -4776,36 +4790,81 @@ static void EmitSmiNonsmiComparison(MacroAssembler* masm,
   // Lhs is a smi, rhs is a number.
   // a0 is Smi and a1 is heap number.
   // Convert smi a0 to double.
-  __ sra(at, a0, kSmiTagSize);
-  __ mtc1(at, f12);
-  __ cvt_d_w(f12, f12);
-  __ ldc1(f14, FieldMemOperand(a1, HeapNumber::kValueOffset));
+  if (CpuFeatures::IsSupported(FPU)){
+    CpuFeatures::Scope scope(FPU);
+    __ sra(at, a0, kSmiTagSize);
+    __ mtc1(at, f12);
+    __ cvt_d_w(f12, f12);
+    __ ldc1(f14, FieldMemOperand(a1, HeapNumber::kValueOffset));
+  } else {
+    // Convert lhs to a double format. t5 is scratch.
+    __ mov(t6, a0);
+    ConvertToDoubleStub stub2(a3, a2, t6, t5);
+    __ Push(ra);
+    __ Call(stub2.GetCode(), RelocInfo::CODE_TARGET);
+    __ Pop(ra);
+    // Load rhs to a double in a1, a0.
+    __ lw(a0, FieldMemOperand(a1, HeapNumber::kValueOffset));
+    __ lw(a1, FieldMemOperand(a1, HeapNumber::kValueOffset + 4));
+  }
   // Fall through to both_loaded_as_doubles.
 }
 
 
 void EmitNanCheck(MacroAssembler* masm, Condition cc) {
-  // We use the coprocessor c.cond instructions.
+  bool exp_first = (HeapNumber::kExponentOffset == HeapNumber::kValueOffset);
+  if (CpuFeatures::IsSupported(FPU)){
+    CpuFeatures::Scope scope(FPU);
+    // Lhs and rhs are already loaded to f12 and f14 register pairs
+    __ mfc1(t0, f14);  // f14 has LS 32 bits of rhs.
+    __ mfc1(t1, f15);  // f15 has MS 32 bits of rhs.
+    __ mfc1(t2, f12);  // f12 has LS 32 bits of lhs.
+    __ mfc1(t3, f13);  // f13 has MS 32 bits of lhs.
+  } else {
+    // Lhs and rhs are already loaded to GP registers
+    __ and_(t0, a0, a0);  // a0 has LS 32 bits of rhs.
+    __ and_(t1, a1, a1);  // a1 has MS 32 bits of rhs.
+    __ and_(t2, a2, a2);  // a2 has LS 32 bits of lhs.
+    __ and_(t3, a3, a3);  // a3 has MS 32 bits of lhs.
+  }
+  Register rhs_exponent = exp_first ? t0 : t1;
+  Register lhs_exponent = exp_first ? t2 : t3;
+  Register rhs_mantissa = exp_first ? t1 : t0;
+  Register lhs_mantissa = exp_first ? t3 : t2;
   Label one_is_nan, neither_is_nan;
+  Label lhs_not_nan_exp_mask_is_loaded;
 
-  // Test the Unordered condition on both doubles. This is false if any of them
-  // is Nan.
-  __ c(UN, D, f12, f14);
-  __ bc1f(&neither_is_nan);
-  __ nop();
-  __ bc1t(&one_is_nan);
-  __ nop();
+  Register exp_mask_reg = t4;
 
-  // At least one is nan
+  __ li(exp_mask_reg, HeapNumber::kExponentMask);
+  __ xor_(t5, lhs_exponent, exp_mask_reg);
+  __ Branch(&lhs_not_nan_exp_mask_is_loaded, ne, t5, Operand(exp_mask_reg));
+
+  __ sll(t5, lhs_exponent, HeapNumber::kNonMantissaBitsInTopWord);
+  __ Branch(&one_is_nan, ne, t5, Operand(zero_reg));
+
+  __ Branch(&one_is_nan, ne, lhs_mantissa, Operand(zero_reg));
+
+  __ li(exp_mask_reg, HeapNumber::kExponentMask);
+  __ bind(&lhs_not_nan_exp_mask_is_loaded);
+  __ xor_(t5, rhs_exponent, exp_mask_reg);
+
+  __ Branch(&neither_is_nan, ne, t5, Operand(exp_mask_reg));
+
+  __ sll(t5, rhs_exponent, HeapNumber::kNonMantissaBitsInTopWord);
+  __ Branch(&one_is_nan, ne, t5, Operand(zero_reg));
+
+  __ Branch(&neither_is_nan, eq, rhs_mantissa, Operand(zero_reg));
+
   __ bind(&one_is_nan);
   // NaN comparisons always fail.
   // Load whatever we need in r0 to make the comparison fail.
-  if (cc == less || cc == less_equal) {
+  if (cc == lt || cc == le) {
     __ li(v0, Operand(GREATER));
   } else {
     __ li(v0, Operand(LESS));
   }
-  __ Ret();
+  __ Ret();  // Return.
 
   __ bind(&neither_is_nan);
 }
@@ -4828,26 +4887,82 @@ static void EmitTwoNonNanDoubleComparison(MacroAssembler* masm, Condition cc) {
   // __ ReturnFromAlignedCall();
   // __ Ret();
 
-  Label equal, less_than;
-  __ c(EQ, D, f12, f14);
-  __ bc1t(&equal);
-  __ nop();
+  Label return_result_not_equal, return_result_equal;
+  if (cc == eq) {
+    // Doubles are not equal unless they have the same bit pattern.
+    // Exception: 0 and -0.
+    bool exp_first = (HeapNumber::kExponentOffset == HeapNumber::kValueOffset);
+    if (CpuFeatures::IsSupported(FPU)){
+    CpuFeatures::Scope scope(FPU);
+      // Lhs and rhs are already loaded to f12 and f14 register pairs
+      __ mfc1(t0, f14);  // f14 has LS 32 bits of rhs.
+      __ mfc1(t1, f15);  // f15 has MS 32 bits of rhs.
+      __ mfc1(t2, f12);  // f12 has LS 32 bits of lhs.
+      __ mfc1(t3, f13);  // f13 has MS 32 bits of lhs.
+    } else {
+      // Lhs and rhs are already loaded to GP registers
+      __ and_(t0, a0, a0);  // a0 has LS 32 bits of rhs.
+      __ and_(t1, a1, a1);  // a1 has MS 32 bits of rhs.
+      __ and_(t2, a2, a2);  // a2 has LS 32 bits of lhs.
+      __ and_(t3, a3, a3);  // a3 has MS 32 bits of lhs.
+    }
+    Register rhs_exponent = exp_first ? t0 : t1;
+    Register lhs_exponent = exp_first ? t2 : t3;
+    Register rhs_mantissa = exp_first ? t1 : t0;
+    Register lhs_mantissa = exp_first ? t3 : t2;
 
-  __ c(OLT, D, f12, f14);
-  __ bc1t(&less_than);
-  __ nop();
+    __ xor_(v0, rhs_mantissa, lhs_mantissa);
+    __ Branch(&return_result_not_equal, ne, v0, Operand(zero_reg));
 
-  // Not equal, not less, not NaN, must be greater.
-  __ li(v0, Operand(GREATER));
-  __ Ret();
+    __ subu(v0, rhs_exponent, lhs_exponent);
+    // 0, -0 case
+    __ sll(rhs_exponent, rhs_exponent, kSmiTagSize);
+    __ sll(lhs_exponent, lhs_exponent, kSmiTagSize);
+    __ addu(t4, rhs_exponent, lhs_exponent);
+    __ addu(t4, t4, rhs_mantissa);
 
-  __ bind(&equal);
-  __ li(v0, Operand(EQUAL));
-  __ Ret();
+    __ Branch(&return_result_equal, eq, t4, Operand(zero_reg));
+    __ Branch(&return_result_not_equal, ne, v0, Operand(zero_reg));
 
-  __ bind(&less_than);
-  __ li(v0, Operand(LESS));
-  __ Ret();
+    __ bind(&return_result_equal);
+    __ li(v0, Operand(EQUAL));
+    __ Ret();
+  }
+
+  __ bind(&return_result_not_equal);
+
+  if (!CpuFeatures::IsSupported(FPU)){
+    __ Push(ra);
+    __ mov(s3, sp);  // Save sp.
+    __ AlignStack(0);
+    __ li(t4, Operand(ExternalReference::compare_doubles()));
+    __ Call(t4);
+    __ mov(sp, s3);  // Restore stack pointer.
+    __ Pop(ra);
+    __ Ret();
+  } else {
+    CpuFeatures::Scope scope(FPU);
+    Label equal, less_than;
+    __ c(EQ, D, f12, f14);
+    __ bc1t(&equal);
+    __ nop();
+
+    __ c(OLT, D, f12, f14);
+    __ bc1t(&less_than);
+    __ nop();
+
+    // Not equal, not less, not NaN, must be greater.
+    __ li(v0, Operand(GREATER));
+    __ Ret();
+
+    __ bind(&equal);
+    __ li(v0, Operand(EQUAL));
+    __ Ret();
+
+    __ bind(&less_than);
+    __ li(v0, Operand(LESS));
+    __ Ret();
+  }
 }
 
 
@@ -4900,8 +5015,16 @@ static void EmitCheckForTwoHeapNumbers(MacroAssembler* masm,
 
   // Both are heap numbers. Load them up then jump to the code we have
   // for that.
-  __ ldc1(f12, FieldMemOperand(a0, HeapNumber::kValueOffset));
-  __ ldc1(f14, FieldMemOperand(a1, HeapNumber::kValueOffset));
+  if (CpuFeatures::IsSupported(FPU)) {
+    CpuFeatures::Scope scope(FPU);
+    __ ldc1(f12, FieldMemOperand(a0, HeapNumber::kValueOffset));
+    __ ldc1(f14, FieldMemOperand(a1, HeapNumber::kValueOffset));
+  } else {
+    __ lw(a2, FieldMemOperand(a0, HeapNumber::kValueOffset));
+    __ lw(a3, FieldMemOperand(a0, HeapNumber::kValueOffset + 4));
+    __ lw(a0, FieldMemOperand(a1, HeapNumber::kValueOffset));
+    __ lw(a1, FieldMemOperand(a1, HeapNumber::kValueOffset + 4));
+  }
   __ jmp(both_loaded_as_doubles);
 }
 
@@ -5020,12 +5143,14 @@ void CompareStub::Generate(MacroAssembler* masm) {
   // 3) Fall through to both_loaded_as_doubles.
   // 4) Jump to rhs_not_nan.
   // In cases 3 and 4 we have found out we were dealing with a number-number
-  // comparison and the numbers have been loaded into f12 and f14 as doubles.
+  // comparison and the numbers have been loaded into f12 and f14 as doubles,
+  // or in GP registers (a0, a1, a2, a3) depending on the presence of the FPU.
   EmitSmiNonsmiComparison(masm, &both_loaded_as_doubles, &slow, strict_);
 
   __ bind(&both_loaded_as_doubles);
   // f12, f14 are the double representations of the left hand side
-  // and the right hand side.
+  // and the right hand side if we have FPU. Otherwise a2, a3 are representing
+  // left hand side and a0, a1 represent right hand side.
 
   // Checks for NaN in the doubles we have loaded.  Can return the answer or
   // fall through if neither is a NaN.  Also binds rhs_not_nan.
