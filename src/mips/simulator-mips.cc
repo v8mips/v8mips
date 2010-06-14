@@ -278,37 +278,37 @@ void Debugger::PrintAllRegs() {
 
   PrintF("\n\n");
   // f0, f1, f2, ... f31
-  PrintF("%3s: 0x%08x %10e\t%3s: 0x%08x %10e\n",
+  PrintF("%3s: 0x%08x %11.4e\t%3s: 0x%08x %11.4e\n",
          FPU_REG_INFO(0), FPU_REG_INFO(1));
-  PrintF("%3s: 0x%08x %10e\t%3s: 0x%08x %10e\n",
+  PrintF("%3s: 0x%08x %11.4e\t%3s: 0x%08x %11.4e\n",
          FPU_REG_INFO(2), FPU_REG_INFO(3));
-  PrintF("%3s: 0x%08x %10e\t%3s: 0x%08x %10e\n",
+  PrintF("%3s: 0x%08x %11.4e\t%3s: 0x%08x %11.4e\n",
          FPU_REG_INFO(4), FPU_REG_INFO(5));
-  PrintF("%3s: 0x%08x %10e\t%3s: 0x%08x %10e\n",
+  PrintF("%3s: 0x%08x %11.4e\t%3s: 0x%08x %11.4e\n",
          FPU_REG_INFO(6), FPU_REG_INFO(7));
-  PrintF("%3s: 0x%08x %10e\t%3s: 0x%08x %10e\n",
+  PrintF("%3s: 0x%08x %11.4e\t%3s: 0x%08x %11.4e\n",
          FPU_REG_INFO(8), FPU_REG_INFO(9));
-  PrintF("%3s: 0x%08x %10e\t%3s: 0x%08x %10e\n",
+  PrintF("%3s: 0x%08x %11.4e\t%3s: 0x%08x %11.4e\n",
          FPU_REG_INFO(10), FPU_REG_INFO(11));
-  PrintF("%3s: 0x%08x %10e\t%3s: 0x%08x %10e\n",
+  PrintF("%3s: 0x%08x %11.4e\t%3s: 0x%08x %11.4e\n",
          FPU_REG_INFO(12), FPU_REG_INFO(13));
-  PrintF("%3s: 0x%08x %10e\t%3s: 0x%08x %10e\n",
+  PrintF("%3s: 0x%08x %11.4e\t%3s: 0x%08x %11.4e\n",
          FPU_REG_INFO(14), FPU_REG_INFO(15));
-  PrintF("%3s: 0x%08x %10e\t%3s: 0x%08x %10e\n",
+  PrintF("%3s: 0x%08x %11.4e\t%3s: 0x%08x %11.4e\n",
          FPU_REG_INFO(16), FPU_REG_INFO(17));
-  PrintF("%3s: 0x%08x %10e\t%3s: 0x%08x %10e\n",
+  PrintF("%3s: 0x%08x %11.4e\t%3s: 0x%08x %11.4e\n",
          FPU_REG_INFO(18), FPU_REG_INFO(19));
-  PrintF("%3s: 0x%08x %10e\t%3s: 0x%08x %10e\n",
+  PrintF("%3s: 0x%08x %11.4e\t%3s: 0x%08x %11.4e\n",
          FPU_REG_INFO(20), FPU_REG_INFO(21));
-  PrintF("%3s: 0x%08x %10e\t%3s: 0x%08x %10e\n",
+  PrintF("%3s: 0x%08x %11.4e\t%3s: 0x%08x %11.4e\n",
          FPU_REG_INFO(22), FPU_REG_INFO(23));
-  PrintF("%3s: 0x%08x %10e\t%3s: 0x%08x %10e\n",
+  PrintF("%3s: 0x%08x %11.4e\t%3s: 0x%08x %11.4e\n",
          FPU_REG_INFO(24), FPU_REG_INFO(25));
-  PrintF("%3s: 0x%08x %10e\t%3s: 0x%08x %10e\n",
+  PrintF("%3s: 0x%08x %11.4e\t%3s: 0x%08x %11.4e\n",
          FPU_REG_INFO(26), FPU_REG_INFO(27));
-  PrintF("%3s: 0x%08x %10e\t%3s: 0x%08x %10e\n",
+  PrintF("%3s: 0x%08x %11.4e\t%3s: 0x%08x %11.4e\n",
          FPU_REG_INFO(28), FPU_REG_INFO(29));
-  PrintF("%3s: 0x%08x %10e\t%3s: 0x%08x %10e\n",
+  PrintF("%3s: 0x%08x %11.4e\t%3s: 0x%08x %11.4e\n",
          FPU_REG_INFO(30), FPU_REG_INFO(31));
 
 #undef REG_INFO
@@ -392,7 +392,7 @@ void Debugger::Debug() {
             } else if (fpuregnum != kInvalidFPURegister) {
               value = GetFPURegisterValueInt(fpuregnum);
               fvalue = GetFPURegisterValueFloat(fpuregnum);
-              PrintF("%s: 0x%08x %10e\n", arg1, value, fvalue);
+              PrintF("%s: 0x%08x %11.4e\n", arg1, value, fvalue);
             } else {
               PrintF("%s unrecognized\n", arg1);
             }
@@ -408,7 +408,7 @@ void Debugger::Debug() {
                 fpuregnum <<= 1;
                 lvalue = GetFPURegisterValueLong(fpuregnum);
                 dfvalue = GetFPURegisterValueDouble(fpuregnum);
-                PrintF("%s,%s: 0x%016x %10e\n", FPURegisters::Name(fpuregnum), FPURegisters::Name(fpuregnum+1), lvalue, dfvalue);
+                PrintF("%s,%s: 0x%016llx %16.4e\n", FPURegisters::Name(fpuregnum), FPURegisters::Name(fpuregnum+1), lvalue, dfvalue);
               } else {
                 PrintF("%s %s unrecognized\n", arg1, arg2);
               }
