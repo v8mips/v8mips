@@ -1681,7 +1681,7 @@ void MacroAssembler::AllocateTwoByteString(Register result,
   // Calculate the number of bytes needed for the characters in the string while
   // observing object alignment.
   ASSERT((SeqTwoByteString::kHeaderSize & kObjectAlignmentMask) == 0);
-  sll(scratch1, scratch1, 1);  // Length in bytes, not chars.
+  sll(scratch1, length, 1);  // Length in bytes, not chars.
   addiu(scratch1, scratch1,
        kObjectAlignmentMask + SeqTwoByteString::kHeaderSize);
   // AllocateInNewSpace expects the size in words, so we can round down
