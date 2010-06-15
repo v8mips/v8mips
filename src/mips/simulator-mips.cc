@@ -390,33 +390,39 @@ void Debugger::Debug() {
               value = GetRegisterValue(regnum);
               PrintF("%s: 0x%08x %d \n", arg1, value, value);
             } else if (fpuregnum != kInvalidFPURegister) {
-              value = GetFPURegisterValueInt(fpuregnum);
-              fvalue = GetFPURegisterValueFloat(fpuregnum);
-              PrintF("%s: 0x%08x %11.4e\n", arg1, value, fvalue);
+              if(fpuregnum%2 == 1){
+                value = GetFPURegisterValueInt(fpuregnum);
+                fvalue = GetFPURegisterValueFloat(fpuregnum);
+                PrintF("%s: 0x%08x %11.4e\n", arg1, value, fvalue);
+              } else {
+                int64_t lvalue;
+                double dfvalue;
+                lvalue = GetFPURegisterValueLong(fpuregnum);
+                dfvalue = GetFPURegisterValueDouble(fpuregnum);
+                PrintF("%s,%s: 0x%016llx %16.4e\n", FPURegisters::Name(fpuregnum), FPURegisters::Name(fpuregnum+1), lvalue, dfvalue);
+              }
             } else {
               PrintF("%s unrecognized\n", arg1);
             }
           }
         } else {
           if (argc == 3) {
-            if (strcmp(arg2, "pair") == 0) {
-              int64_t lvalue;
-              double dfvalue;
+            if (strcmp(arg2, "single") == 0) {
+              int32_t value;
+              float fvalue;
               int fpuregnum = FPURegisters::Number(arg1);
               if (fpuregnum != kInvalidFPURegister) {
-                fpuregnum >>= 1;
-                fpuregnum <<= 1;
-                lvalue = GetFPURegisterValueLong(fpuregnum);
-                dfvalue = GetFPURegisterValueDouble(fpuregnum);
-                PrintF("%s,%s: 0x%016llx %16.4e\n", FPURegisters::Name(fpuregnum), FPURegisters::Name(fpuregnum+1), lvalue, dfvalue);
+                value = GetFPURegisterValueInt(fpuregnum);
+                fvalue = GetFPURegisterValueFloat(fpuregnum);
+                PrintF("%s: 0x%08x %11.4e\n", arg1, value, fvalue);
               } else {
-                PrintF("%s %s unrecognized\n", arg1, arg2);
+                PrintF("%s unrecognized\n", arg1);
               }
             } else {
-              PrintF("print <fpu register> pair, fpu register must be even\n");
+              PrintF("print <fpu register> single\n");
             }
           } else {
-            PrintF("print <register> or print <fpu register> pair\n");
+            PrintF("print <register> or print <fpu register> single\n");
           }
         }
       } else if ((strcmp(cmd, "po") == 0)
