@@ -4751,11 +4751,10 @@ static void EmitSmiNonsmiComparison(MacroAssembler* masm,
   // Convert smi a1 to double.
   if (CpuFeatures::IsSupported(FPU)){
     CpuFeatures::Scope scope(FPU);
-
-  __ sra(at, a1, kSmiTagSize);
-  __ mtc1(at, f14);
-  __ cvt_d_w(f14, f14);
-  __ ldc1(f12, FieldMemOperand(a0, HeapNumber::kValueOffset));
+    __ sra(at, a1, kSmiTagSize);
+    __ mtc1(at, f14);
+    __ cvt_d_w(f14, f14);
+    __ ldc1(f12, FieldMemOperand(a0, HeapNumber::kValueOffset));
   } else {
     // Load lhs to a double in a2, a3.
     __ lw(a3, FieldMemOperand(a0, HeapNumber::kValueOffset + 4));
@@ -4822,10 +4821,10 @@ void EmitNanCheck(MacroAssembler* masm, Condition cc) {
     __ mfc1(t3, f13);  // f13 has MS 32 bits of lhs.
   } else {
     // Lhs and rhs are already loaded to GP registers
-    __ and_(t0, a0, a0);  // a0 has LS 32 bits of rhs.
-    __ and_(t1, a1, a1);  // a1 has MS 32 bits of rhs.
-    __ and_(t2, a2, a2);  // a2 has LS 32 bits of lhs.
-    __ and_(t3, a3, a3);  // a3 has MS 32 bits of lhs.
+    __ mov(t0, a0);  // a0 has LS 32 bits of rhs.
+    __ mov(t1, a1);  // a1 has MS 32 bits of rhs.
+    __ mov(t2, a2);  // a2 has LS 32 bits of lhs.
+    __ mov(t3, a3);  // a3 has MS 32 bits of lhs.
   }
   Register rhs_exponent = exp_first ? t0 : t1;
   Register lhs_exponent = exp_first ? t2 : t3;
@@ -4857,7 +4856,7 @@ void EmitNanCheck(MacroAssembler* masm, Condition cc) {
 
   __ bind(&one_is_nan);
   // NaN comparisons always fail.
-  // Load whatever we need in r0 to make the comparison fail.
+  // Load whatever we need in v0 to make the comparison fail.
   if (cc == lt || cc == le) {
     __ li(v0, Operand(GREATER));
   } else {
@@ -4876,16 +4875,6 @@ static void EmitTwoNonNanDoubleComparison(MacroAssembler* masm, Condition cc) {
   // We use a call_was and return manually because we need arguments slots to
   // be freed.
 
-  // Something similar to this should be used when we support CPUFeature(FPU)
-  // But in the non-CPU case, the doubles must be passed in GP regs.
-  // __ li(t9, Operand(ExternalReference::compare_doubles()));
-  // __ SetupAlignedCall(t0, 0);
-  // __ Addu(sp, sp, Operand(-StandardFrameConstants::kCArgsSlotsSize));
-  // __ Call(t9);  // Call the code
-  // __ Addu(sp, sp, Operand(StandardFrameConstants::kCArgsSlotsSize));
-  // __ ReturnFromAlignedCall();
-  // __ Ret();
-
   Label return_result_not_equal, return_result_equal;
   if (cc == eq) {
     // Doubles are not equal unless they have the same bit pattern.
@@ -4900,10 +4889,10 @@ static void EmitTwoNonNanDoubleComparison(MacroAssembler* masm, Condition cc) {
       __ mfc1(t3, f13);  // f13 has MS 32 bits of lhs.
     } else {
       // Lhs and rhs are already loaded to GP registers
-      __ and_(t0, a0, a0);  // a0 has LS 32 bits of rhs.
-      __ and_(t1, a1, a1);  // a1 has MS 32 bits of rhs.
-      __ and_(t2, a2, a2);  // a2 has LS 32 bits of lhs.
-      __ and_(t3, a3, a3);  // a3 has MS 32 bits of lhs.
+      __ mov(t0, a0);  // a0 has LS 32 bits of rhs.
+      __ mov(t1, a1);  // a1 has MS 32 bits of rhs.
+      __ mov(t2, a2);  // a2 has LS 32 bits of lhs.
+      __ mov(t3, a3);  // a3 has MS 32 bits of lhs.
     }
     Register rhs_exponent = exp_first ? t0 : t1;
     Register lhs_exponent = exp_first ? t2 : t3;
@@ -5862,8 +5851,6 @@ static void HandleBinaryOpSlowCases(MacroAssembler* masm,
   // If we have floating point hardware, inline ADD, SUB, MUL, and DIV,
   // using registers f12 and f14 for the double values.
 
-// plind debug - implement fmod in fpu instructions.
-//  bool use_fp_registers = CpuFeatures::IsSupported(FPU);
   bool use_fp_registers = CpuFeatures::IsSupported(FPU) &&
       Token::MOD != operation;
 
@@ -6066,14 +6053,6 @@ static void HandleBinaryOpSlowCases(MacroAssembler* masm,
       __ add_d(f0, f12, f14);
     } else if (Token::SUB == operation) {
       __ sub_d(f0, f12, f14);
-    } else if (Token::MOD == operation) {
-      // result = x - y * floor(x / y);
-      // Use int-conversion for floor function.
-      __ div_d(f2, f12, f14);
-      __ cvt_w_d(f2, f2);  // Convert to int with current rounding mode.
-      __ cvt_d_w(f2, f2);  // Convert to double (floor of original number).
-      __ mul_d(f2, f2, f14);
-      __ sub_d(f0, f12, f2);
     } else {
       UNREACHABLE();
     }
