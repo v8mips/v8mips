@@ -5816,8 +5816,10 @@ const char* CompareStub::GetName() {
 
 int CompareStub::MinorKey() {
   // Encode the two parameters in a unique 16 bit value.
-  ASSERT(static_cast<unsigned>(cc_) >> 28 < (1 << 15));
-  return (static_cast<unsigned>(cc_) >> 27) | (strict_ ? 1 : 0);
+  ASSERT(static_cast<unsigned>(cc_) < (1 << 14));
+  return ConditionField::encode(static_cast<unsigned>(cc_))
+         | StrictField::encode(strict_)
+         | NeverNanNanField::encode(cc_ == eq ? never_nan_nan_ : false);
 }
 
 
