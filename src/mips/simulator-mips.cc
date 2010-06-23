@@ -195,7 +195,7 @@ bool Debugger::GetValue(const char* desc, int32_t* value) {
     *value = GetFPURegisterValueInt(fpuregnum);
     return true;
   } else if (strncmp(desc, "0x", 2) == 0) {
-    return SScanF(desc, "%x", (uint32_t*) value) == 1;
+    return SScanF(desc, "%x", reinterpret_cast<uint32_t*>(value)) == 1;
   } else {
     return SScanF(desc, "%i", value) == 1;
   }
@@ -1411,7 +1411,7 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
               // Warning: does not follow rouding modes, just truncates.
               set_fpu_register(fd_reg, static_cast<int32_t>(fs));
               break;
-            case TRUNC_W_D: // Truncate double to word.
+            case TRUNC_W_D:  // Truncate double to word.
               set_fpu_register(fd_reg, static_cast<int32_t>(fs));
               break;
             case CVT_S_D:  // Convert double to float (single).
