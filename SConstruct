@@ -936,8 +936,7 @@ def PostprocessOptions(options, os):
   if options['arch'] == 'mips':
     if ('regexp' in ARGUMENTS) and options['regexp'] == 'native':
       # Print a warning if native regexp is specified for mips
-      print "Warning: forcing regexp to interpreted for mips"
-    options['regexp'] = 'interpreted'
+      print "Warning: implementation of native regexp not fully completed"
 
 
 def ParseEnvOverrides(arg, imports):

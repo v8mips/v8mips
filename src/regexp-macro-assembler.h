@@ -46,6 +46,7 @@ class RegExpMacroAssembler {
   enum IrregexpImplementation {
     kIA32Implementation,
     kARMImplementation,
+    kMIPSImplementation,
     kX64Implementation,
     kBytecodeImplementation
   };

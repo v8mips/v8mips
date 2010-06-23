@@ -151,6 +151,7 @@ SOURCES = {
     mips/ic-mips.cc
     mips/jump-target-mips.cc
     mips/macro-assembler-mips.cc
+    mips/regexp-macro-assembler-mips.cc
     mips/register-allocator-mips.cc
     mips/stub-cache-mips.cc
     mips/virtual-frame-mips.cc
