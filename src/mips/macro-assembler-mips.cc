@@ -819,6 +819,7 @@ void MacroAssembler::Branch(int16_t offset, Condition cond, Register rs,
           bne(scratch, zero_reg, offset);
         } else {
           r2 = scratch;
+          li(r2, rt);
           slt(scratch, rs, r2);
           bne(scratch, zero_reg, offset);
         }
@@ -852,6 +853,7 @@ void MacroAssembler::Branch(int16_t offset, Condition cond, Register rs,
           beq(scratch, zero_reg, offset);
         } else {
           r2 = scratch;
+          li(r2, rt);
           sltu(scratch, rs, r2);
           beq(scratch, zero_reg, offset);
         }
@@ -864,6 +866,7 @@ void MacroAssembler::Branch(int16_t offset, Condition cond, Register rs,
           bne(scratch, zero_reg, offset);
         } else {
           r2 = scratch;
+          li(r2, rt);
           sltu(scratch, rs, r2);
           bne(scratch, zero_reg, offset);
         }
@@ -1044,7 +1047,7 @@ void MacroAssembler::Branch(Label* L, Condition cond, Register rs,
           bne(scratch, zero_reg, offset);
         }
         break;
-        case greater_equal:
+      case greater_equal:
         if (rt.imm32_ == 0) {
           offset = shifted_branch_offset(L, false);
           bgez(rs, offset);
@@ -1070,6 +1073,7 @@ void MacroAssembler::Branch(Label* L, Condition cond, Register rs,
           bne(scratch, zero_reg, offset);
         } else {
           r2 = scratch;
+          li(r2, rt);
           slt(scratch, rs, r2);
           offset = shifted_branch_offset(L, false);
           bne(scratch, zero_reg, offset);
@@ -1110,6 +1114,7 @@ void MacroAssembler::Branch(Label* L, Condition cond, Register rs,
           beq(scratch, zero_reg, offset);
         } else {
           r2 = scratch;
+          li(r2, rt);
           sltu(scratch, rs, r2);
           offset = shifted_branch_offset(L, false);
           beq(scratch, zero_reg, offset);
@@ -1125,6 +1130,7 @@ void MacroAssembler::Branch(Label* L, Condition cond, Register rs,
           bne(scratch, zero_reg, offset);
         } else {
           r2 = scratch;
+          li(r2, rt);
           sltu(scratch, rs, r2);
           offset = shifted_branch_offset(L, false);
           bne(scratch, zero_reg, offset);
