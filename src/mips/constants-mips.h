@@ -370,6 +370,7 @@ enum Condition {
   eq            = equal,
   not_zero      = not_equal,
   ne            = not_equal,
+  nz            = not_equal,
   sign          = negative,
   not_sign      = positive,
   mi            = negative,

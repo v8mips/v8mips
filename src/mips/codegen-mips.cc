@@ -3355,11 +3355,34 @@ void CodeGenerator::GenerateCharFromCode(ZoneList<Expression*>* args) {
   LoadAndSpill(args->at(0));
   frame_->EmitPop(a0);
 
-  // Always use slow case for now.
+  JumpTarget slow_case;
+  JumpTarget exit;
 
+  // Fast case of Heap::LookupSingleCharacterStringFromCode.
+  ASSERT(kSmiTag == 0);
+  ASSERT(kSmiShiftSize == 0);
+  ASSERT(IsPowerOf2(String::kMaxAsciiCharCode + 1));
+  __ And(a1, a0, Operand(kSmiTagMask |
+                     ((~String::kMaxAsciiCharCode) << kSmiTagSize)));
+  slow_case.Branch(nz, a1, Operand(zero_reg));
+
+  ASSERT(kSmiTag == 0);
+  __ li(a1, Operand(Factory::single_character_string_cache()));
+  __ sll(a2, a0, kPointerSizeLog2 - kSmiTagSize);
+  __ Addu(a1, a1, Operand(a2));
+  __ lw(v0, MemOperand(a1, FixedArray::kHeaderSize - kHeapObjectTag));
+  __ LoadRoot(a2, Heap::kUndefinedValueRootIndex);
+  slow_case.Branch(eq, v0, Operand(a2));
+
+  frame_->EmitPush(v0);
+  exit.Jump();
+
+  slow_case.Bind();
   frame_->EmitPush(a0);
   frame_->CallRuntime(Runtime::kCharFromCode, 1);
   frame_->EmitPush(v0);
+
+  exit.Bind();
 }
 
 
