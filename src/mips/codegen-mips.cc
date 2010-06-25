@@ -3270,11 +3270,80 @@ void CodeGenerator::GenerateMathSqrt(ZoneList<Expression*>* args) {
 
 // This should generate code that performs a charCodeAt() call or returns
 // undefined in order to trigger the slow case, Runtime_StringCharCodeAt.
-// It is not yet implemented on MIPS, so it always goes to the slow case.
 void CodeGenerator::GenerateFastCharCodeAt(ZoneList<Expression*>* args) {
   VirtualFrame::SpilledScope spilled_scope;
   ASSERT(args->length() == 2);
+  Comment(masm_, "[ GenerateFastCharCodeAt");
+
+  LoadAndSpill(args->at(0));
+  LoadAndSpill(args->at(1));
+  frame_->EmitPop(a0);  // Index.
+  frame_->EmitPop(a1);  // String.
+
+  Label slow, end, not_a_flat_string, ascii_string, try_again_with_new_string;
+
+  __ BranchOnSmi(a1, &slow);  // The 'string' was a Smi.
+
+  ASSERT(kSmiTag == 0);
+  // Branch slow on index negative or not a Smi.
+  __ And(t0, a0, Operand(kSmiTagMask | 0x80000000u));
+  __ Branch(&slow, ne, t0, Operand(zero_reg));
+
+  __ bind(&try_again_with_new_string);
+  __ GetObjectType(a1, a2, a2);
+  __ Branch(&slow, ge, a2, Operand(FIRST_NONSTRING_TYPE));
+
+  // Now a2 has the string type.
+  __ lw(a3, FieldMemOperand(a1, String::kLengthOffset));
+  // Now a3 has the (Smi) length of the string.  Compare with the index.
+  __ srl(t0, a0, kSmiTagSize);  // Convert Smi index to int in t0
+  __ Branch(&slow, le, a3, Operand(t0));
+
+  // Here we know the index is in range.  Check that string is sequential.
+  ASSERT_EQ(0, kSeqStringTag);
+  __ And(t1, a2, Operand(kStringRepresentationMask));
+  __ Branch(&not_a_flat_string, ne, t1, Operand(zero_reg));
+
+  // Check whether it is an ASCII string.
+  ASSERT_EQ(0, kTwoByteStringTag);
+  __ And(t1, a2, Operand(kStringEncodingMask));
+  __ Branch(&ascii_string, ne, t1, Operand(zero_reg));
+
+  // 2-byte string.  We can add without shifting since the Smi tag size is the
+  // log2 of the number of bytes in a two-byte character.
+  ASSERT_EQ(1, kSmiTagSize);
+  ASSERT_EQ(0, kSmiShiftSize);
+  __ Addu(a1, a1, Operand(a0));
+  __ lhu(v0, FieldMemOperand(a1, SeqTwoByteString::kHeaderSize));
+  __ sll(v0, v0, kSmiTagSize);   // Make 2-byte char an Smi.
+  __ jmp(&end);
+
+  __ bind(&ascii_string);
+  // Integer version of index is still in t0
+  __ Addu(a1, a1, Operand(t0));
+  __ lbu(v0, FieldMemOperand(a1, SeqAsciiString::kHeaderSize));
+  __ sll(v0, v0, kSmiTagSize);   // Make char an Smi.
+  __ jmp(&end);
+
+  __ bind(&not_a_flat_string);
+  __ And(a2, a2, Operand(kStringRepresentationMask));
+  __ Branch(&slow, ne, a2, Operand(kConsStringTag));
+
+  // ConsString.
+  // Check that the right hand side is the empty string (ie if this is really a
+  // flat string in a cons string).  If that is not the case we would rather go
+  // to the runtime system now, to flatten the string.
+  __ lw(a2, FieldMemOperand(a1, ConsString::kSecondOffset));
+  __ LoadRoot(a3, Heap::kEmptyStringRootIndex);
+  __ Branch(&slow, ne, a2, Operand(a3));
+  // Get the first of the two strings.
+  __ lw(a1, FieldMemOperand(a1, ConsString::kFirstOffset));
+  __ jmp(&try_again_with_new_string);
+
+  __ bind(&slow);
   __ LoadRoot(v0, Heap::kUndefinedValueRootIndex);
+
+  __ bind(&end);
   frame_->EmitPush(v0);
 }
 
