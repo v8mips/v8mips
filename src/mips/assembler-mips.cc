@@ -326,14 +326,17 @@ void Assembler::GetCode(CodeDesc* desc) {
 // to be generated; pos() is the position of the last
 // instruction using the label.
 
-
-// The link chain is terminated by a negative code position (must be aligned).
+// The link chain is terminated by a value in the instruction of -1,
+// which is an otherwise illegal value (branch -1 is inf loop).
+// The instruction 16-bit offset field addresses 32-bit words, but in
+// code is conv to an 18-bit value addressing bytes, hence the -4 value.
 const int kEndOfChain = -4;
 
 bool Assembler::is_branch(Instr instr) {
   uint32_t opcode   = ((instr & kOpcodeMask));
   uint32_t rt_field = ((instr & kRtFieldMask));
   uint32_t rs_field = ((instr & kRsFieldMask));
+  uint32_t label_constant = (instr & ~kImm16Mask);
   // Checks if the instruction is a branch.
   return opcode == BEQ ||
       opcode == BNE ||
@@ -345,7 +348,8 @@ bool Assembler::is_branch(Instr instr) {
       opcode == BGTZL||
       (opcode == REGIMM && (rt_field == BLTZ || rt_field == BGEZ ||
                             rt_field == BLTZAL || rt_field == BGEZAL)) ||
-      (opcode == COP1 && rs_field == BC1);  // Coprocessor branch.
+      (opcode == COP1 && rs_field == BC1) ||  // Coprocessor branch.
+      label_constant == 0;  // Emitted label const in reg-exp engine.
 }
 
 
@@ -362,7 +366,12 @@ int Assembler::target_at(int32_t pos) {
   int32_t imm18 = ((instr &
                     static_cast<int32_t>(kImm16Mask)) << 16) >> 14;
 
-  return pos + kBranchPCOffset + imm18;
+  if (imm18 == kEndOfChain) {
+    // EndOfChain sentinel is returned directly, not relative to pc or pos.
+    return kEndOfChain;
+  } else {
+    return pos + kBranchPCOffset + imm18;
+  }
 }
 
 
@@ -456,13 +465,14 @@ void Assembler::bind(Label* L) {
 
 
 void Assembler::next(Label* L) {
+  // ASSERT(L->pos() == kEndOfChain || L->is_linked());
   ASSERT(L->is_linked());
   int link = target_at(L->pos());
-  if (link > 0) {
-    L->link_to(link);
-  } else {
-    ASSERT(link == kEndOfChain);
+  ASSERT(link > 0 || link == kEndOfChain);
+  if (link == kEndOfChain) {
     L->Unuse();
+  } else if (link > 0) {
+    L->link_to(link);
   }
 }
 
@@ -583,10 +593,11 @@ int32_t Assembler::branch_offset(Label* L, bool jump_elimination_allowed) {
   } else {
     if (L->is_linked()) {
       target_pos = L->pos();  // L's link
+      L->link_to(pc_offset());
     } else {
-      target_pos = kEndOfChain;
+      L->link_to(pc_offset());
+      return kEndOfChain;
     }
-    L->link_to(pc_offset());
   }
 
   int32_t offset = target_pos - (pc_offset() + kBranchPCOffset);
