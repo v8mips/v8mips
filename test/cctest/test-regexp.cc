@@ -51,6 +51,10 @@
 #include "ia32/macro-assembler-ia32.h"
 #include "ia32/regexp-macro-assembler-ia32.h"
 #endif
+#ifdef V8_TARGET_ARCH_MIPS
+#include "mips/macro-assembler-mips.h"
+#include "mips/regexp-macro-assembler-mips.h"
+#endif
 #else
 #include "interpreter-irregexp.h"
 #endif
@@ -654,7 +658,7 @@ typedef RegExpMacroAssemblerX64 ArchRegExpMacroAssembler;
 #elif V8_TARGET_ARCH_ARM
 typedef RegExpMacroAssemblerARM ArchRegExpMacroAssembler;
 #elif V8_TARGET_ARCH_MIPS
-typedef RegExpMacroAssembler ArchRegExpMacroAssembler;
+typedef RegExpMacroAssemblerMIPS ArchRegExpMacroAssembler;
 #endif
 
 class ContextInitializer {
