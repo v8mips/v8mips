@@ -216,9 +216,49 @@ void RegExpMacroAssemblerMIPS::CheckCharacters(Vector<const uc16> str,
                                               int cp_offset,
                                               Label* on_failure,
                                               bool check_end_of_string) {
-  UNIMPLEMENTED_MIPS();
-}
+  if (on_failure == NULL) {
+    // Instead of inlining a backtrack for each test, (re)use the global
+    // backtrack target.
+    on_failure = &backtrack_label_;
+  }
 
+  if (check_end_of_string) {
+    // Is last character of required match inside string.
+    CheckPosition(cp_offset + str.length() - 1, on_failure);
+  }
+
+  __ Addu(a0, end_of_input_address(), Operand(current_input_offset()));
+  if (cp_offset != 0) {
+    int byte_offset = cp_offset * char_size();
+    __ Addu(a0, a0, Operand(byte_offset));
+  }
+
+  // a0 : Address of characters to match against str.
+  int stored_high_byte = 0;
+  for (int i = 0; i < str.length(); i++) {
+    if (mode_ == ASCII) {
+      __ lbu(a1, MemOperand(a0, 0));
+      __ addiu(a0, a0, char_size());
+      ASSERT(str[i] <= String::kMaxAsciiCharCode);
+      BranchOrBacktrack(on_failure, ne, a1, Operand(str[i]));
+    } else {
+      __ lhu(a1, MemOperand(a0, 0));
+      __ addiu(a0, a0, char_size());
+      uc16 match_char = str[i];
+      int match_high_byte = (match_char >> 8);
+      if (match_high_byte == 0) {
+        BranchOrBacktrack(on_failure, ne, a1, Operand(str[i]));
+      } else {
+        if (match_high_byte != stored_high_byte) {
+          __ li(a2, Operand(match_high_byte));
+          stored_high_byte = match_high_byte;
+        }
+        __ Addu(a3, a2, Operand(match_char & 0xff));
+        BranchOrBacktrack(on_failure, ne, a1, Operand(a3));
+      }
+    }
+  }
+}
 
 void RegExpMacroAssemblerMIPS::CheckGreedyLoop(Label* on_equal) {
   Label backtrack_non_equal;
@@ -767,7 +807,8 @@ void RegExpMacroAssemblerMIPS::IfRegisterLT(int reg,
 
 void RegExpMacroAssemblerMIPS::IfRegisterEqPos(int reg,
                                               Label* if_eq) {
-  UNIMPLEMENTED_MIPS();
+  __ lw(a0, register_location(reg));
+  BranchOrBacktrack(if_eq, eq, a0, Operand(current_input_offset()));
 }
 
 
@@ -918,6 +959,12 @@ int RegExpMacroAssemblerMIPS::CheckStackGuardState(Address* return_address,
 
   // If not real stack overflow the stack guard was used to interrupt
   // execution for another purpose.
+
+  // If this is a direct call from JavaScript retry the RegExp forcing the call
+  // through the runtime system. Currently the direct call cannot handle a GC.
+  if (frame_entry<int>(re_frame, kDirectCall) == 1) {
+    return RETRY;
+  }
 
   // Prepare for possible GC.
   HandleScope handles;
