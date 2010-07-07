@@ -597,6 +597,44 @@ void KeyedLoadIC::GenerateString(MacroAssembler* masm) {
   GenerateGeneric(masm);
 }
 
+// Convert unsigned integer with specified number of leading zeroes in binary
+// representation to IEEE 754 double.
+// Integer to convert is passed in register hiword.
+// Resulting double is returned in registers hiword:loword.
+// This functions does not work correctly for 0.
+static void GenerateUInt2Double(MacroAssembler* masm,
+                                Register hiword,
+                                Register loword,
+                                Register scratch,
+                                int leading_zeroes) {
+  const int meaningful_bits = kBitsPerInt - leading_zeroes - 1;
+  const int biased_exponent = HeapNumber::kExponentBias + meaningful_bits;
+
+  const int mantissa_shift_for_hi_word =
+      meaningful_bits - HeapNumber::kMantissaBitsInTopWord;
+
+  const int mantissa_shift_for_lo_word =
+      kBitsPerInt - mantissa_shift_for_hi_word;
+
+  __ li(scratch, biased_exponent << HeapNumber::kExponentShift);
+  if (mantissa_shift_for_hi_word > 0) {
+    __ sll(loword, hiword, mantissa_shift_for_lo_word);
+    __ srl(hiword, hiword, mantissa_shift_for_hi_word);
+    __ or_(hiword, scratch, hiword);
+  } else {
+    __ mov(loword, zero_reg);
+    __ sll(hiword, hiword, mantissa_shift_for_hi_word);
+    __ or_(hiword, scratch, hiword);
+  }
+
+  // If least significant bit of biased exponent was not 1 it was corrupted
+  // by most significant bit of mantissa so we should fix that.
+  if (!(biased_exponent & 1)) {
+    __ li(scratch, 1 << HeapNumber::kExponentShift);
+    __ nor(scratch, scratch, scratch);
+    __ and_(hiword, hiword, scratch);
+  }
+}
 
 void KeyedLoadIC::GenerateExternalArray(MacroAssembler* masm,
                                         ExternalArrayType array_type) {
@@ -678,8 +716,8 @@ void KeyedLoadIC::GenerateExternalArray(MacroAssembler* masm,
       __ lw(a0, MemOperand(t0, 0));
       break;
     case kExternalFloatArray:
-      if (1) {  // (CpuFeatures::IsSupported(FPU)) {  // TODO(mips)
-         // CpuFeatures::Scope scope(FPU);
+      if (0) { //CpuFeatures::IsSupported(FPU)) {  // TODO(mips)
+        // CpuFeatures::Scope scope(FPU);
         __ sll(t0, t1, 2);
         __ addu(t0, a1, t0);
         __ lwc1(f0, MemOperand(t0, 0));
@@ -716,22 +754,21 @@ void KeyedLoadIC::GenerateExternalArray(MacroAssembler* masm,
     // conversion.
     __ AllocateHeapNumber(v0, a3, t0, &slow);
 
-    if (1) {  // (CpuFeatures::IsSupported(FPU)) {  // TODO(mips)
+    if (0) { //CpuFeatures::IsSupported(FPU)) {  // TODO(mips)
       // CpuFeatures::Scope scope(FPU);
       __ mtc1(a0, f0);
       __ cvt_d_w(f0, f0);
       __ sdc1(f0, MemOperand(v0, HeapNumber::kValueOffset - kHeapObjectTag));
       __ Ret();
     } else {
-      // WriteInt32ToHeapNumberStub stub(r1, r0, r3);
-      // __ TailCallStub(&stub);
+      WriteInt32ToHeapNumberStub stub(a0, v0, t0, t1);
+      __ TailCallStub(&stub);
     }
   } else if (array_type == kExternalUnsignedIntArray) {
     // The test is different for unsigned int values. Since we need
     // the value to be in the range of a positive smi, we can't
     // handle either of the top two bits being set in the value.
-
-    if (1) {  // (CpuFeatures::IsSupported(FPU)) {  // TODO(mips)
+    if (0) { //CpuFeatures::IsSupported(FPU)) {  // TODO(mips)
       // CpuFeatures::Scope scope(FPU);
       Label pl_box_int;
       __ And(t0, a0, Operand(0xC0000000));
@@ -747,44 +784,44 @@ void KeyedLoadIC::GenerateExternalArray(MacroAssembler* masm,
       __ mtc1(zero_reg, f1);  // MS 32-bits are all zero.
       __ cvt_d_l(f0, f0);     // Use 64 bit conv to get correct unsigned 32-bit.
       __ sdc1(f0, MemOperand(v0, HeapNumber::kValueOffset - kHeapObjectTag));
+
       __ Ret();
     } else {
-    //   // Check whether unsigned integer fits into smi.
-    //   Label box_int_0, box_int_1, done;
-    //   __ tst(r0, Operand(0x80000000));
-    //   __ b(ne, &box_int_0);
-    //   __ tst(r0, Operand(0x40000000));
-    //   __ b(ne, &box_int_1);
-    //
-    //   // Tag integer as smi and return it.
-    //   __ mov(r0, Operand(r0, LSL, kSmiTagSize));
-    //   __ Ret();
-    //
-    //   __ bind(&box_int_0);
-    //   // Integer does not have leading zeros.
-    //   GenerateUInt2Double(masm, r0, r1, r2, 0);
-    //   __ b(&done);
-    //
-    //   __ bind(&box_int_1);
-    //   // Integer has one leading zero.
-    //   GenerateUInt2Double(masm, r0, r1, r2, 1);
-    //
-    //   __ bind(&done);
-    //   // Integer was converted to double in registers r0:r1.
-    //   // Wrap it into a HeapNumber.
-    //   __ AllocateHeapNumber(r2, r3, r5, &slow);
-    //
-    //   __ str(r0, FieldMemOperand(r2, HeapNumber::kExponentOffset));
-    //   __ str(r1, FieldMemOperand(r2, HeapNumber::kMantissaOffset));
-    //
-    //   __ mov(r0, r2);
-    //
-    //   __ Ret();
+      // Check whether unsigned integer fits into smi.
+      Label box_int_0, box_int_1, done;
+      __ And(t0, a0, Operand(0x80000000));
+      __ Branch(&box_int_0, ne, t0, Operand(zero_reg));
+      __ And(t0, a0, Operand(0x40000000));
+      __ Branch(&box_int_1, ne, t0, Operand(zero_reg));
+
+      // Tag integer as smi and return it.
+      __ sll(v0, a0, kSmiTagSize);
+      __ Ret();
+
+      __ bind(&box_int_0);
+      // Integer does not have leading zeros.
+      GenerateUInt2Double(masm, a0, a1, t0, 0);
+      __ b(&done);
+
+      __ bind(&box_int_1);
+      // Integer has one leading zero.
+      GenerateUInt2Double(masm, a0, a1, t0, 1);
+
+      __ bind(&done);
+      // Integer was converted to double in registers a0:a1.
+      // Wrap it into a HeapNumber.
+      __ AllocateHeapNumber(t2, t3, t5, &slow);
+
+      __ sw(a0, FieldMemOperand(t2, HeapNumber::kExponentOffset));
+      __ sw(a1, FieldMemOperand(t2, HeapNumber::kMantissaOffset));
+
+      __ mov(v0, t2);
+      __ Ret();
     }
   } else if (array_type == kExternalFloatArray) {
     // For the floating-point array type, we need to always allocate a
     // HeapNumber.
-    if (1) {  // (CpuFeatures::IsSupported(FPU)) {  // TODO(mips)
+    if (0) { //CpuFeatures::IsSupported(FPU)) {  // TODO(mips)
       // CpuFeatures::Scope scope(FPU);
       __ AllocateHeapNumber(v0, a1, a2, &slow);
       // The float (single) value is already in fpu reg f0 (if we use float)
@@ -792,49 +829,48 @@ void KeyedLoadIC::GenerateExternalArray(MacroAssembler* masm,
       __ sdc1(f0, MemOperand(v0, HeapNumber::kValueOffset - kHeapObjectTag));
       __ Ret();
     } else {
-    //   __ AllocateHeapNumber(r3, r1, r2, &slow);
-    //   // VFP is not available, do manual single to double conversion.
-    //
-    //   // r0: floating point value (binary32)
-    //
-    //   // Extract mantissa to r1.
-    //   __ and_(r1, r0, Operand(kBinary32MantissaMask));
-    //
-    //   // Extract exponent to r2.
-    //   __ mov(r2, Operand(r0, LSR, kBinary32MantissaBits));
-    //   __ and_(r2, r2, Operand(kBinary32ExponentMask >> kBinary32MantissaBits));
-    //
-    //   Label exponent_rebiased;
-    //   __ teq(r2, Operand(0x00));
-    //   __ b(eq, &exponent_rebiased);
-    //
-    //   __ teq(r2, Operand(0xff));
-    //   __ mov(r2, Operand(0x7ff), LeaveCC, eq);
-    //   __ b(eq, &exponent_rebiased);
-    //
-    //   // Rebias exponent.
-    //   __ add(r2,
-    //          r2,
-    //          Operand(-kBinary32ExponentBias + HeapNumber::kExponentBias));
-    //
-    //   __ bind(&exponent_rebiased);
-    //   __ and_(r0, r0, Operand(kBinary32SignMask));
-    //   __ orr(r0, r0, Operand(r2, LSL, HeapNumber::kMantissaBitsInTopWord));
-    //
-    //   // Shift mantissa.
-    //   static const int kMantissaShiftForHiWord =
-    //       kBinary32MantissaBits - HeapNumber::kMantissaBitsInTopWord;
-    //
-    //   static const int kMantissaShiftForLoWord =
-    //       kBitsPerInt - kMantissaShiftForHiWord;
-    //
-    //   __ orr(r0, r0, Operand(r1, LSR, kMantissaShiftForHiWord));
-    //   __ mov(r1, Operand(r1, LSL, kMantissaShiftForLoWord));
-    //
-    //   __ str(r0, FieldMemOperand(r3, HeapNumber::kExponentOffset));
-    //   __ str(r1, FieldMemOperand(r3, HeapNumber::kMantissaOffset));
-    //   __ mov(r0, r3);
-    //   __ Ret();
+      __ AllocateHeapNumber(v0, t1, t2, &slow);
+      // FPU is not available, do manual single to double conversion.
+
+      // a0: floating point value (binary32)
+
+      // Extract mantissa to a1.
+      __ And(a1, a0, Operand(kBinary32MantissaMask));
+
+      // Extract exponent to a2.
+      __ srl(a2, a0, kBinary32MantissaBits);
+      __ And(a2, a2, Operand(kBinary32ExponentMask >> kBinary32MantissaBits));
+
+      Label exponent_rebiased;
+      __ Branch(&exponent_rebiased, eq, a2, Operand(zero_reg));
+
+      __ mov(t0, a2);
+      __ li(a2, 0x7ff); //set a2 to 0x7ff only if to is equal to 0xff
+      __ Branch(&exponent_rebiased, eq, t0, Operand(0xff));
+      __ mov(a2, t0);
+
+      // Rebias exponent.
+      __ Addu(a2, a2, Operand(-kBinary32ExponentBias + HeapNumber::kExponentBias));
+
+      __ bind(&exponent_rebiased);
+      __ And(a0, a0, Operand(kBinary32SignMask));
+      __ sll(a2, a2, HeapNumber::kMantissaBitsInTopWord);
+      __ or_(a0, a0, a2);
+
+      // Shift mantissa.
+      static const int kMantissaShiftForHiWord =
+          kBinary32MantissaBits - HeapNumber::kMantissaBitsInTopWord;
+
+      static const int kMantissaShiftForLoWord =
+          kBitsPerInt - kMantissaShiftForHiWord;
+
+      __ srl(t0, a1, kMantissaShiftForHiWord);
+      __ or_(a0, a0, t0);
+      __ sll(a1, a1, kMantissaShiftForLoWord);
+
+      __ sw(a0, FieldMemOperand(v0, HeapNumber::kExponentOffset));
+      __ sw(a1, FieldMemOperand(v0, HeapNumber::kMantissaOffset));
+      __ Ret();
     }
 
   } else {
@@ -1018,7 +1054,7 @@ static void ConvertIntToFloat(MacroAssembler* masm,
                               Register fval,
                               Register scratch1,
                               Register scratch2) {
-  if (1) {  // (CpuFeatures::IsSupported(FPU)) {  // TODO(mips)
+  if (0) { //CpuFeatures::IsSupported(FPU)) {  // TODO(mips)
     // CpuFeatures::Scope scope(FPU);
     __ mtc1(ival, f0);
     __ cvt_s_w(f0, f0);
@@ -1026,54 +1062,53 @@ static void ConvertIntToFloat(MacroAssembler* masm,
   } else {
     // FPU is not available,  do manual conversions.
 
-    // Label not_special, done;
-    // // Move sign bit from source to destination.  This works because the sign
-    // // bit in the exponent word of the double has the same position and polarity
-    // // as the 2's complement sign bit in a Smi.
-    // ASSERT(kBinary32SignMask == 0x80000000u);
-    //
-    // __ and_(fval, ival, Operand(kBinary32SignMask), SetCC);
-    // // Negate value if it is negative.
-    // __ rsb(ival, ival, Operand(0), LeaveCC, ne);
-    //
-    // // We have -1, 0 or 1, which we treat specially. Register ival contains
-    // // absolute value: it is either equal to 1 (special case of -1 and 1),
-    // // greater than 1 (not a special case) or less than 1 (special case of 0).
-    // __ cmp(ival, Operand(1));
-    // __ b(gt, &not_special);
-    //
-    // // For 1 or -1 we need to or in the 0 exponent (biased).
-    // static const uint32_t exponent_word_for_1 =
-    //     kBinary32ExponentBias << kBinary32ExponentShift;
-    //
-    // __ orr(fval, fval, Operand(exponent_word_for_1), LeaveCC, eq);
-    // __ b(&done);
-    //
-    // __ bind(&not_special);
-    // // Count leading zeros.
-    // // Gets the wrong answer for 0, but we already checked for that case above.
-    // Register zeros = scratch2;
-    // __ CountLeadingZeros(ival, scratch1, zeros);
-    //
-    // // Compute exponent and or it into the exponent register.
-    // __ rsb(scratch1,
-    //        zeros,
-    //        Operand((kBitsPerInt - 1) + kBinary32ExponentBias));
-    //
-    // __ orr(fval,
-    //        fval,
-    //        Operand(scratch1, LSL, kBinary32ExponentShift));
-    //
-    // // Shift up the source chopping the top bit off.
-    // __ add(zeros, zeros, Operand(1));
-    // // This wouldn't work for 1 and -1 as the shift would be 32 which means 0.
-    // __ mov(ival, Operand(ival, LSL, zeros));
-    // // And the top (top 20 bits).
-    // __ orr(fval,
-    //        fval,
-    //        Operand(ival, LSR, kBitsPerInt - kBinary32MantissaBits));
-    //
-    // __ bind(&done);
+    Label not_special, done;
+    // Move sign bit from source to destination.  This works because the sign
+    // bit in the exponent word of the double has the same position and polarity
+    // as the 2's complement sign bit in a Smi.
+    ASSERT(kBinary32SignMask == 0x80000000u);
+
+    __ And(fval, ival, Operand(kBinary32SignMask));
+    // Negate value if it is negative.
+    __ Branch(2, eq, fval, Operand(zero_reg));
+    __ subu(ival, zero_reg, ival);
+
+    // We have -1, 0 or 1, which we treat specially. Register ival contains
+    // absolute value: it is either equal to 1 (special case of -1 and 1),
+    // greater than 1 (not a special case) or less than 1 (special case of 0).
+    __ Branch(&not_special, gt, ival, Operand(1));
+
+    // For 1 or -1 we need to or in the 0 exponent (biased).
+    static const uint32_t exponent_word_for_1 =
+        kBinary32ExponentBias << kBinary32ExponentShift;
+
+    __ Branch(3, ne, ival, Operand(1));
+    __ li(scratch1, exponent_word_for_1);
+    __ or_(fval, fval, scratch1); //Only if ival is equal to 1
+    __ Branch(&done);
+
+    __ bind(&not_special);
+    // Count leading zeros.
+    // Gets the wrong answer for 0, but we already checked for that case above.
+    Register zeros = scratch2;
+    __ clz(zeros, ival);
+
+    // Compute exponent and or it into the exponent register.
+    __ li(scratch1, (kBitsPerInt - 1) + kBinary32ExponentBias);
+    __ subu(scratch1, scratch1, zeros);
+
+    __ sll(scratch1, scratch1, kBinary32ExponentShift);
+    __ or_(fval, fval, scratch1);
+
+    // Shift up the source chopping the top bit off.
+    __ Addu(zeros, zeros, Operand(1));
+    // This wouldn't work for 1 and -1 as the shift would be 32 which means 0.
+    __ sllv(ival, ival, zeros);
+    // And the top (top 20 bits).
+    __ srl(scratch1, ival, kBitsPerInt - kBinary32MantissaBits);
+    __ or_(fval, fval, scratch1);
+
+    __ bind(&done);
   }
 }
 
@@ -1203,7 +1238,7 @@ void KeyedStoreIC::GenerateExternalArray(MacroAssembler* masm,
   // +/-Infinity into integer arrays basically undefined. For more
   // reproducible behavior, convert these to zero.
 
-  if (1) {  // (CpuFeatures::IsSupported(FPU)) {  // TODO(mips)
+  if (0) { //CpuFeatures::IsSupported(FPU)) {  // TODO(mips)
     // CpuFeatures::Scope scope(FPU);
 
     __ ldc1(f0, MemOperand(a0, HeapNumber::kValueOffset - kHeapObjectTag));
@@ -1267,127 +1302,148 @@ void KeyedStoreIC::GenerateExternalArray(MacroAssembler* masm,
     __ Ret();
   } else {
     // FPU is not available,  do manual conversions.
-    // TODO(mips) - convert following code to mips
 
-    // __ ldr(r3, FieldMemOperand(r0, HeapNumber::kExponentOffset));
-    // __ ldr(r4, FieldMemOperand(r0, HeapNumber::kMantissaOffset));
-    //
-    // if (array_type == kExternalFloatArray) {
-    //   Label done, nan_or_infinity_or_zero;
-    //   static const int kMantissaInHiWordShift =
-    //       kBinary32MantissaBits - HeapNumber::kMantissaBitsInTopWord;
-    //
-    //   static const int kMantissaInLoWordShift =
-    //       kBitsPerInt - kMantissaInHiWordShift;
-    //
-    //   // Test for all special exponent values: zeros, subnormal numbers, NaNs
-    //   // and infinities. All these should be converted to 0.
-    //   __ mov(r5, Operand(HeapNumber::kExponentMask));
-    //   __ and_(r6, r3, Operand(r5), SetCC);
-    //   __ b(eq, &nan_or_infinity_or_zero);
-    //
-    //   __ teq(r6, Operand(r5));
-    //   __ mov(r6, Operand(kBinary32ExponentMask), LeaveCC, eq);
-    //   __ b(eq, &nan_or_infinity_or_zero);
-    //
-    //   // Rebias exponent.
-    //   __ mov(r6, Operand(r6, LSR, HeapNumber::kExponentShift));
-    //   __ add(r6,
-    //          r6,
-    //          Operand(kBinary32ExponentBias - HeapNumber::kExponentBias));
-    //
-    //   __ cmp(r6, Operand(kBinary32MaxExponent));
-    //   __ and_(r3, r3, Operand(HeapNumber::kSignMask), LeaveCC, gt);
-    //   __ orr(r3, r3, Operand(kBinary32ExponentMask), LeaveCC, gt);
-    //   __ b(gt, &done);
-    //
-    //   __ cmp(r6, Operand(kBinary32MinExponent));
-    //   __ and_(r3, r3, Operand(HeapNumber::kSignMask), LeaveCC, lt);
-    //   __ b(lt, &done);
-    //
-    //   __ and_(r7, r3, Operand(HeapNumber::kSignMask));
-    //   __ and_(r3, r3, Operand(HeapNumber::kMantissaMask));
-    //   __ orr(r7, r7, Operand(r3, LSL, kMantissaInHiWordShift));
-    //   __ orr(r7, r7, Operand(r4, LSR, kMantissaInLoWordShift));
-    //   __ orr(r3, r7, Operand(r6, LSL, kBinary32ExponentShift));
-    //
-    //   __ bind(&done);
-    //   __ str(r3, MemOperand(r2, r1, LSL, 2));
-    //   __ Ret();
-    //
-    //   __ bind(&nan_or_infinity_or_zero);
-    //   __ and_(r7, r3, Operand(HeapNumber::kSignMask));
-    //   __ and_(r3, r3, Operand(HeapNumber::kMantissaMask));
-    //   __ orr(r6, r6, r7);
-    //   __ orr(r6, r6, Operand(r3, LSL, kMantissaInHiWordShift));
-    //   __ orr(r3, r6, Operand(r4, LSR, kMantissaInLoWordShift));
-    //   __ b(&done);
-    // } else {
-    //   bool is_signed_type  = IsElementTypeSigned(array_type);
-    //   int meaningfull_bits = is_signed_type ? (kBitsPerInt - 1) : kBitsPerInt;
-    //   int32_t min_value    = is_signed_type ? 0x80000000 : 0x00000000;
-    //
-    //   Label done, sign;
-    //
-    //   // Test for all special exponent values: zeros, subnormal numbers, NaNs
-    //   // and infinities. All these should be converted to 0.
-    //   __ mov(r5, Operand(HeapNumber::kExponentMask));
-    //   __ and_(r6, r3, Operand(r5), SetCC);
-    //   __ mov(r3, Operand(0), LeaveCC, eq);
-    //   __ b(eq, &done);
-    //
-    //   __ teq(r6, Operand(r5));
-    //   __ mov(r3, Operand(0), LeaveCC, eq);
-    //   __ b(eq, &done);
-    //
-    //   // Unbias exponent.
-    //   __ mov(r6, Operand(r6, LSR, HeapNumber::kExponentShift));
-    //   __ sub(r6, r6, Operand(HeapNumber::kExponentBias), SetCC);
-    //   // If exponent is negative than result is 0.
-    //   __ mov(r3, Operand(0), LeaveCC, mi);
-    //   __ b(mi, &done);
-    //
-    //   // If exponent is too big than result is minimal value
-    //   __ cmp(r6, Operand(meaningfull_bits - 1));
-    //   __ mov(r3, Operand(min_value), LeaveCC, ge);
-    //   __ b(ge, &done);
-    //
-    //   __ and_(r5, r3, Operand(HeapNumber::kSignMask), SetCC);
-    //   __ and_(r3, r3, Operand(HeapNumber::kMantissaMask));
-    //   __ orr(r3, r3, Operand(1u << HeapNumber::kMantissaBitsInTopWord));
-    //
-    //   __ rsb(r6, r6, Operand(HeapNumber::kMantissaBitsInTopWord), SetCC);
-    //   __ mov(r3, Operand(r3, LSR, r6), LeaveCC, pl);
-    //   __ b(pl, &sign);
-    //
-    //   __ rsb(r6, r6, Operand(0));
-    //   __ mov(r3, Operand(r3, LSL, r6));
-    //   __ rsb(r6, r6, Operand(meaningfull_bits));
-    //   __ orr(r3, r3, Operand(r4, LSR, r6));
-    //
-    //   __ bind(&sign);
-    //   __ teq(r5, Operand(0));
-    //   __ rsb(r3, r3, Operand(0), LeaveCC, ne);
-    //
-    //   __ bind(&done);
-    //   switch (array_type) {
-    //     case kExternalByteArray:
-    //     case kExternalUnsignedByteArray:
-    //       __ strb(r3, MemOperand(r2, r1, LSL, 0));
-    //       break;
-    //     case kExternalShortArray:
-    //     case kExternalUnsignedShortArray:
-    //       __ strh(r3, MemOperand(r2, r1, LSL, 1));
-    //       break;
-    //     case kExternalIntArray:
-    //     case kExternalUnsignedIntArray:
-    //       __ str(r3, MemOperand(r2, r1, LSL, 2));
-    //       break;
-    //     default:
-    //       UNREACHABLE();
-    //       break;
-    //   }
-    // }
+    __ lw(t3, FieldMemOperand(a0, HeapNumber::kExponentOffset)); // __ ldr(r3, FieldMemOperand(r0, HeapNumber::kExponentOffset));
+    __ lw(t4, FieldMemOperand(a0, HeapNumber::kMantissaOffset)); // __ ldr(r4, FieldMemOperand(r0, HeapNumber::kMantissaOffset));
+
+    if (array_type == kExternalFloatArray) {
+      Label done, nan_or_infinity_or_zero;
+      static const int kMantissaInHiWordShift =
+          kBinary32MantissaBits - HeapNumber::kMantissaBitsInTopWord;
+
+      static const int kMantissaInLoWordShift =
+          kBitsPerInt - kMantissaInHiWordShift;
+
+      // Test for all special exponent values: zeros, subnormal numbers, NaNs
+      // and infinities. All these should be converted to 0.
+      __ li(t5, HeapNumber::kExponentMask);
+      __ and_(t6, t3, t5);
+      __ Branch(&nan_or_infinity_or_zero, eq, t6, Operand(zero_reg));
+
+      __ mov(t2, t6);
+      __ li(t6, kBinary32ExponentMask); //Only if t6 is equal to t5
+      __ Branch(&nan_or_infinity_or_zero, eq, t6, Operand(t5)); 
+      __ mov(t6, t2);
+
+      // Rebias exponent.
+      __ srl(t6, t6, HeapNumber::kExponentShift);
+      __ Addu(t6, t6, Operand(kBinary32ExponentBias - HeapNumber::kExponentBias));
+
+      __ mov(t2, t3);
+      //Only if t6 is gt kBinary32MaxExponent
+      __ And(t3, t3, Operand(HeapNumber::kSignMask));
+      __ Or(t3, t3, Operand(kBinary32ExponentMask));
+      __ Branch(&done, gt, t6, Operand(kBinary32MaxExponent));
+      __ mov(t3, t2);
+
+      __ mov(t2, t3);
+      //Only if t6 is lt kBinary32MinExponent
+      __ And(t3, t3, Operand(HeapNumber::kSignMask));
+      __ Branch(&done, lt, t6, Operand(kBinary32MinExponent));
+      __ mov(t3, t2);
+
+      __ And(t7, t3, Operand(HeapNumber::kSignMask));
+      __ And(t3, t3, Operand(HeapNumber::kMantissaMask));
+      __ sll(t3, t3, kMantissaInHiWordShift);
+      __ or_(t7, t7, t3);
+      __ srl(t4, t4, kMantissaInLoWordShift);
+      __ or_(t7, t7, t4);
+      __ sll(t6, t6, kBinary32ExponentShift);
+      __ or_(t3, t7, t6);
+
+      __ bind(&done);
+      __ sll(t0, a1, 2);
+      __ addu(t0, a2, t0);
+      __ sw(t3, MemOperand(t0, 0));
+      __ mov(v0, a0);
+      __ Ret();
+
+      __ bind(&nan_or_infinity_or_zero);
+      __ And(t7, t3, Operand(HeapNumber::kSignMask));
+      __ And(t3, t3, Operand(HeapNumber::kMantissaMask));
+      __ or_(t6, t6, t7);
+      __ sll(t3, t3, kMantissaInHiWordShift);
+      __ or_(t6, t6, t3);
+      __ srl(t4, t4, kMantissaInLoWordShift);
+      __ or_(t3, t6, t4);
+      __ Branch(&done);
+    } else {
+      bool is_signed_type  = IsElementTypeSigned(array_type);
+      int meaningfull_bits = is_signed_type ? (kBitsPerInt - 1) : kBitsPerInt;
+      int32_t min_value    = is_signed_type ? 0x80000000 : 0x00000000;
+
+      Label done, sign;
+
+      // Test for all special exponent values: zeros, subnormal numbers, NaNs
+      // and infinities. All these should be converted to 0.
+      __ li(t5, HeapNumber::kExponentMask);
+      __ and_(t6, t3, t5);
+      __ Branch(2, ne, t6, Operand(zero_reg));
+      __ mov(t3, zero_reg); //Only if t3 is equal to zero
+      __ Branch(&done, eq, t6, Operand(zero_reg));
+
+      __ Branch(2, ne, t6, Operand(t5));
+      __ mov(t3, zero_reg); //Only if t3 is equal to t5
+      __ Branch(&done, eq, t6, Operand(t5));
+
+      // Unbias exponent.
+      __ srl(t6, t6, HeapNumber::kExponentShift);
+      __ Subu(t6, t6, Operand(HeapNumber::kExponentBias));
+      // If exponent is negative than result is 0.
+      __ Branch(2, ge, t6, Operand(zero_reg));
+      __ mov(t3, zero_reg); //Only if exponent is negative
+      __ Branch(&done, lt, t6, Operand(zero_reg));
+
+      // If exponent is too big than result is minimal value
+      __ Branch(2, lt, t6, Operand(meaningfull_bits - 1));
+      __ li(t3, min_value); //Only if t6 is ge meaningfull_bits - 1
+      __ Branch(&done, ge, t6, Operand(meaningfull_bits - 1));
+
+      __ And(t5, t3, Operand(HeapNumber::kSignMask));
+      __ And(t3, t3, Operand(HeapNumber::kMantissaMask));
+      __ Or(t3, t3, Operand(1u << HeapNumber::kMantissaBitsInTopWord));
+
+      __ li(t0, HeapNumber::kMantissaBitsInTopWord);
+      __ subu(t6, t0, t6);
+      __ Branch(2, lt, t6, Operand(zero_reg));
+      __ srlv(t3, t3, t6); //Only if t6 is positive
+      __ Branch(&sign, ge, t6, Operand(zero_reg));
+
+      __ subu(t6, zero_reg, t6);
+      __ sllv(t3, t3, t6);
+      __ li(t0, meaningfull_bits);
+      __ subu(t6, t0, t6);
+      __ srlv(t4, t4, t6);
+      __ or_(t3, t3, t4);
+
+      __ bind(&sign);
+      __ Branch(2, eq, t5, Operand(zero_reg));
+      __ subu(t3, t3, zero_reg); //Only if t5 is zero
+
+      __ bind(&done);
+      switch (array_type) {
+        case kExternalByteArray:
+        case kExternalUnsignedByteArray:
+          __ addu(t0, a2, a1);
+          __ sb(t3, MemOperand(t0, 0));
+          break;
+        case kExternalShortArray:
+        case kExternalUnsignedShortArray:
+          __ sll(t0, a1, 1);
+          __ addu(t0, a2, t0);
+          __ sh(t3, MemOperand(t0, 0));
+          break;
+        case kExternalIntArray:
+        case kExternalUnsignedIntArray:
+          __ sll(t0, a1, 2);
+          __ addu(t0, a2, t0);
+          __ sw(t3, MemOperand(t0, 0));
+          break;
+        default:
+          UNREACHABLE();
+          break;
+      }
+    }
   }
 
   // Slow case: call runtime.
