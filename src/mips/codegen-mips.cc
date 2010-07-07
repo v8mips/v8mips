@@ -5443,19 +5443,64 @@ void CEntryStub::GenerateCore(MacroAssembler* masm,
     __ sw(a1, MemOperand(a0));
   }
 
-  // Call C built-in.
-  // a0 = argc, a1 = argv
+  // Prepare arguments for C routine: a0 = argc, a1 = argv
   __ mov(a0, s0);
   __ mov(a1, s1);
+
+  // We are calling compiled C/C++ code. a0 and a1 hold our two arguments. We
+  // also need to reserve the 4 argument slots on the stack.
 
   // TODO(MIPS): As of 26May10, Arm code has frame-alignment checks
   // and modification code here.
 
-  // We are calling compiled C/C++ code. a0 and a1 hold our two arguments. We
-  // also need the argument slots.
-  __ jalr(s2);  // Use delay slot for sp adjustment.
-  __ addiu(sp, sp, -StandardFrameConstants::kCArgsSlotsSize);
-  __ addiu(sp, sp, StandardFrameConstants::kCArgsSlotsSize);
+  // The mips __ EnterExitFrame(), which is called in CEntryStub::Generate,
+  // does stack alignment to activation_frame_alignment. In this routine,
+  // that alignment must be preserved. We do need to push one kPointerSize
+  // value (below), plus the argument slots. See comments, caveats in
+  // MacroAssembler::AlignStack() function.
+#if defined(V8_HOST_ARCH_MIPS)
+  int activation_frame_alignment = OS::ActivationFrameAlignment();
+#else  // !defined(V8_HOST_ARCH_MIPS)
+  int activation_frame_alignment = 2 * kPointerSize;
+#endif  // defined(V8_HOST_ARCH_MIPS)
+
+  int stack_adjustment = (StandardFrameConstants::kCArgsSlotsSize
+                       + kPointerSize
+                       + (activation_frame_alignment - 1))
+                       & ~(activation_frame_alignment - 1);
+
+  // From arm version of this function:
+  // TODO(1242173): To let the GC traverse the return address of the exit
+  // frames, we need to know where the return address is. Right now,
+  // we push it on the stack to be able to find it again, but we never
+  // restore from it in case of changes, which makes it impossible to
+  // support moving the C entry code stub. This should be fixed, but currently
+  // this is OK because the CEntryStub gets generated so early in the V8 boot
+  // sequence that it is not moving ever.
+
+  // This branch-and-link sequence is needed to find the current PC on mips,
+  // saved to the ra register.
+  // Use masm-> here instead of the double-underscore macro since extra
+  // coverage code can interfere with the proper calculation of ra.
+  Label find_ra;
+  masm->bal(&find_ra);
+  masm->nop();  // Branch delay slot nop.
+  masm->bind(&find_ra);
+
+  // Adjust the value in ra to point to the correct return location, 2nd
+  // instruction past the real call into C code (the jalr(s2)), and push it.
+  // This is the return address of the exit frame.
+  masm->Addu(ra, ra, 20);  // 5 instructions is 20 bytes.
+  masm->addiu(sp, sp, -(stack_adjustment));
+  masm->sw(ra, MemOperand(sp, stack_adjustment - kPointerSize));
+
+  // Call the C routine.
+  masm->jalr(s2);  // If ra computed correctly above, this could be jr().
+  masm->nop();    // Branch delay slot nop.
+
+  // Restore stack (remove arg slots and extra parameter).
+  masm->addiu(sp, sp, stack_adjustment);
+
 
   if (always_allocate) {
     // It's okay to clobber a2 and a3 here. v0 & v1 contain result.
