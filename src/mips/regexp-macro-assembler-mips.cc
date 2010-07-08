@@ -851,13 +851,17 @@ void RegExpMacroAssemblerMIPS::PushBacktrack(Label* label) {
     Label after_constant;
     __ Branch(&after_constant, al);
     int offset = masm_->pc_offset();
+    int cp_offset = offset + Code::kHeaderSize - kHeapObjectTag;
     __ emit(0);
     masm_->label_at_put(label, offset);
     __ bind(&after_constant);
-    __ lw(a0,
-          MemOperand(code_pointer(),
-                     offset + Code::kHeaderSize - kHeapObjectTag));
+    if (is_int16(cp_offset)) {
+      __ lw(a0, MemOperand(code_pointer(), cp_offset));
+    } else {
+      __ Addu(a0, code_pointer(), cp_offset);
+      __ lw(a0, MemOperand(a0, 0));
     }
+  }
   Push(a0);
   CheckStackLimit();
 }
