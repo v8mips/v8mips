@@ -3590,14 +3590,12 @@ void CodeGenerator::GenerateSubString(ZoneList<Expression*>* args) {
 
 
 void CodeGenerator::GenerateStringCompare(ZoneList<Expression*>* args) {
-__ break_(__LINE__);
   ASSERT_EQ(2, args->length());
 
   Load(args->at(0));
   Load(args->at(1));
 
   StringCompareStub stub;
-  __ break_(__LINE__);
   frame_->CallStub(&stub, 2);
   frame_->EmitPush(v0);
 }
