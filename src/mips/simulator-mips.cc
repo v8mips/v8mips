@@ -34,6 +34,7 @@
 #include "globals.h"    // Need the BitCast
 #include "mips/constants-mips.h"
 #include "mips/simulator-mips.h"
+#include "mips/assembler-mips.h"
 
 namespace v8i = v8::internal;
 
@@ -72,6 +73,7 @@ class Debugger {
   void Debug();
   // Print all registers with a nice formatting.
   void PrintAllRegs();
+  void PrintAllRegsIncludingFPU();
 
  private:
   // We set the breakpoint code to 0xfffff to easily recognize it.
@@ -187,7 +189,13 @@ double Debugger::GetFPURegisterValueDouble(int regnum) {
 
 bool Debugger::GetValue(const char* desc, int32_t* value) {
   int regnum = Registers::Number(desc);
-  int fpuregnum = FPURegisters::Number(desc);
+  int fpuregnum;
+  if (v8i::CpuFeatures::IsSupported(v8i::FPU)){
+    v8i::CpuFeatures::Scope scope(v8i::FPU);
+    fpuregnum = FPURegisters::Number(desc);
+  } else {
+    fpuregnum = kInvalidFPURegister;
+  }
   if (regnum != kInvalidRegister) {
     *value = GetRegisterValue(regnum);
     return true;
@@ -244,8 +252,6 @@ void Debugger::RedoBreakpoints() {
 
 void Debugger::PrintAllRegs() {
 #define REG_INFO(n) Registers::Name(n), GetRegisterValue(n), GetRegisterValue(n)
-#define FPU_REG_INFO(n) FPURegisters::Name(n), GetFPURegisterValueInt(n), \
-                        GetFPURegisterValueFloat(n)
 
   PrintF("\n");
   // at, v0, a0
@@ -278,40 +284,37 @@ void Debugger::PrintAllRegs() {
   PrintF("%3s: 0x%08x %10d\t%3s: 0x%08x %10d\n",
          REG_INFO(31), REG_INFO(34));
 
-  PrintF("\n\n");
-  // f0, f1, f2, ... f31
-  PrintF("%3s: 0x%08x %11.4e\t%3s: 0x%08x %11.4e\n",
-         FPU_REG_INFO(0), FPU_REG_INFO(1));
-  PrintF("%3s: 0x%08x %11.4e\t%3s: 0x%08x %11.4e\n",
-         FPU_REG_INFO(2), FPU_REG_INFO(3));
-  PrintF("%3s: 0x%08x %11.4e\t%3s: 0x%08x %11.4e\n",
-         FPU_REG_INFO(4), FPU_REG_INFO(5));
-  PrintF("%3s: 0x%08x %11.4e\t%3s: 0x%08x %11.4e\n",
-         FPU_REG_INFO(6), FPU_REG_INFO(7));
-  PrintF("%3s: 0x%08x %11.4e\t%3s: 0x%08x %11.4e\n",
-         FPU_REG_INFO(8), FPU_REG_INFO(9));
-  PrintF("%3s: 0x%08x %11.4e\t%3s: 0x%08x %11.4e\n",
-         FPU_REG_INFO(10), FPU_REG_INFO(11));
-  PrintF("%3s: 0x%08x %11.4e\t%3s: 0x%08x %11.4e\n",
-         FPU_REG_INFO(12), FPU_REG_INFO(13));
-  PrintF("%3s: 0x%08x %11.4e\t%3s: 0x%08x %11.4e\n",
-         FPU_REG_INFO(14), FPU_REG_INFO(15));
-  PrintF("%3s: 0x%08x %11.4e\t%3s: 0x%08x %11.4e\n",
-         FPU_REG_INFO(16), FPU_REG_INFO(17));
-  PrintF("%3s: 0x%08x %11.4e\t%3s: 0x%08x %11.4e\n",
-         FPU_REG_INFO(18), FPU_REG_INFO(19));
-  PrintF("%3s: 0x%08x %11.4e\t%3s: 0x%08x %11.4e\n",
-         FPU_REG_INFO(20), FPU_REG_INFO(21));
-  PrintF("%3s: 0x%08x %11.4e\t%3s: 0x%08x %11.4e\n",
-         FPU_REG_INFO(22), FPU_REG_INFO(23));
-  PrintF("%3s: 0x%08x %11.4e\t%3s: 0x%08x %11.4e\n",
-         FPU_REG_INFO(24), FPU_REG_INFO(25));
-  PrintF("%3s: 0x%08x %11.4e\t%3s: 0x%08x %11.4e\n",
-         FPU_REG_INFO(26), FPU_REG_INFO(27));
-  PrintF("%3s: 0x%08x %11.4e\t%3s: 0x%08x %11.4e\n",
-         FPU_REG_INFO(28), FPU_REG_INFO(29));
-  PrintF("%3s: 0x%08x %11.4e\t%3s: 0x%08x %11.4e\n",
-         FPU_REG_INFO(30), FPU_REG_INFO(31));
+#undef REG_INFO
+#undef FPU_REG_INFO
+}
+
+void Debugger::PrintAllRegsIncludingFPU() {
+#define FPU_REG_INFO(n) FPURegisters::Name(n), FPURegisters::Name(n+1), \
+                        GetFPURegisterValueLong(n), GetFPURegisterValueDouble(n)
+
+  PrintAllRegs();
+
+  if (v8i::CpuFeatures::IsSupported(v8i::FPU)){
+    v8i::CpuFeatures::Scope scope(v8i::FPU);
+    PrintF("\n\n");
+    // f0, f1, f2, ... f31
+    PrintF("%3s,%3s: 0x%016llx %16.4e\n", FPU_REG_INFO(0) );
+    PrintF("%3s,%3s: 0x%016llx %16.4e\n", FPU_REG_INFO(2) );
+    PrintF("%3s,%3s: 0x%016llx %16.4e\n", FPU_REG_INFO(4) );
+    PrintF("%3s,%3s: 0x%016llx %16.4e\n", FPU_REG_INFO(6) );
+    PrintF("%3s,%3s: 0x%016llx %16.4e\n", FPU_REG_INFO(8) );
+    PrintF("%3s,%3s: 0x%016llx %16.4e\n", FPU_REG_INFO(10));
+    PrintF("%3s,%3s: 0x%016llx %16.4e\n", FPU_REG_INFO(12));
+    PrintF("%3s,%3s: 0x%016llx %16.4e\n", FPU_REG_INFO(14));
+    PrintF("%3s,%3s: 0x%016llx %16.4e\n", FPU_REG_INFO(16));
+    PrintF("%3s,%3s: 0x%016llx %16.4e\n", FPU_REG_INFO(18));
+    PrintF("%3s,%3s: 0x%016llx %16.4e\n", FPU_REG_INFO(20));
+    PrintF("%3s,%3s: 0x%016llx %16.4e\n", FPU_REG_INFO(22));
+    PrintF("%3s,%3s: 0x%016llx %16.4e\n", FPU_REG_INFO(24));
+    PrintF("%3s,%3s: 0x%016llx %16.4e\n", FPU_REG_INFO(26));
+    PrintF("%3s,%3s: 0x%016llx %16.4e\n", FPU_REG_INFO(28));
+    PrintF("%3s,%3s: 0x%016llx %16.4e\n", FPU_REG_INFO(30));
+  }
 
 #undef REG_INFO
 #undef FPU_REG_INFO
@@ -385,9 +388,17 @@ void Debugger::Debug() {
           float fvalue;
           if (strcmp(arg1, "all") == 0) {
             PrintAllRegs();
+          } else if (strcmp(arg1, "allf") == 0) {
+            PrintAllRegsIncludingFPU();
           } else {
             int regnum = Registers::Number(arg1);
-            int fpuregnum = FPURegisters::Number(arg1);
+            int fpuregnum;
+            if (v8i::CpuFeatures::IsSupported(v8i::FPU)){
+              v8i::CpuFeatures::Scope scope(v8i::FPU);
+              fpuregnum = FPURegisters::Number(arg1);
+            } else {
+              fpuregnum = kInvalidFPURegister;
+            }
             if (regnum != kInvalidRegister) {
               value = GetRegisterValue(regnum);
               PrintF("%s: 0x%08x %d \n", arg1, value, value);
@@ -401,7 +412,7 @@ void Debugger::Debug() {
                 double dfvalue;
                 lvalue = GetFPURegisterValueLong(fpuregnum);
                 dfvalue = GetFPURegisterValueDouble(fpuregnum);
-                PrintF("%s,%s: 0x%016llx %16.4e\n", FPURegisters::Name(fpuregnum), FPURegisters::Name(fpuregnum+1), lvalue, dfvalue);
+                PrintF("%3s,%3s: 0x%016llx %16.4e\n", FPURegisters::Name(fpuregnum), FPURegisters::Name(fpuregnum+1), lvalue, dfvalue);
               }
             } else {
               PrintF("%s unrecognized\n", arg1);
@@ -412,7 +423,13 @@ void Debugger::Debug() {
             if (strcmp(arg2, "single") == 0) {
               int32_t value;
               float fvalue;
-              int fpuregnum = FPURegisters::Number(arg1);
+              int fpuregnum;
+              if (v8i::CpuFeatures::IsSupported(v8i::FPU)){
+                v8i::CpuFeatures::Scope scope(v8i::FPU);
+                fpuregnum = FPURegisters::Number(arg1);
+              } else {
+                fpuregnum = kInvalidFPURegister;
+              }
               if (fpuregnum != kInvalidFPURegister) {
                 value = GetFPURegisterValueInt(fpuregnum);
                 fvalue = GetFPURegisterValueFloat(fpuregnum);
