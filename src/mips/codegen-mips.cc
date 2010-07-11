@@ -1226,19 +1226,19 @@ void CodeGenerator::Comparison(Condition cc,
   // Implement '>' and '<=' by reversal to obtain ECMA-262 conversion order.
   if (cc == greater || cc == less_equal) {
     cc = ReverseCondition(cc);
-    frame_->EmitPop(a0);
-    frame_->EmitPop(a1);
+    frame_->EmitPop(a0);  // Lhs of reversed condition in a0.
+    frame_->EmitPop(a1);  // Rhs of reversed condition in a1.
   } else {
-    frame_->EmitPop(a1);
-    frame_->EmitPop(a0);
+    frame_->EmitPop(a1);  // Rhs in a1.
+    frame_->EmitPop(a0);  // Lhs in a0.
   }
   __ Or(t0, a0, a1);
   __ And(t1, t0, kSmiTagMask);
   smi.Branch(eq, t1, Operand(zero_reg), no_hint);
 
   // Perform non-smi comparison by stub.
-  // CompareStub takes arguments in a0 and a1, returns <0, >0 or 0 in v0.
-  // We call with 0 args because there are 0 on the stack.
+  // CompareStub takes arguments in a0 (lhs) and a1 (rhs), returns
+  // <0, >0 or 0 in v0. We call with 0 args because there are 0 on the stack.
   CompareStub stub(cc, strict);
   frame_->CallStub(&stub, 0);
   __ mov(condReg1, v0);
@@ -5197,8 +5197,8 @@ void NumberToStringStub::Generate(MacroAssembler* masm) {
 }
 
 
-// On entry a0 and a1 are the things to be compared. On exit v0 is 0,
-// positive or negative to indicate the result of the comparison.
+// On entry a0 (lhs) and a1 (rhs) are the things to be compared. On exit, v0
+// is 0, positive, or negative (smi) to indicate the result of the comparison.
 void CompareStub::Generate(MacroAssembler* masm) {
   Label slow;  // Call builtin.
   Label not_smis, both_loaded_as_doubles;
@@ -5282,8 +5282,9 @@ void CompareStub::Generate(MacroAssembler* masm) {
   // Never falls through to here.
 
   __ bind(&slow);
-  // TOCHECK: Check push order. In Comparison() we pop in the reverse order.................Alexandre....
-  __ MultiPush(a1.bit() | a0.bit());
+  // Prepare for call to builtin. Push object pointers, a0 (lhs) first,
+  // a1 (lhs) second.
+  __ MultiPushReversed(a1.bit() | a0.bit());
   // Figure out which native to call and setup the arguments.
   Builtins::JavaScript native;
   if (cc_ == eq) {
@@ -7426,7 +7427,6 @@ void StringCompareStub::GenerateCompareFlatAsciiStrings(MacroAssembler* masm,
   // set min_length to the smaller of the two string lengths.
   __ slt(scratch3, scratch1, scratch2);
   __ movz(min_length, scratch2, scratch3);
-  // __ Branch(&compare_lengths, eq, min_length, Operand(zero_reg));
 
   // Setup registers left and right to point to character[0].
   __ Addu(left, left, Operand(SeqAsciiString::kHeaderSize - kHeapObjectTag));
