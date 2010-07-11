@@ -2915,8 +2915,9 @@ void CodeGenerator::VisitCall(Call* node) {
     frame_->CallRuntime(Runtime::kResolvePossiblyDirectEval, 3);
 
     // Touch up stack with the right values for the function and the receiver.
+    // Runtime::kResolvePossiblyDirectEval returns object pair in v0/v1.
     __ sw(v0, MemOperand(sp, (arg_count + 1) * kPointerSize));
-    __ sw(a1, MemOperand(sp, arg_count * kPointerSize));
+    __ sw(v1, MemOperand(sp, arg_count * kPointerSize));
 
     // Call the function.
     CodeForSourcePosition(node->position());
