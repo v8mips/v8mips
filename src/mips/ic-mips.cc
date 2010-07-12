@@ -716,8 +716,8 @@ void KeyedLoadIC::GenerateExternalArray(MacroAssembler* masm,
       __ lw(a0, MemOperand(t0, 0));
       break;
     case kExternalFloatArray:
-      if (0) { //CpuFeatures::IsSupported(FPU)) {  // TODO(mips)
-        // CpuFeatures::Scope scope(FPU);
+      if (CpuFeatures::IsSupported(FPU)) {
+        CpuFeatures::Scope scope(FPU);
         __ sll(t0, t1, 2);
         __ addu(t0, a1, t0);
         __ lwc1(f0, MemOperand(t0, 0));
@@ -743,7 +743,7 @@ void KeyedLoadIC::GenerateExternalArray(MacroAssembler* masm,
     // the value can be represented in a Smi. If not, we need to convert
     // it to a HeapNumber.
     Label box_int;
-    __ Subu(t0, a0, Operand(0xc0000000)); // Non-smi value gives neg result.
+    __ Subu(t0, a0, Operand(0xc0000000));  // Non-smi value gives neg result.
     __ Branch(&box_int, lt, t0, Operand(zero_reg));
     __ sll(v0, a0, kSmiTagSize);
     __ Ret();
@@ -754,8 +754,8 @@ void KeyedLoadIC::GenerateExternalArray(MacroAssembler* masm,
     // conversion.
     __ AllocateHeapNumber(v0, a3, t0, &slow);
 
-    if (0) { //CpuFeatures::IsSupported(FPU)) {  // TODO(mips)
-      // CpuFeatures::Scope scope(FPU);
+    if (CpuFeatures::IsSupported(FPU)) {
+      CpuFeatures::Scope scope(FPU);
       __ mtc1(a0, f0);
       __ cvt_d_w(f0, f0);
       __ sdc1(f0, MemOperand(v0, HeapNumber::kValueOffset - kHeapObjectTag));
@@ -768,8 +768,8 @@ void KeyedLoadIC::GenerateExternalArray(MacroAssembler* masm,
     // The test is different for unsigned int values. Since we need
     // the value to be in the range of a positive smi, we can't
     // handle either of the top two bits being set in the value.
-    if (0) { //CpuFeatures::IsSupported(FPU)) {  // TODO(mips)
-      // CpuFeatures::Scope scope(FPU);
+    if (CpuFeatures::IsSupported(FPU)) {
+      CpuFeatures::Scope scope(FPU);
       Label pl_box_int;
       __ And(t0, a0, Operand(0xC0000000));
       __ Branch(&pl_box_int, ne, t0, Operand(zero_reg));
@@ -821,10 +821,10 @@ void KeyedLoadIC::GenerateExternalArray(MacroAssembler* masm,
   } else if (array_type == kExternalFloatArray) {
     // For the floating-point array type, we need to always allocate a
     // HeapNumber.
-    if (0) { //CpuFeatures::IsSupported(FPU)) {  // TODO(mips)
-      // CpuFeatures::Scope scope(FPU);
+    if (CpuFeatures::IsSupported(FPU)) {
+      CpuFeatures::Scope scope(FPU);
       __ AllocateHeapNumber(v0, a1, a2, &slow);
-      // The float (single) value is already in fpu reg f0 (if we use float)
+      // The float (single) value is already in fpu reg f0 (if we use float).
       __ cvt_d_s(f0, f0);
       __ sdc1(f0, MemOperand(v0, HeapNumber::kValueOffset - kHeapObjectTag));
       __ Ret();
@@ -832,7 +832,7 @@ void KeyedLoadIC::GenerateExternalArray(MacroAssembler* masm,
       __ AllocateHeapNumber(v0, t1, t2, &slow);
       // FPU is not available, do manual single to double conversion.
 
-      // a0: floating point value (binary32)
+      // a0: floating point value (binary32).
 
       // Extract mantissa to a1.
       __ And(a1, a0, Operand(kBinary32MantissaMask));
@@ -844,10 +844,10 @@ void KeyedLoadIC::GenerateExternalArray(MacroAssembler* masm,
       Label exponent_rebiased;
       __ Branch(&exponent_rebiased, eq, a2, Operand(zero_reg));
 
-      __ mov(t0, a2);
-      __ li(a2, 0x7ff); //set a2 to 0x7ff only if to is equal to 0xff
+      __ li(t0, 0x7ff);
+      __ Xor(t1, a2, Operand(0xFF));
+      __ movz(a2, t0, t1);  // Set a2 to 0x7ff only if to is equal to 0xff.
       __ Branch(&exponent_rebiased, eq, t0, Operand(0xff));
-      __ mov(a2, t0);
 
       // Rebias exponent.
       __ Addu(a2, a2, Operand(-kBinary32ExponentBias + HeapNumber::kExponentBias));
@@ -909,8 +909,8 @@ void KeyedStoreIC::GenerateGeneric(MacroAssembler* masm) {
   Label slow, fast, array, extra, exit, check_pixel_array;
 
   // Get the key and receiver object from the stack (don't pop).
-  __ lw(a1, MemOperand(sp, 0));   // a1 = key.
-  __ lw(a3, MemOperand(sp, 4));   // a3 = receiver.
+  __ lw(a1, MemOperand(sp, 0));  // a1 = key.
+  __ lw(a3, MemOperand(sp, 4));  // a3 = receiver.
   // Check that the key is a smi.
   __ BranchOnNotSmi(a1, &slow);
   // Check that the object isn't a smi.
@@ -1020,7 +1020,7 @@ void KeyedStoreIC::GenerateGeneric(MacroAssembler* masm) {
 
   // Check the key against the length in the array, compute the
   // address to store into and fall through to fast case.
-  __ lw(a1, MemOperand(sp));  // restore key
+  __ lw(a1, MemOperand(sp)); // Restore key
   // r0 == value, r1 == key, r2 == elements, r3 == object.
   __ lw(t0, FieldMemOperand(a3, JSArray::kLengthOffset));
   __ Branch(&extra, hs, a1, Operand(t0));
@@ -1054,8 +1054,8 @@ static void ConvertIntToFloat(MacroAssembler* masm,
                               Register fval,
                               Register scratch1,
                               Register scratch2) {
-  if (0) { //CpuFeatures::IsSupported(FPU)) {  // TODO(mips)
-    // CpuFeatures::Scope scope(FPU);
+  if (CpuFeatures::IsSupported(FPU)) {
+    CpuFeatures::Scope scope(FPU);
     __ mtc1(ival, f0);
     __ cvt_s_w(f0, f0);
     __ mfc1(fval, f0);
@@ -1070,8 +1070,8 @@ static void ConvertIntToFloat(MacroAssembler* masm,
 
     __ And(fval, ival, Operand(kBinary32SignMask));
     // Negate value if it is negative.
-    __ Branch(2, eq, fval, Operand(zero_reg));
-    __ subu(ival, zero_reg, ival);
+    __ subu(scratch1, zero_reg, ival);
+    __ movn(ival, scratch1, fval);
 
     // We have -1, 0 or 1, which we treat specially. Register ival contains
     // absolute value: it is either equal to 1 (special case of -1 and 1),
@@ -1082,9 +1082,10 @@ static void ConvertIntToFloat(MacroAssembler* masm,
     static const uint32_t exponent_word_for_1 =
         kBinary32ExponentBias << kBinary32ExponentShift;
 
-    __ Branch(3, ne, ival, Operand(1));
-    __ li(scratch1, exponent_word_for_1);
-    __ or_(fval, fval, scratch1); //Only if ival is equal to 1
+    __ Xor(scratch1, ival, Operand(1));
+    __ li(scratch2, exponent_word_for_1);
+    __ or_(scratch2, fval, scratch2);
+    __ movz(fval, scratch2, scratch1);  // Only if ival is equal to 1.
     __ Branch(&done);
 
     __ bind(&not_special);
@@ -1238,8 +1239,8 @@ void KeyedStoreIC::GenerateExternalArray(MacroAssembler* masm,
   // +/-Infinity into integer arrays basically undefined. For more
   // reproducible behavior, convert these to zero.
 
-  if (0) { //CpuFeatures::IsSupported(FPU)) {  // TODO(mips)
-    // CpuFeatures::Scope scope(FPU);
+  if (CpuFeatures::IsSupported(FPU)) {
+    CpuFeatures::Scope scope(FPU);
 
     __ ldc1(f0, MemOperand(a0, HeapNumber::kValueOffset - kHeapObjectTag));
 
@@ -1303,8 +1304,8 @@ void KeyedStoreIC::GenerateExternalArray(MacroAssembler* masm,
   } else {
     // FPU is not available,  do manual conversions.
 
-    __ lw(t3, FieldMemOperand(a0, HeapNumber::kExponentOffset)); // __ ldr(r3, FieldMemOperand(r0, HeapNumber::kExponentOffset));
-    __ lw(t4, FieldMemOperand(a0, HeapNumber::kMantissaOffset)); // __ ldr(r4, FieldMemOperand(r0, HeapNumber::kMantissaOffset));
+    __ lw(t3, FieldMemOperand(a0, HeapNumber::kExponentOffset));
+    __ lw(t4, FieldMemOperand(a0, HeapNumber::kMantissaOffset));
 
     if (array_type == kExternalFloatArray) {
       Label done, nan_or_infinity_or_zero;
@@ -1320,27 +1321,26 @@ void KeyedStoreIC::GenerateExternalArray(MacroAssembler* masm,
       __ and_(t6, t3, t5);
       __ Branch(&nan_or_infinity_or_zero, eq, t6, Operand(zero_reg));
 
-      __ mov(t2, t6);
-      __ li(t6, kBinary32ExponentMask); //Only if t6 is equal to t5
+      __ xor_(t1, t6, t5);
+      __ li(t2, kBinary32ExponentMask);
+      __ movz(t6, t2, t1);  // Only if t6 is equal to t5.
       __ Branch(&nan_or_infinity_or_zero, eq, t6, Operand(t5)); 
-      __ mov(t6, t2);
 
       // Rebias exponent.
       __ srl(t6, t6, HeapNumber::kExponentShift);
       __ Addu(t6, t6, Operand(kBinary32ExponentBias - HeapNumber::kExponentBias));
 
-      __ mov(t2, t3);
-      //Only if t6 is gt kBinary32MaxExponent
-      __ And(t3, t3, Operand(HeapNumber::kSignMask));
-      __ Or(t3, t3, Operand(kBinary32ExponentMask));
+      __ li(t1, Operand(kBinary32MaxExponent));
+      __ Slt(t1, t1, t6);
+      __ And(t2, t3, Operand(HeapNumber::kSignMask));
+      __ Or(t2, t2, Operand(kBinary32ExponentMask));
+      __ movn(t3, t2, t1);  // Only if t6 is gt kBinary32MaxExponent.
       __ Branch(&done, gt, t6, Operand(kBinary32MaxExponent));
-      __ mov(t3, t2);
 
-      __ mov(t2, t3);
-      //Only if t6 is lt kBinary32MinExponent
-      __ And(t3, t3, Operand(HeapNumber::kSignMask));
+      __ Slt(t1, t6, Operand(kBinary32MinExponent));
+      __ And(t2, t3, Operand(HeapNumber::kSignMask));
+      __ movn(t3, t2, t1);  // Only if t6 is lt kBinary32MinExponent.
       __ Branch(&done, lt, t6, Operand(kBinary32MinExponent));
-      __ mov(t3, t2);
 
       __ And(t7, t3, Operand(HeapNumber::kSignMask));
       __ And(t3, t3, Operand(HeapNumber::kMantissaMask));
@@ -1378,25 +1378,25 @@ void KeyedStoreIC::GenerateExternalArray(MacroAssembler* masm,
       // and infinities. All these should be converted to 0.
       __ li(t5, HeapNumber::kExponentMask);
       __ and_(t6, t3, t5);
-      __ Branch(2, ne, t6, Operand(zero_reg));
-      __ mov(t3, zero_reg); //Only if t3 is equal to zero
+      __ movz(t3, zero_reg, t6);  // Only if t6 is equal to zero.
       __ Branch(&done, eq, t6, Operand(zero_reg));
 
-      __ Branch(2, ne, t6, Operand(t5));
-      __ mov(t3, zero_reg); //Only if t3 is equal to t5
+      __ xor_(t2, t6, t5);
+      __ movz(t3, zero_reg, t2);  // Only if t6 is equal to t5
       __ Branch(&done, eq, t6, Operand(t5));
 
       // Unbias exponent.
       __ srl(t6, t6, HeapNumber::kExponentShift);
       __ Subu(t6, t6, Operand(HeapNumber::kExponentBias));
       // If exponent is negative than result is 0.
-      __ Branch(2, ge, t6, Operand(zero_reg));
-      __ mov(t3, zero_reg); //Only if exponent is negative
+      __ slt(t2, t6, zero_reg);
+      __ movn(t3, zero_reg, t2);  // Only if exponent is negative.
       __ Branch(&done, lt, t6, Operand(zero_reg));
 
-      // If exponent is too big than result is minimal value
-      __ Branch(2, lt, t6, Operand(meaningfull_bits - 1));
-      __ li(t3, min_value); //Only if t6 is ge meaningfull_bits - 1
+      // If exponent is too big than result is minimal value.
+      __ slti(t1, t6, meaningfull_bits - 1);
+      __ li(t2, min_value);
+      __ movz(t3, t2, t1);  // Only if t6 is ge meaningfull_bits - 1.
       __ Branch(&done, ge, t6, Operand(meaningfull_bits - 1));
 
       __ And(t5, t3, Operand(HeapNumber::kSignMask));
@@ -1405,8 +1405,9 @@ void KeyedStoreIC::GenerateExternalArray(MacroAssembler* masm,
 
       __ li(t0, HeapNumber::kMantissaBitsInTopWord);
       __ subu(t6, t0, t6);
-      __ Branch(2, lt, t6, Operand(zero_reg));
-      __ srlv(t3, t3, t6); //Only if t6 is positive
+      __ slt(t1, t6, zero_reg);
+      __ srlv(t2, t3, t6);
+      __ movz(t3, t2, t1);  // Only if t6 is positive.
       __ Branch(&sign, ge, t6, Operand(zero_reg));
 
       __ subu(t6, zero_reg, t6);
@@ -1417,8 +1418,8 @@ void KeyedStoreIC::GenerateExternalArray(MacroAssembler* masm,
       __ or_(t3, t3, t4);
 
       __ bind(&sign);
-      __ Branch(2, eq, t5, Operand(zero_reg));
-      __ subu(t3, t3, zero_reg); //Only if t5 is zero
+      __ subu(t2, t3, zero_reg);
+      __ movz(t3, t2, t5);  // Only if t5 is zero.
 
       __ bind(&done);
       switch (array_type) {
