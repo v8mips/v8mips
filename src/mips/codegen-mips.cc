@@ -5495,7 +5495,8 @@ void CEntryStub::GenerateCore(MacroAssembler* masm,
   masm->sw(ra, MemOperand(sp, stack_adjustment - kPointerSize));
 
   // Call the C routine.
-  masm->jalr(s2);  // If ra computed correctly above, this could be jr().
+  masm->mov(t9, s2);  // Function pointer to t9 to conform to ABI for PIC.
+  masm->jalr(t9);
   masm->nop();    // Branch delay slot nop.
 
   // Restore stack (remove arg slots and extra parameter).
