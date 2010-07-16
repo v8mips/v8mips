@@ -531,7 +531,7 @@ static void Generate_JSEntryTrampolineHelper(MacroAssembler* masm,
   __ mov(s1, t0);
   __ mov(s2, t0);
   __ mov(s3, t0);
-  __ mov(s4, s0);
+  __ mov(s4, t0);
   __ mov(s5, t0);
   // s6 holds the root address. Do not clobber.
   // s7 is cp. Do not init.
