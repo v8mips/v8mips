@@ -68,7 +68,7 @@ ANDROID_FLAGS = ['-march=armv5te',
                  '-frename-registers',
                  '-fomit-frame-pointer',
                  '-fno-strict-aliasing',
-                 '-finline-limit=64',
+                 '-finline-limit=300',
                  '-MD']
 
 ANDROID_INCLUDES = [ANDROID_TOP + '/bionic/libc/arch-arm/include',
@@ -194,7 +194,7 @@ LIBRARY_FLAGS = {
     'arch:mips': {
       'CPPDEFINES':   ['V8_TARGET_ARCH_MIPS'],
       'simulator:none': {
-        'CCFLAGS':      ['-EL', '-mips32r2', '-Wa,-mips32r2', '-fno-inline', '-mhard-float'],
+        'CCFLAGS':      ['-EL', '-mips32r2', '-Wa,-mips32r2', '-mhard-float'],
         'LDFLAGS':      ['-EL', '-static', '-static-libgcc']
       }
     },
@@ -387,7 +387,7 @@ CCTEST_EXTRA_FLAGS = {
     },
     'arch:mips': {
       'simulator:none': {
-        'CCFLAGS':      ['-EL', '-mips32r2', '-Wa,-mips32r2', '-fno-inline', '-mhard-float'],
+        'CCFLAGS':      ['-EL', '-mips32r2', '-Wa,-mips32r2', '-mhard-float'],
         'LINKFLAGS':    ['-EL', '-static', '-static-libgcc'],
         'LDFLAGS':      ['-EL', '-static', '-static-libgcc']
       }
@@ -490,7 +490,7 @@ SAMPLE_FLAGS = {
     'arch:mips': {
       'CPPDEFINES':   ['V8_TARGET_ARCH_MIPS'],
       'simulator:none': {
-        'CCFLAGS':      ['-EL', '-mips32r2', '-Wa,-mips32r2', '-fno-inline', '-mhard-float'],
+        'CCFLAGS':      ['-EL', '-mips32r2', '-Wa,-mips32r2', '-mhard-float'],
         'LINKFLAGS':    ['-EL', '-static', '-static-libgcc'],
         'LDFLAGS':      ['-EL', '-static', '-static-libgcc']
       }
