@@ -5384,7 +5384,7 @@ void CEntryStub::GenerateThrowUncatchable(MacroAssembler* masm,
     Failure* out_of_memory = Failure::OutOfMemoryException();
     __ li(v0, Operand(reinterpret_cast<int32_t>(out_of_memory)));
     __ li(a2, Operand(ExternalReference(Top::k_pending_exception_address)));
-    __ sw(a0, MemOperand(a2));
+    __ sw(v0, MemOperand(a2));
   }
 
   // Stack layout at this point. See also StackHandlerConstants.
