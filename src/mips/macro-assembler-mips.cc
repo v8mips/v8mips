@@ -1703,15 +1703,15 @@ void MacroAssembler::AllocateInNewSpace(Register object_size,
       ExternalReference::new_space_allocation_limit_address();
   li(scratch2, Operand(new_space_allocation_limit));
   lw(scratch2, MemOperand(scratch2));
-  sll(ip, object_size, kPointerSizeLog2);
-  Addu(result, result, Operand(ip));
+  sll(t8, object_size, kPointerSizeLog2);
+  Addu(result, result, Operand(t8));
   Branch(gc_required, Ugreater, result, Operand(scratch2));
 
   // Update allocation top. result temporarily holds the new top,
   sw(result, MemOperand(scratch1));
 
   // Adjust back to start of new object.
-  Subu(result, result, Operand(ip));
+  Subu(result, result, Operand(t8));
 
   // Tag object if requested.
   if ((flags & TAG_OBJECT) != 0) {
@@ -2094,7 +2094,7 @@ void MacroAssembler::TryGetFunctionPrototype(Register function,
   // simply miss the cache instead. This will allow us to allocate a
   // prototype object on-demand in the runtime system.
   LoadRoot(t8, Heap::kTheHoleValueRootIndex);
-  Branch(miss, eq, result, Operand(ip));
+  Branch(miss, eq, result, Operand(t8));
 
   // If the function does not have an initial map, we're done.
   Label done;

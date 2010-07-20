@@ -37,14 +37,17 @@ namespace internal {
 // Forward declaration.
 class JumpTarget;
 
-// Register at is used for instruction generation. So it is not always safe to
-// use it. Instead t8 and t9 registers are used by the MacroAssembler when
-// necessary.
+// Reserved Register Usage Summary.
+//
+// Registers t8, t9, and at are reserved for use by the MacroAssembler.
+//
 // The programmer should know that the MacroAssembler may clobber these two,
 // but won't touch other registers except in special cases.
-
-// Unless we know exactly what we do. Therefore we create another scratch reg.
-const Register ip = t8;  // Alias ip (equivalent to arm ip scratch register).
+//
+// Per the MIPS ABI, register t9 must be used for indirect function call
+// via 'jalr t9' or 'jr t9' instructions. This is relied upon by gcc when
+// trying to update gp register for position-independent-code. Whenever
+// MIPS generated code calls C code, it must be via t9 register.
 
 // Registers aliases
 // cp is assumed to be a callee saved register.
