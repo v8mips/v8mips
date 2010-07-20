@@ -5012,11 +5012,8 @@ static void EmitTwoNonNanDoubleComparison(MacroAssembler* masm, Condition cc) {
 
   if (!CpuFeatures::IsSupported(FPU)){
     __ Push(ra);
-    __ mov(s3, sp);  // Save sp.
-    __ AlignStack(0);
-    __ li(t4, Operand(ExternalReference::compare_doubles()));
-    __ Call(t4);
-    __ mov(sp, s3);  // Restore stack pointer.
+    __ PrepareCallCFunction(4, t4);  // Two doubles count as 4 arguments.
+    __ CallCFunction(ExternalReference::compare_doubles(), 4);
     __ Pop(ra);
     __ Ret();
   } else {
@@ -5430,8 +5427,8 @@ void CEntryStub::GenerateCore(MacroAssembler* masm,
   if (do_gc) {
     // Move result passed in v0 into a0 to call PerformGC.
     __ mov(a0, v0);
-    ExternalReference gc_reference = ExternalReference::perform_gc_function();
-    __ Call(gc_reference.address(), RelocInfo::RUNTIME_ENTRY);
+    __ PrepareCallCFunction(1, a1);
+    __ CallCFunction(ExternalReference::perform_gc_function(), 1);
   }
 
   ExternalReference scope_depth =
@@ -6211,13 +6208,12 @@ static void HandleBinaryOpSlowCases(MacroAssembler* masm,
   // t0: Address of heap number for result.
 
   __ Push(ra);
-  __ Push(t0);    // Address of heap number that is answer.
-  __ mov(s3, sp);  // Save sp.
-  __ AlignStack(0);
+  __ Push(t0);    // Address of heap number to store the answer.
+
+  __ PrepareCallCFunction(4, t1);  // Two doubles count as 4 arguments.
   // Call C routine that may not cause GC or other trouble.
-  __ li(t0, Operand(ExternalReference::double_fp_operation(operation)));
-  __ Call(t0);
-  __ mov(sp, s3);  // Restore stack pointer.
+  __ CallCFunction(ExternalReference::double_fp_operation(operation), 4);
+
   __ Pop(t0);  // Address of heap number.
   // Store answer in the overwritable heap number.
   // Double returned in registers v0 and v1.

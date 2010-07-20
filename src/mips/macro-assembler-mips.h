@@ -369,8 +369,10 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
   void LeaveExitFrame(ExitFrame::Mode mode);
 
   // Align the stack by optionally pushing a Smi zero.
-  void AlignStack(int offset);
+  void AlignStack(int offset);    // TODO(REBASE) : remove this function.
 
+  // Get the actual activation frame alignment for target environment.
+  static int ActivationFrameAlignment();
 
   // -------------------------------------------------------------------------
   // JavaScript invokes
@@ -505,6 +507,37 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
   void TailCallRuntime(Runtime::FunctionId fid,
                        int num_arguments,
                        int result_size);
+
+  // Before calling a C-function from generated code, align arguments on stack
+  // and add space for the four mips argument slots.
+  // After aligning the frame, non-register arguments must be stored in
+  // sp[kCFuncArg_5], sp[kCFuncArg_6], etc., not pushed.
+  // The argument count assumes all arguments are word sized.
+  // Some compilers/platforms require the stack to be aligned when calling
+  // C++ code.
+  // Needs a scratch register to do some arithmetic. This register will be
+  // trashed.
+  void PrepareCallCFunction(int num_arguments, Register scratch);
+
+  // Arguments 1-4 are placed in registers a0 thru a3 respectively.
+  // Arguments 5..n are stored to stack using following constants:
+  //  sw(t0, MemOperand(sp, kCFuncArg_5));
+  static const int kCFuncArg_5 =
+      (0 + StandardFrameConstants::kCArgsSlotsSize) * kPointerSize;
+  static const int kCFuncArg_6 =
+      (1 + StandardFrameConstants::kCArgsSlotsSize) * kPointerSize;
+  static const int kCFuncArg_7 =
+      (2 + StandardFrameConstants::kCArgsSlotsSize) * kPointerSize;
+  static const int kCFuncArg_8 =
+      (3 + StandardFrameConstants::kCArgsSlotsSize) * kPointerSize;
+
+  // Calls a C function and cleans up the space for arguments allocated
+  // by PrepareCallCFunction. The called function is not allowed to trigger a
+  // garbage collection, since that might move the code and invalidate the
+  // return address (unless this is somehow accounted for by the called
+  // function).
+  void CallCFunction(ExternalReference function, int num_arguments);
+  void CallCFunction(Register function, int num_arguments);
 
   // Jump to the builtin routine.
   void JumpToExternalReference(const ExternalReference& builtin);

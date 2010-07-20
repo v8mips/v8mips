@@ -1411,6 +1411,7 @@ void MacroAssembler::Jump(const Operand& target,
 }
 
 
+// Note: To call gcc-compiled C code on mips, you must call thru t9.
 void MacroAssembler::Call(const Operand& target,
                           bool ProtectBranchDelaySlot) {
   if (target.is_reg()) {
@@ -1419,8 +1420,8 @@ void MacroAssembler::Call(const Operand& target,
     if (!MustUseAt(target.rmode_)) {
         jal(target.imm32_);
     } else {  // MustUseAt(target)
-      li(at, target);
-        jalr(at);
+      li(t9, target);
+        jalr(t9);
     }
   }
   // Emit a nop in the branch delay slot if required.
@@ -1428,7 +1429,7 @@ void MacroAssembler::Call(const Operand& target,
     nop();
 }
 
-
+// Note: To call gcc-compiled C code on mips, you must call thru t9.
 void MacroAssembler::Call(const Operand& target,
                           Condition cond, Register rs, const Operand& rt,
                           bool ProtectBranchDelaySlot) {
@@ -1449,12 +1450,12 @@ void MacroAssembler::Call(const Operand& target,
         jal(target.imm32_);  // Will generate only one instruction.
       }
     } else {  // MustUseAt(target)
-      li(at, target);
+      li(t9, target);
       if (cond == cc_always) {
-        jalr(at);
+        jalr(t9);
       } else {
         Branch(2, NegateCondition(cond), rs, rt);
-        jalr(at);  // Will generate only one instruction.
+        jalr(t9);  // Will generate only one instruction.
       }
     }
   }
@@ -2453,6 +2454,24 @@ void MacroAssembler::LeaveExitFrame(ExitFrame::Mode mode) {
 }
 
 
+int MacroAssembler::ActivationFrameAlignment() {
+#if defined(V8_HOST_ARCH_MIPS)
+  // Running on the real platform. Use the alignment as mandated by the local
+  // environment.
+  // Note: This will break if we ever start generating snapshots on one ARM
+  // platform for another ARM platform with a different alignment.
+  return OS::ActivationFrameAlignment();
+#else  // defined(V8_HOST_ARCH_MIPS)
+  // If we are using the simulator then we should always align to the expected
+  // alignment. As the simulator is used to generate snapshots we do not know
+  // if the target platform will need alignment, so this is controlled from a
+  // flag.
+  // return FLAG_sim_stack_alignment;  // TODO(REBASE): uncomment
+  return 2 * kPointerSize;  // TODO(REBASE): use above flog & remove this line.
+#endif  // defined(V8_HOST_ARCH_MIPS)
+}
+
+
 void MacroAssembler::AlignStack(int offset) {
   // On MIPS an offset of 0 aligns to 0 modulo 8 bytes,
   //     and an offset of 1 aligns to 4 modulo 8 bytes.
@@ -2572,6 +2591,79 @@ void MacroAssembler::JumpIfInstanceTypeIsNotSequentialAscii(Register type,
   And(scratch, type, Operand(kFlatAsciiStringMask));
   Branch(failure, ne, scratch, Operand(kFlatAsciiStringTag));
 }
+
+
+void MacroAssembler::PrepareCallCFunction(int num_arguments, Register scratch) {
+  int frame_alignment = ActivationFrameAlignment();
+  // Up to four simple arguments are passed in registers a0..a3.
+  // Those four arguments must have reserved argument slots on the stack for
+  // mips, even though those argument slots are not normally used.
+  // Remaining arguments are pushed on the stack, above (higher address than)
+  // the argument slots.
+  int stack_passed_arguments = ((num_arguments <= 4) ? 0 : num_arguments - 4) +
+                               StandardFrameConstants::kCArgsSlotsSize;
+  if (frame_alignment > kPointerSize) {
+    // Make stack end at alignment and make room for num_arguments - 4 words
+    // and the original value of sp.
+    mov(scratch, sp);
+    Subu(sp, sp, Operand((stack_passed_arguments + 1) * kPointerSize));
+    ASSERT(IsPowerOf2(frame_alignment));
+    And(sp, sp, Operand(-frame_alignment));
+    sw(scratch, MemOperand(sp, stack_passed_arguments * kPointerSize));
+  } else {
+    Subu(sp, sp, Operand(stack_passed_arguments * kPointerSize));
+  }
+}
+
+
+void MacroAssembler::CallCFunction(ExternalReference function,
+                                   int num_arguments) {
+  li(t9, Operand(function));
+  CallCFunction(t9, num_arguments);
+}
+
+
+void MacroAssembler::CallCFunction(Register function, int num_arguments) {
+  // Make sure that the stack is aligned before calling a C function unless
+  // running in the simulator. The simulator has its own alignment check which
+  // provides more information.
+  // The argument stots are presumed to have been set up by
+  // PrepareCallCFunction. The C function must be called via t9, for mips ABI.
+#if defined(V8_HOST_ARCH_MIPS)
+  if (FLAG_debug_code) {
+    int frame_alignment = OS::ActivationFrameAlignment();
+    int frame_alignment_mask = frame_alignment - 1;
+    if (frame_alignment > kPointerSize) {
+      ASSERT(IsPowerOf2(frame_alignment));
+      Label alignment_as_expected;
+      And(at, sp, Operand(frame_alignment_mask));
+      Branch(&alignment_as_expected, eq, at, Operand(zero_reg));
+      // Don't use Check here, as it will call Runtime_Abort possibly
+      // re-entering here.
+      stop("Unexpected alignment in CallCFunction");
+      bind(&alignment_as_expected);
+    }
+  }
+#endif  // V8_HOST_ARCH_MIPS
+
+  // Just call directly. The function called cannot cause a GC, or
+  // allow preemption, so the return address in the link register
+  // stays correct.
+  if (!function.is(t9)) {
+    mov(t9, function);
+  }
+  Call(t9);
+
+  int stack_passed_arguments = ((num_arguments <= 4) ? 0 : num_arguments - 4) +
+                               StandardFrameConstants::kCArgsSlotsSize;
+
+  if (OS::ActivationFrameAlignment() > kPointerSize) {
+    lw(sp, MemOperand(sp, stack_passed_arguments * kPointerSize));
+  } else {
+    Addu(sp, sp, Operand(stack_passed_arguments * sizeof(kPointerSize)));
+  }
+}
+
 
 #undef BRANCH_ARGS_CHECK
 
