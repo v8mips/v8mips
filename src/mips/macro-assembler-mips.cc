@@ -381,7 +381,7 @@ void MacroAssembler::Addu(Register rd, Register rs, const Operand& rt) {
   if (rt.is_reg()) {
     addu(rd, rs, rt.rm());
   } else {
-    if (is_int16(rt.imm32_) && !MustUseAt(rt.rmode_)) {
+    if (is_int16(rt.imm32_) && !MustUseReg(rt.rmode_)) {
       addiu(rd, rs, rt.imm32_);
     } else {
       // li handles the relocation.
@@ -397,7 +397,7 @@ void MacroAssembler::Subu(Register rd, Register rs, const Operand& rt) {
   if (rt.is_reg()) {
     subu(rd, rs, rt.rm());
   } else {
-    if (is_int16(rt.imm32_) && !MustUseAt(rt.rmode_)) {
+    if (is_int16(rt.imm32_) && !MustUseReg(rt.rmode_)) {
       addiu(rd, rs, -rt.imm32_);  // No subiu instr, use addiu(x, y, -imm).
     } else {
       // li handles the relocation.
@@ -473,7 +473,7 @@ void MacroAssembler::And(Register rd, Register rs, const Operand& rt) {
   if (rt.is_reg()) {
     and_(rd, rs, rt.rm());
   } else {
-    if (is_uint16(rt.imm32_) && !MustUseAt(rt.rmode_)) {
+    if (is_uint16(rt.imm32_) && !MustUseReg(rt.rmode_)) {
       andi(rd, rs, rt.imm32_);
     } else {
       // li handles the relocation.
@@ -489,7 +489,7 @@ void MacroAssembler::Or(Register rd, Register rs, const Operand& rt) {
   if (rt.is_reg()) {
     or_(rd, rs, rt.rm());
   } else {
-    if (is_uint16(rt.imm32_) && !MustUseAt(rt.rmode_)) {
+    if (is_uint16(rt.imm32_) && !MustUseReg(rt.rmode_)) {
       ori(rd, rs, rt.imm32_);
     } else {
       // li handles the relocation.
@@ -505,7 +505,7 @@ void MacroAssembler::Xor(Register rd, Register rs, const Operand& rt) {
   if (rt.is_reg()) {
     xor_(rd, rs, rt.rm());
   } else {
-    if (is_uint16(rt.imm32_) && !MustUseAt(rt.rmode_)) {
+    if (is_uint16(rt.imm32_) && !MustUseReg(rt.rmode_)) {
       xori(rd, rs, rt.imm32_);
     } else {
       // li handles the relocation.
@@ -533,7 +533,7 @@ void MacroAssembler::Slt(Register rd, Register rs, const Operand& rt) {
   if (rt.is_reg()) {
     slt(rd, rs, rt.rm());
   } else {
-    if (is_int16(rt.imm32_) && !MustUseAt(rt.rmode_)) {
+    if (is_int16(rt.imm32_) && !MustUseReg(rt.rmode_)) {
       slti(rd, rs, rt.imm32_);
     } else {
       // li handles the relocation.
@@ -549,7 +549,7 @@ void MacroAssembler::Sltu(Register rd, Register rs, const Operand& rt) {
   if (rt.is_reg()) {
     sltu(rd, rs, rt.rm());
   } else {
-    if (is_uint16(rt.imm32_) && !MustUseAt(rt.rmode_)) {
+    if (is_uint16(rt.imm32_) && !MustUseReg(rt.rmode_)) {
       sltiu(rd, rs, rt.imm32_);
     } else {
       // li handles the relocation.
@@ -566,7 +566,7 @@ void MacroAssembler::Sltu(Register rd, Register rs, const Operand& rt) {
 void MacroAssembler::li(Register rd, Operand j, bool gen2instr) {
   ASSERT(!j.is_reg());
 
-  if (!MustUseAt(j.rmode_) && !gen2instr) {
+  if (!MustUseReg(j.rmode_) && !gen2instr) {
     // Normal load of an immediate value which does not need Relocation Info.
     if (is_int16(j.imm32_)) {
       addiu(rd, zero_reg, j.imm32_);
@@ -578,8 +578,8 @@ void MacroAssembler::li(Register rd, Operand j, bool gen2instr) {
       lui(rd, (HIMask & j.imm32_) >> 16);
       ori(rd, rd, (LOMask & j.imm32_));
     }
-  } else if (MustUseAt(j.rmode_) || gen2instr) {
-    if (MustUseAt(j.rmode_)) {
+  } else if (MustUseReg(j.rmode_) || gen2instr) {
+    if (MustUseReg(j.rmode_)) {
       RecordRelocInfo(j.rmode_, j.imm32_);
     }
     // We need always the same number of instructions as we may need to patch
@@ -1363,12 +1363,12 @@ void MacroAssembler::Jump(const Operand& target,
   if (target.is_reg()) {
       jr(target.rm());
   } else {    // !target.is_reg()
-    if (!MustUseAt(target.rmode_)) {
+    if (!MustUseReg(target.rmode_)) {
         j(target.imm32_);
-    } else {  // MustUseAt(target)
-      li(at, target);
-        jr(at);
-      }
+    } else {  // MustUseReg(target)
+      li(t9, target);
+      jr(t9);
+    }
   }
   // Emit a nop in the branch delay slot if required.
   if (ProtectBranchDelaySlot)
@@ -1388,20 +1388,20 @@ void MacroAssembler::Jump(const Operand& target,
       jr(target.rm());
     }
   } else {    // !target.is_reg()
-    if (!MustUseAt(target.rmode_)) {
+    if (!MustUseReg(target.rmode_)) {
       if (cond == cc_always) {
         j(target.imm32_);
       } else {
         Branch(2, NegateCondition(cond), rs, rt);
         j(target.imm32_);  // Will generate only one instruction.
       }
-    } else {  // MustUseAt(target)
-      li(at, target);
+    } else {  // MustUseReg(target)
+      li(t9, target);
       if (cond == cc_always) {
-        jr(at);
+        jr(t9);
       } else {
         Branch(2, NegateCondition(cond), rs, rt);
-        jr(at);  // Will generate only one instruction.
+        jr(t9);  // Will generate only one instruction.
       }
     }
   }
@@ -1417,11 +1417,11 @@ void MacroAssembler::Call(const Operand& target,
   if (target.is_reg()) {
       jalr(target.rm());
   } else {    // !target.is_reg()
-    if (!MustUseAt(target.rmode_)) {
-        jal(target.imm32_);
-    } else {  // MustUseAt(target)
+    if (!MustUseReg(target.rmode_)) {
+      jal(target.imm32_);
+    } else {  // MustUseReg(target)
       li(t9, target);
-        jalr(t9);
+      jalr(t9);
     }
   }
   // Emit a nop in the branch delay slot if required.
@@ -1442,14 +1442,14 @@ void MacroAssembler::Call(const Operand& target,
       jalr(target.rm());
     }
   } else {    // !target.is_reg()
-    if (!MustUseAt(target.rmode_)) {
+    if (!MustUseReg(target.rmode_)) {
       if (cond == cc_always) {
         jal(target.imm32_);
       } else {
         Branch(2, NegateCondition(cond), rs, rt);
         jal(target.imm32_);  // Will generate only one instruction.
       }
-    } else {  // MustUseAt(target)
+    } else {  // MustUseReg(target)
       li(t9, target);
       if (cond == cc_always) {
         jalr(t9);

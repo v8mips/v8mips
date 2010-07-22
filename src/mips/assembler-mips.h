@@ -631,7 +631,7 @@ class Assembler : public Malloced {
   void target_at_put(int32_t pos, int32_t target_pos);
 
   // Say if we need to relocate with this mode.
-  bool MustUseAt(RelocInfo::Mode rmode);
+  bool MustUseReg(RelocInfo::Mode rmode);
 
   // Record reloc info for current pc_.
   void RecordRelocInfo(RelocInfo::Mode rmode, intptr_t data = 0);

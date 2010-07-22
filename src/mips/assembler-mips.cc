@@ -481,7 +481,7 @@ void Assembler::next(Label* L) {
 // if they can be encoded in the MIPS's 16 bits of immediate-offset instruction
 // space.  There is no guarantee that the relocated location can be similarly
 // encoded.
-bool Assembler::MustUseAt(RelocInfo::Mode rmode) {
+bool Assembler::MustUseReg(RelocInfo::Mode rmode) {
   if (rmode == RelocInfo::EXTERNAL_REFERENCE) {
     return Serializer::enabled();
   } else if (rmode == RelocInfo::NONE) {
@@ -1349,7 +1349,7 @@ void Assembler::set_target_address_at(Address pc, Address target) {
 #ifdef DEBUG
   Instr instr1 = instr_at(pc);
 
-  // Check we have indeed the result from a li with MustUseAt true.
+  // Check we have indeed the result from a li with MustUseReg true.
   CHECK(((instr1 & kOpcodeMask) == LUI && (instr2 & kOpcodeMask) == ORI) ||
         ((instr1 == 0) && ((instr2 & kOpcodeMask)== ADDIU ||
                            (instr2 & kOpcodeMask)== ORI ||
