@@ -1884,44 +1884,6 @@ void MacroAssembler::AllocateHeapNumber(Register result,
 }
 
 
-
-// -----------------------------------------------------------------------------
-// Activation frames
-
-void MacroAssembler::SetupAlignedCall(Register scratch, int arg_count) {
-  Label extra_push, end;
-
-  andi(scratch, sp, 7);
-
-  // We check for args and receiver size on the stack, all of them word sized.
-  // We add one for sp, that we also want to store on the stack.
-  if (((arg_count + 1) % kPointerSizeLog2) == 0) {
-    Branch(&extra_push, ne, scratch, Operand(zero_reg));
-  } else {  // ((arg_count + 1) % 2) == 1
-    Branch(&extra_push, eq, scratch, Operand(zero_reg));
-  }
-
-  // Save sp on the stack.
-  mov(scratch, sp);
-  Push(scratch);
-  jmp(&end);
-
-  // Align before saving sp on the stack.
-  bind(&extra_push);
-  mov(scratch, sp);
-  addiu(sp, sp, -8);
-  sw(scratch, MemOperand(sp));
-
-  // The stack is aligned and sp is stored on the top.
-  bind(&end);
-}
-
-
-void MacroAssembler::ReturnFromAlignedCall() {
-  lw(sp, MemOperand(sp));
-}
-
-
 // -----------------------------------------------------------------------------
 // JavaScript invokes
 

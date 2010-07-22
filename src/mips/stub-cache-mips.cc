@@ -751,13 +751,10 @@ Object* StubCompiler::CompileLazyCompile(Code::Flags flags) {
   __ EnterInternalFrame();
   // Preserve the function.
   __ Push(a1);
-  // Setup aligned call.
-  __ SetupAlignedCall(t0, 1);
   // Push the function on the stack as the argument to the runtime function.
   __ Push(a1);
   // Call the runtime function
   __ CallRuntime(Runtime::kLazyCompile, 1);
-  __ ReturnFromAlignedCall();
   // Calculate the entry point.
   __ addiu(t9, v0, Code::kHeaderSize - kHeapObjectTag);
   // Restore saved function.

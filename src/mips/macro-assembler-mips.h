@@ -371,9 +371,6 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
   // Align the stack by optionally pushing a Smi zero.
   void AlignStack(int offset);
 
-  void SetupAlignedCall(Register scratch, int arg_count = 0);
-  void ReturnFromAlignedCall();
-
 
   // -------------------------------------------------------------------------
   // JavaScript invokes
