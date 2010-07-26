@@ -600,6 +600,10 @@ class Assembler : public Malloced {
   int32_t current_position() const { return current_position_; }
   int32_t current_statement_position() const { return current_position_; }
 
+  // Postpone the generation of the trampoline pool for the specified number of
+  // instructions.
+  void BlockTrampolinePoolFor(int instructions);
+
   // Check if there is less than kGap bytes available in the buffer.
   // If this is the case, we need to grow the buffer before emitting
   // an instruction or relocation information.
@@ -636,6 +640,12 @@ class Assembler : public Malloced {
   // Record reloc info for current pc_.
   void RecordRelocInfo(RelocInfo::Mode rmode, intptr_t data = 0);
 
+  // Block the emission of the trampoline pool before pc_offset.
+  void BlockTrampolinePoolBefore(int pc_offset) {
+    if (no_trampoline_pool_before_ < pc_offset)
+      no_trampoline_pool_before_ = pc_offset;
+  }
+
  private:
   // Code buffer:
   // The buffer into which code and relocation info are generated.
@@ -656,6 +666,21 @@ class Assembler : public Malloced {
   static const int kGap = 32;
   byte* pc_;  // The program counter - moves forward.
 
+
+  // Repeated checking whether the trampoline pool should be emitted is rather
+  // expensive. By default we only check again once a number of instructions
+  // has been generated.
+  static const int kCheckConstIntervalInst = 32;
+  static const int kCheckConstInterval = kCheckConstIntervalInst * kInstrSize;
+
+  int next_buffer_check_;  // pc offset of next buffer check.
+
+  // Emission of the trampoline pool may be blocked in some code sequences.
+  int no_trampoline_pool_before_;  // Block emission before this pc offset.
+
+  // Keep track of the last emitted pool to guarantee a maximal distance.
+  int last_trampoline_pool_end_;  // pc offset of the end of the last pool.
+
   // Relocation information generation.
   // Each relocation is encoded as a variable size value.
   static const int kMaxRelocSize = RelocInfoWriter::kMaxSize;
@@ -674,6 +699,8 @@ class Assembler : public Malloced {
   inline void CheckBuffer();
   void GrowBuffer();
   inline void emit(Instr x);
+  inline void CheckTrampolinePoolQuick();
+  void CheckTrampolinePool();
 
   // Instruction generation.
   // We have 3 different kind of encoding layout on MIPS.
@@ -735,6 +762,69 @@ class Assembler : public Malloced {
   void bind_to(Label* L, int pos);
   void link_to(Label* L, Label* appendix);
   void next(Label* L);
+
+  // One trampoline consists of:
+  // - space for trampoline slots,
+  // - space for labels.
+  //
+  // Space for trampoline slots is equal to slot_count * 2*kInstrSize.
+  // Space for trampoline slots preceeds space for labels. Each label is of one
+  // instruction size, so total amount for labels is equal to
+  // label_count *  kInstrSize.
+  class Trampoline {
+   public:
+    Trampoline(int start, int slot_count, int label_count) {
+      start_ = start;
+      next_slot_ = start;
+      free_slot_count_ = slot_count;
+      next_label_ = start + slot_count*2*kInstrSize;
+      free_label_count_ = label_count;
+      end_ = next_label_ + (label_count-1)*kInstrSize;
+    }
+    int bound() {
+      return next_slot_;
+    }
+    int start() {
+      return start_;
+    }
+    int end() {
+      return end_;
+    }
+    int take_slot() {
+      int trampoline_slot = next_slot_;
+      ASSERT(free_slot_count_ > 0);
+      free_slot_count_--;
+      next_slot_ += 2*kInstrSize;
+      return trampoline_slot;
+    }
+    int take_label() {
+      int label_pos = next_label_;
+      ASSERT(free_label_count_ > 0);
+      free_label_count_--;
+      next_label_ += kInstrSize;
+      return label_pos;
+    }
+   private:
+    int start_;
+    int end_;
+    int next_slot_;
+    int free_slot_count_;
+    int next_label_;
+    int free_label_count_;
+  };
+
+  int32_t get_label_entry(int32_t pos, bool next_pool = true);
+  int32_t get_trampoline_entry(int32_t pos, bool next_pool = true);
+
+  static const int kSlotsPerTrampoline = 2048;
+  static const int kLabelsPerTrampoline = 8;
+  static const int kTrampolineInst =
+                                  2*kSlotsPerTrampoline + kLabelsPerTrampoline;
+  static const int kTrampolineSize = kTrampolineInst*kInstrSize;
+  static const int kMaxBranchOffset = (1 << (18-1)) - 1;
+  static const int kMaxDistBetweenPools = kMaxBranchOffset - 2*kTrampolineSize;
+
+  List<Trampoline> trampolines_;
 
   friend class RegExpMacroAssemblerMIPS;
   friend class RelocInfo;

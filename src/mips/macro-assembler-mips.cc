@@ -668,6 +668,9 @@ void MacroAssembler::MultiPopReversed(RegList regs) {
 
 void MacroAssembler::Branch(int16_t offset,
                             bool ProtectBranchDelaySlot) {
+  // Block check and emission of trampoline pool for a maximum number of
+  // instructions that can be emitted from this function.
+  BlockTrampolinePoolFor(2);
   b(offset);
 
   // Emit a nop in the branch delay slot if required.
@@ -682,6 +685,11 @@ void MacroAssembler::Branch(int16_t offset, Condition cond, Register rs,
   ASSERT(!rs.is(zero_reg));
   Register r2 = no_reg;
   Register scratch = at;
+
+  // Block check and emission of trampoline pool for a maximum number of
+  // instructions that can be emitted from this function.
+  BlockTrampolinePoolFor(4);
+
   if (rt.is_reg()) {
     // We don't want any other register but scratch clobbered.
     ASSERT(!scratch.is(rs) && !scratch.is(rt.rm_));
@@ -1177,6 +1185,10 @@ void MacroAssembler::BranchAndLink(int16_t offset, Condition cond, Register rs,
   BRANCH_ARGS_CHECK(cond, rs, rt);
   Register r2 = no_reg;
   Register scratch = at;
+  // Block check and emission of trampoline pool for a maximum number of
+  // instructions that can be emitted from this function.
+  BlockTrampolinePoolFor(5);
+
   if (rt.is_reg()) {
     r2 = rt.rm_;
   } else if (cond != cc_always) {
@@ -1269,6 +1281,9 @@ void MacroAssembler::BranchAndLink(Label* L, Condition cond, Register rs,
   int32_t offset;
   Register r2 = no_reg;
   Register scratch = at;
+  // Block check and emission of trampoline pool for a maximum number of
+  // instructions that can be emitted from this function.
+  BlockTrampolinePoolFor(5);
   if (rt.is_reg()) {
     r2 = rt.rm_;
   } else if (cond != cc_always) {

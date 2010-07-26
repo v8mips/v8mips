@@ -4840,7 +4840,7 @@ static void EmitSmiNonsmiComparison(MacroAssembler* masm,
 
   // Rhs is a smi, lhs is a number.
   // Convert smi a1 to double.
-  if (CpuFeatures::IsSupported(FPU)){
+  if (CpuFeatures::IsSupported(FPU)) {
     CpuFeatures::Scope scope(FPU);
     __ sra(at, a1, kSmiTagSize);
     __ mtc1(at, f14);
@@ -4880,7 +4880,7 @@ static void EmitSmiNonsmiComparison(MacroAssembler* masm,
   // Lhs is a smi, rhs is a number.
   // a0 is Smi and a1 is heap number.
   // Convert smi a0 to double.
-  if (CpuFeatures::IsSupported(FPU)){
+  if (CpuFeatures::IsSupported(FPU)) {
     CpuFeatures::Scope scope(FPU);
     __ sra(at, a0, kSmiTagSize);
     __ mtc1(at, f12);
@@ -4903,7 +4903,7 @@ static void EmitSmiNonsmiComparison(MacroAssembler* masm,
 
 void EmitNanCheck(MacroAssembler* masm, Condition cc) {
   bool exp_first = (HeapNumber::kExponentOffset == HeapNumber::kValueOffset);
-  if (CpuFeatures::IsSupported(FPU)){
+  if (CpuFeatures::IsSupported(FPU)) {
     CpuFeatures::Scope scope(FPU);
     // Lhs and rhs are already loaded to f12 and f14 register pairs
     __ mfc1(t0, f14);  // f14 has LS 32 bits of rhs.
@@ -4971,7 +4971,7 @@ static void EmitTwoNonNanDoubleComparison(MacroAssembler* masm, Condition cc) {
     // Doubles are not equal unless they have the same bit pattern.
     // Exception: 0 and -0.
     bool exp_first = (HeapNumber::kExponentOffset == HeapNumber::kValueOffset);
-    if (CpuFeatures::IsSupported(FPU)){
+    if (CpuFeatures::IsSupported(FPU)) {
     CpuFeatures::Scope scope(FPU);
       // Lhs and rhs are already loaded to f12 and f14 register pairs
       __ mfc1(t0, f14);  // f14 has LS 32 bits of rhs.
@@ -5010,7 +5010,7 @@ static void EmitTwoNonNanDoubleComparison(MacroAssembler* masm, Condition cc) {
 
   __ bind(&return_result_not_equal);
 
-  if (!CpuFeatures::IsSupported(FPU)){
+  if (!CpuFeatures::IsSupported(FPU)) {
     __ Push(ra);
     __ PrepareCallCFunction(4, t4);  // Two doubles count as 4 arguments.
     __ CallCFunction(ExternalReference::compare_doubles(), 4);
@@ -7515,49 +7515,49 @@ void StringAddStub::Generate(MacroAssembler* masm) {
   // sp[0]: second argument.
   // sp[4]: first argument.
 
-   // Load the two arguments.
- __ lw(a0, MemOperand(sp, 1 * kPointerSize));  // First argument.
- __ lw(a1, MemOperand(sp, 0 * kPointerSize));  // Second argument.
+  // Load the two arguments.
+  __ lw(a0, MemOperand(sp, 1 * kPointerSize));  // First argument.
+  __ lw(a1, MemOperand(sp, 0 * kPointerSize));  // Second argument.
 
- // Make sure that both arguments are strings if not known in advance.
- if (string_check_) {
-   ASSERT_EQ(0, kSmiTag);
-   __ JumpIfEitherSmi(a0, a1, &string_add_runtime);
-   // Load instance types.
-   __ lw(t0, FieldMemOperand(a0, HeapObject::kMapOffset));
-   __ lw(t1, FieldMemOperand(a1, HeapObject::kMapOffset));
-   __ lbu(t0, FieldMemOperand(t0, Map::kInstanceTypeOffset));
-   __ lbu(t1, FieldMemOperand(t1, Map::kInstanceTypeOffset));
-   ASSERT_EQ(0, kStringTag);
-   // If either is not a string, go to runtime.
-   __ Or(t4, t0, Operand(t1));
-   __ And(t4, t4, Operand(kIsNotStringMask));
-   __ Branch(&string_add_runtime, ne, t4, Operand(zero_reg));
- }
+  // Make sure that both arguments are strings if not known in advance.
+  if (string_check_) {
+    ASSERT_EQ(0, kSmiTag);
+    __ JumpIfEitherSmi(a0, a1, &string_add_runtime);
+    // Load instance types.
+    __ lw(t0, FieldMemOperand(a0, HeapObject::kMapOffset));
+    __ lw(t1, FieldMemOperand(a1, HeapObject::kMapOffset));
+    __ lbu(t0, FieldMemOperand(t0, Map::kInstanceTypeOffset));
+    __ lbu(t1, FieldMemOperand(t1, Map::kInstanceTypeOffset));
+    ASSERT_EQ(0, kStringTag);
+    // If either is not a string, go to runtime.
+    __ Or(t4, t0, Operand(t1));
+    __ And(t4, t4, Operand(kIsNotStringMask));
+    __ Branch(&string_add_runtime, ne, t4, Operand(zero_reg));
+  }
 
- // Both arguments are strings.
- // a0: first string
- // a1: second string
- // t0: first string instance type (if string_check_)
- // t1: second string instance type (if string_check_)
- {
-   Label strings_not_empty;
-   // Check if either of the strings are empty. In that case return the other.
-   __ lw(a2, FieldMemOperand(a0, String::kLengthOffset));
-   __ lw(a3, FieldMemOperand(a1, String::kLengthOffset));
-   __ mov(v0, a0);       // Assume we'll return first string (from a0).
-   __ movz(v0, a1, a2);  // If first is empty, return second (from a1).
-   __ slt(t4, zero_reg, a2);   // if (a2 > 0) t4 = 1.
-   __ slt(t5, zero_reg, a3);   // if (a3 > 0) t5 = 1.
-   __ and_(t4, t4, t5);        // Branch if both strings were non-empty.
-   __ Branch(&strings_not_empty, ne, t4, Operand(zero_reg));
+  // Both arguments are strings.
+  // a0: first string
+  // a1: second string
+  // t0: first string instance type (if string_check_)
+  // t1: second string instance type (if string_check_)
+  {
+    Label strings_not_empty;
+    // Check if either of the strings are empty. In that case return the other.
+    __ lw(a2, FieldMemOperand(a0, String::kLengthOffset));
+    __ lw(a3, FieldMemOperand(a1, String::kLengthOffset));
+    __ mov(v0, a0);       // Assume we'll return first string (from a0).
+    __ movz(v0, a1, a2);  // If first is empty, return second (from a1).
+    __ slt(t4, zero_reg, a2);   // if (a2 > 0) t4 = 1.
+    __ slt(t5, zero_reg, a3);   // if (a3 > 0) t5 = 1.
+    __ and_(t4, t4, t5);        // Branch if both strings were non-empty.
+    __ Branch(&strings_not_empty, ne, t4, Operand(zero_reg));
 
-   __ IncrementCounter(&Counters::string_add_native, 1, a2, a3);
-   __ Addu(sp, sp, Operand(2 * kPointerSize));
-   __ Ret();
+    __ IncrementCounter(&Counters::string_add_native, 1, a2, a3);
+    __ Addu(sp, sp, Operand(2 * kPointerSize));
+    __ Ret();
 
-   __ bind(&strings_not_empty);
- }
+    __ bind(&strings_not_empty);
+  }
 
   // Both strings are non-empty.
   // a0: first string
@@ -7577,10 +7577,10 @@ void StringAddStub::Generate(MacroAssembler* masm) {
 
   // Check that both strings are non-external ascii strings.
   if (!string_check_) {
-   __ lw(t0, FieldMemOperand(a0, HeapObject::kMapOffset));
-   __ lw(t1, FieldMemOperand(a1, HeapObject::kMapOffset));
-   __ lbu(t0, FieldMemOperand(t0, Map::kInstanceTypeOffset));
-   __ lbu(t1, FieldMemOperand(t1, Map::kInstanceTypeOffset));
+    __ lw(t0, FieldMemOperand(a0, HeapObject::kMapOffset));
+    __ lw(t1, FieldMemOperand(a1, HeapObject::kMapOffset));
+    __ lbu(t0, FieldMemOperand(t0, Map::kInstanceTypeOffset));
+    __ lbu(t1, FieldMemOperand(t1, Map::kInstanceTypeOffset));
   }
   __ JumpIfBothInstanceTypesAreNotSequentialAscii(t0, t1, t2, t3,
                                                  &string_add_runtime);
@@ -7624,10 +7624,10 @@ void StringAddStub::Generate(MacroAssembler* masm) {
   // If result is not supposed to be flat, allocate a cons string object.
   // If both strings are ascii the result is an ascii cons string.
   if (!string_check_) {
-   __ lw(t0, FieldMemOperand(a0, HeapObject::kMapOffset));
-   __ lw(t1, FieldMemOperand(a1, HeapObject::kMapOffset));
-   __ lbu(t0, FieldMemOperand(t0, Map::kInstanceTypeOffset));
-   __ lbu(t1, FieldMemOperand(t1, Map::kInstanceTypeOffset));
+    __ lw(t0, FieldMemOperand(a0, HeapObject::kMapOffset));
+    __ lw(t1, FieldMemOperand(a1, HeapObject::kMapOffset));
+    __ lbu(t0, FieldMemOperand(t0, Map::kInstanceTypeOffset));
+    __ lbu(t1, FieldMemOperand(t1, Map::kInstanceTypeOffset));
   }
   Label non_ascii, allocated;
   ASSERT_EQ(0, kTwoByteStringTag);
@@ -7663,10 +7663,10 @@ void StringAddStub::Generate(MacroAssembler* masm) {
   // t2: sum of lengths.
   __ bind(&string_add_flat_result);
   if (!string_check_) {
-   __ lw(t0, FieldMemOperand(a0, HeapObject::kMapOffset));
-   __ lw(t1, FieldMemOperand(a1, HeapObject::kMapOffset));
-   __ lbu(t0, FieldMemOperand(t0, Map::kInstanceTypeOffset));
-   __ lbu(t1, FieldMemOperand(t1, Map::kInstanceTypeOffset));
+    __ lw(t0, FieldMemOperand(a0, HeapObject::kMapOffset));
+    __ lw(t1, FieldMemOperand(a1, HeapObject::kMapOffset));
+    __ lbu(t0, FieldMemOperand(t0, Map::kInstanceTypeOffset));
+    __ lbu(t1, FieldMemOperand(t1, Map::kInstanceTypeOffset));
   }
   // Check that both strings are sequential, meaning that we
   // branch to runtime if either string tag is non-zero.
