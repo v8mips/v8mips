@@ -816,7 +816,7 @@ class Assembler : public Malloced {
   int32_t get_label_entry(int32_t pos, bool next_pool = true);
   int32_t get_trampoline_entry(int32_t pos, bool next_pool = true);
 
-  static const int kSlotsPerTrampoline = 2048;
+  static const int kSlotsPerTrampoline = 2304;
   static const int kLabelsPerTrampoline = 8;
   static const int kTrampolineInst =
                                   2*kSlotsPerTrampoline + kLabelsPerTrampoline;

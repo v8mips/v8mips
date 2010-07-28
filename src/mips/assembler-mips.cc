@@ -607,6 +607,7 @@ void Assembler::GenInstrImmediate(Opcode opcode,
 // Registers are in the order of the instruction encoding, from left to right.
 void Assembler::GenInstrJump(Opcode opcode,
                               uint32_t address) {
+  BlockTrampolinePoolFor(2);
   ASSERT(is_uint26(address));
   Instr instr = opcode | address;
   emit(instr);
@@ -625,7 +626,7 @@ int32_t Assembler::get_label_entry(int32_t pos, bool next_pool) {
        break;
       }
     }
-  } else { //  Caller needs a label entry from the previous pool.
+  } else {  //  Caller needs a label entry from the previous pool.
     for (int i = trampoline_count-1; i >= 0; i--) {
       if (trampolines_[i].end() < pos) {
        label_entry = trampolines_[i].take_label();
@@ -649,7 +650,7 @@ int32_t Assembler::get_trampoline_entry(int32_t pos, bool next_pool) {
        break;
       }
     }
-  } else { //  Caller needs a trampoline entry from the previous pool.
+  } else {  //  Caller needs a trampoline entry from the previous pool.
     for (int i = trampoline_count-1; i >= 0; i--) {
       if (trampolines_[i].end() < pos) {
        trampoline_entry = trampolines_[i].take_slot();
@@ -663,9 +664,6 @@ int32_t Assembler::get_trampoline_entry(int32_t pos, bool next_pool) {
 int32_t Assembler::branch_offset(Label* L, bool jump_elimination_allowed) {
   int32_t target_pos;
   int32_t pc_offset_v = pc_offset();
-  // Block the emission of the trampoline for two instructions. We should not
-  // emit the trampoline pool in the branch delay slot.
-  BlockTrampolinePoolFor(2);
 
   if (L->is_bound()) {
     target_pos = L->pos();
@@ -761,43 +759,51 @@ void Assembler::bal(int16_t offset) {
 
 
 void Assembler::beq(Register rs, Register rt, int16_t offset) {
+  BlockTrampolinePoolFor(2);
   GenInstrImmediate(BEQ, rs, rt, offset);
 }
 
 
 void Assembler::bgez(Register rs, int16_t offset) {
+  BlockTrampolinePoolFor(2);
   GenInstrImmediate(REGIMM, rs, BGEZ, offset);
 }
 
 
 void Assembler::bgezal(Register rs, int16_t offset) {
+  BlockTrampolinePoolFor(2);
   WriteRecordedPositions();
   GenInstrImmediate(REGIMM, rs, BGEZAL, offset);
 }
 
 
 void Assembler::bgtz(Register rs, int16_t offset) {
+  BlockTrampolinePoolFor(2);
   GenInstrImmediate(BGTZ, rs, zero_reg, offset);
 }
 
 
 void Assembler::blez(Register rs, int16_t offset) {
+  BlockTrampolinePoolFor(2);
   GenInstrImmediate(BLEZ, rs, zero_reg, offset);
 }
 
 
 void Assembler::bltz(Register rs, int16_t offset) {
+  BlockTrampolinePoolFor(2);
   GenInstrImmediate(REGIMM, rs, BLTZ, offset);
 }
 
 
 void Assembler::bltzal(Register rs, int16_t offset) {
+  BlockTrampolinePoolFor(2);
   WriteRecordedPositions();
   GenInstrImmediate(REGIMM, rs, BLTZAL, offset);
 }
 
 
 void Assembler::bne(Register rs, Register rt, int16_t offset) {
+  BlockTrampolinePoolFor(2);
   GenInstrImmediate(BNE, rs, rt, offset);
 }
 
@@ -809,6 +815,7 @@ void Assembler::j(int32_t target) {
 
 
 void Assembler::jr(Register rs) {
+  BlockTrampolinePoolFor(2);
   if (rs.is(ra)) {
     WriteRecordedPositions();
   }
@@ -824,6 +831,7 @@ void Assembler::jal(int32_t target) {
 
 
 void Assembler::jalr(Register rs, Register rd) {
+  BlockTrampolinePoolFor(2);
   WriteRecordedPositions();
   GenInstrRegister(SPECIAL, rs, zero_reg, rd, 0, JALR);
 }

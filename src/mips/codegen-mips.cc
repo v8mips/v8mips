@@ -5491,6 +5491,7 @@ void CEntryStub::GenerateCore(MacroAssembler* masm,
   masm->addiu(sp, sp, -(stack_adjustment));
   masm->sw(ra, MemOperand(sp, stack_adjustment - kPointerSize));
 
+  masm->BlockTrampolinePoolFor(3);
   // Call the C routine.
   masm->mov(t9, s2);  // Function pointer to t9 to conform to ABI for PIC.
   masm->jalr(t9);

@@ -566,6 +566,7 @@ void MacroAssembler::Sltu(Register rd, Register rs, const Operand& rt) {
 void MacroAssembler::li(Register rd, Operand j, bool gen2instr) {
   ASSERT(!j.is_reg());
 
+  BlockTrampolinePoolFor(2);
   if (!MustUseReg(j.rmode_) && !gen2instr) {
     // Normal load of an immediate value which does not need Relocation Info.
     if (is_int16(j.imm32_)) {
@@ -668,9 +669,6 @@ void MacroAssembler::MultiPopReversed(RegList regs) {
 
 void MacroAssembler::Branch(int16_t offset,
                             bool ProtectBranchDelaySlot) {
-  // Block check and emission of trampoline pool for a maximum number of
-  // instructions that can be emitted from this function.
-  BlockTrampolinePoolFor(2);
   b(offset);
 
   // Emit a nop in the branch delay slot if required.
@@ -685,10 +683,6 @@ void MacroAssembler::Branch(int16_t offset, Condition cond, Register rs,
   ASSERT(!rs.is(zero_reg));
   Register r2 = no_reg;
   Register scratch = at;
-
-  // Block check and emission of trampoline pool for a maximum number of
-  // instructions that can be emitted from this function.
-  BlockTrampolinePoolFor(4);
 
   if (rt.is_reg()) {
     // We don't want any other register but scratch clobbered.
@@ -1185,9 +1179,6 @@ void MacroAssembler::BranchAndLink(int16_t offset, Condition cond, Register rs,
   BRANCH_ARGS_CHECK(cond, rs, rt);
   Register r2 = no_reg;
   Register scratch = at;
-  // Block check and emission of trampoline pool for a maximum number of
-  // instructions that can be emitted from this function.
-  BlockTrampolinePoolFor(5);
 
   if (rt.is_reg()) {
     r2 = rt.rm_;
@@ -1281,9 +1272,6 @@ void MacroAssembler::BranchAndLink(Label* L, Condition cond, Register rs,
   int32_t offset;
   Register r2 = no_reg;
   Register scratch = at;
-  // Block check and emission of trampoline pool for a maximum number of
-  // instructions that can be emitted from this function.
-  BlockTrampolinePoolFor(5);
   if (rt.is_reg()) {
     r2 = rt.rm_;
   } else if (cond != cc_always) {
@@ -1429,6 +1417,7 @@ void MacroAssembler::Jump(const Operand& target,
 // Note: To call gcc-compiled C code on mips, you must call thru t9.
 void MacroAssembler::Call(const Operand& target,
                           bool ProtectBranchDelaySlot) {
+  BlockTrampolinePoolFor(3);
   if (target.is_reg()) {
       jalr(target.rm());
   } else {    // !target.is_reg()
@@ -1449,6 +1438,7 @@ void MacroAssembler::Call(const Operand& target,
                           Condition cond, Register rs, const Operand& rt,
                           bool ProtectBranchDelaySlot) {
   BRANCH_ARGS_CHECK(cond, rs, rt);
+  BlockTrampolinePoolFor(4);
   if (target.is_reg()) {
     if (cond == cc_always) {
       jalr(target.rm());
