@@ -757,6 +757,8 @@ Handle<Object> RegExpMacroAssemblerMIPS::GetCode(Handle<String> source) {
     // Otherwise use return value as new stack pointer.
     __ mov(backtrack_stackpointer(), v0);
     // Restore saved registers and continue.
+    __ li(code_pointer(), Operand(masm_->CodeObject()));
+    __ lw(end_of_input_address(), MemOperand(frame_pointer(), kInputEnd));
     SafeReturn();
   }
 
