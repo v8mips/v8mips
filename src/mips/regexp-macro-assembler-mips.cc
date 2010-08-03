@@ -42,14 +42,14 @@ namespace internal {
 #ifdef V8_NATIVE_REGEXP
 /*
  * This assembler uses the following register assignment convention
- * - t1 : Pointer to current code object (Code*) including heap object tag.
- * - t2 : Current position in input, as negative offset from end of string.
+ * - s1 : Pointer to current code object (Code*) including heap object tag.
+ * - s2 : Current position in input, as negative offset from end of string.
  *        Please notice that this is the byte offset, not the character offset!
- * - t3 : Currently loaded character. Must be loaded using
+ * - s3 : Currently loaded character. Must be loaded using
  *        LoadCurrentCharacter before using any of the dispatch methods.
- * - t4 : points to tip of backtrack stack
- * - t5 : Unused, might be used by C code and expected unchanged.
- * - t6 : End of input (points to byte after last character in input).
+ * - s4 : points to tip of backtrack stack
+ * - s5 : Unused, might be used by C code and expected unchanged.
+ * - s6 : End of input (points to byte after last character in input).
  * - fp : Frame pointer. Used to access arguments, local variables and
  *         RegExp registers.
  * - sp : points to tip of C stack.
@@ -348,7 +348,7 @@ void RegExpMacroAssemblerMIPS::CheckNotBackReferenceIgnoreCase(
     // Length of capture.
     __ mov(a2, a1);
     // Save length in callee-save register for use on return.
-    __ mov(t0, a1);
+    __ mov(s0, a1);
     // Address of current input position.
     __ Addu(a1, current_input_offset(), Operand(end_of_input_address()));
 
@@ -359,7 +359,7 @@ void RegExpMacroAssemblerMIPS::CheckNotBackReferenceIgnoreCase(
     // Check if function returned non-zero for success or zero for failure.
     BranchOrBacktrack(on_no_match, eq, v0, Operand(0));
     // On success, increment position by length of capture.
-    __ Addu(current_input_offset(), current_input_offset(), Operand(t0));
+    __ Addu(current_input_offset(), current_input_offset(), Operand(s0));
   }
 
   __ bind(&fallthrough);
@@ -576,8 +576,8 @@ Handle<Object> RegExpMacroAssemblerMIPS::GetCode(Handle<String> source) {
   // Save callee-save registers.
   // Start new stack frame.
   // Order here should correspond to order of offset constants in header file.
-  RegList registers_to_retain = t0.bit() | t1.bit() | t2.bit() |
-      t3.bit() | t4.bit() | t5.bit() | t6.bit() | fp.bit();
+  RegList registers_to_retain = s0.bit() | s1.bit() | s2.bit() |
+      s3.bit() | s4.bit() | s5.bit() | s6.bit() | fp.bit();
   RegList argument_registers = a0.bit() | a1.bit() | a2.bit() | a3.bit();
   __ MultiPush(argument_registers | registers_to_retain | ra.bit());
   // Set frame pointer just above the arguments.
@@ -710,7 +710,7 @@ Handle<Object> RegExpMacroAssemblerMIPS::GetCode(Handle<String> source) {
   __ bind(&exit_label_);
   // Skip sp past regexp registers and local variables..
   __ mov(sp, frame_pointer());
-  // Restore registers t0..t7 and return (restoring lr to pc).
+  // Restore registers s0..s6 and return (restoring lr to pc).
   __ MultiPop(registers_to_retain | ra.bit());
   __ Ret();
 
@@ -757,8 +757,6 @@ Handle<Object> RegExpMacroAssemblerMIPS::GetCode(Handle<String> source) {
     // Otherwise use return value as new stack pointer.
     __ mov(backtrack_stackpointer(), v0);
     // Restore saved registers and continue.
-    __ li(code_pointer(), Operand(masm_->CodeObject()));
-    __ lw(end_of_input_address(), MemOperand(frame_pointer(), kInputEnd));
     SafeReturn();
   }
 
