@@ -42,14 +42,14 @@ namespace internal {
 #ifdef V8_NATIVE_REGEXP
 /*
  * This assembler uses the following register assignment convention
- * - s1 : Pointer to current code object (Code*) including heap object tag.
- * - s2 : Current position in input, as negative offset from end of string.
+ * - t1 : Pointer to current code object (Code*) including heap object tag.
+ * - t2 : Current position in input, as negative offset from end of string.
  *        Please notice that this is the byte offset, not the character offset!
- * - s3 : Currently loaded character. Must be loaded using
+ * - t3 : Currently loaded character. Must be loaded using
  *        LoadCurrentCharacter before using any of the dispatch methods.
- * - s4 : points to tip of backtrack stack
- * - s5 : Unused, might be used by C code and expected unchanged.
- * - s6 : End of input (points to byte after last character in input).
+ * - t4 : points to tip of backtrack stack
+ * - t5 : Unused.
+ * - t6 : End of input (points to byte after last character in input).
  * - fp : Frame pointer. Used to access arguments, local variables and
  *         RegExp registers.
  * - sp : points to tip of C stack.
@@ -66,7 +66,7 @@ namespace internal {
  *       - stack frame header (16 bytes in size)
  *       --- sp when called ---
  *       - link address
- *       - backup of registers t0..t7
+ *       - backup of registers s0..s7
  *       - end of input       (Address of end of string)
  *       - start of input     (Address of first character in string)
  *       - start index        (character index of start)
@@ -331,6 +331,11 @@ void RegExpMacroAssemblerMIPS::CheckNotBackReferenceIgnoreCase(
     __ Subu(current_input_offset(), a2, end_of_input_address());
   } else {
     ASSERT(mode_ == UC16);
+    // Put regexp engine registers on stack.
+    RegList regexp_registers_to_retain = current_input_offset().bit() |
+        current_character().bit() | backtrack_stackpointer().bit();
+    __ MultiPush(regexp_registers_to_retain);
+
     int argument_count = 3;
     __ PrepareCallCFunction(argument_count, a2);
 
@@ -348,7 +353,7 @@ void RegExpMacroAssemblerMIPS::CheckNotBackReferenceIgnoreCase(
     // Length of capture.
     __ mov(a2, a1);
     // Save length in callee-save register for use on return.
-    __ mov(s0, a1);
+    __ mov(s3, a1);
     // Address of current input position.
     __ Addu(a1, current_input_offset(), Operand(end_of_input_address()));
 
@@ -356,10 +361,15 @@ void RegExpMacroAssemblerMIPS::CheckNotBackReferenceIgnoreCase(
         ExternalReference::re_case_insensitive_compare_uc16();
     __ CallCFunction(function, argument_count);
 
+    // Restore regexp engine registers.
+    __ MultiPop(regexp_registers_to_retain);
+    __ li(code_pointer(), Operand(masm_->CodeObject()));
+    __ lw(end_of_input_address(), MemOperand(frame_pointer(), kInputEnd));
+
     // Check if function returned non-zero for success or zero for failure.
     BranchOrBacktrack(on_no_match, eq, v0, Operand(0));
     // On success, increment position by length of capture.
-    __ Addu(current_input_offset(), current_input_offset(), Operand(s0));
+    __ Addu(current_input_offset(), current_input_offset(), Operand(s3));
   }
 
   __ bind(&fallthrough);
@@ -577,7 +587,7 @@ Handle<Object> RegExpMacroAssemblerMIPS::GetCode(Handle<String> source) {
   // Start new stack frame.
   // Order here should correspond to order of offset constants in header file.
   RegList registers_to_retain = s0.bit() | s1.bit() | s2.bit() |
-      s3.bit() | s4.bit() | s5.bit() | s6.bit() | fp.bit();
+      s3.bit() | s4.bit() | s5.bit() | s6.bit() | s7.bit() | fp.bit();
   RegList argument_registers = a0.bit() | a1.bit() | a2.bit() | a3.bit();
   __ MultiPush(argument_registers | registers_to_retain | ra.bit());
   // Set frame pointer just above the arguments.
@@ -710,7 +720,7 @@ Handle<Object> RegExpMacroAssemblerMIPS::GetCode(Handle<String> source) {
   __ bind(&exit_label_);
   // Skip sp past regexp registers and local variables..
   __ mov(sp, frame_pointer());
-  // Restore registers s0..s6 and return (restoring lr to pc).
+  // Restore registers s0..s7 and return (restoring ra to pc).
   __ MultiPop(registers_to_retain | ra.bit());
   __ Ret();
 
@@ -725,14 +735,19 @@ Handle<Object> RegExpMacroAssemblerMIPS::GetCode(Handle<String> source) {
   // Preempt-code
   if (check_preempt_label_.is_linked()) {
     SafeCallTarget(&check_preempt_label_);
-
+    // Put regexp engine registers on stack.
+    RegList regexp_registers_to_retain = current_input_offset().bit() |
+        current_character().bit() | backtrack_stackpointer().bit();
+    __ MultiPush(regexp_registers_to_retain);
     CallCheckStackGuardState(a0);
+    __ MultiPop(regexp_registers_to_retain);
     // If returning non-zero, we should end execution with the given
     // result as return value.
     __ Branch(&exit_label_, ne, v0, Operand(0));
 
     // String might have moved: Reload end of string from frame.
     __ lw(end_of_input_address(), MemOperand(frame_pointer(), kInputEnd));
+    __ li(code_pointer(), Operand(masm_->CodeObject()));
     SafeReturn();
   }
 
@@ -740,9 +755,11 @@ Handle<Object> RegExpMacroAssemblerMIPS::GetCode(Handle<String> source) {
   if (stack_overflow_label_.is_linked()) {
     SafeCallTarget(&stack_overflow_label_);
     // Reached if the backtrack-stack limit has been hit.
-
+    // Put regexp engine registers on stack first.
+    RegList regexp_registers = current_input_offset().bit() |
+        current_character().bit();
+    __ MultiPush(regexp_registers);
     Label grow_failed;
-
     // Call GrowStack(backtrack_stackpointer())
     static const int num_arguments = 2;
     __ PrepareCallCFunction(num_arguments, a0);
@@ -751,12 +768,16 @@ Handle<Object> RegExpMacroAssemblerMIPS::GetCode(Handle<String> source) {
     ExternalReference grow_stack =
       ExternalReference::re_grow_stack();
     __ CallCFunction(grow_stack, num_arguments);
+    // Restore regexp registers.
+    __ MultiPop(regexp_registers);
     // If return NULL, we have failed to grow the stack, and
     // must exit with a stack-overflow exception.
     __ Branch(&exit_with_exception, eq, v0, Operand(0));
     // Otherwise use return value as new stack pointer.
     __ mov(backtrack_stackpointer(), v0);
     // Restore saved registers and continue.
+    __ li(code_pointer(), Operand(masm_->CodeObject()));
+    __ lw(end_of_input_address(), MemOperand(frame_pointer(), kInputEnd));
     SafeReturn();
   }
 

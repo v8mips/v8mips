@@ -116,10 +116,10 @@ class RegExpMacroAssemblerMIPS: public NativeRegExpMacroAssembler {
   static const int kFramePointer = 0;
 
   // Above the frame pointer - Stored registers and stack passed parameters.
-  // Register 4..11.
+  // Registers s0 to s7, fp, and ra.
   static const int kStoredRegisters = kFramePointer;
   // Return address (stored from link register, read into pc on return).
-  static const int kReturnAddress = kStoredRegisters + 8 * kPointerSize;
+  static const int kReturnAddress = kStoredRegisters + 9 * kPointerSize;
   // Stack frame header.
   static const int kStackFrameHeader = kReturnAddress + kPointerSize;
   // Stack parameters placed by caller.
@@ -162,13 +162,13 @@ class RegExpMacroAssemblerMIPS: public NativeRegExpMacroAssembler {
 
   // Register holding the current input position as negative offset from
   // the end of the string.
-  inline Register current_input_offset() { return s2; }
+  inline Register current_input_offset() { return t2; }
 
   // The register containing the current character after LoadCurrentCharacter.
-  inline Register current_character() { return s3; }
+  inline Register current_character() { return t3; }
 
   // Register holding address of the end of the input string.
-  inline Register end_of_input_address() { return s6; }
+  inline Register end_of_input_address() { return t6; }
 
   // Register holding the frame address. Local variables, parameters and
   // regexp registers are addressed relative to this.
@@ -176,10 +176,10 @@ class RegExpMacroAssemblerMIPS: public NativeRegExpMacroAssembler {
 
   // The register containing the backtrack stack top. Provides a meaningful
   // name to the register.
-  inline Register backtrack_stackpointer() { return s4; }
+  inline Register backtrack_stackpointer() { return t4; }
 
   // Register holding pointer to the current code object.
-  inline Register code_pointer() { return s1; }
+  inline Register code_pointer() { return t1; }
 
   // Byte size of chars in the string to match (decided by the Mode argument)
   inline int char_size() { return static_cast<int>(mode_); }
