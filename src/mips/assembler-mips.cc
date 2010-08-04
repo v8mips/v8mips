@@ -563,12 +563,11 @@ void Assembler::next(Label* L) {
 // space.  There is no guarantee that the relocated location can be similarly
 // encoded.
 bool Assembler::MustUseReg(RelocInfo::Mode rmode) {
-  if (rmode == RelocInfo::EXTERNAL_REFERENCE) {
-    return Serializer::enabled();
-  } else if (rmode == RelocInfo::NONE) {
+  if (rmode == RelocInfo::NONE) {
     return false;
+  } else {
+    return true;
   }
-  return true;
 }
 
 

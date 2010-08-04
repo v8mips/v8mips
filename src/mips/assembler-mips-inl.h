@@ -153,7 +153,8 @@ void RelocInfo::set_target_object(Object* target) {
 
 Address* RelocInfo::target_reference_address() {
   ASSERT(rmode_ == EXTERNAL_REFERENCE);
-  return reinterpret_cast<Address*>(pc_);
+  reconstructed_adr_ptr_ = Assembler::target_address_at(pc_);
+  return &reconstructed_adr_ptr_;
 }
 
 
