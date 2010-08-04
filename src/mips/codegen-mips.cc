@@ -3652,7 +3652,7 @@ void CodeGenerator::GenerateIsNonNegativeSmi(ZoneList<Expression*>* args) {
   VirtualFrame::SpilledScope spilled_scope(frame_);
   ASSERT(args->length() == 1);
   LoadAndSpill(args->at(0));
-  frame_->EmitPop(t0);
+  frame_->EmitPop(a0);
   __ And(condReg1, a0, Operand(kSmiTagMask | 0x80000000u));
   __ mov(condReg2, zero_reg);
   cc_reg_ = eq;
