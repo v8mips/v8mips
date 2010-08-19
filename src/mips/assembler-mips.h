@@ -405,7 +405,7 @@ class Assembler : public Malloced {
 
   // Distance between start of patched return sequence and the emitted address
   // to jump to.
-  static const int kPatchReturnSequenceAddressOffset = kInstrSize;
+  static const int kPatchReturnSequenceAddressOffset = 0;
 
   // Number of instructions used for the JS return sequence. The constant is
   // used by the debugger to patch the JS return sequence.
