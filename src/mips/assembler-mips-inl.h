@@ -160,17 +160,20 @@ Address* RelocInfo::target_reference_address() {
 
 Address RelocInfo::call_address() {
   ASSERT(IsPatchedReturnSequence());
-  // The 2 instructions offset assumes patched return sequence.
   ASSERT(IsJSReturn(rmode()));
-  return Memory::Address_at(pc_ + 2 * Assembler::kInstrSize);
+  // The pc_ offset of 0 assumes mips patched return sequence per
+  // debug-mips.cc BreakLocationIterator::SetDebugBreakAtReturn().
+  return Assembler::target_address_at(pc_);
+
 }
 
 
 void RelocInfo::set_call_address(Address target) {
   ASSERT(IsPatchedReturnSequence());
-  // The 2 instructions offset assumes patched return sequence.
   ASSERT(IsJSReturn(rmode()));
-  Memory::Address_at(pc_ + 2 * Assembler::kInstrSize) = target;
+  // The pc_ offset of 0 assumes mips patched return sequence per
+  // debug-mips.cc BreakLocationIterator::SetDebugBreakAtReturn().
+  Assembler::set_target_address_at(pc_, target);
 }
 
 
