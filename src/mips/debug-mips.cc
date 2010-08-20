@@ -43,25 +43,6 @@ bool BreakLocationIterator::IsDebugBreakAtReturn() {
 
 
 void BreakLocationIterator::SetDebugBreakAtReturn() {
-  
-  // ..................................................clean this crappy comment up .........
-  
-  // Patch the code changing the return from JS function sequence from
-  //   mov sp, fp
-  //   ldmia sp!, {fp, lr}
-  //   add sp, sp, #4
-  //   bx lr
-  // to a call to the debug break return code.
-  // #if USE_BLX
-  //   ldr ip, [pc, #0]
-  //   blx ip
-  // #else
-  //   mov lr, pc
-  //   ldr pc, [pc, #-4]
-  // #endif
-  //   <debug break return code entry point address>
-  //   bktp 0
-  
   // Mips return sequence:
   // mov sp, fp
   // lw fp, sp(0)
@@ -71,16 +52,16 @@ void BreakLocationIterator::SetDebugBreakAtReturn() {
   // jr ra
   // nop (in branch delay slot)
   //
-  CodePatcher patcher(rinfo()->pc(), 7);   // Assembler::kJSReturnSequenceLength
-  patcher.masm()->li(v8::internal::at, 
-              Operand(reinterpret_cast<int32_t>(Debug::debug_break_return()->entry())));
-  patcher.masm()->Call(v8::internal::at);
+  CodePatcher patcher(rinfo()->pc(), Assembler::kJSReturnSequenceLength);
+  // li and Call pseudo-instructions emit two instructions each.
+  patcher.masm()->li(v8::internal::t9,
+                     Operand(reinterpret_cast<int32_t>(Debug::debug_break_return()->entry())));
+  patcher.masm()->Call(v8::internal::t9);
   patcher.masm()->nop();
   patcher.masm()->nop();
   patcher.masm()->nop();
-  
-  
-  // patcher.Emit(Debug::debug_break_return()->entry());
+
+  // TODO(mips): Open issue about using breakpoint instrucntion instead of nop's.
   // patcher.masm()->bkpt(0);
 }
 
@@ -142,9 +123,9 @@ static void Generate_DebugBreakCallHelper(MacroAssembler* masm,
   // Now that the break point has been handled, resume normal execution by
   // jumping to the target address intended by the caller and that was
   // overwritten by the address of DebugBreakXXX.
-  __ li(at, Operand(ExternalReference(Debug_Address::AfterBreakTarget())));
-  __ lw(at, MemOperand(at));
-  __ Jump(at);
+  __ li(t9, Operand(ExternalReference(Debug_Address::AfterBreakTarget())));
+  __ lw(t9, MemOperand(t9));
+  __ Jump(t9);
 }
 
 
