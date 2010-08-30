@@ -40,7 +40,6 @@ namespace internal {
 
 #define __ ACCESS_MASM(masm())
 
-
 void VirtualFrame::SyncElementBelowStackPointer(int index) {
   UNREACHABLE();
 }
