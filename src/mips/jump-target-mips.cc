@@ -25,12 +25,12 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-
 #include "v8.h"
 
 #include "codegen-inl.h"
 #include "jump-target-inl.h"
 #include "register-allocator-inl.h"
+#include "virtual-frame-inl.h"
 
 namespace v8 {
 namespace internal {

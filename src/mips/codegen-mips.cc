@@ -25,18 +25,17 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-
 #include "v8.h"
 
 #include "bootstrapper.h"
 #include "codegen-inl.h"
+#include "compiler.h"
 #include "debug.h"
 #include "parser.h"
 #include "register-allocator-inl.h"
 #include "runtime.h"
 #include "scopes.h"
-#include "compiler.h"
-
+#include "virtual-frame-inl.h"
 
 
 namespace v8 {

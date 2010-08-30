@@ -25,13 +25,12 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-
-
 #include "v8.h"
 
 #include "codegen-inl.h"
 #include "register-allocator-inl.h"
 #include "scopes.h"
+#include "virtual-frame-inl.h"
 
 namespace v8 {
 namespace internal {
@@ -40,16 +39,6 @@ namespace internal {
 // VirtualFrame implementation.
 
 #define __ ACCESS_MASM(masm())
-
-
-// On entry to a function, the virtual frame already contains the
-// receiver and the parameters.  All initial frame elements are in
-// memory.
-VirtualFrame::VirtualFrame()
-    : elements_(parameter_count() + local_count() + kPreallocatedElements),
-      stack_pointer_(parameter_count()) {  // 0-based index of TOS.
-  UNIMPLEMENTED_MIPS();
-}
 
 
 void VirtualFrame::SyncElementBelowStackPointer(int index) {
