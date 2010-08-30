@@ -81,7 +81,7 @@ CodeGenerator::CodeGenerator(MacroAssembler* masm)
 // a1: called JS function
 // cp: callee's context
 
-void CodeGenerator::Generate(CompilationInfo* info, Mode mode) {
+void CodeGenerator::Generate(CompilationInfo* info) {
   UNIMPLEMENTED_MIPS();
 }
 

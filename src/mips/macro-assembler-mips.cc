@@ -787,6 +787,38 @@ void MacroAssembler::Call(Label* target) {
 }
 
 
+#ifdef ENABLE_DEBUGGER_SUPPORT
+// ---------------------------------------------------------------------------
+// Debugger Support
+
+void MacroAssembler::SaveRegistersToMemory(RegList regs) {
+  UNIMPLEMENTED_MIPS();
+}
+
+
+void MacroAssembler::RestoreRegistersFromMemory(RegList regs) {
+  UNIMPLEMENTED_MIPS();
+}
+
+
+void MacroAssembler::CopyRegistersFromMemoryToStack(Register base,
+                                                    RegList regs) {
+  UNIMPLEMENTED_MIPS();
+}
+
+
+void MacroAssembler::CopyRegistersFromStackToMemory(Register base,
+                                                    Register scratch,
+                                                    RegList regs) {
+  UNIMPLEMENTED_MIPS();
+}
+
+
+void MacroAssembler::DebugBreak() {
+  UNIMPLEMENTED_MIPS();
+}
+#endif
+
 // ---------------------------------------------------------------------------
 // Exception handling
 
