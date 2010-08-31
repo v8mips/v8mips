@@ -162,11 +162,7 @@ void CodeGenerator::Generate(CompilationInfo* info) {
       // context location and thus the last value is what is seen inside
       // the function.
       for (int i = 0; i < scope()->num_parameters(); i++) {
-        Variable* par = scope()->parameter(i);
-        Slot* slot = par->slot();
-        if (slot != NULL && slot->type() == Slot::CONTEXT) {
-          UNIMPLEMENTED_MIPS();
-        }
+        UNIMPLEMENTED_MIPS();
       }
     }
 
@@ -320,15 +316,12 @@ MemOperand CodeGenerator::SlotOperand(Slot* slot, Register tmp) {
   switch (slot->type()) {
     case Slot::PARAMETER:
       return frame_->ParameterAt(index);
-
     case Slot::LOCAL:
       return frame_->LocalAt(index);
-
     case Slot::CONTEXT: {
       UNIMPLEMENTED_MIPS();
       return MemOperand(no_reg, 0);
     }
-
     default:
       UNREACHABLE();
       return MemOperand(no_reg, 0);
@@ -1169,6 +1162,7 @@ void CEntryStub::GenerateCore(MacroAssembler* masm,
                               Label* throw_out_of_memory_exception,
                               bool do_gc,
                               bool always_allocate) {
+  // v0: result parameter for PerformGC, if any
   // s0: number of arguments including receiver (C callee-saved)
   // s1: pointer to the first argument          (C callee-saved)
   // s2: pointer to builtin function            (C callee-saved)
@@ -1236,7 +1230,8 @@ void CEntryStub::GenerateCore(MacroAssembler* masm,
   __ b(throw_normal_exception);
   __ nop();   // Branch delay slot nop.
 
-  __ bind(&retry);  // pass last failure (r0) as parameter (r0) when retrying
+  __ bind(&retry);  // pass last failure (v0) as parameter (a0) when retrying
+  __ mov(a0, v0);
 }
 
 void CEntryStub::Generate(MacroAssembler* masm) {

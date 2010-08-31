@@ -279,12 +279,12 @@ TEST(MIPS3) {
   __ ldc1(f6, MemOperand(a0, OFFSET_OF(T, b)) );
   __ add_d(f8, f4, f6);
   __ sdc1(f8, MemOperand(a0, OFFSET_OF(T, c)) );   // c = a + b
-  
+
   __ mov_d(f10, f8);  // c
   __ neg_d(f12, f6);  // -b
   __ sub_d(f10, f10, f12);
   __ sdc1(f10, MemOperand(a0, OFFSET_OF(T, d)) );   // d = c - (-b)
-  
+
   __ sdc1(f4, MemOperand(a0, OFFSET_OF(T, b)) );  // b = a
 
   __ li(t0, 120);
@@ -298,7 +298,7 @@ TEST(MIPS3) {
 
   __ jr(ra);
   __ nop();
-  
+
   CodeDesc desc;
   assm.GetCode(&desc);
   Object* code = Heap::CreateCode(desc,
@@ -350,19 +350,19 @@ TEST(MIPS4) {
   __ mfc1(t1, f5);
   __ mfc1(t2, f6);
   __ mfc1(t3, f7);
-  
+
   __ mtc1(t0, f6);
   __ mtc1(t1, f7);
   __ mtc1(t2, f4);
   __ mtc1(t3, f5);
-  
+
   // store the swapped f4 and f5 back to memory
   __ sdc1(f4, MemOperand(a0, OFFSET_OF(T, a)) );
   __ sdc1(f6, MemOperand(a0, OFFSET_OF(T, c)) );
 
   __ jr(ra);
   __ nop();
-  
+
   CodeDesc desc;
   assm.GetCode(&desc);
   Object* code = Heap::CreateCode(desc,
@@ -379,7 +379,7 @@ TEST(MIPS4) {
   t.c = 17.17;
   Object* dummy = CALL_GENERATED_CODE(f, &t, 0, 0, 0, 0);
   USE(dummy);
-  
+
   CHECK_EQ(2.75e11, t.a);
   CHECK_EQ(2.75e11, t.b);
   CHECK_EQ(1.5e22, t.c);
@@ -412,25 +412,25 @@ TEST(MIPS5) {
   __ cvt_w_d(f8, f4);
   __ mfc1(t2, f8);
   __ sw(t2, MemOperand(a0, OFFSET_OF(T, i)) );
-  
+
   // convert double in f6 to int in element j
   __ cvt_w_d(f10, f6);
   __ mfc1(t3, f10);
   __ sw(t3, MemOperand(a0, OFFSET_OF(T, j)) );
-  
-  // convert int in original i (t0) to double in a  
+
+  // convert int in original i (t0) to double in a
   __ mtc1(t0, f12);
   __ cvt_d_w(f0, f12);
   __ sdc1(f0, MemOperand(a0, OFFSET_OF(T, a)) );
-  
-  // convert int in original j (t1) to double in b  
+
+  // convert int in original j (t1) to double in b
   __ mtc1(t1, f14);
   __ cvt_d_w(f2, f14);
   __ sdc1(f2, MemOperand(a0, OFFSET_OF(T, b)) );
-  
+
   __ jr(ra);
   __ nop();
-  
+
   CodeDesc desc;
   assm.GetCode(&desc);
   Object* code = Heap::CreateCode(desc,
@@ -448,7 +448,7 @@ TEST(MIPS5) {
   t.j = -100000;
   Object* dummy = CALL_GENERATED_CODE(f, &t, 0, 0, 0, 0);
   USE(dummy);
-  
+
   CHECK_EQ(12345678.0, t.a);
   CHECK_EQ(-100000.0, t.b);
   CHECK_EQ(15000, t.i);

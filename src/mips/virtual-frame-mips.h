@@ -212,7 +212,7 @@ class VirtualFrame : public ZoneObject {
   MemOperand LocalAt(int index) {
     ASSERT(0 <= index);
     ASSERT(index < local_count());
-    return MemOperand(s8_fp, kLocal0Offset - index * kPointerSize);
+    return MemOperand(fp, kLocal0Offset - index * kPointerSize);
   }
 
   // Push a copy of the value of a local frame slot on top of the frame.
@@ -237,13 +237,13 @@ class VirtualFrame : public ZoneObject {
   void PushReceiverSlotAddress();
 
   // The function frame slot.
-  MemOperand Function() { return MemOperand(s8_fp, kFunctionOffset); }
+  MemOperand Function() { return MemOperand(fp, kFunctionOffset); }
 
   // Push the function on top of the frame.
   void PushFunction() { PushFrameSlotAt(function_index()); }
 
   // The context frame slot.
-  MemOperand Context() { return MemOperand(s8_fp, kContextOffset); }
+  MemOperand Context() { return MemOperand(fp, kContextOffset); }
 
   // Save the value of the cp register to the context frame slot.
   void SaveContextRegister();
