@@ -1130,12 +1130,6 @@ bool Genesis::InstallNatives() {
     return true;
   }
 
-  if (strlen(FLAG_natives_file) == 0) {
-    // Empty natives file name - don't install natives: for mips early dev.
-    PrintF("Warning: Running without installed natives!\n");
-    return true;
-  }
-
   // Install natives.
   for (int i = Natives::GetDebuggerCount();
        i < Natives::GetBuiltinsCount();
