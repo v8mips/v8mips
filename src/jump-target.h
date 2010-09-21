@@ -118,7 +118,11 @@ class JumpTarget : public ZoneObject {  // Shadows are dynamically allocated.
 #ifndef V8_TARGET_ARCH_MIPS
   virtual void Branch(Condition cc, Hint hint = no_hint);
   virtual void Branch(Condition cc, Result* arg, Hint hint = no_hint);
-#else
+  virtual void Branch(Condition cc,
+                      Result* arg0,
+                      Result* arg1,
+                      Hint hint = no_hint);
+#else  // V8_TARGET_ARCH_MIPS
   virtual void Branch(Condition cc,
                       Register src1 = zero_reg,
                       const Operand& src2 = Operand(zero_reg),
@@ -127,13 +131,21 @@ class JumpTarget : public ZoneObject {  // Shadows are dynamically allocated.
                       Register src1 = zero_reg,
                       const Operand& src2 = Operand(zero_reg),
                       Hint hint = no_hint);
-#endif
+  virtual void Branch(Condition cc,
+                      Result* arg0,
+                      Result* arg1,
+                      Register src1 = zero_reg,
+                      const Operand& src2 = Operand(zero_reg),
+                      Hint hint = no_hint);
+#endif  // V8_TARGET_ARCH_MIPS
+
 
   // Bind a jump target.  If there is no current frame at the binding
   // site, there must be at least one frame reaching via a forward
   // jump.
   virtual void Bind();
   virtual void Bind(Result* arg);
+  virtual void Bind(Result* arg0, Result* arg1);
 
   // Emit a call to a jump target.  There must be a current frame at
   // the call.  The frame at the target is the same as the current

@@ -282,6 +282,7 @@ void JumpTarget::Branch(Condition cc,
 #define ASSERT_ARGCHECK(name) do {} while (false)
 #endif
 
+
 #ifndef V8_TARGET_ARCH_MIPS
 void JumpTarget::Branch(Condition cc, Result* arg, Hint hint) {
   ASSERT(cgen()->has_valid_frame());
@@ -297,8 +298,11 @@ void JumpTarget::Branch(Condition cc, Result* arg, Hint hint) {
   ASSERT_ARGCHECK(arg);
 }
 #else
-void JumpTarget::Branch(Condition cc, Result* arg,
-    Register src1, const Operand& src2, Hint hint) {
+void JumpTarget::Branch(Condition cc,
+                        Result* arg,
+                        Register src1,
+                        const Operand& src2,
+                        Hint hint) {
   ASSERT(cgen()->has_valid_frame());
 
   // We want to check that non-frame registers at the call site stay in
@@ -312,6 +316,50 @@ void JumpTarget::Branch(Condition cc, Result* arg,
   ASSERT_ARGCHECK(arg);
 }
 #endif
+
+
+#ifndef V8_TARGET_ARCH_MIPS
+void JumpTarget::Branch(Condition cc, Result* arg0, Result* arg1, Hint hint) {
+  ASSERT(cgen()->has_valid_frame());
+
+  // We want to check that non-frame registers at the call site stay in
+  // the same registers on the fall-through branch.
+  DECLARE_ARGCHECK_VARS(arg0);
+  DECLARE_ARGCHECK_VARS(arg1);
+
+  cgen()->frame()->Push(arg0);
+  cgen()->frame()->Push(arg1);
+  DoBranch(cc, hint);
+  *arg1 = cgen()->frame()->Pop();
+  *arg0 = cgen()->frame()->Pop();
+
+  ASSERT_ARGCHECK(arg0);
+  ASSERT_ARGCHECK(arg1);
+}
+#else // V8_TARGET_ARCH_MIPS
+void JumpTarget::Branch(Condition cc,
+                        Result* arg0,
+                        Result* arg1,
+                        Register src1,
+                        const Operand& src2,
+                        Hint hint) {
+  ASSERT(cgen()->has_valid_frame());
+
+  // We want to check that non-frame registers at the call site stay in
+  // the same registers on the fall-through branch.
+  DECLARE_ARGCHECK_VARS(arg0);
+  DECLARE_ARGCHECK_VARS(arg1);
+
+  cgen()->frame()->Push(arg0);
+  cgen()->frame()->Push(arg1);
+  DoBranch(cc, hint, src1, src2);
+  *arg1 = cgen()->frame()->Pop();
+  *arg0 = cgen()->frame()->Pop();
+
+  ASSERT_ARGCHECK(arg0);
+  ASSERT_ARGCHECK(arg1);
+}
+#endif // V8_TARGET_ARCH_MIPS
 
 
 #ifndef V8_TARGET_ARCH_MIPS
@@ -337,9 +385,12 @@ void BreakTarget::Branch(Condition cc, Result* arg, Hint hint) {
     ASSERT_ARGCHECK(arg);
   }
 }
-#else
-void BreakTarget::Branch(Condition cc, Result* arg,
-    Register src1, const Operand& src2, Hint hint) {
+#else  // V8_TARGET_ARCH_MIPS
+void BreakTarget::Branch(Condition cc,
+                         Result* arg,
+                         Register src1,
+                         const Operand& src2,
+                         Hint hint) {
   ASSERT(cgen()->has_valid_frame());
 
   int count = cgen()->frame()->height() - expected_height_;
@@ -361,7 +412,7 @@ void BreakTarget::Branch(Condition cc, Result* arg,
     ASSERT_ARGCHECK(arg);
   }
 }
-#endif
+#endif // V8_TARGET_ARCH_MIPS
 
 #undef DECLARE_ARGCHECK_VARS
 #undef ASSERT_ARGCHECK
@@ -378,6 +429,17 @@ void JumpTarget::Bind(Result* arg) {
   }
   DoBind();
   *arg = cgen()->frame()->Pop();
+}
+
+
+void JumpTarget::Bind(Result* arg0, Result* arg1) {
+  if (cgen()->has_valid_frame()) {
+    cgen()->frame()->Push(arg0);
+    cgen()->frame()->Push(arg1);
+  }
+  DoBind();
+  *arg1 = cgen()->frame()->Pop();
+  *arg0 = cgen()->frame()->Pop();
 }
 
 
