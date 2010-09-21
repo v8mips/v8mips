@@ -341,7 +341,7 @@ void VirtualFrame::EmitMultiPop(RegList regs) {
 
 void VirtualFrame::EmitPush(Register reg) {
   ASSERT(stack_pointer_ == element_count() - 1);
-  elements_.Add(FrameElement::MemoryElement(NumberInfo::Unknown()));
+  elements_.Add(FrameElement::MemoryElement(TypeInfo::Unknown()));
   stack_pointer_++;
   __ Push(reg);
 }
@@ -351,7 +351,7 @@ void VirtualFrame::EmitMultiPush(RegList regs) {
   ASSERT(stack_pointer_ == element_count() - 1);
   for (int16_t i = kNumRegisters; i > 0; i--) {
     if ((regs & (1 << i)) != 0) {
-      elements_.Add(FrameElement::MemoryElement(NumberInfo::Unknown()));
+      elements_.Add(FrameElement::MemoryElement(TypeInfo::Unknown()));
       stack_pointer_++;
     }
   }
@@ -363,7 +363,7 @@ void VirtualFrame::EmitMultiPushReversed(RegList regs) {
   ASSERT(stack_pointer_ == element_count() - 1);
   for (int16_t i = 0; i< RegisterAllocatorConstants::kNumRegisters; i++) {
     if ((regs & (1<<i)) != 0) {
-      elements_.Add(FrameElement::MemoryElement(NumberInfo::Unknown()));
+      elements_.Add(FrameElement::MemoryElement(TypeInfo::Unknown()));
       stack_pointer_++;
     }
   }
