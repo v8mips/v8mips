@@ -763,6 +763,8 @@ TEST(MIPS9) {
 }
 
 TEST(MIPS10) {
+  // Test conversions between doubles and long integers.
+  // Test hos the long ints map to FP regs pairs.
   InitializeVM();
   v8::HandleScope scope;
 

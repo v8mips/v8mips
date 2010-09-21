@@ -52,8 +52,8 @@ class JumpTarget;
 // Registers aliases
 // cp is assumed to be a callee saved register.
 const Register roots = s6;  // Roots array pointer.
-const Register cp = s7;     // JavaScript context pointer.
-const Register fp = s8_fp;  // Alias fp.
+const Register cp = s7;     // JavaScript context pointer
+const Register fp = s8_fp;  // Alias fp
 // Register used for condition evaluation.
 const Register condReg1 = s4;
 const Register condReg2 = s5;

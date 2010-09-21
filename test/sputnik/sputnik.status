@@ -317,5 +317,3 @@ S11.4.3_A3.6: FAIL_OK
 S15.10.7_A3_T2: FAIL_OK
 S15.10.7_A3_T1: FAIL_OK
 
-[ $arch == mips ]
-

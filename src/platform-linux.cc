@@ -786,6 +786,7 @@ static inline bool IsVmThread() {
 
 
 static void ProfilerSignalHandler(int signal, siginfo_t* info, void* context) {
+#ifndef V8_HOST_ARCH_MIPS
   USE(info);
   if (signal != SIGPROF) return;
   if (active_sampler_ == NULL) return;
@@ -829,6 +830,7 @@ static void ProfilerSignalHandler(int signal, siginfo_t* info, void* context) {
   }
 
   active_sampler_->Tick(&sample);
+#endif
 }
 
 
