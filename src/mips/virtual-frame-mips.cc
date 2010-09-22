@@ -52,16 +52,6 @@ void VirtualFrame::SyncElementByPushing(int index) {
 }
 
 
-void VirtualFrame::SyncRange(int begin, int end) {
-  // All elements are in memory on MIPS (ie, synced).
-#ifdef DEBUG
-  for (int i = begin; i <= end; i++) {
-    ASSERT(elements_[i].is_synced());
-  }
-#endif
-}
-
-
 void VirtualFrame::MergeTo(VirtualFrame* expected) {
   // MIPS frames are currently always in memory.
   ASSERT(Equals(expected));
@@ -298,12 +288,7 @@ void VirtualFrame::Drop(int count) {
   }
 
   // Discard elements from the virtual frame and free any registers.
-  for (int i = 0; i < count; i++) {
-    FrameElement dropped = elements_.RemoveLast();
-    if (dropped.is_register()) {
-      Unuse(dropped.reg());
-    }
-  }
+  element_count_ -= count;
 }
 
 
@@ -322,7 +307,7 @@ Result VirtualFrame::Pop() {
 void VirtualFrame::EmitPop(Register reg) {
   ASSERT(stack_pointer_ == element_count() - 1);
   stack_pointer_--;
-  elements_.RemoveLast();
+  element_count_--;
   __ Pop(reg);
 }
 
@@ -332,7 +317,7 @@ void VirtualFrame::EmitMultiPop(RegList regs) {
   for (int16_t i = 0; i < kNumRegisters; i++) {
     if ((regs & (1 << i)) != 0) {
       stack_pointer_--;
-      elements_.RemoveLast();
+      element_count_--;
     }
   }
   __ MultiPop(regs);
@@ -341,7 +326,7 @@ void VirtualFrame::EmitMultiPop(RegList regs) {
 
 void VirtualFrame::EmitPush(Register reg) {
   ASSERT(stack_pointer_ == element_count() - 1);
-  elements_.Add(FrameElement::MemoryElement(TypeInfo::Unknown()));
+  element_count_++
   stack_pointer_++;
   __ Push(reg);
 }
@@ -351,7 +336,7 @@ void VirtualFrame::EmitMultiPush(RegList regs) {
   ASSERT(stack_pointer_ == element_count() - 1);
   for (int16_t i = kNumRegisters; i > 0; i--) {
     if ((regs & (1 << i)) != 0) {
-      elements_.Add(FrameElement::MemoryElement(TypeInfo::Unknown()));
+      element_count_++
       stack_pointer_++;
     }
   }
