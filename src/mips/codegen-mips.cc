@@ -3908,14 +3908,7 @@ void CodeGenerator::VisitCountOperation(CountOperation* node) {
 }
 
 
-void CodeGenerator::VisitBinaryOperation(BinaryOperation* node) {
-#ifdef DEBUG
-  int original_height = frame_->height();
-#endif
-  VirtualFrame::SpilledScope spilled_scope;
-  Comment cmnt(masm_, "[ BinaryOperation");
-  Token::Value op = node->op();
-
+void CodeGenerator::GenerateLogicalBooleanOperation(BinaryOperation* node) {
   // According to ECMA-262 section 11.11, page 58, the binary logical
   // operators must yield the result of one of the two expressions
   // before any ToBoolean() conversions. This means that the value
@@ -3928,7 +3921,7 @@ void CodeGenerator::VisitBinaryOperation(BinaryOperation* node) {
   // semantics), but the compiler must (statically) know if the result
   // of compiling the binary operation is materialized or not.
 
-  if (op == Token::AND) {
+  if (node->op() == Token::AND) {
     JumpTarget is_true;
     LoadConditionAndSpill(node->left(),
                           &is_true,
@@ -3974,7 +3967,8 @@ void CodeGenerator::VisitBinaryOperation(BinaryOperation* node) {
       ASSERT(!has_valid_frame() && !has_cc() && !is_true.is_linked());
     }
 
-  } else if (op == Token::OR) {
+  } else {
+    ASSERT(node->op() == Token::OR);
     JumpTarget is_false;
     LoadConditionAndSpill(node->left(),
                           true_target(),
@@ -4019,7 +4013,19 @@ void CodeGenerator::VisitBinaryOperation(BinaryOperation* node) {
       // Nothing to do.
       ASSERT(!has_valid_frame() && !has_cc() && !is_false.is_linked());
     }
+  }
+}
 
+
+void CodeGenerator::VisitBinaryOperation(BinaryOperation* node) {
+#ifdef DEBUG
+  int original_height = frame_->height();
+#endif
+  VirtualFrame::SpilledScope spilled_scope;
+  Comment cmnt(masm_, "[ BinaryOperation");
+
+  if (node->op() == Token::AND || node->op() == Token::OR) {
+    GenerateLogicalBooleanOperation(node);
   } else {
     // Optimize for the case where (at least) one of the expressions
     // is a literal small integer.
