@@ -393,15 +393,14 @@ static void PushInterceptorArguments(MacroAssembler* masm,
                                      Register holder,
                                      Register name,
                                      JSObject* holder_obj) {
-  __ Push(receiver);
-  __ Push(holder);
   __ Push(name);
   InterceptorInfo* interceptor = holder_obj->GetNamedInterceptor();
   ASSERT(!Heap::InNewSpace(interceptor));
-
-  Register scratch = receiver;
+  Register scratch = name;
   __ li(scratch, Operand(Handle<Object>(interceptor)));
   __ Push(scratch);
+  __ Push(receiver);
+  __ Push(holder);
   __ lw(scratch, FieldMemOperand(scratch, InterceptorInfo::kDataOffset));
   __ Push(scratch);
 }
