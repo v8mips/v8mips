@@ -140,6 +140,8 @@ SOURCES = {
     """),
   'arch:mips': Split("""
     fast-codegen.cc
+    jump-target-light.cc
+    virtual-frame-light.cc
     mips/assembler-mips.cc
     mips/builtins-mips.cc
     mips/codegen-mips.cc

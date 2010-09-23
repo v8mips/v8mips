@@ -175,22 +175,6 @@ void VirtualFrame::PushTryHandler(HandlerType type) {
 }
 
 
-void VirtualFrame::RawCallStub(CodeStub* stub) {
-  ASSERT(cgen()->HasValidEntryRegisters());
-  __ CallStub(stub);
-}
-
-
-void VirtualFrame::CallStub(CodeStub* stub, Result* arg) {
-  UNIMPLEMENTED_MIPS();
-}
-
-
-void VirtualFrame::CallStub(CodeStub* stub, Result* arg0, Result* arg1) {
-  UNIMPLEMENTED_MIPS();
-}
-
-
 void VirtualFrame::CallRuntime(Runtime::Function* f, int arg_count) {
   Forget(arg_count);
   ASSERT(cgen()->HasValidEntryRegisters());
@@ -211,16 +195,6 @@ void VirtualFrame::DebugBreak() {
   __ DebugBreak();
 }
 #endif
-
-
-void VirtualFrame::CallAlignedRuntime(Runtime::Function* f, int arg_count) {
-  UNIMPLEMENTED_MIPS();
-}
-
-
-void VirtualFrame::CallAlignedRuntime(Runtime::FunctionId id, int arg_count) {
-  UNIMPLEMENTED_MIPS();
-}
 
 
 void VirtualFrame::InvokeBuiltin(Builtins::JavaScript id,
@@ -292,11 +266,6 @@ void VirtualFrame::Drop(int count) {
 }
 
 
-void VirtualFrame::DropFromVFrameOnly(int count) {
-  UNIMPLEMENTED_MIPS();
-}
-
-
 Result VirtualFrame::Pop() {
   UNIMPLEMENTED_MIPS();
   Result res = Result();
@@ -326,7 +295,7 @@ void VirtualFrame::EmitMultiPop(RegList regs) {
 
 void VirtualFrame::EmitPush(Register reg) {
   ASSERT(stack_pointer_ == element_count() - 1);
-  element_count_++
+  element_count_++;
   stack_pointer_++;
   __ Push(reg);
 }
@@ -336,7 +305,7 @@ void VirtualFrame::EmitMultiPush(RegList regs) {
   ASSERT(stack_pointer_ == element_count() - 1);
   for (int16_t i = kNumRegisters; i > 0; i--) {
     if ((regs & (1 << i)) != 0) {
-      element_count_++
+      element_count_++;
       stack_pointer_++;
     }
   }
@@ -348,7 +317,7 @@ void VirtualFrame::EmitMultiPushReversed(RegList regs) {
   ASSERT(stack_pointer_ == element_count() - 1);
   for (int16_t i = 0; i< RegisterAllocatorConstants::kNumRegisters; i++) {
     if ((regs & (1<<i)) != 0) {
-      elements_.Add(FrameElement::MemoryElement(TypeInfo::Unknown()));
+      element_count_++;
       stack_pointer_++;
     }
   }

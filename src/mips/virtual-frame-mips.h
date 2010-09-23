@@ -263,13 +263,10 @@ class VirtualFrame : public ZoneObject {
   // Call stub given the number of arguments it expects on (and
   // removes from) the stack.
   void CallStub(CodeStub* stub, int arg_count) {
-    PrepareForCall(arg_count, arg_count);
-    RawCallStub(stub);
+    Forget(arg_count);
+    ASSERT(cgen()->HasValidEntryRegisters());
+    masm()->CallStub(stub);
   }
-
-  void CallStub(CodeStub* stub, Result* arg);
-
-  void CallStub(CodeStub* stub, Result* arg0, Result* arg1);
 
   // Call runtime given the number of arguments expected on (and
   // removed from) the stack.
@@ -280,10 +277,6 @@ class VirtualFrame : public ZoneObject {
   void DebugBreak();
 #endif
 
-  // Call runtime with sp aligned to 8 bytes.
-  void CallAlignedRuntime(Runtime::Function* f, int arg_count);
-  void CallAlignedRuntime(Runtime::FunctionId id, int arg_count);
-
   // Invoke builtin given the number of arguments it expects on (and
   // removes from) the stack.
   void InvokeBuiltin(Builtins::JavaScript id,
@@ -291,8 +284,8 @@ class VirtualFrame : public ZoneObject {
                      int arg_count);
 
   // Call into an IC stub given the number of arguments it removes
-  // from the stack. Register arguments are passed as results and
-  // consumed by the call.
+  // from the stack. Register arguments to the IC stub are implicit,
+  // and depend on the type of IC stub.
   void CallCodeObject(Handle<Code> ic,
                       RelocInfo::Mode rmode,
                       int dropped_args);
@@ -301,9 +294,6 @@ class VirtualFrame : public ZoneObject {
   // emit code to affect the physical frame. Does not clobber any registers
   // excepting possibly the stack pointer.
   void Drop(int count);
-  // Similar to VirtualFrame::Drop but we don't modify the actual stack.
-  // This is because we need to manually restore sp to the correct position.
-  void DropFromVFrameOnly(int count);
 
   // Drop one element.
   void Drop() { Drop(1); }
@@ -471,14 +461,6 @@ class VirtualFrame : public ZoneObject {
   // is returned. Otherwise, returns kIllegalIndex.
   // Register counts are correctly updated.
   int InvalidateFrameSlotAt(int index);
-
-  // Call a code stub that has already been prepared for calling (via
-  // PrepareForCall).
-  void RawCallStub(CodeStub* stub);
-
-  // Calls a code object which has already been prepared for calling
-  // (via PrepareForCall).
-  void RawCallCodeObject(Handle<Code> code, RelocInfo::Mode rmode);
 
   inline bool Equals(VirtualFrame* other);
 

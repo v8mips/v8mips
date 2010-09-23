@@ -38,7 +38,7 @@ void JumpTarget::Jump(Result* arg) {
   UNIMPLEMENTED();
 }
 
-
+#ifndef V8_TARGET_ARCH_MIPS
 void JumpTarget::Branch(Condition cc, Result* arg, Hint hint) {
   UNIMPLEMENTED();
 }
@@ -52,7 +52,34 @@ void JumpTarget::Branch(Condition cc, Result* arg0, Result* arg1, Hint hint) {
 void BreakTarget::Branch(Condition cc, Result* arg, Hint hint) {
   UNIMPLEMENTED();
 }
+#else  // V8_TARGET_ARCH_MIPS
+void JumpTarget::Branch(Condition cc,
+                        Result* arg,
+                        Register src1,
+                        const Operand& src2,
+                        Hint hint) {
+  UNIMPLEMENTED();
+}
 
+
+void JumpTarget::Branch(Condition cc,
+                        Result* arg0,
+                        Result* arg1,
+                        Register src1,
+                        const Operand& src2,
+                        Hint hint) {
+  UNIMPLEMENTED();
+}
+
+
+void BreakTarget::Branch(Condition cc,
+                         Result* arg,
+                         Register src1,
+                         const Operand& src2,
+                         Hint hint) {
+  UNIMPLEMENTED();
+}
+#endif  // V8_TARGET_ARCH_MIPS
 
 void JumpTarget::Bind(Result* arg) {
   UNIMPLEMENTED();
