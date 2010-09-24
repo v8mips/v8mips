@@ -130,7 +130,7 @@ class TypeInfo {
     return false;
   }
 
-  static inline TypeInfo TypeFromValue(Handle<Object> value);
+  static TypeInfo TypeFromValue(Handle<Object> value);
 
   inline bool IsUnknown() {
     return type_ == kUnknownType;
@@ -154,6 +154,11 @@ class TypeInfo {
   inline bool IsDouble() {
     ASSERT(type_ != kUninitializedType);
     return ((type_ & kDoubleType) == kDoubleType);
+  }
+
+  inline bool IsString() {
+    ASSERT(type_ != kUninitializedType);
+    return ((type_ & kStringType) == kStringType);
   }
 
   inline bool IsUninitialized() {

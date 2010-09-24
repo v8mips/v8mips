@@ -406,7 +406,7 @@ function addCaptureString(builder, matchInfo, index) {
 };
 
 // TODO(lrn): This array will survive indefinitely if replace is never
-// called again. However, it will be empty, since the contents are cleared 
+// called again. However, it will be empty, since the contents are cleared
 // in the finally block.
 var reusableReplaceArray = $Array(16);
 
@@ -427,16 +427,16 @@ function StringReplaceRegExpWithFunction(subject, regexp, replace) {
     try {
       // Must handle exceptions thrown by the replace functions correctly,
       // including unregistering global regexps.
-      var res = %RegExpExecMultiple(regexp, 
-                                    subject, 
-                                    lastMatchInfo, 
+      var res = %RegExpExecMultiple(regexp,
+                                    subject,
+                                    lastMatchInfo,
                                     resultArray);
       regexp.lastIndex = 0;
       if (IS_NULL(res)) {
-        // No matches at all. 
-        return subject;  
-      }  
-      var len = res.length; 
+        // No matches at all.
+        return subject;
+      }
+      var len = res.length;
       var i = 0;
       if (NUMBER_OF_CAPTURES(lastMatchInfo) == 2) {
         var match_start = 0;
@@ -450,13 +450,15 @@ function StringReplaceRegExpWithFunction(subject, regexp, replace) {
             }
           } else {
             var func_result = replace.call(null, elem, match_start, subject);
-            if (!IS_STRING(func_result)) func_result = TO_STRING(func_result);
+            if (!IS_STRING(func_result)) {
+              func_result = NonStringToString(func_result);
+            }
             res[i] = func_result;
-            match_start += elem.length; 
+            match_start += elem.length;
           }
           i++;
-        }      
-      } else {      
+        }
+      } else {
         while (i < len) {
           var elem = res[i];
           if (!%_IsSmi(elem)) {
@@ -464,7 +466,9 @@ function StringReplaceRegExpWithFunction(subject, regexp, replace) {
             // Use the apply argument as backing for global RegExp properties.
             lastMatchInfoOverride = elem;
             var func_result = replace.apply(null, elem);
-            if (!IS_STRING(func_result)) func_result = TO_STRING(func_result);
+            if (!IS_STRING(func_result)) {
+              func_result = NonStringToString(func_result);
+            }
             res[i] = func_result;
           }
           i++;
@@ -480,7 +484,7 @@ function StringReplaceRegExpWithFunction(subject, regexp, replace) {
   } else { // Not a global regexp, no need to loop.
     var matchInfo = DoRegExpExec(regexp, subject, 0);
     if (IS_NULL(matchInfo)) return subject;
-    
+
     var result = new ReplaceResultBuilder(subject);
     result.addSpecialSlice(0, matchInfo[CAPTURE0]);
     var endOfMatch = matchInfo[CAPTURE1];
@@ -516,7 +520,7 @@ function ApplyReplacementFunction(replace, matchInfo, subject) {
 
 
 // ECMA-262 section 15.5.4.12
-function StringSearch(re) { 
+function StringSearch(re) {
   var regexp = new $RegExp(re);
   var s = TO_STRING_INLINE(this);
   var match = DoRegExpExec(regexp, s, 0);

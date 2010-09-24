@@ -503,7 +503,6 @@ class JSConstructEntryStub : public JSEntryStub {
 class ArgumentsAccessStub: public CodeStub {
  public:
   enum Type {
-    READ_LENGTH,
     READ_ELEMENT,
     NEW_OBJECT
   };
@@ -517,7 +516,6 @@ class ArgumentsAccessStub: public CodeStub {
   int MinorKey() { return type_; }
 
   void Generate(MacroAssembler* masm);
-  void GenerateReadLength(MacroAssembler* masm);
   void GenerateReadElement(MacroAssembler* masm);
   void GenerateNewObject(MacroAssembler* masm);
 

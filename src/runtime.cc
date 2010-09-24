@@ -1228,6 +1228,62 @@ static Object* Runtime_RegExpExec(Arguments args) {
 }
 
 
+static Object* Runtime_RegExpInitializeObject(Arguments args) {
+  AssertNoAllocation no_alloc;
+  ASSERT(args.length() == 5);
+  CONVERT_CHECKED(JSRegExp, regexp, args[0]);
+  CONVERT_CHECKED(String, source, args[1]);
+
+  Object* global = args[2];
+  if (!global->IsTrue()) global = Heap::false_value();
+
+  Object* ignoreCase = args[3];
+  if (!ignoreCase->IsTrue()) ignoreCase = Heap::false_value();
+
+  Object* multiline = args[4];
+  if (!multiline->IsTrue()) multiline = Heap::false_value();
+
+  Map* map = regexp->map();
+  Object* constructor = map->constructor();
+  if (constructor->IsJSFunction() &&
+      JSFunction::cast(constructor)->initial_map() == map) {
+    // If we still have the original map, set in-object properties directly.
+    regexp->InObjectPropertyAtPut(JSRegExp::kSourceFieldIndex, source);
+    // TODO(lrn): Consider skipping write barrier on booleans as well.
+    // Both true and false should be in oldspace at all times.
+    regexp->InObjectPropertyAtPut(JSRegExp::kGlobalFieldIndex, global);
+    regexp->InObjectPropertyAtPut(JSRegExp::kIgnoreCaseFieldIndex, ignoreCase);
+    regexp->InObjectPropertyAtPut(JSRegExp::kMultilineFieldIndex, multiline);
+    regexp->InObjectPropertyAtPut(JSRegExp::kLastIndexFieldIndex,
+                                  Smi::FromInt(0),
+                                  SKIP_WRITE_BARRIER);
+    return regexp;
+  }
+
+  // Map has changed, so use generic, but slower, method.
+  PropertyAttributes final =
+      static_cast<PropertyAttributes>(READ_ONLY | DONT_ENUM | DONT_DELETE);
+  PropertyAttributes writable =
+      static_cast<PropertyAttributes>(DONT_ENUM | DONT_DELETE);
+  regexp->IgnoreAttributesAndSetLocalProperty(Heap::source_symbol(),
+                                              source,
+                                              final);
+  regexp->IgnoreAttributesAndSetLocalProperty(Heap::global_symbol(),
+                                              global,
+                                              final);
+  regexp->IgnoreAttributesAndSetLocalProperty(Heap::ignore_case_symbol(),
+                                              ignoreCase,
+                                              final);
+  regexp->IgnoreAttributesAndSetLocalProperty(Heap::multiline_symbol(),
+                                              multiline,
+                                              final);
+  regexp->IgnoreAttributesAndSetLocalProperty(Heap::last_index_symbol(),
+                                              Smi::FromInt(0),
+                                              writable);
+  return regexp;
+}
+
+
 static Object* Runtime_FinishArrayPrototypeSetup(Arguments args) {
   HandleScope scope;
   ASSERT(args.length() == 1);
@@ -3301,11 +3357,16 @@ static RegExpImpl::IrregexpResult SearchRegExpMultiple(
                                                 match_start,
                                                 match_end));
         for (int i = 1; i <= capture_count; i++) {
-          Handle<String> substring =
-              Factory::NewSubString(subject,
-                                    register_vector[i * 2],
-                                    register_vector[i * 2 + 1]);
-          elements->set(i, *substring);
+          int start = register_vector[i * 2];
+          if (start >= 0) {
+            int end = register_vector[i * 2 + 1];
+            ASSERT(start <= end);
+            Handle<String> substring = Factory::NewSubString(subject, start, end);
+            elements->set(i, *substring);
+          } else {
+            ASSERT(register_vector[i * 2 + 1] < 0);
+            elements->set(i, Heap::undefined_value());
+          }
         }
         elements->set(capture_count + 1, Smi::FromInt(match_start));
         elements->set(capture_count + 2, *subject);

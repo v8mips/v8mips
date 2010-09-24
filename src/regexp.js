@@ -71,32 +71,10 @@ function DoConstructRegExp(object, pattern, flags, isConstructorCall) {
     }
   }
 
-  if (isConstructorCall) {
-    // ECMA-262, section 15.10.7.1.
-    %SetProperty(object, 'source', pattern,
-                 DONT_DELETE |  READ_ONLY | DONT_ENUM);
-
-    // ECMA-262, section 15.10.7.2.
-    %SetProperty(object, 'global', global, DONT_DELETE | READ_ONLY | DONT_ENUM);
-
-    // ECMA-262, section 15.10.7.3.
-    %SetProperty(object, 'ignoreCase', ignoreCase,
-                 DONT_DELETE | READ_ONLY | DONT_ENUM);
-
-    // ECMA-262, section 15.10.7.4.
-    %SetProperty(object, 'multiline', multiline,
-                 DONT_DELETE | READ_ONLY | DONT_ENUM);
-
-    // ECMA-262, section 15.10.7.5.
-    %SetProperty(object, 'lastIndex', 0, DONT_DELETE | DONT_ENUM);
-  } else { // RegExp is being recompiled via RegExp.prototype.compile.
-    %IgnoreAttributesAndSetProperty(object, 'source', pattern);
-    %IgnoreAttributesAndSetProperty(object, 'global', global);
-    %IgnoreAttributesAndSetProperty(object, 'ignoreCase', ignoreCase);
-    %IgnoreAttributesAndSetProperty(object, 'multiline', multiline);
-    %IgnoreAttributesAndSetProperty(object, 'lastIndex', 0);
+  if (!isConstructorCall) {
     regExpCache.type = 'none';
   }
+  %RegExpInitializeObject(object, pattern, global, ignoreCase, multiline);
 
   // Call internal function to compile the pattern.
   %RegExpCompile(object, pattern, flags);
@@ -355,7 +333,7 @@ function RegExpGetLastMatch() {
 function RegExpGetLastParen() {
   if (lastMatchInfoOverride) {
     var override = lastMatchInfoOverride;
-    if (override.length <= 3) return ''; 
+    if (override.length <= 3) return '';
     return override[override.length - 3];
   }
   var length = NUMBER_OF_CAPTURES(lastMatchInfo);
@@ -438,8 +416,8 @@ var lastMatchInfo = [
 
 // Override last match info with an array of actual substrings.
 // Used internally by replace regexp with function.
-// The array has the format of an "apply" argument for a replacement 
-// function. 
+// The array has the format of an "apply" argument for a replacement
+// function.
 var lastMatchInfoOverride = null;
 
 // -------------------------------------------------------------------
@@ -461,7 +439,7 @@ function SetupRegExp() {
   %FunctionSetLength($RegExp.prototype.compile, 1);
 
   // The properties input, $input, and $_ are aliases for each other.  When this
-  // value is set the value it is set to is coerced to a string. 
+  // value is set the value it is set to is coerced to a string.
   // Getter and setter for the input.
   function RegExpGetInput() {
     var regExpInput = LAST_INPUT(lastMatchInfo);
