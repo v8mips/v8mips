@@ -25,62 +25,15 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#ifndef V8_CPU_PROFILER_INL_H_
-#define V8_CPU_PROFILER_INL_H_
+#include "v8.h"
 
-#include "cpu-profiler.h"
-
-#ifdef ENABLE_CPP_PROFILES_PROCESSOR
-
-#include "circular-queue-inl.h"
-#include "profile-generator-inl.h"
+#include "vm-state.h"
 
 namespace v8 {
 namespace internal {
 
-void CodeCreateEventRecord::UpdateCodeMap(CodeMap* code_map) {
-    code_map->AddCode(start, entry, size);
-}
-
-
-void CodeMoveEventRecord::UpdateCodeMap(CodeMap* code_map) {
-    code_map->MoveCode(from, to);
-}
-
-
-void CodeDeleteEventRecord::UpdateCodeMap(CodeMap* code_map) {
-    code_map->DeleteCode(start);
-}
-
-
-void CodeAliasEventRecord::UpdateCodeMap(CodeMap* code_map) {
-    code_map->AddAlias(alias, start);
-}
-
-
-TickSample* ProfilerEventsProcessor::TickSampleEvent() {
-  TickSampleEventRecord* evt =
-      TickSampleEventRecord::cast(ticks_buffer_.Enqueue());
-  evt->order = enqueue_order_;  // No increment!
-  return &evt->sample;
-}
-
-
-bool ProfilerEventsProcessor::FilterOutCodeCreateEvent(
-    Logger::LogEventsAndTags tag) {
-  // In browser mode, leave only callbacks and non-native JS entries.
-  // We filter out regular expressions as currently we can't tell
-  // whether they origin from native scripts, so let's not confise people by
-  // showing them weird regexes they didn't wrote.
-  return FLAG_prof_browser_mode
-      && (tag != Logger::CALLBACK_TAG
-          && tag != Logger::FUNCTION_TAG
-          && tag != Logger::LAZY_COMPILE_TAG
-          && tag != Logger::SCRIPT_TAG);
-}
+#ifdef ENABLE_VMSTATE_TRACKING
+VMState* VMState::current_state_ = NULL;
+#endif
 
 } }  // namespace v8::internal
-
-#endif  // ENABLE_CPP_PROFILES_PROCESSOR
-
-#endif  // V8_CPU_PROFILER_INL_H_

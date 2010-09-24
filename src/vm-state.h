@@ -25,62 +25,51 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#ifndef V8_CPU_PROFILER_INL_H_
-#define V8_CPU_PROFILER_INL_H_
-
-#include "cpu-profiler.h"
-
-#ifdef ENABLE_CPP_PROFILES_PROCESSOR
-
-#include "circular-queue-inl.h"
-#include "profile-generator-inl.h"
+#ifndef V8_VM_STATE_H_
+#define V8_VM_STATE_H_
 
 namespace v8 {
 namespace internal {
 
-void CodeCreateEventRecord::UpdateCodeMap(CodeMap* code_map) {
-    code_map->AddCode(start, entry, size);
-}
+class VMState BASE_EMBEDDED {
+#ifdef ENABLE_VMSTATE_TRACKING
+ public:
+  inline VMState(StateTag state);
+  inline ~VMState();
 
+  StateTag state() { return state_; }
+  void set_external_callback(Address external_callback) {
+    external_callback_ = external_callback;
+  }
 
-void CodeMoveEventRecord::UpdateCodeMap(CodeMap* code_map) {
-    code_map->MoveCode(from, to);
-}
+  // Used for debug asserts.
+  static bool is_outermost_external() {
+    return current_state_ == NULL;
+  }
 
+  static StateTag current_state() {
+    return current_state_ ? current_state_->state() : EXTERNAL;
+  }
 
-void CodeDeleteEventRecord::UpdateCodeMap(CodeMap* code_map) {
-    code_map->DeleteCode(start);
-}
+  static Address external_callback() {
+    return current_state_ ? current_state_->external_callback_ : NULL;
+  }
 
+ private:
+  bool disabled_;
+  StateTag state_;
+  VMState* previous_;
+  Address external_callback_;
 
-void CodeAliasEventRecord::UpdateCodeMap(CodeMap* code_map) {
-    code_map->AddAlias(alias, start);
-}
-
-
-TickSample* ProfilerEventsProcessor::TickSampleEvent() {
-  TickSampleEventRecord* evt =
-      TickSampleEventRecord::cast(ticks_buffer_.Enqueue());
-  evt->order = enqueue_order_;  // No increment!
-  return &evt->sample;
-}
-
-
-bool ProfilerEventsProcessor::FilterOutCodeCreateEvent(
-    Logger::LogEventsAndTags tag) {
-  // In browser mode, leave only callbacks and non-native JS entries.
-  // We filter out regular expressions as currently we can't tell
-  // whether they origin from native scripts, so let's not confise people by
-  // showing them weird regexes they didn't wrote.
-  return FLAG_prof_browser_mode
-      && (tag != Logger::CALLBACK_TAG
-          && tag != Logger::FUNCTION_TAG
-          && tag != Logger::LAZY_COMPILE_TAG
-          && tag != Logger::SCRIPT_TAG);
-}
+  // A stack of VM states.
+  static VMState* current_state_;
+#else
+ public:
+  explicit VMState(StateTag state) {}
+#endif
+};
 
 } }  // namespace v8::internal
 
-#endif  // ENABLE_CPP_PROFILES_PROCESSOR
 
-#endif  // V8_CPU_PROFILER_INL_H_
+#endif  // V8_VM_STATE_H_
