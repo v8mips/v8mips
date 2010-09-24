@@ -389,18 +389,31 @@ Debug.LiveEditChangeScript.CheckStackActivations = function(shared_wrapper_list,
   for (var i = 0; i < shared_wrapper_list.length; i++) {
     shared_list[i] = shared_wrapper_list[i].info;
   }
-  var result = %LiveEditCheckStackActivations(shared_list);
+  var result = %LiveEditCheckAndDropActivations(shared_list, true);
+  if (result[shared_list.length]) {
+    // Extra array element may contain error message.
+    throw new liveedit.Failure(result[shared_list.length]);
+  }
+  
   var problems = new Array();
+  var dropped = new Array();
   for (var i = 0; i < shared_list.length; i++) {
-    if (result[i] == liveedit.FunctionPatchabilityStatus.FUNCTION_BLOCKED_ON_STACK) {
-      var shared = shared_list[i];
+    var shared = shared_wrapper_list[i];
+    if (result[i] == liveedit.FunctionPatchabilityStatus.REPLACED_ON_ACTIVE_STACK) {
+      dropped.push({ name: shared.function_name } );
+    } else if (result[i] != liveedit.FunctionPatchabilityStatus.AVAILABLE_FOR_PATCH) {
       var description = {
           name: shared.function_name,
-          start_pos: shared.start_position,
-          end_pos: shared.end_position
+          start_pos: shared.start_position, 
+          end_pos: shared.end_position,
+          replace_problem:
+              liveedit.FunctionPatchabilityStatus.SymbolName(result[i])
       };
       problems.push(description);
     }
+  }
+  if (dropped.length > 0) {
+    change_log.push({ dropped_from_stack: dropped });
   }
   if (problems.length > 0) {
     change_log.push( { functions_on_stack: problems } );
@@ -410,8 +423,21 @@ Debug.LiveEditChangeScript.CheckStackActivations = function(shared_wrapper_list,
 
 // A copy of the FunctionPatchabilityStatus enum from liveedit.h
 Debug.LiveEditChangeScript.FunctionPatchabilityStatus = {
-    FUNCTION_AVAILABLE_FOR_PATCH: 0,
-    FUNCTION_BLOCKED_ON_STACK: 1
+    AVAILABLE_FOR_PATCH: 1,
+    BLOCKED_ON_ACTIVE_STACK: 2,
+    BLOCKED_ON_OTHER_STACK: 3,
+    BLOCKED_UNDER_NATIVE_CODE: 4,
+    REPLACED_ON_ACTIVE_STACK: 5
+}
+
+Debug.LiveEditChangeScript.FunctionPatchabilityStatus.SymbolName =
+    function(code) {
+  var enum = Debug.LiveEditChangeScript.FunctionPatchabilityStatus;
+  for (name in enum) {
+    if (enum[name] == code) {
+      return name;
+    }
+  }      
 }
 
 
@@ -428,4 +454,87 @@ Debug.LiveEditChangeScript.Failure.prototype.toString = function() {
 // A testing entry.
 Debug.LiveEditChangeScript.GetPcFromSourcePos = function(func, source_pos) {
   return %GetFunctionCodePositionFromSource(func, source_pos);
+}
+
+// A LiveEdit namespace is declared inside a single function constructor.
+Debug.LiveEdit = new function() {
+  var LiveEdit = this;
+
+  
+  // LiveEdit main entry point: changes a script text to a new string.
+  LiveEdit.SetScriptSource = function(script, new_source, change_log) {
+    var old_source = script.source;
+    var diff = FindSimpleDiff(old_source, new_source);
+    if (!diff) {
+      return;
+    }
+    Debug.LiveEditChangeScript(script, diff.change_pos, diff.old_len,
+        new_source.substring(diff.change_pos, diff.change_pos + diff.new_len),
+        change_log);
+  }
+
+  
+  // Finds a difference between 2 strings in form of a single chunk.
+  // This is a temporary solution. We should calculate a read diff instead.
+  function FindSimpleDiff(old_source, new_source) {
+    var change_pos;
+    var old_len;
+    var new_len;
+    
+    // A find range block. Whenever control leaves it, it should set 3 local
+    // variables declared above.
+    find_range:
+    {
+      // First look from the beginning of strings.
+      var pos1;
+      {
+        var next_pos;
+        for (pos1 = 0; true; pos1 = next_pos) {
+          if (pos1 >= old_source.length) {
+            change_pos = pos1;
+            old_len = 0;
+            new_len = new_source.length - pos1;
+            break find_range;
+          }
+          if (pos1 >= new_source.length) {
+            change_pos = pos1;
+            old_len = old_source.length - pos1;
+            new_len = 0;
+            break find_range;
+          }
+          if (old_source[pos1] != new_source[pos1]) {
+            break;
+          }
+          next_pos = pos1 + 1;
+        }
+      }
+      // Now compare strings from the ends.
+      change_pos = pos1;
+      var pos_old;
+      var pos_new;
+      {
+        for (pos_old = old_source.length - 1, pos_new = new_source.length - 1;
+            true;
+            pos_old--, pos_new--) {
+          if (pos_old - change_pos + 1 < 0 || pos_new - change_pos + 1 < 0) {
+            old_len = pos_old - change_pos + 2;
+            new_len = pos_new - change_pos + 2;
+            break find_range;
+          }
+          if (old_source[pos_old] != new_source[pos_new]) {
+            old_len = pos_old - change_pos + 1;
+            new_len = pos_new - change_pos + 1;
+            break find_range;
+          }
+        }
+      }
+    }
+
+    if (old_len == 0 && new_len == 0) {
+      // no change
+      return;
+    }
+    
+    return { "change_pos": change_pos, "old_len": old_len, "new_len": new_len };
+  }
 }

@@ -3361,7 +3361,9 @@ static RegExpImpl::IrregexpResult SearchRegExpMultiple(
           if (start >= 0) {
             int end = register_vector[i * 2 + 1];
             ASSERT(start <= end);
-            Handle<String> substring = Factory::NewSubString(subject, start, end);
+            Handle<String> substring = Factory::NewSubString(subject,
+                                                             start,
+                                                             end);
             elements->set(i, *substring);
           } else {
             ASSERT(register_vector[i * 2 + 1] < 0);
@@ -4443,11 +4445,66 @@ static Object* Runtime_Typeof(Arguments args) {
 }
 
 
+static bool AreDigits(const char*s, int from, int to) {
+  for (int i = from; i < to; i++) {
+    if (s[i] < '0' || s[i] > '9') return false;
+  }
+
+  return true;
+}
+
+
+static int ParseDecimalInteger(const char*s, int from, int to) {
+  ASSERT(to - from < 10);  // Overflow is not possible.
+  ASSERT(from < to);
+  int d = s[from] - '0';
+
+  for (int i = from + 1; i < to; i++) {
+    d = 10 * d + (s[i] - '0');
+  }
+
+  return d;
+}
+
+
 static Object* Runtime_StringToNumber(Arguments args) {
   NoHandleAllocation ha;
   ASSERT(args.length() == 1);
   CONVERT_CHECKED(String, subject, args[0]);
   subject->TryFlatten();
+
+  // Fast case: short integer or some sorts of junk values.
+  int len = subject->length();
+  if (subject->IsSeqAsciiString()) {
+    if (len == 0) return Smi::FromInt(0);
+
+    char const* data = SeqAsciiString::cast(subject)->GetChars();
+    bool minus = (data[0] == '-');
+    int start_pos = (minus ? 1 : 0);
+
+    if (start_pos == len) {
+      return Heap::nan_value();
+    } else if (data[start_pos] > '9') {
+      // Fast check for a junk value. A valid string may start from a
+      // whitespace, a sign ('+' or '-'), the decimal point, a decimal digit or
+      // the 'I' character ('Infinity'). All of that have codes not greater than
+      // '9' except 'I'.
+      if (data[start_pos] != 'I') {
+        return Heap::nan_value();
+      }
+    } else if (len - start_pos < 10 && AreDigits(data, start_pos, len)) {
+      // The maximal/minimal smi has 10 digits. If the string has less digits we
+      // know it will fit into the smi-data type.
+      int d = ParseDecimalInteger(data, start_pos, len);
+      if (minus) {
+        if (d == 0) return Heap::minus_zero_value();
+        d = -d;
+      }
+      return Smi::FromInt(d);
+    }
+  }
+
+  // Slower case.
   return Heap::NumberFromDouble(StringToDouble(subject, ALLOW_HEX));
 }
 
@@ -4684,49 +4741,9 @@ static Object* Runtime_StringParseInt(Arguments args) {
 
   s->TryFlatten();
 
-  int len = s->length();
-  int i;
-
-  // Skip leading white space.
-  for (i = 0; i < len && Scanner::kIsWhiteSpace.get(s->Get(i)); i++) ;
-  if (i == len) return Heap::nan_value();
-
-  // Compute the sign (default to +).
-  int sign = 1;
-  if (s->Get(i) == '-') {
-    sign = -1;
-    i++;
-  } else if (s->Get(i) == '+') {
-    i++;
-  }
-
-  // Compute the radix if 0.
-  if (radix == 0) {
-    radix = 10;
-    if (i < len && s->Get(i) == '0') {
-      radix = 8;
-      if (i + 1 < len) {
-        int c = s->Get(i + 1);
-        if (c == 'x' || c == 'X') {
-          radix = 16;
-          i += 2;
-        }
-      }
-    }
-  } else if (radix == 16) {
-    // Allow 0x or 0X prefix if radix is 16.
-    if (i + 1 < len && s->Get(i) == '0') {
-      int c = s->Get(i + 1);
-      if (c == 'x' || c == 'X') i += 2;
-    }
-  }
-
-  RUNTIME_ASSERT(2 <= radix && radix <= 36);
-  double value;
-  int end_index = StringToInt(s, i, radix, &value);
-  if (end_index != i) {
-    return Heap::NumberFromDouble(sign * value);
-  }
+  RUNTIME_ASSERT(radix == 0 || (2 <= radix && radix <= 36));
+  double value = StringToInt(s, radix);
+  return Heap::NumberFromDouble(value);
   return Heap::nan_value();
 }
 
@@ -7080,21 +7097,6 @@ static Object* Runtime_DateDaylightSavingsOffset(Arguments args) {
 
   CONVERT_DOUBLE_CHECKED(x, args[0]);
   return Heap::NumberFromDouble(OS::DaylightSavingsOffset(x));
-}
-
-
-static Object* Runtime_NumberIsFinite(Arguments args) {
-  NoHandleAllocation ha;
-  ASSERT(args.length() == 1);
-
-  CONVERT_DOUBLE_CHECKED(value, args[0]);
-  Object* result;
-  if (isnan(value) || (fpclassify(value) == FP_INFINITE)) {
-    result = Heap::false_value();
-  } else {
-    result = Heap::true_value();
-  }
-  return result;
 }
 
 
@@ -9691,41 +9693,18 @@ static Object* Runtime_LiveEditPatchFunctionPositions(Arguments args) {
 }
 
 
-static LiveEdit::FunctionPatchabilityStatus FindFunctionCodeOnStacks(
-    Handle<SharedFunctionInfo> shared) {
-  // TODO(635): check all threads, not only the current one.
-  for (StackFrameIterator it; !it.done(); it.Advance()) {
-    StackFrame* frame = it.frame();
-    if (frame->code() == shared->code()) {
-      return LiveEdit::FUNCTION_BLOCKED_ON_STACK;
-    }
-  }
-  return LiveEdit::FUNCTION_AVAILABLE_FOR_PATCH;
-}
-
 // For array of SharedFunctionInfo's (each wrapped in JSValue)
 // checks that none of them have activations on stacks (of any thread).
 // Returns array of the same length with corresponding results of
 // LiveEdit::FunctionPatchabilityStatus type.
-static Object* Runtime_LiveEditCheckStackActivations(Arguments args) {
-  ASSERT(args.length() == 1);
+static Object* Runtime_LiveEditCheckAndDropActivations(Arguments args) {
+  ASSERT(args.length() == 2);
   HandleScope scope;
   CONVERT_ARG_CHECKED(JSArray, shared_array, 0);
+  CONVERT_BOOLEAN_CHECKED(do_drop, args[1]);
 
 
-  int len = Smi::cast(shared_array->length())->value();
-  Handle<JSArray> result = Factory::NewJSArray(len);
-
-  for (int i = 0; i < len; i++) {
-    JSValue* wrapper = JSValue::cast(shared_array->GetElement(i));
-    Handle<SharedFunctionInfo> shared(
-        SharedFunctionInfo::cast(wrapper->value()));
-    LiveEdit::FunctionPatchabilityStatus check_res =
-        FindFunctionCodeOnStacks(shared);
-    SetElement(result, i, Handle<Smi>(Smi::FromInt(check_res)));
-  }
-
-  return *result;
+  return *LiveEdit::CheckAndDropActivations(shared_array, do_drop);
 }
 
 
@@ -9756,6 +9735,35 @@ static Object* Runtime_GetFunctionCodePositionFromSource(Arguments args) {
   }
 
   return Smi::FromInt(closest_pc);
+}
+
+
+// Calls specified function with or without entering the debugger.
+// This is used in unit tests to run code as if debugger is entered or simply
+// to have a stack with C++ frame in the middle.
+static Object* Runtime_ExecuteInDebugContext(Arguments args) {
+  ASSERT(args.length() == 2);
+  HandleScope scope;
+  CONVERT_ARG_CHECKED(JSFunction, function, 0);
+  CONVERT_BOOLEAN_CHECKED(without_debugger, args[1]);
+
+  Handle<Object> result;
+  bool pending_exception;
+  {
+    if (without_debugger) {
+      result = Execution::Call(function, Top::global(), 0, NULL,
+                               &pending_exception);
+    } else {
+      EnterDebugger enter_debugger;
+      result = Execution::Call(function, Top::global(), 0, NULL,
+                               &pending_exception);
+    }
+  }
+  if (!pending_exception) {
+    return *result;
+  } else {
+    return Failure::Exception();
+  }
 }
 
 

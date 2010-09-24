@@ -31,8 +31,15 @@
 
 #include "profile-generator-inl.h"
 
+#include "../include/v8-profiler.h"
+
 namespace v8 {
 namespace internal {
+
+
+const char* CodeEntry::kEmptyNamePrefix = "";
+unsigned CodeEntry::next_call_uid_ = 1;
+
 
 ProfileNode* ProfileNode::FindChild(CodeEntry* entry) {
   HashMap::Entry* map_entry =
@@ -56,10 +63,14 @@ ProfileNode* ProfileNode::FindOrAddChild(CodeEntry* entry) {
 
 
 void ProfileNode::Print(int indent) {
-  OS::Print("%5u %5u %*c %s\n",
+  OS::Print("%5u %5u %*c %s%s",
             total_ticks_, self_ticks_,
             indent, ' ',
-            entry_ != NULL ? entry_->name() : "");
+            entry_->name_prefix(),
+            entry_->name());
+  if (entry_->resource_name()[0] != '\0')
+    OS::Print(" %s:%d", entry_->resource_name(), entry_->line_number());
+  OS::Print("\n");
   for (HashMap::Entry* p = children_.Start();
        p != NULL;
        p = children_.Next(p)) {
@@ -80,6 +91,12 @@ class DeleteNodesCallback {
 };
 
 }  // namespace
+
+
+ProfileTree::ProfileTree()
+    : root_entry_(Logger::FUNCTION_TAG, "", "(root)", "", 0),
+      root_(new ProfileNode(&root_entry_)) {
+}
 
 
 ProfileTree::~ProfileTree() {
@@ -353,7 +370,8 @@ CodeEntry* CpuProfilesCollection::NewCodeEntry(Logger::LogEventsAndTags tag,
                                                String* resource_name,
                                                int line_number) {
   CodeEntry* entry = new CodeEntry(tag,
-                                   GetName(name),
+                                   CodeEntry::kEmptyNamePrefix,
+                                   GetFunctionName(name),
                                    GetName(resource_name),
                                    line_number);
   code_entries_.Add(entry);
@@ -364,9 +382,23 @@ CodeEntry* CpuProfilesCollection::NewCodeEntry(Logger::LogEventsAndTags tag,
 CodeEntry* CpuProfilesCollection::NewCodeEntry(Logger::LogEventsAndTags tag,
                                                const char* name) {
   CodeEntry* entry = new CodeEntry(tag,
+                                   CodeEntry::kEmptyNamePrefix,
                                    name,
                                    "",
-                                   kNoLineNumberInfo);
+                                   v8::CpuProfileNode::kNoLineNumberInfo);
+  code_entries_.Add(entry);
+  return entry;
+}
+
+
+CodeEntry* CpuProfilesCollection::NewCodeEntry(Logger::LogEventsAndTags tag,
+                                               const char* name_prefix,
+                                               String* name) {
+  CodeEntry* entry = new CodeEntry(tag,
+                                   name_prefix,
+                                   GetName(name),
+                                   "",
+                                   v8::CpuProfileNode::kNoLineNumberInfo);
   code_entries_.Add(entry);
   return entry;
 }
@@ -375,11 +407,19 @@ CodeEntry* CpuProfilesCollection::NewCodeEntry(Logger::LogEventsAndTags tag,
 CodeEntry* CpuProfilesCollection::NewCodeEntry(Logger::LogEventsAndTags tag,
                                                int args_count) {
   CodeEntry* entry = new CodeEntry(tag,
+                                   "args_count: ",
                                    GetName(args_count),
                                    "",
-                                   kNoLineNumberInfo);
+                                   v8::CpuProfileNode::kNoLineNumberInfo);
   code_entries_.Add(entry);
   return entry;
+}
+
+
+const char* CpuProfilesCollection::GetFunctionName(String* name) {
+  const char* maybe_empty_name = GetName(name);
+  return strlen(maybe_empty_name) > 0 ?
+      maybe_empty_name : "(anonymous function)";
 }
 
 
@@ -413,8 +453,7 @@ const char* CpuProfilesCollection::GetName(int args_count) {
   if (args_count_names_[args_count] == NULL) {
     const int kMaximumNameLength = 32;
     char* name = NewArray<char>(kMaximumNameLength);
-    OS::SNPrintF(Vector<char>(name, kMaximumNameLength),
-                 "args_count: %d", args_count);
+    OS::SNPrintF(Vector<char>(name, kMaximumNameLength), "%d", args_count);
     args_count_names_[args_count] = name;
   }
   return args_count_names_[args_count];
@@ -434,14 +473,17 @@ void CpuProfilesCollection::AddPathToCurrentProfiles(
 }
 
 
+
 ProfileGenerator::ProfileGenerator(CpuProfilesCollection* profiles)
-    : profiles_(profiles) {
+    : profiles_(profiles),
+      program_entry_(
+          profiles->NewCodeEntry(Logger::FUNCTION_TAG, "(program)")) {
 }
 
 
 void ProfileGenerator::RecordTickSample(const TickSample& sample) {
-  // Allocate space for stack frames + pc + function.
-  ScopedVector<CodeEntry*> entries(sample.frames_count + 2);
+  // Allocate space for stack frames + pc + function + (program).
+  ScopedVector<CodeEntry*> entries(sample.frames_count + 3);
   CodeEntry** entry = entries.start();
   *entry++ = code_map_.FindEntry(sample.pc);
 
@@ -465,6 +507,10 @@ void ProfileGenerator::RecordTickSample(const TickSample& sample) {
        ++stack_pos) {
     *entry++ = code_map_.FindEntry(*stack_pos);
   }
+
+  // WebKit CPU profiles visualization requires "(program)" to be the
+  // topmost entry.
+  *entry++ = FLAG_prof_browser_mode ? program_entry_ : NULL;
 
   profiles_->AddPathToCurrentProfiles(entries);
 }
