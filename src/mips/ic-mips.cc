@@ -70,11 +70,11 @@ static void GenerateDictionaryLoad(MacroAssembler* masm,
   // Check for the absence of an interceptor.
   // Load the map into reg0.
   __ lw(reg0, FieldMemOperand(reg1, JSObject::kMapOffset));
-  // Test the has_named_interceptor bit in the map.
-  __ lw(a3, FieldMemOperand(reg0, Map::kInstanceAttributesOffset));
-  __ And(a3, a3, Operand(1 << (Map::kHasNamedInterceptor + (3 * 8))));
-  // Jump to miss if the interceptor bit is set.
-  __ Branch(miss, ne, t0, Operand(zero_reg));
+
+  // Bail out if the receiver has a named interceptor.
+  __ lbu(a3, FieldMemOperand(reg0, Map::kBitFieldOffset));
+  __ And(a3, a3, Operand(1 << Map::kHasNamedInterceptor));
+  __ Branch(miss, ne, a3, Operand(zero_reg));
 
   // Bail out if we have a JS global proxy object.
   __ lbu(a3, FieldMemOperand(reg0, Map::kInstanceTypeOffset));
@@ -145,6 +145,108 @@ static void GenerateDictionaryLoad(MacroAssembler* masm,
 
   // Get the value at the masked, scaled index and return.
   __ lw(reg1, FieldMemOperand(reg1, kElementsStartOffset + 1 * kPointerSize));
+}
+
+
+static void GenerateNumberDictionaryLoad(MacroAssembler* masm,
+                                         Label* miss,
+                                         Register elements,
+                                         Register key,
+                                         Register reg0,
+                                         Register reg1,
+                                         Register reg2) {
+  // Register use:
+  //
+  // elements - holds the slow-case elements of the receiver and is unchanged.
+  //
+  // key      - holds the smi key on entry and is unchanged if a branch is
+  //            performed to the miss label.
+  //
+  // Scratch registers:
+  //
+  // reg0 - holds the untagged key on entry and holds the hash once computed.
+  //      Holds the result on exit if the load succeeded.
+  //
+  // reg1 - Used to hold the capacity mask of the dictionary.
+  //
+  // reg2 - Used for the index into the dictionary.
+  // at   - Temporary (avoid MacroAssembler instructions also using 'at').
+  Label done;
+
+  // Compute the hash code from the untagged key.  This must be kept in sync
+  // with ComputeIntegerHash in utils.h.
+  //
+  // hash = ~hash + (hash << 15);
+  __ nor(reg1, reg0, zero_reg);
+  __ sll(at, reg0, 15);
+  __ addu(reg0, reg1, at);
+
+  // hash = hash ^ (hash >> 12);
+  __ srl(at, reg0, 12);
+  __ xor_(reg0, reg0, at);
+
+  // hash = hash + (hash << 2);
+  __ sll(at, reg0, 2);
+  __ addu(reg0, reg0, at);
+
+  // hash = hash ^ (hash >> 4);
+  __ srl(at, reg0, 4);
+  __ xor_(reg0, reg0, at);
+
+  // hash = hash * 2057;
+  __ li(reg1, Operand(2057));
+  __ mul(reg0, reg0, reg1);
+
+  // hash = hash ^ (hash >> 16);
+  __ srl(at, reg0, 16);
+  __ xor_(reg0, reg0, at);
+
+  // Compute the capacity mask.
+  __ lw(reg1, FieldMemOperand(elements, NumberDictionary::kCapacityOffset));
+  __ sra(reg1, reg1, kSmiTagSize);
+  __ Subu(reg1, reg1, Operand(1));
+
+  // Generate an unrolled loop that performs a few probes before giving up.
+  static const int kProbes = 4;
+  for (int i = 0; i < kProbes; i++) {
+    // Use reg2 for index calculations and keep the hash intact in reg0.
+    __ mov(reg2, reg0);
+    // Compute the masked index: (hash + i + i * i) & mask.
+    if (i > 0) {
+      __ Addu(reg2, reg2, Operand(NumberDictionary::GetProbeOffset(i)));
+    }
+    __ and_(reg2, reg2, reg1);
+
+    // Scale the index by multiplying by the element size.
+    ASSERT(NumberDictionary::kEntrySize == 3);
+    __ sll(at, reg2, 1);  // 2x.
+    __ addu(reg2, reg2, at);  // reg2 = reg2 * 3.
+
+    // Check if the key is identical to the name.
+    __ sll(at, reg2, kPointerSizeLog2);
+    __ addu(reg2, elements, at);
+
+    __ lw(at, FieldMemOperand(reg2, NumberDictionary::kElementsStartOffset));
+    if (i != kProbes - 1) {
+      __ Branch(&done, eq, key, Operand(at));
+    } else {
+      __ Branch(miss, ne, key, Operand(at));
+    }
+  }
+
+  __ bind(&done);
+  // Check that the value is a normal property.
+  // reg2: elements + (index * kPointerSize)
+  const int kDetailsOffset =
+      NumberDictionary::kElementsStartOffset + 2 * kPointerSize;
+  __ lw(reg1, FieldMemOperand(reg2, kDetailsOffset));
+  __ And(at, reg1, Operand(Smi::FromInt(PropertyDetails::TypeField::mask())));
+  __ Branch(miss, ne, at, Operand(zero_reg));
+
+  // Get the value at the masked, scaled index and return.
+  const int kValueOffset =
+      NumberDictionary::kElementsStartOffset + kPointerSize;
+  __ lw(reg0, FieldMemOperand(reg2, kValueOffset));
 }
 
 
@@ -511,7 +613,7 @@ void KeyedLoadIC::GenerateGeneric(MacroAssembler* masm) {
   //  -- sp[0]  : key
   //  -- sp[4]  : receiver
   // -----------------------------------
-  Label slow, check_pixel_array;
+  Label slow, check_pixel_array, check_number_dictionary;
 
   // Modified slightly from in-tree arm version, see
   // ic-arm.cc: 6a579d9fd7.
@@ -541,6 +643,8 @@ void KeyedLoadIC::GenerateGeneric(MacroAssembler* masm) {
 
   // Check that the key is a smi.
   __ BranchOnNotSmi(a0, &slow);
+  // Save key in a2 in case we want it for the number dictionary case.
+  __ mov(a2, a0);
   __ sra(a0, a0, kSmiTagSize);  // Untag the key.
 
   // Get the elements array of the object.
@@ -572,7 +676,7 @@ void KeyedLoadIC::GenerateGeneric(MacroAssembler* masm) {
   // a3: map of elements array.
   __ bind(&check_pixel_array);
   __ LoadRoot(t0, Heap::kPixelArrayMapRootIndex);
-  __ Branch(&slow, ne, a3, Operand(t0));
+  __ Branch(&check_number_dictionary, ne, a3, Operand(t0));
   // Check that the key (index) is within bounds.
   __ lw(t0, FieldMemOperand(a1, PixelArray::kLengthOffset));
   __ Branch(&slow, hs, a0, Operand(t0));
@@ -580,6 +684,19 @@ void KeyedLoadIC::GenerateGeneric(MacroAssembler* masm) {
   __ Addu(t0, t0, Operand(a0));
   __ lbu(v0, MemOperand(t0, 0));
   __ sll(v0, v0, kSmiTagSize);  // Tag result as smi.
+  __ Ret();
+
+  __ bind(&check_number_dictionary);
+  // Check whether the elements is a number dictionary.
+  // a0: untagged index
+  // a1: elements
+  // a2: key
+  // a3: map of elements array.
+  __ LoadRoot(t0, Heap::kHashTableMapRootIndex);
+  __ Branch(&slow, ne, a3, Operand(t0));
+
+  GenerateNumberDictionaryLoad(masm, &slow, a1, a2, a0, a3, t0);
+  __ mov(v0, a0);  // Return value in v0.
   __ Ret();
 
   // Slow case: Push extra copies of the arguments (2).
@@ -596,6 +713,7 @@ void KeyedLoadIC::GenerateString(MacroAssembler* masm) {
 
   GenerateGeneric(masm);
 }
+
 
 // Convert unsigned integer with specified number of leading zeroes in binary
 // representation to IEEE 754 double.
@@ -1324,7 +1442,7 @@ void KeyedStoreIC::GenerateExternalArray(MacroAssembler* masm,
       __ xor_(t1, t6, t5);
       __ li(t2, kBinary32ExponentMask);
       __ movz(t6, t2, t1);  // Only if t6 is equal to t5.
-      __ Branch(&nan_or_infinity_or_zero, eq, t6, Operand(t5)); 
+      __ Branch(&nan_or_infinity_or_zero, eq, t6, Operand(t5));
 
       // Rebias exponent.
       __ srl(t6, t6, HeapNumber::kExponentShift);
