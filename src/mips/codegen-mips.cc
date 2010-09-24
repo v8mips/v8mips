@@ -3454,13 +3454,23 @@ void CodeGenerator::GenerateArgumentsLength(ZoneList<Expression*>* args) {
   VirtualFrame::SpilledScope spilled_scope;
   ASSERT(args->length() == 0);
 
-  // Seed the result with the formal parameters count, which will be used
-  // in case no arguments adaptor frame is found below the current frame.
-  __ li(a0, Operand(Smi::FromInt(scope()->num_parameters())));
+  Label exit;
 
-  // Call the shared stub to get to arguments[key].
-  ArgumentsAccessStub stub(ArgumentsAccessStub::READ_LENGTH);
-  frame_->CallStub(&stub, 0);
+  // Get the number of formal parameters.
+  __ li(v0, Operand(Smi::FromInt(scope()->num_parameters())));
+
+  __ lw(a2, MemOperand(fp, StandardFrameConstants::kCallerFPOffset));
+  __ lw(a3, MemOperand(a2, StandardFrameConstants::kContextOffset));
+  __ Branch(&exit,
+            ne,
+            a3,
+            Operand(Smi::FromInt(StackFrame::ARGUMENTS_ADAPTOR)));
+
+  // Arguments adaptor case: Read the arguments length from the
+  // adaptor frame and return it.
+  __ lw(v0, MemOperand(a2, ArgumentsAdaptorFrameConstants::kLengthOffset));
+
+  __ bind(&exit);
   frame_->EmitPush(v0);
 }
 
@@ -5809,29 +5819,6 @@ void InstanceofStub::Generate(MacroAssembler* masm) {
   // Slow-case. Tail call builtin.
   __ bind(&slow);
   __ InvokeBuiltin(Builtins::INSTANCE_OF, JUMP_JS);
-}
-
-
-void ArgumentsAccessStub::GenerateReadLength(MacroAssembler* masm) {
-  // Check if the calling frame is an arguments adaptor frame.
-  Label adaptor;
-  __ lw(a2, MemOperand(fp, StandardFrameConstants::kCallerFPOffset));
-  __ lw(a3, MemOperand(a2, StandardFrameConstants::kContextOffset));
-  __ Branch(&adaptor,
-            eq,
-            a3,
-            Operand(Smi::FromInt(StackFrame::ARGUMENTS_ADAPTOR)));
-
-  // Nothing to do: The formal number of parameters has already been
-  // passed in register a0 by calling function. Just return it.
-  __ mov(v0, a0);
-  __ Ret();
-
-  // Arguments adaptor case: Read the arguments length from the
-  // adaptor frame and return it.
-  __ bind(&adaptor);
-  __ lw(v0, MemOperand(a2, ArgumentsAdaptorFrameConstants::kLengthOffset));
-  __ Ret();
 }
 
 
