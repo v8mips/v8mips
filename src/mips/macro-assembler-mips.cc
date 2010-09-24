@@ -1890,6 +1890,20 @@ void MacroAssembler::AllocateHeapNumber(Register result,
 }
 
 
+void MacroAssembler::CheckMap(Register obj,
+                              Register scratch,
+                              Handle<Map> map,
+                              Label* fail,
+                              bool is_heap_object) {
+  if (!is_heap_object) {
+    BranchOnSmi(obj, fail);
+  }
+  lw(scratch, FieldMemOperand(obj, HeapObject::kMapOffset));
+  li(at, Operand(map));
+  Branch(fail, ne, scratch, Operand(at));
+}
+
+
 // -----------------------------------------------------------------------------
 // JavaScript invokes
 

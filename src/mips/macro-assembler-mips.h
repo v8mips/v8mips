@@ -444,6 +444,15 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
                      Register map,
                      Register type_reg);
 
+  // Check if the map of an object is equal to a specified map and
+  // branch to label if not. Skip the smi check if not required
+  // (object is known to be a heap object).
+  void CheckMap(Register obj,
+                Register scratch,
+                Handle<Map> map,
+                Label* fail,
+                bool is_heap_object);
+
   inline void BranchOnSmi(Register value, Label* smi_label,
                           Register scratch = at) {
     ASSERT_EQ(0, kSmiTag);

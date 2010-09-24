@@ -711,6 +711,33 @@ void KeyedLoadIC::GenerateString(MacroAssembler* masm) {
   // sp[0]  : key
   // sp[4]  : receiver
 
+  Label miss, index_ok;
+
+  // Get the key and receiver object from the stack (don't pop).
+  __ lw(a0, MemOperand(sp, 0));   // Key.
+  __ lw(a1, MemOperand(sp, 4));   // Receiver object.
+
+  // Check that the receiver isn't a smi.
+  __ BranchOnSmi(a1, &miss);
+
+  // Check that the receiver is a string.
+  // Inline version of Arm masm->IsObjectStringType().
+  __ lw(a2, FieldMemOperand(a1, HeapObject::kMapOffset));
+  __ lbu(a2, FieldMemOperand(a2, Map::kInstanceTypeOffset));
+  __ And(a2, a2, Operand(kIsNotStringMask));
+  __ Branch(&miss, ne, a2, Operand(zero_reg));
+
+  // Check if key is a smi or a heap number.
+  __ BranchOnSmi(a0, &index_ok);
+  __ CheckMap(a0, a2, Factory::heap_number_map(), &miss, false);
+
+  __ bind(&index_ok);
+  // Duplicate receiver and key since they are expected on the stack after
+  // the KeyedLoadIC call.
+  __ MultiPush(a0.bit() | a1.bit());
+  __ InvokeBuiltin(Builtins::STRING_CHAR_AT, JUMP_JS);
+
+  __ bind(&miss);
   GenerateGeneric(masm);
 }
 
