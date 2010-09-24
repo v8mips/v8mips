@@ -2152,7 +2152,6 @@ void CodeGenerator::VisitTryCatchStatement(TryCatchStatement* node) {
     exit.Jump();
   }
 
-
   // --- Try block ---
   try_block.Bind();
 
@@ -3492,10 +3491,24 @@ void CodeGenerator::GenerateArguments(ZoneList<Expression*>* args) {
 }
 
 
-void CodeGenerator::GenerateRandomPositiveSmi(ZoneList<Expression*>* args) {
+void CodeGenerator::GenerateRandomHeapNumber(
+    ZoneList<Expression*>* args) {
   VirtualFrame::SpilledScope spilled_scope;
   ASSERT(args->length() == 0);
-  __ Call(ExternalReference::random_positive_smi_function().address(),
+
+  Label slow_allocate_heapnumber;
+  Label heapnumber_allocated;
+
+  __ AllocateHeapNumber(a0, a1, a2, &slow_allocate_heapnumber);
+  __ jmp(&heapnumber_allocated);
+
+  __ bind(&slow_allocate_heapnumber);
+  __ li(a0, Operand(Smi::FromInt(0)));
+  __ Push(a0);
+  __ CallRuntime(Runtime::kNumberUnaryMinus, 1);
+
+  __ bind(&heapnumber_allocated);
+  __ Call(ExternalReference::fill_heap_number_with_random_function().address(),
           RelocInfo::RUNTIME_ENTRY);
   frame_->EmitPush(v0);
 }
