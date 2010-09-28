@@ -417,7 +417,13 @@ class CodeGenerator: public AstVisitor {
   void GenerateStringAdd(ZoneList<Expression*>* args);
   void GenerateSubString(ZoneList<Expression*>* args);
   void GenerateStringCompare(ZoneList<Expression*>* args);
+
+  // Support for direct calls from JavaScript to native RegExp code.
   void GenerateRegExpExec(ZoneList<Expression*>* args);
+
+  void GenerateRegExpConstructResult(ZoneList<Expression*>* args);
+
+  // Fast support for number to string.
   void GenerateNumberToString(ZoneList<Expression*>* args);
 
   // Fast call for custom callbacks.
