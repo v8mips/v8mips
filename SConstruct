@@ -702,7 +702,7 @@ SIMPLE_OPTIONS = {
   },
   'cppprofilesprocessor': {
     'values': ['on', 'off'],
-    'default': 'off',
+    'default': 'on',
     'help': 'enable C++ profiles processor'
   },
   'debuggersupport': {

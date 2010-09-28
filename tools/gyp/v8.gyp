@@ -38,6 +38,7 @@
       'ENABLE_LOGGING_AND_PROFILING',
       'ENABLE_DEBUGGER_SUPPORT',
       'ENABLE_VMSTATE_TRACKING',
+      'ENABLE_CPP_PROFILES_PROCESSOR',
     ],
     'conditions': [
       ['target_arch=="arm"', {
@@ -243,7 +244,9 @@
         '../../src/char-predicates.h',
         '../../src/checks.cc',
         '../../src/checks.h',
+        '../../src/circular-queue-inl.h',
         '../../src/circular-queue.cc',
+        '../../src/circular-queue.h',
         '../../src/code-stubs.cc',
         '../../src/code-stubs.h',
         '../../src/code.h',
