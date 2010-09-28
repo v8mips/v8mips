@@ -420,6 +420,9 @@ class CodeGenerator: public AstVisitor {
   void GenerateRegExpExec(ZoneList<Expression*>* args);
   void GenerateNumberToString(ZoneList<Expression*>* args);
 
+  // Fast call for custom callbacks.
+  void GenerateCallFunction(ZoneList<Expression*>* args);
+
   // Fast call to math functions.
   void GenerateMathPow(ZoneList<Expression*>* args);
   void GenerateMathSin(ZoneList<Expression*>* args);

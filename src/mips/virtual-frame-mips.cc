@@ -175,6 +175,20 @@ void VirtualFrame::PushTryHandler(HandlerType type) {
 }
 
 
+void VirtualFrame::CallJSFunction(int arg_count) {
+  // InvokeFunction requires function in a1.
+  EmitPop(a1);
+
+  // +1 for receiver.
+  Forget(arg_count + 1);
+  ASSERT(cgen()->HasValidEntryRegisters());
+  ParameterCount count(arg_count);
+  __ InvokeFunction(a1, count, CALL_FUNCTION);
+  // Restore the context.
+  __ lw(cp, Context());
+}
+
+
 void VirtualFrame::CallRuntime(Runtime::Function* f, int arg_count) {
   Forget(arg_count);
   ASSERT(cgen()->HasValidEntryRegisters());
