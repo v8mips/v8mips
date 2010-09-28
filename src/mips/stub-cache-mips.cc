@@ -1356,6 +1356,36 @@ Object* StoreStubCompiler::CompileStoreGlobal(GlobalObject* object,
 }
 
 
+Object* LoadStubCompiler::CompileLoadNonexistent(JSObject* object) {
+  // ----------- S t a t e -------------
+  //  -- a2    : name
+  //  -- ra    : return address
+  //  -- [sp]  : receiver
+  // -----------------------------------
+  Label miss;
+
+  // Load receiver.
+  __ lw(a0, MemOperand(sp, 0));
+
+  // Check the maps of the full prototype chain.
+  JSObject* last = object;
+  while (last->GetPrototype() != Heap::null_value()) {
+    last = JSObject::cast(last->GetPrototype());
+  }
+  CheckPrototypes(object, a0, last, a3, a1, Heap::empty_string(), &miss);
+
+  // Return undefined if maps of the full prototype chain is still the same.
+  __ LoadRoot(v0, Heap::kUndefinedValueRootIndex);
+  __ Ret();
+
+  __ bind(&miss);
+  GenerateLoadMiss(masm(), Code::LOAD_IC);
+
+  // Return the generated code.
+  return GetCode(NONEXISTENT, Heap::empty_string());
+}
+
+
 Object* LoadStubCompiler::CompileLoadField(JSObject* object,
                                            JSObject* holder,
                                            int index,
