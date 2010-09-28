@@ -52,9 +52,10 @@ else:
     GCC_EXTRA_CCFLAGS = []
     GCC_DTOA_EXTRA_CCFLAGS = []
 
-ANDROID_FLAGS = ['-march=armv5te',
-                 '-mtune=xscale',
-                 '-msoft-float',
+ANDROID_FLAGS = ['-march=armv7-a',
+                 '-mtune=cortex-a8',
+                 '-mfloat-abi=softfp',
+                 '-mfpu=vfp',
                  '-fpic',
                  '-mthumb-interwork',
                  '-funwind-tables',
@@ -68,7 +69,9 @@ ANDROID_FLAGS = ['-march=armv5te',
                  '-frename-registers',
                  '-fomit-frame-pointer',
                  '-fno-strict-aliasing',
-                 '-finline-limit=300',
+                 '-finline-limit=64',
+                 '-DCAN_USE_VFP_INSTRUCTIONS=1',
+                 '-DCAN_USE_ARMV7_INSTRUCTIONS=1',
                  '-MD']
 
 ANDROID_INCLUDES = [ANDROID_TOP + '/bionic/libc/arch-arm/include',
