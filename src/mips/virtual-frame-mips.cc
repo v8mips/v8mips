@@ -252,12 +252,11 @@ void VirtualFrame::CallCodeObject(Handle<Code> code,
 void VirtualFrame::Drop(int count) {
   ASSERT(count >= 0);
   ASSERT(height() >= count);
-  int num_virtual_elements = (element_count() - 1) - stack_pointer_;
+  int num_virtual_elements = 0;
 
   // Emit code to lower the stack pointer if necessary.
   if (num_virtual_elements < count) {
     int num_dropped = count - num_virtual_elements;
-    stack_pointer_ -= num_dropped;
     __ addiu(sp, sp, num_dropped * kPointerSize);
   }
 
@@ -274,18 +273,14 @@ Result VirtualFrame::Pop() {
 
 
 void VirtualFrame::EmitPop(Register reg) {
-  ASSERT(stack_pointer_ == element_count() - 1);
-  stack_pointer_--;
   element_count_--;
   __ Pop(reg);
 }
 
 
 void VirtualFrame::EmitMultiPop(RegList regs) {
-  ASSERT(stack_pointer_ == element_count() - 1);
   for (int16_t i = 0; i < kNumRegisters; i++) {
     if ((regs & (1 << i)) != 0) {
-      stack_pointer_--;
       element_count_--;
     }
   }
@@ -294,19 +289,15 @@ void VirtualFrame::EmitMultiPop(RegList regs) {
 
 
 void VirtualFrame::EmitPush(Register reg) {
-  ASSERT(stack_pointer_ == element_count() - 1);
   element_count_++;
-  stack_pointer_++;
   __ Push(reg);
 }
 
 
 void VirtualFrame::EmitMultiPush(RegList regs) {
-  ASSERT(stack_pointer_ == element_count() - 1);
   for (int16_t i = kNumRegisters; i > 0; i--) {
     if ((regs & (1 << i)) != 0) {
       element_count_++;
-      stack_pointer_++;
     }
   }
   __ MultiPush(regs);
@@ -314,11 +305,9 @@ void VirtualFrame::EmitMultiPush(RegList regs) {
 
 
 void VirtualFrame::EmitMultiPushReversed(RegList regs) {
-  ASSERT(stack_pointer_ == element_count() - 1);
-  for (int16_t i = 0; i< RegisterAllocatorConstants::kNumRegisters; i++) {
+  for (int16_t i = 0; i< kNumRegisters; i++) {
     if ((regs & (1<<i)) != 0) {
       element_count_++;
-      stack_pointer_++;
     }
   }
   __ MultiPushReversed(regs);
@@ -328,6 +317,18 @@ void VirtualFrame::EmitMultiPushReversed(RegList regs) {
 void VirtualFrame::EmitArgumentSlots(RegList reglist) {
   UNIMPLEMENTED_MIPS();
 }
+
+
+void VirtualFrame::SpillAll() {
+  ASSERT(register_allocation_map_ == 0);  // Not yet implemented.
+}
+
+
+// Make the type of the element at a given index be MEMORY.
+void VirtualFrame::SpillElementAt(int index) {
+  UNIMPLEMENTED_MIPS();
+}
+
 
 #undef __
 

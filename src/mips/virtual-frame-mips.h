@@ -79,25 +79,23 @@ class VirtualFrame : public ZoneObject {
 
   int register_location(int num) {
     ASSERT(num >= 0 && num < RegisterAllocator::kNumRegisters);
-    return register_locations_[num];
+    return 0;
   }
 
   int register_location(Register reg) {
-    return register_locations_[RegisterAllocator::ToNumber(reg)];
+    return 0;
   }
 
   void set_register_location(Register reg, int index) {
-    register_locations_[RegisterAllocator::ToNumber(reg)] = index;
   }
 
   bool is_used(int num) {
     ASSERT(num >= 0 && num < RegisterAllocator::kNumRegisters);
-    return register_locations_[num] != kIllegalIndex;
+    return false;   // plind HACK ......................................................................
   }
 
   bool is_used(Register reg) {
-    return register_locations_[RegisterAllocator::ToNumber(reg)]
-        != kIllegalIndex;
+    return is_used(RegisterAllocator::ToNumber(reg));
   }
 
   // Add extra in-memory elements to the top of the frame to match an actual
@@ -109,8 +107,6 @@ class VirtualFrame : public ZoneObject {
   // the frame after a runtime call). No code is emitted.
   void Forget(int count) {
     ASSERT(count >= 0);
-    ASSERT(stack_pointer_ == element_count() - 1);
-    stack_pointer_ -= count;
     // On mips, all elements are in memory, so there is no extra bookkeeping
     // (registers, copies, etc.) beyond dropping the elements.
     element_count_ -= count;
@@ -122,7 +118,12 @@ class VirtualFrame : public ZoneObject {
   void ForgetElements(int count);
 
   // Spill all values from the frame to memory.
-  inline void SpillAll();
+  void SpillAll();
+
+  void AssertIsSpilled() {
+    ASSERT(top_of_stack_state_ == NO_TOS_REGISTERS);
+    ASSERT(register_allocation_map_ == 0);
+  }
 
   // Spill all occurrences of a specific register from the frame.
   void Spill(Register reg) {
@@ -340,16 +341,35 @@ class VirtualFrame : public ZoneObject {
   static const int kHandlerSize = StackHandlerConstants::kSize / kPointerSize;
   static const int kPreallocatedElements = 5 + 8;  // 8 expression stack slots.
 
+  // 5 states for the top of stack, which can be in memory or in r0 and r1.
+  enum TopOfStack { NO_TOS_REGISTERS, R0_TOS, R1_TOS, R1_R0_TOS, R0_R1_TOS,
+                    TOS_STATES};
+  static const int kMaxTOSRegisters = 2;
+
+  static const bool kR0InUse[TOS_STATES];
+  static const bool kR1InUse[TOS_STATES];
+  static const int kVirtualElements[TOS_STATES];
+  static const TopOfStack kStateAfterPop[TOS_STATES];
+  static const TopOfStack kStateAfterPush[TOS_STATES];
+  static const Register kTopRegister[TOS_STATES];
+  static const Register kBottomRegister[TOS_STATES];
+
+  // We allocate up to 5 locals in registers.
+  static const int kNumberOfAllocatedRegisters = 5;
+  // r2 to r6 are allocated to locals.
+  static const int kFirstAllocatedRegister = 2;
+
+  static const Register kAllocatedRegisters[kNumberOfAllocatedRegisters];
+
+  static Register AllocatedRegister(int r) {
+    ASSERT(r >= 0 && r < kNumberOfAllocatedRegisters);
+    return kAllocatedRegisters[r];
+  }
+
   // The number of elements on the stack frame.
   int element_count_;
-
-  // The index of the element that is at the processor's stack pointer
-  // (the sp register).
-  int stack_pointer_;
-
-  // The index of the register frame element using each register, or
-  // kIllegalIndex if a register is not on the frame.
-  int register_locations_[RegisterAllocator::kNumRegisters];
+  TopOfStack top_of_stack_state_:3;
+  int register_allocation_map_:kNumberOfAllocatedRegisters;
 
   // The number of frame-allocated locals and parameters respectively.
   int parameter_count() { return cgen()->scope()->num_parameters(); }
