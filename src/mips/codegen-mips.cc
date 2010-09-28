@@ -3722,7 +3722,7 @@ void CodeGenerator::GenerateRegExpConstructResult(ZoneList<Expression*>* args) {
     __ sw(a2, MemOperand(a3));
     __ Branch(&loop, false);         // Use branch delay slot.
     __ addiu(a3, a3, kPointerSize);  // In branch delay slot.
-    
+
     __ bind(&slowcase);
     __ CallRuntime(Runtime::kRegExpConstructResult, 3);
     __ bind(&done);
