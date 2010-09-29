@@ -33,7 +33,10 @@
 #include "compiler.h"
 #include "debug.h"
 #include "ic-inl.h"
+#include "jsregexp.h"
 #include "parser.h"
+#include "regexp-macro-assembler.h"
+#include "regexp-stack.h"
 #include "register-allocator-inl.h"
 #include "runtime.h"
 #include "scopes.h"
@@ -3634,8 +3637,8 @@ void CodeGenerator::GenerateRegExpExec(ZoneList<Expression*>* args) {
   Load(args->at(1));
   Load(args->at(2));
   Load(args->at(3));
-
-  frame_->CallRuntime(Runtime::kRegExpExec, 4);
+  RegExpExecStub stub;
+  frame_->CallStub(&stub, 4);
   frame_->EmitPush(v0);
 }
 
@@ -5996,6 +5999,347 @@ void ArgumentsAccessStub::GenerateReadElement(MacroAssembler* masm) {
 }
 
 
+void RegExpExecStub::Generate(MacroAssembler* masm) {
+  // Just jump directly to runtime if native RegExp is not selected at compile
+  // time or if regexp entry in generated code is turned off runtime switch or
+  // at compilation.
+#ifndef V8_NATIVE_REGEXP
+  __ TailCallRuntime(Runtime::kRegExpExec, 4, 1);
+#else  // V8_NATIVE_REGEXP
+  if (!FLAG_regexp_entry_native) {
+    __ TailCallRuntime(Runtime::kRegExpExec, 4, 1);
+    return;
+  }
+
+  // Stack frame on entry.
+  //  sp[0]: last_match_info (expected JSArray)
+  //  sp[4]: previous index
+  //  sp[8]: subject string
+  //  sp[12]: JSRegExp object
+
+  static const int kLastMatchInfoOffset = 0 * kPointerSize;
+  static const int kPreviousIndexOffset = 1 * kPointerSize;
+  static const int kSubjectOffset = 2 * kPointerSize;
+  static const int kJSRegExpOffset = 3 * kPointerSize;
+
+  Label runtime, invoke_regexp;
+
+  // Allocation of registers for this function. These are in callee save
+  // registers and will be preserved by the call to the native RegExp code, as
+  // this code is called using the normal C calling convention. When calling
+  // directly from generated code the native RegExp code will not do a GC and
+  // therefore the content of these registers are safe to use after the call.
+  // MIPS - using s0..s2, since we are not using CEntry Stub.
+  Register subject = s0;
+  Register regexp_data = s1;
+  Register last_match_info_elements = s2;
+
+  // Ensure that a RegExp stack is allocated.
+  ExternalReference address_of_regexp_stack_memory_address =
+      ExternalReference::address_of_regexp_stack_memory_address();
+  ExternalReference address_of_regexp_stack_memory_size =
+      ExternalReference::address_of_regexp_stack_memory_size();
+  __ li(a0, Operand(address_of_regexp_stack_memory_size));
+  __ lw(a0, MemOperand(a0, 0));
+  __ Branch(&runtime, eq, a0, Operand(zero_reg));
+
+  // Check that the first argument is a JSRegExp object.
+  __ lw(a0, MemOperand(sp, kJSRegExpOffset));
+  ASSERT_EQ(0, kSmiTag);
+  __ BranchOnSmi(a0, &runtime);
+  __ GetObjectType(a0, a1, a1);
+  __ Branch(&runtime, ne, a1, Operand(JS_REGEXP_TYPE));
+
+  // Check that the RegExp has been compiled (data contains a fixed array).
+  __ lw(regexp_data, FieldMemOperand(a0, JSRegExp::kDataOffset));
+  if (FLAG_debug_code) {
+    __ And(t0, regexp_data, Operand(kSmiTagMask));
+    __ Check(nz,
+             "Unexpected type for RegExp data, FixedArray expected",
+             t0,
+             Operand(zero_reg));
+    __ GetObjectType(regexp_data, a0, a0);
+    __ Check(eq,
+             "Unexpected type for RegExp data, FixedArray expected",
+             a0,
+             Operand(FIXED_ARRAY_TYPE));
+  }
+
+  // regexp_data: RegExp data (FixedArray)
+  // Check the type of the RegExp. Only continue if type is JSRegExp::IRREGEXP.
+  __ lw(a0, FieldMemOperand(regexp_data, JSRegExp::kDataTagOffset));
+  __ Branch(&runtime, ne, a0, Operand(Smi::FromInt(JSRegExp::IRREGEXP)));
+
+  // regexp_data: RegExp data (FixedArray)
+  // Check that the number of captures fit in the static offsets vector buffer.
+  __ lw(a2,
+         FieldMemOperand(regexp_data, JSRegExp::kIrregexpCaptureCountOffset));
+  // Calculate number of capture registers (number_of_captures + 1) * 2. This
+  // uses the asumption that smis are 2 * their untagged value.
+  ASSERT_EQ(0, kSmiTag);
+  ASSERT_EQ(1, kSmiTagSize + kSmiShiftSize);
+  __ Addu(a2, a2, Operand(2));  // a2 was a smi.
+  // Check that the static offsets vector buffer is large enough.
+  __ Branch(&runtime, hi, a2, Operand(OffsetsVector::kStaticOffsetsVectorSize));
+
+  // a2: Number of capture registers
+  // regexp_data: RegExp data (FixedArray)
+  // Check that the second argument is a string.
+  __ lw(subject, MemOperand(sp, kSubjectOffset));
+  __ BranchOnSmi(subject, &runtime);
+  __ GetObjectType(subject, a0, a0);
+  __ And(a0, a0, Operand(kIsNotStringMask));
+  ASSERT_EQ(0, kStringTag);
+  __ Branch(&runtime, ne, a0, Operand(zero_reg));
+
+  // Get the length of the string to r3.
+  __ lw(a3, FieldMemOperand(subject, String::kLengthOffset));
+
+  // a2: Number of capture registers
+  // a3: Length of subject string
+  // subject: Subject string
+  // regexp_data: RegExp data (FixedArray)
+  // Check that the third argument is a positive smi less than the subject
+  // string length. A negative value will be greater (unsigned comparison).
+  __ lw(a0, MemOperand(sp, kPreviousIndexOffset));
+  __ sra(a0, a0, kSmiTagSize + kSmiShiftSize);
+  __ Branch(&runtime, Uless, a3, Operand(a0));
+
+  // a2: Number of capture registers
+  // subject: Subject string
+  // regexp_data: RegExp data (FixedArray)
+  // Check that the fourth object is a JSArray object.
+  __ lw(a0, MemOperand(sp, kLastMatchInfoOffset));
+  __ BranchOnSmi(a0, &runtime);
+  __ GetObjectType(a0, a1, a1);
+  __ Branch(&runtime, ne, a1, Operand(JS_ARRAY_TYPE));
+  // Check that the JSArray is in fast case.
+  __ lw(last_match_info_elements,
+         FieldMemOperand(a0, JSArray::kElementsOffset));
+  __ lw(a0, FieldMemOperand(last_match_info_elements, HeapObject::kMapOffset));
+  __ Branch(&runtime, ne, a0, Operand(Factory::fixed_array_map()));
+  // Check that the last match info has space for the capture registers and the
+  // additional information.
+  __ lw(a0,
+         FieldMemOperand(last_match_info_elements, FixedArray::kLengthOffset));
+  __ Addu(a2, a2, Operand(RegExpImpl::kLastMatchOverhead));
+  __ Branch(&runtime, gt, a2, Operand(a0));
+  // subject: Subject string
+  // regexp_data: RegExp data (FixedArray)
+  // Check the representation and encoding of the subject string.
+  Label seq_string;
+  const int kStringRepresentationEncodingMask =
+      kIsNotStringMask | kStringRepresentationMask | kStringEncodingMask;
+  __ lw(a0, FieldMemOperand(subject, HeapObject::kMapOffset));
+  __ lbu(a0, FieldMemOperand(a0, Map::kInstanceTypeOffset));
+  __ And(a1, a0, Operand(kStringRepresentationEncodingMask));
+  // First check for sequential string.
+  ASSERT_EQ(0, kStringTag);
+  ASSERT_EQ(0, kSeqStringTag);
+  __ And(a1, a1, Operand(kIsNotStringMask | kStringRepresentationMask));
+  __ Branch(&seq_string, eq, a1, Operand(zero_reg));
+  // subject: Subject string
+  // a0: instance type if Subject string
+  // regexp_data: RegExp data (FixedArray)
+  // Check for flat cons string.
+  // A flat cons string is a cons string where the second part is the empty
+  // string. In that case the subject string is just the first part of the cons
+  // string. Also in this case the first part of the cons string is known to be
+  // a sequential string or an external string.
+  __ And(a0, a0, Operand(kStringRepresentationMask));
+  __ Branch(&runtime, ne, a0, Operand(kConsStringTag));
+  __ lw(a0, FieldMemOperand(subject, ConsString::kSecondOffset));
+  __ LoadRoot(a1, Heap::kEmptyStringRootIndex);
+  __ Branch(&runtime, ne, a0, Operand(a1));
+  __ lw(subject, FieldMemOperand(subject, ConsString::kFirstOffset));
+  __ lw(a0, FieldMemOperand(subject, HeapObject::kMapOffset));
+  __ lbu(a0, FieldMemOperand(a0, Map::kInstanceTypeOffset));
+  ASSERT_EQ(0, kSeqStringTag);
+  __ And(a1, a0, Operand(kStringRepresentationMask));
+  __ Branch(&runtime, ne, a1, Operand(zero_reg));
+  __ And(a1, a0, Operand(kStringRepresentationEncodingMask));
+
+  __ bind(&seq_string);
+  // a1: suject string type & kStringRepresentationEncodingMask
+  // subject: Subject string
+  // regexp_data: RegExp data (FixedArray)
+  // Check that the irregexp code has been generated for an ascii string. If
+  // it has, the field contains a code object otherwise it contains the hole.
+#ifdef DEBUG
+  const int kSeqAsciiString = kStringTag | kSeqStringTag | kAsciiStringTag;
+  const int kSeqTwoByteString = kStringTag | kSeqStringTag | kTwoByteStringTag;
+  CHECK_EQ(4, kSeqAsciiString);
+  CHECK_EQ(0, kSeqTwoByteString);
+#endif
+  // Find the code object based on the assumptions above.
+  __ lw(t9, FieldMemOperand(regexp_data, JSRegExp::kDataAsciiCodeOffset));
+  __ sra(a3, a1, 2);  // a3 is 1 for ascii and 0 for 2_byte string.
+  __ lw(t0, FieldMemOperand(regexp_data, JSRegExp::kDataUC16CodeOffset));
+  __ movz(t9, t0, a3);  // If 2-byte (a3 == 0), replace t9.
+
+  // Check that the irregexp code has been generated for the actual string
+  // encoding. If it has, the field contains a code object otherwise it contains
+  // the hole.
+  __ GetObjectType(t9, a0, a0);
+  __ Branch(&runtime, ne, a0, Operand(CODE_TYPE));
+
+  // a3: encoding of subject string (1 if ascii, 0 if two_byte);
+  // t9: code
+  // subject: Subject string
+  // regexp_data: RegExp data (FixedArray)
+  // Load used arguments before starting to push arguments for call to native
+  // RegExp code to avoid handling changing stack height.
+  __ lw(a1, MemOperand(sp, kPreviousIndexOffset));
+  __ sra(a1, a1, kSmiTagSize);  // Untag the Smi.
+
+  // a1: previous index
+  // a3: encoding of subject string (1 if ascii, 0 if two_byte);
+  // t9: code
+  // subject: Subject string
+  // regexp_data: RegExp data (FixedArray)
+  // All checks done. Now push arguments for native regexp code.
+  __ IncrementCounter(&Counters::regexp_entry_native, 1, a0, a2);
+
+  static const int kRegExpExecuteArguments = 7;
+  __ Push(ra);
+  __ PrepareCallCFunction(kRegExpExecuteArguments, a0);
+
+  // Argument 7: Indicate that this is a direct call from JavaScript.
+  // kCFuncArg_N take MIPS stack argument slots into account.
+  __ li(a0, Operand(1));
+  __ sw(a0, MemOperand(sp, MacroAssembler::kCFuncArg_7));
+
+  // Argument 6: Start (high end) of backtracking stack memory area.
+  __ li(a0, Operand(address_of_regexp_stack_memory_address));
+  __ lw(a0, MemOperand(a0, 0));
+  __ li(a2, Operand(address_of_regexp_stack_memory_size));
+  __ lw(a2, MemOperand(a2, 0));
+  __ addu(a0, a0, a2);
+  __ sw(a0, MemOperand(sp, MacroAssembler::kCFuncArg_6));
+
+  // Argument 5: static offsets vector buffer.
+  __ li(a0, Operand(ExternalReference::address_of_static_offsets_vector()));
+  __ sw(a0, MemOperand(sp, MacroAssembler::kCFuncArg_5));
+
+  // For arguments 4 and 3 get string length, calculate start of string data and
+  // calculate the shift of the index (0 for ASCII and 1 for two byte).
+  __ lw(a0, FieldMemOperand(subject, String::kLengthOffset));
+  ASSERT_EQ(SeqAsciiString::kHeaderSize, SeqTwoByteString::kHeaderSize);
+  __ Addu(t0, subject, Operand(SeqAsciiString::kHeaderSize - kHeapObjectTag));
+  __ Xor(a3, a3, Operand(1));  // 1 for 2-byte str, 0 for 1-byte.
+  // Argument 4 (a3): End of string data
+  // Argument 3 (a2): Start of string data
+  __ sllv(t1, a1, a3);
+  __ addu(a2, t0, t1);
+  __ sllv(t1, a0, a3);
+  __ addu(a3, t0, t1);
+
+  // Argument 2 (a1): Previous index.
+  // Already there
+
+  // Argument 1 (a0): Subject string.
+  __ mov(a0, subject);
+
+  // Locate the code entry and call it.
+  __ Addu(t9, t9, Operand(Code::kHeaderSize - kHeapObjectTag));
+  __ CallCFunction(t9, kRegExpExecuteArguments);
+  __ Pop(ra);
+
+  // v0: result
+  // subject: subject string (callee saved)
+  // regexp_data: RegExp data (callee saved)
+  // last_match_info_elements: Last match info elements (callee saved)
+
+  // Check the result.
+  Label success;
+  __ Branch(&success, eq, v0, Operand(NativeRegExpMacroAssembler::SUCCESS));
+  Label failure;
+  __ Branch(&failure, eq, v0, Operand(NativeRegExpMacroAssembler::FAILURE));
+  // If not exception it can only be retry. Handle that in the runtime system.
+  __ Branch(&runtime, ne, v0, Operand(NativeRegExpMacroAssembler::EXCEPTION));
+  // Result must now be exception. If there is no pending exception already a
+  // stack overflow (on the backtrack stack) was detected in RegExp code but
+  // haven't created the exception yet. Handle that in the runtime system.
+  // TODO(592): Rerunning the RegExp to get the stack overflow exception.
+  __ li(a0, Operand(ExternalReference::the_hole_value_location()));
+  __ lw(a0, MemOperand(a0, 0));
+  __ li(a1, Operand(ExternalReference(Top::k_pending_exception_address)));
+  __ lw(a1, MemOperand(a1, 0));
+  __ Branch(&runtime, eq, a0, Operand(a1));
+  __ bind(&failure);
+  // For failure and exception return null.
+  __ li(v0, Operand(Factory::null_value()));
+  __ Addu(sp, sp, Operand(4 * kPointerSize));
+  __ Ret();
+
+  // Process the result from the native regexp code.
+  __ bind(&success);
+  __ lw(a1,
+         FieldMemOperand(regexp_data, JSRegExp::kIrregexpCaptureCountOffset));
+  // Calculate number of capture registers (number_of_captures + 1) * 2.
+  ASSERT_EQ(0, kSmiTag);
+  ASSERT_EQ(1, kSmiTagSize + kSmiShiftSize);
+  __ Addu(a1, a1, Operand(2));  // a1 was a smi.
+
+  // a1: number of capture registers
+  // subject: subject string
+  // Store the capture count.
+  __ sll(a2, a1, kSmiTagSize + kSmiShiftSize);  // To smi.
+  __ sw(a2, FieldMemOperand(last_match_info_elements,
+                             RegExpImpl::kLastCaptureCountOffset));
+  // Store last subject and last input.
+  __ mov(a3, last_match_info_elements);  // Moved up to reduce latency.
+  __ li(a2, Operand(RegExpImpl::kLastSubjectOffset));  // Ditto.
+  __ sw(subject,
+         FieldMemOperand(last_match_info_elements,
+                         RegExpImpl::kLastSubjectOffset));
+  __ RecordWrite(a3, a2, t0);
+  __ sw(subject,
+         FieldMemOperand(last_match_info_elements,
+                         RegExpImpl::kLastInputOffset));
+  __ mov(a3, last_match_info_elements);
+  __ li(a2, Operand(RegExpImpl::kLastInputOffset));
+  __ RecordWrite(a3, a2, t0);
+
+  // Get the static offsets vector filled by the native regexp code.
+  ExternalReference address_of_static_offsets_vector =
+      ExternalReference::address_of_static_offsets_vector();
+  __ li(a2, Operand(address_of_static_offsets_vector));
+
+  // a1: number of capture registers
+  // a2: offsets vector
+  Label next_capture, done;
+  // Capture register counter starts from number of capture registers and
+  // counts down until wrapping after zero.
+  __ Addu(a0,
+         last_match_info_elements,
+         Operand(RegExpImpl::kFirstCaptureOffset - kHeapObjectTag));
+  __ bind(&next_capture);
+  __ Subu(a1, a1, Operand(1));
+  __ Branch(&done, lt, a1, Operand(zero_reg));
+  // Read the value from the static offsets vector buffer.
+  __ lw(a3, MemOperand(a2, 0));
+  __ addiu(a2, a2, kPointerSize);
+  // Store the smi value in the last match info.
+  __ sll(a3, a3, kSmiTagSize);  // Convert to Smi.
+  __ sw(a3, MemOperand(a0, 0));
+  __ Branch(&next_capture, false);  // Use branch delay slot.
+  __ addiu(a0, a0, kPointerSize);   // In branch delay slot.
+
+  __ bind(&done);
+
+  // Return last match info.
+  __ lw(v0, MemOperand(sp, kLastMatchInfoOffset));
+  __ Addu(sp, sp, Operand(4 * kPointerSize));
+  __ Ret();
+
+  // Do the runtime call to execute the regexp.
+  __ bind(&runtime);
+  __ TailCallRuntime(Runtime::kRegExpExec, 4, 1);
+#endif  // V8_NATIVE_REGEXP
+}
+
+
 void ArgumentsAccessStub::GenerateNewObject(MacroAssembler* masm) {
   // sp[0] : number of parameters
   // sp[4] : receiver displacement
@@ -6022,6 +6366,68 @@ void ArgumentsAccessStub::GenerateNewObject(MacroAssembler* masm) {
   // Do the runtime call to allocate the arguments object.
   __ bind(&runtime);
   __ TailCallRuntime(Runtime::kNewArgumentsFast, 3, 1);
+}
+
+
+void CallFunctionStub::Generate(MacroAssembler* masm) {
+  Label slow;
+
+  // If the receiver might be a value (string, number or boolean) check
+  // for this and box it if it is.
+  if (ReceiverMightBeValue()) {
+    // Get the receiver from the stack.
+    // function, receiver [, arguments]
+    Label receiver_is_value, receiver_is_js_object;
+    __ lw(a1, MemOperand(sp, argc_ * kPointerSize));
+
+    // Check if receiver is a smi (which is a number value).
+    __ BranchOnSmi(a1, &receiver_is_value);
+
+    // Check if the receiver is a valid JS object.
+    __ GetObjectType(a1, a2, a2);
+    __ Branch(&receiver_is_js_object,
+              ge,
+              a2,
+              Operand(FIRST_JS_OBJECT_TYPE));
+
+    // Call the runtime to box the value.
+    __ bind(&receiver_is_value);
+    // We need natives to execute this.
+    __ EnterInternalFrame();
+    __ Push(a1);
+    __ InvokeBuiltin(Builtins::TO_OBJECT, CALL_JS);
+    __ LeaveInternalFrame();
+    __ sw(v0, MemOperand(sp, argc_ * kPointerSize));
+
+    __ bind(&receiver_is_js_object);
+  }
+
+  // Get the function to call from the stack.
+  // function, receiver [, arguments]
+  __ lw(a1, MemOperand(sp, (argc_ + 1) * kPointerSize));
+
+  // Check that the function is really a JavaScript function.
+  // a1: pushed function (to be verified)
+  __ BranchOnSmi(a1, &slow);
+  // Get the map of the function object.
+  __ GetObjectType(a1, a2, a2);
+  __ Branch(&slow, ne, a2, Operand(JS_FUNCTION_TYPE));
+
+  // Fast-case: Invoke the function now.
+  // a1: pushed function
+  ParameterCount actual(argc_);
+  __ InvokeFunction(a1, actual, JUMP_FUNCTION);
+
+  // Slow-case: Non-function called.
+  __ bind(&slow);
+  // CALL_NON_FUNCTION expects the non-function callee as receiver (instead
+  // of the original receiver from the call site).
+  __ sw(a1, MemOperand(sp, argc_ * kPointerSize));
+  __ li(a0, Operand(argc_));  // Setup the number of arguments.
+  __ mov(a2, zero_reg);
+  __ GetBuiltinEntry(a3, Builtins::CALL_NON_FUNCTION);
+  __ Jump(Handle<Code>(Builtins::builtin(Builtins::ArgumentsAdaptorTrampoline)),
+          RelocInfo::CODE_TARGET);
 }
 
 
@@ -6923,7 +7329,7 @@ void GenericUnaryOpStub::Generate(MacroAssembler* masm) {
       __ Xor(a2, a2, Operand(HeapNumber::kSignMask));  // Flip sign.
       __ sw(a2, FieldMemOperand(a0, HeapNumber::kExponentOffset));
     } else {
-      __ AllocateHeapNumber(a1, a2, s3, &slow);
+      __ AllocateHeapNumber(a1, a2, a3, &slow);
       __ lw(a3, FieldMemOperand(a0, HeapNumber::kMantissaOffset));
       __ lw(a2, FieldMemOperand(a0, HeapNumber::kExponentOffset));
       __ sw(a3, FieldMemOperand(a1, HeapNumber::kMantissaOffset));
@@ -7881,68 +8287,6 @@ void StringAddStub::Generate(MacroAssembler* masm) {
   // Just jump to runtime to add the two strings.
   __ bind(&string_add_runtime);
   __ TailCallRuntime(Runtime::kStringAdd, 2, 1);
-}
-
-
-void CallFunctionStub::Generate(MacroAssembler* masm) {
-  Label slow;
-
-  // If the receiver might be a value (string, number or boolean) check
-  // for this and box it if it is.
-  if (ReceiverMightBeValue()) {
-    // Get the receiver from the stack.
-    // function, receiver [, arguments]
-    Label receiver_is_value, receiver_is_js_object;
-    __ lw(a1, MemOperand(sp, argc_ * kPointerSize));
-
-    // Check if receiver is a smi (which is a number value).
-    __ BranchOnSmi(a1, &receiver_is_value);
-
-    // Check if the receiver is a valid JS object.
-    __ GetObjectType(a1, a2, a2);
-    __ Branch(&receiver_is_js_object,
-              ge,
-              a2,
-              Operand(FIRST_JS_OBJECT_TYPE));
-
-    // Call the runtime to box the value.
-    __ bind(&receiver_is_value);
-    // We need natives to execute this.
-    __ EnterInternalFrame();
-    __ Push(a1);
-    __ InvokeBuiltin(Builtins::TO_OBJECT, CALL_JS);
-    __ LeaveInternalFrame();
-    __ sw(v0, MemOperand(sp, argc_ * kPointerSize));
-
-    __ bind(&receiver_is_js_object);
-  }
-
-  // Get the function to call from the stack.
-  // function, receiver [, arguments]
-  __ lw(a1, MemOperand(sp, (argc_ + 1) * kPointerSize));
-
-  // Check that the function is really a JavaScript function.
-  // a1: pushed function (to be verified)
-  __ BranchOnSmi(a1, &slow);
-  // Get the map of the function object.
-  __ GetObjectType(a1, a2, a2);
-  __ Branch(&slow, ne, a2, Operand(JS_FUNCTION_TYPE));
-
-  // Fast-case: Invoke the function now.
-  // a1: pushed function
-  ParameterCount actual(argc_);
-  __ InvokeFunction(a1, actual, JUMP_FUNCTION);
-
-  // Slow-case: Non-function called.
-  __ bind(&slow);
-  // CALL_NON_FUNCTION expects the non-function callee as receiver (instead
-  // of the original receiver from the call site).
-  __ sw(a1, MemOperand(sp, argc_ * kPointerSize));
-  __ li(a0, Operand(argc_));  // Setup the number of arguments.
-  __ mov(a2, zero_reg);
-  __ GetBuiltinEntry(a3, Builtins::CALL_NON_FUNCTION);
-  __ Jump(Handle<Code>(Builtins::builtin(Builtins::ArgumentsAdaptorTrampoline)),
-          RelocInfo::CODE_TARGET);
 }
 
 

@@ -530,15 +530,15 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
 
   // Arguments 1-4 are placed in registers a0 thru a3 respectively.
   // Arguments 5..n are stored to stack using following constants:
-  //  sw(t0, MemOperand(sp, kCFuncArg_5));
+  //  sw(t0, MemOperand(sp, MacroAssembler::kCFuncArg_5));
   static const int kCFuncArg_5 =
-      (0 + StandardFrameConstants::kCArgsSlotsSize) * kPointerSize;
+      (0 * kPointerSize + StandardFrameConstants::kCArgsSlotsSize);
   static const int kCFuncArg_6 =
-      (1 + StandardFrameConstants::kCArgsSlotsSize) * kPointerSize;
+      (1 * kPointerSize + StandardFrameConstants::kCArgsSlotsSize);
   static const int kCFuncArg_7 =
-      (2 + StandardFrameConstants::kCArgsSlotsSize) * kPointerSize;
+      (2 * kPointerSize + StandardFrameConstants::kCArgsSlotsSize);
   static const int kCFuncArg_8 =
-      (3 + StandardFrameConstants::kCArgsSlotsSize) * kPointerSize;
+      (3 * kPointerSize + StandardFrameConstants::kCArgsSlotsSize);
 
   // Calls a C function and cleans up the space for arguments allocated
   // by PrepareCallCFunction. The called function is not allowed to trigger a

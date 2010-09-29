@@ -2358,6 +2358,9 @@ void MacroAssembler::Abort(const char* msg) {
     RecordComment(msg);
   }
 #endif
+  // Disable stub call restrictions to always allow calls to abort.
+  set_allow_stub_calls(true);
+
   li(a0, Operand(p0));
   Push(a0);
   li(a0, Operand(Smi::FromInt(p1 - p0)));
