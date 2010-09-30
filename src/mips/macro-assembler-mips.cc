@@ -2265,26 +2265,39 @@ void MacroAssembler::JumpToExternalReference(const ExternalReference& builtin) {
 
 void MacroAssembler::InvokeBuiltin(Builtins::JavaScript id,
                                    InvokeJSFlags flags) {
-  GetBuiltinEntry(a2, id);
+  GetBuiltinEntry(t9, id);
   if (flags == CALL_JS) {
-    Call(a2);
+    Call(t9);
   } else {
     ASSERT(flags == JUMP_JS);
-    Jump(a2);
+    Jump(t9);
   }
 }
 
 
 void MacroAssembler::GetBuiltinEntry(Register target, Builtins::JavaScript id) {
+  ASSERT(!target.is(a1));
+
+  // Load the builtins object into target register.
+  lw(target, MemOperand(cp, Context::SlotOffset(Context::GLOBAL_INDEX)));
+  lw(target, FieldMemOperand(target, GlobalObject::kBuiltinsOffset));
+  
   // Load the JavaScript builtin function from the builtins object.
-  lw(a1, MemOperand(cp, Context::SlotOffset(Context::GLOBAL_INDEX)));
-  lw(a1, FieldMemOperand(a1, GlobalObject::kBuiltinsOffset));
-  int builtins_offset =
-      JSBuiltinsObject::kJSBuiltinsOffset + (id * kPointerSize);
-  lw(a1, FieldMemOperand(a1, builtins_offset));
-  // Load the code entry point from the function into the target register.
-  lw(target, FieldMemOperand(a1, JSFunction::kSharedFunctionInfoOffset));
-  lw(target, FieldMemOperand(target, SharedFunctionInfo::kCodeOffset));
+  lw(a1, FieldMemOperand(target,
+                         JSBuiltinsObject::OffsetOfFunctionWithId(id)));
+
+  // Load the code entry point from the builtins object.
+  lw(target, FieldMemOperand(target,
+                             JSBuiltinsObject::OffsetOfCodeWithId(id)));
+  if (FLAG_debug_code) {
+    // Make sure the code objects in the builtins object and in the
+    // builtin function are the same.
+    Push(a1);
+    lw(a1, FieldMemOperand(a1, JSFunction::kSharedFunctionInfoOffset));
+    lw(a1, FieldMemOperand(a1, SharedFunctionInfo::kCodeOffset));
+    Assert(eq, "Builtin code object changed", a1, Operand(target));
+    Pop(a1);
+  }
   Addu(target, target, Operand(Code::kHeaderSize - kHeapObjectTag));
 }
 
