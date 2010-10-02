@@ -290,6 +290,7 @@ void CodeGenerator::Generate(CompilationInfo* info) {
   set_in_spilled_code(false);
 
   // Adjust for function-level loop nesting.
+  ASSERT_EQ(0, loop_nesting_);
   loop_nesting_ += info->loop_nesting();
 
   JumpTarget::set_compiling_deferred_code(false);
@@ -483,11 +484,11 @@ void CodeGenerator::Generate(CompilationInfo* info) {
   }
 
   // Adjust for function-level loop nesting.
-  loop_nesting_ -= info->loop_nesting();
+  ASSERT_EQ(loop_nesting_, info->loop_nesting());
+  loop_nesting_ = 0;
 
   // Code generation state must be reset.
   ASSERT(state_ == NULL);
-  ASSERT(loop_nesting() == 0);
   ASSERT(!function_return_is_shadowed_);
   function_return_.Unuse();
   DeleteFrame();
@@ -8249,8 +8250,16 @@ void CEntryStub::GenerateCore(MacroAssembler* masm,
   // Complex results must be written to address passed as first argument.
   // AMD64 calling convention: a struct of two pointers in rax+rdx
 
+  // Check stack alignment.
+  if (FLAG_debug_code) {
+    __ CheckStackAlignment();
+  }
+
   if (do_gc) {
-    // Pass failure code returned from last attempt as first argument to GC.
+    // Pass failure code returned from last attempt as first argument to
+    // PerformGC. No need to use PrepareCallCFunction/CallCFunction here as the
+    // stack is known to be aligned. This function takes one argument which is
+    // passed in register.
 #ifdef _WIN64
     __ movq(rcx, rax);
 #else  // ! defined(_WIN64)
