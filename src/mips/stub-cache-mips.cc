@@ -596,6 +596,27 @@ static void CompileLoadInterceptor(LoadInterceptorCompiler* compiler,
 }
 
 
+// Generate code to check that a global property cell is empty. Create
+// the property cell at compilation time if no cell exists for the
+// property.
+static Object* GenerateCheckPropertyCell(MacroAssembler* masm,
+                                         GlobalObject* global,
+                                         String* name,
+                                         Register scratch,
+                                         Label* miss) {
+  Object* probe = global->EnsurePropertyCell(name);
+  if (probe->IsFailure()) return probe;
+  JSGlobalPropertyCell* cell = JSGlobalPropertyCell::cast(probe);
+  ASSERT(cell->value()->IsTheHole());
+  __ li(scratch, Operand(Handle<Object>(cell)));
+  __ lw(scratch,
+        FieldMemOperand(scratch, JSGlobalPropertyCell::kValueOffset));
+  __ LoadRoot(at, Heap::kTheHoleValueRootIndex);
+  __ Branch(miss, ne, scratch, Operand(at));
+  return cell;
+}
+
+
 #undef __
 #define __ ACCESS_MASM(masm())
 
@@ -616,22 +637,19 @@ Register StubCompiler::CheckPrototypes(JSObject* object,
       masm()->CheckMaps(object, object_reg, holder, holder_reg, scratch, miss);
 
   // If we've skipped any global objects, it's not enough to verify
-  // that their maps haven't changed.
+  // that their maps haven't changed.  We also need to check that the
+  // property cell for the property is still empty.
   while (object != holder) {
     if (object->IsGlobalObject()) {
-      GlobalObject* global = GlobalObject::cast(object);
-      Object* probe = global->EnsurePropertyCell(name);
-      if (probe->IsFailure()) {
-        set_failure(Failure::cast(probe));
+      Object* cell = GenerateCheckPropertyCell(masm(),
+                                               GlobalObject::cast(object),
+                                               name,
+                                               scratch,
+                                               miss);
+      if (cell->IsFailure()) {
+        set_failure(Failure::cast(cell));
         return result;
       }
-      JSGlobalPropertyCell* cell = JSGlobalPropertyCell::cast(probe);
-      ASSERT(cell->value()->IsTheHole());
-      __ li(scratch, Operand(Handle<Object>(cell)));
-      __ lw(scratch,
-             FieldMemOperand(scratch, JSGlobalPropertyCell::kValueOffset));
-      __ LoadRoot(at, Heap::kTheHoleValueRootIndex);
-      __ Branch(miss, ne, scratch, Operand(at));
     }
     object = JSObject::cast(object->GetPrototype());
   }
@@ -1356,34 +1374,43 @@ Object* StoreStubCompiler::CompileStoreGlobal(GlobalObject* object,
 }
 
 
-// Object* LoadStubCompiler::CompileLoadNonexistent(JSObject* object) {
-//   // ----------- S t a t e -------------
-//   //  -- a2    : name
-//   //  -- ra    : return address
-//   //  -- [sp]  : receiver
-//   // -----------------------------------
-//   Label miss;
-// 
-//   // Load receiver.
-//   __ lw(a0, MemOperand(sp, 0));
-// 
-//   // Check the maps of the full prototype chain.
-//   JSObject* last = object;
-//   while (last->GetPrototype() != Heap::null_value()) {
-//     last = JSObject::cast(last->GetPrototype());
-//   }
-//   CheckPrototypes(object, a0, last, a3, a1, Heap::empty_string(), &miss);
-// 
-//   // Return undefined if maps of the full prototype chain is still the same.
-//   __ LoadRoot(v0, Heap::kUndefinedValueRootIndex);
-//   __ Ret();
-// 
-//   __ bind(&miss);
-//   GenerateLoadMiss(masm(), Code::LOAD_IC);
-// 
-//   // Return the generated code.
-//   return GetCode(NONEXISTENT, Heap::empty_string());
-// }
+Object* LoadStubCompiler::CompileLoadNonexistent(String* name,
+                                                 JSObject* object,
+                                                 JSObject* last) {
+  // ----------- S t a t e -------------
+  //  -- a2    : name
+  //  -- ra    : return address
+  //  -- [sp]  : receiver
+  // -----------------------------------
+  Label miss;
+
+  // Load receiver.
+  __ lw(a0, MemOperand(sp, 0));
+
+  // Check the maps of the full prototype chain.
+  CheckPrototypes(object, a0, last, a3, a1, name, &miss);
+
+  // If the last object in the prototype chain is a global object,
+  // check that the global property cell is empty.
+  if (last->IsGlobalObject()) {
+    Object* cell = GenerateCheckPropertyCell(masm(),
+                                             GlobalObject::cast(last),
+                                             name,
+                                             a1,
+                                             &miss);
+    if (cell->IsFailure()) return cell;
+  }
+
+  // Return undefined if maps of the full prototype chain is still the same.
+  __ LoadRoot(v0, Heap::kUndefinedValueRootIndex);
+  __ Ret();
+
+  __ bind(&miss);
+  GenerateLoadMiss(masm(), Code::LOAD_IC);
+
+  // Return the generated code.
+  return GetCode(NONEXISTENT, Heap::empty_string());
+}
 
 
 Object* LoadStubCompiler::CompileLoadField(JSObject* object,
