@@ -5626,7 +5626,8 @@ void CEntryStub::GenerateCore(MacroAssembler* masm,
                               Label* throw_termination_exception,
                               Label* throw_out_of_memory_exception,
                               bool do_gc,
-                              bool always_allocate) {
+                              bool always_allocate,
+                              int frame_alignment_skew) {
   // v0: result parameter for PerformGC, if any
   // s0: number of arguments including receiver (C callee-saved)
   // s1: pointer to the first argument          (C callee-saved)
@@ -5693,7 +5694,7 @@ void CEntryStub::GenerateCore(MacroAssembler* masm,
   masm->bind(&find_ra);
 
   // Adjust the value in ra to point to the correct return location, 2nd
-  // instruction past the real call into C code (the jalr(s2)), and push it.
+  // instruction past the real call into C code (the jalr(t9)), and push it.
   // This is the return address of the exit frame.
   masm->Addu(ra, ra, 20);  // 5 instructions is 20 bytes.
   masm->addiu(sp, sp, -(stack_adjustment));
