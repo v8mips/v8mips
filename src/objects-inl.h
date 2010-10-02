@@ -2515,11 +2515,6 @@ bool SharedFunctionInfo::HasCustomCallGenerator() {
 }
 
 
-bool JSFunction::IsBoilerplate() {
-  return map() == Heap::boilerplate_function_map();
-}
-
-
 bool JSFunction::IsBuiltin() {
   return context()->global()->IsJSBuiltinsObject();
 }
@@ -2604,7 +2599,6 @@ bool JSFunction::is_compiled() {
 
 
 int JSFunction::NumberOfLiterals() {
-  ASSERT(!IsBoilerplate());
   return literals()->length();
 }
 
