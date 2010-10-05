@@ -1387,6 +1387,9 @@ Object* LoadStubCompiler::CompileLoadNonexistent(String* name,
   // Load receiver.
   __ lw(a0, MemOperand(sp, 0));
 
+  // Check that the receiver isn't a smi.
+  __ BranchOnSmi(a0, &miss);
+
   // Check the maps of the full prototype chain.
   CheckPrototypes(object, a0, last, a3, a1, name, &miss);
 
