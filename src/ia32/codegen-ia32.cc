@@ -154,8 +154,7 @@ void CodeGenerator::Generate(CompilationInfo* info) {
 #endif
 
   // New scope to get automatic timing calculation.
-  {  // NOLINT
-    HistogramTimerScope codegen_timer(&Counters::code_generation);
+  { HistogramTimerScope codegen_timer(&Counters::code_generation);
     CodeGenState state(this);
 
     // Entry:
@@ -1181,16 +1180,23 @@ static TypeInfo CalculateTypeInfo(TypeInfo operands_type,
     case Token::SAR:
       if (left.is_smi()) return TypeInfo::Smi();
       // Result is a smi if we shift by a constant >= 1, otherwise an integer32.
+      // Shift amount is masked with 0x1F (ECMA standard 11.7.2).
       return (right.is_constant() && right.handle()->IsSmi()
-                     && Smi::cast(*right.handle())->value() >= 1)
+              && (Smi::cast(*right.handle())->value() & 0x1F)  >= 1)
           ? TypeInfo::Smi()
           : TypeInfo::Integer32();
     case Token::SHR:
-      // Result is a smi if we shift by a constant >= 2, otherwise an integer32.
-      return (right.is_constant() && right.handle()->IsSmi()
-                     && Smi::cast(*right.handle())->value() >= 2)
-          ? TypeInfo::Smi()
-          : TypeInfo::Integer32();
+      // Result is a smi if we shift by a constant >= 2, an integer32 if
+      // we shift by 1, and an unsigned 32-bit integer if we shift by 0.
+      if (right.is_constant() && right.handle()->IsSmi()) {
+        int shift_amount = Smi::cast(*right.handle())->value() & 0x1F;
+        if (shift_amount > 1) {
+          return TypeInfo::Smi();
+        } else if (shift_amount > 0) {
+          return TypeInfo::Integer32();
+        }
+      }
+      return TypeInfo::Number();
     case Token::ADD:
       if (operands_type.IsSmi()) {
         // The Integer32 range is big enough to take the sum of any two Smis.
@@ -9810,8 +9816,7 @@ void TranscendentalCacheStub::Generate(MacroAssembler* masm) {
   __ j(zero, &runtime_call_clear_stack);
 #ifdef DEBUG
   // Check that the layout of cache elements match expectations.
-  {  // NOLINT - doesn't like a single brace on a line.
-    TranscendentalCache::Element test_elem[2];
+  { TranscendentalCache::Element test_elem[2];
     char* elem_start = reinterpret_cast<char*>(&test_elem[0]);
     char* elem2_start = reinterpret_cast<char*>(&test_elem[1]);
     char* elem_in0  = reinterpret_cast<char*>(&(test_elem[0].in[0]));
