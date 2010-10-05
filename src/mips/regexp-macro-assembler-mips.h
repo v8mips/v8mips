@@ -32,13 +32,13 @@
 namespace v8 {
 namespace internal {
 
-#ifndef V8_NATIVE_REGEXP
+#ifdef V8_INTERPRETED_REGEXP
 class RegExpMacroAssemblerMIPS: public RegExpMacroAssembler {
  public:
   RegExpMacroAssemblerMIPS();
   virtual ~RegExpMacroAssemblerMIPS();
 };
-#else
+#else  // V8_INTERPRETED_REGEXP
 class RegExpMacroAssemblerMIPS: public NativeRegExpMacroAssembler {
  public:
   RegExpMacroAssemblerMIPS(Mode mode, int registers_to_save);
@@ -239,7 +239,7 @@ class RegExpMacroAssemblerMIPS: public NativeRegExpMacroAssembler {
   Label stack_overflow_label_;
 };
 
-#endif  // V8_NATIVE_REGEXP
+#endif  // V8_INTERPRETED_REGEXP
 
 
 }}  // namespace v8::internal
