@@ -162,7 +162,7 @@ class RegExpMacroAssembler {
 };
 
 
-#ifdef V8_NATIVE_REGEXP  // Avoid compiling unused code.
+#ifndef V8_INTERPRETED_REGEXP  // Avoid compiling unused code.
 
 class NativeRegExpMacroAssembler: public RegExpMacroAssembler {
  public:
@@ -222,7 +222,7 @@ class NativeRegExpMacroAssembler: public RegExpMacroAssembler {
                         int* output);
 };
 
-#endif  // V8_NATIVE_REGEXP
+#endif  // V8_INTERPRETED_REGEXP
 
 } }  // namespace v8::internal
 

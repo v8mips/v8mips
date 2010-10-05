@@ -38,7 +38,9 @@
 #include "jsregexp.h"
 #include "regexp-macro-assembler.h"
 #include "regexp-macro-assembler-irregexp.h"
-#ifdef V8_NATIVE_REGEXP
+#ifdef V8_INTERPRETED_REGEXP
+#include "interpreter-irregexp.h"
+#else  // V8_INTERPRETED_REGEXP
 #ifdef V8_TARGET_ARCH_ARM
 #include "arm/macro-assembler-arm.h"
 #include "arm/regexp-macro-assembler-arm.h"
@@ -55,9 +57,7 @@
 #include "mips/macro-assembler-mips.h"
 #include "mips/regexp-macro-assembler-mips.h"
 #endif
-#else
-#include "interpreter-irregexp.h"
-#endif
+#endif  // V8_INTERPRETED_REGEXP
 
 using namespace v8::internal;
 
@@ -649,7 +649,7 @@ TEST(ParsePossessiveRepetition) {
 // Tests of interpreter.
 
 
-#ifdef V8_NATIVE_REGEXP
+#ifndef V8_INTERPRETED_REGEXP
 
 #if V8_TARGET_ARCH_IA32
 typedef RegExpMacroAssemblerIA32 ArchRegExpMacroAssembler;
@@ -1271,7 +1271,7 @@ TEST(MacroAssemblerNativeLotsOfRegisters) {
   Top::clear_pending_exception();
 }
 
-#else  // ! V8_REGEX_NATIVE
+#else  // V8_INTERPRETED_REGEXP
 
 TEST(MacroAssembler) {
   V8::Initialize(NULL);
@@ -1336,7 +1336,7 @@ TEST(MacroAssembler) {
   CHECK_EQ(42, captures[0]);
 }
 
-#endif  // ! V8_REGEXP_NATIVE
+#endif  // V8_INTERPRETED_REGEXP
 
 
 TEST(AddInverseToTable) {
