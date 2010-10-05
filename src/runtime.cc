@@ -9766,7 +9766,7 @@ static Object* Runtime_LiveEditCheckAndDropActivations(Arguments args) {
 }
 
 // Compares 2 strings line-by-line and returns diff in form of JSArray of
-// triplets (pos1, len1, len2) describing list of diff chunks.
+// triplets (pos1, pos1_end, pos2_end) describing list of diff chunks.
 static Object* Runtime_LiveEditCompareStringsLinewise(Arguments args) {
   ASSERT(args.length() == 2);
   HandleScope scope;
@@ -10101,8 +10101,10 @@ static Object* Runtime_GetFromCache(Arguments args) {
     cache->set(JSFunctionResultCache::kCacheSizeIndex, Smi::FromInt(size + 2));
     return CacheMiss(cache, size, key);
   } else {
-    int target_index = (finger_index < cache->length()) ?
-        finger_index + 2 : JSFunctionResultCache::kEntriesIndex;
+    int target_index = finger_index + JSFunctionResultCache::kEntrySize;
+    if (target_index == cache->length()) {
+      target_index = JSFunctionResultCache::kEntriesIndex;
+    }
     return CacheMiss(cache, target_index, key);
   }
 }
