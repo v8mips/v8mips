@@ -3517,18 +3517,49 @@ void CodeGenerator::GenerateRandomHeapNumber(
   Label slow_allocate_heapnumber;
   Label heapnumber_allocated;
 
-  __ AllocateHeapNumber(a0, a1, a2, &slow_allocate_heapnumber);
+  // Save the new heap number in callee-saved register s0, since
+  // we call out to external C code below.
+  __ AllocateHeapNumber(s0, a1, a2, &slow_allocate_heapnumber);
   __ jmp(&heapnumber_allocated);
 
   __ bind(&slow_allocate_heapnumber);
+  // To allocate a heap number, and ensure that it is not a smi, we
+  // call the runtime function FUnaryMinus on 0, returning the double
+  // -0.0. A new, distinct heap number is returned each time.
   __ li(a0, Operand(Smi::FromInt(0)));
   __ Push(a0);
   __ CallRuntime(Runtime::kNumberUnaryMinus, 1);
+  __ mov(s0, v0);   // move the new heap-number in v0, to s0 as parameter.
 
   __ bind(&heapnumber_allocated);
-  __ Call(ExternalReference::fill_heap_number_with_random_function().address(),
-          RelocInfo::RUNTIME_ENTRY);
-  frame_->EmitPush(v0);
+
+  // Convert 32 random bits in r0 to 0.(32 random bits) in a double
+  // by computing:
+  // ( 1.(20 0s)(32 random bits) x 2^20 ) - (1.0 x 2^20)).
+  if (CpuFeatures::IsSupported(FPU)) {
+    __ PrepareCallCFunction(0, a1);
+    __ CallCFunction(ExternalReference::random_uint32_function(), 0);
+
+    CpuFeatures::Scope scope(FPU);
+    // 0x41300000 is the top half of 1.0 x 2^20 as a double.
+    __ li(a1, Operand(0x41300000));
+    // Move 0x41300000xxxxxxxx (x = random bits in v0) to FPU.
+    __ mtc1(a1, f13);
+    __ mtc1(v0, f12);
+    // Move 0x4130000000000000 to FPU.
+    __ mtc1(a1, f15);
+    __ mtc1(zero_reg, f14);
+    // Subtract and store the result in the heap number.
+    __ sub_d(f0, f12, f14);
+    __ sdc1(f0, MemOperand(s0, HeapNumber::kValueOffset - kHeapObjectTag));
+    frame_->EmitPush(s0);
+  } else {
+    __ mov(a0, s0);
+    __ PrepareCallCFunction(1, a1);
+    __ CallCFunction(
+        ExternalReference::fill_heap_number_with_random_function(), 1);
+    frame_->EmitPush(v0);
+  }
 }
 
 
