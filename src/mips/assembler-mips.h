@@ -598,7 +598,9 @@ class Assembler : public Malloced {
 
   int32_t pc_offset() const { return pc_ - buffer_; }
   int32_t current_position() const { return current_position_; }
-  int32_t current_statement_position() const { return current_position_; }
+  int32_t current_statement_position() const {
+    return current_statement_position_;
+  }
 
   // Postpone the generation of the trampoline pool for the specified number of
   // instructions.
