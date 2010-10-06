@@ -3819,18 +3819,20 @@ void CodeGenerator::GenerateGetFromCache(ZoneList<Expression*>* args) {
     frame_->EmitPush(v0);
     return;
   }
-  Handle<FixedArray> cache_obj(
-      FixedArray::cast(jsfunction_result_caches->get(cache_id)));
 
   Load(args->at(1));
   frame_->EmitPop(a2);
+
+  __ lw(a1, ContextOperand(cp, Context::GLOBAL_INDEX));
+  __ lw(a1, FieldMemOperand(a1, GlobalObject::kGlobalContextOffset));
+  __ lw(a1, ContextOperand(a1, Context::JSFUNCTION_RESULT_CACHES_INDEX));
+  __ lw(a1, FieldMemOperand(a1, FixedArray::OffsetOfElementAt(cache_id)));
 
   DeferredSearchCache* deferred = new DeferredSearchCache(v0, a1, a2);
 
   const int kFingerOffset =
       FixedArray::OffsetOfElementAt(JSFunctionResultCache::kFingerIndex);
   ASSERT(kSmiTag == 0 && kSmiTagSize == 1);
-  __ li(a1, Operand(cache_obj));
   __ lw(v0, FieldMemOperand(a1, kFingerOffset));
   // v0 now holds finger offset as a smi.
   __ Addu(a3, a1, Operand(FixedArray::kHeaderSize - kHeapObjectTag));
