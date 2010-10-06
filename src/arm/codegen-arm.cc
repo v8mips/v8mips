@@ -4460,18 +4460,20 @@ void CodeGenerator::GenerateGetFromCache(ZoneList<Expression*>* args) {
     frame_->EmitPush(r0);
     return;
   }
-  Handle<FixedArray> cache_obj(
-      FixedArray::cast(jsfunction_result_caches->get(cache_id)));
 
   Load(args->at(1));
   frame_->EmitPop(r2);
+
+  __ ldr(r1, ContextOperand(cp, Context::GLOBAL_INDEX));
+  __ ldr(r1, FieldMemOperand(r1, GlobalObject::kGlobalContextOffset));
+  __ ldr(r1, ContextOperand(r1, Context::JSFUNCTION_RESULT_CACHES_INDEX));
+  __ ldr(r1, FieldMemOperand(r1, FixedArray::OffsetOfElementAt(cache_id)));
 
   DeferredSearchCache* deferred = new DeferredSearchCache(r0, r1, r2);
 
   const int kFingerOffset =
       FixedArray::OffsetOfElementAt(JSFunctionResultCache::kFingerIndex);
   ASSERT(kSmiTag == 0 && kSmiTagSize == 1);
-  __ mov(r1, Operand(cache_obj));
   __ ldr(r0, FieldMemOperand(r1, kFingerOffset));
   // r0 now holds finger offset as a smi.
   __ add(r3, r1, Operand(FixedArray::kHeaderSize - kHeapObjectTag));
@@ -5229,11 +5231,18 @@ class DeferredReferenceGetNamedValue: public DeferredCode {
     set_comment("[ DeferredReferenceGetNamedValue");
   }
 
+  virtual void BeforeGenerate();
   virtual void Generate();
+  virtual void AfterGenerate();
 
  private:
   Handle<String> name_;
 };
+
+
+void DeferredReferenceGetNamedValue::BeforeGenerate() {
+  __ StartBlockConstPool();
+}
 
 
 void DeferredReferenceGetNamedValue::Generate() {
@@ -5242,9 +5251,14 @@ void DeferredReferenceGetNamedValue::Generate() {
   __ mov(r2, Operand(name_));
   Handle<Code> ic(Builtins::builtin(Builtins::LoadIC_Initialize));
   __ Call(ic, RelocInfo::CODE_TARGET);
-  // The call must be followed by a b instruction to indicate that the inobject
-  // property case was inlined. Jumping back from the deferred code ensures
-  // that.
+  // The call must be followed by a nop(1) instruction to indicate that the
+  // inobject has been inlined.
+  __ nop(NAMED_PROPERTY_LOAD_INLINED);
+}
+
+
+void DeferredReferenceGetNamedValue::AfterGenerate() {
+  __ EndBlockConstPool();
 }
 
 
@@ -6456,11 +6470,22 @@ void GenericBinaryOpStub::HandleBinaryOpSlowCases(
       __ pop(lr);
     }
 
+    // HEAP_NUMBERS stub is slower than GENERIC on a pair of smis.
+    // r0 is known to be a smi. If r1 is also a smi then switch to GENERIC.
+    Label r1_is_not_smi;
+    if (runtime_operands_type_ == BinaryOpIC::HEAP_NUMBERS) {
+      __ tst(r1, Operand(kSmiTagMask));
+      __ b(ne, &r1_is_not_smi);
+      GenerateTypeTransition(masm);
+      __ jmp(&r1_is_smi);
+    }
+
     __ bind(&finished_loading_r0);
 
     // Move r1 to a double in r0-r1.
     __ tst(r1, Operand(kSmiTagMask));
     __ b(eq, &r1_is_smi);  // It's a Smi so don't check it's a heap number.
+    __ bind(&r1_is_not_smi);
     __ CompareObjectType(r1, r4, r4, HEAP_NUMBER_TYPE);
     __ b(ne, &slow);
     if (mode_ == OVERWRITE_LEFT) {

@@ -6553,17 +6553,23 @@ void CodeGenerator::GenerateGetFromCache(ZoneList<Expression*>* args) {
     frame_->Push(Factory::undefined_value());
     return;
   }
-  Handle<FixedArray> cache_obj(
-      FixedArray::cast(jsfunction_result_caches->get(cache_id)));
 
   Load(args->at(1));
   Result key = frame_->Pop();
   key.ToRegister();
 
   Result cache = allocator()->Allocate();
-  __ mov(cache.reg(), cache_obj);
+  ASSERT(cache.is_valid());
+  __ mov(cache.reg(), ContextOperand(esi, Context::GLOBAL_INDEX));
+  __ mov(cache.reg(),
+         FieldOperand(cache.reg(), GlobalObject::kGlobalContextOffset));
+  __ mov(cache.reg(),
+         ContextOperand(cache.reg(), Context::JSFUNCTION_RESULT_CACHES_INDEX));
+  __ mov(cache.reg(),
+         FieldOperand(cache.reg(), FixedArray::OffsetOfElementAt(cache_id)));
 
   Result tmp = allocator()->Allocate();
+  ASSERT(tmp.is_valid());
 
   DeferredSearchCache* deferred = new DeferredSearchCache(tmp.reg(),
                                                           cache.reg(),
@@ -7047,6 +7053,12 @@ void CodeGenerator::VisitUnaryOperation(UnaryOperation* node) {
           (node->expression()->AsBinaryOperation() != NULL &&
            node->expression()->AsBinaryOperation()->ResultOverwriteAllowed());
       switch (op) {
+        case Token::NOT:
+        case Token::DELETE:
+        case Token::TYPEOF:
+          UNREACHABLE();  // handled above
+          break;
+
         case Token::SUB: {
           GenericUnaryOpStub stub(Token::SUB, overwrite);
           Result operand = frame_->Pop();
@@ -7087,11 +7099,7 @@ void CodeGenerator::VisitUnaryOperation(UnaryOperation* node) {
             __ not_(answer.reg());
 
             continue_label.Bind(&answer);
-            if (operand_info.IsInteger32()) {
-              answer.set_type_info(TypeInfo::Integer32());
-            } else {
-              answer.set_type_info(TypeInfo::Number());
-            }
+            answer.set_type_info(TypeInfo::Integer32());
             frame_->Push(&answer);
           }
           break;
@@ -7121,8 +7129,6 @@ void CodeGenerator::VisitUnaryOperation(UnaryOperation* node) {
           break;
         }
         default:
-          // NOT, DELETE, TYPEOF, and VOID are handled outside the
-          // switch.
           UNREACHABLE();
       }
     }
