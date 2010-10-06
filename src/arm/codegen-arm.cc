@@ -206,7 +206,7 @@ void CodeGenerator::Generate(CompilationInfo* info) {
 
 #ifdef DEBUG
         JumpTarget verified_true;
-        __ cmp(r0, Operand(cp));
+        __ cmp(r0, cp);
         verified_true.Branch(eq);
         __ stop("NewContext: r0 is expected to be the same as cp");
         verified_true.Bind();
@@ -351,17 +351,17 @@ void CodeGenerator::Generate(CompilationInfo* info) {
       int32_t sp_delta = (scope()->num_parameters() + 1) * kPointerSize;
       masm_->add(sp, sp, Operand(sp_delta));
       masm_->Jump(lr);
-    }
 
 #ifdef DEBUG
-    // Check that the size of the code used for returning matches what is
-    // expected by the debugger. If the sp_delts above cannot be encoded in the
-    // add instruction the add will generate two instructions.
-    int return_sequence_length =
-        masm_->InstructionsGeneratedSince(&check_exit_codesize);
-    CHECK(return_sequence_length == Assembler::kJSReturnSequenceLength ||
-          return_sequence_length == Assembler::kJSReturnSequenceLength + 1);
+      // Check that the size of the code used for returning matches what is
+      // expected by the debugger. If the sp_delts above cannot be encoded in the
+      // add instruction the add will generate two instructions.
+      int return_sequence_length =
+          masm_->InstructionsGeneratedSince(&check_exit_codesize);
+      CHECK(return_sequence_length == Assembler::kJSReturnSequenceLength ||
+            return_sequence_length == Assembler::kJSReturnSequenceLength + 1);
 #endif
+    }
   }
 
   // Adjust for function-level loop nesting.
@@ -619,7 +619,7 @@ void CodeGenerator::StoreArgumentsObject(bool initial) {
     __ add(r1, fp, Operand(kReceiverDisplacement * kPointerSize));
     __ mov(r0, Operand(Smi::FromInt(scope()->num_parameters())));
     frame_->Adjust(3);
-    __ stm(db_w, sp, r0.bit() | r1.bit() | r2.bit());
+    __ Push(r2, r1, r0);
     frame_->CallStub(&stub, 3);
     frame_->EmitPush(r0);
   }
@@ -1992,7 +1992,7 @@ void CodeGenerator::VisitWithEnterStatement(WithEnterStatement* node) {
   }
 #ifdef DEBUG
   JumpTarget verified_true;
-  __ cmp(r0, Operand(cp));
+  __ cmp(r0, cp);
   verified_true.Branch(eq);
   __ stop("PushContext: r0 is expected to be the same as cp");
   verified_true.Bind();
@@ -2469,7 +2469,7 @@ void CodeGenerator::VisitForInStatement(ForInStatement* node) {
 
   __ ldr(r0, frame_->ElementAt(0));  // load the current count
   __ ldr(r1, frame_->ElementAt(1));  // load the length
-  __ cmp(r0, Operand(r1));  // compare to the array length
+  __ cmp(r0, r1);  // compare to the array length
   node->break_target()->Branch(hs);
 
   __ ldr(r0, frame_->ElementAt(0));
@@ -4437,8 +4437,7 @@ class DeferredSearchCache: public DeferredCode {
 
 
 void DeferredSearchCache::Generate() {
-  __ push(cache_);
-  __ push(key_);
+  __ Push(cache_, key_);
   __ CallRuntime(Runtime::kGetFromCache, 2);
   if (!dst_.is(r0)) {
     __ mov(dst_, r0);
@@ -4545,7 +4544,7 @@ void CodeGenerator::GenerateObjectEquals(ZoneList<Expression*>* args) {
   LoadAndSpill(args->at(1));
   frame_->EmitPop(r0);
   frame_->EmitPop(r1);
-  __ cmp(r0, Operand(r1));
+  __ cmp(r0, r1);
   cc_reg_ = eq;
 }
 
@@ -5231,34 +5230,34 @@ class DeferredReferenceGetNamedValue: public DeferredCode {
     set_comment("[ DeferredReferenceGetNamedValue");
   }
 
-  virtual void BeforeGenerate();
   virtual void Generate();
-  virtual void AfterGenerate();
 
  private:
   Handle<String> name_;
 };
 
 
-void DeferredReferenceGetNamedValue::BeforeGenerate() {
-  __ StartBlockConstPool();
-}
-
-
 void DeferredReferenceGetNamedValue::Generate() {
+  __ DecrementCounter(&Counters::named_load_inline, 1, r1, r2);
   __ IncrementCounter(&Counters::named_load_inline_miss, 1, r1, r2);
+
   // Setup the name register and call load IC.
   __ mov(r2, Operand(name_));
-  Handle<Code> ic(Builtins::builtin(Builtins::LoadIC_Initialize));
-  __ Call(ic, RelocInfo::CODE_TARGET);
-  // The call must be followed by a nop(1) instruction to indicate that the
-  // inobject has been inlined.
-  __ nop(NAMED_PROPERTY_LOAD_INLINED);
-}
 
+  // The rest of the instructions in the deferred code must be together.
+  { Assembler::BlockConstPoolScope block_const_pool(masm_);
 
-void DeferredReferenceGetNamedValue::AfterGenerate() {
-  __ EndBlockConstPool();
+    Handle<Code> ic(Builtins::builtin(Builtins::LoadIC_Initialize));
+    __ Call(ic, RelocInfo::CODE_TARGET);
+    // The call must be followed by a nop(1) instruction to indicate that the
+    // in-object has been inlined.
+    __ nop(NAMED_PROPERTY_LOAD_INLINED);
+
+    // Block the constant pool for one more instruction after leaving this
+    // constant pool block scope to include the branch instruction ending the
+    // deferred code.
+    __ BlockConstPoolFor(1);
+  }
 }
 
 
@@ -5276,6 +5275,11 @@ void CodeGenerator::EmitNamedLoad(Handle<String> name, bool is_contextual) {
 
     DeferredReferenceGetNamedValue* deferred =
         new DeferredReferenceGetNamedValue(name);
+
+    // Counter will be decremented in the deferred code. Placed here to avoid
+    // having it in the instruction stream below where patching will occur.
+    __ IncrementCounter(&Counters::named_load_inline, 1,
+                        frame_->scratch0(), frame_->scratch1());
 
     // The following instructions are the inlined load of an in-object property.
     // Parts of this code is patched, so the exact instructions generated needs
@@ -5304,13 +5308,12 @@ void CodeGenerator::EmitNamedLoad(Handle<String> name, bool is_contextual) {
       // Use initially use an invalid index. The index will be patched by the
       // inline cache code.
       __ ldr(r0, MemOperand(r1, 0));
+
+      // Make sure that the expected number of instructions are generated.
+      ASSERT_EQ(kInlinedNamedLoadInstructions,
+                masm_->InstructionsGeneratedSince(&check_inlined_codesize));
     }
 
-    // Make sure that the expected number of instructions are generated.
-    ASSERT_EQ(kInlinedNamedLoadInstructions,
-              masm_->InstructionsGeneratedSince(&check_inlined_codesize));
-
-    __ IncrementCounter(&Counters::named_load_inline, 1, r1, r2);
     deferred->BindExit();
   }
 }
@@ -5497,8 +5500,7 @@ void FastNewClosureStub::Generate(MacroAssembler* masm) {
 
   // Create a new closure through the slower runtime call.
   __ bind(&gc);
-  __ push(cp);
-  __ push(r3);
+  __ Push(cp, r3);
   __ TailCallRuntime(Runtime::kNewClosure, 2, 1);
 }
 
@@ -5773,7 +5775,7 @@ static void EmitIdenticalObjectComparison(MacroAssembler* masm,
   Label not_identical;
   Label heap_number, return_equal;
   Register exp_mask_reg = r5;
-  __ cmp(r0, Operand(r1));
+  __ cmp(r0, r1);
   __ b(ne, &not_identical);
 
   // The two objects are identical.  If we know that one of them isn't NaN then
@@ -5802,7 +5804,7 @@ static void EmitIdenticalObjectComparison(MacroAssembler* masm,
           __ cmp(r4, Operand(ODDBALL_TYPE));
           __ b(ne, &return_equal);
           __ LoadRoot(r2, Heap::kUndefinedValueRootIndex);
-          __ cmp(r0, Operand(r2));
+          __ cmp(r0, r2);
           __ b(ne, &return_equal);
           if (cc == le) {
             // undefined <= undefined should fail.
@@ -6328,8 +6330,7 @@ void CompareStub::Generate(MacroAssembler* masm) {
 
   __ bind(&slow);
 
-  __ push(r1);
-  __ push(r0);
+  __ Push(r1, r0);
   // Figure out which native to call and setup the arguments.
   Builtins::JavaScript native;
   if (cc_ == eq) {
@@ -6365,8 +6366,7 @@ void GenericBinaryOpStub::HandleBinaryOpSlowCases(
     Register lhs,
     Register rhs,
     const Builtins::JavaScript& builtin) {
-  Label slow, slow_pop_2_first, do_the_call;
-  Label r0_is_smi, r1_is_smi, finished_loading_r0, finished_loading_r1;
+  Label slow, slow_reverse, do_the_call;
   bool use_fp_registers = CpuFeatures::IsSupported(VFP3) && Token::MOD != op_;
 
   ASSERT((lhs.is(r0) && rhs.is(r1)) || (lhs.is(r1) && rhs.is(r0)));
@@ -6375,7 +6375,7 @@ void GenericBinaryOpStub::HandleBinaryOpSlowCases(
     // Smi-smi case (overflow).
     // Since both are Smis there is no heap number to overwrite, so allocate.
     // The new heap number is in r5.  r6 and r7 are scratch.
-    __ AllocateHeapNumber(r5, r6, r7, &slow);
+    __ AllocateHeapNumber(r5, r6, r7, lhs.is(r0) ? &slow_reverse : &slow);
 
     // If we have floating point hardware, inline ADD, SUB, MUL, and DIV,
     // using registers d7 and d6 for the double values.
@@ -6405,11 +6405,15 @@ void GenericBinaryOpStub::HandleBinaryOpSlowCases(
   // We branch here if at least one of r0 and r1 is not a Smi.
   __ bind(not_smi);
 
+  // After this point we have the left hand side in r1 and the right hand side
+  // in r0.
   if (lhs.is(r0)) {
     __ Swap(r0, r1, ip);
   }
 
   if (ShouldGenerateFPCode()) {
+    Label r0_is_smi, r1_is_smi, finished_loading_r0, finished_loading_r1;
+
     if (runtime_operands_type_ == BinaryOpIC::DEFAULT) {
       switch (op_) {
         case Token::ADD:
@@ -6427,7 +6431,7 @@ void GenericBinaryOpStub::HandleBinaryOpSlowCases(
     if (mode_ == NO_OVERWRITE) {
       // In the case where there is no chance of an overwritable float we may as
       // well do the allocation immediately while r0 and r1 are untouched.
-    __ AllocateHeapNumber(r5, r6, r7, &slow);
+      __ AllocateHeapNumber(r5, r6, r7, &slow);
     }
 
     // Move r0 to a double in r2-r3.
@@ -6578,13 +6582,20 @@ void GenericBinaryOpStub::HandleBinaryOpSlowCases(
       __ pop(pc);
     }
   }
+
+
+  if (lhs.is(r0)) {
+    __ b(&slow);
+    __ bind(&slow_reverse);
+    __ Swap(r0, r1, ip);
+  }
+
   // We jump to here if something goes wrong (one param is not a number of any
   // sort or new-space allocation fails).
   __ bind(&slow);
 
   // Push arguments to the stack
-  __ push(r1);
-  __ push(r0);
+  __ Push(r1, r0);
 
   if (Token::ADD == op_) {
     // Test for string arguments before calling runtime.
@@ -6838,8 +6849,7 @@ void GenericBinaryOpStub::HandleNonSmiBitwiseOp(MacroAssembler* masm,
 
   // If all else failed then we go to the runtime system.
   __ bind(&slow);
-  __ push(lhs);  // restore stack
-  __ push(rhs);
+  __ Push(lhs, rhs);  // Restore stack.
   switch (op_) {
     case Token::BIT_OR:
       __ InvokeBuiltin(Builtins::BIT_OR, JUMP_JS);
@@ -7237,8 +7247,7 @@ void GenericBinaryOpStub::Generate(MacroAssembler* masm) {
 void GenericBinaryOpStub::GenerateTypeTransition(MacroAssembler* masm) {
   Label get_result;
 
-  __ push(r1);
-  __ push(r0);
+  __ Push(r1, r0);
 
   // Internal frame is necessary to handle exceptions properly.
   __ EnterInternalFrame();
@@ -7712,7 +7721,7 @@ void JSEntryStub::GenerateBody(MacroAssembler* masm, bool is_construct) {
   __ mov(r6, Operand(Smi::FromInt(marker)));
   __ mov(r5, Operand(ExternalReference(Top::k_c_entry_fp_address)));
   __ ldr(r5, MemOperand(r5));
-  __ stm(db_w, sp, r5.bit() | r6.bit() | r7.bit() | r8.bit());
+  __ Push(r8, r7, r6, r5);
 
   // Setup frame pointer for the frame to be pushed.
   __ add(fp, sp, Operand(-EntryFrameConstants::kCallerFPOffset));
@@ -8127,7 +8136,8 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
   __ ldr(last_match_info_elements,
          FieldMemOperand(r0, JSArray::kElementsOffset));
   __ ldr(r0, FieldMemOperand(last_match_info_elements, HeapObject::kMapOffset));
-  __ cmp(r0, Operand(Factory::fixed_array_map()));
+  __ LoadRoot(ip, kFixedArrayMapRootIndex);
+  __ cmp(r0, ip);
   __ b(ne, &runtime);
   // Check that the last match info has space for the capture registers and the
   // additional information.

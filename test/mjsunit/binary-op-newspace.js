@@ -25,48 +25,21 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// Check pops with various number of arguments.
-(function() {
-  var a = [];
-  for (var i = 0; i < 7; i++) {
-    a = [7, 6, 5, 4, 3, 2, 1];
+/**
+ * @fileoverview Check that a mod where the stub code hits a failure
+ * in heap number allocation still works.
+ */
 
-    assertEquals(1, a.pop(), "1st pop");
-    assertEquals(6, a.length, "length 1st pop");
+// Flags: --max-new-space-size=262144
 
-    assertEquals(2, a.pop(1), "2nd pop");
-    assertEquals(5, a.length, "length 2nd pop");
+function f(x) {
+  return x % 3;
+}
 
-    assertEquals(3, a.pop(1, 2), "3rd pop");
-    assertEquals(4, a.length, "length 3rd pop");
-
-    assertEquals(4, a.pop(1, 2, 3), "4th pop");
-    assertEquals(3, a.length, "length 4th pop");
-
-    assertEquals(5, a.pop(), "5th pop");
-    assertEquals(2, a.length, "length 5th pop");
-
-    assertEquals(6, a.pop(), "6th pop");
-    assertEquals(1, a.length, "length 6th pop");
-
-    assertEquals(7, a.pop(), "7th pop");
-    assertEquals(0, a.length, "length 7th pop");
-
-    assertEquals(undefined, a.pop(), "8th pop");
-    assertEquals(0, a.length, "length 8th pop");
-
-    assertEquals(undefined, a.pop(1, 2, 3), "9th pop");
-    assertEquals(0, a.length, "length 9th pop");
+function test() {
+  for (var i = 0; i < 40000; i++) {
+    assertEquals(-1 / 0, 1 / f(-3));
   }
-})();
+}
 
-// Test the case of not JSArray receiver.
-// Regression test for custom call generators, see issue 684.
-(function() {
-  var a = [];
-  for (var i = 0; i < 100; i++) a.push(i);
-  var x = {__proto__: a};
-  for (var i = 0; i < 100; i++) {
-    assertEquals(99 - i, x.pop(), i + 'th iteration');
-  }
-})();
+test();

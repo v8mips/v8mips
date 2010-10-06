@@ -217,9 +217,6 @@ class DeferredCode: public ZoneObject {
   void SaveRegisters();
   void RestoreRegisters();
 
-  virtual void BeforeGenerate() { }
-  virtual void AfterGenerate() { }
-
  protected:
   MacroAssembler* masm_;
 
