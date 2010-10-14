@@ -153,7 +153,14 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
   // from the stack, clobbering only the sp register.
   void Drop(int count, Condition cond = cc_always);
 
+  // Swap two registers.  If the scratch register is omitted then a slightly
+  // less efficient form using xor instead of mov is emitted.
+  void Swap(Register reg1, Register reg2, Register scratch = no_reg);
+
   void Call(Label* target);
+  // May do nothing if the registers are identical.
+  void Move(Register dst, Register src);
+
 
   // Jump unconditionally to given label.
   // We NEED a nop in the branch delay slot, as it used by v8, for example in

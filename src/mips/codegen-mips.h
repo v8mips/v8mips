@@ -352,10 +352,19 @@ class CodeGenerator: public AstVisitor {
                               OverwriteMode overwrite_mode,
                               int known_rhs = kUnknownIntValue);
 
+  void VirtualFrameBinaryOperation(Token::Value op,
+                                   OverwriteMode overwrite_mode,
+                                   int known_rhs = kUnknownIntValue);
+
   void SmiOperation(Token::Value op,
                     Handle<Object> value,
                     bool reversed,
                     OverwriteMode mode);
+
+  void VirtualFrameSmiOperation(Token::Value op,
+                                Handle<Object> value,
+                                bool reversed,
+                                OverwriteMode mode);
 
   void Comparison(Condition cc,
                   Expression* left,

@@ -29,6 +29,8 @@
 #ifndef V8_MIPS_CODEGEN_MIPS_INL_H_
 #define V8_MIPS_CODEGEN_MIPS_INL_H_
 
+#include "virtual-frame-mips.h"
+
 namespace v8 {
 namespace internal {
 
@@ -63,6 +65,7 @@ void CodeGenerator::VisitStatementsAndSpill(ZoneList<Statement*>* statements) {
 
 
 void CodeGenerator::LoadAndSpill(Expression* expression) {
+  ASSERT(VirtualFrame::SpilledScope::is_spilled());
   Load(expression);
 }
 

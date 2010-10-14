@@ -1481,11 +1481,27 @@ void MacroAssembler::Drop(int count, Condition cond) {
   break_(__LINE__);
 }
 
+void MacroAssembler::Swap(Register reg1, Register reg2, Register scratch) {
+  if (scratch.is(no_reg)) {
+    Xor(reg1, reg1, Operand(reg2));
+    Xor(reg2, reg2, Operand(reg1));
+    Xor(reg1, reg1, Operand(reg2));
+  } else {
+    mov(scratch, reg1);
+    mov(reg1, reg2);
+    mov(reg2, scratch);
+  }
+}
 
 void MacroAssembler::Call(Label* target) {
   BranchAndLink(cc_always, target);
 }
 
+void MacroAssembler::Move(Register dst, Register src) {
+  if (!dst.is(src)) {
+    mov(dst, src);
+  }
+}
 
 #ifdef ENABLE_DEBUGGER_SUPPORT
 // ---------------------------------------------------------------------------
@@ -2281,7 +2297,7 @@ void MacroAssembler::GetBuiltinEntry(Register target, Builtins::JavaScript id) {
   // Load the builtins object into target register.
   lw(target, MemOperand(cp, Context::SlotOffset(Context::GLOBAL_INDEX)));
   lw(target, FieldMemOperand(target, GlobalObject::kBuiltinsOffset));
-  
+
   // Load the JavaScript builtin function from the builtins object.
   lw(a1, FieldMemOperand(target,
                          JSBuiltinsObject::OffsetOfFunctionWithId(id)));
