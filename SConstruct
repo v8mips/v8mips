@@ -816,7 +816,7 @@ SIMPLE_OPTIONS = {
   },
   'mipsabi': {
     'values': ['hardfloat', 'softfloat', 'none'],
-    'default': 'softfloat',
+    'default': 'hardfloat',
     'help': 'generate calling conventiont according to selected mips ABI'
   },
 }
