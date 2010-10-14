@@ -5250,14 +5250,14 @@ static void EmitTwoNonNanDoubleComparison(MacroAssembler* masm, Condition cc) {
     __ Branch(&return_result_not_equal, ne, v0, Operand(zero_reg));
 
     __ subu(v0, rhs_exponent, lhs_exponent);
+    __ Branch(&return_result_equal, eq, v0, Operand(zero_reg));
     // 0, -0 case
     __ sll(rhs_exponent, rhs_exponent, kSmiTagSize);
     __ sll(lhs_exponent, lhs_exponent, kSmiTagSize);
-    __ addu(t4, rhs_exponent, lhs_exponent);
-    __ addu(t4, t4, rhs_mantissa);
+    __ or_(t4, rhs_exponent, lhs_exponent);
+    __ or_(t4, t4, rhs_mantissa);
 
-    __ Branch(&return_result_equal, eq, t4, Operand(zero_reg));
-    __ Branch(&return_result_not_equal, ne, v0, Operand(zero_reg));
+    __ Branch(&return_result_not_equal, ne, t4, Operand(zero_reg));
 
     __ bind(&return_result_equal);
     __ li(v0, Operand(EQUAL));
@@ -5269,8 +5269,19 @@ static void EmitTwoNonNanDoubleComparison(MacroAssembler* masm, Condition cc) {
   if (!CpuFeatures::IsSupported(FPU)) {
     __ Push(ra);
     __ PrepareCallCFunction(4, t4);  // Two doubles count as 4 arguments.
+    if(!IsMipsSoftFloatABI){
+      // We are not using MIPS FPU instructions, and parameters for the run-time
+      // function call are prepaired in a0-a3 registers, but function we are
+      // calling is compiled with hard-float flag and expecting hard float ABI
+      // (parameters in f12/f14 registers). We need to copy parameters from a0-a3
+      // registers to f12/f14 register pairs.
+      __ mtc1(a0, f12);
+      __ mtc1(a1, f13);
+      __ mtc1(a2, f14);
+      __ mtc1(a3, f15);
+    }
     __ CallCFunction(ExternalReference::compare_doubles(), 4);
-    __ Pop(ra);
+    __ Pop(ra);  // Because this function returns int, result is in v0.
     __ Ret();
   } else {
     CpuFeatures::Scope scope(FPU);
@@ -6626,8 +6637,7 @@ static void HandleBinaryOpSlowCases(MacroAssembler* masm,
   // If we have floating point hardware, inline ADD, SUB, MUL, and DIV,
   // using registers f12 and f14 for the double values.
 
-  bool use_fp_registers = CpuFeatures::IsSupported(FPU) &&
-      Token::MOD != operation;
+  bool use_fp_registers = CpuFeatures::IsSupported(FPU);
 
   if (use_fp_registers) {
     CpuFeatures::Scope scope(FPU);
@@ -6828,6 +6838,36 @@ static void HandleBinaryOpSlowCases(MacroAssembler* masm,
       __ add_d(f0, f12, f14);
     } else if (Token::SUB == operation) {
       __ sub_d(f0, f12, f14);
+    } else if (Token::MOD == operation) {
+      // This is special case because only here we go to run-time 
+      // while using FPU registers. Current ABI must be taken into account.
+      __ Push(ra);
+      __ Push(t0);
+      __ PrepareCallCFunction(4, t1);  // Two doubles count as 4 arguments.
+      if(IsMipsSoftFloatABI){
+        // We are using MIPS FPU instructions, and parameters for the run-time
+        // function call are prepared in f12/f14 register pairs, but function
+        // we are calling is compiled with soft-float flag and expecting soft 
+        // float ABI (parameters in a0-a3 registers). We need to copy parameters
+        // from f12/f14 register pairs to a0-a3 registers.
+        __ mfc1(a0, f12);
+        __ mfc1(a1, f13);
+        __ mfc1(a2, f14);
+        __ mfc1(a3, f15);
+      }
+      __ CallCFunction(ExternalReference::double_fp_operation(operation), 4);
+      __ Pop(t0);  // Address of heap number.
+      __ Pop(ra);
+      if(IsMipsSoftFloatABI){
+        // Store answer in the overwritable heap number.
+        // Double returned is stored in registers v0 and v1 (function we called 
+        // is compiled with soft-float flag and uses soft-float ABI).
+        __ sw(v0, FieldMemOperand(t0, HeapNumber::kValueOffset));
+        __ sw(v1, FieldMemOperand(t0, HeapNumber::kValueOffset + 4));
+        __ mov(v0, t0);  // Return object ptr to caller.
+        __ Ret();
+        return;
+      }
     } else {
       UNREACHABLE();
     }
@@ -6850,14 +6890,40 @@ static void HandleBinaryOpSlowCases(MacroAssembler* masm,
 
   __ PrepareCallCFunction(4, t1);  // Two doubles count as 4 arguments.
   // Call C routine that may not cause GC or other trouble.
+  if(!IsMipsSoftFloatABI){
+    if(!use_fp_registers){
+      // We are not using MIPS FPU instructions, and parameters for the run-time
+      // function call are prepared in a0-a3 registers, but the function we are
+      // calling is compiled with hard-float flag and expecting hard float ABI
+      // (parameters in f12/f14 registers). We need to copy parameters from a0-a3
+      // registers to f12/f14 register pairs.
+      __ mtc1(a0, f12);
+      __ mtc1(a1, f13);
+      __ mtc1(a2, f14);
+      __ mtc1(a3, f15);
+    }
+  }
+
   __ CallCFunction(ExternalReference::double_fp_operation(operation), 4);
 
+  if(!IsMipsSoftFloatABI){              
+    if(!use_fp_registers){                                                
+      // Returned double value is stored in registers f0 and f1 (function we 
+      // called is compiled with hard-float flag and uses hard-float ABI). Return
+      // value in the case when we are not using MIPS FPU instructions has to be 
+      // placed in v0/v1, so we need to copy from f0/f1.
+      __ mfc1(v0, f0);                                                    
+      __ mfc1(v1, f1);                                                    
+    }                                                                     
+  }
   __ Pop(t0);  // Address of heap number.
   // Store answer in the overwritable heap number.
+
   // Double returned in registers v0 and v1.
   __ sw(v0, FieldMemOperand(t0, HeapNumber::kValueOffset));
   __ sw(v1, FieldMemOperand(t0, HeapNumber::kValueOffset + 4));
   __ mov(v0, t0);  // Return object ptr to caller.
+
   // And we are done.
   __ Pop(ra);
   __ Ret();
