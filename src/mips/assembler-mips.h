@@ -315,7 +315,6 @@ class CpuFeatures : public AllStatic {
   static unsigned found_by_runtime_probing_;
 };
 
-
 class Assembler : public Malloced {
  public:
   // Create an assembler. Instructions and relocation information are emitted
@@ -371,6 +370,10 @@ class Assembler : public Malloced {
 
   // Size of an instruction.
   static const int kInstrSize = sizeof(Instr);
+
+  // Difference between address of current opcode and value read from pc
+  // register.
+  static const int kPcLoadDelta = 4;
 
   // Difference between address of current opcode and target address offset.
   static const int kBranchPCOffset = 4;

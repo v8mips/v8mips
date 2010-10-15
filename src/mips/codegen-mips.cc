@@ -3366,7 +3366,7 @@ void CodeGenerator::VisitCall(Call* node) {
 
       LoadAndSpill(property->obj());
       LoadAndSpill(property->key());
-      EmitKeyedLoad(false);  // Load from Keyed Property: result in v0.
+      EmitKeyedLoad();  // Load from Keyed Property: result in v0.
       frame_->Drop();  // key
       // Put the function below the receiver.
       if (property->is_synthetic()) {
@@ -4922,7 +4922,7 @@ void DeferredReferenceGetNamedValue::Generate() {
 
   // The call must be followed by a nop(1) instruction to indicate that the
   // in-object has been inlined.
-  __ nop(NAMED_PROPERTY_LOAD_INLINED);
+  __ nop(PROPERTY_LOAD_INLINED);
 
 #ifdef DEBUG
   // Make sure that the expected number of instructions are generated.
@@ -4973,7 +4973,6 @@ void CodeGenerator::EmitNamedLoad(Handle<String> name, bool is_contextual) {
 
     // The null map used below is patched by the inline cache code.
     __ li(a3, Operand(Factory::null_value()), true);
-
     deferred->Branch(ne, a2, Operand(a3));
 
     // Initially use an invalid index. The index will be patched by the
@@ -4990,13 +4989,113 @@ void CodeGenerator::EmitNamedLoad(Handle<String> name, bool is_contextual) {
   }
 }
 
-void CodeGenerator::EmitKeyedLoad(bool is_global) {
-  Comment cmnt(masm_, "[ Load from keyed Property");
+class DeferredReferenceGetKeyedValue: public DeferredCode {
+  public:
+    DeferredReferenceGetKeyedValue() {
+    set_comment("[ DeferredReferenceGetKeyedValue");
+  }
+
+  virtual void Generate();
+};
+
+
+void DeferredReferenceGetKeyedValue::Generate() {
+  __ DecrementCounter(&Counters::keyed_load_inline, 1, a1, a2);
+  __ IncrementCounter(&Counters::keyed_load_inline_miss, 1, a1, a2);
+
+#ifdef DEBUG
+  int kInlinedNamedLoadInstructions = 5;
+  Label check_inlined_codesize;
+  masm_->bind(&check_inlined_codesize);
+#endif
+  __ BlockTrampolinePoolFor(6);
+
+  // Call keyed load IC. It has all arguments on the stack.
   Handle<Code> ic(Builtins::builtin(Builtins::KeyedLoadIC_Initialize));
-  RelocInfo::Mode rmode = is_global
-                          ? RelocInfo::CODE_TARGET_CONTEXT
-                          : RelocInfo::CODE_TARGET;
-  frame_->CallCodeObject(ic, rmode, 0);
+  __ Call(ic, RelocInfo::CODE_TARGET);
+  // The call must be followed by a nop instruction to indicate that the
+  // keyed load has been inlined.
+  __ nop(PROPERTY_LOAD_INLINED);
+
+#ifdef DEBUG
+  // Make sure that the expected number of instructions are generated.
+  ASSERT_EQ(kInlinedNamedLoadInstructions,
+            masm_->InstructionsGeneratedSince(&check_inlined_codesize));
+#endif
+}
+
+void CodeGenerator::EmitKeyedLoad() {
+  if (loop_nesting() == 0) {
+    Comment cmnt(masm_, "[ Load from keyed property");
+    frame_->CallKeyedLoadIC();
+  } else {
+    // Inline the keyed load.
+    Comment cmnt(masm_, "[ Inlined load from keyed property");
+
+    DeferredReferenceGetKeyedValue* deferred =
+        new DeferredReferenceGetKeyedValue();
+
+    // Counter will be decremented in the deferred code. Placed here to avoid
+    // having it in the instruction stream below where patching will occur.
+    __ IncrementCounter(&Counters::keyed_load_inline, 1, t0, t1);
+
+    // Load the receiver from the stack.
+    __ lw(a0, MemOperand(sp, kPointerSize));
+
+    // Check that the receiver is a heap object.
+    __ And(t0, a0, kSmiTagMask);
+    deferred->Branch(ne, t0, Operand(kSmiTagMask));
+
+    // The following instructions are the inlined load keyed property. Parts
+    // of this code are patched, so the exact number of instructions generated
+    // need to be fixed.
+
+    // Check the map. The null map used below is patched by the inline cache
+    // code.
+    __ lw(a1, FieldMemOperand(a0, HeapObject::kMapOffset));
+
+#ifdef DEBUG
+    int kInlinedKeyedLoadInstructions = 26;
+    Label check_inlined_codesize;
+    masm_->bind(&check_inlined_codesize);
+#endif
+    __ li(a2, Operand(Factory::null_value()), true);
+    deferred->Branch(ne, a1, Operand(a2));
+
+    // Load the key from the stack.
+    __ lw(a1, MemOperand(sp, 0));
+
+    // Check that the key is a smi.
+    __ And(t0, a1, kSmiTagMask);
+    deferred->Branch(eq, t0, Operand(kSmiTagMask));
+
+    // Get the elements array from the receiver and check that it
+    // is not a dictionary.
+    __ lw(a2, FieldMemOperand(a0, JSObject::kElementsOffset));
+    __ lw(a3, FieldMemOperand(a2, JSObject::kMapOffset));
+    __ LoadRoot(t0, Heap::kFixedArrayMapRootIndex);
+    deferred->Branch(ne, a3, Operand(t0));
+
+    // Check that key is within bounds.
+    __ lw(a3, FieldMemOperand(a2, FixedArray::kLengthOffset));
+    __ sra(t0, a1, kSmiTagSize);
+    deferred->Branch(ls, a3, Operand(t0));
+
+    // Load and check that the result is not the hole (a1 is a smi).
+    __ LoadRoot(a3, Heap::kTheHoleValueRootIndex);
+    __ Addu(a2, a2, Operand(FixedArray::kHeaderSize - kHeapObjectTag));
+    __ sll(t0, a1, kPointerSizeLog2 - (kSmiTagSize + kSmiShiftSize));
+    __ Addu(t0, t0, a2);
+    __ lw(v0, MemOperand(t0, 0));
+
+    deferred->Branch(eq, v0, Operand(a3));
+
+    // Make sure that the expected number of instructions are generated.
+    ASSERT_EQ(kInlinedKeyedLoadInstructions,
+              masm_->InstructionsGeneratedSince(&check_inlined_codesize));
+
+    deferred->BindExit();
+  }
 }
 
 
@@ -5073,9 +5172,7 @@ void Reference::GetValue() {
 
     case KEYED: {
       ASSERT(property != NULL);
-      Variable* var = expression_->AsVariableProxy()->AsVariable();
-      ASSERT(var == NULL || var->is_global());
-      cgen_->EmitKeyedLoad(var != NULL);
+      cgen_->EmitKeyedLoad();
       cgen_->frame()->EmitPush(v0);
       break;
     }

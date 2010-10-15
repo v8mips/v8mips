@@ -175,7 +175,7 @@ class CodeGenState BASE_EMBEDDED {
 // states of the generated code.
 enum NopMarkerTypes {
   NON_MARKING_NOP = 0,
-  NAMED_PROPERTY_LOAD_INLINED = 1
+  PROPERTY_LOAD_INLINED = 1
 };
 
 
@@ -353,7 +353,7 @@ class CodeGenerator: public AstVisitor {
 
   // Load a keyed property, leaving it in v0. The receiver and key are
   // passed on the stack, and remain there.
-  void EmitKeyedLoad(bool is_global);
+  void EmitKeyedLoad();
 
   void ToBoolean(JumpTarget* true_target, JumpTarget* false_target);
 
