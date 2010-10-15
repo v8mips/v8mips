@@ -6831,22 +6831,96 @@ void ArgumentsAccessStub::GenerateNewObject(MacroAssembler* masm) {
   // sp[8] : function
 
   // Check if the calling frame is an arguments adaptor frame.
-  Label adaptor_frame, runtime;
-  __ lw(t2, MemOperand(fp, StandardFrameConstants::kCallerFPOffset));
-  __ lw(t3, MemOperand(t2, StandardFrameConstants::kContextOffset));
-  __ Branch(&runtime,
-      ne,
-      t3,
-      Operand(Smi::FromInt(StackFrame::ARGUMENTS_ADAPTOR)));
+  Label adaptor_frame, try_allocate, runtime;
+  __ lw(a2, MemOperand(fp, StandardFrameConstants::kCallerFPOffset));
+  __ lw(a3, MemOperand(a2, StandardFrameConstants::kContextOffset));
+  __ Branch(&adaptor_frame, eq, a3, Operand(Smi::FromInt(StackFrame::ARGUMENTS_ADAPTOR)));
+
+  // Get the length from the frame.
+  __ lw(a1, MemOperand(sp, 0));
+  __ Branch(&try_allocate, al);
 
   // Patch the arguments.length and the parameters pointer.
   __ bind(&adaptor_frame);
-  __ lw(t1, MemOperand(t2, ArgumentsAdaptorFrameConstants::kLengthOffset));
-  __ sw(t1, MemOperand(sp));
-  __ sll(t0, t1, kPointerSizeLog2 - kSmiTagSize);
-  __ Addu(t3, t2, t0);
-  __ Addu(t3, t3, Operand(StandardFrameConstants::kCallerSPOffset));
-  __ sw(t3, MemOperand(sp, 1 * kPointerSize));
+  __ lw(a1, MemOperand(a2, ArgumentsAdaptorFrameConstants::kLengthOffset));
+  __ sw(a1, MemOperand(sp, 0));
+  __ sll(at, a1, kPointerSizeLog2 - kSmiTagSize);
+  __ Addu(a3, a2, Operand(at));
+
+  __ Addu(a3, a3, Operand(StandardFrameConstants::kCallerSPOffset));
+  __ sw(a3, MemOperand(sp, 1 * kPointerSize));
+
+  // Try the new space allocation. Start out with computing the size
+  // of the arguments object and the elements array (in words, not
+  // bytes because AllocateInNewSpace expects words).
+  Label add_arguments_object;
+  __ bind(&try_allocate);
+  __ Branch (&add_arguments_object, eq, a1, Operand(0));
+  __ srl(a1, a1, kSmiTagSize);
+
+  __ Addu(a1, a1, Operand(FixedArray::kHeaderSize / kPointerSize));
+  __ bind(&add_arguments_object);
+  __ Addu(a1, a1, Operand(Heap::kArgumentsObjectSize / kPointerSize));
+
+  // Do the allocation of both objects in one go.
+  __ AllocateInNewSpace(a1, v0, a2, a3, &runtime, TAG_OBJECT);
+
+  // Get the arguments boilerplate from the current (global) context.
+  int offset = Context::SlotOffset(Context::ARGUMENTS_BOILERPLATE_INDEX);
+  __ lw(t0, MemOperand(cp, Context::SlotOffset(Context::GLOBAL_INDEX)));
+  __ lw(t0, FieldMemOperand(t0, GlobalObject::kGlobalContextOffset));
+  __ lw(t0, MemOperand(t0, offset));
+
+  // Copy the JS object part.
+  for (int i = 0; i < JSObject::kHeaderSize; i += kPointerSize) {
+    __ lw(a3, FieldMemOperand(t0, i));
+    __ sw(a3, FieldMemOperand(v0, i));
+  }
+
+  // Setup the callee in-object property.
+  ASSERT(Heap::arguments_callee_index == 0);
+  __ lw(a3, MemOperand(sp, 2 * kPointerSize));
+  __ sw(a3, FieldMemOperand(v0, JSObject::kHeaderSize));
+
+  // Get the length (smi tagged) and set that as an in-object property too.
+  ASSERT(Heap::arguments_length_index == 1);
+  __ lw(a1, MemOperand(sp, 0 * kPointerSize));
+  __ sw(a1, FieldMemOperand(v0, JSObject::kHeaderSize + kPointerSize));
+
+  Label done;
+  __ Branch(&done, eq, a1, Operand(0));
+
+  // Get the parameters pointer from the stack and untag the length.
+  __ lw(a2, MemOperand(sp, 1 * kPointerSize));
+  __ srl(a1, a1, kSmiTagSize);
+
+  // Setup the elements pointer in the allocated arguments object and
+  // initialize the header in the elements fixed array.
+  __ Addu(t0, v0, Operand(Heap::kArgumentsObjectSize));
+  __ sw(t0, FieldMemOperand(v0, JSObject::kElementsOffset));
+  __ LoadRoot(a3, Heap::kFixedArrayMapRootIndex);
+  __ sw(a3, FieldMemOperand(t0, FixedArray::kMapOffset));
+  __ sw(a1, FieldMemOperand(t0, FixedArray::kLengthOffset));
+
+  // Copy the fixed array slots.
+  Label loop;
+  // Setup t0 to point to the first array slot.
+  __ Addu(t0, t0, Operand(FixedArray::kHeaderSize - kHeapObjectTag));
+  __ bind(&loop);
+  // Pre-decrement a2 with kPointerSize on each iteration.
+  // Pre-decrement in order to skip receiver.
+  __ Addu(a2, a2, Operand(-kPointerSize));
+  __ lw(a3, MemOperand(a2));
+  // Post-increment t0 with kPointerSize on each iteration.
+  __ sw(a3, MemOperand(t0));
+  __ Addu(t0, t0, Operand(kPointerSize));
+  __ Subu(a1, a1, Operand(1));
+  __ Branch(&loop, ne, a1, Operand(0));
+
+  // Return and remove the on-stack parameters.
+  __ bind(&done);
+  __ Addu(sp, sp, Operand(3 * kPointerSize));
+  __ Ret();
 
   // Do the runtime call to allocate the arguments object.
   __ bind(&runtime);
