@@ -170,14 +170,6 @@ bool OS::MipsCpuHasFeature(CpuFeature feature) {
   // on Linux, it's reading from a (non-mmap-able)
   // character special device.
 
-  // ---------------------------------------------------------------------------
-
-  // HACK plind, due to issue 6, force FPU test true for now, with side-
-  // effect of using kernel FPU emulation.
-  return true;
-
-  // ---------------------------------------------------------------------------
-
   switch (feature) {
     case FPU:
       search_string = "FPU";
