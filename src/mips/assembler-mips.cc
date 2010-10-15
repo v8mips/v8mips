@@ -356,6 +356,51 @@ bool Assembler::is_branch(Instr instr) {
       label_constant == 0;  // Emitted label const in reg-exp engine.
 }
 
+bool Assembler::is_nop(Instr instr, unsigned int type) {
+  // See Assembler::nop(type).
+  ASSERT(type < 32);
+  uint32_t opcode   = ((instr & kOpcodeMask));
+  uint32_t rt = ((instr & kRtFieldMask) >> kRtShift);
+  uint32_t rs = ((instr & kRsFieldMask) >> kRsShift);
+  uint32_t sa = ((instr & kSaFieldMask) >> kSaShift);
+
+  // nop(type) == sll(zero_reg, zero_reg, type);
+  // Technically all these values will be 0 but
+  // this makes more sense to the reader.
+
+  bool ret = (opcode == SLL &&
+          rt == static_cast<uint32_t>(ToNumber(zero_reg)) &&
+          rs == static_cast<uint32_t>(ToNumber(zero_reg)) &&
+          sa == type);
+
+  return ret;
+}
+
+int32_t Assembler::get_branch_offset(Instr instr) {
+  ASSERT(is_branch(instr));
+  return ((int16_t)(instr & kImm16Mask)) << 2;
+}
+
+bool Assembler::is_lw(Instr instr) {
+  return ((instr & kOpcodeMask) == LW);
+}
+
+int16_t Assembler::get_lw_offset(Instr instr) {
+  ASSERT(is_lw(instr));
+  return ((instr & kImm16Mask));
+}
+
+Instr Assembler::set_lw_offset(Instr instr, int16_t offset) {
+  ASSERT(is_lw(instr));
+
+  // We actually create a new lw instruction based on the original one.
+  Instr temp_instr = LW |
+                     (instr & kRsFieldMask) |
+                     (instr & kRtFieldMask) |
+                     (offset & kImm16Mask);
+
+  return temp_instr;
+}
 
 int Assembler::target_at(int32_t pos) {
   Instr instr = instr_at(pos);

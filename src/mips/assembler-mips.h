@@ -412,7 +412,13 @@ class Assembler : public Malloced {
   // ---------------------------------------------------------------------------
   // Code generation.
 
-  void nop() { sll(zero_reg, zero_reg, 0); }
+  // Generic nop instruction. You should generally use nop().
+  // nop(1) is used in the property load inline patcher.
+  // Other nops are not currently used.
+  void nop(unsigned int type = 0) {
+    ASSERT(type < 32);
+    sll(zero_reg, zero_reg, type);
+  }
 
 
   //------- Branch and jump  instructions --------
@@ -472,6 +478,9 @@ class Assembler : public Malloced {
   void lui(Register rd, int32_t j);
 
   // Shifts.
+  // Please note: sll(zero_reg, zero_reg, x) instructions are reserved as nop
+  // and may cause problems in normal code (currently only if x == 1).
+
   void sll(Register rd, Register rt, uint16_t sa);
   void sllv(Register rd, Register rt, Register rs);
   void srl(Register rd, Register rt, uint16_t sa);
@@ -614,12 +623,9 @@ class Assembler : public Malloced {
   // Get the number of bytes available in the buffer.
   inline int available_space() const { return reloc_info_writer.pos() - pc_; }
 
- protected:
-  int32_t buffer_space() const { return reloc_info_writer.pos() - pc_; }
-
   // Read/patch instructions.
   static Instr instr_at(byte* pc) { return *reinterpret_cast<Instr*>(pc); }
-  void instr_at_put(byte* pc, Instr instr) {
+  static void instr_at_put(byte* pc, Instr instr) {
     *reinterpret_cast<Instr*>(pc) = instr;
   }
   Instr instr_at(int pos) { return *reinterpret_cast<Instr*>(buffer_ + pos); }
@@ -628,7 +634,17 @@ class Assembler : public Malloced {
   }
 
   // Check if an instruction is a branch of some kind.
-  bool is_branch(Instr instr);
+  static bool is_branch(Instr instr);
+
+  static bool is_nop(Instr instr, unsigned int type);
+
+  static int32_t get_branch_offset(Instr instr);
+  static bool is_lw(Instr instr);
+  static int16_t get_lw_offset(Instr instr);
+  static Instr set_lw_offset(Instr instr, int16_t offset);
+
+ protected:
+  int32_t buffer_space() const { return reloc_info_writer.pos() - pc_; }
 
   // Decode branch instruction at pos and return branch target pos.
   int target_at(int32_t pos);

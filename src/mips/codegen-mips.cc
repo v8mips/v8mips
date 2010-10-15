@@ -768,19 +768,14 @@ void CodeGenerator::LoadFromGlobalSlotCheckExtensions(Slot* slot,
     __ bind(&fast);
   }
 
-  // All extension objects were empty and it is safe to use a global
-  // load IC call.
-  Handle<Code> ic(Builtins::builtin(Builtins::LoadIC_Initialize));
   // Load the global object.
   LoadGlobal();
   // Setup the name register.
   __ li(a2, Operand(slot->var()->name()));
   // Call IC stub.
-  if (typeof_state == INSIDE_TYPEOF) {
-    frame_->CallCodeObject(ic, RelocInfo::CODE_TARGET, 0);
-  } else {
-    frame_->CallCodeObject(ic, RelocInfo::CODE_TARGET_CONTEXT, 0);
-  }
+  frame_->CallLoadIC(typeof_state == INSIDE_TYPEOF
+                     ? RelocInfo::CODE_TARGET
+                     : RelocInfo::CODE_TARGET_CONTEXT);
 
   // Drop the global object. The result is in v0.
   frame_->Drop();
@@ -4894,6 +4889,106 @@ void CodeGenerator::VisitCompareOperation(CompareOperation* node) {
          (!has_cc() && frame_->height() == original_height + 1));
 }
 
+class DeferredReferenceGetNamedValue: public DeferredCode {
+  public:
+    explicit DeferredReferenceGetNamedValue(Handle<String> name) : name_(name) {
+      set_comment("[ DeferredReferenceGetNamedValue");
+    }
+
+    virtual void Generate();
+
+  private:
+    Handle<String> name_;
+};
+
+void DeferredReferenceGetNamedValue::Generate() {
+  __ DecrementCounter(&Counters::named_load_inline, 1, a1, a2);
+  __ IncrementCounter(&Counters::named_load_inline_miss, 1, a1, a2);
+
+  // Setup the name register and call load IC.
+  __ li(a2, Operand(name_));
+
+#ifdef DEBUG
+  int kInlinedNamedLoadInstructions = 5;
+  Label check_inlined_codesize;
+  masm_->bind(&check_inlined_codesize);
+#endif
+
+  // Call is 5 instructions, nop is 1, plus an extra one for later.
+  __ BlockTrampolinePoolFor(6);
+
+  Handle<Code> ic(Builtins::builtin(Builtins::LoadIC_Initialize));
+  __ Call(ic, RelocInfo::CODE_TARGET);
+
+  // The call must be followed by a nop(1) instruction to indicate that the
+  // in-object has been inlined.
+  __ nop(NAMED_PROPERTY_LOAD_INLINED);
+
+#ifdef DEBUG
+  // Make sure that the expected number of instructions are generated.
+  ASSERT_EQ(kInlinedNamedLoadInstructions,
+            masm_->InstructionsGeneratedSince(&check_inlined_codesize));
+#endif
+}
+
+
+void CodeGenerator::EmitNamedLoad(Handle<String> name, bool is_contextual) {
+  if (is_contextual || scope()->is_global_scope() || loop_nesting() == 0) {
+    Comment cmnt(masm(), "[ Load from named Property");
+    // Setup the name register and call load IC.
+    __ li(a2, Operand(name));
+    frame_->CallLoadIC(is_contextual
+                       ? RelocInfo::CODE_TARGET_CONTEXT
+                       : RelocInfo::CODE_TARGET);
+  } else {
+    // Inline the inobject property case.
+    Comment cmnt(masm(), "[ Inlined named property load");
+
+    DeferredReferenceGetNamedValue* deferred =
+        new DeferredReferenceGetNamedValue(name);
+
+    // Counter will be decremented in the deferred code. Placed here to avoid
+    // having it in the instruction stream below where patching will occur.
+    __ IncrementCounter(&Counters::named_load_inline, 1, t0, t1);
+
+    // Load the receiver from the stack.
+    __ lw(a1, MemOperand(sp, 0));
+
+    // Check that the receiver is a heap object.
+    __ And(t0, a1, kSmiTagMask);
+    deferred->Branch(ne, t0, Operand(kSmiTagMask));
+
+    // Check the map.
+    __ lw(a2, FieldMemOperand(a1, HeapObject::kMapOffset));
+
+#ifdef DEBUG
+    // 5 instructions. li generates 2, Branch generates 2, lw generates 1.
+    int kInlinedNamedLoadInstructions = 5;
+    Label check_inlined_codesize;
+    masm_->bind(&check_inlined_codesize);
+#endif
+    __ BlockTrampolinePoolFor(5);
+
+    // Generate patchable inline code. See LoadIC::PatchInlinedLoad.
+
+    // The null map used below is patched by the inline cache code.
+    __ li(a3, Operand(Factory::null_value()), true);
+
+    deferred->Branch(ne, a2, Operand(a3));
+
+    // Initially use an invalid index. The index will be patched by the
+    // inline cache code.
+    __ lw(v0, MemOperand(a1, 666));
+
+#ifdef DEBUG
+    // Make sure that the expected number of instructions are generated.
+    ASSERT_EQ(kInlinedNamedLoadInstructions,
+              masm_->InstructionsGeneratedSince(&check_inlined_codesize));
+#endif
+
+    deferred->BindExit();
+  }
+}
 
 void CodeGenerator::EmitKeyedLoad(bool is_global) {
   Comment cmnt(masm_, "[ Load from keyed Property");
@@ -4969,19 +5064,10 @@ void Reference::GetValue() {
     }
 
     case NAMED: {
-      VirtualFrame* frame = cgen_->frame();
-      Comment cmnt(masm, "[ Load from named Property");
-      Handle<String> name(GetName());
       Variable* var = expression_->AsVariableProxy()->AsVariable();
-      Handle<Code> ic(Builtins::builtin(Builtins::LoadIC_Initialize));
-      // Setup the name register.
-      __ li(a2, Operand(name));
       ASSERT(var == NULL || var->is_global());
-      RelocInfo::Mode rmode = (var == NULL)
-                            ? RelocInfo::CODE_TARGET
-                            : RelocInfo::CODE_TARGET_CONTEXT;
-      frame->CallCodeObject(ic, rmode, 0);
-      frame->EmitPush(v0);
+      cgen_->EmitNamedLoad(GetName(), var != NULL);
+      cgen_->frame()->EmitPush(v0);
       break;
     }
 
