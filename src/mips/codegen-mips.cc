@@ -6846,8 +6846,8 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
   // First check for sequential string.
   ASSERT_EQ(0, kStringTag);
   ASSERT_EQ(0, kSeqStringTag);
-  __ And(a1, a1, Operand(kIsNotStringMask | kStringRepresentationMask));
-  __ Branch(&seq_string, eq, a1, Operand(zero_reg));
+  __ And(t0, a1, Operand(kIsNotStringMask | kStringRepresentationMask));
+  __ Branch(&seq_string, eq, t0, Operand(zero_reg));
   // subject: Subject string
   // a0: instance type if Subject string
   // regexp_data: RegExp data (FixedArray)
