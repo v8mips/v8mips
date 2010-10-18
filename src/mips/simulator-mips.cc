@@ -1321,7 +1321,7 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
             uint16_t msb = rd_reg;
             // Interpret sa field as 5-bit lsb of extract.
             uint16_t lsb = sa;
-            uint16_t size = msb - lsb + 1;
+            uint16_t size = msb + 1;
             uint16_t mask = (1 << size) - 1;
             alu_out = (rs_u & (mask << lsb)) >> lsb;
           }

@@ -1189,7 +1189,7 @@ void Assembler::ins(Register rt, Register rs, uint16_t pos, uint16_t size) {
 
 void Assembler::ext(Register rt, Register rs, uint16_t pos, uint16_t size) {
   // Ext instr has 'rt' field as dest, and two uint5: msb, lsb
-  GenInstrRegister(SPECIAL3, rs, rt, pos + size - 1, pos, EXT);
+  GenInstrRegister(SPECIAL3, rs, rt, size - 1, pos, EXT);
 }
 
 
