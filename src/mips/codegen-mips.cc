@@ -5938,19 +5938,12 @@ void NumberToStringStub::GenerateLookupNumberStringCache(MacroAssembler* masm,
                                                          Register result,
                                                          Register scratch1,
                                                          Register scratch2,
+                                                         Register scratch3,
                                                          bool object_is_smi,
                                                          Label* not_found) {
-  // Currently only lookup for smis. Check for smi if object is not known to be
-  // a smi.
-  if (!object_is_smi) {
-    ASSERT(kSmiTag == 0);
-    __ BranchOnNotSmi(object, not_found, scratch1);
-  }
-
   // Use of registers. Register result is used as a temporary.
   Register number_string_cache = result;
-  Register mask = scratch1;
-  Register scratch = scratch2;
+  Register mask = scratch3;
 
   // Load the number string cache.
   __ LoadRoot(number_string_cache, Heap::kNumberStringCacheRootIndex);
@@ -5963,9 +5956,57 @@ void NumberToStringStub::GenerateLookupNumberStringCache(MacroAssembler* masm,
   __ Addu(mask, mask, -1);  // Make mask.
 
   // Calculate the entry in the number string cache. The hash value in the
-  // number string cache for smis is just the smi value.
-  __ sra(scratch, object, 1);
-  __ And(scratch, mask, scratch);
+  // number string cache for smis is just the smi value, and the hash for
+  // doubles is the xor of the upper and lower words. See
+  // Heap::GetNumberStringCache.
+  Label is_smi;
+  Label load_result_from_cache;
+  if (!object_is_smi) {
+    __ BranchOnSmi(object, &is_smi);
+    if (CpuFeatures::IsSupported(FPU)) {
+      CpuFeatures::Scope scope(FPU);
+      __ CheckMap(object,
+                  scratch1,
+                  Factory::heap_number_map(),
+                  not_found,
+                  true);
+
+      ASSERT_EQ(8, kDoubleSize);
+      __ Addu(scratch1,
+              object,
+              Operand(HeapNumber::kValueOffset - kHeapObjectTag));
+      __ lw(scratch2, MemOperand(scratch1, kPointerSize));
+      __ lw(scratch1, MemOperand(scratch1, 0));
+      __ Xor(scratch1, scratch1, Operand(scratch2));
+      __ And(scratch1, scratch1, Operand(mask));
+
+      // Calculate address of entry in string cache: each entry consists
+      // of two pointer sized fields.
+      __ sll(scratch1, scratch1, kPointerSizeLog2 + 1);
+      __ Addu(scratch1, number_string_cache, scratch1);
+
+      Register probe = mask;
+      __ lw(probe,
+             FieldMemOperand(scratch1, FixedArray::kHeaderSize));
+      __ BranchOnSmi(probe, not_found);
+      __ ldc1(f12, FieldMemOperand(object, HeapNumber::kValueOffset));
+      __ ldc1(f14, FieldMemOperand(probe, HeapNumber::kValueOffset));
+      __ c(EQ, D, f12, f14);
+      __ bc1t(&load_result_from_cache);
+      __ nop();   // bc1t() requires explicit fill of branch delay slot.
+      __ Branch(not_found);
+    } else {
+      // Note that there is no cache check for non-FPU case, even though
+      // it seems there could be. May be a tiny opimization for non-FPU
+      // cores.
+      __ Branch(not_found);
+    }
+  }
+
+  __ bind(&is_smi);
+  Register scratch = scratch1;
+  __ sra(scratch, object, 1);   // Shift away the tag.
+  __ And(scratch, mask, Operand(scratch));
 
   // Calculate address of entry in string cache: each entry consists
   // of two pointer sized fields.
@@ -5973,11 +6014,12 @@ void NumberToStringStub::GenerateLookupNumberStringCache(MacroAssembler* masm,
   __ Addu(scratch, number_string_cache, scratch);
 
   // Check if the entry is the smi we are looking for.
-  Register object1 = scratch1;
-  __ lw(object1, FieldMemOperand(scratch, FixedArray::kHeaderSize));
-  __ Branch(not_found, ne, object, Operand(object1));
+  Register probe = mask;
+  __ lw(probe, FieldMemOperand(scratch, FixedArray::kHeaderSize));
+  __ Branch(not_found, ne, object, Operand(probe));
 
   // Get the result from the cache.
+  __ bind(&load_result_from_cache);
   __ lw(result,
          FieldMemOperand(scratch, FixedArray::kHeaderSize + kPointerSize));
 
@@ -5994,7 +6036,7 @@ void NumberToStringStub::Generate(MacroAssembler* masm) {
   __ lw(a1, MemOperand(sp, 0));
 
   // Generate code to lookup number in the number string cache.
-  GenerateLookupNumberStringCache(masm, a1, v0, a2, a3, false, &runtime);
+  GenerateLookupNumberStringCache(masm, a1, v0, a2, a3, t0, false, &runtime);
   __ Addu(sp, sp, Operand(1 * kPointerSize));
   __ Ret();
 
@@ -7317,7 +7359,7 @@ static void HandleBinaryOpSlowCases(MacroAssembler* masm,
 
     __ bind(&string1_smi2);
     NumberToStringStub::GenerateLookupNumberStringCache(
-        masm, a0, a2, t0, t1, true, &string1);
+        masm, a0, a2, t0, t1, t2, true, &string1);
 
     // Replace second argument on stack and tailcall string add stub to make
     // the result.
@@ -7455,7 +7497,7 @@ static void HandleBinaryOpSlowCases(MacroAssembler* masm,
     } else if (Token::SUB == operation) {
       __ sub_d(f0, f12, f14);
     } else if (Token::MOD == operation) {
-      // This is special case because only here we go to run-time 
+      // This is special case because only here we go to run-time
       // while using FPU registers. Current ABI must be taken into account.
       __ Push(ra);
       __ Push(t0);
@@ -7463,7 +7505,7 @@ static void HandleBinaryOpSlowCases(MacroAssembler* masm,
       if(IsMipsSoftFloatABI){
         // We are using MIPS FPU instructions, and parameters for the run-time
         // function call are prepared in f12/f14 register pairs, but function
-        // we are calling is compiled with soft-float flag and expecting soft 
+        // we are calling is compiled with soft-float flag and expecting soft
         // float ABI (parameters in a0-a3 registers). We need to copy parameters
         // from f12/f14 register pairs to a0-a3 registers.
         __ mfc1(a0, f12);
@@ -7476,7 +7518,7 @@ static void HandleBinaryOpSlowCases(MacroAssembler* masm,
       __ Pop(ra);
       if(IsMipsSoftFloatABI){
         // Store answer in the overwritable heap number.
-        // Double returned is stored in registers v0 and v1 (function we called 
+        // Double returned is stored in registers v0 and v1 (function we called
         // is compiled with soft-float flag and uses soft-float ABI).
         __ sw(v0, FieldMemOperand(t0, HeapNumber::kValueOffset));
         __ sw(v1, FieldMemOperand(t0, HeapNumber::kValueOffset + 4));
@@ -7522,15 +7564,15 @@ static void HandleBinaryOpSlowCases(MacroAssembler* masm,
 
   __ CallCFunction(ExternalReference::double_fp_operation(operation), 4);
 
-  if(!IsMipsSoftFloatABI){              
-    if(!use_fp_registers){                                                
-      // Returned double value is stored in registers f0 and f1 (function we 
+  if(!IsMipsSoftFloatABI){
+    if(!use_fp_registers){
+      // Returned double value is stored in registers f0 and f1 (function we
       // called is compiled with hard-float flag and uses hard-float ABI). Return
-      // value in the case when we are not using MIPS FPU instructions has to be 
+      // value in the case when we are not using MIPS FPU instructions has to be
       // placed in v0/v1, so we need to copy from f0/f1.
-      __ mfc1(v0, f0);                                                    
-      __ mfc1(v1, f1);                                                    
-    }                                                                     
+      __ mfc1(v0, f0);
+      __ mfc1(v1, f1);
+    }
   }
   __ Pop(t0);  // Address of heap number.
   // Store answer in the overwritable heap number.
