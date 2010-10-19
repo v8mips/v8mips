@@ -5155,6 +5155,7 @@ void CodeGenerator::VisitCompareOperation(CompareOperation* node) {
          (!has_cc() && frame_->height() == original_height + 1));
 }
 
+
 class DeferredReferenceGetNamedValue: public DeferredCode {
   public:
     explicit DeferredReferenceGetNamedValue(Handle<String> name) : name_(name) {
@@ -5191,6 +5192,44 @@ void DeferredReferenceGetNamedValue::Generate() {
 
   // The call must be followed by a nop(1) instruction to indicate that the
   // in-object has been inlined.
+  __ nop(PROPERTY_LOAD_INLINED);
+
+  // Block the trampoline pool for one more instruction to
+  // include the branch instruction ending the deferred code.
+  __ BlockTrampolinePoolFor(1);
+
+  // Make sure that the expected number of instructions are generated.
+  ASSERT_EQ(kInlinedNamedLoadInstructions,
+            masm_->InstructionsGeneratedSince(&check_inlined_codesize));
+}
+
+
+class DeferredReferenceGetKeyedValue: public DeferredCode {
+  public:
+    DeferredReferenceGetKeyedValue() {
+    set_comment("[ DeferredReferenceGetKeyedValue");
+  }
+
+  virtual void Generate();
+};
+
+
+void DeferredReferenceGetKeyedValue::Generate() {
+  __ DecrementCounter(&Counters::keyed_load_inline, 1, a1, a2);
+  __ IncrementCounter(&Counters::keyed_load_inline_miss, 1, a1, a2);
+
+  const int kInlinedNamedLoadInstructions = 5;
+#ifdef DEBUG
+  Label check_inlined_codesize;
+  masm_->bind(&check_inlined_codesize);
+#endif
+  __ BlockTrampolinePoolFor(kInlinedNamedLoadInstructions);
+
+  // Call keyed load IC. It has all arguments on the stack.
+  Handle<Code> ic(Builtins::builtin(Builtins::KeyedLoadIC_Initialize));
+  __ Call(ic, RelocInfo::CODE_TARGET);
+  // The call must be followed by a nop instruction to indicate that the
+  // keyed load has been inlined.
   __ nop(PROPERTY_LOAD_INLINED);
 
   // Block the trampoline pool for one more instruction to
@@ -5265,42 +5304,6 @@ void CodeGenerator::EmitNamedLoad(Handle<String> name, bool is_contextual) {
   }
 }
 
-class DeferredReferenceGetKeyedValue: public DeferredCode {
-  public:
-    DeferredReferenceGetKeyedValue() {
-    set_comment("[ DeferredReferenceGetKeyedValue");
-  }
-
-  virtual void Generate();
-};
-
-
-void DeferredReferenceGetKeyedValue::Generate() {
-  __ DecrementCounter(&Counters::keyed_load_inline, 1, a1, a2);
-  __ IncrementCounter(&Counters::keyed_load_inline_miss, 1, a1, a2);
-
-  const int kInlinedNamedLoadInstructions = 5;
-#ifdef DEBUG
-  Label check_inlined_codesize;
-  masm_->bind(&check_inlined_codesize);
-#endif
-  __ BlockTrampolinePoolFor(kInlinedNamedLoadInstructions);
-
-  // Call keyed load IC. It has all arguments on the stack.
-  Handle<Code> ic(Builtins::builtin(Builtins::KeyedLoadIC_Initialize));
-  __ Call(ic, RelocInfo::CODE_TARGET);
-  // The call must be followed by a nop instruction to indicate that the
-  // keyed load has been inlined.
-  __ nop(PROPERTY_LOAD_INLINED);
-
-  // Block the trampoline pool for one more instruction to
-  // include the branch instruction ending the deferred code.
-  __ BlockTrampolinePoolFor(1);
-
-  // Make sure that the expected number of instructions are generated.
-  ASSERT_EQ(kInlinedNamedLoadInstructions,
-            masm_->InstructionsGeneratedSince(&check_inlined_codesize));
-}
 
 void CodeGenerator::EmitKeyedLoad() {
   if (loop_nesting() == 0) {
