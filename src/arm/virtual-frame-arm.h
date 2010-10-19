@@ -316,6 +316,10 @@ class VirtualFrame : public ZoneObject {
   // in r0.
   void CallKeyedLoadIC();
 
+  // Call keyed store IC. Key and receiver are on the stack and the value is in
+  // r0. Result is returned in r0.
+  void CallKeyedStoreIC();
+
   // Call into an IC stub given the number of arguments it removes
   // from the stack.  Register arguments to the IC stub are implicit,
   // and depend on the type of IC stub.
@@ -344,9 +348,12 @@ class VirtualFrame : public ZoneObject {
   // must be copied to a scratch register before modification.
   Register Peek();
 
-  // A little specialized, this one.  It flushes all registers, but it puts a
-  // copy of the top-of-stack in R0.
+  // Flushes all registers, but it puts a copy of the top-of-stack in r0.
   void SpillAllButCopyTOSToR0();
+
+  // Flushes all registers, but it puts a copy of the top-of-stack in r1
+  // and the next value on the stack in r0.
+  void SpillAllButCopyTOSToR1R0();
 
   // Pop and save an element from the top of the expression stack and
   // emit a corresponding pop instruction.

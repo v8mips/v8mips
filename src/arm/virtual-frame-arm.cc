@@ -88,7 +88,7 @@ void VirtualFrame::MergeTo(VirtualFrame* expected) {
       break;
     case CASE_NUMBER(NO_TOS_REGISTERS, R1_R0_TOS):
       __ pop(r1);
-      __ pop(r1);
+      __ pop(r0);
       break;
     case CASE_NUMBER(R0_TOS, NO_TOS_REGISTERS):
       __ push(r0);
@@ -310,6 +310,12 @@ void VirtualFrame::CallKeyedLoadIC() {
 }
 
 
+void VirtualFrame::CallKeyedStoreIC() {
+  Handle<Code> ic(Builtins::builtin(Builtins::KeyedStoreIC_Initialize));
+  CallCodeObject(ic, RelocInfo::CODE_TARGET, 0);
+}
+
+
 void VirtualFrame::CallCodeObject(Handle<Code> code,
                                   RelocInfo::Mode rmode,
                                   int dropped_args) {
@@ -421,6 +427,35 @@ void VirtualFrame::SpillAllButCopyTOSToR0() {
     case R1_R0_TOS:
       __ Push(r0, r1);
       __ mov(r0, r1);
+      break;
+    default:
+      UNREACHABLE();
+  }
+  top_of_stack_state_ = NO_TOS_REGISTERS;
+}
+
+
+void VirtualFrame::SpillAllButCopyTOSToR1R0() {
+  switch (top_of_stack_state_) {
+    case NO_TOS_REGISTERS:
+      __ ldr(r1, MemOperand(sp, 0));
+      __ ldr(r0, MemOperand(sp, kPointerSize));
+      break;
+    case R0_TOS:
+      __ push(r0);
+      __ mov(r1, r0);
+      __ ldr(r0, MemOperand(sp, kPointerSize));
+      break;
+    case R1_TOS:
+      __ push(r1);
+      __ ldr(r0, MemOperand(sp, kPointerSize));
+      break;
+    case R0_R1_TOS:
+      __ Push(r1, r0);
+      __ Swap(r0, r1, ip);
+      break;
+    case R1_R0_TOS:
+      __ Push(r0, r1);
       break;
     default:
       UNREACHABLE();
