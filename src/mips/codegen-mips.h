@@ -347,8 +347,6 @@ class CodeGenerator: public AstVisitor {
   void LoadFromSlot(Slot* slot, TypeofState typeof_state);
   void LoadFromGlobalSlotCheckExtensions(Slot* slot,
                                          TypeofState typeof_state,
-                                         Register tmp,
-                                         Register tmp2,
                                          JumpTarget* slow);
 
   // Store the value on top of the stack to a slot.

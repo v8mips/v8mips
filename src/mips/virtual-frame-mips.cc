@@ -275,6 +275,7 @@ void VirtualFrame::CallJSFunction(int arg_count) {
 
 
 void VirtualFrame::CallRuntime(Runtime::Function* f, int arg_count) {
+  ASSERT(SpilledScope::is_spilled());
   Forget(arg_count);
   ASSERT(cgen()->HasValidEntryRegisters());
   __ CallRuntime(f, arg_count);
@@ -420,6 +421,32 @@ void VirtualFrame::EmitPop(Register reg) {
     top_of_stack_state_ = kStateAfterPop[top_of_stack_state_];
   }
   element_count_--;
+}
+
+
+void VirtualFrame::SpillAllButCopyTOSToA0() {
+  switch (top_of_stack_state_) {
+    case NO_TOS_REGISTERS:
+      __ lw(a0, MemOperand(sp, 0));
+      break;
+    case A0_TOS:
+      __ Push(a0);
+      break;
+    case A1_TOS:
+      __ Push(a1);
+      __ mov(a0, a1);
+      break;
+    case A0_A1_TOS:
+      __ MultiPush(a0.bit() | a1.bit());
+      break;
+    case A1_A0_TOS:
+      __ MultiPushReversed(a0.bit() | a1.bit());
+      __ mov(a0, a1);
+      break;
+    default:
+      UNREACHABLE();
+  }
+  top_of_stack_state_ = NO_TOS_REGISTERS;
 }
 
 

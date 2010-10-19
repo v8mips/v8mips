@@ -63,7 +63,8 @@ static void GenerateDictionaryLoad(MacroAssembler* masm,
   //
   // a2 - holds the name of the property and is unchanged.
   //
-  // t0 - scratch
+  // t0 - scratch.
+  // t1 - scratch.
 
   Label done;
 
@@ -107,29 +108,29 @@ static void GenerateDictionaryLoad(MacroAssembler* masm,
   static const int kProbes = 4;
   for (int i = 0; i < kProbes; i++) {
     // Compute the masked index: (hash + i + i * i) & mask.
-    __ lw(reg1, FieldMemOperand(a2, String::kHashFieldOffset));
+    __ lw(t1, FieldMemOperand(a2, String::kHashFieldOffset));
     if (i > 0) {
       // Add the probe offset (i + i * i) left shifted to avoid right shifting
       // the hash in a separate instruction. The value hash + i + i * i is right
       // shifted in the following and instruction.
       ASSERT(StringDictionary::GetProbeOffset(i) <
              1 << (32 - String::kHashFieldOffset));
-      __ Addu(reg1, reg1, Operand(
+      __ Addu(t1, t1, Operand(
           StringDictionary::GetProbeOffset(i) << String::kHashShift));
     }
 
-    __ srl(reg1, reg1, String::kHashShift);
-    __ And(reg1, a3, reg1);
+    __ srl(t1, t1, String::kHashShift);
+    __ And(t1, a3, t1);
 
     // Scale the index by multiplying by the element size.
     ASSERT(StringDictionary::kEntrySize == 3);
-    __ sll(at, reg1, 1);  // at = reg1 * 2.
-    __ addu(reg1, reg1, at);  // reg1 = reg1 * 3.
+    __ sll(at, t1, 1);  // at = t1 * 2.
+    __ addu(t1, t1, at);  // t1 = t1 * 3.
 
     // Check if the key is identical to the name.
-    __ sll(at, reg1, 2);
-    __ addu(reg1, reg0, at);
-    __ lw(t0, FieldMemOperand(reg1, kElementsStartOffset));
+    __ sll(at, t1, 2);
+    __ addu(t1, reg0, at);
+    __ lw(t0, FieldMemOperand(t1, kElementsStartOffset));
     if (i != kProbes - 1) {
       __ Branch(&done, eq, a2, Operand(t0));
     } else {
@@ -138,13 +139,13 @@ static void GenerateDictionaryLoad(MacroAssembler* masm,
   }
 
   // Check that the value is a normal property.
-  __ bind(&done);  // reg1 == reg0 + 4*index
-  __ lw(a3, FieldMemOperand(reg1, kElementsStartOffset + 2 * kPointerSize));
+  __ bind(&done);  // t1 == reg0 + 4*index
+  __ lw(a3, FieldMemOperand(t1, kElementsStartOffset + 2 * kPointerSize));
   __ And(a3, a3, Operand(PropertyDetails::TypeField::mask() << kSmiTagSize));
   __ Branch(miss, ne, a3, Operand(zero_reg));
 
   // Get the value at the masked, scaled index and return.
-  __ lw(reg1, FieldMemOperand(reg1, kElementsStartOffset + 1 * kPointerSize));
+  __ lw(reg1, FieldMemOperand(t1, kElementsStartOffset + 1 * kPointerSize));
 }
 
 
@@ -253,11 +254,10 @@ static void GenerateNumberDictionaryLoad(MacroAssembler* masm,
 void LoadIC::GenerateArrayLength(MacroAssembler* masm) {
   // a2    : name
   // ra    : return address
-  // [sp]  : receiver
+  // a0    : receiver
+  // sp[0] : receiver
 
   Label miss;
-
-  __ lw(a0, MemOperand(sp, 0));
 
   StubCompiler::GenerateLoadArrayLength(masm, a0, a3, &miss);
   __ bind(&miss);
@@ -268,10 +268,9 @@ void LoadIC::GenerateArrayLength(MacroAssembler* masm) {
 void LoadIC::GenerateStringLength(MacroAssembler* masm) {
   // a2    : name
   // lr    : return address
-  // [sp]  : receiver
+  // a0    : receiver
+  // sp[0] : receiver
   Label miss;
-
-  __ lw(a0, MemOperand(sp, 0));
 
   StubCompiler::GenerateLoadStringLength(masm, a0, a1, a3, &miss);
   // Cache miss: Jump to runtime.
@@ -283,12 +282,10 @@ void LoadIC::GenerateStringLength(MacroAssembler* masm) {
 void LoadIC::GenerateFunctionPrototype(MacroAssembler* masm) {
   // r2    : name
   // lr    : return address
-  // [sp]  : receiver
+  // a0    : receiver
+  // sp[0] : receiver
 
   Label miss;
-
-  // Load receiver.
-  __ lw(a0, MemOperand(sp, 0));
 
   StubCompiler::GenerateLoadFunctionPrototype(masm, a0, a1, a3, &miss);
   __ bind(&miss);
@@ -358,7 +355,8 @@ void CallIC::GenerateMegamorphic(MacroAssembler* masm, int argc) {
 static void GenerateNormalHelper(MacroAssembler* masm,
                                  int argc,
                                  bool is_global_object,
-                                 Label* miss) {
+                                 Label* miss,
+                                 Register scratch) {
   // Search dictionary - put result in register a1.
   // This function uses name in a2, and trashes a3.
   GenerateDictionaryLoad(masm, miss, a0, a1);
@@ -367,8 +365,8 @@ static void GenerateNormalHelper(MacroAssembler* masm,
   __ BranchOnSmi(a1, miss);
 
   // Check that the value is a JSFunction.
-  __ GetObjectType(a1, a0, a0);
-  __ Branch(miss, ne, a0, Operand(JS_FUNCTION_TYPE));
+  __ GetObjectType(a1, scratch, scratch);
+  __ Branch(miss, ne, scratch, Operand(JS_FUNCTION_TYPE));
 
   // Patch the receiver with the global proxy if necessary.
   if (is_global_object) {
@@ -413,7 +411,7 @@ void CallIC::GenerateNormal(MacroAssembler* masm, int argc) {
   __ lbu(a3, FieldMemOperand(a3, Map::kBitFieldOffset));
   __ And(a3, a3, Operand(1 << Map::kIsAccessCheckNeeded));
   __ Branch(&miss, ne, a3, Operand(zero_reg));
-  GenerateNormalHelper(masm, argc, true, &miss);
+  GenerateNormalHelper(masm, argc, true, &miss, t0);
 
   // Accessing non-global object: Check for access to global proxy.
   Label global_proxy, invoke;
@@ -425,7 +423,7 @@ void CallIC::GenerateNormal(MacroAssembler* masm, int argc) {
   __ And(a3, a3, Operand(1 << Map::kIsAccessCheckNeeded));
   __ Branch(&miss, ne, a3, Operand(zero_reg));
   __ bind(&invoke);
-  GenerateNormalHelper(masm, argc, false, &miss);
+  GenerateNormalHelper(masm, argc, false, &miss, t0);
 
   // Global object access: Check access rights.
   __ bind(&global_proxy);
@@ -487,9 +485,9 @@ Object* LoadIC_Miss(Arguments args);
 void LoadIC::GenerateMegamorphic(MacroAssembler* masm) {
   // a2    : name
   // ra    : return address
-  // [sp]  : receiver
+  // a0    : receiver
+  // sp[0] : receiver
 
-  __ lw(a0, MemOperand(sp, 0));
   // Probe the stub cache.
   Code::Flags flags = Code::ComputeFlags(Code::LOAD_IC,
                                          NOT_IN_LOOP,
@@ -505,11 +503,11 @@ void LoadIC::GenerateNormal(MacroAssembler* masm) {
   // ----------- S t a t e -------------
   //  -- a2    : name
   //  -- lr    : return address
-  //  -- [sp]  : receiver
+  //  -- a0    : receiver
+  //  -- sp[0] : receiver
   // -----------------------------------
   Label miss, probe, global;
 
-  __ lw(a0, MemOperand(sp, 0));
   // Check that the receiver isn't a smi.
   __ BranchOnSmi(a0, &miss);
 
@@ -548,9 +546,10 @@ void LoadIC::GenerateNormal(MacroAssembler* masm) {
 void LoadIC::GenerateMiss(MacroAssembler* masm) {
   // a2    : name
   // ra    : return address
-  // [sp]  : receiver
+  // a0    : receiver
+  // sp[0] : receiver
 
-  __ lw(a3, MemOperand(sp));
+  __ mov(a3, a0);
   __ MultiPush(a2.bit() | a3.bit());
 
   // Perform tail call to the entry.
@@ -635,7 +634,7 @@ bool KeyedLoadIC::PatchInlinedLoad(Address address, Object* map) {
 
   // Patch the map check.
   Address ldr_map_instr_address =
-          inline_end_address - 26 * Assembler::kInstrSize;
+          inline_end_address - 25 * Assembler::kInstrSize;
   Assembler::set_target_address_at(ldr_map_instr_address,
                                    reinterpret_cast<Address>(map));
   return true;
@@ -1202,7 +1201,7 @@ void KeyedStoreIC::GenerateGeneric(MacroAssembler* masm) {
   // Extra capacity case: Check if there is extra capacity to
   // perform the store and update the length. Used for adding one
   // element to the array by writing to array[array.length].
-  // r0 == value, r1 == key, r2 == elements, r3 == object
+  // a0 == value, a1 == key, a2 == elements, a3 == object
   // t0 == current array len
   __ bind(&extra);
   // Do not leave holes in the array.
@@ -1228,7 +1227,7 @@ void KeyedStoreIC::GenerateGeneric(MacroAssembler* masm) {
   // Array case: Get the length and the elements array from the JS
   // array. Check that the array is in fast mode; if it is the
   // length is always a smi.
-  // r0 == value, r3 == object
+  // a0 == value, a3 == object
   __ bind(&array);
   __ lw(a2, FieldMemOperand(a3, JSObject::kElementsOffset));
   __ lw(a1, FieldMemOperand(a2, HeapObject::kMapOffset));
@@ -1238,7 +1237,7 @@ void KeyedStoreIC::GenerateGeneric(MacroAssembler* masm) {
   // Check the key against the length in the array, compute the
   // address to store into and fall through to fast case.
   __ lw(a1, MemOperand(sp)); // Restore key
-  // r0 == value, r1 == key, r2 == elements, r3 == object.
+  // a0 == value, a1 == key, a2 == elements, a3 == object.
   __ lw(t0, FieldMemOperand(a3, JSArray::kLengthOffset));
   __ Branch(&extra, hs, a1, Operand(t0));
   __ mov(a3, a2);
@@ -1248,7 +1247,7 @@ void KeyedStoreIC::GenerateGeneric(MacroAssembler* masm) {
 
 
   // Fast case: Do the store.
-  // r0 == value, r2 == address to store into, r3 == elements
+  // a0 == value, a2 == address to store into, a3 == elements
   __ bind(&fast);
   __ sw(a0, MemOperand(a2, 0));
   // Skip write barrier if the written value is a smi.

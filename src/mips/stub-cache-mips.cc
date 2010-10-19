@@ -1519,33 +1519,32 @@ Object* LoadStubCompiler::CompileLoadGlobal(JSObject* object,
                                             bool is_dont_delete) {
   // a2    : name
   // ra    : return address
-  // [sp]  : receiver
+  // a0    : receiver
+  // sp[0] : receiver
   Label miss;
-
-  // Get the receiver from the stack.
-  __ lw(a1, MemOperand(sp));
 
   // If the object is the holder then we know that it's a global
   // object which can only happen for contextual calls. In this case,
   // the receiver cannot be a smi.
   if (object != holder) {
-    __ And(t0, a1, Operand(kSmiTagMask));
+    __ And(t0, a0, Operand(kSmiTagMask));
     __ Branch(&miss, eq, t0, Operand(zero_reg));
   }
 
   // Check that the map of the global has not changed.
-  CheckPrototypes(object, a1, holder, a3, a0, name, &miss);
+  CheckPrototypes(object, a0, holder, a3, t0, name, &miss);
 
   // Get the value from the cell.
   __ li(a3, Operand(Handle<JSGlobalPropertyCell>(cell)));
-  __ lw(v0, FieldMemOperand(a3, JSGlobalPropertyCell::kValueOffset));
+  __ lw(t0, FieldMemOperand(a3, JSGlobalPropertyCell::kValueOffset));
 
   // Check for deleted property if property can actually be deleted.
   if (!is_dont_delete) {
-    __ LoadRoot(t0, Heap::kTheHoleValueRootIndex);
-    __ Branch(&miss, eq, v0, Operand(t0));
+    __ LoadRoot(at, Heap::kTheHoleValueRootIndex);
+    __ Branch(&miss, eq, t0, Operand(at));
   }
 
+  __ mov(v0, t0);
   __ IncrementCounter(&Counters::named_load_global_inline, 1, a1, a3);
   __ Ret();
 
