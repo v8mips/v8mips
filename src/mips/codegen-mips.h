@@ -382,11 +382,6 @@ class CodeGenerator: public AstVisitor {
                     bool reversed,
                     OverwriteMode mode);
 
-  void VirtualFrameSmiOperation(Token::Value op,
-                                Handle<Object> value,
-                                bool reversed,
-                                OverwriteMode mode);
-
   void Comparison(Condition cc,
                   Expression* left,
                   Expression* right,
