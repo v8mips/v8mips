@@ -184,6 +184,7 @@ namespace internal {
   F(FunctionSetPrototype, 2, 1) \
   F(FunctionGetName, 1, 1) \
   F(FunctionSetName, 2, 1) \
+  F(FunctionRemovePrototype, 1, 1) \
   F(FunctionGetSourceCode, 1, 1) \
   F(FunctionGetScript, 1, 1) \
   F(FunctionGetScriptSourcePosition, 1, 1) \
@@ -337,7 +338,8 @@ namespace internal {
   F(LiveEditGatherCompileInfo, 2, 1) \
   F(LiveEditReplaceScript, 3, 1) \
   F(LiveEditReplaceFunctionCode, 2, 1) \
-  F(LiveEditRelinkFunctionToScript, 2, 1) \
+  F(LiveEditFunctionSetScript, 2, 1) \
+  F(LiveEditReplaceRefToNestedFunction, 3, 1) \
   F(LiveEditPatchFunctionPositions, 2, 1) \
   F(LiveEditCheckAndDropActivations, 2, 1) \
   F(LiveEditCompareStringsLinewise, 2, 1) \
