@@ -633,8 +633,11 @@ bool KeyedLoadIC::PatchInlinedLoad(Address address, Object* map) {
   if (!IsInlinedICSite(address, &inline_end_address)) return false;
 
   // Patch the map check.
+  // This ugly hack patches CodeGenerator::EmitKeyedLoad(), at the
+  // li(scratch2, Operand(Factory::null_value()), true); which at
+  // this moment is 24 instructions from the end of the routine.
   Address ldr_map_instr_address =
-          inline_end_address - 25 * Assembler::kInstrSize;
+          inline_end_address - 24 * Assembler::kInstrSize;
   Assembler::set_target_address_at(ldr_map_instr_address,
                                    reinterpret_cast<Address>(map));
   return true;

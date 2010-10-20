@@ -450,6 +450,35 @@ void VirtualFrame::SpillAllButCopyTOSToA0() {
 }
 
 
+void VirtualFrame::SpillAllButCopyTOSToA1A0() {
+  switch (top_of_stack_state_) {
+    case NO_TOS_REGISTERS:
+      __ lw(a1, MemOperand(sp, 0));
+      __ lw(a0, MemOperand(sp, kPointerSize));
+      break;
+    case A0_TOS:
+      __ Push(a0);
+      __ mov(a1, a0);
+      __ lw(a0, MemOperand(sp, kPointerSize));
+      break;
+    case A1_TOS:
+      __ Push(a1);
+      __ lw(a0, MemOperand(sp, kPointerSize));
+      break;
+    case A0_A1_TOS:
+      __ MultiPush(a1.bit() | a0.bit());
+      __ Swap(a0, a1, at);
+      break;
+    case A1_A0_TOS:
+      __ MultiPushReversed(a0.bit() | a1.bit());
+      break;
+    default:
+      UNREACHABLE();
+  }
+  top_of_stack_state_ = NO_TOS_REGISTERS;
+}
+
+
 Register VirtualFrame::Peek() {
   AssertIsNotSpilled();
   if (top_of_stack_state_ == NO_TOS_REGISTERS) {

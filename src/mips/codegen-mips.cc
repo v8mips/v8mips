@@ -5215,8 +5215,10 @@ class DeferredReferenceGetKeyedValue: public DeferredCode {
 
 
 void DeferredReferenceGetKeyedValue::Generate() {
-  __ DecrementCounter(&Counters::keyed_load_inline, 1, a1, a2);
-  __ IncrementCounter(&Counters::keyed_load_inline_miss, 1, a1, a2);
+  Register scratch1 = VirtualFrame::scratch0();
+  Register scratch2 = VirtualFrame::scratch1();
+  __ DecrementCounter(&Counters::keyed_load_inline, 1, scratch1, scratch2);
+  __ IncrementCounter(&Counters::keyed_load_inline_miss, 1, scratch1, scratch2);
 
   const int kInlinedNamedLoadInstructions = 5;
 #ifdef DEBUG
@@ -5316,27 +5318,26 @@ void CodeGenerator::EmitKeyedLoad() {
 
     // Counter will be decremented in the deferred code. Placed here to avoid
     // having it in the instruction stream below where patching will occur.
-    __ IncrementCounter(&Counters::keyed_load_inline, 1, t0, t1);
+    __ IncrementCounter(&Counters::keyed_load_inline, 1,
+                        frame_->scratch0(), frame_->scratch1());
 
-    // Load the receiver from the stack.
-    frame_->SpillAllButCopyTOSToA0();
+    // Load the receiver and key from the stack.
+    frame_->SpillAllButCopyTOSToA1A0();
+    Register receiver = a0;
+    Register key = a1;
     VirtualFrame::SpilledScope spilled(frame_);
 
     DeferredReferenceGetKeyedValue* deferred =
         new DeferredReferenceGetKeyedValue();
 
     // Check that the receiver is a heap object.
-    __ And(at, a0, Operand(kSmiTagMask));
+    __ And(at, receiver, Operand(kSmiTagMask));
     deferred->Branch(eq, at, Operand(zero_reg));
 
     // The following instructions are the inlined load keyed property. Parts
     // of this code are patched, so the exact number of instructions generated
-    // need to be fixed.
-
-    // Check the map. The null map used below is patched by the inline cache
-    // code.
-    __ lw(a1, FieldMemOperand(a0, HeapObject::kMapOffset));
-
+    // need to be fixed. Therefore the trampoline pool is blocked while
+    // generating this code.
     const int kInlinedKeyedLoadInstructions = 25;
 #ifdef DEBUG
     Label check_inlined_codesize;
@@ -5344,36 +5345,43 @@ void CodeGenerator::EmitKeyedLoad() {
 #endif
     __ BlockTrampolinePoolFor(kInlinedKeyedLoadInstructions);
 
-    __ li(a2, Operand(Factory::null_value()), true);
-    deferred->Branch(ne, a1, Operand(a2));
-
-    // Load the key from the stack.
-    __ lw(a1, MemOperand(sp, 0));
+    Register scratch1 = VirtualFrame::scratch0();
+    Register scratch2 = VirtualFrame::scratch1();
+    // Check the map. The null map used below is patched by the inline cache
+    // code.
+    __ lw(scratch1, FieldMemOperand(receiver, HeapObject::kMapOffset));
+    __ li(scratch2, Operand(Factory::null_value()), true);
+    deferred->Branch(ne, scratch1, Operand(scratch2));
 
     // Check that the key is a smi.
-    __ And(at, a1, Operand(kSmiTagMask));
+    __ And(at, key, Operand(kSmiTagMask));
     deferred->Branch(ne, at, Operand(zero_reg));
 
     // Get the elements array from the receiver and check that it
     // is not a dictionary.
-    __ lw(a2, FieldMemOperand(a0, JSObject::kElementsOffset));
-    __ lw(a3, FieldMemOperand(a2, JSObject::kMapOffset));
-    __ LoadRoot(t0, Heap::kFixedArrayMapRootIndex);
-    deferred->Branch(ne, a3, Operand(t0));
+    __ lw(scratch1, FieldMemOperand(receiver, JSObject::kElementsOffset));
+    __ lw(scratch2, FieldMemOperand(scratch1, JSObject::kMapOffset));
+    __ LoadRoot(at, Heap::kFixedArrayMapRootIndex);
+    deferred->Branch(ne, scratch2, Operand(at));
 
     // Check that key is within bounds.
-    __ lw(a3, FieldMemOperand(a2, FixedArray::kLengthOffset));
-    __ sra(t0, a1, kSmiTagSize);
-    deferred->Branch(ls, a3, Operand(t0));
+    __ lw(scratch2, FieldMemOperand(scratch1, FixedArray::kLengthOffset));
+    __ sra(at, key, kSmiTagSize);
+    deferred->Branch(ls, scratch2, Operand(at));  // Unsigned less equal.
 
-    // Load and check that the result is not the hole (a1 is a smi).
-    __ LoadRoot(a3, Heap::kTheHoleValueRootIndex);
-    __ Addu(a2, a2, Operand(FixedArray::kHeaderSize - kHeapObjectTag));
-    __ sll(t0, a1, kPointerSizeLog2 - (kSmiTagSize + kSmiShiftSize));
-    __ Addu(t0, t0, a2);
-    __ lw(v0, MemOperand(t0, 0));
+    // Load and check that the result is not the hole (key is a smi).
+    __ LoadRoot(scratch2, Heap::kTheHoleValueRootIndex);
+    __ Addu(scratch1,
+            scratch1,
+            Operand(FixedArray::kHeaderSize - kHeapObjectTag));
+    __ sll(at, key, kPointerSizeLog2 - (kSmiTagSize + kSmiShiftSize));
+    __ addu(at, at, scratch1);
+    __ lw(v0, MemOperand(at, 0));
 
-    deferred->Branch(eq, v0, Operand(a3));
+    // This is the only branch to deferred where r0 and r1 do not contain the
+    // receiver and key.  We can't just load undefined here because we have to
+    // check the prototype.
+    deferred->Branch(eq, v0, Operand(scratch2));
 
     // Make sure that the expected number of instructions are generated.
     ASSERT_EQ(kInlinedKeyedLoadInstructions,
