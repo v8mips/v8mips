@@ -3696,8 +3696,13 @@ void CodeGenerator::GenerateMathSqrt(ZoneList<Expression*>* args) {
   frame_->EmitPush(v0);
 }
 
-// This should generate code that performs a charCodeAt() call or returns
+
+// This generates code that performs a charCodeAt() call or returns
 // undefined in order to trigger the slow case, Runtime_StringCharCodeAt.
+// It can handle flat, 8 and 16 bit characters and cons strings where the
+// answer is found in the left hand branch of the cons.  The slow case will
+// flatten the string, which will ensure that the answer is in the left hand
+// side the next time around.
 void CodeGenerator::GenerateFastCharCodeAt(ZoneList<Expression*>* args) {
   VirtualFrame::SpilledScope spilled_scope(frame_);
   ASSERT(args->length() == 2);
@@ -3705,73 +3710,28 @@ void CodeGenerator::GenerateFastCharCodeAt(ZoneList<Expression*>* args) {
 
   LoadAndSpill(args->at(0));
   LoadAndSpill(args->at(1));
-  frame_->EmitPop(a0);  // Index.
-  frame_->EmitPop(a1);  // String.
+  frame_->EmitPop(a1);  // Index.
+  frame_->EmitPop(a2);  // String.
 
-  Label slow, end, not_a_flat_string, ascii_string, try_again_with_new_string;
+  Label slow_case;
+  Label exit;
+  StringHelper::GenerateFastCharCodeAt(masm_,
+                                       a2,
+                                       a1,
+                                       a3,
+                                       v0,
+                                       &slow_case,
+                                       &slow_case,
+                                       &slow_case,
+                                       &slow_case);
+  __ Branch(&exit);
 
-  __ BranchOnSmi(a1, &slow);  // The 'string' was a Smi.
-
-  ASSERT(kSmiTag == 0);
-  // Branch slow on index negative or not a Smi.
-  __ And(t0, a0, Operand(kSmiTagMask | 0x80000000u));
-  __ Branch(&slow, ne, t0, Operand(zero_reg));
-
-  __ bind(&try_again_with_new_string);
-  __ GetObjectType(a1, a2, a2);
-  __ Branch(&slow, ge, a2, Operand(FIRST_NONSTRING_TYPE));
-
-  // Now a2 has the string type.
-  __ lw(a3, FieldMemOperand(a1, String::kLengthOffset));
-  // Now a3 has the (Smi) length of the string.  Compare with the index.
-  __ srl(t0, a0, kSmiTagSize);  // Convert Smi index to int in t0
-  __ Branch(&slow, le, a3, Operand(t0));
-
-  // Here we know the index is in range.  Check that string is sequential.
-  ASSERT_EQ(0, kSeqStringTag);
-  __ And(t1, a2, Operand(kStringRepresentationMask));
-  __ Branch(&not_a_flat_string, ne, t1, Operand(zero_reg));
-
-  // Check whether it is an ASCII string.
-  ASSERT_EQ(0, kTwoByteStringTag);
-  __ And(t1, a2, Operand(kStringEncodingMask));
-  __ Branch(&ascii_string, ne, t1, Operand(zero_reg));
-
-  // 2-byte string.  We can add without shifting since the Smi tag size is the
-  // log2 of the number of bytes in a two-byte character.
-  ASSERT_EQ(1, kSmiTagSize);
-  ASSERT_EQ(0, kSmiShiftSize);
-  __ Addu(a1, a1, Operand(a0));
-  __ lhu(v0, FieldMemOperand(a1, SeqTwoByteString::kHeaderSize));
-  __ sll(v0, v0, kSmiTagSize);   // Make 2-byte char an Smi.
-  __ jmp(&end);
-
-  __ bind(&ascii_string);
-  // Integer version of index is still in t0
-  __ Addu(a1, a1, Operand(t0));
-  __ lbu(v0, FieldMemOperand(a1, SeqAsciiString::kHeaderSize));
-  __ sll(v0, v0, kSmiTagSize);   // Make char an Smi.
-  __ jmp(&end);
-
-  __ bind(&not_a_flat_string);
-  __ And(a2, a2, Operand(kStringRepresentationMask));
-  __ Branch(&slow, ne, a2, Operand(kConsStringTag));
-
-  // ConsString.
-  // Check that the right hand side is the empty string (ie if this is really a
-  // flat string in a cons string).  If that is not the case we would rather go
-  // to the runtime system now, to flatten the string.
-  __ lw(a2, FieldMemOperand(a1, ConsString::kSecondOffset));
-  __ LoadRoot(a3, Heap::kEmptyStringRootIndex);
-  __ Branch(&slow, ne, a2, Operand(a3));
-  // Get the first of the two strings.
-  __ lw(a1, FieldMemOperand(a1, ConsString::kFirstOffset));
-  __ jmp(&try_again_with_new_string);
-
-  __ bind(&slow);
+  __ bind(&slow_case);
+  // Move the undefined value into the result register, which will
+  // trigger the slow case.
   __ LoadRoot(v0, Heap::kUndefinedValueRootIndex);
 
-  __ bind(&end);
+  __ bind(&exit);
   frame_->EmitPush(v0);
 }
 
@@ -3780,37 +3740,19 @@ void CodeGenerator::GenerateCharFromCode(ZoneList<Expression*>* args) {
   Comment(masm_, "[ GenerateCharFromCode");
   ASSERT(args->length() == 1);
 
+  Register code = a1;
+  Register scratch = a2;
+  Register result = v0;
+
   LoadAndSpill(args->at(0));
-  frame_->EmitPop(a0);
+  frame_->EmitPop(code);
 
-  JumpTarget slow_case;
-  JumpTarget exit;
-
-  // Fast case of Heap::LookupSingleCharacterStringFromCode.
-  ASSERT(kSmiTag == 0);
-  ASSERT(kSmiShiftSize == 0);
-  ASSERT(IsPowerOf2(String::kMaxAsciiCharCode + 1));
-  __ And(a1, a0, Operand(kSmiTagMask |
-                     ((~String::kMaxAsciiCharCode) << kSmiTagSize)));
-  slow_case.Branch(nz, a1, Operand(zero_reg));
-
-  ASSERT(kSmiTag == 0);
-  __ li(a1, Operand(Factory::single_character_string_cache()));
-  __ sll(a2, a0, kPointerSizeLog2 - kSmiTagSize);
-  __ Addu(a1, a1, Operand(a2));
-  __ lw(v0, MemOperand(a1, FixedArray::kHeaderSize - kHeapObjectTag));
-  __ LoadRoot(a2, Heap::kUndefinedValueRootIndex);
-  slow_case.Branch(eq, v0, Operand(a2));
-
-  frame_->EmitPush(v0);
-  exit.Jump();
-
-  slow_case.Bind();
-  frame_->EmitPush(a0);
-  frame_->CallRuntime(Runtime::kCharFromCode, 1);
-  frame_->EmitPush(v0);
-
-  exit.Bind();
+  StringHelper::GenerateCharFromCode(masm_,
+                                     code,
+                                     scratch,
+                                     result,
+                                     CALL_FUNCTION);
+  frame_->EmitPush(result);
 }
 
 
@@ -8482,12 +8424,149 @@ void GenericUnaryOpStub::Generate(MacroAssembler* masm) {
 }
 
 
-void StringStubBase::GenerateCopyCharacters(MacroAssembler* masm,
-                                            Register dest,
-                                            Register src,
-                                            Register count,
-                                            Register scratch,
-                                            bool ascii) {
+void StringHelper::GenerateFastCharCodeAt(MacroAssembler* masm,
+                                          Register object,
+                                          Register index,
+                                          Register scratch,
+                                          Register result,
+                                          Label* receiver_not_string,
+                                          Label* index_not_smi,
+                                          Label* index_out_of_range,
+                                          Label* slow_case) {
+  Label not_a_flat_string;
+  Label try_again_with_new_string;
+  Label ascii_string;
+  Label got_char_code;
+
+  // If the receiver is a smi trigger the non-string case.
+  __ BranchOnSmi(object, receiver_not_string);
+
+  // Fetch the instance type of the receiver into result register.
+  __ lw(result, FieldMemOperand(object, HeapObject::kMapOffset));
+  __ lbu(result, FieldMemOperand(result, Map::kInstanceTypeOffset));
+  // If the receiver is not a string trigger the non-string case.
+  __ And(at, result, Operand(kIsNotStringMask));
+  __ Branch(receiver_not_string, ne, at, Operand(zero_reg));
+  // If the index is non-smi trigger the non-smi case.
+  __ BranchOnNotSmi(index, index_not_smi);
+
+  // Check for index out of range.
+  __ lw(scratch, FieldMemOperand(object, String::kLengthOffset));
+  // Now scratch has the length of the string.  Compare with the index.
+  __ srl(at, index, kSmiTagSize);  // Remove the smi tag.
+  __ Branch(index_out_of_range, ls, scratch, Operand(at));
+
+  __ bind(&try_again_with_new_string);
+  // ----------- S t a t e -------------
+  //  -- object  : string to access
+  //  -- result  : instance type of the string
+  //  -- scratch : non-negative index < length
+  // -----------------------------------
+
+  // We need special handling for non-flat strings.
+  ASSERT_EQ(0, kSeqStringTag);
+  __ And(at, result, Operand(kStringRepresentationMask));
+  __ Branch(&not_a_flat_string, ne, at, Operand(zero_reg));
+
+  // Check for 1-byte or 2-byte string.
+  ASSERT_EQ(0, kTwoByteStringTag);
+  __ And(at, result, Operand(kStringEncodingMask));
+  __ Branch(&ascii_string, ne, at, Operand(zero_reg));
+
+  // 2-byte string.  We can add without shifting since the Smi tag size is the
+  // log2 of the number of bytes in a two-byte character.
+  ASSERT_EQ(1, kSmiTagSize);
+  ASSERT_EQ(0, kSmiShiftSize);
+  __ Addu(scratch, object, Operand(index));
+  __ lhu(result, FieldMemOperand(scratch, SeqTwoByteString::kHeaderSize));
+  __ Branch(&got_char_code);
+
+  // Handle non-flat strings.
+  __ bind(&not_a_flat_string);
+  __ And(result, result, Operand(kStringRepresentationMask));
+  __ Branch(slow_case, ne, result, Operand(kConsStringTag));
+
+  // ConsString.
+  // Check whether the right hand side is the empty string (i.e. if
+  // this is really a flat string in a cons string). If that is not
+  // the case we would rather go to the runtime system now to flatten
+  // the string.
+  __ lw(result, FieldMemOperand(object, ConsString::kSecondOffset));
+  __ LoadRoot(scratch, Heap::kEmptyStringRootIndex);
+  __ Branch(slow_case, ne, result, Operand(scratch));
+
+  // Get the first of the two strings and load its instance type.
+  __ lw(object, FieldMemOperand(object, ConsString::kFirstOffset));
+  __ lw(result, FieldMemOperand(object, HeapObject::kMapOffset));
+  __ lbu(result, FieldMemOperand(result, Map::kInstanceTypeOffset));
+  __ Branch(&try_again_with_new_string);
+
+  // ASCII string.
+  __ bind(&ascii_string);
+  __ srl(at, index, kSmiTagSize);  // Untag the index.
+  __ addu(scratch, object, at);  // scratch = object + index.
+  __ lbu(result, FieldMemOperand(scratch, SeqAsciiString::kHeaderSize));
+
+  __ bind(&got_char_code);
+  __ sll(result, result, kSmiTagSize);  // Tag the result.
+}
+
+
+void StringHelper::GenerateCharFromCode(MacroAssembler* masm,
+                                        Register code,
+                                        Register scratch,
+                                        Register result,
+                                        InvokeFlag flag) {
+  ASSERT(!code.is(result));
+
+  Label slow_case;
+  Label exit;
+
+  // Fast case of Heap::LookupSingleCharacterStringFromCode.
+  ASSERT(kSmiTag == 0);
+  ASSERT(kSmiShiftSize == 0);
+  ASSERT(IsPowerOf2(String::kMaxAsciiCharCode + 1));
+  __ And(at, code, Operand(kSmiTagMask |
+                           ((~String::kMaxAsciiCharCode) << kSmiTagSize)));
+  __ Branch(&slow_case, nz, at, Operand(zero_reg));
+
+  ASSERT(kSmiTag == 0);
+  __ li(result, Operand(Factory::single_character_string_cache()));
+  __ sll(at, code, kPointerSizeLog2 - kSmiTagSize);
+  __ addu(result, result, at);
+  __ lw(result, MemOperand(result, FixedArray::kHeaderSize - kHeapObjectTag));
+  __ LoadRoot(scratch, Heap::kUndefinedValueRootIndex);
+  __ Branch(&slow_case, eq, result, Operand(scratch));
+  __ Branch(&exit);
+
+  __ bind(&slow_case);
+  if (flag == CALL_FUNCTION) {
+    __ Push(code);
+    __ CallRuntime(Runtime::kCharFromCode, 1);
+    if (!result.is(v0)) {
+      __ mov(result, v0);
+    }
+  } else {
+    ASSERT(flag == JUMP_FUNCTION);
+    ASSERT(result.is(v0));
+    __ Push(code);
+    __ TailCallRuntime(Runtime::kCharFromCode, 1, 1);
+  }
+
+  __ bind(&exit);
+  if (flag == JUMP_FUNCTION) {
+    ASSERT(result.is(v0));
+    __ Ret();
+  }
+}
+
+
+void StringHelper::GenerateCopyCharacters(MacroAssembler* masm,
+                                          Register dest,
+                                          Register src,
+                                          Register count,
+                                          Register scratch,
+                                          bool ascii) {
   Label loop;
   Label done;
   // This loop just copies one character at a time, as it is only used for
@@ -8515,16 +8594,16 @@ enum CopyCharactersFlags {
 };
 
 
-void StringStubBase::GenerateCopyCharactersLong(MacroAssembler* masm,
-                                                Register dest,
-                                                Register src,
-                                                Register count,
-                                                Register scratch1,
-                                                Register scratch2,
-                                                Register scratch3,
-                                                Register scratch4,
-                                                Register scratch5,
-                                                int flags) {
+void StringHelper::GenerateCopyCharactersLong(MacroAssembler* masm,
+                                              Register dest,
+                                              Register src,
+                                              Register count,
+                                              Register scratch1,
+                                              Register scratch2,
+                                              Register scratch3,
+                                              Register scratch4,
+                                              Register scratch5,
+                                              int flags) {
   bool ascii = (flags & COPY_ASCII) != 0;
   bool dest_always_aligned = (flags & DEST_ALWAYS_ALIGNED) != 0;
 
@@ -8627,15 +8706,15 @@ void StringStubBase::GenerateCopyCharactersLong(MacroAssembler* masm,
 }
 
 
-void StringStubBase::GenerateTwoCharacterSymbolTableProbe(MacroAssembler* masm,
-                                                          Register c1,
-                                                          Register c2,
-                                                          Register scratch1,
-                                                          Register scratch2,
-                                                          Register scratch3,
-                                                          Register scratch4,
-                                                          Register scratch5,
-                                                          Label* not_found) {
+void StringHelper::GenerateTwoCharacterSymbolTableProbe(MacroAssembler* masm,
+                                                        Register c1,
+                                                        Register c2,
+                                                        Register scratch1,
+                                                        Register scratch2,
+                                                        Register scratch3,
+                                                        Register scratch4,
+                                                        Register scratch5,
+                                                        Label* not_found) {
   // Register scratch3 is the general scratch register in this function.
   Register scratch = scratch3;
 
@@ -8665,9 +8744,9 @@ void StringStubBase::GenerateTwoCharacterSymbolTableProbe(MacroAssembler* masm,
   __ bind(&not_array_index);
   // Calculate the two character string hash.
   Register hash = scratch1;
-  GenerateHashInit(masm, hash, c1);
-  GenerateHashAddCharacter(masm, hash, c2);
-  GenerateHashGetHash(masm, hash);
+  StringHelper::GenerateHashInit(masm, hash, c1);
+  StringHelper::GenerateHashAddCharacter(masm, hash, c2);
+  StringHelper::GenerateHashGetHash(masm, hash);
 
   // Collect the two characters in a register.
   Register chars = c1;
@@ -8757,7 +8836,7 @@ void StringStubBase::GenerateTwoCharacterSymbolTableProbe(MacroAssembler* masm,
 }
 
 
-void StringStubBase::GenerateHashInit(MacroAssembler* masm,
+void StringHelper::GenerateHashInit(MacroAssembler* masm,
                                       Register hash,
                                       Register character) {
   // hash = character + (character << 10);
@@ -8769,7 +8848,7 @@ void StringStubBase::GenerateHashInit(MacroAssembler* masm,
 }
 
 
-void StringStubBase::GenerateHashAddCharacter(MacroAssembler* masm,
+void StringHelper::GenerateHashAddCharacter(MacroAssembler* masm,
                                               Register hash,
                                               Register character) {
   // hash += character;
@@ -8783,7 +8862,7 @@ void StringStubBase::GenerateHashAddCharacter(MacroAssembler* masm,
 }
 
 
-void StringStubBase::GenerateHashGetHash(MacroAssembler* masm,
+void StringHelper::GenerateHashGetHash(MacroAssembler* masm,
                                          Register hash) {
   // hash += hash << 3;
   __ sll(at, hash, 3);
@@ -8929,12 +9008,10 @@ void SubStringStub::Generate(MacroAssembler* masm) {
   __ lbu(a3, FieldMemOperand(t1, SeqAsciiString::kHeaderSize));
   __ lbu(t0, FieldMemOperand(t1, SeqAsciiString::kHeaderSize + 1));
 
-
-
   // Try to lookup two character string in symbol table.
   Label make_two_character_string;
-  GenerateTwoCharacterSymbolTableProbe(masm, a3, t0, a1, t1, t2, t3, t4,
-                                       &make_two_character_string);
+  StringHelper::GenerateTwoCharacterSymbolTableProbe(
+      masm, a3, t0, a1, t1, t2, t3, t4, &make_two_character_string);
   __ IncrementCounter(&Counters::sub_string_native, 1, a3, t0);
   __ Addu(sp, sp, Operand(3 * kPointerSize));
   __ Ret();
@@ -8970,8 +9047,8 @@ void SubStringStub::Generate(MacroAssembler* masm) {
   // a2: result string length.
   // t1: first character of sub string to copy.
   ASSERT_EQ(0, SeqAsciiString::kHeaderSize & kObjectAlignmentMask);
-  GenerateCopyCharactersLong(masm, a1, t1, a2, a3, t0, t2, t3, t4,
-                             COPY_ASCII | DEST_ALWAYS_ALIGNED);
+  StringHelper::GenerateCopyCharactersLong(
+      masm, a1, t1, a2, a3, t0, t2, t3, t4, COPY_ASCII | DEST_ALWAYS_ALIGNED);
   __ IncrementCounter(&Counters::sub_string_native, 1, a3, t0);
   __ Addu(sp, sp, Operand(3 * kPointerSize));
   __ Ret();
@@ -9001,8 +9078,8 @@ void SubStringStub::Generate(MacroAssembler* masm) {
   // a2: result length.
   // t1: first character of string to copy.
   ASSERT_EQ(0, SeqTwoByteString::kHeaderSize & kObjectAlignmentMask);
-  GenerateCopyCharactersLong(masm, a1, t1, a2, a3, t0, t2, t3, t4,
-                             DEST_ALWAYS_ALIGNED);
+  StringHelper::GenerateCopyCharactersLong(
+      masm, a1, t1, a2, a3, t0, t2, t3, t4, DEST_ALWAYS_ALIGNED);
   __ IncrementCounter(&Counters::sub_string_native, 1, a3, t0);
   __ Addu(sp, sp, Operand(3 * kPointerSize));
   __ Ret();
@@ -9197,8 +9274,8 @@ void StringAddStub::Generate(MacroAssembler* masm) {
   // Try to lookup two character string in symbol table. If it is not found
   // just allocate a new one.
   Label make_two_character_string;
-  GenerateTwoCharacterSymbolTableProbe(masm, a2, a3, t2, t3, t0, t1, t4,
-                                      &make_two_character_string);
+  StringHelper::GenerateTwoCharacterSymbolTableProbe(
+      masm, a2, a3, t2, t3, t0, t1, t4, &make_two_character_string);
   __ IncrementCounter(&Counters::string_add_native, 1, a2, a3);
   __ Addu(sp, sp, Operand(2 * kPointerSize));
   __ Ret();
@@ -9311,7 +9388,7 @@ void StringAddStub::Generate(MacroAssembler* masm) {
   // a3: length of second string.
   // t2: first character of result.
   // t3: result string.
-  GenerateCopyCharacters(masm, t2, a0, a2, t0, true);
+  StringHelper::GenerateCopyCharacters(masm, t2, a0, a2, t0, true);
 
   // Load second argument and locate first character.
   __ Addu(a1, a1, Operand(SeqAsciiString::kHeaderSize - kHeapObjectTag));
@@ -9319,7 +9396,7 @@ void StringAddStub::Generate(MacroAssembler* masm) {
   // a3: length of second string.
   // t2: next character of result.
   // t3: result string.
-  GenerateCopyCharacters(masm, t2, a1, a3, t0, true);
+  StringHelper::GenerateCopyCharacters(masm, t2, a1, a3, t0, true);
   __ mov(v0, t3);
   __ IncrementCounter(&Counters::string_add_native, 1, a2, a3);
   __ Addu(sp, sp, Operand(2 * kPointerSize));
@@ -9350,7 +9427,7 @@ void StringAddStub::Generate(MacroAssembler* masm) {
   // a3: length of second string.
   // t2: first character of result.
   // t3: result string.
-  GenerateCopyCharacters(masm, t2, a0, a2, t0, false);
+  StringHelper::GenerateCopyCharacters(masm, t2, a0, a2, t0, false);
 
   // Locate first character of second argument.
   __ Addu(a1, a1, Operand(SeqTwoByteString::kHeaderSize - kHeapObjectTag));
@@ -9359,7 +9436,7 @@ void StringAddStub::Generate(MacroAssembler* masm) {
   // a3: length of second string.
   // t2: next character of result (after copy of first string).
   // t3: result string.
-  GenerateCopyCharacters(masm, t2, a1, a3, t0, false);
+  StringHelper::GenerateCopyCharacters(masm, t2, a1, a3, t0, false);
 
   __ mov(v0, t3);
   __ IncrementCounter(&Counters::string_add_native, 1, a2, a3);
