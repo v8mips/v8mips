@@ -3531,8 +3531,15 @@ void CodeGenerator::VisitBinaryOperation(BinaryOperation* node) {
       overwrite_mode = OVERWRITE_RIGHT;
     }
 
-    Load(node->left());
-    Load(node->right());
+    if (node->left()->IsTrivial()) {
+      Load(node->right());
+      Result right = frame_->Pop();
+      frame_->Push(node->left());
+      frame_->Push(&right);
+    } else {
+      Load(node->left());
+      Load(node->right());
+    }
     GenericBinaryOperation(node->op(), node->type(), overwrite_mode);
   }
 }
@@ -4050,8 +4057,7 @@ void CodeGenerator::GenerateMathPow(ZoneList<Expression*>* args) {
 
   Label base_not_smi;
   Label handle_special_cases;
-  __ testl(base.reg(), Immediate(kSmiTagMask));
-  __ j(not_zero, &base_not_smi);
+  __ JumpIfNotSmi(base.reg(), &base_not_smi);
   __ SmiToInteger32(base.reg(), base.reg());
   __ cvtlsi2sd(xmm0, base.reg());
   __ jmp(&handle_special_cases);
@@ -5958,9 +5964,72 @@ class DeferredInlineBinaryOperation: public DeferredCode {
 
 
 void DeferredInlineBinaryOperation::Generate() {
+  Label done;
+  if ((op_ == Token::ADD)
+      || (op_ ==Token::SUB)
+      || (op_ == Token::MUL)
+      || (op_ == Token::DIV)) {
+    Label call_runtime;
+    Label left_smi, right_smi, load_right, do_op;
+    __ JumpIfSmi(left_, &left_smi);
+    __ CompareRoot(FieldOperand(left_, HeapObject::kMapOffset),
+                   Heap::kHeapNumberMapRootIndex);
+    __ j(not_equal, &call_runtime);
+    __ movsd(xmm0, FieldOperand(left_, HeapNumber::kValueOffset));
+    if (mode_ == OVERWRITE_LEFT) {
+      __ movq(dst_, left_);
+    }
+    __ jmp(&load_right);
+
+    __ bind(&left_smi);
+    __ SmiToInteger32(left_, left_);
+    __ cvtlsi2sd(xmm0, left_);
+    __ Integer32ToSmi(left_, left_);
+    if (mode_ == OVERWRITE_LEFT) {
+      Label alloc_failure;
+      __ AllocateHeapNumber(dst_, no_reg, &call_runtime);
+    }
+
+    __ bind(&load_right);
+    __ JumpIfSmi(right_, &right_smi);
+    __ CompareRoot(FieldOperand(right_, HeapObject::kMapOffset),
+                   Heap::kHeapNumberMapRootIndex);
+    __ j(not_equal, &call_runtime);
+    __ movsd(xmm1, FieldOperand(right_, HeapNumber::kValueOffset));
+    if (mode_ == OVERWRITE_RIGHT) {
+      __ movq(dst_, right_);
+    } else if (mode_ == NO_OVERWRITE) {
+      Label alloc_failure;
+      __ AllocateHeapNumber(dst_, no_reg, &call_runtime);
+    }
+    __ jmp(&do_op);
+
+    __ bind(&right_smi);
+    __ SmiToInteger32(right_, right_);
+    __ cvtlsi2sd(xmm1, right_);
+    __ Integer32ToSmi(right_, right_);
+    if (mode_ == OVERWRITE_RIGHT || mode_ == NO_OVERWRITE) {
+      Label alloc_failure;
+      __ AllocateHeapNumber(dst_, no_reg, &call_runtime);
+    }
+
+    __ bind(&do_op);
+    switch (op_) {
+      case Token::ADD: __ addsd(xmm0, xmm1); break;
+      case Token::SUB: __ subsd(xmm0, xmm1); break;
+      case Token::MUL: __ mulsd(xmm0, xmm1); break;
+      case Token::DIV: __ divsd(xmm0, xmm1); break;
+      default: UNREACHABLE();
+    }
+    __ movsd(FieldOperand(dst_, HeapNumber::kValueOffset), xmm0);
+    __ jmp(&done);
+
+    __ bind(&call_runtime);
+  }
   GenericBinaryOpStub stub(op_, mode_, NO_SMI_CODE_IN_STUB);
   stub.GenerateCall(masm_, left_, right_);
   if (!dst_.is(rax)) __ movq(dst_, rax);
+  __ bind(&done);
 }
 
 

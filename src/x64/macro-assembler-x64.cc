@@ -2346,7 +2346,7 @@ void MacroAssembler::LoadAllocationTopHelper(Register result,
   // Just return if allocation top is already known.
   if ((flags & RESULT_CONTAINS_TOP) != 0) {
     // No use of scratch if allocation top is provided.
-    ASSERT(scratch.is(no_reg));
+    ASSERT(!scratch.is_valid());
 #ifdef DEBUG
     // Assert that result actually contains top on entry.
     movq(kScratchRegister, new_space_allocation_top);
@@ -2356,14 +2356,17 @@ void MacroAssembler::LoadAllocationTopHelper(Register result,
     return;
   }
 
-  // Move address of new object to result. Use scratch register if available.
-  if (scratch.is(no_reg)) {
-    movq(kScratchRegister, new_space_allocation_top);
-    movq(result, Operand(kScratchRegister, 0));
-  } else {
+  // Move address of new object to result. Use scratch register if available,
+  // and keep address in scratch until call to UpdateAllocationTopHelper.
+  if (scratch.is_valid()) {
     ASSERT(!scratch.is(result_end));
     movq(scratch, new_space_allocation_top);
     movq(result, Operand(scratch, 0));
+  } else if (result.is(rax)) {
+    load_rax(new_space_allocation_top);
+  } else {
+    movq(kScratchRegister, new_space_allocation_top);
+    movq(result, Operand(kScratchRegister, 0));
   }
 }
 
@@ -2384,11 +2387,11 @@ void MacroAssembler::UpdateAllocationTopHelper(Register result_end,
     store_rax(new_space_allocation_top);
   } else {
     // Register required - use scratch provided if available.
-    if (scratch.is(no_reg)) {
+    if (scratch.is_valid()) {
+      movq(Operand(scratch, 0), result_end);
+    } else {
       movq(kScratchRegister, new_space_allocation_top);
       movq(Operand(kScratchRegister, 0), result_end);
-    } else {
-      movq(Operand(scratch, 0), result_end);
     }
   }
 }
@@ -2408,16 +2411,29 @@ void MacroAssembler::AllocateInNewSpace(int object_size,
   // Calculate new top and bail out if new space is exhausted.
   ExternalReference new_space_allocation_limit =
       ExternalReference::new_space_allocation_limit_address();
-  lea(result_end, Operand(result, object_size));
+
+  Register top_reg = result_end.is_valid() ? result_end : result;
+
+  if (top_reg.is(result)) {
+    addq(top_reg, Immediate(object_size));
+  } else {
+    lea(top_reg, Operand(result, object_size));
+  }
   movq(kScratchRegister, new_space_allocation_limit);
-  cmpq(result_end, Operand(kScratchRegister, 0));
+  cmpq(top_reg, Operand(kScratchRegister, 0));
   j(above, gc_required);
 
   // Update allocation top.
-  UpdateAllocationTopHelper(result_end, scratch);
+  UpdateAllocationTopHelper(top_reg, scratch);
 
-  // Tag the result if requested.
-  if ((flags & TAG_OBJECT) != 0) {
+  if (top_reg.is(result)) {
+    if ((flags & TAG_OBJECT) != 0) {
+      subq(result, Immediate(object_size - kHeapObjectTag));
+    } else {
+      subq(result, Immediate(object_size));
+    }
+  } else if ((flags & TAG_OBJECT) != 0) {
+    // Tag the result if requested.
     addq(result, Immediate(kHeapObjectTag));
   }
 }
