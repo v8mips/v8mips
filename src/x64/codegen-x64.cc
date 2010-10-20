@@ -43,6 +43,8 @@ namespace internal {
 
 #define __ ACCESS_MASM(masm_)
 
+static int64_t kNaNValue = V8_INT64_C(0x7ff8000000000000);
+
 // -------------------------------------------------------------------------
 // Platform-specific DeferredCode functions.
 
@@ -187,6 +189,34 @@ class DeferredInlineSmiOperation: public DeferredCode {
   Register dst_;
   Register src_;
   Smi* value_;
+  OverwriteMode overwrite_mode_;
+};
+
+
+// Call the appropriate binary operation stub to compute value op src
+// and leave the result in dst.
+class DeferredInlineSmiOperationReversed: public DeferredCode {
+ public:
+  DeferredInlineSmiOperationReversed(Token::Value op,
+                                     Register dst,
+                                     Smi* value,
+                                     Register src,
+                                     OverwriteMode overwrite_mode)
+      : op_(op),
+        dst_(dst),
+        value_(value),
+        src_(src),
+        overwrite_mode_(overwrite_mode) {
+    set_comment("[ DeferredInlineSmiOperationReversed");
+  }
+
+  virtual void Generate();
+
+ private:
+  Token::Value op_;
+  Register dst_;
+  Smi* value_;
+  Register src_;
   OverwriteMode overwrite_mode_;
 };
 
@@ -2682,8 +2712,9 @@ void CodeGenerator::VisitAssignment(Assignment* node) {
         target.GetValue();
       }
       Load(node->value());
-      GenericBinaryOperation(node->binary_op(),
-                             node->type(),
+      BinaryOperation expr(node, node->binary_op(), node->target(),
+                           node->value());
+      GenericBinaryOperation(&expr,
                              overwrite_value ? OVERWRITE_RIGHT : NO_OVERWRITE);
     }
 
@@ -3540,7 +3571,7 @@ void CodeGenerator::VisitBinaryOperation(BinaryOperation* node) {
       Load(node->left());
       Load(node->right());
     }
-    GenericBinaryOperation(node->op(), node->type(), overwrite_mode);
+    GenericBinaryOperation(node, overwrite_mode);
   }
 }
 
@@ -4484,6 +4515,28 @@ void CodeGenerator::GenerateNumberToString(ZoneList<Expression*>* args) {
 }
 
 
+class DeferredSwapElements: public DeferredCode {
+ public:
+  DeferredSwapElements(Register object, Register index1, Register index2)
+      : object_(object), index1_(index1), index2_(index2) {
+    set_comment("[ DeferredSwapElements");
+  }
+
+  virtual void Generate();
+
+ private:
+  Register object_, index1_, index2_;
+};
+
+
+void DeferredSwapElements::Generate() {
+  __ push(object_);
+  __ push(index1_);
+  __ push(index2_);
+  __ CallRuntime(Runtime::kSwapElements, 3);
+}
+
+
 void CodeGenerator::GenerateSwapElements(ZoneList<Expression*>* args) {
   Comment cmnt(masm_, "[ GenerateSwapElements");
 
@@ -4493,8 +4546,81 @@ void CodeGenerator::GenerateSwapElements(ZoneList<Expression*>* args) {
   Load(args->at(1));
   Load(args->at(2));
 
-  Result result = frame_->CallRuntime(Runtime::kSwapElements, 3);
-  frame_->Push(&result);
+  Result index2 = frame_->Pop();
+  index2.ToRegister();
+
+  Result index1 = frame_->Pop();
+  index1.ToRegister();
+
+  Result object = frame_->Pop();
+  object.ToRegister();
+
+  Result tmp1 = allocator()->Allocate();
+  tmp1.ToRegister();
+  Result tmp2 = allocator()->Allocate();
+  tmp2.ToRegister();
+
+  frame_->Spill(object.reg());
+  frame_->Spill(index1.reg());
+  frame_->Spill(index2.reg());
+
+  DeferredSwapElements* deferred = new DeferredSwapElements(object.reg(),
+                                                            index1.reg(),
+                                                            index2.reg());
+
+  // Fetch the map and check if array is in fast case.
+  // Check that object doesn't require security checks and
+  // has no indexed interceptor.
+  __ CmpObjectType(object.reg(), FIRST_JS_OBJECT_TYPE, tmp1.reg());
+  deferred->Branch(below);
+  __ testb(FieldOperand(tmp1.reg(), Map::kBitFieldOffset),
+           Immediate(KeyedLoadIC::kSlowCaseBitFieldMask));
+  deferred->Branch(not_zero);
+
+  // Check the object's elements are in fast case.
+  __ movq(tmp1.reg(), FieldOperand(object.reg(), JSObject::kElementsOffset));
+  __ CompareRoot(FieldOperand(tmp1.reg(), HeapObject::kMapOffset),
+                 Heap::kFixedArrayMapRootIndex);
+  deferred->Branch(not_equal);
+
+  // Check that both indices are smis.
+  Condition both_smi = __ CheckBothSmi(index1.reg(), index2.reg());
+  deferred->Branch(NegateCondition(both_smi));
+
+  // Bring addresses into index1 and index2.
+  __ SmiToInteger32(index1.reg(), index1.reg());
+  __ lea(index1.reg(), FieldOperand(tmp1.reg(),
+                                    index1.reg(),
+                                    times_pointer_size,
+                                    FixedArray::kHeaderSize));
+  __ SmiToInteger32(index2.reg(), index2.reg());
+  __ lea(index2.reg(), FieldOperand(tmp1.reg(),
+                                    index2.reg(),
+                                    times_pointer_size,
+                                    FixedArray::kHeaderSize));
+
+  // Swap elements.
+  __ movq(object.reg(), Operand(index1.reg(), 0));
+  __ movq(tmp2.reg(), Operand(index2.reg(), 0));
+  __ movq(Operand(index2.reg(), 0), object.reg());
+  __ movq(Operand(index1.reg(), 0), tmp2.reg());
+
+  Label done;
+  __ InNewSpace(tmp1.reg(), tmp2.reg(), equal, &done);
+  // Possible optimization: do a check that both values are Smis
+  // (or them and test against Smi mask.)
+
+  __ movq(tmp2.reg(), tmp1.reg());
+  RecordWriteStub recordWrite1(tmp2.reg(), index1.reg(), object.reg());
+  __ CallStub(&recordWrite1);
+
+  RecordWriteStub recordWrite2(tmp1.reg(), index2.reg(), object.reg());
+  __ CallStub(&recordWrite2);
+
+  __ bind(&done);
+
+  deferred->BindExit();
+  frame_->Push(Factory::undefined_value());
 }
 
 
@@ -4516,19 +4642,19 @@ void CodeGenerator::GenerateCallFunction(ZoneList<Expression*>* args) {
 
 void CodeGenerator::GenerateMathSin(ZoneList<Expression*>* args) {
   ASSERT_EQ(args->length(), 1);
-  // Load the argument on the stack and jump to the runtime.
   Load(args->at(0));
-  Result answer = frame_->CallRuntime(Runtime::kMath_sin, 1);
-  frame_->Push(&answer);
+  TranscendentalCacheStub stub(TranscendentalCache::SIN);
+  Result result = frame_->CallStub(&stub, 1);
+  frame_->Push(&result);
 }
 
 
 void CodeGenerator::GenerateMathCos(ZoneList<Expression*>* args) {
   ASSERT_EQ(args->length(), 1);
-  // Load the argument on the stack and jump to the runtime.
   Load(args->at(0));
-  Result answer = frame_->CallRuntime(Runtime::kMath_cos, 1);
-  frame_->Push(&answer);
+  TranscendentalCacheStub stub(TranscendentalCache::COS);
+  Result result = frame_->CallStub(&stub, 1);
+  frame_->Push(&result);
 }
 
 
@@ -6084,10 +6210,10 @@ static TypeInfo CalculateTypeInfo(TypeInfo operands_type,
 }
 
 
-void CodeGenerator::GenericBinaryOperation(Token::Value op,
-                                           StaticType* type,
+void CodeGenerator::GenericBinaryOperation(BinaryOperation* expr,
                                            OverwriteMode overwrite_mode) {
   Comment cmnt(masm_, "[ BinaryOperation");
+  Token::Value op = expr->op();
   Comment cmnt_token(masm_, Token::String(op));
 
   if (op == Token::COMMA) {
@@ -6113,8 +6239,6 @@ void CodeGenerator::GenericBinaryOperation(Token::Value op,
       Result answer;
       if (left_is_string) {
         if (right_is_string) {
-          // TODO(lrn): if both are constant strings
-          // -- do a compile time cons, if allocation during codegen is allowed.
           StringAddStub stub(NO_STRING_CHECK_IN_STUB);
           answer = frame_->CallStub(&stub, 2);
         } else {
@@ -6153,25 +6277,29 @@ void CodeGenerator::GenericBinaryOperation(Token::Value op,
 
   Result answer;
   if (left_is_non_smi_constant || right_is_non_smi_constant) {
+    // Go straight to the slow case, with no smi code.
     GenericBinaryOpStub stub(op,
                              overwrite_mode,
                              NO_SMI_CODE_IN_STUB,
                              operands_type);
     answer = stub.GenerateCall(masm_, frame_, &left, &right);
   } else if (right_is_smi_constant) {
-    answer = ConstantSmiBinaryOperation(op, &left, right.handle(),
-                                        type, false, overwrite_mode);
+    answer = ConstantSmiBinaryOperation(expr, &left, right.handle(),
+                                        false, overwrite_mode);
   } else if (left_is_smi_constant) {
-    answer = ConstantSmiBinaryOperation(op, &right, left.handle(),
-                                        type, true, overwrite_mode);
+    answer = ConstantSmiBinaryOperation(expr, &right, left.handle(),
+                                        true, overwrite_mode);
   } else {
     // Set the flags based on the operation, type and loop nesting level.
     // Bit operations always assume they likely operate on Smis. Still only
     // generate the inline Smi check code if this operation is part of a loop.
     // For all other operations only inline the Smi check code for likely smis
     // if the operation is part of a loop.
-    if (loop_nesting() > 0 && (Token::IsBitOp(op) || type->IsLikelySmi())) {
-      answer = LikelySmiBinaryOperation(op, &left, &right, overwrite_mode);
+    if (loop_nesting() > 0 &&
+        (Token::IsBitOp(op) ||
+         operands_type.IsInteger32() ||
+         expr->type()->IsLikelySmi())) {
+      answer = LikelySmiBinaryOperation(expr, &left, &right, overwrite_mode);
     } else {
       GenericBinaryOpStub stub(op,
                                overwrite_mode,
@@ -6263,26 +6391,32 @@ void DeferredInlineSmiOperation::Generate() {
 }
 
 
-Result CodeGenerator::ConstantSmiBinaryOperation(Token::Value op,
+void DeferredInlineSmiOperationReversed::Generate() {
+  GenericBinaryOpStub stub(
+      op_,
+      overwrite_mode_,
+      NO_SMI_CODE_IN_STUB);
+  stub.GenerateCall(masm_, value_, src_);
+  if (!dst_.is(rax)) __ movq(dst_, rax);
+}
+
+
+Result CodeGenerator::ConstantSmiBinaryOperation(BinaryOperation* expr,
                                                  Result* operand,
                                                  Handle<Object> value,
-                                                 StaticType* type,
                                                  bool reversed,
                                                  OverwriteMode overwrite_mode) {
   // NOTE: This is an attempt to inline (a bit) more of the code for
   // some possible smi operations (like + and -) when (at least) one
   // of the operands is a constant smi.
   // Consumes the argument "operand".
-
-  // TODO(199): Optimize some special cases of operations involving a
-  // smi literal (multiply by 2, shift by 0, etc.).
   if (IsUnsafeSmi(value)) {
     Result unsafe_operand(value);
     if (reversed) {
-      return LikelySmiBinaryOperation(op, &unsafe_operand, operand,
+      return LikelySmiBinaryOperation(expr, &unsafe_operand, operand,
                                overwrite_mode);
     } else {
-      return LikelySmiBinaryOperation(op, operand, &unsafe_operand,
+      return LikelySmiBinaryOperation(expr, operand, &unsafe_operand,
                                overwrite_mode);
     }
   }
@@ -6291,6 +6425,7 @@ Result CodeGenerator::ConstantSmiBinaryOperation(Token::Value op,
   Smi* smi_value = Smi::cast(*value);
   int int_value = smi_value->value();
 
+  Token::Value op = expr->op();
   Result answer;
   switch (op) {
     case Token::ADD: {
@@ -6319,7 +6454,7 @@ Result CodeGenerator::ConstantSmiBinaryOperation(Token::Value op,
     case Token::SUB: {
       if (reversed) {
         Result constant_operand(value);
-        answer = LikelySmiBinaryOperation(op, &constant_operand, operand,
+        answer = LikelySmiBinaryOperation(expr, &constant_operand, operand,
                                           overwrite_mode);
       } else {
         operand->ToRegister();
@@ -6342,7 +6477,7 @@ Result CodeGenerator::ConstantSmiBinaryOperation(Token::Value op,
     case Token::SAR:
       if (reversed) {
         Result constant_operand(value);
-        answer = LikelySmiBinaryOperation(op, &constant_operand, operand,
+        answer = LikelySmiBinaryOperation(expr, &constant_operand, operand,
                                           overwrite_mode);
       } else {
         // Only the least significant 5 bits of the shift value are used.
@@ -6368,7 +6503,7 @@ Result CodeGenerator::ConstantSmiBinaryOperation(Token::Value op,
     case Token::SHR:
       if (reversed) {
         Result constant_operand(value);
-        answer = LikelySmiBinaryOperation(op, &constant_operand, operand,
+        answer = LikelySmiBinaryOperation(expr, &constant_operand, operand,
                                           overwrite_mode);
       } else {
         // Only the least significant 5 bits of the shift value are used.
@@ -6395,9 +6530,45 @@ Result CodeGenerator::ConstantSmiBinaryOperation(Token::Value op,
 
     case Token::SHL:
       if (reversed) {
-        Result constant_operand(value);
-        answer = LikelySmiBinaryOperation(op, &constant_operand, operand,
-                                          overwrite_mode);
+        // Move operand into rcx and also into a second register.
+        // If operand is already in a register, take advantage of that.
+        // This lets us modify rcx, but still bail out to deferred code.
+        Result right;
+        Result right_copy_in_rcx;
+        TypeInfo right_type_info = operand->type_info();
+        operand->ToRegister();
+        if (operand->reg().is(rcx)) {
+          right = allocator()->Allocate();
+          __ movq(right.reg(), rcx);
+          frame_->Spill(rcx);
+          right_copy_in_rcx = *operand;
+        } else {
+          right_copy_in_rcx = allocator()->Allocate(rcx);
+          __ movq(rcx, operand->reg());
+          right = *operand;
+        }
+        operand->Unuse();
+
+        answer = allocator()->Allocate();
+        DeferredInlineSmiOperationReversed* deferred =
+            new DeferredInlineSmiOperationReversed(op,
+                                                   answer.reg(),
+                                                   smi_value,
+                                                   right.reg(),
+                                                   overwrite_mode);
+        __ movq(answer.reg(), Immediate(int_value));
+        __ SmiToInteger32(rcx, rcx);
+        if (!right.type_info().IsSmi()) {
+          Condition is_smi = masm_->CheckSmi(right.reg());
+          deferred->Branch(NegateCondition(is_smi));
+        } else if (FLAG_debug_code) {
+          __ AbortIfNotSmi(right.reg(),
+              "Static type info claims non-smi is smi in (const SHL smi).");
+        }
+        __ shl_cl(answer.reg());
+        __ Integer32ToSmi(answer.reg(), answer.reg());
+
+        deferred->BindExit();
       } else {
         // Only the least significant 5 bits of the shift value are used.
         // In the slow case, this masking is done inside the runtime call.
@@ -6503,10 +6674,10 @@ Result CodeGenerator::ConstantSmiBinaryOperation(Token::Value op,
     default: {
       Result constant_operand(value);
       if (reversed) {
-        answer = LikelySmiBinaryOperation(op, &constant_operand, operand,
+        answer = LikelySmiBinaryOperation(expr, &constant_operand, operand,
                                           overwrite_mode);
       } else {
-        answer = LikelySmiBinaryOperation(op, operand, &constant_operand,
+        answer = LikelySmiBinaryOperation(expr, operand, &constant_operand,
                                           overwrite_mode);
       }
       break;
@@ -6516,10 +6687,11 @@ Result CodeGenerator::ConstantSmiBinaryOperation(Token::Value op,
   return answer;
 }
 
-Result CodeGenerator::LikelySmiBinaryOperation(Token::Value op,
+Result CodeGenerator::LikelySmiBinaryOperation(BinaryOperation* expr,
                                                Result* left,
                                                Result* right,
                                                OverwriteMode overwrite_mode) {
+  Token::Value op = expr->op();
   Result answer;
   // Special handling of div and mod because they use fixed registers.
   if (op == Token::DIV || op == Token::MOD) {
@@ -7103,10 +7275,8 @@ void Reference::SetValue(InitState init_state) {
         // Check that the key is a smi.
         if (!key.is_smi()) {
           __ JumpIfNotSmi(key.reg(), deferred->entry_label());
-        } else {
-          if (FLAG_debug_code) {
-            __ AbortIfNotSmi(key.reg(), "Non-smi value in smi-typed value.");
-          }
+        } else if (FLAG_debug_code) {
+          __ AbortIfNotSmi(key.reg(), "Non-smi value in smi-typed value.");
         }
 
         // Check that the receiver is a JSArray.
@@ -7458,6 +7628,216 @@ bool CodeGenerator::FoldConstantSmis(Token::Value op, int left, int right) {
 
 
 // End of CodeGenerator implementation.
+
+void TranscendentalCacheStub::Generate(MacroAssembler* masm) {
+  // Input on stack:
+  // rsp[8]: argument (should be number).
+  // rsp[0]: return address.
+  Label runtime_call;
+  Label runtime_call_clear_stack;
+  Label input_not_smi;
+  Label loaded;
+  // Test that rax is a number.
+  __ movq(rax, Operand(rsp, kPointerSize));
+  __ JumpIfNotSmi(rax, &input_not_smi);
+  // Input is a smi. Untag and load it onto the FPU stack.
+  // Then load the bits of the double into rbx.
+  __ SmiToInteger32(rax, rax);
+  __ subq(rsp, Immediate(kPointerSize));
+  __ cvtlsi2sd(xmm1, rax);
+  __ movsd(Operand(rsp, 0), xmm1);
+  __ movq(rbx, xmm1);
+  __ movq(rdx, xmm1);
+  __ fld_d(Operand(rsp, 0));
+  __ addq(rsp, Immediate(kPointerSize));
+  __ jmp(&loaded);
+
+  __ bind(&input_not_smi);
+  // Check if input is a HeapNumber.
+  __ Move(rbx, Factory::heap_number_map());
+  __ cmpq(rbx, FieldOperand(rax, HeapObject::kMapOffset));
+  __ j(not_equal, &runtime_call);
+  // Input is a HeapNumber. Push it on the FPU stack and load its
+  // bits into rbx.
+  __ fld_d(FieldOperand(rax, HeapNumber::kValueOffset));
+  __ movq(rbx, FieldOperand(rax, HeapNumber::kValueOffset));
+  __ movq(rdx, rbx);
+  __ bind(&loaded);
+  // ST[0] == double value
+  // rbx = bits of double value.
+  // rdx = also bits of double value.
+  // Compute hash (h is 32 bits, bits are 64):
+  //   h = h0 = bits ^ (bits >> 32);
+  //   h ^= h >> 16;
+  //   h ^= h >> 8;
+  //   h = h & (cacheSize - 1);
+  // or h = (h0 ^ (h0 >> 8) ^ (h0 >> 16) ^ (h0 >> 24)) & (cacheSize - 1)
+  __ sar(rdx, Immediate(32));
+  __ xorl(rdx, rbx);
+  __ movl(rcx, rdx);
+  __ movl(rax, rdx);
+  __ movl(rdi, rdx);
+  __ sarl(rdx, Immediate(8));
+  __ sarl(rcx, Immediate(16));
+  __ sarl(rax, Immediate(24));
+  __ xorl(rcx, rdx);
+  __ xorl(rax, rdi);
+  __ xorl(rcx, rax);
+  ASSERT(IsPowerOf2(TranscendentalCache::kCacheSize));
+  __ andl(rcx, Immediate(TranscendentalCache::kCacheSize - 1));
+  // ST[0] == double value.
+  // rbx = bits of double value.
+  // rcx = TranscendentalCache::hash(double value).
+  __ movq(rax, ExternalReference::transcendental_cache_array_address());
+  // rax points to cache array.
+  __ movq(rax, Operand(rax, type_ * sizeof(TranscendentalCache::caches_[0])));
+  // rax points to the cache for the type type_.
+  // If NULL, the cache hasn't been initialized yet, so go through runtime.
+  __ testq(rax, rax);
+  __ j(zero, &runtime_call_clear_stack);
+#ifdef DEBUG
+  // Check that the layout of cache elements match expectations.
+  {  // NOLINT - doesn't like a single brace on a line.
+    TranscendentalCache::Element test_elem[2];
+    char* elem_start = reinterpret_cast<char*>(&test_elem[0]);
+    char* elem2_start = reinterpret_cast<char*>(&test_elem[1]);
+    char* elem_in0  = reinterpret_cast<char*>(&(test_elem[0].in[0]));
+    char* elem_in1  = reinterpret_cast<char*>(&(test_elem[0].in[1]));
+    char* elem_out = reinterpret_cast<char*>(&(test_elem[0].output));
+    // Two uint_32's and a pointer per element.
+    CHECK_EQ(16, static_cast<int>(elem2_start - elem_start));
+    CHECK_EQ(0, static_cast<int>(elem_in0 - elem_start));
+    CHECK_EQ(kIntSize, static_cast<int>(elem_in1 - elem_start));
+    CHECK_EQ(2 * kIntSize, static_cast<int>(elem_out - elem_start));
+  }
+#endif
+  // Find the address of the rcx'th entry in the cache, i.e., &rax[rcx*16].
+  __ addl(rcx, rcx);
+  __ lea(rcx, Operand(rax, rcx, times_8, 0));
+  // Check if cache matches: Double value is stored in uint32_t[2] array.
+  Label cache_miss;
+  __ cmpq(rbx, Operand(rcx, 0));
+  __ j(not_equal, &cache_miss);
+  // Cache hit!
+  __ movq(rax, Operand(rcx, 2 * kIntSize));
+  __ fstp(0);  // Clear FPU stack.
+  __ ret(kPointerSize);
+
+  __ bind(&cache_miss);
+  // Update cache with new value.
+  __ AllocateHeapNumber(rax, rdi, &runtime_call_clear_stack);
+  GenerateOperation(masm);
+  __ movq(Operand(rcx, 0), rbx);
+  __ movq(Operand(rcx, 2 * kIntSize), rax);
+  __ fstp_d(FieldOperand(rax, HeapNumber::kValueOffset));
+  __ ret(kPointerSize);
+
+  __ bind(&runtime_call_clear_stack);
+  __ fstp(0);
+  __ bind(&runtime_call);
+  __ TailCallExternalReference(ExternalReference(RuntimeFunction()), 1, 1);
+}
+
+
+Runtime::FunctionId TranscendentalCacheStub::RuntimeFunction() {
+  switch (type_) {
+    // Add more cases when necessary.
+    case TranscendentalCache::SIN: return Runtime::kMath_sin;
+    case TranscendentalCache::COS: return Runtime::kMath_cos;
+    default:
+      UNIMPLEMENTED();
+      return Runtime::kAbort;
+  }
+}
+
+
+void TranscendentalCacheStub::GenerateOperation(MacroAssembler* masm) {
+  // Only free register is rdi.
+  Label done;
+  ASSERT(type_ == TranscendentalCache::SIN ||
+         type_ == TranscendentalCache::COS);
+  // More transcendental types can be added later.
+
+  // Both fsin and fcos require arguments in the range +/-2^63 and
+  // return NaN for infinities and NaN. They can share all code except
+  // the actual fsin/fcos operation.
+  Label in_range;
+  // If argument is outside the range -2^63..2^63, fsin/cos doesn't
+  // work. We must reduce it to the appropriate range.
+  __ movq(rdi, rbx);
+  // Move exponent and sign bits to low bits.
+  __ shr(rdi, Immediate(HeapNumber::kMantissaBits));
+  // Remove sign bit.
+  __ andl(rdi, Immediate((1 << HeapNumber::KExponentBits) - 1));
+  int supported_exponent_limit = (63 + HeapNumber::kExponentBias);
+  __ cmpl(rdi, Immediate(supported_exponent_limit));
+  __ j(below, &in_range);
+  // Check for infinity and NaN. Both return NaN for sin.
+  __ cmpl(rdi, Immediate(0x7ff));
+  Label non_nan_result;
+  __ j(not_equal, &non_nan_result);
+  // Input is +/-Infinity or NaN. Result is NaN.
+  __ fstp(0);  // Clear fpu stack.
+  // NaN is represented by 0x7ff8000000000000.
+  __ movq(rdi, kNaNValue, RelocInfo::NONE);
+  __ push(rdi);
+  __ fld_d(Operand(rsp, 0));
+  __ addq(rsp, Immediate(kPointerSize));
+  __ jmp(&done);
+
+  __ bind(&non_nan_result);
+
+  // Use fpmod to restrict argument to the range +/-2*PI.
+  __ movq(rdi, rax);  // Save rax before using fnstsw_ax.
+  __ fldpi();
+  __ fadd(0);
+  __ fld(1);
+  // FPU Stack: input, 2*pi, input.
+  {
+    Label no_exceptions;
+    __ fwait();
+    __ fnstsw_ax();
+    // Clear if Illegal Operand or Zero Division exceptions are set.
+    __ testl(rax, Immediate(5));
+    __ j(zero, &no_exceptions);
+    __ fnclex();
+    __ bind(&no_exceptions);
+  }
+
+  // Compute st(0) % st(1)
+  {
+    Label partial_remainder_loop;
+    __ bind(&partial_remainder_loop);
+    __ fprem1();
+    __ fwait();
+    __ fnstsw_ax();
+    __ testl(rax, Immediate(0x400));  // Check C2 bit of FPU status word.
+    // If C2 is set, computation only has partial result. Loop to
+    // continue computation.
+    __ j(not_zero, &partial_remainder_loop);
+  }
+  // FPU Stack: input, 2*pi, input % 2*pi
+  __ fstp(2);
+  // FPU Stack: input % 2*pi, 2*pi,
+  __ fstp(0);
+  // FPU Stack: input % 2*pi
+  __ movq(rax, rdi);  // Restore rax (allocated HeapNumber pointer).
+
+  // FPU Stack: input % 2*pi
+  __ bind(&in_range);
+  switch (type_) {
+    case TranscendentalCache::SIN:
+      __ fsin();
+      break;
+    case TranscendentalCache::COS:
+      __ fcos();
+      break;
+    default:
+      UNREACHABLE();
+  }
+  __ bind(&done);
+}
+
 
 // Get the integer part of a heap number.  Surprisingly, all this bit twiddling
 // is faster than using the built-in instructions on floating point registers.
@@ -8125,6 +8505,12 @@ void NumberToStringStub::Generate(MacroAssembler* masm) {
   __ bind(&runtime);
   // Handle number to string in the runtime system if not found in the cache.
   __ TailCallRuntime(Runtime::kNumberToStringSkipCache, 1, 1);
+}
+
+
+void RecordWriteStub::Generate(MacroAssembler* masm) {
+  masm->RecordWriteHelper(object_, addr_, scratch_);
+  masm->ret(0);
 }
 
 
@@ -9647,12 +10033,10 @@ void GenericBinaryOpStub::Generate(MacroAssembler* masm) {
         Label not_floats;
         // rax: y
         // rdx: x
-      if (static_operands_type_.IsNumber()) {
-        if (FLAG_debug_code) {
-          // Assert at runtime that inputs are only numbers.
-          __ AbortIfNotNumber(rdx, "GenericBinaryOpStub operand not a number.");
-          __ AbortIfNotNumber(rax, "GenericBinaryOpStub operand not a number.");
-        }
+      if (static_operands_type_.IsNumber() && FLAG_debug_code) {
+        // Assert at runtime that inputs are only numbers.
+        __ AbortIfNotNumber(rdx, "GenericBinaryOpStub operand not a number.");
+        __ AbortIfNotNumber(rax, "GenericBinaryOpStub operand not a number.");
       } else {
         FloatingPointHelper::CheckNumberOperands(masm, &call_runtime);
       }
@@ -10995,7 +11379,6 @@ ModuloFunction CreateModuloFunction() {
   __ testb(rax, Immediate(5));
   __ j(zero, &valid_result);
   __ fstp(0);  // Drop result in st(0).
-  int64_t kNaNValue = V8_INT64_C(0x7ff8000000000000);
   __ movq(rcx, kNaNValue, RelocInfo::NONE);
   __ movq(Operand(rsp, kPointerSize), rcx);
   __ movsd(xmm0, Operand(rsp, kPointerSize));
