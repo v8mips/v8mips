@@ -5412,7 +5412,7 @@ static Object* Runtime_NumberDiv(Arguments args) {
 
   CONVERT_DOUBLE_CHECKED(x, args[0]);
   CONVERT_DOUBLE_CHECKED(y, args[1]);
-  return Heap::NewNumberFromDouble(x / y);
+  return Heap::NumberFromDouble(x / y);
 }
 
 
@@ -5424,8 +5424,8 @@ static Object* Runtime_NumberMod(Arguments args) {
   CONVERT_DOUBLE_CHECKED(y, args[1]);
 
   x = modulo(x, y);
-  // NewNumberFromDouble may return a Smi instead of a Number object
-  return Heap::NewNumberFromDouble(x);
+  // NumberFromDouble may return a Smi instead of a Number object
+  return Heap::NumberFromDouble(x);
 }
 
 
@@ -6079,7 +6079,8 @@ static Object* Runtime_RoundNumber(Arguments args) {
 
   if (sign && value >= -0.5) return Heap::minus_zero_value();
 
-  return Heap::NumberFromDouble(floor(value + 0.5));
+  // Do not call NumberFromDouble() to avoid extra checks.
+  return Heap::AllocateHeapNumber(floor(value + 0.5));
 }
 
 
@@ -7769,6 +7770,38 @@ static Object* Runtime_EstimateNumberOfElements(Arguments args) {
   } else {
     return array->length();
   }
+}
+
+
+static Object* Runtime_SwapElements(Arguments args) {
+  HandleScope handle_scope;
+
+  ASSERT_EQ(3, args.length());
+
+  Handle<Object> object = args.at<Object>(0);
+  Handle<Object> key1 = args.at<Object>(1);
+  Handle<Object> key2 = args.at<Object>(2);
+
+  uint32_t index1, index2;
+  // That must be the most common case.
+  if (object->IsJSObject()
+      && Array::IndexFromObject(*key1, &index1)
+      && Array::IndexFromObject(*key2, &index2)) {
+    Handle<JSObject> jsobject = Handle<JSObject>::cast(object);
+    Handle<Object> tmp1 = GetElement(jsobject, index1);
+    Handle<Object> tmp2 = GetElement(jsobject, index2);
+
+    SetElement(jsobject, index1, tmp2);
+    SetElement(jsobject, index2, tmp1);
+  } else {
+    Handle<Object> tmp1 = GetProperty(object, key1);
+    Handle<Object> tmp2 = GetProperty(object, key2);
+
+    SetProperty(object, key1, tmp2, NONE);
+    SetProperty(object, key2, tmp1, NONE);
+  }
+
+  return Heap::undefined_value();
 }
 
 
