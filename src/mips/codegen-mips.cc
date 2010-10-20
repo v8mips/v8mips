@@ -6993,14 +6993,15 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
   __ lw(a3, FieldMemOperand(subject, String::kLengthOffset));
 
   // a2: Number of capture registers
-  // a3: Length of subject string
+  // a3: Length of subject string as a smi
   // subject: Subject string
   // regexp_data: RegExp data (FixedArray)
   // Check that the third argument is a positive smi less than the subject
   // string length. A negative value will be greater (unsigned comparison).
   __ lw(a0, MemOperand(sp, kPreviousIndexOffset));
-  __ sra(a0, a0, kSmiTagSize + kSmiShiftSize);
-  __ Branch(&runtime, Uless, a3, Operand(a0));
+  __ And(at, a0, Operand(kSmiTagMask));
+  __ Branch(&runtime, ne, at, Operand(zero_reg));
+  __ Branch(&runtime, ls, a3, Operand(a0));
 
   // a2: Number of capture registers
   // subject: Subject string
@@ -7121,6 +7122,7 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
   // For arguments 4 and 3 get string length, calculate start of string data and
   // calculate the shift of the index (0 for ASCII and 1 for two byte).
   __ lw(a0, FieldMemOperand(subject, String::kLengthOffset));
+  __ sra(a0, a0, kSmiTagSize);
   ASSERT_EQ(SeqAsciiString::kHeaderSize, SeqTwoByteString::kHeaderSize);
   __ Addu(t0, subject, Operand(SeqAsciiString::kHeaderSize - kHeapObjectTag));
   __ Xor(a3, a3, Operand(1));  // 1 for 2-byte str, 0 for 1-byte.
@@ -8453,8 +8455,7 @@ void StringHelper::GenerateFastCharCodeAt(MacroAssembler* masm,
   // Check for index out of range.
   __ lw(scratch, FieldMemOperand(object, String::kLengthOffset));
   // Now scratch has the length of the string.  Compare with the index.
-  __ srl(at, index, kSmiTagSize);  // Remove the smi tag.
-  __ Branch(index_out_of_range, ls, scratch, Operand(at));
+  __ Branch(index_out_of_range, ls, scratch, Operand(index));
 
   __ bind(&try_again_with_new_string);
   // ----------- S t a t e -------------
@@ -8812,7 +8813,7 @@ void StringHelper::GenerateTwoCharacterSymbolTableProbe(MacroAssembler* masm,
 
     // If length is not 2 the string is not a candidate.
     __ lw(scratch, FieldMemOperand(candidate, String::kLengthOffset));
-    __ Branch(&next_probe[i], ne, scratch, Operand(2));
+    __ Branch(&next_probe[i], ne, scratch, Operand(Smi::FromInt(2)));
 
     // Check that the candidate is a non-external ascii string.
     __ lw(scratch, FieldMemOperand(candidate, HeapObject::kMapOffset));
@@ -8982,7 +8983,7 @@ void SubStringStub::Generate(MacroAssembler* masm) {
   // t5: to index (untagged smi)
 
   __ lw(t0, FieldMemOperand(t1, String::kLengthOffset));
-  __ Branch(&sub_string_runtime, lt, t0, Operand(t5));  // Fail if to > length.
+  __ Branch(&sub_string_runtime, lt, t0, Operand(t3));  // Fail if to > length.
 
   // a1: instance type
   // a2: result string length
@@ -9104,9 +9105,13 @@ void StringCompareStub::GenerateCompareFlatAsciiStrings(MacroAssembler* masm,
   Register length_delta = v0;   // This will later become result.
   __ subu(length_delta, scratch1, scratch2);
   Register min_length = scratch1;
+  ASSERT(kSmiTag == 0);
   // set min_length to the smaller of the two string lengths.
   __ slt(scratch3, scratch1, scratch2);
   __ movz(min_length, scratch2, scratch3);
+
+  // Untag smi.
+  __ sra(min_length, min_length, kSmiTagSize);
 
   // Setup registers left and right to point to character[0].
   __ Addu(left, left, Operand(SeqAsciiString::kHeaderSize - kHeapObjectTag));
@@ -9225,6 +9230,10 @@ void StringAddStub::Generate(MacroAssembler* masm) {
   {
     Label strings_not_empty;
     // Check if either of the strings are empty. In that case return the other.
+    // These tests use zero-length check on string-length whch is an Smi.
+    // Assert that Smi::FromInt(0) is really 0.
+    ASSERT(kSmiTag == 0);
+    ASSERT(Smi::FromInt(0) == 0);
     __ lw(a2, FieldMemOperand(a0, String::kLengthOffset));
     __ lw(a3, FieldMemOperand(a1, String::kLengthOffset));
     __ mov(v0, a0);       // Assume we'll return first string (from a0).
@@ -9240,6 +9249,10 @@ void StringAddStub::Generate(MacroAssembler* masm) {
 
     __ bind(&strings_not_empty);
   }
+
+  // Untag both string-lengths.
+  __ sra(a2, a2, kSmiTagSize);
+  __ sra(a3, a3, kSmiTagSize);
 
   // Both strings are non-empty.
   // a0: first string

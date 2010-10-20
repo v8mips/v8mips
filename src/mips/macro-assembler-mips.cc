@@ -39,7 +39,6 @@ namespace internal {
 
 MacroAssembler::MacroAssembler(void* buffer, int size)
     : Assembler(buffer, size),
-      unresolved_(0),
       generating_stub_(false),
       allow_stub_calls_(true),
       code_object_(Heap::undefined_value()) {
@@ -1788,11 +1787,11 @@ void MacroAssembler::AllocateTwoByteString(Register result,
                      TAG_OBJECT);
 
   // Set the map, length and hash field.
-  LoadRoot(scratch1, Heap::kStringMapRootIndex);
-  sw(length, FieldMemOperand(result, String::kLengthOffset));
-  sw(scratch1, FieldMemOperand(result, HeapObject::kMapOffset));
-  li(scratch2, Operand(String::kEmptyHashField));
-  sw(scratch2, FieldMemOperand(result, String::kHashFieldOffset));
+  InitializeNewString(result,
+                     length,
+                     Heap::kStringMapRootIndex,
+                     scratch1,
+                     scratch2);
 }
 
 
@@ -1821,12 +1820,11 @@ void MacroAssembler::AllocateAsciiString(Register result,
                      TAG_OBJECT);
 
   // Set the map, length and hash field.
-  LoadRoot(scratch1, Heap::kAsciiStringMapRootIndex);
-  li(scratch1, Operand(Factory::ascii_string_map()));
-  sw(length, FieldMemOperand(result, String::kLengthOffset));
-  sw(scratch1, FieldMemOperand(result, HeapObject::kMapOffset));
-  li(scratch2, Operand(String::kEmptyHashField));
-  sw(scratch2, FieldMemOperand(result, String::kHashFieldOffset));
+  InitializeNewString(result,
+                     length,
+                     Heap::kAsciiStringMapRootIndex,
+                     scratch1,
+                     scratch2);
 }
 
 
@@ -1841,11 +1839,11 @@ void MacroAssembler::AllocateTwoByteConsString(Register result,
                      scratch2,
                      gc_required,
                      TAG_OBJECT);
-  LoadRoot(scratch1, Heap::kConsStringMapRootIndex);
-  li(scratch2, Operand(String::kEmptyHashField));
-  sw(length, FieldMemOperand(result, String::kLengthOffset));
-  sw(scratch1, FieldMemOperand(result, HeapObject::kMapOffset));
-  sw(scratch2, FieldMemOperand(result, String::kHashFieldOffset));
+  InitializeNewString(result,
+                     length,
+                     Heap::kConsStringMapRootIndex,
+                     scratch1,
+                     scratch2);
 }
 
 
@@ -1860,11 +1858,11 @@ void MacroAssembler::AllocateAsciiConsString(Register result,
                      scratch2,
                      gc_required,
                      TAG_OBJECT);
-  LoadRoot(scratch1, Heap::kConsAsciiStringMapRootIndex);
-  li(scratch2, Operand(String::kEmptyHashField));
-  sw(length, FieldMemOperand(result, String::kLengthOffset));
-  sw(scratch1, FieldMemOperand(result, HeapObject::kMapOffset));
-  sw(scratch2, FieldMemOperand(result, String::kHashFieldOffset));
+  InitializeNewString(result,
+                    length,
+                    Heap::kConsAsciiStringMapRootIndex,
+                    scratch1,
+                    scratch2);
 }
 
 
@@ -2502,6 +2500,20 @@ void MacroAssembler::LeaveExitFrame(ExitFrame::Mode mode) {
   lw(sp, MemOperand(sp, 8));
   jr(ra);
   nop();  // Branch delay slot nop.
+}
+
+
+void MacroAssembler::InitializeNewString(Register string,
+                                         Register length,
+                                         Heap::RootListIndex map_index,
+                                         Register scratch1,
+                                         Register scratch2) {
+  sll(scratch1, length, kSmiTagSize);
+  LoadRoot(scratch2, map_index);
+  sw(scratch1, FieldMemOperand(string, String::kLengthOffset));
+  li(scratch1, Operand(String::kEmptyHashField));
+  sw(scratch2, FieldMemOperand(string, HeapObject::kMapOffset));
+  sw(scratch1, FieldMemOperand(string, String::kHashFieldOffset));
 }
 
 

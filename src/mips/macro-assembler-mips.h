@@ -571,7 +571,6 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
     uint32_t flags;  // see Bootstrapper::FixupFlags decoders/encoders.
     const char* name;
   };
-  List<Unresolved>* unresolved() { return &unresolved_; }
 
   Handle<Object> CodeObject() { return code_object_; }
 
@@ -655,12 +654,6 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
                                            Label* failure);
 
  private:
-  List<Unresolved> unresolved_;
-  bool generating_stub_;
-  bool allow_stub_calls_;
-  // This handle will be patched with the code object on installation.
-  Handle<Object> code_object_;
-
   void Jump(intptr_t target, RelocInfo::Mode rmode,
             bool ProtectBranchDelaySlot = true);
   void Jump(intptr_t target, RelocInfo::Mode rmode, Condition cond = cc_always,
@@ -687,6 +680,18 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
   // Activation support.
   void EnterFrame(StackFrame::Type type);
   void LeaveFrame(StackFrame::Type type);
+
+  void InitializeNewString(Register string,
+                           Register length,
+                           Heap::RootListIndex map_index,
+                           Register scratch1,
+                           Register scratch2);
+
+
+  bool generating_stub_;
+  bool allow_stub_calls_;
+  // This handle will be patched with the code object on installation.
+  Handle<Object> code_object_;
 };
 
 
