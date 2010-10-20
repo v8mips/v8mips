@@ -557,6 +557,7 @@ void LoadIC::GenerateMiss(MacroAssembler* masm) {
   __ TailCallExternalReference(ref, 2, 1);
 }
 
+
 static inline bool IsInlinedICSite(Address address,
                                    Address* inline_end_address) {
   // If the instruction after the call site is not the pseudo instruction nop(1)
@@ -566,7 +567,7 @@ static inline bool IsInlinedICSite(Address address,
   // is a branch instruction for jumping back from the deferred code.
   Address address_after_call = address + Assembler::kCallTargetAddressOffset;
   Instr instr_after_call = Assembler::instr_at(address_after_call);
-  if (!Assembler::is_nop(instr_after_call, PROPERTY_LOAD_INLINED)) {
+  if (!Assembler::is_nop(instr_after_call, PROPERTY_ACCESS_INLINED)) {
     return false;
   }
   Address address_after_nop = address_after_call + Assembler::kInstrSize;
@@ -582,12 +583,14 @@ static inline bool IsInlinedICSite(Address address,
   return true;
 }
 
+
 void LoadIC::ClearInlinedVersion(Address address) {
   // Reset the map check of the inlined inobject property load (if present) to
   // guarantee failure by holding an invalid map (the null value). The offset
   // can be patched to anything.
   PatchInlinedLoad(address, Heap::null_value(), 0);
 }
+
 
 bool LoadIC::PatchInlinedLoad(Address address, Object* map, int offset) {
   // See CodeGenerator::EmitNamedLoad for
@@ -622,20 +625,22 @@ bool LoadIC::PatchInlinedLoad(Address address, Object* map, int offset) {
   return true;
 }
 
+
 void KeyedLoadIC::ClearInlinedVersion(Address address) {
   // Reset the map check of the inlined keyed load (if present) to
   // guarantee failure by holding an invalid map (the null value).
   PatchInlinedLoad(address, Heap::null_value());
 }
 
+
 bool KeyedLoadIC::PatchInlinedLoad(Address address, Object* map) {
   Address inline_end_address;
   if (!IsInlinedICSite(address, &inline_end_address)) return false;
 
   // Patch the map check.
-  // This ugly hack patches CodeGenerator::EmitKeyedLoad(), at the
+  // This code patches CodeGenerator::EmitKeyedLoad(), at the
   // li(scratch2, Operand(Factory::null_value()), true); which at
-  // this moment is 24 instructions from the end of the routine.
+  // present is 24 instructions from the end of the routine.
   Address ldr_map_instr_address =
           inline_end_address - 24 * Assembler::kInstrSize;
   Assembler::set_target_address_at(ldr_map_instr_address,
@@ -643,10 +648,37 @@ bool KeyedLoadIC::PatchInlinedLoad(Address address, Object* map) {
   return true;
 }
 
-void KeyedStoreIC::ClearInlinedVersion(Address address) {}
-void KeyedStoreIC::RestoreInlinedVersion(Address address) {}
+
+void KeyedStoreIC::ClearInlinedVersion(Address address) {
+  // Insert null as the elements map to check for.  This will make
+  // sure that the elements fast-case map check fails so that control
+  // flows to the IC instead of the inlined version.
+  PatchInlinedStore(address, Heap::null_value());
+}
+
+
+void KeyedStoreIC::RestoreInlinedVersion(Address address) {
+  // Restore the fast-case elements map check so that the inlined
+  // version can be used again.
+  PatchInlinedStore(address, Heap::fixed_array_map());
+}
+
+
 bool KeyedStoreIC::PatchInlinedStore(Address address, Object* map) {
-  return false;
+  // Find the end of the inlined code for handling the store if this is an
+  // inlined IC call site.
+  Address inline_end_address;
+  if (!IsInlinedICSite(address, &inline_end_address)) return false;
+
+  // Patch the map check.
+  // This code patches CodeGenerator::EmitKeyedStore(), at the
+  // __ li(t1, Operand(Factory::fixed_array_map()), true);  which at
+  // present is 9 instructions from the end of the routine.
+  Address ldr_map_instr_address =
+      inline_end_address - 9 * Assembler::kInstrSize;
+  Assembler::set_target_address_at(ldr_map_instr_address,
+                                   reinterpret_cast<Address>(map));
+  return true;
 }
 
 

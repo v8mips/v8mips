@@ -2113,10 +2113,10 @@ void MacroAssembler::TryGetFunctionPrototype(Register function,
 }
 
 
-  void MacroAssembler::GetObjectType(Register function,
+  void MacroAssembler::GetObjectType(Register object,
                                      Register map,
                                      Register type_reg) {
-    lw(map, FieldMemOperand(function, HeapObject::kMapOffset));
+    lw(map, FieldMemOperand(object, HeapObject::kMapOffset));
     lbu(type_reg, FieldMemOperand(map, Map::kInstanceTypeOffset));
   }
 

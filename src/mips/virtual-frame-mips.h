@@ -318,6 +318,10 @@ class VirtualFrame : public ZoneObject {
   // in v0.
   void CallKeyedLoadIC();
 
+  // Call keyed store IC. Key and receiver are on the stack and the value is in
+  // a0. Result is returned in v0 (and a0).
+  void CallKeyedStoreIC();
+
   // Call into an IC stub given the number of arguments it removes
   // from the stack. Register arguments to the IC stub are implicit,
   // and depend on the type of IC stub.

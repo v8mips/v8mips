@@ -304,15 +304,24 @@ void VirtualFrame::InvokeBuiltin(Builtins::JavaScript id,
   __ InvokeBuiltin(id, flags);
 }
 
+
 void VirtualFrame::CallLoadIC(RelocInfo::Mode mode) {
   Handle<Code> ic(Builtins::builtin(Builtins::LoadIC_Initialize));
   CallCodeObject(ic, mode, 0);
 }
 
+
 void VirtualFrame::CallKeyedLoadIC() {
   Handle<Code> ic(Builtins::builtin(Builtins::KeyedLoadIC_Initialize));
   CallCodeObject(ic, RelocInfo::CODE_TARGET, 0);
 }
+
+
+void VirtualFrame::CallKeyedStoreIC() {
+  Handle<Code> ic(Builtins::builtin(Builtins::KeyedStoreIC_Initialize));
+  CallCodeObject(ic, RelocInfo::CODE_TARGET, 0);
+}
+
 
 void VirtualFrame::CallCodeObject(Handle<Code> code,
                                   RelocInfo::Mode rmode,

@@ -176,7 +176,7 @@ enum ArgumentsAllocationMode {
 // states of the generated code.
 enum NopMarkerTypes {
   NON_MARKING_NOP = 0,
-  PROPERTY_LOAD_INLINED = 1
+  PROPERTY_ACCESS_INLINED
 };
 
 
@@ -342,6 +342,10 @@ class CodeGenerator: public AstVisitor {
   // look like an explicit property access, instead of an access
   // through the context chain.
   void LoadTypeofExpression(Expression* x);
+
+  // Store a keyed property. Key and receiver are on the stack and the value is
+  // in a0. Result is returned in r0.
+  void EmitKeyedStore(StaticType* key_type);
 
   // Read a value from a slot and leave it on top of the expression stack.
   void LoadFromSlot(Slot* slot, TypeofState typeof_state);
