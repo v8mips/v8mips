@@ -573,6 +573,20 @@ Register VirtualFrame::GetTOSRegister() {
   return kTopRegister[kStateAfterPush[top_of_stack_state_]];
 }
 
+
+void VirtualFrame::EmitPush(Operand operand) {
+  element_count_++;
+  if (SpilledScope::is_spilled()) {
+    __ li(a0, operand);
+    __ Push(a0);
+    return;
+  }
+  EnsureOneFreeTOSRegister();
+  top_of_stack_state_ = kStateAfterPush[top_of_stack_state_];
+  __ li(kTopRegister[top_of_stack_state_], operand);
+}
+
+
 void VirtualFrame::EmitPush(MemOperand operand) {
   element_count_++;
   if (SpilledScope::is_spilled()) {
@@ -584,6 +598,20 @@ void VirtualFrame::EmitPush(MemOperand operand) {
   top_of_stack_state_ = kStateAfterPush[top_of_stack_state_];
   __ lw(kTopRegister[top_of_stack_state_], operand);
 }
+
+
+void VirtualFrame::EmitPushRoot(Heap::RootListIndex index) {
+  element_count_++;
+  if (SpilledScope::is_spilled()) {
+    __ LoadRoot(a0, index);
+    __ Push(a0);
+    return;
+  }
+  EnsureOneFreeTOSRegister();
+  top_of_stack_state_ = kStateAfterPush[top_of_stack_state_];
+  __ LoadRoot(kTopRegister[top_of_stack_state_], index);
+}
+
 
 void VirtualFrame::EmitMultiPush(RegList regs) {
   for (int16_t i = kNumRegisters; i > 0; i--) {

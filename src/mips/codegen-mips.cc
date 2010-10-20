@@ -1747,12 +1747,11 @@ void CodeGenerator::VisitBlock(Block* node) {
 
 
 void CodeGenerator::DeclareGlobals(Handle<FixedArray> pairs) {
-  VirtualFrame::SpilledScope spilled_scope(frame_);
   frame_->EmitPush(cp);
-  __ li(t0, Operand(pairs));
-  frame_->EmitPush(t0);
-  __ li(t0, Operand(Smi::FromInt(is_eval() ? 1 : 0)));
-  frame_->EmitPush(t0);
+  frame_->EmitPush(Operand(pairs));
+  frame_->EmitPush(Operand(Smi::FromInt(is_eval() ? 1 : 0)));
+
+  VirtualFrame::SpilledScope spilled_scope(frame_);
   frame_->CallRuntime(Runtime::kDeclareGlobals, 3);
   // The result is discarded.
 }
@@ -1762,7 +1761,6 @@ void CodeGenerator::VisitDeclaration(Declaration* node) {
 #ifdef DEBUG
   int original_height = frame_->height();
 #endif
-  VirtualFrame::SpilledScope spilled_scope(frame_);
   Comment cmnt(masm_, "[ Declaration");
   Variable* var = node->proxy()->var();
   ASSERT(var != NULL);  // Must have been resolved.
@@ -1777,28 +1775,27 @@ void CodeGenerator::VisitDeclaration(Declaration* node) {
     ASSERT(var->is_dynamic());
     // For now, just do a runtime call.
     frame_->EmitPush(cp);
-    __ li(a0, Operand(var->name()));
-    frame_->EmitPush(a0);
+    frame_->EmitPush(Operand(var->name()));
     // Declaration nodes are always declared in only two modes.
     ASSERT(node->mode() == Variable::VAR || node->mode() == Variable::CONST);
     PropertyAttributes attr = node->mode() == Variable::VAR ? NONE : READ_ONLY;
-    __ li(a0, Operand(Smi::FromInt(attr)));
-    frame_->EmitPush(a0);
+    frame_->EmitPush(Operand(Smi::FromInt(attr)));
     // Push initial value, if any.
     // Note: For variables we must not push an initial value (such as
     // 'undefined') because we may have a (legal) redeclaration and we
     // must not destroy the current value.
     if (node->mode() == Variable::CONST) {
-      __ LoadRoot(a0, Heap::kTheHoleValueRootIndex);
-      frame_->EmitPush(a0);
+      frame_->EmitPushRoot(Heap::kTheHoleValueRootIndex);
     } else if (node->fun() != NULL) {
-      LoadAndSpill(node->fun());
+      Load(node->fun());
     } else {
-      __ li(a0, Operand(0));  // no initial value!
-      frame_->EmitPush(a0);
+      frame_->EmitPush(Operand(0));
     }
+
+    VirtualFrame::SpilledScope spilled_scope(frame_);
     frame_->CallRuntime(Runtime::kDeclareContextSlot, 4);
     // Ignore the return value (declarations are statements).
+
     ASSERT(frame_->height() == original_height);
     return;
   }
@@ -1814,14 +1811,11 @@ void CodeGenerator::VisitDeclaration(Declaration* node) {
   }
 
   if (val != NULL) {
-    {
-      // Set initial value.
-      Reference target(this, node->proxy());
-      LoadAndSpill(val);
-      target.SetValue(NOT_CONST_INIT);
-      // The reference is removed from the stack (preserving TOS) when
-      // it goes out of scope.
-    }
+    // Set initial value.
+    Reference target(this, node->proxy());
+    Load(val);
+    target.SetValue(NOT_CONST_INIT);
+
     // Get rid of the assigned value (declarations are statements).
     frame_->Drop();
   }
@@ -5109,7 +5103,7 @@ void DeferredReferenceSetKeyedValue::Generate() {
   // constant pool block scope to include the branch instruction ending the
   // deferred code.
   __ BlockTrampolinePoolFor(1);
-  
+
   // Make sure that the expected number of instructions are generated.
   ASSERT_EQ(kInlinedInstructions,
             masm_->InstructionsGeneratedSince(&check_inlined_codesize));
@@ -5209,7 +5203,7 @@ void CodeGenerator::EmitKeyedLoad() {
 
     // The following instructions are the part of the inlined load keyed
     // property code which can be patched. Therefore the exact number of
-    // instructions generated need to be fixed, so the trampoline pool is 
+    // instructions generated need to be fixed, so the trampoline pool is
     // blocked while generating this code.
     const int kInlinedKeyedLoadInstructions = 25;
 #ifdef DEBUG
@@ -5302,7 +5296,7 @@ void CodeGenerator::EmitKeyedStore(StaticType* key_type) {
     // Check that the receiver is a JSArray.
     __ GetObjectType(a2, a3, a3);
     deferred->Branch(ne, a3, Operand(JS_ARRAY_TYPE));
-    
+
     // Check that the key is within bounds. Both the key and the length of
     // the JSArray are smis. Use unsigned comparison to handle negative keys.
     __ lw(a3, FieldMemOperand(a2, JSArray::kLengthOffset));
@@ -5319,7 +5313,7 @@ void CodeGenerator::EmitKeyedStore(StaticType* key_type) {
 #endif
     //{ Assembler::BlockConstPoolScope block_const_pool(masm_);
     __ BlockTrampolinePoolFor(kInlinedKeyedStoreInstructions);
-    
+
     // Get the elements array from the receiver and check that it
     // is not a dictionary.
     __ lw(a3, FieldMemOperand(a2, JSObject::kElementsOffset));
