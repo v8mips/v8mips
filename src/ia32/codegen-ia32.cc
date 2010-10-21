@@ -1426,6 +1426,9 @@ Result CodeGenerator::LikelySmiBinaryOperation(BinaryOperation* expr,
                                                Result* left,
                                                Result* right,
                                                OverwriteMode overwrite_mode) {
+  // Copy the type info because left and right may be overwritten.
+  TypeInfo left_type_info = left->type_info();
+  TypeInfo right_type_info = right->type_info();
   Token::Value op = expr->op();
   Result answer;
   // Special handling of div and mod because they use fixed registers.
@@ -1501,8 +1504,8 @@ Result CodeGenerator::LikelySmiBinaryOperation(BinaryOperation* expr,
                                           (op == Token::DIV) ? eax : edx,
                                           left->reg(),
                                           right->reg(),
-                                          left->type_info(),
-                                          right->type_info(),
+                                          left_type_info,
+                                          right_type_info,
                                           overwrite_mode);
     if (left->reg().is(right->reg())) {
       __ test(left->reg(), Immediate(kSmiTagMask));
@@ -1605,18 +1608,18 @@ Result CodeGenerator::LikelySmiBinaryOperation(BinaryOperation* expr,
                                           answer.reg(),
                                           left->reg(),
                                           ecx,
-                                          left->type_info(),
-                                          right->type_info(),
+                                          left_type_info,
+                                          right_type_info,
                                           overwrite_mode);
 
     Label do_op, left_nonsmi;
     // If right is a smi we make a fast case if left is either a smi
     // or a heapnumber.
-    if (CpuFeatures::IsSupported(SSE2) && right->type_info().IsSmi()) {
+    if (CpuFeatures::IsSupported(SSE2) && right_type_info.IsSmi()) {
       CpuFeatures::Scope use_sse2(SSE2);
       __ mov(answer.reg(), left->reg());
       // Fast case - both are actually smis.
-      if (!left->type_info().IsSmi()) {
+      if (!left_type_info.IsSmi()) {
         __ test(answer.reg(), Immediate(kSmiTagMask));
         __ j(not_zero, &left_nonsmi);
       } else {
@@ -1640,7 +1643,7 @@ Result CodeGenerator::LikelySmiBinaryOperation(BinaryOperation* expr,
       deferred->Branch(negative);
     } else {
       CheckTwoForSminess(masm_, left->reg(), right->reg(), answer.reg(),
-                         left->type_info(), right->type_info(), deferred);
+                         left_type_info, right_type_info, deferred);
 
       // Untag both operands.
       __ mov(answer.reg(), left->reg());
@@ -1713,11 +1716,11 @@ Result CodeGenerator::LikelySmiBinaryOperation(BinaryOperation* expr,
                                         answer.reg(),
                                         left->reg(),
                                         right->reg(),
-                                        left->type_info(),
-                                        right->type_info(),
+                                        left_type_info,
+                                        right_type_info,
                                         overwrite_mode);
   CheckTwoForSminess(masm_, left->reg(), right->reg(), answer.reg(),
-                     left->type_info(), right->type_info(), deferred);
+                     left_type_info, right_type_info, deferred);
 
   __ mov(answer.reg(), left->reg());
   switch (op) {
@@ -1988,18 +1991,13 @@ void DeferredInlineSmiSub::Generate() {
 }
 
 
-Result CodeGenerator::ConstantSmiBinaryOperation(
-    BinaryOperation* expr,
-    Result* operand,
-    Handle<Object> value,
-    bool reversed,
-    OverwriteMode overwrite_mode) {
-  // NOTE: This is an attempt to inline (a bit) more of the code for
-  // some possible smi operations (like + and -) when (at least) one
-  // of the operands is a constant smi.
-  // Consumes the argument "operand".
-  // TODO(199): Optimize some special cases of operations involving a
-  // smi literal (multiply by 2, shift by 0, etc.).
+Result CodeGenerator::ConstantSmiBinaryOperation(BinaryOperation* expr,
+                                                 Result* operand,
+                                                 Handle<Object> value,
+                                                 bool reversed,
+                                                 OverwriteMode overwrite_mode) {
+  // Generate inline code for a binary operation when one of the
+  // operands is a constant smi.  Consumes the argument "operand".
   if (IsUnsafeSmi(value)) {
     Result unsafe_operand(value);
     if (reversed) {
@@ -5369,10 +5367,13 @@ void CodeGenerator::EmitSlotAssignment(Assignment* node) {
 
   // Evaluate the right-hand side.
   if (node->is_compound()) {
+    // For a compound assignment the right-hand side is a binary operation
+    // between the current property value and the actual right-hand side.
     Result result = LoadFromSlotCheckForArguments(slot, NOT_INSIDE_TYPEOF);
     frame()->Push(&result);
     Load(node->value());
 
+    // Perform the binary operation.
     bool overwrite_value =
         (node->value()->AsBinaryOperation() != NULL &&
          node->value()->AsBinaryOperation()->ResultOverwriteAllowed());
@@ -5382,6 +5383,7 @@ void CodeGenerator::EmitSlotAssignment(Assignment* node) {
     GenericBinaryOperation(&expr,
                            overwrite_value ? OVERWRITE_RIGHT : NO_OVERWRITE);
   } else {
+    // For non-compound assignment just load the right-hand side.
     Load(node->value());
   }
 
@@ -5404,7 +5406,9 @@ void CodeGenerator::EmitNamedPropertyAssignment(Assignment* node) {
   Property* prop = node->target()->AsProperty();
   ASSERT(var == NULL || (prop == NULL && var->is_global()));
 
-  // Initialize name and evaluate the receiver subexpression if necessary.
+  // Initialize name and evaluate the receiver sub-expression if necessary. If
+  // the receiver is trivial it is not placed on the stack at this point, but
+  // loaded whenever actually needed.
   Handle<String> name;
   bool is_trivial_receiver = false;
   if (var != NULL) {
@@ -5418,10 +5422,13 @@ void CodeGenerator::EmitNamedPropertyAssignment(Assignment* node) {
     if (!is_trivial_receiver) Load(prop->obj());
   }
 
+  // Change to slow case in the beginning of an initialization block to
+  // avoid the quadratic behavior of repeatedly adding fast properties.
   if (node->starts_initialization_block()) {
+    // Initialization block consists of assignments of the form expr.x = ..., so
+    // this will never be an assignment to a variable, so there must be a
+    // receiver object.
     ASSERT_EQ(NULL, var);
-    // Change to slow case in the beginning of an initialization block to
-    // avoid the quadratic behavior of repeatedly adding fast properties.
     if (is_trivial_receiver) {
       frame()->Push(prop->obj());
     } else {
@@ -5430,14 +5437,21 @@ void CodeGenerator::EmitNamedPropertyAssignment(Assignment* node) {
     Result ignored = frame()->CallRuntime(Runtime::kToSlowProperties, 1);
   }
 
+  // Change to fast case at the end of an initialization block. To prepare for
+  // that add an extra copy of the receiver to the frame, so that it can be
+  // converted back to fast case after the assignment.
   if (node->ends_initialization_block() && !is_trivial_receiver) {
-    // Add an extra copy of the receiver to the frame, so that it can be
-    // converted back to fast case after the assignment.
     frame()->Dup();
   }
 
+  // Stack layout:
+  // [tos]   : receiver (only materialized if non-trivial)
+  // [tos+1] : receiver if at the end of an initialization block
+
   // Evaluate the right-hand side.
   if (node->is_compound()) {
+    // For a compound assignment the right-hand side is a binary operation
+    // between the current property value and the actual right-hand side.
     if (is_trivial_receiver) {
       frame()->Push(prop->obj());
     } else if (var != NULL) {
@@ -5461,8 +5475,14 @@ void CodeGenerator::EmitNamedPropertyAssignment(Assignment* node) {
     GenericBinaryOperation(&expr,
                            overwrite_value ? OVERWRITE_RIGHT : NO_OVERWRITE);
   } else {
+    // For non-compound assignment just load the right-hand side.
     Load(node->value());
   }
+
+  // Stack layout:
+  // [tos]   : value
+  // [tos+1] : receiver (only materialized if non-trivial)
+  // [tos+2] : receiver if at the end of an initialization block
 
   // Perform the assignment.  It is safe to ignore constants here.
   ASSERT(var == NULL || var->mode() != Variable::CONST);
@@ -5476,6 +5496,10 @@ void CodeGenerator::EmitNamedPropertyAssignment(Assignment* node) {
   bool is_contextual = (var != NULL);
   Result answer = EmitNamedStore(name, is_contextual);
   frame()->Push(&answer);
+
+  // Stack layout:
+  // [tos]   : result
+  // [tos+1] : receiver if at the end of an initialization block
 
   if (node->ends_initialization_block()) {
     ASSERT_EQ(NULL, var);
@@ -5493,6 +5517,9 @@ void CodeGenerator::EmitNamedPropertyAssignment(Assignment* node) {
     Result ignored = frame_->CallRuntime(Runtime::kToFastProperties, 1);
   }
 
+  // Stack layout:
+  // [tos]   : result
+
   ASSERT_EQ(frame()->height(), original_height + 1);
 }
 
@@ -5501,38 +5528,47 @@ void CodeGenerator::EmitKeyedPropertyAssignment(Assignment* node) {
 #ifdef DEBUG
   int original_height = frame()->height();
 #endif
-  Comment cmnt(masm_, "[ Named Property Assignment");
+  Comment cmnt(masm_, "[ Keyed Property Assignment");
   Property* prop = node->target()->AsProperty();
   ASSERT_NOT_NULL(prop);
 
   // Evaluate the receiver subexpression.
   Load(prop->obj());
 
+  // Change to slow case in the beginning of an initialization block to
+  // avoid the quadratic behavior of repeatedly adding fast properties.
   if (node->starts_initialization_block()) {
-    // Change to slow case in the beginning of an initialization block to
-    // avoid the quadratic behavior of repeatedly adding fast properties.
     frame_->Dup();
     Result ignored = frame_->CallRuntime(Runtime::kToSlowProperties, 1);
   }
 
+  // Change to fast case at the end of an initialization block. To prepare for
+  // that add an extra copy of the receiver to the frame, so that it can be
+  // converted back to fast case after the assignment.
   if (node->ends_initialization_block()) {
-    // Add an extra copy of the receiver to the frame, so that it can be
-    // converted back to fast case after the assignment.
     frame_->Dup();
   }
 
   // Evaluate the key subexpression.
   Load(prop->key());
 
+  // Stack layout:
+  // [tos]   : key
+  // [tos+1] : receiver
+  // [tos+2] : receiver if at the end of an initialization block
+
   // Evaluate the right-hand side.
   if (node->is_compound()) {
-    // Duplicate receiver and key.
+    // For a compound assignment the right-hand side is a binary operation
+    // between the current property value and the actual right-hand side.
+    // Duplicate receiver and key for loading the current property value.
     frame()->PushElementAt(1);
     frame()->PushElementAt(1);
     Result value = EmitKeyedLoad();
     frame()->Push(&value);
     Load(node->value());
 
+    // Perform the binary operation.
     bool overwrite_value =
         (node->value()->AsBinaryOperation() != NULL &&
          node->value()->AsBinaryOperation()->ResultOverwriteAllowed());
@@ -5541,8 +5577,15 @@ void CodeGenerator::EmitKeyedPropertyAssignment(Assignment* node) {
     GenericBinaryOperation(&expr,
                            overwrite_value ? OVERWRITE_RIGHT : NO_OVERWRITE);
   } else {
+    // For non-compound assignment just load the right-hand side.
     Load(node->value());
   }
+
+  // Stack layout:
+  // [tos]   : value
+  // [tos+1] : key
+  // [tos+2] : receiver
+  // [tos+3] : receiver if at the end of an initialization block
 
   // Perform the assignment.  It is safe to ignore constants here.
   ASSERT(node->op() != Token::INIT_CONST);
@@ -5550,6 +5593,11 @@ void CodeGenerator::EmitKeyedPropertyAssignment(Assignment* node) {
   Result answer = EmitKeyedStore(prop->key()->type());
   frame()->Push(&answer);
 
+  // Stack layout:
+  // [tos]   : result
+  // [tos+1] : receiver if at the end of an initialization block
+
+  // Change to fast case at the end of an initialization block.
   if (node->ends_initialization_block()) {
     // The argument to the runtime call is the extra copy of the receiver,
     // which is below the value of the assignment.  Swap the receiver and
@@ -5560,6 +5608,9 @@ void CodeGenerator::EmitKeyedPropertyAssignment(Assignment* node) {
     frame()->Push(&receiver);
     Result ignored = frame_->CallRuntime(Runtime::kToFastProperties, 1);
   }
+
+  // Stack layout:
+  // [tos]   : result
 
   ASSERT(frame()->height() == original_height + 1);
 }
