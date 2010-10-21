@@ -310,9 +310,8 @@ class VirtualFrame : public ZoneObject {
                      InvokeJSFlags flag,
                      int arg_count);
 
-  // Call load IC. Receiver is on the stack and the property name is in a2.
-  // Result is returned in v0.
-  void CallLoadIC(RelocInfo::Mode mode);
+  // Call load IC. Receiver is on the stack. Result is returned in v0.
+  void CallLoadIC(Handle<String> name, RelocInfo::Mode mode);
 
   // Call keyed load IC. Key and receiver are on the stack. Result is returned
   // in v0.

@@ -305,8 +305,10 @@ void VirtualFrame::InvokeBuiltin(Builtins::JavaScript id,
 }
 
 
-void VirtualFrame::CallLoadIC(RelocInfo::Mode mode) {
+void VirtualFrame::CallLoadIC(Handle<String> name, RelocInfo::Mode mode) {
   Handle<Code> ic(Builtins::builtin(Builtins::LoadIC_Initialize));
+  SpillAllButCopyTOSToA0();
+  __ li(a2, Operand(name));
   CallCodeObject(ic, mode, 0);
 }
 

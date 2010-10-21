@@ -836,11 +836,10 @@ void CodeGenerator::LoadFromGlobalSlotCheckExtensions(Slot* slot,
   // Load the global object.
   LoadGlobal();
   // Setup the name register and call load IC.
-  frame_->SpillAllButCopyTOSToA0();
-  __ li(a2, Operand(slot->var()->name()));
-  frame_->CallLoadIC(typeof_state == INSIDE_TYPEOF
-                     ? RelocInfo::CODE_TARGET
-                     : RelocInfo::CODE_TARGET_CONTEXT);
+  frame_->CallLoadIC(slot->var()->name(),
+                     typeof_state == INSIDE_TYPEOF
+                         ? RelocInfo::CODE_TARGET
+                         : RelocInfo::CODE_TARGET_CONTEXT);
 
   // Drop the global object. The result is in v0.
   frame_->Drop();
@@ -1541,9 +1540,7 @@ void CodeGenerator::CallApplyLazy(Expression* applicand,
   // give us a megamorphic load site. Not super, but it works.
   LoadAndSpill(applicand);
   Handle<String> name = Factory::LookupAsciiSymbol("apply");
-  __ li(a2, Operand(name));
-  __ lw(a0, MemOperand(sp, 0));
-  frame_->CallLoadIC(RelocInfo::CODE_TARGET);
+  frame_->CallLoadIC(name, RelocInfo::CODE_TARGET);
   frame_->EmitPush(v0);
 
   // Load the receiver and the existing arguments object onto the
@@ -5058,11 +5055,10 @@ void CodeGenerator::EmitNamedLoad(Handle<String> name, bool is_contextual) {
   if (is_contextual || scope()->is_global_scope() || loop_nesting() == 0) {
     Comment cmnt(masm(), "[ Load from named Property");
     // Setup the name register and call load IC.
-    frame_->SpillAllButCopyTOSToA0();
-    __ li(a2, Operand(name));
-    frame_->CallLoadIC(is_contextual
-                       ? RelocInfo::CODE_TARGET_CONTEXT
-                       : RelocInfo::CODE_TARGET);
+    frame_->CallLoadIC(name,
+                       is_contextual
+                           ? RelocInfo::CODE_TARGET_CONTEXT
+                           : RelocInfo::CODE_TARGET);
   } else {
     // Inline the inobject property case.
     Comment cmnt(masm(), "[ Inlined named property load");
