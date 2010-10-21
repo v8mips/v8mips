@@ -302,7 +302,7 @@ void CallIC::GenerateMegamorphic(MacroAssembler* masm, int argc) {
 
   Label number, non_number, non_string, boolean, probe, miss;
 
-  // Get the receiver of the function from the stack into r1.
+  // Get the receiver of the function from the stack into a1.
   __ lw(a1, MemOperand(sp, argc * kPointerSize));
 
   // Probe the stub cache.
@@ -687,12 +687,12 @@ Object* KeyedLoadIC_Miss(Arguments args);
 
 void KeyedLoadIC::GenerateMiss(MacroAssembler* masm) {
   // ra     : return address
+  // a0     : key
   // sp[0]  : key
   // sp[4]  : receiver
 
-  __ lw(a2, MemOperand(sp, 0));
-  __ lw(a3, MemOperand(sp, 4));
-  __ MultiPush(a2.bit() | a3.bit());
+  __ lw(a1, MemOperand(sp, kPointerSize));
+  __ MultiPush(a1.bit() | a0.bit());
 
   ExternalReference ref = ExternalReference(IC_Utility(kKeyedLoadIC_Miss));
   __ TailCallExternalReference(ref, 2, 1);
@@ -701,12 +701,12 @@ void KeyedLoadIC::GenerateMiss(MacroAssembler* masm) {
 
 void KeyedLoadIC::GenerateRuntimeGetProperty(MacroAssembler* masm) {
   // ra     : return address
+  // a0     : key
   // sp[0]  : key
   // sp[4]  : receiver
 
-  __ lw(a2, MemOperand(sp, 0));
-  __ lw(a3, MemOperand(sp, 4));
-  __ MultiPush(a2.bit() | a3.bit());
+  __ lw(a1, MemOperand(sp, kPointerSize));
+  __ MultiPush(a1.bit() | a0.bit());
   // Do a tail-call to runtime routine.
 
   __ TailCallRuntime(Runtime::kGetProperty, 2, 1);
@@ -716,6 +716,7 @@ void KeyedLoadIC::GenerateRuntimeGetProperty(MacroAssembler* masm) {
 void KeyedLoadIC::GenerateGeneric(MacroAssembler* masm) {
   // ---------- S t a t e --------------
   //  -- ra     : return address
+  //  -- a0     : key
   //  -- sp[0]  : key
   //  -- sp[4]  : receiver
   // -----------------------------------
@@ -724,9 +725,8 @@ void KeyedLoadIC::GenerateGeneric(MacroAssembler* masm) {
   // Modified slightly from in-tree arm version, see
   // ic-arm.cc: 6a579d9fd7.
 
-  // Get the key and receiver object from the stack (don't pop).
-  __ lw(a0, MemOperand(sp, 0));
-  __ lw(a1, MemOperand(sp, 4));
+  // Get the object from the stack.
+  __ lw(a1, MemOperand(sp, kPointerSize));
 
   // a0: key
   // a1: receiver object
@@ -808,12 +808,14 @@ void KeyedLoadIC::GenerateGeneric(MacroAssembler* masm) {
   // Slow case: Push extra copies of the arguments (2).
   __ bind(&slow);
   __ IncrementCounter(&Counters::keyed_load_generic_slow, 1, a0, a1);
+  __ lw(a0, MemOperand(sp, 0));
   GenerateRuntimeGetProperty(masm);
 }
 
 
 void KeyedLoadIC::GenerateString(MacroAssembler* masm) {
   // ra     : return address
+  // a0     : key
   // sp[0]  : key
   // sp[4]  : receiver
 
@@ -823,9 +825,8 @@ void KeyedLoadIC::GenerateString(MacroAssembler* masm) {
   Label slow_char_code;
   Label got_char_code;
 
-  // Get the key and receiver object from the stack (don't pop).
-  __ lw(a0, MemOperand(sp, 0));   // Key.
-  __ lw(a1, MemOperand(sp, 4));   // Receiver object.
+  // Get the object from the stack.
+  __ lw(a1, MemOperand(sp, kPointerSize));
 
   Register object = a1;
   Register index = a0;
@@ -929,14 +930,14 @@ void KeyedLoadIC::GenerateExternalArray(MacroAssembler* masm,
                                         ExternalArrayType array_type) {
   // ---------- S t a t e --------------
   //  -- ra     : return address
+  //  -- a0     : key
   //  -- sp[0]  : key
   //  -- sp[4]  : receiver
   // -----------------------------------
   Label slow, failed_allocation;
 
-  // Get the key and receiver object from the stack (don't pop).
-  __ lw(a0, MemOperand(sp, 0));
-  __ lw(a1, MemOperand(sp, 4));
+  // Get the object from the stack.
+  __ lw(a1, MemOperand(sp, kPointerSize));
 
   // a0: key
   // a1: receiver object
@@ -1171,6 +1172,7 @@ void KeyedLoadIC::GenerateExternalArray(MacroAssembler* masm,
   // Slow case: Load name and receiver from stack and jump to runtime.
   __ bind(&slow);
   __ IncrementCounter(&Counters::keyed_load_external_array_slow, 1, a0, a1);
+  __ lw(a0, MemOperand(sp, 0));
   GenerateRuntimeGetProperty(masm);
 }
 
@@ -1214,7 +1216,7 @@ void KeyedStoreIC::GenerateGeneric(MacroAssembler* masm) {
   __ Branch(&slow, ne, t0, Operand(zero_reg));
   // Check if the object is a JS array or not.
   __ lbu(a2, FieldMemOperand(a2, Map::kInstanceTypeOffset));
-  // r1 == key.
+  // a1 == key.
   __ Branch(&array, eq, a2, Operand(JS_ARRAY_TYPE));
   // Check that the object is some kind of JS object.
   __ Branch(&slow, lt, a2, Operand(FIRST_JS_OBJECT_TYPE));
@@ -1745,14 +1747,14 @@ void KeyedStoreIC::GenerateExternalArray(MacroAssembler* masm,
 void KeyedLoadIC::GenerateIndexedInterceptor(MacroAssembler* masm) {
   // ---------- S t a t e --------------
   //  -- ra     : return address
+  //  -- a0     : key
   //  -- sp[0]  : key
   //  -- sp[4]  : receiver
   // -----------------------------------
   Label slow;
 
-  // Get the key and receiver object from the stack.
-  __ lw(a0, MemOperand(sp, 0));
-  __ lw(a1, MemOperand(sp, 4));
+  // Get the object from the stack.
+  __ lw(a1, MemOperand(sp, kPointerSize));
 
   // Check that the receiver isn't a smi.
   __ BranchOnSmi(a1, &slow);

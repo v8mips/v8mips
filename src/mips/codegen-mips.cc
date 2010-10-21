@@ -4983,14 +4983,15 @@ void DeferredReferenceGetKeyedValue::Generate() {
   __ DecrementCounter(&Counters::keyed_load_inline, 1, scratch1, scratch2);
   __ IncrementCounter(&Counters::keyed_load_inline_miss, 1, scratch1, scratch2);
 
-  const int kInlinedInstructions = 5;
+  const int kInlinedInstructions = 6;
 #ifdef DEBUG
   Label check_inlined_codesize;
   masm_->bind(&check_inlined_codesize);
 #endif
   __ BlockTrampolinePoolFor(kInlinedInstructions);
 
-  // Call keyed load IC. It has all arguments on the stack.
+  // Call keyed load IC. It has all arguments on the stack and the key in a0.
+  __ lw(a0, MemOperand(sp, 0));
   Handle<Code> ic(Builtins::builtin(Builtins::KeyedLoadIC_Initialize));
   __ Call(ic, RelocInfo::CODE_TARGET);
   // The call must be followed by a nop instruction to indicate that the
@@ -5118,7 +5119,6 @@ void CodeGenerator::EmitNamedLoad(Handle<String> name, bool is_contextual) {
 
 void CodeGenerator::EmitKeyedLoad() {
   if (loop_nesting() == 0) {
-    VirtualFrame::SpilledScope spilled(frame_);
     Comment cmnt(masm_, "[ Load from keyed property");
     frame_->CallKeyedLoadIC();
   } else {

@@ -313,6 +313,7 @@ void VirtualFrame::CallLoadIC(RelocInfo::Mode mode) {
 
 void VirtualFrame::CallKeyedLoadIC() {
   Handle<Code> ic(Builtins::builtin(Builtins::KeyedLoadIC_Initialize));
+  SpillAllButCopyTOSToA0();
   CallCodeObject(ic, RelocInfo::CODE_TARGET, 0);
 }
 

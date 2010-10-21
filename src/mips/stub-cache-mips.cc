@@ -366,9 +366,10 @@ static void GenerateCallFunction(MacroAssembler* masm,
                                  Object* object,
                                  const ParameterCount& arguments,
                                  Label* miss) {
-  // a0: receiver
-  // a1: function to call
-
+  // ----------- S t a t e -------------
+  //  -- a0: receiver
+  //  -- a1: function to call
+  // -----------------------------------
   // Check that the function really is a function.
   __ BranchOnSmi(a1, miss);
   __ GetObjectType(a1, a3, a3);
@@ -758,9 +759,10 @@ void StubCompiler::GenerateLoadInterceptor(JSObject* object,
 
 
 Object* StubCompiler::CompileLazyCompile(Code::Flags flags) {
-  // Registers:
-  // a1: function
-  // ra: return address
+  // ----------- S t a t e -------------
+  //  -- a1: function
+  //  -- ra: return address
+  // -----------------------------------
 
   // Enter an internal frame.
   __ EnterInternalFrame();
@@ -873,8 +875,10 @@ Object* CallStubCompiler::CompileArrayPopCall(Object* object,
                                               JSFunction* function,
                                               String* name,
                                               CheckType check) {
-  // a2    : name
-  // ra    : return address
+  // ----------- S t a t e -------------
+  //  -- a2    : name
+  //  -- ra    : return address
+  // -----------------------------------
 
   // If object is not an array, bail out to regular call.
   if (!object->IsJSArray()) {
@@ -1240,11 +1244,12 @@ Object* StoreStubCompiler::CompileStoreField(JSObject* object,
                                              int index,
                                              Map* transition,
                                              String* name) {
-  // a0    : value
-  // a1    : receiver
-  // a2    : name
-  // ra    : return address
-  // [sp]  : receiver
+  // ----------- S t a t e -------------
+  //  -- a0    : value
+  //  -- a1    : receiver
+  //  -- a2    : name
+  //  -- ra    : return address
+  // -----------------------------------
   Label miss;
 
   // name register might be clobbered.
@@ -1358,10 +1363,12 @@ Object* StoreStubCompiler::CompileStoreInterceptor(JSObject* receiver,
 Object* StoreStubCompiler::CompileStoreGlobal(GlobalObject* object,
                                               JSGlobalPropertyCell* cell,
                                               String* name) {
-  // a0    : value
-  // a1    : receiver
-  // a2    : name
-  // ra    : return address
+  // ----------- S t a t e -------------
+  //  -- a0    : value
+  //  -- a1    : receiver
+  //  -- a2    : name
+  //  -- ra    : return address
+  // -----------------------------------
   Label miss;
 
   // Check that the map of the global has not changed.
@@ -1454,9 +1461,11 @@ Object* LoadStubCompiler::CompileLoadCallback(String* name,
                                               JSObject* object,
                                               JSObject* holder,
                                               AccessorInfo* callback) {
-  // a2    : name
-  // ra    : return address
-  // [sp]  : receiver
+  // ----------- S t a t e -------------
+  //  -- a2    : name
+  //  -- ra    : return address
+  //  -- [sp]  : receiver
+  // -----------------------------------
   Label miss;
 
   __ lw(a0, MemOperand(sp, 0));
@@ -1477,9 +1486,11 @@ Object* LoadStubCompiler::CompileLoadConstant(JSObject* object,
                                               JSObject* holder,
                                               Object* value,
                                               String* name) {
-  // a2    : name
-  // ra    : return address
-  // [sp] : receiver
+  // ----------- S t a t e -------------
+  //  -- a2    : name
+  //  -- ra    : return address
+  //  -- [sp]  : receiver
+  // -----------------------------------
   Label miss;
 
   __ lw(a0, MemOperand(sp, 0));
@@ -1529,10 +1540,12 @@ Object* LoadStubCompiler::CompileLoadGlobal(JSObject* object,
                                             JSGlobalPropertyCell* cell,
                                             String* name,
                                             bool is_dont_delete) {
-  // a2    : name
-  // ra    : return address
-  // a0    : receiver
-  // sp[0] : receiver
+  // ----------- S t a t e -------------
+  //  -- a2    : name
+  //  -- ra    : return address
+  //  -- a0    : receiver
+  //  -- sp[0] : receiver
+  // -----------------------------------
   Label miss;
 
   // If the object is the holder then we know that it's a global
@@ -1575,17 +1588,17 @@ Object* KeyedLoadStubCompiler::CompileLoadField(String* name,
                                                 int index) {
   // ----------- S t a t e -------------
   //  -- ra    : return address
+  //  -- a0    : key
   //  -- sp[0] : key
   //  -- sp[4] : receiver
   // -----------------------------------
   Label miss;
 
-  __ lw(a2, MemOperand(sp, 0));
-  __ lw(a0, MemOperand(sp, kPointerSize));
+  // Check the key is the cached one.
+  __ Branch(&miss, ne, a0, Operand(Handle<String>(name)));
 
-  __ Branch(&miss, ne, a2, Operand(Handle<String>(name)));
-
-  GenerateLoadField(receiver, holder, a0, a3, a1, index, name, &miss);
+  __ lw(a1, MemOperand(sp, kPointerSize));  // Receiver.
+  GenerateLoadField(receiver, holder, a1, a2, a3, index, name, &miss);
   __ bind(&miss);
   GenerateLoadMiss(masm(), Code::KEYED_LOAD_IC);
 
@@ -1599,18 +1612,18 @@ Object* KeyedLoadStubCompiler::CompileLoadCallback(String* name,
                                                    AccessorInfo* callback) {
   // ----------- S t a t e -------------
   //  -- ra    : return address
+  //  -- a0    : key
   //  -- sp[0] : key
   //  -- sp[4] : receiver
   // -----------------------------------
   Label miss;
 
-  __ lw(a2, MemOperand(sp, 0));
-  __ lw(a0, MemOperand(sp, kPointerSize));
-
-  __ Branch(&miss, ne, a2, Operand(Handle<String>(name)));
+  // Check the key is the cached one.
+  __ Branch(&miss, ne, a0, Operand(Handle<String>(name)));
 
   Failure* failure = Failure::InternalError();
-  bool success = GenerateLoadCallback(receiver, holder, a0, a2, a3, a1,
+  __ lw(a1, MemOperand(sp, kPointerSize));  // Receiver.
+  bool success = GenerateLoadCallback(receiver, holder, a1, a0, a2, a3,
                                       callback, name, &miss, &failure);
   if (!success) return failure;
 
@@ -1625,18 +1638,19 @@ Object* KeyedLoadStubCompiler::CompileLoadConstant(String* name,
                                                    JSObject* receiver,
                                                    JSObject* holder,
                                                    Object* value) {
-  // ra    : return address
-  // sp[0] : key
-  // sp[4] : receiver
+  // ----------- S t a t e -------------
+  //  -- ra    : return address
+  //  -- a0    : key
+  //  -- sp[0] : key
+  //  -- sp[4] : receiver
+  // -----------------------------------
   Label miss;
 
   // Check the key is the cached one
-  __ lw(a2, MemOperand(sp, 0));
-  __ lw(a0, MemOperand(sp, kPointerSize));
+  __ Branch(&miss, ne, a0, Operand(Handle<String>(name)));
 
-  __ Branch(&miss, ne, a2, Operand(Handle<String>(name)));
-
-  GenerateLoadConstant(receiver, holder, a0, a3, a1, value, name, &miss);
+  __ lw(a1, MemOperand(sp, kPointerSize));  // Receiver.
+  GenerateLoadConstant(receiver, holder, a1, a2, a3, value, name, &miss);
   __ bind(&miss);
   GenerateLoadMiss(masm(), Code::KEYED_LOAD_IC);
 
@@ -1650,26 +1664,25 @@ Object* KeyedLoadStubCompiler::CompileLoadInterceptor(JSObject* receiver,
                                                       String* name) {
   // ----------- S t a t e -------------
   //  -- ra    : return address
+  //  -- a0    : key
   //  -- sp[0] : key
   //  -- sp[4] : receiver
   // -----------------------------------
   Label miss;
 
   // Check the key is the cached one.
-  __ lw(a2, MemOperand(sp, 0));
-  __ lw(a0, MemOperand(sp, kPointerSize));
-
-  __ Branch(&miss, ne, a2, Operand(Handle<String>(name)));
+  __ Branch(&miss, ne, a0, Operand(Handle<String>(name)));
 
   LookupResult lookup;
   LookupPostInterceptor(holder, name, &lookup);
+  __ lw(a1, MemOperand(sp, kPointerSize));  // Receiver.
   GenerateLoadInterceptor(receiver,
                           holder,
                           &lookup,
+                          a1,
                           a0,
                           a2,
                           a3,
-                          a1,
                           name,
                           &miss);
   __ bind(&miss);
@@ -1682,18 +1695,17 @@ Object* KeyedLoadStubCompiler::CompileLoadInterceptor(JSObject* receiver,
 Object* KeyedLoadStubCompiler::CompileLoadArrayLength(String* name) {
   // ----------- S t a t e -------------
   //  -- ra    : return address
+  //  -- a0    : key
   //  -- sp[0] : key
   //  -- sp[4] : receiver
   // -----------------------------------
   Label miss;
 
-  // Check the key is the cached one
-  __ lw(a2, MemOperand(sp, 0));
-  __ lw(a0, MemOperand(sp, kPointerSize));
+  // Check the key is the cached one.
+  __ Branch(&miss, ne, a0, Operand(Handle<String>(name)));
 
-  __ Branch(&miss, ne, a2, Operand(Handle<String>(name)));
-
-  GenerateLoadArrayLength(masm(), a0, a3, &miss);
+  __ lw(a1, MemOperand(sp, kPointerSize));  // Receiver.
+  GenerateLoadArrayLength(masm(), a1, a2, &miss);
   __ bind(&miss);
   GenerateLoadMiss(masm(), Code::KEYED_LOAD_IC);
 
@@ -1704,18 +1716,18 @@ Object* KeyedLoadStubCompiler::CompileLoadArrayLength(String* name) {
 Object* KeyedLoadStubCompiler::CompileLoadStringLength(String* name) {
   // ----------- S t a t e -------------
   //  -- ra    : return address
+  //  -- a0    : key
   //  -- sp[0] : key
   //  -- sp[4] : receiver
   // -----------------------------------
   Label miss;
   __ IncrementCounter(&Counters::keyed_load_string_length, 1, a1, a3);
 
-  __ lw(a2, MemOperand(sp));
-  __ lw(a0, MemOperand(sp, kPointerSize));  // Receiver.
+  // Check the key is the cached one.
+  __ Branch(&miss, ne, a0, Operand(Handle<String>(name)));
 
-  __ Branch(&miss, ne, a2, Operand(Handle<String>(name)));
-
-  GenerateLoadStringLength(masm(), a0, a1, a3, &miss);
+  __ lw(a1, MemOperand(sp, kPointerSize));  // Receiver.
+  GenerateLoadStringLength(masm(), a1, a2, a3, &miss);
   __ bind(&miss);
   __ DecrementCounter(&Counters::keyed_load_string_length, 1, a1, a3);
 
@@ -1729,6 +1741,7 @@ Object* KeyedLoadStubCompiler::CompileLoadStringLength(String* name) {
 Object* KeyedLoadStubCompiler::CompileLoadFunctionPrototype(String* name) {
   // ----------- S t a t e -------------
   //  -- ra    : return address
+  //  -- a0    : key
   //  -- sp[0] : key
   //  -- sp[4] : receiver
   // -----------------------------------
