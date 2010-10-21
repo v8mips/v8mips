@@ -349,6 +349,9 @@ class VirtualFrame : public ZoneObject {
   // must be copied to a scratch register before modification.
   Register Peek();
 
+  // Duplicate the top of stack.
+  void Dup();
+
   // Flushes all registers, but it puts a copy of the top-of-stack in a0.
   void SpillAllButCopyTOSToA0();
 
