@@ -3601,7 +3601,6 @@ void CodeGenerator::VisitCall(Call* node) {
                       node->position());
 
       } else {
-
         LoadAndSpill(property->obj());  // Receiver.
         // Load the arguments.
         int arg_count = args->length();
@@ -5168,27 +5167,15 @@ void DeferredReferenceGetNamedValue::Generate() {
   // Setup the name register and call load IC.
   __ li(a2, Operand(name_));
 
-#ifdef DEBUG
-  int kInlinedNamedLoadInstructions = 5;
-  Label check_inlined_codesize;
-  masm_->bind(&check_inlined_codesize);
-#endif
+  { Assembler::BlockTrampolinePoolScope block_trampoline_pool(masm_);
+    Handle<Code> ic(Builtins::builtin(Builtins::LoadIC_Initialize));
+    __ Call(ic, RelocInfo::CODE_TARGET);
 
-  // Call is 5 instructions, nop is 1, plus an extra one for later.
-  __ BlockTrampolinePoolFor(6);
-
-  Handle<Code> ic(Builtins::builtin(Builtins::LoadIC_Initialize));
-  __ Call(ic, RelocInfo::CODE_TARGET);
-
-  // The call must be followed by a nop(1) instruction to indicate that the
-  // in-object has been inlined.
-  __ nop(PROPERTY_LOAD_INLINED);
-
-#ifdef DEBUG
-  // Make sure that the expected number of instructions are generated.
-  ASSERT_EQ(kInlinedNamedLoadInstructions,
-            masm_->InstructionsGeneratedSince(&check_inlined_codesize));
-#endif
+    // The call must be followed by a nop(1) instruction to indicate that the
+    // in-object has been inlined.
+    __ nop(PROPERTY_LOAD_INLINED);
+    __ BlockTrampolinePoolFor(1);
+  }
 }
 
 
@@ -5221,29 +5208,16 @@ void CodeGenerator::EmitNamedLoad(Handle<String> name, bool is_contextual) {
     // Check the map.
     __ lw(a2, FieldMemOperand(a1, HeapObject::kMapOffset));
 
-#ifdef DEBUG
-    // 5 instructions. li generates 2, Branch generates 2, lw generates 1.
-    int kInlinedNamedLoadInstructions = 5;
-    Label check_inlined_codesize;
-    masm_->bind(&check_inlined_codesize);
-#endif
-    __ BlockTrampolinePoolFor(5);
-
     // Generate patchable inline code. See LoadIC::PatchInlinedLoad.
+    { Assembler::BlockTrampolinePoolScope block_trampoline_pool(masm_);
+      // The null map used below is patched by the inline cache code.
+      __ li(a3, Operand(Factory::null_value()), true);
+      deferred->Branch(ne, a2, Operand(a3));
 
-    // The null map used below is patched by the inline cache code.
-    __ li(a3, Operand(Factory::null_value()), true);
-    deferred->Branch(ne, a2, Operand(a3));
-
-    // Initially use an invalid index. The index will be patched by the
-    // inline cache code.
-    __ lw(v0, MemOperand(a1, 666));
-
-#ifdef DEBUG
-    // Make sure that the expected number of instructions are generated.
-    ASSERT_EQ(kInlinedNamedLoadInstructions,
-              masm_->InstructionsGeneratedSince(&check_inlined_codesize));
-#endif
+      // Initially use an invalid index. The index will be patched by the
+      // inline cache code.
+      __ lw(v0, MemOperand(a1, 666));
+    }
 
     deferred->BindExit();
   }
@@ -5263,25 +5237,15 @@ void DeferredReferenceGetKeyedValue::Generate() {
   __ DecrementCounter(&Counters::keyed_load_inline, 1, a1, a2);
   __ IncrementCounter(&Counters::keyed_load_inline_miss, 1, a1, a2);
 
-#ifdef DEBUG
-  int kInlinedNamedLoadInstructions = 5;
-  Label check_inlined_codesize;
-  masm_->bind(&check_inlined_codesize);
-#endif
-  __ BlockTrampolinePoolFor(6);
-
   // Call keyed load IC. It has all arguments on the stack.
-  Handle<Code> ic(Builtins::builtin(Builtins::KeyedLoadIC_Initialize));
-  __ Call(ic, RelocInfo::CODE_TARGET);
-  // The call must be followed by a nop instruction to indicate that the
-  // keyed load has been inlined.
-  __ nop(PROPERTY_LOAD_INLINED);
-
-#ifdef DEBUG
-  // Make sure that the expected number of instructions are generated.
-  ASSERT_EQ(kInlinedNamedLoadInstructions,
-            masm_->InstructionsGeneratedSince(&check_inlined_codesize));
-#endif
+  { Assembler::BlockTrampolinePoolScope block_trampoline_pool(masm_);
+    Handle<Code> ic(Builtins::builtin(Builtins::KeyedLoadIC_Initialize));
+    __ Call(ic, RelocInfo::CODE_TARGET);
+    // The call must be followed by a nop instruction to indicate that the
+    // keyed load has been inlined.
+    __ nop(PROPERTY_LOAD_INLINED);
+    __ BlockTrampolinePoolFor(1);
+  }
 }
 
 void CodeGenerator::EmitKeyedLoad() {
@@ -6071,12 +6035,12 @@ static void EmitTwoNonNanDoubleComparison(MacroAssembler* masm, Condition cc) {
   if (!CpuFeatures::IsSupported(FPU)) {
     __ Push(ra);
     __ PrepareCallCFunction(4, t4);  // Two doubles count as 4 arguments.
-    if(!IsMipsSoftFloatABI){
-      // We are not using MIPS FPU instructions, and parameters for the run-time
+    if (!IsMipsSoftFloatABI) {
+      // We are not using MIPS FPU instructions, and parameters for the runtime
       // function call are prepaired in a0-a3 registers, but function we are
       // calling is compiled with hard-float flag and expecting hard float ABI
-      // (parameters in f12/f14 registers). We need to copy parameters from a0-a3
-      // registers to f12/f14 register pairs.
+      // (parameters in f12/f14 registers). We need to copy parameters from
+      // a0-a3 registers to f12/f14 register pairs.
       __ mtc1(a0, f12);
       __ mtc1(a1, f13);
       __ mtc1(a2, f14);
@@ -6603,11 +6567,12 @@ void CEntryStub::GenerateCore(MacroAssembler* masm,
   masm->addiu(sp, sp, -(stack_adjustment));
   masm->sw(ra, MemOperand(sp, stack_adjustment - kPointerSize));
 
-  masm->BlockTrampolinePoolFor(3);
   // Call the C routine.
-  masm->mov(t9, s2);  // Function pointer to t9 to conform to ABI for PIC.
-  masm->jalr(t9);
-  masm->nop();    // Branch delay slot nop.
+  { Assembler::BlockTrampolinePoolScope block_trampoline_pool(masm);
+    masm->mov(t9, s2);  // Function pointer to t9 to conform to ABI for PIC.
+    masm->jalr(t9);
+    masm->nop();    // Branch delay slot nop.
+  }
 
   // Restore stack (remove arg slots and extra parameter).
   masm->addiu(sp, sp, stack_adjustment);
@@ -7340,7 +7305,7 @@ void ArgumentsAccessStub::GenerateNewObject(MacroAssembler* masm) {
   // bytes because AllocateInNewSpace expects words).
   Label add_arguments_object;
   __ bind(&try_allocate);
-  __ Branch (&add_arguments_object, eq, a1, Operand(0));
+  __ Branch(&add_arguments_object, eq, a1, Operand(0));
   __ srl(a1, a1, kSmiTagSize);
 
   __ Addu(a1, a1, Operand(FixedArray::kHeaderSize / kPointerSize));
@@ -7762,7 +7727,7 @@ static void HandleBinaryOpSlowCases(MacroAssembler* masm,
       __ Push(ra);
       __ Push(t0);
       __ PrepareCallCFunction(4, t1);  // Two doubles count as 4 arguments.
-      if(IsMipsSoftFloatABI){
+      if (IsMipsSoftFloatABI) {
         // We are using MIPS FPU instructions, and parameters for the run-time
         // function call are prepared in f12/f14 register pairs, but function
         // we are calling is compiled with soft-float flag and expecting soft
@@ -7776,7 +7741,7 @@ static void HandleBinaryOpSlowCases(MacroAssembler* masm,
       __ CallCFunction(ExternalReference::double_fp_operation(operation), 4);
       __ Pop(t0);  // Address of heap number.
       __ Pop(ra);
-      if(IsMipsSoftFloatABI){
+      if (IsMipsSoftFloatABI) {
         // Store answer in the overwritable heap number.
         // Double returned is stored in registers v0 and v1 (function we called
         // is compiled with soft-float flag and uses soft-float ABI).
@@ -7808,13 +7773,13 @@ static void HandleBinaryOpSlowCases(MacroAssembler* masm,
 
   __ PrepareCallCFunction(4, t1);  // Two doubles count as 4 arguments.
   // Call C routine that may not cause GC or other trouble.
-  if(!IsMipsSoftFloatABI){
-    if(!use_fp_registers){
-      // We are not using MIPS FPU instructions, and parameters for the run-time
+  if (!IsMipsSoftFloatABI) {
+    if (!use_fp_registers) {
+      // We are not using MIPS FPU instructions, and parameters for the runtime
       // function call are prepared in a0-a3 registers, but the function we are
       // calling is compiled with hard-float flag and expecting hard float ABI
-      // (parameters in f12/f14 registers). We need to copy parameters from a0-a3
-      // registers to f12/f14 register pairs.
+      // (parameters in f12/f14 registers). We need to copy parameters from
+      // a0-a3 registers to f12/f14 register pairs.
       __ mtc1(a0, f12);
       __ mtc1(a1, f13);
       __ mtc1(a2, f14);
@@ -7824,12 +7789,12 @@ static void HandleBinaryOpSlowCases(MacroAssembler* masm,
 
   __ CallCFunction(ExternalReference::double_fp_operation(operation), 4);
 
-  if(!IsMipsSoftFloatABI){
-    if(!use_fp_registers){
+  if (!IsMipsSoftFloatABI) {
+    if (!use_fp_registers) {
       // Returned double value is stored in registers f0 and f1 (function we
-      // called is compiled with hard-float flag and uses hard-float ABI). Return
-      // value in the case when we are not using MIPS FPU instructions has to be
-      // placed in v0/v1, so we need to copy from f0/f1.
+      // called is compiled with hard-float flag and uses hard-float ABI).
+      // Return value in the case when we are not using MIPS FPU instructions
+      // has to be placed in v0/v1, so we need to copy from f0/f1.
       __ mfc1(v0, f0);
       __ mfc1(v1, f1);
     }

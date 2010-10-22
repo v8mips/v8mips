@@ -565,8 +565,7 @@ void MacroAssembler::Sltu(Register rd, Register rs, const Operand& rt) {
 
 void MacroAssembler::li(Register rd, Operand j, bool gen2instr) {
   ASSERT(!j.is_reg());
-
-  BlockTrampolinePoolFor(2);
+  BlockTrampolinePoolScope block_trampoline_pool(this);
   if (!MustUseReg(j.rmode_) && !gen2instr) {
     // Normal load of an immediate value which does not need Relocation Info.
     if (is_int16(j.imm32_)) {
@@ -1417,7 +1416,7 @@ void MacroAssembler::Jump(const Operand& target,
 // Note: To call gcc-compiled C code on mips, you must call thru t9.
 void MacroAssembler::Call(const Operand& target,
                           bool ProtectBranchDelaySlot) {
-  BlockTrampolinePoolFor(3);
+  BlockTrampolinePoolScope block_trampoline_pool(this);
   if (target.is_reg()) {
       jalr(target.rm());
   } else {    // !target.is_reg()
@@ -1438,7 +1437,7 @@ void MacroAssembler::Call(const Operand& target,
                           Condition cond, Register rs, const Operand& rt,
                           bool ProtectBranchDelaySlot) {
   BRANCH_ARGS_CHECK(cond, rs, rt);
-  BlockTrampolinePoolFor(4);
+  BlockTrampolinePoolScope block_trampoline_pool(this);
   if (target.is_reg()) {
     if (cond == cc_always) {
       jalr(target.rm());
