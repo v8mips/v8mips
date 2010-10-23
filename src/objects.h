@@ -5117,6 +5117,10 @@ class ObjectVisitor BASE_EMBEDDED {
   // Handy shorthand for visiting a single pointer.
   virtual void VisitPointer(Object** p) { VisitPointers(p, p + 1); }
 
+  // Variant of VisitPointer() can be defined in visitors where
+  // reloc info is needed (initially defined for mips).
+  virtual void VisitPointer(Object** p, RelocInfo* rinfo) { VisitPointers(p, p + 1); }
+
   // Visits a contiguous arrays of external references (references to the C++
   // heap) in the half-open range [start, end). Any or all of the values
   // may be modified on return.

@@ -198,7 +198,7 @@ bool RelocInfo::IsPatchedReturnSequence() {
 //   PrintF("%s - %d - %s : Checking for jal(r)",
 //       __FILE__, __LINE__, __func__);
 // #endif
-  //return 
+  //return
   bool prs = (((current_instr & 0xffff0000) == 0x3c010000) &&   // plind -- really UGLY HACK .......
           ((third_instr & kOpcodeMask) == SPECIAL) &&
           ((third_instr & kFunctionFieldMask) == JALR));
@@ -211,7 +211,10 @@ bool RelocInfo::IsPatchedReturnSequence() {
 void RelocInfo::Visit(ObjectVisitor* visitor) {
   RelocInfo::Mode mode = rmode();
   if (mode == RelocInfo::EMBEDDED_OBJECT) {
-    visitor->VisitPointer(target_object_address());
+    // RelocInfo is needed when pointer must be updated, such as
+    // UpdatingVisitor in mark-compact.cc. It ignored by visitors
+    // that do not need it.
+    visitor->VisitPointer(target_object_address(), this);
   } else if (RelocInfo::IsCodeTarget(mode)) {
     visitor->VisitCodeTarget(this);
   } else if (mode == RelocInfo::EXTERNAL_REFERENCE) {
