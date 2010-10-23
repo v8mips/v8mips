@@ -206,6 +206,15 @@ Register ToRegister(int num) {
 
 const int RelocInfo::kApplyMask = 0;
 
+
+bool RelocInfo::IsCodedSpecially() {
+  // The deserializer needs to know whether a pointer is specially coded.  Being
+  // specially coded on MIPS means that it is a lui/ori instruction, and that is
+  // always the case inside code objects.
+  return true;
+}
+
+
 // Patch the code at the current address with the supplied instructions.
 void RelocInfo::PatchCode(byte* instructions, int instruction_count) {
   Instr* pc = reinterpret_cast<Instr*>(pc_);
