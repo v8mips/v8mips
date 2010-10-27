@@ -5059,8 +5059,8 @@ void CodeGenerator::EmitNamedLoad(Handle<String> name, bool is_contextual) {
 
     // Check the map. The null map used below is patched by the inline cache
     // code.
-    __ lw(a2, FieldMemOperand(a0, HeapObject::kMapOffset));
 
+    __ lw(a2, FieldMemOperand(a0, HeapObject::kMapOffset));
     // Generate patchable inline code. See LoadIC::PatchInlinedLoad.
     { Assembler::BlockTrampolinePoolScope block_trampoline_pool(masm_);
       // The null map used below is patched by the inline cache code.
