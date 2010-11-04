@@ -2918,9 +2918,8 @@ void CodeGenerator::VisitConditional(Conditional* node) {
   }
   if (else_.is_linked()) {
     JumpTarget exit;
-    if (has_valid_frame()) {
-      exit.Jump();
-    } else_.Bind();
+    if (has_valid_frame()) exit.Jump();
+    else_.Bind();
     LoadAndSpill(node->else_expression());
     if (exit.is_linked()) exit.Bind();
   }
@@ -3409,7 +3408,6 @@ void CodeGenerator::VisitCall(Call* node) {
                       node->position());
 
       } else {
-
         LoadAndSpill(property->obj());  // Receiver.
         // Load the arguments.
         int arg_count = args->length();
@@ -4937,30 +4935,17 @@ void DeferredReferenceGetNamedValue::Generate() {
   // receiver from the top of the stack.
   __ li(a2, Operand(name_));
 
-  // Call is 4 instructions, nop is 1.
-  const int kInlinedInstructions = 5;
-#ifdef DEBUG
-  Label check_inlined_codesize;
-  masm_->bind(&check_inlined_codesize);
-#endif
+  { Assembler::BlockTrampolinePoolScope block_trampoline_pool(masm_);
+    Handle<Code> ic(Builtins::builtin(Builtins::LoadIC_Initialize));
+    __ Call(ic, RelocInfo::CODE_TARGET);
 
-  // Call is 5 instructions, nop is 1, plus an extra one for later.
-  __ BlockTrampolinePoolFor(kInlinedInstructions);
-
-  Handle<Code> ic(Builtins::builtin(Builtins::LoadIC_Initialize));
-  __ Call(ic, RelocInfo::CODE_TARGET);
-
-  // The call must be followed by a nop(1) instruction to indicate that the
-  // in-object has been inlined.
-  __ nop(PROPERTY_ACCESS_INLINED);
-
-  // Block the trampoline pool for one more instruction to
-  // include the branch instruction ending the deferred code.
-  __ BlockTrampolinePoolFor(1);
-
-  // Make sure that the expected number of instructions are generated.
-  ASSERT_EQ(kInlinedInstructions,
-            masm_->InstructionsGeneratedSince(&check_inlined_codesize));
+    // The call must be followed by a nop(1) instruction to indicate that the
+    // in-object has been inlined.
+    __ nop(PROPERTY_ACCESS_INLINED);
+    // Block the trampoline pool for one more instruction to
+    // include the branch instruction ending the deferred code.
+    __ BlockTrampolinePoolFor(1);
+  }
 }
 
 
@@ -4980,29 +4965,20 @@ void DeferredReferenceGetKeyedValue::Generate() {
   __ DecrementCounter(&Counters::keyed_load_inline, 1, scratch1, scratch2);
   __ IncrementCounter(&Counters::keyed_load_inline_miss, 1, scratch1, scratch2);
 
-  const int kInlinedInstructions = 6;
-#ifdef DEBUG
-  Label check_inlined_codesize;
-  masm_->bind(&check_inlined_codesize);
-#endif
-  __ BlockTrampolinePoolFor(kInlinedInstructions);
+  { Assembler::BlockTrampolinePoolScope block_trampoline_pool(masm_);
+    // Call keyed load IC. It has all arguments on the stack and the key in a0.
+    __ lw(a0, MemOperand(sp, 0));
+    Handle<Code> ic(Builtins::builtin(Builtins::KeyedLoadIC_Initialize));
+    __ Call(ic, RelocInfo::CODE_TARGET);
+    // The call must be followed by a nop instruction to indicate that the
+    // keyed load has been inlined.
+    __ nop(PROPERTY_ACCESS_INLINED);
 
-  // Call keyed load IC. It has all arguments on the stack and the key in a0.
-  __ lw(a0, MemOperand(sp, 0));
-  Handle<Code> ic(Builtins::builtin(Builtins::KeyedLoadIC_Initialize));
-  __ Call(ic, RelocInfo::CODE_TARGET);
-  // The call must be followed by a nop instruction to indicate that the
-  // keyed load has been inlined.
-  __ nop(PROPERTY_ACCESS_INLINED);
-
-  // Block the trampoline pool for one more instruction after leaving this
-  // constant pool block scope to include the branch instruction ending the
-  // deferred code.
-  __ BlockTrampolinePoolFor(1);
-
-  // Make sure that the expected number of instructions are generated.
-  ASSERT_EQ(kInlinedInstructions,
-            masm_->InstructionsGeneratedSince(&check_inlined_codesize));
+    // Block the trampoline pool for one more instruction after leaving this
+    // constant pool block scope to include the branch instruction ending the
+    // deferred code.
+    __ BlockTrampolinePoolFor(1);
+  }
 }
 
 
@@ -5024,30 +5000,20 @@ void DeferredReferenceSetKeyedValue::Generate() {
       &Counters::keyed_store_inline_miss, 1, scratch1, scratch2);
 
   // The rest of the instructions in the deferred code must be together.
-  const int kInlinedInstructions = 5;
-#ifdef DEBUG
-  Label check_inlined_codesize;
-  masm_->bind(&check_inlined_codesize);
-#endif
-  __ BlockTrampolinePoolFor(kInlinedInstructions);
+  { Assembler::BlockTrampolinePoolScope block_trampoline_pool(masm_);
+    // Call keyed load IC. It has receiver amd key on the stack and the value to
+    // store in a0.
+    Handle<Code> ic(Builtins::builtin(Builtins::KeyedStoreIC_Initialize));
+    __ Call(ic, RelocInfo::CODE_TARGET);
+    // The call must be followed by a nop instruction to indicate that the
+    // keyed store has been inlined.
+    __ nop(PROPERTY_ACCESS_INLINED);
 
-  // Call keyed load IC. It has receiver amd key on the stack and the value to
-  // store in a0.
-  Handle<Code> ic(Builtins::builtin(Builtins::KeyedStoreIC_Initialize));
-  __ Call(ic, RelocInfo::CODE_TARGET);
-  // The call must be followed by a nop instruction to indicate that the
-  // keyed store has been inlined.
-  __ nop(PROPERTY_ACCESS_INLINED);
-
-  // Block the trampoline pool for one more instruction after leaving this
-  // constant pool block scope to include the branch instruction ending the
-  // deferred code.
-  __ BlockTrampolinePoolFor(1);
-
-  // Make sure that the expected number of instructions are generated.
-  ASSERT_EQ(kInlinedInstructions,
-            masm_->InstructionsGeneratedSince(&check_inlined_codesize));
-
+    // Block the trampoline pool for one more instruction after leaving this
+    // constant pool block scope to include the branch instruction ending the
+    // deferred code.
+    __ BlockTrampolinePoolFor(1);
+  }
 }
 
 
@@ -5093,21 +5059,18 @@ void CodeGenerator::EmitNamedLoad(Handle<String> name, bool is_contextual) {
 
     // Check the map. The null map used below is patched by the inline cache
     // code.
+
     __ lw(a2, FieldMemOperand(a0, HeapObject::kMapOffset));
-
     // Generate patchable inline code. See LoadIC::PatchInlinedLoad.
+    { Assembler::BlockTrampolinePoolScope block_trampoline_pool(masm_);
+      // The null map used below is patched by the inline cache code.
+      __ li(a3, Operand(Factory::null_value()), true);
+      deferred->Branch(ne, a2, Operand(a3));
 
-    // The null map used below is patched by the inline cache code.
-    __ li(a3, Operand(Factory::null_value()), true);
-    deferred->Branch(ne, a2, Operand(a3));
-
-    // Initially use an invalid index. The index will be patched by the
-    // inline cache code.
-    __ lw(v0, MemOperand(a0, 666));
-
-    // Make sure that the expected number of instructions are generated.
-    ASSERT_EQ(kInlinedNamedLoadInstructions,
-              masm_->InstructionsGeneratedSince(&check_inlined_codesize));
+      // Initially use an invalid index. The index will be patched by the
+      // inline cache code.
+      __ lw(v0, MemOperand(a0, 666));
+    }
     deferred->BindExit();
   }
 }
@@ -5143,56 +5106,46 @@ void CodeGenerator::EmitKeyedLoad() {
     // property code which can be patched. Therefore the exact number of
     // instructions generated need to be fixed, so the trampoline pool is
     // blocked while generating this code.
-    const int kInlinedKeyedLoadInstructions = 25;
-#ifdef DEBUG
-    Label check_inlined_codesize;
-    masm_->bind(&check_inlined_codesize);
-#endif
-    __ BlockTrampolinePoolFor(kInlinedKeyedLoadInstructions);
+    { Assembler::BlockTrampolinePoolScope block_trampoline_pool(masm_);
+      Register scratch1 = VirtualFrame::scratch0();
+      Register scratch2 = VirtualFrame::scratch1();
+      // Check the map. The null map used below is patched by the inline cache
+      // code.
+      __ lw(scratch1, FieldMemOperand(receiver, HeapObject::kMapOffset));
+      __ li(scratch2, Operand(Factory::null_value()), true);
+      deferred->Branch(ne, scratch1, Operand(scratch2));
 
-    Register scratch1 = VirtualFrame::scratch0();
-    Register scratch2 = VirtualFrame::scratch1();
-    // Check the map. The null map used below is patched by the inline cache
-    // code.
-    __ lw(scratch1, FieldMemOperand(receiver, HeapObject::kMapOffset));
-    __ li(scratch2, Operand(Factory::null_value()), true);
-    deferred->Branch(ne, scratch1, Operand(scratch2));
+      // Check that the key is a smi.
+      __ And(at, key, Operand(kSmiTagMask));
+      deferred->Branch(ne, at, Operand(zero_reg));
 
-    // Check that the key is a smi.
-    __ And(at, key, Operand(kSmiTagMask));
-    deferred->Branch(ne, at, Operand(zero_reg));
+      // Get the elements array from the receiver and check that it
+      // is not a dictionary.
+      __ lw(scratch1, FieldMemOperand(receiver, JSObject::kElementsOffset));
+      __ lw(scratch2, FieldMemOperand(scratch1, JSObject::kMapOffset));
+      __ LoadRoot(at, Heap::kFixedArrayMapRootIndex);
+      deferred->Branch(ne, scratch2, Operand(at));
 
-    // Get the elements array from the receiver and check that it
-    // is not a dictionary.
-    __ lw(scratch1, FieldMemOperand(receiver, JSObject::kElementsOffset));
-    __ lw(scratch2, FieldMemOperand(scratch1, JSObject::kMapOffset));
-    __ LoadRoot(at, Heap::kFixedArrayMapRootIndex);
-    deferred->Branch(ne, scratch2, Operand(at));
+      // Check that key is within bounds. Use unsigned comparison to handle
+      // negative keys.
+      __ lw(scratch2, FieldMemOperand(scratch1, FixedArray::kLengthOffset));
+      __ sra(at, key, kSmiTagSize);
+      deferred->Branch(ls, scratch2, Operand(at));  // Unsigned less equal.
 
-    // Check that key is within bounds. Use unsigned comparison to handle
-    // negative keys.
-    __ lw(scratch2, FieldMemOperand(scratch1, FixedArray::kLengthOffset));
-    __ sra(at, key, kSmiTagSize);
-    deferred->Branch(ls, scratch2, Operand(at));  // Unsigned less equal.
+      // Load and check that the result is not the hole (key is a smi).
+      __ LoadRoot(scratch2, Heap::kTheHoleValueRootIndex);
+      __ Addu(scratch1,
+              scratch1,
+              Operand(FixedArray::kHeaderSize - kHeapObjectTag));
+      __ sll(at, key, kPointerSizeLog2 - (kSmiTagSize + kSmiShiftSize));
+      __ addu(at, at, scratch1);
+      __ lw(v0, MemOperand(at, 0));
 
-    // Load and check that the result is not the hole (key is a smi).
-    __ LoadRoot(scratch2, Heap::kTheHoleValueRootIndex);
-    __ Addu(scratch1,
-            scratch1,
-            Operand(FixedArray::kHeaderSize - kHeapObjectTag));
-    __ sll(at, key, kPointerSizeLog2 - (kSmiTagSize + kSmiShiftSize));
-    __ addu(at, at, scratch1);
-    __ lw(v0, MemOperand(at, 0));
-
-    // This is the only branch to deferred where r0 and r1 do not contain the
-    // receiver and key.  We can't just load undefined here because we have to
-    // check the prototype.
-    deferred->Branch(eq, v0, Operand(scratch2));
-
-    // Make sure that the expected number of instructions are generated.
-    ASSERT_EQ(kInlinedKeyedLoadInstructions,
-              masm_->InstructionsGeneratedSince(&check_inlined_codesize));
-
+      // This is the only branch to deferred where a0 and a1 do not contain the
+      // receiver and key.  We can't just load undefined here because we have to
+      // check the prototype.
+      deferred->Branch(eq, v0, Operand(scratch2));
+    }
     deferred->BindExit();
   }
 }
@@ -5244,39 +5197,28 @@ void CodeGenerator::EmitKeyedStore(StaticType* key_type) {
     // property code which can be patched. Therefore the exact number of
     // instructions generated need to be fixed, so the constant pool is blocked
     // while generating this code.
-    const int kInlinedKeyedStoreInstructions = 11;
-#ifdef DEBUG
-    Label check_inlined_codesize;
-    masm_->bind(&check_inlined_codesize);
-#endif
-    //{ Assembler::BlockConstPoolScope block_const_pool(masm_);
-    __ BlockTrampolinePoolFor(kInlinedKeyedStoreInstructions);
+    { Assembler::BlockTrampolinePoolScope block_trampoline_pool(masm_);
+      // Get the elements array from the receiver and check that it
+      // is not a dictionary.
+      __ lw(a3, FieldMemOperand(a2, JSObject::kElementsOffset));
+      __ lw(t0, FieldMemOperand(a3, JSObject::kMapOffset));
+      // Read the fixed array map from the constant pool (not from the root
+      // array) so that the value can be patched.  When debugging, we patch this
+      // comparison to always fail so that we will hit the IC call in the
+      // deferred code which will allow the debugger to break for fast case
+      // stores.
+      __ li(t1, Operand(Factory::fixed_array_map()), true);
+      deferred->Branch(ne, t0, Operand(t1));
 
-    // Get the elements array from the receiver and check that it
-    // is not a dictionary.
-    __ lw(a3, FieldMemOperand(a2, JSObject::kElementsOffset));
-    __ lw(t0, FieldMemOperand(a3, JSObject::kMapOffset));
-    // Read the fixed array map from the constant pool (not from the root
-    // array) so that the value can be patched.  When debugging, we patch this
-    // comparison to always fail so that we will hit the IC call in the
-    // deferred code which will allow the debugger to break for fast case
-    // stores.
-    __ li(t1, Operand(Factory::fixed_array_map()), true);
-    deferred->Branch(ne, t0, Operand(t1));
+      // Store the value.
+      __ Addu(a3, a3, Operand(FixedArray::kHeaderSize - kHeapObjectTag));
 
-    // Store the value.
-    __ Addu(a3, a3, Operand(FixedArray::kHeaderSize - kHeapObjectTag));
-
-    // Use (Smi) key in a1 to index array pointed to by a3.
-    __ sll(at, a1, kPointerSizeLog2 - (kSmiTagSize + kSmiShiftSize));
-    __ addu(at, a3, at);
-    __ sw(a0, MemOperand(at, 0));
-    __ mov(v0, a0);  // Leave stored value in v0.
-
-    // Make sure that the expected number of instructions are generated.
-    ASSERT_EQ(kInlinedKeyedStoreInstructions,
-              masm_->InstructionsGeneratedSince(&check_inlined_codesize));
-
+      // Use (Smi) key in a1 to index array pointed to by a3.
+      __ sll(at, a1, kPointerSizeLog2 - (kSmiTagSize + kSmiShiftSize));
+      __ addu(at, a3, at);
+      __ sw(a0, MemOperand(at, 0));
+      __ mov(v0, a0);  // Leave stored value in v0.
+    }
     deferred->BindExit();
   } else {
     frame()->CallKeyedStoreIC();
@@ -5994,12 +5936,12 @@ static void EmitTwoNonNanDoubleComparison(MacroAssembler* masm, Condition cc) {
   if (!CpuFeatures::IsSupported(FPU)) {
     __ Push(ra);
     __ PrepareCallCFunction(4, t4);  // Two doubles count as 4 arguments.
-    if(!IsMipsSoftFloatABI){
-      // We are not using MIPS FPU instructions, and parameters for the run-time
+    if (!IsMipsSoftFloatABI) {
+      // We are not using MIPS FPU instructions, and parameters for the runtime
       // function call are prepaired in a0-a3 registers, but function we are
       // calling is compiled with hard-float flag and expecting hard float ABI
-      // (parameters in f12/f14 registers). We need to copy parameters from a0-a3
-      // registers to f12/f14 register pairs.
+      // (parameters in f12/f14 registers). We need to copy parameters from
+      // a0-a3 registers to f12/f14 register pairs.
       __ mtc1(a0, f12);
       __ mtc1(a1, f13);
       __ mtc1(a2, f14);
@@ -6526,11 +6468,12 @@ void CEntryStub::GenerateCore(MacroAssembler* masm,
   masm->addiu(sp, sp, -(stack_adjustment));
   masm->sw(ra, MemOperand(sp, stack_adjustment - kPointerSize));
 
-  masm->BlockTrampolinePoolFor(3);
   // Call the C routine.
-  masm->mov(t9, s2);  // Function pointer to t9 to conform to ABI for PIC.
-  masm->jalr(t9);
-  masm->nop();    // Branch delay slot nop.
+  { Assembler::BlockTrampolinePoolScope block_trampoline_pool(masm);
+    masm->mov(t9, s2);  // Function pointer to t9 to conform to ABI for PIC.
+    masm->jalr(t9);
+    masm->nop();    // Branch delay slot nop.
+  }
 
   // Restore stack (remove arg slots and extra parameter).
   masm->addiu(sp, sp, stack_adjustment);
@@ -7265,7 +7208,7 @@ void ArgumentsAccessStub::GenerateNewObject(MacroAssembler* masm) {
   // bytes because AllocateInNewSpace expects words).
   Label add_arguments_object;
   __ bind(&try_allocate);
-  __ Branch (&add_arguments_object, eq, a1, Operand(0));
+  __ Branch(&add_arguments_object, eq, a1, Operand(0));
   __ srl(a1, a1, kSmiTagSize);
 
   __ Addu(a1, a1, Operand(FixedArray::kHeaderSize / kPointerSize));
@@ -7687,7 +7630,7 @@ static void HandleBinaryOpSlowCases(MacroAssembler* masm,
       __ Push(ra);
       __ Push(t0);
       __ PrepareCallCFunction(4, t1);  // Two doubles count as 4 arguments.
-      if(IsMipsSoftFloatABI){
+      if (IsMipsSoftFloatABI) {
         // We are using MIPS FPU instructions, and parameters for the run-time
         // function call are prepared in f12/f14 register pairs, but function
         // we are calling is compiled with soft-float flag and expecting soft
@@ -7701,7 +7644,7 @@ static void HandleBinaryOpSlowCases(MacroAssembler* masm,
       __ CallCFunction(ExternalReference::double_fp_operation(operation), 4);
       __ Pop(t0);  // Address of heap number.
       __ Pop(ra);
-      if(IsMipsSoftFloatABI){
+      if (IsMipsSoftFloatABI) {
         // Store answer in the overwritable heap number.
         // Double returned is stored in registers v0 and v1 (function we called
         // is compiled with soft-float flag and uses soft-float ABI).
@@ -7733,13 +7676,13 @@ static void HandleBinaryOpSlowCases(MacroAssembler* masm,
 
   __ PrepareCallCFunction(4, t1);  // Two doubles count as 4 arguments.
   // Call C routine that may not cause GC or other trouble.
-  if(!IsMipsSoftFloatABI){
-    if(!use_fp_registers){
-      // We are not using MIPS FPU instructions, and parameters for the run-time
+  if (!IsMipsSoftFloatABI) {
+    if (!use_fp_registers) {
+      // We are not using MIPS FPU instructions, and parameters for the runtime
       // function call are prepared in a0-a3 registers, but the function we are
       // calling is compiled with hard-float flag and expecting hard float ABI
-      // (parameters in f12/f14 registers). We need to copy parameters from a0-a3
-      // registers to f12/f14 register pairs.
+      // (parameters in f12/f14 registers). We need to copy parameters from
+      // a0-a3 registers to f12/f14 register pairs.
       __ mtc1(a0, f12);
       __ mtc1(a1, f13);
       __ mtc1(a2, f14);
@@ -7749,12 +7692,12 @@ static void HandleBinaryOpSlowCases(MacroAssembler* masm,
 
   __ CallCFunction(ExternalReference::double_fp_operation(operation), 4);
 
-  if(!IsMipsSoftFloatABI){
-    if(!use_fp_registers){
+  if (!IsMipsSoftFloatABI) {
+    if (!use_fp_registers) {
       // Returned double value is stored in registers f0 and f1 (function we
-      // called is compiled with hard-float flag and uses hard-float ABI). Return
-      // value in the case when we are not using MIPS FPU instructions has to be
-      // placed in v0/v1, so we need to copy from f0/f1.
+      // called is compiled with hard-float flag and uses hard-float ABI).
+      // Return value in the case when we are not using MIPS FPU instructions
+      // has to be placed in v0/v1, so we need to copy from f0/f1.
       __ mfc1(v0, f0);
       __ mfc1(v1, f1);
     }

@@ -295,6 +295,7 @@ Assembler::Assembler(void* buffer, int buffer_size) {
 
   last_trampoline_pool_end_ = 0;
   no_trampoline_pool_before_ = 0;
+  trampoline_pool_blocked_nesting_ = 0;
   next_buffer_check_ = kMaxBranchOffset - kTrampolineSize;
 }
 
@@ -652,10 +653,11 @@ void Assembler::GenInstrImmediate(Opcode opcode,
 // Registers are in the order of the instruction encoding, from left to right.
 void Assembler::GenInstrJump(Opcode opcode,
                               uint32_t address) {
-  BlockTrampolinePoolFor(2);
+  BlockTrampolinePoolScope block_trampoline_pool(this);
   ASSERT(is_uint26(address));
   Instr instr = opcode | address;
   emit(instr);
+  BlockTrampolinePoolFor(1);
 }
 
 // Returns the next free label entry from the next trampoline pool.
@@ -804,52 +806,60 @@ void Assembler::bal(int16_t offset) {
 
 
 void Assembler::beq(Register rs, Register rt, int16_t offset) {
-  BlockTrampolinePoolFor(2);
+  BlockTrampolinePoolScope block_trampoline_pool(this);
   GenInstrImmediate(BEQ, rs, rt, offset);
+  BlockTrampolinePoolFor(1);
 }
 
 
 void Assembler::bgez(Register rs, int16_t offset) {
-  BlockTrampolinePoolFor(2);
+  BlockTrampolinePoolScope block_trampoline_pool(this);
   GenInstrImmediate(REGIMM, rs, BGEZ, offset);
+  BlockTrampolinePoolFor(1);
 }
 
 
 void Assembler::bgezal(Register rs, int16_t offset) {
-  BlockTrampolinePoolFor(2);
+  BlockTrampolinePoolScope block_trampoline_pool(this);
   WriteRecordedPositions();
   GenInstrImmediate(REGIMM, rs, BGEZAL, offset);
+  BlockTrampolinePoolFor(1);
 }
 
 
 void Assembler::bgtz(Register rs, int16_t offset) {
-  BlockTrampolinePoolFor(2);
+  BlockTrampolinePoolScope block_trampoline_pool(this);
   GenInstrImmediate(BGTZ, rs, zero_reg, offset);
+  BlockTrampolinePoolFor(1);
 }
 
 
 void Assembler::blez(Register rs, int16_t offset) {
-  BlockTrampolinePoolFor(2);
+  BlockTrampolinePoolScope block_trampoline_pool(this);
   GenInstrImmediate(BLEZ, rs, zero_reg, offset);
+  BlockTrampolinePoolFor(1);
 }
 
 
 void Assembler::bltz(Register rs, int16_t offset) {
-  BlockTrampolinePoolFor(2);
+  BlockTrampolinePoolScope block_trampoline_pool(this);
   GenInstrImmediate(REGIMM, rs, BLTZ, offset);
+  BlockTrampolinePoolFor(1);
 }
 
 
 void Assembler::bltzal(Register rs, int16_t offset) {
-  BlockTrampolinePoolFor(2);
+  BlockTrampolinePoolScope block_trampoline_pool(this);
   WriteRecordedPositions();
   GenInstrImmediate(REGIMM, rs, BLTZAL, offset);
+  BlockTrampolinePoolFor(1);
 }
 
 
 void Assembler::bne(Register rs, Register rt, int16_t offset) {
-  BlockTrampolinePoolFor(2);
+  BlockTrampolinePoolScope block_trampoline_pool(this);
   GenInstrImmediate(BNE, rs, rt, offset);
+  BlockTrampolinePoolFor(1);
 }
 
 
@@ -860,11 +870,12 @@ void Assembler::j(int32_t target) {
 
 
 void Assembler::jr(Register rs) {
-  BlockTrampolinePoolFor(2);
+  BlockTrampolinePoolScope block_trampoline_pool(this);
   if (rs.is(ra)) {
     WriteRecordedPositions();
   }
   GenInstrRegister(SPECIAL, rs, zero_reg, zero_reg, 0, JR);
+  BlockTrampolinePoolFor(1);
 }
 
 
@@ -876,9 +887,10 @@ void Assembler::jal(int32_t target) {
 
 
 void Assembler::jalr(Register rs, Register rd) {
-  BlockTrampolinePoolFor(2);
+  BlockTrampolinePoolScope block_trampoline_pool(this);
   WriteRecordedPositions();
   GenInstrRegister(SPECIAL, rs, zero_reg, rd, 0, JALR);
+  BlockTrampolinePoolFor(1);
 }
 
 
@@ -1499,41 +1511,45 @@ void Assembler::CheckTrampolinePool() {
 
   // Some small sequences of instructions must not be broken up by the
   // insertion of a trampoline pool; such sequences are protected by setting
-  // no_trampoline_pool_before_, which is checked here. Recursive calls to
-  // CheckTrampolinePool are blocked by no_trampoline_pool_before_ as well.
-  if (pc_offset() < no_trampoline_pool_before_) {
+  // either trampoline_pool_blocked_nesting_ or no_trampoline_pool_before_,
+  // which are both checked here. Also, recursive calls to CheckTrampolinePool
+  // are blocked by trampoline_pool_blocked_nesting_.
+  if ((trampoline_pool_blocked_nesting_ > 0) ||
+      (pc_offset() < no_trampoline_pool_before_)) {
     // Emission is currently blocked; make sure we try again as soon as
     // possible.
-    next_buffer_check_ = no_trampoline_pool_before_;
+    if (trampoline_pool_blocked_nesting_ > 0) {
+      next_buffer_check_ = pc_offset() + kInstrSize;
+    } else {
+      next_buffer_check_ = no_trampoline_pool_before_;
+    }
     return;
   }
 
   // First we emit jump (2 instructions), then we emit trampoline pool.
-  BlockTrampolinePoolFor(2 + kSlotsPerTrampoline*2 + kLabelsPerTrampoline + 1);
-  // Don't bother to check for the emit calls below.
-  next_buffer_check_ = no_trampoline_pool_before_;
-
-  Label after_pool;
-  b(&after_pool);
-  nop();
-
-  int pool_start = pc_offset();
-  for (int i = 0; i < kSlotsPerTrampoline; i++) {
+  { BlockTrampolinePoolScope block_trampoline_pool(this);
+    Label after_pool;
     b(&after_pool);
     nop();
-  }
-  for (int i = 0; i < kLabelsPerTrampoline; i++) {
-    emit(0);
-  }
-  last_trampoline_pool_end_ = pc_offset() - kInstrSize;
-  bind(&after_pool);
-  trampolines_.Add(Trampoline(pool_start,
-                              kSlotsPerTrampoline,
-                              kLabelsPerTrampoline));
 
-  // Since a trampoline pool was just emitted, move the check offset forward by
-  // the standard interval.
-  next_buffer_check_ = last_trampoline_pool_end_ + kMaxDistBetweenPools;
+    int pool_start = pc_offset();
+    for (int i = 0; i < kSlotsPerTrampoline; i++) {
+      b(&after_pool);
+      nop();
+    }
+    for (int i = 0; i < kLabelsPerTrampoline; i++) {
+      emit(0);
+    }
+    last_trampoline_pool_end_ = pc_offset() - kInstrSize;
+    bind(&after_pool);
+    trampolines_.Add(Trampoline(pool_start,
+                                kSlotsPerTrampoline,
+                                kLabelsPerTrampoline));
+
+    // Since a trampoline pool was just emitted, move the check offset forward by
+    // the standard interval.
+    next_buffer_check_ = last_trampoline_pool_end_ + kMaxDistBetweenPools;
+  }
   return;
 }
 

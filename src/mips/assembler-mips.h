@@ -595,6 +595,22 @@ class Assembler : public Malloced {
     return (pc_offset() - l->pos()) / kInstrSize;
   }
 
+  // Class for scoping postponing the trampoline pool generation.
+  class BlockTrampolinePoolScope {
+   public:
+    explicit BlockTrampolinePoolScope(Assembler* assem) : assem_(assem) {
+      assem_->StartBlockTrampolinePool();
+    }
+    ~BlockTrampolinePoolScope() {
+      assem_->EndBlockTrampolinePool();
+    }
+
+   private:
+    Assembler* assem_;
+
+    DISALLOW_IMPLICIT_CONSTRUCTORS(BlockTrampolinePoolScope);
+  };
+
   // Debugging.
 
   // Mark address of the ExitJSFrame code.
@@ -667,6 +683,13 @@ class Assembler : public Malloced {
       no_trampoline_pool_before_ = pc_offset;
   }
 
+  void StartBlockTrampolinePool() {
+    trampoline_pool_blocked_nesting_++;
+  }
+  void EndBlockTrampolinePool() {
+    trampoline_pool_blocked_nesting_--;
+  }
+
  private:
   // Code buffer:
   // The buffer into which code and relocation info are generated.
@@ -697,6 +720,7 @@ class Assembler : public Malloced {
   int next_buffer_check_;  // pc offset of next buffer check.
 
   // Emission of the trampoline pool may be blocked in some code sequences.
+  int trampoline_pool_blocked_nesting_;  // Block emission if this is not zero.
   int no_trampoline_pool_before_;  // Block emission before this pc offset.
 
   // Keep track of the last emitted pool to guarantee a maximal distance.
@@ -850,6 +874,7 @@ class Assembler : public Malloced {
   friend class RegExpMacroAssemblerMIPS;
   friend class RelocInfo;
   friend class CodePatcher;
+  friend class BlockTrampolinePoolScope;
 };
 
 } }  // namespace v8::internal
