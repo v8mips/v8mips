@@ -530,6 +530,7 @@ void LoadIC::GenerateNormal(MacroAssembler* masm) {
   __ bind(&probe);
   // This function uses name in a2, and trashes a3.
   GenerateDictionaryLoad(masm, &miss, a1, a0);
+  __ mov(v0, a0);
   __ Ret();
 
   // Global object access: Check access rights.
