@@ -234,6 +234,7 @@ void MacroAssembler::RecordWrite(Register object,
 Register MacroAssembler::CheckMaps(JSObject* object, Register object_reg,
                                    JSObject* holder, Register holder_reg,
                                    Register scratch,
+                                   int save_at_depth,
                                    Label* miss) {
   // Make sure there's no overlap between scratch and the other
   // registers.
@@ -241,7 +242,11 @@ Register MacroAssembler::CheckMaps(JSObject* object, Register object_reg,
 
   // Keep track of the current object in register reg.
   Register reg = object_reg;
-  int depth = 1;
+  int depth = 0;
+
+  if (save_at_depth == depth) {
+    sw(reg, MemOperand(sp));
+  }
 
   // Check the maps in the prototype chain.
   // Traverse the prototype chain from the object and do map checks.
@@ -280,6 +285,10 @@ Register MacroAssembler::CheckMaps(JSObject* object, Register object_reg,
       li(reg, Operand(Handle<JSObject>(prototype)));
     }
 
+    if (save_at_depth == depth) {
+      sw(reg, MemOperand(sp));
+    }
+
     // Go to the next object in the prototype chain.
     object = prototype;
   }
@@ -289,7 +298,7 @@ Register MacroAssembler::CheckMaps(JSObject* object, Register object_reg,
   Branch(miss, ne, scratch, Operand(Handle<Map>(object->map())));
 
   // Log the check depth.
-  LOG(IntEvent("check-maps-depth", depth));
+  LOG(IntEvent("check-maps-depth", depth + 1));
 
   // Perform security check for access to the global object and return
   // the holder register.
