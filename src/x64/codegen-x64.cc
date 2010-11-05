@@ -4447,7 +4447,7 @@ void CodeGenerator::GenerateRegExpConstructResult(ZoneList<Expression*>* args) {
     __ Move(FieldOperand(rcx, HeapObject::kMapOffset),
             Factory::fixed_array_map());
     // Set length.
-    __ movq(FieldOperand(rcx, FixedArray::kLengthOffset), rbx);
+    __ movl(FieldOperand(rcx, FixedArray::kLengthOffset), rbx);
     // Fill contents of fixed-array with the-hole.
     __ Move(rdx, Factory::the_hole_value());
     __ lea(rcx, FieldOperand(rcx, FixedArray::kHeaderSize));
@@ -4476,22 +4476,142 @@ void CodeGenerator::GenerateRegExpConstructResult(ZoneList<Expression*>* args) {
 
 class DeferredSearchCache: public DeferredCode {
  public:
-  DeferredSearchCache(Register dst, Register cache, Register key)
-      : dst_(dst), cache_(cache), key_(key) {
+  DeferredSearchCache(Register dst,
+                      Register cache,
+                      Register key,
+                      Register scratch)
+      : dst_(dst), cache_(cache), key_(key), scratch_(scratch) {
     set_comment("[ DeferredSearchCache");
   }
 
   virtual void Generate();
 
  private:
-  Register dst_, cache_, key_;
+  Register dst_;    // on invocation index of finger (as Smi), on exit
+                    // holds value being looked up.
+  Register cache_;  // instance of JSFunctionResultCache.
+  Register key_;    // key being looked up.
+  Register scratch_;
 };
 
 
+// Return a position of the element at |index| + |additional_offset|
+// in FixedArray pointer to which is held in |array|.  |index| is int32.
+static Operand ArrayElement(Register array,
+                            Register index,
+                            int additional_offset = 0) {
+  int offset = FixedArray::kHeaderSize + additional_offset * kPointerSize;
+  return FieldOperand(array, index, times_pointer_size, offset);
+}
+
+
 void DeferredSearchCache::Generate() {
-  __ push(cache_);
+  Label first_loop, search_further, second_loop, cache_miss;
+
+  Immediate kEntriesIndexImm = Immediate(JSFunctionResultCache::kEntriesIndex);
+  Immediate kEntrySizeImm = Immediate(JSFunctionResultCache::kEntrySize);
+
+  __ SmiToInteger32(dst_, dst_);
+  // Check the cache from finger to start of the cache.
+  __ bind(&first_loop);
+  __ subq(dst_, kEntrySizeImm);
+  __ cmpq(dst_, kEntriesIndexImm);
+  __ j(less, &search_further);
+
+  __ cmpq(ArrayElement(cache_, dst_), key_);
+  __ j(not_equal, &first_loop);
+
+  __ Integer32ToSmi(scratch_, dst_);
+  __ movq(FieldOperand(cache_, JSFunctionResultCache::kFingerOffset), scratch_);
+  __ movq(dst_, ArrayElement(cache_, dst_, 1));
+  __ jmp(exit_label());
+
+  __ bind(&search_further);
+
+  // Check the cache from end of cache up to finger.
+  __ movq(dst_, FieldOperand(cache_, JSFunctionResultCache::kCacheSizeOffset));
+  __ movq(scratch_, FieldOperand(cache_, JSFunctionResultCache::kFingerOffset));
+  __ SmiToInteger32(dst_, dst_);
+  __ SmiToInteger32(scratch_, scratch_);
+
+  __ bind(&second_loop);
+  __ subq(dst_, kEntrySizeImm);
+  __ cmpq(dst_, scratch_);
+  __ j(less_equal, &cache_miss);
+
+  __ cmpq(ArrayElement(cache_, dst_), key_);
+  __ j(not_equal, &second_loop);
+
+  __ Integer32ToSmi(scratch_, dst_);
+  __ movq(FieldOperand(cache_, JSFunctionResultCache::kFingerOffset), scratch_);
+  __ movq(dst_, ArrayElement(cache_, dst_, 1));
+  __ jmp(exit_label());
+
+  __ bind(&cache_miss);
+  __ push(cache_);  // store a reference to cache
+  __ push(key_);  // store a key
+  Handle<Object> receiver(Top::global_context()->global());
+  __ Push(receiver);
   __ push(key_);
-  __ CallRuntime(Runtime::kGetFromCache, 2);
+  // On x64 function must be in rdi.
+  __ movq(rdi, FieldOperand(cache_, JSFunctionResultCache::kFactoryOffset));
+  ParameterCount expected(1);
+  __ InvokeFunction(rdi, expected, CALL_FUNCTION);
+
+  // Find a place to put new cached value into.
+  Label add_new_entry, update_cache;
+  __ movq(rcx, Operand(rsp, kPointerSize));  // restore the cache
+  // Possible optimization: cache size is constant for the given cache
+  // so technically we could use a constant here.  However, if we have
+  // cache miss this optimization would hardly matter much.
+
+  // Check if we could add new entry to cache.
+  __ movl(rbx, FieldOperand(rcx, FixedArray::kLengthOffset));
+  __ movq(r9, FieldOperand(rcx, JSFunctionResultCache::kCacheSizeOffset));
+  __ SmiToInteger32(r9, r9);
+  __ cmpq(rbx, r9);
+  __ j(greater, &add_new_entry);
+
+  // Check if we could evict entry after finger.
+  __ movq(rdx, FieldOperand(rcx, JSFunctionResultCache::kFingerOffset));
+  __ SmiToInteger32(rdx, rdx);
+  __ addq(rdx, kEntrySizeImm);
+  Label forward;
+  __ cmpq(rbx, rdx);
+  __ j(greater, &forward);
+  // Need to wrap over the cache.
+  __ movq(rdx, kEntriesIndexImm);
+  __ bind(&forward);
+  __ Integer32ToSmi(r9, rdx);
+  __ jmp(&update_cache);
+
+  __ bind(&add_new_entry);
+  // r9 holds cache size as int.
+  __ movq(rdx, r9);
+  __ Integer32ToSmi(r9, r9);
+  __ SmiAddConstant(rbx, r9, Smi::FromInt(JSFunctionResultCache::kEntrySize));
+  __ movq(FieldOperand(rcx, JSFunctionResultCache::kCacheSizeOffset), rbx);
+
+  // Update the cache itself.
+  // rdx holds the index as int.
+  // r9 holds the index as smi.
+  __ bind(&update_cache);
+  __ pop(rbx);  // restore the key
+  __ movq(FieldOperand(rcx, JSFunctionResultCache::kFingerOffset), r9);
+  // Store key.
+  __ movq(ArrayElement(rcx, rdx), rbx);
+  __ RecordWrite(rcx, 0, rbx, r9);
+
+  // Store value.
+  __ pop(rcx);  // restore the cache.
+  __ movq(rdx, FieldOperand(rcx, JSFunctionResultCache::kFingerOffset));
+  __ SmiAddConstant(rdx, rdx, Smi::FromInt(1));
+  __ movq(r9, rdx);
+  __ SmiToInteger32(rdx, rdx);
+  __ movq(rbx, rax);
+  __ movq(ArrayElement(rcx, rdx), rbx);
+  __ RecordWrite(rcx, 0, rbx, r9);
+
   if (!dst_.is(rax)) {
     __ movq(dst_, rax);
   }
@@ -4529,27 +4649,28 @@ void CodeGenerator::GenerateGetFromCache(ZoneList<Expression*>* args) {
   Result tmp = allocator()->Allocate();
   ASSERT(tmp.is_valid());
 
+  Result scratch = allocator()->Allocate();
+  ASSERT(scratch.is_valid());
+
   DeferredSearchCache* deferred = new DeferredSearchCache(tmp.reg(),
                                                           cache.reg(),
-                                                          key.reg());
+                                                          key.reg(),
+                                                          scratch.reg());
 
   const int kFingerOffset =
       FixedArray::OffsetOfElementAt(JSFunctionResultCache::kFingerIndex);
   // tmp.reg() now holds finger offset as a smi.
-  ASSERT(kSmiTag == 0 && kSmiTagSize == 1);
   __ movq(tmp.reg(), FieldOperand(cache.reg(), kFingerOffset));
   SmiIndex index =
       masm()->SmiToIndex(kScratchRegister, tmp.reg(), kPointerSizeLog2);
   __ cmpq(key.reg(), FieldOperand(cache.reg(),
-                                  index.reg,
-                                  index.scale,
+                                  index.reg, index.scale,
                                   FixedArray::kHeaderSize));
+  // Do NOT alter index.reg or tmp.reg() before cmpq below.
   deferred->Branch(not_equal);
-
   __ movq(tmp.reg(), FieldOperand(cache.reg(),
-                                  index.reg,
-                                  index.scale,
-                                  kPointerSize + FixedArray::kHeaderSize));
+                                  index.reg, index.scale,
+                                  FixedArray::kHeaderSize + kPointerSize));
 
   deferred->BindExit();
   frame_->Push(&tmp);
@@ -5739,48 +5860,55 @@ void CodeGenerator::Comparison(AstNode* node,
       // by reconstituting them on the non-fall-through path.
       JumpTarget is_smi;
 
-      Condition left_is_smi = masm_->CheckSmi(left_side.reg());
-      is_smi.Branch(left_is_smi);
-
-      bool is_loop_condition = (node->AsExpression() != NULL) &&
-          node->AsExpression()->is_loop_condition();
-      if (!is_loop_condition && right_val->IsSmi()) {
-        // Right side is a constant smi and left side has been checked
-        // not to be a smi.
-        JumpTarget not_number;
-        __ Cmp(FieldOperand(left_reg, HeapObject::kMapOffset),
-               Factory::heap_number_map());
-        not_number.Branch(not_equal, &left_side);
-        __ movsd(xmm1,
-                 FieldOperand(left_reg, HeapNumber::kValueOffset));
-        int value = Smi::cast(*right_val)->value();
-        if (value == 0) {
-          __ xorpd(xmm0, xmm0);
-        } else {
-          Result temp = allocator()->Allocate();
-          __ movl(temp.reg(), Immediate(value));
-          __ cvtlsi2sd(xmm0, temp.reg());
-          temp.Unuse();
+      if (left_side.is_smi()) {
+        if (FLAG_debug_code) {
+          __ AbortIfNotSmi(left_side.reg(), "Non-smi value inferred as smi.");
         }
-        __ ucomisd(xmm1, xmm0);
-        // Jump to builtin for NaN.
-        not_number.Branch(parity_even, &left_side);
-        left_side.Unuse();
-        dest->true_target()->Branch(DoubleCondition(cc));
+      } else {
+        Condition left_is_smi = masm_->CheckSmi(left_side.reg());
+        is_smi.Branch(left_is_smi);
+
+        bool is_loop_condition = (node->AsExpression() != NULL) &&
+            node->AsExpression()->is_loop_condition();
+        if (!is_loop_condition && right_val->IsSmi()) {
+          // Right side is a constant smi and left side has been checked
+          // not to be a smi.
+          JumpTarget not_number;
+          __ Cmp(FieldOperand(left_reg, HeapObject::kMapOffset),
+                 Factory::heap_number_map());
+          not_number.Branch(not_equal, &left_side);
+          __ movsd(xmm1,
+              FieldOperand(left_reg, HeapNumber::kValueOffset));
+          int value = Smi::cast(*right_val)->value();
+          if (value == 0) {
+            __ xorpd(xmm0, xmm0);
+          } else {
+            Result temp = allocator()->Allocate();
+            __ movl(temp.reg(), Immediate(value));
+            __ cvtlsi2sd(xmm0, temp.reg());
+            temp.Unuse();
+          }
+          __ ucomisd(xmm1, xmm0);
+          // Jump to builtin for NaN.
+          not_number.Branch(parity_even, &left_side);
+          left_side.Unuse();
+          dest->true_target()->Branch(DoubleCondition(cc));
+          dest->false_target()->Jump();
+          not_number.Bind(&left_side);
+        }
+
+        // Setup and call the compare stub.
+        CompareStub stub(cc, strict, kCantBothBeNaN);
+        Result result = frame_->CallStub(&stub, &left_side, &right_side);
+        result.ToRegister();
+        __ testq(result.reg(), result.reg());
+        result.Unuse();
+        dest->true_target()->Branch(cc);
         dest->false_target()->Jump();
-        not_number.Bind(&left_side);
+
+        is_smi.Bind();
       }
 
-      // Setup and call the compare stub.
-      CompareStub stub(cc, strict, kCantBothBeNaN);
-      Result result = frame_->CallStub(&stub, &left_side, &right_side);
-      result.ToRegister();
-      __ testq(result.reg(), result.reg());
-      result.Unuse();
-      dest->true_target()->Branch(cc);
-      dest->false_target()->Jump();
-
-      is_smi.Bind();
       left_side = Result(left_reg);
       right_side = Result(right_val);
       // Test smi equality and comparison by signed int comparison.
@@ -5952,7 +6080,7 @@ void CodeGenerator::Comparison(AstNode* node,
         // If the first character is the same then the long string sorts after
         // the short one.
         __ SmiCompare(FieldOperand(left_side.reg(), String::kLengthOffset),
-               Smi::FromInt(1));
+                      Smi::FromInt(1));
         __ bind(&characters_were_different);
       }
       temp2.Unuse();
@@ -9010,7 +9138,7 @@ void ArgumentsAccessStub::GenerateNewObject(MacroAssembler* masm) {
   __ movq(FieldOperand(rax, JSObject::kElementsOffset), rdi);
   __ LoadRoot(kScratchRegister, Heap::kFixedArrayMapRootIndex);
   __ movq(FieldOperand(rdi, FixedArray::kMapOffset), kScratchRegister);
-  __ movq(FieldOperand(rdi, FixedArray::kLengthOffset), rcx);
+  __ movl(FieldOperand(rdi, FixedArray::kLengthOffset), rcx);
 
   // Copy the fixed array slots.
   Label loop;

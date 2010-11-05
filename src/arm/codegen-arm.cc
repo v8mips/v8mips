@@ -1486,8 +1486,7 @@ void CodeGenerator::CallApplyLazy(Expression* applicand,
   // Then process it as a normal function call.
   __ ldr(r0, MemOperand(sp, 3 * kPointerSize));
   __ ldr(r1, MemOperand(sp, 2 * kPointerSize));
-  __ str(r0, MemOperand(sp, 2 * kPointerSize));
-  __ str(r1, MemOperand(sp, 3 * kPointerSize));
+  __ strd(r0, MemOperand(sp, 2 * kPointerSize));
 
   CallFunctionStub call_function(2, NOT_IN_LOOP, NO_CALL_FUNCTION_FLAGS);
   frame_->CallStub(&call_function, 3);
@@ -2279,8 +2278,8 @@ void CodeGenerator::VisitForInStatement(ForInStatement* node) {
   node->break_target()->set_direction(JumpTarget::FORWARD_ONLY);
   node->continue_target()->set_direction(JumpTarget::FORWARD_ONLY);
 
-  __ ldr(r0, frame_->ElementAt(0));  // load the current count
-  __ ldr(r1, frame_->ElementAt(1));  // load the length
+  // Load the current count to r0, load the length to r1.
+  __ ldrd(r0, frame_->ElementAt(0));
   __ cmp(r0, r1);  // compare to the array length
   node->break_target()->Branch(hs);
 
@@ -4414,12 +4413,13 @@ void CodeGenerator::GenerateRegExpConstructResult(ZoneList<Expression*>* args) {
         (JSRegExpResult::kSize + FixedArray::kHeaderSize) / kPointerSize;
     __ mov(r5, Operand(r1, LSR, kSmiTagSize + kSmiShiftSize));
     __ add(r2, r5, Operand(objects_size));
-    __ AllocateInNewSpace(r2,  // In: Size, in words.
-                          r0,  // Out: Start of allocation (tagged).
-                          r3,  // Scratch register.
-                          r4,  // Scratch register.
-                          &slowcase,
-                          TAG_OBJECT);
+    __ AllocateInNewSpace(
+        r2,  // In: Size, in words.
+        r0,  // Out: Start of allocation (tagged).
+        r3,  // Scratch register.
+        r4,  // Scratch register.
+        &slowcase,
+        static_cast<AllocationFlags>(TAG_OBJECT | SIZE_IN_WORDS));
     // r0: Start of allocated area, object-tagged.
     // r1: Number of elements in array, as smi.
     // r5: Number of elements, untagged.
@@ -5578,8 +5578,8 @@ void CodeGenerator::EmitKeyedLoad() {
 
     // Load the key and receiver from the stack to r0 and r1.
     frame_->PopToR1R0();
-    Register receiver = r0;
-    Register key = r1;
+    Register key = r0;
+    Register receiver = r1;
     VirtualFrame::SpilledScope spilled(frame_);
 
     // The deferred code expects key and receiver in r0 and r1.
@@ -5594,17 +5594,16 @@ void CodeGenerator::EmitKeyedLoad() {
     // property code which can be patched. Therefore the exact number of
     // instructions generated need to be fixed, so the constant pool is blocked
     // while generating this code.
-#ifdef DEBUG
-    int kInlinedKeyedLoadInstructions = 19;
-    Label check_inlined_codesize;
-    masm_->bind(&check_inlined_codesize);
-#endif
     { Assembler::BlockConstPoolScope block_const_pool(masm_);
       Register scratch1 = VirtualFrame::scratch0();
       Register scratch2 = VirtualFrame::scratch1();
       // Check the map. The null map used below is patched by the inline cache
       // code.
       __ ldr(scratch1, FieldMemOperand(receiver, HeapObject::kMapOffset));
+#ifdef DEBUG
+    Label check_inlined_codesize;
+    masm_->bind(&check_inlined_codesize);
+#endif
       __ mov(scratch2, Operand(Factory::null_value()));
       __ cmp(scratch1, scratch2);
       deferred->Branch(ne);
@@ -5632,17 +5631,15 @@ void CodeGenerator::EmitKeyedLoad() {
       __ add(scratch1,
              scratch1,
              Operand(FixedArray::kHeaderSize - kHeapObjectTag));
-      __ ldr(r0,
+      __ ldr(scratch1,
              MemOperand(scratch1, key, LSL,
                         kPointerSizeLog2 - (kSmiTagSize + kSmiShiftSize)));
-      __ cmp(r0, scratch2);
-      // This is the only branch to deferred where r0 and r1 do not contain the
-      // receiver and key.  We can't just load undefined here because we have to
-      // check the prototype.
+      __ cmp(scratch1, scratch2);
       deferred->Branch(eq);
 
+      __ mov(r0, scratch1);
       // Make sure that the expected number of instructions are generated.
-      ASSERT_EQ(kInlinedKeyedLoadInstructions,
+      ASSERT_EQ(kInlinedKeyedLoadInstructionsAfterPatchSize,
                 masm_->InstructionsGeneratedSince(&check_inlined_codesize));
     }
 
@@ -5867,7 +5864,7 @@ void FastNewClosureStub::Generate(MacroAssembler* masm) {
   __ pop(r3);
 
   // Attempt to allocate new JSFunction in new space.
-  __ AllocateInNewSpace(JSFunction::kSize / kPointerSize,
+  __ AllocateInNewSpace(JSFunction::kSize,
                         r0,
                         r1,
                         r2,
@@ -5908,7 +5905,7 @@ void FastNewContextStub::Generate(MacroAssembler* masm) {
   int length = slots_ + Context::MIN_CONTEXT_SLOTS;
 
   // Attempt to allocate the context in new space.
-  __ AllocateInNewSpace(length + (FixedArray::kHeaderSize / kPointerSize),
+  __ AllocateInNewSpace(FixedArray::SizeFor(length),
                         r0,
                         r1,
                         r2,
@@ -5976,7 +5973,7 @@ void FastCloneShallowArrayStub::Generate(MacroAssembler* masm) {
 
   // Allocate both the JS array and the elements array in one big
   // allocation. This avoids multiple limit checks.
-  __ AllocateInNewSpace(size / kPointerSize,
+  __ AllocateInNewSpace(size,
                         r0,
                         r1,
                         r2,
@@ -6309,8 +6306,7 @@ static void EmitSmiNonsmiComparison(MacroAssembler* masm,
     ConvertToDoubleStub stub1(r3, r2, r7, r6);
     __ Call(stub1.GetCode(), RelocInfo::CODE_TARGET);
     // Load rhs to a double in r0, r1.
-    __ ldr(r1, FieldMemOperand(r0, HeapNumber::kValueOffset + kPointerSize));
-    __ ldr(r0, FieldMemOperand(r0, HeapNumber::kValueOffset));
+    __ ldrd(r0, FieldMemOperand(r0, HeapNumber::kValueOffset));
     __ pop(lr);
   }
 
@@ -6345,8 +6341,7 @@ static void EmitSmiNonsmiComparison(MacroAssembler* masm,
   } else {
     __ push(lr);
     // Load lhs to a double in r2, r3.
-    __ ldr(r3, FieldMemOperand(r1, HeapNumber::kValueOffset + kPointerSize));
-    __ ldr(r2, FieldMemOperand(r1, HeapNumber::kValueOffset));
+    __ ldrd(r2, FieldMemOperand(r1, HeapNumber::kValueOffset));
     // Convert rhs to a double in r0, r1.
     __ mov(r7, Operand(r0));
     ConvertToDoubleStub stub2(r1, r0, r7, r6);
@@ -6510,10 +6505,8 @@ static void EmitCheckForTwoHeapNumbers(MacroAssembler* masm,
     __ sub(r7, r1, Operand(kHeapObjectTag));
     __ vldr(d7, r7, HeapNumber::kValueOffset);
   } else {
-    __ ldr(r2, FieldMemOperand(r1, HeapNumber::kValueOffset));
-    __ ldr(r3, FieldMemOperand(r1, HeapNumber::kValueOffset + kPointerSize));
-    __ ldr(r1, FieldMemOperand(r0, HeapNumber::kValueOffset + kPointerSize));
-    __ ldr(r0, FieldMemOperand(r0, HeapNumber::kValueOffset));
+    __ ldrd(r2, FieldMemOperand(r1, HeapNumber::kValueOffset));
+    __ ldrd(r0, FieldMemOperand(r0, HeapNumber::kValueOffset));
   }
   __ jmp(both_loaded_as_doubles);
 }
@@ -6890,8 +6883,7 @@ void GenericBinaryOpStub::HandleBinaryOpSlowCases(
       __ vldr(d7, r7, HeapNumber::kValueOffset);
     } else {
       // Calling convention says that second double is in r2 and r3.
-      __ ldr(r2, FieldMemOperand(r0, HeapNumber::kValueOffset));
-      __ ldr(r3, FieldMemOperand(r0, HeapNumber::kValueOffset + 4));
+      __ ldrd(r2, FieldMemOperand(r0, HeapNumber::kValueOffset));
     }
     __ jmp(&finished_loading_r0);
     __ bind(&r0_is_smi);
@@ -6943,8 +6935,7 @@ void GenericBinaryOpStub::HandleBinaryOpSlowCases(
       __ vldr(d6, r7, HeapNumber::kValueOffset);
     } else {
       // Calling convention says that first double is in r0 and r1.
-      __ ldr(r0, FieldMemOperand(r1, HeapNumber::kValueOffset));
-      __ ldr(r1, FieldMemOperand(r1, HeapNumber::kValueOffset + 4));
+      __ ldrd(r0, FieldMemOperand(r1, HeapNumber::kValueOffset));
     }
     __ jmp(&finished_loading_r1);
     __ bind(&r1_is_smi);
@@ -7015,8 +7006,7 @@ void GenericBinaryOpStub::HandleBinaryOpSlowCases(
       __ stc(p1, cr8, MemOperand(r4, HeapNumber::kValueOffset));
   #else
       // Double returned in registers 0 and 1.
-      __ str(r0, FieldMemOperand(r5, HeapNumber::kValueOffset));
-      __ str(r1, FieldMemOperand(r5, HeapNumber::kValueOffset + 4));
+      __ strd(r0, FieldMemOperand(r5, HeapNumber::kValueOffset));
   #endif
       __ mov(r0, Operand(r5));
       // And we are done.
@@ -8406,8 +8396,7 @@ void ArgumentsAccessStub::GenerateNewObject(MacroAssembler* masm) {
   __ str(r3, MemOperand(sp, 1 * kPointerSize));
 
   // Try the new space allocation. Start out with computing the size
-  // of the arguments object and the elements array (in words, not
-  // bytes because AllocateInNewSpace expects words).
+  // of the arguments object and the elements array in words.
   Label add_arguments_object;
   __ bind(&try_allocate);
   __ cmp(r1, Operand(0));
@@ -8418,7 +8407,13 @@ void ArgumentsAccessStub::GenerateNewObject(MacroAssembler* masm) {
   __ add(r1, r1, Operand(Heap::kArgumentsObjectSize / kPointerSize));
 
   // Do the allocation of both objects in one go.
-  __ AllocateInNewSpace(r1, r0, r2, r3, &runtime, TAG_OBJECT);
+  __ AllocateInNewSpace(
+      r1,
+      r0,
+      r2,
+      r3,
+      &runtime,
+      static_cast<AllocationFlags>(TAG_OBJECT | SIZE_IN_WORDS));
 
   // Get the arguments boilerplate from the current (global) context.
   int offset = Context::SlotOffset(Context::ARGUMENTS_BOILERPLATE_INDEX);

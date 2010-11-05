@@ -28,6 +28,7 @@
 #include "v8.h"
 
 #include "assembler-arm.h"
+#include "codegen.h"
 #include "codegen-inl.h"
 #include "disasm.h"
 #include "ic-inl.h"
@@ -639,7 +640,9 @@ bool KeyedLoadIC::PatchInlinedLoad(Address address, Object* map) {
 
   // Patch the map check.
   Address ldr_map_instr_address =
-      inline_end_address - 18 * Assembler::kInstrSize;
+      inline_end_address -
+      CodeGenerator::kInlinedKeyedLoadInstructionsAfterPatchSize *
+      Assembler::kInstrSize;
   Assembler::set_target_address_at(ldr_map_instr_address,
                                    reinterpret_cast<Address>(map));
   return true;
@@ -841,7 +844,6 @@ void KeyedLoadIC::GenerateString(MacroAssembler* masm) {
   // string and a number), and call runtime.
   __ bind(&slow_char_code);
   __ EnterInternalFrame();
-  ASSERT(object.code() > index.code());
   __ Push(object, index);
   __ CallRuntime(Runtime::kStringCharCodeAt, 2);
   ASSERT(!code.is(r0));
