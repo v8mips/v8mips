@@ -729,7 +729,8 @@ void CodeGenerator::LoadFromSlot(Slot* slot, TypeofState typeof_state) {
       frame_->SpillAll();
       Slot* potential_slot = slot->var()->local_if_not_shadowed()->slot();
       // Only generate the fast case for locals that rewrite to slots.
-      // This rules out argument loads.
+      // This rules out argument loads because eval forces arguments
+      // access to be through the arguments object.
       if (potential_slot != NULL) {
         __ lw(v0,
                ContextSlotOperandCheckExtensions(potential_slot,
@@ -3365,10 +3366,58 @@ void CodeGenerator::VisitCall(Call* node) {
 
   } else if (var != NULL && var->slot() != NULL &&
              var->slot()->type() == Slot::LOOKUP) {
-    // ----------------------------------------------------------------
-    // JavaScript example: 'with (obj) foo(1, 2, 3)'  // foo is in obj.
-    // ----------------------------------------------------------------
+    // ----------------------------------
+    // JavaScript examples:
+    //
+    //  with (obj) foo(1, 2, 3)  // foo is in obj
+    //
+    //  function f() {};
+    //  function g() {
+    //    eval(...);
+    //    f();  // f could be in extension object
+    //  }
+    // ----------------------------------
 
+    // JumpTargets do not yet support merging frames so the frame must be
+    // spilled when jumping to these targets.
+    JumpTarget slow;
+    JumpTarget done;
+
+    // Generate fast-case code for variables that might be shadowed by
+    // eval-introduced variables.  Eval is used a lot without
+    // introducing variables.  In those cases, we do not want to
+    // perform a runtime call for all variables in the scope
+    // containing the eval.
+    if (var->mode() == Variable::DYNAMIC_GLOBAL) {
+      LoadFromGlobalSlotCheckExtensions(var->slot(), NOT_INSIDE_TYPEOF, &slow);
+      frame_->EmitPush(v0);
+      LoadGlobalReceiver(a1);
+      done.Jump();
+
+    } else if (var->mode() == Variable::DYNAMIC_LOCAL) {
+      Slot* potential_slot = var->local_if_not_shadowed()->slot();
+      // Only generate the fast case for locals that rewrite to slots.
+      // This rules out argument loads because eval forces arguments
+      // access to be through the arguments object.
+      if (potential_slot != NULL) {
+        __ lw(v0,
+              ContextSlotOperandCheckExtensions(potential_slot,
+                                                a1,
+                                                a2,
+                                                &slow));
+        if (potential_slot->var()->mode() == Variable::CONST) {
+          __ LoadRoot(a1, Heap::kTheHoleValueRootIndex);
+          __ subu(a1, v0, a1);
+          __ LoadRoot(a0, Heap::kUndefinedValueRootIndex);
+          __ movz(v0, a0, a1);  // Cond move Undef if v0 was 'the hole'.
+        }
+        frame_->EmitPush(v0);
+        LoadGlobalReceiver(a1);
+        done.Jump();
+      }
+    }
+
+    slow.Bind();
     // Load the function
     frame_->EmitPush(cp);
     __ li(a0, Operand(var->name()));
@@ -3380,7 +3429,9 @@ void CodeGenerator::VisitCall(Call* node) {
     // Push the function and receiver on the stack.
     frame_->EmitMultiPushReversed(v0.bit() | v1.bit());
 
-    // Call the function.
+    done.Bind();
+    // Call the function. At this point, everything is spilled but the
+    // function and receiver are in v0 and v1.
     CallWithArguments(args, NO_CALL_FUNCTION_FLAGS, node->position());
     frame_->EmitPush(v0);
 
