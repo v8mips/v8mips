@@ -1829,12 +1829,17 @@ int MarkCompactCollector::IterateLiveObjects(PagedSpace* space,
 class UpdatingVisitor: public ObjectVisitor {
  public:
   void VisitPointer(Object** p) {
-    UpdatePointer(p);
+    UpdatePointer(p, NULL);
+  }
+
+  void VisitPointer(Object** p, RelocInfo* rinfo) {
+    // Variant of UpdatePointer, for arch's where RelocInfo is needed.
+    UpdatePointer(p, rinfo);
   }
 
   void VisitPointers(Object** start, Object** end) {
     // Mark all HeapObject pointers in [start, end)
-    for (Object** p = start; p < end; p++) UpdatePointer(p);
+    for (Object** p = start; p < end; p++) UpdatePointer(p, NULL);
   }
 
   void VisitCodeTarget(RelocInfo* rinfo) {
@@ -1855,7 +1860,7 @@ class UpdatingVisitor: public ObjectVisitor {
   }
 
  private:
-  void UpdatePointer(Object** p) {
+  void UpdatePointer(Object** p, RelocInfo* rinfo) {
     if (!(*p)->IsHeapObject()) return;
 
     HeapObject* obj = HeapObject::cast(*p);
@@ -1901,7 +1906,14 @@ class UpdatingVisitor: public ObjectVisitor {
              original_space->MCSpaceOffsetForAddress(old_addr));
     }
 
-    *p = HeapObject::FromAddress(new_addr);
+    if (rinfo) {
+      // For arch (like mips) without natural pointers in embedded code
+      // objects, RelocInfo is passed to allow proper pointer update.
+      rinfo->set_target_object(HeapObject::FromAddress(new_addr));
+    } else {
+      // Do standard indirect pointer update when there is no reloc info.
+      *p = HeapObject::FromAddress(new_addr);
+    }
 
 #ifdef DEBUG
     if (FLAG_gc_verbose) {

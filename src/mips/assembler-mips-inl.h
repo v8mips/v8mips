@@ -38,6 +38,7 @@
 
 #include "mips/assembler-mips.h"
 #include "cpu.h"
+#include "debug.h"
 
 
 namespace v8 {
@@ -110,6 +111,11 @@ Address RelocInfo::target_address_address() {
 }
 
 
+int RelocInfo::target_address_size() {
+  return Assembler::kExternalTargetSize;
+}
+
+
 void RelocInfo::set_target_address(Address target) {
   ASSERT(IsCodeTarget(rmode_) || rmode_ == RUNTIME_ENTRY);
   Assembler::set_target_address_at(pc_, target);
@@ -147,23 +153,27 @@ void RelocInfo::set_target_object(Object* target) {
 
 Address* RelocInfo::target_reference_address() {
   ASSERT(rmode_ == EXTERNAL_REFERENCE);
-  return reinterpret_cast<Address*>(pc_);
+  reconstructed_adr_ptr_ = Assembler::target_address_at(pc_);
+  return &reconstructed_adr_ptr_;
 }
 
 
 Address RelocInfo::call_address() {
   ASSERT(IsPatchedReturnSequence());
-  // The 2 instructions offset assumes patched return sequence.
   ASSERT(IsJSReturn(rmode()));
-  return Memory::Address_at(pc_ + 2 * Assembler::kInstrSize);
+  // The pc_ offset of 0 assumes mips patched return sequence per
+  // debug-mips.cc BreakLocationIterator::SetDebugBreakAtReturn().
+  return Assembler::target_address_at(pc_);
+
 }
 
 
 void RelocInfo::set_call_address(Address target) {
   ASSERT(IsPatchedReturnSequence());
-  // The 2 instructions offset assumes patched return sequence.
   ASSERT(IsJSReturn(rmode()));
-  Memory::Address_at(pc_ + 2 * Assembler::kInstrSize) = target;
+  // The pc_ offset of 0 assumes mips patched return sequence per
+  // debug-mips.cc BreakLocationIterator::SetDebugBreakAtReturn().
+  Assembler::set_target_address_at(pc_, target);
 }
 
 
@@ -186,19 +196,37 @@ void RelocInfo::set_call_object(Object* target) {
 
 
 bool RelocInfo::IsPatchedReturnSequence() {
-  Instr current_instr = Assembler::instr_at(pc_);
-  Instr third_instr = Assembler::instr_at(pc_ + 2 * Assembler::kInstrSize);
-// #ifdef DEBUG
-//   PrintF("%s - %d - %s : Checking for jal(r)",
-//       __FILE__, __LINE__, __func__);
-// #endif
-  //return 
-  bool prs = (((current_instr & 0xffff0000) == 0x3c010000) &&   // plind -- really UGLY HACK .......
-          ((third_instr & kOpcodeMask) == SPECIAL) &&
-          ((third_instr & kFunctionFieldMask) == JALR));
-        // PrintF("%08x, %08x : Checking for patched ret sequence: lui, ori, jalr: %d\n",
-        //   current_instr, third_instr, prs);
-        return prs;
+  Instr instr0 = Assembler::instr_at(pc_);
+  Instr instr1 = Assembler::instr_at(pc_ + 1 * Assembler::kInstrSize);
+  Instr instr2 = Assembler::instr_at(pc_ + 2 * Assembler::kInstrSize);
+  bool patched_return = ((instr0 & kOpcodeMask) == LUI &&
+                         (instr1 & kOpcodeMask) == ORI &&
+                         (instr2 & kOpcodeMask) == SPECIAL &&
+                         (instr2 & kFunctionFieldMask) == JALR);
+  return patched_return;
+}
+
+
+void RelocInfo::Visit(ObjectVisitor* visitor) {
+  RelocInfo::Mode mode = rmode();
+  if (mode == RelocInfo::EMBEDDED_OBJECT) {
+    // RelocInfo is needed when pointer must be updated, such as
+    // UpdatingVisitor in mark-compact.cc. It ignored by visitors
+    // that do not need it.
+    visitor->VisitPointer(target_object_address(), this);
+  } else if (RelocInfo::IsCodeTarget(mode)) {
+    visitor->VisitCodeTarget(this);
+  } else if (mode == RelocInfo::EXTERNAL_REFERENCE) {
+    visitor->VisitExternalReference(target_reference_address());
+#ifdef ENABLE_DEBUGGER_SUPPORT
+  } else if (Debug::has_break_points() &&
+             RelocInfo::IsJSReturn(mode) &&
+             IsPatchedReturnSequence()) {
+    visitor->VisitDebugTarget(this);
+#endif
+  } else if (mode == RelocInfo::RUNTIME_ENTRY) {
+    visitor->VisitRuntimeEntry(this);
+  }
 }
 
 

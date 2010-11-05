@@ -3580,15 +3580,15 @@ void CodeGenerator::GenerateValueOf(ZoneList<Expression*>* args) {
   ASSERT(args->length() == 1);
   JumpTarget leave;
   LoadAndSpill(args->at(0));
-  frame_->EmitPop(a0);  // r0 contains object.
+  frame_->EmitPop(v0);  // v0 contains object.
   // if (object->IsSmi()) return the object.
-  __ And(t0, a0, Operand(kSmiTagMask));
+  __ And(t0, v0, Operand(kSmiTagMask));
   leave.Branch(eq, t0, Operand(zero_reg));
   // It is a heap object - get map. If (!object->IsJSValue()) return the object.
-  __ GetObjectType(a0, a1, a1);
+  __ GetObjectType(v0, a1, a1);
   leave.Branch(ne, a1, Operand(JS_VALUE_TYPE));
   // Load the value.
-  __ lw(v0, FieldMemOperand(a0, JSValue::kValueOffset));
+  __ lw(v0, FieldMemOperand(v0, JSValue::kValueOffset));
   leave.Bind();
   frame_->EmitPush(v0);
 }
@@ -3600,15 +3600,15 @@ void CodeGenerator::GenerateSetValueOf(ZoneList<Expression*>* args) {
   JumpTarget leave;
   LoadAndSpill(args->at(0));  // Load the object.
   LoadAndSpill(args->at(1));  // Load the value.
-  frame_->EmitPop(a0);  // a0 contains value
-  frame_->EmitPop(a1);  // a1 contains object
-  // if (object->IsSmi()) return object.
+  frame_->EmitPop(v0);  // v0 contains value.
+  frame_->EmitPop(a1);  // a1 contains object.
+  // if (object->IsSmi()) return value.
   __ And(t1, a1, Operand(kSmiTagMask));
   leave.Branch(eq, t1, Operand(zero_reg), no_hint);
-  // It is a heap object - get map. If (!object->IsJSValue()) return the object.
+  // It is a heap object - get map. If (!object->IsJSValue()) return the value.
   __ GetObjectType(a1, a2, a2);
   leave.Branch(ne, a2, Operand(JS_VALUE_TYPE), no_hint);
-  // Store the value.
+  // Store the value in object, and return value.
   __ sw(v0, FieldMemOperand(a1, JSValue::kValueOffset));
   // Update the write barrier.
   __ li(a2, Operand(JSValue::kValueOffset - kHeapObjectTag));
@@ -3650,7 +3650,7 @@ void CodeGenerator::GenerateIsNonNegativeSmi(ZoneList<Expression*>* args) {
   VirtualFrame::SpilledScope spilled_scope(frame_);
   ASSERT(args->length() == 1);
   LoadAndSpill(args->at(0));
-  frame_->EmitPop(t0);
+  frame_->EmitPop(a0);
   __ And(condReg1, a0, Operand(kSmiTagMask | 0x80000000u));
   __ mov(condReg2, zero_reg);
   cc_reg_ = eq;
