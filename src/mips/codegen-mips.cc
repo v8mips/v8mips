@@ -6870,6 +6870,20 @@ void InstanceofStub::Generate(MacroAssembler* masm) {
 
   // Get the prototype of the function (t0 is result, a2 is scratch).
   __ lw(a1, MemOperand(sp, 0 * kPointerSize));
+  // a1 is function, a3 is map.
+
+  // Look up the function and the map in the instanceof cache.
+  Label miss;
+  __ LoadRoot(at, Heap::kInstanceofCacheFunctionRootIndex);
+  __ Branch(&miss, ne, a1, Operand(at));
+  __ LoadRoot(at, Heap::kInstanceofCacheMapRootIndex);
+  __ Branch(&miss, ne, a3, Operand(at));
+  __ LoadRoot(v0, Heap::kInstanceofCacheAnswerRootIndex);
+  __ Ret(false);  // Use branch delay slot.
+  __ Pop(2);  // In branch delay slot, remove 2 arguments.
+
+  __ bind(&miss);
+
   __ TryGetFunctionPrototype(a1, t0, a2, &slow);
 
   // Check that the function prototype is a JS object.
@@ -6877,6 +6891,9 @@ void InstanceofStub::Generate(MacroAssembler* masm) {
   __ GetObjectType(t0, t1, t1);
   __ Branch(&slow, less, t1, Operand(FIRST_JS_OBJECT_TYPE));
   __ Branch(&slow, greater, t1, Operand(LAST_JS_OBJECT_TYPE));
+
+  __ StoreRoot(a1, Heap::kInstanceofCacheFunctionRootIndex);
+  __ StoreRoot(a3, Heap::kInstanceofCacheMapRootIndex);
 
   // Register mapping: a3 is object map and t0 is function prototype.
   // Get prototype of object into a2.
@@ -6893,13 +6910,15 @@ void InstanceofStub::Generate(MacroAssembler* masm) {
 
   __ bind(&is_instance);
   __ li(v0, Operand(Smi::FromInt(0)));
-  __ Pop(2);
-  __ Ret();
+  __ StoreRoot(v0, Heap::kInstanceofCacheAnswerRootIndex);
+  __ Ret(false);  // Use branch delay slot.
+  __ Pop(2);  // In branch delay slot.
 
   __ bind(&is_not_instance);
   __ li(v0, Operand(Smi::FromInt(1)));
-  __ Pop(2);
-  __ Ret();
+  __ StoreRoot(v0, Heap::kInstanceofCacheAnswerRootIndex);
+  __ Ret(false);  // Use branch delay slot.
+  __ Pop(2);  // In branch delay slot.
 
   // Slow-case. Tail call builtin.
   __ bind(&slow);

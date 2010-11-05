@@ -178,6 +178,13 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
                 Heap::RootListIndex index,
                 Condition cond, Register src1, const Operand& src2);
 
+  // Store an object to the root table.
+  void StoreRoot(Register source,
+                 Heap::RootListIndex index);
+  void StoreRoot(Register source,
+                 Heap::RootListIndex index,
+                 Condition cond, Register src1, const Operand& src2);
+
   // Load an external reference.
   void LoadExternalReference(Register reg, ExternalReference ext) {
     li(reg, Operand(ext));
