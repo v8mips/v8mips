@@ -7541,12 +7541,23 @@ void GenericBinaryOpStub::HandleBinaryOpSlowCases(MacroAssembler* masm,
       __ Pop(ra);
     }
 
+    // HEAP_NUMBERS stub is slower than GENERIC on a pair of smis.
+    // a0 is known to be a smi. If a1 is also a smi then switch to GENERIC.
+    Label a1_is_not_smi;
+    if (runtime_operands_type_ == BinaryOpIC::HEAP_NUMBERS) {
+      __ And(at, a1, Operand(kSmiTagMask));
+      __ Branch(&a1_is_not_smi, ne, at, Operand(zero_reg));
+      GenerateTypeTransition(masm);
+      __ jmp(&a1_is_smi);
+    }
+
     __ bind(&finished_loading_a0);
 
     // Move a1 (x) to a double in a0-a1.
     __ And(t1, a1, Operand(kSmiTagMask));
     // If it is an Smi, don't check if it is a heap number.
     __ Branch(&a1_is_smi, eq, t1, Operand(zero_reg));
+    __ bind(&a1_is_not_smi);
     __ GetObjectType(a1, t1, t1);
     __ Branch(&slow, ne, t1, Operand(HEAP_NUMBER_TYPE));
     if (mode_ == OVERWRITE_LEFT) {
