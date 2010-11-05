@@ -2787,7 +2787,8 @@ void CodeGenerator::LoadFromSlot(Slot* slot, TypeofState typeof_state) {
       frame_->SpillAll();
       Slot* potential_slot = slot->var()->local_if_not_shadowed()->slot();
       // Only generate the fast case for locals that rewrite to slots.
-      // This rules out argument loads.
+      // This rules out argument loads because eval forces arguments
+      // access to be through the arguments object.
       if (potential_slot != NULL) {
         __ ldr(r0,
                ContextSlotOperandCheckExtensions(potential_slot,
@@ -3473,7 +3474,8 @@ void CodeGenerator::EmitKeyedPropertyAssignment(Assignment* node) {
   if (node->is_compound()) {
     // For a compound assignment the right-hand side is a binary operation
     // between the current property value and the actual right-hand side.
-    // Load of the current value leaves receiver and key on the stack.
+    // Duplicate receiver and key for loading the current property value.
+    frame_->Dup2();
     EmitKeyedLoad();
     frame_->EmitPush(r0);
 
@@ -3702,9 +3704,56 @@ void CodeGenerator::VisitCall(Call* node) {
   } else if (var != NULL && var->slot() != NULL &&
              var->slot()->type() == Slot::LOOKUP) {
     // ----------------------------------
-    // JavaScript example: 'with (obj) foo(1, 2, 3)'  // foo is in obj
+    // JavaScript examples:
+    //
+    //  with (obj) foo(1, 2, 3)  // foo is in obj
+    //
+    //  function f() {};
+    //  function g() {
+    //    eval(...);
+    //    f();  // f could be in extension object
+    //  }
     // ----------------------------------
 
+    // JumpTargets do not yet support merging frames so the frame must be
+    // spilled when jumping to these targets.
+    JumpTarget slow;
+    JumpTarget done;
+
+    // Generate fast-case code for variables that might be shadowed by
+    // eval-introduced variables.  Eval is used a lot without
+    // introducing variables.  In those cases, we do not want to
+    // perform a runtime call for all variables in the scope
+    // containing the eval.
+    if (var->mode() == Variable::DYNAMIC_GLOBAL) {
+      LoadFromGlobalSlotCheckExtensions(var->slot(), NOT_INSIDE_TYPEOF, &slow);
+      frame_->EmitPush(r0);
+      LoadGlobalReceiver(r1);
+      done.Jump();
+
+    } else if (var->mode() == Variable::DYNAMIC_LOCAL) {
+      Slot* potential_slot = var->local_if_not_shadowed()->slot();
+      // Only generate the fast case for locals that rewrite to slots.
+      // This rules out argument loads because eval forces arguments
+      // access to be through the arguments object.
+      if (potential_slot != NULL) {
+        __ ldr(r0,
+               ContextSlotOperandCheckExtensions(potential_slot,
+                                                 r1,
+                                                 r2,
+                                                 &slow));
+        if (potential_slot->var()->mode() == Variable::CONST) {
+          __ LoadRoot(ip, Heap::kTheHoleValueRootIndex);
+          __ cmp(r0, ip);
+          __ LoadRoot(r0, Heap::kUndefinedValueRootIndex, eq);
+        }
+        frame_->EmitPush(r0);
+        LoadGlobalReceiver(r1);
+        done.Jump();
+      }
+    }
+
+    slow.Bind();
     // Load the function
     frame_->EmitPush(cp);
     __ mov(r0, Operand(var->name()));
@@ -3716,7 +3765,9 @@ void CodeGenerator::VisitCall(Call* node) {
     frame_->EmitPush(r0);  // function
     frame_->EmitPush(r1);  // receiver
 
-    // Call the function.
+    done.Bind();
+    // Call the function. At this point, everything is spilled but the
+    // function and receiver are in r0 and r1.
     CallWithArguments(args, NO_CALL_FUNCTION_FLAGS, node->position());
     frame_->EmitPush(r0);
 
@@ -3767,19 +3818,23 @@ void CodeGenerator::VisitCall(Call* node) {
       // -------------------------------------------
 
       LoadAndSpill(property->obj());
+      if (!property->is_synthetic()) {
+        // Duplicate receiver for later use.
+        __ ldr(r0, MemOperand(sp, 0));
+        frame_->EmitPush(r0);
+      }
       LoadAndSpill(property->key());
       EmitKeyedLoad();
-      frame_->Drop();  // key
       // Put the function below the receiver.
       if (property->is_synthetic()) {
         // Use the global receiver.
-        frame_->Drop();
-        frame_->EmitPush(r0);
+        frame_->EmitPush(r0);  // Function.
         LoadGlobalReceiver(r0);
       } else {
-        frame_->EmitPop(r1);  // receiver
-        frame_->EmitPush(r0);  // function
-        frame_->EmitPush(r1);  // receiver
+        // Switch receiver and function.
+        frame_->EmitPop(r1);  // Receiver.
+        frame_->EmitPush(r0);  // Function.
+        frame_->EmitPush(r1);  // Receiver.
       }
 
       // Call the function.
@@ -5388,8 +5443,7 @@ void DeferredReferenceGetKeyedValue::Generate() {
 
   // The rest of the instructions in the deferred code must be together.
   { Assembler::BlockConstPoolScope block_const_pool(masm_);
-    // Call keyed load IC. It has all arguments on the stack and the key in r0.
-    __ ldr(r0, MemOperand(sp, 0));
+    // Call keyed load IC. It has the arguments key and receiver in r0 and r1.
     Handle<Code> ic(Builtins::builtin(Builtins::KeyedLoadIC_Initialize));
     __ Call(ic, RelocInfo::CODE_TARGET);
     // The call must be followed by a nop instruction to indicate that the
@@ -5522,12 +5576,13 @@ void CodeGenerator::EmitKeyedLoad() {
     __ IncrementCounter(&Counters::keyed_load_inline, 1,
                         frame_->scratch0(), frame_->scratch1());
 
-    // Load the receiver and key from the stack.
-    frame_->SpillAllButCopyTOSToR1R0();
+    // Load the key and receiver from the stack to r0 and r1.
+    frame_->PopToR1R0();
     Register receiver = r0;
     Register key = r1;
     VirtualFrame::SpilledScope spilled(frame_);
 
+    // The deferred code expects key and receiver in r0 and r1.
     DeferredReferenceGetKeyedValue* deferred =
         new DeferredReferenceGetKeyedValue();
 
@@ -5721,6 +5776,9 @@ void Reference::GetValue() {
       Slot* slot = expression_->AsVariableProxy()->AsVariable()->slot();
       ASSERT(slot != NULL);
       cgen_->LoadFromSlotCheckForArguments(slot, NOT_INSIDE_TYPEOF);
+      if (!persist_after_get_) {
+        cgen_->UnloadReference(this);
+      }
       break;
     }
 
@@ -5730,22 +5788,25 @@ void Reference::GetValue() {
       ASSERT(!is_global || var->is_global());
       cgen_->EmitNamedLoad(GetName(), is_global);
       cgen_->frame()->EmitPush(r0);
+      if (!persist_after_get_) {
+        cgen_->UnloadReference(this);
+      }
       break;
     }
 
     case KEYED: {
+      if (persist_after_get_) {
+        cgen_->frame()->Dup2();
+      }
       ASSERT(property != NULL);
       cgen_->EmitKeyedLoad();
       cgen_->frame()->EmitPush(r0);
+      if (!persist_after_get_) set_unloaded();
       break;
     }
 
     default:
       UNREACHABLE();
-  }
-
-  if (!persist_after_get_) {
-    cgen_->UnloadReference(this);
   }
 }
 
