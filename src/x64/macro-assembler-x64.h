@@ -62,6 +62,7 @@ class MacroAssembler: public Assembler {
   void CompareRoot(Register with, Heap::RootListIndex index);
   void CompareRoot(Operand with, Heap::RootListIndex index);
   void PushRoot(Heap::RootListIndex index);
+  void StoreRoot(Register source, Heap::RootListIndex index);
 
   // ---------------------------------------------------------------------------
   // GC Support
@@ -374,8 +375,7 @@ class MacroAssembler: public Assembler {
 
   void SmiShiftLeftConstant(Register dst,
                             Register src,
-                            int shift_value,
-                            Label* on_not_smi_result);
+                            int shift_value);
   void SmiShiftLogicalRightConstant(Register dst,
                                   Register src,
                                   int shift_value,
@@ -388,8 +388,7 @@ class MacroAssembler: public Assembler {
   // Uses and clobbers rcx, so dst may not be rcx.
   void SmiShiftLeft(Register dst,
                     Register src1,
-                    Register src2,
-                    Label* on_not_smi_result);
+                    Register src2);
   // Shifts a smi value to the right, shifting in zero bits at the top, and
   // returns the unsigned intepretation of the result if that is a smi.
   // Uses and clobbers rcx, so dst may not be rcx.
