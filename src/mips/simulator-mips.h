@@ -96,6 +96,7 @@ class SimulatorStack : public v8::internal::AllStatic {
   try_catch_address == NULL ? \
       NULL : *(reinterpret_cast<TryCatch**>(try_catch_address))
 
+#include "hashmap.h"
 
 namespace assembler {
 namespace mips {
@@ -109,8 +110,35 @@ static inline bool is_uintn(int x, int n) {
 
 static inline bool is_uint3(int x)  { return is_uintn(x, 3); }
 
+class CachePage {
+ public:
+  static const int LINE_VALID = 0;
+  static const int LINE_INVALID = 1;
 
+  static const int kPageShift = 12;
+  static const int kPageSize = 1 << kPageShift;
+  static const int kPageMask = kPageSize - 1;
+  static const int kLineShift = 2;  // The cache line is only 4 bytes right now.
+  static const int kLineLength = 1 << kLineShift;
+  static const int kLineMask = kLineLength - 1;
 
+  CachePage() {
+    memset(&validity_map_, LINE_INVALID, sizeof(validity_map_));
+  }
+
+  char* ValidityByte(int offset) {
+    return &validity_map_[offset >> kLineShift];
+  }
+
+  char* CachedData(int offset) {
+    return &data_[offset];
+  }
+
+ private:
+  char data_[kPageSize];   // The cached data.
+  static const int kValidityMapSize = kPageSize >> kLineShift;
+  char validity_map_[kValidityMapSize];  // One byte per line.
+};
 
 class Simulator {
  public:
@@ -197,6 +225,9 @@ class Simulator {
   // Pop an address from the JS stack.
   uintptr_t PopAddress();
 
+  // ICache checking.
+  static void FlushICache(void* start, size_t size);
+
  private:
   enum special_values {
     // Known bad pc value to ensure that the simulator does not execute
@@ -261,6 +292,12 @@ class Simulator {
     InstructionDecode(instr);
   }
 
+  // ICache.
+  static void CheckICache(Instruction* instr);
+  static void FlushOnePage(intptr_t start, int size);
+  static CachePage* GetCachePage(void* page);
+
+
   enum Exception {
     none,
     kIntegerOverflow,
@@ -295,6 +332,9 @@ class Simulator {
   int icount_;
   static bool initialized_;
   int break_count_;
+
+  // Icache simulation
+  static v8::internal::HashMap* i_cache_;
 
   // Registered breakpoints.
   Instruction* break_pc_;

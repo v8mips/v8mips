@@ -141,52 +141,51 @@ void MacroAssembler::LoadRoot(Register destination,
   lw(destination, MemOperand(s6, index << kPointerSizeLog2));
 }
 
-
-void MacroAssembler::RecordWrite(Register object,
-                                 Register offset,
-                                 Register scratch) {
-  // The compiled code assumes that record write doesn't change the
-  // context register, so we check that none of the clobbered
-  // registers are cp.
-  ASSERT(!object.is(cp) && !offset.is(cp) && !scratch.is(cp));
+void MacroAssembler::RecordWriteHelper(Register object,
+                                       Register offset,
+                                       Register scratch) {
+  if (FLAG_debug_code) {
+    // Check that the object is not in new space.
+    Label not_in_new_space;
+    InNewSpace(object, scratch, ne, &not_in_new_space);
+    Abort("new-space object passed to RecordWriteHelper");
+    bind(&not_in_new_space);
+  }
 
   // This is how much we shift the remembered set bit offset to get the
-  // offset of the word in the remembered set. We divide by kBitsPerInt (32,
+  // offset of the word in the remembered set.  We divide by kBitsPerInt (32,
   // shift right 5) and then multiply by kIntSize (4, shift left 2).
   const int kRSetWordShift = 3;
 
-  Label fast, done;
-
-  // First, test that the object is not in the new space.  We cannot set
-  // remembered set bits in the new space.
-  // object: heap object pointer (with tag)
-  // offset: offset to store location from the object
-  And(scratch, object, Operand(Heap::NewSpaceMask()));
-  Branch(&done, eq, scratch, Operand(ExternalReference::new_space_start()));
+  Label fast;
 
   // Compute the bit offset in the remembered set.
   // object: heap object pointer (with tag)
   // offset: offset to store location from the object
-  li(at, Operand(Page::kPageAlignmentMask));    // load mask only once
-  And(scratch, object, Operand(at));  // offset into page of the object
-  Addu(offset, scratch, Operand(offset));  // add offset into the object
+  li(t8, Operand(Page::kPageAlignmentMask));  // load mask only once
+  and_(scratch, object, t8);  // offset into page of the object
+  addu(offset, scratch, offset);  // add offset into the object
   srl(offset, offset, kObjectAlignmentBits);
 
   // Compute the page address from the heap object pointer.
   // object: heap object pointer (with tag)
   // offset: bit offset of store position in the remembered set
-  And(object, object, Operand(~Page::kPageAlignmentMask));
+
+  // Bitwise negation.
+  li(t9, 0xFFFFFFFF);
+  xor_(t8, t8, t9);
+  and_(object, object, t8);
 
   // If the bit offset lies beyond the normal remembered set range, it is in
   // the extra remembered set area of a large object.
   // object: page start
   // offset: bit offset of store position in the remembered set
-  Branch(&fast, less, offset, Operand(Page::kPageSize / kPointerSize));
+  Branch(&fast, lt, offset, Operand(Page::kPageSize / kPointerSize));
 
   // Adjust the bit offset to be relative to the start of the extra
   // remembered set and the start address to be the address of the extra
   // remembered set.
-  Addu(offset, offset, - Page::kPageSize / kPointerSize);
+  Subu(offset, offset, Operand(Page::kPageSize / kPointerSize));
   // Load the array length into 'scratch' and multiply by four to get the
   // size in bytes of the elements.
   lw(scratch, MemOperand(object, Page::kObjectStartOffset
@@ -194,26 +193,61 @@ void MacroAssembler::RecordWrite(Register object,
   sll(scratch, scratch, kObjectAlignmentBits);
   // Add the page header (including remembered set), array header, and array
   // body size to the page address.
-  Addu(object, object, Page::kObjectStartOffset + FixedArray::kHeaderSize);
-  Addu(object, object, scratch);
+  addiu(object, object, Page::kObjectStartOffset + FixedArray::kHeaderSize);
+  addu(object, object, scratch);
 
   bind(&fast);
   // Get address of the rset word.
   // object: start of the remembered set (page start for the fast case)
   // offset: bit offset of store position in the remembered set
-  And(scratch, offset, Operand(~(kBitsPerInt - 1)));
+
+  // Clear the bit offset.
+  li(t8, -kBitsPerInt);
+  and_(scratch, offset, t8);
+
   srl(scratch, scratch, kRSetWordShift);
-  Addu(object, object, scratch);
+  addu(object, object, scratch);
   // Get bit offset in the rset word.
   // object: address of remembered set word
   // offset: bit offset of store position
-  And(offset, offset, Operand(kBitsPerInt - 1));
+  andi(offset, offset, kBitsPerInt - 1);
 
   lw(scratch, MemOperand(object));
-  li(t8, Operand(1));
+  li(t8, 1);
   sllv(t8, t8, offset);
-  Or(scratch, scratch, Operand(t8));
+  or_(scratch, scratch, t8);
   sw(scratch, MemOperand(object));
+}
+
+
+void MacroAssembler::InNewSpace(Register object,
+                                Register scratch,
+                                Condition cc,
+                                Label* branch) {
+  ASSERT(cc == eq || cc == ne);
+  And(scratch, object, Operand(ExternalReference::new_space_mask()));
+  Branch(branch, cc, scratch, Operand(ExternalReference::new_space_start()));
+}
+
+
+// Will clobber 3 registers: object, offset, scratch.  The
+// register 'object' contains a heap object pointer.  The heap object
+// tag is shifted away.
+void MacroAssembler::RecordWrite(Register object, Register offset,
+                                 Register scratch) {
+  // The compiled code assumes that record write doesn't change the
+  // context register, so we check that none of the clobbered
+  // registers are cp.
+  ASSERT(!object.is(cp) && !offset.is(cp) && !scratch.is(cp));
+
+  Label done;
+
+  // First, test that the object is not in the new space.  We cannot set
+  // remembered set bits in the new space.
+  InNewSpace(object, scratch, eq, &done);
+
+  // Record the actual write.
+  RecordWriteHelper(object, offset, scratch);
 
   bind(&done);
 
@@ -234,6 +268,7 @@ void MacroAssembler::RecordWrite(Register object,
 Register MacroAssembler::CheckMaps(JSObject* object, Register object_reg,
                                    JSObject* holder, Register holder_reg,
                                    Register scratch,
+                                   int save_at_depth,
                                    Label* miss) {
   // Make sure there's no overlap between scratch and the other
   // registers.
@@ -241,7 +276,11 @@ Register MacroAssembler::CheckMaps(JSObject* object, Register object_reg,
 
   // Keep track of the current object in register reg.
   Register reg = object_reg;
-  int depth = 1;
+  int depth = 0;
+
+  if (save_at_depth == depth) {
+    sw(reg, MemOperand(sp));
+  }
 
   // Check the maps in the prototype chain.
   // Traverse the prototype chain from the object and do map checks.
@@ -280,6 +319,10 @@ Register MacroAssembler::CheckMaps(JSObject* object, Register object_reg,
       li(reg, Operand(Handle<JSObject>(prototype)));
     }
 
+    if (save_at_depth == depth) {
+      sw(reg, MemOperand(sp));
+    }
+
     // Go to the next object in the prototype chain.
     object = prototype;
   }
@@ -289,7 +332,7 @@ Register MacroAssembler::CheckMaps(JSObject* object, Register object_reg,
   Branch(miss, ne, scratch, Operand(Handle<Map>(object->map())));
 
   // Log the check depth.
-  LOG(IntEvent("check-maps-depth", depth));
+  LOG(IntEvent("check-maps-depth", depth + 1));
 
   // Perform security check for access to the global object and return
   // the holder register.

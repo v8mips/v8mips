@@ -38,6 +38,10 @@
 #include "cpu.h"
 #include "macro-assembler.h"
 
+#ifndef __mips
+#include "simulator-mips.h"  // for cache flushing.
+#endif
+
 namespace v8 {
 namespace internal {
 
@@ -56,6 +60,13 @@ void CPU::FlushICache(void* start, size_t size) {
     V8_Fatal(__FILE__, __LINE__, "Failed to flush the instruction cache");
   }
 
+#else  // simulator mode
+  // Not generating mips instructions for C-code. This means that we are
+  // building a mips emulator based target.  We should notify the simulator
+  // that the Icache was flushed.
+  // None of this code ends up in the snapshot so there are no issues
+  // around whether or not to generate the code when building snapshots.
+  assembler::mips::Simulator::FlushICache(start, size);
 #endif    // #ifdef __mips
 }
 

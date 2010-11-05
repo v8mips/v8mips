@@ -636,6 +636,92 @@ void Debugger::Debug() {
 #undef XSTR
 }
 
+static bool ICacheMatch(void* one, void* two) {
+  ASSERT((reinterpret_cast<intptr_t>(one) & CachePage::kPageMask) == 0);
+  ASSERT((reinterpret_cast<intptr_t>(two) & CachePage::kPageMask) == 0);
+  return one == two;
+}
+
+
+static uint32_t ICacheHash(void* key) {
+  return static_cast<uint32_t>(reinterpret_cast<uintptr_t>(key)) >> 2;
+}
+
+
+static bool AllOnOnePage(uintptr_t start, int size) {
+  intptr_t start_page = (start & ~CachePage::kPageMask);
+  intptr_t end_page = ((start + size) & ~CachePage::kPageMask);
+  return start_page == end_page;
+}
+
+
+void Simulator::FlushICache(void* start_addr, size_t size) {
+  intptr_t start = reinterpret_cast<intptr_t>(start_addr);
+  int intra_line = (start & CachePage::kLineMask);
+  start -= intra_line;
+  size += intra_line;
+  size = ((size - 1) | CachePage::kLineMask) + 1;
+  int offset = (start & CachePage::kPageMask);
+  while (!AllOnOnePage(start, size - 1)) {
+    int bytes_to_flush = CachePage::kPageSize - offset;
+    FlushOnePage(start, bytes_to_flush);
+    start += bytes_to_flush;
+    size -= bytes_to_flush;
+    ASSERT_EQ(0, start & CachePage::kPageMask);
+    offset = 0;
+  }
+  if (size != 0) {
+    FlushOnePage(start, size);
+  }
+}
+
+
+CachePage* Simulator::GetCachePage(void* page) {
+  v8::internal::HashMap::Entry* entry = i_cache_->Lookup(page,
+                                                         ICacheHash(page),
+                                                         true);
+  if (entry->value == NULL) {
+    CachePage* new_page = new CachePage();
+    entry->value = new_page;
+  }
+  return reinterpret_cast<CachePage*>(entry->value);
+}
+
+
+// Flush from start up to and not including start + size.
+void Simulator::FlushOnePage(intptr_t start, int size) {
+  ASSERT(size <= CachePage::kPageSize);
+  ASSERT(AllOnOnePage(start, size - 1));
+  ASSERT((start & CachePage::kLineMask) == 0);
+  ASSERT((size & CachePage::kLineMask) == 0);
+  void* page = reinterpret_cast<void*>(start & (~CachePage::kPageMask));
+  int offset = (start & CachePage::kPageMask);
+  CachePage* cache_page = GetCachePage(page);
+  char* valid_bytemap = cache_page->ValidityByte(offset);
+  memset(valid_bytemap, CachePage::LINE_INVALID, size >> CachePage::kLineShift);
+}
+
+
+void Simulator::CheckICache(Instruction* instr) {
+  intptr_t address = reinterpret_cast<intptr_t>(instr);
+  void* page = reinterpret_cast<void*>(address & (~CachePage::kPageMask));
+  void* line = reinterpret_cast<void*>(address & (~CachePage::kLineMask));
+  int offset = (address & CachePage::kPageMask);
+  CachePage* cache_page = GetCachePage(page);
+  char* cache_valid_byte = cache_page->ValidityByte(offset);
+  bool cache_hit = (*cache_valid_byte == CachePage::LINE_VALID);
+  char* cached_line = cache_page->CachedData(offset & ~CachePage::kLineMask);
+  if (cache_hit) {
+    // Check that the data in memory matches the contents of the I-cache.
+    CHECK(memcmp(reinterpret_cast<void*>(instr),
+                 cache_page->CachedData(offset),
+                 Instruction::kInstructionSize) == 0);
+  } else {
+    // Cache miss.  Load memory into the cache.
+    memcpy(cached_line, line, CachePage::kLineLength);
+    *cache_valid_byte = CachePage::LINE_VALID;
+  }
+}
 
 // Create one simulator per thread and keep it in thread local storage.
 static v8::internal::Thread::LocalStorageKey simulator_key;
@@ -651,8 +737,12 @@ void Simulator::Initialize() {
   ::v8::internal::ExternalReference::set_redirector(&RedirectExternalReference);
 }
 
+v8::internal::HashMap* Simulator::i_cache_ = NULL;
 
 Simulator::Simulator() {
+  if (i_cache_ == NULL) {
+    i_cache_ = new v8::internal::HashMap(&ICacheMatch);
+  }
   Initialize();
   // Setup simulator support first. Some of this information is needed to
   // setup the architecture state.
@@ -700,6 +790,9 @@ class Redirection {
         swi_instruction_(rtCallRedirInstr),
         fp_return_(fp_return),
         next_(list_) {
+    Simulator::current()->
+        FlushICache(reinterpret_cast<void*>(&swi_instruction_),
+                      Instruction::kInstructionSize);
     list_ = this;
   }
 
@@ -1929,6 +2022,9 @@ void Simulator::DecodeTypeJump(Instruction* instr) {
 
 // Executes the current instruction.
 void Simulator::InstructionDecode(Instruction* instr) {
+  if (v8::internal::FLAG_check_icache) {
+    CheckICache(instr);
+  }
   pc_modified_ = false;
   if (::v8::internal::FLAG_trace_sim) {
     disasm::NameConverter converter;
