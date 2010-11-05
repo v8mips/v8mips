@@ -183,6 +183,21 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
     li(reg, Operand(ext));
   }
 
+
+
+  // Check if object is in new space.
+  // scratch can be object itself, but it will be clobbered.
+  void InNewSpace(Register object,
+                  Register scratch,
+                  Condition cc,  // eq for new space, ne otherwise
+                  Label* branch);
+
+
+  // Set the remembered set bit for an offset into an
+  // object. RecordWriteHelper only works if the object is not in new
+  // space.
+  void RecordWriteHelper(Register object, Register offset, Register scracth);
+
   // Sets the remembered set bit for [address+offset].
   void RecordWrite(Register object, Register offset, Register scratch);
 
