@@ -5045,24 +5045,24 @@ void CodeGenerator::EmitNamedLoad(Handle<String> name, bool is_contextual) {
     DeferredReferenceGetNamedValue* deferred =
         new DeferredReferenceGetNamedValue(name);
 
+#ifdef DEBUG
     // 9 instructions. and:1, branch:2, lw:1, li:2, Branch:2, lw:1.
     const int kInlinedNamedLoadInstructions = 9;
-#ifdef DEBUG
     Label check_inlined_codesize;
     masm_->bind(&check_inlined_codesize);
 #endif
-    __ BlockTrampolinePoolFor(kInlinedNamedLoadInstructions);
 
-    // Check that the receiver is a heap object.
-    __ And(at, a0, Operand(kSmiTagMask));
-    deferred->Branch(eq, at, Operand(zero_reg));
-
-    // Check the map. The null map used below is patched by the inline cache
-    // code.
-
-    __ lw(a2, FieldMemOperand(a0, HeapObject::kMapOffset));
     // Generate patchable inline code. See LoadIC::PatchInlinedLoad.
     { Assembler::BlockTrampolinePoolScope block_trampoline_pool(masm_);
+
+      // Check that the receiver is a heap object.
+      __ And(at, a0, Operand(kSmiTagMask));
+      deferred->Branch(eq, at, Operand(zero_reg));
+
+      // Check the map. The null map used below is patched by the inline cache
+      // code.
+
+      __ lw(a2, FieldMemOperand(a0, HeapObject::kMapOffset));
       // The null map used below is patched by the inline cache code.
       __ li(a3, Operand(Factory::null_value()), true);
       deferred->Branch(ne, a2, Operand(a3));
@@ -5070,6 +5070,10 @@ void CodeGenerator::EmitNamedLoad(Handle<String> name, bool is_contextual) {
       // Initially use an invalid index. The index will be patched by the
       // inline cache code.
       __ lw(v0, MemOperand(a0, 666));
+      // Make sure that the expected number of instructions are generated.
+      // If this fails, LoadIC::PatchInlinedLoad() must be fixed as well.
+      ASSERT_EQ(kInlinedNamedLoadInstructions,
+                masm_->InstructionsGeneratedSince(&check_inlined_codesize));
     }
     deferred->BindExit();
   }
@@ -5106,6 +5110,11 @@ void CodeGenerator::EmitKeyedLoad() {
     // property code which can be patched. Therefore the exact number of
     // instructions generated need to be fixed, so the trampoline pool is
     // blocked while generating this code.
+#ifdef DEBUG
+    const int kInlinedKeyedLoadInstructions = 25;
+    Label check_inlined_codesize;
+    masm_->bind(&check_inlined_codesize);
+#endif
     { Assembler::BlockTrampolinePoolScope block_trampoline_pool(masm_);
       Register scratch1 = VirtualFrame::scratch0();
       Register scratch2 = VirtualFrame::scratch1();
@@ -5145,6 +5154,11 @@ void CodeGenerator::EmitKeyedLoad() {
       // receiver and key.  We can't just load undefined here because we have to
       // check the prototype.
       deferred->Branch(eq, v0, Operand(scratch2));
+
+      // Make sure that the expected number of instructions are generated.
+      // If this fails, KeyedLoadIC::PatchInlinedLoad() must be fixed as well.
+      ASSERT_EQ(kInlinedKeyedLoadInstructions,
+                masm_->InstructionsGeneratedSince(&check_inlined_codesize));
     }
     deferred->BindExit();
   }
@@ -5197,6 +5211,11 @@ void CodeGenerator::EmitKeyedStore(StaticType* key_type) {
     // property code which can be patched. Therefore the exact number of
     // instructions generated need to be fixed, so the constant pool is blocked
     // while generating this code.
+#ifdef DEBUG
+    const int kInlinedKeyedStoreInstructions = 11;
+    Label check_inlined_codesize;
+    masm_->bind(&check_inlined_codesize);
+#endif
     { Assembler::BlockTrampolinePoolScope block_trampoline_pool(masm_);
       // Get the elements array from the receiver and check that it
       // is not a dictionary.
@@ -5218,6 +5237,11 @@ void CodeGenerator::EmitKeyedStore(StaticType* key_type) {
       __ addu(at, a3, at);
       __ sw(a0, MemOperand(at, 0));
       __ mov(v0, a0);  // Leave stored value in v0.
+
+      // Make sure that the expected number of instructions are generated.
+      // If fail, KeyedStoreIC::PatchInlinedStore() must be fixed as well.
+      ASSERT_EQ(kInlinedKeyedStoreInstructions,
+                masm_->InstructionsGeneratedSince(&check_inlined_codesize));
     }
     deferred->BindExit();
   } else {
