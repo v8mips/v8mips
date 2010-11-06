@@ -67,7 +67,7 @@ void BreakTarget::Jump() {
   DoJump();
 }
 
-
+#ifndef V8_TARGET_ARCH_MIPS
 void BreakTarget::Branch(Condition cc, Hint hint) {
   if (cc == al) {
     Jump();
@@ -93,6 +93,36 @@ void BreakTarget::Branch(Condition cc, Hint hint) {
     DoBranch(cc, hint);
   }
 }
+#else  // V8_TARGET_ARCH_MIPS
+void BreakTarget::Branch(Condition cc,
+                         Register src1,
+                         const Operand& src2,
+                         Hint hint){
+  if (cc == al) {
+    Jump();
+    return;
+  }
+
+  ASSERT(cgen()->has_valid_frame());
+
+  int count = cgen()->frame()->height() - expected_height_;
+  if (count > 0) {
+    // We negate and branch here rather than using DoBranch's negate
+    // and branch.  This gives us a hook to remove statement state
+    // from the frame.
+    JumpTarget fall_through;
+    // Branch to fall through will not negate, because it is a
+    // forward-only target.
+    fall_through.Branch(NegateCondition(cc), src1, Operand(src2), NegateHint(hint));
+    // Emit merge code.
+    cgen()->frame()->Drop(count);
+    DoJump();
+    fall_through.Bind();
+  } else {
+    DoBranch(cc, hint, src1, src2);
+  }
+}
+#endif  // V8_TARGET_ARCH_MIPS
 
 
 void BreakTarget::Bind() {
