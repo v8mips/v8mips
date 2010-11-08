@@ -1146,44 +1146,66 @@ void CodeGenerator::SmiOperation(Token::Value op,
       int shift_value = int_value & 0x1f;  // least significant 5 bits
       DeferredCode* deferred =
         new DeferredInlineSmiOperation(op, shift_value, false, mode, tos);
-      __ tst(tos, Operand(kSmiTagMask));
-      deferred->Branch(ne);
-      __ mov(scratch, Operand(tos, ASR, kSmiTagSize));  // remove tags
+      uint32_t problematic_mask = kSmiTagMask;
+      // For unsigned shift by zero all negative smis are problematic.
+      if (shift_value == 0 && op == Token::SHR) problematic_mask |= 0x80000000;
+      __ tst(tos, Operand(problematic_mask));
+      deferred->Branch(ne);  // Go slow for problematic input.
       switch (op) {
         case Token::SHL: {
           if (shift_value != 0) {
-            __ mov(scratch, Operand(scratch, LSL, shift_value));
+            int adjusted_shift = shift_value - kSmiTagSize;
+            ASSERT(adjusted_shift >= 0);
+            if (adjusted_shift != 0) {
+              __ mov(scratch, Operand(tos, LSL, adjusted_shift));
+              // Check that the *signed* result fits in a smi.
+              __ add(scratch2, scratch, Operand(0x40000000), SetCC);
+              deferred->Branch(mi);
+              __ mov(tos, Operand(scratch, LSL, kSmiTagSize));
+            } else {
+              // Check that the *signed* result fits in a smi.
+              __ add(scratch2, tos, Operand(0x40000000), SetCC);
+              deferred->Branch(mi);
+              __ mov(tos, Operand(tos, LSL, kSmiTagSize));
+            }
           }
-          // check that the *signed* result fits in a smi
-          __ add(scratch2, scratch, Operand(0x40000000), SetCC);
-          deferred->Branch(mi);
           break;
         }
         case Token::SHR: {
-          // LSR by immediate 0 means shifting 32 bits.
           if (shift_value != 0) {
+            __ mov(scratch, Operand(tos, ASR, kSmiTagSize));  // Remove tag.
+            // LSR by immediate 0 means shifting 32 bits.
             __ mov(scratch, Operand(scratch, LSR, shift_value));
+            if (shift_value == 1) {
+              // check that the *unsigned* result fits in a smi
+              // neither of the two high-order bits can be set:
+              // - 0x80000000: high bit would be lost when smi tagging
+              // - 0x40000000: this number would convert to negative when
+              // smi tagging these two cases can only happen with shifts
+              // by 0 or 1 when handed a valid smi
+              __ tst(scratch, Operand(0xc0000000));
+              deferred->Branch(ne);
+            }
+            __ mov(tos, Operand(scratch, LSL, kSmiTagSize));
           }
-          // check that the *unsigned* result fits in a smi
-          // neither of the two high-order bits can be set:
-          // - 0x80000000: high bit would be lost when smi tagging
-          // - 0x40000000: this number would convert to negative when
-          // smi tagging these two cases can only happen with shifts
-          // by 0 or 1 when handed a valid smi
-          __ tst(scratch, Operand(0xc0000000));
-          deferred->Branch(ne);
           break;
         }
         case Token::SAR: {
+          // In the ARM instructions set, ASR by immediate 0 means shifting 32
+          // bits.
           if (shift_value != 0) {
-            // ASR by immediate 0 means shifting 32 bits.
-            __ mov(scratch, Operand(scratch, ASR, shift_value));
+            // Do the shift and the tag removal in one operation.  If the shift
+            // is 31 bits (the highest possible value) then we emit the
+            // instruction as a shift by 0 which means shift arithmetically by
+            // 32.
+            __ mov(tos, Operand(tos, ASR, (kSmiTagSize + shift_value) & 0x1f));
+            // Put tag back.
+            __ mov(tos, Operand(tos, LSL, kSmiTagSize));
           }
           break;
         }
         default: UNREACHABLE();
       }
-      __ mov(tos, Operand(scratch, LSL, kSmiTagSize));
       deferred->BindExit();
       frame_->EmitPush(tos);
       break;
@@ -5471,19 +5493,33 @@ void DeferredReferenceGetNamedValue::Generate() {
 
 class DeferredReferenceGetKeyedValue: public DeferredCode {
  public:
-  DeferredReferenceGetKeyedValue() {
+  DeferredReferenceGetKeyedValue(Register key, Register receiver)
+      : key_(key), receiver_(receiver) {
     set_comment("[ DeferredReferenceGetKeyedValue");
   }
 
   virtual void Generate();
+
+ private:
+  Register key_;
+  Register receiver_;
 };
 
 
 void DeferredReferenceGetKeyedValue::Generate() {
+  ASSERT((key_.is(r0) && receiver_.is(r1)) ||
+         (key_.is(r1) && receiver_.is(r0)));
+
   Register scratch1 = VirtualFrame::scratch0();
   Register scratch2 = VirtualFrame::scratch1();
   __ DecrementCounter(&Counters::keyed_load_inline, 1, scratch1, scratch2);
   __ IncrementCounter(&Counters::keyed_load_inline_miss, 1, scratch1, scratch2);
+
+  // Ensure key in r0 and receiver in r1 to match keyed load ic calling
+  // convention.
+  if (key_.is(r1)) {
+    __ Swap(r0, r1, ip);
+  }
 
   // The rest of the instructions in the deferred code must be together.
   { Assembler::BlockConstPoolScope block_const_pool(masm_);
@@ -5620,15 +5656,14 @@ void CodeGenerator::EmitKeyedLoad() {
     __ IncrementCounter(&Counters::keyed_load_inline, 1,
                         frame_->scratch0(), frame_->scratch1());
 
-    // Load the key and receiver from the stack to r0 and r1.
-    frame_->PopToR1R0();
-    Register key = r0;
-    Register receiver = r1;
+    // Load the key and receiver from the stack.
+    Register key = frame_->PopToRegister();
+    Register receiver = frame_->PopToRegister(key);
     VirtualFrame::SpilledScope spilled(frame_);
 
-    // The deferred code expects key and receiver in r0 and r1.
+    // The deferred code expects key and receiver in registers.
     DeferredReferenceGetKeyedValue* deferred =
-        new DeferredReferenceGetKeyedValue();
+        new DeferredReferenceGetKeyedValue(key, receiver);
 
     // Check that the receiver is a heap object.
     __ tst(receiver, Operand(kSmiTagMask));
@@ -8639,7 +8674,7 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
   __ ldr(last_match_info_elements,
          FieldMemOperand(r0, JSArray::kElementsOffset));
   __ ldr(r0, FieldMemOperand(last_match_info_elements, HeapObject::kMapOffset));
-  __ LoadRoot(ip, kFixedArrayMapRootIndex);
+  __ LoadRoot(ip, Heap::kFixedArrayMapRootIndex);
   __ cmp(r0, ip);
   __ b(ne, &runtime);
   // Check that the last match info has space for the capture registers and the
