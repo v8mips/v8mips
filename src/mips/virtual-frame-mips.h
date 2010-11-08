@@ -281,6 +281,11 @@ class VirtualFrame : public ZoneObject {
   // Call load IC. Receiver is on the stack. Result is returned in v0.
   void CallLoadIC(Handle<String> name, RelocInfo::Mode mode);
 
+  // Call store IC. If the load is contextual, value is found on top of the
+  // frame. If not, value and receiver are on the frame. Both are consumed.
+  // Result is returned in v0.
+  void CallStoreIC(Handle<String> name, bool is_contextual);
+
   // Call keyed load IC. Key and receiver are on the stack. Result is returned
   // in v0.
   void CallKeyedLoadIC();

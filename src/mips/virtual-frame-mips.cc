@@ -229,7 +229,7 @@ void VirtualFrame::AllocateStackSlots() {
       __ sw(t0, MemOperand(a2, 0));
       __ Subu(a1, a1, Operand(1));
       __ Branch(false, &alloc_locals_loop, gt, a1, Operand(zero_reg));
-      __ Addu(a2, a2, Operand(kPointerSize)); // Use branch-delay slot.
+      __ Addu(a2, a2, Operand(kPointerSize));  // Use branch-delay slot.
     }
   }
   // Call the stub if lower.
@@ -313,6 +313,21 @@ void VirtualFrame::CallLoadIC(Handle<String> name, RelocInfo::Mode mode) {
 }
 
 
+void VirtualFrame::CallStoreIC(Handle<String> name, bool is_contextual) {
+  Handle<Code> ic(Builtins::builtin(Builtins::StoreIC_Initialize));
+  PopToA0();
+  if (is_contextual) {
+    SpillAll();
+    __ lw(a1, MemOperand(cp, Context::SlotOffset(Context::GLOBAL_INDEX)));
+  } else {
+    EmitPop(a1);
+    SpillAll();
+  }
+  __ li(a2, Operand(name));
+  CallCodeObject(ic, RelocInfo::CODE_TARGET, 0);
+}
+
+
 void VirtualFrame::CallKeyedLoadIC() {
   Handle<Code> ic(Builtins::builtin(Builtins::KeyedLoadIC_Initialize));
   SpillAllButCopyTOSToA0();
@@ -321,6 +336,7 @@ void VirtualFrame::CallKeyedLoadIC() {
 
 
 void VirtualFrame::CallKeyedStoreIC() {
+  ASSERT(SpilledScope::is_spilled());
   Handle<Code> ic(Builtins::builtin(Builtins::KeyedStoreIC_Initialize));
   CallCodeObject(ic, RelocInfo::CODE_TARGET, 0);
 }
