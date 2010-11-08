@@ -277,7 +277,6 @@ class FloatingPointHelper : public AllStatic {
   // Takes the operands in rdx and rax and loads them as integers in rax
   // and rcx.
   static void LoadAsIntegers(MacroAssembler* masm,
-                             bool use_sse3,
                              Label* operand_conversion_failure);
 };
 
@@ -2868,12 +2867,12 @@ void CodeGenerator::VisitCall(Call* node) {
     // ----------------------------------
     // JavaScript examples:
     //
-    //  with (obj) foo(1, 2, 3)  // foo is in obj
+    //  with (obj) foo(1, 2, 3)  // foo may be in obj.
     //
     //  function f() {};
     //  function g() {
     //    eval(...);
-    //    f();  // f could be in extension object
+    //    f();  // f could be in extension object.
     //  }
     // ----------------------------------
 
@@ -2896,10 +2895,9 @@ void CodeGenerator::VisitCall(Call* node) {
 
     } else if (var->mode() == Variable::DYNAMIC_LOCAL) {
       Slot* potential_slot = var->local_if_not_shadowed()->slot();
-      // Only generate the fast case for locals that rewrite to slots.
-      // This rules out argument loads because eval forces arguments
-      // access to be through the arguments object.
+      Expression* rewrite = var->local_if_not_shadowed()->rewrite();
       if (potential_slot != NULL) {
+        // Generate fast case for locals that rewrite to slots.
         // Allocate a fresh register to use as a temp in
         // ContextSlotOperandCheckExtensions and to hold the result
         // value.
@@ -2919,6 +2917,34 @@ void CodeGenerator::VisitCall(Call* node) {
         frame_->Push(&function);
         LoadGlobalReceiver();
         done.Jump();
+      } else if (rewrite != NULL) {
+        // Generate fast case for calls of an argument function.
+        Property* property = rewrite->AsProperty();
+        if (property != NULL) {
+          VariableProxy* obj_proxy = property->obj()->AsVariableProxy();
+          Literal* key_literal = property->key()->AsLiteral();
+          if (obj_proxy != NULL &&
+              key_literal != NULL &&
+              obj_proxy->IsArguments() &&
+              key_literal->handle()->IsSmi()) {
+            // Load arguments object if there are no eval-introduced
+            // variables. Then load the argument from the arguments
+            // object using keyed load.
+            Result arguments = allocator()->Allocate();
+            ASSERT(arguments.is_valid());
+            __ movq(arguments.reg(),
+                    ContextSlotOperandCheckExtensions(obj_proxy->var()->slot(),
+                                                      arguments,
+                                                      &slow));
+            frame_->Push(&arguments);
+            frame_->Push(key_literal->handle());
+            Result value = EmitKeyedLoad(false);
+            frame_->Drop(2);  // Drop key and receiver.
+            frame_->Push(&value);
+            LoadGlobalReceiver();
+            done.Jump();
+          }
+        }
       }
     }
 
@@ -5343,20 +5369,13 @@ void CodeGenerator::LoadFromSlot(Slot* slot, TypeofState typeof_state) {
     // containing the eval.
     if (slot->var()->mode() == Variable::DYNAMIC_GLOBAL) {
       value = LoadFromGlobalSlotCheckExtensions(slot, typeof_state, &slow);
-      // If there was no control flow to slow, we can exit early.
-      if (!slow.is_linked()) {
-        frame_->Push(&value);
-        return;
-      }
-
       done.Jump(&value);
 
     } else if (slot->var()->mode() == Variable::DYNAMIC_LOCAL) {
       Slot* potential_slot = slot->var()->local_if_not_shadowed()->slot();
-      // Only generate the fast case for locals that rewrite to slots.
-      // This rules out argument loads because eval forces arguments
-      // access to be through the arguments object.
+      Expression* rewrite = slot->var()->local_if_not_shadowed()->rewrite();
       if (potential_slot != NULL) {
+        // Generate fast case for locals that rewrite to slots.
         // Allocate a fresh register to use as a temp in
         // ContextSlotOperandCheckExtensions and to hold the result
         // value.
@@ -5371,10 +5390,33 @@ void CodeGenerator::LoadFromSlot(Slot* slot, TypeofState typeof_state) {
           done.Branch(not_equal, &value);
           __ LoadRoot(value.reg(), Heap::kUndefinedValueRootIndex);
         }
-        // There is always control flow to slow from
-        // ContextSlotOperandCheckExtensions so we have to jump around
-        // it.
         done.Jump(&value);
+      } else if (rewrite != NULL) {
+        // Generate fast case for argument loads.
+        Property* property = rewrite->AsProperty();
+        if (property != NULL) {
+          VariableProxy* obj_proxy = property->obj()->AsVariableProxy();
+          Literal* key_literal = property->key()->AsLiteral();
+          if (obj_proxy != NULL &&
+              key_literal != NULL &&
+              obj_proxy->IsArguments() &&
+              key_literal->handle()->IsSmi()) {
+            // Load arguments object if there are no eval-introduced
+            // variables. Then load the argument from the arguments
+            // object using keyed load.
+            Result arguments = allocator()->Allocate();
+            ASSERT(arguments.is_valid());
+            __ movq(arguments.reg(),
+                    ContextSlotOperandCheckExtensions(obj_proxy->var()->slot(),
+                                                      arguments,
+                                                      &slow));
+            frame_->Push(&arguments);
+            frame_->Push(key_literal->handle());
+            value = EmitKeyedLoad(false);
+            frame_->Drop(2);  // Drop key and receiver.
+            done.Jump(&value);
+          }
+        }
       }
     }
 
@@ -8015,138 +8057,29 @@ void TranscendentalCacheStub::GenerateOperation(MacroAssembler* masm,
 }
 
 
-// Get the integer part of a heap number.  Surprisingly, all this bit twiddling
-// is faster than using the built-in instructions on floating point registers.
+// Get the integer part of a heap number.
 // Trashes rdi and rbx.  Dest is rcx.  Source cannot be rcx or one of the
 // trashed registers.
 void IntegerConvert(MacroAssembler* masm,
                     Register source,
-                    bool use_sse3,
                     Label* conversion_failure) {
   ASSERT(!source.is(rcx) && !source.is(rdi) && !source.is(rbx));
-  Label done, right_exponent, normal_exponent;
   Register scratch = rbx;
   Register scratch2 = rdi;
   // Get exponent word.
-  __ movl(scratch, FieldOperand(source, HeapNumber::kExponentOffset));
+  __ movq(scratch2, FieldOperand(source, HeapNumber::kValueOffset));
   // Get exponent alone in scratch2.
-  __ movl(scratch2, scratch);
-  __ and_(scratch2, Immediate(HeapNumber::kExponentMask));
-  if (use_sse3) {
-    CpuFeatures::Scope scope(SSE3);
-    // Check whether the exponent is too big for a 64 bit signed integer.
-    static const uint32_t kTooBigExponent =
-        (HeapNumber::kExponentBias + 63) << HeapNumber::kExponentShift;
-    __ cmpl(scratch2, Immediate(kTooBigExponent));
-    __ j(greater_equal, conversion_failure);
-    // Load x87 register with heap number.
-    __ fld_d(FieldOperand(source, HeapNumber::kValueOffset));
-    // Reserve space for 64 bit answer.
-    __ subq(rsp, Immediate(sizeof(uint64_t)));  // Nolint.
-    // Do conversion, which cannot fail because we checked the exponent.
-    __ fisttp_d(Operand(rsp, 0));
-    __ movl(rcx, Operand(rsp, 0));  // Load low word of answer into rcx.
-    __ addq(rsp, Immediate(sizeof(uint64_t)));  // Nolint.
-  } else {
-    // Load rcx with zero.  We use this either for the final shift or
-    // for the answer.
-    __ xor_(rcx, rcx);
-    // Check whether the exponent matches a 32 bit signed int that cannot be
-    // represented by a Smi.  A non-smi 32 bit integer is 1.xxx * 2^30 so the
-    // exponent is 30 (biased).  This is the exponent that we are fastest at and
-    // also the highest exponent we can handle here.
-    const uint32_t non_smi_exponent =
-        (HeapNumber::kExponentBias + 30) << HeapNumber::kExponentShift;
-    __ cmpl(scratch2, Immediate(non_smi_exponent));
-    // If we have a match of the int32-but-not-Smi exponent then skip some
-    // logic.
-    __ j(equal, &right_exponent);
-    // If the exponent is higher than that then go to slow case.  This catches
-    // numbers that don't fit in a signed int32, infinities and NaNs.
-    __ j(less, &normal_exponent);
-
-    {
-      // Handle a big exponent.  The only reason we have this code is that the
-      // >>> operator has a tendency to generate numbers with an exponent of 31.
-      const uint32_t big_non_smi_exponent =
-          (HeapNumber::kExponentBias + 31) << HeapNumber::kExponentShift;
-      __ cmpl(scratch2, Immediate(big_non_smi_exponent));
-      __ j(not_equal, conversion_failure);
-      // We have the big exponent, typically from >>>.  This means the number is
-      // in the range 2^31 to 2^32 - 1.  Get the top bits of the mantissa.
-      __ movl(scratch2, scratch);
-      __ and_(scratch2, Immediate(HeapNumber::kMantissaMask));
-      // Put back the implicit 1.
-      __ or_(scratch2, Immediate(1 << HeapNumber::kExponentShift));
-      // Shift up the mantissa bits to take up the space the exponent used to
-      // take. We just orred in the implicit bit so that took care of one and
-      // we want to use the full unsigned range so we subtract 1 bit from the
-      // shift distance.
-      const int big_shift_distance = HeapNumber::kNonMantissaBitsInTopWord - 1;
-      __ shl(scratch2, Immediate(big_shift_distance));
-      // Get the second half of the double.
-      __ movl(rcx, FieldOperand(source, HeapNumber::kMantissaOffset));
-      // Shift down 21 bits to get the most significant 11 bits or the low
-      // mantissa word.
-      __ shr(rcx, Immediate(32 - big_shift_distance));
-      __ or_(rcx, scratch2);
-      // We have the answer in rcx, but we may need to negate it.
-      __ testl(scratch, scratch);
-      __ j(positive, &done);
-      __ neg(rcx);
-      __ jmp(&done);
-    }
-
-    __ bind(&normal_exponent);
-    // Exponent word in scratch, exponent part of exponent word in scratch2.
-    // Zero in rcx.
-    // We know the exponent is smaller than 30 (biased).  If it is less than
-    // 0 (biased) then the number is smaller in magnitude than 1.0 * 2^0, ie
-    // it rounds to zero.
-    const uint32_t zero_exponent =
-        (HeapNumber::kExponentBias + 0) << HeapNumber::kExponentShift;
-    __ subl(scratch2, Immediate(zero_exponent));
-    // rcx already has a Smi zero.
-    __ j(less, &done);
-
-    // We have a shifted exponent between 0 and 30 in scratch2.
-    __ shr(scratch2, Immediate(HeapNumber::kExponentShift));
-    __ movl(rcx, Immediate(30));
-    __ subl(rcx, scratch2);
-
-    __ bind(&right_exponent);
-    // Here rcx is the shift, scratch is the exponent word.
-    // Get the top bits of the mantissa.
-    __ and_(scratch, Immediate(HeapNumber::kMantissaMask));
-    // Put back the implicit 1.
-    __ or_(scratch, Immediate(1 << HeapNumber::kExponentShift));
-    // Shift up the mantissa bits to take up the space the exponent used to
-    // take. We have kExponentShift + 1 significant bits int he low end of the
-    // word.  Shift them to the top bits.
-    const int shift_distance = HeapNumber::kNonMantissaBitsInTopWord - 2;
-    __ shl(scratch, Immediate(shift_distance));
-    // Get the second half of the double. For some exponents we don't
-    // actually need this because the bits get shifted out again, but
-    // it's probably slower to test than just to do it.
-    __ movl(scratch2, FieldOperand(source, HeapNumber::kMantissaOffset));
-    // Shift down 22 bits to get the most significant 10 bits or the low
-    // mantissa word.
-    __ shr(scratch2, Immediate(32 - shift_distance));
-    __ or_(scratch2, scratch);
-    // Move down according to the exponent.
-    __ shr_cl(scratch2);
-    // Now the unsigned answer is in scratch2.  We need to move it to rcx and
-    // we may need to fix the sign.
-    Label negative;
-    __ xor_(rcx, rcx);
-    __ cmpl(rcx, FieldOperand(source, HeapNumber::kExponentOffset));
-    __ j(greater, &negative);
-    __ movl(rcx, scratch2);
-    __ jmp(&done);
-    __ bind(&negative);
-    __ subl(rcx, scratch2);
-    __ bind(&done);
-  }
+  __ movq(xmm0, scratch2);
+  __ shr(scratch2, Immediate(HeapNumber::kMantissaBits));
+  __ andl(scratch2, Immediate((1 << HeapNumber::KExponentBits) - 1));
+  // Check whether the exponent is too big for a 63 bit unsigned integer.
+  // (Notice: Doesn't handle MIN_SMI).
+  __ cmpl(scratch2, Immediate(63 + HeapNumber::kExponentBias));
+  __ j(greater_equal, conversion_failure);
+  // Handle exponent range -inf..62.
+  __ cvttsd2siq(rcx, xmm0);
+  // TODO(lrn): Do bit-fiddling for exponents in range 63..84 and return
+  // zero for everything else (also including negative exponents).
 }
 
 
@@ -8196,7 +8129,7 @@ void GenericUnaryOpStub::Generate(MacroAssembler* masm) {
     __ j(not_equal, &slow);
 
     // Convert the heap number in rax to an untagged integer in rcx.
-    IntegerConvert(masm, rax, CpuFeatures::IsSupported(SSE3), &slow);
+    IntegerConvert(masm, rax, &slow);
 
     // Do the bitwise operation and check if the result fits in a smi.
     Label try_float;
@@ -9777,7 +9710,6 @@ void FloatingPointHelper::LoadFloatOperandsFromSmis(MacroAssembler* masm,
 // Input: rdx, rax are the left and right objects of a bit op.
 // Output: rax, rcx are left and right integers for a bit op.
 void FloatingPointHelper::LoadAsIntegers(MacroAssembler* masm,
-                                         bool use_sse3,
                                          Label* conversion_failure) {
   // Check float operands.
   Label arg1_is_object, check_undefined_arg1;
@@ -9800,10 +9732,10 @@ void FloatingPointHelper::LoadAsIntegers(MacroAssembler* masm,
   __ CompareRoot(rbx, Heap::kHeapNumberMapRootIndex);
   __ j(not_equal, &check_undefined_arg1);
   // Get the untagged integer version of the edx heap number in rcx.
-  IntegerConvert(masm, rdx, use_sse3, conversion_failure);
+  IntegerConvert(masm, rdx, conversion_failure);
   __ movl(rdx, rcx);
 
-  // Here edx has the untagged integer, eax has a Smi or a heap number.
+  // Here rdx has the untagged integer, rax has a Smi or a heap number.
   __ bind(&load_arg2);
   // Test if arg2 is a Smi.
   __ JumpIfNotSmi(rax, &arg2_is_object);
@@ -9823,7 +9755,7 @@ void FloatingPointHelper::LoadAsIntegers(MacroAssembler* masm,
   __ CompareRoot(rbx, Heap::kHeapNumberMapRootIndex);
   __ j(not_equal, &check_undefined_arg2);
   // Get the untagged integer version of the eax heap number in ecx.
-  IntegerConvert(masm, rax, use_sse3, conversion_failure);
+  IntegerConvert(masm, rax, conversion_failure);
   __ bind(&done);
   __ movl(rax, rdx);
 }
@@ -9898,7 +9830,6 @@ const char* GenericBinaryOpStub::GetName() {
                (flags_ & NO_SMI_CODE_IN_STUB) ? "_NoSmiInStub" : "",
                args_in_registers_ ? "RegArgs" : "StackArgs",
                args_reversed_ ? "_R" : "",
-               use_sse3_ ? "SSE3" : "SSE2",
                static_operands_type_.ToString(),
                BinaryOpIC::GetName(runtime_operands_type_));
   return name_;
@@ -10331,7 +10262,7 @@ void GenericBinaryOpStub::Generate(MacroAssembler* masm) {
       case Token::SHL:
       case Token::SHR: {
         Label skip_allocation, non_smi_result;
-        FloatingPointHelper::LoadAsIntegers(masm, use_sse3_, &call_runtime);
+        FloatingPointHelper::LoadAsIntegers(masm, &call_runtime);
         switch (op_) {
           case Token::BIT_OR:  __ orl(rax, rcx); break;
           case Token::BIT_AND: __ andl(rax, rcx); break;
@@ -10342,7 +10273,7 @@ void GenericBinaryOpStub::Generate(MacroAssembler* masm) {
           default: UNREACHABLE();
         }
         if (op_ == Token::SHR) {
-          // Check if result is non-negative. This can only happen for a shift
+          // Check if result is negative. This can only happen for a shift
           // by zero, which also doesn't update the sign flag.
           __ testl(rax, rax);
           __ j(negative, &non_smi_result);
