@@ -28,6 +28,8 @@
 
 #include "v8.h"
 
+#if defined(V8_TARGET_ARCH_MIPS)
+
 #include "frames-inl.h"
 #include "mips/assembler-mips-inl.h"
 
@@ -114,3 +116,4 @@ Address InternalFrame::GetCallerStackPointer() const {
 
 } }  // namespace v8::internal
 
+#endif  // V8_TARGET_ARCH_MIPS

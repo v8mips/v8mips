@@ -34,6 +34,9 @@
 
 
 #include "v8.h"
+
+#if defined(V8_TARGET_ARCH_MIPS)
+
 #include "mips/assembler-mips-inl.h"
 #include "serialize.h"
 
@@ -1647,3 +1650,4 @@ void Assembler::set_target_address_at(Address pc, Address target) {
 
 } }  // namespace v8::internal
 
+#endif  // V8_TARGET_ARCH_MIPS

@@ -27,6 +27,8 @@
 
 #include "v8.h"
 
+#if defined(V8_TARGET_ARCH_ARM)
+
 #include "bootstrapper.h"
 #include "codegen-inl.h"
 #include "compiler.h"
@@ -8539,9 +8541,9 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
   // Just jump directly to runtime if native RegExp is not selected at compile
   // time or if regexp entry in generated code is turned off runtime switch or
   // at compilation.
-#ifndef V8_NATIVE_REGEXP
+#ifdef V8_INTERPRETED_REGEXP
   __ TailCallRuntime(Runtime::kRegExpExec, 4, 1);
-#else  // V8_NATIVE_REGEXP
+#else  // V8_INTERPRETED_REGEXP
   if (!FLAG_regexp_entry_native) {
     __ TailCallRuntime(Runtime::kRegExpExec, 4, 1);
     return;
@@ -8874,7 +8876,7 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
   // Do the runtime call to execute the regexp.
   __ bind(&runtime);
   __ TailCallRuntime(Runtime::kRegExpExec, 4, 1);
-#endif  // V8_NATIVE_REGEXP
+#endif  // V8_INTERPRETED_REGEXP
 }
 
 
@@ -10020,3 +10022,5 @@ void StringAddStub::Generate(MacroAssembler* masm) {
 #undef __
 
 } }  // namespace v8::internal
+
+#endif  // V8_TARGET_ARCH_ARM

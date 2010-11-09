@@ -27,6 +27,8 @@
 
 #include "v8.h"
 
+#if defined(V8_TARGET_ARCH_ARM)
+
 #include "codegen-inl.h"
 #include "register-allocator-inl.h"
 #include "scopes.h"
@@ -635,7 +637,6 @@ void VirtualFrame::EmitPush(Register reg) {
 
 
 void VirtualFrame::SetElementAt(Register reg, int this_far_down) {
-  int virtual_elements = kVirtualElements[top_of_stack_state_];
   if (this_far_down == 0) {
     Pop();
     Register dest = GetTOSRegister();
@@ -662,7 +663,7 @@ void VirtualFrame::SetElementAt(Register reg, int this_far_down) {
     }
   } else {
     ASSERT(this_far_down >= 2);
-    ASSERT(virtual_elements <= 2);
+    ASSERT(kVirtualElements[top_of_stack_state_] <= 2);
     __ str(reg, ElementAt(this_far_down));
   }
 }
@@ -750,3 +751,5 @@ void VirtualFrame::SpillAll() {
 #undef __
 
 } }  // namespace v8::internal
+
+#endif  // V8_TARGET_ARCH_ARM
