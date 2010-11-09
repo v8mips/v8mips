@@ -4878,8 +4878,12 @@ void CodeGenerator::VisitCountOperation(CountOperation* node) {
 #ifdef DEBUG
   int original_height = frame_->height();
 #endif
-  VirtualFrame::SpilledScope spilled_scope(frame_);
   Comment cmnt(masm_, "[ CountOperation");
+
+  // TODO(plind) This line is not needed or present in 
+  // codegen-arm.cc, but it is needed currently for mips. I 
+  // suspect a virtual-frame change we have not caught up with.
+  VirtualFrame::RegisterAllocationScope scope(this);
 
   bool is_postfix = node->is_postfix();
   bool is_increment = node->op() == Token::INC;
@@ -4887,89 +4891,92 @@ void CodeGenerator::VisitCountOperation(CountOperation* node) {
   Variable* var = node->expression()->AsVariableProxy()->AsVariable();
   bool is_const = (var != NULL && var->mode() == Variable::CONST);
 
-  // Postfix: Make room for the result.
   if (is_postfix) {
-    __ mov(v0, zero_reg);
-    frame_->EmitPush(v0);
+    frame_->EmitPush(Operand(Smi::FromInt(0)));
   }
 
+  // A constant reference is not saved to, so a constant reference is not a
+  // compound assignment reference.
   { Reference target(this, node->expression(), !is_const);
     if (target.is_illegal()) {
       // Spoof the virtual frame to have the expected height (one higher
       // than on entry).
       if (!is_postfix) {
-        __ mov(v0, zero_reg);
-        frame_->EmitPush(v0);
+        frame_->EmitPush(Operand(Smi::FromInt(0)));
       }
       ASSERT_EQ(original_height + 1, frame_->height());
       return;
     }
-    // Get the old value in a0.
+    // This pushes 0, 1 or 2 words on the object to be used later when updating
+    // the target.  It also pushes the current value of the target.
     target.GetValue();
-    frame_->EmitPop(a0);
 
     JumpTarget slow;
     JumpTarget exit;
 
     // Check for smi operand.
-    __ And(t0, a0, Operand(kSmiTagMask));
-    slow.Branch(ne, t0, Operand(zero_reg), no_hint);
+    Register value = frame_->PopToRegister();
+    __ And(t0, value, Operand(kSmiTagMask));
+    slow.Branch(ne, t0, Operand(zero_reg));
 
     // Postfix: Store the old value as the result.
     if (is_postfix) {
-      __ sw(a0, frame_->ElementAt(target.size()));
+      frame_->SetElementAt(value, target.size());
     }
 
     // Perform optimistic increment/decrement and check for overflow.
     // If we don't overflow we are done.
     if (is_increment) {
-      __ Addu(v0, a0, Operand(Smi::FromInt(1)));
-      // Check for overflow of a0 + Smi::FromInt(1).
-      __ Xor(t0, v0, a0);
+      __ Addu(v0, value, Operand(Smi::FromInt(1)));
+      // Check for overflow of value + Smi::FromInt(1).
+      __ Xor(t0, v0, value);
       __ Xor(t1, v0, Operand(Smi::FromInt(1)));
       __ and_(t0, t0, t1);    // Overflow occurred if result is negative.
       exit.Branch(ge, t0, Operand(zero_reg));  // Exit on NO overflow (ge 0).
     } else {
-      __ Addu(v0, a0, Operand(Smi::FromInt(-1)));
-      // Check for overflow of a0 + Smi::FromInt(-1).
-      __ Xor(t0, v0, a0);
+      __ Addu(v0, value, Operand(Smi::FromInt(-1)));
+      // Check for overflow of value + Smi::FromInt(-1).
+      __ Xor(t0, v0, value);
       __ Xor(t1, v0, Operand(Smi::FromInt(-1)));
       __ and_(t0, t0, t1);    // Overflow occurred if result is negative.
       exit.Branch(ge, t0, Operand(zero_reg));  // Exit on NO overflow (ge 0).
     }
-    // We had an overflow.
-    // Slow case: Convert to number.
-    // a0 still holds the original value.
+    // Slow case: Convert to number.  At this point the
+    // value to be incremented is in the value register.
     slow.Bind();
-    {
-      // Convert the operand to a number.
-      frame_->EmitPush(a0);
-      frame_->InvokeBuiltin(Builtins::TO_NUMBER, CALL_JS, 1);
-      __ mov(a0, v0);  // Move result back to a0 as parameter.
-    }
-    if (is_postfix) {
-      // Postfix: store to result (on the stack).
-      __ sw(a0, frame_->ElementAt(target.size()));
-    }
 
-    // Compute the new value.
-    __ li(a1, Operand(Smi::FromInt(1)));
-    frame_->EmitPush(a0);
-    frame_->EmitPush(a1);
-    if (is_increment) {
-      frame_->CallRuntime(Runtime::kNumberAdd, 2);
-    } else {
-      frame_->CallRuntime(Runtime::kNumberSub, 2);
+    // Convert the operand to a number.
+    frame_->EmitPush(value);
+
+    {
+      VirtualFrame::SpilledScope spilled(frame_);
+      frame_->InvokeBuiltin(Builtins::TO_NUMBER, CALL_JS, 1);
+      if (is_postfix) {
+        // Postfix: store to result (on the stack).
+        __ sw(v0, frame_->ElementAt(target.size()));
+      }
+
+      // Compute the new value.
+      frame_->EmitPush(v0);
+      frame_->EmitPush(Operand(Smi::FromInt(1)));
+      if (is_increment) {
+        frame_->CallRuntime(Runtime::kNumberAdd, 2);
+      } else {
+        frame_->CallRuntime(Runtime::kNumberSub, 2);
+      }
     }
 
     // Store the new value in the target if not const.
     exit.Bind();
     frame_->EmitPush(v0);
+    // Set the target with the result, leaving the result on
+    // top of the stack.  Removes the target from the stack if
+    // it has a non-zero size.
     if (!is_const) target.SetValue(NOT_CONST_INIT);
   }
 
   // Postfix: Discard the new value and use the old.
-  if (is_postfix) frame_->EmitPop(v0);
+  if (is_postfix) frame_->Pop();
   ASSERT_EQ(original_height + 1, frame_->height());
 }
 

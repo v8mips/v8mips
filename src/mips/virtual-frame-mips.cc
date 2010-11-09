@@ -74,11 +74,16 @@ void VirtualFrame::PopToA0() {
   top_of_stack_state_ = NO_TOS_REGISTERS;
 }
 
-
 void VirtualFrame::MergeTo(VirtualFrame* expected) {
   if (Equals(expected)) return;
+  MergeTOSTo(expected->top_of_stack_state_);
+  ASSERT(register_allocation_map_ == expected->register_allocation_map_);
+}
+
+void VirtualFrame::MergeTOSTo(
+    VirtualFrame::TopOfStack expected_top_of_stack_state) {
 #define CASE_NUMBER(a, b) ((a) * TOS_STATES + (b))
-  switch (CASE_NUMBER(top_of_stack_state_, expected->top_of_stack_state_)) {
+  switch (CASE_NUMBER(top_of_stack_state_, expected_top_of_stack_state)) {
     case CASE_NUMBER(NO_TOS_REGISTERS, NO_TOS_REGISTERS):
       break;
     case CASE_NUMBER(NO_TOS_REGISTERS, A0_TOS):
@@ -161,7 +166,7 @@ void VirtualFrame::MergeTo(VirtualFrame* expected) {
       UNREACHABLE();
 #undef CASE_NUMBER
   }
-  ASSERT(register_allocation_map_ == expected->register_allocation_map_);
+  top_of_stack_state_ = expected_top_of_stack_state;
 }
 
 
@@ -620,6 +625,37 @@ void VirtualFrame::EmitPush(Register reg) {
   __ Move(dest, reg);
 }
 
+void VirtualFrame::SetElementAt(Register reg, int this_far_down) {
+  if (this_far_down == 0) {
+    Pop();
+    Register dest = GetTOSRegister();
+    if (dest.is(reg)) {
+      // We already popped one item off the top of the stack.  If the only
+      // free register is the one we were asked to push then we have been
+      // asked to push a register that was already in use, which cannot
+      // happen.  It therefore folows that there are two free TOS registers:
+      ASSERT(top_of_stack_state_ == NO_TOS_REGISTERS);
+      dest = dest.is(a0) ? a1 : a0;
+    }
+    __ mov(dest, reg);
+    EmitPush(dest);
+  } else if (this_far_down == 1) {
+    int virtual_elements = kVirtualElements[top_of_stack_state_];
+    if (virtual_elements < 2) {
+      __ sw(reg, ElementAt(this_far_down));
+    } else {
+      ASSERT(virtual_elements == 2);
+      ASSERT(!reg.is(a0));
+      ASSERT(!reg.is(a1));
+      Register dest = kBottomRegister[top_of_stack_state_];
+      __ mov(dest, reg);
+    }
+  } else {
+    ASSERT(this_far_down >= 2);
+    ASSERT(kVirtualElements[top_of_stack_state_] <= 2);
+    __ sw(reg, ElementAt(this_far_down));
+  }
+}
 
 Register VirtualFrame::GetTOSRegister() {
   if (SpilledScope::is_spilled()) return a0;

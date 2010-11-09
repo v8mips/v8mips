@@ -230,8 +230,9 @@ class VirtualFrame : public ZoneObject {
 
   // An element of the expression stack as an assembly operand.
   MemOperand ElementAt(int index) {
-    AssertIsSpilled();
-    return MemOperand(sp, index * kPointerSize);
+    int adjusted_index = index - kVirtualElements[top_of_stack_state_];
+    ASSERT(adjusted_index >= 0);
+    return MemOperand(sp, adjusted_index * kPointerSize);
   }
 
   // A frame-allocated local as an assembly operand.
@@ -357,6 +358,12 @@ class VirtualFrame : public ZoneObject {
   void EmitPush(MemOperand operand);
   void EmitPushRoot(Heap::RootListIndex index);
 
+  // Overwrite the nth thing on the stack.  If the nth position is in a
+  // register then this turns into a Move, otherwise an sw.  Afterwards
+  // you can still use the register even if it is a register that can be
+  // used for TOS (a0 or a1).
+  void SetElementAt(Register reg, int this_far_down);
+
   // Get a register which is free and which must be immediately used to
   // push on the top of the stack.
   Register GetTOSRegister();
@@ -453,6 +460,10 @@ class VirtualFrame : public ZoneObject {
   // If all top-of-stack registers are in use then the lowest one is pushed
   // onto the physical stack and made free.
   void EnsureOneFreeTOSRegister();
+
+  // Emit instructions to get the top of stack state from where we are to where
+  // we want to be.
+  void MergeTOSTo(TopOfStack expected_state);
 
   inline bool Equals(VirtualFrame* other);
 
