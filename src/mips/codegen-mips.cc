@@ -1343,46 +1343,62 @@ void CodeGenerator::SmiOperation(Token::Value op,
       int shift_value = int_value & 0x1f;  // least significant 5 bits
       DeferredCode* deferred =
         new DeferredInlineSmiOperation(op, shift_value, false, mode, tos);
-      __ And(v0, tos, Operand(kSmiTagMask));
+      uint32_t problematic_mask = kSmiTagMask;
+      // For unsigned shift by zero all negative smis are problematic.
+      if (shift_value == 0 && op == Token::SHR) problematic_mask |= 0x80000000;
+      __ And(v0, tos, Operand(problematic_mask));
       deferred->Branch(ne, v0, Operand(zero_reg));
-      __ sra(v0, tos, kSmiTagSize);  // Remove tag.
       switch (op) {
         case Token::SHL: {
           if (shift_value != 0) {
-            __ sll(v0, v0, shift_value);
+            int adjusted_shift = shift_value - kSmiTagSize;
+            ASSERT(adjusted_shift >= 0);
+            if (adjusted_shift != 0) {
+              __ sll(v0, tos, adjusted_shift);
+              // Check that the *signed* result fits in a smi.
+              __ Addu(scratch, v0, Operand(0x40000000));
+              deferred->Branch(lt, scratch, Operand(zero_reg));
+              __ sll(tos, v0, kSmiTagSize);  // Tag result.
+            } else {
+              // Check that the *signed* result fits in a smi.
+              __ Addu(scratch, tos, Operand(0x40000000));
+              deferred->Branch(lt, scratch, Operand(zero_reg));
+              __ sll(tos, tos, kSmiTagSize);  // Tag result.
+            }
           }
-          // Check that the *unsigned* result fits in a Smi.
-          __ Addu(scratch, v0, Operand(0x40000000));
-          deferred->Branch(lt, scratch, Operand(zero_reg));
           break;
         }
         case Token::SHR: {
           if (shift_value != 0) {
+            __ sra(v0, tos, kSmiTagSize);  // Remove tag.
             __ srl(v0, v0, shift_value);
+            if (shift_value == 1) {
+              // Check that the *unsigned* result fits in a smi.
+              // Neither of the two high-order bits can be set:
+              // - 0x80000000: high bit would be lost when smi tagging
+              // - 0x40000000: this number would convert to negative when
+              // Smi tagging these two cases can only happen with shifts
+              // by 0 or 1 when handed a valid smi.
+              __ And(scratch, v0, Operand(0xc0000000));
+              deferred->Branch(ne, scratch, Operand(zero_reg));
+            }
+            __ sll(tos, v0, kSmiTagSize);  // Tag result.
           }
-          // Check that the *unsigned* result fits in a smi.
-          // Neither of the two high-order bits can be set:
-          // - 0x80000000: high bit would be lost when smi tagging
-          // - 0x40000000: this number would convert to negative when
-          // Smi tagging these two cases can only happen with shifts
-          // by 0 or 1 when handed a valid smi.
-          // Check that the result fits in a Smi.
-          __ And(scratch, v0, Operand(0xc0000000));
-          deferred->Branch(ne, scratch, Operand(zero_reg));
           break;
         }
         case Token::SAR: {
           if (shift_value != 0) {
-            // ASR by immediate 0 means shifting 32 bits.
-            __ sra(v0, v0, shift_value);
+            // On Mips, we cannot combine the untag & shift, since
+            // shift-value of 0 does NOT shift by 32 bits as on Arm.
+            __ sra(v0, tos, kSmiTagSize);  // Remove tag.
+            __ sra(v0, v0, shift_value);   // Shift 0 - 31 bits.
+            __ sll(tos, v0, kSmiTagSize);  // Tag result.
            }
           break;
         }
         default: UNREACHABLE();
       }
-      __ sll(v0, v0, kSmiTagSize);  // Tag result.
       deferred->BindExit();
-      __ mov(tos, v0);
       frame_->EmitPush(tos);
       break;
     }
