@@ -585,9 +585,13 @@ class GenericBinaryOpStub : public CodeStub {
  public:
   GenericBinaryOpStub(Token::Value op,
                       OverwriteMode mode,
+                      Register lhs,
+                      Register rhs,
                       int constant_rhs = CodeGenerator::kUnknownIntValue)
       : op_(op),
         mode_(mode),
+        lhs_(lhs),
+        rhs_(rhs),
         constant_rhs_(constant_rhs),
         specialized_on_rhs_(RhsIsOneWeWantToOptimizeFor(op, constant_rhs)),
         runtime_operands_type_(BinaryOpIC::DEFAULT),
@@ -596,6 +600,8 @@ class GenericBinaryOpStub : public CodeStub {
   GenericBinaryOpStub(int key, BinaryOpIC::TypeInfo type_info)
       : op_(OpBits::decode(key)),
         mode_(ModeBits::decode(key)),
+        lhs_(LhsRegister(RegisterBits::decode(key))),
+        rhs_(RhsRegister(RegisterBits::decode(key))),
         constant_rhs_(KnownBitsForMinorKey(KnownIntBits::decode(key))),
         specialized_on_rhs_(RhsIsOneWeWantToOptimizeFor(op_, constant_rhs_)),
         runtime_operands_type_(type_info),
@@ -604,32 +610,43 @@ class GenericBinaryOpStub : public CodeStub {
  private:
   Token::Value op_;
   OverwriteMode mode_;
+  Register lhs_;
+  Register rhs_;
   int constant_rhs_;
   bool specialized_on_rhs_;
   BinaryOpIC::TypeInfo runtime_operands_type_;
   char* name_;
 
   static const int kMaxKnownRhs = 0x40000000;
+  static const int kKnownRhsKeyBits = 6;
 
-  // Minor key encoding in 18 bits.
+  // Minor key encoding in 16 bits.
   class ModeBits: public BitField<OverwriteMode, 0, 2> {};
   class OpBits: public BitField<Token::Value, 2, 6> {};
-  class KnownIntBits: public BitField<int, 8, 8> {};
-  class TypeInfoBits: public BitField<int, 16, 2> {};
+  class TypeInfoBits: public BitField<int, 8, 2> {};
+  class RegisterBits: public BitField<bool, 10, 1> {};
+  class KnownIntBits: public BitField<int, 11, kKnownRhsKeyBits> {};
 
   Major MajorKey() { return GenericBinaryOp; }
   int MinorKey() {
-    // Encode the parameters in a unique 18 bit value.
+    ASSERT((lhs_.is(a0) && rhs_.is(a1)) ||
+           (lhs_.is(a1) && rhs_.is(a0)));
+    // Encode the parameters in a unique 16 bit value.
     return OpBits::encode(op_)
            | ModeBits::encode(mode_)
            | KnownIntBits::encode(MinorKeyForKnownInt())
-           | TypeInfoBits::encode(runtime_operands_type_);
+           | TypeInfoBits::encode(runtime_operands_type_)
+           | RegisterBits::encode(lhs_.is(a0));
   }
 
   void Generate(MacroAssembler* masm);
-  void HandleNonSmiBitwiseOp(MacroAssembler* masm);
+  void HandleNonSmiBitwiseOp(MacroAssembler* masm,
+                             Register lhs,
+                             Register rhs);
   void HandleBinaryOpSlowCases(MacroAssembler* masm,
                                Label* not_smi,
+                               Register lhs,
+                               Register rhs,
                                const Builtins::JavaScript& builtin);
   void GenerateTypeTransition(MacroAssembler* masm);
 
@@ -655,6 +672,7 @@ class GenericBinaryOpStub : public CodeStub {
       key++;
       d >>= 1;
     }
+    ASSERT(key >= 0 && key < (1 << kKnownRhsKeyBits));
     return key;
   }
 
@@ -667,6 +685,14 @@ class GenericBinaryOpStub : public CodeStub {
       d <<= 1;
     }
     return d;
+  }
+
+  Register LhsRegister(bool lhs_is_a0) {
+    return lhs_is_a0 ? a0 : a1;
+  }
+
+  Register RhsRegister(bool lhs_is_a0) {
+    return lhs_is_a0 ? a1 : a0;
   }
 
   bool ShouldGenerateSmiCode() {

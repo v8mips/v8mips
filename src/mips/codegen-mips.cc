@@ -1034,7 +1034,7 @@ void CodeGenerator::GenericBinaryOperation(Token::Value op,
     case Token::SAR: {
       frame_->EmitPop(a0);  // a0 : y
       frame_->EmitPop(a1);  // a1 : x
-      GenericBinaryOpStub stub(op, overwrite_mode, constant_rhs);
+      GenericBinaryOpStub stub(op, overwrite_mode, a1, a0, constant_rhs);
       frame_->CallStub(&stub, 0);
       break;
     }
@@ -1073,10 +1073,11 @@ void CodeGenerator::VirtualFrameBinaryOperation(Token::Value op,
     case Token::SHL:
     case Token::SHR:
     case Token::SAR: {
-      frame_->PopToA1A0();  // Pop y to a0 and x to a1.
+      Register rhs = frame_->PopToRegister();
+      Register lhs = frame_->PopToRegister(rhs);
       {
         VirtualFrame::SpilledScope spilled_scope(frame_);
-        GenericBinaryOpStub stub(op, overwrite_mode, constant_rhs);
+        GenericBinaryOpStub stub(op, overwrite_mode, lhs, rhs, constant_rhs);
         frame_->CallStub(&stub, 0);
       }
       frame_->EmitPush(v0);
@@ -1129,14 +1130,12 @@ void DeferredInlineSmiOperation::Generate() {
   // In CodeGenerator::SmiOperation we used a1 instead of a0, and we left the
   // register untouched.
   // We just need to load value_ and switch if necessary.
+  Register lhs = a1;
+  Register rhs = a0;
+
   switch (op_) {
     case Token::ADD:
-    case Token::SUB:
-    case Token::MUL:
-    case Token::MOD:
-    case Token::BIT_OR:
-    case Token::BIT_XOR:
-    case Token::BIT_AND: {
+    case Token::SUB:  {
       if (reversed_) {
         __ mov(a0, tos_register_);
         __ li(a1, Operand(Smi::FromInt(value_)));
@@ -1146,12 +1145,44 @@ void DeferredInlineSmiOperation::Generate() {
       }
       break;
     }
+    case Token::MUL:
+    case Token::MOD:
+    case Token::BIT_OR:
+    case Token::BIT_XOR:
+    case Token::BIT_AND: {
+      if (reversed_) {
+        if (tos_register_.is(a0)) {
+          __ li(a1, Operand(Smi::FromInt(value_)));
+        } else {
+          ASSERT(tos_register_.is(a1));
+          __ li(a0, Operand(Smi::FromInt(value_)));
+          lhs = a0;
+          rhs = a1;
+        }
+      } else {
+        if (tos_register_.is(a1)) {
+          __ li(a0, Operand(Smi::FromInt(value_)));
+        } else {
+          ASSERT(tos_register_.is(a0));
+          __ li(a1, Operand(Smi::FromInt(value_)));
+            lhs = a0;
+            rhs = a1;
+        }
+      }
+      break;
+    }
     case Token::SHL:
     case Token::SHR:
     case Token::SAR: {
       if (!reversed_) {
-        __ mov(a1, tos_register_);
-        __ li(a0, Operand(Smi::FromInt(value_)));
+        if (tos_register_.is(a1)) {
+          __ li(a0, Operand(Smi::FromInt(value_)));
+        } else {
+          ASSERT(tos_register_.is(a0));
+          __ li(a1, Operand(Smi::FromInt(value_)));
+           lhs = a0;
+           rhs = a1;
+         }
       } else {
         UNREACHABLE();  // Should have been handled in SmiOperation.
       }
@@ -1164,7 +1195,7 @@ void DeferredInlineSmiOperation::Generate() {
       break;
   }
 
-  GenericBinaryOpStub stub(op_, overwrite_mode_, value_);
+  GenericBinaryOpStub stub(op_, overwrite_mode_, lhs, rhs, value_);
   __ CallStub(&stub);
   // The generic stub returns its value in v0, but that's not
   // necessarily what we want.  We want whatever the inlined code
@@ -1243,32 +1274,19 @@ void CodeGenerator::SmiOperation(Token::Value op,
 
   if (!something_to_inline) {
     if (!reversed) {
-      // Move the lhs to a1.
-      frame_->PopToA1();
-      // Flush any other registers to the stack.
-      frame_->SpillAll();
-      // Tell the virtual frame that TOS is in a1 (no code emitted).
-      frame_->EmitPush(a1);
-      // We know that a0 is free.
-      __ li(a0, Operand(value));
-      // Push a0 on the virtual frame (no code emitted).
-      frame_->EmitPush(a0);
-      // This likes having a1 and a0 on top of the stack.  It pushes
-      // the answer on the virtual frame.
+      // Push the rhs onto the virtual frame by putting it in a TOS register.
+      Register rhs = frame_->GetTOSRegister();
+      __ li(rhs, Operand(value));
+      frame_->EmitPush(rhs);
       VirtualFrameBinaryOperation(op, mode, int_value);
     } else {
-      // Move the rhs to a0.
-      frame_->PopToA0();
-      // Flush any other registers to the stack.
-      frame_->SpillAll();
-      // We know that a1 is free.
-      __ li(a1, Operand(value));
-      // Tell the virtual frame that TOS is in a1 (no code emitted).
-      frame_->EmitPush(a1);
-      // Push a0 on the virtual frame (no code emitted).
-      frame_->EmitPush(a0);
-      // This likes having a1 and a0 on top of the stack.  It pushes
-      // the answer on the virtual frame.
+      // Pop the rhs, then push lhs and rhs in the right order.  Only performs
+      // at most one pop, the rest takes place in TOS registers.
+      Register lhs = frame_->GetTOSRegister();
+      Register rhs = frame_->PopToRegister(lhs);
+      __ li(lhs, Operand(value));
+      frame_->EmitPush(lhs);
+      frame_->EmitPush(rhs);
       VirtualFrameBinaryOperation(op, mode, kUnknownIntValue);
     }
     return;
@@ -1359,62 +1377,46 @@ void CodeGenerator::SmiOperation(Token::Value op,
       int shift_value = int_value & 0x1f;  // least significant 5 bits
       DeferredCode* deferred =
         new DeferredInlineSmiOperation(op, shift_value, false, mode, tos);
-      uint32_t problematic_mask = kSmiTagMask;
-      // For unsigned shift by zero all negative smis are problematic.
-      if (shift_value == 0 && op == Token::SHR) problematic_mask |= 0x80000000;
-      __ And(v0, tos, Operand(problematic_mask));
+      __ And(v0, tos, Operand(kSmiTagMask));
       deferred->Branch(ne, v0, Operand(zero_reg));
+      __ sra(v0, tos, kSmiTagSize);  // Remove tag.
       switch (op) {
         case Token::SHL: {
           if (shift_value != 0) {
-            int adjusted_shift = shift_value - kSmiTagSize;
-            ASSERT(adjusted_shift >= 0);
-            if (adjusted_shift != 0) {
-              __ sll(v0, tos, adjusted_shift);
-              // Check that the *signed* result fits in a smi.
-              __ Addu(scratch, v0, Operand(0x40000000));
-              deferred->Branch(lt, scratch, Operand(zero_reg));
-              __ sll(tos, v0, kSmiTagSize);  // Tag result.
-            } else {
-              // Check that the *signed* result fits in a smi.
-              __ Addu(scratch, tos, Operand(0x40000000));
-              deferred->Branch(lt, scratch, Operand(zero_reg));
-              __ sll(tos, tos, kSmiTagSize);  // Tag result.
-            }
+            __ sll(v0, v0, shift_value);
           }
+          // Check that the *unsigned* result fits in a Smi.
+          __ Addu(scratch, v0, Operand(0x40000000));
+          deferred->Branch(lt, scratch, Operand(zero_reg));
           break;
         }
         case Token::SHR: {
           if (shift_value != 0) {
-            __ sra(v0, tos, kSmiTagSize);  // Remove tag.
             __ srl(v0, v0, shift_value);
-            if (shift_value == 1) {
+          }
               // Check that the *unsigned* result fits in a smi.
               // Neither of the two high-order bits can be set:
               // - 0x80000000: high bit would be lost when smi tagging
               // - 0x40000000: this number would convert to negative when
-              // Smi tagging these two cases can only happen with shifts
-              // by 0 or 1 when handed a valid smi.
-              __ And(scratch, v0, Operand(0xc0000000));
-              deferred->Branch(ne, scratch, Operand(zero_reg));
-            }
-            __ sll(tos, v0, kSmiTagSize);  // Tag result.
-          }
+          // Smi tagging these two cases can only happen with shifts
+          // by 0 or 1 when handed a valid smi.
+          // Check that the result fits in a Smi.
+          __ And(scratch, v0, Operand(0xc0000000));
+          deferred->Branch(ne, scratch, Operand(zero_reg));
           break;
         }
         case Token::SAR: {
           if (shift_value != 0) {
-            // On Mips, we cannot combine the untag & shift, since
-            // shift-value of 0 does NOT shift by 32 bits as on Arm.
-            __ sra(v0, tos, kSmiTagSize);  // Remove tag.
-            __ sra(v0, v0, shift_value);   // Shift 0 - 31 bits.
-            __ sll(tos, v0, kSmiTagSize);  // Tag result.
+            // ASR by immediate 0 means shifting 32 bits.
+            __ sra(v0, v0, shift_value);
            }
           break;
         }
         default: UNREACHABLE();
       }
+      __ sll(v0, v0, kSmiTagSize);  // Tag result.
       deferred->BindExit();
+      __ mov(tos, v0);
       frame_->EmitPush(tos);
       break;
     }
@@ -7892,48 +7894,50 @@ int CompareStub::MinorKey() {
 
 void GenericBinaryOpStub::HandleBinaryOpSlowCases(MacroAssembler* masm,
                                     Label* not_smi,
+                                    Register lhs,
+                                    Register rhs,
                                     const Builtins::JavaScript& builtin) {
-  Label slow, do_the_call;
+  Label slow, slow_reverse, do_the_call;
   Label a0_is_smi, a1_is_smi, finished_loading_a0, finished_loading_a1;
   bool use_fp_registers = CpuFeatures::IsSupported(FPU);
   if (ShouldGenerateSmiCode()) {
     if (op_ == Token::MOD || op_ == Token::DIV) {
     // If the divisor is zero for MOD or DIV, go to
     // the builtin code to return NaN.
-    __ Branch(&slow, eq, a0, Operand(zero_reg));
+     __ Branch(lhs.is(a0) ? &slow_reverse : &slow, eq, rhs, Operand(zero_reg));
     }
 
     // Smi-smi case (overflow).
     // Since both are Smis there is no heap number to overwrite, so allocate.
     // The new heap number is in t0. t1 and t2 are scratch.
-    __ AllocateHeapNumber(t0, t1, t2, &slow);
+    __ AllocateHeapNumber(t0, t1, t2, lhs.is(a0) ? &slow_reverse : &slow);
 
     // If we have floating point hardware, inline ADD, SUB, MUL, and DIV,
     // using registers f12 and f14 for the double values.
 
     bool use_fp_registers = CpuFeatures::IsSupported(FPU);
 
-    if (use_fp_registers) {
+     if (use_fp_registers) {
       CpuFeatures::Scope scope(FPU);
       // Convert a1 (x) to double in f12
-      __ sra(t2, a1, kSmiTagSize);
+      __ sra(t2, lhs, kSmiTagSize);
       __ mtc1(t2, f12);
       __ cvt_d_w(f12, f12);
 
       // Convert a0 (y) to double in f14
-      __ sra(t2, a0, kSmiTagSize);
+      __ sra(t2, rhs, kSmiTagSize);
       __ mtc1(t2, f14);
       __ cvt_d_w(f14, f14);
 
     } else {
       // Write Smi from a0 to a3 and a2 in double format. t1 is scratch.
-      ConvertToDoubleStub stub1(a3, a2, a0, t1);
+      ConvertToDoubleStub stub1(a3, a2, rhs, t1);
       __ Push(ra);
       __ Call(stub1.GetCode(), RelocInfo::CODE_TARGET);
 
       // Write Smi from a1 to a1 and a0 in double format. t1 is scratch.
       // Needs a1 in temp (t2); cannot use same reg for src & dest.
-      __ mov(t2, a1);
+      __ mov(t2, lhs);
       ConvertToDoubleStub stub2(a1, a0, t2, t1);
       __ Call(stub2.GetCode(), RelocInfo::CODE_TARGET);
       __ Pop(ra);
@@ -7943,6 +7947,13 @@ void GenericBinaryOpStub::HandleBinaryOpSlowCases(MacroAssembler* masm,
 
   // We branch here if at least one of a0 and a1 is not a Smi.
   __ bind(not_smi);
+
+  // After this point we have the left hand side in a1 and the right hand side
+  // in a0.
+  Register scratch  = VirtualFrame::scratch0();
+  if (lhs.is(a0)) {
+    __ Swap(a0, a1, scratch);
+  }
 
   if (ShouldGenerateFPCode()) {
     if (runtime_operands_type_ == BinaryOpIC::DEFAULT) {
@@ -8084,12 +8095,12 @@ void GenericBinaryOpStub::HandleBinaryOpSlowCases(MacroAssembler* masm,
         __ Push(ra);
         __ Push(t0);
         __ PrepareCallCFunction(4, t1);  // Two doubles count as 4 arguments.
-        if(IsMipsSoftFloatABI){
-          // We are using MIPS FPU instructions, and parameters for the run-time
-          // function call are prepared in f12/f14 register pairs, but function
-          // we are calling is compiled with soft-float flag and expecting soft
-          // float ABI (parameters in a0-a3 registers). We need to copy parameters
-          // from f12/f14 register pairs to a0-a3 registers.
+        if (IsMipsSoftFloatABI) {
+          // We are using MIPS FPU instructions, and parameters for the
+          // run-time function call are prepared in f12/f14 register pairs,
+          // but function we are calling is compiled with soft-float flag and
+          // expecting soft float ABI (parameters in a0-a3 registers). We need
+          // to copy parameters from f12/f14 register pairs to a0-a3 registers.
           __ mfc1(a0, f12);
           __ mfc1(a1, f13);
           __ mfc1(a2, f14);
@@ -8098,10 +8109,10 @@ void GenericBinaryOpStub::HandleBinaryOpSlowCases(MacroAssembler* masm,
         __ CallCFunction(ExternalReference::double_fp_operation(op_), 4);
         __ Pop(t0);  // Address of heap number.
         __ Pop(ra);
-        if(IsMipsSoftFloatABI){
+        if (IsMipsSoftFloatABI) {
           // Store answer in the overwritable heap number.
-          // Double returned is stored in registers v0 and v1 (function we called
-          // is compiled with soft-float flag and uses soft-float ABI).
+          // Double returned is stored in registers v0 and v1 (function we
+          // called is compiled with soft-float flag and uses soft-float ABI).
           __ sw(v0, FieldMemOperand(t0, HeapNumber::kValueOffset));
           __ sw(v1, FieldMemOperand(t0, HeapNumber::kValueOffset + 4));
           __ mov(v0, t0);  // Return object ptr to caller.
@@ -8127,13 +8138,14 @@ void GenericBinaryOpStub::HandleBinaryOpSlowCases(MacroAssembler* masm,
 
       __ PrepareCallCFunction(4, t1);  // Two doubles count as 4 arguments.
       // Call C routine that may not cause GC or other trouble.
-      if(!IsMipsSoftFloatABI){
-        if(!use_fp_registers){
-          // We are not using MIPS FPU instructions, and parameters for the run-time
-          // function call are prepared in a0-a3 registers, but the function we are
-          // calling is compiled with hard-float flag and expecting hard float ABI
-          // (parameters in f12/f14 registers). We need to copy parameters from a0-a3
-          // registers to f12/f14 register pairs.
+      if (!IsMipsSoftFloatABI) {
+        if (!use_fp_registers) {
+          // We are not using MIPS FPU instructions, and parameters for the
+          // run-time function call are prepared in a0-a3 registers, but the
+          // function we are calling is compiled with hard-float flag and
+          // expecting hard float ABI (parameters in f12/f14 registers).
+          // We need to copy parameters from a0-a3 registers to f12/f14
+          // register pairs.
           __ mtc1(a0, f12);
           __ mtc1(a1, f13);
           __ mtc1(a2, f14);
@@ -8143,12 +8155,13 @@ void GenericBinaryOpStub::HandleBinaryOpSlowCases(MacroAssembler* masm,
 
       __ CallCFunction(ExternalReference::double_fp_operation(op_), 4);
 
-      if(!IsMipsSoftFloatABI){
-        if(!use_fp_registers){
-          // Returned double value is stored in registers f0 and f1 (function we
-          // called is compiled with hard-float flag and uses hard-float ABI). Return
-          // value in the case when we are not using MIPS FPU instructions has to be
-          // placed in v0/v1, so we need to copy from f0/f1.
+      if (!IsMipsSoftFloatABI) {
+        if (!use_fp_registers) {
+          // Returned double value is stored in registers f0 and f1.
+          // Function we called is compiled with hard-float flag and uses
+          // hard-float ABI. Return value in the case when we are not using
+          // MIPS FPU instructions has to be placed in v0/v1, so we need to
+          // copy from f0/f1.
           __ mfc1(v0, f0);
           __ mfc1(v1, f1);
         }
@@ -8167,6 +8180,11 @@ void GenericBinaryOpStub::HandleBinaryOpSlowCases(MacroAssembler* masm,
     }
   }
 
+  if (lhs.is(a0)) {
+    __ b(&slow);
+    __ bind(&slow_reverse);
+    __ Swap(a0, a1, scratch);
+  }
   // We jump to here if something goes wrong (one param is not a number of any
   // sort or new-space allocation fails).
   __ bind(&slow);
@@ -8336,36 +8354,38 @@ static void GetInt32(MacroAssembler* masm,
 // by the ES spec.  If this is the case we do the bitwise op and see if the
 // result is a Smi.  If so, great, otherwise we try to find a heap number to
 // write the answer into (either by allocating or by overwriting).
-// On entry the operands are in a1 (x) and a0 (y). (Result = x op y).
+// On entry the operands are in lhs (x) and rhs (y). (Result = x op y).
 // On exit the result is in v0.
-void GenericBinaryOpStub::HandleNonSmiBitwiseOp(MacroAssembler* masm) {
+void GenericBinaryOpStub::HandleNonSmiBitwiseOp(MacroAssembler* masm,
+                                                Register lhs,
+                                                Register rhs) {
   Label slow, result_not_a_smi;
-  Label a0_is_smi, a1_is_smi;
-  Label done_checking_a0, done_checking_a1;
+  Label rhs_is_smi, lhs_is_smi;
+  Label done_checking_rhs, done_checking_lhs;
 
-  __ And(t1, a1, Operand(kSmiTagMask));
-  __ Branch(&a1_is_smi, eq, t1, Operand(zero_reg));
-  __ GetObjectType(a1, t4, t4);
+  __ And(t1, lhs, Operand(kSmiTagMask));
+  __ Branch(&lhs_is_smi, eq, t1, Operand(zero_reg));
+  __ GetObjectType(lhs, t4, t4);
   __ Branch(&slow, ne, t4, Operand(HEAP_NUMBER_TYPE));
-  GetInt32(masm, a1, a3, t2, t3, &slow);  // Convert HeapNum a1 to integer a3.
-  __ b(&done_checking_a1);
+  GetInt32(masm, lhs, a3, t2, t3, &slow);  // Convert HeapNum a1 to integer a3.
+  __ b(&done_checking_lhs);
   __ nop();   // NOP_ADDED
 
-  __ bind(&a1_is_smi);
-  __ sra(a3, a1, kSmiTagSize);  // Remove tag from Smi.
-  __ bind(&done_checking_a1);
+  __ bind(&lhs_is_smi);
+  __ sra(a3, lhs, kSmiTagSize);  // Remove tag from Smi.
+  __ bind(&done_checking_lhs);
 
-  __ And(t0, a0, Operand(kSmiTagMask));
-  __ Branch(&a0_is_smi, eq, t0, Operand(zero_reg));
-  __ GetObjectType(a0, t4, t4);
+  __ And(t0, rhs, Operand(kSmiTagMask));
+  __ Branch(&rhs_is_smi, eq, t0, Operand(zero_reg));
+  __ GetObjectType(rhs, t4, t4);
   __ Branch(&slow, ne, t4, Operand(HEAP_NUMBER_TYPE));
-  GetInt32(masm, a0, a2, t2, t3, &slow);  // Convert HeapNum a0 to integer a2.
-  __ b(&done_checking_a0);
+  GetInt32(masm, rhs, a2, t2, t3, &slow);  // Convert HeapNum a0 to integer a2.
+  __ b(&done_checking_rhs);
   __ nop();   // NOP_ADDED
 
-  __ bind(&a0_is_smi);
-  __ sra(a2, a0, kSmiTagSize);  // Remove tag from Smi.
-  __ bind(&done_checking_a0);
+  __ bind(&rhs_is_smi);
+  __ sra(a2, rhs, kSmiTagSize);  // Remove tag from Smi.
+  __ bind(&done_checking_rhs);
 
   // a1 (x) and a0 (y): Original operands (Smi or heap numbers).
   // a3 (x) and a2 (y): Signed int32 operands.
@@ -8405,13 +8425,13 @@ void GenericBinaryOpStub::HandleNonSmiBitwiseOp(MacroAssembler* masm) {
     case OVERWRITE_RIGHT: {
       // t0 has not been changed since  __ andi(t0, a0, Operand(kSmiTagMask));
       __ Branch(&have_to_allocate, eq, t0, Operand(zero_reg));
-      __ mov(t5, a0);
+      __ mov(t5, rhs);
       break;
     }
     case OVERWRITE_LEFT: {
       // t1 has not been changed since  __ andi(t1, a1, Operand(kSmiTagMask));
       __ Branch(&have_to_allocate, eq, t1, Operand(zero_reg));
-      __ mov(t5, a1);
+      __ mov(t5, lhs);
       break;
     }
     case NO_OVERWRITE: {
@@ -8445,9 +8465,9 @@ void GenericBinaryOpStub::HandleNonSmiBitwiseOp(MacroAssembler* masm) {
   // If all else failed then we go to the runtime system.
   __ bind(&slow);
 
-  __ Push(a1);  // restore stack
-  __ Push(a0);
-  __ li(a0, Operand(1));  // 1 argument (not counting receiver).
+  __ Push(lhs);  // restore stack
+  __ Push(rhs);
+  __ li(rhs, Operand(1));  // 1 argument (not counting receiver).
 
   switch (op_) {
     case Token::BIT_OR:
@@ -8537,14 +8557,24 @@ static void MultiplyByKnownInt(MacroAssembler* masm,
 
 
 void GenericBinaryOpStub::Generate(MacroAssembler* masm) {
-  // a1 : x
-  // a0 : y
+  // lhs_ : x
+  // rhs_ : y
   // result : v0 = x op y
+
+  Register result = v0;
+  Register lhs = lhs_;
+  Register rhs = rhs_;
+
+  ASSERT(result.is(v0) &&
+          (((lhs.is(a1)) && (rhs.is(a0))) || ((lhs.is(a0)) && (rhs.is(a1)))));
+
+  Register smi_test_reg = VirtualFrame::scratch0();
+  Register scratch = VirtualFrame::scratch1();
 
   // All ops need to know whether we are dealing with two Smis.  Set up t2 to
   // tell us that.
   if (ShouldGenerateSmiCode()) {
-    __ Or(t2, a1, Operand(a0));  // t2 = x | y;
+    __ Or(smi_test_reg, lhs, Operand(rhs));  // smi_test_reg = x | y;
   }
 
   switch (op_) {
@@ -8553,7 +8583,7 @@ void GenericBinaryOpStub::Generate(MacroAssembler* masm) {
       // Fast path.
       if (ShouldGenerateSmiCode()) {
         ASSERT(kSmiTag == 0);  // Adjust code below.
-        __ And(t3, t2, Operand(kSmiTagMask));
+        __ And(t3, smi_test_reg, Operand(kSmiTagMask));
         __ Branch(&not_smi, ne, t3, Operand(zero_reg));
         __ addu(v0, a1, a0);    // Add y.
         // Check for overflow.
@@ -8563,7 +8593,11 @@ void GenericBinaryOpStub::Generate(MacroAssembler* masm) {
         __ Ret(ge, t0, Operand(zero_reg));  // Return on NO overflow (ge 0).
       }
       // Fall thru on overflow, with a0 and a1 preserved.
-      HandleBinaryOpSlowCases(masm, &not_smi, Builtins::ADD);
+      HandleBinaryOpSlowCases(masm,
+                              &not_smi,
+                              lhs,
+                              rhs,
+                              Builtins::ADD);
       break;
     }
 
@@ -8572,17 +8606,31 @@ void GenericBinaryOpStub::Generate(MacroAssembler* masm) {
       // Fast path.
       if (ShouldGenerateSmiCode()) {
         ASSERT(kSmiTag == 0);  // Adjust code below.
-        __ And(t3, t2, Operand(kSmiTagMask));
+        __ And(t3, smi_test_reg, Operand(kSmiTagMask));
         __ Branch(&not_smi, ne, t3, Operand(zero_reg));
-        __ subu(v0, a1, a0);  // Subtract y.
-        // Check for overflow of a1 - a0.
-        __ xor_(t0, v0, a1);
-        __ xor_(t1, a0, a1);
-        __ and_(t0, t0, t1);    // Overflow occurred if result is negative.
-        __ Ret(ge, t0, Operand(zero_reg));  // Return on NO overflow (ge 0).
+        if (lhs.is(a1)) {
+          __ subu(v0, a1, a0);  // Subtract y.
+           // Check for overflow of a1 - a0.
+          __ xor_(t0, v0, a1);
+          __ xor_(t1, a0, a1);
+          __ and_(t0, t0, t1);    // Overflow occurred if result is negative.
+          __ Ret(ge, t0, Operand(zero_reg));  // Return on NO overflow (ge 0).
+        } else {
+          __ subu(v0, a0, a1);
+           // Check for overflow of a0 - a1.
+          __ xor_(t0, v0, a0);
+          __ xor_(t1, a0, a1);
+          __ and_(t0, t0, t1);    // Overflow occurred if result is negative.
+          __ Ret(ge, t0, Operand(zero_reg));  // Return on NO overflow (ge 0).
+        }
       }
+
       // Fall thru on overflow, with a0 and a1 preserved.
-      HandleBinaryOpSlowCases(masm, &not_smi, Builtins::SUB);
+      HandleBinaryOpSlowCases(masm,
+                              &not_smi,
+                              lhs,
+                              rhs,
+                              Builtins::SUB);
       break;
     }
 
@@ -8590,18 +8638,18 @@ void GenericBinaryOpStub::Generate(MacroAssembler* masm) {
       Label not_smi, slow;
       if (ShouldGenerateSmiCode()) {
         ASSERT(kSmiTag == 0);  // Adjust code below.
-        __ And(t3, t2, Operand(kSmiTagMask));
+        __ And(t3, smi_test_reg, Operand(kSmiTagMask));
         __ Branch(&not_smi, ne, t3, Operand(zero_reg));
         // Remove tag from one operand (but keep sign), so that result is Smi.
-        __ sra(t0, a0, kSmiTagSize);
+        __ sra(scratch, rhs, kSmiTagSize);
         // Do multiplication.
-        __ mult(a1, t0);
+        __ mult(lhs, scratch);
         __ mflo(v0);
         __ mfhi(v1);
 
         // Go 'slow' on overflow, detected if top 33 bits are not same.
-        __ sra(t0, v0, 31);
-        __ Branch(&slow, ne, t0, Operand(v1));
+        __ sra(scratch, v0, 31);
+        __ Branch(&slow, ne, scratch, Operand(v1));
 
         // Return if non-zero Smi result.
         __ Ret(ne, v0, Operand(zero_reg));
@@ -8609,13 +8657,17 @@ void GenericBinaryOpStub::Generate(MacroAssembler* masm) {
         // We can return 0, if we multiplied positive number by 0.
         // We know one of them was 0, so sign of sum is sign of other.
         // (note that result of 0 is already in v0, and Smi::FromInt(0) is 0.)
-        __ addu(t0, a0, a1);
-        __ Ret(gt, t0, Operand(zero_reg));
+        __ addu(scratch, rhs, lhs);
+        __ Ret(gt, scratch, Operand(zero_reg));
         // Else, fall thru to slow case to handle -0
 
         __ bind(&slow);
       }
-      HandleBinaryOpSlowCases(masm, &not_smi, Builtins::MUL);
+      HandleBinaryOpSlowCases(masm,
+                              &not_smi,
+                              lhs,
+                              rhs,
+                              Builtins::MUL);
       break;
     }
 
@@ -8624,12 +8676,12 @@ void GenericBinaryOpStub::Generate(MacroAssembler* masm) {
       Label not_smi, slow;
       if (ShouldGenerateSmiCode()) {
         ASSERT(kSmiTag == 0);  // Adjust code below.
-        // t2 = x | y at entry.
-        __ And(t3, t2, Operand(kSmiTagMask));
+        // smi_test_reg = x | y at entry.
+        __ And(t3, smi_test_reg, Operand(kSmiTagMask));
         __ Branch(&not_smi, ne, t3, Operand(zero_reg));
         // Remove tags, preserving sign.
-        __ sra(t0, a0, kSmiTagSize);
-        __ sra(t1, a1, kSmiTagSize);
+        __ sra(t0, rhs, kSmiTagSize);
+        __ sra(t1, lhs, kSmiTagSize);
         // Check for divisor of 0.
         __ Branch(&slow, eq, t0, Operand(zero_reg));
         // Divide x by y.
@@ -8648,13 +8700,18 @@ void GenericBinaryOpStub::Generate(MacroAssembler* masm) {
         // Check for negative zero result.
         __ Ret(ne, v0, Operand(zero_reg));  // OK if result was non-zero.
         __ li(t0, Operand(0x80000000));
-        __ And(t2, t2, Operand(t0));
-        __ Branch(&slow, eq, t2, Operand(t0));  // Go slow if operands negative.
+        __ And(smi_test_reg, smi_test_reg, Operand(t0));
+        // Go slow if operands negative.
+        __ Branch(&slow, eq, smi_test_reg, Operand(t0));
         __ Ret();
 
         __ bind(&slow);
       }
-      HandleBinaryOpSlowCases(masm, &not_smi, Builtins::DIV);
+      HandleBinaryOpSlowCases(masm,
+                              &not_smi,
+                              lhs,
+                              rhs,
+                              Builtins::DIV);
       break;
     }
 
@@ -8663,26 +8720,33 @@ void GenericBinaryOpStub::Generate(MacroAssembler* masm) {
       if (ShouldGenerateSmiCode()) {
         ASSERT(kSmiTag == 0);  // Adjust code below.
         // t2 = x | y at entry.
-        __ And(t3, t2, Operand(kSmiTagMask));
+        __ And(t3, smi_test_reg, Operand(kSmiTagMask));
         __ Branch(&not_smi, ne, t3, Operand(zero_reg));
+        Register scratch2 = smi_test_reg;
+        smi_test_reg = no_reg;
         // Remove tags, preserving sign.
-        __ sra(t0, a0, kSmiTagSize);
-        __ sra(t1, a1, kSmiTagSize);
+        __ sra(t0, rhs, kSmiTagSize);
+        __ sra(t1, lhs, kSmiTagSize);
         // Check for divisor of 0.
         __ Branch(&slow, eq, t0, Operand(zero_reg));
         __ Div(t1, Operand(t0));
-        __ mfhi(v0);
-        __ sll(v0, v0, kSmiTagSize);  // Smi tag return value.
+        __ mfhi(result);
+        __ sll(result, result, kSmiTagSize);  // Smi tag return value.
         // Check for negative zero result.
-        __ Ret(ne, v0, Operand(zero_reg));  // OK if result was non-zero.
+        __ Ret(ne, result, Operand(zero_reg));  // OK if result was non-zero.
         __ li(t0, Operand(0x80000000));
-        __ And(t2, t2, Operand(t0));
-        __ Branch(&slow, eq, t2, Operand(t0));  // Go slow if operands negative.
+        __ And(scratch2, scratch2, Operand(t0));
+        // Go slow if operands negative.
+        __ Branch(&slow, eq, scratch2, Operand(t0));
         __ Ret();
 
         __ bind(&slow);
       }
-      HandleBinaryOpSlowCases(masm, &not_smi, Builtins::MOD);
+      HandleBinaryOpSlowCases(masm,
+                              &not_smi,
+                              lhs,
+                              rhs,
+                              Builtins::MOD);
       break;
     }
 
@@ -8693,20 +8757,22 @@ void GenericBinaryOpStub::Generate(MacroAssembler* masm) {
     case Token::SAR:
     case Token::SHR:
     case Token::SHL: {
-      // Result (v0) = x (a1) op y (a0).
+      // Result (v0) = x (lhs) op y (rhs).
       // Untaged x: a3, untagged y: a2.
       Label slow;
       ASSERT(kSmiTag == 0);  // Adjust code below.
-      __ And(t3, t2, Operand(kSmiTagMask));
+      __ And(t3, smi_test_reg, Operand(kSmiTagMask));
       __ Branch(&slow, ne, t3, Operand(zero_reg));
+      Register scratch2 = smi_test_reg;
+      smi_test_reg = no_reg;
       switch (op_) {
-        case Token::BIT_OR:  __ Or(v0, a0, Operand(a1)); break;
-        case Token::BIT_AND: __ And(v0, a0, Operand(a1)); break;
-        case Token::BIT_XOR: __ Xor(v0, a0, Operand(a1)); break;
+        case Token::BIT_OR:  __ Or(result, rhs, Operand(lhs)); break;
+        case Token::BIT_AND: __ And(result, rhs, Operand(lhs)); break;
+        case Token::BIT_XOR: __ Xor(result, rhs, Operand(lhs)); break;
         case Token::SAR:
           // Remove tags from operands.
-          __ sra(a2, a0, kSmiTagSize);  // y.
-          __ sra(a3, a1, kSmiTagSize);  // x.
+          __ sra(a2, rhs, kSmiTagSize);  // y.
+          __ sra(a3, lhs, kSmiTagSize);  // x.
           // Shift.
           __ srav(v0, a3, a2);
           // Smi tag result.
@@ -8714,8 +8780,8 @@ void GenericBinaryOpStub::Generate(MacroAssembler* masm) {
           break;
         case Token::SHR:
           // Remove tags from operands.
-          __ sra(a2, a0, kSmiTagSize);  // y.
-          __ sra(a3, a1, kSmiTagSize);  // x.
+          __ sra(a2, rhs, kSmiTagSize);  // y.
+          __ sra(a3, lhs, kSmiTagSize);  // x.
           // Shift.
           __ srlv(v0, a3, a2);
           // Unsigned shift is not allowed to produce a negative number, so
@@ -8727,8 +8793,8 @@ void GenericBinaryOpStub::Generate(MacroAssembler* masm) {
           break;
         case Token::SHL:
            // Remove tags from operands.
-          __ sra(a2, a0, kSmiTagSize);  // y.
-          __ sra(a3, a1, kSmiTagSize);  // x.
+          __ sra(a2, rhs, kSmiTagSize);  // y.
+          __ sra(a3, lhs, kSmiTagSize);  // x.
           // Shift.
           __ sllv(v0, a3, a2);
           // Check that the signed result fits in a Smi.
@@ -8741,7 +8807,8 @@ void GenericBinaryOpStub::Generate(MacroAssembler* masm) {
       }
       __ Ret();
       __ bind(&slow);
-      HandleNonSmiBitwiseOp(masm);
+
+      HandleNonSmiBitwiseOp(masm, lhs, rhs);
       break;
     }
 
