@@ -62,17 +62,13 @@ Operand::Operand(int32_t immediate, RelocInfo::Mode rmode)  {
   rmode_ = rmode;
 }
 
+
 Operand::Operand(const ExternalReference& f)  {
   rm_ = no_reg;
   imm32_ = reinterpret_cast<int32_t>(f.address());
   rmode_ = RelocInfo::EXTERNAL_REFERENCE;
 }
 
-Operand::Operand(const char* s) {
-  rm_ = no_reg;
-  imm32_ = reinterpret_cast<int32_t>(s);
-  rmode_ = RelocInfo::EMBEDDED_STRING;
-}
 
 Operand::Operand(Smi* value) {
   rm_ = no_reg;
@@ -80,9 +76,11 @@ Operand::Operand(Smi* value) {
   rmode_ = RelocInfo::NONE;
 }
 
+
 Operand::Operand(Register rm) {
   rm_ = rm;
 }
+
 
 bool Operand::is_reg() const {
   return rm_.is_valid();
