@@ -117,7 +117,17 @@ void FullCodeGenerator::DeclareGlobals(Handle<FixedArray> pairs) {
 }
 
 
-void FullCodeGenerator::VisitFunctionLiteral(FunctionLiteral* expr) {
+void FullCodeGenerator::VisitSwitchStatement(SwitchStatement* stmt) {
+  UNIMPLEMENTED_MIPS();
+}
+
+
+void FullCodeGenerator::VisitForInStatement(ForInStatement* stmt) {
+  UNIMPLEMENTED_MIPS();
+}
+
+
+void FullCodeGenerator::EmitNewClosure(Handle<SharedFunctionInfo> info) {
   UNIMPLEMENTED_MIPS();
 }
 
@@ -170,6 +180,7 @@ void FullCodeGenerator::EmitBinaryOp(Token::Value op,
 
 
 void FullCodeGenerator::EmitVariableAssignment(Variable* var,
+                                               Token::Value op,
                                                Expression::Context context) {
   UNIMPLEMENTED_MIPS();
 }
