@@ -1711,6 +1711,12 @@ void MacroAssembler::AllocateInNewSpace(int object_size,
   ASSERT(!result.is(scratch1));
   ASSERT(!scratch1.is(scratch2));
 
+  // Make object size into bytes.
+  if ((flags & SIZE_IN_WORDS) != 0) {
+    object_size *= kPointerSize;
+  }
+  ASSERT_EQ(0, object_size & kObjectAlignmentMask);
+
   // Load address of new object into result and allocation top address into
   // scratch1.
   ExternalReference new_space_allocation_top =
@@ -1734,7 +1740,7 @@ void MacroAssembler::AllocateInNewSpace(int object_size,
       ExternalReference::new_space_allocation_limit_address();
   li(scratch2, Operand(new_space_allocation_limit));
   lw(scratch2, MemOperand(scratch2));
-  Addu(result, result, Operand(object_size * kPointerSize));
+  Addu(result, result, Operand(object_size));
   Branch(gc_required, Ugreater, result, Operand(scratch2));
 
   // Update allocation top. Result temporarily holds the new top.
@@ -1742,10 +1748,9 @@ void MacroAssembler::AllocateInNewSpace(int object_size,
 
   // Tag and adjust back to start of new object.
   if ((flags & TAG_OBJECT) != 0) {
-    Addu(result, result, Operand(-(object_size * kPointerSize) +
-                                kHeapObjectTag));
+    Addu(result, result, Operand(-object_size + kHeapObjectTag));
   } else {
-    Addu(result, result, Operand(-object_size * kPointerSize));
+    Addu(result, result, Operand(-object_size));
   }
 }
 
@@ -1783,15 +1788,23 @@ void MacroAssembler::AllocateInNewSpace(Register object_size,
       ExternalReference::new_space_allocation_limit_address();
   li(scratch2, Operand(new_space_allocation_limit));
   lw(scratch2, MemOperand(scratch2));
-  sll(t8, object_size, kPointerSizeLog2);
-  Addu(result, result, Operand(t8));
+  if ((flags & SIZE_IN_WORDS) != 0) {
+    sll(t8, object_size, kPointerSizeLog2);
+    Addu(result, result, Operand(t8));
+  } else {
+    addu(result, result, object_size);
+  }
   Branch(gc_required, Ugreater, result, Operand(scratch2));
 
   // Update allocation top. result temporarily holds the new top,
   sw(result, MemOperand(scratch1));
 
   // Adjust back to start of new object.
-  Subu(result, result, Operand(t8));
+  if ((flags & SIZE_IN_WORDS) != 0) {
+    Subu(result, result, Operand(t8));
+  } else {
+    subu(result, result, object_size);
+  }
 
   // Tag object if requested.
   if ((flags & TAG_OBJECT) != 0) {
@@ -1832,10 +1845,7 @@ void MacroAssembler::AllocateTwoByteString(Register result,
   sll(scratch1, length, 1);  // Length in bytes, not chars.
   addiu(scratch1, scratch1,
        kObjectAlignmentMask + SeqTwoByteString::kHeaderSize);
-  // AllocateInNewSpace expects the size in words, so we can round down
-  // to kObjectAlignment and divide by kPointerSize in the same shift.
-  ASSERT_EQ(kPointerSize, kObjectAlignmentMask + 1);
-  sra(scratch1, scratch1, kPointerSizeLog2);
+  And(scratch1, scratch1, Operand(~kObjectAlignmentMask));
 
   // Allocate two-byte string in new space.
   AllocateInNewSpace(scratch1,
@@ -1865,10 +1875,7 @@ void MacroAssembler::AllocateAsciiString(Register result,
   ASSERT((SeqAsciiString::kHeaderSize & kObjectAlignmentMask) == 0);
   ASSERT(kCharSize == 1);
   addiu(scratch1, length, kObjectAlignmentMask + SeqAsciiString::kHeaderSize);
-  // AllocateInNewSpace expects the size in words, so we can round down
-  // to kObjectAlignment and divide by kPointerSize in the same shift.
-  ASSERT_EQ(kPointerSize, kObjectAlignmentMask + 1);
-  sra(scratch1, scratch1, kPointerSizeLog2);
+  And(scratch1, scratch1, Operand(~kObjectAlignmentMask));
 
   // Allocate ASCII string in new space.
   AllocateInNewSpace(scratch1,
@@ -1892,7 +1899,7 @@ void MacroAssembler::AllocateTwoByteConsString(Register result,
                                                Register scratch1,
                                                Register scratch2,
                                                Label* gc_required) {
-  AllocateInNewSpace(ConsString::kSize / kPointerSize,
+  AllocateInNewSpace(ConsString::kSize,
                      result,
                      scratch1,
                      scratch2,
@@ -1911,7 +1918,7 @@ void MacroAssembler::AllocateAsciiConsString(Register result,
                                              Register scratch1,
                                              Register scratch2,
                                              Label* gc_required) {
-  AllocateInNewSpace(ConsString::kSize / kPointerSize,
+  AllocateInNewSpace(ConsString::kSize,
                      result,
                      scratch1,
                      scratch2,
@@ -1935,7 +1942,7 @@ void MacroAssembler::AllocateHeapNumber(Register result,
   // object.
   // We ask for four more bytes to align it as we need and align the result.
   // (HeapNumber::kSize is modified to be 4-byte bigger)
-  AllocateInNewSpace((HeapNumber::kSize) / kPointerSize,
+  AllocateInNewSpace(HeapNumber::kSize,
                         result,
                         scratch1,
                         scratch2,

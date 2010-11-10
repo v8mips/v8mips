@@ -186,7 +186,7 @@ static void Generate_JSConstructStubHelper(MacroAssembler* masm,
     // a2: initial map
     // t7: undefined
     __ lbu(a3, FieldMemOperand(a2, Map::kInstanceSizeOffset));
-    __ AllocateInNewSpace(a3, t4, t5, t6, &rt_call, NO_ALLOCATION_FLAGS);
+    __ AllocateInNewSpace(a3, t4, t5, t6, &rt_call, SIZE_IN_WORDS);
 
     // Allocated the JSObject, now initialize the fields. Map is set to initial
     // map and properties and elements are set to empty fixed array.
@@ -262,12 +262,13 @@ static void Generate_JSConstructStubHelper(MacroAssembler* masm,
     // t5: start of next object
     // t7: undefined
     __ Addu(a0, a3, Operand(FixedArray::kHeaderSize / kPointerSize));
-    __ AllocateInNewSpace(a0,
-                          t5,
-                          t6,
-                          a2,
-                          &undo_allocation,
-                          RESULT_CONTAINS_TOP);
+    __ AllocateInNewSpace(
+        a0,
+        t5,
+        t6,
+        a2,
+        &undo_allocation,
+        static_cast<AllocationFlags>(RESULT_CONTAINS_TOP | SIZE_IN_WORDS));
 
     // Initialize the FixedArray.
     // a1: constructor

@@ -4396,12 +4396,13 @@ void CodeGenerator::GenerateRegExpConstructResult(ZoneList<Expression*>* args) {
         (JSRegExpResult::kSize + FixedArray::kHeaderSize) / kPointerSize;
     __ srl(t1, a1, kSmiTagSize + kSmiShiftSize);
     __ Addu(a2, t1, Operand(objects_size));
-    __ AllocateInNewSpace(a2,  // In: Size, in words.
-                          v0,  // Out: Start of allocation (tagged).
-                          a3,  // Scratch register.
-                          t0,  // Scratch register.
-                          &slowcase,
-                          TAG_OBJECT);
+    __ AllocateInNewSpace(
+        a2,  // In: Size, in words.
+        v0,  // Out: Start of allocation (tagged).
+        a3,  // Scratch register.
+        t0,  // Scratch register.
+        &slowcase,
+        static_cast<AllocationFlags>(TAG_OBJECT | SIZE_IN_WORDS));
     // v0: Start of allocated area, object-tagged.
     // a1: Number of elements in array, as smi.
     // t1: Number of elements, untagged.
@@ -6108,7 +6109,7 @@ void FastNewClosureStub::Generate(MacroAssembler* masm) {
   __ Pop(a3);
 
   // Attempt to allocate new JSFunction in new space.
-  __ AllocateInNewSpace(JSFunction::kSize / kPointerSize,
+  __ AllocateInNewSpace(JSFunction::kSize,
                         v0,
                         a1,
                         a2,
@@ -6170,7 +6171,7 @@ void FastCloneShallowArrayStub::Generate(MacroAssembler* masm) {
   // Allocate both the JS array and the elements array in one big
   // allocation. This avoids multiple limit checks.
   // Return new object in v0.
-  __ AllocateInNewSpace(size / kPointerSize,
+  __ AllocateInNewSpace(size,
                         v0,
                         a1,
                         a2,
@@ -7694,8 +7695,7 @@ void ArgumentsAccessStub::GenerateNewObject(MacroAssembler* masm) {
   __ sw(a3, MemOperand(sp, 1 * kPointerSize));
 
   // Try the new space allocation. Start out with computing the size
-  // of the arguments object and the elements array (in words, not
-  // bytes because AllocateInNewSpace expects words).
+  // of the arguments object and the elements array in words.
   Label add_arguments_object;
   __ bind(&try_allocate);
   __ Branch(&add_arguments_object, eq, a1, Operand(0));
@@ -7706,7 +7706,13 @@ void ArgumentsAccessStub::GenerateNewObject(MacroAssembler* masm) {
   __ Addu(a1, a1, Operand(Heap::kArgumentsObjectSize / kPointerSize));
 
   // Do the allocation of both objects in one go.
-  __ AllocateInNewSpace(a1, v0, a2, a3, &runtime, TAG_OBJECT);
+  __ AllocateInNewSpace(
+      a1,
+      v0,
+      a2,
+      a3,
+      &runtime,
+      static_cast<AllocationFlags>(TAG_OBJECT | SIZE_IN_WORDS));
 
   // Get the arguments boilerplate from the current (global) context.
   int offset = Context::SlotOffset(Context::ARGUMENTS_BOILERPLATE_INDEX);
