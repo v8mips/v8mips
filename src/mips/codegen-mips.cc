@@ -2516,8 +2516,6 @@ void CodeGenerator::VisitForInStatement(ForInStatement* node) {
   __ lw(a1, frame_->ElementAt(1));  // load the length
   node->break_target()->Branch(hs, a0, Operand(a1));
 
-  __ lw(a0, frame_->ElementAt(0));
-
   // Get the i'th entry of the array.
   __ lw(a2, frame_->ElementAt(2));
   __ Addu(a2, a2, Operand(FixedArray::kHeaderSize - kHeapObjectTag));
@@ -4279,7 +4277,7 @@ void CodeGenerator::GenerateIsObject(ZoneList<Expression*>* args) {
   // Undetectable objects behave like undefined when tested with typeof.
   __ lbu(a1, FieldMemOperand(map_reg, Map::kBitFieldOffset));
   __ And(t1, a1, Operand(1 << Map::kIsUndetectable));
-  false_target()->Branch(eq, t1, Operand(1 << Map::kIsUndetectable));
+  false_target()->Branch(ne, t1, Operand(zero_reg));
 
   __ lbu(t1, FieldMemOperand(map_reg, Map::kInstanceTypeOffset));
   false_target()->Branch(less, t1, Operand(FIRST_JS_OBJECT_TYPE));
