@@ -185,11 +185,6 @@ Immediate::Immediate(const ExternalReference& ext) {
   rmode_ = RelocInfo::EXTERNAL_REFERENCE;
 }
 
-Immediate::Immediate(const char* s) {
-  x_ = reinterpret_cast<int32_t>(s);
-  rmode_ = RelocInfo::EMBEDDED_STRING;
-}
-
 
 Immediate::Immediate(Label* internal_offset) {
   x_ = reinterpret_cast<int32_t>(internal_offset);
