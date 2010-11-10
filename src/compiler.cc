@@ -49,7 +49,9 @@ namespace internal {
 // --always-full-compiler is specified or debugging is active the full
 // compiler will be used for all code.
 static bool AlwaysFullCompiler() {
-#ifdef ENABLE_DEBUGGER_SUPPORT
+// Mips has not implemented full-codegen yet, so stay with old debugging
+// for now.
+#if defined(ENABLE_DEBUGGER_SUPPORT) && !defined(V8_TARGET_ARCH_MIPS)
   return FLAG_always_full_compiler || Debugger::IsDebuggerActive();
 #else
   return FLAG_always_full_compiler;
