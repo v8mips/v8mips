@@ -631,7 +631,7 @@ Object* String::SlowTryFlatten(PretenureFlag pretenure) {
     case kConsStringTag: {
       ConsString* cs = ConsString::cast(this);
       if (cs->second()->length() == 0) {
-        return this;
+        return cs->first();
       }
       // There's little point in putting the flat string in new space if the
       // cons string is in old space.  It can never get GCed until there is
@@ -669,7 +669,7 @@ Object* String::SlowTryFlatten(PretenureFlag pretenure) {
       }
       cs->set_first(result);
       cs->set_second(Heap::empty_string());
-      return this;
+      return result;
     }
     default:
       return this;
@@ -4580,51 +4580,58 @@ bool String::SlowEquals(String* other) {
     if (Hash() != other->Hash()) return false;
   }
 
-  if (StringShape(this).IsSequentialAscii() &&
-      StringShape(other).IsSequentialAscii()) {
-    const char* str1 = SeqAsciiString::cast(this)->GetChars();
-    const char* str2 = SeqAsciiString::cast(other)->GetChars();
+  // We know the strings are both non-empty. Compare the first chars
+  // before we try to flatten the strings.
+  if (this->Get(0) != other->Get(0)) return false;
+
+  String* lhs = this->TryFlattenGetString();
+  String* rhs = other->TryFlattenGetString();
+
+  if (StringShape(lhs).IsSequentialAscii() &&
+      StringShape(rhs).IsSequentialAscii()) {
+    const char* str1 = SeqAsciiString::cast(lhs)->GetChars();
+    const char* str2 = SeqAsciiString::cast(rhs)->GetChars();
     return CompareRawStringContents(Vector<const char>(str1, len),
                                     Vector<const char>(str2, len));
   }
 
-  if (this->IsFlat()) {
+  if (lhs->IsFlat()) {
     if (IsAsciiRepresentation()) {
-      Vector<const char> vec1 = this->ToAsciiVector();
-      if (other->IsFlat()) {
-        if (other->IsAsciiRepresentation()) {
-          Vector<const char> vec2 = other->ToAsciiVector();
+      Vector<const char> vec1 = lhs->ToAsciiVector();
+      if (rhs->IsFlat()) {
+        if (rhs->IsAsciiRepresentation()) {
+          Vector<const char> vec2 = rhs->ToAsciiVector();
           return CompareRawStringContents(vec1, vec2);
         } else {
           VectorIterator<char> buf1(vec1);
-          VectorIterator<uc16> ib(other->ToUC16Vector());
+          VectorIterator<uc16> ib(rhs->ToUC16Vector());
           return CompareStringContents(&buf1, &ib);
         }
       } else {
         VectorIterator<char> buf1(vec1);
-        string_compare_buffer_b.Reset(0, other);
+        string_compare_buffer_b.Reset(0, rhs);
         return CompareStringContents(&buf1, &string_compare_buffer_b);
       }
     } else {
-      Vector<const uc16> vec1 = this->ToUC16Vector();
-      if (other->IsFlat()) {
-        if (other->IsAsciiRepresentation()) {
+      Vector<const uc16> vec1 = lhs->ToUC16Vector();
+      if (rhs->IsFlat()) {
+        if (rhs->IsAsciiRepresentation()) {
           VectorIterator<uc16> buf1(vec1);
-          VectorIterator<char> ib(other->ToAsciiVector());
+          VectorIterator<char> ib(rhs->ToAsciiVector());
           return CompareStringContents(&buf1, &ib);
         } else {
-          Vector<const uc16> vec2(other->ToUC16Vector());
+          Vector<const uc16> vec2(rhs->ToUC16Vector());
           return CompareRawStringContents(vec1, vec2);
         }
       } else {
         VectorIterator<uc16> buf1(vec1);
-        string_compare_buffer_b.Reset(0, other);
+        string_compare_buffer_b.Reset(0, rhs);
         return CompareStringContents(&buf1, &string_compare_buffer_b);
       }
     }
   } else {
-    string_compare_buffer_a.Reset(0, this);
-    return CompareStringContentsPartial(&string_compare_buffer_a, other);
+    string_compare_buffer_a.Reset(0, lhs);
+    return CompareStringContentsPartial(&string_compare_buffer_a, rhs);
   }
 }
 
@@ -4676,7 +4683,7 @@ static inline uint32_t HashSequentialString(const schar* chars, int length) {
 
 uint32_t String::ComputeAndSetHash() {
   // Should only be called if hash code has not yet been computed.
-  ASSERT(!(hash_field() & kHashComputedMask));
+  ASSERT(!HasHashCode());
 
   const int len = length();
 
@@ -4695,7 +4702,7 @@ uint32_t String::ComputeAndSetHash() {
   set_hash_field(field);
 
   // Check the hash code is there.
-  ASSERT(hash_field() & kHashComputedMask);
+  ASSERT(HasHashCode());
   uint32_t result = field >> kHashShift;
   ASSERT(result != 0);  // Ensure that the hash value of 0 is never computed.
   return result;
@@ -4750,8 +4757,7 @@ bool String::SlowAsArrayIndex(uint32_t* index) {
 static inline uint32_t HashField(uint32_t hash,
                                  bool is_array_index,
                                  int length = -1) {
-  uint32_t result =
-      (hash << String::kHashShift) | String::kHashComputedMask;
+  uint32_t result = (hash << String::kHashShift);
   if (is_array_index) {
     // For array indexes mix the length into the hash as an array index could
     // be zero.
@@ -5531,7 +5537,7 @@ Object* JSObject::SetElementsLength(Object* len) {
   // General slow case.
   if (len->IsNumber()) {
     uint32_t length;
-    if (Array::IndexFromObject(len, &length)) {
+    if (len->ToArrayIndex(&length)) {
       return SetSlowElements(len);
     } else {
       return ArrayLengthRangeError();
@@ -5854,8 +5860,7 @@ Object* JSObject::SetFastElement(uint32_t index, Object* value) {
     if (IsJSArray()) {
       // Update the length of the array if needed.
       uint32_t array_length = 0;
-      CHECK(Array::IndexFromObject(JSArray::cast(this)->length(),
-                                   &array_length));
+      CHECK(JSArray::cast(this)->length()->ToArrayIndex(&array_length));
       if (index >= array_length) {
         JSArray::cast(this)->set_length(Smi::FromInt(index + 1));
       }
@@ -6006,8 +6011,7 @@ Object* JSObject::SetElementWithoutInterceptor(uint32_t index, Object* value) {
       if (ShouldConvertToFastElements()) {
         uint32_t new_length = 0;
         if (IsJSArray()) {
-          CHECK(Array::IndexFromObject(JSArray::cast(this)->length(),
-                                       &new_length));
+          CHECK(JSArray::cast(this)->length()->ToArrayIndex(&new_length));
           JSArray::cast(this)->set_length(Smi::FromInt(new_length));
         } else {
           new_length = NumberDictionary::cast(elements())->max_number_key() + 1;
@@ -6038,7 +6042,7 @@ Object* JSObject::SetElementWithoutInterceptor(uint32_t index, Object* value) {
 
 Object* JSArray::JSArrayUpdateLengthFromIndex(uint32_t index, Object* value) {
   uint32_t old_len = 0;
-  CHECK(Array::IndexFromObject(length(), &old_len));
+  CHECK(length()->ToArrayIndex(&old_len));
   // Check to see if we need to update the length. For now, we make
   // sure that the length stays within 32-bits (unsigned).
   if (index >= old_len && index != 0xffffffff) {
@@ -6332,7 +6336,7 @@ bool JSObject::ShouldConvertToFastElements() {
   // fast elements.
   uint32_t length = 0;
   if (IsJSArray()) {
-    CHECK(Array::IndexFromObject(JSArray::cast(this)->length(), &length));
+    CHECK(JSArray::cast(this)->length()->ToArrayIndex(&length));
   } else {
     length = dictionary->max_number_key();
   }
@@ -7023,15 +7027,9 @@ class SymbolKey : public HashTableKey {
   }
 
   Object* AsObject() {
-    // If the string is a cons string, attempt to flatten it so that
-    // symbols will most often be flat strings.
-    if (StringShape(string_).IsCons()) {
-      ConsString* cons_string = ConsString::cast(string_);
-      cons_string->TryFlatten();
-      if (cons_string->second()->length() == 0) {
-        string_ = cons_string->first();
-      }
-    }
+    // Attempt to flatten the string, so that symbols will most often
+    // be flat strings.
+    string_ = string_->TryFlattenGetString();
     // Transform string to symbol if possible.
     Map* map = Heap::SymbolMapForString(string_);
     if (map != NULL) {

@@ -1370,6 +1370,7 @@ void CodeGenerator::CallApplyLazy(Expression* applicand,
   // give us a megamorphic load site. Not super, but it works.
   LoadAndSpill(applicand);
   Handle<String> name = Factory::LookupAsciiSymbol("apply");
+  frame_->Dup();
   frame_->CallLoadIC(name, RelocInfo::CODE_TARGET);
   frame_->EmitPush(r0);
 
@@ -2275,7 +2276,6 @@ void CodeGenerator::VisitForInStatement(ForInStatement* node) {
   frame_->EmitPush(r0);  // map
   frame_->EmitPush(r2);  // enum cache bridge cache
   __ ldr(r0, FieldMemOperand(r2, FixedArray::kLengthOffset));
-  __ mov(r0, Operand(r0, LSL, kSmiTagSize));
   frame_->EmitPush(r0);
   __ mov(r0, Operand(Smi::FromInt(0)));
   frame_->EmitPush(r0);
@@ -2288,7 +2288,6 @@ void CodeGenerator::VisitForInStatement(ForInStatement* node) {
 
   // Push the length of the array and the initial index onto the stack.
   __ ldr(r0, FieldMemOperand(r0, FixedArray::kLengthOffset));
-  __ mov(r0, Operand(r0, LSL, kSmiTagSize));
   frame_->EmitPush(r0);
   __ mov(r0, Operand(Smi::FromInt(0)));  // init index
   frame_->EmitPush(r0);
@@ -3009,8 +3008,6 @@ void CodeGenerator::LoadFromGlobalSlotCheckExtensions(Slot* slot,
                      typeof_state == INSIDE_TYPEOF
                          ? RelocInfo::CODE_TARGET
                          : RelocInfo::CODE_TARGET_CONTEXT);
-  // Drop the global object. The result is in r0.
-  frame_->Drop();
 }
 
 
@@ -3424,7 +3421,6 @@ void CodeGenerator::EmitNamedPropertyAssignment(Assignment* node) {
       frame_->Dup();
     }
     EmitNamedLoad(name, var != NULL);
-    frame_->Drop();  // Receiver is left on the stack.
     frame_->EmitPush(r0);
 
     // Perform the binary operation.
@@ -4492,7 +4488,8 @@ void CodeGenerator::GenerateRegExpConstructResult(ZoneList<Expression*>* args) {
     __ mov(r2, Operand(Factory::fixed_array_map()));
     __ str(r2, FieldMemOperand(r3, HeapObject::kMapOffset));
     // Set FixedArray length.
-    __ str(r5, FieldMemOperand(r3, FixedArray::kLengthOffset));
+    __ mov(r6, Operand(r5, LSL, kSmiTagSize));
+    __ str(r6, FieldMemOperand(r3, FixedArray::kLengthOffset));
     // Fill contents of fixed-array with the-hole.
     __ mov(r2, Operand(Factory::the_hole_value()));
     __ add(r3, r3, Operand(FixedArray::kHeaderSize - kHeapObjectTag));
@@ -5430,26 +5427,30 @@ void CodeGenerator::VisitCompareOperation(CompareOperation* node) {
 
 class DeferredReferenceGetNamedValue: public DeferredCode {
  public:
-  explicit DeferredReferenceGetNamedValue(Handle<String> name) : name_(name) {
+  explicit DeferredReferenceGetNamedValue(Register receiver,
+                                          Handle<String> name)
+      : receiver_(receiver), name_(name) {
     set_comment("[ DeferredReferenceGetNamedValue");
   }
 
   virtual void Generate();
 
  private:
+  Register receiver_;
   Handle<String> name_;
 };
 
 
 void DeferredReferenceGetNamedValue::Generate() {
+  ASSERT(receiver_.is(r0) || receiver_.is(r1));
+
   Register scratch1 = VirtualFrame::scratch0();
   Register scratch2 = VirtualFrame::scratch1();
   __ DecrementCounter(&Counters::named_load_inline, 1, scratch1, scratch2);
   __ IncrementCounter(&Counters::named_load_inline_miss, 1, scratch1, scratch2);
 
-  // Setup the registers and call load IC.
-  // On entry to this deferred code, r0 is assumed to already contain the
-  // receiver from the top of the stack.
+  // Ensure receiver in r0 and name in r2 to match load ic calling convention.
+  __ Move(r0, receiver_);
   __ mov(r2, Operand(name_));
 
   // The rest of the instructions in the deferred code must be together.
@@ -5588,10 +5589,11 @@ void CodeGenerator::EmitNamedLoad(Handle<String> name, bool is_contextual) {
     // this code
 
     // Load the receiver from the stack.
-    frame_->SpillAllButCopyTOSToR0();
+    Register receiver = frame_->PopToRegister();
+    VirtualFrame::SpilledScope spilled(frame_);
 
     DeferredReferenceGetNamedValue* deferred =
-        new DeferredReferenceGetNamedValue(name);
+        new DeferredReferenceGetNamedValue(receiver, name);
 
 #ifdef DEBUG
     int kInlinedNamedLoadInstructions = 7;
@@ -5601,19 +5603,19 @@ void CodeGenerator::EmitNamedLoad(Handle<String> name, bool is_contextual) {
 
     { Assembler::BlockConstPoolScope block_const_pool(masm_);
       // Check that the receiver is a heap object.
-      __ tst(r0, Operand(kSmiTagMask));
+      __ tst(receiver, Operand(kSmiTagMask));
       deferred->Branch(eq);
 
       // Check the map. The null map used below is patched by the inline cache
       // code.
-      __ ldr(r2, FieldMemOperand(r0, HeapObject::kMapOffset));
+      __ ldr(r2, FieldMemOperand(receiver, HeapObject::kMapOffset));
       __ mov(r3, Operand(Factory::null_value()));
       __ cmp(r2, r3);
       deferred->Branch(ne);
 
       // Initially use an invalid index. The index will be patched by the
       // inline cache code.
-      __ ldr(r0, MemOperand(r0, 0));
+      __ ldr(r0, MemOperand(receiver, 0));
 
       // Make sure that the expected number of instructions are generated.
       ASSERT_EQ(kInlinedNamedLoadInstructions,
@@ -5694,7 +5696,7 @@ void CodeGenerator::EmitKeyedLoad() {
       // Check that key is within bounds. Use unsigned comparison to handle
       // negative keys.
       __ ldr(scratch2, FieldMemOperand(scratch1, FixedArray::kLengthOffset));
-      __ cmp(scratch2, Operand(key, ASR, kSmiTagSize));
+      __ cmp(scratch2, key);
       deferred->Branch(ls);  // Unsigned less equal.
 
       // Load and check that the result is not the hole (key is a smi).
@@ -5862,19 +5864,20 @@ void Reference::GetValue() {
       Variable* var = expression_->AsVariableProxy()->AsVariable();
       bool is_global = var != NULL;
       ASSERT(!is_global || var->is_global());
+      if (persist_after_get_) {
+        cgen_->frame()->Dup();
+      }
       cgen_->EmitNamedLoad(GetName(), is_global);
       cgen_->frame()->EmitPush(r0);
-      if (!persist_after_get_) {
-        cgen_->UnloadReference(this);
-      }
+      if (!persist_after_get_) set_unloaded();
       break;
     }
 
     case KEYED: {
+      ASSERT(property != NULL);
       if (persist_after_get_) {
         cgen_->frame()->Dup2();
       }
-      ASSERT(property != NULL);
       cgen_->EmitKeyedLoad();
       cgen_->frame()->EmitPush(r0);
       if (!persist_after_get_) set_unloaded();
@@ -5994,8 +5997,8 @@ void FastNewContextStub::Generate(MacroAssembler* masm) {
   // Setup the object header.
   __ LoadRoot(r2, Heap::kContextMapRootIndex);
   __ str(r2, FieldMemOperand(r0, HeapObject::kMapOffset));
-  __ mov(r2, Operand(length));
-  __ str(r2, FieldMemOperand(r0, Array::kLengthOffset));
+  __ mov(r2, Operand(Smi::FromInt(length)));
+  __ str(r2, FieldMemOperand(r0, FixedArray::kLengthOffset));
 
   // Setup the fixed slots.
   __ mov(r1, Operand(Smi::FromInt(0)));
@@ -6626,8 +6629,8 @@ void NumberToStringStub::GenerateLookupNumberStringCache(MacroAssembler* masm,
   // Make the hash mask from the length of the number string cache. It
   // contains two elements (number and string) for each cache entry.
   __ ldr(mask, FieldMemOperand(number_string_cache, FixedArray::kLengthOffset));
-  // Divide length by two (length is not a smi).
-  __ mov(mask, Operand(mask, ASR, 1));
+  // Divide length by two (length is a smi).
+  __ mov(mask, Operand(mask, ASR, kSmiTagSize + 1));
   __ sub(mask, mask, Operand(1));  // Make mask.
 
   // Calculate the entry in the number string cache. The hash value in the
@@ -8518,9 +8521,8 @@ void ArgumentsAccessStub::GenerateNewObject(MacroAssembler* masm) {
   __ cmp(r1, Operand(0));
   __ b(eq, &done);
 
-  // Get the parameters pointer from the stack and untag the length.
+  // Get the parameters pointer from the stack.
   __ ldr(r2, MemOperand(sp, 1 * kPointerSize));
-  __ mov(r1, Operand(r1, LSR, kSmiTagSize));
 
   // Setup the elements pointer in the allocated arguments object and
   // initialize the header in the elements fixed array.
@@ -8529,6 +8531,7 @@ void ArgumentsAccessStub::GenerateNewObject(MacroAssembler* masm) {
   __ LoadRoot(r3, Heap::kFixedArrayMapRootIndex);
   __ str(r3, FieldMemOperand(r4, FixedArray::kMapOffset));
   __ str(r1, FieldMemOperand(r4, FixedArray::kLengthOffset));
+  __ mov(r1, Operand(r1, LSR, kSmiTagSize));  // Untag the length for the loop.
 
   // Copy the fixed array slots.
   Label loop;
@@ -8679,7 +8682,7 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
   __ ldr(r0,
          FieldMemOperand(last_match_info_elements, FixedArray::kLengthOffset));
   __ add(r2, r2, Operand(RegExpImpl::kLastMatchOverhead));
-  __ cmp(r2, r0);
+  __ cmp(r2, Operand(r0, ASR, kSmiTagSize));
   __ b(gt, &runtime);
 
   // subject: Subject string

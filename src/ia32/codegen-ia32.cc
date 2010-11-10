@@ -4201,7 +4201,6 @@ void CodeGenerator::VisitForInStatement(ForInStatement* node) {
   frame_->EmitPush(eax);  // <- slot 3
   frame_->EmitPush(edx);  // <- slot 2
   __ mov(eax, FieldOperand(edx, FixedArray::kLengthOffset));
-  __ SmiTag(eax);
   frame_->EmitPush(eax);  // <- slot 1
   frame_->EmitPush(Immediate(Smi::FromInt(0)));  // <- slot 0
   entry.Jump();
@@ -4213,7 +4212,6 @@ void CodeGenerator::VisitForInStatement(ForInStatement* node) {
 
   // Push the length of the array and the initial index onto the stack.
   __ mov(eax, FieldOperand(eax, FixedArray::kLengthOffset));
-  __ SmiTag(eax);
   frame_->EmitPush(eax);  // <- slot 1
   frame_->EmitPush(Immediate(Smi::FromInt(0)));  // <- slot 0
 
@@ -6165,11 +6163,11 @@ void CodeGenerator::GenerateIsObject(ZoneList<Expression*>* args) {
   __ mov(map.reg(), FieldOperand(obj.reg(), HeapObject::kMapOffset));
   __ movzx_b(map.reg(), FieldOperand(map.reg(), Map::kInstanceTypeOffset));
   __ cmp(map.reg(), FIRST_JS_OBJECT_TYPE);
-  destination()->false_target()->Branch(less);
+  destination()->false_target()->Branch(below);
   __ cmp(map.reg(), LAST_JS_OBJECT_TYPE);
   obj.Unuse();
   map.Unuse();
-  destination()->Split(less_equal);
+  destination()->Split(below_equal);
 }
 
 
@@ -6282,7 +6280,7 @@ void CodeGenerator::GenerateClassOf(ZoneList<Expression*>* args) {
     __ mov(obj.reg(), FieldOperand(obj.reg(), HeapObject::kMapOffset));
     __ movzx_b(tmp.reg(), FieldOperand(obj.reg(), Map::kInstanceTypeOffset));
     __ cmp(tmp.reg(), FIRST_JS_OBJECT_TYPE);
-    null.Branch(less);
+    null.Branch(below);
 
     // As long as JS_FUNCTION_TYPE is the last instance type and it is
     // right after LAST_JS_OBJECT_TYPE, we can avoid checking for
@@ -6605,9 +6603,9 @@ void CodeGenerator::GenerateRegExpConstructResult(ZoneList<Expression*>* args) {
     __ mov(FieldOperand(ebx, HeapObject::kMapOffset),
            Immediate(Factory::fixed_array_map()));
     // Set length.
-    __ SmiUntag(ecx);
     __ mov(FieldOperand(ebx, FixedArray::kLengthOffset), ecx);
     // Fill contents of fixed-array with the-hole.
+    __ SmiUntag(ecx);
     __ mov(edx, Immediate(Factory::the_hole_value()));
     __ lea(ebx, FieldOperand(ebx, FixedArray::kHeaderSize));
     // Fill fixed array elements with hole.
@@ -6711,7 +6709,6 @@ void DeferredSearchCache::Generate() {
 
   // Check if we could add new entry to cache.
   __ mov(ebx, FieldOperand(ecx, FixedArray::kLengthOffset));
-  __ SmiTag(ebx);
   __ cmp(ebx, FieldOperand(ecx, JSFunctionResultCache::kCacheSizeOffset));
   __ j(greater, &add_new_entry);
 
@@ -6872,7 +6869,7 @@ void CodeGenerator::GenerateSwapElements(ZoneList<Expression*>* args) {
   // Check that object doesn't require security checks and
   // has no indexed interceptor.
   __ CmpObjectType(object.reg(), FIRST_JS_OBJECT_TYPE, tmp1.reg());
-  deferred->Branch(less);
+  deferred->Branch(below);
   __ movzx_b(tmp1.reg(), FieldOperand(tmp1.reg(), Map::kBitFieldOffset));
   __ test(tmp1.reg(), Immediate(KeyedLoadIC::kSlowCaseBitFieldMask));
   deferred->Branch(not_zero);
@@ -6909,12 +6906,8 @@ void CodeGenerator::GenerateSwapElements(ZoneList<Expression*>* args) {
   // (or them and test against Smi mask.)
 
   __ mov(tmp2.reg(), tmp1.reg());
-  RecordWriteStub recordWrite1(tmp2.reg(), index1.reg(), object.reg());
-  __ CallStub(&recordWrite1);
-
-  RecordWriteStub recordWrite2(tmp1.reg(), index2.reg(), object.reg());
-  __ CallStub(&recordWrite2);
-
+  __ RecordWriteHelper(tmp2.reg(), index1.reg(), object.reg());
+  __ RecordWriteHelper(tmp1.reg(), index2.reg(), object.reg());
   __ bind(&done);
 
   deferred->BindExit();
@@ -8192,11 +8185,11 @@ void CodeGenerator::VisitCompareOperation(CompareOperation* node) {
       __ mov(map.reg(), FieldOperand(answer.reg(), HeapObject::kMapOffset));
       __ movzx_b(map.reg(), FieldOperand(map.reg(), Map::kInstanceTypeOffset));
       __ cmp(map.reg(), FIRST_JS_OBJECT_TYPE);
-      destination()->false_target()->Branch(less);
+      destination()->false_target()->Branch(below);
       __ cmp(map.reg(), LAST_JS_OBJECT_TYPE);
       answer.Unuse();
       map.Unuse();
-      destination()->Split(less_equal);
+      destination()->Split(below_equal);
     } else {
       // Uncommon case: typeof testing against a string literal that is
       // never returned from the typeof operator.
@@ -8613,13 +8606,10 @@ Result CodeGenerator::EmitKeyedLoad() {
     Result elements = allocator()->Allocate();
     ASSERT(elements.is_valid());
 
-    // Use a fresh temporary for the index and later the loaded
-    // value.
-    result = allocator()->Allocate();
-    ASSERT(result.is_valid());
+    result = elements;
 
     DeferredReferenceGetKeyedValue* deferred =
-        new DeferredReferenceGetKeyedValue(result.reg(),
+        new DeferredReferenceGetKeyedValue(elements.reg(),
                                            receiver.reg(),
                                            key.reg());
 
@@ -8651,20 +8641,17 @@ Result CodeGenerator::EmitKeyedLoad() {
            Immediate(Factory::fixed_array_map()));
     deferred->Branch(not_equal);
 
-    // Shift the key to get the actual index value and check that
-    // it is within bounds. Use unsigned comparison to handle negative keys.
-    __ mov(result.reg(), key.reg());
-    __ SmiUntag(result.reg());
-    __ cmp(result.reg(),
+    // Check that the key is within bounds.
+    __ cmp(key.reg(),
            FieldOperand(elements.reg(), FixedArray::kLengthOffset));
     deferred->Branch(above_equal);
 
     // Load and check that the result is not the hole.
+    ASSERT((kSmiTag == 0) && (kSmiTagSize == 1));
     __ mov(result.reg(), Operand(elements.reg(),
-                                 result.reg(),
-                                 times_4,
+                                 key.reg(),
+                                 times_2,
                                  FixedArray::kHeaderSize - kHeapObjectTag));
-    elements.Unuse();
     __ cmp(Operand(result.reg()), Immediate(Factory::the_hole_value()));
     deferred->Branch(equal);
     __ IncrementCounter(&Counters::keyed_load_inline, 1);
@@ -8749,7 +8736,7 @@ Result CodeGenerator::EmitKeyedStore(StaticType* key_type) {
 
     // Check whether it is possible to omit the write barrier. If the elements
     // array is in new space or the value written is a smi we can safely update
-    // the elements array without updating the remembered set.
+    // the elements array without write barrier.
     Label in_new_space;
     __ InNewSpace(tmp.reg(), tmp2.reg(), equal, &in_new_space);
     if (!value_is_constant) {
@@ -9021,7 +9008,8 @@ void FastNewContextStub::Generate(MacroAssembler* masm) {
 
   // Setup the object header.
   __ mov(FieldOperand(eax, HeapObject::kMapOffset), Factory::context_map());
-  __ mov(FieldOperand(eax, Array::kLengthOffset), Immediate(length));
+  __ mov(FieldOperand(eax, Context::kLengthOffset),
+         Immediate(Smi::FromInt(length)));
 
   // Setup the fixed slots.
   __ xor_(ebx, Operand(ebx));  // Set to NULL.
@@ -10984,9 +10972,8 @@ void ArgumentsAccessStub::GenerateNewObject(MacroAssembler* masm) {
   __ test(ecx, Operand(ecx));
   __ j(zero, &done);
 
-  // Get the parameters pointer from the stack and untag the length.
+  // Get the parameters pointer from the stack.
   __ mov(edx, Operand(esp, 2 * kPointerSize));
-  __ SmiUntag(ecx);
 
   // Setup the elements pointer in the allocated arguments object and
   // initialize the header in the elements fixed array.
@@ -10995,6 +10982,8 @@ void ArgumentsAccessStub::GenerateNewObject(MacroAssembler* masm) {
   __ mov(FieldOperand(edi, FixedArray::kMapOffset),
          Immediate(Factory::fixed_array_map()));
   __ mov(FieldOperand(edi, FixedArray::kLengthOffset), ecx);
+  // Untag the length for the loop below.
+  __ SmiUntag(ecx);
 
   // Copy the fixed array slots.
   Label loop;
@@ -11123,6 +11112,7 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
   // Check that the last match info has space for the capture registers and the
   // additional information.
   __ mov(eax, FieldOperand(ebx, FixedArray::kLengthOffset));
+  __ SmiUntag(eax);
   __ add(Operand(edx), Immediate(RegExpImpl::kLastMatchOverhead));
   __ cmp(edx, Operand(eax));
   __ j(greater, &runtime);
@@ -11366,7 +11356,7 @@ void NumberToStringStub::GenerateLookupNumberStringCache(MacroAssembler* masm,
   // Make the hash mask from the length of the number string cache. It
   // contains two elements (number and string) for each cache entry.
   __ mov(mask, FieldOperand(number_string_cache, FixedArray::kLengthOffset));
-  __ shr(mask, 1);  // Divide length by two (length is not a smi).
+  __ shr(mask, kSmiTagSize + 1);  // Untag length and divide it by two.
   __ sub(Operand(mask), Immediate(1));  // Make mask.
 
   // Calculate the entry in the number string cache. The hash value in the
@@ -11454,12 +11444,6 @@ void NumberToStringStub::Generate(MacroAssembler* masm) {
   __ bind(&runtime);
   // Handle number to string in the runtime system if not found in the cache.
   __ TailCallRuntime(Runtime::kNumberToStringSkipCache, 1, 1);
-}
-
-
-void RecordWriteStub::Generate(MacroAssembler* masm) {
-  masm->RecordWriteHelper(object_, addr_, scratch_);
-  masm->ret(0);
 }
 
 
@@ -11602,7 +11586,7 @@ void CompareStub::Generate(MacroAssembler* masm) {
       ASSERT(LAST_TYPE == JS_FUNCTION_TYPE);
       Label first_non_object;
       __ cmp(ecx, FIRST_JS_OBJECT_TYPE);
-      __ j(less, &first_non_object);
+      __ j(below, &first_non_object);
 
       // Return non-zero (eax is not zero)
       Label return_not_equal;
@@ -11619,7 +11603,7 @@ void CompareStub::Generate(MacroAssembler* masm) {
       __ movzx_b(ecx, FieldOperand(ecx, Map::kInstanceTypeOffset));
 
       __ cmp(ecx, FIRST_JS_OBJECT_TYPE);
-      __ j(greater_equal, &return_not_equal);
+      __ j(above_equal, &return_not_equal);
 
       // Check for oddballs: true, false, null, undefined.
       __ cmp(ecx, ODDBALL_TYPE);
@@ -12267,9 +12251,9 @@ void InstanceofStub::Generate(MacroAssembler* masm) {
   __ mov(eax, FieldOperand(eax, HeapObject::kMapOffset));  // eax - object map
   __ movzx_b(ecx, FieldOperand(eax, Map::kInstanceTypeOffset));  // ecx - type
   __ cmp(ecx, FIRST_JS_OBJECT_TYPE);
-  __ j(less, &slow, not_taken);
+  __ j(below, &slow, not_taken);
   __ cmp(ecx, LAST_JS_OBJECT_TYPE);
-  __ j(greater, &slow, not_taken);
+  __ j(above, &slow, not_taken);
 
   // Get the prototype of the function.
   __ mov(edx, Operand(esp, 1 * kPointerSize));  // 1 ~ return address
@@ -12297,9 +12281,9 @@ void InstanceofStub::Generate(MacroAssembler* masm) {
   __ mov(ecx, FieldOperand(ebx, HeapObject::kMapOffset));
   __ movzx_b(ecx, FieldOperand(ecx, Map::kInstanceTypeOffset));
   __ cmp(ecx, FIRST_JS_OBJECT_TYPE);
-  __ j(less, &slow, not_taken);
+  __ j(below, &slow, not_taken);
   __ cmp(ecx, LAST_JS_OBJECT_TYPE);
-  __ j(greater, &slow, not_taken);
+  __ j(above, &slow, not_taken);
 
   // Register mapping:
   //   eax is object map.
