@@ -314,7 +314,8 @@ void VirtualFrame::InvokeBuiltin(Builtins::JavaScript id,
 
 void VirtualFrame::CallLoadIC(Handle<String> name, RelocInfo::Mode mode) {
   Handle<Code> ic(Builtins::builtin(Builtins::LoadIC_Initialize));
-  SpillAllButCopyTOSToA0();
+  PopToA0();
+  SpillAll();
   __ li(a2, Operand(name));
   CallCodeObject(ic, mode, 0);
 }
@@ -528,36 +529,40 @@ Register VirtualFrame::Peek() {
 
 
 void VirtualFrame::Dup() {
-  AssertIsNotSpilled();
-  switch (top_of_stack_state_) {
-    case NO_TOS_REGISTERS:
-      __ lw(a0, MemOperand(sp, 0));
-      top_of_stack_state_ = A0_TOS;
-      break;
-    case A0_TOS:
-      __ mov(a1, a0);
-      // a0 and a1 contains the same value. Prefer a state with a0 holding TOS.
-      top_of_stack_state_ = A0_A1_TOS;
-      break;
-    case A1_TOS:
-      __ mov(a0, a1);
-      // a0 and a1 contains the same value. Prefer a state with a0 holding TOS.
-      top_of_stack_state_ = A0_A1_TOS;
-      break;
-    case A0_A1_TOS:
-      __ Push(a1);
-      __ mov(a1, a0);
-      // a0 and a1 contains the same value. Prefer a state with a0 holding TOS.
-      top_of_stack_state_ = A0_A1_TOS;
-      break;
-    case A1_A0_TOS:
-      __ Push(a0);
-      __ mov(a0, a1);
-      // a0 and a1 contains the same value. Prefer a state with a0 holding TOS.
-      top_of_stack_state_ = A0_A1_TOS;
-      break;
-    default:
-      UNREACHABLE();
+  if (SpilledScope::is_spilled()) {
+    __ lw(at, MemOperand(sp, 0));
+    __ Push(at);
+  } else {
+    switch (top_of_stack_state_) {
+      case NO_TOS_REGISTERS:
+        __ lw(a0, MemOperand(sp, 0));
+        top_of_stack_state_ = A0_TOS;
+        break;
+      case A0_TOS:
+        __ mov(a1, a0);
+        // a0 and a1 contains the same value. Prefer a state with a0 holding TOS.
+        top_of_stack_state_ = A0_A1_TOS;
+        break;
+      case A1_TOS:
+        __ mov(a0, a1);
+        // a0 and a1 contains the same value. Prefer a state with a0 holding TOS.
+        top_of_stack_state_ = A0_A1_TOS;
+        break;
+      case A0_A1_TOS:
+        __ Push(a1);
+        __ mov(a1, a0);
+        // a0 and a1 contains the same value. Prefer a state with a0 holding TOS.
+        top_of_stack_state_ = A0_A1_TOS;
+        break;
+      case A1_A0_TOS:
+        __ Push(a0);
+        __ mov(a0, a1);
+        // a0 and a1 contains the same value. Prefer a state with a0 holding TOS.
+        top_of_stack_state_ = A0_A1_TOS;
+        break;
+      default:
+        UNREACHABLE();
+    }
   }
   element_count_++;
 }
