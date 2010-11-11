@@ -5762,14 +5762,21 @@ void Reference::GetValue() {
       Slot* slot = expression_->AsVariableProxy()->AsVariable()->slot();
       ASSERT(slot != NULL);
       cgen_->LoadFromSlotCheckForArguments(slot, NOT_INSIDE_TYPEOF);
+      if (!persist_after_get_) {
+        cgen_->UnloadReference(this);
+      }
       break;
     }
 
     case NAMED: {
       Variable* var = expression_->AsVariableProxy()->AsVariable();
-      ASSERT(var == NULL || var->is_global());
-      cgen_->EmitNamedLoad(GetName(), var != NULL);
+      bool is_global = var != NULL;
+      ASSERT(!is_global || var->is_global());
+      cgen_->EmitNamedLoad(GetName(), is_global);
       cgen_->frame()->EmitPush(v0);
+      if (!persist_after_get_) {
+        cgen_->UnloadReference(this);
+      }
       break;
     }
 
@@ -5777,17 +5784,17 @@ void Reference::GetValue() {
       ASSERT(property != NULL);
       cgen_->EmitKeyedLoad();
       cgen_->frame()->EmitPush(v0);
+      if (!persist_after_get_) {
+        cgen_->UnloadReference(this);
+      }
       break;
     }
 
     default:
       UNREACHABLE();
   }
-
-  if (!persist_after_get_) {
-    cgen_->UnloadReference(this);
-  }
 }
+
 
 
 void Reference::SetValue(InitState init_state) {
