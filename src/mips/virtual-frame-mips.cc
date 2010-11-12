@@ -25,8 +25,6 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-
-
 #include "v8.h"
 
 #if defined(V8_TARGET_ARCH_MIPS)
@@ -38,9 +36,6 @@
 
 namespace v8 {
 namespace internal {
-
-// -------------------------------------------------------------------------
-// VirtualFrame implementation.
 
 #define __ ACCESS_MASM(masm())
 
@@ -257,8 +252,6 @@ void VirtualFrame::PushReceiverSlotAddress() {
 }
 
 
-
-
 void VirtualFrame::PushTryHandler(HandlerType type) {
   // Grow the expression stack by handler size less one (the return
   // address in lr is already counted by a call instruction).
@@ -338,7 +331,8 @@ void VirtualFrame::CallStoreIC(Handle<String> name, bool is_contextual) {
 
 void VirtualFrame::CallKeyedLoadIC() {
   Handle<Code> ic(Builtins::builtin(Builtins::KeyedLoadIC_Initialize));
-  SpillAllButCopyTOSToA0();
+  PopToA1A0();
+  SpillAll();
   CallCodeObject(ic, RelocInfo::CODE_TARGET, 0);
 }
 
@@ -540,24 +534,28 @@ void VirtualFrame::Dup() {
         break;
       case A0_TOS:
         __ mov(a1, a0);
-        // a0 and a1 contains the same value. Prefer a state with a0 holding TOS.
+        // a0 and a1 contains the same value.
+        // Prefer a state with a0 holding TOS.
         top_of_stack_state_ = A0_A1_TOS;
         break;
       case A1_TOS:
         __ mov(a0, a1);
-        // a0 and a1 contains the same value. Prefer a state with a0 holding TOS.
+        // a0 and a1 contains the same value.
+        // Prefer a state with a0 holding TOS.
         top_of_stack_state_ = A0_A1_TOS;
         break;
       case A0_A1_TOS:
         __ Push(a1);
         __ mov(a1, a0);
-        // a0 and a1 contains the same value. Prefer a state with a0 holding TOS.
+        // a0 and a1 contains the same value.
+        // Prefer a state with a0 holding TOS.
         top_of_stack_state_ = A0_A1_TOS;
         break;
       case A1_A0_TOS:
         __ Push(a0);
         __ mov(a0, a1);
-        // a0 and a1 contains the same value. Prefer a state with a0 holding TOS.
+        // a0 and a1 contains the same value.
+        // Prefer a state with a0 holding TOS.
         top_of_stack_state_ = A0_A1_TOS;
         break;
       default:
@@ -567,6 +565,44 @@ void VirtualFrame::Dup() {
   element_count_++;
 }
 
+
+void VirtualFrame::Dup2() {
+  if (SpilledScope::is_spilled()) {
+    __ lw(t0, MemOperand(sp, kPointerSize));
+    __ Push(t0);
+    __ lw(t0, MemOperand(sp, kPointerSize));
+    __ Push(t0);
+  } else {
+    switch (top_of_stack_state_) {
+      case NO_TOS_REGISTERS:
+        __ lw(a0, MemOperand(sp, 0));
+        __ lw(a1, MemOperand(sp, kPointerSize));
+        top_of_stack_state_ = A0_A1_TOS;
+        break;
+      case A0_TOS:
+        __ Push(a0);
+        __ lw(a1, MemOperand(sp, kPointerSize));
+        top_of_stack_state_ = A0_A1_TOS;
+        break;
+      case A1_TOS:
+        __ Push(a1);
+        __ lw(a0, MemOperand(sp, kPointerSize));
+        top_of_stack_state_ = A1_A0_TOS;
+        break;
+      case A0_A1_TOS:
+        __ MultiPush(a0.bit() | a1.bit());
+        top_of_stack_state_ = A0_A1_TOS;
+        break;
+      case A1_A0_TOS:
+        __ MultiPushReversed(a0.bit() | a1.bit());
+        top_of_stack_state_ = A1_A0_TOS;
+        break;
+      default:
+        UNREACHABLE();
+    }
+  }
+  element_count_ += 2;
+}
 
 Register VirtualFrame::PopToRegister(Register but_not_to_this_one) {
   ASSERT(but_not_to_this_one.is(a0) ||

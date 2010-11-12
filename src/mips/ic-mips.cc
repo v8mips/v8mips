@@ -645,7 +645,9 @@ bool KeyedLoadIC::PatchInlinedLoad(Address address, Object* map) {
   // li(scratch2, Operand(Factory::null_value()), true); which at
   // present is 24 instructions from the end of the routine.
   Address ldr_map_instr_address =
-          inline_end_address - 24 * Assembler::kInstrSize;
+      inline_end_address -
+      (CodeGenerator::kInlinedKeyedLoadInstructionsAfterPatch *
+      Assembler::kInstrSize);
   Assembler::set_target_address_at(ldr_map_instr_address,
                                    reinterpret_cast<Address>(map));
   return true;
@@ -689,12 +691,12 @@ Object* KeyedLoadIC_Miss(Arguments args);
 
 
 void KeyedLoadIC::GenerateMiss(MacroAssembler* masm) {
-  // ra     : return address
-  // a0     : key
-  // sp[0]  : key
-  // sp[4]  : receiver
+  // ---------- S t a t e --------------
+  //  -- ra     : return address
+  //  -- a0     : key
+  //  -- a1     : receiver
+  // -----------------------------------
 
-  __ lw(a1, MemOperand(sp, kPointerSize));
   __ MultiPush(a1.bit() | a0.bit());
 
   ExternalReference ref = ExternalReference(IC_Utility(kKeyedLoadIC_Miss));
@@ -703,12 +705,12 @@ void KeyedLoadIC::GenerateMiss(MacroAssembler* masm) {
 
 
 void KeyedLoadIC::GenerateRuntimeGetProperty(MacroAssembler* masm) {
-  // ra     : return address
-  // a0     : key
-  // sp[0]  : key
-  // sp[4]  : receiver
+  // ---------- S t a t e --------------
+  //  -- ra     : return address
+  //  -- a0     : key
+  //  -- a1     : receiver
+  // -----------------------------------
 
-  __ lw(a1, MemOperand(sp, kPointerSize));
   __ MultiPush(a1.bit() | a0.bit());
   // Do a tail-call to runtime routine.
 
@@ -720,24 +722,22 @@ void KeyedLoadIC::GenerateGeneric(MacroAssembler* masm) {
   // ---------- S t a t e --------------
   //  -- ra     : return address
   //  -- a0     : key
-  //  -- sp[0]  : key
-  //  -- sp[4]  : receiver
+  //  -- a1     : receiver
   // -----------------------------------
   Label slow, check_pixel_array, check_number_dictionary;
 
   // Modified slightly from in-tree arm version, see
   // ic-arm.cc: 6a579d9fd7.
 
-  // Get the object from the stack.
-  __ lw(a1, MemOperand(sp, kPointerSize));
-
   // a0: key
   // a1: receiver object
+  Register key = a0;
+  Register receiver = a1;
 
   // Check that the object isn't a smi.
-  __ BranchOnSmi(a1, &slow);
+  __ BranchOnSmi(receiver, &slow);
   // Get the map of the receiver.
-  __ lw(a2, FieldMemOperand(a1, HeapObject::kMapOffset));
+  __ lw(a2, FieldMemOperand(receiver, HeapObject::kMapOffset));
   // Check bit field.
   __ lbu(a3, FieldMemOperand(a2, Map::kBitFieldOffset));
   __ And(a3, a3, Operand(kSlowCaseBitFieldMask));
@@ -751,85 +751,82 @@ void KeyedLoadIC::GenerateGeneric(MacroAssembler* masm) {
   __ Branch(&slow, lt, a2, Operand(JS_OBJECT_TYPE));
 
   // Check that the key is a smi.
-  __ BranchOnNotSmi(a0, &slow);
-  // Save key in a2 in case we want it for the number dictionary case.
-  __ mov(a2, a0);
-  __ sra(a0, a0, kSmiTagSize);  // Untag the key.
+  __ BranchOnNotSmi(key, &slow);
+  // Untag key into a2.
+  __ sra(a2, key, kSmiTagSize);
 
   // Get the elements array of the object.
-  __ lw(a1, FieldMemOperand(a1, JSObject::kElementsOffset));
+  __ lw(t0, FieldMemOperand(receiver, JSObject::kElementsOffset));
   // Check that the object is in fast mode (not dictionary).
-  __ lw(a3, FieldMemOperand(a1, HeapObject::kMapOffset));
-  __ LoadRoot(t0, Heap::kFixedArrayMapRootIndex);
+  __ lw(a3, FieldMemOperand(t0, HeapObject::kMapOffset));
+  __ LoadRoot(t1, Heap::kFixedArrayMapRootIndex);
   __ Branch(&check_pixel_array, ne, a3, Operand(t0));
   // Check that the key (index) is within bounds.
-  __ lw(a3, FieldMemOperand(a1, Array::kLengthOffset));
-  __ Branch(&slow, hs, a0, Operand(a3));
+  __ lw(a3, FieldMemOperand(t1, Array::kLengthOffset));
+  __ Branch(&slow, hs, a2, Operand(a3));
 
   // Fast case: Do the load.
   // a0: key (un-tagged integer).
   // a1: elements array of the object.
-  __ Addu(a3, a1, Operand(FixedArray::kHeaderSize - kHeapObjectTag));
-  __ sll(t0, a0, kPointerSizeLog2);  // Scale index for words.
-  __ Addu(t0, t0, Operand(a3));  // Index + base.
-  __ lw(v0, MemOperand(t0, 0));
+  __ Addu(a3, t0, Operand(FixedArray::kHeaderSize - kHeapObjectTag));
+  __ sll(a2, a2, kPointerSizeLog2);  // Scale index for words.
+  __ Addu(a2, a2, Operand(a3));
+  __ lw(a2, MemOperand(a2, 0));
   __ LoadRoot(t1, Heap::kTheHoleValueRootIndex);
   // In case the loaded value is the_hole we have to consult GetProperty
   // to ensure the prototype chain is searched.
-  __ Branch(&slow, eq, v0, Operand(t1));
+  __ Branch(&slow, eq, a2, Operand(t1));
+  __ mov(v0, a2);
   __ Ret();
 
   // Check whether the elements is a pixel array.
-  // a0: key (untagged integer).
-  // a1: elements array of the object.
-  // a3: map of elements array.
+  // a0: key
+  // a2: untagged index
+  // a3: elements map
+  // t0: elements
   __ bind(&check_pixel_array);
-  __ LoadRoot(t0, Heap::kPixelArrayMapRootIndex);
-  __ Branch(&check_number_dictionary, ne, a3, Operand(t0));
+  __ LoadRoot(t1, Heap::kPixelArrayMapRootIndex);
+  __ Branch(&check_number_dictionary, ne, a3, Operand(t1));
   // Check that the key (index) is within bounds.
-  __ lw(t0, FieldMemOperand(a1, PixelArray::kLengthOffset));
-  __ Branch(&slow, hs, a0, Operand(t0));
-  __ lw(t0, FieldMemOperand(a1, PixelArray::kExternalPointerOffset));
-  __ Addu(t0, t0, Operand(a0));
-  __ lbu(v0, MemOperand(t0, 0));
-  __ sll(v0, v0, kSmiTagSize);  // Tag result as smi.
+  __ lw(t1, FieldMemOperand(t0, PixelArray::kLengthOffset));
+  __ Branch(&slow, hs, a2, Operand(t1));
+  __ lw(t1, FieldMemOperand(t0, PixelArray::kExternalPointerOffset));
+  __ Addu(t1, t1, Operand(a2));
+  __ lbu(a2, MemOperand(t1, 0));
+  __ sll(v0, a2, kSmiTagSize);  // Tag result as smi.
   __ Ret();
 
   __ bind(&check_number_dictionary);
   // Check whether the elements is a number dictionary.
-  // a0: untagged index
-  // a1: elements
-  // a2: key
-  // a3: map of elements array.
-  __ LoadRoot(t0, Heap::kHashTableMapRootIndex);
-  __ Branch(&slow, ne, a3, Operand(t0));
+  // a0: key
+  // a2: untagged index
+  // a3: elements map
+  // t0: elements
+  __ LoadRoot(t1, Heap::kHashTableMapRootIndex);
+  __ Branch(&slow, ne, a3, Operand(t1));
 
-  GenerateNumberDictionaryLoad(masm, &slow, a1, a2, a0, a3, t0);
-  __ mov(v0, a0);  // Return value in v0.
+  GenerateNumberDictionaryLoad(masm, &slow, t0, a0, a2, a3, t1);
+  __ mov(v0, a2);  // Return value in v0.
   __ Ret();
 
   // Slow case: Push extra copies of the arguments (2).
   __ bind(&slow);
-  __ IncrementCounter(&Counters::keyed_load_generic_slow, 1, a0, a1);
-  __ lw(a0, MemOperand(sp, 0));
+  __ IncrementCounter(&Counters::keyed_load_generic_slow, 1, a2, a3);
   GenerateRuntimeGetProperty(masm);
 }
 
 
 void KeyedLoadIC::GenerateString(MacroAssembler* masm) {
-  // ra     : return address
-  // a0     : key
-  // sp[0]  : key
-  // sp[4]  : receiver
-
+  // ---------- S t a t e --------------
+  //  -- ra     : return address
+  //  -- a0     : key
+  //  -- a1     : receiver
+  // -----------------------------------
   Label miss;
   Label index_not_smi;
   Label index_out_of_range;
   Label slow_char_code;
   Label got_char_code;
-
-  // Get the object from the stack.
-  __ lw(a1, MemOperand(sp, kPointerSize));
 
   Register object = a1;
   Register index = a0;
@@ -934,90 +931,88 @@ void KeyedLoadIC::GenerateExternalArray(MacroAssembler* masm,
   // ---------- S t a t e --------------
   //  -- ra     : return address
   //  -- a0     : key
-  //  -- sp[0]  : key
-  //  -- sp[4]  : receiver
+  //  -- a1     : receiver
   // -----------------------------------
   Label slow, failed_allocation;
 
-  // Get the object from the stack.
-  __ lw(a1, MemOperand(sp, kPointerSize));
-
-  // a0: key
-  // a1: receiver object
+  Register key = a0;
+  Register receiver = a1;
 
   // Check that the object isn't a smi
-  __ BranchOnSmi(a1, &slow);
+  __ BranchOnSmi(receiver, &slow);
 
   // Check that the key is a smi.
-  __ BranchOnNotSmi(a0, &slow);
+  __ BranchOnNotSmi(key, &slow);
 
   // Check that the object is a JS object. Load map into a2.
-  __ GetObjectType(a1, a2, a3);
+  __ GetObjectType(receiver, a2, a3);
   __ Branch(&slow, lt, a3, Operand(FIRST_JS_OBJECT_TYPE));
 
   // Check that the receiver does not require access checks.  We need
   // to check this explicitly since this generic stub does not perform
   // map checks.
   __ lbu(a3, FieldMemOperand(a2, Map::kBitFieldOffset));
-  __ And(a3, a3, Operand(1 << Map::kIsAccessCheckNeeded));
-  __ Branch(&slow, ne, a3, Operand(zero_reg));
+  __ And(t1, a3, Operand(1 << Map::kIsAccessCheckNeeded));
+  __ Branch(&slow, ne, t1, Operand(zero_reg));
 
   // Check that the elements array is the appropriate type of
   // ExternalArray.
-  // a0: index (as a smi)
-  // a1: JSObject
-  __ lw(a1, FieldMemOperand(a1, JSObject::kElementsOffset));
-  __ lw(a2, FieldMemOperand(a1, HeapObject::kMapOffset));
-  __ LoadRoot(t0, Heap::RootIndexForExternalArrayType(array_type));
-  __ Branch(&slow, ne, a2, Operand(t0));
+  __ lw(a3, FieldMemOperand(receiver, JSObject::kElementsOffset));
+  __ lw(a2, FieldMemOperand(a3, HeapObject::kMapOffset));
+  __ LoadRoot(t1, Heap::RootIndexForExternalArrayType(array_type));
+  __ Branch(&slow, ne, a2, Operand(t1));
 
   // Check that the index is in range.
-  __ lw(t0, FieldMemOperand(a1, ExternalArray::kLengthOffset));
-  __ sra(t1, a0, kSmiTagSize);
+  __ lw(t1, FieldMemOperand(a3, ExternalArray::kLengthOffset));
+  __ sra(t2, key, kSmiTagSize);
   // Unsigned comparison catches both negative and too-large values.
-  __ Branch(&slow, Uless, t0, Operand(t1));
+  __ Branch(&slow, Uless, t1, Operand(t2));
 
-  // a0: index (smi)
-  // t1: key (un-tagged)
-  // a1: elements array
-  __ lw(a1, FieldMemOperand(a1, ExternalArray::kExternalPointerOffset));
-  // a1: base pointer of external storage
 
+  // a3: elements array
+  __ lw(a3, FieldMemOperand(a3, ExternalArray::kExternalPointerOffset));
+  // a3: base pointer of external storage
+
+  // We are not untagging smi key and instead work with it
+  // as if it was premultiplied by 2.
+  ASSERT((kSmiTag == 0) && (kSmiTagSize == 1));
+
+  Register value = a2;
   switch (array_type) {
     case kExternalByteArray:
-      __ addu(t0, a1, t1);
-      __ lb(a0, MemOperand(t0, 0));
+      __ addu(t3, a3, t2);
+      __ lb(value, MemOperand(t3, 0));
       break;
     case kExternalUnsignedByteArray:
-      __ addu(t0, a1, t1);
-      __ lbu(a0, MemOperand(t0, 0));
+      __ addu(t3, a3, t2);
+      __ lbu(value, MemOperand(t3, 0));
       break;
     case kExternalShortArray:
-      __ sll(t0, t1, 1);
-      __ addu(t0, a1, t0);
-      __ lh(a0, MemOperand(t0, 0));
+      __ sll(t3, t2, 1);
+      __ addu(t3, a3, t3);
+      __ lh(value, MemOperand(t3, 0));
       break;
     case kExternalUnsignedShortArray:
-      __ sll(t0, t1, 1);
-      __ addu(t0, a1, t0);
-      __ lhu(a0, MemOperand(t0, 0));
+      __ sll(t3, t2, 1);
+      __ addu(t3, a3, t3);
+      __ lhu(value, MemOperand(t3, 0));
       break;
     case kExternalIntArray:
     case kExternalUnsignedIntArray:
-      __ sll(t0, t1, 2);
-      __ addu(t0, a1, t0);
-      __ lw(a0, MemOperand(t0, 0));
+      __ sll(t3, t2, 2);
+      __ addu(t3, a3, t3);
+      __ lw(value, MemOperand(t3, 0));
       break;
     case kExternalFloatArray:
       if (CpuFeatures::IsSupported(FPU)) {
         CpuFeatures::Scope scope(FPU);
-        __ sll(t0, t1, 2);
-        __ addu(t0, a1, t0);
-        __ lwc1(f0, MemOperand(t0, 0));
+        __ sll(t3, t2, 2);
+        __ addu(a2, a3, t3);
+        __ lwc1(f0, MemOperand(a2, 0));
       } else {
-        __ sll(t0, t1, 2);
-        __ addu(t0, a1, t0);
-        __ lw(a0, MemOperand(t0, 0));
+        __ sll(t3, t2, 2);
+        __ addu(t3, a3, t3);
+        __ lw(value, MemOperand(t3, 0));
       }
       break;
     default:
@@ -1026,35 +1021,35 @@ void KeyedLoadIC::GenerateExternalArray(MacroAssembler* masm,
   }
 
   // For integer array types:
-  // a0: value
+  // a2: value
   // For floating-point array type
   // f0: value (if FPU is supported)
-  // a0: value (if FPU is not supported)
+  // a2: value (if FPU is not supported)
 
   if (array_type == kExternalIntArray) {
     // For the Int and UnsignedInt array types, we need to see whether
     // the value can be represented in a Smi. If not, we need to convert
     // it to a HeapNumber.
     Label box_int;
-    __ Subu(t0, a0, Operand(0xc0000000));  // Non-smi value gives neg result.
-    __ Branch(&box_int, lt, t0, Operand(zero_reg));
-    __ sll(v0, a0, kSmiTagSize);
+    __ Subu(t3, value, Operand(0xC0000000));  // Non-smi value gives neg result.
+    __ Branch(&box_int, lt, t3, Operand(zero_reg));
+    // Tag integer as smi and return it.
+    __ sll(v0, value, kSmiTagSize);
     __ Ret();
 
     __ bind(&box_int);
-
-    // Allocate a HeapNumber for the int and perform int-to-double
-    // conversion.
+    // Allocate a HeapNumber for the result and perform int-to-double
+    // conversion. Use v0 for result as key is not needed any more.
     __ AllocateHeapNumber(v0, a3, t0, &slow);
 
     if (CpuFeatures::IsSupported(FPU)) {
       CpuFeatures::Scope scope(FPU);
-      __ mtc1(a0, f0);
+      __ mtc1(value, f0);
       __ cvt_d_w(f0, f0);
       __ sdc1(f0, MemOperand(v0, HeapNumber::kValueOffset - kHeapObjectTag));
       __ Ret();
     } else {
-      WriteInt32ToHeapNumberStub stub(a0, v0, t0, t1);
+      WriteInt32ToHeapNumberStub stub(value, v0, t2, t3);
       __ TailCallStub(&stub);
     }
   } else if (array_type == kExternalUnsignedIntArray) {
@@ -1064,16 +1059,20 @@ void KeyedLoadIC::GenerateExternalArray(MacroAssembler* masm,
     if (CpuFeatures::IsSupported(FPU)) {
       CpuFeatures::Scope scope(FPU);
       Label pl_box_int;
-      __ And(t0, a0, Operand(0xC0000000));
-      __ Branch(&pl_box_int, ne, t0, Operand(zero_reg));
+      __ And(t2, value, Operand(0xC0000000));
+      __ Branch(&pl_box_int, ne, t2, Operand(zero_reg));
 
       // It can fit in an Smi.
-      __ sll(v0, a0, kSmiTagSize);
+      // Tag integer as smi and return it.
+      __ sll(v0, value, kSmiTagSize);
       __ Ret();
 
       __ bind(&pl_box_int);
-      __ AllocateHeapNumber(v0, a1, a2, &slow);
-      __ mtc1(a0, f0);        // LS 32-bits.
+      // Allocate a HeapNumber for the result and perform int-to-double
+      // conversion. Don't use a0 and a1 as AllocateHeapNumber clobbers all
+      // registers - also when jumping due to exhausted young space.
+      __ AllocateHeapNumber(v0, t2, t3, &slow);
+      __ mtc1(value, f0);     // LS 32-bits.
       __ mtc1(zero_reg, f1);  // MS 32-bits are all zero.
       __ cvt_d_l(f0, f0);     // Use 64 bit conv to get correct unsigned 32-bit.
       __ sdc1(f0, MemOperand(v0, HeapNumber::kValueOffset - kHeapObjectTag));
@@ -1082,31 +1081,37 @@ void KeyedLoadIC::GenerateExternalArray(MacroAssembler* masm,
     } else {
       // Check whether unsigned integer fits into smi.
       Label box_int_0, box_int_1, done;
-      __ And(t0, a0, Operand(0x80000000));
-      __ Branch(&box_int_0, ne, t0, Operand(zero_reg));
-      __ And(t0, a0, Operand(0x40000000));
-      __ Branch(&box_int_1, ne, t0, Operand(zero_reg));
+      __ And(t2, value, Operand(0x80000000));
+      __ Branch(&box_int_0, ne, t2, Operand(zero_reg));
+      __ And(t2, value, Operand(0x40000000));
+      __ Branch(&box_int_1, ne, t2, Operand(zero_reg));
 
       // Tag integer as smi and return it.
-      __ sll(v0, a0, kSmiTagSize);
+      __ sll(v0, value, kSmiTagSize);
       __ Ret();
+
+      Register hiword = value;  // a2.
+      Register loword = a3;
 
       __ bind(&box_int_0);
       // Integer does not have leading zeros.
-      GenerateUInt2Double(masm, a0, a1, t0, 0);
+      GenerateUInt2Double(masm, hiword, loword, t0, 0);
       __ b(&done);
 
       __ bind(&box_int_1);
       // Integer has one leading zero.
-      GenerateUInt2Double(masm, a0, a1, t0, 1);
+      GenerateUInt2Double(masm, hiword, loword, t0, 1);
+
 
       __ bind(&done);
-      // Integer was converted to double in registers a0:a1.
-      // Wrap it into a HeapNumber.
+      // Integer was converted to double in registers hiword:loword.
+      // Wrap it into a HeapNumber. Don't use a0 and a1 as AllocateHeapNumber
+      // clobbers all registers - also when jumping due to exhausted young
+      // space.
       __ AllocateHeapNumber(t2, t3, t5, &slow);
 
-      __ sw(a0, FieldMemOperand(t2, HeapNumber::kExponentOffset));
-      __ sw(a1, FieldMemOperand(t2, HeapNumber::kMantissaOffset));
+      __ sw(hiword, FieldMemOperand(t2, HeapNumber::kExponentOffset));
+      __ sw(loword, FieldMemOperand(t2, HeapNumber::kMantissaOffset));
 
       __ mov(v0, t2);
       __ Ret();
@@ -1116,39 +1121,49 @@ void KeyedLoadIC::GenerateExternalArray(MacroAssembler* masm,
     // HeapNumber.
     if (CpuFeatures::IsSupported(FPU)) {
       CpuFeatures::Scope scope(FPU);
-      __ AllocateHeapNumber(v0, a1, a2, &slow);
+      // Allocate a HeapNumber for the result. Don't use a0 and a1 as
+      // AllocateHeapNumber clobbers all registers - also when jumping due to
+      // exhausted young space.
+      __ AllocateHeapNumber(v0, t3, t5, &slow);
       // The float (single) value is already in fpu reg f0 (if we use float).
       __ cvt_d_s(f0, f0);
       __ sdc1(f0, MemOperand(v0, HeapNumber::kValueOffset - kHeapObjectTag));
       __ Ret();
     } else {
-      __ AllocateHeapNumber(v0, t1, t2, &slow);
+      // Allocate a HeapNumber for the result. Don't use a0 and a1 as
+      // AllocateHeapNumber clobbers all registers - also when jumping due to
+      // exhausted young space.
+      __ AllocateHeapNumber(v0, t3, t5, &slow);
       // FPU is not available, do manual single to double conversion.
 
-      // a0: floating point value (binary32).
+      // a2: floating point value (binary32).
+      // v0: heap number for result
 
-      // Extract mantissa to a1.
-      __ And(a1, a0, Operand(kBinary32MantissaMask));
+      // Extract mantissa to t4.
+      __ And(t4, value, Operand(kBinary32MantissaMask));
 
-      // Extract exponent to a2.
-      __ srl(a2, a0, kBinary32MantissaBits);
-      __ And(a2, a2, Operand(kBinary32ExponentMask >> kBinary32MantissaBits));
+      // Extract exponent to t5.
+      __ srl(t5, value, kBinary32MantissaBits);
+      __ And(t5, t5, Operand(kBinary32ExponentMask >> kBinary32MantissaBits));
 
       Label exponent_rebiased;
-      __ Branch(&exponent_rebiased, eq, a2, Operand(zero_reg));
+      __ Branch(&exponent_rebiased, eq, t5, Operand(zero_reg));
 
       __ li(t0, 0x7ff);
-      __ Xor(t1, a2, Operand(0xFF));
-      __ movz(a2, t0, t1);  // Set a2 to 0x7ff only if to is equal to 0xff.
+      __ Xor(t1, t5, Operand(0xFF));
+      __ movz(t5, t0, t1);  // Set t5 to 0x7ff only if t5 is equal to 0xff.
       __ Branch(&exponent_rebiased, eq, t0, Operand(0xff));
 
       // Rebias exponent.
-      __ Addu(a2, a2, Operand(-kBinary32ExponentBias + HeapNumber::kExponentBias));
+      __ Addu(t5,
+              t5,
+              Operand(-kBinary32ExponentBias + HeapNumber::kExponentBias));
 
       __ bind(&exponent_rebiased);
-      __ And(a0, a0, Operand(kBinary32SignMask));
-      __ sll(a2, a2, HeapNumber::kMantissaBitsInTopWord);
-      __ or_(a0, a0, a2);
+      __ And(a2, value, Operand(kBinary32SignMask));
+      __ sll(t0, t0, HeapNumber::kMantissaBitsInTopWord);
+      value = no_reg;
+      __ or_(a2, a2, t0);
 
       // Shift mantissa.
       static const int kMantissaShiftForHiWord =
@@ -1157,25 +1172,24 @@ void KeyedLoadIC::GenerateExternalArray(MacroAssembler* masm,
       static const int kMantissaShiftForLoWord =
           kBitsPerInt - kMantissaShiftForHiWord;
 
-      __ srl(t0, a1, kMantissaShiftForHiWord);
-      __ or_(a0, a0, t0);
-      __ sll(a1, a1, kMantissaShiftForLoWord);
+      __ srl(t0, t4, kMantissaShiftForHiWord);
+      __ or_(a2, a2, t0);
+      __ sll(a0, t4, kMantissaShiftForLoWord);
 
-      __ sw(a0, FieldMemOperand(v0, HeapNumber::kExponentOffset));
-      __ sw(a1, FieldMemOperand(v0, HeapNumber::kMantissaOffset));
+      __ sw(a2, FieldMemOperand(v0, HeapNumber::kExponentOffset));
+      __ sw(a0, FieldMemOperand(v0, HeapNumber::kMantissaOffset));
       __ Ret();
     }
 
   } else {
-    // Remaining array-types will all fit in Smi.
-    __ sll(v0, a0, kSmiTagSize);
+    // Tag integer as smi and return it.
+    __ sll(v0, value, kSmiTagSize);
     __ Ret();
   }
 
-  // Slow case: Load name and receiver from stack and jump to runtime.
+  // Slow case, key and receiver still in a0 and a1.
   __ bind(&slow);
-  __ IncrementCounter(&Counters::keyed_load_external_array_slow, 1, a0, a1);
-  __ lw(a0, MemOperand(sp, 0));
+  __ IncrementCounter(&Counters::keyed_load_external_array_slow, 1, a2, a3);
   GenerateRuntimeGetProperty(masm);
 }
 
@@ -1297,7 +1311,7 @@ void KeyedStoreIC::GenerateGeneric(MacroAssembler* masm) {
   int displacement = FixedArray::kHeaderSize - kHeapObjectTag -
       ((1 << kSmiTagSize) * 2);
   __ Addu(a2, a2, Operand(displacement));
-  __ sll(t0, a1, kPointerSizeLog2 - kSmiTagSize); // Scale smi to word index.
+  __ sll(t0, a1, kPointerSizeLog2 - kSmiTagSize);  // Scale smi to word index.
   __ Addu(a2, a2, Operand(t0));  // Base + index.
   __ Branch(&fast, al);
 
@@ -1314,13 +1328,13 @@ void KeyedStoreIC::GenerateGeneric(MacroAssembler* masm) {
 
   // Check the key against the length in the array, compute the
   // address to store into and fall through to fast case.
-  __ lw(a1, MemOperand(sp)); // Restore key
+  __ lw(a1, MemOperand(sp));  // Restore key
   // a0 == value, a1 == key, a2 == elements, a3 == object.
   __ lw(t0, FieldMemOperand(a3, JSArray::kLengthOffset));
   __ Branch(&extra, hs, a1, Operand(t0));
   __ mov(a3, a2);
   __ Addu(a2, a2, Operand(FixedArray::kHeaderSize - kHeapObjectTag));
-  __ sll(t0, a1, kPointerSizeLog2 - kSmiTagSize); // Scale smi to word index.
+  __ sll(t0, a1, kPointerSizeLog2 - kSmiTagSize);  // Scale smi to word index.
   __ Addu(a2, a2, Operand(t0));  // Base + index
 
 
@@ -1622,7 +1636,9 @@ void KeyedStoreIC::GenerateExternalArray(MacroAssembler* masm,
 
       // Rebias exponent.
       __ srl(t6, t6, HeapNumber::kExponentShift);
-      __ Addu(t6, t6, Operand(kBinary32ExponentBias - HeapNumber::kExponentBias));
+      __ Addu(t6,
+              t6,
+              Operand(kBinary32ExponentBias - HeapNumber::kExponentBias));
 
       __ li(t1, Operand(kBinary32MaxExponent));
       __ Slt(t1, t1, t6);
@@ -1751,13 +1767,9 @@ void KeyedLoadIC::GenerateIndexedInterceptor(MacroAssembler* masm) {
   // ---------- S t a t e --------------
   //  -- ra     : return address
   //  -- a0     : key
-  //  -- sp[0]  : key
-  //  -- sp[4]  : receiver
+  //  -- a1     : receiver
   // -----------------------------------
   Label slow;
-
-  // Get the object from the stack.
-  __ lw(a1, MemOperand(sp, kPointerSize));
 
   // Check that the receiver isn't a smi.
   __ BranchOnSmi(a1, &slow);

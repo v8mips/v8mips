@@ -257,6 +257,9 @@ class CodeGenerator: public AstVisitor {
   // expected arguments. Otherwise return -1.
   static int InlineRuntimeCallArgumentsCount(Handle<String> name);
 
+  // Constants related to patching of inlined load/store.
+  static const int kInlinedKeyedLoadInstructionsAfterPatch = 25;
+
  private:
   // Construction/Destruction.
   explicit CodeGenerator(MacroAssembler* masm);

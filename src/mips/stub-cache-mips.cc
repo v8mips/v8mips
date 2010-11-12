@@ -1811,15 +1811,13 @@ Object* KeyedLoadStubCompiler::CompileLoadField(String* name,
   // ----------- S t a t e -------------
   //  -- ra    : return address
   //  -- a0    : key
-  //  -- sp[0] : key
-  //  -- sp[4] : receiver
+  //  -- a1    : receiver
   // -----------------------------------
   Label miss;
 
   // Check the key is the cached one.
   __ Branch(&miss, ne, a0, Operand(Handle<String>(name)));
 
-  __ lw(a1, MemOperand(sp, kPointerSize));  // Receiver.
   GenerateLoadField(receiver, holder, a1, a2, a3, index, name, &miss);
   __ bind(&miss);
   GenerateLoadMiss(masm(), Code::KEYED_LOAD_IC);
@@ -1835,8 +1833,7 @@ Object* KeyedLoadStubCompiler::CompileLoadCallback(String* name,
   // ----------- S t a t e -------------
   //  -- ra    : return address
   //  -- a0    : key
-  //  -- sp[0] : key
-  //  -- sp[4] : receiver
+  //  -- a1    : receiver
   // -----------------------------------
   Label miss;
 
@@ -1844,7 +1841,6 @@ Object* KeyedLoadStubCompiler::CompileLoadCallback(String* name,
   __ Branch(&miss, ne, a0, Operand(Handle<String>(name)));
 
   Failure* failure = Failure::InternalError();
-  __ lw(a1, MemOperand(sp, kPointerSize));  // Receiver.
   bool success = GenerateLoadCallback(receiver, holder, a1, a0, a2, a3,
                                       callback, name, &miss, &failure);
   if (!success) return failure;
@@ -1863,15 +1859,13 @@ Object* KeyedLoadStubCompiler::CompileLoadConstant(String* name,
   // ----------- S t a t e -------------
   //  -- ra    : return address
   //  -- a0    : key
-  //  -- sp[0] : key
-  //  -- sp[4] : receiver
+  //  -- a1    : receiver
   // -----------------------------------
   Label miss;
 
   // Check the key is the cached one
   __ Branch(&miss, ne, a0, Operand(Handle<String>(name)));
 
-  __ lw(a1, MemOperand(sp, kPointerSize));  // Receiver.
   GenerateLoadConstant(receiver, holder, a1, a2, a3, value, name, &miss);
   __ bind(&miss);
   GenerateLoadMiss(masm(), Code::KEYED_LOAD_IC);
@@ -1887,8 +1881,7 @@ Object* KeyedLoadStubCompiler::CompileLoadInterceptor(JSObject* receiver,
   // ----------- S t a t e -------------
   //  -- ra    : return address
   //  -- a0    : key
-  //  -- sp[0] : key
-  //  -- sp[4] : receiver
+  //  -- a1    : receiver
   // -----------------------------------
   Label miss;
 
@@ -1897,7 +1890,6 @@ Object* KeyedLoadStubCompiler::CompileLoadInterceptor(JSObject* receiver,
 
   LookupResult lookup;
   LookupPostInterceptor(holder, name, &lookup);
-  __ lw(a1, MemOperand(sp, kPointerSize));  // Receiver.
   GenerateLoadInterceptor(receiver,
                           holder,
                           &lookup,
@@ -1918,15 +1910,13 @@ Object* KeyedLoadStubCompiler::CompileLoadArrayLength(String* name) {
   // ----------- S t a t e -------------
   //  -- ra    : return address
   //  -- a0    : key
-  //  -- sp[0] : key
-  //  -- sp[4] : receiver
+  //  -- a1    : receiver
   // -----------------------------------
   Label miss;
 
   // Check the key is the cached one.
   __ Branch(&miss, ne, a0, Operand(Handle<String>(name)));
 
-  __ lw(a1, MemOperand(sp, kPointerSize));  // Receiver.
   GenerateLoadArrayLength(masm(), a1, a2, &miss);
   __ bind(&miss);
   GenerateLoadMiss(masm(), Code::KEYED_LOAD_IC);
@@ -1939,8 +1929,7 @@ Object* KeyedLoadStubCompiler::CompileLoadStringLength(String* name) {
   // ----------- S t a t e -------------
   //  -- ra    : return address
   //  -- a0    : key
-  //  -- sp[0] : key
-  //  -- sp[4] : receiver
+  //  -- a1    : receiver
   // -----------------------------------
   Label miss;
   __ IncrementCounter(&Counters::keyed_load_string_length, 1, a1, a3);
@@ -1948,7 +1937,6 @@ Object* KeyedLoadStubCompiler::CompileLoadStringLength(String* name) {
   // Check the key is the cached one.
   __ Branch(&miss, ne, a0, Operand(Handle<String>(name)));
 
-  __ lw(a1, MemOperand(sp, kPointerSize));  // Receiver.
   GenerateLoadStringLength(masm(), a1, a2, a3, &miss);
   __ bind(&miss);
   __ DecrementCounter(&Counters::keyed_load_string_length, 1, a1, a3);
@@ -1964,8 +1952,7 @@ Object* KeyedLoadStubCompiler::CompileLoadFunctionPrototype(String* name) {
   // ----------- S t a t e -------------
   //  -- ra    : return address
   //  -- a0    : key
-  //  -- sp[0] : key
-  //  -- sp[4] : receiver
+  //  -- a1    : receiver
   // -----------------------------------
   GenerateLoadMiss(masm(), Code::KEYED_LOAD_IC);
 

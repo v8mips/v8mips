@@ -814,7 +814,6 @@ void CodeGenerator::LoadFromGlobalSlotCheckExtensions(Slot* slot,
                      typeof_state == INSIDE_TYPEOF
                          ? RelocInfo::CODE_TARGET
                          : RelocInfo::CODE_TARGET_CONTEXT);
-
 }
 
 
@@ -3430,7 +3429,8 @@ void CodeGenerator::EmitKeyedPropertyAssignment(Assignment* node) {
   if (node->is_compound()) {
     // For a compound assignment the right-hand side is a binary operation
     // between the current property value and the actual right-hand side.
-    // Load of the current value leaves receiver and key on the stack.
+    // Duplicate receiver and key for loading the current property value.
+    frame_->Dup2();
     EmitKeyedLoad();
     frame_->EmitPush(v0);
 
@@ -3525,7 +3525,6 @@ void CodeGenerator::VisitAssignment(Assignment* node) {
     // still generate code and expects a certain frame height.
     frame_->EmitPush(v0);
   }
-
   ASSERT_EQ(original_height + 1, frame_->height());
 }
 
@@ -3593,8 +3592,8 @@ void CodeGenerator::VisitCall(Call* node) {
     // arguments.
     // Prepare stack for call to resolved function.
     LoadAndSpill(function);
-    __ LoadRoot(t2, Heap::kUndefinedValueRootIndex);
-    frame_->EmitPush(t2);  // Slot for receiver
+    __ LoadRoot(a2, Heap::kUndefinedValueRootIndex);
+    frame_->EmitPush(a2);  // Slot for receiver
 
     int arg_count = args->length();
     for (int i = 0; i < arg_count; i++) {
@@ -3608,7 +3607,7 @@ void CodeGenerator::VisitCall(Call* node) {
       __ lw(a1, MemOperand(sp, arg_count * kPointerSize));
       frame_->EmitPush(a1);
     } else {
-      frame_->EmitPush(t2);
+      frame_->EmitPush(a2);
     }
 
     // Push the receiver.
@@ -3763,19 +3762,23 @@ void CodeGenerator::VisitCall(Call* node) {
       // -------------------------------------------
 
       LoadAndSpill(property->obj());
+      if (!property->is_synthetic()) {
+        // Duplicate receiver for later use.
+        __ lw(v0, MemOperand(sp, 0));
+        frame_->EmitPush(v0);
+      }
       LoadAndSpill(property->key());
       EmitKeyedLoad();  // Load from Keyed Property: result in v0.
-      frame_->Drop();  // key
       // Put the function below the receiver.
       if (property->is_synthetic()) {
         // Use the global receiver.
-        frame_->Drop();
-        frame_->EmitPush(v0);
+        frame_->EmitPush(v0);  // Function.
         LoadGlobalReceiver(a0);
       } else {
-        frame_->EmitPop(a1);  // receiver
-        frame_->EmitPush(v0);  // function
-        frame_->EmitPush(a1);  // receiver
+        // Switch receiver and function.
+        frame_->EmitPop(a1);  // Receiver.
+        frame_->EmitPush(v0);  // Function.
+        frame_->EmitPush(a1);  // Receiver.
       }
 
       // Call the function.
@@ -3816,7 +3819,6 @@ void CodeGenerator::VisitCallNew(CallNew* node) {
   // actual function to call is resolved after the arguments have been
   // evaluated.
 
-
   // Compute function to call and use the global object as the
   // receiver. There is no need to use the global proxy here because
   // it will always be replaced with a newly allocated object.
@@ -3839,9 +3841,8 @@ void CodeGenerator::VisitCallNew(CallNew* node) {
   // constructor invocation.
   CodeForSourcePosition(node->position());
   Handle<Code> ic(Builtins::builtin(Builtins::JSConstructCall));
-  frame_->CallCodeObject(ic,
-                         RelocInfo::CONSTRUCT_CALL,
-                         arg_count + 1);
+  frame_->CallCodeObject(ic, RelocInfo::CONSTRUCT_CALL, arg_count + 1);
+
   // Discard old TOS value and push v0 on the stack (same as Pop(), push(v0)).
   __ sw(v0, frame_->Top());
   ASSERT_EQ(original_height + 1, frame_->height());
@@ -5390,24 +5391,38 @@ void DeferredReferenceGetNamedValue::Generate() {
 
 
 class DeferredReferenceGetKeyedValue: public DeferredCode {
-  public:
-    DeferredReferenceGetKeyedValue() {
+ public:
+  DeferredReferenceGetKeyedValue(Register key, Register receiver)
+      : key_(key), receiver_(receiver) {
     set_comment("[ DeferredReferenceGetKeyedValue");
   }
 
   virtual void Generate();
+
+ private:
+  Register key_;
+  Register receiver_;
 };
 
 
 void DeferredReferenceGetKeyedValue::Generate() {
+  ASSERT((key_.is(a0) && receiver_.is(a1)) ||
+         (key_.is(a1) && receiver_.is(a0)));
+
   Register scratch1 = VirtualFrame::scratch0();
   Register scratch2 = VirtualFrame::scratch1();
   __ DecrementCounter(&Counters::keyed_load_inline, 1, scratch1, scratch2);
   __ IncrementCounter(&Counters::keyed_load_inline_miss, 1, scratch1, scratch2);
 
+  // Ensure key in a0 and receiver in a1 to match keyed load ic calling
+  // convention.
+  if (key_.is(a1)) {
+    __ Swap(a0, a1, at);
+  }
+
+  // The rest of the instructions in the deferred code must be together.
   { Assembler::BlockTrampolinePoolScope block_trampoline_pool(masm_);
-    // Call keyed load IC. It has all arguments on the stack and the key in a0.
-    __ lw(a0, MemOperand(sp, 0));
+    // Call keyed load IC. It has the arguments key and receiver in a0 and a1.
     Handle<Code> ic(Builtins::builtin(Builtins::KeyedLoadIC_Initialize));
     __ Call(ic, RelocInfo::CODE_TARGET);
     // The call must be followed by a nop instruction to indicate that the
@@ -5495,7 +5510,6 @@ void CodeGenerator::EmitNamedLoad(Handle<String> name, bool is_contextual) {
 
     // Generate patchable inline code. See LoadIC::PatchInlinedLoad.
     { Assembler::BlockTrampolinePoolScope block_trampoline_pool(masm_);
-
       // Check that the receiver is a heap object.
       __ And(at, receiver, Operand(kSmiTagMask));
       deferred->Branch(eq, at, Operand(zero_reg));
@@ -5546,14 +5560,14 @@ void CodeGenerator::EmitKeyedLoad() {
     __ IncrementCounter(&Counters::keyed_load_inline, 1,
                         frame_->scratch0(), frame_->scratch1());
 
-    // Load the receiver and key from the stack.
-    frame_->SpillAllButCopyTOSToA1A0();
-    Register receiver = a0;
-    Register key = a1;
+    // Load the key and receiver from the stack.
+    Register key = frame_->PopToRegister();
+    Register receiver = frame_->PopToRegister(key);
     VirtualFrame::SpilledScope spilled(frame_);
 
+    // The deferred code expects key and receiver in registers.
     DeferredReferenceGetKeyedValue* deferred =
-        new DeferredReferenceGetKeyedValue();
+        new DeferredReferenceGetKeyedValue(key, receiver);
 
     // Check that the receiver is a heap object.
     __ And(at, receiver, Operand(kSmiTagMask));
@@ -5563,17 +5577,16 @@ void CodeGenerator::EmitKeyedLoad() {
     // property code which can be patched. Therefore the exact number of
     // instructions generated need to be fixed, so the trampoline pool is
     // blocked while generating this code.
-#ifdef DEBUG
-    const int kInlinedKeyedLoadInstructions = 25;
-    Label check_inlined_codesize;
-    masm_->bind(&check_inlined_codesize);
-#endif
     { Assembler::BlockTrampolinePoolScope block_trampoline_pool(masm_);
       Register scratch1 = VirtualFrame::scratch0();
       Register scratch2 = VirtualFrame::scratch1();
       // Check the map. The null map used below is patched by the inline cache
       // code.
       __ lw(scratch1, FieldMemOperand(receiver, HeapObject::kMapOffset));
+#ifdef DEBUG
+    Label check_inlined_codesize;
+    masm_->bind(&check_inlined_codesize);
+#endif
       __ li(scratch2, Operand(Factory::null_value()), true);
       deferred->Branch(ne, scratch1, Operand(scratch2));
 
@@ -5601,18 +5614,17 @@ void CodeGenerator::EmitKeyedLoad() {
               Operand(FixedArray::kHeaderSize - kHeapObjectTag));
       __ sll(at, key, kPointerSizeLog2 - (kSmiTagSize + kSmiShiftSize));
       __ addu(at, at, scratch1);
-      __ lw(v0, MemOperand(at, 0));
+      __ lw(scratch1, MemOperand(at, 0));
 
-      // This is the only branch to deferred where a0 and a1 do not contain the
-      // receiver and key.  We can't just load undefined here because we have to
-      // check the prototype.
-      deferred->Branch(eq, v0, Operand(scratch2));
+      deferred->Branch(eq, scratch1, Operand(scratch2));
 
+      __ mov(v0, scratch1);
       // Make sure that the expected number of instructions are generated.
       // If this fails, KeyedLoadIC::PatchInlinedLoad() must be fixed as well.
-      ASSERT_EQ(kInlinedKeyedLoadInstructions,
+      ASSERT_EQ(kInlinedKeyedLoadInstructionsAfterPatch,
                 masm_->InstructionsGeneratedSince(&check_inlined_codesize));
     }
+
     deferred->BindExit();
   }
 }
@@ -5784,11 +5796,12 @@ void Reference::GetValue() {
 
     case KEYED: {
       ASSERT(property != NULL);
+      if (persist_after_get_) {
+        cgen_->frame()->Dup2();
+      }
       cgen_->EmitKeyedLoad();
       cgen_->frame()->EmitPush(v0);
-      if (!persist_after_get_) {
-        cgen_->UnloadReference(this);
-      }
+      if (!persist_after_get_) set_unloaded();
       break;
     }
 
@@ -5796,7 +5809,6 @@ void Reference::GetValue() {
       UNREACHABLE();
   }
 }
-
 
 
 void Reference::SetValue(InitState init_state) {
