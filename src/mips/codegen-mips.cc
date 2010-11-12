@@ -2922,7 +2922,6 @@ void CodeGenerator::VisitFunctionLiteral(FunctionLiteral* node) {
 #ifdef DEBUG
   int original_height = frame_->height();
 #endif
-  VirtualFrame::SpilledScope spilled_scope(frame_);
   Comment cmnt(masm_, "[ FunctionLiteral");
 
   // Build the function info and instantiate it.
@@ -2943,7 +2942,6 @@ void CodeGenerator::VisitSharedFunctionInfoLiteral(
 #ifdef DEBUG
   int original_height = frame_->height();
 #endif
-  VirtualFrame::SpilledScope spilled_scope(frame_);
   Comment cmnt(masm_, "[ SharedFunctionInfoLiteral");
   InstantiateFunction(node->shared_function_info());
   ASSERT_EQ(original_height + 1, frame_->height());
@@ -3954,29 +3952,28 @@ void CodeGenerator::GenerateSetValueOf(ZoneList<Expression*>* args) {
 
 
 void CodeGenerator::GenerateIsSmi(ZoneList<Expression*>* args) {
-  VirtualFrame::SpilledScope spilled_scope(frame_);
   ASSERT(args->length() == 1);
-  LoadAndSpill(args->at(0));
-  frame_->EmitPop(t0);
-  __ And(condReg1, t0, Operand(kSmiTagMask));
+  Load(args->at(0));
+  Register reg = frame_->PopToRegister();
+  __ And(condReg1, reg, Operand(kSmiTagMask));
   __ mov(condReg2, zero_reg);
   cc_reg_ = eq;
 }
 
 
 void CodeGenerator::GenerateLog(ZoneList<Expression*>* args) {
-  VirtualFrame::SpilledScope spilled_scope(frame_);
   // See comment in CodeGenerator::GenerateLog in codegen-ia32.cc.
   ASSERT_EQ(args->length(), 3);
 #ifdef ENABLE_LOGGING_AND_PROFILING
   if (ShouldGenerateLog(args->at(0))) {
-    LoadAndSpill(args->at(1));
-    LoadAndSpill(args->at(2));
+    Load(args->at(1));
+    Load(args->at(2));
+    frame_->SpillAll();
+    VirtualFrame::SpilledScope spilled_scope(frame_);
     __ CallRuntime(Runtime::kLog, 2);
   }
 #endif
-  __ LoadRoot(v0, Heap::kUndefinedValueRootIndex);
-  frame_->EmitPush(v0);
+  frame_->EmitPushRoot(Heap::kUndefinedValueRootIndex);
 }
 
 
@@ -4033,22 +4030,23 @@ void CodeGenerator::GenerateMathSqrt(ZoneList<Expression*>* args) {
 // flatten the string, which will ensure that the answer is in the left hand
 // side the next time around.
 void CodeGenerator::GenerateFastCharCodeAt(ZoneList<Expression*>* args) {
-  VirtualFrame::SpilledScope spilled_scope(frame_);
   ASSERT(args->length() == 2);
   Comment(masm_, "[ GenerateFastCharCodeAt");
 
-  LoadAndSpill(args->at(0));
-  LoadAndSpill(args->at(1));
-  frame_->EmitPop(a1);  // Index.
-  frame_->EmitPop(a2);  // String.
+  Load(args->at(0));
+  Load(args->at(1));
+  Register index = frame_->PopToRegister();         // Index.
+  Register string = frame_->PopToRegister(index);   // String.
+  Register result = v0;
+  Register scratch = VirtualFrame::scratch1();
 
   Label slow_case;
   Label exit;
   StringHelper::GenerateFastCharCodeAt(masm_,
-                                       a2,
-                                       a1,
-                                       a3,
-                                       v0,
+                                       string,
+                                       index,
+                                       scratch,
+                                       result,
                                        &slow_case,
                                        &slow_case,
                                        &slow_case,
@@ -4058,10 +4056,10 @@ void CodeGenerator::GenerateFastCharCodeAt(ZoneList<Expression*>* args) {
   __ bind(&slow_case);
   // Move the undefined value into the result register, which will
   // trigger the slow case.
-  __ LoadRoot(v0, Heap::kUndefinedValueRootIndex);
+  __ LoadRoot(result, Heap::kUndefinedValueRootIndex);
 
   __ bind(&exit);
-  frame_->EmitPush(v0);
+  frame_->EmitPush(result);
 }
 
 
@@ -4125,49 +4123,54 @@ void CodeGenerator::GenerateIsRegExp(ZoneList<Expression*>* args) {
 
 
 void CodeGenerator::GenerateIsConstructCall(ZoneList<Expression*>* args) {
-  VirtualFrame::SpilledScope spilled_scope(frame_);
   ASSERT(args->length() == 0);
 
+  Register scratch0 = VirtualFrame::scratch0();
+  Register scratch1 = VirtualFrame::scratch1();
   // Get the frame pointer for the calling frame.
-  __ lw(a2, MemOperand(fp, StandardFrameConstants::kCallerFPOffset));
+  __ lw(scratch0, MemOperand(fp, StandardFrameConstants::kCallerFPOffset));
 
   // Skip the arguments adaptor frame if it exists.
   Label check_frame_marker;
-  __ lw(a1, MemOperand(a2, StandardFrameConstants::kContextOffset));
+  __ lw(scratch1,
+        MemOperand(scratch0, StandardFrameConstants::kContextOffset));
   __ Branch(&check_frame_marker, ne,
-              a1, Operand(Smi::FromInt(StackFrame::ARGUMENTS_ADAPTOR)));
-  __ lw(a2, MemOperand(a2, StandardFrameConstants::kCallerFPOffset));
+            scratch1, Operand(Smi::FromInt(StackFrame::ARGUMENTS_ADAPTOR)));
+  __ lw(scratch0,
+        MemOperand(scratch0, StandardFrameConstants::kCallerFPOffset));
 
   // Check the marker in the calling frame.
   __ bind(&check_frame_marker);
-  __ lw(condReg1, MemOperand(a2, StandardFrameConstants::kMarkerOffset));
+  __ lw(condReg1, MemOperand(scratch0, StandardFrameConstants::kMarkerOffset));
   __ li(condReg2, Operand(Smi::FromInt(StackFrame::CONSTRUCT)));
   cc_reg_ = eq;
 }
 
 
 void CodeGenerator::GenerateArgumentsLength(ZoneList<Expression*>* args) {
-  VirtualFrame::SpilledScope spilled_scope(frame_);
   ASSERT(args->length() == 0);
 
   Label exit;
+  Register tos = frame_->GetTOSRegister();
+  Register scratch0 = VirtualFrame::scratch0();
+  Register scratch1 = VirtualFrame::scratch1();
 
   // Get the number of formal parameters.
-  __ li(v0, Operand(Smi::FromInt(scope()->num_parameters())));
+  __ li(tos, Operand(Smi::FromInt(scope()->num_parameters())));
 
-  __ lw(a2, MemOperand(fp, StandardFrameConstants::kCallerFPOffset));
-  __ lw(a3, MemOperand(a2, StandardFrameConstants::kContextOffset));
+  __ lw(scratch0, MemOperand(fp, StandardFrameConstants::kCallerFPOffset));
+  __ lw(scratch1, MemOperand(scratch0, StandardFrameConstants::kContextOffset));
   __ Branch(&exit,
             ne,
-            a3,
+            scratch1,
             Operand(Smi::FromInt(StackFrame::ARGUMENTS_ADAPTOR)));
 
   // Arguments adaptor case: Read the arguments length from the
   // adaptor frame and return it.
-  __ lw(v0, MemOperand(a2, ArgumentsAdaptorFrameConstants::kLengthOffset));
+  __ lw(tos, MemOperand(scratch0, ArgumentsAdaptorFrameConstants::kLengthOffset));
 
   __ bind(&exit);
-  frame_->EmitPush(v0);
+  frame_->EmitPush(tos);
 }
 
 
@@ -4243,16 +4246,15 @@ void CodeGenerator::GenerateRandomHeapNumber(
 
 
 void CodeGenerator::GenerateObjectEquals(ZoneList<Expression*>* args) {
-  VirtualFrame::SpilledScope spilled_scope(frame_);
   ASSERT(args->length() == 2);
 
   // Load the two objects into registers and perform the comparison.
-  LoadAndSpill(args->at(0));
-  LoadAndSpill(args->at(1));
-  frame_->EmitPop(a0);
-  frame_->EmitPop(a1);
-  __ mov(condReg1, a0);
-  __ mov(condReg2, a1);
+  Load(args->at(0));
+  Load(args->at(1));
+  Register lhs = frame_->PopToRegister();
+  Register rhs = frame_->PopToRegister(lhs);
+  __ mov(condReg1, lhs);
+  __ mov(condReg2, rhs);
   cc_reg_ = eq;
 }
 
@@ -4966,7 +4968,7 @@ void CodeGenerator::GenerateLogicalBooleanOperation(BinaryOperation* node) {
   // after evaluating the left hand side (due to the shortcut
   // semantics), but the compiler must (statically) know if the result
   // of compiling the binary operation is materialized or not.
-
+  VirtualFrame::SpilledScope spilled_scope(frame_);
   if (node->op() == Token::AND) {
     JumpTarget is_true;
     LoadConditionAndSpill(node->left(),
@@ -4978,8 +4980,7 @@ void CodeGenerator::GenerateLogicalBooleanOperation(BinaryOperation* node) {
       JumpTarget pop_and_continue;
       JumpTarget exit;
 
-      __ lw(a0, frame_->Top());  // Duplicate the stack top.
-      frame_->EmitPush(a0);
+      frame_->Dup();
       // Avoid popping the result if it converts to 'false' using the
       // standard ToBoolean() conversion as described in ECMA-262,
       // section 9.2, page 30.
@@ -4988,7 +4989,7 @@ void CodeGenerator::GenerateLogicalBooleanOperation(BinaryOperation* node) {
 
       // Pop the result of evaluating the first part.
       pop_and_continue.Bind();
-      frame_->EmitPop(t0);
+      frame_->Pop();
 
       // Evaluate right side expression.
       is_true.Bind();
@@ -5025,8 +5026,7 @@ void CodeGenerator::GenerateLogicalBooleanOperation(BinaryOperation* node) {
       JumpTarget pop_and_continue;
       JumpTarget exit;
 
-      __ lw(a0, frame_->Top());
-      frame_->EmitPush(a0);
+      frame_->Dup();
       // Avoid popping the result if it converts to 'true' using the
       // standard ToBoolean() conversion as described in ECMA-262,
       // section 9.2, page 30.
@@ -5035,7 +5035,7 @@ void CodeGenerator::GenerateLogicalBooleanOperation(BinaryOperation* node) {
 
       // Pop the result of evaluating the first part.
       pop_and_continue.Bind();
-      frame_->EmitPop(a0);
+      frame_->Pop();
 
       // Evaluate right side expression.
       is_false.Bind();
@@ -5070,7 +5070,6 @@ void CodeGenerator::VisitBinaryOperation(BinaryOperation* node) {
   Comment cmnt(masm_, "[ BinaryOperation");
 
   if (node->op() == Token::AND || node->op() == Token::OR) {
-    VirtualFrame::SpilledScope spilled_scope(frame_);
     GenerateLogicalBooleanOperation(node);
   } else {
     // Optimize for the case where (at least) one of the expressions
@@ -5124,9 +5123,7 @@ void CodeGenerator::VisitThisFunction(ThisFunction* node) {
 #ifdef DEBUG
   int original_height = frame_->height();
 #endif
-  VirtualFrame::SpilledScope spilled_scope(frame_);
-  __ lw(a0, frame_->Function());
-  frame_->EmitPush(a0);
+  frame_->EmitPush(MemOperand(frame_->Function()));
   ASSERT_EQ(original_height + 1, frame_->height());
 }
 
