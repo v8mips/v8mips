@@ -630,6 +630,12 @@ class Assembler : public Malloced {
     return current_statement_position_;
   }
 
+  bool can_peephole_optimize(int instructions) {
+    if (!FLAG_peephole_optimization) return false;
+    if (last_bound_pos_ > pc_offset() - instructions * kInstrSize) return false;
+    return reloc_info_writer.last_pc() <= pc_ - instructions * kInstrSize;
+  }
+
   // Postpone the generation of the trampoline pool for the specified number of
   // instructions.
   void BlockTrampolinePoolFor(int instructions);
@@ -656,6 +662,14 @@ class Assembler : public Malloced {
   static bool is_branch(Instr instr);
 
   static bool is_nop(Instr instr, unsigned int type);
+  static bool IsPop(Instr instr);
+  static bool IsPush(Instr instr);
+  static bool IsLwRegFpOffset(Instr instr);
+  static bool IsSwRegFpOffset(Instr instr);
+  static bool IsLwRegFpNegOffset(Instr instr);
+  static bool IsSwRegFpNegOffset(Instr instr);
+
+  static Register GetRt(Instr instr);
 
   static int32_t get_branch_offset(Instr instr);
   static bool is_lw(Instr instr);

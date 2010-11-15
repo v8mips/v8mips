@@ -979,4 +979,98 @@ TEST(MIPS11) {
   CHECK_EQ(0xccdd3344, t.swr_2);
   CHECK_EQ(0xdd223344, t.swr_3);
 }
+
+TEST(MIPS12) {
+  InitializeVM();
+  v8::HandleScope scope;
+
+  typedef struct {
+      int32_t  x;
+      int32_t  y;
+      int32_t  y1;
+      int32_t  y2;
+      int32_t  y3;
+      int32_t  y4;
+  } T;
+
+  T t;
+
+
+  MacroAssembler assm(NULL, 0);
+
+  __ mov(t6, fp);  // save frame pointer.
+  __ mov(fp, a0);  // access struct T by fp.
+  __ lw(t0, MemOperand(a0, OFFSET_OF(T, y)) );
+  __ lw(t3, MemOperand(a0, OFFSET_OF(T, y4)) );
+
+  __ addu(t1, t0, t3);
+  __ subu(t4, t0, t3);
+  __ nop();
+  __ Push(t0);  // These instructions disappear after opt.
+  __ Pop();
+  __ addu(t0, t0, t0);
+  __ nop();
+  __ Pop();     // These instructions disappear after opt.
+  __ Push(t3);  //
+  __ nop();
+  __ Push(t3);  // These instructions disappear after opt.
+  __ Pop(t3);   //
+  __ nop();
+  __ Push(t3);
+  __ Pop(t4);
+  __ nop();
+  __ sw(t0, MemOperand(fp, OFFSET_OF(T, y)) );
+  __ lw(t0, MemOperand(fp, OFFSET_OF(T, y)) );
+  __ nop();
+  __ sw(t0, MemOperand(fp, OFFSET_OF(T, y)) );
+  __ lw(t1, MemOperand(fp, OFFSET_OF(T, y)) );
+  __ nop();
+  __ Push(t1);
+  __ lw(t1, MemOperand(fp, OFFSET_OF(T, y)) );
+  __ Pop(t1);
+  __ nop();
+  __ Push(t1);
+  __ lw(t2, MemOperand(fp, OFFSET_OF(T, y)) );
+  __ Pop(t1);
+  __ nop();
+  __ Push(t1);
+  __ lw(t2, MemOperand(fp, OFFSET_OF(T, y)) );
+  __ Pop(t2);
+  __ nop();
+  __ Push(t2);
+  __ lw(t2, MemOperand(fp, OFFSET_OF(T, y)) );
+  __ Pop(t1);
+  __ nop();
+  __ Push(t1);
+  __ lw(t2, MemOperand(fp, OFFSET_OF(T, y)) );
+  __ Pop(t3);
+  __ nop();
+
+  __ mov(fp, t6);
+  __ jr(ra);
+  __ nop();
+
+  CodeDesc desc;
+  assm.GetCode(&desc);
+  Object* code = Heap::CreateCode(desc,
+                                  NULL,
+                                  Code::ComputeFlags(Code::STUB),
+                                  Handle<Object>(Heap::undefined_value()));
+  CHECK(code->IsCode());
+#ifdef DEBUG
+  Code::cast(code)->Print();
+#endif
+  F3 f = FUNCTION_CAST<F3>(Code::cast(code)->entry());
+  t.x = 1;
+  t.y = 2;
+  t.y1 = 3;
+  t.y2 = 4;
+  t.y3 = 0XBABA;
+  t.y4 = 0xDEDA;
+
+  Object* dummy = CALL_GENERATED_CODE(f, &t, 0, 0, 0, 0);
+  USE(dummy);
+
+  CHECK_EQ(3, t.y1);
+}
 #undef __
