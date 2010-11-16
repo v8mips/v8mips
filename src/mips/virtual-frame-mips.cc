@@ -338,8 +338,10 @@ void VirtualFrame::CallKeyedLoadIC() {
 
 
 void VirtualFrame::CallKeyedStoreIC() {
-  ASSERT(SpilledScope::is_spilled());
   Handle<Code> ic(Builtins::builtin(Builtins::KeyedStoreIC_Initialize));
+  PopToA1A0();
+  SpillAll();
+  EmitPop(a2);
   CallCodeObject(ic, RelocInfo::CODE_TARGET, 0);
 }
 

@@ -170,10 +170,11 @@ void Debug::GenerateKeyedLoadICDebugBreak(MacroAssembler* masm) {
 
 void Debug::GenerateKeyedStoreICDebugBreak(MacroAssembler* masm) {
   // ---------- S t a t e --------------
+  //  -- a0     : value
+  //  -- a1     : key
+  //  -- a2     : receiver
   //  -- ra     : return address
-  //  -- sp[0]  : key
-  //  -- sp[4]  : receiver
-  Generate_DebugBreakCallHelper(masm, 0);
+  Generate_DebugBreakCallHelper(masm, a0.bit() | a1.bit() | a2.bit());
 }
 
 

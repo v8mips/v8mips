@@ -259,6 +259,7 @@ class CodeGenerator: public AstVisitor {
 
   // Constants related to patching of inlined load/store.
   static const int kInlinedKeyedLoadInstructionsAfterPatch = 25;
+  static const int kInlinedKeyedStoreInstructionsAfterPatch = 9;
 
  private:
   // Construction/Destruction.
