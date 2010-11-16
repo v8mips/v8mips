@@ -375,10 +375,50 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
   // saved in higher memory addresses
   void MultiPush(RegList regs);
   void MultiPushReversed(RegList regs);
+
   void Push(Register src) {
     Addu(sp, sp, Operand(-kPointerSize));
     sw(src, MemOperand(sp, 0));
   }
+
+  // Push two registers.  Pushes leftmost register first (to highest address).
+  void Push(Register src1, Register src2, Condition cond = al) {
+    ASSERT(cond == al);  // Do not support conditional versions yet.
+    ASSERT(!src1.is(src2));
+    Addu(sp, sp, Operand(2 * -kPointerSize));
+    sw(src1, MemOperand(sp, 1 * kPointerSize));
+    sw(src2, MemOperand(sp, 0 * kPointerSize));
+  }
+
+  // Push three registers.  Pushes leftmost register first (to highest address).
+  void Push(Register src1, Register src2, Register src3, Condition cond = al) {
+    ASSERT(cond == al);  // Do not support conditional versions yet.
+    ASSERT(!src1.is(src2));
+    ASSERT(!src2.is(src3));
+    ASSERT(!src1.is(src3));
+    Addu(sp, sp, Operand(3 * -kPointerSize));
+    sw(src1, MemOperand(sp, 2 * kPointerSize));
+    sw(src2, MemOperand(sp, 1 * kPointerSize));
+    sw(src3, MemOperand(sp, 0 * kPointerSize));
+  }
+
+  // Push four registers.  Pushes leftmost register first (to highest address).
+  void Push(Register src1, Register src2,
+            Register src3, Register src4, Condition cond = al) {
+    ASSERT(cond == al);  // Do not support conditional versions yet.
+    ASSERT(!src1.is(src2));
+    ASSERT(!src2.is(src3));
+    ASSERT(!src1.is(src3));
+    ASSERT(!src1.is(src4));
+    ASSERT(!src2.is(src4));
+    ASSERT(!src3.is(src4));
+    Addu(sp, sp, Operand(4 * -kPointerSize));
+    sw(src1, MemOperand(sp, 3 * kPointerSize));
+    sw(src2, MemOperand(sp, 2 * kPointerSize));
+    sw(src3, MemOperand(sp, 1 * kPointerSize));
+    sw(src4, MemOperand(sp, 0 * kPointerSize));
+  }
+  
   inline void push(Register src) { Push(src); }
 
   void Push(Register src, Condition cond, Register tst1, Register tst2) {
@@ -387,6 +427,7 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
     Addu(sp, sp, Operand(-kPointerSize));
     sw(src, MemOperand(sp, 0));
   }
+
 
   // Pops multiple values from the stack and load them in the
   // registers specified in regs. Pop order is the opposite as in MultiPush.

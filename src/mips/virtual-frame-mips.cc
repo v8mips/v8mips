@@ -187,7 +187,7 @@ void VirtualFrame::Enter() {
 
   // We are about to push four values to the frame.
   Adjust(4);
-  __ MultiPush(ra.bit() | fp.bit() | cp.bit() | a1.bit());
+  __ Push(ra, fp, cp, a1);
   // Adjust FP to point to saved FP.
   __ addiu(fp, sp, 2 * kPointerSize);
 }
@@ -467,10 +467,10 @@ void VirtualFrame::SpillAllButCopyTOSToA0() {
       __ mov(a0, a1);
       break;
     case A0_A1_TOS:
-      __ MultiPush(a0.bit() | a1.bit());
+      __ Push(a1, a0);
       break;
     case A1_A0_TOS:
-      __ MultiPushReversed(a0.bit() | a1.bit());
+      __ Push(a0, a1);
       __ mov(a0, a1);
       break;
     default:
@@ -496,11 +496,11 @@ void VirtualFrame::SpillAllButCopyTOSToA1A0() {
       __ lw(a0, MemOperand(sp, kPointerSize));
       break;
     case A0_A1_TOS:
-      __ MultiPush(a1.bit() | a0.bit());
+      __ Push(a1, a0);
       __ Swap(a0, a1, at);
       break;
     case A1_A0_TOS:
-      __ MultiPushReversed(a0.bit() | a1.bit());
+      __ Push(a0, a1);
       break;
     default:
       UNREACHABLE();
@@ -590,11 +590,11 @@ void VirtualFrame::Dup2() {
         top_of_stack_state_ = A1_A0_TOS;
         break;
       case A0_A1_TOS:
-        __ MultiPush(a0.bit() | a1.bit());
+        __ Push(a1, a0);
         top_of_stack_state_ = A0_A1_TOS;
         break;
       case A1_A0_TOS:
-        __ MultiPushReversed(a0.bit() | a1.bit());
+        __ Push(a0, a1);
         top_of_stack_state_ = A1_A0_TOS;
         break;
       default:

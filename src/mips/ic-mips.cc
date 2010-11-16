@@ -448,7 +448,7 @@ void CallIC::GenerateMiss(MacroAssembler* masm, int argc) {
   __ EnterInternalFrame();
 
   // Push the receiver and the name of the function.
-  __ MultiPush(a2.bit() | a3.bit());
+  __ Push(a3, a2);
 
   // Call the entry.
   __ li(a0, Operand(2));
@@ -553,7 +553,7 @@ void LoadIC::GenerateMiss(MacroAssembler* masm) {
   // sp[0] : receiver
 
   __ mov(a3, a0);
-  __ MultiPush(a2.bit() | a3.bit());
+  __ Push(a3, a2);
 
   // Perform tail call to the entry.
   ExternalReference ref = ExternalReference(IC_Utility(kLoadIC_Miss));
@@ -697,7 +697,7 @@ void KeyedLoadIC::GenerateMiss(MacroAssembler* masm) {
   //  -- a1     : receiver
   // -----------------------------------
 
-  __ MultiPush(a1.bit() | a0.bit());
+  __ Push(a1, a0);
 
   ExternalReference ref = ExternalReference(IC_Utility(kKeyedLoadIC_Miss));
   __ TailCallExternalReference(ref, 2, 1);
@@ -711,7 +711,7 @@ void KeyedLoadIC::GenerateRuntimeGetProperty(MacroAssembler* masm) {
   //  -- a1     : receiver
   // -----------------------------------
 
-  __ MultiPush(a1.bit() | a0.bit());
+  __ Push(a1, a0);
   // Do a tail-call to runtime routine.
 
   __ TailCallRuntime(Runtime::kGetProperty, 2, 1);
@@ -859,7 +859,7 @@ void KeyedLoadIC::GenerateString(MacroAssembler* masm) {
   // string and a number), and call runtime.
   __ bind(&slow_char_code);
   __ EnterInternalFrame();
-  __ MultiPush(object.bit() | index.bit());
+  __ Push(object, index);
   __ CallRuntime(Runtime::kStringCharCodeAt, 2);
   ASSERT(!code.is(v0));
   __ mov(code, v0);
@@ -1201,8 +1201,7 @@ void KeyedStoreIC::GenerateRuntimeSetProperty(MacroAssembler* masm) {
   // sp[1]  : receiver
   __ lw(a1, MemOperand(sp, 0));
   __ lw(a3, MemOperand(sp, 4));
-  __ MultiPush(a0.bit() | a1.bit() | a3.bit());
-
+  __ Push(a3, a1, a0);
   __ TailCallRuntime(Runtime::kSetProperty, 3, 1);
 }
 
@@ -1786,8 +1785,7 @@ void KeyedLoadIC::GenerateIndexedInterceptor(MacroAssembler* masm) {
   __ And(a3, a3, Operand(kSlowCaseBitFieldMask));
   __ Branch(&slow, ne, a3, Operand(1 << Map::kHasIndexedInterceptor));
   // Everything is fine, call runtime.
-  __ Push(a1);  // receiver
-  __ Push(a0);  // key
+  __ Push(a1, a0);  // Receiver, key.
 
   // Perform tail call to the entry.
   __ TailCallExternalReference(ExternalReference(
@@ -1806,7 +1804,7 @@ void KeyedStoreIC::GenerateMiss(MacroAssembler* masm) {
 
   __ lw(a3, MemOperand(sp, 1 * kPointerSize));
   __ lw(a2, MemOperand(sp, 0 * kPointerSize));
-  __ MultiPush(a0.bit() | a2.bit() | a3.bit());
+  __ Push(a3, a2, a0);
 
   ExternalReference ref = ExternalReference(IC_Utility(kKeyedStoreIC_Miss));
   __ TailCallExternalReference(ref, 3, 1);
@@ -1836,11 +1834,7 @@ void StoreIC::GenerateMiss(MacroAssembler* masm) {
   // a2    : name
   // ra    : return address
 
-  __ addiu(sp, sp, -3 * kPointerSize);
-  __ sw(a1, MemOperand(sp, 2 * kPointerSize));
-  __ sw(a2, MemOperand(sp, 1 * kPointerSize));
-  __ sw(a0, MemOperand(sp, 0 * kPointerSize));
-
+  __ Push(a1, a2, a0);
   // Perform tail call to the entry.
   ExternalReference ref = ExternalReference(IC_Utility(kStoreIC_Miss));
   __ TailCallExternalReference(ref, 3, 1);
@@ -1883,8 +1877,7 @@ void StoreIC::GenerateArrayLength(MacroAssembler* masm) {
   __ BranchOnNotSmi(value, &miss);
 
   // Prepare tail call to StoreIC_ArrayLength.
-  __ push(receiver);
-  __ push(value);
+  __ Push(receiver, value);
 
   ExternalReference ref = ExternalReference(IC_Utility(kStoreIC_ArrayLength));
   __ TailCallExternalReference(ref, 2, 1);

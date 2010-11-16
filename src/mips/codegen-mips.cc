@@ -632,7 +632,7 @@ void CodeGenerator::StoreArgumentsObject(bool initial) {
     __ Addu(a1, fp, Operand(kReceiverDisplacement * kPointerSize));
     __ li(a0, Operand(Smi::FromInt(scope()->num_parameters())));
     frame_->Adjust(3);
-    __ MultiPush(a0.bit() | a1.bit() | a2.bit());
+    __ Push(a2, a1, a0);
     frame_->CallStub(&stub, 3);
     frame_->EmitPush(v0);
   }
@@ -4479,8 +4479,7 @@ class DeferredSearchCache: public DeferredCode {
 
 
 void DeferredSearchCache::Generate() {
-  __ Push(cache_);
-  __ Push(key_);
+  __ Push(cache_, key_);
   __ CallRuntime(Runtime::kGetFromCache, 2);
   if (!dst_.is(v0)) {
     __ mov(dst_, v0);
@@ -6160,9 +6159,7 @@ void FastNewClosureStub::Generate(MacroAssembler* masm) {
 
   // Create a new closure through the slower runtime call.
   __ bind(&gc);
-  __ addiu(sp, sp, 2 * kPointerSize);
-  __ sw(cp, MemOperand(sp, 1 * kPointerSize));
-  __ sw(a3, MemOperand(sp, 0 * kPointerSize));
+  __ Push(cp, a3);
   __ TailCallRuntime(Runtime::kNewClosure, 2, 1);
 }
 
@@ -6750,8 +6747,8 @@ void CompareStub::Generate(MacroAssembler* masm) {
 
   __ bind(&slow);
   // Prepare for call to builtin. Push object pointers, a0 (lhs) first,
-  // a1 (lhs) second.
-  __ MultiPushReversed(a1.bit() | a0.bit());
+  // a1 (rhs) second.
+  __ Push(a0, a1);
   // Figure out which native to call and setup the arguments.
   Builtins::JavaScript native;
   if (cc_ == eq) {
@@ -7112,8 +7109,7 @@ void JSEntryStub::GenerateBody(MacroAssembler* masm, bool is_construct) {
   __ li(t1, Operand(Smi::FromInt(marker)));
   __ LoadExternalReference(t0, ExternalReference(Top::k_c_entry_fp_address));
   __ lw(t0, MemOperand(t0));
-  __ MultiPush(t0.bit() | t1.bit() | t2.bit() | t3.bit());
-
+  __ Push(t3, t2, t1, t0);
   // Setup frame pointer for the frame to be pushed.
   __ addiu(fp, sp, -EntryFrameConstants::kCallerFPOffset);
 
@@ -8215,8 +8211,7 @@ void GenericBinaryOpStub::HandleBinaryOpSlowCases(MacroAssembler* masm,
   __ bind(&slow);
 
   // Push arguments to the stack
-  __ Push(a1);
-  __ Push(a0);
+  __ Push(a1, a0);
 
   if (Token::ADD == op_) {
     // Test for string arguments before calling runtime.
@@ -8490,8 +8485,7 @@ void GenericBinaryOpStub::HandleNonSmiBitwiseOp(MacroAssembler* masm,
   // If all else failed then we go to the runtime system.
   __ bind(&slow);
 
-  __ Push(lhs);  // restore stack
-  __ Push(rhs);
+  __ Push(lhs, rhs);  // restore stack
   __ li(rhs, Operand(1));  // 1 argument (not counting receiver).
 
   switch (op_) {
@@ -8855,8 +8849,7 @@ void GenericBinaryOpStub::Generate(MacroAssembler* masm) {
 void GenericBinaryOpStub::GenerateTypeTransition(MacroAssembler* masm) {
   Label get_result;
 
-  __ push(a1);
-  __ push(a0);
+  __ Push(a1, a0);
 
   // Internal frame is necessary to handle exceptions properly.
   __ EnterInternalFrame();
