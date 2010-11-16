@@ -399,7 +399,9 @@ static void PushInterceptorArguments(MacroAssembler* masm,
   ASSERT(!Heap::InNewSpace(interceptor));
   Register scratch = name;
   __ li(scratch, Operand(Handle<Object>(interceptor)));
-  __ Push(scratch, receiver, holder);
+  __ Push(scratch);
+  __ Push(receiver);
+  __ Push(holder);
   __ lw(scratch, FieldMemOperand(scratch, InterceptorInfo::kDataOffset));
   __ Push(scratch);
 }
@@ -1006,7 +1008,8 @@ bool StubCompiler::GenerateLoadCallback(JSObject* object,
     CheckPrototypes(object, receiver, holder, scratch1, scratch2, name, miss);
 
   // Push the arguments on the JS stack of the caller.
-  __ Push(receiver, reg);  // Receiver, holder.
+  __ Push(receiver);  // Receiver.
+  __ Push(reg);  // Holder.
   __ li(scratch1, Operand(Handle<AccessorInfo>(callback)));  // Callback data.
   __ Push(scratch1);
   __ lw(reg, FieldMemOperand(scratch1, AccessorInfo::kDataOffset));
