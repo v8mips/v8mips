@@ -296,7 +296,7 @@ void StubCompiler::GenerateStoreField(MacroAssembler* masm,
     // We jump to a runtime call that extends the properties array.
     __ Push(receiver_reg);
     __ li(a2, Operand(Handle<Map>(transition)));
-    __ MultiPush(a2.bit() | a0.bit());
+    __ Push(a2, a0);
     __ TailCallExternalReference(
            ExternalReference(IC_Utility(IC::kSharedStoreIC_ExtendStorage)),
            3, 1);
@@ -399,9 +399,7 @@ static void PushInterceptorArguments(MacroAssembler* masm,
   ASSERT(!Heap::InNewSpace(interceptor));
   Register scratch = name;
   __ li(scratch, Operand(Handle<Object>(interceptor)));
-  __ Push(scratch);
-  __ Push(receiver);
-  __ Push(holder);
+  __ Push(scratch, receiver, holder);
   __ lw(scratch, FieldMemOperand(scratch, InterceptorInfo::kDataOffset));
   __ Push(scratch);
 }
@@ -462,9 +460,12 @@ class LoadInterceptorCompiler BASE_EMBEDDED {
     // Note: starting a frame here makes GC aware of pointers pushed below.
     __ EnterInternalFrame();
 
-    __ Push(receiver);
-    __ Push(holder);
-    __ Push(name_);
+    if (lookup->type() == CALLBACKS && !receiver.is(holder)) {
+      // CALLBACKS case needs a receiver to be passed into C++ callback.
+      __ Push(receiver, holder, name_);
+    } else {
+      __ Push(holder, name_);
+    }
 
     CompileCallLoadPropertyWithInterceptor(masm,
                                            receiver,
@@ -484,22 +485,25 @@ class LoadInterceptorCompiler BASE_EMBEDDED {
     __ bind(&interceptor_failed);
     __ Pop(name_);
     __ Pop(holder);
-    __ Pop(receiver);
+    if (lookup->type() == CALLBACKS && !receiver.is(holder)) {
+      __ Pop(receiver);
+    }
 
     __ LeaveInternalFrame();
 
-    if (lookup->type() == FIELD) {
-      // We found FIELD property in prototype chain of interceptor's holder.
-      // Check that the maps from interceptor's holder to field's holder
-      // haven't changed...
-      holder = stub_compiler->CheckPrototypes(interceptor_holder,
-                                              holder,
-                                              lookup->holder(),
-                                              scratch1,
+    // Check that the maps from interceptor's holder to lookup's holder
+    // haven't changed.  And load lookup's holder into |holder| register.
+    if (interceptor_holder != lookup->holder()) {
+      holder = stub_compiler->CheckPrototypes(interceptor_holder, holder,
+                                              lookup->holder(), scratch1,
                                               scratch2,
                                               name,
                                               miss_label);
-      // ... and retrieve a field from field's holder.
+    }
+
+    if (lookup->type() == FIELD) {
+      // We found FIELD property in prototype chain of interceptor's holder.
+      // Retrieve a field from field's holder.
       stub_compiler->GenerateFastPropertyLoad(masm,
                                               v0,
                                               holder,
@@ -514,34 +518,25 @@ class LoadInterceptorCompiler BASE_EMBEDDED {
       ASSERT(callback != NULL);
       ASSERT(callback->getter() != NULL);
 
-      // Prepare for tail call: push receiver to stack.
-      Label cleanup;
-      __ Push(receiver);
-
-      // Check that the maps from interceptor's holder to callback's holder
-      // haven't changed.
-      holder = stub_compiler->CheckPrototypes(interceptor_holder, holder,
-                                              lookup->holder(), scratch1,
-                                              scratch2,
-                                              name,
-                                              &cleanup);
-
-      // Continue tail call preparation: push remaining parameters.
-      __ Push(holder);
-      __ li(holder, Operand(Handle<AccessorInfo>(callback)));
-      __ Push(holder);
-      __ lw(scratch1, FieldMemOperand(holder, AccessorInfo::kDataOffset));
-      __ Push(scratch1);
-      __ Push(name_);
-
       // Tail call to runtime.
+      // Important invariant in CALLBACKS case: the code above must be
+      // structured to never clobber |receiver| register.
+      __ li(scratch2, Handle<AccessorInfo>(callback));
+      // holder is either receiver or scratch1.
+      if (!receiver.is(holder)) {
+        ASSERT(scratch1.is(holder));
+        __ Push(receiver, holder, scratch2);
+        __ lw(scratch1, FieldMemOperand(holder, AccessorInfo::kDataOffset));
+        __ Push(scratch1, name_);
+      } else {
+        __ push(receiver);
+        __ lw(scratch1, FieldMemOperand(holder, AccessorInfo::kDataOffset));
+        __ Push(holder, scratch2, scratch1, name_);
+      }
+
       ExternalReference ref =
           ExternalReference(IC_Utility(IC::kLoadCallbackProperty));
       __ TailCallExternalReference(ref, 5, 1);
-
-      // Clean up code: we pushed receiver and need to remove it.
-      __ bind(&cleanup);
-      __ Pop(scratch2);
     }
   }
 
@@ -614,11 +609,19 @@ static void CompileLoadInterceptor(LoadInterceptorCompiler* compiler,
 // These arguments are set by CheckPrototypes and GenerateFastApiCall.
 static void ReserveSpaceForFastApiCall(MacroAssembler* masm,
                                        Register scratch) {
-  __ li(scratch, Operand(Smi::FromInt(0)));
-  __ Push(scratch);
-  __ Push(scratch);
-  __ Push(scratch);
-  __ Push(scratch);
+  // The following sequence of 4 Push()'s is slow on mips, due to stack
+  // adjustment on each push.
+  // __ li(scratch, Operand(Smi::FromInt(0)));
+  // __ Push(scratch);
+  // __ Push(scratch);
+  // __ Push(scratch);
+  // __ Push(scratch);
+  ASSERT(Smi::FromInt(0) == 0);
+  __ Addu(sp, sp, Operand(4 * -kPointerSize));
+  __ sw(zero_reg, MemOperand(sp, 3 * kPointerSize));
+  __ sw(zero_reg, MemOperand(sp, 2 * kPointerSize));
+  __ sw(zero_reg, MemOperand(sp, 1 * kPointerSize));
+  __ sw(zero_reg, MemOperand(sp, 0 * kPointerSize));
 }
 
 
@@ -769,9 +772,9 @@ class CallInterceptorCompiler BASE_EMBEDDED {
     Label miss_cleanup;
     Label* miss = can_do_fast_api_call ? &miss_cleanup : miss_label;
     Register holder =
-        stub_compiler_->CheckPrototypes(object, receiver, interceptor_holder,
-                                        scratch1, scratch2, name,
-                                        depth1, miss);
+      stub_compiler_->CheckPrototypes(object, receiver,
+                                      interceptor_holder, scratch1,
+                                      scratch2, name, depth1, miss);
 
     // Invoke an interceptor and if it provides a value,
     // branch to |regular_invoke|.
@@ -784,9 +787,16 @@ class CallInterceptorCompiler BASE_EMBEDDED {
 
     // Check that the maps from interceptor's holder to constant function's
     // holder haven't changed and thus we can use cached constant function.
-    stub_compiler_->CheckPrototypes(interceptor_holder, receiver,
-                                    lookup->holder(), scratch1,
-                                    scratch2, name, depth2, miss);
+    if (interceptor_holder != lookup->holder()) {
+      stub_compiler_->CheckPrototypes(interceptor_holder, receiver,
+                                      lookup->holder(), scratch1,
+                                      scratch2, name, depth2, miss);
+      // CheckPrototypes has a side effect of fetching a 'holder'
+      // for API (object which is instanceof for the signature).  It's
+      // safe to omit it here, as if present, it should be fetched
+      // by the previous CheckPrototypes.
+      ASSERT((depth2 == kInvalidProtoDepth) || (depth1 != kInvalidProtoDepth));
+    }
 
     // Invoke function.
     if (can_do_fast_api_call) {
@@ -852,8 +862,7 @@ class CallInterceptorCompiler BASE_EMBEDDED {
                            Label* interceptor_succeeded) {
     __ EnterInternalFrame();
 
-    __ Push(holder);
-    __ Push(name_);
+    __ Push(holder, name_);
 
     CompileCallLoadPropertyWithInterceptor(masm,
                                            receiver,
@@ -997,13 +1006,11 @@ bool StubCompiler::GenerateLoadCallback(JSObject* object,
     CheckPrototypes(object, receiver, holder, scratch1, scratch2, name, miss);
 
   // Push the arguments on the JS stack of the caller.
-  __ Push(receiver);  // Receiver.
-  __ Push(reg);  // Holder.
+  __ Push(receiver, reg);  // Receiver, holder.
   __ li(scratch1, Operand(Handle<AccessorInfo>(callback)));  // Callback data.
   __ Push(scratch1);
   __ lw(reg, FieldMemOperand(scratch1, AccessorInfo::kDataOffset));
-  __ Push(reg);
-  __ Push(name_reg);  // Name.
+  __ Push(reg, name_reg);
 
   // Do tail-call to the runtime system.
   ExternalReference load_callback_property =
@@ -1529,7 +1536,7 @@ Object* StoreStubCompiler::CompileStoreCallback(JSObject* object,
 
   __ Push(a1);  // Receiver.
   __ li(a3, Operand(Handle<AccessorInfo>(callback)));  // Callback info.
-  __ MultiPush(a3.bit() | a2.bit() | a0.bit());
+  __ Push(a3, a2, a0);
 
   // Do tail-call to the runtime system.
   ExternalReference store_callback_property =
@@ -1572,9 +1579,7 @@ Object* StoreStubCompiler::CompileStoreInterceptor(JSObject* receiver,
   // checks.
   ASSERT(receiver->IsJSGlobalProxy() || !receiver->IsAccessCheckNeeded());
 
-  __ Push(a1);  // receiver.
-  __ Push(a2);  // name.
-  __ Push(a0);  // value.
+  __ Push(a1, a2, a0);  // Receiver, name, value.
 
   // Do tail-call to the runtime system.
   ExternalReference store_ic_property =
@@ -2073,14 +2078,6 @@ Object* ConstructStubCompiler::CompileConstructStub(
   // argc arguments.
   __ sll(a1, a0, kPointerSizeLog2);
   __ Addu(a1, a1, sp);
-
-  // We need to add the 4 args slots size because they need to be setup when we
-  // call the real time function the first time this kind of object is
-  // initialized (cf Builtins::Generate_JSConstructStubGeneric).
-  // TOCHECK: This need is maybe just because I first implemented it with args
-  // slots. Try to do it without: we should not need this as the real time
-  // function called has the stack setup just before it is called.
-//  __ Addu(a1, a1, StandardFrameConstants::kRArgsSlotsSize); .... Update this comment block .......
 
   // Fill all the in-object properties with undefined.
   // a0: argc

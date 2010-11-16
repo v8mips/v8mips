@@ -365,6 +365,9 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
   inline void li(Register rd, int32_t j, bool gen2instr = false) {
     li(rd, Operand(j), gen2instr);
   }
+  inline void li(Register dst, Handle<Object> value, bool gen2instr = false) {
+    li(dst, Operand(value), gen2instr);
+  }
 
   // Exception-generating instructions and debugging support
   void stop(const char* msg);
