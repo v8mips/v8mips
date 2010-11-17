@@ -1204,6 +1204,24 @@ Object* CallStubCompiler::CompileArrayPopCall(Object* object,
   return GetCode(function);
 }
 
+Object* CallStubCompiler::CompileStringCharCodeAtCall(Object* object,
+                                                      JSObject* holder,
+                                                      JSFunction* function,
+                                                      String* name,
+                                                      CheckType check) {
+  // TODO: implement this.
+  return Heap::undefined_value();
+}
+
+
+Object* CallStubCompiler::CompileStringCharAtCall(Object* object,
+                                                  JSObject* holder,
+                                                  JSFunction* function,
+                                                  String* name,
+                                                  CheckType check) {
+  // TODO: implement this.
+  return Heap::undefined_value();
+}
 
 Object* CallStubCompiler::CompileCallConstant(Object* object,
                                               JSObject* holder,
