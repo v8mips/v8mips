@@ -425,6 +425,7 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
   }
   
   inline void push(Register src) { Push(src); }
+  inline void pop(Register src) { Pop(src); }
 
   void Push(Register src, Condition cond, Register tst1, Register tst2) {
     // Since we don't have conditionnal execution we use a Branch.
