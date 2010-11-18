@@ -134,6 +134,7 @@ namespace internal {
 
 class Arguments;
 class Object;
+class Heap;
 class Top;
 
 }
@@ -513,6 +514,7 @@ class V8EXPORT Data {
 class V8EXPORT ScriptData {  // NOLINT
  public:
   virtual ~ScriptData() { }
+
   /**
    * Pre-compiles the specified script (context-independent).
    *
@@ -520,6 +522,16 @@ class V8EXPORT ScriptData {  // NOLINT
    * \param length Length of UTF-8 script source code.
    */
   static ScriptData* PreCompile(const char* input, int length);
+
+  /**
+   * Pre-compiles the specified script (context-independent).
+   *
+   * NOTE: Pre-compilation using this method cannot happen on another thread
+   * without using Lockers.
+   *
+   * \param source Script source code.
+   */
+  static ScriptData* PreCompile(Handle<String> source);
 
   /**
    * Load previous pre-compilation data.
@@ -1026,12 +1038,24 @@ class V8EXPORT String : public Primitive {
   class V8EXPORT ExternalStringResourceBase {
    public:
     virtual ~ExternalStringResourceBase() {}
+
    protected:
     ExternalStringResourceBase() {}
+
+    /**
+     * Internally V8 will call this Dispose method when the external string
+     * resource is no longer needed. The default implementation will use the
+     * delete operator. This method can be overridden in subclasses to
+     * control how allocated external string resources are disposed.
+     */
+    virtual void Dispose() { delete this; }
+
    private:
     // Disallow copying and assigning.
     ExternalStringResourceBase(const ExternalStringResourceBase&);
     void operator=(const ExternalStringResourceBase&);
+
+    friend class v8::internal::Heap;
   };
 
   /**
@@ -1048,10 +1072,17 @@ class V8EXPORT String : public Primitive {
      * buffer.
      */
     virtual ~ExternalStringResource() {}
-    /** The string data from the underlying buffer.*/
+
+    /**
+     * The string data from the underlying buffer.
+     */
     virtual const uint16_t* data() const = 0;
-    /** The length of the string. That is, the number of two-byte characters.*/
+
+    /**
+     * The length of the string. That is, the number of two-byte characters.
+     */
     virtual size_t length() const = 0;
+
    protected:
     ExternalStringResource() {}
   };
@@ -1122,11 +1153,11 @@ class V8EXPORT String : public Primitive {
 
   /**
    * Creates a new external string using the data defined in the given
-   * resource. The resource is deleted when the external string is no
-   * longer live on V8's heap. The caller of this function should not
-   * delete or modify the resource. Neither should the underlying buffer be
-   * deallocated or modified except through the destructor of the
-   * external string resource.
+   * resource. When the external string is no longer live on V8's heap the
+   * resource will be disposed by calling its Dispose method. The caller of
+   * this function should not otherwise delete or modify the resource. Neither
+   * should the underlying buffer be deallocated or modified except through the
+   * destructor of the external string resource.
    */
   static Local<String> NewExternal(ExternalStringResource* resource);
 
@@ -1136,17 +1167,18 @@ class V8EXPORT String : public Primitive {
    * will use the external string resource. The external string resource's
    * character contents needs to be equivalent to this string.
    * Returns true if the string has been changed to be an external string.
-   * The string is not modified if the operation fails.
+   * The string is not modified if the operation fails. See NewExternal for
+   * information on the lifetime of the resource.
    */
   bool MakeExternal(ExternalStringResource* resource);
 
   /**
    * Creates a new external string using the ascii data defined in the given
-   * resource. The resource is deleted when the external string is no
-   * longer live on V8's heap. The caller of this function should not
-   * delete or modify the resource. Neither should the underlying buffer be
-   * deallocated or modified except through the destructor of the
-   * external string resource.
+   * resource. When the external string is no longer live on V8's heap the
+   * resource will be disposed by calling its Dispose method. The caller of
+   * this function should not otherwise delete or modify the resource. Neither
+   * should the underlying buffer be deallocated or modified except through the
+   * destructor of the external string resource.
    */
   static Local<String> NewExternal(ExternalAsciiStringResource* resource);
 
@@ -1156,7 +1188,8 @@ class V8EXPORT String : public Primitive {
    * will use the external string resource. The external string resource's
    * character contents needs to be equivalent to this string.
    * Returns true if the string has been changed to be an external string.
-   * The string is not modified if the operation fails.
+   * The string is not modified if the operation fails. See NewExternal for
+   * information on the lifetime of the resource.
    */
   bool MakeExternal(ExternalAsciiStringResource* resource);
 
