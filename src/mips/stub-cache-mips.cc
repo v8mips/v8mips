@@ -155,6 +155,17 @@ void StubCompiler::GenerateLoadGlobalFunctionPrototype(MacroAssembler* masm,
 }
 
 
+void StubCompiler::GenerateDirectLoadGlobalFunctionPrototype(
+    MacroAssembler* masm, int index, Register prototype) {
+  // Get the global function with the given index.
+  JSFunction* function = JSFunction::cast(Top::global_context()->get(index));
+  // Load its initial map. The global functions all have initial maps.
+  __ li(prototype, Handle<Map>(function->initial_map()));
+  // Load the prototype from the initial map.
+  __ lw(prototype, FieldMemOperand(prototype, Map::kPrototypeOffset));
+}
+
+
 // Load a fast property out of a holder object (src). In-object properties
 // are loaded directly otherwise the property is loaded from the properties
 // fixed array.
@@ -1220,9 +1231,8 @@ Object* CallStubCompiler::CompileCallConstant(Object* object,
         __ GetObjectType(a1, a3, a3);
         __ Branch(&miss, Ugreater_equal, a3, Operand(FIRST_NONSTRING_TYPE));
         // Check that the maps starting from the prototype haven't changed.
-        GenerateLoadGlobalFunctionPrototype(masm(),
-                                            Context::STRING_FUNCTION_INDEX,
-                                            a0);
+        GenerateDirectLoadGlobalFunctionPrototype(
+            masm(), Context::STRING_FUNCTION_INDEX, a0);
         CheckPrototypes(JSObject::cast(object->GetPrototype()), a0, holder, a3,
                         a1, name, &miss);
       }
@@ -1241,9 +1251,8 @@ Object* CallStubCompiler::CompileCallConstant(Object* object,
         __ Branch(&miss, ne, a0, Operand(HEAP_NUMBER_TYPE));
         __ bind(&fast);
         // Check that the maps starting from the prototype haven't changed.
-        GenerateLoadGlobalFunctionPrototype(masm(),
-                                            Context::NUMBER_FUNCTION_INDEX,
-                                            a0);
+        GenerateDirectLoadGlobalFunctionPrototype(
+            masm(), Context::NUMBER_FUNCTION_INDEX, a0);
         CheckPrototypes(JSObject::cast(object->GetPrototype()), a0, holder, a3,
                         a1, name, &miss);
       }
