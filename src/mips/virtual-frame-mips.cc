@@ -71,14 +71,25 @@ void VirtualFrame::PopToA0() {
   top_of_stack_state_ = NO_TOS_REGISTERS;
 }
 
-void VirtualFrame::MergeTo(VirtualFrame* expected) {
+void VirtualFrame::MergeTo(const VirtualFrame* expected,
+                           Condition cond,
+                           Register r1,
+                           const Operand& r2) {
   if (Equals(expected)) return;
-  MergeTOSTo(expected->top_of_stack_state_);
+  MergeTOSTo(expected->top_of_stack_state_, cond, r1, r2);
   ASSERT(register_allocation_map_ == expected->register_allocation_map_);
 }
 
 void VirtualFrame::MergeTOSTo(
-    VirtualFrame::TopOfStack expected_top_of_stack_state) {
+    VirtualFrame::TopOfStack expected_top_of_stack_state,
+    Condition cond,
+    Register r1,
+    const Operand& r2) {
+  Label merge_tos_to_end;
+  if (cond != al) {
+    __ Branch(&merge_tos_to_end, NegateCondition(cond), r1, r2);
+  }
+
 #define CASE_NUMBER(a, b) ((a) * TOS_STATES + (b))
   switch (CASE_NUMBER(top_of_stack_state_, expected_top_of_stack_state)) {
     case CASE_NUMBER(NO_TOS_REGISTERS, NO_TOS_REGISTERS):
@@ -163,7 +174,18 @@ void VirtualFrame::MergeTOSTo(
       UNREACHABLE();
 #undef CASE_NUMBER
   }
-  top_of_stack_state_ = expected_top_of_stack_state;
+
+  __ bind(&merge_tos_to_end);
+  if(cond == al) {
+    // A conditional merge will be followed by a conditional branch and the
+    // fall-through code will have an unchanged virtual frame state.  If the
+    // merge is unconditional ('al'ways) then it might be followed by a fall
+    // through.  We need to update the virtual frame state to match the code we
+    // are falling into.  The final case is an unconditional merge followed by
+    // an unconditional branch, in which case it doesn't matter what we do to
+    // the virtual frame state, because the virtual frame will be invalidated.
+    top_of_stack_state_ = expected_top_of_stack_state;
+  }
 }
 
 

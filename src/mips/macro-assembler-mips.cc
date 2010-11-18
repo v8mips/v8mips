@@ -1491,7 +1491,9 @@ void MacroAssembler::Drop(int count, Condition cond) {
   break_(__LINE__);
 }
 
-void MacroAssembler::Swap(Register reg1, Register reg2, Register scratch) {
+void MacroAssembler::Swap(Register reg1,
+                          Register reg2,
+                          Register scratch) {
   if (scratch.is(no_reg)) {
     Xor(reg1, reg1, Operand(reg2));
     Xor(reg2, reg2, Operand(reg1));
