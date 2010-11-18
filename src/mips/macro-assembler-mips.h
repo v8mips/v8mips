@@ -389,7 +389,6 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
   // Push two registers.  Pushes leftmost register first (to highest address).
   void Push(Register src1, Register src2, Condition cond = al) {
     ASSERT(cond == al);  // Do not support conditional versions yet.
-    ASSERT(!src1.is(src2));
     Addu(sp, sp, Operand(2 * -kPointerSize));
     sw(src1, MemOperand(sp, 1 * kPointerSize));
     sw(src2, MemOperand(sp, 0 * kPointerSize));
@@ -398,9 +397,6 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
   // Push three registers.  Pushes leftmost register first (to highest address).
   void Push(Register src1, Register src2, Register src3, Condition cond = al) {
     ASSERT(cond == al);  // Do not support conditional versions yet.
-    ASSERT(!src1.is(src2));
-    ASSERT(!src2.is(src3));
-    ASSERT(!src1.is(src3));
     Addu(sp, sp, Operand(3 * -kPointerSize));
     sw(src1, MemOperand(sp, 2 * kPointerSize));
     sw(src2, MemOperand(sp, 1 * kPointerSize));
@@ -411,12 +407,6 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
   void Push(Register src1, Register src2,
             Register src3, Register src4, Condition cond = al) {
     ASSERT(cond == al);  // Do not support conditional versions yet.
-    ASSERT(!src1.is(src2));
-    ASSERT(!src2.is(src3));
-    ASSERT(!src1.is(src3));
-    ASSERT(!src1.is(src4));
-    ASSERT(!src2.is(src4));
-    ASSERT(!src3.is(src4));
     Addu(sp, sp, Operand(4 * -kPointerSize));
     sw(src1, MemOperand(sp, 3 * kPointerSize));
     sw(src2, MemOperand(sp, 2 * kPointerSize));

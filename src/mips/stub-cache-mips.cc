@@ -399,9 +399,7 @@ static void PushInterceptorArguments(MacroAssembler* masm,
   ASSERT(!Heap::InNewSpace(interceptor));
   Register scratch = name;
   __ li(scratch, Operand(Handle<Object>(interceptor)));
-  __ Push(scratch);
-  __ Push(receiver);
-  __ Push(holder);
+  __ Push(scratch, receiver, holder);
   __ lw(scratch, FieldMemOperand(scratch, InterceptorInfo::kDataOffset));
   __ Push(scratch);
 }
@@ -430,19 +428,8 @@ static void CompileCallLoadPropertyWithInterceptor(MacroAssembler* masm,
 // These arguments are set by CheckPrototypes and GenerateFastApiCall.
 static void ReserveSpaceForFastApiCall(MacroAssembler* masm,
                                        Register scratch) {
-  // The following sequence of 4 Push()'s is slow on mips, due to stack
-  // adjustment on each push.
-  // __ li(scratch, Operand(Smi::FromInt(0)));
-  // __ Push(scratch);
-  // __ Push(scratch);
-  // __ Push(scratch);
-  // __ Push(scratch);
   ASSERT(Smi::FromInt(0) == 0);
-  __ Addu(sp, sp, Operand(4 * -kPointerSize));
-  __ sw(zero_reg, MemOperand(sp, 3 * kPointerSize));
-  __ sw(zero_reg, MemOperand(sp, 2 * kPointerSize));
-  __ sw(zero_reg, MemOperand(sp, 1 * kPointerSize));
-  __ sw(zero_reg, MemOperand(sp, 0 * kPointerSize));
+  __ Push(zero_reg, zero_reg, zero_reg, zero_reg);
 }
 
 
@@ -828,8 +815,7 @@ bool StubCompiler::GenerateLoadCallback(JSObject* object,
     CheckPrototypes(object, receiver, holder, scratch1, scratch2, name, miss);
 
   // Push the arguments on the JS stack of the caller.
-  __ Push(receiver);  // Receiver.
-  __ Push(reg);  // Holder.
+  __ Push(receiver, reg);  // Receiver, holder.
   __ li(scratch1, Operand(Handle<AccessorInfo>(callback)));  // Callback data.
   __ Push(scratch1);
   __ lw(reg, FieldMemOperand(scratch1, AccessorInfo::kDataOffset));
