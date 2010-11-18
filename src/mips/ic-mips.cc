@@ -56,16 +56,15 @@ static void GenerateDictionaryLoad(MacroAssembler* masm,
   //
   // reg0 - used to hold the property dictionary.
   //
-  // reg1 - initially the receiver
-  //    - used for the index into the property dictionary
+  // reg1 - initially the receiver.
   //    - holds the result on exit.
   //
   // a3 - used as temporary and to hold the capacity of the property
   //      dictionary.
   //
-  // a2 - holds the name of the property and is unchanged.
+  // a2 - initially holds the name of the property and is unchanged.
   //
-  // t0 - scratch.
+  // t0 - used to hold the index into the property dictionary.
   // t1 - scratch.
 
   Label done;
@@ -540,7 +539,7 @@ void LoadIC::GenerateNormal(MacroAssembler* masm) {
   __ CheckAccessGlobalProxy(a0, a1, &miss);
   __ Branch(&probe);
 
-  // Cache miss: Restore receiver from stack and jump to runtime.
+  // Cache miss: Jump to runtime.
   __ bind(&miss);
   GenerateMiss(masm);
 }
