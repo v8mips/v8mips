@@ -420,6 +420,8 @@ class VirtualFrame : public ZoneObject {
   int element_count_;
   TopOfStack top_of_stack_state_:3;
   int register_allocation_map_:kNumberOfAllocatedRegisters;
+  static const int kTOSKnownSmiMapSize = 4;
+  unsigned tos_known_smi_map_:kTOSKnownSmiMapSize;
 
   // The index of the element that is at the processor's stack pointer
   // (the sp register).  For now since everything is in memory it is given
@@ -477,6 +479,24 @@ class VirtualFrame : public ZoneObject {
 
   inline bool Equals(const VirtualFrame* other);
 
+  inline void LowerHeight(int count) {
+    element_count_ -= count;
+    if (count >= kTOSKnownSmiMapSize) {
+      tos_known_smi_map_ = 0;
+    } else {
+      tos_known_smi_map_ >>= count;
+    }
+  }
+
+  inline void RaiseHeight(int count, unsigned known_smi_map = 0) {
+    ASSERT(known_smi_map < (1u << count));
+    element_count_ += count;
+    if (count >= kTOSKnownSmiMapSize) {
+      tos_known_smi_map_ = known_smi_map;
+    } else {
+      tos_known_smi_map_ = ((tos_known_smi_map_ << count) | known_smi_map);
+    }
+  }
   friend class JumpTarget;
 };
 
