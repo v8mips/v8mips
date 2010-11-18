@@ -7505,7 +7505,7 @@ void ArgumentsAccessStub::GenerateReadElement(MacroAssembler* masm) {
   __ Branch(&slow, Ugreater_equal, a0, Operand(a1));
 
   // Read the argument from the stack and return it.
-  __ subu(a0, a0, a1);
+  __ subu(a3, a0, a1);
   __ sll(t3, a3, kPointerSizeLog2 - kSmiTagSize);
   __ Addu(a3, fp, Operand(t3));
   __ lw(v0, MemOperand(a3, kDisplacement));
