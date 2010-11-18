@@ -183,15 +183,18 @@ void MacroAssembler::Drop(int count, Condition cond) {
 }
 
 
-void MacroAssembler::Swap(Register reg1, Register reg2, Register scratch) {
+void MacroAssembler::Swap(Register reg1,
+                          Register reg2,
+                          Register scratch,
+                          Condition cond) {
   if (scratch.is(no_reg)) {
-    eor(reg1, reg1, Operand(reg2));
-    eor(reg2, reg2, Operand(reg1));
-    eor(reg1, reg1, Operand(reg2));
+    eor(reg1, reg1, Operand(reg2), LeaveCC, cond);
+    eor(reg2, reg2, Operand(reg1), LeaveCC, cond);
+    eor(reg1, reg1, Operand(reg2), LeaveCC, cond);
   } else {
-    mov(scratch, reg1);
-    mov(reg1, reg2);
-    mov(reg2, scratch);
+    mov(scratch, reg1, LeaveCC, cond);
+    mov(reg1, reg2, LeaveCC, cond);
+    mov(reg2, scratch, LeaveCC, cond);
   }
 }
 
@@ -1287,7 +1290,7 @@ void MacroAssembler::GetLeastBitsFromSmi(Register dst,
                                          Register src,
                                          int num_least_bits) {
   if (CpuFeatures::IsSupported(ARMv7)) {
-    ubfx(dst, src, Operand(kSmiTagSize), Operand(num_least_bits - 1));
+    ubfx(dst, src, kSmiTagSize, num_least_bits);
   } else {
     mov(dst, Operand(src, ASR, kSmiTagSize));
     and_(dst, dst, Operand((1 << num_least_bits) - 1));
