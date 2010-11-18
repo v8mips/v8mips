@@ -9294,8 +9294,7 @@ void StringCharCodeAtGenerator::GenerateSlow(
   __ CheckMap(index_, scratch_,
               Factory::heap_number_map(), index_not_number_, true);
   call_helper.BeforeCall(masm);
-  __ Push(object_, index_, result_);
-  __ push(index_);  // Consumed by runtime conversion function.
+  __ Push(object_, index_, index_); // Consumed by runtime conversion function.
   if (index_flags_ == STRING_INDEX_IS_NUMBER) {
     __ CallRuntime(Runtime::kNumberToIntegerMapMinusZero, 1);
   } else {
@@ -9309,9 +9308,11 @@ void StringCharCodeAtGenerator::GenerateSlow(
 
   __ Move(scratch_, v0);
 
-  __ Pop(result_);
   __ Pop(index_);
   __ Pop(object_);
+  // Reload the instance type.
+  __ lw(result_, FieldMemOperand(object_, HeapObject::kMapOffset));
+  __ lbu(result_, FieldMemOperand(result_, Map::kInstanceTypeOffset));
   call_helper.AfterCall(masm);
   // If index is still not a smi, it must be out of range.
   __ BranchOnNotSmi(scratch_, index_out_of_range_);
