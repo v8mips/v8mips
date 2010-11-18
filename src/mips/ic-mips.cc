@@ -855,8 +855,8 @@ void KeyedLoadIC::GenerateGeneric(MacroAssembler* masm) {
 
   // Is the string an array index, with cached numeric value?
   __ lw(a3, FieldMemOperand(a0, String::kHashFieldOffset));
-  __ And(at, a3, Operand(String::kIsArrayIndexMask));
-  __ Branch(&index_string, ne, at, Operand(zero_reg));
+  __ And(at, a3, Operand(String::kContainsCachedArrayIndexMask));
+  __ Branch(&index_string, eq, at, Operand(zero_reg));
 
   // Is the string a symbol?
   // a2: key map
