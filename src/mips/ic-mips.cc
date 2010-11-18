@@ -164,11 +164,11 @@ static void GenerateNumberDictionaryLoad(MacroAssembler* masm,
   //
   // key      - holds the smi key on entry and is unchanged if a branch is
   //            performed to the miss label.
+  //            Holds the result on exit if the load succeeded.
   //
   // Scratch registers:
   //
   // reg0 - holds the untagged key on entry and holds the hash once computed.
-  //      Holds the result on exit if the load succeeded.
   //
   // reg1 - Used to hold the capacity mask of the dictionary.
   //
@@ -249,7 +249,7 @@ static void GenerateNumberDictionaryLoad(MacroAssembler* masm,
   // Get the value at the masked, scaled index and return.
   const int kValueOffset =
       NumberDictionary::kElementsStartOffset + kPointerSize;
-  __ lw(reg0, FieldMemOperand(reg2, kValueOffset));
+  __ lw(key, FieldMemOperand(reg2, kValueOffset));
 }
 
 
@@ -728,11 +728,6 @@ void KeyedLoadIC::GenerateGeneric(MacroAssembler* masm) {
   // -----------------------------------
   Label slow, check_pixel_array, check_number_dictionary;
 
-  // Modified slightly from in-tree arm version, see
-  // ic-arm.cc: 6a579d9fd7.
-
-  // a0: key
-  // a1: receiver object
   Register key = a0;
   Register receiver = a1;
 
@@ -754,8 +749,6 @@ void KeyedLoadIC::GenerateGeneric(MacroAssembler* masm) {
 
   // Check that the key is a smi.
   __ BranchOnNotSmi(key, &slow);
-  // Untag key into a2.
-  __ sra(a2, key, kSmiTagSize);
 
   // Get the elements array of the object.
   __ lw(t0, FieldMemOperand(receiver, JSObject::kElementsOffset));
@@ -764,14 +757,16 @@ void KeyedLoadIC::GenerateGeneric(MacroAssembler* masm) {
   __ LoadRoot(t1, Heap::kFixedArrayMapRootIndex);
   __ Branch(&check_pixel_array, ne, a3, Operand(t0));
   // Check that the key (index) is within bounds.
-  __ lw(a3, FieldMemOperand(t1, Array::kLengthOffset));
-  __ Branch(&slow, hs, a2, Operand(a3));
+  __ lw(a3, FieldMemOperand(t1, FixedArray::kLengthOffset));
+  __ Branch(&slow, hs, key, Operand(a3));
 
   // Fast case: Do the load.
-  // a0: key (un-tagged integer).
-  // a1: elements array of the object.
+  // a0: key (tagged smi).
+  // t0: elements array of the object.
   __ Addu(a3, t0, Operand(FixedArray::kHeaderSize - kHeapObjectTag));
-  __ sll(a2, a2, kPointerSizeLog2);  // Scale index for words.
+  // The key is a smi.
+  ASSERT(kSmiTag == 0 && kSmiTagSize < kPointerSizeLog2);
+  __ sll(a2, key, kPointerSizeLog2 - kSmiTagSize);  // Scale index for words.
   __ Addu(a2, a2, Operand(a3));
   __ lw(a2, MemOperand(a2, 0));
   __ LoadRoot(t1, Heap::kTheHoleValueRootIndex);
@@ -783,7 +778,6 @@ void KeyedLoadIC::GenerateGeneric(MacroAssembler* masm) {
 
   // Check whether the elements is a pixel array.
   // a0: key
-  // a2: untagged index
   // a3: elements map
   // t0: elements
   __ bind(&check_pixel_array);
@@ -791,6 +785,7 @@ void KeyedLoadIC::GenerateGeneric(MacroAssembler* masm) {
   __ Branch(&check_number_dictionary, ne, a3, Operand(t1));
   // Check that the key (index) is within bounds.
   __ lw(t1, FieldMemOperand(t0, PixelArray::kLengthOffset));
+  __ sra(a2, key, kSmiTagSize);  // Untag the key.
   __ Branch(&slow, hs, a2, Operand(t1));
   __ lw(t1, FieldMemOperand(t0, PixelArray::kExternalPointerOffset));
   __ Addu(t1, t1, Operand(a2));
@@ -801,14 +796,13 @@ void KeyedLoadIC::GenerateGeneric(MacroAssembler* masm) {
   __ bind(&check_number_dictionary);
   // Check whether the elements is a number dictionary.
   // a0: key
-  // a2: untagged index
   // a3: elements map
   // t0: elements
   __ LoadRoot(t1, Heap::kHashTableMapRootIndex);
   __ Branch(&slow, ne, a3, Operand(t1));
-
+  __ sra(a2, a0, kSmiTagSize);
   GenerateNumberDictionaryLoad(masm, &slow, t0, a0, a2, a3, t1);
-  __ mov(v0, a2);  // Return value in v0.
+  __ mov(v0, a0);  // Return value in v0.
   __ Ret();
 
   // Slow case: Push extra copies of the arguments (2).
@@ -1221,11 +1215,9 @@ void KeyedStoreIC::GenerateGeneric(MacroAssembler* masm) {
   __ lw(t3, FieldMemOperand(elements, HeapObject::kMapOffset));
   __ LoadRoot(t0, Heap::kFixedArrayMapRootIndex);
   __ Branch(&check_pixel_array, ne, t3, Operand(t0));
-  // Untag the key (for checking against untagged length in the fixed array).
-  __ sra(t3, key, kSmiTagSize);
-  // Compute address to store into and check array bounds.
+  // Check array bounds. Both the key and the length of FixedArray are smis.
   __ lw(t0, FieldMemOperand(elements, FixedArray::kLengthOffset));
-  __ Branch(&fast, lo, t3, Operand(t0));
+  __ Branch(&fast, lo, key, Operand(t0));
   // Fall thru to slow if un-tagged index >= length.
 
   // Slow case, handle jump to runtime.
@@ -1285,9 +1277,9 @@ void KeyedStoreIC::GenerateGeneric(MacroAssembler* masm) {
   // Only support writing to array[array.length].
   __ Branch(&slow, ne, key, Operand(t0));
   // Check for room in the elements backing store.
-  __ sra(t3, key, kSmiTagSize);  // Untag key.
-  __ lw(t0, FieldMemOperand(elements, Array::kLengthOffset));
-  __ Branch(&slow, hs, t3, Operand(t0));
+  // Both the key and the length of FixedArray are smis.
+  __ lw(t0, FieldMemOperand(elements, FixedArray::kLengthOffset));
+  __ Branch(&slow, hs, key, Operand(t0));
   // Calculate key + 1 as smi.
   ASSERT_EQ(0, kSmiTag);
   __ Addu(t3, key, Operand(Smi::FromInt(1)));

@@ -169,71 +169,23 @@ void MacroAssembler::RecordWriteHelper(Register object,
     bind(&not_in_new_space);
   }
 
-  // This is how much we shift the remembered set bit offset to get the
-  // offset of the word in the remembered set.  We divide by kBitsPerInt (32,
-  // shift right 5) and then multiply by kIntSize (4, shift left 2).
-  const int kRSetWordShift = 3;
+  li(t8, Operand(Page::kPageAlignmentMask));  // Load mask only once.
 
-  Label fast;
+  // Calculate region number.
+  addu(offset, object, offset);  // Add offset into the object.
+  and_(offset, offset, t8);  // Offset into page of the object.
+  srl(offset, offset, Page::kRegionSizeLog2);
 
-  // Compute the bit offset in the remembered set.
-  // object: heap object pointer (with tag)
-  // offset: offset to store location from the object
-  li(t8, Operand(Page::kPageAlignmentMask));  // load mask only once
-  and_(scratch, object, t8);  // offset into page of the object
-  addu(offset, scratch, offset);  // add offset into the object
-  srl(offset, offset, kObjectAlignmentBits);
+  // Calculate page address, by clearing the kPageAlignmentMask bits.
+  nor(at, t8, zero_reg);  // Invert page mask.
+  and_(object, object, at);
 
-  // Compute the page address from the heap object pointer.
-  // object: heap object pointer (with tag)
-  // offset: bit offset of store position in the remembered set
-
-  // Bitwise negation.
-  li(t9, 0xFFFFFFFF);
-  xor_(t8, t8, t9);
-  and_(object, object, t8);
-
-  // If the bit offset lies beyond the normal remembered set range, it is in
-  // the extra remembered set area of a large object.
-  // object: page start
-  // offset: bit offset of store position in the remembered set
-  Branch(&fast, lt, offset, Operand(Page::kPageSize / kPointerSize));
-
-  // Adjust the bit offset to be relative to the start of the extra
-  // remembered set and the start address to be the address of the extra
-  // remembered set.
-  Subu(offset, offset, Operand(Page::kPageSize / kPointerSize));
-  // Load the array length into 'scratch' and multiply by four to get the
-  // size in bytes of the elements.
-  lw(scratch, MemOperand(object, Page::kObjectStartOffset
-                                  + FixedArray::kLengthOffset));
-  sll(scratch, scratch, kObjectAlignmentBits);
-  // Add the page header (including remembered set), array header, and array
-  // body size to the page address.
-  addiu(object, object, Page::kObjectStartOffset + FixedArray::kHeaderSize);
-  addu(object, object, scratch);
-
-  bind(&fast);
-  // Get address of the rset word.
-  // object: start of the remembered set (page start for the fast case)
-  // offset: bit offset of store position in the remembered set
-
-  // Clear the bit offset.
-  li(t8, -kBitsPerInt);
-  and_(scratch, offset, t8);
-
-  srl(scratch, scratch, kRSetWordShift);
-  addu(object, object, scratch);
-  // Get bit offset in the rset word.
-  // object: address of remembered set word
-  // offset: bit offset of store position
-  andi(offset, offset, kBitsPerInt - 1);
-
-  lw(scratch, MemOperand(object));
-  li(t8, 1);
-  sllv(t8, t8, offset);
-  or_(scratch, scratch, t8);
-  sw(scratch, MemOperand(object));
+  // Mark region dirty.
+  lw(scratch, MemOperand(object, Page::kDirtyFlagOffset));
+  li(at, Operand(1));
+  sllv(at, at, offset);
+  or_(scratch, scratch, at);
+  sw(scratch, MemOperand(object, Page::kDirtyFlagOffset));
 }
 
 
@@ -260,7 +212,7 @@ void MacroAssembler::RecordWrite(Register object, Register offset,
   Label done;
 
   // First, test that the object is not in the new space.  We cannot set
-  // remembered set bits in the new space.
+  // region marks for new space pages.
   InNewSpace(object, scratch, eq, &done);
 
   // Record the actual write.
@@ -2103,6 +2055,7 @@ void MacroAssembler::InvokeFunction(Register function,
   lw(expected_reg,
       FieldMemOperand(code_reg,
                       SharedFunctionInfo::kFormalParameterCountOffset));
+  sra(expected_reg, expected_reg, kSmiTagSize);
   lw(code_reg,
       MemOperand(code_reg, SharedFunctionInfo::kCodeOffset - kHeapObjectTag));
   addiu(code_reg, code_reg, Code::kHeaderSize - kHeapObjectTag);

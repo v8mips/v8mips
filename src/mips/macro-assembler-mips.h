@@ -216,12 +216,14 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
                   Label* branch);
 
 
-  // Set the remembered set bit for an offset into an
-  // object. RecordWriteHelper only works if the object is not in new
-  // space.
+  // For the page containing |object| mark the region covering [object+offset]
+  // dirty. The object address must be in the first 8K of an allocated page.
   void RecordWriteHelper(Register object, Register offset, Register scracth);
 
-  // Sets the remembered set bit for [address+offset].
+  // For the page containing |object| mark the region covering [object+offset]
+  // dirty. The object address must be in the first 8K of an allocated page.
+  // The 'scratch' register is used in the implementation and all 3 registers
+  // are clobbered by the operation, as well as the t8 and 'at' registers.
   void RecordWrite(Register object, Register offset, Register scratch);
 
 

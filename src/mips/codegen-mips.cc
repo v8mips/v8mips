@@ -2518,7 +2518,6 @@ void CodeGenerator::VisitForInStatement(ForInStatement* node) {
   frame_->EmitPush(a0);  // map
   frame_->EmitPush(a2);  // enum cache bridge cache
   __ lw(a0, FieldMemOperand(a2, FixedArray::kLengthOffset));
-  __ sll(a0, a0, kSmiTagSize);
   frame_->EmitPush(a0);
   __ li(a0, Operand(Smi::FromInt(0)));
   frame_->EmitPush(a0);
@@ -2531,7 +2530,6 @@ void CodeGenerator::VisitForInStatement(ForInStatement* node) {
 
   // Push the length of the array and the initial index onto the stack.
   __ lw(a0, FieldMemOperand(a0, FixedArray::kLengthOffset));
-  __ sll(a0, a0, kSmiTagSize);
   frame_->EmitPush(a0);
   __ li(a0, Operand(Smi::FromInt(0)));  // init index
   frame_->EmitPush(a0);
@@ -4351,7 +4349,7 @@ void CodeGenerator::GenerateArguments(ZoneList<Expression*>* args) {
   ASSERT(args->length() == 1);
 
   // Satisfy contract with ArgumentsAccessStub:
-  // Load the key into r1 and the formal parameters count into r0.
+  // Load the key into a1 and the formal parameters count into a0.
   LoadAndSpill(args->at(0));
   frame_->EmitPop(a1);
   __ li(a0, Operand(Smi::FromInt(scope()->num_parameters())));
@@ -4608,7 +4606,8 @@ void CodeGenerator::GenerateRegExpConstructResult(ZoneList<Expression*>* args) {
     __ li(a2, Operand(Factory::fixed_array_map()));
     __ sw(a2, FieldMemOperand(a3, HeapObject::kMapOffset));
     // Set FixedArray length.
-    __ sw(t1, FieldMemOperand(a3, FixedArray::kLengthOffset));
+    __ sll(t2, t1, kSmiTagSize);
+    __ sw(t2, FieldMemOperand(a3, FixedArray::kLengthOffset));
     // Fill contents of fixed-array with the-hole.
     __ li(a2, Operand(Factory::the_hole_value()));
     __ Addu(a3, a3, Operand(FixedArray::kHeaderSize - kHeapObjectTag));
@@ -5789,8 +5788,7 @@ void CodeGenerator::EmitKeyedLoad() {
       // Check that key is within bounds. Use unsigned comparison to handle
       // negative keys.
       __ lw(scratch2, FieldMemOperand(scratch1, FixedArray::kLengthOffset));
-      __ sra(at, key, kSmiTagSize);
-      deferred->Branch(ls, scratch2, Operand(at));  // Unsigned less equal.
+      deferred->Branch(ls, scratch2, Operand(key));  // Unsigned less equal.
 
       // Load and check that the result is not the hole (key is a smi).
       __ LoadRoot(scratch2, Heap::kTheHoleValueRootIndex);
@@ -5804,8 +5802,6 @@ void CodeGenerator::EmitKeyedLoad() {
       deferred->Branch(eq, scratch1, Operand(scratch2));
 
       __ mov(v0, scratch1);
-      // Make sure that the expected number of instructions are generated.
-      // If this fails, KeyedLoadIC::PatchInlinedLoad() must be fixed as well.
       ASSERT_EQ(kInlinedKeyedLoadInstructionsAfterPatch,
                 masm_->InstructionsGeneratedSince(&check_inlined_codesize));
     }
@@ -6756,8 +6752,8 @@ void NumberToStringStub::GenerateLookupNumberStringCache(MacroAssembler* masm,
   // Make the hash mask from the length of the number string cache. It
   // contains two elements (number and string) for each cache entry.
   __ lw(mask, FieldMemOperand(number_string_cache, FixedArray::kLengthOffset));
-  // Divide length by two (length is not a smi).
-  __ sra(mask, mask, 1);
+  // Divide length by two (length is a smi).
+  __ sra(mask, mask, kSmiTagSize + 1);
   __ Addu(mask, mask, -1);  // Make mask.
 
   // Calculate the entry in the number string cache. The hash value in the
@@ -7662,7 +7658,8 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
   __ lw(a0,
          FieldMemOperand(last_match_info_elements, FixedArray::kLengthOffset));
   __ Addu(a2, a2, Operand(RegExpImpl::kLastMatchOverhead));
-  __ Branch(&runtime, gt, a2, Operand(a0));
+  __ sra(at, a0, kSmiTagSize);  // Untag length for comparison.
+  __ Branch(&runtime, gt, a2, Operand(at));
   // subject: Subject string
   // regexp_data: RegExp data (FixedArray)
   // Check the representation and encoding of the subject string.
@@ -7889,7 +7886,10 @@ void ArgumentsAccessStub::GenerateNewObject(MacroAssembler* masm) {
   Label adaptor_frame, try_allocate, runtime;
   __ lw(a2, MemOperand(fp, StandardFrameConstants::kCallerFPOffset));
   __ lw(a3, MemOperand(a2, StandardFrameConstants::kContextOffset));
-  __ Branch(&adaptor_frame, eq, a3, Operand(Smi::FromInt(StackFrame::ARGUMENTS_ADAPTOR)));
+  __ Branch(&adaptor_frame,
+            eq,
+            a3,
+            Operand(Smi::FromInt(StackFrame::ARGUMENTS_ADAPTOR)));
 
   // Get the length from the frame.
   __ lw(a1, MemOperand(sp, 0));
@@ -7950,9 +7950,8 @@ void ArgumentsAccessStub::GenerateNewObject(MacroAssembler* masm) {
   Label done;
   __ Branch(&done, eq, a1, Operand(0));
 
-  // Get the parameters pointer from the stack and untag the length.
+  // Get the parameters pointer from the stack.
   __ lw(a2, MemOperand(sp, 1 * kPointerSize));
-  __ srl(a1, a1, kSmiTagSize);
 
   // Setup the elements pointer in the allocated arguments object and
   // initialize the header in the elements fixed array.
@@ -7961,6 +7960,7 @@ void ArgumentsAccessStub::GenerateNewObject(MacroAssembler* masm) {
   __ LoadRoot(a3, Heap::kFixedArrayMapRootIndex);
   __ sw(a3, FieldMemOperand(t0, FixedArray::kMapOffset));
   __ sw(a1, FieldMemOperand(t0, FixedArray::kLengthOffset));
+  __ srl(a1, a1, kSmiTagSize);  // Untag the length for the loop.
 
   // Copy the fixed array slots.
   Label loop;

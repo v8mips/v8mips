@@ -140,7 +140,7 @@ static void AllocateEmptyJSArray(MacroAssembler* masm,
   // Clear the heap tag on the elements array.
   __ And(scratch1, scratch1, Operand(~kHeapObjectTagMask));
 
-  // Initialize the FixedArray and fill it with holes. FixedArray length is not
+  // Initialize the FixedArray and fill it with holes. FixedArray length is
   // stored as a smi.
   // result: JSObject
   // scratch1: elements array (untagged)
@@ -149,7 +149,7 @@ static void AllocateEmptyJSArray(MacroAssembler* masm,
   ASSERT_EQ(0 * kPointerSize, FixedArray::kMapOffset);
   __ sw(scratch3, MemOperand(scratch1));
   __ Addu(scratch1, scratch1, kPointerSize);
-  __ li(scratch3,  initial_capacity);
+  __ li(scratch3,  Operand(Smi::FromInt(initial_capacity)));
   ASSERT_EQ(1 * kPointerSize, FixedArray::kLengthOffset);
   __ sw(scratch3, MemOperand(scratch1));
   __ Addu(scratch1, scratch1, kPointerSize);
@@ -246,29 +246,22 @@ static void AllocateJSArray(MacroAssembler* masm,
   __ And(elements_array_storage,
           elements_array_storage,
           Operand(~kHeapObjectTagMask));
-  // Initialize the fixed array and fill it with holes. FixedArray length is not
+  // Initialize the fixed array and fill it with holes. FixedArray length is
   // stored as a smi.
   // result: JSObject
   // elements_array_storage: elements array (untagged)
   // array_size: size of array (smi)
-  ASSERT(kSmiTag == 0);
   __ LoadRoot(scratch1, Heap::kFixedArrayMapRootIndex);
   ASSERT_EQ(0 * kPointerSize, FixedArray::kMapOffset);
   __ sw(scratch1, MemOperand(elements_array_storage));
   __ Addu(elements_array_storage, elements_array_storage, kPointerSize);
-  // Convert array_size from smi to value.
-  __ sra(array_size, array_size, kSmiTagSize);
 
-  {
-    // Length of the FixedArray is the number of pre-allocated elements if
-    // the actual JSArray has length 0 and the size of the JSArray for non-empty
-    // JSArrays. The length of a FixedArray is not stored as a smi.
-
-    Label array_size_not_zero;
-    __ Branch(&array_size_not_zero, ne, array_size, Operand(zero_reg));
-    __ li(array_size, JSArray::kPreallocatedArrayElements);
-    __ bind(&array_size_not_zero);
-  }
+  // Length of the FixedArray is the number of pre-allocated elements if
+  // the actual JSArray has length 0 and the size of the JSArray for non-empty
+  // JSArrays. The length of a FixedArray is stored as a smi.
+  ASSERT(kSmiTag == 0);
+  __ li(at, Operand(Smi::FromInt(JSArray::kPreallocatedArrayElements)));
+  __ movz(array_size, at, array_size);
 
   ASSERT_EQ(1 * kPointerSize, FixedArray::kLengthOffset);
   __ sw(array_size, MemOperand(elements_array_storage));
@@ -277,8 +270,9 @@ static void AllocateJSArray(MacroAssembler* masm,
   // Calculate elements array and elements array end.
   // result: JSObject
   // elements_array_storage: elements array element storage
-  // array_size: size of elements array
-  __ sll(elements_array_end, array_size, kPointerSizeLog2);
+  // array_size: smi-tagged size of elements array
+  ASSERT(kSmiTag == 0 && kSmiTagSize < kPointerSizeLog2);
+  __ sll(elements_array_end, array_size, kPointerSizeLog2 - kSmiTagSize);
   __ Addu(elements_array_end, elements_array_storage, elements_array_end);
 
   // Fill the allocated FixedArray with the hole value if requested.
@@ -441,7 +435,6 @@ void Builtins::Generate_ArrayCode(MacroAssembler* masm) {
               t0, Operand(MAP_TYPE));
   }
 
-
   // Run the native code for the Array function called as a normal function.
   ArrayNativeCode(masm, &generic_array_code);
 
@@ -562,7 +555,7 @@ static void Generate_JSConstructStubHelper(MacroAssembler* masm,
 
     // Load the initial map and verify that it is in fact a map.
     // a1: constructor function
-    // t7: undefined
+    // t7: undefined value
     __ lw(a2, FieldMemOperand(a1, JSFunction::kPrototypeOrInitialMapOffset));
     __ And(t0, a2, Operand(kSmiTagMask));
     __ Branch(&rt_call, eq, t0, Operand(zero_reg));
@@ -574,14 +567,14 @@ static void Generate_JSConstructStubHelper(MacroAssembler* masm,
     // instance type would be JS_FUNCTION_TYPE.
     // a1: constructor function
     // a2: initial map
-    // t7: undefined
+    // t7: undefined value
     __ lbu(a3, FieldMemOperand(a2, Map::kInstanceTypeOffset));
     __ Branch(&rt_call, eq, a3, Operand(JS_FUNCTION_TYPE));
 
     // Now allocate the JSObject on the heap.
     // constructor function
     // a2: initial map
-    // t7: undefined
+    // t7: undefined value
     __ lbu(a3, FieldMemOperand(a2, Map::kInstanceSizeOffset));
     __ AllocateInNewSpace(a3, t4, t5, t6, &rt_call, SIZE_IN_WORDS);
 
@@ -591,7 +584,7 @@ static void Generate_JSConstructStubHelper(MacroAssembler* masm,
     // a2: initial map
     // a3: object size
     // t4: JSObject (not tagged)
-    // t7: undefined
+    // t7: undefined value
     __ LoadRoot(t6, Heap::kEmptyFixedArrayRootIndex);
     __ mov(t5, t4);
     __ sw(a2, MemOperand(t5, JSObject::kMapOffset));
@@ -608,7 +601,7 @@ static void Generate_JSConstructStubHelper(MacroAssembler* masm,
     // a3: object size (in words)
     // t4: JSObject (not tagged)
     // t5: First in-object property of JSObject (not tagged)
-    // t7: undefined
+    // t7: undefined value
     __ sll(t0, a3, kPointerSizeLog2);
     __ addu(t6, t4, t0);   // End of object.
     ASSERT_EQ(3 * kPointerSize, JSObject::kHeaderSize);
@@ -632,7 +625,7 @@ static void Generate_JSConstructStubHelper(MacroAssembler* masm,
     // a1: constructor function
     // t4: JSObject
     // t5: start of next object (not tagged)
-    // t7: undefined
+    // t7: undefined value
     __ lbu(a3, FieldMemOperand(a2, Map::kUnusedPropertyFieldsOffset));
     // The field instance sizes contains both pre-allocated property fields and
     // in-object properties.
@@ -657,7 +650,7 @@ static void Generate_JSConstructStubHelper(MacroAssembler* masm,
     // a3: number of elements in properties array
     // t4: JSObject
     // t5: start of next object
-    // t7: undefined
+    // t7: undefined value
     __ Addu(a0, a3, Operand(FixedArray::kHeaderSize / kPointerSize));
     __ AllocateInNewSpace(
         a0,
@@ -669,18 +662,19 @@ static void Generate_JSConstructStubHelper(MacroAssembler* masm,
 
     // Initialize the FixedArray.
     // a1: constructor
-    // a3: number of elements in properties array
+    // a3: number of elements in properties array (un-tagged)
     // t4: JSObject
     // t5: start of next object
-    // t7: undefined
+    // t7: undefined value
     __ LoadRoot(t6, Heap::kFixedArrayMapRootIndex);
     __ mov(a2, t5);
     __ sw(t6, MemOperand(a2, JSObject::kMapOffset));
-    __ sw(a3, MemOperand(a2, Array::kLengthOffset));
+    __ sll(a0, a3, kSmiTagSize);
+    __ sw(a0, MemOperand(a2, FixedArray::kLengthOffset));
     __ Addu(a2, a2, Operand(2 * kPointerSize));
 
     ASSERT_EQ(0 * kPointerSize, JSObject::kMapOffset);
-    ASSERT_EQ(1 * kPointerSize, Array::kLengthOffset);
+    ASSERT_EQ(1 * kPointerSize, FixedArray::kLengthOffset);
 
     // Initialize the fields to undefined.
     // a1: constructor
@@ -688,7 +682,7 @@ static void Generate_JSConstructStubHelper(MacroAssembler* masm,
     // a3: number of elements in properties array
     // t4: JSObject
     // t5: FixedArray (not tagged)
-    // t7: undefined
+    // t7: undefined value
     __ sll(t3, a3, kPointerSizeLog2);
     __ addu(t6, a2, t3);  // End of object.
     ASSERT_EQ(2 * kPointerSize, FixedArray::kHeaderSize);
@@ -1107,6 +1101,7 @@ void Builtins::Generate_FunctionCall(MacroAssembler* masm) {
   __ lw(a3, FieldMemOperand(a1, JSFunction::kSharedFunctionInfoOffset));
   __ lw(a2,
          FieldMemOperand(a3, SharedFunctionInfo::kFormalParameterCountOffset));
+  __ sra(a2, a2, kSmiTagSize);
   __ lw(a3, FieldMemOperand(a3, SharedFunctionInfo::kCodeOffset));
   __ Addu(a3, a3, Operand(Code::kHeaderSize - kHeapObjectTag));
   // Check formal and actual parameter counts.
