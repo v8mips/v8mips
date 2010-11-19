@@ -3599,17 +3599,55 @@ void CodeGenerator::VisitCall(Call* node) {
     // resolve the function we need to call and the receiver of the
     // call.  Then we call the resolved function using the given
     // arguments.
+
     // Prepare stack for call to resolved function.
     Load(function);
-    __ LoadRoot(a2, Heap::kUndefinedValueRootIndex);
-    frame_->EmitPush(a2);  // Slot for receiver
 
+    // Allocate a frame slot for the receiver.
+    __ LoadRoot(a2, Heap::kUndefinedValueRootIndex);
+    frame_->EmitPush(a2);
+
+    // Load the arguments.
     int arg_count = args->length();
     for (int i = 0; i < arg_count; i++) {
       Load(args->at(i));
     }
 
-    // Prepare stack for call to ResolvePossiblyDirectEval.
+    // If we know that eval can only be shadowed by eval-introduced
+    // variables we attempt to load the global eval function directly
+    // in generated code. If we succeed, there is no need to perform a
+    // context lookup in the runtime system.
+    JumpTarget done;
+    if (var->slot() != NULL && var->mode() == Variable::DYNAMIC_GLOBAL) {
+      ASSERT(var->slot()->type() == Slot::LOOKUP);
+      JumpTarget slow;
+      // Prepare the stack for the call to
+      // ResolvePossiblyDirectEvalNoLookup by pushing the loaded
+      // function, the first argument to the eval call and the
+      // receiver.
+      LoadFromGlobalSlotCheckExtensions(var->slot(),
+                                        NOT_INSIDE_TYPEOF,
+                                        &slow);
+      frame_->EmitPush(v0);
+      if (arg_count > 0) {
+        __ lw(a1, MemOperand(sp, arg_count * kPointerSize));
+        frame_->EmitPush(a1);
+      } else {
+        frame_->EmitPush(a2);
+      }
+      __ lw(a1, frame_->Receiver());
+      frame_->EmitPush(a1);
+
+      frame_->CallRuntime(Runtime::kResolvePossiblyDirectEvalNoLookup, 3);
+
+      done.Jump();
+      slow.Bind();
+    }
+
+    // Prepare the stack for the call to ResolvePossiblyDirectEval by
+    // pushing the loaded function, the first argument to the eval
+    // call and the receiver.
+
     __ lw(a1, MemOperand(sp, arg_count * kPointerSize + kPointerSize));
     frame_->EmitPush(a1);
     if (arg_count > 0) {
@@ -3618,13 +3656,15 @@ void CodeGenerator::VisitCall(Call* node) {
     } else {
       frame_->EmitPush(a2);
     }
-
-    // Push the receiver.
     __ lw(a1, frame_->Receiver());
     frame_->EmitPush(a1);
 
     // Resolve the call.
     frame_->CallRuntime(Runtime::kResolvePossiblyDirectEval, 3);
+
+    // If we generated fast-case code bind the jump-target where fast
+    // and slow case merge.
+    if (done.is_linked()) done.Bind();
 
     // Touch up stack with the right values for the function and the receiver.
     // Runtime::kResolvePossiblyDirectEval returns object pair in v0/v1.
