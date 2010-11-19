@@ -53,11 +53,13 @@ void BreakLocationIterator::SetDebugBreakAtReturn() {
   // addiu sp, sp, N
   // jr ra
   // nop (in branch delay slot)
-  //
-  CodePatcher patcher(rinfo()->pc(), Assembler::kJSReturnSequenceLength);
+
+  // Make sure this constant matches the number if instrucntions we emit.
+  ASSERT(Assembler::kJSReturnSequenceInstructions == 7);
+  CodePatcher patcher(rinfo()->pc(), Assembler::kJSReturnSequenceInstructions);
   // li and Call pseudo-instructions emit two instructions each.
   patcher.masm()->li(v8::internal::t9,
-                     Operand(reinterpret_cast<int32_t>(Debug::debug_break_return()->entry())));
+      Operand(reinterpret_cast<int32_t>(Debug::debug_break_return()->entry())));
   patcher.masm()->Call(v8::internal::t9);
   patcher.masm()->nop();
   patcher.masm()->nop();
@@ -71,14 +73,46 @@ void BreakLocationIterator::SetDebugBreakAtReturn() {
 // Restore the JS frame exit code.
 void BreakLocationIterator::ClearDebugBreakAtReturn() {
   rinfo()->PatchCode(original_rinfo()->pc(),
-                     Assembler::kJSReturnSequenceLength);
+                     Assembler::kJSReturnSequenceInstructions);
 }
 
 
-// A debug break in the exit code is identified by a call.
+// A debug break in the exit code is identified by the JS frame exit code
+// having been patched with li/call psuedo-instrunction (liu/ori/jalr)
 bool Debug::IsDebugBreakAtReturn(RelocInfo* rinfo) {
   ASSERT(RelocInfo::IsJSReturn(rinfo->rmode()));
   return rinfo->IsPatchedReturnSequence();
+}
+
+
+bool BreakLocationIterator::IsDebugBreakAtSlot() {
+  ASSERT(IsDebugBreakSlot());
+  // Check whether the debug break slot instructions have been patched.
+  return rinfo()->IsPatchedDebugBreakSlotSequence();
+}
+
+
+void BreakLocationIterator::SetDebugBreakAtSlot() {
+  ASSERT(IsDebugBreakSlot());
+  // Patch the code changing the debug break slot code from
+  //   nop(2) - nop(2) is sll(zero_reg, zero_reg, 2)
+  //   nop(2)
+  //   nop(2)
+  //   nop(2)
+  // to a call to the debug break slot code.
+  //   li t9, address   (lui t9 / ori t9 instruction pair)
+  //   call t9          (jalr t9 / nop instruction pair)
+  CodePatcher patcher(rinfo()->pc(), Assembler::kDebugBreakSlotInstructions);
+  patcher.masm()->li(v8::internal::t9,
+      Operand(reinterpret_cast<int32_t>(Debug::debug_break_return()->entry())));
+  patcher.masm()->Call(v8::internal::t9);
+}
+
+
+void BreakLocationIterator::ClearDebugBreakAtSlot() {
+  ASSERT(IsDebugBreakSlot());
+  rinfo()->PatchCode(original_rinfo()->pc(),
+                     Assembler::kDebugBreakSlotInstructions);
 }
 
 
@@ -214,6 +248,26 @@ void Debug::GenerateStubNoRegistersDebugBreak(MacroAssembler* masm) {
   // ----------- S t a t e -------------
   //  No registers used on entry.
   // -----------------------------------
+  Generate_DebugBreakCallHelper(masm, 0);
+}
+
+
+void Debug::GenerateSlot(MacroAssembler* masm) {
+  // Generate enough nop's to make space for a call instruction.
+  Label check_codesize;
+  __ bind(&check_codesize);
+  __ RecordDebugBreakSlot();
+  for (int i = 0; i < Assembler::kDebugBreakSlotInstructions; i++) {
+    __ nop(2);
+  }
+  ASSERT_EQ(Assembler::kDebugBreakSlotInstructions,
+            masm->InstructionsGeneratedSince(&check_codesize));
+}
+
+
+void Debug::GenerateSlotDebugBreak(MacroAssembler* masm) {
+  // In the places where a debug break slot is inserted no registers can contain
+  // object pointers.
   Generate_DebugBreakCallHelper(masm, 0);
 }
 

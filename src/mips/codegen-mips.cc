@@ -325,15 +325,38 @@ void CodeGenerator::Generate(CompilationInfo* info) {
       frame_->CallRuntime(Runtime::kTraceExit, 1);
     }
 
-    // We don't check for the return code size. It may differ if the number of
-    // arguments is too big.
+#ifdef DEBUG
+    // Add a label for checking the size of the code used for returning.
+    Label check_exit_codesize;
+    masm_->bind(&check_exit_codesize);
+#endif
+    // Make sure that the trampoline pool is not emitted inside of the return
+    // sequence.
+    { Assembler::BlockTrampolinePoolScope block_trampoline_pool(masm_);
 
-    // Tear down the frame which will restore the caller's frame pointer and
-    // the link register.
-    frame_->Exit();
+      // Tear down the frame which will restore the caller's frame pointer and
+      // the link register.
+      frame_->Exit();
 
-    __ Addu(sp, sp, Operand((scope()->num_parameters() + 1) * kPointerSize));
-    __ Ret();
+      // Here we use masm_-> instead of the __ macro to avoid the code coverage
+      // tool from instrumenting as we rely on the code size here.
+      int32_t sp_delta = (scope()->num_parameters() + 1) * kPointerSize;
+      masm_-> Addu(sp, sp, Operand(sp_delta));
+      masm_-> Ret();
+
+#ifdef DEBUG
+      // Check that the size of the code used for returning matches what is
+      // expected by the debugger. If the sp_delta above cannot be encoded in
+      // the add instruction the add will generate two instructions.
+      int return_sequence_length =
+          masm_->InstructionsGeneratedSince(&check_exit_codesize);
+      CHECK(return_sequence_length ==
+            Assembler::kJSReturnSequenceInstructions ||
+            return_sequence_length ==
+            Assembler::kJSReturnSequenceInstructions + 1);
+#endif
+
+    }
   }
 
   // Adjust for function-level loop nesting.

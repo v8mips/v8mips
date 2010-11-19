@@ -368,16 +368,6 @@ class Assembler : public Malloced {
   // The high 8 bits are set to zero.
   void label_at_put(Label* L, int at_offset);
 
-  // Size of an instruction.
-  static const int kInstrSize = sizeof(Instr);
-
-  // Difference between address of current opcode and value read from pc
-  // register.
-  static const int kPcLoadDelta = 4;
-
-  // Difference between address of current opcode and target address offset.
-  static const int kBranchPCOffset = 4;
-
   // Read/Modify the code target address in the branch/call instruction at pc.
   static Address target_address_at(Address pc);
   static void set_target_address_at(Address pc, Address target);
@@ -396,8 +386,17 @@ class Assembler : public Malloced {
     set_target_address_at(instruction_payload, target);
   }
 
-  static const int kCallTargetSize = 3 * kPointerSize;
-  static const int kExternalTargetSize = 3 * kPointerSize;
+  // Size of an instruction.
+  static const int kInstrSize = sizeof(Instr);
+
+  // Difference between address of current opcode and target address offset.
+  static const int kBranchPCOffset = 4;
+
+  // Here we are patching the address in the LUI/ORI instruction pair.
+  // I can't tell if these are right or wrong. We have not used the
+  // serialization yet (as of 11/18/2010). Good luck.
+  static const int kCallTargetSize = 2 * kInstrSize;
+  static const int kExternalTargetSize = 4 * kInstrSize;
 
   // Distance between the instruction referring to the address of the call
   // target and the return address.
@@ -407,13 +406,21 @@ class Assembler : public Malloced {
   // to jump to.
   static const int kPatchReturnSequenceAddressOffset = 0;
 
-  // Number of instructions used for the JS return sequence. The constant is
-  // used by the debugger to patch the JS return sequence.
-  static const int kJSReturnSequenceLength = 7;
-
   // Distance between start of patched debug break slot and the emitted address
   // to jump to.
-  static const int kPatchDebugBreakSlotAddressOffset = kInstrSize;
+  static const int kPatchDebugBreakSlotAddressOffset =  0 * kInstrSize;
+
+  // Difference between address of current opcode and value read from pc
+  // register.
+  static const int kPcLoadDelta = 4;
+
+  // Number of instructions used for the JS return sequence. The constant is
+  // used by the debugger to patch the JS return sequence.
+  static const int kJSReturnSequenceInstructions = 7;
+  static const int kDebugBreakSlotInstructions = 4;
+  static const int kDebugBreakSlotLength =
+      kDebugBreakSlotInstructions * kInstrSize;
+
 
   // ---------------------------------------------------------------------------
   // Code generation.
@@ -618,6 +625,9 @@ class Assembler : public Malloced {
 
   // Mark address of the ExitJSFrame code.
   void RecordJSReturn();
+
+  // Mark address of a debug break slot.
+  void RecordDebugBreakSlot();
 
   // Record a comment relocation entry that can be used by a disassembler.
   // Use --debug_code to enable.
