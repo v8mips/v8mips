@@ -535,12 +535,19 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
                      Register map,
                      Register type_reg);
 
-  // Check if the map of an object is equal to a specified map and
-  // branch to label if not. Skip the smi check if not required
-  // (object is known to be a heap object).
+  // Check if the map of an object is equal to a specified map (either
+  // given directly or as an index into the root list) and branch to
+  // label if not. Skip the smi check if not required (object is known
+  // to be a heap object)
   void CheckMap(Register obj,
                 Register scratch,
                 Handle<Map> map,
+                Label* fail,
+                bool is_heap_object);
+
+  void CheckMap(Register obj,
+                Register scratch,
+                Heap::RootListIndex index,
                 Label* fail,
                 bool is_heap_object);
 

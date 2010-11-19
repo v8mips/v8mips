@@ -574,6 +574,19 @@ class CodeGenerator: public AstVisitor {
   DISALLOW_COPY_AND_ASSIGN(CodeGenerator);
 };
 
+// Compute a transcendental math function natively, or call the
+// TranscendentalCache runtime function.
+class TranscendentalCacheStub: public CodeStub {
+ public:
+  explicit TranscendentalCacheStub(TranscendentalCache::Type type)
+      : type_(type) {}
+  void Generate(MacroAssembler* masm);
+ private:
+  TranscendentalCache::Type type_;
+  Major MajorKey() { return TranscendentalCache; }
+  int MinorKey() { return type_; }
+  Runtime::FunctionId RuntimeFunction();
+};
 
 class GenericBinaryOpStub : public CodeStub {
  public:

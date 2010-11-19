@@ -4054,18 +4054,28 @@ void CodeGenerator::GenerateMathPow(ZoneList<Expression*>* args) {
 
 void CodeGenerator::GenerateMathSin(ZoneList<Expression*>* args) {
   ASSERT_EQ(args->length(), 1);
-  // Load the argument on the stack and jump to the runtime.
   Load(args->at(0));
-  frame_->CallRuntime(Runtime::kMath_sin, 1);
+  if (CpuFeatures::IsSupported(FPU)) {
+    TranscendentalCacheStub stub(TranscendentalCache::SIN);
+    frame_->SpillAllButCopyTOSToA0();
+    frame_->CallStub(&stub, 1);
+  } else {
+    frame_->CallRuntime(Runtime::kMath_sin, 1);
+  }
   frame_->EmitPush(v0);
 }
 
 
 void CodeGenerator::GenerateMathCos(ZoneList<Expression*>* args) {
   ASSERT_EQ(args->length(), 1);
-  // Load the argument on the stack and jump to the runtime.
   Load(args->at(0));
-  frame_->CallRuntime(Runtime::kMath_cos, 1);
+  if (CpuFeatures::IsSupported(FPU)) {
+    TranscendentalCacheStub stub(TranscendentalCache::COS);
+    frame_->SpillAllButCopyTOSToA0();
+    frame_->CallStub(&stub, 1);
+  } else {
+    frame_->CallRuntime(Runtime::kMath_cos, 1);
+  }
   frame_->EmitPush(v0);
 }
 
@@ -6831,7 +6841,7 @@ void NumberToStringStub::GenerateLookupNumberStringCache(MacroAssembler* masm,
       CpuFeatures::Scope scope(FPU);
       __ CheckMap(object,
                   scratch1,
-                  Factory::heap_number_map(),
+                  Heap::kHeapNumberMapRootIndex,
                   not_found,
                   true);
 
@@ -9139,6 +9149,111 @@ Handle<Code> GetBinaryOpStub(int key, BinaryOpIC::TypeInfo type_info) {
   return stub.GetCode();
 }
 
+void TranscendentalCacheStub::Generate(MacroAssembler* masm) {
+  // Argument is a number and is on stack and in a0.
+  Label runtime_call;
+  Label input_not_smi;
+  Label loaded;
+
+  if (CpuFeatures::IsSupported(FPU)) {
+    // Load argument and check if it is a smi.
+    __ BranchOnNotSmi(a0, &input_not_smi);
+
+    CpuFeatures::Scope scope(FPU);
+    // Input is a smi. Convert to double and load the low and high words
+    // of the double into a2, a3.
+    __ sra(t0, a0, kSmiTagSize);
+    __ mtc1(t0, f4);
+    __ cvt_d_w(f4, f4);
+    __ mfc1(a2, f4);
+    __ mfc1(a3, f5);
+    __ Branch(&loaded);
+
+    __ bind(&input_not_smi);
+    // Check if input is a HeapNumber.
+    __ CheckMap(a0,
+                a1,
+                Heap::kHeapNumberMapRootIndex,
+                &runtime_call,
+                true);
+    // Input is a HeapNumber. Store the
+    // low and high words into a2, a3.
+    __ lw(a2, FieldMemOperand(a0, HeapNumber::kValueOffset));
+    __ lw(a3, FieldMemOperand(a0, HeapNumber::kValueOffset + 4));
+
+    __ bind(&loaded);
+    // a2 = low 32 bits of double value
+    // a3 = high 32 bits of double value
+    // Compute hash:
+    //   h = (low ^ high); h ^= h >> 16; h ^= h >> 8; h = h & (cacheSize - 1);
+    __ Xor(a1, a2, a3);
+    __ srl(t0, a1, 16);
+    __ Xor(a1, a1, t0);
+    __ srl(t0, a1, 8);
+    __ Xor(a1, a1, t0);
+    ASSERT(IsPowerOf2(TranscendentalCache::kCacheSize));
+    __ And(a1, a1, Operand(TranscendentalCache::kCacheSize - 1));
+
+    // a2 = low 32 bits of double value.
+    // a3 = high 32 bits of double value.
+    // a1 = TranscendentalCache::hash(double value).
+    __ li(a0,
+           Operand(ExternalReference::transcendental_cache_array_address()));
+    // a0 points to cache array.
+    __ lw(a0, MemOperand(a0, type_ * sizeof(TranscendentalCache::caches_[0])));
+    // a0 points to the cache for the type type_.
+    // If NULL, the cache hasn't been initialized yet, so go through runtime.
+    __ Branch(&runtime_call, eq, a0, Operand(zero_reg));
+
+#ifdef DEBUG
+    // Check that the layout of cache elements match expectations.
+    { TranscendentalCache::Element test_elem[2];
+      char* elem_start = reinterpret_cast<char*>(&test_elem[0]);
+      char* elem2_start = reinterpret_cast<char*>(&test_elem[1]);
+      char* elem_in0 = reinterpret_cast<char*>(&(test_elem[0].in[0]));
+      char* elem_in1 = reinterpret_cast<char*>(&(test_elem[0].in[1]));
+      char* elem_out = reinterpret_cast<char*>(&(test_elem[0].output));
+      CHECK_EQ(12, elem2_start - elem_start);  // Two uint_32's and a pointer.
+      CHECK_EQ(0, elem_in0 - elem_start);
+      CHECK_EQ(kIntSize, elem_in1 - elem_start);
+      CHECK_EQ(2 * kIntSize, elem_out - elem_start);
+    }
+#endif
+
+    // Find the address of the a1'st entry in the cache, i.e., &a0[a1*12].
+    __ sll(t0, a1, 1);
+    __ Addu(a1, a1, t0);
+    __ sll(t0, a1, 2);
+    __ Addu(a0, a0, t0);
+
+    // Check if cache matches: Double value is stored in uint32_t[2] array.
+    __ lw(t0, MemOperand(a0, 0));
+    __ lw(t1, MemOperand(a0, 4));
+    __ lw(t2, MemOperand(a0, 8));
+    __ Addu(a0, a0, 12);
+    __ Branch(&runtime_call, ne, a2, Operand(t0));
+    __ Branch(&runtime_call, ne, a3, Operand(t1));
+    // Cache hit. Load result, pop argument and return.
+    __ mov(v0, t2);
+    __ Pop();
+    __ Ret();
+  }
+
+  __ bind(&runtime_call);
+  __ TailCallExternalReference(ExternalReference(RuntimeFunction()), 1, 1);
+}
+
+
+Runtime::FunctionId TranscendentalCacheStub::RuntimeFunction() {
+  switch (type_) {
+    // Add more cases when necessary.
+    case TranscendentalCache::SIN: return Runtime::kMath_sin;
+    case TranscendentalCache::COS: return Runtime::kMath_cos;
+    default:
+      UNIMPLEMENTED();
+      return Runtime::kAbort;
+  }
+}
 
 void StackCheckStub::Generate(MacroAssembler* masm) {
   // Do tail-call to runtime routine.  Runtime routines expect at least one
@@ -9346,8 +9461,11 @@ void StringCharCodeAtGenerator::GenerateSlow(
   // Index is not a smi.
   __ bind(&index_not_smi_);
   // If index is a heap number, try converting it to an integer.
-  __ CheckMap(index_, scratch_,
-              Factory::heap_number_map(), index_not_number_, true);
+  __ CheckMap(index_,
+              scratch_,
+              Heap::kHeapNumberMapRootIndex,
+              index_not_number_,
+              true);
   call_helper.BeforeCall(masm);
   __ Push(object_, index_, index_); // Consumed by runtime conversion function.
   if (index_flags_ == STRING_INDEX_IS_NUMBER) {

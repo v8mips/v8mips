@@ -1937,6 +1937,19 @@ void MacroAssembler::CheckMap(Register obj,
   Branch(fail, ne, scratch, Operand(at));
 }
 
+void MacroAssembler::CheckMap(Register obj,
+                              Register scratch,
+                              Heap::RootListIndex index,
+                              Label* fail,
+                              bool is_heap_object) {
+  if (!is_heap_object) {
+    BranchOnSmi(obj, fail);
+  }
+  lw(scratch, FieldMemOperand(obj, HeapObject::kMapOffset));
+  LoadRoot(at, index);
+  Branch(fail, ne, scratch, Operand(at));
+}
+
 
 // -----------------------------------------------------------------------------
 // JavaScript invokes
