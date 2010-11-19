@@ -64,12 +64,6 @@ void CodeGenerator::VisitStatementsAndSpill(ZoneList<Statement*>* statements) {
 }
 
 
-void CodeGenerator::LoadAndSpill(Expression* expression) {
-  ASSERT(VirtualFrame::SpilledScope::is_spilled());
-  Load(expression);
-}
-
-
 void CodeGenerator::LoadConditionAndSpill(Expression* expression,
                                           JumpTarget* true_target,
                                           JumpTarget* false_target,

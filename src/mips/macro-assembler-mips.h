@@ -218,7 +218,7 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
 
   // For the page containing |object| mark the region covering [object+offset]
   // dirty. The object address must be in the first 8K of an allocated page.
-  void RecordWriteHelper(Register object, Register offset, Register scracth);
+  void RecordWriteHelper(Register object, Register offset, Register scratch);
 
   // For the page containing |object| mark the region covering [object+offset]
   // dirty. The object address must be in the first 8K of an allocated page.
