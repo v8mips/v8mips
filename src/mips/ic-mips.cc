@@ -1110,8 +1110,8 @@ void KeyedLoadIC::GenerateExternalArray(MacroAssembler* masm,
       if (CpuFeatures::IsSupported(FPU)) {
         CpuFeatures::Scope scope(FPU);
         __ sll(t3, t2, 2);
-        __ addu(a2, a3, t3);
-        __ lwc1(f0, MemOperand(a2, 0));
+        __ addu(t3, a3, t3);
+        __ lwc1(f0, MemOperand(t3, 0));
       } else {
         __ sll(t3, t2, 2);
         __ addu(t3, a3, t3);
@@ -1264,8 +1264,8 @@ void KeyedLoadIC::GenerateExternalArray(MacroAssembler* masm,
 
       __ bind(&exponent_rebiased);
       __ And(a2, value, Operand(kBinary32SignMask));
-      __ sll(t0, t0, HeapNumber::kMantissaBitsInTopWord);
       value = no_reg;
+      __ sll(t0, t5, HeapNumber::kMantissaBitsInTopWord);
       __ or_(a2, a2, t0);
 
       // Shift mantissa.
