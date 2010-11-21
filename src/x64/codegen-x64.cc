@@ -3108,25 +3108,31 @@ void CodeGenerator::VisitCall(Call* node) {
         ref.GetValue();
         // Use global object as receiver.
         LoadGlobalReceiver();
+       // Call the function.
+        CallWithArguments(args, RECEIVER_MIGHT_BE_VALUE, node->position());
       } else {
-        Reference ref(this, property, false);
-        ASSERT(ref.size() == 2);
-        Result key = frame_->Pop();
-        frame_->Dup();  // Duplicate the receiver.
-        frame_->Push(&key);
-        ref.GetValue();
-        // Top of frame contains function to call, with duplicate copy of
-        // receiver below it.  Swap them.
-        Result function = frame_->Pop();
-        Result receiver = frame_->Pop();
-        frame_->Push(&function);
-        frame_->Push(&receiver);
+        // Push the receiver onto the frame.
+        Load(property->obj());
+
+        // Load the arguments.
+        int arg_count = args->length();
+        for (int i = 0; i < arg_count; i++) {
+          Load(args->at(i));
+          frame_->SpillTop();
+        }
+
+        // Load the name of the function.
+        Load(property->key());
+
+        // Call the IC initialization code.
+        CodeForSourcePosition(node->position());
+        Result result = frame_->CallKeyedCallIC(RelocInfo::CODE_TARGET,
+                                                arg_count,
+                                                loop_nesting());
+        frame_->RestoreContextRegister();
+        frame_->Push(&result);
       }
-
-      // Call the function.
-      CallWithArguments(args, RECEIVER_MIGHT_BE_VALUE, node->position());
     }
-
   } else {
     // ----------------------------------
     // JavaScript example: 'foo(1, 2, 3)'  // foo is not global
@@ -4793,8 +4799,7 @@ void DeferredSearchCache::Generate() {
   __ bind(&cache_miss);
   __ push(cache_);  // store a reference to cache
   __ push(key_);  // store a key
-  Handle<Object> receiver(Top::global_context()->global());
-  __ Push(receiver);
+  __ push(Operand(rsi, Context::SlotOffset(Context::GLOBAL_INDEX)));
   __ push(key_);
   // On x64 function must be in rdi.
   __ movq(rdi, FieldOperand(cache_, JSFunctionResultCache::kFactoryOffset));
@@ -8178,7 +8183,7 @@ void TranscendentalCacheStub::Generate(MacroAssembler* masm) {
   // ST[0] == double value
   // rbx = bits of double value.
   // rdx = also bits of double value.
-  // Compute hash (h is 32 bits, bits are 64):
+  // Compute hash (h is 32 bits, bits are 64 and the shifts are arithmetic):
   //   h = h0 = bits ^ (bits >> 32);
   //   h ^= h >> 16;
   //   h ^= h >> 8;
@@ -8189,9 +8194,9 @@ void TranscendentalCacheStub::Generate(MacroAssembler* masm) {
   __ movl(rcx, rdx);
   __ movl(rax, rdx);
   __ movl(rdi, rdx);
-  __ shrl(rdx, Immediate(8));
-  __ shrl(rcx, Immediate(16));
-  __ shrl(rax, Immediate(24));
+  __ sarl(rdx, Immediate(8));
+  __ sarl(rcx, Immediate(16));
+  __ sarl(rax, Immediate(24));
   __ xorl(rcx, rdx);
   __ xorl(rax, rdi);
   __ xorl(rcx, rax);
@@ -8293,7 +8298,7 @@ void TranscendentalCacheStub::GenerateOperation(MacroAssembler* masm,
   // Move exponent and sign bits to low bits.
   __ shr(rdi, Immediate(HeapNumber::kMantissaBits));
   // Remove sign bit.
-  __ andl(rdi, Immediate((1 << HeapNumber::KExponentBits) - 1));
+  __ andl(rdi, Immediate((1 << HeapNumber::kExponentBits) - 1));
   int supported_exponent_limit = (63 + HeapNumber::kExponentBias);
   __ cmpl(rdi, Immediate(supported_exponent_limit));
   __ j(below, &in_range);
@@ -8370,7 +8375,7 @@ void IntegerConvert(MacroAssembler* masm,
   // Double to remove sign bit, shift exponent down to least significant bits.
   // and subtract bias to get the unshifted, unbiased exponent.
   __ lea(double_exponent, Operand(double_value, double_value, times_1, 0));
-  __ shr(double_exponent, Immediate(64 - HeapNumber::KExponentBits));
+  __ shr(double_exponent, Immediate(64 - HeapNumber::kExponentBits));
   __ subl(double_exponent, Immediate(HeapNumber::kExponentBias));
   // Check whether the exponent is too big for a 63 bit unsigned integer.
   __ cmpl(double_exponent, Immediate(63));

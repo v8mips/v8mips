@@ -6918,8 +6918,7 @@ void DeferredSearchCache::Generate() {
   __ bind(&cache_miss);
   __ push(cache_);  // store a reference to cache
   __ push(key_);  // store a key
-  Handle<Object> receiver(Top::global_context()->global());
-  __ push(Immediate(receiver));
+  __ push(Operand(esi, Context::SlotOffset(Context::GLOBAL_INDEX)));
   __ push(key_);
   // On ia32 function must be in edi.
   __ mov(edi, FieldOperand(cache_, JSFunctionResultCache::kFactoryOffset));
@@ -10294,15 +10293,15 @@ void TranscendentalCacheStub::Generate(MacroAssembler* masm) {
   // ST[0] == double value
   // ebx = low 32 bits of double value
   // edx = high 32 bits of double value
-  // Compute hash:
+  // Compute hash (the shifts are arithmetic):
   //   h = (low ^ high); h ^= h >> 16; h ^= h >> 8; h = h & (cacheSize - 1);
   __ mov(ecx, ebx);
   __ xor_(ecx, Operand(edx));
   __ mov(eax, ecx);
-  __ shr(eax, 16);
+  __ sar(eax, 16);
   __ xor_(ecx, Operand(eax));
   __ mov(eax, ecx);
-  __ shr(eax, 8);
+  __ sar(eax, 8);
   __ xor_(ecx, Operand(eax));
   ASSERT(IsPowerOf2(TranscendentalCache::kCacheSize));
   __ and_(Operand(ecx), Immediate(TranscendentalCache::kCacheSize - 1));
