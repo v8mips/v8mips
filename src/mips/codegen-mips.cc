@@ -7755,16 +7755,13 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
   // regexp_data: RegExp data (FixedArray)
   // Check the representation and encoding of the subject string.
   Label seq_string;
-  const int kStringRepresentationEncodingMask =
-      kIsNotStringMask | kStringRepresentationMask | kStringEncodingMask;
   __ lw(a0, FieldMemOperand(subject, HeapObject::kMapOffset));
   __ lbu(a0, FieldMemOperand(a0, Map::kInstanceTypeOffset));
-  __ And(a1, a0, Operand(kStringRepresentationEncodingMask));
-  // First check for sequential string.
-  ASSERT_EQ(0, kStringTag);
-  ASSERT_EQ(0, kSeqStringTag);
-  __ And(t0, a1, Operand(kIsNotStringMask | kStringRepresentationMask));
-  __ Branch(&seq_string, eq, t0, Operand(zero_reg));
+  // First check for flat string.
+  __ And(at, a0, Operand(kIsNotStringMask | kStringRepresentationMask));
+  ASSERT_EQ(0, kStringTag | kSeqStringTag);
+  __ Branch(&seq_string, eq, at, Operand(zero_reg));
+
   // subject: Subject string
   // a0: instance type if Subject string
   // regexp_data: RegExp data (FixedArray)
@@ -7773,40 +7770,38 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
   // string. In that case the subject string is just the first part of the cons
   // string. Also in this case the first part of the cons string is known to be
   // a sequential string or an external string.
-  __ And(a0, a0, Operand(kStringRepresentationMask));
-  __ Branch(&runtime, ne, a0, Operand(kConsStringTag));
+  ASSERT(kExternalStringTag != 0);
+  ASSERT_EQ(0, kConsStringTag & kExternalStringTag);
+  __ And(at, a0, Operand(kIsNotStringMask | kExternalStringTag));
+  __ Branch(&runtime, ne, at, Operand(zero_reg));
   __ lw(a0, FieldMemOperand(subject, ConsString::kSecondOffset));
   __ LoadRoot(a1, Heap::kEmptyStringRootIndex);
   __ Branch(&runtime, ne, a0, Operand(a1));
   __ lw(subject, FieldMemOperand(subject, ConsString::kFirstOffset));
   __ lw(a0, FieldMemOperand(subject, HeapObject::kMapOffset));
   __ lbu(a0, FieldMemOperand(a0, Map::kInstanceTypeOffset));
+  // Is first part a flat string?
   ASSERT_EQ(0, kSeqStringTag);
-  __ And(a1, a0, Operand(kStringRepresentationMask));
-  __ Branch(&runtime, ne, a1, Operand(zero_reg));
-  __ And(a1, a0, Operand(kStringRepresentationEncodingMask));
+  __ And(at, a0, Operand(kStringRepresentationMask));
+  __ Branch(&runtime, ne, at, Operand(zero_reg));
 
   __ bind(&seq_string);
-  // a1: suject string type & kStringRepresentationEncodingMask
   // subject: Subject string
   // regexp_data: RegExp data (FixedArray)
-  // Check that the irregexp code has been generated for an ascii string. If
-  // it has, the field contains a code object otherwise it contains the hole.
-#ifdef DEBUG
-  const int kSeqAsciiString = kStringTag | kSeqStringTag | kAsciiStringTag;
-  const int kSeqTwoByteString = kStringTag | kSeqStringTag | kTwoByteStringTag;
-  CHECK_EQ(4, kSeqAsciiString);
-  CHECK_EQ(0, kSeqTwoByteString);
-#endif
+  // a0: Instance type of subject string
+  ASSERT_EQ(4, kStringEncodingMask);
+  ASSERT_EQ(4, kAsciiStringTag);
+  ASSERT_EQ(0, kTwoByteStringTag);
   // Find the code object based on the assumptions above.
+  __ And(a0, a0, Operand(kStringEncodingMask));  // Non-zero for ascii.
   __ lw(t9, FieldMemOperand(regexp_data, JSRegExp::kDataAsciiCodeOffset));
-  __ sra(a3, a1, 2);  // a3 is 1 for ascii and 0 for 2_byte string.
+  __ sra(a3, a0, 2);  // a3 is 1 for ascii, 0 for UC16 (used below).
   __ lw(t0, FieldMemOperand(regexp_data, JSRegExp::kDataUC16CodeOffset));
-  __ movz(t9, t0, a3);  // If 2-byte (a3 == 0), replace t9.
+  __ movz(t9, t0, a0);  // If UC16 (a0 is 0), replace t9 w/kDataUC16CodeOffset.
 
   // Check that the irregexp code has been generated for the actual string
-  // encoding. If it has, the field contains a code object otherwise it contains
-  // the hole.
+  // encoding. If it has, the field contains a code object otherwise it
+  // contains the hole.
   __ GetObjectType(t9, a0, a0);
   __ Branch(&runtime, ne, a0, Operand(CODE_TYPE));
 
