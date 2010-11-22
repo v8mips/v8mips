@@ -209,7 +209,12 @@ void CodeGenerator::Generate(CompilationInfo* info) {
       // Get outer context and create a new context based on it.
       __ lw(a0, frame_->Function());
       frame_->EmitPush(a0);
-      frame_->CallRuntime(Runtime::kNewContext, 1);  // v0 holds the result
+      if (heap_slots <= FastNewContextStub::kMaximumSlots) {
+        FastNewContextStub stub(heap_slots);
+        frame_->CallStub(&stub, 1);
+      } else {
+        frame_->CallRuntime(Runtime::kNewContext, 1);  // v0 holds the result
+      }
 
 #ifdef DEBUG
       JumpTarget verified_true;
@@ -6442,6 +6447,56 @@ void FastNewClosureStub::Generate(MacroAssembler* masm) {
   __ bind(&gc);
   __ Push(cp, a3);
   __ TailCallRuntime(Runtime::kNewClosure, 2, 1);
+}
+
+
+void FastNewContextStub::Generate(MacroAssembler* masm) {
+  // Try to allocate the context in new space.
+  Label gc;
+  int length = slots_ + Context::MIN_CONTEXT_SLOTS;
+
+  // Attempt to allocate the context in new space.
+  __ AllocateInNewSpace(FixedArray::SizeFor(length),
+                        v0,
+                        a1,
+                        a2,
+                        &gc,
+                        TAG_OBJECT);
+
+  // Load the function from the stack.
+  __ lw(a3, MemOperand(sp, 0));
+
+  // Setup the object header.
+  __ LoadRoot(a2, Heap::kContextMapRootIndex);
+  __ sw(a2, FieldMemOperand(v0, HeapObject::kMapOffset));
+  __ li(a2, Operand(Smi::FromInt(length)));
+  __ sw(a2, FieldMemOperand(v0, FixedArray::kLengthOffset));
+
+  // Setup the fixed slots.
+  __ li(a1, Operand(Smi::FromInt(0)));
+  __ sw(a3, MemOperand(v0, Context::SlotOffset(Context::CLOSURE_INDEX)));
+  __ sw(v0, MemOperand(v0, Context::SlotOffset(Context::FCONTEXT_INDEX)));
+  __ sw(a1, MemOperand(v0, Context::SlotOffset(Context::PREVIOUS_INDEX)));
+  __ sw(a1, MemOperand(v0, Context::SlotOffset(Context::EXTENSION_INDEX)));
+
+  // Copy the global object from the surrounding context.
+  __ lw(a1, MemOperand(cp, Context::SlotOffset(Context::GLOBAL_INDEX)));
+  __ sw(a1, MemOperand(v0, Context::SlotOffset(Context::GLOBAL_INDEX)));
+
+  // Initialize the rest of the slots to undefined.
+  __ LoadRoot(a1, Heap::kUndefinedValueRootIndex);
+  for (int i = Context::MIN_CONTEXT_SLOTS; i < length; i++) {
+    __ sw(a1, MemOperand(v0, Context::SlotOffset(i)));
+  }
+
+  // Remove the on-stack argument and return.
+  __ mov(cp, v0);
+  __ Pop();
+  __ Ret();
+
+  // Need to collect. Call into runtime system.
+  __ bind(&gc);
+  __ TailCallRuntime(Runtime::kNewContext, 1, 1);
 }
 
 
