@@ -215,7 +215,10 @@ enum Condition {
 // Negation of the default no_condition (-1) results in a non-default
 // no_condition value (-2). As long as tests for no_condition check
 // for condition < 0, this will work as expected.
-inline Condition NegateCondition(Condition cc);
+inline Condition NegateCondition(Condition cc) {
+  return static_cast<Condition>(cc ^ 1);
+}
+
 
 // Corresponds to transposing the operands of a comparison.
 inline Condition ReverseCondition(Condition cc) {
@@ -240,6 +243,7 @@ inline Condition ReverseCondition(Condition cc) {
       return cc;
   };
 }
+
 
 enum Hint {
   no_hint = 0,
@@ -1122,7 +1126,6 @@ class Assembler : public Malloced {
   void xorpd(XMMRegister dst, XMMRegister src);
   void sqrtsd(XMMRegister dst, XMMRegister src);
 
-  void comisd(XMMRegister dst, XMMRegister src);
   void ucomisd(XMMRegister dst, XMMRegister src);
 
   // The first argument is the reg field, the second argument is the r/m field.
