@@ -10411,7 +10411,7 @@ void StringAddStub::Generate(MacroAssembler* masm) {
   Label non_ascii, allocated;
   ASSERT_EQ(0, kTwoByteStringTag);
   // Branch to non_ascii if either string-encoding field is zero (non-ascii).
-  __ And(t4, t2, Operand(t3));
+  __ And(t4, t0, Operand(t1));
   __ And(t4, t4, Operand(kStringEncodingMask));
   __ Branch(&non_ascii, eq, t4, Operand(zero_reg));
 
