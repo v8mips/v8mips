@@ -413,7 +413,7 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
     sw(src3, MemOperand(sp, 1 * kPointerSize));
     sw(src4, MemOperand(sp, 0 * kPointerSize));
   }
-  
+
   inline void push(Register src) { Push(src); }
   inline void pop(Register src) { Pop(src); }
 
@@ -435,6 +435,15 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
   }
   void Pop(uint32_t count = 1) {
     Addu(sp, sp, Operand(count * kPointerSize));
+  }
+
+  // Placeholders for Ins and Ext which still need macro-expansion
+  // for mips32r1 equivalents, if we are on one of those cpus.
+  void Ext(Register rt, Register rs, uint16_t pos, uint16_t size) {
+    ext(rt, rs, pos, size);
+  }
+  void Ins(Register rt, Register rs, uint16_t pos, uint16_t size) {
+    ins(rt, rs, pos, size);
   }
 
 

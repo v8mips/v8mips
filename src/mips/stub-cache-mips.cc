@@ -903,8 +903,6 @@ void StubCompiler::GenerateLoadInterceptor(JSObject* object,
     // the case, return immediately.
     Label interceptor_failed;
     __ LoadRoot(scratch1, Heap::kNoInterceptorResultSentinelRootIndex);
-// __ cmp(r0, scratch1);
-// __ b(eq, &interceptor_failed);
     __ Branch(&interceptor_failed, eq, v0, Operand(scratch1));
     __ LeaveInternalFrame();
     __ Ret();
@@ -990,22 +988,36 @@ Object* StubCompiler::CompileLazyCompile(Code::Flags flags) {
 
   // Enter an internal frame.
   __ EnterInternalFrame();
+
   // Preserve the function.
   __ Push(a1);
+
   // Push the function on the stack as the argument to the runtime function.
   __ Push(a1);
+
   // Call the runtime function
   __ CallRuntime(Runtime::kLazyCompile, 1);
+
   // Calculate the entry point.
   __ addiu(t9, v0, Code::kHeaderSize - kHeapObjectTag);
+
   // Restore saved function.
   __ Pop(a1);
+
   // Tear down temporary frame.
   __ LeaveInternalFrame();
+
   // Do a tail-call of the compiled function.
   __ Jump(t9);
 
   return GetCodeWithFlags(flags, "LazyCompileStub");
+}
+
+
+void CallStubCompiler::GenerateNameCheck(String* name, Label* miss) {
+  if (kind_ == Code::KEYED_CALL_IC) {
+    __ Branch(miss, ne, a2, Operand(Handle<String>(name)));
+  }
 }
 
 
@@ -1019,13 +1031,17 @@ Object* CallStubCompiler::CompileCallField(JSObject* object,
                                            JSObject* holder,
                                            int index,
                                            String* name) {
-  // a2    : name
-  // ra    : return address
+  // ----------- S t a t e -------------
+  //  -- a2    : name
+  //  -- ra    : return address
+  // -----------------------------------
   Label miss;
+
+  GenerateNameCheck(name, &miss);
 
   const int argc = arguments().immediate();
 
-  // Get the receiver of the function from the stack into r0.
+  // Get the receiver of the function from the stack into a0.
   __ lw(a0, MemOperand(sp, argc * kPointerSize));
   // Check that the receiver isn't a smi.
   __ BranchOnSmi(a0, &miss, t0);
@@ -1064,6 +1080,8 @@ Object* CallStubCompiler::CompileArrayPushCall(Object* object,
   ASSERT(check == RECEIVER_MAP_CHECK);
 
   Label miss;
+
+  GenerateNameCheck(name, &miss);
 
   // Get the receiver from the stack
   const int argc = arguments().immediate();
@@ -1113,6 +1131,8 @@ Object* CallStubCompiler::CompileArrayPopCall(Object* object,
   ASSERT(check == RECEIVER_MAP_CHECK);
 
   Label miss;
+
+  GenerateNameCheck(name, &miss);
 
   // Get the receiver from the stack
   const int argc = arguments().immediate();
@@ -1165,8 +1185,10 @@ Object* CallStubCompiler::CompileCallConstant(Object* object,
                                               JSFunction* function,
                                               String* name,
                                               CheckType check) {
-  // a2: name
-  // ra: return address
+  // ----------- S t a t e -------------
+  //  -- a2    : name
+  //  -- ra    : return address
+  // -----------------------------------
   SharedFunctionInfo* function_info = function->shared();
   if (function_info->HasCustomCallGenerator()) {
     const int id = function_info->custom_call_generator_id();
@@ -1179,6 +1201,8 @@ Object* CallStubCompiler::CompileCallConstant(Object* object,
   }
 
   Label miss_in_smi_check;
+
+  GenerateNameCheck(name, &miss_in_smi_check);
 
   // Get the receiver from the stack
   const int argc = arguments().immediate();
@@ -1318,6 +1342,8 @@ Object* CallStubCompiler::CompileCallInterceptor(JSObject* object,
 
   Label miss;
 
+  GenerateNameCheck(name, &miss);
+
   // Get the number of arguments.
   const int argc = arguments().immediate();
 
@@ -1339,7 +1365,7 @@ Object* CallStubCompiler::CompileCallInterceptor(JSObject* object,
                    &miss);
 
   // Move returned value, the function to call, to a1.
-  __ mov(a1, a0);
+  __ mov(a1, v0);
   // Restore receiver.
   __ lw(a0, MemOperand(sp, argc * kPointerSize));
 
@@ -1359,9 +1385,13 @@ Object* CallStubCompiler::CompileCallGlobal(JSObject* object,
                                             JSGlobalPropertyCell* cell,
                                             JSFunction* function,
                                             String* name) {
-  // r2    : name
-  // ra: return address
+  // ----------- S t a t e -------------
+  //  -- a2    : name
+  //  -- ra    : return address
+  // -----------------------------------
   Label miss;
+
+  GenerateNameCheck(name, &miss);
 
   // Get the number of arguments.
   const int argc = arguments().immediate();

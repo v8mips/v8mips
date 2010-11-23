@@ -369,9 +369,7 @@ void VirtualFrame::CallCodeObject(Handle<Code> code,
                                   int dropped_args) {
   switch (code->kind()) {
     case Code::CALL_IC:
-      Forget(dropped_args);
-      ASSERT(cgen()->HasValidEntryRegisters());
-      __ Call(code, rmode);
+    case Code::KEYED_CALL_IC:
       break;
 
     case Code::FUNCTION:
@@ -384,28 +382,22 @@ void VirtualFrame::CallCodeObject(Handle<Code> code,
     case Code::KEYED_STORE_IC:
     case Code::STORE_IC:
       ASSERT(dropped_args == 0);
-      Forget(dropped_args);
-      ASSERT(cgen()->HasValidEntryRegisters());
-      __ Call(code, rmode);
       break;
 
     case Code::BUILTIN:
-      // The only builtin called through this function is JSConstructCall.
       ASSERT(*code == Builtins::builtin(Builtins::JSConstructCall));
-      Forget(dropped_args);
-      ASSERT(cgen()->HasValidEntryRegisters());
-      // This is a builtin and it expects argument slots.
-      // Don't protect the branch delay slot and use it to allocate args slots.
-      __ Call(false, code, rmode);
-      __ addiu(sp, sp, -StandardFrameConstants::kBArgsSlotsSize);
-      __ addiu(sp, sp, StandardFrameConstants::kBArgsSlotsSize);
       break;
 
     default:
       UNREACHABLE();
       break;
   }
+  Forget(dropped_args);
+  ASSERT(cgen()->HasValidEntryRegisters());
+  __ Call(code, rmode);
+
 }
+
 
 //    NO_TOS_REGISTERS, A0_TOS, A1_TOS, A1_A0_TOS, A0_A1_TOS.
 const bool VirtualFrame::kA0InUse[TOS_STATES] =
