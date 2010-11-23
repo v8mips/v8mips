@@ -10408,7 +10408,7 @@ void StringAddStub::Generate(MacroAssembler* masm) {
     __ lbu(t0, FieldMemOperand(t0, Map::kInstanceTypeOffset));
     __ lbu(t1, FieldMemOperand(t1, Map::kInstanceTypeOffset));
   }
-  Label non_ascii, allocated;
+  Label non_ascii, allocated, ascii_data;
   ASSERT_EQ(0, kTwoByteStringTag);
   // Branch to non_ascii if either string-encoding field is zero (non-ascii).
   __ And(t4, t0, Operand(t1));
@@ -10416,6 +10416,7 @@ void StringAddStub::Generate(MacroAssembler* masm) {
   __ Branch(&non_ascii, eq, t4, Operand(zero_reg));
 
   // Allocate an ASCII cons string.
+  __ bind(&ascii_data);
   __ AllocateAsciiConsString(t3, t2, t0, t1, &string_add_runtime);
   __ bind(&allocated);
   // Fill the fields of the cons string.
@@ -10427,6 +10428,20 @@ void StringAddStub::Generate(MacroAssembler* masm) {
   __ Ret();
 
   __ bind(&non_ascii);
+  // At least one of the strings is two-byte. Check whether it happens
+  // to contain only ascii characters.
+  // t0: first instance type.
+  // t1: second instance type.
+  // Branch to if _both_ instances have kAsciiDataHintMask set.
+  __ And(at, t0, Operand(kAsciiDataHintMask));
+  __ and_(at, at, t1);
+  __ Branch(&ascii_data, ne, at, Operand(zero_reg));
+
+  __ xor_(t0, t0, t1);
+  ASSERT(kAsciiStringTag != 0 && kAsciiDataHintTag != 0);
+  __ And(t0, t0, Operand(kAsciiStringTag | kAsciiDataHintTag));
+  __ Branch(&ascii_data, eq, t0, Operand(kAsciiStringTag | kAsciiDataHintTag));
+
   // Allocate a two byte cons string.
   __ AllocateTwoByteConsString(t3, t2, t0, t1, &string_add_runtime);
   __ Branch(al, &allocated);
