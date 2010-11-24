@@ -1163,7 +1163,7 @@ Object* CallStubCompiler::CompileStringCharCodeAtCall(Object* object,
                                                       JSFunction* function,
                                                       String* name,
                                                       CheckType check) {
-  // TODO: implement this.
+  // TODO(722): implement this.
   return Heap::undefined_value();
 }
 
@@ -1173,7 +1173,7 @@ Object* CallStubCompiler::CompileStringCharAtCall(Object* object,
                                                   JSFunction* function,
                                                   String* name,
                                                   CheckType check) {
-  // TODO: implement this.
+  // TODO(722): implement this.
   return Heap::undefined_value();
 }
 

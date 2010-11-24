@@ -65,7 +65,7 @@ void BreakLocationIterator::SetDebugBreakAtReturn() {
   patcher.masm()->nop();
   patcher.masm()->nop();
 
-  // TODO(mips): Open issue about using breakpoint instrucntion instead of nop's.
+  // TODO(mips): Open issue about using breakpoint instruction instead of nops.
   // patcher.masm()->bkpt(0);
 }
 

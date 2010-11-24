@@ -98,7 +98,7 @@ void BreakTarget::Branch(Condition cc, Hint hint) {
 void BreakTarget::Branch(Condition cc,
                          Register src1,
                          const Operand& src2,
-                         Hint hint){
+                         Hint hint) {
   if (cc == al) {
     Jump();
     return;
@@ -114,7 +114,10 @@ void BreakTarget::Branch(Condition cc,
     JumpTarget fall_through;
     // Branch to fall through will not negate, because it is a
     // forward-only target.
-    fall_through.Branch(NegateCondition(cc), src1, Operand(src2), NegateHint(hint));
+    fall_through.Branch(NegateCondition(cc),
+                        src1,
+                        Operand(src2),
+                        NegateHint(hint));
     // Emit merge code.
     cgen()->frame()->Drop(count);
     DoJump();

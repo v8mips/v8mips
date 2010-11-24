@@ -5070,7 +5070,6 @@ void CodeGenerator::VisitUnaryOperation(UnaryOperation* node) {
         // Smi check.
         JumpTarget continue_label;
         __ mov(v0, a0);   // In case Smi test passes, move param to result.
-                          // TODO(plind): move this instr into branch delay slot.......
         __ And(t0, a0, Operand(kSmiTagMask));
         continue_label.Branch(eq, t0, Operand(zero_reg));
         frame_->EmitPush(a0);
