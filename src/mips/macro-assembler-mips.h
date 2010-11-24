@@ -449,6 +449,14 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
   // MIPS32 R2 instruction macro.
   void Ins(Register rt, Register rs, uint16_t pos, uint16_t size);
 
+  // Convert unsigned word to double.
+  void Cvt_d_uw(FPURegister fd, FPURegister fs);
+  void Cvt_d_uw(FPURegister fd, Register rs);
+
+  // Convert double to unsigned word.
+  void Trunc_uw_d(FPURegister fd, FPURegister fs);
+  void Trunc_uw_d(FPURegister fd, Register rs);
+
   // -------------------------------------------------------------------------
   // Activation frames
 

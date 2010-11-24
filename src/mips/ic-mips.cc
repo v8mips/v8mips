@@ -1396,9 +1396,14 @@ void KeyedLoadIC::GenerateExternalArray(MacroAssembler* masm,
       // conversion. Don't use a0 and a1 as AllocateHeapNumber clobbers all
       // registers - also when jumping due to exhausted young space.
       __ AllocateHeapNumber(v0, t2, t3, &slow);
-      __ mtc1(value, f0);     // LS 32-bits.
-      __ mtc1(zero_reg, f1);  // MS 32-bits are all zero.
-      __ cvt_d_l(f0, f0);     // Use 64 bit conv to get correct unsigned 32-bit.
+
+      // This is replaced by a macro:
+      // __ mtc1(value, f0);     // LS 32-bits.
+      // __ mtc1(zero_reg, f1);  // MS 32-bits are all zero.
+      // __ cvt_d_l(f0, f0); // Use 64 bit conv to get correct unsigned 32-bit.
+
+      __ Cvt_d_uw(f0, a0);
+
       __ sdc1(f0, MemOperand(v0, HeapNumber::kValueOffset - kHeapObjectTag));
 
       __ Ret();
@@ -1903,8 +1908,10 @@ void KeyedStoreIC::GenerateExternalArray(MacroAssembler* masm,
         __ trunc_w_d(f0, f0);
         __ mfc1(t3, f0);
       } else {
-        __ trunc_l_d(f0, f0);  // Convert double to 64-bit int.
-        __ mfc1(t3, f0);  // Keep the LS 32-bits.
+        // This is replaced by a macro:
+        // __ trunc_l_d(f0, f0);  // Convert double to 64-bit int.
+        // __ mfc1(t3, f0);  // Keep the LS 32-bits.
+        __ Trunc_uw_d(f0, a3);
       }
 
       // t3: HeapNumber converted to integer

@@ -1074,4 +1074,65 @@ TEST(MIPS12) {
 
   CHECK_EQ(3, t.y1);
 }
+
+TEST(MIPS13) {
+  // Test Cvt_d_uw and Trunc_uw_d macros.
+  InitializeVM();
+  v8::HandleScope scope;
+
+  typedef struct {
+    double cvt_big_out;
+    double cvt_small_out;
+    uint32_t trunc_big_out;
+    uint32_t trunc_small_out;
+    uint32_t cvt_big_in;
+    uint32_t cvt_small_in;
+  } T;
+  T t;
+
+  MacroAssembler assm(NULL, 0);
+
+  __ sw(t0, MemOperand(a0, OFFSET_OF(T, cvt_small_in)));
+  __ Cvt_d_uw(f10, t0);
+  __ sdc1(f10, MemOperand(a0, OFFSET_OF(T, cvt_small_out)));
+
+  __ Trunc_uw_d(f10, f10);
+  __ swc1(f10, MemOperand(a0, OFFSET_OF(T, trunc_small_out)));
+
+  __ sw(t0, MemOperand(a0, OFFSET_OF(T, cvt_big_in)));
+  __ Cvt_d_uw(f8, t0);
+  __ sdc1(f8, MemOperand(a0, OFFSET_OF(T, cvt_big_out)));
+
+  __ Trunc_uw_d(f8, f8);
+  __ swc1(f8, MemOperand(a0, OFFSET_OF(T, trunc_big_out)));
+
+  __ jr(ra);
+  __ nop();
+
+  CodeDesc desc;
+  assm.GetCode(&desc);
+  Object* code = Heap::CreateCode(desc,
+                                  NULL,
+                                  Code::ComputeFlags(Code::STUB),
+                                  Handle<Object>(Heap::undefined_value()));
+  CHECK(code->IsCode());
+#ifdef DEBUG
+  Code::cast(code)->Print();
+#endif
+  F3 f = FUNCTION_CAST<F3>(Code::cast(code)->entry());
+
+  t.cvt_big_in = 0xFFFFFFFF;
+  t.cvt_small_in  = 333;
+
+  Object* dummy = CALL_GENERATED_CODE(f, &t, 0, 0, 0, 0);
+  USE(dummy);
+
+  CHECK_EQ(t.cvt_big_out, static_cast<double>(t.cvt_big_in));
+  CHECK_EQ(t.cvt_small_out, static_cast<double>(t.cvt_small_in));
+
+  CHECK_EQ(static_cast<int>(t.trunc_big_out), static_cast<int>(t.cvt_big_in));
+  CHECK_EQ(static_cast<int>(t.trunc_small_out),
+           static_cast<int>(t.cvt_small_in));
+}
+
 #undef __

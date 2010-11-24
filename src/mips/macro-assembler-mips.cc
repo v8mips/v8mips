@@ -737,6 +737,91 @@ void MacroAssembler::Ins(Register rt,
   }
 }
 
+void MacroAssembler::Cvt_d_uw(FPURegister fd, FPURegister fs) {
+  // Move the data from fs to t4.
+  mfc1(t4, fs);
+  return Cvt_d_uw(fd, t4);
+}
+
+void MacroAssembler::Cvt_d_uw(FPURegister fd, Register rs) {
+  // Convert rs to a FP value in fd (and fd + 1).
+  // We do this by converting rs minus the MSB to avoid sign conversion,
+  // then adding 2^31-1 and 1 to the result.
+
+  ASSERT(!fd.is(f20));
+  ASSERT(!rs.is(t9));
+  ASSERT(!rs.is(t8));
+
+  // Save rs's MSB to t8
+  And(t8, rs, 0x80000000);
+  // Remove rs's MSB.
+  And(t9, rs, 0x7FFFFFFF);
+  // Move t9 to fd
+  mtc1(t9, fd);
+
+  // Convert fd to a real FP value.
+  cvt_d_w(fd, fd);
+
+  Label conversion_done;
+
+  // If rs's MSB was 0, it's done.
+  // Otherwise we need to add that to the FP register.
+  Branch(&conversion_done, eq, t8, Operand(zero_reg));
+
+  // First load 2^31 - 1 into f20.
+  Or(t9, zero_reg, 0x7FFFFFFF);
+  mtc1(t9, f20);
+
+  // Convert it to FP and add it to fd.
+  cvt_d_w(f20, f20);
+  add_d(fd, fd, f20);
+  // Now add 1.
+  Or(t9, zero_reg, 1);
+  mtc1(t9, f20);
+
+  cvt_d_w(f20, f20);
+  add_d(fd, fd, f20);
+  bind(&conversion_done);
+}
+
+void MacroAssembler::Trunc_uw_d(FPURegister fd, FPURegister fs) {
+  Trunc_uw_d(fs, t4);
+  mtc1(t4, fd);
+}
+
+void MacroAssembler::Trunc_uw_d(FPURegister fd, Register rs) {
+  ASSERT(!fd.is(f22));
+  ASSERT(!rs.is(t6));
+
+  // Load 2^31 into f22.
+  Or(t6, zero_reg, 0x80000000);
+  Cvt_d_uw(f22, t6);
+
+  // Test if f22 > fd.
+  c(OLT, D, fd, f22);
+
+  Label simple_convert;
+  // If fd < 2^31 we can convert it normally.
+  bc1t(&simple_convert);
+
+  // First we subtract 2^31 from fd, then trunc it to rs
+  // and add 2^31 to rs.
+
+  sub_d(f22, fd, f22);
+  trunc_w_d(f22, f22);
+  mfc1(rs, f22);
+  or_(rs, rs, t6);
+
+  Label done;
+  Branch(&done);
+  // Simple conversion.
+  bind(&simple_convert);
+  trunc_w_d(f22, fd);
+  mfc1(rs, f22);
+
+  bind(&done);
+}
+
 // Emulated condtional branches do not emit a nop in the branch delay slot.
 //
 // BRANCH_ARGS_CHECK checks that conditional jump arguments are correct.
