@@ -378,7 +378,9 @@ void Assembler::Align(int m) {
 
 
 void Assembler::CodeTargetAlign() {
-  Align(8);  // Tentative value.
+  // No advantage to aligning branch/call targets to more than 
+  // single instruction, that I am aware of.
+  Align(4);
 }
 
 
