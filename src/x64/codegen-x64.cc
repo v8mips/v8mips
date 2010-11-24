@@ -262,58 +262,14 @@ class DeferredInlineSmiOperationReversed: public DeferredCode {
 
 class FloatingPointHelper : public AllStatic {
  public:
-  // Code pattern for loading a floating point value. Input value must
-  // be either a smi or a heap number object (fp value). Requirements:
-  // operand on TOS+1. Returns operand as floating point number on FPU
-  // stack.
-  static void LoadFloatOperand(MacroAssembler* masm, Register scratch);
-
-  // Code pattern for loading a floating point value. Input value must
-  // be either a smi or a heap number object (fp value). Requirements:
-  // operand in src register. Returns operand as floating point number
-  // in XMM register.  May destroy src register.
-  static void LoadFloatOperand(MacroAssembler* masm,
-                               Register src,
-                               XMMRegister dst);
-
-  // Code pattern for loading a possible number into a XMM register.
-  // If the contents of src is not a number, control branches to
-  // the Label not_number.  If contents of src is a smi or a heap number
-  // object (fp value), it is loaded into the XMM register as a double.
-  // The register src is not changed, and src may not be kScratchRegister.
-  static void LoadFloatOperand(MacroAssembler* masm,
-                               Register src,
-                               XMMRegister dst,
-                               Label *not_number);
-
-  // Code pattern for loading floating point values. Input values must
-  // be either smi or heap number objects (fp values). Requirements:
-  // operand_1 in rdx, operand_2 in rax; Returns operands as
-  // floating point numbers in XMM registers.
-  static void LoadFloatOperands(MacroAssembler* masm,
-                                XMMRegister dst1,
-                                XMMRegister dst2);
-
-  // Similar to LoadFloatOperands, assumes that the operands are smis.
-  static void LoadFloatOperandsFromSmis(MacroAssembler* masm,
-                                        XMMRegister dst1,
-                                        XMMRegister dst2);
-
-  // Code pattern for loading floating point values onto the fp stack.
-  // Input values must be either smi or heap number objects (fp values).
-  // Requirements:
-  // Register version: operands in registers lhs and rhs.
-  // Stack version: operands on TOS+1 and TOS+2.
-  // Returns operands as floating point numbers on fp stack.
-  static void LoadFloatOperands(MacroAssembler* masm,
-                                Register lhs,
-                                Register rhs);
-
-  // Test if operands are smi or number objects (fp). Requirements:
-  // operand_1 in rax, operand_2 in rdx; falls through on float or smi
-  // operands, jumps to the non_float label otherwise.
-  static void CheckNumberOperands(MacroAssembler* masm,
-                                  Label* non_float);
+  // Load the operands from rdx and rax into xmm0 and xmm1, as doubles.
+  // If the operands are not both numbers, jump to not_numbers.
+  // Leaves rdx and rax unchanged.  SmiOperands assumes both are smis.
+  // NumberOperands assumes both are smis or heap numbers.
+  static void LoadSSE2SmiOperands(MacroAssembler* masm);
+  static void LoadSSE2NumberOperands(MacroAssembler* masm);
+  static void LoadSSE2UnknownOperands(MacroAssembler* masm,
+                                      Label* not_numbers);
 
   // Takes the operands in rdx and rax and loads them as integers in rax
   // and rcx.
@@ -9106,11 +9062,7 @@ void CompareStub::Generate(MacroAssembler* masm) {
   if (include_number_compare_) {
     Label non_number_comparison;
     Label unordered;
-    FloatingPointHelper::LoadFloatOperand(masm, rdx, xmm0,
-                                          &non_number_comparison);
-    FloatingPointHelper::LoadFloatOperand(masm, rax, xmm1,
-                                          &non_number_comparison);
-
+    FloatingPointHelper::LoadSSE2UnknownOperands(masm, &non_number_comparison);
     __ ucomisd(xmm0, xmm1);
 
     // Don't base result on EFLAGS when a NaN is involved.
@@ -9967,79 +9919,65 @@ void StackCheckStub::Generate(MacroAssembler* masm) {
 }
 
 
-void FloatingPointHelper::LoadFloatOperand(MacroAssembler* masm,
-                                           Register number) {
-  Label load_smi, done;
-
-  __ JumpIfSmi(number, &load_smi);
-  __ fld_d(FieldOperand(number, HeapNumber::kValueOffset));
-  __ jmp(&done);
-
-  __ bind(&load_smi);
-  __ SmiToInteger32(number, number);
-  __ push(number);
-  __ fild_s(Operand(rsp, 0));
-  __ pop(number);
-
-  __ bind(&done);
-}
-
-
-void FloatingPointHelper::LoadFloatOperand(MacroAssembler* masm,
-                                           Register src,
-                                           XMMRegister dst) {
-  Label load_smi, done;
-
-  __ JumpIfSmi(src, &load_smi);
-  __ movsd(dst, FieldOperand(src, HeapNumber::kValueOffset));
-  __ jmp(&done);
-
-  __ bind(&load_smi);
-  __ SmiToInteger32(src, src);
-  __ cvtlsi2sd(dst, src);
-
-  __ bind(&done);
-}
-
-
-void FloatingPointHelper::LoadFloatOperand(MacroAssembler* masm,
-                                           Register src,
-                                           XMMRegister dst,
-                                           Label* not_number) {
-  Label load_smi, done;
-  ASSERT(!src.is(kScratchRegister));
-  __ JumpIfSmi(src, &load_smi);
-  __ LoadRoot(kScratchRegister, Heap::kHeapNumberMapRootIndex);
-  __ cmpq(FieldOperand(src, HeapObject::kMapOffset), kScratchRegister);
-  __ j(not_equal, not_number);
-  __ movsd(dst, FieldOperand(src, HeapNumber::kValueOffset));
-  __ jmp(&done);
-
-  __ bind(&load_smi);
-  __ SmiToInteger32(kScratchRegister, src);
-  __ cvtlsi2sd(dst, kScratchRegister);
-
-  __ bind(&done);
-}
-
-
-void FloatingPointHelper::LoadFloatOperands(MacroAssembler* masm,
-                                            XMMRegister dst1,
-                                            XMMRegister dst2) {
-  __ movq(kScratchRegister, rdx);
-  LoadFloatOperand(masm, kScratchRegister, dst1);
-  __ movq(kScratchRegister, rax);
-  LoadFloatOperand(masm, kScratchRegister, dst2);
-}
-
-
-void FloatingPointHelper::LoadFloatOperandsFromSmis(MacroAssembler* masm,
-                                                    XMMRegister dst1,
-                                                    XMMRegister dst2) {
+void FloatingPointHelper::LoadSSE2SmiOperands(MacroAssembler* masm) {
   __ SmiToInteger32(kScratchRegister, rdx);
-  __ cvtlsi2sd(dst1, kScratchRegister);
+  __ cvtlsi2sd(xmm0, kScratchRegister);
   __ SmiToInteger32(kScratchRegister, rax);
-  __ cvtlsi2sd(dst2, kScratchRegister);
+  __ cvtlsi2sd(xmm1, kScratchRegister);
+}
+
+
+void FloatingPointHelper::LoadSSE2NumberOperands(MacroAssembler* masm) {
+  Label load_smi_rdx, load_nonsmi_rax, load_smi_rax, done;
+  // Load operand in rdx into xmm0.
+  __ JumpIfSmi(rdx, &load_smi_rdx);
+  __ movsd(xmm0, FieldOperand(rdx, HeapNumber::kValueOffset));
+  // Load operand in rax into xmm1.
+  __ JumpIfSmi(rax, &load_smi_rax);
+  __ bind(&load_nonsmi_rax);
+  __ movsd(xmm1, FieldOperand(rax, HeapNumber::kValueOffset));
+  __ jmp(&done);
+
+  __ bind(&load_smi_rdx);
+  __ SmiToInteger32(kScratchRegister, rdx);
+  __ cvtlsi2sd(xmm0, kScratchRegister);
+  __ JumpIfNotSmi(rax, &load_nonsmi_rax);
+
+  __ bind(&load_smi_rax);
+  __ SmiToInteger32(kScratchRegister, rax);
+  __ cvtlsi2sd(xmm1, kScratchRegister);
+
+  __ bind(&done);
+}
+
+
+void FloatingPointHelper::LoadSSE2UnknownOperands(MacroAssembler* masm,
+                                                  Label* not_numbers) {
+  Label load_smi_rdx, load_nonsmi_rax, load_smi_rax, load_float_rax, done;
+  // Load operand in rdx into xmm0, or branch to not_numbers.
+  __ LoadRoot(rcx, Heap::kHeapNumberMapRootIndex);
+  __ JumpIfSmi(rdx, &load_smi_rdx);
+  __ cmpq(FieldOperand(rdx, HeapObject::kMapOffset), rcx);
+  __ j(not_equal, not_numbers);  // Argument in rdx is not a number.
+  __ movsd(xmm0, FieldOperand(rdx, HeapNumber::kValueOffset));
+  // Load operand in rax into xmm1, or branch to not_numbers.
+  __ JumpIfSmi(rax, &load_smi_rax);
+
+  __ bind(&load_nonsmi_rax);
+  __ cmpq(FieldOperand(rax, HeapObject::kMapOffset), rcx);
+  __ j(not_equal, not_numbers);
+  __ movsd(xmm1, FieldOperand(rax, HeapNumber::kValueOffset));
+  __ jmp(&done);
+
+  __ bind(&load_smi_rdx);
+  __ SmiToInteger32(kScratchRegister, rdx);
+  __ cvtlsi2sd(xmm0, kScratchRegister);
+  __ JumpIfNotSmi(rax, &load_nonsmi_rax);
+
+  __ bind(&load_smi_rax);
+  __ SmiToInteger32(kScratchRegister, rax);
+  __ cvtlsi2sd(xmm1, kScratchRegister);
+  __ bind(&done);
 }
 
 
@@ -10093,54 +10031,6 @@ void FloatingPointHelper::LoadAsIntegers(MacroAssembler* masm,
   IntegerConvert(masm, rcx, rax);
   __ bind(&done);
   __ movl(rax, rdx);
-}
-
-
-void FloatingPointHelper::LoadFloatOperands(MacroAssembler* masm,
-                                            Register lhs,
-                                            Register rhs) {
-  Label load_smi_lhs, load_smi_rhs, done_load_lhs, done;
-  __ JumpIfSmi(lhs, &load_smi_lhs);
-  __ fld_d(FieldOperand(lhs, HeapNumber::kValueOffset));
-  __ bind(&done_load_lhs);
-
-  __ JumpIfSmi(rhs, &load_smi_rhs);
-  __ fld_d(FieldOperand(rhs, HeapNumber::kValueOffset));
-  __ jmp(&done);
-
-  __ bind(&load_smi_lhs);
-  __ SmiToInteger64(kScratchRegister, lhs);
-  __ push(kScratchRegister);
-  __ fild_d(Operand(rsp, 0));
-  __ pop(kScratchRegister);
-  __ jmp(&done_load_lhs);
-
-  __ bind(&load_smi_rhs);
-  __ SmiToInteger64(kScratchRegister, rhs);
-  __ push(kScratchRegister);
-  __ fild_d(Operand(rsp, 0));
-  __ pop(kScratchRegister);
-
-  __ bind(&done);
-}
-
-
-void FloatingPointHelper::CheckNumberOperands(MacroAssembler* masm,
-                                              Label* non_float) {
-  Label test_other, done;
-  // Test if both operands are numbers (heap_numbers or smis).
-  // If not, jump to label non_float.
-  __ JumpIfSmi(rdx, &test_other);  // argument in rdx is OK
-  __ Cmp(FieldOperand(rdx, HeapObject::kMapOffset), Factory::heap_number_map());
-  __ j(not_equal, non_float);  // The argument in rdx is not a number.
-
-  __ bind(&test_other);
-  __ JumpIfSmi(rax, &done);  // argument in rax is OK
-  __ Cmp(FieldOperand(rax, HeapObject::kMapOffset), Factory::heap_number_map());
-  __ j(not_equal, non_float);  // The argument in rax is not a number.
-
-  // Fall-through: Both operands are numbers.
-  __ bind(&done);
 }
 
 
@@ -10450,15 +10340,15 @@ void GenericBinaryOpStub::GenerateSmiCode(MacroAssembler* masm, Label* slow) {
       }
       // left is rdx, right is rax.
       __ AllocateHeapNumber(rbx, rcx, slow);
-      FloatingPointHelper::LoadFloatOperandsFromSmis(masm, xmm4, xmm5);
+      FloatingPointHelper::LoadSSE2SmiOperands(masm);
       switch (op_) {
-        case Token::ADD: __ addsd(xmm4, xmm5); break;
-        case Token::SUB: __ subsd(xmm4, xmm5); break;
-        case Token::MUL: __ mulsd(xmm4, xmm5); break;
-        case Token::DIV: __ divsd(xmm4, xmm5); break;
+        case Token::ADD: __ addsd(xmm0, xmm1); break;
+        case Token::SUB: __ subsd(xmm0, xmm1); break;
+        case Token::MUL: __ mulsd(xmm0, xmm1); break;
+        case Token::DIV: __ divsd(xmm0, xmm1); break;
         default: UNREACHABLE();
       }
-      __ movsd(FieldOperand(rbx, HeapNumber::kValueOffset), xmm4);
+      __ movsd(FieldOperand(rbx, HeapNumber::kValueOffset), xmm0);
       __ movq(rax, rbx);
       GenerateReturn(masm);
     }
@@ -10521,22 +10411,23 @@ void GenericBinaryOpStub::Generate(MacroAssembler* masm) {
         Label not_floats;
         // rax: y
         // rdx: x
-      if (static_operands_type_.IsNumber() && FLAG_debug_code) {
-        // Assert at runtime that inputs are only numbers.
-        __ AbortIfNotNumber(rdx);
-        __ AbortIfNotNumber(rax);
-      } else {
-        FloatingPointHelper::CheckNumberOperands(masm, &call_runtime);
-      }
-        // Fast-case: Both operands are numbers.
-        // xmm4 and xmm5 are volatile XMM registers.
-        FloatingPointHelper::LoadFloatOperands(masm, xmm4, xmm5);
+        ASSERT(!static_operands_type_.IsSmi());
+        if (static_operands_type_.IsNumber()) {
+          if (FLAG_debug_code) {
+            // Assert at runtime that inputs are only numbers.
+            __ AbortIfNotNumber(rdx);
+            __ AbortIfNotNumber(rax);
+          }
+          FloatingPointHelper::LoadSSE2NumberOperands(masm);
+        } else {
+          FloatingPointHelper::LoadSSE2UnknownOperands(masm, &call_runtime);
+        }
 
         switch (op_) {
-          case Token::ADD: __ addsd(xmm4, xmm5); break;
-          case Token::SUB: __ subsd(xmm4, xmm5); break;
-          case Token::MUL: __ mulsd(xmm4, xmm5); break;
-          case Token::DIV: __ divsd(xmm4, xmm5); break;
+          case Token::ADD: __ addsd(xmm0, xmm1); break;
+          case Token::SUB: __ subsd(xmm0, xmm1); break;
+          case Token::MUL: __ mulsd(xmm0, xmm1); break;
+          case Token::DIV: __ divsd(xmm0, xmm1); break;
           default: UNREACHABLE();
         }
         // Allocate a heap number, if needed.
@@ -10571,7 +10462,7 @@ void GenericBinaryOpStub::Generate(MacroAssembler* masm) {
             break;
           default: UNREACHABLE();
         }
-        __ movsd(FieldOperand(rax, HeapNumber::kValueOffset), xmm4);
+        __ movsd(FieldOperand(rax, HeapNumber::kValueOffset), xmm0);
         GenerateReturn(masm);
         __ bind(&not_floats);
         if (runtime_operands_type_ == BinaryOpIC::DEFAULT &&
