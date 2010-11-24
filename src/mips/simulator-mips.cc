@@ -192,7 +192,7 @@ double Debugger::GetFPURegisterValueDouble(int regnum) {
 bool Debugger::GetValue(const char* desc, int32_t* value) {
   int regnum = Registers::Number(desc);
   int fpuregnum;
-  if (v8i::CpuFeatures::IsSupported(v8i::FPU)){
+  if (v8i::CpuFeatures::IsSupported(v8i::FPU)) {
     v8i::CpuFeatures::Scope scope(v8i::FPU);
     fpuregnum = FPURegisters::Number(desc);
   } else {
@@ -296,7 +296,7 @@ void Debugger::PrintAllRegsIncludingFPU() {
 
   PrintAllRegs();
 
-  if (v8i::CpuFeatures::IsSupported(v8i::FPU)){
+  if (v8i::CpuFeatures::IsSupported(v8i::FPU)) {
     v8i::CpuFeatures::Scope scope(v8i::FPU);
     PrintF("\n\n");
     // f0, f1, f2, ... f31
@@ -395,7 +395,7 @@ void Debugger::Debug() {
           } else {
             int regnum = Registers::Number(arg1);
             int fpuregnum;
-            if (v8i::CpuFeatures::IsSupported(v8i::FPU)){
+            if (v8i::CpuFeatures::IsSupported(v8i::FPU)) {
               v8i::CpuFeatures::Scope scope(v8i::FPU);
               fpuregnum = FPURegisters::Number(arg1);
             } else {
@@ -405,7 +405,7 @@ void Debugger::Debug() {
               value = GetRegisterValue(regnum);
               PrintF("%s: 0x%08x %d \n", arg1, value, value);
             } else if (fpuregnum != kInvalidFPURegister) {
-              if(fpuregnum%2 == 1){
+              if (fpuregnum % 2 == 1) {
                 value = GetFPURegisterValueInt(fpuregnum);
                 fvalue = GetFPURegisterValueFloat(fpuregnum);
                 PrintF("%s: 0x%08x %11.4e\n", arg1, value, fvalue);
@@ -414,7 +414,11 @@ void Debugger::Debug() {
                 double dfvalue;
                 lvalue = GetFPURegisterValueLong(fpuregnum);
                 dfvalue = GetFPURegisterValueDouble(fpuregnum);
-                PrintF("%3s,%3s: 0x%016llx %16.4e\n", FPURegisters::Name(fpuregnum), FPURegisters::Name(fpuregnum+1), lvalue, dfvalue);
+                PrintF("%3s,%3s: 0x%016llx %16.4e\n",
+                       FPURegisters::Name(fpuregnum),
+                       FPURegisters::Name(fpuregnum+1),
+                       lvalue,
+                       dfvalue);
               }
             } else {
               PrintF("%s unrecognized\n", arg1);
@@ -426,7 +430,7 @@ void Debugger::Debug() {
               int32_t value;
               float fvalue;
               int fpuregnum;
-              if (v8i::CpuFeatures::IsSupported(v8i::FPU)){
+              if (v8i::CpuFeatures::IsSupported(v8i::FPU)) {
                 v8i::CpuFeatures::Scope scope(v8i::FPU);
                 fpuregnum = FPURegisters::Number(arg1);
               } else {

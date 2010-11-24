@@ -850,7 +850,6 @@ void StubCompiler::GenerateLoadInterceptor(JSObject* object,
                                            Register scratch2,
                                            String* name,
                                            Label* miss) {
-
   ASSERT(interceptor_holder->HasNamedInterceptor());
   ASSERT(!interceptor_holder->GetNamedInterceptor()->getter()->IsUndefined());
 

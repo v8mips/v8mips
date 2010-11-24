@@ -284,7 +284,8 @@ void FullCodeGenerator::ExitFinallyBlock() {
 // This is a quick way to define some functions that are
 // currently unimplemented.
 #define MIPS_UNIMPLEMENTED_FULL_CODEGEN_FUNCTION(Name) \
-  void FullCodeGenerator::Name(ZoneList<v8::internal::Expression*>*) { UNIMPLEMENTED_MIPS(); }
+  void FullCodeGenerator::Name(ZoneList<v8::internal::Expression*>*) \
+  { UNIMPLEMENTED_MIPS(); }
 
 MIPS_UNIMPLEMENTED_FULL_CODEGEN_FUNCTION(EmitIsSmi)
 MIPS_UNIMPLEMENTED_FULL_CODEGEN_FUNCTION(EmitIsNonNegativeSmi)

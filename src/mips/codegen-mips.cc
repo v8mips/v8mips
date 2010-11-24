@@ -2064,7 +2064,6 @@ void CodeGenerator::GenerateReturnSequence() {
           return_sequence_length ==
           Assembler::kJSReturnSequenceInstructions + 1);
 #endif
-
   }
 }
 
@@ -4396,7 +4395,8 @@ void CodeGenerator::GenerateArgumentsLength(ZoneList<Expression*>* args) {
 
   // Arguments adaptor case: Read the arguments length from the
   // adaptor frame and return it.
-  __ lw(tos, MemOperand(scratch0, ArgumentsAdaptorFrameConstants::kLengthOffset));
+  __ lw(tos, MemOperand(scratch0,
+                        ArgumentsAdaptorFrameConstants::kLengthOffset));
 
   __ bind(&exit);
   frame_->EmitPush(tos);
@@ -9541,7 +9541,8 @@ void StringCharCodeAtGenerator::GenerateSlow(
               index_not_number_,
               true);
   call_helper.BeforeCall(masm);
-  __ Push(object_, index_, index_); // Consumed by runtime conversion function.
+  // Consumed by runtime conversion function:
+  __ Push(object_, index_, index_);
   if (index_flags_ == STRING_INDEX_IS_NUMBER) {
     __ CallRuntime(Runtime::kNumberToIntegerMapMinusZero, 1);
   } else {

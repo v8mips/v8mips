@@ -162,7 +162,6 @@ Address RelocInfo::call_address() {
   // The pc_ offset of 0 assumes mips patched return sequence per
   // debug-mips.cc BreakLocationIterator::SetDebugBreakAtReturn().
   return Assembler::target_address_at(pc_);
-
 }
 
 

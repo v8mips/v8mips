@@ -386,11 +386,13 @@ bool Assembler::IsLwRegFpOffset(Instr instr) {
 }
 
 bool Assembler::IsSwRegFpNegOffset(Instr instr) {
-  return ((instr & (kLwSwInstrTypeMask | kNegOffset)) == kSwRegFpNegOffsetPattern);
+  return ((instr & (kLwSwInstrTypeMask | kNegOffset)) ==
+          kSwRegFpNegOffsetPattern);
 }
 
 bool Assembler::IsLwRegFpNegOffset(Instr instr) {
-  return ((instr & (kLwSwInstrTypeMask | kNegOffset)) == kLwRegFpNegOffsetPattern);
+  return ((instr & (kLwSwInstrTypeMask | kNegOffset)) ==
+          kLwRegFpNegOffsetPattern);
 }
 
 // Labels refer to positions in the (to be) generated code.
@@ -1021,7 +1023,8 @@ void Assembler::addiu(Register rd, Register rs, int32_t j) {
         // Insert a mov instruction, which is better than a pair of push & pop
         or_(reg_popped, reg_pushed, zero_reg);
         if (FLAG_print_peephole_optimization) {
-          PrintF("%x push/pop (diff reg) replaced by a reg move\n", pc_offset());
+          PrintF("%x push/pop (diff reg) replaced by a reg move\n",
+                 pc_offset());
         }
       } else {
         // For consecutive push and pop on the same register,
@@ -1344,7 +1347,8 @@ void Assembler::sw(Register rd, const MemOperand& rs) {
   // ->  sw r, MemOpernad(sp, 0);
   if (can_peephole_optimize(3) &&
      // Pattern.
-     instr_at(pc_ - 1 * kInstrSize) == (kPushRegPattern | (rd.code() << kRtShift)) &&
+     instr_at(pc_ - 1 * kInstrSize) ==
+       (kPushRegPattern | (rd.code() << kRtShift)) &&
      instr_at(pc_ - 2 * kInstrSize) == kPushInstruction &&
      instr_at(pc_ - 3 * kInstrSize) == kPopInstruction) {
     pc_ -= 3 * kInstrSize;
@@ -1846,8 +1850,8 @@ void Assembler::CheckTrampolinePool() {
                                 kSlotsPerTrampoline,
                                 kLabelsPerTrampoline));
 
-    // Since a trampoline pool was just emitted, move the check offset forward by
-    // the standard interval.
+    // Since a trampoline pool was just emitted,
+    // move the check offset forward by the standard interval.
     next_buffer_check_ = last_trampoline_pool_end_ + kMaxDistBetweenPools;
   }
   return;

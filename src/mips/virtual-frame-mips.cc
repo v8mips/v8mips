@@ -170,7 +170,7 @@ void VirtualFrame::MergeTOSTo(
   }
 
   __ bind(&merge_tos_to_end);
-  if(cond == al) {
+  if (cond == al) {
     // A conditional merge will be followed by a conditional branch and the
     // fall-through code will have an unchanged virtual frame state.  If the
     // merge is unconditional ('al'ways) then it might be followed by a fall
@@ -395,7 +395,6 @@ void VirtualFrame::CallCodeObject(Handle<Code> code,
   Forget(dropped_args);
   ASSERT(cgen()->HasValidEntryRegisters());
   __ Call(code, rmode);
-
 }
 
 

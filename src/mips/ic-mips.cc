@@ -336,7 +336,6 @@ static void GenerateKeyedLoadReceiverCheck(MacroAssembler* masm,
   ASSERT(JS_OBJECT_TYPE > JS_VALUE_TYPE);
   __ lbu(scratch1, FieldMemOperand(scratch1, Map::kInstanceTypeOffset));
   __ Branch(slow, lt, scratch1, Operand(JS_OBJECT_TYPE));
-
 }
 
 
@@ -383,7 +382,8 @@ static void GenerateFastArrayLoad(MacroAssembler* masm,
   __ Branch(out_of_range, hs, key, Operand(scratch1));
 
   // Fast case: Do the load.
-  __ Addu(scratch1, elements, Operand(FixedArray::kHeaderSize - kHeapObjectTag));
+  __ Addu(scratch1, elements,
+          Operand(FixedArray::kHeaderSize - kHeapObjectTag));
   // The key is a smi.
   ASSERT(kSmiTag == 0 && kSmiTagSize < kPointerSizeLog2);
   __ sll(at, key, kPointerSizeLog2 - kSmiTagSize);
