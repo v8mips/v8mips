@@ -45,15 +45,6 @@ namespace v8 {
 namespace internal {
 
 // -----------------------------------------------------------------------------
-// Condition
-
-Condition NegateCondition(Condition cc) {
-  ASSERT(cc != cc_always);
-  return static_cast<Condition>(cc ^ 1);
-}
-
-
-// -----------------------------------------------------------------------------
 // Operand and MemOperand
 
 Operand::Operand(int32_t immediate, RelocInfo::Mode rmode)  {

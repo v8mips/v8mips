@@ -187,7 +187,10 @@ extern const FPURegister f31;
 // Negation of the default no_condition (-1) results in a non-default
 // no_condition value (-2). As long as tests for no_condition check
 // for condition < 0, this will work as expected.
-inline Condition NegateCondition(Condition cc);
+inline Condition NegateCondition(Condition cc) {
+  ASSERT(cc != cc_always);
+  return static_cast<Condition>(cc ^ 1);
+}
 
 inline Condition ReverseCondition(Condition cc) {
   switch (cc) {
