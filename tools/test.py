@@ -1122,6 +1122,7 @@ def BuildOptions():
   result.add_option("--no-suppress-dialogs", help="Display Windows dialogs for crashing tests",
         dest="suppress_dialogs", action="store_false")
   result.add_option("--shell", help="Path to V8 shell", default="shell");
+  result.add_option("--mips-arch-variant", help="mips architecture variant: mips32r1/mips32r2", default="mips32r2");
   return result
 
 
@@ -1151,6 +1152,8 @@ def ProcessOptions(options):
     options.scons_flags.append("arch=" + options.arch)
   if options.snapshot:
     options.scons_flags.append("snapshot=on")
+  if options.mips_arch_variant:
+    options.scons_flags.append("mips_arch_variant=" + options.mips_arch_variant)
   return True
 
 

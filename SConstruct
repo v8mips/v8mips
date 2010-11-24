@@ -218,8 +218,16 @@ LIBRARY_FLAGS = {
     },
     'arch:mips': {
       'CPPDEFINES':   ['V8_TARGET_ARCH_MIPS'],
+      'mips_arch_variant:mips32r2': {
+        'CPPDEFINES':    ['_MIPS_ARCH_MIPS32R2']
+      },
       'simulator:none': {
-        'CCFLAGS':      ['-EL', '-mips32r2', '-Wa,-mips32r2'],
+        'mips_arch_variant:mips32r2': {
+          'CCFLAGS':      ['-EL', '-mips32r2', '-Wa,-mips32r2'],
+        },
+        'mips_arch_variant:mips32r1': {
+          'CCFLAGS':      ['-EL', '-mips32', '-Wa,-mips32']
+        },
         'LDFLAGS':      ['-EL', '-static', '-static-libgcc'],
         'mipsabi:softfloat': {
           'CCFLAGS':      ['-msoft-float'],
@@ -352,6 +360,9 @@ V8_EXTRA_FLAGS = {
     },
     'arch:mips': {
       'CPPDEFINES':   ['V8_TARGET_ARCH_MIPS'],
+      'mips_arch_variant:mips32r2': {
+        'CPPDEFINES':    ['_MIPS_ARCH_MIPS32R2']
+      },
     },
     'disassembler:on': {
       'CPPDEFINES':   ['ENABLE_DISASSEMBLER']
@@ -424,8 +435,16 @@ CCTEST_EXTRA_FLAGS = {
       'LIBS':         ['execinfo', 'pthread']
     },
     'arch:mips': {
+      'mips_arch_variant:mips32r2': {
+        'CPPDEFINES':    ['_MIPS_ARCH_MIPS32R2']
+      },
       'simulator:none': {
-        'CCFLAGS':      ['-EL', '-mips32r2', '-Wa,-mips32r2'],
+        'mips_arch_variant:mips32r2': {
+          'CCFLAGS':      ['-EL', '-mips32r2', '-Wa,-mips32r2'],
+        },
+        'mips_arch_variant:mips32r1': {
+          'CCFLAGS':      ['-EL', '-mips32', '-Wa,-mips32']
+        },
         'LINKFLAGS':    ['-EL', '-static', '-static-libgcc'],
         'LDFLAGS':      ['-EL', '-static', '-static-libgcc'],
         'mipsabi:softfloat': {
@@ -543,8 +562,16 @@ SAMPLE_FLAGS = {
     },
     'arch:mips': {
       'CPPDEFINES':   ['V8_TARGET_ARCH_MIPS'],
+      'mips_arch_variant:mips32r2': {
+        'CPPDEFINES':    ['_MIPS_ARCH_MIPS32R2']
+      },
       'simulator:none': {
-        'CCFLAGS':      ['-EL', '-mips32r2', '-Wa,-mips32r2'],
+        'mips_arch_variant:mips32r2': {
+          'CCFLAGS':      ['-EL', '-mips32r2', '-Wa,-mips32r2'],
+        },
+        'mips_arch_variant:mips32r1': {
+          'CCFLAGS':      ['-EL', '-mips32', '-Wa,-mips32']
+        },
         'LINKFLAGS':    ['-EL', '-static', '-static-libgcc'],
         'LDFLAGS':      ['-EL', '-static', '-static-libgcc'],
         'mipsabi:softfloat': {
@@ -822,6 +849,11 @@ SIMPLE_OPTIONS = {
     'values': ['hardfloat', 'softfloat', 'none'],
     'default': 'hardfloat',
     'help': 'generate calling conventiont according to selected mips ABI'
+  },
+  'mips_arch_variant': {
+    'values': ['mips32r2', 'mips32r1'],
+    'default': 'mips32r2',
+    'help': 'mips variant'
   },
 }
 

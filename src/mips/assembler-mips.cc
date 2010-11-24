@@ -40,6 +40,11 @@
 #include "mips/assembler-mips-inl.h"
 #include "serialize.h"
 
+#ifdef _MIPS_ARCH_MIPS32R2
+  #define mips32r2 1
+#else
+  #define mips32r2 0
+#endif
 
 namespace v8 {
 namespace internal {
@@ -1231,16 +1236,26 @@ void Assembler::srav(Register rd, Register rt, Register rs) {
 
 void Assembler::rotr(Register rd, Register rt, uint16_t sa) {
   ASSERT(rd.is_valid() && rt.is_valid() && is_uint5(sa));
-  Instr instr = SPECIAL | (1 << kRsShift) | (rt.code() << kRtShift)
-      | (rd.code() << kRdShift) | (sa << kSaShift) | SRL;
-  emit(instr);
+  if (mips32r2) {
+    Instr instr = SPECIAL | (1 << kRsShift) | (rt.code() << kRtShift)
+        | (rd.code() << kRdShift) | (sa << kSaShift) | SRL;
+    emit(instr);
+  } else {
+    // Just in case. You should generally use this through MacroAssembler::Ror.
+    UNIMPLEMENTED_MIPS();
+  }
 }
 
 void Assembler::rotrv(Register rd, Register rt, Register rs) {
   ASSERT(rd.is_valid() && rt.is_valid() && rs.is_valid() );
-  Instr instr = SPECIAL | (rs.code() << kRsShift) | (rt.code() << kRtShift)
-      | (rd.code() << kRdShift) | (1 << kSaShift) | SRLV;
-  emit(instr);
+  if (mips32r2) {
+    Instr instr = SPECIAL | (rs.code() << kRsShift) | (rt.code() << kRtShift)
+        | (rd.code() << kRdShift) | (1 << kSaShift) | SRLV;
+    emit(instr);
+  } else {
+    // Just in case. You should generally use this through MacroAssembler::Ror.
+    UNIMPLEMENTED_MIPS();
+  }
 }
 
 //------------Memory-instructions-------------
@@ -1482,15 +1497,28 @@ void Assembler::clz(Register rd, Register rs) {
 }
 
 
-void Assembler::ins(Register rt, Register rs, uint16_t pos, uint16_t size) {
-  // Ins instr has 'rt' field as dest, and two uint5: msb, lsb
-  GenInstrRegister(SPECIAL3, rs, rt, pos + size - 1, pos, INS);
+void Assembler::ins_(Register rt, Register rs, uint16_t pos, uint16_t size) {
+  if (mips32r2) {
+    // Ins instr has 'rt' field as dest, and two uint5: msb, lsb
+    GenInstrRegister(SPECIAL3, rs, rt, pos + size - 1, pos, INS);
+  } else {
+    // Just in case. This instruction should
+    // be called through MacroAssembler::Ins.
+    UNIMPLEMENTED_MIPS();
+  }
 }
 
 
 void Assembler::ext(Register rt, Register rs, uint16_t pos, uint16_t size) {
-  // Ext instr has 'rt' field as dest, and two uint5: msb, lsb
-  GenInstrRegister(SPECIAL3, rs, rt, size - 1, pos, EXT);
+  if (mips32r2) {
+    // Ext instr has 'rt' field as dest, and two uint5: msb, lsb.
+    GenInstrRegister(SPECIAL3, rs, rt, size - 1, pos, EXT);
+  } else {
+    // Move rs to rt and shift it left then right to get the
+    // desired bitfield on the right side and zeroes on the left.
+    sll(rt, rs, 32 - (pos + size));
+    srl(rt, rt, 32 - size);
+  }
 }
 
 
@@ -1595,22 +1623,38 @@ void Assembler::trunc_w_d(FPURegister fd, FPURegister fs) {
 
 
 void Assembler::cvt_l_s(FPURegister fd, FPURegister fs) {
-  GenInstrRegister(COP1, S, f0, fs, fd, CVT_L_S);
+  if (mips32r2) {
+    GenInstrRegister(COP1, S, f0, fs, fd, CVT_L_S);
+  } else {
+    UNIMPLEMENTED_MIPS();
+  }
 }
 
 
 void Assembler::cvt_l_d(FPURegister fd, FPURegister fs) {
-  GenInstrRegister(COP1, D, f0, fs, fd, CVT_L_D);
+  if (mips32r2) {
+    GenInstrRegister(COP1, D, f0, fs, fd, CVT_L_D);
+  } else {
+    UNIMPLEMENTED_MIPS();
+  }
 }
 
 
 void Assembler::trunc_l_s(FPURegister fd, FPURegister fs) {
-  GenInstrRegister(COP1, S, f0, fs, fd, TRUNC_L_S);
+  if (mips32r2) {
+    GenInstrRegister(COP1, S, f0, fs, fd, TRUNC_L_S);
+  } else {
+    UNIMPLEMENTED_MIPS();
+  }
 }
 
 
 void Assembler::trunc_l_d(FPURegister fd, FPURegister fs) {
-  GenInstrRegister(COP1, D, f0, fs, fd, TRUNC_L_D);
+  if (mips32r2) {
+    GenInstrRegister(COP1, D, f0, fs, fd, TRUNC_L_D);
+  } else {
+    UNIMPLEMENTED_MIPS();
+  }
 }
 
 
@@ -1620,7 +1664,11 @@ void Assembler::cvt_s_w(FPURegister fd, FPURegister fs) {
 
 
 void Assembler::cvt_s_l(FPURegister fd, FPURegister fs) {
-  GenInstrRegister(COP1, L, f0, fs, fd, CVT_S_L);
+  if (mips32r2) {
+    GenInstrRegister(COP1, L, f0, fs, fd, CVT_S_L);
+  } else {
+    UNIMPLEMENTED_MIPS();
+  }
 }
 
 
@@ -1635,7 +1683,11 @@ void Assembler::cvt_d_w(FPURegister fd, FPURegister fs) {
 
 
 void Assembler::cvt_d_l(FPURegister fd, FPURegister fs) {
-  GenInstrRegister(COP1, L, f0, fs, fd, CVT_D_L);
+  if (mips32r2) {
+    GenInstrRegister(COP1, L, f0, fs, fd, CVT_D_L);
+  } else {
+    UNIMPLEMENTED_MIPS();
+  }
 }
 
 

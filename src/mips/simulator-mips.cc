@@ -42,6 +42,12 @@ namespace v8i = v8::internal;
 
 #if !defined(__mips)
 
+#ifdef _MIPS_ARCH_MIPS32R2
+  #define mips32r2 1
+#else
+  #define mips32r2 0
+#endif
+
 // Only build the simulator if not compiling for real MIPS hardware.
 namespace assembler {
 namespace mips {
@@ -1274,9 +1280,13 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
             alu_out = rt_u >> sa;
           } else {
             // Logical right-rotate of a word by a fixed number of bits. This
-            // is special case od SRL instruction, added in MIPS32 Release 2.
+            // is special case of SRL instruction, added in MIPS32 Release 2.
             // RS field is equal to 00001
-            alu_out = (rt_u >> sa) | (rt_u << (32 - sa));
+            if (mips32r2) {
+              alu_out = (rt_u >> sa) | (rt_u << (32 - sa));
+            } else {
+              Format(instr, "SRL");
+            }
           }
           break;
         case SRA:
@@ -1294,7 +1304,11 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
             // Logical right-rotate of a word by a variable number of bits.
             // This is special case od SRLV instruction, added in MIPS32
             // Release 2. SA field is equal to 00001
-            alu_out = (rt_u >> rs_u) | (rt_u << (32 - rs_u));
+            if (mips32r2) {
+              alu_out = (rt_u >> rs_u) | (rt_u << (32 - rs_u));
+            } else {
+              Format(instr, "SRLV");
+            }
           }
           break;
         case SRAV:
@@ -1406,23 +1420,31 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
     case SPECIAL3:
       switch (instr->FunctionFieldRaw()) {
         case INS: {   // mips32r2 instruction.
-            // Interpret Rd field as 5-bit msb of insert.
-            uint16_t msb = rd_reg;
-            // Interpret sa field as 5-bit lsb of insert.
-            uint16_t lsb = sa;
-            uint16_t size = msb - lsb + 1;
-            uint16_t mask = (1 << size) - 1;
-            alu_out = (rt_u & ~(mask << lsb)) | ((rs_u & mask) << lsb);
+            if (mips32r2) {
+              // Interpret Rd field as 5-bit msb of insert.
+              uint16_t msb = rd_reg;
+              // Interpret sa field as 5-bit lsb of insert.
+              uint16_t lsb = sa;
+              uint16_t size = msb - lsb + 1;
+              uint16_t mask = (1 << size) - 1;
+              alu_out = (rt_u & ~(mask << lsb)) | ((rs_u & mask) << lsb);
+            } else {
+              Format(instr, "INS");
+            }
           }
           break;
         case EXT: {   // mips32r2 instruction.
-            // Interpret Rd field as 5-bit msb of extract.
-            uint16_t msb = rd_reg;
-            // Interpret sa field as 5-bit lsb of extract.
-            uint16_t lsb = sa;
-            uint16_t size = msb + 1;
-            uint16_t mask = (1 << size) - 1;
-            alu_out = (rs_u & (mask << lsb)) >> lsb;
+            if (mips32r2) {
+              // Interpret Rd field as 5-bit msb of extract.
+              uint16_t msb = rd_reg;
+              // Interpret sa field as 5-bit lsb of extract.
+              uint16_t lsb = sa;
+              uint16_t size = msb + 1;
+              uint16_t mask = (1 << size) - 1;
+              alu_out = (rs_u & (mask << lsb)) >> lsb;
+            } else {
+              Format(instr, "EXT");
+            }
           }
           break;
         default:
@@ -1534,15 +1556,25 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
               set_fpu_register_float(fd_reg, static_cast<float>(fs));
               break;
             case CVT_L_D:  // Truncate double to 64-bit long-word.
-              // Does not follow rounding modes, just truncates.
-              i64 = static_cast<int64_t>(fs);
-              set_fpu_register(fd_reg, i64 & 0xffffffff);
-              set_fpu_register(fd_reg + 1, i64 >> 32);
+              if (mips32r2) {
+                // Does not follow rounding modes, just truncates.
+                i64 = static_cast<int64_t>(fs);
+                set_fpu_register(fd_reg, i64 & 0xffffffff);
+                set_fpu_register(fd_reg + 1, i64 >> 32);
+              } else {
+                // Not allowed on MIPS32 Release 1
+                UNIMPLEMENTED_MIPS();
+              }
               break;
             case TRUNC_L_D:
-              i64 = static_cast<int64_t>(fs);
-              set_fpu_register(fd_reg, i64 & 0xffffffff);
-              set_fpu_register(fd_reg + 1, i64 >> 32);
+              if (mips32r2) {
+                i64 = static_cast<int64_t>(fs);
+                set_fpu_register(fd_reg, i64 & 0xffffffff);
+                set_fpu_register(fd_reg + 1, i64 >> 32);
+              } else {
+                // Not allowed on MIPS32 Release 1
+                UNIMPLEMENTED_MIPS();
+              }
               break;
             case C_F_D:
               UNIMPLEMENTED_MIPS();
@@ -1567,12 +1599,18 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
           break;
         case L:
           switch (instr->FunctionFieldRaw()) {
-            case CVT_D_L:
-              // Watch the signs here, we want 2 32-bit vals to make a sign-64.
+          case CVT_D_L:
+            if (mips32r2) {
+              // Watch the signs here, we want 2 32-bit vals
+              // to make a sign-64.
               i64 = (uint32_t) get_fpu_register(fs_reg);
               i64 |= ((int64_t) get_fpu_register(fs_reg + 1) << 32);
               set_fpu_register_double(fd_reg, static_cast<double>(i64));
-              break;
+            } else {
+              // Not allowed on MIPS32 Release 1
+              UNIMPLEMENTED_MIPS();
+            }
+            break;
             case CVT_S_L:
               UNIMPLEMENTED_MIPS();
               break;

@@ -359,6 +359,9 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
   DEFINE_INSTRUCTION(Slt);
   DEFINE_INSTRUCTION(Sltu);
 
+  // MIPS32 R2 instruction macro.
+  DEFINE_INSTRUCTION(Ror);
+
 #undef DEFINE_INSTRUCTION
 #undef DEFINE_INSTRUCTION2
 
@@ -443,15 +446,8 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
     Addu(sp, sp, Operand(count * kPointerSize));
   }
 
-  // Placeholders for Ins and Ext which still need macro-expansion
-  // for mips32r1 equivalents, if we are on one of those cpus.
-  void Ext(Register rt, Register rs, uint16_t pos, uint16_t size) {
-    ext(rt, rs, pos, size);
-  }
-  void Ins(Register rt, Register rs, uint16_t pos, uint16_t size) {
-    ins(rt, rs, pos, size);
-  }
-
+  // MIPS32 R2 instruction macro.
+  void Ins(Register rt, Register rs, uint16_t pos, uint16_t size);
 
   // -------------------------------------------------------------------------
   // Activation frames

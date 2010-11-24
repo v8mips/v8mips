@@ -8687,7 +8687,7 @@ static void GetInt32(MacroAssembler* masm,
     // The width of the field here is the same as the shift amount above.
     const int field_width = shift_distance;
     __ ext(scratch2, scratch2, 32-shift_distance, field_width);
-    __ ins(scratch, scratch2, 0, field_width);
+    __ Ins(scratch, scratch2, 0, field_width);
     // Move down according to the exponent.
     __ srlv(scratch, scratch, dest);
     // Prepare the negative version of our integer.

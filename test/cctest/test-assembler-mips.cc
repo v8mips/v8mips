@@ -237,7 +237,7 @@ TEST(MIPS2) {
   __ addu(v0, v0, v1);  // 51
   __ Branch(&error, ne, v0, Operand(51));
   __ movn(a0, t3, t0);  // move a0<-t3 (t0 is NOT 0)
-  __ ins(a0, t1, 12, 8);  // 0x7ff34fff
+  __ Ins(a0, t1, 12, 8);  // 0x7ff34fff
   __ Branch(&error, ne, a0, Operand(0x7ff34fff));
   __ movz(a0, t6, t7);    // a0 not updated (t7 is NOT 0)
   __ ext(a1, a0, 8, 12);  // 0x34f
@@ -655,14 +655,14 @@ TEST(MIPS8) {
   // basic word load
   __ lw(t0, MemOperand(a0, OFFSET_OF(T, input)) );
 
-  // ROTR instruction
-  __ rotr(t1, t0, 0x0004);
-  __ rotr(t2, t0, 0x0008);
-  __ rotr(t3, t0, 0x000c);
-  __ rotr(t4, t0, 0x0010);
-  __ rotr(t5, t0, 0x0014);
-  __ rotr(t6, t0, 0x0018);
-  __ rotr(t7, t0, 0x001c);
+  // ROTR instruction (called through the Ror macro).
+  __ Ror(t1, t0, 0x0004);
+  __ Ror(t2, t0, 0x0008);
+  __ Ror(t3, t0, 0x000c);
+  __ Ror(t4, t0, 0x0010);
+  __ Ror(t5, t0, 0x0014);
+  __ Ror(t6, t0, 0x0018);
+  __ Ror(t7, t0, 0x001c);
 
   // basic word store
   __ sw(t1, MemOperand(a0, OFFSET_OF(T, result_rotr_4)) );
@@ -673,21 +673,21 @@ TEST(MIPS8) {
   __ sw(t6, MemOperand(a0, OFFSET_OF(T, result_rotr_24)) );
   __ sw(t7, MemOperand(a0, OFFSET_OF(T, result_rotr_28)) );
 
-  // ROTRV instruction
+  // ROTRV instruction (called through the Ror macro).
   __ li(t7, 0x0004);
-  __ rotrv(t1, t0, t7);
+  __ Ror(t1, t0, t7);
   __ li(t7, 0x0008);
-  __ rotrv(t2, t0, t7);
+  __ Ror(t2, t0, t7);
   __ li(t7, 0x000C);
-  __ rotrv(t3, t0, t7);
+  __ Ror(t3, t0, t7);
   __ li(t7, 0x0010);
-  __ rotrv(t4, t0, t7);
+  __ Ror(t4, t0, t7);
   __ li(t7, 0x0014);
-  __ rotrv(t5, t0, t7);
+  __ Ror(t5, t0, t7);
   __ li(t7, 0x0018);
-  __ rotrv(t6, t0, t7);
+  __ Ror(t6, t0, t7);
   __ li(t7, 0x001C);
-  __ rotrv(t7, t0, t7);
+  __ Ror(t7, t0, t7);
 
   // basic word store
   __ sw(t1, MemOperand(a0, OFFSET_OF(T, result_rotrv_4)) );

@@ -36,6 +36,12 @@
 #include "debug.h"
 #include "runtime.h"
 
+#ifdef _MIPS_ARCH_MIPS32R2
+  #define mips32r2 1
+#else
+  #define mips32r2 0
+#endif
+
 namespace v8 {
 namespace internal {
 
@@ -576,6 +582,30 @@ void MacroAssembler::Sltu(Register rd, Register rs, const Operand& rt) {
   }
 }
 
+void MacroAssembler::Ror(Register rd, Register rs, const Operand& rt) {
+  if (mips32r2) {
+    if (rt.is_reg()) {
+      rotrv(rd, rs, rt.rm());
+    } else {
+      rotr(rd, rs, rt.imm32_);
+    }
+  } else {
+    if (rt.is_reg()) {
+      subu(at, zero_reg, rt.rm());
+      sllv(at, rs, at);
+      srlv(rd, rs, rt.rm());
+      or_(rd, rd, at);
+    } else {
+      if (rt.imm32_ == 0) {
+        srl(rd, rs, 0);
+      } else {
+        srl(at, rs, rt.imm32_);
+        sll(rd, rs, (0x20 - rt.imm32_) & 0x1f);
+        or_(rd, rd, at);
+      }
+    }
+  }
+}
 
 //------------Pseudo-instructions-------------
 
@@ -674,6 +704,38 @@ void MacroAssembler::MultiPopReversed(RegList regs) {
   addiu(sp, sp, 4 * NumSaved);
 }
 
+void MacroAssembler::Ins(Register rt,
+                         Register rs,
+                         uint16_t pos,
+                         uint16_t size) {
+  if (mips32r2) {
+    ins_(rt, rs, pos, size);
+  } else {
+    ASSERT(!rt.is(t8) && !rs.is(t8));
+
+    srl(t8, rt, pos + size);
+    // The left chunk from rt that needs to
+    // be saved is on the right side of t8.
+    sll(at, t8, pos + size);
+    // The 'at' register now contains the left chunk on
+    // the left (proper position) and zeroes.
+    sll(t8, rt, 32 - pos);
+    // t8 now contains the right chunk on the left and zeroes.
+    srl(t8, t8, 32 - pos);
+    // t8 now contains the right chunk on
+    // the right (proper position) and zeroes.
+    or_(rt, at, t8);
+    // rt now contains the left and right chunks from the original rt
+    // in their proper position and zeroes in the middle.
+    sll(t8, rs, 32 - size);
+    // t8 now contains the chunk from rs on the left and zeroes.
+    srl(t8, t8, 32 - size - pos);
+    // t8 now contains the original chunk from rs in
+    // the middle (proper position).
+    or_(rt, rt, t8);
+    // rt now contains the result of the ins instruction in R2 mode.
+  }
+}
 
 // Emulated condtional branches do not emit a nop in the branch delay slot.
 //

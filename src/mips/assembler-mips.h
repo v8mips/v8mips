@@ -550,7 +550,7 @@ class Assembler : public Malloced {
 
   // Bit twiddling.
   void clz(Register rd, Register rs);
-  void ins(Register rt, Register rs, uint16_t pos, uint16_t size);
+  void ins_(Register rt, Register rs, uint16_t pos, uint16_t size);
   void ext(Register rt, Register rs, uint16_t pos, uint16_t size);
 
   //--------Coprocessor-instructions----------------
