@@ -218,13 +218,19 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
 
   // For the page containing |object| mark the region covering [object+offset]
   // dirty. The object address must be in the first 8K of an allocated page.
-  void RecordWriteHelper(Register object, Register offset, Register scratch);
+  void RecordWriteHelper(Register object,
+                         Operand offset,
+                         Register scratch0,
+                         Register scratch1);
 
   // For the page containing |object| mark the region covering [object+offset]
   // dirty. The object address must be in the first 8K of an allocated page.
-  // The 'scratch' register is used in the implementation and all 3 registers
+  // The 'scratch' registers are used in the implementation and all 3 registers
   // are clobbered by the operation, as well as the t8 and 'at' registers.
-  void RecordWrite(Register object, Register offset, Register scratch);
+  void RecordWrite(Register object,
+                   Operand offset,
+                   Register scratch0,
+                   Register scratch1);
 
 
   // ---------------------------------------------------------------------------
