@@ -428,6 +428,13 @@ class Assembler : public Malloced {
   // ---------------------------------------------------------------------------
   // Code generation.
 
+  // Insert the smallest number of nop instructions
+  // possible to align the pc offset to a multiple
+  // of m. m must be a power of 2 (>= 4).
+  void Align(int m);
+  // Aligns code to something that's optimal for a jump target for the platform.
+  void CodeTargetAlign();
+
   // Generic nop instruction. You should generally use nop().
   // nop(1) is used in the property load inline patcher.
   // Other nops are not currently used.

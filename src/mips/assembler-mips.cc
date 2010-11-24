@@ -368,27 +368,46 @@ void Assembler::GetCode(CodeDesc* desc) {
   desc->reloc_size = (buffer_ + buffer_size_) - reloc_info_writer.pos();
 }
 
+
+void Assembler::Align(int m) {
+  ASSERT(m >= 4 && IsPowerOf2(m));
+  while ((pc_offset() & (m - 1)) != 0) {
+    nop();
+  }
+}
+
+
+void Assembler::CodeTargetAlign() {
+  Align(8);  // Tentative value.
+}
+
+
 Register Assembler::GetRt(Instr instr) {
   Register rt;
   rt.code_ = (instr & kRtMask) >> kRtShift;
   return rt;
 }
 
+
 bool Assembler::IsPop(Instr instr) {
   return (instr & ~kRtMask) == kPopRegPattern;
 }
+
 
 bool Assembler::IsPush(Instr instr) {
   return (instr & ~kRtMask) == kPushRegPattern;
 }
 
+
 bool Assembler::IsSwRegFpOffset(Instr instr) {
   return ((instr & kLwSwInstrTypeMask) == kSwRegFpOffsetPattern);
 }
 
+
 bool Assembler::IsLwRegFpOffset(Instr instr) {
   return ((instr & kLwSwInstrTypeMask) == kLwRegFpOffsetPattern);
 }
+
 
 bool Assembler::IsSwRegFpNegOffset(Instr instr) {
   return ((instr & (kLwSwInstrTypeMask | kNegOffset)) ==
