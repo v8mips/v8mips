@@ -1143,42 +1143,21 @@ void DeferredInlineSmiOperation::Generate() {
     case Token::MOD:
     case Token::BIT_OR:
     case Token::BIT_XOR:
-    case Token::BIT_AND: {
-      if (reversed_) {
-        if (tos_register_.is(a0)) {
-          __ li(a1, Operand(Smi::FromInt(value_)));
-        } else {
-          ASSERT(tos_register_.is(a1));
-          __ li(a0, Operand(Smi::FromInt(value_)));
-          lhs = a0;
-          rhs = a1;
-        }
-      } else {
-        if (tos_register_.is(a1)) {
-          __ li(a0, Operand(Smi::FromInt(value_)));
-        } else {
-          ASSERT(tos_register_.is(a0));
-          __ li(a1, Operand(Smi::FromInt(value_)));
-            lhs = a0;
-            rhs = a1;
-        }
-      }
-      break;
-    }
+    case Token::BIT_AND:
     case Token::SHL:
     case Token::SHR:
     case Token::SAR: {
-      if (!reversed_) {
-        if (tos_register_.is(a1)) {
-          __ li(a0, Operand(Smi::FromInt(value_)));
-        } else {
-          ASSERT(tos_register_.is(a0));
-          __ li(a1, Operand(Smi::FromInt(value_)));
-           lhs = a0;
-           rhs = a1;
-         }
+      if (tos_register_.is(a1)) {
+        __ li(a0, Operand(Smi::FromInt(value_)));
       } else {
-        UNREACHABLE();  // Should have been handled in SmiOperation.
+        // This used to look a little different from the arm version.
+        // Now it's a copy of that.
+        ASSERT(tos_register_.is(a0));
+        __ li(a1, Operand(Smi::FromInt(value_)));
+      }
+      if (reversed_ == tos_register_.is(a1)) {
+        lhs = a0;
+        rhs = a1;
       }
       break;
     }
