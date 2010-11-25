@@ -1380,7 +1380,7 @@ void KeyedLoadIC::GenerateExternalArray(MacroAssembler* masm,
       // __ mtc1(zero_reg, f1);  // MS 32-bits are all zero.
       // __ cvt_d_l(f0, f0); // Use 64 bit conv to get correct unsigned 32-bit.
 
-      __ Cvt_d_uw(f0, a0);
+      __ Cvt_d_uw(f0, value);
 
       __ sdc1(f0, MemOperand(v0, HeapNumber::kValueOffset - kHeapObjectTag));
 
@@ -1889,7 +1889,7 @@ void KeyedStoreIC::GenerateExternalArray(MacroAssembler* masm,
         // This is replaced by a macro:
         // __ trunc_l_d(f0, f0);  // Convert double to 64-bit int.
         // __ mfc1(t3, f0);  // Keep the LS 32-bits.
-        __ Trunc_uw_d(f0, a3);
+        __ Trunc_uw_d(f0, t3);
       }
 
       // t3: HeapNumber converted to integer
