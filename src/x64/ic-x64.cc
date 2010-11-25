@@ -702,7 +702,7 @@ void KeyedLoadIC::GenerateExternalArray(MacroAssembler* masm,
   //  -- rdx    : receiver
   //  -- rsp[0] : return address
   // -----------------------------------
-  Label slow, failed_allocation;
+  Label slow;
 
   // Check that the object isn't a smi.
   __ JumpIfSmi(rdx, &slow);
@@ -761,7 +761,7 @@ void KeyedLoadIC::GenerateExternalArray(MacroAssembler* masm,
       __ movl(rcx, Operand(rbx, rcx, times_4, 0));
       break;
     case kExternalFloatArray:
-      __ fld_s(Operand(rbx, rcx, times_4, 0));
+      __ cvtss2sd(xmm0, Operand(rbx, rcx, times_4, 0));
       break;
     default:
       UNREACHABLE();
@@ -773,20 +773,16 @@ void KeyedLoadIC::GenerateExternalArray(MacroAssembler* masm,
   // For integer array types:
   // rcx: value
   // For floating-point array type:
-  // FP(0): value
+  // xmm0: value as double.
 
-  if (array_type == kExternalIntArray ||
-      array_type == kExternalUnsignedIntArray) {
-    // For the Int and UnsignedInt array types, we need to see whether
+  ASSERT(kSmiValueSize == 32);
+  if (array_type == kExternalUnsignedIntArray) {
+    // For the UnsignedInt array type, we need to see whether
     // the value can be represented in a Smi. If not, we need to convert
     // it to a HeapNumber.
     Label box_int;
-    if (array_type == kExternalIntArray) {
-      __ JumpIfNotValidSmiValue(rcx, &box_int);
-    } else {
-      ASSERT_EQ(array_type, kExternalUnsignedIntArray);
-      __ JumpIfUIntNotValidSmiValue(rcx, &box_int);
-    }
+
+    __ JumpIfUIntNotValidSmiValue(rcx, &box_int);
 
     __ Integer32ToSmi(rax, rcx);
     __ ret(0);
@@ -795,41 +791,27 @@ void KeyedLoadIC::GenerateExternalArray(MacroAssembler* masm,
 
     // Allocate a HeapNumber for the int and perform int-to-double
     // conversion.
-    __ push(rcx);
-    if (array_type == kExternalIntArray) {
-      __ fild_s(Operand(rsp, 0));
-    } else {
-      ASSERT(array_type == kExternalUnsignedIntArray);
-      // The value is zero-extended on the stack, because all pushes are
-      // 64-bit and we loaded the value from memory with movl.
-      __ fild_d(Operand(rsp, 0));
-    }
-    __ pop(rcx);
-    // FP(0): value
-    __ AllocateHeapNumber(rcx, rbx, &failed_allocation);
+    // The value is zero-extended since we loaded the value from memory
+    // with movl.
+    __ cvtqsi2sd(xmm0, rcx);
+
+    __ AllocateHeapNumber(rcx, rbx, &slow);
     // Set the value.
+    __ movsd(FieldOperand(rcx, HeapNumber::kValueOffset), xmm0);
     __ movq(rax, rcx);
-    __ fstp_d(FieldOperand(rax, HeapNumber::kValueOffset));
     __ ret(0);
   } else if (array_type == kExternalFloatArray) {
     // For the floating-point array type, we need to always allocate a
     // HeapNumber.
-    __ AllocateHeapNumber(rcx, rbx, &failed_allocation);
+    __ AllocateHeapNumber(rcx, rbx, &slow);
     // Set the value.
+    __ movsd(FieldOperand(rcx, HeapNumber::kValueOffset), xmm0);
     __ movq(rax, rcx);
-    __ fstp_d(FieldOperand(rax, HeapNumber::kValueOffset));
     __ ret(0);
   } else {
     __ Integer32ToSmi(rax, rcx);
     __ ret(0);
   }
-
-  // If we fail allocation of the HeapNumber, we still have a value on
-  // top of the FPU stack. Remove it.
-  __ bind(&failed_allocation);
-  __ ffree();
-  __ fincstp();
-  // Fall through to slow case.
 
   // Slow case: Jump to runtime.
   __ bind(&slow);
@@ -1116,10 +1098,8 @@ void KeyedStoreIC::GenerateExternalArray(MacroAssembler* masm,
       break;
     case kExternalFloatArray:
       // Need to perform int-to-float conversion.
-      __ push(rdx);
-      __ fild_s(Operand(rsp, 0));
-      __ pop(rdx);
-      __ fstp_s(Operand(rbx, rdi, times_4, 0));
+      __ cvtlsi2ss(xmm0, rdx);
+      __ movss(Operand(rbx, rdi, times_4, 0), xmm0);
       break;
     default:
       UNREACHABLE();
@@ -1140,81 +1120,44 @@ void KeyedStoreIC::GenerateExternalArray(MacroAssembler* masm,
   // The WebGL specification leaves the behavior of storing NaN and
   // +/-Infinity into integer arrays basically undefined. For more
   // reproducible behavior, convert these to zero.
-  __ fld_d(FieldOperand(rax, HeapNumber::kValueOffset));
+  __ movsd(xmm0, FieldOperand(rax, HeapNumber::kValueOffset));
   __ movq(rbx, FieldOperand(rbx, ExternalArray::kExternalPointerOffset));
   // rdi: untagged index
   // rbx: base pointer of external storage
   // top of FPU stack: value
   if (array_type == kExternalFloatArray) {
-    __ fstp_s(Operand(rbx, rdi, times_4, 0));
+    __ cvtsd2ss(xmm0, xmm0);
+    __ movss(Operand(rbx, rdi, times_4, 0), xmm0);
     __ ret(0);
   } else {
     // Need to perform float-to-int conversion.
-    // Test the top of the FP stack for NaN.
-    Label is_nan;
-    __ fucomi(0);
-    __ j(parity_even, &is_nan);
+    // Test the value for NaN.
 
-    __ push(rdx);  // Make room on the stack.  Receiver is no longer needed.
-    __ fistp_d(Operand(rsp, 0));
-    __ pop(rdx);
+    // Convert to int32 and store the low byte/word.
+    // If the value is NaN or +/-infinity, the result is 0x80000000,
+    // which is automatically zero when taken mod 2^n, n < 32.
     // rdx: value (converted to an untagged integer)
     // rdi: untagged index
     // rbx: base pointer of external storage
     switch (array_type) {
       case kExternalByteArray:
       case kExternalUnsignedByteArray:
+        __ cvtsd2si(rdx, xmm0);
         __ movb(Operand(rbx, rdi, times_1, 0), rdx);
         break;
       case kExternalShortArray:
       case kExternalUnsignedShortArray:
+        __ cvtsd2si(rdx, xmm0);
         __ movw(Operand(rbx, rdi, times_2, 0), rdx);
         break;
       case kExternalIntArray:
       case kExternalUnsignedIntArray: {
-        // We also need to explicitly check for +/-Infinity. These are
-        // converted to MIN_INT, but we need to be careful not to
-        // confuse with legal uses of MIN_INT.  Since MIN_INT truncated
-        // to 8 or 16 bits is zero, we only perform this test when storing
-        // 32-bit ints.
-        Label not_infinity;
-        // This test would apparently detect both NaN and Infinity,
-        // but we've already checked for NaN using the FPU hardware
-        // above.
-        __ movzxwq(rcx, FieldOperand(rax, HeapNumber::kValueOffset + 6));
-        __ and_(rcx, Immediate(0x7FF0));
-        __ cmpw(rcx, Immediate(0x7FF0));
-        __ j(not_equal, &not_infinity);
-        __ movq(rdx, Immediate(0));
-        __ bind(&not_infinity);
+        // Convert to int64, so that NaN and infinities become
+        // 0x8000000000000000, which is zero mod 2^32.
+        __ cvtsd2siq(rdx, xmm0);
         __ movl(Operand(rbx, rdi, times_4, 0), rdx);
         break;
       }
-      default:
-        UNREACHABLE();
-        break;
-    }
-    __ ret(0);
-
-    __ bind(&is_nan);
-    // rdi: untagged index
-    // rbx: base pointer of external storage
-    __ ffree();
-    __ fincstp();
-    __ movq(rdx, Immediate(0));
-    switch (array_type) {
-      case kExternalByteArray:
-      case kExternalUnsignedByteArray:
-        __ movb(Operand(rbx, rdi, times_1, 0), rdx);
-        break;
-      case kExternalShortArray:
-      case kExternalUnsignedShortArray:
-        __ movw(Operand(rbx, rdi, times_2, 0), rdx);
-        break;
-      case kExternalIntArray:
-      case kExternalUnsignedIntArray:
-        __ movl(Operand(rbx, rdi, times_4, 0), rdx);
-        break;
       default:
         UNREACHABLE();
         break;

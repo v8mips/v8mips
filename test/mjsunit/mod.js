@@ -25,57 +25,29 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#include "v8.h"
-
-#include "ast.h"
-
-namespace v8 {
-namespace internal {
-
-BreakableStatement::BreakableStatement(ZoneStringList* labels, Type type)
-    : labels_(labels), type_(type) {
-  ASSERT(labels == NULL || labels->length() > 0);
+function foo() {
+  for (var i = 1; i < 100; i++) {
+    var answer = 1;
+    for (var j = 1; j < 100; j++) {
+      if (answer == i) answer = 0;
+      // Positive case.
+      print(j + " % " + i + " = " + answer);
+      m = j % i;
+      assertEquals(answer, m, j + " % " + i);
+      m = j % (-i);
+      assertEquals(answer, m, j + " % -" + i);
+      // Negative case.
+      m = (-j) % i;
+      assertEquals(-answer, m, j + " % " + i);
+      // Check for negative zero.
+      if (answer == 0) assertEquals(-Infinity, 1/m);
+      m = (-j) % (-i);
+      assertEquals(-answer, m, j + " % -" + i);
+      // Check for negative zero.
+      if (answer == 0) assertEquals(-Infinity, 1/m);
+      answer++;
+    }
+  }
 }
 
-
-SwitchStatement::SwitchStatement(ZoneStringList* labels)
-    : BreakableStatement(labels, TARGET_FOR_ANONYMOUS),
-      tag_(NULL), cases_(NULL) {
-}
-
-
-IterationStatement::IterationStatement(ZoneStringList* labels)
-    : BreakableStatement(labels, TARGET_FOR_ANONYMOUS),
-      body_(NULL),
-      continue_target_(JumpTarget::BIDIRECTIONAL) {
-}
-
-
-Block::Block(ZoneStringList* labels, int capacity, bool is_initializer_block)
-    : BreakableStatement(labels, TARGET_FOR_NAMED_ONLY),
-      statements_(capacity),
-      is_initializer_block_(is_initializer_block) {
-}
-
-
-ForStatement::ForStatement(ZoneStringList* labels)
-    : IterationStatement(labels),
-      init_(NULL),
-      cond_(NULL),
-      next_(NULL),
-      may_have_function_literal_(true),
-      loop_variable_(NULL),
-      peel_this_loop_(false) {
-}
-
-
-ForInStatement::ForInStatement(ZoneStringList* labels)
-    : IterationStatement(labels), each_(NULL), enumerable_(NULL) {
-}
-
-
-DoWhileStatement::DoWhileStatement(ZoneStringList* labels)
-    : IterationStatement(labels), cond_(NULL), condition_position_(-1) {
-}
-
-} }  // namespace v8::internal
+foo();
