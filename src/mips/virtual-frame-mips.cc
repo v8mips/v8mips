@@ -43,7 +43,7 @@ void VirtualFrame::PopToA1A0() {
   // Shuffle things around so the top of stack is in a0 and a1.
   MergeTOSTo(A0_A1_TOS);
   // Pop the two registers off the stack so they are detached from the frame.
-  element_count_ -= 2;
+  LowerHeight(2);
   top_of_stack_state_ = NO_TOS_REGISTERS;
 }
 
@@ -52,7 +52,7 @@ void VirtualFrame::PopToA1() {
   // Shuffle things around so the top of stack is only in a1.
   MergeTOSTo(A1_TOS);
   // Pop the register off the stack so it is detached from the frame.
-  element_count_ -= 1;
+  LowerHeight(1);
   top_of_stack_state_ = NO_TOS_REGISTERS;
 }
 
@@ -61,7 +61,7 @@ void VirtualFrame::PopToA0() {
   // Shuffle things around so the top of stack only in a0.
   MergeTOSTo(A0_TOS);
   // Pop the register off the stack so it is detached from the frame.
-  element_count_ -= 1;
+  LowerHeight(1);
   top_of_stack_state_ = NO_TOS_REGISTERS;
 }
 
@@ -70,10 +70,20 @@ void VirtualFrame::MergeTo(const VirtualFrame* expected,
                            Register r1,
                            const Operand& r2) {
   if (Equals(expected)) return;
+  ASSERT(expected->IsCompatibleWith(this));
   MergeTOSTo(expected->top_of_stack_state_, cond, r1, r2);
   ASSERT(register_allocation_map_ == expected->register_allocation_map_);
 }
 
+void VirtualFrame::MergeTo(VirtualFrame* expected,
+                           Condition cond,
+                           Register r1,
+                           const Operand& r2) {
+  if (Equals(expected)) return;
+  expected->tos_known_smi_map_ &= tos_known_smi_map_;
+  MergeTOSTo(expected->top_of_stack_state_, cond, r1, r2);
+  ASSERT(register_allocation_map_ == expected->register_allocation_map_);
+}
 void VirtualFrame::MergeTOSTo(
     VirtualFrame::TopOfStack expected_top_of_stack_state,
     Condition cond,
@@ -439,7 +449,7 @@ void VirtualFrame::Drop(int count) {
   }
   if (count == 0) return;
   __ Addu(sp, sp, Operand(count * kPointerSize));
-  element_count_ -= count;
+  LowerHeight(count);
 }
 
 
@@ -449,7 +459,7 @@ void VirtualFrame::Pop() {
   } else {
     top_of_stack_state_ = kStateAfterPop[top_of_stack_state_];
   }
-  element_count_--;
+  LowerHeight(1);
 }
 
 
@@ -461,7 +471,7 @@ void VirtualFrame::EmitPop(Register reg) {
     __ mov(reg, kTopRegister[top_of_stack_state_]);
     top_of_stack_state_ = kStateAfterPop[top_of_stack_state_];
   }
-  element_count_--;
+  LowerHeight(1);
 }
 
 
@@ -573,7 +583,7 @@ void VirtualFrame::Dup() {
         UNREACHABLE();
     }
   }
-  element_count_++;
+  RaiseHeight(1, tos_known_smi_map_ & 1);
 }
 
 
@@ -612,14 +622,14 @@ void VirtualFrame::Dup2() {
         UNREACHABLE();
     }
   }
-  element_count_ += 2;
+  RaiseHeight(2, tos_known_smi_map_ & 3);
 }
 
 Register VirtualFrame::PopToRegister(Register but_not_to_this_one) {
   ASSERT(but_not_to_this_one.is(a0) ||
          but_not_to_this_one.is(a1) ||
          but_not_to_this_one.is(no_reg));
-  element_count_--;
+  LowerHeight(1);
   if (top_of_stack_state_ == NO_TOS_REGISTERS) {
     if (but_not_to_this_one.is(a0)) {
       __ Pop(a1);
@@ -656,8 +666,8 @@ void VirtualFrame::EmitMultiPop(RegList regs) {
 }
 
 
-void VirtualFrame::EmitPush(Register reg) {
-  element_count_++;
+void VirtualFrame::EmitPush(Register reg, TypeInfo info) {
+  RaiseHeight(1, info.IsSmi() ? 1 : 0);
   if (reg.is(cp)) {
     // If we are pushing cp then we are about to make a call and things have to
     // be pushed to the physical stack.  There's nothing to be gained my moving
@@ -689,6 +699,9 @@ void VirtualFrame::EmitPush(Register reg) {
 }
 
 void VirtualFrame::SetElementAt(Register reg, int this_far_down) {
+  if (this_far_down < kTOSKnownSmiMapSize) {
+    tos_known_smi_map_ &= ~(1 << this_far_down);
+  }
   if (this_far_down == 0) {
     Pop();
     Register dest = GetTOSRegister();
@@ -728,8 +741,8 @@ Register VirtualFrame::GetTOSRegister() {
 }
 
 
-void VirtualFrame::EmitPush(Operand operand) {
-  element_count_++;
+void VirtualFrame::EmitPush(Operand operand, TypeInfo info) {
+  RaiseHeight(1, info.IsSmi() ? 1 : 0);
   if (SpilledScope::is_spilled()) {
     __ li(a0, operand);
     __ Push(a0);
@@ -741,8 +754,8 @@ void VirtualFrame::EmitPush(Operand operand) {
 }
 
 
-void VirtualFrame::EmitPush(MemOperand operand) {
-  element_count_++;
+void VirtualFrame::EmitPush(MemOperand operand, TypeInfo info) {
+  RaiseHeight(1, info.IsSmi() ? 1 : 0);
   if (SpilledScope::is_spilled()) {
     __ lw(a0, operand);
     __ Push(a0);
@@ -755,7 +768,7 @@ void VirtualFrame::EmitPush(MemOperand operand) {
 
 
 void VirtualFrame::EmitPushRoot(Heap::RootListIndex index) {
-  element_count_++;
+  RaiseHeight(1, 0);
   if (SpilledScope::is_spilled()) {
     __ LoadRoot(a0, index);
     __ Push(a0);

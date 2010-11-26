@@ -110,21 +110,41 @@ void ICRuntimeCallHelper::AfterCall(MacroAssembler* masm) const {
 
 CodeGenState::CodeGenState(CodeGenerator* owner)
     : owner_(owner),
-      true_target_(NULL),
-      false_target_(NULL),
-      previous_(NULL) {
-  owner_->set_state(this);
+
+
+
+
+
+
+
+
+
+
+
+
+
+      previous_(owner->state()) {
+  owner->set_state(this);
 }
 
 
-CodeGenState::CodeGenState(CodeGenerator* owner,
+ConditionCodeGenState::ConditionCodeGenState(CodeGenerator* owner,
                            JumpTarget* true_target,
                            JumpTarget* false_target)
-    : owner_(owner),
+    : CodeGenState(owner),
       true_target_(true_target),
-      false_target_(false_target),
-      previous_(owner->state()) {
-  owner_->set_state(this);
+      false_target_(false_target) {
+  owner->set_state(this);
+}
+
+
+TypeInfoCodeGenState::TypeInfoCodeGenState(CodeGenerator* owner,
+                                           Slot* slot,
+                                           TypeInfo type_info)
+    : CodeGenState(owner),
+      slot_(slot) {
+  owner->set_state(this);
+  old_type_info_ = owner->set_type_info(slot, type_info);
 }
 
 
@@ -134,17 +154,23 @@ CodeGenState::~CodeGenState() {
 }
 
 
+TypeInfoCodeGenState::~TypeInfoCodeGenState() {
+  owner()->set_type_info(slot_, old_type_info_);
+}
+
 // -----------------------------------------------------------------------------
 // CodeGenerator implementation.
 
 CodeGenerator::CodeGenerator(MacroAssembler* masm)
     : deferred_(8),
       masm_(masm),
+      info_(NULL),
       frame_(NULL),
       allocator_(NULL),
       cc_reg_(cc_always),
       state_(NULL),
       loop_nesting_(0),
+      type_info_(NULL),
       function_return_is_shadowed_(false) {
 }
 
@@ -161,6 +187,9 @@ void CodeGenerator::Generate(CompilationInfo* info) {
 
   // Initialize state.
   info_ = info;
+  int slots = scope()->num_parameters() + scope()->num_stack_slots();
+  ScopedVector<TypeInfo> type_info_array(slots);
+  type_info_ = &type_info_array;
   ASSERT(allocator_ == NULL);
   RegisterAllocator register_allocator(this);
   allocator_ = &register_allocator;
@@ -401,6 +430,29 @@ void CodeGenerator::UnloadReference(Reference* ref) {
   }
 }
 
+int CodeGenerator::NumberOfSlot(Slot* slot) {
+  if (slot == NULL) return kInvalidSlotNumber;
+
+
+
+
+
+
+
+
+
+
+  switch (slot->type()) {
+    case Slot::PARAMETER:
+      return slot->index();
+
+    case Slot::LOCAL:
+      return slot->index() + scope()->num_parameters();
+    default:
+      break;
+  }
+  return kInvalidSlotNumber;
+}
 
 MemOperand CodeGenerator::SlotOperand(Slot* slot, Register tmp) {
   // Currently, this assertion will fail if we try to assign to
@@ -494,7 +546,7 @@ void CodeGenerator::LoadCondition(Expression* x,
   ASSERT(!has_cc());
   int original_height = frame_->height();
 
-  { CodeGenState new_state(this, true_target, false_target);
+  { ConditionCodeGenState new_state(this, true_target, false_target);
     Visit(x);
 
     // If we hit a stack overflow, we may not have actually visited
@@ -716,17 +768,17 @@ void CodeGenerator::LoadFromSlot(Slot* slot, TypeofState typeof_state) {
     Register scratch0 = VirtualFrame::scratch0();
     Register scratch1 = VirtualFrame::scratch1();
     Register scratch2 = VirtualFrame::scratch2();
-
+    TypeInfo info = type_info(slot);
     __ lw(v0, SlotOperand(slot, scratch2));
-    frame_->EmitPush(v0);
+    frame_->EmitPush(v0, info);
     if (slot->var()->mode() == Variable::CONST) {
       // Const slots may contain 'the hole' value (the constant hasn't been
       // initialized yet) which needs to be converted into the 'undefined'
       // value.
       Comment cmnt(masm_, "[ Unhole const");
-      frame_->EmitPop(v0);
+      frame_->EmitPop(scratch2);
       __ LoadRoot(scratch0, Heap::kTheHoleValueRootIndex);
-      __ subu(scratch1, v0, scratch0);
+      __ subu(scratch1, scratch2, scratch0);
       __ LoadRoot(scratch2, Heap::kUndefinedValueRootIndex);
       __ movz(v0, scratch2, scratch1);  // Conditional move if v0 was the hole.
       frame_->EmitPush(v0);
@@ -1009,6 +1061,7 @@ void CodeGenerator::ToBoolean(JumpTarget* true_target,
 
 void CodeGenerator::GenericBinaryOperation(Token::Value op,
                                            OverwriteMode overwrite_mode,
+                                           GenerateInlineSmi inline_smi,
                                            int constant_rhs) {
   VirtualFrame::SpilledScope spilled_scope(frame_);
   // sp[0] : y
@@ -1019,58 +1072,95 @@ void CodeGenerator::GenericBinaryOperation(Token::Value op,
   switch (op) {
     case Token::ADD:  // Fall through.
     case Token::SUB:  // Fall through.
-    case Token::MUL:
-    case Token::DIV:
-    case Token::MOD:
+      if (inline_smi) {
+        JumpTarget done;
+        JumpTarget not_smi;
+        Register rhs = frame_->PopToRegister();
+        Register lhs = frame_->PopToRegister(rhs);
+        Register scratch = VirtualFrame::scratch0();
+        __ Or(scratch, rhs, Operand(lhs));
+        // Check they are both small and positive.
+        __ And(scratch, scratch, Operand(kSmiTagMask | 0xc0000000));
+        not_smi.Branch(ne, scratch, Operand(zero_reg));
+        ASSERT(rhs.is(a0) || lhs.is(a0));  // r0 is free now.
+        ASSERT_EQ(0, kSmiTag);
+        if (op == Token::ADD) {
+          __ Addu(v0, lhs, Operand(rhs));
+        } else {
+          __ Subu(v0, lhs, Operand(rhs));
+        }
+        done.Branch(eq, scratch, Operand(zero_reg));
+        not_smi.Bind();
+        GenericBinaryOpStub stub(op, overwrite_mode, lhs, rhs, constant_rhs);
+        frame_->SpillAll();
+        frame_->CallStub(&stub, 0);
+        done.Bind();
+        frame_->EmitPush(v0);
+        break;
+      } else {
+        // Fall through!
+      }
+
     case Token::BIT_OR:
     case Token::BIT_AND:
     case Token::BIT_XOR:
-    case Token::SHL:
-    case Token::SHR:
-    case Token::SAR: {
-      frame_->EmitPop(a0);  // a0 : y
-      frame_->EmitPop(a1);  // a1 : x
-      GenericBinaryOpStub stub(op, overwrite_mode, a1, a0, constant_rhs);
-      frame_->CallStub(&stub, 0);
-      break;
-    }
-
-    case Token::COMMA:
-      frame_->EmitPop(v0);
-      // Simply discard left value.
-      frame_->Drop();
-      break;
-
-    default:
-      // Other cases should have been handled before this point.
-      UNREACHABLE();
-      break;
-  }
-}
-
-
-void CodeGenerator::VirtualFrameBinaryOperation(Token::Value op,
-                                                OverwriteMode overwrite_mode,
-                                                int constant_rhs) {
-  // top of virtual frame: y
-  // 2nd elt. on virtual frame : x
-  // result : top of virtual frame
-
-  // Stub is entered with a call: 'return address' is in lr.
-  switch (op) {
-    case Token::ADD:  // fall through.
-    case Token::SUB:  // fall through.
+      if (inline_smi) {
+        JumpTarget not_smi;
+        bool rhs_is_smi = frame_->KnownSmiAt(0);
+        bool lhs_is_smi = frame_->KnownSmiAt(1);
+        Register rhs = frame_->PopToRegister();
+        Register lhs = frame_->PopToRegister(rhs);
+        Register smi_test_reg;
+        Register scratch = VirtualFrame::scratch0();
+        Condition cond;
+        if (!rhs_is_smi || !lhs_is_smi) {
+          if (rhs_is_smi) {
+            smi_test_reg = lhs;
+          } else if (lhs_is_smi) {
+            smi_test_reg = rhs;
+          } else {
+            smi_test_reg = VirtualFrame::scratch0();
+            __ Or(smi_test_reg, rhs, Operand(lhs));
+          }
+          // Check they are both Smis.
+          __ And(scratch, smi_test_reg, Operand(kSmiTagMask));
+          cond = eq;
+          not_smi.Branch(ne, scratch, Operand(zero_reg));
+        } else {
+          cond = al;
+        }
+        ASSERT(rhs.is(a0) || lhs.is(a0));  // r0 is free now.
+        if (op == Token::BIT_OR) {
+          __ or_(v0, lhs, rhs);
+        } else if (op == Token::BIT_AND) {
+          __ and_(v0, lhs, rhs);
+        } else {
+          ASSERT(op == Token::BIT_XOR);
+          ASSERT_EQ(0, kSmiTag);
+          __ xor_(v0, lhs, rhs);
+        }
+        not_smi.Bind();
+        if (cond != al) {
+          JumpTarget done;
+          done.Branch(cond, scratch, Operand(zero_reg));
+          GenericBinaryOpStub stub(op, overwrite_mode, lhs, rhs, constant_rhs);
+          frame_->SpillAll();
+          frame_->CallStub(&stub, 0);
+          done.Bind();
+        }
+        frame_->EmitPush(v0);
+        break;
+      } else {
+        // Fall through!
+      }
     case Token::MUL:
     case Token::DIV:
     case Token::MOD:
-    case Token::BIT_OR:
-    case Token::BIT_AND:
-    case Token::BIT_XOR:
     case Token::SHL:
     case Token::SHR:
     case Token::SAR: {
       Register rhs = frame_->PopToRegister();
-      Register lhs = frame_->PopToRegister(rhs);
+      Register lhs = frame_->PopToRegister(rhs);  // Don't pop to rhs register.
       GenericBinaryOpStub stub(op, overwrite_mode, lhs, rhs, constant_rhs);
       frame_->SpillAll();
       frame_->CallStub(&stub, 0);
@@ -1204,6 +1294,7 @@ void CodeGenerator::SmiOperation(Token::Value op,
                                  OverwriteMode mode) {
   int int_value = Smi::cast(*value)->value();
   bool something_to_inline;
+  bool both_sides_are_smi = frame_->KnownSmiAt(0);
   switch (op) {
     case Token::ADD:
     case Token::SUB:
@@ -1213,7 +1304,10 @@ void CodeGenerator::SmiOperation(Token::Value op,
       something_to_inline = true;
       break;
     }
-    case Token::SHL:
+    case Token::SHL: {
+      something_to_inline = (both_sides_are_smi || !reversed);
+      break;
+    }
     case Token::SHR:
     case Token::SAR: {
       if (reversed) {
@@ -1250,17 +1344,18 @@ void CodeGenerator::SmiOperation(Token::Value op,
       // Push the rhs onto the virtual frame by putting it in a TOS register.
       Register rhs = frame_->GetTOSRegister();
       __ li(rhs, Operand(value));
-      frame_->EmitPush(rhs);
-      VirtualFrameBinaryOperation(op, mode, int_value);
+      frame_->EmitPush(rhs, TypeInfo::Smi());
+      GenericBinaryOperation(op, mode, GENERATE_INLINE_SMI, int_value);
     } else {
       // Pop the rhs, then push lhs and rhs in the right order.  Only performs
       // at most one pop, the rest takes place in TOS registers.
       Register lhs = frame_->GetTOSRegister();
       Register rhs = frame_->PopToRegister(lhs);
       __ li(lhs, Operand(value));
-      frame_->EmitPush(lhs);
-      frame_->EmitPush(rhs);
-      VirtualFrameBinaryOperation(op, mode, kUnknownIntValue);
+      frame_->EmitPush(lhs, TypeInfo::Smi());
+      TypeInfo t = both_sides_are_smi ? TypeInfo::Smi() : TypeInfo::Unknown();
+      frame_->EmitPush(rhs, t);
+      GenericBinaryOperation(op, mode, GENERATE_INLINE_SMI, kUnknownIntValue);
     }
     return;
   }
@@ -1314,8 +1409,10 @@ void CodeGenerator::SmiOperation(Token::Value op,
       __ and_(scratch2, scratch2, scratch1);
       // Overflow occurred if result is negative.
       deferred->Branch(lt, scratch2, Operand(zero_reg));
-      __ And(scratch0, v0, Operand(kSmiTagMask));
-      deferred->Branch(ne, scratch0, Operand(zero_reg));
+      if (!both_sides_are_smi) {
+        __ And(scratch0, v0, Operand(kSmiTagMask));
+        deferred->Branch(ne, scratch0, Operand(zero_reg));
+      }
       deferred->BindExit();
       __ mov(tos, v0);
       frame_->EmitPush(tos);
@@ -1325,33 +1422,76 @@ void CodeGenerator::SmiOperation(Token::Value op,
     case Token::BIT_OR:
     case Token::BIT_XOR:
     case Token::BIT_AND: {
-      Register scratch = VirtualFrame::scratch0();
-      DeferredCode* deferred =
-        new DeferredInlineSmiOperation(op, int_value, reversed, mode, tos);
-      __ And(scratch, tos, Operand(kSmiTagMask));
-      deferred->Branch(ne, scratch, Operand(zero_reg));
-      switch (op) {
-        case Token::BIT_OR:  __ Or(v0, tos, Operand(value)); break;
-        case Token::BIT_XOR: __ Xor(v0, tos, Operand(value)); break;
-        case Token::BIT_AND: __ And(v0, tos, Operand(value)); break;
-        default: UNREACHABLE();
+     if (both_sides_are_smi) {
+         switch (op) {
+          case Token::BIT_OR:  __ Or(v0, tos, Operand(value)); break;
+          case Token::BIT_XOR: __ Xor(v0, tos, Operand(value)); break;
+          case Token::BIT_AND: __ And(v0, tos, Operand(value)); break;
+          default: UNREACHABLE();
+        }
+        __ mov(tos, v0);
+        frame_->EmitPush(tos, TypeInfo::Smi());
+      } else {
+        Register scratch = VirtualFrame::scratch0();
+        DeferredCode* deferred =
+          new DeferredInlineSmiOperation(op, int_value, reversed, mode, tos);
+        __ And(scratch, tos, Operand(kSmiTagMask));
+        deferred->Branch(ne, scratch, Operand(zero_reg));
+        switch (op) {
+          case Token::BIT_OR:  __ Or(v0, tos, Operand(value)); break;
+          case Token::BIT_XOR: __ Xor(v0, tos, Operand(value)); break;
+          case Token::BIT_AND: __ And(v0, tos, Operand(value)); break;
+          default: UNREACHABLE();
+        }
+        deferred->BindExit();
+        TypeInfo result_type =
+            (op == Token::BIT_AND) ? TypeInfo::Smi() : TypeInfo::Integer32();
+        __ mov(tos, v0);
+        frame_->EmitPush(tos, result_type);
       }
-      deferred->BindExit();
-      __ mov(tos, v0);
-      frame_->EmitPush(tos);
       break;
     }
 
     case Token::SHL:
+      if (reversed) {
+        ASSERT(both_sides_are_smi);
+        int max_shift = 0;
+        int max_result = int_value == 0 ? 1 : int_value;
+        while (Smi::IsValid(max_result << 1)) {
+          max_shift++;
+          max_result <<= 1;
+        }
+        DeferredCode* deferred =
+          new DeferredInlineSmiOperation(op, int_value, true, mode, tos);
+        // Mask off the last 5 bits of the shift operand (rhs).  This is part
+        // of the definition of shift in JS and we know we have a Smi so we
+        // can safely do this.  The masked version gets passed to the
+        // deferred code, but that makes no difference.
+        __ And(tos, tos, Operand(Smi::FromInt(0x1f)));
+        deferred->Branch(ge, tos, Operand(Smi::FromInt(max_shift)));
+        Register scratch = VirtualFrame::scratch0();
+        __ sra(scratch, tos, kSmiTagSize);  // Untag.
+        __ li(tos, Operand(Smi::FromInt(int_value)));    // Load constant.
+        __ sllv(tos, tos, scratch);          // Shift constant.
+        deferred->BindExit();
+        TypeInfo result = TypeInfo::Integer32();
+        frame_->EmitPush(tos, result);
+        break;
+      }
+      // Fall through!
     case Token::SHR:
     case Token::SAR: {
       ASSERT(!reversed);
+      TypeInfo result = TypeInfo::Integer32();
       Register scratch = VirtualFrame::scratch0();
       int shift_value = int_value & 0x1f;  // least significant 5 bits
       DeferredCode* deferred =
         new DeferredInlineSmiOperation(op, shift_value, false, mode, tos);
-      __ And(v0, tos, Operand(kSmiTagMask));
-      deferred->Branch(ne, v0, Operand(zero_reg));
+      bool skip_smi_test = both_sides_are_smi;
+      if (!skip_smi_test) {
+        __ And(v0, tos, Operand(kSmiTagMask));
+        deferred->Branch(ne, v0, Operand(zero_reg));
+      }
       __ sra(v0, tos, kSmiTagSize);  // Remove tag.
       switch (op) {
         case Token::SHL: {
@@ -1376,6 +1516,9 @@ void CodeGenerator::SmiOperation(Token::Value op,
           // Check that the result fits in a Smi.
           __ And(scratch, v0, Operand(0xc0000000));
           deferred->Branch(ne, scratch, Operand(zero_reg));
+          if (shift_value >= 2) {
+            result = TypeInfo::Smi();
+          }
           break;
         }
         case Token::SAR: {
@@ -1409,7 +1552,9 @@ void CodeGenerator::SmiOperation(Token::Value op,
       __ And(v0, tos, Operand(mask));
       deferred->BindExit();
       __ mov(tos, v0);
-      frame_->EmitPush(tos);
+      // Mod of positive power of 2 Smi gives a Smi if the lhs is an integer.
+      frame_->EmitPush(
+              tos, both_sides_are_smi ? TypeInfo::Smi() : TypeInfo::Number());
       break;
     }
 
@@ -1466,14 +1611,20 @@ void CodeGenerator::Comparison(Condition cc,
   Register lhs;
   Register rhs;
 
+  bool lhs_is_smi;
+  bool rhs_is_smi;
   // We load the top two stack positions into registers chosen by the virtual
   // frame.  This should keep the register shuffling to a minimum.
   // Implement '>' and '<=' by reversal to obtain ECMA-262 conversion order.
   if (cc == gt || cc == le) {
     cc = ReverseCondition(cc);
+    lhs_is_smi = frame_->KnownSmiAt(0);
+    rhs_is_smi = frame_->KnownSmiAt(1);
     lhs = frame_->PopToRegister();
     rhs = frame_->PopToRegister(lhs);  // Don't pop to the same register again!
   } else {
+    rhs_is_smi = frame_->KnownSmiAt(0);
+    lhs_is_smi = frame_->KnownSmiAt(1);
     rhs = frame_->PopToRegister();
     lhs = frame_->PopToRegister(rhs);  // Don't pop to the same register again!
   }
@@ -1481,12 +1632,25 @@ void CodeGenerator::Comparison(Condition cc,
   ASSERT(rhs.is(a0) || rhs.is(a1));
   ASSERT(lhs.is(a0) || lhs.is(a1));
 
+  bool both_sides_are_smi = (lhs_is_smi && rhs_is_smi);
+  JumpTarget exit;
+
+  if (!both_sides_are_smi) {
   // Now we have the two sides in a0 and a1.  We flush any other registers
   // because the stub doesn't know about register allocation.
-  frame_->SpillAll();
-  Register scratch = VirtualFrame::scratch0();
-  __ Or(scratch, lhs, rhs);
-  __ And(scratch, scratch, kSmiTagMask);
+    frame_->SpillAll();
+    Register scratch = VirtualFrame::scratch0();
+    Register smi_test_reg;
+    if (lhs_is_smi) {
+      smi_test_reg = rhs;
+    } else if (rhs_is_smi) {
+      smi_test_reg = lhs;
+    } else {
+      __ Or(scratch, lhs, rhs);
+      smi_test_reg = scratch;
+    }
+
+  __ And(scratch, smi_test_reg, kSmiTagMask);
   JumpTarget smi;
   smi.Branch(eq, scratch, Operand(zero_reg), no_hint);
 
@@ -1501,11 +1665,12 @@ void CodeGenerator::Comparison(Condition cc,
   frame_->CallStub(&stub, 0);
   __ mov(condReg1, v0);
   __ li(condReg2, Operand(0));
-  JumpTarget exit;
+
   exit.Jump();
 
   // Do smi comparisons by pointer comparison.
   smi.Bind();
+  }
   __ mov(condReg1, lhs);
   __ mov(condReg2, rhs);
 
@@ -2318,6 +2483,16 @@ void CodeGenerator::VisitForStatement(ForStatement* node) {
   node->break_target()->SetExpectedHeight();
   IncrementLoopNesting();
 
+  // We know that the loop index is a smi if it is not modified in the
+  // loop body and it is checked against a constant limit in the loop
+  // condition.  In this case, we reset the static type information of the
+  // loop index to smi before compiling the body, the update expression, and
+  // the bottom check of the loop condition.
+  TypeInfoCodeGenState type_info_scope(this,
+                                       node->is_fast_smi_loop() ?
+                                           node->loop_variable()->slot() :
+                                           NULL,
+                                       TypeInfo::Smi());
   // If there is no update statement, label the top of the loop with the
   // continue target, otherwise with the loop target.
   JumpTarget loop(JumpTarget::BIDIRECTIONAL);
@@ -2992,7 +3167,7 @@ void CodeGenerator::VisitSlot(Slot* node) {
   int original_height = frame_->height();
 #endif
   Comment cmnt(masm_, "[ Slot");
-  LoadFromSlotCheckForArguments(node, typeof_state());
+  LoadFromSlotCheckForArguments(node, NOT_INSIDE_TYPEOF);
   ASSERT_EQ(original_height + 1, frame_->height());
 }
 
@@ -3022,8 +3197,9 @@ void CodeGenerator::VisitLiteral(Literal* node) {
 #endif
   Comment cmnt(masm_, "[ Literal");
   Register reg = frame_->GetTOSRegister();
+  bool is_smi = node->handle()->IsSmi();
   __ li(reg, Operand(node->handle()));
-  frame_->EmitPush(reg);
+  frame_->EmitPush(reg, is_smi ? TypeInfo::Smi() : TypeInfo::Unknown());
   ASSERT_EQ(original_height + 1, frame_->height());
 }
 
@@ -3255,9 +3431,16 @@ void CodeGenerator::EmitSlotAssignment(Assignment* node) {
                    false,
                    overwrite_value ? OVERWRITE_RIGHT : NO_OVERWRITE);
     } else {
+      GenerateInlineSmi inline_smi =
+          loop_nesting() > 0 ? GENERATE_INLINE_SMI : DONT_GENERATE_INLINE_SMI;
+      if (literal != NULL) {
+        ASSERT(!literal->handle()->IsSmi());
+        inline_smi = DONT_GENERATE_INLINE_SMI;
+      }
       Load(node->value());
-      VirtualFrameBinaryOperation(
-          node->binary_op(), overwrite_value ? OVERWRITE_RIGHT : NO_OVERWRITE);
+      GenericBinaryOperation(node->binary_op(),
+                             overwrite_value ? OVERWRITE_RIGHT : NO_OVERWRITE,
+                             inline_smi);
     }
   } else {
     Load(node->value());
@@ -3348,9 +3531,16 @@ void CodeGenerator::EmitNamedPropertyAssignment(Assignment* node) {
                    false,
                    overwrite_value ? OVERWRITE_RIGHT : NO_OVERWRITE);
     } else {
+      GenerateInlineSmi inline_smi =
+          loop_nesting() > 0 ? GENERATE_INLINE_SMI : DONT_GENERATE_INLINE_SMI;
+      if (literal != NULL) {
+        ASSERT(!literal->handle()->IsSmi());
+        inline_smi = DONT_GENERATE_INLINE_SMI;
+      }
       Load(node->value());
-      VirtualFrameBinaryOperation(
-          node->binary_op(), overwrite_value ? OVERWRITE_RIGHT : NO_OVERWRITE);
+      GenericBinaryOperation(node->binary_op(),
+                             overwrite_value ? OVERWRITE_RIGHT : NO_OVERWRITE,
+                             inline_smi);
     }
   } else {
     // For non-compound assignment just load the right-hand side.
@@ -3455,9 +3645,16 @@ void CodeGenerator::EmitKeyedPropertyAssignment(Assignment* node) {
                    false,
                    overwrite_value ? OVERWRITE_RIGHT : NO_OVERWRITE);
     } else {
+      GenerateInlineSmi inline_smi =
+          loop_nesting() > 0 ? GENERATE_INLINE_SMI : DONT_GENERATE_INLINE_SMI;
+      if (literal != NULL) {
+        ASSERT(!literal->handle()->IsSmi());
+        inline_smi = DONT_GENERATE_INLINE_SMI;
+      }
       Load(node->value());
-      VirtualFrameBinaryOperation(
-          node->binary_op(), overwrite_value ? OVERWRITE_RIGHT : NO_OVERWRITE);
+      GenericBinaryOperation(node->binary_op(),
+                             overwrite_value ? OVERWRITE_RIGHT : NO_OVERWRITE,
+                             inline_smi);
     }
   } else {
     // For non-compound assignment just load the right-hand side.
@@ -5083,9 +5280,36 @@ void CodeGenerator::VisitCountOperation(CountOperation* node) {
 
   Variable* var = node->expression()->AsVariableProxy()->AsVariable();
   bool is_const = (var != NULL && var->mode() == Variable::CONST);
+  bool is_slot = (var != NULL && var->mode() == Variable::VAR);
 
-  if (is_postfix) {
+  if (!is_const && is_slot && type_info(var->slot()).IsSmi()) {
+    // The type info declares that this variable is always a Smi.  That
+    // means it is a Smi both before and after the increment/decrement.
+    // Lets make use of that to make a very minimal count.
+    Reference target(this, node->expression(), !is_const);
+    ASSERT(!target.is_illegal());
+    target.GetValue();  // Pushes the value.
+    Register value = frame_->PopToRegister();
+    if (is_postfix) frame_->EmitPush(value);
+    if (is_increment) {
+      __ Addu(value, value, Operand(Smi::FromInt(1)));
+    } else {
+      __ Subu(value, value, Operand(Smi::FromInt(1)));
+    }
+    frame_->EmitPush(value);
+    target.SetValue(NOT_CONST_INIT);
+    if (is_postfix) frame_->Pop();
+    ASSERT_EQ(original_height + 1, frame_->height());
+    return;
+  }
+
+  // If it's a postfix expression and its result is not ignored and the
+  // reference is non-trivial, then push a placeholder on the stack now
+  // to hold the result of the expression.
+  bool placeholder_pushed = false;
+  if (!is_slot && is_postfix) {
     frame_->EmitPush(Operand(Smi::FromInt(0)));
+    placeholder_pushed = true;
   }
 
   // A constant reference is not saved to, so a constant reference is not a
@@ -5094,7 +5318,7 @@ void CodeGenerator::VisitCountOperation(CountOperation* node) {
     if (target.is_illegal()) {
       // Spoof the virtual frame to have the expected height (one higher
       // than on entry).
-      if (!is_postfix) {
+      if (!placeholder_pushed) {
         frame_->EmitPush(Operand(Smi::FromInt(0)));
       }
       ASSERT_EQ(original_height + 1, frame_->height());
@@ -5107,15 +5331,20 @@ void CodeGenerator::VisitCountOperation(CountOperation* node) {
     JumpTarget slow;
     JumpTarget exit;
 
-    // Check for smi operand.
     Register value = frame_->PopToRegister();
-    __ And(t0, value, Operand(kSmiTagMask));
-    slow.Branch(ne, t0, Operand(zero_reg));
 
     // Postfix: Store the old value as the result.
-    if (is_postfix) {
+    if (placeholder_pushed) {
       frame_->SetElementAt(value, target.size());
+    } else if (is_postfix) {
+      frame_->EmitPush(value);
+      __ mov(VirtualFrame::scratch0(), value);
+      value = VirtualFrame::scratch0();
     }
+
+    // Check for smi operand.
+    __ And(t0, value, Operand(kSmiTagMask));
+    slow.Branch(ne, t0, Operand(zero_reg));
 
     // Perform optimistic increment/decrement and check for overflow.
     // If we don't overflow we are done.
@@ -5294,19 +5523,31 @@ void CodeGenerator::VisitBinaryOperation(BinaryOperation* node) {
     if (rliteral != NULL && rliteral->handle()->IsSmi()) {
       VirtualFrame::RegisterAllocationScope scope(this);
       Load(node->left());
+      if (frame_->KnownSmiAt(0)) overwrite_left = false;
       SmiOperation(node->op(),
                    rliteral->handle(),
                    false,
-                   overwrite_right ? OVERWRITE_RIGHT : NO_OVERWRITE);
+                   overwrite_left ? OVERWRITE_LEFT : NO_OVERWRITE);
 
     } else if (lliteral != NULL && lliteral->handle()->IsSmi()) {
       VirtualFrame::RegisterAllocationScope scope(this);
       Load(node->right());
+      if (frame_->KnownSmiAt(0)) overwrite_right = false;
       SmiOperation(node->op(),
                    lliteral->handle(),
                    true,
-                   overwrite_left ? OVERWRITE_LEFT : NO_OVERWRITE);
+                   overwrite_right ? OVERWRITE_RIGHT : NO_OVERWRITE);
     } else {
+      GenerateInlineSmi inline_smi =
+          loop_nesting() > 0 ? GENERATE_INLINE_SMI : DONT_GENERATE_INLINE_SMI;
+      if (lliteral != NULL) {
+        ASSERT(!lliteral->handle()->IsSmi());
+        inline_smi = DONT_GENERATE_INLINE_SMI;
+      }
+      if (rliteral != NULL) {
+        ASSERT(!rliteral->handle()->IsSmi());
+        inline_smi = DONT_GENERATE_INLINE_SMI;
+      }
       VirtualFrame::RegisterAllocationScope scope(this);
       OverwriteMode overwrite_mode = NO_OVERWRITE;
       if (overwrite_left) {
@@ -5316,7 +5557,7 @@ void CodeGenerator::VisitBinaryOperation(BinaryOperation* node) {
       }
       Load(node->left());
       Load(node->right());
-      VirtualFrameBinaryOperation(node->op(), overwrite_mode);
+      GenericBinaryOperation(node->op(), overwrite_mode, inline_smi);
     }
   }
   ASSERT(!has_valid_frame() ||
@@ -5810,6 +6051,7 @@ void CodeGenerator::EmitKeyedLoad() {
                         frame_->scratch0(), frame_->scratch1());
 
     // Load the key and receiver from the stack.
+    bool key_is_known_smi = frame_->KnownSmiAt(0);
     Register key = frame_->PopToRegister();
     Register receiver = frame_->PopToRegister(key);
     VirtualFrame::SpilledScope spilled(frame_);
@@ -5832,9 +6074,14 @@ void CodeGenerator::EmitKeyedLoad() {
       // Check the map. The null map used below is patched by the inline cache
       // code.
       __ lw(scratch1, FieldMemOperand(receiver, HeapObject::kMapOffset));
+       // Check that the key is a smi.
+      if (!key_is_known_smi) {
+        __ And(scratch2, key, Operand(kSmiTagMask));
+        deferred->Branch(ne, scratch2, Operand(zero_reg));
+      }
 #ifdef DEBUG
-    Label check_inlined_codesize;
-    masm_->bind(&check_inlined_codesize);
+      Label check_inlined_codesize;
+      masm_->bind(&check_inlined_codesize);
 #endif
       __ li(scratch2, Operand(Factory::null_value()), true);
       deferred->Branch(ne, scratch1, Operand(scratch2));

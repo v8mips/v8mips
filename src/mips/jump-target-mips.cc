@@ -57,6 +57,11 @@ void JumpTarget::DoJump() {
   ASSERT(cgen()->HasValidEntryRegisters());
 
   if (entry_frame_set_) {
+    if (entry_label_.is_bound()) {
+      // If we already bound and generated code at the destination then it
+      // is too late to ask for less optimistic type assumptions.
+      ASSERT(entry_frame_.IsCompatibleWith(cgen()->frame()));
+    }
     // There is already a frame expectation at the target.
     cgen()->frame()->MergeTo(&entry_frame_);
     cgen()->DeleteFrame();
@@ -77,6 +82,11 @@ void JumpTarget::DoBranch(Condition cc, Hint ignored,
   ASSERT(cgen()->has_valid_frame());
 
   if (entry_frame_set_) {
+    if (entry_label_.is_bound()) {
+      // If we already bound and generated code at the destination then it
+      // is too late to ask for less optimistic type assumptions.
+      ASSERT(entry_frame_.IsCompatibleWith(cgen()->frame()));
+    }
     // Backward branch.  We have an expected frame to merge to on the
     // backward edge.
     cgen()->frame()->MergeTo(&entry_frame_, cc, src1, src2);

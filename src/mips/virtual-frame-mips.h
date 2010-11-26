@@ -155,10 +155,8 @@ class VirtualFrame : public ZoneObject {
   // Forget elements from the top of the frame to match an actual frame (eg,
   // the frame after a runtime call). No code is emitted except to bring the
   // frame to a spilled state.
-  void Forget(int count) {
-    SpillAll();
-    element_count_ -= count;
-  }
+  void Forget(int count);
+
 
   // Spill all values from the frame to memory.
   void SpillAll();
@@ -190,6 +188,15 @@ class VirtualFrame : public ZoneObject {
                Register r1 = no_reg,
                const Operand& r2 = Operand(no_reg));
 
+  void MergeTo(VirtualFrame* expected,
+               Condition cond = al,
+               Register r1 = no_reg,
+               const Operand& r2 = Operand(no_reg));
+
+  // Checks whether this frame can be branched to by the other frame.
+  bool IsCompatibleWith(const VirtualFrame* other) const {
+    return (tos_known_smi_map_ & (~other->tos_known_smi_map_)) == 0;
+  }
   // Detach a frame from its code generator, perhaps temporarily. This
   // tells the register allocator that it is free to use frame-internal
   // registers. Used when the code generator's frame is switched from this
@@ -237,6 +244,10 @@ class VirtualFrame : public ZoneObject {
     return MemOperand(sp, adjusted_index * kPointerSize);
   }
 
+  bool KnownSmiAt(int index) {
+    if (index >= kTOSKnownSmiMapSize) return false;
+    return (tos_known_smi_map_ & (1 << index)) != 0;
+  }
   // A frame-allocated local as an assembly operand.
   inline MemOperand LocalAt(int index);
 
@@ -359,9 +370,9 @@ class VirtualFrame : public ZoneObject {
 
   // Push an element on top of the expression stack and emit a
   // corresponding push instruction.
-  void EmitPush(Register reg);
-  void EmitPush(Operand operand);
-  void EmitPush(MemOperand operand);
+  void EmitPush(Register reg, TypeInfo type_info = TypeInfo::Unknown());
+  void EmitPush(Operand operand, TypeInfo type_info = TypeInfo::Unknown());
+  void EmitPush(MemOperand operand, TypeInfo type_info = TypeInfo::Unknown());
   void EmitPushRoot(Heap::RootListIndex index);
 
   // Overwrite the nth thing on the stack.  If the nth position is in a
