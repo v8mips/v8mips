@@ -6069,9 +6069,12 @@ void CodeGenerator::EmitKeyedLoad() {
       // Get the elements array from the receiver and check that it
       // is not a dictionary.
       __ lw(scratch1, FieldMemOperand(receiver, JSObject::kElementsOffset));
-      __ lw(scratch2, FieldMemOperand(scratch1, JSObject::kMapOffset));
-      __ LoadRoot(at, Heap::kFixedArrayMapRootIndex);
-      deferred->Branch(ne, scratch2, Operand(at));
+      if (FLAG_debug_code) {
+        __ lw(scratch2, FieldMemOperand(scratch1, JSObject::kMapOffset));
+        __ LoadRoot(at, Heap::kFixedArrayMapRootIndex);
+        __ Assert(eq, "JSObject with fast elements map has slow elements",
+                  scratch2, Operand(at));
+      }
 
       // Check that key is within bounds. Use unsigned comparison to handle
       // negative keys.
@@ -6090,7 +6093,7 @@ void CodeGenerator::EmitKeyedLoad() {
       deferred->Branch(eq, scratch1, Operand(scratch2));
 
       __ mov(v0, scratch1);
-      ASSERT_EQ(kInlinedKeyedLoadInstructionsAfterPatch,
+      ASSERT_EQ(GetInlinedKeyedLoadInstructionsAfterPatch(),
                 masm_->InstructionsGeneratedSince(&check_inlined_codesize));
     }
 

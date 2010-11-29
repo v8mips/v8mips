@@ -727,6 +727,10 @@ class Assembler : public Malloced {
     trampoline_pool_blocked_nesting_--;
   }
 
+  bool is_trampoline_pool_blocked() const {
+    return trampoline_pool_blocked_nesting_ > 0;
+  }
+
  private:
   // Code buffer:
   // The buffer into which code and relocation info are generated.
