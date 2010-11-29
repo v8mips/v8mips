@@ -110,19 +110,6 @@ void ICRuntimeCallHelper::AfterCall(MacroAssembler* masm) const {
 
 CodeGenState::CodeGenState(CodeGenerator* owner)
     : owner_(owner),
-
-
-
-
-
-
-
-
-
-
-
-
-
       previous_(owner->state()) {
   owner->set_state(this);
 }
@@ -432,20 +419,9 @@ void CodeGenerator::UnloadReference(Reference* ref) {
 
 int CodeGenerator::NumberOfSlot(Slot* slot) {
   if (slot == NULL) return kInvalidSlotNumber;
-
-
-
-
-
-
-
-
-
-
   switch (slot->type()) {
     case Slot::PARAMETER:
       return slot->index();
-
     case Slot::LOCAL:
       return slot->index() + scope()->num_parameters();
     default:
