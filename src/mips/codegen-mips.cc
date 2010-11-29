@@ -7042,11 +7042,11 @@ static void EmitCheckForTwoHeapNumbers(MacroAssembler* masm,
                                        Label* both_loaded_as_doubles,
                                        Label* not_heap_numbers,
                                        Label* slow) {
-  __ GetObjectType(a0, a2, a2);
+  __ GetObjectType(a0, a3, a2);
   __ Branch(not_heap_numbers, ne, a2, Operand(HEAP_NUMBER_TYPE));
-  __ GetObjectType(a1, a3, a3);
-  // First was a heap number, second wasn't. Go slow case.
-  __ Branch(not_heap_numbers, ne, a3, Operand(HEAP_NUMBER_TYPE));
+  __ lw(a2, FieldMemOperand(a1, HeapObject::kMapOffset));
+  // If first was a heap number & second wasn't, go to slow case.
+  __ Branch(slow, ne, a3, Operand(a2));
 
   // Both are heap numbers. Load them up then jump to the code we have
   // for that.
@@ -7064,21 +7064,42 @@ static void EmitCheckForTwoHeapNumbers(MacroAssembler* masm,
 }
 
 
-static void EmitCheckForSymbols(MacroAssembler* masm, Label* slow) {
+// Fast negative check for symbol-to-symbol equality.
+static void EmitCheckForSymbolsOrObjects(MacroAssembler* masm,
+                                         Label* possible_strings,
+                                         Label* not_both_strings) {
   // a2 is object type of a0.
   // Ensure that no non-strings have the symbol bit set.
-  ASSERT(kNotStringTag + kIsSymbolMask > LAST_TYPE);
+  Label object_test;
   ASSERT(kSymbolTag != 0);
-  __ And(t2, a2, Operand(kIsSymbolMask));
-  __ Branch(slow, eq, t2, Operand(zero_reg));
-  __ lw(a3, FieldMemOperand(a1, HeapObject::kMapOffset));
-  __ lbu(a3, FieldMemOperand(a3, Map::kInstanceTypeOffset));
-  __ And(t3, a3, Operand(kIsSymbolMask));
-  __ Branch(slow, eq, t3, Operand(zero_reg));
+  __ And(at, a2, Operand(kIsNotStringMask));
+  __ Branch(&object_test, ne, at, Operand(zero_reg));
+  __ And(at, a2, Operand(kIsSymbolMask));
+  __ Branch(possible_strings, eq, at, Operand(zero_reg));
+  __ GetObjectType(a1, a3, a3);
+  __ Branch(not_both_strings, ge, a3, Operand(FIRST_NONSTRING_TYPE));
+  __ And(at, a3, Operand(kIsSymbolMask));
+  __ Branch(possible_strings, eq, at, Operand(zero_reg));
 
   // Both are symbols. We already checked they weren't the same pointer
   // so they are not equal.
   __ li(v0, Operand(1));   // Non-zero indicates not equal.
+  __ Ret();
+
+  __ bind(&object_test);
+  __ Branch(not_both_strings, lt, a2, Operand(FIRST_JS_OBJECT_TYPE));
+  __ GetObjectType(a1, a2, a3);
+  __ Branch(not_both_strings, lt, a3, Operand(FIRST_JS_OBJECT_TYPE));
+
+  // If both objects are undetectable, they are equal.  Otherwise, they
+  // are not equal, since they are different objects and an object is not
+  // equal to undefined.
+  __ lw(a3, FieldMemOperand(a0, HeapObject::kMapOffset));
+  __ lbu(a2, FieldMemOperand(a2, Map::kBitFieldOffset));
+  __ lbu(a3, FieldMemOperand(a3, Map::kBitFieldOffset));
+  __ and_(a0, a2, a3);
+  __ And(a0, a0, Operand(1 << Map::kIsUndetectable));
+  __ Xor(v0, a0, Operand(1 << Map::kIsUndetectable));
   __ Ret();
 }
 
@@ -7266,9 +7287,10 @@ void CompareStub::Generate(MacroAssembler* masm) {
 
   __ bind(&check_for_symbols);
   if (cc_ == eq && !strict_) {
-    // Either jumps to slow or returns the answer. Assumes that a2 is the type
-    // of a0 on entry.
-    EmitCheckForSymbols(masm, &flat_string_check);
+    // Returns an answer for two symbols or two detectable objects.
+    // Otherwise jumps to string case or not both strings case.
+    // Assumes that a2 is the type of a0 on entry.
+    EmitCheckForSymbolsOrObjects(masm, &flat_string_check, &slow);
   }
 
   // Check for both being sequential ASCII strings, and inline if that is the
