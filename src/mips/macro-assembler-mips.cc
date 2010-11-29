@@ -165,19 +165,15 @@ void MacroAssembler::StoreRoot(Register source,
 
 
 void MacroAssembler::RecordWriteHelper(Register object,
-                                       Operand offset,
-                                       Register scratch0,
-                                       Register scratch1) {
+                                       Register address,
+                                       Register scratch) {
   if (FLAG_debug_code) {
     // Check that the object is not in new space.
     Label not_in_new_space;
-    InNewSpace(object, scratch1, ne, &not_in_new_space);
+    InNewSpace(object, scratch, ne, &not_in_new_space);
     Abort("new-space object passed to RecordWriteHelper");
     bind(&not_in_new_space);
   }
-
-  // Add offset into the object.
-  Addu(scratch0, object, offset);
 
   // Calculate page address.
   // Clear bits from 0 to kPageSizeBits by shifting
@@ -186,15 +182,15 @@ void MacroAssembler::RecordWriteHelper(Register object,
   sll(object, object, kPageSizeBits);
 
   // Calculate region number.
-  ext(scratch0, scratch0, Page::kRegionSizeLog2,
+  ext(address, address, Page::kRegionSizeLog2,
       kPageSizeBits - Page::kRegionSizeLog2);
 
   // Mark region dirty.
-  lw(scratch1, MemOperand(object, Page::kDirtyFlagOffset));
+  lw(scratch, MemOperand(object, Page::kDirtyFlagOffset));
   li(at, Operand(1));
-  sllv(at, at, scratch0);
-  or_(scratch1, scratch1, at);
-  sw(scratch1, MemOperand(object, Page::kDirtyFlagOffset));
+  sllv(at, at, address);
+  or_(scratch, scratch, at);
+  sw(scratch, MemOperand(object, Page::kDirtyFlagOffset));
 }
 
 
@@ -208,7 +204,7 @@ void MacroAssembler::InNewSpace(Register object,
 }
 
 
-// Will clobber 3 registers: object, offset, scratch.  The
+// Will clobber 4 registers: object, scratch0, scratch1, at. The
 // register 'object' contains a heap object pointer.  The heap object
 // tag is shifted away.
 void MacroAssembler::RecordWrite(Register object,
@@ -226,8 +222,11 @@ void MacroAssembler::RecordWrite(Register object,
   // region marks for new space pages.
   InNewSpace(object, scratch0, eq, &done);
 
+  // Add offset into the object.
+  Addu(scratch0, object, offset);
+
   // Record the actual write.
-  RecordWriteHelper(object, offset, scratch0, scratch1);
+  RecordWriteHelper(object, scratch0, scratch1);
 
   bind(&done);
 
@@ -237,6 +236,38 @@ void MacroAssembler::RecordWrite(Register object,
     li(object, Operand(BitCast<int32_t>(kZapValue)));
     li(scratch0, Operand(BitCast<int32_t>(kZapValue)));
     li(scratch1, Operand(BitCast<int32_t>(kZapValue)));
+  }
+}
+
+
+// Will clobber 4 registers: object, address, scratch, ip.  The
+// register 'object' contains a heap object pointer.  The heap object
+// tag is shifted away.
+void MacroAssembler::RecordWrite(Register object,
+                                 Register address,
+                                 Register scratch) {
+  // The compiled code assumes that record write doesn't change the
+  // context register, so we check that none of the clobbered
+  // registers are cp.
+  ASSERT(!object.is(cp) && !address.is(cp) && !scratch.is(cp));
+
+  Label done;
+
+  // First, test that the object is not in the new space.  We cannot set
+  // region marks for new space pages.
+  InNewSpace(object, scratch, eq, &done);
+
+  // Record the actual write.
+  RecordWriteHelper(object, address, scratch);
+
+  bind(&done);
+
+  // Clobber all input registers when running with the debug-code flag
+  // turned on to provoke errors.
+  if (FLAG_debug_code) {
+    li(object, Operand(BitCast<int32_t>(kZapValue)));
+    li(address, Operand(BitCast<int32_t>(kZapValue)));
+    li(scratch, Operand(BitCast<int32_t>(kZapValue)));
   }
 }
 

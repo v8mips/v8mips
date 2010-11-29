@@ -7195,10 +7195,13 @@ void NumberToStringStub::Generate(MacroAssembler* masm) {
   __ TailCallRuntime(Runtime::kNumberToString, 1, 1);
 }
 
+
 void RecordWriteStub::Generate(MacroAssembler* masm) {
-  __ RecordWriteHelper(object_, Operand(offset_), offset_, scratch_);
+  __ addu(offset_, object_, offset_);
+  __ RecordWriteHelper(object_, offset_, scratch_);
   __ Ret();
 }
+
 
 // On entry a0 (lhs) and a1 (rhs) are the things to be compared. On exit, v0
 // is 0, positive, or negative (smi) to indicate the result of the comparison.

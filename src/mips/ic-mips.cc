@@ -60,12 +60,12 @@ static void GenerateGlobalInstanceTypeCheck(MacroAssembler* masm,
 
 // Generated code falls through if the receiver is a regular non-global
 // JS object with slow properties and no interceptors.
-static void GenerateDictionaryLoadReceiverCheck(MacroAssembler* masm,
-                                                Register receiver,
-                                                Register elements,
-                                                Register scratch0,
-                                                Register scratch1,
-                                                Label* miss) {
+static void GenerateStringDictionaryReceiverCheck(MacroAssembler* masm,
+                                                  Register receiver,
+                                                  Register elements,
+                                                  Register scratch0,
+                                                  Register scratch1,
+                                                  Label* miss) {
   // Register usage:
   //   receiver: holds the receiver on entry and is unchanged.
   //   elements: holds the property dictionary on fall through.
@@ -99,32 +99,16 @@ static void GenerateDictionaryLoadReceiverCheck(MacroAssembler* masm,
 }
 
 
-// Helper function used from LoadIC/CallIC GenerateNormal.
-// elements: Property dictionary. It is not clobbered if a jump to the miss
-//           label is done.
-// name:     Property name. It is not clobbered if a jump to the miss label is
-//           done
-// result:   Register for the result. It is only updated if a jump to the miss
-//           label is not done. Can be the same as elements or name clobbering
-//           one of these in the case of not jumping to the miss label.
-// The two scratch registers need to be different from elements, name and
-// result.
-// The generated code assumes that the receiver has slow properties,
-// is not a global object and does not have interceptors.
-static void GenerateDictionaryLoad(MacroAssembler* masm,
-                                   Label* miss,
-                                   Register elements,
-                                   Register name,
-                                   Register result,
-                                   Register scratch1,
-                                   Register scratch2) {
-  // Main use of the scratch registers.
-  // scratch1: Used as temporary and to hold the capacity of the property
-  //           dictionary.
-  // scratch2: Used as temporary.
-
-  Label done;
-
+// Probe the string dictionary in the |elements| register. Jump to the
+// |done| label if a property with the given name is found. Jump to
+// the |miss| label otherwise.
+static void GenerateStringDictionaryProbes(MacroAssembler* masm,
+                                           Label* miss,
+                                           Label* done,
+                                           Register elements,
+                                           Register name,
+                                           Register scratch1,
+                                           Register scratch2) {
   // Compute the capacity mask.
   const int kCapacityOffset = StringDictionary::kHeaderSize +
       StringDictionary::kCapacityIndex * kPointerSize;
@@ -165,24 +149,125 @@ static void GenerateDictionaryLoad(MacroAssembler* masm,
     __ addu(scratch2, elements, at);
     __ lw(at, FieldMemOperand(scratch2, kElementsStartOffset));
     if (i != kProbes - 1) {
-      __ Branch(&done, eq, name, Operand(at));
+      __ Branch(done, eq, name, Operand(at));
     } else {
       __ Branch(miss, ne, name, Operand(at));
     }
   }
+}
 
-  // Check that the value is a normal property.
+
+// Helper function used from LoadIC/CallIC GenerateNormal.
+//
+// elements: Property dictionary. It is not clobbered if a jump to the miss
+//           label is done.
+// name:     Property name. It is not clobbered if a jump to the miss label is
+//           done
+// result:   Register for the result. It is only updated if a jump to the miss
+//           label is not done. Can be the same as elements or name clobbering
+//           one of these in the case of not jumping to the miss label.
+// The two scratch registers need to be different from elements, name and
+// result.
+// The generated code assumes that the receiver has slow properties,
+// is not a global object and does not have interceptors.
+// The address returned from GenerateStringDictionaryProbes() in scratch2
+// is used.
+static void GenerateDictionaryLoad(MacroAssembler* masm,
+                                   Label* miss,
+                                   Register elements,
+                                   Register name,
+                                   Register result,
+                                   Register scratch1,
+                                   Register scratch2) {
+  // Main use of the scratch registers.
+  // scratch1: Used as temporary and to hold the capacity of the property
+  //           dictionary.
+  // scratch2: Used as temporary.
+  Label done;
+
+  // Probe the dictionary.
+  GenerateStringDictionaryProbes(masm,
+                                 miss,
+                                 &done,
+                                 elements,
+                                 name,
+                                 scratch1,
+                                 scratch2);
+
+  // If probing finds an entry check that the value is a normal
+  // property.
   __ bind(&done);  // scratch2 == elements + 4 * index.
-  __ lw(scratch1,
-        FieldMemOperand(scratch2, kElementsStartOffset + 2 * kPointerSize));
-  __ And(scratch1,
+  const int kElementsStartOffset = StringDictionary::kHeaderSize +
+      StringDictionary::kElementsStartIndex * kPointerSize;
+  const int kDetailsOffset = kElementsStartOffset + 2 * kPointerSize;
+  __ lw(scratch1, FieldMemOperand(scratch2, kDetailsOffset));
+  __ And(at,
          scratch1,
          Operand(PropertyDetails::TypeField::mask() << kSmiTagSize));
-  __ Branch(miss, ne, scratch2, Operand(zero_reg));
+  __ Branch(miss, ne, at, Operand(zero_reg));
 
   // Get the value at the masked, scaled index and return.
   __ lw(result,
         FieldMemOperand(scratch2, kElementsStartOffset + 1 * kPointerSize));
+}
+
+
+// Helper function used from StoreIC::GenerateNormal.
+//
+// elements: Property dictionary. It is not clobbered if a jump to the miss
+//           label is done.
+// name:     Property name. It is not clobbered if a jump to the miss label is
+//           done
+// value:    The value to store.
+// The two scratch registers need to be different from elements, name and
+// result.
+// The generated code assumes that the receiver has slow properties,
+// is not a global object and does not have interceptors.
+// The address returned from GenerateStringDictionaryProbes() in scratch2
+// is used.
+static void GenerateDictionaryStore(MacroAssembler* masm,
+                                    Label* miss,
+                                    Register elements,
+                                    Register name,
+                                    Register value,
+                                    Register scratch1,
+                                    Register scratch2) {
+  // Main use of the scratch registers.
+  // scratch1: Used as temporary and to hold the capacity of the property
+  //           dictionary.
+  // scratch2: Used as temporary.
+  Label done;
+
+  // Probe the dictionary.
+  GenerateStringDictionaryProbes(masm,
+                                 miss,
+                                 &done,
+                                 elements,
+                                 name,
+                                 scratch1,
+                                 scratch2);
+
+  // If probing finds an entry in the dictionary check that the value
+  // is a normal property that is not read only.
+  __ bind(&done);  // scratch2 == elements + 4 * index
+  const int kElementsStartOffset = StringDictionary::kHeaderSize +
+      StringDictionary::kElementsStartIndex * kPointerSize;
+  const int kDetailsOffset = kElementsStartOffset + 2 * kPointerSize;
+  const int kTypeAndReadOnlyMask
+      = (PropertyDetails::TypeField::mask() |
+         PropertyDetails::AttributesField::encode(READ_ONLY)) << kSmiTagSize;
+  __ lw(scratch1, FieldMemOperand(scratch2, kDetailsOffset));
+  __ And(at, scratch1, Operand(kTypeAndReadOnlyMask));
+  __ Branch(miss, ne, at, Operand(zero_reg));
+
+  // Store the value at the masked, scaled index and return.
+  const int kValueOffset = kElementsStartOffset + kPointerSize;
+  __ Addu(scratch2, scratch2, Operand(kValueOffset - kHeapObjectTag));
+  __ sw(value, MemOperand(scratch2));
+
+  // Update the write barrier. Make sure not to clobber the value.
+  __ mov(scratch1, value);
+  __ RecordWrite(elements, scratch2, scratch1);
 }
 
 
@@ -562,7 +647,7 @@ static void GenerateCallNormal(MacroAssembler* masm, int argc) {
   // Get the receiver of the function from the stack into a1.
   __ lw(a1, MemOperand(sp, argc * kPointerSize));
 
-  GenerateDictionaryLoadReceiverCheck(masm, a1, a0, a3, t0, &miss);
+  GenerateStringDictionaryReceiverCheck(masm, a1, a0, a3, t0, &miss);
 
   // a0: elements
   // Search the dictionary - put result in register a1.
@@ -813,7 +898,7 @@ void LoadIC::GenerateNormal(MacroAssembler* masm) {
   // -----------------------------------
   Label miss;
 
-  GenerateDictionaryLoadReceiverCheck(masm, a0, a1, a3, t0, &miss);
+  GenerateStringDictionaryReceiverCheck(masm, a0, a1, a3, t0, &miss);
 
   // a1: elements
   GenerateDictionaryLoad(masm, &miss, a1, a2, v0, a3, t0);
@@ -2208,6 +2293,28 @@ void StoreIC::GenerateArrayLength(MacroAssembler* masm) {
 
   GenerateMiss(masm);
 }
+
+
+void StoreIC::GenerateNormal(MacroAssembler* masm) {
+  // ----------- S t a t e -------------
+  //  -- a0    : value
+  //  -- a1    : receiver
+  //  -- a2    : name
+  //  -- ra    : return address
+  // -----------------------------------
+  Label miss;
+
+  GenerateStringDictionaryReceiverCheck(masm, a1, a3, t0, t1, &miss);
+
+  GenerateDictionaryStore(masm, &miss, a3, a2, a0, t0, t1);
+  __ IncrementCounter(&Counters::store_normal_hit, 1, t0, t1);
+  __ Ret();
+
+  __ bind(&miss);
+  __ IncrementCounter(&Counters::store_normal_miss, 1, t0, t1);
+  GenerateMiss(masm);
+}
+
 
 #undef __
 
