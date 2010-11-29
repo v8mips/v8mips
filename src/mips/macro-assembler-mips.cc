@@ -2143,6 +2143,17 @@ void MacroAssembler::AllocateHeapNumber(Register result,
   sw(scratch1, FieldMemOperand(result, HeapObject::kMapOffset));
 }
 
+void MacroAssembler::AllocateHeapNumberWithValue(Register result,
+                                                 FPURegister value,
+                                                 Register scratch1,
+                                                 Register scratch2,
+                                                 Label* gc_required) {
+  AllocateHeapNumber(result, scratch1, scratch2, gc_required);
+  Subu(scratch1, result, Operand(kHeapObjectTag));
+  sdc1(value, MemOperand(scratch1, HeapNumber::kValueOffset));
+}
+
+
 
 void MacroAssembler::CheckMap(Register obj,
                               Register scratch,
@@ -2469,6 +2480,66 @@ void MacroAssembler::IllegalOperation(int num_arguments) {
   LoadRoot(v0, Heap::kUndefinedValueRootIndex);
 }
 
+void MacroAssembler::ObjectToDoubleFPURegister(Register object,
+                                               FPURegister result,
+                                               Register scratch1,
+                                               Register scratch2,
+                                               Register heap_number_map,
+                                               Label* not_number,
+                                               ObjectToDoubleFlags flags) {
+  Label done;
+  if ((flags & OBJECT_NOT_SMI) == 0) {
+    Label not_smi;
+    BranchOnNotSmi(object, &not_smi);
+    // Remove smi tag and convert to double.
+    sra(scratch1, object, kSmiTagSize);
+    mtc1(scratch1, result);
+    cvt_d_w(result, result);
+    Branch(&done);
+    bind(&not_smi);
+  }
+  // Check for heap number and load double value from it.
+  lw(scratch1, FieldMemOperand(object, HeapObject::kMapOffset));
+  Subu(scratch2, object, Operand(kHeapObjectTag));
+  Branch(not_number, ne, scratch1, Operand(heap_number_map));
+
+  if ((flags & AVOID_NANS_AND_INFINITIES) != 0) {
+    // If exponent is all ones the number is either a NaN or +/-Infinity.
+    lw(scratch1, FieldMemOperand(object, HeapNumber::kExponentOffset));
+    {
+      // Signed bitfield extraction, based on ARM's Sbfx macro.
+      // We cannot use the ext instruction, because it doesn't sign-extend.
+      int lsb = HeapNumber::kExponentShift;
+      int width = HeapNumber::kExponentBits;
+      Register dst = scratch1;
+      Register src = scratch1;
+
+      int mask = (1 << (width + lsb)) - 1 - ((1 << lsb) - 1);
+      And(dst, src, mask);
+      int shift_up = 32 - lsb - width;
+      int shift_down = lsb + shift_up;
+      if (shift_up != 0) {
+        sll(dst, dst, shift_up);
+      }
+      if (shift_down != 0) {
+        sra(dst, dst, shift_down);
+      }
+    }
+    // All-one value sign extend to -1.
+    Branch(not_number, eq, scratch1, Operand(-1));
+  }
+  ldc1(result, MemOperand(scratch2, HeapNumber::kValueOffset));
+  bind(&done);
+}
+
+
+void MacroAssembler::SmiToDoubleFPURegister(Register smi,
+                                            FPURegister value,
+                                            Register scratch1) {
+  sra(scratch1, smi, kSmiTagSize);
+  mtc1(scratch1, value);
+  cvt_d_w(value, value);
+}
 
 void MacroAssembler::CallRuntime(Runtime::Function* f, int num_arguments) {
   // All parameters are on the stack. v0 has the return value after call.

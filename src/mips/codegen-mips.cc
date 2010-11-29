@@ -4223,8 +4223,90 @@ void CodeGenerator::GenerateMathPow(ZoneList<Expression*>* args) {
   ASSERT(args->length() == 2);
   Load(args->at(0));
   Load(args->at(1));
-  frame_->CallRuntime(Runtime::kMath_pow, 2);
-  frame_->EmitPush(v0);
+
+  if (!CpuFeatures::IsSupported(FPU)) {
+    frame_->CallRuntime(Runtime::kMath_pow, 2);
+    frame_->EmitPush(v0);
+  } else {
+    CpuFeatures::Scope scope(FPU);
+    JumpTarget runtime, done;
+    Label not_minus_half, allocate_return;
+
+    Register scratch1 = VirtualFrame::scratch0();
+    Register scratch2 = VirtualFrame::scratch1();
+
+    // Get base and exponent to registers.
+    Register exponent = frame_->PopToRegister();
+    Register base = frame_->PopToRegister(exponent);
+
+    // Set the frame for the runtime jump target. The code below jumps to the
+    // jump target label so the frame needs to be established before that.
+    ASSERT(runtime.entry_frame() == NULL);
+    runtime.set_entry_frame(frame_);
+
+    __ BranchOnSmi(exponent, runtime.entry_label());
+
+    // Special handling of raising to the power of -0.5 and 0.5. First check
+    // that the value is a heap number and that the lower bits (which for both
+    // values are zero).
+    Register heap_number_map = t2;
+    __ LoadRoot(heap_number_map, Heap::kHeapNumberMapRootIndex);
+    __ lw(scratch1, FieldMemOperand(exponent, HeapObject::kMapOffset));
+    __ lw(scratch2, FieldMemOperand(exponent, HeapNumber::kMantissaOffset));
+    runtime.Branch(ne, scratch1, Operand(heap_number_map));
+    __ And(at, scratch1, scratch2);
+    runtime.Branch(ne, at, Operand(zero_reg));
+
+    // Load the e
+    __ lw(scratch1, FieldMemOperand(exponent, HeapNumber::kExponentOffset));
+
+    // Compare exponent with -0.5.
+    __ Branch(&not_minus_half, ne, scratch1, Operand(0xbfe00000));
+
+    // Get the double value from the base into fpu register f0.
+    __ ObjectToDoubleFPURegister(base, f0,
+                                 scratch1, scratch2, heap_number_map,
+                                 runtime.entry_label(),
+                                 AVOID_NANS_AND_INFINITIES);
+
+    // Load 1.0 into f2.
+    __ li(scratch2, 0x3ff00000);
+    __ mtc1(scratch2, f2);
+    __ mtc1(zero_reg, f3);
+
+    // Calculate the reciprocal of the square root. 1/sqrt(x) = sqrt(1/x).
+    __ div_d(f0, f2, f0);
+    __ sqrt_d(f0, f0);
+
+    __ Branch(&allocate_return);
+
+    __ bind(&not_minus_half);
+    // Compare exponent with 0.5.
+    runtime.Branch(ne, scratch1, Operand(0x3fe00000));
+
+      // Get the double value from the base into fpu register f0.
+    __ ObjectToDoubleFPURegister(base, f0,
+                                 scratch1, scratch2, heap_number_map,
+                                 runtime.entry_label(),
+                                 AVOID_NANS_AND_INFINITIES);
+    __ sqrt_d(f0, f0);
+
+    __ bind(&allocate_return);
+    __ AllocateHeapNumberWithValue(
+        base, f0, scratch1, scratch2, runtime.entry_label());
+    done.Jump();
+
+    runtime.Bind();
+
+    // Push back the arguments again for the runtime call.
+    frame_->EmitPush(base);
+    frame_->EmitPush(exponent);
+    frame_->CallRuntime(Runtime::kMath_pow, 2);
+    __ Move(base, v0);
+
+    done.Bind();
+    frame_->EmitPush(base);
+  }
 }
 
 
@@ -4256,11 +4338,52 @@ void CodeGenerator::GenerateMathCos(ZoneList<Expression*>* args) {
 }
 
 
+// Generates the Math.sqrt method.
 void CodeGenerator::GenerateMathSqrt(ZoneList<Expression*>* args) {
   ASSERT(args->length() == 1);
   Load(args->at(0));
-  frame_->CallRuntime(Runtime::kMath_sqrt, 1);
-  frame_->EmitPush(v0);
+
+  if (!CpuFeatures::IsSupported(FPU)) {
+    frame_->CallRuntime(Runtime::kMath_sqrt, 1);
+    frame_->EmitPush(v0);
+  } else {
+    CpuFeatures::Scope scope(FPU);
+    JumpTarget runtime, done;
+
+    Register scratch1 = VirtualFrame::scratch0();
+    Register scratch2 = VirtualFrame::scratch1();
+
+    // Get the value from the frame.
+    Register tos = frame_->PopToRegister();
+
+    // Set the frame for the runtime jump target. The code below jumps to the
+    // jump target label so the frame needs to be established before that.
+    ASSERT(runtime.entry_frame() == NULL);
+    runtime.set_entry_frame(frame_);
+
+    Register heap_number_map = t2;
+    __ LoadRoot(heap_number_map, Heap::kHeapNumberMapRootIndex);
+
+    // Get the double value from the heap number into fpu register f0.
+    __ ObjectToDoubleFPURegister(tos, f0,
+                                 scratch1, scratch2, heap_number_map,
+                                 runtime.entry_label());
+
+    // Calculate the square root of f0 and place result in a heap number object.
+    __ sqrt_d(f0, f0);
+    __ AllocateHeapNumberWithValue(
+        tos, f0, scratch1, scratch2, runtime.entry_label());
+    done.Jump();
+
+    runtime.Bind();
+    // Push back the argument again for the runtime call.
+    frame_->EmitPush(tos);
+    frame_->CallRuntime(Runtime::kMath_sqrt, 1);
+    __ Move(tos, v0);
+
+    done.Bind();
+    frame_->EmitPush(tos);
+  }
 }
 
 class DeferredStringCharCodeAt : public DeferredCode {

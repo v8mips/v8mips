@@ -26,6 +26,7 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include <stdlib.h>
+#include <math.h>
 #include <cstdarg>
 #include "v8.h"
 
@@ -1523,6 +1524,9 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
               break;
             case NEG_D:
               set_fpu_register_double(fd_reg, -fs);
+              break;
+            case SQRT_D:
+              set_fpu_register_double(fd_reg, sqrt(fs));
               break;
             case C_UN_D:
               set_fpu_ccr_bit(cc, isnan(fs) || isnan(ft));

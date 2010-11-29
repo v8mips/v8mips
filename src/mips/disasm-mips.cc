@@ -491,6 +491,9 @@ void Decoder::DecodeTypeRegister(Instruction* instr) {
             case NEG_D:
               Format(instr, "neg.d   'fd, 'fs");
               break;
+            case SQRT_D:
+              Format(instr, "sqrt.d   'fd, 'fs");
+              break;
             case CVT_W_D:
               Format(instr, "cvt.w.d 'fd, 'fs");
               break;

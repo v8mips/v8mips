@@ -1619,6 +1619,10 @@ void Assembler::neg_d(FPURegister fd, FPURegister fs) {
   GenInstrRegister(COP1, D, f0, fs, fd, NEG_D);
 }
 
+void Assembler::sqrt_d(FPURegister fd, FPURegister fs) {
+  GenInstrRegister(COP1, D, f0, fs, fd, SQRT_D);
+}
+
 
 // Conversions.
 

@@ -287,6 +287,7 @@ TEST(MIPS3) {
     double d;
     double e;
     double f;
+    double g;
   } T;
   T t;
 
@@ -316,6 +317,10 @@ TEST(MIPS3) {
   __ div_d(f12, f10, f4);
   __ sdc1(f12, MemOperand(a0, OFFSET_OF(T, f)) );   // f = e / a = 120.44
 
+  __ sqrt_d(f14, f12);
+  __ sdc1(f14, MemOperand(a0, OFFSET_OF(T, g)) );
+  // g = sqrt(f) = 10.97451593465515908537
+
   __ jr(ra);
   __ nop();
 
@@ -344,6 +349,7 @@ TEST(MIPS3) {
   CHECK_EQ(1.50550e14, t.d);
   CHECK_EQ(1.8066e16, t.e);
   CHECK_EQ(120.44, t.f);
+  CHECK_EQ(10.97451593465515908537, t.g);
 }
 
 

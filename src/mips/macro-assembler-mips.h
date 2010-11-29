@@ -78,6 +78,15 @@ enum AllocationFlags {
   SIZE_IN_WORDS = 1 << 2
 };
 
+// Flags used for the ObjectToDoubleFPURegister function.
+enum ObjectToDoubleFlags {
+  // No special flags.
+  NO_OBJECT_TO_DOUBLE_FLAGS = 0,
+  // Object is known to be a non smi.
+  OBJECT_NOT_SMI = 1 << 0,
+  // Don't load NaNs or infinities, branch to the non number case instead.
+  AVOID_NANS_AND_INFINITIES = 1 << 1
+};
 
 // MacroAssembler implements a collection of frequently used macros.
 class MacroAssembler: public Assembler {
@@ -331,6 +340,11 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
                           Register scratch1,
                           Register scratch2,
                           Label* gc_required);
+  void AllocateHeapNumberWithValue(Register result,
+                                   FPURegister value,
+                                   Register scratch1,
+                                   Register scratch2,
+                                   Label* gc_required);
 
   // ---------------------------------------------------------------------------
   // Instruction macros
@@ -607,6 +621,24 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
   // occurred.
   void IllegalOperation(int num_arguments);
 
+  // Load the value of a number object into a FPU double register. If the
+  // object is not a number a jump to the label not_number is performed
+  // and the FPU double register is unchanged.
+  void ObjectToDoubleFPURegister(
+      Register object,
+      FPURegister value,
+      Register scratch1,
+      Register scratch2,
+      Register heap_number_map,
+      Label* not_number,
+      ObjectToDoubleFlags flags = NO_OBJECT_TO_DOUBLE_FLAGS);
+
+  // Load the value of a smi object into a FPU double register. The register
+  // scratch1 can be the same register as smi in which case smi will hold the
+  // untagged value afterwards.
+  void SmiToDoubleFPURegister(Register smi,
+                              FPURegister value,
+                              Register scratch1);
 
   // -------------------------------------------------------------------------
   // Runtime calls

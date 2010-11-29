@@ -580,6 +580,7 @@ class Assembler : public Malloced {
   void abs_d(FPURegister fd, FPURegister fs);
   void mov_d(FPURegister fd, FPURegister fs);
   void neg_d(FPURegister fd, FPURegister fs);
+  void sqrt_d(FPURegister fd, FPURegister fs);
 
   // Conversion.
   void cvt_w_s(FPURegister fd, FPURegister fs);
