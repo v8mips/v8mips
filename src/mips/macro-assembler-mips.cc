@@ -175,14 +175,17 @@ void MacroAssembler::RecordWriteHelper(Register object,
     bind(&not_in_new_space);
   }
 
-  // Calculate page address.
-  // Clear bits from 0 to kPageSizeBits by shifting
-  // (this way we don't need to use the possibly slower Ins macro).
-  srl(object, object, kPageSizeBits);
-  sll(object, object, kPageSizeBits);
+  // Calculate page address: Clear bits from 0 to kPageSizeBits.
+  if (mips32r2) {
+    Ins(object, zero_reg, 0, kPageSizeBits);
+  } else {
+    // The Ins macro is slow on r1, so use shifts instead.
+    srl(object, object, kPageSizeBits);
+    sll(object, object, kPageSizeBits);
+  }
 
   // Calculate region number.
-  ext(address, address, Page::kRegionSizeLog2,
+  Ext(address, address, Page::kRegionSizeLog2,
       kPageSizeBits - Page::kRegionSizeLog2);
 
   // Mark region dirty.
@@ -613,6 +616,7 @@ void MacroAssembler::Sltu(Register rd, Register rs, const Operand& rt) {
   }
 }
 
+
 void MacroAssembler::Ror(Register rd, Register rs, const Operand& rt) {
   if (mips32r2) {
     if (rt.is_reg()) {
@@ -637,6 +641,7 @@ void MacroAssembler::Ror(Register rd, Register rs, const Operand& rt) {
     }
   }
 }
+
 
 //------------Pseudo-instructions-------------
 
@@ -735,6 +740,22 @@ void MacroAssembler::MultiPopReversed(RegList regs) {
   addiu(sp, sp, 4 * NumSaved);
 }
 
+
+void MacroAssembler::Ext(Register rt,
+                         Register rs,
+                         uint16_t pos,
+                         uint16_t size) {
+  if (mips32r2) {
+    ext_(rt, rs, pos, size);
+  } else {
+    // Move rs to rt and shift it left then right to get the
+    // desired bitfield on the right side and zeroes on the left.
+    sll(rt, rs, 32 - (pos + size));
+    srl(rt, rt, 32 - size);
+  }
+}
+
+
 void MacroAssembler::Ins(Register rt,
                          Register rs,
                          uint16_t pos,
@@ -768,11 +789,13 @@ void MacroAssembler::Ins(Register rt,
   }
 }
 
+
 void MacroAssembler::Cvt_d_uw(FPURegister fd, FPURegister fs) {
   // Move the data from fs to t4.
   mfc1(t4, fs);
   return Cvt_d_uw(fd, t4);
 }
+
 
 void MacroAssembler::Cvt_d_uw(FPURegister fd, Register rs) {
   // Convert rs to a FP value in fd (and fd + 1).
@@ -815,10 +838,12 @@ void MacroAssembler::Cvt_d_uw(FPURegister fd, Register rs) {
   bind(&conversion_done);
 }
 
+
 void MacroAssembler::Trunc_uw_d(FPURegister fd, FPURegister fs) {
   Trunc_uw_d(fs, t4);
   mtc1(t4, fd);
 }
+
 
 void MacroAssembler::Trunc_uw_d(FPURegister fd, Register rs) {
   ASSERT(!fd.is(f22));
@@ -852,6 +877,7 @@ void MacroAssembler::Trunc_uw_d(FPURegister fd, Register rs) {
 
   bind(&done);
 }
+
 
 // Emulated condtional branches do not emit a nop in the branch delay slot.
 //
@@ -1085,6 +1111,7 @@ void MacroAssembler::Branch(int16_t offset, Condition cond, Register rs,
     nop();
 }
 
+
 void MacroAssembler::Branch(Label* L,
                             bool ProtectBranchDelaySlot) {
   // We use branch_offset as an argument for the branch instructions to be sure
@@ -1096,6 +1123,7 @@ void MacroAssembler::Branch(Label* L,
   if (ProtectBranchDelaySlot)
     nop();
 }
+
 
 void MacroAssembler::Branch(Label* L, Condition cond, Register rs,
                             const Operand& rt,
@@ -1354,6 +1382,7 @@ void MacroAssembler::Branch(Label* L, Condition cond, Register rs,
     nop();
 }
 
+
 // We need to use a bgezal or bltzal, but they can't be used directly with the
 // slt instructions. We could use sub or add instead but we would miss overflow
 // cases, so we keep slt and add an intermediate third instruction.
@@ -1365,6 +1394,7 @@ void MacroAssembler::BranchAndLink(int16_t offset,
   if (ProtectBranchDelaySlot)
     nop();
 }
+
 
 void MacroAssembler::BranchAndLink(int16_t offset, Condition cond, Register rs,
                                    const Operand& rt,
@@ -1446,6 +1476,7 @@ void MacroAssembler::BranchAndLink(int16_t offset, Condition cond, Register rs,
   if (ProtectBranchDelaySlot)
     nop();
 }
+
 
 void MacroAssembler::BranchAndLink(Label* L,
                                    bool ProtectBranchDelaySlot) {
@@ -1554,6 +1585,7 @@ void MacroAssembler::BranchAndLink(Label* L, Condition cond, Register rs,
     nop();
 }
 
+
 void MacroAssembler::Jump(const Operand& target,
                           bool ProtectBranchDelaySlot) {
   if (target.is_reg()) {
@@ -1626,6 +1658,7 @@ void MacroAssembler::Call(const Operand& target,
     nop();
 }
 
+
 // Note: To call gcc-compiled C code on mips, you must call thru t9.
 void MacroAssembler::Call(const Operand& target,
                           Condition cond, Register rs, const Operand& rt,
@@ -1674,6 +1707,7 @@ void MacroAssembler::Drop(int count, Condition cond) {
   break_(__LINE__);
 }
 
+
 void MacroAssembler::Swap(Register reg1,
                           Register reg2,
                           Register scratch) {
@@ -1688,15 +1722,18 @@ void MacroAssembler::Swap(Register reg1,
   }
 }
 
+
 void MacroAssembler::Call(Label* target) {
   BranchAndLink(cc_always, target);
 }
+
 
 void MacroAssembler::Move(Register dst, Register src) {
   if (!dst.is(src)) {
     mov(dst, src);
   }
 }
+
 
 #ifdef ENABLE_DEBUGGER_SUPPORT
 // ---------------------------------------------------------------------------
@@ -2120,6 +2157,7 @@ void MacroAssembler::CheckMap(Register obj,
   Branch(fail, ne, scratch, Operand(at));
 }
 
+
 void MacroAssembler::CheckMap(Register obj,
                               Register scratch,
                               Heap::RootListIndex index,
@@ -2201,6 +2239,7 @@ void MacroAssembler::InvokePrologue(const ParameterCount& expected,
     bind(&regular_invoke);
   }
 }
+
 
 void MacroAssembler::InvokeCode(Register code,
                                 const ParameterCount& expected,

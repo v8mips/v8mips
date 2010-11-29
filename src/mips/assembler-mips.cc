@@ -1530,15 +1530,14 @@ void Assembler::ins_(Register rt, Register rs, uint16_t pos, uint16_t size) {
 }
 
 
-void Assembler::ext(Register rt, Register rs, uint16_t pos, uint16_t size) {
+void Assembler::ext_(Register rt, Register rs, uint16_t pos, uint16_t size) {
   if (mips32r2) {
     // Ext instr has 'rt' field as dest, and two uint5: msb, lsb.
     GenInstrRegister(SPECIAL3, rs, rt, size - 1, pos, EXT);
   } else {
-    // Move rs to rt and shift it left then right to get the
-    // desired bitfield on the right side and zeroes on the left.
-    sll(rt, rs, 32 - (pos + size));
-    srl(rt, rt, 32 - size);
+    // Just in case. This instruction should
+    // be called through MacroAssembler::Ext.
+    UNIMPLEMENTED_MIPS();
   }
 }
 

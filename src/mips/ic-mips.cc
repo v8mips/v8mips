@@ -555,7 +555,7 @@ static void GenerateIndexFromHash(MacroAssembler* masm,
   // runtime later. However as the new key is the numeric value of a string key
   // there is no difference in using either key.
   ASSERT(String::kHashShift >= kSmiTagSize);
-  __ ext(hash, hash, String::kHashShift, String::kArrayIndexValueBits);
+  __ Ext(hash, hash, String::kHashShift, String::kArrayIndexValueBits);
   __ sll(key, hash, kSmiTagSize);
 }
 

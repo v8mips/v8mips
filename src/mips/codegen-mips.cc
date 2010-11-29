@@ -8890,7 +8890,7 @@ static void GetInt32(MacroAssembler* masm,
     // Extract the top 10 bits, and insert those bottom 10 bits of scratch.
     // The width of the field here is the same as the shift amount above.
     const int field_width = shift_distance;
-    __ ext(scratch2, scratch2, 32-shift_distance, field_width);
+    __ Ext(scratch2, scratch2, 32-shift_distance, field_width);
     __ Ins(scratch, scratch2, 0, field_width);
     // Move down according to the exponent.
     __ srlv(scratch, scratch, dest);
