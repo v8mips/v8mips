@@ -2143,16 +2143,15 @@ void MacroAssembler::AllocateHeapNumber(Register result,
   sw(scratch1, FieldMemOperand(result, HeapObject::kMapOffset));
 }
 
+
 void MacroAssembler::AllocateHeapNumberWithValue(Register result,
                                                  FPURegister value,
                                                  Register scratch1,
                                                  Register scratch2,
                                                  Label* gc_required) {
   AllocateHeapNumber(result, scratch1, scratch2, gc_required);
-  Subu(scratch1, result, Operand(kHeapObjectTag));
-  sdc1(value, MemOperand(scratch1, HeapNumber::kValueOffset));
+  sdc1(value, FieldMemOperand(result, HeapNumber::kValueOffset));
 }
-
 
 
 void MacroAssembler::CheckMap(Register obj,
