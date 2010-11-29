@@ -748,37 +748,43 @@ void CodeGenerator::ToBoolean(JumpTarget* true_target,
                               JumpTarget* false_target) {
   // Note: The generated code snippet does not change stack variables.
   //       Only the condition code should be set.
+  bool known_smi = frame_->KnownSmiAt(0);
   Register tos = frame_->PopToRegister();
 
   // Fast case checks
 
   // Check if the value is 'false'.
-  __ LoadRoot(ip, Heap::kFalseValueRootIndex);
-  __ cmp(tos, ip);
-  false_target->Branch(eq);
+  if (!known_smi) {
+    __ LoadRoot(ip, Heap::kFalseValueRootIndex);
+    __ cmp(tos, ip);
+    false_target->Branch(eq);
 
-  // Check if the value is 'true'.
-  __ LoadRoot(ip, Heap::kTrueValueRootIndex);
-  __ cmp(tos, ip);
-  true_target->Branch(eq);
+    // Check if the value is 'true'.
+    __ LoadRoot(ip, Heap::kTrueValueRootIndex);
+    __ cmp(tos, ip);
+    true_target->Branch(eq);
 
-  // Check if the value is 'undefined'.
-  __ LoadRoot(ip, Heap::kUndefinedValueRootIndex);
-  __ cmp(tos, ip);
-  false_target->Branch(eq);
+    // Check if the value is 'undefined'.
+    __ LoadRoot(ip, Heap::kUndefinedValueRootIndex);
+    __ cmp(tos, ip);
+    false_target->Branch(eq);
+  }
 
   // Check if the value is a smi.
   __ cmp(tos, Operand(Smi::FromInt(0)));
-  false_target->Branch(eq);
-  __ tst(tos, Operand(kSmiTagMask));
-  true_target->Branch(eq);
 
-  // Slow case: call the runtime.
-  frame_->EmitPush(tos);
-  frame_->CallRuntime(Runtime::kToBool, 1);
-  // Convert the result (r0) to a condition code.
-  __ LoadRoot(ip, Heap::kFalseValueRootIndex);
-  __ cmp(r0, ip);
+  if (!known_smi) {
+    false_target->Branch(eq);
+    __ tst(tos, Operand(kSmiTagMask));
+    true_target->Branch(eq);
+
+    // Slow case: call the runtime.
+    frame_->EmitPush(tos);
+    frame_->CallRuntime(Runtime::kToBool, 1);
+    // Convert the result (r0) to a condition code.
+    __ LoadRoot(ip, Heap::kFalseValueRootIndex);
+    __ cmp(r0, ip);
+  }
 
   cc_reg_ = ne;
 }
@@ -1745,11 +1751,15 @@ void CodeGenerator::VisitDeclaration(Declaration* node) {
     val = node->fun();  // NULL if we don't have a function
   }
 
+
   if (val != NULL) {
+    WriteBarrierCharacter wb_info =
+        val->type()->IsLikelySmi() ? LIKELY_SMI : UNLIKELY_SMI;
+    if (val->AsLiteral() != NULL) wb_info = NEVER_NEWSPACE;
     // Set initial value.
     Reference target(this, node->proxy());
     Load(val);
-    target.SetValue(NOT_CONST_INIT);
+    target.SetValue(NOT_CONST_INIT, wb_info);
 
     // Get rid of the assigned value (declarations are statements).
     frame_->Drop();
@@ -2485,13 +2495,13 @@ void CodeGenerator::VisitForInStatement(ForInStatement* node) {
       if (each.size() > 0) {
         __ ldr(r0, frame_->ElementAt(each.size()));
         frame_->EmitPush(r0);
-        each.SetValue(NOT_CONST_INIT);
+        each.SetValue(NOT_CONST_INIT, UNLIKELY_SMI);
         frame_->Drop(2);
       } else {
         // If the reference was to a slot we rely on the convenient property
         // that it doesn't matter whether a value (eg, r3 pushed above) is
         // right on top of or right underneath a zero-sized reference.
-        each.SetValue(NOT_CONST_INIT);
+        each.SetValue(NOT_CONST_INIT, UNLIKELY_SMI);
         frame_->Drop();
       }
     }
@@ -3646,6 +3656,8 @@ void CodeGenerator::EmitKeyedPropertyAssignment(Assignment* node) {
   // Evaluate the receiver subexpression.
   Load(prop->obj());
 
+  WriteBarrierCharacter wb_info;
+
   // Change to slow case in the beginning of an initialization block to
   // avoid the quadratic behavior of repeatedly adding fast properties.
   if (node->starts_initialization_block()) {
@@ -3667,7 +3679,7 @@ void CodeGenerator::EmitKeyedPropertyAssignment(Assignment* node) {
   // [tos]   : key
   // [tos+1] : receiver
   // [tos+2] : receiver if at the end of an initialization block
-
+  //
   // Evaluate the right-hand side.
   if (node->is_compound()) {
     // For a compound assignment the right-hand side is a binary operation
@@ -3699,9 +3711,13 @@ void CodeGenerator::EmitKeyedPropertyAssignment(Assignment* node) {
                              overwrite_value ? OVERWRITE_RIGHT : NO_OVERWRITE,
                              inline_smi);
     }
+    wb_info = node->type()->IsLikelySmi() ? LIKELY_SMI : UNLIKELY_SMI;
   } else {
     // For non-compound assignment just load the right-hand side.
     Load(node->value());
+    wb_info = node->value()->AsLiteral() != NULL ?
+        NEVER_NEWSPACE :
+        (node->value()->type()->IsLikelySmi() ? LIKELY_SMI : UNLIKELY_SMI);
   }
 
   // Stack layout:
@@ -3713,7 +3729,7 @@ void CodeGenerator::EmitKeyedPropertyAssignment(Assignment* node) {
   // Perform the assignment.  It is safe to ignore constants here.
   ASSERT(node->op() != Token::INIT_CONST);
   CodeForSourcePosition(node->position());
-  EmitKeyedStore(prop->key()->type());
+  EmitKeyedStore(prop->key()->type(), wb_info);
   frame_->EmitPush(r0);
 
   // Stack layout:
@@ -4346,10 +4362,20 @@ void CodeGenerator::GenerateMathPow(ZoneList<Expression*>* args) {
     __ vmul(d1, d1, d1, ne);  // Don't bother calculating next d1 if done.
     __ b(ne, &more_bits);
 
-    // If exponent is negative result is 1/result (d2 already holds 1.0 in that
-    // case).
+    // If exponent is positive we are done.
     __ cmp(exponent, Operand(0));
-    __ vdiv(d0, d2, d0, mi);
+    __ b(ge, &allocate_return);
+
+    // If exponent is negative result is 1/result (d2 already holds 1.0 in that
+    // case). However if d0 has reached infinity this will not provide the
+    // correct result, so call runtime if that is the case.
+    __ mov(scratch2, Operand(0x7FF00000));
+    __ mov(scratch1, Operand(0));
+    __ vmov(d1, scratch1, scratch2);  // Load infinity into d1.
+    __ vcmp(d0, d1);
+    __ vmrs(pc);
+    runtime.Branch(eq);  // d0 reached infinity.
+    __ vdiv(d0, d2, d0);
     __ b(&allocate_return);
 
     __ bind(&exponent_nonsmi);
@@ -4402,8 +4428,10 @@ void CodeGenerator::GenerateMathPow(ZoneList<Expression*>* args) {
     __ vsqrt(d0, d0);
 
     __ bind(&allocate_return);
-    __ AllocateHeapNumberWithValue(
-        base, d0, scratch1, scratch2, heap_number_map, runtime.entry_label());
+    Register scratch3 = r5;
+    __ AllocateHeapNumberWithValue(scratch3, d0, scratch1, scratch2,
+                                   heap_number_map, runtime.entry_label());
+    __ mov(base, scratch3);
     done.Jump();
 
     runtime.Bind();
@@ -5497,7 +5525,7 @@ void CodeGenerator::VisitCountOperation(CountOperation* node) {
       __ sub(value, value, Operand(Smi::FromInt(1)));
     }
     frame_->EmitPush(value);
-    target.SetValue(NOT_CONST_INIT);
+    target.SetValue(NOT_CONST_INIT, LIKELY_SMI);
     if (is_postfix) frame_->Pop();
     ASSERT_EQ(original_height + 1, frame_->height());
     return;
@@ -5596,7 +5624,7 @@ void CodeGenerator::VisitCountOperation(CountOperation* node) {
     // Set the target with the result, leaving the result on
     // top of the stack.  Removes the target from the stack if
     // it has a non-zero size.
-    if (!is_const) target.SetValue(NOT_CONST_INIT);
+    if (!is_const) target.SetValue(NOT_CONST_INIT, LIKELY_SMI);
   }
 
   // Postfix: Discard the new value and use the old.
@@ -6329,7 +6357,8 @@ void CodeGenerator::EmitKeyedLoad() {
 }
 
 
-void CodeGenerator::EmitKeyedStore(StaticType* key_type) {
+void CodeGenerator::EmitKeyedStore(StaticType* key_type,
+                                   WriteBarrierCharacter wb_info) {
   // Generate inlined version of the keyed store if the code is in a loop
   // and the key is likely to be a smi.
   if (loop_nesting() > 0 && key_type->IsLikelySmi()) {
@@ -6345,12 +6374,21 @@ void CodeGenerator::EmitKeyedStore(StaticType* key_type) {
     __ IncrementCounter(&Counters::keyed_store_inline, 1,
                         scratch1, scratch2);
 
+
+
     // Load the value, key and receiver from the stack.
+    bool value_is_harmless = frame_->KnownSmiAt(0);
+    if (wb_info == NEVER_NEWSPACE) value_is_harmless = true;
+    bool key_is_smi = frame_->KnownSmiAt(1);
     Register value = frame_->PopToRegister();
     Register key = frame_->PopToRegister(value);
     VirtualFrame::SpilledScope spilled(frame_);
     Register receiver = r2;
     frame_->EmitPop(receiver);
+
+#ifdef DEBUG
+    bool we_remembered_the_write_barrier = value_is_harmless;
+#endif
 
     // The deferred code expects value, key and receiver in registers.
     DeferredReferenceSetKeyedValue* deferred =
@@ -6358,12 +6396,23 @@ void CodeGenerator::EmitKeyedStore(StaticType* key_type) {
 
     // Check that the value is a smi. As this inlined code does not set the
     // write barrier it is only possible to store smi values.
-    __ tst(value, Operand(kSmiTagMask));
-    deferred->Branch(ne);
+    if (!value_is_harmless) {
+      // If the value is not likely to be a Smi then let's test the fixed array
+      // for new space instead.  See below.
+      if (wb_info == LIKELY_SMI) {
+        __ tst(value, Operand(kSmiTagMask));
+        deferred->Branch(ne);
+#ifdef DEBUG
+        we_remembered_the_write_barrier = true;
+#endif
+      }
+    }
 
-    // Check that the key is a smi.
-    __ tst(key, Operand(kSmiTagMask));
-    deferred->Branch(ne);
+    if (!key_is_smi) {
+      // Check that the key is a smi.
+      __ tst(key, Operand(kSmiTagMask));
+      deferred->Branch(ne);
+    }
 
     // Check that the receiver is a heap object.
     __ tst(receiver, Operand(kSmiTagMask));
@@ -6379,24 +6428,35 @@ void CodeGenerator::EmitKeyedStore(StaticType* key_type) {
     __ cmp(scratch1, key);
     deferred->Branch(ls);  // Unsigned less equal.
 
+    // Get the elements array from the receiver.
+    __ ldr(scratch1, FieldMemOperand(receiver, JSObject::kElementsOffset));
+    if (!value_is_harmless && wb_info != LIKELY_SMI) {
+      Label ok;
+      __ and_(scratch2, scratch1, Operand(ExternalReference::new_space_mask()));
+      __ cmp(scratch2, Operand(ExternalReference::new_space_start()));
+      __ tst(value, Operand(kSmiTagMask), ne);
+      deferred->Branch(ne);
+#ifdef DEBUG
+      we_remembered_the_write_barrier = true;
+#endif
+    }
+    // Check that the elements array is not a dictionary.
+    __ ldr(scratch2, FieldMemOperand(scratch1, JSObject::kMapOffset));
     // The following instructions are the part of the inlined store keyed
     // property code which can be patched. Therefore the exact number of
     // instructions generated need to be fixed, so the constant pool is blocked
     // while generating this code.
     { Assembler::BlockConstPoolScope block_const_pool(masm_);
-      // Get the elements array from the receiver and check that it
-      // is not a dictionary.
-      __ ldr(scratch1, FieldMemOperand(receiver, JSObject::kElementsOffset));
-      __ ldr(scratch2, FieldMemOperand(scratch1, JSObject::kMapOffset));
+#ifdef DEBUG
+      Label check_inlined_codesize;
+      masm_->bind(&check_inlined_codesize);
+#endif
+
       // Read the fixed array map from the constant pool (not from the root
       // array) so that the value can be patched.  When debugging, we patch this
       // comparison to always fail so that we will hit the IC call in the
       // deferred code which will allow the debugger to break for fast case
       // stores.
-#ifdef DEBUG
-    Label check_inlined_codesize;
-    masm_->bind(&check_inlined_codesize);
-#endif
       __ mov(scratch3, Operand(Factory::fixed_array_map()));
       __ cmp(scratch2, scratch3);
       deferred->Branch(ne);
@@ -6412,6 +6472,8 @@ void CodeGenerator::EmitKeyedStore(StaticType* key_type) {
       ASSERT_EQ(kInlinedKeyedStoreInstructionsAfterPatch,
                 masm_->InstructionsGeneratedSince(&check_inlined_codesize));
     }
+
+    ASSERT(we_remembered_the_write_barrier);
 
     deferred->BindExit();
   } else {
@@ -6510,7 +6572,7 @@ void Reference::GetValue() {
 }
 
 
-void Reference::SetValue(InitState init_state) {
+void Reference::SetValue(InitState init_state, WriteBarrierCharacter wb_info) {
   ASSERT(!is_illegal());
   ASSERT(!cgen_->has_cc());
   MacroAssembler* masm = cgen_->masm();
@@ -6542,7 +6604,7 @@ void Reference::SetValue(InitState init_state) {
       Property* property = expression_->AsProperty();
       ASSERT(property != NULL);
       cgen_->CodeForSourcePosition(property->position());
-      cgen_->EmitKeyedStore(property->key()->type());
+      cgen_->EmitKeyedStore(property->key()->type(), wb_info);
       frame->EmitPush(r0);
       set_unloaded();
       break;
@@ -7981,7 +8043,11 @@ void GenericBinaryOpStub::HandleNonSmiBitwiseOp(MacroAssembler* masm,
       // The code below for writing into heap numbers isn't capable of writing
       // the register as an unsigned int so we go to slow case if we hit this
       // case.
-      __ b(mi, &slow);
+      if (CpuFeatures::IsSupported(VFP3)) {
+        __ b(mi, &result_not_a_smi);
+      } else {
+        __ b(mi, &slow);
+      }
       break;
     case Token::SHL:
       // Use only the 5 least significant bits of the shift count.
@@ -8025,10 +8091,24 @@ void GenericBinaryOpStub::HandleNonSmiBitwiseOp(MacroAssembler* masm,
   // result.
   __ mov(r0, Operand(r5));
 
-  // Tail call that writes the int32 in r2 to the heap number in r0, using
-  // r3 as scratch.  r0 is preserved and returned.
-  WriteInt32ToHeapNumberStub stub(r2, r0, r3);
-  __ Jump(stub.GetCode(), RelocInfo::CODE_TARGET);
+  if (CpuFeatures::IsSupported(VFP3)) {
+    // Convert the int32 in r2 to the heap number in r0. r3 is corrupted.
+    CpuFeatures::Scope scope(VFP3);
+    __ vmov(s0, r2);
+    if (op_ == Token::SHR) {
+      __ vcvt_f64_u32(d0, s0);
+    } else {
+      __ vcvt_f64_s32(d0, s0);
+    }
+    __ sub(r3, r0, Operand(kHeapObjectTag));
+    __ vstr(d0, r3, HeapNumber::kValueOffset);
+    __ Ret();
+  } else {
+    // Tail call that writes the int32 in r2 to the heap number in r0, using
+    // r3 as scratch.  r0 is preserved and returned.
+    WriteInt32ToHeapNumberStub stub(r2, r0, r3);
+    __ TailCallStub(&stub);
+  }
 
   if (mode_ != NO_OVERWRITE) {
     __ bind(&have_to_allocate);
@@ -8877,12 +8957,21 @@ void GenericUnaryOpStub::Generate(MacroAssembler* masm) {
       __ mov(r0, Operand(r2));
     }
 
-    // WriteInt32ToHeapNumberStub does not trigger GC, so we do not
-    // have to set up a frame.
-    WriteInt32ToHeapNumberStub stub(r1, r0, r2);
-    __ push(lr);
-    __ Call(stub.GetCode(), RelocInfo::CODE_TARGET);
-    __ pop(lr);
+    if (CpuFeatures::IsSupported(VFP3)) {
+      // Convert the int32 in r1 to the heap number in r0. r2 is corrupted.
+      CpuFeatures::Scope scope(VFP3);
+      __ vmov(s0, r1);
+      __ vcvt_f64_s32(d0, s0);
+      __ sub(r2, r0, Operand(kHeapObjectTag));
+      __ vstr(d0, r2, HeapNumber::kValueOffset);
+    } else {
+      // WriteInt32ToHeapNumberStub does not trigger GC, so we do not
+      // have to set up a frame.
+      WriteInt32ToHeapNumberStub stub(r1, r0, r2);
+      __ push(lr);
+      __ Call(stub.GetCode(), RelocInfo::CODE_TARGET);
+      __ pop(lr);
+    }
   } else {
     UNIMPLEMENTED();
   }
