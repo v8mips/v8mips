@@ -240,7 +240,7 @@ TEST(MIPS2) {
   __ Ins(a0, t1, 12, 8);  // 0x7ff34fff
   __ Branch(&error, ne, a0, Operand(0x7ff34fff));
   __ movz(a0, t6, t7);    // a0 not updated (t7 is NOT 0)
-  __ ext(a1, a0, 8, 12);  // 0x34f
+  __ Ext(a1, a0, 8, 12);  // 0x34f
   __ Branch(&error, ne, a1, Operand(0x34f));
   __ movz(a0, t6, v1);    // a0<-t6, v0 is 0, from 8 instr back
   __ Branch(&error, ne, a0, Operand(t6));
