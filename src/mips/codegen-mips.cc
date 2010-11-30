@@ -1000,36 +1000,44 @@ void CodeGenerator::StoreToSlot(Slot* slot, InitState init_state) {
 // may jump to 'false_target' in case the register converts to 'false'.
 void CodeGenerator::ToBoolean(JumpTarget* true_target,
                               JumpTarget* false_target) {
-  VirtualFrame::SpilledScope spilled_scope(frame_);
   // Note: The generated code snippet does not change stack variables.
   //       Only the condition code should be set.
-  frame_->EmitPop(t0);
+  bool known_smi = frame_->KnownSmiAt(0);
+  Register tos = frame_->PopToRegister();
 
   // Fast case checks
 
-  // Check if the value is 'false'.
-  __ LoadRoot(t1, Heap::kFalseValueRootIndex);
-  false_target->Branch(eq, t0, Operand(t1), no_hint);
+  if (!known_smi) {
+    // Check if the value is 'false'.
+    __ LoadRoot(at, Heap::kFalseValueRootIndex);
+    false_target->Branch(eq, tos, Operand(at));
 
-  // Check if the value is 'true'.
-  __ LoadRoot(t2, Heap::kTrueValueRootIndex);
-  true_target->Branch(eq, t0, Operand(t2), no_hint);
+    // Check if the value is 'true'.
+    __ LoadRoot(at, Heap::kTrueValueRootIndex);
+    true_target->Branch(eq, tos, Operand(at));
 
-  // Check if the value is 'undefined'.
-  __ LoadRoot(t3, Heap::kUndefinedValueRootIndex);
-  false_target->Branch(eq, t0, Operand(t3), no_hint);
+    // Check if the value is 'undefined'.
+    __ LoadRoot(at, Heap::kUndefinedValueRootIndex);
+    false_target->Branch(eq, tos, Operand(at));
+  }
 
   // Check if the value is a smi.
-  false_target->Branch(eq, t0, Operand(Smi::FromInt(0)), no_hint);
-  __ And(t4, t0, Operand(kSmiTagMask));
-  true_target->Branch(eq, t4, Operand(zero_reg), no_hint);
+  __ mov(condReg1, tos);
+  ASSERT(Smi::FromInt(0) == 0);
+  __ mov(condReg2, zero_reg);
 
-  // Slow case: call the runtime.
-  frame_->EmitPush(t0);
-  frame_->CallRuntime(Runtime::kToBool, 1);
-  // Convert the result (v0) to a condition code.
-  __ LoadRoot(condReg1, Heap::kFalseValueRootIndex);
-  __ mov(condReg2, v0);
+  if (!known_smi) {
+    false_target->Branch(eq, tos, Operand(Smi::FromInt(0)));
+    __ And(at, tos, Operand(kSmiTagMask));
+    true_target->Branch(eq, at, Operand(zero_reg));
+
+    // Slow case: call the runtime.
+    frame_->EmitPush(tos);
+    frame_->CallRuntime(Runtime::kToBool, 1);
+    // Convert the result (v0) to a condition code.
+    __ LoadRoot(condReg1, Heap::kFalseValueRootIndex);
+    __ mov(condReg2, v0);
+  }
 
   cc_reg_ = ne;
 }
