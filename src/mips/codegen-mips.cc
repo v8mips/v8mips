@@ -1976,11 +1976,15 @@ void CodeGenerator::VisitDeclaration(Declaration* node) {
     val = node->fun();  // NULL if we don't have a function.
   }
 
+
   if (val != NULL) {
+    WriteBarrierCharacter wb_info =
+        val->type()->IsLikelySmi() ? LIKELY_SMI : UNLIKELY_SMI;
+    if (val->AsLiteral() != NULL) wb_info = NEVER_NEWSPACE;
     // Set initial value.
     Reference target(this, node->proxy());
     Load(val);
-    target.SetValue(NOT_CONST_INIT);
+    target.SetValue(NOT_CONST_INIT, wb_info);
 
     // Get rid of the assigned value (declarations are statements).
     frame_->Drop();
@@ -2716,13 +2720,13 @@ void CodeGenerator::VisitForInStatement(ForInStatement* node) {
       if (each.size() > 0) {
         __ lw(a0, frame_->ElementAt(each.size()));
         frame_->EmitPush(a0);
-        each.SetValue(NOT_CONST_INIT);
+        each.SetValue(NOT_CONST_INIT, UNLIKELY_SMI);
         frame_->Drop(2);
       } else {
         // If the reference was to a slot we rely on the convenient property
         // that it doesn't matter whether a value (eg, a3 pushed above) is
         // right on top of or right underneath a zero-sized reference.
-        each.SetValue(NOT_CONST_INIT);
+        each.SetValue(NOT_CONST_INIT, UNLIKELY_SMI);
         frame_->Drop();
       }
     }
@@ -3579,6 +3583,8 @@ void CodeGenerator::EmitKeyedPropertyAssignment(Assignment* node) {
   // Evaluate the receiver subexpression.
   Load(prop->obj());
 
+  WriteBarrierCharacter wb_info;
+
   // Change to slow case in the beginning of an initialization block to
   // avoid the quadratic behavior of repeatedly adding fast properties.
   if (node->starts_initialization_block()) {
@@ -3600,7 +3606,7 @@ void CodeGenerator::EmitKeyedPropertyAssignment(Assignment* node) {
   // [tos]   : key
   // [tos+1] : receiver
   // [tos+2] : receiver if at the end of an initialization block
-
+  //
   // Evaluate the right-hand side.
   if (node->is_compound()) {
     // For a compound assignment the right-hand side is a binary operation
@@ -3632,9 +3638,13 @@ void CodeGenerator::EmitKeyedPropertyAssignment(Assignment* node) {
                              overwrite_value ? OVERWRITE_RIGHT : NO_OVERWRITE,
                              inline_smi);
     }
+    wb_info = node->type()->IsLikelySmi() ? LIKELY_SMI : UNLIKELY_SMI;
   } else {
     // For non-compound assignment just load the right-hand side.
     Load(node->value());
+    wb_info = node->value()->AsLiteral() != NULL ?
+        NEVER_NEWSPACE :
+        (node->value()->type()->IsLikelySmi() ? LIKELY_SMI : UNLIKELY_SMI);
   }
 
   // Stack layout:
@@ -3646,7 +3656,7 @@ void CodeGenerator::EmitKeyedPropertyAssignment(Assignment* node) {
   // Perform the assignment.  It is safe to ignore constants here.
   ASSERT(node->op() != Token::INIT_CONST);
   CodeForSourcePosition(node->position());
-  EmitKeyedStore(prop->key()->type());
+  EmitKeyedStore(prop->key()->type(), wb_info);
   frame_->EmitPush(v0);
 
 
@@ -5396,7 +5406,7 @@ void CodeGenerator::VisitCountOperation(CountOperation* node) {
       __ Subu(value, value, Operand(Smi::FromInt(1)));
     }
     frame_->EmitPush(value);
-    target.SetValue(NOT_CONST_INIT);
+    target.SetValue(NOT_CONST_INIT, LIKELY_SMI);
     if (is_postfix) frame_->Pop();
     ASSERT_EQ(original_height + 1, frame_->height());
     return;
@@ -5493,7 +5503,7 @@ void CodeGenerator::VisitCountOperation(CountOperation* node) {
     // Set the target with the result, leaving the result on
     // top of the stack.  Removes the target from the stack if
     // it has a non-zero size.
-    if (!is_const) target.SetValue(NOT_CONST_INIT);
+    if (!is_const) target.SetValue(NOT_CONST_INIT, LIKELY_SMI);
   }
 
   // Postfix: Discard the new value and use the old.
@@ -6225,7 +6235,8 @@ void CodeGenerator::EmitKeyedLoad() {
 }
 
 
-void CodeGenerator::EmitKeyedStore(StaticType* key_type) {
+void CodeGenerator::EmitKeyedStore(StaticType* key_type,
+                                   WriteBarrierCharacter wb_info) {
   // Generate inlined version of the keyed store if the code is in a loop
   // and the key is likely to be a smi.
   if (loop_nesting() > 0 && key_type->IsLikelySmi()) {
@@ -6242,11 +6253,18 @@ void CodeGenerator::EmitKeyedStore(StaticType* key_type) {
                         scratch1, scratch2);
 
     // Load the value, key and receiver from the stack.
+    bool value_is_harmless = frame_->KnownSmiAt(0);
+    if (wb_info == NEVER_NEWSPACE) value_is_harmless = true;
+    bool key_is_smi = frame_->KnownSmiAt(1);
     Register value = frame_->PopToRegister();
     Register key = frame_->PopToRegister(value);
     Register receiver = a2;
     frame_->EmitPop(receiver);
     VirtualFrame::SpilledScope spilled(frame_);
+
+#ifdef DEBUG
+    bool we_remembered_the_write_barrier = value_is_harmless;
+#endif
 
     // The deferred code expects value, key and receiver in registers.
     DeferredReferenceSetKeyedValue* deferred =
@@ -6254,12 +6272,23 @@ void CodeGenerator::EmitKeyedStore(StaticType* key_type) {
 
     // Check that the value is a smi. As this inlined code does not set the
     // write barrier it is only possible to store smi values.
-    __ And(at, value, Operand(kSmiTagMask));
-    deferred->Branch(ne, at, Operand(zero_reg));
+    if (!value_is_harmless) {
+      // If the value is not likely to be a Smi then let's test the fixed array
+      // for new space instead.  See below.
+      if (wb_info == LIKELY_SMI) {
+        __ And(at, value, Operand(kSmiTagMask));
+        deferred->Branch(ne, at, Operand(zero_reg));
+  #ifdef DEBUG
+        we_remembered_the_write_barrier = true;
+  #endif
+      }
+    }
 
-    // Check that the key is a smi.
-    __ And(at, key, Operand(kSmiTagMask));
-    deferred->Branch(ne, at, Operand(zero_reg));
+    if (!key_is_smi) {
+      // Check that the key is a smi.
+      __ And(at, key, Operand(kSmiTagMask));
+      deferred->Branch(ne, at, Operand(zero_reg));
+    }
 
     // Check that the receiver is a heap object.
     __ And(at, receiver, Operand(kSmiTagMask));
@@ -6274,26 +6303,41 @@ void CodeGenerator::EmitKeyedStore(StaticType* key_type) {
     __ lw(scratch1, FieldMemOperand(receiver, JSArray::kLengthOffset));
     deferred->Branch(ls, scratch1, Operand(key));  // Unsigned less equal.
 
+    // Get the elements array from the receiver.
+    __ lw(scratch1, FieldMemOperand(receiver, JSObject::kElementsOffset));
+    if (!value_is_harmless && wb_info != LIKELY_SMI) {
+      Label ok;
+      __ And(scratch2, scratch1, Operand(ExternalReference::new_space_mask()));
+      __ Branch(&ok,
+                eq,
+                scratch2,
+                Operand(ExternalReference::new_space_start()));
+      __ And(at, value, Operand(kSmiTagMask));
+      deferred->Branch(ne, at, Operand(zero_reg));
+      __ bind(&ok);
+#ifdef DEBUG
+      we_remembered_the_write_barrier = true;
+#endif
+    }
+
+    // Check that the elements array is not a dictionary.
+    __ lw(scratch2, FieldMemOperand(scratch1, JSObject::kMapOffset));
+
     // The following instructions are the part of the inlined store keyed
     // property code which can be patched. Therefore the exact number of
-    // instructions generated need to be fixed, so the constant pool is blocked
-    // while generating this code.
-
+    // instructions generated need to be fixed, so the trampoline pool is
+    // blocked while generating this code.
     { Assembler::BlockTrampolinePoolScope block_trampoline_pool(masm_);
-      // Get the elements array from the receiver and check that it
-      // is not a dictionary.
-      __ lw(scratch1, FieldMemOperand(receiver, JSObject::kElementsOffset));
-      __ lw(scratch2, FieldMemOperand(scratch1, JSObject::kMapOffset));
-      // Read the fixed array map from the constant pool (not from the root
-      // array) so that the value can be patched.  When debugging, we patch this
-      // comparison to always fail so that we will hit the IC call in the
-      // deferred code which will allow the debugger to break for fast case
-      // stores.
-
 #ifdef DEBUG
     Label check_inlined_codesize;
     masm_->bind(&check_inlined_codesize);
 #endif
+
+      // Read the fixed array map from inlined code (li) (not from the root
+      // array) so that the value can be patched.  When debugging, we patch this
+      // comparison to always fail so that we will hit the IC call in the
+      // deferred code which will allow the debugger to break for fast case
+      // stores.
 
       __ li(scratch3, Operand(Factory::fixed_array_map()), true);
       deferred->Branch(ne, scratch2, Operand(scratch3));
@@ -6302,7 +6346,7 @@ void CodeGenerator::EmitKeyedStore(StaticType* key_type) {
       __ Addu(scratch1, scratch1,
               Operand(FixedArray::kHeaderSize - kHeapObjectTag));
 
-      // Use (Smi) key in a1 to index array pointed to by a3.
+      // Use (Smi) key  to index array pointed to by scratch1.
       __ sll(at, key, kPointerSizeLog2 - (kSmiTagSize + kSmiShiftSize));
       __ addu(at, scratch1, at);
       __ sw(value, MemOperand(at, 0));
@@ -6313,6 +6357,9 @@ void CodeGenerator::EmitKeyedStore(StaticType* key_type) {
       ASSERT_EQ(kInlinedKeyedStoreInstructionsAfterPatch,
                 masm_->InstructionsGeneratedSince(&check_inlined_codesize));
     }
+
+    ASSERT(we_remembered_the_write_barrier);
+
     deferred->BindExit();
   } else {
     frame()->CallKeyedStoreIC();
@@ -6427,7 +6474,7 @@ void Reference::GetValue() {
 }
 
 
-void Reference::SetValue(InitState init_state) {
+void Reference::SetValue(InitState init_state, WriteBarrierCharacter wb_info) {
   ASSERT(!is_illegal());
   ASSERT(!cgen_->has_cc());
   MacroAssembler* masm = cgen_->masm();
@@ -6461,7 +6508,7 @@ void Reference::SetValue(InitState init_state) {
       ASSERT(property != NULL);
       cgen_->CodeForSourcePosition(property->position());
 
-      cgen_->EmitKeyedStore(property->key()->type());
+      cgen_->EmitKeyedStore(property->key()->type(), wb_info);
       frame->EmitPush(v0);
       set_unloaded();
       break;
