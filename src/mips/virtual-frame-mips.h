@@ -197,12 +197,16 @@ class VirtualFrame : public ZoneObject {
   bool IsCompatibleWith(const VirtualFrame* other) const {
     return (tos_known_smi_map_ & (~other->tos_known_smi_map_)) == 0;
   }
+
+  inline void ForgetTypeInfo() {
+    tos_known_smi_map_ = 0;
+  }
+
   // Detach a frame from its code generator, perhaps temporarily. This
   // tells the register allocator that it is free to use frame-internal
   // registers. Used when the code generator's frame is switched from this
   // one to NULL by an unconditional jump.
   void DetachFromCodeGenerator() {
-    AssertIsSpilled();
   }
 
   // (Re)attach a frame to its code generator. This informs the register
@@ -210,7 +214,6 @@ class VirtualFrame : public ZoneObject {
   // Used when a code generator's frame is switched from NULL to this one by
   // binding a label.
   void AttachToCodeGenerator() {
-    AssertIsSpilled();
   }
 
   // Emit code for the physical JS entry and exit frame sequences. After
@@ -337,6 +340,10 @@ class VirtualFrame : public ZoneObject {
   // must be copied to a scratch register before modification.
   Register Peek();
 
+  // Look at the value beneath the top of the stack. The register returned is
+  // aliased and must be copied to a scratch register before modification.
+  Register Peek2();
+
   // Duplicate the top of stack.
   void Dup();
 
@@ -345,6 +352,9 @@ class VirtualFrame : public ZoneObject {
 
   // Flushes all registers, but it puts a copy of the top-of-stack in a0.
   void SpillAllButCopyTOSToA0();
+
+  // Flushes all registers, but it puts a copy of the top-of-stack in a1.
+  void SpillAllButCopyTOSToA1();
 
   // Flushes all registers, but it puts a copy of the top-of-stack in a1
   // and the next value on the stack in a0.

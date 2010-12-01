@@ -500,6 +500,31 @@ void VirtualFrame::SpillAllButCopyTOSToA0() {
   top_of_stack_state_ = NO_TOS_REGISTERS;
 }
 
+void VirtualFrame::SpillAllButCopyTOSToA1() {
+  switch (top_of_stack_state_) {
+    case NO_TOS_REGISTERS:
+      __ lw(a1, MemOperand(sp, 0));
+      break;
+    case A0_TOS:
+      __ Push(a0);
+      __ mov(a1, a0);
+      break;
+    case A1_TOS:
+      __ Push(a1);
+      break;
+    case A0_A1_TOS:
+      __ Push(a1, a0);
+      __ mov(a1, a0);
+      break;
+    case A1_A0_TOS:
+      __ Push(a0, a1);
+      break;
+    default:
+      UNREACHABLE();
+  }
+  top_of_stack_state_ = NO_TOS_REGISTERS;
+}
+
 
 void VirtualFrame::SpillAllButCopyTOSToA1A0() {
   switch (top_of_stack_state_) {
@@ -540,6 +565,23 @@ Register VirtualFrame::Peek() {
   } else {
     return kTopRegister[top_of_stack_state_];
   }
+}
+
+Register VirtualFrame::Peek2() {
+  AssertIsNotSpilled();
+  switch (top_of_stack_state_) {
+    case NO_TOS_REGISTERS:
+    case A0_TOS:
+    case A0_A1_TOS:
+      MergeTOSTo(A0_A1_TOS);
+      return a1;
+    case A1_TOS:
+    case A1_A0_TOS:
+      MergeTOSTo(A1_A0_TOS);
+      return a0;
+  }
+  UNREACHABLE();
+  return no_reg;
 }
 
 
