@@ -5315,9 +5315,13 @@ void CodeGenerator::VisitUnaryOperation(UnaryOperation* node) {
     frame_->EmitPush(v0);  // v0 holds the result.
 
   } else {
-    bool overwrite =
+    bool can_overwrite =
         (node->expression()->AsBinaryOperation() != NULL &&
          node->expression()->AsBinaryOperation()->ResultOverwriteAllowed());
+    UnaryOverwriteMode overwrite =
+       can_overwrite ? UNARY_OVERWRITE : UNARY_NO_OVERWRITE;
+
+    bool no_negative_zero = node->expression()->no_negative_zero();
     Load(node->expression());
     switch (op) {
       case Token::NOT:
@@ -5329,7 +5333,10 @@ void CodeGenerator::VisitUnaryOperation(UnaryOperation* node) {
       case Token::SUB: {
         VirtualFrame::SpilledScope spilled(frame_);
         frame_->EmitPop(a0);
-        GenericUnaryOpStub stub(Token::SUB, overwrite);
+        GenericUnaryOpStub stub(
+            Token::SUB,
+            overwrite,
+            no_negative_zero ? kIgnoreNegativeZero : kStrictNegativeZero);
         frame_->CallStub(&stub, 0);
         frame_->EmitPush(v0);  // v0 has result
         break;
@@ -9775,24 +9782,31 @@ void GenericUnaryOpStub::Generate(MacroAssembler* masm) {
 
     // Go slow case if the value of the expression is zero
     // to make sure that we switch between 0 and -0.
-    __ Branch(&slow, eq, a0, Operand(0));
-
-    // The value of the expression is a smi that is not zero.  Try
-    // optimistic subtraction '0 - value'.
-    __ subu(v0, zero_reg, a0);
-    // Check for overflow. For v=0-x, overflow only occurs on x=0x80000000.
-    __ Branch(&slow, eq, a0, Operand(0x80000000));  // Go slow on overflow.
-
-    // Return v0 result if no overflow.
-    __ StubReturn(1);
+    if (negative_zero_ == kStrictNegativeZero) {
+      // If we have to check for zero, then we can check for the max negative
+      // smi while we are at it. (This is kind of expensive on mips, and
+      // it seems that we should be able to find a more optimal test.)
+      __ And(at, a0, Operand(~0x80000000));  // Emit 3 instr: lui, ori, and.
+      __ Branch(&slow, eq, at, Operand(zero_reg));
+      __ subu(v0, zero_reg, a0);
+      __ StubReturn(1);
+    } else {
+      // The value of the expression is a smi and 0 is OK for -0.  Try
+      // optimistic subtraction '0 - value'.
+      __ subu(v0, zero_reg, a0);
+      // Check for overflow. For v=0-x, overflow only occurs on x=0x80000000.
+      // We don't have to reverse the optimistic neg since we did not 
+      // change input register a0.
+      __ Branch(&slow, eq, a0, Operand(0x80000000));  // Go slow on overflow.
+      __ StubReturn(1);
+    }
 
     __ bind(&try_float);
-
     __ lw(a1, FieldMemOperand(a0, HeapObject::kMapOffset));
     __ AssertRegisterIsRoot(heap_number_map, Heap::kHeapNumberMapRootIndex);
     __ Branch(&slow, ne, a1, Operand(heap_number_map));
     // a0 is a heap number.  Get a new heap number in a1.
-    if (overwrite_) {
+    if (overwrite_ == UNARY_OVERWRITE) {
       __ lw(a2, FieldMemOperand(a0, HeapNumber::kExponentOffset));
       __ Xor(a2, a2, Operand(HeapNumber::kSignMask));  // Flip sign.
       __ sw(a2, FieldMemOperand(a0, HeapNumber::kExponentOffset));
@@ -9828,7 +9842,7 @@ void GenericUnaryOpStub::Generate(MacroAssembler* masm) {
     __ StubReturn(1);
 
     __ bind(&try_float);
-    if (!overwrite_) {
+    if (!overwrite_ == UNARY_OVERWRITE) {
       // Allocate a fresh heap number, but don't overwrite a0 in-case
       // we need to go slow. Return new heap number in v0.
       __ AllocateHeapNumber(a2, a3, t0, heap_number_map, &slow);
