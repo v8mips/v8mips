@@ -1509,7 +1509,6 @@ void CodeGenerator::SmiOperation(Token::Value op,
           if (shift_value != 0) {
             // ASR by immediate 0 means shifting 32 bits.
             __ sra(v0, v0, shift_value);
-             result = TypeInfo::Smi();
            }
           break;
         }
@@ -1518,7 +1517,7 @@ void CodeGenerator::SmiOperation(Token::Value op,
       __ sll(v0, v0, kSmiTagSize);  // Tag result.
       deferred->BindExit();
       __ mov(tos, v0);
-      frame_->EmitPush(tos, result);
+      frame_->EmitPush(tos);
       break;
     }
 
@@ -4720,7 +4719,8 @@ void CodeGenerator::GenerateRandomHeapNumber(
 
   // Save the new heap number in callee-saved register s0, since
   // we call out to external C code below.
-  __ AllocateHeapNumber(s0, a1, a2, &slow_allocate_heapnumber);
+  __ LoadRoot(t6, Heap::kHeapNumberMapRootIndex);
+  __ AllocateHeapNumber(s0, a1, a2, t6, &slow_allocate_heapnumber);
   __ jmp(&heapnumber_allocated);
 
   __ bind(&slow_allocate_heapnumber);
@@ -8664,6 +8664,9 @@ void GenericBinaryOpStub::HandleBinaryOpSlowCases(MacroAssembler* masm,
   Label slow, slow_reverse, do_the_call;
   Label a0_is_smi, a1_is_smi, finished_loading_a0, finished_loading_a1;
   bool use_fp_registers = CpuFeatures::IsSupported(FPU);
+
+  Register heap_number_map = t6;
+
   if (ShouldGenerateSmiCode()) {
     if (op_ == Token::MOD || op_ == Token::DIV) {
     // If the divisor is zero for MOD or DIV, go to
@@ -8674,7 +8677,8 @@ void GenericBinaryOpStub::HandleBinaryOpSlowCases(MacroAssembler* masm,
     // Smi-smi case (overflow).
     // Since both are Smis there is no heap number to overwrite, so allocate.
     // The new heap number is in t0. t1 and t2 are scratch.
-    __ AllocateHeapNumber(t0, t1, t2, lhs.is(a0) ? &slow_reverse : &slow);
+    __ LoadRoot(heap_number_map, Heap::kHeapNumberMapRootIndex);
+    __ AllocateHeapNumber(t0, t1, t2, heap_number_map, lhs.is(a0) ? &slow_reverse : &slow);
 
     // If we have floating point hardware, inline ADD, SUB, MUL, and DIV,
     // using registers f12 and f14 for the double values.
@@ -8711,7 +8715,7 @@ void GenericBinaryOpStub::HandleBinaryOpSlowCases(MacroAssembler* masm,
 
   // We branch here if at least one of a0 and a1 is not a Smi.
   __ bind(not_smi);
-
+  __ LoadRoot(heap_number_map, Heap::kHeapNumberMapRootIndex);
   // After this point we have the left hand side in a1 and the right hand side
   // in a0.
   Register scratch  = VirtualFrame::scratch0();
@@ -8732,20 +8736,24 @@ void GenericBinaryOpStub::HandleBinaryOpSlowCases(MacroAssembler* masm,
         default:
           break;
       }
+      // Restore heap number map register. 
+      __ LoadRoot(heap_number_map, Heap::kHeapNumberMapRootIndex);
     }
 
     if (mode_ == NO_OVERWRITE) {
       // In the case where there is no chance of an overwritable float we may as
       // well do the allocation immediately while a0 and a1 are untouched.
-      __ AllocateHeapNumber(t0, t1, t2, &slow);
+      __ AllocateHeapNumber(t0, t1, t2, heap_number_map, &slow);
     }
 
     // Move a0 (y) to a double in a2-a3.
     __ And(t1, a0, Operand(kSmiTagMask));
     // If it is an Smi, don't check if it is a heap number.
     __ Branch(&a0_is_smi, eq, t1, Operand(zero_reg));
-    __ GetObjectType(a0, t1, t1);
-    __ Branch(&slow, ne, t1, Operand(HEAP_NUMBER_TYPE));
+
+    __ lw(t1, FieldMemOperand(a0, HeapObject::kMapOffset));
+    __ AssertRegisterIsRoot(heap_number_map, Heap::kHeapNumberMapRootIndex);
+    __ Branch(&slow, ne, t1, Operand(heap_number_map));
 
     if (mode_ == OVERWRITE_RIGHT) {
       __ mov(t0, a0);  // Overwrite this heap number.
@@ -8764,7 +8772,7 @@ void GenericBinaryOpStub::HandleBinaryOpSlowCases(MacroAssembler* masm,
     __ bind(&a0_is_smi);
     if (mode_ == OVERWRITE_RIGHT) {
       // We can't overwrite a Smi so get address of new heap number into t0.
-      __ AllocateHeapNumber(t0, t1, t2, &slow);
+      __ AllocateHeapNumber(t0, t1, t2, heap_number_map, &slow);
     }
 
     if (use_fp_registers) {
@@ -8789,6 +8797,8 @@ void GenericBinaryOpStub::HandleBinaryOpSlowCases(MacroAssembler* masm,
       __ And(at, a1, Operand(kSmiTagMask));
       __ Branch(&a1_is_not_smi, ne, at, Operand(zero_reg));
       GenerateTypeTransition(masm);
+      // Restore heap number map register.
+      __ LoadRoot(heap_number_map, Heap::kHeapNumberMapRootIndex);
       __ jmp(&a1_is_smi);
     }
 
@@ -8799,8 +8809,10 @@ void GenericBinaryOpStub::HandleBinaryOpSlowCases(MacroAssembler* masm,
     // If it is an Smi, don't check if it is a heap number.
     __ Branch(&a1_is_smi, eq, t1, Operand(zero_reg));
     __ bind(&a1_is_not_smi);
-    __ GetObjectType(a1, t1, t1);
-    __ Branch(&slow, ne, t1, Operand(HEAP_NUMBER_TYPE));
+
+    __ lw(t1, FieldMemOperand(a1, HeapObject::kMapOffset));
+    __ AssertRegisterIsRoot(heap_number_map, Heap::kHeapNumberMapRootIndex);
+    __ Branch(&slow, ne, t1, Operand(heap_number_map));
     if (mode_ == OVERWRITE_LEFT) {
       __ mov(t0, a1);  // Overwrite this heap number.
     }
@@ -8817,7 +8829,7 @@ void GenericBinaryOpStub::HandleBinaryOpSlowCases(MacroAssembler* masm,
     __ bind(&a1_is_smi);
     if (mode_ == OVERWRITE_LEFT) {
       // We can't overwrite a Smi so get address of new heap number into t0.
-      __ AllocateHeapNumber(t0, t1, t2, &slow);
+      __ AllocateHeapNumber(t0, t1, t2, heap_number_map, &slow);
     }
 
     if (use_fp_registers) {
@@ -8949,6 +8961,9 @@ void GenericBinaryOpStub::HandleBinaryOpSlowCases(MacroAssembler* masm,
     __ bind(&slow_reverse);
     __ Swap(a0, a1, scratch);
   }
+
+  heap_number_map = no_reg;  // Don't use this any more from here on.
+
   // We jump to here if something goes wrong (one param is not a number of any
   // sort or new-space allocation fails).
   __ bind(&slow);
@@ -9126,10 +9141,14 @@ void GenericBinaryOpStub::HandleNonSmiBitwiseOp(MacroAssembler* masm,
   Label rhs_is_smi, lhs_is_smi;
   Label done_checking_rhs, done_checking_lhs;
 
+  Register heap_number_map = t6;
+  __ LoadRoot(heap_number_map, Heap::kHeapNumberMapRootIndex);
+  
   __ And(t1, lhs, Operand(kSmiTagMask));
   __ Branch(&lhs_is_smi, eq, t1, Operand(zero_reg));
-  __ GetObjectType(lhs, t4, t4);
-  __ Branch(&slow, ne, t4, Operand(HEAP_NUMBER_TYPE));
+
+  __ lw(t4, FieldMemOperand(lhs, HeapNumber::kMapOffset));
+  __ Branch(&slow, ne, t4, Operand(heap_number_map));
   GetInt32(masm, lhs, a3, t2, t3, &slow);  // Convert HeapNum a1 to integer a3.
   __ b(&done_checking_lhs);
   __ nop();   // NOP_ADDED
@@ -9140,8 +9159,8 @@ void GenericBinaryOpStub::HandleNonSmiBitwiseOp(MacroAssembler* masm,
 
   __ And(t0, rhs, Operand(kSmiTagMask));
   __ Branch(&rhs_is_smi, eq, t0, Operand(zero_reg));
-  __ GetObjectType(rhs, t4, t4);
-  __ Branch(&slow, ne, t4, Operand(HEAP_NUMBER_TYPE));
+  __ lw(t4, FieldMemOperand(rhs, HeapNumber::kMapOffset));
+  __ Branch(&slow, ne, t4, Operand(heap_number_map));
   GetInt32(masm, rhs, a2, t2, t3, &slow);  // Convert HeapNum a0 to integer a2.
   __ b(&done_checking_rhs);
   __ nop();   // NOP_ADDED
@@ -9198,8 +9217,8 @@ void GenericBinaryOpStub::HandleNonSmiBitwiseOp(MacroAssembler* masm,
       break;
     }
     case NO_OVERWRITE: {
-      // Get a new heap number in t5.  t6 and t7 are scratch.
-      __ AllocateHeapNumber(t5, t6, t7, &slow);
+      // Get a new heap number in t5.  t4 and t7 are scratch.
+      __ AllocateHeapNumber(t5, t4, t7, heap_number_map, &slow);
     }
     default: break;
   }
@@ -9219,15 +9238,15 @@ void GenericBinaryOpStub::HandleNonSmiBitwiseOp(MacroAssembler* masm,
 
   if (mode_ != NO_OVERWRITE) {
     __ bind(&have_to_allocate);
-    // Get a new heap number in t5.  t6 and t7 are scratch.
-    __ AllocateHeapNumber(t5, t6, t7, &slow);
+    // Get a new heap number in t5.  t4 and t7 are scratch.
+    __ AllocateHeapNumber(t5, t4, t7, heap_number_map, &slow);
     __ b(&got_a_heap_number);
     __ nop();   // NOP_ADDED
   }
 
   // If all else failed then we go to the runtime system.
   __ bind(&slow);
-
+  
   __ Push(lhs, rhs);  // restore stack
   __ li(rhs, Operand(1));  // 1 argument (not counting receiver).
 
@@ -9744,6 +9763,9 @@ void StackCheckStub::Generate(MacroAssembler* masm) {
 void GenericUnaryOpStub::Generate(MacroAssembler* masm) {
   Label slow, done;
 
+  Register heap_number_map = t6;
+  __ LoadRoot(heap_number_map, Heap::kHeapNumberMapRootIndex);
+
   if (op_ == Token::SUB) {
     // Check whether the value is a smi.
     Label try_float;
@@ -9763,15 +9785,17 @@ void GenericUnaryOpStub::Generate(MacroAssembler* masm) {
     __ StubReturn(1);
 
     __ bind(&try_float);
-    __ GetObjectType(a0, a1, a1);
-    __ Branch(&slow, ne, a1, Operand(HEAP_NUMBER_TYPE));
+
+    __ lw(a1, FieldMemOperand(a0, HeapObject::kMapOffset));
+    __ AssertRegisterIsRoot(heap_number_map, Heap::kHeapNumberMapRootIndex);
+    __ Branch(&slow, ne, a1, Operand(heap_number_map));
     // a0 is a heap number.  Get a new heap number in a1.
     if (overwrite_) {
       __ lw(a2, FieldMemOperand(a0, HeapNumber::kExponentOffset));
       __ Xor(a2, a2, Operand(HeapNumber::kSignMask));  // Flip sign.
       __ sw(a2, FieldMemOperand(a0, HeapNumber::kExponentOffset));
     } else {
-      __ AllocateHeapNumber(a1, a2, a3, &slow);
+      __ AllocateHeapNumber(a1, a2, a3, heap_number_map, &slow);
       __ lw(a3, FieldMemOperand(a0, HeapNumber::kMantissaOffset));
       __ lw(a2, FieldMemOperand(a0, HeapNumber::kExponentOffset));
       __ sw(a3, FieldMemOperand(a1, HeapNumber::kMantissaOffset));
@@ -9781,8 +9805,9 @@ void GenericUnaryOpStub::Generate(MacroAssembler* masm) {
     }
   } else if (op_ == Token::BIT_NOT) {
     // Check if the operand is a heap number.
-    __ GetObjectType(a0, a1, a1);
-    __ Branch(&slow, ne, a1, Operand(HEAP_NUMBER_TYPE));
+    __ lw(a1, FieldMemOperand(a0, HeapObject::kMapOffset));
+    __ AssertRegisterIsRoot(heap_number_map, Heap::kHeapNumberMapRootIndex);
+    __ Branch(&slow, ne, a1, Operand(heap_number_map));
 
     // Convert the heap number in a0 to an untagged integer in a1.
     // Go slow if HeapNumber won't fit in 32-bit (untagged) int.
@@ -9804,7 +9829,7 @@ void GenericUnaryOpStub::Generate(MacroAssembler* masm) {
     if (!overwrite_) {
       // Allocate a fresh heap number, but don't overwrite a0 in-case
       // we need to go slow. Return new heap number in v0.
-      __ AllocateHeapNumber(a2, a3, t0, &slow);
+      __ AllocateHeapNumber(a2, a3, t0, heap_number_map, &slow);
       __ mov(v0, a2);
     }
 

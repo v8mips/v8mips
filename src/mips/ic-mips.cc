@@ -1427,7 +1427,8 @@ void KeyedLoadIC::GenerateExternalArray(MacroAssembler* masm,
     __ bind(&box_int);
     // Allocate a HeapNumber for the result and perform int-to-double
     // conversion. Use v0 for result as key is not needed any more.
-    __ AllocateHeapNumber(v0, a3, t0, &slow);
+    __ LoadRoot(t6, Heap::kHeapNumberMapRootIndex);
+    __ AllocateHeapNumber(v0, a3, t0, t6, &slow);
 
     if (CpuFeatures::IsSupported(FPU)) {
       CpuFeatures::Scope scope(FPU);
@@ -1458,7 +1459,8 @@ void KeyedLoadIC::GenerateExternalArray(MacroAssembler* masm,
       // Allocate a HeapNumber for the result and perform int-to-double
       // conversion. Don't use a0 and a1 as AllocateHeapNumber clobbers all
       // registers - also when jumping due to exhausted young space.
-      __ AllocateHeapNumber(v0, t2, t3, &slow);
+      __ LoadRoot(t6, Heap::kHeapNumberMapRootIndex);
+      __ AllocateHeapNumber(v0, t2, t3, t6, &slow);
 
       // This is replaced by a macro:
       // __ mtc1(value, f0);     // LS 32-bits.
@@ -1500,7 +1502,8 @@ void KeyedLoadIC::GenerateExternalArray(MacroAssembler* masm,
       // Wrap it into a HeapNumber. Don't use a0 and a1 as AllocateHeapNumber
       // clobbers all registers - also when jumping due to exhausted young
       // space.
-      __ AllocateHeapNumber(t2, t3, t5, &slow);
+      __ LoadRoot(t6, Heap::kHeapNumberMapRootIndex);
+      __ AllocateHeapNumber(t2, t3, t5, t6, &slow);
 
       __ sw(hiword, FieldMemOperand(t2, HeapNumber::kExponentOffset));
       __ sw(loword, FieldMemOperand(t2, HeapNumber::kMantissaOffset));
@@ -1516,7 +1519,8 @@ void KeyedLoadIC::GenerateExternalArray(MacroAssembler* masm,
       // Allocate a HeapNumber for the result. Don't use a0 and a1 as
       // AllocateHeapNumber clobbers all registers - also when jumping due to
       // exhausted young space.
-      __ AllocateHeapNumber(v0, t3, t5, &slow);
+      __ LoadRoot(t6, Heap::kHeapNumberMapRootIndex);
+      __ AllocateHeapNumber(v0, t3, t5, t6, &slow);
       // The float (single) value is already in fpu reg f0 (if we use float).
       __ cvt_d_s(f0, f0);
       __ sdc1(f0, MemOperand(v0, HeapNumber::kValueOffset - kHeapObjectTag));
@@ -1525,7 +1529,8 @@ void KeyedLoadIC::GenerateExternalArray(MacroAssembler* masm,
       // Allocate a HeapNumber for the result. Don't use a0 and a1 as
       // AllocateHeapNumber clobbers all registers - also when jumping due to
       // exhausted young space.
-      __ AllocateHeapNumber(v0, t3, t5, &slow);
+      __ LoadRoot(t6, Heap::kHeapNumberMapRootIndex);
+      __ AllocateHeapNumber(v0, t3, t5, t6, &slow);
       // FPU is not available, do manual single to double conversion.
 
       // a2: floating point value (binary32).

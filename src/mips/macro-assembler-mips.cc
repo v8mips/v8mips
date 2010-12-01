@@ -2111,7 +2111,9 @@ void MacroAssembler::AllocateAsciiConsString(Register result,
 void MacroAssembler::AllocateHeapNumber(Register result,
                                Register scratch1,
                                Register scratch2,
+                               Register heap_number_map,
                                Label* need_gc) {
+
   // Allocate an object in the heap for the heap number and tag it as a heap
   // object.
   // We ask for four more bytes to align it as we need and align the result.
@@ -2138,9 +2140,9 @@ void MacroAssembler::AllocateHeapNumber(Register result,
 //          scratch2, Operand(zero_reg));
 #endif
 
-  // Get heap number map and store it in the allocated object.
-  LoadRoot(scratch1, Heap::kHeapNumberMapRootIndex);
-  sw(scratch1, FieldMemOperand(result, HeapObject::kMapOffset));
+  // Store heap number map in the allocated object.
+  AssertRegisterIsRoot(heap_number_map, Heap::kHeapNumberMapRootIndex);
+  sw(heap_number_map, FieldMemOperand(result, HeapObject::kMapOffset));
 }
 
 
@@ -2149,7 +2151,8 @@ void MacroAssembler::AllocateHeapNumberWithValue(Register result,
                                                  Register scratch1,
                                                  Register scratch2,
                                                  Label* gc_required) {
-  AllocateHeapNumber(result, scratch1, scratch2, gc_required);
+  LoadRoot(t6, Heap::kHeapNumberMapRootIndex);
+  AllocateHeapNumber(result, scratch1, scratch2, t6, gc_required);
   sdc1(value, FieldMemOperand(result, HeapNumber::kValueOffset));
 }
 
@@ -2683,6 +2686,15 @@ void MacroAssembler::Assert(Condition cc, const char* msg,
                             Register rs, Operand rt) {
   if (FLAG_debug_code)
     Check(cc, msg, rs, rt);
+}
+
+
+void MacroAssembler::AssertRegisterIsRoot(Register reg,
+                                          Heap::RootListIndex index) {
+  if (FLAG_debug_code) {
+    LoadRoot(at, index);
+    Check(eq, "Register did not match expected root", reg, Operand(at));
+  }
 }
 
 
