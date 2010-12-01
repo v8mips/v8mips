@@ -1509,6 +1509,7 @@ void CodeGenerator::SmiOperation(Token::Value op,
           if (shift_value != 0) {
             // ASR by immediate 0 means shifting 32 bits.
             __ sra(v0, v0, shift_value);
+             result = TypeInfo::Smi();
            }
           break;
         }
@@ -1517,7 +1518,7 @@ void CodeGenerator::SmiOperation(Token::Value op,
       __ sll(v0, v0, kSmiTagSize);  // Tag result.
       deferred->BindExit();
       __ mov(tos, v0);
-      frame_->EmitPush(tos);
+      frame_->EmitPush(tos, result);
       break;
     }
 
