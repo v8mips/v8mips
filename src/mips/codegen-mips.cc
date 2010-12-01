@@ -1491,13 +1491,12 @@ void CodeGenerator::SmiOperation(Token::Value op,
           if (shift_value != 0) {
             __ srl(v0, v0, shift_value);
           }
-              // Check that the *unsigned* result fits in a smi.
-              // Neither of the two high-order bits can be set:
-              // - 0x80000000: high bit would be lost when smi tagging
-              // - 0x40000000: this number would convert to negative when
+          // Check that the *unsigned* result fits in a smi.
+          // Neither of the two high-order bits can be set:
+          // - 0x80000000: high bit would be lost when smi tagging
+          // - 0x40000000: this number would convert to negative when
           // Smi tagging these two cases can only happen with shifts
           // by 0 or 1 when handed a valid smi.
-          // Check that the result fits in a Smi.
           __ And(scratch, v0, Operand(0xc0000000));
           deferred->Branch(ne, scratch, Operand(zero_reg));
           if (shift_value >= 2) {
@@ -8745,7 +8744,7 @@ void GenericBinaryOpStub::HandleBinaryOpSlowCases(MacroAssembler* masm,
         default:
           break;
       }
-      // Restore heap number map register. 
+      // Restore heap number map register.
       __ LoadRoot(heap_number_map, Heap::kHeapNumberMapRootIndex);
     }
 
@@ -9152,7 +9151,7 @@ void GenericBinaryOpStub::HandleNonSmiBitwiseOp(MacroAssembler* masm,
 
   Register heap_number_map = t6;
   __ LoadRoot(heap_number_map, Heap::kHeapNumberMapRootIndex);
-  
+
   __ And(t1, lhs, Operand(kSmiTagMask));
   __ Branch(&lhs_is_smi, eq, t1, Operand(zero_reg));
 
@@ -9255,7 +9254,7 @@ void GenericBinaryOpStub::HandleNonSmiBitwiseOp(MacroAssembler* masm,
 
   // If all else failed then we go to the runtime system.
   __ bind(&slow);
-  
+
   __ Push(lhs, rhs);  // restore stack
   __ li(rhs, Operand(1));  // 1 argument (not counting receiver).
 
@@ -9795,7 +9794,7 @@ void GenericUnaryOpStub::Generate(MacroAssembler* masm) {
       // optimistic subtraction '0 - value'.
       __ subu(v0, zero_reg, a0);
       // Check for overflow. For v=0-x, overflow only occurs on x=0x80000000.
-      // We don't have to reverse the optimistic neg since we did not 
+      // We don't have to reverse the optimistic neg since we did not
       // change input register a0.
       __ Branch(&slow, eq, a0, Operand(0x80000000));  // Go slow on overflow.
       __ StubReturn(1);
