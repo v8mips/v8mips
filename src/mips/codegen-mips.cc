@@ -1454,9 +1454,9 @@ void CodeGenerator::SmiOperation(Token::Value op,
         __ And(tos, tos, Operand(Smi::FromInt(0x1f)));
         deferred->Branch(ge, tos, Operand(Smi::FromInt(max_shift)));
         Register scratch = VirtualFrame::scratch0();
-        __ sra(scratch, tos, kSmiTagSize);  // Untag.
-        __ li(tos, Operand(Smi::FromInt(int_value)));    // Load constant.
-        __ sllv(tos, tos, scratch);          // Shift constant.
+        __ sra(scratch, tos, kSmiTagSize);             // Untag.
+        __ li(tos, Operand(Smi::FromInt(int_value)));  // Load constant.
+        __ sllv(tos, tos, scratch);                    // Shift constant.
         deferred->BindExit();
         TypeInfo result = TypeInfo::Integer32();
         frame_->EmitPush(tos, result);
@@ -1468,7 +1468,7 @@ void CodeGenerator::SmiOperation(Token::Value op,
       ASSERT(!reversed);
       TypeInfo result = TypeInfo::Integer32();
       Register scratch = VirtualFrame::scratch0();
-      int shift_value = int_value & 0x1f;  // least significant 5 bits
+      int shift_value = int_value & 0x1f;  // Least significant 5 bits.
       DeferredCode* deferred =
         new DeferredInlineSmiOperation(op, shift_value, false, mode, tos);
       bool skip_smi_test = both_sides_are_smi;
@@ -1507,8 +1507,10 @@ void CodeGenerator::SmiOperation(Token::Value op,
         }
         case Token::SAR: {
           if (shift_value != 0) {
-            // ASR by immediate 0 means shifting 32 bits.
+            // SAR by immediate 0 means we do not have to do anything.
             __ sra(v0, v0, shift_value);
+            // SAR by at least 1 gives a Smi.
+            result = TypeInfo::Smi();
            }
           break;
         }
@@ -1517,7 +1519,7 @@ void CodeGenerator::SmiOperation(Token::Value op,
       __ sll(v0, v0, kSmiTagSize);  // Tag result.
       deferred->BindExit();
       __ mov(tos, v0);
-      frame_->EmitPush(tos);
+      frame_->EmitPush(tos, result);
       break;
     }
 
