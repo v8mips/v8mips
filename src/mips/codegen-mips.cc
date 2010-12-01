@@ -5245,7 +5245,6 @@ void CodeGenerator::VisitUnaryOperation(UnaryOperation* node) {
 #ifdef DEBUG
   int original_height = frame_->height();
 #endif
-  VirtualFrame::SpilledScope spilled_scope(frame_);
   Comment cmnt(masm_, "[ UnaryOperation");
 
   Token::Value op = node->op();
@@ -5322,8 +5321,7 @@ void CodeGenerator::VisitUnaryOperation(UnaryOperation* node) {
         break;
 
       case Token::SUB: {
-        VirtualFrame::SpilledScope spilled(frame_);
-        frame_->EmitPop(a0);
+        frame_->PopToA0();
         GenericUnaryOpStub stub(
             Token::SUB,
             overwrite,
@@ -5334,22 +5332,27 @@ void CodeGenerator::VisitUnaryOperation(UnaryOperation* node) {
       }
 
       case Token::BIT_NOT: {
-        VirtualFrame::SpilledScope spilled(frame_);
-        frame_->EmitPop(a0);
-        JumpTarget smi_label;
+        Register tos = frame_->PopToRegister();
+        JumpTarget not_smi_label;
         JumpTarget continue_label;
-        __ And(t0, a0, Operand(kSmiTagMask));
-        smi_label.Branch(eq, t0, Operand(zero_reg));
+        // Smi check.
+        __ And(t0, tos, Operand(kSmiTagMask));
+        not_smi_label.Branch(ne, t0, Operand(zero_reg));
 
-        GenericUnaryOpStub stub(Token::BIT_NOT, overwrite);
-        frame_->CallStub(&stub, 0);
+        // We have a smi. Invert all bits except bit 0.
+        __ Xor(tos, tos, 0xfffffffe);
+        frame_->EmitPush(tos);
+        // The fast case is the first to jump to the continue label, so it gets
+        // to decide the virtual frame layout.
         continue_label.Jump();
 
-        smi_label.Bind();
-        // We have a smi. Invert all bits except bit 0.
-        __ Xor(v0, a0, 0xfffffffe);
+        not_smi_label.Bind();
+        frame_->SpillAll();
+        __ Move(a0, tos);
+        GenericUnaryOpStub stub(Token::BIT_NOT, overwrite);
+        frame_->CallStub(&stub, 0);
+        frame_->EmitPush(v0);
         continue_label.Bind();
-        frame_->EmitPush(v0);  // v0 has result
         break;
       }
 
@@ -5359,17 +5362,18 @@ void CodeGenerator::VisitUnaryOperation(UnaryOperation* node) {
         break;
 
       case Token::ADD: {
-        VirtualFrame::SpilledScope spilled(frame_);
-        frame_->EmitPop(a0);
+        // This line is not in the ARM version, however it is currently
+        // needed here.
+        VirtualFrame::RegisterAllocationScope scope(this);
+        Register tos = frame_->Peek();
         // Smi check.
         JumpTarget continue_label;
-        __ mov(v0, a0);   // In case Smi test passes, move param to result.
-        __ And(t0, a0, Operand(kSmiTagMask));
+        __ And(t0, tos, Operand(kSmiTagMask));
         continue_label.Branch(eq, t0, Operand(zero_reg));
-        frame_->EmitPush(a0);
+
         frame_->InvokeBuiltin(Builtins::TO_NUMBER, CALL_JS, 1);
-        continue_label.Bind();
         frame_->EmitPush(v0);  // v0 holds the result.
+        continue_label.Bind();
         break;
       }
       default:
@@ -5386,12 +5390,8 @@ void CodeGenerator::VisitCountOperation(CountOperation* node) {
 #ifdef DEBUG
   int original_height = frame_->height();
 #endif
-  Comment cmnt(masm_, "[ CountOperation");
-
-  // TODO(plind) This line is not needed or present in
-  // codegen-arm.cc, but it is needed currently for mips. I
-  // suspect a virtual-frame change we have not caught up with.
   VirtualFrame::RegisterAllocationScope scope(this);
+  Comment cmnt(masm_, "[ CountOperation");
 
   bool is_postfix = node->is_postfix();
   bool is_increment = node->op() == Token::INC;
@@ -5533,7 +5533,6 @@ void CodeGenerator::GenerateLogicalBooleanOperation(BinaryOperation* node) {
   // after evaluating the left hand side (due to the shortcut
   // semantics), but the compiler must (statically) know if the result
   // of compiling the binary operation is materialized or not.
-  VirtualFrame::SpilledScope spilled_scope(frame_);
   if (node->op() == Token::AND) {
     JumpTarget is_true;
     LoadCondition(node->left(), &is_true, false_target(), false);
@@ -5720,8 +5719,6 @@ void CodeGenerator::VisitCompareOperation(CompareOperation* node) {
       Load(left_is_null ? right : left);
       Register tos = frame_->PopToRegister();
       __ mov(condReg1, tos);
-      // JumpTargets can't cope with register allocation yet.
-      frame_->SpillAll();
       __ LoadRoot(condReg2, Heap::kNullValueRootIndex);
 
       // The 'null' value is only equal to 'undefined' if using non-strict
@@ -5764,8 +5761,6 @@ void CodeGenerator::VisitCompareOperation(CompareOperation* node) {
     LoadTypeofExpression(operation->expression());
     Register tos = frame_->PopToRegister();
     __ mov(condReg1, tos);
-    // JumpTargets can't cope with register allocation yet.
-    frame_->SpillAll();
 
     Register scratch = VirtualFrame::scratch0();
     Register scratch2 = VirtualFrame::scratch1();
@@ -5883,7 +5878,6 @@ void CodeGenerator::VisitCompareOperation(CompareOperation* node) {
       break;
 
     case Token::IN: {
-      VirtualFrame::SpilledScope scope(frame_);
       Load(left);
       Load(right);
       frame_->InvokeBuiltin(Builtins::IN, CALL_JS, 2);
@@ -5892,7 +5886,6 @@ void CodeGenerator::VisitCompareOperation(CompareOperation* node) {
     }
 
     case Token::INSTANCEOF: {
-      VirtualFrame::SpilledScope scope(frame_);
       Load(left);
       Load(right);
       InstanceofStub stub;
@@ -5989,10 +5982,14 @@ class DeferredReferenceGetKeyedValue: public DeferredCode {
   Register receiver_;
 };
 
-
+// Takes key and register in a0 and a1 or vice versa.  Returns result
+// in a0.
 void DeferredReferenceGetKeyedValue::Generate() {
   ASSERT((key_.is(a0) && receiver_.is(a1)) ||
          (key_.is(a1) && receiver_.is(a0)));
+
+  VirtualFrame copied_frame(*frame_state()->frame());
+  copied_frame.SpillAll();
 
   Register scratch1 = VirtualFrame::scratch0();
   Register scratch2 = VirtualFrame::scratch1();
@@ -6013,6 +6010,14 @@ void DeferredReferenceGetKeyedValue::Generate() {
     // The call must be followed by a nop instruction to indicate that the
     // keyed load has been inlined.
     __ nop(PROPERTY_ACCESS_INLINED);
+
+
+    // Now go back to the frame that we entered with.  This will not overwrite
+    // the receiver or key registers since they were not in use when we came
+    // in.  The instructions emitted by this merge are skipped over by the
+    // inline load patching mechanism when looking for the branch instruction
+    // that tells it where the code to patch is.
+    copied_frame.MergeTo(frame_state()->frame());
 
     // Block the trampoline pool for one more instruction after leaving this
     // constant pool block scope to include the branch instruction ending the
