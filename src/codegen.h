@@ -425,7 +425,7 @@ enum NegativeZeroHandling {
   kIgnoreNegativeZero
 };
 
-  
+
 class GenericUnaryOpStub : public CodeStub {
  public:
   GenericUnaryOpStub(Token::Value op,
