@@ -4241,7 +4241,7 @@ void CodeGenerator::GenerateMathPow(ZoneList<Expression*>* args) {
   } else {
     CpuFeatures::Scope scope(FPU);
     JumpTarget runtime, done;
-    Label not_minus_half, allocate_return;
+    Label exponent_nonsmi, base_nonsmi, powi, not_minus_half, allocate_return;
 
     Register scratch1 = VirtualFrame::scratch0();
     Register scratch2 = VirtualFrame::scratch1();
@@ -4249,18 +4249,94 @@ void CodeGenerator::GenerateMathPow(ZoneList<Expression*>* args) {
     // Get base and exponent to registers.
     Register exponent = frame_->PopToRegister();
     Register base = frame_->PopToRegister(exponent);
+    Register heap_number_map = no_reg;
 
     // Set the frame for the runtime jump target. The code below jumps to the
     // jump target label so the frame needs to be established before that.
     ASSERT(runtime.entry_frame() == NULL);
     runtime.set_entry_frame(frame_);
 
-    __ BranchOnSmi(exponent, runtime.entry_label());
+    __ BranchOnNotSmi(exponent, &exponent_nonsmi);
+    __ BranchOnNotSmi(base, &base_nonsmi);
+
+    heap_number_map = t2;
+    __ LoadRoot(heap_number_map, Heap::kHeapNumberMapRootIndex);
+
+    // Exponent is a smi and base is a smi. Get the smi value into fpu register
+    // f2.
+    __ SmiToDoubleFPURegister(base, f2, scratch1);
+    __ Branch(&powi);
+
+    __ bind(&base_nonsmi);
+    // Exponent is smi and base is non smi. Get the double value from the base
+    // into fpu register f2.
+    __ ObjectToDoubleFPURegister(base, f2,
+                                 scratch1, scratch2, heap_number_map,
+                                 runtime.entry_label());
+
+    __ bind(&powi);
+
+    // Load 1.0 into f0.
+    __ li(scratch2, Operand(0x3ff00000));
+    __ mtc1(scratch2, f1);
+    __ mtc1(zero_reg, f0);
+
+    // Get the absolute untagged value of the exponent and use that for the
+    // calculation.
+    __ sra(scratch1, exponent, kSmiTagSize);
+    {
+      Label exponent_not_negative;
+      __ Branch(&exponent_not_negative, gt,
+                scratch1, Operand(zero_reg));
+      __ Subu(scratch1, zero_reg, scratch1);  // Negate if negative.
+      __ mov_d(f4, f0);  // 1.0 needed in f4 later if exponent is negative.
+      __ bind(&exponent_not_negative);
+    }
+
+    // Run through all the bits in the exponent. The result is calculated in f0
+    // and f2 holds base^(bit^2).
+    Label more_bits;
+    __ bind(&more_bits);
+    {
+      Label will_not_carry;
+      __ andi(scratch2, scratch1, 1);  // Test LSB.
+      __ Branch(&will_not_carry, eq, scratch2, Operand(zero_reg));
+      __ mul_d(f0, f0, f2);  // Multiply with base^(bit^2).
+      __ bind(&will_not_carry);
+    }
+    __ srl(scratch1, scratch1, 1);
+    {
+      Label zero;
+      __ Branch(&zero, eq, scratch1, Operand(zero_reg));
+      __ mul_d(f2, f2, f2);
+      __ Branch(&more_bits);
+      __ bind(&zero);
+    }
+
+    // If exponent is positive we are done.
+    __ Branch(&allocate_return, ge, exponent, Operand(zero_reg));
+
+    // If exponent is negative result is 1/result (f4 already holds 1.0 in that
+    // case). However if f0 has reached infinity this will not provide the
+    // correct result, so call runtime if that is the case.
+    {
+      // Testing for Infinity. This is much simpler than comparing FPU values.
+      Label no_match;
+      __ mfc1(scratch2, f0);
+      __ Branch(&no_match, ne, scratch2, Operand(zero_reg));
+      __ mfc1(scratch2, f1);
+      runtime.Branch(eq, scratch2, Operand(0x7FF00000));  // f0 == Inf.
+      __ bind(&no_match);
+    }
+    __ div_d(f0, f4, f0);
+    __ Branch(&allocate_return);
+
+    __ bind(&exponent_nonsmi);
 
     // Special handling of raising to the power of -0.5 and 0.5. First check
     // that the value is a heap number and that the lower bits (which for both
     // values are zero).
-    Register heap_number_map = t2;
+    heap_number_map = t2;
     __ LoadRoot(heap_number_map, Heap::kHeapNumberMapRootIndex);
     __ lw(scratch1, FieldMemOperand(exponent, HeapObject::kMapOffset));
     __ lw(scratch2, FieldMemOperand(exponent, HeapNumber::kMantissaOffset));
@@ -4268,7 +4344,7 @@ void CodeGenerator::GenerateMathPow(ZoneList<Expression*>* args) {
     __ And(at, scratch1, scratch2);
     runtime.Branch(ne, at, Operand(zero_reg));
 
-    // Load the e
+    // Load the higher bits (which contains the floating point exponent).
     __ lw(scratch1, FieldMemOperand(exponent, HeapNumber::kExponentOffset));
 
     // Compare exponent with -0.5.
@@ -4303,8 +4379,10 @@ void CodeGenerator::GenerateMathPow(ZoneList<Expression*>* args) {
     __ sqrt_d(f0, f0);
 
     __ bind(&allocate_return);
-    __ AllocateHeapNumberWithValue(
-        base, f0, scratch1, scratch2, runtime.entry_label());
+    Register scratch3 = t3;
+    __ AllocateHeapNumberWithValue(scratch3, f0, scratch1, scratch2,
+                                   runtime.entry_label());
+    __ Move(base, scratch3);
     done.Jump();
 
     runtime.Bind();
