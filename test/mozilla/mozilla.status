@@ -65,6 +65,8 @@ js1_5/Array/regress-465980-02: SKIP
 ecma_3/Date/15.9.3.2-1: SKIP
 js1_2/function/Number: SKIP
 
+# prints too much crap to the screen, polluting logfiles.
+js1_5/extensions/regress-342960: SKIP
 
 ##################### SLOW TESTS #####################
 
@@ -740,7 +742,7 @@ js1_5/extensions/toLocaleFormat-02: FAIL_OK
 
 js1_5/extensions/regress-330569: TIMEOUT
 js1_5/extensions/regress-351448: TIMEOUT
-js1_5/extensions/regress-342960: FAIL_OK || TIMEOUT if $mode == debug
+### plind   js1_5/extensions/regress-342960: FAIL_OK || TIMEOUT if $mode == debug
 # In the 64-bit version, this test takes longer to run out of memory
 # than it does in the 32-bit version when attempting to generate a huge
 # error message in debug mode.
