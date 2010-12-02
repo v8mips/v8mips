@@ -2535,6 +2535,7 @@ ACCESSORS(BreakPointInfo, break_point_objects, Object, kBreakPointObjectsIndex)
 #endif
 
 ACCESSORS(SharedFunctionInfo, name, Object, kNameOffset)
+ACCESSORS(SharedFunctionInfo, scope_info, Object, kScopeInfoOffset)
 ACCESSORS(SharedFunctionInfo, construct_stub, Code, kConstructStubOffset)
 ACCESSORS(SharedFunctionInfo, instance_class_name, Object,
           kInstanceClassNameOffset)
@@ -2847,7 +2848,6 @@ JSValue* JSValue::cast(Object* obj) {
 
 INT_ACCESSORS(Code, instruction_size, kInstructionSizeOffset)
 ACCESSORS(Code, relocation_info, ByteArray, kRelocationInfoOffset)
-INT_ACCESSORS(Code, sinfo_size, kSInfoSizeOffset)
 
 
 byte* Code::instruction_start()  {
@@ -2888,11 +2888,6 @@ byte* Code::entry() {
 bool Code::contains(byte* pc) {
   return (instruction_start() <= pc) &&
       (pc < instruction_start() + instruction_size());
-}
-
-
-byte* Code::sinfo_start() {
-  return FIELD_ADDR(this, kHeaderSize + body_size());
 }
 
 
