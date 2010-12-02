@@ -8734,7 +8734,7 @@ int CompareStub::MinorKey() {
 
 // We fall into this code if the operands were Smis, but the result was
 // not (eg. overflow).  We branch into this code (to the not_smi label) if
-// the operands were not both Smi.  The operands are in a1 (x) and a0 (y).
+// the operands were not both Smi.  The operands are in lhs and rhs.
 // To call the C-implemented binary fp operation routines we need to end up
 // with the double precision floating point operands in a0 and a1 (for the
 // value in a1) and a2 and a3 (for the value in a0).
@@ -8745,51 +8745,55 @@ void GenericBinaryOpStub::HandleBinaryOpSlowCases(MacroAssembler* masm,
                                     Register rhs,
                                     const Builtins::JavaScript& builtin) {
   Label slow, slow_reverse, do_the_call;
-  Label a0_is_smi, a1_is_smi, finished_loading_a0, finished_loading_a1;
-  bool use_fp_registers = CpuFeatures::IsSupported(FPU);
+  bool use_fp_registers = CpuFeatures::IsSupported(FPU) && Token::MOD != op_;
 
-  Register heap_number_map = t6;
+  ASSERT((lhs.is(a0) && rhs.is(a1)) || (lhs.is(a1) && rhs.is(a0)));
+  Register heap_number_map = t2;
 
   if (ShouldGenerateSmiCode()) {
     if (op_ == Token::MOD || op_ == Token::DIV) {
-    // If the divisor is zero for MOD or DIV, go to
-    // the builtin code to return NaN.
-     __ Branch(lhs.is(a0) ? &slow_reverse : &slow, eq, rhs, Operand(zero_reg));
+      // If the divisor is zero for MOD or DIV, go to
+      // the builtin code to return NaN.
+      __ Branch(lhs.is(a0) ? &slow_reverse : &slow, eq, rhs, Operand(zero_reg));
     }
-
     // Smi-smi case (overflow).
     // Since both are Smis there is no heap number to overwrite, so allocate.
-    // The new heap number is in t0. t1 and t2 are scratch.
+    // The new heap number is in t1. a3 and t3 are scratch.
     __ LoadRoot(heap_number_map, Heap::kHeapNumberMapRootIndex);
-    __ AllocateHeapNumber(t0, t1, t2, heap_number_map, lhs.is(a0) ? &slow_reverse : &slow);
+    __ AllocateHeapNumber(
+        t1, a3, t3, heap_number_map, lhs.is(a0) ? &slow_reverse : &slow);
 
     // If we have floating point hardware, inline ADD, SUB, MUL, and DIV,
     // using registers f12 and f14 for the double values.
-
-    bool use_fp_registers = CpuFeatures::IsSupported(FPU);
-
-     if (use_fp_registers) {
+    if (CpuFeatures::IsSupported(FPU)) {
       CpuFeatures::Scope scope(FPU);
-      // Convert a1 (x) to double in f12
-      __ sra(t2, lhs, kSmiTagSize);
-      __ mtc1(t2, f12);
+      // Convert lhs to double in f12
+      __ sra(t3, lhs, kSmiTagSize);
+      __ mtc1(t3, f12);
       __ cvt_d_w(f12, f12);
 
-      // Convert a0 (y) to double in f14
-      __ sra(t2, rhs, kSmiTagSize);
-      __ mtc1(t2, f14);
+      // Convert rhs to double in f14
+      __ sra(t3, rhs, kSmiTagSize);
+      __ mtc1(t3, f14);
       __ cvt_d_w(f14, f14);
 
+      if (!use_fp_registers) {
+        __ mfc1(a2, f14);   // a2, a3 get rhs.
+        __ mfc1(a3, f15);
+        __ mfc1(a0, f12);   // a0, a1 get lhs.
+        __ mfc1(a1, f13);
+      }
+
     } else {
-      // Write Smi from a0 to a3 and a2 in double format. t1 is scratch.
-      ConvertToDoubleStub stub1(a3, a2, rhs, t1);
+      // Write Smi from rhs to a3 and a2 in double format. t5 is scratch.
+      __ mov(t3, rhs);
+      ConvertToDoubleStub stub1(a3, a2, t3, t5);
       __ Push(ra);
       __ Call(stub1.GetCode(), RelocInfo::CODE_TARGET);
 
-      // Write Smi from a1 to a1 and a0 in double format. t1 is scratch.
-      // Needs a1 in temp (t2); cannot use same reg for src & dest.
-      __ mov(t2, lhs);
-      ConvertToDoubleStub stub2(a1, a0, t2, t1);
+      // Write Smi from lhs to a1 and a0 in double format. t5 is scratch.
+      __ mov(t3, lhs);
+      ConvertToDoubleStub stub2(a1, a0, t3, t5);
       __ Call(stub2.GetCode(), RelocInfo::CODE_TARGET);
       __ Pop(ra);
     }
@@ -8799,12 +8803,16 @@ void GenericBinaryOpStub::HandleBinaryOpSlowCases(MacroAssembler* masm,
   // We branch here if at least one of a0 and a1 is not a Smi.
   __ bind(not_smi);
   __ LoadRoot(heap_number_map, Heap::kHeapNumberMapRootIndex);
+
   // After this point we have the left hand side in a1 and the right hand side
   // in a0.
   Register scratch  = VirtualFrame::scratch0();
   if (lhs.is(a0)) {
     __ Swap(a0, a1, scratch);
   }
+
+  // The type transition also calculates the answer.
+  bool generate_code_to_calculate_answer = true;
 
   if (ShouldGenerateFPCode()) {
     if (runtime_operands_type_ == BinaryOpIC::DEFAULT) {
@@ -8813,234 +8821,199 @@ void GenericBinaryOpStub::HandleBinaryOpSlowCases(MacroAssembler* masm,
         case Token::SUB:
         case Token::MUL:
         case Token::DIV:
-          GenerateTypeTransition(masm);
+          GenerateTypeTransition(masm);   // Tail call.
+          generate_code_to_calculate_answer = false;
           break;
 
         default:
           break;
       }
-      // Restore heap number map register.
-      __ LoadRoot(heap_number_map, Heap::kHeapNumberMapRootIndex);
     }
 
-    if (mode_ == NO_OVERWRITE) {
-      // In the case where there is no chance of an overwritable float we may as
-      // well do the allocation immediately while a0 and a1 are untouched.
-      __ AllocateHeapNumber(t0, t1, t2, heap_number_map, &slow);
-    }
+    if (generate_code_to_calculate_answer) {
+      Label a0_is_smi, a1_is_smi, finished_loading_a0, finished_loading_a1;
+      if (mode_ == NO_OVERWRITE) {
+        // In the case where there is no chance of an overwritable float we may
+        // as well do the allocation immediately while a0 and a1 are untouched.
+        __ AllocateHeapNumber(t1, a3, t3, heap_number_map, &slow);
+      }
 
-    // Move a0 (y) to a double in a2-a3.
-    __ And(t1, a0, Operand(kSmiTagMask));
-    // If it is an Smi, don't check if it is a heap number.
-    __ Branch(&a0_is_smi, eq, t1, Operand(zero_reg));
+      // Move a0 (rhs) to a double in a2-a3.
+      // If it's a Smi don't check if it's a heap number.
+      __ BranchOnSmi(a0, &a0_is_smi);
 
-    __ lw(t1, FieldMemOperand(a0, HeapObject::kMapOffset));
-    __ AssertRegisterIsRoot(heap_number_map, Heap::kHeapNumberMapRootIndex);
-    __ Branch(&slow, ne, t1, Operand(heap_number_map));
+      __ lw(t0, FieldMemOperand(a0, HeapObject::kMapOffset));
+      __ AssertRegisterIsRoot(heap_number_map, Heap::kHeapNumberMapRootIndex);
+      __ Branch(&slow, ne, t0, Operand(heap_number_map));
+      if (mode_ == OVERWRITE_RIGHT) {
+        __ mov(t1, a0);  // Overwrite this heap number.
+      }
+      if (use_fp_registers) {
+        CpuFeatures::Scope scope(FPU);
+        // Load the double from tagged HeapNumber a0 (rhs) to f14.
+        __ ldc1(f14, FieldMemOperand(a0, HeapNumber::kValueOffset));
+      } else {
+        // Calling convention says that second double is in a2 and a3.
+        __ lw(a2, FieldMemOperand(a0, HeapNumber::kValueOffset));
+        __ lw(a3, FieldMemOperand(a0, HeapNumber::kValueOffset + 4));
+      }
+      __ jmp(&finished_loading_a0);
+      __ bind(&a0_is_smi);
+      if (mode_ == OVERWRITE_RIGHT) {
+        // We can't overwrite a Smi so get address of new heap number into t1.
+      __ AllocateHeapNumber(t1, t0, t3, heap_number_map, &slow);
+      }
 
-    if (mode_ == OVERWRITE_RIGHT) {
-      __ mov(t0, a0);  // Overwrite this heap number.
-    }
-    if (use_fp_registers) {
-      CpuFeatures::Scope scope(FPU);
-      // Load the double from tagged HeapNumber a1 to f14.
-      __ Subu(t1, a0, Operand(kHeapObjectTag));
-      __ ldc1(f14, MemOperand(t1, HeapNumber::kValueOffset));
-    } else {
-      // Calling convention says that 'right' double (x) is in a2 and a3.
-      __ lw(a2, FieldMemOperand(a0, HeapNumber::kValueOffset));
-      __ lw(a3, FieldMemOperand(a0, HeapNumber::kValueOffset + 4));
-    }
-    __ jmp(&finished_loading_a0);
-    __ bind(&a0_is_smi);
-    if (mode_ == OVERWRITE_RIGHT) {
-      // We can't overwrite a Smi so get address of new heap number into t0.
-      __ AllocateHeapNumber(t0, t1, t2, heap_number_map, &slow);
-    }
+      if (CpuFeatures::IsSupported(FPU)) {
+       CpuFeatures::Scope scope(FPU);
+       // Convert smi in a0 (rhs) to double in f14.
+       __ sra(t3, a0, kSmiTagSize);
+       __ mtc1(t3, f14);
+       __ cvt_d_w(f14, f14);
+       if (!use_fp_registers) {
+         __ mfc1(a2, f14);
+         __ mfc1(a3, f15);
+       }
+      } else {
+       // Write Smi from a0 (rhs) to a3 and a2 in double format.
+       __ mov(t3, a0);
+       ConvertToDoubleStub stub3(a3, a2, t3, t0);
+       __ Push(ra);
+       __ Call(stub3.GetCode(), RelocInfo::CODE_TARGET);
+       __ Pop(ra);
+      }
 
-    if (use_fp_registers) {
-      CpuFeatures::Scope scope(FPU);
-      // Convert smi in a0 to double in f14.
-      __ sra(t2, a0, kSmiTagSize);
-      __ mtc1(t2, f14);
-      __ cvt_d_w(f14, f14);
-    } else {
-      // Write Smi from a0 to a3 and a2 in double format.
-      __ mov(t1, a0);
-      ConvertToDoubleStub stub3(a3, a2, t1, t2);
-      __ Push(ra);
-      __ Call(stub3.GetCode(), RelocInfo::CODE_TARGET);
-      __ Pop(ra);
-    }
+      // HEAP_NUMBERS stub is slower than GENERIC on a pair of smis.
+      // a0 is known to be a smi. If a1 is also a smi then switch to GENERIC.
+      Label a1_is_not_smi;
+      if (runtime_operands_type_ == BinaryOpIC::HEAP_NUMBERS) {
+        __ BranchOnNotSmi(a1, &a1_is_not_smi);
+        GenerateTypeTransition(masm);  // Tail call.
+      }
 
-    // HEAP_NUMBERS stub is slower than GENERIC on a pair of smis.
-    // a0 is known to be a smi. If a1 is also a smi then switch to GENERIC.
-    Label a1_is_not_smi;
-    if (runtime_operands_type_ == BinaryOpIC::HEAP_NUMBERS) {
-      __ And(at, a1, Operand(kSmiTagMask));
-      __ Branch(&a1_is_not_smi, ne, at, Operand(zero_reg));
-      GenerateTypeTransition(masm);
-      // Restore heap number map register.
-      __ LoadRoot(heap_number_map, Heap::kHeapNumberMapRootIndex);
-      __ jmp(&a1_is_smi);
-    }
+      __ bind(&finished_loading_a0);
 
-    __ bind(&finished_loading_a0);
+      // Move a1 (lhs) to a double in a0-a1.
+      // If it's a Smi don't check if it's a heap number.
+      __ BranchOnSmi(a1, &a1_is_smi);
+      __ bind(&a1_is_not_smi);
+      __ lw(t0, FieldMemOperand(a1, HeapNumber::kMapOffset));
+      __ AssertRegisterIsRoot(heap_number_map, Heap::kHeapNumberMapRootIndex);
+      __ Branch(&slow, ne, t0, Operand(heap_number_map));
+      if (mode_ == OVERWRITE_LEFT) {
+        __ mov(t1, a1);  // Overwrite this heap number.
+      }
+      if (use_fp_registers) {
+        CpuFeatures::Scope scope(FPU);
+        // Load the double from tagged HeapNumber a1 (lhs) to f12.
+        __ ldc1(f12, FieldMemOperand(a1, HeapNumber::kValueOffset));
+      } else {
+        // Calling convention says that first double (lhs) is in a0 and a1.
+        __ lw(a0, FieldMemOperand(a1, HeapNumber::kValueOffset));
+        __ lw(a1, FieldMemOperand(a1, HeapNumber::kValueOffset + 4));
+      }
+      __ jmp(&finished_loading_a1);
+      __ bind(&a1_is_smi);
+      if (mode_ == OVERWRITE_LEFT) {
+        // We can't overwrite a Smi so get address of new heap number into t1.
+      __ AllocateHeapNumber(t1, t0, t3, heap_number_map, &slow);
+      }
 
-    // Move a1 (x) to a double in a0-a1.
-    __ And(t1, a1, Operand(kSmiTagMask));
-    // If it is an Smi, don't check if it is a heap number.
-    __ Branch(&a1_is_smi, eq, t1, Operand(zero_reg));
-    __ bind(&a1_is_not_smi);
-
-    __ lw(t1, FieldMemOperand(a1, HeapObject::kMapOffset));
-    __ AssertRegisterIsRoot(heap_number_map, Heap::kHeapNumberMapRootIndex);
-    __ Branch(&slow, ne, t1, Operand(heap_number_map));
-    if (mode_ == OVERWRITE_LEFT) {
-      __ mov(t0, a1);  // Overwrite this heap number.
-    }
-    if (use_fp_registers) {
-      CpuFeatures::Scope scope(FPU);
-      // Load the double from tagged HeapNumber a1 to f12.
-      __ Subu(t1, a1, Operand(kHeapObjectTag));
-      __ ldc1(f12, MemOperand(t1, HeapNumber::kValueOffset));
-    } else {
-      __ lw(a0, FieldMemOperand(a1, HeapNumber::kValueOffset));
-      __ lw(a1, FieldMemOperand(a1, HeapNumber::kValueOffset + 4));
-    }
-    __ jmp(&finished_loading_a1);
-    __ bind(&a1_is_smi);
-    if (mode_ == OVERWRITE_LEFT) {
-      // We can't overwrite a Smi so get address of new heap number into t0.
-      __ AllocateHeapNumber(t0, t1, t2, heap_number_map, &slow);
-    }
-
-    if (use_fp_registers) {
-      CpuFeatures::Scope scope(FPU);
-      // Convert smi in a1 to double in f12.
-      __ sra(t2, a1, kSmiTagSize);
-      __ mtc1(t2, f12);
-      __ cvt_d_w(f12, f12);
-
-    } else {
-      // Write Smi from a1 to a0 and a1 in double format.
-      __ mov(t1, a1);
-      ConvertToDoubleStub stub4(a1, a0, t1, t2);
-      __ Push(ra);
-      __ Call(stub4.GetCode(), RelocInfo::CODE_TARGET);
-      __ Pop(ra);
-    }
-
-    __ bind(&finished_loading_a1);
-
-    __ bind(&do_the_call);
-    // If we are inlining the operation using FPU instructions for
-    // add, subtract, multiply, or divide, the arguments are in f12 and f14.
-    if (use_fp_registers) {
-      CpuFeatures::Scope scope(FPU);
-      // MIPS FPU instructions to implement
-      // double precision, add, subtract, multiply, divide.
-      if (Token::MUL == op_) {
-        __ mul_d(f0, f12, f14);
-      } else if (Token::DIV == op_) {
-        __ div_d(f0, f12, f14);
-      } else if (Token::ADD == op_) {
-        __ add_d(f0, f12, f14);
-      } else if (Token::SUB == op_) {
-        __ sub_d(f0, f12, f14);
-      } else if (Token::MOD == op_) {
-        // This is special case because only here we go to run-time
-        // while using FPU registers. Current ABI must be taken into account.
-        __ Push(ra);
-        __ Push(t0);
-        __ PrepareCallCFunction(4, t1);  // Two doubles count as 4 arguments.
-        if (IsMipsSoftFloatABI) {
-          // We are using MIPS FPU instructions, and parameters for the
-          // run-time function call are prepared in f12/f14 register pairs,
-          // but function we are calling is compiled with soft-float flag and
-          // expecting soft float ABI (parameters in a0-a3 registers). We need
-          // to copy parameters from f12/f14 register pairs to a0-a3 registers.
+      if (CpuFeatures::IsSupported(FPU)) {
+        CpuFeatures::Scope scope(FPU);
+        // Convert smi in a1 (lhs) to double in f12.
+        __ sra(t3, a1, kSmiTagSize);
+        __ mtc1(t3, f12);
+        __ cvt_d_w(f12, f12);
+        if (!use_fp_registers) {
           __ mfc1(a0, f12);
           __ mfc1(a1, f13);
-          __ mfc1(a2, f14);
-          __ mfc1(a3, f15);
-        }
-        __ CallCFunction(ExternalReference::double_fp_operation(op_), 4);
-        __ Pop(t0);  // Address of heap number.
-        __ Pop(ra);
-        if (IsMipsSoftFloatABI) {
-          // Store answer in the overwritable heap number.
-          // Double returned is stored in registers v0 and v1 (function we
-          // called is compiled with soft-float flag and uses soft-float ABI).
-          __ sw(v0, FieldMemOperand(t0, HeapNumber::kValueOffset));
-          __ sw(v1, FieldMemOperand(t0, HeapNumber::kValueOffset + 4));
-          __ mov(v0, t0);  // Return object ptr to caller.
-          __ Ret();
         }
       } else {
-        UNREACHABLE();
+        // Write Smi from a1 (lhs) to a1 and a0 in double format.
+        __ mov(t3, a1);
+        ConvertToDoubleStub stub4(a1, a0, t3, t5);
+        __ Push(ra);
+        __ Call(stub4.GetCode(), RelocInfo::CODE_TARGET);
+        __ Pop(ra);
       }
-      __ Subu(v0, t0, Operand(kHeapObjectTag));
-      __ sdc1(f0, MemOperand(v0, HeapNumber::kValueOffset));
-      __ Addu(v0, v0, Operand(kHeapObjectTag));
-      __ Ret();
-    } else {
-      // If we did not inline the operation, then the arguments are in:
-      // a0: Left value (least significant part of mantissa).
-      // a1: Left value (sign, exponent, top of mantissa).
-      // a2: Right value (least significant part of mantissa).
-      // a3: Right value (sign, exponent, top of mantissa).
-      // t0: Address of heap number for result.
 
-      __ Push(ra);
-      __ Push(t0);    // Address of heap number to store the answer.
+      __ bind(&finished_loading_a1);
+    }
 
-      __ PrepareCallCFunction(4, t1);  // Two doubles count as 4 arguments.
-      // Call C routine that may not cause GC or other trouble.
-      if (!IsMipsSoftFloatABI) {
-        if (!use_fp_registers) {
+    if (generate_code_to_calculate_answer || do_the_call.is_linked()) {
+      __ bind(&do_the_call);
+      // If we are inlining the operation using FPU instructions for
+      // add, subtract, multiply, or divide, the arguments are in f12 and f14.
+      if (use_fp_registers) {
+        CpuFeatures::Scope scope(FPU);
+        // MIPS32 FPU instructions to implement
+        // double precision, add, subtract, multiply, divide.
+
+        if (Token::MUL == op_) {
+          __ mul_d(f0, f12, f14);
+        } else if (Token::DIV == op_) {
+          __ div_d(f0, f12, f14);
+        } else if (Token::ADD == op_) {
+          __ add_d(f0, f12, f14);
+        } else if (Token::SUB == op_) {
+          __ sub_d(f0, f12, f14);
+        } else {
+          UNREACHABLE();
+        }
+        __ sdc1(f0, FieldMemOperand(t1, HeapNumber::kValueOffset));
+        __ mov(v0, t1);
+        __ Ret();
+      } else {
+        // If we did not inline the operation, then the arguments are in:
+        // a0: Left value (least significant part of mantissa).
+        // a1: Left value (sign, exponent, top of mantissa).
+        // a2: Right value (least significant part of mantissa).
+        // a3: Right value (sign, exponent, top of mantissa).
+        // t1: Address of heap number for result.
+
+        __ Push(ra);
+        __ Push(t1);
+        __ PrepareCallCFunction(4, t0);  // Two doubles count as 4 arguments.
+        if (!IsMipsSoftFloatABI) {
           // We are not using MIPS FPU instructions, and parameters for the
           // run-time function call are prepared in a0-a3 registers, but the
           // function we are calling is compiled with hard-float flag and
           // expecting hard float ABI (parameters in f12/f14 registers).
-          // We need to copy parameters from a0-a3 registers to f12/f14
-          // register pairs.
+          // Copy parameters from a0-a3 registers to f12/f14 register pairs.
           __ mtc1(a0, f12);
           __ mtc1(a1, f13);
           __ mtc1(a2, f14);
           __ mtc1(a3, f15);
         }
-      }
-
-      __ CallCFunction(ExternalReference::double_fp_operation(op_), 4);
-
-      if (!IsMipsSoftFloatABI) {
-        if (!use_fp_registers) {
-          // Returned double value is stored in registers f0 and f1.
-          // Function we called is compiled with hard-float flag and uses
-          // hard-float ABI. Return value in the case when we are not using
-          // MIPS FPU instructions has to be placed in v0/v1, so we need to
-          // copy from f0/f1.
-          __ mfc1(v0, f0);
-          __ mfc1(v1, f1);
+        // Call C routine that may not cause GC or other trouble.
+        __ CallCFunction(ExternalReference::double_fp_operation(op_), 4);
+        __ Pop(t1);
+        __ Pop(ra);
+        // Store answer in the overwritable heap number.
+        if (!IsMipsSoftFloatABI) {
+          // Double returned in fp coprocessor register f0 and f1.
+          __ sdc1(f0, FieldMemOperand(t1, HeapNumber::kValueOffset));
+        } else {
+          // Double returned in registers v0 and v1.
+          __ sw(v0, FieldMemOperand(t1, HeapNumber::kValueOffset));
+          __ sw(v1, FieldMemOperand(t1, HeapNumber::kValueOffset + 4));
         }
+        __ mov(v0, t1);
+        // And we are done.
+        __ Ret();
       }
-      __ Pop(t0);  // Address of heap number.
-      // Store answer in the overwritable heap number.
-
-      // Double returned in registers v0 and v1.
-      __ sw(v0, FieldMemOperand(t0, HeapNumber::kValueOffset));
-      __ sw(v1, FieldMemOperand(t0, HeapNumber::kValueOffset + 4));
-      __ mov(v0, t0);  // Return object ptr to caller.
-
-      // And we are done.
-      __ Pop(ra);
-      __ Ret();
     }
   }
 
+  if (!generate_code_to_calculate_answer &&
+      !slow_reverse.is_linked() &&
+      !slow.is_linked()) {
+    return;
+  }
+
   if (lhs.is(a0)) {
-    __ b(&slow);
+    __ Branch(&slow);
     __ bind(&slow_reverse);
     __ Swap(a0, a1, scratch);
   }
@@ -9697,29 +9670,15 @@ void GenericBinaryOpStub::GenerateTypeTransition(MacroAssembler* masm) {
 
   __ Push(a1, a0);
 
-  // Internal frame is necessary to handle exceptions properly.
-  __ EnterInternalFrame();
-  // Call the stub proper to get the result in v0.
-  __ Call(&get_result);
-  __ LeaveInternalFrame();
-
-  __ push(v0);
-
-  __ li(a0, Operand(Smi::FromInt(MinorKey())));
-  __ push(a0);
-  __ li(a0, Operand(Smi::FromInt(op_)));
-  __ push(a0);
+  __ li(a2, Operand(Smi::FromInt(MinorKey())));
+  __ li(a1, Operand(Smi::FromInt(op_)));
   __ li(a0, Operand(Smi::FromInt(runtime_operands_type_)));
-  __ push(a0);
+  __ Push(a2, a1, a0);
 
   __ TailCallExternalReference(
       ExternalReference(IC_Utility(IC::kBinaryOp_Patch)),
-      6,
+      5,
       1);
-
-  // The entry point for the result calculation is assumed to be immediately
-  // after this sequence.
-  __ bind(&get_result);
 }
 
 
