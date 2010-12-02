@@ -4795,13 +4795,10 @@ void CodeGenerator::GenerateRandomHeapNumber(
   __ jmp(&heapnumber_allocated);
 
   __ bind(&slow_allocate_heapnumber);
-  // To allocate a heap number, and ensure that it is not a smi, we
-  // call the runtime function FUnaryMinus on 0, returning the double
-  // -0.0. A new, distinct heap number is returned each time.
-  __ li(a0, Operand(Smi::FromInt(0)));
-  __ Push(a0);
-  __ CallRuntime(Runtime::kNumberUnaryMinus, 1);
-  __ mov(s0, v0);   // move the new heap-number in v0, to s0 as parameter.
+
+  // Allocate a heap number.
+  __ CallRuntime(Runtime::kNumberAlloc, 0);
+  __ mov(s0, v0);   // Save result in s0, so it is saved thru CFunc call.
 
   __ bind(&heapnumber_allocated);
 
