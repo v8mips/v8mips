@@ -962,7 +962,7 @@ int32_t Simulator::get_pc() const {
 // get the correct MIPS-like behaviour on unaligned accesses.
 
 int Simulator::ReadW(int32_t addr, Instruction* instr) {
-  if (addr >= 0 && addr < 0x400) {
+  if (addr >=0 && addr < 0x400) {
     // this has to be a NULL-dereference
     Debugger dbg(this);
     dbg.Debug();
@@ -972,7 +972,8 @@ int Simulator::ReadW(int32_t addr, Instruction* instr) {
     return *ptr;
   }
   PrintF("Unaligned read at 0x%08x, pc=%p\n", addr, instr);
-  OS::Abort();
+  Debugger dbg(this);
+  dbg.Debug();
   return 0;
 }
 
@@ -989,7 +990,8 @@ void Simulator::WriteW(int32_t addr, int value, Instruction* instr) {
     return;
   }
   PrintF("Unaligned write at 0x%08x, pc=%p\n", addr, instr);
-  OS::Abort();
+  Debugger dbg(this);
+  dbg.Debug();
 }
 
 
