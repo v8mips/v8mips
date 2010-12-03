@@ -4235,7 +4235,11 @@ void CodeGenerator::GenerateMathPow(ZoneList<Expression*>* args) {
   Load(args->at(0));
   Load(args->at(1));
 
-  if (!CpuFeatures::IsSupported(FPU)) {
+    
+  // There is a performance bug with the new code.
+  // Just force the call to runtime until this is debugged.
+  // if (!CpuFeatures::IsSupported(FPU)) {
+  if (1) {  // Fix this.........................................................
     frame_->CallRuntime(Runtime::kMath_pow, 2);
     frame_->EmitPush(v0);
   } else {
