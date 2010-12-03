@@ -2535,7 +2535,6 @@ ACCESSORS(BreakPointInfo, break_point_objects, Object, kBreakPointObjectsIndex)
 #endif
 
 ACCESSORS(SharedFunctionInfo, name, Object, kNameOffset)
-ACCESSORS(SharedFunctionInfo, scope_info, Object, kScopeInfoOffset)
 ACCESSORS(SharedFunctionInfo, construct_stub, Code, kConstructStubOffset)
 ACCESSORS(SharedFunctionInfo, instance_class_name, Object,
           kInstanceClassNameOffset)
@@ -2669,6 +2668,19 @@ Code* SharedFunctionInfo::code() {
 void SharedFunctionInfo::set_code(Code* value, WriteBarrierMode mode) {
   WRITE_FIELD(this, kCodeOffset, value);
   CONDITIONAL_WRITE_BARRIER(this, kCodeOffset, mode);
+}
+
+
+SerializedScopeInfo* SharedFunctionInfo::scope_info() {
+  return reinterpret_cast<SerializedScopeInfo*>(
+      READ_FIELD(this, kScopeInfoOffset));
+}
+
+
+void SharedFunctionInfo::set_scope_info(SerializedScopeInfo* value,
+                                        WriteBarrierMode mode) {
+  WRITE_FIELD(this, kScopeInfoOffset, reinterpret_cast<Object*>(value));
+  CONDITIONAL_WRITE_BARRIER(this, kScopeInfoOffset, mode);
 }
 
 
