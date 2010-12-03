@@ -28,6 +28,7 @@
 #include "v8.h"
 
 #include "execution.h"
+#include "heap-profiler.h"
 #include "global-handles.h"
 #include "ic-inl.h"
 #include "mark-compact.h"
@@ -2230,6 +2231,7 @@ int MarkCompactCollector::RelocateOldNonCodeObject(HeapObject* obj,
   if (copied_to->IsJSFunction()) {
     PROFILE(FunctionMoveEvent(old_addr, new_addr));
   }
+  HEAP_PROFILE(ObjectMoveEvent(old_addr, new_addr));
 
   return obj_size;
 }
@@ -2276,6 +2278,7 @@ int MarkCompactCollector::RelocateCodeObject(HeapObject* obj) {
     // Notify the logger that compiled code has moved.
     PROFILE(CodeMoveEvent(old_addr, new_addr));
   }
+  HEAP_PROFILE(ObjectMoveEvent(old_addr, new_addr));
 
   return obj_size;
 }
@@ -2320,6 +2323,7 @@ int MarkCompactCollector::RelocateNewObject(HeapObject* obj) {
   if (copied_to->IsJSFunction()) {
     PROFILE(FunctionMoveEvent(old_addr, new_addr));
   }
+  HEAP_PROFILE(ObjectMoveEvent(old_addr, new_addr));
 
   return obj_size;
 }
