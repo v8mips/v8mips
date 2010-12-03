@@ -165,9 +165,9 @@ static void GenerateDictionaryNegativeLookup(MacroAssembler* masm,
 
     Register entity_name = scratch1;
     // Having undefined at this place means the name is not contained.
-    ASSERT_EQ(kSmiTagSize, 1);
+    ASSERT(kSmiTag == 0 && kSmiTagSize < kPointerSizeLog2);
     Register tmp = properties;
-    // Note: register 'at' still contains index << 1, from 2 instr previous.
+    __ sll(at, index, kPointerSizeLog2 - kSmiTagSize);
     __ Addu(tmp, properties, Operand(at));
     __ lw(entity_name, FieldMemOperand(tmp, kElementsStartOffset));
 
