@@ -445,6 +445,37 @@ Instr Assembler::SetLdrRegisterImmediateOffset(Instr instr, int offset) {
 }
 
 
+bool Assembler::IsStrRegisterImmediate(Instr instr) {
+  return (instr & (B27 | B26 | B25 | B22 | B20)) == B26;
+}
+
+
+Instr Assembler::SetStrRegisterImmediateOffset(Instr instr, int offset) {
+  ASSERT(IsStrRegisterImmediate(instr));
+  bool positive = offset >= 0;
+  if (!positive) offset = -offset;
+  ASSERT(is_uint12(offset));
+  // Set bit indicating whether the offset should be added.
+  instr = (instr & ~B23) | (positive ? B23 : 0);
+  // Set the actual offset.
+  return (instr & ~Off12Mask) | offset;
+}
+
+
+bool Assembler::IsAddRegisterImmediate(Instr instr) {
+  return (instr & (B27 | B26 | B25 | B24 | B23 | B22 | B21)) == (B25 | B23);
+}
+
+
+Instr Assembler::SetAddRegisterImmediateOffset(Instr instr, int offset) {
+  ASSERT(IsAddRegisterImmediate(instr));
+  ASSERT(offset >= 0);
+  ASSERT(is_uint12(offset));
+  // Set the offset.
+  return (instr & ~Off12Mask) | offset;
+}
+
+
 Register Assembler::GetRd(Instr instr) {
   Register reg;
   reg.code_ = ((instr & kRdMask) >> kRdShift);
@@ -1189,6 +1220,30 @@ void Assembler::clz(Register dst, Register src, Condition cond) {
   ASSERT(!dst.is(pc) && !src.is(pc));
   emit(cond | B24 | B22 | B21 | 15*B16 | dst.code()*B12 |
        15*B8 | B4 | src.code());
+}
+
+
+// Saturating instructions.
+
+// Unsigned saturate.
+void Assembler::usat(Register dst,
+                     int satpos,
+                     const Operand& src,
+                     Condition cond) {
+  // v6 and above.
+  ASSERT(CpuFeatures::IsSupported(ARMv7));
+  ASSERT(!dst.is(pc) && !src.rm_.is(pc));
+  ASSERT((satpos >= 0) && (satpos <= 31));
+  ASSERT((src.shift_op_ == ASR) || (src.shift_op_ == LSL));
+  ASSERT(src.rs_.is(no_reg));
+
+  int sh = 0;
+  if (src.shift_op_ == ASR) {
+      sh = 1;
+  }
+
+  emit(cond | 0x6*B24 | 0xe*B20 | satpos*B16 | dst.code()*B12 |
+       src.shift_imm_*B7 | sh*B6 | 0x1*B4 | src.rm_.code());
 }
 
 
