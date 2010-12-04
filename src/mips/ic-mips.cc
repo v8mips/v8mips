@@ -1010,7 +1010,8 @@ bool StoreIC::PatchInlinedStore(Address address, Object* map, int offset) {
   // it will bail out in the map check.
   if (map != Heap::null_value()) {
     // Patch the offset in the actual store instruction.
-    // Magic number 4 is li(liu & ori), and Branch (bne & nop).
+    // Magic number 4 is instruction count before the 'sw' instr we patch.
+    // These are: li(liu & ori), and Branch (bne & nop).
     Address sw_property_instr_address =
         li_map_instr_address + 4 * Assembler::kInstrSize;
     Instr sw_property_instr = Assembler::instr_at(sw_property_instr_address);
@@ -1020,10 +1021,10 @@ bool StoreIC::PatchInlinedStore(Address address, Object* map, int offset) {
     Assembler::instr_at_put(sw_property_instr_address, sw_property_instr);
 
     // Patch the offset in the add instruction that is part of the
-    // write barrier.
-    // Magic number 8 ... see RecordWrite implementation.
+    // (in-lined) write barrier. The Add comes 1 instrunction after the
+    // 'sw' instruction, hence the magic-number 1 below.
     Address add_offset_instr_address =
-        sw_property_instr_address + 8 * Assembler::kInstrSize;
+        sw_property_instr_address + 1 * Assembler::kInstrSize;
     Instr add_offset_instr = Assembler::instr_at(add_offset_instr_address);
     ASSERT(Assembler::IsAddImmediate(add_offset_instr));
     add_offset_instr = Assembler::SetAddImmediateOffset(
@@ -1031,11 +1032,12 @@ bool StoreIC::PatchInlinedStore(Address address, Object* map, int offset) {
     Assembler::instr_at_put(add_offset_instr_address, add_offset_instr);
 
     // Indicate that code has changed.
-    // Magic number, must cover both updated sw, and write barrier offset.
-    CPU::FlushICache(sw_property_instr_address, 8 * Assembler::kInstrSize);
+    // Magic number 2, covers updated (consecutive)'sw', and 'add' instrs.
+    CPU::FlushICache(sw_property_instr_address, 2 * Assembler::kInstrSize);
   }
 
   // Patch the map check.
+  // This does its own i-cache-flush.
   Assembler::set_target_address_at(li_map_instr_address,
                                    reinterpret_cast<Address>(map));
 
