@@ -6194,8 +6194,8 @@ class DeferredReferenceSetNamedValue: public DeferredCode {
 };
 
 
-// Takes value in a0, receiver in a1 and returns the result (the
-// value) in v0.
+// Takes value in a0 (and in v0), receiver in a1. Must return the result (the
+// value) in v0 (this stub does not alter v0, which is passed in by caller.)
 void DeferredReferenceSetNamedValue::Generate() {
   // Record the entry frame and spill.
   VirtualFrame copied_frame(*frame_state()->frame());
@@ -6318,6 +6318,7 @@ void CodeGenerator::EmitNamedStore(Handle<String> name, bool is_contextual) {
     // Get the value and receiver from the stack.
     frame()->PopToA0();
     Register value = a0;
+    __ mov(v0, value);  // On mips, we must also return value in v0.
     frame()->PopToA1();
     Register receiver = a1;
 

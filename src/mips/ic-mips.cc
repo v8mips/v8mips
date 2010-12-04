@@ -1032,7 +1032,7 @@ bool StoreIC::PatchInlinedStore(Address address, Object* map, int offset) {
     Assembler::instr_at_put(add_offset_instr_address, add_offset_instr);
 
     // Indicate that code has changed.
-    // Magic number 2, covers updated (consecutive)'sw', and 'add' instrs.
+    // Magic number 2, covers updated (consecutive) 'sw', and 'add' instrs.
     CPU::FlushICache(sw_property_instr_address, 2 * Assembler::kInstrSize);
   }
 
