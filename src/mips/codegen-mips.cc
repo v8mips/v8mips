@@ -4235,7 +4235,7 @@ void CodeGenerator::GenerateMathPow(ZoneList<Expression*>* args) {
   Load(args->at(0));
   Load(args->at(1));
 
-    
+
   // There is a performance bug with the new code.
   // Just force the call to runtime until this is debugged.
   // if (!CpuFeatures::IsSupported(FPU)) {
@@ -6167,7 +6167,49 @@ void DeferredReferenceSetKeyedValue::Generate() {
     __ nop(PROPERTY_ACCESS_INLINED);
 
     // Block the trampoline pool for one more instruction after leaving this
-    // constant pool block scope to include the branch instruction ending the
+    // trampoline pool block scope to include the branch instruction ending the
+    // deferred code.
+    __ BlockTrampolinePoolFor(1);
+  }
+}
+
+
+class DeferredReferenceSetNamedValue: public DeferredCode {
+ public:
+  DeferredReferenceSetNamedValue(Register value,
+                                 Register receiver,
+                                 Handle<String> name)
+      : value_(value), receiver_(receiver), name_(name) {
+    set_comment("[ DeferredReferenceSetNamedValue");
+  }
+
+  virtual void Generate();
+
+ private:
+  Register value_;
+  Register receiver_;
+  Handle<String> name_;
+};
+
+
+void DeferredReferenceSetNamedValue::Generate() {
+  // Ensure value in a0, receiver in a1 to match store ic calling
+  // convention.
+  ASSERT(value_.is(a0) && receiver_.is(a1));
+  __ li(a2, Operand(name_));
+
+  // The rest of the instructions in the deferred code must be together.
+  { Assembler::BlockTrampolinePoolScope block_trampoline_pool(masm_);
+    // Call named store IC. It has the arguments value, receiever and name in
+    // a0, a1 and a2.
+    Handle<Code> ic(Builtins::builtin(Builtins::StoreIC_Initialize));
+    __ Call(ic, RelocInfo::CODE_TARGET);
+    // The call must be followed by a nop instruction to indicate that the
+    // named store has been inlined.
+    __ nop(PROPERTY_ACCESS_INLINED);
+
+    // Block the trampoline pool for one more instruction after leaving this
+    // trampoline pool block scope to include the branch instruction ending the
     // deferred code.
     __ BlockTrampolinePoolFor(1);
   }
@@ -6249,11 +6291,60 @@ void CodeGenerator::EmitNamedLoad(Handle<String> name, bool is_contextual) {
 
 void CodeGenerator::EmitNamedStore(Handle<String> name, bool is_contextual) {
 #ifdef DEBUG
-  int expected_height = frame_->height() - (is_contextual ? 1 : 2);
+  int expected_height = frame()->height() - (is_contextual ? 1 : 2);
 #endif
-  frame_->CallStoreIC(name, is_contextual);
 
-  ASSERT_EQ(expected_height, frame_->height());
+  Result result;
+  if (is_contextual || scope()->is_global_scope() || loop_nesting() == 0) {
+    frame()->CallStoreIC(name, is_contextual);
+  } else {
+    // Inline the in-object property case.
+    JumpTarget slow, done;
+
+    // Get the value and receiver from the stack.
+    frame()->PopToA0();
+    Register value = a0;
+    frame()->PopToA1();
+    Register receiver = a1;
+
+    DeferredReferenceSetNamedValue* deferred =
+        new DeferredReferenceSetNamedValue(value, receiver, name);
+
+    // Check that the receiver is a heap object.
+    __ And(at, receiver, Operand(kSmiTagMask));
+    deferred->Branch(eq, at, Operand(zero_reg));
+
+    // The following instructions are the part of the inlined
+    // in-object property store code which can be patched. Therefore
+    // the exact number of instructions generated must be fixed, so
+    // the trampoline pool is blocked while generating this code.
+    { Assembler::BlockTrampolinePoolScope block_trampoline_pool(masm_);
+      Register scratch0 = VirtualFrame::scratch0();
+      Register scratch1 = VirtualFrame::scratch1();
+
+      // Check the map. Initially use an invalid map to force a
+      // failure. The map check will be patched in the runtime system.
+      __ lw(scratch1, FieldMemOperand(receiver, HeapObject::kMapOffset));
+
+#ifdef DEBUG
+      Label check_inlined_codesize;
+      masm_->bind(&check_inlined_codesize);
+#endif
+      __ li(scratch0, Operand(Factory::null_value()), true);
+      deferred->Branch(ne, scratch0, Operand(scratch1));
+
+      int offset = 0;
+      __ sw(value, MemOperand(receiver, offset));
+
+      // Update the write barrier.
+      __ RecordWrite(receiver, Operand(offset), scratch0, scratch1);
+      // Make sure that the expected number of instructions are generated.
+      ASSERT_EQ(GetInlinedNamedStoreInstructionsAfterPatch(),
+                masm_->InstructionsGeneratedSince(&check_inlined_codesize));
+    }
+    deferred->BindExit();
+  }
+  ASSERT_EQ(expected_height, frame()->height());
 }
 
 

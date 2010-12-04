@@ -378,7 +378,7 @@ void Assembler::Align(int m) {
 
 
 void Assembler::CodeTargetAlign() {
-  // No advantage to aligning branch/call targets to more than 
+  // No advantage to aligning branch/call targets to more than
   // single instruction, that I am aware of.
   Align(4);
 }
@@ -420,6 +420,7 @@ bool Assembler::IsLwRegFpNegOffset(Instr instr) {
   return ((instr & (kLwSwInstrTypeMask | kNegOffset)) ==
           kLwRegFpNegOffsetPattern);
 }
+
 
 // Labels refer to positions in the (to be) generated code.
 // There are bound, linked, and unused labels.
@@ -502,6 +503,29 @@ Instr Assembler::set_lw_offset(Instr instr, int16_t offset) {
 
   return temp_instr;
 }
+
+
+bool Assembler::IsSw(Instr instr) {
+  return ((instr & kOpcodeMask) == SW);
+}
+
+
+Instr Assembler::SetSwOffset(Instr instr, int16_t offset) {
+  ASSERT(IsSw(instr));
+  return ((instr & ~kImm16Mask) | (offset & kImm16Mask));
+}
+
+
+bool Assembler::IsAddImmediate(Instr instr) {
+  return ((instr & kOpcodeMask) == ADDIU);
+}
+
+
+Instr Assembler::SetAddImmediateOffset(Instr instr, int16_t offset) {
+  ASSERT(IsAddImmediate(instr));
+  return ((instr & ~kImm16Mask) | (offset & kImm16Mask));
+}
+
 
 int Assembler::target_at(int32_t pos) {
   Instr instr = instr_at(pos);

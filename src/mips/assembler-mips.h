@@ -700,6 +700,11 @@ class Assembler : public Malloced {
   static int16_t get_lw_offset(Instr instr);
   static Instr set_lw_offset(Instr instr, int16_t offset);
 
+  static bool IsSw(Instr instr);
+  static Instr SetSwOffset(Instr instr, int16_t offset);
+  static bool IsAddImmediate(Instr instr);
+  static Instr SetAddImmediateOffset(Instr instr, int16_t offset);
+
  protected:
   int32_t buffer_space() const { return reloc_info_writer.pos() - pc_; }
 

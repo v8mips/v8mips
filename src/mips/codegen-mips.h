@@ -314,6 +314,9 @@ class CodeGenerator: public AstVisitor {
     return FLAG_debug_code ? 38 : 20;
   }
   static const int kInlinedKeyedStoreInstructionsAfterPatch = 9;
+  static int GetInlinedNamedStoreInstructionsAfterPatch() {
+    return FLAG_debug_code ? 47 : 20;
+  }
 
  private:
   // Construction/Destruction.
