@@ -6751,6 +6751,32 @@ static Object* Runtime_NewClosure(Arguments args) {
   return *result;
 }
 
+static Object* Runtime_NewObjectFromBound(Arguments args) {
+  HandleScope scope;
+  ASSERT(args.length() == 2);
+  CONVERT_ARG_CHECKED(JSFunction, function, 0);
+  CONVERT_ARG_CHECKED(JSArray, params, 1);
+
+  RUNTIME_ASSERT(params->HasFastElements());
+  FixedArray* fixed = FixedArray::cast(params->elements());
+
+  int fixed_length = Smi::cast(params->length())->value();
+  SmartPointer<Object**> param_data(NewArray<Object**>(fixed_length));
+  for (int i = 0; i < fixed_length; i++) {
+    Handle<Object> val = Handle<Object>(fixed->get(i));
+    param_data[i] = val.location();
+  }
+
+  bool exception = false;
+  Handle<Object> result = Execution::New(
+      function, fixed_length, *param_data, &exception);
+  if (exception) {
+      return Failure::Exception();
+  }
+  ASSERT(!result.is_null());
+  return *result;
+}
+
 
 static Code* ComputeConstructStub(Handle<JSFunction> function) {
   Handle<Object> prototype = Factory::null_value();
@@ -9361,6 +9387,13 @@ static Object* Runtime_SetScriptBreakPoint(Arguments args) {
     }
     Debug::SetBreakPoint(shared, break_point_object_arg, &position);
     position += shared->start_position();
+
+    // The result position may become beyond script source end.
+    // This is expected when the function is toplevel. This may become
+    // a problem later when actual position gets converted into line/column.
+    if (shared->is_toplevel() && position == shared->end_position()) {
+      position = shared->end_position() - 1;
+    }
     return Smi::FromInt(position);
   }
   return  Heap::undefined_value();

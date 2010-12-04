@@ -1201,6 +1201,50 @@ bool CodeGenerator::FoldConstantSmis(Token::Value op, int left, int right) {
 }
 
 
+void CodeGenerator::JumpIfBothSmiUsingTypeInfo(Result* left,
+                                               Result* right,
+                                               JumpTarget* both_smi) {
+  TypeInfo left_info = left->type_info();
+  TypeInfo right_info = right->type_info();
+  if (left_info.IsDouble() || left_info.IsString() ||
+      right_info.IsDouble() || right_info.IsString()) {
+    // We know that left and right are not both smi.  Don't do any tests.
+    return;
+  }
+
+  if (left->reg().is(right->reg())) {
+    if (!left_info.IsSmi()) {
+      Condition is_smi = masm()->CheckSmi(left->reg());
+      both_smi->Branch(is_smi);
+    } else {
+      if (FLAG_debug_code) __ AbortIfNotSmi(left->reg());
+      left->Unuse();
+      right->Unuse();
+      both_smi->Jump();
+    }
+  } else if (!left_info.IsSmi()) {
+    if (!right_info.IsSmi()) {
+      Condition is_smi = masm()->CheckBothSmi(left->reg(), right->reg());
+      both_smi->Branch(is_smi);
+    } else {
+      Condition is_smi = masm()->CheckSmi(left->reg());
+      both_smi->Branch(is_smi);
+    }
+  } else {
+    if (FLAG_debug_code) __ AbortIfNotSmi(left->reg());
+    if (!right_info.IsSmi()) {
+      Condition is_smi = masm()->CheckSmi(right->reg());
+      both_smi->Branch(is_smi);
+    } else {
+      if (FLAG_debug_code) __ AbortIfNotSmi(right->reg());
+      left->Unuse();
+      right->Unuse();
+      both_smi->Jump();
+    }
+  }
+}
+
+
 void CodeGenerator::JumpIfNotSmiUsingTypeInfo(Register reg,
                                               TypeInfo type,
                                               DeferredCode* deferred) {
@@ -2242,37 +2286,45 @@ void CodeGenerator::Comparison(AstNode* node,
       Register left_reg = left_side.reg();
       Register right_reg = right_side.reg();
 
-      Condition both_smi = masm_->CheckBothSmi(left_reg, right_reg);
-      is_smi.Branch(both_smi);
+      // In-line check for comparing two smis.
+      JumpIfBothSmiUsingTypeInfo(&left_side, &right_side, &is_smi);
 
-      // Inline the equality check if both operands can't be a NaN. If both
-      // objects are the same they are equal.
-      if (nan_info == kCantBothBeNaN && cc == equal) {
-        __ cmpq(left_side.reg(), right_side.reg());
-        dest->true_target()->Branch(equal);
+      if (has_valid_frame()) {
+        // Inline the equality check if both operands can't be a NaN. If both
+        // objects are the same they are equal.
+        if (nan_info == kCantBothBeNaN && cc == equal) {
+          __ cmpq(left_side.reg(), right_side.reg());
+          dest->true_target()->Branch(equal);
+        }
+
+        // Inlined number comparison:
+        if (inline_number_compare) {
+          GenerateInlineNumberComparison(&left_side, &right_side, cc, dest);
+        }
+
+        // End of in-line compare, call out to the compare stub. Don't include
+        // number comparison in the stub if it was inlined.
+        CompareStub stub(cc, strict, nan_info, !inline_number_compare);
+        Result answer = frame_->CallStub(&stub, &left_side, &right_side);
+        __ testq(answer.reg(), answer.reg());  // Sets both zero and sign flags.
+        answer.Unuse();
+        if (is_smi.is_linked()) {
+          dest->true_target()->Branch(cc);
+          dest->false_target()->Jump();
+        } else {
+          dest->Split(cc);
+        }
       }
 
-      // Inlined number comparison:
-      if (inline_number_compare) {
-        GenerateInlineNumberComparison(&left_side, &right_side, cc, dest);
+      if (is_smi.is_linked()) {
+        is_smi.Bind();
+        left_side = Result(left_reg);
+        right_side = Result(right_reg);
+        __ SmiCompare(left_side.reg(), right_side.reg());
+        right_side.Unuse();
+        left_side.Unuse();
+        dest->Split(cc);
       }
-
-      // End of in-line compare, call out to the compare stub. Don't include
-      // number comparison in the stub if it was inlined.
-      CompareStub stub(cc, strict, nan_info, !inline_number_compare);
-      Result answer = frame_->CallStub(&stub, &left_side, &right_side);
-      __ testq(answer.reg(), answer.reg());  // Sets both zero and sign flags.
-      answer.Unuse();
-      dest->true_target()->Branch(cc);
-      dest->false_target()->Jump();
-
-      is_smi.Bind();
-      left_side = Result(left_reg);
-      right_side = Result(right_reg);
-      __ SmiCompare(left_side.reg(), right_side.reg());
-      right_side.Unuse();
-      left_side.Unuse();
-      dest->Split(cc);
     }
   }
 }
@@ -8051,15 +8103,20 @@ Result CodeGenerator::EmitNamedStore(Handle<String> name, bool is_contextual) {
 
     // Allocate scratch register for write barrier.
     Result scratch = allocator()->Allocate();
-    ASSERT(scratch.is_valid() &&
-           result.is_valid() &&
-           receiver.is_valid() &&
-           value.is_valid());
+    ASSERT(scratch.is_valid());
 
     // The write barrier clobbers all input registers, so spill the
     // receiver and the value.
     frame_->Spill(receiver.reg());
     frame_->Spill(value.reg());
+
+    // If the receiver and the value share a register allocate a new
+    // register for the receiver.
+    if (receiver.reg().is(value.reg())) {
+      receiver = allocator()->Allocate();
+      ASSERT(receiver.is_valid());
+      __ movq(receiver.reg(), value.reg());
+    }
 
     // Update the write barrier. To save instructions in the inlined
     // version we do not filter smis.
@@ -10833,7 +10890,48 @@ void CEntryStub::GenerateThrowTOS(MacroAssembler* masm) {
 
 
 void ApiGetterEntryStub::Generate(MacroAssembler* masm) {
-  UNREACHABLE();
+  Label empty_result;
+  Label prologue;
+  Label promote_scheduled_exception;
+  __ EnterApiExitFrame(ExitFrame::MODE_NORMAL, kStackSpace, 0);
+  ASSERT_EQ(kArgc, 4);
+#ifdef _WIN64
+  // All the parameters should be set up by a caller.
+#else
+  // Set 1st parameter register with property name.
+  __ movq(rsi, rdx);
+  // Second parameter register rdi should be set with pointer to AccessorInfo
+  // by a caller.
+#endif
+  // Call the api function!
+  __ movq(rax,
+          reinterpret_cast<int64_t>(fun()->address()),
+          RelocInfo::RUNTIME_ENTRY);
+  __ call(rax);
+  // Check if the function scheduled an exception.
+  ExternalReference scheduled_exception_address =
+      ExternalReference::scheduled_exception_address();
+  __ movq(rsi, scheduled_exception_address);
+  __ Cmp(Operand(rsi, 0), Factory::the_hole_value());
+  __ j(not_equal, &promote_scheduled_exception);
+#ifdef _WIN64
+  // rax keeps a pointer to v8::Handle, unpack it.
+  __ movq(rax, Operand(rax, 0));
+#endif
+  // Check if the result handle holds 0.
+  __ testq(rax, rax);
+  __ j(zero, &empty_result);
+  // It was non-zero.  Dereference to get the result value.
+  __ movq(rax, Operand(rax, 0));
+  __ bind(&prologue);
+  __ LeaveExitFrame(ExitFrame::MODE_NORMAL);
+  __ ret(0);
+  __ bind(&promote_scheduled_exception);
+  __ TailCallRuntime(Runtime::kPromoteScheduledException, 0, 1);
+  __ bind(&empty_result);
+  // It was zero; the result is undefined.
+  __ Move(rax, Factory::undefined_value());
+  __ jmp(&prologue);
 }
 
 

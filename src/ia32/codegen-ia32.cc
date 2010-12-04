@@ -1445,6 +1445,55 @@ bool CodeGenerator::FoldConstantSmis(Token::Value op, int left, int right) {
 }
 
 
+void CodeGenerator::JumpIfBothSmiUsingTypeInfo(Result* left,
+                                               Result* right,
+                                               JumpTarget* both_smi) {
+  TypeInfo left_info = left->type_info();
+  TypeInfo right_info = right->type_info();
+  if (left_info.IsDouble() || left_info.IsString() ||
+      right_info.IsDouble() || right_info.IsString()) {
+    // We know that left and right are not both smi.  Don't do any tests.
+    return;
+  }
+
+  if (left->reg().is(right->reg())) {
+    if (!left_info.IsSmi()) {
+      __ test(left->reg(), Immediate(kSmiTagMask));
+      both_smi->Branch(zero);
+    } else {
+      if (FLAG_debug_code) __ AbortIfNotSmi(left->reg());
+      left->Unuse();
+      right->Unuse();
+      both_smi->Jump();
+    }
+  } else if (!left_info.IsSmi()) {
+    if (!right_info.IsSmi()) {
+      Result temp = allocator_->Allocate();
+      ASSERT(temp.is_valid());
+      __ mov(temp.reg(), left->reg());
+      __ or_(temp.reg(), Operand(right->reg()));
+      __ test(temp.reg(), Immediate(kSmiTagMask));
+      temp.Unuse();
+      both_smi->Branch(zero);
+    } else {
+      __ test(left->reg(), Immediate(kSmiTagMask));
+      both_smi->Branch(zero);
+    }
+  } else {
+    if (FLAG_debug_code) __ AbortIfNotSmi(left->reg());
+    if (!right_info.IsSmi()) {
+      __ test(right->reg(), Immediate(kSmiTagMask));
+      both_smi->Branch(zero);
+    } else {
+      if (FLAG_debug_code) __ AbortIfNotSmi(right->reg());
+      left->Unuse();
+      right->Unuse();
+      both_smi->Jump();
+    }
+  }
+}
+
+
 void CodeGenerator::JumpIfNotBothSmiUsingTypeInfo(Register left,
                                                   Register right,
                                                   Register scratch,
@@ -2735,42 +2784,44 @@ void CodeGenerator::Comparison(AstNode* node,
       Register right_reg = right_side.reg();
 
       // In-line check for comparing two smis.
-      Result temp = allocator_->Allocate();
-      ASSERT(temp.is_valid());
-      __ mov(temp.reg(), left_side.reg());
-      __ or_(temp.reg(), Operand(right_side.reg()));
-      __ test(temp.reg(), Immediate(kSmiTagMask));
-      temp.Unuse();
-      is_smi.Branch(zero, taken);
+      JumpIfBothSmiUsingTypeInfo(&left_side, &right_side, &is_smi);
 
-      // Inline the equality check if both operands can't be a NaN. If both
-      // objects are the same they are equal.
-      if (nan_info == kCantBothBeNaN && cc == equal) {
+      if (has_valid_frame()) {
+        // Inline the equality check if both operands can't be a NaN. If both
+        // objects are the same they are equal.
+        if (nan_info == kCantBothBeNaN && cc == equal) {
+          __ cmp(left_side.reg(), Operand(right_side.reg()));
+          dest->true_target()->Branch(equal);
+        }
+
+        // Inlined number comparison:
+        if (inline_number_compare) {
+          GenerateInlineNumberComparison(&left_side, &right_side, cc, dest);
+        }
+
+        // End of in-line compare, call out to the compare stub. Don't include
+        // number comparison in the stub if it was inlined.
+        CompareStub stub(cc, strict, nan_info, !inline_number_compare);
+        Result answer = frame_->CallStub(&stub, &left_side, &right_side);
+        __ test(answer.reg(), Operand(answer.reg()));
+        answer.Unuse();
+        if (is_smi.is_linked()) {
+          dest->true_target()->Branch(cc);
+          dest->false_target()->Jump();
+        } else {
+          dest->Split(cc);
+        }
+      }
+
+      if (is_smi.is_linked()) {
+        is_smi.Bind();
+        left_side = Result(left_reg);
+        right_side = Result(right_reg);
         __ cmp(left_side.reg(), Operand(right_side.reg()));
-        dest->true_target()->Branch(equal);
+        right_side.Unuse();
+        left_side.Unuse();
+        dest->Split(cc);
       }
-
-      // Inlined number comparison:
-      if (inline_number_compare) {
-        GenerateInlineNumberComparison(&left_side, &right_side, cc, dest);
-      }
-
-      // End of in-line compare, call out to the compare stub. Don't include
-      // number comparison in the stub if it was inlined.
-      CompareStub stub(cc, strict, nan_info, !inline_number_compare);
-      Result answer = frame_->CallStub(&stub, &left_side, &right_side);
-      __ test(answer.reg(), Operand(answer.reg()));
-      answer.Unuse();
-      dest->true_target()->Branch(cc);
-      dest->false_target()->Jump();
-
-      is_smi.Bind();
-      left_side = Result(left_reg);
-      right_side = Result(right_reg);
-      __ cmp(left_side.reg(), Operand(right_side.reg()));
-      right_side.Unuse();
-      left_side.Unuse();
-      dest->Split(cc);
     }
   }
 }
@@ -8917,15 +8968,20 @@ Result CodeGenerator::EmitNamedStore(Handle<String> name, bool is_contextual) {
 
     // Allocate scratch register for write barrier.
     Result scratch = allocator()->Allocate();
-    ASSERT(scratch.is_valid() &&
-           result.is_valid() &&
-           receiver.is_valid() &&
-           value.is_valid());
+    ASSERT(scratch.is_valid());
 
     // The write barrier clobbers all input registers, so spill the
     // receiver and the value.
     frame_->Spill(receiver.reg());
     frame_->Spill(value.reg());
+
+    // If the receiver and the value share a register allocate a new
+    // register for the receiver.
+    if (receiver.reg().is(value.reg())) {
+      receiver = allocator()->Allocate();
+      ASSERT(receiver.is_valid());
+      __ mov(receiver.reg(), Operand(value.reg()));
+    }
 
     // Update the write barrier. To save instructions in the inlined
     // version we do not filter smis.
@@ -12219,7 +12275,7 @@ static const bool kPassHandlesDirectly = false;
 
 
 void ApiGetterEntryStub::Generate(MacroAssembler* masm) {
-  Label get_result;
+  Label empty_handle;
   Label prologue;
   Label promote_scheduled_exception;
   __ EnterApiExitFrame(ExitFrame::MODE_NORMAL, kStackSpace, kArgc);
@@ -12262,20 +12318,20 @@ void ApiGetterEntryStub::Generate(MacroAssembler* masm) {
     // Dereference this to get to the location.
     __ mov(eax, Operand(eax, 0));
   }
-  // Check if the result handle holds 0
+  // Check if the result handle holds 0.
   __ test(eax, Operand(eax));
-  __ j(not_zero, &get_result, taken);
-  // It was zero; the result is undefined.
-  __ mov(eax, Factory::undefined_value());
-  __ jmp(&prologue);
+  __ j(zero, &empty_handle, not_taken);
   // It was non-zero.  Dereference to get the result value.
-  __ bind(&get_result);
   __ mov(eax, Operand(eax, 0));
   __ bind(&prologue);
   __ LeaveExitFrame(ExitFrame::MODE_NORMAL);
   __ ret(0);
   __ bind(&promote_scheduled_exception);
   __ TailCallRuntime(Runtime::kPromoteScheduledException, 0, 1);
+  __ bind(&empty_handle);
+  // It was zero; the result is undefined.
+  __ mov(eax, Factory::undefined_value());
+  __ jmp(&prologue);
 }
 
 
