@@ -9243,6 +9243,17 @@ static Object* Runtime_GetThreadDetails(Arguments args) {
 }
 
 
+// Sets the disable break state
+// args[0]: disable break state
+static Object* Runtime_SetDisableBreak(Arguments args) {
+  HandleScope scope;
+  ASSERT(args.length() == 1);
+  CONVERT_BOOLEAN_CHECKED(disable_break, args[0]);
+  Debug::set_disable_break(disable_break);
+  return  Heap::undefined_value();
+}
+
+
 static Object* Runtime_GetBreakLocations(Arguments args) {
   HandleScope scope;
   ASSERT(args.length() == 1);
@@ -9387,13 +9398,6 @@ static Object* Runtime_SetScriptBreakPoint(Arguments args) {
     }
     Debug::SetBreakPoint(shared, break_point_object_arg, &position);
     position += shared->start_position();
-
-    // The result position may become beyond script source end.
-    // This is expected when the function is toplevel. This may become
-    // a problem later when actual position gets converted into line/column.
-    if (shared->is_toplevel() && position == shared->end_position()) {
-      position = shared->end_position() - 1;
-    }
     return Smi::FromInt(position);
   }
   return  Heap::undefined_value();
