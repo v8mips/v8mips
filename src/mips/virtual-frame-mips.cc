@@ -579,9 +579,10 @@ Register VirtualFrame::Peek2() {
     case A1_A0_TOS:
       MergeTOSTo(A1_A0_TOS);
       return a0;
+    default:
+      UNREACHABLE();
+      return no_reg;
   }
-  UNREACHABLE();
-  return no_reg;
 }
 
 
