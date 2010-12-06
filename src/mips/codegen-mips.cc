@@ -9448,7 +9448,12 @@ void GenericBinaryOpStub::HandleNonSmiBitwiseOp(MacroAssembler* masm,
       // the register as an unsigned int so we go to slow case if we hit this
       // case.
       __ And(t3, v1, Operand(0x80000000));
-      __ Branch(&slow, ne, t3, Operand(zero_reg));
+      if (CpuFeatures::IsSupported(FPU)) {
+        CpuFeatures::Scope scope(FPU);
+        __ Branch(&result_not_a_smi, ne, t3, Operand(zero_reg));
+      } else {
+        __ Branch(&slow, ne, t3, Operand(zero_reg));
+      }
       break;
     case Token::SHL:
         __ sllv(v1, a3, a2);
@@ -9493,10 +9498,25 @@ void GenericBinaryOpStub::HandleNonSmiBitwiseOp(MacroAssembler* masm,
   // result.
   __ mov(v0, t5);
 
-  // Tail call that writes the int32 in v1 to the heap number in v0, using
-  // t0, t1 as scratch.  v0 is preserved and returned by the stub.
-  WriteInt32ToHeapNumberStub stub(v1, v0, t0, t1);
-  __ Jump(stub.GetCode(), RelocInfo::CODE_TARGET);
+  if (CpuFeatures::IsSupported(FPU)) {
+    CpuFeatures::Scope scope(FPU);
+    __ mov(s0, v1);
+    if (op_ == Token::SHR) {
+      __ Cvt_d_uw(f0, s0);
+    } else {
+      __ mtc1(s0, f0);
+      __ cvt_d_w(f0, f0);
+    }
+    __ Subu(t3, v0, Operand(kHeapObjectTag));
+    __ sdc1(f0, MemOperand(t3, HeapNumber::kValueOffset));
+    __ Ret();
+
+  } else {
+    // Tail call that writes the int32 in v1 to the heap number in v0, using
+    // t0, t1 as scratch.  v0 is preserved and returned by the stub.
+    WriteInt32ToHeapNumberStub stub(v1, v0, t0, t1);
+    __ Jump(stub.GetCode(), RelocInfo::CODE_TARGET);
+  }
 
   if (mode_ != NO_OVERWRITE) {
     __ bind(&have_to_allocate);
@@ -10088,13 +10108,24 @@ void GenericUnaryOpStub::Generate(MacroAssembler* masm) {
       __ mov(v0, a2);
     }
 
-    // WriteInt32ToHeapNumberStub does not trigger GC, so we do not
-    // have to set up a frame.
-    WriteInt32ToHeapNumberStub stub(a1, v0, a2, a3);
-    __ Push(ra);
-    __ Call(stub.GetCode(), RelocInfo::CODE_TARGET);
-    __ Pop(ra);
-    // Fall thru to done.
+    if (CpuFeatures::IsSupported(FPU)) {
+      CpuFeatures::Scope scope(FPU);
+      __ mov(s0, a1);
+      __ mtc1(s0, f0);
+      __ cvt_d_w(f0, f0);
+
+      __ Subu(t3, v0, Operand(kHeapObjectTag));
+      __ sdc1(f0, MemOperand(t3, HeapNumber::kValueOffset));
+      __ Ret();
+    } else {
+      // WriteInt32ToHeapNumberStub does not trigger GC, so we do not
+      // have to set up a frame.
+      WriteInt32ToHeapNumberStub stub(a1, v0, a2, a3);
+      __ Push(ra);
+      __ Call(stub.GetCode(), RelocInfo::CODE_TARGET);
+      __ Pop(ra);
+      // Fall thru to done.
+    }
   } else {
     UNIMPLEMENTED();
     __ break_(__LINE__);
