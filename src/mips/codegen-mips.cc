@@ -55,11 +55,15 @@ static void EmitIdenticalObjectComparison(MacroAssembler* masm,
                                           Condition cc,
                                           bool never_nan_nan);
 static void EmitSmiNonsmiComparison(MacroAssembler* masm,
+                                    Register lhs,
+                                    Register rhs,
                                     Label* rhs_not_nan,
                                     Label* slow,
                                     bool strict);
 static void EmitTwoNonNanDoubleComparison(MacroAssembler* masm, Condition cc);
-static void EmitStrictTwoHeapObjectCompare(MacroAssembler* masm);
+static void EmitStrictTwoHeapObjectCompare(MacroAssembler* masm,
+                                           Register lhs,
+                                           Register rhs);
 static void MultiplyByKnownInt(MacroAssembler* masm,
                                Register source,
                                Register destination,
@@ -1639,11 +1643,7 @@ void CodeGenerator::Comparison(Condition cc,
   // Perform non-smi comparison by stub.
   // CompareStub takes arguments in a0 and a1, returns <0, >0 or 0 in v0.
   // We call with 0 args because there are 0 on the stack.
-  if (!rhs.is(a1)) {
-    __ Swap(rhs, lhs, scratch);
-  }
-
-  CompareStub stub(cc, strict);
+  CompareStub stub(cc, strict, kBothCouldBeNaN, true, lhs, rhs);
   frame_->CallStub(&stub, 0);
   __ mov(condReg1, v0);
   __ li(condReg2, Operand(0));
@@ -7240,19 +7240,24 @@ void FastCloneShallowArrayStub::Generate(MacroAssembler* masm) {
 }
 
 static void EmitSmiNonsmiComparison(MacroAssembler* masm,
+                                    Register lhs,
+                                    Register rhs,
                                     Label* both_loaded_as_doubles,
                                     Label* slow,
                                     bool strict) {
+  ASSERT((lhs.is(a0) && rhs.is(a1)) ||
+         (lhs.is(a1) && rhs.is(a0)));
+
   Label lhs_is_smi;
-  __ And(t0, a0, Operand(kSmiTagMask));
+  __ And(t0, lhs, Operand(kSmiTagMask));
   __ Branch(&lhs_is_smi, eq, t0, Operand(zero_reg));
   // Rhs is a Smi.
   // Check whether the non-smi is a heap number.
-  __ GetObjectType(a0, t4, t4);
+  __ GetObjectType(lhs, t4, t4);
   if (strict) {
     // If lhs was not a number and rhs was a Smi then strict equality cannot
-    // succeed. Return non-equal (a0 is already not zero)
-    __ mov(v0, a0);
+    // succeed. Return non-equal (lhs is already not zero)
+    __ mov(v0, lhs);
     __ Ret(ne, t4, Operand(HEAP_NUMBER_TYPE));
   } else {
     // Smi compared non-strictly with a non-Smi non-heap-number. Call
@@ -7261,20 +7266,20 @@ static void EmitSmiNonsmiComparison(MacroAssembler* masm,
   }
 
   // Rhs is a smi, lhs is a number.
-  // Convert smi a1 to double.
+  // Convert smi rhs to double.
   if (CpuFeatures::IsSupported(FPU)) {
     CpuFeatures::Scope scope(FPU);
-    __ sra(at, a1, kSmiTagSize);
+    __ sra(at, rhs, kSmiTagSize);
     __ mtc1(at, f14);
     __ cvt_d_w(f14, f14);
-    __ ldc1(f12, FieldMemOperand(a0, HeapNumber::kValueOffset));
+    __ ldc1(f12, FieldMemOperand(lhs, HeapNumber::kValueOffset));
   } else {
     // Load lhs to a double in a2, a3.
-    __ lw(a3, FieldMemOperand(a0, HeapNumber::kValueOffset + 4));
-    __ lw(a2, FieldMemOperand(a0, HeapNumber::kValueOffset));
+    __ lw(a3, FieldMemOperand(lhs, HeapNumber::kValueOffset + 4));
+    __ lw(a2, FieldMemOperand(lhs, HeapNumber::kValueOffset));
 
-    // Write Smi from a1 to a1 and a0 in double format. t5 is scratch.
-    __ mov(t6, a1);
+    // Write Smi from rhs to a1 and a0 in double format. t5 is scratch.
+    __ mov(t6, rhs);
     ConvertToDoubleStub stub1(a1, a0, t6, t5);
     __ Push(ra);
     __ Call(stub1.GetCode(), RelocInfo::CODE_TARGET);
@@ -7287,7 +7292,7 @@ static void EmitSmiNonsmiComparison(MacroAssembler* masm,
 
   __ bind(&lhs_is_smi);
   // Lhs is a Smi.  Check whether the non-smi is a heap number.
-  __ GetObjectType(a1, t4, t4);
+  __ GetObjectType(rhs, t4, t4);
   if (strict) {
     // If lhs was not a number and rhs was a Smi then strict equality cannot
     // succeed. Return non-equal.
@@ -7300,24 +7305,23 @@ static void EmitSmiNonsmiComparison(MacroAssembler* masm,
   }
 
   // Lhs is a smi, rhs is a number.
-  // a0 is Smi and a1 is heap number.
-  // Convert smi a0 to double.
+  // Convert smi lhs to double.
   if (CpuFeatures::IsSupported(FPU)) {
     CpuFeatures::Scope scope(FPU);
-    __ sra(at, a0, kSmiTagSize);
+    __ sra(at, lhs, kSmiTagSize);
     __ mtc1(at, f12);
     __ cvt_d_w(f12, f12);
-    __ ldc1(f14, FieldMemOperand(a1, HeapNumber::kValueOffset));
+    __ ldc1(f14, FieldMemOperand(rhs, HeapNumber::kValueOffset));
   } else {
     // Convert lhs to a double format. t5 is scratch.
-    __ mov(t6, a0);
+    __ mov(t6, lhs);
     ConvertToDoubleStub stub2(a3, a2, t6, t5);
     __ Push(ra);
     __ Call(stub2.GetCode(), RelocInfo::CODE_TARGET);
     __ Pop(ra);
     // Load rhs to a double in a1, a0.
-    __ lw(a0, FieldMemOperand(a1, HeapNumber::kValueOffset));
-    __ lw(a1, FieldMemOperand(a1, HeapNumber::kValueOffset + 4));
+    __ lw(a0, FieldMemOperand(rhs, HeapNumber::kValueOffset));
+    __ lw(a1, FieldMemOperand(rhs, HeapNumber::kValueOffset + 4));
   }
   // Fall through to both_loaded_as_doubles.
 }
@@ -7475,7 +7479,9 @@ static void EmitTwoNonNanDoubleComparison(MacroAssembler* masm, Condition cc) {
 }
 
 
-static void EmitStrictTwoHeapObjectCompare(MacroAssembler* masm) {
+static void EmitStrictTwoHeapObjectCompare(MacroAssembler* masm,
+                                           Register lhs,
+                                           Register rhs) {
     // If either operand is a JSObject or an oddball value, then they are
     // not equal since their pointers are different.
     // There is no test for undetectability in strict equality.
@@ -7483,7 +7489,7 @@ static void EmitStrictTwoHeapObjectCompare(MacroAssembler* masm) {
     Label first_non_object;
     // Get the type of the first operand into a2 and compare it with
     // FIRST_JS_OBJECT_TYPE.
-    __ GetObjectType(a0, a2, a2);
+    __ GetObjectType(lhs, a2, a2);
     __ Branch(&first_non_object, less, a2, Operand(FIRST_JS_OBJECT_TYPE));
 
     // Return non-zero.
@@ -7496,7 +7502,7 @@ static void EmitStrictTwoHeapObjectCompare(MacroAssembler* masm) {
     // Check for oddballs: true, false, null, undefined.
     __ Branch(&return_not_equal, eq, a2, Operand(ODDBALL_TYPE));
 
-    __ GetObjectType(a1, a3, a3);
+    __ GetObjectType(rhs, a3, a3);
     __ Branch(&return_not_equal, greater, a3, Operand(FIRST_JS_OBJECT_TYPE));
 
     // Check for oddballs: true, false, null, undefined.
@@ -7513,12 +7519,14 @@ static void EmitStrictTwoHeapObjectCompare(MacroAssembler* masm) {
 
 
 static void EmitCheckForTwoHeapNumbers(MacroAssembler* masm,
+                                       Register lhs,
+                                       Register rhs,
                                        Label* both_loaded_as_doubles,
                                        Label* not_heap_numbers,
                                        Label* slow) {
-  __ GetObjectType(a0, a3, a2);
+  __ GetObjectType(lhs, a3, a2);
   __ Branch(not_heap_numbers, ne, a2, Operand(HEAP_NUMBER_TYPE));
-  __ lw(a2, FieldMemOperand(a1, HeapObject::kMapOffset));
+  __ lw(a2, FieldMemOperand(rhs, HeapObject::kMapOffset));
   // If first was a heap number & second wasn't, go to slow case.
   __ Branch(slow, ne, a3, Operand(a2));
 
@@ -7526,13 +7534,13 @@ static void EmitCheckForTwoHeapNumbers(MacroAssembler* masm,
   // for that.
   if (CpuFeatures::IsSupported(FPU)) {
     CpuFeatures::Scope scope(FPU);
-    __ ldc1(f12, FieldMemOperand(a0, HeapNumber::kValueOffset));
-    __ ldc1(f14, FieldMemOperand(a1, HeapNumber::kValueOffset));
+    __ ldc1(f12, FieldMemOperand(lhs, HeapNumber::kValueOffset));
+    __ ldc1(f14, FieldMemOperand(rhs, HeapNumber::kValueOffset));
   } else {
-    __ lw(a2, FieldMemOperand(a0, HeapNumber::kValueOffset));
-    __ lw(a3, FieldMemOperand(a0, HeapNumber::kValueOffset + 4));
-    __ lw(a0, FieldMemOperand(a1, HeapNumber::kValueOffset));
-    __ lw(a1, FieldMemOperand(a1, HeapNumber::kValueOffset + 4));
+    __ lw(a2, FieldMemOperand(lhs, HeapNumber::kValueOffset));
+    __ lw(a3, FieldMemOperand(lhs, HeapNumber::kValueOffset + 4));
+    __ lw(a0, FieldMemOperand(rhs, HeapNumber::kValueOffset));
+    __ lw(a1, FieldMemOperand(rhs, HeapNumber::kValueOffset + 4));
   }
   __ jmp(both_loaded_as_doubles);
 }
@@ -7540,9 +7548,14 @@ static void EmitCheckForTwoHeapNumbers(MacroAssembler* masm,
 
 // Fast negative check for symbol-to-symbol equality.
 static void EmitCheckForSymbolsOrObjects(MacroAssembler* masm,
+                                         Register lhs,
+                                         Register rhs,
                                          Label* possible_strings,
                                          Label* not_both_strings) {
-  // a2 is object type of a0.
+  ASSERT((lhs.is(a0) && rhs.is(a1)) ||
+         (lhs.is(a1) && rhs.is(a0)));
+
+  // a2 is object type of lhs.
   // Ensure that no non-strings have the symbol bit set.
   Label object_test;
   STATIC_ASSERT(kSymbolTag != 0);
@@ -7550,7 +7563,7 @@ static void EmitCheckForSymbolsOrObjects(MacroAssembler* masm,
   __ Branch(&object_test, ne, at, Operand(zero_reg));
   __ And(at, a2, Operand(kIsSymbolMask));
   __ Branch(possible_strings, eq, at, Operand(zero_reg));
-  __ GetObjectType(a1, a3, a3);
+  __ GetObjectType(rhs, a3, a3);
   __ Branch(not_both_strings, ge, a3, Operand(FIRST_NONSTRING_TYPE));
   __ And(at, a3, Operand(kIsSymbolMask));
   __ Branch(possible_strings, eq, at, Operand(zero_reg));
@@ -7562,13 +7575,13 @@ static void EmitCheckForSymbolsOrObjects(MacroAssembler* masm,
 
   __ bind(&object_test);
   __ Branch(not_both_strings, lt, a2, Operand(FIRST_JS_OBJECT_TYPE));
-  __ GetObjectType(a1, a2, a3);
+  __ GetObjectType(rhs, a2, a3);
   __ Branch(not_both_strings, lt, a3, Operand(FIRST_JS_OBJECT_TYPE));
 
   // If both objects are undetectable, they are equal.  Otherwise, they
   // are not equal, since they are different objects and an object is not
   // equal to undefined.
-  __ lw(a3, FieldMemOperand(a0, HeapObject::kMapOffset));
+  __ lw(a3, FieldMemOperand(lhs, HeapObject::kMapOffset));
   __ lbu(a2, FieldMemOperand(a2, Map::kBitFieldOffset));
   __ lbu(a3, FieldMemOperand(a3, Map::kBitFieldOffset));
   __ and_(a0, a2, a3);
@@ -7698,7 +7711,7 @@ void RecordWriteStub::Generate(MacroAssembler* masm) {
 }
 
 
-// On entry a0 (lhs) and a1 (rhs) are the things to be compared. On exit, v0
+// On entry lhs_ (lhs) and rhs_ (rhs) are the things to be compared. On exit, v0
 // is 0, positive, or negative (smi) to indicate the result of the comparison.
 void CompareStub::Generate(MacroAssembler* masm) {
   Label slow;  // Call builtin.
@@ -7714,7 +7727,7 @@ void CompareStub::Generate(MacroAssembler* masm) {
   // be strictly equal if the other is a HeapNumber.
   STATIC_ASSERT(kSmiTag == 0);
   ASSERT_EQ(0, Smi::FromInt(0));
-  __ And(t2, a0, Operand(a1));
+  __ And(t2, lhs_, Operand(rhs_));
   __ BranchOnNotSmi(t2, &not_smis, t0);
   // One operand is a smi. EmitSmiNonsmiComparison generates code that can:
   // 1) Return the answer.
@@ -7724,7 +7737,8 @@ void CompareStub::Generate(MacroAssembler* masm) {
   // In cases 3 and 4 we have found out we were dealing with a number-number
   // comparison and the numbers have been loaded into f12 and f14 as doubles,
   // or in GP registers (a0, a1, a2, a3) depending on the presence of the FPU.
-  EmitSmiNonsmiComparison(masm, &both_loaded_as_doubles, &slow, strict_);
+  EmitSmiNonsmiComparison(masm, lhs_, rhs_,
+                          &both_loaded_as_doubles, &slow, strict_);
 
   __ bind(&both_loaded_as_doubles);
   // f12, f14 are the double representations of the left hand side
@@ -7741,11 +7755,11 @@ void CompareStub::Generate(MacroAssembler* masm) {
 
   __ bind(&not_smis);
   // At this point we know we are dealing with two different objects,
-  // and neither of them is a Smi. The objects are in a0 and a1.
+  // and neither of them is a Smi. The objects are in lhs_ and rhs_.
   if (strict_) {
     // This returns non-equal for some object types, or falls through if it
     // was not lucky.
-    EmitStrictTwoHeapObjectCompare(masm);
+    EmitStrictTwoHeapObjectCompare(masm, lhs_, rhs_);
   }
 
   Label check_for_symbols;
@@ -7753,8 +7767,10 @@ void CompareStub::Generate(MacroAssembler* masm) {
   // Check for heap-number-heap-number comparison. Can jump to slow case,
   // or load both doubles and jump to the code that handles
   // that case. If the inputs are not doubles then jumps to check_for_symbols.
-  // In this case a2 will contain the type of a0.
+  // In this case a2 will contain the type of lhs_.
   EmitCheckForTwoHeapNumbers(masm,
+                             lhs_,
+                             rhs_,
                              &both_loaded_as_doubles,
                              &check_for_symbols,
                              &flat_string_check);
@@ -7763,20 +7779,20 @@ void CompareStub::Generate(MacroAssembler* masm) {
   if (cc_ == eq && !strict_) {
     // Returns an answer for two symbols or two detectable objects.
     // Otherwise jumps to string case or not both strings case.
-    // Assumes that a2 is the type of a0 on entry.
-    EmitCheckForSymbolsOrObjects(masm, &flat_string_check, &slow);
+    // Assumes that a2 is the type of lhs_ on entry.
+    EmitCheckForSymbolsOrObjects(masm, lhs_, rhs_, &flat_string_check, &slow);
   }
 
   // Check for both being sequential ASCII strings, and inline if that is the
   // case.
   __ bind(&flat_string_check);
 
-  __ JumpIfNonSmisNotBothSequentialAsciiStrings(a0, a1, a2, a3, &slow);
+  __ JumpIfNonSmisNotBothSequentialAsciiStrings(lhs_, rhs_, a2, a3, &slow);
 
   __ IncrementCounter(&Counters::string_compare_native, 1, a2, a3);
   StringCompareStub::GenerateCompareFlatAsciiStrings(masm,
-                                                     a1,
-                                                     a0,
+                                                     rhs_,
+                                                     lhs_,
                                                      a2,
                                                      a3,
                                                      t0,
@@ -7786,7 +7802,7 @@ void CompareStub::Generate(MacroAssembler* masm) {
   __ bind(&slow);
   // Prepare for call to builtin. Push object pointers, a0 (lhs) first,
   // a1 (rhs) second.
-  __ Push(a0, a1);
+  __ Push(lhs_, rhs_);
   // Figure out which native to call and setup the arguments.
   Builtins::JavaScript native;
   if (cc_ == eq) {
@@ -8932,7 +8948,10 @@ const char* CompareStub::GetName() {
 int CompareStub::MinorKey() {
   // Encode the two parameters in a unique 16 bit value.
   ASSERT(static_cast<unsigned>(cc_) < (1 << 14));
+  ASSERT((lhs_.is(a0) && rhs_.is(a1)) ||
+         (lhs_.is(a1) && rhs_.is(a0)));
   return ConditionField::encode(static_cast<unsigned>(cc_))
+         | RegisterField::encode(lhs_.is(a0))
          | StrictField::encode(strict_)
          | NeverNanNanField::encode(cc_ == eq ? never_nan_nan_ : false);
 }
