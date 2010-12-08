@@ -1122,7 +1122,7 @@ void KeyedLoadIC::GenerateGeneric(MacroAssembler* masm) {
   //  -- a0     : key
   //  -- a1     : receiver
   // -----------------------------------
-  Label slow, check_string, index_smi, index_string;
+  Label slow, check_string, index_smi, index_string, property_array_property;
   Label check_pixel_array, probe_dictionary, check_number_dictionary;
 
   Register key = a0;
@@ -1211,7 +1211,7 @@ void KeyedLoadIC::GenerateGeneric(MacroAssembler* masm) {
   __ lw(t1, MemOperand(t0));
   __ Branch(&slow, ne, a0, Operand(t1));
 
-  // Get field offset and check that it is an in-object property.
+  // Get field offset.
   // a0     : key
   // a1     : receiver
   // a2     : receiver's map
@@ -1223,10 +1223,10 @@ void KeyedLoadIC::GenerateGeneric(MacroAssembler* masm) {
   __ addu(at, t0, at);
   __ lw(t1, MemOperand(at));
   __ lbu(t2, FieldMemOperand(a2, Map::kInObjectPropertiesOffset));
-  __ Branch(&slow, ge, t1, Operand(t2));
+  __ Subu(t1, t1, t2);
+  __ Branch(&property_array_property, ge, t1, Operand(zero_reg));
 
   // Load in-object property.
-  __ subu(t1, t1, t2);  // Index from end of object.
   __ lbu(t2, FieldMemOperand(a2, Map::kInstanceSizeOffset));
   __ addu(t2, t2, t1);  // Index from start of object.
   __ Subu(a1, a1, Operand(kHeapObjectTag));  // Remove the heap tag.
@@ -1235,6 +1235,17 @@ void KeyedLoadIC::GenerateGeneric(MacroAssembler* masm) {
   __ lw(v0, MemOperand(at));
   __ IncrementCounter(&Counters::keyed_load_generic_lookup_cache, 1, a2, a3);
   __ Ret();
+
+  // Load property array property.
+  __ bind(&property_array_property);
+  __ lw(a1, FieldMemOperand(a1, JSObject::kPropertiesOffset));
+  __ Addu(a1, a1, FixedArray::kHeaderSize - kHeapObjectTag);
+  __ sll(t0, t1, kPointerSizeLog2);
+  __ Addu(t0, t0, a1);
+  __ lw(v0, MemOperand(t0));
+  __ IncrementCounter(&Counters::keyed_load_generic_lookup_cache, 1, a2, a3);
+  __ Ret();
+
 
   // Do a quick inline probe of the receiver's dictionary, if it
   // exists.
