@@ -3205,12 +3205,12 @@ void CodeGenerator::VisitRegExpLiteral(RegExpLiteral* node) {
       FixedArray::kHeaderSize + node->literal_index() * kPointerSize;
   __ lw(literal, FieldMemOperand(tmp, literal_offset));
 
-  JumpTarget done;
+  JumpTarget materialized;
   __ LoadRoot(at, Heap::kUndefinedValueRootIndex);
   // This branch locks the virtual frame at the done label to match the
   // one we have here, where the literal register is not on the stack and
   // nothing is spilled.
-  done.Branch(ne, literal, Operand(at));
+  materialized.Branch(ne, literal, Operand(at));
 
   // If the entry is undefined we call the runtime system to compute
   // the literal.
@@ -3226,12 +3226,24 @@ void CodeGenerator::VisitRegExpLiteral(RegExpLiteral* node) {
   frame_->CallRuntime(Runtime::kMaterializeRegExpLiteral, 4);
   __ Move(literal, v0);
 
-  // This call to bind will get us back to the virtual frame we had before
-  // where things are not spilled and the literal register is not on the stack.
+  materialized.Bind();
 
-  done.Bind();
-  // Push the literal.
   frame_->EmitPush(literal);
+
+  int size = JSRegExp::kSize + JSRegExp::kInObjectFieldCount * kPointerSize;
+  frame_->EmitPush(Operand(Smi::FromInt(size)));
+  frame_->CallRuntime(Runtime::kAllocateInNewSpace, 1);
+  // From ARM:TODO(lrn): Use AllocateInNewSpace macro with fallback to runtime.
+  // v0 is newly allocated space.
+
+  // Reuse literal variable with (possibly) a new register, still holding
+  // the materialized boilerplate.
+  literal = frame_->PopToRegister();
+
+  __ CopyFields(v0, literal, tmp.bit(), size / kPointerSize);
+
+  // Push the clone.
+  frame_->EmitPush(v0);
   ASSERT_EQ(original_height + 1, frame_->height());
 }
 
@@ -4849,6 +4861,46 @@ void CodeGenerator::GenerateObjectEquals(ZoneList<Expression*>* args) {
   Register rhs = frame_->PopToRegister(lhs);
   __ mov(condReg1, lhs);
   __ mov(condReg2, rhs);
+  cc_reg_ = eq;
+}
+
+void CodeGenerator::GenerateIsRegExpEquivalent(ZoneList<Expression*>* args) {
+  ASSERT(args->length() == 2);
+
+  // Load the two objects into registers and perform the comparison.
+  Load(args->at(0));
+  Load(args->at(1));
+
+  // Since MIPS has no condition codes, this code is optimized by using the
+  // condition registers.
+  Register right = frame_->PopToRegister();
+  Register left = frame_->PopToRegister(right);
+  Register tmp = frame_->scratch0();
+  Register tmp2 = frame_->scratch1();
+
+  // Jumps to done must have the eq flag set if the test is successful
+  // and clear if the test has failed.
+  Label done;
+
+  // Fail if either is a non-HeapObject.
+  __ Move(condReg1, left);
+  __ Move(condReg2, right);
+  __ Branch(&done, eq);
+  __ And(tmp, left, right);
+  __ Xor(tmp, tmp, kSmiTagMask);
+  __ And(condReg1, tmp, kSmiTagMask);
+  __ Move(condReg2, zero_reg);
+  __ Branch(&done, ne);
+  __ lw(tmp, FieldMemOperand(left, HeapObject::kMapOffset));
+  __ lbu(condReg1, FieldMemOperand(tmp, Map::kInstanceTypeOffset));
+  __ li(condReg2, JS_REGEXP_TYPE);
+  __ Branch(&done, ne);
+  __ lw(condReg2, FieldMemOperand(right, HeapObject::kMapOffset));
+  __ Move(condReg1, tmp);
+  __ Branch(&done, ne);
+  __ lw(condReg1, FieldMemOperand(left, JSRegExp::kDataOffset));
+  __ lw(condReg2, FieldMemOperand(right, JSRegExp::kDataOffset));
+  __ bind(&done);
   cc_reg_ = eq;
 }
 
@@ -7169,10 +7221,7 @@ void FastCloneShallowArrayStub::Generate(MacroAssembler* masm) {
     __ sw(a2, FieldMemOperand(v0, JSArray::kElementsOffset));
 
     // Copy the elements array.
-    for (int i = 0; i < elements_size; i += kPointerSize) {
-      __ lw(a1, FieldMemOperand(a3, i));
-      __ sw(a1, FieldMemOperand(a2, i));
-    }
+    __ CopyFields(a2, a3, a1.bit(), elements_size / kPointerSize);
   }
 
   // Return and remove the on-stack parameters.
@@ -8717,10 +8766,7 @@ void ArgumentsAccessStub::GenerateNewObject(MacroAssembler* masm) {
   __ lw(t0, MemOperand(t0, offset));
 
   // Copy the JS object part.
-  for (int i = 0; i < JSObject::kHeaderSize; i += kPointerSize) {
-    __ lw(a3, FieldMemOperand(t0, i));
-    __ sw(a3, FieldMemOperand(v0, i));
-  }
+  __ CopyFields(v0, t0, a3.bit(), JSObject::kHeaderSize / kPointerSize);
 
   // Setup the callee in-object property.
   ASSERT(Heap::arguments_callee_index == 0);

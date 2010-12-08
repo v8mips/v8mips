@@ -579,6 +579,8 @@ class CodeGenerator: public AstVisitor {
   void GenerateMathCos(ZoneList<Expression*>* args);
   void GenerateMathSqrt(ZoneList<Expression*>* args);
 
+  void GenerateIsRegExpEquivalent(ZoneList<Expression*>* args);
+
   // Simple condition analysis.
   enum ConditionAnalysis {
     ALWAYS_TRUE,
