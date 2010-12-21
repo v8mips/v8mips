@@ -2540,7 +2540,7 @@ void CodeGenerator::VisitForInStatement(ForInStatement* node) {
 #ifdef DEBUG
   int original_height = frame_->height();
 #endif
-  
+
   Comment cmnt(masm_, "[ ForInStatement");
   CodeForStatementPosition(node);
 
@@ -5052,7 +5052,7 @@ void CodeGenerator::GenerateRegExpExec(ZoneList<Expression*>* args) {
 void CodeGenerator::GenerateRegExpConstructResult(ZoneList<Expression*>* args) {
   // No stub. This code only occurs a few times in regexp.js.
   const int kMaxInlineLength = 100;
- 
+
   ASSERT_EQ(3, args->length());
   Load(args->at(0));  // Size of array, smi.
   Load(args->at(1));  // "index" property value.
@@ -5191,21 +5191,23 @@ void CodeGenerator::GenerateGetFromCache(ZoneList<Expression*>* args) {
   Register scratch2 = VirtualFrame::scratch1();
 
   __ lw(scratch1, ContextOperand(cp, Context::GLOBAL_INDEX));
-  __ lw(scratch1, 
+  __ lw(scratch1,
         FieldMemOperand(scratch1, GlobalObject::kGlobalContextOffset));
-  __ lw(scratch1, 
+  __ lw(scratch1,
         ContextOperand(scratch1, Context::JSFUNCTION_RESULT_CACHES_INDEX));
-  __ lw(scratch1, 
+  __ lw(scratch1,
         FieldMemOperand(scratch1, FixedArray::OffsetOfElementAt(cache_id)));
 
-  DeferredSearchCache* deferred = new DeferredSearchCache(result, scratch1, key);
+  DeferredSearchCache* deferred =
+      new DeferredSearchCache(result, scratch1, key);
 
   const int kFingerOffset =
       FixedArray::OffsetOfElementAt(JSFunctionResultCache::kFingerIndex);
   STATIC_ASSERT(kSmiTag == 0 && kSmiTagSize == 1);
   __ lw(result, FieldMemOperand(scratch1, kFingerOffset));
   // result now holds finger offset as a smi.
-  __ Addu(scratch2, scratch1, Operand(FixedArray::kHeaderSize - kHeapObjectTag));
+  __ Addu(scratch2, scratch1,
+          Operand(FixedArray::kHeaderSize - kHeapObjectTag));
   // scratch2 now points to the start of fixed array elements.
   __ sll(at, result, kPointerSizeLog2 - kSmiTagSize);  // Smi to byte index.
   __ addu(scratch2, scratch2, at);  // a3 now points to the key of the pair.
@@ -5361,7 +5363,6 @@ void CodeGenerator::GenerateCallFunction(ZoneList<Expression*>* args) {
 }
 
 void CodeGenerator::VisitCallRuntime(CallRuntime* node) {
-  
 #ifdef DEBUG
   int original_height = frame_->height();
 #endif
@@ -5385,13 +5386,12 @@ void CodeGenerator::VisitCallRuntime(CallRuntime* node) {
     __ lw(builtins, FieldMemOperand(scratch, GlobalObject::kBuiltinsOffset));
     frame_->EmitPush(builtins);
   }
-  
+
   // Push the arguments ("left-to-right").
   int arg_count = args->length();
   for (int i = 0; i < arg_count; i++) {
     Load(args->at(i));
   }
-  
 
   VirtualFrame::SpilledScope spilled_scope(frame_);
 
@@ -7490,7 +7490,7 @@ static void EmitTwoNonNanDoubleComparison(MacroAssembler* masm, Condition cc) {
 
 
 static void EmitStrictTwoHeapObjectCompare(MacroAssembler* masm,
-                                           Register lhs, 
+                                           Register lhs,
                                            Register rhs) {
     // If either operand is a JSObject or an oddball value, then they are
     // not equal since their pointers are different.
