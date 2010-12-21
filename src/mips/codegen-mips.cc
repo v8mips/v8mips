@@ -372,6 +372,7 @@ void CodeGenerator::Generate(CompilationInfo* info) {
   }
 
   allocator_ = NULL;
+  type_info_ = NULL;
 }
 
 
@@ -560,6 +561,10 @@ void CodeGenerator::LoadCondition(Expression* x,
 
 
 void CodeGenerator::Load(Expression* x) {
+  // We generally assume that we are not in a spilled scope for most
+  // of the code generator.  A failure to ensure this caused issue 815
+  // and this assert is designed to catch similar issues.
+  frame_->AssertIsNotSpilled();
 #ifdef DEBUG
   int original_height = frame_->height();
 #endif
@@ -1041,7 +1046,6 @@ void CodeGenerator::GenericBinaryOperation(Token::Value op,
                                            OverwriteMode overwrite_mode,
                                            GenerateInlineSmi inline_smi,
                                            int constant_rhs) {
-  VirtualFrame::SpilledScope spilled_scope(frame_);
   // sp[0] : y
   // sp[1] : x
   // result : v0
@@ -1662,9 +1666,13 @@ void CodeGenerator::Comparison(Condition cc,
 
 
 void CodeGenerator::VisitStatements(ZoneList<Statement*>* statements) {
+#ifdef DEBUG
+  int original_height = frame_->height();
+#endif
   for (int i = 0; frame_ != NULL && i < statements->length(); i++) {
     Visit(statements->at(i));
   }
+  ASSERT(!has_valid_frame() || frame_->height() == original_height);
 }
 
 
@@ -2129,19 +2137,17 @@ void CodeGenerator::VisitBreakStatement(BreakStatement* node) {
 
 
 void CodeGenerator::VisitReturnStatement(ReturnStatement* node) {
-  frame_->SpillAll();
   Comment cmnt(masm_, "[ ReturnStatement");
 
   CodeForStatementPosition(node);
   Load(node->expression());
+  frame_->EmitPop(v0);
+  frame_->PrepareForReturn();
   if (function_return_is_shadowed_) {
-    frame_->EmitPop(v0);
     function_return_.Jump();
   } else {
     // Pop the result from the frame and prepare the frame for
     // returning thus making it easier to merge.
-    frame_->EmitPop(v0);
-    frame_->PrepareForReturn();
     if (function_return_.is_bound()) {
       // If the function return label is already bound we reuse the
       // code by jumping to the return site.
@@ -2534,7 +2540,7 @@ void CodeGenerator::VisitForInStatement(ForInStatement* node) {
 #ifdef DEBUG
   int original_height = frame_->height();
 #endif
-  VirtualFrame::SpilledScope spilled_scope(frame_);
+  
   Comment cmnt(masm_, "[ ForInStatement");
   CodeForStatementPosition(node);
 
@@ -2547,7 +2553,7 @@ void CodeGenerator::VisitForInStatement(ForInStatement* node) {
 
   // Get the object to enumerate over (converted to JSObject).
   Load(node->enumerable());
-
+  VirtualFrame::SpilledScope spilled_scope(frame_);
   // Both SpiderMonkey and kjs ignore null and undefined in contrast
   // to the specification.  12.6.4 mandates a call to ToObject.
   frame_->EmitPop(a0);
@@ -2714,9 +2720,13 @@ void CodeGenerator::VisitForInStatement(ForInStatement* node) {
   // Store the entry in the 'each' expression and take another spin in the
   // loop.  a3: i'th entry of the enum cache (or string there of)
   frame_->EmitPush(a3);  // push entry
-  { Reference each(this, node->each());
+  { VirtualFrame::RegisterAllocationScope scope(this);
+    Reference each(this, node->each());
     if (!each.is_illegal()) {
       if (each.size() > 0) {
+        // Loading a reference may leave the frame in an unspilled state.
+        frame_->SpillAll();  // Sync stack to memory.
+        // Get the value (under the reference on the stack) from memory.
         __ lw(a0, frame_->ElementAt(each.size()));
         frame_->EmitPush(a0);
         each.SetValue(NOT_CONST_INIT, UNLIKELY_SMI);
@@ -2726,13 +2736,15 @@ void CodeGenerator::VisitForInStatement(ForInStatement* node) {
         // that it doesn't matter whether a value (eg, a3 pushed above) is
         // right on top of or right underneath a zero-sized reference.
         each.SetValue(NOT_CONST_INIT, UNLIKELY_SMI);
-        frame_->Drop();
+        frame_->Drop(1);  // Drop the result of the set operation.
       }
     }
   }
   // Body.
   CheckStack();  // TODO(1222600): ignore if body contains calls.
-  Visit(node->body());
+  { VirtualFrame::RegisterAllocationScope scope(this);
+    Visit(node->body());
+  }
 
   // Next.  Reestablish a spilled frame in case we are coming here via
   // a continue in the body.
@@ -2779,7 +2791,9 @@ void CodeGenerator::VisitTryCatchStatement(TryCatchStatement* node) {
   // Remove the exception from the stack.
   frame_->Drop();
 
-  VisitStatements(node->catch_block()->statements());
+  { VirtualFrame::RegisterAllocationScope scope(this);
+    VisitStatements(node->catch_block()->statements());
+  }
   if (frame_ != NULL) {
     exit.Jump();
   }
@@ -2813,8 +2827,9 @@ void CodeGenerator::VisitTryCatchStatement(TryCatchStatement* node) {
   }
 
   // Generate code for the statements in the try block.
-
-  VisitStatements(node->try_block()->statements());
+  { VirtualFrame::RegisterAllocationScope scope(this);
+    VisitStatements(node->try_block()->statements());
+  }
 
   // Stop the introduced shadowing and count the number of required unlinks.
   // After shadowing stops, the original labels are unshadowed and the
@@ -2928,7 +2943,9 @@ void CodeGenerator::VisitTryFinallyStatement(TryFinallyStatement* node) {
   }
 
   // Generate code for the statements in the try block.
-  VisitStatements(node->try_block()->statements());
+  { VirtualFrame::RegisterAllocationScope scope(this);
+    VisitStatements(node->try_block()->statements());
+  }
 
   // Stop the introduced shadowing and count the number of required unlinks.
   // After shadowing stops, the original labels are unshadowed and the
@@ -3018,7 +3035,9 @@ void CodeGenerator::VisitTryFinallyStatement(TryFinallyStatement* node) {
   // and the state - while evaluating the finally block.
   //
   // Generate code for the statements in the finally block.
-  VisitStatements(node->finally_block()->statements());
+  { VirtualFrame::RegisterAllocationScope scope(this);
+    VisitStatements(node->finally_block()->statements());
+  }
 
   if (has_valid_frame()) {
     // Restore state and return value or faked TOS.
@@ -3163,7 +3182,7 @@ void CodeGenerator::VisitVariableProxy(VariableProxy* node) {
   } else {
     ASSERT(var->is_global());
     Reference ref(this, node);
-    ref.GetValueAndSpill();
+    ref.GetValue();
   }
   ASSERT_EQ(original_height + 1, frame_->height());
 }
@@ -3414,7 +3433,7 @@ void CodeGenerator::EmitSlotAssignment(Assignment* node) {
   if (node->is_compound()) {
     // For a compound assignment the right-hand side is a binary operation
     // between the current property value and the actual right-hand side.
-    LoadFromSlot(slot, NOT_INSIDE_TYPEOF);
+    LoadFromSlotCheckForArguments(slot, NOT_INSIDE_TYPEOF);
 
     // Perform the binary operation.
     Literal* literal = node->value()->AsLiteral();
@@ -3757,7 +3776,7 @@ void CodeGenerator::VisitProperty(Property* node) {
   Comment cmnt(masm_, "[ Property");
 
   { Reference property(this, node);
-    property.GetValueAndSpill();
+    property.GetValue();
   }
   ASSERT_EQ(original_height + 1, frame_->height());
 }
@@ -3909,7 +3928,6 @@ void CodeGenerator::VisitCall(Call* node) {
 
   } else if (var != NULL && var->slot() != NULL &&
              var->slot()->type() == Slot::LOOKUP) {
-    VirtualFrame::SpilledScope spilled_scope(frame_);
     // ----------------------------------
     // JavaScript examples:
     //
@@ -3954,7 +3972,7 @@ void CodeGenerator::VisitCall(Call* node) {
       call.Jump();
       done.Bind();
       frame_->EmitPush(v0);  // function
-      LoadGlobalReceiver(v1);  // receiver
+      LoadGlobalReceiver(VirtualFrame::scratch0());  // receiver
       call.Bind();
     }
 
@@ -4009,7 +4027,6 @@ void CodeGenerator::VisitCall(Call* node) {
       // -------------------------------------------
       // JavaScript example: 'array[index](1, 2, 3)'
       // -------------------------------------------
-      VirtualFrame::SpilledScope spilled_scope(frame_);
 
       Load(property->obj());
       if (property->is_synthetic()) {
@@ -4018,7 +4035,7 @@ void CodeGenerator::VisitCall(Call* node) {
         // Put the function below the receiver.
         // Use the global receiver.
         frame_->EmitPush(v0);  // Function.
-        LoadGlobalReceiver(a0);
+        LoadGlobalReceiver(VirtualFrame::scratch0());
         // Call the function.
         CallWithArguments(args, RECEIVER_MIGHT_BE_VALUE, node->position());
         frame_->EmitPush(v0);
@@ -4031,6 +4048,7 @@ void CodeGenerator::VisitCall(Call* node) {
 
         // Set the name register and call the IC initialization code.
         Load(property->key());
+        frame_->SpillAll();
         frame_->EmitPop(a2);  // Function name.
 
         InLoopFlag in_loop = loop_nesting() > 0 ? IN_LOOP : NOT_IN_LOOP;
@@ -4050,10 +4068,9 @@ void CodeGenerator::VisitCall(Call* node) {
     // Load the function.
     Load(function);
 
-    VirtualFrame::SpilledScope spilled_scope(frame_);
 
     // Pass the global proxy as the receiver.
-    LoadGlobalReceiver(a0);
+    LoadGlobalReceiver(VirtualFrame::scratch0());
 
     // Call the function (and allocate args slots).
     CallWithArguments(args, NO_CALL_FUNCTION_FLAGS, node->position());
@@ -4242,11 +4259,10 @@ void CodeGenerator::GenerateLog(ZoneList<Expression*>* args) {
 
 
 void CodeGenerator::GenerateIsNonNegativeSmi(ZoneList<Expression*>* args) {
-  VirtualFrame::SpilledScope spilled_scope(frame_);
   ASSERT(args->length() == 1);
   Load(args->at(0));
-  frame_->EmitPop(a0);
-  __ And(condReg1, a0, Operand(kSmiTagMask | 0x80000000u));
+  Register reg = frame_->PopToRegister();
+  __ And(condReg1, reg, Operand(kSmiTagMask | 0x80000000u));
   __ mov(condReg2, zero_reg);
   cc_reg_ = eq;
 }
@@ -4550,22 +4566,18 @@ class DeferredStringCharCodeAt : public DeferredCode {
 // This generates code that performs a String.prototype.charCodeAt() call
 // or returns a smi in order to trigger conversion.
 void CodeGenerator::GenerateStringCharCodeAt(ZoneList<Expression*>* args) {
-  VirtualFrame::SpilledScope spilled_scope(frame_);
   Comment(masm_, "[ GenerateStringCharCodeAt");
   ASSERT(args->length() == 2);
 
   Load(args->at(0));
   Load(args->at(1));
 
-  Register index = a1;
-  Register object = a2;
-
-  frame_->EmitPop(index);
-  frame_->EmitPop(object);
+  Register index = frame_->PopToRegister();
+  Register object = frame_->PopToRegister(index);
 
   // We need two extra registers.
-  Register scratch = a3;
-  Register result = v0;
+  Register scratch = VirtualFrame::scratch0();
+  Register result =  VirtualFrame::scratch1();
 
   DeferredStringCharCodeAt* deferred =
       new DeferredStringCharCodeAt(object,
@@ -4598,16 +4610,13 @@ class DeferredStringCharFromCode : public DeferredCode {
 
 // Generates code for creating a one-char string from a char code.
 void CodeGenerator::GenerateStringCharFromCode(ZoneList<Expression*>* args) {
-  VirtualFrame::SpilledScope spilled_scope(frame_);
   Comment(masm_, "[ GenerateStringCharFromCode");
   ASSERT(args->length() == 1);
 
   Load(args->at(0));
 
-  Register code = a1;
+  Register code = frame_->PopToRegister();
   Register result = v0;
-
-  frame_->EmitPop(code);
 
   DeferredStringCharFromCode* deferred = new DeferredStringCharFromCode(
       code, result);
@@ -4668,22 +4677,18 @@ class DeferredStringCharAt : public DeferredCode {
 // This generates code that performs a String.prototype.charAt() call
 // or returns a smi in order to trigger conversion.
 void CodeGenerator::GenerateStringCharAt(ZoneList<Expression*>* args) {
-  VirtualFrame::SpilledScope spilled_scope(frame_);
   Comment(masm_, "[ GenerateStringCharAt");
   ASSERT(args->length() == 2);
 
   Load(args->at(0));
   Load(args->at(1));
 
-  Register index = a1;
-  Register object = a2;
-
-  frame_->EmitPop(a1);
-  frame_->EmitPop(a2);
+  Register index = frame_->PopToRegister();
+  Register object = frame_->PopToRegister(index);
 
   // We need three extra registers.
-  Register scratch1 = a3;
-  Register scratch2 = t1;
+  Register scratch1 = VirtualFrame::scratch0();
+  Register scratch2 = VirtualFrame::scratch1();
   Register result = v0;
 
   DeferredStringCharAt* deferred =
@@ -4790,13 +4795,13 @@ void CodeGenerator::GenerateArgumentsLength(ZoneList<Expression*>* args) {
 
 
 void CodeGenerator::GenerateArguments(ZoneList<Expression*>* args) {
-  VirtualFrame::SpilledScope spilled_scope(frame_);
   ASSERT(args->length() == 1);
 
   // Satisfy contract with ArgumentsAccessStub:
   // Load the key into a1 and the formal parameters count into a0.
   Load(args->at(0));
-  frame_->EmitPop(a1);
+  frame_->PopToA1();
+  frame_->SpillAll();
   __ li(a0, Operand(Smi::FromInt(scope()->num_parameters())));
 
   // Call the shared stub to get to arguments[key].
@@ -5047,12 +5052,13 @@ void CodeGenerator::GenerateRegExpExec(ZoneList<Expression*>* args) {
 void CodeGenerator::GenerateRegExpConstructResult(ZoneList<Expression*>* args) {
   // No stub. This code only occurs a few times in regexp.js.
   const int kMaxInlineLength = 100;
+ 
   ASSERT_EQ(3, args->length());
   Load(args->at(0));  // Size of array, smi.
   Load(args->at(1));  // "index" property value.
   Load(args->at(2));  // "input" property value.
   {
-    VirtualFrame::SpilledScope spilled_scope();
+    VirtualFrame::SpilledScope spilled_scope(frame_);
     Label slowcase;
     Label done;
     __ lw(a1, MemOperand(sp, kPointerSize * 2));
@@ -5177,33 +5183,39 @@ void CodeGenerator::GenerateGetFromCache(ZoneList<Expression*>* args) {
 
   Load(args->at(1));
 
-  VirtualFrame::SpilledScope spilled_scope(frame_);
+  frame_->PopToA1();
+  frame_->SpillAll();
+  Register key = a1;  // Just poped to r1
+  Register result = v0;  // Free, as frame has just been spilled.
+  Register scratch1 = VirtualFrame::scratch0();
+  Register scratch2 = VirtualFrame::scratch1();
 
-  frame_->EmitPop(a2);
+  __ lw(scratch1, ContextOperand(cp, Context::GLOBAL_INDEX));
+  __ lw(scratch1, 
+        FieldMemOperand(scratch1, GlobalObject::kGlobalContextOffset));
+  __ lw(scratch1, 
+        ContextOperand(scratch1, Context::JSFUNCTION_RESULT_CACHES_INDEX));
+  __ lw(scratch1, 
+        FieldMemOperand(scratch1, FixedArray::OffsetOfElementAt(cache_id)));
 
-  __ lw(a1, ContextOperand(cp, Context::GLOBAL_INDEX));
-  __ lw(a1, FieldMemOperand(a1, GlobalObject::kGlobalContextOffset));
-  __ lw(a1, ContextOperand(a1, Context::JSFUNCTION_RESULT_CACHES_INDEX));
-  __ lw(a1, FieldMemOperand(a1, FixedArray::OffsetOfElementAt(cache_id)));
-
-  DeferredSearchCache* deferred = new DeferredSearchCache(v0, a1, a2);
+  DeferredSearchCache* deferred = new DeferredSearchCache(result, scratch1, key);
 
   const int kFingerOffset =
       FixedArray::OffsetOfElementAt(JSFunctionResultCache::kFingerIndex);
   STATIC_ASSERT(kSmiTag == 0 && kSmiTagSize == 1);
-  __ lw(v0, FieldMemOperand(a1, kFingerOffset));
-  // v0 now holds finger offset as a smi.
-  __ Addu(a3, a1, Operand(FixedArray::kHeaderSize - kHeapObjectTag));
-  // a3 now points to the start of fixed array elements.
-  __ sll(at, v0, kPointerSizeLog2 - kSmiTagSize);  // Smi to byte index.
-  __ addu(a3, a3, at);  // a3 now points to the key of the pair.
-  __ lw(v0, MemOperand(a3, 0));
-  deferred->Branch(ne, a2, Operand(v0));
+  __ lw(result, FieldMemOperand(scratch1, kFingerOffset));
+  // result now holds finger offset as a smi.
+  __ Addu(scratch2, scratch1, Operand(FixedArray::kHeaderSize - kHeapObjectTag));
+  // scratch2 now points to the start of fixed array elements.
+  __ sll(at, result, kPointerSizeLog2 - kSmiTagSize);  // Smi to byte index.
+  __ addu(scratch2, scratch2, at);  // a3 now points to the key of the pair.
+  __ lw(result, MemOperand(scratch2, 0));
+  deferred->Branch(ne, key, Operand(result));
 
-  __ lw(v0, MemOperand(a3, kPointerSize));
+  __ lw(result, MemOperand(scratch2, kPointerSize));
 
   deferred->BindExit();
-  frame_->EmitPush(v0);
+  frame_->EmitPush(result);
 }
 
 
@@ -5348,14 +5360,11 @@ void CodeGenerator::GenerateCallFunction(ZoneList<Expression*>* args) {
   frame_->EmitPush(v0);
 }
 
-
 void CodeGenerator::VisitCallRuntime(CallRuntime* node) {
+  
 #ifdef DEBUG
   int original_height = frame_->height();
 #endif
-  // For some reason this is needed right here.
-  // The arm version only uses the spilled scope after loading the arguments.
-  VirtualFrame::SpilledScope spilled_scope(frame_);
 
   if (CheckForInlineRuntimeCall(node)) {
     ASSERT((has_cc() && frame_->height() == original_height) ||
@@ -5376,12 +5385,15 @@ void CodeGenerator::VisitCallRuntime(CallRuntime* node) {
     __ lw(builtins, FieldMemOperand(scratch, GlobalObject::kBuiltinsOffset));
     frame_->EmitPush(builtins);
   }
-
+  
   // Push the arguments ("left-to-right").
   int arg_count = args->length();
   for (int i = 0; i < arg_count; i++) {
     Load(args->at(i));
   }
+  
+
+  VirtualFrame::SpilledScope spilled_scope(frame_);
 
   if (function == NULL) {
     // Call the JS runtime function.
@@ -5521,9 +5533,6 @@ void CodeGenerator::VisitUnaryOperation(UnaryOperation* node) {
         break;
 
       case Token::ADD: {
-        // This line is not in the ARM version, however it is currently
-        // needed here.
-        VirtualFrame::RegisterAllocationScope scope(this);
         Register tos = frame_->Peek();
         // Smi check.
         JumpTarget continue_label;
@@ -6316,7 +6325,6 @@ void CodeGenerator::EmitNamedLoad(Handle<String> name, bool is_contextual) {
 
     // Load the receiver from the stack.
     Register receiver = frame_->PopToRegister();
-    VirtualFrame::SpilledScope spilled(frame_);
 
     DeferredReferenceGetNamedValue* deferred =
         new DeferredReferenceGetNamedValue(receiver, name);
@@ -6467,7 +6475,6 @@ void CodeGenerator::EmitKeyedLoad() {
     bool key_is_known_smi = frame_->KnownSmiAt(0);
     Register key = frame_->PopToRegister();
     Register receiver = frame_->PopToRegister(key);
-    VirtualFrame::SpilledScope spilled(frame_);
 
     // The deferred code expects key and receiver in registers.
     DeferredReferenceGetKeyedValue* deferred =
@@ -6689,6 +6696,10 @@ Reference::Reference(CodeGenerator* cgen,
       expression_(expression),
       type_(ILLEGAL),
       persist_after_get_(persist_after_get) {
+  // We generally assume that we are not in a spilled scope for most
+  // of the code generator.  A failure to ensure this caused issue 815
+  // and this assert is designed to catch similar issues.
+  cgen->frame()->AssertIsNotSpilled();
   cgen->LoadReference(this);
 }
 
@@ -6798,7 +6809,6 @@ void Reference::SetValue(InitState init_state, WriteBarrierCharacter wb_info) {
     }
 
     case NAMED: {
-      VirtualFrame::SpilledScope scope(frame);
       Comment cmnt(masm, "[ Store to named Property");
       cgen_->EmitNamedStore(GetName(), false);
       frame->EmitPush(v0);
@@ -7480,7 +7490,7 @@ static void EmitTwoNonNanDoubleComparison(MacroAssembler* masm, Condition cc) {
 
 
 static void EmitStrictTwoHeapObjectCompare(MacroAssembler* masm,
-                                           Register lhs,
+                                           Register lhs, 
                                            Register rhs) {
     // If either operand is a JSObject or an oddball value, then they are
     // not equal since their pointers are different.
@@ -9531,10 +9541,10 @@ void GenericBinaryOpStub::HandleNonSmiBitwiseOp(MacroAssembler* masm,
     __ Ret();
 
   } else {
-    // Tail call that writes the int32 in v1 to the heap number in v0, using
-    // t0, t1 as scratch.  v0 is preserved and returned by the stub.
-    WriteInt32ToHeapNumberStub stub(v1, v0, t0, t1);
-    __ Jump(stub.GetCode(), RelocInfo::CODE_TARGET);
+  // Tail call that writes the int32 in v1 to the heap number in v0, using
+  // t0, t1 as scratch.  v0 is preserved and returned by the stub.
+  WriteInt32ToHeapNumberStub stub(v1, v0, t0, t1);
+  __ Jump(stub.GetCode(), RelocInfo::CODE_TARGET);
   }
 
   if (mode_ != NO_OVERWRITE) {
@@ -10137,13 +10147,13 @@ void GenericUnaryOpStub::Generate(MacroAssembler* masm) {
       __ sdc1(f0, MemOperand(t3, HeapNumber::kValueOffset));
       __ Ret();
     } else {
-      // WriteInt32ToHeapNumberStub does not trigger GC, so we do not
-      // have to set up a frame.
-      WriteInt32ToHeapNumberStub stub(a1, v0, a2, a3);
-      __ Push(ra);
-      __ Call(stub.GetCode(), RelocInfo::CODE_TARGET);
-      __ Pop(ra);
-      // Fall thru to done.
+    // WriteInt32ToHeapNumberStub does not trigger GC, so we do not
+    // have to set up a frame.
+    WriteInt32ToHeapNumberStub stub(a1, v0, a2, a3);
+    __ Push(ra);
+    __ Call(stub.GetCode(), RelocInfo::CODE_TARGET);
+    __ Pop(ra);
+    // Fall thru to done.
     }
   } else {
     UNIMPLEMENTED();
@@ -10355,7 +10365,7 @@ void StringCharFromCodeGenerator::GenerateSlow(
   call_helper.BeforeCall(masm);
   __ push(code_);
   __ CallRuntime(Runtime::kCharFromCode, 1);
-  __ Move(v0, result_);
+  __ Move(result_, v0);
 
   call_helper.AfterCall(masm);
   __ Branch(&exit_);
