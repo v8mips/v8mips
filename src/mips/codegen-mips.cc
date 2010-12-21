@@ -1471,9 +1471,27 @@ void CodeGenerator::SmiOperation(Token::Value op,
     case Token::SHR:
     case Token::SAR: {
       ASSERT(!reversed);
-      TypeInfo result = TypeInfo::Integer32();
-      Register scratch = VirtualFrame::scratch0();
       int shift_value = int_value & 0x1f;  // Least significant 5 bits.
+      TypeInfo result = TypeInfo::Number();
+
+      if (op == Token::SHR) {
+        if (shift_value > 1) {
+          result = TypeInfo::Smi();
+        } else if (shift_value > 0) {
+          result = TypeInfo::Integer32();
+        }
+      } else if (op == Token::SAR) {
+        if (shift_value > 0) {
+          result = TypeInfo::Smi();
+        } else {
+          result = TypeInfo::Integer32();
+        }
+      } else {
+        ASSERT(op == Token::SHL);
+        result = TypeInfo::Integer32();
+      }
+
+      Register scratch = VirtualFrame::scratch0();
       DeferredCode* deferred =
         new DeferredInlineSmiOperation(op, shift_value, false, mode, tos);
       bool skip_smi_test = both_sides_are_smi;
@@ -1504,17 +1522,13 @@ void CodeGenerator::SmiOperation(Token::Value op,
           // by 0 or 1 when handed a valid smi.
           __ And(scratch, v0, Operand(0xc0000000));
           deferred->Branch(ne, scratch, Operand(zero_reg));
-          if (shift_value >= 2) {
-            result = TypeInfo::Smi();
-          }
           break;
         }
         case Token::SAR: {
           if (shift_value != 0) {
             // SAR by immediate 0 means we do not have to do anything.
             __ sra(v0, v0, shift_value);
-            // SAR by at least 1 gives a Smi.
-            result = TypeInfo::Smi();
+
            }
           break;
         }
