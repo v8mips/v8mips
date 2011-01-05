@@ -1055,6 +1055,7 @@ class DeferredInlineBinaryOperation: public DeferredCode {
       : op_(op), dst_(dst), left_(left), right_(right),
         left_info_(left_info), right_info_(right_info), mode_(mode) {
     set_comment("[ DeferredInlineBinaryOperation");
+    ASSERT(!left.is(right));
   }
 
   virtual void Generate();
@@ -1844,16 +1845,15 @@ Result CodeGenerator::LikelySmiBinaryOperation(BinaryOperation* expr,
     frame_->Spill(eax);
     frame_->Spill(edx);
     // DeferredInlineBinaryOperation requires all the registers that it is
-    // told about to be spilled.
-    frame_->Spill(left->reg());
-    frame_->Spill(right->reg());
+    // told about to be spilled and distinct.
+    Result distinct_right = frame_->MakeDistinctAndSpilled(left, right);
 
     // Check that left and right are smi tagged.
     DeferredInlineBinaryOperation* deferred =
         new DeferredInlineBinaryOperation(op,
                                           (op == Token::DIV) ? eax : edx,
                                           left->reg(),
-                                          right->reg(),
+                                          distinct_right.reg(),
                                           left_type_info,
                                           right_type_info,
                                           overwrite_mode);
@@ -1946,7 +1946,8 @@ Result CodeGenerator::LikelySmiBinaryOperation(BinaryOperation* expr,
     // We will modify right, it must be spilled.
     frame_->Spill(ecx);
     // DeferredInlineBinaryOperation requires all the registers that it is told
-    // about to be spilled.
+    // about to be spilled and distinct.  We know that right is ecx and left is
+    // not ecx.
     frame_->Spill(left->reg());
 
     // Use a fresh answer register to avoid spilling the left operand.
@@ -2021,8 +2022,7 @@ Result CodeGenerator::LikelySmiBinaryOperation(BinaryOperation* expr,
   right->ToRegister();
   // DeferredInlineBinaryOperation requires all the registers that it is told
   // about to be spilled.
-  frame_->Spill(left->reg());
-  frame_->Spill(right->reg());
+  Result distinct_right = frame_->MakeDistinctAndSpilled(left, right);
   // A newly allocated register answer is used to hold the answer.  The
   // registers containing left and right are not modified so they don't
   // need to be spilled in the fast case.
@@ -2034,7 +2034,7 @@ Result CodeGenerator::LikelySmiBinaryOperation(BinaryOperation* expr,
       new DeferredInlineBinaryOperation(op,
                                         answer.reg(),
                                         left->reg(),
-                                        right->reg(),
+                                        distinct_right.reg(),
                                         left_type_info,
                                         right_type_info,
                                         overwrite_mode);
@@ -3435,10 +3435,8 @@ void CodeGenerator::CallApplyLazy(Expression* applicand,
       __ j(zero, &build_args);
       __ CmpObjectType(eax, JS_FUNCTION_TYPE, ecx);
       __ j(not_equal, &build_args);
-      __ mov(ecx, FieldOperand(eax, JSFunction::kSharedFunctionInfoOffset));
       Handle<Code> apply_code(Builtins::builtin(Builtins::FunctionApply));
-      __ cmp(FieldOperand(ecx, SharedFunctionInfo::kCodeOffset),
-             Immediate(apply_code));
+      __ cmp(FieldOperand(eax, JSFunction::kCodeOffset), Immediate(apply_code));
       __ j(not_equal, &build_args);
 
       // Check that applicand is a function.
@@ -9689,6 +9687,11 @@ void FastNewClosureStub::Generate(MacroAssembler* masm) {
   __ mov(FieldOperand(eax, JSFunction::kSharedFunctionInfoOffset), edx);
   __ mov(FieldOperand(eax, JSFunction::kContextOffset), esi);
   __ mov(FieldOperand(eax, JSFunction::kLiteralsOffset), ebx);
+
+  // Initialize the code pointer in the function to be the one
+  // found in the shared function info object.
+  __ mov(edx, FieldOperand(edx, SharedFunctionInfo::kCodeOffset));
+  __ mov(FieldOperand(eax, JSFunction::kCodeOffset), edx);
 
   // Return and remove the on-stack parameter.
   __ ret(1 * kPointerSize);
