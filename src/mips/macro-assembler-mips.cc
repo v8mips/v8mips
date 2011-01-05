@@ -2252,7 +2252,8 @@ void MacroAssembler::InvokeFunction(Register function,
                       SharedFunctionInfo::kFormalParameterCountOffset));
   sra(expected_reg, expected_reg, kSmiTagSize);
   lw(code_reg,
-      MemOperand(code_reg, SharedFunctionInfo::kCodeOffset - kHeapObjectTag));
+     MemOperand(a1, JSFunction::kCodeOffset - kHeapObjectTag));
+     //MemOperand(code_reg, SharedFunctionInfo::kCodeOffset - kHeapObjectTag));
   addiu(code_reg, code_reg, Code::kHeaderSize - kHeapObjectTag);
 
   ParameterCount expected(expected_reg);
@@ -2581,8 +2582,7 @@ void MacroAssembler::GetBuiltinEntry(Register target, Builtins::JavaScript id) {
     // Make sure the code objects in the builtins object and in the
     // builtin function are the same.
     Push(a1);
-    lw(a1, FieldMemOperand(a1, JSFunction::kSharedFunctionInfoOffset));
-    lw(a1, FieldMemOperand(a1, SharedFunctionInfo::kCodeOffset));
+    lw(a1, FieldMemOperand(a1, JSFunction::kCodeOffset));
     Assert(eq, "Builtin code object changed", a1, Operand(target));
     Pop(a1);
   }
