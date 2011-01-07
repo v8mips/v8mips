@@ -888,7 +888,7 @@ void Simulator::set_fpu_register_float(int fpureg, float value) {
 
 void Simulator::set_fpu_register_double(int fpureg, double value) {
   ASSERT((fpureg >= 0) && (fpureg < kNumFPURegisters) && ((fpureg % 2) == 0));
-  *v8i::BitCast<double*, int32_t*>(&FPUregisters_[fpureg]) = value;
+  *v8i::BitCast<double*>(&FPUregisters_[fpureg]) = value;
 }
 
 
@@ -921,8 +921,7 @@ float Simulator::get_fpu_register_float(int fpureg) const {
 
 double Simulator::get_fpu_register_double(int fpureg) const {
   ASSERT((fpureg >= 0) && (fpureg < kNumFPURegisters) && ((fpureg % 2) == 0));
-  return *v8i::BitCast<double*, int32_t*>(
-      const_cast<int32_t*>(&FPUregisters_[fpureg]));
+  return *v8i::BitCast<double*>(const_cast<int32_t*>(&FPUregisters_[fpureg]));
 }
 
 // Helper functions for setting and testing the FPU condition code bits.
