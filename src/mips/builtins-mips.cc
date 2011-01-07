@@ -955,6 +955,30 @@ void Builtins::Generate_JSConstructEntryTrampoline(MacroAssembler* masm) {
   Generate_JSEntryTrampolineHelper(masm, true);
 }
 
+void Builtins::Generate_LazyCompile(MacroAssembler* masm) {
+  // Enter an internal frame.
+  __ EnterInternalFrame();
+
+  // Preserve the function.
+  __ Push(a1);
+
+  // Push the function on the stack as the argument to the runtime function.
+  __ Push(a1);
+  // Call the runtime function
+  __ CallRuntime(Runtime::kLazyCompile, 1);
+  // Calculate the entry point.
+  __ addiu(t9, v0, Code::kHeaderSize - kHeapObjectTag);
+  // Restore saved function.
+  __ Pop(a1);
+
+  // Tear down temporary frame.
+  __ LeaveInternalFrame();
+
+  // Do a tail-call of the compiled function.
+  __ Jump(t9);
+}
+
+
 
 void Builtins::Generate_FunctionCall(MacroAssembler* masm) {
   // CAREFUL! : Implemented without Builtins args slots.
