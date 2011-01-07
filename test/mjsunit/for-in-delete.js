@@ -1,4 +1,4 @@
-// Copyright 2006-2008 the V8 project authors. All rights reserved.
+// Copyright 2010 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -24,53 +24,27 @@
 // THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
 
-#ifndef V8_HANDLES_INL_H_
-#define V8_HANDLES_INL_H_
+// Test that properties deleted during a for-in iteration do not show up in
+// the for-in.
 
-#include "apiutils.h"
-#include "handles.h"
-#include "api.h"
-
-namespace v8 {
-namespace internal {
-
-template<class T>
-Handle<T>::Handle(T* obj) {
-  ASSERT(!obj->IsFailure());
-  location_ = HandleScope::CreateHandle(obj);
+function f(o, expected, del) {
+  var index = 0;
+  for (p in o) {
+    if (del) delete o[del];
+    assertEquals(expected[index], p);
+    index++;
+  }
+  assertEquals(expected.length, index);
 }
 
+var o = {}
+o.a = 1;
+o.b = 2;
+o.c = 3;
+o.d = 3;
 
-template <class T>
-inline T* Handle<T>::operator*() const {
-  ASSERT(location_ != NULL);
-  ASSERT(reinterpret_cast<Address>(*location_) != kHandleZapValue);
-  return *BitCast<T**>(location_);
-}
-
-
-#ifdef DEBUG
-inline NoHandleAllocation::NoHandleAllocation() {
-  v8::ImplementationUtilities::HandleScopeData* current =
-      v8::ImplementationUtilities::CurrentHandleScope();
-  extensions_ = current->extensions;
-  // Shrink the current handle scope to make it impossible to do
-  // handle allocations without an explicit handle scope.
-  current->limit = current->next;
-  current->extensions = -1;
-}
-
-
-inline NoHandleAllocation::~NoHandleAllocation() {
-  // Restore state in current handle scope to re-enable handle
-  // allocations.
-  v8::ImplementationUtilities::CurrentHandleScope()->extensions = extensions_;
-}
-#endif
-
-
-} }  // namespace v8::internal
-
-#endif  // V8_HANDLES_INL_H_
+f(o, ['a', 'b', 'c', 'd']);
+f(o, ['a', 'b', 'c', 'd']);
+f(o, ['a', 'c', 'd'], 'b');
+f(o, ['a', 'c'], 'd');
