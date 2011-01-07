@@ -1284,11 +1284,6 @@ Object* CallStubCompiler::CompileArrayPushCall(Object* object,
   // Check that the maps haven't changed.
   CheckPrototypes(JSObject::cast(object), a1, holder, a3, a0, t0, name, &miss);
 
-  if (object->IsGlobalObject()) {
-    __ lw(a3, FieldMemOperand(a1, GlobalObject::kGlobalReceiverOffset));
-    __ sw(a3, MemOperand(sp, argc * kPointerSize));
-  }
-
   __ TailCallExternalReference(ExternalReference(Builtins::c_ArrayPush),
                                argc + 1,
                                1);
@@ -1334,11 +1329,6 @@ Object* CallStubCompiler::CompileArrayPopCall(Object* object,
 
   // Check that the maps haven't changed.
   CheckPrototypes(JSObject::cast(object), a1, holder, a3, a0, t0, name, &miss);
-
-  if (object->IsGlobalObject()) {
-    __ lw(a3, FieldMemOperand(a1, GlobalObject::kGlobalReceiverOffset));
-    __ sw(a3, MemOperand(sp, argc * kPointerSize));
-  }
 
   __ TailCallExternalReference(ExternalReference(Builtins::c_ArrayPop),
                                argc + 1,

@@ -2642,6 +2642,22 @@ void MacroAssembler::AssertRegisterIsRoot(Register reg,
   }
 }
 
+void MacroAssembler::AssertFastElements(Register elements) {
+  if (FLAG_debug_code) {
+    ASSERT(!elements.is(at));
+    Label ok;
+    Push(elements);
+    lw(elements, FieldMemOperand(elements, HeapObject::kMapOffset));
+    LoadRoot(at, Heap::kFixedArrayMapRootIndex);
+    Branch(&ok, eq, elements, Operand(at));
+    LoadRoot(at, Heap::kFixedCOWArrayMapRootIndex);
+    Branch(&ok, eq, elements, Operand(at));
+    Abort("JSObject with fast elements map has slow elements");
+    bind(&ok);
+    Pop(elements);
+  }
+}
+
 
 void MacroAssembler::Check(Condition cc, const char* msg,
                            Register rs, Operand rt) {

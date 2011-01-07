@@ -426,29 +426,30 @@ void LoadIC::GenerateFunctionPrototype(MacroAssembler* masm) {
 // Falls through for regular JS object.
 static void GenerateKeyedLoadReceiverCheck(MacroAssembler* masm,
                                            Register receiver,
-                                           Register scratch1,
-                                           Register scratch2,
+                                           Register map,
+                                           Register scratch,
                                            int interceptor_bit,
                                            Label* slow) {
   // Check that the object isn't a smi.
   __ BranchOnSmi(receiver, slow);
   // Get the map of the receiver.
-  __ lw(scratch1, FieldMemOperand(receiver, HeapObject::kMapOffset));
+  __ lw(map, FieldMemOperand(receiver, HeapObject::kMapOffset));
   // Check bit field.
-  __ lbu(scratch2, FieldMemOperand(scratch1, Map::kBitFieldOffset));
-  __ And(at, scratch2, Operand(KeyedLoadIC::kSlowCaseBitFieldMask));
+  __ lbu(scratch, FieldMemOperand(map, Map::kBitFieldOffset));
+  __ And(at, scratch, Operand(KeyedLoadIC::kSlowCaseBitFieldMask));
   __ Branch(slow, ne, at, Operand(zero_reg));
   // Check that the object is some kind of JS object EXCEPT JS Value type.
   // In the case that the object is a value-wrapper object,
   // we enter the runtime system to make sure that indexing into string
   // objects work as intended.
   ASSERT(JS_OBJECT_TYPE > JS_VALUE_TYPE);
-  __ lbu(scratch1, FieldMemOperand(scratch1, Map::kInstanceTypeOffset));
-  __ Branch(slow, lt, scratch1, Operand(JS_OBJECT_TYPE));
+  __ lbu(scratch, FieldMemOperand(map, Map::kInstanceTypeOffset));
+  __ Branch(slow, lt, scratch, Operand(JS_OBJECT_TYPE));
 }
 
 
 // Loads an indexed element from a fast case array.
+// If not_fast_array is NULL, doesn't perform the elements map check.
 static void GenerateFastArrayLoad(MacroAssembler* masm,
                                   Register receiver,
                                   Register key,
@@ -481,10 +482,14 @@ static void GenerateFastArrayLoad(MacroAssembler* masm,
   // scratch2 - used to hold the loaded value.
 
   __ lw(elements, FieldMemOperand(receiver, JSObject::kElementsOffset));
-  // Check that the object is in fast mode (not dictionary).
-  __ lw(scratch1, FieldMemOperand(elements, HeapObject::kMapOffset));
-  __ LoadRoot(at, Heap::kFixedArrayMapRootIndex);
-  __ Branch(not_fast_array, ne, scratch1, Operand(at));
+  if (not_fast_array != NULL) {
+    // Check that the object is in fast mode (not dictionary).
+    __ lw(scratch1, FieldMemOperand(elements, HeapObject::kMapOffset));
+    __ LoadRoot(at, Heap::kFixedArrayMapRootIndex);
+    __ Branch(not_fast_array, ne, scratch1, Operand(at));
+  } else {
+    __ AssertFastElements(elements);
+  }
 
   // Check that the key (index) is within bounds.
   __ lw(scratch1, FieldMemOperand(elements, FixedArray::kLengthOffset));
@@ -1137,17 +1142,25 @@ void KeyedLoadIC::GenerateGeneric(MacroAssembler* masm) {
   GenerateKeyedLoadReceiverCheck(
       masm, receiver, a2, a3, Map::kHasIndexedInterceptor, &slow);
 
+  // Check the "has fast elements" bit in the receiver's map which is
+  // now in a2.
+  __ lbu(a3, FieldMemOperand(a2, Map::kBitField2Offset));
+  __ And(at, a3, Operand(1 << Map::kHasFastElements));
+  __ Branch(&check_pixel_array, eq, at, Operand(zero_reg));
+
   GenerateFastArrayLoad(
-      masm, receiver, key, t0, a3, a2, v0, &check_pixel_array, &slow);
+      masm, receiver, key, t0, a3, a2, v0, NULL, &slow);
 
   __ IncrementCounter(&Counters::keyed_load_generic_smi, 1, a2, a3);
   __ Ret();
 
   // Check whether the elements is a pixel array.
   // a0: key
-  // a3: elements map
-  // t0: elements
+  // a1: receiver
   __ bind(&check_pixel_array);
+
+  __ lw(t0, FieldMemOperand(a1, JSObject::kElementsOffset));
+  __ lw(a3, FieldMemOperand(t0, HeapObject::kMapOffset));
   __ LoadRoot(at, Heap::kPixelArrayMapRootIndex);
   __ Branch(&check_number_dictionary, ne, a3, Operand(at));
   // Check that the key (index) is within bounds.
@@ -1677,7 +1690,7 @@ void KeyedStoreIC::GenerateGeneric(MacroAssembler* masm) {
 
   // Object case: Check key against length in the elements array.
   __ lw(elements, FieldMemOperand(receiver, JSObject::kElementsOffset));
-  // Check that the object is in fast mode (not dictionary).
+  // Check that the object is in fast mode and writable.
   __ lw(t3, FieldMemOperand(elements, HeapObject::kMapOffset));
   __ LoadRoot(t0, Heap::kFixedArrayMapRootIndex);
   __ Branch(&check_pixel_array, ne, t3, Operand(t0));
@@ -1754,8 +1767,8 @@ void KeyedStoreIC::GenerateGeneric(MacroAssembler* masm) {
 
 
   // Array case: Get the length and the elements array from the JS
-  // array. Check that the array is in fast mode; if it is the
-  // length is always a smi.
+  // array. Check that the array is in fast mode (and writable); if it
+  // is the length is always a smi.
 
   __ bind(&array);
   __ lw(elements, FieldMemOperand(receiver, JSObject::kElementsOffset));
@@ -2314,6 +2327,8 @@ void StoreIC::GenerateArrayLength(MacroAssembler* masm) {
   __ Branch(&miss, ne, scratch, Operand(JS_ARRAY_TYPE));
 
   // Check that elements are FixedArray.
+  // We rely on StoreIC_ArrayLength below to deal with all types of
+  // fast elements (including COW).
   __ lw(scratch, FieldMemOperand(receiver, JSArray::kElementsOffset));
   __ GetObjectType(scratch, scratch, scratch);
   __ Branch(&miss, ne, scratch, Operand(FIXED_ARRAY_TYPE));

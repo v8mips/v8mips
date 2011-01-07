@@ -311,7 +311,7 @@ class CodeGenerator: public AstVisitor {
   // Constants related to patching of inlined load/store.
   static int GetInlinedKeyedLoadInstructionsAfterPatch() {
     // This is in correlation with the padding in MacroAssembler::Abort.
-    return FLAG_debug_code ? 38 : 20;
+    return FLAG_debug_code ? 45 : 20;
   }
   static const int kInlinedKeyedStoreInstructionsAfterPatch = 9;
   static int GetInlinedNamedStoreInstructionsAfterPatch() {
