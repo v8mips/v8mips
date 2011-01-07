@@ -883,7 +883,7 @@ void Simulator::set_fpu_register(int fpureg, int32_t value) {
 
 void Simulator::set_fpu_register_float(int fpureg, float value) {
   ASSERT((fpureg >= 0) && (fpureg < kNumFPURegisters));
-  *v8i::BitCast<float*, int32_t*>(&FPUregisters_[fpureg]) = value;
+  *v8i::BitCast<float*>(&FPUregisters_[fpureg]) = value;
 }
 
 void Simulator::set_fpu_register_double(int fpureg, double value) {
@@ -909,13 +909,13 @@ int32_t Simulator::get_fpu_register(int fpureg) const {
 
 int64_t Simulator::get_fpu_register_long(int fpureg) const {
   ASSERT((fpureg >= 0) && (fpureg < kNumFPURegisters) && ((fpureg % 2) == 0));
-  return *v8i::BitCast<int64_t*, int32_t*>(
+  return *v8i::BitCast<int64_t*>(
       const_cast<int32_t*>(&FPUregisters_[fpureg]));
 }
 
 float Simulator::get_fpu_register_float(int fpureg) const {
   ASSERT((fpureg >= 0) && (fpureg < kNumFPURegisters));
-  return *v8i::BitCast<float*, int32_t*>(
+  return *v8i::BitCast<float*>(
       const_cast<int32_t*>(&FPUregisters_[fpureg]));
 }
 
@@ -1131,7 +1131,6 @@ void Simulator::SoftwareInterrupt(Instruction* instr) {
     int32_t arg1 = get_register(a1);
     int32_t arg2 = get_register(a2);
     int32_t arg3 = get_register(a3);
-    int32_t result_l, result_h;
     // This is dodgy but it works because the C entry stubs are never moved.
     // See comment in codegen-arm.cc and bug 1242173.
     int32_t saved_ra = get_register(ra);
@@ -1165,19 +1164,18 @@ void Simulator::SoftwareInterrupt(Instruction* instr) {
       SimulatorRuntimeFPCall target =
           reinterpret_cast<SimulatorRuntimeFPCall>(external);
       double result = target(arg0, arg1, arg2, arg3);
-      uint64_t u64;
-      u64 = *v8i::BitCast<uint64_t*, double*>(const_cast<double*>(&result));
-      result_h = static_cast<uint32_t>(u64 >> 32);
-      result_l = static_cast<uint32_t>(u64 & 0xffffffff);
+      // fp result -> registers v0 and v1.
+      int32_t gpreg_pair[2];
+      memcpy(&gpreg_pair[0], &result, 2 * sizeof(int32_t));
+      set_register(v0, gpreg_pair[0]);
+      set_register(v1, gpreg_pair[1]);
     } else {
       int64_t result = target(arg0, arg1, arg2, arg3);
-      result_l = static_cast<int32_t>(result);
-      result_h = static_cast<int32_t>(result >> 32);
+      set_register(v0, static_cast<int32_t>(result));
+      set_register(v1, static_cast<int32_t>(result >> 32));
     }
-    set_register(v0, result_l);
-    set_register(v1, result_h);
     if (::v8::internal::FLAG_trace_sim) {
-      PrintF("Returned %08x : %08x\n", result_h, result_l);
+      PrintF("Returned %08x : %08x\n", get_register(v1), get_register(v0));
     }
     set_register(ra, saved_ra);
     set_pc(get_register(ra));
