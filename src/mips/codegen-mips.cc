@@ -2724,10 +2724,8 @@ void CodeGenerator::VisitForInStatement(ForInStatement* node) {
   frame_->EmitPush(a3);  // push entry
   frame_->InvokeBuiltin(Builtins::FILTER_KEY, CALL_JS, 2);
   __ mov(a3, v0);
-
   // If the property has been removed while iterating, we just skip it.
-  __ LoadRoot(t2, Heap::kNullValueRootIndex);
-  node->continue_target()->Branch(eq, a3, Operand(t2));
+  node->continue_target()->Branch(eq, a3, Operand(zero_reg));
 
   end_del_check.Bind();
   // Store the entry in the 'each' expression and take another spin in the
