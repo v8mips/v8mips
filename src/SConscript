@@ -138,7 +138,6 @@ SOURCES = {
     arm/assembler-arm.cc
     """),
   'arch:mips': Split("""
-    fast-codegen.cc
     jump-target-light.cc
     virtual-frame-light.cc
     mips/assembler-mips.cc

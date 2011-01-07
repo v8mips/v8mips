@@ -217,9 +217,6 @@ void CodeGenerator::Generate(CompilationInfo* info) {
     }
 #endif
 
-    // Arm codegen supports secondary mode, which mips doesn't support yet.
-    // For now, make sure we're always called as primary.
-    ASSERT(info->mode() == CompilationInfo::PRIMARY);
     frame_->Enter();
 
     // Allocate space for locals and initialize them.

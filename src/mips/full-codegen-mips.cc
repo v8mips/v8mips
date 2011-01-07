@@ -40,7 +40,7 @@ namespace internal {
 
 #define __ ACCESS_MASM(masm_)
 
-void FullCodeGenerator::Generate(CompilationInfo* info, Mode mode) {
+void FullCodeGenerator::Generate(CompilationInfo* info) {
   UNIMPLEMENTED_MIPS();
 }
 
