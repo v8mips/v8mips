@@ -5023,7 +5023,7 @@ class DeferredIsStringWrapperSafeForDefaultValueOf : public DeferredCode {
     // Calculate location of the first key name.
     __ Addu(map_result_,
             map_result_,
-            Operand(FixedArray::kHeaderSize +
+            Operand(FixedArray::kHeaderSize - kHeapObjectTag +
                     DescriptorArray::kFirstIndex * kPointerSize));
     // Loop through all the keys in the descriptor array. If one of these is the
     // symbol valueOf the result is false.
