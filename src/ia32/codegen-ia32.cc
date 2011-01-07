@@ -1250,7 +1250,7 @@ void DeferredInlineBinaryOperation::GenerateNonSmiInput() {
     if (left_info_.IsSmi()) {
       // Right is a heap object.
       __ JumpIfNotNumber(right_, right_info_, entry_label());
-      __ ConvertToInt32(right_, right_, dst_, left_info_, entry_label());
+      __ ConvertToInt32(right_, right_, dst_, right_info_, entry_label());
       __ mov(dst_, Operand(left_));
       __ SmiUntag(dst_);
     } else if (right_info_.IsSmi()) {
@@ -1270,11 +1270,11 @@ void DeferredInlineBinaryOperation::GenerateNonSmiInput() {
       // Both were heap objects.
       __ rcl(right_, 1);  // Put tag back.
       __ JumpIfNotNumber(right_, right_info_, entry_label());
-      __ ConvertToInt32(right_, right_, no_reg, left_info_, entry_label());
+      __ ConvertToInt32(right_, right_, no_reg, right_info_, entry_label());
       __ jmp(&got_both);
       __ bind(&only_right_is_heap_object);
       __ JumpIfNotNumber(right_, right_info_, entry_label());
-      __ ConvertToInt32(right_, right_, no_reg, left_info_, entry_label());
+      __ ConvertToInt32(right_, right_, no_reg, right_info_, entry_label());
       __ bind(&got_both);
     }
   }
@@ -1940,6 +1940,7 @@ Result CodeGenerator::LikelySmiBinaryOperation(BinaryOperation* expr,
     // Use a fresh answer register to avoid spilling the left operand.
     answer = allocator_->Allocate();
     ASSERT(answer.is_valid());
+
     DeferredInlineBinaryOperation* deferred =
         new DeferredInlineBinaryOperation(op,
                                           answer.reg(),
@@ -4605,10 +4606,11 @@ void CodeGenerator::VisitForInStatement(ForInStatement* node) {
   // loop.  edx: i'th entry of the enum cache (or string there of)
   frame_->EmitPush(ebx);
   { Reference each(this, node->each());
-    // Loading a reference may leave the frame in an unspilled state.
-    frame_->SpillAll();
     if (!each.is_illegal()) {
       if (each.size() > 0) {
+        // Loading a reference may leave the frame in an unspilled state.
+        frame_->SpillAll();
+        // Get the value (under the reference on the stack) from memory.
         frame_->EmitPush(frame_->ElementAt(each.size()));
         each.SetValue(NOT_CONST_INIT);
         frame_->Drop(2);
@@ -5710,12 +5712,18 @@ void CodeGenerator::VisitArrayLiteral(ArrayLiteral* node) {
   frame_->Push(node->constant_elements());
   int length = node->values()->length();
   Result clone;
-  if (node->depth() > 1) {
+  if (node->constant_elements()->map() == Heap::fixed_cow_array_map()) {
+    FastCloneShallowArrayStub stub(
+        FastCloneShallowArrayStub::COPY_ON_WRITE_ELEMENTS, length);
+    clone = frame_->CallStub(&stub, 3);
+    __ IncrementCounter(&Counters::cow_arrays_created_stub, 1);
+  } else if (node->depth() > 1) {
     clone = frame_->CallRuntime(Runtime::kCreateArrayLiteral, 3);
-  } else if (length > FastCloneShallowArrayStub::kMaximumLength) {
+  } else if (length > FastCloneShallowArrayStub::kMaximumClonedLength) {
     clone = frame_->CallRuntime(Runtime::kCreateArrayLiteralShallow, 3);
   } else {
-    FastCloneShallowArrayStub stub(length);
+    FastCloneShallowArrayStub stub(
+        FastCloneShallowArrayStub::CLONE_ELEMENTS, length);
     clone = frame_->CallStub(&stub, 3);
   }
   frame_->Push(&clone);
@@ -5725,12 +5733,9 @@ void CodeGenerator::VisitArrayLiteral(ArrayLiteral* node) {
   for (int i = 0; i < length; i++) {
     Expression* value = node->values()->at(i);
 
-    // If value is a literal the property value is already set in the
-    // boilerplate object.
-    if (value->AsLiteral() != NULL) continue;
-    // If value is a materialized literal the property value is already set
-    // in the boilerplate object if it is simple.
-    if (CompileTimeValue::IsCompileTimeValue(value)) continue;
+    if (!CompileTimeValue::ArrayLiteralElementNeedsInitialization(value)) {
+      continue;
+    }
 
     // The property must be set by generated code.
     Load(value);
@@ -7599,7 +7604,7 @@ void CodeGenerator::GenerateSwapElements(ZoneList<Expression*>* args) {
             KeyedLoadIC::kSlowCaseBitFieldMask);
   deferred->Branch(not_zero);
 
-  // Check the object's elements are in fast case.
+  // Check the object's elements are in fast case and writable.
   __ mov(tmp1.reg(), FieldOperand(object.reg(), JSObject::kElementsOffset));
   __ cmp(FieldOperand(tmp1.reg(), HeapObject::kMapOffset),
          Immediate(Factory::fixed_array_map()));
@@ -9494,15 +9499,10 @@ Result CodeGenerator::EmitKeyedLoad() {
       if (FLAG_debug_code) __ AbortIfNotSmi(key.reg());
     }
 
-    // Get the elements array from the receiver and check that it
-    // is not a dictionary.
+    // Get the elements array from the receiver.
     __ mov(elements.reg(),
            FieldOperand(receiver.reg(), JSObject::kElementsOffset));
-    if (FLAG_debug_code) {
-      __ cmp(FieldOperand(elements.reg(), HeapObject::kMapOffset),
-             Immediate(Factory::fixed_array_map()));
-      __ Assert(equal, "JSObject with fast elements map has slow elements");
-    }
+    __ AssertFastElements(elements.reg());
 
     // Check that the key is within bounds.
     __ cmp(key.reg(),
@@ -9898,6 +9898,24 @@ void FastCloneShallowArrayStub::Generate(MacroAssembler* masm) {
   __ mov(ecx, CodeGenerator::FixedArrayElementOperand(ecx, eax));
   __ cmp(ecx, Factory::undefined_value());
   __ j(equal, &slow_case);
+
+  if (FLAG_debug_code) {
+    const char* message;
+    Handle<Map> expected_map;
+    if (mode_ == CLONE_ELEMENTS) {
+      message = "Expected (writable) fixed array";
+      expected_map = Factory::fixed_array_map();
+    } else {
+      ASSERT(mode_ == COPY_ON_WRITE_ELEMENTS);
+      message = "Expected copy-on-write fixed array";
+      expected_map = Factory::fixed_cow_array_map();
+    }
+    __ push(ecx);
+    __ mov(ecx, FieldOperand(ecx, JSArray::kElementsOffset));
+    __ cmp(FieldOperand(ecx, HeapObject::kMapOffset), expected_map);
+    __ Assert(equal, message);
+    __ pop(ecx);
+  }
 
   // Allocate both the JS array and the elements array in one big
   // allocation. This avoids multiple limit checks.

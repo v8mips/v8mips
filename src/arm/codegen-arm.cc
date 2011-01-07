@@ -519,6 +519,10 @@ void CodeGenerator::LoadCondition(Expression* x,
 
 
 void CodeGenerator::Load(Expression* expr) {
+  // We generally assume that we are not in a spilled scope for most
+  // of the code generator.  A failure to ensure this caused issue 815
+  // and this assert is designed to catch similar issues.
+  frame_->AssertIsNotSpilled();
 #ifdef DEBUG
   int original_height = frame_->height();
 #endif
@@ -675,6 +679,10 @@ Reference::Reference(CodeGenerator* cgen,
       expression_(expression),
       type_(ILLEGAL),
       persist_after_get_(persist_after_get) {
+  // We generally assume that we are not in a spilled scope for most
+  // of the code generator.  A failure to ensure this caused issue 815
+  // and this assert is designed to catch similar issues.
+  cgen->frame()->AssertIsNotSpilled();
   cgen->LoadReference(this);
 }
 
@@ -771,12 +779,26 @@ void CodeGenerator::ToBoolean(JumpTarget* true_target,
     __ tst(tos, Operand(kSmiTagMask));
     true_target->Branch(eq);
 
-    // Slow case: call the runtime.
-    frame_->EmitPush(tos);
-    frame_->CallRuntime(Runtime::kToBool, 1);
-    // Convert the result (r0) to a condition code.
-    __ LoadRoot(ip, Heap::kFalseValueRootIndex);
-    __ cmp(r0, ip);
+    // Slow case.
+    if (CpuFeatures::IsSupported(VFP3)) {
+      CpuFeatures::Scope scope(VFP3);
+      // Implements the slow case by using ToBooleanStub.
+      // The ToBooleanStub takes a single argument, and
+      // returns a non-zero value for true, or zero for false.
+      // Both the argument value and the return value use the
+      // register assigned to tos_
+      ToBooleanStub stub(tos);
+      frame_->CallStub(&stub, 0);
+      // Convert the result in "tos" to a condition code.
+      __ cmp(tos, Operand(0));
+    } else {
+      // Implements slow case by calling the runtime.
+      frame_->EmitPush(tos);
+      frame_->CallRuntime(Runtime::kToBool, 1);
+      // Convert the result (r0) to a condition code.
+      __ LoadRoot(ip, Heap::kFalseValueRootIndex);
+      __ cmp(r0, ip);
+    }
   }
 
   cc_reg_ = ne;
@@ -1200,7 +1222,21 @@ void CodeGenerator::SmiOperation(Token::Value op,
     case Token::SHR:
     case Token::SAR: {
       ASSERT(!reversed);
-      TypeInfo result = TypeInfo::Integer32();
+      TypeInfo result =
+          (op == Token::SAR) ? TypeInfo::Integer32() : TypeInfo::Number();
+      if (!reversed) {
+        if (op == Token::SHR) {
+          if (int_value >= 2) {
+            result = TypeInfo::Smi();
+          } else if (int_value >= 1) {
+            result = TypeInfo::Integer32();
+          }
+        } else {
+          if (int_value >= 1) {
+            result = TypeInfo::Smi();
+          }
+        }
+      }
       Register scratch = VirtualFrame::scratch0();
       Register scratch2 = VirtualFrame::scratch1();
       int shift_value = int_value & 0x1f;  // least significant 5 bits
@@ -1885,19 +1921,17 @@ void CodeGenerator::VisitBreakStatement(BreakStatement* node) {
 
 
 void CodeGenerator::VisitReturnStatement(ReturnStatement* node) {
-  frame_->SpillAll();
   Comment cmnt(masm_, "[ ReturnStatement");
 
   CodeForStatementPosition(node);
   Load(node->expression());
+  frame_->PopToR0();
+  frame_->PrepareForReturn();
   if (function_return_is_shadowed_) {
-    frame_->EmitPop(r0);
     function_return_.Jump();
   } else {
     // Pop the result from the frame and prepare the frame for
     // returning thus making it easier to merge.
-    frame_->PopToR0();
-    frame_->PrepareForReturn();
     if (function_return_.is_bound()) {
       // If the function return label is already bound we reuse the
       // code by jumping to the return site.
@@ -2293,7 +2327,6 @@ void CodeGenerator::VisitForInStatement(ForInStatement* node) {
 #ifdef DEBUG
   int original_height = frame_->height();
 #endif
-  VirtualFrame::SpilledScope spilled_scope(frame_);
   Comment cmnt(masm_, "[ ForInStatement");
   CodeForStatementPosition(node);
 
@@ -2307,6 +2340,7 @@ void CodeGenerator::VisitForInStatement(ForInStatement* node) {
   // Get the object to enumerate over (converted to JSObject).
   Load(node->enumerable());
 
+  VirtualFrame::SpilledScope spilled_scope(frame_);
   // Both SpiderMonkey and kjs ignore null and undefined in contrast
   // to the specification.  12.6.4 mandates a call to ToObject.
   frame_->EmitPop(r0);
@@ -2476,25 +2510,31 @@ void CodeGenerator::VisitForInStatement(ForInStatement* node) {
   // Store the entry in the 'each' expression and take another spin in the
   // loop.  r3: i'th entry of the enum cache (or string there of)
   frame_->EmitPush(r3);  // push entry
-  { Reference each(this, node->each());
+  { VirtualFrame::RegisterAllocationScope scope(this);
+    Reference each(this, node->each());
     if (!each.is_illegal()) {
       if (each.size() > 0) {
+        // Loading a reference may leave the frame in an unspilled state.
+        frame_->SpillAll();  // Sync stack to memory.
+        // Get the value (under the reference on the stack) from memory.
         __ ldr(r0, frame_->ElementAt(each.size()));
         frame_->EmitPush(r0);
         each.SetValue(NOT_CONST_INIT, UNLIKELY_SMI);
-        frame_->Drop(2);
+        frame_->Drop(2);  // The result of the set and the extra pushed value.
       } else {
         // If the reference was to a slot we rely on the convenient property
-        // that it doesn't matter whether a value (eg, r3 pushed above) is
+        // that it doesn't matter whether a value (eg, ebx pushed above) is
         // right on top of or right underneath a zero-sized reference.
         each.SetValue(NOT_CONST_INIT, UNLIKELY_SMI);
-        frame_->Drop();
+        frame_->Drop(1);  // Drop the result of the set operation.
       }
     }
   }
   // Body.
   CheckStack();  // TODO(1222600): ignore if body contains calls.
-  Visit(node->body());
+  { VirtualFrame::RegisterAllocationScope scope(this);
+    Visit(node->body());
+  }
 
   // Next.  Reestablish a spilled frame in case we are coming here via
   // a continue in the body.
@@ -2541,7 +2581,9 @@ void CodeGenerator::VisitTryCatchStatement(TryCatchStatement* node) {
   // Remove the exception from the stack.
   frame_->Drop();
 
-  VisitStatements(node->catch_block()->statements());
+  { VirtualFrame::RegisterAllocationScope scope(this);
+    VisitStatements(node->catch_block()->statements());
+  }
   if (frame_ != NULL) {
     exit.Jump();
   }
@@ -2576,7 +2618,9 @@ void CodeGenerator::VisitTryCatchStatement(TryCatchStatement* node) {
   }
 
   // Generate code for the statements in the try block.
-  VisitStatements(node->try_block()->statements());
+  { VirtualFrame::RegisterAllocationScope scope(this);
+    VisitStatements(node->try_block()->statements());
+  }
 
   // Stop the introduced shadowing and count the number of required unlinks.
   // After shadowing stops, the original labels are unshadowed and the
@@ -2597,7 +2641,7 @@ void CodeGenerator::VisitTryCatchStatement(TryCatchStatement* node) {
     // the handler list and drop the rest of this handler from the
     // frame.
     STATIC_ASSERT(StackHandlerConstants::kNextOffset == 0);
-    frame_->EmitPop(r1);
+    frame_->EmitPop(r1);  // r0 can contain the return value.
     __ mov(r3, Operand(handler_address));
     __ str(r1, MemOperand(r3));
     frame_->Drop(StackHandlerConstants::kSize / kPointerSize - 1);
@@ -2623,7 +2667,7 @@ void CodeGenerator::VisitTryCatchStatement(TryCatchStatement* node) {
       frame_->Forget(frame_->height() - handler_height);
 
       STATIC_ASSERT(StackHandlerConstants::kNextOffset == 0);
-      frame_->EmitPop(r1);
+      frame_->EmitPop(r1);  // r0 can contain the return value.
       __ str(r1, MemOperand(r3));
       frame_->Drop(StackHandlerConstants::kSize / kPointerSize - 1);
 
@@ -2690,7 +2734,9 @@ void CodeGenerator::VisitTryFinallyStatement(TryFinallyStatement* node) {
   }
 
   // Generate code for the statements in the try block.
-  VisitStatements(node->try_block()->statements());
+  { VirtualFrame::RegisterAllocationScope scope(this);
+    VisitStatements(node->try_block()->statements());
+  }
 
   // Stop the introduced shadowing and count the number of required unlinks.
   // After shadowing stops, the original labels are unshadowed and the
@@ -2780,7 +2826,9 @@ void CodeGenerator::VisitTryFinallyStatement(TryFinallyStatement* node) {
   // and the state - while evaluating the finally block.
   //
   // Generate code for the statements in the finally block.
-  VisitStatements(node->finally_block()->statements());
+  { VirtualFrame::RegisterAllocationScope scope(this);
+    VisitStatements(node->finally_block()->statements());
+  }
 
   if (has_valid_frame()) {
     // Restore state and return value or faked TOS.
@@ -3397,12 +3445,18 @@ void CodeGenerator::VisitArrayLiteral(ArrayLiteral* node) {
   frame_->EmitPush(Operand(Smi::FromInt(node->literal_index())));
   frame_->EmitPush(Operand(node->constant_elements()));
   int length = node->values()->length();
-  if (node->depth() > 1) {
+  if (node->constant_elements()->map() == Heap::fixed_cow_array_map()) {
+    FastCloneShallowArrayStub stub(
+        FastCloneShallowArrayStub::COPY_ON_WRITE_ELEMENTS, length);
+    frame_->CallStub(&stub, 3);
+    __ IncrementCounter(&Counters::cow_arrays_created_stub, 1, r1, r2);
+  } else if (node->depth() > 1) {
     frame_->CallRuntime(Runtime::kCreateArrayLiteral, 3);
-  } else if (length > FastCloneShallowArrayStub::kMaximumLength) {
+  } else if (length > FastCloneShallowArrayStub::kMaximumClonedLength) {
     frame_->CallRuntime(Runtime::kCreateArrayLiteralShallow, 3);
   } else {
-    FastCloneShallowArrayStub stub(length);
+    FastCloneShallowArrayStub stub(
+        FastCloneShallowArrayStub::CLONE_ELEMENTS, length);
     frame_->CallStub(&stub, 3);
   }
   frame_->EmitPush(r0);  // save the result
@@ -3960,7 +4014,6 @@ void CodeGenerator::VisitCall(Call* node) {
 
   } else if (var != NULL && var->slot() != NULL &&
              var->slot()->type() == Slot::LOOKUP) {
-    VirtualFrame::SpilledScope spilled_scope(frame_);
     // ----------------------------------
     // JavaScript examples:
     //
@@ -3973,8 +4026,6 @@ void CodeGenerator::VisitCall(Call* node) {
     //  }
     // ----------------------------------
 
-    // JumpTargets do not yet support merging frames so the frame must be
-    // spilled when jumping to these targets.
     JumpTarget slow, done;
 
     // Generate fast case for loading functions from slots that
@@ -3988,8 +4039,7 @@ void CodeGenerator::VisitCall(Call* node) {
     slow.Bind();
     // Load the function
     frame_->EmitPush(cp);
-    __ mov(r0, Operand(var->name()));
-    frame_->EmitPush(r0);
+    frame_->EmitPush(Operand(var->name()));
     frame_->CallRuntime(Runtime::kLoadContextSlot, 2);
     // r0: slot value; r1: receiver
 
@@ -4005,7 +4055,7 @@ void CodeGenerator::VisitCall(Call* node) {
       call.Jump();
       done.Bind();
       frame_->EmitPush(r0);  // function
-      LoadGlobalReceiver(r1);  // receiver
+      LoadGlobalReceiver(VirtualFrame::scratch0());  // receiver
       call.Bind();
     }
 
@@ -4060,8 +4110,6 @@ void CodeGenerator::VisitCall(Call* node) {
       // -------------------------------------------
       // JavaScript example: 'array[index](1, 2, 3)'
       // -------------------------------------------
-      VirtualFrame::SpilledScope spilled_scope(frame_);
-
       Load(property->obj());
       if (property->is_synthetic()) {
         Load(property->key());
@@ -4069,7 +4117,7 @@ void CodeGenerator::VisitCall(Call* node) {
         // Put the function below the receiver.
         // Use the global receiver.
         frame_->EmitPush(r0);  // Function.
-        LoadGlobalReceiver(r0);
+        LoadGlobalReceiver(VirtualFrame::scratch0());
         // Call the function.
         CallWithArguments(args, RECEIVER_MIGHT_BE_VALUE, node->position());
         frame_->EmitPush(r0);
@@ -4082,6 +4130,7 @@ void CodeGenerator::VisitCall(Call* node) {
 
         // Set the name register and call the IC initialization code.
         Load(property->key());
+        frame_->SpillAll();
         frame_->EmitPop(r2);  // Function name.
 
         InLoopFlag in_loop = loop_nesting() > 0 ? IN_LOOP : NOT_IN_LOOP;
@@ -4101,10 +4150,8 @@ void CodeGenerator::VisitCall(Call* node) {
     // Load the function.
     Load(function);
 
-    VirtualFrame::SpilledScope spilled_scope(frame_);
-
     // Pass the global proxy as the receiver.
-    LoadGlobalReceiver(r0);
+    LoadGlobalReceiver(VirtualFrame::scratch0());
 
     // Call the function.
     CallWithArguments(args, NO_CALL_FUNCTION_FLAGS, node->position());
@@ -4159,8 +4206,8 @@ void CodeGenerator::VisitCallNew(CallNew* node) {
 
 
 void CodeGenerator::GenerateClassOf(ZoneList<Expression*>* args) {
-  JumpTarget leave, null, function, non_function_constructor;
   Register scratch = VirtualFrame::scratch0();
+  JumpTarget null, function, leave, non_function_constructor;
 
   // Load the object into register.
   ASSERT(args->length() == 1);
@@ -5361,7 +5408,7 @@ void CodeGenerator::GenerateSwapElements(ZoneList<Expression*>* args) {
   __ tst(tmp2, Operand(KeyedLoadIC::kSlowCaseBitFieldMask));
   deferred->Branch(nz);
 
-  // Check the object's elements are in fast case.
+  // Check the object's elements are in fast case and writable.
   __ ldr(tmp1, FieldMemOperand(object, JSObject::kElementsOffset));
   __ ldr(tmp2, FieldMemOperand(tmp1, HeapObject::kMapOffset));
   __ LoadRoot(ip, Heap::kFixedArrayMapRootIndex);
@@ -6653,15 +6700,9 @@ void CodeGenerator::EmitKeyedLoad() {
       __ cmp(scratch1, scratch2);
       deferred->Branch(ne);
 
-      // Get the elements array from the receiver and check that it
-      // is not a dictionary.
+      // Get the elements array from the receiver.
       __ ldr(scratch1, FieldMemOperand(receiver, JSObject::kElementsOffset));
-      if (FLAG_debug_code) {
-        __ ldr(scratch2, FieldMemOperand(scratch1, JSObject::kMapOffset));
-        __ LoadRoot(ip, Heap::kFixedArrayMapRootIndex);
-        __ cmp(scratch2, ip);
-        __ Assert(eq, "JSObject with fast elements map has slow elements");
-      }
+      __ AssertFastElements(scratch1);
 
       // Check that key is within bounds. Use unsigned comparison to handle
       // negative keys.
@@ -7070,6 +7111,26 @@ void FastCloneShallowArrayStub::Generate(MacroAssembler* masm) {
   __ LoadRoot(ip, Heap::kUndefinedValueRootIndex);
   __ cmp(r3, ip);
   __ b(eq, &slow_case);
+
+  if (FLAG_debug_code) {
+    const char* message;
+    Heap::RootListIndex expected_map_index;
+    if (mode_ == CLONE_ELEMENTS) {
+      message = "Expected (writable) fixed array";
+      expected_map_index = Heap::kFixedArrayMapRootIndex;
+    } else {
+      ASSERT(mode_ == COPY_ON_WRITE_ELEMENTS);
+      message = "Expected copy-on-write fixed array";
+      expected_map_index = Heap::kFixedCOWArrayMapRootIndex;
+    }
+    __ push(r3);
+    __ ldr(r3, FieldMemOperand(r3, JSArray::kElementsOffset));
+    __ ldr(r3, FieldMemOperand(r3, HeapObject::kMapOffset));
+    __ LoadRoot(ip, expected_map_index);
+    __ cmp(r3, ip);
+    __ Assert(eq, message);
+    __ pop(r3);
+  }
 
   // Allocate both the JS array and the elements array in one big
   // allocation. This avoids multiple limit checks.
@@ -7936,6 +7997,77 @@ void CompareStub::Generate(MacroAssembler* masm) {
   // Call the native; it returns -1 (less), 0 (equal), or 1 (greater)
   // tagged as a small integer.
   __ InvokeBuiltin(native, JUMP_JS);
+}
+
+
+// This stub does not handle the inlined cases (Smis, Booleans, undefined).
+// The stub returns zero for false, and a non-zero value for true.
+void ToBooleanStub::Generate(MacroAssembler* masm) {
+  Label false_result;
+  Label not_heap_number;
+  Register scratch0 = VirtualFrame::scratch0();
+
+  // HeapNumber => false iff +0, -0, or NaN.
+  __ ldr(scratch0, FieldMemOperand(tos_, HeapObject::kMapOffset));
+  __ LoadRoot(ip, Heap::kHeapNumberMapRootIndex);
+  __ cmp(scratch0, ip);
+  __ b(&not_heap_number, ne);
+
+  __ sub(ip, tos_, Operand(kHeapObjectTag));
+  __ vldr(d1, ip, HeapNumber::kValueOffset);
+  __ vcmp(d1, 0.0);
+  __ vmrs(pc);
+  // "tos_" is a register, and contains a non zero value by default.
+  // Hence we only need to overwrite "tos_" with zero to return false for
+  // FP_ZERO or FP_NAN cases. Otherwise, by default it returns true.
+  __ mov(tos_, Operand(0), LeaveCC, eq);  // for FP_ZERO
+  __ mov(tos_, Operand(0), LeaveCC, vs);  // for FP_NAN
+  __ Ret();
+
+  __ bind(&not_heap_number);
+
+  // Check if the value is 'null'.
+  // 'null' => false.
+  __ LoadRoot(ip, Heap::kNullValueRootIndex);
+  __ cmp(tos_, ip);
+  __ b(&false_result, eq);
+
+  // It can be an undetectable object.
+  // Undetectable => false.
+  __ ldr(ip, FieldMemOperand(tos_, HeapObject::kMapOffset));
+  __ ldrb(scratch0, FieldMemOperand(ip, Map::kBitFieldOffset));
+  __ and_(scratch0, scratch0, Operand(1 << Map::kIsUndetectable));
+  __ cmp(scratch0, Operand(1 << Map::kIsUndetectable));
+  __ b(&false_result, eq);
+
+  // JavaScript object => true.
+  __ ldr(scratch0, FieldMemOperand(tos_, HeapObject::kMapOffset));
+  __ ldrb(scratch0, FieldMemOperand(scratch0, Map::kInstanceTypeOffset));
+  __ cmp(scratch0, Operand(FIRST_JS_OBJECT_TYPE));
+  // "tos_" is a register and contains a non-zero value.
+  // Hence we implicitly return true if the greater than
+  // condition is satisfied.
+  __ Ret(gt);
+
+  // Check for string
+  __ ldr(scratch0, FieldMemOperand(tos_, HeapObject::kMapOffset));
+  __ ldrb(scratch0, FieldMemOperand(scratch0, Map::kInstanceTypeOffset));
+  __ cmp(scratch0, Operand(FIRST_NONSTRING_TYPE));
+  // "tos_" is a register and contains a non-zero value.
+  // Hence we implicitly return true if the greater than
+  // condition is satisfied.
+  __ Ret(gt);
+
+  // String value => false iff empty, i.e., length is zero
+  __ ldr(tos_, FieldMemOperand(tos_, String::kLengthOffset));
+  // If length is zero, "tos_" contains zero ==> false.
+  // If length is not zero, "tos_" contains a non-zero value ==> true.
+  __ Ret();
+
+  // Return 0 in "tos_" for false .
+  __ bind(&false_result);
+  __ mov(tos_, Operand(0));
+  __ Ret();
 }
 
 

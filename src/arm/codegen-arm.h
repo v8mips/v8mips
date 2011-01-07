@@ -278,7 +278,7 @@ class CodeGenerator: public AstVisitor {
 
   // Constants related to patching of inlined load/store.
   static int GetInlinedKeyedLoadInstructionsAfterPatch() {
-    return FLAG_debug_code ? 27 : 13;
+    return FLAG_debug_code ? 32 : 13;
   }
   static const int kInlinedKeyedStoreInstructionsAfterPatch = 5;
   static int GetInlinedNamedStoreInstructionsAfterPatch() {
@@ -622,6 +622,19 @@ class TranscendentalCacheStub: public CodeStub {
   Major MajorKey() { return TranscendentalCache; }
   int MinorKey() { return type_; }
   Runtime::FunctionId RuntimeFunction();
+};
+
+
+class ToBooleanStub: public CodeStub {
+ public:
+  explicit ToBooleanStub(Register tos) : tos_(tos) { }
+
+  void Generate(MacroAssembler* masm);
+
+ private:
+  Register tos_;
+  Major MajorKey() { return ToBoolean; }
+  int MinorKey() { return tos_.code(); }
 };
 
 

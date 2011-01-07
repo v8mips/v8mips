@@ -66,12 +66,13 @@ debug-liveedit-check-stack: SKIP
 
 [ $arch == mips ]
 
-# For now, run all tests on MIPS.
-
+# Run all tests on MIPS, except for
 # Stack manipulations in LiveEdit is implemented for ia32 only.
 debug-liveedit-check-stack: SKIP
 
 [ $arch == x64 ]
+
 # Stack manipulations in LiveEdit is implemented for ia32 only.
 debug-liveedit-check-stack: SKIP
+
 
