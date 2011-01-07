@@ -5028,11 +5028,13 @@ class DeferredIsStringWrapperSafeForDefaultValueOf : public DeferredCode {
     // Loop through all the keys in the descriptor array. If one of these is the
     // symbol valueOf the result is false.
     Label entry, loop;
+    // The use of t0 to store the valueOf symbol asumes that it is not otherwise
+    // used in the loop below.
+    __ li(t0, Factory::value_of_symbol());
     __ Branch(&entry);
     __ bind(&loop);
-    __ lw(scratch2_, FieldMemOperand(map_result_, 0));
-    __ Branch(&false_result, eq, scratch2_,
-              Operand(Factory::value_of_symbol()));
+    __ lw(scratch2_, MemOperand(map_result_, 0));
+    __ Branch(&false_result, eq, scratch2_, Operand(t0));
     __ Addu(map_result_, map_result_, Operand(kPointerSize));
     __ bind(&entry);
     __ Branch(&loop, ne, map_result_, Operand(scratch1_));
