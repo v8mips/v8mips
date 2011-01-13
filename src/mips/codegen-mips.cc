@@ -5322,6 +5322,15 @@ void CodeGenerator::GenerateRegExpCloneResult(ZoneList<Expression*>* args) {
     __ lw(t1, FieldMemOperand(a0, HeapObject::kMapOffset));
     __ Branch(&done, ne, a1, Operand(t1));
 
+    if (FLAG_debug_code) {
+      __ LoadRoot(a2, Heap::kEmptyFixedArrayRootIndex);
+      __ lw(at, FieldMemOperand(a0, JSObject::kPropertiesOffset));
+      __ Check(eq,
+               "JSRegExpResult: default map but non-empty properties.",
+               at,
+               Operand(a2));
+    }
+
     // All set, copy the contents to a new object.
     __ AllocateInNewSpace(JSRegExpResult::kSize,
                           a2,
@@ -5350,7 +5359,6 @@ void CodeGenerator::GenerateRegExpCloneResult(ZoneList<Expression*>* args) {
     __ lw(t0, MemOperand(a0, 5 * kPointerSize));
     __ sw(t0, MemOperand(a2, 5 * kPointerSize));
 
-    ASSERT(!Heap::InNewSpace(Heap::fixed_cow_array_map()));
     ASSERT(JSRegExp::kElementsOffset == 2 * kPointerSize);
     // Check whether elements array is empty fixed array, and otherwise make
     // it copy-on-write (it never should be empty unless someone is messing
