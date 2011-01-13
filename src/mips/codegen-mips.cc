@@ -7502,8 +7502,13 @@ static void EmitSmiNonsmiComparison(MacroAssembler* masm,
     __ Call(stub2.GetCode(), RelocInfo::CODE_TARGET);
     __ Pop(ra);
     // Load rhs to a double in a1, a0.
-    __ lw(a0, FieldMemOperand(rhs, HeapNumber::kValueOffset));
-    __ lw(a1, FieldMemOperand(rhs, HeapNumber::kValueOffset + 4));
+    if (rhs.is(a0)) {
+      __ lw(a1, FieldMemOperand(rhs, HeapNumber::kValueOffset + 4));
+      __ lw(a0, FieldMemOperand(rhs, HeapNumber::kValueOffset));
+    } else {
+      __ lw(a0, FieldMemOperand(rhs, HeapNumber::kValueOffset));
+      __ lw(a1, FieldMemOperand(rhs, HeapNumber::kValueOffset + 4));
+    }
   }
   // Fall through to both_loaded_as_doubles.
 }
@@ -7721,8 +7726,13 @@ static void EmitCheckForTwoHeapNumbers(MacroAssembler* masm,
   } else {
     __ lw(a2, FieldMemOperand(lhs, HeapNumber::kValueOffset));
     __ lw(a3, FieldMemOperand(lhs, HeapNumber::kValueOffset + 4));
-    __ lw(a0, FieldMemOperand(rhs, HeapNumber::kValueOffset));
-    __ lw(a1, FieldMemOperand(rhs, HeapNumber::kValueOffset + 4));
+    if (rhs.is(a0)) {
+      __ lw(a1, FieldMemOperand(rhs, HeapNumber::kValueOffset + 4));
+      __ lw(a0, FieldMemOperand(rhs, HeapNumber::kValueOffset));
+    } else {
+      __ lw(a0, FieldMemOperand(rhs, HeapNumber::kValueOffset));
+      __ lw(a1, FieldMemOperand(rhs, HeapNumber::kValueOffset + 4));
+    }
   }
   __ jmp(both_loaded_as_doubles);
 }
