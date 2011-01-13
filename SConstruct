@@ -305,6 +305,17 @@ LIBRARY_FLAGS = {
         }
       }
     }
+  },
+  'mipspro': {
+    'all': {
+      'CCFLAGS':      ['-woff', '1234,3970,3968,3624,1174,1682,1460,1552,1035,1188', '-ansi', '-LANG:exceptions=OFF'],
+      'CPPDEFINES':   ['V8_TARGET_ARCH_MIPS'],
+      'ARFLAGS':      ['-ar', '-no_prelink', '-ptused'],
+    },
+    'mode:debug': {
+      'CCFLAGS':      ['-g', '-O0'],
+      'CPPDEFINES':   ['ENABLE_DISASSEMBLER', 'DEBUG'],
+    }
   }
 }
 
@@ -493,6 +504,13 @@ CCTEST_EXTRA_FLAGS = {
       'CPPDEFINES':   ['V8_TARGET_ARCH_X64'],
       'LINKFLAGS': ['/STACK:2091752']
     },
+  },
+  'mipspro': {
+    'all': {
+      'CCFLAGS':      ['-woff', '1234,3970,3968,3624,1174,1682,1460,1552,1035,1188', '-ansi', '-LANG:exceptions=OFF'],
+      'LIBS':         ['m', 'pthread'],
+      'LINKFLAGS':    ['-no_prelink']
+    }
   }
 }
 
@@ -657,6 +675,13 @@ SAMPLE_FLAGS = {
         'CCFLAGS': ['/MDd']
       }
     }
+  },
+  'mipspro': {
+    'all': {
+      'CCFLAGS':   ['-woff', '1234,3970,3968,3624,1174,1682,1460,1552,1035,1188', '-ansi', '-LANG:exceptions=OFF'],
+      'LIBPATH':   ['.'],
+      'LIBS':      ['m', 'pthread'],
+    }
   }
 }
 
@@ -720,6 +745,8 @@ def GuessToolchain(os):
     return 'gcc'
   elif 'msvc' in tools:
     return 'msvc'
+  elif os == 'irix':
+    return 'mipspro'
   else:
     return None
 
@@ -731,12 +758,12 @@ ARCH_GUESS = utils.GuessArchitecture()
 
 SIMPLE_OPTIONS = {
   'toolchain': {
-    'values': ['gcc', 'msvc'],
+    'values': ['gcc', 'msvc', 'mipspro'],
     'default': TOOLCHAIN_GUESS,
     'help': 'the toolchain to use (' + TOOLCHAIN_GUESS + ')'
   },
   'os': {
-    'values': ['freebsd', 'linux', 'macos', 'win32', 'android', 'openbsd', 'solaris'],
+    'values': ['freebsd', 'linux', 'macos', 'win32', 'android', 'openbsd', 'solaris', 'irix'],
     'default': OS_GUESS,
     'help': 'the os to build for (' + OS_GUESS + ')'
   },

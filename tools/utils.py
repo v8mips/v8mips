@@ -59,6 +59,8 @@ def GuessOS():
     return 'openbsd'
   elif id == 'SunOS':
     return 'solaris'
+  elif id == 'IRIX64':
+    return 'irix'
   else:
     return None
 
@@ -73,6 +75,8 @@ def GuessArchitecture():
     return 'ia32'
   elif id == 'amd64':
     return 'ia32'
+  elif id == 'IP35':
+    return 'mips'
   else:
     return None
 
