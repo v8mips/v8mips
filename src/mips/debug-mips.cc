@@ -215,16 +215,9 @@ void Debug::GenerateKeyedStoreICDebugBreak(MacroAssembler* masm) {
 void Debug::GenerateCallICDebugBreak(MacroAssembler* masm) {
   // Calling convention for IC call (from ic-mips.cc)
   // ----------- S t a t e -------------
-  //  -- a0: number of arguments
-  //  -- a1: receiver
-  //  -- ra: return address
+  //  -- a2: name
   // -----------------------------------
-  // Register a1 contains an object that needs to be pushed on the expression
-  // stack of the fake JS frame. a0 is the actual number of arguments not
-  // encoded as a smi, therefore it cannot be on the expression stack of the
-  // fake JS frame as it can easily be an invalid pointer (e.g. 1). a0 will be
-  // pushed on the stack of the C frame and restored from there.
-  Generate_DebugBreakCallHelper(masm, a1.bit());
+  Generate_DebugBreakCallHelper(masm, a2.bit());
 }
 
 
