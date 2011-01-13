@@ -83,7 +83,9 @@ void FullCodeGenerator::Apply(Expression::Context context,
 }
 
 
-void FullCodeGenerator::DoTest(Expression::Context context) {
+void FullCodeGenerator::DoTest(Label* if_true,
+                               Label* if_false,
+                               Label* fall_through) {
   UNIMPLEMENTED_MIPS();
 }
 
@@ -237,11 +239,6 @@ void FullCodeGenerator::VisitCountOperation(CountOperation* expr) {
 }
 
 
-void FullCodeGenerator::VisitBinaryOperation(BinaryOperation* expr) {
-  UNIMPLEMENTED_MIPS();
-}
-
-
 void FullCodeGenerator::VisitCompareOperation(CompareOperation* expr) {
   UNIMPLEMENTED_MIPS();
 }
@@ -322,7 +319,6 @@ MIPS_UNIMPLEMENTED_FULL_CODEGEN_FUNC(EmitSwapElements)
 MIPS_UNIMPLEMENTED_FULL_CODEGEN_FUNC(EmitGetFromCache)
 MIPS_UNIMPLEMENTED_FULL_CODEGEN_FUNC(EmitIsRegExpEquivalent)
 MIPS_UNIMPLEMENTED_FULL_CODEGEN_FUNC(EmitIsStringWrapperSafeForDefaultValueOf)
-MIPS_UNIMPLEMENTED_FULL_CODEGEN_FUNC(EmitRegExpCloneResult)
 
 #undef __
 
