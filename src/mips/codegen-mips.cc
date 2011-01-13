@@ -4108,11 +4108,10 @@ void CodeGenerator::VisitCallNew(CallNew* node) {
   // actual function to call is resolved after the arguments have been
   // evaluated.
 
-  // Compute function to call and use the global object as the
-  // receiver. There is no need to use the global proxy here because
-  // it will always be replaced with a newly allocated object.
+  // Push constructor on the stack.  If it's not a function it's used as
+  // receiver for CALL_NON_FUNCTION, otherwise the value on the stack is
+  // ignored.
   Load(node->expression());
-  LoadGlobal();
 
   ZoneList<Expression*>* args = node->arguments();
   int arg_count = args->length();
@@ -4121,21 +4120,21 @@ void CodeGenerator::VisitCallNew(CallNew* node) {
     Load(args->at(i));
   }
 
+  // Spill everything from here to simplify the implementation.
   VirtualFrame::SpilledScope spilled_scope(frame_);
 
-  // a0: the number of arguments.
+  // Load the argument count into a0 and the function into a1 as per
+  // calling convention.
   __ li(a0, Operand(arg_count));
-  // Load the function into a1 as per calling convention.
-  __ lw(a1, frame_->ElementAt(arg_count + 1));
+  __ lw(a1, frame_->ElementAt(arg_count));
 
   // Call the construct call builtin that handles allocation and
   // constructor invocation.
   CodeForSourcePosition(node->position());
   Handle<Code> ic(Builtins::builtin(Builtins::JSConstructCall));
   frame_->CallCodeObject(ic, RelocInfo::CONSTRUCT_CALL, arg_count + 1);
+  frame_->EmitPush(v0);
 
-  // Discard old TOS value and push v0 on the stack (same as Pop(), push(v0)).
-  __ sw(v0, frame_->Top());
   ASSERT_EQ(original_height + 1, frame_->height());
 }
 
