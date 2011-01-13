@@ -36,29 +36,6 @@
 namespace v8 {
 namespace internal {
 
-class FullCodeGenSyntaxChecker: public AstVisitor {
- public:
-  FullCodeGenSyntaxChecker() : has_supported_syntax_(true) {}
-
-  void Check(FunctionLiteral* fun);
-
-  bool has_supported_syntax() { return has_supported_syntax_; }
-
- private:
-  void VisitDeclarations(ZoneList<Declaration*>* decls);
-  void VisitStatements(ZoneList<Statement*>* stmts);
-
-  // AST node visit functions.
-#define DECLARE_VISIT(type) virtual void Visit##type(type* node);
-  AST_NODE_LIST(DECLARE_VISIT)
-#undef DECLARE_VISIT
-
-  bool has_supported_syntax_;
-
-  DISALLOW_COPY_AND_ASSIGN(FullCodeGenSyntaxChecker);
-};
-
-
 // AST node visitor which can tell whether a given statement will be breakable
 // when the code is compiled by the full compiler in the debugger. This means
 // that there will be an IC (load/store/call) in the code generated for the
@@ -346,6 +323,16 @@ class FullCodeGenerator: public AstVisitor {
   void VisitDeclarations(ZoneList<Declaration*>* declarations);
   void DeclareGlobals(Handle<FixedArray> pairs);
 
+  // Try to perform a comparison as a fast inlined literal compare if
+  // the operands allow it.  Returns true if the compare operations
+  // has been matched and all code generated; false otherwise.
+  bool TryLiteralCompare(Token::Value op,
+                         Expression* left,
+                         Expression* right,
+                         Label* if_true,
+                         Label* if_false,
+                         Label* fall_through);
+
   // Platform-specific code for a variable, constant, or function
   // declaration.  Functions have an initial value.
   void EmitDeclaration(Variable* variable,
@@ -409,14 +396,6 @@ class FullCodeGenerator: public AstVisitor {
   // accumulator.
   void EmitKeyedPropertyAssignment(Assignment* expr);
 
-  // Helper for compare operations. Expects the null-value in a register.
-  void EmitNullCompare(bool strict,
-                       Register obj,
-                       Register null_const,
-                       Label* if_true,
-                       Label* if_false,
-                       Register scratch);
-
   void SetFunctionPosition(FunctionLiteral* fun);
   void SetReturnPosition(FunctionLiteral* fun);
   void SetStatementPosition(Statement* stmt);
@@ -460,6 +439,9 @@ class FullCodeGenerator: public AstVisitor {
 #undef DECLARE_VISIT
   // Handles the shortcutted logical binary operations in VisitBinaryOperation.
   void EmitLogicalOperation(BinaryOperation* expr);
+
+  void VisitForTypeofValue(Expression* expr, Location where);
+
   void VisitLogicalForValue(Expression* expr,
                             Token::Value op,
                             Location where,

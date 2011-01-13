@@ -341,9 +341,7 @@ class Parser {
 template <typename T, int initial_size>
 class BufferedZoneList {
  public:
-
-  BufferedZoneList() :
-    list_(NULL), last_(NULL) {}
+  BufferedZoneList() : list_(NULL), last_(NULL) {}
 
   // Adds element at end of list. This element is buffered and can
   // be read using last() or removed using RemoveLast until a new Add or until
@@ -413,6 +411,7 @@ class BufferedZoneList {
   ZoneList<T*>* list_;
   T* last_;
 };
+
 
 // Accumulates RegExp atoms and assertions into lists of terms and alternatives.
 class RegExpBuilder: public ZoneObject {
@@ -652,6 +651,7 @@ class RegExpParser {
 
   static const int kMaxCaptures = 1 << 16;
   static const uc32 kEndMarker = (1 << 21);
+
  private:
   enum SubexpressionType {
     INITIAL,
@@ -747,6 +747,10 @@ class TemporaryScope BASE_EMBEDDED {
 
   void AddProperty() { expected_property_count_++; }
   int expected_property_count() { return expected_property_count_; }
+
+  void AddLoop() { loop_count_++; }
+  bool ContainsLoops() const { return loop_count_ > 0; }
+
  private:
   // Captures the number of literals that need materialization in the
   // function.  Includes regexp literals, and boilerplate for object
@@ -756,8 +760,13 @@ class TemporaryScope BASE_EMBEDDED {
   // Properties count estimation.
   int expected_property_count_;
 
+  // Keeps track of assignments to properties of this. Used for
+  // optimizing constructors.
   bool only_simple_this_property_assignments_;
   Handle<FixedArray> this_property_assignments_;
+
+  // Captures the number of loops inside the scope.
+  int loop_count_;
 
   // Bookkeeping
   Parser* parser_;
@@ -772,6 +781,7 @@ TemporaryScope::TemporaryScope(Parser* parser)
     expected_property_count_(0),
     only_simple_this_property_assignments_(false),
     this_property_assignments_(Factory::empty_fixed_array()),
+    loop_count_(0),
     parser_(parser),
     parent_(parser->temp_scope_) {
   parser->temp_scope_ = this;
@@ -1282,7 +1292,8 @@ FunctionLiteral* Parser::ParseProgram(Handle<String> source,
           0,
           0,
           source->length(),
-          false));
+          false,
+          temp_scope.ContainsLoops()));
     } else if (scanner().stack_overflow()) {
       Top::StackOverflow();
     }
@@ -1382,7 +1393,8 @@ FunctionLiteral* Parser::ParseJson(Handle<String> source) {
           0,
           0,
           source->length(),
-          false));
+          false,
+          temp_scope.ContainsLoops()));
     } else if (scanner().stack_overflow()) {
       Top::StackOverflow();
     }
@@ -2653,6 +2665,7 @@ DoWhileStatement* Parser::ParseDoWhileStatement(ZoneStringList* labels,
   // DoStatement ::
   //   'do' Statement 'while' '(' Expression ')' ';'
 
+  temp_scope_->AddLoop();
   DoWhileStatement* loop = NEW(DoWhileStatement(labels));
   Target target(this, loop);
 
@@ -2685,6 +2698,7 @@ WhileStatement* Parser::ParseWhileStatement(ZoneStringList* labels, bool* ok) {
   // WhileStatement ::
   //   'while' '(' Expression ')' Statement
 
+  temp_scope_->AddLoop();
   WhileStatement* loop = NEW(WhileStatement(labels));
   Target target(this, loop);
 
@@ -2704,6 +2718,7 @@ Statement* Parser::ParseForStatement(ZoneStringList* labels, bool* ok) {
   // ForStatement ::
   //   'for' '(' Expression? ';' Expression? ';' Expression? ')' Statement
 
+  temp_scope_->AddLoop();
   Statement* init = NULL;
 
   Expect(Token::FOR, CHECK_OK);
@@ -3071,7 +3086,8 @@ Expression* Parser::ParseUnaryExpression(bool* ok) {
       Handle<String> type = Factory::invalid_lhs_in_prefix_op_symbol();
       expression = NewThrowReferenceError(type);
     }
-    return NEW(CountOperation(true /* prefix */, op, expression));
+    IncrementOperation* increment = NEW(IncrementOperation(op, expression));
+    return NEW(CountOperation(true /* prefix */, increment));
 
   } else {
     return ParsePostfixExpression(ok);
@@ -3094,7 +3110,8 @@ Expression* Parser::ParsePostfixExpression(bool* ok) {
       expression = NewThrowReferenceError(type);
     }
     Token::Value next = Next();
-    expression = NEW(CountOperation(false /* postfix */, next, expression));
+    IncrementOperation* increment = NEW(IncrementOperation(next, expression));
+    expression = NEW(CountOperation(false /* postfix */, increment));
   }
   return expression;
 }
@@ -3363,7 +3380,7 @@ Expression* Parser::ParsePrimaryExpression(bool* ok) {
     case Token::NUMBER: {
       Consume(Token::NUMBER);
       double value =
-        StringToDouble(scanner_.literal_string(), ALLOW_HEX | ALLOW_OCTALS);
+        StringToDouble(scanner_.literal(), ALLOW_HEX | ALLOW_OCTALS);
       result = NewNumberLiteral(value);
       break;
     }
@@ -3721,7 +3738,7 @@ Expression* Parser::ParseObjectLiteral(bool* ok) {
       case Token::NUMBER: {
         Consume(Token::NUMBER);
         double value =
-          StringToDouble(scanner_.literal_string(), ALLOW_HEX | ALLOW_OCTALS);
+          StringToDouble(scanner_.literal(), ALLOW_HEX | ALLOW_OCTALS);
         key = NewNumberLiteral(value);
         break;
       }
@@ -3955,7 +3972,8 @@ FunctionLiteral* Parser::ParseFunctionLiteral(Handle<String> var_name,
                             num_parameters,
                             start_pos,
                             end_pos,
-                            function_name->length() > 0));
+                            function_name->length() > 0,
+                            temp_scope.ContainsLoops()));
     if (!is_pre_parsing_) {
       function_literal->set_function_token_position(function_token_position);
     }
@@ -3973,7 +3991,7 @@ Expression* Parser::ParseV8Intrinsic(bool* ok) {
   Expect(Token::MOD, CHECK_OK);
   Handle<String> name = ParseIdentifier(CHECK_OK);
   Runtime::Function* function =
-      Runtime::FunctionForName(scanner_.literal_string());
+      Runtime::FunctionForName(scanner_.literal());
   ZoneList<Expression*>* args = ParseArguments(CHECK_OK);
   if (function == NULL && extension_ != NULL) {
     // The extension structures are only accessible while parsing the
@@ -4260,7 +4278,7 @@ Expression* Parser::ParseJsonValue(bool* ok) {
     case Token::NUMBER: {
       Consume(Token::NUMBER);
       ASSERT(scanner_.literal_length() > 0);
-      double value = StringToDouble(scanner_.literal_string(),
+      double value = StringToDouble(scanner_.literal(),
                                     NO_FLAGS,  // Hex, octal or trailing junk.
                                     OS::nan_value());
       return NewNumberLiteral(value);
