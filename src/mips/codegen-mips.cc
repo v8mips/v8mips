@@ -6106,48 +6106,6 @@ void CodeGenerator::VisitCompareOperation(CompareOperation* node) {
   Expression* right = node->right();
   Token::Value op = node->op();
 
-  // To make null checks efficient, we check if either left or right is the
-  // literal 'null'. If so, we optimize the code by inlining a null check
-  // instead of calling the (very) general runtime routine for checking
-  // equality.
-  if (op == Token::EQ || op == Token::EQ_STRICT) {
-    bool left_is_null =
-        left->AsLiteral() != NULL && left->AsLiteral()->IsNull();
-    bool right_is_null =
-        right->AsLiteral() != NULL && right->AsLiteral()->IsNull();
-    // The 'null' value can only be equal to 'null' or 'undefined'.
-    if (left_is_null || right_is_null) {
-      Load(left_is_null ? right : left);
-      Register tos = frame_->PopToRegister();
-      __ mov(condReg1, tos);
-      __ LoadRoot(condReg2, Heap::kNullValueRootIndex);
-
-      // The 'null' value is only equal to 'undefined' if using non-strict
-      // comparisons.
-      if (op != Token::EQ_STRICT) {
-        true_target()->Branch(eq, condReg1, Operand(condReg2), no_hint);
-
-        __ LoadRoot(condReg2, Heap::kUndefinedValueRootIndex);
-        true_target()->Branch(eq, condReg1, Operand(condReg2), no_hint);
-
-        __ And(condReg2, condReg1, kSmiTagMask);
-        false_target()->Branch(eq, condReg2, Operand(zero_reg), no_hint);
-
-        // It can be an undetectable object.
-        __ lw(condReg1, FieldMemOperand(condReg1, HeapObject::kMapOffset));
-        __ lbu(condReg1, FieldMemOperand(condReg1, Map::kBitFieldOffset));
-        __ And(condReg1, condReg1, 1 << Map::kIsUndetectable);
-        __ li(condReg2, Operand(1 << Map::kIsUndetectable));
-      }
-
-      // We don't need to load anyting in condReg1 and condReg2 as they are
-      // already correctly loaded.
-      cc_reg_ = eq;
-      ASSERT(has_cc() && frame_->height() == original_height);
-      return;
-    }
-  }
-
   // To make typeof testing for natives implemented in JavaScript really
   // efficient, we generate special code for expressions of the form:
   // 'typeof <expression> == <string>'.
@@ -6320,6 +6278,41 @@ class DeferredReferenceGetNamedValue: public DeferredCode {
     Register receiver_;
     Handle<String> name_;
 };
+
+void CodeGenerator::VisitCompareToNull(CompareToNull* node) {
+#ifdef DEBUG
+  int original_height = frame_->height();
+#endif
+  Comment cmnt(masm_, "[ CompareToNull");
+
+  Load(node->expression());
+  Register tos = frame_->PopToRegister();
+  __ mov(condReg1, tos);
+  __ LoadRoot(condReg2, Heap::kNullValueRootIndex);
+
+  // The 'null' value is only equal to 'undefined' if using non-strict
+  // comparisons.
+  if (!node->is_strict()) {
+    true_target()->Branch(eq, condReg1, Operand(condReg2), no_hint);
+    __ LoadRoot(condReg2, Heap::kUndefinedValueRootIndex);
+    true_target()->Branch(eq, condReg1, Operand(condReg2), no_hint);
+
+    __ And(condReg2, condReg1, kSmiTagMask);
+    false_target()->Branch(eq, condReg2, Operand(zero_reg), no_hint);
+
+    // It can be an undetectable object.
+    __ lw(condReg1, FieldMemOperand(condReg1, HeapObject::kMapOffset));
+    __ lbu(condReg1, FieldMemOperand(condReg1, Map::kBitFieldOffset));
+    __ And(condReg1, condReg1, 1 << Map::kIsUndetectable);
+    __ li(condReg2, Operand(1 << Map::kIsUndetectable));
+  }
+
+  // We don't need to load anyting in condReg1 and condReg2 as they are
+  // already correctly loaded.
+  cc_reg_ = eq;
+  ASSERT(has_cc() && frame_->height() == original_height);
+}
+
 
 // Convention for this is that on entry the receiver is in a register that
 // is not used by the stack.  On exit the answer is found in that same

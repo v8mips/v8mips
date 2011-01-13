@@ -243,6 +243,9 @@ void FullCodeGenerator::VisitCompareOperation(CompareOperation* expr) {
   UNIMPLEMENTED_MIPS();
 }
 
+void FullCodeGenerator::VisitCompareToNull(CompareToNull* expr) {
+  UNIMPLEMENTED_MIPS();
+}
 
 void FullCodeGenerator::VisitThisFunction(ThisFunction* expr) {
   UNIMPLEMENTED_MIPS();
