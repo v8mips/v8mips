@@ -1126,8 +1126,7 @@ void Builtins::Generate_FunctionCall(MacroAssembler* masm) {
   __ lw(a2,
          FieldMemOperand(a3, SharedFunctionInfo::kFormalParameterCountOffset));
   __ sra(a2, a2, kSmiTagSize);
-  __ lw(a3, FieldMemOperand(a1, JSFunction::kCodeOffset));
-  __ Addu(a3, a3, Operand(Code::kHeaderSize - kHeapObjectTag));
+  __ lw(a3, FieldMemOperand(a1, JSFunction::kCodeEntryOffset));
   // Check formal and actual parameter counts.
   __ Jump(Handle<Code>(builtin(ArgumentsAdaptorTrampoline)),
           RelocInfo::CODE_TARGET, ne, a2, Operand(a0));

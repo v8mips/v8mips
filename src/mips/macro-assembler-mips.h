@@ -704,6 +704,9 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
   // setup the function in a1.
   void GetBuiltinEntry(Register target, Builtins::JavaScript id);
 
+  // Store the function for the given builtin in the target register.
+  void GetBuiltinFunction(Register target, Builtins::JavaScript id);
+
   struct Unresolved {
     int pc;
     uint32_t flags;  // see Bootstrapper::FixupFlags decoders/encoders.

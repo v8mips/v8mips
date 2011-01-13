@@ -2251,10 +2251,7 @@ void MacroAssembler::InvokeFunction(Register function,
       FieldMemOperand(code_reg,
                       SharedFunctionInfo::kFormalParameterCountOffset));
   sra(expected_reg, expected_reg, kSmiTagSize);
-  lw(code_reg,
-     MemOperand(a1, JSFunction::kCodeOffset - kHeapObjectTag));
-     //MemOperand(code_reg, SharedFunctionInfo::kCodeOffset - kHeapObjectTag));
-  addiu(code_reg, code_reg, Code::kHeaderSize - kHeapObjectTag);
+  lw(code_reg, FieldMemOperand(a1, JSFunction::kCodeEntryOffset));
 
   ParameterCount expected(expected_reg);
   InvokeCode(code_reg, expected, actual, flag);
@@ -2564,29 +2561,22 @@ void MacroAssembler::InvokeBuiltin(Builtins::JavaScript id,
 }
 
 
-void MacroAssembler::GetBuiltinEntry(Register target, Builtins::JavaScript id) {
-  ASSERT(!target.is(a1));
-
+void MacroAssembler::GetBuiltinFunction(Register target,
+                                        Builtins::JavaScript id) {
   // Load the builtins object into target register.
   lw(target, MemOperand(cp, Context::SlotOffset(Context::GLOBAL_INDEX)));
   lw(target, FieldMemOperand(target, GlobalObject::kBuiltinsOffset));
-
   // Load the JavaScript builtin function from the builtins object.
-  lw(a1, FieldMemOperand(target,
-                         JSBuiltinsObject::OffsetOfFunctionWithId(id)));
-
-  // Load the code entry point from the builtins object.
   lw(target, FieldMemOperand(target,
-                             JSBuiltinsObject::OffsetOfCodeWithId(id)));
-  if (FLAG_debug_code) {
-    // Make sure the code objects in the builtins object and in the
-    // builtin function are the same.
-    Push(a1);
-    lw(a1, FieldMemOperand(a1, JSFunction::kCodeOffset));
-    Assert(eq, "Builtin code object changed", a1, Operand(target));
-    Pop(a1);
-  }
-  Addu(target, target, Operand(Code::kHeaderSize - kHeapObjectTag));
+                          JSBuiltinsObject::OffsetOfFunctionWithId(id)));
+}
+
+
+void MacroAssembler::GetBuiltinEntry(Register target, Builtins::JavaScript id) {
+  ASSERT(!target.is(a1));
+  GetBuiltinFunction(a1, id);
+  // Load the code entry point from the builtins object.
+  lw(target, FieldMemOperand(a1, JSFunction::kCodeEntryOffset));
 }
 
 
