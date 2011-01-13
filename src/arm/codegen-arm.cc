@@ -1222,21 +1222,26 @@ void CodeGenerator::SmiOperation(Token::Value op,
     case Token::SHR:
     case Token::SAR: {
       ASSERT(!reversed);
-      TypeInfo result =
-          (op == Token::SAR) ? TypeInfo::Integer32() : TypeInfo::Number();
-      if (!reversed) {
-        if (op == Token::SHR) {
-          if (int_value >= 2) {
-            result = TypeInfo::Smi();
-          } else if (int_value >= 1) {
-            result = TypeInfo::Integer32();
-          }
-        } else {
-          if (int_value >= 1) {
-            result = TypeInfo::Smi();
-          }
+      int shift_amount = int_value & 0x1f;
+      TypeInfo result = TypeInfo::Number();
+
+      if (op == Token::SHR) {
+        if (shift_amount > 1) {
+          result = TypeInfo::Smi();
+        } else if (shift_amount > 0) {
+          result = TypeInfo::Integer32();
         }
+      } else if (op == Token::SAR) {
+        if (shift_amount > 0) {
+          result = TypeInfo::Smi();
+        } else {
+          result = TypeInfo::Integer32();
+        }
+      } else {
+        ASSERT(op == Token::SHL);
+        result = TypeInfo::Integer32();
       }
+
       Register scratch = VirtualFrame::scratch0();
       Register scratch2 = VirtualFrame::scratch1();
       int shift_value = int_value & 0x1f;  // least significant 5 bits
@@ -5290,6 +5295,13 @@ void CodeGenerator::GenerateRegExpCloneResult(ZoneList<Expression*>* args) {
     __ cmp(r1, Operand(ip));
     __ b(ne, &done);
 
+    if (FLAG_debug_code) {
+      __ LoadRoot(r2, Heap::kEmptyFixedArrayRootIndex);
+      __ ldr(ip, FieldMemOperand(r0, JSObject::kPropertiesOffset));
+      __ cmp(ip, r2);
+      __ Check(eq, "JSRegExpResult: default map but non-empty properties.");
+    }
+
     // All set, copy the contents to a new object.
     __ AllocateInNewSpace(JSRegExpResult::kSize,
                           r2,
@@ -5305,7 +5317,6 @@ void CodeGenerator::GenerateRegExpCloneResult(ZoneList<Expression*>* args) {
     __ ldm(ib, r0, r3.bit() | r4.bit() | r5.bit() | r6.bit() | r7.bit());
     __ stm(ia, r2,
            r1.bit() | r3.bit() | r4.bit() | r5.bit() | r6.bit() | r7.bit());
-    ASSERT(!Heap::InNewSpace(Heap::fixed_cow_array_map()));
     ASSERT(JSRegExp::kElementsOffset == 2 * kPointerSize);
     // Check whether elements array is empty fixed array, and otherwise make
     // it copy-on-write (it never should be empty unless someone is messing
