@@ -35,9 +35,10 @@
 #ifndef V8_OBJECTS_INL_H_
 #define V8_OBJECTS_INL_H_
 
-#include "objects.h"
+#include "memory.h"
 #include "contexts.h"
 #include "conversions-inl.h"
+#include "objects.h"
 #include "property.h"
 
 namespace v8 {
@@ -2135,20 +2136,28 @@ int Map::pre_allocated_property_fields() {
 
 
 int HeapObject::SizeFromMap(Map* map) {
-  InstanceType instance_type = map->instance_type();
+  int instance_size = map->instance_size();
+  if (instance_size != kVariableSizeSentinel) return instance_size;
+  // We can ignore the "symbol" bit becase it is only set for symbols
+  // and implies a string type.
+  int instance_type = static_cast<int>(map->instance_type()) & ~kIsSymbolMask;
   // Only inline the most frequent cases.
-  if (instance_type == JS_OBJECT_TYPE ||
-      (instance_type & (kIsNotStringMask | kStringRepresentationMask)) ==
-      (kStringTag | kConsStringTag) ||
-      instance_type == JS_ARRAY_TYPE) return map->instance_size();
   if (instance_type == FIXED_ARRAY_TYPE) {
     return FixedArray::BodyDescriptor::SizeOf(map, this);
+  }
+  if (instance_type == ASCII_STRING_TYPE) {
+    return SeqAsciiString::SizeFor(
+        reinterpret_cast<SeqAsciiString*>(this)->length());
   }
   if (instance_type == BYTE_ARRAY_TYPE) {
     return reinterpret_cast<ByteArray*>(this)->ByteArraySize();
   }
-  // Otherwise do the general size computation.
-  return SlowSizeFromMap(map);
+  if (instance_type == STRING_TYPE) {
+    return SeqTwoByteString::SizeFor(
+        reinterpret_cast<SeqTwoByteString*>(this)->length());
+  }
+  ASSERT(instance_type == CODE_TYPE);
+  return reinterpret_cast<Code*>(this)->CodeSize();
 }
 
 
@@ -2426,6 +2435,12 @@ Code* Code::GetCodeFromTargetAddress(Address address) {
 }
 
 
+Object* Code::GetObjectFromEntryAddress(Address location_of_address) {
+  return HeapObject::
+      FromAddress(Memory::Address_at(location_of_address) - Code::kHeaderSize);
+}
+
+
 Object* Map::prototype() {
   return READ_FIELD(this, kPrototypeOffset);
 }
@@ -2587,6 +2602,7 @@ BOOL_ACCESSORS(SharedFunctionInfo,
                allows_lazy_compilation,
                kAllowLazyCompilation)
 
+
 #if V8_HOST_ARCH_32_BIT
 SMI_ACCESSORS(SharedFunctionInfo, length, kLengthOffset)
 SMI_ACCESSORS(SharedFunctionInfo, formal_parameter_count,
@@ -2686,6 +2702,11 @@ Code* SharedFunctionInfo::code() {
 }
 
 
+Code* SharedFunctionInfo::unchecked_code() {
+  return reinterpret_cast<Code*>(READ_FIELD(this, kCodeOffset));
+}
+
+
 void SharedFunctionInfo::set_code(Code* value, WriteBarrierMode mode) {
   WRITE_FIELD(this, kCodeOffset, value);
   CONDITIONAL_WRITE_BARRIER(this, kCodeOffset, mode);
@@ -2732,20 +2753,38 @@ int SharedFunctionInfo::custom_call_generator_id() {
 }
 
 
+int SharedFunctionInfo::code_age() {
+  return (compiler_hints() >> kCodeAgeShift) & kCodeAgeMask;
+}
+
+
+void SharedFunctionInfo::set_code_age(int code_age) {
+  set_compiler_hints(compiler_hints() |
+                     ((code_age & kCodeAgeMask) << kCodeAgeShift));
+}
+
+
 bool JSFunction::IsBuiltin() {
   return context()->global()->IsJSBuiltinsObject();
 }
 
 
 Code* JSFunction::code() {
-  return Code::cast(READ_FIELD(this, kCodeOffset));
+  return Code::cast(unchecked_code());
+}
+
+
+Code* JSFunction::unchecked_code() {
+  return reinterpret_cast<Code*>(
+      Code::GetObjectFromEntryAddress(FIELD_ADDR(this, kCodeEntryOffset)));
 }
 
 
 void JSFunction::set_code(Code* value) {
   // Skip the write barrier because code is never in new space.
   ASSERT(!Heap::InNewSpace(value));
-  WRITE_FIELD(this, kCodeOffset, value);
+  Address entry = value->entry();
+  WRITE_INTPTR_FIELD(this, kCodeEntryOffset, reinterpret_cast<intptr_t>(entry));
 }
 
 
@@ -2756,6 +2795,12 @@ Context* JSFunction::context() {
 
 Object* JSFunction::unchecked_context() {
   return READ_FIELD(this, kContextOffset);
+}
+
+
+SharedFunctionInfo* JSFunction::unchecked_shared() {
+  return reinterpret_cast<SharedFunctionInfo*>(
+      READ_FIELD(this, kSharedFunctionInfoOffset));
 }
 
 

@@ -201,6 +201,10 @@ enum PropertyNormalizationMode {
 };
 
 
+// Instance size sentinel for objects of variable size.
+static const int kVariableSizeSentinel = 0;
+
+
 // All Maps have a field instance_type containing a InstanceType.
 // It describes the type of the instances.
 //
@@ -230,19 +234,21 @@ enum PropertyNormalizationMode {
   V(CONS_SYMBOL_TYPE)                                                          \
   V(CONS_ASCII_SYMBOL_TYPE)                                                    \
   V(EXTERNAL_SYMBOL_TYPE)                                                      \
+  V(EXTERNAL_SYMBOL_WITH_ASCII_DATA_TYPE)                                      \
   V(EXTERNAL_ASCII_SYMBOL_TYPE)                                                \
   V(STRING_TYPE)                                                               \
   V(ASCII_STRING_TYPE)                                                         \
   V(CONS_STRING_TYPE)                                                          \
   V(CONS_ASCII_STRING_TYPE)                                                    \
   V(EXTERNAL_STRING_TYPE)                                                      \
+  V(EXTERNAL_STRING_WITH_ASCII_DATA_TYPE)                                      \
   V(EXTERNAL_ASCII_STRING_TYPE)                                                \
   V(PRIVATE_EXTERNAL_ASCII_STRING_TYPE)                                        \
                                                                                \
   V(MAP_TYPE)                                                                  \
   V(CODE_TYPE)                                                                 \
-  V(JS_GLOBAL_PROPERTY_CELL_TYPE)                                              \
   V(ODDBALL_TYPE)                                                              \
+  V(JS_GLOBAL_PROPERTY_CELL_TYPE)                                              \
                                                                                \
   V(HEAP_NUMBER_TYPE)                                                          \
   V(PROXY_TYPE)                                                                \
@@ -260,11 +266,9 @@ enum PropertyNormalizationMode {
   V(EXTERNAL_FLOAT_ARRAY_TYPE)                                                 \
   V(FILLER_TYPE)                                                               \
                                                                                \
-  V(FIXED_ARRAY_TYPE)                                                          \
   V(ACCESSOR_INFO_TYPE)                                                        \
   V(ACCESS_CHECK_INFO_TYPE)                                                    \
   V(INTERCEPTOR_INFO_TYPE)                                                     \
-  V(SHARED_FUNCTION_INFO_TYPE)                                                 \
   V(CALL_HANDLER_INFO_TYPE)                                                    \
   V(FUNCTION_TEMPLATE_INFO_TYPE)                                               \
   V(OBJECT_TEMPLATE_INFO_TYPE)                                                 \
@@ -272,6 +276,9 @@ enum PropertyNormalizationMode {
   V(TYPE_SWITCH_INFO_TYPE)                                                     \
   V(SCRIPT_TYPE)                                                               \
   V(CODE_CACHE_TYPE)                                                           \
+                                                                               \
+  V(FIXED_ARRAY_TYPE)                                                          \
+  V(SHARED_FUNCTION_INFO_TYPE)                                                 \
                                                                                \
   V(JS_VALUE_TYPE)                                                             \
   V(JS_OBJECT_TYPE)                                                            \
@@ -301,11 +308,11 @@ enum PropertyNormalizationMode {
 // iterate over them.
 #define STRING_TYPE_LIST(V)                                                    \
   V(SYMBOL_TYPE,                                                               \
-    SeqTwoByteString::kAlignedSize,                                            \
+    kVariableSizeSentinel,                                                     \
     symbol,                                                                    \
     Symbol)                                                                    \
   V(ASCII_SYMBOL_TYPE,                                                         \
-    SeqAsciiString::kAlignedSize,                                              \
+    kVariableSizeSentinel,                                                     \
     ascii_symbol,                                                              \
     AsciiSymbol)                                                               \
   V(CONS_SYMBOL_TYPE,                                                          \
@@ -329,11 +336,11 @@ enum PropertyNormalizationMode {
     external_ascii_symbol,                                                     \
     ExternalAsciiSymbol)                                                       \
   V(STRING_TYPE,                                                               \
-    SeqTwoByteString::kAlignedSize,                                            \
+    kVariableSizeSentinel,                                                     \
     string,                                                                    \
     String)                                                                    \
   V(ASCII_STRING_TYPE,                                                         \
-    SeqAsciiString::kAlignedSize,                                              \
+    kVariableSizeSentinel,                                                     \
     ascii_string,                                                              \
     AsciiString)                                                               \
   V(CONS_STRING_TYPE,                                                          \
@@ -355,7 +362,7 @@ enum PropertyNormalizationMode {
   V(EXTERNAL_ASCII_STRING_TYPE,                                                \
     ExternalAsciiString::kSize,                                                \
     external_ascii_string,                                                     \
-    ExternalAsciiString)                                                       \
+    ExternalAsciiString)
 
 // A struct is a simple object a set of object-valued fields.  Including an
 // object type in this causes the compiler to generate most of the boilerplate
@@ -1015,10 +1022,6 @@ class HeapObject: public Object {
   // object, and so is safe to call while the map pointer is modified.
   void IterateBody(InstanceType type, int object_size, ObjectVisitor* v);
 
-  // This method only applies to struct objects.  Iterates over all the fields
-  // of this struct.
-  void IterateStructBody(int object_size, ObjectVisitor* v);
-
   // Returns the heap object's size in bytes
   inline int Size();
 
@@ -1096,10 +1099,6 @@ class HeapObject: public Object {
   inline void IteratePointers(ObjectVisitor* v, int start, int end);
   // as above, for the single element at "offset"
   inline void IteratePointer(ObjectVisitor* v, int offset);
-
-  // Computes the object size from the map.
-  // Should only be used from SizeFromMap.
-  int SlowSizeFromMap(Map* map);
 
  private:
   DISALLOW_IMPLICIT_CONSTRUCTORS(HeapObject);
@@ -2783,7 +2782,12 @@ class Code: public HeapObject {
  public:
   // Opaque data type for encapsulating code flags like kind, inline
   // cache state, and arguments count.
-  enum Flags { };
+  // FLAGS_MIN_VALUE and FLAGS_MAX_VALUE are specified to ensure that
+  // enumeration type has correct value range (see Issue 830 for more details).
+  enum Flags {
+    FLAGS_MIN_VALUE = kMinInt,
+    FLAGS_MAX_VALUE = kMaxInt
+  };
 
   enum Kind {
     FUNCTION,
@@ -2878,6 +2882,9 @@ class Code: public HeapObject {
 
   // Convert a target address into a code object.
   static inline Code* GetCodeFromTargetAddress(Address address);
+
+  // Convert an entry address into an object.
+  static inline Object* GetObjectFromEntryAddress(Address location_of_address);
 
   // Returns the address of the first instruction.
   inline byte* instruction_start();
@@ -2985,6 +2992,8 @@ class Code: public HeapObject {
 class Map: public HeapObject {
  public:
   // Instance size.
+  // Size in bytes or kVariableSizeSentinel if instances do not have
+  // a fixed size.
   inline int instance_size();
   inline void set_instance_size(int value);
 
@@ -3366,6 +3375,8 @@ class SharedFunctionInfo: public HeapObject {
   // [construct stub]: Code stub for constructing instances of this function.
   DECL_ACCESSORS(construct_stub, Code)
 
+  inline Code* unchecked_code();
+
   // Returns if this function has been compiled to native code yet.
   inline bool is_compiled();
 
@@ -3472,6 +3483,15 @@ class SharedFunctionInfo: public HeapObject {
   // when doing GC if we expect that the function will no longer be used.
   inline bool allows_lazy_compilation();
   inline void set_allows_lazy_compilation(bool flag);
+
+  // Indicates how many full GCs this function has survived with assigned
+  // code object. Used to determine when it is relatively safe to flush
+  // this code object and replace it with lazy compilation stub.
+  // Age is reset when GC notices that the code object is referenced
+  // from the stack or compilation cache.
+  inline int code_age();
+  inline void set_code_age(int age);
+
 
   // Check whether a inlined constructor can be generated with the given
   // prototype.
@@ -3603,6 +3623,8 @@ class SharedFunctionInfo: public HeapObject {
   static const int kHasOnlySimpleThisPropertyAssignments = 0;
   static const int kTryFullCodegen = 1;
   static const int kAllowLazyCompilation = 2;
+  static const int kCodeAgeShift = 3;
+  static const int kCodeAgeMask = 7;
 
   DISALLOW_IMPLICIT_CONSTRUCTORS(SharedFunctionInfo);
 };
@@ -3618,6 +3640,8 @@ class JSFunction: public JSObject {
   // can be shared by instances.
   DECL_ACCESSORS(shared, SharedFunctionInfo)
 
+  inline SharedFunctionInfo* unchecked_shared();
+
   // [context]: The context for this function.
   inline Context* context();
   inline Object* unchecked_context();
@@ -3629,6 +3653,8 @@ class JSFunction: public JSObject {
   // 8.6.2, page 27.
   inline Code* code();
   inline void set_code(Code* value);
+
+  inline Code* unchecked_code();
 
   // Tells whether this function is builtin.
   inline bool IsBuiltin();
@@ -3682,6 +3708,10 @@ class JSFunction: public JSObject {
   // Casting.
   static inline JSFunction* cast(Object* obj);
 
+  // Iterates the objects, including code objects indirectly referenced
+  // through pointers to the first instruction in the code object.
+  void JSFunctionIterateBody(int object_size, ObjectVisitor* v);
+
   // Dispatched behavior.
 #ifdef DEBUG
   void JSFunctionPrint();
@@ -3695,9 +3725,9 @@ class JSFunction: public JSObject {
   static Context* GlobalContextFromLiterals(FixedArray* literals);
 
   // Layout descriptors.
-  static const int kCodeOffset = JSObject::kHeaderSize;
+  static const int kCodeEntryOffset = JSObject::kHeaderSize;
   static const int kPrototypeOrInitialMapOffset =
-      kCodeOffset + kPointerSize;
+      kCodeEntryOffset + kPointerSize;
   static const int kSharedFunctionInfoOffset =
       kPrototypeOrInitialMapOffset + kPointerSize;
   static const int kContextOffset = kSharedFunctionInfoOffset + kPointerSize;
@@ -5411,6 +5441,9 @@ class ObjectVisitor BASE_EMBEDDED {
 
   // Visits a code target in the instruction stream.
   virtual void VisitCodeTarget(RelocInfo* rinfo);
+
+  // Visits a code entry in a JS function.
+  virtual void VisitCodeEntry(Address entry_address);
 
   // Visits a runtime entry in the instruction stream.
   virtual void VisitRuntimeEntry(RelocInfo* rinfo) {}
