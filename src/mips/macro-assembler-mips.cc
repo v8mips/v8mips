@@ -1623,8 +1623,10 @@ void MacroAssembler::StackLimitCheck(Label* on_stack_overflow) {
 
 
 void MacroAssembler::Drop(int count, Condition cond) {
-  UNIMPLEMENTED_MIPS();
-  break_(__LINE__);
+  ASSERT(cond == al);
+  if (count > 0) {
+    addiu(sp, sp, count * kPointerSize);
+  }
 }
 
 
