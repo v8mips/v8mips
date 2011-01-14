@@ -142,6 +142,7 @@ SOURCES = {
     virtual-frame-light.cc
     mips/assembler-mips.cc
     mips/builtins-mips.cc
+    mips/code-stubs-mips.cc
     mips/codegen-mips.cc
     mips/constants-mips.cc
     mips/cpu-mips.cc
