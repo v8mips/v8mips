@@ -1802,10 +1802,12 @@ void KeyedStoreIC::GenerateGeneric(MacroAssembler* masm) {
 }
 
 
-// Convert int passed in register ival to IEEE-754 single precision
-// floating point value and store it into register fval.
+// Convert and store int passed in register ival to IEEE 754 single precision
+// floating point value at memory location (dst + 4 * wordoffset)
 // If FPU is available use it for conversion.
-static void ConvertIntToFloat(MacroAssembler* masm,
+static void StoreIntAsFloat(MacroAssembler* masm,
+                              Register dst,
+                              Register wordoffset,
                               Register ival,
                               Register fval,
                               Register scratch1,
@@ -1814,7 +1816,9 @@ static void ConvertIntToFloat(MacroAssembler* masm,
     CpuFeatures::Scope scope(FPU);
     __ mtc1(ival, f0);
     __ cvt_s_w(f0, f0);
-    __ mfc1(fval, f0);
+    __ sll(scratch1, wordoffset, 2);
+    __ addu(scratch1, dst, scratch1);
+    __ swc1(f0, MemOperand(scratch1, 0));
   } else {
     // FPU is not available,  do manual conversions.
 
@@ -1866,6 +1870,10 @@ static void ConvertIntToFloat(MacroAssembler* masm,
     __ or_(fval, fval, scratch1);
 
     __ bind(&done);
+
+    __ sll(scratch1, wordoffset, 2);
+    __ addu(scratch1, dst, scratch1);
+    __ sw(fval, MemOperand(scratch1, 0));
   }
 }
 
@@ -1966,11 +1974,8 @@ void KeyedStoreIC::GenerateExternalArray(MacroAssembler* masm,
       __ sw(t1, MemOperand(t8, 0));
       break;
     case kExternalFloatArray:
-      // Need to perform int-to-float conversion.
-      ConvertIntToFloat(masm, t1, t2, t3, t4);
-      __ sll(t8, t0, 2);
-      __ addu(t8, a3, t8);
-      __ sw(t1, MemOperand(t8, 0));
+      // Perform int-to-float conversion and store to memory.
+      StoreIntAsFloat(masm, a3, t0, t1, t2, t3, t4);
       break;
     default:
       UNREACHABLE();
