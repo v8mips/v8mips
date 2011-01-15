@@ -718,6 +718,13 @@ void Decoder::DecodeTypeRegister(Instruction* instr) {
         case MOVN:
           Format(instr, "movn 'rd, 'rs, 'rt");
           break;
+        case MOVCI:
+          if (instr->Bit(16)) {
+            Format(instr, "movt 'rd, 'rs, 'Cc");
+          } else {
+            Format(instr, "movf 'rd, 'rs, 'Cc");
+          }
+          break;
         default:
           UNREACHABLE();
       };

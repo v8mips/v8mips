@@ -1095,7 +1095,70 @@ void CompareStub::Generate(MacroAssembler* masm) {
 }
 
 
-// void ToBooleanStub::Generate(MacroAssembler* masm) {  ... should go here .............................
+// This stub does not handle the inlined cases (Smis, Booleans, undefined).
+// The stub returns zero for false, and a non-zero value for true.
+void ToBooleanStub::Generate(MacroAssembler* masm) {
+  Label false_result;
+  Label not_heap_number;
+  Register scratch0 = VirtualFrame::scratch0();
+
+  // HeapNumber => false iff +0, -0, or NaN.
+  __ lw(scratch0, FieldMemOperand(tos_, HeapObject::kMapOffset));
+  __ LoadRoot(at, Heap::kHeapNumberMapRootIndex);
+  __ Branch(&not_heap_number, ne, scratch0, Operand(at));
+
+  __ Subu(at, tos_, Operand(kHeapObjectTag));
+  __ ldc1(f12, MemOperand(at, HeapNumber::kValueOffset));
+  __ fcmp(f12, 0.0, UEQ);
+
+  // "tos_" is a register, and contains a non zero value by default.
+  // Hence we only need to overwrite "tos_" with zero to return false for
+  // FP_ZERO or FP_NAN cases. Otherwise, by default it returns true.
+  __ movt(tos_, zero_reg);
+  __ Ret();
+
+  __ bind(&not_heap_number);
+
+  // Check if the value is 'null'.
+  // 'null' => false.
+  __ LoadRoot(at, Heap::kNullValueRootIndex);
+  __ Branch(&false_result, eq, tos_, Operand(at));
+
+  // It can be an undetectable object.
+  // Undetectable => false.
+  __ lw(at, FieldMemOperand(tos_, HeapObject::kMapOffset));
+  __ lbu(scratch0, FieldMemOperand(at, Map::kBitFieldOffset));
+  __ And(scratch0, scratch0, Operand(1 << Map::kIsUndetectable));
+  __ Branch(&false_result, eq, scratch0, Operand(1 << Map::kIsUndetectable));
+
+  // JavaScript object => true.
+  __ lw(scratch0, FieldMemOperand(tos_, HeapObject::kMapOffset));
+  __ lbu(scratch0, FieldMemOperand(scratch0, Map::kInstanceTypeOffset));
+
+  // "tos_" is a register and contains a non-zero value.
+  // Hence we implicitly return true if the greater than
+  // condition is satisfied.
+  __ Ret(gt, scratch0, Operand(FIRST_JS_OBJECT_TYPE));
+
+  // Check for string
+  __ lw(scratch0, FieldMemOperand(tos_, HeapObject::kMapOffset));
+  __ lbu(scratch0, FieldMemOperand(scratch0, Map::kInstanceTypeOffset));
+  // "tos_" is a register and contains a non-zero value.
+  // Hence we implicitly return true if the greater than
+  // condition is satisfied.
+  __ Ret(gt, scratch0, Operand(FIRST_NONSTRING_TYPE));
+
+  // String value => false iff empty, i.e., length is zero
+  __ lw(tos_, FieldMemOperand(tos_, String::kLengthOffset));
+  // If length is zero, "tos_" contains zero ==> false.
+  // If length is not zero, "tos_" contains a non-zero value ==> true.
+  __ Ret();
+
+  // Return 0 in "tos_" for false .
+  __ bind(&false_result);
+  __ mov(tos_, zero_reg);
+  __ Ret();
+}
 
 
 // We fall into this code if the operands were Smis, but the result was

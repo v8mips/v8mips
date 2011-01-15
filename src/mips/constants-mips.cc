@@ -271,6 +271,7 @@ Instruction::Type Instruction::InstructionType() const {
         case TNE:
         case MOVZ:
         case MOVN:
+        case MOVCI:
           return kRegisterType;
         default:
           UNREACHABLE();

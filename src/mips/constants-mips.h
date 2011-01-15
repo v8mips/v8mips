@@ -237,6 +237,7 @@ enum SecondaryField {
   SLLV      =   ((0 << 3) + 4),
   SRLV      =   ((0 << 3) + 6),
   SRAV      =   ((0 << 3) + 7),
+  MOVCI     =   ((0 << 3) + 1),
 
   JR        =   ((1 << 3) + 0),
   JALR      =   ((1 << 3) + 1),

@@ -749,12 +749,27 @@ void CodeGenerator::ToBoolean(JumpTarget* true_target,
     __ And(at, tos, Operand(kSmiTagMask));
     true_target->Branch(eq, at, Operand(zero_reg));
 
-    // Slow case: call the runtime.
-    frame_->EmitPush(tos);
-    frame_->CallRuntime(Runtime::kToBool, 1);
-    // Convert the result (v0) to a condition code.
-    __ LoadRoot(condReg1, Heap::kFalseValueRootIndex);
-    __ mov(condReg2, v0);
+    if (CpuFeatures::IsSupported(FPU)) {
+      CpuFeatures::Scope scope(FPU);
+      // Implements the slow case by using ToBooleanStub.
+      // The ToBooleanStub takes a single argument, and
+      // returns a non-zero value for true, or zero for false.
+      // Both the argument value and the return value use the
+      // register assigned to tos_
+      ToBooleanStub stub(tos);
+      frame_->CallStub(&stub, 0);
+      // Convert the result in "tos" to a condition code.
+      __ mov(condReg1, zero_reg);
+      __ mov(condReg2, tos);
+
+    } else {
+      // Slow case: call the runtime.
+      frame_->EmitPush(tos);
+      frame_->CallRuntime(Runtime::kToBool, 1);
+      // Convert the result (v0) to a condition code.
+      __ LoadRoot(condReg1, Heap::kFalseValueRootIndex);
+      __ mov(condReg2, v0);
+    }
   }
 
   cc_reg_ = ne;

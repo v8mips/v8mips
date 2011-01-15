@@ -554,6 +554,8 @@ class Assembler : public Malloced {
   // Conditional move.
   void movz(Register rd, Register rs, Register rt);
   void movn(Register rd, Register rs, Register rt);
+  void movt(Register rd, Register rs, uint16_t cc = 0);
+  void movf(Register rd, Register rs, uint16_t cc = 0);
 
   // Bit twiddling.
   void clz(Register rd, Register rs);
@@ -609,7 +611,7 @@ class Assembler : public Malloced {
   void bc1f(Label* L, uint16_t cc = 0) { bc1f(branch_offset(L, false)>>2, cc); }
   void bc1t(int16_t offset, uint16_t cc = 0);
   void bc1t(Label* L, uint16_t cc = 0) { bc1t(branch_offset(L, false)>>2, cc); }
-
+  void fcmp(FPURegister src1, const double src2, FPUCondition cond);
 
   // Check the code size generated from label to here.
   int InstructionsGeneratedSince(Label* l) {
