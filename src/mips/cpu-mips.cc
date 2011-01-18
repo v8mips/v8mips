@@ -58,13 +58,18 @@ void CPU::Setup() {
 
 void CPU::FlushICache(void* start, size_t size) {
 #ifdef __mips
+  int res;
 
-  char *end = (char *)((unsigned int)start + size);
 #ifdef __sgi
-  cacheflush(start, size, ICACHE);
+  res = cacheflush(start, size, ICACHE);
 #else
-  __builtin___clear_cache(start, end);
+  // See http://www.linux-mips.org/wiki/Cacheflush_Syscall
+  res = syscall(__NR_cacheflush, start, size, ICACHE);
 #endif
+
+  if (res) {
+    V8_Fatal(__FILE__, __LINE__, "Failed to flush the instruction cache");
+  }
 
 #else  // simulator mode
   // Not generating mips instructions for C-code. This means that we are

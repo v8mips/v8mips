@@ -1399,6 +1399,7 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
           break;
         case MOVN:
         case MOVZ:
+        case MOVCI:
           // No action taken on decode.
           break;
         default:
@@ -1680,6 +1681,15 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
         case MOVN:
           if (rt) set_register(rd_reg, rs);
           break;
+        case MOVCI: {
+          uint32_t cc = instr->FCccField();
+          if (instr->Bit(16)) {  // Read Tf bit
+            if (test_fpu_ccr_bit(cc)) set_register(rd_reg, rs);
+          } else {
+            if (!test_fpu_ccr_bit(cc)) set_register(rd_reg, rs);
+          }
+          break;
+        }
         case MOVZ:
           if (!rt) set_register(rd_reg, rs);
           break;

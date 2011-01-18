@@ -1535,6 +1535,18 @@ void Assembler::movn(Register rd, Register rs, Register rt) {
   GenInstrRegister(SPECIAL, rs, rt, rd, 0, MOVN);
 }
 
+void Assembler::movt(Register rd, Register rs, uint16_t cc) {
+  Register rt;
+  rt.code_ = (cc & 0x0003)<<2 | 1;
+  GenInstrRegister(SPECIAL, rs, rt, rd, 0, MOVCI);
+}
+
+void Assembler::movf(Register rd, Register rs, uint16_t cc) {
+  Register rt;
+  rt.code_ = (cc & 0x0003)<<2 | 0;
+  GenInstrRegister(SPECIAL, rs, rt, rd, 0, MOVCI);
+}
+
 // Bit twiddling.
 void Assembler::clz(Register rd, Register rs) {
   // Clz instr requires same GPR number in 'rd' and 'rt' fields.
@@ -1754,6 +1766,14 @@ void Assembler::c(FPUCondition cond, SecondaryField fmt,
   emit(instr);
 }
 
+void Assembler::fcmp(FPURegister src1, const double src2,
+      FPUCondition cond) {
+  ASSERT(CpuFeatures::IsSupported(FPU));
+  ASSERT(src2 == 0.0);
+  mtc1(zero_reg, f14);
+  cvt_d_w(f14, f14);
+  c(cond, D, src1, f14, 0);
+}
 
 void Assembler::bc1f(int16_t offset, uint16_t cc) {
   ASSERT(is_uint3(cc));
