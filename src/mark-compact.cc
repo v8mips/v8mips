@@ -65,6 +65,14 @@ int MarkCompactCollector::live_cell_objects_size_ = 0;
 int MarkCompactCollector::live_lo_objects_size_ = 0;
 #endif
 
+#ifdef __sgi
+// Mipspro breaks with error 1455
+// A template argument cannot reference a non-external entity
+#define TPL_ARG_INLINE
+#else
+#define TPL_ARG_INLINE inline
+#endif
+
 
 void MarkCompactCollector::CollectGarbage() {
   // Make sure that Prepare() has been called. The individual steps below will
@@ -1217,7 +1225,7 @@ void EncodeFreeRegion(Address free_start, int free_size) {
 // Try to promote all objects in new space.  Heap numbers and sequential
 // strings are promoted to the code space, large objects to large object space,
 // and all others to the old space.
-inline Object* MCAllocateFromNewSpace(HeapObject* object, int object_size) {
+TPL_ARG_INLINE Object* MCAllocateFromNewSpace(HeapObject* object, int object_size) {
   Object* forwarded;
   if (object_size > Heap::MaxObjectSizeInPagedSpace()) {
     forwarded = Failure::Exception();
@@ -1235,35 +1243,35 @@ inline Object* MCAllocateFromNewSpace(HeapObject* object, int object_size) {
 
 
 // Allocation functions for the paged spaces call the space's MCAllocateRaw.
-inline Object* MCAllocateFromOldPointerSpace(HeapObject* ignore,
+TPL_ARG_INLINE Object* MCAllocateFromOldPointerSpace(HeapObject* ignore,
                                              int object_size) {
   return Heap::old_pointer_space()->MCAllocateRaw(object_size);
 }
 
 
-inline Object* MCAllocateFromOldDataSpace(HeapObject* ignore, int object_size) {
+TPL_ARG_INLINE Object* MCAllocateFromOldDataSpace(HeapObject* ignore, int object_size) {
   return Heap::old_data_space()->MCAllocateRaw(object_size);
 }
 
 
-inline Object* MCAllocateFromCodeSpace(HeapObject* ignore, int object_size) {
+TPL_ARG_INLINE Object* MCAllocateFromCodeSpace(HeapObject* ignore, int object_size) {
   return Heap::code_space()->MCAllocateRaw(object_size);
 }
 
 
-inline Object* MCAllocateFromMapSpace(HeapObject* ignore, int object_size) {
+TPL_ARG_INLINE Object* MCAllocateFromMapSpace(HeapObject* ignore, int object_size) {
   return Heap::map_space()->MCAllocateRaw(object_size);
 }
 
 
-inline Object* MCAllocateFromCellSpace(HeapObject* ignore, int object_size) {
+TPL_ARG_INLINE Object* MCAllocateFromCellSpace(HeapObject* ignore, int object_size) {
   return Heap::cell_space()->MCAllocateRaw(object_size);
 }
 
 
 // The forwarding address is encoded at the same offset as the current
 // to-space object, but in from space.
-inline void EncodeForwardingAddressInNewSpace(HeapObject* old_object,
+TPL_ARG_INLINE void EncodeForwardingAddressInNewSpace(HeapObject* old_object,
                                               int object_size,
                                               Object* new_object,
                                               int* ignored) {
@@ -1277,7 +1285,7 @@ inline void EncodeForwardingAddressInNewSpace(HeapObject* old_object,
 // The forwarding address is encoded in the map pointer of the object as an
 // offset (in terms of live bytes) from the address of the first live object
 // in the page.
-inline void EncodeForwardingAddressInPagedSpace(HeapObject* old_object,
+TPL_ARG_INLINE void EncodeForwardingAddressInPagedSpace(HeapObject* old_object,
                                                 int object_size,
                                                 Object* new_object,
                                                 int* offset) {
@@ -1296,7 +1304,7 @@ inline void EncodeForwardingAddressInPagedSpace(HeapObject* old_object,
 
 
 // Most non-live objects are ignored.
-inline void IgnoreNonLiveObject(HeapObject* object) {}
+TPL_ARG_INLINE void IgnoreNonLiveObject(HeapObject* object) {}
 
 
 // Function template that, given a range of addresses (eg, a semispace or a
@@ -1420,23 +1428,6 @@ static void MigrateObject(Address dst,
 
   Memory::Address_at(src) = dst;
 }
-
-
-class StaticPointersToNewGenUpdatingVisitor : public
-  StaticNewSpaceVisitor<StaticPointersToNewGenUpdatingVisitor> {
- public:
-  static inline void VisitPointer(Object** p) {
-    if (!(*p)->IsHeapObject()) return;
-
-    HeapObject* obj = HeapObject::cast(*p);
-    Address old_addr = obj->address();
-
-    if (Heap::new_space()->Contains(obj)) {
-      ASSERT(Heap::InFromSpace(*p));
-      *p = HeapObject::FromAddress(Memory::Address_at(old_addr));
-    }
-  }
-};
 
 
 // Visitor for updating pointers from live objects in old spaces to new space.

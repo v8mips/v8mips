@@ -43,7 +43,6 @@
 #include <semaphore.h>
 #include <signal.h>
 
-extern const float _nanf_val;
 #undef MAP_TYPE
 
 #include "v8.h"

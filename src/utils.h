@@ -939,10 +939,12 @@ inline Dest BitCast(const Source& source) {
   return dest;
 }
 
+#ifndef __sgi
 template <class Dest, class Source>
 inline Dest BitCast(Source* source) {
   return BitCast<Dest>(reinterpret_cast<uintptr_t>(source));
 }
+#endif
 
 } }  // namespace v8::internal
 

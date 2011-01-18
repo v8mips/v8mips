@@ -31,7 +31,11 @@
 #include <unistd.h>
 
 #ifdef __mips
+#ifdef __sgi
+#include <sys/cachectl.h>
+#else
 #include <asm/cachectl.h>
+#endif  // #ifdef __sgi
 #endif  // #ifdef __mips
 
 #include "v8.h"
@@ -56,7 +60,11 @@ void CPU::FlushICache(void* start, size_t size) {
 #ifdef __mips
 
   char *end = (char *)((unsigned int)start + size);
+#ifdef __sgi
+  cacheflush(start, size, ICACHE);
+#else
   __builtin___clear_cache(start, end);
+#endif
 
 #else  // simulator mode
   // Not generating mips instructions for C-code. This means that we are
@@ -71,7 +79,9 @@ void CPU::FlushICache(void* start, size_t size) {
 
 void CPU::DebugBreak() {
 #ifdef __mips
+#ifndef __sgi
   asm volatile("break");
+#endif  // #ifdef __sgi
 #endif  // #ifdef __mips
 }
 

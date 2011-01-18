@@ -7387,7 +7387,7 @@ uint32_t HashTable<Shape, Key>::FindInsertionEntry(uint32_t hash) {
 
 // Force instantiation of template instances class.
 // Please note this list is compiler dependent.
-
+#ifndef __sgi
 template class HashTable<SymbolTableShape, HashTableKey*>;
 
 template class HashTable<CompilationCacheShape, HashTableKey*>;
@@ -7462,7 +7462,7 @@ int Dictionary<StringDictionaryShape, String*>::NumberOfEnumElements();
 
 template
 int HashTable<NumberDictionaryShape, uint32_t>::FindEntry(uint32_t);
-
+#endif // __sgi
 
 // Collates undefined and unexisting elements below limit from position
 // zero of the elements. The object stays in Dictionary mode.

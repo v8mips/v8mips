@@ -76,7 +76,11 @@ typedef unsigned __int64 uint64_t;
 
 #else  // _WIN32
 
+#ifndef __sgi
 #include <stdint.h>
+#else
+#include <inttypes.h>
+#endif
 
 // Setup for Linux shared library export. There is no need to distinguish
 // between building or using the V8 shared library, but we should not
@@ -461,7 +465,9 @@ class V8EXPORT HandleScope {
   HandleScope(const HandleScope&);
   void operator=(const HandleScope&);
   void* operator new(size_t size);
+#ifndef __sgi
   void operator delete(void*, size_t);
+#endif
 
   // This Data class is accessible internally as HandleScopeData through a
   // typedef in the ImplementationUtilities class.

@@ -39,7 +39,7 @@
 
 #if !(defined(__APPLE__) && defined(__MACH__)) && \
     !defined(WIN32) && !defined(__FreeBSD__) && !defined(__OpenBSD__) && \
-    !defined(__sun)
+    !defined(__sun) && !defined(__sgi)
 #include <endian.h>
 #endif
 #include <math.h>

@@ -145,7 +145,9 @@ class HandleScope {
   HandleScope(const HandleScope&);
   void operator=(const HandleScope&);
   void* operator new(size_t size);
+#ifndef __sgi
   void operator delete(void* size_t);
+#endif
 
   static v8::ImplementationUtilities::HandleScopeData current_;
   const v8::ImplementationUtilities::HandleScopeData previous_;
