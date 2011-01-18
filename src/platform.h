@@ -90,6 +90,28 @@ int signbit(double x);
 # endif
 #endif
 
+#ifdef __sgi
+// Irix CC cannot use C++ and define __c99 in the same time, which is needed
+// for the following definition to be seen in math.h
+// XXX : temporary ugly hack
+extern int _isinf(double);
+extern int _fpclassify(double);
+extern int _isless(double, double);
+extern const float __infinityf;
+extern const float _nanf_val;
+#define isinf(x) _isinf(x)
+#define fpclassify(x) _fpclassify(x)
+#define isless(x, y) _isless(x, y)
+#define isfinite(x) finite(x)
+#pragma optional _isinf
+#pragma optional _fpclassify
+#pragma optional _isless
+#define INFINITY  __infinityf
+#define FP_ZERO 1
+#define FP_INFINITE 8
+#define FP_NAN 16
+#define NAN _nanf_val
+#endif
 
 // GCC specific stuff
 #ifdef __GNUC__
