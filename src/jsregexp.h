@@ -1457,6 +1457,68 @@ class OffsetsVector {
 };
 
 
+class AddDispatchRange {
+ public:
+  explicit AddDispatchRange(DispatchTableConstructor* constructor)
+    : constructor_(constructor) { }
+  void Call(uc32 from, DispatchTable::Entry entry);
+ private:
+  DispatchTableConstructor* constructor_;
+};
+
+
+class CharacterRangeSplitter {
+ public:
+  CharacterRangeSplitter(ZoneList<CharacterRange>** included,
+                          ZoneList<CharacterRange>** excluded)
+      : included_(included),
+        excluded_(excluded) { }
+  void Call(uc16 from, DispatchTable::Entry entry);
+
+  static const int kInBase = 0;
+  static const int kInOverlay = 1;
+
+ private:
+  ZoneList<CharacterRange>** included_;
+  ZoneList<CharacterRange>** excluded_;
+};
+
+
+class TableEntryBodyPrinter {
+ public:
+  TableEntryBodyPrinter(StringStream* stream, ChoiceNode* choice)
+      : stream_(stream), choice_(choice) { }
+  void Call(uc16 from, DispatchTable::Entry entry);
+ private:
+  StringStream* stream() { return stream_; }
+  ChoiceNode* choice() { return choice_; }
+  StringStream* stream_;
+  ChoiceNode* choice_;
+};
+
+
+class TableEntryHeaderPrinter {
+ public:
+  explicit TableEntryHeaderPrinter(StringStream* stream)
+      : first_(true), stream_(stream) { }
+  void Call(uc16 from, DispatchTable::Entry entry);
+ private:
+  bool first_;
+  StringStream* stream() { return stream_; }
+  StringStream* stream_;
+};
+
+
+class DispatchTableDumper {
+ public:
+  explicit DispatchTableDumper(StringStream* stream) : stream_(stream) { }
+  void Call(uc16 key, DispatchTable::Entry entry);
+  StringStream* stream() { return stream_; }
+ private:
+  StringStream* stream_;
+};
+
+
 } }  // namespace v8::internal
 
 #endif  // V8_JSREGEXP_H_

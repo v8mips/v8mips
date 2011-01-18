@@ -1027,17 +1027,6 @@ void Heap::UpdateNewSpaceReferencesInExternalStringTable(
 }
 
 
-class NewSpaceScavenger : public StaticNewSpaceVisitor<NewSpaceScavenger> {
- public:
-  static inline void VisitPointer(Object** p) {
-    Object* object = *p;
-    if (!Heap::InNewSpace(object)) return;
-    Heap::ScavengeObject(reinterpret_cast<HeapObject**>(p),
-                         reinterpret_cast<HeapObject*>(object));
-  }
-};
-
-
 Address Heap::DoScavenge(ObjectVisitor* scavenge_visitor,
                          Address new_space_front) {
   do {
@@ -1701,7 +1690,9 @@ bool Heap::CreateInitialObjects() {
   obj = AllocateHeapNumber(-0.0, TENURED);
   if (obj->IsFailure()) return false;
   set_minus_zero_value(obj);
+#ifndef __sgi
   ASSERT(signbit(minus_zero_value()->Number()) != 0);
+#endif
 
   obj = AllocateHeapNumber(OS::nan_value(), TENURED);
   if (obj->IsFailure()) return false;

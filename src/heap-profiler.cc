@@ -38,7 +38,9 @@ namespace internal {
 
 
 #ifdef ENABLE_LOGGING_AND_PROFILING
+#ifndef __sgi
 namespace {
+#endif
 
 // Clusterizer is a set of helper functions for converting
 // object references into clusters.
@@ -179,23 +181,6 @@ class RetainersPrinter : public RetainerHeapProfile::Printer {
 };
 
 
-// Visitor for printing a cluster tree.
-class ClusterTreePrinter BASE_EMBEDDED {
- public:
-  explicit ClusterTreePrinter(StringStream* stream) : stream_(stream) {}
-  void Call(const JSObjectsCluster& cluster,
-            const NumberAndSizeInfo& number_and_size) {
-    Print(stream_, cluster, number_and_size);
-  }
-  static void Print(StringStream* stream,
-                    const JSObjectsCluster& cluster,
-                    const NumberAndSizeInfo& number_and_size);
-
- private:
-  StringStream* stream_;
-};
-
-
 void ClusterTreePrinter::Print(StringStream* stream,
                                const JSObjectsCluster& cluster,
                                const NumberAndSizeInfo& number_and_size) {
@@ -203,18 +188,6 @@ void ClusterTreePrinter::Print(StringStream* stream,
   cluster.Print(stream);
   stream->Add(";%d", number_and_size.number());
 }
-
-
-// Visitor for printing a retainer tree.
-class SimpleRetainerTreePrinter BASE_EMBEDDED {
- public:
-  explicit SimpleRetainerTreePrinter(RetainerHeapProfile::Printer* printer)
-      : printer_(printer) {}
-  void Call(const JSObjectsCluster& cluster, JSObjectsClusterTree* tree);
-
- private:
-  RetainerHeapProfile::Printer* printer_;
-};
 
 
 void SimpleRetainerTreePrinter::Call(const JSObjectsCluster& cluster,
@@ -227,20 +200,6 @@ void SimpleRetainerTreePrinter::Call(const JSObjectsCluster& cluster,
 }
 
 
-// Visitor for aggregating references count of equivalent clusters.
-class RetainersAggregator BASE_EMBEDDED {
- public:
-  RetainersAggregator(ClustersCoarser* coarser, JSObjectsClusterTree* dest_tree)
-      : coarser_(coarser), dest_tree_(dest_tree) {}
-  void Call(const JSObjectsCluster& cluster,
-            const NumberAndSizeInfo& number_and_size);
-
- private:
-  ClustersCoarser* coarser_;
-  JSObjectsClusterTree* dest_tree_;
-};
-
-
 void RetainersAggregator::Call(const JSObjectsCluster& cluster,
                                const NumberAndSizeInfo& number_and_size) {
   JSObjectsCluster eq = coarser_->GetCoarseEquivalent(cluster);
@@ -251,20 +210,6 @@ void RetainersAggregator::Call(const JSObjectsCluster& cluster,
   aggregated_number.increment_number(number_and_size.number());
   loc.set_value(aggregated_number);
 }
-
-
-// Visitor for printing retainers tree. Aggregates equivalent retainer clusters.
-class AggregatingRetainerTreePrinter BASE_EMBEDDED {
- public:
-  AggregatingRetainerTreePrinter(ClustersCoarser* coarser,
-                                 RetainerHeapProfile::Printer* printer)
-      : coarser_(coarser), printer_(printer) {}
-  void Call(const JSObjectsCluster& cluster, JSObjectsClusterTree* tree);
-
- private:
-  ClustersCoarser* coarser_;
-  RetainerHeapProfile::Printer* printer_;
-};
 
 
 void AggregatingRetainerTreePrinter::Call(const JSObjectsCluster& cluster,
@@ -280,7 +225,9 @@ void AggregatingRetainerTreePrinter::Call(const JSObjectsCluster& cluster,
   printer_->PrintRetainers(cluster, stream);
 }
 
+#ifndef __sgi
 }  // namespace
+#endif
 
 
 // A helper class for building a retainers tree, that aggregates
@@ -807,27 +754,6 @@ void AggregatedHeapSnapshotGenerator::GenerateSnapshot() {
 }
 
 
-class CountingConstructorHeapProfileIterator {
- public:
-  CountingConstructorHeapProfileIterator()
-      : entities_count_(0), children_count_(0) {
-  }
-
-  void Call(const JSObjectsCluster& cluster,
-            const NumberAndSizeInfo& number_and_size) {
-    ++entities_count_;
-    children_count_ += number_and_size.number();
-  }
-
-  int entities_count() { return entities_count_; }
-  int children_count() { return children_count_; }
-
- private:
-  int entities_count_;
-  int children_count_;
-};
-
-
 static HeapEntry* AddEntryFromAggregatedSnapshot(HeapSnapshot* snapshot,
                                                  int* root_child_index,
                                                  HeapEntry::Type type,
@@ -847,34 +773,21 @@ static HeapEntry* AddEntryFromAggregatedSnapshot(HeapSnapshot* snapshot,
 }
 
 
-class AllocatingConstructorHeapProfileIterator {
- public:
-  AllocatingConstructorHeapProfileIterator(HeapSnapshot* snapshot,
-                                  int* root_child_index)
-      : snapshot_(snapshot),
-        root_child_index_(root_child_index) {
+void AllocatingConstructorHeapProfileIterator::Call(const JSObjectsCluster& cluster,
+          const NumberAndSizeInfo& number_and_size) {
+  const char* name = cluster.GetSpecialCaseName();
+  if (name == NULL) {
+    name = snapshot_->collection()->GetFunctionName(cluster.constructor());
   }
-
-  void Call(const JSObjectsCluster& cluster,
-            const NumberAndSizeInfo& number_and_size) {
-    const char* name = cluster.GetSpecialCaseName();
-    if (name == NULL) {
-      name = snapshot_->collection()->GetFunctionName(cluster.constructor());
-    }
-    AddEntryFromAggregatedSnapshot(snapshot_,
-                                   root_child_index_,
-                                   HeapEntry::kObject,
-                                   name,
-                                   number_and_size.number(),
-                                   number_and_size.bytes(),
-                                   0,
-                                   0);
-  }
-
- private:
-  HeapSnapshot* snapshot_;
-  int* root_child_index_;
-};
+  AddEntryFromAggregatedSnapshot(snapshot_,
+                                 root_child_index_,
+                                 HeapEntry::kObject,
+                                 name,
+                                 number_and_size.number(),
+                                 number_and_size.bytes(),
+                                 0,
+                                 0);
+}
 
 
 static HeapObject* ClusterAsHeapObject(const JSObjectsCluster& cluster) {
@@ -894,106 +807,50 @@ static JSObjectsCluster HeapObjectAsCluster(HeapObject* object) {
 }
 
 
-class CountingRetainersIterator {
- public:
-  CountingRetainersIterator(const JSObjectsCluster& child_cluster,
+CountingRetainersIterator::CountingRetainersIterator(const JSObjectsCluster& child_cluster,
+                          HeapEntriesMap* map)
+    : child_(ClusterAsHeapObject(child_cluster)), map_(map) {
+  if (map_->Map(child_) == NULL)
+    map_->Pair(child_, HeapEntriesMap::kHeapEntryPlaceholder);
+}
+
+void CountingRetainersIterator::Call(const JSObjectsCluster& cluster,
+          const NumberAndSizeInfo& number_and_size) {
+  if (map_->Map(ClusterAsHeapObject(cluster)) == NULL)
+    map_->Pair(ClusterAsHeapObject(cluster),
+               HeapEntriesMap::kHeapEntryPlaceholder);
+  map_->CountReference(ClusterAsHeapObject(cluster), child_);
+}
+
+
+AllocatingRetainersIterator::AllocatingRetainersIterator(const JSObjectsCluster& child_cluster,
                             HeapEntriesMap* map)
-      : child_(ClusterAsHeapObject(child_cluster)), map_(map) {
-    if (map_->Map(child_) == NULL)
-      map_->Pair(child_, HeapEntriesMap::kHeapEntryPlaceholder);
+    : child_(ClusterAsHeapObject(child_cluster)), map_(map) {
+  child_entry_ = map_->Map(child_);
+  ASSERT(child_entry_ != NULL);
+}
+
+void AllocatingRetainersIterator::Call(const JSObjectsCluster& cluster,
+          const NumberAndSizeInfo& number_and_size) {
+  int child_index, retainer_index;
+  map_->CountReference(ClusterAsHeapObject(cluster), child_,
+                       &child_index, &retainer_index);
+  map_->Map(ClusterAsHeapObject(cluster))->SetElementReference(
+      child_index, number_and_size.number(), child_entry_, retainer_index);
+}
+
+
+HeapEntry* AggregatedRetainerTreeAllocator::GetEntry(
+    HeapObject* obj, int children_count, int retainers_count) {
+  JSObjectsCluster cluster = HeapObjectAsCluster(obj);
+  const char* name = cluster.GetSpecialCaseName();
+  if (name == NULL) {
+    name = snapshot_->collection()->GetFunctionName(cluster.constructor());
   }
-
-  void Call(const JSObjectsCluster& cluster,
-            const NumberAndSizeInfo& number_and_size) {
-    if (map_->Map(ClusterAsHeapObject(cluster)) == NULL)
-      map_->Pair(ClusterAsHeapObject(cluster),
-                 HeapEntriesMap::kHeapEntryPlaceholder);
-    map_->CountReference(ClusterAsHeapObject(cluster), child_);
-  }
-
- private:
-  HeapObject* child_;
-  HeapEntriesMap* map_;
-};
-
-
-class AllocatingRetainersIterator {
- public:
-  AllocatingRetainersIterator(const JSObjectsCluster& child_cluster,
-                              HeapEntriesMap* map)
-      : child_(ClusterAsHeapObject(child_cluster)), map_(map) {
-    child_entry_ = map_->Map(child_);
-    ASSERT(child_entry_ != NULL);
-  }
-
-  void Call(const JSObjectsCluster& cluster,
-            const NumberAndSizeInfo& number_and_size) {
-    int child_index, retainer_index;
-    map_->CountReference(ClusterAsHeapObject(cluster), child_,
-                         &child_index, &retainer_index);
-    map_->Map(ClusterAsHeapObject(cluster))->SetElementReference(
-        child_index, number_and_size.number(), child_entry_, retainer_index);
-  }
-
- private:
-  HeapObject* child_;
-  HeapEntriesMap* map_;
-  HeapEntry* child_entry_;
-};
-
-
-template<class RetainersIterator>
-class AggregatingRetainerTreeIterator {
- public:
-  explicit AggregatingRetainerTreeIterator(ClustersCoarser* coarser,
-                                           HeapEntriesMap* map)
-      : coarser_(coarser), map_(map) {
-  }
-
-  void Call(const JSObjectsCluster& cluster, JSObjectsClusterTree* tree) {
-    if (coarser_ != NULL &&
-        !coarser_->GetCoarseEquivalent(cluster).is_null()) return;
-    JSObjectsClusterTree* tree_to_iterate = tree;
-    ZoneScope zs(DELETE_ON_EXIT);
-    JSObjectsClusterTree dest_tree_;
-    if (coarser_ != NULL) {
-      RetainersAggregator retainers_aggregator(coarser_, &dest_tree_);
-      tree->ForEach(&retainers_aggregator);
-      tree_to_iterate = &dest_tree_;
-    }
-    RetainersIterator iterator(cluster, map_);
-    tree_to_iterate->ForEach(&iterator);
-  }
-
- private:
-  ClustersCoarser* coarser_;
-  HeapEntriesMap* map_;
-};
-
-
-class AggregatedRetainerTreeAllocator {
- public:
-  AggregatedRetainerTreeAllocator(HeapSnapshot* snapshot,
-                                  int* root_child_index)
-      : snapshot_(snapshot), root_child_index_(root_child_index) {
-  }
-
-  HeapEntry* GetEntry(
-      HeapObject* obj, int children_count, int retainers_count) {
-    JSObjectsCluster cluster = HeapObjectAsCluster(obj);
-    const char* name = cluster.GetSpecialCaseName();
-    if (name == NULL) {
-      name = snapshot_->collection()->GetFunctionName(cluster.constructor());
-    }
-    return AddEntryFromAggregatedSnapshot(
-        snapshot_, root_child_index_, HeapEntry::kObject, name,
-        0, 0, children_count, retainers_count);
-  }
-
- private:
-  HeapSnapshot* snapshot_;
-  int* root_child_index_;
-};
+  return AddEntryFromAggregatedSnapshot(
+      snapshot_, root_child_index_, HeapEntry::kObject, name,
+      0, 0, children_count, retainers_count);
+}
 
 
 template<class Iterator>

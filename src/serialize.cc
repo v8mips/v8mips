@@ -63,51 +63,6 @@ static int* GetInternalPointer(StatsCounter* counter) {
 }
 
 
-// ExternalReferenceTable is a helper class that defines the relationship
-// between external references and their encodings. It is used to build
-// hashmaps in ExternalReferenceEncoder and ExternalReferenceDecoder.
-class ExternalReferenceTable {
- public:
-  static ExternalReferenceTable* instance() {
-    if (!instance_) instance_ = new ExternalReferenceTable();
-    return instance_;
-  }
-
-  int size() const { return refs_.length(); }
-
-  Address address(int i) { return refs_[i].address; }
-
-  uint32_t code(int i) { return refs_[i].code; }
-
-  const char* name(int i) { return refs_[i].name; }
-
-  int max_id(int code) { return max_id_[code]; }
-
- private:
-  static ExternalReferenceTable* instance_;
-
-  ExternalReferenceTable() : refs_(64) { PopulateTable(); }
-  ~ExternalReferenceTable() { }
-
-  struct ExternalReferenceEntry {
-    Address address;
-    uint32_t code;
-    const char* name;
-  };
-
-  void PopulateTable();
-
-  // For a few types of references, we can get their address from their id.
-  void AddFromId(TypeCode type, uint16_t id, const char* name);
-
-  // For other types of references, the caller will figure out the address.
-  void Add(Address address, TypeCode type, uint16_t id, const char* name);
-
-  List<ExternalReferenceEntry> refs_;
-  int max_id_[kTypeCodeCount];
-};
-
-
 ExternalReferenceTable* ExternalReferenceTable::instance_ = NULL;
 
 

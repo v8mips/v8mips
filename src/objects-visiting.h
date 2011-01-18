@@ -384,6 +384,34 @@ void Code::CodeIterateBody() {
 }
 
 
+class NewSpaceScavenger : public StaticNewSpaceVisitor<NewSpaceScavenger> {
+ public:
+  static inline void VisitPointer(Object** p) {
+    Object* object = *p;
+    if (!Heap::InNewSpace(object)) return;
+    Heap::ScavengeObject(reinterpret_cast<HeapObject**>(p),
+                         reinterpret_cast<HeapObject*>(object));
+  }
+};
+
+
+class StaticPointersToNewGenUpdatingVisitor : public
+  StaticNewSpaceVisitor<StaticPointersToNewGenUpdatingVisitor> {
+ public:
+  static void VisitPointer(Object** p) {
+    if (!(*p)->IsHeapObject()) return;
+
+    HeapObject* obj = HeapObject::cast(*p);
+    Address old_addr = obj->address();
+
+    if (Heap::new_space()->Contains(obj)) {
+      ASSERT(Heap::InFromSpace(*p));
+      *p = HeapObject::FromAddress(Memory::Address_at(old_addr));
+    }
+  }
+};
+
+
 } }  // namespace v8::internal
 
 #endif  // V8_OBJECTS_ITERATION_H_

@@ -453,6 +453,19 @@ class MarkCompactCollector: public AllStatic {
 #endif
 };
 
+// Allocation functions for the paged spaces call the space's MCAllocateRaw.
+Object* MCAllocateFromOldPointerSpace(HeapObject* ignore, int object_size);
+
+Object* MCAllocateFromOldDataSpace(HeapObject* ignore, int object_size);
+
+Object* MCAllocateFromCodeSpace(HeapObject* ignore, int object_size);
+
+Object* MCAllocateFromMapSpace(HeapObject* ignore, int object_size);
+
+Object* MCAllocateFromCellSpace(HeapObject* ignore, int object_size);
+
+void IgnoreNonLiveObject(HeapObject* object);
+
 
 } }  // namespace v8::internal
 

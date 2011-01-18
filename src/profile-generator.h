@@ -973,6 +973,136 @@ class HeapSnapshotGenerator {
   DISALLOW_COPY_AND_ASSIGN(HeapSnapshotGenerator);
 };
 
+
+class RetainedSizeCalculator {
+ public:
+  RetainedSizeCalculator()
+      : retained_size_(0) {
+  }
+
+  int reained_size() const { return retained_size_; }
+
+  void Apply(HeapEntry** entry_ptr) {
+    if ((*entry_ptr)->painted_reachable()) {
+      retained_size_ += (*entry_ptr)->self_size();
+    }
+  }
+
+ private:
+  int retained_size_;
+};
+
+
+struct NodesPair {
+  NodesPair(ProfileNode* src, ProfileNode* dst)
+      : src(src), dst(dst) { }
+  ProfileNode* src;
+  ProfileNode* dst;
+};
+
+
+class SnapshotAllocator {
+ public:
+  explicit SnapshotAllocator(HeapSnapshot* snapshot)
+      : snapshot_(snapshot) { }
+  HeapEntry* GetEntry(
+      HeapObject* obj, int children_count, int retainers_count) {
+    HeapEntry* entry =
+        snapshot_->AddEntry(obj, children_count, retainers_count);
+    ASSERT(entry != NULL);
+    return entry;
+  }
+ private:
+  HeapSnapshot* snapshot_;
+};
+
+
+class DeleteNodesCallback {
+ public:
+  void BeforeTraversingChild(ProfileNode*, ProfileNode*) { }
+
+  void AfterAllChildrenTraversed(ProfileNode* node) {
+    delete node;
+  }
+
+  void AfterChildTraversed(ProfileNode*, ProfileNode*) { }
+};
+
+
+class CalculateTotalTicksCallback {
+ public:
+  void BeforeTraversingChild(ProfileNode*, ProfileNode*) { }
+
+  void AfterAllChildrenTraversed(ProfileNode* node) {
+    node->IncreaseTotalTicks(node->self_ticks());
+  }
+
+  void AfterChildTraversed(ProfileNode* parent, ProfileNode* child) {
+    parent->IncreaseTotalTicks(child->total_ticks());
+  }
+};
+
+
+class FilteredCloneCallback {
+ public:
+  explicit FilteredCloneCallback(ProfileNode* dst_root, int security_token_id)
+      : stack_(10),
+        security_token_id_(security_token_id) {
+    stack_.Add(NodesPair(NULL, dst_root));
+  }
+
+  void BeforeTraversingChild(ProfileNode* parent, ProfileNode* child);
+  void AfterAllChildrenTraversed(ProfileNode* parent);
+  void AfterChildTraversed(ProfileNode*, ProfileNode* child);
+
+ private:
+  bool IsTokenAcceptable(int token, int parent_token);
+
+  List<NodesPair> stack_;
+  int security_token_id_;
+};
+
+
+class NullClass {
+ public:
+  void Apply(HeapEntry* entry) { }
+};
+
+
+class ReachableSizeCalculator {
+ public:
+  ReachableSizeCalculator()
+      : reachable_size_(0) {
+  }
+
+  int reachable_size() const { return reachable_size_; }
+
+  void Apply(HeapEntry* entry) {
+    reachable_size_ += entry->self_size();
+  }
+
+ private:
+  int reachable_size_;
+};
+
+
+class Position {
+ public:
+  explicit Position(ProfileNode* node)
+      : node(node), child_idx_(0) { }
+  INLINE(ProfileNode* current_child()) {
+    return node->children()->at(child_idx_);
+  }
+  INLINE(bool has_current_child()) {
+    return child_idx_ < node->children()->length();
+  }
+  INLINE(void next_child()) { ++child_idx_; }
+
+  ProfileNode* node;
+ private:
+  int child_idx_;
+};
+
 } }  // namespace v8::internal
 
 #endif  // ENABLE_LOGGING_AND_PROFILING

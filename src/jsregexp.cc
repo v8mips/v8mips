@@ -3161,57 +3161,38 @@ void DotPrinter::PrintOnFailure(RegExpNode* from, RegExpNode* on_failure) {
 }
 
 
-class TableEntryBodyPrinter {
- public:
-  TableEntryBodyPrinter(StringStream* stream, ChoiceNode* choice)
-      : stream_(stream), choice_(choice) { }
-  void Call(uc16 from, DispatchTable::Entry entry) {
-    OutSet* out_set = entry.out_set();
-    for (unsigned i = 0; i < OutSet::kFirstLimit; i++) {
-      if (out_set->Get(i)) {
-        stream()->Add("    n%p:s%io%i -> n%p;\n",
-                      choice(),
-                      from,
-                      i,
-                      choice()->alternatives()->at(i).node());
-      }
+void TableEntryBodyPrinter::Call(uc16 from, DispatchTable::Entry entry) {
+  OutSet* out_set = entry.out_set();
+  for (unsigned i = 0; i < OutSet::kFirstLimit; i++) {
+    if (out_set->Get(i)) {
+      stream()->Add("    n%p:s%io%i -> n%p;\n",
+                    choice(),
+                    from,
+                    i,
+                    choice()->alternatives()->at(i).node());
     }
   }
- private:
-  StringStream* stream() { return stream_; }
-  ChoiceNode* choice() { return choice_; }
-  StringStream* stream_;
-  ChoiceNode* choice_;
-};
+}
 
 
-class TableEntryHeaderPrinter {
- public:
-  explicit TableEntryHeaderPrinter(StringStream* stream)
-      : first_(true), stream_(stream) { }
-  void Call(uc16 from, DispatchTable::Entry entry) {
-    if (first_) {
-      first_ = false;
-    } else {
-      stream()->Add("|");
-    }
-    stream()->Add("{\\%k-\\%k|{", from, entry.to());
-    OutSet* out_set = entry.out_set();
-    int priority = 0;
-    for (unsigned i = 0; i < OutSet::kFirstLimit; i++) {
-      if (out_set->Get(i)) {
-        if (priority > 0) stream()->Add("|");
-        stream()->Add("<s%io%i> %i", from, i, priority);
-        priority++;
-      }
-    }
-    stream()->Add("}}");
+void TableEntryHeaderPrinter::Call(uc16 from, DispatchTable::Entry entry) {
+  if (first_) {
+    first_ = false;
+  } else {
+    stream()->Add("|");
   }
- private:
-  bool first_;
-  StringStream* stream() { return stream_; }
-  StringStream* stream_;
-};
+  stream()->Add("{\\%k-\\%k|{", from, entry.to());
+  OutSet* out_set = entry.out_set();
+  int priority = 0;
+  for (unsigned i = 0; i < OutSet::kFirstLimit; i++) {
+    if (out_set->Get(i)) {
+      if (priority > 0) stream()->Add("|");
+      stream()->Add("<s%io%i> %i", from, i, priority);
+      priority++;
+    }
+  }
+  stream()->Add("}}");
+}
 
 
 class AttributePrinter {
@@ -3408,16 +3389,6 @@ void DotPrinter::VisitAction(ActionNode* that) {
   stream()->Add("  n%p -> n%p;\n", that, successor);
   Visit(successor);
 }
-
-
-class DispatchTableDumper {
- public:
-  explicit DispatchTableDumper(StringStream* stream) : stream_(stream) { }
-  void Call(uc16 key, DispatchTable::Entry entry);
-  StringStream* stream() { return stream_; }
- private:
-  StringStream* stream_;
-};
 
 
 void DispatchTableDumper::Call(uc16 key, DispatchTable::Entry entry) {
@@ -3957,23 +3928,6 @@ void CharacterRange::AddClassEscape(uc16 type,
 Vector<const uc16> CharacterRange::GetWordBounds() {
   return Vector<const uc16>(kWordRanges, kWordRangeCount);
 }
-
-
-class CharacterRangeSplitter {
- public:
-  CharacterRangeSplitter(ZoneList<CharacterRange>** included,
-                          ZoneList<CharacterRange>** excluded)
-      : included_(included),
-        excluded_(excluded) { }
-  void Call(uc16 from, DispatchTable::Entry entry);
-
-  static const int kInBase = 0;
-  static const int kInOverlay = 1;
-
- private:
-  ZoneList<CharacterRange>** included_;
-  ZoneList<CharacterRange>** excluded_;
-};
 
 
 void CharacterRangeSplitter::Call(uc16 from, DispatchTable::Entry entry) {
@@ -5070,16 +5024,6 @@ void DispatchTableConstructor::BuildTable(ChoiceNode* node) {
   }
   node->set_being_calculated(false);
 }
-
-
-class AddDispatchRange {
- public:
-  explicit AddDispatchRange(DispatchTableConstructor* constructor)
-    : constructor_(constructor) { }
-  void Call(uc32 from, DispatchTable::Entry entry);
- private:
-  DispatchTableConstructor* constructor_;
-};
 
 
 void AddDispatchRange::Call(uc32 from, DispatchTable::Entry entry) {

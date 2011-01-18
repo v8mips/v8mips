@@ -182,18 +182,6 @@ void ProfileNode::Print(int indent) {
 }
 
 
-class DeleteNodesCallback {
- public:
-  void BeforeTraversingChild(ProfileNode*, ProfileNode*) { }
-
-  void AfterAllChildrenTraversed(ProfileNode* node) {
-    delete node;
-  }
-
-  void AfterChildTraversed(ProfileNode*, ProfileNode*) { }
-};
-
-
 ProfileTree::ProfileTree()
     : root_entry_(Logger::FUNCTION_TAG,
                   "",
@@ -237,57 +225,36 @@ void ProfileTree::AddPathFromStart(const Vector<CodeEntry*>& path) {
 }
 
 
-struct NodesPair {
-  NodesPair(ProfileNode* src, ProfileNode* dst)
-      : src(src), dst(dst) { }
-  ProfileNode* src;
-  ProfileNode* dst;
-};
-
-
-class FilteredCloneCallback {
- public:
-  explicit FilteredCloneCallback(ProfileNode* dst_root, int security_token_id)
-      : stack_(10),
-        security_token_id_(security_token_id) {
-    stack_.Add(NodesPair(NULL, dst_root));
+void FilteredCloneCallback::BeforeTraversingChild(ProfileNode* parent, ProfileNode* child) {
+  if (IsTokenAcceptable(child->entry()->security_token_id(),
+                        parent->entry()->security_token_id())) {
+    ProfileNode* clone = stack_.last().dst->FindOrAddChild(child->entry());
+    clone->IncreaseSelfTicks(child->self_ticks());
+    stack_.Add(NodesPair(child, clone));
+  } else {
+    // Attribute ticks to parent node.
+    stack_.last().dst->IncreaseSelfTicks(child->self_ticks());
   }
+}
 
-  void BeforeTraversingChild(ProfileNode* parent, ProfileNode* child) {
-    if (IsTokenAcceptable(child->entry()->security_token_id(),
-                          parent->entry()->security_token_id())) {
-      ProfileNode* clone = stack_.last().dst->FindOrAddChild(child->entry());
-      clone->IncreaseSelfTicks(child->self_ticks());
-      stack_.Add(NodesPair(child, clone));
-    } else {
-      // Attribute ticks to parent node.
-      stack_.last().dst->IncreaseSelfTicks(child->self_ticks());
-    }
+void FilteredCloneCallback::AfterAllChildrenTraversed(ProfileNode* parent) { }
+
+void FilteredCloneCallback::AfterChildTraversed(ProfileNode*, ProfileNode* child) {
+  if (stack_.last().src == child) {
+    stack_.RemoveLast();
   }
+}
 
-  void AfterAllChildrenTraversed(ProfileNode* parent) { }
-
-  void AfterChildTraversed(ProfileNode*, ProfileNode* child) {
-    if (stack_.last().src == child) {
-      stack_.RemoveLast();
-    }
+bool FilteredCloneCallback::IsTokenAcceptable(int token, int parent_token) {
+  if (token == TokenEnumerator::kNoSecurityToken
+      || token == security_token_id_) return true;
+  if (token == TokenEnumerator::kInheritsSecurityToken) {
+    ASSERT(parent_token != TokenEnumerator::kInheritsSecurityToken);
+    return parent_token == TokenEnumerator::kNoSecurityToken
+        || parent_token == security_token_id_;
   }
-
- private:
-  bool IsTokenAcceptable(int token, int parent_token) {
-    if (token == TokenEnumerator::kNoSecurityToken
-        || token == security_token_id_) return true;
-    if (token == TokenEnumerator::kInheritsSecurityToken) {
-      ASSERT(parent_token != TokenEnumerator::kInheritsSecurityToken);
-      return parent_token == TokenEnumerator::kNoSecurityToken
-          || parent_token == security_token_id_;
-    }
-    return false;
-  }
-
-  List<NodesPair> stack_;
-  int security_token_id_;
-};
+  return false;
+}
 
 void ProfileTree::FilteredClone(ProfileTree* src, int security_token_id) {
   ms_to_ticks_scale_ = src->ms_to_ticks_scale_;
@@ -300,24 +267,6 @@ void ProfileTree::FilteredClone(ProfileTree* src, int security_token_id) {
 void ProfileTree::SetTickRatePerMs(double ticks_per_ms) {
   ms_to_ticks_scale_ = ticks_per_ms > 0 ? 1.0 / ticks_per_ms : 1.0;
 }
-
-
-class Position {
- public:
-  explicit Position(ProfileNode* node)
-      : node(node), child_idx_(0) { }
-  INLINE(ProfileNode* current_child()) {
-    return node->children()->at(child_idx_);
-  }
-  INLINE(bool has_current_child()) {
-    return child_idx_ < node->children()->length();
-  }
-  INLINE(void next_child()) { ++child_idx_; }
-
-  ProfileNode* node;
- private:
-  int child_idx_;
-};
 
 
 // Non-recursive implementation of a depth-first post-order tree traversal.
@@ -342,20 +291,6 @@ void ProfileTree::TraverseDepthFirst(Callback* callback) {
     }
   }
 }
-
-
-class CalculateTotalTicksCallback {
- public:
-  void BeforeTraversingChild(ProfileNode*, ProfileNode*) { }
-
-  void AfterAllChildrenTraversed(ProfileNode* node) {
-    node->IncreaseTotalTicks(node->self_ticks());
-  }
-
-  void AfterChildTraversed(ProfileNode* parent, ProfileNode* child) {
-    parent->IncreaseTotalTicks(child->total_ticks());
-  }
-};
 
 
 void ProfileTree::CalculateTotalTicks() {
@@ -913,11 +848,6 @@ void HeapEntry::ApplyAndPaintAllReachable(Visitor* visitor) {
 }
 
 
-class NullClass {
- public:
-  void Apply(HeapEntry* entry) { }
-};
-
 void HeapEntry::PaintAllReachable() {
   NullClass null;
   ApplyAndPaintAllReachable(&null);
@@ -1009,40 +939,6 @@ int HeapEntryCalculatedData::RetainedSize(HeapEntry* entry) {
   return retained_size_;
 }
 
-
-class ReachableSizeCalculator {
- public:
-  ReachableSizeCalculator()
-      : reachable_size_(0) {
-  }
-
-  int reachable_size() const { return reachable_size_; }
-
-  void Apply(HeapEntry* entry) {
-    reachable_size_ += entry->self_size();
-  }
-
- private:
-  int reachable_size_;
-};
-
-class RetainedSizeCalculator {
- public:
-  RetainedSizeCalculator()
-      : retained_size_(0) {
-  }
-
-  int reained_size() const { return retained_size_; }
-
-  void Apply(HeapEntry** entry_ptr) {
-    if ((*entry_ptr)->painted_reachable()) {
-      retained_size_ += (*entry_ptr)->self_size();
-    }
-  }
-
- private:
-  int retained_size_;
-};
 
 void HeapEntryCalculatedData::CalculateSizes(HeapEntry* entry) {
   // To calculate retained size, first we paint all reachable nodes in
@@ -1213,12 +1109,14 @@ HeapSnapshot::HeapSnapshot(HeapSnapshotsCollection* collection,
       root_entry_index_(-1),
       raw_entries_(NULL),
       entries_sorted_(false) {
+#ifndef __sgi
   STATIC_ASSERT(
       sizeof(HeapGraphEdge) ==
       SnapshotSizeConstants<sizeof(void*)>::kExpectedHeapGraphEdgeSize);  // NOLINT
   STATIC_ASSERT(
       sizeof(HeapEntry) ==
       SnapshotSizeConstants<sizeof(void*)>::kExpectedHeapEntrySize);  // NOLINT
+#endif
 }
 
 
@@ -1731,21 +1629,6 @@ class SnapshotFiller : public HeapSnapshotGenerator::SnapshotFillerInterface {
   HeapSnapshot* snapshot_;
   HeapSnapshotsCollection* collection_;
   HeapEntriesMap* entries_;
-};
-
-class SnapshotAllocator {
- public:
-  explicit SnapshotAllocator(HeapSnapshot* snapshot)
-      : snapshot_(snapshot) { }
-  HeapEntry* GetEntry(
-      HeapObject* obj, int children_count, int retainers_count) {
-    HeapEntry* entry =
-        snapshot_->AddEntry(obj, children_count, retainers_count);
-    ASSERT(entry != NULL);
-    return entry;
-  }
- private:
-  HeapSnapshot* snapshot_;
 };
 
 void HeapSnapshotGenerator::GenerateSnapshot() {

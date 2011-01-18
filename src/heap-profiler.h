@@ -364,6 +364,174 @@ class ProducerHeapProfile : public AllStatic {
   static bool can_log_;
 };
 
+
+class CountingConstructorHeapProfileIterator {
+ public:
+  CountingConstructorHeapProfileIterator()
+      : entities_count_(0), children_count_(0) {
+  }
+
+  void Call(const JSObjectsCluster& cluster,
+            const NumberAndSizeInfo& number_and_size) {
+    ++entities_count_;
+    children_count_ += number_and_size.number();
+  }
+
+  int entities_count() { return entities_count_; }
+  int children_count() { return children_count_; }
+
+ private:
+  int entities_count_;
+  int children_count_;
+};
+
+
+class AllocatingConstructorHeapProfileIterator {
+ public:
+  AllocatingConstructorHeapProfileIterator(HeapSnapshot* snapshot,
+                                  int* root_child_index)
+      : snapshot_(snapshot),
+        root_child_index_(root_child_index) {
+  }
+
+  void Call(const JSObjectsCluster& cluster,
+            const NumberAndSizeInfo& number_and_size);
+
+ private:
+  HeapSnapshot* snapshot_;
+  int* root_child_index_;
+};
+
+
+class AllocatingRetainersIterator {
+ public:
+  AllocatingRetainersIterator(const JSObjectsCluster& child_cluster,
+                              HeapEntriesMap* map);
+  void Call(const JSObjectsCluster& cluster,
+            const NumberAndSizeInfo& number_and_size);
+
+ private:
+  HeapObject* child_;
+  HeapEntriesMap* map_;
+  HeapEntry* child_entry_;
+};
+
+
+class CountingRetainersIterator {
+ public:
+  CountingRetainersIterator(const JSObjectsCluster& child_cluster,
+                            HeapEntriesMap* map);
+  void Call(const JSObjectsCluster& cluster,
+            const NumberAndSizeInfo& number_and_size);
+
+ private:
+  HeapObject* child_;
+  HeapEntriesMap* map_;
+};
+
+
+template<class RetainersIterator>
+class AggregatingRetainerTreeIterator {
+ public:
+  explicit AggregatingRetainerTreeIterator(ClustersCoarser* coarser,
+                                           HeapEntriesMap* map)
+      : coarser_(coarser), map_(map) {
+  }
+
+  void Call(const JSObjectsCluster& cluster, JSObjectsClusterTree* tree) {
+    if (coarser_ != NULL &&
+        !coarser_->GetCoarseEquivalent(cluster).is_null()) return;
+    JSObjectsClusterTree* tree_to_iterate = tree;
+    ZoneScope zs(DELETE_ON_EXIT);
+    JSObjectsClusterTree dest_tree_;
+    if (coarser_ != NULL) {
+      RetainersAggregator retainers_aggregator(coarser_, &dest_tree_);
+      tree->ForEach(&retainers_aggregator);
+      tree_to_iterate = &dest_tree_;
+    }
+    RetainersIterator iterator(cluster, map_);
+    tree_to_iterate->ForEach(&iterator);
+  }
+
+
+ private:
+  ClustersCoarser* coarser_;
+  HeapEntriesMap* map_;
+};
+
+
+// Visitor for printing a cluster tree.
+class ClusterTreePrinter BASE_EMBEDDED {
+ public:
+  explicit ClusterTreePrinter(StringStream* stream) : stream_(stream) {}
+  void Call(const JSObjectsCluster& cluster,
+            const NumberAndSizeInfo& number_and_size) {
+    Print(stream_, cluster, number_and_size);
+  }
+  static void Print(StringStream* stream,
+                    const JSObjectsCluster& cluster,
+                    const NumberAndSizeInfo& number_and_size);
+
+ private:
+  StringStream* stream_;
+};
+
+
+// Visitor for aggregating references count of equivalent clusters.
+class RetainersAggregator BASE_EMBEDDED {
+ public:
+  RetainersAggregator(ClustersCoarser* coarser, JSObjectsClusterTree* dest_tree)
+      : coarser_(coarser), dest_tree_(dest_tree) {}
+  void Call(const JSObjectsCluster& cluster,
+            const NumberAndSizeInfo& number_and_size);
+
+ private:
+  ClustersCoarser* coarser_;
+  JSObjectsClusterTree* dest_tree_;
+};
+
+
+// Visitor for printing retainers tree. Aggregates equivalent retainer clusters.
+class AggregatingRetainerTreePrinter BASE_EMBEDDED {
+ public:
+  AggregatingRetainerTreePrinter(ClustersCoarser* coarser,
+                                 RetainerHeapProfile::Printer* printer)
+      : coarser_(coarser), printer_(printer) {}
+  void Call(const JSObjectsCluster& cluster, JSObjectsClusterTree* tree);
+
+ private:
+  ClustersCoarser* coarser_;
+  RetainerHeapProfile::Printer* printer_;
+};
+
+
+// Visitor for printing a retainer tree.
+class SimpleRetainerTreePrinter BASE_EMBEDDED {
+ public:
+  explicit SimpleRetainerTreePrinter(RetainerHeapProfile::Printer* printer)
+      : printer_(printer) {}
+  void Call(const JSObjectsCluster& cluster, JSObjectsClusterTree* tree);
+
+ private:
+  RetainerHeapProfile::Printer* printer_;
+};
+
+
+class AggregatedRetainerTreeAllocator {
+ public:
+  AggregatedRetainerTreeAllocator(HeapSnapshot* snapshot,
+                                  int* root_child_index)
+      : snapshot_(snapshot), root_child_index_(root_child_index) {
+  }
+
+  HeapEntry* GetEntry(
+      HeapObject* obj, int children_count, int retainers_count);
+
+ private:
+  HeapSnapshot* snapshot_;
+  int* root_child_index_;
+};
+
 #endif  // ENABLE_LOGGING_AND_PROFILING
 
 } }  // namespace v8::internal

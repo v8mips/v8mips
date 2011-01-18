@@ -28,6 +28,8 @@
 #ifndef V8_RUNTIME_H_
 #define V8_RUNTIME_H_
 
+#include "zone.h"
+
 namespace v8 {
 namespace internal {
 
@@ -455,6 +457,165 @@ class Runtime : public AllStatic {
   // Helper functions used stubs.
   static void PerformGC(Object* result);
 };
+
+
+class FixedArrayBuilder {
+ public:
+  explicit FixedArrayBuilder(int initial_capacity)
+      : array_(Factory::NewFixedArrayWithHoles(initial_capacity)),
+        length_(0) {
+    // Require a non-zero initial size. Ensures that doubling the size to
+    // extend the array will work.
+    ASSERT(initial_capacity > 0);
+  }
+
+  explicit FixedArrayBuilder(Handle<FixedArray> backing_store)
+      : array_(backing_store),
+        length_(0) {
+    // Require a non-zero initial size. Ensures that doubling the size to
+    // extend the array will work.
+    ASSERT(backing_store->length() > 0);
+  }
+
+  bool HasCapacity(int elements);
+  void EnsureCapacity(int elements);
+  void Add(Object* value);
+  void Add(Smi* value);
+  Handle<FixedArray> array();
+  int length();
+  int capacity();
+  Handle<JSArray> ToJSArray();
+  Handle<JSArray> ToJSArray(Handle<JSArray> target_array);
+
+ private:
+  Handle<FixedArray> array_;
+  int length_;
+};
+
+
+class ReplacementStringBuilder {
+ public:
+  ReplacementStringBuilder(Handle<String> subject, int estimated_part_count)
+      : array_builder_(estimated_part_count),
+        subject_(subject),
+        character_count_(0),
+        is_ascii_(subject->IsAsciiRepresentation()) {
+    // Require a non-zero initial size. Ensures that doubling the size to
+    // extend the array will work.
+    ASSERT(estimated_part_count > 0);
+  }
+
+  static inline void AddSubjectSlice(FixedArrayBuilder* builder,
+                                     int from,
+                                     int to);
+  void EnsureCapacity(int elements);
+  void AddSubjectSlice(int from, int to);
+  void AddString(Handle<String> string);
+  Handle<String> ToString();
+  void IncrementCharacterCount(int by);
+  Handle<JSArray> GetParts();
+
+ private:
+  Handle<String> NewRawAsciiString(int size);
+  Handle<String> NewRawTwoByteString(int size);
+  void AddElement(Object* element);
+
+  FixedArrayBuilder array_builder_;
+  Handle<String> subject_;
+  int character_count_;
+  bool is_ascii_;
+};
+
+
+class CompiledReplacement {
+ public:
+  CompiledReplacement()
+      : parts_(1), replacement_substrings_(0) {}
+
+  void Compile(Handle<String> replacement,
+               int capture_count,
+               int subject_length);
+
+  void Apply(ReplacementStringBuilder* builder,
+             int match_from,
+             int match_to,
+             Handle<JSArray> last_match_info);
+
+  // Number of distinct parts of the replacement pattern.
+  int parts();
+
+ private:
+  enum PartType {
+    SUBJECT_PREFIX = 1,
+    SUBJECT_SUFFIX,
+    SUBJECT_CAPTURE,
+    REPLACEMENT_SUBSTRING,
+    REPLACEMENT_STRING,
+
+    NUMBER_OF_PART_TYPES
+  };
+
+  struct ReplacementPart {
+    static inline ReplacementPart SubjectMatch() {
+      return ReplacementPart(SUBJECT_CAPTURE, 0);
+    }
+    static inline ReplacementPart SubjectCapture(int capture_index) {
+      return ReplacementPart(SUBJECT_CAPTURE, capture_index);
+    }
+    static inline ReplacementPart SubjectPrefix() {
+      return ReplacementPart(SUBJECT_PREFIX, 0);
+    }
+    static inline ReplacementPart SubjectSuffix(int subject_length) {
+      return ReplacementPart(SUBJECT_SUFFIX, subject_length);
+    }
+    static inline ReplacementPart ReplacementString() {
+      return ReplacementPart(REPLACEMENT_STRING, 0);
+    }
+    static inline ReplacementPart ReplacementSubString(int from, int to) {
+      ASSERT(from >= 0);
+      ASSERT(to > from);
+      return ReplacementPart(-from, to);
+    }
+
+    // If tag <= 0 then it is the negation of a start index of a substring of
+    // the replacement pattern, otherwise it's a value from PartType.
+    ReplacementPart(int tag, int data)
+        : tag(tag), data(data) {
+      // Must be non-positive or a PartType value.
+      ASSERT(tag < NUMBER_OF_PART_TYPES);
+    }
+    // Either a value of PartType or a non-positive number that is
+    // the negation of an index into the replacement string.
+    int tag;
+    // The data value's interpretation depends on the value of tag:
+    // tag == SUBJECT_PREFIX ||
+    // tag == SUBJECT_SUFFIX:  data is unused.
+    // tag == SUBJECT_CAPTURE: data is the number of the capture.
+    // tag == REPLACEMENT_SUBSTRING ||
+    // tag == REPLACEMENT_STRING:    data is index into array of substrings
+    //                               of the replacement string.
+    // tag <= 0: Temporary representation of the substring of the replacement
+    //           string ranging over -tag .. data.
+    //           Is replaced by REPLACEMENT_{SUB,}STRING when we create the
+    //           substring objects.
+    int data;
+  };
+
+  template<typename Char>
+  static void ParseReplacementPattern(ZoneList<ReplacementPart>* parts,
+                                      Vector<Char> characters,
+                                      int capture_count,
+                                      int subject_length);
+  ZoneList<ReplacementPart> parts_;
+  ZoneList<Handle<String> > replacement_substrings_;
+};
+
+
+template <typename schar, typename pchar>
+void FindStringIndices(Vector<const schar> subject,
+                       Vector<const pchar> pattern,
+                       ZoneList<int>* indices,
+                       unsigned int limit);
 
 
 } }  // namespace v8::internal
