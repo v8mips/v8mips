@@ -230,6 +230,13 @@ void FullCodeGenerator::EmitReturnSequence() {
 }
 
 
+FullCodeGenerator::ConstantOperand FullCodeGenerator::GetConstantOperand(
+    Token::Value op, Expression* left, Expression* right) {
+  ASSERT(ShouldInlineSmiCase(op));
+  return kNoConstants;
+}
+
+
 void FullCodeGenerator::Apply(Expression::Context context, Register reg) {
   switch (context) {
     case Expression::kUninitialized:
@@ -672,17 +679,18 @@ void FullCodeGenerator::VisitSwitchStatement(SwitchStatement* stmt) {
     // Compile the label expression.
     VisitForValue(clause->label(), kAccumulator);
 
-    // Perform the comparison as if via '==='.  The comparison stub expects
-    // the smi vs. smi case to be handled before it is called.
-    Label slow_case;
-    __ movq(rdx, Operand(rsp, 0));  // Switch value.
-    __ JumpIfNotBothSmi(rdx, rax, &slow_case);
-    __ SmiCompare(rdx, rax);
-    __ j(not_equal, &next_test);
-    __ Drop(1);  // Switch value is no longer needed.
-    __ jmp(clause->body_target()->entry_label());
+    // Perform the comparison as if via '==='.
+    if (ShouldInlineSmiCase(Token::EQ_STRICT)) {
+      Label slow_case;
+      __ movq(rdx, Operand(rsp, 0));  // Switch value.
+      __ JumpIfNotBothSmi(rdx, rax, &slow_case);
+      __ SmiCompare(rdx, rax);
+      __ j(not_equal, &next_test);
+      __ Drop(1);  // Switch value is no longer needed.
+      __ jmp(clause->body_target()->entry_label());
+      __ bind(&slow_case);
+    }
 
-    __ bind(&slow_case);
     CompareStub stub(equal, true);
     __ CallStub(&stub);
     __ testq(rax, rax);
@@ -1155,10 +1163,11 @@ void FullCodeGenerator::VisitAssignment(Assignment* expr) {
   // slot. Variables with rewrite to .arguments are treated as KEYED_PROPERTY.
   enum LhsKind { VARIABLE, NAMED_PROPERTY, KEYED_PROPERTY };
   LhsKind assign_type = VARIABLE;
-  Property* prop = expr->target()->AsProperty();
-  if (prop != NULL) {
-    assign_type =
-        (prop->key()->IsPropertyName()) ? NAMED_PROPERTY : KEYED_PROPERTY;
+  Property* property = expr->target()->AsProperty();
+  if (property != NULL) {
+    assign_type = (property->key()->IsPropertyName())
+        ? NAMED_PROPERTY
+        : KEYED_PROPERTY;
   }
 
   // Evaluate LHS expression.
@@ -1169,60 +1178,70 @@ void FullCodeGenerator::VisitAssignment(Assignment* expr) {
     case NAMED_PROPERTY:
       if (expr->is_compound()) {
         // We need the receiver both on the stack and in the accumulator.
-        VisitForValue(prop->obj(), kAccumulator);
+        VisitForValue(property->obj(), kAccumulator);
         __ push(result_register());
       } else {
-        VisitForValue(prop->obj(), kStack);
+        VisitForValue(property->obj(), kStack);
       }
       break;
     case KEYED_PROPERTY:
       if (expr->is_compound()) {
-        VisitForValue(prop->obj(), kStack);
-        VisitForValue(prop->key(), kAccumulator);
+        VisitForValue(property->obj(), kStack);
+        VisitForValue(property->key(), kAccumulator);
         __ movq(rdx, Operand(rsp, 0));
         __ push(rax);
       } else {
-        VisitForValue(prop->obj(), kStack);
-        VisitForValue(prop->key(), kStack);
+        VisitForValue(property->obj(), kStack);
+        VisitForValue(property->key(), kStack);
       }
       break;
   }
 
-  // If we have a compound assignment: Get value of LHS expression and
-  // store in on top of the stack.
   if (expr->is_compound()) {
     Location saved_location = location_;
-    location_ = kStack;
+    location_ = kAccumulator;
     switch (assign_type) {
       case VARIABLE:
         EmitVariableLoad(expr->target()->AsVariableProxy()->var(),
                          Expression::kValue);
         break;
       case NAMED_PROPERTY:
-        EmitNamedPropertyLoad(prop);
-        __ push(result_register());
+        EmitNamedPropertyLoad(property);
         break;
       case KEYED_PROPERTY:
-        EmitKeyedPropertyLoad(prop);
-        __ push(result_register());
+        EmitKeyedPropertyLoad(property);
         break;
     }
-    location_ = saved_location;
-  }
 
-  // Evaluate RHS expression.
-  Expression* rhs = expr->value();
-  VisitForValue(rhs, kAccumulator);
+    Token::Value op = expr->binary_op();
+    ConstantOperand constant = ShouldInlineSmiCase(op)
+        ? GetConstantOperand(op, expr->target(), expr->value())
+        : kNoConstants;
+    ASSERT(constant == kRightConstant || constant == kNoConstants);
+    if (constant == kNoConstants) {
+      __ push(rax);  // Left operand goes on the stack.
+      VisitForValue(expr->value(), kAccumulator);
+    }
 
-  // If we have a compound assignment: Apply operator.
-  if (expr->is_compound()) {
-    Location saved_location = location_;
-    location_ = kAccumulator;
     OverwriteMode mode = expr->value()->ResultOverwriteAllowed()
         ? OVERWRITE_RIGHT
         : NO_OVERWRITE;
-    EmitBinaryOp(expr->binary_op(), Expression::kValue, mode);
+    SetSourcePosition(expr->position() + 1);
+    if (ShouldInlineSmiCase(op)) {
+      EmitInlineSmiBinaryOp(expr,
+                            op,
+                            Expression::kValue,
+                            mode,
+                            expr->target(),
+                            expr->value(),
+                            constant);
+    } else {
+      EmitBinaryOp(op, Expression::kValue, mode);
+    }
     location_ = saved_location;
+
+  } else {
+    VisitForValue(expr->value(), kAccumulator);
   }
 
   // Record source position before possible IC call.
@@ -1260,6 +1279,74 @@ void FullCodeGenerator::EmitKeyedPropertyLoad(Property* prop) {
   Handle<Code> ic(Builtins::builtin(Builtins::KeyedLoadIC_Initialize));
   __ Call(ic, RelocInfo::CODE_TARGET);
   __ nop();
+}
+
+
+void FullCodeGenerator::EmitInlineSmiBinaryOp(Expression* expr,
+                                              Token::Value op,
+                                              Expression::Context context,
+                                              OverwriteMode mode,
+                                              Expression* left,
+                                              Expression* right,
+                                              ConstantOperand constant) {
+  ASSERT(constant == kNoConstants);  // Only handled case.
+
+  // Do combined smi check of the operands. Left operand is on the
+  // stack (popped into rdx). Right operand is in rax but moved into
+  // rcx to make the shifts easier.
+  Label done, stub_call, smi_case;
+  __ pop(rdx);
+  __ movq(rcx, rax);
+  Condition smi = __ CheckBothSmi(rdx, rax);
+  __ j(smi, &smi_case);
+
+  __ bind(&stub_call);
+  GenericBinaryOpStub stub(op, mode, NO_SMI_CODE_IN_STUB, TypeInfo::Unknown());
+  if (stub.ArgsInRegistersSupported()) {
+    stub.GenerateCall(masm_, rdx, rcx);
+  } else {
+    __ push(rdx);
+    __ push(rcx);
+    __ CallStub(&stub);
+  }
+  __ jmp(&done);
+
+  __ bind(&smi_case);
+  switch (op) {
+    case Token::SAR:
+      __ SmiShiftArithmeticRight(rax, rdx, rcx);
+      break;
+    case Token::SHL:
+      __ SmiShiftLeft(rax, rdx, rcx);
+      break;
+    case Token::SHR:
+      __ SmiShiftLogicalRight(rax, rdx, rcx, &stub_call);
+      break;
+    case Token::ADD:
+      __ SmiAdd(rax, rdx, rcx, &stub_call);
+      break;
+    case Token::SUB:
+      __ SmiSub(rax, rdx, rcx, &stub_call);
+      break;
+    case Token::MUL:
+      __ SmiMul(rax, rdx, rcx, &stub_call);
+      break;
+    case Token::BIT_OR:
+      __ SmiOr(rax, rdx, rcx);
+      break;
+    case Token::BIT_AND:
+      __ SmiAnd(rax, rdx, rcx);
+      break;
+    case Token::BIT_XOR:
+      __ SmiXor(rax, rdx, rcx);
+      break;
+    default:
+      UNREACHABLE();
+      break;
+  }
+
+  __ bind(&done);
+  Apply(context, rax);
 }
 
 
@@ -1970,8 +2057,8 @@ void FullCodeGenerator::EmitObjectEquals(ZoneList<Expression*>* args) {
 void FullCodeGenerator::EmitArguments(ZoneList<Expression*>* args) {
   ASSERT(args->length() == 1);
 
-  // ArgumentsAccessStub expects the key in edx and the formal
-  // parameter count in eax.
+  // ArgumentsAccessStub expects the key in rdx and the formal
+  // parameter count in rax.
   VisitForValue(args->at(0), kAccumulator);
   __ movq(rdx, rax);
   __ Move(rax, Smi::FromInt(scope()->num_parameters()));
@@ -2175,7 +2262,7 @@ void FullCodeGenerator::EmitSetValueOf(ZoneList<Expression*>* args) {
 
   VisitForValue(args->at(0), kStack);  // Load the object.
   VisitForValue(args->at(1), kAccumulator);  // Load the value.
-  __ pop(rbx);  // rax = value. ebx = object.
+  __ pop(rbx);  // rax = value. rbx = object.
 
   Label done;
   // If the object is a smi, return the value.
@@ -2667,25 +2754,24 @@ void FullCodeGenerator::VisitUnaryOperation(UnaryOperation* expr) {
 
     case Token::BIT_NOT: {
       Comment cmt(masm_, "[ UnaryOperation (BIT_NOT)");
-      bool can_overwrite = expr->expression()->ResultOverwriteAllowed();
-      UnaryOverwriteMode overwrite =
-          can_overwrite ? UNARY_OVERWRITE : UNARY_NO_OVERWRITE;
-      GenericUnaryOpStub stub(Token::BIT_NOT, overwrite);
-      // GenericUnaryOpStub expects the argument to be in the
-      // accumulator register rax.
+      // The generic unary operation stub expects the argument to be
+      // in the accumulator register rax.
       VisitForValue(expr->expression(), kAccumulator);
-      // Avoid calling the stub for Smis.
-      Label smi, done;
-      Condition is_smi = masm_->CheckSmi(result_register());
-      __ j(is_smi, &smi);
-      // Non-smi: call stub leaving result in accumulator register.
+      Label done;
+      if (ShouldInlineSmiCase(expr->op())) {
+        Label call_stub;
+        __ JumpIfNotSmi(rax, &call_stub);
+        __ SmiNot(rax, rax);
+        __ jmp(&done);
+        __ bind(&call_stub);
+      }
+      bool overwrite = expr->expression()->ResultOverwriteAllowed();
+      UnaryOverwriteMode mode =
+          overwrite ? UNARY_OVERWRITE : UNARY_NO_OVERWRITE;
+      GenericUnaryOpStub stub(Token::BIT_NOT, mode);
       __ CallStub(&stub);
-      __ jmp(&done);
-      // Perform operation directly on Smis.
-      __ bind(&smi);
-      __ SmiNot(result_register(), result_register());
       __ bind(&done);
-      Apply(context_, result_register());
+      Apply(context_, rax);
       break;
     }
 
@@ -3054,15 +3140,14 @@ void FullCodeGenerator::VisitCompareOperation(CompareOperation* expr) {
           UNREACHABLE();
       }
 
-      // The comparison stub expects the smi vs. smi case to be handled
-      // before it is called.
-      Label slow_case;
-      __ JumpIfNotBothSmi(rax, rdx, &slow_case);
-      __ SmiCompare(rdx, rax);
-      __ j(cc, if_true);
-      __ jmp(if_false);
+      if (ShouldInlineSmiCase(op)) {
+        Label slow_case;
+        __ JumpIfNotBothSmi(rax, rdx, &slow_case);
+        __ SmiCompare(rdx, rax);
+        Split(cc, if_true, if_false, NULL);
+        __ bind(&slow_case);
+      }
 
-      __ bind(&slow_case);
       CompareStub stub(cc, strict);
       __ CallStub(&stub);
       __ testq(rax, rax);
