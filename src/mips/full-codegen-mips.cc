@@ -176,7 +176,8 @@ void FullCodeGenerator::EmitKeyedPropertyLoad(Property* prop) {
 
 
 void FullCodeGenerator::EmitBinaryOp(Token::Value op,
-                                     Expression::Context context) {
+                                     Expression::Context context,
+                                     OverwriteMode mode) {
   UNIMPLEMENTED_MIPS();
 }
 
