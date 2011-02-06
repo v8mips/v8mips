@@ -49,6 +49,11 @@ void FullCodeGenerator::EmitReturnSequence() {
   UNIMPLEMENTED_MIPS();
 }
 
+FullCodeGenerator::ConstantOperand FullCodeGenerator::GetConstantOperand(
+    Token::Value op, Expression* left, Expression* right) {
+  UNIMPLEMENTED_MIPS();
+  return kNoConstants;
+}
 
 void FullCodeGenerator::Apply(Expression::Context context, Register reg) {
   UNIMPLEMENTED_MIPS();
@@ -174,6 +179,16 @@ void FullCodeGenerator::EmitKeyedPropertyLoad(Property* prop) {
   UNIMPLEMENTED_MIPS();
 }
 
+
+void FullCodeGenerator::EmitInlineSmiBinaryOp(Expression* expr,
+                                              Token::Value op,
+                                              Expression::Context context,
+                                              OverwriteMode mode,
+                                              Expression* left,
+                                              Expression* right,
+                                              ConstantOperand constant) {
+  UNIMPLEMENTED_MIPS();
+}
 
 void FullCodeGenerator::EmitBinaryOp(Token::Value op,
                                      Expression::Context context,
