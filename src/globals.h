@@ -52,7 +52,7 @@ namespace internal {
 #if CAN_USE_UNALIGNED_ACCESSES
 #define V8_HOST_CAN_READ_UNALIGNED 1
 #endif
-#elif defined(_MIPS_ARCH_MIPS32R2)
+#elif defined(_MIPS_ARCH_MIPS32R2) || defined(__sgi)
 #define V8_HOST_ARCH_MIPS 1
 #define V8_HOST_ARCH_32_BIT 1
 #else
