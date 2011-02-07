@@ -2191,11 +2191,11 @@ Object* LoadStubCompiler::CompileLoadGlobal(JSObject* object,
   }
 
   __ mov(v0, t0);
-  __ IncrementCounter(&Counters::named_load_global_inline, 1, a1, a3);
+  __ IncrementCounter(&Counters::named_load_global_stub, 1, a1, a3);
   __ Ret();
 
   __ bind(&miss);
-  __ IncrementCounter(&Counters::named_load_global_inline_miss, 1, a1, a3);
+  __ IncrementCounter(&Counters::named_load_global_stub_miss, 1, a1, a3);
   GenerateLoadMiss(masm(), Code::LOAD_IC);
 
   // Return the generated code.
