@@ -2101,11 +2101,7 @@ Runtime::FunctionId TranscendentalCacheStub::RuntimeFunction() {
 
 
 void StackCheckStub::Generate(MacroAssembler* masm) {
-  // Do tail-call to runtime routine.  Runtime routines expect at least one
-  // argument, so give it a Smi.
-  __ Push(zero_reg);
-  __ TailCallRuntime(Runtime::kStackGuard, 1, 1);
-  __ Ret();
+  __ TailCallRuntime(Runtime::kStackGuard, 0, 1);
 }
 
 
