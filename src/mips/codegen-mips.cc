@@ -916,14 +916,60 @@ class DeferredInlineSmiOperation: public DeferredCode {
   }
 
   virtual void Generate();
+  // This stub makes explicit calls to SaveRegisters(), RestoreRegisters() and
+  // Exit(). Currently on MIPS SaveRegisters() and RestoreRegisters() are empty
+  // methods, it is the responsibility of the deferred code to save and restore
+  // registers.
+  virtual bool AutoSaveAndRestore() { return false; }
+
+  void JumpToNonSmiInput(Condition cond, Register cmp1, const Operand& cmp2);
+  void JumpToAnswerOutOfRange(Condition cond,
+                              Register cmp1,
+                              const Operand& cmp2);
 
  private:
+  void GenerateNonSmiInput();
+  void GenerateAnswerOutOfRange();
+  void WriteNonSmiAnswer(Register answer,
+                         Register heap_number,
+                         Register scratch);
+
   Token::Value op_;
   int value_;
   bool reversed_;
   OverwriteMode overwrite_mode_;
   Register tos_register_;
+  Label non_smi_input_;
+  Label answer_out_of_range_;
 };
+
+
+// For bit operations we try harder and handle the case where the input is not
+// a Smi but a 32bits integer without calling the generic stub.
+void DeferredInlineSmiOperation::JumpToNonSmiInput(Condition cond,
+                                                   Register cmp1,
+                                                   const Operand& cmp2) {
+  ASSERT(Token::IsBitOp(op_));
+
+  __ Branch(&non_smi_input_, cond, cmp1, cmp2);
+}
+
+
+// For bit operations the result is always 32bits so we handle the case where
+// the result does not fit in a Smi without calling the generic stub.
+void DeferredInlineSmiOperation::JumpToAnswerOutOfRange(Condition cond,
+                                                        Register cmp1,
+                                                        const Operand& cmp2) {
+  ASSERT(Token::IsBitOp(op_));
+
+  if ((op_ == Token::SHR) && !CpuFeatures::IsSupported(FPU)) {
+    // >>> requires an unsigned to double conversion and the non FPU code
+    // does not support this conversion.
+    __ Branch(entry_label(), cond, cmp1, cmp2);
+  } else {
+    __ Branch(&answer_out_of_range_, cond, cmp1, cmp2);
+  }
+}
 
 // On entry the non-constant side of the binary operation is in tos_register_
 // and the constant smi side is nowhere.  The tos_register_ is not used by the
@@ -993,6 +1039,176 @@ void DeferredInlineSmiOperation::Generate() {
   // came into this function with, so we can merge back to that frame
   // without trashing it.
   copied_frame.MergeTo(frame_state()->frame());
+
+  Exit();
+
+  if (non_smi_input_.is_linked()) {
+    GenerateNonSmiInput();
+  }
+
+  if (answer_out_of_range_.is_linked()) {
+    GenerateAnswerOutOfRange();
+  }
+}
+
+
+// Convert and write the integer answer into heap_number.
+void DeferredInlineSmiOperation::WriteNonSmiAnswer(Register answer,
+                                                   Register heap_number,
+                                                   Register scratch) {
+  if (CpuFeatures::IsSupported(FPU)) {
+    CpuFeatures::Scope scope(FPU);
+    __ mtc1(answer, f0);
+    if (op_ == Token::SHR) {
+      __ Cvt_d_uw(f2, f0);
+    } else {
+      __ cvt_d_w(f2, f0);
+    }
+    __ Subu(scratch, heap_number, kHeapObjectTag);
+    __ sdc1(f2, MemOperand(scratch, HeapNumber::kValueOffset));
+  } else {
+    Register scratch2 = VirtualFrame::scratch2();
+    ASSERT(!scratch.is(scratch2));
+    ASSERT(!answer.is(scratch2));
+    ASSERT(!heap_number.is(scratch2));
+    WriteInt32ToHeapNumberStub stub(answer, heap_number, scratch,
+        scratch2);
+    __ CallStub(&stub);
+  }
+}
+
+
+void DeferredInlineSmiOperation::GenerateNonSmiInput() {
+  // We know the left hand side is not a Smi and the right hand side is an
+  // immediate value (value_) which can be represented as a Smi. We only
+  // handle bit operations.
+  ASSERT(Token::IsBitOp(op_));
+
+  if (FLAG_debug_code) {
+    __ Abort("Should not fall through!");
+  }
+
+  __ bind(&non_smi_input_);
+  if (FLAG_debug_code) {
+    __ AbortIfSmi(tos_register_);
+  }
+
+  // This routine uses the registers from a2 to t2.  At the moment they are
+  // not used by the register allocator, but when they are it should use
+  // SpillAll and MergeTo like DeferredInlineSmiOperation::Generate() above.
+
+  Register heap_number_map = t3;
+  __ LoadRoot(heap_number_map, Heap::kHeapNumberMapRootIndex);
+  __ lw(a3, FieldMemOperand(tos_register_, HeapNumber::kMapOffset));
+  // Not a number, fall back to the GenericBinaryOpStub.
+  __ Branch(entry_label(), ne, a3, Operand(heap_number_map));
+
+  Register int32 = a2;
+  // Not a 32bits signed int, fall back to the GenericBinaryOpStub.
+  __ ConvertToInt32(tos_register_, int32, t0, t1, entry_label());
+
+  // tos_register_ (a0 or a1): Original heap number.
+  // int32: signed 32bits int.
+
+  Label result_not_a_smi;
+  int shift_value = value_ & 0x1f;
+  switch (op_) {
+    case Token::BIT_OR:  __ Or(int32, int32, value_); break;
+    case Token::BIT_XOR: __ Xor(int32, int32, value_); break;
+    case Token::BIT_AND: __ And(int32, int32, value_); break;
+    case Token::SAR:
+      ASSERT(!reversed_);
+      if (shift_value != 0) {
+         __ sra(int32, int32, shift_value);
+      }
+      break;
+    case Token::SHR: {
+      ASSERT(!reversed_);
+      if (shift_value != 0) {
+        __ srl(int32, int32, shift_value);
+      }
+      // SHR is special because it is required to produce a positive answer.
+      if (CpuFeatures::IsSupported(FPU)) {
+        __ Branch(&result_not_a_smi, lt, int32, Operand(zero_reg));
+      } else {
+        // Non FPU code cannot convert from unsigned to double, so fall back
+        // to GenericBinaryOpStub.
+        __ Branch(entry_label(), lt, int32, Operand(zero_reg));
+      }
+      break;
+    }
+    case Token::SHL:
+      ASSERT(!reversed_);
+      if (shift_value != 0) {
+        __ sll(int32, int32, shift_value);
+      }
+      break;
+    default: UNREACHABLE();
+  }
+
+  // Check that the *signed* result fits in a smi. Not necessary for AND, SAR
+  // if the shift if more than 0 or SHR if the shit is more than 1.
+  if (!( (op_ == Token::AND) ||
+        ((op_ == Token::SAR) && (shift_value > 0)) ||
+        ((op_ == Token::SHR) && (shift_value > 1)))) {
+    __ Addu(a3, int32, Operand(0x40000000));
+    __ Branch(&result_not_a_smi, lt, a3, Operand(zero_reg));
+  }
+  __ sll(tos_register_, int32, kSmiTagSize);
+  Exit();
+
+  if (result_not_a_smi.is_linked()) {
+    __ bind(&result_not_a_smi);
+    if (overwrite_mode_ != OVERWRITE_LEFT) {
+      ASSERT((overwrite_mode_ == NO_OVERWRITE) ||
+             (overwrite_mode_ == OVERWRITE_RIGHT));
+      // If the allocation fails, fall back to the GenericBinaryOpStub.
+      __ AllocateHeapNumber(t0, t1, t2, heap_number_map, entry_label());
+      // Nothing can go wrong now, so overwrite tos.
+      __ mov(tos_register_, t0);
+    }
+
+    // int32: answer as signed 32bits integer.
+    // tos_register_: Heap number to write the answer into.
+    WriteNonSmiAnswer(int32, tos_register_, a3);
+
+    Exit();
+  }
+}
+
+
+void DeferredInlineSmiOperation::GenerateAnswerOutOfRange() {
+  // The input from a bitwise operation were Smis but the result cannot fit
+  // into a Smi, so we store it into a heap number. tos_register_ holds the
+  // result to be converted.
+  ASSERT(Token::IsBitOp(op_));
+  ASSERT(!reversed_);
+
+  if (FLAG_debug_code) {
+    __ Abort("Should not fall through!");
+  }
+
+  __ bind(&answer_out_of_range_);
+  if (((value_ & 0x1f) == 0) && (op_ == Token::SHR)) {
+    // >>> 0 is a special case where the result is already tagged but wrong
+    // because the Smi is negative. We untag it.
+    __ sra(tos_register_, tos_register_, kSmiTagSize);
+  }
+
+  // This routine uses the registers from a2 to t2.  At the moment they are
+  // not used by the register allocator, but when they are it should use
+  // SpillAll and MergeTo like DeferredInlineSmiOperation::Generate() above.
+
+  // Allocate the result heap number.
+  Register heap_number_map = t3;
+  Register heap_number = t0;
+  __ LoadRoot(heap_number_map, Heap::kHeapNumberMapRootIndex);
+  // If the allocation fails, fall back to the GenericBinaryOpStub.
+  __ AllocateHeapNumber(heap_number, t1, t2, heap_number_map, entry_label());
+  WriteNonSmiAnswer(tos_register_, heap_number, a3);
+  __ mov(tos_register_, heap_number);
+
+  Exit();
 }
 
 
@@ -1187,29 +1403,27 @@ void CodeGenerator::SmiOperation(Token::Value op,
     case Token::BIT_AND: {
      if (both_sides_are_smi) {
          switch (op) {
-          case Token::BIT_OR:  __ Or(v0, tos, Operand(value)); break;
-          case Token::BIT_XOR: __ Xor(v0, tos, Operand(value)); break;
-          case Token::BIT_AND: __ And(v0, tos, Operand(value)); break;
+          case Token::BIT_OR:  __ Or(tos, tos, Operand(value)); break;
+          case Token::BIT_XOR: __ Xor(tos, tos, Operand(value)); break;
+          case Token::BIT_AND: __ And(tos, tos, Operand(value)); break;
           default: UNREACHABLE();
         }
-        __ mov(tos, v0);
         frame_->EmitPush(tos, TypeInfo::Smi());
       } else {
         Register scratch = VirtualFrame::scratch0();
-        DeferredCode* deferred =
+        DeferredInlineSmiOperation* deferred =
           new DeferredInlineSmiOperation(op, int_value, reversed, mode, tos);
         __ And(scratch, tos, Operand(kSmiTagMask));
-        deferred->Branch(ne, scratch, Operand(zero_reg));
+        deferred->JumpToNonSmiInput(ne, scratch, Operand(zero_reg));
         switch (op) {
-          case Token::BIT_OR:  __ Or(v0, tos, Operand(value)); break;
-          case Token::BIT_XOR: __ Xor(v0, tos, Operand(value)); break;
-          case Token::BIT_AND: __ And(v0, tos, Operand(value)); break;
+          case Token::BIT_OR:  __ Or(tos, tos, Operand(value)); break;
+          case Token::BIT_XOR: __ Xor(tos, tos, Operand(value)); break;
+          case Token::BIT_AND: __ And(tos, tos, Operand(value)); break;
           default: UNREACHABLE();
         }
         deferred->BindExit();
         TypeInfo result_type =
             (op == Token::BIT_AND) ? TypeInfo::Smi() : TypeInfo::Integer32();
-        __ mov(tos, v0);
         frame_->EmitPush(tos, result_type);
       }
       break;
@@ -1266,51 +1480,68 @@ void CodeGenerator::SmiOperation(Token::Value op,
       }
 
       Register scratch = VirtualFrame::scratch0();
-      DeferredCode* deferred =
+      DeferredInlineSmiOperation* deferred =
         new DeferredInlineSmiOperation(op, shift_value, false, mode, tos);
-      bool skip_smi_test = both_sides_are_smi;
-      if (!skip_smi_test) {
+      if (!both_sides_are_smi) {
         __ And(v0, tos, Operand(kSmiTagMask));
-        deferred->Branch(ne, v0, Operand(zero_reg));
+        deferred->JumpToNonSmiInput(ne, v0, Operand(zero_reg));
       }
-      __ sra(v0, tos, kSmiTagSize);  // Remove tag.
+
       switch (op) {
         case Token::SHL: {
           if (shift_value != 0) {
-            __ sll(v0, v0, shift_value);
+            int adjusted_shift = shift_value - kSmiTagSize;
+            ASSERT(adjusted_shift >= 0);
+            if (adjusted_shift != 0) {
+              __ sll(tos, tos, adjusted_shift);
+            }
+            // Check that the *unsigned* result fits in a Smi.
+            __ Addu(scratch, tos, Operand(0x40000000));
+            deferred->JumpToAnswerOutOfRange(lt, scratch, Operand(zero_reg));
+            __ sll(tos, tos, kSmiTagSize);
           }
-          // Check that the *unsigned* result fits in a Smi.
-          __ Addu(scratch, v0, Operand(0x40000000));
-          deferred->Branch(lt, scratch, Operand(zero_reg));
           break;
         }
         case Token::SHR: {
           if (shift_value != 0) {
-            __ srl(v0, v0, shift_value);
+            __ sra(scratch, tos, kSmiTagSize); // Remove tag.
+            __ srl(tos, scratch, shift_value);
+            if (shift_value == 1) {
+              // Check that the *unsigned* result fits in a smi.
+              // Neither of the two high-order bits can be set:
+              // - 0x80000000: high bit would be lost when smi tagging
+              // - 0x40000000: this number would convert to negative when Smi
+              // tagging. These two cases can only happen with shifts
+              // by 0 or 1 when handed a valid smi.
+              Register scratch2 = VirtualFrame::scratch2();
+              __ And(scratch2, tos, Operand(0xc0000000));
+              if (!CpuFeatures::IsSupported(FPU)) {
+                // If the unsigned result does not fit in a Smi, we require an
+                // unsigned to double conversion. Without FPU V8 has to fall
+                // back to the runtime. The deferred code will expect tos
+                // to hold the original Smi to be shifted.
+                __ sll(scratch, scratch, kSmiTagSize);
+                __ movn(tos, scratch, scratch2); // Only move if scratch2 != 0.
+              }
+              deferred->JumpToAnswerOutOfRange(ne, scratch2, Operand(zero_reg));
+            }
+            __ sll(tos, tos, kSmiTagSize);
+          } else {
+            deferred->JumpToAnswerOutOfRange(lt, tos, Operand(zero_reg));
           }
-          // Check that the *unsigned* result fits in a smi.
-          // Neither of the two high-order bits can be set:
-          // - 0x80000000: high bit would be lost when smi tagging
-          // - 0x40000000: this number would convert to negative when
-          // Smi tagging these two cases can only happen with shifts
-          // by 0 or 1 when handed a valid smi.
-          __ And(scratch, v0, Operand(0xc0000000));
-          deferred->Branch(ne, scratch, Operand(zero_reg));
           break;
         }
         case Token::SAR: {
           if (shift_value != 0) {
-            // SAR by immediate 0 means we do not have to do anything.
-            __ sra(v0, v0, shift_value);
-
+            // Do the shift and the tag removal in one operation.
+            __ sra(tos, tos, (kSmiTagSize + shift_value));
+            __ sll(tos, tos, kSmiTagSize);
            }
           break;
         }
         default: UNREACHABLE();
       }
-      __ sll(v0, v0, kSmiTagSize);  // Tag result.
       deferred->BindExit();
-      __ mov(tos, v0);
       frame_->EmitPush(tos, result);
       break;
     }
@@ -1357,7 +1588,7 @@ void CodeGenerator::SmiOperation(Token::Value op,
       InlineMultiplyByKnownInt(masm_, tos, v0, int_value);
       deferred->BindExit();
       __ mov(tos, v0);
-        frame_->EmitPush(tos);
+      frame_->EmitPush(tos);
       break;
     }
 

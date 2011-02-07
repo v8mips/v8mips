@@ -465,6 +465,15 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
   void Trunc_uw_d(FPURegister fd, FPURegister fs);
   void Trunc_uw_d(FPURegister fd, Register rs);
 
+  // Convert the HeapNumber pointed to by source to a 32bits signed integer
+  // dest. If the HeapNumber does not fit into a 32bits signed integer branch
+  // to not_int32 label.
+  void ConvertToInt32(Register source,
+                      Register dest,
+                      Register scratch,
+                      Register scratch2,
+                      Label *not_int32);
+
   // -------------------------------------------------------------------------
   // Activation frames
 
