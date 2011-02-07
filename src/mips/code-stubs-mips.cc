@@ -985,6 +985,27 @@ void RecordWriteStub::Generate(MacroAssembler* masm) {
 void CompareStub::Generate(MacroAssembler* masm) {
   Label slow;  // Call builtin.
   Label not_smis, both_loaded_as_doubles;
+
+
+  if (include_smi_compare_) {
+    Label not_two_smis, smi_done;
+    __ Or(a2, a1, a0);
+    __ BranchOnNotSmi(a2, &not_two_smis);
+    __ Branch(&smi_done, ge, a1, Operand(a0), false);
+    __ subu(v0, a1, a0);  // This is in the branch delay slot.
+    // Correct the sign in case of overflow.
+    __ Subu(v0, zero_reg, v0);
+    __ bind(&smi_done);
+    __ Ret();
+    __ bind(&not_two_smis);
+  } else if (FLAG_debug_code) {
+    __ Or(a2, a1, a0);
+    __ And(a2, a2, kSmiTagMask);
+    __ Assert(ne, "CompareStub: unexpected smi operands.",
+        a2, Operand(zero_reg));
+  }
+
+
   // NOTICE! This code is only reached after a smi-fast-case check, so
   // it is certain that at least one operand isn't a smi.
 
@@ -2086,7 +2107,7 @@ void StackCheckStub::Generate(MacroAssembler* masm) {
   // argument, so give it a Smi.
   __ Push(zero_reg);
   __ TailCallRuntime(Runtime::kStackGuard, 1, 1);
-  __ StubReturn(1);
+  __ Ret();
 }
 
 
@@ -2097,32 +2118,38 @@ void GenericUnaryOpStub::Generate(MacroAssembler* masm) {
   __ LoadRoot(heap_number_map, Heap::kHeapNumberMapRootIndex);
 
   if (op_ == Token::SUB) {
-    // Check whether the value is a smi.
-    Label try_float;
-    __ BranchOnNotSmi(a0, &try_float);
+    if (include_smi_code_) {
+      // Check whether the value is a smi.
+      Label try_float;
+      __ BranchOnNotSmi(a0, &try_float);
 
-    // Go slow case if the value of the expression is zero
-    // to make sure that we switch between 0 and -0.
-    if (negative_zero_ == kStrictNegativeZero) {
-      // If we have to check for zero, then we can check for the max negative
-      // smi while we are at it. (This is kind of expensive on mips, and
-      // it seems that we should be able to find a more optimal test.)
-      __ And(at, a0, Operand(~0x80000000));  // Emit 3 instr: lui, ori, and.
-      __ Branch(&slow, eq, at, Operand(zero_reg));
-      __ subu(v0, zero_reg, a0);
-      __ StubReturn(1);
-    } else {
-      // The value of the expression is a smi and 0 is OK for -0.  Try
-      // optimistic subtraction '0 - value'.
-      __ subu(v0, zero_reg, a0);
-      // Check for overflow. For v=0-x, overflow only occurs on x=0x80000000.
-      // We don't have to reverse the optimistic neg since we did not
-      // change input register a0.
-      __ Branch(&slow, eq, a0, Operand(0x80000000));  // Go slow on overflow.
-      __ StubReturn(1);
+      // Go slow case if the value of the expression is zero
+      // to make sure that we switch between 0 and -0.
+      if (negative_zero_ == kStrictNegativeZero) {
+        // If we have to check for zero, then we can check for the max negative
+        // smi while we are at it. (This is kind of expensive on mips, and
+        // it seems that we should be able to find a more optimal test.)
+        __ And(at, a0, Operand(~0x80000000));  // Emit 3 instr: lui, ori, and.
+        __ Branch(&slow, eq, at, Operand(zero_reg));
+        __ subu(v0, zero_reg, a0);
+        __ Ret();
+      } else {
+        // The value of the expression is a smi and 0 is OK for -0.  Try
+        // optimistic subtraction '0 - value'.
+        __ subu(v0, zero_reg, a0);
+        // Check for overflow. For v=0-x, overflow only occurs on x=0x80000000.
+        // We don't have to reverse the optimistic neg since we did not
+        // change input register a0.
+        __ Branch(&slow, eq, a0, Operand(0x80000000));  // Go slow on overflow.
+        __ Ret();
+      }
+      __ bind(&try_float);
+    } else if (FLAG_debug_code) {
+      Register scratch = VirtualFrame::scratch0();
+      __ And(scratch, a0, kSmiTagMask);
+      __ Assert(ne, "Unexpected smi operand.", scratch, Operand(zero_reg));
     }
 
-    __ bind(&try_float);
     __ lw(a1, FieldMemOperand(a0, HeapObject::kMapOffset));
     __ AssertRegisterIsRoot(heap_number_map, Heap::kHeapNumberMapRootIndex);
     __ Branch(&slow, ne, a1, Operand(heap_number_map));
@@ -2141,6 +2168,20 @@ void GenericUnaryOpStub::Generate(MacroAssembler* masm) {
       __ mov(v0, a1);
     }
   } else if (op_ == Token::BIT_NOT) {
+    if (include_smi_code_) {
+      Label non_smi;
+      __ BranchOnNotSmi(a0, &non_smi);
+      __ srl(v0, a0, kSmiTagSize);
+      __ nor(v0, v0, v0);
+      __ sll(v0, v0, kSmiTagSize);
+      __ Ret();
+      __ bind(&non_smi);
+    } else if (FLAG_debug_code) {
+      Register scratch = VirtualFrame::scratch0();
+      __ And(scratch, a0, kSmiTagMask);
+      __ Assert(ne, "Unexpected smi operand.",
+          scratch, Operand(zero_reg));
+    }
     // Check if the operand is a heap number.
     __ lw(a1, FieldMemOperand(a0, HeapObject::kMapOffset));
     __ AssertRegisterIsRoot(heap_number_map, Heap::kHeapNumberMapRootIndex);
@@ -2160,7 +2201,7 @@ void GenericUnaryOpStub::Generate(MacroAssembler* masm) {
 
     // Smi tag result.
     __ sll(v0, a1, kSmiTagMask);
-    __ StubReturn(1);
+    __ Ret();
 
     __ bind(&try_float);
     if (!overwrite_ == UNARY_OVERWRITE) {
@@ -2194,7 +2235,7 @@ void GenericUnaryOpStub::Generate(MacroAssembler* masm) {
   }
 
   __ bind(&done);
-  __ StubReturn(1);
+  __ Ret();
 
   // Handle the slow case by jumping to the JavaScript builtin.
   __ bind(&slow);
@@ -3334,6 +3375,11 @@ const char* CompareStub::GetName() {
     include_number_compare_name = "_NO_NUMBER";
   }
 
+  const char* include_smi_compare_name = "";
+  if (!include_smi_compare_) {
+    include_smi_compare_name = "_NO_SMI";
+  }
+
   OS::SNPrintF(Vector<char>(name_, kMaxNameLength),
                "CompareStub_%s%s%s%s%s%s",
                cc_name,
@@ -3341,7 +3387,8 @@ const char* CompareStub::GetName() {
                rhs_name,
                strict_name,
                never_nan_nan_name,
-               include_number_compare_name);
+               include_number_compare_name,
+               include_smi_compare_name);
   return name_;
 }
 
@@ -3354,7 +3401,8 @@ int CompareStub::MinorKey() {
   return ConditionField::encode(static_cast<unsigned>(cc_))
          | RegisterField::encode(lhs_.is(a0))
          | StrictField::encode(strict_)
-         | NeverNanNanField::encode(cc_ == eq ? never_nan_nan_ : false);
+         | NeverNanNanField::encode(cc_ == eq ? never_nan_nan_ : false)
+         | IncludeSmiCompareField::encode(include_smi_compare_);
 }
 
 

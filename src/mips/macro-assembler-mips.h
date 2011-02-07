@@ -645,9 +645,6 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
 
   void CallJSExitStub(CodeStub* stub);
 
-  // Return from a code stub after popping its arguments.
-  void StubReturn(int argc);
-
   // Call a runtime routine.
   void CallRuntime(Runtime::Function* f, int num_arguments);
 

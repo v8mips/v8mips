@@ -1666,7 +1666,7 @@ void CodeGenerator::Comparison(Condition cc,
   // Perform non-smi comparison by stub.
   // CompareStub takes arguments in a0 and a1, returns <0, >0 or 0 in v0.
   // We call with 0 args because there are 0 on the stack.
-  CompareStub stub(cc, strict, kBothCouldBeNaN, true, lhs, rhs);
+  CompareStub stub(cc, strict, NO_SMI_COMPARE_IN_STUB, lhs, rhs);
   frame_->CallStub(&stub, 0);
   __ mov(condReg1, v0);
   __ mov(condReg2, zero_reg);
@@ -6065,6 +6065,7 @@ void CodeGenerator::VisitUnaryOperation(UnaryOperation* node) {
         GenericUnaryOpStub stub(
             Token::SUB,
             overwrite,
+            NO_UNARY_FLAGS,
             no_negative_zero ? kIgnoreNegativeZero : kStrictNegativeZero);
         frame_->CallStub(&stub, 0);
         frame_->EmitPush(v0);  // v0 has result
@@ -6089,7 +6090,9 @@ void CodeGenerator::VisitUnaryOperation(UnaryOperation* node) {
         not_smi_label.Bind();
         frame_->SpillAll();
         __ Move(a0, tos);
-        GenericUnaryOpStub stub(Token::BIT_NOT, overwrite);
+        GenericUnaryOpStub stub(Token::BIT_NOT,
+                                overwrite,
+                                NO_UNARY_SMI_CODE_IN_STUB);
         frame_->CallStub(&stub, 0);
         frame_->EmitPush(v0);
         continue_label.Bind();

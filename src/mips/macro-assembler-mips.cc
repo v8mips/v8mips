@@ -2443,15 +2443,6 @@ void MacroAssembler::TailCallStub(CodeStub* stub) {
   Jump(stub->GetCode(), RelocInfo::CODE_TARGET);
 }
 
-
-void MacroAssembler::StubReturn(int argc) {
-  ASSERT(argc >= 1 && generating_stub());
-  if (argc > 1)
-    addiu(sp, sp, (argc - 1) * kPointerSize);
-  Ret();
-}
-
-
 void MacroAssembler::IllegalOperation(int num_arguments) {
   if (num_arguments > 0) {
     addiu(sp, sp, num_arguments * kPointerSize);
