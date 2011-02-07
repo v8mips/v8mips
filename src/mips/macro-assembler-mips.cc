@@ -25,7 +25,7 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#include <limits.h> // For LONG_MIN, LONG_MAX
+#include <limits.h>  // For LONG_MIN, LONG_MAX
 
 #include "v8.h"
 
@@ -2067,7 +2067,6 @@ void MacroAssembler::AllocateHeapNumber(Register result,
                                Register scratch2,
                                Register heap_number_map,
                                Label* need_gc) {
-
   // Allocate an object in the heap for the heap number and tag it as a heap
   // object.
   // We ask for four more bytes to align it as we need and align the result.

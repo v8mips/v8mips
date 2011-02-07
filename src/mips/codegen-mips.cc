@@ -1504,7 +1504,7 @@ void CodeGenerator::SmiOperation(Token::Value op,
         }
         case Token::SHR: {
           if (shift_value != 0) {
-            __ sra(scratch, tos, kSmiTagSize); // Remove tag.
+            __ sra(scratch, tos, kSmiTagSize);  // Remove tag.
             __ srl(tos, scratch, shift_value);
             if (shift_value == 1) {
               // Check that the *unsigned* result fits in a smi.
@@ -1521,7 +1521,8 @@ void CodeGenerator::SmiOperation(Token::Value op,
                 // back to the runtime. The deferred code will expect tos
                 // to hold the original Smi to be shifted.
                 __ sll(scratch, scratch, kSmiTagSize);
-                __ movn(tos, scratch, scratch2); // Only move if scratch2 != 0.
+                // Only move if scratch2 != 0.
+                __ movn(tos, scratch, scratch2);
               }
               deferred->JumpToAnswerOutOfRange(ne, scratch2, Operand(zero_reg));
             }

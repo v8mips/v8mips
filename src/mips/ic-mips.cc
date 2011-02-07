@@ -832,7 +832,7 @@ void KeyedCallIC::GenerateMegamorphic(MacroAssembler* masm, int argc) {
   GenerateMiss(masm, argc);
 
   __ bind(&index_string);
-  __ IndexFromHash (a3, a2);
+  __ IndexFromHash(a3, a2);
   // Now jump to the place where smi keys are handled.
   __ jmp(&index_smi);
 }

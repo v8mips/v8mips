@@ -123,7 +123,6 @@ void BreakLocationIterator::ClearDebugBreakAtSlot() {
 static void Generate_DebugBreakCallHelper(MacroAssembler* masm,
                                           RegList object_regs,
                                           RegList non_object_regs) {
-
   __ EnterInternalFrame();
 
   // Store the registers containing live values on the expression stack to
