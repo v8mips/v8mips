@@ -2053,7 +2053,10 @@ Object* LoadStubCompiler::CompileLoadNonexistent(String* name,
                                              name,
                                              a1,
                                              &miss);
-    if (cell->IsFailure()) return cell;
+    if (cell->IsFailure()) {
+      miss.Unuse();
+      return cell;
+    }
   }
 
   // Return undefined if maps of the full prototype chain is still the same.
@@ -2104,7 +2107,10 @@ Object* LoadStubCompiler::CompileLoadCallback(String* name,
   Failure* failure = Failure::InternalError();
   bool success = GenerateLoadCallback(object, holder, a0, a2, a3, a1, t0,
                                       callback, name, &miss, &failure);
-  if (!success) return failure;
+  if (!success) {
+    miss.Unuse();
+    return failure;
+  }
 
   __ bind(&miss);
   GenerateLoadMiss(masm(), Code::LOAD_IC);
@@ -2250,7 +2256,10 @@ Object* KeyedLoadStubCompiler::CompileLoadCallback(String* name,
   Failure* failure = Failure::InternalError();
   bool success = GenerateLoadCallback(receiver, holder, a1, a0, a2, a3, t0,
                                       callback, name, &miss, &failure);
-  if (!success) return failure;
+  if (!success) {
+    miss.Unuse();
+    return failure;
+  }
 
   __ bind(&miss);
   GenerateLoadMiss(masm(), Code::KEYED_LOAD_IC);
