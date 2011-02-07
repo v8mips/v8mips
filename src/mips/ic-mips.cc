@@ -1263,7 +1263,6 @@ void KeyedLoadIC::GenerateString(MacroAssembler* masm) {
   //  -- a1     : receiver
   // -----------------------------------
   Label miss;
-  Label index_out_of_range;
 
   Register receiver = a1;
   Register index = a0;
@@ -1278,17 +1277,13 @@ void KeyedLoadIC::GenerateString(MacroAssembler* masm) {
                                           result,
                                           &miss,  // When not a string.
                                           &miss,  // When not a number.
-                                          &index_out_of_range,
+                                          &miss,  // When index out of range.
                                           STRING_INDEX_IS_ARRAY_INDEX);
   char_at_generator.GenerateFast(masm);
   __ Ret();
 
   ICRuntimeCallHelper call_helper;
   char_at_generator.GenerateSlow(masm, call_helper);
-
-  __ bind(&index_out_of_range);
-  __ LoadRoot(v0, Heap::kUndefinedValueRootIndex);
-  __ Ret();
 
   __ bind(&miss);
   GenerateMiss(masm);
