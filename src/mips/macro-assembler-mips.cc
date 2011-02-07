@@ -1836,6 +1836,17 @@ void MacroAssembler::AllocateInNewSpace(int object_size,
                                         Register scratch2,
                                         Label* gc_required,
                                         AllocationFlags flags) {
+  if (!FLAG_inline_new) {
+    if (FLAG_debug_code) {
+      // Trash the registers to simulate an allocation failure.
+      li(result, 0x7091);
+      li(scratch1, 0x7191);
+      li(scratch2, 0x7291);
+    }
+    jmp(gc_required);
+    return;
+  }
+
   ASSERT(!result.is(scratch1));
   ASSERT(!scratch1.is(scratch2));
 
@@ -1889,6 +1900,17 @@ void MacroAssembler::AllocateInNewSpace(Register object_size,
                                         Register scratch2,
                                         Label* gc_required,
                                         AllocationFlags flags) {
+  if (!FLAG_inline_new) {
+    if (FLAG_debug_code) {
+      // Trash the registers to simulate an allocation failure.
+      li(result, 0x7091);
+      li(scratch1, 0x7191);
+      li(scratch2, 0x7291);
+    }
+    jmp(gc_required);
+    return;
+  }
+
   ASSERT(!result.is(scratch1));
   ASSERT(!scratch1.is(scratch2));
 

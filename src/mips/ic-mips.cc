@@ -1449,9 +1449,11 @@ void KeyedLoadIC::GenerateExternalArray(MacroAssembler* masm,
 
     __ bind(&box_int);
     // Allocate a HeapNumber for the result and perform int-to-double
-    // conversion. Use v0 for result as key is not needed any more.
-    __ LoadRoot(t6, Heap::kHeapNumberMapRootIndex);
-    __ AllocateHeapNumber(v0, a3, t0, t6, &slow);
+    // conversion.
+    // The arm version uses a temporary here to save r0, but we don't need to
+    // (a0 is not modified).
+    __ LoadRoot(t1, Heap::kHeapNumberMapRootIndex);
+    __ AllocateHeapNumber(v0, a3, t0, t1, &slow);
 
     if (CpuFeatures::IsSupported(FPU)) {
       CpuFeatures::Scope scope(FPU);
