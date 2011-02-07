@@ -991,11 +991,9 @@ void CompareStub::Generate(MacroAssembler* masm) {
     Label not_two_smis, smi_done;
     __ Or(a2, a1, a0);
     __ BranchOnNotSmi(a2, &not_two_smis);
+    __ sra(a1, a1, 1);
+    __ sra(a0, a0, 1);
     __ Subu(v0, a1, a0);
-    __ Branch(&smi_done, ge, v0, Operand(zero_reg));
-    // Correct the sign in case of overflow.
-    __ Subu(v0, zero_reg, v0);
-    __ bind(&smi_done);
     __ Ret();
     __ bind(&not_two_smis);
   } else if (FLAG_debug_code) {
