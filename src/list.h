@@ -148,6 +148,7 @@ class List {
   DISALLOW_COPY_AND_ASSIGN(List);
 };
 
+#ifndef __sgi
 class FrameElement;
 
 // Add() is inlined, ResizeAdd() called by Add() is inlined except for
@@ -155,6 +156,7 @@ class FrameElement;
 template <>
 void List<FrameElement,
           FreeStoreAllocationPolicy>::ResizeAdd(const FrameElement& element);
+#endif
 
 } }  // namespace v8::internal
 
