@@ -37,10 +37,7 @@ namespace v8 {
 namespace internal {
 
 Address ExitFrame::ComputeStackPointer(Address fp) {
-  Address sp = fp + ExitFrameConstants::kSPOffset;
-
-  return sp;
-  ASSERT(*state->pc_address != NULL);
+  return fp + ExitFrameConstants::kSPOffset;
 }
 
 } }  // namespace v8::internal
