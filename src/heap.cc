@@ -1218,7 +1218,14 @@ class ScavengingVisitor : public StaticVisitorBase {
     RecordCopiedObject(target);
 #endif
     HEAP_PROFILE(ObjectMoveEvent(source->address(), target->address()));
-
+#if defined(ENABLE_LOGGING_AND_PROFILING)
+    if (Logger::is_logging() || CpuProfiler::is_profiling()) {
+      if (target->IsJSFunction()) {
+        PROFILE(FunctionMoveEvent(source->address(), target->address()));
+        PROFILE(FunctionCreateEventFromMove(JSFunction::cast(target), source));
+      }
+    }
+#endif
     return target;
   }
 
@@ -2437,7 +2444,7 @@ Object* Heap::CreateCode(const CodeDesc& desc,
   // Compute size
   int body_size = RoundUp(desc.instr_size, kObjectAlignment);
   int obj_size = Code::SizeFor(body_size);
-  ASSERT(IsAligned(obj_size, Code::kCodeAlignment));
+  ASSERT(IsAligned(static_cast<intptr_t>(obj_size), kCodeAlignment));
   Object* result;
   if (obj_size > MaxObjectSizeInPagedSpace()) {
     result = lo_space_->AllocateRawCode(obj_size);

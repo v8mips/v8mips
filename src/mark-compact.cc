@@ -2532,6 +2532,7 @@ int MarkCompactCollector::RelocateOldNonCodeObject(HeapObject* obj,
   HeapObject* copied_to = HeapObject::FromAddress(new_addr);
   if (copied_to->IsJSFunction()) {
     PROFILE(FunctionMoveEvent(old_addr, new_addr));
+    PROFILE(FunctionCreateEventFromMove(JSFunction::cast(copied_to), obj));
   }
   HEAP_PROFILE(ObjectMoveEvent(old_addr, new_addr));
 
@@ -2624,6 +2625,7 @@ int MarkCompactCollector::RelocateNewObject(HeapObject* obj) {
   HeapObject* copied_to = HeapObject::FromAddress(new_addr);
   if (copied_to->IsJSFunction()) {
     PROFILE(FunctionMoveEvent(old_addr, new_addr));
+    PROFILE(FunctionCreateEventFromMove(JSFunction::cast(copied_to), obj));
   }
   HEAP_PROFILE(ObjectMoveEvent(old_addr, new_addr));
 

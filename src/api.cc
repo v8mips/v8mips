@@ -2658,8 +2658,9 @@ void v8::Object::SetIndexedPropertiesToPixelData(uint8_t* data, int length) {
     return;
   }
   i::Handle<i::PixelArray> pixels = i::Factory::NewPixelArray(length, data);
-  self->set_map(
-      *i::Factory::GetSlowElementsMap(i::Handle<i::Map>(self->map())));
+  i::Handle<i::Map> slow_map =
+      i::Factory::GetSlowElementsMap(i::Handle<i::Map>(self->map()));
+  self->set_map(*slow_map);
   self->set_elements(*pixels);
 }
 
@@ -2713,8 +2714,9 @@ void v8::Object::SetIndexedPropertiesToExternalArrayData(
   }
   i::Handle<i::ExternalArray> array =
       i::Factory::NewExternalArray(length, array_type, data);
-  self->set_map(
-      *i::Factory::GetSlowElementsMap(i::Handle<i::Map>(self->map())));
+  i::Handle<i::Map> slow_map =
+      i::Factory::GetSlowElementsMap(i::Handle<i::Map>(self->map()));
+  self->set_map(*slow_map);
   self->set_elements(*array);
 }
 
@@ -4260,6 +4262,11 @@ bool Debug::SetDebugEventListener(v8::Handle<v8::Object> that,
 void Debug::DebugBreak() {
   if (!i::V8::IsRunning()) return;
   i::StackGuard::DebugBreak();
+}
+
+
+void Debug::CancelDebugBreak() {
+  i::StackGuard::Continue(i::DEBUGBREAK);
 }
 
 
