@@ -43,8 +43,11 @@ import threading
 import utils
 from Queue import Queue, Empty
 
+from unittest_output import UnitTestOutput
 
 VERBOSE = False
+XMLOUT = None
+XMLTESTSUITE = None
 
 
 # ---------------------------------------------
@@ -66,6 +69,8 @@ class ProgressIndicator(object):
     self.crashed = 0
     self.terminate = False
     self.lock = threading.Lock()
+    if XMLOUT:
+      self.xmlOutputter = UnitTestProgressIndicator()
 
   def PrintFailureHeader(self, test):
     if test.IsNegative():
@@ -80,6 +85,8 @@ class ProgressIndicator(object):
 
   def Run(self, tasks):
     self.Starting()
+    if XMLOUT:
+      self.xmlOutputter.Starting()
     threads = []
     # Spawn N-1 threads and then use this thread as the last one.
     # That way -j1 avoids threading altogether which is a nice fallback
@@ -101,6 +108,8 @@ class ProgressIndicator(object):
       # ...and then reraise the exception to bail out
       raise
     self.Done()
+    if XMLOUT:
+      self.xmlOutputter.Done()
     return not self.failed
 
   def RunSingle(self):
@@ -112,6 +121,8 @@ class ProgressIndicator(object):
       case = test.case
       self.lock.acquire()
       self.AboutToRun(case)
+      if XMLOUT:
+        self.xmlOutputter.AboutToRun(case)
       self.lock.release()
       try:
         start = time.time()
@@ -131,6 +142,8 @@ class ProgressIndicator(object):
         self.succeeded += 1
       self.remaining -= 1
       self.HasRun(output)
+      if XMLOUT:
+        self.xmlOutputter.HasRun(output)
       self.lock.release()
 
 
@@ -304,6 +317,47 @@ class MonochromeProgressIndicator(CompactProgressIndicator):
 
   def ClearLine(self, last_line_length):
     print ("\r" + (" " * last_line_length) + "\r"),
+
+class UnitTestProgressIndicator(ProgressIndicator):
+
+  def __init__(self):
+    self.outputter = UnitTestOutput(XMLTESTSUITE)
+    if XMLOUT:
+      self.outfile = open(XMLOUT, "w")
+    else:
+      self.outfile = sys.stdout
+
+  def Starting(self):
+    pass
+
+  def AboutToRun(self, case):
+    self.outputter.startNewTest(case.GetName())
+
+  def Done(self):
+    self.outputter.finishAndWrite(self.outfile)
+    if self.outfile != sys.stdout:
+      self.outfile.close()
+
+  def HasRun(self, output):
+    if output.UnexpectedOutput():
+      failtext=""
+      stdout = output.output.stdout.strip()
+      if len(stdout):
+        failtext+="stdout:\n"
+        failtext+=stdout
+        failtext+="\n"
+      stderr = output.output.stderr.strip()
+      if len(stderr):
+        failtext+="stderr:\n"
+        failtext+=stderr
+        failtext+="\n"
+      if output.HasCrashed():
+        failtext+= "--- CRASHED ---"
+      if output.HasTimedOut():
+        failtext+= "--- TIMEOUT ---"
+      self.outputter.finishCurrentTest(True, failtext)
+    else:
+      self.outputter.finishCurrentTest(False)
 
 
 PROGRESS_INDICATORS = {
@@ -1166,6 +1220,8 @@ def BuildOptions():
   result.add_option("--no-store-unexpected-output", 
       help="Deletes the temporary JS files from tests that fails",
       dest="store_unexpected_output", action="store_false")
+  result.add_option("--xmlout", help="File name of the UnitTest output")
+  result.add_option("--xmltestsuite", help="Name of the testsuite in the UnitTest XML output", default="v8tests")
   return result
 
 
@@ -1197,6 +1253,12 @@ def ProcessOptions(options):
     options.scons_flags.append("snapshot=on")
   if options.mips_arch_variant:
     options.scons_flags.append("mips_arch_variant=" + options.mips_arch_variant)
+
+  global XMLOUT
+  XMLOUT = options.xmlout
+  global XMLTESTSUITE
+  XMLTESTSUITE = options.xmltestsuite
+
   return True
 
 
@@ -1415,4 +1477,5 @@ def Main():
 
 
 if __name__ == '__main__':
-  sys.exit(Main())
+  Main()
+  sys.exit(0)
