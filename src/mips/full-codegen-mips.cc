@@ -143,6 +143,13 @@ void FullCodeGenerator::VisitVariableProxy(VariableProxy* expr) {
   UNIMPLEMENTED_MIPS();
 }
 
+void FullCodeGenerator::EmitLoadGlobalSlotCheckExtensions(
+    Slot* slot,
+    TypeofState typeof_state,
+    Label* slow) {
+  UNIMPLEMENTED_MIPS();
+}
+
 
 void FullCodeGenerator::EmitVariableLoad(Variable* var,
                                          Expression::Context context) {
