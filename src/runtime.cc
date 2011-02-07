@@ -678,7 +678,8 @@ static Object* Runtime_GetOwnProperty(Arguments args) {
       // Elements that are stored as array elements always has:
       // writable: true, configurable: true, enumerable: true.
       elms->set(IS_ACCESSOR_INDEX, Heap::false_value());
-      elms->set(VALUE_INDEX, obj->GetElement(index));
+      Object* element = obj->GetElement(index);
+      elms->set(VALUE_INDEX, element);
       elms->set(WRITABLE_INDEX, Heap::true_value());
       elms->set(ENUMERABLE_INDEX,  Heap::true_value());
       elms->set(CONFIGURABLE_INDEX, Heap::true_value());
@@ -2837,7 +2838,8 @@ static Object* Runtime_StringMatch(Arguments args) {
   for (int i = 0; i < matches ; i++) {
     int from = offsets.at(i * 2);
     int to = offsets.at(i * 2 + 1);
-    elements->set(i, *Factory::NewSubString(subject, from, to));
+    Handle<String> match = Factory::NewSubString(subject, from, to);
+    elements->set(i, *match);
   }
   Handle<JSArray> result = Factory::NewJSArrayWithElements(elements);
   result->set_length(Smi::FromInt(matches));
@@ -3105,9 +3107,10 @@ static RegExpImpl::IrregexpResult SearchRegExpMultiple(
         // Arguments array to replace function is match, captures, index and
         // subject, i.e., 3 + capture count in total.
         Handle<FixedArray> elements = Factory::NewFixedArray(3 + capture_count);
-        elements->set(0, *Factory::NewSubString(subject,
-                                                match_start,
-                                                match_end));
+        Handle<String> match = Factory::NewSubString(subject,
+                                                     match_start,
+                                                     match_end);
+        elements->set(0, *match);
         for (int i = 1; i <= capture_count; i++) {
           int start = register_vector[i * 2];
           if (start >= 0) {
@@ -4953,12 +4956,14 @@ static Object* Runtime_StringToArray(Arguments args) {
                                                             length);
 
     for (int i = num_copied_from_cache; i < length; ++i) {
-      elements->set(i, *LookupSingleCharacterStringFromCode(chars[i]));
+      Handle<Object> str = LookupSingleCharacterStringFromCode(chars[i]);
+      elements->set(i, *str);
     }
   } else {
     elements = Factory::NewFixedArray(length);
     for (int i = 0; i < length; ++i) {
-      elements->set(i, *LookupSingleCharacterStringFromCode(s->Get(i)));
+      Handle<Object> str = LookupSingleCharacterStringFromCode(s->Get(i));
+      elements->set(i, *str);
     }
   }
 
@@ -6279,7 +6284,7 @@ static Object* Runtime_NewObjectFromBound(Arguments args) {
 }
 
 
-static Code* ComputeConstructStub(Handle<JSFunction> function) {
+static void TrySettingInlineConstructStub(Handle<JSFunction> function) {
   Handle<Object> prototype = Factory::null_value();
   if (function->has_instance_prototype()) {
     prototype = Handle<Object>(function->instance_prototype());
@@ -6287,13 +6292,10 @@ static Code* ComputeConstructStub(Handle<JSFunction> function) {
   if (function->shared()->CanGenerateInlineConstructor(*prototype)) {
     ConstructStubCompiler compiler;
     Object* code = compiler.CompileConstructStub(function->shared());
-    if (code->IsFailure()) {
-      return Builtins::builtin(Builtins::JSConstructStubGeneric);
+    if (!code->IsFailure()) {
+      function->shared()->set_construct_stub(Code::cast(code));
     }
-    return Code::cast(code);
   }
-
-  return function->shared()->construct_stub();
 }
 
 
@@ -6350,18 +6352,38 @@ static Object* Runtime_NewObject(Arguments args) {
   Handle<SharedFunctionInfo> shared(function->shared());
   EnsureCompiled(shared, CLEAR_EXCEPTION);
 
-  bool first_allocation = !function->has_initial_map();
+  if (!function->has_initial_map() &&
+      shared->IsInobjectSlackTrackingInProgress()) {
+    // The tracking is already in progress for another function. We can only
+    // track one initial_map at a time, so we force the completion before the
+    // function is called as a constructor for the first time.
+    shared->CompleteInobjectSlackTracking();
+    TrySettingInlineConstructStub(function);
+  }
+
+  bool first_allocation = !shared->live_objects_may_exist();
   Handle<JSObject> result = Factory::NewJSObject(function);
-  if (first_allocation) {
-    Handle<Code> stub = Handle<Code>(
-        ComputeConstructStub(Handle<JSFunction>(function)));
-    shared->set_construct_stub(*stub);
+  // Delay setting the stub if inobject slack tracking is in progress.
+  if (first_allocation && !shared->IsInobjectSlackTrackingInProgress()) {
+    TrySettingInlineConstructStub(function);
   }
 
   Counters::constructed_objects.Increment();
   Counters::constructed_objects_runtime.Increment();
 
   return *result;
+}
+
+
+static Object* Runtime_FinalizeInstanceSize(Arguments args) {
+  HandleScope scope;
+  ASSERT(args.length() == 1);
+
+  CONVERT_ARG_CHECKED(JSFunction, function, 0);
+  function->shared()->CompleteInobjectSlackTracking();
+  TrySettingInlineConstructStub(function);
+
+  return Heap::undefined_value();
 }
 
 
@@ -7826,7 +7848,8 @@ static Object* Runtime_DebugGetPropertyDetails(Arguments args) {
   uint32_t index;
   if (name->AsArrayIndex(&index)) {
     Handle<FixedArray> details = Factory::NewFixedArray(2);
-    details->set(0, Runtime::GetElementOrCharAt(obj, index));
+    Object* element_or_char = Runtime::GetElementOrCharAt(obj, index);
+    details->set(0, element_or_char);
     details->set(1, PropertyDetails(NONE, NORMAL).AsSmi());
     return *Factory::NewJSArrayWithElements(details);
   }
@@ -8628,7 +8651,8 @@ static Object* Runtime_GetScopeDetails(Arguments args) {
 
   // Fill in scope details.
   details->set(kScopeDetailsTypeIndex, Smi::FromInt(it.Type()));
-  details->set(kScopeDetailsObjectIndex, *it.ScopeObject());
+  Handle<JSObject> scope_object = it.ScopeObject();
+  details->set(kScopeDetailsObjectIndex, *scope_object);
 
   return *Factory::NewJSArrayWithElements(details);
 }
@@ -8673,10 +8697,10 @@ static Object* Runtime_GetCFrames(Arguments args) {
   Handle<FixedArray> frames_array = Factory::NewFixedArray(frames_count);
   for (int i = 0; i < frames_count; i++) {
     Handle<JSObject> frame_value = Factory::NewJSObject(Top::object_function());
-    frame_value->SetProperty(
-        *address_str,
-        *Factory::NewNumberFromInt(reinterpret_cast<int>(frames[i].address)),
-        NONE);
+    Handle<Object> frame_address =
+        Factory::NewNumberFromInt(reinterpret_cast<int>(frames[i].address));
+
+    frame_value->SetProperty(*address_str, *frame_address, NONE);
 
     // Get the stack walk text for this frame.
     Handle<String> frame_text;
