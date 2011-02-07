@@ -32,7 +32,7 @@
 #if defined(V8_TARGET_ARCH_MIPS)
 
 #include "codegen-inl.h"
-#include "code-stubs-mips.h"
+#include "code-stubs.h"
 #include "ic-inl.h"
 #include "runtime.h"
 #include "stub-cache.h"

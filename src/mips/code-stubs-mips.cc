@@ -30,7 +30,7 @@
 #if defined(V8_TARGET_ARCH_MIPS)
 
 #include "bootstrapper.h"
-#include "code-stubs-mips.h"
+#include "code-stubs.h"
 #include "codegen-inl.h"
 #include "regexp-macro-assembler.h"
 

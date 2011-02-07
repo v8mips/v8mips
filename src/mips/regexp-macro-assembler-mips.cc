@@ -31,12 +31,10 @@
 
 #include "unicode.h"
 #include "log.h"
-#include "ast.h"
 #include "code-stubs.h"
 #include "regexp-stack.h"
 #include "macro-assembler.h"
 #include "regexp-macro-assembler.h"
-#include "mips/macro-assembler-mips.h"
 #include "mips/regexp-macro-assembler-mips.h"
 
 namespace v8 {
