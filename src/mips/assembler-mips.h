@@ -129,7 +129,7 @@ Register ToRegister(int num);
 
 // Coprocessor register.
 struct FPURegister {
-  bool is_valid() const { return 0 <= code_ && code_ < kNumFPURegister ; }
+  bool is_valid() const { return 0 <= code_ && code_ < kNumFPURegisters ; }
   bool is(FPURegister creg) const { return code_ == creg.code_; }
   int code() const {
     ASSERT(is_valid());
