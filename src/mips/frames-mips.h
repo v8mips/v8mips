@@ -123,7 +123,13 @@ class StandardFrameConstants : public AllStatic {
   static const int kRegularArgsSlotsSize = kRArgsSlotsSize;
 
   // C/C++ argument slots size.
+#ifdef _ABIN32
+  // No need to reserve space for args in n32
+  // See sys/asm.h on Irix
+  static const int kCArgsSlotsSize = 0;
+#else
   static const int kCArgsSlotsSize = 4 * kPointerSize;
+#endif
   // JS argument slots size.
   static const int kJSArgsSlotsSize = 0 * kPointerSize;
   // Assembly builtins argument slots size.

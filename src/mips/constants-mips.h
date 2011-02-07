@@ -600,7 +600,11 @@ class Instruction {
 static const int kArgsSlotsSize  = 4 * Instruction::kInstructionSize;
 static const int kArgsSlotsNum   = 4;
 // C/C++ argument slots size.
+#ifdef _ABIN32
+static const int kCArgsSlotsSize = 0;
+#else
 static const int kCArgsSlotsSize = 4 * Instruction::kInstructionSize;
+#endif
 // JS argument slots size.
 static const int kJSArgsSlotsSize = 0 * Instruction::kInstructionSize;
 // Assembly builtins argument slots size.
