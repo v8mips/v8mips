@@ -76,9 +76,10 @@ TEST(MIPS0) {
 
   CodeDesc desc;
   assm.GetCode(&desc);
-  Object* code = Heap::CreateCode(desc,
-                                  Code::ComputeFlags(Code::STUB),
-                                  Handle<Object>(Heap::undefined_value()));
+  Object* code = Heap::CreateCode(
+      desc,
+      Code::ComputeFlags(Code::STUB),
+      Handle<Object>(Heap::undefined_value()))->ToObjectChecked();
   CHECK(code->IsCode());
 #ifdef DEBUG
   Code::cast(code)->Print();
@@ -116,9 +117,10 @@ TEST(MIPS1) {
 
   CodeDesc desc;
   assm.GetCode(&desc);
-  Object* code = Heap::CreateCode(desc,
-                                  Code::ComputeFlags(Code::STUB),
-                                  Handle<Object>(Heap::undefined_value()));
+  Object* code = Heap::CreateCode(
+      desc,
+      Code::ComputeFlags(Code::STUB),
+      Handle<Object>(Heap::undefined_value()))->ToObjectChecked();
   CHECK(code->IsCode());
 #ifdef DEBUG
   Code::cast(code)->Print();
@@ -258,9 +260,10 @@ TEST(MIPS2) {
 
   CodeDesc desc;
   assm.GetCode(&desc);
-  Object* code = Heap::CreateCode(desc,
-                                  Code::ComputeFlags(Code::STUB),
-                                  Handle<Object>(Heap::undefined_value()));
+  Object* code = Heap::CreateCode(
+      desc,
+      Code::ComputeFlags(Code::STUB),
+      Handle<Object>(Heap::undefined_value()))->ToObjectChecked();
   CHECK(code->IsCode());
 #ifdef DEBUG
   Code::cast(code)->Print();
@@ -323,9 +326,10 @@ TEST(MIPS3) {
 
   CodeDesc desc;
   assm.GetCode(&desc);
-  Object* code = Heap::CreateCode(desc,
-                                  Code::ComputeFlags(Code::STUB),
-                                  Handle<Object>(Heap::undefined_value()));
+  Object* code = Heap::CreateCode(
+      desc,
+      Code::ComputeFlags(Code::STUB),
+      Handle<Object>(Heap::undefined_value()))->ToObjectChecked();
   CHECK(code->IsCode());
 #ifdef DEBUG
   Code::cast(code)->Print();
@@ -387,9 +391,10 @@ TEST(MIPS4) {
 
   CodeDesc desc;
   assm.GetCode(&desc);
-  Object* code = Heap::CreateCode(desc,
-                                  Code::ComputeFlags(Code::STUB),
-                                  Handle<Object>(Heap::undefined_value()));
+  Object* code = Heap::CreateCode(
+      desc,
+      Code::ComputeFlags(Code::STUB),
+      Handle<Object>(Heap::undefined_value()))->ToObjectChecked();
   CHECK(code->IsCode());
 #ifdef DEBUG
   Code::cast(code)->Print();
@@ -454,9 +459,10 @@ TEST(MIPS5) {
 
   CodeDesc desc;
   assm.GetCode(&desc);
-  Object* code = Heap::CreateCode(desc,
-                                  Code::ComputeFlags(Code::STUB),
-                                  Handle<Object>(Heap::undefined_value()));
+  Object* code = Heap::CreateCode(
+      desc,
+      Code::ComputeFlags(Code::STUB),
+      Handle<Object>(Heap::undefined_value()))->ToObjectChecked();
   CHECK(code->IsCode());
 #ifdef DEBUG
   Code::cast(code)->Print();
@@ -529,9 +535,10 @@ TEST(MIPS6) {
 
   CodeDesc desc;
   assm.GetCode(&desc);
-  Object* code = Heap::CreateCode(desc,
-                                  Code::ComputeFlags(Code::STUB),
-                                  Handle<Object>(Heap::undefined_value()));
+  Object* code = Heap::CreateCode(
+      desc,
+      Code::ComputeFlags(Code::STUB),
+      Handle<Object>(Heap::undefined_value()))->ToObjectChecked();
   CHECK(code->IsCode());
 #ifdef DEBUG
   Code::cast(code)->Print();
@@ -602,9 +609,10 @@ TEST(MIPS7) {
 
   CodeDesc desc;
   assm.GetCode(&desc);
-  Object* code = Heap::CreateCode(desc,
-                                  Code::ComputeFlags(Code::STUB),
-                                  Handle<Object>(Heap::undefined_value()));
+  Object* code = Heap::CreateCode(
+      desc,
+      Code::ComputeFlags(Code::STUB),
+      Handle<Object>(Heap::undefined_value()))->ToObjectChecked();
   CHECK(code->IsCode());
 #ifdef DEBUG
   Code::cast(code)->Print();
@@ -701,9 +709,10 @@ TEST(MIPS8) {
 
   CodeDesc desc;
   assm.GetCode(&desc);
-  Object* code = Heap::CreateCode(desc,
-                                  Code::ComputeFlags(Code::STUB),
-                                  Handle<Object>(Heap::undefined_value()));
+  Object* code = Heap::CreateCode(
+      desc,
+      Code::ComputeFlags(Code::STUB),
+      Handle<Object>(Heap::undefined_value()))->ToObjectChecked();
   CHECK(code->IsCode());
 #ifdef DEBUG
   Code::cast(code)->Print();
@@ -749,9 +758,10 @@ TEST(MIPS9) {
 
   CodeDesc desc;
   assm.GetCode(&desc);
-  Object* code = Heap::CreateCode(desc,
-                                  Code::ComputeFlags(Code::STUB),
-                                  Handle<Object>(Heap::undefined_value()));
+  Object* code = Heap::CreateCode(
+      desc,
+      Code::ComputeFlags(Code::STUB),
+      Handle<Object>(Heap::undefined_value()))->ToObjectChecked();
   CHECK(code->IsCode());
 #ifdef DEBUG
   Code::cast(code)->Print();
@@ -808,9 +818,10 @@ TEST(MIPS10) {
 
   CodeDesc desc;
   assm.GetCode(&desc);
-  Object* code = Heap::CreateCode(desc,
-                                  Code::ComputeFlags(Code::STUB),
-                                  Handle<Object>(Heap::undefined_value()));
+  Object* code = Heap::CreateCode(
+      desc,
+      Code::ComputeFlags(Code::STUB),
+      Handle<Object>(Heap::undefined_value()))->ToObjectChecked();
   CHECK(code->IsCode());
 #ifdef DEBUG
   Code::cast(code)->Print();
@@ -940,9 +951,10 @@ TEST(MIPS11) {
 
   CodeDesc desc;
   assm.GetCode(&desc);
-  Object* code = Heap::CreateCode(desc,
-                                  Code::ComputeFlags(Code::STUB),
-                                  Handle<Object>(Heap::undefined_value()));
+  Object* code = Heap::CreateCode(
+      desc,
+      Code::ComputeFlags(Code::STUB),
+      Handle<Object>(Heap::undefined_value()))->ToObjectChecked();
   CHECK(code->IsCode());
 #ifdef DEBUG
   Code::cast(code)->Print();
@@ -1047,9 +1059,10 @@ TEST(MIPS12) {
 
   CodeDesc desc;
   assm.GetCode(&desc);
-  Object* code = Heap::CreateCode(desc,
-                                  Code::ComputeFlags(Code::STUB),
-                                  Handle<Object>(Heap::undefined_value()));
+  Object* code = Heap::CreateCode(
+      desc,
+      Code::ComputeFlags(Code::STUB),
+      Handle<Object>(Heap::undefined_value()))->ToObjectChecked();
   CHECK(code->IsCode());
 #ifdef DEBUG
   Code::cast(code)->Print();
@@ -1104,9 +1117,10 @@ TEST(MIPS13) {
 
   CodeDesc desc;
   assm.GetCode(&desc);
-  Object* code = Heap::CreateCode(desc,
-                                  Code::ComputeFlags(Code::STUB),
-                                  Handle<Object>(Heap::undefined_value()));
+  Object* code = Heap::CreateCode(
+      desc,
+      Code::ComputeFlags(Code::STUB),
+      Handle<Object>(Heap::undefined_value()))->ToObjectChecked();
   CHECK(code->IsCode());
 #ifdef DEBUG
   Code::cast(code)->Print();
