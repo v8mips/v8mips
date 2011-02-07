@@ -384,7 +384,7 @@ void WriteInt32ToHeapNumberStub::Generate(MacroAssembler* masm) {
   __ li(scratch_, Operand(HeapNumber::kSignMask | non_smi_exponent));
   __ sw(scratch_,
         FieldMemOperand(the_heap_number_, HeapNumber::kExponentOffset));
-  __ li(scratch_, Operand(0));
+  __ mov(scratch_, zero_reg);
   __ sw(scratch_,
         FieldMemOperand(the_heap_number_, HeapNumber::kMantissaOffset));
   __ Ret();
@@ -448,7 +448,7 @@ static void EmitIdenticalObjectComparison(MacroAssembler* masm,
   } else if (cc == greater) {
     __ li(v0, Operand(LESS));     // Things aren't greater than themselves.
   } else {
-    __ li(v0, Operand(0));        // Things are <=, >=, ==, === themselves.
+    __ mov(v0, zero_reg);         // Things are <=, >=, ==, === themselves.
   }
   __ Ret();
 
@@ -2819,7 +2819,7 @@ void ArgumentsAccessStub::GenerateNewObject(MacroAssembler* masm) {
   // of the arguments object and the elements array in words.
   Label add_arguments_object;
   __ bind(&try_allocate);
-  __ Branch(&add_arguments_object, eq, a1, Operand(0));
+  __ Branch(&add_arguments_object, eq, a1, Operand(zero_reg));
   __ srl(a1, a1, kSmiTagSize);
 
   __ Addu(a1, a1, Operand(FixedArray::kHeaderSize / kPointerSize));
@@ -2855,7 +2855,7 @@ void ArgumentsAccessStub::GenerateNewObject(MacroAssembler* masm) {
   __ sw(a1, FieldMemOperand(v0, JSObject::kHeaderSize + kPointerSize));
 
   Label done;
-  __ Branch(&done, eq, a1, Operand(0));
+  __ Branch(&done, eq, a1, Operand(zero_reg));
 
   // Get the parameters pointer from the stack.
   __ lw(a2, MemOperand(sp, 1 * kPointerSize));
@@ -2882,7 +2882,7 @@ void ArgumentsAccessStub::GenerateNewObject(MacroAssembler* masm) {
   __ sw(a3, MemOperand(t0));
   __ Addu(t0, t0, Operand(kPointerSize));
   __ Subu(a1, a1, Operand(1));
-  __ Branch(&loop, ne, a1, Operand(0));
+  __ Branch(&loop, ne, a1, Operand(zero_reg));
 
   // Return and remove the on-stack parameters.
   __ bind(&done);

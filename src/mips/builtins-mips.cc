@@ -516,7 +516,7 @@ void Builtins::Generate_JSConstructCall(MacroAssembler* masm) {
   // (instead of the original receiver from the call site). The receiver is
   // stack element argc.
   // Set expected number of arguments to zero (not changing a0).
-  __ li(a2, Operand(0));
+  __ mov(a2, zero_reg);
   __ GetBuiltinEntry(a3, Builtins::CALL_NON_FUNCTION_AS_CONSTRUCTOR);
   // ra-dev: Already inside builtin, so don't need args slots?
   // __ break_(__LINE__);
@@ -870,7 +870,7 @@ static void Generate_JSEntryTrampolineHelper(MacroAssembler* masm,
   // args
 
   // Clear the context before we push it when entering the JS frame.
-  __ li(cp, Operand(0, RelocInfo::NONE));
+  __ mov(cp, zero_reg);
 
   // Enter an internal frame.
   __ EnterInternalFrame();
@@ -1176,7 +1176,7 @@ void Builtins::Generate_FunctionApply(MacroAssembler* masm) {
   // Push current limit and index.
   __ bind(&okay);
   __ push(v0);  // Limit.
-  __ li(a1, Operand(0));  // Initial index.
+  __ mov(a1, zero_reg);  // Initial index.
   __ push(a1);
 
   // Change context eagerly to get the right global object if necessary.

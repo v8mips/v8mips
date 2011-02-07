@@ -187,7 +187,7 @@ void RegExpMacroAssemblerMIPS::CheckAtStart(Label* on_at_start) {
   Label not_at_start;
   // Did we start the match at the start of the string at all?
   __ lw(a0, MemOperand(frame_pointer(), kAtStart));
-  BranchOrBacktrack(&not_at_start, eq, a0, Operand(0));
+  BranchOrBacktrack(&not_at_start, eq, a0, Operand(zero_reg));
 
   // If we did, are we still at the start of the input?
   __ lw(a1, MemOperand(frame_pointer(), kInputStart));
@@ -200,7 +200,7 @@ void RegExpMacroAssemblerMIPS::CheckAtStart(Label* on_at_start) {
 void RegExpMacroAssemblerMIPS::CheckNotAtStart(Label* on_not_at_start) {
   // Did we start the match at the start of the string at all?
   __ lw(a0, MemOperand(frame_pointer(), kAtStart));
-  BranchOrBacktrack(on_not_at_start, eq, a0, Operand(0));
+  BranchOrBacktrack(on_not_at_start, eq, a0, Operand(zero_reg));
   // If we did, are we still at the start of the input?
   __ lw(a1, MemOperand(frame_pointer(), kInputStart));
   __ Addu(a0, end_of_input_address(), Operand(current_input_offset()));
@@ -283,11 +283,11 @@ void RegExpMacroAssemblerMIPS::CheckNotBackReferenceIgnoreCase(
 
   // If length is zero, either the capture is empty or it is not participating.
   // In either case succeed immediately.
-  __ Branch(&fallthrough, eq, a1, Operand(0));
+  __ Branch(&fallthrough, eq, a1, Operand(zero_reg));
 
   __ Addu(t5, a1, current_input_offset());
   // Check that there are enough characters left in the input.
-  BranchOrBacktrack(on_no_match, gt, t5, Operand(0));
+  BranchOrBacktrack(on_no_match, gt, t5, Operand(zero_reg));
 
   if (mode_ == ASCII) {
     Label success;
@@ -368,7 +368,7 @@ void RegExpMacroAssemblerMIPS::CheckNotBackReferenceIgnoreCase(
     __ lw(end_of_input_address(), MemOperand(frame_pointer(), kInputEnd));
 
     // Check if function returned non-zero for success or zero for failure.
-    BranchOrBacktrack(on_no_match, eq, v0, Operand(0));
+    BranchOrBacktrack(on_no_match, eq, v0, Operand(zero_reg));
     // On success, increment position by length of capture.
     __ Addu(current_input_offset(), current_input_offset(), Operand(s3));
   }
@@ -388,11 +388,11 @@ void RegExpMacroAssemblerMIPS::CheckNotBackReference(
   __ lw(a1, register_location(start_reg + 1));
   __ Subu(a1, a1, a0);  // Length to check.
   // Succeed on empty capture (including no capture).
-  __ Branch(&fallthrough, eq, a1, Operand(0));
+  __ Branch(&fallthrough, eq, a1, Operand(zero_reg));
 
   __ Addu(t5, a1, current_input_offset());
   // Check that there are enough characters left in the input.
-  BranchOrBacktrack(on_no_match, gt, t5, Operand(0));
+  BranchOrBacktrack(on_no_match, gt, t5, Operand(zero_reg));
 
   // Compute pointers to match string and capture string
   __ Addu(a0, a0, Operand(end_of_input_address()));
@@ -541,7 +541,7 @@ bool RegExpMacroAssemblerMIPS::CheckSpecialCharacterClass(uc16 type,
     __ li(a0, Operand(map));
     __ Addu(a0, a0, current_character());
     __ lbu(a0, MemOperand(a0, 0));
-    BranchOrBacktrack(on_no_match, eq, a0, Operand(0));
+    BranchOrBacktrack(on_no_match, eq, a0, Operand(zero_reg));
     return true;
   }
   case 'W': {
@@ -554,7 +554,7 @@ bool RegExpMacroAssemblerMIPS::CheckSpecialCharacterClass(uc16 type,
     __ li(a0, Operand(map));
     __ Addu(a0, a0, current_character());
     __ lbu(a0, MemOperand(a0, 0));
-    BranchOrBacktrack(on_no_match, ne, a0, Operand(0));
+    BranchOrBacktrack(on_no_match, ne, a0, Operand(zero_reg));
     if (mode_ != ASCII) {
       __ bind(&done);
     }
@@ -618,7 +618,7 @@ Handle<Object> RegExpMacroAssemblerMIPS::GetCode(Handle<String> source) {
   __ bind(&stack_limit_hit);
   CallCheckStackGuardState(a0);
   // If returned value is non-zero, we exit with the returned value as result.
-  __ Branch(&exit_label_, ne, v0, Operand(0));
+  __ Branch(&exit_label_, ne, v0, Operand(zero_reg));
 
   __ bind(&stack_ok);
   // Allocate space on stack for registers.
@@ -657,7 +657,7 @@ Handle<Object> RegExpMacroAssemblerMIPS::GetCode(Handle<String> source) {
     __ sw(a0, MemOperand(a1));
     __ Addu(a1, a1, Operand(-kPointerSize));
     __ Subu(a2, a2, Operand(1));
-    __ Branch(&init_loop, ne, a2, Operand(0));
+    __ Branch(&init_loop, ne, a2, Operand(zero_reg));
   }
 
   // Initialize backtrack stack pointer.
@@ -667,7 +667,7 @@ Handle<Object> RegExpMacroAssemblerMIPS::GetCode(Handle<String> source) {
   // Load previous char as initial value of current character register.
   Label at_start;
   __ lw(a0, MemOperand(frame_pointer(), kAtStart));
-  __ Branch(&at_start, ne, a0, Operand(0));
+  __ Branch(&at_start, ne, a0, Operand(zero_reg));
   LoadCurrentCharacterUnchecked(-1, 1);  // Load previous char.
   __ jmp(&start_label_);
   __ bind(&at_start);
@@ -744,7 +744,7 @@ Handle<Object> RegExpMacroAssemblerMIPS::GetCode(Handle<String> source) {
     __ MultiPop(regexp_registers_to_retain);
     // If returning non-zero, we should end execution with the given
     // result as return value.
-    __ Branch(&exit_label_, ne, v0, Operand(0));
+    __ Branch(&exit_label_, ne, v0, Operand(zero_reg));
 
     // String might have moved: Reload end of string from frame.
     __ lw(end_of_input_address(), MemOperand(frame_pointer(), kInputEnd));
@@ -773,7 +773,7 @@ Handle<Object> RegExpMacroAssemblerMIPS::GetCode(Handle<String> source) {
     __ MultiPop(regexp_registers);
     // If return NULL, we have failed to grow the stack, and
     // must exit with a stack-overflow exception.
-    __ Branch(&exit_with_exception, eq, v0, Operand(0));
+    __ Branch(&exit_with_exception, eq, v0, Operand(zero_reg));
     // Otherwise use return value as new stack pointer.
     __ mov(backtrack_stackpointer(), v0);
     // Restore saved registers and continue.

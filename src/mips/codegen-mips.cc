@@ -1669,7 +1669,7 @@ void CodeGenerator::Comparison(Condition cc,
   CompareStub stub(cc, strict, kBothCouldBeNaN, true, lhs, rhs);
   frame_->CallStub(&stub, 0);
   __ mov(condReg1, v0);
-  __ li(condReg2, Operand(0));
+  __ mov(condReg2, zero_reg);
 
   exit.Jump();
 
@@ -1993,7 +1993,7 @@ void CodeGenerator::VisitDeclaration(Declaration* node) {
     } else if (node->fun() != NULL) {
       Load(node->fun());
     } else {
-      frame_->EmitPush(Operand(0));
+      frame_->EmitPush(zero_reg);
     }
 
     frame_->CallRuntime(Runtime::kDeclareContextSlot, 4);
