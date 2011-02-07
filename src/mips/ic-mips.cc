@@ -2210,8 +2210,9 @@ void KeyedLoadIC::GenerateIndexedInterceptor(MacroAssembler* masm) {
   // Check that the receiver isn't a smi.
   __ BranchOnSmi(a1, &slow);
 
-  // Check that the key is a smi.
-  __ BranchOnNotSmi(a0, &slow);
+  // Check that the key is an array index, that is Uint32.
+  __ And(t0, a0, Operand(kSmiTagMask | kSmiSignMask));
+  __ Branch(&slow, ne, t0, Operand(zero_reg));
 
   // Get the map of the receiver.
   __ lw(a2, FieldMemOperand(a1, HeapObject::kMapOffset));
