@@ -2527,7 +2527,7 @@ void CEntryStub::GenerateCore(MacroAssembler* masm,
   // v0:v1: result
   // sp: stack pointer
   // fp: frame pointer
-  __ LeaveExitFrame(mode_);
+  __ LeaveExitFrame();
 
   // Check if we should retry or throw exception.
   Label retry;
@@ -2576,7 +2576,7 @@ void CEntryStub::Generate(MacroAssembler* masm) {
   // builtin once.
 
   // Enter the exit frame that transitions from JavaScript to C++.
-  __ EnterExitFrame(mode_, s0, s1, s2);
+  __ EnterExitFrame(s0, s1, s2);
 
   // s0: number of arguments (C callee-saved)
   // s1: pointer to first argument (C callee-saved)

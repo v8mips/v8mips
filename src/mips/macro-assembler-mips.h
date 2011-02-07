@@ -474,17 +474,16 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
   void EnterConstructFrame() { EnterFrame(StackFrame::CONSTRUCT); }
   void LeaveConstructFrame() { LeaveFrame(StackFrame::CONSTRUCT); }
 
-  // Enter specific kind of exit frame; either EXIT or
-  // EXIT_DEBUG. Expects the number of arguments in register a0 and
+  // Enter exit frame.
+  // Expects the number of arguments in register a0 and
   // the builtin function to call in register a1.
   // On output hold_argc, hold_function, and hold_argv are setup.
-  void EnterExitFrame(ExitFrame::Mode mode,
-                      Register hold_argc,
+  void EnterExitFrame(Register hold_argc,
                       Register hold_argv,
                       Register hold_function);
 
   // Leave the current exit frame. Expects the return value in v0.
-  void LeaveExitFrame(ExitFrame::Mode mode);
+  void LeaveExitFrame();
 
   // Align the stack by optionally pushing a Smi zero.
   void AlignStack(int offset);    // TODO(REBASE) : remove this function.
@@ -522,12 +521,6 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
   // -------------------------------------------------------------------------
   // Debugger Support
 
-  void SaveRegistersToMemory(RegList regs);
-  void RestoreRegistersFromMemory(RegList regs);
-  void CopyRegistersFromMemoryToStack(Register base, RegList regs);
-  void CopyRegistersFromStackToMemory(Register base,
-                                      Register scratch,
-                                      RegList regs);
   void DebugBreak();
 #endif
 

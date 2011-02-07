@@ -247,17 +247,18 @@ const Address kFromSpaceZapValue =
 const uint64_t kDebugZapValue = 0xbadbaddbbadbaddb;
 #else
 #ifdef V8_TARGET_ARCH_MIPS
-// On mips 0xbaddead & 0xbeefdad are legal jump instructions, which
+// On mips 0xbaddead, 0xbeefdad, 0xbadbaddb are legal instructions, which
 // confuses debugging. Change to illegal instructions.
 const Address kZapValue = reinterpret_cast<Address>(0xdeadbeed);
 const Address kHandleZapValue = reinterpret_cast<Address>(0xdeadf00d);
 const Address kFromSpaceZapValue = reinterpret_cast<Address>(0xdeadd00d);
+const uint32_t kDebugZapValue = 0xf00dbadb;
 #else  // ! V8_TARGET_ARCH_MIPS
 const Address kZapValue = reinterpret_cast<Address>(0xdeadbeed);
 const Address kHandleZapValue = reinterpret_cast<Address>(0xbaddead);
 const Address kFromSpaceZapValue = reinterpret_cast<Address>(0xbeefdad);
-#endif  // V8_TARGET_ARCH_MIPS
 const uint32_t kDebugZapValue = 0xbadbaddb;
+#endif  // V8_TARGET_ARCH_MIPS
 #endif  // V8_HOST_ARCH_64_BIT
 
 
