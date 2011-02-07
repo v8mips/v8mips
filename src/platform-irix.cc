@@ -77,7 +77,7 @@ void OS::Setup() {
 
 
 int OS::ActivationFrameAlignment() {
-  return 8;
+  return 16;
 }
 
 
