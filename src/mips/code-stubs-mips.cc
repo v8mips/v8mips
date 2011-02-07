@@ -4018,17 +4018,21 @@ void SubStringStub::Generate(MacroAssembler* masm) {
   static const int kFromOffset = 1 * kPointerSize;
   static const int kStringOffset = 2 * kPointerSize;
 
+  Register to = t2;
+  Register from = t3;
+
   // Check bounds and smi-ness.
-  __ lw(t3, MemOperand(sp, kToOffset));
-  __ lw(t2, MemOperand(sp, kFromOffset));
+  __ lw(to, MemOperand(sp, kToOffset));
+  __ lw(from, MemOperand(sp, kFromOffset));
+  STATIC_ASSERT(kFromOffset == kToOffset + 4);
   STATIC_ASSERT(kSmiTag == 0);
   STATIC_ASSERT(kSmiTagSize + kSmiShiftSize == 1);
 
-  __ BranchOnNotSmi(t3, &sub_string_runtime);
-  __ BranchOnNotSmi(t2, &sub_string_runtime);
+  __ BranchOnNotSmi(from, &sub_string_runtime);
+  __ BranchOnNotSmi(to, &sub_string_runtime);
 
-  __ sra(a3, t2, kSmiTagSize);  // Remove smi tag.
-  __ sra(t5, t3, kSmiTagSize);  // Remove smi tag.
+  __ sra(a3, from, kSmiTagSize);  // Remove smi tag.
+  __ sra(t5, to, kSmiTagSize);  // Remove smi tag.
 
   // a3: from index (untagged smi)
   // t5: to index (untagged smi)
@@ -4043,10 +4047,12 @@ void SubStringStub::Generate(MacroAssembler* masm) {
   // cache). Two character strings are looked for in the symbol cache.
   __ Branch(&sub_string_runtime, lt, a2, Operand(2));
 
+  // Both to and from are smis.
+
   // a2: result string length
   // a3: from index (untagged smi)
-  // t2: from (smi)
-  // t3: to (smi)
+  // t2: (a.k.a. to): to (smi)
+  // t3: (a.k.a. from): from offset (smi)
   // t5: to index (untagged smi)
 
   // Make sure first argument is a sequential (or flat) string.
@@ -4063,8 +4069,8 @@ void SubStringStub::Generate(MacroAssembler* masm) {
   // a2: result string length
   // a3: from index (untagged smi)
   // t1: string
-  // t2: from (smi)
-  // t3: to (smi)
+  // t2: (a.k.a. to): to (smi)
+  // t3: (a.k.a. from): from offset (smi)
   // t5: to index (untagged smi)
 
   Label seq_string;
@@ -4095,19 +4101,19 @@ void SubStringStub::Generate(MacroAssembler* masm) {
   // a2: result string length
   // a3: from index (untagged smi)
   // t1: string
-  // t2: from (smi)
-  // t3: to (smi)
+  // t2: (a.k.a. to): to (smi)
+  // t3: (a.k.a. from): from offset (smi)
   // t5: to index (untagged smi)
 
   __ lw(t0, FieldMemOperand(t1, String::kLengthOffset));
-  __ Branch(&sub_string_runtime, lt, t0, Operand(t3));  // Fail if to > length.
+  __ Branch(&sub_string_runtime, lt, t0, Operand(to));  // Fail if to > length.
+  to = no_reg;
 
   // a1: instance type
   // a2: result string length
   // a3: from index (untagged smi)
   // t1: string
-  // t2: from (smi)
-  // t3: to (smi)
+  // t3: (a.k.a. from): from offset (smi)
   // t5: to index (untagged smi)
 
   // Check for flat ascii string.
@@ -4153,7 +4159,7 @@ void SubStringStub::Generate(MacroAssembler* masm) {
   // a2: result string length.
   // a3: from index (untagged smi)
   // t1: string.
-  // t2: from offset (smi)
+  // t3: (a.k.a. from): from offset (smi)
   // Locate first character of result.
   __ Addu(a1, v0, Operand(SeqAsciiString::kHeaderSize - kHeapObjectTag));
   // Locate 'from' character of string.
@@ -4174,7 +4180,7 @@ void SubStringStub::Generate(MacroAssembler* masm) {
   __ bind(&non_ascii_flat);
   // a2: result string length.
   // t1: string.
-  // t2: from offset (smi)
+  // t3: (a.k.a. from): from offset (smi)
   // Check for flat two byte string.
 
   // Allocate the result.
@@ -4189,7 +4195,8 @@ void SubStringStub::Generate(MacroAssembler* masm) {
   __ Addu(t1, t1, Operand(SeqTwoByteString::kHeaderSize - kHeapObjectTag));
   // As "from" is a smi it is 2 times the value which matches the size of a two
   // byte character.
-  __ Addu(t1, t1, Operand(t2));
+  __ Addu(t1, t1, Operand(from));
+  from = no_reg;
 
   // v0: result string.
   // a1: first character of result.
@@ -4286,8 +4293,8 @@ void StringCompareStub::Generate(MacroAssembler* masm) {
   // Stack frame on entry.
   //  sp[0]: right string
   //  sp[4]: left string
-  __ lw(a0, MemOperand(sp, 1 * kPointerSize));  // left
-  __ lw(a1, MemOperand(sp, 0 * kPointerSize));  // right
+  __ lw(a1, MemOperand(sp, 1 * kPointerSize));  // left
+  __ lw(a0, MemOperand(sp, 0 * kPointerSize));  // right
 
   Label not_same;
   __ Branch(&not_same, ne, a0, Operand(a1));
@@ -4301,12 +4308,12 @@ void StringCompareStub::Generate(MacroAssembler* masm) {
   __ bind(&not_same);
 
   // Check that both objects are sequential ascii strings.
-  __ JumpIfNotBothSequentialAsciiStrings(a0, a1, a2, a3, &runtime);
+  __ JumpIfNotBothSequentialAsciiStrings(a1, a0, a2, a3, &runtime);
 
   // Compare flat ascii strings natively. Remove arguments from stack first.
   __ IncrementCounter(&Counters::string_compare_native, 1, a2, a3);
   __ Addu(sp, sp, Operand(2 * kPointerSize));
-  GenerateCompareFlatAsciiStrings(masm, a1, a0, a2, a3, t0, t1);
+  GenerateCompareFlatAsciiStrings(masm, a0, a1, a2, a3, t0, t1);
 
   __ bind(&runtime);
   __ TailCallRuntime(Runtime::kStringCompare, 2, 1);
