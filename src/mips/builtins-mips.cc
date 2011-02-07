@@ -526,7 +526,11 @@ void Builtins::Generate_JSConstructCall(MacroAssembler* masm) {
 
 
 static void Generate_JSConstructStubHelper(MacroAssembler* masm,
-                                           bool is_api_function) {
+                                           bool is_api_function,
+                                           bool count_constructions) {
+  // Should never count constructions for api objects.
+  ASSERT(!is_api_function || !count_constructions);
+
   // a0     : number of arguments
   // a1     : constructor function
   // ra     : return address
@@ -557,7 +561,6 @@ static void Generate_JSConstructStubHelper(MacroAssembler* masm,
 
     // Load the initial map and verify that it is in fact a map.
     // a1: constructor function
-    // t7: undefined value
     __ lw(a2, FieldMemOperand(a1, JSFunction::kPrototypeOrInitialMapOffset));
     __ And(t0, a2, Operand(kSmiTagMask));
     __ Branch(&rt_call, eq, t0, Operand(zero_reg));
@@ -569,14 +572,36 @@ static void Generate_JSConstructStubHelper(MacroAssembler* masm,
     // instance type would be JS_FUNCTION_TYPE.
     // a1: constructor function
     // a2: initial map
-    // t7: undefined value
     __ lbu(a3, FieldMemOperand(a2, Map::kInstanceTypeOffset));
     __ Branch(&rt_call, eq, a3, Operand(JS_FUNCTION_TYPE));
+
+    if (count_constructions) {
+      Label allocate;
+      // Decrease generous allocation count.
+      __ lw(a3, FieldMemOperand(a1, JSFunction::kSharedFunctionInfoOffset));
+      MemOperand constructor_count =
+         FieldMemOperand(a3, SharedFunctionInfo::kConstructionCountOffset);
+      __ lbu(t0, constructor_count);
+      __ Subu(t0, t0, Operand(1));
+      __ sb(t0, constructor_count);
+      __ Branch(&allocate, ne, t0, Operand(zero_reg));
+
+      __ Push(a1, a2);
+
+      __ push(a1);  // constructor
+      // The call will replace the stub, so the countdown is only done once.
+      __ CallRuntime(Runtime::kFinalizeInstanceSize, 1);
+
+      __ pop(a2);
+      __ pop(a1);
+
+      __ bind(&allocate);
+    }
+
 
     // Now allocate the JSObject on the heap.
     // constructor function
     // a2: initial map
-    // t7: undefined value
     __ lbu(a3, FieldMemOperand(a2, Map::kInstanceSizeOffset));
     __ AllocateInNewSpace(a3, t4, t5, t6, &rt_call, SIZE_IN_WORDS);
 
@@ -586,7 +611,6 @@ static void Generate_JSConstructStubHelper(MacroAssembler* masm,
     // a2: initial map
     // a3: object size
     // t4: JSObject (not tagged)
-    // t7: undefined value
     __ LoadRoot(t6, Heap::kEmptyFixedArrayRootIndex);
     __ mov(t5, t4);
     __ sw(a2, MemOperand(t5, JSObject::kMapOffset));
@@ -597,17 +621,22 @@ static void Generate_JSConstructStubHelper(MacroAssembler* masm,
     ASSERT_EQ(1 * kPointerSize, JSObject::kPropertiesOffset);
     ASSERT_EQ(2 * kPointerSize, JSObject::kElementsOffset);
 
-    // Fill all the in-object properties with undefined.
+    // Fill all the in-object properties with appropriate filler.
     // a1: constructor function
     // a2: initial map
     // a3: object size (in words)
     // t4: JSObject (not tagged)
     // t5: First in-object property of JSObject (not tagged)
-    // t7: undefined value
     __ sll(t0, a3, kPointerSizeLog2);
     __ addu(t6, t4, t0);   // End of object.
     ASSERT_EQ(3 * kPointerSize, JSObject::kHeaderSize);
     { Label loop, entry;
+      if (count_constructions) {
+        // To allow for truncation.
+        __ LoadRoot(t7, Heap::kOnePointerFillerMapRootIndex);
+      } else {
+        __ LoadRoot(t7, Heap::kUndefinedValueRootIndex);
+      }
       __ jmp(&entry);
       __ bind(&loop);
       __ sw(t7, MemOperand(t5, 0));
@@ -627,7 +656,6 @@ static void Generate_JSConstructStubHelper(MacroAssembler* masm,
     // a1: constructor function
     // t4: JSObject
     // t5: start of next object (not tagged)
-    // t7: undefined value
     __ lbu(a3, FieldMemOperand(a2, Map::kUnusedPropertyFieldsOffset));
     // The field instance sizes contains both pre-allocated property fields and
     // in-object properties.
@@ -652,7 +680,6 @@ static void Generate_JSConstructStubHelper(MacroAssembler* masm,
     // a3: number of elements in properties array
     // t4: JSObject
     // t5: start of next object
-    // t7: undefined value
     __ Addu(a0, a3, Operand(FixedArray::kHeaderSize / kPointerSize));
     __ AllocateInNewSpace(
         a0,
@@ -667,7 +694,6 @@ static void Generate_JSConstructStubHelper(MacroAssembler* masm,
     // a3: number of elements in properties array (un-tagged)
     // t4: JSObject
     // t5: start of next object
-    // t7: undefined value
     __ LoadRoot(t6, Heap::kFixedArrayMapRootIndex);
     __ mov(a2, t5);
     __ sw(t6, MemOperand(a2, JSObject::kMapOffset));
@@ -684,11 +710,16 @@ static void Generate_JSConstructStubHelper(MacroAssembler* masm,
     // a3: number of elements in properties array
     // t4: JSObject
     // t5: FixedArray (not tagged)
-    // t7: undefined value
     __ sll(t3, a3, kPointerSizeLog2);
     __ addu(t6, a2, t3);  // End of object.
     ASSERT_EQ(2 * kPointerSize, FixedArray::kHeaderSize);
     { Label loop, entry;
+      if (count_constructions) {
+        __ LoadRoot(t7, Heap::kUndefinedValueRootIndex);
+      } else if (FLAG_debug_code) {
+        __ LoadRoot(t8, Heap::kUndefinedValueRootIndex);
+        __ Assert(eq, "Undefined value not loaded.", t7, Operand(t8));
+      }
       __ jmp(&entry);
       __ bind(&loop);
       __ sw(t7, MemOperand(a2));
@@ -840,13 +871,18 @@ static void Generate_JSConstructStubHelper(MacroAssembler* masm,
 }
 
 
+void Builtins::Generate_JSConstructStubCountdown(MacroAssembler* masm) {
+  Generate_JSConstructStubHelper(masm, false, true);
+}
+
+
 void Builtins::Generate_JSConstructStubGeneric(MacroAssembler* masm) {
-  Generate_JSConstructStubHelper(masm, false);
+  Generate_JSConstructStubHelper(masm, false, false);
 }
 
 
 void Builtins::Generate_JSConstructStubApi(MacroAssembler* masm) {
-  Generate_JSConstructStubHelper(masm, true);
+  Generate_JSConstructStubHelper(masm, true, false);
 }
 
 
