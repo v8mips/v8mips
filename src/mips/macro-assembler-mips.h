@@ -599,6 +599,12 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
   // occurred.
   void IllegalOperation(int num_arguments);
 
+  // Picks out an array index from the hash field.
+  // Register use:
+  //   hash - holds the index's hash. Clobbered.
+  //   index - holds the overwritten index on exit.
+  void IndexFromHash(Register hash, Register index);
+
   // Load the value of a number object into a FPU double register. If the
   // object is not a number a jump to the label not_number is performed
   // and the FPU double register is unchanged.

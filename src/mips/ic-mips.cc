@@ -540,32 +540,6 @@ static void GenerateKeyStringCheck(MacroAssembler* masm,
 }
 
 
-// Picks out an array index from the hash field.
-static void GenerateIndexFromHash(MacroAssembler* masm,
-                                  Register key,
-                                  Register hash) {
-  // Register use:
-  //   key - holds the overwritten key on exit.
-  //   hash - holds the key's hash. Clobbered.
-
-  // If the hash field contains an array index pick it out. The assert checks
-  // that the constants for the maximum number of digits for an array index
-  // cached in the hash field and the number of bits reserved for it does not
-  // conflict.
-  ASSERT(TenToThe(String::kMaxCachedArrayIndexLength) <
-         (1 << String::kArrayIndexValueBits));
-  // We want the smi-tagged index in key.  kArrayIndexValueMask has zeros in
-  // the low kHashShift bits.
-  ASSERT(String::kHashShift >= kSmiTagSize);
-  // Here we actually clobber the key which will be used if calling into
-  // runtime later. However as the new key is the numeric value of a string key
-  // there is no difference in using either key.
-  ASSERT(String::kHashShift >= kSmiTagSize);
-  __ Ext(hash, hash, String::kHashShift, String::kArrayIndexValueBits);
-  __ sll(key, hash, kSmiTagSize);
-}
-
-
 // Defined in ic.cc.
 Object* CallIC_Miss(Arguments args);
 
@@ -858,7 +832,7 @@ void KeyedCallIC::GenerateMegamorphic(MacroAssembler* masm, int argc) {
   GenerateMiss(masm, argc);
 
   __ bind(&index_string);
-  GenerateIndexFromHash(masm, a2, a3);
+  __ IndexFromHash (a3, a2);
   // Now jump to the place where smi keys are handled.
   __ jmp(&index_smi);
 }
@@ -1276,7 +1250,7 @@ void KeyedLoadIC::GenerateGeneric(MacroAssembler* masm) {
   __ Ret();
 
   __ bind(&index_string);
-  GenerateIndexFromHash(masm, key, a3);
+  __ IndexFromHash(a3, key);
   // Now jump to the place where smi keys are handled.
   __ Branch(&index_smi);
 }

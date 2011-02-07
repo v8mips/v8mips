@@ -5676,6 +5676,29 @@ void CodeGenerator::GenerateIsRegExpEquivalent(ZoneList<Expression*>* args) {
 }
 
 
+void CodeGenerator::GenerateHasCachedArrayIndex(ZoneList<Expression*>* args) {
+  ASSERT(args->length() == 1);
+  Load(args->at(0));
+  Register value = frame_->PopToRegister();
+  Register tmp = frame_->scratch0();
+  __ lw(tmp, FieldMemOperand(value, String::kHashFieldOffset));
+  __ And(condReg1, tmp, String::kContainsCachedArrayIndexMask);
+  __ mov(condReg2, zero_reg);
+  cc_reg_ = eq;
+}
+
+
+void CodeGenerator::GenerateGetCachedArrayIndex(ZoneList<Expression*>* args) {
+  ASSERT(args->length() == 1);
+  Load(args->at(0));
+  Register value = frame_->PopToRegister();
+
+  __ lw(value, FieldMemOperand(value, String::kHashFieldOffset));
+  __ IndexFromHash(value, value);
+  frame_->EmitPush(value);
+}
+
+
 void CodeGenerator::VisitCallRuntime(CallRuntime* node) {
 #ifdef DEBUG
   int original_height = frame_->height();
