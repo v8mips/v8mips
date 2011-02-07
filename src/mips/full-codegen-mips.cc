@@ -274,7 +274,7 @@ void FullCodeGenerator::ExitFinallyBlock() {
   { UNIMPLEMENTED_MIPS(); }
 
 #define MIPS_UNIMPLEMENTED_FULL_CODEGEN_PLUG(Name) \
-  void FullCodeGenerator::Name##Context::Plug(Slot*) const \
+  void FullCodeGenerator::Name##Context::Plug(Slot* slot) const \
   { UNIMPLEMENTED_MIPS(); } \
   void FullCodeGenerator::Name##Context::Plug(Heap::RootListIndex) const \
   { UNIMPLEMENTED_MIPS(); } \
@@ -284,7 +284,7 @@ void FullCodeGenerator::ExitFinallyBlock() {
   { UNIMPLEMENTED_MIPS(); } \
   void FullCodeGenerator::Name##Context::Plug(Label*, Label*) const \
   { UNIMPLEMENTED_MIPS(); } \
-  void FullCodeGenerator::Name##Context::Plug(bool) const \
+  void FullCodeGenerator::Name##Context::Plug(bool bool_) const \
   { UNIMPLEMENTED_MIPS(); }
 
 MIPS_UNIMPLEMENTED_FULL_CODEGEN_FUNC(EmitIsSmi)
