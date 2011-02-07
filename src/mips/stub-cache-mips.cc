@@ -1619,6 +1619,108 @@ Object* CallStubCompiler::CompileMathFloorCall(Object* object,
   return Heap::undefined_value();
 }
 
+Object* CallStubCompiler::CompileMathAbsCall(Object* object,
+                                             JSObject* holder,
+                                             JSGlobalPropertyCell* cell,
+                                             JSFunction* function,
+                                             String* name) {
+  // ----------- S t a t e -------------
+  // IMPORTANT: the stack alignment differs from the arm version
+  //  -- a2                     : function name
+  //  -- ra                     : return address
+  //  -- sp[(argc - n) * 4]     : arg[n] (zero-based)
+  //  -- ...
+  //  -- sp[(argc + 1) * 4]     : receiver
+  // -----------------------------------
+
+  const int argc = arguments().immediate();
+
+  // If the object is not a JSObject or we got an unexpected number of
+  // arguments, bail out to the regular call.
+  if (!object->IsJSObject() || argc != 1) return Heap::undefined_value();
+
+  Label miss;
+  GenerateNameCheck(name, &miss);
+
+  if (cell == NULL) {
+    __ lw(a1, MemOperand(sp, 2 * kPointerSize));
+
+    STATIC_ASSERT(kSmiTag == 0);
+    __ BranchOnSmi(a1, &miss);
+
+    CheckPrototypes(JSObject::cast(object), a1, holder, a0, a3, t0, name,
+                    &miss);
+  } else {
+    ASSERT(cell->value() == function);
+    GenerateGlobalReceiverCheck(JSObject::cast(object), holder, name, &miss);
+    GenerateLoadFunctionFromCell(cell, function, &miss);
+  }
+
+  // Load the (only) argument into a0.
+  __ lw(a0, MemOperand(sp, 1 * kPointerSize));
+
+  // Check if the argument is a smi.
+  Label not_smi;
+  STATIC_ASSERT(kSmiTag == 0);
+  __ BranchOnNotSmi(a0, &not_smi);
+
+  // Do bitwise not or do nothing depending on the sign of the
+  // argument.
+  __ sra(t0, a0, kBitsPerInt - 1);
+  __ Xor(a1, a0, t0);
+
+  // Add 1 or do nothing depending on the sign of the argument.
+  __ Subu(a0, a1, t0);
+
+  // If the result is still negative, go to the slow case.
+  // This only happens for the most negative smi.
+  Label slow;
+  __ Branch(&slow, lt, a0, Operand(zero_reg));
+
+  // Smi case done.
+  __ Drop(argc + 1);
+  __ Ret();
+
+  // Check if the argument is a heap number and load its exponent and
+  // sign.
+  __ bind(&not_smi);
+  __ CheckMap(a0, a1, Heap::kHeapNumberMapRootIndex, &slow, true);
+  __ lw(a1, FieldMemOperand(a0, HeapNumber::kExponentOffset));
+
+  // Check the sign of the argument. If the argument is positive,
+  // just return it.
+  Label negative_sign;
+  __ And(t0, a1, Operand(HeapNumber::kSignMask));
+  __ Branch(&negative_sign, ne, t0, Operand(zero_reg));
+  __ Drop(argc + 1);
+  __ Ret();
+
+  // If the argument is negative, clear the sign, and return a new
+  // number.
+  __ bind(&negative_sign);
+  __ Xor(a1, a1, Operand(HeapNumber::kSignMask));
+  __ lw(a3, FieldMemOperand(a0, HeapNumber::kMantissaOffset));
+  __ LoadRoot(t2, Heap::kHeapNumberMapRootIndex);
+  __ AllocateHeapNumber(a0, t0, t1, t2, &slow);
+  __ sw(a1, FieldMemOperand(a0, HeapNumber::kExponentOffset));
+  __ sw(a3, FieldMemOperand(a0, HeapNumber::kMantissaOffset));
+  __ Drop(argc + 1);
+  __ Ret();
+
+  // Tail call the full function. We do not have to patch the receiver
+  // because the function makes no use of it.
+  __ bind(&slow);
+  __ InvokeFunction(function, arguments(), JUMP_FUNCTION);
+
+  __ bind(&miss);
+  // a2: function name.
+  Object* obj = GenerateMissBranch();
+  if (obj->IsFailure()) return obj;
+
+  // Return the generated code.
+  return (cell == NULL) ? GetCode(function) : GetCode(NORMAL, name);
+}
+
 Object* CallStubCompiler::CompileCallConstant(Object* object,
                                               JSObject* holder,
                                               JSFunction* function,
