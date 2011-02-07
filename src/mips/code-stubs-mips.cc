@@ -991,8 +991,8 @@ void CompareStub::Generate(MacroAssembler* masm) {
     Label not_two_smis, smi_done;
     __ Or(a2, a1, a0);
     __ BranchOnNotSmi(a2, &not_two_smis);
-    __ Branch(&smi_done, ge, a1, Operand(a0), false);
-    __ subu(v0, a1, a0);  // This is in the branch delay slot.
+    __ Subu(v0, a1, a0);
+    __ Branch(&smi_done, ge, v0, Operand(zero_reg));
     // Correct the sign in case of overflow.
     __ Subu(v0, zero_reg, v0);
     __ bind(&smi_done);
