@@ -3195,6 +3195,7 @@ Object* Heap::AllocateRawFixedArray(int length) {
   if (length < 0 || length > FixedArray::kMaxLength) {
     return Failure::OutOfMemoryException();
   }
+  ASSERT(length > 0);
   // Use the general function if we're forced to always allocate.
   if (always_allocate()) return AllocateFixedArray(length, TENURED);
   // Allocate the raw data for a fixed array.
@@ -3205,16 +3206,19 @@ Object* Heap::AllocateRawFixedArray(int length) {
 }
 
 
-Object* Heap::CopyFixedArray(FixedArray* src) {
+Object* Heap::CopyFixedArrayWithMap(FixedArray* src, Map* map) {
   int len = src->length();
   Object* obj = AllocateRawFixedArray(len);
   if (obj->IsFailure()) return obj;
   if (Heap::InNewSpace(obj)) {
     HeapObject* dst = HeapObject::cast(obj);
-    CopyBlock(dst->address(), src->address(), FixedArray::SizeFor(len));
+    dst->set_map(map);
+    CopyBlock(dst->address() + kPointerSize,
+              src->address() + kPointerSize,
+              FixedArray::SizeFor(len) - kPointerSize);
     return obj;
   }
-  HeapObject::cast(obj)->set_map(src->map());
+  HeapObject::cast(obj)->set_map(map);
   FixedArray* result = FixedArray::cast(obj);
   result->set_length(len);
 
