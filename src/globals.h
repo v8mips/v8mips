@@ -333,6 +333,7 @@ class MarkCompactCollector;
 class NewSpace;
 class NodeVisitor;
 class Object;
+class MaybeObject;
 class OldSpace;
 class Property;
 class Proxy;
@@ -551,8 +552,8 @@ union IeeeDoubleBigEndianArchType {
 
 // AccessorCallback
 struct AccessorDescriptor {
-  Object* (*getter)(Object* object, void* data);
-  Object* (*setter)(JSObject* object, Object* value, void* data);
+  MaybeObject* (*getter)(Object* object, void* data);
+  MaybeObject* (*setter)(JSObject* object, Object* value, void* data);
   void* data;
 };
 

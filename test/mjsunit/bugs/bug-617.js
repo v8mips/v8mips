@@ -25,41 +25,20 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#ifndef V8_CACHED_POWERS_H_
-#define V8_CACHED_POWERS_H_
+// See http://code.google.com/p/v8/issues/detail?id=617 comment 5
 
-#include "diy-fp.h"
+var got_here = 0;
 
-namespace v8 {
-namespace internal {
+function make_sure_we_dont_get_here() {
+  got_here = 1;
+}
 
-class PowersOfTenCache {
- public:
+RegExp.prototype.exec = make_sure_we_dont_get_here;
 
-  // Not all powers of ten are cached. The decimal exponent of two neighboring
-  // cached numbers will differ by kDecimalExponentDistance.
-  static const int kDecimalExponentDistance;
+var re = /foo/;
 
-  static const int kMinDecimalExponent;
-  static const int kMaxDecimalExponent;
+re.exec = make_sure_we_dont_get_here;
 
-  // Returns a cached power-of-ten with a binary exponent in the range
-  // [min_exponent; max_exponent] (boundaries included).
-  static void GetCachedPowerForBinaryExponentRange(int min_exponent,
-                                                   int max_exponent,
-                                                   DiyFp* power,
-                                                   int* decimal_exponent);
+re("foo");
 
-  // Returns a cached power of ten x ~= 10^k such that
-  //   k <= decimal_exponent < k + kCachedPowersDecimalDistance.
-  // The given decimal_exponent must satisfy
-  //   kMinDecimalExponent <= requested_exponent, and
-  //   requested_exponent < kMaxDecimalExponent + kDecimalExponentDistance.
-  static void GetCachedPowerForDecimalExponent(int requested_exponent,
-                                               DiyFp* power,
-                                               int* found_exponent);
-};
-
-} }  // namespace v8::internal
-
-#endif  // V8_CACHED_POWERS_H_
+assertEquals(got_here, 0);
