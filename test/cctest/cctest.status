@@ -56,8 +56,4 @@ test-api/OutOfMemoryNested: SKIP
 # BUG(355): Test crashes on ARM.
 test-log/ProfLazyMode: SKIP
 
-# BUG(845)
-test-debug/GCDuringBreakPointProcessing: SKIP
-test-debug/BreakPointICCallWithGC: SKIP
-
 [ $arch == mips ]
