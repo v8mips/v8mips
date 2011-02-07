@@ -345,10 +345,10 @@ class CodeGenerator: public AstVisitor {
 
   int NumberOfSlot(Slot* slot);
   // State
-  bool has_cc() const  { return cc_reg_ != cc_always; }
+  bool has_cc() const { return cc_reg_ != cc_always; }
 
-  JumpTarget* true_target() const  { return state_->true_target(); }
-  JumpTarget* false_target() const  { return state_->false_target(); }
+  JumpTarget* true_target() const { return state_->true_target(); }
+  JumpTarget* false_target() const { return state_->false_target(); }
 
   // Track loop nesting level.
   int loop_nesting() const { return loop_nesting_; }
@@ -390,7 +390,7 @@ class CodeGenerator: public AstVisitor {
                                                JumpTarget* slow);
 
   // Expressions
-  MemOperand GlobalObject() const  {
+  MemOperand GlobalObject() const {
     return ContextOperand(cp, Context::GLOBAL_INDEX);
   }
 
