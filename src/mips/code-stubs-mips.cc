@@ -2641,7 +2641,11 @@ void JSEntryStub::GenerateBody(MacroAssembler* masm, bool is_construct) {
 
   // Load argv in s0 register.
   __ lw(s0, MemOperand(sp, kNumCalleeSaved * kPointerSize +
-                           StandardFrameConstants::kCArgsSlotsSize));
+                           StandardFrameConstants::kCArgsSlotsSize
+#ifdef _ABIN32
+                           + 180
+#endif
+                       ));
 
   // We build an EntryFrame.
   __ li(t3, Operand(-1));  // Push a bad frame pointer to fail if it is used.

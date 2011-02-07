@@ -68,6 +68,9 @@ class Arguments BASE_EMBEDDED {
 
  private:
   int length_;
+#ifdef _ABIN32
+  uint32_t padding_;
+#endif
   Object** arguments_;
 };
 
