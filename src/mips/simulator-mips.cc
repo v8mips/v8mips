@@ -299,7 +299,9 @@ void Debugger::PrintAllRegs() {
 
 void Debugger::PrintAllRegsIncludingFPU() {
 #define FPU_REG_INFO(n) FPURegisters::Name(n), FPURegisters::Name(n+1), \
-                        GetFPURegisterValueLong(n), GetFPURegisterValueDouble(n)
+        GetFPURegisterValueInt(n), \
+        GetFPURegisterValueInt(n+1), \
+                        GetFPURegisterValueDouble(n)
 
   PrintAllRegs();
 
@@ -307,22 +309,22 @@ void Debugger::PrintAllRegsIncludingFPU() {
     v8i::CpuFeatures::Scope scope(v8i::FPU);
     PrintF("\n\n");
     // f0, f1, f2, ... f31
-    PrintF("%3s,%3s: 0x%016llx %16.4e\n", FPU_REG_INFO(0) );
-    PrintF("%3s,%3s: 0x%016llx %16.4e\n", FPU_REG_INFO(2) );
-    PrintF("%3s,%3s: 0x%016llx %16.4e\n", FPU_REG_INFO(4) );
-    PrintF("%3s,%3s: 0x%016llx %16.4e\n", FPU_REG_INFO(6) );
-    PrintF("%3s,%3s: 0x%016llx %16.4e\n", FPU_REG_INFO(8) );
-    PrintF("%3s,%3s: 0x%016llx %16.4e\n", FPU_REG_INFO(10));
-    PrintF("%3s,%3s: 0x%016llx %16.4e\n", FPU_REG_INFO(12));
-    PrintF("%3s,%3s: 0x%016llx %16.4e\n", FPU_REG_INFO(14));
-    PrintF("%3s,%3s: 0x%016llx %16.4e\n", FPU_REG_INFO(16));
-    PrintF("%3s,%3s: 0x%016llx %16.4e\n", FPU_REG_INFO(18));
-    PrintF("%3s,%3s: 0x%016llx %16.4e\n", FPU_REG_INFO(20));
-    PrintF("%3s,%3s: 0x%016llx %16.4e\n", FPU_REG_INFO(22));
-    PrintF("%3s,%3s: 0x%016llx %16.4e\n", FPU_REG_INFO(24));
-    PrintF("%3s,%3s: 0x%016llx %16.4e\n", FPU_REG_INFO(26));
-    PrintF("%3s,%3s: 0x%016llx %16.4e\n", FPU_REG_INFO(28));
-    PrintF("%3s,%3s: 0x%016llx %16.4e\n", FPU_REG_INFO(30));
+    PrintF("%3s,%3s: 0x%08x%08x %16.4e\n", FPU_REG_INFO(0) );
+    PrintF("%3s,%3s: 0x%08x%08x %16.4e\n", FPU_REG_INFO(2) );
+    PrintF("%3s,%3s: 0x%08x%08x %16.4e\n", FPU_REG_INFO(4) );
+    PrintF("%3s,%3s: 0x%08x%08x %16.4e\n", FPU_REG_INFO(6) );
+    PrintF("%3s,%3s: 0x%08x%08x %16.4e\n", FPU_REG_INFO(8) );
+    PrintF("%3s,%3s: 0x%08x%08x %16.4e\n", FPU_REG_INFO(10));
+    PrintF("%3s,%3s: 0x%08x%08x %16.4e\n", FPU_REG_INFO(12));
+    PrintF("%3s,%3s: 0x%08x%08x %16.4e\n", FPU_REG_INFO(14));
+    PrintF("%3s,%3s: 0x%08x%08x %16.4e\n", FPU_REG_INFO(16));
+    PrintF("%3s,%3s: 0x%08x%08x %16.4e\n", FPU_REG_INFO(18));
+    PrintF("%3s,%3s: 0x%08x%08x %16.4e\n", FPU_REG_INFO(20));
+    PrintF("%3s,%3s: 0x%08x%08x %16.4e\n", FPU_REG_INFO(22));
+    PrintF("%3s,%3s: 0x%08x%08x %16.4e\n", FPU_REG_INFO(24));
+    PrintF("%3s,%3s: 0x%08x%08x %16.4e\n", FPU_REG_INFO(26));
+    PrintF("%3s,%3s: 0x%08x%08x %16.4e\n", FPU_REG_INFO(28));
+    PrintF("%3s,%3s: 0x%08x%08x %16.4e\n", FPU_REG_INFO(30));
   }
 
 #undef REG_INFO
@@ -417,14 +419,15 @@ void Debugger::Debug() {
                 fvalue = GetFPURegisterValueFloat(fpuregnum);
                 PrintF("%s: 0x%08x %11.4e\n", arg1, value, fvalue);
               } else {
-                int64_t lvalue;
                 double dfvalue;
-                lvalue = GetFPURegisterValueLong(fpuregnum);
+                int32_t lvalue1 = GetFPURegisterValueInt(fpuregnum);
+                int32_t lvalue2 = GetFPURegisterValueInt(fpuregnum + 1);
                 dfvalue = GetFPURegisterValueDouble(fpuregnum);
-                PrintF("%3s,%3s: 0x%016llx %16.4e\n",
+                PrintF("%3s,%3s: 0x%08x%08x %16.4e\n",
                        FPURegisters::Name(fpuregnum),
                        FPURegisters::Name(fpuregnum+1),
-                       lvalue,
+                       lvalue1,
+                       lvalue2,
                        dfvalue);
               }
             } else {
@@ -504,7 +507,8 @@ void Debugger::Debug() {
         end = cur + words;
 
         while (cur < end) {
-          PrintF("  0x%08x:  0x%08x %10d\n", cur, *cur, *cur);
+          PrintF("  0x%08x:  0x%08x %10d\n",
+                 reinterpret_cast<intptr_t>(cur), *cur, *cur);
           cur++;
         }
 
@@ -538,7 +542,8 @@ void Debugger::Debug() {
 
         while (cur < end) {
           dasm.InstructionDecode(buffer, cur);
-          PrintF("  0x%08x  %s\n", cur, buffer.start());
+          PrintF("  0x%08x  %s\n",
+              reinterpret_cast<intptr_t>(cur), buffer.start());
           cur += Instruction::kInstructionSize;
         }
       } else if (strcmp(cmd, "gdb") == 0) {
@@ -600,7 +605,8 @@ void Debugger::Debug() {
 
         while (cur < end) {
           dasm.InstructionDecode(buffer, cur);
-          PrintF("  0x%08x  %s\n", cur, buffer.start());
+          PrintF("  0x%08x  %s\n",
+                 reinterpret_cast<intptr_t>(cur), buffer.start());
           cur += Instruction::kInstructionSize;
         }
       } else if ((strcmp(cmd, "h") == 0) || (strcmp(cmd, "help") == 0)) {
@@ -970,7 +976,8 @@ int Simulator::ReadW(int32_t addr, Instruction* instr) {
     intptr_t* ptr = reinterpret_cast<intptr_t*>(addr);
     return *ptr;
   }
-  PrintF("Unaligned read at 0x%08x, pc=%p\n", addr, instr);
+  PrintF("Unaligned read at 0x%08x, pc=%p\n", addr,
+      reinterpret_cast<void*>(instr));
   Debugger dbg(this);
   dbg.Debug();
   return 0;
@@ -988,7 +995,8 @@ void Simulator::WriteW(int32_t addr, int value, Instruction* instr) {
     *ptr = value;
     return;
   }
-  PrintF("Unaligned write at 0x%08x, pc=%p\n", addr, instr);
+  PrintF("Unaligned write at 0x%08x, pc=%p\n", addr,
+      reinterpret_cast<void*>(instr));
   Debugger dbg(this);
   dbg.Debug();
 }
@@ -999,7 +1007,8 @@ double Simulator::ReadD(int32_t addr, Instruction* instr) {
     double* ptr = reinterpret_cast<double*>(addr);
     return *ptr;
   }
-  PrintF("Unaligned (double) read at 0x%08x, pc=%p\n", addr, instr);
+  PrintF("Unaligned (double) read at 0x%08x, pc=%p\n", addr,
+      reinterpret_cast<void*>(instr));
   OS::Abort();
   return 0;
 }
@@ -1011,7 +1020,8 @@ void Simulator::WriteD(int32_t addr, double value, Instruction* instr) {
     *ptr = value;
     return;
   }
-  PrintF("Unaligned (double) write at 0x%08x, pc=%p\n", addr, instr);
+  PrintF("Unaligned (double) write at 0x%08x, pc=%p\n", addr,
+      reinterpret_cast<void*>(instr));
   OS::Abort();
 }
 
@@ -1021,7 +1031,8 @@ uint16_t Simulator::ReadHU(int32_t addr, Instruction* instr) {
     uint16_t* ptr = reinterpret_cast<uint16_t*>(addr);
     return *ptr;
   }
-  PrintF("Unaligned unsigned halfword read at 0x%08x, pc=%p\n", addr, instr);
+  PrintF("Unaligned unsigned halfword read at 0x%08x, pc=%p\n", addr,
+      reinterpret_cast<void*>(instr));
   OS::Abort();
   return 0;
 }
@@ -1032,7 +1043,8 @@ int16_t Simulator::ReadH(int32_t addr, Instruction* instr) {
     int16_t* ptr = reinterpret_cast<int16_t*>(addr);
     return *ptr;
   }
-  PrintF("Unaligned signed halfword read at 0x%08x, pc=%p\n", addr, instr);
+  PrintF("Unaligned signed halfword read at 0x%08x, pc=%p\n", addr,
+      reinterpret_cast<void*>(instr));
   OS::Abort();
   return 0;
 }
@@ -1044,7 +1056,8 @@ void Simulator::WriteH(int32_t addr, uint16_t value, Instruction* instr) {
     *ptr = value;
     return;
   }
-  PrintF("Unaligned unsigned halfword write at 0x%08x, pc=%p\n", addr, instr);
+  PrintF("Unaligned unsigned halfword write at 0x%08x, pc=%p\n", addr,
+      reinterpret_cast<void*>(instr));
   OS::Abort();
 }
 
@@ -1055,7 +1068,8 @@ void Simulator::WriteH(int32_t addr, int16_t value, Instruction* instr) {
     *ptr = value;
     return;
   }
-  PrintF("Unaligned halfword write at 0x%08x, pc=%p\n", addr, instr);
+  PrintF("Unaligned halfword write at 0x%08x, pc=%p\n", addr,
+      reinterpret_cast<void*>(instr));
   OS::Abort();
 }
 
@@ -1095,7 +1109,7 @@ uintptr_t Simulator::StackLimit() const {
 // Unsupported instructions use Format to print an error and stop execution.
 void Simulator::Format(Instruction* instr, const char* format) {
   PrintF("Simulator found unsupported instruction:\n 0x%08x: %s\n",
-         instr, format);
+         reinterpret_cast<intptr_t>(instr), format);
   UNIMPLEMENTED_MIPS();
 }
 
@@ -2090,7 +2104,8 @@ void Simulator::InstructionDecode(Instruction* instr) {
     v8::internal::EmbeddedVector<char, 256> buffer;
     dasm.InstructionDecode(buffer,
                            reinterpret_cast<byte_*>(instr));
-    PrintF("  0x%08x  %s\n", instr, buffer.start());
+    PrintF("  0x%08x  %s\n", reinterpret_cast<intptr_t>(instr),
+        buffer.start());
   }
 
   switch (instr->InstructionType()) {
