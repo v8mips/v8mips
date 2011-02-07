@@ -55,38 +55,6 @@ FullCodeGenerator::ConstantOperand FullCodeGenerator::GetConstantOperand(
   return kNoConstants;
 }
 
-void FullCodeGenerator::Apply(Expression::Context context, Register reg) {
-  UNIMPLEMENTED_MIPS();
-}
-
-
-void FullCodeGenerator::Apply(Expression::Context context, Slot* slot) {
-  UNIMPLEMENTED_MIPS();
-}
-
-void FullCodeGenerator::Apply(Expression::Context context, Literal* lit) {
-  UNIMPLEMENTED_MIPS();
-}
-
-
-void FullCodeGenerator::ApplyTOS(Expression::Context context) {
-  UNIMPLEMENTED_MIPS();
-}
-
-
-void FullCodeGenerator::DropAndApply(int count,
-                                     Expression::Context context,
-                                     Register reg) {
-  UNIMPLEMENTED_MIPS();
-}
-
-
-void FullCodeGenerator::Apply(Expression::Context context,
-                              Label* materialize_true,
-                              Label* materialize_false) {
-  UNIMPLEMENTED_MIPS();
-}
-
 
 void FullCodeGenerator::DoTest(Label* if_true,
                                Label* if_false,
@@ -165,13 +133,6 @@ void FullCodeGenerator::EmitLoadGlobalSlotCheckExtensions(
   UNIMPLEMENTED_MIPS();
 }
 
-
-void FullCodeGenerator::EmitVariableLoad(Variable* var,
-                                         Expression::Context context) {
-  UNIMPLEMENTED_MIPS();
-}
-
-
 void FullCodeGenerator::VisitRegExpLiteral(RegExpLiteral* expr) {
   UNIMPLEMENTED_MIPS();
 }
@@ -200,31 +161,6 @@ void FullCodeGenerator::EmitNamedPropertyLoad(Property* prop) {
 void FullCodeGenerator::EmitKeyedPropertyLoad(Property* prop) {
   UNIMPLEMENTED_MIPS();
 }
-
-
-void FullCodeGenerator::EmitInlineSmiBinaryOp(Expression* expr,
-                                              Token::Value op,
-                                              Expression::Context context,
-                                              OverwriteMode mode,
-                                              Expression* left,
-                                              Expression* right,
-                                              ConstantOperand constant) {
-  UNIMPLEMENTED_MIPS();
-}
-
-void FullCodeGenerator::EmitBinaryOp(Token::Value op,
-                                     Expression::Context context,
-                                     OverwriteMode mode) {
-  UNIMPLEMENTED_MIPS();
-}
-
-
-void FullCodeGenerator::EmitVariableAssignment(Variable* var,
-                                               Token::Value op,
-                                               Expression::Context context) {
-  UNIMPLEMENTED_MIPS();
-}
-
 
 void FullCodeGenerator::EmitNamedPropertyAssignment(Assignment* expr) {
   UNIMPLEMENTED_MIPS();
@@ -305,6 +241,18 @@ void FullCodeGenerator::LoadContextField(Register dst, int context_index) {
   UNIMPLEMENTED_MIPS();
 }
 
+void FullCodeGenerator::EmitInlineSmiBinaryOp(Expression*,
+                                              Token::Value,
+                                              OverwriteMode,
+                                              Expression*,
+                                              Expression*,
+                                              ConstantOperand) {
+  UNIMPLEMENTED_MIPS();
+}
+
+void FullCodeGenerator::EmitBinaryOp(Token::Value, OverwriteMode) {
+  UNIMPLEMENTED_MIPS();
+}
 
 // ----------------------------------------------------------------------------
 // Non-local control flow support.
@@ -323,6 +271,20 @@ void FullCodeGenerator::ExitFinallyBlock() {
 // currently unimplemented.
 #define MIPS_UNIMPLEMENTED_FULL_CODEGEN_FUNC(Name) \
   void FullCodeGenerator::Name(ZoneList<v8::internal::Expression*>*) \
+  { UNIMPLEMENTED_MIPS(); }
+
+#define MIPS_UNIMPLEMENTED_FULL_CODEGEN_PLUG(Name) \
+  void FullCodeGenerator::Name##Context::Plug(Slot*) const \
+  { UNIMPLEMENTED_MIPS(); } \
+  void FullCodeGenerator::Name##Context::Plug(Heap::RootListIndex) const \
+  { UNIMPLEMENTED_MIPS(); } \
+  void FullCodeGenerator::Name##Context::Plug(Handle<Object>) const \
+  { UNIMPLEMENTED_MIPS(); } \
+  void FullCodeGenerator::Name##Context::DropAndPlug(int, Register) const \
+  { UNIMPLEMENTED_MIPS(); } \
+  void FullCodeGenerator::Name##Context::Plug(Label*, Label*) const \
+  { UNIMPLEMENTED_MIPS(); } \
+  void FullCodeGenerator::Name##Context::Plug(bool) const \
   { UNIMPLEMENTED_MIPS(); }
 
 MIPS_UNIMPLEMENTED_FULL_CODEGEN_FUNC(EmitIsSmi)
@@ -362,6 +324,12 @@ MIPS_UNIMPLEMENTED_FULL_CODEGEN_FUNC(EmitIsRegExpEquivalent)
 MIPS_UNIMPLEMENTED_FULL_CODEGEN_FUNC(EmitIsStringWrapperSafeForDefaultValueOf)
 MIPS_UNIMPLEMENTED_FULL_CODEGEN_FUNC(EmitHasCachedArrayIndex)
 MIPS_UNIMPLEMENTED_FULL_CODEGEN_FUNC(EmitGetCachedArrayIndex)
+
+MIPS_UNIMPLEMENTED_FULL_CODEGEN_PLUG(Effect)
+MIPS_UNIMPLEMENTED_FULL_CODEGEN_PLUG(AccumulatorValue)
+MIPS_UNIMPLEMENTED_FULL_CODEGEN_PLUG(StackValue)
+MIPS_UNIMPLEMENTED_FULL_CODEGEN_PLUG(Test)
+
 
 #undef __
 
