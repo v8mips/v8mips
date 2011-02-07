@@ -469,6 +469,7 @@ void Heap::CollectGarbage(AllocationSpace space,
 
 #ifdef ENABLE_LOGGING_AND_PROFILING
   if (FLAG_log_gc) HeapProfiler::WriteSample();
+  if (CpuProfiler::is_profiling()) CpuProfiler::ProcessMovedFunctions();
 #endif
 }
 
@@ -662,6 +663,10 @@ void Heap::UpdateSurvivalRateTrend(int start_new_space_size) {
 void Heap::PerformGarbageCollection(GarbageCollector collector,
                                     GCTracer* tracer,
                                     CollectionPolicy collectionPolicy) {
+  if (collector != SCAVENGER) {
+    PROFILE(CodeMovingGCEvent());
+  }
+
   VerifySymbolTable();
   if (collector == MARK_COMPACTOR && global_gc_prologue_callback_) {
     ASSERT(!allocation_allowed_);
@@ -1256,7 +1261,7 @@ class ScavengingVisitor : public StaticVisitorBase {
     if (Logger::is_logging() || CpuProfiler::is_profiling()) {
       if (target->IsJSFunction()) {
         PROFILE(FunctionMoveEvent(source->address(), target->address()));
-        PROFILE(FunctionCreateEventFromMove(JSFunction::cast(target), source));
+        PROFILE(FunctionCreateEventFromMove(JSFunction::cast(target)));
       }
     }
 #endif
