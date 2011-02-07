@@ -298,6 +298,11 @@ Handle<Code> FullCodeGenerator::MakeCode(CompilationInfo* info) {
 }
 
 
+MemOperand FullCodeGenerator::ContextOperand(Register context, int index) {
+  return CodeGenerator::ContextOperand(context, index);
+}
+
+
 int FullCodeGenerator::SlotOffset(Slot* slot) {
   ASSERT(slot != NULL);
   // Offset is negative because higher indexes are at lower addresses.
@@ -825,18 +830,13 @@ void FullCodeGenerator::VisitDoWhileStatement(DoWhileStatement* stmt) {
 
 void FullCodeGenerator::VisitWhileStatement(WhileStatement* stmt) {
   Comment cmnt(masm_, "[ WhileStatement");
-  Label body, stack_limit_hit, stack_check_success;
+  Label body, stack_limit_hit, stack_check_success, done;
 
   Iteration loop_statement(this, stmt);
   increment_loop_depth();
 
   // Emit the test at the bottom of the loop.
   __ jmp(loop_statement.continue_target());
-
-  __ bind(&stack_limit_hit);
-  StackCheckStub stack_stub;
-  __ CallStub(&stack_stub);
-  __ jmp(&stack_check_success);
 
   __ bind(&body);
   Visit(stmt->body());
@@ -856,6 +856,14 @@ void FullCodeGenerator::VisitWhileStatement(WhileStatement* stmt) {
                   loop_statement.break_target());
 
   __ bind(loop_statement.break_target());
+  __ jmp(&done);
+
+  __ bind(&stack_limit_hit);
+  StackCheckStub stack_stub;
+  __ CallStub(&stack_stub);
+  __ jmp(&stack_check_success);
+
+  __ bind(&done);
   decrement_loop_depth();
 }
 
