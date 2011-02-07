@@ -41,7 +41,7 @@
 
 namespace v8i = v8::internal;
 
-#if !defined(__mips)
+#if !defined(__mips) || defined(USE_SIMULATOR)
 
 #ifdef _MIPS_ARCH_MIPS32R2
   #define mips32r2 1
@@ -2283,6 +2283,6 @@ uintptr_t Simulator::PopAddress() {
 
 } }  // namespace assembler::mips
 
-#endif  // __mips
+#endif  // !__mips || USE_SIMULATOR
 
 #endif  // V8_TARGET_ARCH_MIPS
