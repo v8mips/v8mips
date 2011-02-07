@@ -2859,14 +2859,16 @@ void MacroAssembler::AlignStack(int offset) {
 #endif  // defined(V8_HOST_ARCH_MIPS)
   if (activation_frame_alignment != kPointerSize) {
     // This code needs to be made more general if this assert doesn't hold.
+#ifdef _ABIO32
     ASSERT(activation_frame_alignment == 2 * kPointerSize);
+#endif
     if (offset == 0) {
       andi(t8, sp, activation_frame_alignment - 1);
-      Push(zero_reg, eq, t8, zero_reg);
+      Subu(sp, sp, t8);
     } else {
       andi(t8, sp, activation_frame_alignment - 1);
       addiu(t8, t8, -4);
-      Push(zero_reg, eq, t8, zero_reg);
+      Subu(sp, sp, t8);
     }
   }
 }
