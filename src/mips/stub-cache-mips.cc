@@ -204,8 +204,8 @@ void StubCache::GenerateProbe(MacroAssembler* masm,
                               Register receiver,
                               Register name,
                               Register scratch,
-                              Register extra) {
-  Label miss;
+                              Register extra,
+                              Register extra2) {
 
   // Make sure that code is valid. The shifting code relies on the
   // entry size being 8.
