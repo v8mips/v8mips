@@ -37,7 +37,7 @@
 #include "globals.h"    // Need the BitCast
 #include "mips/constants-mips.h"
 #include "mips/simulator-mips.h"
-#include "mips/assembler-mips.h"
+#include "mips/assembler-mips-inl.h"
 
 namespace v8i = v8::internal;
 

@@ -305,7 +305,8 @@ static const Instr kLwSwInstrTypeMask = 0xffe00000;
 static const Instr kLwSwInstrArgumentMask  = ~kLwSwInstrTypeMask;
 static const Instr kLwSwOffsetMask = kImm16Mask;
 
-Assembler::Assembler(void* buffer, int buffer_size) {
+Assembler::Assembler(void* buffer, int buffer_size)
+    : positions_recorder_(this) {
   if (buffer == NULL) {
     // Do our own buffer management.
     if (buffer_size <= kMinimalBufferSize) {
@@ -336,10 +337,6 @@ Assembler::Assembler(void* buffer, int buffer_size) {
   ASSERT(buffer_ != NULL);
   pc_ = buffer_;
   reloc_info_writer.Reposition(buffer_ + buffer_size, pc_);
-  current_statement_position_ = RelocInfo::kNoPosition;
-  current_position_ = RelocInfo::kNoPosition;
-  written_statement_position_ = current_statement_position_;
-  written_position_ = current_position_;
 
   last_trampoline_pool_end_ = 0;
   no_trampoline_pool_before_ = 0;
@@ -923,7 +920,7 @@ void Assembler::b(int16_t offset) {
 
 
 void Assembler::bal(int16_t offset) {
-  WriteRecordedPositions();
+  positions_recorder()->WriteRecordedPositions();
   bgezal(zero_reg, offset);
 }
 
@@ -944,7 +941,7 @@ void Assembler::bgez(Register rs, int16_t offset) {
 
 void Assembler::bgezal(Register rs, int16_t offset) {
   BlockTrampolinePoolScope block_trampoline_pool(this);
-  WriteRecordedPositions();
+  positions_recorder()->WriteRecordedPositions();
   GenInstrImmediate(REGIMM, rs, BGEZAL, offset);
   BlockTrampolinePoolFor(1);
 }
@@ -973,7 +970,7 @@ void Assembler::bltz(Register rs, int16_t offset) {
 
 void Assembler::bltzal(Register rs, int16_t offset) {
   BlockTrampolinePoolScope block_trampoline_pool(this);
-  WriteRecordedPositions();
+  positions_recorder()->WriteRecordedPositions();
   GenInstrImmediate(REGIMM, rs, BLTZAL, offset);
   BlockTrampolinePoolFor(1);
 }
@@ -995,7 +992,7 @@ void Assembler::j(int32_t target) {
 void Assembler::jr(Register rs) {
   BlockTrampolinePoolScope block_trampoline_pool(this);
   if (rs.is(ra)) {
-    WriteRecordedPositions();
+    positions_recorder()->WriteRecordedPositions();
   }
   GenInstrRegister(SPECIAL, rs, zero_reg, zero_reg, 0, JR);
   BlockTrampolinePoolFor(1);
@@ -1003,7 +1000,7 @@ void Assembler::jr(Register rs) {
 
 
 void Assembler::jal(int32_t target) {
-  WriteRecordedPositions();
+  positions_recorder()->WriteRecordedPositions();
   ASSERT(is_uint28(target) && ((target & 3) == 0));
   GenInstrJump(JAL, target >> 2);
 }
@@ -1011,7 +1008,7 @@ void Assembler::jal(int32_t target) {
 
 void Assembler::jalr(Register rs, Register rd) {
   BlockTrampolinePoolScope block_trampoline_pool(this);
-  WriteRecordedPositions();
+  positions_recorder()->WriteRecordedPositions();
   GenInstrRegister(SPECIAL, rs, zero_reg, rd, 0, JALR);
   BlockTrampolinePoolFor(1);
 }
@@ -1791,14 +1788,14 @@ void Assembler::bc1t(int16_t offset, uint16_t cc) {
 
 // Debugging.
 void Assembler::RecordJSReturn() {
-  WriteRecordedPositions();
+  positions_recorder()->WriteRecordedPositions();
   CheckBuffer();
   RecordRelocInfo(RelocInfo::JS_RETURN);
 }
 
 
 void Assembler::RecordDebugBreakSlot() {
-  WriteRecordedPositions();
+  positions_recorder()->WriteRecordedPositions();
   CheckBuffer();
   RecordRelocInfo(RelocInfo::DEBUG_BREAK_SLOT);
 }
@@ -1810,48 +1807,6 @@ void Assembler::RecordComment(const char* msg) {
     RecordRelocInfo(RelocInfo::COMMENT, reinterpret_cast<intptr_t>(msg));
   }
 }
-
-
-void Assembler::RecordPosition(int pos) {
-  if (pos == RelocInfo::kNoPosition) return;
-  ASSERT(pos >= 0);
-  current_position_ = pos;
-}
-
-
-void Assembler::RecordStatementPosition(int pos) {
-  if (pos == RelocInfo::kNoPosition) return;
-  ASSERT(pos >= 0);
-  current_statement_position_ = pos;
-}
-
-
-bool Assembler::WriteRecordedPositions() {
-  bool written = false;
-
-  // Write the statement position if it is different from what was written last
-  // time.
-  if (current_statement_position_ != written_statement_position_) {
-    CheckBuffer();
-    RecordRelocInfo(RelocInfo::STATEMENT_POSITION, current_statement_position_);
-    written_statement_position_ = current_statement_position_;
-    written = true;
-  }
-
-  // Write the position if it is different from what was written last time and
-  // also different from the written statement position.
-  if (current_position_ != written_position_ &&
-      current_position_ != written_statement_position_) {
-    CheckBuffer();
-    RecordRelocInfo(RelocInfo::POSITION, current_position_);
-    written_position_ = current_position_;
-    written = true;
-  }
-
-  // Return whether something was written.
-  return written;
-}
-
 
 void Assembler::GrowBuffer() {
   if (!own_buffer_) FATAL("external code buffer is too small");
