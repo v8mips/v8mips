@@ -3603,6 +3603,11 @@ void CodeGenerator::VisitObjectLiteral(ObjectLiteral* node) {
   }
   frame_->EmitPush(v0);  // Save the result.
 
+  // Mark all computed expressions that are bound to a key that
+  // is shadowed by a later occurrence of the same key. For the
+  // marked expressions, no store code is emitted.
+  node->CalculateEmitStore();
+
   for (int i = 0; i < node->properties()->length(); i++) {
     // At the start of each iteration, the top of stack contains
     // the newly created object literal.
@@ -3619,11 +3624,15 @@ void CodeGenerator::VisitObjectLiteral(ObjectLiteral* node) {
         if (key->handle()->IsSymbol()) {
           Handle<Code> ic(Builtins::builtin(Builtins::StoreIC_Initialize));
           Load(value);
-          frame_->PopToA0();
-          // Fetch the object literal.
-          frame_->SpillAllButCopyTOSToA1();
-          __ li(a2, Operand(key->handle()));
-          frame_->CallCodeObject(ic, RelocInfo::CODE_TARGET, 0);
+          if (property->emit_store()) {
+            frame_->PopToA0();
+            // Fetch the object literal.
+            frame_->SpillAllButCopyTOSToA1();
+            __ li(a2, Operand(key->handle()));
+            frame_->CallCodeObject(ic, RelocInfo::CODE_TARGET, 0);
+          } else {
+            frame_->Drop();
+          }
           break;
         }
         // Else fall through.
@@ -3631,7 +3640,11 @@ void CodeGenerator::VisitObjectLiteral(ObjectLiteral* node) {
         frame_->Dup();
         Load(key);
         Load(value);
-        frame_->CallRuntime(Runtime::kSetProperty, 3);
+        if (property->emit_store()) {
+          frame_->CallRuntime(Runtime::kSetProperty, 3);
+        } else {
+          frame_->Drop(3);
+        }
         break;
       }
       case ObjectLiteral::Property::SETTER: {
