@@ -41,9 +41,7 @@
 #include "cpu.h"
 #include "macro-assembler.h"
 
-#ifndef __mips
-#include "simulator-mips.h"  // for cache flushing.
-#endif
+#include "simulator.h"  // for cache flushing.
 
 namespace v8 {
 namespace internal {
@@ -53,7 +51,7 @@ void CPU::Setup() {
 }
 
 void CPU::FlushICache(void* start, size_t size) {
-#ifdef __mips
+#if !defined (USE_SIMULATOR)
   int res;
 
   // See http://www.linux-mips.org/wiki/Cacheflush_Syscall
