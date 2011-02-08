@@ -94,11 +94,15 @@ namespace internal {
 #endif
 
 // Determine whether we are running in a simulated environment.
+// Setting USE_SIMULATOR explicitly from the build script will force
+// the use of a simulated environment.
+#if !defined(USE_SIMULATOR)
 #if (defined(V8_TARGET_ARCH_ARM) && !defined(V8_HOST_ARCH_ARM))
 #define USE_SIMULATOR 1
 #endif
 #if (defined(V8_TARGET_ARCH_MIPS) && !defined(V8_HOST_ARCH_MIPS))
 #define USE_SIMULATOR 1
+#endif
 #endif
 
 // Define unaligned read for the target architectures supporting it.
@@ -197,9 +201,11 @@ const int kIntptrSize   = sizeof(intptr_t);  // NOLINT
 #if V8_HOST_ARCH_64_BIT
 const int kPointerSizeLog2 = 3;
 const intptr_t kIntptrSignBit = V8_INT64_C(0x8000000000000000);
+const uintptr_t kUintptrAllBitsSet = V8_UINT64_C(0xFFFFFFFFFFFFFFFF);
 #else
 const int kPointerSizeLog2 = 2;
 const intptr_t kIntptrSignBit = 0x80000000;
+const uintptr_t kUintptrAllBitsSet = 0xFFFFFFFFu;
 #endif
 
 // Mask for the sign bit in a smi.

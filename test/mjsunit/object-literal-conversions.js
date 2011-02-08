@@ -1,4 +1,4 @@
-// Copyright 2008 the V8 project authors. All rights reserved.
+// Copyright 2010 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -25,47 +25,22 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// Flags: --random-seed=17
+// Test that the various conversions between property names are correctly
+// used when overwriting initializers.
 
-assertEquals("ΚΟΣΜΟΣ ΚΟΣΜΟΣ".toLowerCase(), "κοσμος κοσμος");
+var test1 = { 13: 6, "13": 7 };
+var test2 = { 13: 7, "13.0": 6 };
+var test3 = { "13": 6, 13.0000000000000000: 7 };
+var test4 = { 13.213000: 6, "13.213": 7 };
 
-var A_CODE = "A".charCodeAt(0);
-var Z_CODE = "Z".charCodeAt(0);
-var a_CODE = "a".charCodeAt(0);
-var z_CODE = "z".charCodeAt(0);
+assertEquals(7, test1[13]);
+assertEquals(7, test2[13]);
+assertEquals(7, test3[13]);
+assertEquals(7, test4[13.213]);
 
-function charCodeToLower(charCode) {
-  if (A_CODE <= charCode && charCode <= Z_CODE) {
-    return charCode + a_CODE - A_CODE;
-  }
-  return charCode;
-}
+var test5 = { 13: function() {}, "13": 7 };
+var test6 = { 17.31: function() {}, "17.31": 7 };
 
-function charCodeToUpper(charCode) {
-  if (a_CODE <= charCode && charCode <= z_CODE) {
-    return charCode - (a_CODE - A_CODE);
-  }
-  return charCode;
-}
-
-function test(length) {
-  var str = "";
-  var strLower = "";
-  var strUpper = "";
-  for (var i = 0; i < length; i++) {
-    var c = Math.round(0x7f * Math.random());
-    str += String.fromCharCode(c);
-    strLower += String.fromCharCode(charCodeToLower(c));
-    strUpper += String.fromCharCode(charCodeToUpper(c));
-  }
-  assertEquals(strLower, str.toLowerCase());
-  assertEquals(strUpper, str.toUpperCase());
-}
-
-for (var i = 1; i <= 128; i <<= 1); {
-  for (var j = 0; j < 8; j++) {
-    for (var k = 0; k < 3; k++) {
-      test(i + j);
-    }
-  }
-}
+assertEquals(7, test5[13]);
+assertEquals(7, test6[17.31]);
+  
