@@ -33,7 +33,12 @@
 namespace v8 {
 namespace internal {
 
+#ifndef __sgi
 class GlobalHandles::Node : public Malloced {
+#else
+// The Malloced inheritance cause a 4 bytes offset for _object
+class GlobalHandles::Node {
+#endif
  public:
 
   void Initialize(Object* object) {
