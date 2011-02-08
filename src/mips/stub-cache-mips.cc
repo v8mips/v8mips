@@ -43,47 +43,53 @@ static void ProbeTable(MacroAssembler* masm,
                        Code::Flags flags,
                        StubCache::Table table,
                        Register name,
-                       Register offset) {
+                       Register offset,
+                       Register scratch,
+                       Register scratch2) {
   ExternalReference key_offset(SCTableReference::keyReference(table));
   ExternalReference value_offset(SCTableReference::valueReference(table));
 
-  Label miss;
+  uint32_t key_off_addr = reinterpret_cast<uint32_t>(key_offset.address());
+  uint32_t value_off_addr = reinterpret_cast<uint32_t>(value_offset.address());
 
-  // Save the offset on the stack.
-  __ Push(offset);
+  // Check the relative positions of the address fields.
+  ASSERT(value_off_addr > key_off_addr);
+  ASSERT((value_off_addr - key_off_addr) % 4 == 0);
+  ASSERT((value_off_addr - key_off_addr) < (256 * 4));
+
+  Label miss;
+  Register offsets_base_addr = scratch;
 
   // Check that the key in the entry matches the name.
-  __ li(t8, Operand(key_offset));
-  __ sll(t9, offset, 1);
-  __ addu(t9, t8, t9);
-  __ lw(t8, MemOperand(t9));
-  __ Branch(&miss, ne, name, Operand(t8));
+  __ li(offsets_base_addr, Operand(key_offset));
+  __ sll(scratch2, offset, 1);
+  __ addu(scratch2, offsets_base_addr, scratch2);
+  __ lw(scratch2, MemOperand(scratch2));
+  __ Branch(&miss, ne, name, Operand(scratch2));
 
   // Get the code entry from the cache.
-  __ li(t8, Operand(value_offset));
-  __ sll(t9, offset, 1);
-  __ addu(t9, t8, t9);
-  __ lw(offset, MemOperand(t9));
+  __ Addu(offsets_base_addr, offsets_base_addr,
+         Operand(value_off_addr - key_off_addr));
+  __ sll(scratch2, offset, 1);
+  __ addu(scratch2, offsets_base_addr, scratch2);
+  __ lw(scratch2, MemOperand(scratch2));
 
   // Check that the flags match what we're looking for.
-  __ lw(offset, FieldMemOperand(offset, Code::kFlagsOffset));
-  __ And(offset, offset, Operand(~Code::kFlagsNotUsedInLookup));
-  __ Branch(&miss, ne, offset, Operand(flags));
+  __ lw(scratch2, FieldMemOperand(scratch2, Code::kFlagsOffset));
+  __ And(scratch2, scratch2, Operand(~Code::kFlagsNotUsedInLookup));
+  __ Branch(&miss, ne, scratch2, Operand(flags));
 
-  // Restore offset and re-load code entry from cache.
-  __ Pop(offset);
-  __ li(t8, Operand(value_offset));
-  __ sll(t9, offset, 1);
-  __ addu(t9, t8, t9);
-  __ lw(offset, MemOperand(t9));
+  // Re-load code entry from cache.
+  __ sll(offset, offset, 1);
+  __ addu(offset, offset, offsets_base_addr);
+  __ lw(offset, MemOperand(offset));
 
   // Jump to the first instruction in the code stub.
   __ Addu(offset, offset, Operand(Code::kHeaderSize - kHeapObjectTag));
   __ Jump(offset);
 
-  // Miss: Restore offset and fall through.
+  // Miss: fall through.
   __ bind(&miss);
-  __ Pop(offset);
 }
 
 
@@ -206,6 +212,7 @@ void StubCache::GenerateProbe(MacroAssembler* masm,
                               Register scratch,
                               Register extra,
                               Register extra2) {
+  Label miss;
 
   // Make sure that code is valid. The shifting code relies on the
   // entry size being 8.
@@ -217,6 +224,18 @@ void StubCache::GenerateProbe(MacroAssembler* masm,
   // Make sure that there are no register conflicts.
   ASSERT(!scratch.is(receiver));
   ASSERT(!scratch.is(name));
+  ASSERT(!extra.is(receiver));
+  ASSERT(!extra.is(name));
+  ASSERT(!extra.is(scratch));
+  ASSERT(!extra2.is(receiver));
+  ASSERT(!extra2.is(name));
+  ASSERT(!extra2.is(scratch));
+  ASSERT(!extra2.is(extra));
+
+  // Check scratch, extra and extra2 registers are valid.
+  ASSERT(!scratch.is(no_reg));
+  ASSERT(!extra.is(no_reg));
+  ASSERT(!extra2.is(no_reg));
 
   // Check that the receiver isn't a smi.
   __ BranchOnSmi(receiver, &miss, t0);
@@ -231,7 +250,7 @@ void StubCache::GenerateProbe(MacroAssembler* masm,
          Operand((kPrimaryTableSize - 1) << kHeapObjectTagSize));
 
   // Probe the primary table.
-  ProbeTable(masm, flags, kPrimary, name, scratch);
+  ProbeTable(masm, flags, kPrimary, name, scratch, extra, extra2);
 
   // Primary miss: Compute hash for secondary probe.
   __ Subu(scratch, scratch, Operand(name));
@@ -241,7 +260,7 @@ void StubCache::GenerateProbe(MacroAssembler* masm,
          Operand((kSecondaryTableSize - 1) << kHeapObjectTagSize));
 
   // Probe the secondary table.
-  ProbeTable(masm, flags, kSecondary, name, scratch);
+  ProbeTable(masm, flags, kSecondary, name, scratch, extra, extra2);
 
   // Cache miss: Fall-through and let caller handle the miss by
   // entering the runtime system.

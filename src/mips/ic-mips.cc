@@ -557,7 +557,7 @@ static void GenerateMonomorphicCacheProbe(MacroAssembler* masm,
   // Probe the stub cache.
   Code::Flags flags =
       Code::ComputeFlags(kind, NOT_IN_LOOP, MONOMORPHIC, NORMAL, argc);
-  StubCache::GenerateProbe(masm, flags, a1, a2, a3, no_reg);
+  StubCache::GenerateProbe(masm, flags, a1, a2, a3, t0, t1);
 
   // If the stub cache probing failed, the receiver might be a value.
   // For value objects, we use the map of the prototype objects for
@@ -592,7 +592,7 @@ static void GenerateMonomorphicCacheProbe(MacroAssembler* masm,
 
   // Probe the stub cache for the value object.
   __ bind(&probe);
-  StubCache::GenerateProbe(masm, flags, a1, a2, a3, no_reg);
+  StubCache::GenerateProbe(masm, flags, a1, a2, a3, t0, t1);
 
   __ bind(&miss);
 }
@@ -862,7 +862,7 @@ void LoadIC::GenerateMegamorphic(MacroAssembler* masm) {
   Code::Flags flags = Code::ComputeFlags(Code::LOAD_IC,
                                          NOT_IN_LOOP,
                                          MONOMORPHIC);
-  StubCache::GenerateProbe(masm, flags, a0, a2, a3, no_reg);
+  StubCache::GenerateProbe(masm, flags, a0, a2, a3, t0, t1);
 
   // Cache miss: Jump to runtime.
   GenerateMiss(masm);
@@ -2264,7 +2264,7 @@ void StoreIC::GenerateMegamorphic(MacroAssembler* masm) {
   Code::Flags flags = Code::ComputeFlags(Code::STORE_IC,
                                          NOT_IN_LOOP,
                                          MONOMORPHIC);
-  StubCache::GenerateProbe(masm, flags, a1, a2, a3, no_reg);
+  StubCache::GenerateProbe(masm, flags, a1, a2, a3, t0, t1);
 
   // Cache miss: Jump to runtime.
   GenerateMiss(masm);
