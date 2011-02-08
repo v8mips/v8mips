@@ -665,6 +665,9 @@ void MacroAssembler::Ext(Register rt,
                          Register rs,
                          uint16_t pos,
                          uint16_t size) {
+  ASSERT(pos < 32);
+  ASSERT(pos + size < 32);
+
   if (mips32r2) {
     ext_(rt, rs, pos, size);
   } else {
@@ -680,6 +683,9 @@ void MacroAssembler::Ins(Register rt,
                          Register rs,
                          uint16_t pos,
                          uint16_t size) {
+  ASSERT(pos < 32);
+  ASSERT(pos + size < 32);
+
   if (mips32r2) {
     ins_(rt, rs, pos, size);
   } else {

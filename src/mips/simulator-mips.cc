@@ -1441,7 +1441,7 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
               // Interpret sa field as 5-bit lsb of insert.
               uint16_t lsb = sa;
               uint16_t size = msb - lsb + 1;
-              uint16_t mask = (1 << size) - 1;
+              uint32_t mask = (1 << size) - 1;
               alu_out = (rt_u & ~(mask << lsb)) | ((rs_u & mask) << lsb);
             } else {
               Format(instr, "INS");
@@ -1455,7 +1455,7 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
               // Interpret sa field as 5-bit lsb of extract.
               uint16_t lsb = sa;
               uint16_t size = msb + 1;
-              uint16_t mask = (1 << size) - 1;
+              uint32_t mask = (1 << size) - 1;
               alu_out = (rs_u & (mask << lsb)) >> lsb;
             } else {
               Format(instr, "EXT");
