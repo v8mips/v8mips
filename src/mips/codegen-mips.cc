@@ -1813,7 +1813,7 @@ void CodeGenerator::CallApplyLazy(Expression* applicand,
             Operand(Smi::FromInt(StackFrame::ARGUMENTS_ADAPTOR)));
 
   // No arguments adaptor frame. Copy fixed number of arguments.
-  __ Or(v0, zero_reg, Operand(scope()->num_parameters()));
+  __ li(a0, Operand(scope()->num_parameters()));
   for (int i = 0; i < scope()->num_parameters(); i++) {
     __ lw(a2, frame_->ParameterAt(i));
     __ push(a2);
@@ -1824,10 +1824,10 @@ void CodeGenerator::CallApplyLazy(Expression* applicand,
   // avoid copying too many arguments to avoid stack overflows.
   __ bind(&adapted);
   static const uint32_t kArgumentsLimit = 1 * KB;
-  __ lw(v0, MemOperand(a2, ArgumentsAdaptorFrameConstants::kLengthOffset));
-  __ srl(v0, v0, kSmiTagSize);
-  __ mov(a3, v0);
-  __ Branch(&build_args, gt, v0, Operand(kArgumentsLimit));
+  __ lw(a0, MemOperand(a2, ArgumentsAdaptorFrameConstants::kLengthOffset));
+  __ srl(a0, a0, kSmiTagSize);
+  __ mov(a3, a0);
+  __ Branch(&build_args, gt, a0, Operand(kArgumentsLimit));
 
   // Loop through the arguments pushing them onto the execution
   // stack. We don't inform the virtual frame of the push, so we don't
