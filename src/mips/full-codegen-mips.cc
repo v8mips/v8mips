@@ -879,12 +879,18 @@ void FullCodeGenerator::VisitArrayLiteral(ArrayLiteral* expr) {
   __ li(a2, Operand(Smi::FromInt(expr->literal_index())));
   __ li(a1, Operand(expr->constant_elements()));
   __ Push(a3, a2, a1);
-  if (expr->depth() > 1) {
+  if (expr->constant_elements()->map() == Heap::fixed_cow_array_map()) {
+    FastCloneShallowArrayStub stub(
+        FastCloneShallowArrayStub::COPY_ON_WRITE_ELEMENTS, length);
+    __ CallStub(&stub);
+    __ IncrementCounter(&Counters::cow_arrays_created_stub, 1, a1, a2);
+  } else if (expr->depth() > 1) {
     __ CallRuntime(Runtime::kCreateArrayLiteral, 3);
-  } else if (length > FastCloneShallowArrayStub::kMaximumLength) {
+  } else if (length > FastCloneShallowArrayStub::kMaximumClonedLength) {
     __ CallRuntime(Runtime::kCreateArrayLiteralShallow, 3);
   } else {
-    FastCloneShallowArrayStub stub(length);
+    FastCloneShallowArrayStub stub(
+        FastCloneShallowArrayStub::CLONE_ELEMENTS, length);
     __ CallStub(&stub);
   }
 
@@ -2135,12 +2141,11 @@ MIPS_UNIMPLEMENTED_FULL_CODEGEN_FUNC(EmitMathCos)
 MIPS_UNIMPLEMENTED_FULL_CODEGEN_FUNC(EmitMathSqrt)
 MIPS_UNIMPLEMENTED_FULL_CODEGEN_FUNC(EmitCallFunction)
 MIPS_UNIMPLEMENTED_FULL_CODEGEN_FUNC(EmitRegExpConstructResult)
+MIPS_UNIMPLEMENTED_FULL_CODEGEN_FUNC(EmitRegExpCloneResult)
 MIPS_UNIMPLEMENTED_FULL_CODEGEN_FUNC(EmitSwapElements)
 MIPS_UNIMPLEMENTED_FULL_CODEGEN_FUNC(EmitGetFromCache)
 MIPS_UNIMPLEMENTED_FULL_CODEGEN_FUNC(EmitIsRegExpEquivalent)
 MIPS_UNIMPLEMENTED_FULL_CODEGEN_FUNC(EmitIsStringWrapperSafeForDefaultValueOf)
-MIPS_UNIMPLEMENTED_FULL_CODEGEN_FUNC(EmitHasCachedArrayIndex)
-MIPS_UNIMPLEMENTED_FULL_CODEGEN_FUNC(EmitGetCachedArrayIndex)
 
 MIPS_UNIMPLEMENTED_FULL_CODEGEN_PLUG(Effect)
 MIPS_UNIMPLEMENTED_FULL_CODEGEN_PLUG(AccumulatorValue)
