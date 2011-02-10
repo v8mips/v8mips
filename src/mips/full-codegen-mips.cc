@@ -1398,7 +1398,9 @@ void FullCodeGenerator::EmitIsFunction(ZoneList<Expression*>* args) {
   Label materialize_true, materialize_false;
   Label* if_true = NULL;
   Label* if_false = NULL;
-  PrepareTest(&materialize_true, &materialize_false, &if_true, &if_false);
+  Label* fall_through = NULL;
+  PrepareTest(&materialize_true, &materialize_false,
+              &if_true, &if_false, &fall_through);
 
   __ BranchOnSmi(v0, if_false);
   __ GetObjectType(v0, a1, a2);
@@ -1529,7 +1531,7 @@ void FullCodeGenerator::VisitUnaryOperation(UnaryOperation* expr) {
       PrepareTest(&materialize_true, &materialize_false, 
                   &if_false, &if_true, &fall_through);
 
-      VisitForControl(expr->expression(), if_true, if_false);
+      VisitForControl(expr->expression(), if_true, if_false, fall_through);
 
       Apply(context_, if_false, if_true);  // Labels swapped.
       break;
@@ -1558,9 +1560,11 @@ void FullCodeGenerator::VisitUnaryOperation(UnaryOperation* expr) {
 
     case Token::SUB: {
       Comment cmt(masm_, "[ UnaryOperation (SUB)");
-      bool overwrite =
+      bool can_overwrite =
           (expr->expression()->AsBinaryOperation() != NULL &&
            expr->expression()->AsBinaryOperation()->ResultOverwriteAllowed());
+      UnaryOverwriteMode overwrite =
+          can_overwrite ? UNARY_OVERWRITE : UNARY_NO_OVERWRITE;
       GenericUnaryOpStub stub(Token::SUB, overwrite);
       // GenericUnaryOpStub expects the argument to be in the
       // register a0.
@@ -1573,9 +1577,11 @@ void FullCodeGenerator::VisitUnaryOperation(UnaryOperation* expr) {
 
     case Token::BIT_NOT: {
       Comment cmt(masm_, "[ UnaryOperation (BIT_NOT)");
-      bool overwrite =
+      bool can_overwrite =
           (expr->expression()->AsBinaryOperation() != NULL &&
            expr->expression()->AsBinaryOperation()->ResultOverwriteAllowed());
+      UnaryOverwriteMode overwrite =
+          can_overwrite ? UNARY_OVERWRITE : UNARY_NO_OVERWRITE;
       GenericUnaryOpStub stub(Token::BIT_NOT, overwrite);
       // GenericUnaryOpStub expects the argument to be in the
       // register a0.
@@ -1766,6 +1772,7 @@ bool FullCodeGenerator::TryLiteralCompare(Token::Value op,
                                           Label* fall_through) {
   UNIMPLEMENTED_MIPS();
   __ break_ (__LINE__);
+  return false;
 }
 
 
@@ -1824,7 +1831,6 @@ void FullCodeGenerator::VisitCompareOperation(CompareOperation* expr) {
           __ mov(a0, result_register());
           __ pop(a1);
           break;
-        }
         case Token::LT:
           cc = lt;
           __ mov(a0, result_register());
