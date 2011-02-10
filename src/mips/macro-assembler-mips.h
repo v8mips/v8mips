@@ -500,6 +500,8 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
   // Get the actual activation frame alignment for target environment.
   static int ActivationFrameAlignment();
 
+  void LoadContext(Register dst, int context_chain_length);
+
   // -------------------------------------------------------------------------
   // JavaScript invokes
 

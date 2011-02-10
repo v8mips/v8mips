@@ -1719,8 +1719,8 @@ void MacroAssembler::Call(const Operand& target,
 
 
 void MacroAssembler::StackLimitCheck(Label* on_stack_overflow) {
-  UNIMPLEMENTED_MIPS();
-  break_(__LINE__);
+  LoadRoot(at, Heap::kStackLimitRootIndex);
+  Branch(on_stack_overflow, lo, sp, Operand(at));
 }
 
 
@@ -1832,7 +1832,11 @@ void MacroAssembler::PushTryHandler(CodeLocation try_location,
 
 
 void MacroAssembler::PopTryHandler() {
-  UNIMPLEMENTED_MIPS();
+  ASSERT_EQ(0, StackHandlerConstants::kNextOffset);
+  pop(a1);
+  Addu(sp, sp, Operand(StackHandlerConstants::kSize - kPointerSize));
+  li(at, Operand(ExternalReference(Top::k_handler_address)));
+  sw(a1, MemOperand(at));
 }
 
 
@@ -2765,6 +2769,25 @@ void MacroAssembler::Abort(const char* msg) {
     while (abort_instructions++ < kExpectedAbortInstructions) {
       nop();
     }
+  }
+}
+
+
+void MacroAssembler::LoadContext(Register dst, int context_chain_length) {
+  if (context_chain_length > 0) {
+    // Move up the chain of contexts to the context containing the slot.
+    lw(dst, MemOperand(cp, Context::SlotOffset(Context::CLOSURE_INDEX)));
+    // Load the function context (which is the incoming, outer context).
+    lw(dst, FieldMemOperand(dst, JSFunction::kContextOffset));
+    for (int i = 1; i < context_chain_length; i++) {
+      lw(dst, MemOperand(dst, Context::SlotOffset(Context::CLOSURE_INDEX)));
+      lw(dst, FieldMemOperand(dst, JSFunction::kContextOffset));
+    }
+    // The context may be an intermediate context, not a function context.
+    lw(dst, MemOperand(dst, Context::SlotOffset(Context::FCONTEXT_INDEX)));
+  } else {  // Slot is in the current function context.
+    // The context may be an intermediate context, not a function context.
+    lw(dst, MemOperand(cp, Context::SlotOffset(Context::FCONTEXT_INDEX)));
   }
 }
 

@@ -388,7 +388,7 @@ class CodeGenerator: public AstVisitor {
                                                JumpTarget* slow);
 
   // Expressions
-  MemOperand GlobalObject() const {
+  static MemOperand GlobalObject() {
     return ContextOperand(cp, Context::GLOBAL_INDEX);
   }
 
@@ -497,7 +497,7 @@ class CodeGenerator: public AstVisitor {
   static Handle<Code> ComputeLazyCompile(int argc);
   void ProcessDeclarations(ZoneList<Declaration*>* declarations);
 
-  Handle<Code> ComputeCallInitialize(int argc, InLoopFlag in_loop);
+  static Handle<Code> ComputeCallInitialize(int argc, InLoopFlag in_loop);
 
   static Handle<Code> ComputeKeyedCallInitialize(int argc, InLoopFlag in_loop);
 
