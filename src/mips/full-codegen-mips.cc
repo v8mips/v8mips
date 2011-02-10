@@ -1441,7 +1441,7 @@ void FullCodeGenerator::EmitVariableAssignment(Variable* var,
       case Slot::LOOKUP:
         // Call the runtime for the assignment.  The runtime will ignore
         // const reinitialization.
-        __ push(a0);  // Value.
+        __ push(v0);  // Value.
         __ li(a0, Operand(slot->var()->name()));
         __ Push(cp, a0);  // Context and name.
         if (op == Token::INIT_CONST) {
@@ -1718,9 +1718,10 @@ void FullCodeGenerator::VisitCall(Call* expr) {
       VisitForValue(prop->obj(), kStack);
       if (prop->is_synthetic()) {
         VisitForValue(prop->key(), kAccumulator);
+        __ mov(a0, result_register());
         // Record source code position for IC call.
         SetSourcePosition(prop->position());
-        __ pop(v1);  // We do not need to keep the receiver.
+        __ pop(a1);  // We do not need to keep the receiver.
 
         Handle<Code> ic(Builtins::builtin(Builtins::KeyedLoadIC_Initialize));
         __ Call(ic, RelocInfo::CODE_TARGET);
@@ -2040,6 +2041,7 @@ void FullCodeGenerator::EmitArguments(ZoneList<Expression*>* args) {
   VisitForValue(args->at(0), kAccumulator);
   __ mov(a1, v0);
   __ li(a0, Operand(Smi::FromInt(scope()->num_parameters())));
+  // __ break_(0x04);
   ArgumentsAccessStub stub(ArgumentsAccessStub::READ_ELEMENT);
   __ CallStub(&stub);
   Apply(context_, v0);
