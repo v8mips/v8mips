@@ -264,10 +264,10 @@ class Operand BASE_EMBEDDED {
 class MemOperand : public Operand {
  public:
 
-  explicit MemOperand(Register rn, int16_t offset = 0);
+  explicit MemOperand(Register rn, int32_t offset = 0);
 
  private:
-  int16_t offset_;
+  int32_t offset_;
 
   friend class Assembler;
 };

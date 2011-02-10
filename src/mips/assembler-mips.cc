@@ -263,7 +263,7 @@ Operand::Operand(Handle<Object> handle) {
   }
 }
 
-MemOperand::MemOperand(Register rm, int16_t offset) : Operand(rm) {
+MemOperand::MemOperand(Register rm, int32_t offset) : Operand(rm) {
   offset_ = offset;
 }
 
@@ -1303,27 +1303,67 @@ void Assembler::rotrv(Register rd, Register rt, Register rs) {
 //------------Memory-instructions-------------
 
 void Assembler::lb(Register rd, const MemOperand& rs) {
-  GenInstrImmediate(LB, rs.rm(), rd, rs.offset_);
+  if (is_int16(rs.offset_)) {
+    GenInstrImmediate(LB, rs.rm(), rd, rs.offset_);
+  } else {  // Offset > 16 bits, use multiple instructions to load.
+    ASSERT(!rs.rm().is(at));
+    lui(at, rs.offset_ >> 16);
+    ori(at, at, rs.offset_ & 0xffff);
+    addu(at, at, rs.rm());
+    GenInstrImmediate(LB, at, rd, 0);  // Equiv to lb(rd, MemOperand(at, 0));
+  }
 }
 
 
 void Assembler::lbu(Register rd, const MemOperand& rs) {
-  GenInstrImmediate(LBU, rs.rm(), rd, rs.offset_);
+  if (is_int16(rs.offset_)) {
+    GenInstrImmediate(LBU, rs.rm(), rd, rs.offset_);
+  } else {  // Offset > 16 bits, use multiple instructions to load.
+    ASSERT(!rs.rm().is(at));
+    lui(at, rs.offset_ >> 16);
+    ori(at, at, rs.offset_ & 0xffff);
+    addu(at, at, rs.rm());
+    GenInstrImmediate(LBU, at, rd, 0);  // Equiv to lbu(rd, MemOperand(at, 0));
+  }
 }
 
 
 void Assembler::lh(Register rd, const MemOperand& rs) {
-  GenInstrImmediate(LH, rs.rm(), rd, rs.offset_);
+  if (is_int16(rs.offset_)) {
+    GenInstrImmediate(LH, rs.rm(), rd, rs.offset_);
+  } else {  // Offset > 16 bits, use multiple instructions to load.
+    ASSERT(!rs.rm().is(at));
+    lui(at, rs.offset_ >> 16);
+    ori(at, at, rs.offset_ & 0xffff);
+    addu(at, at, rs.rm());
+    GenInstrImmediate(LH, at, rd, 0);  // Equiv to lh(rd, MemOperand(at, 0));
+  }
 }
 
 
 void Assembler::lhu(Register rd, const MemOperand& rs) {
-  GenInstrImmediate(LHU, rs.rm(), rd, rs.offset_);
+  if (is_int16(rs.offset_)) {
+    GenInstrImmediate(LHU, rs.rm(), rd, rs.offset_);
+  } else {  // Offset > 16 bits, use multiple instructions to load.
+    ASSERT(!rs.rm().is(at));
+    lui(at, rs.offset_ >> 16);
+    ori(at, at, rs.offset_ & 0xffff);
+    addu(at, at, rs.rm());
+    GenInstrImmediate(LHU, at, rd, 0);  // Equiv to lhu(rd, MemOperand(at, 0));
+  }
 }
 
 
 void Assembler::lw(Register rd, const MemOperand& rs) {
-  GenInstrImmediate(LW, rs.rm(), rd, rs.offset_);
+  if (is_int16(rs.offset_)) {
+    GenInstrImmediate(LW, rs.rm(), rd, rs.offset_);
+  } else {  // Offset > 16 bits, use multiple instructions to load.
+    ASSERT(!rs.rm().is(at));
+    lui(at, rs.offset_ >> 16);
+    ori(at, at, rs.offset_ & 0xffff);
+    addu(at, at, rs.rm());
+    GenInstrImmediate(LW, at, rd, 0);  // Equiv to lw(rd, MemOperand(at, 0));
+  }
 
   if (can_peephole_optimize(2)) {
     Instr sw_instr = instr_at(pc_ - 2 * kInstrSize);
@@ -1386,17 +1426,41 @@ void Assembler::lwr(Register rd, const MemOperand& rs) {
 
 
 void Assembler::sb(Register rd, const MemOperand& rs) {
-  GenInstrImmediate(SB, rs.rm(), rd, rs.offset_);
+  if (is_int16(rs.offset_)) {
+    GenInstrImmediate(SB, rs.rm(), rd, rs.offset_);
+  } else {  // Offset > 16 bits, use multiple instructions to store.
+    ASSERT(!rs.rm().is(at));
+    lui(at, rs.offset_ >> 16);
+    ori(at, at, rs.offset_ & 0xffff);
+    addu(at, at, rs.rm());
+    GenInstrImmediate(SB, at, rd, 0);  // Equiv to sb(rd, MemOperand(at, 0));
+  }
 }
 
 
 void Assembler::sh(Register rd, const MemOperand& rs) {
-  GenInstrImmediate(SH, rs.rm(), rd, rs.offset_);
+  if (is_int16(rs.offset_)) {
+    GenInstrImmediate(SH, rs.rm(), rd, rs.offset_);
+  } else {  // Offset > 16 bits, use multiple instructions to store.
+    ASSERT(!rs.rm().is(at));
+    lui(at, rs.offset_ >> 16);
+    ori(at, at, rs.offset_ & 0xffff);
+    addu(at, at, rs.rm());
+    GenInstrImmediate(SH, at, rd, 0);  // Equiv to sh(rd, MemOperand(at, 0));
+  }
 }
 
 
 void Assembler::sw(Register rd, const MemOperand& rs) {
-  GenInstrImmediate(SW, rs.rm(), rd, rs.offset_);
+  if (is_int16(rs.offset_)) {
+    GenInstrImmediate(SW, rs.rm(), rd, rs.offset_);
+  } else {  // Offset > 16 bits, use multiple instructions to store.
+    ASSERT(!rs.rm().is(at));
+    lui(at, rs.offset_ >> 16);
+    ori(at, at, rs.offset_ & 0xffff);
+    addu(at, at, rs.rm());
+    GenInstrImmediate(SW, at, rd, 0);  // Equiv to sw(rd, MemOperand(at, 0));
+  }
 
   // Eliminate pattern: pop(), push(r)
   //     addiu sp, sp, Operand(kPointerSize);
