@@ -154,7 +154,7 @@ DEFINE_bool(debug_info, true, "add debug information to compiled functions")
 DEFINE_bool(strict, false, "strict error checking")
 DEFINE_int(min_preparse_length, 1024,
            "minimum length for automatic enable preparsing")
-DEFINE_bool(full_compiler, false, "enable dedicated backend for run-once code")
+DEFINE_bool(full_compiler, true, "enable dedicated backend for run-once code")
 DEFINE_bool(always_full_compiler, false,
             "try to use the dedicated run-once backend for all code")
 DEFINE_bool(trace_bailout, false,
