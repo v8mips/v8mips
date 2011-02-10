@@ -282,11 +282,13 @@ void FullCodeGenerator::EmitReturnSequence() {
   }
 }
 
+
 FullCodeGenerator::ConstantOperand FullCodeGenerator::GetConstantOperand(
     Token::Value op, Expression* left, Expression* right) {
-  UNIMPLEMENTED_MIPS();
+  ASSERT(ShouldInlineSmiCase(op));
   return kNoConstants;
 }
+
 
 void FullCodeGenerator::Apply(Expression::Context context, Register reg) {
   switch (context) {
@@ -710,20 +712,22 @@ void FullCodeGenerator::VisitSwitchStatement(SwitchStatement* stmt) {
 
     // Compile the label expression.
     VisitForValue(clause->label(), kAccumulator);
-    __ mov(a0, result_register());  // plind - use v0 below, to remove this mov
+    __ mov(a0, result_register());  // CompareStub requires args in a0, a1.
 
-    // Perform the comparison as if via '==='.  The comparison stub expects
-    // the smi vs. smi case to be handled before it is called.
-    Label slow_case;
+    // Perform the comparison as if via '==='.
     __ lw(a1, MemOperand(sp, 0));  // Switch value.
-    __ or_(a2, a1, a0);
-    __ And(at, a2, Operand(kSmiTagMask));
-    __ Branch(&slow_case, ne, at, Operand(zero_reg));
-    __ Branch(&next_test, ne, a1, Operand(a0));
-    __ Drop(1);  // Switch value is no longer needed.
-    __ Branch(clause->body_target()->entry_label());
+    if (ShouldInlineSmiCase(Token::EQ_STRICT)) {
+      Label slow_case;
+      __ or_(a2, a1, a0);
+      __ And(at, a2, Operand(kSmiTagMask));
+      __ Branch(&slow_case, ne, at, Operand(zero_reg));
+      __ Branch(&next_test, ne, a1, Operand(a0));
+      __ Drop(1);  // Switch value is no longer needed.
+      __ Branch(clause->body_target()->entry_label());
 
-    __ bind(&slow_case);
+      __ bind(&slow_case);
+    }
+
     CompareStub stub(eq, true, kBothCouldBeNaN, true, a1, a0);
     __ CallStub(&stub);
     __ Branch(&next_test, ne, v0, Operand(zero_reg));
@@ -1210,10 +1214,11 @@ void FullCodeGenerator::VisitAssignment(Assignment* expr) {
   // slot. Variables with rewrite to .arguments are treated as KEYED_PROPERTY.
   enum LhsKind { VARIABLE, NAMED_PROPERTY, KEYED_PROPERTY };
   LhsKind assign_type = VARIABLE;
-  Property* prop = expr->target()->AsProperty();
-  if (prop != NULL) {
-    assign_type =
-        (prop->key()->IsPropertyName()) ? NAMED_PROPERTY : KEYED_PROPERTY;
+  Property* property = expr->target()->AsProperty();
+  if (property != NULL) {
+    assign_type = (property->key()->IsPropertyName())
+        ? NAMED_PROPERTY
+        : KEYED_PROPERTY;
   }
 
   // Evaluate LHS expression.
@@ -1224,59 +1229,72 @@ void FullCodeGenerator::VisitAssignment(Assignment* expr) {
     case NAMED_PROPERTY:
       if (expr->is_compound()) {
         // We need the receiver both on the stack and in the accumulator.
-        VisitForValue(prop->obj(), kAccumulator);
+        VisitForValue(property->obj(), kAccumulator);
         __ push(result_register());
       } else {
-        VisitForValue(prop->obj(), kStack);
+        VisitForValue(property->obj(), kStack);
       }
       break;
     case KEYED_PROPERTY:
       // We need the key and receiver on both the stack and in v0 and a1.
       if (expr->is_compound()) {
-        VisitForValue(prop->obj(), kStack);
-        VisitForValue(prop->key(), kAccumulator);
+        VisitForValue(property->obj(), kStack);
+        VisitForValue(property->key(), kAccumulator);
         __ lw(a1, MemOperand(sp, 0));
         __ push(v0);
       } else {
-        VisitForValue(prop->obj(), kStack);
-        VisitForValue(prop->key(), kStack);
+        VisitForValue(property->obj(), kStack);
+        VisitForValue(property->key(), kStack);
         // plind, should we have key & recvr in v0 and a1 here ??
       }
       break;
   }
 
-  // If we have a compound assignment: Get value of LHS expression and
-  // store in on top of the stack.
   if (expr->is_compound()) {
     Location saved_location = location_;
-    location_ = kStack;
+    location_ = kAccumulator;
     switch (assign_type) {
       case VARIABLE:
         EmitVariableLoad(expr->target()->AsVariableProxy()->var(),
                          Expression::kValue);
         break;
       case NAMED_PROPERTY:
-        EmitNamedPropertyLoad(prop);
-        __ push(result_register());
+        EmitNamedPropertyLoad(property);
         break;
       case KEYED_PROPERTY:
-        EmitKeyedPropertyLoad(prop);
-        __ push(result_register());
+        EmitKeyedPropertyLoad(property);
         break;
     }
-    location_ = saved_location;
-  }
 
-  // Evaluate RHS expression.
-  Expression* rhs = expr->value();
-  VisitForValue(rhs, kAccumulator);
+    Token::Value op = expr->binary_op();
+    ConstantOperand constant = ShouldInlineSmiCase(op)
+        ? GetConstantOperand(op, expr->target(), expr->value())
+        : kNoConstants;
+    ASSERT(constant == kRightConstant || constant == kNoConstants);
+    if (constant == kNoConstants) {
+      __ push(v0);  // Left operand goes on the stack.
+      VisitForValue(expr->value(), kAccumulator);
+    }
 
-  // If we have a compound assignment: Apply operator.
-  if (expr->is_compound()) {
-    Location saved_location = location_;
-    location_ = kAccumulator;
-    EmitBinaryOp(expr->binary_op(), Expression::kValue);
+    OverwriteMode mode = expr->value()->ResultOverwriteAllowed()
+        ? OVERWRITE_RIGHT
+        : NO_OVERWRITE;
+    SetSourcePosition(expr->position() + 1);
+    if (ShouldInlineSmiCase(op)) {
+      EmitInlineSmiBinaryOp(expr,
+                            op,
+                            Expression::kValue,
+                            mode,
+                            expr->target(),
+                            expr->value(),
+                            constant);
+    } else {
+      EmitBinaryOp(op, Expression::kValue, mode);
+    }
     location_ = saved_location;
+
+  } else {
+    VisitForValue(expr->value(), kAccumulator);
   }
 
   // Record source position before possible IC call.
@@ -1326,15 +1344,17 @@ void FullCodeGenerator::EmitInlineSmiBinaryOp(Expression* expr,
                                               Expression* left,
                                               Expression* right,
                                               ConstantOperand constant) {
-  UNIMPLEMENTED_MIPS();
+  ASSERT(constant == kNoConstants);  // Only handled case.
+  EmitBinaryOp(op, context, mode);
 }
+
 
 void FullCodeGenerator::EmitBinaryOp(Token::Value op,
                                      Expression::Context context,
                                      OverwriteMode mode) {
   __ mov(a0, result_register());
   __ pop(a1);
-  GenericBinaryOpStub stub(op, NO_OVERWRITE, a1, a0);
+  GenericBinaryOpStub stub(op, mode, a1, a0);
   __ CallStub(&stub);
   Apply(context, v0);
 }
@@ -2741,9 +2761,7 @@ void FullCodeGenerator::VisitUnaryOperation(UnaryOperation* expr) {
 
     case Token::SUB: {
       Comment cmt(masm_, "[ UnaryOperation (SUB)");
-      bool can_overwrite =
-          (expr->expression()->AsBinaryOperation() != NULL &&
-           expr->expression()->AsBinaryOperation()->ResultOverwriteAllowed());
+      bool can_overwrite = expr->expression()->ResultOverwriteAllowed();
       UnaryOverwriteMode overwrite =
           can_overwrite ? UNARY_OVERWRITE : UNARY_NO_OVERWRITE;
       GenericUnaryOpStub stub(Token::SUB, overwrite);
@@ -2758,25 +2776,23 @@ void FullCodeGenerator::VisitUnaryOperation(UnaryOperation* expr) {
 
     case Token::BIT_NOT: {
       Comment cmt(masm_, "[ UnaryOperation (BIT_NOT)");
-      bool can_overwrite =
-          (expr->expression()->AsBinaryOperation() != NULL &&
-           expr->expression()->AsBinaryOperation()->ResultOverwriteAllowed());
-      UnaryOverwriteMode overwrite =
-          can_overwrite ? UNARY_OVERWRITE : UNARY_NO_OVERWRITE;
-      GenericUnaryOpStub stub(Token::BIT_NOT, overwrite);
-      // GenericUnaryOpStub expects the argument to be in the
-      // register a0.
       VisitForValue(expr->expression(), kAccumulator);
-      // Avoid calling the stub for Smis.
-      Label smi, done;
-      __ BranchOnSmi(result_register(), &smi);
-      // Non-smi: call stub leaving result in accumulator register.
+      Label done;
+      if (ShouldInlineSmiCase(expr->op())) {
+        Label call_stub;
+        __ BranchOnNotSmi(result_register(), &call_stub);
+        // Invert all bits except Smi tag, which stays 0.
+        __ Xor(result_register(), result_register(), 0xfffffffe);
+        __ Branch(&done);
+        __ bind(&call_stub);
+      }
+      bool overwrite = expr->expression()->ResultOverwriteAllowed();
+      UnaryOverwriteMode mode =
+          overwrite ? UNARY_OVERWRITE : UNARY_NO_OVERWRITE;
+      // GenericUnaryOpStub expects the argument to be in register a0.
       __ mov(a0, result_register());
+      GenericUnaryOpStub stub(Token::BIT_NOT, mode);
       __ CallStub(&stub);
-      __ Branch(&done);
-      // Perform operation directly on Smis.
-      __ bind(&smi);
-      __ Xor(result_register(), result_register(), 0xfffffffe);
       __ bind(&done);
       Apply(context_, result_register());
       break;
@@ -2879,7 +2895,7 @@ void FullCodeGenerator::VisitCountOperation(CountOperation* expr) {
   int count_value = expr->op() == Token::INC ? 1 : -1;
   __ li(a1, Operand(Smi::FromInt(count_value)));
 
-  if (loop_depth() > 0) {
+  if (ShouldInlineSmiCase(expr->op())) {
     __ Addu(v0, a0, a1);
 
     // Check for overflow of a0 + smi:count_value (in a1).
@@ -3086,7 +3102,7 @@ void FullCodeGenerator::VisitCompareOperation(CompareOperation* expr) {
   }
 
   VisitForValue(expr->left(), kStack);
-  switch (expr->op()) {
+  switch (op) {
     case Token::IN:
       VisitForValue(expr->right(), kStack);
       __ InvokeBuiltin(Builtins::IN, CALL_JS);
@@ -3107,7 +3123,7 @@ void FullCodeGenerator::VisitCompareOperation(CompareOperation* expr) {
       VisitForValue(expr->right(), kAccumulator);
       Condition cc = eq;
       bool strict = false;
-      switch (expr->op()) {
+      switch (op) {
         case Token::EQ_STRICT:
           strict = true;
           // Fall through
@@ -3144,15 +3160,14 @@ void FullCodeGenerator::VisitCompareOperation(CompareOperation* expr) {
           UNREACHABLE();
       }
 
-      // The comparison stub expects the smi vs. smi case to be handled
-      // before it is called.
-      Label slow_case;
-      __ Or(a2, a0, Operand(a1));
-      __ BranchOnNotSmi(a2, &slow_case);
-      __ Branch(if_true, cc, a1, Operand(a0));
-      __ jmp(if_false);
+      if (ShouldInlineSmiCase(op)) {
+        Label slow_case;
+        __ Or(a2, a0, Operand(a1));
+        __ BranchOnNotSmi(a2, &slow_case);
+        Split(cc, a1, Operand(a0), if_true, if_false, NULL);
+        __ bind(&slow_case);
+      }
 
-      __ bind(&slow_case);
       CompareStub stub(cc, strict, kBothCouldBeNaN, true, a1, a0);
       __ CallStub(&stub);
       Split(cc, v0, Operand(zero_reg), if_true, if_false, fall_through);
