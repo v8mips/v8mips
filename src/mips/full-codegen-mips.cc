@@ -1528,7 +1528,7 @@ void FullCodeGenerator::VisitUnaryOperation(UnaryOperation* expr) {
       Label* fall_through = NULL;
 
       // Notice that the labels are swapped.
-      PrepareTest(&materialize_true, &materialize_false, 
+      PrepareTest(&materialize_true, &materialize_false,
                   &if_false, &if_true, &fall_through);
 
       VisitForControl(expr->expression(), if_true, if_false, fall_through);
@@ -1610,7 +1610,7 @@ void FullCodeGenerator::VisitUnaryOperation(UnaryOperation* expr) {
 void FullCodeGenerator::VisitCountOperation(CountOperation* expr) {
   Comment cmnt(masm_, "[ CountOperation");
   SetSourcePosition(expr->position());
-  
+
   // Invalid left-hand sides are rewritten to have a 'throw ReferenceError'
   // as the left-hand side.
   if (!expr->expression()->IsValidLeftHandSide()) {
@@ -1759,8 +1759,27 @@ void FullCodeGenerator::VisitCountOperation(CountOperation* expr) {
 
 
 void FullCodeGenerator::VisitForTypeofValue(Expression* expr, Location where) {
-  UNIMPLEMENTED_MIPS();
-  __ break_ (__LINE__);
+  VariableProxy* proxy = expr->AsVariableProxy();
+  if (proxy != NULL && !proxy->var()->is_this() && proxy->var()->is_global()) {
+    Comment cmnt(masm_, "Global variable");
+    __ lw(a0, CodeGenerator::GlobalObject());
+    __ li(a2, Operand(proxy->name()));
+    Handle<Code> ic(Builtins::builtin(Builtins::LoadIC_Initialize));
+    // Use a regular load, not a contextual load, to avoid a reference
+    // error.
+    __ Call(ic, RelocInfo::CODE_TARGET);
+    if (where == kStack) __ push(v0);
+  } else if (proxy != NULL &&
+             proxy->var()->slot() != NULL &&
+             proxy->var()->slot()->type() == Slot::LOOKUP) {
+    __ li(a0, Operand(proxy->name()));
+    __ Push(cp, a0);
+    __ CallRuntime(Runtime::kLoadContextSlotNoReferenceError, 2);
+    if (where == kStack) __ push(v0);
+  } else {
+    // This expression cannot throw a reference error at the top level.
+    VisitForValue(expr, where);
+  }
 }
 
 
@@ -1770,9 +1789,96 @@ bool FullCodeGenerator::TryLiteralCompare(Token::Value op,
                                           Label* if_true,
                                           Label* if_false,
                                           Label* fall_through) {
-  UNIMPLEMENTED_MIPS();
-  __ break_ (__LINE__);
-  return false;
+  if (op != Token::EQ && op != Token::EQ_STRICT) return false;
+
+  // Check for the pattern: typeof <expression> == <string literal>.
+  Literal* right_literal = right->AsLiteral();
+  if (right_literal == NULL) return false;
+  Handle<Object> right_literal_value = right_literal->handle();
+  if (!right_literal_value->IsString()) return false;
+  UnaryOperation* left_unary = left->AsUnaryOperation();
+  if (left_unary == NULL || left_unary->op() != Token::TYPEOF) return false;
+  Handle<String> check = Handle<String>::cast(right_literal_value);
+
+  VisitForTypeofValue(left_unary->expression(), kAccumulator);
+  __ mov(a0, result_register());
+  if (check->Equals(Heap::number_symbol())) {
+    UNCOMPLETED_MIPS();
+    __ And(at, a0, Operand(kSmiTagMask));
+    __ Branch(if_true, eq, at, Operand(zero_reg));
+    __ lw(a0, FieldMemOperand(a0, HeapObject::kMapOffset));
+    __ LoadRoot(at, Heap::kHeapNumberMapRootIndex);
+    // __ cmp(r0, ip);
+    Split(eq, a0, Operand(at), if_true, if_false, fall_through);
+  } else if (check->Equals(Heap::string_symbol())) {
+    UNCOMPLETED_MIPS();
+    // __ tst(r0, Operand(kSmiTagMask));
+    // __ b(eq, if_false);
+    // // Check for undetectable objects => false.
+    // __ ldr(r0, FieldMemOperand(r0, HeapObject::kMapOffset));
+    // __ ldrb(r1, FieldMemOperand(r0, Map::kBitFieldOffset));
+    // __ and_(r1, r1, Operand(1 << Map::kIsUndetectable));
+    // __ cmp(r1, Operand(1 << Map::kIsUndetectable));
+    // __ b(eq, if_false);
+    // __ ldrb(r1, FieldMemOperand(r0, Map::kInstanceTypeOffset));
+    // __ cmp(r1, Operand(FIRST_NONSTRING_TYPE));
+    // Split(lt, if_true, if_false, fall_through);
+  } else if (check->Equals(Heap::boolean_symbol())) {
+    UNCOMPLETED_MIPS();
+    // __ LoadRoot(ip, Heap::kTrueValueRootIndex);
+    // __ cmp(r0, ip);
+    // __ b(eq, if_true);
+    // __ LoadRoot(ip, Heap::kFalseValueRootIndex);
+    // __ cmp(r0, ip);
+    // Split(eq, if_true, if_false, fall_through);
+  } else if (check->Equals(Heap::undefined_symbol())) {
+    UNCOMPLETED_MIPS();
+    // __ LoadRoot(ip, Heap::kUndefinedValueRootIndex);
+    // __ cmp(r0, ip);
+    // __ b(eq, if_true);
+    // __ tst(r0, Operand(kSmiTagMask));
+    // __ b(eq, if_false);
+    // // Check for undetectable objects => true.
+    // __ ldr(r0, FieldMemOperand(r0, HeapObject::kMapOffset));
+    // __ ldrb(r1, FieldMemOperand(r0, Map::kBitFieldOffset));
+    // __ and_(r1, r1, Operand(1 << Map::kIsUndetectable));
+    // __ cmp(r1, Operand(1 << Map::kIsUndetectable));
+    // Split(eq, if_true, if_false, fall_through);
+  } else if (check->Equals(Heap::function_symbol())) {
+    UNCOMPLETED_MIPS();
+    // __ tst(r0, Operand(kSmiTagMask));
+    // __ b(eq, if_false);
+    // __ CompareObjectType(r0, r1, r0, JS_FUNCTION_TYPE);
+    // __ b(eq, if_true);
+    // // Regular expressions => 'function' (they are callable).
+    // __ CompareInstanceType(r1, r0, JS_REGEXP_TYPE);
+    // Split(eq, if_true, if_false, fall_through);
+  } else if (check->Equals(Heap::object_symbol())) {
+    UNCOMPLETED_MIPS();
+    // __ tst(r0, Operand(kSmiTagMask));
+    // __ b(eq, if_false);
+    // __ LoadRoot(ip, Heap::kNullValueRootIndex);
+    // __ cmp(r0, ip);
+    // __ b(eq, if_true);
+    // // Regular expressions => 'function', not 'object'.
+    // __ CompareObjectType(r0, r1, r0, JS_REGEXP_TYPE);
+    // __ b(eq, if_false);
+    // // Check for undetectable objects => false.
+    // __ ldrb(r0, FieldMemOperand(r1, Map::kBitFieldOffset));
+    // __ and_(r0, r0, Operand(1 << Map::kIsUndetectable));
+    // __ cmp(r0, Operand(1 << Map::kIsUndetectable));
+    // __ b(eq, if_false);
+    // // Check for JS objects => true.
+    // __ ldrb(r0, FieldMemOperand(r1, Map::kInstanceTypeOffset));
+    // __ cmp(r0, Operand(FIRST_JS_OBJECT_TYPE));
+    // __ b(lt, if_false);
+    // __ cmp(r0, Operand(LAST_JS_OBJECT_TYPE));
+    // Split(le, if_true, if_false, fall_through);
+  } else {
+    if (if_false != fall_through) __ jmp(if_false);
+  }
+
+  return true;
 }
 
 
@@ -1882,7 +1988,7 @@ void FullCodeGenerator::VisitCompareOperation(CompareOperation* expr) {
 
 void FullCodeGenerator::VisitCompareToNull(CompareToNull* expr) {
   UNIMPLEMENTED_MIPS();
-  __ break_(__LINE__);
+  // __ break_(__LINE__);
 }
 
 
