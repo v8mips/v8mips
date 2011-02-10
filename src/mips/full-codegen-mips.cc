@@ -34,8 +34,11 @@
 #define UNCOMPLETED_MIPS()                                                  \
   v8::internal::PrintF("%s, \tline %d: \tfunction %s HAS NOT BEEN COMPLETED! \n",    \
                        __FILE__, __LINE__, __func__)
+#define TRACE(s) \
+  v8::internal::PrintF("fcg TRACE line %d: function %s, tag: %s\n", __LINE__, __func__, s)
 #else
 #define UNCOMPLETED_MIPS()
+#define TRACE(s)
 #endif
 
 #include "code-stubs-mips.h"
@@ -520,7 +523,17 @@ void FullCodeGenerator::Move(Slot* dst,
                              Register src,
                              Register scratch1,
                              Register scratch2) {
-  UNIMPLEMENTED_MIPS();
+  ASSERT(dst->type() != Slot::LOOKUP);  // Not yet implemented.
+  ASSERT(!scratch1.is(src) && !scratch2.is(src));
+  MemOperand location = EmitSlotSearch(dst, scratch1);
+  __ sw(src, location);
+  // Emit the write barrier code if the location is in the heap.
+  if (dst->type() == Slot::CONTEXT) {
+   __ RecordWrite(scratch1,
+                  Operand(Context::SlotOffset(dst->index())),
+                  scratch2,
+                  src);
+  }
 }
 
 
@@ -546,8 +559,31 @@ void FullCodeGenerator::EmitDeclaration(Variable* variable,
         break;
 
       case Slot::CONTEXT:
-         UNCOMPLETED_MIPS();
-         ASSERT(0);
+        // We bypass the general EmitSlotSearch because we know more about
+        // this specific context.
+
+        // The variable in the decl always resides in the current context.
+        ASSERT_EQ(0, scope()->ContextChainLength(variable->scope()));
+        if (FLAG_debug_code) {
+          // Check if we have the correct context pointer.
+          __ lw(a1,
+                 CodeGenerator::ContextOperand(cp, Context::FCONTEXT_INDEX));
+          __ Check(eq, "Unexpected declaration in current context.",
+                   a1, Operand(cp));
+        }
+        if (mode == Variable::CONST) {
+          __ LoadRoot(at, Heap::kTheHoleValueRootIndex);
+          __ sw(at, CodeGenerator::ContextOperand(cp, slot->index()));
+          // No write barrier since the_hole_value is in old space.
+        } else if (function != NULL) {
+          VisitForValue(function, kAccumulator);
+          __ sw(result_register(),
+                 CodeGenerator::ContextOperand(cp, slot->index()));
+          int offset = Context::SlotOffset(slot->index());
+          // We know that we have written a function, which is not a smi.
+          __ mov(a1, cp);
+          __ RecordWrite(a1, Operand(offset), a2, result_register());
+        }
         break;
 
       case Slot::LOOKUP: {
@@ -561,6 +597,7 @@ void FullCodeGenerator::EmitDeclaration(Variable* variable,
          ASSERT(0);
   }
 }
+
 
 void FullCodeGenerator::VisitDeclaration(Declaration* decl) {
   EmitDeclaration(decl->proxy()->var(), decl->mode(), decl->fun());
@@ -1033,10 +1070,8 @@ void FullCodeGenerator::EmitVariableAssignment(Variable* var,
         __ sw(result_register(), target);
         // RecordWrite may destroy all its register arguments.
         __ mov(a3, result_register());
-         UNCOMPLETED_MIPS();
-         ASSERT(0);  // TODO(PJ): Get back to this!
-        //  int offset = FixedArray::kHeaderSize + slot->index() * kPointerSize;
-        // __ RecordWrite(a1, Operand(offset), a2, a3);
+         int offset = FixedArray::kHeaderSize + slot->index() * kPointerSize;
+        __ RecordWrite(a1, Operand(offset), a2, a3);
         break;
       }
 
@@ -1691,17 +1726,28 @@ void FullCodeGenerator::VisitCountOperation(CountOperation* expr) {
         break;
     }
   }
-
+  __ mov(a0, result_register());
 
   // Inline smi case if we are in a loop.
   Label stub_call, done;
   int count_value = expr->op() == Token::INC ? 1 : -1;
-  if (loop_depth() > 0) {
-    UNCOMPLETED_MIPS();
-    ASSERT(0);
-  }
-  __ mov(a0, result_register());
   __ li(a1, Operand(Smi::FromInt(count_value)));
+
+  if (loop_depth() > 0) {
+    __ Addu(v0, a0, a1);
+
+    // Check for overflow of a0 + smi:count_value (in a1).
+    __ Xor(t0, v0, a0);
+    __ Xor(t1, v0, a1);
+    __ and_(t0, t0, t1);    // Overflow occurred if result is negative.
+    __ Branch(&stub_call, lt, t0, Operand(zero_reg));  // Do stub on overflow.
+
+    // We could eliminate this smi check if we split the code at
+    // the first smi check before calling ToNumber.
+    __ BranchOnSmi(v0, &done);
+    __ bind(&stub_call);
+  }
+
   GenericBinaryOpStub stub(Token::ADD, NO_OVERWRITE, a1, a0);
   __ CallStub(&stub);
   __ bind(&done);
