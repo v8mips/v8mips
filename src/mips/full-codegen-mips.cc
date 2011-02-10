@@ -638,8 +638,26 @@ void FullCodeGenerator::EmitDeclaration(Variable* variable,
     }
 
   } else if (prop != NULL) {
-         UNCOMPLETED_MIPS();
-         ASSERT(0);
+    if (function != NULL || mode == Variable::CONST) {
+      // We are declaring a function or constant that rewrites to a
+      // property.  Use (keyed) IC to set the initial value.
+      VisitForValue(prop->obj(), kStack);
+      if (function != NULL) {
+        VisitForValue(prop->key(), kStack);
+        VisitForValue(function, kAccumulator);
+        __ mov(a0, result_register());
+        __ pop(a1);  // Key.
+      } else {
+        VisitForValue(prop->key(), kAccumulator);
+        __ mov(a1, result_register());  // Key.
+        __ LoadRoot(a0, Heap::kTheHoleValueRootIndex);
+      }
+      __ pop(a2);  // Receiver.
+
+      Handle<Code> ic(Builtins::builtin(Builtins::KeyedStoreIC_Initialize));
+      __ Call(ic, RelocInfo::CODE_TARGET);
+      // Value in v0 is ignored (declarations are statements).
+    }
   }
 }
 
