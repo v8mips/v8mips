@@ -2026,7 +2026,7 @@ Comment cmnt(masm_, "[ CompareOperation");
       __ jmp(if_false);
 
       __ bind(&slow_case);
-      CompareStub stub(cc, strict);
+      CompareStub stub(cc, strict, kBothCouldBeNaN, true, a1, a0);
       __ CallStub(&stub);
       __ Branch(if_true, cc, v0, Operand(0));
       __ jmp(if_false);
