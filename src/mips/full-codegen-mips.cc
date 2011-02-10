@@ -1855,7 +1855,26 @@ void FullCodeGenerator::EmitClassOf(ZoneList<Expression*>* args) {
 }
 
 
-MIPS_UNIMPLEMENTED_FULL_CODEGEN_FUNCTION(EmitLog)
+void FullCodeGenerator::EmitLog(ZoneList<Expression*>* args) {
+  // Conditionally generate a log call.
+  // Args:
+  //   0 (literal string): The type of logging (corresponds to the flags).
+  //     This is used to determine whether or not to generate the log call.
+  //   1 (string): Format string.  Access the string at argument index 2
+  //     with '%2s' (see Logger::LogRuntime for all the formats).
+  //   2 (array): Arguments to the format string.
+  ASSERT_EQ(args->length(), 3);
+#ifdef ENABLE_LOGGING_AND_PROFILING
+  if (CodeGenerator::ShouldGenerateLog(args->at(0))) {
+    VisitForValue(args->at(1), kStack);
+    VisitForValue(args->at(2), kStack);
+    __ CallRuntime(Runtime::kLog, 2);
+  }
+#endif
+  // Finally, we're expected to leave a value on the top of the stack.
+  __ LoadRoot(v0, Heap::kUndefinedValueRootIndex);
+  Apply(context_, v0);
+}
 
 
 void FullCodeGenerator::EmitRandomHeapNumber(ZoneList<Expression*>* args) {
@@ -2099,11 +2118,85 @@ MIPS_UNIMPLEMENTED_FULL_CODEGEN_FUNCTION(EmitStringCompare)
 MIPS_UNIMPLEMENTED_FULL_CODEGEN_FUNCTION(EmitMathSin)
 MIPS_UNIMPLEMENTED_FULL_CODEGEN_FUNCTION(EmitMathCos)
 MIPS_UNIMPLEMENTED_FULL_CODEGEN_FUNCTION(EmitMathSqrt)
-MIPS_UNIMPLEMENTED_FULL_CODEGEN_FUNCTION(EmitCallFunction)
-MIPS_UNIMPLEMENTED_FULL_CODEGEN_FUNCTION(EmitRegExpConstructResult)
-MIPS_UNIMPLEMENTED_FULL_CODEGEN_FUNCTION(EmitSwapElements)
+
+
+void FullCodeGenerator::EmitCallFunction(ZoneList<Expression*>* args) {
+  ASSERT(args->length() >= 2);
+
+  int arg_count = args->length() - 2;  // For receiver and function.
+  VisitForValue(args->at(0), kStack);  // Receiver.
+  for (int i = 0; i < arg_count; i++) {
+    VisitForValue(args->at(i + 1), kStack);
+  }
+  VisitForValue(args->at(arg_count + 1), kAccumulator);  // Function.
+
+  // InvokeFunction requires function in r1. Move it in there.
+  if (!result_register().is(a1)) __ mov(a1, result_register());
+  ParameterCount count(arg_count);
+  __ InvokeFunction(a1, count, CALL_FUNCTION);
+  __ lw(cp, MemOperand(fp, StandardFrameConstants::kContextOffset));
+  Apply(context_, v0);
+}
+
+
+void FullCodeGenerator::EmitRegExpConstructResult(ZoneList<Expression*>* args) {
+  ASSERT(args->length() == 3);
+  VisitForValue(args->at(0), kStack);
+  VisitForValue(args->at(1), kStack);
+  VisitForValue(args->at(2), kStack);
+  __ CallRuntime(Runtime::kRegExpConstructResult, 3);
+  Apply(context_, v0);
+}
+
+
+void FullCodeGenerator::EmitSwapElements(ZoneList<Expression*>* args) {
+  ASSERT(args->length() == 3);
+  VisitForValue(args->at(0), kStack);
+  VisitForValue(args->at(1), kStack);
+  VisitForValue(args->at(2), kStack);
+  __ CallRuntime(Runtime::kSwapElements, 3);
+  Apply(context_, v0);
+}
+
+
 MIPS_UNIMPLEMENTED_FULL_CODEGEN_FUNCTION(EmitGetFromCache)
-MIPS_UNIMPLEMENTED_FULL_CODEGEN_FUNCTION(EmitIsRegExpEquivalent)
+
+
+void FullCodeGenerator::EmitIsRegExpEquivalent(ZoneList<Expression*>* args) {
+  ASSERT_EQ(2, args->length());
+
+  Register right = v0;
+  Register left = a1;
+  Register tmp = a2;
+  Register tmp2 = a3;
+
+  VisitForValue(args->at(0), kStack);
+  VisitForValue(args->at(1), kAccumulator);  // Result (right) in v0.
+  __ pop(left);
+
+  Label done, fail, ok;
+  __ Branch(&ok, eq, left, Operand(right));
+  // Fail if either is a non-HeapObject.
+  __ And(tmp, left, Operand(right));
+  __ And(at, tmp, Operand(kSmiTagMask));
+  __ Branch(&fail, eq, at, Operand(zero_reg));
+  __ lw(tmp, FieldMemOperand(left, HeapObject::kMapOffset));
+  __ lbu(tmp2, FieldMemOperand(tmp, Map::kInstanceTypeOffset));
+  __ Branch(&fail, ne, tmp2, Operand(JS_REGEXP_TYPE));
+  __ lw(tmp2, FieldMemOperand(right, HeapObject::kMapOffset));
+  __ Branch(&fail, ne, tmp, Operand(tmp2));
+  __ lw(tmp, FieldMemOperand(left, JSRegExp::kDataOffset));
+  __ lw(tmp2, FieldMemOperand(right, JSRegExp::kDataOffset));
+  __ Branch(&ok, eq, tmp, Operand(tmp2));
+  __ bind(&fail);
+  __ LoadRoot(v0, Heap::kFalseValueRootIndex);
+  __ jmp(&done);
+  __ bind(&ok);
+  __ LoadRoot(v0, Heap::kTrueValueRootIndex);
+  __ bind(&done);
+
+  Apply(context_, v0);
+}
 
 
 void FullCodeGenerator::VisitCallRuntime(CallRuntime* expr) {
