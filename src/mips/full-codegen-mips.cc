@@ -729,9 +729,145 @@ void FullCodeGenerator::VisitSwitchStatement(SwitchStatement* stmt) {
 }
 
 
-
 void FullCodeGenerator::VisitForInStatement(ForInStatement* stmt) {
-  UNIMPLEMENTED_MIPS();
+  Comment cmnt(masm_, "[ ForInStatement");
+  SetStatementPosition(stmt);
+
+  Label loop, exit;
+  ForIn loop_statement(this, stmt);
+  increment_loop_depth();
+
+  // Get the object to enumerate over. Both SpiderMonkey and JSC
+  // ignore null and undefined in contrast to the specification; see
+  // ECMA-262 section 12.6.4.
+  VisitForValue(stmt->enumerable(), kAccumulator);
+  __ mov(a0, result_register());  // Result as param to InvokeBuiltin below.
+  __ LoadRoot(at, Heap::kUndefinedValueRootIndex);
+  __ Branch(&exit, eq, a0, Operand(at));
+  __ LoadRoot(at, Heap::kNullValueRootIndex);
+  __ Branch(&exit, eq, a0, Operand(at));
+
+  // Convert the object to a JS object.
+  Label convert, done_convert;
+  __ BranchOnSmi(a0, &convert);
+  __ GetObjectType(a0, a1, a1);
+  __ Branch(&done_convert, hs, a1, Operand(FIRST_JS_OBJECT_TYPE));
+  __ bind(&convert);
+  __ push(a0);
+  __ InvokeBuiltin(Builtins::TO_OBJECT, CALL_JS);
+  __ mov(a0, v0);   // plind, revisit a0/v0 thru here, can be optimized ........
+  __ bind(&done_convert);
+  __ push(a0);
+
+  // TODO(kasperl): Check cache validity in generated code. This is a
+  // fast case for the JSObject::IsSimpleEnum cache validity
+  // checks. If we cannot guarantee cache validity, call the runtime
+  // system to check cache validity or get the property names in a
+  // fixed array.
+
+  // Get the set of properties to enumerate.
+  __ push(a0);  // Duplicate the enumerable object on the stack.
+  __ CallRuntime(Runtime::kGetPropertyNamesFast, 1);
+
+  // If we got a map from the runtime call, we can do a fast
+  // modification check. Otherwise, we got a fixed array, and we have
+  // to do a slow check.
+  Label fixed_array;
+  __ mov(a2, v0);
+  __ lw(a1, FieldMemOperand(a2, HeapObject::kMapOffset));
+  __ LoadRoot(at, Heap::kMetaMapRootIndex);
+  __ Branch(&fixed_array, ne, a1, Operand(at));
+  
+  // We got a map in register v0. Get the enumeration cache from it.
+  __ lw(a1, FieldMemOperand(v0, Map::kInstanceDescriptorsOffset));
+  __ lw(a1, FieldMemOperand(a1, DescriptorArray::kEnumerationIndexOffset));
+  __ lw(a2, FieldMemOperand(a1, DescriptorArray::kEnumCacheBridgeCacheOffset));
+
+  // Setup the four remaining stack slots.
+  __ push(v0);  // Map.
+  __ lw(a1, FieldMemOperand(a2, FixedArray::kLengthOffset));
+  __ li(a0, Operand(Smi::FromInt(0)));
+  // Push enumeration cache, enumeration cache length (as smi) and zero.
+  __ Push(a2, a1, a0);
+  __ jmp(&loop);
+
+  // We got a fixed array in register v0. Iterate through that.
+  __ bind(&fixed_array);
+  __ li(a1, Operand(Smi::FromInt(0)));  // Map (0) - force slow check.
+  __ Push(a1, v0);
+  __ lw(a1, FieldMemOperand(v0, FixedArray::kLengthOffset));
+  __ li(a0, Operand(Smi::FromInt(0)));
+  __ Push(a1, a0);  // Fixed array length (as smi) and initial index.
+
+  // Generate code for doing the condition check.
+  __ bind(&loop);
+  // Load the current count to a0, load the length to a1.
+  __ lw(a0, MemOperand(sp, 0 * kPointerSize));
+  __ lw(a1, MemOperand(sp, 1 * kPointerSize));
+  __ Branch(loop_statement.break_target(), hs, a0, Operand(a1));
+  
+  // Get the current entry of the array into register a3.
+  __ lw(a2, MemOperand(sp, 2 * kPointerSize));
+  __ Addu(a2, a2, Operand(FixedArray::kHeaderSize - kHeapObjectTag));
+  __ sll(t0, a0, kPointerSizeLog2 - kSmiTagSize);
+  __ addu(t0, a2, t0);  // Array base + scaled (smi) index.
+  __ lw(a3, MemOperand(t0));  // Current entry.
+
+  // Get the expected map from the stack or a zero map in the
+  // permanent slow case into register a2.
+  __ lw(a2, MemOperand(sp, 3 * kPointerSize));
+
+  // Check if the expected map still matches that of the enumerable.
+  // If not, we have to filter the key.
+  Label update_each;
+  __ lw(a1, MemOperand(sp, 4 * kPointerSize));
+  __ lw(t0, FieldMemOperand(a1, HeapObject::kMapOffset));
+  __ Branch(&update_each, eq, t0, Operand(a2));
+  
+  // Convert the entry to a string or (smi) 0 if it isn't a property
+  // any more. If the property has been removed while iterating, we
+  // just skip it.
+  __ push(a1);  // Enumerable.
+  __ push(a3);  // Current entry.
+  __ InvokeBuiltin(Builtins::FILTER_KEY, CALL_JS);
+  __ mov(a3, v0);
+  __ Branch(loop_statement.continue_target(), eq, a3, Operand(zero_reg));
+  
+  // Update the 'each' property or variable from the possibly filtered
+  // entry in register r3.
+  __ bind(&update_each);
+  __ mov(result_register(), a3);
+  // Perform the assignment as if via '='.
+  EmitAssignment(stmt->each());
+
+  // Generate code for the body of the loop.
+  Label stack_limit_hit, stack_check_done;
+  Visit(stmt->body());
+
+  __ StackLimitCheck(&stack_limit_hit);
+  __ bind(&stack_check_done);
+
+  // Generate code for the going to the next element by incrementing
+  // the index (smi) stored on top of the stack.
+  __ bind(loop_statement.continue_target());
+  __ pop(a0);
+  __ Addu(a0, a0, Operand(Smi::FromInt(1)));
+  __ push(a0);
+  __ Branch(&loop);
+
+  // Slow case for the stack limit check.
+  StackCheckStub stack_check_stub;
+  __ bind(&stack_limit_hit);
+  __ CallStub(&stack_check_stub);
+  __ Branch(&stack_check_done);
+
+  // Remove the pointers stored on the stack.
+  __ bind(loop_statement.break_target());
+  __ Drop(5);
+
+  // Exit and decrement the loop depth.
+  __ bind(&exit);
+  decrement_loop_depth();
 }
 
 
@@ -1177,6 +1313,56 @@ void FullCodeGenerator::EmitBinaryOp(Token::Value op,
   GenericBinaryOpStub stub(op, NO_OVERWRITE, a1, a0);
   __ CallStub(&stub);
   Apply(context, v0);
+}
+
+
+void FullCodeGenerator::EmitAssignment(Expression* expr) {
+  // Invalid left-hand sides are rewritten to have a 'throw
+  // ReferenceError' on the left-hand side.
+  if (!expr->IsValidLeftHandSide()) {
+    VisitForEffect(expr);
+    return;
+  }
+
+  // Left-hand side can only be a property, a global or a (parameter or local)
+  // slot. Variables with rewrite to .arguments are treated as KEYED_PROPERTY.
+  enum LhsKind { VARIABLE, NAMED_PROPERTY, KEYED_PROPERTY };
+  LhsKind assign_type = VARIABLE;
+  Property* prop = expr->AsProperty();
+  if (prop != NULL) {
+    assign_type = (prop->key()->IsPropertyName())
+        ? NAMED_PROPERTY
+        : KEYED_PROPERTY;
+  }
+
+  switch (assign_type) {
+    case VARIABLE: {
+      Variable* var = expr->AsVariableProxy()->var();
+      EmitVariableAssignment(var, Token::ASSIGN, Expression::kEffect);
+      break;
+    }
+    case NAMED_PROPERTY: {
+      __ push(a0);  // Preserve value.
+      VisitForValue(prop->obj(), kAccumulator);
+      __ mov(a1, v0);
+      __ pop(a0);  // Restore value.
+      __ li(a2, Operand(prop->key()->AsLiteral()->handle()));
+      Handle<Code> ic(Builtins::builtin(Builtins::StoreIC_Initialize));
+      __ Call(ic, RelocInfo::CODE_TARGET);
+      break;
+    }
+    case KEYED_PROPERTY: {
+      __ push(a0);  // Preserve value.
+      VisitForValue(prop->obj(), kStack);
+      VisitForValue(prop->key(), kAccumulator);
+      __ mov(a1, v0);
+      __ pop(a2);
+      __ pop(a0);  // Restore value.
+      Handle<Code> ic(Builtins::builtin(Builtins::KeyedStoreIC_Initialize));
+      __ Call(ic, RelocInfo::CODE_TARGET);
+      break;
+    }
+  }
 }
 
 
