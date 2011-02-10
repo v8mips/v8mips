@@ -1241,7 +1241,7 @@ void Builtins::Generate_FunctionApply(MacroAssembler* masm) {
   __ push(a0);
   __ InvokeBuiltin(Builtins::TO_OBJECT, CALL_JS);
   __ mov(a0, v0);  // Put object in a0 to match other paths to push_receiver.
-  __ b(&push_receiver);
+  __ Branch(&push_receiver);
 
   // Use the current global receiver object as the receiver.
   __ bind(&use_global_receiver);

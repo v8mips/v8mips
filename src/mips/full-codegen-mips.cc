@@ -2541,7 +2541,7 @@ void FullCodeGenerator::EmitGetFromCache(ZoneList<Expression*>* args) {
   __ Branch(&not_found, ne, key, Operand(a2));
 
   __ lw(v0, MemOperand(a3, kPointerSize));
-  __ b(&done);
+  __ Branch(&done);
 
   __ bind(&not_found);
   // Call runtime to perform the lookup.

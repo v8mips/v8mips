@@ -1515,7 +1515,7 @@ void KeyedLoadIC::GenerateExternalArray(MacroAssembler* masm,
       __ bind(&box_int_0);
       // Integer does not have leading zeros.
       GenerateUInt2Double(masm, hiword, loword, t0, 0);
-      __ b(&done);
+      __ Branch(&done);
 
       __ bind(&box_int_1);
       // Integer has one leading zero.
