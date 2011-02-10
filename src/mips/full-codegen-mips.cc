@@ -777,7 +777,7 @@ void FullCodeGenerator::VisitForInStatement(ForInStatement* stmt) {
   __ lw(a1, FieldMemOperand(a2, HeapObject::kMapOffset));
   __ LoadRoot(at, Heap::kMetaMapRootIndex);
   __ Branch(&fixed_array, ne, a1, Operand(at));
-  
+
   // We got a map in register v0. Get the enumeration cache from it.
   __ lw(a1, FieldMemOperand(v0, Map::kInstanceDescriptorsOffset));
   __ lw(a1, FieldMemOperand(a1, DescriptorArray::kEnumerationIndexOffset));
@@ -805,7 +805,7 @@ void FullCodeGenerator::VisitForInStatement(ForInStatement* stmt) {
   __ lw(a0, MemOperand(sp, 0 * kPointerSize));
   __ lw(a1, MemOperand(sp, 1 * kPointerSize));
   __ Branch(loop_statement.break_target(), hs, a0, Operand(a1));
-  
+
   // Get the current entry of the array into register a3.
   __ lw(a2, MemOperand(sp, 2 * kPointerSize));
   __ Addu(a2, a2, Operand(FixedArray::kHeaderSize - kHeapObjectTag));
@@ -823,7 +823,7 @@ void FullCodeGenerator::VisitForInStatement(ForInStatement* stmt) {
   __ lw(a1, MemOperand(sp, 4 * kPointerSize));
   __ lw(t0, FieldMemOperand(a1, HeapObject::kMapOffset));
   __ Branch(&update_each, eq, t0, Operand(a2));
-  
+
   // Convert the entry to a string or (smi) 0 if it isn't a property
   // any more. If the property has been removed while iterating, we
   // just skip it.
@@ -832,7 +832,7 @@ void FullCodeGenerator::VisitForInStatement(ForInStatement* stmt) {
   __ InvokeBuiltin(Builtins::FILTER_KEY, CALL_JS);
   __ mov(a3, v0);
   __ Branch(loop_statement.continue_target(), eq, a3, Operand(zero_reg));
-  
+
   // Update the 'each' property or variable from the possibly filtered
   // entry in register r3.
   __ bind(&update_each);
@@ -1789,7 +1789,23 @@ void FullCodeGenerator::EmitIsSmi(ZoneList<Expression*>* args) {
 }
 
 
-MIPS_UNIMPLEMENTED_FULL_CODEGEN_FUNCTION(EmitIsNonNegativeSmi)
+void FullCodeGenerator::EmitIsNonNegativeSmi(ZoneList<Expression*>* args) {
+  ASSERT(args->length() == 1);
+
+  VisitForValue(args->at(0), kAccumulator);
+
+  Label materialize_true, materialize_false;
+  Label* if_true = NULL;
+  Label* if_false = NULL;
+  Label* fall_through = NULL;
+  PrepareTest(&materialize_true, &materialize_false,
+              &if_true, &if_false, &fall_through);
+
+  __ And(at, v0, Operand(kSmiTagMask | 0x80000000));
+  Split(eq, at, Operand(zero_reg), if_true, if_false, fall_through);
+
+  Apply(context_, if_true, if_false);
+}
 
 
 void FullCodeGenerator::EmitIsObject(ZoneList<Expression*>* args) {
@@ -1863,7 +1879,26 @@ void FullCodeGenerator::EmitIsUndetectableObject(ZoneList<Expression*>* args) {
 }
 
 
-MIPS_UNIMPLEMENTED_FULL_CODEGEN_FUNCTION(EmitIsStringWrapperSafeForDefaultValueOf)
+void FullCodeGenerator::EmitIsStringWrapperSafeForDefaultValueOf(
+    ZoneList<Expression*>* args) {
+
+  ASSERT(args->length() == 1);
+
+  VisitForValue(args->at(0), kAccumulator);
+
+  Label materialize_true, materialize_false;
+  Label* if_true = NULL;
+  Label* if_false = NULL;
+  Label* fall_through = NULL;
+  PrepareTest(&materialize_true, &materialize_false,
+              &if_true, &if_false, &fall_through);
+
+  // Just indicate false, as %_IsStringWrapperSafeForDefaultValueOf() is only
+  // used in a few functions in runtime.js which should not normally be hit by
+  // this compiler.
+  __ jmp(if_false);
+  Apply(context_, if_true, if_false);
+}
 
 
 void FullCodeGenerator::EmitIsFunction(ZoneList<Expression*>* args) {
@@ -1928,7 +1963,34 @@ void FullCodeGenerator::EmitIsRegExp(ZoneList<Expression*>* args) {
 }
 
 
-MIPS_UNIMPLEMENTED_FULL_CODEGEN_FUNCTION(EmitIsConstructCall)
+void FullCodeGenerator::EmitIsConstructCall(ZoneList<Expression*>* args) {
+  ASSERT(args->length() == 0);
+
+  Label materialize_true, materialize_false;
+  Label* if_true = NULL;
+  Label* if_false = NULL;
+  Label* fall_through = NULL;
+  PrepareTest(&materialize_true, &materialize_false,
+              &if_true, &if_false, &fall_through);
+
+  // Get the frame pointer for the calling frame.
+  __ lw(a2, MemOperand(fp, StandardFrameConstants::kCallerFPOffset));
+
+  // Skip the arguments adaptor frame if it exists.
+  Label check_frame_marker;
+  __ lw(a1, MemOperand(a2, StandardFrameConstants::kContextOffset));
+  __ Branch(&check_frame_marker, ne,
+            a1, Operand(Smi::FromInt(StackFrame::ARGUMENTS_ADAPTOR)));
+  __ lw(a2, MemOperand(a2, StandardFrameConstants::kCallerFPOffset));
+
+  // Check the marker in the calling frame.
+  __ bind(&check_frame_marker);
+  __ lw(a1, MemOperand(a2, StandardFrameConstants::kMarkerOffset));
+  Split(eq, a1, Operand(Smi::FromInt(StackFrame::CONSTRUCT)),
+        if_true, if_false, fall_through);
+
+  Apply(context_, if_true, if_false);
+}
 
 
 void FullCodeGenerator::EmitObjectEquals(ZoneList<Expression*>* args) {
@@ -2168,7 +2230,30 @@ void FullCodeGenerator::EmitMathPow(ZoneList<Expression*>* args) {
 }
 
 
-MIPS_UNIMPLEMENTED_FULL_CODEGEN_FUNCTION(EmitSetValueOf)
+void FullCodeGenerator::EmitSetValueOf(ZoneList<Expression*>* args) {
+  ASSERT(args->length() == 2);
+
+  VisitForValue(args->at(0), kStack);  // Load the object.
+  VisitForValue(args->at(1), kAccumulator);  // Load the value.
+  __ pop(a1);  // v0 = value. a1 = object.
+
+  Label done;
+  // If the object is a smi, return the value.
+  __ BranchOnSmi(a1, &done);
+
+  // If the object is not a value type, return the value.
+  __ GetObjectType(a1, a2, a2);
+  __ Branch(&done, ne, a2, Operand(JS_VALUE_TYPE));
+
+  // Store the value.
+  __ sw(v0, FieldMemOperand(a1, JSValue::kValueOffset));
+  // Update the write barrier.  Save the value as it will be
+  // overwritten by the write barrier code and is needed afterward.
+  __ RecordWrite(a1, Operand(JSValue::kValueOffset - kHeapObjectTag), a2, a3);
+
+  __ bind(&done);
+  Apply(context_, v0);
+}
 
 
 void FullCodeGenerator::EmitNumberToString(ZoneList<Expression*>* args) {
@@ -2299,11 +2384,55 @@ void FullCodeGenerator::EmitStringCharAt(ZoneList<Expression*>* args) {
 }
 
 
-MIPS_UNIMPLEMENTED_FULL_CODEGEN_FUNCTION(EmitStringAdd)
-MIPS_UNIMPLEMENTED_FULL_CODEGEN_FUNCTION(EmitStringCompare)
-MIPS_UNIMPLEMENTED_FULL_CODEGEN_FUNCTION(EmitMathSin)
-MIPS_UNIMPLEMENTED_FULL_CODEGEN_FUNCTION(EmitMathCos)
-MIPS_UNIMPLEMENTED_FULL_CODEGEN_FUNCTION(EmitMathSqrt)
+void FullCodeGenerator::EmitStringAdd(ZoneList<Expression*>* args) {
+  ASSERT_EQ(2, args->length());
+
+  VisitForValue(args->at(0), kStack);
+  VisitForValue(args->at(1), kStack);
+
+  StringAddStub stub(NO_STRING_ADD_FLAGS);
+  __ CallStub(&stub);
+  Apply(context_, v0);
+}
+
+
+void FullCodeGenerator::EmitStringCompare(ZoneList<Expression*>* args) {
+  ASSERT_EQ(2, args->length());
+
+  VisitForValue(args->at(0), kStack);
+  VisitForValue(args->at(1), kStack);
+
+  StringCompareStub stub;
+  __ CallStub(&stub);
+  Apply(context_, v0);
+}
+
+
+void FullCodeGenerator::EmitMathSin(ZoneList<Expression*>* args) {
+  // Load the argument on the stack and call the runtime.
+  ASSERT(args->length() == 1);
+  VisitForValue(args->at(0), kStack);
+  __ CallRuntime(Runtime::kMath_sin, 1);
+  Apply(context_, v0);
+}
+
+
+void FullCodeGenerator::EmitMathCos(ZoneList<Expression*>* args) {
+  // Load the argument on the stack and call the runtime.
+  ASSERT(args->length() == 1);
+  VisitForValue(args->at(0), kStack);
+  __ CallRuntime(Runtime::kMath_cos, 1);
+  Apply(context_, v0);
+}
+
+
+void FullCodeGenerator::EmitMathSqrt(ZoneList<Expression*>* args) {
+  // Load the argument on the stack and call the runtime function.
+  ASSERT(args->length() == 1);
+  VisitForValue(args->at(0), kStack);
+  __ CallRuntime(Runtime::kMath_sqrt, 1);
+  Apply(context_, v0);
+}
 
 
 void FullCodeGenerator::EmitCallFunction(ZoneList<Expression*>* args) {
@@ -2345,7 +2474,57 @@ void FullCodeGenerator::EmitSwapElements(ZoneList<Expression*>* args) {
 }
 
 
-MIPS_UNIMPLEMENTED_FULL_CODEGEN_FUNCTION(EmitGetFromCache)
+void FullCodeGenerator::EmitGetFromCache(ZoneList<Expression*>* args) {
+  ASSERT_EQ(2, args->length());
+
+  ASSERT_NE(NULL, args->at(0)->AsLiteral());
+  int cache_id = Smi::cast(*(args->at(0)->AsLiteral()->handle()))->value();
+
+  Handle<FixedArray> jsfunction_result_caches(
+      Top::global_context()->jsfunction_result_caches());
+  if (jsfunction_result_caches->length() <= cache_id) {
+    __ Abort("Attempt to use undefined cache.");
+    __ LoadRoot(v0, Heap::kUndefinedValueRootIndex);
+    Apply(context_, v0);
+    return;
+  }
+
+  VisitForValue(args->at(1), kAccumulator);
+
+  Register key = v0;
+  Register cache = a1;
+  __ lw(cache, CodeGenerator::ContextOperand(cp, Context::GLOBAL_INDEX));
+  __ lw(cache, FieldMemOperand(cache, GlobalObject::kGlobalContextOffset));
+  __ lw(cache,
+         CodeGenerator::ContextOperand(
+             cache, Context::JSFUNCTION_RESULT_CACHES_INDEX));
+  __ lw(cache,
+         FieldMemOperand(cache, FixedArray::OffsetOfElementAt(cache_id)));
+
+
+  Label done, not_found;
+  ASSERT(kSmiTag == 0 && kSmiTagSize == 1);
+  __ lw(a2, FieldMemOperand(cache, JSFunctionResultCache::kFingerOffset));
+  // a2 now holds finger offset as a smi.
+  __ Addu(a3, cache, Operand(FixedArray::kHeaderSize - kHeapObjectTag));
+  // a3 now points to the start of fixed array elements.
+  __ sll(at, a2, kPointerSizeLog2 - kSmiTagSize);
+  __ addu(a3, a3, at);
+  // a3 now points to key of indexed element of cache.
+  __ lw(a2, MemOperand(a3));
+  __ Branch(&not_found, ne, key, Operand(a2));
+
+  __ lw(v0, MemOperand(a3, kPointerSize));
+  __ b(&done);
+
+  __ bind(&not_found);
+  // Call runtime to perform the lookup.
+  __ Push(cache, key);
+  __ CallRuntime(Runtime::kGetFromCache, 2);
+
+  __ bind(&done);
+  Apply(context_, v0);
+}
 
 
 void FullCodeGenerator::EmitIsRegExpEquivalent(ZoneList<Expression*>* args) {
