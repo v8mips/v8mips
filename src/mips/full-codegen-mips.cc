@@ -32,8 +32,8 @@
 // UNCOMPLETED_MIPS macro.
 #ifdef DEBUG
 #define UNCOMPLETED_MIPS()                                                  \
-  v8::internal::PrintF("%s, \tline %d: \tfunction %s HAS NOT BEEN COMPLETED! \n",    \
-                       __FILE__, __LINE__, __func__)
+  v8::internal::PrintF("%s, \tline %d: \tfunction %s HAS NOT BEEN COMPLETED! \n", \
+                       __FILE__, __LINE__, __func__); ASSERT(0);
 #define TRACE(s) \
   v8::internal::PrintF("fcg TRACE line %d: function %s, tag: %s\n", __LINE__, __func__, s)
 #else
@@ -49,6 +49,10 @@
 #include "parser.h"
 #include "scopes.h"
 
+#undef  UNIMPLEMENTED_MIPS()
+#define UNIMPLEMENTED_MIPS()                                                  \
+  v8::internal::PrintF("%s, \tline %d: \tfunction %s not implemented. \n",    \
+                       __FILE__, __LINE__, __func__); ASSERT(0);
 namespace v8 {
 namespace internal {
 
@@ -587,8 +591,32 @@ void FullCodeGenerator::EmitDeclaration(Variable* variable,
         break;
 
       case Slot::LOOKUP: {
-         UNCOMPLETED_MIPS();
-         ASSERT(0);
+        __ li(a2, Operand(variable->name()));
+        // Declaration nodes are always introduced in one of two modes.
+        ASSERT(mode == Variable::VAR ||
+               mode == Variable::CONST);
+        PropertyAttributes attr =
+            (mode == Variable::VAR) ? NONE : READ_ONLY;
+        __ li(a1, Operand(Smi::FromInt(attr)));
+        // Push initial value, if any.
+        // Note: For variables we must not push an initial value (such as
+        // 'undefined') because we may have a (legal) redeclaration and we
+        // must not destroy the current value.
+        if (mode == Variable::CONST) {
+          __ LoadRoot(a0, Heap::kTheHoleValueRootIndex);
+          __ Push(cp, a2, a1, a0);
+        } else if (function != NULL) {
+          __ Push(cp, a2, a1);
+          // Push initial value for function declaration.
+          VisitForValue(function, kStack);
+        } else {
+          ASSERT(Smi::FromInt(0) == 0);
+          // No initial value!
+          __ mov(a0, zero_reg);  // Operand(Smi::FromInt(0)));
+          __ Push(cp, a2, a1, a0);
+        }
+        __ CallRuntime(Runtime::kDeclareContextSlot, 4);
+        break;
       }
     }
 
@@ -1425,6 +1453,25 @@ void FullCodeGenerator::VisitCallNew(CallNew* expr) {
 }
 
 
+void FullCodeGenerator::EmitIsSmi(ZoneList<Expression*>* args) {
+  ASSERT(args->length() == 1);
+
+  VisitForValue(args->at(0), kAccumulator);
+
+  Label materialize_true, materialize_false;
+  Label* if_true = NULL;
+  Label* if_false = NULL;
+  Label* fall_through = NULL;
+  PrepareTest(&materialize_true, &materialize_false,
+              &if_true, &if_false, &fall_through);
+
+  __ BranchOnSmi(a0, if_true);
+  __ b(if_false);
+
+  Apply(context_, if_true, if_false);
+}
+
+
 void FullCodeGenerator::EmitIsFunction(ZoneList<Expression*>* args) {
   ASSERT(args->length() == 1);
 
@@ -1444,6 +1491,23 @@ void FullCodeGenerator::EmitIsFunction(ZoneList<Expression*>* args) {
 
   Apply(context_, if_true, if_false);
 }
+
+
+
+void FullCodeGenerator::EmitMathPow(ZoneList<Expression*>* args) {
+  // Load the arguments on the stack and call the runtime function.
+  ASSERT(args->length() == 2);
+  VisitForValue(args->at(0), kStack);
+  VisitForValue(args->at(1), kStack);
+  __ CallRuntime(Runtime::kMath_pow, 2);
+  Apply(context_, v0);
+}
+
+
+
+// ---- plind ----- new functions probably above here ......
+
+
 void FullCodeGenerator::VisitCallRuntime(CallRuntime* expr) {
   Handle<String> name = expr->name();
   if (name->length() > 0 && name->Get(0) == '_') {
@@ -1849,12 +1913,10 @@ bool FullCodeGenerator::TryLiteralCompare(Token::Value op,
   VisitForTypeofValue(left_unary->expression(), kAccumulator);
   __ mov(a0, result_register());
   if (check->Equals(Heap::number_symbol())) {
-    UNCOMPLETED_MIPS();
     __ And(at, a0, Operand(kSmiTagMask));
     __ Branch(if_true, eq, at, Operand(zero_reg));
     __ lw(a0, FieldMemOperand(a0, HeapObject::kMapOffset));
     __ LoadRoot(at, Heap::kHeapNumberMapRootIndex);
-    // __ cmp(r0, ip);
     Split(eq, a0, Operand(at), if_true, if_false, fall_through);
   } else if (check->Equals(Heap::string_symbol())) {
     UNCOMPLETED_MIPS();
@@ -1900,26 +1962,22 @@ bool FullCodeGenerator::TryLiteralCompare(Token::Value op,
     // __ CompareInstanceType(r1, r0, JS_REGEXP_TYPE);
     // Split(eq, if_true, if_false, fall_through);
   } else if (check->Equals(Heap::object_symbol())) {
-    UNCOMPLETED_MIPS();
-    // __ tst(r0, Operand(kSmiTagMask));
-    // __ b(eq, if_false);
-    // __ LoadRoot(ip, Heap::kNullValueRootIndex);
-    // __ cmp(r0, ip);
-    // __ b(eq, if_true);
-    // // Regular expressions => 'function', not 'object'.
-    // __ CompareObjectType(r0, r1, r0, JS_REGEXP_TYPE);
-    // __ b(eq, if_false);
-    // // Check for undetectable objects => false.
-    // __ ldrb(r0, FieldMemOperand(r1, Map::kBitFieldOffset));
-    // __ and_(r0, r0, Operand(1 << Map::kIsUndetectable));
-    // __ cmp(r0, Operand(1 << Map::kIsUndetectable));
-    // __ b(eq, if_false);
-    // // Check for JS objects => true.
-    // __ ldrb(r0, FieldMemOperand(r1, Map::kInstanceTypeOffset));
-    // __ cmp(r0, Operand(FIRST_JS_OBJECT_TYPE));
-    // __ b(lt, if_false);
-    // __ cmp(r0, Operand(LAST_JS_OBJECT_TYPE));
-    // Split(le, if_true, if_false, fall_through);
+    __ And(at, a0, Operand(kSmiTagMask));
+    __ Branch(if_false, eq, at, Operand(zero_reg));
+    __ LoadRoot(at, Heap::kNullValueRootIndex);
+    __ Branch(if_true, eq, a0, Operand(at));
+    // Regular expressions => 'function', not 'object'.
+    __ GetObjectType(a0, a1, a0);  // Leave map in a1.
+    __ Branch(if_false, eq, a0, Operand(JS_REGEXP_TYPE));
+    // Check for undetectable objects => false.
+    __ lbu(a0, FieldMemOperand(a1, Map::kBitFieldOffset));
+    __ And(a0, a0, Operand(1 << Map::kIsUndetectable));
+    __ Branch(if_false, ne, a0, Operand(zero_reg));
+    // Check for JS objects => true.
+    __ lbu(a0, FieldMemOperand(a1, Map::kInstanceTypeOffset));
+    __ Branch(if_false, lt, a0, Operand(FIRST_JS_OBJECT_TYPE));
+    Split(le, a0, Operand(LAST_JS_OBJECT_TYPE),
+          if_true, if_false, fall_through);
   } else {
     if (if_false != fall_through) __ jmp(if_false);
   }
@@ -2033,14 +2091,39 @@ void FullCodeGenerator::VisitCompareOperation(CompareOperation* expr) {
 
 
 void FullCodeGenerator::VisitCompareToNull(CompareToNull* expr) {
-  UNIMPLEMENTED_MIPS();
-  // __ break_(__LINE__);
+  Comment cmnt(masm_, "[ CompareToNull");
+  Label materialize_true, materialize_false;
+  Label* if_true = NULL;
+  Label* if_false = NULL;
+  Label* fall_through = NULL;
+  PrepareTest(&materialize_true, &materialize_false,
+              &if_true, &if_false, &fall_through);
+
+  VisitForValue(expr->expression(), kAccumulator);
+  __ mov(a0, result_register());
+  __ LoadRoot(a1, Heap::kNullValueRootIndex);
+  if (expr->is_strict()) {
+    Split(eq, a0, Operand(a1), if_true, if_false, fall_through);
+  } else {
+    __ Branch(if_true, eq, a0, Operand(a1));
+    __ LoadRoot(a1, Heap::kUndefinedValueRootIndex);
+    __ Branch(if_true, eq, a0, Operand(a1));
+    __ And(at, a0, Operand(kSmiTagMask));
+    __ Branch(if_false, eq, at, Operand(zero_reg));
+    // It can be an undetectable object.
+    __ lw(a1, FieldMemOperand(a0, HeapObject::kMapOffset));
+    __ lbu(a1, FieldMemOperand(a1, Map::kBitFieldOffset));
+    __ And(a1, a1, Operand(1 << Map::kIsUndetectable));
+    Split(eq, a1, Operand(1 << Map::kIsUndetectable),  // plind badly optimized
+          if_true, if_false, fall_through);
+  }
+  Apply(context_, if_true, if_false);
 }
 
 
 void FullCodeGenerator::VisitThisFunction(ThisFunction* expr) {
   __ lw(a0, MemOperand(fp, JavaScriptFrameConstants::kFunctionOffset));
-  Apply(context_, a0);
+  Apply(context_, a0);  // plind -- should-be-v0-?
 }
 
 Register FullCodeGenerator::result_register() { return v0; }
@@ -2050,12 +2133,13 @@ Register FullCodeGenerator::context_register() { return cp; }
 
 
 void FullCodeGenerator::StoreToFrameField(int frame_offset, Register value) {
-  UNIMPLEMENTED_MIPS();
+  ASSERT_EQ(POINTER_SIZE_ALIGN(frame_offset), frame_offset);
+  __ sw(value, MemOperand(fp, frame_offset));
 }
 
 
 void FullCodeGenerator::LoadContextField(Register dst, int context_index) {
-  UNIMPLEMENTED_MIPS();
+  __ lw(dst, CodeGenerator::ContextOperand(cp, context_index));
 }
 
 void FullCodeGenerator::EmitInlineSmiBinaryOp(Expression*,
@@ -2074,14 +2158,31 @@ void FullCodeGenerator::EmitBinaryOp(Token::Value, OverwriteMode) {
 // ----------------------------------------------------------------------------
 // Non-local control flow support.
 
-void FullCodeGenerator::EnterFinallyBlock() {
-  UNIMPLEMENTED_MIPS();
+void FullCodeGenerator::EnterFinallyBlock() {  // plind .... suspect freeeky code
+  ASSERT(!result_register().is(a1));
+  // Store result register while executing finally block.
+  __ push(result_register());
+  // Cook return address in link register to stack (smi encoded Code* delta)
+  __ Subu(a1, ra, Operand(masm_->CodeObject()));
+  ASSERT_EQ(1, kSmiTagSize + kSmiShiftSize);
+  ASSERT_EQ(0, kSmiTag);
+  __ Addu(a1, a1, Operand(a1));  // Convert to smi.
+  __ push(a1);
 }
 
 
-void FullCodeGenerator::ExitFinallyBlock() {
-  UNIMPLEMENTED_MIPS();
+void FullCodeGenerator::ExitFinallyBlock() {  // plind .... suspect freeeky code
+  ASSERT(!result_register().is(a1));
+  // Restore result register from stack.
+  __ pop(a1);
+  // Uncook return address and return.
+  __ pop(result_register());
+  ASSERT_EQ(1, kSmiTagSize + kSmiShiftSize);
+  __ sra(a1, a1, 1);  // Un-smi-tag value.
+  __ Addu(at, a1, Operand(masm_->CodeObject()));
+  __ Jump(at);
 }
+
 
 // ----------------------------------------------------------------------------
 // This is a quick way to define some functions that are
@@ -2104,7 +2205,6 @@ void FullCodeGenerator::ExitFinallyBlock() {
   void FullCodeGenerator::Name##Context::Plug(bool bool_) const \
   { UNIMPLEMENTED_MIPS(); }
 
-MIPS_UNIMPLEMENTED_FULL_CODEGEN_FUNC(EmitIsSmi)
 MIPS_UNIMPLEMENTED_FULL_CODEGEN_FUNC(EmitIsNonNegativeSmi)
 MIPS_UNIMPLEMENTED_FULL_CODEGEN_FUNC(EmitIsObject)
 MIPS_UNIMPLEMENTED_FULL_CODEGEN_FUNC(EmitIsSpecObject)
@@ -2129,7 +2229,6 @@ MIPS_UNIMPLEMENTED_FULL_CODEGEN_FUNC(EmitStringCharCodeAt)
 MIPS_UNIMPLEMENTED_FULL_CODEGEN_FUNC(EmitStringCharAt)
 MIPS_UNIMPLEMENTED_FULL_CODEGEN_FUNC(EmitStringAdd)
 MIPS_UNIMPLEMENTED_FULL_CODEGEN_FUNC(EmitStringCompare)
-MIPS_UNIMPLEMENTED_FULL_CODEGEN_FUNC(EmitMathPow)
 MIPS_UNIMPLEMENTED_FULL_CODEGEN_FUNC(EmitMathSin)
 MIPS_UNIMPLEMENTED_FULL_CODEGEN_FUNC(EmitMathCos)
 MIPS_UNIMPLEMENTED_FULL_CODEGEN_FUNC(EmitMathSqrt)
