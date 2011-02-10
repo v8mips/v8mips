@@ -38,6 +38,7 @@
 #define UNCOMPLETED_MIPS()
 #endif
 
+#include "code-stubs-mips.h"
 #include "codegen-inl.h"
 #include "compiler.h"
 #include "debug.h"
@@ -278,16 +279,10 @@ void FullCodeGenerator::Apply(Expression::Context context, Register reg) {
       }
       break;
 
-    case Expression::kValueTest:
-    case Expression::kTestValue:
-      // Push an extra copy of the value in case it's needed.
-      __ push(reg);
-      // Fall through.
-
     case Expression::kTest:
-      // We always call the runtime on ARM, so push the value as argument.
-      __ push(reg);
-      DoTest(context);
+      // For simplicity we always test the accumulator register.
+      if (!reg.is(result_register())) __ mov(result_register(), reg);
+      DoTest(true_label_, false_label_, fall_through_);
       break;
   }
 }
@@ -302,9 +297,7 @@ void FullCodeGenerator::Apply(Expression::Context context, Slot* slot) {
       break;
     case Expression::kValue:
     case Expression::kTest:
-    case Expression::kValueTest:
-    case Expression::kTestValue:
-      // On ARM we have to move the value into a register to do anything
+      // On MIPS we have to move the value into a register to do anything
       // with it.
       Move(result_register(), slot);
       Apply(context, result_register());
@@ -322,9 +315,7 @@ void FullCodeGenerator::Apply(Expression::Context context, Literal* lit) {
       // Nothing to do.
     case Expression::kValue:
     case Expression::kTest:
-    case Expression::kValueTest:
-    case Expression::kTestValue:
-      // On ARM we have to move the value into a register to do anything
+      // On MIPS we have to move the value into a register to do anything
       // with it.
       __ li(result_register(), Operand(lit->handle()));
       Apply(context, result_register());
@@ -352,15 +343,9 @@ void FullCodeGenerator::ApplyTOS(Expression::Context context) {
       }
       break;
 
-    case Expression::kValueTest:
-    case Expression::kTestValue:
-      // Duplicate the value on the stack in case it's needed.
-      __ lw(t0, MemOperand(sp));
-      __ push(t0);
-      // Fall through.
-
     case Expression::kTest:
-      DoTest(context);
+      __ pop(result_register());
+      DoTest(true_label_, false_label_, fall_through_);
       break;
   }
 }
@@ -393,22 +378,9 @@ void FullCodeGenerator::DropAndApply(int count,
       break;
 
     case Expression::kTest:
-      if (count > 1) __ Drop(count - 1);
-      __ sw(reg, MemOperand(sp));
-      DoTest(context);
-      break;
-
-    case Expression::kValueTest:
-    case Expression::kTestValue:
-      if (count == 1) {
-        __ sw(reg, MemOperand(sp));
-        __ push(reg);
-      } else {  // count > 1
-        __ Drop(count - 2);
-        __ sw(reg, MemOperand(sp, kPointerSize));
-        __ sw(reg, MemOperand(sp));
-      }
-      DoTest(context);
+      __ Drop(count);
+      if (!reg.is(result_register())) __ mov(result_register(), reg);
+      DoTest(true_label_, false_label_, fall_through_);
       break;
   }
 }
@@ -433,14 +405,6 @@ void FullCodeGenerator::PrepareTest(Label* materialize_true,
     case Expression::kTest:
       *if_true = true_label_;
       *if_false = false_label_;
-      break;
-    case Expression::kValueTest:
-      *if_true = materialize_true;
-      *if_false = false_label_;
-      break;
-    case Expression::kTestValue:
-      *if_true = true_label_;
-      *if_false = materialize_false;
       break;
   }
 }
@@ -483,34 +447,6 @@ void FullCodeGenerator::Apply(Expression::Context context,
 
     case Expression::kTest:
       break;
-
-    case Expression::kValueTest:
-      __ bind(materialize_true);
-      switch (location_) {
-        case kAccumulator:
-          __ LoadRoot(result_register(), Heap::kTrueValueRootIndex);
-          break;
-        case kStack:
-          __ LoadRoot(t0, Heap::kTrueValueRootIndex);
-          __ push(t0);
-          break;
-      }
-      __ jmp(true_label_);
-      break;
-
-    case Expression::kTestValue:
-      __ bind(materialize_false);
-      switch (location_) {
-        case kAccumulator:
-          __ LoadRoot(result_register(), Heap::kFalseValueRootIndex);
-          break;
-        case kStack:
-          __ LoadRoot(t0, Heap::kFalseValueRootIndex);
-          __ push(t0);
-          break;
-      }
-      __ jmp(false_label_);
-      break;
   }
 }
 
@@ -541,44 +477,36 @@ void FullCodeGenerator::Apply(Expression::Context context, bool flag) {
     case Expression::kTest:
       __ b(flag ? true_label_ : false_label_);
       break;
-    case Expression::kTestValue:
-      switch (location_) {
-        case kAccumulator:
-          // If value is false it's needed.
-          if (!flag) __ LoadRoot(result_register(), Heap::kFalseValueRootIndex);
-          break;
-        case kStack:
-          // If value is false it's needed.
-          if (!flag) {
-            __ LoadRoot(t0, Heap::kFalseValueRootIndex);
-            __ push(t0);
-          }
-          break;
-      }
-      __ b(flag ? true_label_ : false_label_);
-      break;
-    case Expression::kValueTest:
-      switch (location_) {
-        case kAccumulator:
-          // If value is true it's needed.
-          if (flag) __ LoadRoot(result_register(), Heap::kTrueValueRootIndex);
-          break;
-        case kStack:
-          // If value is true it's needed.
-          if (flag) {
-            __ LoadRoot(t0, Heap::kTrueValueRootIndex);
-            __ push(t0);
-          }
-          break;
-      }
-      __ b(flag ? true_label_ : false_label_);
-      break;
   }
 }
 
 
-void FullCodeGenerator::DoTest(Expression::Context context) {
-  UNIMPLEMENTED_MIPS();
+void FullCodeGenerator::DoTest(Label* if_true,
+                               Label* if_false,
+                               Label* fall_through) {
+  // Call the runtime to find the boolean value of the source and then
+  // translate it into control flow to the pair of labels.
+  __ push(result_register());
+  __ CallRuntime(Runtime::kToBool, 1);
+  __ LoadRoot(at, Heap::kTrueValueRootIndex);
+  Split(eq, v0, Operand(at), if_true, if_false, fall_through);
+}
+
+
+void FullCodeGenerator::Split(Condition cc,
+                              Register lhs,
+                              const Operand&  rhs,
+                              Label* if_true,
+                              Label* if_false,
+                              Label* fall_through) {
+  if (if_false == fall_through) {
+    __ Branch(if_true, cc, lhs, rhs);
+  } else if (if_true == fall_through) {
+    __ Branch(if_false, NegateCondition(cc), lhs, rhs);
+  } else {
+    __ Branch(cc, if_true, cc, lhs, rhs);
+    __ jmp(if_false);
+  }
 }
 
 
@@ -1605,19 +1533,7 @@ void FullCodeGenerator::VisitUnaryOperation(UnaryOperation* expr) {
               break;
           }
           break;
-        case Expression::kTestValue:
-          // Value is false so it's needed.
-          __ LoadRoot(result_register(), Heap::kUndefinedValueRootIndex);
-          switch (location_) {
-            case kAccumulator:
-              break;
-            case kStack:
-              __ push(result_register());
-              break;
-          }
-          // Fall through.
         case Expression::kTest:
-        case Expression::kValueTest:
           __ jmp(false_label_);
           break;
       }
@@ -1793,8 +1709,6 @@ void FullCodeGenerator::VisitCountOperation(CountOperation* expr) {
         break;
       case Expression::kValue:
       case Expression::kTest:
-      case Expression::kValueTest:
-      case Expression::kTestValue:
         // Save the result on the stack. If we have a named or keyed property
         // we store the result under the receiver that is currently on top
         // of the stack.
@@ -1879,41 +1793,6 @@ void FullCodeGenerator::VisitCountOperation(CountOperation* expr) {
 }
 
 
-void FullCodeGenerator::VisitBinaryOperation(BinaryOperation* expr) {
-  Comment cmnt(masm_, "[ BinaryOperation");
-  switch (expr->op()) {
-    case Token::COMMA:
-      VisitForEffect(expr->left());
-      Visit(expr->right());
-      break;
-
-    case Token::OR:
-    case Token::AND:
-      EmitLogicalOperation(expr);
-      break;
-
-    case Token::ADD:
-    case Token::SUB:
-    case Token::DIV:
-    case Token::MOD:
-    case Token::MUL:
-    case Token::BIT_OR:
-    case Token::BIT_AND:
-    case Token::BIT_XOR:
-    case Token::SHL:
-    case Token::SHR:
-    case Token::SAR:
-      VisitForValue(expr->left(), kStack);
-      VisitForValue(expr->right(), kAccumulator);
-      EmitBinaryOp(expr->op(), context_);
-      break;
-
-    default:
-      UNREACHABLE();
-  }
-}
-
-
 void FullCodeGenerator::EmitNullCompare(bool strict,
                                         Register obj,
                                         Register null_const,
@@ -1921,7 +1800,7 @@ void FullCodeGenerator::EmitNullCompare(bool strict,
                                         Label* if_false,
                                         Register scratch) {
   if (strict) {
-    __ Branch(if_true, eq, obj, Operand(null_const));
+    Split(eq, obj, Operand(null_const), if_true, if_false, NULL);
   } else {
     __ Branch(if_true, eq, obj, Operand(null_const));
     __ LoadRoot(t0, Heap::kUndefinedValueRootIndex);
@@ -1931,9 +1810,8 @@ void FullCodeGenerator::EmitNullCompare(bool strict,
     __ lw(scratch, FieldMemOperand(obj, HeapObject::kMapOffset));
     __ lbu(scratch, FieldMemOperand(scratch, Map::kBitFieldOffset));
     __ And(scratch, scratch, Operand(1 << Map::kIsUndetectable));
-    __ Branch(if_true, ne, scratch, Operand(0));
+    Split(ne, scratch, Operand(zero_reg), if_true, if_false, NULL);
   }
-  __ jmp(if_false);
 }
 
 
@@ -1954,16 +1832,15 @@ Comment cmnt(masm_, "[ CompareOperation");
       VisitForValue(expr->right(), kStack);
       __ InvokeBuiltin(Builtins::IN, CALL_JS);
       __ LoadRoot(t0, Heap::kTrueValueRootIndex);
-      __ Branch(if_true, eq, v0, Operand(t0));
-      __ jmp(if_false);
+      Split(eq, v0, Operand(t0), if_true, if_false, NULL);
       break;
 
     case Token::INSTANCEOF: {
       VisitForValue(expr->right(), kStack);
       InstanceofStub stub;
       __ CallStub(&stub);
-      __ Branch(if_true, eq, v0, Operand(zero_reg));
-      __ jmp(if_false);
+      // The stub returns 0 for true.
+      Split(eq, v0, Operand(zero_reg), if_true, if_false, NULL);
       break;
     }
 
@@ -2033,8 +1910,7 @@ Comment cmnt(masm_, "[ CompareOperation");
       __ bind(&slow_case);
       CompareStub stub(cc, strict, kBothCouldBeNaN, true, a1, a0);
       __ CallStub(&stub);
-      __ Branch(if_true, cc, v0, Operand(0));
-      __ jmp(if_false);
+      Split(cc, v0, Operand(zero_reg), if_true, if_false, NULL);
     }
   }
 
