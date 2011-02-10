@@ -385,30 +385,6 @@ void FullCodeGenerator::DropAndApply(int count,
   }
 }
 
-void FullCodeGenerator::PrepareTest(Label* materialize_true,
-                                    Label* materialize_false,
-                                    Label** if_true,
-                                    Label** if_false) {
-  switch (context_) {
-    case Expression::kUninitialized:
-      UNREACHABLE();
-      break;
-    case Expression::kEffect:
-      // In an effect context, the true and the false case branch to the
-      // same label.
-      *if_true = *if_false = materialize_true;
-      break;
-    case Expression::kValue:
-      *if_true = materialize_true;
-      *if_false = materialize_false;
-      break;
-    case Expression::kTest:
-      *if_true = true_label_;
-      *if_false = false_label_;
-      break;
-  }
-}
-
 
 void FullCodeGenerator::Apply(Expression::Context context,
                               Label* materialize_true,
@@ -475,7 +451,11 @@ void FullCodeGenerator::Apply(Expression::Context context, bool flag) {
       break;
     }
     case Expression::kTest:
-      __ b(flag ? true_label_ : false_label_);
+    if (flag) {
+      if (true_label_ != fall_through_) __ Branch(true_label_);
+    } else {
+      if (false_label_ != fall_through_) __ Branch(false_label_);
+    }
       break;
   }
 }
@@ -1383,12 +1363,12 @@ void FullCodeGenerator::VisitCallNew(CallNew* expr) {
   // According to ECMA-262, section 11.2.2, page 44, the function
   // expression in new calls must be evaluated before the
   // arguments.
-  // Push function on the stack.
+
+  // Push constructor on the stack.  If it's not a function it's used as
+  // receiver for CALL_NON_FUNCTION, otherwise the value on the stack is
+  // ignored.
   VisitForValue(expr->expression(), kStack);
 
-  // Push global object (receiver).
-  __ lw(a0, CodeGenerator::GlobalObject());
-  __ push(a0);
   // Push the arguments ("left-to-right") on the stack.
   ZoneList<Expression*>* args = expr->arguments();
   int arg_count = args->length();
@@ -1400,17 +1380,15 @@ void FullCodeGenerator::VisitCallNew(CallNew* expr) {
   // constructor invocation.
   SetSourcePosition(expr->position());
 
-  // Load function, arg_count into a1 and a0.
+  // Load function and argument count into a1 and a0.
   __ li(a0, Operand(arg_count));
-  // Function is in sp[arg_count + 1].
-  __ lw(a1, MemOperand(sp, (arg_count + 1) * kPointerSize));
+  __ lw(a1, MemOperand(sp, arg_count * kPointerSize));
 
   Handle<Code> construct_builtin(Builtins::builtin(Builtins::JSConstructCall));
   __ Call(construct_builtin, RelocInfo::CONSTRUCT_CALL);
-
-  // Replace function on TOS with result in v0, or pop it.
-  DropAndApply(1, context_, v0);
+  Apply(context_, v0);
 }
+
 
 void FullCodeGenerator::EmitIsFunction(ZoneList<Expression*>* args) {
   ASSERT(args->length() == 1);
@@ -1545,9 +1523,11 @@ void FullCodeGenerator::VisitUnaryOperation(UnaryOperation* expr) {
       Label materialize_true, materialize_false;
       Label* if_true = NULL;
       Label* if_false = NULL;
+      Label* fall_through = NULL;
 
       // Notice that the labels are swapped.
-      PrepareTest(&materialize_true, &materialize_false, &if_false, &if_true);
+      PrepareTest(&materialize_true, &materialize_false, 
+                  &if_false, &if_true, &fall_through);
 
       VisitForControl(expr->expression(), if_true, if_false);
 
@@ -1557,30 +1537,7 @@ void FullCodeGenerator::VisitUnaryOperation(UnaryOperation* expr) {
 
     case Token::TYPEOF: {
       Comment cmnt(masm_, "[ UnaryOperation (TYPEOF)");
-      VariableProxy* proxy = expr->expression()->AsVariableProxy();
-      if (proxy != NULL &&
-          !proxy->var()->is_this() &&
-          proxy->var()->is_global()) {
-        Comment cmnt(masm_, "Global variable");
-        __ lw(a0, CodeGenerator::GlobalObject());
-        __ li(a2, Operand(proxy->name()));
-        Handle<Code> ic(Builtins::builtin(Builtins::LoadIC_Initialize));
-        // Use a regular load, not a contextual load, to avoid a reference
-        // error.
-        __ Call(ic, RelocInfo::CODE_TARGET);
-        __ push(v0);
-      } else if (proxy != NULL &&
-                 proxy->var()->slot() != NULL &&
-                 proxy->var()->slot()->type() == Slot::LOOKUP) {
-        __ li(a0, Operand(proxy->name()));
-        __ Push(cp, a0);
-        __ CallRuntime(Runtime::kLoadContextSlotNoReferenceError, 2);
-        __ push(v0);
-      } else {
-        // This expression cannot throw a reference error at the top level.
-        VisitForValue(expr->expression(), kStack);
-      }
-
+      VisitForTypeofValue(expr->expression(), kStack);
       __ CallRuntime(Runtime::kTypeof, 1);
       Apply(context_, v0);
       break;
@@ -1646,6 +1603,8 @@ void FullCodeGenerator::VisitUnaryOperation(UnaryOperation* expr) {
 
 void FullCodeGenerator::VisitCountOperation(CountOperation* expr) {
   Comment cmnt(masm_, "[ CountOperation");
+  SetSourcePosition(expr->position());
+  
   // Invalid left-hand sides are rewritten to have a 'throw ReferenceError'
   // as the left-hand side.
   if (!expr->expression()->IsValidLeftHandSide()) {
@@ -1793,30 +1752,26 @@ void FullCodeGenerator::VisitCountOperation(CountOperation* expr) {
 }
 
 
-void FullCodeGenerator::EmitNullCompare(bool strict,
-                                        Register obj,
-                                        Register null_const,
-                                        Label* if_true,
-                                        Label* if_false,
-                                        Register scratch) {
-  if (strict) {
-    Split(eq, obj, Operand(null_const), if_true, if_false, NULL);
-  } else {
-    __ Branch(if_true, eq, obj, Operand(null_const));
-    __ LoadRoot(t0, Heap::kUndefinedValueRootIndex);
-    __ Branch(if_true, eq, obj, Operand(t0));
-    __ BranchOnSmi(obj, if_false);
-    // It can be an undetectable object.
-    __ lw(scratch, FieldMemOperand(obj, HeapObject::kMapOffset));
-    __ lbu(scratch, FieldMemOperand(scratch, Map::kBitFieldOffset));
-    __ And(scratch, scratch, Operand(1 << Map::kIsUndetectable));
-    Split(ne, scratch, Operand(zero_reg), if_true, if_false, NULL);
-  }
+void FullCodeGenerator::VisitForTypeofValue(Expression* expr, Location where) {
+  UNIMPLEMENTED_MIPS();
+  __ break_ (__LINE__);
+}
+
+
+bool FullCodeGenerator::TryLiteralCompare(Token::Value op,
+                                          Expression* left,
+                                          Expression* right,
+                                          Label* if_true,
+                                          Label* if_false,
+                                          Label* fall_through) {
+  UNIMPLEMENTED_MIPS();
+  __ break_ (__LINE__);
 }
 
 
 void FullCodeGenerator::VisitCompareOperation(CompareOperation* expr) {
-Comment cmnt(masm_, "[ CompareOperation");
+  Comment cmnt(masm_, "[ CompareOperation");
+  SetSourcePosition(expr->position());
 
   // Always perform the comparison for its control flow.  Pack the result
   // into the expression's context after the comparison is performed.
@@ -1824,7 +1779,19 @@ Comment cmnt(masm_, "[ CompareOperation");
   Label materialize_true, materialize_false;
   Label* if_true = NULL;
   Label* if_false = NULL;
-  PrepareTest(&materialize_true, &materialize_false, &if_true, &if_false);
+  Label* fall_through = NULL;
+  PrepareTest(&materialize_true, &materialize_false,
+              &if_true, &if_false, &fall_through);
+
+  // First we try a fast inlined version of the compare when one of
+  // the operands is a literal.
+  Token::Value op = expr->op();
+  Expression* left = expr->left();
+  Expression* right = expr->right();
+  if (TryLiteralCompare(op, left, right, if_true, if_false, fall_through)) {
+    Apply(context_, if_true, if_false);
+    return;
+  }
 
   VisitForValue(expr->left(), kStack);
   switch (expr->op()) {
@@ -1832,7 +1799,7 @@ Comment cmnt(masm_, "[ CompareOperation");
       VisitForValue(expr->right(), kStack);
       __ InvokeBuiltin(Builtins::IN, CALL_JS);
       __ LoadRoot(t0, Heap::kTrueValueRootIndex);
-      Split(eq, v0, Operand(t0), if_true, if_false, NULL);
+      Split(eq, v0, Operand(t0), if_true, if_false, fall_through);
       break;
 
     case Token::INSTANCEOF: {
@@ -1840,7 +1807,7 @@ Comment cmnt(masm_, "[ CompareOperation");
       InstanceofStub stub;
       __ CallStub(&stub);
       // The stub returns 0 for true.
-      Split(eq, v0, Operand(zero_reg), if_true, if_false, NULL);
+      Split(eq, v0, Operand(zero_reg), if_true, if_false, fall_through);
       break;
     }
 
@@ -1852,23 +1819,10 @@ Comment cmnt(masm_, "[ CompareOperation");
         case Token::EQ_STRICT:
           strict = true;
           // Fall through
-        case Token::EQ: {
+        case Token::EQ:
           cc = eq;
           __ mov(a0, result_register());
           __ pop(a1);
-          // If either operand is constant null we do a fast compare
-          // against null.
-          Literal* right_literal = expr->right()->AsLiteral();
-          Literal* left_literal = expr->left()->AsLiteral();
-          if (right_literal != NULL && right_literal->handle()->IsNull()) {
-            EmitNullCompare(strict, a1, a0, if_true, if_false, a2);
-            Apply(context_, if_true, if_false);
-            return;
-          } else if (left_literal != NULL && left_literal->handle()->IsNull()) {
-            EmitNullCompare(strict, a0, a1, if_true, if_false, a2);
-            Apply(context_, if_true, if_false);
-            return;
-          }
           break;
         }
         case Token::LT:
@@ -1910,13 +1864,19 @@ Comment cmnt(masm_, "[ CompareOperation");
       __ bind(&slow_case);
       CompareStub stub(cc, strict, kBothCouldBeNaN, true, a1, a0);
       __ CallStub(&stub);
-      Split(cc, v0, Operand(zero_reg), if_true, if_false, NULL);
+      Split(cc, v0, Operand(zero_reg), if_true, if_false, fall_through);
     }
   }
 
   // Convert the result of the comparison into one expected for this
   // expression's context.
   Apply(context_, if_true, if_false);
+}
+
+
+void FullCodeGenerator::VisitCompareToNull(CompareToNull* expr) {
+  UNIMPLEMENTED_MIPS();
+  __ break_(__LINE__);
 }
 
 
