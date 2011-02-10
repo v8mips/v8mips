@@ -2788,10 +2788,10 @@ void ArgumentsAccessStub::GenerateReadElement(MacroAssembler* masm) {
             a3,
             Operand(Smi::FromInt(StackFrame::ARGUMENTS_ADAPTOR)));
 
-  // Check index against formal parameters count limit passed in
+  // Check index (a1) against formal parameters count limit passed in
   // through register a0. Use unsigned comparison to get negative
   // check for free.
-  __ Branch(&slow, Ugreater_equal, a0, Operand(a1));
+  __ Branch(&slow, Ugreater_equal, a1, Operand(a0));
 
   // Read the argument from the stack and return it.
   __ subu(a3, a0, a1);
@@ -2800,12 +2800,12 @@ void ArgumentsAccessStub::GenerateReadElement(MacroAssembler* masm) {
   __ lw(v0, MemOperand(a3, kDisplacement));
   __ Ret();
 
-  // Arguments adaptor case: Check index against actual arguments
+  // Arguments adaptor case: Check index (a1) against actual arguments
   // limit found in the arguments adaptor frame. Use unsigned
   // comparison to get negative check for free.
   __ bind(&adaptor);
   __ lw(a0, MemOperand(a2, ArgumentsAdaptorFrameConstants::kLengthOffset));
-  __ Branch(&slow, greater_equal, a1, Operand(a0));
+  __ Branch(&slow, Ugreater_equal, a1, Operand(a0));
 
   // Read the argument from the adaptor frame and return it.
   __ subu(a3, a0, a1);
