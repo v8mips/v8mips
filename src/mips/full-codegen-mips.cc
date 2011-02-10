@@ -33,7 +33,10 @@
 #ifdef DEBUG
 #define UNCOMPLETED_MIPS()                                                  \
   v8::internal::PrintF("%s, \tline %d: \tfunction %s HAS NOT BEEN COMPLETED! \n", \
-                       __FILE__, __LINE__, __func__); ASSERT(0);
+                       __FILE__, __LINE__, __func__)
+
+//; ASSERT(0);
+
 #define TRACE(s) \
   v8::internal::PrintF("fcg TRACE line %d: function %s, tag: %s\n", __LINE__, __func__, s)
 #else
@@ -49,10 +52,13 @@
 #include "parser.h"
 #include "scopes.h"
 
-#undef  UNIMPLEMENTED_MIPS()
+#undef  UNIMPLEMENTED_MIPS
 #define UNIMPLEMENTED_MIPS()                                                  \
   v8::internal::PrintF("%s, \tline %d: \tfunction %s not implemented. \n",    \
-                       __FILE__, __LINE__, __func__); ASSERT(0);
+                       __FILE__, __LINE__, __func__)
+
+// ; ASSERT(0);
+
 namespace v8 {
 namespace internal {
 
@@ -1465,7 +1471,7 @@ void FullCodeGenerator::EmitIsSmi(ZoneList<Expression*>* args) {
   PrepareTest(&materialize_true, &materialize_false,
               &if_true, &if_false, &fall_through);
 
-  __ BranchOnSmi(a0, if_true);
+  __ BranchOnSmi(v0, if_true);
   __ b(if_false);
 
   Apply(context_, if_true, if_false);
@@ -2122,8 +2128,8 @@ void FullCodeGenerator::VisitCompareToNull(CompareToNull* expr) {
 
 
 void FullCodeGenerator::VisitThisFunction(ThisFunction* expr) {
-  __ lw(a0, MemOperand(fp, JavaScriptFrameConstants::kFunctionOffset));
-  Apply(context_, a0);  // plind -- should-be-v0-?
+  __ lw(v0, MemOperand(fp, JavaScriptFrameConstants::kFunctionOffset));
+  Apply(context_, v0);
 }
 
 Register FullCodeGenerator::result_register() { return v0; }
