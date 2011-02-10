@@ -27,6 +27,12 @@
 
 #include "v8.h"
 
+
+// plind -- writeup general use of accumlator - v0 - transfer to a0
+//       -- review consistency of the mov(a0,v0) ops.
+//       -- review consistency of naming v0 vs. result_register()
+
+
 #if defined(V8_TARGET_ARCH_MIPS)
 
 // UNCOMPLETED_MIPS macro.
@@ -848,11 +854,11 @@ void FullCodeGenerator::VisitForInStatement(ForInStatement* stmt) {
   __ push(a1);  // Enumerable.
   __ push(a3);  // Current entry.
   __ InvokeBuiltin(Builtins::FILTER_KEY, CALL_JS);
-  __ mov(a3, v0);
+  __ mov(a3, result_register());
   __ Branch(loop_statement.continue_target(), eq, a3, Operand(zero_reg));
 
   // Update the 'each' property or variable from the possibly filtered
-  // entry in register r3.
+  // entry in register a3.
   __ bind(&update_each);
   __ mov(result_register(), a3);
   // Perform the assignment as if via '='.
@@ -998,7 +1004,6 @@ void FullCodeGenerator::EmitVariableLoad(Variable* var,
     // Load the key.
     __ li(a0, Operand(key_literal->handle()));
 
-//    __ break_(0x5544);
     // Call keyed load IC. It has arguments key and receiver in r0 and r1.
     Handle<Code> ic(Builtins::builtin(Builtins::KeyedLoadIC_Initialize));
     __ Call(ic, RelocInfo::CODE_TARGET);
@@ -1226,7 +1231,7 @@ void FullCodeGenerator::VisitAssignment(Assignment* expr) {
       }
       break;
     case KEYED_PROPERTY:
-      // We need the key and receiver on both the stack and in r0 and r1.
+      // We need the key and receiver on both the stack and in v0 and a1.
       if (expr->is_compound()) {
         VisitForValue(prop->obj(), kStack);
         VisitForValue(prop->key(), kAccumulator);
@@ -1235,6 +1240,7 @@ void FullCodeGenerator::VisitAssignment(Assignment* expr) {
       } else {
         VisitForValue(prop->obj(), kStack);
         VisitForValue(prop->key(), kStack);
+        // plind, should we have key & recvr in v0 and a1 here ??
       }
       break;
   }
@@ -1360,9 +1366,9 @@ void FullCodeGenerator::EmitAssignment(Expression* expr) {
       break;
     }
     case NAMED_PROPERTY: {
-      __ push(a0);  // Preserve value.
+      __ push(result_register());  // Preserve value.
       VisitForValue(prop->obj(), kAccumulator);
-      __ mov(a1, v0);
+      __ mov(a1, result_register());
       __ pop(a0);  // Restore value.
       __ li(a2, Operand(prop->key()->AsLiteral()->handle()));
       Handle<Code> ic(Builtins::builtin(Builtins::StoreIC_Initialize));
@@ -1370,10 +1376,10 @@ void FullCodeGenerator::EmitAssignment(Expression* expr) {
       break;
     }
     case KEYED_PROPERTY: {
-      __ push(a0);  // Preserve value.
+      __ push(result_register());  // Preserve value.
       VisitForValue(prop->obj(), kStack);
       VisitForValue(prop->key(), kAccumulator);
-      __ mov(a1, v0);
+      __ mov(a1, result_register());
       __ pop(a2);
       __ pop(a0);  // Restore value.
       Handle<Code> ic(Builtins::builtin(Builtins::KeyedStoreIC_Initialize));
