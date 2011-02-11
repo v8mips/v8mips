@@ -50,7 +50,7 @@
 #define TRACE(s)
 #endif
 
-#include "code-stubs-mips.h"
+#include "code-stubs.h"
 #include "codegen-inl.h"
 #include "compiler.h"
 #include "debug.h"
@@ -2606,6 +2606,35 @@ void FullCodeGenerator::EmitIsRegExpEquivalent(ZoneList<Expression*>* args) {
   __ LoadRoot(v0, Heap::kTrueValueRootIndex);
   __ bind(&done);
 
+  Apply(context_, v0);
+}
+
+
+void FullCodeGenerator::EmitHasCachedArrayIndex(ZoneList<Expression*>* args) {
+  VisitForValue(args->at(0), kAccumulator);
+
+  Label materialize_true, materialize_false;
+  Label* if_true = NULL;
+  Label* if_false = NULL;
+  Label* fall_through = NULL;
+  PrepareTest(&materialize_true, &materialize_false,
+              &if_true, &if_false, &fall_through);
+
+  __ lw(a0, FieldMemOperand(v0, String::kHashFieldOffset));
+  __ And(a0, a0, Operand(String::kContainsCachedArrayIndexMask));
+
+  __ Branch(if_true, eq, a0, Operand(zero_reg));
+  __ Branch(if_false);
+
+  Apply(context_, if_true, if_false);
+}
+
+
+void FullCodeGenerator::EmitGetCachedArrayIndex(ZoneList<Expression*>* args) {
+  ASSERT(args->length() == 1);
+  VisitForValue(args->at(0), kAccumulator);
+  __ lw(v0, FieldMemOperand(v0, String::kHashFieldOffset));
+  __ IndexFromHash(v0, v0);
   Apply(context_, v0);
 }
 
