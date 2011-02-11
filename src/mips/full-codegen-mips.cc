@@ -531,7 +531,7 @@ MemOperand FullCodeGenerator::EmitSlotSearch(Slot* slot, Register scratch) {
       int context_chain_length =
           scope()->ContextChainLength(slot->var()->scope());
       __ LoadContext(scratch, context_chain_length);
-      return CodeGenerator::ContextOperand(scratch, slot->index());
+      return ContextOperand(scratch, slot->index());
     }
     case Slot::LOOKUP:
       UNREACHABLE();
@@ -595,19 +595,17 @@ void FullCodeGenerator::EmitDeclaration(Variable* variable,
         ASSERT_EQ(0, scope()->ContextChainLength(variable->scope()));
         if (FLAG_debug_code) {
           // Check if we have the correct context pointer.
-          __ lw(a1,
-                 CodeGenerator::ContextOperand(cp, Context::FCONTEXT_INDEX));
+          __ lw(a1, ContextOperand(cp, Context::FCONTEXT_INDEX));
           __ Check(eq, "Unexpected declaration in current context.",
                    a1, Operand(cp));
         }
         if (mode == Variable::CONST) {
           __ LoadRoot(at, Heap::kTheHoleValueRootIndex);
-          __ sw(at, CodeGenerator::ContextOperand(cp, slot->index()));
+          __ sw(at, ContextOperand(cp, slot->index()));
           // No write barrier since the_hole_value is in old space.
         } else if (function != NULL) {
           VisitForValue(function, kAccumulator);
-          __ sw(result_register(),
-                 CodeGenerator::ContextOperand(cp, slot->index()));
+          __ sw(result_register(), ContextOperand(cp, slot->index()));
           int offset = Context::SlotOffset(slot->index());
           // We know that we have written a function, which is not a smi.
           __ mov(a1, cp);
@@ -921,12 +919,14 @@ void FullCodeGenerator::VisitVariableProxy(VariableProxy* expr) {
   EmitVariableLoad(expr->var(), context_);
 }
 
+
 MemOperand FullCodeGenerator::ContextSlotOperandCheckExtensions(
     Slot* slot,
     Label* slow) {
   UNIMPLEMENTED_MIPS();
   return MemOperand(zero_reg, 0);
 }
+
 
 void FullCodeGenerator::EmitDynamicLoadFromSlotFastCase(
     Slot* slot,
@@ -936,11 +936,65 @@ void FullCodeGenerator::EmitDynamicLoadFromSlotFastCase(
   UNIMPLEMENTED_MIPS();
 }
 
+
 void FullCodeGenerator::EmitLoadGlobalSlotCheckExtensions(
     Slot* slot,
     TypeofState typeof_state,
     Label* slow) {
-  UNIMPLEMENTED_MIPS();
+  Register current = cp;
+  Register next = a1;
+  Register temp = a2;
+
+  Scope* s = scope();
+  while (s != NULL) {
+    if (s->num_heap_slots() > 0) {
+      if (s->calls_eval()) {
+        // Check that extension is NULL.
+        __ lw(temp, ContextOperand(current, Context::EXTENSION_INDEX));
+        __ Branch(slow, ne, temp, Operand(zero_reg));
+      }
+      // Load next context in chain.
+      __ lw(next, ContextOperand(current, Context::CLOSURE_INDEX));
+      __ lw(next, FieldMemOperand(next, JSFunction::kContextOffset));
+      // Walk the rest of the chain using a single register without
+      // clobbering cp.
+      current = next;
+    }
+    // If no outer scope calls eval, we do not need to check more
+    // context extensions.
+    if (!s->outer_scope_calls_eval() || s->is_eval_scope()) break;
+    s = s->outer_scope();
+  }
+
+  if (s->is_eval_scope()) {
+    Label loop, fast;
+    if (!current.is(next)) {
+      __ Move(next, current);
+    }
+    __ bind(&loop);
+    // Terminate at global context.
+    __ lw(temp, FieldMemOperand(next, HeapObject::kMapOffset));
+    __ LoadRoot(at, Heap::kGlobalContextMapRootIndex);
+    __ Branch(&fast, eq, temp, Operand(at));
+    
+    // Check that extension is NULL.
+    __ lw(temp, ContextOperand(next, Context::EXTENSION_INDEX));
+    __ Branch(slow, ne, temp, Operand(zero_reg));
+    
+    // Load next context in chain.
+    __ lw(next, ContextOperand(next, Context::CLOSURE_INDEX));
+    __ lw(next, FieldMemOperand(next, JSFunction::kContextOffset));
+    __ Branch(&loop);
+    __ bind(&fast);
+  }
+
+  __ lw(a0, CodeGenerator::GlobalObject());
+  __ li(a2, Operand(slot->var()->name()));
+  RelocInfo::Mode mode = (typeof_state == INSIDE_TYPEOF)
+      ? RelocInfo::CODE_TARGET
+      : RelocInfo::CODE_TARGET_CONTEXT;
+  Handle<Code> ic(Builtins::builtin(Builtins::LoadIC_Initialize));
+  __ Call(ic, mode);
 }
 
 
@@ -963,11 +1017,26 @@ void FullCodeGenerator::EmitVariableLoad(Variable* var,
     Apply(context, v0);
 
   } else if (slot != NULL && slot->type() == Slot::LOOKUP) {
+    Label done, slow;
+
+    // Generate fast-case code for variables that might be shadowed by
+    // eval-introduced variables.  Eval is used a lot without
+    // introducing variables.  In those cases, we do not want to
+    // perform a runtime call for all variables in the scope
+    // containing the eval.
+    if (slot->var()->mode() == Variable::DYNAMIC_GLOBAL) {
+      EmitLoadGlobalSlotCheckExtensions(slot, NOT_INSIDE_TYPEOF, &slow);
+      Apply(context, v0);
+      __ Branch(&done);
+    }
+
+    __ bind(&slow);
     Comment cmnt(masm_, "Lookup slot");
     __ li(a1, Operand(var->name()));
     __ Push(cp, a1);  // Context and name.
     __ CallRuntime(Runtime::kLoadContextSlot, 2);
     Apply(context, v0);
+    __ bind(&done);
 
   } else if (slot != NULL) {
     Comment cmnt(masm_, (slot->type() == Slot::CONTEXT)
