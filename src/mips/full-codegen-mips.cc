@@ -923,8 +923,29 @@ void FullCodeGenerator::VisitVariableProxy(VariableProxy* expr) {
 MemOperand FullCodeGenerator::ContextSlotOperandCheckExtensions(
     Slot* slot,
     Label* slow) {
-  UNIMPLEMENTED_MIPS();
-  return MemOperand(zero_reg, 0);
+  ASSERT(slot->type() == Slot::CONTEXT);
+  Register current = cp;
+  Register next = a3;
+  Register temp = t0;
+
+  for (Scope* s = scope(); s != slot->var()->scope(); s = s->outer_scope()) {
+    if (s->num_heap_slots() > 0) {
+      if (s->calls_eval()) {
+        // Check that extension is NULL.
+        __ lw(temp, ContextOperand(current, Context::EXTENSION_INDEX));
+        __ Branch(slow, ne, temp, Operand(zero_reg));
+      }
+      __ lw(next, ContextOperand(current, Context::CLOSURE_INDEX));
+      __ lw(next, FieldMemOperand(next, JSFunction::kContextOffset));
+      // Walk the rest of the chain without clobbering cp.
+      current = next;
+    }
+  }
+  // Check that last extension is NULL.
+  __ lw(temp, ContextOperand(current, Context::EXTENSION_INDEX));
+  __ Branch(slow, ne, temp, Operand(zero_reg));
+  __ lw(temp, ContextOperand(current, Context::FCONTEXT_INDEX));
+  return ContextOperand(temp, slot->index());
 }
 
 
@@ -933,7 +954,51 @@ void FullCodeGenerator::EmitDynamicLoadFromSlotFastCase(
     TypeofState typeof_state,
     Label* slow,
     Label* done) {
-  UNIMPLEMENTED_MIPS();
+  // Generate fast-case code for variables that might be shadowed by
+  // eval-introduced variables.  Eval is used a lot without
+  // introducing variables.  In those cases, we do not want to
+  // perform a runtime call for all variables in the scope
+  // containing the eval.
+  if (slot->var()->mode() == Variable::DYNAMIC_GLOBAL) {
+    EmitLoadGlobalSlotCheckExtensions(slot, typeof_state, slow);
+    __ Branch(done);
+  } else if (slot->var()->mode() == Variable::DYNAMIC_LOCAL) {
+    Slot* potential_slot = slot->var()->local_if_not_shadowed()->slot();
+    Expression* rewrite = slot->var()->local_if_not_shadowed()->rewrite();
+    if (potential_slot != NULL) {
+      // Generate fast case for locals that rewrite to slots.
+      __ lw(v0, ContextSlotOperandCheckExtensions(potential_slot, slow));
+      if (potential_slot->var()->mode() == Variable::CONST) {
+        __ LoadRoot(at, Heap::kTheHoleValueRootIndex);
+        __ subu(at, v0, at);  // Sub as compare: at == 0 on eq.
+        __ LoadRoot(a0, Heap::kUndefinedValueRootIndex);
+        __ movz(v0, a0, at);  // Conditional move.
+      }
+      __ Branch(done);
+    } else if (rewrite != NULL) {
+      // Generate fast case for calls of an argument function.
+      Property* property = rewrite->AsProperty();
+      if (property != NULL) {
+        VariableProxy* obj_proxy = property->obj()->AsVariableProxy();
+        Literal* key_literal = property->key()->AsLiteral();
+        if (obj_proxy != NULL &&
+            key_literal != NULL &&
+            obj_proxy->IsArguments() &&
+            key_literal->handle()->IsSmi()) {
+          // Load arguments object if there are no eval-introduced
+          // variables. Then load the argument from the arguments
+          // object using keyed load.
+          __ lw(a1,
+                 ContextSlotOperandCheckExtensions(obj_proxy->var()->slot(),
+                                                   slow));
+          __ li(a0, Operand(key_literal->handle()));
+          Handle<Code> ic(Builtins::builtin(Builtins::KeyedLoadIC_Initialize));
+          __ Call(ic, RelocInfo::CODE_TARGET);
+          __ Branch(done);
+        }
+      }
+    }
+  }
 }
 
 
@@ -956,8 +1021,7 @@ void FullCodeGenerator::EmitLoadGlobalSlotCheckExtensions(
       // Load next context in chain.
       __ lw(next, ContextOperand(current, Context::CLOSURE_INDEX));
       __ lw(next, FieldMemOperand(next, JSFunction::kContextOffset));
-      // Walk the rest of the chain using a single register without
-      // clobbering cp.
+      // Walk the rest of the chain without clobbering cp.
       current = next;
     }
     // If no outer scope calls eval, we do not need to check more
@@ -976,11 +1040,11 @@ void FullCodeGenerator::EmitLoadGlobalSlotCheckExtensions(
     __ lw(temp, FieldMemOperand(next, HeapObject::kMapOffset));
     __ LoadRoot(at, Heap::kGlobalContextMapRootIndex);
     __ Branch(&fast, eq, temp, Operand(at));
-    
+
     // Check that extension is NULL.
     __ lw(temp, ContextOperand(next, Context::EXTENSION_INDEX));
     __ Branch(slow, ne, temp, Operand(zero_reg));
-    
+
     // Load next context in chain.
     __ lw(next, ContextOperand(next, Context::CLOSURE_INDEX));
     __ lw(next, FieldMemOperand(next, JSFunction::kContextOffset));
@@ -1019,24 +1083,18 @@ void FullCodeGenerator::EmitVariableLoad(Variable* var,
   } else if (slot != NULL && slot->type() == Slot::LOOKUP) {
     Label done, slow;
 
-    // Generate fast-case code for variables that might be shadowed by
-    // eval-introduced variables.  Eval is used a lot without
-    // introducing variables.  In those cases, we do not want to
-    // perform a runtime call for all variables in the scope
-    // containing the eval.
-    if (slot->var()->mode() == Variable::DYNAMIC_GLOBAL) {
-      EmitLoadGlobalSlotCheckExtensions(slot, NOT_INSIDE_TYPEOF, &slow);
-      Apply(context, v0);
-      __ Branch(&done);
-    }
+    // Generate code for loading from variables potentially shadowed
+    // by eval-introduced variables.
+    EmitDynamicLoadFromSlotFastCase(slot, NOT_INSIDE_TYPEOF, &slow, &done);
 
     __ bind(&slow);
     Comment cmnt(masm_, "Lookup slot");
     __ li(a1, Operand(var->name()));
     __ Push(cp, a1);  // Context and name.
     __ CallRuntime(Runtime::kLoadContextSlot, 2);
-    Apply(context, v0);
     __ bind(&done);
+
+    Apply(context, v0);
 
   } else if (slot != NULL) {
     Comment cmnt(masm_, (slot->type() == Slot::CONTEXT)
@@ -1045,13 +1103,12 @@ void FullCodeGenerator::EmitVariableLoad(Variable* var,
     if (var->mode() == Variable::CONST) {
        // Constants may be the hole value if they have not been initialized.
        // Unhole them.
-       Label done;
        MemOperand slot_operand = EmitSlotSearch(slot, a0);
        __ lw(v0, slot_operand);
-       __ LoadRoot(t0, Heap::kTheHoleValueRootIndex);
-       __ Branch(&done, ne, v0, Operand(t0));
-       __ LoadRoot(v0, Heap::kUndefinedValueRootIndex);
-       __ bind(&done);
+       __ LoadRoot(at, Heap::kTheHoleValueRootIndex);
+       __ subu(at, v0, at);  // Sub as compare: at == 0 on eq.
+       __ LoadRoot(a0, Heap::kUndefinedValueRootIndex);
+       __ movz(v0, a0, at);  // Conditional move.
        Apply(context, v0);
      } else {
        Apply(context, slot);
@@ -1077,7 +1134,7 @@ void FullCodeGenerator::EmitVariableLoad(Variable* var,
     // Load the key.
     __ li(a0, Operand(key_literal->handle()));
 
-    // Call keyed load IC. It has arguments key and receiver in r0 and r1.
+    // Call keyed load IC. It has arguments key and receiver in a0 and a1.
     Handle<Code> ic(Builtins::builtin(Builtins::KeyedLoadIC_Initialize));
     __ Call(ic, RelocInfo::CODE_TARGET);
     Apply(context, v0);
@@ -1788,15 +1845,42 @@ void FullCodeGenerator::VisitCall(Call* expr) {
     EmitCallWithIC(expr, var->name(), RelocInfo::CODE_TARGET_CONTEXT);
   } else if (var != NULL && var->slot() != NULL &&
              var->slot()->type() == Slot::LOOKUP) {
-    // Call to a lookup slot (dynamically introduced variable).  Call the
-    // runtime to find the function to call (returned in eax) and the object
-    // holding it (returned in edx).
+
+    // Call to a lookup slot (dynamically introduced variable).
+    Label slow, done;
+
+    // Generate code for loading from variables potentially shadowed
+    // by eval-introduced variables.
+    EmitDynamicLoadFromSlotFastCase(var->slot(),
+                                    NOT_INSIDE_TYPEOF,
+                                    &slow,
+                                    &done);
+
+    __ bind(&slow);
+    // Call the runtime to find the function to call (returned in v0)
+    // and the object holding it (returned in v1).
     __ push(context_register());
     __ li(a2, Operand(var->name()));
     __ push(a2);
     __ CallRuntime(Runtime::kLoadContextSlot, 2);
-    __ push(v0);  // Function.
-    __ push(v1);  // Receiver.
+    __ Push(v0, v1);  // Function, receiver.
+
+    // If fast case code has been generated, emit code to push the
+    // function and receiver and have the slow path jump around this
+    // code.
+    if (done.is_linked()) {
+      Label call;
+      __ Branch(&call);
+      __ bind(&done);
+      // Push function.
+      __ push(v0);
+      // Push global receiver.
+      __ lw(a1, CodeGenerator::GlobalObject());
+      __ lw(a1, FieldMemOperand(a1, GlobalObject::kGlobalReceiverOffset));
+      __ push(a1);
+      __ bind(&call);
+    }
+
     EmitCallWithStub(expr);
   } else if (fun->AsProperty() != NULL) {
     // Call to an object property.
@@ -1820,12 +1904,9 @@ void FullCodeGenerator::VisitCall(Call* expr) {
 
         Handle<Code> ic(Builtins::builtin(Builtins::KeyedLoadIC_Initialize));
         __ Call(ic, RelocInfo::CODE_TARGET);
-        // Push result (function).
-        __ push(v0);
-        // Push Global receiver.
         __ lw(a1, CodeGenerator::GlobalObject());
         __ lw(a1, FieldMemOperand(a1, GlobalObject::kGlobalReceiverOffset));
-        __ push(a1);
+        __ Push(v0, a1);  // Function, receiver.
         EmitCallWithStub(expr);
       } else {
         EmitKeyedCallWithIC(expr, prop->key(), RelocInfo::CODE_TARGET);
@@ -2260,7 +2341,7 @@ void FullCodeGenerator::EmitRandomHeapNumber(ZoneList<Expression*>* args) {
 
   __ bind(&heapnumber_allocated);
 
-  // Convert 32 random bits in r0 to 0.(32 random bits) in a double
+  // Convert 32 random bits in v0 to 0.(32 random bits) in a double
   // by computing:
   // ( 1.(20 0s)(32 random bits) x 2^20 ) - (1.0 x 2^20)).
   if (CpuFeatures::IsSupported(FPU)) {
@@ -2560,7 +2641,7 @@ void FullCodeGenerator::EmitCallFunction(ZoneList<Expression*>* args) {
   }
   VisitForValue(args->at(arg_count + 1), kAccumulator);  // Function.
 
-  // InvokeFunction requires function in r1. Move it in there.
+  // InvokeFunction requires function in a1. Move it in there.
   if (!result_register().is(a1)) __ mov(a1, result_register());
   ParameterCount count(arg_count);
   __ InvokeFunction(a1, count, CALL_FUNCTION);
@@ -3078,9 +3159,19 @@ void FullCodeGenerator::VisitForTypeofValue(Expression* expr, Location where) {
   } else if (proxy != NULL &&
              proxy->var()->slot() != NULL &&
              proxy->var()->slot()->type() == Slot::LOOKUP) {
+    Label done, slow;
+
+    // Generate code for loading from variables potentially shadowed
+    // by eval-introduced variables.
+    Slot* slot = proxy->var()->slot();
+    EmitDynamicLoadFromSlotFastCase(slot, INSIDE_TYPEOF, &slow, &done);
+
+    __ bind(&slow);
     __ li(a0, Operand(proxy->name()));
     __ Push(cp, a0);
     __ CallRuntime(Runtime::kLoadContextSlotNoReferenceError, 2);
+    __ bind(&done);
+
     if (where == kStack) __ push(v0);
   } else {
     // This expression cannot throw a reference error at the top level.
