@@ -661,7 +661,7 @@ void FullCodeGenerator::EmitDeclaration(Variable* variable,
       __ pop(a2);  // Receiver.
 
       Handle<Code> ic(Builtins::builtin(Builtins::KeyedStoreIC_Initialize));
-      __ Call(ic, RelocInfo::CODE_TARGET);
+      EmitCallIC(ic, RelocInfo::CODE_TARGET);
       // Value in v0 is ignored (declarations are statements).
     }
   }
@@ -714,7 +714,8 @@ void FullCodeGenerator::VisitSwitchStatement(SwitchStatement* stmt) {
 
     // Perform the comparison as if via '==='.
     __ lw(a1, MemOperand(sp, 0));  // Switch value.
-    if (ShouldInlineSmiCase(Token::EQ_STRICT)) {
+    bool inline_smi_code = ShouldInlineSmiCase(Token::EQ_STRICT);
+    if (inline_smi_code) {
       Label slow_case;
       __ or_(a2, a1, a0);
       __ And(at, a2, Operand(kSmiTagMask));
@@ -726,7 +727,10 @@ void FullCodeGenerator::VisitSwitchStatement(SwitchStatement* stmt) {
       __ bind(&slow_case);
     }
 
-    CompareStub stub(eq, true, kBothCouldBeNaN, true, a1, a0);
+    CompareFlags flags = inline_smi_code
+        ? NO_SMI_COMPARE_IN_STUB
+        : NO_COMPARE_FLAGS;
+    CompareStub stub(eq, true, flags, a1, a0);
     __ CallStub(&stub);
     __ Branch(&next_test, ne, v0, Operand(zero_reg));
     __ Drop(1);  // Switch value is no longer needed.
@@ -993,7 +997,7 @@ void FullCodeGenerator::EmitDynamicLoadFromSlotFastCase(
                                                    slow));
           __ li(a0, Operand(key_literal->handle()));
           Handle<Code> ic(Builtins::builtin(Builtins::KeyedLoadIC_Initialize));
-          __ Call(ic, RelocInfo::CODE_TARGET);
+          EmitCallIC(ic, RelocInfo::CODE_TARGET);
           __ Branch(done);
         }
       }
@@ -1058,7 +1062,7 @@ void FullCodeGenerator::EmitLoadGlobalSlotCheckExtensions(
       ? RelocInfo::CODE_TARGET
       : RelocInfo::CODE_TARGET_CONTEXT;
   Handle<Code> ic(Builtins::builtin(Builtins::LoadIC_Initialize));
-  __ Call(ic, mode);
+  EmitCallIC(ic, mode);
 }
 
 
@@ -1077,7 +1081,7 @@ void FullCodeGenerator::EmitVariableLoad(Variable* var,
     __ lw(a0, CodeGenerator::GlobalObject());
     __ li(a2, Operand(var->name()));
     Handle<Code> ic(Builtins::builtin(Builtins::LoadIC_Initialize));
-    __ Call(ic, RelocInfo::CODE_TARGET_CONTEXT);
+    EmitCallIC(ic, RelocInfo::CODE_TARGET_CONTEXT);
     Apply(context, v0);
 
   } else if (slot != NULL && slot->type() == Slot::LOOKUP) {
@@ -1136,7 +1140,7 @@ void FullCodeGenerator::EmitVariableLoad(Variable* var,
 
     // Call keyed load IC. It has arguments key and receiver in a0 and a1.
     Handle<Code> ic(Builtins::builtin(Builtins::KeyedLoadIC_Initialize));
-    __ Call(ic, RelocInfo::CODE_TARGET);
+    EmitCallIC(ic, RelocInfo::CODE_TARGET);
     Apply(context, v0);
   }
 }
@@ -1225,7 +1229,7 @@ void FullCodeGenerator::VisitObjectLiteral(ObjectLiteral* expr) {
           __ li(a2, Operand(key->handle()));
           __ lw(a1, MemOperand(sp));
           Handle<Code> ic(Builtins::builtin(Builtins::StoreIC_Initialize));
-          __ Call(ic, RelocInfo::CODE_TARGET);
+          EmitCallIC(ic, RelocInfo::CODE_TARGET);
           break;
         }
         // Fall through.
@@ -1459,7 +1463,7 @@ void FullCodeGenerator::EmitKeyedPropertyLoad(Property* prop) {
   __ mov(a0, result_register());
   // Call keyed load IC. It has arguments key and receiver in a0 and a1.
   Handle<Code> ic(Builtins::builtin(Builtins::KeyedLoadIC_Initialize));
-  __ Call(ic, RelocInfo::CODE_TARGET);
+  EmitCallIC(ic, RelocInfo::CODE_TARGET);
 }
 
 
@@ -1518,7 +1522,7 @@ void FullCodeGenerator::EmitAssignment(Expression* expr) {
       __ pop(a0);  // Restore value.
       __ li(a2, Operand(prop->key()->AsLiteral()->handle()));
       Handle<Code> ic(Builtins::builtin(Builtins::StoreIC_Initialize));
-      __ Call(ic, RelocInfo::CODE_TARGET);
+      EmitCallIC(ic, RelocInfo::CODE_TARGET);
       break;
     }
     case KEYED_PROPERTY: {
@@ -1529,7 +1533,7 @@ void FullCodeGenerator::EmitAssignment(Expression* expr) {
       __ pop(a2);
       __ pop(a0);  // Restore value.
       Handle<Code> ic(Builtins::builtin(Builtins::KeyedStoreIC_Initialize));
-      __ Call(ic, RelocInfo::CODE_TARGET);
+      EmitCallIC(ic, RelocInfo::CODE_TARGET);
       break;
     }
   }
@@ -1553,7 +1557,7 @@ void FullCodeGenerator::EmitVariableAssignment(Variable* var,
     __ li(a2, Operand(var->name()));
     __ lw(a1, CodeGenerator::GlobalObject());
     Handle<Code> ic(Builtins::builtin(Builtins::StoreIC_Initialize));
-    __ Call(ic, RelocInfo::CODE_TARGET);
+    EmitCallIC(ic, RelocInfo::CODE_TARGET);
 
   } else if (var->mode() != Variable::CONST || op == Token::INIT_CONST) {
     // Perform the assignment for non-const variables and for initialization
@@ -1641,7 +1645,7 @@ void FullCodeGenerator::EmitNamedPropertyAssignment(Assignment* expr) {
   }
 
   Handle<Code> ic(Builtins::builtin(Builtins::StoreIC_Initialize));
-  __ Call(ic, RelocInfo::CODE_TARGET);
+  EmitCallIC(ic, RelocInfo::CODE_TARGET);
 
   // If the assignment ends an initialization block, revert to fast case.
   if (expr->ends_initialization_block()) {
@@ -1689,8 +1693,9 @@ void FullCodeGenerator::EmitKeyedPropertyAssignment(Assignment* expr) {
   } else {
     __ pop(a2);
   }
+
   Handle<Code> ic(Builtins::builtin(Builtins::KeyedStoreIC_Initialize));
-  __ Call(ic, RelocInfo::CODE_TARGET);
+  EmitCallIC(ic, RelocInfo::CODE_TARGET);
 
   // If the assignment ends an initialization block, revert to fast case.
   if (expr->ends_initialization_block()) {
@@ -1739,7 +1744,7 @@ void FullCodeGenerator::EmitCallWithIC(Call* expr,
   // Call the IC initialization code.
   InLoopFlag in_loop = (loop_depth() > 0) ? IN_LOOP : NOT_IN_LOOP;
   Handle<Code> ic = CodeGenerator::ComputeCallInitialize(arg_count, in_loop);
-  __ Call(ic, mode);
+  EmitCallIC(ic, mode);
   // Restore context register.
   __ lw(cp, MemOperand(fp, StandardFrameConstants::kContextOffset));
   Apply(context_, v0);
@@ -1763,7 +1768,7 @@ void FullCodeGenerator::EmitKeyedCallWithIC(Call* expr,
   InLoopFlag in_loop = (loop_depth() > 0) ? IN_LOOP : NOT_IN_LOOP;
   Handle<Code> ic = CodeGenerator::ComputeKeyedCallInitialize(arg_count,
                                                               in_loop);
-  __ Call(ic, mode);
+  EmitCallIC(ic, mode);
   // Restore context register.
   __ lw(cp, MemOperand(fp, StandardFrameConstants::kContextOffset));
   Apply(context_, v0);
@@ -1903,7 +1908,7 @@ void FullCodeGenerator::VisitCall(Call* expr) {
         __ pop(a1);  // We do not need to keep the receiver.
 
         Handle<Code> ic(Builtins::builtin(Builtins::KeyedLoadIC_Initialize));
-        __ Call(ic, RelocInfo::CODE_TARGET);
+        EmitCallIC(ic, RelocInfo::CODE_TARGET);
         __ lw(a1, CodeGenerator::GlobalObject());
         __ lw(a1, FieldMemOperand(a1, GlobalObject::kGlobalReceiverOffset));
         __ Push(v0, a1);  // Function, receiver.
@@ -2818,7 +2823,7 @@ void FullCodeGenerator::VisitCallRuntime(CallRuntime* expr) {
     __ li(a2, Operand(expr->name()));
     Handle<Code> ic = CodeGenerator::ComputeCallInitialize(arg_count,
                                                            NOT_IN_LOOP);
-    __ Call(ic, RelocInfo::CODE_TARGET);
+    EmitCallIC(ic, RelocInfo::CODE_TARGET);
     // Restore context register.
     __ lw(cp, MemOperand(fp, StandardFrameConstants::kContextOffset));
   } else {
@@ -2943,7 +2948,9 @@ void FullCodeGenerator::VisitUnaryOperation(UnaryOperation* expr) {
       bool can_overwrite = expr->expression()->ResultOverwriteAllowed();
       UnaryOverwriteMode overwrite =
           can_overwrite ? UNARY_OVERWRITE : UNARY_NO_OVERWRITE;
-      GenericUnaryOpStub stub(Token::SUB, overwrite);
+      GenericUnaryOpStub stub(Token::SUB,
+                              overwrite,
+                              NO_UNARY_FLAGS);
       // GenericUnaryOpStub expects the argument to be in the
       // register a0.
       VisitForValue(expr->expression(), kAccumulator);
@@ -2957,7 +2964,8 @@ void FullCodeGenerator::VisitUnaryOperation(UnaryOperation* expr) {
       Comment cmt(masm_, "[ UnaryOperation (BIT_NOT)");
       VisitForValue(expr->expression(), kAccumulator);
       Label done;
-      if (ShouldInlineSmiCase(expr->op())) {
+      bool inline_smi_code = ShouldInlineSmiCase(expr->op());
+      if (inline_smi_code) {
         Label call_stub;
         __ BranchOnNotSmi(result_register(), &call_stub);
         // Invert all bits except Smi tag, which stays 0.
@@ -2966,11 +2974,14 @@ void FullCodeGenerator::VisitUnaryOperation(UnaryOperation* expr) {
         __ bind(&call_stub);
       }
       bool overwrite = expr->expression()->ResultOverwriteAllowed();
+      UnaryOpFlags flags = inline_smi_code
+          ? NO_UNARY_SMI_CODE_IN_STUB
+          : NO_UNARY_FLAGS;
       UnaryOverwriteMode mode =
           overwrite ? UNARY_OVERWRITE : UNARY_NO_OVERWRITE;
+      GenericUnaryOpStub stub(Token::BIT_NOT, mode, flags);
       // GenericUnaryOpStub expects the argument to be in register a0.
       __ mov(a0, result_register());
-      GenericUnaryOpStub stub(Token::BIT_NOT, mode);
       __ CallStub(&stub);
       __ bind(&done);
       Apply(context_, result_register());
@@ -3116,7 +3127,7 @@ void FullCodeGenerator::VisitCountOperation(CountOperation* expr) {
       __ li(a2, Operand(prop->key()->AsLiteral()->handle()));  // Name.
       __ pop(a1);  // Receiver.
       Handle<Code> ic(Builtins::builtin(Builtins::StoreIC_Initialize));
-      __ Call(ic, RelocInfo::CODE_TARGET);
+      EmitCallIC(ic, RelocInfo::CODE_TARGET);
       if (expr->is_postfix()) {
         if (context_ != Expression::kEffect) {
           ApplyTOS(context_);
@@ -3131,7 +3142,7 @@ void FullCodeGenerator::VisitCountOperation(CountOperation* expr) {
       __ pop(a1);  // Key.
       __ pop(a2);  // Receiver.
       Handle<Code> ic(Builtins::builtin(Builtins::KeyedStoreIC_Initialize));
-      __ Call(ic, RelocInfo::CODE_TARGET);
+      EmitCallIC(ic, RelocInfo::CODE_TARGET);
       if (expr->is_postfix()) {
         if (context_ != Expression::kEffect) {
           ApplyTOS(context_);
@@ -3349,15 +3360,18 @@ void FullCodeGenerator::VisitCompareOperation(CompareOperation* expr) {
           UNREACHABLE();
       }
 
-      if (ShouldInlineSmiCase(op)) {
+      bool inline_smi_code = ShouldInlineSmiCase(op);
+      if (inline_smi_code) {
         Label slow_case;
         __ Or(a2, a0, Operand(a1));
         __ BranchOnNotSmi(a2, &slow_case);
         Split(cc, a1, Operand(a0), if_true, if_false, NULL);
         __ bind(&slow_case);
       }
-
-      CompareStub stub(cc, strict, kBothCouldBeNaN, true, a1, a0);
+      CompareFlags flags = inline_smi_code
+          ? NO_SMI_COMPARE_IN_STUB
+          : NO_COMPARE_FLAGS;
+      CompareStub stub(cc, strict, flags, a1, a0);
       __ CallStub(&stub);
       Split(cc, v0, Operand(zero_reg), if_true, if_false, fall_through);
     }
@@ -3405,10 +3419,21 @@ void FullCodeGenerator::VisitThisFunction(ThisFunction* expr) {
   Apply(context_, v0);
 }
 
-Register FullCodeGenerator::result_register() { return v0; }
+Register FullCodeGenerator::result_register() {
+  return v0;
+}
 
 
-Register FullCodeGenerator::context_register() { return cp; }
+Register FullCodeGenerator::context_register() {
+  return cp;
+}
+
+
+void FullCodeGenerator::EmitCallIC(Handle<Code> ic, RelocInfo::Mode mode) {
+  ASSERT(mode == RelocInfo::CODE_TARGET ||
+         mode == RelocInfo::CODE_TARGET_CONTEXT);
+  __ Call(ic, mode);
+}
 
 
 void FullCodeGenerator::StoreToFrameField(int frame_offset, Register value) {
