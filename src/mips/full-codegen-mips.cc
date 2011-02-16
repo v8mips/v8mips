@@ -44,6 +44,7 @@
 #include "full-codegen.h"
 #include "parser.h"
 #include "scopes.h"
+#include "stub-cache.h"
 
 namespace v8 {
 namespace internal {
@@ -1719,7 +1720,7 @@ void FullCodeGenerator::EmitCallWithIC(Call* expr,
   SetSourcePosition(expr->position(), FORCED_POSITION);
   // Call the IC initialization code.
   InLoopFlag in_loop = (loop_depth() > 0) ? IN_LOOP : NOT_IN_LOOP;
-  Handle<Code> ic = CodeGenerator::ComputeCallInitialize(arg_count, in_loop);
+  Handle<Code> ic = StubCache::ComputeCallInitialize(arg_count, in_loop);
   EmitCallIC(ic, mode);
   // Restore context register.
   __ lw(cp, MemOperand(fp, StandardFrameConstants::kContextOffset));
@@ -1744,8 +1745,7 @@ void FullCodeGenerator::EmitKeyedCallWithIC(Call* expr,
   SetSourcePosition(expr->position(), FORCED_POSITION);
   // Call the IC initialization code.
   InLoopFlag in_loop = (loop_depth() > 0) ? IN_LOOP : NOT_IN_LOOP;
-  Handle<Code> ic = CodeGenerator::ComputeKeyedCallInitialize(arg_count,
-                                                              in_loop);
+  Handle<Code> ic = StubCache::ComputeKeyedCallInitialize(arg_count, in_loop);
   EmitCallIC(ic, mode);
   // Restore context register.
   __ lw(cp, MemOperand(fp, StandardFrameConstants::kContextOffset));
@@ -2814,8 +2814,7 @@ void FullCodeGenerator::VisitCallRuntime(CallRuntime* expr) {
   if (expr->is_jsruntime()) {
     // Call the JS runtime function.
     __ li(a2, Operand(expr->name()));
-    Handle<Code> ic = CodeGenerator::ComputeCallInitialize(arg_count,
-                                                           NOT_IN_LOOP);
+    Handle<Code> ic = StubCache::ComputeCallInitialize(arg_count, NOT_IN_LOOP);
     EmitCallIC(ic, RelocInfo::CODE_TARGET);
     // Restore context register.
     __ lw(cp, MemOperand(fp, StandardFrameConstants::kContextOffset));
