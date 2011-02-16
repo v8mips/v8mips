@@ -1581,12 +1581,11 @@ MaybeObject* CallStubCompiler::CompileStringFromCharCodeCall(
     JSFunction* function,
     String* name) {
   // ----------- S t a t e -------------
-  // IMPORTANT: the stack alignment differs from the arm version
   //  -- a2                     : function name
   //  -- ra                     : return address
-  //  -- sp[(argc - n) * 4]     : arg[n] (zero-based)
+  //  -- sp[(argc - n - 1) * 4] : arg[n] (zero-based)
   //  -- ...
-  //  -- sp[(argc + 1) * 4]     : receiver
+  //  -- sp[argc * 4]           : receiver
   // -----------------------------------
 
   const int argc = arguments().immediate();
@@ -1599,7 +1598,7 @@ MaybeObject* CallStubCompiler::CompileStringFromCharCodeCall(
   GenerateNameCheck(name, &miss);
 
   if (cell == NULL) {
-    __ lw(a1, MemOperand(sp, 2 * kPointerSize));
+    __ lw(a1, MemOperand(sp, 1 * kPointerSize));
 
     STATIC_ASSERT(kSmiTag == 0);
     __ BranchOnSmi(a1, &miss);
@@ -1614,7 +1613,7 @@ MaybeObject* CallStubCompiler::CompileStringFromCharCodeCall(
 
   // Load the char code argument.
   Register code = a1;
-  __ lw(code, MemOperand(sp, 1 * kPointerSize));
+  __ lw(code, MemOperand(sp, 0 * kPointerSize));
 
   // Check the code is a smi.
   Label slow;
@@ -1663,12 +1662,11 @@ MaybeObject* CallStubCompiler::CompileMathAbsCall(Object* object,
                                                   JSFunction* function,
                                                   String* name) {
   // ----------- S t a t e -------------
-  // IMPORTANT: the stack alignment differs from the arm version
   //  -- a2                     : function name
   //  -- ra                     : return address
-  //  -- sp[(argc - n) * 4]     : arg[n] (zero-based)
+  //  -- sp[(argc - n - 1) * 4] : arg[n] (zero-based)
   //  -- ...
-  //  -- sp[(argc + 1) * 4]     : receiver
+  //  -- sp[argc * 4]           : receiver
   // -----------------------------------
 
   const int argc = arguments().immediate();
@@ -1681,7 +1679,7 @@ MaybeObject* CallStubCompiler::CompileMathAbsCall(Object* object,
   GenerateNameCheck(name, &miss);
 
   if (cell == NULL) {
-    __ lw(a1, MemOperand(sp, 2 * kPointerSize));
+    __ lw(a1, MemOperand(sp, 1 * kPointerSize));
 
     STATIC_ASSERT(kSmiTag == 0);
     __ BranchOnSmi(a1, &miss);
@@ -1695,7 +1693,7 @@ MaybeObject* CallStubCompiler::CompileMathAbsCall(Object* object,
   }
 
   // Load the (only) argument into a0.
-  __ lw(a0, MemOperand(sp, 1 * kPointerSize));
+  __ lw(a0, MemOperand(sp, 0 * kPointerSize));
 
   // Check if the argument is a smi.
   Label not_smi;
