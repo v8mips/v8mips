@@ -101,6 +101,13 @@ void FullCodeGenerator::Generate(CompilationInfo* info) {
   SetFunctionPosition(function());
   Comment cmnt(masm_, "[ function compiled by full code generator");
 
+#ifdef DEBUG
+  if (strlen(FLAG_stop_at) > 0 &&
+      info->function()->name()->IsEqualTo(CStrVector(FLAG_stop_at))) {
+    __ stop("stop-at");
+  }
+#endif
+
   int locals_count = scope()->num_stack_slots();
 
   __ Push(ra, fp, cp, a1);
@@ -1201,6 +1208,11 @@ void FullCodeGenerator::VisitObjectLiteral(ObjectLiteral* expr) {
   // result_saved is false the result is in v0.
   bool result_saved = false;
 
+  // Mark all computed expressions that are bound to a key that
+  // is shadowed by a later occurrence of the same key. For the
+  // marked expressions, no store code is emitted.
+  expr->CalculateEmitStore();
+
   for (int i = 0; i < expr->properties()->length(); i++) {
     ObjectLiteral::Property* property = expr->properties()->at(i);
     if (property->IsCompileTimeValue()) continue;
@@ -1223,8 +1235,10 @@ void FullCodeGenerator::VisitObjectLiteral(ObjectLiteral* expr) {
           __ mov(a0, result_register());
           __ li(a2, Operand(key->handle()));
           __ lw(a1, MemOperand(sp));
-          Handle<Code> ic(Builtins::builtin(Builtins::StoreIC_Initialize));
-          EmitCallIC(ic, RelocInfo::CODE_TARGET);
+          if (property->emit_store()) {
+            Handle<Code> ic(Builtins::builtin(Builtins::StoreIC_Initialize));
+            EmitCallIC(ic, RelocInfo::CODE_TARGET);
+          }
           break;
         }
         // Fall through.
@@ -1234,7 +1248,11 @@ void FullCodeGenerator::VisitObjectLiteral(ObjectLiteral* expr) {
         __ push(a0);
         VisitForStackValue(key);
         VisitForStackValue(value);
-        __ CallRuntime(Runtime::kSetProperty, 3);
+        if (property->emit_store()) {
+          __ CallRuntime(Runtime::kSetProperty, 3);
+        } else {
+          __ Drop(3);
+        }
         break;
       case ObjectLiteral::Property::GETTER:
       case ObjectLiteral::Property::SETTER:
