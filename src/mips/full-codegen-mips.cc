@@ -1412,7 +1412,9 @@ void FullCodeGenerator::VisitAssignment(Assignment* expr) {
                             expr->value(),
                             constant);
     } else {
-      EmitBinaryOp(op, mode);
+      { AccumulatorValueContext context(this);  // plind HACK, will break stuff
+        EmitBinaryOp(op, mode);
+      }
     }
   } else {
     VisitForAccumulatorValue(expr->value());
