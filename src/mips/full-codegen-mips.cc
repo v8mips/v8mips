@@ -27,28 +27,15 @@
 
 #include "v8.h"
 
-
-// plind -- writeup general use of accumlator - v0 - transfer to a0
-//       -- review consistency of the mov(a0,v0) ops.
-//       -- review consistency of naming v0 vs. result_register()
-
-
 #if defined(V8_TARGET_ARCH_MIPS)
 
-// UNCOMPLETED_MIPS macro. plind, clean this up....
-#ifdef DEBUG
-#define UNCOMPLETED_MIPS()                                                  \
-  v8::internal::PrintF("%s, \tline %d: \tfunction %s HAS NOT BEEN COMPLETED! \n", \
-                       __FILE__, __LINE__, __func__)
-
-//; ASSERT(0);
-
-#define TRACE(s) \
-  v8::internal::PrintF("fcg TRACE line %d: function %s, tag: %s\n", __LINE__, __func__, s)
-#else
-#define UNCOMPLETED_MIPS()
-#define TRACE(s)
-#endif
+// Note on Mips implementation:
+//
+// The result_register() for mips is the 'v0' register, which is defined
+// by the ABI to contain function return values. However, the first
+// parameter to a function is defined to be 'a0'. So there are many
+// places where we have to move a previous result in v0 to a0 for the
+// next call: mov(a0, v0). This is not needed on the other architectures.
 
 #include "code-stubs.h"
 #include "codegen-inl.h"
@@ -57,24 +44,6 @@
 #include "full-codegen.h"
 #include "parser.h"
 #include "scopes.h"
-
-#undef  UNIMPLEMENTED_MIPS
-#define UNIMPLEMENTED_MIPS()                                                  \
-  v8::internal::PrintF("%s, \tline %d: \tfunction %s not implemented. \n",    \
-                       __FILE__, __LINE__, __func__)
-
-// ; ASSERT(0);  // plind, clean this out
-
-
-
-// ----------------------------------------------------------------------------
-// This is a quick way to define some functions that are
-// currently unimplemented.  ...  plind clean
-#define MIPS_UNIMPLEMENTED_FULL_CODEGEN_FUNCTION(Name) \
-  void FullCodeGenerator::Name(ZoneList<v8::internal::Expression*>*) { UNIMPLEMENTED_MIPS(); }
-
-
-
 
 namespace v8 {
 namespace internal {
@@ -788,7 +757,7 @@ void FullCodeGenerator::VisitForInStatement(ForInStatement* stmt) {
   __ bind(&convert);
   __ push(a0);
   __ InvokeBuiltin(Builtins::TO_OBJECT, CALL_JS);
-  __ mov(a0, v0);   // plind, revisit a0/v0 thru here, can be optimized ........
+  __ mov(a0, v0);
   __ bind(&done_convert);
   __ push(a0);
 
@@ -1388,7 +1357,6 @@ void FullCodeGenerator::VisitAssignment(Assignment* expr) {
       } else {
         VisitForStackValue(property->obj());
         VisitForStackValue(property->key());
-        // plind, should we have key & recvr in v0 and a1 here ??
       }
       break;
   }
@@ -2248,7 +2216,6 @@ void FullCodeGenerator::EmitArguments(ZoneList<Expression*>* args) {
   VisitForAccumulatorValue(args->at(0));
   __ mov(a1, v0);
   __ li(a0, Operand(Smi::FromInt(scope()->num_parameters())));
-  // __ break_(0x04);  // plind debug
   ArgumentsAccessStub stub(ArgumentsAccessStub::READ_ELEMENT);
   __ CallStub(&stub);
   context()->Plug(v0);
@@ -3222,8 +3189,6 @@ bool FullCodeGenerator::TryLiteralCompare(Token::Value op,
     __ lw(v0, FieldMemOperand(v0, HeapObject::kMapOffset));
     __ lbu(a1, FieldMemOperand(v0, Map::kBitFieldOffset));
     __ And(a1, a1, Operand(1 << Map::kIsUndetectable));
-  // __ cmp(r1, Operand(1 << Map::kIsUndetectable)); // plind ..... review again
-  // __ b(eq, if_false);
     __ Branch(if_false, ne, a1, Operand(zero_reg));
     __ lbu(a1, FieldMemOperand(v0, Map::kInstanceTypeOffset));
     Split(lt, a1, Operand(FIRST_NONSTRING_TYPE),
@@ -3242,7 +3207,6 @@ bool FullCodeGenerator::TryLiteralCompare(Token::Value op,
     __ lw(v0, FieldMemOperand(v0, HeapObject::kMapOffset));
     __ lbu(a1, FieldMemOperand(v0, Map::kBitFieldOffset));
     __ And(a1, a1, Operand(1 << Map::kIsUndetectable));
-// __ cmp(r1, Operand(1 << Map::kIsUndetectable));  // plind ..... review again
     Split(ne, a1, Operand(zero_reg), if_true, if_false, fall_through);
   } else if (check->Equals(Heap::function_symbol())) {
     __ And(at, v0, Operand(kSmiTagMask));
@@ -3451,7 +3415,7 @@ void FullCodeGenerator::LoadContextField(Register dst, int context_index) {
 // ----------------------------------------------------------------------------
 // Non-local control flow support.
 
-void FullCodeGenerator::EnterFinallyBlock() {  // plind .... suspect freeeky code
+void FullCodeGenerator::EnterFinallyBlock() {
   ASSERT(!result_register().is(a1));
   // Store result register while executing finally block.
   __ push(result_register());
@@ -3464,7 +3428,7 @@ void FullCodeGenerator::EnterFinallyBlock() {  // plind .... suspect freeeky cod
 }
 
 
-void FullCodeGenerator::ExitFinallyBlock() {  // plind .... suspect freeeky code
+void FullCodeGenerator::ExitFinallyBlock() {
   ASSERT(!result_register().is(a1));
   // Restore result register from stack.
   __ pop(a1);
