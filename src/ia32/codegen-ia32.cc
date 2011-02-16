@@ -686,10 +686,10 @@ void CodeGenerator::Load(Expression* expr) {
 
 void CodeGenerator::LoadGlobal() {
   if (in_spilled_code()) {
-    frame_->EmitPush(GlobalObject());
+    frame_->EmitPush(GlobalObjectOperand());
   } else {
     Result temp = allocator_->Allocate();
-    __ mov(temp.reg(), GlobalObject());
+    __ mov(temp.reg(), GlobalObjectOperand());
     frame_->Push(&temp);
   }
 }
@@ -698,7 +698,7 @@ void CodeGenerator::LoadGlobal() {
 void CodeGenerator::LoadGlobalReceiver() {
   Result temp = allocator_->Allocate();
   Register reg = temp.reg();
-  __ mov(reg, GlobalObject());
+  __ mov(reg, GlobalObjectOperand());
   __ mov(reg, FieldOperand(reg, GlobalObject::kGlobalReceiverOffset));
   frame_->Push(&temp);
 }
@@ -6778,8 +6778,8 @@ class DeferredIsStringWrapperSafeForDefaultValueOf : public DeferredCode {
     __ mov(scratch2_,
            FieldOperand(scratch2_, GlobalObject::kGlobalContextOffset));
     __ cmp(scratch1_,
-           CodeGenerator::ContextOperand(
-               scratch2_, Context::STRING_FUNCTION_PROTOTYPE_MAP_INDEX));
+           ContextOperand(scratch2_,
+                          Context::STRING_FUNCTION_PROTOTYPE_MAP_INDEX));
     __ j(not_equal, &false_result);
     // Set the bit in the map to indicate that it has been checked safe for
     // default valueOf and set true result.
@@ -7934,7 +7934,7 @@ void CodeGenerator::VisitCallRuntime(CallRuntime* node) {
     // Push the builtins object found in the current global object.
     Result temp = allocator()->Allocate();
     ASSERT(temp.is_valid());
-    __ mov(temp.reg(), GlobalObject());
+    __ mov(temp.reg(), GlobalObjectOperand());
     __ mov(temp.reg(), FieldOperand(temp.reg(), GlobalObject::kBuiltinsOffset));
     frame_->Push(&temp);
   }
@@ -8578,9 +8578,11 @@ void CodeGenerator::Int32BinaryOperation(BinaryOperation* node) {
       }
       right.Unuse();
       frame_->Push(&left);
-      if (!node->to_int32()) {
-        // If ToInt32 is called on the result of ADD, SUB, or MUL, we don't
+      if (!node->to_int32() || op == Token::MUL) {
+        // If ToInt32 is called on the result of ADD, SUB, we don't
         // care about overflows.
+        // Result of MUL can be non-representable precisely in double so
+        // we have to check for overflow.
         unsafe_bailout_->Branch(overflow);
       }
       break;
