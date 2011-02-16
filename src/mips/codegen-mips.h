@@ -317,10 +317,6 @@ class CodeGenerator: public AstVisitor {
     return inlined_write_barrier_size_ + 5;
   }
 
-  static MemOperand ContextOperand(Register context, int index) {
-    return MemOperand(context, Context::SlotOffset(index));
-  }
-
  private:
   // Type of a member function that generates inline code for a native function.
   typedef void (CodeGenerator::*InlineFunctionGenerator)
@@ -386,11 +382,6 @@ class CodeGenerator: public AstVisitor {
                                                Register tmp,
                                                Register tmp2,
                                                JumpTarget* slow);
-
-  // Expressions
-  static MemOperand GlobalObject() {
-    return ContextOperand(cp, Context::GLOBAL_INDEX);
-  }
 
   void LoadCondition(Expression* x,
                      JumpTarget* true_target,
