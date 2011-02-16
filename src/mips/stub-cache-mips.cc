@@ -1449,10 +1449,10 @@ MaybeObject* CallStubCompiler::CompileStringCharCodeAtCall(
   // Check that the maps starting from the prototype haven't changed.
   GenerateDirectLoadGlobalFunctionPrototype(masm(),
                                             Context::STRING_FUNCTION_INDEX,
-                                            a0,
+                                            v0,
                                             &miss);
   ASSERT(object != holder);
-  CheckPrototypes(JSObject::cast(object->GetPrototype()), a0, holder,
+  CheckPrototypes(JSObject::cast(object->GetPrototype()), v0, holder,
                   a1, a3, t0, name, &miss);
 
   Register receiver = a1;
@@ -1524,13 +1524,13 @@ MaybeObject* CallStubCompiler::CompileStringCharAtCall(
   // Check that the maps starting from the prototype haven't changed.
   GenerateDirectLoadGlobalFunctionPrototype(masm(),
                                             Context::STRING_FUNCTION_INDEX,
-                                            a0,
+                                            v0,
                                             &miss);
   ASSERT(object != holder);
-  CheckPrototypes(JSObject::cast(object->GetPrototype()), a0, holder,
+  CheckPrototypes(JSObject::cast(object->GetPrototype()), v0, holder,
                   a1, a3, t0, name, &miss);
 
-  Register receiver = a0;
+  Register receiver = v0;
   Register index = t1;
   Register scratch1 = a1;
   Register scratch2 = a3;
@@ -1603,7 +1603,7 @@ MaybeObject* CallStubCompiler::CompileStringFromCharCodeCall(
     STATIC_ASSERT(kSmiTag == 0);
     __ BranchOnSmi(a1, &miss);
 
-    CheckPrototypes(JSObject::cast(object), a1, holder, a0, a3, t0, name,
+    CheckPrototypes(JSObject::cast(object), a1, holder, v0, a3, t0, name,
                     &miss);
   } else {
     ASSERT(cell->value() == function);
@@ -1623,7 +1623,7 @@ MaybeObject* CallStubCompiler::CompileStringFromCharCodeCall(
   // Convert the smi code to uint16.
   __ And(code, code, Operand(Smi::FromInt(0xffff)));
 
-  StringCharFromCodeGenerator char_from_code_generator(code, a0);
+  StringCharFromCodeGenerator char_from_code_generator(code, v0);
   char_from_code_generator.GenerateFast(masm());
   __ Drop(argc + 1);
   __ Ret();
@@ -1684,7 +1684,7 @@ MaybeObject* CallStubCompiler::CompileMathAbsCall(Object* object,
     STATIC_ASSERT(kSmiTag == 0);
     __ BranchOnSmi(a1, &miss);
 
-    CheckPrototypes(JSObject::cast(object), a1, holder, a0, a3, t0, name,
+    CheckPrototypes(JSObject::cast(object), a1, holder, v0, a3, t0, name,
                     &miss);
   } else {
     ASSERT(cell->value() == function);
@@ -1692,26 +1692,26 @@ MaybeObject* CallStubCompiler::CompileMathAbsCall(Object* object,
     GenerateLoadFunctionFromCell(cell, function, &miss);
   }
 
-  // Load the (only) argument into a0.
-  __ lw(a0, MemOperand(sp, 0 * kPointerSize));
+  // Load the (only) argument into v0.
+  __ lw(v0, MemOperand(sp, 0 * kPointerSize));
 
   // Check if the argument is a smi.
   Label not_smi;
   STATIC_ASSERT(kSmiTag == 0);
-  __ BranchOnNotSmi(a0, &not_smi);
+  __ BranchOnNotSmi(v0, &not_smi);
 
   // Do bitwise not or do nothing depending on the sign of the
   // argument.
-  __ sra(t0, a0, kBitsPerInt - 1);
-  __ Xor(a1, a0, t0);
+  __ sra(t0, v0, kBitsPerInt - 1);
+  __ Xor(a1, v0, t0);
 
   // Add 1 or do nothing depending on the sign of the argument.
-  __ Subu(a0, a1, t0);
+  __ Subu(v0, a1, t0);
 
   // If the result is still negative, go to the slow case.
   // This only happens for the most negative smi.
   Label slow;
-  __ Branch(&slow, lt, a0, Operand(zero_reg));
+  __ Branch(&slow, lt, v0, Operand(zero_reg));
 
   // Smi case done.
   __ Drop(argc + 1);
@@ -1720,8 +1720,8 @@ MaybeObject* CallStubCompiler::CompileMathAbsCall(Object* object,
   // Check if the argument is a heap number and load its exponent and
   // sign.
   __ bind(&not_smi);
-  __ CheckMap(a0, a1, Heap::kHeapNumberMapRootIndex, &slow, true);
-  __ lw(a1, FieldMemOperand(a0, HeapNumber::kExponentOffset));
+  __ CheckMap(v0, a1, Heap::kHeapNumberMapRootIndex, &slow, true);
+  __ lw(a1, FieldMemOperand(v0, HeapNumber::kExponentOffset));
 
   // Check the sign of the argument. If the argument is positive,
   // just return it.
@@ -1735,11 +1735,11 @@ MaybeObject* CallStubCompiler::CompileMathAbsCall(Object* object,
   // number.
   __ bind(&negative_sign);
   __ Xor(a1, a1, Operand(HeapNumber::kSignMask));
-  __ lw(a3, FieldMemOperand(a0, HeapNumber::kMantissaOffset));
+  __ lw(a3, FieldMemOperand(v0, HeapNumber::kMantissaOffset));
   __ LoadRoot(t2, Heap::kHeapNumberMapRootIndex);
-  __ AllocateHeapNumber(a0, t0, t1, t2, &slow);
-  __ sw(a1, FieldMemOperand(a0, HeapNumber::kExponentOffset));
-  __ sw(a3, FieldMemOperand(a0, HeapNumber::kMantissaOffset));
+  __ AllocateHeapNumber(v0, t0, t1, t2, &slow);
+  __ sw(a1, FieldMemOperand(v0, HeapNumber::kExponentOffset));
+  __ sw(a3, FieldMemOperand(v0, HeapNumber::kMantissaOffset));
   __ Drop(argc + 1);
   __ Ret();
 
