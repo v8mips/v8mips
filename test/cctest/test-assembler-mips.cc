@@ -1141,4 +1141,123 @@ TEST(MIPS13) {
            static_cast<int>(t.cvt_small_in));
 }
 
+TEST(MIPS14) {
+  // Test round, floor, ceil.
+  InitializeVM();
+  v8::HandleScope scope;
+
+  typedef struct {
+    double round_up_in;
+    double round_down_in;
+    double neg_round_up_in;
+    double neg_round_down_in;
+
+    int32_t round_up_out;
+    int32_t round_down_out;
+    int32_t neg_round_up_out;
+    int32_t neg_round_down_out;
+
+    int32_t floor_up_out;
+    int32_t floor_down_out;
+    int32_t neg_floor_up_out;
+    int32_t neg_floor_down_out;
+
+    int32_t ceil_up_out;
+    int32_t ceil_down_out;
+    int32_t neg_ceil_up_out;
+    int32_t neg_ceil_down_out;
+  } T;
+  T t;
+
+  MacroAssembler assm(NULL, 0);
+
+  __ ldc1(f0, MemOperand(a0, OFFSET_OF(T, round_up_in)));
+  __ round_w_d(f0, f0);
+  __ swc1(f0, MemOperand(a0, OFFSET_OF(T, round_up_out)));
+
+  __ ldc1(f0, MemOperand(a0, OFFSET_OF(T, round_down_in)));
+  __ round_w_d(f0, f0);
+  __ swc1(f0, MemOperand(a0, OFFSET_OF(T, round_down_out)));
+
+  __ ldc1(f0, MemOperand(a0, OFFSET_OF(T, neg_round_up_in)));
+  __ round_w_d(f0, f0);
+  __ swc1(f0, MemOperand(a0, OFFSET_OF(T, neg_round_up_out)));
+
+  __ ldc1(f0, MemOperand(a0, OFFSET_OF(T, neg_round_down_in)));
+  __ round_w_d(f0, f0);
+  __ swc1(f0, MemOperand(a0, OFFSET_OF(T, neg_round_down_out)));
+
+  __ ldc1(f0, MemOperand(a0, OFFSET_OF(T, round_up_in)));
+  __ floor_w_d(f0, f0);
+  __ swc1(f0, MemOperand(a0, OFFSET_OF(T, floor_up_out)));
+
+  __ ldc1(f0, MemOperand(a0, OFFSET_OF(T, round_down_in)));
+  __ floor_w_d(f0, f0);
+  __ swc1(f0, MemOperand(a0, OFFSET_OF(T, floor_down_out)));
+
+  __ ldc1(f0, MemOperand(a0, OFFSET_OF(T, neg_round_up_in)));
+  __ floor_w_d(f0, f0);
+  __ swc1(f0, MemOperand(a0, OFFSET_OF(T, neg_floor_up_out)));
+
+  __ ldc1(f0, MemOperand(a0, OFFSET_OF(T, neg_round_down_in)));
+  __ floor_w_d(f0, f0);
+  __ swc1(f0, MemOperand(a0, OFFSET_OF(T, neg_floor_down_out)));
+
+  __ ldc1(f0, MemOperand(a0, OFFSET_OF(T, round_up_in)));
+  __ ceil_w_d(f0, f0);
+  __ swc1(f0, MemOperand(a0, OFFSET_OF(T, ceil_up_out)));
+
+  __ ldc1(f0, MemOperand(a0, OFFSET_OF(T, round_down_in)));
+  __ ceil_w_d(f0, f0);
+  __ swc1(f0, MemOperand(a0, OFFSET_OF(T, ceil_down_out)));
+
+  __ ldc1(f0, MemOperand(a0, OFFSET_OF(T, neg_round_up_in)));
+  __ ceil_w_d(f0, f0);
+  __ swc1(f0, MemOperand(a0, OFFSET_OF(T, neg_ceil_up_out)));
+
+  __ ldc1(f0, MemOperand(a0, OFFSET_OF(T, neg_round_down_in)));
+  __ ceil_w_d(f0, f0);
+  __ swc1(f0, MemOperand(a0, OFFSET_OF(T, neg_ceil_down_out)));
+
+  __ jr(ra);
+  __ nop();
+
+  CodeDesc desc;
+  assm.GetCode(&desc);
+  Object* code = Heap::CreateCode(
+      desc,
+      Code::ComputeFlags(Code::STUB),
+      Handle<Object>(Heap::undefined_value()))->ToObjectChecked();
+  CHECK(code->IsCode());
+#ifdef DEBUG
+  Code::cast(code)->Print();
+#endif
+  F3 f = FUNCTION_CAST<F3>(Code::cast(code)->entry());
+
+  t.round_up_in = 123.51;
+  t.round_down_in = 123.49;
+  t.neg_round_up_in = -123.5;
+  t.neg_round_down_in = -123.49;
+
+  Object* dummy = CALL_GENERATED_CODE(f, &t, 0, 0, 0, 0);
+  USE(dummy);
+
+  CHECK_EQ(124, t.round_up_out);
+  CHECK_EQ(123, t.round_down_out);
+  CHECK_EQ(-124, t.neg_round_up_out);
+  CHECK_EQ(-123, t.neg_round_down_out);
+
+  CHECK_EQ(123, t.floor_up_out);
+  CHECK_EQ(123, t.floor_down_out);
+  CHECK_EQ(-124, t.neg_floor_up_out);
+  CHECK_EQ(-124, t.neg_floor_down_out);
+
+  CHECK_EQ(124, t.ceil_up_out);
+  CHECK_EQ(124, t.ceil_down_out);
+  CHECK_EQ(-123, t.neg_ceil_up_out);
+  CHECK_EQ(-123, t.neg_ceil_down_out);
+
+}
+
+
 #undef __
