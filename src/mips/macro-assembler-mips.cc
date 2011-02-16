@@ -812,92 +812,90 @@ void MacroAssembler::ConvertToInt32(Register source,
                                     Register scratch,
                                     Register scratch2,
                                     Label *not_int32) {
+  Label right_exponent, done;
+  // Get exponent word (ENDIAN issues).
+  lw(scratch, FieldMemOperand(source, HeapNumber::kExponentOffset));
+  // Get exponent alone in scratch2.
+  And(scratch2, scratch, Operand(HeapNumber::kExponentMask));
+  // Load dest with zero.  We use this either for the final shift or
+  // for the answer.
+  mov(dest, zero_reg);
+  // Check whether the exponent matches a 32 bit signed int that is not a Smi.
+  // A non-Smi integer is 1.xxx * 2^30 so the exponent is 30 (biased).  This is
+  // the exponent that we are fastest at and also the highest exponent we can
+  // handle here.
+  const uint32_t non_smi_exponent =
+      (HeapNumber::kExponentBias + 30) << HeapNumber::kExponentShift;
+  // If we have a match of the int32-but-not-Smi exponent then skip some logic.
+  Branch(&right_exponent, eq, scratch2, Operand(non_smi_exponent));
+  // If the exponent is higher than that then go to not_int32 case.  This
+  // catches numbers that don't fit in a signed int32, infinities and NaNs.
+  Branch(not_int32, gt, scratch2, Operand(non_smi_exponent));
+
+  // We know the exponent is smaller than 30 (biased).  If it is less than
+  // 0 (biased) then the number is smaller in magnitude than 1.0 * 2^0, ie
+  // it rounds to zero.
+  const uint32_t zero_exponent =
+      (HeapNumber::kExponentBias + 0) << HeapNumber::kExponentShift;
+  Subu(scratch2, scratch2, Operand(zero_exponent));
+  // Dest already has a Smi zero.
+  Branch(&done, lt, scratch2, Operand(zero_reg));
+  if (!CpuFeatures::IsSupported(FPU)) {
+    // We have a shifted exponent between 0 and 30 in scratch2.
+    srl(dest, scratch2, HeapNumber::kExponentShift);
+    // We now have the exponent in dest.  Subtract from 30 to get
+    // how much to shift down.
+    li(at, Operand(30));
+    subu(dest, at, dest);
+  }
+  bind(&right_exponent);
   if (CpuFeatures::IsSupported(FPU)) {
     CpuFeatures::Scope scope(FPU);
-    Subu(scratch, source, kHeapObjectTag);
-    ldc1(f0, MemOperand(scratch, HeapNumber::kValueOffset));
-    trunc_w_d(f0, f0);
+    // MIPS FPU instructions implementing double precision to integer
+    // conversion using round to zero. Since the FP value was qualified
+    // above, the resulting integer should be a legal int32.
+    // The original 'Exponent' word is still in scratch.
+    lwc1(f12, FieldMemOperand(source, HeapNumber::kMantissaOffset));
+    mtc1(scratch, f13);
+    trunc_w_d(f0, f12);
     mfc1(dest, f0);
-    // The trunc instruction will saturate to the minimum (0x80000000) or
-    // maximum (0x7fffffff) signed 32bits integer when the double is out of
-    // range. When subtracting one, the minimum signed integer becomes the
-    // maximum signed integer.
-    Subu(scratch, dest, Operand(1));
-    // If equal then dest was LONG_MAX, if greater dest was LONG_MIN.
-    Branch(not_int32, ge, scratch, Operand(LONG_MAX - 1));
   } else {
-    // This code is faster for doubles that are in the ranges -0x7fffffff to
-    // -0x40000000 or 0x40000000 to 0x7fffffff. This corresponds almost to
-    // the range of signed int32 values that are not Smis.  Jumps to the label
-    // 'not_int32' if the double isn't in the range -0x80000000.0 to
-    // 0x80000000.0 (excluding the endpoints).
-    Label right_exponent, done;
-    // Get exponent word.
-    lw(scratch, FieldMemOperand(source, HeapNumber::kExponentOffset));
-    // Get exponent alone in scratch2.
-    Ext(scratch2,
-            scratch,
-            HeapNumber::kExponentShift,
-            HeapNumber::kExponentBits);
-    // Load dest with zero.  We use this either for the final shift or
-    // for the answer.
-    mov(dest, zero_reg);
-    // Check whether the exponent matches a 32 bit signed int that is not a
-    // Smi. A non-Smi integer is 1.xxx * 2^30 so the exponent is 30 (biased).
-    // This is the exponent that we are fastest at and also the highest
-    // exponent we can handle here.
-    const uint32_t non_smi_exponent = HeapNumber::kExponentBias + 30;
-    // If we have a match of the int32-but-not-Smi exponent then skip some
-    // logic.
-    Branch(&right_exponent, eq, scratch2, Operand(non_smi_exponent));
-    // If the exponent is higher than that then go to slow case.  This catches
-    // numbers that don't fit in a signed int32, infinities and NaNs.
-    Branch(not_int32, gt, scratch2, Operand(non_smi_exponent));
+    // On entry, dest has final downshift, scratch has original sign/exp/mant.
+    // Save sign bit in top bit of dest.
+    And(scratch2, scratch, Operand(0x80000000));
+    Or(dest, dest, Operand(scratch2));
+    // Put back the implicit 1, just above mantissa field.
+    Or(scratch, scratch, Operand(1 << HeapNumber::kExponentShift));
 
-    // We know the exponent is smaller than 30 (biased).  If it is less than
-    // 0 (biased) then the number is smaller in magnitude than 1.0 * 2^0, ie
-    // it rounds to zero.
-    const uint32_t zero_exponent = HeapNumber::kExponentBias + 0;
-    Subu(scratch2, scratch2, Operand(zero_exponent));
-    // Dest already has a Smi zero.
-    Branch(&done, lt, scratch2, Operand(zero_reg));
-
-    // We have an exponent between 0 and 30 in scratch2. Subtract from 30 to
-    // get how much to shift down.
-    li(at, Operand(30));
-    subu(dest, at, scratch2);
-
-    bind(&right_exponent);
-    // Get the top bits of the mantissa.
-    And(scratch2, scratch, HeapNumber::kMantissaMask);
-
-    // Put back the implicit 1.
-    Or(scratch2, scratch2, 1 << HeapNumber::kExponentShift);
     // Shift up the mantissa bits to take up the space the exponent used to
     // take. We just orred in the implicit bit so that took care of one and
     // we want to leave the sign bit 0 so we subtract 2 bits from the shift
-    // distance.
+    // distance. But we want to clear the sign-bit so shift one more bit
+    // left, then shift right one bit.
     const int shift_distance = HeapNumber::kNonMantissaBitsInTopWord - 2;
-    sll(scratch2, scratch2, shift_distance);
-
-    // Save sign bit in top bit of t8.
-    And(t8, scratch, HeapNumber::kSignMask);
+    sll(scratch, scratch, shift_distance + 1);
+    srl(scratch, scratch, 1);
 
     // Get the second half of the double. For some exponents we don't
     // actually need this because the bits get shifted out again, but
     // it's probably slower to test than just to do it.
-    lw(scratch, FieldMemOperand(source, HeapNumber::kMantissaOffset));
-    // Shift down 22 bits to get the last 10 bits.
-    srl(scratch, scratch, 32 - shift_distance);
-    or_(scratch, scratch2, scratch);
+    lw(scratch2, FieldMemOperand(source, HeapNumber::kMantissaOffset));
+    // Extract the top 10 bits, and insert those bottom 10 bits of scratch.
+    // The width of the field here is the same as the shift amount above.
+    const int field_width = shift_distance;
+    Ext(scratch2, scratch2, 32-shift_distance, field_width);
+    Ins(scratch, scratch2, 0, field_width);
     // Move down according to the exponent.
-    srlv(dest, scratch, dest);
-    // Fix sign if sign bit was set.
-    subu(scratch, zero_reg, dest);
-    // Only modify dest if t8 is non-zero (if it holds the sign bit).
-    movn(dest, scratch, t8);
-    bind(&done);
+    srlv(scratch, scratch, dest);
+    // Prepare the negative version of our integer.
+    subu(scratch2, zero_reg, scratch);
+    // Trick to check sign bit (msb) held in dest, count leading zero.
+    // 0 indicates negative, save negative version with conditional move.
+    clz(dest, dest);
+    movz(scratch, scratch2, dest);
+    mov(dest, scratch);
   }
+  bind(&done);
 }
 
 
