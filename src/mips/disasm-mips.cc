@@ -1000,6 +1000,7 @@ int Disassembler::InstructionDecode(v8::internal::Vector<char> buffer,
   return d.InstructionDecode(instruction);
 }
 
+
 // The MIPS assembler does not currently use constant pools.
 int Disassembler::ConstantPoolSizeAt(byte_* instruction) {
   return -1;
@@ -1018,6 +1019,7 @@ void Disassembler::Disassemble(FILE* f, byte_* begin, byte_* end) {
             prev_pc, *reinterpret_cast<int32_t*>(prev_pc), buffer.start());
   }
 }
+
 
 #undef UNSUPPORTED
 

@@ -46,9 +46,11 @@
 namespace v8 {
 namespace internal {
 
+
 void CPU::Setup() {
   CpuFeatures::Probe();
 }
+
 
 void CPU::FlushICache(void* start, size_t size) {
 #if !defined (USE_SIMULATOR)
@@ -77,6 +79,7 @@ void CPU::DebugBreak() {
   asm volatile("break");
 #endif  // #ifdef __mips
 }
+
 
 } }  // namespace v8::internal
 

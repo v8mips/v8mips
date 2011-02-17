@@ -972,6 +972,7 @@ bool LoadIC::PatchInlinedLoad(Address address, Object* map, int offset) {
   return true;
 }
 
+
 bool LoadIC::PatchInlinedContextualLoad(Address address,
                                         Object* map,
                                         Object* cell,
@@ -979,6 +980,7 @@ bool LoadIC::PatchInlinedContextualLoad(Address address,
   // TODO(<bug#>): implement this.
   return false;
 }
+
 
 bool StoreIC::PatchInlinedStore(Address address, Object* map, int offset) {
   // Find the end of the inlined code for the store if there is an
@@ -1335,6 +1337,7 @@ static void GenerateUInt2Double(MacroAssembler* masm,
     __ and_(hiword, hiword, scratch);
   }
 }
+
 
 void KeyedLoadIC::GenerateExternalArray(MacroAssembler* masm,
                                         ExternalArrayType array_type) {

@@ -260,6 +260,7 @@ void RegExpMacroAssemblerMIPS::CheckCharacters(Vector<const uc16> str,
   }
 }
 
+
 void RegExpMacroAssemblerMIPS::CheckGreedyLoop(Label* on_equal) {
   Label backtrack_non_equal;
   __ lw(a0, MemOperand(backtrack_stackpointer(), 0));
@@ -1179,6 +1180,7 @@ void RegExpMacroAssemblerMIPS::LoadCurrentCharacterUnchecked(int cp_offset,
     __ lhu(current_character(), MemOperand(t5, 0));
   }
 }
+
 
 #undef __
 

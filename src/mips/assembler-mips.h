@@ -192,6 +192,7 @@ inline Condition NegateCondition(Condition cc) {
   return static_cast<Condition>(cc ^ 1);
 }
 
+
 inline Condition ReverseCondition(Condition cc) {
   switch (cc) {
     case Uless:

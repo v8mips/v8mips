@@ -112,8 +112,10 @@ Debugger::Debugger(Simulator* sim) {
   sim_ = sim;
 }
 
+
 Debugger::~Debugger() {
 }
+
 
 #ifdef GENERATED_CODE_COVERAGE
 static FILE* coverage_log = NULL;
@@ -140,6 +142,7 @@ void Debugger::Stop(Instruction* instr) {
   sim_->set_pc(sim_->get_pc() + Instruction::kInstructionSize);
 }
 
+
 #else  // ndef GENERATED_CODE_COVERAGE
 
 #define UNSUPPORTED() printf("Unsupported instruction.\n");
@@ -164,6 +167,7 @@ int32_t Debugger::GetRegisterValue(int regnum) {
   }
 }
 
+
 int32_t Debugger::GetFPURegisterValueInt(int regnum) {
   if (regnum == kNumFPURegisters) {
     return sim_->get_pc();
@@ -171,6 +175,7 @@ int32_t Debugger::GetFPURegisterValueInt(int regnum) {
     return sim_->get_fpu_register(regnum);
   }
 }
+
 
 int64_t Debugger::GetFPURegisterValueLong(int regnum) {
   if (regnum == kNumFPURegisters) {
@@ -180,6 +185,7 @@ int64_t Debugger::GetFPURegisterValueLong(int regnum) {
   }
 }
 
+
 float Debugger::GetFPURegisterValueFloat(int regnum) {
   if (regnum == kNumFPURegisters) {
     return sim_->get_pc();
@@ -188,6 +194,7 @@ float Debugger::GetFPURegisterValueFloat(int regnum) {
   }
 }
 
+
 double Debugger::GetFPURegisterValueDouble(int regnum) {
   if (regnum == kNumFPURegisters) {
     return sim_->get_pc();
@@ -195,6 +202,7 @@ double Debugger::GetFPURegisterValueDouble(int regnum) {
     return sim_->get_fpu_register_double(regnum);
   }
 }
+
 
 bool Debugger::GetValue(const char* desc, int32_t* value) {
   int regnum = Registers::Number(desc);
@@ -259,6 +267,7 @@ void Debugger::RedoBreakpoints() {
   }
 }
 
+
 void Debugger::PrintAllRegs() {
 #define REG_INFO(n) Registers::Name(n), GetRegisterValue(n), GetRegisterValue(n)
 
@@ -297,6 +306,7 @@ void Debugger::PrintAllRegs() {
 #undef FPU_REG_INFO
 }
 
+
 void Debugger::PrintAllRegsIncludingFPU() {
 #define FPU_REG_INFO(n) FPURegisters::Name(n), FPURegisters::Name(n+1), \
         GetFPURegisterValueInt(n), \
@@ -330,6 +340,7 @@ void Debugger::PrintAllRegsIncludingFPU() {
 #undef REG_INFO
 #undef FPU_REG_INFO
 }
+
 
 void Debugger::Debug() {
   intptr_t last_pc = -1;
@@ -655,6 +666,7 @@ void Debugger::Debug() {
 #undef XSTR
 }
 
+
 static bool ICacheMatch(void* one, void* two) {
   ASSERT((reinterpret_cast<intptr_t>(one) & CachePage::kPageMask) == 0);
   ASSERT((reinterpret_cast<intptr_t>(two) & CachePage::kPageMask) == 0);
@@ -742,6 +754,7 @@ void Simulator::CheckICache(Instruction* instr) {
   }
 }
 
+
 // Create one simulator per thread and keep it in thread local storage.
 static v8::internal::Thread::LocalStorageKey simulator_key;
 
@@ -755,6 +768,7 @@ void Simulator::Initialize() {
   initialized_ = true;
   ::v8::internal::ExternalReference::set_redirector(&RedirectExternalReference);
 }
+
 
 v8::internal::HashMap* Simulator::i_cache_ = NULL;
 
@@ -882,15 +896,18 @@ void Simulator::set_register(int reg, int32_t value) {
   registers_[reg] = (reg == 0) ? 0 : value;
 }
 
+
 void Simulator::set_fpu_register(int fpureg, int32_t value) {
   ASSERT((fpureg >= 0) && (fpureg < kNumFPURegisters));
   FPUregisters_[fpureg] = value;
 }
 
+
 void Simulator::set_fpu_register_float(int fpureg, float value) {
   ASSERT((fpureg >= 0) && (fpureg < kNumFPURegisters));
   *v8i::BitCast<float*>(&FPUregisters_[fpureg]) = value;
 }
+
 
 void Simulator::set_fpu_register_double(int fpureg, double value) {
   ASSERT((fpureg >= 0) && (fpureg < kNumFPURegisters) && ((fpureg % 2) == 0));
@@ -908,10 +925,12 @@ int32_t Simulator::get_register(int reg) const {
     return registers_[reg] + ((reg == pc) ? Instruction::kPCReadOffset : 0);
 }
 
+
 int32_t Simulator::get_fpu_register(int fpureg) const {
   ASSERT((fpureg >= 0) && (fpureg < kNumFPURegisters));
   return FPUregisters_[fpureg];
 }
+
 
 int64_t Simulator::get_fpu_register_long(int fpureg) const {
   ASSERT((fpureg >= 0) && (fpureg < kNumFPURegisters) && ((fpureg % 2) == 0));
@@ -919,16 +938,19 @@ int64_t Simulator::get_fpu_register_long(int fpureg) const {
       const_cast<int32_t*>(&FPUregisters_[fpureg]));
 }
 
+
 float Simulator::get_fpu_register_float(int fpureg) const {
   ASSERT((fpureg >= 0) && (fpureg < kNumFPURegisters));
   return *v8i::BitCast<float*>(
       const_cast<int32_t*>(&FPUregisters_[fpureg]));
 }
 
+
 double Simulator::get_fpu_register_double(int fpureg) const {
   ASSERT((fpureg >= 0) && (fpureg < kNumFPURegisters) && ((fpureg % 2) == 0));
   return *v8i::BitCast<double*>(const_cast<int32_t*>(&FPUregisters_[fpureg]));
 }
+
 
 // Helper functions for setting and testing the FPU condition code bits.
 void Simulator::set_fpu_ccr_bit(uint32_t cc, bool value) {
@@ -939,6 +961,7 @@ void Simulator::set_fpu_ccr_bit(uint32_t cc, bool value) {
     FPUccr_ &= ~(1 << cc);
   }
 }
+
 
 bool Simulator::test_fpu_ccr_bit(uint32_t cc) {
   ASSERT(is_uint3(cc));
@@ -951,6 +974,7 @@ void Simulator::set_pc(int32_t value) {
   pc_modified_ = true;
   registers_[pc] = value;
 }
+
 
 // Raw access to the PC register without the special adjustment when reading.
 int32_t Simulator::get_pc() const {
@@ -1209,6 +1233,7 @@ void Simulator::SoftwareInterrupt(Instruction* instr) {
   }
 }
 
+
 void Simulator::SignalExceptions() {
   for (int i = 1; i < kNumExceptions; i++) {
     if (exceptions[i] != 0) {
@@ -1216,6 +1241,7 @@ void Simulator::SignalExceptions() {
     }
   }
 }
+
 
 // Handle execution based on instruction types.
 void Simulator::DecodeTypeRegister(Instruction* instr) {
@@ -1745,6 +1771,7 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
   };
 }
 
+
 // Type 2: instructions using a 16 bytes immediate. (eg: addi, beq)
 void Simulator::DecodeTypeImmediate(Instruction* instr) {
   // Instruction fields.
@@ -2066,6 +2093,7 @@ void Simulator::DecodeTypeImmediate(Instruction* instr) {
   }
 }
 
+
 // Type 3: instructions using a 26 bytes immediate. (eg: j, jal)
 void Simulator::DecodeTypeJump(Instruction* instr) {
   // Get current pc.
@@ -2090,6 +2118,7 @@ void Simulator::DecodeTypeJump(Instruction* instr) {
   set_pc(next_pc);
   pc_modified_ = true;
 }
+
 
 // Executes the current instruction.
 void Simulator::InstructionDecode(Instruction* instr) {

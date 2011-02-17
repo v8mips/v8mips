@@ -164,6 +164,7 @@ static void AllocateEmptyJSArray(MacroAssembler* masm,
   }
 }
 
+
 // Allocate a JSArray with the number of elements stored in a register. The
 // register array_function holds the built-in Array function and the register
 // array_size holds the size of the array as a smi. The allocated array is put
@@ -291,6 +292,7 @@ static void AllocateJSArray(MacroAssembler* masm,
     __ Branch(&loop, lt, elements_array_storage, Operand(elements_array_end));
   }
 }
+
 
 // Create a new array for the built-in Array function. This function allocates
 // the JSArray object and the FixedArray elements array and initializes these.
@@ -481,6 +483,7 @@ void Builtins::Generate_ArrayConstructCode(MacroAssembler* masm) {
   Handle<Code> generic_construct_stub(code);
   __ Jump(generic_construct_stub, RelocInfo::CODE_TARGET);
 }
+
 
 void Builtins::Generate_StringConstructCode(MacroAssembler* masm) {
   // TODO(849): implement custom construct stub.
@@ -993,6 +996,7 @@ void Builtins::Generate_JSConstructEntryTrampoline(MacroAssembler* masm) {
   Generate_JSEntryTrampolineHelper(masm, true);
 }
 
+
 void Builtins::Generate_LazyCompile(MacroAssembler* masm) {
   // Enter an internal frame.
   __ EnterInternalFrame();
@@ -1015,7 +1019,6 @@ void Builtins::Generate_LazyCompile(MacroAssembler* masm) {
   // Do a tail-call of the compiled function.
   __ Jump(t9);
 }
-
 
 
 void Builtins::Generate_FunctionCall(MacroAssembler* masm) {

@@ -52,6 +52,7 @@ MacroAssembler::MacroAssembler(void* buffer, int size)
       code_object_(Heap::undefined_value()) {
 }
 
+
 // Arguments macros
 #define COND_TYPED_ARGS Condition cond, Register r1, const Operand& r2
 #define COND_ARGS cond, r1, r2
@@ -66,6 +67,7 @@ void MacroAssembler::Name(Register target, COND_TYPED_ARGS, \
   Name(Operand(target), COND_ARGS, ProtectBranchDelaySlot); \
 }
 
+
 #define INT_PTR_TARGET_BODY(Name) \
 void MacroAssembler::Name(intptr_t target, RelocInfo::Mode rmode, \
                           bool ProtectBranchDelaySlot) { \
@@ -77,6 +79,7 @@ void MacroAssembler::Name(intptr_t target, \
                           bool ProtectBranchDelaySlot) { \
   Name(Operand(target, rmode), COND_ARGS, ProtectBranchDelaySlot); \
 }
+
 
 #define BYTE_PTR_TARGET_BODY(Name) \
 void MacroAssembler::Name(byte* target, RelocInfo::Mode rmode, \
@@ -93,6 +96,7 @@ void MacroAssembler::Name(byte* target, \
        ProtectBranchDelaySlot); \
 }
 
+
 #define CODE_TARGET_BODY(Name) \
 void MacroAssembler::Name(Handle<Code> target, RelocInfo::Mode rmode, \
                           bool ProtectBranchDelaySlot) { \
@@ -108,6 +112,7 @@ void MacroAssembler::Name(Handle<Code> target, \
        COND_ARGS, \
        ProtectBranchDelaySlot); \
 }
+
 
 REGISTER_TARGET_BODY(Jump)
 REGISTER_TARGET_BODY(Call)
@@ -141,6 +146,7 @@ void MacroAssembler::LoadRoot(Register destination,
   lw(destination, MemOperand(s6, index << kPointerSizeLog2));
 }
 
+
 void MacroAssembler::LoadRoot(Register destination,
                               Heap::RootListIndex index,
                               Condition cond,
@@ -154,6 +160,7 @@ void MacroAssembler::StoreRoot(Register source,
                                Heap::RootListIndex index) {
   sw(source, MemOperand(s6, index << kPointerSizeLog2));
 }
+
 
 void MacroAssembler::StoreRoot(Register source,
                                Heap::RootListIndex index,
@@ -804,6 +811,7 @@ void MacroAssembler::Trunc_uw_d(FPURegister fd, Register rs) {
   bind(&done);
 }
 
+
 // Tries to get a signed int32 out of a double precision floating point heap
 // number. Rounds towards 0. Branch to 'not_int32' if the double is out of the
 // 32bits signed integer range.
@@ -908,6 +916,7 @@ void MacroAssembler::ConvertToInt32(Register source,
     (cond == cc_always && rs.is(zero_reg) && rt.rm().is(zero_reg)) ||          \
     (cond != cc_always && (!rs.is(zero_reg) || !rt.rm().is(zero_reg))))
 
+
 void MacroAssembler::Branch(int16_t offset,
                             bool ProtectBranchDelaySlot) {
   b(offset);
@@ -916,6 +925,7 @@ void MacroAssembler::Branch(int16_t offset,
   if (ProtectBranchDelaySlot)
     nop();
 }
+
 
 void MacroAssembler::Branch(int16_t offset, Condition cond, Register rs,
                             const Operand& rt,
@@ -1758,6 +1768,7 @@ void MacroAssembler::Move(Register dst, Register src) {
   }
 }
 
+
 #ifdef ENABLE_DEBUGGER_SUPPORT
 
 void MacroAssembler::DebugBreak() {
@@ -2141,6 +2152,7 @@ void MacroAssembler::AllocateHeapNumberWithValue(Register result,
   sdc1(value, FieldMemOperand(result, HeapNumber::kValueOffset));
 }
 
+
 // Copies a fixed number of fields of heap objects from src to dst.
 void MacroAssembler::CopyFields(Register dst,
                                 Register src,
@@ -2474,12 +2486,14 @@ void MacroAssembler::TailCallStub(CodeStub* stub) {
   Jump(stub->GetCode(), RelocInfo::CODE_TARGET);
 }
 
+
 void MacroAssembler::IllegalOperation(int num_arguments) {
   if (num_arguments > 0) {
     addiu(sp, sp, num_arguments * kPointerSize);
   }
   LoadRoot(v0, Heap::kUndefinedValueRootIndex);
 }
+
 
 void MacroAssembler::IndexFromHash(Register hash,
                                    Register index) {
@@ -2557,6 +2571,7 @@ void MacroAssembler::SmiToDoubleFPURegister(Register smi,
   mtc1(scratch1, value);
   cvt_d_w(value, value);
 }
+
 
 void MacroAssembler::CallRuntime(Runtime::Function* f, int num_arguments) {
   // All parameters are on the stack. v0 has the return value after call.
@@ -2703,6 +2718,7 @@ void MacroAssembler::AssertRegisterIsRoot(Register reg,
     Check(eq, "Register did not match expected root", reg, Operand(at));
   }
 }
+
 
 void MacroAssembler::AssertFastElements(Register elements) {
   if (FLAG_debug_code) {
@@ -2960,11 +2976,13 @@ void MacroAssembler::JumpIfEitherSmi(Register reg1,
   Branch(on_either_smi, eq, at, Operand(zero_reg));
 }
 
+
 void MacroAssembler::AbortIfSmi(Register object) {
   ASSERT_EQ(0, kSmiTag);
   andi(at, object, kSmiTagMask);
   Assert(ne, "Operand is a smi", at, Operand(zero_reg));
 }
+
 
 void MacroAssembler::JumpIfNonSmisNotBothSequentialAsciiStrings(
     Register first,
@@ -3143,6 +3161,8 @@ void CodePatcher::Emit(Instr x) {
 void CodePatcher::Emit(Address addr) {
   masm()->emit(reinterpret_cast<Instr>(addr));
 }
+
+
 #endif  // ENABLE_DEBUGGER_SUPPORT
 
 

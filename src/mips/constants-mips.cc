@@ -348,6 +348,7 @@ Instruction::Type Instruction::InstructionType() const {
   return kUnsupported;
 }
 
+
 } }   // namespace assembler::mips
 
 #endif  // V8_TARGET_ARCH_MIPS

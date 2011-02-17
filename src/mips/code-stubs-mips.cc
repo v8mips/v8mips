@@ -1993,6 +1993,7 @@ Handle<Code> GetBinaryOpStub(int key, BinaryOpIC::TypeInfo type_info) {
   return stub.GetCode();
 }
 
+
 void TranscendentalCacheStub::Generate(MacroAssembler* masm) {
   // Argument is a number and is on stack and in a0.
   Label runtime_call;

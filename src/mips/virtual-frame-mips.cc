@@ -65,6 +65,7 @@ void VirtualFrame::PopToA0() {
   top_of_stack_state_ = NO_TOS_REGISTERS;
 }
 
+
 void VirtualFrame::MergeTo(const VirtualFrame* expected,
                            Condition cond,
                            Register r1,
@@ -75,6 +76,7 @@ void VirtualFrame::MergeTo(const VirtualFrame* expected,
   ASSERT(register_allocation_map_ == expected->register_allocation_map_);
 }
 
+
 void VirtualFrame::MergeTo(VirtualFrame* expected,
                            Condition cond,
                            Register r1,
@@ -84,6 +86,8 @@ void VirtualFrame::MergeTo(VirtualFrame* expected,
   MergeTOSTo(expected->top_of_stack_state_, cond, r1, r2);
   ASSERT(register_allocation_map_ == expected->register_allocation_map_);
 }
+
+
 void VirtualFrame::MergeTOSTo(
     VirtualFrame::TopOfStack expected_top_of_stack_state,
     Condition cond,
@@ -500,6 +504,7 @@ void VirtualFrame::SpillAllButCopyTOSToA0() {
   top_of_stack_state_ = NO_TOS_REGISTERS;
 }
 
+
 void VirtualFrame::SpillAllButCopyTOSToA1() {
   switch (top_of_stack_state_) {
     case NO_TOS_REGISTERS:
@@ -566,6 +571,7 @@ Register VirtualFrame::Peek() {
     return kTopRegister[top_of_stack_state_];
   }
 }
+
 
 Register VirtualFrame::Peek2() {
   AssertIsNotSpilled();
@@ -668,6 +674,7 @@ void VirtualFrame::Dup2() {
   RaiseHeight(2, tos_known_smi_map_ & 3);
 }
 
+
 Register VirtualFrame::PopToRegister(Register but_not_to_this_one) {
   ASSERT(but_not_to_this_one.is(a0) ||
          but_not_to_this_one.is(a1) ||
@@ -698,6 +705,7 @@ void VirtualFrame::EnsureOneFreeTOSRegister() {
   }
   ASSERT(kVirtualElements[top_of_stack_state_] != kMaxTOSRegisters);
 }
+
 
 void VirtualFrame::EmitMultiPop(RegList regs) {
   for (int16_t i = 0; i < kNumRegisters; i++) {
@@ -741,6 +749,7 @@ void VirtualFrame::EmitPush(Register reg, TypeInfo info) {
   __ Move(dest, reg);
 }
 
+
 void VirtualFrame::SetElementAt(Register reg, int this_far_down) {
   if (this_far_down < kTOSKnownSmiMapSize) {
     tos_known_smi_map_ &= ~(1 << this_far_down);
@@ -775,6 +784,7 @@ void VirtualFrame::SetElementAt(Register reg, int this_far_down) {
     __ sw(reg, ElementAt(this_far_down));
   }
 }
+
 
 Register VirtualFrame::GetTOSRegister() {
   if (SpilledScope::is_spilled()) return a0;
@@ -867,6 +877,7 @@ void VirtualFrame::SpillAll() {
   }
   ASSERT(register_allocation_map_ == 0);  // Not yet implemented.
 }
+
 
 #undef __
 

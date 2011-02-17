@@ -1703,6 +1703,7 @@ void FullCodeGenerator::VisitProperty(Property* expr) {
   context()->Plug(v0);
 }
 
+
 void FullCodeGenerator::EmitCallWithIC(Call* expr,
                                        Handle<Object> name,
                                        RelocInfo::Mode mode) {
@@ -1751,6 +1752,7 @@ void FullCodeGenerator::EmitKeyedCallWithIC(Call* expr,
   __ lw(cp, MemOperand(fp, StandardFrameConstants::kContextOffset));
   context()->Plug(v0);
 }
+
 
 void FullCodeGenerator::EmitCallWithStub(Call* expr) {
   // Code common for calls using the call stub.

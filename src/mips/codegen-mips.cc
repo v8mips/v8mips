@@ -129,6 +129,7 @@ TypeInfoCodeGenState::~TypeInfoCodeGenState() {
   owner()->set_type_info(slot_, old_type_info_);
 }
 
+
 // -----------------------------------------------------------------------------
 // CodeGenerator implementation.
 
@@ -970,6 +971,7 @@ void DeferredInlineSmiOperation::JumpToAnswerOutOfRange(Condition cond,
     __ Branch(&answer_out_of_range_, cond, cmp1, cmp2);
   }
 }
+
 
 // On entry the non-constant side of the binary operation is in tos_register_
 // and the constant smi side is nowhere.  The tos_register_ is not used by the
@@ -5633,6 +5635,7 @@ void CodeGenerator::GenerateNumberToString(ZoneList<Expression*>* args) {
   frame_->CallStub(&stub, 1);
   frame_->EmitPush(v0);
 }
+
 
 class DeferredSwapElements: public DeferredCode {
  public:

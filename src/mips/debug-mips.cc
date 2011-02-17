@@ -288,6 +288,7 @@ void Debug::GeneratePlainReturnLiveEdit(MacroAssembler* masm) {
   masm->Abort("LiveEdit frame dropping is not supported on mips");
 }
 
+
 void Debug::GenerateFrameDropperLiveEdit(MacroAssembler* masm) {
   masm->Abort("LiveEdit frame dropping is not supported on mips");
 }

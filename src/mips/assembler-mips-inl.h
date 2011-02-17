@@ -224,6 +224,7 @@ void RelocInfo::Visit(ObjectVisitor* visitor) {
   }
 }
 
+
 template<typename StaticVisitor>
 void RelocInfo::Visit() {
   RelocInfo::Mode mode = rmode();
@@ -245,6 +246,7 @@ void RelocInfo::Visit() {
     StaticVisitor::VisitRuntimeEntry(this);
   }
 }
+
 
 // -----------------------------------------------------------------------------
 // Assembler

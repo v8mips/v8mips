@@ -36,9 +36,11 @@
 namespace v8 {
 namespace internal {
 
+
 Address ExitFrame::ComputeStackPointer(Address fp) {
   return fp + ExitFrameConstants::kSPOffset;
 }
+
 
 } }  // namespace v8::internal
 

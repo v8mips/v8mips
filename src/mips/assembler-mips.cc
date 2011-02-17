@@ -189,6 +189,7 @@ int ToNumber(Register reg) {
   return kNumbers[reg.code()];
 }
 
+
 Register ToRegister(int num) {
   ASSERT(num >= 0 && num < kNumRegisters);
   const Register kRegisters[] = {
@@ -262,6 +263,7 @@ Operand::Operand(Handle<Object> handle) {
     rmode_ = RelocInfo::NONE;
   }
 }
+
 
 MemOperand::MemOperand(Register rm, int32_t offset) : Operand(rm) {
   offset_ = offset;
@@ -413,6 +415,7 @@ bool Assembler::IsSwRegFpNegOffset(Instr instr) {
           kSwRegFpNegOffsetPattern);
 }
 
+
 bool Assembler::IsLwRegFpNegOffset(Instr instr) {
   return ((instr & (kLwSwInstrTypeMask | kNegOffset)) ==
           kLwRegFpNegOffsetPattern);
@@ -433,7 +436,9 @@ bool Assembler::IsLwRegFpNegOffset(Instr instr) {
 // which is an otherwise illegal value (branch -1 is inf loop).
 // The instruction 16-bit offset field addresses 32-bit words, but in
 // code is conv to an 18-bit value addressing bytes, hence the -4 value.
+
 const int kEndOfChain = -4;
+
 
 bool Assembler::is_branch(Instr instr) {
   uint32_t opcode   = ((instr & kOpcodeMask));
@@ -455,6 +460,7 @@ bool Assembler::is_branch(Instr instr) {
       label_constant == 0;  // Emitted label const in reg-exp engine.
 }
 
+
 bool Assembler::is_nop(Instr instr, unsigned int type) {
   // See Assembler::nop(type).
   ASSERT(type < 32);
@@ -475,19 +481,23 @@ bool Assembler::is_nop(Instr instr, unsigned int type) {
   return ret;
 }
 
+
 int32_t Assembler::get_branch_offset(Instr instr) {
   ASSERT(is_branch(instr));
   return ((int16_t)(instr & kImm16Mask)) << 2;
 }
 
+
 bool Assembler::is_lw(Instr instr) {
   return ((instr & kOpcodeMask) == LW);
 }
+
 
 int16_t Assembler::get_lw_offset(Instr instr) {
   ASSERT(is_lw(instr));
   return ((instr & kImm16Mask));
 }
+
 
 Instr Assembler::set_lw_offset(Instr instr, int16_t offset) {
   ASSERT(is_lw(instr));
@@ -780,6 +790,7 @@ void Assembler::GenInstrJump(Opcode opcode,
   BlockTrampolinePoolFor(1);
 }
 
+
 // Returns the next free label entry from the next trampoline pool.
 int32_t Assembler::get_label_entry(int32_t pos, bool next_pool) {
   int trampoline_count = trampolines_.length();
@@ -804,6 +815,7 @@ int32_t Assembler::get_label_entry(int32_t pos, bool next_pool) {
   return label_entry;
 }
 
+
 // Returns the next free trampoline entry from the next trampoline pool.
 int32_t Assembler::get_trampoline_entry(int32_t pos, bool next_pool) {
   int trampoline_count = trampolines_.length();
@@ -827,6 +839,7 @@ int32_t Assembler::get_trampoline_entry(int32_t pos, bool next_pool) {
   }
   return trampoline_entry;
 }
+
 
 int32_t Assembler::branch_offset(Label* L, bool jump_elimination_allowed) {
   int32_t target_pos;
@@ -1276,6 +1289,7 @@ void Assembler::srav(Register rd, Register rt, Register rs) {
   GenInstrRegister(SPECIAL, rs, rt, rd, 0, SRAV);
 }
 
+
 void Assembler::rotr(Register rd, Register rt, uint16_t sa) {
   ASSERT(rd.is_valid() && rt.is_valid() && is_uint5(sa));
   if (mips32r2) {
@@ -1288,6 +1302,7 @@ void Assembler::rotr(Register rd, Register rt, uint16_t sa) {
   }
 }
 
+
 void Assembler::rotrv(Register rd, Register rt, Register rs) {
   ASSERT(rd.is_valid() && rt.is_valid() && rs.is_valid() );
   if (mips32r2) {
@@ -1299,6 +1314,7 @@ void Assembler::rotrv(Register rd, Register rt, Register rs) {
     UNIMPLEMENTED_MIPS();
   }
 }
+
 
 //------------Memory-instructions-------------
 
@@ -1586,6 +1602,7 @@ void Assembler::sltiu(Register rt, Register rs, int32_t j) {
   GenInstrImmediate(SLTIU, rs, rt, j);
 }
 
+
 // Conditional move.
 void Assembler::movz(Register rd, Register rs, Register rt) {
   GenInstrRegister(SPECIAL, rs, rt, rd, 0, MOVZ);
@@ -1596,17 +1613,20 @@ void Assembler::movn(Register rd, Register rs, Register rt) {
   GenInstrRegister(SPECIAL, rs, rt, rd, 0, MOVN);
 }
 
+
 void Assembler::movt(Register rd, Register rs, uint16_t cc) {
   Register rt;
   rt.code_ = (cc & 0x0003)<<2 | 1;
   GenInstrRegister(SPECIAL, rs, rt, rd, 0, MOVCI);
 }
 
+
 void Assembler::movf(Register rd, Register rs, uint16_t cc) {
   Register rt;
   rt.code_ = (cc & 0x0003)<<2 | 0;
   GenInstrRegister(SPECIAL, rs, rt, rd, 0, MOVCI);
 }
+
 
 // Bit twiddling.
 void Assembler::clz(Register rd, Register rs) {
@@ -1692,29 +1712,36 @@ void Assembler::add_d(FPURegister fd, FPURegister fs, FPURegister ft) {
   GenInstrRegister(COP1, D, ft, fs, fd, ADD_D);
 }
 
+
 void Assembler::sub_d(FPURegister fd, FPURegister fs, FPURegister ft) {
   GenInstrRegister(COP1, D, ft, fs, fd, SUB_D);
 }
+
 
 void Assembler::mul_d(FPURegister fd, FPURegister fs, FPURegister ft) {
   GenInstrRegister(COP1, D, ft, fs, fd, MUL_D);
 }
 
+
 void Assembler::div_d(FPURegister fd, FPURegister fs, FPURegister ft) {
   GenInstrRegister(COP1, D, ft, fs, fd, DIV_D);
 }
+
 
 void Assembler::abs_d(FPURegister fd, FPURegister fs) {
   GenInstrRegister(COP1, D, f0, fs, fd, ABS_D);
 }
 
+
 void Assembler::mov_d(FPURegister fd, FPURegister fs) {
   GenInstrRegister(COP1, D, f0, fs, fd, MOV_D);
 }
 
+
 void Assembler::neg_d(FPURegister fd, FPURegister fs) {
   GenInstrRegister(COP1, D, f0, fs, fd, NEG_D);
 }
+
 
 void Assembler::sqrt_d(FPURegister fd, FPURegister fs) {
   GenInstrRegister(COP1, D, f0, fs, fd, SQRT_D);
@@ -1827,6 +1854,7 @@ void Assembler::c(FPUCondition cond, SecondaryField fmt,
   emit(instr);
 }
 
+
 void Assembler::fcmp(FPURegister src1, const double src2,
       FPUCondition cond) {
   ASSERT(CpuFeatures::IsSupported(FPU));
@@ -1835,6 +1863,7 @@ void Assembler::fcmp(FPURegister src1, const double src2,
   cvt_d_w(f14, f14);
   c(cond, D, src1, f14, 0);
 }
+
 
 void Assembler::bc1f(int16_t offset, uint16_t cc) {
   ASSERT(is_uint3(cc));
@@ -1871,6 +1900,7 @@ void Assembler::RecordComment(const char* msg) {
     RecordRelocInfo(RelocInfo::COMMENT, reinterpret_cast<intptr_t>(msg));
   }
 }
+
 
 void Assembler::GrowBuffer() {
   if (!own_buffer_) FATAL("external code buffer is too small");
@@ -1938,9 +1968,11 @@ void Assembler::RecordRelocInfo(RelocInfo::Mode rmode, intptr_t data) {
   }
 }
 
+
 void Assembler::BlockTrampolinePoolFor(int instructions) {
   BlockTrampolinePoolBefore(pc_offset() + instructions * kInstrSize);
 }
+
 
 void Assembler::CheckTrampolinePool() {
   // Calculate the offset of the next check.
@@ -1995,6 +2027,7 @@ void Assembler::CheckTrampolinePool() {
   }
   return;
 }
+
 
 Address Assembler::target_address_at(Address pc) {
   Instr instr1 = instr_at(pc);

@@ -166,6 +166,7 @@ void JumpTarget::DoBind() {
   __ bind(&entry_label_);
 }
 
+
 #undef __
 #undef BRANCH_ARGS_CHECK
 

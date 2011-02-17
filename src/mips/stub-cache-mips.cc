@@ -1234,6 +1234,7 @@ void CallStubCompiler::GenerateNameCheck(String* name, Label* miss) {
   }
 }
 
+
 void CallStubCompiler::GenerateGlobalReceiverCheck(JSObject* object,
                                                    JSObject* holder,
                                                    String* name,
@@ -1284,6 +1285,7 @@ void CallStubCompiler::GenerateLoadFunctionFromCell(JSGlobalPropertyCell* cell,
     __ Branch(miss, ne, a1, Operand(Handle<JSFunction>(function)));
   }
 }
+
 
 MaybeObject* CallStubCompiler::GenerateMissBranch() {
   Object* obj;
@@ -1422,6 +1424,7 @@ MaybeObject* CallStubCompiler::CompileArrayPopCall(Object* object,
   // Return the generated code.
   return GetCode(function);
 }
+
 
 MaybeObject* CallStubCompiler::CompileStringCharCodeAtCall(
     Object* object,
@@ -1647,6 +1650,7 @@ MaybeObject* CallStubCompiler::CompileStringFromCharCodeCall(
   return (cell == NULL) ? GetCode(function) : GetCode(NORMAL, name);
 }
 
+
 MaybeObject* CallStubCompiler::CompileMathFloorCall(Object* object,
                                                     JSObject* holder,
                                                     JSGlobalPropertyCell* cell,
@@ -1655,6 +1659,7 @@ MaybeObject* CallStubCompiler::CompileMathFloorCall(Object* object,
   // TODO(872): implement this.
   return Heap::undefined_value();
 }
+
 
 MaybeObject* CallStubCompiler::CompileMathAbsCall(Object* object,
                                                   JSObject* holder,
@@ -1758,6 +1763,7 @@ MaybeObject* CallStubCompiler::CompileMathAbsCall(Object* object,
   // Return the generated code.
   return (cell == NULL) ? GetCode(function) : GetCode(NORMAL, name);
 }
+
 
 MaybeObject* CallStubCompiler::CompileCallConstant(Object* object,
                                                    JSObject* holder,
