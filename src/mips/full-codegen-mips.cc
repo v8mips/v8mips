@@ -1833,7 +1833,6 @@ void FullCodeGenerator::VisitCall(Call* expr) {
     EmitCallWithIC(expr, var->name(), RelocInfo::CODE_TARGET_CONTEXT);
   } else if (var != NULL && var->AsSlot() != NULL &&
              var->AsSlot()->type() == Slot::LOOKUP) {
-
     // Call to a lookup slot (dynamically introduced variable).
     Label slow, done;
 
