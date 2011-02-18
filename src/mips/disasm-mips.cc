@@ -516,6 +516,15 @@ void Decoder::DecodeTypeRegister(Instruction* instr) {
               }
               }
               break;
+            case ROUND_W_D:
+              Format(instr, "round.w.d 'fd, 'fs");
+              break;
+            case FLOOR_W_D:
+              Format(instr, "floor.w.d 'fd, 'fs");
+              break;
+            case CEIL_W_D:
+              Format(instr, "ceil.w.d 'fd, 'fs");
+              break;
             case CVT_S_D:
               Format(instr, "cvt.s.d 'fd, 'fs");
               break;

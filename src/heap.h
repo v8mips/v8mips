@@ -222,7 +222,9 @@ class Heap : public AllStatic {
  public:
   // Configure heap size before setup. Return false if the heap has been
   // setup already.
-  static bool ConfigureHeap(int max_semispace_size, int max_old_gen_size);
+  static bool ConfigureHeap(int max_semispace_size,
+                            int max_old_gen_size,
+                            int max_executable_size);
   static bool ConfigureHeapDefault();
 
   // Initializes the global object heap. If create_heap_objects is true,
@@ -253,6 +255,7 @@ class Heap : public AllStatic {
   static int ReservedSemiSpaceSize() { return reserved_semispace_size_; }
   static int InitialSemiSpaceSize() { return initial_semispace_size_; }
   static intptr_t MaxOldGenerationSize() { return max_old_generation_size_; }
+  static intptr_t MaxExecutableSize() { return max_executable_size_; }
 
   // Returns the capacity of the heap in bytes w/o growing. Heap grows when
   // more spaces are needed until it reaches the limit.
@@ -260,6 +263,9 @@ class Heap : public AllStatic {
 
   // Returns the amount of memory currently committed for the heap.
   static intptr_t CommittedMemory();
+
+  // Returns the amount of executable memory currently committed for the heap.
+  static intptr_t CommittedMemoryExecutable();
 
   // Returns the available bytes in space w/o growing.
   // Heap doesn't guarantee that it can allocate an object that requires
@@ -1096,6 +1102,7 @@ class Heap : public AllStatic {
   static int max_semispace_size_;
   static int initial_semispace_size_;
   static intptr_t max_old_generation_size_;
+  static intptr_t max_executable_size_;
   static intptr_t code_range_size_;
 
   // For keeping track of how much data has survived
@@ -1551,6 +1558,7 @@ class PagedSpaces BASE_EMBEDDED {
 class SpaceIterator : public Malloced {
  public:
   SpaceIterator();
+  explicit SpaceIterator(HeapObjectCallback size_func);
   virtual ~SpaceIterator();
 
   bool has_next();
@@ -1561,17 +1569,31 @@ class SpaceIterator : public Malloced {
 
   int current_space_;  // from enum AllocationSpace.
   ObjectIterator* iterator_;  // object iterator for the current space.
+  HeapObjectCallback size_func_;
 };
 
 
-// A HeapIterator provides iteration over the whole heap It aggregates a the
-// specific iterators for the different spaces as these can only iterate over
-// one space only.
+// A HeapIterator provides iteration over the whole heap. It
+// aggregates the specific iterators for the different spaces as
+// these can only iterate over one space only.
+//
+// HeapIterator can skip free list nodes (that is, de-allocated heap
+// objects that still remain in the heap). As implementation of free
+// nodes filtering uses GC marks, it can't be used during MS/MC GC
+// phases. Also, it is forbidden to interrupt iteration in this mode,
+// as this will leave heap objects marked (and thus, unusable).
+class FreeListNodesFilter;
 
 class HeapIterator BASE_EMBEDDED {
  public:
-  explicit HeapIterator();
-  virtual ~HeapIterator();
+  enum FreeListNodesFiltering {
+    kNoFiltering,
+    kPreciseFiltering
+  };
+
+  HeapIterator();
+  explicit HeapIterator(FreeListNodesFiltering filtering);
+  ~HeapIterator();
 
   HeapObject* next();
   void reset();
@@ -1579,10 +1601,12 @@ class HeapIterator BASE_EMBEDDED {
  private:
   // Perform the initialization.
   void Init();
-
   // Perform all necessary shutdown (destruction) work.
   void Shutdown();
+  HeapObject* NextObject();
 
+  FreeListNodesFiltering filtering_;
+  FreeListNodesFilter* filter_;
   // Space iterator for iterating all the spaces.
   SpaceIterator* space_iterator_;
   // Object iterator for the space currently being iterated.

@@ -79,20 +79,32 @@ int Heap::amount_of_external_allocated_memory_at_last_global_gc_ = 0;
 // semispace_size_ should be a power of 2 and old_generation_size_ should be
 // a multiple of Page::kPageSize.
 #if defined(ANDROID)
-int Heap::max_semispace_size_  = 2*MB;
+static const int default_max_semispace_size_  = 2*MB;
 intptr_t Heap::max_old_generation_size_ = 192*MB;
 int Heap::initial_semispace_size_ = 128*KB;
 intptr_t Heap::code_range_size_ = 0;
+intptr_t Heap::max_executable_size_ = max_old_generation_size_;
 #elif defined(V8_TARGET_ARCH_X64)
-int Heap::max_semispace_size_  = 16*MB;
+static const int default_max_semispace_size_  = 16*MB;
 intptr_t Heap::max_old_generation_size_ = 1*GB;
 int Heap::initial_semispace_size_ = 1*MB;
 intptr_t Heap::code_range_size_ = 512*MB;
+intptr_t Heap::max_executable_size_ = 256*MB;
 #else
-int Heap::max_semispace_size_  = 8*MB;
+static const int default_max_semispace_size_  = 8*MB;
 intptr_t Heap::max_old_generation_size_ = 512*MB;
 int Heap::initial_semispace_size_ = 512*KB;
 intptr_t Heap::code_range_size_ = 0;
+intptr_t Heap::max_executable_size_ = 128*MB;
+#endif
+
+// Allow build-time customization of the max semispace size. Building
+// V8 with snapshots and a non-default max semispace size is much
+// easier if you can define it as part of the build environment.
+#if defined(V8_MAX_SEMISPACE_SIZE)
+int Heap::max_semispace_size_ = V8_MAX_SEMISPACE_SIZE;
+#else
+int Heap::max_semispace_size_ = default_max_semispace_size_;
 #endif
 
 // The snapshot semispace size will be the default semispace size if
@@ -170,6 +182,12 @@ intptr_t Heap::CommittedMemory() {
       map_space_->CommittedMemory() +
       cell_space_->CommittedMemory() +
       lo_space_->Size();
+}
+
+intptr_t Heap::CommittedMemoryExecutable() {
+  if (!HasBeenSetup()) return 0;
+
+  return MemoryAllocator::SizeExecutable();
 }
 
 
@@ -386,7 +404,7 @@ intptr_t Heap::SizeOfObjects() {
   intptr_t total = 0;
   AllSpaces spaces;
   for (Space* space = spaces.next(); space != NULL; space = spaces.next()) {
-    total += space->Size();
+    total += space->SizeOfObjects();
   }
   return total;
 }
@@ -4313,7 +4331,9 @@ static bool heap_configured = false;
 // TODO(1236194): Since the heap size is configurable on the command line
 // and through the API, we should gracefully handle the case that the heap
 // size is not big enough to fit all the initial objects.
-bool Heap::ConfigureHeap(int max_semispace_size, int max_old_gen_size) {
+bool Heap::ConfigureHeap(int max_semispace_size,
+                         int max_old_gen_size,
+                         int max_executable_size) {
   if (HasBeenSetup()) return false;
 
   if (max_semispace_size > 0) max_semispace_size_ = max_semispace_size;
@@ -4334,6 +4354,15 @@ bool Heap::ConfigureHeap(int max_semispace_size, int max_old_gen_size) {
   }
 
   if (max_old_gen_size > 0) max_old_generation_size_ = max_old_gen_size;
+  if (max_executable_size > 0) {
+    max_executable_size_ = RoundUp(max_executable_size, Page::kPageSize);
+  }
+
+  // The max executable size must be less than or equal to the max old
+  // generation size.
+  if (max_executable_size_ > max_old_generation_size_) {
+    max_executable_size_ = max_old_generation_size_;
+  }
 
   // The new space size must be a power of two to support single-bit testing
   // for containment.
@@ -4351,8 +4380,9 @@ bool Heap::ConfigureHeap(int max_semispace_size, int max_old_gen_size) {
 
 
 bool Heap::ConfigureHeapDefault() {
-  return ConfigureHeap(
-      FLAG_max_new_space_size * (KB / 2), FLAG_max_old_space_size * MB);
+  return ConfigureHeap(FLAG_max_new_space_size / 2 * KB,
+                       FLAG_max_old_space_size * MB,
+                       FLAG_max_executable_size * MB);
 }
 
 
@@ -4378,13 +4408,10 @@ void Heap::RecordStats(HeapStats* stats, bool take_snapshot) {
       MemoryAllocator::Size() + MemoryAllocator::Available();
   *stats->os_error = OS::GetLastError();
   if (take_snapshot) {
-    HeapIterator iterator;
+    HeapIterator iterator(HeapIterator::kPreciseFiltering);
     for (HeapObject* obj = iterator.next();
          obj != NULL;
          obj = iterator.next()) {
-      // Note: snapshot won't be precise because IsFreeListNode returns true
-      // for any bytearray.
-      if (FreeListNode::IsFreeListNode(obj)) continue;
       InstanceType type = obj->map()->instance_type();
       ASSERT(0 <= type && type <= LAST_TYPE);
       stats->objects_per_type[type]++;
@@ -4435,7 +4462,7 @@ bool Heap::Setup(bool create_heap_objects) {
   // space.  The chunk is double the size of the requested reserved
   // new space size to ensure that we can find a pair of semispaces that
   // are contiguous and aligned to their size.
-  if (!MemoryAllocator::Setup(MaxReserved())) return false;
+  if (!MemoryAllocator::Setup(MaxReserved(), MaxExecutableSize())) return false;
   void* chunk =
       MemoryAllocator::ReserveInitialChunk(4 * reserved_semispace_size_);
   if (chunk == NULL) return false;
@@ -4739,7 +4766,17 @@ OldSpace* OldSpaces::next() {
 }
 
 
-SpaceIterator::SpaceIterator() : current_space_(FIRST_SPACE), iterator_(NULL) {
+SpaceIterator::SpaceIterator()
+    : current_space_(FIRST_SPACE),
+      iterator_(NULL),
+      size_func_(NULL) {
+}
+
+
+SpaceIterator::SpaceIterator(HeapObjectCallback size_func)
+    : current_space_(FIRST_SPACE),
+      iterator_(NULL),
+      size_func_(size_func) {
 }
 
 
@@ -4777,25 +4814,25 @@ ObjectIterator* SpaceIterator::CreateIterator() {
 
   switch (current_space_) {
     case NEW_SPACE:
-      iterator_ = new SemiSpaceIterator(Heap::new_space());
+      iterator_ = new SemiSpaceIterator(Heap::new_space(), size_func_);
       break;
     case OLD_POINTER_SPACE:
-      iterator_ = new HeapObjectIterator(Heap::old_pointer_space());
+      iterator_ = new HeapObjectIterator(Heap::old_pointer_space(), size_func_);
       break;
     case OLD_DATA_SPACE:
-      iterator_ = new HeapObjectIterator(Heap::old_data_space());
+      iterator_ = new HeapObjectIterator(Heap::old_data_space(), size_func_);
       break;
     case CODE_SPACE:
-      iterator_ = new HeapObjectIterator(Heap::code_space());
+      iterator_ = new HeapObjectIterator(Heap::code_space(), size_func_);
       break;
     case MAP_SPACE:
-      iterator_ = new HeapObjectIterator(Heap::map_space());
+      iterator_ = new HeapObjectIterator(Heap::map_space(), size_func_);
       break;
     case CELL_SPACE:
-      iterator_ = new HeapObjectIterator(Heap::cell_space());
+      iterator_ = new HeapObjectIterator(Heap::cell_space(), size_func_);
       break;
     case LO_SPACE:
-      iterator_ = new LargeObjectIterator(Heap::lo_space());
+      iterator_ = new LargeObjectIterator(Heap::lo_space(), size_func_);
       break;
   }
 
@@ -4805,7 +4842,54 @@ ObjectIterator* SpaceIterator::CreateIterator() {
 }
 
 
-HeapIterator::HeapIterator() {
+class FreeListNodesFilter {
+ public:
+  FreeListNodesFilter() {
+    MarkFreeListNodes();
+  }
+
+  inline bool IsFreeListNode(HeapObject* object) {
+    if (object->IsMarked()) {
+      object->ClearMark();
+      return true;
+    } else {
+      return false;
+    }
+  }
+
+ private:
+  void MarkFreeListNodes() {
+    Heap::old_pointer_space()->MarkFreeListNodes();
+    Heap::old_data_space()->MarkFreeListNodes();
+    MarkCodeSpaceFreeListNodes();
+    Heap::map_space()->MarkFreeListNodes();
+    Heap::cell_space()->MarkFreeListNodes();
+  }
+
+  void MarkCodeSpaceFreeListNodes() {
+    // For code space, using FreeListNode::IsFreeListNode is OK.
+    HeapObjectIterator iter(Heap::code_space());
+    for (HeapObject* obj = iter.next_object();
+         obj != NULL;
+         obj = iter.next_object()) {
+      if (FreeListNode::IsFreeListNode(obj)) obj->SetMark();
+    }
+  }
+
+  AssertNoAllocation no_alloc;
+};
+
+
+HeapIterator::HeapIterator()
+    : filtering_(HeapIterator::kNoFiltering),
+      filter_(NULL) {
+  Init();
+}
+
+
+HeapIterator::HeapIterator(HeapIterator::FreeListNodesFiltering filtering)
+    : filtering_(filtering),
+      filter_(NULL) {
   Init();
 }
 
@@ -4817,20 +4901,44 @@ HeapIterator::~HeapIterator() {
 
 void HeapIterator::Init() {
   // Start the iteration.
-  space_iterator_ = new SpaceIterator();
+  if (filtering_ == kPreciseFiltering) {
+    filter_ = new FreeListNodesFilter;
+    space_iterator_ =
+        new SpaceIterator(MarkCompactCollector::SizeOfMarkedObject);
+  } else {
+    space_iterator_ = new SpaceIterator;
+  }
   object_iterator_ = space_iterator_->next();
 }
 
 
 void HeapIterator::Shutdown() {
+#ifdef DEBUG
+  // Assert that in precise mode we have iterated through all
+  // objects. Otherwise, heap will be left in an inconsistent state.
+  if (filtering_ == kPreciseFiltering) {
+    ASSERT(object_iterator_ == NULL);
+  }
+#endif
   // Make sure the last iterator is deallocated.
   delete space_iterator_;
   space_iterator_ = NULL;
   object_iterator_ = NULL;
+  delete filter_;
+  filter_ = NULL;
 }
 
 
 HeapObject* HeapIterator::next() {
+  if (filter_ == NULL) return NextObject();
+
+  HeapObject* obj = NextObject();
+  while (obj != NULL && filter_->IsFreeListNode(obj)) obj = NextObject();
+  return obj;
+}
+
+
+HeapObject* HeapIterator::NextObject() {
   // No iterator means we are done.
   if (object_iterator_ == NULL) return NULL;
 

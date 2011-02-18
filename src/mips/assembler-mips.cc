@@ -1769,6 +1769,29 @@ void Assembler::trunc_w_d(FPURegister fd, FPURegister fs) {
   GenInstrRegister(COP1, D, f0, fs, fd, TRUNC_W_D);
 }
 
+void Assembler::round_w_s(FPURegister fd, FPURegister fs) {
+  GenInstrRegister(COP1, S, f0, fs, fd, ROUND_W_S);
+}
+
+void Assembler::round_w_d(FPURegister fd, FPURegister fs) {
+  GenInstrRegister(COP1, D, f0, fs, fd, ROUND_W_D);
+}
+
+void Assembler::floor_w_s(FPURegister fd, FPURegister fs) {
+  GenInstrRegister(COP1, S, f0, fs, fd, FLOOR_W_S);
+}
+
+void Assembler::floor_w_d(FPURegister fd, FPURegister fs) {
+  GenInstrRegister(COP1, D, f0, fs, fd, FLOOR_W_D);
+}
+
+void Assembler::ceil_w_s(FPURegister fd, FPURegister fs) {
+  GenInstrRegister(COP1, S, f0, fs, fd, CEIL_W_S);
+}
+
+void Assembler::ceil_w_d(FPURegister fd, FPURegister fs) {
+  GenInstrRegister(COP1, D, f0, fs, fd, CEIL_W_D);
+}
 
 void Assembler::cvt_l_s(FPURegister fd, FPURegister fs) {
   if (mips32r2) {
@@ -1803,6 +1826,30 @@ void Assembler::trunc_l_d(FPURegister fd, FPURegister fs) {
   } else {
     UNIMPLEMENTED_MIPS();
   }
+}
+
+void Assembler::round_l_s(FPURegister fd, FPURegister fs) {
+  GenInstrRegister(COP1, S, f0, fs, fd, ROUND_L_S);
+}
+
+void Assembler::round_l_d(FPURegister fd, FPURegister fs) {
+  GenInstrRegister(COP1, D, f0, fs, fd, ROUND_L_D);
+}
+
+void Assembler::floor_l_s(FPURegister fd, FPURegister fs) {
+  GenInstrRegister(COP1, S, f0, fs, fd, FLOOR_L_S);
+}
+
+void Assembler::floor_l_d(FPURegister fd, FPURegister fs) {
+  GenInstrRegister(COP1, D, f0, fs, fd, FLOOR_L_D);
+}
+
+void Assembler::ceil_l_s(FPURegister fd, FPURegister fs) {
+  GenInstrRegister(COP1, S, f0, fs, fd, CEIL_L_S);
+}
+
+void Assembler::ceil_l_d(FPURegister fd, FPURegister fs) {
+  GenInstrRegister(COP1, D, f0, fs, fd, CEIL_L_D);
 }
 
 

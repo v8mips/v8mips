@@ -53,10 +53,10 @@
 
 // Basic includes
 #include "../include/v8.h"
-#include "globals.h"
+#include "v8globals.h"
 #include "checks.h"
 #include "allocation.h"
-#include "utils.h"
+#include "v8utils.h"
 #include "flags.h"
 
 // Objects & heap

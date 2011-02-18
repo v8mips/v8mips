@@ -64,7 +64,6 @@ bool HaveSameSign(int32_t a, int32_t b) {
   return ((a ^ b) >= 0);
 }
 
-
 // This macro provides a platform independent use of sscanf. The reason for
 // SScanF not being implemented in a platform independent was through
 // ::v8::internal::OS in the same way as SNPrintF is that the Windows C Run-Time
@@ -1529,6 +1528,12 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
             case CVT_L_S:
             case TRUNC_W_S:
             case TRUNC_L_S:
+            case ROUND_W_S:
+            case ROUND_L_S:
+            case FLOOR_W_S:
+            case FLOOR_L_S:
+            case CEIL_W_S:
+            case CEIL_L_S:
             case CVT_PS_S:
               UNIMPLEMENTED_MIPS();
               break;
@@ -1593,8 +1598,27 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
               // Warning: does not follow rouding modes, just truncates.
               set_fpu_register(fd_reg, static_cast<int32_t>(fs));
               break;
-            case TRUNC_W_D:  // Truncate double to word.
+            case TRUNC_W_D:  // Truncate double to word (round toward 0).
               set_fpu_register(fd_reg, static_cast<int32_t>(fs));
+              break;
+            case ROUND_W_D:  // Round double to word.
+              {
+                double rounded = fs > 0 ? floor (fs + 0.5) : ceil(fs - 0.5);
+                int32_t result = static_cast<int32_t>(rounded);
+                set_fpu_register(fd_reg, result);
+              }
+              break;
+            case FLOOR_W_D:  // Round double to word toward negative infinity.
+              {
+                int32_t result = static_cast<int32_t>(floor(fs));
+                set_fpu_register(fd_reg, result);
+              }
+              break;
+            case CEIL_W_D:  // Round double to word toward positive infinity.
+              {
+                int32_t result = static_cast<int32_t>(ceil(fs));
+                set_fpu_register(fd_reg, result);
+              }
               break;
             case CVT_S_D:  // Convert double to float (single).
               set_fpu_register_float(fd_reg, static_cast<float>(fs));
@@ -1613,6 +1637,37 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
             case TRUNC_L_D:
               if (mips32r2) {
                 i64 = static_cast<int64_t>(fs);
+                set_fpu_register(fd_reg, i64 & 0xffffffff);
+                set_fpu_register(fd_reg + 1, i64 >> 32);
+              } else {
+                // Not allowed on MIPS32 Release 1
+                UNIMPLEMENTED_MIPS();
+              }
+              break;
+            case ROUND_L_D:
+              if (mips32r2) {
+                double rounded = fs > 0 ? floor (fs + 0.5) : ceil(fs - 0.5);
+                i64 = static_cast<int64_t>(rounded);
+                set_fpu_register(fd_reg, i64 & 0xffffffff);
+                set_fpu_register(fd_reg + 1, i64 >> 32);
+              } else {
+                // Not allowed on MIPS32 Release 1
+                UNIMPLEMENTED_MIPS();
+              }
+              break;
+            case FLOOR_L_D:
+              if (mips32r2) {
+                i64 = static_cast<int64_t>(floor(fs));
+                set_fpu_register(fd_reg, i64 & 0xffffffff);
+                set_fpu_register(fd_reg + 1, i64 >> 32);
+              } else {
+                // Not allowed on MIPS32 Release 1
+                UNIMPLEMENTED_MIPS();
+              }
+              break;
+            case CEIL_L_D:
+              if (mips32r2) {
+                i64 = static_cast<int64_t>(ceil(fs));
                 set_fpu_register(fd_reg, i64 & 0xffffffff);
                 set_fpu_register(fd_reg + 1, i64 >> 32);
               } else {

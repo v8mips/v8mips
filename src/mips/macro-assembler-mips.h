@@ -881,6 +881,16 @@ class CodePatcher {
 // -----------------------------------------------------------------------------
 // Static helper functions.
 
+static MemOperand ContextOperand(Register context, int index) {
+  return MemOperand(context, Context::SlotOffset(index));
+}
+
+
+static inline MemOperand GlobalObjectOperand()  {
+  return ContextOperand(cp, Context::GLOBAL_INDEX);
+}
+
+
 // Generate a MemOperand for loading a field from an object.
 static inline MemOperand FieldMemOperand(Register object, int offset) {
   return MemOperand(object, offset - kHeapObjectTag);

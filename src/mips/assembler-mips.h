@@ -590,11 +590,23 @@ class Assembler : public Malloced {
   void cvt_w_d(FPURegister fd, FPURegister fs);
   void trunc_w_s(FPURegister fd, FPURegister fs);
   void trunc_w_d(FPURegister fd, FPURegister fs);
+  void round_w_s(FPURegister fd, FPURegister fs);
+  void round_w_d(FPURegister fd, FPURegister fs);
+  void floor_w_s(FPURegister fd, FPURegister fs);
+  void floor_w_d(FPURegister fd, FPURegister fs);
+  void ceil_w_s(FPURegister fd, FPURegister fs);
+  void ceil_w_d(FPURegister fd, FPURegister fs);
 
   void cvt_l_s(FPURegister fd, FPURegister fs);
   void cvt_l_d(FPURegister fd, FPURegister fs);
   void trunc_l_s(FPURegister fd, FPURegister fs);
   void trunc_l_d(FPURegister fd, FPURegister fs);
+  void round_l_s(FPURegister fd, FPURegister fs);
+  void round_l_d(FPURegister fd, FPURegister fs);
+  void floor_l_s(FPURegister fd, FPURegister fs);
+  void floor_l_d(FPURegister fd, FPURegister fs);
+  void ceil_l_s(FPURegister fd, FPURegister fs);
+  void ceil_l_d(FPURegister fd, FPURegister fs);
 
   void cvt_s_w(FPURegister fd, FPURegister fs);
   void cvt_s_l(FPURegister fd, FPURegister fs);

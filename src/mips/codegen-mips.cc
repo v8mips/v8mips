@@ -44,6 +44,7 @@
 #include "register-allocator-inl.h"
 #include "runtime.h"
 #include "scopes.h"
+#include "stub-cache.h"
 #include "virtual-frame-inl.h"
 #include "virtual-frame-mips-inl.h"
 
@@ -550,7 +551,7 @@ void CodeGenerator::Load(Expression* x) {
 
 void CodeGenerator::LoadGlobal() {
   Register reg = frame_->GetTOSRegister();
-  __ lw(reg, GlobalObject());
+  __ lw(reg, GlobalObjectOperand());
   frame_->EmitPush(reg);
 }
 
@@ -4249,7 +4250,7 @@ void CodeGenerator::VisitCall(Call* node) {
     // Setup the receiver register and call the IC initialization code.
     __ li(a2, Operand(var->name()));
     InLoopFlag in_loop = loop_nesting() > 0 ? IN_LOOP : NOT_IN_LOOP;
-    Handle<Code> stub = ComputeCallInitialize(arg_count, in_loop);
+    Handle<Code> stub = StubCache::ComputeCallInitialize(arg_count, in_loop);
     CodeForSourcePosition(node->position());
     frame_->CallCodeObject(stub, RelocInfo::CODE_TARGET_CONTEXT,
                            arg_count + 1);
@@ -4347,7 +4348,8 @@ void CodeGenerator::VisitCall(Call* node) {
         // Set the name register and call the IC initialization code.
         __ li(a2, Operand(name));
         InLoopFlag in_loop = loop_nesting() > 0 ? IN_LOOP : NOT_IN_LOOP;
-        Handle<Code> stub = ComputeCallInitialize(arg_count, in_loop);
+        Handle<Code> stub =
+            StubCache::ComputeCallInitialize(arg_count, in_loop);
         CodeForSourcePosition(node->position());
         frame_->CallCodeObject(stub, RelocInfo::CODE_TARGET, arg_count + 1);
         __ lw(cp, frame_->Context());
@@ -4383,7 +4385,8 @@ void CodeGenerator::VisitCall(Call* node) {
         frame_->EmitPop(a2);  // Function name.
 
         InLoopFlag in_loop = loop_nesting() > 0 ? IN_LOOP : NOT_IN_LOOP;
-        Handle<Code> stub = ComputeKeyedCallInitialize(arg_count, in_loop);
+        Handle<Code> stub =
+            StubCache::ComputeKeyedCallInitialize(arg_count, in_loop);
         CodeForSourcePosition(node->position());
         frame_->CallCodeObject(stub, RelocInfo::CODE_TARGET, arg_count + 1);
         __ lw(cp, frame_->Context());
@@ -5177,11 +5180,11 @@ class DeferredIsStringWrapperSafeForDefaultValueOf : public DeferredCode {
     __ BranchOnSmi(scratch1_, &false_result);
     __ lw(scratch1_, FieldMemOperand(scratch1_, HeapObject::kMapOffset));
     __ lw(scratch2_,
-          CodeGenerator::ContextOperand(cp, Context::GLOBAL_INDEX));
+          ContextOperand(cp, Context::GLOBAL_INDEX));
     __ lw(scratch2_,
           FieldMemOperand(scratch2_, GlobalObject::kGlobalContextOffset));
     __ lw(scratch2_,
-          CodeGenerator::ContextOperand(
+          ContextOperand(
               scratch2_, Context::STRING_FUNCTION_PROTOTYPE_MAP_INDEX));
     __ Branch(&false_result, ne, scratch1_, Operand(scratch2_));
 
@@ -5892,7 +5895,7 @@ void CodeGenerator::VisitCallRuntime(CallRuntime* node) {
     // Prepare stack for calling JS runtime function.
     // Push the builtins object found in the current global object.
     Register scratch = VirtualFrame::scratch0();
-    __ lw(scratch, GlobalObject());
+    __ lw(scratch, GlobalObjectOperand());
     Register builtins = frame_->GetTOSRegister();
     __ lw(builtins, FieldMemOperand(scratch, GlobalObject::kBuiltinsOffset));
     frame_->EmitPush(builtins);
@@ -5910,7 +5913,8 @@ void CodeGenerator::VisitCallRuntime(CallRuntime* node) {
     // Call the JS runtime function.
     __ li(a2, Operand(node->name()));
     InLoopFlag in_loop = loop_nesting() > 0 ? IN_LOOP : NOT_IN_LOOP;
-    Handle<Code> stub = ComputeCallInitialize(arg_count, in_loop);
+    Handle<Code> stub =
+        StubCache::ComputeCallInitialize(arg_count, in_loop);
     frame_->CallCodeObject(stub, RelocInfo::CODE_TARGET, arg_count + 1);
     __ lw(cp, frame_->Context());
     frame_->EmitPush(v0);
