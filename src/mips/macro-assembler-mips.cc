@@ -815,6 +815,8 @@ void MacroAssembler::Trunc_uw_d(FPURegister fd, Register rs) {
 // Tries to get a signed int32 out of a double precision floating point heap
 // number. Rounds towards 0. Branch to 'not_int32' if the double is out of the
 // 32bits signed integer range.
+// This method implementation differs from the ARM version for performance
+// reasons.
 void MacroAssembler::ConvertToInt32(Register source,
                                     Register dest,
                                     Register scratch,
