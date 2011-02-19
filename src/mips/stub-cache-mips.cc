@@ -1656,10 +1656,134 @@ MaybeObject* CallStubCompiler::CompileMathFloorCall(Object* object,
                                                     JSGlobalPropertyCell* cell,
                                                     JSFunction* function,
                                                     String* name) {
-  // TODO(872): implement this.
-  return Heap::undefined_value();
-}
+  // ----------- S t a t e -------------
+  //  -- a2                     : function name
+  //  -- ra                     : return address
+  //  -- sp[(argc - n - 1) * 4] : arg[n] (zero-based)
+  //  -- ...
+  //  -- sp[argc * 4]           : receiver
+  // -----------------------------------
 
+  if (!CpuFeatures::IsSupported(FPU)) return Heap::undefined_value();
+  CpuFeatures::Scope scope_vfp3(FPU);
+
+  const int argc = arguments().immediate();
+
+  // If the object is not a JSObject or we got an unexpected number of
+  // arguments, bail out to the regular call.
+  if (!object->IsJSObject() || argc != 1) return Heap::undefined_value();
+
+  Label miss, slow;
+  GenerateNameCheck(name, &miss);
+
+  if (cell == NULL) {
+    __ lw(a1, MemOperand(sp, 1 * kPointerSize));
+
+    STATIC_ASSERT(kSmiTag == 0);
+    __ BranchOnSmi(a1, &miss);
+
+    CheckPrototypes(JSObject::cast(object), a1, holder, a0, a3, t0, name,
+                    &miss);
+  } else {
+    ASSERT(cell->value() == function);
+    GenerateGlobalReceiverCheck(JSObject::cast(object), holder, name, &miss);
+    GenerateLoadFunctionFromCell(cell, function, &miss);
+  }
+
+  // Load the (only) argument into v0.
+  __ lw(v0, MemOperand(sp, 0 * kPointerSize));
+
+  // If the argument is a smi, just return.
+  STATIC_ASSERT(kSmiTag == 0);
+  __ And(t0, v0, Operand(kSmiTagMask));
+  __ Drop(argc + 1, eq, t0, Operand(zero_reg));
+  __ Ret(eq, t0, Operand(zero_reg));
+
+  __ CheckMap(v0, a1, Heap::kHeapNumberMapRootIndex, &slow, true);
+
+  Label wont_fit_smi, no_fpu_error, restore_fcsr_and_return;
+
+  // If fpu is enabled, we use the floor instruction.
+
+  // Load the HeapNumber value.
+  __ ldc1(f0, FieldMemOperand(v0, HeapNumber::kValueOffset));
+
+  // Backup FCSR.
+  __ cfc1(a3, FCSR);
+  // Clearing FCSR clears the exception mask with no side-effects.
+  __ ctc1(zero_reg, FCSR);
+  // Convert the argument to an integer.
+  __ floor_w_d(f0, f0);
+
+  // Start checking for special cases.
+  // Get the argument exponent and clear the sign bit.
+  __ lw(t1, FieldMemOperand(v0, HeapNumber::kValueOffset + kPointerSize));
+  __ And(t2, t1, Operand(~HeapNumber::kSignMask));
+  __ srl(t2, t2, HeapNumber::kMantissaBitsInTopWord);
+
+  // Retrieve FCSR and check for fpu errors.
+  __ cfc1(t5, FCSR);
+  __ srl(t5, t5, kFCSRFlagShift);
+  // Flag 1 marks an inaccurate but still good result so we ignore it.
+  __ And(t5, t5, Operand(kFCSRFlagMask ^ 1));
+  __ Branch(&no_fpu_error, eq, t5, Operand(zero_reg));
+
+  // Check for NaN, Infinity, and -Infinity.
+  // They are invariant through a Math.Floor call, so just
+  // return the original argument.
+  __ Subu(t3, t2, Operand(HeapNumber::kExponentMask
+        >> HeapNumber::kMantissaBitsInTopWord));
+  __ Branch(&restore_fcsr_and_return, eq, t3, Operand(zero_reg));
+  // We had an overflow or underflow in the conversion. Check if we
+  // have a big exponent.
+  // If greater or equal, the argument is already round and in v0.
+  __ Branch(&restore_fcsr_and_return, ge, t3,
+      Operand(HeapNumber::kMantissaBits));
+  __ Branch(&slow);
+
+  __ bind(&no_fpu_error);
+  // Move the result back to v0.
+  __ mfc1(v0, f0);
+  // Check if the result fits into a smi.
+  __ Addu(a1, v0, Operand(0x40000000));
+  __ Branch(&wont_fit_smi, lt, a1, Operand(zero_reg));
+  // Tag the result.
+  STATIC_ASSERT(kSmiTag == 0);
+  __ sll(v0, v0, kSmiTagSize);
+
+  // Check for -0.
+  __ Branch(&restore_fcsr_and_return, ne, v0, Operand(zero_reg));
+  // t1 already holds the HeapNumber exponent.
+  __ And(t0, t1, Operand(HeapNumber::kSignMask));
+  // If our HeapNumber is negative it was -0, so load its address and return.
+  // Else v0 is loaded with 0, so we can also just return.
+  __ Branch(&restore_fcsr_and_return, eq, t0, Operand(zero_reg));
+  __ lw(v0, MemOperand(sp, 0 * kPointerSize));
+
+  __ bind(&restore_fcsr_and_return);
+  // Restore FCSR and return.
+  __ ctc1(a3, FCSR);
+
+  __ Drop(argc + 1);
+  __ Ret();
+
+  __ bind(&wont_fit_smi);
+  __ bind(&slow);
+  // Restore FCSR and fall to slow case.
+  __ ctc1(a3, FCSR);
+
+  // Tail call the full function. We do not have to patch the receiver
+  // because the function makes no use of it.
+  __ InvokeFunction(function, arguments(), JUMP_FUNCTION);
+
+  __ bind(&miss);
+  // r2: function name.
+  MaybeObject* obj = GenerateMissBranch();
+  if (obj->IsFailure()) return obj;
+
+  // Return the generated code.
+  return (cell == NULL) ? GetCode(function) : GetCode(NORMAL, name);
+}
 
 MaybeObject* CallStubCompiler::CompileMathAbsCall(Object* object,
                                                   JSObject* holder,

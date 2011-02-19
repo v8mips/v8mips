@@ -206,6 +206,10 @@ struct FPUControlRegister {
 extern const FPUControlRegister no_fpucreg;
 extern const FPUControlRegister FCSR;
 
+// FCSR constants.
+static const uint32_t kFCSRFlagMask = (1 << 6) - 1;
+static const uint32_t kFCSRFlagShift = 2;
+
 // Returns the equivalent of !cc.
 // Negation of the default no_condition (-1) results in a non-default
 // no_condition value (-2). As long as tests for no_condition check
