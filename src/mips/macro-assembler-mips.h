@@ -176,7 +176,10 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
 
   // Emit code to discard a non-negative number of pointer-sized elements
   // from the stack, clobbering only the sp register.
-  void Drop(int count, Condition cond = cc_always);
+  void Drop(int count,
+            Condition cond = cc_always,
+            Register reg = no_reg,
+            const Operand& op = Operand(no_reg));
 
   // Swap two registers.  If the scratch register is omitted then a slightly
   // less efficient form using xor instead of mov is emitted.

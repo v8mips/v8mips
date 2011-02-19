@@ -1734,10 +1734,26 @@ void MacroAssembler::StackLimitCheck(Label* on_stack_overflow) {
 }
 
 
-void MacroAssembler::Drop(int count, Condition cond) {
-  ASSERT(cond == al);
+void MacroAssembler::Drop(int count,
+                          Condition cond,
+                          Register reg,
+                          const Operand& op) {
+  if (count <= 0) {
+    return;
+  }
+
+  Label skip;
+
+  if (cond != al) {
+    Branch(&skip, NegateCondition(cond), reg, op);
+  }
+
   if (count > 0) {
     addiu(sp, sp, count * kPointerSize);
+  }
+
+  if (cond != al) {
+    bind(&skip);
   }
 }
 
