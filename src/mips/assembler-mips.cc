@@ -150,6 +150,9 @@ const FPURegister f29 = { 29 };
 const FPURegister f30 = { 30 };
 const FPURegister f31 = { 31 };
 
+const FPUControlRegister no_fpucreg = { -1 };
+const FPUControlRegister FCSR = { kFCSRRegister };
+
 int ToNumber(Register reg) {
   ASSERT(reg.is_valid());
   const int kNumbers[] = {
@@ -745,6 +748,16 @@ void Assembler::GenInstrRegister(Opcode opcode,
   emit(instr);
 }
 
+void Assembler::GenInstrRegister(Opcode opcode,
+                                 SecondaryField fmt,
+                                 Register rt,
+                                 FPUControlRegister fs,
+                                 SecondaryField func) {
+  ASSERT(fs.is_valid() && rt.is_valid());
+  Instr instr = opcode | fmt | (rt.code() << kRtShift)
+      | (fs.code() << kFsShift) | func;
+  emit(instr);
+}
 
 // Instructions with immediate value.
 // Registers are in the order of the instruction encoding, from left to right.
@@ -1705,6 +1718,14 @@ void Assembler::mfc1(Register rt, FPURegister fs) {
   GenInstrRegister(COP1, MFC1, rt, fs, f0);
 }
 
+void Assembler::ctc1(Register rt, FPUControlRegister fs) {
+  GenInstrRegister(COP1, CTC1, rt, fs);
+}
+
+
+void Assembler::cfc1(Register rt, FPUControlRegister fs) {
+  GenInstrRegister(COP1, CFC1, rt, fs);
+}
 
 // Arithmetic.
 

@@ -69,6 +69,11 @@ static const int kPCRegister = 34;
 static const int kNumFPURegisters = 32;
 static const int kInvalidFPURegister = -1;
 
+// FPU (coprocessor 1) control registers. Currently only FCSR is implemented.
+static const int kFCSRRegister = 31;
+static const int kInvalidFPUControlRegister = -1;
+static const uint32_t kFPUInvalidResult = (uint32_t)(1 << 31) - 1;
+
 // Helper functions for converting between register numbers and names.
 class Registers {
  public:
@@ -289,8 +294,10 @@ enum SecondaryField {
 
   // COP1 Encoding of rs Field.
   MFC1      =   ((0 << 3) + 0) << 21,
+  CFC1      =   ((0 << 3) + 2) << 21,
   MFHC1     =   ((0 << 3) + 3) << 21,
   MTC1      =   ((0 << 3) + 4) << 21,
+  CTC1      =   ((0 << 3) + 6) << 21,
   MTHC1     =   ((0 << 3) + 7) << 21,
   BC1       =   ((1 << 3) + 0) << 21,
   S         =   ((2 << 3) + 0) << 21,

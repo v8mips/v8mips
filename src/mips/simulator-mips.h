@@ -189,8 +189,9 @@ class Simulator {
   int64_t get_fpu_register_long(int fpureg) const;
   float get_fpu_register_float(int fpureg) const;
   double get_fpu_register_double(int fpureg) const;
-  void set_fpu_ccr_bit(uint32_t cc, bool value);
-  bool test_fpu_ccr_bit(uint32_t cc);
+  void set_fcsr_bit(uint32_t cc, bool value);
+  bool test_fcsr_bit(uint32_t cc);
+  bool set_fcsr_round_error(double original, double rounded);
 
   // Special case of set_register and get_register to access the raw PC value.
   void set_pc(int32_t value);
@@ -314,8 +315,8 @@ class Simulator {
   int32_t registers_[kNumSimuRegisters];
   // Coprocessor Registers.
   int32_t FPUregisters_[kNumFPURegisters];
-  // FPU Condition Code register.
-  int32_t FPUccr_;
+  // FPU control register.
+  uint32_t FCSR_;
 
   // Simulator support.
   char* stack_;

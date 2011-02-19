@@ -465,6 +465,13 @@ void Decoder::DecodeTypeRegister(Instruction* instr) {
         case MTC1:
           Format(instr, "mtc1   'rt, 'fs");
           break;
+        // These are called "fs" too, although they are not FPU registers.
+        case CTC1:
+          Format(instr, "ctc1   'rt, 'fs");
+          break;
+        case CFC1:
+          Format(instr, "cfc1   'rt, 'fs");
+          break;
         case MTHC1:
           Format(instr, "mthc1  'rt, 'fs");
           break;

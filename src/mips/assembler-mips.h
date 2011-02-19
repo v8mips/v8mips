@@ -182,6 +182,29 @@ extern const FPURegister f29;
 extern const FPURegister f30;
 extern const FPURegister f31;
 
+// FPU (coprocessor 1) control registers.
+// Currently only FCSR (#31) is implemented.
+struct FPUControlRegister {
+  bool is_valid() const { return code_ == kFCSRRegister; }
+  bool is(FPUControlRegister creg) const { return code_ == creg.code_; }
+  int code() const {
+    ASSERT(is_valid());
+    return code_;
+  }
+  int bit() const {
+    ASSERT(is_valid());
+    return 1 << code_;
+  }
+  void setcode(int f) {
+    code_ = f;
+    ASSERT(is_valid());
+  }
+  // Unfortunately we can't make this private in a struct.
+  int code_;
+};
+
+extern const FPUControlRegister no_fpucreg;
+extern const FPUControlRegister FCSR;
 
 // Returns the equivalent of !cc.
 // Negation of the default no_condition (-1) results in a non-default
@@ -575,6 +598,9 @@ class Assembler : public Malloced {
   void mtc1(Register rt, FPURegister fs);
   void mfc1(Register rt, FPURegister fs);
 
+  void ctc1(Register rt, FPUControlRegister fs);
+  void cfc1(Register rt, FPUControlRegister fs);
+
   // Arithmetic.
   void add_d(FPURegister fd, FPURegister fs, FPURegister ft);
   void sub_d(FPURegister fd, FPURegister fs, FPURegister ft);
@@ -831,6 +857,12 @@ class Assembler : public Malloced {
                         Register rt,
                         FPURegister fs,
                         FPURegister fd,
+                        SecondaryField func = NULLSF);
+
+  void GenInstrRegister(Opcode opcode,
+                        SecondaryField fmt,
+                        Register rt,
+                        FPUControlRegister fs,
                         SecondaryField func = NULLSF);
 
 

@@ -1142,82 +1142,99 @@ TEST(MIPS13) {
 }
 
 TEST(MIPS14) {
-  // Test round, floor, ceil.
+  // Test round, floor, ceil, trunc, cvt.
   InitializeVM();
   v8::HandleScope scope;
+
+#define ROUND_STRUCT_ELEMENT(x) \
+  int32_t x##_up_out; \
+  int32_t x##_down_out; \
+  int32_t neg_##x##_up_out; \
+  int32_t neg_##x##_down_out; \
+  int32_t x##_err1_out; \
+  int32_t x##_err2_out; \
+  int32_t x##_err3_out; \
+  int32_t x##_err4_out; \
+  int32_t x##_invalid_result;
 
   typedef struct {
     double round_up_in;
     double round_down_in;
     double neg_round_up_in;
     double neg_round_down_in;
+    double err1_in;
+    double err2_in;
+    double err3_in;
+    double err4_in;
 
-    int32_t round_up_out;
-    int32_t round_down_out;
-    int32_t neg_round_up_out;
-    int32_t neg_round_down_out;
-
-    int32_t floor_up_out;
-    int32_t floor_down_out;
-    int32_t neg_floor_up_out;
-    int32_t neg_floor_down_out;
-
-    int32_t ceil_up_out;
-    int32_t ceil_down_out;
-    int32_t neg_ceil_up_out;
-    int32_t neg_ceil_down_out;
+    ROUND_STRUCT_ELEMENT(round)
+    ROUND_STRUCT_ELEMENT(floor)
+    ROUND_STRUCT_ELEMENT(ceil)
+    ROUND_STRUCT_ELEMENT(trunc)
+    ROUND_STRUCT_ELEMENT(cvt)
   } T;
   T t;
 
+#undef ROUND_STRUCT_ELEMENT
+
   MacroAssembler assm(NULL, 0);
 
-  __ ldc1(f0, MemOperand(a0, OFFSET_OF(T, round_up_in)));
-  __ round_w_d(f0, f0);
-  __ swc1(f0, MemOperand(a0, OFFSET_OF(T, round_up_out)));
+  // Save FCSR.
+  __ cfc1(a1, FCSR);
+  // Disable FPU exceptions.
+  __ ctc1(zero_reg, FCSR);
+#define RUN_ROUND_TEST(x) \
+  __ ldc1(f0, MemOperand(a0, OFFSET_OF(T, round_up_in))); \
+  __ x##_w_d(f0, f0); \
+  __ swc1(f0, MemOperand(a0, OFFSET_OF(T, x##_up_out))); \
+  \
+  __ ldc1(f0, MemOperand(a0, OFFSET_OF(T, round_down_in))); \
+  __ x##_w_d(f0, f0); \
+  __ swc1(f0, MemOperand(a0, OFFSET_OF(T, x##_down_out))); \
+  \
+  __ ldc1(f0, MemOperand(a0, OFFSET_OF(T, neg_round_up_in))); \
+  __ x##_w_d(f0, f0); \
+  __ swc1(f0, MemOperand(a0, OFFSET_OF(T, neg_##x##_up_out))); \
+  \
+  __ ldc1(f0, MemOperand(a0, OFFSET_OF(T, neg_round_down_in))); \
+  __ x##_w_d(f0, f0); \
+  __ swc1(f0, MemOperand(a0, OFFSET_OF(T, neg_##x##_down_out))); \
+  \
+  __ ldc1(f0, MemOperand(a0, OFFSET_OF(T, err1_in))); \
+  __ ctc1(zero_reg, FCSR); \
+  __ x##_w_d(f0, f0); \
+  __ cfc1(a2, FCSR); \
+  __ sw(a2, MemOperand(a0, OFFSET_OF(T, x##_err1_out))); \
+  \
+  __ ldc1(f0, MemOperand(a0, OFFSET_OF(T, err2_in))); \
+  __ ctc1(zero_reg, FCSR); \
+  __ x##_w_d(f0, f0); \
+  __ cfc1(a2, FCSR); \
+  __ sw(a2, MemOperand(a0, OFFSET_OF(T, x##_err2_out))); \
+  \
+  __ ldc1(f0, MemOperand(a0, OFFSET_OF(T, err3_in))); \
+  __ ctc1(zero_reg, FCSR); \
+  __ x##_w_d(f0, f0); \
+  __ cfc1(a2, FCSR); \
+  __ sw(a2, MemOperand(a0, OFFSET_OF(T, x##_err3_out))); \
+  \
+  __ ldc1(f0, MemOperand(a0, OFFSET_OF(T, err4_in))); \
+  __ ctc1(zero_reg, FCSR); \
+  __ x##_w_d(f0, f0); \
+  __ cfc1(a2, FCSR); \
+  __ sw(a2, MemOperand(a0, OFFSET_OF(T, x##_err4_out))); \
+  __ swc1(f0, MemOperand(a0, OFFSET_OF(T, x##_invalid_result)));
 
-  __ ldc1(f0, MemOperand(a0, OFFSET_OF(T, round_down_in)));
-  __ round_w_d(f0, f0);
-  __ swc1(f0, MemOperand(a0, OFFSET_OF(T, round_down_out)));
+  RUN_ROUND_TEST(round)
+  RUN_ROUND_TEST(floor)
+  RUN_ROUND_TEST(ceil)
+  RUN_ROUND_TEST(trunc)
+  RUN_ROUND_TEST(cvt)
 
-  __ ldc1(f0, MemOperand(a0, OFFSET_OF(T, neg_round_up_in)));
-  __ round_w_d(f0, f0);
-  __ swc1(f0, MemOperand(a0, OFFSET_OF(T, neg_round_up_out)));
+  // Restore FCSR.
+  __ ctc1(a1, FCSR);
 
-  __ ldc1(f0, MemOperand(a0, OFFSET_OF(T, neg_round_down_in)));
-  __ round_w_d(f0, f0);
-  __ swc1(f0, MemOperand(a0, OFFSET_OF(T, neg_round_down_out)));
-
-  __ ldc1(f0, MemOperand(a0, OFFSET_OF(T, round_up_in)));
-  __ floor_w_d(f0, f0);
-  __ swc1(f0, MemOperand(a0, OFFSET_OF(T, floor_up_out)));
-
-  __ ldc1(f0, MemOperand(a0, OFFSET_OF(T, round_down_in)));
-  __ floor_w_d(f0, f0);
-  __ swc1(f0, MemOperand(a0, OFFSET_OF(T, floor_down_out)));
-
-  __ ldc1(f0, MemOperand(a0, OFFSET_OF(T, neg_round_up_in)));
-  __ floor_w_d(f0, f0);
-  __ swc1(f0, MemOperand(a0, OFFSET_OF(T, neg_floor_up_out)));
-
-  __ ldc1(f0, MemOperand(a0, OFFSET_OF(T, neg_round_down_in)));
-  __ floor_w_d(f0, f0);
-  __ swc1(f0, MemOperand(a0, OFFSET_OF(T, neg_floor_down_out)));
-
-  __ ldc1(f0, MemOperand(a0, OFFSET_OF(T, round_up_in)));
-  __ ceil_w_d(f0, f0);
-  __ swc1(f0, MemOperand(a0, OFFSET_OF(T, ceil_up_out)));
-
-  __ ldc1(f0, MemOperand(a0, OFFSET_OF(T, round_down_in)));
-  __ ceil_w_d(f0, f0);
-  __ swc1(f0, MemOperand(a0, OFFSET_OF(T, ceil_down_out)));
-
-  __ ldc1(f0, MemOperand(a0, OFFSET_OF(T, neg_round_up_in)));
-  __ ceil_w_d(f0, f0);
-  __ swc1(f0, MemOperand(a0, OFFSET_OF(T, neg_ceil_up_out)));
-
-  __ ldc1(f0, MemOperand(a0, OFFSET_OF(T, neg_round_down_in)));
-  __ ceil_w_d(f0, f0);
-  __ swc1(f0, MemOperand(a0, OFFSET_OF(T, neg_ceil_down_out)));
+#undef RUN_ROUND_TEST
 
   __ jr(ra);
   __ nop();
@@ -1238,25 +1255,73 @@ TEST(MIPS14) {
   t.round_down_in = 123.49;
   t.neg_round_up_in = -123.5;
   t.neg_round_down_in = -123.49;
+  t.err1_in = 123.51;
+  t.err2_in = 1;
+  t.err3_in = static_cast<double>(1) + 0xFFFFFFFF;
+  t.err4_in = NAN;
 
   Object* dummy = CALL_GENERATED_CODE(f, &t, 0, 0, 0, 0);
   USE(dummy);
+
+#define GET_FPU_ERR(x) \
+  ((x >> 2) & (32 - 1))
 
   CHECK_EQ(124, t.round_up_out);
   CHECK_EQ(123, t.round_down_out);
   CHECK_EQ(-124, t.neg_round_up_out);
   CHECK_EQ(-123, t.neg_round_down_out);
 
+  // Inaccurate.
+  CHECK_EQ(1, GET_FPU_ERR(t.round_err1_out));
+  // No error.
+  CHECK_EQ(0, GET_FPU_ERR(t.round_err2_out));
+  // Invalid operation.
+  CHECK_EQ(16, GET_FPU_ERR(t.round_err3_out));
+  CHECK_EQ(16, GET_FPU_ERR(t.round_err4_out));
+  CHECK_EQ(kFPUInvalidResult, t.round_invalid_result);
+
   CHECK_EQ(123, t.floor_up_out);
   CHECK_EQ(123, t.floor_down_out);
   CHECK_EQ(-124, t.neg_floor_up_out);
   CHECK_EQ(-124, t.neg_floor_down_out);
+
+  // Inaccurate.
+  CHECK_EQ(1, GET_FPU_ERR(t.floor_err1_out));
+  // No error.
+  CHECK_EQ(0, GET_FPU_ERR(t.floor_err2_out));
+  // Invalid operation.
+  CHECK_EQ(16, GET_FPU_ERR(t.floor_err3_out));
+  CHECK_EQ(16, GET_FPU_ERR(t.floor_err4_out));
+  CHECK_EQ(kFPUInvalidResult, t.floor_invalid_result);
 
   CHECK_EQ(124, t.ceil_up_out);
   CHECK_EQ(124, t.ceil_down_out);
   CHECK_EQ(-123, t.neg_ceil_up_out);
   CHECK_EQ(-123, t.neg_ceil_down_out);
 
+  // Inaccurate.
+  CHECK_EQ(1, GET_FPU_ERR(t.ceil_err1_out));
+  // No error.
+  CHECK_EQ(0, GET_FPU_ERR(t.ceil_err2_out));
+  // Invalid operation.
+  CHECK_EQ(16, GET_FPU_ERR(t.ceil_err3_out));
+  CHECK_EQ(16, GET_FPU_ERR(t.ceil_err4_out));
+  CHECK_EQ(kFPUInvalidResult, t.ceil_invalid_result);
+
+  // In rounding mode 0 cvt should behave like round.
+  CHECK_EQ(t.round_up_out, t.cvt_up_out);
+  CHECK_EQ(t.round_down_out, t.cvt_down_out);
+  CHECK_EQ(t.neg_round_up_out, t.neg_cvt_up_out);
+  CHECK_EQ(t.neg_round_down_out, t.neg_cvt_down_out);
+
+  // Inaccurate.
+  CHECK_EQ(1, GET_FPU_ERR(t.cvt_err1_out));
+  // No error.
+  CHECK_EQ(0, GET_FPU_ERR(t.cvt_err2_out));
+  // Invalid operation.
+  CHECK_EQ(16, GET_FPU_ERR(t.cvt_err3_out));
+  CHECK_EQ(16, GET_FPU_ERR(t.cvt_err4_out));
+  CHECK_EQ(kFPUInvalidResult, t.cvt_invalid_result);
 }
 
 
