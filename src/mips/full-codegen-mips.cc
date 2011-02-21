@@ -1732,6 +1732,15 @@ void FullCodeGenerator::EmitCallWithIC(Call* expr,
 void FullCodeGenerator::EmitKeyedCallWithIC(Call* expr,
                                             Expression* key,
                                             RelocInfo::Mode mode) {
+  // Load the key.
+  VisitForAccumulatorValue(key);
+
+  // Swap the name of the function and the receiver on the stack to follow
+  // the calling convention for call ICs.
+  __ Pop(a1);
+  __ Push(v0);
+  __ Push(a1);
+
   // Code common for calls using the IC.
   ZoneList<Expression*>* args = expr->arguments();
   int arg_count = args->length();
@@ -1739,18 +1748,17 @@ void FullCodeGenerator::EmitKeyedCallWithIC(Call* expr,
     for (int i = 0; i < arg_count; i++) {
       VisitForStackValue(args->at(i));
     }
-    VisitForAccumulatorValue(key);
-    __ mov(a2, result_register());
   }
   // Record source position for debugger.
   SetSourcePosition(expr->position(), FORCED_POSITION);
   // Call the IC initialization code.
   InLoopFlag in_loop = (loop_depth() > 0) ? IN_LOOP : NOT_IN_LOOP;
   Handle<Code> ic = StubCache::ComputeKeyedCallInitialize(arg_count, in_loop);
+  __ lw(a2, MemOperand(sp, (arg_count + 1) * kPointerSize));  // Key.
   EmitCallIC(ic, mode);
   // Restore context register.
   __ lw(cp, MemOperand(fp, StandardFrameConstants::kContextOffset));
-  context()->Plug(v0);
+  context()->DropAndPlug(1, v0);  // Drop the key still on the stack.
 }
 
 
