@@ -2795,6 +2795,12 @@ void FullCodeGenerator::EmitGetCachedArrayIndex(ZoneList<Expression*>* args) {
   context()->Plug(v0);
 }
 
+void FullCodeGenerator::EmitFastAsciiArrayJoin(ZoneList<Expression*>* args) {
+  __ LoadRoot(v0, Heap::kUndefinedValueRootIndex);
+  context()->Plug(v0);
+  return;
+}
+
 
 void FullCodeGenerator::VisitCallRuntime(CallRuntime* expr) {
   Handle<String> name = expr->name();
