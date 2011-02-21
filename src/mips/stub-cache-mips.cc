@@ -590,8 +590,8 @@ static void GenerateFastApiCall(MacroAssembler* masm,
                                 int argc) {
   // Get the function and setup the context.
   JSFunction* function = optimization.constant_function();
-  __ li(t3, Operand(Handle<JSFunction>(function)));
-  __ lw(cp, FieldMemOperand(t3, JSFunction::kContextOffset));
+  __ li(t1, Operand(Handle<JSFunction>(function)));
+  __ lw(cp, FieldMemOperand(t1, JSFunction::kContextOffset));
 
   // Pass the additional arguments FastHandleApiCall expects.
   bool info_loaded = false;
@@ -599,18 +599,18 @@ static void GenerateFastApiCall(MacroAssembler* masm,
   if (Heap::InNewSpace(callback)) {
     info_loaded = true;
     __ li(a0, Operand(Handle<CallHandlerInfo>(optimization.api_call_info())));
-    __ lw(t2, FieldMemOperand(a0, CallHandlerInfo::kCallbackOffset));
+    __ lw(t3, FieldMemOperand(a0, CallHandlerInfo::kCallbackOffset));
   } else {
-    __ li(t2, Operand(Handle<Object>(callback)));
+    __ li(t3, Operand(Handle<Object>(callback)));
   }
   Object* call_data = optimization.api_call_info()->data();
   if (Heap::InNewSpace(call_data)) {
     if (!info_loaded) {
       __ li(a0, Operand(Handle<CallHandlerInfo>(optimization.api_call_info())));
     }
-    __ lw(t1, FieldMemOperand(a0, CallHandlerInfo::kDataOffset));
+    __ lw(t2, FieldMemOperand(a0, CallHandlerInfo::kDataOffset));
   } else {
-    __ li(t1, Operand(Handle<Object>(call_data)));
+    __ li(t2, Operand(Handle<Object>(call_data)));
   }
 
   // Store the values on the stack (the space is pre-allocated).
@@ -1071,11 +1071,12 @@ bool StubCompiler::GenerateLoadCallback(JSObject* object,
                     name, miss);
 
   // Push the arguments on the JS stack of the caller.
-  __ Push(receiver, reg);  // Receiver, holder.
-  __ li(scratch1, Operand(Handle<AccessorInfo>(callback)));  // Callback data.
-  __ Push(scratch1);
-  __ lw(reg, FieldMemOperand(scratch1, AccessorInfo::kDataOffset));
-  __ Push(reg, name_reg);
+  __ Push(receiver);  // Receiver.
+  __ li(scratch3, Operand(Handle<AccessorInfo>(callback)));  // Callback data.
+  // scratch2 is used here as ARM's ip. This may cause problems if scratch2
+  // will be used to hold a value in the future.
+  __ lw(scratch2, FieldMemOperand(scratch3, AccessorInfo::kDataOffset));
+  __ Push(reg, scratch2, scratch3, name_reg);
 
   // Do tail-call to the runtime system.
   ExternalReference load_callback_property =
@@ -1197,15 +1198,15 @@ void StubCompiler::GenerateLoadInterceptor(JSObject* object,
       // holder_reg is either receiver or scratch1.
       if (!receiver.is(holder_reg)) {
         ASSERT(scratch1.is(holder_reg));
-        __ Push(receiver, holder_reg, scratch2);
-        __ lw(scratch1,
-              FieldMemOperand(holder_reg, AccessorInfo::kDataOffset));
-        __ Push(scratch1, name_reg);
+        __ Push(receiver, holder_reg);
+        __ lw(scratch3,
+              FieldMemOperand(scratch2, AccessorInfo::kDataOffset));
+        __ Push(scratch3, scratch2, name_reg);
       } else {
         __ push(receiver);
-        __ lw(scratch1,
-              FieldMemOperand(holder_reg, AccessorInfo::kDataOffset));
-        __ Push(holder_reg, scratch2, scratch1, name_reg);
+        __ lw(scratch3,
+              FieldMemOperand(scratch2, AccessorInfo::kDataOffset));
+        __ Push(holder_reg, scratch3, scratch2, name_reg);
       }
 
       ExternalReference ref =
