@@ -874,18 +874,23 @@ void FullCodeGenerator::VisitForInStatement(ForInStatement* stmt) {
 }
 
 
-void FullCodeGenerator::EmitNewClosure(Handle<SharedFunctionInfo> info) {
+void FullCodeGenerator::EmitNewClosure(Handle<SharedFunctionInfo> info,
+                                       bool pretenure) {
   // Use the fast case closure allocation code that allocates in new
   // space for nested functions that don't need literals cloning.
-  if (scope()->is_function_scope() && info->num_literals() == 0) {
+  if (scope()->is_function_scope() &&
+      info->num_literals() == 0 &&
+      !pretenure) {
     FastNewClosureStub stub;
     __ li(a0, Operand(info));
     __ push(a0);
     __ CallStub(&stub);
   } else {
     __ li(a0, Operand(info));
-    __ Push(cp, a0);
-    __ CallRuntime(Runtime::kNewClosure, 2);
+    __ LoadRoot(a1, pretenure ? Heap::kTrueValueRootIndex
+                              : Heap::kFalseValueRootIndex);
+    __ Push(cp, a0, a1);
+    __ CallRuntime(Runtime::kNewClosure, 3);
   }
   context()->Plug(v0);
 }

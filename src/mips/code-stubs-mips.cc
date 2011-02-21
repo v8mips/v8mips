@@ -101,8 +101,9 @@ void FastNewClosureStub::Generate(MacroAssembler* masm) {
 
   // Create a new closure through the slower runtime call.
   __ bind(&gc);
-  __ Push(cp, a3);
-  __ TailCallRuntime(Runtime::kNewClosure, 2, 1);
+  __ LoadRoot(t0, Heap::kFalseValueRootIndex);
+  __ Push(cp, a3, t0);
+  __ TailCallRuntime(Runtime::kNewClosure, 3, 1);
 }
 
 
