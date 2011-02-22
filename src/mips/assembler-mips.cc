@@ -467,7 +467,7 @@ bool Assembler::is_branch(Instr instr) {
 bool Assembler::is_nop(Instr instr, unsigned int type) {
   // See Assembler::nop(type).
   ASSERT(type < 32);
-  uint32_t opcode   = ((instr & kOpcodeMask));
+  uint32_t opcode = ((instr & kOpcodeMask));
   uint32_t rt = ((instr & kRtFieldMask) >> kRtShift);
   uint32_t rs = ((instr & kRsFieldMask) >> kRsShift);
   uint32_t sa = ((instr & kSaFieldMask) >> kSaShift);
@@ -1273,7 +1273,15 @@ void Assembler::nor(Register rd, Register rs, Register rt) {
 
 
 // Shifts.
-void Assembler::sll(Register rd, Register rt, uint16_t sa) {
+void Assembler::sll(Register rd,
+                    Register rt,
+                    uint16_t sa,
+                    bool coming_from_nop) {
+  // Don't allow nop instructions in the form sll zero_reg, zero_reg to be
+  // generated using the sll instruction. They must be generated using
+  // nop(int/NopMarkerTypes) or MarkCode(int/NopMarkerTypes) pseudo
+  // instructions.
+  ASSERT(coming_from_nop || !(rd.is(zero_reg) && rt.is(zero_reg)));
   GenInstrRegister(SPECIAL, zero_reg, rt, rd, sa, SLL);
 }
 

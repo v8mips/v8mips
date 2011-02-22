@@ -265,6 +265,42 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
                               Register scratch,
                               Label* miss);
 
+  inline void MarkCode(NopMarkerTypes type) {
+    nop(type);
+  }
+
+  // Check if the given instruction is a 'type' marker.
+  // ie. check if is is a sll zero_reg, zero_reg, <type> (referenced as
+  // nop(type)). These instructions are generated to mark special location in
+  // the code, like some special IC code.
+  static inline bool IsMarkedCode(Instr instr, int type) {
+    ASSERT((FIRST_IC_MARKER <= type) && (type < LAST_CODE_MARKER));
+    return is_nop(instr, type);
+  }
+
+
+  static inline int GetCodeMarker(Instr instr) {
+    uint32_t opcode = ((instr & kOpcodeMask));
+    uint32_t rt = ((instr & kRtFieldMask) >> kRtShift);
+    uint32_t rs = ((instr & kRsFieldMask) >> kRsShift);
+    uint32_t sa = ((instr & kSaFieldMask) >> kSaShift);
+
+    // Return <n> if we have a sll zero_reg, zero_reg, n
+    // else return -1.
+    bool sllzz = (opcode == SLL &&
+                  rt == static_cast<uint32_t>(ToNumber(zero_reg)) &&
+                  rs == static_cast<uint32_t>(ToNumber(zero_reg)));
+    int type = (sllzz &&
+                FIRST_IC_MARKER <= sa &&
+                sa < LAST_CODE_MARKER)
+                  ? sa
+                  : -1;
+    ASSERT((type == -1) ||
+           ((FIRST_IC_MARKER <= type) && (type < LAST_CODE_MARKER)));
+    return type;
+  }
+
+
 
   // ---------------------------------------------------------------------------
   // Allocation support

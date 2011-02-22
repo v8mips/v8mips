@@ -907,8 +907,9 @@ void LoadIC::GenerateMiss(MacroAssembler* masm) {
 }
 
 
-static inline bool IsInlinedICSite(Address address,
-                                   Address* inline_end_address) {
+// Returns the code marker, or the 0 if the code is not marked.
+static inline int InlinedICSiteMarker(Address address,
+                                      Address* inline_end_address) {
   // If the instruction after the call site is not the pseudo instruction nop(1)
   // then this is not related to an inlined in-object property load. The nop(1)
   // instruction is located just after the call to the IC in the deferred code
@@ -916,9 +917,12 @@ static inline bool IsInlinedICSite(Address address,
   // is a branch instruction for jumping back from the deferred code.
   Address address_after_call = address + Assembler::kCallTargetAddressOffset;
   Instr instr_after_call = Assembler::instr_at(address_after_call);
-  if (!Assembler::is_nop(instr_after_call, PROPERTY_ACCESS_INLINED)) {
-    return false;
-  }
+
+  int code_marker = MacroAssembler::GetCodeMarker(instr_after_call);
+
+  // A negative result means the code is not marked.
+  if (code_marker <= 0) return 0;
+
   Address address_after_nop = address_after_call + Assembler::kInstrSize;
   Instr instr_after_nop = Assembler::instr_at(address_after_nop);
   // There may be some reg-reg move and frame merging code to skip over before
@@ -935,7 +939,7 @@ static inline bool IsInlinedICSite(Address address,
   ASSERT(b_offset < 0);  // Jumping back from deferred code.
   *inline_end_address = address_after_nop + b_offset;
 
-  return true;
+  return code_marker;
 }
 
 
@@ -946,7 +950,10 @@ bool LoadIC::PatchInlinedLoad(Address address, Object* map, int offset) {
   // Find the end of the inlined code for handling the load if this is an
   // inlined IC call site.
   Address inline_end_address;
-  if (!IsInlinedICSite(address, &inline_end_address)) return false;
+  if (InlinedICSiteMarker(address, &inline_end_address)
+      != Assembler::PROPERTY_ACCESS_INLINED) {
+    return false;
+  }
 
   // Patch the offset of the property load instruction.
   // The immediate must be representable in 16 bits.
@@ -965,7 +972,12 @@ bool LoadIC::PatchInlinedLoad(Address address, Object* map, int offset) {
   CPU::FlushICache(lw_property_instr_address, 1 * Assembler::kInstrSize);
 
   // Patch the map check.
-  Address li_map_instr_address = inline_end_address - 5 * Assembler::kInstrSize;
+  // For PROPERTY_ACCESS_INLINED, the load map instruction is generated
+  // 5 instructions before the end of the inlined code.
+  // See codgen-arm.cc CodeGenerator::EmitNamedLoad.
+  int lw_map_offset = -5;
+  Address li_map_instr_address = inline_end_address + lw_map_offset *
+      Assembler::kInstrSize;
 
   Assembler::set_target_address_at(li_map_instr_address,
                                    reinterpret_cast<Address>(map));
@@ -977,8 +989,41 @@ bool LoadIC::PatchInlinedContextualLoad(Address address,
                                         Object* map,
                                         Object* cell,
                                         bool is_dont_delete) {
-  // TODO(<bug#>): implement this.
-  return false;
+  // Find the end of the inlined code for handling the contextual load if
+  // this is inlined IC call site.
+  Address inline_end_address;
+  int marker = InlinedICSiteMarker(address, &inline_end_address);
+  if (!((marker == Assembler::PROPERTY_ACCESS_INLINED_CONTEXT) ||
+        (marker == Assembler::PROPERTY_ACCESS_INLINED_CONTEXT_DONT_DELETE))) {
+    return false;
+  }
+  // On MIPS we don't rely on the is_dont_delete argument as the hint is already
+  // embedded in the code marker.
+  bool marker_is_dont_delete =
+      marker == Assembler::PROPERTY_ACCESS_INLINED_CONTEXT_DONT_DELETE;
+
+  // These are the offsets from the end of the inlined code.
+  // See codgen-mips.cc CodeGenerator::EmitNamedLoad.
+  int lw_map_offset = marker_is_dont_delete ? -7: -11;
+  int lw_cell_offset = marker_is_dont_delete ? -3: -7;
+  if (FLAG_debug_code && marker_is_dont_delete) {
+    // Three extra instructions were generated to check for the_hole_value.
+    lw_map_offset -= 4;
+    lw_cell_offset -= 4;
+  }
+  Address lw_map_instr_address =
+      inline_end_address + lw_map_offset * Assembler::kInstrSize;
+  Address lw_cell_instr_address =
+      inline_end_address + lw_cell_offset * Assembler::kInstrSize;
+
+  // Patch the map check.
+  Assembler::set_target_address_at(lw_map_instr_address,
+                                   reinterpret_cast<Address>(map));
+  // Patch the cell address.
+  Assembler::set_target_address_at(lw_cell_instr_address,
+                                   reinterpret_cast<Address>(cell));
+
+  return true;
 }
 
 
@@ -986,7 +1031,10 @@ bool StoreIC::PatchInlinedStore(Address address, Object* map, int offset) {
   // Find the end of the inlined code for the store if there is an
   // inlined version of the store.
   Address inline_end_address;
-  if (!IsInlinedICSite(address, &inline_end_address)) return false;
+  if (InlinedICSiteMarker(address, &inline_end_address)
+      != Assembler::PROPERTY_ACCESS_INLINED) {
+    return false;
+  }
 
   // Compute the address of the map load instruction.
   Address li_map_instr_address =
@@ -1036,7 +1084,10 @@ bool StoreIC::PatchInlinedStore(Address address, Object* map, int offset) {
 
 bool KeyedLoadIC::PatchInlinedLoad(Address address, Object* map) {
   Address inline_end_address;
-  if (!IsInlinedICSite(address, &inline_end_address)) return false;
+  if (InlinedICSiteMarker(address, &inline_end_address)
+      != Assembler::PROPERTY_ACCESS_INLINED) {
+    return false;
+  }
 
   // Patch the map check.
   // This code patches CodeGenerator::EmitKeyedLoad(), at the
@@ -1056,7 +1107,10 @@ bool KeyedStoreIC::PatchInlinedStore(Address address, Object* map) {
   // Find the end of the inlined code for handling the store if this is an
   // inlined IC call site.
   Address inline_end_address;
-  if (!IsInlinedICSite(address, &inline_end_address)) return false;
+  if (InlinedICSiteMarker(address, &inline_end_address)
+      != Assembler::PROPERTY_ACCESS_INLINED) {
+    return false;
+  }
 
   // Patch the map check.
   // This code patches CodeGenerator::EmitKeyedStore(), at the

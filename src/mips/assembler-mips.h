@@ -463,12 +463,24 @@ class Assembler : public Malloced {
   // Aligns code to something that's optimal for a jump target for the platform.
   void CodeTargetAlign();
 
-  // Generic nop instruction. You should generally use nop().
-  // nop(1) is used in the property load inline patcher.
-  // Other nops are not currently used.
+  // Different nop operations are used by the code generator to detect certain
+  // states of the generated code.
+  enum NopMarkerTypes {
+    NON_MARKING_NOP = 0,
+    DEBUG_BREAK_NOP,
+    // IC markers.
+    PROPERTY_ACCESS_INLINED,
+    PROPERTY_ACCESS_INLINED_CONTEXT,
+    PROPERTY_ACCESS_INLINED_CONTEXT_DONT_DELETE,
+    // Helper values.
+    LAST_CODE_MARKER,
+    FIRST_IC_MARKER = PROPERTY_ACCESS_INLINED
+  };
+
+  // type == 0 is the default non-marking type.
   void nop(unsigned int type = 0) {
     ASSERT(type < 32);
-    sll(zero_reg, zero_reg, type);
+    sll(zero_reg, zero_reg, type, true);
   }
 
 
@@ -530,9 +542,9 @@ class Assembler : public Malloced {
 
   // Shifts.
   // Please note: sll(zero_reg, zero_reg, x) instructions are reserved as nop
-  // and may cause problems in normal code (currently only if x == 1).
-
-  void sll(Register rd, Register rt, uint16_t sa);
+  // and may cause problems in normal code. coming_from_nop makes sure this
+  // doesn't happen.
+  void sll(Register rd, Register rt, uint16_t sa, bool coming_from_nop = false);
   void sllv(Register rd, Register rt, Register rs);
   void srl(Register rd, Register rt, uint16_t sa);
   void srlv(Register rd, Register rt, Register rs);
