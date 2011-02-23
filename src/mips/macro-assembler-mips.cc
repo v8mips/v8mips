@@ -1885,7 +1885,9 @@ void MacroAssembler::AllocateInNewSpace(int object_size,
   }
 
   ASSERT(!result.is(scratch1));
+  ASSERT(!result.is(scratch2));
   ASSERT(!scratch1.is(scratch2));
+  ASSERT(!scratch1.is(t9) && !scratch2.is(t9) && !result.is(t9));
 
   // Make object size into bytes.
   if ((flags & SIZE_IN_WORDS) != 0) {
@@ -1893,40 +1895,51 @@ void MacroAssembler::AllocateInNewSpace(int object_size,
   }
   ASSERT_EQ(0, object_size & kObjectAlignmentMask);
 
-  // Load address of new object into result and allocation top address into
-  // scratch1.
+  // Check relative positions of allocation top and limit addresses.
+  // ARM adds additional checks to make sure the ldm instruction can be
+  // used. On MIPS we don't have ldm so we don't need additional checks either.
   ExternalReference new_space_allocation_top =
       ExternalReference::new_space_allocation_top_address();
-  li(scratch1, Operand(new_space_allocation_top));
+  ExternalReference new_space_allocation_limit =
+      ExternalReference::new_space_allocation_limit_address();
+  intptr_t top   =
+      reinterpret_cast<intptr_t>(new_space_allocation_top.address());
+  intptr_t limit =
+      reinterpret_cast<intptr_t>(new_space_allocation_limit.address());
+  ASSERT((limit - top) == kPointerSize);
+
+  // Set up allocation top address and object size registers.
+  Register topaddr = scratch1;
+  Register obj_size_reg = scratch2;
+  li(topaddr, Operand(new_space_allocation_top));
+  li(obj_size_reg, Operand(object_size));
+
+  // This code stores a temporary value in t9.
   if ((flags & RESULT_CONTAINS_TOP) == 0) {
-    lw(result, MemOperand(scratch1));
+    // Load allocation top into result and allocation limit into t9.
+    lw(result, MemOperand(topaddr));
+    lw(t9, MemOperand(topaddr, kPointerSize));
   } else {
-#ifdef DEBUG
-    // Assert that result actually contains top on entry. scratch2 is used
-    // immediately below so this use of scratch2 does not cause difference with
-    // respect to register content between debug and release mode.
-    lw(scratch2, MemOperand(scratch1));
-    Check(eq, "Unexpected allocation top", result, Operand(scratch2));
-#endif
+    if (FLAG_debug_code) {
+      // Assert that result actually contains top on entry. t9 is used
+      // immediately below so this use of t9 does not cause difference with
+      // respect to register content between debug and release mode.
+      lw(t9, MemOperand(topaddr));
+      Check(eq, "Unexpected allocation top", result, Operand(t9));
+    }
+    // Load allocation limit into t9. Result already contains allocation top.
+    lw(t9, MemOperand(topaddr, limit - top));
   }
 
   // Calculate new top and bail out if new space is exhausted. Use result
   // to calculate the new top.
-  ExternalReference new_space_allocation_limit =
-      ExternalReference::new_space_allocation_limit_address();
-  li(scratch2, Operand(new_space_allocation_limit));
-  lw(scratch2, MemOperand(scratch2));
-  Addu(result, result, Operand(object_size));
-  Branch(gc_required, Ugreater, result, Operand(scratch2));
+  Addu(scratch2, result, Operand(obj_size_reg));
+  Branch(gc_required, Ugreater, scratch2, Operand(t9));
+  sw(scratch2, MemOperand(topaddr));
 
-  // Update allocation top. Result temporarily holds the new top.
-  sw(result, MemOperand(scratch1));
-
-  // Tag and adjust back to start of new object.
+  // Tag object if requested.
   if ((flags & TAG_OBJECT) != 0) {
-    Addu(result, result, Operand(-object_size + kHeapObjectTag));
-  } else {
-    Addu(result, result, Operand(-object_size));
+    Addu(result, result, Operand(kHeapObjectTag));
   }
 }
 
@@ -1949,49 +1962,61 @@ void MacroAssembler::AllocateInNewSpace(Register object_size,
   }
 
   ASSERT(!result.is(scratch1));
+  ASSERT(!result.is(scratch2));
   ASSERT(!scratch1.is(scratch2));
+  ASSERT(!scratch1.is(t9) && !scratch2.is(t9) && !result.is(t9));
 
-  // Load address of new object into result and allocation top address into
-  // scratch1.
+  // Check relative positions of allocation top and limit addresses.
+  // ARM adds additional checks to make sure the ldm instruction can be
+  // used. On MIPS we don't have ldm so we don't need additional checks either.
   ExternalReference new_space_allocation_top =
       ExternalReference::new_space_allocation_top_address();
-  li(scratch1, Operand(new_space_allocation_top));
+  ExternalReference new_space_allocation_limit =
+      ExternalReference::new_space_allocation_limit_address();
+  intptr_t top   =
+      reinterpret_cast<intptr_t>(new_space_allocation_top.address());
+  intptr_t limit =
+      reinterpret_cast<intptr_t>(new_space_allocation_limit.address());
+  ASSERT((limit - top) == kPointerSize);
+
+  // Set up allocation top address and object size registers.
+  Register topaddr = scratch1;
+  li(topaddr, Operand(new_space_allocation_top));
+
+  // This code stores a temporary value in t9.
   if ((flags & RESULT_CONTAINS_TOP) == 0) {
-    lw(result, MemOperand(scratch1));
+    // Load allocation top into result and allocation limit into t9.
+    lw(result, MemOperand(topaddr));
+    lw(t9, MemOperand(topaddr, kPointerSize));
   } else {
-#ifdef DEBUG
-    // Assert that result actually contains top on entry. scratch2 is used
-    // immediately below so this use of scratch2 does not cause difference with
-    // respect to register content between debug and release mode.
-    lw(scratch2, MemOperand(scratch1));
-    Check(eq, "Unexpected allocation top", result, Operand(scratch2));
-#endif
+    if (FLAG_debug_code) {
+      // Assert that result actually contains top on entry. t9 is used
+      // immediately below so this use of t9 does not cause difference with
+      // respect to register content between debug and release mode.
+      lw(t9, MemOperand(topaddr));
+      Check(eq, "Unexpected allocation top", result, Operand(t9));
+    }
+    // Load allocation limit into t9. Result already contains allocation top.
+    lw(t9, MemOperand(topaddr, limit - top));
   }
 
   // Calculate new top and bail out if new space is exhausted. Use result
-  // to calculate the new top. Object size is in words so a shift is required to
-  // get the number of bytes
-  ExternalReference new_space_allocation_limit =
-      ExternalReference::new_space_allocation_limit_address();
-  li(scratch2, Operand(new_space_allocation_limit));
-  lw(scratch2, MemOperand(scratch2));
+  // to calculate the new top. Object size may be in words so a shift is
+  // required to get the number of bytes.
   if ((flags & SIZE_IN_WORDS) != 0) {
-    sll(t8, object_size, kPointerSizeLog2);
-    Addu(result, result, Operand(t8));
+    sll(scratch2, object_size, kPointerSizeLog2);
+    Addu(scratch2, result, scratch2);
   } else {
-    addu(result, result, object_size);
+    Addu(scratch2, result, Operand(object_size));
   }
-  Branch(gc_required, Ugreater, result, Operand(scratch2));
+  Branch(gc_required, Ugreater, scratch2, Operand(t9));
 
-  // Update allocation top. result temporarily holds the new top,
-  sw(result, MemOperand(scratch1));
-
-  // Adjust back to start of new object.
-  if ((flags & SIZE_IN_WORDS) != 0) {
-    Subu(result, result, Operand(t8));
-  } else {
-    subu(result, result, object_size);
+  // Update allocation top. result temporarily holds the new top.
+  if (FLAG_debug_code) {
+    And(t9, scratch2, Operand(kObjectAlignmentMask));
+    Check(eq, "Unaligned allocation in new space", t9, Operand(zero_reg));
   }
+  sw(scratch2, MemOperand(topaddr));
 
   // Tag object if requested.
   if ((flags & TAG_OBJECT) != 0) {
