@@ -486,9 +486,128 @@ void Builtins::Generate_ArrayConstructCode(MacroAssembler* masm) {
 
 
 void Builtins::Generate_StringConstructCode(MacroAssembler* masm) {
-  // TODO(849): implement custom construct stub.
-  // Generate a copy of the generic stub for now.
-  Generate_JSConstructStubGeneric(masm);
+  // ----------- S t a t e -------------
+  //  -- a0                     : number of arguments
+  //  -- a1                     : constructor function
+  //  -- ra                     : return address
+  //  -- sp[(argc - n - 1) * 4] : arg[n] (zero based)
+  //  -- sp[argc * 4]           : receiver
+  // -----------------------------------
+  __ IncrementCounter(&Counters::string_ctor_calls, 1, a2, a3);
+
+  Register function = a1;
+  if (FLAG_debug_code) {
+    __ LoadGlobalFunction(Context::STRING_FUNCTION_INDEX, a2);
+    __ Assert(eq, "Unexpected String function", function, Operand(a2));
+  }
+
+  // Load the first arguments in a0 and get rid of the rest.
+  Label no_arguments;
+  __ Branch(&no_arguments, eq, a0, Operand(zero_reg));
+  // First args = sp[(argc - 1) * 4].
+  __ Subu(a0, a0, Operand(1));
+  __ sll(a0, a0, kPointerSizeLog2);
+  __ Addu(sp, a0, sp);
+  __ lw(a0, MemOperand(sp));
+  // sp now point to args[0], drop args[0] + receiver.
+  __ Drop(2);
+
+  Register argument = a2;
+  Label not_cached, argument_is_string;
+  NumberToStringStub::GenerateLookupNumberStringCache(
+      masm,
+      a0,        // Input.
+      argument,  // Result.
+      a3,        // Scratch.
+      t0,        // Scratch.
+      t1,        // Scratch.
+      false,     // Is it a Smi?
+      &not_cached);
+  __ IncrementCounter(&Counters::string_ctor_cached_number, 1, a3, t0);
+  __ bind(&argument_is_string);
+
+  // ----------- S t a t e -------------
+  //  -- a2     : argument converted to string
+  //  -- a1     : constructor function
+  //  -- ra     : return address
+  // -----------------------------------
+
+  Label gc_required;
+  __ AllocateInNewSpace(JSValue::kSize,
+                        v0,  // Result.
+                        a3,  // Scratch.
+                        t0,  // Scratch.
+                        &gc_required,
+                        TAG_OBJECT);
+
+  // Initialising the String Object.
+  Register map = a3;
+  __ LoadGlobalFunctionInitialMap(function, map, t0);
+  if (FLAG_debug_code) {
+    __ lbu(t0, FieldMemOperand(map, Map::kInstanceSizeOffset));
+    __ Assert(eq, "Unexpected string wrapper instance size",
+        t0, Operand(JSValue::kSize >> kPointerSizeLog2));
+    __ lbu(t0, FieldMemOperand(map, Map::kUnusedPropertyFieldsOffset));
+    __ Assert(eq, "Unexpected unused properties of string wrapper",
+        t0, Operand(zero_reg));
+  }
+  __ sw(map, FieldMemOperand(v0, HeapObject::kMapOffset));
+
+  __ LoadRoot(a3, Heap::kEmptyFixedArrayRootIndex);
+  __ sw(a3, FieldMemOperand(v0, JSObject::kPropertiesOffset));
+  __ sw(a3, FieldMemOperand(v0, JSObject::kElementsOffset));
+
+  __ sw(argument, FieldMemOperand(v0, JSValue::kValueOffset));
+
+  // Ensure the object is fully initialized.
+  STATIC_ASSERT(JSValue::kSize == 4 * kPointerSize);
+
+  __ Ret();
+
+  // The argument was not found in the number to string cache. Check
+  // if it's a string already before calling the conversion builtin.
+  Label convert_argument;
+  __ bind(&not_cached);
+  __ BranchOnSmi(a0, &convert_argument);
+
+  // Is it a String?
+  __ lw(a2, FieldMemOperand(a0, HeapObject::kMapOffset));
+  __ lbu(a3, FieldMemOperand(a2, Map::kInstanceTypeOffset));
+  ASSERT(kNotStringTag != 0);
+  __ And(t0, a3, Operand(kIsNotStringMask));
+  __ Branch(&convert_argument, ne, t0, Operand(zero_reg));
+  __ mov(argument, a0);
+  __ IncrementCounter(&Counters::string_ctor_conversions, 1, a3, t0);
+  __ Branch(&argument_is_string);
+
+  // Invoke the conversion builtin and put the result into a2.
+  __ bind(&convert_argument);
+  __ push(function);  // Preserve the function.
+  __ IncrementCounter(&Counters::string_ctor_conversions, 1, a3, t0);
+  __ EnterInternalFrame();
+  __ push(v0);
+  __ InvokeBuiltin(Builtins::TO_STRING, CALL_JS);
+  __ LeaveInternalFrame();
+  __ pop(function);
+  __ mov(argument, v0);
+  __ Branch(&argument_is_string);
+
+  // Load the empty string into a2, remove the receiver from the
+  // stack, and jump back to the case where the argument is a string.
+  __ bind(&no_arguments);
+  __ LoadRoot(argument, Heap::kEmptyStringRootIndex);
+  __ Drop(1);
+  __ Branch(&argument_is_string);
+
+  // At this point the argument is already a string. Call runtime to
+  // create a string wrapper.
+  __ bind(&gc_required);
+  __ IncrementCounter(&Counters::string_ctor_gc_required, 1, a3, t0);
+  __ EnterInternalFrame();
+  __ push(argument);
+  __ CallRuntime(Runtime::kNewStringWrapper, 1);
+  __ LeaveInternalFrame();
+  __ Ret();
 }
 
 
