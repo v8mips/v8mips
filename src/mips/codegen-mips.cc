@@ -6093,6 +6093,67 @@ void CodeGenerator::VisitUnaryOperation(UnaryOperation* node) {
 }
 
 
+class DeferredCountOperation: public DeferredCode {
+ public:
+  DeferredCountOperation(Register value,
+                         bool is_increment,
+                         bool is_postfix,
+                         int target_size)
+      : value_(value),
+        is_increment_(is_increment),
+        is_postfix_(is_postfix),
+        target_size_(target_size) {}
+
+  virtual void Generate() {
+    VirtualFrame copied_frame(*frame_state()->frame());
+
+    Label slow;
+    // Check for smi operand.
+    __ BranchOnNotSmi(value_, &slow);
+
+    // Revert optimistic increment/decrement.
+    if (is_increment_) {
+      __ Subu(value_, value_, Operand(Smi::FromInt(1)));
+    } else {
+      __ Addu(value_, value_, Operand(Smi::FromInt(1)));
+    }
+
+    // Slow case: Convert to number.  At this point the
+    // value to be incremented is in the value register..
+    __ bind(&slow);
+
+    // Convert the operand to a number.
+    copied_frame.EmitPush(value_);
+
+    copied_frame.InvokeBuiltin(Builtins::TO_NUMBER, CALL_JS, 1);
+
+    if (is_postfix_) {
+      // Postfix: store to result (on the stack).
+      __ sw(v0,  MemOperand(sp, target_size_ * kPointerSize));
+    }
+
+    copied_frame.EmitPush(v0);
+    copied_frame.EmitPush(Operand(Smi::FromInt(1)));
+
+    if (is_increment_) {
+      copied_frame.CallRuntime(Runtime::kNumberAdd, 2);
+    } else {
+      copied_frame.CallRuntime(Runtime::kNumberSub, 2);
+    }
+
+    __ Move(value_, v0);
+
+    copied_frame.MergeTo(frame_state()->frame());
+  }
+
+ private:
+  Register value_;
+  bool is_increment_;
+  bool is_postfix_;
+  int target_size_;
+};
+
+
 void CodeGenerator::VisitCountOperation(CountOperation* node) {
 #ifdef DEBUG
   int original_height = frame_->height();
@@ -6153,9 +6214,7 @@ void CodeGenerator::VisitCountOperation(CountOperation* node) {
     // the target.  It also pushes the current value of the target.
     target.GetValue();
 
-    JumpTarget slow;
-    JumpTarget exit;
-
+    bool value_is_known_smi = frame_->KnownSmiAt(0);
     Register value = frame_->PopToRegister();
 
     // Postfix: Store the old value as the result.
@@ -6167,55 +6226,55 @@ void CodeGenerator::VisitCountOperation(CountOperation* node) {
       value = VirtualFrame::scratch0();
     }
 
-    // Check for smi operand.
-    __ And(t0, value, Operand(kSmiTagMask));
-    slow.Branch(ne, t0, Operand(zero_reg));
+    // We can't use any type information here since the virtual frame from the
+    // deferred code may have lost information and we can't merge a virtual
+    // frame with less specific type knowledge to a virtual frame with more
+    // specific knowledge that has already used that specific knowledge to
+    // generate code.
+    frame_->ForgetTypeInfo();
+
+    // The constructor here will capture the current virtual frame and use it to
+    // merge to after the deferred code has run.  No virtual frame changes are
+    // allowed from here until the 'BindExit' below.
+    DeferredCode* deferred =
+        new DeferredCountOperation(value,
+                                   is_increment,
+                                   is_postfix,
+                                   target.size());
+    if (!value_is_known_smi) {
+      // Check for smi operand.
+      __ And(t0, value, Operand(kSmiTagMask));
+      deferred->Branch(ne, t0, Operand(zero_reg));
+    }
+
 
     // Perform optimistic increment/decrement and check for overflow.
-    // If we don't overflow we are done.
+    // If increment/decrement overflows, go to deferred code.
     if (is_increment) {
       __ Addu(v0, value, Operand(Smi::FromInt(1)));
       // Check for overflow of value + Smi::FromInt(1).
       __ Xor(t0, v0, value);
       __ Xor(t1, v0, Operand(Smi::FromInt(1)));
       __ and_(t0, t0, t1);    // Overflow occurred if result is negative.
-      exit.Branch(ge, t0, Operand(zero_reg));  // Exit on NO overflow (ge 0).
+      __ mov(value, v0);
+      // Branch on overflow (lt 0).
+      deferred->Branch(lt, t0, Operand(zero_reg));
     } else {
       __ Addu(v0, value, Operand(Smi::FromInt(-1)));
       // Check for overflow of value + Smi::FromInt(-1).
       __ Xor(t0, v0, value);
       __ Xor(t1, v0, Operand(Smi::FromInt(-1)));
       __ and_(t0, t0, t1);    // Overflow occurred if result is negative.
-      exit.Branch(ge, t0, Operand(zero_reg));  // Exit on NO overflow (ge 0).
+      __ mov(value, v0);
+      // Branch on overflow (lt 0).
+      deferred->Branch(lt, t0, Operand(zero_reg));
     }
-    // Slow case: Convert to number.  At this point the
-    // value to be incremented is in the value register.
-    slow.Bind();
 
-    // Convert the operand to a number.
-    frame_->EmitPush(value);
-
-    {
-      VirtualFrame::SpilledScope spilled(frame_);
-      frame_->InvokeBuiltin(Builtins::TO_NUMBER, CALL_JS, 1);
-      if (is_postfix) {
-        // Postfix: store to result (on the stack).
-        __ sw(v0, frame_->ElementAt(target.size()));
-      }
-
-      // Compute the new value.
-      frame_->EmitPush(v0);
-      frame_->EmitPush(Operand(Smi::FromInt(1)));
-      if (is_increment) {
-        frame_->CallRuntime(Runtime::kNumberAdd, 2);
-      } else {
-        frame_->CallRuntime(Runtime::kNumberSub, 2);
-      }
-    }
+    deferred->BindExit();
 
     // Store the new value in the target if not const.
-    exit.Bind();
-    frame_->EmitPush(v0);
+    // At this point the answer is in the value register.
+    frame_->EmitPush(value);
     // Set the target with the result, leaving the result on
     // top of the stack.  Removes the target from the stack if
     // it has a non-zero size.
