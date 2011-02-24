@@ -424,10 +424,13 @@ class Assembler : public Malloced {
   static const int kBranchPCOffset = 4;
 
   // Here we are patching the address in the LUI/ORI instruction pair.
-  // I can't tell if these are right or wrong. We have not used the
-  // serialization yet (as of 11/18/2010). Good luck.
-  static const int kCallTargetSize = 2 * kInstrSize;
-  static const int kExternalTargetSize = 4 * kInstrSize;
+  // These values are used in serialization process and must be zero for
+  // MIPS platform, as Code, Embedded Object or External-reference pointers
+  // are split across two consequtive instructions and don't exist separately
+  // in the code, so the serializer should not step forwards in memory after
+  // a target is resolved and written.
+  static const int kCallTargetSize = 0 * kInstrSize;
+  static const int kExternalTargetSize = 0 * kInstrSize;
 
   // Distance between the instruction referring to the address of the call
   // target and the return address.

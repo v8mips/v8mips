@@ -446,7 +446,17 @@ class Serializer : public SerializerDeserializer {
         bytes_processed_so_far_(0) { }
     void Serialize();
     void VisitPointers(Object** start, Object** end);
+    // Variant of VisitPointer(). Reloc info is needed to obtain address of
+    // the object pointer in the code (if pointer is mixed into instruction
+    // bits of several instructions).
+    void VisitPointer(Object** obj, RelocInfo* rinfo);
+    void VisitPointers(Object** start, Object** end, RelocInfo* rinfo);
     void VisitExternalReferences(Address* start, Address* end);
+    // Variant of VisitExternalReference(). Reloc info is needed to obtain
+    // address of the ExternalReference pointer in the code (if pointer is
+    // mixed into instruction bits of several instructions).
+    void VisitExternalReference(Address* adr, RelocInfo* r);
+    void VisitExternalReferences(Address* start, Address* end, RelocInfo* r);
     void VisitCodeTarget(RelocInfo* target);
     void VisitCodeEntry(Address entry_address);
     void VisitRuntimeEntry(RelocInfo* reloc);

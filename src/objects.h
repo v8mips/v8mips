@@ -5735,6 +5735,12 @@ class ObjectVisitor BASE_EMBEDDED {
     VisitExternalReferences(p, p + 1);
   }
 
+  // Variant of VisitExternalReference() can be defined in visitors where
+  // reloc info is needed (initially defined for mips).
+  virtual void VisitExternalReference(Address* p, RelocInfo* rinfo) {
+    VisitExternalReferences(p, p + 1);
+  }
+
 #ifdef DEBUG
   // Intended for serialization/deserialization checking: insert, or
   // check for the presence of, a tag at this position in the stream.
