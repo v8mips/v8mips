@@ -383,6 +383,22 @@ class RecordWriteStub : public CodeStub {
 };
 
 
+// Enter C code from generated RegExp code in a way that allows
+// the C code to fix the return address in case of a GC.
+// Currently only needed on ARM and MIPS.
+class RegExpCEntryStub: public CodeStub {
+ public:
+  RegExpCEntryStub() {}
+  virtual ~RegExpCEntryStub() {}
+  void Generate(MacroAssembler* masm);
+
+ private:
+  Major MajorKey() { return RegExpCEntry; }
+  int MinorKey() { return 0; }
+  const char* GetName() { return "RegExpCEntryStub"; }
+};
+
+
 } }  // namespace v8::internal
 
 #endif  // V8_MIPS_CODE_STUBS_ARM_H_

@@ -116,7 +116,7 @@ namespace internal {
   V(Smi, real_stack_limit, RealStackLimit)                                     \
   V(StringDictionary, intrinsic_function_names, IntrinsicFunctionNames)        \
 
-#if V8_TARGET_ARCH_ARM && !V8_INTERPRETED_REGEXP
+#if (V8_TARGET_ARCH_ARM || V8_TARGET_ARCH_MIPS) && !V8_INTERPRETED_REGEXP
 #define STRONG_ROOT_LIST(V)                                                    \
   UNCONDITIONAL_STRONG_ROOT_LIST(V)                                            \
   V(Code, re_c_entry_code, RegExpCEntryCode)

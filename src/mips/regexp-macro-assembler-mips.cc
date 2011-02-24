@@ -975,10 +975,10 @@ void RegExpMacroAssemblerMIPS::CallCheckStackGuardState(Register scratch) {
   __ mov(a2, frame_pointer());
   // Code* of self.
   __ li(a1, Operand(masm_->CodeObject()));
-  // v0 becomes return address pointer.
+  // a0 becomes return address pointer.
   ExternalReference stack_guard_check =
       ExternalReference::re_check_stack_guard_state();
-  __ CallCFunction(stack_guard_check, num_arguments);
+  CallCFunctionUsingStub(stack_guard_check, num_arguments);
 }
 
 
@@ -1162,6 +1162,21 @@ void RegExpMacroAssemblerMIPS::CheckStackLimit() {
 }
 
 
+void RegExpMacroAssemblerMIPS::CallCFunctionUsingStub(
+    ExternalReference function,
+    int num_arguments) {
+  // Must pass all arguments in registers. The stub pushes on the stack.
+  ASSERT(num_arguments <= 4);
+  __ li(code_pointer(), Operand(function));
+  RegExpCEntryStub stub;
+  __ CallStub(&stub);
+  if (OS::ActivationFrameAlignment() != 0) {
+    __ lw(sp, MemOperand(sp, 16));
+  }
+  __ li(code_pointer(), Operand(masm_->CodeObject()));
+}
+
+
 void RegExpMacroAssemblerMIPS::LoadCurrentCharacterUnchecked(int cp_offset,
                                                             int characters) {
   Register offset = current_input_offset();
@@ -1169,7 +1184,7 @@ void RegExpMacroAssemblerMIPS::LoadCurrentCharacterUnchecked(int cp_offset,
     __ Addu(a0, current_input_offset(), Operand(cp_offset * char_size()));
     offset = a0;
   }
-  // We assume that we cannot do unaligned loads on ARM, so this function
+  // We assume that we cannot do unaligned loads on MIPS, so this function
   // must only be used to load a single character at a time.
   ASSERT(characters == 1);
   __ Addu(t5, end_of_input_address(), Operand(offset));
@@ -1181,6 +1196,21 @@ void RegExpMacroAssemblerMIPS::LoadCurrentCharacterUnchecked(int cp_offset,
   }
 }
 
+
+void RegExpCEntryStub::Generate(MacroAssembler* masm_) {
+  int stack_alignment = OS::ActivationFrameAlignment();
+  if (stack_alignment < kPointerSize) stack_alignment = kPointerSize;
+  // Stack is already aligned for call, so decrement by alignment
+  // to make room for storing the return address.
+  __ Subu(sp, sp, Operand(stack_alignment));
+  __ sw(ra, MemOperand(sp, 0));
+  __ mov(a0, sp);
+  __ mov(t9, t1);
+  __ Call(t9);
+  __ lw(ra, MemOperand(sp, 0));
+  __ Addu(sp, sp, Operand(stack_alignment));
+  __ Jump(Operand(ra));
+}
 
 #undef __
 
