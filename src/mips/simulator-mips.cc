@@ -814,6 +814,9 @@ Simulator::Simulator() {
   registers_[pc] = bad_ra;
   registers_[ra] = bad_ra;
   InitializeCoverage();
+  for(int i = 0; i < kNumExceptions; i++){
+    exceptions[i] = 0;
+  }
 }
 
 
