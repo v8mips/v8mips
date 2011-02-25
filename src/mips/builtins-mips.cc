@@ -1153,23 +1153,15 @@ void Builtins::Generate_FunctionCall(MacroAssembler* masm) {
     __ bind(&done);
   }
 
-  Register shifted_actual_args = t0;
-  Register function_location = t1;
-  MemOperand receiver_memop = MemOperand(function_location, -kPointerSize);
-  Register scratch1 = t2;
-  Register scratch2 = t3;
-
-  // Setup shifted_actual_args and function_location.
-  __ sll(shifted_actual_args, a0, kPointerSizeLog2);
-  __ Addu(function_location, sp, shifted_actual_args);
-
   // 2. Get the function to call (passed as receiver) from the stack, check
   //    if it is a function.
   // a0: actual number of arguments
   Label non_function;
-  __ lw(a1, MemOperand(function_location));
-  __ And(scratch1, a1, Operand(kSmiTagMask));
-  __ Branch(&non_function, eq, scratch1, Operand(zero_reg));
+  __ sll(at, a0, kPointerSizeLog2);
+  __ addu(at, sp, at);
+  __ lw(a1, MemOperand(at));
+  __ And(at, a1, Operand(kSmiTagMask));
+  __ Branch(&non_function, eq, at, Operand(zero_reg));
   __ GetObjectType(a1, a2, a2);
   __ Branch(&non_function, ne, a2, Operand(JS_FUNCTION_TYPE));
 
@@ -1182,7 +1174,9 @@ void Builtins::Generate_FunctionCall(MacroAssembler* masm) {
     __ lw(cp, FieldMemOperand(a1, JSFunction::kContextOffset));
 
     // Load first argument in a2. a2 = -kPointerSize(sp + n_args << 2)
-    __ lw(a2, receiver_memop);
+    __ sll(at, a0, kPointerSizeLog2);
+    __ addu(a2, sp, at);
+    __ lw(a2, MemOperand(a2, -kPointerSize));
     // a0: actual number of arguments
     // a1: function
     // a2: first argument
@@ -1199,20 +1193,20 @@ void Builtins::Generate_FunctionCall(MacroAssembler* masm) {
 
     __ bind(&convert_to_object);
     __ EnterInternalFrame();  // In order to preserve argument count.
-    // Preserve shifted_actual_args and function_location over the builtin call.
-    __ MultiPush(a0.bit() |
-        shifted_actual_args.bit() | function_location.bit());
-    __ mov(a0, shifted_actual_args);   // Setup a0 for the builtin.
+    __ sll(a0, a0, kSmiTagSize);  // Smi tagged.
+    __ Push(a0);
 
     __ Push(a2);
     __ InvokeBuiltin(Builtins::TO_OBJECT, CALL_JS);
     __ mov(a2, v0);
 
-    // Restore shifted_actual_args and function_location.
-    __ MultiPop(a0.bit() | shifted_actual_args.bit() | function_location.bit());
+    __ Pop(a0);
+    __ sra(a0, a0, kSmiTagSize);  // Un-tag.
     __ LeaveInternalFrame();
     // Restore the function to a1.
-    __ lw(a1, MemOperand(function_location));
+    __ sll(at, a0, kPointerSizeLog2);
+    __ addu(at, sp, at);
+    __ lw(a1, MemOperand(at));
     __ Branch(&patch_receiver);
 
     // Use the global receiver object from the called function as the
@@ -1226,7 +1220,9 @@ void Builtins::Generate_FunctionCall(MacroAssembler* masm) {
     __ lw(a2, FieldMemOperand(a2, GlobalObject::kGlobalReceiverOffset));
 
     __ bind(&patch_receiver);
-    __ sw(a2, receiver_memop);
+    __ sll(at, a0, kPointerSizeLog2);
+    __ addu(a3, sp, at);
+    __ sw(a2, MemOperand(a3, -kPointerSize));
 
     __ Branch(&shift_arguments);
   }
@@ -1239,7 +1235,9 @@ void Builtins::Generate_FunctionCall(MacroAssembler* masm) {
   // a1: function
   __ bind(&non_function);
   // Restore the function in case it has been modified.
-  __ sw(a1, MemOperand(t1));
+  __ sll(at, a0, kPointerSizeLog2);
+  __ addu(a2, sp, at);
+  __ sw(a1, MemOperand(a2, -kPointerSize));
   // Clear a1 to indicate a non-function being called.
   __ mov(a1, zero_reg);
 
@@ -1251,14 +1249,14 @@ void Builtins::Generate_FunctionCall(MacroAssembler* masm) {
   __ bind(&shift_arguments);
   { Label loop;
     // Calculate the copy start address (destination). Copy end address is sp.
-    // function_location register already holds the start address.
-    __ mov(scratch1, function_location);
+    __ sll(at, a0, kPointerSizeLog2);
+    __ addu(a2, sp, at);
 
     __ bind(&loop);
-    __ lw(scratch2, MemOperand(scratch1, -kPointerSize));
-    __ sw(scratch2, MemOperand(scratch1));
-    __ Subu(scratch1, scratch1, Operand(kPointerSize));
-    __ Branch(&loop, ne, scratch1, Operand(sp));
+    __ lw(at, MemOperand(a2, -kPointerSize));
+    __ sw(at, MemOperand(a2));
+    __ Subu(a2, a2, Operand(kPointerSize));
+    __ Branch(&loop, ne, a2, Operand(sp));
     // Adjust the actual number of arguments and remove the top element
     // (which is a copy of the last argument).
     __ Subu(a0, a0, Operand(1));
