@@ -4619,11 +4619,7 @@ void CodeGenerator::GenerateMathPow(ZoneList<Expression*>* args) {
   Load(args->at(0));
   Load(args->at(1));
 
-
-  // There is a performance bug with the new code.
-  // Just force the call to runtime until this is debugged.
-  // if (!CpuFeatures::IsSupported(FPU)) {
-  if (1) {  // Fix this.........................................................
+  if (!CpuFeatures::IsSupported(FPU)) {
     frame_->CallRuntime(Runtime::kMath_pow, 2);
     frame_->EmitPush(v0);
   } else {
@@ -4656,8 +4652,11 @@ void CodeGenerator::GenerateMathPow(ZoneList<Expression*>* args) {
     __ Branch(&powi);
 
     __ bind(&base_nonsmi);
+
+    __ LoadRoot(heap_number_map, Heap::kHeapNumberMapRootIndex);
     // Exponent is smi and base is non smi. Get the double value from the base
-    // into fpu register f2.
+    // into fpu register f2. OBJECT_NOT_SMI flag added in function call
+    // in order to reduce one extra branch when smi is checked.
     __ ObjectToDoubleFPURegister(base, f2,
                                  scratch1, scratch2, heap_number_map,
                                  runtime.entry_label());
@@ -4729,8 +4728,7 @@ void CodeGenerator::GenerateMathPow(ZoneList<Expression*>* args) {
     __ lw(scratch1, FieldMemOperand(exponent, HeapObject::kMapOffset));
     __ lw(scratch2, FieldMemOperand(exponent, HeapNumber::kMantissaOffset));
     runtime.Branch(ne, scratch1, Operand(heap_number_map));
-    __ And(at, scratch1, scratch2);
-    runtime.Branch(ne, at, Operand(zero_reg));
+    runtime.Branch(ne, scratch2, Operand(zero_reg));
 
     // Load the higher bits (which contains the floating point exponent).
     __ lw(scratch1, FieldMemOperand(exponent, HeapNumber::kExponentOffset));
@@ -4746,8 +4744,8 @@ void CodeGenerator::GenerateMathPow(ZoneList<Expression*>* args) {
 
     // Load 1.0 into f2.
     __ li(scratch2, 0x3ff00000);
-    __ mtc1(scratch2, f2);
-    __ mtc1(zero_reg, f3);
+    __ mtc1(scratch2, f3);
+    __ mtc1(zero_reg, f2);
 
     // Calculate the reciprocal of the square root. 1/sqrt(x) = sqrt(1/x).
     __ div_d(f0, f2, f0);
