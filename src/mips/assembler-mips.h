@@ -73,6 +73,44 @@ namespace internal {
 
 // Core register.
 struct Register {
+  static const int kNumRegisters = ::kNumRegisters;
+  static const int kNumAllocatableRegisters = 14;  // v0 through t7
+
+  static int ToAllocationIndex(Register reg) {
+    return reg.code() - 2;  // zero_reg and 'at' are skipped.
+  }
+
+  static Register FromAllocationIndex(int index) {
+    ASSERT(index >= 0 && index < kNumAllocatableRegisters);
+    return from_code(index + 2);  // zero_reg and 'at' are skipped.
+  }
+
+  static const char* AllocationIndexToString(int index) {
+    ASSERT(index >= 0 && index < kNumAllocatableRegisters);
+    const char* const names[] = {
+      "v0",
+      "v1",
+      "a0",
+      "a1",
+      "a2",
+      "a3",
+      "t0",
+      "t1",
+      "t2",
+      "t3",
+      "t4",
+      "t5",
+      "t6",
+      "t7",
+    };
+    return names[index];
+  }
+
+  static Register from_code(int code) {
+    Register r = { code };
+    return r;
+  }
+
   bool is_valid() const { return 0 <= code_ && code_ < kNumRegisters; }
   bool is(Register reg) const { return code_ == reg.code_; }
   int code() const {
@@ -123,12 +161,56 @@ extern const Register sp;
 extern const Register s8_fp;
 extern const Register ra;
 
+
 int ToNumber(Register reg);
 
 Register ToRegister(int num);
 
 // Coprocessor register.
 struct FPURegister {
+  static const int kNumRegisters = ::kNumFPURegisters;
+  // f0 has been excluded from allocation. This is following ia32
+  // where xmm0 is excluded. This should be revisited.
+  static const int kNumAllocatableRegisters = 15;
+
+  static int ToAllocationIndex(FPURegister reg) {
+    ASSERT(reg.code() != 0);
+    ASSERT(reg.code() % 2 == 0);
+    return (reg.code() / 2) - 1;
+  }
+
+  static FPURegister FromAllocationIndex(int index) {
+    ASSERT(index >= 0 && index < kNumAllocatableRegisters);
+    return from_code((index + 1) * 2);
+  }
+
+  static const char* AllocationIndexToString(int index) {
+    ASSERT(index >= 0 && index < kNumAllocatableRegisters);
+    const char* const names[] = {
+      "f2",
+      "f4",
+      "f6",
+      "f8",
+      "f10",
+      "f12",
+      "f14",
+      "f16",
+      "f18",
+      "f20",
+      "f22",
+      "f24",
+      "f26",
+      "f28",
+      "f30"
+    };
+    return names[index];
+  }
+
+  static FPURegister from_code(int code) {
+    FPURegister r = { code };
+    return r;
+  }
+
   bool is_valid() const { return 0 <= code_ && code_ < kNumFPURegisters ; }
   bool is(FPURegister creg) const { return code_ == creg.code_; }
   int code() const {
@@ -146,6 +228,8 @@ struct FPURegister {
   // Unfortunately we can't make this private in a struct.
   int code_;
 };
+
+typedef FPURegister DoubleRegister;
 
 extern const FPURegister no_creg;
 
@@ -185,6 +269,9 @@ extern const FPURegister f31;
 // FPU (coprocessor 1) control registers.
 // Currently only FCSR (#31) is implemented.
 struct FPUControlRegister {
+  static const int kFCSRRegister = 31;
+  static const int kInvalidFPUControlRegister = -1;
+
   bool is_valid() const { return code_ == kFCSRRegister; }
   bool is(FPUControlRegister creg) const { return code_ == creg.code_; }
   int code() const {
@@ -205,6 +292,7 @@ struct FPUControlRegister {
 
 extern const FPUControlRegister no_fpucreg;
 extern const FPUControlRegister FCSR;
+
 
 // FCSR constants.
 static const uint32_t kFCSRFlagMask = (1 << 6) - 1;
@@ -307,7 +395,7 @@ class CpuFeatures : public AllStatic {
  public:
   // Detect features of the target CPU. Set safe defaults if the serializer
   // is enabled (snapshots must be portable).
-  static void Probe();
+  static void Probe(bool portable);
 
   // Check whether a feature is supported by the target CPU.
   static bool IsSupported(CpuFeature f) {
@@ -701,15 +789,20 @@ class Assembler : public Malloced {
   void RecordDebugBreakSlot();
 
   // Record a comment relocation entry that can be used by a disassembler.
-  // Use --debug_code to enable.
+  // Use --code-comments to enable.
   void RecordComment(const char* msg);
+
+  // Writes a single byte or word of data in the code stream.  Used for
+  // inline tables, e.g., jump-tables.
+  void db(uint8_t data);
+  void dd(uint32_t data);
 
   int32_t pc_offset() const { return pc_ - buffer_; }
 
   PositionsRecorder* positions_recorder() { return &positions_recorder_; }
 
   bool can_peephole_optimize(int instructions) {
-    if (!FLAG_peephole_optimization) return false;
+    if (!allow_peephole_optimization_) return false;
     if (last_bound_pos_ > pc_offset() - instructions * kInstrSize) return false;
     return reloc_info_writer.last_pc() <= pc_ - instructions * kInstrSize;
   }
@@ -758,6 +851,8 @@ class Assembler : public Malloced {
   static Instr SetSwOffset(Instr instr, int16_t offset);
   static bool IsAddImmediate(Instr instr);
   static Instr SetAddImmediateOffset(Instr instr, int16_t offset);
+
+  void CheckTrampolinePool(bool force_emit = false);
 
  protected:
   int32_t buffer_space() const { return reloc_info_writer.pos() - pc_; }
@@ -840,7 +935,6 @@ class Assembler : public Malloced {
   void GrowBuffer();
   inline void emit(Instr x);
   inline void CheckTrampolinePoolQuick();
-  void CheckTrampolinePool();
 
   // Instruction generation.
   // We have 3 different kind of encoding layout on MIPS.
@@ -978,6 +1072,7 @@ class Assembler : public Malloced {
   friend class BlockTrampolinePoolScope;
 
   PositionsRecorder positions_recorder_;
+  bool allow_peephole_optimization_;
   friend class PositionsRecorder;
   friend class EnsureSpace;
 };

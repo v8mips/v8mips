@@ -281,6 +281,21 @@ void MacroAssembler::RecordWrite(Register object,
   }
 }
 
+// These functions are only used by crankshaft.
+// Push and pop all registers that can hold pointers.
+void MacroAssembler::PushSafepointRegisters() {
+  UNIMPLEMENTED_MIPS();
+}
+
+void MacroAssembler::PopSafepointRegisters() {
+  UNIMPLEMENTED_MIPS();
+}
+
+int MacroAssembler::SafepointRegisterStackIndex(int reg_code) {
+  UNIMPLEMENTED_MIPS();
+  return 0;
+}
+
 
 // -----------------------------------------------------------------------------
 // Allocation support
@@ -1728,12 +1743,6 @@ void MacroAssembler::Call(const Operand& target,
 }
 
 
-void MacroAssembler::StackLimitCheck(Label* on_stack_overflow) {
-  LoadRoot(at, Heap::kStackLimitRootIndex);
-  Branch(on_stack_overflow, lo, sp, Operand(at));
-}
-
-
 void MacroAssembler::Drop(int count,
                           Condition cond,
                           Register reg,
@@ -2388,7 +2397,11 @@ void MacroAssembler::InvokeFunction(JSFunction* function,
   // Invoke the cached code.
   Handle<Code> code(function->code());
   ParameterCount expected(function->shared()->formal_parameter_count());
-  InvokeCode(code, expected, actual, RelocInfo::CODE_TARGET, flag);
+  if (V8::UseCrankshaft()) {
+    UNIMPLEMENTED_MIPS();
+  } else {
+    InvokeCode(code, expected, actual, RelocInfo::CODE_TARGET, flag);
+  }
 }
 
 
@@ -2635,6 +2648,14 @@ void MacroAssembler::CallRuntime(Runtime::Function* f, int num_arguments) {
   CallStub(&stub);
 }
 
+void MacroAssembler::CallRuntimeSaveDoubles(Runtime::FunctionId id) {
+  Runtime::Function* function = Runtime::FunctionForId(id);
+  li(a0, Operand(function->nargs));
+  li(a1, Operand(ExternalReference(function)));
+  CEntryStub stub(1);
+  stub.SaveDoubles();
+  CallStub(&stub);
+}
 
 void MacroAssembler::CallRuntime(Runtime::FunctionId fid, int num_arguments) {
   CallRuntime(Runtime::FunctionForId(fid), num_arguments);
@@ -2897,8 +2918,8 @@ void MacroAssembler::LeaveFrame(StackFrame::Type type) {
 
 void MacroAssembler::EnterExitFrame(Register hold_argc,
                                     Register hold_argv,
-                                    Register hold_function) {
-  // Compute the argv pointer and keep it in a callee-saved register.
+                                    Register hold_function,
+                                    bool save_doubles) {
   // a0 is argc.
   sll(t8, a0, kPointerSizeLog2);
   addu(hold_argv, sp, t8);
@@ -2909,6 +2930,11 @@ void MacroAssembler::EnterExitFrame(Register hold_argc,
   // popping the args.
   // t9 = sp + kPointerSize * #args
   addu(t9, sp, t8);
+
+  // Compute the argv pointer and keep it in a callee-saved register.
+  // This only seems to be needed for crankshaft and may cause problems
+  // so it's disabled for now.
+  // Subu(s6, t9, Operand(kPointerSize));
 
   // Align the stack at this point.
   AlignStack(0);
@@ -2932,10 +2958,48 @@ void MacroAssembler::EnterExitFrame(Register hold_argc,
   // Setup argc and the builtin function in callee-saved registers.
   mov(hold_argc, a0);
   mov(hold_function, a1);
+
+  // Optionally save all double registers.
+  if (save_doubles) {
+#ifdef DEBUG
+    int frame_alignment = ActivationFrameAlignment();
+#endif
+    // TODO(regis): Use vstrm instruction.
+    // The stack alignment code above made sp unaligned, so add space for one
+    // more double register and use aligned addresses.
+    ASSERT(kDoubleSize == frame_alignment);
+    // Mark the frame as containing doubles by pushing a non-valid return
+    // address, i.e. 0.
+    ASSERT(ExitFrameConstants::kMarkerOffset == -2 * kPointerSize);
+    push(zero_reg);  // Marker and alignment word.
+    int space = FPURegister::kNumRegisters * kDoubleSize + kPointerSize;
+    Subu(sp, sp, Operand(space));
+    // Remember: we only need to save every 2nd double FPU value.
+    for (int i = 0; i < FPURegister::kNumRegisters; i+=2) {
+      FPURegister reg = FPURegister::from_code(i);
+      sdc1(reg, MemOperand(sp, i * kDoubleSize + kPointerSize));
+    }
+    // Note that f0 will be accessible at fp - 2*kPointerSize -
+    // FPURegister::kNumRegisters * kDoubleSize, since the code slot and the
+    // alignment word were pushed after the fp.
+  }
 }
 
 
-void MacroAssembler::LeaveExitFrame() {
+void MacroAssembler::LeaveExitFrame(bool save_doubles) {
+  // Optionally restore all double registers.
+  if (save_doubles) {
+    // TODO(regis): Use vldrm instruction.
+    // Remember: we only need to restore every 2nd double FPU value.
+    for (int i = 0; i < FPURegister::kNumRegisters; i+=2) {
+      FPURegister reg = FPURegister::from_code(i);
+      // Register f30-f31 is just below the marker.
+      const int offset = ExitFrameConstants::kMarkerOffset;
+      ldc1(reg, MemOperand(fp,
+          (i - FPURegister::kNumRegisters) * kDoubleSize + offset));
+    }
+  }
+
   // Clear top frame.
   LoadExternalReference(t8, ExternalReference(Top::k_c_entry_fp_address));
   sw(zero_reg, MemOperand(t8));

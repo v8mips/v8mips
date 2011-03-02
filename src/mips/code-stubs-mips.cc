@@ -83,12 +83,14 @@ void FastNewClosureStub::Generate(MacroAssembler* masm) {
   // write barrier because the allocated object is in new space.
   __ LoadRoot(a1, Heap::kEmptyFixedArrayRootIndex);
   __ LoadRoot(a2, Heap::kTheHoleValueRootIndex);
+  __ LoadRoot(t0, Heap::kUndefinedValueRootIndex);
   __ sw(a1, FieldMemOperand(v0, JSObject::kPropertiesOffset));
   __ sw(a1, FieldMemOperand(v0, JSObject::kElementsOffset));
   __ sw(a2, FieldMemOperand(v0, JSFunction::kPrototypeOrInitialMapOffset));
   __ sw(a3, FieldMemOperand(v0, JSFunction::kSharedFunctionInfoOffset));
   __ sw(cp, FieldMemOperand(v0, JSFunction::kContextOffset));
   __ sw(a1, FieldMemOperand(v0, JSFunction::kLiteralsOffset));
+  __ sw(t0, FieldMemOperand(v0, JSFunction::kNextFunctionLinkOffset));
 
   // Initialize the code pointer in the function to be the one
   // found in the shared function info object.
@@ -1122,6 +1124,9 @@ void ToBooleanStub::Generate(MacroAssembler* masm) {
   Label not_heap_number;
   Register scratch0 = VirtualFrame::scratch0();
 
+  __ LoadRoot(scratch0, Heap::kNullValueRootIndex);
+  __ Branch(&false_result, eq, tos_, Operand(scratch0));
+
   // HeapNumber => false iff +0, -0, or NaN.
   __ lw(scratch0, FieldMemOperand(tos_, HeapObject::kMapOffset));
   __ LoadRoot(at, Heap::kHeapNumberMapRootIndex);
@@ -1995,6 +2000,14 @@ Handle<Code> GetBinaryOpStub(int key, BinaryOpIC::TypeInfo type_info) {
 }
 
 
+Handle<Code> GetTypeRecordingBinaryOpStub(int key,
+    TRBinaryOpIC::TypeInfo type_info,
+    TRBinaryOpIC::TypeInfo result_type_info) {
+  UNIMPLEMENTED();
+  return Handle<Code>::null();
+}
+
+
 void TranscendentalCacheStub::Generate(MacroAssembler* masm) {
   // Argument is a number and is on stack and in a0.
   Label runtime_call;
@@ -2468,7 +2481,7 @@ void CEntryStub::GenerateCore(MacroAssembler* masm,
   // v0:v1: result
   // sp: stack pointer
   // fp: frame pointer
-  __ LeaveExitFrame();
+  __ LeaveExitFrame(save_doubles_);
 
   // Check if we should retry or throw exception.
   Label retry;
@@ -2517,7 +2530,7 @@ void CEntryStub::Generate(MacroAssembler* masm) {
   // builtin once.
 
   // Enter the exit frame that transitions from JavaScript to C++.
-  __ EnterExitFrame(s0, s1, s2);
+  __ EnterExitFrame(s0, s1, s2, save_doubles_);
 
   // s0: number of arguments (C callee-saved)
   // s1: pointer to first argument (C callee-saved)
@@ -2611,6 +2624,19 @@ void JSEntryStub::GenerateBody(MacroAssembler* masm, bool is_construct) {
   // 4 args slots
   // args
 
+  #ifdef ENABLE_LOGGING_AND_PROFILING
+    // If this is the outermost JS call, set js_entry_sp value.
+    ExternalReference js_entry_sp(Top::k_js_entry_sp_address);
+    __ li(t1, Operand(ExternalReference(js_entry_sp)));
+    __ lw(t2, MemOperand(t1));
+    {
+      Label skip;
+      __ Branch(&skip, ne, t2, Operand(zero_reg));
+      __ sw(fp, MemOperand(t1));
+      __ bind(&skip);
+    }
+  #endif
+
   // Call a faked try-block that does the invoke.
   __ bal(&invoke);
   __ nop();   // Branch delay slot nop.
@@ -2682,6 +2708,19 @@ void JSEntryStub::GenerateBody(MacroAssembler* masm, bool is_construct) {
 
   // This restores sp to its position before PushTryHandler.
   __ addiu(sp, sp, StackHandlerConstants::kSize);
+
+#ifdef ENABLE_LOGGING_AND_PROFILING
+  // If current FP value is the same as js_entry_sp value, it means that
+  // the current function is the outermost.
+  __ li(t1, Operand(ExternalReference(js_entry_sp)));
+  __ lw(t2, MemOperand(t1));
+  {
+    Label skip;
+    __ Branch(&skip, ne, fp, Operand(t2));
+    __ sw(zero_reg, MemOperand(t1));
+    __ bind(&skip);
+  }
+#endif
 
   __ bind(&exit);  // v0 holds result.
   // Restore the top frame descriptors from the stack.
@@ -3269,6 +3308,93 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
 #endif  // V8_INTERPRETED_REGEXP
 }
 
+void RegExpConstructResultStub::Generate(MacroAssembler* masm) {
+  const int kMaxInlineLength = 100;
+  Label slowcase;
+  Label done;
+  __ lw(a1, MemOperand(sp, kPointerSize * 2));
+  STATIC_ASSERT(kSmiTag == 0);
+  STATIC_ASSERT(kSmiTagSize == 1);
+  __ BranchOnNotSmi(a1, &slowcase);
+  __ Branch(&slowcase, hi, a1, Operand(Smi::FromInt(kMaxInlineLength)));
+  // Smi-tagging is equivalent to multiplying by 2.
+  // Allocate RegExpResult followed by FixedArray with size in ebx.
+  // JSArray:   [Map][empty properties][Elements][Length-smi][index][input]
+  // Elements:  [Map][Length][..elements..]
+  // Size of JSArray with two in-object properties and the header of a
+  // FixedArray.
+  int objects_size =
+      (JSRegExpResult::kSize + FixedArray::kHeaderSize) / kPointerSize;
+  __ srl(t1, a1, kSmiTagSize + kSmiShiftSize);
+  __ Addu(a2, t1, Operand(objects_size));
+  __ AllocateInNewSpace(
+      a2,  // In: Size, in words.
+      v0,  // Out: Start of allocation (tagged).
+      a3,  // Scratch register.
+      t0,  // Scratch register.
+      &slowcase,
+      static_cast<AllocationFlags>(TAG_OBJECT | SIZE_IN_WORDS));
+  // v0: Start of allocated area, object-tagged.
+  // a1: Number of elements in array, as smi.
+  // t1: Number of elements, untagged.
+
+  // Set JSArray map to global.regexp_result_map().
+  // Set empty properties FixedArray.
+  // Set elements to point to FixedArray allocated right after the JSArray.
+  // Interleave operations for better latency.
+  __ lw(a2, ContextOperand(cp, Context::GLOBAL_INDEX));
+  __ Addu(a3, v0, Operand(JSRegExpResult::kSize));
+  __ li(t0, Operand(Factory::empty_fixed_array()));
+  __ lw(a2, FieldMemOperand(a2, GlobalObject::kGlobalContextOffset));
+  __ sw(a3, FieldMemOperand(v0, JSObject::kElementsOffset));
+  __ lw(a2, ContextOperand(a2, Context::REGEXP_RESULT_MAP_INDEX));
+  __ sw(t0, FieldMemOperand(v0, JSObject::kPropertiesOffset));
+  __ sw(a2, FieldMemOperand(v0, HeapObject::kMapOffset));
+
+  // Set input, index and length fields from arguments.
+  __ lw(a1, MemOperand(sp, kPointerSize * 0));
+  __ sw(a1, FieldMemOperand(v0, JSRegExpResult::kInputOffset));
+  __ lw(a1, MemOperand(sp, kPointerSize * 1));
+  __ sw(a1, FieldMemOperand(v0, JSRegExpResult::kIndexOffset));
+  __ lw(a1, MemOperand(sp, kPointerSize * 2));
+  __ sw(a1, FieldMemOperand(v0, JSArray::kLengthOffset));
+
+  // Fill out the elements FixedArray.
+  // v0: JSArray, tagged.
+  // a3: FixedArray, tagged.
+  // t1: Number of elements in array, untagged.
+
+  // Set map.
+  __ li(a2, Operand(Factory::fixed_array_map()));
+  __ sw(a2, FieldMemOperand(a3, HeapObject::kMapOffset));
+  // Set FixedArray length.
+  __ sll(t2, t1, kSmiTagSize);
+  __ sw(t2, FieldMemOperand(a3, FixedArray::kLengthOffset));
+  // Fill contents of fixed-array with the-hole.
+  __ li(a2, Operand(Factory::the_hole_value()));
+  __ Addu(a3, a3, Operand(FixedArray::kHeaderSize - kHeapObjectTag));
+  // Fill fixed array elements with hole.
+  // v0: JSArray, tagged.
+  // a2: the hole.
+  // a3: Start of elements in FixedArray.
+  // t1: Number of elements to fill.
+  Label loop;
+  __ bind(&loop);
+  // Jump if a1(?) is negative or zero.
+  __ Branch(&done, le, t1, Operand(t1));
+  __ Subu(t1, t1, Operand(1));
+  __ sll(t0, t1, kPointerSizeLog2);
+  __ Addu(t0, a3, t0);
+  __ sw(a2, MemOperand(t0));
+  __ Branch(&loop);
+
+  __ bind(&done);
+  __ Addu(sp, sp, Operand(3 * kPointerSize));
+  __ Ret();
+
+  __ bind(&slowcase);
+  __ TailCallRuntime(Runtime::kRegExpConstructResult, 3, 1);
+}
 
 void CallFunctionStub::Generate(MacroAssembler* masm) {
   Label slow;
@@ -4595,6 +4721,146 @@ void StringAddStub::Generate(MacroAssembler* masm) {
   // Just jump to runtime to add the two strings.
   __ bind(&string_add_runtime);
   __ TailCallRuntime(Runtime::kStringAdd, 2, 1);
+}
+
+void ICCompareStub::GenerateSmis(MacroAssembler* masm) {
+  ASSERT(state_ == CompareIC::SMIS);
+  Label miss;
+  __ Or(a2, a1, a0);
+  __ BranchOnNotSmi(a2, &miss);
+
+  if (GetCondition() == eq) {
+    // For equality we do not care about the sign of the result.
+    __ Subu(v0, a0, a1);
+  } else {
+    __ Subu(v0, a1, a0);
+    // Check for overflow.
+    __ xor_(t0, v0, a0);
+    __ xor_(t1, v0, a1);
+    __ and_(t0, t0, t1);    // Overflow occurred if result is negative.
+    Label done;
+    __ Branch(&done, ge, t0, Operand(zero_reg));
+    // Correct sign of result in case of overflow.
+    __ Subu(v0, zero_reg, v0);
+    __ bind(&done);
+  }
+  __ Ret();
+
+  __ bind(&miss);
+  GenerateMiss(masm);
+}
+
+
+void ICCompareStub::GenerateHeapNumbers(MacroAssembler* masm) {
+  ASSERT(state_ == CompareIC::HEAP_NUMBERS);
+
+  Label generic_stub;
+  Label unordered;
+  Label miss;
+  __ And(a2, a1, Operand(a0));
+  __ BranchOnSmi(a2, &generic_stub);
+
+  __ GetObjectType(a0, a2, a2);
+  __ Branch(&miss, ne, a2, Operand(HEAP_NUMBER_TYPE));
+  __ GetObjectType(a1, a2, a2);
+  __ Branch(&miss, ne, a2, Operand(HEAP_NUMBER_TYPE));
+
+  // Inlining the double comparison and falling back to the general compare
+  // stub if NaN is involved or FPU is unsupported.
+  if (CpuFeatures::IsSupported(FPU)) {
+    CpuFeatures::Scope scope(FPU);
+
+    // Load left and right operand
+    __ Subu(a2, a1, Operand(kHeapObjectTag));
+    __ ldc1(f0, MemOperand(a2, HeapNumber::kValueOffset));
+    __ Subu(a2, a0, Operand(kHeapObjectTag));
+    __ ldc1(f2, MemOperand(a2, HeapNumber::kValueOffset));
+
+    Label fpu_eq, fpu_lt, fpu_gt;
+    // Compare operands (test if unordered).
+    __ c(UN, D, f0, f2);
+    // Don't base result on status bits when a NaN is involved.
+    __ bc1t(&unordered);
+    __ nop();
+
+    // Test if equal.
+    __ c(EQ, D, f0, f2);
+    __ bc1t(&fpu_eq);
+    __ nop();
+
+    // Test if unordered or less (unordered case is already handled).
+    __ c(ULT, D, f0, f2);
+    __ bc1t(&fpu_lt);
+    __ nop();
+
+    // Otherwise it's greater.
+    __ bc1f(&fpu_gt);
+    __ nop();
+
+    // Return a result of -1, 0, or 1.
+    __ bind(&fpu_eq);
+    __ li(v0, Operand(EQUAL));
+    __ Ret();
+
+    __ bind(&fpu_lt);
+    __ li(v0, Operand(LESS));
+    __ Ret();
+
+    __ bind(&fpu_gt);
+    __ li(v0, Operand(GREATER));
+    __ Ret();
+
+    __ bind(&unordered);
+  }
+
+  CompareStub stub(GetCondition(), strict(), NO_COMPARE_FLAGS, a1, a0);
+  __ bind(&generic_stub);
+  __ Jump(stub.GetCode(), RelocInfo::CODE_TARGET);
+
+  __ bind(&miss);
+  GenerateMiss(masm);
+}
+
+
+void ICCompareStub::GenerateObjects(MacroAssembler* masm) {
+  ASSERT(state_ == CompareIC::OBJECTS);
+  Label miss;
+  __ And(a2, a1, Operand(a0));
+  __ BranchOnSmi(a2, &miss);
+
+  __ GetObjectType(a0, a2, a2);
+  __ Branch(&miss, ne, a2, Operand(JS_OBJECT_TYPE));
+  __ GetObjectType(a1, a2, a2);
+  __ Branch(&miss, ne, a2, Operand(JS_OBJECT_TYPE));
+
+  ASSERT(GetCondition() == eq);
+  __ Subu(v0, a0, Operand(a1));
+  __ Ret();
+
+  __ bind(&miss);
+  GenerateMiss(masm);
+}
+
+
+void ICCompareStub::GenerateMiss(MacroAssembler* masm) {
+  __ Push(a1, a0);
+  __ push(ra);
+
+  // Call the runtime system in a fresh internal frame.
+  ExternalReference miss = ExternalReference(IC_Utility(IC::kCompareIC_Miss));
+  __ EnterInternalFrame();
+  __ Push(a1, a0);
+  __ li(t0, Operand(Smi::FromInt(op_)));
+  __ push(t0);
+  __ CallExternalReference(miss, 3);
+  __ LeaveInternalFrame();
+  // Compute the entry point of the rewritten stub.
+  __ Addu(a2, v0, Operand(Code::kHeaderSize - kHeapObjectTag));
+  // Restore registers.
+  __ pop(ra);
+  __ pop(a0);
+  __ pop(a1);
+  __ Jump(a2);
 }
 
 

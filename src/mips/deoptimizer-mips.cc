@@ -25,66 +25,56 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// CPU specific code for arm independent of OS goes here.
-
-#include <sys/syscall.h>
-#include <unistd.h>
-
-#ifdef __mips
-#include <asm/cachectl.h>
-#endif  // #ifdef __mips
-
 #include "v8.h"
 
-#if defined(V8_TARGET_ARCH_MIPS)
+#include "codegen.h"
+#include "deoptimizer.h"
+#include "full-codegen.h"
+#include "safepoint-table.h"
 
-#include "cpu.h"
-#include "macro-assembler.h"
-
-#include "simulator.h"  // for cache flushing.
+// Note: this file was taken from the X64 version. ARM has a partially working
+// lithium implementation, but for now it is not ported to mips.
 
 namespace v8 {
 namespace internal {
 
 
-void CPU::Setup() {
-  CpuFeatures::Probe(true);
-  // For now just disable lithium/crankshaft.
-  if (true || !CpuFeatures::IsSupported(FPU) || Serializer::enabled()) {
-    V8::DisableCrankshaft();
-  }
+int Deoptimizer::table_entry_size_ = 10;
+
+void Deoptimizer::DeoptimizeFunction(JSFunction* function) {
+  UNIMPLEMENTED();
 }
 
 
-void CPU::FlushICache(void* start, size_t size) {
-#if !defined (USE_SIMULATOR)
-  int res;
-
-  // See http://www.linux-mips.org/wiki/Cacheflush_Syscall
-  res = syscall(__NR_cacheflush, start, size, ICACHE);
-
-  if (res) {
-    V8_Fatal(__FILE__, __LINE__, "Failed to flush the instruction cache");
-  }
-
-#else  // simulator mode
-  // Not generating mips instructions for C-code. This means that we are
-  // building a mips emulator based target.  We should notify the simulator
-  // that the Icache was flushed.
-  // None of this code ends up in the snapshot so there are no issues
-  // around whether or not to generate the code when building snapshots.
-  assembler::mips::Simulator::FlushICache(start, size);
-#endif    // #ifdef __mips
+void Deoptimizer::PatchStackCheckCode(RelocInfo* rinfo,
+                                      Code* replacement_code) {
+  UNIMPLEMENTED();
 }
 
 
-void CPU::DebugBreak() {
-#ifdef __mips
-  asm volatile("break");
-#endif  // #ifdef __mips
+void Deoptimizer::RevertStackCheckCode(RelocInfo* rinfo, Code* check_code) {
+  UNIMPLEMENTED();
 }
 
+
+void Deoptimizer::DoComputeOsrOutputFrame() {
+  UNIMPLEMENTED();
+}
+
+
+void Deoptimizer::DoComputeFrame(TranslationIterator* iterator,
+                                 int frame_index) {
+  UNIMPLEMENTED();
+}
+
+
+void Deoptimizer::EntryGenerator::Generate() {
+  UNIMPLEMENTED();
+}
+
+
+void Deoptimizer::TableEntryGenerator::GeneratePrologue() {
+  UNIMPLEMENTED();
+}
 
 } }  // namespace v8::internal
-
-#endif  // V8_TARGET_ARCH_MIPS

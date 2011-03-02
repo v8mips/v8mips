@@ -220,6 +220,10 @@ class Simulator {
   // ICache checking.
   static void FlushICache(void* start, size_t size);
 
+  // Returns true if pc register contains one of the 'special_values' defined
+  // below (bad_ra, end_sim_pc).
+  bool has_bad_pc() const;
+
  private:
   enum special_values {
     // Known bad pc value to ensure that the simulator does not execute
@@ -319,6 +323,8 @@ class Simulator {
   uint32_t FCSR_;
 
   // Simulator support.
+  // Allocate 1MB for stack.
+  static const size_t stack_size_ = 1 * 1024*1024;
   char* stack_;
   bool pc_modified_;
   int icount_;

@@ -33,6 +33,8 @@
 
 #include "codegen-inl.h"
 #include "debug.h"
+#include "deoptimizer.h"
+#include "full-codegen.h"
 #include "runtime.h"
 
 namespace v8 {
@@ -1139,6 +1141,43 @@ void Builtins::Generate_LazyCompile(MacroAssembler* masm) {
   __ Jump(t9);
 }
 
+void Builtins::Generate_LazyRecompile(MacroAssembler* masm) {
+  // Enter an internal frame.
+  __ EnterInternalFrame();
+
+  // Preserve the function.
+  __ push(a1);
+
+  // Push the function on the stack as the argument to the runtime function.
+  __ push(a1);
+  __ CallRuntime(Runtime::kLazyRecompile, 1);
+  // Calculate the entry point.
+  __ Addu(t9, v0, Operand(Code::kHeaderSize - kHeapObjectTag));
+  // Restore saved function.
+  __ pop(a1);
+
+  // Tear down temporary frame.
+  __ LeaveInternalFrame();
+
+  // Do a tail-call of the compiled function.
+  __ Jump(t9);
+}
+
+void Builtins::Generate_NotifyDeoptimized(MacroAssembler* masm) {
+  __ break_(333);
+}
+
+void Builtins::Generate_NotifyLazyDeoptimized(MacroAssembler* masm) {
+  __ break_(334);
+}
+
+void Builtins::Generate_NotifyOSR(MacroAssembler* masm) {
+  __ break_(335);
+}
+
+void Builtins::Generate_OnStackReplacement(MacroAssembler* masm) {
+  __ break_(336);
+}
 
 void Builtins::Generate_FunctionCall(MacroAssembler* masm) {
   // CAREFUL! : Implemented without Builtins args slots.

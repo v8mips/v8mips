@@ -25,66 +25,41 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// CPU specific code for arm independent of OS goes here.
+#ifndef V8_MIPS_LITHIUM_CODEGEN_MIPS_H_
+#define V8_MIPS_LITHIUM_CODEGEN_MIPS_H_
 
-#include <sys/syscall.h>
-#include <unistd.h>
+#include "mips/lithium-mips.h"
 
-#ifdef __mips
-#include <asm/cachectl.h>
-#endif  // #ifdef __mips
+#include "deoptimizer.h"
+#include "safepoint-table.h"
+#include "scopes.h"
 
-#include "v8.h"
-
-#if defined(V8_TARGET_ARCH_MIPS)
-
-#include "cpu.h"
-#include "macro-assembler.h"
-
-#include "simulator.h"  // for cache flushing.
+// Note: this file was taken from the X64 version. ARM has a partially working
+// lithium implementation, but for now it is not ported to mips.
 
 namespace v8 {
 namespace internal {
 
+// Forward declarations.
+class LDeferredCode;
 
-void CPU::Setup() {
-  CpuFeatures::Probe(true);
-  // For now just disable lithium/crankshaft.
-  if (true || !CpuFeatures::IsSupported(FPU) || Serializer::enabled()) {
-    V8::DisableCrankshaft();
-  }
-}
+class LCodeGen BASE_EMBEDDED {
+ public:
+  LCodeGen(LChunk* chunk, MacroAssembler* assembler, CompilationInfo* info) { }
 
-
-void CPU::FlushICache(void* start, size_t size) {
-#if !defined (USE_SIMULATOR)
-  int res;
-
-  // See http://www.linux-mips.org/wiki/Cacheflush_Syscall
-  res = syscall(__NR_cacheflush, start, size, ICACHE);
-
-  if (res) {
-    V8_Fatal(__FILE__, __LINE__, "Failed to flush the instruction cache");
+  // Try to generate code for the entire chunk, but it may fail if the
+  // chunk contains constructs we cannot handle. Returns true if the
+  // code generation attempt succeeded.
+  bool GenerateCode() {
+    UNIMPLEMENTED();
+    return false;
   }
 
-#else  // simulator mode
-  // Not generating mips instructions for C-code. This means that we are
-  // building a mips emulator based target.  We should notify the simulator
-  // that the Icache was flushed.
-  // None of this code ends up in the snapshot so there are no issues
-  // around whether or not to generate the code when building snapshots.
-  assembler::mips::Simulator::FlushICache(start, size);
-#endif    // #ifdef __mips
-}
-
-
-void CPU::DebugBreak() {
-#ifdef __mips
-  asm volatile("break");
-#endif  // #ifdef __mips
-}
-
+  // Finish the code by setting stack height, safepoint, and bailout
+  // information on it.
+  void FinishCode(Handle<Code> code) { UNIMPLEMENTED(); }
+};
 
 } }  // namespace v8::internal
 
-#endif  // V8_TARGET_ARCH_MIPS
+#endif  // V8_MIPS_LITHIUM_CODEGEN_MIPS_H_

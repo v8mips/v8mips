@@ -37,7 +37,7 @@
 #include "debug.h"
 #include "ic-inl.h"
 #include "jsregexp.h"
-#include "jump-target-light-inl.h"
+#include "jump-target-inl.h"
 #include "parser.h"
 #include "regexp-macro-assembler.h"
 #include "regexp-stack.h"
@@ -80,12 +80,12 @@ void VirtualFrameRuntimeCallHelper::AfterCall(MacroAssembler* masm) const {
 }
 
 
-void ICRuntimeCallHelper::BeforeCall(MacroAssembler* masm) const {
+void StubRuntimeCallHelper::BeforeCall(MacroAssembler* masm) const {
   masm->EnterInternalFrame();
 }
 
 
-void ICRuntimeCallHelper::AfterCall(MacroAssembler* masm) const {
+void StubRuntimeCallHelper::AfterCall(MacroAssembler* masm) const {
   masm->LeaveInternalFrame();
 }
 
@@ -165,6 +165,9 @@ void CodeGenerator::Generate(CompilationInfo* info) {
   info_ = info;
   int slots = scope()->num_parameters() + scope()->num_stack_slots();
   ScopedVector<TypeInfo> type_info_array(slots);
+  for (int i = 0; i < slots; i++) {
+    type_info_array[i] = TypeInfo::Unknown();
+  }
   type_info_ = &type_info_array;
   ASSERT(allocator_ == NULL);
   RegisterAllocator register_allocator(this);
@@ -5467,96 +5470,14 @@ void CodeGenerator::GenerateRegExpExec(ZoneList<Expression*>* args) {
 
 
 void CodeGenerator::GenerateRegExpConstructResult(ZoneList<Expression*>* args) {
-  // No stub. This code only occurs a few times in regexp.js.
-  const int kMaxInlineLength = 100;
-
   ASSERT_EQ(3, args->length());
+
   Load(args->at(0));  // Size of array, smi.
   Load(args->at(1));  // "index" property value.
   Load(args->at(2));  // "input" property value.
-  {
-    VirtualFrame::SpilledScope spilled_scope(frame_);
-    Label slowcase;
-    Label done;
-    __ lw(a1, MemOperand(sp, kPointerSize * 2));
-    STATIC_ASSERT(kSmiTag == 0);
-    STATIC_ASSERT(kSmiTagSize == 1);
-    __ BranchOnNotSmi(a1, &slowcase);
-    __ Branch(&slowcase, hi, a1, Operand(Smi::FromInt(kMaxInlineLength)));
-    // Smi-tagging is equivalent to multiplying by 2.
-    // Allocate RegExpResult followed by FixedArray with size in ebx.
-    // JSArray:   [Map][empty properties][Elements][Length-smi][index][input]
-    // Elements:  [Map][Length][..elements..]
-    // Size of JSArray with two in-object properties and the header of a
-    // FixedArray.
-    int objects_size =
-        (JSRegExpResult::kSize + FixedArray::kHeaderSize) / kPointerSize;
-    __ srl(t1, a1, kSmiTagSize + kSmiShiftSize);
-    __ Addu(a2, t1, Operand(objects_size));
-    __ AllocateInNewSpace(
-        a2,  // In: Size, in words.
-        v0,  // Out: Start of allocation (tagged).
-        a3,  // Scratch register.
-        t0,  // Scratch register.
-        &slowcase,
-        static_cast<AllocationFlags>(TAG_OBJECT | SIZE_IN_WORDS));
-    // v0: Start of allocated area, object-tagged.
-    // a1: Number of elements in array, as smi.
-    // t1: Number of elements, untagged.
-
-    // Set JSArray map to global.regexp_result_map().
-    // Set empty properties FixedArray.
-    // Set elements to point to FixedArray allocated right after the JSArray.
-    // Interleave operations for better latency.
-    __ lw(a2, ContextOperand(cp, Context::GLOBAL_INDEX));
-    __ Addu(a3, v0, Operand(JSRegExpResult::kSize));
-    __ li(t0, Operand(Factory::empty_fixed_array()));
-    __ lw(a2, FieldMemOperand(a2, GlobalObject::kGlobalContextOffset));
-    __ sw(a3, FieldMemOperand(v0, JSObject::kElementsOffset));
-    __ lw(a2, ContextOperand(a2, Context::REGEXP_RESULT_MAP_INDEX));
-    __ sw(t0, FieldMemOperand(v0, JSObject::kPropertiesOffset));
-    __ sw(a2, FieldMemOperand(v0, HeapObject::kMapOffset));
-
-    // Set input, index and length fields from arguments.
-    __ MultiPop(static_cast<RegList>(a2.bit() | t0.bit()));
-    __ sw(a1, FieldMemOperand(v0, JSArray::kLengthOffset));
-    __ Addu(sp, sp, Operand(kPointerSize));
-    __ sw(t0, FieldMemOperand(v0, JSRegExpResult::kIndexOffset));
-    __ sw(a2, FieldMemOperand(v0, JSRegExpResult::kInputOffset));
-
-    // Fill out the elements FixedArray.
-    // v0: JSArray, tagged.
-    // a3: FixedArray, tagged.
-    // t1: Number of elements in array, untagged.
-
-    // Set map.
-    __ li(a2, Operand(Factory::fixed_array_map()));
-    __ sw(a2, FieldMemOperand(a3, HeapObject::kMapOffset));
-    // Set FixedArray length.
-    __ sll(t2, t1, kSmiTagSize);
-    __ sw(t2, FieldMemOperand(a3, FixedArray::kLengthOffset));
-    // Fill contents of fixed-array with the-hole.
-    __ li(a2, Operand(Factory::the_hole_value()));
-    __ Addu(a3, a3, Operand(FixedArray::kHeaderSize - kHeapObjectTag));
-    // Fill fixed array elements with hole.
-    // v0: JSArray, tagged.
-    // a2: the hole.
-    // a3: Start of elements in FixedArray.
-    // t1: Number of elements to fill.
-    Label loop;
-    __ sll(t1, t1, kPointerSizeLog2);  // Concert num elements to num bytes.
-    __ addu(t1, t1, a3);  // Point past last element to store.
-    __ bind(&loop);
-    __ Branch(&done, ge, a3, Operand(t1));  // Break when a3 past end of elem.
-    __ sw(a2, MemOperand(a3));
-    __ Branch(&loop, false);         // Use branch delay slot.
-    __ addiu(a3, a3, kPointerSize);  // In branch delay slot.
-
-    __ bind(&slowcase);
-    __ CallRuntime(Runtime::kRegExpConstructResult, 3);
-    __ bind(&done);
-  }
-  frame_->Forget(3);
+  RegExpConstructResultStub stub;
+  frame_->SpillAll();
+  frame_->CallStub(&stub, 3);
   frame_->EmitPush(v0);
 }
 

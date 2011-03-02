@@ -787,8 +787,7 @@ Simulator::Simulator() {
   Initialize();
   // Setup simulator support first. Some of this information is needed to
   // setup the architecture state.
-  size_t stack_size = 1 * 1024*1024;  // allocate 1MB for stack
-  stack_ = reinterpret_cast<char*>(malloc(stack_size));
+  stack_ = reinterpret_cast<char*>(malloc(stack_size_));
   pc_modified_ = false;
   icount_ = 0;
   break_count_ = 0;
@@ -808,13 +807,13 @@ Simulator::Simulator() {
   // The sp is initialized to point to the bottom (high address) of the
   // allocated stack area. To be safe in potential stack underflows we leave
   // some buffer below.
-  registers_[sp] = reinterpret_cast<int32_t>(stack_) + stack_size - 64;
+  registers_[sp] = reinterpret_cast<int32_t>(stack_) + stack_size_ - 64;
   // The ra and pc are initialized to a known bad value that will cause an
   // access violation if the simulator ever tries to execute it.
   registers_[pc] = bad_ra;
   registers_[ra] = bad_ra;
   InitializeCoverage();
-  for(int i = 0; i < kNumExceptions; i++){
+  for (int i = 0; i < kNumExceptions; i++) {
     exceptions[i] = 0;
   }
 }
@@ -998,6 +997,9 @@ void Simulator::set_pc(int32_t value) {
   registers_[pc] = value;
 }
 
+bool Simulator::has_bad_pc() const {
+  return ((registers_[pc] == bad_ra) || (registers_[pc] == end_sim_pc));
+}
 
 // Raw access to the PC register without the special adjustment when reading.
 int32_t Simulator::get_pc() const {
@@ -1170,11 +1172,12 @@ void Simulator::Format(Instruction* instr, const char* format) {
 typedef int64_t (*SimulatorRuntimeCall)(int32_t arg0,
                                         int32_t arg1,
                                         int32_t arg2,
-                                        int32_t arg3);
+                                        int32_t arg3,
+                                        int32_t arg4);
 typedef double (*SimulatorRuntimeFPCall)(int32_t arg0,
-                                        int32_t arg1,
-                                        int32_t arg2,
-                                        int32_t arg3);
+                                         int32_t arg1,
+                                         int32_t arg2,
+                                         int32_t arg3);
 
 // Software interrupt instructions are used by the simulator to call into the
 // C-based V8 runtime. They are also used for debugging with simulator.
@@ -1192,6 +1195,17 @@ void Simulator::SoftwareInterrupt(Instruction* instr) {
     int32_t arg1 = get_register(a1);
     int32_t arg2 = get_register(a2);
     int32_t arg3 = get_register(a3);
+    int32_t arg4 = 0;
+
+    // We try to make arg4 = *sp, but need to check if sp is valid first.
+    // This is basically a fix for cctest test-api/CatchStackOverflow which
+    // causes the stack to overflow. For some reason arm doesn't need this
+    // stack check here.
+    int32_t* stack_pointer = reinterpret_cast<int32_t*>(get_register(sp));
+    int32_t* stack = reinterpret_cast<int32_t*>(stack_);
+    if (stack_pointer >= stack && stack_pointer < stack + stack_size_) {
+      arg4 = *stack_pointer;
+    }
     // This is dodgy but it works because the C entry stubs are never moved.
     // See comment in codegen-arm.cc and bug 1242173.
     int32_t saved_ra = get_register(ra);
@@ -1203,12 +1217,13 @@ void Simulator::SoftwareInterrupt(Instruction* instr) {
 
     if (::v8::internal::FLAG_trace_sim) {
       PrintF(
-          "Call to host function at %p with args %08x, %08x, %08x, %08x\n",
+          "Call to host function at %p args %08x, %08x, %08x, %08x, %0xc",
           FUNCTION_ADDR(target),
           arg0,
           arg1,
           arg2,
-          arg3);
+          arg3,
+          arg4);
     }
 
     // Based on CpuFeatures::IsSupported(FPU), Mips will use either hardware
@@ -1231,7 +1246,7 @@ void Simulator::SoftwareInterrupt(Instruction* instr) {
       set_register(v0, gpreg_pair[0]);
       set_register(v1, gpreg_pair[1]);
     } else {
-      int64_t result = target(arg0, arg1, arg2, arg3);
+      int64_t result = target(arg0, arg1, arg2, arg3, arg4);
       set_register(v0, static_cast<int32_t>(result));
       set_register(v1, static_cast<int32_t>(result >> 32));
     }

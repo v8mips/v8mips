@@ -55,7 +55,7 @@ unsigned CpuFeatures::supported_ = 0;
 unsigned CpuFeatures::enabled_ = 0;
 unsigned CpuFeatures::found_by_runtime_probing_ = 0;
 
-void CpuFeatures::Probe() {
+void CpuFeatures::Probe(bool portable) {
   // If the compiler is allowed to use fpu then we can use fpu too in our
   // code generation.
 #if !defined(__mips__)
@@ -64,7 +64,7 @@ void CpuFeatures::Probe() {
       supported_ |= 1u << FPU;
   }
 #else
-  if (Serializer::enabled()) {
+  if (portable && Serializer::enabled()) {
     supported_ |= OS::CpuFeaturesImpliedByPlatform();
     return;  // No features if we might serialize.
   }
@@ -75,6 +75,8 @@ void CpuFeatures::Probe() {
     supported_ |= 1u << FPU;
     found_by_runtime_probing_ |= 1u << FPU;
   }
+
+  if (!portable) found_by_runtime_probing_ = 0;
 #endif
 }
 
@@ -311,7 +313,10 @@ static const Instr kLwSwInstrArgumentMask  = ~kLwSwInstrTypeMask;
 static const Instr kLwSwOffsetMask = kImm16Mask;
 
 Assembler::Assembler(void* buffer, int buffer_size)
-    : positions_recorder_(this) {
+    : positions_recorder_(this),
+      allow_peephole_optimization_(false) {
+  // BUG(3245989): disable peephole optimization if crankshaft is enabled.
+  allow_peephole_optimization_ = FLAG_peephole_optimization;
   if (buffer == NULL) {
     // Do our own buffer management.
     if (buffer_size <= kMinimalBufferSize) {
@@ -1971,7 +1976,7 @@ void Assembler::RecordDebugBreakSlot() {
 
 
 void Assembler::RecordComment(const char* msg) {
-  if (FLAG_debug_code) {
+  if (FLAG_code_comments) {
     CheckBuffer();
     RecordRelocInfo(RelocInfo::COMMENT, reinterpret_cast<intptr_t>(msg));
   }
@@ -2021,6 +2026,19 @@ void Assembler::GrowBuffer() {
   ASSERT(!overflow());
 }
 
+void Assembler::db(uint8_t data) {
+  CheckBuffer();
+  *reinterpret_cast<uint8_t*>(pc_) = data;
+  pc_ += sizeof(uint8_t);
+}
+
+
+void Assembler::dd(uint32_t data) {
+  CheckBuffer();
+  *reinterpret_cast<uint32_t*>(pc_) = data;
+  pc_ += sizeof(uint32_t);
+}
+
 
 void Assembler::RecordRelocInfo(RelocInfo::Mode rmode, intptr_t data) {
   RelocInfo rinfo(pc_, rmode, data);  // we do not try to reuse pool constants
@@ -2050,13 +2068,13 @@ void Assembler::BlockTrampolinePoolFor(int instructions) {
 }
 
 
-void Assembler::CheckTrampolinePool() {
+void Assembler::CheckTrampolinePool(bool force_emit) {
   // Calculate the offset of the next check.
   next_buffer_check_ = pc_offset() + kCheckConstInterval;
 
   int dist = pc_offset() - last_trampoline_pool_end_;
 
-  if (dist <= kMaxDistBetweenPools) {
+  if (dist <= kMaxDistBetweenPools && !force_emit) {
     return;
   }
 

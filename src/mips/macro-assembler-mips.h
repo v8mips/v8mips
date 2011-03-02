@@ -492,6 +492,12 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
     Addu(sp, sp, Operand(count * kPointerSize));
   }
 
+  // Push and pop the registers that can hold pointers, as defined by the
+  // RegList constant kSafepointSavedRegisters.
+  void PushSafepointRegisters();
+  void PopSafepointRegisters();
+  static int SafepointRegisterStackIndex(int reg_code);
+
   // MIPS32 R2 instruction macro.
   void Ins(Register rt, Register rs, uint16_t pos, uint16_t size);
   void Ext(Register rt, Register rs, uint16_t pos, uint16_t size);
@@ -528,10 +534,11 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
   // On output hold_argc, hold_function, and hold_argv are setup.
   void EnterExitFrame(Register hold_argc,
                       Register hold_argv,
-                      Register hold_function);
+                      Register hold_function,
+                      bool save_doubles);
 
   // Leave the current exit frame. Expects the return value in v0.
-  void LeaveExitFrame();
+  void LeaveExitFrame(bool save_doubles);
 
   // Align the stack by optionally pushing a Smi zero.
   void AlignStack(int offset);    // TODO(REBASE) : remove this function.
@@ -696,6 +703,7 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
 
   // Call a runtime routine.
   void CallRuntime(Runtime::Function* f, int num_arguments);
+  void CallRuntimeSaveDoubles(Runtime::FunctionId id);
 
   // Convenience function: Same as above, but takes the fid instead.
   void CallRuntime(Runtime::FunctionId fid, int num_arguments);
@@ -769,13 +777,6 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
 
   Handle<Object> CodeObject() { return code_object_; }
 
-
-  // -------------------------------------------------------------------------
-  // Stack limit support
-
-  void StackLimitCheck(Label* on_stack_limit_hit);
-
-
   // -------------------------------------------------------------------------
   // StatsCounter support
 
@@ -810,6 +811,14 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
 
   // -------------------------------------------------------------------------
   // Smi utilities
+
+  void SmiTag(Register reg) {
+    Addu(reg, reg, Operand(reg));
+  }
+
+  void SmiUntag(Register reg) {
+    sra(reg, reg, kSmiTagSize);
+  }
 
   // Jump if either of the registers contain a non-smi.
   void JumpIfNotBothSmi(Register reg1, Register reg2, Label* on_not_both_smi);
@@ -923,6 +932,16 @@ class CodePatcher {
 };
 #endif  // ENABLE_DEBUGGER_SUPPORT
 
+
+// Helper class for generating code or data associated with the code
+// right after a call instruction. As an example this can be used to
+// generate safepoint data after calls for crankshaft.
+class PostCallGenerator {
+ public:
+  PostCallGenerator() { }
+  virtual ~PostCallGenerator() { }
+  virtual void Generate() = 0;
+};
 
 
 // -----------------------------------------------------------------------------

@@ -166,6 +166,7 @@ SOURCES = {
     mips/constants-mips.cc
     mips/cpu-mips.cc
     mips/debug-mips.cc
+    mips/deoptimizer-mips.cc
     mips/disasm-mips.cc
     mips/full-codegen-mips.cc
     mips/frames-mips.cc
