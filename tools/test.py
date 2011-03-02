@@ -1232,6 +1232,9 @@ def BuildOptions():
   result.add_option("--nostress",
                     help="Don't run crankshaft --always-opt --stress-op test",
                     default=False, action="store_true")
+  result.add_option("--onetest",
+                    help="Only run each test once (crankshaft enabled)",
+                    default=False, action="store_true")
   return result
 
 
@@ -1271,6 +1274,8 @@ def ProcessOptions(options):
     VARIANT_FLAGS = [['--stress-opt', '--always-opt']]
   if options.nostress:
     VARIANT_FLAGS = [[],['--nocrankshaft']]
+  if options.onetest:
+    VARIANT_FLAGS = [[]]
   global XMLTESTSUITE
   XMLTESTSUITE = options.xmltestsuite
 
