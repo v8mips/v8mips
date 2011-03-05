@@ -181,6 +181,11 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
             Register reg = no_reg,
             const Operand& op = Operand(no_reg));
 
+void DropAndRet(int drop = 0,
+                Condition cond = cc_always,
+                Register reg = no_reg,
+                const Operand& op = Operand(no_reg));
+
   // Swap two registers.  If the scratch register is omitted then a slightly
   // less efficient form using xor instead of mov is emitted.
   void Swap(Register reg1, Register reg2, Register scratch = no_reg);
@@ -581,6 +586,19 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
                       const ParameterCount& actual,
                       InvokeFlag flag);
 
+
+  void IsObjectJSObjectType(Register heap_object,
+                            Register map,
+                            Register scratch,
+                            Label* fail);
+
+  void IsInstanceJSObjectType(Register map,
+                              Register scratch,
+                              Label* fail);
+
+  void IsObjectJSStringType(Register object,
+                            Register scratch,
+                            Label* fail);
 
 #ifdef ENABLE_DEBUGGER_SUPPORT
   // -------------------------------------------------------------------------

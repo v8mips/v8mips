@@ -2738,74 +2738,96 @@ void JSEntryStub::GenerateBody(MacroAssembler* masm, bool is_construct) {
 }
 
 
-// This stub performs an instanceof, calling the builtin function if
-// necessary. Uses a1 for the object, a0 for the function that it may
-// be an instance of (these are fetched from the stack).
+// Uses registers a0 to t0. Expected input is
+// function in a0 (or at sp+1*ptrsz) and object in
+// a1 (or at sp), depending on whether or not
+// args_in_registers() is true.
 void InstanceofStub::Generate(MacroAssembler* masm) {
-  // Get the object - slow case for smis (we may need to throw an exception
-  // depending on the rhs).
-  Label slow, loop, is_instance, is_not_instance;
-  __ lw(a0, MemOperand(sp, 1 * kPointerSize));
-  __ BranchOnSmi(a0, &slow);
+  // Fixed register usage throughout the stub:
+  const Register object = a1;  // Object (lhs).
+  const Register map = a3;  // Map of the object.
+  const Register function = a0;  // Function (rhs).
+  const Register prototype = t0;  // Prototype of the function.
+  const Register scratch = a2;
+  Label slow, loop, is_instance, is_not_instance, not_js_object;
+  if (!args_in_registers()) {
+    __ lw(function, MemOperand(sp, 1 * kPointerSize));
+    __ lw(object, MemOperand(sp, 0));
+  }
 
-  // Check that the left hand is a JS object and put map in a3.
-  __ GetObjectType(a0, a3, a2);
-  __ Branch(&slow, less, a2, Operand(FIRST_JS_OBJECT_TYPE));
-  __ Branch(&slow, greater, a2, Operand(LAST_JS_OBJECT_TYPE));
-
-  // Get the prototype of the function (t0 is result, a2 is scratch).
-  __ lw(a1, MemOperand(sp, 0 * kPointerSize));
-  // a1 is function, a3 is map.
+  // Check that the left hand is a JS object and load map.
+  __ BranchOnSmi(object, &slow);
+  __ IsObjectJSObjectType(object, map, scratch, &slow);
 
   // Look up the function and the map in the instanceof cache.
   Label miss;
-  __ LoadRoot(at, Heap::kInstanceofCacheFunctionRootIndex);
-  __ Branch(&miss, ne, a1, Operand(at));
-  __ LoadRoot(at, Heap::kInstanceofCacheMapRootIndex);
-  __ Branch(&miss, ne, a3, Operand(at));
-  __ LoadRoot(v0, Heap::kInstanceofCacheAnswerRootIndex);
-  __ Ret(false);  // Use branch delay slot.
-  __ Pop(2);  // In branch delay slot, remove 2 arguments.
+  __ LoadRoot(t1, Heap::kInstanceofCacheFunctionRootIndex);
+  __ Branch(&miss, ne, object, Operand(t1));
+  __ LoadRoot(t1, Heap::kInstanceofCacheMapRootIndex);
+  __ Branch(&miss, ne, map, Operand(t1));
+  __ LoadRoot(function, Heap::kInstanceofCacheAnswerRootIndex);
+  __ mov(v0, function);
+  __ DropAndRet(args_in_registers() ? 0 : 2);
 
   __ bind(&miss);
-
-  __ TryGetFunctionPrototype(a1, t0, a2, &slow);
+  __ TryGetFunctionPrototype(object, prototype, scratch, &slow);
 
   // Check that the function prototype is a JS object.
-  __ BranchOnSmi(t0, &slow);
-  __ GetObjectType(t0, t1, t1);
-  __ Branch(&slow, less, t1, Operand(FIRST_JS_OBJECT_TYPE));
-  __ Branch(&slow, greater, t1, Operand(LAST_JS_OBJECT_TYPE));
+  __ BranchOnSmi(prototype, &slow);
+  __ IsObjectJSObjectType(prototype, scratch, scratch, &slow);
 
-  __ StoreRoot(a1, Heap::kInstanceofCacheFunctionRootIndex);
-  __ StoreRoot(a3, Heap::kInstanceofCacheMapRootIndex);
+  __ StoreRoot(object, Heap::kInstanceofCacheFunctionRootIndex);
+  __ StoreRoot(map, Heap::kInstanceofCacheMapRootIndex);
 
   // Register mapping: a3 is object map and t0 is function prototype.
   // Get prototype of object into a2.
-  __ lw(a2, FieldMemOperand(a3, Map::kPrototypeOffset));
+  __ lw(scratch, FieldMemOperand(map, Map::kPrototypeOffset));
 
-  __ LoadRoot(t1, Heap::kNullValueRootIndex);
   // Loop through the prototype chain looking for the function prototype.
   __ bind(&loop);
-  __ Branch(&is_instance, eq, a2, Operand(t0));
-  __ Branch(&is_not_instance, eq, a2, Operand(t1));
-  __ lw(a2, FieldMemOperand(a2, HeapObject::kMapOffset));
-  __ lw(a2, FieldMemOperand(a2, Map::kPrototypeOffset));
-  __ jmp(&loop);
+  __ Branch(&is_instance, eq, scratch, Operand(prototype));
+  __ LoadRoot(t1, Heap::kNullValueRootIndex);
+  __ Branch(&is_not_instance, eq, scratch, Operand(t1));
+  __ lw(scratch, FieldMemOperand(scratch, HeapObject::kMapOffset));
+  __ lw(scratch, FieldMemOperand(scratch, Map::kPrototypeOffset));
+  __ Branch(&loop);
 
   __ bind(&is_instance);
-  __ li(v0, Operand(Smi::FromInt(0)));
+  ASSERT(Smi::FromInt(0) == 0);
+  __ mov(v0, zero_reg);
   __ StoreRoot(v0, Heap::kInstanceofCacheAnswerRootIndex);
-  __ Ret(false);  // Use branch delay slot.
-  __ Pop(2);  // In branch delay slot.
+  __ DropAndRet(args_in_registers() ? 0 : 2);
 
   __ bind(&is_not_instance);
   __ li(v0, Operand(Smi::FromInt(1)));
-  __ StoreRoot(v0, Heap::kInstanceofCacheAnswerRootIndex);
-  __ Ret(false);  // Use branch delay slot.
-  __ Pop(2);  // In branch delay slot.
+  __ DropAndRet(args_in_registers() ? 0 : 2);
 
-  // Slow-case. Tail call builtin.
+  Label object_not_null, object_not_null_or_smi;
+  __ bind(&not_js_object);
+  // Before null, smi and string value checks, check that the rhs is a function
+  // as for a non-function rhs an exception needs to be thrown.
+  __ BranchOnSmi(function, &slow);
+  __ GetObjectType(function, map, scratch);
+  __ Branch(&slow, ne, scratch, Operand(JS_FUNCTION_TYPE));
+
+  // Null is not instance of anything.
+  __ Branch(&object_not_null, ne, scratch, Operand(Factory::null_value()));
+  __ li(v0, Operand(Smi::FromInt(1)));
+  __ DropAndRet(args_in_registers() ? 0 : 2);
+
+  __ bind(&object_not_null);
+  // Smi values are not instances of anything.
+  __ BranchOnNotSmi(object, &object_not_null_or_smi);
+  __ li(v0, Operand(Smi::FromInt(1)));
+  __ DropAndRet(args_in_registers() ? 0 : 2);
+
+  __ bind(&object_not_null_or_smi);
+  // String values are not instances of anything.
+  __ IsObjectJSStringType(object, scratch, &slow);
+  __ li(v0, Operand(Smi::FromInt(1)));
+  __ DropAndRet(args_in_registers() ? 0 : 2);
+
+  // Slow-case.  Tail call builtin.
   __ bind(&slow);
   __ InvokeBuiltin(Builtins::INSTANCE_OF, JUMP_JS);
 }

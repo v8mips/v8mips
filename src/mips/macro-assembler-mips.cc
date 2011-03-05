@@ -1766,6 +1766,25 @@ void MacroAssembler::Drop(int count,
   }
 }
 
+void MacroAssembler::DropAndRet(int drop,
+                                Condition cond,
+                                Register r1,
+                                const Operand& r2) {
+  // This is a workaround to make sure only one branch instruction is
+  // generated. It relies on Drop and Ret not creating branches if
+  // cond == cc_always.
+  Label skip;
+  if (cond != cc_always) {
+    Branch(&skip, NegateCondition(cond), r1, r2);
+  }
+
+  Drop(drop);
+  Ret();
+
+  if (cond != cc_always) {
+    bind(&skip);
+  }
+}
 
 void MacroAssembler::Swap(Register reg1,
                           Register reg2,
@@ -2406,6 +2425,35 @@ void MacroAssembler::InvokeFunction(JSFunction* function,
   }
 }
 
+
+void MacroAssembler::IsObjectJSObjectType(Register heap_object,
+                                          Register map,
+                                          Register scratch,
+                                          Label* fail) {
+  lw(map, FieldMemOperand(heap_object, HeapObject::kMapOffset));
+  IsInstanceJSObjectType(map, scratch, fail);
+}
+
+
+void MacroAssembler::IsInstanceJSObjectType(Register map,
+                                            Register scratch,
+                                            Label* fail) {
+  lbu(scratch, FieldMemOperand(map, Map::kInstanceTypeOffset));
+  Branch(fail, lt, scratch, Operand(FIRST_JS_OBJECT_TYPE));
+  Branch(fail, gt, scratch, Operand(LAST_JS_OBJECT_TYPE));
+}
+
+
+void MacroAssembler::IsObjectJSStringType(Register object,
+                                          Register scratch,
+                                          Label* fail) {
+  ASSERT(kNotStringTag != 0);
+
+  lw(scratch, FieldMemOperand(object, HeapObject::kMapOffset));
+  lbu(scratch, FieldMemOperand(scratch, Map::kInstanceTypeOffset));
+  And(scratch, scratch, Operand(kIsNotStringMask));
+  Branch(fail, ne, scratch, Operand(zero_reg));
+}
 
 // ---------------------------------------------------------------------------
 // Support functions.
