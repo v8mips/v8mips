@@ -5644,6 +5644,14 @@ void CodeGenerator::GenerateSwapElements(ZoneList<Expression*>* args) {
   __ And(tmp2, tmp2, Operand(kSmiTagMask));
   deferred->Branch(ne, tmp2, Operand(zero_reg));
 
+  // Check that both indices are valid.
+  __ lw(tmp2, FieldMemOperand(object, JSArray::kLengthOffset));
+  Label not_hi;
+  deferred->Branch(ls, tmp2, Operand(index1));
+  __ Branch(&not_hi, NegateCondition(hi), tmp2, Operand(index1));
+  deferred->Branch(ls, tmp2, Operand(index2));
+  __ bind(&not_hi);
+
   // Bring the offsets into the fixed array in tmp1 into index1 and
   // index2.
   __ li(tmp2, Operand(FixedArray::kHeaderSize - kHeapObjectTag));
