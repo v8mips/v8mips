@@ -881,19 +881,6 @@ LOperand* LChunkBuilder::FixedTemp(XMMRegister reg) {
 
 
 LInstruction* LChunkBuilder::DoBlockEntry(HBlockEntry* instr) {
-  HBasicBlock* deopt_predecessor = instr->block()->deopt_predecessor();
-  if (deopt_predecessor != NULL &&
-      deopt_predecessor->inverted()) {
-    HEnvironment* env = current_block_->last_environment();
-    HValue* value = env->Pop();
-    ASSERT(value->IsConstant());
-    Handle<Object> obj = HConstant::cast(value)->handle();
-    ASSERT(*obj == *Factory::true_value() || *obj == *Factory::false_value());
-    env->Push(*obj == *Factory::true_value()
-              ? current_block_->graph()->GetConstantFalse()
-              : current_block_->graph()->GetConstantTrue());
-  }
-
   return new LLabel(instr->block());
 }
 
@@ -1350,7 +1337,7 @@ LInstruction* LChunkBuilder::DoApplyArguments(HApplyArguments* instr) {
 
 LInstruction* LChunkBuilder::DoPushArgument(HPushArgument* instr) {
   ++argument_count_;
-  LOperand* argument = Use(instr->argument());
+  LOperand* argument = UseOrConstant(instr->argument());
   return new LPushArgument(argument);
 }
 
@@ -1374,7 +1361,7 @@ LInstruction* LChunkBuilder::DoCallConstantFunction(
 
 LInstruction* LChunkBuilder::DoUnaryMathOperation(HUnaryMathOperation* instr) {
   BuiltinFunctionId op = instr->op();
-  if (op == kMathLog) {
+  if (op == kMathLog || op == kMathSin || op == kMathCos) {
     LOperand* input = UseFixedDouble(instr->value(), xmm1);
     LInstruction* result = new LUnaryMathOperation(input);
     return MarkAsCall(DefineFixedDouble(result, xmm1), instr);

@@ -1238,6 +1238,8 @@ def BuildOptions():
   result.add_option("--crankshaft",
                     help="Run with the --crankshaft flag",
                     default=False, action="store_true")
+  result.add_option("--noprof", help="Disable profiling support",
+                    default=False)
   return result
 
 
@@ -1285,6 +1287,9 @@ def ProcessOptions(options):
       options.special_command += " --crankshaft"
     else:
       options.special_command = "@--crankshaft"
+  if options.noprof:
+    options.scons_flags.append("prof=off")
+    options.scons_flags.append("profilingsupport=off")
   return True
 
 
