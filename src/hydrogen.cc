@@ -3301,7 +3301,7 @@ void HGraphBuilder::HandlePropertyAssignment(Assignment* expr) {
   Push(value);
   instr->set_position(expr->position());
   AddInstruction(instr);
-  if (instr->HasSideEffects()) AddSimulate(expr->id());
+  if (instr->HasSideEffects()) AddSimulate(expr->AssignmentId());
   ast_context()->ReturnValue(Pop());
 }
 
@@ -3346,7 +3346,10 @@ void HGraphBuilder::HandleCompoundAssignment(Assignment* expr) {
     VISIT_FOR_VALUE(operation);
 
     if (var->is_global()) {
-      HandleGlobalVariableAssignment(var, Top(), expr->position(), expr->id());
+      HandleGlobalVariableAssignment(var,
+                                     Top(),
+                                     expr->position(),
+                                     expr->AssignmentId());
     } else {
       Bind(var, Top());
     }
@@ -3369,7 +3372,7 @@ void HGraphBuilder::HandleCompoundAssignment(Assignment* expr) {
         load = BuildLoadNamedGeneric(obj, prop);
       }
       PushAndAdd(load);
-      if (load->HasSideEffects()) AddSimulate(expr->compound_bailout_id());
+      if (load->HasSideEffects()) AddSimulate(expr->CompoundLoadId());
 
       VISIT_FOR_VALUE(expr->value());
       HValue* right = Pop();
@@ -3381,11 +3384,11 @@ void HGraphBuilder::HandleCompoundAssignment(Assignment* expr) {
 
       HInstruction* store = BuildStoreNamed(obj, instr, prop);
       AddInstruction(store);
-      if (store->HasSideEffects()) AddSimulate(expr->id());
-
       // Drop the simulated receiver and value.  Return the value.
       Drop(2);
-      ast_context()->ReturnValue(instr);
+      Push(instr);
+      if (store->HasSideEffects()) AddSimulate(expr->AssignmentId());
+      ast_context()->ReturnValue(Pop());
 
     } else {
       // Keyed property.
@@ -3401,7 +3404,7 @@ void HGraphBuilder::HandleCompoundAssignment(Assignment* expr) {
           ? BuildLoadKeyedFastElement(obj, key, prop)
           : BuildLoadKeyedGeneric(obj, key);
       PushAndAdd(load);
-      if (load->HasSideEffects()) AddSimulate(expr->compound_bailout_id());
+      if (load->HasSideEffects()) AddSimulate(expr->CompoundLoadId());
 
       VISIT_FOR_VALUE(expr->value());
       HValue* right = Pop();
@@ -3415,11 +3418,11 @@ void HGraphBuilder::HandleCompoundAssignment(Assignment* expr) {
           ? BuildStoreKeyedFastElement(obj, key, instr, prop)
           : BuildStoreKeyedGeneric(obj, key, instr);
       AddInstruction(store);
-      if (store->HasSideEffects()) AddSimulate(expr->id());
-
       // Drop the simulated receiver, key, and value.  Return the value.
       Drop(3);
-      ast_context()->ReturnValue(instr);
+      Push(instr);
+      if (store->HasSideEffects()) AddSimulate(expr->AssignmentId());
+      ast_context()->ReturnValue(Pop());
     }
 
   } else {
@@ -3445,7 +3448,10 @@ void HGraphBuilder::VisitAssignment(Assignment* expr) {
     // Handle the assignment.
     if (var->is_global()) {
       VISIT_FOR_VALUE(expr->value());
-      HandleGlobalVariableAssignment(var, Top(), expr->position(), expr->id());
+      HandleGlobalVariableAssignment(var,
+                                     Top(),
+                                     expr->position(),
+                                     expr->AssignmentId());
     } else {
       // We allow reference to the arguments object only in assignemtns
       // to local variables to make sure that the arguments object does
@@ -4538,7 +4544,10 @@ void HGraphBuilder::VisitCountOperation(CountOperation* expr) {
     }
 
     if (var->is_global()) {
-      HandleGlobalVariableAssignment(var, instr, expr->position(), expr->id());
+      HandleGlobalVariableAssignment(var,
+                                     instr,
+                                     expr->position(),
+                                     expr->AssignmentId());
     } else {
       ASSERT(var->IsStackAllocated());
       Bind(var, instr);
@@ -4553,9 +4562,8 @@ void HGraphBuilder::VisitCountOperation(CountOperation* expr) {
 
       // Match the full code generator stack by simulating an extra stack
       // element for postfix operations in a value context.
-      if (expr->is_postfix() && !ast_context()->IsEffect()) {
-        Push(graph_->GetConstantUndefined());
-      }
+      bool has_extra = expr->is_postfix() && !ast_context()->IsEffect();
+      if (has_extra) Push(graph_->GetConstantUndefined());
 
       VISIT_FOR_VALUE(prop->obj());
       HValue* obj = Top();
@@ -4571,40 +4579,35 @@ void HGraphBuilder::VisitCountOperation(CountOperation* expr) {
       PushAndAdd(load);
       if (load->HasSideEffects()) AddSimulate(increment->id());
 
-      HValue* value = Pop();
-
+      HValue* before = Pop();
       // There is no deoptimization to after the increment, so we don't need
       // to simulate the expression stack after this instruction.
-      HInstruction* instr = BuildIncrement(value, inc);
-      AddInstruction(instr);
+      HInstruction* after = BuildIncrement(before, inc);
+      AddInstruction(after);
 
-      HInstruction* store = BuildStoreNamed(obj, instr, prop);
+      HInstruction* store = BuildStoreNamed(obj, after, prop);
       AddInstruction(store);
 
-      // Drop simulated receiver and push the result.
-      Drop(1);
-      if (expr->is_prefix()) {
-        Push(instr);
-      } else {
-        if (!ast_context()->IsEffect()) Drop(1);  // Drop simulated zero.
-        Push(value);
-      }
+      // Overwrite the receiver in the bailout environment with the result
+      // of the operation, and the placeholder with the original value if
+      // necessary.
+      environment()->SetExpressionStackAt(0, after);
+      if (has_extra) environment()->SetExpressionStackAt(1, before);
+      if (store->HasSideEffects()) AddSimulate(expr->AssignmentId());
+      Drop(has_extra ? 2 : 1);
 
-      if (store->HasSideEffects()) AddSimulate(expr->id());
-      ast_context()->ReturnValue(Pop());
+      ast_context()->ReturnValue(expr->is_postfix() ? before : after);
 
     } else {
       // Keyed property.
 
       // Match the full code generator stack by simulate an extra stack element
       // for postfix operations in a value context.
-      if (expr->is_postfix() && !ast_context()->IsEffect()) {
-        Push(graph_->GetConstantUndefined());
-      }
+      bool has_extra = expr->is_postfix() && !ast_context()->IsEffect();
+      if (has_extra) Push(graph_->GetConstantUndefined());
 
       VISIT_FOR_VALUE(prop->obj());
       VISIT_FOR_VALUE(prop->key());
-
       HValue* obj = environment()->ExpressionStackAt(1);
       HValue* key = environment()->ExpressionStackAt(0);
 
@@ -4617,29 +4620,27 @@ void HGraphBuilder::VisitCountOperation(CountOperation* expr) {
       PushAndAdd(load);
       if (load->HasSideEffects()) AddSimulate(increment->id());
 
-      HValue* value = Pop();
-
+      HValue* before = Pop();
       // There is no deoptimization to after the increment, so we don't need
       // to simulate the expression stack after this instruction.
-      HInstruction* instr = BuildIncrement(value, inc);
-      AddInstruction(instr);
+      HInstruction* after = BuildIncrement(before, inc);
+      AddInstruction(after);
 
       HInstruction* store = is_fast_elements
-          ? BuildStoreKeyedFastElement(obj, key, instr, prop)
-          : new HStoreKeyedGeneric(obj, key, instr);
+          ? BuildStoreKeyedFastElement(obj, key, after, prop)
+          : new HStoreKeyedGeneric(obj, key, after);
       AddInstruction(store);
 
-      // Drop simulated receiver and key and push the result.
-      Drop(2);
-      if (expr->is_prefix()) {
-        Push(instr);
-      } else {
-        if (!ast_context()->IsEffect()) Drop(1);  // Drop simulated zero.
-        Push(value);
-      }
+      // Drop the key from the bailout environment.  Overwrite the receiver
+      // with the result of the operation, and the placeholder with the
+      // original value if necessary.
+      Drop(1);
+      environment()->SetExpressionStackAt(0, after);
+      if (has_extra) environment()->SetExpressionStackAt(1, before);
+      if (store->HasSideEffects()) AddSimulate(expr->AssignmentId());
+      Drop(has_extra ? 2 : 1);
 
-      if (store->HasSideEffects()) AddSimulate(expr->id());
-      ast_context()->ReturnValue(Pop());
+      ast_context()->ReturnValue(expr->is_postfix() ? before : after);
     }
 
   } else {
