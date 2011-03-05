@@ -1366,7 +1366,7 @@ class HBitNot: public HUnaryOperation {
 
 class HUnaryMathOperation: public HUnaryOperation {
  public:
-  HUnaryMathOperation(HValue* value, MathFunctionId op)
+  HUnaryMathOperation(HValue* value, BuiltinFunctionId op)
       : HUnaryOperation(value), op_(op) {
     switch (op) {
       case kMathFloor:
@@ -1380,8 +1380,11 @@ class HUnaryMathOperation: public HUnaryOperation {
         break;
       case kMathSqrt:
       case kMathPowHalf:
-      default:
+      case kMathLog:
         set_representation(Representation::Double());
+        break;
+      default:
+        UNREACHABLE();
     }
     SetFlag(kUseGVN);
   }
@@ -1399,6 +1402,7 @@ class HUnaryMathOperation: public HUnaryOperation {
       case kMathCeil:
       case kMathSqrt:
       case kMathPowHalf:
+      case kMathLog:
         return Representation::Double();
         break;
       case kMathAbs:
@@ -1419,13 +1423,13 @@ class HUnaryMathOperation: public HUnaryOperation {
     return this;
   }
 
-  MathFunctionId op() const { return op_; }
+  BuiltinFunctionId op() const { return op_; }
   const char* OpName() const;
 
   DECLARE_CONCRETE_INSTRUCTION(UnaryMathOperation, "unary_math_operation")
 
  private:
-  MathFunctionId op_;
+  BuiltinFunctionId op_;
 };
 
 

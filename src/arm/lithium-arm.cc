@@ -1341,7 +1341,7 @@ LInstruction* LChunkBuilder::DoCallConstantFunction(
 
 
 LInstruction* LChunkBuilder::DoUnaryMathOperation(HUnaryMathOperation* instr) {
-  MathFunctionId op = instr->op();
+  BuiltinFunctionId op = instr->op();
   LOperand* input = UseRegisterAtStart(instr->value());
   LInstruction* result = new LUnaryMathOperation(input);
   switch (op) {
@@ -1353,6 +1353,9 @@ LInstruction* LChunkBuilder::DoUnaryMathOperation(HUnaryMathOperation* instr) {
       return DefineSameAsFirst(result);
     case kMathPowHalf:
       Abort("MathPowHalf LUnaryMathOperation not implemented");
+      return NULL;
+    case kMathLog:
+      Abort("MathLog LUnaryMathOperation not implemented");
       return NULL;
     default:
       UNREACHABLE();
