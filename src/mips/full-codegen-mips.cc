@@ -1503,6 +1503,8 @@ void FullCodeGenerator::VisitAssignment(Assignment* expr) {
     case VARIABLE:
       EmitVariableAssignment(expr->target()->AsVariableProxy()->var(),
                              expr->op());
+      PrepareForBailoutForId(expr->AssignmentId(), TOS_REG);
+      context()->Plug(v0);
       break;
     case NAMED_PROPERTY:
       EmitNamedPropertyAssignment(expr);
