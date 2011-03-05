@@ -219,11 +219,6 @@ class LChunk: public ZoneObject {
     return 0;
   }
 
-  int NearestNextGapPos(int index) const {
-    UNIMPLEMENTED();
-    return 0;
-  }
-
   void MarkEmptyBlocks() { UNIMPLEMENTED(); }
 
 #ifdef DEBUG
