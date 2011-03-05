@@ -1896,7 +1896,9 @@ void MacroAssembler::AllocateInNewSpace(int object_size,
   ASSERT(!result.is(scratch1));
   ASSERT(!result.is(scratch2));
   ASSERT(!scratch1.is(scratch2));
-  ASSERT(!scratch1.is(t9) && !scratch2.is(t9) && !result.is(t9));
+  ASSERT(!scratch1.is(t9));
+  ASSERT(!scratch2.is(t9));
+  ASSERT(!result.is(t9));
 
   // Make object size into bytes.
   if ((flags & SIZE_IN_WORDS) != 0) {
