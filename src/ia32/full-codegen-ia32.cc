@@ -745,10 +745,9 @@ void FullCodeGenerator::VisitSwitchStatement(SwitchStatement* stmt) {
   Breakable nested_statement(this, stmt);
   SetStatementPosition(stmt);
 
-  PrepareForBailoutForId(stmt->EntryId(), NO_REGISTERS);
-
   // Keep the switch value on the stack until a case matches.
   VisitForStackValue(stmt->tag());
+  PrepareForBailoutForId(stmt->EntryId(), NO_REGISTERS);
 
   ZoneList<CaseClause*>* clauses = stmt->cases();
   CaseClause* default_clause = NULL;  // Can occur anywhere in the list.
@@ -4040,7 +4039,8 @@ void FullCodeGenerator::VisitCompareOperation(CompareOperation* expr) {
 
     case Token::INSTANCEOF: {
       VisitForStackValue(expr->right());
-      InstanceofStub stub;
+      __ IncrementCounter(&Counters::instance_of_full, 1);
+      InstanceofStub stub(InstanceofStub::kNoFlags);
       __ CallStub(&stub);
       PrepareForBailoutBeforeSplit(TOS_REG, true, if_true, if_false);
       __ test(eax, Operand(eax));
