@@ -214,6 +214,13 @@ void FullCodeGenerator::Generate(CompilationInfo* info) {
   masm()->CheckTrampolinePool(true);
 }
 
+
+void FullCodeGenerator::ClearAccumulator() {
+  ASSERT(Smi::FromInt(0) == 0);
+  __ mov(v0, zero_reg);
+}
+
+
 void FullCodeGenerator::EmitStackCheck(IterationStatement* stmt) {
   Comment cmnt(masm_, "[ Stack check");
   Label ok;
