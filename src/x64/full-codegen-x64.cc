@@ -1,4 +1,4 @@
-// Copyright 2010 the V8 project authors. All rights reserved.
+// Copyright 2011 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -210,10 +210,17 @@ void FullCodeGenerator::EmitStackCheck(IterationStatement* stmt) {
   __ j(above_equal, &ok);
   StackCheckStub stub;
   __ CallStub(&stub);
+  // Record a mapping of this PC offset to the OSR id.  This is used to find
+  // the AST id from the unoptimized code in order to use it as a key into
+  // the deoptimization input data found in the optimized code.
+  RecordStackCheck(stmt->OsrEntryId());
+
   __ bind(&ok);
   PrepareForBailoutForId(stmt->EntryId(), NO_REGISTERS);
+  // Record a mapping of the OSR id to this PC.  This is used if the OSR
+  // entry becomes the target of a bailout.  We don't expect it to be, but
+  // we want it to work if it is.
   PrepareForBailoutForId(stmt->OsrEntryId(), NO_REGISTERS);
-  RecordStackCheck(stmt->OsrEntryId());
 }
 
 
@@ -459,7 +466,10 @@ void FullCodeGenerator::StackValueContext::Plug(bool flag) const {
 
 
 void FullCodeGenerator::TestContext::Plug(bool flag) const {
-  codegen()->PrepareForBailoutBeforeSplit(TOS_REG, true, NULL, NULL);
+  codegen()->PrepareForBailoutBeforeSplit(TOS_REG,
+                                          true,
+                                          true_label_,
+                                          false_label_);
   if (flag) {
     if (true_label_ != fall_through_) __ jmp(true_label_);
   } else {
@@ -1380,17 +1390,34 @@ void FullCodeGenerator::VisitAssignment(Assignment* expr) {
         VisitForStackValue(property->obj());
       }
       break;
-    case KEYED_PROPERTY:
+    case KEYED_PROPERTY: {
       if (expr->is_compound()) {
-        VisitForStackValue(property->obj());
-        VisitForAccumulatorValue(property->key());
+        if (property->is_arguments_access()) {
+          VariableProxy* obj_proxy = property->obj()->AsVariableProxy();
+          MemOperand slot_operand =
+              EmitSlotSearch(obj_proxy->var()->AsSlot(), rcx);
+          __ push(slot_operand);
+          __ Move(rax, property->key()->AsLiteral()->handle());
+        } else {
+          VisitForStackValue(property->obj());
+          VisitForAccumulatorValue(property->key());
+        }
         __ movq(rdx, Operand(rsp, 0));
         __ push(rax);
       } else {
-        VisitForStackValue(property->obj());
-        VisitForStackValue(property->key());
+        if (property->is_arguments_access()) {
+          VariableProxy* obj_proxy = property->obj()->AsVariableProxy();
+          MemOperand slot_operand =
+              EmitSlotSearch(obj_proxy->var()->AsSlot(), rcx);
+          __ push(slot_operand);
+          __ Push(property->key()->AsLiteral()->handle());
+        } else {
+          VisitForStackValue(property->obj());
+          VisitForStackValue(property->key());
+        }
       }
       break;
+    }
   }
 
   if (expr->is_compound()) {
@@ -3119,8 +3146,16 @@ void FullCodeGenerator::VisitCountOperation(CountOperation* expr) {
       __ push(rax);  // Copy of receiver, needed for later store.
       EmitNamedPropertyLoad(prop);
     } else {
-      VisitForStackValue(prop->obj());
-      VisitForAccumulatorValue(prop->key());
+      if (prop->is_arguments_access()) {
+        VariableProxy* obj_proxy = prop->obj()->AsVariableProxy();
+        MemOperand slot_operand =
+            EmitSlotSearch(obj_proxy->var()->AsSlot(), rcx);
+        __ push(slot_operand);
+        __ Move(rax, prop->key()->AsLiteral()->handle());
+      } else {
+        VisitForStackValue(prop->obj());
+        VisitForAccumulatorValue(prop->key());
+      }
       __ movq(rdx, Operand(rsp, 0));  // Leave receiver on stack
       __ push(rax);  // Copy of key, needed for later store.
       EmitKeyedPropertyLoad(prop);
