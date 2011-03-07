@@ -46,6 +46,8 @@
 #include "scopes.h"
 #include "stub-cache.h"
 
+#include "mips/code-stubs-mips.h"
+
 namespace v8 {
 namespace internal {
 
