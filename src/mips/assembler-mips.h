@@ -171,7 +171,10 @@ struct FPURegister {
   static const int kNumRegisters = ::kNumFPURegisters;
   // f0 has been excluded from allocation. This is following ia32
   // where xmm0 is excluded. This should be revisited.
-  static const int kNumAllocatableRegisters = 15;
+  // Currently f0 is used as a scratch register.
+  // f2 has also been excluded from allocation to be used as a scratch
+  // register as well.
+  static const int kNumAllocatableRegisters = 14;
 
   static int ToAllocationIndex(FPURegister reg) {
     ASSERT(reg.code() != 0);
@@ -181,13 +184,12 @@ struct FPURegister {
 
   static FPURegister FromAllocationIndex(int index) {
     ASSERT(index >= 0 && index < kNumAllocatableRegisters);
-    return from_code((index + 1) * 2);
+    return from_code((index + 2) * 2);
   }
 
   static const char* AllocationIndexToString(int index) {
     ASSERT(index >= 0 && index < kNumAllocatableRegisters);
     const char* const names[] = {
-      "f2",
       "f4",
       "f6",
       "f8",
