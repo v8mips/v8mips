@@ -1316,8 +1316,8 @@ LInstruction* LChunkBuilder::DoArgumentsElements(HArgumentsElements* elems) {
 
 LInstruction* LChunkBuilder::DoInstanceOf(HInstanceOf* instr) {
   LInstruction* result =
-      new LInstanceOf(UseFixed(instr->left(), r1),
-                      UseFixed(instr->right(), r0));
+      new LInstanceOf(UseFixed(instr->left(), r0),
+                      UseFixed(instr->right(), r1));
   return MarkAsCall(DefineFixed(result, r0), instr);
 }
 
@@ -1851,6 +1851,14 @@ LInstruction* LChunkBuilder::DoLoadNamedGeneric(HLoadNamedGeneric* instr) {
   LOperand* object = UseFixed(instr->object(), r0);
   LInstruction* result = DefineFixed(new LLoadNamedGeneric(object), r0);
   return MarkAsCall(result, instr);
+}
+
+
+LInstruction* LChunkBuilder::DoLoadFunctionPrototype(
+    HLoadFunctionPrototype* instr) {
+  return AssignEnvironment(DefineAsRegister(
+      new LLoadFunctionPrototype(UseRegister(instr->function()),
+                                 TempRegister())));
 }
 
 

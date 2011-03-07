@@ -3724,6 +3724,11 @@ void HGraphBuilder::VisitProperty(Property* expr) {
     AddInstruction(new HCheckNonSmi(array));
     instr = new HArrayLength(array);
 
+  } else if (expr->IsFunctionPrototype()) {
+    HValue* function = Pop();
+    AddInstruction(new HCheckNonSmi(function));
+    instr = new HLoadFunctionPrototype(function);
+
   } else if (expr->key()->IsPropertyName()) {
     Handle<String> name = expr->key()->AsLiteral()->AsPropertyName();
     ZoneMapList* types = expr->GetReceiverTypes();
@@ -4177,7 +4182,7 @@ bool HGraphBuilder::TryCallApply(Call* expr) {
   if (args->length() != 2) return false;
 
   VariableProxy* arg_two = args->at(1)->AsVariableProxy();
-  if (arg_two == NULL) return false;
+  if (arg_two == NULL || !arg_two->var()->IsStackAllocated()) return false;
   HValue* arg_two_value = environment()->Lookup(arg_two->var());
   if (!arg_two_value->CheckFlag(HValue::kIsArguments)) return false;
 
