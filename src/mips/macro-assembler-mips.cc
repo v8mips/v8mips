@@ -2877,7 +2877,7 @@ void MacroAssembler::Abort(const char* msg) {
   }
 #endif
   // Disable stub call restrictions to always allow calls to abort.
-  set_allow_stub_calls(true);
+  AllowStubCallsScope allow_scope(this, true);
 
   li(a0, Operand(p0));
   Push(a0);
