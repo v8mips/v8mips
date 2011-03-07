@@ -2858,7 +2858,7 @@ void ArgumentsAccessStub::GenerateReadElement(MacroAssembler* masm) {
   // Check index (a1) against formal parameters count limit passed in
   // through register a0. Use unsigned comparison to get negative
   // check for free.
-  __ Branch(&slow, Ugreater_equal, a1, Operand(a0));
+  __ Branch(&slow, hs, a1, Operand(a0));
 
   // Read the argument from the stack and return it.
   __ subu(a3, a0, a1);
