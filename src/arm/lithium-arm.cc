@@ -767,11 +767,6 @@ LInstruction* LChunkBuilder::DefineAsSpilled(LInstruction* instr, int index) {
 }
 
 
-LInstruction* LChunkBuilder::DefineSameAsAny(LInstruction* instr) {
-  return Define(instr, new LUnallocated(LUnallocated::SAME_AS_ANY_INPUT));
-}
-
-
 LInstruction* LChunkBuilder::DefineSameAsFirst(LInstruction* instr) {
   return Define(instr, new LUnallocated(LUnallocated::SAME_AS_FIRST_INPUT));
 }
@@ -1222,7 +1217,6 @@ LInstruction* LChunkBuilder::DoBranch(HBranch* instr) {
       ASSERT(compare->value()->representation().IsTagged());
 
       return new LHasInstanceTypeAndBranch(UseRegisterAtStart(compare->value()),
-                                           TempRegister(),
                                            first_id,
                                            second_id);
     } else if (v->IsHasCachedArrayIndex()) {
@@ -1235,11 +1229,8 @@ LInstruction* LChunkBuilder::DoBranch(HBranch* instr) {
       HIsNull* compare = HIsNull::cast(v);
       ASSERT(compare->value()->representation().IsTagged());
 
-      // We only need a temp register for non-strict compare.
-      LOperand* temp = compare->is_strict() ? NULL : TempRegister();
       return new LIsNullAndBranch(UseRegisterAtStart(compare->value()),
                                   compare->is_strict(),
-                                  temp,
                                   first_id,
                                   second_id);
     } else if (v->IsIsObject()) {
@@ -1292,12 +1283,8 @@ LInstruction* LChunkBuilder::DoCompareMapAndBranch(
     HCompareMapAndBranch* instr) {
   ASSERT(instr->value()->representation().IsTagged());
   LOperand* value = UseRegisterAtStart(instr->value());
-  HBasicBlock* first = instr->FirstSuccessor();
-  HBasicBlock* second = instr->SecondSuccessor();
-  return new LCmpMapAndBranch(value,
-                              instr->map(),
-                              first->block_id(),
-                              second->block_id());
+  LOperand* temp = TempRegister();
+  return new LCmpMapAndBranch(value, temp);
 }
 
 
@@ -1315,6 +1302,14 @@ LInstruction* LChunkBuilder::DoInstanceOf(HInstanceOf* instr) {
   LInstruction* result =
       new LInstanceOf(UseFixed(instr->left(), r0),
                       UseFixed(instr->right(), r1));
+  return MarkAsCall(DefineFixed(result, r0), instr);
+}
+
+
+LInstruction* LChunkBuilder::DoInstanceOfKnownGlobal(
+    HInstanceOfKnownGlobal* instr) {
+  LInstruction* result =
+      new LInstanceOfKnownGlobal(UseFixed(instr->value(), r0));
   return MarkAsCall(DefineFixed(result, r0), instr);
 }
 
@@ -1367,6 +1362,9 @@ LInstruction* LChunkBuilder::DoUnaryMathOperation(HUnaryMathOperation* instr) {
       return AssignEnvironment(DefineAsRegister(result));
     case kMathSqrt:
       return DefineSameAsFirst(result);
+    case kMathRound:
+      Abort("MathRound LUnaryMathOperation not implemented");
+      return NULL;
     case kMathPowHalf:
       Abort("MathPowHalf LUnaryMathOperation not implemented");
       return NULL;
@@ -1771,9 +1769,11 @@ LInstruction* LChunkBuilder::DoCheckInstanceType(HCheckInstanceType* instr) {
 
 
 LInstruction* LChunkBuilder::DoCheckPrototypeMaps(HCheckPrototypeMaps* instr) {
-  LOperand* temp = TempRegister();
+  LOperand* temp1 = TempRegister();
+  LOperand* temp2 = TempRegister();
   LInstruction* result =
-      new LCheckPrototypeMaps(temp,
+      new LCheckPrototypeMaps(temp1,
+                              temp2,
                               instr->holder(),
                               instr->receiver_map());
   return AssignEnvironment(result);
@@ -1850,8 +1850,7 @@ LInstruction* LChunkBuilder::DoLoadNamedGeneric(HLoadNamedGeneric* instr) {
 LInstruction* LChunkBuilder::DoLoadFunctionPrototype(
     HLoadFunctionPrototype* instr) {
   return AssignEnvironment(DefineAsRegister(
-      new LLoadFunctionPrototype(UseRegister(instr->function()),
-                                 TempRegister())));
+      new LLoadFunctionPrototype(UseRegister(instr->function()))));
 }
 
 

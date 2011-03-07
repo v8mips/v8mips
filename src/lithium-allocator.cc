@@ -108,9 +108,6 @@ void LOperand::PrintTo(StringStream* stream) {
         case LUnallocated::SAME_AS_FIRST_INPUT:
           stream->Add("(1)");
           break;
-        case LUnallocated::SAME_AS_ANY_INPUT:
-          stream->Add("(A)");
-          break;
         case LUnallocated::ANY:
           stream->Add("(-)");
           break;
@@ -945,6 +942,9 @@ void LAllocator::ProcessInstructions(HBasicBlock* block, BitVector* live) {
                                     curr_position.InstructionEnd());
             }
           }
+        }
+
+        if (summary->IsCall() || summary->IsSaveDoubles()) {
           for (int i = 0; i < DoubleRegister::kNumAllocatableRegisters; ++i) {
             if (output == NULL || !output->IsDoubleRegister() ||
                 output->index() != i) {
@@ -1588,7 +1588,32 @@ RegisterKind LAllocator::RequiredRegisterKind(int virtual_register) const {
 
 
 void LAllocator::MarkAsCall() {
-  current_summary()->MarkAsCall();
+  // Call instructions can use only fixed registers as
+  // temporaries and outputs because all registers
+  // are blocked by the calling convention.
+  // Inputs can use either fixed register or have a short lifetime (be
+  // used at start of the instruction).
+  InstructionSummary* summary = current_summary();
+#ifdef DEBUG
+  ASSERT(summary->Output() == NULL ||
+         LUnallocated::cast(summary->Output())->HasFixedPolicy() ||
+         !LUnallocated::cast(summary->Output())->HasRegisterPolicy());
+  for (int i = 0; i < summary->InputCount(); i++) {
+    ASSERT(LUnallocated::cast(summary->InputAt(i))->HasFixedPolicy() ||
+           LUnallocated::cast(summary->InputAt(i))->IsUsedAtStart() ||
+           !LUnallocated::cast(summary->InputAt(i))->HasRegisterPolicy());
+  }
+  for (int i = 0; i < summary->TempCount(); i++) {
+    ASSERT(LUnallocated::cast(summary->TempAt(i))->HasFixedPolicy() ||
+           !LUnallocated::cast(summary->TempAt(i))->HasRegisterPolicy());
+  }
+#endif
+  summary->MarkAsCall();
+}
+
+
+void LAllocator::MarkAsSaveDoubles() {
+  current_summary()->MarkAsSaveDoubles();
 }
 
 

@@ -73,6 +73,7 @@ class LChunkBuilder;
 //       HCompare
 //       HCompareJSObjectEq
 //       HInstanceOf
+//       HInstanceOfKnownGlobal
 //       HLoadKeyed
 //         HLoadKeyedFastElement
 //         HLoadKeyedGeneric
@@ -210,6 +211,7 @@ class LChunkBuilder;
   V(GlobalReceiver)                            \
   V(Goto)                                      \
   V(InstanceOf)                                \
+  V(InstanceOfKnownGlobal)                     \
   V(IsNull)                                    \
   V(IsObject)                                  \
   V(IsSmi)                                     \
@@ -909,6 +911,9 @@ class HCompareMapAndBranch: public HUnaryControlInstruction {
 
   virtual HBasicBlock* FirstSuccessor() const { return true_destination_; }
   virtual HBasicBlock* SecondSuccessor() const { return false_destination_; }
+
+  HBasicBlock* true_destination() const { return true_destination_; }
+  HBasicBlock* false_destination() const { return false_destination_; }
 
   virtual void PrintDataTo(StringStream* stream) const;
 
@@ -2256,6 +2261,28 @@ class HInstanceOf: public HBinaryOperation {
   }
 
   DECLARE_CONCRETE_INSTRUCTION(InstanceOf, "instance_of")
+};
+
+
+class HInstanceOfKnownGlobal: public HUnaryOperation {
+ public:
+  HInstanceOfKnownGlobal(HValue* left, Handle<JSFunction> right)
+      : HUnaryOperation(left), function_(right) {
+    set_representation(Representation::Tagged());
+    SetFlagMask(AllSideEffects());
+  }
+
+  Handle<JSFunction> function() { return function_; }
+
+  virtual Representation RequiredInputRepresentation(int index) const {
+    return Representation::Tagged();
+  }
+
+  DECLARE_CONCRETE_INSTRUCTION(InstanceOfKnownGlobal,
+                               "instance_of_known_global")
+
+ private:
+  Handle<JSFunction> function_;
 };
 
 

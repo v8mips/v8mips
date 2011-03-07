@@ -767,11 +767,6 @@ LInstruction* LChunkBuilder::DefineAsSpilled(LInstruction* instr, int index) {
 }
 
 
-LInstruction* LChunkBuilder::DefineSameAsAny(LInstruction* instr) {
-  return Define(instr, new LUnallocated(LUnallocated::SAME_AS_ANY_INPUT));
-}
-
-
 LInstruction* LChunkBuilder::DefineSameAsFirst(LInstruction* instr) {
   return Define(instr, new LUnallocated(LUnallocated::SAME_AS_FIRST_INPUT));
 }
@@ -834,6 +829,12 @@ LInstruction* LChunkBuilder::MarkAsCall(LInstruction* instr,
     instr = AssignEnvironment(instr);
   }
 
+  return instr;
+}
+
+
+LInstruction* LChunkBuilder::MarkAsSaveDoubles(LInstruction* instr) {
+  allocator_->MarkAsSaveDoubles();
   return instr;
 }
 
@@ -1262,10 +1263,11 @@ LInstruction* LChunkBuilder::DoBranch(HBranch* instr) {
     } else if (v->IsInstanceOf()) {
       HInstanceOf* instance_of = HInstanceOf::cast(v);
       LInstruction* result =
-          new LInstanceOfAndBranch(UseFixed(instance_of->left(), eax),
-                                   UseFixed(instance_of->right(), edx),
-                                   first_id,
-                                   second_id);
+          new LInstanceOfAndBranch(
+              UseFixed(instance_of->left(), InstanceofStub::left()),
+              UseFixed(instance_of->right(), InstanceofStub::right()),
+              first_id,
+              second_id);
       return MarkAsCall(result, instr);
     } else if (v->IsTypeofIs()) {
       HTypeofIs* typeof_is = HTypeofIs::cast(v);
@@ -1313,9 +1315,20 @@ LInstruction* LChunkBuilder::DoArgumentsElements(HArgumentsElements* elems) {
 
 LInstruction* LChunkBuilder::DoInstanceOf(HInstanceOf* instr) {
   LInstruction* result =
-      new LInstanceOf(UseFixed(instr->left(), eax),
-                      UseFixed(instr->right(), edx));
+      new LInstanceOf(UseFixed(instr->left(), InstanceofStub::left()),
+                      UseFixed(instr->right(), InstanceofStub::right()));
   return MarkAsCall(DefineFixed(result, eax), instr);
+}
+
+
+LInstruction* LChunkBuilder::DoInstanceOfKnownGlobal(
+    HInstanceOfKnownGlobal* instr) {
+  LInstruction* result =
+      new LInstanceOfKnownGlobal(
+          UseFixed(instr->value(), InstanceofStub::left()),
+          FixedTemp(edi));
+  MarkAsSaveDoubles(result);
+  return AssignEnvironment(AssignPointerMap(DefineFixed(result, eax)));
 }
 
 
@@ -2036,7 +2049,7 @@ LInstruction* LChunkBuilder::DoAccessArgumentsAt(HAccessArgumentsAt* instr) {
 
 
 LInstruction* LChunkBuilder::DoTypeof(HTypeof* instr) {
-  LInstruction* result = new LTypeof(Use(instr->value()));
+  LInstruction* result = new LTypeof(UseAtStart(instr->value()));
   return MarkAsCall(DefineFixed(result, eax), instr);
 }
 
