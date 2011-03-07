@@ -1077,6 +1077,7 @@ void LCodeGen::DoBranch(LBranch* instr) {
   } else if (r.IsDouble()) {
     DoubleRegister reg = ToDoubleRegister(instr->input());
     __ vcmp(reg, 0.0);
+    __ vmrs(pc);  // Move vector status bits to normal status bits.
     EmitBranch(true_block, false_block, ne);
   } else {
     ASSERT(r.IsTagged());
@@ -1114,6 +1115,7 @@ void LCodeGen::DoBranch(LBranch* instr) {
       __ sub(ip, reg, Operand(kHeapObjectTag));
       __ vldr(dbl_scratch, ip, HeapNumber::kValueOffset);
       __ vcmp(dbl_scratch, 0.0);
+      __ vmrs(pc);  // Move vector status bits to normal status bits.
       __ b(eq, false_label);
       __ b(true_label);
 
@@ -1586,7 +1588,18 @@ void LCodeGen::DoLoadElements(LLoadElements* instr) {
 
 
 void LCodeGen::DoAccessArgumentsAt(LAccessArgumentsAt* instr) {
-  Abort("DoAccessArgumentsAt unimplemented.");
+  Register arguments = ToRegister(instr->arguments());
+  Register length = ToRegister(instr->length());
+  Operand index = ToOperand(instr->index());
+  Register result = ToRegister(instr->result());
+
+  __ sub(length, length, index);
+  DeoptimizeIf(hi, instr->environment());
+
+  // There are two words between the frame pointer and the last argument.
+  // Subtracting from length accounts for one of them add one more.
+  __ add(length, length, Operand(1));
+  __ ldr(result, MemOperand(arguments, length, LSL, kPointerSizeLog2));
 }
 
 
@@ -1605,12 +1618,41 @@ void LCodeGen::DoLoadKeyedGeneric(LLoadKeyedGeneric* instr) {
 
 
 void LCodeGen::DoArgumentsElements(LArgumentsElements* instr) {
-  Abort("DoArgumentsElements unimplemented.");
+  Register scratch = scratch0();
+  Register result = ToRegister(instr->result());
+
+  // Check if the calling frame is an arguments adaptor frame.
+  Label done, adapted;
+  __ ldr(scratch, MemOperand(fp, StandardFrameConstants::kCallerFPOffset));
+  __ ldr(result, MemOperand(scratch, StandardFrameConstants::kContextOffset));
+  __ cmp(result, Operand(Smi::FromInt(StackFrame::ARGUMENTS_ADAPTOR)));
+
+  // Result is the frame pointer for the frame if not adapted and for the real
+  // frame below the adaptor frame if adapted.
+  __ mov(result, fp, LeaveCC, ne);
+  __ mov(result, scratch, LeaveCC, eq);
 }
 
 
 void LCodeGen::DoArgumentsLength(LArgumentsLength* instr) {
-  Abort("DoArgumentsLength unimplemented.");
+  Operand elem = ToOperand(instr->input());
+  Register result = ToRegister(instr->result());
+
+  Label done;
+
+  // If no arguments adaptor frame the number of arguments is fixed.
+  __ cmp(fp, elem);
+  __ mov(result, Operand(scope()->num_parameters()));
+  __ b(eq, &done);
+
+  // Arguments adaptor frame present. Get argument length from there.
+  __ ldr(result, MemOperand(fp, StandardFrameConstants::kCallerFPOffset));
+  __ ldr(result,
+         MemOperand(result, ArgumentsAdaptorFrameConstants::kLengthOffset));
+  __ SmiUntag(result);
+
+  // Argument length is in result register.
+  __ bind(&done);
 }
 
 
@@ -2222,7 +2264,57 @@ void LCodeGen::DoObjectLiteral(LObjectLiteral* instr) {
 
 
 void LCodeGen::DoRegExpLiteral(LRegExpLiteral* instr) {
-  Abort("DoRegExpLiteral unimplemented.");
+  Label materialized;
+  // Registers will be used as follows:
+  // r3 = JS function.
+  // r7 = literals array.
+  // r1 = regexp literal.
+  // r0 = regexp literal clone.
+  // r2 and r4-r6 are used as temporaries.
+  __ ldr(r3, MemOperand(fp, JavaScriptFrameConstants::kFunctionOffset));
+  __ ldr(r7, FieldMemOperand(r3, JSFunction::kLiteralsOffset));
+  int literal_offset = FixedArray::kHeaderSize +
+      instr->hydrogen()->literal_index() * kPointerSize;
+  __ ldr(r1, FieldMemOperand(r7, literal_offset));
+  __ LoadRoot(ip, Heap::kUndefinedValueRootIndex);
+  __ cmp(r1, ip);
+  __ b(ne, &materialized);
+
+  // Create regexp literal using runtime function
+  // Result will be in r0.
+  __ mov(r6, Operand(Smi::FromInt(instr->hydrogen()->literal_index())));
+  __ mov(r5, Operand(instr->hydrogen()->pattern()));
+  __ mov(r4, Operand(instr->hydrogen()->flags()));
+  __ Push(r7, r6, r5, r4);
+  CallRuntime(Runtime::kMaterializeRegExpLiteral, 4, instr);
+  __ mov(r1, r0);
+
+  __ bind(&materialized);
+  int size = JSRegExp::kSize + JSRegExp::kInObjectFieldCount * kPointerSize;
+  Label allocated, runtime_allocate;
+
+  __ AllocateInNewSpace(size, r0, r2, r3, &runtime_allocate, TAG_OBJECT);
+  __ jmp(&allocated);
+
+  __ bind(&runtime_allocate);
+  __ mov(r0, Operand(Smi::FromInt(size)));
+  __ Push(r1, r0);
+  CallRuntime(Runtime::kAllocateInNewSpace, 1, instr);
+  __ pop(r1);
+
+  __ bind(&allocated);
+  // Copy the content into the newly allocated memory.
+  // (Unroll copy loop once for better throughput).
+  for (int i = 0; i < size - kPointerSize; i += 2 * kPointerSize) {
+    __ ldr(r3, FieldMemOperand(r1, i));
+    __ ldr(r2, FieldMemOperand(r1, i + kPointerSize));
+    __ str(r3, FieldMemOperand(r0, i));
+    __ str(r2, FieldMemOperand(r0, i + kPointerSize));
+  }
+  if ((size % (2 * kPointerSize)) != 0) {
+    __ ldr(r3, FieldMemOperand(r1, size - kPointerSize));
+    __ str(r3, FieldMemOperand(r0, size - kPointerSize));
+  }
 }
 
 

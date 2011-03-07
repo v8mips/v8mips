@@ -3105,8 +3105,15 @@ HBasicBlock* HGraphBuilder::BuildTypeSwitch(ZoneMapList* maps,
   // this basic block the current basic block.
   HBasicBlock* join_block = graph_->CreateBasicBlock();
   for (int i = 0; i < subgraphs->length(); ++i) {
-    if (subgraphs->at(i)->HasExit()) {
-      subgraphs->at(i)->exit_block()->Goto(join_block);
+    HSubgraph* subgraph = subgraphs->at(i);
+    if (subgraph->HasExit()) {
+      // In an effect context the value of the type switch is not needed.
+      // There is no need to merge it at the join block only to discard it.
+      HBasicBlock* subgraph_exit = subgraph->exit_block();
+      if (ast_context()->IsEffect()) {
+        subgraph_exit->last_environment()->Drop(1);
+      }
+      subgraph_exit->Goto(join_block);
     }
   }
 
@@ -3244,7 +3251,8 @@ void HGraphBuilder::HandlePolymorphicStoreNamedField(Assignment* expr,
     Push(value);
     instr->set_position(expr->position());
     AddInstruction(instr);
-    if (instr->HasSideEffects()) AddSimulate(expr->id());
+    if (instr->HasSideEffects()) AddSimulate(expr->AssignmentId());
+    ast_context()->ReturnValue(Pop());
   } else {
     // Build subgraph for generic store through IC.
     {
@@ -3262,11 +3270,14 @@ void HGraphBuilder::HandlePolymorphicStoreNamedField(Assignment* expr,
     }
 
     HBasicBlock* new_exit_block =
-        BuildTypeSwitch(&maps, &subgraphs, object, expr->AssignmentId());
+        BuildTypeSwitch(&maps, &subgraphs, object, expr->id());
     subgraph()->set_exit_block(new_exit_block);
+    // In an effect context, we did not materialized the value in the
+    // predecessor environments so there's no need to handle it here.
+    if (subgraph()->HasExit() && !ast_context()->IsEffect()) {
+      ast_context()->ReturnValue(Pop());
+    }
   }
-
-  if (subgraph()->HasExit()) ast_context()->ReturnValue(Pop());
 }
 
 
@@ -3550,8 +3561,7 @@ void HGraphBuilder::HandlePolymorphicLoadNamedField(Property* expr,
   if (maps.length() == 0) {
     HInstruction* instr = BuildLoadNamedGeneric(object, expr);
     instr->set_position(expr->position());
-    PushAndAdd(instr);
-    if (instr->HasSideEffects()) AddSimulate(expr->id());
+    ast_context()->ReturnInstruction(instr, expr->id());
   } else {
     // Build subgraph for generic load through IC.
     {
@@ -3570,9 +3580,12 @@ void HGraphBuilder::HandlePolymorphicLoadNamedField(Property* expr,
     HBasicBlock* new_exit_block =
         BuildTypeSwitch(&maps, &subgraphs, object, expr->id());
     subgraph()->set_exit_block(new_exit_block);
+    // In an effect context, we did not materialized the value in the
+    // predecessor environments so there's no need to handle it here.
+    if (subgraph()->HasExit() && !ast_context()->IsEffect()) {
+      ast_context()->ReturnValue(Pop());
+    }
   }
-
-  if (subgraph()->HasExit()) ast_context()->ReturnValue(Pop());
 }
 
 
@@ -3858,7 +3871,11 @@ void HGraphBuilder::HandlePolymorphicCallNamed(Call* expr,
     HBasicBlock* new_exit_block =
         BuildTypeSwitch(&maps, &subgraphs, receiver, expr->id());
     subgraph()->set_exit_block(new_exit_block);
-    if (new_exit_block != NULL) ast_context()->ReturnValue(Pop());
+    // In an effect context, we did not materialized the value in the
+    // predecessor environments so there's no need to handle it here.
+    if (new_exit_block != NULL && !ast_context()->IsEffect()) {
+      ast_context()->ReturnValue(Pop());
+    }
   }
 }
 

@@ -1772,7 +1772,6 @@ void TypeRecordingBinaryOpStub::GenerateSmiStub(MacroAssembler* masm) {
 }
 
 
-
 void TypeRecordingBinaryOpStub::GenerateStringStub(MacroAssembler* masm) {
   Label call_runtime;
   ASSERT(operands_type_ == TRBinaryOpIC::STRING);
@@ -5004,9 +5003,9 @@ void InstanceofStub::Generate(MacroAssembler* masm) {
   static const int kDeltaToCmpImmediate = 2;
   static const int kDeltaToMov = 8;
   static const int kDeltaToMovImmediate = 9;
-  static const int8_t kCmpEdiImmediateByte1 = static_cast<int8_t>(0x81);
-  static const int8_t kCmpEdiImmediateByte2 = static_cast<int8_t>(0xff);
-  static const int8_t kMovEaxImmediateByte = static_cast<int8_t>(0xb8);
+  static const int8_t kCmpEdiImmediateByte1 = BitCast<int8_t, uint8_t>(0x81);
+  static const int8_t kCmpEdiImmediateByte2 = BitCast<int8_t, uint8_t>(0xff);
+  static const int8_t kMovEaxImmediateByte = BitCast<int8_t, uint8_t>(0xb8);
 
   ExternalReference roots_address = ExternalReference::roots_address();
 
@@ -5165,14 +5164,31 @@ void InstanceofStub::Generate(MacroAssembler* masm) {
 
   // Slow-case: Go through the JavaScript implementation.
   __ bind(&slow);
-  if (HasArgsInRegisters()) {
-    // Push arguments below return address.
-    __ pop(scratch);
+  if (!ReturnTrueFalseObject()) {
+    // Tail call the builtin which returns 0 or 1.
+    if (HasArgsInRegisters()) {
+      // Push arguments below return address.
+      __ pop(scratch);
+      __ push(object);
+      __ push(function);
+      __ push(scratch);
+    }
+    __ InvokeBuiltin(Builtins::INSTANCE_OF, JUMP_FUNCTION);
+  } else {
+    // Call the builtin and convert 0/1 to true/false.
     __ push(object);
     __ push(function);
-    __ push(scratch);
+    __ InvokeBuiltin(Builtins::INSTANCE_OF, CALL_FUNCTION);
+    NearLabel true_value, done;
+    __ test(eax, Operand(eax));
+    __ j(zero, &true_value);
+    __ mov(eax, Factory::false_value());
+    __ jmp(&done);
+    __ bind(&true_value);
+    __ mov(eax, Factory::true_value());
+    __ bind(&done);
+    __ ret((HasArgsInRegisters() ? 0 : 2) * kPointerSize);
   }
-  __ InvokeBuiltin(Builtins::INSTANCE_OF, JUMP_FUNCTION);
 }
 
 
