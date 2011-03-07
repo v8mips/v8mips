@@ -975,13 +975,6 @@ void NumberToStringStub::Generate(MacroAssembler* masm) {
 }
 
 
-void RecordWriteStub::Generate(MacroAssembler* masm) {
-  __ addu(offset_, object_, offset_);
-  __ RecordWriteHelper(object_, offset_, scratch_);
-  __ Ret();
-}
-
-
 // On entry lhs_ (lhs) and rhs_ (rhs) are the things to be compared.
 // On exit, v0 is 0, positive, or negative (smi) to indicate the result
 // of the comparison.
