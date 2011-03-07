@@ -174,7 +174,7 @@ struct FPURegister {
   // Currently f0 is used as a scratch register.
   // f2 has also been excluded from allocation to be used as a scratch
   // register as well.
-  static const int kNumAllocatableRegisters = 14;
+  static const int kNumAllocatableRegisters = 15;
 
   static int ToAllocationIndex(FPURegister reg) {
     ASSERT(reg.code() != 0);
@@ -184,12 +184,13 @@ struct FPURegister {
 
   static FPURegister FromAllocationIndex(int index) {
     ASSERT(index >= 0 && index < kNumAllocatableRegisters);
-    return from_code((index + 2) * 2);
+    return from_code((index + 1) * 2);
   }
 
   static const char* AllocationIndexToString(int index) {
     ASSERT(index >= 0 && index < kNumAllocatableRegisters);
     const char* const names[] = {
+      "f2",
       "f4",
       "f6",
       "f8",
