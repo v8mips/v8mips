@@ -281,22 +281,6 @@ void MacroAssembler::RecordWrite(Register object,
   }
 }
 
-// These functions are only used by crankshaft.
-// Push and pop all registers that can hold pointers.
-void MacroAssembler::PushSafepointRegisters() {
-  UNIMPLEMENTED_MIPS();
-}
-
-void MacroAssembler::PopSafepointRegisters() {
-  UNIMPLEMENTED_MIPS();
-}
-
-int MacroAssembler::SafepointRegisterStackIndex(int reg_code) {
-  UNIMPLEMENTED_MIPS();
-  return 0;
-}
-
-
 // -----------------------------------------------------------------------------
 // Allocation support
 

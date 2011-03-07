@@ -499,11 +499,34 @@ void DropAndRet(int drop = 0,
     Addu(sp, sp, Operand(count * kPointerSize));
   }
 
+  // ---------------------------------------------------------------------------
+  // These functions are only used by crankshaft, so they are currently
+  // unimplemented.
+
   // Push and pop the registers that can hold pointers, as defined by the
   // RegList constant kSafepointSavedRegisters.
-  void PushSafepointRegisters();
-  void PopSafepointRegisters();
-  static int SafepointRegisterStackIndex(int reg_code);
+  void PushSafepointRegisters() {
+    UNIMPLEMENTED_MIPS();
+  }
+
+  void PopSafepointRegisters() {
+    UNIMPLEMENTED_MIPS();
+  }
+
+  void PushSafepointRegistersAndDoubles() {
+    UNIMPLEMENTED_MIPS();
+  }
+
+  void PopSafepointRegistersAndDoubles() {
+    UNIMPLEMENTED_MIPS();
+  }
+
+  static int SafepointRegisterStackIndex(int reg_code) {
+    UNIMPLEMENTED_MIPS();
+    return 0;
+  }
+
+  // ---------------------------------------------------------------------------
 
   // MIPS32 R2 instruction macro.
   void Ins(Register rt, Register rs, uint16_t pos, uint16_t size);
@@ -835,6 +858,14 @@ void DropAndRet(int drop = 0,
 
   // -------------------------------------------------------------------------
   // Smi utilities
+
+  // Try to convert int32 to smi. If the value is to large, preserve
+  // the original value and jump to not_a_smi. Destroys scratch and
+  // sets flags.
+  // This is only used by crankshaft atm so it is unimplemented on MIPS.
+  void TrySmiTag(Register reg, Label* not_a_smi, Register scratch) {
+    UNIMPLEMENTED_MIPS();
+  }
 
   void SmiTag(Register reg) {
     Addu(reg, reg, Operand(reg));
