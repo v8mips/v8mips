@@ -1767,7 +1767,7 @@ void LCodeGen::DoInstanceOfKnownGlobal(LInstanceOfKnownGlobal* instr) {
   __ cmp(object, Factory::null_value());
   __ j(equal, &false_result);
 
-  // String values is not instance of anything.
+  // String values are not instances of anything.
   Condition is_string = masm_->IsObjectStringType(object, temp, temp);
   __ j(is_string, &false_result);
 
@@ -2638,7 +2638,6 @@ void LCodeGen::DoStoreKeyedFastElement(LStoreKeyedFastElement* instr) {
            value);
   }
 
-  // Update the write barrier unless we're certain that we're storing a smi.
   if (instr->hydrogen()->NeedsWriteBarrier()) {
     // Compute address of modified element and store it into key register.
     __ lea(key, FieldOperand(elements, key, times_4, FixedArray::kHeaderSize));
