@@ -570,7 +570,8 @@ void DropAndRet(int drop = 0,
   void InvokeCode(Register code,
                   const ParameterCount& expected,
                   const ParameterCount& actual,
-                  InvokeFlag flag);
+                  InvokeFlag flag,
+                  PostCallGenerator* post_call_generator = NULL);
 
   void InvokeCode(Handle<Code> code,
                   const ParameterCount& expected,
@@ -582,7 +583,8 @@ void DropAndRet(int drop = 0,
   // current context to the context in the function before invoking.
   void InvokeFunction(Register function,
                       const ParameterCount& actual,
-                      InvokeFlag flag);
+                      InvokeFlag flag,
+                      PostCallGenerator* post_call_generator = NULL);
 
   void InvokeFunction(JSFunction* function,
                       const ParameterCount& actual,
@@ -902,7 +904,8 @@ void DropAndRet(int drop = 0,
                       Handle<Code> code_constant,
                       Register code_reg,
                       Label* done,
-                      InvokeFlag flag);
+                      InvokeFlag flag,
+                      PostCallGenerator* post_call_generator = NULL);
 
   // Get the code for the given builtin. Returns if able to resolve
   // the function in the 'resolved' flag.
