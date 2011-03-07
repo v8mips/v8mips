@@ -2749,10 +2749,12 @@ void MacroAssembler::JumpToExternalReference(const ExternalReference& builtin) {
 
 
 void MacroAssembler::InvokeBuiltin(Builtins::JavaScript id,
-                                   InvokeJSFlags flags) {
+                                   InvokeJSFlags flags,
+                                   PostCallGenerator* post_call_generator) {
   GetBuiltinEntry(t9, id);
   if (flags == CALL_JS) {
     Call(t9);
+    if (post_call_generator != NULL) post_call_generator->Generate();
   } else {
     ASSERT(flags == JUMP_JS);
     Jump(t9);

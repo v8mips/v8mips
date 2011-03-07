@@ -36,6 +36,7 @@ namespace internal {
 
 // Forward declaration.
 class JumpTarget;
+class PostCallGenerator;
 
 // Reserved Register Usage Summary.
 //
@@ -779,7 +780,9 @@ void DropAndRet(int drop = 0,
 
   // Invoke specified builtin JavaScript function. Adds an entry to
   // the unresolved list if the name does not resolve.
-  void InvokeBuiltin(Builtins::JavaScript id, InvokeJSFlags flags);
+  void InvokeBuiltin(Builtins::JavaScript id,
+                     InvokeJSFlags flags,
+                     PostCallGenerator* post_call_generator = NULL);
 
   // Store the code object for the given builtin in the target register and
   // setup the function in a1.
