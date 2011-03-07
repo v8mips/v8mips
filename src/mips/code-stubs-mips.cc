@@ -2828,10 +2828,10 @@ void InstanceofStub::Generate(MacroAssembler* masm) {
   __ DropAndRet(HasArgsInRegisters() ? 0 : 2);
 
   // Slow-case.  Tail call builtin.
+  __ bind(&slow);
   if (HasArgsInRegisters()) {
     __ Push(a0, a1);
   }
-  __ bind(&slow);
   __ InvokeBuiltin(Builtins::INSTANCE_OF, JUMP_JS);
 }
 
