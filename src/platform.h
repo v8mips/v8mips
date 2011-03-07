@@ -390,6 +390,7 @@ class Thread: public ThreadHandle {
 
   // Create new thread.
   Thread();
+  explicit Thread(const char* name);
   virtual ~Thread();
 
   // Start new thread by calling the Run() method in the new thread.
@@ -397,6 +398,10 @@ class Thread: public ThreadHandle {
 
   // Wait until thread terminates.
   void Join();
+
+  inline const char* name() const {
+    return name_;
+  }
 
   // Abstract method for run handler.
   virtual void Run() = 0;
@@ -420,8 +425,16 @@ class Thread: public ThreadHandle {
   static void YieldCPU();
 
  private:
+  void set_name(const char *name);
+
   class PlatformData;
   PlatformData* data_;
+
+  // The thread name length is limited to 16 based on Linux's implementation of
+  // prctl().
+  static const int kMaxThreadNameLength = 16;
+  char name_[kMaxThreadNameLength];
+
   DISALLOW_COPY_AND_ASSIGN(Thread);
 };
 

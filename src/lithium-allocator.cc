@@ -27,7 +27,6 @@
 
 #include "lithium-allocator.h"
 
-#include "data-flow.h"
 #include "hydrogen.h"
 #include "string-stream.h"
 
@@ -836,6 +835,13 @@ void LAllocator::MeetConstraintsBetween(InstructionSummary* first,
       } else if (cur_input->policy() == LUnallocated::WRITABLE_REGISTER) {
         LUnallocated* input_copy = cur_input->CopyUnconstrained();
         cur_input->set_virtual_register(next_virtual_register_++);
+
+        if (RequiredRegisterKind(input_copy->virtual_register()) ==
+            DOUBLE_REGISTERS) {
+          double_artificial_registers_.Add(
+              cur_input->virtual_register() - first_artificial_register_);
+        }
+
         second->AddTemp(cur_input);
         AddConstraintsGapMove(gap_index, input_copy, cur_input);
       }
@@ -1038,6 +1044,7 @@ void LAllocator::Allocate(LChunk* chunk) {
 
 void LAllocator::MeetRegisterConstraints() {
   HPhase phase("Register constraints", chunk());
+  first_artificial_register_ = next_virtual_register_;
   const ZoneList<HBasicBlock*>* blocks = graph()->blocks();
   for (int i = 0; i < blocks->length(); ++i) {
     HBasicBlock* block = blocks->at(i);
@@ -1566,10 +1573,16 @@ bool LAllocator::HasTaggedValue(int virtual_register) const {
 
 
 RegisterKind LAllocator::RequiredRegisterKind(int virtual_register) const {
-  HValue* value = graph()->LookupValue(virtual_register);
-  if (value != NULL && value->representation().IsDouble()) {
+  if (virtual_register < first_artificial_register_) {
+    HValue* value = graph()->LookupValue(virtual_register);
+    if (value != NULL && value->representation().IsDouble()) {
+      return DOUBLE_REGISTERS;
+    }
+  } else if (double_artificial_registers_.Contains(
+      virtual_register - first_artificial_register_)) {
     return DOUBLE_REGISTERS;
   }
+
   return GENERAL_REGISTERS;
 }
 
