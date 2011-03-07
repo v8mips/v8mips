@@ -86,7 +86,8 @@ class LCodeGen;
 //   LGlobalObject
 //   LGlobalReceiver
 //   LLabel
-//   LLayzBailout
+//   LLazyBailout
+//   LLoadContextSlot
 //   LLoadGlobal
 //   LMaterializedLiteral
 //     LArrayLiteral
@@ -221,6 +222,7 @@ class LCodeGen;
   V(ClassOfTestAndBranch)                       \
   V(Label)                                      \
   V(LazyBailout)                                \
+  V(LoadContextSlot)                            \
   V(LoadElements)                               \
   V(LoadGlobal)                                 \
   V(LoadKeyedFastElement)                       \
@@ -1273,6 +1275,20 @@ class LStoreGlobal: public LUnaryOperation {
 };
 
 
+class LLoadContextSlot: public LInstruction {
+ public:
+  DECLARE_CONCRETE_INSTRUCTION(LoadContextSlot, "load-context-slot")
+  DECLARE_HYDROGEN_ACCESSOR(LoadContextSlot)
+
+  int context_chain_length() const {
+    return hydrogen()->context_chain_length();
+  }
+  int slot_index() const { return hydrogen()->slot_index(); }
+
+  virtual void PrintDataTo(StringStream* stream);
+};
+
+
 class LPushArgument: public LUnaryOperation {
  public:
   explicit LPushArgument(LOperand* argument) : LUnaryOperation(argument) {}
@@ -1871,14 +1887,24 @@ class LChunkBuilder BASE_EMBEDDED {
   LOperand* UseRegister(HValue* value);
   LOperand* UseRegisterAtStart(HValue* value);
 
-  // A value in a register that may be trashed.
+  // An input operand in a register that may be trashed.
   LOperand* UseTempRegister(HValue* value);
+
+  // An input operand in a register or stack slot.
   LOperand* Use(HValue* value);
   LOperand* UseAtStart(HValue* value);
+
+  // An input operand in a register, stack slot or a constant operand.
   LOperand* UseOrConstant(HValue* value);
   LOperand* UseOrConstantAtStart(HValue* value);
+
+  // An input operand in a register or a constant operand.
   LOperand* UseRegisterOrConstant(HValue* value);
   LOperand* UseRegisterOrConstantAtStart(HValue* value);
+
+  // An input operand in register, stack slot or a constant operand.
+  // Will not be moved to a register even if one is freely available.
+  LOperand* UseAny(HValue* value);
 
   // Methods for setting up define-use relationships.
   // Return the same instruction that they are passed.

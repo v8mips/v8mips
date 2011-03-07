@@ -250,6 +250,9 @@ LIBRARY_FLAGS = {
     },
     'prof:oprofile': {
       'CPPDEFINES':   ['ENABLE_OPROFILE_AGENT']
+    },
+    'gdbjit:on': {
+      'CPPDEFINES':   ['ENABLE_GDB_JIT_INTERFACE']
     }
   },
   'msvc': {
@@ -776,6 +779,11 @@ SIMPLE_OPTIONS = {
     'default': 'off',
     'help': 'enable profiling of build target'
   },
+  'gdbjit': {
+    'values': ['on', 'off'],
+    'default': 'off',
+    'help': 'enable GDB JIT interface'
+  },
   'library': {
     'values': ['static', 'shared'],
     'default': 'static',
@@ -952,6 +960,8 @@ def VerifyOptions(env):
     return False
   if env['os'] == 'win32' and env['library'] == 'shared' and env['prof'] == 'on':
     Abort("Profiling on windows only supported for static library.")
+  if env['gdbjit'] == 'on' and (env['os'] != 'linux' or (env['arch'] != 'ia32' and env['arch'] != 'x64')):
+    Abort("GDBJIT interface is supported only for Intel-compatible (ia32 or x64) Linux target.")
   if env['prof'] == 'oprofile' and env['os'] != 'linux':
     Abort("OProfile is only supported on Linux.")
   if env['os'] == 'win32' and env['soname'] == 'on':

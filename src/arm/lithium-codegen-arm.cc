@@ -172,13 +172,13 @@ bool LGapResolver::CanReach(LGapNode* a, LGapNode* b) {
 
 
 void LGapResolver::RegisterMove(LMoveOperands move) {
-  if (move.from()->IsConstantOperand()) {
+  if (move.source()->IsConstantOperand()) {
     // Constant moves should be last in the machine code. Therefore add them
     // first to the result set.
-    AddResultMove(move.from(), move.to());
+    AddResultMove(move.source(), move.destination());
   } else {
-    LGapNode* from = LookupNode(move.from());
-    LGapNode* to = LookupNode(move.to());
+    LGapNode* from = LookupNode(move.source());
+    LGapNode* to = LookupNode(move.destination());
     if (to->IsAssigned() && to->assigned_from() == from) {
       move.Eliminate();
       return;
@@ -340,6 +340,11 @@ bool LCodeGen::GenerateDeferredCode() {
     code->Generate();
     __ jmp(code->exit());
   }
+
+  // Force constant pool emission at the end of deferred code to make
+  // sure that no constant pools are emitted after the official end of
+  // the instruction sequence.
+  masm()->CheckConstPool(true, false);
 
   // Deferred code is the last part of the instruction sequence. Mark
   // the generated code as done unless we bailed out.
@@ -816,8 +821,8 @@ void LCodeGen::DoParallelMove(LParallelMove* move) {
       resolver_.Resolve(move->move_operands(), &marker_operand);
   for (int i = moves->length() - 1; i >= 0; --i) {
     LMoveOperands move = moves->at(i);
-    LOperand* from = move.from();
-    LOperand* to = move.to();
+    LOperand* from = move.source();
+    LOperand* to = move.destination();
     ASSERT(!from->IsDoubleRegister() ||
            !ToDoubleRegister(from).is(dbl_scratch));
     ASSERT(!to->IsDoubleRegister() || !ToDoubleRegister(to).is(dbl_scratch));
@@ -999,7 +1004,6 @@ void LCodeGen::DoUnknownOSRValue(LUnknownOSRValue* instr) {
 
 
 void LCodeGen::DoModI(LModI* instr) {
-  Abort("ModI not implemented");
   class DeferredModI: public LDeferredCode {
    public:
     DeferredModI(LCodeGen* codegen, LModI* instr)
@@ -1055,7 +1059,6 @@ void LCodeGen::DoModI(LModI* instr) {
 
 
 void LCodeGen::DoDivI(LDivI* instr) {
-  Abort("DivI not implemented");
   class DeferredDivI: public LDeferredCode {
    public:
     DeferredDivI(LCodeGen* codegen, LDivI* instr)
@@ -1293,7 +1296,10 @@ void LCodeGen::DoConstantI(LConstantI* instr) {
 
 
 void LCodeGen::DoConstantD(LConstantD* instr) {
-  Abort("DoConstantD unimplemented.");
+  ASSERT(instr->result()->IsDoubleRegister());
+  DwVfpRegister result = ToDoubleRegister(instr->result());
+  double v = instr->value();
+  __ vmov(result, v);
 }
 
 
@@ -1988,6 +1994,14 @@ void LCodeGen::DoStoreGlobal(LStoreGlobal* instr) {
 }
 
 
+void LCodeGen::DoLoadContextSlot(LLoadContextSlot* instr) {
+  // TODO(antonm): load a context with a separate instruction.
+  Register result = ToRegister(instr->result());
+  __ LoadContext(result, instr->context_chain_length());
+  __ ldr(result, ContextOperand(result, instr->slot_index()));
+}
+
+
 void LCodeGen::DoLoadNamedField(LLoadNamedField* instr) {
   Register object = ToRegister(instr->input());
   Register result = ToRegister(instr->result());
@@ -2328,6 +2342,15 @@ void LCodeGen::DoMathFloor(LUnaryMathOperation* instr) {
 
   // Move the result back to general purpose register r0.
   __ vmov(result, single_scratch);
+
+  // Test for -0.
+  Label done;
+  __ cmp(result, Operand(0));
+  __ b(ne, &done);
+  __ vmov(scratch, input.high());
+  __ tst(scratch, Operand(HeapNumber::kSignMask));
+  DeoptimizeIf(ne, instr->environment());
+  __ bind(&done);
 }
 
 
@@ -2865,15 +2888,15 @@ void LCodeGen::DoCheckMap(LCheckMap* instr) {
 }
 
 
-void LCodeGen::LoadPrototype(Register result,
-                             Handle<JSObject> prototype) {
-  if (Heap::InNewSpace(*prototype)) {
+void LCodeGen::LoadHeapObject(Register result,
+                              Handle<HeapObject> object) {
+  if (Heap::InNewSpace(*object)) {
     Handle<JSGlobalPropertyCell> cell =
-        Factory::NewJSGlobalPropertyCell(prototype);
+        Factory::NewJSGlobalPropertyCell(object);
     __ mov(result, Operand(cell));
     __ ldr(result, FieldMemOperand(result, JSGlobalPropertyCell::kValueOffset));
   } else {
-    __ mov(result, Operand(prototype));
+    __ mov(result, Operand(object));
   }
 }
 
@@ -2886,7 +2909,7 @@ void LCodeGen::DoCheckPrototypeMaps(LCheckPrototypeMaps* instr) {
   Handle<JSObject> current_prototype = instr->prototype();
 
   // Load prototype object.
-  LoadPrototype(temp1, current_prototype);
+  LoadHeapObject(temp1, current_prototype);
 
   // Check prototype maps up to the holder.
   while (!current_prototype.is_identical_to(holder)) {
@@ -2896,7 +2919,7 @@ void LCodeGen::DoCheckPrototypeMaps(LCheckPrototypeMaps* instr) {
     current_prototype =
         Handle<JSObject>(JSObject::cast(current_prototype->GetPrototype()));
     // Load next prototype object.
-    LoadPrototype(temp1, current_prototype);
+    LoadHeapObject(temp1, current_prototype);
   }
 
   // Check the holder map.

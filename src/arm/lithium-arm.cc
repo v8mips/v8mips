@@ -244,6 +244,11 @@ void LUnaryMathOperation::PrintDataTo(StringStream* stream) const {
 }
 
 
+void LLoadContextSlot::PrintDataTo(StringStream* stream) {
+  stream->Add("(%d, %d)", context_chain_length(), slot_index());
+}
+
+
 void LCallKeyed::PrintDataTo(StringStream* stream) const {
   stream->Add("[r2] #%d / ", arity());
 }
@@ -568,6 +573,13 @@ LOperand* LChunkBuilder::UseRegisterOrConstantAtStart(HValue* value) {
   return value->IsConstant()
       ? chunk_->DefineConstantOperand(HConstant::cast(value))
       : UseRegisterAtStart(value);
+}
+
+
+LOperand* LChunkBuilder::UseAny(HValue* value) {
+  return value->IsConstant()
+      ? chunk_->DefineConstantOperand(HConstant::cast(value))
+      :  Use(value, new LUnallocated(LUnallocated::ANY));
 }
 
 
@@ -902,11 +914,7 @@ LEnvironment* LChunkBuilder::CreateEnvironment(HEnvironment* hydrogen_env) {
     } else if (value->IsPushArgument()) {
       op = new LArgument(argument_index++);
     } else {
-      op = UseOrConstant(value);
-      if (op->IsUnallocated()) {
-        LUnallocated* unalloc = LUnallocated::cast(op);
-        unalloc->set_policy(LUnallocated::ANY);
-      }
+      op = UseAny(value);
     }
     result->AddValue(op, value->representation());
   }
@@ -1598,6 +1606,11 @@ LInstruction* LChunkBuilder::DoLoadGlobal(HLoadGlobal* instr) {
 
 LInstruction* LChunkBuilder::DoStoreGlobal(HStoreGlobal* instr) {
   return new LStoreGlobal(UseRegisterAtStart(instr->value()));
+}
+
+
+LInstruction* LChunkBuilder::DoLoadContextSlot(HLoadContextSlot* instr) {
+  return DefineAsRegister(new LLoadContextSlot);
 }
 
 

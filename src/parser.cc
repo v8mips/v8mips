@@ -283,6 +283,11 @@ class TemporaryScope BASE_EMBEDDED {
   void AddLoop() { loop_count_++; }
   bool ContainsLoops() const { return loop_count_ > 0; }
 
+  bool StrictMode() { return strict_mode_; }
+  void EnableStrictMode() {
+    strict_mode_ = FLAG_strict_mode;
+  }
+
  private:
   // Captures the number of literals that need materialization in the
   // function.  Includes regexp literals, and boilerplate for object
@@ -300,6 +305,9 @@ class TemporaryScope BASE_EMBEDDED {
   // Captures the number of loops inside the scope.
   int loop_count_;
 
+  // Parsing strict mode code.
+  bool strict_mode_;
+
   // Bookkeeping
   TemporaryScope** variable_;
   TemporaryScope* parent_;
@@ -314,6 +322,8 @@ TemporaryScope::TemporaryScope(TemporaryScope** variable)
     loop_count_(0),
     variable_(variable),
     parent_(*variable) {
+  // Inherit the strict mode from the parent scope.
+  strict_mode_ = (parent_ != NULL) && parent_->strict_mode_;
   *variable = this;
 }
 
@@ -561,7 +571,6 @@ class LexicalScope BASE_EMBEDDED {
   int prev_level_;
 };
 
-
 // ----------------------------------------------------------------------------
 // The CHECK_OK macro is a convenient macro to enforce error
 // handling for functions that may fail (by returning !*ok).
@@ -669,7 +678,8 @@ FunctionLiteral* Parser::DoParseProgram(Handle<String> source,
           0,
           source->length(),
           false,
-          temp_scope.ContainsLoops());
+          temp_scope.ContainsLoops(),
+          temp_scope.StrictMode());
     } else if (stack_overflow_) {
       Top::StackOverflow();
     }
@@ -778,10 +788,26 @@ void Parser::ReportMessageAt(Scanner::Location source_location,
                              const char* type,
                              Vector<const char*> args) {
   MessageLocation location(script_,
-                           source_location.beg_pos, source_location.end_pos);
+                           source_location.beg_pos,
+                           source_location.end_pos);
   Handle<JSArray> array = Factory::NewJSArray(args.length());
   for (int i = 0; i < args.length(); i++) {
     SetElement(array, i, Factory::NewStringFromUtf8(CStrVector(args[i])));
+  }
+  Handle<Object> result = Factory::NewSyntaxError(type, array);
+  Top::Throw(*result, &location);
+}
+
+
+void Parser::ReportMessageAt(Scanner::Location source_location,
+                             const char* type,
+                             Vector<Handle<String> > args) {
+  MessageLocation location(script_,
+                           source_location.beg_pos,
+                           source_location.end_pos);
+  Handle<JSArray> array = Factory::NewJSArray(args.length());
+  for (int i = 0; i < args.length(); i++) {
+    SetElement(array, i, args[i]);
   }
   Handle<Object> result = Factory::NewSyntaxError(type, array);
   Top::Throw(*result, &location);
@@ -1059,9 +1085,46 @@ void* Parser::ParseSourceElements(ZoneList<Statement*>* processor,
   ASSERT(processor != NULL);
   InitializationBlockFinder block_finder;
   ThisNamedPropertyAssigmentFinder this_property_assignment_finder;
+  bool directive_prologue = true;     // Parsing directive prologue.
+
   while (peek() != end_token) {
+    if (directive_prologue && peek() != Token::STRING) {
+      directive_prologue = false;
+    }
+
+    Scanner::Location token_loc = scanner().peek_location();
     Statement* stat = ParseStatement(NULL, CHECK_OK);
-    if (stat == NULL || stat->IsEmpty()) continue;
+
+    if (stat == NULL || stat->IsEmpty()) {
+      directive_prologue = false;   // End of directive prologue.
+      continue;
+    }
+
+    if (directive_prologue) {
+      // A shot at a directive.
+      ExpressionStatement *e_stat;
+      Literal *literal;
+      // Still processing directive prologue?
+      if ((e_stat = stat->AsExpressionStatement()) != NULL &&
+          (literal = e_stat->expression()->AsLiteral()) != NULL &&
+          literal->handle()->IsString()) {
+        Handle<String> directive = Handle<String>::cast(literal->handle());
+
+        // Check "use strict" directive (ES5 14.1).
+        if (!temp_scope_->StrictMode() &&
+            directive->Equals(Heap::use_strict()) &&
+            token_loc.end_pos - token_loc.beg_pos ==
+              Heap::use_strict()->length() + 2) {
+          temp_scope_->EnableStrictMode();
+          // "use strict" is the only directive for now.
+          directive_prologue = false;
+        }
+      } else {
+        // End of the directive prologue.
+        directive_prologue = false;
+      }
+    }
+
     // We find and mark the initialization blocks on top level code only.
     // This is because the optimization prevents reuse of the map transitions,
     // so it should be used only for code that will only be run once.
@@ -1415,6 +1478,10 @@ Block* Parser::ParseVariableStatement(bool* ok) {
   return result;
 }
 
+static bool IsEvalOrArguments(Handle<String> string) {
+  return string.is_identical_to(Factory::eval_symbol()) ||
+         string.is_identical_to(Factory::arguments_symbol());
+}
 
 // If the variable declaration declares exactly one non-const
 // variable, then *var is set to that variable. In all other cases,
@@ -1462,6 +1529,13 @@ Block* Parser::ParseVariableDeclarations(bool accept_IN,
     if (nvars > 0) Consume(Token::COMMA);
     Handle<String> name = ParseIdentifier(CHECK_OK);
     if (fni_ != NULL) fni_->PushVariableName(name);
+
+    // Strict mode variables may not be named eval or arguments
+    if (temp_scope_->StrictMode() && IsEvalOrArguments(name)) {
+      ReportMessage("strict_var_name", Vector<const char*>::empty());
+      *ok = false;
+      return NULL;
+    }
 
     // Declare variable.
     // Note that we *always* must treat the initial value via a separate init
@@ -1693,12 +1767,16 @@ Statement* Parser::ParseContinueStatement(bool* ok) {
   IterationStatement* target = NULL;
   target = LookupContinueTarget(label, CHECK_OK);
   if (target == NULL) {
-    // Illegal continue statement.  To be consistent with KJS we delay
-    // reporting of the syntax error until runtime.
-    Handle<String> error_type = Factory::illegal_continue_symbol();
-    if (!label.is_null()) error_type = Factory::unknown_label_symbol();
-    Expression* throw_error = NewThrowSyntaxError(error_type, label);
-    return new ExpressionStatement(throw_error);
+    // Illegal continue statement.
+    const char* message = "illegal_continue";
+    Vector<Handle<String> > args;
+    if (!label.is_null()) {
+      message = "unknown_label";
+      args = Vector<Handle<String> >(&label, 1);
+    }
+    ReportMessageAt(scanner().location(), message, args);
+    *ok = false;
+    return NULL;
   }
   ExpectSemicolon(CHECK_OK);
   return new ContinueStatement(target);
@@ -1724,12 +1802,16 @@ Statement* Parser::ParseBreakStatement(ZoneStringList* labels, bool* ok) {
   BreakableStatement* target = NULL;
   target = LookupBreakTarget(label, CHECK_OK);
   if (target == NULL) {
-    // Illegal break statement.  To be consistent with KJS we delay
-    // reporting of the syntax error until runtime.
-    Handle<String> error_type = Factory::illegal_break_symbol();
-    if (!label.is_null()) error_type = Factory::unknown_label_symbol();
-    Expression* throw_error = NewThrowSyntaxError(error_type, label);
-    return new ExpressionStatement(throw_error);
+    // Illegal break statement.
+    const char* message = "illegal_break";
+    Vector<Handle<String> > args;
+    if (!label.is_null()) {
+      message = "unknown_label";
+      args = Vector<Handle<String> >(&label, 1);
+    }
+    ReportMessageAt(scanner().location(), message, args);
+    *ok = false;
+    return NULL;
   }
   ExpectSemicolon(CHECK_OK);
   return new BreakStatement(target);
@@ -1815,6 +1897,13 @@ Statement* Parser::ParseWithStatement(ZoneStringList* labels, bool* ok) {
   //   'with' '(' Expression ')' Statement
 
   Expect(Token::WITH, CHECK_OK);
+
+  if (temp_scope_->StrictMode()) {
+    ReportMessage("strict_mode_with", Vector<const char*>::empty());
+    *ok = false;
+    return NULL;
+  }
+
   Expect(Token::LPAREN, CHECK_OK);
   Expression* expr = ParseExpression(true, CHECK_OK);
   Expect(Token::RPAREN, CHECK_OK);
@@ -1947,6 +2036,13 @@ TryStatement* Parser::ParseTryStatement(bool* ok) {
 
     Expect(Token::LPAREN, CHECK_OK);
     Handle<String> name = ParseIdentifier(CHECK_OK);
+
+    if (temp_scope_->StrictMode() && IsEvalOrArguments(name)) {
+      ReportMessage("strict_catch_variable", Vector<const char*>::empty());
+      *ok = false;
+      return NULL;
+    }
+
     Expect(Token::RPAREN, CHECK_OK);
 
     if (peek() == Token::LBRACE) {
@@ -3200,11 +3296,27 @@ FunctionLiteral* Parser::ParseFunctionLiteral(Handle<String> var_name,
     //    '(' (Identifier)*[','] ')'
     Expect(Token::LPAREN, CHECK_OK);
     int start_pos = scanner().location().beg_pos;
+    Scanner::Location eval_loc(RelocInfo::kNoPosition, RelocInfo::kNoPosition);
+    Scanner::Location dupe_loc(RelocInfo::kNoPosition, RelocInfo::kNoPosition);
+
     bool done = (peek() == Token::RPAREN);
     while (!done) {
       Handle<String> param_name = ParseIdentifier(CHECK_OK);
-      top_scope_->AddParameter(top_scope_->DeclareLocal(param_name,
-                                                        Variable::VAR));
+      Variable* parameter = top_scope_->DeclareLocal(param_name, Variable::VAR);
+
+      // Store locations for possible future error reports.
+      if (eval_loc.beg_pos == RelocInfo::kNoPosition &&
+          IsEvalOrArguments(param_name)) {
+        // Store location for later
+        eval_loc = scanner().location();
+      }
+      if (dupe_loc.beg_pos == RelocInfo::kNoPosition &&
+        top_scope_->IsParameterDeclared(param_name)) {
+        // Store location for later
+        dupe_loc = scanner().location();
+      }
+
+      top_scope_->AddParameter(parameter);
       num_parameters++;
       done = (peek() == Token::RPAREN);
       if (!done) Expect(Token::COMMA, CHECK_OK);
@@ -3276,6 +3388,32 @@ FunctionLiteral* Parser::ParseFunctionLiteral(Handle<String> var_name,
       end_pos = scanner().location().end_pos;
     }
 
+    // Validate strict mode.
+    if (temp_scope_->StrictMode()) {
+      if (IsEvalOrArguments(name)) {
+        int position = function_token_position != RelocInfo::kNoPosition
+                         ? function_token_position
+                         : (start_pos > 0 ? start_pos - 1 : start_pos);
+        ReportMessageAt(Scanner::Location(position, start_pos),
+                        "strict_function_name", Vector<const char*>::empty());
+        *ok = false;
+        return NULL;
+      }
+      if (eval_loc.beg_pos != RelocInfo::kNoPosition) {
+        ReportMessageAt(eval_loc, "strict_param_name",
+                        Vector<const char*>::empty());
+        *ok = false;
+        return NULL;
+      }
+      if (dupe_loc.beg_pos != RelocInfo::kNoPosition) {
+        ReportMessageAt(dupe_loc, "strict_param_dupe",
+                        Vector<const char*>::empty());
+        *ok = false;
+        return NULL;
+      }
+      // TODO(mmaly): Check for octal escape sequence here.
+    }
+
     FunctionLiteral* function_literal =
         new FunctionLiteral(name,
                             top_scope_,
@@ -3288,7 +3426,8 @@ FunctionLiteral* Parser::ParseFunctionLiteral(Handle<String> var_name,
                             start_pos,
                             end_pos,
                             function_name->length() > 0,
-                            temp_scope.ContainsLoops());
+                            temp_scope.ContainsLoops(),
+                            temp_scope.StrictMode());
     function_literal->set_function_token_position(function_token_position);
 
     if (fni_ != NULL && !is_named) fni_->AddFunction(function_literal);

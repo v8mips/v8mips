@@ -747,10 +747,10 @@ void LAllocator::AddConstraintsGapMove(int index,
     const ZoneList<LMoveOperands>* move_operands = move->move_operands();
     for (int i = 0; i < move_operands->length(); ++i) {
       LMoveOperands cur = move_operands->at(i);
-      LOperand* cur_to = cur.to();
+      LOperand* cur_to = cur.destination();
       if (cur_to->IsUnallocated()) {
         if (cur_to->VirtualRegister() == from->VirtualRegister()) {
-          move->AddMove(cur.from(), to);
+          move->AddMove(cur.source(), to);
           return;
         }
       }
@@ -830,6 +830,10 @@ void LAllocator::MeetConstraintsBetween(InstructionSummary* first,
         AllocateFixed(cur_input, gap_index + 1, is_tagged);
         AddConstraintsGapMove(gap_index, input_copy, cur_input);
       } else if (cur_input->policy() == LUnallocated::WRITABLE_REGISTER) {
+        // The live range of writable input registers always goes until the end
+        // of the instruction.
+        ASSERT(!cur_input->IsUsedAtStart());
+
         LUnallocated* input_copy = cur_input->CopyUnconstrained();
         cur_input->set_virtual_register(next_virtual_register_++);
 
@@ -839,7 +843,6 @@ void LAllocator::MeetConstraintsBetween(InstructionSummary* first,
               cur_input->virtual_register() - first_artificial_register_);
         }
 
-        second->AddTemp(cur_input);
         AddConstraintsGapMove(gap_index, input_copy, cur_input);
       }
     }
@@ -895,8 +898,8 @@ void LAllocator::ProcessInstructions(HBasicBlock* block, BitVector* live) {
       for (int i = 0; i < move_operands->length(); ++i) {
         LMoveOperands* cur = &move_operands->at(i);
         if (cur->IsIgnored()) continue;
-        LOperand* from = cur->from();
-        LOperand* to = cur->to();
+        LOperand* from = cur->source();
+        LOperand* to = cur->destination();
         HPhi* phi = LookupPhi(to);
         LOperand* hint = to;
         if (phi != NULL) {
@@ -1216,9 +1219,9 @@ void LAllocator::BuildLiveRanges() {
       LGap* gap = GetLastGap(phi->block()->predecessors()->at(0));
       LParallelMove* move = gap->GetOrCreateParallelMove(LGap::START);
       for (int j = 0; j < move->move_operands()->length(); ++j) {
-        LOperand* to = move->move_operands()->at(j).to();
+        LOperand* to = move->move_operands()->at(j).destination();
         if (to->IsUnallocated() && to->VirtualRegister() == phi->id()) {
-          hint = move->move_operands()->at(j).from();
+          hint = move->move_operands()->at(j).source();
           phi_operand = to;
           break;
         }
