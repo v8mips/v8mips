@@ -112,15 +112,15 @@ struct Register {
     ASSERT(index >= 0 && index < kNumAllocatableRegisters);
     const char* const names[] = {
       "rax",
-      "rcx",
-      "rdx",
       "rbx",
+      "rdx",
+      "rcx",
       "rdi",
       "r8",
       "r9",
       "r11",
-      "r12",
-      "r14"
+      "r14",
+      "r12"
     };
     return names[index];
   }
@@ -215,6 +215,7 @@ struct XMMRegister {
   }
 
   bool is_valid() const { return 0 <= code_ && code_ < kNumRegisters; }
+  bool is(XMMRegister reg) const { return code_ == reg.code_; }
   int code() const {
     ASSERT(is_valid());
     return code_;

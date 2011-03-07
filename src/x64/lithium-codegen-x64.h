@@ -40,7 +40,30 @@ namespace internal {
 
 // Forward declarations.
 class LDeferredCode;
+class LGapNode;
 class SafepointGenerator;
+
+class LGapResolver BASE_EMBEDDED {
+ public:
+  LGapResolver();
+  const ZoneList<LMoveOperands>* Resolve(const ZoneList<LMoveOperands>* moves,
+                                         LOperand* marker_operand);
+
+ private:
+  LGapNode* LookupNode(LOperand* operand);
+  bool CanReach(LGapNode* a, LGapNode* b, int visited_id);
+  bool CanReach(LGapNode* a, LGapNode* b);
+  void RegisterMove(LMoveOperands move);
+  void AddResultMove(LOperand* from, LOperand* to);
+  void AddResultMove(LGapNode* from, LGapNode* to);
+  void ResolveCycle(LGapNode* start, LOperand* marker_operand);
+
+  ZoneList<LGapNode*> nodes_;
+  ZoneList<LGapNode*> identified_cycles_;
+  ZoneList<LMoveOperands> result_;
+  int next_visited_id_;
+};
+
 
 class LCodeGen BASE_EMBEDDED {
  public:
@@ -170,7 +193,10 @@ class LCodeGen BASE_EMBEDDED {
   XMMRegister ToDoubleRegister(int index) const;
   Register ToRegister(LOperand* op) const;
   XMMRegister ToDoubleRegister(LOperand* op) const;
+  bool IsInteger32Constant(LConstantOperand* op) const;
   int ToInteger32(LConstantOperand* op) const;
+  bool IsTaggedConstant(LConstantOperand* op) const;
+  Handle<Object> ToHandle(LConstantOperand* op) const;
   Operand ToOperand(LOperand* op) const;
 
   // Specific math operations - used from DoUnaryMathOperation.
