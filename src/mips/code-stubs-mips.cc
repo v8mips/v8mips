@@ -2750,7 +2750,7 @@ void InstanceofStub::Generate(MacroAssembler* masm) {
   const Register prototype = t0;  // Prototype of the function.
   const Register scratch = a2;
   Label slow, loop, is_instance, is_not_instance, not_js_object;
-  if (!args_in_registers()) {
+  if (!HasArgsInRegisters()) {
     __ lw(object, MemOperand(sp, 1 * kPointerSize));
     __ lw(function, MemOperand(sp, 0));
   }
@@ -2766,7 +2766,7 @@ void InstanceofStub::Generate(MacroAssembler* masm) {
   __ LoadRoot(t1, Heap::kInstanceofCacheMapRootIndex);
   __ Branch(&miss, ne, map, Operand(t1));
   __ LoadRoot(v0, Heap::kInstanceofCacheAnswerRootIndex);
-  __ DropAndRet(args_in_registers() ? 0 : 2);
+  __ DropAndRet(HasArgsInRegisters() ? 0 : 2);
 
   __ bind(&miss);
   __ TryGetFunctionPrototype(function, prototype, scratch, &slow);
@@ -2795,12 +2795,12 @@ void InstanceofStub::Generate(MacroAssembler* masm) {
   ASSERT(Smi::FromInt(0) == 0);
   __ mov(v0, zero_reg);
   __ StoreRoot(v0, Heap::kInstanceofCacheAnswerRootIndex);
-  __ DropAndRet(args_in_registers() ? 0 : 2);
+  __ DropAndRet(HasArgsInRegisters() ? 0 : 2);
 
   __ bind(&is_not_instance);
   __ li(v0, Operand(Smi::FromInt(1)));
   __ StoreRoot(v0, Heap::kInstanceofCacheAnswerRootIndex);
-  __ DropAndRet(args_in_registers() ? 0 : 2);
+  __ DropAndRet(HasArgsInRegisters() ? 0 : 2);
 
   Label object_not_null, object_not_null_or_smi;
   __ bind(&not_js_object);
@@ -2813,22 +2813,22 @@ void InstanceofStub::Generate(MacroAssembler* masm) {
   // Null is not instance of anything.
   __ Branch(&object_not_null, ne, scratch, Operand(Factory::null_value()));
   __ li(v0, Operand(Smi::FromInt(1)));
-  __ DropAndRet(args_in_registers() ? 0 : 2);
+  __ DropAndRet(HasArgsInRegisters() ? 0 : 2);
 
   __ bind(&object_not_null);
   // Smi values are not instances of anything.
   __ BranchOnNotSmi(object, &object_not_null_or_smi);
   __ li(v0, Operand(Smi::FromInt(1)));
-  __ DropAndRet(args_in_registers() ? 0 : 2);
+  __ DropAndRet(HasArgsInRegisters() ? 0 : 2);
 
   __ bind(&object_not_null_or_smi);
   // String values are not instances of anything.
   __ IsObjectJSStringType(object, scratch, &slow);
   __ li(v0, Operand(Smi::FromInt(1)));
-  __ DropAndRet(args_in_registers() ? 0 : 2);
+  __ DropAndRet(HasArgsInRegisters() ? 0 : 2);
 
   // Slow-case.  Tail call builtin.
-  if (args_in_registers()) {
+  if (HasArgsInRegisters()) {
     __ Push(a0, a1);
   }
   __ bind(&slow);
