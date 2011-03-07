@@ -4011,7 +4011,9 @@ bool HGraphBuilder::TryInline(Call* expr) {
     function_return_->MarkAsInlineReturnTarget();
   }
   call_context_ = ast_context();
-  TypeFeedbackOracle new_oracle(Handle<Code>(shared->code()));
+  TypeFeedbackOracle new_oracle(
+      Handle<Code>(shared->code()),
+      Handle<Context>(target->context()->global_context()));
   oracle_ = &new_oracle;
   graph()->info()->SetOsrAstId(AstNode::kNoNumber);
 
@@ -4213,7 +4215,8 @@ bool HGraphBuilder::TryCallApply(Call* expr) {
   HValue* arg_two_value = environment()->Lookup(arg_two->var());
   if (!arg_two_value->CheckFlag(HValue::kIsArguments)) return false;
 
-  if (!expr->IsMonomorphic()) return false;
+  if (!expr->IsMonomorphic() ||
+      expr->check_type() != RECEIVER_MAP_CHECK) return false;
 
   // Found pattern f.apply(receiver, arguments).
   VisitForValue(prop->obj());
@@ -4282,7 +4285,7 @@ void HGraphBuilder::VisitCall(Call* expr) {
     expr->RecordTypeFeedback(oracle());
     ZoneMapList* types = expr->GetReceiverTypes();
 
-    if (expr->IsMonomorphic()) {
+    if (expr->IsMonomorphic() && expr->check_type() == RECEIVER_MAP_CHECK) {
       AddCheckConstantFunction(expr, receiver, types->first(), true);
 
       if (TryMathFunctionInline(expr)) {
@@ -4307,6 +4310,7 @@ void HGraphBuilder::VisitCall(Call* expr) {
       }
 
     } else if (types != NULL && types->length() > 1) {
+      ASSERT(expr->check_type() == RECEIVER_MAP_CHECK);
       HandlePolymorphicCallNamed(expr, receiver, types, name);
       return;
 
