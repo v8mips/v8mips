@@ -324,6 +324,45 @@ MemOperand LCodeGen::ToMemOperand(LOperand* op) const {
 }
 
 
+void LCodeGen::WriteTranslation(LEnvironment* environment,
+                                Translation* translation) {
+  if (environment == NULL) return;
+
+  // The translation includes one command per value in the environment.
+  int translation_size = environment->values()->length();
+  // The output frame height does not include the parameters.
+  int height = translation_size - environment->parameter_count();
+
+  WriteTranslation(environment->outer(), translation);
+  int closure_id = DefineDeoptimizationLiteral(environment->closure());
+  translation->BeginFrame(environment->ast_id(), closure_id, height);
+  for (int i = 0; i < translation_size; ++i) {
+    LOperand* value = environment->values()->at(i);
+    // spilled_registers_ and spilled_double_registers_ are either
+    // both NULL or both set.
+    if (environment->spilled_registers() != NULL && value != NULL) {
+      if (value->IsRegister() &&
+          environment->spilled_registers()[value->index()] != NULL) {
+        translation->MarkDuplicate();
+        AddToTranslation(translation,
+                         environment->spilled_registers()[value->index()],
+                         environment->HasTaggedValueAt(i));
+      } else if (
+          value->IsDoubleRegister() &&
+          environment->spilled_double_registers()[value->index()] != NULL) {
+        translation->MarkDuplicate();
+        AddToTranslation(
+            translation,
+            environment->spilled_double_registers()[value->index()],
+            false);
+      }
+    }
+
+    AddToTranslation(translation, value, environment->HasTaggedValueAt(i));
+  }
+}
+
+
 void LCodeGen::AddToTranslation(Translation* translation,
                                 LOperand* op,
                                 bool is_tagged) {
@@ -439,7 +478,7 @@ void LCodeGen::RegisterEnvironmentForDeoptimization(LEnvironment* environment) {
       ++frame_count;
     }
     Translation translation(&translations_, frame_count);
-    environment->WriteTranslation(this, &translation);
+    WriteTranslation(environment, &translation);
     int deoptimization_index = deoptimizations_.length();
     environment->Register(deoptimization_index, translation.index());
     deoptimizations_.Add(environment);
@@ -1095,7 +1134,7 @@ void LCodeGen::DoBranch(LBranch* instr) {
 
     // Test the double value. Zero and NaN are false.
     __ VFPCompareAndLoadFlags(reg, 0.0, scratch);
-    __ tst(scratch, Operand(kVFPZConditionFlagBit | kVFPInvalidExceptionBit));
+    __ tst(scratch, Operand(kVFPZConditionFlagBit | kVFPVConditionFlagBit));
     EmitBranch(true_block, false_block, ne);
   } else {
     ASSERT(r.IsTagged());
@@ -1133,7 +1172,7 @@ void LCodeGen::DoBranch(LBranch* instr) {
       __ sub(ip, reg, Operand(kHeapObjectTag));
       __ vldr(dbl_scratch, ip, HeapNumber::kValueOffset);
       __ VFPCompareAndLoadFlags(dbl_scratch, 0.0, scratch);
-      __ tst(scratch, Operand(kVFPZConditionFlagBit | kVFPInvalidExceptionBit));
+      __ tst(scratch, Operand(kVFPZConditionFlagBit | kVFPVConditionFlagBit));
       __ b(ne, false_label);
       __ b(true_label);
 
@@ -1941,12 +1980,44 @@ void LCodeGen::DoMathAbs(LUnaryMathOperation* instr) {
 
 
 void LCodeGen::DoMathFloor(LUnaryMathOperation* instr) {
-  Abort("DoMathFloor unimplemented.");
+  DoubleRegister input = ToDoubleRegister(instr->input());
+  Register result = ToRegister(instr->result());
+  Register prev_fpscr = ToRegister(instr->temp());
+  SwVfpRegister single_scratch = single_scratch0();
+  Register scratch = scratch0();
+
+  // Set custom FPCSR:
+  //  - Set rounding mode to "Round towards Minus Infinity".
+  //  - Clear vfp cumulative exception flags.
+  //  - Make sure Flush-to-zero mode control bit is unset.
+  __ vmrs(prev_fpscr);
+  __ bic(scratch, prev_fpscr,
+      Operand(kVFPExceptionMask | kVFPRoundingModeMask | kVFPFlushToZeroMask));
+  __ orr(scratch, scratch, Operand(kVFPRoundToMinusInfinityBits));
+  __ vmsr(scratch);
+
+  // Convert the argument to an integer.
+  __ vcvt_s32_f64(single_scratch,
+                  input,
+                  Assembler::FPSCRRounding,
+                  al);
+
+  // Retrieve FPSCR and check for vfp exceptions.
+  __ vmrs(scratch);
+  // Restore FPSCR
+  __ vmsr(prev_fpscr);
+  __ tst(scratch, Operand(kVFPExceptionMask));
+  DeoptimizeIf(ne, instr->environment());
+
+  // Move the result back to general purpose register r0.
+  __ vmov(result, single_scratch);
 }
 
 
 void LCodeGen::DoMathSqrt(LUnaryMathOperation* instr) {
-  Abort("DoMathSqrt unimplemented.");
+  DoubleRegister input = ToDoubleRegister(instr->input());
+  ASSERT(ToDoubleRegister(instr->result()).is(input));
+  __ vsqrt(input, input);
 }
 
 
@@ -2471,6 +2542,7 @@ void LCodeGen::LoadPrototype(Register result,
     Handle<JSGlobalPropertyCell> cell =
         Factory::NewJSGlobalPropertyCell(prototype);
     __ mov(result, Operand(cell));
+    __ ldr(result, FieldMemOperand(result, JSGlobalPropertyCell::kValueOffset));
   } else {
     __ mov(result, Operand(prototype));
   }
@@ -2482,8 +2554,7 @@ void LCodeGen::DoCheckPrototypeMaps(LCheckPrototypeMaps* instr) {
   Register temp2 = ToRegister(instr->temp2());
 
   Handle<JSObject> holder = instr->holder();
-  Handle<Map> receiver_map = instr->receiver_map();
-  Handle<JSObject> current_prototype(JSObject::cast(receiver_map->prototype()));
+  Handle<JSObject> current_prototype = instr->prototype();
 
   // Load prototype object.
   LoadPrototype(temp1, current_prototype);

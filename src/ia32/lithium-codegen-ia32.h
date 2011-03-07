@@ -42,7 +42,6 @@ namespace internal {
 class LDeferredCode;
 class SafepointGenerator;
 
-
 class LCodeGen BASE_EMBEDDED {
  public:
   LCodeGen(LChunk* chunk, MacroAssembler* assembler, CompilationInfo* info)
@@ -82,6 +81,9 @@ class LCodeGen BASE_EMBEDDED {
 
   // Parallel move support.
   void DoParallelMove(LParallelMove* move);
+
+  // Emit frame translation commands for an environment.
+  void WriteTranslation(LEnvironment* environment, Translation* translation);
 
   // Declare methods that deal with the individual node types.
 #define DECLARE_DO(type) void Do##type(L##type* node);

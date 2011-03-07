@@ -67,9 +67,9 @@ void LOsrEntry::MarkSpilledDoubleRegister(int allocation_index,
 void LInstruction::PrintTo(StringStream* stream) {
   stream->Add("%s ", this->Mnemonic());
   if (HasResult()) {
-    LTemplateInstruction<1>::cast(this)->result()->PrintTo(stream);
-    stream->Add(" ");
+    PrintOutputOperandTo(stream);
   }
+
   PrintDataTo(stream);
 
   if (HasEnvironment()) {
@@ -80,6 +80,24 @@ void LInstruction::PrintTo(StringStream* stream) {
   if (HasPointerMap()) {
     stream->Add(" ");
     pointer_map()->PrintTo(stream);
+  }
+}
+
+
+template<int R, int I, int T>
+void LTemplateInstruction<R, I, T>::PrintDataTo(StringStream* stream) {
+  for (int i = 0; i < I; i++) {
+    stream->Add(i == 0 ? "= " : " ");
+    inputs_.at(i)->PrintTo(stream);
+  }
+}
+
+
+template<int R, int I, int T>
+void LTemplateInstruction<R, I, T>::PrintOutputOperandTo(StringStream* stream) {
+  if (this->HasResult()) {
+    this->result()->PrintTo(stream);
+    stream->Add(" ");
   }
 }
 
@@ -140,15 +158,6 @@ const char* LArithmeticT::Mnemonic() const {
       UNREACHABLE();
       return NULL;
   }
-}
-
-
-
-void LBinaryOperation::PrintDataTo(StringStream* stream) {
-  stream->Add("= ");
-  left()->PrintTo(stream);
-  stream->Add(" ");
-  right()->PrintTo(stream);
 }
 
 
@@ -267,7 +276,8 @@ void LCallKnownGlobal::PrintDataTo(StringStream* stream) {
 
 
 void LCallNew::PrintDataTo(StringStream* stream) {
-  LUnaryOperation<1>::PrintDataTo(stream);
+  stream->Add("= ");
+  input()->PrintTo(stream);
   stream->Add(" #%d / ", arity());
 }
 
@@ -279,13 +289,6 @@ void LClassOfTest::PrintDataTo(StringStream* stream) {
 }
 
 
-template <int R>
-void LUnaryOperation<R>::PrintDataTo(StringStream* stream) {
-  stream->Add("= ");
-  input()->PrintTo(stream);
-}
-
-
 void LAccessArgumentsAt::PrintDataTo(StringStream* stream) {
   arguments()->PrintTo(stream);
 
@@ -294,11 +297,6 @@ void LAccessArgumentsAt::PrintDataTo(StringStream* stream) {
 
   stream->Add(" index ");
   index()->PrintTo(stream);
-}
-
-
-void LChunk::Verify() const {
-  // TODO(twuerthinger): Implement verification for chunk.
 }
 
 
@@ -573,35 +571,54 @@ LOperand* LChunkBuilder::Use(HValue* value, LUnallocated* operand) {
 }
 
 
-LInstruction* LChunkBuilder::Define(LTemplateInstruction<1>* instr) {
+template<int I, int T>
+LInstruction* LChunkBuilder::Define(LTemplateInstruction<1, I, T>* instr,
+                                    LUnallocated* result) {
+  allocator_->RecordDefinition(current_instruction_, result);
+  instr->set_result(result);
+  return instr;
+}
+
+
+template<int I, int T>
+LInstruction* LChunkBuilder::Define(LTemplateInstruction<1, I, T>* instr) {
   return Define(instr, new LUnallocated(LUnallocated::NONE));
 }
 
 
-LInstruction* LChunkBuilder::DefineAsRegister(LTemplateInstruction<1>* instr) {
+template<int I, int T>
+LInstruction* LChunkBuilder::DefineAsRegister(
+    LTemplateInstruction<1, I, T>* instr) {
   return Define(instr, new LUnallocated(LUnallocated::MUST_HAVE_REGISTER));
 }
 
 
-LInstruction* LChunkBuilder::DefineAsSpilled(LTemplateInstruction<1>* instr,
-                                             int index) {
+template<int I, int T>
+LInstruction* LChunkBuilder::DefineAsSpilled(
+    LTemplateInstruction<1, I, T>* instr,
+    int index) {
   return Define(instr, new LUnallocated(LUnallocated::FIXED_SLOT, index));
 }
 
 
-LInstruction* LChunkBuilder::DefineSameAsFirst(LTemplateInstruction<1>* instr) {
+template<int I, int T>
+LInstruction* LChunkBuilder::DefineSameAsFirst(
+    LTemplateInstruction<1, I, T>* instr) {
   return Define(instr, new LUnallocated(LUnallocated::SAME_AS_FIRST_INPUT));
 }
 
 
-LInstruction* LChunkBuilder::DefineFixed(LTemplateInstruction<1>* instr,
+template<int I, int T>
+LInstruction* LChunkBuilder::DefineFixed(LTemplateInstruction<1, I, T>* instr,
                                          Register reg) {
   return Define(instr, ToUnallocated(reg));
 }
 
 
-LInstruction* LChunkBuilder::DefineFixedDouble(LTemplateInstruction<1>* instr,
-                                               XMMRegister reg) {
+template<int I, int T>
+LInstruction* LChunkBuilder::DefineFixedDouble(
+    LTemplateInstruction<1, I, T>* instr,
+    XMMRegister reg) {
   return Define(instr, ToUnallocated(reg));
 }
 
@@ -666,21 +683,6 @@ LInstruction* LChunkBuilder::AssignPointerMap(LInstruction* instr) {
   ASSERT(!instr->HasPointerMap());
   instr->set_pointer_map(new LPointerMap(position_));
   return instr;
-}
-
-
-LInstruction* LChunkBuilder::Define(LTemplateInstruction<1>* instr,
-                                    LUnallocated* result) {
-  allocator_->RecordDefinition(current_instruction_, result);
-  instr->set_result(result);
-  return instr;
-}
-
-
-LOperand* LChunkBuilder::Temp() {
-  LUnallocated* operand = new LUnallocated(LUnallocated::NONE);
-  allocator_->RecordTemporary(operand);
-  return operand;
 }
 
 
@@ -888,59 +890,6 @@ void LChunkBuilder::VisitInstruction(HInstruction* current) {
 }
 
 
-void LEnvironment::WriteTranslation(LCodeGen* cgen,
-                                    Translation* translation) const {
-  if (this == NULL) return;
-
-  // The translation includes one command per value in the environment.
-  int translation_size = values()->length();
-  // The output frame height does not include the parameters.
-  int height = translation_size - parameter_count();
-
-  outer()->WriteTranslation(cgen, translation);
-  int closure_id = cgen->DefineDeoptimizationLiteral(closure());
-  translation->BeginFrame(ast_id(), closure_id, height);
-  for (int i = 0; i < translation_size; ++i) {
-    LOperand* value = values()->at(i);
-    // spilled_registers_ and spilled_double_registers_ are either
-    // both NULL or both set.
-    if (spilled_registers_ != NULL && value != NULL) {
-      if (value->IsRegister() &&
-          spilled_registers_[value->index()] != NULL) {
-        translation->MarkDuplicate();
-        cgen->AddToTranslation(translation,
-                               spilled_registers_[value->index()],
-                               HasTaggedValueAt(i));
-      } else if (value->IsDoubleRegister() &&
-                 spilled_double_registers_[value->index()] != NULL) {
-        translation->MarkDuplicate();
-        cgen->AddToTranslation(translation,
-                               spilled_double_registers_[value->index()],
-                               false);
-      }
-    }
-
-    cgen->AddToTranslation(translation, value, HasTaggedValueAt(i));
-  }
-}
-
-
-void LEnvironment::PrintTo(StringStream* stream) {
-  stream->Add("[id=%d|", ast_id());
-  stream->Add("[parameters=%d|", parameter_count());
-  stream->Add("[arguments_stack_height=%d|", arguments_stack_height());
-  for (int i = 0; i < values_.length(); ++i) {
-    if (i != 0) stream->Add(";");
-    if (values_[i] == NULL) {
-      stream->Add("[hole]");
-    } else {
-      values_[i]->PrintTo(stream);
-    }
-  }
-  stream->Add("]");
-}
-
-
 LEnvironment* LChunkBuilder::CreateEnvironment(HEnvironment* hydrogen_env) {
   if (hydrogen_env == NULL) return NULL;
 
@@ -1008,22 +957,23 @@ LInstruction* LChunkBuilder::DoBranch(HBranch* instr) {
       Token::Value op = compare->token();
       HValue* left = compare->left();
       HValue* right = compare->right();
-      if (left->representation().IsInteger32()) {
+      Representation r = compare->GetInputRepresentation();
+      if (r.IsInteger32()) {
+        ASSERT(left->representation().IsInteger32());
         ASSERT(right->representation().IsInteger32());
-        return new LCmpIDAndBranch(op,
-                                   UseRegisterAtStart(left),
+
+        return new LCmpIDAndBranch(UseRegisterAtStart(left),
                                    UseOrConstantAtStart(right),
                                    first_id,
-                                   second_id,
-                                   false);
-      } else if (left->representation().IsDouble()) {
+                                   second_id);
+      } else if (r.IsDouble()) {
+        ASSERT(left->representation().IsDouble());
         ASSERT(right->representation().IsDouble());
-        return new LCmpIDAndBranch(op,
-                                   UseRegisterAtStart(left),
+
+        return new LCmpIDAndBranch(UseRegisterAtStart(left),
                                    UseRegisterAtStart(right),
                                    first_id,
-                                   second_id,
-                                   true);
+                                   second_id);
       } else {
         ASSERT(left->representation().IsTagged());
         ASSERT(right->representation().IsTagged());
@@ -1064,7 +1014,6 @@ LInstruction* LChunkBuilder::DoBranch(HBranch* instr) {
       // We only need a temp register for non-strict compare.
       LOperand* temp = compare->is_strict() ? NULL : TempRegister();
       return new LIsNullAndBranch(UseRegisterAtStart(compare->value()),
-                                  compare->is_strict(),
                                   temp,
                                   first_id,
                                   second_id);
@@ -1286,7 +1235,9 @@ LInstruction* LChunkBuilder::DoBitAnd(HBitAnd* instr) {
 LInstruction* LChunkBuilder::DoBitNot(HBitNot* instr) {
   ASSERT(instr->value()->representation().IsInteger32());
   ASSERT(instr->representation().IsInteger32());
-  return DefineSameAsFirst(new LBitNotI(UseRegisterAtStart(instr->value())));
+  LOperand* input = UseRegisterAtStart(instr->value());
+  LBitNotI* result = new LBitNotI(input);
+  return DefineSameAsFirst(result);
 }
 
 
@@ -1428,17 +1379,22 @@ LInstruction* LChunkBuilder::DoPower(HPower* instr) {
 
 LInstruction* LChunkBuilder::DoCompare(HCompare* instr) {
   Token::Value op = instr->token();
-  if (instr->left()->representation().IsInteger32()) {
+  Representation r = instr->GetInputRepresentation();
+  if (r.IsInteger32()) {
+    ASSERT(instr->left()->representation().IsInteger32());
     ASSERT(instr->right()->representation().IsInteger32());
     LOperand* left = UseRegisterAtStart(instr->left());
     LOperand* right = UseOrConstantAtStart(instr->right());
-    return DefineAsRegister(new LCmpID(op, left, right, false));
-  } else if (instr->left()->representation().IsDouble()) {
+    return DefineAsRegister(new LCmpID(left, right));
+  } else if (r.IsDouble()) {
+    ASSERT(instr->left()->representation().IsDouble());
     ASSERT(instr->right()->representation().IsDouble());
     LOperand* left = UseRegisterAtStart(instr->left());
     LOperand* right = UseRegisterAtStart(instr->right());
-    return DefineAsRegister(new LCmpID(op, left, right, true));
+    return DefineAsRegister(new LCmpID(left, right));
   } else {
+    ASSERT(instr->left()->representation().IsTagged());
+    ASSERT(instr->right()->representation().IsTagged());
     bool reversed = (op == Token::GT || op == Token::LTE);
     LOperand* left = UseFixed(instr->left(), reversed ? eax : edx);
     LOperand* right = UseFixed(instr->right(), reversed ? edx : eax);
@@ -1461,8 +1417,7 @@ LInstruction* LChunkBuilder::DoIsNull(HIsNull* instr) {
   ASSERT(instr->value()->representation().IsTagged());
   LOperand* value = UseRegisterAtStart(instr->value());
 
-  return DefineAsRegister(new LIsNull(value,
-                                      instr->is_strict()));
+  return DefineAsRegister(new LIsNull(value));
 }
 
 
@@ -1917,22 +1872,5 @@ LInstruction* LChunkBuilder::DoLeaveInlined(HLeaveInlined* instr) {
   return NULL;
 }
 
-
-void LPointerMap::RecordPointer(LOperand* op) {
-  // Do not record arguments as pointers.
-  if (op->IsStackSlot() && op->index() < 0) return;
-  ASSERT(!op->IsDoubleRegister() && !op->IsDoubleStackSlot());
-  pointer_operands_.Add(op);
-}
-
-
-void LPointerMap::PrintTo(StringStream* stream) {
-  stream->Add("{");
-  for (int i = 0; i < pointer_operands_.length(); ++i) {
-    if (i != 0) stream->Add(";");
-    pointer_operands_[i]->PrintTo(stream);
-  }
-  stream->Add("} @%d", position());
-}
 
 } }  // namespace v8::internal

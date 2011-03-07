@@ -3797,9 +3797,9 @@ void HGraphBuilder::AddCheckConstantFunction(Call* expr,
     AddInstruction(new HCheckMap(receiver, receiver_map));
   }
   if (!expr->holder().is_null()) {
-    AddInstruction(new HCheckPrototypeMaps(receiver,
-                                           expr->holder(),
-                                           receiver_map));
+    AddInstruction(new HCheckPrototypeMaps(
+        Handle<JSObject>(JSObject::cast(receiver_map->prototype())),
+        expr->holder()));
   }
 }
 
@@ -5790,7 +5790,6 @@ void HPhase::End() const {
 
 #ifdef DEBUG
   if (graph_ != NULL) graph_->Verify();
-  if (chunk_ != NULL) chunk_->Verify();
   if (allocator_ != NULL) allocator_->Verify();
 #endif
 }
