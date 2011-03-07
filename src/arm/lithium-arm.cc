@@ -93,32 +93,6 @@ void LLabel::PrintDataTo(StringStream* stream) const {
 }
 
 
-bool LParallelMove::IsRedundant() const {
-  for (int i = 0; i < move_operands_.length(); ++i) {
-    if (!move_operands_[i].IsRedundant()) return false;
-  }
-  return true;
-}
-
-
-void LParallelMove::PrintDataTo(StringStream* stream) const {
-  for (int i = move_operands_.length() - 1; i >= 0; --i) {
-    if (!move_operands_[i].IsEliminated()) {
-      LOperand* from = move_operands_[i].from();
-      LOperand* to = move_operands_[i].to();
-      if (from->Equals(to)) {
-        to->PrintTo(stream);
-      } else {
-        to->PrintTo(stream);
-        stream->Add(" = ");
-        from->PrintTo(stream);
-      }
-      stream->Add("; ");
-    }
-  }
-}
-
-
 bool LGap::IsRedundant() const {
   for (int i = 0; i < 4; i++) {
     if (parallel_moves_[i] != NULL && !parallel_moves_[i]->IsRedundant()) {
@@ -1829,8 +1803,9 @@ LInstruction* LChunkBuilder::DoFunctionLiteral(HFunctionLiteral* instr) {
 
 
 LInstruction* LChunkBuilder::DoDeleteProperty(HDeleteProperty* instr) {
-  LInstruction* result = new LDeleteProperty(Use(instr->object()),
-                                             UseOrConstant(instr->key()));
+  LOperand* object = UseRegisterAtStart(instr->object());
+  LOperand* key = UseRegisterAtStart(instr->key());
+  LInstruction* result = new LDeleteProperty(object, key);
   return MarkAsCall(DefineFixed(result, r0), instr);
 }
 
@@ -1877,7 +1852,7 @@ LInstruction* LChunkBuilder::DoAccessArgumentsAt(HAccessArgumentsAt* instr) {
 
 
 LInstruction* LChunkBuilder::DoTypeof(HTypeof* instr) {
-  LInstruction* result = new LTypeof(Use(instr->value()));
+  LInstruction* result = new LTypeof(UseRegisterAtStart(instr->value()));
   return MarkAsCall(DefineFixed(result, r0), instr);
 }
 

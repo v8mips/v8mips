@@ -1076,8 +1076,16 @@ void LCodeGen::DoBranch(LBranch* instr) {
     EmitBranch(true_block, false_block, nz);
   } else if (r.IsDouble()) {
     DoubleRegister reg = ToDoubleRegister(instr->input());
+    Register scratch = scratch0();
+
+    // Test for the double value. Zero and NaN are false.
+    // Clear the Invalid cumulative exception flags.
+    __ ClearFPSCRBits(kVFPInvalidExceptionBit, scratch);
     __ vcmp(reg, 0.0);
-    __ vmrs(pc);  // Move vector status bits to normal status bits.
+      // Retrieve the exception and status flags and
+      // check for zero or an invalid exception.
+    __ vmrs(scratch);
+    __ tst(scratch, Operand(kVFPZConditionFlagBit | kVFPInvalidExceptionBit));
     EmitBranch(true_block, false_block, ne);
   } else {
     ASSERT(r.IsTagged());
@@ -1104,7 +1112,7 @@ void LCodeGen::DoBranch(LBranch* instr) {
       __ tst(reg, Operand(kSmiTagMask));
       __ b(eq, true_label);
 
-      // Test for double values. Zero is false.
+      // Test for double values. Zero and NaN are false.
       Label call_stub;
       DoubleRegister dbl_scratch = d0;
       Register scratch = scratch0();
@@ -1114,9 +1122,14 @@ void LCodeGen::DoBranch(LBranch* instr) {
       __ b(ne, &call_stub);
       __ sub(ip, reg, Operand(kHeapObjectTag));
       __ vldr(dbl_scratch, ip, HeapNumber::kValueOffset);
+      // Clear the Invalid cumulative exception flags.
+      __ ClearFPSCRBits(kVFPInvalidExceptionBit, scratch);
       __ vcmp(dbl_scratch, 0.0);
-      __ vmrs(pc);  // Move vector status bits to normal status bits.
-      __ b(eq, false_label);
+      // Retrieve the exception and status flags and
+      // check for zero or an invalid exception.
+      __ vmrs(scratch);
+      __ tst(scratch, Operand(kVFPZConditionFlagBit | kVFPInvalidExceptionBit));
+      __ b(ne, false_label);
       __ b(true_label);
 
       // The conversion stub doesn't cause garbage collections so it's
@@ -1812,7 +1825,12 @@ void LCodeGen::DoUnaryMathOperation(LUnaryMathOperation* instr) {
 
 
 void LCodeGen::DoCallKeyed(LCallKeyed* instr) {
-  Abort("DoCallKeyed unimplemented.");
+  ASSERT(ToRegister(instr->result()).is(r0));
+
+  int arity = instr->arity();
+  Handle<Code> ic = StubCache::ComputeKeyedCallInitialize(arity, NOT_IN_LOOP);
+  CallCode(ic, RelocInfo::CODE_TARGET, instr);
+  __ ldr(cp, MemOperand(fp, StandardFrameConstants::kContextOffset));
 }
 
 
@@ -1840,7 +1858,13 @@ void LCodeGen::DoCallFunction(LCallFunction* instr) {
 
 
 void LCodeGen::DoCallGlobal(LCallGlobal* instr) {
-  Abort("DoCallGlobal unimplemented.");
+  ASSERT(ToRegister(instr->result()).is(r0));
+
+  int arity = instr->arity();
+  Handle<Code> ic = StubCache::ComputeCallInitialize(arity, NOT_IN_LOOP);
+  __ mov(r2, Operand(instr->name()));
+  CallCode(ic, RelocInfo::CODE_TARGET_CONTEXT, instr);
+  __ ldr(cp, MemOperand(fp, StandardFrameConstants::kContextOffset));
 }
 
 
@@ -2081,7 +2105,13 @@ void LCodeGen::DoSmiTag(LSmiTag* instr) {
 
 
 void LCodeGen::DoSmiUntag(LSmiUntag* instr) {
-  Abort("DoSmiUntag unimplemented.");
+  LOperand* input = instr->input();
+  ASSERT(input->IsRegister() && input->Equals(instr->result()));
+  if (instr->needs_check()) {
+    __ tst(ToRegister(input), Operand(kSmiTagMask));
+    DeoptimizeIf(ne, instr->environment());
+  }
+  __ SmiUntag(ToRegister(input));
 }
 
 
@@ -2455,12 +2485,32 @@ void LCodeGen::DoFunctionLiteral(LFunctionLiteral* instr) {
 
 
 void LCodeGen::DoTypeof(LTypeof* instr) {
-  Abort("DoTypeof unimplemented.");
+  Register input = ToRegister(instr->input());
+  __ push(input);
+  CallRuntime(Runtime::kTypeof, 1, instr);
 }
 
 
 void LCodeGen::DoTypeofIs(LTypeofIs* instr) {
-  Abort("DoTypeofIs unimplemented.");
+  Register input = ToRegister(instr->input());
+  Register result = ToRegister(instr->result());
+  Label true_label;
+  Label false_label;
+  Label done;
+
+  Condition final_branch_condition = EmitTypeofIs(&true_label,
+                                                  &false_label,
+                                                  input,
+                                                  instr->type_literal());
+  __ b(final_branch_condition, &true_label);
+  __ bind(&false_label);
+  __ LoadRoot(result, Heap::kFalseValueRootIndex);
+  __ b(&done);
+
+  __ bind(&true_label);
+  __ LoadRoot(result, Heap::kTrueValueRootIndex);
+
+  __ bind(&done);
 }
 
 
@@ -2574,7 +2624,14 @@ void LCodeGen::DoDeoptimize(LDeoptimize* instr) {
 
 
 void LCodeGen::DoDeleteProperty(LDeleteProperty* instr) {
-  Abort("DoDeleteProperty unimplemented.");
+  Register object = ToRegister(instr->object());
+  Register key = ToRegister(instr->key());
+  __ Push(object, key);
+  RecordPosition(instr->pointer_map()->position());
+  SafepointGenerator safepoint_generator(this,
+                                         instr->pointer_map(),
+                                         Safepoint::kNoDeoptimizationIndex);
+  __ InvokeBuiltin(Builtins::DELETE, CALL_JS, &safepoint_generator);
 }
 
 

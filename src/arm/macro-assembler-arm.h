@@ -33,6 +33,10 @@
 namespace v8 {
 namespace internal {
 
+// Forward declaration.
+class PostCallGenerator;
+
+
 // ----------------------------------------------------------------------------
 // Static helper functions
 
@@ -242,6 +246,9 @@ class MacroAssembler: public Assembler {
             Register src2,
             const MemOperand& dst,
             Condition cond = al);
+
+  // Clear FPSCR bits.
+  void ClearFPSCRBits(uint32_t bits_to_clear, Register scratch);
 
   // ---------------------------------------------------------------------------
   // Activation frames
@@ -634,7 +641,9 @@ class MacroAssembler: public Assembler {
 
   // Invoke specified builtin JavaScript function. Adds an entry to
   // the unresolved list if the name does not resolve.
-  void InvokeBuiltin(Builtins::JavaScript id, InvokeJSFlags flags);
+  void InvokeBuiltin(Builtins::JavaScript id,
+                     InvokeJSFlags flags,
+                     PostCallGenerator* post_call_generator = NULL);
 
   // Store the code object for the given builtin in the target register and
   // setup the function in r1.
