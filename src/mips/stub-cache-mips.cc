@@ -1919,7 +1919,7 @@ MaybeObject* CallStubCompiler::CompileMathFloorCall(Object* object,
   // If greater or equal, the argument is already round and in v0.
   __ Branch(&restore_fcsr_and_return, ge, t3,
       Operand(HeapNumber::kMantissaBits));
-  __ Branch(&slow);
+  __ Branch(&wont_fit_smi);
 
   __ bind(&no_fpu_error);
   // Move the result back to v0.
@@ -1948,10 +1948,10 @@ MaybeObject* CallStubCompiler::CompileMathFloorCall(Object* object,
   __ Ret();
 
   __ bind(&wont_fit_smi);
-  __ bind(&slow);
   // Restore FCSR and fall to slow case.
   __ ctc1(a3, FCSR);
 
+  __ bind(&slow);
   // Tail call the full function. We do not have to patch the receiver
   // because the function makes no use of it.
   __ InvokeFunction(function, arguments(), JUMP_FUNCTION);
