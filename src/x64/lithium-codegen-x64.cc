@@ -25,59 +25,33 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#ifndef V8_LITHIUM_H_
-#define V8_LITHIUM_H_
-
-#include "lithium-allocator.h"
+#include "x64/lithium-codegen-x64.h"
+#include "code-stubs.h"
+#include "stub-cache.h"
 
 namespace v8 {
 namespace internal {
 
-class LGapNode;
 
-class LGapResolver BASE_EMBEDDED {
- public:
-  LGapResolver();
-  const ZoneList<LMoveOperands>* Resolve(const ZoneList<LMoveOperands>* moves,
-                                         LOperand* marker_operand);
-
- private:
-  LGapNode* LookupNode(LOperand* operand);
-  bool CanReach(LGapNode* a, LGapNode* b, int visited_id);
-  bool CanReach(LGapNode* a, LGapNode* b);
-  void RegisterMove(LMoveOperands move);
-  void AddResultMove(LOperand* from, LOperand* to);
-  void AddResultMove(LGapNode* from, LGapNode* to);
-  void ResolveCycle(LGapNode* start, LOperand* marker_operand);
-
-  ZoneList<LGapNode*> nodes_;
-  ZoneList<LGapNode*> identified_cycles_;
-  ZoneList<LMoveOperands> result_;
-  int next_visited_id_;
-};
+#define __ masm()->
 
 
-class LParallelMove : public ZoneObject {
- public:
-  LParallelMove() : move_operands_(4) { }
+void LCodeGen::DoLazyBailout(LLazyBailout* instr) {
+  // No code for lazy bailout instruction. Used to capture environment after a
+  // call for populating the safepoint data with deoptimization data.
+}
 
-  void AddMove(LOperand* from, LOperand* to) {
-    move_operands_.Add(LMoveOperands(from, to));
-  }
 
-  bool IsRedundant() const;
+void LCodeGen::DoDeoptimize(LDeoptimize* instr) {
+  DeoptimizeIf(no_condition, instr->environment());
+}
 
-  const ZoneList<LMoveOperands>* move_operands() const {
-    return &move_operands_;
-  }
 
-  void PrintDataTo(StringStream* stream) const;
+void LCodeGen::DoOsrEntry(LOsrEntry* instr) {
+  UNIMPLEMENTED();
+}
 
- private:
-  ZoneList<LMoveOperands> move_operands_;
-};
 
+#undef __
 
 } }  // namespace v8::internal
-
-#endif  // V8_LITHIUM_H_

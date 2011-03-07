@@ -1,4 +1,4 @@
-// Copyright 2010 the V8 project authors. All rights reserved.
+// Copyright 2011 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -601,8 +601,8 @@ void LCodeGen::DoParallelMove(LParallelMove* move) {
   Register core_scratch = scratch0();
   bool destroys_core_scratch = false;
 
-  LGapResolver resolver(move->move_operands(), &marker_operand);
-  const ZoneList<LMoveOperands>* moves = resolver.ResolveInReverseOrder();
+  const ZoneList<LMoveOperands>* moves =
+      resolver_.Resolve(move->move_operands(), &marker_operand);
   for (int i = moves->length() - 1; i >= 0; --i) {
     LMoveOperands move = moves->at(i);
     LOperand* from = move.from();
@@ -771,7 +771,9 @@ void LCodeGen::DoCallStub(LCallStub* instr) {
       break;
     }
     case CodeStub::TranscendentalCache: {
-      Abort("TranscendentalCache unimplemented.");
+      __ ldr(r0, MemOperand(sp, 0));
+      TranscendentalCacheStub stub(instr->transcendental_type());
+      CallCode(stub.GetCode(), RelocInfo::CODE_TARGET, instr);
       break;
     }
     default:
@@ -956,12 +958,26 @@ void LCodeGen::DoFixedArrayLength(LFixedArrayLength* instr) {
   Register result = ToRegister(instr->result());
   Register array = ToRegister(instr->input());
   __ ldr(result, FieldMemOperand(array, FixedArray::kLengthOffset));
-  Abort("DoFixedArrayLength untested.");
 }
 
 
 void LCodeGen::DoValueOf(LValueOf* instr) {
-  Abort("DoValueOf unimplemented.");
+  Register input = ToRegister(instr->input());
+  Register result = ToRegister(instr->result());
+  Register map = ToRegister(instr->temporary());
+  ASSERT(input.is(result));
+  Label done;
+
+  // If the object is a smi return the object.
+  __ tst(input, Operand(kSmiTagMask));
+  __ b(eq, &done);
+
+  // If the object is not a value type, return the object.
+  __ CompareObjectType(input, map, map, JS_VALUE_TYPE);
+  __ b(ne, &done);
+  __ ldr(result, FieldMemOperand(input, JSValue::kValueOffset));
+
+  __ bind(&done);
 }
 
 
@@ -969,7 +985,6 @@ void LCodeGen::DoBitNotI(LBitNotI* instr) {
   LOperand* input = instr->input();
   ASSERT(input->Equals(instr->result()));
   __ mvn(ToRegister(input), Operand(ToRegister(input)));
-  Abort("DoBitNotI untested.");
 }
 
 
@@ -1078,13 +1093,8 @@ void LCodeGen::DoBranch(LBranch* instr) {
     DoubleRegister reg = ToDoubleRegister(instr->input());
     Register scratch = scratch0();
 
-    // Test for the double value. Zero and NaN are false.
-    // Clear the Invalid cumulative exception flags.
-    __ ClearFPSCRBits(kVFPInvalidExceptionBit, scratch);
-    __ vcmp(reg, 0.0);
-      // Retrieve the exception and status flags and
-      // check for zero or an invalid exception.
-    __ vmrs(scratch);
+    // Test the double value. Zero and NaN are false.
+    __ VFPCompareAndLoadFlags(reg, 0.0, scratch);
     __ tst(scratch, Operand(kVFPZConditionFlagBit | kVFPInvalidExceptionBit));
     EmitBranch(true_block, false_block, ne);
   } else {
@@ -1112,7 +1122,7 @@ void LCodeGen::DoBranch(LBranch* instr) {
       __ tst(reg, Operand(kSmiTagMask));
       __ b(eq, true_label);
 
-      // Test for double values. Zero and NaN are false.
+      // Test double values. Zero and NaN are false.
       Label call_stub;
       DoubleRegister dbl_scratch = d0;
       Register scratch = scratch0();
@@ -1122,12 +1132,7 @@ void LCodeGen::DoBranch(LBranch* instr) {
       __ b(ne, &call_stub);
       __ sub(ip, reg, Operand(kHeapObjectTag));
       __ vldr(dbl_scratch, ip, HeapNumber::kValueOffset);
-      // Clear the Invalid cumulative exception flags.
-      __ ClearFPSCRBits(kVFPInvalidExceptionBit, scratch);
-      __ vcmp(dbl_scratch, 0.0);
-      // Retrieve the exception and status flags and
-      // check for zero or an invalid exception.
-      __ vmrs(scratch);
+      __ VFPCompareAndLoadFlags(dbl_scratch, 0.0, scratch);
       __ tst(scratch, Operand(kVFPZConditionFlagBit | kVFPInvalidExceptionBit));
       __ b(ne, false_label);
       __ b(true_label);
@@ -1148,24 +1153,47 @@ void LCodeGen::DoBranch(LBranch* instr) {
 
 
 void LCodeGen::EmitGoto(int block, LDeferredCode* deferred_stack_check) {
-  // TODO(srdjan): Perform stack overflow check if this goto needs it
-  // before jumping.
   block = chunk_->LookupDestination(block);
   int next_block = GetNextEmittedBlock(current_block_);
   if (block != next_block) {
-    __ jmp(chunk_->GetAssemblyLabel(block));
+    // Perform stack overflow check if this goto needs it before jumping.
+    if (deferred_stack_check != NULL) {
+      __ LoadRoot(ip, Heap::kStackLimitRootIndex);
+      __ cmp(sp, Operand(ip));
+      __ b(hs, chunk_->GetAssemblyLabel(block));
+      __ jmp(deferred_stack_check->entry());
+      deferred_stack_check->SetExit(chunk_->GetAssemblyLabel(block));
+    } else {
+      __ jmp(chunk_->GetAssemblyLabel(block));
+    }
   }
 }
 
 
 void LCodeGen::DoDeferredStackCheck(LGoto* instr) {
-  UNIMPLEMENTED();
+  __ PushSafepointRegisters();
+  __ CallRuntimeSaveDoubles(Runtime::kStackGuard);
+  RecordSafepointWithRegisters(
+      instr->pointer_map(), 0, Safepoint::kNoDeoptimizationIndex);
+  __ PopSafepointRegisters();
 }
 
 
 void LCodeGen::DoGoto(LGoto* instr) {
-  // TODO(srdjan): Implement deferred stack check.
-  EmitGoto(instr->block_id(), NULL);
+  class DeferredStackCheck: public LDeferredCode {
+   public:
+    DeferredStackCheck(LCodeGen* codegen, LGoto* instr)
+        : LDeferredCode(codegen), instr_(instr) { }
+    virtual void Generate() { codegen()->DoDeferredStackCheck(instr_); }
+   private:
+    LGoto* instr_;
+  };
+
+  DeferredStackCheck* deferred = NULL;
+  if (instr->include_stack_check()) {
+    deferred = new DeferredStackCheck(this, instr);
+  }
+  EmitGoto(instr->block_id(), deferred);
 }
 
 
@@ -1393,7 +1421,7 @@ void LCodeGen::DoHasCachedArrayIndexAndBranch(
 }
 
 
-// Branches to a label or falls through with the answer in the z flag.  Trashes
+// Branches to a label or falls through with the answer in flags.  Trashes
 // the temp registers, but not the input.  Only input and temp2 may alias.
 void LCodeGen::EmitClassOfTest(Label* is_true,
                                Label* is_false,
@@ -1401,17 +1429,91 @@ void LCodeGen::EmitClassOfTest(Label* is_true,
                                Register input,
                                Register temp,
                                Register temp2) {
-  Abort("EmitClassOfTest unimplemented.");
+  ASSERT(!input.is(temp));
+  ASSERT(!temp.is(temp2));  // But input and temp2 may be the same register.
+  __ tst(input, Operand(kSmiTagMask));
+  __ b(eq, is_false);
+  __ CompareObjectType(input, temp, temp2, FIRST_JS_OBJECT_TYPE);
+  __ b(lt, is_false);
+
+  // Map is now in temp.
+  // Functions have class 'Function'.
+  __ CompareInstanceType(temp, temp2, JS_FUNCTION_TYPE);
+  if (class_name->IsEqualTo(CStrVector("Function"))) {
+    __ b(eq, is_true);
+  } else {
+    __ b(eq, is_false);
+  }
+
+  // Check if the constructor in the map is a function.
+  __ ldr(temp, FieldMemOperand(temp, Map::kConstructorOffset));
+
+  // As long as JS_FUNCTION_TYPE is the last instance type and it is
+  // right after LAST_JS_OBJECT_TYPE, we can avoid checking for
+  // LAST_JS_OBJECT_TYPE.
+  ASSERT(LAST_TYPE == JS_FUNCTION_TYPE);
+  ASSERT(JS_FUNCTION_TYPE == LAST_JS_OBJECT_TYPE + 1);
+
+  // Objects with a non-function constructor have class 'Object'.
+  __ CompareObjectType(temp, temp2, temp2, JS_FUNCTION_TYPE);
+  if (class_name->IsEqualTo(CStrVector("Object"))) {
+    __ b(ne, is_true);
+  } else {
+    __ b(ne, is_false);
+  }
+
+  // temp now contains the constructor function. Grab the
+  // instance class name from there.
+  __ ldr(temp, FieldMemOperand(temp, JSFunction::kSharedFunctionInfoOffset));
+  __ ldr(temp, FieldMemOperand(temp,
+                               SharedFunctionInfo::kInstanceClassNameOffset));
+  // The class name we are testing against is a symbol because it's a literal.
+  // The name in the constructor is a symbol because of the way the context is
+  // booted.  This routine isn't expected to work for random API-created
+  // classes and it doesn't have to because you can't access it with natives
+  // syntax.  Since both sides are symbols it is sufficient to use an identity
+  // comparison.
+  __ cmp(temp, Operand(class_name));
+  // End with the answer in flags.
 }
 
 
 void LCodeGen::DoClassOfTest(LClassOfTest* instr) {
-  Abort("DoClassOfTest unimplemented.");
+  Register input = ToRegister(instr->input());
+  Register result = ToRegister(instr->result());
+  ASSERT(input.is(result));
+  Handle<String> class_name = instr->hydrogen()->class_name();
+
+  Label done, is_true, is_false;
+
+  EmitClassOfTest(&is_true, &is_false, class_name, input, scratch0(), input);
+  __ b(ne, &is_false);
+
+  __ bind(&is_true);
+  __ LoadRoot(result, Heap::kTrueValueRootIndex);
+  __ jmp(&done);
+
+  __ bind(&is_false);
+  __ LoadRoot(result, Heap::kFalseValueRootIndex);
+  __ bind(&done);
 }
 
 
 void LCodeGen::DoClassOfTestAndBranch(LClassOfTestAndBranch* instr) {
-  Abort("DoClassOfTestAndBranch unimplemented.");
+  Register input = ToRegister(instr->input());
+  Register temp = scratch0();
+  Register temp2 = ToRegister(instr->temporary());
+  Handle<String> class_name = instr->hydrogen()->class_name();
+
+  int true_block = chunk_->LookupDestination(instr->true_block_id());
+  int false_block = chunk_->LookupDestination(instr->false_block_id());
+
+  Label* true_label = chunk_->GetAssemblyLabel(true_block);
+  Label* false_label = chunk_->GetAssemblyLabel(false_block);
+
+  EmitClassOfTest(true_label, false_label, class_name, input, temp, temp2);
+
+  EmitBranch(true_block, false_block, eq);
 }
 
 
@@ -1482,10 +1584,12 @@ void LCodeGen::DoCmpT(LCmpT* instr) {
     condition = ReverseCondition(condition);
   }
   __ cmp(r0, Operand(0));
-  __ LoadRoot(ToRegister(instr->result()), Heap::kTrueValueRootIndex,
-      condition);
-  __ LoadRoot(ToRegister(instr->result()), Heap::kFalseValueRootIndex,
-      NegateCondition(condition));
+  __ LoadRoot(ToRegister(instr->result()),
+              Heap::kTrueValueRootIndex,
+              condition);
+  __ LoadRoot(ToRegister(instr->result()),
+              Heap::kFalseValueRootIndex,
+              NegateCondition(condition));
 }
 
 
@@ -1636,36 +1740,18 @@ void LCodeGen::DoAccessArgumentsAt(LAccessArgumentsAt* instr) {
 void LCodeGen::DoLoadKeyedFastElement(LLoadKeyedFastElement* instr) {
   Register elements = ToRegister(instr->elements());
   Register key = EmitLoadRegister(instr->key(), scratch0());
-  Register result;
+  Register result = ToRegister(instr->result());
   Register scratch = scratch0();
-
-  if (instr->load_result() != NULL) {
-    result = ToRegister(instr->load_result());
-  } else {
-    result = ToRegister(instr->result());
-    ASSERT(result.is(elements));
-  }
+  ASSERT(result.is(elements));
 
   // Load the result.
   __ add(scratch, elements, Operand(key, LSL, kPointerSizeLog2));
   __ ldr(result, FieldMemOperand(scratch, FixedArray::kHeaderSize));
 
-  Representation r = instr->hydrogen()->representation();
-  if (r.IsInteger32()) {
-    // Untag and check for smi.
-    __ SmiUntag(result);
-    DeoptimizeIf(cs, instr->environment());
-  } else if (r.IsDouble()) {
-    EmitNumberUntagD(result,
-                     ToDoubleRegister(instr->result()),
-                     instr->environment());
-  } else {
-    // Check for the hole value.
-    ASSERT(r.IsTagged());
-    __ LoadRoot(scratch, Heap::kTheHoleValueRootIndex);
-    __ cmp(result, scratch);
-    DeoptimizeIf(eq, instr->environment());
-  }
+  // Check for the hole value.
+  __ LoadRoot(scratch, Heap::kTheHoleValueRootIndex);
+  __ cmp(result, scratch);
+  DeoptimizeIf(eq, instr->environment());
 }
 
 
@@ -1718,7 +1804,65 @@ void LCodeGen::DoArgumentsLength(LArgumentsLength* instr) {
 
 
 void LCodeGen::DoApplyArguments(LApplyArguments* instr) {
-  Abort("DoApplyArguments unimplemented.");
+  Register receiver = ToRegister(instr->receiver());
+  Register function = ToRegister(instr->function());
+  Register scratch = scratch0();
+
+  ASSERT(receiver.is(r0));
+  ASSERT(function.is(r1));
+  ASSERT(ToRegister(instr->result()).is(r0));
+
+  // If the receiver is null or undefined, we have to pass the
+  // global object as a receiver.
+  Label global_receiver, receiver_ok;
+  __ LoadRoot(scratch, Heap::kNullValueRootIndex);
+  __ cmp(receiver, scratch);
+  __ b(eq, &global_receiver);
+  __ LoadRoot(scratch, Heap::kUndefinedValueRootIndex);
+  __ cmp(receiver, scratch);
+  __ b(ne, &receiver_ok);
+  __ bind(&global_receiver);
+  __ ldr(receiver, GlobalObjectOperand());
+  __ bind(&receiver_ok);
+
+  Register length = ToRegister(instr->length());
+  Register elements = ToRegister(instr->elements());
+
+  Label invoke;
+
+  // Copy the arguments to this function possibly from the
+  // adaptor frame below it.
+  const uint32_t kArgumentsLimit = 1 * KB;
+  __ cmp(length, Operand(kArgumentsLimit));
+  DeoptimizeIf(hi, instr->environment());
+
+  // Push the receiver and use the register to keep the original
+  // number of arguments.
+  __ push(receiver);
+  __ mov(receiver, length);
+  // The arguments are at a one pointer size offset from elements.
+  __ add(elements, elements, Operand(1 * kPointerSize));
+
+  // Loop through the arguments pushing them onto the execution
+  // stack.
+  Label loop;
+  // length is a small non-negative integer, due to the test above.
+  __ tst(length, Operand(length));
+  __ b(eq, &invoke);
+  __ bind(&loop);
+  __ ldr(scratch, MemOperand(elements, length, LSL, 2));
+  __ push(scratch);
+  __ sub(length, length, Operand(1), SetCC);
+  __ b(ne, &loop);
+
+  __ bind(&invoke);
+  // Invoke the function. The number of arguments is stored in receiver
+  // which is r0, as expected by InvokeFunction.
+  v8::internal::ParameterCount actual(receiver);
+  SafepointGenerator safepoint_generator(this,
+                                         instr->pointer_map(),
+                                         Safepoint::kNoDeoptimizationIndex);
+  __ InvokeFunction(function, actual, CALL_FUNCTION, &safepoint_generator);
 }
 
 
@@ -2197,7 +2341,7 @@ void LCodeGen::DoDeferredTaggedToI(LTaggedToI* instr) {
     __ bind(&heap_number);
     __ sub(ip, input_reg, Operand(kHeapObjectTag));
     __ vldr(dbl_tmp, ip, HeapNumber::kValueOffset);
-    __ vcmp(dbl_tmp, 0.0);  // Sets overflow bit if NaN.
+    __ vcmp(dbl_tmp, 0.0);  // Sets overflow bit in FPSCR flags if NaN.
     __ vcvt_s32_f64(flt_scratch, dbl_tmp);
     __ vmov(input_reg, flt_scratch);  // 32-bit result of conversion.
     __ vmrs(pc);  // Move vector status bits to normal status bits.
@@ -2218,8 +2362,7 @@ void LCodeGen::DoDeferredTaggedToI(LTaggedToI* instr) {
     // back to check; note that using non-overlapping s and d regs would be
     // slightly faster.
     __ vcvt_f64_s32(dbl_scratch, flt_scratch);
-    __ vcmp(dbl_scratch, dbl_tmp);
-    __ vmrs(pc);  // Move vector status bits to normal status bits.
+    __ VFPCompareAndSetFlags(dbl_scratch, dbl_tmp);
     DeoptimizeIf(ne, instr->environment());  // Not equal or unordered.
     if (instr->hydrogen()->CheckFlag(HValue::kBailoutOnMinusZero)) {
       __ tst(input_reg, Operand(input_reg));

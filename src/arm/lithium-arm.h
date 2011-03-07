@@ -445,6 +445,10 @@ class LCallStub: public LInstruction {
  public:
   DECLARE_CONCRETE_INSTRUCTION(CallStub, "call-stub")
   DECLARE_HYDROGEN_ACCESSOR(CallStub)
+
+  TranscendentalCache::Type transcendental_type() {
+    return hydrogen()->transcendental_type();
+  }
 };
 
 
@@ -844,18 +848,12 @@ class LHasCachedArrayIndexAndBranch: public LHasCachedArrayIndex {
 
 class LClassOfTest: public LUnaryOperation {
  public:
-  LClassOfTest(LOperand* value, LOperand* temp)
-      : LUnaryOperation(value), temporary_(temp) {}
+  explicit LClassOfTest(LOperand* value) : LUnaryOperation(value) {}
 
   DECLARE_CONCRETE_INSTRUCTION(ClassOfTest, "class-of-test")
   DECLARE_HYDROGEN_ACCESSOR(ClassOfTest)
 
   virtual void PrintDataTo(StringStream* stream) const;
-
-  LOperand* temporary() { return temporary_; }
-
- private:
-  LOperand *temporary_;
 };
 
 
@@ -863,11 +861,10 @@ class LClassOfTestAndBranch: public LClassOfTest {
  public:
   LClassOfTestAndBranch(LOperand* value,
                         LOperand* temporary,
-                        LOperand* temporary2,
                         int true_block_id,
                         int false_block_id)
-      : LClassOfTest(value, temporary),
-        temporary2_(temporary2),
+      : LClassOfTest(value),
+        temporary_(temporary),
         true_block_id_(true_block_id),
         false_block_id_(false_block_id) { }
 
@@ -878,10 +875,10 @@ class LClassOfTestAndBranch: public LClassOfTest {
 
   int true_block_id() const { return true_block_id_; }
   int false_block_id() const { return false_block_id_; }
-  LOperand* temporary2() { return temporary2_; }
+  LOperand* temporary() { return temporary_; }
 
  private:
-  LOperand* temporary2_;
+  LOperand* temporary_;
   int true_block_id_;
   int false_block_id_;
 };
@@ -1242,21 +1239,14 @@ class LLoadElements: public LUnaryOperation {
 
 class LLoadKeyedFastElement: public LBinaryOperation {
  public:
-  LLoadKeyedFastElement(LOperand* elements,
-                        LOperand* key,
-                        LOperand* load_result)
-      : LBinaryOperation(elements, key),
-        load_result_(load_result) { }
+  LLoadKeyedFastElement(LOperand* elements, LOperand* key)
+      : LBinaryOperation(elements, key) { }
 
   DECLARE_CONCRETE_INSTRUCTION(LoadKeyedFastElement, "load-keyed-fast-element")
   DECLARE_HYDROGEN_ACCESSOR(LoadKeyedFastElement)
 
   LOperand* elements() const { return left(); }
   LOperand* key() const { return right(); }
-  LOperand* load_result() const { return load_result_; }
-
- private:
-  LOperand* load_result_;
 };
 
 
@@ -1492,63 +1482,46 @@ class LSmiUntag: public LUnaryOperation {
 
 class LStoreNamed: public LInstruction {
  public:
-  LStoreNamed(LOperand* obj, Handle<Object> name, LOperand* val)
-      : object_(obj), name_(name), value_(val) { }
+  LStoreNamed(LOperand* obj, LOperand* val)
+      : object_(obj), value_(val) { }
 
   DECLARE_INSTRUCTION(StoreNamed)
+  DECLARE_HYDROGEN_ACCESSOR(StoreNamed)
 
   virtual void PrintDataTo(StringStream* stream) const;
 
   LOperand* object() const { return object_; }
-  Handle<Object> name() const { return name_; }
+  Handle<Object> name() const { return hydrogen()->name(); }
   LOperand* value() const { return value_; }
 
  private:
   LOperand* object_;
-  Handle<Object> name_;
   LOperand* value_;
 };
 
 
 class LStoreNamedField: public LStoreNamed {
  public:
-  LStoreNamedField(LOperand* obj,
-                   Handle<Object> name,
-                   LOperand* val,
-                   bool in_object,
-                   int offset,
-                   bool needs_write_barrier,
-                   Handle<Map> transition)
-      : LStoreNamed(obj, name, val),
-        is_in_object_(in_object),
-        offset_(offset),
-        needs_write_barrier_(needs_write_barrier),
-        transition_(transition) { }
+  LStoreNamedField(LOperand* obj, LOperand* val)
+      : LStoreNamed(obj, val) { }
 
   DECLARE_CONCRETE_INSTRUCTION(StoreNamedField, "store-named-field")
+  DECLARE_HYDROGEN_ACCESSOR(StoreNamedField)
 
-  bool is_in_object() { return is_in_object_; }
-  int offset() { return offset_; }
-  bool needs_write_barrier() { return needs_write_barrier_; }
-  Handle<Map> transition() const { return transition_; }
-  void set_transition(Handle<Map> map) { transition_ = map; }
-
- private:
-  bool is_in_object_;
-  int offset_;
-  bool needs_write_barrier_;
-  Handle<Map> transition_;
+  bool is_in_object() { return hydrogen()->is_in_object(); }
+  int offset() { return hydrogen()->offset(); }
+  bool needs_write_barrier() { return hydrogen()->NeedsWriteBarrier(); }
+  Handle<Map> transition() { return hydrogen()->transition(); }
 };
 
 
 class LStoreNamedGeneric: public LStoreNamed {
  public:
-  LStoreNamedGeneric(LOperand* obj,
-                     Handle<Object> name,
-                     LOperand* val)
-      : LStoreNamed(obj, name, val) { }
+  LStoreNamedGeneric(LOperand* obj, LOperand* val)
+      : LStoreNamed(obj, val) { }
 
   DECLARE_CONCRETE_INSTRUCTION(StoreNamedGeneric, "store-named-generic")
+  DECLARE_HYDROGEN_ACCESSOR(StoreNamedGeneric)
 };
 
 
@@ -1626,27 +1599,20 @@ class LCheckMap: public LUnaryOperation {
 
 class LCheckPrototypeMaps: public LInstruction {
  public:
-  LCheckPrototypeMaps(LOperand* temp1,
-                      LOperand* temp2,
-                      Handle<JSObject> holder,
-                      Handle<Map> receiver_map)
-      : temp1_(temp1),
-        temp2_(temp2),
-        holder_(holder),
-        receiver_map_(receiver_map) { }
+  LCheckPrototypeMaps(LOperand* temp1, LOperand* temp2)
+      : temp1_(temp1), temp2_(temp2) { }
 
   DECLARE_CONCRETE_INSTRUCTION(CheckPrototypeMaps, "check-prototype-maps")
+  DECLARE_HYDROGEN_ACCESSOR(CheckPrototypeMaps)
 
+  Handle<JSObject> holder() const { return hydrogen()->holder(); }
+  Handle<Map> receiver_map() const { return hydrogen()->receiver_map(); }
   LOperand* temp1() const { return temp1_; }
   LOperand* temp2() const { return temp2_; }
-  Handle<JSObject> holder() const { return holder_; }
-  Handle<Map> receiver_map() const { return receiver_map_; }
 
  private:
   LOperand* temp1_;
   LOperand* temp2_;
-  Handle<JSObject> holder_;
-  Handle<Map> receiver_map_;
 };
 
 

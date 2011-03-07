@@ -998,7 +998,6 @@ LInstruction* LChunkBuilder::DoBranch(HBranch* instr) {
 
       return new LClassOfTestAndBranch(UseTempRegister(compare->value()),
                                        TempRegister(),
-                                       TempRegister(),
                                        first_id,
                                        second_id);
     } else if (v->IsCompare()) {
@@ -1485,8 +1484,7 @@ LInstruction* LChunkBuilder::DoHasCachedArrayIndex(
 LInstruction* LChunkBuilder::DoClassOfTest(HClassOfTest* instr) {
   ASSERT(instr->value()->representation().IsTagged());
   LOperand* value = UseTempRegister(instr->value());
-
-  return DefineSameAsFirst(new LClassOfTest(value, TempRegister()));
+  return DefineSameAsFirst(new LClassOfTest(value));
 }
 
 
@@ -1599,11 +1597,7 @@ LInstruction* LChunkBuilder::DoCheckInstanceType(HCheckInstanceType* instr) {
 LInstruction* LChunkBuilder::DoCheckPrototypeMaps(HCheckPrototypeMaps* instr) {
   LOperand* temp1 = TempRegister();
   LOperand* temp2 = TempRegister();
-  LInstruction* result =
-      new LCheckPrototypeMaps(temp1,
-                              temp2,
-                              instr->holder(),
-                              instr->receiver_map());
+  LInstruction* result = new LCheckPrototypeMaps(temp1, temp2);
   return AssignEnvironment(result);
 }
 
@@ -1690,23 +1684,12 @@ LInstruction* LChunkBuilder::DoLoadElements(HLoadElements* instr) {
 
 LInstruction* LChunkBuilder::DoLoadKeyedFastElement(
     HLoadKeyedFastElement* instr) {
-  Representation r = instr->representation();
-  LOperand* obj = UseRegisterAtStart(instr->object());
+  ASSERT(instr->representation().IsTagged());
   ASSERT(instr->key()->representation().IsInteger32());
+  LOperand* obj = UseRegisterAtStart(instr->object());
   LOperand* key = UseRegisterAtStart(instr->key());
-  LOperand* load_result = NULL;
-  // Double needs an extra temp, because the result is converted from heap
-  // number to a double register.
-  if (r.IsDouble()) load_result = TempRegister();
-  LInstruction* result = new LLoadKeyedFastElement(obj,
-                                                   key,
-                                                   load_result);
-  if (r.IsDouble()) {
-    result = DefineAsRegister(result);
-  } else {
-    result = DefineSameAsFirst(result);
-  }
-  return AssignEnvironment(result);
+  LInstruction* result = new LLoadKeyedFastElement(obj, key);
+  return AssignEnvironment(DefineSameAsFirst(result));
 }
 
 
@@ -1763,13 +1746,7 @@ LInstruction* LChunkBuilder::DoStoreNamedField(HStoreNamedField* instr) {
       ? UseTempRegister(instr->value())
       : UseRegister(instr->value());
 
-  return new LStoreNamedField(obj,
-                              instr->name(),
-                              val,
-                              instr->is_in_object(),
-                              instr->offset(),
-                              needs_write_barrier,
-                              instr->transition());
+  return new LStoreNamedField(obj, val);
 }
 
 
@@ -1777,7 +1754,7 @@ LInstruction* LChunkBuilder::DoStoreNamedGeneric(HStoreNamedGeneric* instr) {
   LOperand* obj = UseFixed(instr->object(), r1);
   LOperand* val = UseFixed(instr->value(), r0);
 
-  LInstruction* result = new LStoreNamedGeneric(obj, instr->name(), val);
+  LInstruction* result = new LStoreNamedGeneric(obj, val);
   return MarkAsCall(result, instr);
 }
 

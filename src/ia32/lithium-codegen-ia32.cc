@@ -1,4 +1,4 @@
-// Copyright 2010 the V8 project authors. All rights reserved.
+// Copyright 2011 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -564,8 +564,8 @@ void LCodeGen::DoParallelMove(LParallelMove* move) {
   Register cpu_scratch = esi;
   bool destroys_cpu_scratch = false;
 
-  LGapResolver resolver(move->move_operands(), &marker_operand);
-  const ZoneList<LMoveOperands>* moves = resolver.ResolveInReverseOrder();
+  const ZoneList<LMoveOperands>* moves =
+      resolver_.Resolve(move->move_operands(), &marker_operand);
   for (int i = moves->length() - 1; i >= 0; --i) {
     LMoveOperands move = moves->at(i);
     LOperand* from = move.from();
@@ -2009,32 +2009,15 @@ void LCodeGen::DoAccessArgumentsAt(LAccessArgumentsAt* instr) {
 void LCodeGen::DoLoadKeyedFastElement(LLoadKeyedFastElement* instr) {
   Register elements = ToRegister(instr->elements());
   Register key = ToRegister(instr->key());
-  Register result;
-  if (instr->load_result() != NULL) {
-    result = ToRegister(instr->load_result());
-  } else {
-    result = ToRegister(instr->result());
-    ASSERT(result.is(elements));
-  }
+  Register result = ToRegister(instr->result());
+  ASSERT(result.is(elements));
 
   // Load the result.
   __ mov(result, FieldOperand(elements, key, times_4, FixedArray::kHeaderSize));
 
-  Representation r = instr->hydrogen()->representation();
-  if (r.IsInteger32()) {
-    // Untag and check for smi.
-    __ SmiUntag(result);
-    DeoptimizeIf(carry, instr->environment());
-  } else if (r.IsDouble()) {
-    EmitNumberUntagD(result,
-                     ToDoubleRegister(instr->result()),
-                     instr->environment());
-  } else {
-    // Check for the hole value.
-    ASSERT(r.IsTagged());
-    __ cmp(result, Factory::the_hole_value());
-    DeoptimizeIf(equal, instr->environment());
-  }
+  // Check for the hole value.
+  __ cmp(result, Factory::the_hole_value());
+  DeoptimizeIf(equal, instr->environment());
 }
 
 
@@ -2988,9 +2971,60 @@ void LCodeGen::DoDoubleToI(LDoubleToI* instr) {
       __ add(Operand(esp), Immediate(kDoubleSize));
       __ bind(&done);
     } else {
-      // This will bail out if the input was not in the int32 range (or,
-      // unfortunately, if the input was 0x80000000).
-      DeoptimizeIf(equal, instr->environment());
+      NearLabel done;
+      Register temp_reg = ToRegister(instr->temporary());
+      XMMRegister xmm_scratch = xmm0;
+
+      // If cvttsd2si succeeded, we're done. Otherwise, we attempt
+      // manual conversion.
+      __ j(not_equal, &done);
+
+      // Get high 32 bits of the input in result_reg and temp_reg.
+      __ pshufd(xmm_scratch, input_reg, 1);
+      __ movd(Operand(temp_reg), xmm_scratch);
+      __ mov(result_reg, temp_reg);
+
+      // Prepare negation mask in temp_reg.
+      __ sar(temp_reg, kBitsPerInt - 1);
+
+      // Extract the exponent from result_reg and subtract adjusted
+      // bias from it. The adjustment is selected in a way such that
+      // when the difference is zero, the answer is in the low 32 bits
+      // of the input, otherwise a shift has to be performed.
+      __ shr(result_reg, HeapNumber::kExponentShift);
+      __ and_(result_reg,
+              HeapNumber::kExponentMask >> HeapNumber::kExponentShift);
+      __ sub(Operand(result_reg),
+             Immediate(HeapNumber::kExponentBias +
+                       HeapNumber::kExponentBits +
+                       HeapNumber::kMantissaBits));
+      // Don't handle big (> kMantissaBits + kExponentBits == 63) or
+      // special exponents.
+      DeoptimizeIf(greater, instr->environment());
+
+      // Zero out the sign and the exponent in the input (by shifting
+      // it to the left) and restore the implicit mantissa bit,
+      // i.e. convert the input to unsigned int64 shifted left by
+      // kExponentBits.
+      ExternalReference minus_zero = ExternalReference::address_of_minus_zero();
+      // Minus zero has the most significant bit set and the other
+      // bits cleared.
+      __ movdbl(xmm_scratch, Operand::StaticVariable(minus_zero));
+      __ psllq(input_reg, HeapNumber::kExponentBits);
+      __ por(input_reg, xmm_scratch);
+
+      // Get the amount to shift the input right in xmm_scratch.
+      __ neg(result_reg);
+      __ movd(xmm_scratch, Operand(result_reg));
+
+      // Shift the input right and extract low 32 bits.
+      __ psrlq(input_reg, xmm_scratch);
+      __ movd(Operand(result_reg), input_reg);
+
+      // Use the prepared mask in temp_reg to negate the result if necessary.
+      __ xor_(result_reg, Operand(temp_reg));
+      __ sub(result_reg, Operand(temp_reg));
+      __ bind(&done);
     }
   } else {
     NearLabel done;

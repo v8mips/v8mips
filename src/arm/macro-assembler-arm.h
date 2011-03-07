@@ -36,7 +36,6 @@ namespace internal {
 // Forward declaration.
 class PostCallGenerator;
 
-
 // ----------------------------------------------------------------------------
 // Static helper functions
 
@@ -247,8 +246,29 @@ class MacroAssembler: public Assembler {
             const MemOperand& dst,
             Condition cond = al);
 
-  // Clear FPSCR bits.
-  void ClearFPSCRBits(uint32_t bits_to_clear, Register scratch);
+  // Clear specified FPSCR bits.
+  void ClearFPSCRBits(const uint32_t bits_to_clear,
+                      const Register scratch,
+                      const Condition cond = al);
+
+  // Compare double values and move the result to the normal condition flags.
+  void VFPCompareAndSetFlags(const DwVfpRegister src1,
+                             const DwVfpRegister src2,
+                             const Condition cond = al);
+  void VFPCompareAndSetFlags(const DwVfpRegister src1,
+                             const double src2,
+                             const Condition cond = al);
+
+  // Compare double values and then load the fpscr flags to a register.
+  void VFPCompareAndLoadFlags(const DwVfpRegister src1,
+                              const DwVfpRegister src2,
+                              const Register fpscr_flags,
+                              const Condition cond = al);
+  void VFPCompareAndLoadFlags(const DwVfpRegister src1,
+                              const double src2,
+                              const Register fpscr_flags,
+                              const Condition cond = al);
+
 
   // ---------------------------------------------------------------------------
   // Activation frames
@@ -288,7 +308,8 @@ class MacroAssembler: public Assembler {
   void InvokeCode(Register code,
                   const ParameterCount& expected,
                   const ParameterCount& actual,
-                  InvokeFlag flag);
+                  InvokeFlag flag,
+                  PostCallGenerator* post_call_generator = NULL);
 
   void InvokeCode(Handle<Code> code,
                   const ParameterCount& expected,
@@ -300,7 +321,8 @@ class MacroAssembler: public Assembler {
   // current context to the context in the function before invoking.
   void InvokeFunction(Register function,
                       const ParameterCount& actual,
-                      InvokeFlag flag);
+                      InvokeFlag flag,
+                      PostCallGenerator* post_call_generator = NULL);
 
   void InvokeFunction(JSFunction* function,
                       const ParameterCount& actual,
@@ -751,7 +773,8 @@ class MacroAssembler: public Assembler {
                       Handle<Code> code_constant,
                       Register code_reg,
                       Label* done,
-                      InvokeFlag flag);
+                      InvokeFlag flag,
+                      PostCallGenerator* post_call_generator = NULL);
 
   // Activation support.
   void EnterFrame(StackFrame::Type type);

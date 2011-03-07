@@ -519,10 +519,54 @@ void MacroAssembler::Strd(Register src1, Register src2,
 }
 
 
-void MacroAssembler::ClearFPSCRBits(uint32_t bits_to_clear, Register scratch) {
-  vmrs(scratch);
-  bic(scratch, scratch, Operand(bits_to_clear));
-  vmsr(scratch);
+void MacroAssembler::ClearFPSCRBits(const uint32_t bits_to_clear,
+                                    const Register scratch,
+                                    const Condition cond) {
+  vmrs(scratch, cond);
+  bic(scratch, scratch, Operand(bits_to_clear), LeaveCC, cond);
+  vmsr(scratch, cond);
+}
+
+
+void MacroAssembler::VFPCompareAndSetFlags(const DwVfpRegister src1,
+                                           const DwVfpRegister src2,
+                                           const Condition cond) {
+  // Compare and move FPSCR flags to the normal condition flags.
+  vcmp(src1, src2, cond);
+  vmrs(pc, cond);
+}
+
+void MacroAssembler::VFPCompareAndSetFlags(const DwVfpRegister src1,
+                                           const double src2,
+                                           const Condition cond) {
+  // Compare and move FPSCR flags to the normal condition flags.
+  vcmp(src1, src2, cond);
+  vmrs(pc, cond);
+}
+
+
+void MacroAssembler::VFPCompareAndLoadFlags(const DwVfpRegister src1,
+                                            const DwVfpRegister src2,
+                                            const Register fpscr_flags,
+                                            const Condition cond) {
+  // Clear the Invalid cumulative exception flags (use fpscr_flags as scratch).
+  ClearFPSCRBits(kVFPInvalidExceptionBit, fpscr_flags);
+
+  // Compare and load FPSCR.
+  vcmp(src1, src2, cond);
+  vmrs(fpscr_flags);
+}
+
+void MacroAssembler::VFPCompareAndLoadFlags(const DwVfpRegister src1,
+                                            const double src2,
+                                            const Register fpscr_flags,
+                                            const Condition cond) {
+  // Clear the Invalid cumulative exception flags (use fpscr_flags as scratch).
+  ClearFPSCRBits(kVFPInvalidExceptionBit, fpscr_flags);
+
+  // Compare and load FPSCR.
+  vcmp(src1, src2, cond);
+  vmrs(fpscr_flags);
 }
 
 
@@ -682,7 +726,8 @@ void MacroAssembler::InvokePrologue(const ParameterCount& expected,
                                     Handle<Code> code_constant,
                                     Register code_reg,
                                     Label* done,
-                                    InvokeFlag flag) {
+                                    InvokeFlag flag,
+                                    PostCallGenerator* post_call_generator) {
   bool definitely_matches = false;
   Label regular_invoke;
 
@@ -738,6 +783,7 @@ void MacroAssembler::InvokePrologue(const ParameterCount& expected,
         Handle<Code>(Builtins::builtin(Builtins::ArgumentsAdaptorTrampoline));
     if (flag == CALL_FUNCTION) {
       Call(adaptor, RelocInfo::CODE_TARGET);
+      if (post_call_generator != NULL) post_call_generator->Generate();
       b(done);
     } else {
       Jump(adaptor, RelocInfo::CODE_TARGET);
@@ -750,12 +796,15 @@ void MacroAssembler::InvokePrologue(const ParameterCount& expected,
 void MacroAssembler::InvokeCode(Register code,
                                 const ParameterCount& expected,
                                 const ParameterCount& actual,
-                                InvokeFlag flag) {
+                                InvokeFlag flag,
+                                PostCallGenerator* post_call_generator) {
   Label done;
 
-  InvokePrologue(expected, actual, Handle<Code>::null(), code, &done, flag);
+  InvokePrologue(expected, actual, Handle<Code>::null(), code, &done, flag,
+                 post_call_generator);
   if (flag == CALL_FUNCTION) {
     Call(code);
+    if (post_call_generator != NULL) post_call_generator->Generate();
   } else {
     ASSERT(flag == JUMP_FUNCTION);
     Jump(code);
@@ -789,7 +838,8 @@ void MacroAssembler::InvokeCode(Handle<Code> code,
 
 void MacroAssembler::InvokeFunction(Register fun,
                                     const ParameterCount& actual,
-                                    InvokeFlag flag) {
+                                    InvokeFlag flag,
+                                    PostCallGenerator* post_call_generator) {
   // Contract with called JS functions requires that function is passed in r1.
   ASSERT(fun.is(r1));
 
@@ -806,7 +856,7 @@ void MacroAssembler::InvokeFunction(Register fun,
       FieldMemOperand(r1, JSFunction::kCodeEntryOffset));
 
   ParameterCount expected(expected_reg);
-  InvokeCode(code_reg, expected, actual, flag);
+  InvokeCode(code_reg, expected, actual, flag, post_call_generator);
 }
 
 
