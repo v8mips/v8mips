@@ -1327,8 +1327,8 @@ LInstruction* LChunkBuilder::DoSub(HSub* instr) {
   if (instr->representation().IsInteger32()) {
     ASSERT(instr->left()->representation().IsInteger32());
     ASSERT(instr->right()->representation().IsInteger32());
-    LOperand* left = UseRegisterAtStart(instr->LeastConstantOperand());
-    LOperand* right = UseOrConstantAtStart(instr->MostConstantOperand());
+    LOperand* left = UseRegisterAtStart(instr->left());
+    LOperand* right = UseOrConstantAtStart(instr->right());
     LSubI* sub = new LSubI(left, right);
     LInstruction* result = DefineSameAsFirst(sub);
     if (instr->CheckFlag(HValue::kCanOverflow)) {
@@ -1858,7 +1858,8 @@ LInstruction* LChunkBuilder::DoSimulate(HSimulate* instr) {
 
   // If there is an instruction pending deoptimization environment create a
   // lazy bailout instruction to capture the environment.
-  if (pending_deoptimization_ast_id_ == instr->ast_id()) {
+  if (pending_deoptimization_ast_id_ != AstNode::kNoNumber) {
+    ASSERT(pending_deoptimization_ast_id_ == instr->ast_id());
     LLazyBailout* lazy_bailout = new LLazyBailout;
     LInstruction* result = AssignEnvironment(lazy_bailout);
     pending_deoptimization_ast_id_ = AstNode::kNoNumber;
