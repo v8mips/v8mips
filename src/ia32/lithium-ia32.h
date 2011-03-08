@@ -321,50 +321,42 @@ class LInstruction: public ZoneObject {
   void set_hydrogen_value(HValue* value) { hydrogen_value_ = value; }
   HValue* hydrogen_value() const { return hydrogen_value_; }
 
-  void set_deoptimization_environment(LEnvironment* env) {
-    deoptimization_environment_.set(env);
-  }
-  LEnvironment* deoptimization_environment() const {
-    return deoptimization_environment_.get();
-  }
-  bool HasDeoptimizationEnvironment() const {
-    return deoptimization_environment_.is_set();
-  }
-
  private:
   SetOncePointer<LEnvironment> environment_;
   SetOncePointer<LPointerMap> pointer_map_;
   HValue* hydrogen_value_;
-  SetOncePointer<LEnvironment> deoptimization_environment_;
 };
 
 
-template<typename T, int N>
+template<typename ElementType, int NumElements>
 class OperandContainer {
  public:
   OperandContainer() {
-    for (int i = 0; i < N; i++) elems_[i] = NULL;
+    for (int i = 0; i < NumElements; i++) elems_[i] = NULL;
   }
-  int length() { return N; }
-  T& operator[](int i) {
+  int length() { return NumElements; }
+  ElementType& operator[](int i) {
     ASSERT(i < length());
     return elems_[i];
   }
   void PrintOperandsTo(StringStream* stream);
 
  private:
-  T elems_[N];
+  ElementType elems_[NumElements];
 };
 
 
-template<typename T>
-class OperandContainer<T, 0> {
+template<typename ElementType>
+class OperandContainer<ElementType, 0> {
  public:
   int length() { return 0; }
   void PrintOperandsTo(StringStream* stream) { }
 };
 
 
+// R = number of result operands (0 or 1).
+// I = number of input operands.
+// T = number of temporary operands.
 template<int R, int I, int T>
 class LTemplateInstruction: public LInstruction {
  public:
@@ -1436,7 +1428,7 @@ class LNumberTagI: public LTemplateInstruction<1, 1, 0> {
 
 class LNumberTagD: public LTemplateInstruction<1, 1, 1> {
  public:
-  explicit LNumberTagD(LOperand* value, LOperand* temp) {
+  LNumberTagD(LOperand* value, LOperand* temp) {
     inputs_[0] = value;
     temps_[0] = temp;
   }
@@ -1878,7 +1870,6 @@ class LChunkBuilder BASE_EMBEDDED {
         argument_count_(0),
         allocator_(allocator),
         position_(RelocInfo::kNoPosition),
-        instructions_pending_deoptimization_environment_(NULL),
         pending_deoptimization_ast_id_(AstNode::kNoNumber) { }
 
   // Build the sequence for the graph.
@@ -1987,10 +1978,6 @@ class LChunkBuilder BASE_EMBEDDED {
       CanDeoptimize can_deoptimize = CANNOT_DEOPTIMIZE_EAGERLY);
   LInstruction* MarkAsSaveDoubles(LInstruction* instr);
 
-  LInstruction* SetInstructionPendingDeoptimizationEnvironment(
-      LInstruction* instr, int ast_id);
-  void ClearInstructionPendingDeoptimizationEnvironment();
-
   LEnvironment* CreateEnvironment(HEnvironment* hydrogen_env);
 
   void VisitInstruction(HInstruction* current);
@@ -2012,7 +1999,6 @@ class LChunkBuilder BASE_EMBEDDED {
   int argument_count_;
   LAllocator* allocator_;
   int position_;
-  LInstruction* instructions_pending_deoptimization_environment_;
   int pending_deoptimization_ast_id_;
 
   DISALLOW_COPY_AND_ASSIGN(LChunkBuilder);
