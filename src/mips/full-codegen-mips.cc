@@ -1492,6 +1492,9 @@ void FullCodeGenerator::VisitAssignment(Assignment* expr) {
         ? OVERWRITE_RIGHT
         : NO_OVERWRITE;
     SetSourcePosition(expr->position() + 1);
+    // Write posistions prior to subsequent call, to ensure RelocInfo ordering.
+    __ positions_recorder()->WriteRecordedPositions();
+
     if (ShouldInlineSmiCase(op)) {
       EmitInlineSmiBinaryOp(expr,
                             op,
@@ -1513,6 +1516,8 @@ void FullCodeGenerator::VisitAssignment(Assignment* expr) {
 
   // Record source position before possible IC call.
   SetSourcePosition(expr->position());
+  // Write posistions prior to subsequent call, to ensure RelocInfo ordering.
+  __ positions_recorder()->WriteRecordedPositions();
 
   // Store the value.
   switch (assign_type) {
@@ -1534,6 +1539,9 @@ void FullCodeGenerator::VisitAssignment(Assignment* expr) {
 
 void FullCodeGenerator::EmitNamedPropertyLoad(Property* prop) {
   SetSourcePosition(prop->position());
+  // Write posistions prior to subsequent call, to ensure RelocInfo ordering.
+  __ positions_recorder()->WriteRecordedPositions();
+
   Literal* key = prop->key()->AsLiteral();
   __ mov(a0, result_register());
   __ li(a2, Operand(key->handle()));
@@ -1545,6 +1553,9 @@ void FullCodeGenerator::EmitNamedPropertyLoad(Property* prop) {
 
 void FullCodeGenerator::EmitKeyedPropertyLoad(Property* prop) {
   SetSourcePosition(prop->position());
+  // Write posistions prior to subsequent call, to ensure RelocInfo ordering.
+  __ positions_recorder()->WriteRecordedPositions();
+
   __ mov(a0, result_register());
   // Call keyed load IC. It has arguments key and receiver in a0 and a1.
   Handle<Code> ic(Builtins::builtin(Builtins::KeyedLoadIC_Initialize));
@@ -1717,6 +1728,9 @@ void FullCodeGenerator::EmitNamedPropertyAssignment(Assignment* expr) {
 
   // Record source code position before IC call.
   SetSourcePosition(expr->position());
+  // Write posistions prior to subsequent call, to ensure RelocInfo ordering.
+  __ positions_recorder()->WriteRecordedPositions();
+
   __ mov(a0, result_register());  // Load the value.
   __ li(a2, Operand(prop->key()->AsLiteral()->handle()));
   // Load receiver to a1. Leave a copy in the stack if needed for turning the
@@ -1762,6 +1776,9 @@ void FullCodeGenerator::EmitKeyedPropertyAssignment(Assignment* expr) {
 
   // Record source code position before IC call.
   SetSourcePosition(expr->position());
+  // Write posistions prior to subsequent call, to ensure RelocInfo ordering.
+  __ positions_recorder()->WriteRecordedPositions();
+
   // Call keyed store IC.
   // The arguments are:
   // - a0 is the value,
@@ -1827,6 +1844,9 @@ void FullCodeGenerator::EmitCallWithIC(Call* expr,
   }
   // Record source position for debugger.
   SetSourcePosition(expr->position());
+  // Write posistions prior to subsequent call, to ensure RelocInfo ordering.
+  __ positions_recorder()->WriteRecordedPositions();
+
   // Call the IC initialization code.
   InLoopFlag in_loop = (loop_depth() > 0) ? IN_LOOP : NOT_IN_LOOP;
   Handle<Code> ic = StubCache::ComputeCallInitialize(arg_count, in_loop);
@@ -1860,6 +1880,9 @@ void FullCodeGenerator::EmitKeyedCallWithIC(Call* expr,
   }
   // Record source position for debugger.
   SetSourcePosition(expr->position());
+  // Write posistions prior to subsequent call, to ensure RelocInfo ordering.
+  __ positions_recorder()->WriteRecordedPositions();
+
   // Call the IC initialization code.
   InLoopFlag in_loop = (loop_depth() > 0) ? IN_LOOP : NOT_IN_LOOP;
   Handle<Code> ic = StubCache::ComputeKeyedCallInitialize(arg_count, in_loop);
@@ -1883,6 +1906,9 @@ void FullCodeGenerator::EmitCallWithStub(Call* expr) {
   }
   // Record source position for debugger.
   SetSourcePosition(expr->position());
+  // Write posistions prior to subsequent call, to ensure RelocInfo ordering.
+  __ positions_recorder()->WriteRecordedPositions();
+
   InLoopFlag in_loop = (loop_depth() > 0) ? IN_LOOP : NOT_IN_LOOP;
   CallFunctionStub stub(arg_count, in_loop, RECEIVER_MIGHT_BE_VALUE);
   __ CallStub(&stub);
@@ -1947,6 +1973,9 @@ void FullCodeGenerator::VisitCall(Call* expr) {
     }
     // Record source position for debugger.
     SetSourcePosition(expr->position());
+    // Write posistions prior to subsequent call, to ensure RelocInfo ordering.
+    __ positions_recorder()->WriteRecordedPositions();
+
     InLoopFlag in_loop = (loop_depth() > 0) ? IN_LOOP : NOT_IN_LOOP;
     CallFunctionStub stub(arg_count, in_loop, RECEIVER_MIGHT_BE_VALUE);
     __ CallStub(&stub);
@@ -2023,6 +2052,8 @@ void FullCodeGenerator::VisitCall(Call* expr) {
         __ mov(a0, result_register());
         // Record source code position for IC call.
         SetSourcePosition(prop->position());
+        // Write posistions prior to subsequent call, to ensure RelocInfo ordering.
+        __ positions_recorder()->WriteRecordedPositions();
         __ pop(a1);  // We do not need to keep the receiver.
 
         Handle<Code> ic(Builtins::builtin(Builtins::KeyedLoadIC_Initialize));
@@ -2085,6 +2116,8 @@ void FullCodeGenerator::VisitCallNew(CallNew* expr) {
   // Call the construct call builtin that handles allocation and
   // constructor invocation.
   SetSourcePosition(expr->position());
+  // Write posistions prior to subsequent call, to ensure RelocInfo ordering.
+  __ positions_recorder()->WriteRecordedPositions();
 
   // Load function and argument count into a1 and a0.
   __ li(a0, Operand(arg_count));
@@ -3131,6 +3164,8 @@ void FullCodeGenerator::VisitUnaryOperation(UnaryOperation* expr) {
 void FullCodeGenerator::VisitCountOperation(CountOperation* expr) {
   Comment cmnt(masm_, "[ CountOperation");
   SetSourcePosition(expr->position());
+  // Write posistions prior to subsequent call, to ensure RelocInfo ordering.
+  __ positions_recorder()->WriteRecordedPositions();
 
   // Invalid left-hand sides are rewritten to have a 'throw ReferenceError'
   // as the left-hand side.
@@ -3427,6 +3462,8 @@ bool FullCodeGenerator::TryLiteralCompare(Token::Value op,
 void FullCodeGenerator::VisitCompareOperation(CompareOperation* expr) {
   Comment cmnt(masm_, "[ CompareOperation");
   SetSourcePosition(expr->position());
+  // Write posistions prior to subsequent call, to ensure RelocInfo ordering.
+  __ positions_recorder()->WriteRecordedPositions();
 
   // Always perform the comparison for its control flow.  Pack the result
   // into the expression's context after the comparison is performed.
