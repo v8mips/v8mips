@@ -1700,6 +1700,9 @@ void CodeGenerator::CallWithArguments(ZoneList<Expression*>* args,
 
   // Record the position for debugging purposes.
   CodeForSourcePosition(position);
+  // Force write of positions before call to ensure position RelocInfo
+  // stored prior to code_target RelocInfo.
+  __ positions_recorder()->WriteRecordedPositions();
 
   // Use the shared code stub to call the function.
   InLoopFlag in_loop = loop_nesting() > 0 ? IN_LOOP : NOT_IN_LOOP;
@@ -3805,6 +3808,9 @@ void CodeGenerator::EmitSlotAssignment(Assignment* node) {
   // Perform the assignment.
   if (var->mode() != Variable::CONST || node->op() == Token::INIT_CONST) {
     CodeForSourcePosition(node->position());
+    // Force write of positions before call to ensure position RelocInfo
+    // stored prior to code_target RelocInfo.
+    __ positions_recorder()->WriteRecordedPositions();
     StoreToSlot(slot,
                 node->op() == Token::INIT_CONST ? CONST_INIT : NOT_CONST_INIT);
   }
@@ -3920,6 +3926,10 @@ void CodeGenerator::EmitNamedPropertyAssignment(Assignment* node) {
     frame_->EmitPush(reg1);
   }
   CodeForSourcePosition(node->position());
+  // Force write of positions before call to ensure position RelocInfo
+  // stored prior to code_target RelocInfo.
+  __ positions_recorder()->WriteRecordedPositions();
+
   bool is_contextual = (var != NULL);
   EmitNamedStore(name, is_contextual);
   frame_->EmitPush(v0);
@@ -4032,6 +4042,10 @@ void CodeGenerator::EmitKeyedPropertyAssignment(Assignment* node) {
   // Perform the assignment.  It is safe to ignore constants here.
   ASSERT(node->op() != Token::INIT_CONST);
   CodeForSourcePosition(node->position());
+  // Force write of positions before call to EmitNamedstore,
+  // to ensure positoin RelocInfo stored prior to
+  // code_target RelocInfo.
+  __ positions_recorder()->WriteRecordedPositions();
   EmitKeyedStore(prop->key()->type(), wb_info);
   frame_->EmitPush(v0);
 
@@ -4104,6 +4118,10 @@ void CodeGenerator::VisitThrow(Throw* node) {
 
   Load(node->exception());
   CodeForSourcePosition(node->position());
+  // Force write of positions before call to EmitNamedstore,
+  // to ensure positoin RelocInfo stored prior to
+  // code_target RelocInfo.
+  __ positions_recorder()->WriteRecordedPositions();
   frame_->CallRuntime(Runtime::kThrow, 1);
   frame_->EmitPush(v0);
   ASSERT_EQ(original_height + 1, frame_->height());
@@ -4230,6 +4248,9 @@ void CodeGenerator::VisitCall(Call* node) {
 
     // Call the function.
     CodeForSourcePosition(node->position());
+    // Force write of positions before call to ensure position RelocInfo
+    // stored prior to code_target RelocInfo.
+    __ positions_recorder()->WriteRecordedPositions();
 
     InLoopFlag in_loop = loop_nesting() > 0 ? IN_LOOP : NOT_IN_LOOP;
     CallFunctionStub call_function(arg_count, in_loop, RECEIVER_MIGHT_BE_VALUE);
@@ -4261,6 +4282,9 @@ void CodeGenerator::VisitCall(Call* node) {
     InLoopFlag in_loop = loop_nesting() > 0 ? IN_LOOP : NOT_IN_LOOP;
     Handle<Code> stub = StubCache::ComputeCallInitialize(arg_count, in_loop);
     CodeForSourcePosition(node->position());
+    // Force write of positions before call to ensure position RelocInfo
+    // stored prior to code_target RelocInfo.
+    __ positions_recorder()->WriteRecordedPositions();
     frame_->CallCodeObject(stub, RelocInfo::CODE_TARGET_CONTEXT,
                            arg_count + 1);
     __ lw(cp, frame_->Context());
@@ -4360,6 +4384,10 @@ void CodeGenerator::VisitCall(Call* node) {
         Handle<Code> stub =
             StubCache::ComputeCallInitialize(arg_count, in_loop);
         CodeForSourcePosition(node->position());
+        // Force write of positions before call to ensure position RelocInfo
+        // stored prior to code_target RelocInfo.
+        __ positions_recorder()->WriteRecordedPositions();
+
         frame_->CallCodeObject(stub, RelocInfo::CODE_TARGET, arg_count + 1);
         __ lw(cp, frame_->Context());
         frame_->EmitPush(v0);
@@ -4401,6 +4429,10 @@ void CodeGenerator::VisitCall(Call* node) {
         Handle<Code> stub =
             StubCache::ComputeKeyedCallInitialize(arg_count, in_loop);
         CodeForSourcePosition(node->position());
+        // Force write of positions before call to ensure position RelocInfo
+        // stored prior to code_target RelocInfo.
+        __ positions_recorder()->WriteRecordedPositions();
+
         frame_->SpillAll();
         __ lw(a2, frame_->ElementAt(arg_count + 1));
         frame_->CallCodeObject(stub, RelocInfo::CODE_TARGET, arg_count + 1);
@@ -4466,6 +4498,10 @@ void CodeGenerator::VisitCallNew(CallNew* node) {
   // Call the construct call builtin that handles allocation and
   // constructor invocation.
   CodeForSourcePosition(node->position());
+  // Force write of positions before call to ensure position RelocInfo
+  // stored prior to code_target RelocInfo.
+  __ positions_recorder()->WriteRecordedPositions();
+
   Handle<Code> ic(Builtins::builtin(Builtins::JSConstructCall));
   frame_->CallCodeObject(ic, RelocInfo::CONSTRUCT_CALL, arg_count + 1);
   frame_->EmitPush(v0);
@@ -7374,6 +7410,10 @@ void Reference::GetValue() {
   Property* property = expression_->AsProperty();
   if (property != NULL) {
     cgen_->CodeForSourcePosition(property->position());
+    // Force write of positions before call to ensure position RelocInfo
+    // stored prior to code_target RelocInfo.
+    __ positions_recorder()->WriteRecordedPositions();
+
   }
 
   switch (type_) {
@@ -7418,6 +7458,10 @@ void Reference::SetValue(InitState init_state, WriteBarrierCharacter wb_info) {
   Property* property = expression_->AsProperty();
   if (property != NULL) {
     cgen_->CodeForSourcePosition(property->position());
+    // Force write of positions before call to ensure position RelocInfo
+    // stored prior to code_target RelocInfo.
+    __ positions_recorder()->WriteRecordedPositions();
+
   }
 
   switch (type_) {
@@ -7442,6 +7486,9 @@ void Reference::SetValue(InitState init_state, WriteBarrierCharacter wb_info) {
       Property* property = expression_->AsProperty();
       ASSERT(property != NULL);
       cgen_->CodeForSourcePosition(property->position());
+      // Force write of positions before call to ensure position RelocInfo
+      // stored prior to code_target RelocInfo.
+      __ positions_recorder()->WriteRecordedPositions();
 
       cgen_->EmitKeyedStore(property->key()->type(), wb_info);
       frame->EmitPush(v0);
