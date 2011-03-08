@@ -247,10 +247,10 @@ void Debug::GenerateConstructCallDebugBreak(MacroAssembler* masm) {
 
 
 void Debug::GenerateReturnDebugBreak(MacroAssembler* masm) {
-  // In places other than IC call sites it is expected that a0 is TOS which
+  // In places other than IC call sites it is expected that v0 is TOS which
   // is an object - this is not generally the case so this should be used with
   // care.
-  Generate_DebugBreakCallHelper(masm, a0.bit(), 0);
+  Generate_DebugBreakCallHelper(masm, v0.bit(), 0);
 }
 
 

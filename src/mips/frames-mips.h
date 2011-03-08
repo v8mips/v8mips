@@ -40,16 +40,17 @@ namespace internal {
 static const int kNumRegs = 32;
 
 static const RegList kJSCallerSaved =
+  1 << 2 |  // v0
   1 << 4 |  // a0
   1 << 5 |  // a1
   1 << 6 |  // a2
   1 << 7;   // a3
 
-static const int kNumJSCallerSaved = 4;
+static const int kNumJSCallerSaved = 5;
 
 
 // Return the code of the n-th caller-saved register available to JavaScript
-// e.g. JSCallerSavedReg(0) returns r0.code() == 0.
+// e.g. JSCallerSavedReg(0) returns a0.code() == 4.
 int JSCallerSavedCode(int n);
 
 
