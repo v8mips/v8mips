@@ -1029,13 +1029,51 @@ void CompareStub::Generate(MacroAssembler* masm) {
   // and the right hand side if we have FPU. Otherwise a2, a3 are representing
   // left hand side and a0, a1 represent right hand side.
 
-  // Checks for NaN in the doubles we have loaded.  Can return the answer or
-  // fall through if neither is a NaN.  Also binds rhs_not_nan.
-  EmitNanCheck(masm, cc_);
+  if (CpuFeatures::IsSupported(FPU)) {
+    CpuFeatures::Scope scope(FPU);
+    Label nan;
+    __ li(t0, Operand(LESS));
+    __ li(t1, Operand(GREATER));
+    __ li(t2, Operand(EQUAL));
 
-  // Compares two doubles that are not NaNs. Returns the answer.
-  // Never falls through.
-  EmitTwoNonNanDoubleComparison(masm, cc_);
+    // Check if either rhs or lhs is NaN
+    __ c(UN, D, f12, f14);
+    __ bc1t(&nan);
+    __ nop();
+
+    // Check if LESS condition is satisfied. If true, move conditionally
+    // result to v0.
+    __ c(OLT, D, f12, f14);
+    __ movt(v0, t0);
+    // Use previous check to store conditionally to v0 oposite condition
+    // (GREATER). If rhs is equal to lhs, this will be corrected in next
+    // check.
+    __ movf(v0, t1);
+    // Check if EQUAL condition is satisfied. If true, move conditionally
+    // result to v0.
+    __ c(EQ, D, f12, f14);
+    __ movt(v0, t2);
+
+    __ Ret();
+
+    __ bind(&nan);
+    // NaN comparisons always fail.
+    // Load whatever we need in v0 to make the comparison fail.
+    if (cc_ == lt || cc_ == le) {
+      __ li(v0, Operand(GREATER));
+    } else {
+      __ li(v0, Operand(LESS));
+    }
+    __ Ret();
+  } else {
+    // Checks for NaN in the doubles we have loaded.  Can return the answer or
+    // fall through if neither is a NaN.  Also binds rhs_not_nan.
+    EmitNanCheck(masm, cc_);
+
+    // Compares two doubles that are not NaNs. Returns the answer.
+    // Never falls through.
+    EmitTwoNonNanDoubleComparison(masm, cc_);
+  }
 
   __ bind(&not_smis);
   // At this point we know we are dealing with two different objects,
