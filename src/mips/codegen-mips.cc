@@ -5962,14 +5962,10 @@ void CodeGenerator::VisitUnaryOperation(UnaryOperation* node) {
         frame_->EmitPush(v0);
 
       } else if (slot != NULL && slot->type() == Slot::LOOKUP) {
-        // lookup the context holding the named variable
+        // Delete from the context holding the named variable.
         frame_->EmitPush(cp);
         frame_->EmitPush(Operand(variable->name()));
-        frame_->CallRuntime(Runtime::kLookupContext, 2);
-        // v0: context
-        frame_->EmitPush(v0);
-        frame_->EmitPush(Operand(variable->name()));
-        frame_->InvokeBuiltin(Builtins::DELETE, CALL_JS, 2);
+        frame_->CallRuntime(Runtime::kDeleteContextSlot, 2);
         frame_->EmitPush(v0);
 
       } else {
