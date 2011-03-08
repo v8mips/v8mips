@@ -3787,9 +3787,7 @@ void CodeGenerator::EmitSlotAssignment(Assignment* node) {
 
     // Perform the binary operation.
     Literal* literal = node->value()->AsLiteral();
-    bool overwrite_value =
-        (node->value()->AsBinaryOperation() != NULL &&
-         node->value()->AsBinaryOperation()->ResultOverwriteAllowed());
+    bool overwrite_value = node->value()->ResultOverwriteAllowed();
     if (literal != NULL && literal->handle()->IsSmi()) {
       SmiOperation(node->binary_op(),
                    literal->handle(),
@@ -3890,9 +3888,7 @@ void CodeGenerator::EmitNamedPropertyAssignment(Assignment* node) {
 
     // Perform the binary operation.
     Literal* literal = node->value()->AsLiteral();
-    bool overwrite_value =
-        (node->value()->AsBinaryOperation() != NULL &&
-         node->value()->AsBinaryOperation()->ResultOverwriteAllowed());
+    bool overwrite_value = node->value()->ResultOverwriteAllowed();
     if (literal != NULL && literal->handle()->IsSmi()) {
       SmiOperation(node->binary_op(),
                    literal->handle(),
@@ -4010,9 +4006,7 @@ void CodeGenerator::EmitKeyedPropertyAssignment(Assignment* node) {
 
     // Perform the binary operation.
     Literal* literal = node->value()->AsLiteral();
-    bool overwrite_value =
-        (node->value()->AsBinaryOperation() != NULL &&
-         node->value()->AsBinaryOperation()->ResultOverwriteAllowed());
+    bool overwrite_value = node->value()->ResultOverwriteAllowed();
     if (literal != NULL && literal->handle()->IsSmi()) {
       SmiOperation(node->binary_op(),
                    literal->handle(),
@@ -5989,9 +5983,7 @@ void CodeGenerator::VisitUnaryOperation(UnaryOperation* node) {
     frame_->EmitPush(v0);  // v0 holds the result.
 
   } else {
-    bool can_overwrite =
-        (node->expression()->AsBinaryOperation() != NULL &&
-         node->expression()->AsBinaryOperation()->ResultOverwriteAllowed());
+    bool can_overwrite = node->expression()->ResultOverwriteAllowed();
     UnaryOverwriteMode overwrite =
        can_overwrite ? UNARY_OVERWRITE : UNARY_NO_OVERWRITE;
 
@@ -6373,12 +6365,8 @@ void CodeGenerator::VisitBinaryOperation(BinaryOperation* node) {
     Literal* rliteral = node->right()->AsLiteral();
     // NOTE: The code below assumes that the slow cases (calls to runtime)
     // never return a constant/immutable object.
-    bool overwrite_left =
-        (node->left()->AsBinaryOperation() != NULL &&
-         node->left()->AsBinaryOperation()->ResultOverwriteAllowed());
-    bool overwrite_right =
-        (node->right()->AsBinaryOperation() != NULL &&
-         node->right()->AsBinaryOperation()->ResultOverwriteAllowed());
+    bool overwrite_left = node->left()->ResultOverwriteAllowed();
+    bool overwrite_right = node->right()->ResultOverwriteAllowed();
 
     if (rliteral != NULL && rliteral->handle()->IsSmi()) {
       VirtualFrame::RegisterAllocationScope scope(this);
