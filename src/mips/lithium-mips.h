@@ -30,6 +30,7 @@
 
 #include "hydrogen.h"
 #include "lithium-allocator.h"
+#include "lithium.h"
 #include "safepoint-table.h"
 
 // Note: this file was taken from the X64 version. ARM has a partially working
@@ -69,21 +70,6 @@ class LInstruction: public ZoneObject {
   }
 
   virtual void PrintTo(StringStream* stream) const { UNIMPLEMENTED(); }
-};
-
-
-class LParallelMove : public ZoneObject {
- public:
-  LParallelMove() { }
-
-  void AddMove(LOperand* from, LOperand* to) {
-    UNIMPLEMENTED();
-  }
-
-  const ZoneList<LMoveOperands>* move_operands() const {
-    UNIMPLEMENTED();
-    return NULL;
-  }
 };
 
 
@@ -147,19 +133,6 @@ class LOsrEntry: public LInstruction {
                                  LOperand* spill_operand) {
     UNIMPLEMENTED();
   }
-};
-
-
-class LPointerMap: public ZoneObject {
- public:
-  explicit LPointerMap(int position) { }
-
-  int lithium_position() const {
-    UNIMPLEMENTED();
-    return 0;
-  }
-
-  void RecordPointer(LOperand* op) { UNIMPLEMENTED(); }
 };
 
 
