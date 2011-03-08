@@ -112,10 +112,9 @@ void FastNewClosureStub::Generate(MacroAssembler* masm) {
 void FastNewContextStub::Generate(MacroAssembler* masm) {
   // Try to allocate the context in new space.
   Label gc;
-  int length = slots_ + Context::MIN_CONTEXT_SLOTS;
 
   // Attempt to allocate the context in new space.
-  __ AllocateInNewSpace(FixedArray::SizeFor(length),
+  __ AllocateInNewSpace(FixedArray::SizeFor(slots_),
                         v0,
                         a1,
                         a2,
@@ -128,7 +127,7 @@ void FastNewContextStub::Generate(MacroAssembler* masm) {
   // Setup the object header.
   __ LoadRoot(a2, Heap::kContextMapRootIndex);
   __ sw(a2, FieldMemOperand(v0, HeapObject::kMapOffset));
-  __ li(a2, Operand(Smi::FromInt(length)));
+  __ li(a2, Operand(Smi::FromInt(slots_)));
   __ sw(a2, FieldMemOperand(v0, FixedArray::kLengthOffset));
 
   // Setup the fixed slots.
@@ -144,7 +143,7 @@ void FastNewContextStub::Generate(MacroAssembler* masm) {
 
   // Initialize the rest of the slots to undefined.
   __ LoadRoot(a1, Heap::kUndefinedValueRootIndex);
-  for (int i = Context::MIN_CONTEXT_SLOTS; i < length; i++) {
+  for (int i = Context::MIN_CONTEXT_SLOTS; i < slots_; i++) {
     __ sw(a1, MemOperand(v0, Context::SlotOffset(i)));
   }
 
