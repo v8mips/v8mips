@@ -223,15 +223,20 @@ LIBRARY_FLAGS = {
         'mips_arch_variant:mips32r1': {
           'CCFLAGS':      ['-EL', '-mips32', '-Wa,-mips32']
         },
-        'LDFLAGS':      ['-EL', '-static', '-static-libgcc'],
+        'library:shared': {
+          'LDFLAGS':      ['-EL']
+        },
+        'library:static': {
+          'LDFLAGS':      ['-EL', '-static', '-static-libgcc']
+        },
         'mipsabi:softfloat': {
           'CCFLAGS':      ['-msoft-float'],
-          'LINKFLAGS':    ['-msoft-float'],
+          'LINKFLAGS':    ['-EL', '-msoft-float'],
           'LDFLAGS':      ['-msoft-float']
         },
         'mipsabi:hardfloat': {
           'CCFLAGS':      ['-mhard-float'],
-          'LINKFLAGS':    ['-mhard-float'],
+          'LINKFLAGS':    ['-EL', '-mhard-float'],
           'LDFLAGS':      ['-mhard-float']
         }
       }
@@ -443,8 +448,14 @@ CCTEST_EXTRA_FLAGS = {
         'mips_arch_variant:mips32r1': {
           'CCFLAGS':      ['-EL', '-mips32', '-Wa,-mips32']
         },
-        'LINKFLAGS':    ['-EL', '-static', '-static-libgcc'],
-        'LDFLAGS':      ['-EL', '-static', '-static-libgcc'],
+        'library:shared': {
+          'LINKFLAGS':    ['-EL'],
+          'LDFLAGS':      ['-EL']
+        },
+        'library:static': {
+          'LINKFLAGS':    ['-EL', '-static', '-static-libgcc'],
+          'LDFLAGS':      ['-EL', '-static', '-static-libgcc']
+        },
         'mipsabi:softfloat': {
           'CCFLAGS':      ['-msoft-float'],
           'LINKFLAGS':    ['-msoft-float'],
@@ -570,8 +581,14 @@ SAMPLE_FLAGS = {
         'mips_arch_variant:mips32r1': {
           'CCFLAGS':      ['-EL', '-mips32', '-Wa,-mips32']
         },
-        'LINKFLAGS':    ['-EL', '-static', '-static-libgcc'],
-        'LDFLAGS':      ['-EL', '-static', '-static-libgcc'],
+        'library:shared': {
+          'LINKFLAGS':    ['-EL'],
+          'LDFLAGS':      ['-EL']
+        },
+        'library:static': {
+          'LINKFLAGS':    ['-EL', '-static', '-static-libgcc'],
+          'LDFLAGS':      ['-EL', '-static', '-static-libgcc']
+        },
         'mipsabi:softfloat': {
           'CCFLAGS':      ['-msoft-float'],
           'LINKFLAGS':    ['-msoft-float'],
