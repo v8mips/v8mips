@@ -160,15 +160,18 @@ CodeGenerator::CodeGenerator(MacroAssembler* masm)
 void CodeGenerator::Generate(CompilationInfo* info) {
   // Record the position for debugging purposes.
   CodeForFunctionPosition(info->function());
+  Comment cmnt(masm_, "[ function compiled by virtual frame code generator");
 
   // Initialize state.
   info_ = info;
+
   int slots = scope()->num_parameters() + scope()->num_stack_slots();
   ScopedVector<TypeInfo> type_info_array(slots);
   for (int i = 0; i < slots; i++) {
     type_info_array[i] = TypeInfo::Unknown();
   }
   type_info_ = &type_info_array;
+
   ASSERT(allocator_ == NULL);
   RegisterAllocator register_allocator(this);
   allocator_ = &register_allocator;
@@ -344,6 +347,7 @@ void CodeGenerator::Generate(CompilationInfo* info) {
   // Code generation state must be reset.
   ASSERT(!has_cc());
   ASSERT(state_ == NULL);
+  ASSERT(loop_nesting() == 0);
   ASSERT(!function_return_is_shadowed_);
   function_return_.Unuse();
   DeleteFrame();
@@ -2409,6 +2413,8 @@ void CodeGenerator::VisitDoWhileStatement(DoWhileStatement* node) {
         node->continue_target()->Bind();
       }
       if (has_valid_frame()) {
+        Comment cmnt(masm_, "[ DoWhileCondition");
+        CodeForDoWhileConditionPosition(node);
         LoadCondition(node->cond(), &body, node->break_target(), true);
         if (has_valid_frame()) {
           // A invalid frame here indicates that control did not

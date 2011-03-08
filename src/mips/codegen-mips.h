@@ -589,9 +589,6 @@ class CodeGenerator: public AstVisitor {
   bool HasValidEntryRegisters();
 #endif
 
-  bool is_eval_;  // Tells whether code is generated for eval.
-
-  Handle<Script> script_;
   List<DeferredCode*> deferred_;
 
   // Assembler
