@@ -95,10 +95,10 @@ bool BreakLocationIterator::IsDebugBreakAtSlot() {
 void BreakLocationIterator::SetDebugBreakAtSlot() {
   ASSERT(IsDebugBreakSlot());
   // Patch the code changing the debug break slot code from
-  //   nop(2) - nop(2) is sll(zero_reg, zero_reg, 2)
-  //   nop(2)
-  //   nop(2)
-  //   nop(2)
+  //   nop(DEBUG_BREAK_NOP) - nop(1) is sll(zero_reg, zero_reg, 1)
+  //   nop(DEBUG_BREAK_NOP)
+  //   nop(DEBUG_BREAK_NOP)
+  //   nop(DEBUG_BREAK_NOP)
   // to a call to the debug break slot code.
   //   li t9, address   (lui t9 / ori t9 instruction pair)
   //   call t9          (jalr t9 / nop instruction pair)
