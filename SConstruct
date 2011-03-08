@@ -124,6 +124,9 @@ LIBRARY_FLAGS = {
     },
     'debuggersupport:on': {
       'CPPDEFINES':   ['ENABLE_DEBUGGER_SUPPORT'],
+    },
+    'inspector:on': {
+      'CPPDEFINES':   ['INSPECTOR'],
     }
   },
   'gcc': {
@@ -830,6 +833,11 @@ SIMPLE_OPTIONS = {
     'values': ['on', 'off'],
     'default': 'on',
     'help': 'enable debugging of JavaScript code'
+  },
+  'inspector': {
+    'values': ['on', 'off'],
+    'default': 'off',
+    'help': 'enable inspector features'
   },
   'soname': {
     'values': ['on', 'off'],
