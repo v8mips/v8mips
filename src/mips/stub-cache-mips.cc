@@ -895,6 +895,121 @@ MUST_USE_RESULT static MaybeObject* GenerateCheckPropertyCells(
   return NULL;
 }
 
+// Convert and store int passed in register ival to IEEE 754 single precision
+// floating point value at memory location (dst + 4 * wordoffset)
+// If FPU is available use it for conversion.
+static void StoreIntAsFloat(MacroAssembler* masm,
+                            Register dst,
+                            Register wordoffset,
+                            Register ival,
+                            Register fval,
+                            Register scratch1,
+                            Register scratch2) {
+  if (CpuFeatures::IsSupported(FPU)) {
+    CpuFeatures::Scope scope(FPU);
+    __ mtc1(ival, f0);
+    __ cvt_s_w(f0, f0);
+    __ sll(scratch1, wordoffset, 2);
+    __ addu(scratch1, dst, scratch1);
+    __ swc1(f0, MemOperand(scratch1, 0));
+  } else {
+    // FPU is not available,  do manual conversions.
+
+    Label not_special, done;
+    // Move sign bit from source to destination.  This works because the sign
+    // bit in the exponent word of the double has the same position and polarity
+    // as the 2's complement sign bit in a Smi.
+    ASSERT(kBinary32SignMask == 0x80000000u);
+
+    __ And(fval, ival, Operand(kBinary32SignMask));
+    // Negate value if it is negative.
+    __ subu(scratch1, zero_reg, ival);
+    __ movn(ival, scratch1, fval);
+
+    // We have -1, 0 or 1, which we treat specially. Register ival contains
+    // absolute value: it is either equal to 1 (special case of -1 and 1),
+    // greater than 1 (not a special case) or less than 1 (special case of 0).
+    __ Branch(&not_special, gt, ival, Operand(1));
+
+    // For 1 or -1 we need to or in the 0 exponent (biased).
+    static const uint32_t exponent_word_for_1 =
+        kBinary32ExponentBias << kBinary32ExponentShift;
+
+    __ Xor(scratch1, ival, Operand(1));
+    __ li(scratch2, exponent_word_for_1);
+    __ or_(scratch2, fval, scratch2);
+    __ movz(fval, scratch2, scratch1);  // Only if ival is equal to 1.
+    __ Branch(&done);
+
+    __ bind(&not_special);
+    // Count leading zeros.
+    // Gets the wrong answer for 0, but we already checked for that case above.
+    Register zeros = scratch2;
+    __ clz(zeros, ival);
+
+    // Compute exponent and or it into the exponent register.
+    __ li(scratch1, (kBitsPerInt - 1) + kBinary32ExponentBias);
+    __ subu(scratch1, scratch1, zeros);
+
+    __ sll(scratch1, scratch1, kBinary32ExponentShift);
+    __ or_(fval, fval, scratch1);
+
+    // Shift up the source chopping the top bit off.
+    __ Addu(zeros, zeros, Operand(1));
+    // This wouldn't work for 1 and -1 as the shift would be 32 which means 0.
+    __ sllv(ival, ival, zeros);
+    // And the top (top 20 bits).
+    __ srl(scratch1, ival, kBitsPerInt - kBinary32MantissaBits);
+    __ or_(fval, fval, scratch1);
+
+    __ bind(&done);
+
+    __ sll(scratch1, wordoffset, 2);
+    __ addu(scratch1, dst, scratch1);
+    __ sw(fval, MemOperand(scratch1, 0));
+  }
+}
+
+
+// Convert unsigned integer with specified number of leading zeroes in binary
+// representation to IEEE 754 double.
+// Integer to convert is passed in register hiword.
+// Resulting double is returned in registers hiword:loword.
+// This functions does not work correctly for 0.
+static void GenerateUInt2Double(MacroAssembler* masm,
+                                Register hiword,
+                                Register loword,
+                                Register scratch,
+                                int leading_zeroes) {
+  const int meaningful_bits = kBitsPerInt - leading_zeroes - 1;
+  const int biased_exponent = HeapNumber::kExponentBias + meaningful_bits;
+
+  const int mantissa_shift_for_hi_word =
+      meaningful_bits - HeapNumber::kMantissaBitsInTopWord;
+
+  const int mantissa_shift_for_lo_word =
+      kBitsPerInt - mantissa_shift_for_hi_word;
+
+  __ li(scratch, biased_exponent << HeapNumber::kExponentShift);
+  if (mantissa_shift_for_hi_word > 0) {
+    __ sll(loword, hiword, mantissa_shift_for_lo_word);
+    __ srl(hiword, hiword, mantissa_shift_for_hi_word);
+    __ or_(hiword, scratch, hiword);
+  } else {
+    __ mov(loword, zero_reg);
+    __ sll(hiword, hiword, mantissa_shift_for_hi_word);
+    __ or_(hiword, scratch, hiword);
+  }
+
+  // If least significant bit of biased exponent was not 1 it was corrupted
+  // by most significant bit of mantissa so we should fix that.
+  if (!(biased_exponent & 1)) {
+    __ li(scratch, 1 << HeapNumber::kExponentShift);
+    __ nor(scratch, scratch, scratch);
+    __ and_(hiword, hiword, scratch);
+  }
+}
+
 #undef __
 #define __ ACCESS_MASM(masm())
 
@@ -3168,17 +3283,654 @@ MaybeObject* ConstructStubCompiler::CompileConstructStub(JSFunction* function) {
 }
 
 
-Object* ExternalArrayStubCompiler::CompileKeyedLoadStub(
-    ExternalArrayType array_type, Code::Flags flags) {
-  UNIMPLEMENTED_MIPS();
-  return reinterpret_cast<Object*>(NULL);   // UNIMPLEMENTED RETURN
+static bool IsElementTypeSigned(ExternalArrayType array_type) {
+  switch (array_type) {
+    case kExternalByteArray:
+    case kExternalShortArray:
+    case kExternalIntArray:
+      return true;
+
+    case kExternalUnsignedByteArray:
+    case kExternalUnsignedShortArray:
+    case kExternalUnsignedIntArray:
+      return false;
+
+    default:
+      UNREACHABLE();
+      return false;
+  }
 }
 
 
-Object* ExternalArrayStubCompiler::CompileKeyedStoreStub(
+MaybeObject* ExternalArrayStubCompiler::CompileKeyedLoadStub(
     ExternalArrayType array_type, Code::Flags flags) {
-  UNIMPLEMENTED_MIPS();
-  return reinterpret_cast<Object*>(NULL);   // UNIMPLEMENTED RETURN
+  // ---------- S t a t e --------------
+  //  -- ra     : return address
+  //  -- a0     : key
+  //  -- a1     : receiver
+  // -----------------------------------
+  Label slow, failed_allocation;
+
+  Register key = a0;
+  Register receiver = a1;
+
+  // Check that the object isn't a smi
+  __ BranchOnSmi(receiver, &slow);
+
+  // Check that the key is a smi.
+  __ BranchOnNotSmi(key, &slow);
+
+  // Check that the object is a JS object. Load map into a2.
+  __ GetObjectType(receiver, a2, a3);
+  __ Branch(&slow, lt, a3, Operand(FIRST_JS_OBJECT_TYPE));
+
+  // Check that the receiver does not require access checks.  We need
+  // to check this explicitly since this generic stub does not perform
+  // map checks.
+  __ lbu(a3, FieldMemOperand(a2, Map::kBitFieldOffset));
+  __ And(t1, a3, Operand(1 << Map::kIsAccessCheckNeeded));
+  __ Branch(&slow, ne, t1, Operand(zero_reg));
+
+  // Check that the elements array is the appropriate type of
+  // ExternalArray.
+  __ lw(a3, FieldMemOperand(receiver, JSObject::kElementsOffset));
+  __ lw(a2, FieldMemOperand(a3, HeapObject::kMapOffset));
+  __ LoadRoot(t1, Heap::RootIndexForExternalArrayType(array_type));
+  __ Branch(&slow, ne, a2, Operand(t1));
+
+  // Check that the index is in range.
+  __ lw(t1, FieldMemOperand(a3, ExternalArray::kLengthOffset));
+  __ sra(t2, key, kSmiTagSize);
+  // Unsigned comparison catches both negative and too-large values.
+  __ Branch(&slow, Uless, t1, Operand(t2));
+
+
+  // a3: elements array
+  __ lw(a3, FieldMemOperand(a3, ExternalArray::kExternalPointerOffset));
+  // a3: base pointer of external storage
+
+  // We are not untagging smi key and instead work with it
+  // as if it was premultiplied by 2.
+  ASSERT((kSmiTag == 0) && (kSmiTagSize == 1));
+
+  Register value = a2;
+  switch (array_type) {
+    case kExternalByteArray:
+      __ addu(t3, a3, t2);
+      __ lb(value, MemOperand(t3, 0));
+      break;
+    case kExternalUnsignedByteArray:
+      __ addu(t3, a3, t2);
+      __ lbu(value, MemOperand(t3, 0));
+      break;
+    case kExternalShortArray:
+      __ sll(t3, t2, 1);
+      __ addu(t3, a3, t3);
+      __ lh(value, MemOperand(t3, 0));
+      break;
+    case kExternalUnsignedShortArray:
+      __ sll(t3, t2, 1);
+      __ addu(t3, a3, t3);
+      __ lhu(value, MemOperand(t3, 0));
+      break;
+    case kExternalIntArray:
+    case kExternalUnsignedIntArray:
+      __ sll(t3, t2, 2);
+      __ addu(t3, a3, t3);
+      __ lw(value, MemOperand(t3, 0));
+      break;
+    case kExternalFloatArray:
+      if (CpuFeatures::IsSupported(FPU)) {
+        CpuFeatures::Scope scope(FPU);
+        __ sll(t3, t2, 2);
+        __ addu(t3, a3, t3);
+        __ lwc1(f0, MemOperand(t3, 0));
+      } else {
+        __ sll(t3, t2, 2);
+        __ addu(t3, a3, t3);
+        __ lw(value, MemOperand(t3, 0));
+      }
+      break;
+    default:
+      UNREACHABLE();
+      break;
+  }
+
+  // For integer array types:
+  // a2: value
+  // For floating-point array type
+  // f0: value (if FPU is supported)
+  // a2: value (if FPU is not supported)
+
+  if (array_type == kExternalIntArray) {
+    // For the Int and UnsignedInt array types, we need to see whether
+    // the value can be represented in a Smi. If not, we need to convert
+    // it to a HeapNumber.
+    Label box_int;
+    __ Subu(t3, value, Operand(0xC0000000));  // Non-smi value gives neg result.
+    __ Branch(&box_int, lt, t3, Operand(zero_reg));
+    // Tag integer as smi and return it.
+    __ sll(v0, value, kSmiTagSize);
+    __ Ret();
+
+    __ bind(&box_int);
+    // Allocate a HeapNumber for the result and perform int-to-double
+    // conversion.
+    // The arm version uses a temporary here to save r0, but we don't need to
+    // (a0 is not modified).
+    __ LoadRoot(t1, Heap::kHeapNumberMapRootIndex);
+    __ AllocateHeapNumber(v0, a3, t0, t1, &slow);
+
+    if (CpuFeatures::IsSupported(FPU)) {
+      CpuFeatures::Scope scope(FPU);
+      __ mtc1(value, f0);
+      __ cvt_d_w(f0, f0);
+      __ sdc1(f0, MemOperand(v0, HeapNumber::kValueOffset - kHeapObjectTag));
+      __ Ret();
+    } else {
+      WriteInt32ToHeapNumberStub stub(value, v0, t2, t3);
+      __ TailCallStub(&stub);
+    }
+  } else if (array_type == kExternalUnsignedIntArray) {
+    // The test is different for unsigned int values. Since we need
+    // the value to be in the range of a positive smi, we can't
+    // handle either of the top two bits being set in the value.
+    if (CpuFeatures::IsSupported(FPU)) {
+      CpuFeatures::Scope scope(FPU);
+      Label pl_box_int;
+      __ And(t2, value, Operand(0xC0000000));
+      __ Branch(&pl_box_int, ne, t2, Operand(zero_reg));
+
+      // It can fit in an Smi.
+      // Tag integer as smi and return it.
+      __ sll(v0, value, kSmiTagSize);
+      __ Ret();
+
+      __ bind(&pl_box_int);
+      // Allocate a HeapNumber for the result and perform int-to-double
+      // conversion. Don't use a0 and a1 as AllocateHeapNumber clobbers all
+      // registers - also when jumping due to exhausted young space.
+      __ LoadRoot(t6, Heap::kHeapNumberMapRootIndex);
+      __ AllocateHeapNumber(v0, t2, t3, t6, &slow);
+
+      // This is replaced by a macro:
+      // __ mtc1(value, f0);     // LS 32-bits.
+      // __ mtc1(zero_reg, f1);  // MS 32-bits are all zero.
+      // __ cvt_d_l(f0, f0); // Use 64 bit conv to get correct unsigned 32-bit.
+
+      __ Cvt_d_uw(f0, value);
+
+      __ sdc1(f0, MemOperand(v0, HeapNumber::kValueOffset - kHeapObjectTag));
+
+      __ Ret();
+    } else {
+      // Check whether unsigned integer fits into smi.
+      Label box_int_0, box_int_1, done;
+      __ And(t2, value, Operand(0x80000000));
+      __ Branch(&box_int_0, ne, t2, Operand(zero_reg));
+      __ And(t2, value, Operand(0x40000000));
+      __ Branch(&box_int_1, ne, t2, Operand(zero_reg));
+
+      // Tag integer as smi and return it.
+      __ sll(v0, value, kSmiTagSize);
+      __ Ret();
+
+      Register hiword = value;  // a2.
+      Register loword = a3;
+
+      __ bind(&box_int_0);
+      // Integer does not have leading zeros.
+      GenerateUInt2Double(masm(), hiword, loword, t0, 0);
+      __ Branch(&done);
+
+      __ bind(&box_int_1);
+      // Integer has one leading zero.
+      GenerateUInt2Double(masm(), hiword, loword, t0, 1);
+
+
+      __ bind(&done);
+      // Integer was converted to double in registers hiword:loword.
+      // Wrap it into a HeapNumber. Don't use a0 and a1 as AllocateHeapNumber
+      // clobbers all registers - also when jumping due to exhausted young
+      // space.
+      __ LoadRoot(t6, Heap::kHeapNumberMapRootIndex);
+      __ AllocateHeapNumber(t2, t3, t5, t6, &slow);
+
+      __ sw(hiword, FieldMemOperand(t2, HeapNumber::kExponentOffset));
+      __ sw(loword, FieldMemOperand(t2, HeapNumber::kMantissaOffset));
+
+      __ mov(v0, t2);
+      __ Ret();
+    }
+  } else if (array_type == kExternalFloatArray) {
+    // For the floating-point array type, we need to always allocate a
+    // HeapNumber.
+    if (CpuFeatures::IsSupported(FPU)) {
+      CpuFeatures::Scope scope(FPU);
+      // Allocate a HeapNumber for the result. Don't use a0 and a1 as
+      // AllocateHeapNumber clobbers all registers - also when jumping due to
+      // exhausted young space.
+      __ LoadRoot(t6, Heap::kHeapNumberMapRootIndex);
+      __ AllocateHeapNumber(v0, t3, t5, t6, &slow);
+      // The float (single) value is already in fpu reg f0 (if we use float).
+      __ cvt_d_s(f0, f0);
+      __ sdc1(f0, MemOperand(v0, HeapNumber::kValueOffset - kHeapObjectTag));
+      __ Ret();
+    } else {
+      // Allocate a HeapNumber for the result. Don't use a0 and a1 as
+      // AllocateHeapNumber clobbers all registers - also when jumping due to
+      // exhausted young space.
+      __ LoadRoot(t6, Heap::kHeapNumberMapRootIndex);
+      __ AllocateHeapNumber(v0, t3, t5, t6, &slow);
+      // FPU is not available, do manual single to double conversion.
+
+      // a2: floating point value (binary32).
+      // v0: heap number for result
+
+      // Extract mantissa to t4.
+      __ And(t4, value, Operand(kBinary32MantissaMask));
+
+      // Extract exponent to t5.
+      __ srl(t5, value, kBinary32MantissaBits);
+      __ And(t5, t5, Operand(kBinary32ExponentMask >> kBinary32MantissaBits));
+
+      Label exponent_rebiased;
+      __ Branch(&exponent_rebiased, eq, t5, Operand(zero_reg));
+
+      __ li(t0, 0x7ff);
+      __ Xor(t1, t5, Operand(0xFF));
+      __ movz(t5, t0, t1);  // Set t5 to 0x7ff only if t5 is equal to 0xff.
+      __ Branch(&exponent_rebiased, eq, t0, Operand(0xff));
+
+      // Rebias exponent.
+      __ Addu(t5,
+              t5,
+              Operand(-kBinary32ExponentBias + HeapNumber::kExponentBias));
+
+      __ bind(&exponent_rebiased);
+      __ And(a2, value, Operand(kBinary32SignMask));
+      value = no_reg;
+      __ sll(t0, t5, HeapNumber::kMantissaBitsInTopWord);
+      __ or_(a2, a2, t0);
+
+      // Shift mantissa.
+      static const int kMantissaShiftForHiWord =
+          kBinary32MantissaBits - HeapNumber::kMantissaBitsInTopWord;
+
+      static const int kMantissaShiftForLoWord =
+          kBitsPerInt - kMantissaShiftForHiWord;
+
+      __ srl(t0, t4, kMantissaShiftForHiWord);
+      __ or_(a2, a2, t0);
+      __ sll(a0, t4, kMantissaShiftForLoWord);
+
+      __ sw(a2, FieldMemOperand(v0, HeapNumber::kExponentOffset));
+      __ sw(a0, FieldMemOperand(v0, HeapNumber::kMantissaOffset));
+      __ Ret();
+    }
+
+  } else {
+    // Tag integer as smi and return it.
+    __ sll(v0, value, kSmiTagSize);
+    __ Ret();
+  }
+
+  // Slow case, key and receiver still in a0 and a1.
+  __ bind(&slow);
+  __ IncrementCounter(&Counters::keyed_load_external_array_slow, 1, a2, a3);
+
+  // ---------- S t a t e --------------
+  //  -- ra     : return address
+  //  -- a0     : key
+  //  -- a1     : receiver
+  // -----------------------------------
+
+  __ Push(a1, a0);
+
+  __ TailCallRuntime(Runtime::kKeyedGetProperty, 2, 1);
+
+  return GetCode(flags);
+}
+
+
+
+
+MaybeObject* ExternalArrayStubCompiler::CompileKeyedStoreStub(
+    ExternalArrayType array_type, Code::Flags flags) {
+  // ---------- S t a t e --------------
+  //  -- a0     : value
+  //  -- a1     : key
+  //  -- a2     : receiver
+  //  -- ra     : return address
+  // -----------------------------------
+
+  Label slow, check_heap_number;
+
+  // Register usage.
+  Register value = a0;
+  Register key = a1;
+  Register receiver = a2;
+  // a3 mostly holds the elements array or the destination external array.
+
+  // Check that the object isn't a smi.
+  __ BranchOnSmi(receiver, &slow);
+
+  // Check that the object is a JS object. Load map into a3.
+  __ GetObjectType(receiver, a3, t0);
+  __ Branch(&slow, lt, t0, Operand(FIRST_JS_OBJECT_TYPE));
+
+  // Check that the receiver does not require access checks.  We need
+  // to do this because this generic stub does not perform map checks.
+  __ lbu(t1, FieldMemOperand(a3, Map::kBitFieldOffset));
+  __ And(t1, t1, Operand(1 << Map::kIsAccessCheckNeeded));
+  __ Branch(&slow, ne, t1, Operand(zero_reg));
+
+  // Check that the key is a smi.
+  __ BranchOnNotSmi(key, &slow);
+
+  // Check that the elements array is the appropriate type of ExternalArray.
+  __ lw(a3, FieldMemOperand(a2, JSObject::kElementsOffset));
+  __ lw(t0, FieldMemOperand(a2, HeapObject::kMapOffset));
+  __ LoadRoot(t1, Heap::RootIndexForExternalArrayType(array_type));
+  __ Branch(&slow, ne, t0, Operand(t1));
+
+  // Check that the index is in range.
+  __ sra(t0, key, kSmiTagSize);  // Untag the index.
+  __ lw(t1, FieldMemOperand(a3, ExternalArray::kLengthOffset));
+  // Unsigned comparison catches both negative and too-large values.
+  __ Branch(&slow, Ugreater_equal, t0, Operand(t1));
+
+  // Handle both smis and HeapNumbers in the fast path. Go to the
+  // runtime for all other kinds of values.
+  // a3: external array.
+  // t0: key (integer).
+
+  __ BranchOnNotSmi(value, &check_heap_number);
+  __ sra(t1, value, kSmiTagSize);  // Untag the value.
+  __ lw(a3, FieldMemOperand(a3, ExternalArray::kExternalPointerOffset));
+
+  // a3: base pointer of external storage.
+  // t0: key (integer).
+  // t1: value (integer).
+
+  switch (array_type) {
+    case kExternalByteArray:
+    case kExternalUnsignedByteArray:
+      __ addu(t8, a3, t0);
+      __ sb(t1, MemOperand(t8, 0));
+      break;
+    case kExternalShortArray:
+    case kExternalUnsignedShortArray:
+      __ sll(t8, t0, 1);
+      __ addu(t8, a3, t8);
+      __ sh(t1, MemOperand(t8, 0));
+      break;
+    case kExternalIntArray:
+    case kExternalUnsignedIntArray:
+      __ sll(t8, t0, 2);
+      __ addu(t8, a3, t8);
+      __ sw(t1, MemOperand(t8, 0));
+      break;
+    case kExternalFloatArray:
+      // Perform int-to-float conversion and store to memory.
+      StoreIntAsFloat(masm(), a3, t0, t1, t2, t3, t4);
+      break;
+    default:
+      UNREACHABLE();
+      break;
+  }
+
+  // Entry registers are intact, a0 holds the value which is the return value.
+  __ mov(v0, value);
+  __ Ret();
+
+  // a3: external array.
+  // t0: index (integer).
+  __ bind(&check_heap_number);
+  __ GetObjectType(value, t1, t2);
+  __ Branch(&slow, ne, t2, Operand(HEAP_NUMBER_TYPE));
+
+  __ lw(a3, FieldMemOperand(a3, ExternalArray::kExternalPointerOffset));
+
+  // a3: base pointer of external storage.
+  // t0: key (integer).
+
+  // The WebGL specification leaves the behavior of storing NaN and
+  // +/-Infinity into integer arrays basically undefined. For more
+  // reproducible behavior, convert these to zero.
+
+  if (CpuFeatures::IsSupported(FPU)) {
+    CpuFeatures::Scope scope(FPU);
+
+    __ ldc1(f0, MemOperand(a0, HeapNumber::kValueOffset - kHeapObjectTag));
+
+    if (array_type == kExternalFloatArray) {
+      __ cvt_s_d(f0, f0);
+      __ sll(t8, t0, 2);
+      __ addu(t8, a3, t8);
+      __ swc1(f0, MemOperand(t8, 0));
+    } else {
+      Label done;
+
+      // Need to perform float-to-int conversion.
+      // Test whether exponent equal to 0x7FF (infinity or NaN).
+
+      __ mfc1(t3, f1);  // Move exponent word of double to t3 (as raw bits).
+      __ li(t1, Operand(0x7FF00000));
+      __ And(t3, t3, Operand(t1));
+      __ Branch(false, &done, eq, t3, Operand(t1));
+      __ mov(t3, zero_reg);  // In delay slot.
+
+      // Not infinity or NaN simply convert to int.
+      if (IsElementTypeSigned(array_type)) {
+        __ trunc_w_d(f0, f0);
+        __ mfc1(t3, f0);
+      } else {
+        // This is replaced by a macro:
+        // __ trunc_l_d(f0, f0);  // Convert double to 64-bit int.
+        // __ mfc1(t3, f0);  // Keep the LS 32-bits.
+        __ Trunc_uw_d(f0, t3);
+      }
+
+      // t3: HeapNumber converted to integer
+      __ bind(&done);
+      switch (array_type) {
+        case kExternalByteArray:
+        case kExternalUnsignedByteArray:
+          __ addu(t8, a3, t0);
+          __ sb(t3, MemOperand(t8, 0));
+          break;
+        case kExternalShortArray:
+        case kExternalUnsignedShortArray:
+          __ sll(t8, t0, 1);
+          __ addu(t8, a3, t8);
+          __ sh(t3, MemOperand(t8, 0));
+          break;
+        case kExternalIntArray:
+        case kExternalUnsignedIntArray:
+          __ sll(t8, t0, 2);
+          __ addu(t8, a3, t8);
+          __ sw(t3, MemOperand(t8, 0));
+          break;
+        default:
+          UNREACHABLE();
+          break;
+      }
+    }
+
+    // Entry registers are intact, a0 holds the value which is the return value.
+    __ mov(v0, value);
+    __ Ret();
+  } else {
+    // FPU is not available, do manual conversions.
+
+    __ lw(t3, FieldMemOperand(value, HeapNumber::kExponentOffset));
+    __ lw(t4, FieldMemOperand(value, HeapNumber::kMantissaOffset));
+
+    if (array_type == kExternalFloatArray) {
+      Label done, nan_or_infinity_or_zero;
+      static const int kMantissaInHiWordShift =
+          kBinary32MantissaBits - HeapNumber::kMantissaBitsInTopWord;
+
+      static const int kMantissaInLoWordShift =
+          kBitsPerInt - kMantissaInHiWordShift;
+
+      // Test for all special exponent values: zeros, subnormal numbers, NaNs
+      // and infinities. All these should be converted to 0.
+      __ li(t5, HeapNumber::kExponentMask);
+      __ and_(t6, t3, t5);
+      __ Branch(&nan_or_infinity_or_zero, eq, t6, Operand(zero_reg));
+
+      __ xor_(t1, t6, t5);
+      __ li(t2, kBinary32ExponentMask);
+      __ movz(t6, t2, t1);  // Only if t6 is equal to t5.
+      __ Branch(&nan_or_infinity_or_zero, eq, t6, Operand(t5));
+
+      // Rebias exponent.
+      __ srl(t6, t6, HeapNumber::kExponentShift);
+      __ Addu(t6,
+              t6,
+              Operand(kBinary32ExponentBias - HeapNumber::kExponentBias));
+
+      __ li(t1, Operand(kBinary32MaxExponent));
+      __ Slt(t1, t1, t6);
+      __ And(t2, t3, Operand(HeapNumber::kSignMask));
+      __ Or(t2, t2, Operand(kBinary32ExponentMask));
+      __ movn(t3, t2, t1);  // Only if t6 is gt kBinary32MaxExponent.
+      __ Branch(&done, gt, t6, Operand(kBinary32MaxExponent));
+
+      __ Slt(t1, t6, Operand(kBinary32MinExponent));
+      __ And(t2, t3, Operand(HeapNumber::kSignMask));
+      __ movn(t3, t2, t1);  // Only if t6 is lt kBinary32MinExponent.
+      __ Branch(&done, lt, t6, Operand(kBinary32MinExponent));
+
+      __ And(t7, t3, Operand(HeapNumber::kSignMask));
+      __ And(t3, t3, Operand(HeapNumber::kMantissaMask));
+      __ sll(t3, t3, kMantissaInHiWordShift);
+      __ or_(t7, t7, t3);
+      __ srl(t4, t4, kMantissaInLoWordShift);
+      __ or_(t7, t7, t4);
+      __ sll(t6, t6, kBinary32ExponentShift);
+      __ or_(t3, t7, t6);
+
+      __ bind(&done);
+      __ sll(t9, a1, 2);
+      __ addu(t9, a2, t9);
+      __ sw(t3, MemOperand(t9, 0));
+
+      // Entry registers are intact, a0 holds the value which is the return
+      // value.
+      __ mov(v0, value);
+      __ Ret();
+
+      __ bind(&nan_or_infinity_or_zero);
+      __ And(t7, t3, Operand(HeapNumber::kSignMask));
+      __ And(t3, t3, Operand(HeapNumber::kMantissaMask));
+      __ or_(t6, t6, t7);
+      __ sll(t3, t3, kMantissaInHiWordShift);
+      __ or_(t6, t6, t3);
+      __ srl(t4, t4, kMantissaInLoWordShift);
+      __ or_(t3, t6, t4);
+      __ Branch(&done);
+    } else {
+      bool is_signed_type  = IsElementTypeSigned(array_type);
+      int meaningfull_bits = is_signed_type ? (kBitsPerInt - 1) : kBitsPerInt;
+      int32_t min_value    = is_signed_type ? 0x80000000 : 0x00000000;
+
+      Label done, sign;
+
+      // Test for all special exponent values: zeros, subnormal numbers, NaNs
+      // and infinities. All these should be converted to 0.
+      __ li(t5, HeapNumber::kExponentMask);
+      __ and_(t6, t3, t5);
+      __ movz(t3, zero_reg, t6);  // Only if t6 is equal to zero.
+      __ Branch(&done, eq, t6, Operand(zero_reg));
+
+      __ xor_(t2, t6, t5);
+      __ movz(t3, zero_reg, t2);  // Only if t6 is equal to t5
+      __ Branch(&done, eq, t6, Operand(t5));
+
+      // Unbias exponent.
+      __ srl(t6, t6, HeapNumber::kExponentShift);
+      __ Subu(t6, t6, Operand(HeapNumber::kExponentBias));
+      // If exponent is negative then result is 0.
+      __ slt(t2, t6, zero_reg);
+      __ movn(t3, zero_reg, t2);  // Only if exponent is negative.
+      __ Branch(&done, lt, t6, Operand(zero_reg));
+
+      // If exponent is too big then result is minimal value.
+      __ slti(t1, t6, meaningfull_bits - 1);
+      __ li(t2, min_value);
+      __ movz(t3, t2, t1);  // Only if t6 is ge meaningfull_bits - 1.
+      __ Branch(&done, ge, t6, Operand(meaningfull_bits - 1));
+
+      __ And(t5, t3, Operand(HeapNumber::kSignMask));
+      __ And(t3, t3, Operand(HeapNumber::kMantissaMask));
+      __ Or(t3, t3, Operand(1u << HeapNumber::kMantissaBitsInTopWord));
+
+      __ li(t9, HeapNumber::kMantissaBitsInTopWord);
+      __ subu(t6, t9, t6);
+      __ slt(t1, t6, zero_reg);
+      __ srlv(t2, t3, t6);
+      __ movz(t3, t2, t1);  // Only if t6 is positive.
+      __ Branch(&sign, ge, t6, Operand(zero_reg));
+
+      __ subu(t6, zero_reg, t6);
+      __ sllv(t3, t3, t6);
+      __ li(t9, meaningfull_bits);
+      __ subu(t6, t9, t6);
+      __ srlv(t4, t4, t6);
+      __ or_(t3, t3, t4);
+
+      __ bind(&sign);
+      __ subu(t2, t3, zero_reg);
+      __ movz(t3, t2, t5);  // Only if t5 is zero.
+
+      __ bind(&done);
+
+      // Result is in t3.
+      // This switch block should be exactly the same as above (FPU mode).
+      switch (array_type) {
+        case kExternalByteArray:
+        case kExternalUnsignedByteArray:
+          __ addu(t8, a3, t0);
+          __ sb(t3, MemOperand(t8, 0));
+          break;
+        case kExternalShortArray:
+        case kExternalUnsignedShortArray:
+          __ sll(t8, t0, 1);
+          __ addu(t8, a3, t8);
+          __ sh(t3, MemOperand(t8, 0));
+          break;
+        case kExternalIntArray:
+        case kExternalUnsignedIntArray:
+          __ sll(t8, t0, 2);
+          __ addu(t8, a3, t8);
+          __ sw(t3, MemOperand(t8, 0));
+          break;
+        default:
+          UNREACHABLE();
+          break;
+      }
+    }
+  }
+
+  // Slow case: call runtime.
+  __ bind(&slow);
+  // Entry registers are intact.
+  // ---------- S t a t e --------------
+  //  -- a0     : value
+  //  -- a1     : key
+  //  -- a2     : receiver
+  //  -- ra     : return address
+  // -----------------------------------
+
+  // Push receiver, key and value for runtime call.
+  __ Push(a2, a1, a0);
+
+  __ TailCallRuntime(Runtime::kSetProperty, 3, 1);
+
+  return GetCode(flags);
 }
 
 
