@@ -2502,6 +2502,7 @@ MaybeObject* StoreStubCompiler::CompileStoreGlobal(GlobalObject* object,
   // Store the value in the cell.
   __ li(a2, Operand(Handle<JSGlobalPropertyCell>(cell)));
   __ sw(a0, FieldMemOperand(a2, JSGlobalPropertyCell::kValueOffset));
+  __ mov(v0, a0);  // Stored value must be returned in v0.
 
   __ IncrementCounter(&Counters::named_store_global_inline, 1, a1, a3);
   __ Ret();
