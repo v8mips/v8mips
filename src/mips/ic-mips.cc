@@ -1745,7 +1745,7 @@ void CompareIC::UpdateCaches(Handle<Object> x, Handle<Object> y) {
 
 
 void PatchInlinedSmiCode(Address address) {
-  UNIMPLEMENTED();
+  // Currently there is no smi inlining in the MIPS full code generator.
 }
 
 } }  // namespace v8::internal

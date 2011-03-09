@@ -3128,7 +3128,7 @@ void MacroAssembler::AlignStack(int offset) {
 void MacroAssembler::JumpIfNotBothSmi(Register reg1,
                                       Register reg2,
                                       Label* on_not_both_smi) {
-  ASSERT_EQ(0, kSmiTag);
+  STATIC_ASSERT(kSmiTag == 0);
   ASSERT_EQ(1, kSmiTagMask);
   or_(at, reg1, reg2);
   andi(at, at, kSmiTagMask);
@@ -3139,7 +3139,7 @@ void MacroAssembler::JumpIfNotBothSmi(Register reg1,
 void MacroAssembler::JumpIfEitherSmi(Register reg1,
                                      Register reg2,
                                      Label* on_either_smi) {
-  ASSERT_EQ(0, kSmiTag);
+  STATIC_ASSERT(kSmiTag == 0);
   ASSERT_EQ(1, kSmiTagMask);
   // Both Smi tags must be 1 (not Smi).
   and_(at, reg1, reg2);
@@ -3149,11 +3149,19 @@ void MacroAssembler::JumpIfEitherSmi(Register reg1,
 
 
 void MacroAssembler::AbortIfSmi(Register object) {
-  ASSERT_EQ(0, kSmiTag);
+  STATIC_ASSERT(kSmiTag == 0);
   andi(at, object, kSmiTagMask);
   Assert(ne, "Operand is a smi", at, Operand(zero_reg));
 }
 
+void MacroAssembler::JumpIfNotHeapNumber(Register object,
+                                         Register heap_number_map,
+                                         Register scratch,
+                                         Label* on_not_heap_number) {
+  lw(scratch, FieldMemOperand(object, HeapObject::kMapOffset));
+  AssertRegisterIsRoot(heap_number_map, Heap::kHeapNumberMapRootIndex);
+  Branch(on_not_heap_number, ne, scratch, Operand(heap_number_map));
+}
 
 void MacroAssembler::JumpIfNonSmisNotBothSequentialAsciiStrings(
     Register first,
@@ -3182,7 +3190,7 @@ void MacroAssembler::JumpIfNotBothSequentialAsciiStrings(Register first,
                                                          Register scratch2,
                                                          Label* failure) {
   // Check that neither is a smi.
-  ASSERT_EQ(0, kSmiTag);
+  STATIC_ASSERT(kSmiTag == 0);
   And(scratch1, first, Operand(second));
   And(scratch1, scratch1, Operand(kSmiTagMask));
   Branch(failure, eq, scratch1, Operand(zero_reg));

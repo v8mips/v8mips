@@ -342,6 +342,164 @@ void ConvertToDoubleStub::Generate(MacroAssembler* masm) {
   __ Ret();
 }
 
+class FloatingPointHelper : public AllStatic {
+ public:
+
+  enum Destination {
+    kFPURegisters,
+    kCoreRegisters
+  };
+
+
+  // Loads smis from a0 and a1 (right and left in binary operations) into
+  // floating point registers. Depending on the destination the values ends up
+  // either f14 and f12 or in a2/a3 and a0/a1 respectively. If the destination is
+  // floating point registers FPU must be supported. If core registers are
+  // requested when FPU is supported f12 and f14 will be scratched.
+  static void LoadSmis(MacroAssembler* masm,
+                       Destination destination,
+                       Register scratch1,
+                       Register scratch2);
+
+  // Loads objects from a0 and a1 (right and left in binary operations) into
+  // floating point registers. Depending on the destination the values ends up
+  // either f14 and f12 or in a2/a3 and a0/a1 respectively. If the destination is
+  // floating point registers FPU must be supported. If core registers are
+  // requested when FPU is supported f12 and f14 will still be scratched. If
+  // either a0 or a1 is not a number (not smi and not heap number object) the
+  // not_number label is jumped to.
+  static void LoadOperands(MacroAssembler* masm,
+                           FloatingPointHelper::Destination destination,
+                           Register heap_number_map,
+                           Register scratch1,
+                           Register scratch2,
+                           Label* not_number);
+ private:
+  static void LoadNumber(MacroAssembler* masm,
+                         FloatingPointHelper::Destination destination,
+                         Register object,
+                         FPURegister dst,
+                         Register dst1,
+                         Register dst2,
+                         Register heap_number_map,
+                         Register scratch1,
+                         Register scratch2,
+                         Label* not_number);
+};
+
+
+void FloatingPointHelper::LoadSmis(MacroAssembler* masm,
+                                   FloatingPointHelper::Destination destination,
+                                   Register scratch1,
+                                   Register scratch2) {
+  if (CpuFeatures::IsSupported(FPU)) {
+    CpuFeatures::Scope scope(FPU);
+    __ sra(scratch1, a0, kSmiTagSize);
+    __ mtc1(scratch1, f14);
+    __ cvt_d_w(f14, f14);
+    __ sra(scratch1, a1, kSmiTagSize);
+    __ mtc1(scratch1, f12);
+    __ cvt_d_w(f12, f12);
+    if (destination == kCoreRegisters) {
+      __ mfc1(a2, f14);
+      __ mfc1(a3, f15);
+
+      __ mfc1(a0, f12);
+      __ mfc1(a1, f13);
+    }
+  } else {
+    ASSERT(destination == kCoreRegisters);
+    // Write Smi from a0 to a3 and a2 in double format.
+    __ mov(scratch1, a0);
+    ConvertToDoubleStub stub1(a3, a2, scratch1, scratch2);
+    __ push(ra);
+    __ Call(stub1.GetCode(), RelocInfo::CODE_TARGET);
+    // Write Smi from a1 to a1 and a0 in double format.  a9 is scratch.
+    __ mov(scratch1, a1);
+    ConvertToDoubleStub stub2(a1, a0, scratch1, scratch2);
+    __ Call(stub2.GetCode(), RelocInfo::CODE_TARGET);
+    __ pop(ra);
+  }
+}
+
+
+void FloatingPointHelper::LoadOperands(
+    MacroAssembler* masm,
+    FloatingPointHelper::Destination destination,
+    Register heap_number_map,
+    Register scratch1,
+    Register scratch2,
+    Label* slow) {
+
+  // Load right operand (a0) to f12 or a2/a3.
+  LoadNumber(masm, destination,
+             a0, f14, a2, a3, heap_number_map, scratch1, scratch2, slow);
+
+  // Load left operand (a1) to f14 or a0/a1.
+  LoadNumber(masm, destination,
+             a1, f12, a0, a1, heap_number_map, scratch1, scratch2, slow);
+}
+
+
+void FloatingPointHelper::LoadNumber(MacroAssembler* masm,
+                                       Destination destination,
+                                       Register object,
+                                       FPURegister dst,
+                                       Register dst1,
+                                       Register dst2,
+                                       Register heap_number_map,
+                                       Register scratch1,
+                                       Register scratch2,
+                                       Label* not_number) {
+  Label is_smi, done;
+
+  __ BranchOnSmi(object, &is_smi);
+  __ JumpIfNotHeapNumber(object, heap_number_map, scratch1, not_number);
+
+  // Handle loading a double from a heap number.
+  if (CpuFeatures::IsSupported(FPU)) {
+    CpuFeatures::Scope scope(FPU);
+    // Load the double from tagged HeapNumber to double register.
+
+    // ARM uses a workaround here because of the unaligned HeapNumber
+    // kValueOffset. On MIPS this workaround is built into sdc1 so there's no
+    // point in generating even more instructions.
+    __ ldc1(dst, FieldMemOperand(object, HeapNumber::kValueOffset));
+  } else {
+    ASSERT(destination == kCoreRegisters);
+    // Load the double from heap number to dst1 and dst2 in double format.
+    __ lw(dst1, FieldMemOperand(object, HeapNumber::kValueOffset));
+    __ lw(dst2, FieldMemOperand(object,
+        HeapNumber::kValueOffset + kPointerSize));
+  }
+  __ Branch(&done);
+
+  // Handle loading a double from a smi.
+  __ bind(&is_smi);
+  if (CpuFeatures::IsSupported(FPU)) {
+    CpuFeatures::Scope scope(FPU);
+    // Convert smi to double.
+    __ SmiUntag(scratch1, object);
+    __ mtc1(scratch1, dst);
+    __ cvt_d_w(dst, dst);
+    if (destination == kCoreRegisters) {
+      FPURegister dst_next = { dst.code() + 1 };
+      __ mfc1(dst1, dst);
+      __ mfc1(dst2, dst_next);
+    }
+  } else {
+    ASSERT(destination == kCoreRegisters);
+    // Write Smi to dst1 and dst2 double format.
+    __ mov(scratch1, object);
+    ConvertToDoubleStub stub(dst2, dst1, scratch1, scratch2);
+    __ push(ra);
+    __ Call(stub.GetCode(), RelocInfo::CODE_TARGET);
+    __ pop(ra);
+  }
+
+  __ bind(&done);
+}
+
 
 // See comment for class, this does NOT work for int32's that are in Smi range.
 void WriteInt32ToHeapNumberStub::Generate(MacroAssembler* masm) {
@@ -2041,9 +2199,398 @@ Handle<Code> GetBinaryOpStub(int key, BinaryOpIC::TypeInfo type_info) {
 Handle<Code> GetTypeRecordingBinaryOpStub(int key,
     TRBinaryOpIC::TypeInfo type_info,
     TRBinaryOpIC::TypeInfo result_type_info) {
-  UNIMPLEMENTED();
-  return Handle<Code>::null();
+  TypeRecordingBinaryOpStub stub(key, type_info, result_type_info);
+  return stub.GetCode();
 }
+
+
+void TypeRecordingBinaryOpStub::GenerateTypeTransition(MacroAssembler* masm) {
+  Label get_result;
+
+  __ Push(a1, a0);
+
+  __ li(a2, Operand(Smi::FromInt(MinorKey())));
+  __ li(a1, Operand(Smi::FromInt(op_)));
+  __ li(a0, Operand(Smi::FromInt(operands_type_)));
+  __ Push(a2, a1, a0);
+
+  __ TailCallExternalReference(
+      ExternalReference(IC_Utility(IC::kTypeRecordingBinaryOp_Patch)),
+      5,
+      1);
+}
+
+
+void TypeRecordingBinaryOpStub::GenerateTypeTransitionWithSavedArgs(
+    MacroAssembler* masm) {
+  UNIMPLEMENTED();
+}
+
+
+void TypeRecordingBinaryOpStub::Generate(MacroAssembler* masm) {
+  switch (operands_type_) {
+    case TRBinaryOpIC::UNINITIALIZED:
+      GenerateTypeTransition(masm);
+      break;
+    case TRBinaryOpIC::SMI:
+      GenerateSmiStub(masm);
+      break;
+    case TRBinaryOpIC::INT32:
+      GenerateInt32Stub(masm);
+      break;
+    case TRBinaryOpIC::HEAP_NUMBER:
+      GenerateHeapNumberStub(masm);
+      break;
+    case TRBinaryOpIC::STRING:
+      GenerateStringStub(masm);
+      break;
+    case TRBinaryOpIC::GENERIC:
+      GenerateGeneric(masm);
+      break;
+    default:
+      UNREACHABLE();
+  }
+}
+
+
+const char* TypeRecordingBinaryOpStub::GetName() {
+  if (name_ != NULL) return name_;
+  const int kMaxNameLength = 100;
+  name_ = Bootstrapper::AllocateAutoDeletedArray(kMaxNameLength);
+  if (name_ == NULL) return "OOM";
+  const char* op_name = Token::Name(op_);
+  const char* overwrite_name;
+  switch (mode_) {
+    case NO_OVERWRITE: overwrite_name = "Alloc"; break;
+    case OVERWRITE_RIGHT: overwrite_name = "OverwriteRight"; break;
+    case OVERWRITE_LEFT: overwrite_name = "OverwriteLeft"; break;
+    default: overwrite_name = "UnknownOverwrite"; break;
+  }
+
+  OS::SNPrintF(Vector<char>(name_, kMaxNameLength),
+               "TypeRecordingBinaryOpStub_%s_%s_%s",
+               op_name,
+               overwrite_name,
+               TRBinaryOpIC::GetName(operands_type_));
+  return name_;
+}
+
+
+// Generate the smi code. If the operation on smis are successful this return is
+// generated. If the result is not a smi and heap number allocation is not
+// requested the code falls through. If number allocation is requested but a
+// heap number cannot be allocated the code jumps to the lable gc_required.
+void TypeRecordingBinaryOpStub::GenerateSmiCode(MacroAssembler* masm,
+    Label* gc_required,
+    SmiCodeGenerateHeapNumberResults allow_heapnumber_results) {
+  Label not_smis;
+
+  ASSERT(op_ == Token::ADD);
+
+  Register left = a1;
+  Register right = a0;
+  Register scratch1 = t3;
+  Register scratch2 = t5;
+
+  // Perform combined smi check on both operands.
+  __ Or(scratch1, left, Operand(right));
+  STATIC_ASSERT(kSmiTag == 0);
+  __ BranchOnNotSmi(scratch1, &not_smis);
+
+  __ Addu(v0, right, left);  // Add optimistically.
+  // Check for overflow.
+  __ Xor(scratch1, v0, left);
+  __ Xor(scratch2, v0, right);
+  __ And(scratch1, scratch1, scratch2);
+
+  // Return smi result if no overflow (v0 is the result).
+  __ Ret(ge, scratch1, Operand(zero_reg));  // Return on NO overflow (ge 0).
+
+  // Result is not a smi. right and left are intact.
+
+  // If heap number results are possible generate the result in an allocated
+  // heap number.
+  if (allow_heapnumber_results == ALLOW_HEAPNUMBER_RESULTS) {
+    FloatingPointHelper::Destination destination =
+        CpuFeatures::IsSupported(FPU) && Token::MOD != op_ ?
+        FloatingPointHelper::kFPURegisters :
+        FloatingPointHelper::kCoreRegisters;
+
+    Register heap_number_map = t2;
+    __ LoadRoot(heap_number_map, Heap::kHeapNumberMapRootIndex);
+
+    // Allocate new heap number for result.
+    Register heap_number = t1;
+    __ AllocateHeapNumber(
+        heap_number, scratch1, scratch2, heap_number_map, gc_required);
+
+    // Load the smis.
+    FloatingPointHelper::LoadSmis(masm, destination, scratch1, scratch2);
+
+    // Calculate the result.
+    if (destination == FloatingPointHelper::kFPURegisters) {
+      // Using FPU registers:
+      // f12: Left value
+      // f14: Right value
+      CpuFeatures::Scope scope(FPU);
+      __ add_d(f10, f12, f14);
+      // ARM uses a workaround here because of the unaligned HeapNumber
+      // kValueOffset. On MIPS this workaround is built into sdc1 so there's no
+      // point in generating even more instructions.
+      __ mov(v0, heap_number);
+      __ sdc1(f10, FieldMemOperand(v0, HeapNumber::kValueOffset));
+      __ Ret();
+    } else {
+      // Using core registers:
+      // a0: Left value (least significant part of mantissa).
+      // a1: Left value (sign, exponent, top of mantissa).
+      // a2: Right value (least significant part of mantissa).
+      // a3: Right value (sign, exponent, top of mantissa).
+
+      __ push(ra);  // For later.
+      __ PrepareCallCFunction(4, scratch1);  // Two doubles are 4 arguments.
+      // Call C routine that may not cause GC or other trouble. t1 is callee
+      // save.
+      __ CallCFunction(ExternalReference::double_fp_operation(op_), 4);
+      // Store answer in the overwritable heap number.
+      if (!IsMipsSoftFloatABI) {
+        // Double returned in register f0.
+        __ sdc1(f0, FieldMemOperand(heap_number, HeapNumber::kValueOffset));
+      } else {
+        // Double returned in registers v0 and v1.
+        __ sw(v0, FieldMemOperand(heap_number, HeapNumber::kValueOffset));
+        __ sw(v1, FieldMemOperand(heap_number,
+            HeapNumber::kValueOffset + kPointerSize));
+      }
+      __ mov(v0, heap_number);
+      // And we are done.
+      __ pop(ra);
+      __ Ret();
+    }
+  }
+  __ bind(&not_smis);
+}
+
+
+void TypeRecordingBinaryOpStub::GenerateSmiStub(MacroAssembler* masm) {
+  Label not_smis, call_runtime;
+
+  ASSERT(op_ == Token::ADD);
+
+  if (result_type_ == TRBinaryOpIC::UNINITIALIZED ||
+      result_type_ == TRBinaryOpIC::SMI) {
+    // Only allow smi results.
+    GenerateSmiCode(masm, NULL, NO_HEAPNUMBER_RESULTS);
+  } else {
+    // Allow heap number result and don't make a transition if a heap number
+    // cannot be allocated.
+    GenerateSmiCode(masm, &call_runtime, ALLOW_HEAPNUMBER_RESULTS);
+  }
+
+  // Code falls through if the result is not returned as either a smi or heap
+  // number.
+  GenerateTypeTransition(masm);
+
+  __ bind(&call_runtime);
+  GenerateCallRuntime(masm);
+}
+
+
+void TypeRecordingBinaryOpStub::GenerateStringStub(MacroAssembler* masm) {
+  ASSERT(operands_type_ == TRBinaryOpIC::STRING);
+  ASSERT(op_ == Token::ADD);
+  // Try to add arguments as strings, otherwise, transition to the generic
+  // TRBinaryOpIC type.
+  GenerateAddStrings(masm);
+  GenerateTypeTransition(masm);
+}
+
+
+void TypeRecordingBinaryOpStub::GenerateInt32Stub(MacroAssembler* masm) {
+  ASSERT(op_ == Token::ADD);
+
+  ASSERT(operands_type_ == TRBinaryOpIC::INT32);
+
+  GenerateTypeTransition(masm);
+}
+
+
+void TypeRecordingBinaryOpStub::GenerateHeapNumberStub(MacroAssembler* masm) {
+  ASSERT(op_ == Token::ADD);
+
+  Register scratch1 = t3;
+  Register scratch2 = t5;
+
+  Label not_number, call_runtime;
+  ASSERT(operands_type_ == TRBinaryOpIC::HEAP_NUMBER);
+
+  Register heap_number_map = t2;
+  __ LoadRoot(heap_number_map, Heap::kHeapNumberMapRootIndex);
+
+  // Load left and right operands into f12 and f14 or a0/a1 and a2/a3 depending
+  // on whether FPU is available.
+  FloatingPointHelper::Destination destination =
+      CpuFeatures::IsSupported(FPU) ?
+      FloatingPointHelper::kFPURegisters :
+      FloatingPointHelper::kCoreRegisters;
+  FloatingPointHelper::LoadOperands(masm,
+                                    destination,
+                                    heap_number_map,
+                                    scratch1,
+                                    scratch2,
+                                    &not_number);
+  if (destination == FloatingPointHelper::kFPURegisters) {
+    // Use floating point instructions for the binary operation.
+    CpuFeatures::Scope scope(FPU);
+    __ add_d(f10, f12, f14);
+
+    // Get a heap number object for the result - might be left or right if one
+    // of these are overwritable.
+    GenerateHeapResultAllocation(
+        masm, v0, heap_number_map, scratch1, scratch2, &call_runtime);
+
+    // Fill the result into the allocated heap number and return.
+
+    // ARM uses a workaround here because of the unaligned HeapNumber
+    // kValueOffset. On MIPS this workaround is built into sdc1 so there's no
+    // point in generating even more instructions.
+    __ sdc1(f10, FieldMemOperand(v0, HeapNumber::kValueOffset));
+    __ Ret();
+
+  } else {
+    // Call a C function for the binary operation.
+    // a0/a1: Left operand
+    // a2/a3: Right operand
+
+    // Get a heap number object for the result - might be left or right if one
+    // of these are overwritable. Uses a callee-save register to keep the value
+    // across the c call.
+    GenerateHeapResultAllocation(
+        masm, t0, heap_number_map, scratch1, scratch2, &call_runtime);
+
+    __ push(ra);  // For returning later (no GC after this point).
+    __ PrepareCallCFunction(4, scratch1);  // Two doubles count as 4 arguments.
+    // Call C routine that may not cause GC or other trouble. r4 is callee
+    // saved.
+    __ CallCFunction(ExternalReference::double_fp_operation(op_), 4);
+
+    // Fill the result into the allocated heap number.
+    if (!IsMipsSoftFloatABI) {
+      // Double returned in register f0.
+      __ sdc1(f0, FieldMemOperand(t0, HeapNumber::kValueOffset));
+    } else {
+      // Double returned in registers v0 and v1.
+      __ sw(v0, FieldMemOperand(t0, HeapNumber::kValueOffset));
+      __ sw(v1, FieldMemOperand(t0, HeapNumber::kValueOffset + kPointerSize));
+    }
+
+    __ mov(v0, t0);
+    __ pop(ra);
+    __ Ret();
+  }
+
+  __ bind(&not_number);
+  GenerateTypeTransition(masm);
+
+  __ bind(&call_runtime);
+  GenerateCallRuntime(masm);
+}
+
+
+void TypeRecordingBinaryOpStub::GenerateGeneric(MacroAssembler* masm) {
+  ASSERT(op_ == Token::ADD);
+
+  Label call_runtime;
+
+  GenerateSmiCode(masm, &call_runtime, ALLOW_HEAPNUMBER_RESULTS);
+
+  // If all else fails, use the runtime system to get the correct
+  // result.
+  __ bind(&call_runtime);
+
+  // Try to add strings before calling runtime.
+  GenerateAddStrings(masm);
+
+  GenericBinaryOpStub stub(op_, mode_, a1, a0);
+  __ TailCallStub(&stub);
+}
+
+
+void TypeRecordingBinaryOpStub::GenerateAddStrings(MacroAssembler* masm) {
+  Register left = a1;
+  Register right = a0;
+  Label call_runtime;
+
+  // Check if first argument is a string.
+  __ BranchOnSmi(left, &call_runtime);
+  __ GetObjectType(left, a2, a2);
+  __ Branch(&call_runtime, ge, a2, Operand(FIRST_NONSTRING_TYPE));
+
+  // First argument is a a string, test second.
+  __ BranchOnSmi(right, &call_runtime);
+  __ GetObjectType(right, a2, a2);
+  __ Branch(&call_runtime, ge, a2, Operand(FIRST_NONSTRING_TYPE));
+
+  // First and second argument are strings.
+  StringAddStub string_add_stub(NO_STRING_CHECK_IN_STUB);
+  GenerateRegisterArgsPush(masm);
+  __ TailCallStub(&string_add_stub);
+
+  // At least one argument is not a string.
+  __ bind(&call_runtime);
+}
+
+
+void TypeRecordingBinaryOpStub::GenerateCallRuntime(MacroAssembler* masm) {
+  switch (op_) {
+    case Token::ADD:
+      GenerateRegisterArgsPush(masm);
+      __ InvokeBuiltin(Builtins::ADD, JUMP_JS);
+      break;
+    default:
+      UNREACHABLE();
+  }
+}
+
+
+void TypeRecordingBinaryOpStub::GenerateHeapResultAllocation(
+    MacroAssembler* masm,
+    Register result,
+    Register heap_number_map,
+    Register scratch1,
+    Register scratch2,
+    Label* gc_required) {
+
+  // Code below will scratch result if allocation fails. To keep both arguments
+  // intact for the runtime call result cannot be one of these.
+  ASSERT(!result.is(a0) && !result.is(a1));
+
+  if (mode_ == OVERWRITE_LEFT || mode_ == OVERWRITE_RIGHT) {
+    Label skip_allocation, allocated;
+    Register overwritable_operand = mode_ == OVERWRITE_LEFT ? a1 : a0;
+    // If the overwritable operand is already an object, we skip the
+    // allocation of a heap number.
+    __ BranchOnNotSmi(overwritable_operand, &skip_allocation);
+    // Allocate a heap number for the result.
+    __ AllocateHeapNumber(
+        result, scratch1, scratch2, heap_number_map, gc_required);
+    __ Branch(&allocated);
+    __ bind(&skip_allocation);
+    // Use object holding the overwritable operand for result.
+    __ li(result, Operand(overwritable_operand));
+    __ bind(&allocated);
+  } else {
+    ASSERT(mode_ == NO_OVERWRITE);
+    __ AllocateHeapNumber(
+        result, scratch1, scratch2, heap_number_map, gc_required);
+  }
+}
+
+
+void TypeRecordingBinaryOpStub::GenerateRegisterArgsPush(MacroAssembler* masm) {
+  __ Push(a1, a0);
+}
+
 
 
 void TranscendentalCacheStub::Generate(MacroAssembler* masm) {

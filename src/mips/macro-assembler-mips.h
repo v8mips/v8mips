@@ -868,11 +868,19 @@ void DropAndRet(int drop = 0,
   }
 
   void SmiTag(Register reg) {
-    Addu(reg, reg, Operand(reg));
+    Addu(reg, reg, reg);
+  }
+
+  void SmiTag(Register dst, Register src) {
+    Addu(dst, src, src);
   }
 
   void SmiUntag(Register reg) {
     sra(reg, reg, kSmiTagSize);
+  }
+
+  void SmiUntag(Register dst, Register src) {
+    sra(dst, src, kSmiTagSize);
   }
 
   // Jump if either of the registers contain a non-smi.
@@ -882,6 +890,14 @@ void DropAndRet(int drop = 0,
 
   // Abort execution if argument is a smi. Used in debug code.
   void AbortIfSmi(Register object);
+
+  // ---------------------------------------------------------------------------
+  // HeapNumber utilities
+
+  void JumpIfNotHeapNumber(Register object,
+                           Register heap_number_map,
+                           Register scratch,
+                           Label* on_not_heap_number);
 
   // -------------------------------------------------------------------------
   // String utilities

@@ -1578,8 +1578,13 @@ void FullCodeGenerator::EmitBinaryOp(Token::Value op,
                                      OverwriteMode mode) {
   __ mov(a0, result_register());
   __ pop(a1);
-  GenericBinaryOpStub stub(op, mode, a1, a0);
-  __ CallStub(&stub);
+  if (op == Token::ADD) {
+    TypeRecordingBinaryOpStub stub(op, mode);
+    __ CallStub(&stub);
+  } else {
+    GenericBinaryOpStub stub(op, mode, a1, a0);
+    __ CallStub(&stub);
+  }
   context()->Plug(v0);
 }
 
