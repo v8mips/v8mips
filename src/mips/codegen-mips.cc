@@ -4048,9 +4048,8 @@ void CodeGenerator::EmitKeyedPropertyAssignment(Assignment* node) {
   // Perform the assignment.  It is safe to ignore constants here.
   ASSERT(node->op() != Token::INIT_CONST);
   CodeForSourcePosition(node->position());
-  // Force write of positions before call to EmitNamedstore,
-  // to ensure positoin RelocInfo stored prior to
-  // code_target RelocInfo.
+  // Force write of positions before call to ensure position RelocInfo
+  // stored prior to code_target RelocInfo.
   __ positions_recorder()->WriteRecordedPositions();
   EmitKeyedStore(prop->key()->type(), wb_info);
   frame_->EmitPush(v0);
@@ -4124,9 +4123,8 @@ void CodeGenerator::VisitThrow(Throw* node) {
 
   Load(node->exception());
   CodeForSourcePosition(node->position());
-  // Force write of positions before call to EmitNamedstore,
-  // to ensure positoin RelocInfo stored prior to
-  // code_target RelocInfo.
+  // Force write of positions before call to ensure position RelocInfo
+  // stored prior to code_target RelocInfo.
   __ positions_recorder()->WriteRecordedPositions();
   frame_->CallRuntime(Runtime::kThrow, 1);
   frame_->EmitPush(v0);
