@@ -1991,7 +1991,16 @@ void LCodeGen::DoInstanceOf(LInstanceOf* instr) {
 
 
 void LCodeGen::DoInstanceOfAndBranch(LInstanceOfAndBranch* instr) {
-  Abort("DoInstanceOfAndBranch unimplemented.");
+  ASSERT(ToRegister(instr->InputAt(0)).is(r0));  // Object is in r0.
+  ASSERT(ToRegister(instr->InputAt(1)).is(r1));  // Function is in r1.
+
+  int true_block = chunk_->LookupDestination(instr->true_block_id());
+  int false_block = chunk_->LookupDestination(instr->false_block_id());
+
+  InstanceofStub stub(InstanceofStub::kArgsInRegisters);
+  CallCode(stub.GetCode(), RelocInfo::CODE_TARGET, instr);
+  __ tst(r0, Operand(r0));
+  EmitBranch(true_block, false_block, eq);
 }
 
 
@@ -2186,8 +2195,26 @@ void LCodeGen::DoLoadGlobal(LLoadGlobal* instr) {
 
 void LCodeGen::DoStoreGlobal(LStoreGlobal* instr) {
   Register value = ToRegister(instr->InputAt(0));
-  __ mov(ip, Operand(Handle<Object>(instr->hydrogen()->cell())));
-  __ str(value, FieldMemOperand(ip, JSGlobalPropertyCell::kValueOffset));
+  Register scratch = scratch0();
+
+  // Load the cell.
+  __ mov(scratch, Operand(Handle<Object>(instr->hydrogen()->cell())));
+
+  // If the cell we are storing to contains the hole it could have
+  // been deleted from the property dictionary. In that case, we need
+  // to update the property details in the property dictionary to mark
+  // it as no longer deleted.
+  if (instr->hydrogen()->check_hole_value()) {
+    Register scratch2 = ToRegister(instr->TempAt(0));
+    __ ldr(scratch2,
+           FieldMemOperand(scratch, JSGlobalPropertyCell::kValueOffset));
+    __ LoadRoot(ip, Heap::kTheHoleValueRootIndex);
+    __ cmp(scratch2, ip);
+    DeoptimizeIf(eq, instr->environment());
+  }
+
+  // Store the value.
+  __ str(value, FieldMemOperand(scratch, JSGlobalPropertyCell::kValueOffset));
 }
 
 
