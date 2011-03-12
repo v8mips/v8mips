@@ -570,7 +570,7 @@ void Builtins::Generate_StringConstructCode(MacroAssembler* masm) {
   // if it's a string already before calling the conversion builtin.
   Label convert_argument;
   __ bind(&not_cached);
-  __ BranchOnSmi(a0, &convert_argument);
+  __ JumpIfSmi(a0, &convert_argument);
 
   // Is it a String?
   __ lw(a2, FieldMemOperand(a0, HeapObject::kMapOffset));
@@ -1219,7 +1219,7 @@ void Builtins::Generate_FunctionCall(MacroAssembler* masm) {
     // a0: actual number of arguments
     // a1: function
     // a2: first argument
-    __ BranchOnSmi(a2, &convert_to_object, t2);
+    __ JumpIfSmi(a2, &convert_to_object, t2);
 
     __ LoadRoot(t3, Heap::kNullValueRootIndex);
     __ Branch(&use_global_receiver, eq, a2, Operand(t3));

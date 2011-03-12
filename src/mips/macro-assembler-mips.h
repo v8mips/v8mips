@@ -683,21 +683,6 @@ void DropAndRet(int drop = 0,
                 Label* fail,
                 bool is_heap_object);
 
-  inline void BranchOnSmi(Register value, Label* smi_label,
-                          Register scratch = at) {
-    ASSERT_EQ(0, kSmiTag);
-    andi(scratch, value, kSmiTagMask);
-    Branch(smi_label, eq, scratch, Operand(zero_reg));
-  }
-
-
-  inline void BranchOnNotSmi(Register value, Label* not_smi_label,
-                             Register scratch = at) {
-    ASSERT_EQ(0, kSmiTag);
-    andi(scratch, value, kSmiTagMask);
-    Branch(not_smi_label, ne, scratch, Operand(zero_reg));
-  }
-
   void CallBuiltin(ExternalReference builtin_entry);
   void CallBuiltin(Register target);
   void CallBuiltin(Handle<Code> code, RelocInfo::Mode rmode);
@@ -881,6 +866,22 @@ void DropAndRet(int drop = 0,
 
   void SmiUntag(Register dst, Register src) {
     sra(dst, src, kSmiTagSize);
+  }
+
+  // Jump the register contains a smi.
+  inline void JumpIfSmi(Register value, Label* smi_label,
+                        Register scratch = at) {
+    ASSERT_EQ(0, kSmiTag);
+    andi(scratch, value, kSmiTagMask);
+    Branch(smi_label, eq, scratch, Operand(zero_reg));
+  }
+
+  // Jump if the register contains a non-smi.
+  inline void JumpIfNotSmi(Register value, Label* not_smi_label,
+                           Register scratch = at) {
+    ASSERT_EQ(0, kSmiTag);
+    andi(scratch, value, kSmiTagMask);
+    Branch(not_smi_label, ne, scratch, Operand(zero_reg));
   }
 
   // Jump if either of the registers contain a non-smi.

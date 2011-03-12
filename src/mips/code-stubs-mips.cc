@@ -453,7 +453,7 @@ void FloatingPointHelper::LoadNumber(MacroAssembler* masm,
                                        Label* not_number) {
   Label is_smi, done;
 
-  __ BranchOnSmi(object, &is_smi);
+  __ JumpIfSmi(object, &is_smi);
   __ JumpIfNotHeapNumber(object, heap_number_map, scratch1, not_number);
 
   // Handle loading a double from a heap number.
@@ -1049,7 +1049,7 @@ void NumberToStringStub::GenerateLookupNumberStringCache(MacroAssembler* masm,
   Label is_smi;
   Label load_result_from_cache;
   if (!object_is_smi) {
-    __ BranchOnSmi(object, &is_smi);
+    __ JumpIfSmi(object, &is_smi);
     if (CpuFeatures::IsSupported(FPU)) {
       CpuFeatures::Scope scope(FPU);
       __ CheckMap(object,
@@ -1075,7 +1075,7 @@ void NumberToStringStub::GenerateLookupNumberStringCache(MacroAssembler* masm,
       Register probe = mask;
       __ lw(probe,
              FieldMemOperand(scratch1, FixedArray::kHeaderSize));
-      __ BranchOnSmi(probe, not_found);
+      __ JumpIfSmi(probe, not_found);
       __ ldc1(f12, FieldMemOperand(object, HeapNumber::kValueOffset));
       __ ldc1(f14, FieldMemOperand(probe, HeapNumber::kValueOffset));
       __ c(EQ, D, f12, f14);
@@ -1144,7 +1144,7 @@ void CompareStub::Generate(MacroAssembler* masm) {
   if (include_smi_compare_) {
     Label not_two_smis, smi_done;
     __ Or(a2, a1, a0);
-    __ BranchOnNotSmi(a2, &not_two_smis);
+    __ JumpIfNotSmi(a2, &not_two_smis);
     __ sra(a1, a1, 1);
     __ sra(a0, a0, 1);
     __ Subu(v0, a1, a0);
@@ -1170,7 +1170,7 @@ void CompareStub::Generate(MacroAssembler* masm) {
   STATIC_ASSERT(kSmiTag == 0);
   ASSERT_EQ(0, Smi::FromInt(0));
   __ And(t2, lhs_, Operand(rhs_));
-  __ BranchOnNotSmi(t2, &not_smis, t0);
+  __ JumpIfNotSmi(t2, &not_smis, t0);
   // One operand is a smi. EmitSmiNonsmiComparison generates code that can:
   // 1) Return the answer.
   // 2) Go to slow.
@@ -1488,7 +1488,7 @@ void GenericBinaryOpStub::HandleBinaryOpSlowCases(MacroAssembler* masm,
 
       // Move a0 (rhs) to a double in a2-a3.
       // If it's a Smi don't check if it's a heap number.
-      __ BranchOnSmi(a0, &a0_is_smi);
+      __ JumpIfSmi(a0, &a0_is_smi);
 
       __ lw(t0, FieldMemOperand(a0, HeapObject::kMapOffset));
       __ AssertRegisterIsRoot(heap_number_map, Heap::kHeapNumberMapRootIndex);
@@ -1536,7 +1536,7 @@ void GenericBinaryOpStub::HandleBinaryOpSlowCases(MacroAssembler* masm,
       Label a1_is_not_smi;
       if ((runtime_operands_type_ == BinaryOpIC::HEAP_NUMBERS) &&
           HasSmiSmiFastPath()) {
-        __ BranchOnNotSmi(a1, &a1_is_not_smi);
+        __ JumpIfNotSmi(a1, &a1_is_not_smi);
         GenerateTypeTransition(masm);  // Tail call.
       }
 
@@ -1544,7 +1544,7 @@ void GenericBinaryOpStub::HandleBinaryOpSlowCases(MacroAssembler* masm,
 
       // Move a1 (lhs) to a double in a0-a1.
       // If it's a Smi don't check if it's a heap number.
-      __ BranchOnSmi(a1, &a1_is_smi);
+      __ JumpIfSmi(a1, &a1_is_smi);
       __ bind(&a1_is_not_smi);
       __ lw(t0, FieldMemOperand(a1, HeapNumber::kMapOffset));
       __ AssertRegisterIsRoot(heap_number_map, Heap::kHeapNumberMapRootIndex);
@@ -2346,7 +2346,7 @@ void TypeRecordingBinaryOpStub::GenerateSmiCode(MacroAssembler* masm,
   // Perform combined smi check on both operands.
   __ Or(scratch1, left, Operand(right));
   STATIC_ASSERT(kSmiTag == 0);
-  __ BranchOnNotSmi(scratch1, &not_smis);
+  __ JumpIfNotSmi(scratch1, &not_smis);
 
   GenerateOptimisticSmiOperation(masm);
 
@@ -2564,12 +2564,12 @@ void TypeRecordingBinaryOpStub::GenerateAddStrings(MacroAssembler* masm) {
   Label call_runtime;
 
   // Check if first argument is a string.
-  __ BranchOnSmi(left, &call_runtime);
+  __ JumpIfSmi(left, &call_runtime);
   __ GetObjectType(left, a2, a2);
   __ Branch(&call_runtime, ge, a2, Operand(FIRST_NONSTRING_TYPE));
 
   // First argument is a a string, test second.
-  __ BranchOnSmi(right, &call_runtime);
+  __ JumpIfSmi(right, &call_runtime);
   __ GetObjectType(right, a2, a2);
   __ Branch(&call_runtime, ge, a2, Operand(FIRST_NONSTRING_TYPE));
 
@@ -2615,7 +2615,7 @@ void TypeRecordingBinaryOpStub::GenerateHeapResultAllocation(
     Register overwritable_operand = mode_ == OVERWRITE_LEFT ? a1 : a0;
     // If the overwritable operand is already an object, we skip the
     // allocation of a heap number.
-    __ BranchOnNotSmi(overwritable_operand, &skip_allocation);
+    __ JumpIfNotSmi(overwritable_operand, &skip_allocation);
     // Allocate a heap number for the result.
     __ AllocateHeapNumber(
         result, scratch1, scratch2, heap_number_map, gc_required);
@@ -2646,7 +2646,7 @@ void TranscendentalCacheStub::Generate(MacroAssembler* masm) {
 
   if (CpuFeatures::IsSupported(FPU)) {
     // Load argument and check if it is a smi.
-    __ BranchOnNotSmi(a0, &input_not_smi);
+    __ JumpIfNotSmi(a0, &input_not_smi);
 
     CpuFeatures::Scope scope(FPU);
     // Input is a smi. Convert to double and load the low and high words
@@ -2761,7 +2761,7 @@ void GenericUnaryOpStub::Generate(MacroAssembler* masm) {
     if (include_smi_code_) {
       // Check whether the value is a smi.
       Label try_float;
-      __ BranchOnNotSmi(a0, &try_float);
+      __ JumpIfNotSmi(a0, &try_float);
 
       // Go slow case if the value of the expression is zero
       // to make sure that we switch between 0 and -0.
@@ -2810,7 +2810,7 @@ void GenericUnaryOpStub::Generate(MacroAssembler* masm) {
   } else if (op_ == Token::BIT_NOT) {
     if (include_smi_code_) {
       Label non_smi;
-      __ BranchOnNotSmi(a0, &non_smi);
+      __ JumpIfNotSmi(a0, &non_smi);
       __ srl(v0, a0, kSmiTagSize);
       __ nor(v0, v0, v0);
       __ sll(v0, v0, kSmiTagSize);
@@ -3385,7 +3385,7 @@ void InstanceofStub::Generate(MacroAssembler* masm) {
   }
 
   // Check that the left hand is a JS object and load map.
-  __ BranchOnSmi(object, &not_js_object);
+  __ JumpIfSmi(object, &not_js_object);
   __ IsObjectJSObjectType(object, map, scratch, &not_js_object);
 
   // Look up the function and the map in the instanceof cache.
@@ -3401,7 +3401,7 @@ void InstanceofStub::Generate(MacroAssembler* masm) {
   __ TryGetFunctionPrototype(function, prototype, scratch, &slow);
 
   // Check that the function prototype is a JS object.
-  __ BranchOnSmi(prototype, &slow);
+  __ JumpIfSmi(prototype, &slow);
   __ IsObjectJSObjectType(prototype, scratch, scratch, &slow);
 
   __ StoreRoot(function, Heap::kInstanceofCacheFunctionRootIndex);
@@ -3435,7 +3435,7 @@ void InstanceofStub::Generate(MacroAssembler* masm) {
   __ bind(&not_js_object);
   // Before null, smi and string value checks, check that the rhs is a function
   // as for a non-function rhs an exception needs to be thrown.
-  __ BranchOnSmi(function, &slow);
+  __ JumpIfSmi(function, &slow);
   __ GetObjectType(function, map, scratch);
   __ Branch(&slow, ne, scratch, Operand(JS_FUNCTION_TYPE));
 
@@ -3446,7 +3446,7 @@ void InstanceofStub::Generate(MacroAssembler* masm) {
 
   __ bind(&object_not_null);
   // Smi values are not instances of anything.
-  __ BranchOnNotSmi(object, &object_not_null_or_smi);
+  __ JumpIfNotSmi(object, &object_not_null_or_smi);
   __ li(v0, Operand(Smi::FromInt(1)));
   __ DropAndRet(HasArgsInRegisters() ? 0 : 2);
 
@@ -3473,7 +3473,7 @@ void ArgumentsAccessStub::GenerateReadElement(MacroAssembler* masm) {
 
   // Check that the key is a smiGenerateReadElement.
   Label slow;
-  __ BranchOnNotSmi(a1, &slow);
+  __ JumpIfNotSmi(a1, &slow);
 
   // Check if the calling frame is an arguments adaptor frame.
   Label adaptor;
@@ -3673,7 +3673,7 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
   // Check that the first argument is a JSRegExp object.
   __ lw(a0, MemOperand(sp, kJSRegExpOffset));
   STATIC_ASSERT(kSmiTag == 0);
-  __ BranchOnSmi(a0, &runtime);
+  __ JumpIfSmi(a0, &runtime);
   __ GetObjectType(a0, a1, a1);
   __ Branch(&runtime, ne, a1, Operand(JS_REGEXP_TYPE));
 
@@ -3713,7 +3713,7 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
   // regexp_data: RegExp data (FixedArray)
   // Check that the second argument is a string.
   __ lw(subject, MemOperand(sp, kSubjectOffset));
-  __ BranchOnSmi(subject, &runtime);
+  __ JumpIfSmi(subject, &runtime);
   __ GetObjectType(subject, a0, a0);
   __ And(a0, a0, Operand(kIsNotStringMask));
   STATIC_ASSERT(kStringTag == 0);
@@ -3738,7 +3738,7 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
   // regexp_data: RegExp data (FixedArray)
   // Check that the fourth object is a JSArray object.
   __ lw(a0, MemOperand(sp, kLastMatchInfoOffset));
-  __ BranchOnSmi(a0, &runtime);
+  __ JumpIfSmi(a0, &runtime);
   __ GetObjectType(a0, a1, a1);
   __ Branch(&runtime, ne, a1, Operand(JS_ARRAY_TYPE));
   // Check that the JSArray is in fast case.
@@ -3969,7 +3969,7 @@ void RegExpConstructResultStub::Generate(MacroAssembler* masm) {
   __ lw(a1, MemOperand(sp, kPointerSize * 2));
   STATIC_ASSERT(kSmiTag == 0);
   STATIC_ASSERT(kSmiTagSize == 1);
-  __ BranchOnNotSmi(a1, &slowcase);
+  __ JumpIfNotSmi(a1, &slowcase);
   __ Branch(&slowcase, hi, a1, Operand(Smi::FromInt(kMaxInlineLength)));
   // Smi-tagging is equivalent to multiplying by 2.
   // Allocate RegExpResult followed by FixedArray with size in ebx.
@@ -4062,7 +4062,7 @@ void CallFunctionStub::Generate(MacroAssembler* masm) {
     __ lw(a1, MemOperand(sp, argc_ * kPointerSize));
 
     // Check if receiver is a smi (which is a number value).
-    __ BranchOnSmi(a1, &receiver_is_value);
+    __ JumpIfSmi(a1, &receiver_is_value);
 
     // Check if the receiver is a valid JS object.
     __ GetObjectType(a1, a2, a2);
@@ -4089,7 +4089,7 @@ void CallFunctionStub::Generate(MacroAssembler* masm) {
 
   // Check that the function is really a JavaScript function.
   // a1: pushed function (to be verified)
-  __ BranchOnSmi(a1, &slow);
+  __ JumpIfSmi(a1, &slow);
   // Get the map of the function object.
   __ GetObjectType(a1, a2, a2);
   __ Branch(&slow, ne, a2, Operand(JS_FUNCTION_TYPE));
@@ -4196,7 +4196,7 @@ void StringCharCodeAtGenerator::GenerateFast(MacroAssembler* masm) {
   ASSERT(!t0.is(object_));
 
   // If the receiver is a smi trigger the non-string case.
-  __ BranchOnSmi(object_, receiver_not_string_);
+  __ JumpIfSmi(object_, receiver_not_string_);
 
   // Fetch the instance type of the receiver into result register.
   __ lw(result_, FieldMemOperand(object_, HeapObject::kMapOffset));
@@ -4206,7 +4206,7 @@ void StringCharCodeAtGenerator::GenerateFast(MacroAssembler* masm) {
   __ Branch(receiver_not_string_, ne, t0, Operand(zero_reg));
 
   // If the index is non-smi trigger the non-smi case.
-  __ BranchOnNotSmi(index_, &index_not_smi_);
+  __ JumpIfNotSmi(index_, &index_not_smi_);
 
   // Put smi-tagged index into scratch register.
   __ mov(scratch_, index_);
@@ -4309,7 +4309,7 @@ void StringCharCodeAtGenerator::GenerateSlow(
   __ lbu(result_, FieldMemOperand(result_, Map::kInstanceTypeOffset));
   call_helper.AfterCall(masm);
   // If index is still not a smi, it must be out of range.
-  __ BranchOnNotSmi(scratch_, index_out_of_range_);
+  __ JumpIfNotSmi(scratch_, index_out_of_range_);
   // Otherwise, return to the fast path.
   __ Branch(&got_smi_index_);
 
@@ -4805,8 +4805,8 @@ void SubStringStub::Generate(MacroAssembler* masm) {
   STATIC_ASSERT(kSmiTag == 0);
   STATIC_ASSERT(kSmiTagSize + kSmiShiftSize == 1);
 
-  __ BranchOnNotSmi(from, &sub_string_runtime);
-  __ BranchOnNotSmi(to, &sub_string_runtime);
+  __ JumpIfNotSmi(from, &sub_string_runtime);
+  __ JumpIfNotSmi(to, &sub_string_runtime);
 
   __ sra(a3, from, kSmiTagSize);  // Remove smi tag.
   __ sra(t5, to, kSmiTagSize);  // Remove smi tag.
@@ -5381,7 +5381,7 @@ void ICCompareStub::GenerateSmis(MacroAssembler* masm) {
   ASSERT(state_ == CompareIC::SMIS);
   Label miss;
   __ Or(a2, a1, a0);
-  __ BranchOnNotSmi(a2, &miss);
+  __ JumpIfNotSmi(a2, &miss);
 
   if (GetCondition() == eq) {
     // For equality we do not care about the sign of the result.
@@ -5412,7 +5412,7 @@ void ICCompareStub::GenerateHeapNumbers(MacroAssembler* masm) {
   Label unordered;
   Label miss;
   __ And(a2, a1, Operand(a0));
-  __ BranchOnSmi(a2, &generic_stub);
+  __ JumpIfSmi(a2, &generic_stub);
 
   __ GetObjectType(a0, a2, a2);
   __ Branch(&miss, ne, a2, Operand(HEAP_NUMBER_TYPE));
@@ -5480,7 +5480,7 @@ void ICCompareStub::GenerateObjects(MacroAssembler* masm) {
   ASSERT(state_ == CompareIC::OBJECTS);
   Label miss;
   __ And(a2, a1, Operand(a0));
-  __ BranchOnSmi(a2, &miss);
+  __ JumpIfSmi(a2, &miss);
 
   __ GetObjectType(a0, a2, a2);
   __ Branch(&miss, ne, a2, Operand(JS_OBJECT_TYPE));

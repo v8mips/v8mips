@@ -238,7 +238,7 @@ void StubCache::GenerateProbe(MacroAssembler* masm,
   ASSERT(!extra2.is(no_reg));
 
   // Check that the receiver isn't a smi.
-  __ BranchOnSmi(receiver, &miss, t0);
+  __ JumpIfSmi(receiver, &miss, t0);
 
   // Get the map of the receiver and compute the hash.
   __ lw(scratch, FieldMemOperand(name, String::kHashFieldOffset));
@@ -351,7 +351,7 @@ static void GenerateStringCheck(MacroAssembler* masm,
                                 Label* smi,
                                 Label* non_string_object) {
   // Check that the receiver isn't a smi.
-  __ BranchOnSmi(receiver, smi, t0);
+  __ JumpIfSmi(receiver, smi, t0);
 
   // Check that the object is a string.
   __ lw(scratch1, FieldMemOperand(receiver, HeapObject::kMapOffset));
@@ -426,7 +426,7 @@ void StubCompiler::GenerateStoreField(MacroAssembler* masm,
   Label exit;
 
   // Check that the receiver isn't a smi.
-  __ BranchOnSmi(receiver_reg, miss_label, scratch);
+  __ JumpIfSmi(receiver_reg, miss_label, scratch);
 
   // Check that the map of the receiver hasn't changed.
   __ lw(scratch, FieldMemOperand(receiver_reg, HeapObject::kMapOffset));
@@ -472,7 +472,7 @@ void StubCompiler::GenerateStoreField(MacroAssembler* masm,
     __ sw(a0, FieldMemOperand(receiver_reg, offset));
 
     // Skip updating write barrier if storing a smi.
-    __ BranchOnSmi(a0, &exit, scratch);
+    __ JumpIfSmi(a0, &exit, scratch);
 
     // Update the write barrier for the array address.
     // Pass the now unused name_reg as a scratch register.
@@ -485,7 +485,7 @@ void StubCompiler::GenerateStoreField(MacroAssembler* masm,
     __ sw(a0, FieldMemOperand(scratch, offset));
 
     // Skip updating write barrier if storing a smi.
-    __ BranchOnSmi(a0, &exit);
+    __ JumpIfSmi(a0, &exit);
 
     // Update the write barrier for the array address.
     // Ok to clobber receiver_reg and name_reg, since we return.
@@ -522,7 +522,7 @@ static void GenerateCallFunction(MacroAssembler* masm,
   //  -- a1: function to call
   // -----------------------------------
   // Check that the function really is a function.
-  __ BranchOnSmi(a1, miss);
+  __ JumpIfSmi(a1, miss);
   __ GetObjectType(a1, a3, a3);
   __ Branch(miss, ne, a3, Operand(JS_FUNCTION_TYPE));
 
@@ -658,7 +658,7 @@ class CallInterceptorCompiler BASE_EMBEDDED {
     ASSERT(!holder->GetNamedInterceptor()->getter()->IsUndefined());
 
     // Check that the receiver isn't a smi.
-    __ BranchOnSmi(receiver, miss);
+    __ JumpIfSmi(receiver, miss);
 
     CallOptimization optimization(lookup);
 
@@ -1183,7 +1183,7 @@ void StubCompiler::GenerateLoadConstant(JSObject* object,
                                         String* name,
                                         Label* miss) {
   // Check that the receiver isn't a smi.
-  __ BranchOnSmi(receiver, miss, scratch1);
+  __ JumpIfSmi(receiver, miss, scratch1);
 
   // Check that the maps haven't changed.
   Register reg =
@@ -1208,7 +1208,7 @@ bool StubCompiler::GenerateLoadCallback(JSObject* object,
                                         Label* miss,
                                         Failure** failure) {
   // Check that the receiver isn't a smi.
-  __ BranchOnSmi(receiver, miss, scratch1);
+  __ JumpIfSmi(receiver, miss, scratch1);
 
   // Check that the maps haven't changed.
   Register reg =
@@ -1246,7 +1246,7 @@ void StubCompiler::GenerateLoadInterceptor(JSObject* object,
   ASSERT(!interceptor_holder->GetNamedInterceptor()->getter()->IsUndefined());
 
   // Check that the receiver isn't a smi.
-  __ BranchOnSmi(receiver, miss);
+  __ JumpIfSmi(receiver, miss);
 
   // So far the most popular follow ups for interceptor loads are FIELD
   // and CALLBACKS, so inline only them, other cases may be added
@@ -1397,7 +1397,7 @@ void CallStubCompiler::GenerateGlobalReceiverCheck(JSObject* object,
   // object which can only happen for contextual calls. In this case,
   // the receiver cannot be a smi.
   if (object != holder) {
-    __ BranchOnSmi(a0, miss);
+    __ JumpIfSmi(a0, miss);
   }
 
   // Check that the maps haven't changed.
@@ -1419,7 +1419,7 @@ void CallStubCompiler::GenerateLoadFunctionFromCell(JSGlobalPropertyCell* cell,
     // the nice side effect that multiple closures based on the same
     // function can all use this call IC. Before we load through the
     // function, we have to verify that it still is a function.
-    __ BranchOnSmi(a1, miss);
+    __ JumpIfSmi(a1, miss);
     __ GetObjectType(a1, a3, a3);
     __ Branch(miss, ne, a3, Operand(JS_FUNCTION_TYPE));
 
@@ -1460,7 +1460,7 @@ MaybeObject* CallStubCompiler::CompileCallField(JSObject* object,
   // Get the receiver of the function from the stack into a0.
   __ lw(a0, MemOperand(sp, argc * kPointerSize));
   // Check that the receiver isn't a smi.
-  __ BranchOnSmi(a0, &miss, t0);
+  __ JumpIfSmi(a0, &miss, t0);
 
   // Do the right check and compute the holder register.
   Register reg = CheckPrototypes(object, a0, holder, a1, a3, t0, name, &miss);
@@ -1507,7 +1507,7 @@ MaybeObject* CallStubCompiler::CompileArrayPushCall(Object* object,
   __ lw(receiver, MemOperand(sp, argc * kPointerSize));
 
   // Check that the receiver isn't a smi.
-  __ BranchOnSmi(receiver, &miss);
+  __ JumpIfSmi(receiver, &miss);
 
   // Check that the maps haven't changed.
   CheckPrototypes(JSObject::cast(object), receiver,
@@ -1561,7 +1561,7 @@ MaybeObject* CallStubCompiler::CompileArrayPushCall(Object* object,
       __ Addu(end_elements, end_elements, kPointerSize);
 
       // Check for a smi.
-      __ BranchOnNotSmi(t0, &with_write_barrier);
+      __ JumpIfNotSmi(t0, &with_write_barrier);
       __ bind(&exit);
       __ Drop(argc + 1);
       __ Ret();
@@ -1666,7 +1666,7 @@ MaybeObject* CallStubCompiler::CompileArrayPopCall(Object* object,
   __ lw(receiver, MemOperand(sp, argc * kPointerSize));
 
   // Check that the receiver isn't a smi.
-  __ BranchOnSmi(receiver, &miss);
+  __ JumpIfSmi(receiver, &miss);
 
   // Check that the maps haven't changed.
   CheckPrototypes(JSObject::cast(object),
@@ -1926,7 +1926,7 @@ MaybeObject* CallStubCompiler::CompileStringFromCharCodeCall(
     __ lw(a1, MemOperand(sp, 1 * kPointerSize));
 
     STATIC_ASSERT(kSmiTag == 0);
-    __ BranchOnSmi(a1, &miss);
+    __ JumpIfSmi(a1, &miss);
 
     CheckPrototypes(JSObject::cast(object), a1, holder, v0, a3, t0, name,
                     &miss);
@@ -1943,7 +1943,7 @@ MaybeObject* CallStubCompiler::CompileStringFromCharCodeCall(
   // Check the code is a smi.
   Label slow;
   STATIC_ASSERT(kSmiTag == 0);
-  __ BranchOnNotSmi(code, &slow);
+  __ JumpIfNotSmi(code, &slow);
 
   // Convert the smi code to uint16.
   __ And(code, code, Operand(Smi::FromInt(0xffff)));
@@ -2002,7 +2002,7 @@ MaybeObject* CallStubCompiler::CompileMathFloorCall(Object* object,
     __ lw(a1, MemOperand(sp, 1 * kPointerSize));
 
     STATIC_ASSERT(kSmiTag == 0);
-    __ BranchOnSmi(a1, &miss);
+    __ JumpIfSmi(a1, &miss);
 
     CheckPrototypes(JSObject::cast(object), a1, holder, a0, a3, t0, name,
                     &miss);
@@ -2133,7 +2133,7 @@ MaybeObject* CallStubCompiler::CompileMathAbsCall(Object* object,
     __ lw(a1, MemOperand(sp, 1 * kPointerSize));
 
     STATIC_ASSERT(kSmiTag == 0);
-    __ BranchOnSmi(a1, &miss);
+    __ JumpIfSmi(a1, &miss);
 
     CheckPrototypes(JSObject::cast(object), a1, holder, v0, a3, t0, name,
                     &miss);
@@ -2149,7 +2149,7 @@ MaybeObject* CallStubCompiler::CompileMathAbsCall(Object* object,
   // Check if the argument is a smi.
   Label not_smi;
   STATIC_ASSERT(kSmiTag == 0);
-  __ BranchOnNotSmi(v0, &not_smi);
+  __ JumpIfNotSmi(v0, &not_smi);
 
   // Do bitwise not or do nothing depending on the sign of the
   // argument.
@@ -2526,7 +2526,7 @@ MaybeObject* StoreStubCompiler::CompileStoreCallback(JSObject* object,
   Label miss;
 
   // Check that the object isn't a smi.
-  __ BranchOnSmi(a1, &miss);
+  __ JumpIfSmi(a1, &miss);
 
   // Check that the map of the object hasn't changed.
   __ lw(a3, FieldMemOperand(a1, HeapObject::kMapOffset));
@@ -2571,7 +2571,7 @@ MaybeObject* StoreStubCompiler::CompileStoreInterceptor(JSObject* receiver,
   Label miss;
 
   // Check that the object isn't a smi.
-  __ BranchOnSmi(a1, &miss);
+  __ JumpIfSmi(a1, &miss);
 
   // Check that the map of the object hasn't changed.
   __ lw(a3, FieldMemOperand(a1, HeapObject::kMapOffset));
@@ -2647,7 +2647,7 @@ MaybeObject* LoadStubCompiler::CompileLoadNonexistent(String* name,
   Label miss;
 
   // Check that the receiver is not a smi.
-  __ BranchOnSmi(a0, &miss);
+  __ JumpIfSmi(a0, &miss);
 
   // Check the maps of the full prototype chain.
   CheckPrototypes(object, a0, last, a3, a1, t0, name, &miss);
@@ -3002,14 +3002,14 @@ MaybeObject* KeyedLoadStubCompiler::CompileLoadSpecialized(JSObject* receiver) {
   Label miss;
 
   // Check that the receiver isn't a smi.
-  __ BranchOnSmi(a1, &miss);
+  __ JumpIfSmi(a1, &miss);
 
   // Check that the map matches.
   __ lw(a2, FieldMemOperand(a1, HeapObject::kMapOffset));
   __ Branch(&miss, ne, a2, Operand(Handle<Map>(receiver->map())));
 
   // Check that the key is a smi.
-  __ BranchOnNotSmi(a0, &miss);
+  __ JumpIfNotSmi(a0, &miss);
 
   // Get the elements array.
   __ lw(a2, FieldMemOperand(a1, JSObject::kElementsOffset));
@@ -3092,14 +3092,14 @@ MaybeObject* KeyedStoreStubCompiler::CompileStoreSpecialized(
   Register elements_reg = t0;
 
   // Check that the receiver isn't a smi.
-  __ BranchOnSmi(receiver_reg, &miss);
+  __ JumpIfSmi(receiver_reg, &miss);
 
   // Check that the map matches.
   __ lw(scratch, FieldMemOperand(receiver_reg, HeapObject::kMapOffset));
   __ Branch(&miss, ne, scratch, Operand(Handle<Map>(receiver->map())));
 
   // Check that the key is a smi.
-  __ BranchOnNotSmi(key_reg, &miss);
+  __ JumpIfNotSmi(key_reg, &miss);
 
   // Get the elements array and make sure it is a fast element array, not 'cow'.
   __ lw(elements_reg,
@@ -3319,10 +3319,10 @@ MaybeObject* ExternalArrayStubCompiler::CompileKeyedLoadStub(
   Register receiver = a1;
 
   // Check that the object isn't a smi
-  __ BranchOnSmi(receiver, &slow);
+  __ JumpIfSmi(receiver, &slow);
 
   // Check that the key is a smi.
-  __ BranchOnNotSmi(key, &slow);
+  __ JumpIfNotSmi(key, &slow);
 
   // Check that the object is a JS object. Load map into a2.
   __ GetObjectType(receiver, a2, a3);
@@ -3617,7 +3617,7 @@ MaybeObject* ExternalArrayStubCompiler::CompileKeyedStoreStub(
   // a3 mostly holds the elements array or the destination external array.
 
   // Check that the object isn't a smi.
-  __ BranchOnSmi(receiver, &slow);
+  __ JumpIfSmi(receiver, &slow);
 
   // Check that the object is a JS object. Load map into a3.
   __ GetObjectType(receiver, a3, t0);
@@ -3630,7 +3630,7 @@ MaybeObject* ExternalArrayStubCompiler::CompileKeyedStoreStub(
   __ Branch(&slow, ne, t1, Operand(zero_reg));
 
   // Check that the key is a smi.
-  __ BranchOnNotSmi(key, &slow);
+  __ JumpIfNotSmi(key, &slow);
 
   // Check that the elements array is the appropriate type of ExternalArray.
   __ lw(a3, FieldMemOperand(a2, JSObject::kElementsOffset));
@@ -3649,7 +3649,7 @@ MaybeObject* ExternalArrayStubCompiler::CompileKeyedStoreStub(
   // a3: external array.
   // t0: key (integer).
 
-  __ BranchOnNotSmi(value, &check_heap_number);
+  __ JumpIfNotSmi(value, &check_heap_number);
   __ sra(t1, value, kSmiTagSize);  // Untag the value.
   __ lw(a3, FieldMemOperand(a3, ExternalArray::kExternalPointerOffset));
 

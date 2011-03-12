@@ -1787,7 +1787,7 @@ void CodeGenerator::CallApplyLazy(Expression* applicand,
   //   sp[2]: applicand.
 
   // Check that the receiver really is a JavaScript object.
-  __ BranchOnSmi(receiver_reg, &build_args);
+  __ JumpIfSmi(receiver_reg, &build_args);
   // We allow all JSObjects including JSFunctions.  As long as
   // JS_FUNCTION_TYPE is the last instance type and it is right
   // after LAST_JS_OBJECT_TYPE, we do not have to check the upper
@@ -1800,7 +1800,7 @@ void CodeGenerator::CallApplyLazy(Expression* applicand,
 
   // Check that applicand.apply is Function.prototype.apply.
   __ lw(v0, MemOperand(sp, kPointerSize));
-  __ BranchOnSmi(v0, &build_args);
+  __ JumpIfSmi(v0, &build_args);
 
   __ GetObjectType(a0, a1, a2);
   __ Branch(&build_args, ne, a2, Operand(JS_FUNCTION_TYPE));
@@ -1812,7 +1812,7 @@ void CodeGenerator::CallApplyLazy(Expression* applicand,
 
   // Check that applicand is a function.
   __ lw(a1, MemOperand(sp, 2 * kPointerSize));
-  __ BranchOnSmi(a1, &build_args);
+  __ JumpIfSmi(a1, &build_args);
 
   __ GetObjectType(a1, a2, a3);
   __ Branch(&build_args, ne, a3, Operand(JS_FUNCTION_TYPE));
@@ -4677,8 +4677,8 @@ void CodeGenerator::GenerateMathPow(ZoneList<Expression*>* args) {
     ASSERT(runtime.entry_frame() == NULL);
     runtime.set_entry_frame(frame_);
 
-    __ BranchOnNotSmi(exponent, &exponent_nonsmi);
-    __ BranchOnNotSmi(base, &base_nonsmi);
+    __ JumpIfNotSmi(exponent, &exponent_nonsmi);
+    __ JumpIfNotSmi(base, &base_nonsmi);
 
     heap_number_map = t2;
     __ LoadRoot(heap_number_map, Heap::kHeapNumberMapRootIndex);
@@ -5225,7 +5225,7 @@ class DeferredIsStringWrapperSafeForDefaultValueOf : public DeferredCode {
     // If a valueOf property is not found on the object check that it's
     // prototype is the un-modified String prototype. If not result is false.
     __ lw(scratch1_, FieldMemOperand(map_result_, Map::kPrototypeOffset));
-    __ BranchOnSmi(scratch1_, &false_result);
+    __ JumpIfSmi(scratch1_, &false_result);
     __ lw(scratch1_, FieldMemOperand(scratch1_, HeapObject::kMapOffset));
     __ lw(scratch2_,
           ContextOperand(cp, Context::GLOBAL_INDEX));
@@ -6078,7 +6078,7 @@ class DeferredCountOperation: public DeferredCode {
 
     Label slow;
     // Check for smi operand.
-    __ BranchOnNotSmi(value_, &slow);
+    __ JumpIfNotSmi(value_, &slow);
 
     // Revert optimistic increment/decrement.
     if (is_increment_) {

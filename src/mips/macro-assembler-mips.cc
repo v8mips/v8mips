@@ -2240,7 +2240,7 @@ void MacroAssembler::CheckMap(Register obj,
                               Label* fail,
                               bool is_heap_object) {
   if (!is_heap_object) {
-    BranchOnSmi(obj, fail);
+    JumpIfSmi(obj, fail);
   }
   lw(scratch, FieldMemOperand(obj, HeapObject::kMapOffset));
   li(at, Operand(map));
@@ -2254,7 +2254,7 @@ void MacroAssembler::CheckMap(Register obj,
                               Label* fail,
                               bool is_heap_object) {
   if (!is_heap_object) {
-    BranchOnSmi(obj, fail);
+    JumpIfSmi(obj, fail);
   }
   lw(scratch, FieldMemOperand(obj, HeapObject::kMapOffset));
   LoadRoot(at, index);
@@ -2452,7 +2452,7 @@ void MacroAssembler::TryGetFunctionPrototype(Register function,
                                              Register scratch,
                                              Label* miss) {
   // Check that the receiver isn't a smi.
-  BranchOnSmi(function, miss);
+  JumpIfSmi(function, miss);
 
   // Check that the function really is a function.  Load map into result reg.
   GetObjectType(function, result, scratch);
@@ -2614,7 +2614,7 @@ void MacroAssembler::ObjectToDoubleFPURegister(Register object,
   Label done;
   if ((flags & OBJECT_NOT_SMI) == 0) {
     Label not_smi;
-    BranchOnNotSmi(object, &not_smi);
+    JumpIfNotSmi(object, &not_smi);
     // Remove smi tag and convert to double.
     sra(scratch1, object, kSmiTagSize);
     mtc1(scratch1, result);

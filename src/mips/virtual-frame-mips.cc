@@ -205,7 +205,7 @@ void VirtualFrame::Enter() {
   // on a2 being available for use.
   if (FLAG_debug_code) {
     Label map_check, done;
-    __ BranchOnNotSmi(a1, &map_check, t1);
+    __ JumpIfNotSmi(a1, &map_check, t1);
     __ stop("VirtualFrame::Enter - a1 is not a function (smi check).");
     __ bind(&map_check);
     __ GetObjectType(a1, a2, a2);
