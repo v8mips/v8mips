@@ -1012,18 +1012,43 @@ $Error.captureStackTrace = captureStackTrace;
 // Setup extra properties of the Error.prototype object.
 $Error.prototype.message = '';
 
-function errorToString() {
-  var type = this.type;
-  if (type && !this.hasOwnProperty("message")) {
-    return this.name + ": " + FormatMessage({ type: type, args: this.arguments });
+// Global list of error objects visited during errorToString. This is
+// used to detect cycles in error toString formatting.
+var visited_errors = new $Array();
+var cyclic_error_marker = new $Object();
+
+function errorToStringDetectCycle() {
+  if (!%PushIfAbsent(visited_errors, this)) throw cyclic_error_marker;
+  try {
+    var type = this.type;
+    if (type && !this.hasOwnProperty("message")) {
+      var formatted = FormatMessage({ type: type, args: this.arguments });
+      return this.name + ": " + formatted;
+    }
+    var message = this.hasOwnProperty("message") ? (": " + this.message) : "";
+    return this.name + message;
+  } finally {
+    visited_errors.pop();
   }
-  var message = this.hasOwnProperty("message") ? (": " + this.message) : "";
-  return this.name + message;
+}
+
+function errorToString() {
+  // This helper function is needed because access to properties on
+  // the builtins object do not work inside of a catch clause.
+  function isCyclicErrorMarker(o) { return o === cyclic_error_marker; }
+
+  try {
+    return %_CallFunction(this, errorToStringDetectCycle);
+  } catch(e) {
+    // If this error message was encountered already return the empty
+    // string for it instead of recursively formatting it.
+    if (isCyclicErrorMarker(e)) return '';
+    else throw e;
+  }
 }
 
 %FunctionSetName(errorToString, 'toString');
 %SetProperty($Error.prototype, 'toString', errorToString, DONT_ENUM);
-
 
 // Boilerplate for exceptions for stack overflows. Used from
 // Top::StackOverflow().
