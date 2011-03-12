@@ -353,8 +353,8 @@ class FloatingPointHelper : public AllStatic {
 
   // Loads smis from a0 and a1 (right and left in binary operations) into
   // floating point registers. Depending on the destination the values ends up
-  // either f14 and f12 or in a2/a3 and a0/a1 respectively. If the destination is
-  // floating point registers FPU must be supported. If core registers are
+  // either f14 and f12 or in a2/a3 and a0/a1 respectively. If the destination
+  // is floating point registers FPU must be supported. If core registers are
   // requested when FPU is supported f12 and f14 will be scratched.
   static void LoadSmis(MacroAssembler* masm,
                        Destination destination,
@@ -363,8 +363,8 @@ class FloatingPointHelper : public AllStatic {
 
   // Loads objects from a0 and a1 (right and left in binary operations) into
   // floating point registers. Depending on the destination the values ends up
-  // either f14 and f12 or in a2/a3 and a0/a1 respectively. If the destination is
-  // floating point registers FPU must be supported. If core registers are
+  // either f14 and f12 or in a2/a3 and a0/a1 respectively. If the destination
+  // is floating point registers FPU must be supported. If core registers are
   // requested when FPU is supported f12 and f14 will still be scratched. If
   // either a0 or a1 is not a number (not smi and not heap number object) the
   // not_number label is jumped to.
@@ -2276,6 +2276,57 @@ const char* TypeRecordingBinaryOpStub::GetName() {
 }
 
 
+
+void TypeRecordingBinaryOpStub::GenerateOptimisticSmiOperation(
+    MacroAssembler* masm) {
+  Register left = a1;
+  Register right = a0;
+
+  Register scratch1 = t0;
+  Register scratch2 = t1;
+
+  ASSERT(right.is(a0));
+
+  switch (op_) {
+    case Token::ADD:
+      __ Addu(v0, left, right);  // Add optimistically.
+      // Check for overflow.
+      __ Xor(scratch1, v0, left);
+      __ Xor(scratch2, v0, right);
+      __ And(scratch1, scratch1, scratch2);
+      __ Ret(ge, scratch1, Operand(zero_reg));  // Return on NO overflow (ge 0).
+      // No need to revert anything - right and left are intact.
+      break;
+    case Token::SUB:
+      __ Subu(v0, left, right);  // Subtract optimistically.
+      // Check for overflow.
+      __ Xor(scratch1, v0, left);
+      __ Xor(scratch2, left, right);
+      __ And(scratch1, scratch1, scratch2);
+      __ Ret(ge, scratch1, Operand(zero_reg));  // Return on NO overflow (ge 0).
+      // No need to revert anything - right and left are intact.
+      break;
+    default:
+      UNREACHABLE();
+  }
+}
+
+
+void TypeRecordingBinaryOpStub::GenerateFPUOperation(
+    MacroAssembler* masm) {
+  switch (op_) {
+    case Token::ADD:
+      __ add_d(f10, f12, f14);
+      break;
+    case Token::SUB:
+      __ sub_d(f10, f12, f14);
+      break;
+    default:
+      UNREACHABLE();
+  }
+}
+
+
 // Generate the smi code. If the operation on smis are successful this return is
 // generated. If the result is not a smi and heap number allocation is not
 // requested the code falls through. If number allocation is requested but a
@@ -2285,7 +2336,7 @@ void TypeRecordingBinaryOpStub::GenerateSmiCode(MacroAssembler* masm,
     SmiCodeGenerateHeapNumberResults allow_heapnumber_results) {
   Label not_smis;
 
-  ASSERT(op_ == Token::ADD);
+  ASSERT(op_ == Token::ADD || op_ == Token::SUB);
 
   Register left = a1;
   Register right = a0;
@@ -2297,16 +2348,7 @@ void TypeRecordingBinaryOpStub::GenerateSmiCode(MacroAssembler* masm,
   STATIC_ASSERT(kSmiTag == 0);
   __ BranchOnNotSmi(scratch1, &not_smis);
 
-  __ Addu(v0, right, left);  // Add optimistically.
-  // Check for overflow.
-  __ Xor(scratch1, v0, left);
-  __ Xor(scratch2, v0, right);
-  __ And(scratch1, scratch1, scratch2);
-
-  // Return smi result if no overflow (v0 is the result).
-  __ Ret(ge, scratch1, Operand(zero_reg));  // Return on NO overflow (ge 0).
-
-  // Result is not a smi. right and left are intact.
+  GenerateOptimisticSmiOperation(masm);
 
   // If heap number results are possible generate the result in an allocated
   // heap number.
@@ -2333,7 +2375,7 @@ void TypeRecordingBinaryOpStub::GenerateSmiCode(MacroAssembler* masm,
       // f12: Left value
       // f14: Right value
       CpuFeatures::Scope scope(FPU);
-      __ add_d(f10, f12, f14);
+      GenerateFPUOperation(masm);
       // ARM uses a workaround here because of the unaligned HeapNumber
       // kValueOffset. On MIPS this workaround is built into sdc1 so there's no
       // point in generating even more instructions.
@@ -2375,7 +2417,7 @@ void TypeRecordingBinaryOpStub::GenerateSmiCode(MacroAssembler* masm,
 void TypeRecordingBinaryOpStub::GenerateSmiStub(MacroAssembler* masm) {
   Label not_smis, call_runtime;
 
-  ASSERT(op_ == Token::ADD);
+  ASSERT(op_ == Token::ADD || op_ == Token::SUB);
 
   if (result_type_ == TRBinaryOpIC::UNINITIALIZED ||
       result_type_ == TRBinaryOpIC::SMI) {
@@ -2398,7 +2440,7 @@ void TypeRecordingBinaryOpStub::GenerateSmiStub(MacroAssembler* masm) {
 
 void TypeRecordingBinaryOpStub::GenerateStringStub(MacroAssembler* masm) {
   ASSERT(operands_type_ == TRBinaryOpIC::STRING);
-  ASSERT(op_ == Token::ADD);
+  ASSERT(op_ == Token::ADD || op_ == Token::SUB);
   // Try to add arguments as strings, otherwise, transition to the generic
   // TRBinaryOpIC type.
   GenerateAddStrings(masm);
@@ -2407,7 +2449,7 @@ void TypeRecordingBinaryOpStub::GenerateStringStub(MacroAssembler* masm) {
 
 
 void TypeRecordingBinaryOpStub::GenerateInt32Stub(MacroAssembler* masm) {
-  ASSERT(op_ == Token::ADD);
+  ASSERT(op_ == Token::ADD || op_ == Token::SUB);
 
   ASSERT(operands_type_ == TRBinaryOpIC::INT32);
 
@@ -2416,7 +2458,7 @@ void TypeRecordingBinaryOpStub::GenerateInt32Stub(MacroAssembler* masm) {
 
 
 void TypeRecordingBinaryOpStub::GenerateHeapNumberStub(MacroAssembler* masm) {
-  ASSERT(op_ == Token::ADD);
+  ASSERT(op_ == Token::ADD || op_ == Token::SUB);
 
   Register scratch1 = t3;
   Register scratch2 = t5;
@@ -2442,7 +2484,7 @@ void TypeRecordingBinaryOpStub::GenerateHeapNumberStub(MacroAssembler* masm) {
   if (destination == FloatingPointHelper::kFPURegisters) {
     // Use floating point instructions for the binary operation.
     CpuFeatures::Scope scope(FPU);
-    __ add_d(f10, f12, f14);
+    GenerateFPUOperation(masm);
 
     // Get a heap number object for the result - might be left or right if one
     // of these are overwritable.
@@ -2498,7 +2540,7 @@ void TypeRecordingBinaryOpStub::GenerateHeapNumberStub(MacroAssembler* masm) {
 
 
 void TypeRecordingBinaryOpStub::GenerateGeneric(MacroAssembler* masm) {
-  ASSERT(op_ == Token::ADD);
+  ASSERT(op_ == Token::ADD || op_ == Token::SUB);
 
   Label call_runtime;
 
@@ -2542,10 +2584,13 @@ void TypeRecordingBinaryOpStub::GenerateAddStrings(MacroAssembler* masm) {
 
 
 void TypeRecordingBinaryOpStub::GenerateCallRuntime(MacroAssembler* masm) {
+  GenerateRegisterArgsPush(masm);
   switch (op_) {
     case Token::ADD:
-      GenerateRegisterArgsPush(masm);
       __ InvokeBuiltin(Builtins::ADD, JUMP_JS);
+      break;
+    case Token::SUB:
+      __ InvokeBuiltin(Builtins::SUB, JUMP_JS);
       break;
     default:
       UNREACHABLE();
@@ -2577,7 +2622,7 @@ void TypeRecordingBinaryOpStub::GenerateHeapResultAllocation(
     __ Branch(&allocated);
     __ bind(&skip_allocation);
     // Use object holding the overwritable operand for result.
-    __ li(result, Operand(overwritable_operand));
+    __ mov(result, overwritable_operand);
     __ bind(&allocated);
   } else {
     ASSERT(mode_ == NO_OVERWRITE);
