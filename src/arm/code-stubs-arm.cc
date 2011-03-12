@@ -2695,7 +2695,9 @@ void TypeRecordingBinaryOpStub::GenerateGeneric(MacroAssembler* masm) {
   __ bind(&call_runtime);
 
   // Try to add strings before calling runtime.
-  GenerateAddStrings(masm);
+  if (op_ == Token::ADD) {
+    GenerateAddStrings(masm);
+  }
 
   GenericBinaryOpStub stub(op_, mode_, r1, r0);
   __ TailCallStub(&stub);
@@ -2703,6 +2705,8 @@ void TypeRecordingBinaryOpStub::GenerateGeneric(MacroAssembler* masm) {
 
 
 void TypeRecordingBinaryOpStub::GenerateAddStrings(MacroAssembler* masm) {
+  ASSERT(op_ == Token::ADD);
+
   Register left = r1;
   Register right = r0;
   Label call_runtime;
@@ -3160,7 +3164,7 @@ void CEntryStub::GenerateCore(MacroAssembler* masm,
     if (frame_alignment > kPointerSize) {
       Label alignment_as_expected;
       ASSERT(IsPowerOf2(frame_alignment));
-      __ tst(r2, Operand(frame_alignment_mask));
+      __ tst(sp, Operand(frame_alignment_mask));
       __ b(eq, &alignment_as_expected);
       // Don't use Check here, as it will call Runtime_Abort re-entering here.
       __ stop("Unexpected alignment");
