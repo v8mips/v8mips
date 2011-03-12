@@ -74,7 +74,7 @@ void ThreadLocalTop::Initialize() {
 #ifdef V8_TARGET_ARCH_ARM
   simulator_ = Simulator::current();
 #elif V8_TARGET_ARCH_MIPS
-  simulator_ = assembler::mips::Simulator::current();
+  simulator_ = Simulator::current();
 #endif
 #endif
 #ifdef ENABLE_LOGGING_AND_PROFILING
@@ -1097,7 +1097,7 @@ char* Top::RestoreThread(char* from) {
 #ifdef V8_TARGET_ARCH_ARM
   thread_local_.simulator_ = Simulator::current();
 #elif V8_TARGET_ARCH_MIPS
-  thread_local_.simulator_ = assembler::mips::Simulator::current();
+  thread_local_.simulator_ = Simulator::current();
 #endif
 #endif
   return from + sizeof(thread_local_);

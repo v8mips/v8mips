@@ -41,8 +41,6 @@
 #include "constants-mips.h"
 #include "serialize.h"
 
-using namespace assembler::mips;
-
 namespace v8 {
 namespace internal {
 
@@ -73,7 +71,7 @@ namespace internal {
 
 // Core register.
 struct Register {
-  static const int kNumRegisters = ::kNumRegisters;
+  static const int kNumRegisters = v8::internal::kNumRegisters;
   static const int kNumAllocatableRegisters = 14;  // v0 through t7
 
   static int ToAllocationIndex(Register reg) {
@@ -126,40 +124,40 @@ struct Register {
   int code_;
 };
 
-extern const Register no_reg;
+const Register no_reg = { -1 };
 
-extern const Register zero_reg;
-extern const Register at;
-extern const Register v0;
-extern const Register v1;
-extern const Register a0;
-extern const Register a1;
-extern const Register a2;
-extern const Register a3;
-extern const Register t0;
-extern const Register t1;
-extern const Register t2;
-extern const Register t3;
-extern const Register t4;
-extern const Register t5;
-extern const Register t6;
-extern const Register t7;
-extern const Register s0;
-extern const Register s1;
-extern const Register s2;
-extern const Register s3;
-extern const Register s4;
-extern const Register s5;
-extern const Register s6;
-extern const Register s7;
-extern const Register t8;
-extern const Register t9;
-extern const Register k0;
-extern const Register k1;
-extern const Register gp;
-extern const Register sp;
-extern const Register s8_fp;
-extern const Register ra;
+const Register zero_reg = { 0 };
+const Register at = { 1 };
+const Register v0 = { 2 };
+const Register v1 = { 3 };
+const Register a0 = { 4 };
+const Register a1 = { 5 };
+const Register a2 = { 6 };
+const Register a3 = { 7 };
+const Register t0 = { 8 };
+const Register t1 = { 9 };
+const Register t2 = { 10 };
+const Register t3 = { 11 };
+const Register t4 = { 12 };
+const Register t5 = { 13 };
+const Register t6 = { 14 };
+const Register t7 = { 15 };
+const Register s0 = { 16 };
+const Register s1 = { 17 };
+const Register s2 = { 18 };
+const Register s3 = { 19 };
+const Register s4 = { 20 };
+const Register s5 = { 21 };
+const Register s6 = { 22 };
+const Register s7 = { 23 };
+const Register t8 = { 24 };
+const Register t9 = { 25 };
+const Register k0 = { 26 };
+const Register k1 = { 27 };
+const Register gp = { 28 };
+const Register sp = { 29 };
+const Register s8_fp = { 30 };
+const Register ra = { 31 };
 
 
 int ToNumber(Register reg);
@@ -168,7 +166,7 @@ Register ToRegister(int num);
 
 // Coprocessor register.
 struct FPURegister {
-  static const int kNumRegisters = ::kNumFPURegisters;
+  static const int kNumRegisters = v8::internal::kNumFPURegisters;
   // f0 has been excluded from allocation. This is following ia32
   // where xmm0 is excluded. This should be revisited.
   // Currently f0 is used as a scratch register.
@@ -234,40 +232,40 @@ struct FPURegister {
 
 typedef FPURegister DoubleRegister;
 
-extern const FPURegister no_creg;
+const FPURegister no_creg = { -1 };
 
-extern const FPURegister f0;
-extern const FPURegister f1;
-extern const FPURegister f2;
-extern const FPURegister f3;
-extern const FPURegister f4;
-extern const FPURegister f5;
-extern const FPURegister f6;
-extern const FPURegister f7;
-extern const FPURegister f8;
-extern const FPURegister f9;
-extern const FPURegister f10;
-extern const FPURegister f11;
-extern const FPURegister f12;  // arg
-extern const FPURegister f13;
-extern const FPURegister f14;  // arg
-extern const FPURegister f15;
-extern const FPURegister f16;
-extern const FPURegister f17;
-extern const FPURegister f18;
-extern const FPURegister f19;
-extern const FPURegister f20;
-extern const FPURegister f21;
-extern const FPURegister f22;
-extern const FPURegister f23;
-extern const FPURegister f24;
-extern const FPURegister f25;
-extern const FPURegister f26;
-extern const FPURegister f27;
-extern const FPURegister f28;
-extern const FPURegister f29;
-extern const FPURegister f30;
-extern const FPURegister f31;
+const FPURegister f0 = { 0 };  // return value in hard float mode
+const FPURegister f1 = { 1 };
+const FPURegister f2 = { 2 };
+const FPURegister f3 = { 3 };
+const FPURegister f4 = { 4 };
+const FPURegister f5 = { 5 };
+const FPURegister f6 = { 6 };
+const FPURegister f7 = { 7 };
+const FPURegister f8 = { 8 };
+const FPURegister f9 = { 9 };
+const FPURegister f10 = { 10 };
+const FPURegister f11 = { 11 };
+const FPURegister f12 = { 12 };  // arg in hard float mode
+const FPURegister f13 = { 13 };
+const FPURegister f14 = { 14 };  // arg in hard float mode
+const FPURegister f15 = { 15 };
+const FPURegister f16 = { 16 };
+const FPURegister f17 = { 17 };
+const FPURegister f18 = { 18 };
+const FPURegister f19 = { 19 };
+const FPURegister f20 = { 20 };
+const FPURegister f21 = { 21 };
+const FPURegister f22 = { 22 };
+const FPURegister f23 = { 23 };
+const FPURegister f24 = { 24 };
+const FPURegister f25 = { 25 };
+const FPURegister f26 = { 26 };
+const FPURegister f27 = { 27 };
+const FPURegister f28 = { 28 };
+const FPURegister f29 = { 29 };
+const FPURegister f30 = { 30 };
+const FPURegister f31 = { 31 };
 
 // FPU (coprocessor 1) control registers.
 // Currently only FCSR (#31) is implemented.
@@ -293,55 +291,8 @@ struct FPUControlRegister {
   int code_;
 };
 
-extern const FPUControlRegister no_fpucreg;
-extern const FPUControlRegister FCSR;
-
-
-// FCSR constants.
-static const uint32_t kFCSRFlagMask = (1 << 6) - 1;
-static const uint32_t kFCSRFlagShift = 2;
-
-// Returns the equivalent of !cc.
-// Negation of the default no_condition (-1) results in a non-default
-// no_condition value (-2). As long as tests for no_condition check
-// for condition < 0, this will work as expected.
-inline Condition NegateCondition(Condition cc) {
-  ASSERT(cc != cc_always);
-  return static_cast<Condition>(cc ^ 1);
-}
-
-
-inline Condition ReverseCondition(Condition cc) {
-  switch (cc) {
-    case Uless:
-      return Ugreater;
-    case Ugreater:
-      return Uless;
-    case Ugreater_equal:
-      return Uless_equal;
-    case Uless_equal:
-      return Ugreater_equal;
-    case less:
-      return greater;
-    case greater:
-      return less;
-    case greater_equal:
-      return less_equal;
-    case less_equal:
-      return greater_equal;
-    default:
-      return cc;
-  };
-}
-
-
-enum Hint {
-  no_hint = 0
-};
-
-inline Hint NegateHint(Hint hint) {
-  return no_hint;
-}
+const FPUControlRegister no_fpucreg = { -1 };
+const FPUControlRegister FCSR = { kFCSRRegister };
 
 
 // -----------------------------------------------------------------------------

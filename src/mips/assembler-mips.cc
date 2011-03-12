@@ -81,80 +81,6 @@ void CpuFeatures::Probe(bool portable) {
 }
 
 
-const Register no_reg = { -1 };
-
-const Register zero_reg = { 0 };
-const Register at = { 1 };
-const Register v0 = { 2 };
-const Register v1 = { 3 };
-const Register a0 = { 4 };
-const Register a1 = { 5 };
-const Register a2 = { 6 };
-const Register a3 = { 7 };
-const Register t0 = { 8 };
-const Register t1 = { 9 };
-const Register t2 = { 10 };
-const Register t3 = { 11 };
-const Register t4 = { 12 };
-const Register t5 = { 13 };
-const Register t6 = { 14 };
-const Register t7 = { 15 };
-const Register s0 = { 16 };
-const Register s1 = { 17 };
-const Register s2 = { 18 };
-const Register s3 = { 19 };
-const Register s4 = { 20 };
-const Register s5 = { 21 };
-const Register s6 = { 22 };
-const Register s7 = { 23 };
-const Register t8 = { 24 };
-const Register t9 = { 25 };
-const Register k0 = { 26 };
-const Register k1 = { 27 };
-const Register gp = { 28 };
-const Register sp = { 29 };
-const Register s8_fp = { 30 };
-const Register ra = { 31 };
-
-
-const FPURegister no_creg = { -1 };
-
-const FPURegister f0 = { 0 };
-const FPURegister f1 = { 1 };
-const FPURegister f2 = { 2 };
-const FPURegister f3 = { 3 };
-const FPURegister f4 = { 4 };
-const FPURegister f5 = { 5 };
-const FPURegister f6 = { 6 };
-const FPURegister f7 = { 7 };
-const FPURegister f8 = { 8 };
-const FPURegister f9 = { 9 };
-const FPURegister f10 = { 10 };
-const FPURegister f11 = { 11 };
-const FPURegister f12 = { 12 };
-const FPURegister f13 = { 13 };
-const FPURegister f14 = { 14 };
-const FPURegister f15 = { 15 };
-const FPURegister f16 = { 16 };
-const FPURegister f17 = { 17 };
-const FPURegister f18 = { 18 };
-const FPURegister f19 = { 19 };
-const FPURegister f20 = { 20 };
-const FPURegister f21 = { 21 };
-const FPURegister f22 = { 22 };
-const FPURegister f23 = { 23 };
-const FPURegister f24 = { 24 };
-const FPURegister f25 = { 25 };
-const FPURegister f26 = { 26 };
-const FPURegister f27 = { 27 };
-const FPURegister f28 = { 28 };
-const FPURegister f29 = { 29 };
-const FPURegister f30 = { 30 };
-const FPURegister f31 = { 31 };
-
-const FPUControlRegister no_fpucreg = { -1 };
-const FPUControlRegister FCSR = { kFCSRRegister };
-
 int ToNumber(Register reg) {
   ASSERT(reg.is_valid());
   const int kNumbers[] = {
@@ -276,41 +202,42 @@ MemOperand::MemOperand(Register rm, int32_t offset) : Operand(rm) {
 
 
 // -----------------------------------------------------------------------------
-// Implementation of Assembler.
+// Specific instructions, constants, and masks.
 
 static const int kMinimalBufferSize = 4*KB;
 static byte* spare_buffer_ = NULL;
 static const int kNegOffset = 0x00008000;
 // addiu(sp, sp, 4) aka Pop() operation or part of Pop(r)
 // operations as post-increment of sp.
-static const Instr kPopInstruction = ADDIU | (sp.code() << kRsShift)
+const Instr kPopInstruction = ADDIU | (sp.code() << kRsShift)
       | (sp.code() << kRtShift) | (kPointerSize & kImm16Mask);
 // addiu(sp, sp, -4) part of Push(r) operation as pre-decrement of sp.
-static const Instr kPushInstruction = ADDIU | (sp.code() << kRsShift)
+const Instr kPushInstruction = ADDIU | (sp.code() << kRsShift)
       | (sp.code() << kRtShift) | (-kPointerSize & kImm16Mask);
 // sw(r, MemOperand(sp, 0))
-static const Instr kPushRegPattern = SW | (sp.code() << kRsShift)
+const Instr kPushRegPattern = SW | (sp.code() << kRsShift)
       |  (0 & kImm16Mask);
 //  lw(r, MemOperand(sp, 0))
-static const Instr kPopRegPattern = LW | (sp.code() << kRsShift)
+const Instr kPopRegPattern = LW | (sp.code() << kRsShift)
       |  (0 & kImm16Mask);
 
-static const Instr kLwRegFpOffsetPattern = LW | (s8_fp.code() << kRsShift)
+const Instr kLwRegFpOffsetPattern = LW | (s8_fp.code() << kRsShift)
       |  (0 & kImm16Mask);
 
-static const Instr kSwRegFpOffsetPattern = SW | (s8_fp.code() << kRsShift)
+const Instr kSwRegFpOffsetPattern = SW | (s8_fp.code() << kRsShift)
       |  (0 & kImm16Mask);
 
-static const Instr kLwRegFpNegOffsetPattern = LW | (s8_fp.code() << kRsShift)
+const Instr kLwRegFpNegOffsetPattern = LW | (s8_fp.code() << kRsShift)
       |  (kNegOffset & kImm16Mask);
 
-static const Instr kSwRegFpNegOffsetPattern = SW | (s8_fp.code() << kRsShift)
+const Instr kSwRegFpNegOffsetPattern = SW | (s8_fp.code() << kRsShift)
       |  (kNegOffset & kImm16Mask);
 // A mask for the Rt register for push, pop, lw, sw instructions.
-static const Instr kRtMask = kRtFieldMask;
-static const Instr kLwSwInstrTypeMask = 0xffe00000;
-static const Instr kLwSwInstrArgumentMask  = ~kLwSwInstrTypeMask;
-static const Instr kLwSwOffsetMask = kImm16Mask;
+const Instr kRtMask = kRtFieldMask;
+const Instr kLwSwInstrTypeMask = 0xffe00000;
+const Instr kLwSwInstrArgumentMask  = ~kLwSwInstrTypeMask;
+const Instr kLwSwOffsetMask = kImm16Mask;
+
 
 Assembler::Assembler(void* buffer, int buffer_size)
     : positions_recorder_(this),

@@ -31,10 +31,8 @@
 
 #include "constants-mips.h"
 
-namespace assembler {
-namespace mips {
-
-namespace v8i = v8::internal;
+namespace v8 {
+namespace internal {
 
 
 // -----------------------------------------------------------------------------
@@ -149,8 +147,8 @@ int FPURegisters::Number(const char* name) {
 // -----------------------------------------------------------------------------
 // Instruction
 
-bool Instruction::IsForbiddenInBranchDelay() {
-  int op = OpcodeFieldRaw();
+bool Instruction::IsForbiddenInBranchDelay() const {
+  const int op = OpcodeFieldRaw();
   switch (op) {
     case J:
     case JAL:
@@ -189,8 +187,8 @@ bool Instruction::IsForbiddenInBranchDelay() {
 }
 
 
-bool Instruction::IsLinkingInstruction() {
-  int op = OpcodeFieldRaw();
+bool Instruction::IsLinkingInstruction() const {
+  const int op = OpcodeFieldRaw();
   switch (op) {
     case JAL:
     case REGIMM:
@@ -214,7 +212,7 @@ bool Instruction::IsLinkingInstruction() {
 }
 
 
-bool Instruction::IsTrap() {
+bool Instruction::IsTrap() const {
   if (OpcodeFieldRaw() != SPECIAL) {
     return false;
   } else {
@@ -349,6 +347,6 @@ Instruction::Type Instruction::InstructionType() const {
 }
 
 
-} }   // namespace assembler::mips
+} }   // namespace v8::internal
 
 #endif  // V8_TARGET_ARCH_MIPS

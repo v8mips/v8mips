@@ -73,7 +73,7 @@ void CPU::FlushICache(void* start, size_t size) {
   // that the Icache was flushed.
   // None of this code ends up in the snapshot so there are no issues
   // around whether or not to generate the code when building snapshots.
-  assembler::mips::Simulator::FlushICache(start, size);
+  Simulator::FlushICache(start, size);
 #endif    // #ifdef __mips
 }
 

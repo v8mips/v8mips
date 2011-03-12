@@ -1716,7 +1716,7 @@ Condition CompareIC::ComputeCondition(Token::Value op) {
       return ge;
     default:
       UNREACHABLE();
-      return no_condition;
+      return kNoCondition;
   }
 }
 

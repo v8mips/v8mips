@@ -2061,7 +2061,8 @@ void FullCodeGenerator::VisitCall(Call* expr) {
         __ li(a0, Operand(prop->key()->AsLiteral()->handle()));
         // Record source code position for IC call.
         SetSourcePosition(prop->position());
-        // Write posistions prior to subsequent call, to ensure RelocInfo ordering.
+        // Write posistions prior to subsequent call, to ensure RelocInfo
+        // ordering.
         __ positions_recorder()->WriteRecordedPositions();
 
         Handle<Code> ic(Builtins::builtin(Builtins::KeyedLoadIC_Initialize));

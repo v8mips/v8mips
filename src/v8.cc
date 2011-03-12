@@ -81,7 +81,7 @@ bool V8::Initialize(Deserializer* des) {
 #if defined(V8_TARGET_ARCH_ARM)
   Simulator::Initialize();
 #elif defined(V8_TARGET_ARCH_MIPS)
-  ::assembler::mips::Simulator::Initialize();
+  Simulator::Initialize();
 #endif
 #endif
 

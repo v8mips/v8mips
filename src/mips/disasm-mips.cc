@@ -58,7 +58,7 @@
 
 #if defined(V8_TARGET_ARCH_MIPS)
 
-#include "constants-mips.h"
+#include "mips/constants-mips.h"
 #include "disasm.h"
 #include "macro-assembler.h"
 #include "platform.h"
@@ -69,12 +69,8 @@
   #define mips32r2 0
 #endif
 
-namespace assembler {
-namespace mips {
-
-
-namespace v8i = v8::internal;
-
+namespace v8 {
+namespace internal {
 
 //------------------------------------------------------------------------------
 
@@ -174,19 +170,19 @@ void Decoder::PrintRegister(int reg) {
 
 
 void Decoder::PrintRs(Instruction* instr) {
-  int reg = instr->RsField();
+  int reg = instr->RsValue();
   PrintRegister(reg);
 }
 
 
 void Decoder::PrintRt(Instruction* instr) {
-  int reg = instr->RtField();
+  int reg = instr->RtValue();
   PrintRegister(reg);
 }
 
 
 void Decoder::PrintRd(Instruction* instr) {
-  int reg = instr->RdField();
+  int reg = instr->RdValue();
   PrintRegister(reg);
 }
 
@@ -198,83 +194,83 @@ void Decoder::PrintFPURegister(int freg) {
 
 
 void Decoder::PrintFs(Instruction* instr) {
-  int freg = instr->RsField();
+  int freg = instr->RsValue();
   PrintFPURegister(freg);
 }
 
 
 void Decoder::PrintFt(Instruction* instr) {
-  int freg = instr->RtField();
+  int freg = instr->RtValue();
   PrintFPURegister(freg);
 }
 
 
 void Decoder::PrintFd(Instruction* instr) {
-  int freg = instr->RdField();
+  int freg = instr->RdValue();
   PrintFPURegister(freg);
 }
 
 
 // Print the integer value of the sa field.
 void Decoder::PrintSa(Instruction* instr) {
-  int sa = instr->SaField();
-  out_buffer_pos_ += v8i::OS::SNPrintF(out_buffer_ + out_buffer_pos_,
+  int sa = instr->SaValue();
+  out_buffer_pos_ += OS::SNPrintF(out_buffer_ + out_buffer_pos_,
                                        "%d", sa);
 }
 
 
 // Print the integer value of the rd field, (when it is not used as reg).
 void Decoder::PrintSd(Instruction* instr) {
-  int sd = instr->RdField();
-  out_buffer_pos_ += v8i::OS::SNPrintF(out_buffer_ + out_buffer_pos_,
+  int sd = instr->RdValue();
+  out_buffer_pos_ += OS::SNPrintF(out_buffer_ + out_buffer_pos_,
                                        "%d", sd);
 }
 
 
 // Print the integer value of the cc field for the bc1t/f instructions.
 void Decoder::PrintBc(Instruction* instr) {
-  int cc = instr->FBccField();
-  out_buffer_pos_ += v8i::OS::SNPrintF(out_buffer_ + out_buffer_pos_,
+  int cc = instr->FBccValue();
+  out_buffer_pos_ += OS::SNPrintF(out_buffer_ + out_buffer_pos_,
                                        "%d", cc);
 }
 
 
 // Print the integer value of the cc field for the FP compare instructions.
 void Decoder::PrintCc(Instruction* instr) {
-  int cc = instr->FCccField();
-  out_buffer_pos_ += v8i::OS::SNPrintF(out_buffer_ + out_buffer_pos_,
+  int cc = instr->FCccValue();
+  out_buffer_pos_ += OS::SNPrintF(out_buffer_ + out_buffer_pos_,
                                        "cc(%d)", cc);
 }
 
 
 // Print 16-bit unsigned immediate value.
 void Decoder::PrintUImm16(Instruction* instr) {
-  int32_t imm = instr->Imm16Field();
-  out_buffer_pos_ += v8i::OS::SNPrintF(out_buffer_ + out_buffer_pos_,
+  int32_t imm = instr->Imm16Value();
+  out_buffer_pos_ += OS::SNPrintF(out_buffer_ + out_buffer_pos_,
                                        "%u", imm);
 }
 
 
 // Print 16-bit signed immediate value.
 void Decoder::PrintSImm16(Instruction* instr) {
-  int32_t imm = ((instr->Imm16Field())<<16)>>16;
-  out_buffer_pos_ += v8i::OS::SNPrintF(out_buffer_ + out_buffer_pos_,
+  int32_t imm = ((instr->Imm16Value())<<16)>>16;
+  out_buffer_pos_ += OS::SNPrintF(out_buffer_ + out_buffer_pos_,
                                        "%d", imm);
 }
 
 
 // Print 16-bit hexa immediate value.
 void Decoder::PrintXImm16(Instruction* instr) {
-  int32_t imm = instr->Imm16Field();
-  out_buffer_pos_ += v8i::OS::SNPrintF(out_buffer_ + out_buffer_pos_,
+  int32_t imm = instr->Imm16Value();
+  out_buffer_pos_ += OS::SNPrintF(out_buffer_ + out_buffer_pos_,
                                        "0x%x", imm);
 }
 
 
 // Print 26-bit immediate value.
 void Decoder::PrintImm26(Instruction* instr) {
-  int32_t imm = instr->Imm26Field();
-  out_buffer_pos_ += v8i::OS::SNPrintF(out_buffer_ + out_buffer_pos_,
+  int32_t imm = instr->Imm26Value();
+  out_buffer_pos_ += OS::SNPrintF(out_buffer_ + out_buffer_pos_,
                                        "%d", imm);
 }
 
@@ -287,7 +283,7 @@ void Decoder::PrintCode(Instruction* instr) {
     case BREAK: {
       int32_t code = instr->Bits(25, 6);
       out_buffer_pos_ +=
-          v8i::OS::SNPrintF(out_buffer_ + out_buffer_pos_, "0x%05x (%d)",
+          OS::SNPrintF(out_buffer_ + out_buffer_pos_, "0x%05x (%d)",
               code, code);
       break;
                 }
@@ -299,7 +295,7 @@ void Decoder::PrintCode(Instruction* instr) {
     case TNE: {
       int32_t code = instr->Bits(15, 6);
       out_buffer_pos_ +=
-          v8i::OS::SNPrintF(out_buffer_ + out_buffer_pos_, "0x%03x", code);
+          OS::SNPrintF(out_buffer_ + out_buffer_pos_, "0x%03x", code);
       break;
     }
     default:  // Not a break or trap instruction.
@@ -318,15 +314,15 @@ void Decoder::PrintInstructionName(Instruction* instr) {
 int Decoder::FormatRegister(Instruction* instr, const char* format) {
   ASSERT(format[0] == 'r');
   if (format[1] == 's') {  // 'rs: Rs register
-    int reg = instr->RsField();
+    int reg = instr->RsValue();
     PrintRegister(reg);
     return 2;
   } else if (format[1] == 't') {  // 'rt: rt register
-    int reg = instr->RtField();
+    int reg = instr->RtValue();
     PrintRegister(reg);
     return 2;
   } else if (format[1] == 'd') {  // 'rd: rd register
-    int reg = instr->RdField();
+    int reg = instr->RdValue();
     PrintRegister(reg);
     return 2;
   }
@@ -340,15 +336,15 @@ int Decoder::FormatRegister(Instruction* instr, const char* format) {
 int Decoder::FormatFPURegister(Instruction* instr, const char* format) {
   ASSERT(format[0] == 'f');
   if (format[1] == 's') {  // 'fs: fs register
-    int reg = instr->FsField();
+    int reg = instr->FsValue();
     PrintFPURegister(reg);
     return 2;
   } else if (format[1] == 't') {  // 'ft: ft register
-    int reg = instr->FtField();
+    int reg = instr->FtValue();
     PrintFPURegister(reg);
     return 2;
   } else if (format[1] == 'd') {  // 'fd: fd register
-    int reg = instr->FdField();
+    int reg = instr->FdValue();
     PrintFPURegister(reg);
     return 2;
   }
@@ -623,7 +619,7 @@ void Decoder::DecodeTypeRegister(Instruction* instr) {
             Format(instr, "sll  'rd, 'rt, 'sa");
           break;
         case SRL:
-          if (instr->RsField() == 0) {
+          if (instr->RsValue() == 0) {
             Format(instr, "srl  'rd, 'rt, 'sa");
           } else {
             if (mips32r2) {
@@ -640,7 +636,7 @@ void Decoder::DecodeTypeRegister(Instruction* instr) {
           Format(instr, "sllv 'rd, 'rt, 'rs");
           break;
         case SRLV:
-          if (instr->SaField() == 0) {
+          if (instr->SaValue() == 0) {
             Format(instr, "srlv 'rd, 'rt, 'rs");
           } else {
             if (mips32r2) {
@@ -687,9 +683,9 @@ void Decoder::DecodeTypeRegister(Instruction* instr) {
           Format(instr, "and  'rd, 'rs, 'rt");
           break;
         case OR:
-          if (0 == instr->RsField()) {
+          if (0 == instr->RsValue()) {
             Format(instr, "mov  'rd, 'rt");
-          } else if (0 == instr->RtField()) {
+          } else if (0 == instr->RtValue()) {
             Format(instr, "mov  'rd, 'rs");
           } else {
             Format(instr, "or   'rd, 'rs, 'rt");
@@ -791,7 +787,7 @@ void Decoder::DecodeTypeImmediate(Instruction* instr) {
     case COP1:
       switch (instr->RsFieldRaw()) {
         case BC1:
-          if (instr->FBtrueField()) {
+          if (instr->FBtrueValue()) {
             Format(instr, "bc1t    'bc, 'imm16u");
           } else {
             Format(instr, "bc1f    'bc, 'imm16u");
@@ -931,7 +927,7 @@ void Decoder::DecodeTypeJump(Instruction* instr) {
 int Decoder::InstructionDecode(byte_* instr_ptr) {
   Instruction* instr = Instruction::At(instr_ptr);
   // Print raw instruction bytes.
-  out_buffer_pos_ += v8i::OS::SNPrintF(out_buffer_ + out_buffer_pos_,
+  out_buffer_pos_ += OS::SNPrintF(out_buffer_ + out_buffer_pos_,
                                        "%08x       ",
                                        instr->InstructionBits());
   switch (instr->InstructionType()) {
@@ -955,7 +951,7 @@ int Decoder::InstructionDecode(byte_* instr_ptr) {
 }
 
 
-} }  // namespace assembler::mips
+} }  // namespace v8::internal
 
 
 
@@ -963,8 +959,7 @@ int Decoder::InstructionDecode(byte_* instr_ptr) {
 
 namespace disasm {
 
-namespace v8i = v8::internal;
-
+using v8::internal::byte_;
 
 const char* NameConverter::NameOfAddress(byte_* addr) const {
   static v8::internal::EmbeddedVector<char, 32> tmp_buffer;
@@ -979,12 +974,12 @@ const char* NameConverter::NameOfConstant(byte_* addr) const {
 
 
 const char* NameConverter::NameOfCPURegister(int reg) const {
-  return assembler::mips::Registers::Name(reg);
+  return v8::internal::Registers::Name(reg);
 }
 
 
 const char* NameConverter::NameOfXMMRegister(int reg) const {
-  return assembler::mips::FPURegisters::Name(reg);
+  return v8::internal::FPURegisters::Name(reg);
 }
 
 
@@ -1012,7 +1007,7 @@ Disassembler::~Disassembler() {}
 
 int Disassembler::InstructionDecode(v8::internal::Vector<char> buffer,
                                     byte_* instruction) {
-  assembler::mips::Decoder d(converter_, buffer);
+  v8::internal::Decoder d(converter_, buffer);
   return d.InstructionDecode(instruction);
 }
 

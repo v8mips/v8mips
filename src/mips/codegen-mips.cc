@@ -7401,7 +7401,6 @@ void Reference::GetValue() {
     // Force write of positions before call to ensure position RelocInfo
     // stored prior to code_target RelocInfo.
     __ positions_recorder()->WriteRecordedPositions();
-
   }
 
   switch (type_) {
@@ -7449,7 +7448,6 @@ void Reference::SetValue(InitState init_state, WriteBarrierCharacter wb_info) {
     // Force write of positions before call to ensure position RelocInfo
     // stored prior to code_target RelocInfo.
     __ positions_recorder()->WriteRecordedPositions();
-
   }
 
   switch (type_) {

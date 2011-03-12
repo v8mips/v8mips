@@ -49,8 +49,8 @@
 //      Volume II: The MIPS32 Instruction Set
 // Try www.cs.cornell.edu/courses/cs3410/2008fa/MIPS_Vol2.pdf.
 
-namespace assembler {
-namespace mips {
+namespace v8 {
+namespace internal {
 
 // -----------------------------------------------------------------------------
 // Registers and FPURegister.
@@ -72,7 +72,11 @@ static const int kInvalidFPURegister = -1;
 // FPU (coprocessor 1) control registers. Currently only FCSR is implemented.
 static const int kFCSRRegister = 31;
 static const int kInvalidFPUControlRegister = -1;
-static const uint32_t kFPUInvalidResult = (uint32_t)(1 << 31) - 1;
+static const uint32_t kFPUInvalidResult = (uint32_t) (1 << 31) - 1;
+
+// FCSR constants.
+static const uint32_t kFCSRFlagMask = (1 << 6) - 1;
+static const uint32_t kFCSRFlagShift = 2;
 
 // Helper functions for converting between register numbers and names.
 class Registers {
@@ -362,7 +366,7 @@ enum SecondaryField {
 // the 'U' prefix is used to specify unsigned comparisons.
 enum Condition {
   // Any value < 0 is considered no_condition.
-  no_condition  = -1,
+  kNoCondition  = -1,
 
   overflow      =  0,
   no_overflow   =  1,
@@ -405,8 +409,42 @@ enum Condition {
   lo            = Uless,
   al            = cc_always,
 
-  cc_default    = no_condition
+  cc_default    = kNoCondition
 };
+
+
+// Returns the equivalent of !cc.
+// Negation of the default kNoCondition (-1) results in a non-default
+// no_condition value (-2). As long as tests for no_condition check
+// for condition < 0, this will work as expected.
+inline Condition NegateCondition(Condition cc) {
+  ASSERT(cc != cc_always);
+  return static_cast<Condition>(cc ^ 1);
+}
+
+
+inline Condition ReverseCondition(Condition cc) {
+  switch (cc) {
+    case Uless:
+      return Ugreater;
+    case Ugreater:
+      return Uless;
+    case Ugreater_equal:
+      return Uless_equal;
+    case Uless_equal:
+      return Ugreater_equal;
+    case less:
+      return greater;
+    case greater:
+      return less;
+    case greater_equal:
+      return less_equal;
+    case less_equal:
+      return greater_equal;
+    default:
+      return cc;
+  };
+}
 
 // ----- Coprocessor conditions.
 enum FPUCondition {
@@ -420,6 +458,44 @@ enum FPUCondition {
   ULE   // Unordered or Less Than or Equal
 };
 
+
+// -----------------------------------------------------------------------------
+// Hints.
+
+// Branch hints are not used on the MIPS.  They are defined so that they can
+// appear in shared function signatures, but will be ignored in MIPS
+// implementations.
+enum Hint {
+  no_hint = 0
+};
+
+inline Hint NegateHint(Hint hint) {
+  return no_hint;
+}
+
+// -----------------------------------------------------------------------------
+// Specific instructions, constants, and masks.
+// These constants are declared in assembler-mips.cc, as they use named
+// registers and other constants.
+
+// addiu(sp, sp, 4) aka Pop() operation or part of Pop(r)
+// operations as post-increment of sp.
+extern const Instr kPopInstruction;
+// addiu(sp, sp, -4) part of Push(r) operation as pre-decrement of sp.
+extern const Instr kPushInstruction;
+// sw(r, MemOperand(sp, 0))
+extern const Instr kPushRegPattern;
+//  lw(r, MemOperand(sp, 0))
+extern const Instr kPopRegPattern;
+extern const Instr kLwRegFpOffsetPattern;
+extern const Instr kSwRegFpOffsetPattern;
+extern const Instr kLwRegFpNegOffsetPattern;
+extern const Instr kSwRegFpNegOffsetPattern;
+// A mask for the Rt register for push, pop, lw, sw instructions.
+extern const Instr kRtMask;
+extern const Instr kLwSwInstrTypeMask;
+extern const Instr kLwSwInstrArgumentMask;
+extern const Instr kLwSwOffsetMask;
 
 // Break 0xfffff, reserved for redirected real time call.
 const Instr rtCallRedirInstr = SPECIAL | BREAK | call_rt_redirected << 6;
@@ -469,63 +545,63 @@ class Instruction {
 
 
   // Accessors for the different named fields used in the MIPS encoding.
-  inline Opcode OpcodeField() const {
+  inline Opcode OpcodeValue() const {
     return static_cast<Opcode>(
         Bits(kOpcodeShift + kOpcodeBits - 1, kOpcodeShift));
   }
 
-  inline int RsField() const {
+  inline int RsValue() const {
     ASSERT(InstructionType() == kRegisterType ||
            InstructionType() == kImmediateType);
     return Bits(kRsShift + kRsBits - 1, kRsShift);
   }
 
-  inline int RtField() const {
+  inline int RtValue() const {
     ASSERT(InstructionType() == kRegisterType ||
            InstructionType() == kImmediateType);
     return Bits(kRtShift + kRtBits - 1, kRtShift);
   }
 
-  inline int RdField() const {
+  inline int RdValue() const {
     ASSERT(InstructionType() == kRegisterType);
     return Bits(kRdShift + kRdBits - 1, kRdShift);
   }
 
-  inline int SaField() const {
+  inline int SaValue() const {
     ASSERT(InstructionType() == kRegisterType);
     return Bits(kSaShift + kSaBits - 1, kSaShift);
   }
 
-  inline int FunctionField() const {
+  inline int FunctionValue() const {
     ASSERT(InstructionType() == kRegisterType ||
            InstructionType() == kImmediateType);
     return Bits(kFunctionShift + kFunctionBits - 1, kFunctionShift);
   }
 
-  inline int FdField() const {
+  inline int FdValue() const {
     return Bits(kFdShift + kFdBits - 1, kFdShift);
   }
 
-  inline int FsField() const {
+  inline int FsValue() const {
     return Bits(kFsShift + kFsBits - 1, kFsShift);
   }
 
-  inline int FtField() const {
+  inline int FtValue() const {
     return Bits(kFtShift + kFtBits - 1, kFtShift);
   }
 
   // Float Compare condition code instruction bits.
-  inline int FCccField() const {
+  inline int FCccValue() const {
     return Bits(kFCccShift + kFCccBits - 1, kFCccShift);
   }
 
   // Float Branch condition code instruction bits.
-  inline int FBccField() const {
+  inline int FBccValue() const {
     return Bits(kFBccShift + kFBccBits - 1, kFBccShift);
   }
 
   // Float Branch true/false instruction bit.
-  inline int FBtrueField() const {
+  inline int FBtrueValue() const {
     return Bits(kFBtrueShift + kFBtrueBits - 1, kFBtrueShift);
   }
 
@@ -566,37 +642,37 @@ class Instruction {
   }
 
   // Get the secondary field according to the opcode.
-  inline int SecondaryField() const {
+  inline int SecondaryValue() const {
     Opcode op = OpcodeFieldRaw();
     switch (op) {
       case SPECIAL:
       case SPECIAL2:
-        return FunctionField();
+        return FunctionValue();
       case COP1:
-        return RsField();
+        return RsValue();
       case REGIMM:
-        return RtField();
+        return RtValue();
       default:
         return NULLSF;
     }
   }
 
-  inline int32_t Imm16Field() const {
+  inline int32_t Imm16Value() const {
     ASSERT(InstructionType() == kImmediateType);
     return Bits(kImm16Shift + kImm16Bits - 1, kImm16Shift);
   }
 
-  inline int32_t Imm26Field() const {
+  inline int32_t Imm26Value() const {
     ASSERT(InstructionType() == kJumpType);
     return Bits(kImm16Shift + kImm26Bits - 1, kImm26Shift);
   }
 
   // Say if the instruction should not be used in a branch delay slot.
-  bool IsForbiddenInBranchDelay();
+  bool IsForbiddenInBranchDelay() const;
   // Say if the instruction 'links'. eg: jal, bal.
-  bool IsLinkingInstruction();
+  bool IsLinkingInstruction() const;
   // Say if the instruction is a break or a trap.
-  bool IsTrap();
+  bool IsTrap() const;
 
   // Instructions are read of out a code stream. The only way to get a
   // reference to an instruction is to convert a pointer. There is no way
@@ -632,7 +708,7 @@ static const int kDoubleAlignment = (1 << kDoubleAlignmentBits);
 static const int kDoubleAlignmentMask = kDoubleAlignment - 1;
 
 
-} }   // namespace assembler::mips
+} }   // namespace v8::internal
 
 #endif    // #ifndef V8_MIPS_CONSTANTS_H_
 
