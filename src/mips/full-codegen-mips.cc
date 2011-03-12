@@ -1580,7 +1580,7 @@ void FullCodeGenerator::EmitBinaryOp(Token::Value op,
                                      OverwriteMode mode) {
   __ mov(a0, result_register());
   __ pop(a1);
-  if (op == Token::ADD || op == Token::SUB) {
+  if (op == Token::ADD || op == Token::SUB || op == Token::MUL) {
     TypeRecordingBinaryOpStub stub(op, mode);
     __ CallStub(&stub);
   } else {
