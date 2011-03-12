@@ -2617,9 +2617,17 @@ MaybeObject* StoreStubCompiler::CompileStoreGlobal(GlobalObject* object,
   __ lw(a3, FieldMemOperand(a1, HeapObject::kMapOffset));
   __ Branch(&miss, ne, a3, Operand(Handle<Map>(object->map())));
 
+  // Check that the value in the cell is not the hole. If it is, this
+  // cell could have been deleted and reintroducing the global needs
+  // to update the property details in the property dictionary of the
+  // global object. We bail out to the runtime system to do that.
+  __ li(t0, Operand(Handle<JSGlobalPropertyCell>(cell)));
+  __ LoadRoot(t1, Heap::kTheHoleValueRootIndex);
+  __ lw(t2, FieldMemOperand(t0, JSGlobalPropertyCell::kValueOffset));
+  __ Branch(&miss, eq, t1, Operand(t2));
+
   // Store the value in the cell.
-  __ li(a2, Operand(Handle<JSGlobalPropertyCell>(cell)));
-  __ sw(a0, FieldMemOperand(a2, JSGlobalPropertyCell::kValueOffset));
+  __ sw(a0, FieldMemOperand(t0, JSGlobalPropertyCell::kValueOffset));
   __ mov(v0, a0);  // Stored value must be returned in v0.
 
   __ IncrementCounter(&Counters::named_store_global_inline, 1, a1, a3);
