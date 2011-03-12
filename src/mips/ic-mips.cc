@@ -395,14 +395,15 @@ void LoadIC::GenerateArrayLength(MacroAssembler* masm) {
 }
 
 
-void LoadIC::GenerateStringLength(MacroAssembler* masm) {
+void LoadIC::GenerateStringLength(MacroAssembler* masm, bool support_wrappers) {
   // a2    : name
   // lr    : return address
   // a0    : receiver
   // sp[0] : receiver
   Label miss;
 
-  StubCompiler::GenerateLoadStringLength(masm, a0, a1, a3, &miss);
+  StubCompiler::GenerateLoadStringLength(masm, a0, a1, a3, &miss,
+                                         support_wrappers);
   // Cache miss: Jump to runtime.
   __ bind(&miss);
   StubCompiler::GenerateLoadMiss(masm, Code::LOAD_IC);
