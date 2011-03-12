@@ -499,7 +499,7 @@ int MacroAssembler::SafepointRegisterStackIndex(int reg_code) {
 
 
 MemOperand MacroAssembler::SafepointRegisterSlot(Register reg) {
-  return MemOperand(sp, SafepointRegisterStackIndex(reg.code()) * kInstrSize);
+  return MemOperand(sp, SafepointRegisterStackIndex(reg.code()) * kPointerSize);
 }
 
 
@@ -1967,6 +1967,13 @@ void MacroAssembler::AbortIfSmi(Register object) {
   ASSERT_EQ(0, kSmiTag);
   tst(object, Operand(kSmiTagMask));
   Assert(ne, "Operand is a smi");
+}
+
+
+void MacroAssembler::AbortIfNotSmi(Register object) {
+  ASSERT_EQ(0, kSmiTag);
+  tst(object, Operand(kSmiTagMask));
+  Assert(eq, "Operand is not smi");
 }
 
 

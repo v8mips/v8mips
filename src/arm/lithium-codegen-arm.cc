@@ -1039,6 +1039,37 @@ void LCodeGen::DoModI(LModI* instr) {
     __ bind(&ok);
   }
 
+  // Try a few common cases before using the generic stub.
+  Label call_stub;
+  const int kUnfolds = 3;
+  // Skip if either side is negative.
+  __ cmp(left, Operand(0));
+  __ cmp(right, Operand(0), NegateCondition(mi));
+  __ b(mi, &call_stub);
+  // If the right hand side is smaller than the (nonnegative)
+  // left hand side, it is the result. Else try a few subtractions
+  // of the left hand side.
+  __ mov(scratch, left);
+  for (int i = 0; i < kUnfolds; i++) {
+    // Check if the left hand side is less or equal than the
+    // the right hand side.
+    __ cmp(scratch, right);
+    __ mov(result, scratch, LeaveCC, lt);
+    __ b(lt, &done);
+    // If not, reduce the left hand side by the right hand
+    // side and check again.
+    if (i < kUnfolds - 1) __ sub(scratch, scratch, right);
+  }
+
+  // Check for power of two on the right hand side.
+  __ sub(scratch, right, Operand(1), SetCC);
+  __ b(mi, &call_stub);
+  __ tst(scratch, right);
+  __ b(ne, &call_stub);
+  // Perform modulo operation.
+  __ and_(result, scratch, Operand(left));
+
+  __ bind(&call_stub);
   // Call the generic stub. The numbers in r0 and r1 have
   // to be tagged to Smis. If that is not possible, deoptimize.
   DeferredModI* deferred = new DeferredModI(this, instr);
@@ -1050,7 +1081,7 @@ void LCodeGen::DoModI(LModI* instr) {
 
   // If the result in r0 is a Smi, untag it, else deoptimize.
   __ BranchOnNotSmi(result, &deoptimize);
-  __ mov(result, Operand(result, ASR, 1));
+  __ SmiUntag(result);
 
   __ b(al, &done);
   __ bind(&deoptimize);
@@ -2451,12 +2482,112 @@ void LCodeGen::DoCallConstantFunction(LCallConstantFunction* instr) {
 
 
 void LCodeGen::DoDeferredMathAbsTaggedHeapNumber(LUnaryMathOperation* instr) {
-  Abort("DoDeferredMathAbsTaggedHeapNumber unimplemented.");
+  Register input = ToRegister(instr->input());
+  Register scratch = scratch0();
+
+  // Deoptimize if not a heap number.
+  __ ldr(scratch, FieldMemOperand(input, HeapObject::kMapOffset));
+  __ LoadRoot(ip, Heap::kHeapNumberMapRootIndex);
+  __ cmp(scratch, Operand(ip));
+  DeoptimizeIf(ne, instr->environment());
+
+  Label done;
+  Register tmp = input.is(r0) ? r1 : r0;
+  Register tmp2 = r2;
+  Register tmp3 = r3;
+
+  Label negative;
+  __ ldr(scratch, FieldMemOperand(input, HeapNumber::kExponentOffset));
+  // Check the sign of the argument. If the argument is positive, just
+  // return it. We do not need to patch the stack since |input| and
+  // |result| are the same register and |input| will be restored
+  // unchanged by popping safepoint registers.
+  __ tst(scratch, Operand(HeapNumber::kSignMask));
+  __ b(ne, &negative);
+  __ jmp(&done);
+
+  __ bind(&negative);
+  // Preserve the value of all registers.
+  __ PushSafepointRegisters();
+
+  Label allocated, slow;
+  __ LoadRoot(scratch, Heap::kHeapNumberMapRootIndex);
+  __ AllocateHeapNumber(tmp, tmp2, tmp3, scratch, &slow);
+  __ b(&allocated);
+
+  // Slow case: Call the runtime system to do the number allocation.
+  __ bind(&slow);
+
+  __ CallRuntimeSaveDoubles(Runtime::kAllocateHeapNumber);
+  RecordSafepointWithRegisters(
+      instr->pointer_map(), 0, Safepoint::kNoDeoptimizationIndex);
+  // Set the pointer to the new heap number in tmp.
+  if (!tmp.is(r0)) __ mov(tmp, Operand(r0));
+
+  // Restore input_reg after call to runtime.
+  MemOperand input_register_slot = masm()->SafepointRegisterSlot(input);
+  __ ldr(input, input_register_slot);
+
+  __ bind(&allocated);
+  __ ldr(tmp2, FieldMemOperand(input, HeapNumber::kExponentOffset));
+  __ bic(tmp2, tmp2, Operand(HeapNumber::kSignMask));
+  __ str(tmp2, FieldMemOperand(tmp, HeapNumber::kExponentOffset));
+  __ ldr(tmp2, FieldMemOperand(input, HeapNumber::kMantissaOffset));
+  __ str(tmp2, FieldMemOperand(tmp, HeapNumber::kMantissaOffset));
+
+  __ str(tmp, input_register_slot);
+  __ PopSafepointRegisters();
+
+  __ bind(&done);
+}
+
+
+void LCodeGen::EmitIntegerMathAbs(LUnaryMathOperation* instr) {
+  Label is_positive;
+  uint32_t kSignMask = 0x80000000u;
+  Register input = ToRegister(instr->input());
+  __ tst(input, Operand(kSignMask));
+  __ b(eq, &is_positive);
+  __ rsb(input, input, Operand(0), SetCC);
+  // Deoptimize on overflow.
+  DeoptimizeIf(vs, instr->environment());
+  __ bind(&is_positive);
 }
 
 
 void LCodeGen::DoMathAbs(LUnaryMathOperation* instr) {
-  Abort("DoMathAbs unimplemented.");
+  // Class for deferred case.
+  class DeferredMathAbsTaggedHeapNumber: public LDeferredCode {
+   public:
+    DeferredMathAbsTaggedHeapNumber(LCodeGen* codegen,
+                                    LUnaryMathOperation* instr)
+        : LDeferredCode(codegen), instr_(instr) { }
+    virtual void Generate() {
+      codegen()->DoDeferredMathAbsTaggedHeapNumber(instr_);
+    }
+   private:
+    LUnaryMathOperation* instr_;
+  };
+
+  ASSERT(instr->input()->Equals(instr->result()));
+  Representation r = instr->hydrogen()->value()->representation();
+  if (r.IsDouble()) {
+    DwVfpRegister input = ToDoubleRegister(instr->input());
+    // __ vabs(input, input);
+    Abort("Double DoMathAbs unimplemented");
+  } else if (r.IsInteger32()) {
+    EmitIntegerMathAbs(instr);
+  } else {
+    // Representation is tagged.
+    DeferredMathAbsTaggedHeapNumber* deferred =
+        new DeferredMathAbsTaggedHeapNumber(this, instr);
+    Register input = ToRegister(instr->input());
+    // Smi check.
+    __ BranchOnNotSmi(input, deferred->entry());
+    // If smi, handle it directly.
+    EmitIntegerMathAbs(instr);
+    __ bind(deferred->exit());
+  }
 }
 
 
@@ -2677,6 +2808,155 @@ void LCodeGen::DoStoreKeyedGeneric(LStoreKeyedGeneric* instr) {
 
   Handle<Code> ic(Builtins::builtin(Builtins::KeyedStoreIC_Initialize));
   CallCode(ic, RelocInfo::CODE_TARGET, instr);
+}
+
+
+void LCodeGen::DoStringCharCodeAt(LStringCharCodeAt* instr) {
+  class DeferredStringCharCodeAt: public LDeferredCode {
+   public:
+    DeferredStringCharCodeAt(LCodeGen* codegen, LStringCharCodeAt* instr)
+        : LDeferredCode(codegen), instr_(instr) { }
+    virtual void Generate() { codegen()->DoDeferredStringCharCodeAt(instr_); }
+   private:
+    LStringCharCodeAt* instr_;
+  };
+
+  Register scratch = scratch0();
+  Register string = ToRegister(instr->string());
+  Register index = no_reg;
+  int const_index = -1;
+  if (instr->index()->IsConstantOperand()) {
+    const_index = ToInteger32(LConstantOperand::cast(instr->index()));
+    STATIC_ASSERT(String::kMaxLength <= Smi::kMaxValue);
+    if (!Smi::IsValid(const_index)) {
+      // Guaranteed to be out of bounds because of the assert above.
+      // So the bounds check that must dominate this instruction must
+      // have deoptimized already.
+      if (FLAG_debug_code) {
+        __ Abort("StringCharCodeAt: out of bounds index.");
+      }
+      // No code needs to be generated.
+      return;
+    }
+  } else {
+    index = ToRegister(instr->index());
+  }
+  Register result = ToRegister(instr->result());
+
+  DeferredStringCharCodeAt* deferred =
+      new DeferredStringCharCodeAt(this, instr);
+
+  Label flat_string, ascii_string, done;
+
+  // Fetch the instance type of the receiver into result register.
+  __ ldr(result, FieldMemOperand(string, HeapObject::kMapOffset));
+  __ ldrb(result, FieldMemOperand(result, Map::kInstanceTypeOffset));
+
+  // We need special handling for non-flat strings.
+  STATIC_ASSERT(kSeqStringTag == 0);
+  __ tst(result, Operand(kStringRepresentationMask));
+  __ b(eq, &flat_string);
+
+  // Handle non-flat strings.
+  __ tst(result, Operand(kIsConsStringMask));
+  __ b(eq, deferred->entry());
+
+  // ConsString.
+  // Check whether the right hand side is the empty string (i.e. if
+  // this is really a flat string in a cons string). If that is not
+  // the case we would rather go to the runtime system now to flatten
+  // the string.
+  __ ldr(scratch, FieldMemOperand(string, ConsString::kSecondOffset));
+  __ LoadRoot(ip, Heap::kEmptyStringRootIndex);
+  __ cmp(scratch, ip);
+  __ b(ne, deferred->entry());
+  // Get the first of the two strings and load its instance type.
+  __ ldr(string, FieldMemOperand(string, ConsString::kFirstOffset));
+  __ ldr(result, FieldMemOperand(string, HeapObject::kMapOffset));
+  __ ldrb(result, FieldMemOperand(result, Map::kInstanceTypeOffset));
+  // If the first cons component is also non-flat, then go to runtime.
+  STATIC_ASSERT(kSeqStringTag == 0);
+  __ tst(result, Operand(kStringRepresentationMask));
+  __ b(ne, deferred->entry());
+
+  // Check for 1-byte or 2-byte string.
+  __ bind(&flat_string);
+  STATIC_ASSERT(kAsciiStringTag != 0);
+  __ tst(result, Operand(kStringEncodingMask));
+  __ b(ne, &ascii_string);
+
+  // 2-byte string.
+  // Load the 2-byte character code into the result register.
+  STATIC_ASSERT(kSmiTag == 0 && kSmiTagSize == 1);
+  if (instr->index()->IsConstantOperand()) {
+    __ ldrh(result,
+            FieldMemOperand(string,
+                            SeqTwoByteString::kHeaderSize + 2 * const_index));
+  } else {
+    __ add(scratch,
+           string,
+           Operand(SeqTwoByteString::kHeaderSize - kHeapObjectTag));
+    __ ldrh(result, MemOperand(scratch, index, LSL, 1));
+  }
+  __ jmp(&done);
+
+  // ASCII string.
+  // Load the byte into the result register.
+  __ bind(&ascii_string);
+  if (instr->index()->IsConstantOperand()) {
+    __ ldrb(result, FieldMemOperand(string,
+                                    SeqAsciiString::kHeaderSize + const_index));
+  } else {
+    __ add(scratch,
+           string,
+           Operand(SeqAsciiString::kHeaderSize - kHeapObjectTag));
+    __ ldrb(result, MemOperand(scratch, index));
+  }
+  __ bind(&done);
+  __ bind(deferred->exit());
+}
+
+
+void LCodeGen::DoDeferredStringCharCodeAt(LStringCharCodeAt* instr) {
+  Register string = ToRegister(instr->string());
+  Register result = ToRegister(instr->result());
+  Register scratch = scratch0();
+
+  // TODO(3095996): Get rid of this. For now, we need to make the
+  // result register contain a valid pointer because it is already
+  // contained in the register pointer map.
+  __ mov(result, Operand(0));
+
+  __ PushSafepointRegisters();
+  __ push(string);
+  // Push the index as a smi. This is safe because of the checks in
+  // DoStringCharCodeAt above.
+  if (instr->index()->IsConstantOperand()) {
+    int const_index = ToInteger32(LConstantOperand::cast(instr->index()));
+    __ mov(scratch, Operand(Smi::FromInt(const_index)));
+    __ push(scratch);
+  } else {
+    Register index = ToRegister(instr->index());
+    __ SmiTag(index);
+    __ push(index);
+  }
+  __ CallRuntimeSaveDoubles(Runtime::kStringCharCodeAt);
+  RecordSafepointWithRegisters(
+      instr->pointer_map(), 2, Safepoint::kNoDeoptimizationIndex);
+  if (FLAG_debug_code) {
+    __ AbortIfNotSmi(r0);
+  }
+  __ SmiUntag(r0);
+  MemOperand result_stack_slot = masm()->SafepointRegisterSlot(result);
+  __ str(r0, result_stack_slot);
+  __ PopSafepointRegisters();
+}
+
+
+void LCodeGen::DoStringLength(LStringLength* instr) {
+  Register string = ToRegister(instr->input());
+  Register result = ToRegister(instr->result());
+  __ ldr(result, FieldMemOperand(string, String::kLengthOffset));
 }
 
 

@@ -2220,11 +2220,12 @@ void LCodeGen::DoDeferredMathAbsTaggedHeapNumber(LUnaryMathOperation* instr) {
 
   Label negative;
   __ mov(tmp, FieldOperand(input_reg, HeapNumber::kExponentOffset));
-  // Check the sign of the argument. If the argument is positive,
-  // just return it.
+  // Check the sign of the argument. If the argument is positive, just
+  // return it. We do not need to patch the stack since |input| and
+  // |result| are the same register and |input| will be restored
+  // unchanged by popping safepoint registers.
   __ test(tmp, Immediate(HeapNumber::kSignMask));
   __ j(not_zero, &negative);
-  __ mov(tmp, input_reg);
   __ jmp(&done);
 
   __ bind(&negative);
@@ -2251,11 +2252,22 @@ void LCodeGen::DoDeferredMathAbsTaggedHeapNumber(LUnaryMathOperation* instr) {
   __ mov(FieldOperand(tmp, HeapNumber::kExponentOffset), tmp2);
   __ mov(tmp2, FieldOperand(input_reg, HeapNumber::kMantissaOffset));
   __ mov(FieldOperand(tmp, HeapNumber::kMantissaOffset), tmp2);
-
-  __ bind(&done);
   __ mov(Operand(esp, EspIndexForPushAll(input_reg) * kPointerSize), tmp);
 
+  __ bind(&done);
   __ PopSafepointRegisters();
+}
+
+
+void LCodeGen::EmitIntegerMathAbs(LUnaryMathOperation* instr) {
+  Register input_reg = ToRegister(instr->InputAt(0));
+  __ test(input_reg, Operand(input_reg));
+  Label is_positive;
+  __ j(not_sign, &is_positive);
+  __ neg(input_reg);
+  __ test(input_reg, Operand(input_reg));
+  DeoptimizeIf(negative, instr->environment());
+  __ bind(&is_positive);
 }
 
 
@@ -2283,31 +2295,15 @@ void LCodeGen::DoMathAbs(LUnaryMathOperation* instr) {
     __ subsd(scratch, input_reg);
     __ pand(input_reg, scratch);
   } else if (r.IsInteger32()) {
-    Register input_reg = ToRegister(instr->InputAt(0));
-    __ test(input_reg, Operand(input_reg));
-    Label is_positive;
-    __ j(not_sign, &is_positive);
-    __ neg(input_reg);
-    __ test(input_reg, Operand(input_reg));
-    DeoptimizeIf(negative, instr->environment());
-    __ bind(&is_positive);
+    EmitIntegerMathAbs(instr);
   } else {  // Tagged case.
     DeferredMathAbsTaggedHeapNumber* deferred =
         new DeferredMathAbsTaggedHeapNumber(this, instr);
-    Label not_smi;
     Register input_reg = ToRegister(instr->InputAt(0));
     // Smi check.
     __ test(input_reg, Immediate(kSmiTagMask));
     __ j(not_zero, deferred->entry());
-    __ test(input_reg, Operand(input_reg));
-    Label is_positive;
-    __ j(not_sign, &is_positive);
-    __ neg(input_reg);
-
-    __ test(input_reg, Operand(input_reg));
-    DeoptimizeIf(negative, instr->environment());
-
-    __ bind(&is_positive);
+    EmitIntegerMathAbs(instr);
     __ bind(deferred->exit());
   }
 }
@@ -2647,6 +2643,151 @@ void LCodeGen::DoStoreKeyedGeneric(LStoreKeyedGeneric* instr) {
 
   Handle<Code> ic(Builtins::builtin(Builtins::KeyedStoreIC_Initialize));
   CallCode(ic, RelocInfo::CODE_TARGET, instr);
+}
+
+
+void LCodeGen::DoStringCharCodeAt(LStringCharCodeAt* instr) {
+  class DeferredStringCharCodeAt: public LDeferredCode {
+   public:
+    DeferredStringCharCodeAt(LCodeGen* codegen, LStringCharCodeAt* instr)
+        : LDeferredCode(codegen), instr_(instr) { }
+    virtual void Generate() { codegen()->DoDeferredStringCharCodeAt(instr_); }
+   private:
+    LStringCharCodeAt* instr_;
+  };
+
+  Register string = ToRegister(instr->string());
+  Register index = no_reg;
+  int const_index = -1;
+  if (instr->index()->IsConstantOperand()) {
+    const_index = ToInteger32(LConstantOperand::cast(instr->index()));
+    STATIC_ASSERT(String::kMaxLength <= Smi::kMaxValue);
+    if (!Smi::IsValid(const_index)) {
+      // Guaranteed to be out of bounds because of the assert above.
+      // So the bounds check that must dominate this instruction must
+      // have deoptimized already.
+      if (FLAG_debug_code) {
+        __ Abort("StringCharCodeAt: out of bounds index.");
+      }
+      // No code needs to be generated.
+      return;
+    }
+  } else {
+    index = ToRegister(instr->index());
+  }
+  Register result = ToRegister(instr->result());
+
+  DeferredStringCharCodeAt* deferred =
+      new DeferredStringCharCodeAt(this, instr);
+
+  NearLabel flat_string, ascii_string, done;
+
+  // Fetch the instance type of the receiver into result register.
+  __ mov(result, FieldOperand(string, HeapObject::kMapOffset));
+  __ movzx_b(result, FieldOperand(result, Map::kInstanceTypeOffset));
+
+  // We need special handling for non-flat strings.
+  STATIC_ASSERT(kSeqStringTag == 0);
+  __ test(result, Immediate(kStringRepresentationMask));
+  __ j(zero, &flat_string);
+
+  // Handle non-flat strings.
+  __ test(result, Immediate(kIsConsStringMask));
+  __ j(zero, deferred->entry());
+
+  // ConsString.
+  // Check whether the right hand side is the empty string (i.e. if
+  // this is really a flat string in a cons string). If that is not
+  // the case we would rather go to the runtime system now to flatten
+  // the string.
+  __ cmp(FieldOperand(string, ConsString::kSecondOffset),
+         Immediate(Factory::empty_string()));
+  __ j(not_equal, deferred->entry());
+  // Get the first of the two strings and load its instance type.
+  __ mov(string, FieldOperand(string, ConsString::kFirstOffset));
+  __ mov(result, FieldOperand(string, HeapObject::kMapOffset));
+  __ movzx_b(result, FieldOperand(result, Map::kInstanceTypeOffset));
+  // If the first cons component is also non-flat, then go to runtime.
+  STATIC_ASSERT(kSeqStringTag == 0);
+  __ test(result, Immediate(kStringRepresentationMask));
+  __ j(not_zero, deferred->entry());
+
+  // Check for 1-byte or 2-byte string.
+  __ bind(&flat_string);
+  STATIC_ASSERT(kAsciiStringTag != 0);
+  __ test(result, Immediate(kStringEncodingMask));
+  __ j(not_zero, &ascii_string);
+
+  // 2-byte string.
+  // Load the 2-byte character code into the result register.
+  STATIC_ASSERT(kSmiTag == 0 && kSmiTagSize == 1);
+  if (instr->index()->IsConstantOperand()) {
+    __ movzx_w(result,
+               FieldOperand(string,
+                            SeqTwoByteString::kHeaderSize + 2 * const_index));
+  } else {
+    __ movzx_w(result, FieldOperand(string,
+                                    index,
+                                    times_2,
+                                    SeqTwoByteString::kHeaderSize));
+  }
+  __ jmp(&done);
+
+  // ASCII string.
+  // Load the byte into the result register.
+  __ bind(&ascii_string);
+  if (instr->index()->IsConstantOperand()) {
+    __ movzx_b(result, FieldOperand(string,
+                                    SeqAsciiString::kHeaderSize + const_index));
+  } else {
+    __ movzx_b(result, FieldOperand(string,
+                                    index,
+                                    times_1,
+                                    SeqAsciiString::kHeaderSize));
+  }
+  __ bind(&done);
+  __ bind(deferred->exit());
+}
+
+
+void LCodeGen::DoDeferredStringCharCodeAt(LStringCharCodeAt* instr) {
+  Register string = ToRegister(instr->string());
+  Register result = ToRegister(instr->result());
+
+  // TODO(3095996): Get rid of this. For now, we need to make the
+  // result register contain a valid pointer because it is already
+  // contained in the register pointer map.
+  __ Set(result, Immediate(0));
+
+  __ PushSafepointRegisters();
+  __ push(string);
+  // Push the index as a smi. This is safe because of the checks in
+  // DoStringCharCodeAt above.
+  STATIC_ASSERT(String::kMaxLength <= Smi::kMaxValue);
+  if (instr->index()->IsConstantOperand()) {
+    int const_index = ToInteger32(LConstantOperand::cast(instr->index()));
+    __ push(Immediate(Smi::FromInt(const_index)));
+  } else {
+    Register index = ToRegister(instr->index());
+    __ SmiTag(index);
+    __ push(index);
+  }
+  __ CallRuntimeSaveDoubles(Runtime::kStringCharCodeAt);
+  RecordSafepointWithRegisters(
+      instr->pointer_map(), 2, Safepoint::kNoDeoptimizationIndex);
+  if (FLAG_debug_code) {
+    __ AbortIfNotSmi(eax);
+  }
+  __ SmiUntag(eax);
+  __ mov(Operand(esp, EspIndexForPushAll(result) * kPointerSize), eax);
+  __ PopSafepointRegisters();
+}
+
+
+void LCodeGen::DoStringLength(LStringLength* instr) {
+  Register string = ToRegister(instr->string());
+  Register result = ToRegister(instr->result());
+  __ mov(result, FieldOperand(string, String::kLengthOffset));
 }
 
 
@@ -3076,13 +3217,19 @@ void LCodeGen::DoCheckInstanceType(LCheckInstanceType* instr) {
   InstanceType last = instr->hydrogen()->last();
 
   __ mov(temp, FieldOperand(input, HeapObject::kMapOffset));
-  __ cmpb(FieldOperand(temp, Map::kInstanceTypeOffset),
-          static_cast<int8_t>(first));
 
   // If there is only one type in the interval check for equality.
   if (first == last) {
+    __ cmpb(FieldOperand(temp, Map::kInstanceTypeOffset),
+            static_cast<int8_t>(first));
     DeoptimizeIf(not_equal, instr->environment());
-  } else {
+  } else if (first == FIRST_STRING_TYPE && last == LAST_STRING_TYPE) {
+    // String has a dedicated bit in instance type.
+    __ test_b(FieldOperand(temp, Map::kInstanceTypeOffset), kIsNotStringMask);
+    DeoptimizeIf(not_zero, instr->environment());
+  } else  {
+    __ cmpb(FieldOperand(temp, Map::kInstanceTypeOffset),
+            static_cast<int8_t>(first));
     DeoptimizeIf(below, instr->environment());
     // Omit check for the last type.
     if (last != LAST_TYPE) {

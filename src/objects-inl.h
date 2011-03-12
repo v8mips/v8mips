@@ -3103,12 +3103,6 @@ bool SharedFunctionInfo::HasBuiltinFunctionId() {
 }
 
 
-bool SharedFunctionInfo::IsBuiltinMathFunction() {
-  return HasBuiltinFunctionId() &&
-      builtin_function_id() >= kFirstMathFunctionId;
-}
-
-
 BuiltinFunctionId SharedFunctionInfo::builtin_function_id() {
   ASSERT(HasBuiltinFunctionId());
   return static_cast<BuiltinFunctionId>(Smi::cast(function_data())->value());

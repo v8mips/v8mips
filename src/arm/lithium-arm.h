@@ -67,6 +67,7 @@ class LCodeGen;
 //     LModI
 //     LMulI
 //     LShiftI
+//     LStringCharCodeAt
 //     LSubI
 //   LCallConstantFunction
 //   LCallFunction
@@ -136,6 +137,7 @@ class LCodeGen;
 //     LReturn
 //     LSmiTag
 //     LStoreGlobal
+//     LStringLength
 //     LTaggedToI
 //     LThrow
 //     LTypeof
@@ -251,6 +253,8 @@ class LCodeGen;
   V(StoreNamedField)                            \
   V(StoreNamedGeneric)                          \
   V(SubI)                                       \
+  V(StringCharCodeAt)                           \
+  V(StringLength)                               \
   V(TaggedToI)                                  \
   V(Throw)                                      \
   V(Typeof)                                     \
@@ -1082,17 +1086,17 @@ class LCmpMapAndBranch: public LUnaryOperation {
       : LUnaryOperation(value), temp_(temp) { }
 
   DECLARE_CONCRETE_INSTRUCTION(CmpMapAndBranch, "cmp-map-and-branch")
-  DECLARE_HYDROGEN_ACCESSOR(CompareMapAndBranch)
+  DECLARE_HYDROGEN_ACCESSOR(CompareMap)
 
   virtual bool IsControl() const { return true; }
 
   LOperand* temp() const { return temp_; }
   Handle<Map> map() const { return hydrogen()->map(); }
   int true_block_id() const {
-    return hydrogen()->true_destination()->block_id();
+    return hydrogen()->FirstSuccessor()->block_id();
   }
   int false_block_id() const {
-    return hydrogen()->false_destination()->block_id();
+    return hydrogen()->SecondSuccessor()->block_id();
   }
 
  private:
@@ -1577,6 +1581,28 @@ class LStoreKeyedGeneric: public LStoreKeyed {
       : LStoreKeyed(obj, key, val) { }
 
   DECLARE_CONCRETE_INSTRUCTION(StoreKeyedGeneric, "store-keyed-generic")
+};
+
+
+class LStringCharCodeAt: public LBinaryOperation {
+ public:
+  LStringCharCodeAt(LOperand* string, LOperand* index)
+      : LBinaryOperation(string, index) {}
+
+  DECLARE_CONCRETE_INSTRUCTION(StringCharCodeAt, "string-char-code-at")
+  DECLARE_HYDROGEN_ACCESSOR(StringCharCodeAt)
+
+  LOperand* string() { return left(); }
+  LOperand* index() { return right(); }
+};
+
+
+class LStringLength: public LUnaryOperation {
+ public:
+  explicit LStringLength(LOperand* string) : LUnaryOperation(string) {}
+
+  DECLARE_CONCRETE_INSTRUCTION(StringLength, "string-length")
+  DECLARE_HYDROGEN_ACCESSOR(StringLength)
 };
 
 
