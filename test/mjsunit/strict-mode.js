@@ -44,6 +44,23 @@ function CheckStrictMode(code, exception) {
     }", exception);
 }
 
+function CheckFunctionConstructorStrictMode() {
+  var args = [];
+  for (var i = 0; i < arguments.length; i ++) {
+    args[i] = arguments[i];
+  }
+  // Create non-strict function. No exception.
+  args[arguments.length] = "";
+  assertDoesNotThrow(function() {
+    Function.apply(this, args);
+  });
+  // Create strict mode function. Exception expected.
+  args[arguments.length] = "'use strict';";
+  assertThrows(function() {
+    Function.apply(this, args);
+  }, SyntaxError);
+}
+
 // Incorrect 'use strict' directive.
 function UseStrictEscape() {
   "use\\x20strict";
@@ -89,6 +106,16 @@ CheckStrictMode("var o = { set foo(arguments) {} }", SyntaxError)
 
 // Duplicate function parameter name.
 CheckStrictMode("function foo(a, b, c, d, b) {}", SyntaxError)
+
+// Function constructor: eval parameter name.
+CheckFunctionConstructorStrictMode("eval")
+
+// Function constructor: arguments parameter name.
+CheckFunctionConstructorStrictMode("arguments")
+
+// Function constructor: duplicate parameter name.
+CheckFunctionConstructorStrictMode("a", "b", "c", "b")
+CheckFunctionConstructorStrictMode("a,b,c,b")
 
 // catch(eval)
 CheckStrictMode("try{}catch(eval){};", SyntaxError)
@@ -145,8 +172,6 @@ function StrictModeNonDuplicate() {
   var x = { 123: 1, '123.00000000000000000000000000000000000000000000000000000000000000000001' : 2 }
 }
 
-//CheckStrictMode("", SyntaxError)
-
 // Two getters (non-strict)
 assertThrows("var x = { get foo() { }, get foo() { } };", SyntaxError)
 assertThrows("var x = { get foo(){}, get 'foo'(){}};", SyntaxError)
@@ -178,3 +203,65 @@ assertThrows("var x = { 'foo': 'data', get foo() { } };", SyntaxError)
 assertThrows("var x = { get 'foo'() { }, 'foo': 'data' };", SyntaxError)
 assertThrows("var x = { '12': 1, get '12'(){}};", SyntaxError);
 assertThrows("var x = { '12': 1, get 12(){}};", SyntaxError);
+
+// Assignment to eval or arguments
+CheckStrictMode("function strict() { eval = undefined; }", SyntaxError)
+CheckStrictMode("function strict() { arguments = undefined; }", SyntaxError)
+CheckStrictMode("function strict() { print(eval = undefined); }", SyntaxError)
+CheckStrictMode("function strict() { print(arguments = undefined); }", SyntaxError)
+CheckStrictMode("function strict() { var x = eval = undefined; }", SyntaxError)
+CheckStrictMode("function strict() { var x = arguments = undefined; }", SyntaxError)
+
+// Compound assignment to eval or arguments
+CheckStrictMode("function strict() { eval *= undefined; }", SyntaxError)
+CheckStrictMode("function strict() { arguments /= undefined; }", SyntaxError)
+CheckStrictMode("function strict() { print(eval %= undefined); }", SyntaxError)
+CheckStrictMode("function strict() { print(arguments %= undefined); }", SyntaxError)
+CheckStrictMode("function strict() { var x = eval += undefined; }", SyntaxError)
+CheckStrictMode("function strict() { var x = arguments -= undefined; }", SyntaxError)
+CheckStrictMode("function strict() { eval <<= undefined; }", SyntaxError)
+CheckStrictMode("function strict() { arguments >>= undefined; }", SyntaxError)
+CheckStrictMode("function strict() { print(eval >>>= undefined); }", SyntaxError)
+CheckStrictMode("function strict() { print(arguments &= undefined); }", SyntaxError)
+CheckStrictMode("function strict() { var x = eval ^= undefined; }", SyntaxError)
+CheckStrictMode("function strict() { var x = arguments |= undefined; }", SyntaxError)
+
+// Postfix increment with eval or arguments
+CheckStrictMode("function strict() { eval++; }", SyntaxError)
+CheckStrictMode("function strict() { arguments++; }", SyntaxError)
+CheckStrictMode("function strict() { print(eval++); }", SyntaxError)
+CheckStrictMode("function strict() { print(arguments++); }", SyntaxError)
+CheckStrictMode("function strict() { var x = eval++; }", SyntaxError)
+CheckStrictMode("function strict() { var x = arguments++; }", SyntaxError)
+
+// Postfix decrement with eval or arguments
+CheckStrictMode("function strict() { eval--; }", SyntaxError)
+CheckStrictMode("function strict() { arguments--; }", SyntaxError)
+CheckStrictMode("function strict() { print(eval--); }", SyntaxError)
+CheckStrictMode("function strict() { print(arguments--); }", SyntaxError)
+CheckStrictMode("function strict() { var x = eval--; }", SyntaxError)
+CheckStrictMode("function strict() { var x = arguments--; }", SyntaxError)
+
+// Prefix increment with eval or arguments
+CheckStrictMode("function strict() { ++eval; }", SyntaxError)
+CheckStrictMode("function strict() { ++arguments; }", SyntaxError)
+CheckStrictMode("function strict() { print(++eval); }", SyntaxError)
+CheckStrictMode("function strict() { print(++arguments); }", SyntaxError)
+CheckStrictMode("function strict() { var x = ++eval; }", SyntaxError)
+CheckStrictMode("function strict() { var x = ++arguments; }", SyntaxError)
+
+// Prefix decrement with eval or arguments
+CheckStrictMode("function strict() { --eval; }", SyntaxError)
+CheckStrictMode("function strict() { --arguments; }", SyntaxError)
+CheckStrictMode("function strict() { print(--eval); }", SyntaxError)
+CheckStrictMode("function strict() { print(--arguments); }", SyntaxError)
+CheckStrictMode("function strict() { var x = --eval; }", SyntaxError)
+CheckStrictMode("function strict() { var x = --arguments; }", SyntaxError)
+
+// Prefix unary operators other than delete, ++, -- are valid in strict mode
+function StrictModeUnaryOperators() {
+  "use strict";
+  var x = [void eval, typeof eval, +eval, -eval, ~eval, !eval];
+  var y = [void arguments, typeof arguments,
+           +arguments, -arguments, ~arguments, !arguments];
+}
