@@ -2344,7 +2344,7 @@ void TypeRecordingBinaryOpStub::GenerateSmiSmiOperation(
       __ Branch(&not_smi_result, ne, scratch1, Operand(scratch2));
       // Go slow on zero result to handle -0.
       __ mflo(v0);
-      __ Ret(ne, v0, Operand(zero_reg));  // if (scratch1!=0) return
+      __ Ret(ne, v0, Operand(zero_reg));
       // We need -0 if we were multiplying a negative number with 0 to get 0.
       // We know one of them was zero.
       __ Addu(scratch2, right, left);
