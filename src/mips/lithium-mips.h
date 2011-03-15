@@ -69,12 +69,82 @@ class LInstruction: public ZoneObject {
     return false;
   }
 
+  void set_environment(LEnvironment* env) { UNIMPLEMENTED(); }
+
+  LEnvironment* environment() const {
+    UNIMPLEMENTED();
+    return NULL;
+  }
+
+  bool HasEnvironment() const {
+    UNIMPLEMENTED();
+    return NULL;
+  }
+
   virtual void PrintTo(StringStream* stream) const { UNIMPLEMENTED(); }
 
   virtual bool IsControl() const {
     UNIMPLEMENTED();
     return false;
   }
+
+  void MarkAsCall() { UNIMPLEMENTED(); }
+  void MarkAsSaveDoubles() { UNIMPLEMENTED(); }
+
+  // Interface to the register allocator and iterators.
+  bool IsMarkedAsCall() const {
+    UNIMPLEMENTED();
+    return false;
+  }
+
+  bool IsMarkedAsSaveDoubles() const {
+    UNIMPLEMENTED();
+    return false;
+  }
+
+  virtual bool HasResult() const {
+    UNIMPLEMENTED();
+    return false;
+  }
+
+  virtual LOperand* result() {
+    UNIMPLEMENTED();
+    return NULL;
+  }
+
+  virtual int InputCount() {
+    UNIMPLEMENTED();
+    return 0;
+  }
+
+  virtual LOperand* InputAt(int i) {
+    UNIMPLEMENTED();
+    return NULL;
+  }
+
+  virtual int TempCount() {
+    UNIMPLEMENTED();
+    return 0;
+  }
+
+  virtual LOperand* TempAt(int i) {
+    UNIMPLEMENTED();
+    return NULL;
+  }
+
+  LOperand* FirstInput() {
+    UNIMPLEMENTED();
+    return NULL;
+  }
+
+  LOperand* Output() {
+    UNIMPLEMENTED();
+    return NULL;
+  }
+
+#ifdef DEBUG
+  void VerifyCall() { UNIMPLEMENTED(); }
+#endif
 };
 
 
