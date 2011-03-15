@@ -894,6 +894,10 @@ class Assembler : public Malloced {
     arithmetic_op(0x0B, dst, src);
   }
 
+  void orl(Register dst, const Operand& src) {
+    arithmetic_op_32(0x0B, dst, src);
+  }
+
   void or_(const Operand& dst, Register src) {
     arithmetic_op(0x09, src, dst);
   }
@@ -1055,6 +1059,18 @@ class Assembler : public Malloced {
 
   void xorl(Register dst, Register src) {
     arithmetic_op_32(0x33, dst, src);
+  }
+
+  void xorl(Register dst, const Operand& src) {
+    arithmetic_op_32(0x33, dst, src);
+  }
+
+  void xorl(Register dst, Immediate src) {
+    immediate_arithmetic_op_32(0x6, dst, src);
+  }
+
+  void xorl(const Operand& dst, Immediate src) {
+    immediate_arithmetic_op_32(0x6, dst, src);
   }
 
   void xor_(Register dst, const Operand& src) {
@@ -1253,6 +1269,8 @@ class Assembler : public Malloced {
 
   void ucomisd(XMMRegister dst, XMMRegister src);
   void ucomisd(XMMRegister dst, const Operand& src);
+
+  void movmskpd(Register dst, XMMRegister src);
 
   // The first argument is the reg field, the second argument is the r/m field.
   void emit_sse_operand(XMMRegister dst, XMMRegister src);
