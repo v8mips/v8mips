@@ -4779,14 +4779,20 @@ void CodeGenerator::GenerateMathPow(ZoneList<Expression*>* args) {
                                  runtime.entry_label(),
                                  AVOID_NANS_AND_INFINITIES);
 
+    // Convert -0 into +0 by adding +0.
+    __ mtc1(zero_reg, f4);
+    __ mtc1(zero_reg, f5);
+    __ add_d(f0, f4, f0);
+
     // Load 1.0 into f2.
     __ li(scratch2, 0x3ff00000);
     __ mtc1(scratch2, f3);
     __ mtc1(zero_reg, f2);
 
-    // Calculate the reciprocal of the square root. 1/sqrt(x) = sqrt(1/x).
-    __ div_d(f0, f2, f0);
+
+    // Calculate the reciprocal of the square root.
     __ sqrt_d(f0, f0);
+    __ div_d(f0, f2, f0);
 
     __ Branch(&allocate_return);
 
@@ -4799,6 +4805,10 @@ void CodeGenerator::GenerateMathPow(ZoneList<Expression*>* args) {
                                  scratch1, scratch2, heap_number_map,
                                  runtime.entry_label(),
                                  AVOID_NANS_AND_INFINITIES);
+    // Convert -0 into +0 by adding +0.
+    __ mtc1(zero_reg, f4);
+    __ mtc1(zero_reg, f5);
+    __ add_d(f0, f4, f0);
     __ sqrt_d(f0, f0);
 
     __ bind(&allocate_return);
