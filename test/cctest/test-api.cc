@@ -2369,13 +2369,25 @@ static void check_reference_error_message(
 }
 
 
-// Test that overwritten toString methods are not invoked on uncaught
-// exception formatting. However, they are invoked when performing
-// normal error string conversions.
+static v8::Handle<Value> Fail(const v8::Arguments& args) {
+  ApiTestFuzzer::Fuzz();
+  CHECK(false);
+  return v8::Undefined();
+}
+
+
+// Test that overwritten methods are not invoked on uncaught exception
+// formatting. However, they are invoked when performing normal error
+// string conversions.
 TEST(APIThrowMessageOverwrittenToString) {
   v8::HandleScope scope;
   v8::V8::AddMessageListener(check_reference_error_message);
-  LocalContext context;
+  Local<ObjectTemplate> templ = ObjectTemplate::New();
+  templ->Set(v8_str("fail"), v8::FunctionTemplate::New(Fail));
+  LocalContext context(NULL, templ);
+  CompileRun("Array.prototype.pop = fail;");
+  CompileRun("Object.prototype.hasOwnProperty = fail;");
+  CompileRun("Object.prototype.toString = function f() { return 'Yikes'; }");
   CompileRun("Number.prototype.toString = function f() { return 'Yikes'; }");
   CompileRun("String.prototype.toString = function f() { return 'Yikes'; }");
   CompileRun("ReferenceError.prototype.toString ="
@@ -12198,6 +12210,25 @@ TEST(RegExp) {
   CHECK(try_catch.HasCaught());
   context->Global()->Set(v8_str("ex"), try_catch.Exception());
   ExpectTrue("ex instanceof SyntaxError");
+}
+
+
+THREADED_TEST(Equals) {
+  v8::HandleScope handleScope;
+  LocalContext localContext;
+
+  v8::Handle<v8::Object> globalProxy = localContext->Global();
+  v8::Handle<Value> global = globalProxy->GetPrototype();
+
+  CHECK(global->StrictEquals(global));
+  CHECK(!global->StrictEquals(globalProxy));
+  CHECK(!globalProxy->StrictEquals(global));
+  CHECK(globalProxy->StrictEquals(globalProxy));
+
+  CHECK(global->Equals(global));
+  CHECK(!global->Equals(globalProxy));
+  CHECK(!globalProxy->Equals(global));
+  CHECK(globalProxy->Equals(globalProxy));
 }
 
 
