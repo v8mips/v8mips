@@ -6001,7 +6001,7 @@ SafepointEntry Code::GetSafepointEntry(Address pc) {
 void Code::SetNoStackCheckTable() {
   // Indicate the absence of a stack-check table by a table start after the
   // end of the instructions.  Table start must be aligned, so round up.
-  set_stack_check_table_start(RoundUp(instruction_size(), kIntSize));
+  set_stack_check_table_offset(RoundUp(instruction_size(), kIntSize));
 }
 
 
@@ -6278,7 +6278,7 @@ void Code::Disassemble(const char* name, FILE* out) {
     }
     PrintF(out, "\n");
   } else if (kind() == FUNCTION) {
-    unsigned offset = stack_check_table_start();
+    unsigned offset = stack_check_table_offset();
     // If there is no stack check table, the "table start" will at or after
     // (due to alignment) the end of the instruction stream.
     if (static_cast<int>(offset) < instruction_size()) {
@@ -6677,6 +6677,13 @@ JSObject::LocalElementType JSObject::HasLocalElement(uint32_t index) {
       !Top::MayIndexedAccess(this, index, v8::ACCESS_HAS)) {
     Top::ReportFailedAccessCheck(this, v8::ACCESS_HAS);
     return UNDEFINED_ELEMENT;
+  }
+
+  if (IsJSGlobalProxy()) {
+    Object* proto = GetPrototype();
+    if (proto->IsNull()) return UNDEFINED_ELEMENT;
+    ASSERT(proto->IsJSGlobalObject());
+    return JSObject::cast(proto)->HasLocalElement(index);
   }
 
   // Check for lookup interceptor

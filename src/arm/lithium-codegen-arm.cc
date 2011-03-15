@@ -223,7 +223,7 @@ bool LCodeGen::GenerateCode() {
 void LCodeGen::FinishCode(Handle<Code> code) {
   ASSERT(is_done());
   code->set_stack_slots(StackSlotCount());
-  code->set_safepoint_table_start(safepoints_.GetCodeOffset());
+  code->set_safepoint_table_offset(safepoints_.GetCodeOffset());
   PopulateDeoptimizationData(code);
 }
 
@@ -1398,7 +1398,18 @@ void LCodeGen::DoArithmeticD(LArithmeticD* instr) {
       __ vdiv(left, left, right);
       break;
     case Token::MOD: {
-      Abort("DoArithmeticD unimplemented for MOD.");
+      // Save r0-r3 on the stack.
+      __ stm(db_w, sp, r0.bit() | r1.bit() | r2.bit() | r3.bit());
+
+      __ PrepareCallCFunction(4, scratch0());
+      __ vmov(r0, r1, left);
+      __ vmov(r2, r3, right);
+      __ CallCFunction(ExternalReference::double_fp_operation(Token::MOD), 4);
+      // Move the result in the double result register.
+      __ vmov(ToDoubleRegister(instr->result()), r0, r1);
+
+      // Restore r0-r3.
+      __ ldm(ia_w, sp, r0.bit() | r1.bit() | r2.bit() | r3.bit());
       break;
     }
     default:
@@ -3497,7 +3508,7 @@ void LCodeGen::DoFunctionLiteral(LFunctionLiteral* instr) {
   // Use the fast case closure allocation code that allocates in new
   // space for nested functions that don't need literals cloning.
   Handle<SharedFunctionInfo> shared_info = instr->shared_info();
-  bool pretenure = !instr->hydrogen()->pretenure();
+  bool pretenure = instr->hydrogen()->pretenure();
   if (shared_info->num_literals() == 0 && !pretenure) {
     FastNewClosureStub stub;
     __ mov(r1, Operand(shared_info));
