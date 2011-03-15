@@ -820,6 +820,7 @@ void MacroAssembler::ConvertToInt32(Register source,
                                     Register dest,
                                     Register scratch,
                                     Register scratch2,
+                                    FPURegister double_scratch,
                                     Label *not_int32) {
   Label right_exponent, done;
   // Get exponent word (ENDIAN issues).
@@ -864,10 +865,10 @@ void MacroAssembler::ConvertToInt32(Register source,
     // conversion using round to zero. Since the FP value was qualified
     // above, the resulting integer should be a legal int32.
     // The original 'Exponent' word is still in scratch.
-    lwc1(f12, FieldMemOperand(source, HeapNumber::kMantissaOffset));
-    mtc1(scratch, f13);
-    trunc_w_d(f0, f12);
-    mfc1(dest, f0);
+    lwc1(double_scratch, FieldMemOperand(source, HeapNumber::kMantissaOffset));
+    mtc1(scratch, FPURegister::from_code(double_scratch.code() + 1));
+    trunc_w_d(double_scratch, double_scratch);
+    mfc1(dest, double_scratch);
   } else {
     // On entry, dest has final downshift, scratch has original sign/exp/mant.
     // Save sign bit in top bit of dest.
@@ -3171,6 +3172,15 @@ void MacroAssembler::AbortIfNotSmi(Register object) {
   STATIC_ASSERT(kSmiTag == 0);
   andi(at, object, kSmiTagMask);
   Assert(eq, "Operand is a smi", at, Operand(zero_reg));
+}
+
+
+void MacroAssembler::AbortIfNotRootValue(Register src,
+                                         Heap::RootListIndex root_value_index,
+                                         const char* message) {
+  ASSERT(!src.is(at));
+  LoadRoot(at, root_value_index);
+  Assert(eq, message, src, Operand(at));
 }
 
 

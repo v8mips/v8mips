@@ -542,11 +542,13 @@ void DropAndRet(int drop = 0,
 
   // Convert the HeapNumber pointed to by source to a 32bits signed integer
   // dest. If the HeapNumber does not fit into a 32bits signed integer branch
-  // to not_int32 label.
+  // to not_int32 label. If FPU is available double_scratch is used but not
+  // scratch2.
   void ConvertToInt32(Register source,
                       Register dest,
                       Register scratch,
                       Register scratch2,
+                      FPURegister double_scratch,
                       Label *not_int32);
 
   // -------------------------------------------------------------------------
@@ -903,6 +905,11 @@ void DropAndRet(int drop = 0,
   // Abort execution if argument is a smi. Used in debug code.
   void AbortIfSmi(Register object);
   void AbortIfNotSmi(Register object);
+
+  // Abort execution if argument is not the root value with the given index.
+  void AbortIfNotRootValue(Register src,
+                           Heap::RootListIndex root_value_index,
+                           const char* message);
 
   // ---------------------------------------------------------------------------
   // HeapNumber utilities
