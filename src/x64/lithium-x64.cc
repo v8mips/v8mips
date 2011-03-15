@@ -262,7 +262,8 @@ void LUnaryMathOperation::PrintDataTo(StringStream* stream) {
 
 
 void LLoadContextSlot::PrintDataTo(StringStream* stream) {
-  stream->Add("(%d, %d)", context_chain_length(), slot_index());
+  InputAt(0)->PrintTo(stream);
+  stream->Add("[%d]", slot_index());
 }
 
 
@@ -1006,8 +1007,9 @@ LInstruction* LChunkBuilder::DoTest(HTest* instr) {
 
 
 LInstruction* LChunkBuilder::DoCompareMap(HCompareMap* instr) {
-  Abort("Unimplemented: %s", "DoCompareMap");
-  return NULL;
+  ASSERT(instr->value()->representation().IsTagged());
+  LOperand* value = UseRegisterAtStart(instr->value());
+  return new LCmpMapAndBranch(value);
 }
 
 
@@ -1049,6 +1051,18 @@ LInstruction* LChunkBuilder::DoPushArgument(HPushArgument* instr) {
 }
 
 
+LInstruction* LChunkBuilder::DoContext(HContext* instr) {
+  Abort("Unimplemented: DoContext");
+  return NULL;
+}
+
+
+LInstruction* LChunkBuilder::DoOuterContext(HOuterContext* instr) {
+  Abort("Unimplemented: DoOuterContext");
+  return NULL;
+}
+
+
 LInstruction* LChunkBuilder::DoGlobalObject(HGlobalObject* instr) {
   return DefineAsRegister(new LGlobalObject);
 }
@@ -1061,8 +1075,8 @@ LInstruction* LChunkBuilder::DoGlobalReceiver(HGlobalReceiver* instr) {
 
 LInstruction* LChunkBuilder::DoCallConstantFunction(
     HCallConstantFunction* instr) {
-  Abort("Unimplemented: %s", "DoCallConstantFunction");
-  return NULL;
+  argument_count_ -= instr->argument_count();
+  return MarkAsCall(DefineFixed(new LCallConstantFunction, rax), instr);
 }
 
 
@@ -1111,8 +1125,8 @@ LInstruction* LChunkBuilder::DoCallFunction(HCallFunction* instr) {
 
 
 LInstruction* LChunkBuilder::DoCallRuntime(HCallRuntime* instr) {
-  Abort("Unimplemented: %s", "DoCallRuntime");
-  return NULL;
+  argument_count_ -= instr->argument_count();
+  return MarkAsCall(DefineFixed(new LCallRuntime, rax), instr);
 }
 
 
@@ -1311,8 +1325,8 @@ LInstruction* LChunkBuilder::DoJSArrayLength(HJSArrayLength* instr) {
 
 
 LInstruction* LChunkBuilder::DoFixedArrayLength(HFixedArrayLength* instr) {
-  Abort("Unimplemented: %s", "DoFixedArrayLength");
-  return NULL;
+  LOperand* array = UseRegisterAtStart(instr->value());
+  return DefineAsRegister(new LFixedArrayLength(array));
 }
 
 
@@ -1323,8 +1337,8 @@ LInstruction* LChunkBuilder::DoValueOf(HValueOf* instr) {
 
 
 LInstruction* LChunkBuilder::DoBoundsCheck(HBoundsCheck* instr) {
-  Abort("Unimplemented: %s", "DoBoundsCheck");
-  return NULL;
+  return AssignEnvironment(new LBoundsCheck(UseRegisterAtStart(instr->index()),
+                                            Use(instr->length())));
 }
 
 
@@ -1472,11 +1486,18 @@ LInstruction* LChunkBuilder::DoLoadGlobal(HLoadGlobal* instr) {
 
 
 LInstruction* LChunkBuilder::DoStoreGlobal(HStoreGlobal* instr) {
-  return new LStoreGlobal(UseRegisterAtStart(instr->value()));}
+  return new LStoreGlobal(UseRegisterAtStart(instr->value()));
+}
 
 
 LInstruction* LChunkBuilder::DoLoadContextSlot(HLoadContextSlot* instr) {
   Abort("Unimplemented: %s", "DoLoadContextSlot");
+  return NULL;
+}
+
+
+LInstruction* LChunkBuilder::DoStoreContextSlot(HStoreContextSlot* instr) {
+  Abort("Unimplemented: DoStoreContextSlot");
   return NULL;
 }
 
@@ -1502,15 +1523,19 @@ LInstruction* LChunkBuilder::DoLoadFunctionPrototype(
 
 
 LInstruction* LChunkBuilder::DoLoadElements(HLoadElements* instr) {
-  Abort("Unimplemented: %s", "DoLoadElements");
-  return NULL;
+  LOperand* input = UseRegisterAtStart(instr->value());
+  return DefineSameAsFirst(new LLoadElements(input));
 }
 
 
 LInstruction* LChunkBuilder::DoLoadKeyedFastElement(
     HLoadKeyedFastElement* instr) {
-  Abort("Unimplemented: %s", "DoLoadKeyedFastElement");
-  return NULL;
+  ASSERT(instr->representation().IsTagged());
+  ASSERT(instr->key()->representation().IsInteger32());
+  LOperand* obj = UseRegisterAtStart(instr->object());
+  LOperand* key = UseRegisterAtStart(instr->key());
+  LLoadKeyedFastElement* result = new LLoadKeyedFastElement(obj, key);
+  return AssignEnvironment(DefineSameAsFirst(result));
 }
 
 
@@ -1572,14 +1597,12 @@ LInstruction* LChunkBuilder::DoStringLength(HStringLength* instr) {
 
 
 LInstruction* LChunkBuilder::DoArrayLiteral(HArrayLiteral* instr) {
-  Abort("Unimplemented: %s", "DoArrayLiteral");
-  return NULL;
+  return MarkAsCall(DefineFixed(new LArrayLiteral, rax), instr);
 }
 
 
 LInstruction* LChunkBuilder::DoObjectLiteral(HObjectLiteral* instr) {
-  Abort("Unimplemented: %s", "DoObjectLiteral");
-  return NULL;
+  return MarkAsCall(DefineFixed(new LObjectLiteral, rax), instr);
 }
 
 
@@ -1590,8 +1613,7 @@ LInstruction* LChunkBuilder::DoRegExpLiteral(HRegExpLiteral* instr) {
 
 
 LInstruction* LChunkBuilder::DoFunctionLiteral(HFunctionLiteral* instr) {
-  Abort("Unimplemented: %s", "DoFunctionLiteral");
-  return NULL;
+  return MarkAsCall(DefineFixed(new LFunctionLiteral, rax), instr);
 }
 
 
@@ -1699,7 +1721,8 @@ LInstruction* LChunkBuilder::DoEnterInlined(HEnterInlined* instr) {
 
 
 LInstruction* LChunkBuilder::DoLeaveInlined(HLeaveInlined* instr) {
-  Abort("Unimplemented: %s", "DoLeaveInlined");
+  HEnvironment* outer = current_block_->last_environment()->outer();
+  current_block_->UpdateEnvironment(outer);
   return NULL;
 }
 

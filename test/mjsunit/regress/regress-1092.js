@@ -1,4 +1,4 @@
-// Copyright 2010 the V8 project authors. All rights reserved.
+// Copyright 2011 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -25,34 +25,11 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#include "gc-extension.h"
+// Test that CodeGenerator::EmitKeyedPropertyAssignment for the start 
+// of an initialization block doesn't normalize the properties of the
+// JSGlobalProxy.
+this.w = 0;
+this.x = 1;
+this.y = 2;
+this.z = 3;
 
-namespace v8 {
-namespace internal {
-
-const char* const GCExtension::kSource = "native function gc();";
-
-
-v8::Handle<v8::FunctionTemplate> GCExtension::GetNativeFunction(
-    v8::Handle<v8::String> str) {
-  return v8::FunctionTemplate::New(GCExtension::GC);
-}
-
-
-v8::Handle<v8::Value> GCExtension::GC(const v8::Arguments& args) {
-  bool compact = false;
-  // All allocation spaces other than NEW_SPACE have the same effect.
-  if (args.Length() >= 1 && args[0]->IsBoolean()) {
-    compact = args[0]->BooleanValue();
-  }
-  Heap::CollectAllGarbage(compact);
-  return v8::Undefined();
-}
-
-
-void GCExtension::Register() {
-  static GCExtension gc_extension;
-  static v8::DeclareExtension gc_extension_declaration(&gc_extension);
-}
-
-} }  // namespace v8::internal

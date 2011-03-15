@@ -364,7 +364,13 @@ void LCodeGen::CallCode(Handle<Code> code,
 void LCodeGen::CallRuntime(Runtime::Function* function,
                            int num_arguments,
                            LInstruction* instr) {
-  Abort("Unimplemented: %s", "CallRuntime");
+  ASSERT(instr != NULL);
+  ASSERT(instr->HasPointerMap());
+  LPointerMap* pointers = instr->pointer_map();
+  RecordPosition(pointers->position());
+
+  __ CallRuntime(function, num_arguments);
+  RegisterLazyDeoptimization(instr);
 }
 
 
@@ -668,7 +674,9 @@ void LCodeGen::DoJSArrayLength(LJSArrayLength* instr) {
 
 
 void LCodeGen::DoFixedArrayLength(LFixedArrayLength* instr) {
-  Abort("Unimplemented: %s", "DoFixedArrayLength");
+  Register result = ToRegister(instr->result());
+  Register array = ToRegister(instr->InputAt(0));
+  __ movq(result, FieldOperand(array, FixedArray::kLengthOffset));
 }
 
 
@@ -1446,7 +1454,19 @@ void LCodeGen::DoLoadFunctionPrototype(LLoadFunctionPrototype* instr) {
 
 
 void LCodeGen::DoLoadElements(LLoadElements* instr) {
-  Abort("Unimplemented: %s", "DoLoadElements");
+  ASSERT(instr->result()->Equals(instr->InputAt(0)));
+  Register reg = ToRegister(instr->InputAt(0));
+  __ movq(reg, FieldOperand(reg, JSObject::kElementsOffset));
+  if (FLAG_debug_code) {
+    NearLabel done;
+    __ Cmp(FieldOperand(reg, HeapObject::kMapOffset),
+           Factory::fixed_array_map());
+    __ j(equal, &done);
+    __ Cmp(FieldOperand(reg, HeapObject::kMapOffset),
+           Factory::fixed_cow_array_map());
+    __ Check(equal, "Check for fast elements failed.");
+    __ bind(&done);
+  }
 }
 
 
@@ -1456,7 +1476,20 @@ void LCodeGen::DoAccessArgumentsAt(LAccessArgumentsAt* instr) {
 
 
 void LCodeGen::DoLoadKeyedFastElement(LLoadKeyedFastElement* instr) {
-  Abort("Unimplemented: %s", "DoLoadKeyedFastElement");
+  Register elements = ToRegister(instr->elements());
+  Register key = ToRegister(instr->key());
+  Register result = ToRegister(instr->result());
+  ASSERT(result.is(elements));
+
+  // Load the result.
+  __ movq(result, FieldOperand(elements,
+                               key,
+                               times_pointer_size,
+                               FixedArray::kHeaderSize));
+
+  // Check for the hole value.
+  __ Cmp(result, Factory::the_hole_value());
+  DeoptimizeIf(equal, instr->environment());
 }
 
 
@@ -1520,12 +1553,43 @@ void LCodeGen::DoGlobalReceiver(LGlobalReceiver* instr) {
 void LCodeGen::CallKnownFunction(Handle<JSFunction> function,
                                  int arity,
                                  LInstruction* instr) {
-  Abort("Unimplemented: %s", "CallKnownFunction");
+  // Change context if needed.
+  bool change_context =
+      (graph()->info()->closure()->context() != function->context()) ||
+      scope()->contains_with() ||
+      (scope()->num_heap_slots() > 0);
+  if (change_context) {
+    __ movq(rsi, FieldOperand(rdi, JSFunction::kContextOffset));
+  }
+
+  // Set rax to arguments count if adaption is not needed. Assumes that rax
+  // is available to write to at this point.
+  if (!function->NeedsArgumentsAdaption()) {
+    __ Set(rax, arity);
+  }
+
+  LPointerMap* pointers = instr->pointer_map();
+  RecordPosition(pointers->position());
+
+  // Invoke function.
+  if (*function == *graph()->info()->closure()) {
+    __ CallSelf();
+  } else {
+    __ call(FieldOperand(rdi, JSFunction::kCodeEntryOffset));
+  }
+
+  // Setup deoptimization.
+  RegisterLazyDeoptimization(instr);
+
+  // Restore context.
+  __ movq(rsi, Operand(rbp, StandardFrameConstants::kContextOffset));
 }
 
 
 void LCodeGen::DoCallConstantFunction(LCallConstantFunction* instr) {
-  Abort("Unimplemented: %s", "DoCallConstantFunction");
+  ASSERT(ToRegister(instr->result()).is(rax));
+  __ Move(rdi, instr->function());
+  CallKnownFunction(instr->function(), instr->arity(), instr);
 }
 
 
@@ -1660,7 +1724,12 @@ void LCodeGen::DoStoreNamedGeneric(LStoreNamedGeneric* instr) {
 
 
 void LCodeGen::DoBoundsCheck(LBoundsCheck* instr) {
-  Abort("Unimplemented: %s", "DoBoundsCheck");
+  if (instr->length()->IsRegister()) {
+    __ cmpq(ToRegister(instr->index()), ToRegister(instr->length()));
+  } else {
+    __ cmpq(ToRegister(instr->index()), ToOperand(instr->length()));
+  }
+  DeoptimizeIf(above_equal, instr->environment());
 }
 
 
@@ -1866,12 +1935,47 @@ void LCodeGen::DoCheckPrototypeMaps(LCheckPrototypeMaps* instr) {
 
 
 void LCodeGen::DoArrayLiteral(LArrayLiteral* instr) {
-  Abort("Unimplemented: %s", "DoArrayLiteral");
+  // Setup the parameters to the stub/runtime call.
+  __ movq(rax, Operand(rbp, JavaScriptFrameConstants::kFunctionOffset));
+  __ push(FieldOperand(rax, JSFunction::kLiteralsOffset));
+  __ Push(Smi::FromInt(instr->hydrogen()->literal_index()));
+  __ Push(instr->hydrogen()->constant_elements());
+
+  // Pick the right runtime function or stub to call.
+  int length = instr->hydrogen()->length();
+  if (instr->hydrogen()->IsCopyOnWrite()) {
+    ASSERT(instr->hydrogen()->depth() == 1);
+    FastCloneShallowArrayStub::Mode mode =
+        FastCloneShallowArrayStub::COPY_ON_WRITE_ELEMENTS;
+    FastCloneShallowArrayStub stub(mode, length);
+    CallCode(stub.GetCode(), RelocInfo::CODE_TARGET, instr);
+  } else if (instr->hydrogen()->depth() > 1) {
+    CallRuntime(Runtime::kCreateArrayLiteral, 3, instr);
+  } else if (length > FastCloneShallowArrayStub::kMaximumClonedLength) {
+    CallRuntime(Runtime::kCreateArrayLiteralShallow, 3, instr);
+  } else {
+    FastCloneShallowArrayStub::Mode mode =
+        FastCloneShallowArrayStub::CLONE_ELEMENTS;
+    FastCloneShallowArrayStub stub(mode, length);
+    CallCode(stub.GetCode(), RelocInfo::CODE_TARGET, instr);
+  }
 }
 
 
 void LCodeGen::DoObjectLiteral(LObjectLiteral* instr) {
-  Abort("Unimplemented: %s", "DoObjectLiteral");
+  // Setup the parameters to the stub/runtime call.
+  __ movq(rax, Operand(rbp, JavaScriptFrameConstants::kFunctionOffset));
+  __ push(FieldOperand(rax, JSFunction::kLiteralsOffset));
+  __ Push(Smi::FromInt(instr->hydrogen()->literal_index()));
+  __ Push(instr->hydrogen()->constant_properties());
+  __ Push(Smi::FromInt(instr->hydrogen()->fast_elements() ? 1 : 0));
+
+  // Pick the right runtime function to call.
+  if (instr->hydrogen()->depth() > 1) {
+    CallRuntime(Runtime::kCreateObjectLiteral, 4, instr);
+  } else {
+    CallRuntime(Runtime::kCreateObjectLiteralShallow, 4, instr);
+  }
 }
 
 
@@ -1881,7 +1985,20 @@ void LCodeGen::DoRegExpLiteral(LRegExpLiteral* instr) {
 
 
 void LCodeGen::DoFunctionLiteral(LFunctionLiteral* instr) {
-  Abort("Unimplemented: %s", "DoFunctionLiteral");
+  // Use the fast case closure allocation code that allocates in new
+  // space for nested functions that don't need literals cloning.
+  Handle<SharedFunctionInfo> shared_info = instr->shared_info();
+  bool pretenure = instr->hydrogen()->pretenure();
+  if (shared_info->num_literals() == 0 && !pretenure) {
+    FastNewClosureStub stub;
+    __ Push(shared_info);
+    CallCode(stub.GetCode(), RelocInfo::CODE_TARGET, instr);
+  } else {
+    __ push(rsi);
+    __ Push(shared_info);
+    __ Push(pretenure ? Factory::true_value() : Factory::false_value());
+    CallRuntime(Runtime::kNewClosure, 3, instr);
+  }
 }
 
 

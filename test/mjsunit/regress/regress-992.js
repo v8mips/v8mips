@@ -1,4 +1,4 @@
-// Copyright 2010 the V8 project authors. All rights reserved.
+// Copyright 2011 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -25,34 +25,19 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#include "gc-extension.h"
+// Object.defineProperty with generic desc on existing property
+// should just update enumerable/configurable flags.
 
-namespace v8 {
-namespace internal {
+var obj =  { get p() { return 42; }  };
+var desc = Object.getOwnPropertyDescriptor(obj, 'p');
+var getter = desc.get;
 
-const char* const GCExtension::kSource = "native function gc();";
-
-
-v8::Handle<v8::FunctionTemplate> GCExtension::GetNativeFunction(
-    v8::Handle<v8::String> str) {
-  return v8::FunctionTemplate::New(GCExtension::GC);
-}
-
-
-v8::Handle<v8::Value> GCExtension::GC(const v8::Arguments& args) {
-  bool compact = false;
-  // All allocation spaces other than NEW_SPACE have the same effect.
-  if (args.Length() >= 1 && args[0]->IsBoolean()) {
-    compact = args[0]->BooleanValue();
-  }
-  Heap::CollectAllGarbage(compact);
-  return v8::Undefined();
-}
-
-
-void GCExtension::Register() {
-  static GCExtension gc_extension;
-  static v8::DeclareExtension gc_extension_declaration(&gc_extension);
-}
-
-} }  // namespace v8::internal
+Object.defineProperty(obj, 'p', {enumerable: false });
+assertEquals(obj.p, 42);
+desc = Object.getOwnPropertyDescriptor(obj, 'p');
+assertFalse(desc.enumerable);
+assertTrue(desc.configurable);
+assertEquals(desc.get, getter);
+assertEquals(desc.set, undefined);
+assertFalse(desc.hasOwnProperty('value'));
+assertFalse(desc.hasOwnProperty('writable'));
