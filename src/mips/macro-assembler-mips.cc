@@ -3166,6 +3166,14 @@ void MacroAssembler::AbortIfSmi(Register object) {
   Assert(ne, "Operand is a smi", at, Operand(zero_reg));
 }
 
+
+void MacroAssembler::AbortIfNotSmi(Register object) {
+  STATIC_ASSERT(kSmiTag == 0);
+  andi(at, object, kSmiTagMask);
+  Assert(eq, "Operand is a smi", at, Operand(zero_reg));
+}
+
+
 void MacroAssembler::JumpIfNotHeapNumber(Register object,
                                          Register heap_number_map,
                                          Register scratch,

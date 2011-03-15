@@ -482,7 +482,7 @@ void FloatingPointHelper::LoadNumber(MacroAssembler* masm,
     // Load the double from tagged HeapNumber to double register.
 
     // ARM uses a workaround here because of the unaligned HeapNumber
-    // kValueOffset. On MIPS this workaround is built into sdc1 so there's no
+    // kValueOffset. On MIPS this workaround is built into ldc1 so there's no
     // point in generating even more instructions.
     __ ldc1(dst, FieldMemOperand(object, HeapNumber::kValueOffset));
   } else {
@@ -2395,26 +2395,107 @@ void TypeRecordingBinaryOpStub::GenerateSmiSmiOperation(
 }
 
 
-void TypeRecordingBinaryOpStub::GenerateFPUOperation(
-    MacroAssembler* masm) {
-  switch (op_) {
-    case Token::ADD:
-      __ add_d(f10, f12, f14);
-      break;
-    case Token::SUB:
-      __ sub_d(f10, f12, f14);
-      break;
-    case Token::MUL:
-      __ mul_d(f10, f12, f14);
-      break;
-    case Token::DIV:
-      __ div_d(f10, f12, f14);
-    break;
-    default:
-      UNREACHABLE();
+void TypeRecordingBinaryOpStub::GenerateFPOperation(MacroAssembler* masm,
+                                                    bool smi_operands,
+                                                    Label* not_numbers,
+                                                    Label* gc_required) {
+  Register left = a1;
+  Register right = a0;
+  Register scratch1 = t3;
+  Register scratch2 = t5;
+
+  // Load left and right operands into f12 and f14 or a0/a1 and a2/a3 depending
+  // on whether FPU is available.
+  FloatingPointHelper::Destination destination =
+      CpuFeatures::IsSupported(FPU) && op_ != Token::MOD ?
+      FloatingPointHelper::kFPURegisters :
+      FloatingPointHelper::kCoreRegisters;
+
+  Register heap_number_map = t2;
+  __ LoadRoot(heap_number_map, Heap::kHeapNumberMapRootIndex);
+
+  // Allocate new heap number for result.
+  Register result = t1;
+  __ AllocateHeapNumber(
+      result, scratch1, scratch2, heap_number_map, gc_required);
+
+  // Load the operands.
+  if (smi_operands) {
+    if (FLAG_debug_code) {
+      __ AbortIfNotSmi(left);
+      __ AbortIfNotSmi(right);
+    }
+    FloatingPointHelper::LoadSmis(masm, destination, scratch1, scratch2);
+  } else {
+    FloatingPointHelper::LoadOperands(masm,
+                                      destination,
+                                      heap_number_map,
+                                      scratch1,
+                                      scratch2,
+                                      not_numbers);
+  }
+
+  // Calculate the result.
+  if (destination == FloatingPointHelper::kFPURegisters) {
+    // Using VFP registers:
+    // f12: Left value
+    // f14: Right value
+    CpuFeatures::Scope scope(VFP3);
+    switch (op_) {
+      case Token::ADD:
+        __ add_d(f10, f12, f14);
+        break;
+      case Token::SUB:
+        __ sub_d(f10, f12, f14);
+        break;
+      case Token::MUL:
+        __ mul_d(f10, f12, f14);
+        break;
+      case Token::DIV:
+        __ div_d(f10, f12, f14);
+        break;
+      default:
+        UNREACHABLE();
+    }
+
+    // ARM uses a workaround here because of the unaligned HeapNumber
+    // kValueOffset. On MIPS this workaround is built into sdc1 so there's no
+    // point in generating even more instructions.
+    __ sdc1(f10, FieldMemOperand(result, HeapNumber::kValueOffset));
+    __ mov(v0, result);
+    __ Ret();
+  } else {
+    // Using core registers:
+    // a0: Left value (least significant part of mantissa).
+    // a1: Left value (sign, exponent, top of mantissa).
+    // a2: Right value (least significant part of mantissa).
+    // a3: Right value (sign, exponent, top of mantissa).
+
+    __ push(ra);  // For later.
+    __ push(result);
+    __ PrepareCallCFunction(4, scratch1);  // Two doubles are 4 arguments.
+    // Call C routine that may not cause GC or other trouble.
+    __ CallCFunction(ExternalReference::double_fp_operation(op_), 4);
+    // Store answer in the overwritable heap number.
+    __ pop(result);
+    if (!IsMipsSoftFloatABI) {
+      // Double returned in register f0.
+      // ARM uses a workaround here because of the unaligned HeapNumber
+      // kValueOffset. On MIPS this workaround is built into sdc1 so there's no
+      // point in generating even more instructions.
+      __ sdc1(f0, FieldMemOperand(result, HeapNumber::kValueOffset));
+    } else {
+      // Double returned in registers v0 and v1.
+      __ sw(v0, FieldMemOperand(result, HeapNumber::kValueOffset));
+      __ sw(v1, FieldMemOperand(result,
+                                HeapNumber::kValueOffset + kPointerSize));
+    }
+    __ mov(v0, result);
+    // And we are done.
+    __ pop(ra);
+    __ Ret();
   }
 }
-
 
 // Generate the smi code. If the operation on smis are successful this return is
 // generated. If the result is not a smi and heap number allocation is not
@@ -2447,62 +2528,7 @@ void TypeRecordingBinaryOpStub::GenerateSmiCode(MacroAssembler* masm,
   // If heap number results are possible generate the result in an allocated
   // heap number.
   if (allow_heapnumber_results == ALLOW_HEAPNUMBER_RESULTS) {
-    FloatingPointHelper::Destination destination =
-        CpuFeatures::IsSupported(FPU) && op_ != Token::MOD ?
-        FloatingPointHelper::kFPURegisters :
-        FloatingPointHelper::kCoreRegisters;
-
-    Register heap_number_map = t2;
-    __ LoadRoot(heap_number_map, Heap::kHeapNumberMapRootIndex);
-
-    // Allocate new heap number for result.
-    Register result = t1;
-    __ AllocateHeapNumber(
-        result, scratch1, scratch2, heap_number_map, gc_required);
-
-    // Load the smis.
-    FloatingPointHelper::LoadSmis(masm, destination, scratch1, scratch2);
-
-    // Calculate the result.
-    if (destination == FloatingPointHelper::kFPURegisters) {
-      // Using FPU registers:
-      // f12: Left value
-      // f14: Right value
-      CpuFeatures::Scope scope(FPU);
-      GenerateFPUOperation(masm);
-      // ARM uses a workaround here because of the unaligned HeapNumber
-      // kValueOffset. On MIPS this workaround is built into sdc1 so there's no
-      // point in generating even more instructions.
-      __ mov(v0, result);
-      __ sdc1(f10, FieldMemOperand(v0, HeapNumber::kValueOffset));
-      __ Ret();
-    } else {
-      // Using core registers:
-      // a0: Left value (least significant part of mantissa).
-      // a1: Left value (sign, exponent, top of mantissa).
-      // a2: Right value (least significant part of mantissa).
-      // a3: Right value (sign, exponent, top of mantissa).
-
-      __ push(ra);  // For later.
-      __ PrepareCallCFunction(4, scratch1);  // Two doubles are 4 arguments.
-      // Call C routine that may not cause GC or other trouble. t1 is callee
-      // save.
-      __ CallCFunction(ExternalReference::double_fp_operation(op_), 4);
-      // Store answer in the overwritable heap number.
-      if (!IsMipsSoftFloatABI) {
-        // Double returned in register f0.
-        __ sdc1(f0, FieldMemOperand(result, HeapNumber::kValueOffset));
-      } else {
-        // Double returned in registers v0 and v1.
-        __ sw(v0, FieldMemOperand(result, HeapNumber::kValueOffset));
-        __ sw(v1, FieldMemOperand(result,
-            HeapNumber::kValueOffset + kPointerSize));
-      }
-      __ mov(v0, result);
-      // And we are done.
-      __ pop(ra);
-      __ Ret();
-    }
+    GenerateFPOperation(masm, true, NULL, gc_required);
   }
   __ bind(&not_smis);
 }
@@ -2570,78 +2596,12 @@ void TypeRecordingBinaryOpStub::GenerateHeapNumberStub(MacroAssembler* masm) {
          op_ == Token::DIV ||
          op_ == Token::MOD);
 
-  Register scratch1 = t3;
-  Register scratch2 = t5;
-
-  Label not_number, call_runtime;
+  Label not_numbers, call_runtime;
   ASSERT(operands_type_ == TRBinaryOpIC::HEAP_NUMBER);
 
-  Register heap_number_map = t2;
-  __ LoadRoot(heap_number_map, Heap::kHeapNumberMapRootIndex);
+  GenerateFPOperation(masm, false, &not_numbers, &call_runtime);
 
-  // Get a heap number object for the result - might be left or right if one
-  // of these are overwritable. Uses a callee-save register to keep the value
-  // across the C call which we might use below.
-  Register result = t1;
-  GenerateHeapResultAllocation(
-      masm, result, heap_number_map, scratch1, scratch2, &call_runtime);
-
-  // Load left and right operands into f12 and f14 or a0/a1 and a2/a3 depending
-  // on whether FPU is available.
-  FloatingPointHelper::Destination destination =
-      CpuFeatures::IsSupported(FPU) && op_ != Token::MOD ?
-      FloatingPointHelper::kFPURegisters :
-      FloatingPointHelper::kCoreRegisters;
-  FloatingPointHelper::LoadOperands(masm,
-                                    destination,
-                                    heap_number_map,
-                                    scratch1,
-                                    scratch2,
-                                    &not_number);
-  if (destination == FloatingPointHelper::kFPURegisters) {
-    // Use floating point instructions for the binary operation.
-    CpuFeatures::Scope scope(FPU);
-    GenerateFPUOperation(masm);
-
-    // Fill the result into the allocated heap number and return.
-
-    // ARM uses a workaround here because of the unaligned HeapNumber
-    // kValueOffset. On MIPS this workaround is built into sdc1 so there's no
-    // point in generating even more instructions.
-    __ mov(v0, result);
-    __ sdc1(f10, FieldMemOperand(v0, HeapNumber::kValueOffset));
-    __ Ret();
-
-  } else {
-    // Call a C function for the binary operation.
-    // a0/a1: Left operand
-    // a2/a3: Right operand
-
-    __ push(ra);  // For returning later (no GC after this point).
-    __ PrepareCallCFunction(4, scratch1);  // Two doubles count as 4 arguments.
-    // Call C routine that may not cause GC or other trouble. result (t1) is
-    // callee saved.
-    __ CallCFunction(ExternalReference::double_fp_operation(op_), 4);
-
-    // Fill the result into the allocated heap number.
-    if (!IsMipsSoftFloatABI) {
-      // Double returned in register f0.
-      // ARM uses a workaround here because of the unaligned HeapNumber
-      // kValueOffset. On MIPS this workaround is built into sdc1 so there's no
-      // point in generating even more instructions.
-      __ sdc1(f0, FieldMemOperand(result, HeapNumber::kValueOffset));
-    } else {
-      // Double returned in registers v0 and v1.
-      __ sw(v0, FieldMemOperand(result, HeapNumber::kValueOffset));
-      __ sw(v1, FieldMemOperand(result, HeapNumber::kValueOffset + kPointerSize));
-    }
-
-    __ mov(v0, result);
-    __ pop(ra);
-    __ Ret();
-  }
-
-  __ bind(&not_number);
+  __ bind(&not_numbers);
   GenerateTypeTransition(masm);
 
   __ bind(&call_runtime);
