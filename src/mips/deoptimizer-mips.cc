@@ -1,4 +1,4 @@
-// Copyright 2010 the V8 project authors. All rights reserved.
+// Copyright 2011 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -40,6 +40,13 @@ namespace internal {
 
 
 int Deoptimizer::table_entry_size_ = 10;
+
+
+int Deoptimizer::patch_size() {
+  const int kCallInstructionSizeInWords = 3;
+  return kCallInstructionSizeInWords * Assembler::kInstrSize;
+}
+
 
 void Deoptimizer::DeoptimizeFunction(JSFunction* function) {
   UNIMPLEMENTED();
