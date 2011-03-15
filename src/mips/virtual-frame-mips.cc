@@ -71,6 +71,8 @@ void VirtualFrame::MergeTo(const VirtualFrame* expected,
                            Register r1,
                            const Operand& r2) {
   if (Equals(expected)) return;
+  ASSERT((expected->tos_known_smi_map_ & tos_known_smi_map_) ==
+         expected->tos_known_smi_map_);
   ASSERT(expected->IsCompatibleWith(this));
   MergeTOSTo(expected->top_of_stack_state_, cond, r1, r2);
   ASSERT(register_allocation_map_ == expected->register_allocation_map_);
@@ -82,7 +84,7 @@ void VirtualFrame::MergeTo(VirtualFrame* expected,
                            Register r1,
                            const Operand& r2) {
   if (Equals(expected)) return;
-  expected->tos_known_smi_map_ &= tos_known_smi_map_;
+  tos_known_smi_map_ &= expected->tos_known_smi_map_;
   MergeTOSTo(expected->top_of_stack_state_, cond, r1, r2);
   ASSERT(register_allocation_map_ == expected->register_allocation_map_);
 }
