@@ -3125,6 +3125,18 @@ void MacroAssembler::AlignStack(int offset) {
 }
 
 
+
+void MacroAssembler::JumpIfNotPowerOfTwoOrZero(
+    Register reg,
+    Register scratch,
+    Label* not_power_of_two_or_zero) {
+  Subu(scratch, reg, Operand(1));
+  Branch(not_power_of_two_or_zero, lt, scratch, Operand(zero_reg), false);
+  and_(at, scratch, reg);  // In the delay slot.
+  Branch(not_power_of_two_or_zero, ne, at, Operand(zero_reg));
+}
+
+
 void MacroAssembler::JumpIfNotBothSmi(Register reg1,
                                       Register reg2,
                                       Label* on_not_both_smi) {

@@ -70,6 +70,11 @@ class LInstruction: public ZoneObject {
   }
 
   virtual void PrintTo(StringStream* stream) const { UNIMPLEMENTED(); }
+
+  virtual bool IsControl() const {
+    UNIMPLEMENTED();
+    return false;
+  }
 };
 
 
