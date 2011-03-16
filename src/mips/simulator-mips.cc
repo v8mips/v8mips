@@ -56,6 +56,7 @@ bool HaveSameSign(int32_t a, int32_t b) {
   return ((a ^ b) >= 0);
 }
 
+
 uint32_t get_fcsr_condition_bit(uint32_t cc) {
   if (cc == 0) {
     return 23;
@@ -63,6 +64,7 @@ uint32_t get_fcsr_condition_bit(uint32_t cc) {
     return 24 + cc;
   }
 }
+
 
 // This macro provides a platform independent use of sscanf. The reason for
 // SScanF not being implemented in a platform independent was through
@@ -964,15 +966,18 @@ bool Simulator::set_fcsr_round_error(double original, double rounded) {
   return false;
 }
 
+
 // Raw access to the PC register.
 void Simulator::set_pc(int32_t value) {
   pc_modified_ = true;
   registers_[pc] = value;
 }
 
+
 bool Simulator::has_bad_pc() const {
   return ((registers_[pc] == bad_ra) || (registers_[pc] == end_sim_pc));
 }
+
 
 // Raw access to the PC register without the special adjustment when reading.
 int32_t Simulator::get_pc() const {
@@ -1506,6 +1511,7 @@ void Simulator::ConfigureTypeRegister(Instruction* instr,
       UNREACHABLE();
   };
 }
+
 
 void Simulator::DecodeTypeRegister(Instruction* instr) {
   // Instruction fields.

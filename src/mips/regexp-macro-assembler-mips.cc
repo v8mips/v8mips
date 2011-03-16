@@ -1212,6 +1212,7 @@ void RegExpCEntryStub::Generate(MacroAssembler* masm_) {
   __ Jump(Operand(ra));
 }
 
+
 #undef __
 
 #endif  // V8_INTERPRETED_REGEXP

@@ -5873,6 +5873,7 @@ void CodeGenerator::GenerateGetCachedArrayIndex(ZoneList<Expression*>* args) {
   frame_->EmitPush(value);
 }
 
+
 void CodeGenerator::GenerateFastAsciiArrayJoin(ZoneList<Expression*>* args) {
   ASSERT(args->length() == 2);
   Load(args->at(0));

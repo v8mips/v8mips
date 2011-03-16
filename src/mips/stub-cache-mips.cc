@@ -872,6 +872,7 @@ MUST_USE_RESULT static MaybeObject* GenerateCheckPropertyCell(
   return cell;
 }
 
+
 // Calls GenerateCheckPropertyCell for each global object in the prototype chain
 // from object to (but not including) holder.
 MUST_USE_RESULT static MaybeObject* GenerateCheckPropertyCells(
@@ -898,6 +899,7 @@ MUST_USE_RESULT static MaybeObject* GenerateCheckPropertyCells(
   }
   return NULL;
 }
+
 
 // Convert and store int passed in register ival to IEEE 754 single precision
 // floating point value at memory location (dst + 4 * wordoffset)
@@ -1013,6 +1015,7 @@ static void GenerateUInt2Double(MacroAssembler* masm,
     __ and_(hiword, hiword, scratch);
   }
 }
+
 
 #undef __
 #define __ ACCESS_MASM(masm())
@@ -2106,6 +2109,7 @@ MaybeObject* CallStubCompiler::CompileMathFloorCall(Object* object,
   return (cell == NULL) ? GetCode(function) : GetCode(NORMAL, name);
 }
 
+
 MaybeObject* CallStubCompiler::CompileMathAbsCall(Object* object,
                                                   JSObject* holder,
                                                   JSGlobalPropertyCell* cell,
@@ -2998,6 +3002,7 @@ MaybeObject* KeyedLoadStubCompiler::CompileLoadFunctionPrototype(String* name) {
   return GetCode(CALLBACKS, name);
 }
 
+
 MaybeObject* KeyedLoadStubCompiler::CompileLoadSpecialized(JSObject* receiver) {
   // ----------- S t a t e -------------
   //  -- ra    : return address
@@ -3042,6 +3047,7 @@ MaybeObject* KeyedLoadStubCompiler::CompileLoadSpecialized(JSObject* receiver) {
   return GetCode(NORMAL, NULL);
 }
 
+
 MaybeObject* KeyedLoadStubCompiler::CompileLoadPixelArray(JSObject* receiver) {
   // ----------- S t a t e -------------
   //  -- ra    : return address
@@ -3072,6 +3078,7 @@ MaybeObject* KeyedLoadStubCompiler::CompileLoadPixelArray(JSObject* receiver) {
   // Return the generated code.
   return GetCode(NORMAL, NULL);
 }
+
 
 MaybeObject* KeyedStoreStubCompiler::CompileStoreField(JSObject* object,
                                                        int index,
@@ -3108,6 +3115,7 @@ MaybeObject* KeyedStoreStubCompiler::CompileStoreField(JSObject* object,
   // Return the generated code.
   return GetCode(transition == NULL ? FIELD : MAP_TRANSITION, name);
 }
+
 
 MaybeObject* KeyedStoreStubCompiler::CompileStoreSpecialized(
     JSObject* receiver) {

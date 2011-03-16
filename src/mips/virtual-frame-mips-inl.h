@@ -34,6 +34,7 @@
 namespace v8 {
 namespace internal {
 
+
 MemOperand VirtualFrame::ParameterAt(int index) {
   // Index -1 corresponds to the receiver.
   ASSERT(-1 <= index);  // -1 is the receiver.
@@ -41,15 +42,19 @@ MemOperand VirtualFrame::ParameterAt(int index) {
   return MemOperand(fp, (1 + parameter_count() - index) * kPointerSize);
 }
 
+
 // The receiver frame slot.
 MemOperand VirtualFrame::Receiver() {
   return ParameterAt(-1);
 }
 
+
 void VirtualFrame::Forget(int count) {
   SpillAll();
   LowerHeight(count);
 }
+
+
 } }  // namespace v8::internal
 
 #endif  // V8_VIRTUAL_FRAME_MIPS_INL_H_

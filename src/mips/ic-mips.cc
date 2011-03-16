@@ -732,6 +732,7 @@ void CallIC::GenerateNormal(MacroAssembler* masm, int argc) {
   GenerateMiss(masm, argc);
 }
 
+
 void KeyedCallIC::GenerateMiss(MacroAssembler* masm, int argc) {
   // ----------- S t a t e -------------
   //  -- a2    : name
@@ -1694,7 +1695,9 @@ void StoreIC::GenerateGlobalProxy(MacroAssembler* masm) {
   __ TailCallRuntime(Runtime::kSetProperty, 3, 1);
 }
 
+
 #undef __
+
 
 Condition CompareIC::ComputeCondition(Token::Value op) {
   switch (op) {
@@ -1716,6 +1719,7 @@ Condition CompareIC::ComputeCondition(Token::Value op) {
       return kNoCondition;
   }
 }
+
 
 void CompareIC::UpdateCaches(Handle<Object> x, Handle<Object> y) {
   HandleScope scope;
@@ -1745,6 +1749,7 @@ void CompareIC::UpdateCaches(Handle<Object> x, Handle<Object> y) {
 void PatchInlinedSmiCode(Address address) {
   // Currently there is no smi inlining in the MIPS full code generator.
 }
+
 
 } }  // namespace v8::internal
 

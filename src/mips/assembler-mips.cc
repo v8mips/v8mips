@@ -680,6 +680,7 @@ void Assembler::GenInstrRegister(Opcode opcode,
   emit(instr);
 }
 
+
 void Assembler::GenInstrRegister(Opcode opcode,
                                  SecondaryField fmt,
                                  Register rt,
@@ -690,6 +691,7 @@ void Assembler::GenInstrRegister(Opcode opcode,
       | (fs.code() << kFsShift) | func;
   emit(instr);
 }
+
 
 // Instructions with immediate value.
 // Registers are in the order of the instruction encoding, from left to right.
@@ -1658,6 +1660,7 @@ void Assembler::mfc1(Register rt, FPURegister fs) {
   GenInstrRegister(COP1, MFC1, rt, fs, f0);
 }
 
+
 void Assembler::ctc1(Register rt, FPUControlRegister fs) {
   GenInstrRegister(COP1, CTC1, rt, fs);
 }
@@ -1666,6 +1669,7 @@ void Assembler::ctc1(Register rt, FPUControlRegister fs) {
 void Assembler::cfc1(Register rt, FPUControlRegister fs) {
   GenInstrRegister(COP1, CFC1, rt, fs);
 }
+
 
 // Arithmetic.
 
@@ -1730,29 +1734,36 @@ void Assembler::trunc_w_d(FPURegister fd, FPURegister fs) {
   GenInstrRegister(COP1, D, f0, fs, fd, TRUNC_W_D);
 }
 
+
 void Assembler::round_w_s(FPURegister fd, FPURegister fs) {
   GenInstrRegister(COP1, S, f0, fs, fd, ROUND_W_S);
 }
+
 
 void Assembler::round_w_d(FPURegister fd, FPURegister fs) {
   GenInstrRegister(COP1, D, f0, fs, fd, ROUND_W_D);
 }
 
+
 void Assembler::floor_w_s(FPURegister fd, FPURegister fs) {
   GenInstrRegister(COP1, S, f0, fs, fd, FLOOR_W_S);
 }
+
 
 void Assembler::floor_w_d(FPURegister fd, FPURegister fs) {
   GenInstrRegister(COP1, D, f0, fs, fd, FLOOR_W_D);
 }
 
+
 void Assembler::ceil_w_s(FPURegister fd, FPURegister fs) {
   GenInstrRegister(COP1, S, f0, fs, fd, CEIL_W_S);
 }
 
+
 void Assembler::ceil_w_d(FPURegister fd, FPURegister fs) {
   GenInstrRegister(COP1, D, f0, fs, fd, CEIL_W_D);
 }
+
 
 void Assembler::cvt_l_s(FPURegister fd, FPURegister fs) {
   if (mips32r2) {
@@ -1789,25 +1800,31 @@ void Assembler::trunc_l_d(FPURegister fd, FPURegister fs) {
   }
 }
 
+
 void Assembler::round_l_s(FPURegister fd, FPURegister fs) {
   GenInstrRegister(COP1, S, f0, fs, fd, ROUND_L_S);
 }
+
 
 void Assembler::round_l_d(FPURegister fd, FPURegister fs) {
   GenInstrRegister(COP1, D, f0, fs, fd, ROUND_L_D);
 }
 
+
 void Assembler::floor_l_s(FPURegister fd, FPURegister fs) {
   GenInstrRegister(COP1, S, f0, fs, fd, FLOOR_L_S);
 }
+
 
 void Assembler::floor_l_d(FPURegister fd, FPURegister fs) {
   GenInstrRegister(COP1, D, f0, fs, fd, FLOOR_L_D);
 }
 
+
 void Assembler::ceil_l_s(FPURegister fd, FPURegister fs) {
   GenInstrRegister(COP1, S, f0, fs, fd, CEIL_L_S);
 }
+
 
 void Assembler::ceil_l_d(FPURegister fd, FPURegister fs) {
   GenInstrRegister(COP1, D, f0, fs, fd, CEIL_L_D);
@@ -1952,6 +1969,7 @@ void Assembler::GrowBuffer() {
 
   ASSERT(!overflow());
 }
+
 
 void Assembler::db(uint8_t data) {
   CheckBuffer();

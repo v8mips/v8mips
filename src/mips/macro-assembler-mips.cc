@@ -281,6 +281,7 @@ void MacroAssembler::RecordWrite(Register object,
   }
 }
 
+
 // -----------------------------------------------------------------------------
 // Allocation support
 
@@ -1751,6 +1752,7 @@ void MacroAssembler::Drop(int count,
   }
 }
 
+
 void MacroAssembler::DropAndRet(int drop,
                                 Condition cond,
                                 Register r1,
@@ -1770,6 +1772,7 @@ void MacroAssembler::DropAndRet(int drop,
     bind(&skip);
   }
 }
+
 
 void MacroAssembler::Swap(Register reg1,
                           Register reg2,
@@ -2445,8 +2448,10 @@ void MacroAssembler::IsObjectJSStringType(Register object,
   Branch(fail, ne, scratch, Operand(zero_reg));
 }
 
+
 // ---------------------------------------------------------------------------
 // Support functions.
+
 
 void MacroAssembler::TryGetFunctionPrototype(Register function,
                                              Register result,
@@ -2688,6 +2693,7 @@ void MacroAssembler::CallRuntime(Runtime::Function* f, int num_arguments) {
   CallStub(&stub);
 }
 
+
 void MacroAssembler::CallRuntimeSaveDoubles(Runtime::FunctionId id) {
   Runtime::Function* function = Runtime::FunctionForId(id);
   li(a0, Operand(function->nargs));
@@ -2696,6 +2702,7 @@ void MacroAssembler::CallRuntimeSaveDoubles(Runtime::FunctionId id) {
   stub.SaveDoubles();
   CallStub(&stub);
 }
+
 
 void MacroAssembler::CallRuntime(Runtime::FunctionId fid, int num_arguments) {
   CallRuntime(Runtime::FunctionForId(fid), num_arguments);
@@ -2911,6 +2918,7 @@ void MacroAssembler::LoadContext(Register dst, int context_chain_length) {
   }
 }
 
+
 void MacroAssembler::LoadGlobalFunction(int index, Register function) {
   // Load the global or builtins object from the current context.
   lw(function, MemOperand(cp, Context::SlotOffset(Context::GLOBAL_INDEX)));
@@ -2936,6 +2944,7 @@ void MacroAssembler::LoadGlobalFunctionInitialMap(Register function,
     bind(&ok);
   }
 }
+
 
 void MacroAssembler::EnterFrame(StackFrame::Type type) {
   addiu(sp, sp, -5 * kPointerSize);
@@ -3192,6 +3201,7 @@ void MacroAssembler::JumpIfNotHeapNumber(Register object,
   AssertRegisterIsRoot(heap_number_map, Heap::kHeapNumberMapRootIndex);
   Branch(on_not_heap_number, ne, scratch, Operand(heap_number_map));
 }
+
 
 void MacroAssembler::JumpIfNonSmisNotBothSequentialAsciiStrings(
     Register first,

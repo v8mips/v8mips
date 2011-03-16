@@ -161,6 +161,7 @@ Address* RelocInfo::target_reference_address() {
   return &reconstructed_adr_ptr_;
 }
 
+
 Handle<JSGlobalPropertyCell> RelocInfo::target_cell_handle() {
   ASSERT(rmode_ == RelocInfo::GLOBAL_PROPERTY_CELL);
   Address address = Memory::Address_at(pc_);

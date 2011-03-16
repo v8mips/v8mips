@@ -1141,6 +1141,7 @@ void Builtins::Generate_LazyCompile(MacroAssembler* masm) {
   __ Jump(t9);
 }
 
+
 void Builtins::Generate_LazyRecompile(MacroAssembler* masm) {
   // Enter an internal frame.
   __ EnterInternalFrame();
@@ -1163,21 +1164,26 @@ void Builtins::Generate_LazyRecompile(MacroAssembler* masm) {
   __ Jump(t9);
 }
 
+
 void Builtins::Generate_NotifyDeoptimized(MacroAssembler* masm) {
   __ break_(333);
 }
+
 
 void Builtins::Generate_NotifyLazyDeoptimized(MacroAssembler* masm) {
   __ break_(334);
 }
 
+
 void Builtins::Generate_NotifyOSR(MacroAssembler* masm) {
   __ break_(335);
 }
 
+
 void Builtins::Generate_OnStackReplacement(MacroAssembler* masm) {
   __ break_(336);
 }
+
 
 void Builtins::Generate_FunctionCall(MacroAssembler* masm) {
   // CAREFUL! : Implemented without Builtins args slots.

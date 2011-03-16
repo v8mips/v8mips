@@ -569,6 +569,7 @@ void FullCodeGenerator::Move(Register destination, Slot* source) {
   __ lw(destination, slot_operand);
 }
 
+
 void FullCodeGenerator::PrepareForBailoutBeforeSplit(State state,
                                                      bool should_normalize,
                                                      Label* if_true,
@@ -2992,6 +2993,7 @@ void FullCodeGenerator::EmitGetCachedArrayIndex(ZoneList<Expression*>* args) {
   __ IndexFromHash(v0, v0);
   context()->Plug(v0);
 }
+
 
 void FullCodeGenerator::EmitFastAsciiArrayJoin(ZoneList<Expression*>* args) {
   __ LoadRoot(v0, Heap::kUndefinedValueRootIndex);

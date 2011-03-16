@@ -362,6 +362,7 @@ void ConvertToDoubleStub::Generate(MacroAssembler* masm) {
   __ Ret();
 }
 
+
 class FloatingPointHelper : public AllStatic {
  public:
 
@@ -2522,8 +2523,8 @@ void TypeRecordingBinaryOpStub::GenerateFPOperation(MacroAssembler* masm,
         }
 
         // ARM uses a workaround here because of the unaligned HeapNumber
-        // kValueOffset. On MIPS this workaround is built into sdc1 so there's no
-        // point in generating even more instructions.
+        // kValueOffset. On MIPS this workaround is built into sdc1 so
+        // there's no point in generating even more instructions.
         __ sdc1(f10, FieldMemOperand(result, HeapNumber::kValueOffset));
         __ mov(v0, result);
         __ Ret();
@@ -2545,8 +2546,8 @@ void TypeRecordingBinaryOpStub::GenerateFPOperation(MacroAssembler* masm,
         if (!IsMipsSoftFloatABI) {
           // Double returned in register f0.
           // ARM uses a workaround here because of the unaligned HeapNumber
-          // kValueOffset. On MIPS this workaround is built into sdc1 so there's no
-          // point in generating even more instructions.
+          // kValueOffset. On MIPS this workaround is built into sdc1 so
+          // there's no point in generating even more instructions.
           __ sdc1(f0, FieldMemOperand(result, HeapNumber::kValueOffset));
         } else {
           // Double returned in registers v0 and v1.
@@ -2625,8 +2626,8 @@ void TypeRecordingBinaryOpStub::GenerateFPOperation(MacroAssembler* masm,
         __ mtc1(a2, f0);
         __ cvt_d_w(f0, f0);
         // ARM uses a workaround here because of the unaligned HeapNumber
-        // kValueOffset. On MIPS this workaround is built into sdc1 so there's no
-        // point in generating even more instructions.
+        // kValueOffset. On MIPS this workaround is built into sdc1 so
+        // there's no point in generating even more instructions.
         __ sdc1(f0, FieldMemOperand(v0, HeapNumber::kValueOffset));
         __ Ret();
       } else {
@@ -2641,6 +2642,7 @@ void TypeRecordingBinaryOpStub::GenerateFPOperation(MacroAssembler* masm,
       UNREACHABLE();
   }
 }
+
 
 // Generate the smi code. If the operation on smis are successful this return is
 // generated. If the result is not a smi and heap number allocation is not
@@ -4221,6 +4223,7 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
 #endif  // V8_INTERPRETED_REGEXP
 }
 
+
 void RegExpConstructResultStub::Generate(MacroAssembler* masm) {
   const int kMaxInlineLength = 100;
   Label slowcase;
@@ -4308,6 +4311,7 @@ void RegExpConstructResultStub::Generate(MacroAssembler* masm) {
   __ bind(&slowcase);
   __ TailCallRuntime(Runtime::kRegExpConstructResult, 3, 1);
 }
+
 
 void CallFunctionStub::Generate(MacroAssembler* masm) {
   Label slow;
@@ -5636,6 +5640,7 @@ void StringAddStub::Generate(MacroAssembler* masm) {
   __ TailCallRuntime(Runtime::kStringAdd, 2, 1);
 }
 
+
 void ICCompareStub::GenerateSmis(MacroAssembler* masm) {
   ASSERT(state_ == CompareIC::SMIS);
   Label miss;
@@ -5846,6 +5851,7 @@ void GenerateFastPixelArrayLoad(MacroAssembler* masm,
   __ SmiTag(v0, scratch1);
   __ Ret();
 }
+
 
 #undef __
 

@@ -446,6 +446,7 @@ inline Condition ReverseCondition(Condition cc) {
   };
 }
 
+
 // ----- Coprocessor conditions.
 enum FPUCondition {
   F,    // False
@@ -469,9 +470,11 @@ enum Hint {
   no_hint = 0
 };
 
+
 inline Hint NegateHint(Hint hint) {
   return no_hint;
 }
+
 
 // -----------------------------------------------------------------------------
 // Specific instructions, constants, and masks.

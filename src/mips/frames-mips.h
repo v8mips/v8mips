@@ -173,6 +173,7 @@ inline Object* JavaScriptFrame::function_slot_object() const {
   return Memory::Object_at(fp() + offset);
 }
 
+
 } }  // namespace v8::internal
 
 #endif
