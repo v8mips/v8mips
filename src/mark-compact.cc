@@ -842,11 +842,11 @@ VisitorDispatchTable<StaticMarkingVisitor::Callback>
 
 class MarkingVisitor : public ObjectVisitor {
  public:
-  void VisitPointer(Object** p) {
+  void VisitPointer(Object** p, RelocInfo* rinfo = 0) {
     StaticMarkingVisitor::VisitPointer(p);
   }
 
-  void VisitPointers(Object** start, Object** end) {
+  void VisitPointers(Object** start, Object** end, RelocInfo* rinfo = 0) {
     StaticMarkingVisitor::VisitPointers(start, end);
   }
 
@@ -876,11 +876,11 @@ class CodeMarkingVisitor : public ThreadVisitor {
 
 class SharedFunctionInfoMarkingVisitor : public ObjectVisitor {
  public:
-  void VisitPointers(Object** start, Object** end) {
+  void VisitPointers(Object** start, Object** end, RelocInfo* rinfo = 0) {
     for (Object** p = start; p < end; p++) VisitPointer(p);
   }
 
-  void VisitPointer(Object** slot) {
+  void VisitPointer(Object** slot, RelocInfo* rinfo = 0) {
     Object* obj = *slot;
     if (obj->IsSharedFunctionInfo()) {
       SharedFunctionInfo* shared = reinterpret_cast<SharedFunctionInfo*>(obj);
@@ -930,11 +930,11 @@ void MarkCompactCollector::PrepareForCodeFlushing() {
 // Visitor class for marking heap roots.
 class RootMarkingVisitor : public ObjectVisitor {
  public:
-  void VisitPointer(Object** p) {
+  void VisitPointer(Object** p, RelocInfo* rinfo = 0) {
     MarkObjectByPointer(p);
   }
 
-  void VisitPointers(Object** start, Object** end) {
+  void VisitPointers(Object** start, Object** end, RelocInfo* rinfo = 0) {
     for (Object** p = start; p < end; p++) MarkObjectByPointer(p);
   }
 
@@ -966,7 +966,8 @@ class SymbolTableCleaner : public ObjectVisitor {
  public:
   SymbolTableCleaner() : pointers_removed_(0) { }
 
-  virtual void VisitPointers(Object** start, Object** end) {
+  virtual void VisitPointers(Object** start, Object** end,
+                             RelocInfo* rinfo = 0) {
     // Visit all HeapObject pointers in [start, end).
     for (Object** p = start; p < end; p++) {
       if ((*p)->IsHeapObject() && !HeapObject::cast(*p)->IsMarked()) {
@@ -1750,11 +1751,11 @@ class StaticPointersToNewGenUpdatingVisitor : public
 // It does not expect to encounter pointers to dead objects.
 class PointersToNewGenUpdatingVisitor: public ObjectVisitor {
  public:
-  void VisitPointer(Object** p) {
+  void VisitPointer(Object** p, RelocInfo* rinfo = 0) {
     StaticPointersToNewGenUpdatingVisitor::VisitPointer(p);
   }
 
-  void VisitPointers(Object** start, Object** end) {
+  void VisitPointers(Object** start, Object** end, RelocInfo* rinfo = 0) {
     for (Object** p = start; p < end; p++) {
       StaticPointersToNewGenUpdatingVisitor::VisitPointer(p);
     }
@@ -2209,11 +2210,11 @@ class MapCompact {
   // Helper class for updating map pointers in HeapObjects.
   class MapUpdatingVisitor: public ObjectVisitor {
   public:
-    void VisitPointer(Object** p) {
+    void VisitPointer(Object** p, RelocInfo* rinfo = 0) {
       UpdateMapPointer(p);
     }
 
-    void VisitPointers(Object** start, Object** end) {
+    void VisitPointers(Object** start, Object** end, RelocInfo* rinfo = 0) {
       for (Object** p = start; p < end; p++) UpdateMapPointer(p);
     }
 
@@ -2442,18 +2443,13 @@ int MarkCompactCollector::IterateLiveObjects(PagedSpace* space,
 // Helper class for updating pointers in HeapObjects.
 class UpdatingVisitor: public ObjectVisitor {
  public:
-  void VisitPointer(Object** p) {
-    UpdatePointer(p, NULL);
-  }
-
-  void VisitPointer(Object** p, RelocInfo* rinfo) {
-    // Variant of UpdatePointer, for arch's where RelocInfo is needed.
+  void VisitPointer(Object** p, RelocInfo* rinfo = 0) {
     UpdatePointer(p, rinfo);
   }
 
-  void VisitPointers(Object** start, Object** end) {
+  void VisitPointers(Object** start, Object** end, RelocInfo* rinfo = 0) {
     // Mark all HeapObject pointers in [start, end)
-    for (Object** p = start; p < end; p++) UpdatePointer(p, NULL);
+    for (Object** p = start; p < end; p++) UpdatePointer(p, rinfo);
   }
 
   void VisitCodeTarget(RelocInfo* rinfo) {

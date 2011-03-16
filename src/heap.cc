@@ -533,7 +533,7 @@ void Heap::PerformScavenge() {
 class SymbolTableVerifier : public ObjectVisitor {
  public:
   SymbolTableVerifier() { }
-  void VisitPointers(Object** start, Object** end) {
+  void VisitPointers(Object** start, Object** end, RelocInfo* rinfo = 0) {
     // Visit all HeapObject pointers in [start, end).
     for (Object** p = start; p < end; p++) {
       if ((*p)->IsHeapObject()) {
@@ -872,9 +872,9 @@ Object* Heap::FindCodeObject(Address a) {
 class ScavengeVisitor: public ObjectVisitor {
  public:
 
-  void VisitPointer(Object** p) { ScavengePointer(p); }
+  void VisitPointer(Object** p, RelocInfo* rinfo = 0) { ScavengePointer(p); }
 
-  void VisitPointers(Object** start, Object** end) {
+  void VisitPointers(Object** start, Object** end, RelocInfo* rinfo = 0) {
     // Copy all HeapObject pointers in [start, end)
     for (Object** p = start; p < end; p++) ScavengePointer(p);
   }
@@ -929,7 +929,7 @@ static PromotionQueue promotion_queue;
 // new space.
 class VerifyNonPointerSpacePointersVisitor: public ObjectVisitor {
  public:
-  void VisitPointers(Object** start, Object**end) {
+  void VisitPointers(Object** start, Object**end, RelocInfo* rinfo = 0) {
     for (Object** current = start; current < end; current++) {
       if ((*current)->IsHeapObject()) {
         ASSERT(!Heap::InNewSpace(HeapObject::cast(*current)));
@@ -4827,7 +4827,7 @@ void Heap::RemoveGCEpilogueCallback(GCEpilogueCallback callback) {
 
 class PrintHandleVisitor: public ObjectVisitor {
  public:
-  void VisitPointers(Object** start, Object** end) {
+  void VisitPointers(Object** start, Object** end, RelocInfo* rinfo = 0) {
     for (Object** p = start; p < end; p++)
       PrintF("  handle %p to %p\n",
              reinterpret_cast<void*>(p),
@@ -5040,7 +5040,7 @@ class UnreachableObjectsFilter : public HeapObjectsFilter {
    public:
     UnmarkingVisitor() : list_(10) {}
 
-    void VisitPointers(Object** start, Object** end) {
+    void VisitPointers(Object** start, Object** end, RelocInfo* rinfo = 0) {
       for (Object** p = start; p < end; p++) {
         if (!(*p)->IsHeapObject()) continue;
         HeapObject* obj = HeapObject::cast(*p);
@@ -5185,7 +5185,7 @@ static const int kMarkTag = 2;
 static void MarkObjectRecursively(Object** p);
 class MarkObjectVisitor : public ObjectVisitor {
  public:
-  void VisitPointers(Object** start, Object** end) {
+  void VisitPointers(Object** start, Object** end, RelocInfo* rinfo = 0) {
     // Copy all HeapObject pointers in [start, end)
     for (Object** p = start; p < end; p++) {
       if ((*p)->IsHeapObject())
@@ -5233,7 +5233,7 @@ static void MarkObjectRecursively(Object** p) {
 static void UnmarkObjectRecursively(Object** p);
 class UnmarkObjectVisitor : public ObjectVisitor {
  public:
-  void VisitPointers(Object** start, Object** end) {
+  void VisitPointers(Object** start, Object** end, RelocInfo* rinfo = 0) {
     // Copy all HeapObject pointers in [start, end)
     for (Object** p = start; p < end; p++) {
       if ((*p)->IsHeapObject())
@@ -5302,7 +5302,7 @@ static void MarkRootObjectRecursively(Object** root) {
 // Helper class for visiting HeapObjects recursively.
 class MarkRootVisitor: public ObjectVisitor {
  public:
-  void VisitPointers(Object** start, Object** end) {
+  void VisitPointers(Object** start, Object** end, RelocInfo* rinfo = 0) {
     // Visit all HeapObject pointers in [start, end)
     for (Object** p = start; p < end; p++) {
       if ((*p)->IsHeapObject())

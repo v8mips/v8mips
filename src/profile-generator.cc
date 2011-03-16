@@ -1856,7 +1856,7 @@ class RootsReferencesExtractor : public ObjectVisitor {
   explicit RootsReferencesExtractor(HeapSnapshotGenerator* generator)
       : generator_(generator) {
   }
-  void VisitPointers(Object** start, Object** end) {
+  void VisitPointers(Object** start, Object** end, RelocInfo* rinfo = 0) {
     for (Object** p = start; p < end; p++) generator_->SetGcRootsReference(*p);
   }
  private:
@@ -1913,7 +1913,7 @@ class IndexedReferencesExtractor : public ObjectVisitor {
         known_references_(known_references),
         next_index_(1) {
   }
-  void VisitPointers(Object** start, Object** end) {
+  void VisitPointers(Object** start, Object** end, RelocInfo* rinfo = 0) {
     for (Object** p = start; p < end; p++) {
       if (!known_references_ || !known_references_->Contains(*p)) {
         generator_->SetHiddenReference(parent_obj_, parent_, next_index_++, *p);

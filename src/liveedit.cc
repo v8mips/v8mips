@@ -832,7 +832,8 @@ class ReferenceCollectorVisitor : public ObjectVisitor {
     : original_(original), rvalues_(10), reloc_infos_(10), code_entries_(10) {
   }
 
-  virtual void VisitPointers(Object** start, Object** end) {
+  virtual void VisitPointers(Object** start, Object** end,
+                             RelocInfo* rinfo = 0) {
     for (Object** p = start; p < end; p++) {
       if (*p == original_) {
         rvalues_.Add(p);

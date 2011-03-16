@@ -142,7 +142,7 @@ class ReferencesExtractor : public ObjectVisitor {
         inside_array_(false) {
   }
 
-  void VisitPointer(Object** o) {
+  void VisitPointer(Object** o, RelocInfo* rinfo = 0) {
     if ((*o)->IsFixedArray() && !inside_array_) {
       // Traverse one level deep for data members that are fixed arrays.
       // This covers the case of 'elements' and 'properties' of JSObject,
@@ -155,7 +155,7 @@ class ReferencesExtractor : public ObjectVisitor {
     }
   }
 
-  void VisitPointers(Object** start, Object** end) {
+  void VisitPointers(Object** start, Object** end, RelocInfo* rinfo = 0) {
     for (Object** p = start; p < end; p++) VisitPointer(p);
   }
 

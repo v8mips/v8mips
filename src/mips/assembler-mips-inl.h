@@ -95,8 +95,24 @@ Address RelocInfo::target_address() {
 
 
 Address RelocInfo::target_address_address() {
-  ASSERT(IsCodeTarget(rmode_) || rmode_ == RUNTIME_ENTRY);
-  return reinterpret_cast<Address>(pc_);
+  ASSERT(IsCodeTarget(rmode_) || rmode_ == RUNTIME_ENTRY
+                              || rmode_ == EMBEDDED_OBJECT
+                              || rmode_ == EXTERNAL_REFERENCE);
+  // Read the address of the word containing the target_address in an
+  // instruction stream.
+  // The only architecture-independent user of this function is the serializer.
+  // The serializer uses it to find out how many raw bytes of instruction to
+  // output before the next target.
+  // For an instructions like LUI/ORI where the target bits are mixed into the
+  // instruction bits, the size of the target will be zero, indicating that the
+  // serializer should not step forward in memory after a target is resolved
+  // and written.  In this case the target_address_address function should
+  // return the end of the instructions to be patched, allowing the
+  // deserializer to deserialize the instructions as raw bytes and put them in
+  // place, ready to be patched with the target. In our case, that is the
+  // address of the instruction that follows LUI/ORI instruction pair.
+  return reinterpret_cast<Address>(
+    pc_ + Assembler::kInstructionsFor32BitConstant * Assembler::kInstrSize);
 }
 
 
@@ -227,14 +243,17 @@ bool RelocInfo::IsPatchedDebugBreakSlotSequence() {
 void RelocInfo::Visit(ObjectVisitor* visitor) {
   RelocInfo::Mode mode = rmode();
   if (mode == RelocInfo::EMBEDDED_OBJECT) {
-    // RelocInfo is needed when pointer must be updated, such as
-    // UpdatingVisitor in mark-compact.cc. It ignored by visitors
-    // that do not need it.
+    // RelocInfo is needed when pointer must be updated/serialized, such as
+    // UpdatingVisitor in mark-compact.cc or Serializer in serialize.cc.
+    // It is ignored by visitors that do not need it.
     visitor->VisitPointer(target_object_address(), this);
   } else if (RelocInfo::IsCodeTarget(mode)) {
     visitor->VisitCodeTarget(this);
   } else if (mode == RelocInfo::EXTERNAL_REFERENCE) {
-    visitor->VisitExternalReference(target_reference_address());
+    // RelocInfo is needed when external-references must be serialized by
+    // Serializer Visitor in serialize.cc. It is ignored by visitors that
+    // do not need it.
+    visitor->VisitExternalReference(target_reference_address(), this);
 #ifdef ENABLE_DEBUGGER_SUPPORT
   } else if (Debug::has_break_points() &&
              ((RelocInfo::IsJSReturn(mode) &&
