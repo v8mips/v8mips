@@ -49,6 +49,10 @@
 #include "regexp-macro-assembler.h"
 #include "arm/regexp-macro-assembler-arm.h"
 #endif
+#if V8_TARGET_ARCH_MIPS && !V8_INTERPRETED_REGEXP
+#include "regexp-macro-assembler.h"
+#include "mips/regexp-macro-assembler-mips.h"
+#endif
 
 
 namespace v8 {
@@ -1923,7 +1927,7 @@ void Heap::CreateCEntryStub() {
 }
 
 
-#if V8_TARGET_ARCH_ARM && !V8_INTERPRETED_REGEXP
+#if (V8_TARGET_ARCH_ARM || V8_TARGET_ARCH_MIPS) && !V8_INTERPRETED_REGEXP
 void Heap::CreateRegExpCEntryStub() {
   RegExpCEntryStub stub;
   set_re_c_entry_code(*stub.GetCode());
@@ -1960,7 +1964,7 @@ void Heap::CreateFixedStubs() {
   Heap::CreateCEntryStub();
   Heap::CreateJSEntryStub();
   Heap::CreateJSConstructEntryStub();
-#if V8_TARGET_ARCH_ARM && !V8_INTERPRETED_REGEXP
+#if (V8_TARGET_ARCH_ARM || V8_TARGET_ARCH_MIPS) && !V8_INTERPRETED_REGEXP
   Heap::CreateRegExpCEntryStub();
 #endif
 }
