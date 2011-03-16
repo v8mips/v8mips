@@ -236,7 +236,7 @@ bool RelocInfo::IsPatchedReturnSequence() {
 
 bool RelocInfo::IsPatchedDebugBreakSlotSequence() {
   Instr current_instr = Assembler::instr_at(pc_);
-  return !Assembler::is_nop(current_instr, Assembler::DEBUG_BREAK_NOP);
+  return !Assembler::IsNop(current_instr, Assembler::DEBUG_BREAK_NOP);
 }
 
 

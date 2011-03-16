@@ -789,9 +789,9 @@ class Assembler : public Malloced {
   }
 
   // Check if an instruction is a branch of some kind.
-  static bool is_branch(Instr instr);
+  static bool IsBranch(Instr instr);
 
-  static bool is_nop(Instr instr, unsigned int type);
+  static bool IsNop(Instr instr, unsigned int type);
   static bool IsPop(Instr instr);
   static bool IsPush(Instr instr);
   static bool IsLwRegFpOffset(Instr instr);
@@ -801,10 +801,10 @@ class Assembler : public Malloced {
 
   static Register GetRt(Instr instr);
 
-  static int32_t get_branch_offset(Instr instr);
-  static bool is_lw(Instr instr);
-  static int16_t get_lw_offset(Instr instr);
-  static Instr set_lw_offset(Instr instr, int16_t offset);
+  static int32_t GetBranchOffset(Instr instr);
+  static bool IsLw(Instr instr);
+  static int16_t GetLwOffset(Instr instr);
+  static Instr SetLwOffset(Instr instr, int16_t offset);
 
   static bool IsSw(Instr instr);
   static Instr SetSwOffset(Instr instr, int16_t offset);

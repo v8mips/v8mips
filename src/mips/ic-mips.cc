@@ -935,14 +935,14 @@ static inline int InlinedICSiteMarker(Address address,
   // There may be some reg-reg move and frame merging code to skip over before
   // the branch back from the DeferredReferenceGetKeyedValue code to the inlined
   // code.
-  while (!Assembler::is_branch(instr_after_nop)) {
+  while (!Assembler::IsBranch(instr_after_nop)) {
     address_after_nop += Assembler::kInstrSize;
     instr_after_nop = Assembler::instr_at(address_after_nop);
   }
 
   // Find the end of the inlined code for handling the load.
   int b_offset =
-  Assembler::get_branch_offset(instr_after_nop) + Assembler::kPcLoadDelta;
+  Assembler::GetBranchOffset(instr_after_nop) + Assembler::kPcLoadDelta;
   ASSERT(b_offset < 0);  // Jumping back from deferred code.
   *inline_end_address = address_after_nop + b_offset;
 
@@ -970,10 +970,10 @@ bool LoadIC::PatchInlinedLoad(Address address, Object* map, int offset) {
 
   Address lw_property_instr_address =
           inline_end_address - Assembler::kInstrSize;
-  ASSERT(Assembler::is_lw(Assembler::instr_at(lw_property_instr_address)));
+  ASSERT(Assembler::IsLw(Assembler::instr_at(lw_property_instr_address)));
   Instr lw_property_instr = Assembler::instr_at(lw_property_instr_address);
 
-  lw_property_instr = Assembler::set_lw_offset(
+  lw_property_instr = Assembler::SetLwOffset(
       lw_property_instr, offset - kHeapObjectTag);
   Assembler::instr_at_put(lw_property_instr_address, lw_property_instr);
 

@@ -375,7 +375,7 @@ bool Assembler::IsLwRegFpNegOffset(Instr instr) {
 const int kEndOfChain = -4;
 
 
-bool Assembler::is_branch(Instr instr) {
+bool Assembler::IsBranch(Instr instr) {
   uint32_t opcode   = ((instr & kOpcodeMask));
   uint32_t rt_field = ((instr & kRtFieldMask));
   uint32_t rs_field = ((instr & kRsFieldMask));
@@ -396,7 +396,7 @@ bool Assembler::is_branch(Instr instr) {
 }
 
 
-bool Assembler::is_nop(Instr instr, unsigned int type) {
+bool Assembler::IsNop(Instr instr, unsigned int type) {
   // See Assembler::nop(type).
   ASSERT(type < 32);
   uint32_t opcode = ((instr & kOpcodeMask));
@@ -417,25 +417,25 @@ bool Assembler::is_nop(Instr instr, unsigned int type) {
 }
 
 
-int32_t Assembler::get_branch_offset(Instr instr) {
-  ASSERT(is_branch(instr));
+int32_t Assembler::GetBranchOffset(Instr instr) {
+  ASSERT(IsBranch(instr));
   return ((int16_t)(instr & kImm16Mask)) << 2;
 }
 
 
-bool Assembler::is_lw(Instr instr) {
+bool Assembler::IsLw(Instr instr) {
   return ((instr & kOpcodeMask) == LW);
 }
 
 
-int16_t Assembler::get_lw_offset(Instr instr) {
-  ASSERT(is_lw(instr));
+int16_t Assembler::GetLwOffset(Instr instr) {
+  ASSERT(IsLw(instr));
   return ((instr & kImm16Mask));
 }
 
 
-Instr Assembler::set_lw_offset(Instr instr, int16_t offset) {
-  ASSERT(is_lw(instr));
+Instr Assembler::SetLwOffset(Instr instr, int16_t offset) {
+  ASSERT(IsLw(instr));
 
   // We actually create a new lw instruction based on the original one.
   Instr temp_instr = LW |
@@ -481,7 +481,7 @@ int Assembler::target_at(int32_t pos) {
      }
   }
   // Check we have a branch instruction.
-  ASSERT(is_branch(instr));
+  ASSERT(IsBranch(instr));
   // Do NOT change this to <<2. We rely on arithmetic shifts here, assuming
   // the compiler uses arithmectic shifts for signed integers.
   int32_t imm18 = ((instr &
@@ -506,7 +506,7 @@ void Assembler::target_at_put(int32_t pos, int32_t target_pos) {
     return;
   }
 
-  ASSERT(is_branch(instr));
+  ASSERT(IsBranch(instr));
   int32_t imm18 = target_pos - (pos + kBranchPCOffset);
   ASSERT((imm18 & 3) == 0);
 

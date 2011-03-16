@@ -281,7 +281,7 @@ void DropAndRet(int drop = 0,
   // the code, like some special IC code.
   static inline bool IsMarkedCode(Instr instr, int type) {
     ASSERT((FIRST_IC_MARKER <= type) && (type < LAST_CODE_MARKER));
-    return is_nop(instr, type);
+    return IsNop(instr, type);
   }
 
 
