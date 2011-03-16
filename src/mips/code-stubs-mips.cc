@@ -4295,7 +4295,7 @@ void RegExpConstructResultStub::Generate(MacroAssembler* masm) {
   // a3: Start of elements in FixedArray.
   // t1: Number of elements to fill.
   Label loop;
-  __ sll(t1, t1, kPointerSizeLog2);  // Concert num elements to num bytes.
+  __ sll(t1, t1, kPointerSizeLog2);  // Convert num elements to num bytes.
   __ addu(t1, t1, a3);  // Point past last element to store.
   __ bind(&loop);
   __ Branch(&done, ge, a3, Operand(t1));  // Break when a3 past end of elem.
