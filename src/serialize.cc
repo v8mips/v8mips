@@ -817,11 +817,8 @@ void Deserializer::ReadChunk(Object** current,
           if (how == kFromCode) {                                              \
             Address location_of_branch_data =                                  \
                 reinterpret_cast<Address>(current);                            \
-            Assembler::set_target_at(location_of_branch_data                   \
-                     - 2*(Assembler::kInstrSize - Assembler::kCallTargetSize), \
+            Assembler::set_target_at(location_of_branch_data,                  \
                                      reinterpret_cast<Address>(new_object));   \
-            current_was_incremented =                                          \
-              Assembler::kCallTargetSize ? false : true;                       \
             if (within == kFirstInstruction) {                                 \
               location_of_branch_data += Assembler::kCallTargetSize;           \
               current = reinterpret_cast<Object**>(location_of_branch_data);   \
@@ -914,11 +911,6 @@ void Deserializer::ReadChunk(Object** current,
       // Deserialize a new object and write a pointer to it to the current
       // object.
       ONE_PER_SPACE(kNewObject, kPlain, kStartOfObject)
-#ifdef V8_TARGET_ARCH_MIPS
-      // Deserialize a new object from pointer found in code and write
-      // a pointer to it to the current object.
-      ONE_PER_SPACE(kNewObject, kFromCode, kStartOfObject)
-#endif
       // Support for direct instruction pointers in functions
       ONE_PER_CODE_SPACE(kNewObject, kPlain, kFirstInstruction)
       // Deserialize a new code object and write a pointer to its first
@@ -932,12 +924,6 @@ void Deserializer::ReadChunk(Object** current,
       // to the current code object or the instruction pointer in a function
       // object.
       ALL_SPACES(kBackref, kFromCode, kFirstInstruction)
-#ifdef V8_TARGET_ARCH_MIPS
-      // Find a recently deserialized code object using its offset from the
-      // current allocation point and write a pointer to it to the current
-      // object.
-      ALL_SPACES(kBackref, kFromCode, kStartOfObject)
-#endif
       ALL_SPACES(kBackref, kPlain, kFirstInstruction)
       // Find an already deserialized object using its offset from the start
       // and write a pointer to it to the current object.
@@ -947,11 +933,6 @@ void Deserializer::ReadChunk(Object** current,
       // start and write a pointer to its first instruction to the current code
       // object.
       ALL_SPACES(kFromStart, kFromCode, kFirstInstruction)
-#ifdef V8_TARGET_ARCH_MIPS
-      // Find an already deserialized code object using its offset from
-      // the start and write a pointer to it to the current object.
-      ALL_SPACES(kFromStart, kFromCode, kStartOfObject)
-#endif
       // Find an already deserialized object at one of the predetermined popular
       // offsets from the start and write a pointer to it in the current object.
       COMMON_REFERENCE_PATTERNS(EMIT_COMMON_REFERENCE_PATTERNS)
@@ -1374,32 +1355,6 @@ void Serializer::ObjectSerializer::VisitPointers(Object** start,
 }
 
 
-void Serializer::ObjectSerializer::VisitPointer(Object** p, RelocInfo* rinfo) {
-  VisitPointers(p, p + 1, rinfo);
-}
-
-
-void Serializer::ObjectSerializer::VisitPointers(Object** start, Object** end,
-                                                 RelocInfo* rinfo) {
-  Object** current = start;
-  for (current = start; current < end; current++) {
-    while (current < end && (*current)->IsSmi()) current++;
-    if (current < end) {
-      OutputRawData(rinfo->target_address_address());
-    }
-
-    while (current < end && !(*current)->IsSmi()) {
-      // kFromCode tag is needed to instruct deserialization functions to call
-      // platform specific object address modification function
-      // (Assmebler::set_target_at)
-      serializer_->SerializeObject(*current, kFromCode, kStartOfObject);
-      bytes_processed_so_far_ += rinfo->target_address_size();
-      current++;
-    }
-  }
-}
-
-
 void Serializer::ObjectSerializer::VisitExternalReferences(Address* start,
                                                            Address* end) {
   Address references_start = reinterpret_cast<Address>(start);
@@ -1411,31 +1366,6 @@ void Serializer::ObjectSerializer::VisitExternalReferences(Address* start,
     sink_->PutInt(reference_id, "reference id");
   }
   bytes_processed_so_far_ += static_cast<int>((end - start) * kPointerSize);
-}
-
-
-void Serializer::ObjectSerializer::VisitExternalReference(Address* adr,
-                                                          RelocInfo* rinfo) {
-  VisitExternalReferences(adr, adr+1, rinfo);
-}
-
-
-void Serializer::ObjectSerializer::VisitExternalReferences(Address* start,
-                                                           Address* end,
-                                                           RelocInfo* rinfo) {
-  Address references_start = rinfo->target_address_address();
-  OutputRawData(references_start);
-
-  for (Address* current = start; current < end; current++) {
-    // kFromCode tag is needed to instruct deserialization functions to call
-    // platform specific ExternalReference address modification function
-    // (Assmebler::set_target_at)
-    sink_->Put(kExternalReference + kFromCode + kStartOfObject, "ExternalRef");
-    int reference_id = serializer_->EncodeExternalReference(*current);
-    sink_->PutInt(reference_id, "reference id");
-  }
-  bytes_processed_so_far_ +=
-    static_cast<int>((end-start)*rinfo->target_address_size());
 }
 
 
