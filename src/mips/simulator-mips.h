@@ -343,10 +343,6 @@ class Simulator {
   Instr break_instr_;
 };
 
-} }   // namespace v8::internal
-
-namespace v8 {
-namespace internal {
 
 // When running with the simulator transition into simulated execution at this
 // point.

@@ -39,15 +39,17 @@
 #include "mips/constants-mips.h"
 #include "mips/simulator-mips.h"
 
+
+// Only build the simulator if not compiling for real MIPS hardware.
 #if defined(USE_SIMULATOR)
 
+// This can be defined by the build system, even for Simulator builds.
 #ifdef _MIPS_ARCH_MIPS32R2
   #define mips32r2 1
 #else
   #define mips32r2 0
 #endif
 
-// Only build the simulator if not compiling for real MIPS hardware.
 namespace v8 {
 namespace internal {
 
