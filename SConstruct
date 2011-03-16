@@ -1110,10 +1110,6 @@ def PostprocessOptions(options, os):
     if 'msvcltcg' in ARGUMENTS:
       print "Warning: forcing msvcltcg on as it is required for pgo (%s)" % options['pgo']
     options['msvcltcg'] = 'on'
-  if options['arch'] == 'mips':
-    if ('regexp' in ARGUMENTS) and options['regexp'] == 'native':
-      # Print a warning if native regexp is specified for mips
-      print "Warning: implementation of native regexp not fully completed"
   if (options['simulator'] == 'mips' and options['mipsabi'] != 'softfloat'):
     # Print a warning if soft-float ABI is not selected for mips simulator
     print "Warning: forcing soft-float mips ABI when running on simulator"
