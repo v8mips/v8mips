@@ -243,8 +243,9 @@ int OS::ActivationFrameAlignment() {
 
 
 void OS::ReleaseStore(volatile AtomicWord* ptr, AtomicWord value) {
-#if defined(V8_TARGET_ARCH_ARM) && defined(__arm__)
-  // Only use on ARM hardware.
+#if (defined(V8_TARGET_ARCH_ARM) && defined(__arm__)) || \
+  (defined(V8_TARGET_ARCH_MIPS) && defined(__mips__))
+  // Only use on ARM and MIPS hardware.
   MemoryBarrier();
 #else
   __asm__ __volatile__("" : : : "memory");
