@@ -1188,8 +1188,8 @@ double HeapNumber::value() {
 #ifndef V8_TARGET_ARCH_MIPS
   return READ_DOUBLE_FIELD(this, kValueOffset);
 #else  // V8_TARGET_ARCH_MIPS
-  // Work-around prevents gcc from using load-double (mips ldc1) on
-  // (possibly) unaligned HeapNumber::value.
+  // Prevent gcc from using load-double (mips ldc1) on (possibly)
+  // non-64-bit aligned HeapNumber::value.
   union conversion {
     double d;
     uint32_t u[2];
@@ -1205,8 +1205,8 @@ void HeapNumber::set_value(double value) {
 #ifndef V8_TARGET_ARCH_MIPS
   WRITE_DOUBLE_FIELD(this, kValueOffset, value);
 #else  // V8_TARGET_ARCH_MIPS
-  // Work-around prevents gcc from using store-double (mips sdc1) on
-  // (possibly) unaligned HeapNumber::value.
+  // Prevent gcc from using store-double (mips sdc1) on (possibly)
+  // non-64-bit aligned HeapNumber::value.
   union conversion {
     double d;
     uint32_t u[2];
