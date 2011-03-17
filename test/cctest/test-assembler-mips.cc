@@ -59,6 +59,7 @@ static void InitializeVM() {
 
 #define __ assm.
 
+
 TEST(MIPS0) {
   InitializeVM();
   v8::HandleScope scope;
@@ -232,13 +233,13 @@ TEST(MIPS2) {
   __ clz(v1, t7);       // 0
   __ addu(v0, v0, v1);  // 51
   __ Branch(&error, ne, v0, Operand(51));
-  __ movn(a0, t3, t0);  // move a0<-t3 (t0 is NOT 0)
+  __ movn(a0, t3, t0);  // Move a0<-t3 (t0 is NOT 0).
   __ Ins(a0, t1, 12, 8);  // 0x7ff34fff
   __ Branch(&error, ne, a0, Operand(0x7ff34fff));
-  __ movz(a0, t6, t7);    // a0 not updated (t7 is NOT 0)
+  __ movz(a0, t6, t7);    // a0 not updated (t7 is NOT 0).
   __ Ext(a1, a0, 8, 12);  // 0x34f
   __ Branch(&error, ne, a1, Operand(0x34f));
-  __ movz(a0, t6, v1);    // a0<-t6, v0 is 0, from 8 instr back
+  __ movz(a0, t6, v1);    // a0<-t6, v0 is 0, from 8 instr back.
   __ Branch(&error, ne, a0, Operand(t6));
 
   // Everything was correctly executed. Load the expected result.
@@ -295,23 +296,23 @@ TEST(MIPS3) {
   __ ldc1(f4, MemOperand(a0, OFFSET_OF(T, a)) );
   __ ldc1(f6, MemOperand(a0, OFFSET_OF(T, b)) );
   __ add_d(f8, f4, f6);
-  __ sdc1(f8, MemOperand(a0, OFFSET_OF(T, c)) );   // c = a + b
+  __ sdc1(f8, MemOperand(a0, OFFSET_OF(T, c)) );   // c = a + b.
 
   __ mov_d(f10, f8);  // c
   __ neg_d(f12, f6);  // -b
   __ sub_d(f10, f10, f12);
-  __ sdc1(f10, MemOperand(a0, OFFSET_OF(T, d)) );   // d = c - (-b)
+  __ sdc1(f10, MemOperand(a0, OFFSET_OF(T, d)) );   // d = c - (-b).
 
-  __ sdc1(f4, MemOperand(a0, OFFSET_OF(T, b)) );  // b = a
+  __ sdc1(f4, MemOperand(a0, OFFSET_OF(T, b)) );  // b = a.
 
   __ li(t0, 120);
   __ mtc1(t0, f14);
-  __ cvt_d_w(f14, f14);   // f14 = 120.0
+  __ cvt_d_w(f14, f14);   // f14 = 120.0.
   __ mul_d(f10, f10, f14);
-  __ sdc1(f10, MemOperand(a0, OFFSET_OF(T, e)) );   // e = d * 120 = 1.8066e16
+  __ sdc1(f10, MemOperand(a0, OFFSET_OF(T, e)) );   // e = d * 120 = 1.8066e16.
 
   __ div_d(f12, f10, f4);
-  __ sdc1(f12, MemOperand(a0, OFFSET_OF(T, f)) );   // f = e / a = 120.44
+  __ sdc1(f12, MemOperand(a0, OFFSET_OF(T, f)) );   // f = e / a = 120.44.
 
   __ sqrt_d(f14, f12);
   __ sdc1(f14, MemOperand(a0, OFFSET_OF(T, g)) );
@@ -367,7 +368,7 @@ TEST(MIPS4) {
   __ ldc1(f4, MemOperand(a0, OFFSET_OF(T, a)) );
   __ ldc1(f6, MemOperand(a0, OFFSET_OF(T, b)) );
 
-  // swap f4 and f6, by using four integer registers, t0-t3
+  // Swap f4 and f6, by using four integer registers, t0-t3.
   __ mfc1(t0, f4);
   __ mfc1(t1, f5);
   __ mfc1(t2, f6);
@@ -378,7 +379,7 @@ TEST(MIPS4) {
   __ mtc1(t2, f4);
   __ mtc1(t3, f5);
 
-  // store the swapped f4 and f5 back to memory
+  // Store the swapped f4 and f5 back to memory.
   __ sdc1(f4, MemOperand(a0, OFFSET_OF(T, a)) );
   __ sdc1(f6, MemOperand(a0, OFFSET_OF(T, c)) );
 
@@ -409,7 +410,7 @@ TEST(MIPS4) {
 
 
 TEST(MIPS5) {
-  // Test conversions between doubles and integers
+  // Test conversions between doubles and integers.
   InitializeVM();
   v8::HandleScope scope;
 
@@ -424,28 +425,28 @@ TEST(MIPS5) {
   Assembler assm(NULL, 0);
   Label L, C;
 
-  // load all structure elements to registers
+  // Load all structure elements to registers.
   __ ldc1(f4, MemOperand(a0, OFFSET_OF(T, a)) );
   __ ldc1(f6, MemOperand(a0, OFFSET_OF(T, b)) );
   __ lw(t0, MemOperand(a0, OFFSET_OF(T, i)) );
   __ lw(t1, MemOperand(a0, OFFSET_OF(T, j)) );
 
-  // convert double in f4 to int in element i
+  // Convert double in f4 to int in element i.
   __ cvt_w_d(f8, f4);
   __ mfc1(t2, f8);
   __ sw(t2, MemOperand(a0, OFFSET_OF(T, i)) );
 
-  // convert double in f6 to int in element j
+  // Convert double in f6 to int in element j.
   __ cvt_w_d(f10, f6);
   __ mfc1(t3, f10);
   __ sw(t3, MemOperand(a0, OFFSET_OF(T, j)) );
 
-  // convert int in original i (t0) to double in a
+  // Convert int in original i (t0) to double in a.
   __ mtc1(t0, f12);
   __ cvt_d_w(f0, f12);
   __ sdc1(f0, MemOperand(a0, OFFSET_OF(T, a)) );
 
-  // convert int in original j (t1) to double in b
+  // Convert int in original j (t1) to double in b.
   __ mtc1(t1, f14);
   __ cvt_d_w(f2, f14);
   __ sdc1(f2, MemOperand(a0, OFFSET_OF(T, b)) );
@@ -479,7 +480,7 @@ TEST(MIPS5) {
 
 
 TEST(MIPS6) {
-  // Test simple memory loads and stores
+  // Test simple memory loads and stores.
   InitializeVM();
   v8::HandleScope scope;
 
@@ -498,33 +499,32 @@ TEST(MIPS6) {
   Assembler assm(NULL, 0);
   Label L, C;
 
-  // basic word load/store
+  // Basic word load/store.
   __ lw(t0, MemOperand(a0, OFFSET_OF(T, ui)) );
   __ sw(t0, MemOperand(a0, OFFSET_OF(T, r1)) );
 
-  // lh with positive data
+  // lh with positive data.
   __ lh(t1, MemOperand(a0, OFFSET_OF(T, ui)) );
   __ sw(t1, MemOperand(a0, OFFSET_OF(T, r2)) );
 
-  // lh with negative data
+  // lh with negative data.
   __ lh(t2, MemOperand(a0, OFFSET_OF(T, si)) );
   __ sw(t2, MemOperand(a0, OFFSET_OF(T, r3)) );
 
-  // lhu with negative data
+  // lhu with negative data.
   __ lhu(t3, MemOperand(a0, OFFSET_OF(T, si)) );
   __ sw(t3, MemOperand(a0, OFFSET_OF(T, r4)) );
 
-  // lb with negative data
+  // lb with negative data.
   __ lb(t4, MemOperand(a0, OFFSET_OF(T, si)) );
   __ sw(t4, MemOperand(a0, OFFSET_OF(T, r5)) );
 
-  // sh writes only 1/2 of word
+  // sh writes only 1/2 of word.
   __ lui(t5, 0x3333);
   __ ori(t5, t5, 0x3333);
   __ sw(t5, MemOperand(a0, OFFSET_OF(T, r6)) );
   __ lhu(t5, MemOperand(a0, OFFSET_OF(T, si)) );
   __ sh(t5, MemOperand(a0, OFFSET_OF(T, r6)) );
-
 
   __ jr(ra);
   __ nop();
@@ -596,7 +596,7 @@ TEST(MIPS7) {
   __ sw(t0, MemOperand(a0, OFFSET_OF(T, result)) );  // Set true.
 
 
-  // This test-case needs additional tests, this is not quite sufficient.
+  // This test-case should have additional tests.
 
   __ bind(&outa_here);
 
@@ -628,6 +628,7 @@ TEST(MIPS7) {
   CHECK_EQ(1, t.result);
 }
 
+
 TEST(MIPS8) {
   // Test ROTR and ROTRV instructions.
   InitializeVM();
@@ -654,7 +655,7 @@ TEST(MIPS8) {
 
   MacroAssembler assm(NULL, 0);
 
-  // basic word load
+  // Basic word load.
   __ lw(t0, MemOperand(a0, OFFSET_OF(T, input)) );
 
   // ROTR instruction (called through the Ror macro).
@@ -666,7 +667,7 @@ TEST(MIPS8) {
   __ Ror(t6, t0, 0x0018);
   __ Ror(t7, t0, 0x001c);
 
-  // basic word store
+  // Basic word store.
   __ sw(t1, MemOperand(a0, OFFSET_OF(T, result_rotr_4)) );
   __ sw(t2, MemOperand(a0, OFFSET_OF(T, result_rotr_8)) );
   __ sw(t3, MemOperand(a0, OFFSET_OF(T, result_rotr_12)) );
@@ -691,7 +692,7 @@ TEST(MIPS8) {
   __ li(t7, 0x001C);
   __ Ror(t7, t0, t7);
 
-  // basic word store
+  // Basic word store.
   __ sw(t1, MemOperand(a0, OFFSET_OF(T, result_rotrv_4)) );
   __ sw(t2, MemOperand(a0, OFFSET_OF(T, result_rotrv_8)) );
   __ sw(t3, MemOperand(a0, OFFSET_OF(T, result_rotrv_12)) );
@@ -734,6 +735,7 @@ TEST(MIPS8) {
   CHECK_EQ(0x23456781, t.result_rotrv_28);
 }
 
+
 TEST(MIPS9) {
   // Test BRANCH improvements.
   InitializeVM();
@@ -764,9 +766,10 @@ TEST(MIPS9) {
 #endif
 }
 
+
 TEST(MIPS10) {
   // Test conversions between doubles and long integers.
-  // Test hos the long ints map to FP regs pairs.
+  // Test how the long ints map to FP regs pairs.
   InitializeVM();
   v8::HandleScope scope;
 
@@ -785,7 +788,7 @@ TEST(MIPS10) {
   Assembler assm(NULL, 0);
   Label L, C;
 
-  // Load all structure elements to registers
+  // Load all structure elements to registers.
   __ ldc1(f0, MemOperand(a0, OFFSET_OF(T, a)));
 
   // Save the raw bits of the double.
@@ -837,6 +840,7 @@ TEST(MIPS10) {
   CHECK_EQ(1.095233372415e12, t.b);
 }
 
+
 TEST(MIPS11) {
   // Test LWL, LWR, SWL and SWR instructions.
   InitializeVM();
@@ -866,7 +870,7 @@ TEST(MIPS11) {
 
   Assembler assm(NULL, 0);
 
-  // Test all combinations of LWL and vAddr
+  // Test all combinations of LWL and vAddr.
   __ lw(t0, MemOperand(a0, OFFSET_OF(T, reg_init)) );
   __ lwl(t0, MemOperand(a0, OFFSET_OF(T, mem_init)) );
   __ sw(t0, MemOperand(a0, OFFSET_OF(T, lwl_0)) );
@@ -883,7 +887,7 @@ TEST(MIPS11) {
   __ lwl(t3, MemOperand(a0, OFFSET_OF(T, mem_init) + 3) );
   __ sw(t3, MemOperand(a0, OFFSET_OF(T, lwl_3)) );
 
-  // Test all combinations of LWR and vAddr
+  // Test all combinations of LWR and vAddr.
   __ lw(t0, MemOperand(a0, OFFSET_OF(T, reg_init)) );
   __ lwr(t0, MemOperand(a0, OFFSET_OF(T, mem_init)) );
   __ sw(t0, MemOperand(a0, OFFSET_OF(T, lwr_0)) );
@@ -900,7 +904,7 @@ TEST(MIPS11) {
   __ lwr(t3, MemOperand(a0, OFFSET_OF(T, mem_init) + 3) );
   __ sw(t3, MemOperand(a0, OFFSET_OF(T, lwr_3)) );
 
-  // Test all combinations of SWL and vAddr
+  // Test all combinations of SWL and vAddr.
   __ lw(t0, MemOperand(a0, OFFSET_OF(T, mem_init)) );
   __ sw(t0, MemOperand(a0, OFFSET_OF(T, swl_0)) );
   __ lw(t0, MemOperand(a0, OFFSET_OF(T, reg_init)) );
@@ -921,7 +925,7 @@ TEST(MIPS11) {
   __ lw(t3, MemOperand(a0, OFFSET_OF(T, reg_init)) );
   __ swl(t3, MemOperand(a0, OFFSET_OF(T, swl_3) + 3) );
 
-  // Test all combinations of SWR and vAddr
+  // Test all combinations of SWR and vAddr.
   __ lw(t0, MemOperand(a0, OFFSET_OF(T, mem_init)) );
   __ sw(t0, MemOperand(a0, OFFSET_OF(T, swr_0)) );
   __ lw(t0, MemOperand(a0, OFFSET_OF(T, reg_init)) );
@@ -983,6 +987,7 @@ TEST(MIPS11) {
   CHECK_EQ(0xdd223344, t.swr_3);
 }
 
+
 TEST(MIPS12) {
   InitializeVM();
   v8::HandleScope scope;
@@ -995,14 +1000,12 @@ TEST(MIPS12) {
       int32_t  y3;
       int32_t  y4;
   } T;
-
   T t;
-
 
   MacroAssembler assm(NULL, 0);
 
-  __ mov(t6, fp);  // save frame pointer.
-  __ mov(fp, a0);  // access struct T by fp.
+  __ mov(t6, fp);  // Save frame pointer.
+  __ mov(fp, a0);  // Access struct T by fp.
   __ lw(t0, MemOperand(a0, OFFSET_OF(T, y)) );
   __ lw(t3, MemOperand(a0, OFFSET_OF(T, y4)) );
 
@@ -1014,10 +1017,10 @@ TEST(MIPS12) {
   __ addu(t0, t0, t0);
   __ nop();
   __ Pop();     // These instructions disappear after opt.
-  __ Push(t3);  //
+  __ Push(t3);
   __ nop();
   __ Push(t3);  // These instructions disappear after opt.
-  __ Pop(t3);   //
+  __ Pop(t3);
   __ nop();
   __ Push(t3);
   __ Pop(t4);
@@ -1076,6 +1079,7 @@ TEST(MIPS12) {
 
   CHECK_EQ(3, t.y1);
 }
+
 
 TEST(MIPS13) {
   // Test Cvt_d_uw and Trunc_uw_d macros.
@@ -1136,6 +1140,7 @@ TEST(MIPS13) {
   CHECK_EQ(static_cast<int>(t.trunc_small_out),
            static_cast<int>(t.cvt_small_in));
 }
+
 
 TEST(MIPS14) {
   // Test round, floor, ceil, trunc, cvt.
