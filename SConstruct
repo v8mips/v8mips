@@ -224,27 +224,22 @@ LIBRARY_FLAGS = {
         'CPPDEFINES':    ['_MIPS_ARCH_MIPS32R2']
       },
       'simulator:none': {
+        'CCFLAGS':      ['-EL'],
+        'LINKFLAGS':    ['-EL'],
         'mips_arch_variant:mips32r2': {
-          'CCFLAGS':      ['-EL', '-mips32r2', '-Wa,-mips32r2'],
+          'CCFLAGS':      ['-mips32r2', '-Wa,-mips32r2']
         },
         'mips_arch_variant:mips32r1': {
-          'CCFLAGS':      ['-EL', '-mips32', '-Wa,-mips32']
-        },
-        'library:shared': {
-          'LDFLAGS':      ['-EL']
+          'CCFLAGS':      ['-mips32', '-Wa,-mips32']
         },
         'library:static': {
-          'LDFLAGS':      ['-EL', '-static', '-static-libgcc']
+          'LINKFLAGS':    ['-static', '-static-libgcc']
         },
         'mipsabi:softfloat': {
-          'CCFLAGS':      ['-msoft-float'],
-          'LINKFLAGS':    ['-EL', '-msoft-float'],
-          'LDFLAGS':      ['-msoft-float']
+          'CCFLAGS':      ['-msoft-float']
         },
         'mipsabi:hardfloat': {
-          'CCFLAGS':      ['-mhard-float'],
-          'LINKFLAGS':    ['-EL', '-mhard-float'],
-          'LDFLAGS':      ['-mhard-float']
+          'CCFLAGS':      ['-mhard-float']
         }
       }
     },
@@ -444,37 +439,6 @@ CCTEST_EXTRA_FLAGS = {
     'os:freebsd': {
       'LIBS':         ['execinfo', 'pthread']
     },
-    'arch:mips': {
-      'mips_arch_variant:mips32r2': {
-        'CPPDEFINES':    ['_MIPS_ARCH_MIPS32R2']
-      },
-      'simulator:none': {
-        'mips_arch_variant:mips32r2': {
-          'CCFLAGS':      ['-EL', '-mips32r2', '-Wa,-mips32r2'],
-        },
-        'mips_arch_variant:mips32r1': {
-          'CCFLAGS':      ['-EL', '-mips32', '-Wa,-mips32']
-        },
-        'library:shared': {
-          'LINKFLAGS':    ['-EL'],
-          'LDFLAGS':      ['-EL']
-        },
-        'library:static': {
-          'LINKFLAGS':    ['-EL', '-static', '-static-libgcc'],
-          'LDFLAGS':      ['-EL', '-static', '-static-libgcc']
-        },
-        'mipsabi:softfloat': {
-          'CCFLAGS':      ['-msoft-float'],
-          'LINKFLAGS':    ['-msoft-float'],
-          'LDFLAGS':      ['-msoft-float']
-        },
-        'mipsabi:hardfloat': {
-          'CCFLAGS':      ['-mhard-float'],
-          'LINKFLAGS':    ['-mhard-float'],
-          'LDFLAGS':      ['-mhard-float']
-        }
-      }
-    },
     'os:solaris': {
       'LIBS':         ['m', 'pthread', 'socket', 'nsl', 'rt'],
       'LINKFLAGS':    ['-mt']
@@ -582,29 +546,22 @@ SAMPLE_FLAGS = {
         'CPPDEFINES':    ['_MIPS_ARCH_MIPS32R2']
       },
       'simulator:none': {
+        'CCFLAGS':      ['-EL'],
+        'LINKFLAGS':    ['-EL'],
         'mips_arch_variant:mips32r2': {
-          'CCFLAGS':      ['-EL', '-mips32r2', '-Wa,-mips32r2'],
+          'CCFLAGS':      ['-mips32r2', '-Wa,-mips32r2']
         },
         'mips_arch_variant:mips32r1': {
-          'CCFLAGS':      ['-EL', '-mips32', '-Wa,-mips32']
-        },
-        'library:shared': {
-          'LINKFLAGS':    ['-EL'],
-          'LDFLAGS':      ['-EL']
+          'CCFLAGS':      ['-mips32', '-Wa,-mips32']
         },
         'library:static': {
-          'LINKFLAGS':    ['-EL', '-static', '-static-libgcc'],
-          'LDFLAGS':      ['-EL', '-static', '-static-libgcc']
+          'LINKFLAGS':    ['-static', '-static-libgcc']
         },
         'mipsabi:softfloat': {
-          'CCFLAGS':      ['-msoft-float'],
-          'LINKFLAGS':    ['-msoft-float'],
-          'LDFLAGS':      ['-msoft-float']
+          'CCFLAGS':      ['-msoft-float']
         },
         'mipsabi:hardfloat': {
-          'CCFLAGS':      ['-mhard-float'],
-          'LINKFLAGS':    ['-mhard-float'],
-          'LDFLAGS':      ['-mhard-float']
+          'CCFLAGS':      ['-mhard-float']
         }
       }
     },
