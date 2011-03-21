@@ -2195,10 +2195,8 @@ void HGraphBuilder::VisitForControl(Expression* expr,
 }
 
 
-HValue* HGraphBuilder::VisitArgument(Expression* expr) {
+void HGraphBuilder::VisitArgument(Expression* expr) {
   VisitForValue(expr);
-  if (HasStackOverflow() || !subgraph()->HasExit()) return NULL;
-  return environment()->Top();
 }
 
 
@@ -2317,29 +2315,15 @@ void HGraphBuilder::PushAndAdd(HInstruction* instr) {
 }
 
 
-void HGraphBuilder::PushArgumentsForStubCall(int argument_count) {
-  const int kMaxStubArguments = 4;
-  ASSERT_GE(kMaxStubArguments, argument_count);
-  // Push the arguments on the stack.
-  HValue* arguments[kMaxStubArguments];
-  for (int i = argument_count - 1; i >= 0; i--) {
-    arguments[i] = Pop();
-  }
-  for (int i = 0; i < argument_count; i++) {
-    AddInstruction(new HPushArgument(arguments[i]));
-  }
-}
-
-
-void HGraphBuilder::ProcessCall(HCall* call) {
-  for (int i = call->argument_count() - 1; i >= 0; --i) {
-    HValue* value = Pop();
-    HPushArgument* push = new HPushArgument(value);
-    call->SetArgumentAt(i, push);
+void HGraphBuilder::PreProcessCall(HCall* call) {
+  int count = call->argument_count();
+  ZoneList<HValue*> arguments(count);
+  for (int i = 0; i < count; ++i) {
+    arguments.Add(Pop());
   }
 
-  for (int i = 0; i < call->argument_count(); ++i) {
-    AddInstruction(call->PushArgumentAt(i));
+  while (!arguments.is_empty()) {
+    AddInstruction(new HPushArgument(arguments.RemoveLast()));
   }
 }
 
@@ -3947,7 +3931,7 @@ void HGraphBuilder::HandlePolymorphicCallNamed(Call* expr,
         CHECK_BAILOUT;
         HCall* call = new HCallConstantFunction(expr->target(), argument_count);
         call->set_position(expr->position());
-        ProcessCall(call);
+        PreProcessCall(call);
         PushAndAdd(call);
       }
       subgraphs.Add(subgraph);
@@ -3963,7 +3947,7 @@ void HGraphBuilder::HandlePolymorphicCallNamed(Call* expr,
     AddInstruction(context);
     HCall* call = new HCallNamed(context, name, argument_count);
     call->set_position(expr->position());
-    ProcessCall(call);
+    PreProcessCall(call);
     ast_context()->ReturnInstruction(call, expr->id());
   } else {
     // Build subgraph for generic call through IC.
@@ -3977,7 +3961,7 @@ void HGraphBuilder::HandlePolymorphicCallNamed(Call* expr,
         AddInstruction(context);
         HCall* call = new HCallNamed(context, name, argument_count);
         call->set_position(expr->position());
-        ProcessCall(call);
+        PreProcessCall(call);
         PushAndAdd(call);
       }
       subgraphs.Add(subgraph);
@@ -4051,6 +4035,9 @@ bool HGraphBuilder::TryInline(Call* expr) {
   CompilationInfo inner_info(target);
   if (!ParserApi::Parse(&inner_info) ||
       !Scope::Analyze(&inner_info)) {
+    if (Top::has_pending_exception()) {
+      SetStackOverflow();
+    }
     return false;
   }
   FunctionLiteral* function = inner_info.function();
@@ -4399,7 +4386,7 @@ void HGraphBuilder::VisitCall(Call* expr) {
       AddInstruction(context);
       call = new HCallKeyed(context, key, argument_count);
       call->set_position(expr->position());
-      ProcessCall(call);
+      PreProcessCall(call);
       Drop(1);  // Key.
       ast_context()->ReturnInstruction(call, expr->id());
       return;
@@ -4411,7 +4398,7 @@ void HGraphBuilder::VisitCall(Call* expr) {
     if (TryCallApply(expr)) return;
     CHECK_BAILOUT;
 
-    HValue* receiver = VisitArgument(prop->obj());
+    VisitArgument(prop->obj());
     CHECK_BAILOUT;
     VisitArgumentList(expr->arguments());
     CHECK_BAILOUT;
@@ -4421,6 +4408,8 @@ void HGraphBuilder::VisitCall(Call* expr) {
     expr->RecordTypeFeedback(oracle());
     ZoneMapList* types = expr->GetReceiverTypes();
 
+    HValue* receiver =
+        environment()->ExpressionStackAt(expr->arguments()->length());
     if (expr->IsMonomorphic()) {
       Handle<Map> receiver_map =
           (types == NULL) ? Handle<Map>::null() : types->first();
@@ -4556,7 +4545,7 @@ void HGraphBuilder::VisitCall(Call* expr) {
   }
 
   call->set_position(expr->position());
-  ProcessCall(call);
+  PreProcessCall(call);
   ast_context()->ReturnInstruction(call, expr->id());
 }
 
@@ -4569,12 +4558,16 @@ void HGraphBuilder::VisitCallNew(CallNew* expr) {
   VisitArgumentList(expr->arguments());
   CHECK_BAILOUT;
 
-  int argument_count = expr->arguments()->length() + 1;  // Plus constructor.
   HContext* context = new HContext;
   AddInstruction(context);
-  HCall* call = new HCallNew(context, argument_count);
+
+  // The constructor is both an operand to the instruction and an argument
+  // to the construct call.
+  int arg_count = expr->arguments()->length() + 1;  // Plus constructor.
+  HValue* constructor = environment()->ExpressionStackAt(arg_count - 1);
+  HCall* call = new HCallNew(context, constructor, arg_count);
   call->set_position(expr->position());
-  ProcessCall(call);
+  PreProcessCall(call);
   ast_context()->ReturnInstruction(call, expr->id());
 }
 
@@ -4628,7 +4621,7 @@ void HGraphBuilder::VisitCallRuntime(CallRuntime* expr) {
     ASSERT(function->intrinsic_type == Runtime::RUNTIME);
     HCall* call = new HCallRuntime(name, expr->function(), argument_count);
     call->set_position(RelocInfo::kNoPosition);
-    ProcessCall(call);
+    PreProcessCall(call);
     ast_context()->ReturnInstruction(call, expr->id());
   }
 }
@@ -5315,11 +5308,11 @@ void HGraphBuilder::GenerateStringCharFromCode(int argument_count,
 // Fast support for string.charAt(n) and string[n].
 void HGraphBuilder::GenerateStringCharAt(int argument_count, int ast_id) {
   ASSERT_EQ(2, argument_count);
-  PushArgumentsForStubCall(argument_count);
   HContext* context = new HContext;
   AddInstruction(context);
   HCallStub* result =
       new HCallStub(context, CodeStub::StringCharAt, argument_count);
+  PreProcessCall(result);
   ast_context()->ReturnInstruction(result, ast_id);
 }
 
@@ -5348,11 +5341,11 @@ void HGraphBuilder::GenerateRandomHeapNumber(int argument_count, int ast_id) {
 // Fast support for StringAdd.
 void HGraphBuilder::GenerateStringAdd(int argument_count, int ast_id) {
   ASSERT_EQ(2, argument_count);
-  PushArgumentsForStubCall(argument_count);
   HContext* context = new HContext;
   AddInstruction(context);
   HCallStub* result =
       new HCallStub(context, CodeStub::StringAdd, argument_count);
+  PreProcessCall(result);
   ast_context()->ReturnInstruction(result, ast_id);
 }
 
@@ -5360,11 +5353,11 @@ void HGraphBuilder::GenerateStringAdd(int argument_count, int ast_id) {
 // Fast support for SubString.
 void HGraphBuilder::GenerateSubString(int argument_count, int ast_id) {
   ASSERT_EQ(3, argument_count);
-  PushArgumentsForStubCall(argument_count);
   HContext* context = new HContext;
   AddInstruction(context);
   HCallStub* result =
       new HCallStub(context, CodeStub::SubString, argument_count);
+  PreProcessCall(result);
   ast_context()->ReturnInstruction(result, ast_id);
 }
 
@@ -5372,11 +5365,11 @@ void HGraphBuilder::GenerateSubString(int argument_count, int ast_id) {
 // Fast support for StringCompare.
 void HGraphBuilder::GenerateStringCompare(int argument_count, int ast_id) {
   ASSERT_EQ(2, argument_count);
-  PushArgumentsForStubCall(argument_count);
   HContext* context = new HContext;
   AddInstruction(context);
   HCallStub* result =
       new HCallStub(context, CodeStub::StringCompare, argument_count);
+  PreProcessCall(result);
   ast_context()->ReturnInstruction(result, ast_id);
 }
 
@@ -5384,11 +5377,11 @@ void HGraphBuilder::GenerateStringCompare(int argument_count, int ast_id) {
 // Support for direct calls from JavaScript to native RegExp code.
 void HGraphBuilder::GenerateRegExpExec(int argument_count, int ast_id) {
   ASSERT_EQ(4, argument_count);
-  PushArgumentsForStubCall(argument_count);
   HContext* context = new HContext;
   AddInstruction(context);
   HCallStub* result =
       new HCallStub(context, CodeStub::RegExpExec, argument_count);
+  PreProcessCall(result);
   ast_context()->ReturnInstruction(result, ast_id);
 }
 
@@ -5397,11 +5390,11 @@ void HGraphBuilder::GenerateRegExpExec(int argument_count, int ast_id) {
 void HGraphBuilder::GenerateRegExpConstructResult(int argument_count,
                                                   int ast_id) {
   ASSERT_EQ(3, argument_count);
-  PushArgumentsForStubCall(argument_count);
   HContext* context = new HContext;
   AddInstruction(context);
   HCallStub* result =
       new HCallStub(context, CodeStub::RegExpConstructResult, argument_count);
+  PreProcessCall(result);
   ast_context()->ReturnInstruction(result, ast_id);
 }
 
@@ -5415,11 +5408,11 @@ void HGraphBuilder::GenerateGetFromCache(int argument_count, int ast_id) {
 // Fast support for number to string.
 void HGraphBuilder::GenerateNumberToString(int argument_count, int ast_id) {
   ASSERT_EQ(1, argument_count);
-  PushArgumentsForStubCall(argument_count);
   HContext* context = new HContext;
   AddInstruction(context);
   HCallStub* result =
       new HCallStub(context, CodeStub::NumberToString, argument_count);
+  PreProcessCall(result);
   ast_context()->ReturnInstruction(result, ast_id);
 }
 
@@ -5450,36 +5443,36 @@ void HGraphBuilder::GenerateMathPow(int argument_count, int ast_id) {
 
 void HGraphBuilder::GenerateMathSin(int argument_count, int ast_id) {
   ASSERT_EQ(1, argument_count);
-  PushArgumentsForStubCall(argument_count);
   HContext* context = new HContext;
   AddInstruction(context);
   HCallStub* result =
       new HCallStub(context, CodeStub::TranscendentalCache, argument_count);
   result->set_transcendental_type(TranscendentalCache::SIN);
+  PreProcessCall(result);
   ast_context()->ReturnInstruction(result, ast_id);
 }
 
 
 void HGraphBuilder::GenerateMathCos(int argument_count, int ast_id) {
   ASSERT_EQ(1, argument_count);
-  PushArgumentsForStubCall(argument_count);
   HContext* context = new HContext;
   AddInstruction(context);
   HCallStub* result =
       new HCallStub(context, CodeStub::TranscendentalCache, argument_count);
   result->set_transcendental_type(TranscendentalCache::COS);
+  PreProcessCall(result);
   ast_context()->ReturnInstruction(result, ast_id);
 }
 
 
 void HGraphBuilder::GenerateMathLog(int argument_count, int ast_id) {
   ASSERT_EQ(1, argument_count);
-  PushArgumentsForStubCall(argument_count);
   HContext* context = new HContext;
   AddInstruction(context);
   HCallStub* result =
       new HCallStub(context, CodeStub::TranscendentalCache, argument_count);
   result->set_transcendental_type(TranscendentalCache::LOG);
+  PreProcessCall(result);
   ast_context()->ReturnInstruction(result, ast_id);
 }
 

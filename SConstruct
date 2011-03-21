@@ -255,9 +255,6 @@ LIBRARY_FLAGS = {
       'CCFLAGS':      ['-m64'],
       'LINKFLAGS':    ['-m64'],
     },
-    'prof:oprofile': {
-      'CPPDEFINES':   ['ENABLE_OPROFILE_AGENT']
-    },
     'gdbjit:on': {
       'CPPDEFINES':   ['ENABLE_GDB_JIT_INTERFACE']
     }
@@ -583,10 +580,6 @@ SAMPLE_FLAGS = {
       'CCFLAGS':      ['-g', '-O0'],
       'CPPDEFINES':   ['DEBUG']
     },
-    'prof:oprofile': {
-      'LIBPATH': ['/usr/lib32', '/usr/lib32/oprofile'],
-      'LIBS': ['opagent']
-    }
   },
   'msvc': {
     'all': {
@@ -756,7 +749,7 @@ SIMPLE_OPTIONS = {
     'help': 'build using snapshots for faster start-up'
   },
   'prof': {
-    'values': ['on', 'off', 'oprofile'],
+    'values': ['on', 'off'],
     'default': 'off',
     'help': 'enable profiling of build target'
   },
@@ -953,8 +946,6 @@ def VerifyOptions(env):
     Abort("Profiling on windows only supported for static library.")
   if env['gdbjit'] == 'on' and (env['os'] != 'linux' or (env['arch'] != 'ia32' and env['arch'] != 'x64')):
     Abort("GDBJIT interface is supported only for Intel-compatible (ia32 or x64) Linux target.")
-  if env['prof'] == 'oprofile' and env['os'] != 'linux':
-    Abort("OProfile is only supported on Linux.")
   if env['os'] == 'win32' and env['soname'] == 'on':
     Abort("Shared Object soname not applicable for Windows.")
   if env['soname'] == 'on' and env['library'] == 'static':
