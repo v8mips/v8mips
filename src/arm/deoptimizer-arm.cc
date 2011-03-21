@@ -167,7 +167,7 @@ void Deoptimizer::RevertStackCheckCodeAt(Address pc_after,
   ASSERT(Memory::uint8_at(pc_after - kInstrSize - 1) == 0xe5);
   ASSERT(Memory::uint8_at(pc_after - kInstrSize - 2) == 0x9f);
 
-  // Replace NOP wi th conditional jump.
+  // Replace NOP with conditional jump.
   CodePatcher patcher(pc_after - 3 * kInstrSize, 1);
   patcher.masm()->b(+4, cs);
 

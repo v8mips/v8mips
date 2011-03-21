@@ -843,8 +843,16 @@ LInstruction* LChunkBuilder::DoShift(Token::Value op,
 
 LInstruction* LChunkBuilder::DoArithmeticD(Token::Value op,
                                            HArithmeticBinaryOperation* instr) {
-  Abort("Unimplemented: %s", "DoArithmeticD");
-  return NULL;
+  ASSERT(instr->representation().IsDouble());
+  ASSERT(instr->left()->representation().IsDouble());
+  ASSERT(instr->right()->representation().IsDouble());
+  if (op == Token::MOD) {
+    Abort("Unimplemented: %s", "DoArithmeticD MOD");
+  }
+  LOperand* left = UseRegisterAtStart(instr->left());
+  LOperand* right = UseRegisterAtStart(instr->right());
+  LArithmeticD* result = new LArithmeticD(op, left, right);
+  return DefineSameAsFirst(result);
 }
 
 
@@ -1106,14 +1114,12 @@ LInstruction* LChunkBuilder::DoCompareMap(HCompareMap* instr) {
 
 
 LInstruction* LChunkBuilder::DoArgumentsLength(HArgumentsLength* length) {
-  Abort("Unimplemented: %s", "DoArgumentsLength");
-  return NULL;
+  return DefineAsRegister(new LArgumentsLength(Use(length->value())));
 }
 
 
 LInstruction* LChunkBuilder::DoArgumentsElements(HArgumentsElements* elems) {
-  Abort("Unimplemented: %s", "DoArgumentsElements");
-  return NULL;
+  return DefineAsRegister(new LArgumentsElements);
 }
 
 
@@ -1335,7 +1341,7 @@ LInstruction* LChunkBuilder::DoAdd(HAdd* instr) {
     }
     return result;
   } else if (instr->representation().IsDouble()) {
-    Abort("Unimplemented: %s", "DoAdd on Doubles");
+    return DoArithmeticD(Token::ADD, instr);
   } else {
     ASSERT(instr->representation().IsTagged());
     return DoArithmeticT(Token::ADD, instr);
@@ -1742,8 +1748,8 @@ LInstruction* LChunkBuilder::DoStringCharCodeAt(HStringCharCodeAt* instr) {
 
 
 LInstruction* LChunkBuilder::DoStringLength(HStringLength* instr) {
-  Abort("Unimplemented: %s", "DoStringLength");
-  return NULL;
+  LOperand* string = UseRegisterAtStart(instr->value());
+  return DefineAsRegister(new LStringLength(string));
 }
 
 
@@ -1805,8 +1811,11 @@ LInstruction* LChunkBuilder::DoArgumentsObject(HArgumentsObject* instr) {
 
 
 LInstruction* LChunkBuilder::DoAccessArgumentsAt(HAccessArgumentsAt* instr) {
-  Abort("Unimplemented: %s", "DoAccessArgumentsAt");
-  return NULL;
+  LOperand* arguments = UseRegister(instr->arguments());
+  LOperand* length = UseTempRegister(instr->length());
+  LOperand* index = Use(instr->index());
+  LAccessArgumentsAt* result = new LAccessArgumentsAt(arguments, length, index);
+  return AssignEnvironment(DefineAsRegister(result));
 }
 
 
