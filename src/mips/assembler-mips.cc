@@ -242,7 +242,6 @@ const Instr kLwSwOffsetMask = kImm16Mask;
 Assembler::Assembler(void* buffer, int buffer_size)
     : positions_recorder_(this),
       allow_peephole_optimization_(false) {
-  // BUG(3245989): disable peephole optimization if crankshaft is enabled.
   allow_peephole_optimization_ = FLAG_peephole_optimization;
   if (buffer == NULL) {
     // Do our own buffer management.
