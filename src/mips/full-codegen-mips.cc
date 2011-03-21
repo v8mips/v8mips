@@ -694,19 +694,25 @@ void FullCodeGenerator::EmitDeclaration(Variable* variable,
   } else if (prop != NULL) {
     if (function != NULL || mode == Variable::CONST) {
       // We are declaring a function or constant that rewrites to a
-      // property.  Use (keyed) IC to set the initial value.
-      VisitForStackValue(prop->obj());
+      // property.  Use (keyed) IC to set the initial value.  We
+      // cannot visit the rewrite because it's shared and we risk
+      // recording duplicate AST IDs for bailouts from optimized code.
+      ASSERT(prop->obj()->AsVariableProxy() != NULL);
+      { AccumulatorValueContext for_object(this);
+        EmitVariableLoad(prop->obj()->AsVariableProxy()->var());
+      }
       if (function != NULL) {
-        VisitForStackValue(prop->key());
+        __ push(result_register());
         VisitForAccumulatorValue(function);
         __ mov(a0, result_register());
-        __ pop(a1);  // Key.
+        __ pop(a2);
       } else {
-        VisitForAccumulatorValue(prop->key());
-        __ mov(a1, result_register());  // Key.
+        __ mov(a2, result_register());
         __ LoadRoot(a0, Heap::kTheHoleValueRootIndex);
       }
-      __ pop(a2);  // Receiver.
+      ASSERT(prop->key()->AsLiteral() != NULL &&
+             prop->key()->AsLiteral()->handle()->IsSmi());
+      __ li(a1, Operand(prop->key()->AsLiteral()->handle()));
 
       Handle<Code> ic(Builtins::builtin(Builtins::KeyedStoreIC_Initialize));
       EmitCallIC(ic, RelocInfo::CODE_TARGET);
