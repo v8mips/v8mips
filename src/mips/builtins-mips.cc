@@ -1165,23 +1165,24 @@ void Builtins::Generate_LazyRecompile(MacroAssembler* masm) {
 }
 
 
+// These functions are called from C++ but cannot be used in live code.
 void Builtins::Generate_NotifyDeoptimized(MacroAssembler* masm) {
-  __ break_(333);
+  __ Abort("Call to unimplemented function in builtins-mips.cc");
 }
 
 
 void Builtins::Generate_NotifyLazyDeoptimized(MacroAssembler* masm) {
-  __ break_(334);
+  __ Abort("Call to unimplemented function in builtins-mips.cc");
 }
 
 
 void Builtins::Generate_NotifyOSR(MacroAssembler* masm) {
-  __ break_(335);
+  __ Abort("Call to unimplemented function in builtins-mips.cc");
 }
 
 
 void Builtins::Generate_OnStackReplacement(MacroAssembler* masm) {
-  __ break_(336);
+  __ Abort("Call to unimplemented function in builtins-mips.cc");
 }
 
 
