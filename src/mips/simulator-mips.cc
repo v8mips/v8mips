@@ -805,10 +805,10 @@ Simulator::Simulator() {
 // offset from the swi instruction so the simulator knows what to call.
 class Redirection {
  public:
-  Redirection(void* external_function, bool fp_return)
+  Redirection(void* external_function, ExternalReference::Type type)
       : external_function_(external_function),
         swi_instruction_(rtCallRedirInstr),
-        fp_return_(fp_return),
+        type_(type),
         next_(list_) {
     Simulator::current()->
         FlushICache(reinterpret_cast<void*>(&swi_instruction_),
@@ -821,14 +821,15 @@ class Redirection {
   }
 
   void* external_function() { return external_function_; }
-  bool fp_return() { return fp_return_; }
+  ExternalReference::Type type() { return type_; }
 
-  static Redirection* Get(void* external_function, bool fp_return) {
+  static Redirection* Get(void* external_function,
+                          ExternalReference::Type type) {
     Redirection* current;
     for (current = list_; current != NULL; current = current->next_) {
       if (current->external_function_ == external_function) return current;
     }
-    return new Redirection(external_function, fp_return);
+    return new Redirection(external_function, type);
   }
 
   static Redirection* FromSwiInstruction(Instruction* swi_instruction) {
@@ -841,7 +842,7 @@ class Redirection {
  private:
   void* external_function_;
   uint32_t swi_instruction_;
-  bool fp_return_;
+  ExternalReference::Type type_;
   Redirection* next_;
   static Redirection* list_;
 };
@@ -851,8 +852,8 @@ Redirection* Redirection::list_ = NULL;
 
 
 void* Simulator::RedirectExternalReference(void* external_function,
-                                           bool fp_return) {
-  Redirection* redirection = Redirection::Get(external_function, fp_return);
+                                           ExternalReference::Type type) {
+  Redirection* redirection = Redirection::Get(external_function, type);
   return redirection->address_of_swi_instruction();
 }
 
@@ -1159,6 +1160,10 @@ typedef double (*SimulatorRuntimeFPCall)(int32_t arg0,
                                          int32_t arg2,
                                          int32_t arg3);
 
+// This signature supports direct call in to API function native callback
+// (refer to InvocationCallback in v8.h).
+typedef v8::Handle<v8::Value> (*SimulatorRuntimeApiCall)(int32_t arg0);
+
 // Software interrupt instructions are used by the simulator to call into the
 // C-based V8 runtime. They are also used for debugging with simulator.
 void Simulator::SoftwareInterrupt(Instruction* instr) {
@@ -1191,20 +1196,7 @@ void Simulator::SoftwareInterrupt(Instruction* instr) {
     int32_t saved_ra = get_register(ra);
 
     intptr_t external =
-        reinterpret_cast<int32_t>(redirection->external_function());
-    SimulatorRuntimeCall target =
-        reinterpret_cast<SimulatorRuntimeCall>(external);
-
-    if (::v8::internal::FLAG_trace_sim) {
-      PrintF(
-          "Call to host function at %p args %08x, %08x, %08x, %08x, %0xc",
-          FUNCTION_ADDR(target),
-          arg0,
-          arg1,
-          arg2,
-          arg3,
-          arg4);
-    }
+          reinterpret_cast<intptr_t>(redirection->external_function());
 
     // Based on CpuFeatures::IsSupported(FPU), Mips will use either hardware
     // FPU, or gcc soft-float routines. Hardware FPU is simulated in this
@@ -1216,16 +1208,47 @@ void Simulator::SoftwareInterrupt(Instruction* instr) {
     // than the usual int64_t return. The data is returned in different
     // registers and cannot be cast from one type to the other. However, the
     // calling arguments are passed the same way in both cases.
-    if (redirection->fp_return()) {
+    if (redirection->type() == ExternalReference::FP_RETURN_CALL) {
       SimulatorRuntimeFPCall target =
-          reinterpret_cast<SimulatorRuntimeFPCall>(external);
+                  reinterpret_cast<SimulatorRuntimeFPCall>(external);
+      if (::v8::internal::FLAG_trace_sim) {
+            PrintF(
+                "Call to host function at %p args %08x, %08x, %08x, %08x\n",
+                FUNCTION_ADDR(target),
+                arg0,
+                arg1,
+                arg2,
+                arg3);
+          }
       double result = target(arg0, arg1, arg2, arg3);
       // fp result -> registers v0 and v1.
       int32_t gpreg_pair[2];
       memcpy(&gpreg_pair[0], &result, 2 * sizeof(int32_t));
       set_register(v0, gpreg_pair[0]);
       set_register(v1, gpreg_pair[1]);
+    } else if (redirection->type() == ExternalReference::DIRECT_CALL) {
+      SimulatorRuntimeApiCall target =
+                  reinterpret_cast<SimulatorRuntimeApiCall>(external);
+      if (::v8::internal::FLAG_trace_sim) {
+        PrintF("Call to host function at %p args %08x\n",
+               FUNCTION_ADDR(target),
+               arg0);
+      }
+      v8::Handle<v8::Value> result = target(arg0);
+      set_register(v0, (int32_t) *result);
     } else {
+      SimulatorRuntimeCall target =
+                  reinterpret_cast<SimulatorRuntimeCall>(external);
+      if (::v8::internal::FLAG_trace_sim) {
+            PrintF(
+                "Call to host function at %p args %08x, %08x, %08x, %08x, %0xc\n",
+                FUNCTION_ADDR(target),
+                arg0,
+                arg1,
+                arg2,
+                arg3,
+                arg4);
+          }
       int64_t result = target(arg0, arg1, arg2, arg3, arg4);
       set_register(v0, static_cast<int32_t>(result));
       set_register(v1, static_cast<int32_t>(result >> 32));

@@ -89,6 +89,7 @@ class SimulatorStack : public v8::internal::AllStatic {
 // Running with a simulator.
 
 #include "hashmap.h"
+#include "assembler.h"
 
 namespace v8 {
 namespace internal {
@@ -311,8 +312,9 @@ class Simulator {
   void SignalExceptions();
 
   // Runtime call support.
-  static void* RedirectExternalReference(void* external_function,
-                                         bool fp_return);
+  static void* RedirectExternalReference(
+      void* external_function,
+      v8::internal::ExternalReference::Type type);
 
   // Used for real time calls that takes two double values as arguments and
   // returns a double.
