@@ -2954,6 +2954,9 @@ void HGraphBuilder::LookupGlobalPropertyCell(Variable* var,
   if (is_store && lookup->IsReadOnly()) {
     BAILOUT("read-only global variable");
   }
+  if (lookup->holder() != *global) {
+    BAILOUT("global property on prototype of global object");
+  }
 }
 
 
@@ -5187,9 +5190,10 @@ void HGraphBuilder::GenerateIsStringWrapperSafeForDefaultValueOf(
 }
 
 
-  // Support for construct call checks.
+// Support for construct call checks.
 void HGraphBuilder::GenerateIsConstructCall(int argument_count, int ast_id) {
-  BAILOUT("inlined runtime function: IsConstructCall");
+  ASSERT(argument_count == 0);
+  ast_context()->ReturnInstruction(new HIsConstructCall, ast_id);
 }
 
 

@@ -1174,7 +1174,7 @@ void LCodeGen::DoMulI(LMulI* instr) {
 
   if (instr->hydrogen()->CheckFlag(HValue::kCanOverflow)) {
     // scratch:left = left * right.
-    __ smull(scratch, left, left, right);
+    __ smull(left, scratch, left, right);
     __ mov(ip, Operand(left, ASR, 31));
     __ cmp(ip, Operand(scratch));
     DeoptimizeIf(ne, instr->environment());
@@ -1188,7 +1188,7 @@ void LCodeGen::DoMulI(LMulI* instr) {
     __ tst(left, Operand(left));
     __ b(ne, &done);
     if (instr->InputAt(1)->IsConstantOperand()) {
-      if (ToInteger32(LConstantOperand::cast(instr->InputAt(1))) < 0) {
+      if (ToInteger32(LConstantOperand::cast(instr->InputAt(1))) <= 0) {
         DeoptimizeIf(kNoCondition, instr->environment());
       }
     } else {
@@ -3412,7 +3412,6 @@ void LCodeGen::DoDoubleToI(LDoubleToI* instr) {
   VFPRoundingMode rounding_mode = instr->truncating() ? kRoundToMinusInf
                                                       : kRoundToNearest;
 
-
   EmitVFPTruncate(rounding_mode,
                   single_scratch,
                   double_input,
@@ -3776,6 +3775,55 @@ Condition LCodeGen::EmitTypeofIs(Label* true_label,
   }
 
   return final_branch_condition;
+}
+
+
+void LCodeGen::DoIsConstructCall(LIsConstructCall* instr) {
+  Register result = ToRegister(instr->result());
+  Label true_label;
+  Label false_label;
+  Label done;
+
+  EmitIsConstructCall(result, scratch0());
+  __ b(eq, &true_label);
+
+  __ LoadRoot(result, Heap::kFalseValueRootIndex);
+  __ b(&done);
+
+
+  __ bind(&true_label);
+  __ LoadRoot(result, Heap::kTrueValueRootIndex);
+
+  __ bind(&done);
+}
+
+
+void LCodeGen::DoIsConstructCallAndBranch(LIsConstructCallAndBranch* instr) {
+  Register temp1 = ToRegister(instr->TempAt(0));
+  int true_block = chunk_->LookupDestination(instr->true_block_id());
+  int false_block = chunk_->LookupDestination(instr->false_block_id());
+
+  EmitIsConstructCall(temp1, scratch0());
+  EmitBranch(true_block, false_block, eq);
+}
+
+
+void LCodeGen::EmitIsConstructCall(Register temp1, Register temp2) {
+  ASSERT(!temp1.is(temp2));
+  // Get the frame pointer for the calling frame.
+  __ ldr(temp1, MemOperand(fp, StandardFrameConstants::kCallerFPOffset));
+
+  // Skip the arguments adaptor frame if it exists.
+  Label check_frame_marker;
+  __ ldr(temp2, MemOperand(temp1, StandardFrameConstants::kContextOffset));
+  __ cmp(temp2, Operand(Smi::FromInt(StackFrame::ARGUMENTS_ADAPTOR)));
+  __ b(ne, &check_frame_marker);
+  __ ldr(temp1, MemOperand(temp1, StandardFrameConstants::kCallerFPOffset));
+
+  // Check the marker in the calling frame.
+  __ bind(&check_frame_marker);
+  __ ldr(temp1, MemOperand(temp1, StandardFrameConstants::kMarkerOffset));
+  __ cmp(temp1, Operand(Smi::FromInt(StackFrame::CONSTRUCT)));
 }
 
 

@@ -206,45 +206,48 @@ void FullCodeGenerator::Generate(CompilationInfo* info) {
     Move(dot_arguments_slot, ecx, ebx, edx);
   }
 
-  { Comment cmnt(masm_, "[ Declarations");
-    // For named function expressions, declare the function name as a
-    // constant.
-    if (scope()->is_function_scope() && scope()->function() != NULL) {
-      EmitDeclaration(scope()->function(), Variable::CONST, NULL);
-    }
-    // Visit all the explicit declarations unless there is an illegal
-    // redeclaration.
-    if (scope()->HasIllegalRedeclaration()) {
-      scope()->VisitIllegalRedeclaration(this);
-    } else {
-      VisitDeclarations(scope()->declarations());
-    }
-  }
-
   if (FLAG_trace) {
     __ CallRuntime(Runtime::kTraceEnter, 0);
   }
 
-  { Comment cmnt(masm_, "[ Stack check");
-    PrepareForBailout(info->function(), NO_REGISTERS);
-    NearLabel ok;
-    ExternalReference stack_limit =
-        ExternalReference::address_of_stack_limit();
-    __ cmp(esp, Operand::StaticVariable(stack_limit));
-    __ j(above_equal, &ok, taken);
-    StackCheckStub stub;
-    __ CallStub(&stub);
-    __ bind(&ok);
+  // Visit the declarations and body unless there is an illegal
+  // redeclaration.
+  if (scope()->HasIllegalRedeclaration()) {
+    Comment cmnt(masm_, "[ Declarations");
+    scope()->VisitIllegalRedeclaration(this);
+
+  } else {
+    { Comment cmnt(masm_, "[ Declarations");
+      // For named function expressions, declare the function name as a
+      // constant.
+      if (scope()->is_function_scope() && scope()->function() != NULL) {
+        EmitDeclaration(scope()->function(), Variable::CONST, NULL);
+      }
+      VisitDeclarations(scope()->declarations());
+    }
+
+    { Comment cmnt(masm_, "[ Stack check");
+      PrepareForBailout(info->function(), NO_REGISTERS);
+      NearLabel ok;
+      ExternalReference stack_limit =
+          ExternalReference::address_of_stack_limit();
+      __ cmp(esp, Operand::StaticVariable(stack_limit));
+      __ j(above_equal, &ok, taken);
+      StackCheckStub stub;
+      __ CallStub(&stub);
+      __ bind(&ok);
+    }
+
+    { Comment cmnt(masm_, "[ Body");
+      ASSERT(loop_depth() == 0);
+      VisitStatements(function()->body());
+      ASSERT(loop_depth() == 0);
+    }
   }
 
-  { Comment cmnt(masm_, "[ Body");
-    ASSERT(loop_depth() == 0);
-    VisitStatements(function()->body());
-    ASSERT(loop_depth() == 0);
-  }
-
+  // Always emit a 'return undefined' in case control fell off the end of
+  // the body.
   { Comment cmnt(masm_, "[ return <undefined>;");
-    // Emit a 'return undefined' in case control fell off the end of the body.
     __ mov(eax, Factory::undefined_value());
     EmitReturnSequence();
   }
@@ -714,18 +717,25 @@ void FullCodeGenerator::EmitDeclaration(Variable* variable,
   } else if (prop != NULL) {
     if (function != NULL || mode == Variable::CONST) {
       // We are declaring a function or constant that rewrites to a
-      // property.  Use (keyed) IC to set the initial value.
-      VisitForStackValue(prop->obj());
-      if (function != NULL) {
-        VisitForStackValue(prop->key());
-        VisitForAccumulatorValue(function);
-        __ pop(ecx);
-      } else {
-        VisitForAccumulatorValue(prop->key());
-        __ mov(ecx, result_register());
-        __ mov(result_register(), Factory::the_hole_value());
+      // property.  Use (keyed) IC to set the initial value.  We cannot
+      // visit the rewrite because it's shared and we risk recording
+      // duplicate AST IDs for bailouts from optimized code.
+      ASSERT(prop->obj()->AsVariableProxy() != NULL);
+      { AccumulatorValueContext for_object(this);
+        EmitVariableLoad(prop->obj()->AsVariableProxy()->var());
       }
-      __ pop(edx);
+
+      if (function != NULL) {
+        __ push(eax);
+        VisitForAccumulatorValue(function);
+        __ pop(edx);
+      } else {
+        __ mov(edx, eax);
+        __ mov(eax, Factory::the_hole_value());
+      }
+      ASSERT(prop->key()->AsLiteral() != NULL &&
+             prop->key()->AsLiteral()->handle()->IsSmi());
+      __ Set(ecx, Immediate(prop->key()->AsLiteral()->handle()));
 
       Handle<Code> ic(Builtins::builtin(Builtins::KeyedStoreIC_Initialize));
       EmitCallIC(ic, RelocInfo::CODE_TARGET);
@@ -3946,8 +3956,7 @@ void FullCodeGenerator::VisitCountOperation(CountOperation* expr) {
   // Call stub for +1/-1.
   __ mov(edx, eax);
   __ mov(eax, Immediate(Smi::FromInt(1)));
-  TypeRecordingBinaryOpStub stub(expr->binary_op(),
-                                 NO_OVERWRITE);
+  TypeRecordingBinaryOpStub stub(expr->binary_op(), NO_OVERWRITE);
   EmitCallIC(stub.GetCode(), &patch_site);
   __ bind(&done);
 
