@@ -1322,6 +1322,13 @@ void LCodeGen::DoJSArrayLength(LJSArrayLength* instr) {
 }
 
 
+void LCodeGen::DoPixelArrayLength(LPixelArrayLength* instr) {
+  Register result = ToRegister(instr->result());
+  Register array = ToRegister(instr->InputAt(0));
+  __ ldr(result, FieldMemOperand(array, PixelArray::kLengthOffset));
+}
+
+
 void LCodeGen::DoFixedArrayLength(LFixedArrayLength* instr) {
   Register result = ToRegister(instr->result());
   Register array = ToRegister(instr->InputAt(0));
@@ -1605,7 +1612,7 @@ Condition LCodeGen::TokenToCondition(Token::Value op, bool is_unsigned) {
 
 
 void LCodeGen::EmitCmpI(LOperand* left, LOperand* right) {
-  __ cmp(ToRegister(left), ToOperand(right));
+  __ cmp(ToRegister(left), ToRegister(right));
 }
 
 
@@ -1619,8 +1626,7 @@ void LCodeGen::DoCmpID(LCmpID* instr) {
   if (instr->is_double()) {
     // Compare left and right as doubles and load the
     // resulting flags into the normal status register.
-    __ vcmp(ToDoubleRegister(left), ToDoubleRegister(right));
-    __ vmrs(pc);
+    __ VFPCompareAndSetFlags(ToDoubleRegister(left), ToDoubleRegister(right));
     // If a NaN is involved, i.e. the result is unordered (V set),
     // jump to unordered to return false.
     __ b(vs, &unordered);
@@ -1647,8 +1653,7 @@ void LCodeGen::DoCmpIDAndBranch(LCmpIDAndBranch* instr) {
   if (instr->is_double()) {
     // Compare left and right as doubles and load the
     // resulting flags into the normal status register.
-    __ vcmp(ToDoubleRegister(left), ToDoubleRegister(right));
-    __ vmrs(pc);
+    __ VFPCompareAndSetFlags(ToDoubleRegister(left), ToDoubleRegister(right));
     // If a NaN is involved, i.e. the result is unordered (V set),
     // jump to false block label.
     __ b(vs, chunk_->GetAssemblyLabel(false_block));
@@ -2180,12 +2185,12 @@ void LCodeGen::DoCmpT(LCmpT* instr) {
 
   Handle<Code> ic = CompareIC::GetUninitialized(op);
   CallCode(ic, RelocInfo::CODE_TARGET, instr);
+  __ cmp(r0, Operand(0));  // This instruction also signals no smi code inlined.
 
   Condition condition = ComputeCompareCondition(op);
   if (op == Token::GT || op == Token::LTE) {
     condition = ReverseCondition(condition);
   }
-  __ cmp(r0, Operand(0));
   __ LoadRoot(ToRegister(instr->result()),
               Heap::kTrueValueRootIndex,
               condition);
@@ -2196,7 +2201,21 @@ void LCodeGen::DoCmpT(LCmpT* instr) {
 
 
 void LCodeGen::DoCmpTAndBranch(LCmpTAndBranch* instr) {
-  Abort("DoCmpTAndBranch unimplemented.");
+  Token::Value op = instr->op();
+  int true_block = chunk_->LookupDestination(instr->true_block_id());
+  int false_block = chunk_->LookupDestination(instr->false_block_id());
+
+  Handle<Code> ic = CompareIC::GetUninitialized(op);
+  CallCode(ic, RelocInfo::CODE_TARGET, instr);
+
+  // The compare stub expects compare condition and the input operands
+  // reversed for GT and LTE.
+  Condition condition = ComputeCompareCondition(op);
+  if (op == Token::GT || op == Token::LTE) {
+    condition = ReverseCondition(condition);
+  }
+  __ cmp(r0, Operand(0));
+  EmitBranch(true_block, false_block, condition);
 }
 
 
@@ -2342,15 +2361,18 @@ void LCodeGen::DoLoadFunctionPrototype(LLoadFunctionPrototype* instr) {
 
 
 void LCodeGen::DoLoadElements(LLoadElements* instr) {
-  ASSERT(instr->result()->Equals(instr->InputAt(0)));
-  Register reg = ToRegister(instr->InputAt(0));
+  Register result = ToRegister(instr->result());
+  Register input = ToRegister(instr->InputAt(0));
   Register scratch = scratch0();
 
-  __ ldr(reg, FieldMemOperand(reg, JSObject::kElementsOffset));
+  __ ldr(result, FieldMemOperand(input, JSObject::kElementsOffset));
   if (FLAG_debug_code) {
     Label done;
-    __ ldr(scratch, FieldMemOperand(reg, HeapObject::kMapOffset));
+    __ ldr(scratch, FieldMemOperand(result, HeapObject::kMapOffset));
     __ LoadRoot(ip, Heap::kFixedArrayMapRootIndex);
+    __ cmp(scratch, ip);
+    __ b(eq, &done);
+    __ LoadRoot(ip, Heap::kPixelArrayMapRootIndex);
     __ cmp(scratch, ip);
     __ b(eq, &done);
     __ LoadRoot(ip, Heap::kFixedCOWArrayMapRootIndex);
@@ -2358,6 +2380,14 @@ void LCodeGen::DoLoadElements(LLoadElements* instr) {
     __ Check(eq, "Check for fast elements failed.");
     __ bind(&done);
   }
+}
+
+
+void LCodeGen::DoLoadPixelArrayExternalPointer(
+    LLoadPixelArrayExternalPointer* instr) {
+  Register to_reg = ToRegister(instr->result());
+  Register from_reg  = ToRegister(instr->InputAt(0));
+  __ ldr(to_reg, FieldMemOperand(from_reg, PixelArray::kExternalPointerOffset));
 }
 
 
@@ -2394,6 +2424,16 @@ void LCodeGen::DoLoadKeyedFastElement(LLoadKeyedFastElement* instr) {
   __ LoadRoot(scratch, Heap::kTheHoleValueRootIndex);
   __ cmp(result, scratch);
   DeoptimizeIf(eq, instr->environment());
+}
+
+
+void LCodeGen::DoLoadPixelArrayElement(LLoadPixelArrayElement* instr) {
+  Register external_elements = ToRegister(instr->external_pointer());
+  Register key = ToRegister(instr->key());
+  Register result = ToRegister(instr->result());
+
+  // Load the result.
+  __ ldrb(result, MemOperand(external_elements, key));
 }
 
 

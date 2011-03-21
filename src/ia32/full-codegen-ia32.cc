@@ -47,8 +47,7 @@ namespace internal {
 
 class JumpPatchSite BASE_EMBEDDED {
  public:
-  explicit JumpPatchSite(MacroAssembler* masm)
-      : masm_(masm) {
+  explicit JumpPatchSite(MacroAssembler* masm) : masm_(masm) {
 #ifdef DEBUG
     info_emitted_ = false;
 #endif
@@ -60,7 +59,7 @@ class JumpPatchSite BASE_EMBEDDED {
 
   void EmitJumpIfNotSmi(Register reg, NearLabel* target) {
     __ test(reg, Immediate(kSmiTagMask));
-    EmitJump(not_carry, target);   // Always taken before patched.
+    EmitJump(not_carry, target);  // Always taken before patched.
   }
 
   void EmitJumpIfSmi(Register reg, NearLabel* target) {
@@ -616,6 +615,7 @@ void FullCodeGenerator::Move(Slot* dst,
   // Emit the write barrier code if the location is in the heap.
   if (dst->type() == Slot::CONTEXT) {
     int offset = Context::SlotOffset(dst->index());
+    ASSERT(!scratch1.is(esi) && !src.is(esi) && !scratch2.is(esi));
     __ RecordWrite(scratch1, offset, src, scratch2);
   }
 }

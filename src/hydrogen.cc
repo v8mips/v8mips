@@ -1815,16 +1815,14 @@ void HGraph::InsertRepresentationChangeForUse(HValue* value,
                                               bool is_truncating) {
   // Insert the representation change right before its use. For phi-uses we
   // insert at the end of the corresponding predecessor.
-  HBasicBlock* insert_block = use->block();
+  HInstruction* next = NULL;
   if (use->IsPhi()) {
     int index = 0;
     while (use->OperandAt(index) != value) ++index;
-    insert_block = insert_block->predecessors()->at(index);
+    next = use->block()->predecessors()->at(index)->end();
+  } else {
+    next = HInstruction::cast(use);
   }
-
-  HInstruction* next = (insert_block == use->block())
-      ? HInstruction::cast(use)
-      : insert_block->end();
 
   // For constants we try to make the representation change at compile
   // time. When a representation change is not possible without loss of
@@ -3024,7 +3022,10 @@ void HGraphBuilder::VisitRegExpLiteral(RegExpLiteral* expr) {
 
 
 void HGraphBuilder::VisitObjectLiteral(ObjectLiteral* expr) {
-  HObjectLiteral* literal = (new HObjectLiteral(expr->constant_properties(),
+  HContext* context = new HContext;
+  AddInstruction(context);
+  HObjectLiteral* literal = (new HObjectLiteral(context,
+                                                expr->constant_properties(),
                                                 expr->fast_elements(),
                                                 expr->literal_index(),
                                                 expr->depth()));
@@ -3051,7 +3052,9 @@ void HGraphBuilder::VisitObjectLiteral(ObjectLiteral* expr) {
             VISIT_FOR_VALUE(value);
             HValue* value = Pop();
             Handle<String> name = Handle<String>::cast(key->handle());
-            AddInstruction(new HStoreNamedGeneric(literal, name, value));
+            HStoreNamedGeneric* store =
+                new HStoreNamedGeneric(context, literal, name, value);
+            AddInstruction(store);
             AddSimulate(key->id());
           } else {
             VISIT_FOR_EFFECT(value);
@@ -3231,7 +3234,9 @@ HInstruction* HGraphBuilder::BuildStoreNamedField(HValue* object,
 HInstruction* HGraphBuilder::BuildStoreNamedGeneric(HValue* object,
                                                     Handle<String> name,
                                                     HValue* value) {
-  return new HStoreNamedGeneric(object, name, value);
+  HContext* context = new HContext;
+  AddInstruction(context);
+  return new HStoreNamedGeneric(context, object, name, value);
 }
 
 
@@ -3293,7 +3298,7 @@ void HGraphBuilder::HandlePolymorphicStoreNamedField(Assignment* expr,
   // If none of the properties were named fields we generate a
   // generic store.
   if (maps.length() == 0) {
-    HInstruction* instr = new HStoreNamedGeneric(object, name, value);
+    HInstruction* instr = BuildStoreNamedGeneric(object, name, value);
     Push(value);
     instr->set_position(expr->position());
     AddInstruction(instr);
@@ -3307,7 +3312,7 @@ void HGraphBuilder::HandlePolymorphicStoreNamedField(Assignment* expr,
       if (!needs_generic && FLAG_deoptimize_uncommon_cases) {
         subgraph->FinishExit(new HDeoptimize());
       } else {
-        HInstruction* instr = new HStoreNamedGeneric(object, name, value);
+        HInstruction* instr = BuildStoreNamedGeneric(object, name, value);
         Push(value);
         instr->set_position(expr->position());
         AddInstruction(instr);
@@ -3357,7 +3362,7 @@ void HGraphBuilder::HandlePropertyAssignment(Assignment* expr) {
       return;
 
     } else {
-      instr = new HStoreNamedGeneric(object, name, value);
+      instr = BuildStoreNamedGeneric(object, name, value);
     }
 
   } else {
@@ -3477,7 +3482,6 @@ void HGraphBuilder::HandleCompoundAssignment(Assignment* expr) {
 
       bool is_fast_elements = prop->IsMonomorphic() &&
           prop->GetMonomorphicReceiverType()->has_fast_elements();
-
       HInstruction* load = is_fast_elements
           ? BuildLoadKeyedFastElement(obj, key, prop)
           : BuildLoadKeyedGeneric(obj, key);
@@ -3680,7 +3684,9 @@ HInstruction* HGraphBuilder::BuildLoadNamedGeneric(HValue* obj,
                                                    Property* expr) {
   ASSERT(expr->key()->IsPropertyName());
   Handle<Object> name = expr->key()->AsLiteral()->handle();
-  return new HLoadNamedGeneric(obj, name);
+  HContext* context = new HContext;
+  AddInstruction(context);
+  return new HLoadNamedGeneric(context, obj, name);
 }
 
 
@@ -3709,7 +3715,9 @@ HInstruction* HGraphBuilder::BuildLoadNamed(HValue* obj,
 
 HInstruction* HGraphBuilder::BuildLoadKeyedGeneric(HValue* object,
                                                    HValue* key) {
-  return new HLoadKeyedGeneric(object, key);
+  HContext* context = new HContext;
+  AddInstruction(context);
+  return new HLoadKeyedGeneric(context, object, key);
 }
 
 
@@ -3737,10 +3745,34 @@ HInstruction* HGraphBuilder::BuildLoadKeyedFastElement(HValue* object,
 }
 
 
+HInstruction* HGraphBuilder::BuildLoadKeyedPixelArrayElement(HValue* object,
+                                                             HValue* key,
+                                                             Property* expr) {
+  ASSERT(!expr->key()->IsPropertyName() && expr->IsMonomorphic());
+  AddInstruction(new HCheckNonSmi(object));
+  Handle<Map> map = expr->GetMonomorphicReceiverType();
+  ASSERT(!map->has_fast_elements());
+  ASSERT(map->has_pixel_array_elements());
+  AddInstruction(new HCheckMap(object, map));
+  HLoadElements* elements = new HLoadElements(object);
+  AddInstruction(elements);
+  HInstruction* length = AddInstruction(new HPixelArrayLength(elements));
+  AddInstruction(new HBoundsCheck(key, length));
+  HLoadPixelArrayExternalPointer* external_elements =
+      new HLoadPixelArrayExternalPointer(elements);
+  AddInstruction(external_elements);
+  HLoadPixelArrayElement* pixel_array_value =
+      new HLoadPixelArrayElement(external_elements, key);
+  return pixel_array_value;
+}
+
+
 HInstruction* HGraphBuilder::BuildStoreKeyedGeneric(HValue* object,
                                                     HValue* key,
                                                     HValue* value) {
-  return new HStoreKeyedGeneric(object, key, value);
+  HContext* context = new HContext;
+  AddInstruction(context);
+  return new HStoreKeyedGeneric(context, object, key, value);
 }
 
 
@@ -3844,12 +3876,20 @@ void HGraphBuilder::VisitProperty(Property* expr) {
     HValue* key = Pop();
     HValue* obj = Pop();
 
-    bool is_fast_elements = expr->IsMonomorphic() &&
-        expr->GetMonomorphicReceiverType()->has_fast_elements();
-
-    instr = is_fast_elements
-        ? BuildLoadKeyedFastElement(obj, key, expr)
-        : BuildLoadKeyedGeneric(obj, key);
+    if (expr->IsMonomorphic()) {
+      Handle<Map> receiver_type(expr->GetMonomorphicReceiverType());
+      // An object has either fast elements or pixel array elements, but never
+      // both. Pixel array maps that are assigned to pixel array elements are
+      // always created with the fast elements flag cleared.
+      if (receiver_type->has_pixel_array_elements()) {
+        instr = BuildLoadKeyedPixelArrayElement(obj, key, expr);
+      } else if (receiver_type->has_fast_elements()) {
+        instr = BuildLoadKeyedFastElement(obj, key, expr);
+      }
+    }
+    if (instr == NULL) {
+      instr = BuildLoadKeyedGeneric(obj, key);
+    }
   }
   instr->set_position(expr->position());
   ast_context()->ReturnInstruction(instr, expr->id());
@@ -3919,7 +3959,9 @@ void HGraphBuilder::HandlePolymorphicCallNamed(Call* expr,
   // If we couldn't compute the target for any of the maps just perform an
   // IC call.
   if (maps.length() == 0) {
-    HCall* call = new HCallNamed(name, argument_count);
+    HContext* context = new HContext;
+    AddInstruction(context);
+    HCall* call = new HCallNamed(context, name, argument_count);
     call->set_position(expr->position());
     ProcessCall(call);
     ast_context()->ReturnInstruction(call, expr->id());
@@ -3931,7 +3973,9 @@ void HGraphBuilder::HandlePolymorphicCallNamed(Call* expr,
       if (!needs_generic && FLAG_deoptimize_uncommon_cases) {
         subgraph->FinishExit(new HDeoptimize());
       } else {
-        HCall* call = new HCallNamed(name, argument_count);
+        HContext* context = new HContext;
+        AddInstruction(context);
+        HCall* call = new HCallNamed(context, name, argument_count);
         call->set_position(expr->position());
         ProcessCall(call);
         PushAndAdd(call);
@@ -4351,7 +4395,9 @@ void HGraphBuilder::VisitCall(Call* expr) {
       VisitArgumentList(expr->arguments());
       CHECK_BAILOUT;
 
-      call = new HCallKeyed(key, argument_count);
+      HContext* context = new HContext;
+      AddInstruction(context);
+      call = new HCallKeyed(context, key, argument_count);
       call->set_position(expr->position());
       ProcessCall(call);
       Drop(1);  // Key.
@@ -4390,7 +4436,9 @@ void HGraphBuilder::VisitCall(Call* expr) {
         // When the target has a custom call IC generator, use the IC,
         // because it is likely to generate better code. Also use the
         // IC when a primitive receiver check is required.
-        call = new HCallNamed(name, argument_count);
+        HContext* context = new HContext;
+        AddInstruction(context);
+        call = new HCallNamed(context, name, argument_count);
       } else {
         AddCheckConstantFunction(expr, receiver, receiver_map, true);
 
@@ -4419,7 +4467,9 @@ void HGraphBuilder::VisitCall(Call* expr) {
       return;
 
     } else {
-      call = new HCallNamed(name, argument_count);
+      HContext* context = new HContext;
+      AddInstruction(context);
+      call = new HCallNamed(context, name, argument_count);
     }
 
   } else {
@@ -4489,7 +4539,7 @@ void HGraphBuilder::VisitCall(Call* expr) {
         VisitArgumentList(expr->arguments());
         CHECK_BAILOUT;
 
-        call = new HCallGlobal(var->name(), argument_count);
+        call = new HCallGlobal(context, var->name(), argument_count);
       }
 
     } else {
@@ -4501,7 +4551,7 @@ void HGraphBuilder::VisitCall(Call* expr) {
       VisitArgumentList(expr->arguments());
       CHECK_BAILOUT;
 
-      call = new HCallFunction(argument_count);
+      call = new HCallFunction(context, argument_count);
     }
   }
 
@@ -4520,7 +4570,9 @@ void HGraphBuilder::VisitCallNew(CallNew* expr) {
   CHECK_BAILOUT;
 
   int argument_count = expr->arguments()->length() + 1;  // Plus constructor.
-  HCall* call = new HCallNew(argument_count);
+  HContext* context = new HContext;
+  AddInstruction(context);
+  HCall* call = new HCallNew(context, argument_count);
   call->set_position(expr->position());
   ProcessCall(call);
   ast_context()->ReturnInstruction(call, expr->id());
@@ -4788,7 +4840,7 @@ void HGraphBuilder::VisitCountOperation(CountOperation* expr) {
 
       HInstruction* store = is_fast_elements
           ? BuildStoreKeyedFastElement(obj, key, after, prop)
-          : new HStoreKeyedGeneric(obj, key, after);
+          : BuildStoreKeyedGeneric(obj, key, after);
       AddInstruction(store);
 
       // Drop the key from the bailout environment.  Overwrite the receiver
@@ -5045,7 +5097,9 @@ void HGraphBuilder::VisitCompareOperation(CompareOperation* expr) {
     // If the target is not null we have found a known global function that is
     // assumed to stay the same for this instanceof.
     if (target.is_null()) {
-      instr = new HInstanceOf(left, right);
+      HContext* context = new HContext;
+      AddInstruction(context);
+      instr = new HInstanceOf(context, left, right);
     } else {
       AddInstruction(new HCheckFunction(right, target));
       instr = new HInstanceOfKnownGlobal(left, target);
@@ -5256,7 +5310,10 @@ void HGraphBuilder::GenerateStringCharFromCode(int argument_count,
 void HGraphBuilder::GenerateStringCharAt(int argument_count, int ast_id) {
   ASSERT_EQ(2, argument_count);
   PushArgumentsForStubCall(argument_count);
-  HCallStub* result = new HCallStub(CodeStub::StringCharAt, argument_count);
+  HContext* context = new HContext;
+  AddInstruction(context);
+  HCallStub* result =
+      new HCallStub(context, CodeStub::StringCharAt, argument_count);
   ast_context()->ReturnInstruction(result, ast_id);
 }
 
@@ -5286,7 +5343,10 @@ void HGraphBuilder::GenerateRandomHeapNumber(int argument_count, int ast_id) {
 void HGraphBuilder::GenerateStringAdd(int argument_count, int ast_id) {
   ASSERT_EQ(2, argument_count);
   PushArgumentsForStubCall(argument_count);
-  HCallStub* result = new HCallStub(CodeStub::StringAdd, argument_count);
+  HContext* context = new HContext;
+  AddInstruction(context);
+  HCallStub* result =
+      new HCallStub(context, CodeStub::StringAdd, argument_count);
   ast_context()->ReturnInstruction(result, ast_id);
 }
 
@@ -5295,7 +5355,10 @@ void HGraphBuilder::GenerateStringAdd(int argument_count, int ast_id) {
 void HGraphBuilder::GenerateSubString(int argument_count, int ast_id) {
   ASSERT_EQ(3, argument_count);
   PushArgumentsForStubCall(argument_count);
-  HCallStub* result = new HCallStub(CodeStub::SubString, argument_count);
+  HContext* context = new HContext;
+  AddInstruction(context);
+  HCallStub* result =
+      new HCallStub(context, CodeStub::SubString, argument_count);
   ast_context()->ReturnInstruction(result, ast_id);
 }
 
@@ -5304,7 +5367,10 @@ void HGraphBuilder::GenerateSubString(int argument_count, int ast_id) {
 void HGraphBuilder::GenerateStringCompare(int argument_count, int ast_id) {
   ASSERT_EQ(2, argument_count);
   PushArgumentsForStubCall(argument_count);
-  HCallStub* result = new HCallStub(CodeStub::StringCompare, argument_count);
+  HContext* context = new HContext;
+  AddInstruction(context);
+  HCallStub* result =
+      new HCallStub(context, CodeStub::StringCompare, argument_count);
   ast_context()->ReturnInstruction(result, ast_id);
 }
 
@@ -5313,7 +5379,10 @@ void HGraphBuilder::GenerateStringCompare(int argument_count, int ast_id) {
 void HGraphBuilder::GenerateRegExpExec(int argument_count, int ast_id) {
   ASSERT_EQ(4, argument_count);
   PushArgumentsForStubCall(argument_count);
-  HCallStub* result = new HCallStub(CodeStub::RegExpExec, argument_count);
+  HContext* context = new HContext;
+  AddInstruction(context);
+  HCallStub* result =
+      new HCallStub(context, CodeStub::RegExpExec, argument_count);
   ast_context()->ReturnInstruction(result, ast_id);
 }
 
@@ -5323,8 +5392,10 @@ void HGraphBuilder::GenerateRegExpConstructResult(int argument_count,
                                                   int ast_id) {
   ASSERT_EQ(3, argument_count);
   PushArgumentsForStubCall(argument_count);
+  HContext* context = new HContext;
+  AddInstruction(context);
   HCallStub* result =
-      new HCallStub(CodeStub::RegExpConstructResult, argument_count);
+      new HCallStub(context, CodeStub::RegExpConstructResult, argument_count);
   ast_context()->ReturnInstruction(result, ast_id);
 }
 
@@ -5339,7 +5410,10 @@ void HGraphBuilder::GenerateGetFromCache(int argument_count, int ast_id) {
 void HGraphBuilder::GenerateNumberToString(int argument_count, int ast_id) {
   ASSERT_EQ(1, argument_count);
   PushArgumentsForStubCall(argument_count);
-  HCallStub* result = new HCallStub(CodeStub::NumberToString, argument_count);
+  HContext* context = new HContext;
+  AddInstruction(context);
+  HCallStub* result =
+      new HCallStub(context, CodeStub::NumberToString, argument_count);
   ast_context()->ReturnInstruction(result, ast_id);
 }
 
@@ -5371,8 +5445,10 @@ void HGraphBuilder::GenerateMathPow(int argument_count, int ast_id) {
 void HGraphBuilder::GenerateMathSin(int argument_count, int ast_id) {
   ASSERT_EQ(1, argument_count);
   PushArgumentsForStubCall(argument_count);
+  HContext* context = new HContext;
+  AddInstruction(context);
   HCallStub* result =
-      new HCallStub(CodeStub::TranscendentalCache, argument_count);
+      new HCallStub(context, CodeStub::TranscendentalCache, argument_count);
   result->set_transcendental_type(TranscendentalCache::SIN);
   ast_context()->ReturnInstruction(result, ast_id);
 }
@@ -5381,8 +5457,10 @@ void HGraphBuilder::GenerateMathSin(int argument_count, int ast_id) {
 void HGraphBuilder::GenerateMathCos(int argument_count, int ast_id) {
   ASSERT_EQ(1, argument_count);
   PushArgumentsForStubCall(argument_count);
+  HContext* context = new HContext;
+  AddInstruction(context);
   HCallStub* result =
-      new HCallStub(CodeStub::TranscendentalCache, argument_count);
+      new HCallStub(context, CodeStub::TranscendentalCache, argument_count);
   result->set_transcendental_type(TranscendentalCache::COS);
   ast_context()->ReturnInstruction(result, ast_id);
 }
@@ -5391,8 +5469,10 @@ void HGraphBuilder::GenerateMathCos(int argument_count, int ast_id) {
 void HGraphBuilder::GenerateMathLog(int argument_count, int ast_id) {
   ASSERT_EQ(1, argument_count);
   PushArgumentsForStubCall(argument_count);
+  HContext* context = new HContext;
+  AddInstruction(context);
   HCallStub* result =
-      new HCallStub(CodeStub::TranscendentalCache, argument_count);
+      new HCallStub(context, CodeStub::TranscendentalCache, argument_count);
   result->set_transcendental_type(TranscendentalCache::LOG);
   ast_context()->ReturnInstruction(result, ast_id);
 }
