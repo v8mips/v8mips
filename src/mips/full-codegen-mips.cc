@@ -1979,7 +1979,10 @@ void FullCodeGenerator::VisitCall(Call* expr) {
       __ lw(a1,
             MemOperand(fp, (2 + scope()->num_parameters()) * kPointerSize));
       __ push(a1);
-      __ CallRuntime(Runtime::kResolvePossiblyDirectEval, 3);
+      // Push the strict mode flag.
+      __ li(a1, Operand(Smi::FromInt(strict_mode_flag())));
+      __ push(a1);
+      __ CallRuntime(Runtime::kResolvePossiblyDirectEval, 4);
 
       // The runtime call returns a pair of values in v0 (function) and
       // v1 (receiver). Touch up the stack with the right values.
