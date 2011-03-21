@@ -3499,6 +3499,12 @@ FunctionLiteral* Parser::ParseFunctionLiteral(Handle<String> var_name,
       Variable* parameter = top_scope_->DeclareLocal(param_name, Variable::VAR);
       top_scope_->AddParameter(parameter);
       num_parameters++;
+      if (num_parameters > kMaxNumFunctionParameters) {
+        ReportMessageAt(scanner().location(), "too_many_parameters",
+                        Vector<const char*>::empty());
+        *ok = false;
+        return NULL;
+      }
       done = (peek() == Token::RPAREN);
       if (!done) Expect(Token::COMMA, CHECK_OK);
     }
