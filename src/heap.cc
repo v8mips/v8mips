@@ -1947,6 +1947,14 @@ void Heap::CreateJSConstructEntryStub() {
 }
 
 
+#if V8_TARGET_ARCH_ARM
+void Heap::CreateDirectCEntryStub() {
+  DirectCEntryStub stub;
+  set_direct_c_entry_code(*stub.GetCode());
+}
+#endif
+
+
 void Heap::CreateFixedStubs() {
   // Here we create roots for fixed stubs. They are needed at GC
   // for cooking and uncooking (check out frames.cc).
@@ -1966,6 +1974,9 @@ void Heap::CreateFixedStubs() {
   Heap::CreateJSConstructEntryStub();
 #if (V8_TARGET_ARCH_ARM || V8_TARGET_ARCH_MIPS) && !V8_INTERPRETED_REGEXP
   Heap::CreateRegExpCEntryStub();
+#endif
+#if V8_TARGET_ARCH_ARM
+  Heap::CreateDirectCEntryStub();
 #endif
 }
 
