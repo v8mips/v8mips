@@ -348,18 +348,25 @@ void VirtualFrame::CallLoadIC(Handle<String> name, RelocInfo::Mode mode) {
 }
 
 
-void VirtualFrame::CallStoreIC(Handle<String> name, bool is_contextual) {
-  Handle<Code> ic(Builtins::builtin(Builtins::StoreIC_Initialize));
+void VirtualFrame::CallStoreIC(Handle<String> name,
+                               bool is_contextual,
+                               StrictModeFlag strict_mode) {
+  Handle<Code> ic(Builtins::builtin(strict_mode == kStrictMode
+      ? Builtins::StoreIC_Initialize_Strict
+      : Builtins::StoreIC_Initialize));
   PopToA0();
+  RelocInfo::Mode mode;
   if (is_contextual) {
     SpillAll();
     __ lw(a1, MemOperand(cp, Context::SlotOffset(Context::GLOBAL_INDEX)));
+    mode = RelocInfo::CODE_TARGET_CONTEXT;
   } else {
     EmitPop(a1);
     SpillAll();
+    mode = RelocInfo::CODE_TARGET;
   }
   __ li(a2, Operand(name));
-  CallCodeObject(ic, RelocInfo::CODE_TARGET, 0);
+  CallCodeObject(ic, mode, 0);
 }
 
 
