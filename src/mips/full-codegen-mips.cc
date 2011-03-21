@@ -1582,20 +1582,8 @@ void FullCodeGenerator::EmitBinaryOp(Token::Value op,
                                      OverwriteMode mode) {
   __ mov(a0, result_register());
   __ pop(a1);
-  if (op == Token::ADD ||
-      op == Token::SUB ||
-      op == Token::MUL ||
-      op == Token::DIV ||
-      op == Token::MOD ||
-      op == Token::BIT_OR ||
-      op == Token::BIT_AND ||
-      op == Token::BIT_XOR) {
-    TypeRecordingBinaryOpStub stub(op, mode);
-    __ CallStub(&stub);
-  } else {
-    GenericBinaryOpStub stub(op, mode, a1, a0);
-    __ CallStub(&stub);
-  }
+  TypeRecordingBinaryOpStub stub(op, mode);
+  __ CallStub(&stub);
   context()->Plug(v0);
 }
 

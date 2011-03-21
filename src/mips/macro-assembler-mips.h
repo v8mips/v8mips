@@ -702,6 +702,10 @@ void DropAndRet(int drop = 0,
   //   index - holds the overwritten index on exit.
   void IndexFromHash(Register hash, Register index);
 
+  // Get the number of least significant bits from a register
+  void GetLeastBitsFromSmi(Register dst, Register src, int num_least_bits);
+  void GetLeastBitsFromInt32(Register dst, Register src, int mun_least_bits);
+
   // Load the value of a number object into a FPU double register. If the
   // object is not a number a jump to the label not_number is performed
   // and the FPU double register is unchanged.

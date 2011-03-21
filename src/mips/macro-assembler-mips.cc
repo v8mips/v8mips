@@ -910,6 +910,20 @@ void MacroAssembler::ConvertToInt32(Register source,
 }
 
 
+void MacroAssembler::GetLeastBitsFromSmi(Register dst,
+                                         Register src,
+                                         int num_least_bits) {
+  Ext(dst, src, kSmiTagSize, num_least_bits);
+}
+
+
+void MacroAssembler::GetLeastBitsFromInt32(Register dst,
+                                           Register src,
+                                           int num_least_bits) {
+  And(dst, src, Operand((1 << num_least_bits) - 1));
+}
+
+
 // Emulated condtional branches do not emit a nop in the branch delay slot.
 //
 // BRANCH_ARGS_CHECK checks that conditional jump arguments are correct.
