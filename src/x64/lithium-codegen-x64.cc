@@ -711,7 +711,8 @@ void LCodeGen::DoCallStub(LCallStub* instr) {
       break;
     }
     case CodeStub::TranscendentalCache: {
-      TranscendentalCacheStub stub(instr->transcendental_type());
+      TranscendentalCacheStub stub(instr->transcendental_type(),
+                                   TranscendentalCacheStub::TAGGED);
       CallCode(stub.GetCode(), RelocInfo::CODE_TARGET, instr);
       break;
     }
@@ -1579,7 +1580,20 @@ static Condition BranchCondition(HHasInstanceType* instr) {
 
 
 void LCodeGen::DoHasInstanceType(LHasInstanceType* instr) {
-  Abort("Unimplemented: %s", "DoHasInstanceType");
+  Register input = ToRegister(instr->InputAt(0));
+  Register result = ToRegister(instr->result());
+
+  ASSERT(instr->hydrogen()->value()->representation().IsTagged());
+  __ testl(input, Immediate(kSmiTagMask));
+  NearLabel done, is_false;
+  __ j(zero, &is_false);
+  __ CmpObjectType(input, TestType(instr->hydrogen()), result);
+  __ j(NegateCondition(BranchCondition(instr->hydrogen())), &is_false);
+  __ LoadRoot(result, Heap::kTrueValueRootIndex);
+  __ jmp(&done);
+  __ bind(&is_false);
+  __ LoadRoot(result, Heap::kFalseValueRootIndex);
+  __ bind(&done);
 }
 
 
@@ -2453,17 +2467,26 @@ void LCodeGen::DoPower(LPower* instr) {
 
 
 void LCodeGen::DoMathLog(LUnaryMathOperation* instr) {
-  Abort("Unimplemented: %s", "DoMathLog");
+  ASSERT(ToDoubleRegister(instr->result()).is(xmm1));
+  TranscendentalCacheStub stub(TranscendentalCache::LOG,
+                               TranscendentalCacheStub::UNTAGGED);
+  CallCode(stub.GetCode(), RelocInfo::CODE_TARGET, instr);
 }
 
 
 void LCodeGen::DoMathCos(LUnaryMathOperation* instr) {
-  Abort("Unimplemented: %s", "DoMathCos");
+  ASSERT(ToDoubleRegister(instr->result()).is(xmm1));
+  TranscendentalCacheStub stub(TranscendentalCache::LOG,
+                               TranscendentalCacheStub::UNTAGGED);
+  CallCode(stub.GetCode(), RelocInfo::CODE_TARGET, instr);
 }
 
 
 void LCodeGen::DoMathSin(LUnaryMathOperation* instr) {
-  Abort("Unimplemented: %s", "DoMathSin");
+  ASSERT(ToDoubleRegister(instr->result()).is(xmm1));
+  TranscendentalCacheStub stub(TranscendentalCache::LOG,
+                               TranscendentalCacheStub::UNTAGGED);
+  CallCode(stub.GetCode(), RelocInfo::CODE_TARGET, instr);
 }
 
 
@@ -2507,6 +2530,7 @@ void LCodeGen::DoCallKeyed(LCallKeyed* instr) {
   int arity = instr->arity();
   Handle<Code> ic = StubCache::ComputeKeyedCallInitialize(arity, NOT_IN_LOOP);
   CallCode(ic, RelocInfo::CODE_TARGET, instr);
+  __ movq(rsi, Operand(rbp, StandardFrameConstants::kContextOffset));
 }
 
 
