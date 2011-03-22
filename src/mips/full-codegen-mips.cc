@@ -818,10 +818,6 @@ void FullCodeGenerator::VisitForInStatement(ForInStatement* stmt) {
   ForIn loop_statement(this, stmt);
   increment_loop_depth();
 
-  // Load null value as it is used several times below.
-  Register null_value = t1;
-  __ LoadRoot(null_value, Heap::kNullValueRootIndex);
-
   // Get the object to enumerate over. Both SpiderMonkey and JSC
   // ignore null and undefined in contrast to the specification; see
   // ECMA-262 section 12.6.4.
@@ -829,6 +825,8 @@ void FullCodeGenerator::VisitForInStatement(ForInStatement* stmt) {
   __ mov(a0, result_register());  // Result as param to InvokeBuiltin below.
   __ LoadRoot(at, Heap::kUndefinedValueRootIndex);
   __ Branch(&exit, eq, a0, Operand(at));
+  Register null_value = t1;
+  __ LoadRoot(null_value, Heap::kNullValueRootIndex);
   __ Branch(&exit, eq, a0, Operand(null_value));
 
   // Convert the object to a JS object.
