@@ -4217,6 +4217,14 @@ static MaybeObject* Runtime_LocalKeys(Arguments args) {
   Handle<JSObject> object(raw_object);
 
   if (object->IsJSGlobalProxy()) {
+    // Do access checks before going to the global object.
+    if (object->IsAccessCheckNeeded() &&
+        !Top::MayNamedAccess(*object, Heap::undefined_value(),
+                             v8::ACCESS_KEYS)) {
+      Top::ReportFailedAccessCheck(*object, v8::ACCESS_KEYS);
+      return *Factory::NewJSArray(0);
+    }
+
     Handle<Object> proto(object->GetPrototype());
     // If proxy is detached we simply return an empty array.
     if (proto->IsNull()) return *Factory::NewJSArray(0);
@@ -5841,7 +5849,12 @@ static MaybeObject* Runtime_StringBuilderJoin(Arguments args) {
   }
   int length = (array_length - 1) * separator_length;
   for (int i = 0; i < array_length; i++) {
-    String* element = String::cast(fixed_array->get(i));
+    Object* element_obj = fixed_array->get(i);
+    if (!element_obj->IsString()) {
+      // TODO(1161): handle this case.
+      return Top::Throw(Heap::illegal_argument_symbol());
+    }
+    String* element = String::cast(element_obj);
     int increment = element->length();
     if (increment > String::kMaxLength - length) {
       Top::context()->mark_out_of_memory();
@@ -8348,7 +8361,7 @@ static MaybeObject* Runtime_ArrayConcat(Arguments args) {
     }
   }
 
-  // Allocate an empty array, will set length and content later.
+  // Allocate an empty array, will set map, length, and content later.
   Handle<JSArray> result = Factory::NewJSArray(0);
 
   uint32_t estimate_nof_elements = IterateArguments(arguments, NULL);
@@ -8357,23 +8370,20 @@ static MaybeObject* Runtime_ArrayConcat(Arguments args) {
   // dictionary.
   bool fast_case = (estimate_nof_elements * 2) >= result_length;
 
+  Handle<Map> map;
   Handle<FixedArray> storage;
   if (fast_case) {
     // The backing storage array must have non-existing elements to
     // preserve holes across concat operations.
+    map = Factory::GetFastElementsMap(Handle<Map>(result->map()));
     storage = Factory::NewFixedArrayWithHoles(result_length);
-    Handle<Map> fast_map =
-        Factory::GetFastElementsMap(Handle<Map>(result->map()));
-    result->set_map(*fast_map);
   } else {
+    map = Factory::GetSlowElementsMap(Handle<Map>(result->map()));
     // TODO(126): move 25% pre-allocation logic into Dictionary::Allocate
     uint32_t at_least_space_for = estimate_nof_elements +
                                   (estimate_nof_elements >> 2);
     storage = Handle<FixedArray>::cast(
-                  Factory::NewNumberDictionary(at_least_space_for));
-    Handle<Map> slow_map =
-        Factory::GetSlowElementsMap(Handle<Map>(result->map()));
-    result->set_map(*slow_map);
+        Factory::NewNumberDictionary(at_least_space_for));
   }
 
   Handle<Object> len = Factory::NewNumber(static_cast<double>(result_length));
@@ -8382,8 +8392,12 @@ static MaybeObject* Runtime_ArrayConcat(Arguments args) {
 
   IterateArguments(arguments, &visitor);
 
+  // Please note:
+  // - the storage might have been changed in the visitor;
+  // - the map and the storage must be set together to avoid breaking
+  //   the invariant that the map describes the array's elements.
+  result->set_map(*map);
   result->set_length(*len);
-  // Please note the storage might have changed in the visitor.
   result->set_elements(*visitor.storage());
 
   return *result;
