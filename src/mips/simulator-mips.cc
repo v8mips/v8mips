@@ -1240,15 +1240,15 @@ void Simulator::SoftwareInterrupt(Instruction* instr) {
       SimulatorRuntimeCall target =
                   reinterpret_cast<SimulatorRuntimeCall>(external);
       if (::v8::internal::FLAG_trace_sim) {
-            PrintF(
-                "Call to host function at %p args %08x, %08x, %08x, %08x, %0xc\n",
-                FUNCTION_ADDR(target),
-                arg0,
-                arg1,
-                arg2,
-                arg3,
-                arg4);
-          }
+        PrintF(
+            "Call to host function at %p args %08x, %08x, %08x, %08x, %0xc\n",
+            FUNCTION_ADDR(target),
+            arg0,
+            arg1,
+            arg2,
+            arg3,
+            arg4);
+      }
       int64_t result = target(arg0, arg1, arg2, arg3, arg4);
       set_register(v0, static_cast<int32_t>(result));
       set_register(v1, static_cast<int32_t>(result >> 32));
