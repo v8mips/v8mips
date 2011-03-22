@@ -138,7 +138,7 @@ Heap::HeapState Heap::gc_state_ = NOT_IN_GC;
 
 int Heap::mc_count_ = 0;
 int Heap::ms_count_ = 0;
-int Heap::gc_count_ = 0;
+unsigned int Heap::gc_count_ = 0;
 
 GCTracer* Heap::tracer_ = NULL;
 
@@ -2928,9 +2928,8 @@ MaybeObject* Heap::AllocateFunctionPrototype(JSFunction* function) {
   // constructor to the function.
   Object* result;
   { MaybeObject* maybe_result =
-        JSObject::cast(prototype)->SetProperty(constructor_symbol(),
-                                               function,
-                                               DONT_ENUM);
+        JSObject::cast(prototype)->SetLocalPropertyIgnoreAttributes(
+            constructor_symbol(), function, DONT_ENUM);
     if (!maybe_result->ToObject(&result)) return maybe_result;
   }
   return prototype;
@@ -3801,9 +3800,9 @@ bool Heap::IdleNotification() {
   static const int kIdlesBeforeMarkSweep = 7;
   static const int kIdlesBeforeMarkCompact = 8;
   static const int kMaxIdleCount = kIdlesBeforeMarkCompact + 1;
-  static const int kGCsBetweenCleanup = 4;
+  static const unsigned int kGCsBetweenCleanup = 4;
   static int number_idle_notifications = 0;
-  static int last_gc_count = gc_count_;
+  static unsigned int last_gc_count = gc_count_;
 
   bool uncommit = true;
   bool finished = false;
@@ -3812,7 +3811,7 @@ bool Heap::IdleNotification() {
   // GCs have taken place. This allows another round of cleanup based
   // on idle notifications if enough work has been carried out to
   // provoke a number of garbage collections.
-  if (gc_count_ < last_gc_count + kGCsBetweenCleanup) {
+  if (gc_count_ - last_gc_count < kGCsBetweenCleanup) {
     number_idle_notifications =
         Min(number_idle_notifications + 1, kMaxIdleCount);
   } else {

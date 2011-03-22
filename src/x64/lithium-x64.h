@@ -147,6 +147,7 @@ class LCodeGen;
   V(StoreNamedField)                            \
   V(StoreNamedGeneric)                          \
   V(StorePixelArrayElement)                     \
+  V(StringCharCodeAt)                           \
   V(StringLength)                               \
   V(SubI)                                       \
   V(TaggedToI)                                  \
@@ -1005,11 +1006,10 @@ class LFixedArrayLength: public LTemplateInstruction<1, 1, 0> {
 };
 
 
-class LValueOf: public LTemplateInstruction<1, 1, 1> {
+class LValueOf: public LTemplateInstruction<1, 1, 0> {
  public:
-  LValueOf(LOperand* value, LOperand* temp) {
+  explicit LValueOf(LOperand* value) {
     inputs_[0] = value;
-    temps_[0] = temp;
   }
 
   DECLARE_CONCRETE_INSTRUCTION(ValueOf, "value-of")
@@ -1472,9 +1472,9 @@ class LSmiUntag: public LTemplateInstruction<1, 1, 0> {
 
 class LStoreNamed: public LTemplateInstruction<0, 2, 1> {
  public:
-  LStoreNamed(LOperand* obj, LOperand* val) {
-    inputs_[0] = obj;
-    inputs_[1] = val;
+  LStoreNamed(LOperand* object, LOperand* value) {
+    inputs_[0] = object;
+    inputs_[1] = value;
   }
 
   DECLARE_INSTRUCTION(StoreNamed)
@@ -1490,8 +1490,8 @@ class LStoreNamed: public LTemplateInstruction<0, 2, 1> {
 
 class LStoreNamedField: public LStoreNamed {
  public:
-  LStoreNamedField(LOperand* obj, LOperand* val, LOperand* temp)
-      : LStoreNamed(obj, val) {
+  LStoreNamedField(LOperand* object, LOperand* value, LOperand* temp)
+      : LStoreNamed(object, value) {
     temps_[0] = temp;
   }
 
@@ -1507,8 +1507,8 @@ class LStoreNamedField: public LStoreNamed {
 
 class LStoreNamedGeneric: public LStoreNamed {
  public:
-  LStoreNamedGeneric(LOperand* obj, LOperand* val)
-      : LStoreNamed(obj, val) { }
+  LStoreNamedGeneric(LOperand* object, LOperand* value)
+      : LStoreNamed(object, value) { }
 
   DECLARE_CONCRETE_INSTRUCTION(StoreNamedGeneric, "store-named-generic")
   DECLARE_HYDROGEN_ACCESSOR(StoreNamedGeneric)
@@ -1566,10 +1566,25 @@ class LStorePixelArrayElement: public LTemplateInstruction<0, 3, 0> {
 
 class LStoreKeyedGeneric: public LStoreKeyed {
  public:
-  LStoreKeyedGeneric(LOperand* obj, LOperand* key, LOperand* val)
-      : LStoreKeyed(obj, key, val) { }
+  LStoreKeyedGeneric(LOperand* object, LOperand* key, LOperand* value)
+      : LStoreKeyed(object, key, value) { }
 
   DECLARE_CONCRETE_INSTRUCTION(StoreKeyedGeneric, "store-keyed-generic")
+};
+
+
+class LStringCharCodeAt: public LTemplateInstruction<1, 2, 0> {
+ public:
+  LStringCharCodeAt(LOperand* string, LOperand* index) {
+    inputs_[0] = string;
+    inputs_[1] = index;
+  }
+
+  DECLARE_CONCRETE_INSTRUCTION(StringCharCodeAt, "string-char-code-at")
+  DECLARE_HYDROGEN_ACCESSOR(StringCharCodeAt)
+
+  LOperand* string() { return inputs_[0]; }
+  LOperand* index() { return inputs_[1]; }
 };
 
 

@@ -1836,7 +1836,7 @@ void LCodeGen::DoDeferredLInstanceOfKnownGlobal(LInstanceOfKnownGlobal* instr,
   Label before_push_delta;
   __ bind(&before_push_delta);
   __ mov(temp, Immediate(delta));
-  __ mov(Operand(esp, EspIndexForPushAll(temp) * kPointerSize), temp);
+  __ StoreToSafepointRegisterSlot(temp, temp);
   __ mov(esi, Operand(ebp, StandardFrameConstants::kContextOffset));
   __ call(stub.GetCode(), RelocInfo::CODE_TARGET);
   ASSERT_EQ(kAdditionalDelta,
@@ -1844,8 +1844,7 @@ void LCodeGen::DoDeferredLInstanceOfKnownGlobal(LInstanceOfKnownGlobal* instr,
   RecordSafepointWithRegisters(
       instr->pointer_map(), 0, Safepoint::kNoDeoptimizationIndex);
   // Put the result value into the eax slot and restore all registers.
-  __ mov(Operand(esp, EspIndexForPushAll(eax) * kPointerSize), eax);
-
+  __ StoreToSafepointRegisterSlot(eax, eax);
   __ PopSafepointRegisters();
 }
 
@@ -2360,7 +2359,7 @@ void LCodeGen::DoDeferredMathAbsTaggedHeapNumber(LUnaryMathOperation* instr) {
   if (!tmp.is(eax)) __ mov(tmp, eax);
 
   // Restore input_reg after call to runtime.
-  __ mov(input_reg, Operand(esp, EspIndexForPushAll(input_reg) * kPointerSize));
+  __ LoadFromSafepointRegisterSlot(input_reg, input_reg);
 
   __ bind(&allocated);
   __ mov(tmp2, FieldOperand(input_reg, HeapNumber::kExponentOffset));
@@ -2368,7 +2367,7 @@ void LCodeGen::DoDeferredMathAbsTaggedHeapNumber(LUnaryMathOperation* instr) {
   __ mov(FieldOperand(tmp, HeapNumber::kExponentOffset), tmp2);
   __ mov(tmp2, FieldOperand(input_reg, HeapNumber::kMantissaOffset));
   __ mov(FieldOperand(tmp, HeapNumber::kMantissaOffset), tmp2);
-  __ mov(Operand(esp, EspIndexForPushAll(input_reg) * kPointerSize), tmp);
+  __ StoreToSafepointRegisterSlot(input_reg, tmp);
 
   __ bind(&done);
   __ PopSafepointRegisters();
@@ -2493,11 +2492,6 @@ void LCodeGen::DoMathPowHalf(LUnaryMathOperation* instr) {
   XMMRegister xmm_scratch = xmm0;
   XMMRegister input_reg = ToDoubleRegister(instr->InputAt(0));
   ASSERT(ToDoubleRegister(instr->result()).is(input_reg));
-  ExternalReference negative_infinity =
-      ExternalReference::address_of_negative_infinity();
-  __ movdbl(xmm_scratch, Operand::StaticVariable(negative_infinity));
-  __ ucomisd(xmm_scratch, input_reg);
-  DeoptimizeIf(equal, instr->environment());
   __ xorpd(xmm_scratch, xmm_scratch);
   __ addsd(input_reg, xmm_scratch);  // Convert -0 to +0.
   __ sqrtsd(input_reg, input_reg);
@@ -2859,19 +2853,20 @@ void LCodeGen::DoStringCharCodeAt(LStringCharCodeAt* instr) {
   __ test(result, Immediate(kStringRepresentationMask));
   __ j(not_zero, deferred->entry());
 
-  // Check for 1-byte or 2-byte string.
+  // Check for ASCII or two-byte string.
   __ bind(&flat_string);
   STATIC_ASSERT(kAsciiStringTag != 0);
   __ test(result, Immediate(kStringEncodingMask));
   __ j(not_zero, &ascii_string);
 
-  // 2-byte string.
-  // Load the 2-byte character code into the result register.
+  // Two-byte string.
+  // Load the two-byte character code into the result register.
   STATIC_ASSERT(kSmiTag == 0 && kSmiTagSize == 1);
   if (instr->index()->IsConstantOperand()) {
     __ movzx_w(result,
                FieldOperand(string,
-                            SeqTwoByteString::kHeaderSize + 2 * const_index));
+                            SeqTwoByteString::kHeaderSize +
+                            (kUC16Size * const_index)));
   } else {
     __ movzx_w(result, FieldOperand(string,
                                     index,
@@ -2927,7 +2922,7 @@ void LCodeGen::DoDeferredStringCharCodeAt(LStringCharCodeAt* instr) {
     __ AbortIfNotSmi(eax);
   }
   __ SmiUntag(eax);
-  __ mov(Operand(esp, EspIndexForPushAll(result) * kPointerSize), eax);
+  __ StoreToSafepointRegisterSlot(result, eax);
   __ PopSafepointRegisters();
 }
 
@@ -2995,7 +2990,7 @@ void LCodeGen::DoDeferredNumberTagI(LNumberTagI* instr) {
   // TODO(3095996): Put a valid pointer value in the stack slot where the result
   // register is stored, as this register is in the pointer map, but contains an
   // integer value.
-  __ mov(Operand(esp, EspIndexForPushAll(reg) * kPointerSize), Immediate(0));
+  __ StoreToSafepointRegisterSlot(reg, Immediate(0));
 
   __ mov(esi, Operand(ebp, StandardFrameConstants::kContextOffset));
   __ CallRuntimeSaveDoubles(Runtime::kAllocateHeapNumber);
@@ -3007,7 +3002,7 @@ void LCodeGen::DoDeferredNumberTagI(LNumberTagI* instr) {
   // number.
   __ bind(&done);
   __ movdbl(FieldOperand(reg, HeapNumber::kValueOffset), xmm0);
-  __ mov(Operand(esp, EspIndexForPushAll(reg) * kPointerSize), reg);
+  __ StoreToSafepointRegisterSlot(reg, reg);
   __ PopSafepointRegisters();
 }
 
@@ -3049,7 +3044,7 @@ void LCodeGen::DoDeferredNumberTagD(LNumberTagD* instr) {
   __ CallRuntimeSaveDoubles(Runtime::kAllocateHeapNumber);
   RecordSafepointWithRegisters(
       instr->pointer_map(), 0, Safepoint::kNoDeoptimizationIndex);
-  __ mov(Operand(esp, EspIndexForPushAll(reg) * kPointerSize), eax);
+  __ StoreToSafepointRegisterSlot(reg, eax);
   __ PopSafepointRegisters();
 }
 
