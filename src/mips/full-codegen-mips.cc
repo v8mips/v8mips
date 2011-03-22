@@ -3067,8 +3067,8 @@ void FullCodeGenerator::VisitUnaryOperation(UnaryOperation* expr) {
         }
       } else if (var != NULL) {
         // Delete of an unqualified identifier is disallowed in strict mode
-        // so this code can only be reached in non-strict mode.
-        ASSERT(strict_mode_flag() == kNonStrictMode);
+        // but "delete this" is.
+        ASSERT(strict_mode_flag() == kNonStrictMode || var->is_this());
         if (var->is_global()) {
           __ lw(a2, GlobalObjectOperand());
           __ li(a1, Operand(var->name()));
