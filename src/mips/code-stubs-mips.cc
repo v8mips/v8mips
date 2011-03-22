@@ -1373,6 +1373,9 @@ void CompareStub::Generate(MacroAssembler* masm) {
 // This stub does not handle the inlined cases (Smis, Booleans, undefined).
 // The stub returns zero for false, and a non-zero value for true.
 void ToBooleanStub::Generate(MacroAssembler* masm) {
+  // This stub uses FPU instructions.
+  ASSERT(CpuFeatures::IsEnabled(FPU));
+
   Label false_result;
   Label not_heap_number;
   Register scratch0 = VirtualFrame::scratch0();
@@ -1380,7 +1383,7 @@ void ToBooleanStub::Generate(MacroAssembler* masm) {
   __ LoadRoot(scratch0, Heap::kNullValueRootIndex);
   __ Branch(&false_result, eq, tos_, Operand(scratch0));
 
-  // HeapNumber => false iff +0, -0, or NaN.
+  // HeapNumber => false if +0, -0, or NaN.
   __ lw(scratch0, FieldMemOperand(tos_, HeapObject::kMapOffset));
   __ LoadRoot(at, Heap::kHeapNumberMapRootIndex);
   __ Branch(&not_heap_number, ne, scratch0, Operand(at));

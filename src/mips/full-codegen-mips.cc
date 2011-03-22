@@ -509,23 +509,33 @@ void FullCodeGenerator::TestContext::Plug(bool flag) const {
 void FullCodeGenerator::DoTest(Label* if_true,
                                Label* if_false,
                                Label* fall_through) {
-  // Emit the inlined tests assumed by the stub.
-  __ LoadRoot(at, Heap::kUndefinedValueRootIndex);
-  __ Branch(if_false, eq, result_register(), Operand(at));
-  __ LoadRoot(at, Heap::kTrueValueRootIndex);
-  __ Branch(if_true, eq, result_register(), Operand(at));
-  __ LoadRoot(at, Heap::kFalseValueRootIndex);
-  __ Branch(if_false, eq, result_register(), Operand(at));
-  STATIC_ASSERT(kSmiTag == 0);
-  __ Branch(if_false, eq, result_register(), Operand(zero_reg));
-  __ JumpIfSmi(result_register(), if_true);
+  if (CpuFeatures::IsSupported(FPU)) {
+    CpuFeatures::Scope scope(FPU);
+    // Emit the inlined tests assumed by the stub.
+    __ LoadRoot(at, Heap::kUndefinedValueRootIndex);
+    __ Branch(if_false, eq, result_register(), Operand(at));
+    __ LoadRoot(at, Heap::kTrueValueRootIndex);
+    __ Branch(if_true, eq, result_register(), Operand(at));
+    __ LoadRoot(at, Heap::kFalseValueRootIndex);
+    __ Branch(if_false, eq, result_register(), Operand(at));
+    STATIC_ASSERT(kSmiTag == 0);
+    __ Branch(if_false, eq, result_register(), Operand(zero_reg));
+    __ JumpIfSmi(result_register(), if_true);
 
-  // Call the ToBoolean stub for all other cases.
-  ToBooleanStub stub(result_register());
-  __ CallStub(&stub);
+    // Call the ToBoolean stub for all other cases.
+    ToBooleanStub stub(result_register());
+    __ CallStub(&stub);
+    __ mov(at, zero_reg);
+  } else {
+    // Call the runtime to find the boolean value of the source and then
+    // translate it into control flow to the pair of labels.
+    __ push(result_register());
+    __ CallRuntime(Runtime::kToBool, 1);
+    __ LoadRoot(at, Heap::kFalseValueRootIndex);
+  }
 
   // The stub returns nonzero for true.
-  Split(ne, v0, Operand(zero_reg), if_true, if_false, fall_through);
+  Split(ne, v0, Operand(at), if_true, if_false, fall_through);
 }
 
 
