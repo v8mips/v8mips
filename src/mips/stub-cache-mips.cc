@@ -3181,6 +3181,47 @@ MaybeObject* KeyedStoreStubCompiler::CompileStoreSpecialized(
 }
 
 
+MaybeObject* KeyedStoreStubCompiler::CompileStorePixelArray(
+    JSObject* receiver) {
+  // ----------- S t a t e -------------
+  //  -- a0    : value
+  //  -- a1    : key
+  //  -- a2    : receiver
+  //  -- a3    : scratch
+  //  -- t0    : scratch
+  //  -- t1    : scratch
+  //  -- t2    : scratch
+  //  -- ra    : return address
+  // -----------------------------------
+  Label miss;
+
+  // Check that the map matches.
+  __ CheckMap(a2, t2, Handle<Map>(receiver->map()), &miss, false);
+
+  GenerateFastPixelArrayStore(masm(),
+                              a2,
+                              a1,
+                              a0,
+                              a3,
+                              t0,
+                              t1,
+                              t2,
+                              true,
+                              true,
+                              &miss,
+                              &miss,
+                              NULL,
+                              &miss);
+
+  __ bind(&miss);
+  Handle<Code> ic(Builtins::builtin(Builtins::KeyedStoreIC_Miss));
+  __ Jump(ic, RelocInfo::CODE_TARGET);
+
+  // Return the generated code.
+  return GetCode(NORMAL, NULL);
+}
+
+
 MaybeObject* ConstructStubCompiler::CompileConstructStub(JSFunction* function) {
   // a0    : argc
   // a1    : constructor

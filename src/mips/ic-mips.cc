@@ -1450,40 +1450,20 @@ void KeyedStoreIC::GenerateGeneric(MacroAssembler* masm) {
   // t3: elements map
 
   __ bind(&check_pixel_array);
-  __ LoadRoot(t0, Heap::kPixelArrayMapRootIndex);
-  __ Branch(&slow, ne, t3, Operand(t0));
-  // Check that the value is a smi. If a conversion is needed call into the
-  // runtime to convert and clamp.
-  __ JumpIfNotSmi(value, &slow);
-  __ sra(t3, key, kSmiTagSize);  // Untag the key.
-  __ lw(t0, FieldMemOperand(elements, PixelArray::kLengthOffset));
-  __ Branch(&slow, hs, t3, Operand(t0));
-  __ sra(t4, value, kSmiTagSize);  // Untag the value.
-  {  // Clamp the value to [0..255].
-     // To my understanding the following piece of code sets t4 to:
-     //    0 if t4 < 0
-     //    255 if t4 > 255
-     //    t4 otherwise
-     // This is done by using v0 as a temporary (not as a return value).
-    Label done;
-    __ li(v0, Operand(255));
-    __ Branch(&done, gt, t4, Operand(v0));  // Normal: nop in delay slot.
-    __ Branch(false, &done, lt, a0, Operand(zero_reg));  // Use delay slot.
-    __ mov(v0, zero_reg);  // In delay slot.
-    __ mov(v0, t4);  // Value is in range 0..255.
-    __ bind(&done);
-    __ mov(t4, v0);
-  }
-
-  // Get the pointer to the external array. This clobbers elements.
-  __ lw(elements,
-        FieldMemOperand(elements, PixelArray::kExternalPointerOffset));
-  __ Addu(t1, elements, t3);  // Base + index.
-  __ sb(t4, MemOperand(t1, 0));  // Elements is now external array.
-
-  __ mov(v0, value);
-  __ Ret();
-
+  GenerateFastPixelArrayStore(masm,
+                              a2,
+                              a1,
+                              a0,
+                              elements,
+                              t0,
+                              t1,
+                              t2,
+                              false,
+                              false,
+                              NULL,
+                              &slow,
+                              &slow,
+                              &slow);
 
   // Extra capacity case: Check if there is extra capacity to
   // perform the store and update the length. Used for adding one

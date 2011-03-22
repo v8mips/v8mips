@@ -5874,6 +5874,107 @@ void GenerateFastPixelArrayLoad(MacroAssembler* masm,
 }
 
 
+void GenerateFastPixelArrayStore(MacroAssembler* masm,
+                                 Register receiver,
+                                 Register key,
+                                 Register value,
+                                 Register elements,
+                                 Register elements_map,
+                                 Register scratch1,
+                                 Register scratch2,
+                                 bool load_elements_from_receiver,
+                                 bool load_elements_map_from_elements,
+                                 Label* key_not_smi,
+                                 Label* value_not_smi,
+                                 Label* not_pixel_array,
+                                 Label* out_of_range) {
+  // Register use:
+  //   receiver - holds the receiver and is unchanged unless the
+  //              store succeeds.
+  //   key - holds the key (must be a smi) and is unchanged.
+  //   value - holds the value (must be a smi) and is unchanged.
+  //   elements - holds the element object of the receiver on entry if
+  //              load_elements_from_receiver is false, otherwise used
+  //              internally to store the pixel arrays elements and
+  //              external array pointer.
+  //   elements_map - holds the map of the element object if
+  //              load_elements_map_from_elements is false, otherwise
+  //              loaded with the element map.
+  //
+  Register external_pointer = elements;
+  Register untagged_key = scratch1;
+  Register untagged_value = scratch2;
+
+  if (load_elements_from_receiver) {
+    __ lw(elements, FieldMemOperand(receiver, JSObject::kElementsOffset));
+  }
+
+  // By passing NULL as not_pixel_array, callers signal that they have already
+  // verified that the receiver has pixel array elements.
+  if (not_pixel_array != NULL) {
+    if (load_elements_map_from_elements) {
+      __ lw(elements_map, FieldMemOperand(elements, HeapObject::kMapOffset));
+    }
+    __ LoadRoot(scratch1, Heap::kPixelArrayMapRootIndex);
+    __ Branch(not_pixel_array, ne, elements_map, Operand(scratch1));
+  } else {
+    if (FLAG_debug_code) {
+      // Map check should have already made sure that elements is a pixel array.
+      __ lw(elements_map, FieldMemOperand(elements, HeapObject::kMapOffset));
+      __ LoadRoot(scratch1, Heap::kPixelArrayMapRootIndex);
+      __ Assert(eq, "Elements isn't a pixel array", elements_map,
+          Operand(scratch1));
+    }
+  }
+
+  // Some callers already have verified that the key is a smi.  key_not_smi is
+  // set to NULL as a sentinel for that case.  Otherwise, add an explicit check
+  // to ensure the key is a smi must be added.
+  if (key_not_smi != NULL) {
+    __ JumpIfNotSmi(key, key_not_smi);
+  } else {
+    if (FLAG_debug_code) {
+      __ AbortIfNotSmi(key);
+    }
+  }
+
+  __ SmiUntag(untagged_key, key);
+
+  // Perform bounds check.
+  __ lw(scratch2, FieldMemOperand(elements, PixelArray::kLengthOffset));
+  // Unsigned check handles negative keys.
+  __ Branch(out_of_range, hs, untagged_key, Operand(scratch2));
+
+  __ JumpIfNotSmi(value, value_not_smi);
+  __ SmiUntag(untagged_value, value);
+
+  // Clamp the value to [0..255].
+  {
+    // v0 is used as a scratch register here.
+    Label done;
+    __ li(v0, Operand(255));
+    // Normal: nop in delay slot.
+    __ Branch(&done, gt, untagged_value, Operand(v0));
+    // Use delay slot.
+    __ Branch(&done, lt, untagged_value, Operand(zero_reg), false);
+    __ mov(v0, zero_reg);  // In delay slot.
+    __ mov(v0, untagged_value);  // Value is in range 0..255.
+    __ bind(&done);
+    __ mov(untagged_value, v0);
+  }
+  // Get the pointer to the external array. This clobbers elements.
+  __ lw(external_pointer,
+        FieldMemOperand(elements, PixelArray::kExternalPointerOffset));
+  // untagged_key is a scratch register, so we can use it to calculate the
+  // memory offset.
+  __ Addu(untagged_key, external_pointer, untagged_key);
+  __ sb(untagged_value, MemOperand(untagged_key));
+
+  __ mov(v0, value);
+  __ Ret();
+}
+
+
 #undef __
 
 } }  // namespace v8::internal
