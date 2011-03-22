@@ -509,12 +509,23 @@ void FullCodeGenerator::TestContext::Plug(bool flag) const {
 void FullCodeGenerator::DoTest(Label* if_true,
                                Label* if_false,
                                Label* fall_through) {
-  // Call the runtime to find the boolean value of the source and then
-  // translate it into control flow to the pair of labels.
-  __ push(result_register());
-  __ CallRuntime(Runtime::kToBool, 1);
+  // Emit the inlined tests assumed by the stub.
+  __ LoadRoot(at, Heap::kUndefinedValueRootIndex);
+  __ Branch(if_false, eq, result_register(), Operand(at));
   __ LoadRoot(at, Heap::kTrueValueRootIndex);
-  Split(eq, v0, Operand(at), if_true, if_false, fall_through);
+  __ Branch(if_true, eq, result_register(), Operand(at));
+  __ LoadRoot(at, Heap::kFalseValueRootIndex);
+  __ Branch(if_false, eq, result_register(), Operand(at));
+  STATIC_ASSERT(kSmiTag == 0);
+  __ Branch(if_false, eq, result_register(), Operand(zero_reg));
+  __ JumpIfSmi(result_register(), if_true);
+
+  // Call the ToBoolean stub for all other cases.
+  ToBooleanStub stub(result_register());
+  __ CallStub(&stub);
+
+  // The stub returns nonzero for true.
+  Split(ne, v0, Operand(zero_reg), if_true, if_false, fall_through);
 }
 
 
@@ -734,9 +745,9 @@ void FullCodeGenerator::VisitSwitchStatement(SwitchStatement* stmt) {
   Comment cmnt(masm_, "[ SwitchStatement");
   Breakable nested_statement(this, stmt);
   SetStatementPosition(stmt);
+
   // Keep the switch value on the stack until a case matches.
   VisitForStackValue(stmt->tag());
-
   PrepareForBailoutForId(stmt->EntryId(), NO_REGISTERS);
 
   ZoneList<CaseClause*>* clauses = stmt->cases();
@@ -995,8 +1006,14 @@ void FullCodeGenerator::VisitForInStatement(ForInStatement* stmt) {
 void FullCodeGenerator::EmitNewClosure(Handle<SharedFunctionInfo> info,
                                        bool pretenure) {
   // Use the fast case closure allocation code that allocates in new
-  // space for nested functions that don't need literals cloning.
-  if (scope()->is_function_scope() &&
+  // space for nested functions that don't need literals cloning. If
+  // we're running with the --always-opt or the --prepare-always-opt
+  // flag, we need to use the runtime function so that the new function
+  // we are creating here gets a chance to have its code optimized and
+  // doesn't just get a copy of the existing unoptimized code.
+  if (!FLAG_always_opt &&
+      !FLAG_prepare_always_opt &&
+      scope()->is_function_scope() &&
       info->num_literals() == 0 &&
       !pretenure) {
     FastNewClosureStub stub;
@@ -1248,18 +1265,19 @@ void FullCodeGenerator::VisitRegExpLiteral(RegExpLiteral* expr) {
   Comment cmnt(masm_, "[ RegExpLiteral");
   Label materialized;
   // Registers will be used as follows:
+  // t1 = materialized value (RegExp literal)
   // t0 = JS function, literals array
   // a3 = literal index
   // a2 = RegExp pattern
   // a1 = RegExp flags
-  // a0 = temp + materialized value (RegExp literal)
+  // a0 = RegExp literal clone
   __ lw(a0, MemOperand(fp, JavaScriptFrameConstants::kFunctionOffset));
   __ lw(t0, FieldMemOperand(a0, JSFunction::kLiteralsOffset));
   int literal_offset =
       FixedArray::kHeaderSize + expr->literal_index() * kPointerSize;
-  __ lw(v0, FieldMemOperand(t0, literal_offset));
+  __ lw(t1, FieldMemOperand(t0, literal_offset));
   __ LoadRoot(at, Heap::kUndefinedValueRootIndex);
-  __ Branch(&materialized, ne, v0, Operand(at));
+  __ Branch(&materialized, ne, t1, Operand(at));
 
   // Create regexp literal using runtime function.
   // Result will be in v0.
@@ -1268,20 +1286,28 @@ void FullCodeGenerator::VisitRegExpLiteral(RegExpLiteral* expr) {
   __ li(a1, Operand(expr->flags()));
   __ Push(t0, a3, a2, a1);
   __ CallRuntime(Runtime::kMaterializeRegExpLiteral, 4);
+  __ mov(t1, v0);
 
   __ bind(&materialized);
   int size = JSRegExp::kSize + JSRegExp::kInObjectFieldCount * kPointerSize;
-  __ push(v0);
+  Label allocated, runtime_allocate;
+  __ AllocateInNewSpace(size, v0, a2, a3, &runtime_allocate, TAG_OBJECT);
+  __ jmp(&allocated);
+
+  __ bind(&runtime_allocate);
+  __ push(t1);
   __ li(a0, Operand(Smi::FromInt(size)));
   __ push(a0);
   __ CallRuntime(Runtime::kAllocateInNewSpace, 1);
+  __ pop(t1);
+
+  __ bind(&allocated);
 
   // After this, registers are used as follows:
   // v0: Newly allocated regexp.
-  // a1: Materialized regexp.
+  // t1: Materialized regexp.
   // a2: temp.
-  __ pop(a1);
-  __ CopyFields(v0, a1, a2.bit(), size / kPointerSize);
+  __ CopyFields(v0, t1, a2.bit(), size / kPointerSize);
   context()->Plug(v0);
 }
 
@@ -2870,19 +2896,31 @@ void FullCodeGenerator::EmitStringCompare(ZoneList<Expression*>* args) {
 
 
 void FullCodeGenerator::EmitMathSin(ZoneList<Expression*>* args) {
-  // Load the argument on the stack and call the runtime.
+  // Load the argument on the stack and call the stub.
+  TranscendentalCacheStub stub(TranscendentalCache::SIN);
   ASSERT(args->length() == 1);
   VisitForStackValue(args->at(0));
-  __ CallRuntime(Runtime::kMath_sin, 1);
+  __ CallStub(&stub);
   context()->Plug(v0);
 }
 
 
 void FullCodeGenerator::EmitMathCos(ZoneList<Expression*>* args) {
-  // Load the argument on the stack and call the runtime.
+  // Load the argument on the stack and call the stub.
+  TranscendentalCacheStub stub(TranscendentalCache::COS);
   ASSERT(args->length() == 1);
   VisitForStackValue(args->at(0));
-  __ CallRuntime(Runtime::kMath_cos, 1);
+  __ CallStub(&stub);
+  context()->Plug(v0);
+}
+
+
+void FullCodeGenerator::EmitMathLog(ZoneList<Expression*>* args) {
+  // Load the argument on the stack and call the stub.
+  TranscendentalCacheStub stub(TranscendentalCache::LOG);
+  ASSERT(args->length() == 1);
+  VisitForStackValue(args->at(0));
+  __ CallStub(&stub);
   context()->Plug(v0);
 }
 
@@ -2892,15 +2930,6 @@ void FullCodeGenerator::EmitMathSqrt(ZoneList<Expression*>* args) {
   ASSERT(args->length() == 1);
   VisitForStackValue(args->at(0));
   __ CallRuntime(Runtime::kMath_sqrt, 1);
-  context()->Plug(v0);
-}
-
-
-void FullCodeGenerator::EmitMathLog(ZoneList<Expression*>* args) {
-  // Load the argument on the stack and call the runtime function.
-  ASSERT(args->length() == 1);
-  VisitForStackValue(args->at(0));
-  __ CallRuntime(Runtime::kMath_log, 1);
   context()->Plug(v0);
 }
 
@@ -3058,8 +3087,14 @@ void FullCodeGenerator::EmitHasCachedArrayIndex(ZoneList<Expression*>* args) {
 void FullCodeGenerator::EmitGetCachedArrayIndex(ZoneList<Expression*>* args) {
   ASSERT(args->length() == 1);
   VisitForAccumulatorValue(args->at(0));
+
+  if (FLAG_debug_code) {
+    __ AbortIfNotString(v0);
+  }
+
   __ lw(v0, FieldMemOperand(v0, String::kHashFieldOffset));
   __ IndexFromHash(v0, v0);
+
   context()->Plug(v0);
 }
 
@@ -3221,9 +3256,7 @@ void FullCodeGenerator::VisitUnaryOperation(UnaryOperation* expr) {
       bool can_overwrite = expr->expression()->ResultOverwriteAllowed();
       UnaryOverwriteMode overwrite =
           can_overwrite ? UNARY_OVERWRITE : UNARY_NO_OVERWRITE;
-      GenericUnaryOpStub stub(Token::SUB,
-                              overwrite,
-                              NO_UNARY_FLAGS);
+      GenericUnaryOpStub stub(Token::SUB, overwrite, NO_UNARY_FLAGS);
       // GenericUnaryOpStub expects the argument to be in the
       // register a0.
       VisitForAccumulatorValue(expr->expression());
@@ -3728,6 +3761,22 @@ Register FullCodeGenerator::context_register() {
 void FullCodeGenerator::EmitCallIC(Handle<Code> ic, RelocInfo::Mode mode) {
   ASSERT(mode == RelocInfo::CODE_TARGET ||
          mode == RelocInfo::CODE_TARGET_CONTEXT);
+  switch (ic->kind()) {
+    case Code::LOAD_IC:
+      __ IncrementCounter(&Counters::named_load_full, 1, a1, a2);
+      break;
+    case Code::KEYED_LOAD_IC:
+      __ IncrementCounter(&Counters::keyed_load_full, 1, a1, a2);
+      break;
+    case Code::STORE_IC:
+      __ IncrementCounter(&Counters::named_store_full, 1, a1, a2);
+      break;
+    case Code::KEYED_STORE_IC:
+      __ IncrementCounter(&Counters::keyed_store_full, 1, a1, a2);
+    default:
+      break;
+  }
+
   __ Call(ic, mode);
 }
 
