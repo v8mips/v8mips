@@ -296,6 +296,13 @@ void LLoadContextSlot::PrintDataTo(StringStream* stream) {
 }
 
 
+void LStoreContextSlot::PrintDataTo(StringStream* stream) {
+  InputAt(0)->PrintTo(stream);
+  stream->Add("[%d] <- ", slot_index());
+  InputAt(1)->PrintTo(stream);
+}
+
+
 void LCallKeyed::PrintDataTo(StringStream* stream) {
   stream->Add("[rcx] #%d / ", arity());
 }
@@ -398,7 +405,7 @@ void LChunk::MarkEmptyBlocks() {
 }
 
 
-void LStoreNamed::PrintDataTo(StringStream* stream) {
+void LStoreNamedField::PrintDataTo(StringStream* stream) {
   object()->PrintTo(stream);
   stream->Add(".");
   stream->Add(*String::cast(*name())->ToCString());
@@ -407,7 +414,25 @@ void LStoreNamed::PrintDataTo(StringStream* stream) {
 }
 
 
-void LStoreKeyed::PrintDataTo(StringStream* stream) {
+void LStoreNamedGeneric::PrintDataTo(StringStream* stream) {
+  object()->PrintTo(stream);
+  stream->Add(".");
+  stream->Add(*String::cast(*name())->ToCString());
+  stream->Add(" <- ");
+  value()->PrintTo(stream);
+}
+
+
+void LStoreKeyedFastElement::PrintDataTo(StringStream* stream) {
+  object()->PrintTo(stream);
+  stream->Add("[");
+  key()->PrintTo(stream);
+  stream->Add("] <- ");
+  value()->PrintTo(stream);
+}
+
+
+void LStoreKeyedGeneric::PrintDataTo(StringStream* stream) {
   object()->PrintTo(stream);
   stream->Add("[");
   key()->PrintTo(stream);
@@ -1165,8 +1190,8 @@ LInstruction* LChunkBuilder::DoContext(HContext* instr) {
 
 
 LInstruction* LChunkBuilder::DoOuterContext(HOuterContext* instr) {
-  Abort("Unimplemented: DoOuterContext");
-  return NULL;
+  LOperand* context = UseRegisterAtStart(instr->value());
+  return DefineAsRegister(new LOuterContext(context));
 }
 
 
@@ -1679,14 +1704,23 @@ LInstruction* LChunkBuilder::DoStoreGlobal(HStoreGlobal* instr) {
 
 
 LInstruction* LChunkBuilder::DoLoadContextSlot(HLoadContextSlot* instr) {
-  Abort("Unimplemented: %s", "DoLoadContextSlot");
-  return NULL;
+  LOperand* context = UseRegisterAtStart(instr->value());
+  return DefineAsRegister(new LLoadContextSlot(context));
 }
 
 
 LInstruction* LChunkBuilder::DoStoreContextSlot(HStoreContextSlot* instr) {
-  Abort("Unimplemented: DoStoreContextSlot");
-  return NULL;
+  Abort("Unimplemented: DoStoreContextSlot");  // Temporarily disabled (whesse).
+  LOperand* context;
+  LOperand* value;
+  if (instr->NeedsWriteBarrier()) {
+    context = UseTempRegister(instr->context());
+    value = UseTempRegister(instr->value());
+  } else {
+    context = UseRegister(instr->context());
+    value = UseRegister(instr->value());
+  }
+  return new LStoreContextSlot(context, value);
 }
 
 
@@ -1868,14 +1902,16 @@ LInstruction* LChunkBuilder::DoFunctionLiteral(HFunctionLiteral* instr) {
 
 
 LInstruction* LChunkBuilder::DoDeleteProperty(HDeleteProperty* instr) {
-  Abort("Unimplemented: %s", "DoDeleteProperty");
-  return NULL;
+  LDeleteProperty* result =
+      new LDeleteProperty(Use(instr->object()), UseOrConstant(instr->key()));
+  return MarkAsCall(DefineFixed(result, rax), instr);
 }
 
 
 LInstruction* LChunkBuilder::DoOsrEntry(HOsrEntry* instr) {
-  Abort("Unimplemented: %s", "DoOsrEntry");
-  return NULL;
+  allocator_->MarkAsOsrEntry();
+  current_block_->last_environment()->set_ast_id(instr->ast_id());
+  return AssignEnvironment(new LOsrEntry);
 }
 
 
@@ -1886,8 +1922,8 @@ LInstruction* LChunkBuilder::DoParameter(HParameter* instr) {
 
 
 LInstruction* LChunkBuilder::DoUnknownOSRValue(HUnknownOSRValue* instr) {
-  Abort("Unimplemented: %s", "DoUnknownOSRValue");
-  return NULL;
+  int spill_index = chunk()->GetNextSpillIndex(false);  // Not double-width.
+  return DefineAsSpilled(new LUnknownOSRValue, spill_index);
 }
 
 
@@ -1916,14 +1952,13 @@ LInstruction* LChunkBuilder::DoAccessArgumentsAt(HAccessArgumentsAt* instr) {
 
 
 LInstruction* LChunkBuilder::DoTypeof(HTypeof* instr) {
-  Abort("Unimplemented: %s", "DoTypeof");
-  return NULL;
+  LTypeof* result = new LTypeof(UseAtStart(instr->value()));
+  return MarkAsCall(DefineFixed(result, rax), instr);
 }
 
 
 LInstruction* LChunkBuilder::DoTypeofIs(HTypeofIs* instr) {
-  Abort("Unimplemented: %s", "DoTypeofIs");
-  return NULL;
+  return DefineSameAsFirst(new LTypeofIs(UseRegister(instr->value())));
 }
 
 

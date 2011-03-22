@@ -322,8 +322,7 @@ int LCodeGen::ToInteger32(LConstantOperand* op) const {
 
 Handle<Object> LCodeGen::ToHandle(LConstantOperand* op) const {
   Handle<Object> literal = chunk_->LookupLiteral(op);
-  Representation r = chunk_->LookupLiteralRepresentation(op);
-  ASSERT(r.IsTagged());
+  ASSERT(chunk_->LookupLiteralRepresentation(op).IsTagged());
   return literal;
 }
 
@@ -1906,7 +1905,20 @@ void LCodeGen::DoStoreGlobal(LStoreGlobal* instr) {
 
 
 void LCodeGen::DoLoadContextSlot(LLoadContextSlot* instr) {
-  Abort("Unimplemented: %s", "DoLoadContextSlot");
+  Register context = ToRegister(instr->context());
+  Register result = ToRegister(instr->result());
+  __ movq(result, ContextOperand(context, instr->slot_index()));
+}
+
+
+void LCodeGen::DoStoreContextSlot(LStoreContextSlot* instr) {
+  Register context = ToRegister(instr->context());
+  Register value = ToRegister(instr->value());
+  __ movq(ContextOperand(context, instr->slot_index()), value);
+  if (instr->needs_write_barrier()) {
+    int offset = Context::SlotOffset(instr->slot_index());
+    __ RecordWrite(context, offset, value, kScratchRegister);
+  }
 }
 
 
@@ -2177,18 +2189,7 @@ void LCodeGen::DoApplyArguments(LApplyArguments* instr) {
 void LCodeGen::DoPushArgument(LPushArgument* instr) {
   LOperand* argument = instr->InputAt(0);
   if (argument->IsConstantOperand()) {
-    LConstantOperand* const_op = LConstantOperand::cast(argument);
-    Handle<Object> literal = chunk_->LookupLiteral(const_op);
-    Representation r = chunk_->LookupLiteralRepresentation(const_op);
-    if (r.IsInteger32()) {
-      ASSERT(literal->IsNumber());
-      __ push(Immediate(static_cast<int32_t>(literal->Number())));
-    } else if (r.IsDouble()) {
-      Abort("unsupported double immediate");
-    } else {
-      ASSERT(r.IsTagged());
-      __ Push(literal);
-    }
+    EmitPushConstantOperand(argument);
   } else if (argument->IsRegister()) {
     __ push(ToRegister(argument));
   } else {
@@ -2201,6 +2202,15 @@ void LCodeGen::DoPushArgument(LPushArgument* instr) {
 void LCodeGen::DoContext(LContext* instr) {
   Register result = ToRegister(instr->result());
   __ movq(result, Operand(rbp, StandardFrameConstants::kContextOffset));
+}
+
+
+void LCodeGen::DoOuterContext(LOuterContext* instr) {
+  Register context = ToRegister(instr->context());
+  Register result = ToRegister(instr->result());
+  __ movq(result,
+          Operand(context, Context::SlotOffset(Context::CLOSURE_INDEX)));
+  __ movq(result, FieldOperand(result, JSFunction::kContextOffset));
 }
 
 
@@ -3173,60 +3183,56 @@ void LCodeGen::DoFunctionLiteral(LFunctionLiteral* instr) {
 
 
 void LCodeGen::DoTypeof(LTypeof* instr) {
-  Abort("Unimplemented: %s", "DoTypeof");
+  LOperand* input = instr->InputAt(0);
+  if (input->IsConstantOperand()) {
+    __ Push(ToHandle(LConstantOperand::cast(input)));
+  } else if (input->IsRegister()) {
+    __ push(ToRegister(input));
+  } else {
+    ASSERT(input->IsStackSlot());
+    __ push(ToOperand(input));
+  }
+  CallRuntime(Runtime::kTypeof, 1, instr);
 }
 
 
 void LCodeGen::DoTypeofIs(LTypeofIs* instr) {
-  Abort("Unimplemented: %s", "DoTypeofIs");
-}
-
-
-void LCodeGen::DoIsConstructCall(LIsConstructCall* instr) {
+  Register input = ToRegister(instr->InputAt(0));
   Register result = ToRegister(instr->result());
-  NearLabel true_label;
-  NearLabel false_label;
+  Label true_label;
+  Label false_label;
   NearLabel done;
 
-  EmitIsConstructCall(result);
-  __ j(equal, &true_label);
-
+  Condition final_branch_condition = EmitTypeofIs(&true_label,
+                                                  &false_label,
+                                                  input,
+                                                  instr->type_literal());
+  __ j(final_branch_condition, &true_label);
+  __ bind(&false_label);
   __ LoadRoot(result, Heap::kFalseValueRootIndex);
   __ jmp(&done);
 
   __ bind(&true_label);
   __ LoadRoot(result, Heap::kTrueValueRootIndex);
 
-
   __ bind(&done);
 }
 
 
-void LCodeGen::DoIsConstructCallAndBranch(LIsConstructCallAndBranch* instr) {
-  Register temp = ToRegister(instr->TempAt(0));
-  int true_block = chunk_->LookupDestination(instr->true_block_id());
-  int false_block = chunk_->LookupDestination(instr->false_block_id());
-
-  EmitIsConstructCall(temp);
-  EmitBranch(true_block, false_block, equal);
-}
-
-
-void LCodeGen::EmitIsConstructCall(Register temp) {
-  // Get the frame pointer for the calling frame.
-  __ movq(temp, Operand(rbp, StandardFrameConstants::kCallerFPOffset));
-
-  // Skip the arguments adaptor frame if it exists.
-  NearLabel check_frame_marker;
-  __ SmiCompare(Operand(temp, StandardFrameConstants::kContextOffset),
-                Smi::FromInt(StackFrame::ARGUMENTS_ADAPTOR));
-  __ j(not_equal, &check_frame_marker);
-  __ movq(temp, Operand(rax, StandardFrameConstants::kCallerFPOffset));
-
-  // Check the marker in the calling frame.
-  __ bind(&check_frame_marker);
-  __ SmiCompare(Operand(temp, StandardFrameConstants::kMarkerOffset),
-                Smi::FromInt(StackFrame::CONSTRUCT));
+void LCodeGen::EmitPushConstantOperand(LOperand* operand) {
+  ASSERT(operand->IsConstantOperand());
+  LConstantOperand* const_op = LConstantOperand::cast(operand);
+  Handle<Object> literal = chunk_->LookupLiteral(const_op);
+  Representation r = chunk_->LookupLiteralRepresentation(const_op);
+  if (r.IsInteger32()) {
+    ASSERT(literal->IsNumber());
+    __ push(Immediate(static_cast<int32_t>(literal->Number())));
+  } else if (r.IsDouble()) {
+    Abort("unsupported double immediate");
+  } else {
+    ASSERT(r.IsTagged());
+    __ Push(literal);
+  }
 }
 
 
@@ -3310,6 +3316,54 @@ Condition LCodeGen::EmitTypeofIs(Label* true_label,
 }
 
 
+void LCodeGen::DoIsConstructCall(LIsConstructCall* instr) {
+  Register result = ToRegister(instr->result());
+  NearLabel true_label;
+  NearLabel false_label;
+  NearLabel done;
+
+  EmitIsConstructCall(result);
+  __ j(equal, &true_label);
+
+  __ LoadRoot(result, Heap::kFalseValueRootIndex);
+  __ jmp(&done);
+
+  __ bind(&true_label);
+  __ LoadRoot(result, Heap::kTrueValueRootIndex);
+
+
+  __ bind(&done);
+}
+
+
+void LCodeGen::DoIsConstructCallAndBranch(LIsConstructCallAndBranch* instr) {
+  Register temp = ToRegister(instr->TempAt(0));
+  int true_block = chunk_->LookupDestination(instr->true_block_id());
+  int false_block = chunk_->LookupDestination(instr->false_block_id());
+
+  EmitIsConstructCall(temp);
+  EmitBranch(true_block, false_block, equal);
+}
+
+
+void LCodeGen::EmitIsConstructCall(Register temp) {
+  // Get the frame pointer for the calling frame.
+  __ movq(temp, Operand(rbp, StandardFrameConstants::kCallerFPOffset));
+
+  // Skip the arguments adaptor frame if it exists.
+  NearLabel check_frame_marker;
+  __ SmiCompare(Operand(temp, StandardFrameConstants::kContextOffset),
+                Smi::FromInt(StackFrame::ARGUMENTS_ADAPTOR));
+  __ j(not_equal, &check_frame_marker);
+  __ movq(temp, Operand(rax, StandardFrameConstants::kCallerFPOffset));
+
+  // Check the marker in the calling frame.
+  __ bind(&check_frame_marker);
+  __ SmiCompare(Operand(temp, StandardFrameConstants::kMarkerOffset),
+                Smi::FromInt(StackFrame::CONSTRUCT));
+}
+
+
 void LCodeGen::DoLazyBailout(LLazyBailout* instr) {
   // No code for lazy bailout instruction. Used to capture environment after a
   // call for populating the safepoint data with deoptimization data.
@@ -3322,7 +3376,36 @@ void LCodeGen::DoDeoptimize(LDeoptimize* instr) {
 
 
 void LCodeGen::DoDeleteProperty(LDeleteProperty* instr) {
-  Abort("Unimplemented: %s", "DoDeleteProperty");
+  LOperand* obj = instr->object();
+  LOperand* key = instr->key();
+  // Push object.
+  if (obj->IsRegister()) {
+    __ push(ToRegister(obj));
+  } else {
+    __ push(ToOperand(obj));
+  }
+  // Push key.
+  if (key->IsConstantOperand()) {
+    EmitPushConstantOperand(key);
+  } else if (key->IsRegister()) {
+    __ push(ToRegister(key));
+  } else {
+    __ push(ToOperand(key));
+  }
+  ASSERT(instr->HasPointerMap() && instr->HasDeoptimizationEnvironment());
+  LPointerMap* pointers = instr->pointer_map();
+  LEnvironment* env = instr->deoptimization_environment();
+  RecordPosition(pointers->position());
+  RegisterEnvironmentForDeoptimization(env);
+  // Create safepoint generator that will also ensure enough space in the
+  // reloc info for patching in deoptimization (since this is invoking a
+  // builtin)
+  SafepointGenerator safepoint_generator(this,
+                                         pointers,
+                                         env->deoptimization_index(),
+                                         true);
+  __ Push(Smi::FromInt(strict_mode_flag()));
+  __ InvokeBuiltin(Builtins::DELETE, CALL_FUNCTION, &safepoint_generator);
 }
 
 
