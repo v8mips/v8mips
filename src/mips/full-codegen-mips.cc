@@ -210,10 +210,6 @@ void FullCodeGenerator::Generate(CompilationInfo* info) {
     __ LoadRoot(v0, Heap::kUndefinedValueRootIndex);
   }
   EmitReturnSequence();
-
-  // Force emit the trampoline pool, so it doesn't get emitted in the middle
-  // of the stack check table.
-  masm()->CheckTrampolinePool(true);
 }
 
 
