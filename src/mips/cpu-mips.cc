@@ -57,6 +57,11 @@ void CPU::Setup() {
 
 
 void CPU::FlushICache(void* start, size_t size) {
+  // Nothing to do flushing no instructions.
+  if (size == 0) {
+    return;
+  }
+
 #if !defined (USE_SIMULATOR)
   int res;
 
