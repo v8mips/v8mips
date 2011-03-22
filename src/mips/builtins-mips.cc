@@ -1219,6 +1219,14 @@ void Builtins::Generate_FunctionCall(MacroAssembler* masm) {
     // Change context eagerly in case we need the global receiver.
     __ lw(cp, FieldMemOperand(a1, JSFunction::kContextOffset));
 
+    // Do not transform the receiver for strict mode functions.
+    __ lw(a2, FieldMemOperand(a1, JSFunction::kSharedFunctionInfoOffset));
+    __ lw(a2, FieldMemOperand(a2, SharedFunctionInfo::kCompilerHintsOffset));
+    __ And(t0, a2, Operand(1 << (SharedFunctionInfo::kStrictModeFunction +
+                                 kSmiTagSize)));
+    __ Branch(&shift_arguments, ne, t0, Operand(zero_reg));
+
+    // Compute the receiver in non-strict mode.
     // Load first argument in a2. a2 = -kPointerSize(sp + n_args << 2)
     __ sll(at, a0, kPointerSizeLog2);
     __ addu(a2, sp, at);
@@ -1384,10 +1392,20 @@ void Builtins::Generate_FunctionApply(MacroAssembler* masm) {
   // Change context eagerly to get the right global object if necessary.
   __ lw(a0, MemOperand(fp, kFunctionOffset));
   __ lw(cp, FieldMemOperand(a0, JSFunction::kContextOffset));
+  // Load the shared function info while the function is still in a0.
+  __ lw(a1, FieldMemOperand(a0, JSFunction::kSharedFunctionInfoOffset));
 
   // Compute the receiver.
   Label call_to_object, use_global_receiver, push_receiver;
   __ lw(a0, MemOperand(fp, kRecvOffset));
+
+  // Do not transform the receiver for strict mode functions.
+  __ lw(a1, FieldMemOperand(a1, SharedFunctionInfo::kCompilerHintsOffset));
+  __ And(t0, a1, Operand(1 << (SharedFunctionInfo::kStrictModeFunction +
+                               kSmiTagSize)));
+  __ Branch(&push_receiver, ne, t0, Operand(zero_reg));
+
+  // Compute the receiver in non-strict mode.
   __ And(t0, a0, Operand(kSmiTagMask));
   __ Branch(&call_to_object, eq, t0, Operand(zero_reg));
   __ LoadRoot(a1, Heap::kNullValueRootIndex);
