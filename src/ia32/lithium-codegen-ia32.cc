@@ -55,7 +55,7 @@ class SafepointGenerator : public PostCallGenerator {
     // Ensure that we have enough space in the reloc info to patch
     // this with calls when doing deoptimization.
     if (ensure_reloc_space_) {
-      codegen_->masm()->RecordComment(RelocInfo::kFillerCommentString, true);
+      codegen_->EnsureRelocSpaceForDeoptimization();
     }
     codegen_->RecordSafepoint(pointers_, deoptimization_index_);
   }
@@ -78,6 +78,7 @@ bool LCodeGen::GenerateCode() {
   return GeneratePrologue() &&
       GenerateBody() &&
       GenerateDeferredCode() &&
+      GenerateRelocPadding() &&
       GenerateSafepointTable();
 }
 
@@ -122,6 +123,16 @@ void LCodeGen::Comment(const char* format, ...) {
 }
 
 
+bool LCodeGen::GenerateRelocPadding() {
+  int reloc_size = masm()->relocation_writer_size();
+  while (reloc_size < deoptimization_reloc_size.min_size) {
+    __ RecordComment(RelocInfo::kFillerCommentString, true);
+    reloc_size += RelocInfo::kRelocCommentSize;
+  }
+  return !is_aborted();
+}
+
+
 bool LCodeGen::GeneratePrologue() {
   ASSERT(is_generating());
 
@@ -161,6 +172,45 @@ bool LCodeGen::GeneratePrologue() {
       }
 #endif
     }
+  }
+
+  // Possibly allocate a local context.
+  int heap_slots = scope()->num_heap_slots() - Context::MIN_CONTEXT_SLOTS;
+  if (heap_slots > 0) {
+    Comment(";;; Allocate local context");
+    // Argument to NewContext is the function, which is still in edi.
+    __ push(edi);
+    if (heap_slots <= FastNewContextStub::kMaximumSlots) {
+      FastNewContextStub stub(heap_slots);
+      __ CallStub(&stub);
+    } else {
+      __ CallRuntime(Runtime::kNewContext, 1);
+    }
+    RecordSafepoint(Safepoint::kNoDeoptimizationIndex);
+    // Context is returned in both eax and esi.  It replaces the context
+    // passed to us.  It's saved in the stack and kept live in esi.
+    __ mov(Operand(ebp, StandardFrameConstants::kContextOffset), esi);
+
+    // Copy parameters into context if necessary.
+    int num_parameters = scope()->num_parameters();
+    for (int i = 0; i < num_parameters; i++) {
+      Slot* slot = scope()->parameter(i)->AsSlot();
+      if (slot != NULL && slot->type() == Slot::CONTEXT) {
+        int parameter_offset = StandardFrameConstants::kCallerSPOffset +
+            (num_parameters - 1 - i) * kPointerSize;
+        // Load parameter from stack.
+        __ mov(eax, Operand(ebp, parameter_offset));
+        // Store it in the context.
+        int context_offset = Context::SlotOffset(slot->index());
+        __ mov(Operand(esi, context_offset), eax);
+        // Update the write barrier. This clobbers all involved
+        // registers, so we have to use a third register to avoid
+        // clobbering esi.
+        __ mov(ecx, esi);
+        __ RecordWrite(ecx, context_offset, eax, ebx);
+      }
+    }
+    Comment(";;; End allocate local context");
   }
 
   // Trace the call.
@@ -335,6 +385,22 @@ void LCodeGen::WriteTranslation(LEnvironment* environment,
 }
 
 
+void LCodeGen::EnsureRelocSpaceForDeoptimization() {
+  // Since we patch the reloc info with RUNTIME_ENTRY calls every patch
+  // site will take up 2 bytes + any pc-jumps.
+  // We are conservative and always reserver 6 bytes in case where a
+  // simple pc-jump is not enough.
+  uint32_t pc_delta =
+      masm()->pc_offset() - deoptimization_reloc_size.last_pc_offset;
+  if (is_uintn(pc_delta, 6)) {
+    deoptimization_reloc_size.min_size += 2;
+  } else {
+    deoptimization_reloc_size.min_size += 6;
+  }
+  deoptimization_reloc_size.last_pc_offset = masm()->pc_offset();
+}
+
+
 void LCodeGen::AddToTranslation(Translation* translation,
                                 LOperand* op,
                                 bool is_tagged) {
@@ -382,10 +448,13 @@ void LCodeGen::CallCode(Handle<Code> code,
   ASSERT(instr != NULL);
   LPointerMap* pointers = instr->pointer_map();
   RecordPosition(pointers->position());
+
   if (!adjusted) {
     __ mov(esi, Operand(ebp, StandardFrameConstants::kContextOffset));
   }
   __ call(code, mode);
+
+  EnsureRelocSpaceForDeoptimization();
   RegisterLazyDeoptimization(instr);
 
   // Signal that we don't inline smi code before these stubs in the
@@ -592,6 +661,12 @@ void LCodeGen::RecordSafepoint(
 void LCodeGen::RecordSafepoint(LPointerMap* pointers,
                                int deoptimization_index) {
   RecordSafepoint(pointers, Safepoint::kSimple, 0, deoptimization_index);
+}
+
+
+void LCodeGen::RecordSafepoint(int deoptimization_index) {
+  LPointerMap empty_pointers(RelocInfo::kNoPosition);
+  RecordSafepoint(&empty_pointers, deoptimization_index);
 }
 
 
@@ -2300,11 +2375,8 @@ void LCodeGen::CallKnownFunction(Handle<JSFunction> function,
   if (*function == *graph()->info()->closure()) {
     __ CallSelf();
   } else {
-    // This is an indirect call and will not be recorded in the reloc info.
-    // Add a comment to the reloc info in case we need to patch this during
-    // deoptimization.
-    __ RecordComment(RelocInfo::kFillerCommentString, true);
     __ call(FieldOperand(edi, JSFunction::kCodeEntryOffset));
+    EnsureRelocSpaceForDeoptimization();
   }
 
   // Setup deoptimization.

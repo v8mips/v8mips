@@ -2277,9 +2277,6 @@ void HGraphBuilder::SetupScope(Scope* scope) {
   // We don't yet handle the function name for named function expressions.
   if (scope->function() != NULL) BAILOUT("named function expression");
 
-  // We can't handle heap-allocated locals.
-  if (scope->num_heap_slots() > 0) BAILOUT("heap allocated locals");
-
   HConstant* undefined_constant =
       new HConstant(Factory::undefined_value(), Representation::Tagged());
   AddInstruction(undefined_constant);
@@ -2301,6 +2298,10 @@ void HGraphBuilder::SetupScope(Scope* scope) {
   // Handle the arguments and arguments shadow variables specially (they do
   // not have declarations).
   if (scope->arguments() != NULL) {
+    if (!scope->arguments()->IsStackAllocated() ||
+        !scope->arguments_shadow()->IsStackAllocated()) {
+      BAILOUT("context-allocated arguments");
+    }
     HArgumentsObject* object = new HArgumentsObject;
     AddInstruction(object);
     graph()->SetArgumentsObject(object);
@@ -4062,6 +4063,7 @@ bool HGraphBuilder::TryInline(Call* expr) {
     }
     return false;
   }
+  if (inner_info.scope()->num_heap_slots() > 0) return false;
   FunctionLiteral* function = inner_info.function();
 
   // Count the number of AST nodes added by inlining this call.
@@ -4101,10 +4103,7 @@ bool HGraphBuilder::TryInline(Call* expr) {
     if (!FullCodeGenerator::MakeCode(&inner_info)) return false;
     shared->EnableDeoptimizationSupport(*inner_info.code());
     Compiler::RecordFunctionCompilation(
-        Logger::FUNCTION_TAG,
-        Handle<String>(shared->DebugName()),
-        shared->start_position(),
-        &inner_info);
+        Logger::FUNCTION_TAG, &inner_info, shared);
   }
 
   // Save the pending call context and type feedback oracle. Set up new ones

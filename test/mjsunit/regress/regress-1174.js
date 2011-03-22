@@ -25,25 +25,19 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// Test that we do not try to create prototypes on objects that has the,
-// should_have_prototype flag set to false.
+// Flags: --allow-natives-syntax
 
-__defineSetter__.__proto__ = function() {};
-__defineSetter__['prototype']
+// Test that we do not crash when doing deoptimization of a function that has
+// reloc info that only take up 1 byte per call (like KeyedStoreIC).
 
-eval.__proto__ = function () { };
-eval['prototype'] = {};
+function Regular() {
+  this[0] >>=  0;
+  this[1] ^=  1;
+}
 
-// Test that we are compatible with Safari on prototypes set locally and
-// on the actual prototype set using __proto__ on objects that has the
-// should_have_prototype set to false.
-function f() { return 42; }
-f.prototype = 43;
-__defineGetter__.__proto__ = f;
+function foo() {
+  var regular = new Regular();
+  %DeoptimizeFunction(Regular);
+}
 
-// Regression test for not returning undefined.
-assertEquals(__defineGetter__.prototype, 43);
-
-// Regression test for not crashing.
-__defineGetter__.prototype = "foo";
-assertEquals(__defineGetter__.prototype, "foo");
+foo();
