@@ -818,6 +818,10 @@ void FullCodeGenerator::VisitForInStatement(ForInStatement* stmt) {
   ForIn loop_statement(this, stmt);
   increment_loop_depth();
 
+  // Load null value as it is used several times below.
+  Register null_value = t1;
+  __ LoadRoot(null_value, Heap::kNullValueRootIndex);
+
   // Get the object to enumerate over. Both SpiderMonkey and JSC
   // ignore null and undefined in contrast to the specification; see
   // ECMA-262 section 12.6.4.
@@ -825,8 +829,7 @@ void FullCodeGenerator::VisitForInStatement(ForInStatement* stmt) {
   __ mov(a0, result_register());  // Result as param to InvokeBuiltin below.
   __ LoadRoot(at, Heap::kUndefinedValueRootIndex);
   __ Branch(&exit, eq, a0, Operand(at));
-  __ LoadRoot(at, Heap::kNullValueRootIndex);
-  __ Branch(&exit, eq, a0, Operand(at));
+  __ Branch(&exit, eq, a0, Operand(null_value));
 
   // Convert the object to a JS object.
   Label convert, done_convert;
@@ -840,13 +843,57 @@ void FullCodeGenerator::VisitForInStatement(ForInStatement* stmt) {
   __ bind(&done_convert);
   __ push(a0);
 
-  // TODO(kasperl): Check cache validity in generated code. This is a
-  // fast case for the JSObject::IsSimpleEnum cache validity
-  // checks. If we cannot guarantee cache validity, call the runtime
-  // system to check cache validity or get the property names in a
-  // fixed array.
+  // Check cache validity in generated code. This is a fast case for
+  // the JSObject::IsSimpleEnum cache validity checks. If we cannot
+  // guarantee cache validity, call the runtime system to check cache
+  // validity or get the property names in a fixed array.
+  Label next, call_runtime;
+  // Preload a couple of values used in the loop.
+  Register  empty_fixed_array_value = t2;
+  __ LoadRoot(empty_fixed_array_value, Heap::kEmptyFixedArrayRootIndex);
+  Register empty_descriptor_array_value = t3;
+  __ LoadRoot(empty_descriptor_array_value,
+              Heap::kEmptyDescriptorArrayRootIndex);
+  __ mov(a1, a0);
+  __ bind(&next);
+
+  // Check that there are no elements.  Register a1 contains the
+  // current JS object we've reached through the prototype chain.
+  __ lw(a2, FieldMemOperand(a1, JSObject::kElementsOffset));
+  __ Branch(&call_runtime, ne, a2, Operand(empty_fixed_array_value));
+
+  // Check that instance descriptors are not empty so that we can
+  // check for an enum cache.  Leave the map in a2 for the subsequent
+  // prototype load.
+  __ lw(a2, FieldMemOperand(a1, HeapObject::kMapOffset));
+  __ lw(a3, FieldMemOperand(a2, Map::kInstanceDescriptorsOffset));
+  __ Branch(&call_runtime, eq, a3, Operand(empty_descriptor_array_value));
+
+  // Check that there is an enum cache in the non-empty instance
+  // descriptors (a3).  This is the case if the next enumeration
+  // index field does not contain a smi.
+  __ lw(a3, FieldMemOperand(a3, DescriptorArray::kEnumerationIndexOffset));
+  __ JumpIfSmi(a3, &call_runtime);
+
+  // For all objects but the receiver, check that the cache is empty.
+  Label check_prototype;
+  __ Branch(&check_prototype, eq, a1, Operand(a0));
+  __ lw(a3, FieldMemOperand(a3, DescriptorArray::kEnumCacheBridgeCacheOffset));
+  __ Branch(&call_runtime, ne, a3, Operand(empty_fixed_array_value));
+
+  // Load the prototype from the map and loop if non-null.
+  __ bind(&check_prototype);
+  __ lw(a1, FieldMemOperand(a2, Map::kPrototypeOffset));
+  __ Branch(&next, ne, a1, Operand(null_value));
+
+  // The enum cache is valid.  Load the map of the object being
+  // iterated over and use the cache for the iteration.
+  Label use_cache;
+  __ lw(v0, FieldMemOperand(a0, HeapObject::kMapOffset));
+  __ Branch(&use_cache);
 
   // Get the set of properties to enumerate.
+  __ bind(&call_runtime);
   __ push(a0);  // Duplicate the enumerable object on the stack.
   __ CallRuntime(Runtime::kGetPropertyNamesFast, 1);
 
@@ -860,6 +907,7 @@ void FullCodeGenerator::VisitForInStatement(ForInStatement* stmt) {
   __ Branch(&fixed_array, ne, a1, Operand(at));
 
   // We got a map in register v0. Get the enumeration cache from it.
+  __ bind(&use_cache);
   __ lw(a1, FieldMemOperand(v0, Map::kInstanceDescriptorsOffset));
   __ lw(a1, FieldMemOperand(a1, DescriptorArray::kEnumerationIndexOffset));
   __ lw(a2, FieldMemOperand(a1, DescriptorArray::kEnumCacheBridgeCacheOffset));
