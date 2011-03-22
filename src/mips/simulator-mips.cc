@@ -1226,7 +1226,7 @@ void Simulator::SoftwareInterrupt(Instruction* instr) {
       memcpy(&gpreg_pair[0], &result, 2 * sizeof(int32_t));
       set_register(v0, gpreg_pair[0]);
       set_register(v1, gpreg_pair[1]);
-    } else if (redirection->type() == ExternalReference::DIRECT_CALL) {
+    } else if (redirection->type() == ExternalReference::DIRECT_API_CALL) {
       SimulatorRuntimeApiCall target =
                   reinterpret_cast<SimulatorRuntimeApiCall>(external);
       if (::v8::internal::FLAG_trace_sim) {
