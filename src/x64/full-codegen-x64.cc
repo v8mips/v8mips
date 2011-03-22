@@ -269,6 +269,13 @@ void FullCodeGenerator::EmitStackCheck(IterationStatement* stmt) {
   // the deoptimization input data found in the optimized code.
   RecordStackCheck(stmt->OsrEntryId());
 
+  // Loop stack checks can be patched to perform on-stack replacement. In
+  // order to decide whether or not to perform OSR we embed the loop depth
+  // in a test instruction after the call so we can extract it from the OSR
+  // builtin.
+  ASSERT(loop_depth() > 0);
+  __ testl(rax, Immediate(Min(loop_depth(), Code::kMaxLoopNestingMarker)));
+
   __ bind(&ok);
   PrepareForBailoutForId(stmt->EntryId(), NO_REGISTERS);
   // Record a mapping of the OSR id to this PC.  This is used if the OSR
@@ -853,7 +860,9 @@ void FullCodeGenerator::VisitForInStatement(ForInStatement* stmt) {
   VisitForAccumulatorValue(stmt->enumerable());
   __ CompareRoot(rax, Heap::kUndefinedValueRootIndex);
   __ j(equal, &exit);
-  __ CompareRoot(rax, Heap::kNullValueRootIndex);
+  Register null_value = rdi;
+  __ LoadRoot(null_value, Heap::kNullValueRootIndex);
+  __ cmpq(rax, null_value);
   __ j(equal, &exit);
 
   // Convert the object to a JS object.
@@ -867,12 +876,61 @@ void FullCodeGenerator::VisitForInStatement(ForInStatement* stmt) {
   __ bind(&done_convert);
   __ push(rax);
 
-  // BUG(867): Check cache validity in generated code. This is a fast
-  // case for the JSObject::IsSimpleEnum cache validity checks. If we
-  // cannot guarantee cache validity, call the runtime system to check
-  // cache validity or get the property names in a fixed array.
+  // Check cache validity in generated code. This is a fast case for
+  // the JSObject::IsSimpleEnum cache validity checks. If we cannot
+  // guarantee cache validity, call the runtime system to check cache
+  // validity or get the property names in a fixed array.
+  Label next, call_runtime;
+  Register empty_fixed_array_value = r8;
+  __ LoadRoot(empty_fixed_array_value, Heap::kEmptyFixedArrayRootIndex);
+  Register empty_descriptor_array_value = r9;
+  __ LoadRoot(empty_descriptor_array_value,
+              Heap::kEmptyDescriptorArrayRootIndex);
+  __ movq(rcx, rax);
+  __ bind(&next);
+
+  // Check that there are no elements.  Register rcx contains the
+  // current JS object we've reached through the prototype chain.
+  __ cmpq(empty_fixed_array_value,
+          FieldOperand(rcx, JSObject::kElementsOffset));
+  __ j(not_equal, &call_runtime);
+
+  // Check that instance descriptors are not empty so that we can
+  // check for an enum cache.  Leave the map in rbx for the subsequent
+  // prototype load.
+  __ movq(rbx, FieldOperand(rcx, HeapObject::kMapOffset));
+  __ movq(rdx, FieldOperand(rbx, Map::kInstanceDescriptorsOffset));
+  __ cmpq(rdx, empty_descriptor_array_value);
+  __ j(equal, &call_runtime);
+
+  // Check that there is an enum cache in the non-empty instance
+  // descriptors (rdx).  This is the case if the next enumeration
+  // index field does not contain a smi.
+  __ movq(rdx, FieldOperand(rdx, DescriptorArray::kEnumerationIndexOffset));
+  __ JumpIfSmi(rdx, &call_runtime);
+
+  // For all objects but the receiver, check that the cache is empty.
+  NearLabel check_prototype;
+  __ cmpq(rcx, rax);
+  __ j(equal, &check_prototype);
+  __ movq(rdx, FieldOperand(rdx, DescriptorArray::kEnumCacheBridgeCacheOffset));
+  __ cmpq(rdx, empty_fixed_array_value);
+  __ j(not_equal, &call_runtime);
+
+  // Load the prototype from the map and loop if non-null.
+  __ bind(&check_prototype);
+  __ movq(rcx, FieldOperand(rbx, Map::kPrototypeOffset));
+  __ cmpq(rcx, null_value);
+  __ j(not_equal, &next);
+
+  // The enum cache is valid.  Load the map of the object being
+  // iterated over and use the cache for the iteration.
+  NearLabel use_cache;
+  __ movq(rax, FieldOperand(rax, HeapObject::kMapOffset));
+  __ jmp(&use_cache);
 
   // Get the set of properties to enumerate.
+  __ bind(&call_runtime);
   __ push(rax);  // Duplicate the enumerable object on the stack.
   __ CallRuntime(Runtime::kGetPropertyNamesFast, 1);
 
@@ -885,6 +943,7 @@ void FullCodeGenerator::VisitForInStatement(ForInStatement* stmt) {
   __ j(not_equal, &fixed_array);
 
   // We got a map in register rax. Get the enumeration cache from it.
+  __ bind(&use_cache);
   __ movq(rcx, FieldOperand(rax, Map::kInstanceDescriptorsOffset));
   __ movq(rcx, FieldOperand(rcx, DescriptorArray::kEnumerationIndexOffset));
   __ movq(rdx, FieldOperand(rcx, DescriptorArray::kEnumCacheBridgeCacheOffset));
@@ -1088,7 +1147,7 @@ MemOperand FullCodeGenerator::ContextSlotOperandCheckExtensions(
   // This function is used only for loads, not stores, so it's safe to
   // return an rsi-based operand (the write barrier cannot be allowed to
   // destroy the rsi register).
-  return ContextOperand(temp, slot->index());
+  return ContextOperand(context, slot->index());
 }
 
 
