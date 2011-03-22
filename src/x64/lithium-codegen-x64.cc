@@ -77,6 +77,7 @@ bool LCodeGen::GenerateCode() {
   return GeneratePrologue() &&
       GenerateBody() &&
       GenerateDeferredCode() &&
+      GenerateJumpTable() &&
       GenerateSafepointTable();
 }
 
@@ -237,6 +238,16 @@ LInstruction* LCodeGen::GetNextInstruction() {
   } else {
     return NULL;
   }
+}
+
+
+bool LCodeGen::GenerateJumpTable() {
+  for (int i = 0; i < jump_table_.length(); i++) {
+    JumpTableEntry* info = jump_table_[i];
+    __ bind(&(info->label_));
+    __ Jump(info->address_, RelocInfo::RUNTIME_ENTRY);
+  }
+  return !is_aborted();
 }
 
 
@@ -512,10 +523,17 @@ void LCodeGen::DeoptimizeIf(Condition cc, LEnvironment* environment) {
   if (cc == no_condition) {
     __ Jump(entry, RelocInfo::RUNTIME_ENTRY);
   } else {
-    NearLabel done;
-    __ j(NegateCondition(cc), &done);
-    __ Jump(entry, RelocInfo::RUNTIME_ENTRY);
-    __ bind(&done);
+    JumpTableEntry* jump_info = NULL;
+    // We often have several deopts to the same entry, reuse the last
+    // jump entry if this is the case.
+    if (jump_table_.length() > 0 &&
+        jump_table_[jump_table_.length() - 1]->address_ == entry) {
+      jump_info = jump_table_[jump_table_.length() - 1];
+    } else {
+      jump_info = new JumpTableEntry(entry);
+      jump_table_.Add(jump_info);
+    }
+    __ j(cc, &jump_info->label_);
   }
 }
 
@@ -691,8 +709,8 @@ void LCodeGen::DoCallStub(LCallStub* instr) {
       break;
     }
     case CodeStub::MathPow: {
-      // TODO(1115): Add MathPow stub to x64.
-      Abort("Unimplemented: %s", "MathPow Stub");
+      MathPowStub stub;
+      CallCode(stub.GetCode(), RelocInfo::CODE_TARGET, instr);
       break;
     }
     case CodeStub::NumberToString: {
@@ -2462,7 +2480,54 @@ void LCodeGen::DoMathPowHalf(LUnaryMathOperation* instr) {
 
 
 void LCodeGen::DoPower(LPower* instr) {
-  Abort("Unimplemented: %s", "DoPower");
+  LOperand* left = instr->InputAt(0);
+  XMMRegister left_reg = ToDoubleRegister(left);
+  ASSERT(!left_reg.is(xmm1));
+  LOperand* right = instr->InputAt(1);
+  XMMRegister result_reg = ToDoubleRegister(instr->result());
+  Representation exponent_type = instr->hydrogen()->right()->representation();
+  if (exponent_type.IsDouble()) {
+    __ PrepareCallCFunction(2);
+    // Move arguments to correct registers
+    __ movsd(xmm0, left_reg);
+    ASSERT(ToDoubleRegister(right).is(xmm1));
+    __ CallCFunction(ExternalReference::power_double_double_function(), 2);
+  } else if (exponent_type.IsInteger32()) {
+    __ PrepareCallCFunction(2);
+    // Move arguments to correct registers: xmm0 and edi (not rdi).
+    // On Windows, the registers are xmm0 and edx.
+    __ movsd(xmm0, left_reg);
+#ifdef _WIN64
+    ASSERT(ToRegister(right).is(rdx));
+#else
+    ASSERT(ToRegister(right).is(rdi));
+#endif
+    __ CallCFunction(ExternalReference::power_double_int_function(), 2);
+  } else {
+    ASSERT(exponent_type.IsTagged());
+    CpuFeatures::Scope scope(SSE2);
+    Register right_reg = ToRegister(right);
+
+    Label non_smi, call;
+    __ JumpIfNotSmi(right_reg, &non_smi);
+    __ SmiToInteger32(right_reg, right_reg);
+    __ cvtlsi2sd(xmm1, right_reg);
+    __ jmp(&call);
+
+    __ bind(&non_smi);
+    __ CmpObjectType(right_reg, HEAP_NUMBER_TYPE , kScratchRegister);
+    DeoptimizeIf(not_equal, instr->environment());
+    __ movsd(xmm1, FieldOperand(right_reg, HeapNumber::kValueOffset));
+
+    __ bind(&call);
+    __ PrepareCallCFunction(2);
+    // Move arguments to correct registers xmm0 and xmm1.
+    __ movsd(xmm0, left_reg);
+    // Right argument is already in xmm1.
+    __ CallCFunction(ExternalReference::power_double_double_function(), 2);
+  }
+  // Return value is in xmm0.
+  __ movsd(result_reg, xmm0);
 }
 
 
