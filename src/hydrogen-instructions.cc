@@ -59,10 +59,13 @@ const char* Representation::Mnemonic() const {
     case kTagged: return "t";
     case kDouble: return "d";
     case kInteger32: return "i";
-    default:
+    case kExternal: return "x";
+    case kNumRepresentations:
       UNREACHABLE();
       return NULL;
   }
+  UNREACHABLE();
+  return NULL;
 }
 
 
@@ -1197,6 +1200,15 @@ void HStoreNamedField::PrintDataTo(StringStream* stream) const {
 
 void HStoreKeyed::PrintDataTo(StringStream* stream) const {
   object()->PrintNameTo(stream);
+  stream->Add("[");
+  key()->PrintNameTo(stream);
+  stream->Add("] = ");
+  value()->PrintNameTo(stream);
+}
+
+
+void HStorePixelArrayElement::PrintDataTo(StringStream* stream) const {
+  external_pointer()->PrintNameTo(stream);
   stream->Add("[");
   key()->PrintNameTo(stream);
   stream->Add("] = ");
