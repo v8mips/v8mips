@@ -1159,8 +1159,7 @@ LInstruction* LChunkBuilder::DoInstanceOfKnownGlobal(
     HInstanceOfKnownGlobal* instr) {
   LInstanceOfKnownGlobal* result =
       new LInstanceOfKnownGlobal(UseRegisterAtStart(instr->value()));
-  MarkAsSaveDoubles(result);
-  return AssignEnvironment(AssignPointerMap(DefineFixed(result, rax)));
+  return MarkAsCall(DefineFixed(result, rax), instr);
 }
 
 
@@ -1726,6 +1725,7 @@ LInstruction* LChunkBuilder::DoLoadContextSlot(HLoadContextSlot* instr) {
 
 
 LInstruction* LChunkBuilder::DoStoreContextSlot(HStoreContextSlot* instr) {
+  Abort("Unimplemented: DoStoreContextSlot");  // Temporarily disabled (whesse).
   LOperand* context;
   LOperand* value;
   if (instr->NeedsWriteBarrier()) {

@@ -1828,9 +1828,7 @@ void LCodeGen::DoDeferredLInstanceOfKnownGlobal(LInstanceOfKnownGlobal* instr) {
   __ push(ToRegister(instr->InputAt(0)));
   __ Push(instr->function());
   __ movq(rsi, Operand(rbp, StandardFrameConstants::kContextOffset));
-  __ Call(stub.GetCode(), RelocInfo::CODE_TARGET);
-  RecordSafepointWithRegisters(
-      instr->pointer_map(), 0, Safepoint::kNoDeoptimizationIndex);
+  CallCode(stub.GetCode(), RelocInfo::CODE_TARGET, instr);
   __ movq(kScratchRegister, rax);
   __ PopSafepointRegisters();
   __ testq(kScratchRegister, kScratchRegister);
@@ -2689,7 +2687,9 @@ void LCodeGen::DoStoreNamedGeneric(LStoreNamedGeneric* instr) {
   ASSERT(ToRegister(instr->value()).is(rax));
 
   __ Move(rcx, instr->hydrogen()->name());
-  Handle<Code> ic(Builtins::builtin(Builtins::StoreIC_Initialize));
+  Handle<Code> ic(Builtins::builtin(
+      info_->is_strict() ? Builtins::StoreIC_Initialize_Strict
+                         : Builtins::StoreIC_Initialize));
   CallCode(ic, RelocInfo::CODE_TARGET, instr);
 }
 
@@ -2758,7 +2758,9 @@ void LCodeGen::DoStoreKeyedGeneric(LStoreKeyedGeneric* instr) {
   ASSERT(ToRegister(instr->key()).is(rcx));
   ASSERT(ToRegister(instr->value()).is(rax));
 
-  Handle<Code> ic(Builtins::builtin(Builtins::KeyedStoreIC_Initialize));
+  Handle<Code> ic(Builtins::builtin(
+      info_->is_strict() ? Builtins::KeyedStoreIC_Initialize_Strict
+                         : Builtins::KeyedStoreIC_Initialize));
   CallCode(ic, RelocInfo::CODE_TARGET, instr);
 }
 
