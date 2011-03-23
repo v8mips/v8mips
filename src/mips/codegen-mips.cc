@@ -5760,7 +5760,8 @@ void CodeGenerator::GenerateMathSin(ZoneList<Expression*>* args) {
   ASSERT_EQ(args->length(), 1);
   Load(args->at(0));
   if (CpuFeatures::IsSupported(FPU)) {
-    TranscendentalCacheStub stub(TranscendentalCache::SIN);
+    TranscendentalCacheStub stub(TranscendentalCache::SIN,
+                                 TranscendentalCacheStub::TAGGED);
     frame_->SpillAllButCopyTOSToA0();
     frame_->CallStub(&stub, 1);
   } else {
@@ -5774,7 +5775,8 @@ void CodeGenerator::GenerateMathCos(ZoneList<Expression*>* args) {
   ASSERT_EQ(args->length(), 1);
   Load(args->at(0));
   if (CpuFeatures::IsSupported(FPU)) {
-    TranscendentalCacheStub stub(TranscendentalCache::COS);
+    TranscendentalCacheStub stub(TranscendentalCache::COS,
+                                 TranscendentalCacheStub::TAGGED);
     frame_->SpillAllButCopyTOSToA0();
     frame_->CallStub(&stub, 1);
   } else {
@@ -5788,7 +5790,8 @@ void CodeGenerator::GenerateMathLog(ZoneList<Expression*>* args) {
   ASSERT_EQ(args->length(), 1);
   Load(args->at(0));
   if (CpuFeatures::IsSupported(FPU)) {
-    TranscendentalCacheStub stub(TranscendentalCache::LOG);
+    TranscendentalCacheStub stub(TranscendentalCache::LOG,
+                                 TranscendentalCacheStub::TAGGED);
     frame_->SpillAllButCopyTOSToA0();
     frame_->CallStub(&stub, 1);
   } else {

@@ -2280,6 +2280,16 @@ void MacroAssembler::CheckMap(Register obj,
 }
 
 
+void MacroAssembler::GetCFunctionDoubleResult(const DoubleRegister dst) {
+  if (IsMipsSoftFloatABI) {
+    mtc1(v0, dst);
+    mtc1(v1, FPURegister::from_code(dst.code() + 1));
+  } else {
+    mov_d(dst, f0);
+  }
+}
+
+
 // -----------------------------------------------------------------------------
 // JavaScript invokes
 

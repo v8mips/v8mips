@@ -2932,37 +2932,54 @@ void TypeRecordingBinaryOpStub::GenerateRegisterArgsPush(MacroAssembler* masm) {
 
 
 void TranscendentalCacheStub::Generate(MacroAssembler* masm) {
-  // Argument is a number and is on stack and in a0.
-  Label runtime_call;
+  // Untagged case: double input in f4, double result goes
+  //   into f4.
+  // Tagged case: tagged input on top of stack and in a0,
+  //   tagged result (heap number) goes into v0.
+
   Label input_not_smi;
   Label loaded;
+  Label calculate;
+  Label invalid_cache;
+  const Register scratch0 = t5;
+  const Register scratch1 = t3;
+  const Register cache_entry = a0;
+  const bool tagged = (argument_type_ == TAGGED);
 
   if (CpuFeatures::IsSupported(FPU)) {
-    // Load argument and check if it is a smi.
-    __ JumpIfNotSmi(a0, &input_not_smi);
+
 
     CpuFeatures::Scope scope(FPU);
-    // Input is a smi. Convert to double and load the low and high words
-    // of the double into a2, a3.
-    __ sra(t0, a0, kSmiTagSize);
-    __ mtc1(t0, f4);
-    __ cvt_d_w(f4, f4);
-    __ mfc1(a2, f4);
-    __ mfc1(a3, f5);
-    __ Branch(&loaded);
+    if (tagged) {
+      // Argument is a number and is on stack and in a0.
+      // Load argument and check if it is a smi.
+      __ JumpIfNotSmi(a0, &input_not_smi);
 
-    __ bind(&input_not_smi);
-    // Check if input is a HeapNumber.
-    __ CheckMap(a0,
-                a1,
-                Heap::kHeapNumberMapRootIndex,
-                &runtime_call,
-                true);
-    // Input is a HeapNumber. Store the
-    // low and high words into a2, a3.
-    __ lw(a2, FieldMemOperand(a0, HeapNumber::kValueOffset));
-    __ lw(a3, FieldMemOperand(a0, HeapNumber::kValueOffset + 4));
+      // Input is a smi. Convert to double and load the low and high words
+      // of the double into a2, a3.
+      __ sra(t0, a0, kSmiTagSize);
+      __ mtc1(t0, f4);
+      __ cvt_d_w(f4, f4);
+      __ mfc1(a2, f4);
+      __ mfc1(a3, f5);
+      __ Branch(&loaded);
 
+      __ bind(&input_not_smi);
+      // Check if input is a HeapNumber.
+      __ CheckMap(a0,
+                  a1,
+                  Heap::kHeapNumberMapRootIndex,
+                  &calculate,
+                  true);
+      // Input is a HeapNumber. Store the
+      // low and high words into a2, a3.
+      __ lw(a2, FieldMemOperand(a0, HeapNumber::kValueOffset));
+      __ lw(a3, FieldMemOperand(a0, HeapNumber::kValueOffset + 4));
+    } else {
+      // Input is untagged double in f4. Output goes to f4.
+      __ mfc1(a2, f4);
+      __ mfc1(a3, f5);
+    }
     __ bind(&loaded);
     // a2 = low 32 bits of double value
     // a3 = high 32 bits of double value
@@ -2979,13 +2996,14 @@ void TranscendentalCacheStub::Generate(MacroAssembler* masm) {
     // a2 = low 32 bits of double value.
     // a3 = high 32 bits of double value.
     // a1 = TranscendentalCache::hash(double value).
-    __ li(a0,
+    __ li(cache_entry,
            Operand(ExternalReference::transcendental_cache_array_address()));
     // a0 points to cache array.
-    __ lw(a0, MemOperand(a0, type_ * sizeof(TranscendentalCache::caches_[0])));
+    __ lw(cache_entry, MemOperand(cache_entry,
+        type_ * sizeof(TranscendentalCache::caches_[0])));
     // a0 points to the cache for the type type_.
     // If NULL, the cache hasn't been initialized yet, so go through runtime.
-    __ Branch(&runtime_call, eq, a0, Operand(zero_reg));
+    __ Branch(&invalid_cache, eq, cache_entry, Operand(zero_reg));
 
 #ifdef DEBUG
     // Check that the layout of cache elements match expectations.
@@ -3006,23 +3024,117 @@ void TranscendentalCacheStub::Generate(MacroAssembler* masm) {
     __ sll(t0, a1, 1);
     __ Addu(a1, a1, t0);
     __ sll(t0, a1, 2);
-    __ Addu(a0, a0, t0);
+    __ Addu(cache_entry, cache_entry, t0);
 
     // Check if cache matches: Double value is stored in uint32_t[2] array.
-    __ lw(t0, MemOperand(a0, 0));
-    __ lw(t1, MemOperand(a0, 4));
-    __ lw(t2, MemOperand(a0, 8));
-    __ Addu(a0, a0, 12);
-    __ Branch(&runtime_call, ne, a2, Operand(t0));
-    __ Branch(&runtime_call, ne, a3, Operand(t1));
-    // Cache hit. Load result, pop argument and return.
-    __ mov(v0, t2);
-    __ Pop();
+    __ lw(t0, MemOperand(cache_entry, 0));
+    __ lw(t1, MemOperand(cache_entry, 4));
+    __ lw(t2, MemOperand(cache_entry, 8));
+    __ Addu(cache_entry, cache_entry, 12);
+    __ Branch(&calculate, ne, a2, Operand(t0));
+    __ Branch(&calculate, ne, a3, Operand(t1));
+    // Cache hit. Load result, cleanup and return.
+    if (tagged) {
+      // Pop input value from stack and load result into v0.
+      __ Drop(1);
+      __ mov(v0, t2);
+    } else {
+      // Load result into f4.
+      __ ldc1(f4, FieldMemOperand(t2, HeapNumber::kValueOffset));
+    }
+    __ Ret();
+  }  // if (CpuFeatures::IsSupported(VFP3))
+
+  __ bind(&calculate);
+  if (tagged) {
+    __ bind(&invalid_cache);
+    __ TailCallExternalReference(ExternalReference(RuntimeFunction()), 1, 1);
+  } else {
+    if (!CpuFeatures::IsSupported(FPU)) UNREACHABLE();
+    CpuFeatures::Scope scope(VFP3);
+
+    Label no_update;
+    Label skip_cache;
+    const Register heap_number_map = t2;
+
+    // Call C function to calculate the result and update the cache.
+    // Register a0 holds precalculated cache entry address; preserve
+    // it on the stack and pop it into register cache_entry after the
+    // call.
+    __ push(cache_entry);
+    GenerateCallCFunction(masm, scratch0);
+    __ GetCFunctionDoubleResult(f4);
+
+    // Try to update the cache. If we cannot allocate a
+    // heap number, we return the result without updating.
+    __ pop(cache_entry);
+    __ LoadRoot(t1, Heap::kHeapNumberMapRootIndex);
+    __ AllocateHeapNumber(t2, scratch0, scratch1, t1, &no_update);
+    __ sdc1(f4, FieldMemOperand(t2, HeapNumber::kValueOffset));
+
+    __ sw(a2, MemOperand(cache_entry, 0 * kPointerSize));
+    __ sw(a3, MemOperand(cache_entry, 1 * kPointerSize));
+    __ sw(t2, MemOperand(cache_entry, 2 * kPointerSize));
+
+    __ mov(v0, cache_entry);
+    __ Ret();
+
+    __ bind(&invalid_cache);
+    // The cache is invalid. Call runtime which will recreate the
+    // cache.
+    __ LoadRoot(t1, Heap::kHeapNumberMapRootIndex);
+    __ AllocateHeapNumber(a0, scratch0, scratch1, t1, &skip_cache);
+    __ sdc1(f4, FieldMemOperand(a0, HeapNumber::kValueOffset));
+    __ EnterInternalFrame();
+    __ push(a0);
+    __ CallRuntime(RuntimeFunction(), 1);
+    __ LeaveInternalFrame();
+    __ ldc1(f4, FieldMemOperand(v0, HeapNumber::kValueOffset));
+    __ Ret();
+
+    __ bind(&skip_cache);
+    // Call C function to calculate the result and answer directly
+    // without updating the cache.
+    GenerateCallCFunction(masm, scratch0);
+    __ GetCFunctionDoubleResult(f4);
+    __ bind(&no_update);
+
+    // We return the value in f4 without adding it to the cache, but
+    // we cause a scavenging GC so that future allocations will succeed.
+    __ EnterInternalFrame();
+
+    // Allocate an aligned object larger than a HeapNumber.
+    ASSERT(4 * kPointerSize >= HeapNumber::kSize);
+    __ li(scratch0, Operand(4 * kPointerSize));
+    __ push(scratch0);
+    __ CallRuntimeSaveDoubles(Runtime::kAllocateInNewSpace);
+    __ LeaveInternalFrame();
     __ Ret();
   }
+}
 
-  __ bind(&runtime_call);
-  __ TailCallExternalReference(ExternalReference(RuntimeFunction()), 1, 1);
+
+void TranscendentalCacheStub::GenerateCallCFunction(MacroAssembler* masm,
+                                                    Register scratch) {
+  __ push(ra);
+  __ PrepareCallCFunction(2, scratch);
+  __ mfc1(v0, f4);
+  __ mfc1(v1, f5);
+  switch (type_) {
+    case TranscendentalCache::SIN:
+      __ CallCFunction(ExternalReference::math_sin_double_function(), 2);
+      break;
+    case TranscendentalCache::COS:
+      __ CallCFunction(ExternalReference::math_cos_double_function(), 2);
+      break;
+    case TranscendentalCache::LOG:
+      __ CallCFunction(ExternalReference::math_log_double_function(), 2);
+      break;
+    default:
+      UNIMPLEMENTED();
+      break;
+  }
+  __ pop(ra);
 }
 
 

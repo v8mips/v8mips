@@ -791,6 +791,8 @@ void DropAndRet(int drop = 0,
   void CallCFunction(ExternalReference function, int num_arguments);
   void CallCFunction(Register function, int num_arguments);
 
+  void GetCFunctionDoubleResult(const DoubleRegister dst);
+
   // Jump to the builtin routine.
   void JumpToExternalReference(const ExternalReference& builtin);
 
