@@ -1374,7 +1374,8 @@ void KeyedLoadIC::GenerateString(MacroAssembler* masm) {
 }
 
 
-void KeyedStoreIC::GenerateRuntimeSetProperty(MacroAssembler* masm) {
+void KeyedStoreIC::GenerateRuntimeSetProperty(MacroAssembler* masm,
+                                              StrictModeFlag strict_mode) {
   // ---------- S t a t e --------------
   //  -- a0     : value
   //  -- a1     : key
@@ -1384,11 +1385,16 @@ void KeyedStoreIC::GenerateRuntimeSetProperty(MacroAssembler* masm) {
 
   // Push receiver, key and value for runtime call.
   __ Push(a2, a1, a0);
-  __ TailCallRuntime(Runtime::kSetProperty, 3, 1);
+  __ li(a1, Operand(Smi::FromInt(NONE)));          // PropertyAttributes
+  __ li(a0, Operand(Smi::FromInt(strict_mode)));   // Strict mode.
+  __ Push(a1, a0);
+
+  __ TailCallRuntime(Runtime::kSetProperty, 5, 1);
 }
 
 
-void KeyedStoreIC::GenerateGeneric(MacroAssembler* masm) {
+void KeyedStoreIC::GenerateGeneric(MacroAssembler* masm,
+                                   StrictModeFlag strict_mode) {
   // ---------- S t a t e --------------
   //  -- a0     : value
   //  -- a1     : key
@@ -1444,7 +1450,7 @@ void KeyedStoreIC::GenerateGeneric(MacroAssembler* masm) {
   // a1: key.
   // a2: receiver.
 
-  GenerateRuntimeSetProperty(masm);
+  GenerateRuntimeSetProperty(masm, strict_mode);
 
   // Check whether the elements is a pixel array.
   // t3: elements map
@@ -1571,7 +1577,7 @@ void KeyedStoreIC::GenerateMiss(MacroAssembler* masm) {
 
 
 void StoreIC::GenerateMegamorphic(MacroAssembler* masm,
-                                  Code::ExtraICState extra_ic_state) {
+                                  StrictModeFlag strict_mode) {
   // a0    : value
   // a1    : receiver
   // a2    : name
@@ -1581,7 +1587,7 @@ void StoreIC::GenerateMegamorphic(MacroAssembler* masm,
   Code::Flags flags = Code::ComputeFlags(Code::STORE_IC,
                                          NOT_IN_LOOP,
                                          MONOMORPHIC,
-                                         extra_ic_state);
+                                         strict_mode);
   StubCache::GenerateProbe(masm, flags, a1, a2, a3, t0, t1);
 
   // Cache miss: Jump to runtime.
@@ -1672,7 +1678,8 @@ void StoreIC::GenerateNormal(MacroAssembler* masm) {
 }
 
 
-void StoreIC::GenerateGlobalProxy(MacroAssembler* masm) {
+void StoreIC::GenerateGlobalProxy(MacroAssembler* masm,
+                                  StrictModeFlag strict_mode) {
   // ----------- S t a t e -------------
   //  -- a0    : value
   //  -- a1    : receiver
@@ -1682,8 +1689,12 @@ void StoreIC::GenerateGlobalProxy(MacroAssembler* masm) {
 
   __ Push(a1, a2, a0);
 
+  __ li(a1, Operand(Smi::FromInt(NONE)));  // PropertyAttributes
+  __ li(a0, Operand(Smi::FromInt(strict_mode)));
+  __ Push(a1, a0);
+
   // Do tail-call to runtime routine.
-  __ TailCallRuntime(Runtime::kSetProperty, 3, 1);
+  __ TailCallRuntime(Runtime::kSetProperty, 5, 1);
 }
 
 

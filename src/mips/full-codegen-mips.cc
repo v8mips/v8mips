@@ -720,7 +720,9 @@ void FullCodeGenerator::EmitDeclaration(Variable* variable,
              prop->key()->AsLiteral()->handle()->IsSmi());
       __ li(a1, Operand(prop->key()->AsLiteral()->handle()));
 
-      Handle<Code> ic(Builtins::builtin(Builtins::KeyedStoreIC_Initialize));
+      Handle<Code> ic(Builtins::builtin(is_strict()
+          ? Builtins::KeyedStoreIC_Initialize_Strict
+          : Builtins::KeyedStoreIC_Initialize));
       EmitCallIC(ic, RelocInfo::CODE_TARGET);
       // Value in v0 is ignored (declarations are statements).
     }
@@ -736,10 +738,11 @@ void FullCodeGenerator::VisitDeclaration(Declaration* decl) {
 void FullCodeGenerator::DeclareGlobals(Handle<FixedArray> pairs) {
   // Call the runtime to declare the globals.
   // The context is the first argument.
-  __ li(a1, Operand(pairs));
-  __ li(a0, Operand(Smi::FromInt(is_eval() ? 1 : 0)));
-  __ Push(cp, a1, a0);
-  __ CallRuntime(Runtime::kDeclareGlobals, 3);
+  __ li(a2, Operand(pairs));
+  __ li(a1, Operand(Smi::FromInt(is_eval() ? 1 : 0)));
+  __ li(a0, Operand(Smi::FromInt(strict_mode_flag())));
+  __ Push(cp, a2, a1, a0);
+  __ CallRuntime(Runtime::kDeclareGlobals, 4);
   // Return value is ignored.
 }
 
@@ -1377,7 +1380,9 @@ void FullCodeGenerator::VisitObjectLiteral(ObjectLiteral* expr) {
         VisitForStackValue(key);
         VisitForStackValue(value);
         if (property->emit_store()) {
-          __ CallRuntime(Runtime::kSetProperty, 3);
+          __ li(a0, Operand(Smi::FromInt(NONE)));  // PropertyAttributes
+          __ push(a0);
+          __ CallRuntime(Runtime::kSetProperty, 4);
         } else {
           __ Drop(3);
         }
@@ -1686,7 +1691,9 @@ void FullCodeGenerator::EmitAssignment(Expression* expr, int bailout_ast_id) {
       __ mov(a1, result_register());
       __ pop(a0);  // Restore value.
       __ li(a2, Operand(prop->key()->AsLiteral()->handle()));
-      Handle<Code> ic(Builtins::builtin(Builtins::StoreIC_Initialize));
+      Handle<Code> ic(Builtins::builtin(
+          is_strict() ? Builtins::StoreIC_Initialize_Strict
+                      : Builtins::StoreIC_Initialize));
       EmitCallIC(ic, RelocInfo::CODE_TARGET);
       break;
     }
@@ -1707,7 +1714,9 @@ void FullCodeGenerator::EmitAssignment(Expression* expr, int bailout_ast_id) {
         __ pop(a2);
       }
       __ pop(a0);  // Restore value.
-      Handle<Code> ic(Builtins::builtin(Builtins::KeyedStoreIC_Initialize));
+      Handle<Code> ic(Builtins::builtin(
+          is_strict() ? Builtins::KeyedStoreIC_Initialize_Strict
+                      : Builtins::KeyedStoreIC_Initialize));
       EmitCallIC(ic, RelocInfo::CODE_TARGET);
       break;
     }
@@ -1732,9 +1741,9 @@ void FullCodeGenerator::EmitVariableAssignment(Variable* var,
     __ mov(a0, result_register());
     __ li(a2, Operand(var->name()));
     __ lw(a1, GlobalObjectOperand());
-    Handle<Code> ic(Builtins::builtin(is_strict()
-        ? Builtins::StoreIC_Initialize_Strict
-        : Builtins::StoreIC_Initialize));
+    Handle<Code> ic(Builtins::builtin(
+        is_strict() ? Builtins::StoreIC_Initialize_Strict
+                    : Builtins::StoreIC_Initialize));
     EmitCallIC(ic, RelocInfo::CODE_TARGET_CONTEXT);
 
   } else if (op == Token::INIT_CONST) {
@@ -1801,9 +1810,10 @@ void FullCodeGenerator::EmitVariableAssignment(Variable* var,
       case Slot::LOOKUP:
         // Call the runtime for the assignment
         __ push(v0);  // Value.
-        __ li(a0, Operand(slot->var()->name()));
-        __ Push(cp, a0);  // Context and name.
-        __ CallRuntime(Runtime::kStoreContextSlot, 3);
+        __ li(a1, Operand(slot->var()->name()));
+        __ li(a0, Operand(Smi::FromInt(strict_mode_flag())));
+        __ Push(cp, a1, a0);  // Context, name, strict mode.
+        __ CallRuntime(Runtime::kStoreContextSlot, 4);
         break;
     }
   }
@@ -1842,7 +1852,9 @@ void FullCodeGenerator::EmitNamedPropertyAssignment(Assignment* expr) {
     __ pop(a1);
   }
 
-  Handle<Code> ic(Builtins::builtin(Builtins::StoreIC_Initialize));
+  Handle<Code> ic(Builtins::builtin(
+      is_strict() ? Builtins::StoreIC_Initialize_Strict
+                  : Builtins::StoreIC_Initialize));
   EmitCallIC(ic, RelocInfo::CODE_TARGET);
 
   // If the assignment ends an initialization block, revert to fast case.
@@ -1895,7 +1907,9 @@ void FullCodeGenerator::EmitKeyedPropertyAssignment(Assignment* expr) {
     __ pop(a2);
   }
 
-  Handle<Code> ic(Builtins::builtin(Builtins::KeyedStoreIC_Initialize));
+  Handle<Code> ic(Builtins::builtin(
+      is_strict() ? Builtins::KeyedStoreIC_Initialize_Strict
+                  : Builtins::KeyedStoreIC_Initialize));
   EmitCallIC(ic, RelocInfo::CODE_TARGET);
 
   // If the assignment ends an initialization block, revert to fast case.
@@ -3464,7 +3478,9 @@ void FullCodeGenerator::VisitCountOperation(CountOperation* expr) {
       __ mov(a0, result_register());  // Value.
       __ li(a2, Operand(prop->key()->AsLiteral()->handle()));  // Name.
       __ pop(a1);  // Receiver.
-      Handle<Code> ic(Builtins::builtin(Builtins::StoreIC_Initialize));
+      Handle<Code> ic(Builtins::builtin(
+          is_strict() ? Builtins::StoreIC_Initialize_Strict
+                      : Builtins::StoreIC_Initialize));
       EmitCallIC(ic, RelocInfo::CODE_TARGET);
       PrepareForBailoutForId(expr->AssignmentId(), TOS_REG);
       if (expr->is_postfix()) {
@@ -3480,7 +3496,9 @@ void FullCodeGenerator::VisitCountOperation(CountOperation* expr) {
       __ mov(a0, result_register());  // Value.
       __ pop(a1);  // Key.
       __ pop(a2);  // Receiver.
-      Handle<Code> ic(Builtins::builtin(Builtins::KeyedStoreIC_Initialize));
+      Handle<Code> ic(Builtins::builtin(
+          is_strict() ? Builtins::KeyedStoreIC_Initialize_Strict
+                      : Builtins::KeyedStoreIC_Initialize));
       EmitCallIC(ic, RelocInfo::CODE_TARGET);
       PrepareForBailoutForId(expr->AssignmentId(), TOS_REG);
       if (expr->is_postfix()) {
