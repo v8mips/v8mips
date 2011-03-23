@@ -461,10 +461,8 @@ void Builtins::Generate_ArrayConstructCode(MacroAssembler* masm) {
   Label generic_constructor;
 
   if (FLAG_debug_code) {
-    // The array construct code is only set for the builtin Array function which
-    // always have a map.
-    GenerateLoadArrayFunction(masm, a2);
-    __ Assert(eq, "Unexpected Array function", a1, Operand(a2));
+    // The array construct code is only set for the builtin and internal
+    // Array functions which always have a map.
     // Initial map for the builtin Array function should be a map.
     __ lw(a2, FieldMemOperand(a1, JSFunction::kPrototypeOrInitialMapOffset));
     __ And(t0, a2, Operand(kSmiTagMask));
