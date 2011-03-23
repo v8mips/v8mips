@@ -1753,7 +1753,7 @@ void FullCodeGenerator::EmitVariableAssignment(Variable* var,
         // Detect const reinitialization by checking for the hole value.
         __ lw(a1, MemOperand(fp, SlotOffset(slot)));
         __ LoadRoot(t0, Heap::kTheHoleValueRootIndex);
-        __ Branch(&skip, ne, a1, Operand(t0));;
+        __ Branch(&skip, ne, a1, Operand(t0));
         __ sw(result_register(), MemOperand(fp, SlotOffset(slot)));
         break;
       case Slot::CONTEXT: {
