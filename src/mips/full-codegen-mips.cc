@@ -3649,21 +3649,18 @@ bool FullCodeGenerator::TryLiteralCompare(Token::Value op,
   PrepareForBailoutBeforeSplit(TOS_REG, true, if_true, if_false);
 
   if (check->Equals(Heap::number_symbol())) {
-    __ And(at, v0, Operand(kSmiTagMask));
-    __ Branch(if_true, eq, at, Operand(zero_reg));
+    __ JumpIfSmi(v0, if_true);
     __ lw(v0, FieldMemOperand(v0, HeapObject::kMapOffset));
     __ LoadRoot(at, Heap::kHeapNumberMapRootIndex);
     Split(eq, v0, Operand(at), if_true, if_false, fall_through);
   } else if (check->Equals(Heap::string_symbol())) {
-    __ And(at, v0, Operand(kSmiTagMask));
-    __ Branch(if_false, eq, at, Operand(zero_reg));
+    __ JumpIfSmi(v0, if_false);
     // Check for undetectable objects => false.
-    __ lw(v0, FieldMemOperand(v0, HeapObject::kMapOffset));
+    __ GetObjectType(v0, v0, a1);
+    __ Branch(if_false, ge, a1, Operand(FIRST_NONSTRING_TYPE));
     __ lbu(a1, FieldMemOperand(v0, Map::kBitFieldOffset));
     __ And(a1, a1, Operand(1 << Map::kIsUndetectable));
-    __ Branch(if_false, ne, a1, Operand(zero_reg));
-    __ lbu(a1, FieldMemOperand(v0, Map::kInstanceTypeOffset));
-    Split(lt, a1, Operand(FIRST_NONSTRING_TYPE),
+    Split(eq, a1, Operand(zero_reg),
           if_true, if_false, fall_through);
   } else if (check->Equals(Heap::boolean_symbol())) {
     __ LoadRoot(at, Heap::kTrueValueRootIndex);
@@ -3673,38 +3670,31 @@ bool FullCodeGenerator::TryLiteralCompare(Token::Value op,
   } else if (check->Equals(Heap::undefined_symbol())) {
     __ LoadRoot(at, Heap::kUndefinedValueRootIndex);
     __ Branch(if_true, eq, v0, Operand(at));
-    __ And(at, v0, Operand(kSmiTagMask));
-    __ Branch(if_false, eq, at, Operand(zero_reg));
+    __ JumpIfSmi(v0, if_false);
     // Check for undetectable objects => true.
     __ lw(v0, FieldMemOperand(v0, HeapObject::kMapOffset));
     __ lbu(a1, FieldMemOperand(v0, Map::kBitFieldOffset));
     __ And(a1, a1, Operand(1 << Map::kIsUndetectable));
     Split(ne, a1, Operand(zero_reg), if_true, if_false, fall_through);
   } else if (check->Equals(Heap::function_symbol())) {
-    __ And(at, v0, Operand(kSmiTagMask));
-    __ Branch(if_false, eq, at, Operand(zero_reg));
+    __ JumpIfSmi(v0, if_false);
     __ GetObjectType(v0, a1, v0);  // Leave map in a1.
-    __ Branch(if_true, eq, v0, Operand(JS_FUNCTION_TYPE));
-    // Regular expressions => 'function' (they are callable).
-    __ lbu(v0, FieldMemOperand(a1, Map::kInstanceTypeOffset));
-    Split(eq, v0, Operand(JS_REGEXP_TYPE), if_true, if_false, fall_through);
+    Split(ge, v0, Operand(FIRST_FUNCTION_CLASS_TYPE),
+        if_true, if_false, fall_through);
+
   } else if (check->Equals(Heap::object_symbol())) {
-    __ And(at, v0, Operand(kSmiTagMask));
-    __ Branch(if_false, eq, at, Operand(zero_reg));
+    __ JumpIfSmi(v0, if_false);
     __ LoadRoot(at, Heap::kNullValueRootIndex);
     __ Branch(if_true, eq, v0, Operand(at));
-    // Regular expressions => 'function', not 'object'.
-    __ GetObjectType(v0, a1, v0);  // Leave map in a1.
-    __ Branch(if_false, eq, v0, Operand(JS_REGEXP_TYPE));
-    // Check for undetectable objects => false.
-    __ lbu(v0, FieldMemOperand(a1, Map::kBitFieldOffset));
-    __ And(v0, v0, Operand(1 << Map::kIsUndetectable));
-    __ Branch(if_false, ne, v0, Operand(zero_reg));
     // Check for JS objects => true.
-    __ lbu(v0, FieldMemOperand(a1, Map::kInstanceTypeOffset));
-    __ Branch(if_false, lt, v0, Operand(FIRST_JS_OBJECT_TYPE));
-    Split(le, v0, Operand(LAST_JS_OBJECT_TYPE),
-          if_true, if_false, fall_through);
+    __ GetObjectType(v0, v0, a1);
+    __ Branch(if_false, lo, a1, Operand(FIRST_JS_OBJECT_TYPE));
+    __ lbu(a1, FieldMemOperand(v0, Map::kInstanceTypeOffset));
+    __ Branch(if_false, hs, a1, Operand(FIRST_FUNCTION_CLASS_TYPE));
+    // Check for undetectable objects => false.
+    __ lbu(a1, FieldMemOperand(v0, Map::kBitFieldOffset));
+    __ And(a1, a1, Operand(1 << Map::kIsUndetectable));
+    Split(eq, a1, Operand(zero_reg), if_true, if_false, fall_through);
   } else {
     if (if_false != fall_through) __ jmp(if_false);
   }
