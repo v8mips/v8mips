@@ -2034,6 +2034,27 @@ void FullCodeGenerator::EmitCallWithStub(Call* expr) {
 }
 
 
+void FullCodeGenerator::EmitResolvePossiblyDirectEval(ResolveEvalFlag flag,
+                                                      int arg_count) {
+  // Push copy of the first argument or undefined if it doesn't exist.
+  if (arg_count > 0) {
+    __ push(Operand(rsp, arg_count * kPointerSize));
+  } else {
+    __ PushRoot(Heap::kUndefinedValueRootIndex);
+  }
+
+  // Push the receiver of the enclosing function and do runtime call.
+  __ push(Operand(rbp, (2 + scope()->num_parameters()) * kPointerSize));
+
+  // Push the strict mode flag.
+  __ Push(Smi::FromInt(strict_mode_flag()));
+
+  __ CallRuntime(flag == SKIP_CONTEXT_LOOKUP
+                 ? Runtime::kResolvePossiblyDirectEvalNoLookup
+                 : Runtime::kResolvePossiblyDirectEval, 4);
+}
+
+
 void FullCodeGenerator::VisitCall(Call* expr) {
 #ifdef DEBUG
   // We want to verify that RecordJSReturnSite gets called on all paths
@@ -2061,21 +2082,30 @@ void FullCodeGenerator::VisitCall(Call* expr) {
         VisitForStackValue(args->at(i));
       }
 
-      // Push copy of the function - found below the arguments.
-      __ push(Operand(rsp, (arg_count + 1) * kPointerSize));
-
-      // Push copy of the first argument or undefined if it doesn't exist.
-      if (arg_count > 0) {
-        __ push(Operand(rsp, arg_count * kPointerSize));
-      } else {
-      __ PushRoot(Heap::kUndefinedValueRootIndex);
+      // If we know that eval can only be shadowed by eval-introduced
+      // variables we attempt to load the global eval function directly
+      // in generated code. If we succeed, there is no need to perform a
+      // context lookup in the runtime system.
+      Label done;
+      if (var->AsSlot() != NULL && var->mode() == Variable::DYNAMIC_GLOBAL) {
+        Label slow;
+        EmitLoadGlobalSlotCheckExtensions(var->AsSlot(),
+                                          NOT_INSIDE_TYPEOF,
+                                          &slow);
+        // Push the function and resolve eval.
+        __ push(rax);
+        EmitResolvePossiblyDirectEval(SKIP_CONTEXT_LOOKUP, arg_count);
+        __ jmp(&done);
+        __ bind(&slow);
       }
 
-      // Push the receiver of the enclosing function and do runtime call.
-      __ push(Operand(rbp, (2 + scope()->num_parameters()) * kPointerSize));
-      // Push the strict mode flag.
-      __ Push(Smi::FromInt(strict_mode_flag()));
-      __ CallRuntime(Runtime::kResolvePossiblyDirectEval, 4);
+      // Push copy of the function (found below the arguments) and
+      // resolve eval.
+      __ push(Operand(rsp, (arg_count + 1) * kPointerSize));
+      EmitResolvePossiblyDirectEval(PERFORM_CONTEXT_LOOKUP, arg_count);
+      if (done.is_linked()) {
+        __ bind(&done);
+      }
 
       // The runtime call returns a pair of values in rax (function) and
       // rdx (receiver). Touch up the stack with the right values.
@@ -2952,7 +2982,73 @@ void FullCodeGenerator::EmitSwapElements(ZoneList<Expression*>* args) {
   VisitForStackValue(args->at(0));
   VisitForStackValue(args->at(1));
   VisitForStackValue(args->at(2));
+  Label done;
+  Label slow_case;
+  Register object = rax;
+  Register index_1 = rbx;
+  Register index_2 = rcx;
+  Register elements = rdi;
+  Register temp = rdx;
+  __ movq(object, Operand(rsp, 2 * kPointerSize));
+  // Fetch the map and check if array is in fast case.
+  // Check that object doesn't require security checks and
+  // has no indexed interceptor.
+  __ CmpObjectType(object, FIRST_JS_OBJECT_TYPE, temp);
+  __ j(below, &slow_case);
+  __ testb(FieldOperand(temp, Map::kBitFieldOffset),
+           Immediate(KeyedLoadIC::kSlowCaseBitFieldMask));
+  __ j(not_zero, &slow_case);
+
+  // Check the object's elements are in fast case and writable.
+  __ movq(elements, FieldOperand(object, JSObject::kElementsOffset));
+  __ CompareRoot(FieldOperand(elements, HeapObject::kMapOffset),
+                 Heap::kFixedArrayMapRootIndex);
+  __ j(not_equal, &slow_case);
+
+  // Check that both indices are smis.
+  __ movq(index_1, Operand(rsp, 1 * kPointerSize));
+  __ movq(index_2, Operand(rsp, 0 * kPointerSize));
+  __ JumpIfNotBothSmi(index_1, index_2, &slow_case);
+
+  // Check that both indices are valid.
+  // The JSArray length field is a smi since the array is in fast case mode.
+  __ movq(temp, FieldOperand(object, JSArray::kLengthOffset));
+  __ SmiCompare(temp, index_1);
+  __ j(below_equal, &slow_case);
+  __ SmiCompare(temp, index_2);
+  __ j(below_equal, &slow_case);
+
+  __ SmiToInteger32(index_1, index_1);
+  __ SmiToInteger32(index_2, index_2);
+  // Bring addresses into index1 and index2.
+  __ lea(index_1, FieldOperand(elements, index_1, times_pointer_size,
+                               FixedArray::kHeaderSize));
+  __ lea(index_2, FieldOperand(elements, index_2, times_pointer_size,
+                               FixedArray::kHeaderSize));
+
+  // Swap elements.  Use object and temp as scratch registers.
+  __ movq(object, Operand(index_1, 0));
+  __ movq(temp,   Operand(index_2, 0));
+  __ movq(Operand(index_2, 0), object);
+  __ movq(Operand(index_1, 0), temp);
+
+  Label new_space;
+  __ InNewSpace(elements, temp, equal, &new_space);
+
+  __ movq(object, elements);
+  __ RecordWriteHelper(object, index_1, temp);
+  __ RecordWriteHelper(elements, index_2, temp);
+
+  __ bind(&new_space);
+  // We are done. Drop elements from the stack, and return undefined.
+  __ addq(rsp, Immediate(3 * kPointerSize));
+  __ LoadRoot(rax, Heap::kUndefinedValueRootIndex);
+  __ jmp(&done);
+
+  __ bind(&slow_case);
   __ CallRuntime(Runtime::kSwapElements, 3);
+
+  __ bind(&done);
   context()->Plug(rax);
 }
 
