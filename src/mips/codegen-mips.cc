@@ -5250,8 +5250,6 @@ class DeferredIsStringWrapperSafeForDefaultValueOf : public DeferredCode {
     // Set the bit in the map to indicate that it has been checked safe for
     // default valueOf and set true result.
     // Warning: possible endian dependency here.
-    // On Arm this was ldr/str, which behaves weirdly, but OK for unaligned
-    // accesses. On mips we would get adr error, the kernel fixes up. Slow.
     __ lbu(scratch1_, FieldMemOperand(map_result_, Map::kBitField2Offset));
     __ Or(scratch1_,
           scratch1_,
