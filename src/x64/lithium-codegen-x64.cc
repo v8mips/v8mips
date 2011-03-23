@@ -1114,25 +1114,31 @@ void LCodeGen::DoAddI(LAddI* instr) {
 
 
 void LCodeGen::DoArithmeticD(LArithmeticD* instr) {
-  LOperand* left = instr->InputAt(0);
-  LOperand* right = instr->InputAt(1);
+  XMMRegister left = ToDoubleRegister(instr->InputAt(0));
+  XMMRegister right = ToDoubleRegister(instr->InputAt(1));
+  XMMRegister result = ToDoubleRegister(instr->result());
   // All operations except MOD are computed in-place.
-  ASSERT(instr->op() == Token::MOD || left->Equals(instr->result()));
+  ASSERT(instr->op() == Token::MOD || left.is(result));
   switch (instr->op()) {
     case Token::ADD:
-      __ addsd(ToDoubleRegister(left), ToDoubleRegister(right));
+      __ addsd(left, right);
       break;
     case Token::SUB:
-       __ subsd(ToDoubleRegister(left), ToDoubleRegister(right));
+       __ subsd(left, right);
        break;
     case Token::MUL:
-      __ mulsd(ToDoubleRegister(left), ToDoubleRegister(right));
+      __ mulsd(left, right);
       break;
     case Token::DIV:
-      __ divsd(ToDoubleRegister(left), ToDoubleRegister(right));
+      __ divsd(left, right);
       break;
     case Token::MOD:
-      Abort("Unimplemented: %s", "DoArithmeticD MOD");
+      __ PrepareCallCFunction(2);
+      __ movsd(xmm0, left);
+      ASSERT(right.is(xmm1));
+      __ CallCFunction(ExternalReference::double_fp_operation(Token::MOD), 2);
+      __ movq(rsi, Operand(rbp, StandardFrameConstants::kContextOffset));
+      __ movsd(result, xmm0);
       break;
     default:
       UNREACHABLE();
@@ -1631,6 +1637,20 @@ void LCodeGen::DoHasInstanceTypeAndBranch(LHasInstanceTypeAndBranch* instr) {
 }
 
 
+void LCodeGen::DoGetCachedArrayIndex(LGetCachedArrayIndex* instr) {
+  Register input = ToRegister(instr->InputAt(0));
+  Register result = ToRegister(instr->result());
+
+  if (FLAG_debug_code) {
+    __ AbortIfNotString(input);
+  }
+
+  __ movl(result, FieldOperand(input, String::kHashFieldOffset));
+  ASSERT(String::kHashShift >= kSmiTagSize);
+  __ IndexFromHash(result, result);
+}
+
+
 void LCodeGen::DoHasCachedArrayIndex(LHasCachedArrayIndex* instr) {
   Register input = ToRegister(instr->InputAt(0));
   Register result = ToRegister(instr->result());
@@ -1640,7 +1660,7 @@ void LCodeGen::DoHasCachedArrayIndex(LHasCachedArrayIndex* instr) {
   __ testl(FieldOperand(input, String::kHashFieldOffset),
            Immediate(String::kContainsCachedArrayIndexMask));
   NearLabel done;
-  __ j(not_zero, &done);
+  __ j(zero, &done);
   __ LoadRoot(result, Heap::kFalseValueRootIndex);
   __ bind(&done);
 }
@@ -1655,7 +1675,7 @@ void LCodeGen::DoHasCachedArrayIndexAndBranch(
 
   __ testl(FieldOperand(input, String::kHashFieldOffset),
            Immediate(String::kContainsCachedArrayIndexMask));
-  EmitBranch(true_block, false_block, not_equal);
+  EmitBranch(true_block, false_block, equal);
 }
 
 

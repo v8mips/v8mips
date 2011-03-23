@@ -873,6 +873,7 @@ LInstruction* LChunkBuilder::DoArithmeticD(Token::Value op,
   ASSERT(instr->representation().IsDouble());
   ASSERT(instr->left()->representation().IsDouble());
   ASSERT(instr->right()->representation().IsDouble());
+  ASSERT(op != Token::MOD);
   LOperand* left = UseRegisterAtStart(instr->left());
   LOperand* right = UseRegisterAtStart(instr->right());
   LArithmeticD* result = new LArithmeticD(op, left, right);
@@ -1518,7 +1519,7 @@ LInstruction* LChunkBuilder::DoHasInstanceType(HHasInstanceType* instr) {
 LInstruction* LChunkBuilder::DoGetCachedArrayIndex(
     HGetCachedArrayIndex* instr)  {
   ASSERT(instr->value()->representation().IsTagged());
-  LOperand* value = UseRegister(instr->value());
+  LOperand* value = UseRegisterAtStart(instr->value());
 
   return DefineAsRegister(new LGetCachedArrayIndex(value));
 }
