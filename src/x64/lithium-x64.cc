@@ -1158,7 +1158,7 @@ LInstruction* LChunkBuilder::DoInstanceOf(HInstanceOf* instr) {
 LInstruction* LChunkBuilder::DoInstanceOfKnownGlobal(
     HInstanceOfKnownGlobal* instr) {
   LInstanceOfKnownGlobal* result =
-      new LInstanceOfKnownGlobal(UseRegisterAtStart(instr->value()));
+      new LInstanceOfKnownGlobal(UseFixed(instr->value(), rax));
   return MarkAsCall(DefineFixed(result, rax), instr);
 }
 
@@ -1531,8 +1531,9 @@ LInstruction* LChunkBuilder::DoGetCachedArrayIndex(
 
 LInstruction* LChunkBuilder::DoHasCachedArrayIndex(
     HHasCachedArrayIndex* instr) {
-  Abort("Unimplemented: %s", "DoHasCachedArrayIndex");
-  return NULL;
+  ASSERT(instr->value()->representation().IsTagged());
+  LOperand* value = UseRegister(instr->value());
+  return DefineAsRegister(new LHasCachedArrayIndex(value));
 }
 
 

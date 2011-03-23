@@ -206,14 +206,12 @@ class LCodeGen BASE_EMBEDDED {
   // Specific math operations - used from DoUnaryMathOperation.
   void EmitIntegerMathAbs(LUnaryMathOperation* instr);
   void DoMathAbs(LUnaryMathOperation* instr);
-  void EmitVFPTruncate(VFPRoundingMode rounding_mode,
-                       SwVfpRegister result,
-                       DwVfpRegister double_input,
-                       Register scratch1,
-                       Register scratch2);
   void DoMathFloor(LUnaryMathOperation* instr);
   void DoMathRound(LUnaryMathOperation* instr);
   void DoMathSqrt(LUnaryMathOperation* instr);
+  void DoMathLog(LUnaryMathOperation* instr);
+  void DoMathCos(LUnaryMathOperation* instr);
+  void DoMathSin(LUnaryMathOperation* instr);
 
   // Support for recording safepoint and position information.
   void RecordSafepoint(LPointerMap* pointers,
