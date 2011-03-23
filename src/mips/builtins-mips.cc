@@ -429,7 +429,7 @@ void Builtins::Generate_ArrayCode(MacroAssembler* masm) {
   GenerateLoadArrayFunction(masm, a1);
 
   if (FLAG_debug_code) {
-    // Initial map for the builtin Array function shoud be a map.
+    // Initial map for the builtin Array functions should be maps.
     __ lw(a2, FieldMemOperand(a1, JSFunction::kPrototypeOrInitialMapOffset));
     __ And(t0, a2, Operand(kSmiTagMask));
     __ Assert(ne, "Unexpected initial map for Array function (1)",
