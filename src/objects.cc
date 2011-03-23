@@ -5552,6 +5552,10 @@ MaybeObject* JSFunction::SetPrototype(Object* value) {
 
 
 Object* JSFunction::RemovePrototype() {
+  if (map() == context()->global_context()->function_without_prototype_map()) {
+    // Be idempotent.
+    return this;
+  }
   ASSERT(map() == context()->global_context()->function_map());
   set_map(context()->global_context()->function_without_prototype_map());
   set_prototype_or_initial_map(Heap::the_hole_value());
@@ -6519,13 +6523,6 @@ void JSArray::Expand(int required_size) {
   // Can't use this any more now because we may have had a GC!
   for (int i = 0; i < old_size; i++) new_backing->set(i, old_backing->get(i));
   self->SetContent(*new_backing);
-}
-
-
-// Computes the new capacity when expanding the elements of a JSObject.
-static int NewElementsCapacity(int old_capacity) {
-  // (old_capacity + 50%) + 16
-  return old_capacity + (old_capacity >> 1) + 16;
 }
 
 
