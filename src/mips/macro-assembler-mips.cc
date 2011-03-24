@@ -1696,6 +1696,9 @@ void MacroAssembler::Call(const Operand& target,
     if (!MustUseReg(target.rmode_)) {
       jal(target.imm32_);
     } else {  // MustUseReg(target)
+      // Must record previous source positions before the
+      // li() generates a new code target.
+      positions_recorder()->WriteRecordedPositions();
       li(t9, target);
       jalr(t9);
     }
