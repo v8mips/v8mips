@@ -236,10 +236,12 @@ LIBRARY_FLAGS = {
           'LINKFLAGS':    ['-static', '-static-libgcc']
         },
         'mipsabi:softfloat': {
-          'CCFLAGS':      ['-msoft-float']
+          'CCFLAGS':      ['-msoft-float'],
+          'LINKFLAGS':    ['-msoft-float']
         },
         'mipsabi:hardfloat': {
-          'CCFLAGS':      ['-mhard-float']
+          'CCFLAGS':      ['-mhard-float'],
+          'LINKFLAGS':    ['-mhard-float']
         }
       }
     },
@@ -555,10 +557,12 @@ SAMPLE_FLAGS = {
           'LINKFLAGS':    ['-static', '-static-libgcc']
         },
         'mipsabi:softfloat': {
-          'CCFLAGS':      ['-msoft-float']
+          'CCFLAGS':      ['-msoft-float'],
+          'LINKFLAGS':    ['-msoft-float']
         },
         'mipsabi:hardfloat': {
-          'CCFLAGS':      ['-mhard-float']
+          'CCFLAGS':      ['-mhard-float'],
+          'LINKFLAGS':    ['-mhard-float']
         }
       }
     },
