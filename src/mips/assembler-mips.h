@@ -406,6 +406,9 @@ class Assembler : public Malloced {
   Assembler(void* buffer, int buffer_size);
   ~Assembler();
 
+  // Overrides the default provided by FLAG_debug_code.
+  void set_emit_debug_code(bool value) { emit_debug_code_ = value; }
+
   // GetCode emits any pending (non-emitted) code and fills the descriptor
   // desc. GetCode() is idempotent; it returns the same result if no other
   // Assembler functions are invoked in between GetCode() calls.
@@ -814,6 +817,8 @@ class Assembler : public Malloced {
   void CheckTrampolinePool(bool force_emit = false);
 
  protected:
+  bool emit_debug_code() const { return emit_debug_code_; }
+
   int32_t buffer_space() const { return reloc_info_writer.pos() - pc_; }
 
   // Decode branch instruction at pos and return branch target pos.
@@ -1032,6 +1037,7 @@ class Assembler : public Malloced {
 
   PositionsRecorder positions_recorder_;
   bool allow_peephole_optimization_;
+  bool emit_debug_code_;
   friend class PositionsRecorder;
   friend class EnsureSpace;
 };

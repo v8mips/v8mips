@@ -241,7 +241,8 @@ const Instr kLwSwOffsetMask = kImm16Mask;
 
 Assembler::Assembler(void* buffer, int buffer_size)
     : positions_recorder_(this),
-      allow_peephole_optimization_(false) {
+      allow_peephole_optimization_(false),
+      emit_debug_code_(FLAG_debug_code) {
   allow_peephole_optimization_ = FLAG_peephole_optimization;
   if (buffer == NULL) {
     // Do our own buffer management.
@@ -1994,7 +1995,7 @@ void Assembler::RecordRelocInfo(RelocInfo::Mode rmode, intptr_t data) {
     // Don't record external references unless the heap will be serialized.
     if (rmode == RelocInfo::EXTERNAL_REFERENCE &&
         !Serializer::enabled() &&
-        !FLAG_debug_code) {
+        !emit_debug_code()) {
       return;
     }
     ASSERT(buffer_space() >= kMaxRelocSize);  // too late to grow buffer here

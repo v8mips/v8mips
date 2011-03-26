@@ -174,7 +174,7 @@ void MacroAssembler::StoreRoot(Register source,
 void MacroAssembler::RecordWriteHelper(Register object,
                                        Register address,
                                        Register scratch) {
-  if (FLAG_debug_code) {
+  if (emit_debug_code()) {
     // Check that the object is not in new space.
     Label not_in_new_space;
     InNewSpace(object, scratch, ne, &not_in_new_space);
@@ -242,7 +242,7 @@ void MacroAssembler::RecordWrite(Register object,
 
   // Clobber all input registers when running with the debug-code flag
   // turned on to provoke errors.
-  if (FLAG_debug_code) {
+  if (emit_debug_code()) {
     li(object, Operand(BitCast<int32_t>(kZapValue)));
     li(scratch0, Operand(BitCast<int32_t>(kZapValue)));
     li(scratch1, Operand(BitCast<int32_t>(kZapValue)));
@@ -274,7 +274,7 @@ void MacroAssembler::RecordWrite(Register object,
 
   // Clobber all input registers when running with the debug-code flag
   // turned on to provoke errors.
-  if (FLAG_debug_code) {
+  if (emit_debug_code()) {
     li(object, Operand(BitCast<int32_t>(kZapValue)));
     li(address, Operand(BitCast<int32_t>(kZapValue)));
     li(scratch, Operand(BitCast<int32_t>(kZapValue)));
@@ -309,7 +309,7 @@ void MacroAssembler::CheckAccessGlobalProxy(Register holder_reg,
   lw(scratch, FieldMemOperand(scratch, GlobalObject::kGlobalContextOffset));
 
   // Check the context is a global context.
-  if (FLAG_debug_code) {
+  if (emit_debug_code()) {
     // TODO(119): Avoid push(holder_reg)/pop(holder_reg).
     Push(holder_reg);  // Temporarily save holder on the stack.
     // Read the first word and compare to the global_context_map.
@@ -325,7 +325,7 @@ void MacroAssembler::CheckAccessGlobalProxy(Register holder_reg,
   Branch(&same_contexts, eq, scratch, Operand(at));
 
   // Check the context is a global context.
-  if (FLAG_debug_code) {
+  if (emit_debug_code()) {
     // TODO(119): Avoid push(holder_reg)/pop(holder_reg).
     Push(holder_reg);  // Temporarily save holder on the stack.
     mov(holder_reg, at);  // Move at to its holding place.
@@ -1907,7 +1907,7 @@ void MacroAssembler::AllocateInNewSpace(int object_size,
                                         Label* gc_required,
                                         AllocationFlags flags) {
   if (!FLAG_inline_new) {
-    if (FLAG_debug_code) {
+    if (emit_debug_code()) {
       // Trash the registers to simulate an allocation failure.
       li(result, 0x7091);
       li(scratch1, 0x7191);
@@ -1955,7 +1955,7 @@ void MacroAssembler::AllocateInNewSpace(int object_size,
     lw(result, MemOperand(topaddr));
     lw(t9, MemOperand(topaddr, kPointerSize));
   } else {
-    if (FLAG_debug_code) {
+    if (emit_debug_code()) {
       // Assert that result actually contains top on entry. t9 is used
       // immediately below so this use of t9 does not cause difference with
       // respect to register content between debug and release mode.
@@ -1986,7 +1986,7 @@ void MacroAssembler::AllocateInNewSpace(Register object_size,
                                         Label* gc_required,
                                         AllocationFlags flags) {
   if (!FLAG_inline_new) {
-    if (FLAG_debug_code) {
+    if (emit_debug_code()) {
       // Trash the registers to simulate an allocation failure.
       li(result, 0x7091);
       li(scratch1, 0x7191);
@@ -2024,7 +2024,7 @@ void MacroAssembler::AllocateInNewSpace(Register object_size,
     lw(result, MemOperand(topaddr));
     lw(t9, MemOperand(topaddr, kPointerSize));
   } else {
-    if (FLAG_debug_code) {
+    if (emit_debug_code()) {
       // Assert that result actually contains top on entry. t9 is used
       // immediately below so this use of t9 does not cause difference with
       // respect to register content between debug and release mode.
@@ -2047,7 +2047,7 @@ void MacroAssembler::AllocateInNewSpace(Register object_size,
   Branch(gc_required, Ugreater, scratch2, Operand(t9));
 
   // Update allocation top. result temporarily holds the new top.
-  if (FLAG_debug_code) {
+  if (emit_debug_code()) {
     And(t9, scratch2, Operand(kObjectAlignmentMask));
     Check(eq, "Unaligned allocation in new space", t9, Operand(zero_reg));
   }
@@ -2844,14 +2844,14 @@ void MacroAssembler::DecrementCounter(StatsCounter* counter, int value,
 
 void MacroAssembler::Assert(Condition cc, const char* msg,
                             Register rs, Operand rt) {
-  if (FLAG_debug_code)
+  if (emit_debug_code())
     Check(cc, msg, rs, rt);
 }
 
 
 void MacroAssembler::AssertRegisterIsRoot(Register reg,
                                           Heap::RootListIndex index) {
-  if (FLAG_debug_code) {
+  if (emit_debug_code()) {
     LoadRoot(at, index);
     Check(eq, "Register did not match expected root", reg, Operand(at));
   }
@@ -2859,7 +2859,7 @@ void MacroAssembler::AssertRegisterIsRoot(Register reg,
 
 
 void MacroAssembler::AssertFastElements(Register elements) {
-  if (FLAG_debug_code) {
+  if (emit_debug_code()) {
     ASSERT(!elements.is(at));
     Label ok;
     Push(elements);
@@ -2948,7 +2948,7 @@ void MacroAssembler::LoadContext(Register dst, int context_chain_length) {
   // (i.e., the static scope chain and runtime context chain do not agree).
   // A variable occurring in such a scope should have slot type LOOKUP and
   // not CONTEXT.
-  if (FLAG_debug_code) {
+  if (emit_debug_code()) {
     lw(t9, MemOperand(dst, Context::SlotOffset(Context::FCONTEXT_INDEX)));
     Check(eq, "Yo dawg, I heard you liked function contexts "
               "so I put function contexts in all your contexts",
@@ -2973,7 +2973,7 @@ void MacroAssembler::LoadGlobalFunctionInitialMap(Register function,
                                                   Register scratch) {
   // Load the initial map. The global functions all have initial maps.
   lw(map, FieldMemOperand(function, JSFunction::kPrototypeOrInitialMapOffset));
-  if (FLAG_debug_code) {
+  if (emit_debug_code()) {
     Label ok, fail;
     CheckMap(map, scratch, Heap::kMetaMapRootIndex, &fail, false);
     Branch(&ok);
@@ -3359,7 +3359,7 @@ void MacroAssembler::CallCFunction(Register function, int num_arguments) {
   // The argument stots are presumed to have been set up by
   // PrepareCallCFunction. The C function must be called via t9, for mips ABI.
 #if defined(V8_HOST_ARCH_MIPS)
-  if (FLAG_debug_code) {
+  if (emit_debug_code()) {
     int frame_alignment = OS::ActivationFrameAlignment();
     int frame_alignment_mask = frame_alignment - 1;
     if (frame_alignment > kPointerSize) {
