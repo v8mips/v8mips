@@ -1190,7 +1190,7 @@ void KeyedLoadIC::GenerateGeneric(MacroAssembler* masm) {
   //  -- a1     : receiver
   // -----------------------------------
   Label slow, check_string, index_smi, index_string, property_array_property;
-  Label check_pixel_array, probe_dictionary, check_number_dictionary;
+  Label probe_dictionary, check_number_dictionary;
 
   Register key = a0;
   Register receiver = a1;
@@ -1208,7 +1208,7 @@ void KeyedLoadIC::GenerateGeneric(MacroAssembler* masm) {
   // now in a2.
   __ lbu(a3, FieldMemOperand(a2, Map::kBitField2Offset));
   __ And(at, a3, Operand(1 << Map::kHasFastElements));
-  __ Branch(&check_pixel_array, eq, at, Operand(zero_reg));
+  __ Branch(&check_number_dictionary, eq, at, Operand(zero_reg));
 
   GenerateFastArrayLoad(
       masm, receiver, key, t0, a3, a2, v0, NULL, &slow);
@@ -1216,23 +1216,10 @@ void KeyedLoadIC::GenerateGeneric(MacroAssembler* masm) {
   __ IncrementCounter(&Counters::keyed_load_generic_smi, 1, a2, a3);
   __ Ret();
 
-  // Check whether the elements is a pixel array.
-  // a0: key
-  // a1: receiver
-  __ bind(&check_pixel_array);
-  GenerateFastPixelArrayLoad(masm,
-                             a1,
-                             a0,
-                             a3,
-                             t0,
-                             a2,
-                             t1,
-                             v0,
-                             &check_number_dictionary,
-                             NULL,
-                             &slow);
-
   __ bind(&check_number_dictionary);
+  __ lw(t0, FieldMemOperand(receiver, JSObject::kElementsOffset));
+  __ lw(a3, FieldMemOperand(t0, JSObject::kMapOffset));
+
   // Check whether the elements is a number dictionary.
   // a0: key
   // a3: elements map
@@ -1402,7 +1389,7 @@ void KeyedStoreIC::GenerateGeneric(MacroAssembler* masm,
   //  -- ra     : return address
   // -----------------------------------
 
-  Label slow, fast, array, extra, check_pixel_array, exit;
+  Label slow, fast, array, extra, exit;
 
   // Register usage.
   Register value = a0;
@@ -1436,7 +1423,7 @@ void KeyedStoreIC::GenerateGeneric(MacroAssembler* masm,
   // Check that the object is in fast mode and writable.
   __ lw(t3, FieldMemOperand(elements, HeapObject::kMapOffset));
   __ LoadRoot(t0, Heap::kFixedArrayMapRootIndex);
-  __ Branch(&check_pixel_array, ne, t3, Operand(t0));
+  __ Branch(&slow, ne, t3, Operand(t0));
   // Check array bounds. Both the key and the length of FixedArray are smis.
   __ lw(t0, FieldMemOperand(elements, FixedArray::kLengthOffset));
   __ Branch(&fast, lo, key, Operand(t0));
@@ -1451,25 +1438,6 @@ void KeyedStoreIC::GenerateGeneric(MacroAssembler* masm,
   // a2: receiver.
 
   GenerateRuntimeSetProperty(masm, strict_mode);
-
-  // Check whether the elements is a pixel array.
-  // t3: elements map
-
-  __ bind(&check_pixel_array);
-  GenerateFastPixelArrayStore(masm,
-                              a2,
-                              a1,
-                              a0,
-                              elements,
-                              t0,
-                              t1,
-                              t2,
-                              false,
-                              false,
-                              NULL,
-                              &slow,
-                              &slow,
-                              &slow);
 
   // Extra capacity case: Check if there is extra capacity to
   // perform the store and update the length. Used for adding one
