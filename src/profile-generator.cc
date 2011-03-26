@@ -105,7 +105,7 @@ StringsStorage::~StringsStorage() {
 
 
 const char* StringsStorage::GetCopy(const char* src) {
-  int len = strlen(src);
+  int len = static_cast<int>(strlen(src));
   Vector<char> dst = Vector<char>::New(len + 1);
   OS::StrNCpy(dst, src, len);
   dst[len] = '\0';
@@ -1226,7 +1226,7 @@ HeapSnapshot::HeapSnapshot(HeapSnapshotsCollection* collection,
       uid_(uid),
       root_entry_(NULL),
       gc_roots_entry_(NULL),
-      dom_subtrees_root_entry_(NULL),
+      natives_root_entry_(NULL),
       raw_entries_(NULL),
       entries_sorted_(false),
       retaining_paths_(HeapEntry::Match) {
@@ -1303,8 +1303,8 @@ HeapEntry* HeapSnapshot::AddGcRootsEntry(int children_count,
 
 HeapEntry* HeapSnapshot::AddNativesRootEntry(int children_count,
                                                  int retainers_count) {
-  ASSERT(dom_subtrees_root_entry_ == NULL);
-  return (dom_subtrees_root_entry_ = AddEntry(
+  ASSERT(natives_root_entry_ == NULL);
+  return (natives_root_entry_ = AddEntry(
       HeapEntry::kObject,
       "(Native objects)",
       HeapObjectsMap::kNativesRootObjectId,
@@ -1510,7 +1510,7 @@ void HeapObjectsMap::RemoveDeadEntries() {
 uint64_t HeapObjectsMap::GenerateId(v8::RetainedObjectInfo* info) {
   uint64_t id = static_cast<uint64_t>(info->GetHash());
   const char* label = info->GetLabel();
-  id ^= HashSequentialString(label, strlen(label));
+  id ^= HashSequentialString(label, static_cast<int>(strlen(label)));
   intptr_t element_count = info->GetElementCount();
   if (element_count != -1)
     id ^= ComputeIntegerHash(static_cast<uint32_t>(element_count));
@@ -2340,7 +2340,7 @@ void NativeObjectsExplorer::SetNativeRootReference(
   ASSERT(child_entry != NULL);
   filler_->SetIndexedAutoIndexReference(
       HeapGraphEdge::kElement,
-      kNativesRootObject, snapshot_->dom_subtrees_root(),
+      kNativesRootObject, snapshot_->natives_root(),
       info, child_entry);
 }
 
@@ -2365,7 +2365,7 @@ void NativeObjectsExplorer::SetRootNativesRootReference() {
   filler_->SetIndexedAutoIndexReference(
       HeapGraphEdge::kElement,
       V8HeapExplorer::kInternalRootObject, snapshot_->root(),
-      kNativesRootObject, snapshot_->dom_subtrees_root());
+      kNativesRootObject, snapshot_->natives_root());
 }
 
 

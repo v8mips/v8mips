@@ -1059,7 +1059,7 @@ void LCodeGen::DoFixedArrayLength(LFixedArrayLength* instr) {
 void LCodeGen::DoExternalArrayLength(LExternalArrayLength* instr) {
   Register result = ToRegister(instr->result());
   Register array = ToRegister(instr->InputAt(0));
-  __ movq(result, FieldOperand(array, ExternalPixelArray::kLengthOffset));
+  __ movl(result, FieldOperand(array, ExternalPixelArray::kLengthOffset));
 }
 
 
@@ -2613,7 +2613,7 @@ void LCodeGen::DoMathLog(LUnaryMathOperation* instr) {
 
 void LCodeGen::DoMathCos(LUnaryMathOperation* instr) {
   ASSERT(ToDoubleRegister(instr->result()).is(xmm1));
-  TranscendentalCacheStub stub(TranscendentalCache::LOG,
+  TranscendentalCacheStub stub(TranscendentalCache::COS,
                                TranscendentalCacheStub::UNTAGGED);
   CallCode(stub.GetCode(), RelocInfo::CODE_TARGET, instr);
 }
@@ -2621,7 +2621,7 @@ void LCodeGen::DoMathCos(LUnaryMathOperation* instr) {
 
 void LCodeGen::DoMathSin(LUnaryMathOperation* instr) {
   ASSERT(ToDoubleRegister(instr->result()).is(xmm1));
-  TranscendentalCacheStub stub(TranscendentalCache::LOG,
+  TranscendentalCacheStub stub(TranscendentalCache::SIN,
                                TranscendentalCacheStub::UNTAGGED);
   CallCode(stub.GetCode(), RelocInfo::CODE_TARGET, instr);
 }
