@@ -500,6 +500,9 @@ class RegExpCEntryStub: public CodeStub {
  private:
   Major MajorKey() { return RegExpCEntry; }
   int MinorKey() { return 0; }
+
+  bool NeedsImmovableCode() { return true; }
+
   const char* GetName() { return "RegExpCEntryStub"; }
 };
 

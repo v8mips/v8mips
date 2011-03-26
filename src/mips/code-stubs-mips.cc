@@ -3400,6 +3400,11 @@ void MathPowStub::Generate(MacroAssembler* masm) {
 }
 
 
+bool CEntryStub::NeedsImmovableCode() {
+  return true;
+}
+
+
 void CEntryStub::GenerateThrowTOS(MacroAssembler* masm) {
   // v0 holds the exception.
 
