@@ -269,6 +269,11 @@ class LChunk: public ZoneObject {
 
   void MarkEmptyBlocks() { UNIMPLEMENTED(); }
 
+  CompilationInfo* info() const {
+    UNIMPLEMENTED();
+    return NULL;
+  }
+
 #ifdef DEBUG
   void Verify() { UNIMPLEMENTED(); }
 #endif
@@ -277,7 +282,7 @@ class LChunk: public ZoneObject {
 
 class LChunkBuilder BASE_EMBEDDED {
  public:
-  LChunkBuilder(HGraph* graph, LAllocator* allocator) { }
+  LChunkBuilder(CompilationInfo*&, HGraph* graph, LAllocator* allocator) { }
 
   // Build the sequence for the graph.
   LChunk* Build() {
