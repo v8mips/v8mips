@@ -3782,7 +3782,8 @@ MaybeObject* ExternalArrayStubCompiler::CompileKeyedStoreStub(
         }
       }
 
-      // Entry registers are intact, a0 holds the value which is the return value.
+      // Entry registers are intact, a0 holds the value
+      // which is the return value.
       __ mov(v0, value);
       __ Ret();
     } else {

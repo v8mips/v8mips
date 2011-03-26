@@ -3019,9 +3019,8 @@ void TranscendentalCacheStub::Generate(MacroAssembler* masm) {
   const bool tagged = (argument_type_ == TAGGED);
 
   if (CpuFeatures::IsSupported(FPU)) {
-
-
     CpuFeatures::Scope scope(FPU);
+
     if (tagged) {
       // Argument is a number and is on stack and in a0.
       // Load argument and check if it is a smi.

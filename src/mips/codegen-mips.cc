@@ -6813,8 +6813,8 @@ void DeferredReferenceSetKeyedValue::Generate() {
     // Call keyed store IC. It has the arguments value, key and receiver in a0,
     // a1 and a2.
     Handle<Code> ic(Builtins::builtin(
-          (strict_mode_ == kStrictMode) ? Builtins::KeyedStoreIC_Initialize_Strict
-                                        : Builtins::KeyedStoreIC_Initialize));
+        (strict_mode_ == kStrictMode) ? Builtins::KeyedStoreIC_Initialize_Strict
+                                      : Builtins::KeyedStoreIC_Initialize));
     __ Call(ic, RelocInfo::CODE_TARGET);
     // The call must be followed by a nop instruction to indicate that the
     // keyed store has been inlined.
