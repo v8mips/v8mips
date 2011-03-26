@@ -1084,9 +1084,10 @@ void FullCodeGenerator::EmitNewClosure(Handle<SharedFunctionInfo> info,
   // doesn't just get a copy of the existing unoptimized code.
   if (!FLAG_always_opt &&
       !FLAG_prepare_always_opt &&
+      !pretenure &&
       scope()->is_function_scope() &&
       info->num_literals() == 0 &&
-      !pretenure) {
+      !info->strict_mode()) {  // Strict mode functions use slow path.
     FastNewClosureStub stub;
     __ mov(r0, Operand(info));
     __ push(r0);
@@ -3131,8 +3132,8 @@ void FullCodeGenerator::EmitSwapElements(ZoneList<Expression*>* args) {
   // Fetch the map and check if array is in fast case.
   // Check that object doesn't require security checks and
   // has no indexed interceptor.
-  __ CompareObjectType(object, scratch1, scratch2, FIRST_JS_OBJECT_TYPE);
-  __ b(lt, &slow_case);
+  __ CompareObjectType(object, scratch1, scratch2, JS_ARRAY_TYPE);
+  __ b(ne, &slow_case);
   // Map is now in scratch1.
 
   __ ldrb(scratch2, FieldMemOperand(scratch1, Map::kBitFieldOffset));

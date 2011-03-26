@@ -757,11 +757,6 @@ void LCodeGen::DoCallStub(LCallStub* instr) {
       CallCode(stub.GetCode(), RelocInfo::CODE_TARGET, instr);
       break;
     }
-    case CodeStub::StringCharAt: {
-      StringCharAtStub stub;
-      CallCode(stub.GetCode(), RelocInfo::CODE_TARGET, instr);
-      break;
-    }
     case CodeStub::NumberToString: {
       NumberToStringStub stub;
       CallCode(stub.GetCode(), RelocInfo::CODE_TARGET, instr);
@@ -796,6 +791,30 @@ void LCodeGen::DoUnknownOSRValue(LUnknownOSRValue* instr) {
 
 
 void LCodeGen::DoModI(LModI* instr) {
+  if (instr->hydrogen()->HasPowerOf2Divisor()) {
+    Register dividend = ToRegister(instr->InputAt(0));
+
+    int32_t divisor =
+        HConstant::cast(instr->hydrogen()->right())->Integer32Value();
+
+    if (divisor < 0) divisor = -divisor;
+
+    Label positive_dividend, done;
+    __ tst(dividend, Operand(dividend));
+    __ b(pl, &positive_dividend);
+    __ rsb(dividend, dividend, Operand(0));
+    __ and_(dividend, dividend, Operand(divisor - 1));
+    __ rsb(dividend, dividend, Operand(0), SetCC);
+    if (instr->hydrogen()->CheckFlag(HValue::kBailoutOnMinusZero)) {
+      __ b(ne, &done);
+      DeoptimizeIf(al, instr->environment());
+    }
+    __ bind(&positive_dividend);
+    __ and_(dividend, dividend, Operand(divisor - 1));
+    __ bind(&done);
+    return;
+  }
+
   class DeferredModI: public LDeferredCode {
    public:
     DeferredModI(LCodeGen* codegen, LModI* instr)
@@ -856,6 +875,7 @@ void LCodeGen::DoModI(LModI* instr) {
   __ JumpIfNotPowerOfTwoOrZero(right, scratch, &call_stub);
   // Perform modulo operation (scratch contains right - 1).
   __ and_(result, scratch, Operand(left));
+  __ b(&done);
 
   __ bind(&call_stub);
   // Call the stub. The numbers in r0 and r1 have
@@ -3098,6 +3118,56 @@ void LCodeGen::DoDeferredStringCharCodeAt(LStringCharCodeAt* instr) {
 }
 
 
+void LCodeGen::DoStringCharFromCode(LStringCharFromCode* instr) {
+  class DeferredStringCharFromCode: public LDeferredCode {
+   public:
+    DeferredStringCharFromCode(LCodeGen* codegen, LStringCharFromCode* instr)
+        : LDeferredCode(codegen), instr_(instr) { }
+    virtual void Generate() { codegen()->DoDeferredStringCharFromCode(instr_); }
+   private:
+    LStringCharFromCode* instr_;
+  };
+
+  DeferredStringCharFromCode* deferred =
+      new DeferredStringCharFromCode(this, instr);
+
+  ASSERT(instr->hydrogen()->value()->representation().IsInteger32());
+  Register char_code = ToRegister(instr->char_code());
+  Register result = ToRegister(instr->result());
+  ASSERT(!char_code.is(result));
+
+  __ cmp(char_code, Operand(String::kMaxAsciiCharCode));
+  __ b(hi, deferred->entry());
+  __ LoadRoot(result, Heap::kSingleCharacterStringCacheRootIndex);
+  __ add(result, result, Operand(char_code, LSL, kPointerSizeLog2));
+  __ ldr(result, FieldMemOperand(result, FixedArray::kHeaderSize));
+  __ LoadRoot(ip, Heap::kUndefinedValueRootIndex);
+  __ cmp(result, ip);
+  __ b(eq, deferred->entry());
+  __ bind(deferred->exit());
+}
+
+
+void LCodeGen::DoDeferredStringCharFromCode(LStringCharFromCode* instr) {
+  Register char_code = ToRegister(instr->char_code());
+  Register result = ToRegister(instr->result());
+
+  // TODO(3095996): Get rid of this. For now, we need to make the
+  // result register contain a valid pointer because it is already
+  // contained in the register pointer map.
+  __ mov(result, Operand(0));
+
+  __ PushSafepointRegisters();
+  __ SmiTag(char_code);
+  __ push(char_code);
+  __ CallRuntimeSaveDoubles(Runtime::kCharFromCode);
+  RecordSafepointWithRegisters(
+      instr->pointer_map(), 1, Safepoint::kNoDeoptimizationIndex);
+  __ StoreToSafepointRegisterSlot(r0, result);
+  __ PopSafepointRegisters();
+}
+
+
 void LCodeGen::DoStringLength(LStringLength* instr) {
   Register string = ToRegister(instr->InputAt(0));
   Register result = ToRegister(instr->result());
@@ -3647,7 +3717,8 @@ void LCodeGen::DoFunctionLiteral(LFunctionLiteral* instr) {
   // space for nested functions that don't need literals cloning.
   Handle<SharedFunctionInfo> shared_info = instr->shared_info();
   bool pretenure = instr->hydrogen()->pretenure();
-  if (shared_info->num_literals() == 0 && !pretenure) {
+  if (!pretenure && shared_info->num_literals() == 0 &&
+      !shared_info->strict_mode()) {  // Strict mode functions use slow path.
     FastNewClosureStub stub;
     __ mov(r1, Operand(shared_info));
     __ push(r1);

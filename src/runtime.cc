@@ -3762,6 +3762,14 @@ static MaybeObject* Runtime_DefineOrRedefineDataProperty(Arguments args) {
   LookupResult result;
   js_object->LookupRealNamedProperty(*name, &result);
 
+  // To be compatible with safari we do not change the value on API objects
+  // in defineProperty. Firefox disagrees here, and actually changes the value.
+  if (result.IsProperty() &&
+      (result.type() == CALLBACKS) &&
+      result.GetCallbackObject()->IsAccessorInfo()) {
+    return Heap::undefined_value();
+  }
+
   // Take special care when attributes are different and there is already
   // a property. For simplicity we normalize the property which enables us
   // to not worry about changing the instance_descriptor and creating a new
@@ -8037,11 +8045,14 @@ static MaybeObject* Runtime_SetNewFunctionAttributes(Arguments args) {
   HandleScope scope;
   ASSERT(args.length() == 1);
   CONVERT_ARG_CHECKED(JSFunction, func, 0);
-  ASSERT(func->map()->instance_type() ==
-         Top::function_instance_map()->instance_type());
-  ASSERT(func->map()->instance_size() ==
-         Top::function_instance_map()->instance_size());
-  func->set_map(*Top::function_instance_map());
+
+  Handle<Map> map = func->shared()->strict_mode()
+                        ? Top::function_instance_map_strict()
+                        : Top::function_instance_map();
+
+  ASSERT(func->map()->instance_type() == map->instance_type());
+  ASSERT(func->map()->instance_size() == map->instance_size());
+  func->set_map(*map);
   return *func;
 }
 

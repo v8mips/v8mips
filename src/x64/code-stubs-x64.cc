@@ -46,8 +46,8 @@ void ToNumberStub::Generate(MacroAssembler* masm) {
   __ Ret();
 
   __ bind(&check_heap_number);
-  __ Move(rbx, Factory::heap_number_map());
-  __ cmpq(rbx, FieldOperand(rax, HeapObject::kMapOffset));
+  __ CompareRoot(FieldOperand(rax, HeapObject::kMapOffset),
+                 Heap::kHeapNumberMapRootIndex);
   __ j(not_equal, &call_builtin);
   __ Ret();
 
@@ -104,7 +104,7 @@ void FastNewClosureStub::Generate(MacroAssembler* masm) {
   __ pop(rdx);
   __ push(rsi);
   __ push(rdx);
-  __ Push(Factory::false_value());
+  __ PushRoot(Heap::kFalseValueRootIndex);
   __ push(rcx);  // Restore return address.
   __ TailCallRuntime(Runtime::kNewClosure, 3, 1);
 }
@@ -2244,11 +2244,14 @@ void ArgumentsAccessStub::GenerateReadElement(MacroAssembler* masm) {
   Label slow;
   __ JumpIfNotSmi(rdx, &slow);
 
-  // Check if the calling frame is an arguments adaptor frame.
+  // Check if the calling frame is an arguments adaptor frame.  We look at the
+  // context offset, and if the frame is not a regular one, then we find a
+  // Smi instead of the context.  We can't use SmiCompare here, because that
+  // only works for comparing two smis.
   Label adaptor;
   __ movq(rbx, Operand(rbp, StandardFrameConstants::kCallerFPOffset));
-  __ SmiCompare(Operand(rbx, StandardFrameConstants::kContextOffset),
-                Smi::FromInt(StackFrame::ARGUMENTS_ADAPTOR));
+  __ Cmp(Operand(rbx, StandardFrameConstants::kContextOffset),
+         Smi::FromInt(StackFrame::ARGUMENTS_ADAPTOR));
   __ j(equal, &adaptor);
 
   // Check index against formal parameters count limit passed in
@@ -2303,8 +2306,8 @@ void ArgumentsAccessStub::GenerateNewObject(MacroAssembler* masm) {
   // Check if the calling frame is an arguments adaptor frame.
   Label adaptor_frame, try_allocate, runtime;
   __ movq(rdx, Operand(rbp, StandardFrameConstants::kCallerFPOffset));
-  __ SmiCompare(Operand(rdx, StandardFrameConstants::kContextOffset),
-                Smi::FromInt(StackFrame::ARGUMENTS_ADAPTOR));
+  __ Cmp(Operand(rdx, StandardFrameConstants::kContextOffset),
+         Smi::FromInt(StackFrame::ARGUMENTS_ADAPTOR));
   __ j(equal, &adaptor_frame);
 
   // Get the length from the frame.
@@ -2493,7 +2496,8 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
   // Check that the JSArray is in fast case.
   __ movq(rbx, FieldOperand(rdi, JSArray::kElementsOffset));
   __ movq(rdi, FieldOperand(rbx, HeapObject::kMapOffset));
-  __ Cmp(rdi, Factory::fixed_array_map());
+  __ CompareRoot(FieldOperand(rbx, HeapObject::kMapOffset),
+                 Heap::kFixedArrayMapRootIndex);
   __ j(not_equal, &runtime);
   // Check that the last match info has space for the capture registers and the
   // additional information. Ensure no overflow in add.
@@ -2528,8 +2532,8 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
   __ testb(rbx, Immediate(kIsNotStringMask | kExternalStringTag));
   __ j(not_zero, &runtime);
   // String is a cons string.
-  __ movq(rdx, FieldOperand(rdi, ConsString::kSecondOffset));
-  __ Cmp(rdx, Factory::empty_string());
+  __ CompareRoot(FieldOperand(rdi, ConsString::kSecondOffset),
+                 Heap::kEmptyStringRootIndex);
   __ j(not_equal, &runtime);
   __ movq(rdi, FieldOperand(rdi, ConsString::kFirstOffset));
   __ movq(rbx, FieldOperand(rdi, HeapObject::kMapOffset));
@@ -2793,8 +2797,8 @@ void RegExpConstructResultStub::Generate(MacroAssembler* masm) {
   __ movq(FieldOperand(rax, HeapObject::kMapOffset), rdx);
 
   // Set empty properties FixedArray.
-  __ Move(FieldOperand(rax, JSObject::kPropertiesOffset),
-          Factory::empty_fixed_array());
+  __ LoadRoot(kScratchRegister, Heap::kEmptyFixedArrayRootIndex);
+  __ movq(FieldOperand(rax, JSObject::kPropertiesOffset), kScratchRegister);
 
   // Set elements to point to FixedArray allocated right after the JSArray.
   __ lea(rcx, Operand(rax, JSRegExpResult::kSize));
@@ -2814,13 +2818,13 @@ void RegExpConstructResultStub::Generate(MacroAssembler* masm) {
   // rbx: Number of elements in array as int32.
 
   // Set map.
-  __ Move(FieldOperand(rcx, HeapObject::kMapOffset),
-          Factory::fixed_array_map());
+  __ LoadRoot(kScratchRegister, Heap::kFixedArrayMapRootIndex);
+  __ movq(FieldOperand(rcx, HeapObject::kMapOffset), kScratchRegister);
   // Set length.
   __ Integer32ToSmi(rdx, rbx);
   __ movq(FieldOperand(rcx, FixedArray::kLengthOffset), rdx);
   // Fill contents of fixed-array with the-hole.
-  __ Move(rdx, Factory::the_hole_value());
+  __ LoadRoot(rdx, Heap::kTheHoleValueRootIndex);
   __ lea(rcx, FieldOperand(rcx, FixedArray::kHeaderSize));
   // Fill fixed array elements with hole.
   // rax: JSArray.
@@ -4156,8 +4160,8 @@ void StringAddStub::Generate(MacroAssembler* masm) {
   // Look at the length of the result of adding the two strings.
   STATIC_ASSERT(String::kMaxLength <= Smi::kMaxValue / 2);
   __ SmiAdd(rbx, rbx, rcx);
-  // Use the runtime system when adding two one character strings, as it
-  // contains optimizations for this specific case using the symbol table.
+  // Use the symbol table when adding two one character strings, as it
+  // helps later optimizations to return a symbol here.
   __ SmiCompare(rbx, Smi::FromInt(2));
   __ j(not_equal, &longer_than_two);
 
@@ -4509,15 +4513,14 @@ void StringHelper::GenerateTwoCharacterSymbolTableProbe(MacroAssembler* masm,
                     FieldOperand(symbol_table, SymbolTable::kCapacityOffset));
   __ decl(mask);
 
-  Register undefined = scratch4;
-  __ LoadRoot(undefined, Heap::kUndefinedValueRootIndex);
+  Register map = scratch4;
 
   // Registers
   // chars:        two character string, char 1 in byte 0 and char 2 in byte 1.
   // hash:         hash of two character string (32-bit int)
   // symbol_table: symbol table
   // mask:         capacity mask (32-bit int)
-  // undefined:    undefined value
+  // map:          -
   // scratch:      -
 
   // Perform a number of probes in the symbol table.
@@ -4532,7 +4535,7 @@ void StringHelper::GenerateTwoCharacterSymbolTableProbe(MacroAssembler* masm,
     }
     __ andl(scratch, mask);
 
-    // Load the entry from the symble table.
+    // Load the entry from the symbol table.
     Register candidate = scratch;  // Scratch register contains candidate.
     STATIC_ASSERT(SymbolTable::kEntrySize == 1);
     __ movq(candidate,
@@ -4542,8 +4545,16 @@ void StringHelper::GenerateTwoCharacterSymbolTableProbe(MacroAssembler* masm,
                          SymbolTable::kElementsStartOffset));
 
     // If entry is undefined no string with this hash can be found.
-    __ cmpq(candidate, undefined);
+    NearLabel is_string;
+    __ CmpObjectType(candidate, ODDBALL_TYPE, map);
+    __ j(not_equal, &is_string);
+
+    __ CompareRoot(candidate, Heap::kUndefinedValueRootIndex);
     __ j(equal, not_found);
+    // Must be null (deleted entry).
+    __ jmp(&next_probe[i]);
+
+    __ bind(&is_string);
 
     // If length is not 2 the string is not a candidate.
     __ SmiCompare(FieldOperand(candidate, String::kLengthOffset),
@@ -4555,8 +4566,7 @@ void StringHelper::GenerateTwoCharacterSymbolTableProbe(MacroAssembler* masm,
     Register temp = kScratchRegister;
 
     // Check that the candidate is a non-external ascii string.
-    __ movq(temp, FieldOperand(candidate, HeapObject::kMapOffset));
-    __ movzxbl(temp, FieldOperand(temp, Map::kInstanceTypeOffset));
+    __ movzxbl(temp, FieldOperand(map, Map::kInstanceTypeOffset));
     __ JumpIfInstanceTypeIsNotSequentialAscii(
         temp, temp, &next_probe[i]);
 
@@ -4905,60 +4915,6 @@ void StringCompareStub::Generate(MacroAssembler* masm) {
   // tagged as a small integer.
   __ bind(&runtime);
   __ TailCallRuntime(Runtime::kStringCompare, 2, 1);
-}
-
-
-void StringCharAtStub::Generate(MacroAssembler* masm) {
-  // Expects two arguments (object, index) on the stack:
-
-  // Stack frame on entry.
-  //  rsp[0]: return address
-  //  rsp[8]: index
-  //  rsp[16]: object
-
-  Register object = rbx;
-  Register index = rax;
-  Register scratch1 = rcx;
-  Register scratch2 = rdx;
-  Register result = rax;
-
-  __ pop(scratch1);  // Return address.
-  __ pop(index);
-  __ pop(object);
-  __ push(scratch1);
-
-  Label need_conversion;
-  Label index_out_of_range;
-  Label done;
-  StringCharAtGenerator generator(object,
-                                  index,
-                                  scratch1,
-                                  scratch2,
-                                  result,
-                                  &need_conversion,
-                                  &need_conversion,
-                                  &index_out_of_range,
-                                  STRING_INDEX_IS_NUMBER);
-  generator.GenerateFast(masm);
-  __ jmp(&done);
-
-  __ bind(&index_out_of_range);
-  // When the index is out of range, the spec requires us to return
-  // the empty string.
-  __ Move(result, Factory::empty_string());
-  __ jmp(&done);
-
-  __ bind(&need_conversion);
-  // Move smi zero into the result register, which will trigger
-  // conversion.
-  __ Move(result, Smi::FromInt(0));
-  __ jmp(&done);
-
-  StubRuntimeCallHelper call_helper;
-  generator.GenerateSlow(masm, call_helper);
-
-  __ bind(&done);
-  __ ret(0);
 }
 
 
