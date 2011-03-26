@@ -4390,7 +4390,7 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
   __ GetObjectType(t9, a0, a0);
   __ Branch(&runtime, ne, a0, Operand(CODE_TYPE));
 
-  // a3: encoding of subject string (1 if ascii, 0 if two_byte);
+  // a3: encoding of subject string (1 if ASCII, 0 if two_byte);
   // t9: code
   // subject: Subject string
   // regexp_data: RegExp data (FixedArray)
@@ -4400,7 +4400,7 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
   __ sra(a1, a1, kSmiTagSize);  // Untag the Smi.
 
   // a1: previous index
-  // a3: encoding of subject string (1 if ascii, 0 if two_byte);
+  // a3: encoding of subject string (1 if ASCII, 0 if two_byte);
   // t9: code
   // subject: Subject string
   // regexp_data: RegExp data (FixedArray)
@@ -4934,7 +4934,7 @@ void StringCharFromCodeGenerator::GenerateFast(MacroAssembler* masm) {
   __ Branch(&slow_case_, ne, t0, Operand(zero_reg));
 
   __ LoadRoot(result_, Heap::kSingleCharacterStringCacheRootIndex);
-  // At this point code register contains smi tagged ascii char code.
+  // At this point code register contains smi tagged ASCII char code.
   STATIC_ASSERT(kSmiTag == 0);
   __ sll(t0, code_, kPointerSizeLog2 - kSmiTagSize);
   __ Addu(result_, result_, t0);
@@ -5242,7 +5242,6 @@ void StringHelper::GenerateTwoCharacterSymbolTableProbe(MacroAssembler* masm,
   Register symbol_table = c2;
   __ LoadRoot(symbol_table, Heap::kSymbolTableRootIndex);
 
-  // Load undefined value
   Register undefined = scratch4;
   __ LoadRoot(undefined, Heap::kUndefinedValueRootIndex);
 
@@ -5263,6 +5262,7 @@ void StringHelper::GenerateTwoCharacterSymbolTableProbe(MacroAssembler* masm,
   // mask:  capacity mask
   // first_symbol_table_element: address of the first element of
   //                             the symbol table
+  // undefined: the undefined object
   // scratch: -
 
   // Perform a number of probes in the symbol table.
@@ -5289,16 +5289,29 @@ void StringHelper::GenerateTwoCharacterSymbolTableProbe(MacroAssembler* masm,
     __ lw(candidate, MemOperand(scratch));
 
     // If entry is undefined no string with this hash can be found.
-    __ Branch(not_found, eq, candidate, Operand(undefined));
+    Label is_string;
+    __ GetObjectType(candidate, scratch, scratch);
+    __ Branch(&is_string, ne, scratch, Operand(ODDBALL_TYPE));
+
+    __ Branch(not_found, eq, undefined, Operand(candidate));
+    // Must be null (deleted entry).
+    if (FLAG_debug_code) {
+      __ LoadRoot(scratch, Heap::kNullValueRootIndex);
+      __ Assert(eq, "oddball in symbol table is not undefined or null",
+          scratch, Operand(candidate));
+    }
+    __ jmp(&next_probe[i]);
+
+    __ bind(&is_string);
+
+    // Check that the candidate is a non-external ASCII string.  The instance
+    // type is still in the scratch register from the CompareObjectType
+    // operation.
+    __ JumpIfInstanceTypeIsNotSequentialAscii(scratch, scratch, &next_probe[i]);
 
     // If length is not 2 the string is not a candidate.
     __ lw(scratch, FieldMemOperand(candidate, String::kLengthOffset));
     __ Branch(&next_probe[i], ne, scratch, Operand(Smi::FromInt(2)));
-
-    // Check that the candidate is a non-external ascii string.
-    __ lw(scratch, FieldMemOperand(candidate, HeapObject::kMapOffset));
-    __ lbu(scratch, FieldMemOperand(scratch, Map::kInstanceTypeOffset));
-    __ JumpIfInstanceTypeIsNotSequentialAscii(scratch, scratch, &next_probe[i]);
 
     // Check if the two characters match.
     // Assumes that word load is little endian.
@@ -5478,7 +5491,7 @@ void SubStringStub::Generate(MacroAssembler* masm) {
   // t3: (a.k.a. from): from offset (smi)
   // t5: to index (untagged smi)
 
-  // Check for flat ascii string.
+  // Check for flat ASCII string.
   Label non_ascii_flat;
   STATIC_ASSERT(kTwoByteStringTag == 0);
 
@@ -5669,10 +5682,10 @@ void StringCompareStub::Generate(MacroAssembler* masm) {
 
   __ bind(&not_same);
 
-  // Check that both objects are sequential ascii strings.
+  // Check that both objects are sequential ASCII strings.
   __ JumpIfNotBothSequentialAsciiStrings(a1, a0, a2, a3, &runtime);
 
-  // Compare flat ascii strings natively. Remove arguments from stack first.
+  // Compare flat ASCII strings natively. Remove arguments from stack first.
   __ IncrementCounter(&Counters::string_compare_native, 1, a2, a3);
   __ Addu(sp, sp, Operand(2 * kPointerSize));
   GenerateCompareFlatAsciiStrings(masm, a0, a1, a2, a3, t0, t1);
@@ -5767,11 +5780,11 @@ void StringAddStub::Generate(MacroAssembler* masm) {
   // Adding two lengths can't overflow.
   STATIC_ASSERT(String::kMaxLength < String::kMaxLength * 2);
   __ Addu(t2, a2, Operand(a3));
-  // Use the runtime system when adding two one character strings, as it
-  // contains optimizations for this specific case using the symbol table.
+  // Use the symbol table when adding two one character strings, as it
+  // helps later optimizations to return a symbol here.
   __ Branch(&longer_than_two, ne, t2, Operand(2));
 
-  // Check that both strings are non-external ascii strings.
+  // Check that both strings are non-external ASCII strings.
   if (flags_ != NO_STRING_ADD_FLAGS) {
     __ lw(t0, FieldMemOperand(a0, HeapObject::kMapOffset));
     __ lw(t1, FieldMemOperand(a1, HeapObject::kMapOffset));
@@ -5818,7 +5831,7 @@ void StringAddStub::Generate(MacroAssembler* masm) {
   __ Branch(&string_add_runtime, hs, t2, Operand(String::kMaxLength + 1));
 
   // If result is not supposed to be flat, allocate a cons string object.
-  // If both strings are ascii the result is an ascii cons string.
+  // If both strings are ASCII the result is an ASCII cons string.
   if (flags_ != NO_STRING_ADD_FLAGS) {
     __ lw(t0, FieldMemOperand(a0, HeapObject::kMapOffset));
     __ lw(t1, FieldMemOperand(a1, HeapObject::kMapOffset));
@@ -5846,7 +5859,7 @@ void StringAddStub::Generate(MacroAssembler* masm) {
 
   __ bind(&non_ascii);
   // At least one of the strings is two-byte. Check whether it happens
-  // to contain only ascii characters.
+  // to contain only ASCII characters.
   // t0: first instance type.
   // t1: second instance type.
   // Branch to if _both_ instances have kAsciiDataHintMask set.

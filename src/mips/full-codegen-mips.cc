@@ -2992,7 +2992,7 @@ void FullCodeGenerator::EmitSwapElements(ZoneList<Expression*>* args) {
   // Check that object doesn't require security checks and
   // has no indexed interceptor.
   __ GetObjectType(object, scratch1, scratch2);
-  __ Branch(&slow_case, lt, scratch2, Operand(FIRST_JS_OBJECT_TYPE));
+  __ Branch(&slow_case, ne, scratch2, Operand(JS_ARRAY_TYPE));
   // Map is now in scratch1.
 
   __ lbu(scratch2, FieldMemOperand(scratch1, Map::kBitFieldOffset));

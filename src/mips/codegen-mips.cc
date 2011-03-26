@@ -5640,7 +5640,7 @@ void CodeGenerator::GenerateSwapElements(ZoneList<Expression*>* args) {
   // Check that object doesn't require security checks and
   // has no indexed interceptor.
   __ GetObjectType(object, tmp1, tmp2);
-  deferred->Branch(lt, tmp2, Operand(FIRST_JS_OBJECT_TYPE));
+  deferred->Branch(ne, tmp2, Operand(JS_ARRAY_TYPE));
 
   __ lbu(tmp2, FieldMemOperand(tmp1, Map::kBitFieldOffset));
   __ And(tmp2, tmp2, Operand(KeyedLoadIC::kSlowCaseBitFieldMask));
@@ -7280,11 +7280,6 @@ void CodeGenerator::EmitKeyedStore(StaticType* key_type,
     __ GetObjectType(receiver, scratch1, scratch1);
     deferred->Branch(ne, scratch1, Operand(JS_ARRAY_TYPE));
 
-    // Check that the key is within bounds. Both the key and the length of
-    // the JSArray are smis. Use unsigned comparison to handle negative keys.
-    __ lw(scratch1, FieldMemOperand(receiver, JSArray::kLengthOffset));
-    deferred->Branch(ls, scratch1, Operand(key));  // Unsigned less equal.
-
     // Get the elements array from the receiver.
     __ lw(scratch1, FieldMemOperand(receiver, JSObject::kElementsOffset));
     if (!value_is_harmless && wb_info != LIKELY_SMI) {
@@ -7323,6 +7318,13 @@ void CodeGenerator::EmitKeyedStore(StaticType* key_type,
 
       __ li(scratch3, Operand(Factory::fixed_array_map()), true);
       deferred->Branch(ne, scratch2, Operand(scratch3));
+
+      // Check that the key is within bounds.  Both the key and the length of
+      // the JSArray are smis (because the fixed array check above ensures the
+      // elements are in fast case). Use unsigned comparison to handle negative
+      // keys.
+      __ lw(scratch3, FieldMemOperand(receiver, JSArray::kLengthOffset));
+      deferred->Branch(ls, scratch3, Operand(key));  // Unsigned less equal.
 
       // Store the value.
       __ Addu(scratch1, scratch1,

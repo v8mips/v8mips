@@ -304,7 +304,7 @@ class CodeGenerator: public AstVisitor {
     // This is in correlation with the padding in MacroAssembler::Abort.
     return FLAG_debug_code ? 45 : 20;
   }
-  static const int kInlinedKeyedStoreInstructionsAfterPatch = 9;
+  static const int kInlinedKeyedStoreInstructionsAfterPatch = 13;
   static int GetInlinedNamedStoreInstructionsAfterPatch() {
     ASSERT(inlined_write_barrier_size_ != -1);
     // Magic number 5: instruction count after patched map load:
