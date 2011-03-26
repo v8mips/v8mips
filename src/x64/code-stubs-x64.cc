@@ -3321,7 +3321,7 @@ void CEntryStub::GenerateCore(MacroAssembler* masm,
   // rbp: frame pointer  (restored after C call).
   // rsp: stack pointer  (restored after C call).
   // r14: number of arguments including receiver (C callee-saved).
-  // r12: pointer to the first argument (C callee-saved).
+  // r15: pointer to the first argument (C callee-saved).
   //      This pointer is reused in LeaveExitFrame(), so it is stored in a
   //      callee-saved register.
 
@@ -3362,7 +3362,7 @@ void CEntryStub::GenerateCore(MacroAssembler* masm,
   // Windows 64-bit ABI passes arguments in rcx, rdx, r8, r9
   // Store Arguments object on stack, below the 4 WIN64 ABI parameter slots.
   __ movq(StackSpaceOperand(0), r14);  // argc.
-  __ movq(StackSpaceOperand(1), r12);  // argv.
+  __ movq(StackSpaceOperand(1), r15);  // argv.
   if (result_size_ < 2) {
     // Pass a pointer to the Arguments object as the first argument.
     // Return result in single register (rax).
@@ -3378,7 +3378,7 @@ void CEntryStub::GenerateCore(MacroAssembler* masm,
 #else  // _WIN64
   // GCC passes arguments in rdi, rsi, rdx, rcx, r8, r9.
   __ movq(rdi, r14);  // argc.
-  __ movq(rsi, r12);  // argv.
+  __ movq(rsi, r15);  // argv.
 #endif
   __ call(rbx);
   // Result is in rax - do not destroy this register!
@@ -3482,7 +3482,7 @@ void CEntryStub::Generate(MacroAssembler* masm) {
   // rbp: frame pointer of exit frame  (restored after C call).
   // rsp: stack pointer (restored after C call).
   // r14: number of arguments including receiver (C callee-saved).
-  // r12: argv pointer (C callee-saved).
+  // r15: argv pointer (C callee-saved).
 
   Label throw_normal_exception;
   Label throw_termination_exception;
@@ -3657,20 +3657,39 @@ void JSEntryStub::GenerateBody(MacroAssembler* masm, bool is_construct) {
 
 void InstanceofStub::Generate(MacroAssembler* masm) {
   // Implements "value instanceof function" operator.
-  // Expected input state:
+  // Expected input state with no inline cache:
   //   rsp[0] : return address
   //   rsp[1] : function pointer
   //   rsp[2] : value
+  // Expected input state with an inline one-element cache:
+  //   rsp[0] : return address
+  //   rsp[1] : offset from return address to location of inline cache
+  //   rsp[2] : function pointer
+  //   rsp[3] : value
   // Returns a bitwise zero to indicate that the value
   // is and instance of the function and anything else to
   // indicate that the value is not an instance.
 
-  // None of the flags are supported on X64.
-  ASSERT(flags_ == kNoFlags);
+  static const int kOffsetToMapCheckValue = 5;
+  static const int kOffsetToResultValue = 21;
+  // The last 4 bytes of the instruction sequence
+  //   movq(rax, FieldOperand(rdi, HeapObject::kMapOffset)
+  //   Move(kScratchRegister, Factory::the_hole_value)
+  // in front of the hole value address.
+  static const unsigned int kWordBeforeMapCheckValue = 0xBA49FF78;
+  // The last 4 bytes of the instruction sequence
+  //   __ j(not_equal, &cache_miss);
+  //   __ LoadRoot(ToRegister(instr->result()), Heap::kTheHoleValueRootIndex);
+  // before the offset of the hole value in the root array.
+  static const unsigned int kWordBeforeResultValue = 0x458B4909;
+  // Only the inline check flag is supported on X64.
+  ASSERT(flags_ == kNoFlags || HasCallSiteInlineCheck());
+  int extra_stack_space = HasCallSiteInlineCheck() ? kPointerSize : 0;
 
   // Get the object - go slow case if it's a smi.
   Label slow;
-  __ movq(rax, Operand(rsp, 2 * kPointerSize));
+
+  __ movq(rax, Operand(rsp, 2 * kPointerSize + extra_stack_space));
   __ JumpIfSmi(rax, &slow);
 
   // Check that the left hand is a JS object. Leave its map in rax.
@@ -3680,19 +3699,23 @@ void InstanceofStub::Generate(MacroAssembler* masm) {
   __ j(above, &slow);
 
   // Get the prototype of the function.
-  __ movq(rdx, Operand(rsp, 1 * kPointerSize));
+  __ movq(rdx, Operand(rsp, 1 * kPointerSize + extra_stack_space));
   // rdx is function, rax is map.
 
-  // Look up the function and the map in the instanceof cache.
-  NearLabel miss;
-  __ CompareRoot(rdx, Heap::kInstanceofCacheFunctionRootIndex);
-  __ j(not_equal, &miss);
-  __ CompareRoot(rax, Heap::kInstanceofCacheMapRootIndex);
-  __ j(not_equal, &miss);
-  __ LoadRoot(rax, Heap::kInstanceofCacheAnswerRootIndex);
-  __ ret(2 * kPointerSize);
+  // If there is a call site cache don't look in the global cache, but do the
+  // real lookup and update the call site cache.
+  if (!HasCallSiteInlineCheck()) {
+    // Look up the function and the map in the instanceof cache.
+    NearLabel miss;
+    __ CompareRoot(rdx, Heap::kInstanceofCacheFunctionRootIndex);
+    __ j(not_equal, &miss);
+    __ CompareRoot(rax, Heap::kInstanceofCacheMapRootIndex);
+    __ j(not_equal, &miss);
+    __ LoadRoot(rax, Heap::kInstanceofCacheAnswerRootIndex);
+    __ ret(2 * kPointerSize);
+    __ bind(&miss);
+  }
 
-  __ bind(&miss);
   __ TryGetFunctionPrototype(rdx, rbx, &slow);
 
   // Check that the function prototype is a JS object.
@@ -3706,8 +3729,19 @@ void InstanceofStub::Generate(MacroAssembler* masm) {
   //   rax is object map.
   //   rdx is function.
   //   rbx is function prototype.
-  __ StoreRoot(rdx, Heap::kInstanceofCacheFunctionRootIndex);
-  __ StoreRoot(rax, Heap::kInstanceofCacheMapRootIndex);
+  if (!HasCallSiteInlineCheck()) {
+    __ StoreRoot(rdx, Heap::kInstanceofCacheFunctionRootIndex);
+    __ StoreRoot(rax, Heap::kInstanceofCacheMapRootIndex);
+  } else {
+    __ movq(kScratchRegister, Operand(rsp, 0 * kPointerSize));
+    __ subq(kScratchRegister, Operand(rsp, 1 * kPointerSize));
+    __ movq(Operand(kScratchRegister, kOffsetToMapCheckValue), rax);
+    if (FLAG_debug_code) {
+      __ movl(rdi, Immediate(kWordBeforeMapCheckValue));
+      __ cmpl(Operand(kScratchRegister, kOffsetToMapCheckValue - 4), rdi);
+      __ Assert(equal, "InstanceofStub unexpected call site cache.");
+    }
+  }
 
   __ movq(rcx, FieldOperand(rax, Map::kPrototypeOffset));
 
@@ -3726,19 +3760,56 @@ void InstanceofStub::Generate(MacroAssembler* masm) {
   __ jmp(&loop);
 
   __ bind(&is_instance);
-  __ xorl(rax, rax);
-  // Store bitwise zero in the cache.  This is a Smi in GC terms.
-  STATIC_ASSERT(kSmiTag == 0);
-  __ StoreRoot(rax, Heap::kInstanceofCacheAnswerRootIndex);
-  __ ret(2 * kPointerSize);
+  if (!HasCallSiteInlineCheck()) {
+    __ xorl(rax, rax);
+    // Store bitwise zero in the cache.  This is a Smi in GC terms.
+    STATIC_ASSERT(kSmiTag == 0);
+    __ StoreRoot(rax, Heap::kInstanceofCacheAnswerRootIndex);
+  } else {
+    // Store offset of true in the root array at the inline check site.
+    ASSERT((Heap::kTrueValueRootIndex << kPointerSizeLog2) - kRootRegisterBias
+        == 0xB0 - 0x100);
+    __ movl(rax, Immediate(0xB0));  // TrueValue is at -10 * kPointerSize.
+    __ movq(kScratchRegister, Operand(rsp, 0 * kPointerSize));
+    __ subq(kScratchRegister, Operand(rsp, 1 * kPointerSize));
+    __ movb(Operand(kScratchRegister, kOffsetToResultValue), rax);
+    if (FLAG_debug_code) {
+      __ movl(rax, Immediate(kWordBeforeResultValue));
+      __ cmpl(Operand(kScratchRegister, kOffsetToResultValue - 4), rax);
+      __ Assert(equal, "InstanceofStub unexpected call site cache.");
+    }
+    __ xorl(rax, rax);
+  }
+  __ ret(2 * kPointerSize + extra_stack_space);
 
   __ bind(&is_not_instance);
-  // We have to store a non-zero value in the cache.
-  __ StoreRoot(kScratchRegister, Heap::kInstanceofCacheAnswerRootIndex);
-  __ ret(2 * kPointerSize);
+  if (!HasCallSiteInlineCheck()) {
+    // We have to store a non-zero value in the cache.
+    __ StoreRoot(kScratchRegister, Heap::kInstanceofCacheAnswerRootIndex);
+  } else {
+    // Store offset of false in the root array at the inline check site.
+    ASSERT((Heap::kFalseValueRootIndex << kPointerSizeLog2) - kRootRegisterBias
+        == 0xB8 - 0x100);
+    __ movl(rax, Immediate(0xB8));  // FalseValue is at -9 * kPointerSize.
+    __ movq(kScratchRegister, Operand(rsp, 0 * kPointerSize));
+    __ subq(kScratchRegister, Operand(rsp, 1 * kPointerSize));
+    __ movb(Operand(kScratchRegister, kOffsetToResultValue), rax);
+    if (FLAG_debug_code) {
+      __ movl(rax, Immediate(kWordBeforeResultValue));
+      __ cmpl(Operand(kScratchRegister, kOffsetToResultValue - 4), rax);
+      __ Assert(equal, "InstanceofStub unexpected call site cache (mov)");
+    }
+  }
+  __ ret(2 * kPointerSize + extra_stack_space);
 
   // Slow-case: Go through the JavaScript implementation.
   __ bind(&slow);
+  if (HasCallSiteInlineCheck()) {
+    // Remove extra value from the stack.
+    __ pop(rcx);
+    __ pop(rax);
+    __ push(rcx);
+  }
   __ InvokeBuiltin(Builtins::INSTANCE_OF, JUMP_FUNCTION);
 }
 
@@ -4102,7 +4173,7 @@ void StringAddStub::Generate(MacroAssembler* masm) {
   // just allocate a new one.
   Label make_two_character_string, make_flat_ascii_string;
   StringHelper::GenerateTwoCharacterSymbolTableProbe(
-      masm, rbx, rcx, r14, r11, rdi, r12, &make_two_character_string);
+      masm, rbx, rcx, r14, r11, rdi, r15, &make_two_character_string);
   __ IncrementCounter(&Counters::string_add_native, 1);
   __ ret(2 * kPointerSize);
 
