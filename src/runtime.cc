@@ -335,7 +335,10 @@ static Handle<Object> CreateObjectLiteralBoilerplate(
       if (key->IsSymbol()) {
         if (Handle<String>::cast(key)->AsArrayIndex(&element_index)) {
           // Array index as string (uint32).
-          result = SetOwnElement(boilerplate, element_index, value);
+          result = SetOwnElement(boilerplate,
+                                 element_index,
+                                 value,
+                                 kNonStrictMode);
         } else {
           Handle<String> name(String::cast(*key));
           ASSERT(!name->AsArrayIndex(&element_index));
@@ -344,7 +347,10 @@ static Handle<Object> CreateObjectLiteralBoilerplate(
         }
       } else if (key->ToArrayIndex(&element_index)) {
         // Array index (uint32).
-        result = SetOwnElement(boilerplate, element_index, value);
+        result = SetOwnElement(boilerplate,
+                               element_index,
+                               value,
+                               kNonStrictMode);
       } else {
         // Non-uint32 number.
         ASSERT(key->IsNumber());
@@ -1186,7 +1192,8 @@ static MaybeObject* Runtime_DeclareContextSlot(Arguments args) {
         } else {
           // The holder is an arguments object.
           Handle<JSObject> arguments(Handle<JSObject>::cast(holder));
-          Handle<Object> result = SetElement(arguments, index, initial_value);
+          Handle<Object> result = SetElement(arguments, index, initial_value,
+                                             kNonStrictMode);
           if (result.is_null()) return Failure::Exception();
         }
       } else {
@@ -1471,7 +1478,8 @@ static MaybeObject* Runtime_InitializeConstContextSlot(Arguments args) {
       // The holder is an arguments object.
       ASSERT((attributes & READ_ONLY) == 0);
       Handle<JSObject> arguments(Handle<JSObject>::cast(holder));
-      RETURN_IF_EMPTY_HANDLE(SetElement(arguments, index, value));
+      RETURN_IF_EMPTY_HANDLE(
+          SetElement(arguments, index, value, kNonStrictMode));
     }
     return *value;
   }
@@ -3784,7 +3792,7 @@ MaybeObject* Runtime::SetObjectProperty(Handle<Object> object,
                                         Handle<Object> key,
                                         Handle<Object> value,
                                         PropertyAttributes attr,
-                                        StrictModeFlag strict) {
+                                        StrictModeFlag strict_mode) {
   HandleScope scope;
 
   if (object->IsUndefined() || object->IsNull()) {
@@ -3814,8 +3822,7 @@ MaybeObject* Runtime::SetObjectProperty(Handle<Object> object,
       return *value;
     }
 
-    // TODO(1220): Implement SetElement strict mode.
-    Handle<Object> result = SetElement(js_object, index, value);
+    Handle<Object> result = SetElement(js_object, index, value, strict_mode);
     if (result.is_null()) return Failure::Exception();
     return *value;
   }
@@ -3823,11 +3830,11 @@ MaybeObject* Runtime::SetObjectProperty(Handle<Object> object,
   if (key->IsString()) {
     Handle<Object> result;
     if (Handle<String>::cast(key)->AsArrayIndex(&index)) {
-      result = SetElement(js_object, index, value);
+      result = SetElement(js_object, index, value, strict_mode);
     } else {
       Handle<String> key_string = Handle<String>::cast(key);
       key_string->TryFlatten();
-      result = SetProperty(js_object, key_string, value, attr, strict);
+      result = SetProperty(js_object, key_string, value, attr, strict_mode);
     }
     if (result.is_null()) return Failure::Exception();
     return *value;
@@ -3840,10 +3847,9 @@ MaybeObject* Runtime::SetObjectProperty(Handle<Object> object,
   Handle<String> name = Handle<String>::cast(converted);
 
   if (name->AsArrayIndex(&index)) {
-    // TODO(1220): Implement SetElement strict mode.
-    return js_object->SetElement(index, *value);
+    return js_object->SetElement(index, *value, strict_mode);
   } else {
-    return js_object->SetProperty(*name, *value, attr, strict);
+    return js_object->SetProperty(*name, *value, attr, strict_mode);
   }
 }
 
@@ -3868,12 +3874,12 @@ MaybeObject* Runtime::ForceSetObjectProperty(Handle<JSObject> js_object,
       return *value;
     }
 
-    return js_object->SetElement(index, *value);
+    return js_object->SetElement(index, *value, kNonStrictMode);
   }
 
   if (key->IsString()) {
     if (Handle<String>::cast(key)->AsArrayIndex(&index)) {
-      return js_object->SetElement(index, *value);
+      return js_object->SetElement(index, *value, kNonStrictMode);
     } else {
       Handle<String> key_string = Handle<String>::cast(key);
       key_string->TryFlatten();
@@ -3890,7 +3896,7 @@ MaybeObject* Runtime::ForceSetObjectProperty(Handle<JSObject> js_object,
   Handle<String> name = Handle<String>::cast(converted);
 
   if (name->AsArrayIndex(&index)) {
-    return js_object->SetElement(index, *value);
+    return js_object->SetElement(index, *value, kNonStrictMode);
   } else {
     return js_object->SetLocalPropertyIgnoreAttributes(*name, *value, attr);
   }
@@ -3947,15 +3953,19 @@ static MaybeObject* Runtime_SetProperty(Arguments args) {
   PropertyAttributes attributes =
       static_cast<PropertyAttributes>(unchecked_attributes);
 
-  StrictModeFlag strict = kNonStrictMode;
+  StrictModeFlag strict_mode = kNonStrictMode;
   if (args.length() == 5) {
     CONVERT_SMI_CHECKED(strict_unchecked, args[4]);
     RUNTIME_ASSERT(strict_unchecked == kStrictMode ||
                    strict_unchecked == kNonStrictMode);
-    strict = static_cast<StrictModeFlag>(strict_unchecked);
+    strict_mode = static_cast<StrictModeFlag>(strict_unchecked);
   }
 
-  return Runtime::SetObjectProperty(object, key, value, attributes, strict);
+  return Runtime::SetObjectProperty(object,
+                                    key,
+                                    value,
+                                    attributes,
+                                    strict_mode);
 }
 
 
@@ -7545,8 +7555,7 @@ static MaybeObject* Runtime_StoreContextSlot(Arguments args) {
   CONVERT_SMI_CHECKED(strict_unchecked, args[3]);
   RUNTIME_ASSERT(strict_unchecked == kStrictMode ||
                  strict_unchecked == kNonStrictMode);
-  StrictModeFlag strict = static_cast<StrictModeFlag>(strict_unchecked);
-
+  StrictModeFlag strict_mode = static_cast<StrictModeFlag>(strict_unchecked);
 
   int index;
   PropertyAttributes attributes;
@@ -7559,11 +7568,17 @@ static MaybeObject* Runtime_StoreContextSlot(Arguments args) {
       if ((attributes & READ_ONLY) == 0) {
         // Context is a fixed array and set cannot fail.
         Context::cast(*holder)->set(index, *value);
+      } else if (strict_mode == kStrictMode) {
+        // Setting read only property in strict mode.
+        Handle<Object> error =
+            Factory::NewTypeError("strict_cannot_assign",
+                                  HandleVector(&name, 1));
+        return Top::Throw(*error);
       }
     } else {
       ASSERT((attributes & READ_ONLY) == 0);
       Handle<Object> result =
-          SetElement(Handle<JSObject>::cast(holder), index, value);
+          SetElement(Handle<JSObject>::cast(holder), index, value, strict_mode);
       if (result.is_null()) {
         ASSERT(Top::has_pending_exception());
         return Failure::Exception();
@@ -7590,11 +7605,12 @@ static MaybeObject* Runtime_StoreContextSlot(Arguments args) {
   // extension object itself.
   if ((attributes & READ_ONLY) == 0 ||
       (context_ext->GetLocalPropertyAttribute(*name) == ABSENT)) {
-    RETURN_IF_EMPTY_HANDLE(SetProperty(context_ext, name, value, NONE, strict));
-  } else if (strict == kStrictMode && (attributes & READ_ONLY) != 0) {
+    RETURN_IF_EMPTY_HANDLE(
+        SetProperty(context_ext, name, value, NONE, strict_mode));
+  } else if (strict_mode == kStrictMode && (attributes & READ_ONLY) != 0) {
     // Setting read only property in strict mode.
     Handle<Object> error =
-      Factory::NewTypeError("strict_cannot_assign", HandleVector(&name, 1));
+        Factory::NewTypeError("strict_cannot_assign", HandleVector(&name, 1));
     return Top::Throw(*error);
   }
   return *value;
@@ -8066,7 +8082,9 @@ static MaybeObject* Runtime_PushIfAbsent(Arguments args) {
     if (elements->get(i) == element) return Heap::false_value();
   }
   Object* obj;
-  { MaybeObject* maybe_obj = array->SetFastElement(length, element);
+  // Strict not needed. Used for cycle detection in Array join implementation.
+  { MaybeObject* maybe_obj = array->SetFastElement(length, element,
+                                                   kNonStrictMode);
     if (!maybe_obj->ToObject(&obj)) return maybe_obj;
   }
   return Heap::true_value();
@@ -8669,8 +8687,8 @@ static MaybeObject* Runtime_SwapElements(Arguments args) {
   Handle<Object> tmp2 = GetElement(jsobject, index2);
   RETURN_IF_EMPTY_HANDLE(tmp2);
 
-  RETURN_IF_EMPTY_HANDLE(SetElement(jsobject, index1, tmp2));
-  RETURN_IF_EMPTY_HANDLE(SetElement(jsobject, index2, tmp1));
+  RETURN_IF_EMPTY_HANDLE(SetElement(jsobject, index1, tmp2, kStrictMode));
+  RETURN_IF_EMPTY_HANDLE(SetElement(jsobject, index2, tmp1, kStrictMode));
 
   return Heap::undefined_value();
 }
