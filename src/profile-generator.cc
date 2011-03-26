@@ -2194,7 +2194,9 @@ class GlobalHandlesExtractor : public ObjectVisitor {
   explicit GlobalHandlesExtractor(NativeObjectsExplorer* explorer)
       : explorer_(explorer) {}
   virtual ~GlobalHandlesExtractor() {}
-  virtual void VisitPointers(Object** start, Object** end) {
+  virtual void VisitPointers(Object** start,
+                             Object** end,
+                             RelocInfo* rinfo = 0) {
     UNREACHABLE();
   }
   virtual void VisitEmbedderReference(Object** p, uint16_t class_id) {
