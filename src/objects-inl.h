@@ -330,9 +330,10 @@ bool Object::IsByteArray() {
 }
 
 
-bool Object::IsPixelArray() {
+bool Object::IsExternalPixelArray() {
   return Object::IsHeapObject() &&
-      HeapObject::cast(this)->map()->instance_type() == PIXEL_ARRAY_TYPE;
+      HeapObject::cast(this)->map()->instance_type() ==
+          EXTERNAL_PIXEL_ARRAY_TYPE;
 }
 
 
@@ -1239,8 +1240,7 @@ ACCESSORS(JSObject, properties, FixedArray, kPropertiesOffset)
 HeapObject* JSObject::elements() {
   Object* array = READ_FIELD(this, kElementsOffset);
   // In the assert below Dictionary is covered under FixedArray.
-  ASSERT(array->IsFixedArray() || array->IsPixelArray() ||
-         array->IsExternalArray());
+  ASSERT(array->IsFixedArray() || array->IsExternalArray());
   return reinterpret_cast<HeapObject*>(array);
 }
 
@@ -1250,8 +1250,7 @@ void JSObject::set_elements(HeapObject* value, WriteBarrierMode mode) {
          (value->map() == Heap::fixed_array_map() ||
           value->map() == Heap::fixed_cow_array_map()));
   // In the assert below Dictionary is covered under FixedArray.
-  ASSERT(value->IsFixedArray() || value->IsPixelArray() ||
-         value->IsExternalArray());
+  ASSERT(value->IsFixedArray() || value->IsExternalArray());
   WRITE_FIELD(this, kElementsOffset, value);
   CONDITIONAL_WRITE_BARRIER(this, kElementsOffset, mode);
 }
@@ -1784,7 +1783,6 @@ CAST_ACCESSOR(JSArray)
 CAST_ACCESSOR(JSRegExp)
 CAST_ACCESSOR(Proxy)
 CAST_ACCESSOR(ByteArray)
-CAST_ACCESSOR(PixelArray)
 CAST_ACCESSOR(ExternalArray)
 CAST_ACCESSOR(ExternalByteArray)
 CAST_ACCESSOR(ExternalUnsignedByteArray)
@@ -1793,6 +1791,7 @@ CAST_ACCESSOR(ExternalUnsignedShortArray)
 CAST_ACCESSOR(ExternalIntArray)
 CAST_ACCESSOR(ExternalUnsignedIntArray)
 CAST_ACCESSOR(ExternalFloatArray)
+CAST_ACCESSOR(ExternalPixelArray)
 CAST_ACCESSOR(Struct)
 
 
@@ -1811,7 +1810,6 @@ HashTable<Shape, Key>* HashTable<Shape, Key>::cast(Object* obj) {
 SMI_ACCESSORS(FixedArray, length, kLengthOffset)
 SMI_ACCESSORS(ByteArray, length, kLengthOffset)
 
-INT_ACCESSORS(PixelArray, length, kLengthOffset)
 INT_ACCESSORS(ExternalArray, length, kLengthOffset)
 
 
@@ -2078,28 +2076,21 @@ Address ByteArray::GetDataStartAddress() {
 }
 
 
-uint8_t* PixelArray::external_pointer() {
-  intptr_t ptr = READ_INTPTR_FIELD(this, kExternalPointerOffset);
-  return reinterpret_cast<uint8_t*>(ptr);
+uint8_t* ExternalPixelArray::external_pixel_pointer() {
+  return reinterpret_cast<uint8_t*>(external_pointer());
 }
 
 
-void PixelArray::set_external_pointer(uint8_t* value, WriteBarrierMode mode) {
-  intptr_t ptr = reinterpret_cast<intptr_t>(value);
-  WRITE_INTPTR_FIELD(this, kExternalPointerOffset, ptr);
-}
-
-
-uint8_t PixelArray::get(int index) {
+uint8_t ExternalPixelArray::get(int index) {
   ASSERT((index >= 0) && (index < this->length()));
-  uint8_t* ptr = external_pointer();
+  uint8_t* ptr = external_pixel_pointer();
   return ptr[index];
 }
 
 
-void PixelArray::set(int index, uint8_t value) {
+void ExternalPixelArray::set(int index, uint8_t value) {
   ASSERT((index >= 0) && (index < this->length()));
-  uint8_t* ptr = external_pointer();
+  uint8_t* ptr = external_pixel_pointer();
   ptr[index] = value;
 }
 
@@ -2577,6 +2568,19 @@ void Code::set_check_type(CheckType value) {
 }
 
 
+ExternalArrayType Code::external_array_type() {
+  ASSERT(is_external_array_load_stub() || is_external_array_store_stub());
+  byte type = READ_BYTE_FIELD(this, kExternalArrayTypeOffset);
+  return static_cast<ExternalArrayType>(type);
+}
+
+
+void Code::set_external_array_type(ExternalArrayType value) {
+  ASSERT(is_external_array_load_stub() || is_external_array_store_stub());
+  WRITE_BYTE_FIELD(this, kExternalArrayTypeOffset, value);
+}
+
+
 byte Code::binary_op_type() {
   ASSERT(is_binary_op_stub());
   return READ_BYTE_FIELD(this, kBinaryOpTypeOffset);
@@ -2778,8 +2782,7 @@ MaybeObject* Map::GetSlowElementsMap() {
 }
 
 
-MaybeObject* Map::GetPixelArrayElementsMap() {
-  if (has_pixel_array_elements()) return this;
+MaybeObject* Map::NewExternalArrayElementsMap() {
   // TODO(danno): Special case empty object map (or most common case)
   // to return a pre-canned pixel array map.
   Object* obj;
@@ -2788,8 +2791,8 @@ MaybeObject* Map::GetPixelArrayElementsMap() {
   }
   Map* new_map = Map::cast(obj);
   new_map->set_has_fast_elements(false);
-  new_map->set_has_pixel_array_elements(true);
-  Counters::map_to_pixel_array_elements.Increment();
+  new_map->set_has_external_array_elements(true);
+  Counters::map_to_external_array_elements.Increment();
   return new_map;
 }
 
@@ -3508,13 +3511,14 @@ JSObject::ElementsKind JSObject::GetElementsKind() {
         return EXTERNAL_INT_ELEMENTS;
       case EXTERNAL_UNSIGNED_INT_ARRAY_TYPE:
         return EXTERNAL_UNSIGNED_INT_ELEMENTS;
+      case EXTERNAL_PIXEL_ARRAY_TYPE:
+        return EXTERNAL_PIXEL_ELEMENTS;
       default:
-        ASSERT(array->map()->instance_type() == EXTERNAL_FLOAT_ARRAY_TYPE);
-        return EXTERNAL_FLOAT_ELEMENTS;
+        break;
     }
   }
-  ASSERT(array->IsPixelArray());
-  return PIXEL_ELEMENTS;
+  ASSERT(array->map()->instance_type() == EXTERNAL_FLOAT_ARRAY_TYPE);
+  return EXTERNAL_FLOAT_ELEMENTS;
 }
 
 
@@ -3528,55 +3532,34 @@ bool JSObject::HasDictionaryElements() {
 }
 
 
-bool JSObject::HasPixelElements() {
-  return GetElementsKind() == PIXEL_ELEMENTS;
-}
-
-
 bool JSObject::HasExternalArrayElements() {
-  return (HasExternalByteElements() ||
-          HasExternalUnsignedByteElements() ||
-          HasExternalShortElements() ||
-          HasExternalUnsignedShortElements() ||
-          HasExternalIntElements() ||
-          HasExternalUnsignedIntElements() ||
-          HasExternalFloatElements());
+  HeapObject* array = elements();
+  ASSERT(array != NULL);
+  return array->IsExternalArray();
 }
 
 
-bool JSObject::HasExternalByteElements() {
-  return GetElementsKind() == EXTERNAL_BYTE_ELEMENTS;
+#define EXTERNAL_ELEMENTS_CHECK(name, type)          \
+bool JSObject::HasExternal##name##Elements() {       \
+  HeapObject* array = elements();                    \
+  ASSERT(array != NULL);                             \
+  if (!array->IsHeapObject())                        \
+    return false;                                    \
+  return array->map()->instance_type() == type;      \
 }
 
 
-bool JSObject::HasExternalUnsignedByteElements() {
-  return GetElementsKind() == EXTERNAL_UNSIGNED_BYTE_ELEMENTS;
-}
-
-
-bool JSObject::HasExternalShortElements() {
-  return GetElementsKind() == EXTERNAL_SHORT_ELEMENTS;
-}
-
-
-bool JSObject::HasExternalUnsignedShortElements() {
-  return GetElementsKind() == EXTERNAL_UNSIGNED_SHORT_ELEMENTS;
-}
-
-
-bool JSObject::HasExternalIntElements() {
-  return GetElementsKind() == EXTERNAL_INT_ELEMENTS;
-}
-
-
-bool JSObject::HasExternalUnsignedIntElements() {
-  return GetElementsKind() == EXTERNAL_UNSIGNED_INT_ELEMENTS;
-}
-
-
-bool JSObject::HasExternalFloatElements() {
-  return GetElementsKind() == EXTERNAL_FLOAT_ELEMENTS;
-}
+EXTERNAL_ELEMENTS_CHECK(Byte, EXTERNAL_BYTE_ARRAY_TYPE)
+EXTERNAL_ELEMENTS_CHECK(UnsignedByte, EXTERNAL_UNSIGNED_BYTE_ARRAY_TYPE)
+EXTERNAL_ELEMENTS_CHECK(Short, EXTERNAL_SHORT_ARRAY_TYPE)
+EXTERNAL_ELEMENTS_CHECK(UnsignedShort,
+                        EXTERNAL_UNSIGNED_SHORT_ARRAY_TYPE)
+EXTERNAL_ELEMENTS_CHECK(Int, EXTERNAL_INT_ARRAY_TYPE)
+EXTERNAL_ELEMENTS_CHECK(UnsignedInt,
+                        EXTERNAL_UNSIGNED_INT_ARRAY_TYPE)
+EXTERNAL_ELEMENTS_CHECK(Float,
+                        EXTERNAL_FLOAT_ARRAY_TYPE)
+EXTERNAL_ELEMENTS_CHECK(Pixel, EXTERNAL_PIXEL_ARRAY_TYPE)
 
 
 bool JSObject::HasNamedInterceptor() {
@@ -3591,7 +3574,7 @@ bool JSObject::HasIndexedInterceptor() {
 
 bool JSObject::AllowsSetElementsLength() {
   bool result = elements()->IsFixedArray();
-  ASSERT(result == (!HasPixelElements() && !HasExternalArrayElements()));
+  ASSERT(result == !HasExternalArrayElements());
   return result;
 }
 

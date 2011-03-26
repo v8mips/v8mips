@@ -559,13 +559,15 @@ void HBasicBlock::FinishExit(HControlInstruction* instruction) {
 
 
 HGraph::HGraph(CompilationInfo* info)
-    : HSubgraph(this),
-      next_block_id_(0),
+    : next_block_id_(0),
+      entry_block_(NULL),
       blocks_(8),
       values_(16),
       phi_list_(NULL) {
   start_environment_ = new HEnvironment(NULL, info->scope(), info->closure());
   start_environment_->set_ast_id(info->function()->id());
+  entry_block_ = CreateBasicBlock();
+  entry_block_->SetInitialEnvironment(start_environment_);
 }
 
 
@@ -787,11 +789,11 @@ void HGraph::EliminateUnreachablePhis() {
 
 
 bool HGraph::CollectPhis() {
-  const ZoneList<HBasicBlock*>* blocks = graph_->blocks();
-  phi_list_ = new ZoneList<HPhi*>(blocks->length());
-  for (int i = 0; i < blocks->length(); ++i) {
-    for (int j = 0; j < blocks->at(i)->phis()->length(); j++) {
-      HPhi* phi = blocks->at(i)->phis()->at(j);
+  int block_count = blocks_.length();
+  phi_list_ = new ZoneList<HPhi*>(block_count);
+  for (int i = 0; i < block_count; ++i) {
+    for (int j = 0; j < blocks_[i]->phis()->length(); ++j) {
+      HPhi* phi = blocks_[i]->phis()->at(j);
       phi_list_->Add(phi);
       // We don't support phi uses of arguments for now.
       if (phi->CheckFlag(HValue::kIsArguments)) return false;
@@ -2082,36 +2084,6 @@ void TestContext::BuildBranch(HValue* value) {
   } while (false)
 
 
-// 'thing' could be an expression, statement, or list of statements.
-#define ADD_TO_SUBGRAPH(graph, thing)       \
-  do {                                      \
-    AddToSubgraph(graph, thing);            \
-    if (HasStackOverflow()) return;         \
-  } while (false)
-
-
-class HGraphBuilder::SubgraphScope BASE_EMBEDDED {
- public:
-  SubgraphScope(HGraphBuilder* builder, HSubgraph* new_subgraph)
-      : builder_(builder) {
-    old_subgraph_ = builder_->current_subgraph_;
-    subgraph_ = new_subgraph;
-    builder_->current_subgraph_ = subgraph_;
-  }
-
-  ~SubgraphScope() {
-    builder_->current_subgraph_ = old_subgraph_;
-  }
-
-  HSubgraph* subgraph() const { return subgraph_; }
-
- private:
-  HGraphBuilder* builder_;
-  HSubgraph* old_subgraph_;
-  HSubgraph* subgraph_;
-};
-
-
 void HGraphBuilder::Bailout(const char* reason) {
   if (FLAG_trace_bailout) {
     SmartPointer<char> name(info()->shared_info()->DebugName()->ToCString());
@@ -2163,13 +2135,10 @@ void HGraphBuilder::VisitExpressions(ZoneList<Expression*>* exprs) {
 
 
 HGraph* HGraphBuilder::CreateGraph() {
-  ASSERT(subgraph() == NULL);
   graph_ = new HGraph(info());
-
   {
     HPhase phase("Block building");
-    graph()->Initialize(CreateBasicBlock(graph()->start_environment()));
-    current_subgraph_ = graph();
+    current_block_ = graph()->entry_block();
 
     Scope* scope = info()->scope();
     if (scope->HasIllegalRedeclaration()) {
@@ -2244,25 +2213,6 @@ HGraph* HGraphBuilder::CreateGraph() {
   }
 
   return graph();
-}
-
-
-void HGraphBuilder::AddToSubgraph(HSubgraph* graph, Statement* stmt) {
-  SubgraphScope scope(this, graph);
-  Visit(stmt);
-}
-
-
-void HGraphBuilder::AddToSubgraph(HSubgraph* graph, Expression* expr) {
-  SubgraphScope scope(this, graph);
-  VisitForValue(expr);
-}
-
-
-void HGraphBuilder::AddToSubgraph(HSubgraph* graph,
-                                  ZoneList<Statement*>* stmts) {
-  SubgraphScope scope(this, graph);
-  VisitStatements(stmts);
 }
 
 
@@ -3240,11 +3190,13 @@ void HGraphBuilder::HandlePropertyAssignment(Assignment* expr) {
 
     if (expr->IsMonomorphic()) {
       Handle<Map> receiver_type(expr->GetMonomorphicReceiverType());
-      // An object has either fast elements or pixel array elements, but never
-      // both. Pixel array maps that are assigned to pixel array elements are
-      // always created with the fast elements flag cleared.
-      if (receiver_type->has_pixel_array_elements()) {
-        instr = BuildStoreKeyedPixelArrayElement(object, key, value, expr);
+      // An object has either fast elements or external array elements, but
+      // never both. Pixel array maps that are assigned to pixel array elements
+      // are always created with the fast elements flag cleared.
+      if (receiver_type->has_external_array_elements()) {
+        if (expr->GetExternalArrayType() == kExternalPixelArray) {
+          instr = BuildStoreKeyedPixelArrayElement(object, key, value, expr);
+        }
       } else if (receiver_type->has_fast_elements()) {
         instr = BuildStoreKeyedFastElement(object, key, value, expr);
       }
@@ -3627,15 +3579,15 @@ HInstruction* HGraphBuilder::BuildLoadKeyedPixelArrayElement(HValue* object,
   AddInstruction(new HCheckNonSmi(object));
   Handle<Map> map = expr->GetMonomorphicReceiverType();
   ASSERT(!map->has_fast_elements());
-  ASSERT(map->has_pixel_array_elements());
+  ASSERT(map->has_external_array_elements());
   AddInstruction(new HCheckMap(object, map));
   HLoadElements* elements = new HLoadElements(object);
   AddInstruction(elements);
-  HInstruction* length = new HPixelArrayLength(elements);
+  HInstruction* length = new HExternalArrayLength(elements);
   AddInstruction(length);
   AddInstruction(new HBoundsCheck(key, length));
-  HLoadPixelArrayExternalPointer* external_elements =
-      new HLoadPixelArrayExternalPointer(elements);
+  HLoadExternalArrayPointer* external_elements =
+      new HLoadExternalArrayPointer(elements);
   AddInstruction(external_elements);
   HLoadPixelArrayElement* pixel_array_value =
       new HLoadPixelArrayElement(external_elements, key);
@@ -3684,14 +3636,14 @@ HInstruction* HGraphBuilder::BuildStoreKeyedPixelArrayElement(
   AddInstruction(new HCheckNonSmi(object));
   Handle<Map> map = expr->GetMonomorphicReceiverType();
   ASSERT(!map->has_fast_elements());
-  ASSERT(map->has_pixel_array_elements());
+  ASSERT(map->has_external_array_elements());
   AddInstruction(new HCheckMap(object, map));
   HLoadElements* elements = new HLoadElements(object);
   AddInstruction(elements);
-  HInstruction* length = AddInstruction(new HPixelArrayLength(elements));
+  HInstruction* length = AddInstruction(new HExternalArrayLength(elements));
   AddInstruction(new HBoundsCheck(key, length));
-  HLoadPixelArrayExternalPointer* external_elements =
-      new HLoadPixelArrayExternalPointer(elements);
+  HLoadExternalArrayPointer* external_elements =
+      new HLoadExternalArrayPointer(elements);
   AddInstruction(external_elements);
   return new HStorePixelArrayElement(external_elements, key, val);
 }
@@ -3781,8 +3733,10 @@ void HGraphBuilder::VisitProperty(Property* expr) {
       // An object has either fast elements or pixel array elements, but never
       // both. Pixel array maps that are assigned to pixel array elements are
       // always created with the fast elements flag cleared.
-      if (receiver_type->has_pixel_array_elements()) {
-        instr = BuildLoadKeyedPixelArrayElement(obj, key, expr);
+      if (receiver_type->has_external_array_elements()) {
+        if (expr->GetExternalArrayType() == kExternalPixelArray) {
+          instr = BuildLoadKeyedPixelArrayElement(obj, key, expr);
+        }
       } else if (receiver_type->has_fast_elements()) {
         instr = BuildLoadKeyedFastElement(obj, key, expr);
       }
