@@ -985,11 +985,13 @@ class ObjectLiteral: public MaterializedLiteral {
                 int literal_index,
                 bool is_simple,
                 bool fast_elements,
-                int depth)
+                int depth,
+                bool has_function)
       : MaterializedLiteral(literal_index, is_simple, depth),
         constant_properties_(constant_properties),
         properties_(properties),
-        fast_elements_(fast_elements) {}
+        fast_elements_(fast_elements),
+        has_function_(has_function) {}
 
   DECLARE_NODE_TYPE(ObjectLiteral)
 
@@ -1000,16 +1002,24 @@ class ObjectLiteral: public MaterializedLiteral {
 
   bool fast_elements() const { return fast_elements_; }
 
+  bool has_function() { return has_function_; }
 
   // Mark all computed expressions that are bound to a key that
   // is shadowed by a later occurrence of the same key. For the
   // marked expressions, no store code is emitted.
   void CalculateEmitStore();
 
+  enum Flags {
+    kNoFlags = 0,
+    kFastElements = 1,
+    kHasFunction = 1 << 1
+  };
+
  private:
   Handle<FixedArray> constant_properties_;
   ZoneList<Property*>* properties_;
   bool fast_elements_;
+  bool has_function_;
 };
 
 
@@ -2180,7 +2190,7 @@ class RegExpEmpty: public RegExpTree {
 
 class AstVisitor BASE_EMBEDDED {
  public:
-  AstVisitor() : stack_overflow_(false) { }
+  AstVisitor() : isolate_(Isolate::Current()), stack_overflow_(false) { }
   virtual ~AstVisitor() { }
 
   // Stack overflow check and dynamic dispatch.
@@ -2210,7 +2220,11 @@ class AstVisitor BASE_EMBEDDED {
   AST_NODE_LIST(DEF_VISIT)
 #undef DEF_VISIT
 
+ protected:
+  Isolate* isolate() { return isolate_; }
+
  private:
+  Isolate* isolate_;
   bool stack_overflow_;
 };
 

@@ -304,7 +304,8 @@ static Handle<Object> CreateObjectLiteralBoilerplate(
     Isolate* isolate,
     Handle<FixedArray> literals,
     Handle<FixedArray> constant_properties,
-    bool should_have_fast_elements) {
+    bool should_have_fast_elements,
+    bool has_function_literal) {
   // Get the global context from the literals array.  This is the
   // context in which the function was created and we use the object
   // function from this context to create the object literal.  We do
@@ -314,70 +315,90 @@ static Handle<Object> CreateObjectLiteralBoilerplate(
   Handle<Context> context =
       Handle<Context>(JSFunction::GlobalContextFromLiterals(*literals));
 
-  bool is_result_from_cache;
-  Handle<Map> map = ComputeObjectLiteralMap(context,
-                                            constant_properties,
-                                            &is_result_from_cache);
+  // In case we have function literals, we want the object to be in
+  // slow properties mode for now. We don't go in the map cache because
+  // maps with constant functions can't be shared if the functions are
+  // not the same (which is the common case).
+  bool is_result_from_cache = false;
+  Handle<Map> map = has_function_literal
+      ? Handle<Map>(context->object_function()->initial_map())
+      : ComputeObjectLiteralMap(context,
+                                constant_properties,
+                                &is_result_from_cache);
 
   Handle<JSObject> boilerplate = isolate->factory()->NewJSObjectFromMap(map);
 
   // Normalize the elements of the boilerplate to save space if needed.
   if (!should_have_fast_elements) NormalizeElements(boilerplate);
 
-  {  // Add the constant properties to the boilerplate.
-    int length = constant_properties->length();
-    OptimizedObjectForAddingMultipleProperties opt(boilerplate,
-                                                   length / 2,
-                                                   !is_result_from_cache);
-    for (int index = 0; index < length; index +=2) {
-      Handle<Object> key(constant_properties->get(index+0), isolate);
-      Handle<Object> value(constant_properties->get(index+1), isolate);
-      if (value->IsFixedArray()) {
-        // The value contains the constant_properties of a
-        // simple object literal.
-        Handle<FixedArray> array = Handle<FixedArray>::cast(value);
-        value = CreateLiteralBoilerplate(isolate, literals, array);
-        if (value.is_null()) return value;
-      }
-      Handle<Object> result;
-      uint32_t element_index = 0;
-      if (key->IsSymbol()) {
-        if (Handle<String>::cast(key)->AsArrayIndex(&element_index)) {
-          // Array index as string (uint32).
-          result = SetOwnElement(boilerplate,
-                                 element_index,
-                                 value,
-                                 kNonStrictMode);
-        } else {
-          Handle<String> name(String::cast(*key));
-          ASSERT(!name->AsArrayIndex(&element_index));
-          result = SetLocalPropertyIgnoreAttributes(boilerplate, name,
-                                                    value, NONE);
-        }
-      } else if (key->ToArrayIndex(&element_index)) {
-        // Array index (uint32).
+  // Add the constant properties to the boilerplate.
+  int length = constant_properties->length();
+  bool should_transform =
+      !is_result_from_cache && boilerplate->HasFastProperties();
+  if (should_transform || has_function_literal) {
+    // Normalize the properties of object to avoid n^2 behavior
+    // when extending the object multiple properties. Indicate the number of
+    // properties to be added.
+    NormalizeProperties(boilerplate, KEEP_INOBJECT_PROPERTIES, length / 2);
+  }
+
+  for (int index = 0; index < length; index +=2) {
+    Handle<Object> key(constant_properties->get(index+0), isolate);
+    Handle<Object> value(constant_properties->get(index+1), isolate);
+    if (value->IsFixedArray()) {
+      // The value contains the constant_properties of a
+      // simple object or array literal.
+      Handle<FixedArray> array = Handle<FixedArray>::cast(value);
+      value = CreateLiteralBoilerplate(isolate, literals, array);
+      if (value.is_null()) return value;
+    }
+    Handle<Object> result;
+    uint32_t element_index = 0;
+    if (key->IsSymbol()) {
+      if (Handle<String>::cast(key)->AsArrayIndex(&element_index)) {
+        // Array index as string (uint32).
         result = SetOwnElement(boilerplate,
                                element_index,
                                value,
                                kNonStrictMode);
       } else {
-        // Non-uint32 number.
-        ASSERT(key->IsNumber());
-        double num = key->Number();
-        char arr[100];
-        Vector<char> buffer(arr, ARRAY_SIZE(arr));
-        const char* str = DoubleToCString(num, buffer);
-        Handle<String> name =
-            isolate->factory()->NewStringFromAscii(CStrVector(str));
+        Handle<String> name(String::cast(*key));
+        ASSERT(!name->AsArrayIndex(&element_index));
         result = SetLocalPropertyIgnoreAttributes(boilerplate, name,
                                                   value, NONE);
       }
-      // If setting the property on the boilerplate throws an
-      // exception, the exception is converted to an empty handle in
-      // the handle based operations.  In that case, we need to
-      // convert back to an exception.
-      if (result.is_null()) return result;
+    } else if (key->ToArrayIndex(&element_index)) {
+      // Array index (uint32).
+      result = SetOwnElement(boilerplate,
+                             element_index,
+                             value,
+                             kNonStrictMode);
+    } else {
+      // Non-uint32 number.
+      ASSERT(key->IsNumber());
+      double num = key->Number();
+      char arr[100];
+      Vector<char> buffer(arr, ARRAY_SIZE(arr));
+      const char* str = DoubleToCString(num, buffer);
+      Handle<String> name =
+          isolate->factory()->NewStringFromAscii(CStrVector(str));
+      result = SetLocalPropertyIgnoreAttributes(boilerplate, name,
+                                                value, NONE);
     }
+    // If setting the property on the boilerplate throws an
+    // exception, the exception is converted to an empty handle in
+    // the handle based operations.  In that case, we need to
+    // convert back to an exception.
+    if (result.is_null()) return result;
+  }
+
+  // Transform to fast properties if necessary. For object literals with
+  // containing function literals we defer this operation until after all
+  // computed properties have been assigned so that we can generate
+  // constant function properties.
+  if (should_transform && !has_function_literal) {
+    TransformToFastProperties(boilerplate,
+                              boilerplate->map()->unused_property_fields());
   }
 
   return boilerplate;
@@ -410,7 +431,7 @@ static Handle<Object> CreateArrayLiteralBoilerplate(
     for (int i = 0; i < content->length(); i++) {
       if (content->get(i)->IsFixedArray()) {
         // The value contains the constant_properties of a
-        // simple object literal.
+        // simple object or array literal.
         Handle<FixedArray> fa(FixedArray::cast(content->get(i)));
         Handle<Object> result =
             CreateLiteralBoilerplate(isolate, literals, fa);
@@ -431,11 +452,20 @@ static Handle<Object> CreateLiteralBoilerplate(
     Handle<FixedArray> literals,
     Handle<FixedArray> array) {
   Handle<FixedArray> elements = CompileTimeValue::GetElements(array);
+  const bool kHasNoFunctionLiteral = false;
   switch (CompileTimeValue::GetType(array)) {
     case CompileTimeValue::OBJECT_LITERAL_FAST_ELEMENTS:
-      return CreateObjectLiteralBoilerplate(isolate, literals, elements, true);
+      return CreateObjectLiteralBoilerplate(isolate,
+                                            literals,
+                                            elements,
+                                            true,
+                                            kHasNoFunctionLiteral);
     case CompileTimeValue::OBJECT_LITERAL_SLOW_ELEMENTS:
-      return CreateObjectLiteralBoilerplate(isolate, literals, elements, false);
+      return CreateObjectLiteralBoilerplate(isolate,
+                                            literals,
+                                            elements,
+                                            false,
+                                            kHasNoFunctionLiteral);
     case CompileTimeValue::ARRAY_LITERAL:
       return CreateArrayLiteralBoilerplate(isolate, literals, elements);
     default:
@@ -476,8 +506,9 @@ static MaybeObject* Runtime_CreateObjectLiteral(RUNTIME_CALLING_CONVENTION) {
   CONVERT_ARG_CHECKED(FixedArray, literals, 0);
   CONVERT_SMI_CHECKED(literals_index, args[1]);
   CONVERT_ARG_CHECKED(FixedArray, constant_properties, 2);
-  CONVERT_SMI_CHECKED(fast_elements, args[3]);
-  bool should_have_fast_elements = fast_elements == 1;
+  CONVERT_SMI_CHECKED(flags, args[3]);
+  bool should_have_fast_elements = (flags & ObjectLiteral::kFastElements) != 0;
+  bool has_function_literal = (flags & ObjectLiteral::kHasFunction) != 0;
 
   // Check if boilerplate exists. If not, create it first.
   Handle<Object> boilerplate(literals->get(literals_index), isolate);
@@ -485,7 +516,8 @@ static MaybeObject* Runtime_CreateObjectLiteral(RUNTIME_CALLING_CONVENTION) {
     boilerplate = CreateObjectLiteralBoilerplate(isolate,
                                                  literals,
                                                  constant_properties,
-                                                 should_have_fast_elements);
+                                                 should_have_fast_elements,
+                                                 has_function_literal);
     if (boilerplate.is_null()) return Failure::Exception();
     // Update the functions literal and return the boilerplate.
     literals->set(literals_index, *boilerplate);
@@ -502,8 +534,9 @@ static MaybeObject* Runtime_CreateObjectLiteralShallow(
   CONVERT_ARG_CHECKED(FixedArray, literals, 0);
   CONVERT_SMI_CHECKED(literals_index, args[1]);
   CONVERT_ARG_CHECKED(FixedArray, constant_properties, 2);
-  CONVERT_SMI_CHECKED(fast_elements, args[3]);
-  bool should_have_fast_elements = fast_elements == 1;
+  CONVERT_SMI_CHECKED(flags, args[3]);
+  bool should_have_fast_elements = (flags & ObjectLiteral::kFastElements) != 0;
+  bool has_function_literal = (flags & ObjectLiteral::kHasFunction) != 0;
 
   // Check if boilerplate exists. If not, create it first.
   Handle<Object> boilerplate(literals->get(literals_index), isolate);
@@ -511,7 +544,8 @@ static MaybeObject* Runtime_CreateObjectLiteralShallow(
     boilerplate = CreateObjectLiteralBoilerplate(isolate,
                                                  literals,
                                                  constant_properties,
-                                                 should_have_fast_elements);
+                                                 should_have_fast_elements,
+                                                 has_function_literal);
     if (boilerplate.is_null()) return Failure::Exception();
     // Update the functions literal and return the boilerplate.
     literals->set(literals_index, *boilerplate);
@@ -5071,23 +5105,24 @@ static const byte JsonQuoteLengths[kQuoteTableLength] = {
 
 
 template <typename StringType>
-MaybeObject* AllocateRawString(int length);
+MaybeObject* AllocateRawString(Isolate* isolate, int length);
 
 
 template <>
-MaybeObject* AllocateRawString<SeqTwoByteString>(int length) {
-  return HEAP->AllocateRawTwoByteString(length);
+MaybeObject* AllocateRawString<SeqTwoByteString>(Isolate* isolate, int length) {
+  return isolate->heap()->AllocateRawTwoByteString(length);
 }
 
 
 template <>
-MaybeObject* AllocateRawString<SeqAsciiString>(int length) {
-  return HEAP->AllocateRawAsciiString(length);
+MaybeObject* AllocateRawString<SeqAsciiString>(Isolate* isolate, int length) {
+  return isolate->heap()->AllocateRawAsciiString(length);
 }
 
 
 template <typename Char, typename StringType, bool comma>
-static MaybeObject* SlowQuoteJsonString(Vector<const Char> characters) {
+static MaybeObject* SlowQuoteJsonString(Isolate* isolate,
+                                        Vector<const Char> characters) {
   int length = characters.length();
   const Char* read_cursor = characters.start();
   const Char* end = read_cursor + length;
@@ -5101,7 +5136,8 @@ static MaybeObject* SlowQuoteJsonString(Vector<const Char> characters) {
       quoted_length += JsonQuoteLengths[static_cast<unsigned>(c)];
     }
   }
-  MaybeObject* new_alloc = AllocateRawString<StringType>(quoted_length);
+  MaybeObject* new_alloc = AllocateRawString<StringType>(isolate,
+                                                         quoted_length);
   Object* new_object;
   if (!new_alloc->ToObject(&new_object)) {
     return new_alloc;
@@ -5133,29 +5169,31 @@ static MaybeObject* SlowQuoteJsonString(Vector<const Char> characters) {
 
 
 template <typename Char, typename StringType, bool comma>
-static MaybeObject* QuoteJsonString(Vector<const Char> characters) {
+static MaybeObject* QuoteJsonString(Isolate* isolate,
+                                    Vector<const Char> characters) {
   int length = characters.length();
-  COUNTERS->quote_json_char_count()->Increment(length);
+  isolate->counters()->quote_json_char_count()->Increment(length);
   const int kSpaceForQuotes = 2 + (comma ? 1 :0);
   int worst_case_length = length * kJsonQuoteWorstCaseBlowup + kSpaceForQuotes;
   if (worst_case_length > kMaxGuaranteedNewSpaceString) {
-    return SlowQuoteJsonString<Char, StringType, comma>(characters);
+    return SlowQuoteJsonString<Char, StringType, comma>(isolate, characters);
   }
 
-  MaybeObject* new_alloc = AllocateRawString<StringType>(worst_case_length);
+  MaybeObject* new_alloc = AllocateRawString<StringType>(isolate,
+                                                         worst_case_length);
   Object* new_object;
   if (!new_alloc->ToObject(&new_object)) {
     return new_alloc;
   }
-  if (!HEAP->new_space()->Contains(new_object)) {
+  if (!isolate->heap()->new_space()->Contains(new_object)) {
     // Even if our string is small enough to fit in new space we still have to
     // handle it being allocated in old space as may happen in the third
     // attempt.  See CALL_AND_RETRY in heap-inl.h and similar code in
     // CEntryStub::GenerateCore.
-    return SlowQuoteJsonString<Char, StringType, comma>(characters);
+    return SlowQuoteJsonString<Char, StringType, comma>(isolate, characters);
   }
   StringType* new_string = StringType::cast(new_object);
-  ASSERT(HEAP->new_space()->Contains(new_string));
+  ASSERT(isolate->heap()->new_space()->Contains(new_string));
 
   STATIC_ASSERT(SeqTwoByteString::kHeaderSize == SeqAsciiString::kHeaderSize);
   Char* write_cursor = reinterpret_cast<Char*>(
@@ -5192,8 +5230,8 @@ static MaybeObject* QuoteJsonString(Vector<const Char> characters) {
   int final_length = static_cast<int>(
       write_cursor - reinterpret_cast<Char*>(
           new_string->address() + SeqAsciiString::kHeaderSize));
-  HEAP->new_space()->ShrinkStringAtAllocationBoundary<StringType>(new_string,
-                                                                  final_length);
+  isolate->heap()->new_space()->ShrinkStringAtAllocationBoundary<StringType>(
+      new_string, final_length);
   return new_string;
 }
 
@@ -5212,9 +5250,11 @@ static MaybeObject* Runtime_QuoteJSONString(RUNTIME_CALLING_CONVENTION) {
     ASSERT(str->IsFlat());
   }
   if (str->IsTwoByteRepresentation()) {
-    return QuoteJsonString<uc16, SeqTwoByteString, false>(str->ToUC16Vector());
+    return QuoteJsonString<uc16, SeqTwoByteString, false>(isolate,
+                                                          str->ToUC16Vector());
   } else {
-    return QuoteJsonString<char, SeqAsciiString, false>(str->ToAsciiVector());
+    return QuoteJsonString<char, SeqAsciiString, false>(isolate,
+                                                        str->ToAsciiVector());
   }
 }
 
@@ -5233,9 +5273,11 @@ static MaybeObject* Runtime_QuoteJSONStringComma(RUNTIME_CALLING_CONVENTION) {
     ASSERT(str->IsFlat());
   }
   if (str->IsTwoByteRepresentation()) {
-    return QuoteJsonString<uc16, SeqTwoByteString, true>(str->ToUC16Vector());
+    return QuoteJsonString<uc16, SeqTwoByteString, true>(isolate,
+                                                         str->ToUC16Vector());
   } else {
-    return QuoteJsonString<char, SeqAsciiString, true>(str->ToAsciiVector());
+    return QuoteJsonString<char, SeqAsciiString, true>(isolate,
+                                                       str->ToAsciiVector());
   }
 }
 

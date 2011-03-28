@@ -81,3 +81,9 @@ test-debug/DebugBreakLoop: SKIP
 
 ##############################################################################
 [ $arch == mips ]
+
+##############################################################################
+# Tests that time out with Isolates
+[ $system == linux ]
+test-profile-generator/RecordStackTraceAtStartProfiling: SKIP
+test-cpu-profiler/CrashIfStoppingLastNonExistentProfile: SKIP
