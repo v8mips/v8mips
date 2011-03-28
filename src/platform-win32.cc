@@ -754,9 +754,13 @@ char* OS::StrChr(char* str, int c) {
 
 
 void OS::StrNCpy(Vector<char> dest, const char* src, size_t n) {
+  // Use _TRUNCATE or strncpy_s crashes (by design) if buffer is too small.
+  size_t buffer_size = static_cast<size_t>(dest.length());
+  if (n + 1 > buffer_size)  // count for trailing '\0'
+    n = _TRUNCATE;
   int result = strncpy_s(dest.start(), dest.length(), src, n);
   USE(result);
-  ASSERT(result == 0);
+  ASSERT(result == 0 || (n == _TRUNCATE && result == STRUNCATE));
 }
 
 
@@ -1503,17 +1507,19 @@ class Thread::PlatformData : public Malloced {
 // Initialize a Win32 thread object. The thread has an invalid thread
 // handle until it is started.
 
-Thread::Thread(Isolate* isolate)
+Thread::Thread(Isolate* isolate, const Options& options)
     : ThreadHandle(ThreadHandle::INVALID),
-      isolate_(isolate) {
+      isolate_(isolate),
+      stack_size_(options.stack_size) {
   data_ = new PlatformData(kNoThread);
-  set_name("v8:<unknown>");
+  set_name(options.name);
 }
 
 
 Thread::Thread(Isolate* isolate, const char* name)
     : ThreadHandle(ThreadHandle::INVALID),
-      isolate_(isolate) {
+      isolate_(isolate),
+      stack_size_(0) {
   data_ = new PlatformData(kNoThread);
   set_name(name);
 }
@@ -1538,7 +1544,7 @@ Thread::~Thread() {
 void Thread::Start() {
   data_->thread_ = reinterpret_cast<HANDLE>(
       _beginthreadex(NULL,
-                     0,
+                     static_cast<unsigned>(stack_size_),
                      ThreadEntry,
                      this,
                      0,
@@ -1884,7 +1890,9 @@ class Sampler::PlatformData : public Malloced {
 
 class SamplerThread : public Thread {
  public:
-  explicit SamplerThread(int interval) : Thread(NULL), interval_(interval) {}
+  explicit SamplerThread(int interval)
+      : Thread(NULL, "SamplerThread"),
+        interval_(interval) {}
 
   static void AddActiveSampler(Sampler* sampler) {
     ScopedLock lock(mutex_);
@@ -1910,8 +1918,9 @@ class SamplerThread : public Thread {
 
   // Implement Thread::Run().
   virtual void Run() {
-    SamplerRegistry::State state = SamplerRegistry::GetState();
-    while (state != SamplerRegistry::HAS_NO_SAMPLERS) {
+    SamplerRegistry::State state;
+    while ((state = SamplerRegistry::GetState()) !=
+           SamplerRegistry::HAS_NO_SAMPLERS) {
       bool cpu_profiling_enabled =
           (state == SamplerRegistry::HAS_CPU_PROFILING_SAMPLERS);
       bool runtime_profiler_enabled = RuntimeProfiler::IsEnabled();

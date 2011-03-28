@@ -391,8 +391,15 @@ class Thread: public ThreadHandle {
     LOCAL_STORAGE_KEY_MAX_VALUE = kMaxInt
   };
 
+  struct Options {
+    Options() : name("v8:<unknown>"), stack_size(0) {}
+
+    const char* name;
+    int stack_size;
+  };
+
   // Create new thread (with a value for storing in the TLS isolate field).
-  explicit Thread(Isolate* isolate);
+  Thread(Isolate* isolate, const Options& options);
   Thread(Isolate* isolate, const char* name);
   virtual ~Thread();
 
@@ -439,6 +446,7 @@ class Thread: public ThreadHandle {
   PlatformData* data_;
   Isolate* isolate_;
   char name_[kMaxThreadNameLength];
+  int stack_size_;
 
   DISALLOW_COPY_AND_ASSIGN(Thread);
 };
@@ -576,13 +584,17 @@ class TickSample {
         tos(NULL),
         frames_count(0) {}
   StateTag state;  // The state of the VM.
-  Address pc;   // Instruction pointer.
-  Address sp;   // Stack pointer.
-  Address fp;   // Frame pointer.
-  Address tos;  // Top stack value (*sp).
+  Address pc;      // Instruction pointer.
+  Address sp;      // Stack pointer.
+  Address fp;      // Frame pointer.
+  union {
+    Address tos;   // Top stack value (*sp).
+    Address external_callback;
+  };
   static const int kMaxFramesCount = 64;
   Address stack[kMaxFramesCount];  // Call stack.
-  int frames_count;  // Number of captured frames.
+  int frames_count : 8;  // Number of captured frames.
+  bool has_external_callback : 1;
 };
 
 #ifdef ENABLE_LOGGING_AND_PROFILING
