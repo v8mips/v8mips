@@ -3333,7 +3333,7 @@ MaybeObject* ConstructStubCompiler::CompileConstructStub(JSFunction* function) {
 
   // Jump to the generic stub in case the specialized code cannot handle the
   // construction.
-  __ bind(&generic_stub_call);;
+  __ bind(&generic_stub_call);
   Handle<Code> generic_construct_stub =
       masm()->isolate()->builtins()->JSConstructStubGeneric();
   __ JumpToBuiltin(generic_construct_stub, RelocInfo::CODE_TARGET);
