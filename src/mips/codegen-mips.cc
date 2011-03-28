@@ -1812,7 +1812,7 @@ void CodeGenerator::CallApplyLazy(Expression* applicand,
   __ Branch(&build_args, ne, a2, Operand(JS_FUNCTION_TYPE));
 
   Handle<Code> apply_code(
-      Isolate::Current()->builtins()->builtin(Builtins::FunctionApply));
+      Isolate::Current()->builtins()->builtin(Builtins::kFunctionApply));
   __ lw(a1, FieldMemOperand(v0, JSFunction::kCodeEntryOffset));
   __ Subu(a1, a1, Operand(Code::kHeaderSize - kHeapObjectTag));
   __ Branch(&build_args, ne, a1, Operand(apply_code));
@@ -3649,7 +3649,7 @@ void CodeGenerator::VisitObjectLiteral(ObjectLiteral* node) {
       case ObjectLiteral::Property::COMPUTED:
         if (key->handle()->IsSymbol()) {
           Handle<Code> ic(Isolate::Current()->builtins()->builtin(
-              Builtins::StoreIC_Initialize));
+              Builtins::kStoreIC_Initialize));
           Load(value);
           if (property->emit_store()) {
             frame_->PopToA0();
@@ -4487,7 +4487,7 @@ void CodeGenerator::VisitCallNew(CallNew* node) {
   // constructor invocation.
   CodeForSourcePosition(node->position());
   Handle<Code> ic(
-      Isolate::Current()->builtins()->builtin(Builtins::JSConstructCall));
+      Isolate::Current()->builtins()->builtin(Builtins::kJSConstructCall));
   frame_->CallCodeObject(ic, RelocInfo::CONSTRUCT_CALL, arg_count + 1);
   frame_->EmitPush(v0);
 
@@ -6691,7 +6691,7 @@ void DeferredReferenceGetNamedValue::Generate() {
 
   { Assembler::BlockTrampolinePoolScope block_trampoline_pool(masm_);
     Handle<Code> ic(
-        Isolate::Current()->builtins()->builtin(Builtins::LoadIC_Initialize));
+        Isolate::Current()->builtins()->builtin(Builtins::kLoadIC_Initialize));
     RelocInfo::Mode mode = is_contextual_
         ? RelocInfo::CODE_TARGET_CONTEXT
         : RelocInfo::CODE_TARGET;
@@ -6772,7 +6772,7 @@ void DeferredReferenceGetKeyedValue::Generate() {
   { Assembler::BlockTrampolinePoolScope block_trampoline_pool(masm_);
     // Call keyed load IC. It has the arguments key and receiver in a0 and a1.
     Handle<Code> ic(Isolate::Current()->builtins()->builtin(
-        Builtins::KeyedLoadIC_Initialize));
+        Builtins::kKeyedLoadIC_Initialize));
     __ Call(ic, RelocInfo::CODE_TARGET);
     // The call must be followed by a nop instruction to indicate that the
     // keyed load has been inlined.
@@ -6841,8 +6841,9 @@ void DeferredReferenceSetKeyedValue::Generate() {
     // Call keyed store IC. It has the arguments value, key and receiver in a0,
     // a1 and a2.
     Handle<Code> ic(Isolate::Current()->builtins()->builtin(
-        (strict_mode_ == kStrictMode) ? Builtins::KeyedStoreIC_Initialize_Strict
-                                      : Builtins::KeyedStoreIC_Initialize));
+        (strict_mode_ == kStrictMode)
+        ? Builtins::kKeyedStoreIC_Initialize_Strict
+        : Builtins::kKeyedStoreIC_Initialize));
     __ Call(ic, RelocInfo::CODE_TARGET);
     // The call must be followed by a nop instruction to indicate that the
     // keyed store has been inlined.
@@ -6896,8 +6897,8 @@ void DeferredReferenceSetNamedValue::Generate() {
     // Call named store IC. It has the arguments value, receiever and name in
     // a0, a1 and a2.
     Handle<Code> ic(Isolate::Current()->builtins()->builtin(
-          (strict_mode_ == kStrictMode) ? Builtins::StoreIC_Initialize_Strict
-                                        : Builtins::StoreIC_Initialize));
+          (strict_mode_ == kStrictMode) ? Builtins::kStoreIC_Initialize_Strict
+                                        : Builtins::kStoreIC_Initialize));
     __ Call(ic, RelocInfo::CODE_TARGET);
     // The call must be followed by a nop instruction to indicate that the
     // named store has been inlined.

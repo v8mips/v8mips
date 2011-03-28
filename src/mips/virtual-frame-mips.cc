@@ -341,7 +341,7 @@ void VirtualFrame::InvokeBuiltin(Builtins::JavaScript id,
 
 void VirtualFrame::CallLoadIC(Handle<String> name, RelocInfo::Mode mode) {
   Handle<Code> ic(
-      Isolate::Current()->builtins()->builtin(Builtins::LoadIC_Initialize));
+      Isolate::Current()->builtins()->builtin(Builtins::kLoadIC_Initialize));
   PopToA0();
   SpillAll();
   __ li(a2, Operand(name));
@@ -353,8 +353,8 @@ void VirtualFrame::CallStoreIC(Handle<String> name,
                                bool is_contextual,
                                StrictModeFlag strict_mode) {
   Handle<Code> ic(Isolate::Current()->builtins()->builtin(
-      (strict_mode == kStrictMode) ? Builtins::StoreIC_Initialize_Strict
-                                   : Builtins::StoreIC_Initialize));
+      (strict_mode == kStrictMode) ? Builtins::kStoreIC_Initialize_Strict
+                                   : Builtins::kStoreIC_Initialize));
   PopToA0();
   RelocInfo::Mode mode;
   if (is_contextual) {
@@ -373,7 +373,7 @@ void VirtualFrame::CallStoreIC(Handle<String> name,
 
 void VirtualFrame::CallKeyedLoadIC() {
   Handle<Code> ic(Isolate::Current()->builtins()->builtin(
-      Builtins::KeyedLoadIC_Initialize));
+      Builtins::kKeyedLoadIC_Initialize));
   PopToA1A0();
   SpillAll();
   CallCodeObject(ic, RelocInfo::CODE_TARGET, 0);
@@ -382,8 +382,8 @@ void VirtualFrame::CallKeyedLoadIC() {
 
 void VirtualFrame::CallKeyedStoreIC(StrictModeFlag strict_mode) {
   Handle<Code> ic(Isolate::Current()->builtins()->builtin(
-      (strict_mode == kStrictMode) ? Builtins::KeyedStoreIC_Initialize_Strict
-                                   : Builtins::KeyedStoreIC_Initialize));
+      (strict_mode == kStrictMode) ? Builtins::kKeyedStoreIC_Initialize_Strict
+                                   : Builtins::kKeyedStoreIC_Initialize));
   PopToA1A0();
   SpillAll();
   EmitPop(a2);
@@ -413,7 +413,7 @@ void VirtualFrame::CallCodeObject(Handle<Code> code,
 
     case Code::BUILTIN:
       ASSERT(*code == Isolate::Current()->builtins()->builtin(
-          Builtins::JSConstructCall));
+          Builtins::kJSConstructCall));
       break;
 
     default:

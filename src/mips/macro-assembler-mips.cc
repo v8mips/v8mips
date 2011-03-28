@@ -2356,7 +2356,7 @@ void MacroAssembler::InvokePrologue(const ParameterCount& expected,
       addiu(a3, a3, Code::kHeaderSize - kHeapObjectTag);
     }
 
-    ExternalReference adaptor(Builtins::ArgumentsAdaptorTrampoline, isolate());
+    ExternalReference adaptor(Builtins::kArgumentsAdaptorTrampoline, isolate());
     if (flag == CALL_FUNCTION) {
       CallBuiltin(adaptor);
       if (post_call_generator != NULL) post_call_generator->Generate();
