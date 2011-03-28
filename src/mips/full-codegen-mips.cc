@@ -3860,18 +3860,19 @@ Register FullCodeGenerator::context_register() {
 void FullCodeGenerator::EmitCallIC(Handle<Code> ic, RelocInfo::Mode mode) {
   ASSERT(mode == RelocInfo::CODE_TARGET ||
          mode == RelocInfo::CODE_TARGET_CONTEXT);
+  Counters* counters = isolate()->counters();
   switch (ic->kind()) {
     case Code::LOAD_IC:
-      __ IncrementCounter(isolate()->counters()->named_load_full(), 1, a1, a2);
+      __ IncrementCounter(counters->named_load_full(), 1, a1, a2);
       break;
     case Code::KEYED_LOAD_IC:
-      __ IncrementCounter(isolate()->counters()->keyed_load_full(), 1, a1, a2);
+      __ IncrementCounter(counters->keyed_load_full(), 1, a1, a2);
       break;
     case Code::STORE_IC:
-      __ IncrementCounter(isolate()->counters()->named_store_full(), 1, a1, a2);
+      __ IncrementCounter(counters->named_store_full(), 1, a1, a2);
       break;
     case Code::KEYED_STORE_IC:
-      __ IncrementCounter(isolate()->counters()->keyed_store_full(), 1, a1, a2);
+      __ IncrementCounter(counters->keyed_store_full(), 1, a1, a2);
     default:
       break;
   }

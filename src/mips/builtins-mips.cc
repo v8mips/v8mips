@@ -312,6 +312,7 @@ static void AllocateJSArray(MacroAssembler* masm,
 // construct call and normal call.
 static void ArrayNativeCode(MacroAssembler* masm,
                             Label* call_generic_code) {
+  Counters* counters = masm->isolate()->counters();
   Label argc_one_or_more, argc_two_or_more;
 
   // Check for array construction with zero arguments or one.
@@ -325,7 +326,7 @@ static void ArrayNativeCode(MacroAssembler* masm,
                        t1,
                        JSArray::kPreallocatedArrayElements,
                        call_generic_code);
-  __ IncrementCounter(COUNTERS->array_function_native(), 1, a3, t0);
+  __ IncrementCounter(counters->array_function_native(), 1, a3, t0);
   // Setup return value, remove receiver from stack and return.
   __ mov(v0, a2);
   __ Addu(sp, sp, Operand(kPointerSize));
@@ -361,7 +362,7 @@ static void ArrayNativeCode(MacroAssembler* masm,
                   t3,
                   true,
                   call_generic_code);
-  __ IncrementCounter(COUNTERS->array_function_native(), 1, a2, t0);
+  __ IncrementCounter(counters->array_function_native(), 1, a2, t0);
 
   // Setup return value, remove receiver and argument from stack and return.
   __ mov(v0, a3);
@@ -386,7 +387,7 @@ static void ArrayNativeCode(MacroAssembler* masm,
                   t3,
                   false,
                   call_generic_code);
-  __ IncrementCounter(COUNTERS->array_function_native(), 1, a2, t2);
+  __ IncrementCounter(counters->array_function_native(), 1, a2, t2);
 
   // Fill arguments as array elements. Copy from the top of the stack (last
   // element) to the array backing store filling it backwards. Note:
@@ -495,7 +496,8 @@ void Builtins::Generate_StringConstructCode(MacroAssembler* masm) {
   //  -- sp[(argc - n - 1) * 4] : arg[n] (zero based)
   //  -- sp[argc * 4]           : receiver
   // -----------------------------------
-  __ IncrementCounter(COUNTERS->string_ctor_calls(), 1, a2, a3);
+  Counters* counters = masm->isolate()->counters();
+  __ IncrementCounter(counters->string_ctor_calls(), 1, a2, a3);
 
   Register function = a1;
   if (FLAG_debug_code) {
@@ -525,7 +527,7 @@ void Builtins::Generate_StringConstructCode(MacroAssembler* masm) {
       t1,        // Scratch.
       false,     // Is it a Smi?
       &not_cached);
-  __ IncrementCounter(COUNTERS->string_ctor_cached_number(), 1, a3, t0);
+  __ IncrementCounter(counters->string_ctor_cached_number(), 1, a3, t0);
   __ bind(&argument_is_string);
 
   // ----------- S t a t e -------------
@@ -579,13 +581,13 @@ void Builtins::Generate_StringConstructCode(MacroAssembler* masm) {
   __ And(t0, a3, Operand(kIsNotStringMask));
   __ Branch(&convert_argument, ne, t0, Operand(zero_reg));
   __ mov(argument, a0);
-  __ IncrementCounter(COUNTERS->string_ctor_conversions(), 1, a3, t0);
+  __ IncrementCounter(counters->string_ctor_conversions(), 1, a3, t0);
   __ Branch(&argument_is_string);
 
   // Invoke the conversion builtin and put the result into a2.
   __ bind(&convert_argument);
   __ push(function);  // Preserve the function.
-  __ IncrementCounter(COUNTERS->string_ctor_conversions(), 1, a3, t0);
+  __ IncrementCounter(counters->string_ctor_conversions(), 1, a3, t0);
   __ EnterInternalFrame();
   __ push(v0);
   __ InvokeBuiltin(Builtins::TO_STRING, CALL_JS);
@@ -604,7 +606,7 @@ void Builtins::Generate_StringConstructCode(MacroAssembler* masm) {
   // At this point the argument is already a string. Call runtime to
   // create a string wrapper.
   __ bind(&gc_required);
-  __ IncrementCounter(COUNTERS->string_ctor_gc_required(), 1, a3, t0);
+  __ IncrementCounter(counters->string_ctor_gc_required(), 1, a3, t0);
   __ EnterInternalFrame();
   __ push(argument);
   __ CallRuntime(Runtime::kNewStringWrapper, 1);
@@ -655,6 +657,8 @@ static void Generate_JSConstructStubHelper(MacroAssembler* masm,
   // Should never count constructions for api objects.
   ASSERT(!is_api_function || !count_constructions);
 
+  Isolate* isolate = masm->isolate();
+
   // a0     : number of arguments
   // a1     : constructor function
   // ra     : return address
@@ -677,7 +681,7 @@ static void Generate_JSConstructStubHelper(MacroAssembler* masm,
     Label undo_allocation;
 #ifdef ENABLE_DEBUGGER_SUPPORT
     ExternalReference debug_step_in_fp =
-        ExternalReference::debug_step_in_fp_address(masm->isolate());
+        ExternalReference::debug_step_in_fp_address(isolate);
     __ li(a2, Operand(debug_step_in_fp));
     __ lw(a2, MemOperand(a2));
     __ Branch(&rt_call, ne, a2, Operand(zero_reg));
@@ -935,8 +939,7 @@ static void Generate_JSConstructStubHelper(MacroAssembler* masm,
   if (is_api_function) {
     __ lw(cp, FieldMemOperand(a1, JSFunction::kContextOffset));
     Handle<Code> code = Handle<Code>(
-        masm->isolate()->builtins()->builtin(
-            Builtins::HandleApiCallConstruct));
+        isolate->builtins()->builtin(Builtins::HandleApiCallConstruct));
     ParameterCount expected(0);
     __ InvokeCode(code, expected, expected,
                   RelocInfo::CODE_TARGET, CALL_FUNCTION);
@@ -991,7 +994,7 @@ static void Generate_JSConstructStubHelper(MacroAssembler* masm,
   __ sll(t0, a1, kPointerSizeLog2 - 1);
   __ Addu(sp, sp, t0);
   __ Addu(sp, sp, kPointerSize);
-  __ IncrementCounter(COUNTERS->constructed_objects(), 1, a1, a2);
+  __ IncrementCounter(isolate->counters()->constructed_objects(), 1, a1, a2);
   __ Ret();
 }
 
