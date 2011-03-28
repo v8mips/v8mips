@@ -2877,7 +2877,7 @@ void CodeGenerator::VisitTryCatchStatement(TryCatchStatement* node) {
   function_return_is_shadowed_ = function_return_was_shadowed;
 
   // Get an external reference to the handler address.
-  ExternalReference handler_address(Isolate::k_handler_address);
+  ExternalReference handler_address(Isolate::k_handler_address, isolate());
 
   // If we can fall off the end of the try block, unlink from try chain.
   if (has_valid_frame()) {
@@ -2993,7 +2993,7 @@ void CodeGenerator::VisitTryFinallyStatement(TryFinallyStatement* node) {
   function_return_is_shadowed_ = function_return_was_shadowed;
 
   // Get an external reference to the handler address.
-  ExternalReference handler_address(Isolate::k_handler_address);
+  ExternalReference handler_address(Isolate::k_handler_address, isolate());
 
   // If we can fall off the end of the try block, unlink from the try
   // chain and set the state on the frame to FALLING.
@@ -5415,7 +5415,7 @@ void CodeGenerator::GenerateRandomHeapNumber(
   // ( 1.(20 0s)(32 random bits) x 2^20 ) - (1.0 x 2^20)).
   if (Isolate::Current()->cpu_features()->IsSupported(FPU)) {
     __ PrepareCallCFunction(0, a1);
-    __ CallCFunction(ExternalReference::random_uint32_function(), 0);
+    __ CallCFunction(ExternalReference::random_uint32_function(isolate()), 0);
 
     CpuFeatures::Scope scope(FPU);
     // 0x41300000 is the top half of 1.0 x 2^20 as a double.
@@ -5434,7 +5434,7 @@ void CodeGenerator::GenerateRandomHeapNumber(
     __ mov(a0, s0);
     __ PrepareCallCFunction(1, a1);
     __ CallCFunction(
-        ExternalReference::fill_heap_number_with_random_function(), 1);
+        ExternalReference::fill_heap_number_with_random_function(isolate()), 1);
     frame_->EmitPush(v0);
   }
 }
@@ -7296,11 +7296,12 @@ void CodeGenerator::EmitKeyedStore(StaticType* key_type,
     __ lw(scratch1, FieldMemOperand(receiver, JSObject::kElementsOffset));
     if (!value_is_harmless && wb_info != LIKELY_SMI) {
       Label ok;
-      __ And(scratch2, scratch1, Operand(ExternalReference::new_space_mask()));
+      __ And(scratch2, scratch1, Operand(
+          ExternalReference::new_space_mask(isolate())));
       __ Branch(&ok,
                 eq,
                 scratch2,
-                Operand(ExternalReference::new_space_start()));
+                Operand(ExternalReference::new_space_start(isolate())));
       __ And(at, value, Operand(kSmiTagMask));
       deferred->Branch(ne, at, Operand(zero_reg));
       __ bind(&ok);

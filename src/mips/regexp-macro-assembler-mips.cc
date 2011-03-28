@@ -360,7 +360,7 @@ void RegExpMacroAssemblerMIPS::CheckNotBackReferenceIgnoreCase(
     __ Addu(a1, current_input_offset(), Operand(end_of_input_address()));
 
     ExternalReference function =
-        ExternalReference::re_case_insensitive_compare_uc16();
+        ExternalReference::re_case_insensitive_compare_uc16(masm_->isolate());
     __ CallCFunction(function, argument_count);
 
     // Restore regexp engine registers.
@@ -602,7 +602,7 @@ Handle<Object> RegExpMacroAssemblerMIPS::GetCode(Handle<String> source) {
   Label stack_ok;
 
   ExternalReference stack_limit =
-      ExternalReference::address_of_stack_limit();
+      ExternalReference::address_of_stack_limit(masm_->isolate());
   __ li(a0, Operand(stack_limit));
   __ lw(a0, MemOperand(a0));
   __ Subu(a0, sp, a0);
@@ -768,7 +768,7 @@ Handle<Object> RegExpMacroAssemblerMIPS::GetCode(Handle<String> source) {
     __ mov(a0, backtrack_stackpointer());
     __ Addu(a1, frame_pointer(), Operand(kStackHighEnd));
     ExternalReference grow_stack =
-      ExternalReference::re_grow_stack();
+      ExternalReference::re_grow_stack(masm_->isolate());
     __ CallCFunction(grow_stack, num_arguments);
     // Restore regexp registers.
     __ MultiPop(regexp_registers);
@@ -978,7 +978,7 @@ void RegExpMacroAssemblerMIPS::CallCheckStackGuardState(Register scratch) {
   __ li(a1, Operand(masm_->CodeObject()));
   // a0 becomes return address pointer.
   ExternalReference stack_guard_check =
-      ExternalReference::re_check_stack_guard_state();
+      ExternalReference::re_check_stack_guard_state(masm_->isolate());
   CallCFunctionUsingStub(stack_guard_check, num_arguments);
 }
 
@@ -1147,7 +1147,7 @@ void RegExpMacroAssemblerMIPS::Pop(Register target) {
 void RegExpMacroAssemblerMIPS::CheckPreemption() {
   // Check for preemption.
   ExternalReference stack_limit =
-      ExternalReference::address_of_stack_limit();
+      ExternalReference::address_of_stack_limit(masm_->isolate());
   __ li(a0, Operand(stack_limit));
   __ lw(a0, MemOperand(a0));
   SafeCall(&check_preempt_label_, ls, sp, Operand(a0));
@@ -1156,7 +1156,7 @@ void RegExpMacroAssemblerMIPS::CheckPreemption() {
 
 void RegExpMacroAssemblerMIPS::CheckStackLimit() {
   ExternalReference stack_limit =
-      ExternalReference::address_of_regexp_stack_limit();
+      ExternalReference::address_of_regexp_stack_limit(masm_->isolate());
 
   __ li(a0, Operand(stack_limit));
   __ lw(a0, MemOperand(a0));

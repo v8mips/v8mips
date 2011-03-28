@@ -209,8 +209,11 @@ void MacroAssembler::InNewSpace(Register object,
                                 Condition cc,
                                 Label* branch) {
   ASSERT(cc == eq || cc == ne);
-  And(scratch, object, Operand(ExternalReference::new_space_mask()));
-  Branch(branch, cc, scratch, Operand(ExternalReference::new_space_start()));
+  And(scratch, object, Operand(ExternalReference::new_space_mask(isolate())));
+  Branch(branch,
+         cc,
+         scratch,
+         Operand(ExternalReference::new_space_start(isolate())));
 }
 
 
@@ -1823,7 +1826,7 @@ void MacroAssembler::Move(Register dst, Register src) {
 void MacroAssembler::DebugBreak() {
   ASSERT(allow_stub_calls());
   mov(a0, zero_reg);
-  li(a1, Operand(ExternalReference(Runtime::kDebugBreak)));
+  li(a1, Operand(ExternalReference(Runtime::kDebugBreak, isolate())));
   CEntryStub ces(1);
   Call(ces.GetCode(), RelocInfo::DEBUG_BREAK);
 }
@@ -1850,7 +1853,8 @@ void MacroAssembler::PushTryHandler(CodeLocation try_location,
            && StackHandlerConstants::kPCOffset == 3 * kPointerSize
            && StackHandlerConstants::kNextOffset == 0 * kPointerSize);
     // Save the current handler as the next handler.
-    LoadExternalReference(t2, ExternalReference(Isolate::k_handler_address));
+    LoadExternalReference(t2, ExternalReference(Isolate::k_handler_address,
+                                                isolate()));
     lw(t1, MemOperand(t2));
 
     addiu(sp, sp, -StackHandlerConstants::kSize);
@@ -1876,7 +1880,8 @@ void MacroAssembler::PushTryHandler(CodeLocation try_location,
     li(t0, Operand(StackHandler::ENTRY));
 
     // Save the current handler as the next handler.
-    LoadExternalReference(t2, ExternalReference(Isolate::k_handler_address));
+    LoadExternalReference(t2, ExternalReference(Isolate::k_handler_address,
+                                                isolate()));
     lw(t1, MemOperand(t2));
 
     addiu(sp, sp, -StackHandlerConstants::kSize);
@@ -1895,7 +1900,8 @@ void MacroAssembler::PopTryHandler() {
   ASSERT_EQ(0, StackHandlerConstants::kNextOffset);
   pop(a1);
   Addu(sp, sp, Operand(StackHandlerConstants::kSize - kPointerSize));
-  li(at, Operand(ExternalReference(Isolate::k_handler_address)));
+  li(at, Operand(ExternalReference(Isolate::k_handler_address,
+                                   isolate())));
   sw(a1, MemOperand(at));
 }
 
@@ -1934,9 +1940,9 @@ void MacroAssembler::AllocateInNewSpace(int object_size,
   // ARM adds additional checks to make sure the ldm instruction can be
   // used. On MIPS we don't have ldm so we don't need additional checks either.
   ExternalReference new_space_allocation_top =
-      ExternalReference::new_space_allocation_top_address();
+      ExternalReference::new_space_allocation_top_address(isolate());
   ExternalReference new_space_allocation_limit =
-      ExternalReference::new_space_allocation_limit_address();
+      ExternalReference::new_space_allocation_limit_address(isolate());
   intptr_t top   =
       reinterpret_cast<intptr_t>(new_space_allocation_top.address());
   intptr_t limit =
@@ -2005,9 +2011,9 @@ void MacroAssembler::AllocateInNewSpace(Register object_size,
   // ARM adds additional checks to make sure the ldm instruction can be
   // used. On MIPS we don't have ldm so we don't need additional checks either.
   ExternalReference new_space_allocation_top =
-      ExternalReference::new_space_allocation_top_address();
+      ExternalReference::new_space_allocation_top_address(isolate());
   ExternalReference new_space_allocation_limit =
-      ExternalReference::new_space_allocation_limit_address();
+      ExternalReference::new_space_allocation_limit_address(isolate());
   intptr_t top   =
       reinterpret_cast<intptr_t>(new_space_allocation_top.address());
   intptr_t limit =
@@ -2063,7 +2069,7 @@ void MacroAssembler::AllocateInNewSpace(Register object_size,
 void MacroAssembler::UndoAllocationInNewSpace(Register object,
                                               Register scratch) {
   ExternalReference new_space_allocation_top =
-      ExternalReference::new_space_allocation_top_address();
+      ExternalReference::new_space_allocation_top_address(isolate());
 
   // Make sure the object has no tag before resetting top.
   And(object, object, Operand(~kHeapObjectTagMask));
@@ -2350,7 +2356,7 @@ void MacroAssembler::InvokePrologue(const ParameterCount& expected,
       addiu(a3, a3, Code::kHeaderSize - kHeapObjectTag);
     }
 
-    ExternalReference adaptor(Builtins::ArgumentsAdaptorTrampoline);
+    ExternalReference adaptor(Builtins::ArgumentsAdaptorTrampoline, isolate());
     if (flag == CALL_FUNCTION) {
       CallBuiltin(adaptor);
       if (post_call_generator != NULL) post_call_generator->Generate();
@@ -2716,7 +2722,7 @@ void MacroAssembler::CallRuntime(const Runtime::Function* f,
   // should remove this need and make the runtime routine entry code
   // smarter.
   li(a0, num_arguments);
-  LoadExternalReference(a1, ExternalReference(f));
+  LoadExternalReference(a1, ExternalReference(f, isolate()));
   CEntryStub stub(1);
   CallStub(&stub);
 }
@@ -2725,7 +2731,7 @@ void MacroAssembler::CallRuntime(const Runtime::Function* f,
 void MacroAssembler::CallRuntimeSaveDoubles(Runtime::FunctionId id) {
   const Runtime::Function* function = Runtime::FunctionForId(id);
   li(a0, Operand(function->nargs));
-  li(a1, Operand(ExternalReference(function)));
+  li(a1, Operand(ExternalReference(function, isolate())));
   CEntryStub stub(1);
   stub.SaveDoubles();
   CallStub(&stub);
@@ -2762,7 +2768,9 @@ void MacroAssembler::TailCallExternalReference(const ExternalReference& ext,
 void MacroAssembler::TailCallRuntime(Runtime::FunctionId fid,
                                      int num_arguments,
                                      int result_size) {
-  TailCallExternalReference(ExternalReference(fid), num_arguments, result_size);
+  TailCallExternalReference(ExternalReference(fid, isolate()),
+                            num_arguments,
+                            result_size);
 }
 
 
@@ -3040,9 +3048,11 @@ void MacroAssembler::EnterExitFrame(Register hold_argc,
   Push(t8);  // Accessed from ExitFrame::code_slot.
 
   // Save the frame pointer and the context in top.
-  LoadExternalReference(t8, ExternalReference(Isolate::k_c_entry_fp_address));
+  LoadExternalReference(t8, ExternalReference(Isolate::k_c_entry_fp_address,
+                                              isolate()));
   sw(fp, MemOperand(t8));
-  LoadExternalReference(t8, ExternalReference(Isolate::k_context_address));
+  LoadExternalReference(t8, ExternalReference(Isolate::k_context_address,
+                                              isolate()));
   sw(cp, MemOperand(t8));
 
   // Setup argc and the builtin function in callee-saved registers.
@@ -3091,11 +3101,13 @@ void MacroAssembler::LeaveExitFrame(bool save_doubles) {
   }
 
   // Clear top frame.
-  LoadExternalReference(t8, ExternalReference(Isolate::k_c_entry_fp_address));
+  LoadExternalReference(t8, ExternalReference(Isolate::k_c_entry_fp_address,
+                                              isolate()));
   sw(zero_reg, MemOperand(t8));
 
   // Restore current context from top and clear it in debug mode.
-  LoadExternalReference(t8, ExternalReference(Isolate::k_context_address));
+  LoadExternalReference(t8, ExternalReference(Isolate::k_context_address,
+                                              isolate()));
   lw(cp, MemOperand(t8));
 #ifdef DEBUG
   sw(a3, MemOperand(t8));
@@ -3363,7 +3375,7 @@ void MacroAssembler::CallCFunction(Register function,
                                    Register scratch,
                                    int num_arguments) {
   CallCFunctionHelper(function,
-                      ExternalReference::the_hole_value_location(),
+                      ExternalReference::the_hole_value_location(isolate()),
                       scratch,
                       num_arguments);
 }

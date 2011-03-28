@@ -452,7 +452,8 @@ void StubCompiler::GenerateStoreField(MacroAssembler* masm,
     __ li(a2, Operand(Handle<Map>(transition)));
     __ Push(a2, a0);
     __ TailCallExternalReference(
-           ExternalReference(IC_Utility(IC::kSharedStoreIC_ExtendStorage)),
+           ExternalReference(IC_Utility(IC::kSharedStoreIC_ExtendStorage),
+                             masm->isolate()),
            3, 1);
     return;
   }
@@ -565,7 +566,8 @@ static void CompileCallLoadPropertyWithInterceptor(MacroAssembler* masm,
   PushInterceptorArguments(masm, receiver, holder, name, holder_obj);
 
   ExternalReference ref =
-      ExternalReference(IC_Utility(IC::kLoadPropertyWithInterceptorOnly));
+      ExternalReference(IC_Utility(IC::kLoadPropertyWithInterceptorOnly),
+          masm->isolate());
   __ li(a0, Operand(5));
   __ li(a1, Operand(ref));
 
@@ -812,7 +814,8 @@ class CallInterceptorCompiler BASE_EMBEDDED {
 
     __ CallExternalReference(
           ExternalReference(
-              IC_Utility(IC::kLoadPropertyWithInterceptorForCall)),
+              IC_Utility(IC::kLoadPropertyWithInterceptorForCall),
+              masm->isolate()),
           5);
 
     // Restore the name_ register.
@@ -1230,7 +1233,8 @@ MaybeObject* StubCompiler::GenerateLoadCallback(JSObject* object,
 
   // Do tail-call to the runtime system.
   ExternalReference load_callback_property =
-      ExternalReference(IC_Utility(IC::kLoadCallbackProperty));
+      ExternalReference(IC_Utility(IC::kLoadCallbackProperty),
+                        masm()->isolate());
   __ TailCallExternalReference(load_callback_property, 5, 1);
 
   return HEAP->undefined_value();  // Success.
@@ -1360,7 +1364,8 @@ void StubCompiler::GenerateLoadInterceptor(JSObject* object,
       }
 
       ExternalReference ref =
-          ExternalReference(IC_Utility(IC::kLoadCallbackProperty));
+          ExternalReference(IC_Utility(IC::kLoadCallbackProperty),
+                            masm()->isolate());
       __ TailCallExternalReference(ref, 5, 1);
     }
   } else {  // !compile_followup_inline
@@ -1373,7 +1378,7 @@ void StubCompiler::GenerateLoadInterceptor(JSObject* object,
                              name_reg, interceptor_holder);
 
     ExternalReference ref = ExternalReference(
-        IC_Utility(IC::kLoadPropertyWithInterceptorForLoad));
+        IC_Utility(IC::kLoadPropertyWithInterceptorForLoad), masm()->isolate());
     __ TailCallExternalReference(ref, 5, 1);
   }
 }
@@ -1584,9 +1589,11 @@ MaybeObject* CallStubCompiler::CompileArrayPushCall(Object* object,
       }
 
       ExternalReference new_space_allocation_top =
-          ExternalReference::new_space_allocation_top_address();
+          ExternalReference::new_space_allocation_top_address(
+              masm()->isolate());
       ExternalReference new_space_allocation_limit =
-          ExternalReference::new_space_allocation_limit_address();
+          ExternalReference::new_space_allocation_limit_address(
+              masm()->isolate());
 
       const int kAllocationDelta = 4;
       // Load top and check if it is the end of elements.
@@ -1624,7 +1631,8 @@ MaybeObject* CallStubCompiler::CompileArrayPushCall(Object* object,
       __ Ret();
     }
     __ bind(&call_builtin);
-    __ TailCallExternalReference(ExternalReference(Builtins::c_ArrayPush),
+    __ TailCallExternalReference(ExternalReference(Builtins::c_ArrayPush,
+                                                   masm()->isolate()),
                                  argc + 1,
                                  1);
   }
@@ -1709,7 +1717,8 @@ MaybeObject* CallStubCompiler::CompileArrayPopCall(Object* object,
   __ Ret();
 
   __ bind(&call_builtin);
-  __ TailCallExternalReference(ExternalReference(Builtins::c_ArrayPop),
+  __ TailCallExternalReference(ExternalReference(Builtins::c_ArrayPop,
+                                                 masm()->isolate()),
                                argc + 1,
                                1);
 
@@ -2566,7 +2575,8 @@ MaybeObject* StoreStubCompiler::CompileStoreCallback(JSObject* object,
 
   // Do tail-call to the runtime system.
   ExternalReference store_callback_property =
-      ExternalReference(IC_Utility(IC::kStoreCallbackProperty));
+      ExternalReference(IC_Utility(IC::kStoreCallbackProperty),
+          masm()->isolate());
   __ TailCallExternalReference(store_callback_property, 4, 1);
 
   // Handle store cache miss.
@@ -2613,7 +2623,8 @@ MaybeObject* StoreStubCompiler::CompileStoreInterceptor(JSObject* receiver,
 
   // Do tail-call to the runtime system.
   ExternalReference store_ic_property =
-      ExternalReference(IC_Utility(IC::kStoreInterceptorProperty));
+      ExternalReference(IC_Utility(IC::kStoreInterceptorProperty),
+          masm()->isolate());
   __ TailCallExternalReference(store_ic_property, 4, 1);
 
   // Handle store cache miss.

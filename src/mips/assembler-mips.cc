@@ -240,19 +240,19 @@ const Instr kLwSwOffsetMask = kImm16Mask;
 
 
 Assembler::Assembler(void* buffer, int buffer_size)
-    : positions_recorder_(this),
+    : AssemblerBase(Isolate::Current()),
+      positions_recorder_(this),
       allow_peephole_optimization_(false),
       emit_debug_code_(FLAG_debug_code) {
-  Isolate* isolate = Isolate::Current();
   allow_peephole_optimization_ = FLAG_peephole_optimization;
   if (buffer == NULL) {
     // Do our own buffer management.
     if (buffer_size <= kMinimalBufferSize) {
       buffer_size = kMinimalBufferSize;
 
-      if (isolate->assembler_spare_buffer() != NULL) {
-        buffer = isolate->assembler_spare_buffer();
-        isolate->set_assembler_spare_buffer(NULL);
+      if (isolate()->assembler_spare_buffer() != NULL) {
+        buffer = isolate()->assembler_spare_buffer();
+        isolate()->set_assembler_spare_buffer(NULL);
       }
     }
     if (buffer == NULL) {
@@ -284,11 +284,10 @@ Assembler::Assembler(void* buffer, int buffer_size)
 
 
 Assembler::~Assembler() {
-  Isolate* isolate = Isolate::Current();
   if (own_buffer_) {
-    if (isolate->assembler_spare_buffer() == NULL &&
+    if (isolate()->assembler_spare_buffer() == NULL &&
         buffer_size_ == kMinimalBufferSize) {
-      isolate->set_assembler_spare_buffer(buffer_);
+      isolate()->set_assembler_spare_buffer(buffer_);
     } else {
       DeleteArray(buffer_);
     }
@@ -1881,7 +1880,7 @@ void Assembler::c(FPUCondition cond, SecondaryField fmt,
 
 void Assembler::fcmp(FPURegister src1, const double src2,
       FPUCondition cond) {
-  ASSERT(Isolate::Current()->cpu_features()->IsSupported(FPU));
+  ASSERT(isolate()->cpu_features()->IsSupported(FPU));
   ASSERT(src2 == 0.0);
   mtc1(zero_reg, f14);
   cvt_d_w(f14, f14);
