@@ -94,6 +94,7 @@ void LCodeGen::FinishCode(Handle<Code> code) {
   code->set_stack_slots(StackSlotCount());
   code->set_safepoint_table_offset(safepoints_.GetCodeOffset());
   PopulateDeoptimizationData(code);
+  Deoptimizer::EnsureRelocSpaceForLazyDeoptimization(code);
 }
 
 
@@ -1085,16 +1086,25 @@ void LCodeGen::DoBitI(LBitI* instr) {
   ASSERT(left->Equals(instr->result()));
   ASSERT(left->IsRegister());
   Register result = ToRegister(left);
-  Register right_reg = EmitLoadRegister(right, ip);
+  Operand right_operand(no_reg);
+
+  if (right->IsStackSlot() || right->IsArgument()) {
+    Register right_reg = EmitLoadRegister(right, ip);
+    right_operand = Operand(right_reg);
+  } else {
+    ASSERT(right->IsRegister() || right->IsConstantOperand());
+    right_operand = ToOperand(right);
+  }
+
   switch (instr->op()) {
     case Token::BIT_AND:
-      __ and_(result, ToRegister(left), Operand(right_reg));
+      __ and_(result, ToRegister(left), right_operand);
       break;
     case Token::BIT_OR:
-      __ orr(result, ToRegister(left), Operand(right_reg));
+      __ orr(result, ToRegister(left), right_operand);
       break;
     case Token::BIT_XOR:
-      __ eor(result, ToRegister(left), Operand(right_reg));
+      __ eor(result, ToRegister(left), right_operand);
       break;
     default:
       UNREACHABLE();
@@ -1163,11 +1173,21 @@ void LCodeGen::DoShiftI(LShiftI* instr) {
 
 
 void LCodeGen::DoSubI(LSubI* instr) {
-  Register left = ToRegister(instr->InputAt(0));
-  Register right = EmitLoadRegister(instr->InputAt(1), ip);
-  ASSERT(instr->InputAt(0)->Equals(instr->result()));
-  __ sub(left, left, right, SetCC);
-  if (instr->hydrogen()->CheckFlag(HValue::kCanOverflow)) {
+  LOperand* left = instr->InputAt(0);
+  LOperand* right = instr->InputAt(1);
+  ASSERT(left->Equals(instr->result()));
+  bool can_overflow = instr->hydrogen()->CheckFlag(HValue::kCanOverflow);
+  SBit set_cond = can_overflow ? SetCC : LeaveCC;
+
+  if (right->IsStackSlot() || right->IsArgument()) {
+    Register right_reg = EmitLoadRegister(right, ip);
+    __ sub(ToRegister(left), ToRegister(left), Operand(right_reg), set_cond);
+  } else {
+    ASSERT(right->IsRegister() || right->IsConstantOperand());
+    __ sub(ToRegister(left), ToRegister(left), ToOperand(right), set_cond);
+  }
+
+  if (can_overflow) {
     DeoptimizeIf(vs, instr->environment());
   }
 }
@@ -1256,11 +1276,18 @@ void LCodeGen::DoAddI(LAddI* instr) {
   LOperand* left = instr->InputAt(0);
   LOperand* right = instr->InputAt(1);
   ASSERT(left->Equals(instr->result()));
+  bool can_overflow = instr->hydrogen()->CheckFlag(HValue::kCanOverflow);
+  SBit set_cond = can_overflow ? SetCC : LeaveCC;
 
-  Register right_reg = EmitLoadRegister(right, ip);
-  __ add(ToRegister(left), ToRegister(left), Operand(right_reg), SetCC);
+  if (right->IsStackSlot() || right->IsArgument()) {
+    Register right_reg = EmitLoadRegister(right, ip);
+    __ add(ToRegister(left), ToRegister(left), Operand(right_reg), set_cond);
+  } else {
+    ASSERT(right->IsRegister() || right->IsConstantOperand());
+    __ add(ToRegister(left), ToRegister(left), ToOperand(right), set_cond);
+  }
 
-  if (instr->hydrogen()->CheckFlag(HValue::kCanOverflow)) {
+  if (can_overflow) {
     DeoptimizeIf(vs, instr->environment());
   }
 }
@@ -2203,6 +2230,70 @@ void LCodeGen::DoLoadNamedField(LLoadNamedField* instr) {
 }
 
 
+void LCodeGen::EmitLoadField(Register result,
+                             Register object,
+                             Handle<Map> type,
+                             Handle<String> name) {
+  LookupResult lookup;
+  type->LookupInDescriptors(NULL, *name, &lookup);
+  ASSERT(lookup.IsProperty() && lookup.type() == FIELD);
+  int index = lookup.GetLocalFieldIndexFromMap(*type);
+  int offset = index * kPointerSize;
+  if (index < 0) {
+    // Negative property indices are in-object properties, indexed
+    // from the end of the fixed part of the object.
+    __ ldr(result, FieldMemOperand(object, offset + type->instance_size()));
+  } else {
+    // Non-negative property indices are in the properties array.
+    __ ldr(result, FieldMemOperand(object, JSObject::kPropertiesOffset));
+    __ ldr(result, FieldMemOperand(result, offset + FixedArray::kHeaderSize));
+  }
+}
+
+
+void LCodeGen::DoLoadNamedFieldPolymorphic(LLoadNamedFieldPolymorphic* instr) {
+  Register object = ToRegister(instr->object());
+  Register result = ToRegister(instr->result());
+  Register scratch = scratch0();
+  int map_count = instr->hydrogen()->types()->length();
+  Handle<String> name = instr->hydrogen()->name();
+  if (map_count == 0) {
+    ASSERT(instr->hydrogen()->need_generic());
+    __ mov(r2, Operand(name));
+    Handle<Code> ic = isolate()->builtins()->LoadIC_Initialize();
+    CallCode(ic, RelocInfo::CODE_TARGET, instr);
+  } else {
+    Label done;
+    __ ldr(scratch, FieldMemOperand(object, HeapObject::kMapOffset));
+    for (int i = 0; i < map_count - 1; ++i) {
+      Handle<Map> map = instr->hydrogen()->types()->at(i);
+      Label next;
+      __ cmp(scratch, Operand(map));
+      __ b(ne, &next);
+      EmitLoadField(result, object, map, name);
+      __ b(&done);
+      __ bind(&next);
+    }
+    Handle<Map> map = instr->hydrogen()->types()->last();
+    __ cmp(scratch, Operand(map));
+    if (instr->hydrogen()->need_generic()) {
+      Label generic;
+      __ b(ne, &generic);
+      EmitLoadField(result, object, map, name);
+      __ b(&done);
+      __ bind(&generic);
+      __ mov(r2, Operand(name));
+      Handle<Code> ic = isolate()->builtins()->LoadIC_Initialize();
+      CallCode(ic, RelocInfo::CODE_TARGET, instr);
+    } else {
+      DeoptimizeIf(ne, instr->environment());
+      EmitLoadField(result, object, map, name);
+    }
+    __ bind(&done);
+  }
+}
+
+
 void LCodeGen::DoLoadNamedGeneric(LLoadNamedGeneric* instr) {
   ASSERT(ToRegister(instr->object()).is(r0));
   ASSERT(ToRegister(instr->result()).is(r0));
@@ -2326,7 +2417,10 @@ void LCodeGen::DoLoadKeyedFastElement(LLoadKeyedFastElement* instr) {
 }
 
 
-void LCodeGen::DoLoadPixelArrayElement(LLoadPixelArrayElement* instr) {
+void LCodeGen::DoLoadKeyedSpecializedArrayElement(
+    LLoadKeyedSpecializedArrayElement* instr) {
+  ASSERT(instr->array_type() == kExternalPixelArray);
+
   Register external_pointer = ToRegister(instr->external_pointer());
   Register key = ToRegister(instr->key());
   Register result = ToRegister(instr->result());
@@ -2994,7 +3088,10 @@ void LCodeGen::DoStoreKeyedFastElement(LStoreKeyedFastElement* instr) {
 }
 
 
-void LCodeGen::DoStorePixelArrayElement(LStorePixelArrayElement* instr) {
+void LCodeGen::DoStoreKeyedSpecializedArrayElement(
+    LStoreKeyedSpecializedArrayElement* instr) {
+  ASSERT(instr->array_type() == kExternalPixelArray);
+
   Register external_pointer = ToRegister(instr->external_pointer());
   Register key = ToRegister(instr->key());
   Register value = ToRegister(instr->value());

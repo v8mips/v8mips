@@ -1,4 +1,4 @@
-// Copyright 2010 the V8 project authors. All rights reserved.
+// Copyright 2011 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -25,18 +25,26 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-function ArrayLength(a) { return a.length; }
+// Platform and architecture specific thread local store functions.
 
-function Test(a0, a2, a5) {
-  assertEquals(0, ArrayLength(a0));
-  assertEquals(2, ArrayLength(a2));
-  assertEquals(5, ArrayLength(a5));
-}
+#ifndef V8_PLATFORM_TLS_H_
+#define V8_PLATFORM_TLS_H_
 
-var a0 = [];
-var a2 = [1,2];
-var a5 = [1,2,3,4,5];
-for (var i = 0; i < 100000; i++) Test(a0, a2, a5);
-assertEquals("undefined", typeof(ArrayLength(0)));
-for (var i = 0; i < 100000; i++) Test(a0, a2, a5);
-assertEquals(4, ArrayLength("hest"));
+#ifdef V8_FAST_TLS
+
+// When fast TLS is requested we include the appropriate
+// implementation header.
+//
+// The implementation header defines V8_FAST_TLS_SUPPORTED if it
+// provides fast TLS support for the current platform and architecture
+// combination.
+
+#if defined(_MSC_VER) && (defined(_WIN32) || defined(_WIN64))
+#include "platform-tls-win32.h"
+#elif defined(__APPLE__)
+#include "platform-tls-mac.h"
+#endif
+
+#endif
+
+#endif  // V8_PLATFORM_TLS_H_

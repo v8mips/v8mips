@@ -1,4 +1,4 @@
-// Copyright 2010 the V8 project authors. All rights reserved.
+// Copyright 2011 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -25,18 +25,38 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-function ArrayLength(a) { return a.length; }
+#ifndef V8_PLATFORM_TLS_MAC_H_
+#define V8_PLATFORM_TLS_MAC_H_
 
-function Test(a0, a2, a5) {
-  assertEquals(0, ArrayLength(a0));
-  assertEquals(2, ArrayLength(a2));
-  assertEquals(5, ArrayLength(a5));
+#include "globals.h"
+
+namespace v8 {
+namespace internal {
+
+#if defined(V8_HOST_ARCH_IA32) || defined(V8_HOST_ARCH_X64)
+
+#define V8_FAST_TLS_SUPPORTED 1
+
+INLINE(intptr_t InternalGetExistingThreadLocal(intptr_t index));
+
+inline intptr_t InternalGetExistingThreadLocal(intptr_t index) {
+  // The constants below are taken from pthreads.s from the XNU kernel
+  // sources archive at www.opensource.apple.com.
+  intptr_t result;
+#if defined(V8_HOST_ARCH_IA32)
+  asm("movl %%gs:0x48(,%1,4), %0;"
+      :"=r"(result)  // Output must be a writable register.
+      :"0"(index));  // Input is the same as output.
+#else
+  asm("movq %%gs:0x60(,%1,8), %0;"
+      :"=r"(result)
+      :"0"(index));
+#endif
+  return result;
 }
 
-var a0 = [];
-var a2 = [1,2];
-var a5 = [1,2,3,4,5];
-for (var i = 0; i < 100000; i++) Test(a0, a2, a5);
-assertEquals("undefined", typeof(ArrayLength(0)));
-for (var i = 0; i < 100000; i++) Test(a0, a2, a5);
-assertEquals(4, ArrayLength("hest"));
+#endif
+
+} }  // namespace v8::internal
+
+#endif  // V8_PLATFORM_TLS_MAC_H_

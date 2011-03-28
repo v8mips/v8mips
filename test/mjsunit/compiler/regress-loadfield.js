@@ -1,4 +1,4 @@
-// Copyright 2010 the V8 project authors. All rights reserved.
+// Copyright 2011 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -25,18 +25,41 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-function ArrayLength(a) { return a.length; }
+// Regression test for GVN on field loads.
 
-function Test(a0, a2, a5) {
-  assertEquals(0, ArrayLength(a0));
-  assertEquals(2, ArrayLength(a2));
-  assertEquals(5, ArrayLength(a5));
+function bar() {}
+
+// Make sure there is a transition on adding "bar" inobject property.
+var b = new bar();
+b.bar = "bar";
+
+function test(a) {
+  var b = new Array(10);
+  for (var i = 0; i < 10; i++) {
+    b[i] = new bar();
+  }
+
+  for (var i = 0; i < 10; i++) {
+    b[i].bar = a.foo;
+  }
 }
 
-var a0 = [];
-var a2 = [1,2];
-var a5 = [1,2,3,4,5];
-for (var i = 0; i < 100000; i++) Test(a0, a2, a5);
-assertEquals("undefined", typeof(ArrayLength(0)));
-for (var i = 0; i < 100000; i++) Test(a0, a2, a5);
-assertEquals(4, ArrayLength("hest"));
+// Create an object with fast backing store properties.
+var a = {};
+a.p1 = "";
+a.p2 = "";
+a.p3 = "";
+a.p4 = "";
+a.p5 = "";
+a.p6 = "";
+a.p7 = "";
+a.p8 = "";
+a.p9 = "";
+a.p10 = "";
+a.p11 = "";
+a.foo = "foo";
+for (var i = 0; i < 100000; i++) {
+ test(a);
+}
+
+test("");

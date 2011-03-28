@@ -1,4 +1,4 @@
-// Copyright 2010 the V8 project authors. All rights reserved.
+// Copyright 2011 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -25,18 +25,28 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-function ArrayLength(a) { return a.length; }
+// Do not generate debug code since that will space things differently
+// in the generated code.
+// Flags: --allow-natives-syntax --expose-gc --nodebug-code
 
-function Test(a0, a2, a5) {
-  assertEquals(0, ArrayLength(a0));
-  assertEquals(2, ArrayLength(a2));
-  assertEquals(5, ArrayLength(a5));
+// Regression test for issue where we did not pad the relocation
+// information enough to have room for lazy deoptimization.
+
+function kaboom() {
+  var a = function () {},
+      b = function () {},
+      c, d = function () { var d = []; },
+      e = function () { var e = {}; };
+    c = function () { d(); b(); };
+    return function (x, y) {
+      c();
+      a();
+      return function f() { }({});
+    };
 }
 
-var a0 = [];
-var a2 = [1,2];
-var a5 = [1,2,3,4,5];
-for (var i = 0; i < 100000; i++) Test(a0, a2, a5);
-assertEquals("undefined", typeof(ArrayLength(0)));
-for (var i = 0; i < 100000; i++) Test(a0, a2, a5);
-assertEquals(4, ArrayLength("hest"));
+kaboom();
+
+%DeoptimizeFunction(kaboom);
+
+gc();

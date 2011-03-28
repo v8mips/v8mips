@@ -1,4 +1,4 @@
-// Copyright 2010 the V8 project authors. All rights reserved.
+// Copyright 2011 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -25,18 +25,56 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-function ArrayLength(a) { return a.length; }
+function fnGlobalObject() { return (function() { return this; })(); }
 
-function Test(a0, a2, a5) {
-  assertEquals(0, ArrayLength(a0));
-  assertEquals(2, ArrayLength(a2));
-  assertEquals(5, ArrayLength(a5));
-}
+var ES5Harness = (function() {
+  var currentTest = {};
+  var $this = this;
 
-var a0 = [];
-var a2 = [1,2];
-var a5 = [1,2,3,4,5];
-for (var i = 0; i < 100000; i++) Test(a0, a2, a5);
-assertEquals("undefined", typeof(ArrayLength(0)));
-for (var i = 0; i < 100000; i++) Test(a0, a2, a5);
-assertEquals(4, ArrayLength("hest"));
+  function Test262Error(id, path, description, codeString,
+                        preconditionString, result, error) {
+    this.id = id;
+    this.path = path;
+    this.description = description;
+    this.result = result;
+    this.error = error;
+    this.code = codeString;
+    this.pre = preconditionString;
+  }
+
+  Test262Error.prototype.toString = function() {
+    return this.result;
+  }
+
+  function registerTest(test) {
+    if (!(test.precondition && !test.precondition())) {
+      var error;
+      try {
+        var res = test.test.call($this);
+      } catch(e) {
+        print(e);
+        res = 'fail'; error = e;
+      }
+      var retVal = /^s/i.test(test.id)
+          ? (res === true || typeof res == 'undefined' ? 'pass' : 'fail')
+          : (res === true ? 'pass' : 'fail');
+
+      if (retVal != 'pass') {
+         throw new Test262Error(
+            test.id,
+            test.path,
+            test.description,
+            test.test.toString(),
+            (test.precondition !== undefined)
+                ? test.precondition.toString()
+                : '',
+            retVal,
+            error);
+      }
+    }
+  }
+
+  return {
+    registerTest: registerTest
+  }
+})();
