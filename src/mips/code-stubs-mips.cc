@@ -4141,7 +4141,7 @@ void ArgumentsAccessStub::GenerateNewObject(MacroAssembler* masm) {
 
   __ Addu(a1, a1, Operand(FixedArray::kHeaderSize / kPointerSize));
   __ bind(&add_arguments_object);
-  __ Addu(a1, a1, Operand(Heap::kArgumentsObjectSize / kPointerSize));
+  __ Addu(a1, a1, Operand(GetArgumentsObjectSize() / kPointerSize));
 
   // Do the allocation of both objects in one go.
   __ AllocateInNewSpace(
@@ -4153,23 +4153,28 @@ void ArgumentsAccessStub::GenerateNewObject(MacroAssembler* masm) {
       static_cast<AllocationFlags>(TAG_OBJECT | SIZE_IN_WORDS));
 
   // Get the arguments boilerplate from the current (global) context.
-  int offset = Context::SlotOffset(Context::ARGUMENTS_BOILERPLATE_INDEX);
   __ lw(t0, MemOperand(cp, Context::SlotOffset(Context::GLOBAL_INDEX)));
   __ lw(t0, FieldMemOperand(t0, GlobalObject::kGlobalContextOffset));
-  __ lw(t0, MemOperand(t0, offset));
+  __ lw(t0, MemOperand(t0,
+                       Context::SlotOffset(GetArgumentsBoilerplateIndex())));
 
   // Copy the JS object part.
   __ CopyFields(v0, t0, a3.bit(), JSObject::kHeaderSize / kPointerSize);
 
-  // Setup the callee in-object property.
-  ASSERT(Heap::arguments_callee_index == 0);
-  __ lw(a3, MemOperand(sp, 2 * kPointerSize));
-  __ sw(a3, FieldMemOperand(v0, JSObject::kHeaderSize));
+  if (type_ == NEW_NON_STRICT) {
+    // Setup the callee in-object property.
+    STATIC_ASSERT(Heap::kArgumentsCalleeIndex == 1);
+    __ lw(a3, MemOperand(sp, 2 * kPointerSize));
+    const int kCalleeOffset = JSObject::kHeaderSize +
+                              Heap::kArgumentsCalleeIndex * kPointerSize;
+    __ sw(a3, FieldMemOperand(v0, kCalleeOffset));
+  }
 
   // Get the length (smi tagged) and set that as an in-object property too.
-  ASSERT(Heap::arguments_length_index == 1);
+  STATIC_ASSERT(Heap::kArgumentsLengthIndex == 0);
   __ lw(a1, MemOperand(sp, 0 * kPointerSize));
-  __ sw(a1, FieldMemOperand(v0, JSObject::kHeaderSize + kPointerSize));
+  __ sw(a1, FieldMemOperand(v0, JSObject::kHeaderSize +
+                                Heap::kArgumentsLengthIndex * kPointerSize));
 
   Label done;
   __ Branch(&done, eq, a1, Operand(zero_reg));
@@ -4179,7 +4184,7 @@ void ArgumentsAccessStub::GenerateNewObject(MacroAssembler* masm) {
 
   // Setup the elements pointer in the allocated arguments object and
   // initialize the header in the elements fixed array.
-  __ Addu(t0, v0, Operand(Heap::kArgumentsObjectSize));
+  __ Addu(t0, v0, Operand(GetArgumentsObjectSize()));
   __ sw(t0, FieldMemOperand(v0, JSObject::kElementsOffset));
   __ LoadRoot(a3, Heap::kFixedArrayMapRootIndex);
   __ sw(a3, FieldMemOperand(t0, FixedArray::kMapOffset));

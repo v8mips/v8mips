@@ -598,7 +598,9 @@ void CodeGenerator::StoreArgumentsObject(bool initial) {
     frame_->EmitPushRoot(Heap::kTheHoleValueRootIndex);
   } else {
     frame_->SpillAll();
-    ArgumentsAccessStub stub(ArgumentsAccessStub::NEW_OBJECT);
+    ArgumentsAccessStub stub(is_strict_mode()
+        ? ArgumentsAccessStub::NEW_STRICT
+        : ArgumentsAccessStub::NEW_NON_STRICT);
     __ lw(a2, frame_->Function());
     // The receiver is below the arguments, the return address, and the
     // frame pointer on the stack.
