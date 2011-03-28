@@ -1475,10 +1475,8 @@ MaybeObject* CallStubCompiler::CompileCallField(JSObject* object,
 
   // Handle call cache miss.
   __ bind(&miss);
-  Object* obj;
-  { MaybeObject* maybe_obj = GenerateMissBranch();
-    if (!maybe_obj->ToObject(&obj)) return maybe_obj;
-  }
+  MaybeObject* maybe_result = GenerateMissBranch();
+  if (maybe_result->IsFailure()) return maybe_result;
 
   // Return the generated code.
   return GetCode(FIELD, name);
@@ -1633,10 +1631,8 @@ MaybeObject* CallStubCompiler::CompileArrayPushCall(Object* object,
 
   // Handle call cache miss.
   __ bind(&miss);
-  Object* obj;
-  { MaybeObject* maybe_obj = GenerateMissBranch();
-    if (!maybe_obj->ToObject(&obj)) return maybe_obj;
-  }
+  MaybeObject* maybe_result = GenerateMissBranch();
+  if (maybe_result->IsFailure()) return maybe_result;
 
   // Return the generated code.
   return GetCode(function);
@@ -1719,10 +1715,8 @@ MaybeObject* CallStubCompiler::CompileArrayPopCall(Object* object,
 
   // Handle call cache miss.
   __ bind(&miss);
-  Object* obj;
-  { MaybeObject* maybe_obj = GenerateMissBranch();
-    if (!maybe_obj->ToObject(&obj)) return maybe_obj;
-  }
+  MaybeObject* maybe_result = GenerateMissBranch();
+  if (maybe_result->IsFailure()) return maybe_result;
 
   // Return the generated code.
   return GetCode(function);
@@ -1806,10 +1800,8 @@ MaybeObject* CallStubCompiler::CompileStringCharCodeAtCall(
   // Restore function name in a2.
   __ li(a2, Handle<String>(name));
   __ bind(&name_miss);
-  Object* obj;
-  { MaybeObject* maybe_obj = GenerateMissBranch();
-    if (!maybe_obj->ToObject(&obj)) return maybe_obj;
-  }
+  MaybeObject* maybe_result = GenerateMissBranch();
+  if (maybe_result->IsFailure()) return maybe_result;
 
   // Return the generated code.
   return GetCode(function);
@@ -1894,10 +1886,8 @@ MaybeObject* CallStubCompiler::CompileStringCharAtCall(
   // Restore function name in a2.
   __ li(a2, Handle<String>(name));
   __ bind(&name_miss);
-  Object* obj;
-  { MaybeObject* maybe_obj = GenerateMissBranch();
-    if (!maybe_obj->ToObject(&obj)) return maybe_obj;
-  }
+  MaybeObject* maybe_result = GenerateMissBranch();
+  if (maybe_result->IsFailure()) return maybe_result;
 
   // Return the generated code.
   return GetCode(function);
@@ -1968,10 +1958,8 @@ MaybeObject* CallStubCompiler::CompileStringFromCharCodeCall(
 
   __ bind(&miss);
   // a2: function name.
-  Object* obj;
-  { MaybeObject* maybe_obj = GenerateMissBranch();
-    if (!maybe_obj->ToObject(&obj)) return maybe_obj;
-  }
+  MaybeObject* maybe_result = GenerateMissBranch();
+  if (maybe_result->IsFailure()) return maybe_result;
 
   // Return the generated code.
   return (cell == NULL) ? GetCode(function) : GetCode(NORMAL, name);
@@ -2208,10 +2196,8 @@ MaybeObject* CallStubCompiler::CompileMathAbsCall(Object* object,
 
   __ bind(&miss);
   // a2: function name.
-  Object* obj;
-  { MaybeObject* maybe_obj = GenerateMissBranch();
-    if (!maybe_obj->ToObject(&obj)) return maybe_obj;
-  }
+  MaybeObject* maybe_result = GenerateMissBranch();
+  if (maybe_result->IsFailure()) return maybe_result;
 
   // Return the generated code.
   return (cell == NULL) ? GetCode(function) : GetCode(NORMAL, name);
@@ -2266,10 +2252,8 @@ MaybeObject* CallStubCompiler::CompileFastApiCall(
   FreeSpaceForFastApiCall(masm());
 
   __ bind(&miss_before_stack_reserved);
-  Object* obj;
-  { MaybeObject* maybe_obj = GenerateMissBranch();
-    if (!maybe_obj->ToObject(&obj)) return maybe_obj;
-  }
+  MaybeObject* maybe_result = GenerateMissBranch();
+  if (maybe_result->IsFailure()) return maybe_result;
 
   // Return the generated code.
   return GetCode(function);
@@ -2399,10 +2383,8 @@ MaybeObject* CallStubCompiler::CompileCallConstant(Object* object,
   // Handle call cache miss.
   __ bind(&miss);
 
-  Object* obj;
-  { MaybeObject* maybe_obj = GenerateMissBranch();
-    if (!maybe_obj->ToObject(&obj)) return maybe_obj;
-  }
+  MaybeObject* maybe_result = GenerateMissBranch();
+  if (maybe_result->IsFailure()) return maybe_result;
 
   // Return the generated code.
   return GetCode(function);
@@ -2451,10 +2433,8 @@ MaybeObject* CallStubCompiler::CompileCallInterceptor(JSObject* object,
 
   // Handle call cache miss.
   __ bind(&miss);
-  Object* obj;
-  { MaybeObject* maybe_obj = GenerateMissBranch();
-    if (!maybe_obj->ToObject(&obj)) return maybe_obj;
-  }
+  MaybeObject* maybe_result = GenerateMissBranch();
+  if (maybe_result->IsFailure()) return maybe_result;
 
   // Return the generated code.
   return GetCode(INTERCEPTOR, name);
@@ -2515,10 +2495,8 @@ MaybeObject* CallStubCompiler::CompileCallGlobal(JSObject* object,
   // Handle call cache miss.
   __ bind(&miss);
   __ IncrementCounter(COUNTERS->call_global_inline_miss(), 1, a1, a3);
-  Object* obj;
-  { MaybeObject* maybe_obj = GenerateMissBranch();
-    if (!maybe_obj->ToObject(&obj)) return maybe_obj;
-  }
+  MaybeObject* maybe_result = GenerateMissBranch();
+  if (maybe_result->IsFailure()) return maybe_result;
 
   // Return the generated code.
   return GetCode(NORMAL, name);
