@@ -77,7 +77,8 @@ class FullCodeGenerator: public AstVisitor {
   };
 
   explicit FullCodeGenerator(MacroAssembler* masm)
-      : masm_(masm),
+      : isolate_(Isolate::Current()),
+        masm_(masm),
         info_(NULL),
         nesting_stack_(NULL),
         loop_depth_(0),
@@ -502,6 +503,7 @@ class FullCodeGenerator: public AstVisitor {
     loop_depth_--;
   }
 
+  Isolate* isolate() { return isolate_; }
   MacroAssembler* masm() { return masm_; }
 
   class ExpressionContext;
@@ -561,6 +563,8 @@ class FullCodeGenerator: public AstVisitor {
     virtual ~ExpressionContext() {
       codegen_->set_new_context(old_);
     }
+
+    Isolate* isolate() const { return codegen_->isolate(); }
 
     // Convert constant control flow (true or false) to the result expected for
     // this expression context.
@@ -738,6 +742,7 @@ class FullCodeGenerator: public AstVisitor {
     virtual bool IsEffect() const { return true; }
   };
 
+  Isolate* isolate_;
   MacroAssembler* masm_;
   CompilationInfo* info_;
   Label return_label_;

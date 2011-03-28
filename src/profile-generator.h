@@ -114,7 +114,7 @@ class CodeEntry {
   uint32_t GetCallUid() const;
   bool IsSameAs(CodeEntry* entry) const;
 
-  static const char* kEmptyNamePrefix;
+  static const char* const kEmptyNamePrefix;
 
  private:
   Logger::LogEventsAndTags tag_;
@@ -422,9 +422,9 @@ class ProfileGenerator {
     return sample_rate_calc_.ticks_per_ms();
   }
 
-  static const char* kAnonymousFunctionName;
-  static const char* kProgramEntryName;
-  static const char* kGarbageCollectorEntryName;
+  static const char* const kAnonymousFunctionName;
+  static const char* const kProgramEntryName;
+  static const char* const kGarbageCollectorEntryName;
 
  private:
   INLINE(CodeEntry* EntryForVMState(StateTag tag));
@@ -1030,11 +1030,13 @@ class V8HeapExplorer : public HeapEntriesAllocator {
   void SetInternalReference(HeapObject* parent_obj,
                             HeapEntry* parent,
                             const char* reference_name,
-                            Object* child);
+                            Object* child,
+                            int field_offset = -1);
   void SetInternalReference(HeapObject* parent_obj,
                             HeapEntry* parent,
                             int index,
-                            Object* child);
+                            Object* child,
+                            int field_offset = -1);
   void SetHiddenReference(HeapObject* parent_obj,
                           HeapEntry* parent,
                           int index,
@@ -1042,7 +1044,8 @@ class V8HeapExplorer : public HeapEntriesAllocator {
   void SetPropertyReference(HeapObject* parent_obj,
                             HeapEntry* parent,
                             String* reference_name,
-                            Object* child);
+                            Object* child,
+                            int field_offset = -1);
   void SetPropertyShortcutReference(HeapObject* parent_obj,
                                     HeapEntry* parent,
                                     String* reference_name,
@@ -1056,9 +1059,6 @@ class V8HeapExplorer : public HeapEntriesAllocator {
   HeapSnapshot* snapshot_;
   HeapSnapshotsCollection* collection_;
   SnapshottingProgressReportingInterface* progress_;
-  // Used during references extraction to mark heap objects that
-  // are references via non-hidden properties.
-  HeapObjectsSet known_references_;
   SnapshotFillerInterface* filler_;
 
   static HeapObject* const kGcRootsObject;
