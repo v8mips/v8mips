@@ -593,7 +593,7 @@ static MaybeObject* Runtime_CreateArrayLiteralShallow(
   }
   if (JSObject::cast(*boilerplate)->elements()->map() ==
       isolate->heap()->fixed_cow_array_map()) {
-    COUNTERS->cow_arrays_created_runtime()->Increment();
+    isolate->counters()->cow_arrays_created_runtime()->Increment();
   }
   return isolate->heap()->CopyJSObject(JSObject::cast(*boilerplate));
 }
@@ -9308,6 +9308,7 @@ static MaybeObject* DebugLookupResultValue(Heap* heap,
     }
     case INTERCEPTOR:
     case MAP_TRANSITION:
+    case EXTERNAL_ARRAY_TRANSITION:
     case CONSTANT_TRANSITION:
     case NULL_DESCRIPTOR:
       return heap->undefined_value();
@@ -12217,16 +12218,17 @@ const Runtime::Function* Runtime::FunctionForId(Runtime::FunctionId id) {
 
 
 void Runtime::PerformGC(Object* result) {
+  Isolate* isolate = Isolate::Current();
   Failure* failure = Failure::cast(result);
   if (failure->IsRetryAfterGC()) {
     // Try to do a garbage collection; ignore it if it fails. The C
     // entry stub will throw an out-of-memory exception in that case.
-    HEAP->CollectGarbage(failure->allocation_space());
+    isolate->heap()->CollectGarbage(failure->allocation_space());
   } else {
     // Handle last resort GC and make sure to allow future allocations
     // to grow the heap without causing GCs (if possible).
-    COUNTERS->gc_last_resort_from_js()->Increment();
-    HEAP->CollectAllGarbage(false);
+    isolate->counters()->gc_last_resort_from_js()->Increment();
+    isolate->heap()->CollectAllGarbage(false);
   }
 }
 

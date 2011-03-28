@@ -393,7 +393,7 @@ void* MemoryAllocator::AllocateRawMemory(const size_t requested,
 #ifdef DEBUG
   ZapBlock(reinterpret_cast<Address>(mem), alloced);
 #endif
-  COUNTERS->memory_allocated()->Increment(alloced);
+  isolate_->counters()->memory_allocated()->Increment(alloced);
   return mem;
 }
 
@@ -409,7 +409,7 @@ void MemoryAllocator::FreeRawMemory(void* mem,
   } else {
     OS::Free(mem, length);
   }
-  COUNTERS->memory_allocated()->Decrement(static_cast<int>(length));
+  isolate_->counters()->memory_allocated()->Decrement(static_cast<int>(length));
   size_ -= static_cast<int>(length);
   if (executable == EXECUTABLE) size_executable_ -= static_cast<int>(length);
 
@@ -537,7 +537,7 @@ Page* MemoryAllocator::CommitPages(Address start, size_t size,
 #ifdef DEBUG
   ZapBlock(start, size);
 #endif
-  COUNTERS->memory_allocated()->Increment(static_cast<int>(size));
+  isolate_->counters()->memory_allocated()->Increment(static_cast<int>(size));
 
   // So long as we correctly overestimated the number of chunks we should not
   // run out of chunk ids.
@@ -561,7 +561,7 @@ bool MemoryAllocator::CommitBlock(Address start,
 #ifdef DEBUG
   ZapBlock(start, size);
 #endif
-  COUNTERS->memory_allocated()->Increment(static_cast<int>(size));
+  isolate_->counters()->memory_allocated()->Increment(static_cast<int>(size));
   return true;
 }
 
@@ -574,7 +574,7 @@ bool MemoryAllocator::UncommitBlock(Address start, size_t size) {
   ASSERT(InInitialChunk(start + size - 1));
 
   if (!initial_chunk_->Uncommit(start, size)) return false;
-  COUNTERS->memory_allocated()->Decrement(static_cast<int>(size));
+  isolate_->counters()->memory_allocated()->Decrement(static_cast<int>(size));
   return true;
 }
 
@@ -675,7 +675,8 @@ void MemoryAllocator::DeleteChunk(int chunk_id) {
     // TODO(1240712): VirtualMemory::Uncommit has a return value which
     // is ignored here.
     initial_chunk_->Uncommit(c.address(), c.size());
-    COUNTERS->memory_allocated()->Decrement(static_cast<int>(c.size()));
+    Counters* counters = isolate_->counters();
+    counters->memory_allocated()->Decrement(static_cast<int>(c.size()));
   } else {
     LOG(isolate_, DeleteEvent("PagedChunk", c.address()));
     ObjectSpace space = static_cast<ObjectSpace>(1 << c.owner_identity());
@@ -1740,7 +1741,7 @@ void NewSpace::RecordPromotion(HeapObject* obj) {
 // -----------------------------------------------------------------------------
 // Free lists for old object spaces implementation
 
-void FreeListNode::set_size(int size_in_bytes) {
+void FreeListNode::set_size(Heap* heap, int size_in_bytes) {
   ASSERT(size_in_bytes > 0);
   ASSERT(IsAligned(size_in_bytes, kPointerSize));
 
@@ -1752,14 +1753,14 @@ void FreeListNode::set_size(int size_in_bytes) {
   // field and a next pointer, we give it a filler map that gives it the
   // correct size.
   if (size_in_bytes > ByteArray::kHeaderSize) {
-    set_map(HEAP->raw_unchecked_byte_array_map());
+    set_map(heap->raw_unchecked_byte_array_map());
     // Can't use ByteArray::cast because it fails during deserialization.
     ByteArray* this_as_byte_array = reinterpret_cast<ByteArray*>(this);
     this_as_byte_array->set_length(ByteArray::LengthFor(size_in_bytes));
   } else if (size_in_bytes == kPointerSize) {
-    set_map(HEAP->raw_unchecked_one_pointer_filler_map());
+    set_map(heap->raw_unchecked_one_pointer_filler_map());
   } else if (size_in_bytes == 2 * kPointerSize) {
-    set_map(HEAP->raw_unchecked_two_pointer_filler_map());
+    set_map(heap->raw_unchecked_two_pointer_filler_map());
   } else {
     UNREACHABLE();
   }
@@ -1768,9 +1769,9 @@ void FreeListNode::set_size(int size_in_bytes) {
 }
 
 
-Address FreeListNode::next() {
+Address FreeListNode::next(Heap* heap) {
   ASSERT(IsFreeListNode(this));
-  if (map() == HEAP->raw_unchecked_byte_array_map()) {
+  if (map() == heap->raw_unchecked_byte_array_map()) {
     ASSERT(Size() >= kNextOffset + kPointerSize);
     return Memory::Address_at(address() + kNextOffset);
   } else {
@@ -1779,9 +1780,9 @@ Address FreeListNode::next() {
 }
 
 
-void FreeListNode::set_next(Address next) {
+void FreeListNode::set_next(Heap* heap, Address next) {
   ASSERT(IsFreeListNode(this));
-  if (map() == HEAP->raw_unchecked_byte_array_map()) {
+  if (map() == heap->raw_unchecked_byte_array_map()) {
     ASSERT(Size() >= kNextOffset + kPointerSize);
     Memory::Address_at(address() + kNextOffset) = next;
   } else {
@@ -1790,7 +1791,9 @@ void FreeListNode::set_next(Address next) {
 }
 
 
-OldSpaceFreeList::OldSpaceFreeList(AllocationSpace owner) : owner_(owner) {
+OldSpaceFreeList::OldSpaceFreeList(Heap* heap, AllocationSpace owner)
+  : heap_(heap),
+    owner_(owner) {
   Reset();
 }
 
@@ -1825,7 +1828,7 @@ int OldSpaceFreeList::Free(Address start, int size_in_bytes) {
   Isolate::Current()->memory_allocator()->ZapBlock(start, size_in_bytes);
 #endif
   FreeListNode* node = FreeListNode::FromAddress(start);
-  node->set_size(size_in_bytes);
+  node->set_size(heap_, size_in_bytes);
 
   // We don't use the freelists in compacting mode.  This makes it more like a
   // GC that only has mark-sweep-compact and doesn't have a mark-sweep
@@ -1843,7 +1846,7 @@ int OldSpaceFreeList::Free(Address start, int size_in_bytes) {
 
   // Insert other blocks at the head of an exact free list.
   int index = size_in_bytes >> kPointerSizeLog2;
-  node->set_next(free_[index].head_node_);
+  node->set_next(heap_, free_[index].head_node_);
   free_[index].head_node_ = node->address();
   available_ += size_in_bytes;
   needs_rebuild_ = true;
@@ -1862,7 +1865,8 @@ MaybeObject* OldSpaceFreeList::Allocate(int size_in_bytes, int* wasted_bytes) {
   if (free_[index].head_node_ != NULL) {
     FreeListNode* node = FreeListNode::FromAddress(free_[index].head_node_);
     // If this was the last block of its size, remove the size.
-    if ((free_[index].head_node_ = node->next()) == NULL) RemoveSize(index);
+    if ((free_[index].head_node_ = node->next(heap_)) == NULL)
+      RemoveSize(index);
     available_ -= size_in_bytes;
     *wasted_bytes = 0;
     ASSERT(!FLAG_always_compact);  // We only use the freelists with mark-sweep.
@@ -1891,33 +1895,33 @@ MaybeObject* OldSpaceFreeList::Allocate(int size_in_bytes, int* wasted_bytes) {
     finger_ = prev;
     free_[prev].next_size_ = rem;
     // If this was the last block of size cur, remove the size.
-    if ((free_[cur].head_node_ = cur_node->next()) == NULL) {
+    if ((free_[cur].head_node_ = cur_node->next(heap_)) == NULL) {
       free_[rem].next_size_ = free_[cur].next_size_;
     } else {
       free_[rem].next_size_ = cur;
     }
     // Add the remainder block.
-    rem_node->set_size(rem_bytes);
-    rem_node->set_next(free_[rem].head_node_);
+    rem_node->set_size(heap_, rem_bytes);
+    rem_node->set_next(heap_, free_[rem].head_node_);
     free_[rem].head_node_ = rem_node->address();
   } else {
     // If this was the last block of size cur, remove the size.
-    if ((free_[cur].head_node_ = cur_node->next()) == NULL) {
+    if ((free_[cur].head_node_ = cur_node->next(heap_)) == NULL) {
       finger_ = prev;
       free_[prev].next_size_ = free_[cur].next_size_;
     }
     if (rem_bytes < kMinBlockSize) {
       // Too-small remainder is wasted.
-      rem_node->set_size(rem_bytes);
+      rem_node->set_size(heap_, rem_bytes);
       available_ -= size_in_bytes + rem_bytes;
       *wasted_bytes = rem_bytes;
       return cur_node;
     }
     // Add the remainder block and, if needed, insert its size.
-    rem_node->set_size(rem_bytes);
-    rem_node->set_next(free_[rem].head_node_);
+    rem_node->set_size(heap_, rem_bytes);
+    rem_node->set_next(heap_, free_[rem].head_node_);
     free_[rem].head_node_ = rem_node->address();
-    if (rem_node->next() == NULL) InsertSize(rem);
+    if (rem_node->next(heap_) == NULL) InsertSize(rem);
   }
   available_ -= size_in_bytes;
   *wasted_bytes = 0;
@@ -1930,7 +1934,7 @@ void OldSpaceFreeList::MarkNodes() {
     Address cur_addr = free_[i].head_node_;
     while (cur_addr != NULL) {
       FreeListNode* cur_node = FreeListNode::FromAddress(cur_addr);
-      cur_addr = cur_node->next();
+      cur_addr = cur_node->next(heap_);
       cur_node->SetMark();
     }
   }
@@ -1944,7 +1948,7 @@ bool OldSpaceFreeList::Contains(FreeListNode* node) {
     while (cur_addr != NULL) {
       FreeListNode* cur_node = FreeListNode::FromAddress(cur_addr);
       if (cur_node == node) return true;
-      cur_addr = cur_node->next();
+      cur_addr = cur_node->next(heap_);
     }
   }
   return false;
@@ -1952,8 +1956,10 @@ bool OldSpaceFreeList::Contains(FreeListNode* node) {
 #endif
 
 
-FixedSizeFreeList::FixedSizeFreeList(AllocationSpace owner, int object_size)
-    : owner_(owner), object_size_(object_size) {
+FixedSizeFreeList::FixedSizeFreeList(Heap* heap,
+                                     AllocationSpace owner,
+                                     int object_size)
+    : heap_(heap), owner_(owner), object_size_(object_size) {
   Reset();
 }
 
@@ -1971,12 +1977,12 @@ void FixedSizeFreeList::Free(Address start) {
   // We only use the freelists with mark-sweep.
   ASSERT(!HEAP->mark_compact_collector()->IsCompacting());
   FreeListNode* node = FreeListNode::FromAddress(start);
-  node->set_size(object_size_);
-  node->set_next(NULL);
+  node->set_size(heap_, object_size_);
+  node->set_next(heap_, NULL);
   if (head_ == NULL) {
     tail_ = head_ = node->address();
   } else {
-    FreeListNode::FromAddress(tail_)->set_next(node->address());
+    FreeListNode::FromAddress(tail_)->set_next(heap_, node->address());
     tail_ = node->address();
   }
   available_ += object_size_;
@@ -1990,7 +1996,7 @@ MaybeObject* FixedSizeFreeList::Allocate() {
 
   ASSERT(!FLAG_always_compact);  // We only use the freelists with mark-sweep.
   FreeListNode* node = FreeListNode::FromAddress(head_);
-  head_ = node->next();
+  head_ = node->next(heap_);
   available_ -= object_size_;
   return node;
 }
@@ -2000,7 +2006,7 @@ void FixedSizeFreeList::MarkNodes() {
   Address cur_addr = head_;
   while (cur_addr != NULL && cur_addr != tail_) {
     FreeListNode* cur_node = FreeListNode::FromAddress(cur_addr);
-    cur_addr = cur_node->next();
+    cur_addr = cur_node->next(heap_);
     cur_node->SetMark();
   }
 }
@@ -2748,7 +2754,7 @@ LargeObjectChunk* LargeObjectChunk::New(int size_in_bytes,
   LargeObjectChunk* chunk = reinterpret_cast<LargeObjectChunk*>(mem);
   chunk->size_ = size;
   Page* page = Page::FromAddress(RoundUp(chunk->address(), Page::kPageSize));
-  page->heap_ = Isolate::Current()->heap();
+  page->heap_ = isolate->heap();
   return chunk;
 }
 
