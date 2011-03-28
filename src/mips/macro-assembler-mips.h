@@ -738,7 +738,7 @@ void DropAndRet(int drop = 0,
   void CallJSExitStub(CodeStub* stub);
 
   // Call a runtime routine.
-  void CallRuntime(Runtime::Function* f, int num_arguments);
+  void CallRuntime(const Runtime::Function* f, int num_arguments);
   void CallRuntimeSaveDoubles(Runtime::FunctionId id);
 
   // Convenience function: Same as above, but takes the fid instead.
@@ -789,7 +789,7 @@ void DropAndRet(int drop = 0,
   // return address (unless this is somehow accounted for by the called
   // function).
   void CallCFunction(ExternalReference function, int num_arguments);
-  void CallCFunction(Register function, int num_arguments);
+  void CallCFunction(Register function, Register scratch, int num_arguments);
 
   void GetCFunctionDoubleResult(const DoubleRegister dst);
 
@@ -963,6 +963,11 @@ void DropAndRet(int drop = 0,
                                            Label* failure);
 
  private:
+  void CallCFunctionHelper(Register function,
+                           ExternalReference function_reference,
+                           Register scratch,
+                           int num_arguments);
+
   void Jump(intptr_t target, RelocInfo::Mode rmode,
             bool ProtectBranchDelaySlot = true);
   void Jump(intptr_t target, RelocInfo::Mode rmode, Condition cond = cc_always,

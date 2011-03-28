@@ -50,10 +50,11 @@ namespace v8 {
 namespace internal {
 
 
-// Safe default is no features.
-unsigned CpuFeatures::supported_ = 0;
-unsigned CpuFeatures::enabled_ = 0;
-unsigned CpuFeatures::found_by_runtime_probing_ = 0;
+CpuFeatures::CpuFeatures()
+    : supported_(0),
+      enabled_(0),
+      found_by_runtime_probing_(0) {
+}
 
 void CpuFeatures::Probe(bool portable) {
   // If the compiler is allowed to use fpu then we can use fpu too in our
@@ -184,7 +185,7 @@ Operand::Operand(Handle<Object> handle) {
   rm_ = no_reg;
   // Verify all Objects referred by code are NOT in new space.
   Object* obj = *handle;
-  ASSERT(!Heap::InNewSpace(obj));
+  ASSERT(!HEAP->InNewSpace(obj));
   if (obj->IsHeapObject()) {
     imm32_ = reinterpret_cast<intptr_t>(handle.location());
     rmode_ = RelocInfo::EMBEDDED_OBJECT;
@@ -205,7 +206,6 @@ MemOperand::MemOperand(Register rm, int32_t offset) : Operand(rm) {
 // Specific instructions, constants, and masks.
 
 static const int kMinimalBufferSize = 4*KB;
-static byte* spare_buffer_ = NULL;
 static const int kNegOffset = 0x00008000;
 // addiu(sp, sp, 4) aka Pop() operation or part of Pop(r)
 // operations as post-increment of sp.
@@ -243,15 +243,16 @@ Assembler::Assembler(void* buffer, int buffer_size)
     : positions_recorder_(this),
       allow_peephole_optimization_(false),
       emit_debug_code_(FLAG_debug_code) {
+  Isolate* isolate = Isolate::Current();
   allow_peephole_optimization_ = FLAG_peephole_optimization;
   if (buffer == NULL) {
     // Do our own buffer management.
     if (buffer_size <= kMinimalBufferSize) {
       buffer_size = kMinimalBufferSize;
 
-      if (spare_buffer_ != NULL) {
-        buffer = spare_buffer_;
-        spare_buffer_ = NULL;
+      if (isolate->assembler_spare_buffer() != NULL) {
+        buffer = isolate->assembler_spare_buffer();
+        isolate->set_assembler_spare_buffer(NULL);
       }
     }
     if (buffer == NULL) {
@@ -283,9 +284,11 @@ Assembler::Assembler(void* buffer, int buffer_size)
 
 
 Assembler::~Assembler() {
+  Isolate* isolate = Isolate::Current();
   if (own_buffer_) {
-    if (spare_buffer_ == NULL && buffer_size_ == kMinimalBufferSize) {
-      spare_buffer_ = buffer_;
+    if (isolate->assembler_spare_buffer() == NULL &&
+        buffer_size_ == kMinimalBufferSize) {
+      isolate->set_assembler_spare_buffer(buffer_);
     } else {
       DeleteArray(buffer_);
     }
@@ -1878,7 +1881,7 @@ void Assembler::c(FPUCondition cond, SecondaryField fmt,
 
 void Assembler::fcmp(FPURegister src1, const double src2,
       FPUCondition cond) {
-  ASSERT(CpuFeatures::IsSupported(FPU));
+  ASSERT(Isolate::Current()->cpu_features()->IsSupported(FPU));
   ASSERT(src2 == 0.0);
   mtc1(zero_reg, f14);
   cvt_d_w(f14, f14);

@@ -28,8 +28,6 @@
 #ifndef  V8_MIPS_CONSTANTS_H_
 #define  V8_MIPS_CONSTANTS_H_
 
-#include "checks.h"
-
 // UNIMPLEMENTED_ macro for MIPS.
 #ifdef DEBUG
 #define UNIMPLEMENTED_MIPS()                                                  \
