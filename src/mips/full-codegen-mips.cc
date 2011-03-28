@@ -1333,7 +1333,13 @@ void FullCodeGenerator::VisitObjectLiteral(ObjectLiteral* expr) {
   __ lw(a3, FieldMemOperand(a3, JSFunction::kLiteralsOffset));
   __ li(a2, Operand(Smi::FromInt(expr->literal_index())));
   __ li(a1, Operand(expr->constant_properties()));
-  __ li(a0, Operand(Smi::FromInt(expr->fast_elements() ? 1 : 0)));
+  int flags = expr->fast_elements()
+      ? ObjectLiteral::kFastElements
+      : ObjectLiteral::kNoFlags;
+  flags |= expr->has_function()
+      ? ObjectLiteral::kHasFunction
+      : ObjectLiteral::kNoFlags;
+  __ li(a0, Operand(Smi::FromInt(flags)));
   __ Push(a3, a2, a1, a0);
   if (expr->depth() > 1) {
     __ CallRuntime(Runtime::kCreateObjectLiteral, 4);
@@ -1411,6 +1417,13 @@ void FullCodeGenerator::VisitObjectLiteral(ObjectLiteral* expr) {
         __ CallRuntime(Runtime::kDefineAccessor, 4);
         break;
     }
+  }
+
+  if (expr->has_function()) {
+    ASSERT(result_saved);
+    __ lw(a0, MemOperand(sp));
+    __ push(a0);
+    __ CallRuntime(Runtime::kToFastProperties, 1);
   }
 
   if (result_saved) {
