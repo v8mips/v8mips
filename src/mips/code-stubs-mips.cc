@@ -3463,7 +3463,7 @@ void MathPowStub::Generate(MacroAssembler* masm) {
     __ sdc1(double_result,
             FieldMemOperand(heapnumber, HeapNumber::kValueOffset));
     __ mov(v0, heapnumber);
-    __ Ret(2 * kPointerSize);
+    __ DropAndRet(2 * kPointerSize);
   }
 
   __ bind(&call_runtime);
@@ -3498,8 +3498,8 @@ void CEntryStub::GenerateThrowTOS(MacroAssembler* masm) {
   // JS entry frame.
   // Set cp to NULL if fp is NULL.
   Label done;
-  __ Branch(false, &done, eq, fp, Operand(zero_reg));
-  __ mov(cp, zero_reg);   // Use the branch delay slot.
+  __ Branch(USE_DELAY_SLOT, &done, eq, fp, Operand(zero_reg));
+  __ mov(cp, zero_reg);   // In branch delay slot.
   __ lw(cp, MemOperand(fp, StandardFrameConstants::kContextOffset));
   __ bind(&done);
 
@@ -3567,8 +3567,8 @@ void CEntryStub::GenerateThrowUncatchable(MacroAssembler* masm,
   // JS entry frame.
   // Set cp to NULL if fp is NULL, else restore cp.
   Label cp_null;
-  __ Branch(false, &cp_null, eq, fp, Operand(zero_reg));
-  __ mov(cp, zero_reg);   // Use the branch delay slot.
+  __ Branch(USE_DELAY_SLOT, &cp_null, eq, fp, Operand(zero_reg));
+  __ mov(cp, zero_reg);   // In the branch delay slot.
   __ lw(cp, MemOperand(fp, StandardFrameConstants::kContextOffset));
   __ bind(&cp_null);
 
@@ -3671,7 +3671,6 @@ void CEntryStub::GenerateCore(MacroAssembler* masm,
 
   // Restore stack (remove arg slots and extra parameter).
   masm->addiu(sp, sp, stack_adjustment);
-
 
   if (always_allocate) {
     // It's okay to clobber a2 and a3 here. v0 & v1 contain result.
@@ -4116,7 +4115,7 @@ void ArgumentsAccessStub::GenerateNewObject(MacroAssembler* masm) {
 
   // Get the length from the frame.
   __ lw(a1, MemOperand(sp, 0));
-  __ Branch(&try_allocate, al);
+  __ Branch(&try_allocate);
 
   // Patch the arguments.length and the parameters pointer.
   __ bind(&adaptor_frame);
@@ -4528,7 +4527,7 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
   // Store the smi value in the last match info.
   __ sll(a3, a3, kSmiTagSize);  // Convert to Smi.
   __ sw(a3, MemOperand(a0, 0));
-  __ Branch(&next_capture, false);  // Use branch delay slot.
+  __ Branch(&next_capture, USE_DELAY_SLOT);
   __ addiu(a0, a0, kPointerSize);   // In branch delay slot.
 
   __ bind(&done);
@@ -4621,9 +4620,8 @@ void RegExpConstructResultStub::Generate(MacroAssembler* masm) {
   __ bind(&loop);
   __ Branch(&done, ge, a3, Operand(t1));  // Break when a3 past end of elem.
   __ sw(a2, MemOperand(a3));
-  __ Branch(&loop, false);         // Use branch delay slot.
+  __ Branch(&loop, USE_DELAY_SLOT);
   __ addiu(a3, a3, kPointerSize);  // In branch delay slot.
-
 
   __ bind(&done);
   __ Addu(sp, sp, Operand(3 * kPointerSize));
@@ -5155,7 +5153,7 @@ void StringHelper::GenerateCopyCharactersLong(MacroAssembler* masm,
     __ Branch(&loop, ge, scratch2, Operand(kReadAlignment));
   }
 
-  __ Branch(&byte_loop, al);
+  __ Branch(&byte_loop);
 
   // Simple loop.
   // Copy words from src to dest, until less than four bytes left.
@@ -5180,7 +5178,7 @@ void StringHelper::GenerateCopyCharactersLong(MacroAssembler* masm,
   __ addiu(src, src, 1);
   __ sb(scratch1, MemOperand(dest));
   __ addiu(dest, dest, 1);
-  __ Branch(&byte_loop, al);
+  __ Branch(&byte_loop);
 
   __ bind(&done);
 }
@@ -5629,7 +5627,7 @@ void StringCompareStub::GenerateCompareFlatAsciiStrings(MacroAssembler* masm,
     __ addiu(right, right, 1);
 
     // Repeat loop while chars are equal. Use Branch-delay slot.
-    __ Branch(false, &loop, eq, scratch2, Operand(scratch4));
+    __ Branch(USE_DELAY_SLOT, &loop, eq, scratch2, Operand(scratch4));
     __ addiu(min_length, min_length, -1);  // In delay-slot.
   }
 
@@ -5873,7 +5871,7 @@ void StringAddStub::Generate(MacroAssembler* masm) {
 
   // Allocate a two byte cons string.
   __ AllocateTwoByteConsString(t3, t2, t0, t1, &string_add_runtime);
-  __ Branch(al, &allocated);
+  __ Branch(&allocated);
 
   // Handle creating a flat result. First check that both strings are
   // sequential and that they have the same encoding.

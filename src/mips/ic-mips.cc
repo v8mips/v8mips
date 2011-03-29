@@ -1454,7 +1454,7 @@ void KeyedStoreIC::GenerateGeneric(MacroAssembler* masm,
   ASSERT_EQ(0, kSmiTag);
   __ Addu(t3, key, Operand(Smi::FromInt(1)));
   __ sw(t3, FieldMemOperand(receiver, JSArray::kLengthOffset));
-  __ Branch(&fast, al);
+  __ Branch(&fast);
 
 
   // Array case: Get the length and the elements array from the JS

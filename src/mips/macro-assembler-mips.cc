@@ -59,58 +59,51 @@ MacroAssembler::MacroAssembler(void* buffer, int size)
 
 #define REGISTER_TARGET_BODY(Name) \
 void MacroAssembler::Name(Register target, \
-                          bool ProtectBranchDelaySlot) { \
-  Name(Operand(target), ProtectBranchDelaySlot); \
+                          BranchDelaySlot bd) { \
+  Name(Operand(target), bd); \
 } \
 void MacroAssembler::Name(Register target, COND_TYPED_ARGS, \
-                          bool ProtectBranchDelaySlot) { \
-  Name(Operand(target), COND_ARGS, ProtectBranchDelaySlot); \
+                          BranchDelaySlot bd) { \
+  Name(Operand(target), COND_ARGS, bd); \
 }
 
 
 #define INT_PTR_TARGET_BODY(Name) \
 void MacroAssembler::Name(intptr_t target, RelocInfo::Mode rmode, \
-                          bool ProtectBranchDelaySlot) { \
-  Name(Operand(target, rmode), ProtectBranchDelaySlot); \
+                          BranchDelaySlot bd) { \
+  Name(Operand(target, rmode), bd); \
 } \
 void MacroAssembler::Name(intptr_t target, \
                           RelocInfo::Mode rmode, \
                           COND_TYPED_ARGS, \
-                          bool ProtectBranchDelaySlot) { \
-  Name(Operand(target, rmode), COND_ARGS, ProtectBranchDelaySlot); \
+                          BranchDelaySlot bd) { \
+  Name(Operand(target, rmode), COND_ARGS, bd); \
 }
 
 
 #define BYTE_PTR_TARGET_BODY(Name) \
 void MacroAssembler::Name(byte* target, RelocInfo::Mode rmode, \
-                          bool ProtectBranchDelaySlot) { \
-  Name(reinterpret_cast<intptr_t>(target), rmode, ProtectBranchDelaySlot); \
+                          BranchDelaySlot bd) { \
+  Name(reinterpret_cast<intptr_t>(target), rmode, bd); \
 } \
 void MacroAssembler::Name(byte* target, \
                           RelocInfo::Mode rmode, \
                           COND_TYPED_ARGS, \
-                          bool ProtectBranchDelaySlot) { \
-  Name(reinterpret_cast<intptr_t>(target), \
-       rmode, \
-       COND_ARGS, \
-       ProtectBranchDelaySlot); \
+                          BranchDelaySlot bd) { \
+  Name(reinterpret_cast<intptr_t>(target), rmode, COND_ARGS, bd); \
 }
 
 
 #define CODE_TARGET_BODY(Name) \
 void MacroAssembler::Name(Handle<Code> target, RelocInfo::Mode rmode, \
-                          bool ProtectBranchDelaySlot) { \
-  Name(reinterpret_cast<intptr_t>(target.location()), \
-       rmode, ProtectBranchDelaySlot); \
+                          BranchDelaySlot bd) { \
+  Name(reinterpret_cast<intptr_t>(target.location()), rmode, bd); \
 } \
 void MacroAssembler::Name(Handle<Code> target, \
                           RelocInfo::Mode rmode, \
                           COND_TYPED_ARGS, \
-                          bool ProtectBranchDelaySlot) { \
-  Name(reinterpret_cast<intptr_t>(target.location()), \
-       rmode, \
-       COND_ARGS, \
-       ProtectBranchDelaySlot); \
+                          BranchDelaySlot bd) { \
+  Name(reinterpret_cast<intptr_t>(target.location()), rmode, COND_ARGS, bd); \
 }
 
 
@@ -130,14 +123,14 @@ CODE_TARGET_BODY(Call)
 #undef CODE_TARGET_BODY
 
 
-void MacroAssembler::Ret(bool ProtectBranchDelaySlot) {
-  Jump(Operand(ra), ProtectBranchDelaySlot);
+void MacroAssembler::Ret(BranchDelaySlot bd) {
+  Jump(Operand(ra), bd);
 }
 
 
 void MacroAssembler::Ret(Condition cond, Register r1, const Operand& r2,
-    bool ProtectBranchDelaySlot) {
-  Jump(Operand(ra), cond, r1, r2, ProtectBranchDelaySlot);
+    BranchDelaySlot bd) {
+  Jump(Operand(ra), cond, r1, r2, bd);
 }
 
 
@@ -932,19 +925,18 @@ void MacroAssembler::GetLeastBitsFromInt32(Register dst,
     (cond != cc_always && (!rs.is(zero_reg) || !rt.rm().is(zero_reg))))
 
 
-void MacroAssembler::Branch(int16_t offset,
-                            bool ProtectBranchDelaySlot) {
+void MacroAssembler::Branch(int16_t offset, BranchDelaySlot bdslot) {
   b(offset);
 
   // Emit a nop in the branch delay slot if required.
-  if (ProtectBranchDelaySlot)
+  if (bdslot == PROTECT)
     nop();
 }
 
 
 void MacroAssembler::Branch(int16_t offset, Condition cond, Register rs,
                             const Operand& rt,
-                            bool ProtectBranchDelaySlot) {
+                            BranchDelaySlot bdslot) {
   BRANCH_ARGS_CHECK(cond, rs, rt);
   ASSERT(!rs.is(zero_reg));
   Register r2 = no_reg;
@@ -1154,27 +1146,26 @@ void MacroAssembler::Branch(int16_t offset, Condition cond, Register rs,
     }
   }
   // Emit a nop in the branch delay slot if required.
-  if (ProtectBranchDelaySlot)
+  if (bdslot == PROTECT)
     nop();
 }
 
 
-void MacroAssembler::Branch(Label* L,
-                            bool ProtectBranchDelaySlot) {
+void MacroAssembler::Branch(Label* L, BranchDelaySlot bdslot) {
   // We use branch_offset as an argument for the branch instructions to be sure
   // it is called just before generating the branch instruction, as needed.
 
   b(shifted_branch_offset(L, false));
 
   // Emit a nop in the branch delay slot if required.
-  if (ProtectBranchDelaySlot)
+  if (bdslot == PROTECT)
     nop();
 }
 
 
 void MacroAssembler::Branch(Label* L, Condition cond, Register rs,
                             const Operand& rt,
-                            bool ProtectBranchDelaySlot) {
+                            BranchDelaySlot bdslot) {
   BRANCH_ARGS_CHECK(cond, rs, rt);
 
   int32_t offset;
@@ -1425,7 +1416,7 @@ void MacroAssembler::Branch(Label* L, Condition cond, Register rs,
   // Check that offset could actually hold on an int16_t.
   ASSERT(is_int16(offset));
   // Emit a nop in the branch delay slot if required.
-  if (ProtectBranchDelaySlot)
+  if (bdslot == PROTECT)
     nop();
 }
 
@@ -1434,18 +1425,18 @@ void MacroAssembler::Branch(Label* L, Condition cond, Register rs,
 // slt instructions. We could use sub or add instead but we would miss overflow
 // cases, so we keep slt and add an intermediate third instruction.
 void MacroAssembler::BranchAndLink(int16_t offset,
-                                   bool ProtectBranchDelaySlot) {
+                                   BranchDelaySlot bdslot) {
   bal(offset);
 
   // Emit a nop in the branch delay slot if required.
-  if (ProtectBranchDelaySlot)
+  if (bdslot == PROTECT)
     nop();
 }
 
 
 void MacroAssembler::BranchAndLink(int16_t offset, Condition cond, Register rs,
                                    const Operand& rt,
-                                   bool ProtectBranchDelaySlot) {
+                                   BranchDelaySlot bdslot) {
   BRANCH_ARGS_CHECK(cond, rs, rt);
   Register r2 = no_reg;
   Register scratch = at;
@@ -1520,24 +1511,23 @@ void MacroAssembler::BranchAndLink(int16_t offset, Condition cond, Register rs,
       UNREACHABLE();
   }
   // Emit a nop in the branch delay slot if required.
-  if (ProtectBranchDelaySlot)
+  if (bdslot == PROTECT)
     nop();
 }
 
 
-void MacroAssembler::BranchAndLink(Label* L,
-                                   bool ProtectBranchDelaySlot) {
+void MacroAssembler::BranchAndLink(Label* L, BranchDelaySlot bdslot) {
   bal(shifted_branch_offset(L, false));
 
   // Emit a nop in the branch delay slot if required.
-  if (ProtectBranchDelaySlot)
+  if (bdslot == PROTECT)
     nop();
 }
 
 
 void MacroAssembler::BranchAndLink(Label* L, Condition cond, Register rs,
                                    const Operand& rt,
-                                   bool ProtectBranchDelaySlot) {
+                                   BranchDelaySlot bdslot) {
   BRANCH_ARGS_CHECK(cond, rs, rt);
 
   int32_t offset;
@@ -1628,32 +1618,33 @@ void MacroAssembler::BranchAndLink(Label* L, Condition cond, Register rs,
   ASSERT(is_int16(offset));
 
   // Emit a nop in the branch delay slot if required.
-  if (ProtectBranchDelaySlot)
+  if (bdslot == PROTECT)
     nop();
 }
 
 
-void MacroAssembler::Jump(const Operand& target,
-                          bool ProtectBranchDelaySlot) {
+void MacroAssembler::Jump(const Operand& target, BranchDelaySlot bdslot) {
+  BlockTrampolinePoolScope block_trampoline_pool(this);
   if (target.is_reg()) {
       jr(target.rm());
-  } else {    // !target.is_reg()
+  } else {
     if (!MustUseReg(target.rmode_)) {
         j(target.imm32_);
-    } else {  // MustUseReg(target)
+    } else {
       li(t9, target);
       jr(t9);
     }
   }
   // Emit a nop in the branch delay slot if required.
-  if (ProtectBranchDelaySlot)
+  if (bdslot == PROTECT)
     nop();
 }
 
 
 void MacroAssembler::Jump(const Operand& target,
                           Condition cond, Register rs, const Operand& rt,
-                          bool ProtectBranchDelaySlot) {
+                          BranchDelaySlot bdslot) {
+  BlockTrampolinePoolScope block_trampoline_pool(this);
   BRANCH_ARGS_CHECK(cond, rs, rt);
   if (target.is_reg()) {
     if (cond == cc_always) {
@@ -1662,7 +1653,7 @@ void MacroAssembler::Jump(const Operand& target,
       Branch(2, NegateCondition(cond), rs, rt);
       jr(target.rm());
     }
-  } else {    // !target.is_reg()
+  } else {  // Not register target.
     if (!MustUseReg(target.rmode_)) {
       if (cond == cc_always) {
         j(target.imm32_);
@@ -1681,14 +1672,13 @@ void MacroAssembler::Jump(const Operand& target,
     }
   }
   // Emit a nop in the branch delay slot if required.
-  if (ProtectBranchDelaySlot)
+  if (bdslot == PROTECT)
     nop();
 }
 
 
 // Note: To call gcc-compiled C code on mips, you must call thru t9.
-void MacroAssembler::Call(const Operand& target,
-                          bool ProtectBranchDelaySlot) {
+void MacroAssembler::Call(const Operand& target, BranchDelaySlot bdslot) {
   BlockTrampolinePoolScope block_trampoline_pool(this);
   if (target.is_reg()) {
       jalr(target.rm());
@@ -1704,7 +1694,7 @@ void MacroAssembler::Call(const Operand& target,
     }
   }
   // Emit a nop in the branch delay slot if required.
-  if (ProtectBranchDelaySlot)
+  if (bdslot == PROTECT)
     nop();
 }
 
@@ -1712,9 +1702,9 @@ void MacroAssembler::Call(const Operand& target,
 // Note: To call gcc-compiled C code on mips, you must call thru t9.
 void MacroAssembler::Call(const Operand& target,
                           Condition cond, Register rs, const Operand& rt,
-                          bool ProtectBranchDelaySlot) {
-  BRANCH_ARGS_CHECK(cond, rs, rt);
+                          BranchDelaySlot bdslot) {
   BlockTrampolinePoolScope block_trampoline_pool(this);
+  BRANCH_ARGS_CHECK(cond, rs, rt);
   if (target.is_reg()) {
     if (cond == cc_always) {
       jalr(target.rm());
@@ -1741,7 +1731,7 @@ void MacroAssembler::Call(const Operand& target,
     }
   }
   // Emit a nop in the branch delay slot if required.
-  if (ProtectBranchDelaySlot)
+  if (bdslot == PROTECT)
     nop();
 }
 
@@ -1807,7 +1797,7 @@ void MacroAssembler::Swap(Register reg1,
 
 
 void MacroAssembler::Call(Label* target) {
-  BranchAndLink(cc_always, target);
+  BranchAndLink(target);
 }
 
 
@@ -3117,7 +3107,8 @@ void MacroAssembler::JumpIfNotPowerOfTwoOrZero(
     Register scratch,
     Label* not_power_of_two_or_zero) {
   Subu(scratch, reg, Operand(1));
-  Branch(not_power_of_two_or_zero, lt, scratch, Operand(zero_reg), false);
+  Branch(USE_DELAY_SLOT, not_power_of_two_or_zero, lt,
+         scratch, Operand(zero_reg));
   and_(at, scratch, reg);  // In the delay slot.
   Branch(not_power_of_two_or_zero, ne, at, Operand(zero_reg));
 }

@@ -581,7 +581,7 @@ TEST(MIPS7) {
   __ bc1f(&neither_is_nan);
   __ nop();
   __ sw(zero_reg, MemOperand(a0, OFFSET_OF(T, result)) );
-  __ Branch(&outa_here, al);
+  __ Branch(&outa_here);
 
   __ bind(&neither_is_nan);
 
@@ -589,7 +589,7 @@ TEST(MIPS7) {
   __ bc1t(&less_than, 2);
   __ nop();
   __ sw(zero_reg, MemOperand(a0, OFFSET_OF(T, result)) );
-  __ Branch(&outa_here, al);
+  __ Branch(&outa_here);
 
   __ bind(&less_than);
   __ Addu(t0, zero_reg, Operand(1));

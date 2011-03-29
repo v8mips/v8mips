@@ -42,7 +42,7 @@ class PostCallGenerator;
 //
 // Registers t8, t9, and at are reserved for use by the MacroAssembler.
 //
-// The programmer should know that the MacroAssembler may clobber these two,
+// The programmer should know that the MacroAssembler may clobber these three,
 // but won't touch other registers except in special cases.
 //
 // Per the MIPS ABI, register t9 must be used for indirect function call
@@ -89,6 +89,12 @@ enum ObjectToDoubleFlags {
   AVOID_NANS_AND_INFINITIES = 1 << 1
 };
 
+// Allow programmer to use Branch Delay Slot of Branches, Jumps, Calls.
+enum BranchDelaySlot {
+  USE_DELAY_SLOT,
+  PROTECT
+};
+
 // MacroAssembler implements a collection of frequently used macros.
 class MacroAssembler: public Assembler {
  public:
@@ -102,10 +108,10 @@ class MacroAssembler: public Assembler {
 
 // * Prototypes for functions with no target (eg Ret()).
 #define DECLARE_NOTARGET_PROTOTYPE(Name) \
-  void Name(bool ProtectBranchDelaySlot = true); \
-  void Name(COND_TYPED_ARGS, bool ProtectBranchDelaySlot = true); \
-  inline void Name(bool ProtectBranchDelaySlot, COND_TYPED_ARGS) { \
-    Name(COND_ARGS, ProtectBranchDelaySlot); \
+  void Name(BranchDelaySlot bd = PROTECT); \
+  void Name(COND_TYPED_ARGS, BranchDelaySlot bd = PROTECT); \
+  inline void Name(BranchDelaySlot bd, COND_TYPED_ARGS) { \
+    Name(COND_ARGS, bd); \
   }
 
 // * Prototypes for functions with a target.
@@ -114,36 +120,36 @@ class MacroAssembler: public Assembler {
 #define DECLARE_RELOC_PROTOTYPE(Name, target_type) \
   void Name(target_type target, \
             RelocInfo::Mode rmode, \
-            bool ProtectBranchDelaySlot = true); \
-  inline void Name(bool ProtectBranchDelaySlot, \
+            BranchDelaySlot bd = PROTECT); \
+  inline void Name(BranchDelaySlot bd, \
                    target_type target, \
                    RelocInfo::Mode rmode) { \
-    Name(target, rmode, ProtectBranchDelaySlot); \
+    Name(target, rmode, bd); \
   } \
   void Name(target_type target, \
             RelocInfo::Mode rmode, \
             COND_TYPED_ARGS, \
-            bool ProtectBranchDelaySlot = true); \
-  inline void Name(bool ProtectBranchDelaySlot, \
+            BranchDelaySlot bd = PROTECT); \
+  inline void Name(BranchDelaySlot bd, \
                    target_type target, \
                    RelocInfo::Mode rmode, \
                    COND_TYPED_ARGS) { \
-    Name(target, rmode, COND_ARGS, ProtectBranchDelaySlot); \
+    Name(target, rmode, COND_ARGS, bd); \
   }
 
 // Cases when relocation is not needed.
 #define DECLARE_NORELOC_PROTOTYPE(Name, target_type) \
-  void Name(target_type target, bool ProtectBranchDelaySlot = true); \
-  inline void Name(bool ProtectBranchDelaySlot, target_type target) { \
-    Name(target, ProtectBranchDelaySlot); \
+  void Name(target_type target, BranchDelaySlot bd = PROTECT); \
+  inline void Name(BranchDelaySlot bd, target_type target) { \
+    Name(target, bd); \
   } \
   void Name(target_type target, \
             COND_TYPED_ARGS, \
-            bool ProtectBranchDelaySlot = true); \
-  inline void Name(bool ProtectBranchDelaySlot, \
+            BranchDelaySlot bd = PROTECT); \
+  inline void Name(BranchDelaySlot bd, \
                    target_type target, \
                    COND_TYPED_ARGS) { \
-    Name(target, COND_ARGS, ProtectBranchDelaySlot); \
+    Name(target, COND_ARGS, bd); \
   }
 
 // ** Target prototypes.
@@ -182,10 +188,10 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
             Register reg = no_reg,
             const Operand& op = Operand(no_reg));
 
-void DropAndRet(int drop = 0,
-                Condition cond = cc_always,
-                Register reg = no_reg,
-                const Operand& op = Operand(no_reg));
+  void DropAndRet(int drop = 0,
+                  Condition cond = cc_always,
+                  Register reg = no_reg,
+                  const Operand& op = Operand(no_reg));
 
   // Swap two registers.  If the scratch register is omitted then a slightly
   // less efficient form using xor instead of mov is emitted.
@@ -957,15 +963,15 @@ void DropAndRet(int drop = 0,
 
  private:
   void Jump(intptr_t target, RelocInfo::Mode rmode,
-            bool ProtectBranchDelaySlot = true);
+            BranchDelaySlot bd = PROTECT);
   void Jump(intptr_t target, RelocInfo::Mode rmode, Condition cond = cc_always,
             Register r1 = zero_reg, const Operand& r2 = Operand(zero_reg),
-            bool ProtectBranchDelaySlot = true);
+            BranchDelaySlot bd = PROTECT);
   void Call(intptr_t target, RelocInfo::Mode rmode,
-            bool ProtectBranchDelaySlot = true);
+            BranchDelaySlot bd = PROTECT);
   void Call(intptr_t target, RelocInfo::Mode rmode, Condition cond = cc_always,
             Register r1 = zero_reg, const Operand& r2 = Operand(zero_reg),
-            bool ProtectBranchDelaySlot = true);
+            BranchDelaySlot bd = PROTECT);
 
   // Helper functions for generating invokes.
   void InvokePrologue(const ParameterCount& expected,

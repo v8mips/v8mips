@@ -546,7 +546,7 @@ void FullCodeGenerator::Split(Condition cc,
   } else if (if_true == fall_through) {
     __ Branch(if_false, NegateCondition(cc), lhs, rhs);
   } else {
-    __ Branch(cc, if_true, cc, lhs, rhs);
+    __ Branch(if_true, cc, lhs, rhs);
     __ Branch(if_false);
   }
 }

@@ -262,8 +262,8 @@ void VirtualFrame::AllocateStackSlots() {
       __ bind(&alloc_locals_loop);
       __ sw(t0, MemOperand(a2, 0));
       __ Subu(a1, a1, Operand(1));
-      __ Branch(false, &alloc_locals_loop, gt, a1, Operand(zero_reg));
-      __ Addu(a2, a2, Operand(kPointerSize));  // Use branch-delay slot.
+      __ Branch(USE_DELAY_SLOT, &alloc_locals_loop, gt, a1, Operand(zero_reg));
+      __ Addu(a2, a2, Operand(kPointerSize));  // In branch-delay slot.
     }
   }
   // Call the stub if lower.

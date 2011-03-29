@@ -3668,10 +3668,10 @@ MaybeObject* ExternalArrayStubCompiler::CompileKeyedStoreStub(
       // v0 is used as a scratch register here.
       Label done;
       __ li(v0, Operand(255));
-      // Normal: nop in delay slot.
+      // Normal branch: nop in delay slot.
       __ Branch(&done, gt, t1, Operand(v0));
-      // Use delay slot.
-      __ Branch(&done, lt, t1, Operand(zero_reg), false);
+      // Use delay slot in this branch.
+      __ Branch(USE_DELAY_SLOT, &done, lt, t1, Operand(zero_reg));
       __ mov(v0, zero_reg);  // In delay slot.
       __ mov(v0, t1);  // Value is in range 0..255.
       __ bind(&done);
@@ -3745,7 +3745,7 @@ MaybeObject* ExternalArrayStubCompiler::CompileKeyedStoreStub(
         __ mfc1(t3, f1);  // Move exponent word of double to t3 (as raw bits).
         __ li(t1, Operand(0x7FF00000));
         __ And(t3, t3, Operand(t1));
-        __ Branch(false, &done, eq, t3, Operand(t1));
+        __ Branch(USE_DELAY_SLOT, &done, eq, t3, Operand(t1));
         __ mov(t3, zero_reg);  // In delay slot.
 
         // Not infinity or NaN simply convert to int.

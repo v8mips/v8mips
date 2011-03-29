@@ -1543,9 +1543,8 @@ void Builtins::Generate_ArgumentsAdaptorTrampoline(MacroAssembler* masm) {
     __ bind(&copy);
     __ lw(t0, MemOperand(a0));
     __ Push(t0);
-    // Use the branch delay slot to update a0.
-    __ Branch(false, &copy, ne, a0, Operand(a2));
-    __ addiu(a0, a0, -kPointerSize);
+    __ Branch(USE_DELAY_SLOT, &copy, ne, a0, Operand(a2));
+    __ addiu(a0, a0, -kPointerSize);  // In delay slot.
 
     __ jmp(&invoke);
   }

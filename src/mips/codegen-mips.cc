@@ -5810,19 +5810,19 @@ void CodeGenerator::GenerateIsRegExpEquivalent(ZoneList<Expression*>* args) {
   // Fail if either is a non-HeapObject.
   __ Move(condReg1, left);
   __ Move(condReg2, right);
-  __ Branch(&done, eq);
+  __ Branch(&done, eq, condReg1, Operand(condReg2));
   __ And(tmp, left, right);
   __ Xor(tmp, tmp, kSmiTagMask);
   __ And(condReg1, tmp, kSmiTagMask);
   __ Move(condReg2, zero_reg);
-  __ Branch(&done, ne);
+  __ Branch(&done, ne, condReg1, Operand(condReg2));
   __ lw(tmp, FieldMemOperand(left, HeapObject::kMapOffset));
   __ lbu(condReg1, FieldMemOperand(tmp, Map::kInstanceTypeOffset));
   __ li(condReg2, JS_REGEXP_TYPE);
-  __ Branch(&done, ne);
+  __ Branch(&done, ne, condReg1, Operand(condReg2));
   __ lw(condReg2, FieldMemOperand(right, HeapObject::kMapOffset));
   __ Move(condReg1, tmp);
-  __ Branch(&done, ne);
+  __ Branch(&done, ne, condReg1, Operand(condReg2));
   __ lw(condReg1, FieldMemOperand(left, JSRegExp::kDataOffset));
   __ lw(condReg2, FieldMemOperand(right, JSRegExp::kDataOffset));
   __ bind(&done);
