@@ -191,7 +191,8 @@ Address RelocInfo::call_address() {
   ASSERT((IsJSReturn(rmode()) && IsPatchedReturnSequence()) ||
          (IsDebugBreakSlot(rmode()) && IsPatchedDebugBreakSlotSequence()));
   // The pc_ offset of 0 assumes mips patched return sequence per
-  // debug-mips.cc BreakLocationIterator::SetDebugBreakAtReturn().
+  // debug-mips.cc BreakLocationIterator::SetDebugBreakAtReturn(), or
+  // debug break slot per BreakLocationIterator::SetDebugBreakAtSlot().
   return Assembler::target_address_at(pc_);
 }
 
@@ -200,7 +201,8 @@ void RelocInfo::set_call_address(Address target) {
   ASSERT((IsJSReturn(rmode()) && IsPatchedReturnSequence()) ||
          (IsDebugBreakSlot(rmode()) && IsPatchedDebugBreakSlotSequence()));
   // The pc_ offset of 0 assumes mips patched return sequence per
-  // debug-mips.cc BreakLocationIterator::SetDebugBreakAtReturn().
+  // debug-mips.cc BreakLocationIterator::SetDebugBreakAtReturn(), or
+  // debug break slot per BreakLocationIterator::SetDebugBreakAtSlot().
   Assembler::set_target_address_at(pc_, target);
 }
 

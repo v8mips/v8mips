@@ -43,13 +43,6 @@
 // Only build the simulator if not compiling for real MIPS hardware.
 #if defined(USE_SIMULATOR)
 
-// This can be defined by the build system, even for Simulator builds.
-#ifdef _MIPS_ARCH_MIPS32R2
-  #define mips32r2 1
-#else
-  #define mips32r2 0
-#endif
-
 namespace v8 {
 namespace internal {
 
@@ -142,7 +135,7 @@ void Debugger::Stop(Instruction* instr) {
     }
     instr->SetInstructionBits(0x0);  // Overwrite with nop.
   }
-  sim_->set_pc(sim_->get_pc() + Instruction::kInstructionSize);
+  sim_->set_pc(sim_->get_pc() + Instruction::kInstrSize);
 }
 
 
@@ -156,7 +149,7 @@ static void InitializeCoverage() {}
 void Debugger::Stop(Instruction* instr) {
   const char* str = reinterpret_cast<char*>(instr->InstructionBits());
   PrintF("Simulator hit %s\n", str);
-  sim_->set_pc(sim_->get_pc() + Instruction::kInstructionSize);
+  sim_->set_pc(sim_->get_pc() + Instruction::kInstrSize);
   Debug();
 }
 #endif  // GENERATED_CODE_COVERAGE
@@ -313,24 +306,24 @@ void Debugger::PrintAllRegsIncludingFPU() {
 
   PrintAllRegs();
 
-    PrintF("\n\n");
-    // f0, f1, f2, ... f31
-    PrintF("%3s,%3s: 0x%08x%08x %16.4e\n", FPU_REG_INFO(0) );
-    PrintF("%3s,%3s: 0x%08x%08x %16.4e\n", FPU_REG_INFO(2) );
-    PrintF("%3s,%3s: 0x%08x%08x %16.4e\n", FPU_REG_INFO(4) );
-    PrintF("%3s,%3s: 0x%08x%08x %16.4e\n", FPU_REG_INFO(6) );
-    PrintF("%3s,%3s: 0x%08x%08x %16.4e\n", FPU_REG_INFO(8) );
-    PrintF("%3s,%3s: 0x%08x%08x %16.4e\n", FPU_REG_INFO(10));
-    PrintF("%3s,%3s: 0x%08x%08x %16.4e\n", FPU_REG_INFO(12));
-    PrintF("%3s,%3s: 0x%08x%08x %16.4e\n", FPU_REG_INFO(14));
-    PrintF("%3s,%3s: 0x%08x%08x %16.4e\n", FPU_REG_INFO(16));
-    PrintF("%3s,%3s: 0x%08x%08x %16.4e\n", FPU_REG_INFO(18));
-    PrintF("%3s,%3s: 0x%08x%08x %16.4e\n", FPU_REG_INFO(20));
-    PrintF("%3s,%3s: 0x%08x%08x %16.4e\n", FPU_REG_INFO(22));
-    PrintF("%3s,%3s: 0x%08x%08x %16.4e\n", FPU_REG_INFO(24));
-    PrintF("%3s,%3s: 0x%08x%08x %16.4e\n", FPU_REG_INFO(26));
-    PrintF("%3s,%3s: 0x%08x%08x %16.4e\n", FPU_REG_INFO(28));
-    PrintF("%3s,%3s: 0x%08x%08x %16.4e\n", FPU_REG_INFO(30));
+  PrintF("\n\n");
+  // f0, f1, f2, ... f31
+  PrintF("%3s,%3s: 0x%08x%08x %16.4e\n", FPU_REG_INFO(0) );
+  PrintF("%3s,%3s: 0x%08x%08x %16.4e\n", FPU_REG_INFO(2) );
+  PrintF("%3s,%3s: 0x%08x%08x %16.4e\n", FPU_REG_INFO(4) );
+  PrintF("%3s,%3s: 0x%08x%08x %16.4e\n", FPU_REG_INFO(6) );
+  PrintF("%3s,%3s: 0x%08x%08x %16.4e\n", FPU_REG_INFO(8) );
+  PrintF("%3s,%3s: 0x%08x%08x %16.4e\n", FPU_REG_INFO(10));
+  PrintF("%3s,%3s: 0x%08x%08x %16.4e\n", FPU_REG_INFO(12));
+  PrintF("%3s,%3s: 0x%08x%08x %16.4e\n", FPU_REG_INFO(14));
+  PrintF("%3s,%3s: 0x%08x%08x %16.4e\n", FPU_REG_INFO(16));
+  PrintF("%3s,%3s: 0x%08x%08x %16.4e\n", FPU_REG_INFO(18));
+  PrintF("%3s,%3s: 0x%08x%08x %16.4e\n", FPU_REG_INFO(20));
+  PrintF("%3s,%3s: 0x%08x%08x %16.4e\n", FPU_REG_INFO(22));
+  PrintF("%3s,%3s: 0x%08x%08x %16.4e\n", FPU_REG_INFO(24));
+  PrintF("%3s,%3s: 0x%08x%08x %16.4e\n", FPU_REG_INFO(26));
+  PrintF("%3s,%3s: 0x%08x%08x %16.4e\n", FPU_REG_INFO(28));
+  PrintF("%3s,%3s: 0x%08x%08x %16.4e\n", FPU_REG_INFO(30));
 
 #undef REG_INFO
 #undef FPU_REG_INFO
@@ -392,7 +385,7 @@ void Debugger::Debug() {
         } else {
           // Allow si to jump over generated breakpoints.
           PrintF("/!\\ Jumping over generated breakpoint.\n");
-          sim_->set_pc(sim_->get_pc() + Instruction::kInstructionSize);
+          sim_->set_pc(sim_->get_pc() + Instruction::kInstrSize);
         }
       } else if ((strcmp(cmd, "c") == 0) || (strcmp(cmd, "cont") == 0)) {
         // Execute the one instruction we broke at with breakpoints disabled.
@@ -519,20 +512,20 @@ void Debugger::Debug() {
 
         if (argc == 1) {
           cur = reinterpret_cast<byte_*>(sim_->get_pc());
-          end = cur + (10 * Instruction::kInstructionSize);
+          end = cur + (10 * Instruction::kInstrSize);
         } else if (argc == 2) {
           int32_t value;
           if (GetValue(arg1, &value)) {
             cur = reinterpret_cast<byte_*>(value);
             // no length parameter passed, assume 10 instructions
-            end = cur + (10 * Instruction::kInstructionSize);
+            end = cur + (10 * Instruction::kInstrSize);
           }
         } else {
           int32_t value1;
           int32_t value2;
           if (GetValue(arg1, &value1) && GetValue(arg2, &value2)) {
             cur = reinterpret_cast<byte_*>(value1);
-            end = cur + (value2 * Instruction::kInstructionSize);
+            end = cur + (value2 * Instruction::kInstrSize);
           }
         }
 
@@ -540,7 +533,7 @@ void Debugger::Debug() {
           dasm.InstructionDecode(buffer, cur);
           PrintF("  0x%08x  %s\n",
               reinterpret_cast<intptr_t>(cur), buffer.start());
-          cur += Instruction::kInstructionSize;
+          cur += Instruction::kInstrSize;
         }
       } else if (strcmp(cmd, "gdb") == 0) {
         PrintF("relinquishing control to gdb\n");
@@ -582,20 +575,20 @@ void Debugger::Debug() {
 
         if (argc == 1) {
           cur = reinterpret_cast<byte_*>(sim_->get_pc());
-          end = cur + (10 * Instruction::kInstructionSize);
+          end = cur + (10 * Instruction::kInstrSize);
         } else if (argc == 2) {
           int32_t value;
           if (GetValue(arg1, &value)) {
             cur = reinterpret_cast<byte_*>(value);
             // no length parameter passed, assume 10 instructions
-            end = cur + (10 * Instruction::kInstructionSize);
+            end = cur + (10 * Instruction::kInstrSize);
           }
         } else {
           int32_t value1;
           int32_t value2;
           if (GetValue(arg1, &value1) && GetValue(arg2, &value2)) {
             cur = reinterpret_cast<byte_*>(value1);
-            end = cur + (value2 * Instruction::kInstructionSize);
+            end = cur + (value2 * Instruction::kInstrSize);
           }
         }
 
@@ -603,7 +596,7 @@ void Debugger::Debug() {
           dasm.InstructionDecode(buffer, cur);
           PrintF("  0x%08x  %s\n",
                  reinterpret_cast<intptr_t>(cur), buffer.start());
-          cur += Instruction::kInstructionSize;
+          cur += Instruction::kInstrSize;
         }
       } else if ((strcmp(cmd, "h") == 0) || (strcmp(cmd, "help") == 0)) {
         PrintF("cont\n");
@@ -731,7 +724,7 @@ void Simulator::CheckICache(Instruction* instr) {
     // Check that the data in memory matches the contents of the I-cache.
     CHECK(memcmp(reinterpret_cast<void*>(instr),
                  cache_page->CachedData(offset),
-                 Instruction::kInstructionSize) == 0);
+                 Instruction::kInstrSize) == 0);
   } else {
     // Cache miss.  Load memory into the cache.
     memcpy(cached_line, line, CachePage::kLineLength);
@@ -812,7 +805,7 @@ class Redirection {
         next_(list_) {
     Simulator::current()->
         FlushICache(reinterpret_cast<void*>(&swi_instruction_),
-                      Instruction::kInstructionSize);
+                    Instruction::kInstrSize);
     list_ = this;
   }
 
@@ -1370,11 +1363,7 @@ void Simulator::ConfigureTypeRegister(Instruction* instr,
             // Logical right-rotate of a word by a fixed number of bits. This
             // is special case of SRL instruction, added in MIPS32 Release 2.
             // RS field is equal to 00001
-            if (mips32r2) {
-              alu_out = (rt_u >> sa) | (rt_u << (32 - sa));
-            } else {
-              Format(instr, "SRL");
-            }
+            alu_out = (rt_u >> sa) | (rt_u << (32 - sa));
           }
           break;
         case SRA:
@@ -1392,11 +1381,7 @@ void Simulator::ConfigureTypeRegister(Instruction* instr,
             // Logical right-rotate of a word by a variable number of bits.
             // This is special case od SRLV instruction, added in MIPS32
             // Release 2. SA field is equal to 00001
-            if (mips32r2) {
-              alu_out = (rt_u >> rs_u) | (rt_u << (32 - rs_u));
-            } else {
-              Format(instr, "SRLV");
-            }
+            alu_out = (rt_u >> rs_u) | (rt_u << (32 - rs_u));
           }
           break;
         case SRAV:
@@ -1508,34 +1493,26 @@ void Simulator::ConfigureTypeRegister(Instruction* instr,
       break;
     case SPECIAL3:
       switch (instr->FunctionFieldRaw()) {
-        case INS: {   // mips32r2 instruction.
-            if (mips32r2) {
-              // Interpret Rd field as 5-bit msb of insert.
-              uint16_t msb = rd_reg;
-              // Interpret sa field as 5-bit lsb of insert.
-              uint16_t lsb = sa;
-              uint16_t size = msb - lsb + 1;
-              uint32_t mask = (1 << size) - 1;
-              alu_out = (rt_u & ~(mask << lsb)) | ((rs_u & mask) << lsb);
-            } else {
-              Format(instr, "INS");
-            }
-          }
+        case INS: {   // Mips32r2 instruction.
+          // Interpret Rd field as 5-bit msb of insert.
+          uint16_t msb = rd_reg;
+          // Interpret sa field as 5-bit lsb of insert.
+          uint16_t lsb = sa;
+          uint16_t size = msb - lsb + 1;
+          uint32_t mask = (1 << size) - 1;
+          alu_out = (rt_u & ~(mask << lsb)) | ((rs_u & mask) << lsb);
           break;
-        case EXT: {   // mips32r2 instruction.
-            if (mips32r2) {
-              // Interpret Rd field as 5-bit msb of extract.
-              uint16_t msb = rd_reg;
-              // Interpret sa field as 5-bit lsb of extract.
-              uint16_t lsb = sa;
-              uint16_t size = msb + 1;
-              uint32_t mask = (1 << size) - 1;
-              alu_out = (rs_u & (mask << lsb)) >> lsb;
-            } else {
-              Format(instr, "EXT");
-            }
-          }
+        }
+        case EXT: {   // Mips32r2 instruction.
+          // Interpret Rd field as 5-bit msb of extract.
+          uint16_t msb = rd_reg;
+          // Interpret sa field as 5-bit lsb of extract.
+          uint16_t lsb = sa;
+          uint16_t size = msb + 1;
+          uint32_t mask = (1 << size) - 1;
+          alu_out = (rs_u & (mask << lsb)) >> lsb;
           break;
+        }
         default:
           UNREACHABLE();
       };
@@ -1738,56 +1715,32 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
             case CVT_S_D:  // Convert double to float (single).
               set_fpu_register_float(fd_reg, static_cast<float>(fs));
               break;
-            case CVT_L_D:  // Truncate double to 64-bit long-word.
-              if (mips32r2) {
-                i64 = static_cast<int64_t>(fs);
-                set_fpu_register(fd_reg, i64 & 0xffffffff);
-                set_fpu_register(fd_reg + 1, i64 >> 32);
-              } else {
-                // Not allowed on MIPS32 Release 1
-                UNIMPLEMENTED_MIPS();
-              }
+            case CVT_L_D:  // Mips32r2: Truncate double to 64-bit long-word.
+              i64 = static_cast<int64_t>(fs);
+              set_fpu_register(fd_reg, i64 & 0xffffffff);
+              set_fpu_register(fd_reg + 1, i64 >> 32);
               break;
-            case TRUNC_L_D:
-              if (mips32r2) {
-                i64 = static_cast<int64_t>(fs);
-                set_fpu_register(fd_reg, i64 & 0xffffffff);
-                set_fpu_register(fd_reg + 1, i64 >> 32);
-              } else {
-                // Not allowed on MIPS32 Release 1
-                UNIMPLEMENTED_MIPS();
-              }
+            case TRUNC_L_D:  // Mips32r2 instruction.
+              i64 = static_cast<int64_t>(fs);
+              set_fpu_register(fd_reg, i64 & 0xffffffff);
+              set_fpu_register(fd_reg + 1, i64 >> 32);
               break;
-            case ROUND_L_D:
-              if (mips32r2) {
-                double rounded = fs > 0 ? floor(fs + 0.5) : ceil(fs - 0.5);
-                i64 = static_cast<int64_t>(rounded);
-                set_fpu_register(fd_reg, i64 & 0xffffffff);
-                set_fpu_register(fd_reg + 1, i64 >> 32);
-              } else {
-                // Not allowed on MIPS32 Release 1
-                UNIMPLEMENTED_MIPS();
-              }
+            case ROUND_L_D: {  // Mips32r2 instruction.
+              double rounded = fs > 0 ? floor(fs + 0.5) : ceil(fs - 0.5);
+              i64 = static_cast<int64_t>(rounded);
+              set_fpu_register(fd_reg, i64 & 0xffffffff);
+              set_fpu_register(fd_reg + 1, i64 >> 32);
               break;
-            case FLOOR_L_D:
-              if (mips32r2) {
-                i64 = static_cast<int64_t>(floor(fs));
-                set_fpu_register(fd_reg, i64 & 0xffffffff);
-                set_fpu_register(fd_reg + 1, i64 >> 32);
-              } else {
-                // Not allowed on MIPS32 Release 1
-                UNIMPLEMENTED_MIPS();
-              }
+            }
+            case FLOOR_L_D:  // Mips32r2 instruction.
+              i64 = static_cast<int64_t>(floor(fs));
+              set_fpu_register(fd_reg, i64 & 0xffffffff);
+              set_fpu_register(fd_reg + 1, i64 >> 32);
               break;
-            case CEIL_L_D:
-              if (mips32r2) {
-                i64 = static_cast<int64_t>(ceil(fs));
-                set_fpu_register(fd_reg, i64 & 0xffffffff);
-                set_fpu_register(fd_reg + 1, i64 >> 32);
-              } else {
-                // Not allowed on MIPS32 Release 1
-                UNIMPLEMENTED_MIPS();
-              }
+            case CEIL_L_D:  // Mips32r2 instruction.
+              i64 = static_cast<int64_t>(ceil(fs));
+              set_fpu_register(fd_reg, i64 & 0xffffffff);
+              set_fpu_register(fd_reg + 1, i64 >> 32);
               break;
             case C_F_D:
               UNIMPLEMENTED_MIPS();
@@ -1812,17 +1765,12 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
           break;
         case L:
           switch (instr->FunctionFieldRaw()) {
-          case CVT_D_L:
-            if (mips32r2) {
-              // Watch the signs here, we want 2 32-bit vals
-              // to make a sign-64.
-              i64 = (uint32_t) get_fpu_register(fs_reg);
-              i64 |= ((int64_t) get_fpu_register(fs_reg + 1) << 32);
-              set_fpu_register_double(fd_reg, static_cast<double>(i64));
-            } else {
-              // Not allowed on MIPS32 Release 1
-              UNIMPLEMENTED_MIPS();
-            }
+          case CVT_D_L:  // Mips32r2 instruction.
+            // Watch the signs here, we want 2 32-bit vals
+            // to make a sign-64.
+            i64 = (uint32_t) get_fpu_register(fs_reg);
+            i64 |= ((int64_t) get_fpu_register(fs_reg + 1) << 32);
+            set_fpu_register_double(fd_reg, static_cast<double>(i64));
             break;
             case CVT_S_L:
               UNIMPLEMENTED_MIPS();
@@ -1841,7 +1789,7 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
       switch (instr->FunctionFieldRaw()) {
         case JR: {
           Instruction* branch_delay_instr = reinterpret_cast<Instruction*>(
-              current_pc+Instruction::kInstructionSize);
+              current_pc+Instruction::kInstrSize);
           BranchDelayInstructionDecode(branch_delay_instr);
           set_pc(next_pc);
           pc_modified_ = true;
@@ -1849,9 +1797,9 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
         }
         case JALR: {
           Instruction* branch_delay_instr = reinterpret_cast<Instruction*>(
-              current_pc+Instruction::kInstructionSize);
+              current_pc+Instruction::kInstrSize);
           BranchDelayInstructionDecode(branch_delay_instr);
-          set_register(31, current_pc + 2* Instruction::kInstructionSize);
+          set_register(31, current_pc + 2 * Instruction::kInstrSize);
           set_pc(next_pc);
           pc_modified_ = true;
           break;
@@ -1992,7 +1940,7 @@ void Simulator::DecodeTypeImmediate(Instruction* instr) {
           execute_branch_delay_instruction = true;
           // Set next_pc
           if (do_branch) {
-            next_pc = current_pc + (imm16 << 2) + Instruction::kInstructionSize;
+            next_pc = current_pc + (imm16 << 2) + Instruction::kInstrSize;
           } else {
             next_pc = current_pc + kBranchReturnOffset;
           }
@@ -2028,7 +1976,7 @@ void Simulator::DecodeTypeImmediate(Instruction* instr) {
           execute_branch_delay_instruction = true;
           // Set next_pc
           if (do_branch) {
-            next_pc = current_pc + (imm16 << 2) + Instruction::kInstructionSize;
+            next_pc = current_pc + (imm16 << 2) + Instruction::kInstrSize;
             if (instr->IsLinkingInstruction()) {
               set_register(31, current_pc + kBranchReturnOffset);
             }
@@ -2105,8 +2053,8 @@ void Simulator::DecodeTypeImmediate(Instruction* instr) {
       alu_out = ReadW(addr, instr);
       alu_out <<= byte_shift * 8;
       alu_out |= rt & mask;
-      }
       break;
+    }
     case LW:
       addr = rs + se_imm16;
       alu_out = ReadW(addr, instr);
@@ -2128,8 +2076,8 @@ void Simulator::DecodeTypeImmediate(Instruction* instr) {
       alu_out = ReadW(addr, instr);
       alu_out = static_cast<uint32_t> (alu_out) >> al_offset * 8;
       alu_out |= rt & mask;
-      }
       break;
+    }
     case SB:
       addr = rs + se_imm16;
       break;
@@ -2143,8 +2091,8 @@ void Simulator::DecodeTypeImmediate(Instruction* instr) {
       addr = rs + se_imm16 - al_offset;
       mem_value = ReadW(addr, instr) & mask;
       mem_value |= static_cast<uint32_t>(rt) >> byte_shift * 8;
-      }
       break;
+    }
     case SW:
       addr = rs + se_imm16;
       break;
@@ -2154,8 +2102,8 @@ void Simulator::DecodeTypeImmediate(Instruction* instr) {
       addr = rs + se_imm16 - al_offset;
       mem_value = ReadW(addr, instr);
       mem_value = (rt << al_offset * 8) | (mem_value & mask);
-      }
       break;
+    }
     case LWC1:
       addr = rs + se_imm16;
       alu_out = ReadW(addr, instr);
@@ -2186,12 +2134,12 @@ void Simulator::DecodeTypeImmediate(Instruction* instr) {
       execute_branch_delay_instruction = true;
       // Set next_pc
       if (do_branch) {
-        next_pc = current_pc + (imm16 << 2) + Instruction::kInstructionSize;
+        next_pc = current_pc + (imm16 << 2) + Instruction::kInstrSize;
         if (instr->IsLinkingInstruction()) {
-          set_register(31, current_pc + 2* Instruction::kInstructionSize);
+          set_register(31, current_pc + 2* Instruction::kInstrSize);
         }
       } else {
-        next_pc = current_pc + 2 * Instruction::kInstructionSize;
+        next_pc = current_pc + 2 * Instruction::kInstrSize;
       }
       break;
     // ------------- Arithmetic instructions
@@ -2254,7 +2202,7 @@ void Simulator::DecodeTypeImmediate(Instruction* instr) {
     // We don't check for end_sim_pc. First it should not be met as the current
     // pc is valid. Secondly a jump should always execute its branch delay slot.
     Instruction* branch_delay_instr =
-      reinterpret_cast<Instruction*>(current_pc+Instruction::kInstructionSize);
+      reinterpret_cast<Instruction*>(current_pc+Instruction::kInstrSize);
     BranchDelayInstructionDecode(branch_delay_instr);
   }
 
@@ -2278,13 +2226,13 @@ void Simulator::DecodeTypeJump(Instruction* instr) {
   // We don't check for end_sim_pc. First it should not be met as the current pc
   // is valid. Secondly a jump should always execute its branch delay slot.
   Instruction* branch_delay_instr =
-    reinterpret_cast<Instruction*>(current_pc+Instruction::kInstructionSize);
+      reinterpret_cast<Instruction*>(current_pc + Instruction::kInstrSize);
   BranchDelayInstructionDecode(branch_delay_instr);
 
   // Update pc and ra if necessary.
   // Do this after the branch delay execution.
   if (instr->IsLinkingInstruction()) {
-    set_register(31, current_pc + 2* Instruction::kInstructionSize);
+    set_register(31, current_pc + 2 * Instruction::kInstrSize);
   }
   set_pc(next_pc);
   pc_modified_ = true;
@@ -2302,8 +2250,7 @@ void Simulator::InstructionDecode(Instruction* instr) {
     disasm::Disassembler dasm(converter);
     // use a reasonably large buffer
     v8::internal::EmbeddedVector<char, 256> buffer;
-    dasm.InstructionDecode(buffer,
-                           reinterpret_cast<byte_*>(instr));
+    dasm.InstructionDecode(buffer, reinterpret_cast<byte_*>(instr));
     PrintF("  0x%08x  %s\n", reinterpret_cast<intptr_t>(instr),
         buffer.start());
   }
@@ -2323,7 +2270,7 @@ void Simulator::InstructionDecode(Instruction* instr) {
   }
   if (!pc_modified_) {
     set_register(pc, reinterpret_cast<int32_t>(instr) +
-                 Instruction::kInstructionSize);
+                 Instruction::kInstrSize);
   }
 }
 

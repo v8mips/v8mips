@@ -67,7 +67,7 @@ static const int kNumCalleeSaved = 11;
 
 // Number of registers for which space is reserved in safepoints. Must be a
 // multiple of 8.
-// TODO(regis): Only 8 registers may actually be sufficient. Revisit.
+// TODO(mips): Only 8 registers may actually be sufficient. Revisit.
 static const int kNumSafepointRegisters = 16;
 
 // Define the list of registers actually saved at safepoints.
@@ -106,7 +106,7 @@ class ExitFrameConstants : public AllStatic {
   static const int kCodeOffset = -1 * kPointerSize;
   static const int kSPOffset = -1 * kPointerSize;
 
-  // TODO(regis): Use a patched sp value on the stack instead.
+  // TODO(mips): Use a patched sp value on the stack instead.
   // A marker of 0 indicates that double registers are saved.
   static const int kMarkerOffset = -2 * kPointerSize;
 

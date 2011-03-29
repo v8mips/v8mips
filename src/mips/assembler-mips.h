@@ -168,10 +168,7 @@ Register ToRegister(int num);
 struct FPURegister {
   static const int kNumRegisters = v8::internal::kNumFPURegisters;
   // f0 has been excluded from allocation. This is following ia32
-  // where xmm0 is excluded. This should be revisited.
-  // Currently f0 is used as a scratch register.
-  // f2 has also been excluded from allocation to be used as a scratch
-  // register as well.
+  // where xmm0 is excluded.
   static const int kNumAllocatableRegisters = 15;
 
   static int ToAllocationIndex(FPURegister reg) {
@@ -234,7 +231,7 @@ typedef FPURegister DoubleRegister;
 
 const FPURegister no_creg = { -1 };
 
-const FPURegister f0 = { 0 };  // return value in hard float mode
+const FPURegister f0 = { 0 };  // Return value in hard float mode.
 const FPURegister f1 = { 1 };
 const FPURegister f2 = { 2 };
 const FPURegister f3 = { 3 };
@@ -246,9 +243,9 @@ const FPURegister f8 = { 8 };
 const FPURegister f9 = { 9 };
 const FPURegister f10 = { 10 };
 const FPURegister f11 = { 11 };
-const FPURegister f12 = { 12 };  // arg in hard float mode
+const FPURegister f12 = { 12 };  // Arg 0 in hard float mode.
 const FPURegister f13 = { 13 };
-const FPURegister f14 = { 14 };  // arg in hard float mode
+const FPURegister f14 = { 14 };  // Arg 1 in hard float mode.
 const FPURegister f15 = { 15 };
 const FPURegister f16 = { 16 };
 const FPURegister f17 = { 17 };
@@ -469,7 +466,7 @@ class Assembler : public Malloced {
   static const int kBranchPCOffset = 4;
 
   // Here we are patching the address in the LUI/ORI instruction pair.
-  // These values are used in serialization process and must be zero for
+  // These values are used in the serialization process and must be zero for
   // MIPS platform, as Code, Embedded Object or External-reference pointers
   // are split across two consecutive instructions and don't exist separately
   // in the code, so the serializer should not step forwards in memory after
@@ -960,6 +957,8 @@ class Assembler : public Malloced {
   void GenInstrJump(Opcode opcode,
                      uint32_t address);
 
+  // Helpers.
+  void LoadRegPlusOffsetToAt(const MemOperand& src);
 
   // Labels.
   void print(Label* L);
@@ -971,7 +970,7 @@ class Assembler : public Malloced {
   // - space for trampoline slots,
   // - space for labels.
   //
-  // Space for trampoline slots is equal to slot_count * 2*kInstrSize.
+  // Space for trampoline slots is equal to slot_count * 2 * kInstrSize.
   // Space for trampoline slots preceeds space for labels. Each label is of one
   // instruction size, so total amount for labels is equal to
   // label_count *  kInstrSize.
@@ -981,12 +980,9 @@ class Assembler : public Malloced {
       start_ = start;
       next_slot_ = start;
       free_slot_count_ = slot_count;
-      next_label_ = start + slot_count*2*kInstrSize;
+      next_label_ = start + slot_count * 2 * kInstrSize;
       free_label_count_ = label_count;
-      end_ = next_label_ + (label_count-1)*kInstrSize;
-    }
-    int bound() {
-      return next_slot_;
+      end_ = next_label_ + (label_count - 1) * kInstrSize;
     }
     int start() {
       return start_;
@@ -998,7 +994,7 @@ class Assembler : public Malloced {
       int trampoline_slot = next_slot_;
       ASSERT(free_slot_count_ > 0);
       free_slot_count_--;
-      next_slot_ += 2*kInstrSize;
+      next_slot_ += 2 * kInstrSize;
       return trampoline_slot;
     }
     int take_label() {
@@ -1023,10 +1019,11 @@ class Assembler : public Malloced {
   static const int kSlotsPerTrampoline = 2304;
   static const int kLabelsPerTrampoline = 8;
   static const int kTrampolineInst =
-                                  2*kSlotsPerTrampoline + kLabelsPerTrampoline;
-  static const int kTrampolineSize = kTrampolineInst*kInstrSize;
-  static const int kMaxBranchOffset = (1 << (18-1)) - 1;
-  static const int kMaxDistBetweenPools = kMaxBranchOffset - 2*kTrampolineSize;
+      2 * kSlotsPerTrampoline + kLabelsPerTrampoline;
+  static const int kTrampolineSize = kTrampolineInst * kInstrSize;
+  static const int kMaxBranchOffset = (1 << (18 - 1)) - 1;
+  static const int kMaxDistBetweenPools =
+      kMaxBranchOffset - 2 * kTrampolineSize;
 
   List<Trampoline> trampolines_;
 

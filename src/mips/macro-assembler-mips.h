@@ -231,12 +231,11 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
   }
 
 
-
   // Check if object is in new space.
   // scratch can be object itself, but it will be clobbered.
   void InNewSpace(Register object,
                   Register scratch,
-                  Condition cc,  // eq for new space, ne otherwise
+                  Condition cc,  // eq for new space, ne otherwise.
                   Label* branch);
 
 
@@ -282,7 +281,7 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
   }
 
   // Check if the given instruction is a 'type' marker.
-  // ie. check if is is a sll zero_reg, zero_reg, <type> (referenced as
+  // ie. check if it is a sll zero_reg, zero_reg, <type> (referenced as
   // nop(type)). These instructions are generated to mark special location in
   // the code, like some special IC code.
   static inline bool IsMarkedCode(Instr instr, int type) {
@@ -302,11 +301,8 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
     bool sllzz = (opcode == SLL &&
                   rt == static_cast<uint32_t>(ToNumber(zero_reg)) &&
                   rs == static_cast<uint32_t>(ToNumber(zero_reg)));
-    int type = (sllzz &&
-                FIRST_IC_MARKER <= sa &&
-                sa < LAST_CODE_MARKER)
-                  ? sa
-                  : -1;
+    int type =
+        (sllzz && FIRST_IC_MARKER <= sa && sa < LAST_CODE_MARKER) ? sa : -1;
     ASSERT((type == -1) ||
            ((FIRST_IC_MARKER <= type) && (type < LAST_CODE_MARKER)));
     return type;
@@ -457,7 +453,7 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
   // Push two registers.  Pushes leftmost register first (to highest address).
   void Push(Register src1, Register src2, Condition cond = al) {
     ASSERT(cond == al);  // Do not support conditional versions yet.
-    Addu(sp, sp, Operand(2 * -kPointerSize));
+    Subu(sp, sp, Operand(2 * kPointerSize));
     sw(src1, MemOperand(sp, 1 * kPointerSize));
     sw(src2, MemOperand(sp, 0 * kPointerSize));
   }
@@ -579,7 +575,7 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
   void LeaveExitFrame(bool save_doubles);
 
   // Align the stack by optionally pushing a Smi zero.
-  void AlignStack(int offset);    // TODO(REBASE) : remove this function.
+  void AlignStack(int offset);    // TODO(mips) : remove this function.
 
   // Get the actual activation frame alignment for target environment.
   static int ActivationFrameAlignment();

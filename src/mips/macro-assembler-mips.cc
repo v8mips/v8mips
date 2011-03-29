@@ -36,12 +36,6 @@
 #include "debug.h"
 #include "runtime.h"
 
-#ifdef _MIPS_ARCH_MIPS32R2
-  #define mips32r2 1
-#else
-  #define mips32r2 0
-#endif
-
 namespace v8 {
 namespace internal {
 
@@ -572,13 +566,13 @@ void MacroAssembler::li(Register rd, Operand j, bool gen2instr) {
     // Normal load of an immediate value which does not need Relocation Info.
     if (is_int16(j.imm32_)) {
       addiu(rd, zero_reg, j.imm32_);
-    } else if (!(j.imm32_ & HIMask)) {
+    } else if (!(j.imm32_ & kHiMask)) {
       ori(rd, zero_reg, j.imm32_);
-    } else if (!(j.imm32_ & LOMask)) {
-      lui(rd, (HIMask & j.imm32_) >> 16);
+    } else if (!(j.imm32_ & kImm16Mask)) {
+      lui(rd, (j.imm32_ & kHiMask) >> kLuiShift);
     } else {
-      lui(rd, (HIMask & j.imm32_) >> 16);
-      ori(rd, rd, (LOMask & j.imm32_));
+      lui(rd, (j.imm32_ & kHiMask) >> kLuiShift);
+      ori(rd, rd, (j.imm32_ & kImm16Mask));
     }
   } else if (MustUseReg(j.rmode_) || gen2instr) {
     if (MustUseReg(j.rmode_)) {
@@ -589,15 +583,15 @@ void MacroAssembler::li(Register rd, Operand j, bool gen2instr) {
     if (is_int16(j.imm32_)) {
       nop();
       addiu(rd, zero_reg, j.imm32_);
-    } else if (!(j.imm32_ & HIMask)) {
+    } else if (!(j.imm32_ & kHiMask)) {
       nop();
       ori(rd, zero_reg, j.imm32_);
-    } else if (!(j.imm32_ & LOMask)) {
+    } else if (!(j.imm32_ & kImm16Mask)) {
       nop();
-      lui(rd, (HIMask & j.imm32_) >> 16);
+      lui(rd, (j.imm32_ & kHiMask) >> kLuiShift);
     } else {
-      lui(rd, (HIMask & j.imm32_) >> 16);
-      ori(rd, rd, (LOMask & j.imm32_));
+      lui(rd, (j.imm32_ & kHiMask) >> kLuiShift);
+      ori(rd, rd, (j.imm32_ & kImm16Mask));
     }
   }
 }
@@ -2094,10 +2088,10 @@ void MacroAssembler::AllocateTwoByteString(Register result,
 
   // Set the map, length and hash field.
   InitializeNewString(result,
-                     length,
-                     Heap::kStringMapRootIndex,
-                     scratch1,
-                     scratch2);
+                      length,
+                      Heap::kStringMapRootIndex,
+                      scratch1,
+                      scratch2);
 }
 
 
@@ -2124,10 +2118,10 @@ void MacroAssembler::AllocateAsciiString(Register result,
 
   // Set the map, length and hash field.
   InitializeNewString(result,
-                     length,
-                     Heap::kAsciiStringMapRootIndex,
-                     scratch1,
-                     scratch2);
+                      length,
+                      Heap::kAsciiStringMapRootIndex,
+                      scratch1,
+                      scratch2);
 }
 
 
@@ -2143,10 +2137,10 @@ void MacroAssembler::AllocateTwoByteConsString(Register result,
                      gc_required,
                      TAG_OBJECT);
   InitializeNewString(result,
-                     length,
-                     Heap::kConsStringMapRootIndex,
-                     scratch1,
-                     scratch2);
+                      length,
+                      Heap::kConsStringMapRootIndex,
+                      scratch1,
+                      scratch2);
 }
 
 
@@ -2162,45 +2156,28 @@ void MacroAssembler::AllocateAsciiConsString(Register result,
                      gc_required,
                      TAG_OBJECT);
   InitializeNewString(result,
-                    length,
-                    Heap::kConsAsciiStringMapRootIndex,
-                    scratch1,
-                    scratch2);
+                      length,
+                      Heap::kConsAsciiStringMapRootIndex,
+                      scratch1,
+                      scratch2);
 }
 
 
 // Allocates a heap number or jumps to the label if the young space is full and
 // a scavenge is needed.
 void MacroAssembler::AllocateHeapNumber(Register result,
-                               Register scratch1,
-                               Register scratch2,
-                               Register heap_number_map,
-                               Label* need_gc) {
+                                        Register scratch1,
+                                        Register scratch2,
+                                        Register heap_number_map,
+                                        Label* need_gc) {
   // Allocate an object in the heap for the heap number and tag it as a heap
   // object.
-  // We ask for four more bytes to align it as we need and align the result.
-  // (HeapNumber::kSize is modified to be 4-byte bigger)
   AllocateInNewSpace(HeapNumber::kSize,
-                        result,
-                        scratch1,
-                        scratch2,
-                        need_gc,
-                        TAG_OBJECT);
-
-  // Align to 8 bytes. [Commented out pending code review.]
-  // __ addiu(result, result, 7-1);  // -1 because result is tagged.
-  // __ And(result, result, Operand(~7));
-  // __ Or(result, result, Operand(1));  // Tag it back.
-
-#ifdef DEBUG
-//  // TODO(MIPS.6)
-//  // Check that the result is 8-byte aligned.
-//  andi(scratch2, result, Operand(7));
-//  xori(scratch2, scratch2, Operand(1));  // Fail if the tag is missing.
-//  Check(eq,
-//          "Error in HeapNumber alloc (not 8-byte aligned or tag missing)",
-//          scratch2, Operand(zero_reg));
-#endif
+                     result,
+                     scratch1,
+                     scratch2,
+                     need_gc,
+                     TAG_OBJECT);
 
   // Store heap number map in the allocated object.
   AssertRegisterIsRoot(heap_number_map, Heap::kHeapNumberMapRootIndex);
@@ -2339,7 +2316,6 @@ void MacroAssembler::InvokePrologue(const ParameterCount& expected,
       li(a3, Operand(code_constant));
       addiu(a3, a3, Code::kHeaderSize - kHeapObjectTag);
     }
-
 
     Handle<Code> adaptor =
         Handle<Code>(Builtins::builtin(Builtins::ArgumentsAdaptorTrampoline));
@@ -2490,7 +2466,7 @@ void MacroAssembler::TryGetFunctionPrototype(Register function,
 
   // Get the prototype or initial map from the function.
   lw(result,
-      FieldMemOperand(function, JSFunction::kPrototypeOrInitialMapOffset));
+     FieldMemOperand(function, JSFunction::kPrototypeOrInitialMapOffset));
 
   // If the prototype or initial map is the hole, don't return it and
   // simply miss the cache instead. This will allow us to allocate a
@@ -2965,7 +2941,6 @@ void MacroAssembler::EnterExitFrame(Register hold_argc,
 #ifdef DEBUG
     int frame_alignment = ActivationFrameAlignment();
 #endif
-    // TODO(regis): Use vstrm instruction.
     // The stack alignment code above made sp unaligned, so add space for one
     // more double register and use aligned addresses.
     ASSERT(kDoubleSize == frame_alignment);

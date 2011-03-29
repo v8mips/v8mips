@@ -28,8 +28,6 @@
 #ifndef  V8_MIPS_CONSTANTS_H_
 #define  V8_MIPS_CONSTANTS_H_
 
-#include "checks.h"
-
 // UNIMPLEMENTED_ macro for MIPS.
 #ifdef DEBUG
 #define UNIMPLEMENTED_MIPS()                                                  \
@@ -40,6 +38,13 @@
 #endif
 
 #define UNSUPPORTED_MIPS() v8::internal::PrintF("Unsupported instruction.\n")
+
+
+#ifdef _MIPS_ARCH_MIPS32R2
+  #define mips32r2 1
+#else
+  #define mips32r2 0
+#endif
 
 
 // Defines constants and accessor classes to assemble, disassemble and
@@ -150,6 +155,7 @@ static const int kSaShift       = 6;
 static const int kSaBits        = 5;
 static const int kFunctionShift = 0;
 static const int kFunctionBits  = 6;
+static const int kLuiShift      = 16;
 
 static const int kImm16Shift = 0;
 static const int kImm16Bits  = 16;
@@ -181,9 +187,9 @@ static const int  kSaFieldMask  = ((1 << kSaBits) - 1) << kSaShift;
 static const int  kFunctionFieldMask =
     ((1 << kFunctionBits) - 1) << kFunctionShift;
 // Misc masks.
-static const int  HIMask        =   0xffff << 16;
-static const int  LOMask        =   0xffff;
-static const int  signMask      =   0x80000000;
+static const int  kHiMask       =   0xffff << 16;
+static const int  kLoMask       =   0xffff;
+static const int  kSignMask     =   0x80000000;
 
 
 // ----- MIPS Opcodes and Function Fields.
@@ -508,10 +514,10 @@ const Instr nopInstr = 0;
 class Instruction {
  public:
   enum {
-    kInstructionSize = 4,
-    kInstructionSizeLog2 = 2,
+    kInstrSize = 4,
+    kInstrSizeLog2 = 2,
     // On MIPS PC cannot actually be directly accessed. We behave as if PC was
-    // always the value of the current instruction being exectued.
+    // always the value of the current instruction being executed.
     kPCReadOffset = 0
   };
 
@@ -695,16 +701,16 @@ class Instruction {
 // MIPS assembly various constants.
 
 
-static const int kArgsSlotsSize  = 4 * Instruction::kInstructionSize;
+static const int kArgsSlotsSize  = 4 * Instruction::kInstrSize;
 static const int kArgsSlotsNum   = 4;
 // C/C++ argument slots size.
-static const int kCArgsSlotsSize = 4 * Instruction::kInstructionSize;
+static const int kCArgsSlotsSize = 4 * Instruction::kInstrSize;
 // JS argument slots size.
-static const int kJSArgsSlotsSize = 0 * Instruction::kInstructionSize;
+static const int kJSArgsSlotsSize = 0 * Instruction::kInstrSize;
 // Assembly builtins argument slots size.
-static const int kBArgsSlotsSize = 0 * Instruction::kInstructionSize;
+static const int kBArgsSlotsSize = 0 * Instruction::kInstrSize;
 
-static const int kBranchReturnOffset = 2 * Instruction::kInstructionSize;
+static const int kBranchReturnOffset = 2 * Instruction::kInstrSize;
 
 static const int kDoubleAlignmentBits = 3;
 static const int kDoubleAlignment = (1 << kDoubleAlignmentBits);
