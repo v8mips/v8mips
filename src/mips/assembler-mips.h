@@ -799,7 +799,21 @@ class Assembler : public Malloced {
   static bool IsLwRegFpNegOffset(Instr instr);
   static bool IsSwRegFpNegOffset(Instr instr);
 
-  static Register GetRt(Instr instr);
+  static Register GetRtReg(Instr instr);
+  static Register GetRsReg(Instr instr);
+  static Register GetRdReg(Instr instr);
+
+  static uint32_t GetRt(Instr instr);
+  static uint32_t GetRtField(Instr instr);
+  static uint32_t GetRs(Instr instr);
+  static uint32_t GetRsField(Instr instr);
+  static uint32_t GetRd(Instr instr);
+  static uint32_t GetRdField(Instr instr);
+  static uint32_t GetSa(Instr instr);
+  static uint32_t GetSaField(Instr instr);
+  static uint32_t GetOpcodeField(Instr instr);
+  static uint32_t GetImmediate16(Instr instr);
+  static uint32_t GetLabelConst(Instr instr);
 
   static int32_t GetBranchOffset(Instr instr);
   static bool IsLw(Instr instr);

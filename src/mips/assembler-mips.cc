@@ -313,11 +313,80 @@ void Assembler::CodeTargetAlign() {
 }
 
 
-Register Assembler::GetRt(Instr instr) {
+Register Assembler::GetRtReg(Instr instr) {
   Register rt;
-  rt.code_ = (instr & kRtMask) >> kRtShift;
+  rt.code_ = (instr & kRtFieldMask) >> kRtShift;
   return rt;
 }
+
+
+Register Assembler::GetRsReg(Instr instr) {
+  Register rs;
+  rs.code_ = (instr & kRsFieldMask) >> kRsShift;
+  return rs;
+}
+
+
+Register Assembler::GetRdReg(Instr instr) {
+  Register rd;
+  rd.code_ = (instr & kRdFieldMask) >> kRdShift;
+  return rd;
+}
+
+
+uint32_t Assembler::GetRt(Instr instr) {
+  return (instr & kRtFieldMask) >> kRtShift;
+}
+
+
+uint32_t Assembler::GetRtField(Instr instr) {
+  return instr & kRtFieldMask;
+}
+
+
+uint32_t Assembler::GetRs(Instr instr) {
+  return (instr & kRsFieldMask) >> kRsShift;
+}
+
+
+uint32_t Assembler::GetRsField(Instr instr) {
+  return instr & kRsFieldMask;
+}
+
+
+uint32_t Assembler::GetRd(Instr instr) {
+  return  (instr & kRdFieldMask) >> kRdShift;
+}
+
+
+uint32_t Assembler::GetRdField(Instr instr) {
+  return  instr & kRdFieldMask;
+}
+
+
+uint32_t Assembler::GetSa(Instr instr) {
+  return (instr & kSaFieldMask) >> kSaShift;
+}
+
+
+uint32_t Assembler::GetSaField(Instr instr) {
+  return instr & kSaFieldMask;
+}
+
+
+uint32_t Assembler::GetOpcodeField(Instr instr) {
+  return instr & kOpcodeMask;
+}
+
+
+uint32_t Assembler::GetImmediate16(Instr instr) {
+  return instr & kImm16Mask;
+}
+
+
+uint32_t Assembler::GetLabelConst(Instr instr) {
+  return instr & ~kImm16Mask;
+}  
 
 
 bool Assembler::IsPop(Instr instr) {
@@ -371,10 +440,10 @@ const int kEndOfChain = -4;
 
 
 bool Assembler::IsBranch(Instr instr) {
-  uint32_t opcode   = ((instr & kOpcodeMask));
-  uint32_t rt_field = ((instr & kRtFieldMask));
-  uint32_t rs_field = ((instr & kRsFieldMask));
-  uint32_t label_constant = (instr & ~kImm16Mask);
+  uint32_t opcode   = GetOpcodeField(instr);
+  uint32_t rt_field = GetRtField(instr);
+  uint32_t rs_field = GetRsField(instr);
+  uint32_t label_constant = GetLabelConst(instr);
   // Checks if the instruction is a branch.
   return opcode == BEQ ||
       opcode == BNE ||
@@ -394,10 +463,10 @@ bool Assembler::IsBranch(Instr instr) {
 bool Assembler::IsNop(Instr instr, unsigned int type) {
   // See Assembler::nop(type).
   ASSERT(type < 32);
-  uint32_t opcode = ((instr & kOpcodeMask));
-  uint32_t rt = ((instr & kRtFieldMask) >> kRtShift);
-  uint32_t rs = ((instr & kRsFieldMask) >> kRsShift);
-  uint32_t sa = ((instr & kSaFieldMask) >> kSaShift);
+  uint32_t opcode = GetOpcodeField(instr);
+  uint32_t rt = GetRt(instr);
+  uint32_t rs = GetRs(instr);
+  uint32_t sa = GetSa(instr);
 
   // nop(type) == sll(zero_reg, zero_reg, type);
   // Technically all these values will be 0 but
@@ -1037,8 +1106,8 @@ void Assembler::addiu(Register rd, Register rs, int32_t j) {
         // we delete both the push & pop and insert a register move.
         // push ry, pop rx --> mov rx, ry.
         Register reg_pushed, reg_popped;
-        reg_pushed = GetRt(push_instr);
-        reg_popped = GetRt(pop_instr);
+        reg_pushed = GetRtReg(push_instr);
+        reg_popped = GetRtReg(pop_instr);
         pc_ -= 4 * kInstrSize;
         // Insert a mov instruction, which is better than a pair of push & pop.
         or_(reg_popped, reg_pushed, zero_reg);
@@ -1121,14 +1190,14 @@ void Assembler::addiu(Register rd, Register rs, int32_t j) {
 
           Register reg_pushed, reg_popped;
           if ((mem_read_instr & kRtMask) == (lw_instr & kRtMask)) {
-            reg_pushed = GetRt(mem_write_instr);
-            reg_popped = GetRt(mem_read_instr);
+            reg_pushed = GetRtReg(mem_write_instr);
+            reg_popped = GetRtReg(mem_read_instr);
             pc_ -= 5 * kInstrSize;
             or_(reg_popped, reg_pushed, zero_reg);  // Move instruction.
           } else if ((mem_write_instr & kRtMask)
                                 != (lw_instr & kRtMask)) {
-            reg_pushed = GetRt(mem_write_instr);
-            reg_popped = GetRt(mem_read_instr);
+            reg_pushed = GetRtReg(mem_write_instr);
+            reg_popped = GetRtReg(mem_read_instr);
             pc_ -= 5 * kInstrSize;
             emit(lw_instr);
             or_(reg_popped, reg_pushed, zero_reg);  // Move instruction.
@@ -1136,8 +1205,8 @@ void Assembler::addiu(Register rd, Register rs, int32_t j) {
                                      != (lw_instr & kRtMask)) ||
                     ((mem_write_instr & kRtMask)
                                      == (lw_instr & kRtMask)) ) {
-            reg_pushed = GetRt(mem_write_instr);
-            reg_popped = GetRt(mem_read_instr);
+            reg_pushed = GetRtReg(mem_write_instr);
+            reg_popped = GetRtReg(mem_read_instr);
             pc_ -= 5 * kInstrSize;
             or_(reg_popped, reg_pushed, zero_reg);  // Move instruction.
             emit(lw_instr);
@@ -1373,8 +1442,8 @@ void Assembler::lw(Register rd, const MemOperand& rs) {
         // mov ry, rx
 
         Register reg_stored, reg_loaded;
-        reg_stored = GetRt(sw_instr);
-        reg_loaded = GetRt(lw_instr);
+        reg_stored = GetRtReg(sw_instr);
+        reg_loaded = GetRtReg(lw_instr);
         pc_ -= 1 * kInstrSize;
         // Insert a mov instruction, which is better than lw.
         or_(reg_loaded, reg_stored, zero_reg);  // Move instruction.
@@ -2035,23 +2104,23 @@ Address Assembler::target_address_at(Address pc) {
   Instr instr1 = instr_at(pc);
   Instr instr2 = instr_at(pc + kInstrSize);
   // Check we have 2 instructions generated by li.
-  ASSERT(((instr1 & kOpcodeMask) == LUI && (instr2 & kOpcodeMask) == ORI) ||
-         ((instr1 == nopInstr) && ((instr2 & kOpcodeMask) == ADDI ||
-                            (instr2 & kOpcodeMask) == ORI ||
-                            (instr2 & kOpcodeMask) == LUI)));
+  ASSERT((GetOpcodeField(instr1) == LUI && GetOpcodeField(instr2) == ORI) ||
+         ((instr1 == nopInstr) && (GetOpcodeField(instr2) == ADDI ||
+                            GetOpcodeField(instr2) == ORI ||
+                            GetOpcodeField(instr2) == LUI)));
   // Interpret these 2 instructions.
   if (instr1 == nopInstr) {
-    if ((instr2 & kOpcodeMask) == ADDI) {
-      return reinterpret_cast<Address>(((instr2 & kImm16Mask) << 16) >> 16);
-    } else if ((instr2 & kOpcodeMask) == ORI) {
-      return reinterpret_cast<Address>(instr2 & kImm16Mask);
-    } else if ((instr2 & kOpcodeMask) == LUI) {
-      return reinterpret_cast<Address>((instr2 & kImm16Mask) << 16);
+    if (GetOpcodeField(instr2) == ADDI) {
+      return reinterpret_cast<Address>((GetImmediate16(instr2) << 16) >> 16);
+    } else if (GetOpcodeField(instr2) == ORI) {
+      return reinterpret_cast<Address>(GetImmediate16(instr2));
+    } else if (GetOpcodeField(instr2) == LUI) {
+      return reinterpret_cast<Address>(GetImmediate16(instr2) << 16);
     }
-  } else if ((instr1 & kOpcodeMask) == LUI && (instr2 & kOpcodeMask) == ORI) {
+  } else if ((GetOpcodeField(instr1) == LUI) && (GetOpcodeField(instr2) == ORI)) {
     // 32 bit value.
     return reinterpret_cast<Address>(
-        (instr1 & kImm16Mask) << 16 | (instr2 & kImm16Mask));
+        (GetImmediate16(instr1) << 16) | GetImmediate16(instr2));
   }
 
   // We should never get here.
@@ -2072,7 +2141,7 @@ void Assembler::set_target_address_at(Address pc, Address target) {
   CHECK((GetOpcodeField(instr1) == LUI && GetOpcodeField(instr2) == ORI));
 #endif
 
-  uint32_t rt_code = (instr2 & kRtFieldMask);
+  uint32_t rt_code = GetRtField(instr2);
   uint32_t* p = reinterpret_cast<uint32_t*>(pc);
   uint32_t itarget = reinterpret_cast<uint32_t>(target);
 
