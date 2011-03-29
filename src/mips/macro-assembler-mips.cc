@@ -2585,35 +2585,19 @@ void MacroAssembler::ObjectToDoubleFPURegister(Register object,
   }
   // Check for heap number and load double value from it.
   lw(scratch1, FieldMemOperand(object, HeapObject::kMapOffset));
-  Subu(scratch2, object, Operand(kHeapObjectTag));
   Branch(not_number, ne, scratch1, Operand(heap_number_map));
 
   if ((flags & AVOID_NANS_AND_INFINITIES) != 0) {
     // If exponent is all ones the number is either a NaN or +/-Infinity.
-    lw(scratch1, FieldMemOperand(object, HeapNumber::kExponentOffset));
-    {
-      // Signed bitfield extraction, based on ARM's Sbfx macro.
-      // We cannot use the ext instruction, because it doesn't sign-extend.
-      int lsb = HeapNumber::kExponentShift;
-      int width = HeapNumber::kExponentBits;
-      Register dst = scratch1;
-      Register src = scratch1;
+    Register exponent = scratch1;
+    Register mask_reg = scratch2;
+    lw(exponent, FieldMemOperand(object, HeapNumber::kExponentOffset));
+    li(mask_reg, HeapNumber::kExponentMask);
 
-      int mask = (1 << (width + lsb)) - 1 - ((1 << lsb) - 1);
-      And(dst, src, mask);
-      int shift_up = 32 - lsb - width;
-      int shift_down = lsb + shift_up;
-      if (shift_up != 0) {
-        sll(dst, dst, shift_up);
-      }
-      if (shift_down != 0) {
-        sra(dst, dst, shift_down);
-      }
-    }
-    // All-one value sign extend to -1.
-    Branch(not_number, eq, scratch1, Operand(-1));
+    And(exponent, exponent, mask_reg);
+    Branch(not_number, eq, exponent, Operand(mask_reg));
   }
-  ldc1(result, MemOperand(scratch2, HeapNumber::kValueOffset));
+  ldc1(result, FieldMemOperand(object, HeapNumber::kValueOffset));
   bind(&done);
 }
 
