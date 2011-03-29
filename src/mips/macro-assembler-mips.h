@@ -761,8 +761,8 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
 
   // Before calling a C-function from generated code, align arguments on stack
   // and add space for the four mips argument slots.
-  // After aligning the frame, non-register arguments must be stored in
-  // sp[kCFuncArg_5], sp[kCFuncArg_6], etc., not pushed.
+  // After aligning the frame, non-register arguments must be stored on the
+  // stack, after the argument-slots using helper: CFunctionArgumentOperand().
   // The argument count assumes all arguments are word sized.
   // Some compilers/platforms require the stack to be aligned when calling
   // C++ code.
@@ -771,16 +771,8 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
   void PrepareCallCFunction(int num_arguments, Register scratch);
 
   // Arguments 1-4 are placed in registers a0 thru a3 respectively.
-  // Arguments 5..n are stored to stack using following constants:
-  //  sw(t0, MemOperand(sp, MacroAssembler::kCFuncArg_5));
-  static const int kCFuncArg_5 =
-      (0 * kPointerSize + StandardFrameConstants::kCArgsSlotsSize);
-  static const int kCFuncArg_6 =
-      (1 * kPointerSize + StandardFrameConstants::kCArgsSlotsSize);
-  static const int kCFuncArg_7 =
-      (2 * kPointerSize + StandardFrameConstants::kCArgsSlotsSize);
-  static const int kCFuncArg_8 =
-      (3 * kPointerSize + StandardFrameConstants::kCArgsSlotsSize);
+  // Arguments 5..n are stored to stack using following:
+  //  sw(t0, CFunctionArgumentOperand(5));
 
   // Calls a C function and cleans up the space for arguments allocated
   // by PrepareCallCFunction. The called function is not allowed to trigger a
@@ -1062,6 +1054,16 @@ static inline MemOperand FieldMemOperand(Register object, int offset) {
   return MemOperand(object, offset - kHeapObjectTag);
 }
 
+
+// Generate a MemOperand for storing arguments 5..N on the stack
+// when calling CallCFunction().
+static inline MemOperand CFunctionArgumentOperand(int index) {
+  ASSERT(index > StandardFrameConstants::kCArgSlotCount);
+  // Argument 5 takes the slot just past the four Arg-slots.
+  int offset =
+      (index - 5) * kPointerSize + StandardFrameConstants::kCArgsSlotsSize;
+  return MemOperand(sp, offset);
+}
 
 
 #ifdef GENERATED_CODE_COVERAGE

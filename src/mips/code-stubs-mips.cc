@@ -4410,9 +4410,9 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
   __ PrepareCallCFunction(kRegExpExecuteArguments, a0);
 
   // Argument 7: Indicate that this is a direct call from JavaScript.
-  // kCFuncArg_N take MIPS stack argument slots into account.
+  // CFunctionArgumentOperand handles MIPS stack argument slots.
   __ li(a0, Operand(1));
-  __ sw(a0, MemOperand(sp, MacroAssembler::kCFuncArg_7));
+  __ sw(a0, CFunctionArgumentOperand(7));
 
   // Argument 6: Start (high end) of backtracking stack memory area.
   __ li(a0, Operand(address_of_regexp_stack_memory_address));
@@ -4420,11 +4420,11 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
   __ li(a2, Operand(address_of_regexp_stack_memory_size));
   __ lw(a2, MemOperand(a2, 0));
   __ addu(a0, a0, a2);
-  __ sw(a0, MemOperand(sp, MacroAssembler::kCFuncArg_6));
+  __ sw(a0, CFunctionArgumentOperand(6));
 
   // Argument 5: static offsets vector buffer.
   __ li(a0, Operand(ExternalReference::address_of_static_offsets_vector()));
-  __ sw(a0, MemOperand(sp, MacroAssembler::kCFuncArg_5));
+  __ sw(a0, CFunctionArgumentOperand(5));
 
   // For arguments 4 and 3 get string length, calculate start of string data and
   // calculate the shift of the index (0 for ASCII and 1 for two byte).
