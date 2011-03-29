@@ -395,11 +395,7 @@ void VirtualFrame::CallCodeObject(Handle<Code> code,
   switch (code->kind()) {
     case Code::CALL_IC:
     case Code::KEYED_CALL_IC:
-      break;
-
     case Code::FUNCTION:
-      UNIMPLEMENTED_MIPS();
-      __ break_(__LINE__);
       break;
 
     case Code::KEYED_LOAD_IC:
