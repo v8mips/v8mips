@@ -3907,7 +3907,7 @@ void JSEntryStub::GenerateBody(MacroAssembler* masm, bool is_construct) {
 
   // Call JSEntryTrampoline.
   __ addiu(t9, t9, Code::kHeaderSize - kHeapObjectTag);
-  __ CallBuiltin(t9);
+  __ Call(t9);
 
   // Unlink this frame from the handler chain. When reading the
   // address of the next handler, there is no need to use the address

@@ -685,13 +685,6 @@ void DropAndRet(int drop = 0,
                 Label* fail,
                 bool is_heap_object);
 
-  void CallBuiltin(ExternalReference builtin_entry);
-  void CallBuiltin(Register target);
-  void CallBuiltin(Handle<Code> code, RelocInfo::Mode rmode);
-  void JumpToBuiltin(ExternalReference builtin_entry);
-  void JumpToBuiltin(Register target);
-  void JumpToBuiltin(Handle<Code> code, RelocInfo::Mode rmode);
-
   // Generates code for reporting that an illegal operation has
   // occurred.
   void IllegalOperation(int num_arguments);

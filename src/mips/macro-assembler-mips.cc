@@ -2350,14 +2350,15 @@ void MacroAssembler::InvokePrologue(const ParameterCount& expected,
       addiu(a3, a3, Code::kHeaderSize - kHeapObjectTag);
     }
 
-    ExternalReference adaptor(Builtins::ArgumentsAdaptorTrampoline);
+
+    Handle<Code> adaptor =
+        Handle<Code>(Builtins::builtin(Builtins::ArgumentsAdaptorTrampoline));
     if (flag == CALL_FUNCTION) {
-      CallBuiltin(adaptor);
+      Call(adaptor, RelocInfo::CODE_TARGET);
       if (post_call_generator != NULL) post_call_generator->Generate();
       jmp(done);
     } else {
-      JumpToBuiltin(adaptor);
-      // break_(__LINE__);
+      Jump(adaptor, RelocInfo::CODE_TARGET);
     }
     bind(&regular_invoke);
   }
@@ -2531,69 +2532,6 @@ void MacroAssembler::GetObjectType(Register object,
                                    Register type_reg) {
   lw(map, FieldMemOperand(object, HeapObject::kMapOffset));
   lbu(type_reg, FieldMemOperand(map, Map::kInstanceTypeOffset));
-}
-
-
-void MacroAssembler::CallBuiltin(ExternalReference builtin_entry) {
-  // Load builtin address.
-  LoadExternalReference(t9, builtin_entry);
-  lw(t9, MemOperand(t9));  // Deref address.
-  addiu(t9, t9, Code::kHeaderSize - kHeapObjectTag);
-  // Call and allocate arguments slots.
-  jalr(t9);
-  // Use the branch delay slot to allocated argument slots.
-  addiu(sp, sp, -StandardFrameConstants::kBArgsSlotsSize);
-  addiu(sp, sp, StandardFrameConstants::kBArgsSlotsSize);
-}
-
-
-void MacroAssembler::CallBuiltin(Register target) {
-  // Target already holds target address.
-  // Call and allocate arguments slots.
-  jalr(target);
-  // Use the branch delay slot to allocated argument slots.
-  addiu(sp, sp, -StandardFrameConstants::kBArgsSlotsSize);
-  addiu(sp, sp, StandardFrameConstants::kBArgsSlotsSize);
-}
-
-
-void MacroAssembler::CallBuiltin(Handle<Code> code, RelocInfo::Mode rmode) {
-  ASSERT(RelocInfo::IsCodeTarget(rmode));
-  // Jump but do not protect the branch delay slot.
-  Call(false, code, rmode);
-  // Use the branch delay slot to allocated argument slots.
-  addiu(sp, sp, -StandardFrameConstants::kBArgsSlotsSize);
-  addiu(sp, sp, StandardFrameConstants::kBArgsSlotsSize);
-}
-
-
-void MacroAssembler::JumpToBuiltin(ExternalReference builtin_entry) {
-  // Load builtin address.
-  LoadExternalReference(t9, builtin_entry);
-  lw(t9, MemOperand(t9));  // Deref address.
-  addiu(t9, t9, Code::kHeaderSize - kHeapObjectTag);
-  // Call and allocate arguments slots.
-  jr(t9);
-  // Use the branch delay slot to allocated argument slots.
-  addiu(sp, sp, -StandardFrameConstants::kBArgsSlotsSize);
-}
-
-
-void MacroAssembler::JumpToBuiltin(Register target) {
-  // t9 already holds target address.
-  // Call and allocate arguments slots.
-  jr(t9);
-  // Use the branch delay slot to allocated argument slots.
-  addiu(sp, sp, -StandardFrameConstants::kBArgsSlotsSize);
-}
-
-
-void MacroAssembler::JumpToBuiltin(Handle<Code> code, RelocInfo::Mode rmode) {
-  ASSERT(RelocInfo::IsCodeTarget(rmode));
-  // Jump but do not protect the branch delay slot.
-  Jump(false, code, rmode);
-  // Use the branch delay slot to allocated argument slots.
-  addiu(sp, sp, -StandardFrameConstants::kBArgsSlotsSize);
 }
 
 

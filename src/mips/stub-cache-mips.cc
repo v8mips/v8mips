@@ -509,7 +509,7 @@ void StubCompiler::GenerateLoadMiss(MacroAssembler* masm, Code::Kind kind) {
   }
 
   Handle<Code> ic(code);
-  __ JumpToBuiltin(ic, RelocInfo::CODE_TARGET);
+  __ Jump(ic, RelocInfo::CODE_TARGET);
 }
 
 
@@ -2513,7 +2513,7 @@ MaybeObject* StoreStubCompiler::CompileStoreField(JSObject* object,
   __ bind(&miss);
   __ li(a2, Operand(Handle<String>(name)));  // Restore name.
   Handle<Code> ic(Builtins::builtin(Builtins::StoreIC_Miss));
-  __ JumpToBuiltin(ic, RelocInfo::CODE_TARGET);
+  __ Jump(ic, RelocInfo::CODE_TARGET);
 
   // Return the generated code.
   return GetCode(transition == NULL ? FIELD : MAP_TRANSITION, name);
@@ -2647,7 +2647,7 @@ MaybeObject* StoreStubCompiler::CompileStoreGlobal(GlobalObject* object,
   __ bind(&miss);
   __ IncrementCounter(&Counters::named_store_global_inline_miss, 1, a1, a3);
   Handle<Code> ic(Builtins::builtin(Builtins::StoreIC_Miss));
-  __ JumpToBuiltin(ic, RelocInfo::CODE_TARGET);
+  __ Jump(ic, RelocInfo::CODE_TARGET);
 
   // Return the generated code.
   return GetCode(NORMAL, name);
@@ -3084,7 +3084,7 @@ MaybeObject* KeyedStoreStubCompiler::CompileStoreField(JSObject* object,
 
   __ DecrementCounter(&Counters::keyed_store_field, 1, a3, t0);
   Handle<Code> ic(Builtins::builtin(Builtins::KeyedStoreIC_Miss));
-  __ JumpToBuiltin(ic, RelocInfo::CODE_TARGET);
+  __ Jump(ic, RelocInfo::CODE_TARGET);
 
   // Return the generated code.
   return GetCode(transition == NULL ? FIELD : MAP_TRANSITION, name);
@@ -3297,7 +3297,7 @@ MaybeObject* ConstructStubCompiler::CompileConstructStub(JSFunction* function) {
   __ bind(&generic_stub_call);
   Code* code = Builtins::builtin(Builtins::JSConstructStubGeneric);
   Handle<Code> generic_construct_stub(code);
-  __ JumpToBuiltin(generic_construct_stub, RelocInfo::CODE_TARGET);
+  __ Jump(generic_construct_stub, RelocInfo::CODE_TARGET);
 
   // Return the generated code.
   return GetCode();

@@ -640,9 +640,7 @@ void Builtins::Generate_JSConstructCall(MacroAssembler* masm) {
   // Set expected number of arguments to zero (not changing a0).
   __ mov(a2, zero_reg);
   __ GetBuiltinEntry(a3, Builtins::CALL_NON_FUNCTION_AS_CONSTRUCTOR);
-  // ra-dev: Already inside builtin, so don't need args slots?
-  // __ break_(__LINE__);
-  __ JumpToBuiltin(Handle<Code>(builtin(ArgumentsAdaptorTrampoline)),
+  __ Jump(Handle<Code>(builtin(ArgumentsAdaptorTrampoline)),
           RelocInfo::CODE_TARGET);
 }
 
@@ -1093,7 +1091,7 @@ static void Generate_JSEntryTrampolineHelper(MacroAssembler* masm,
   // Invoke the code and pass argc as a0.
   __ mov(a0, a3);
   if (is_construct) {
-    __ CallBuiltin(Handle<Code>(Builtins::builtin(Builtins::JSConstructCall)),
+    __ Call(Handle<Code>(Builtins::builtin(Builtins::JSConstructCall)),
             RelocInfo::CODE_TARGET);
   } else {
     ParameterCount actual(a0);
