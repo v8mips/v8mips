@@ -847,6 +847,10 @@ class Assembler : public Malloced {
     return trampoline_pool_blocked_nesting_ > 0;
   }
 
+  bool has_exception() const {
+    return internal_trampoline_exception_;
+  }
+
  private:
   // Code buffer:
   // The buffer into which code and relocation info are generated.
@@ -991,10 +995,18 @@ class Assembler : public Malloced {
       return end_;
     }
     int take_slot() {
-      int trampoline_slot = next_slot_;
-      ASSERT(free_slot_count_ > 0);
-      free_slot_count_--;
-      next_slot_ += 2 * kInstrSize;
+      int trampoline_slot = kInvalidSlotPos;
+      if (free_slot_count_ <= 0) {
+        // We have run out of space on trampolines.
+        // Make sure we fail in debug mode, so we become aware of each case
+        // when this happens.
+        ASSERT(0);
+        // Internal exception will be caught.
+      } else {
+        trampoline_slot = next_slot_;
+        free_slot_count_--;
+        next_slot_ += 2*kInstrSize;
+      }
       return trampoline_slot;
     }
     int take_label() {
@@ -1024,8 +1036,10 @@ class Assembler : public Malloced {
   static const int kMaxBranchOffset = (1 << (18 - 1)) - 1;
   static const int kMaxDistBetweenPools =
       kMaxBranchOffset - 2 * kTrampolineSize;
+  static const int kInvalidSlotPos = -1;
 
   List<Trampoline> trampolines_;
+  bool internal_trampoline_exception_;
 
   friend class RegExpMacroAssemblerMIPS;
   friend class RelocInfo;

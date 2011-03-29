@@ -238,6 +238,7 @@ class RegExpMacroAssemblerMIPS: public NativeRegExpMacroAssembler {
   Label exit_label_;
   Label check_preempt_label_;
   Label stack_overflow_label_;
+  Label internal_failure_label_;
 };
 
 #endif  // V8_INTERPRETED_REGEXP

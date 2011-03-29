@@ -273,6 +273,7 @@ Assembler::Assembler(void* buffer, int buffer_size)
   no_trampoline_pool_before_ = 0;
   trampoline_pool_blocked_nesting_ = 0;
   next_buffer_check_ = kMaxBranchOffset - kTrampolineSize;
+  internal_trampoline_exception_ = false;
 }
 
 
@@ -542,6 +543,10 @@ void Assembler::bind_to(Label* L, int pos) {
     if (dist > kMaxBranchOffset) {
       do {
         int32_t trampoline_pos = get_trampoline_entry(fixup_pos);
+        if (kInvalidSlotPos == trampoline_pos) {
+          // Internal error.
+          return;
+        }
         ASSERT((trampoline_pos - fixup_pos) <= kMaxBranchOffset);
         target_at_put(fixup_pos, trampoline_pos);
         fixup_pos = trampoline_pos;
@@ -550,6 +555,10 @@ void Assembler::bind_to(Label* L, int pos) {
     } else if (dist < -kMaxBranchOffset) {
       do {
         int32_t trampoline_pos = get_trampoline_entry(fixup_pos, false);
+        if (kInvalidSlotPos == trampoline_pos) {
+          // Internal error.
+          return;
+        }
         ASSERT((trampoline_pos - fixup_pos) >= -kMaxBranchOffset);
         target_at_put(fixup_pos, trampoline_pos);
         fixup_pos = trampoline_pos;
@@ -756,24 +765,30 @@ int32_t Assembler::get_label_entry(int32_t pos, bool next_pool) {
 // Returns the next free trampoline entry from the next trampoline pool.
 int32_t Assembler::get_trampoline_entry(int32_t pos, bool next_pool) {
   int trampoline_count = trampolines_.length();
-  int32_t trampoline_entry = 0;
+  int32_t trampoline_entry = kInvalidSlotPos;
   ASSERT(trampoline_count > 0);
 
-  if (next_pool) {
-    for (int i = 0; i < trampoline_count; i++) {
-      if (trampolines_[i].start() > pos) {
-       trampoline_entry = trampolines_[i].take_slot();
-       break;
+  if (!internal_trampoline_exception_) {
+    if (next_pool) {
+      for (int i = 0; i < trampoline_count; i++) {
+        if (trampolines_[i].start() > pos) {
+         trampoline_entry = trampolines_[i].take_slot();
+         break;
+        }
+      }
+    } else {  //  Caller needs a trampoline entry from the previous pool.
+      for (int i = trampoline_count-1; i >= 0; i--) {
+        if (trampolines_[i].end() < pos) {
+         trampoline_entry = trampolines_[i].take_slot();
+         break;
+        }
       }
     }
-  } else {  // Caller needs a trampoline entry from the previous pool.
-    for (int i = trampoline_count-1; i >= 0; i--) {
-      if (trampolines_[i].end() < pos) {
-       trampoline_entry = trampolines_[i].take_slot();
-       break;
-      }
+    if (kInvalidSlotPos == trampoline_entry) {
+      internal_trampoline_exception_ = true;
     }
   }
+
   return trampoline_entry;
 }
 
@@ -788,6 +803,10 @@ int32_t Assembler::branch_offset(Label* L, bool jump_elimination_allowed) {
     if (dist > kMaxBranchOffset) {
       do {
         int32_t trampoline_pos = get_trampoline_entry(target_pos);
+        if (kInvalidSlotPos == trampoline_pos) {
+          // Internal error.
+          return 0;
+        }
         ASSERT((trampoline_pos - target_pos) > 0);
         ASSERT((trampoline_pos - target_pos) <= kMaxBranchOffset);
         target_at_put(trampoline_pos, target_pos);
@@ -797,6 +816,10 @@ int32_t Assembler::branch_offset(Label* L, bool jump_elimination_allowed) {
     } else if (dist < -kMaxBranchOffset) {
       do {
         int32_t trampoline_pos = get_trampoline_entry(target_pos, false);
+        if (kInvalidSlotPos == trampoline_pos) {
+          // Internal error.
+          return 0;
+        }
         ASSERT((target_pos - trampoline_pos) > 0);
         ASSERT((target_pos - trampoline_pos) <= kMaxBranchOffset);
         target_at_put(trampoline_pos, target_pos);
