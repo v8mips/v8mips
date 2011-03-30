@@ -835,6 +835,18 @@ js1_5/Regress/regress-451322: SKIP
 # BUG(1040): Allow this test to timeout.
 js1_5/GC/regress-203278-2: PASS || TIMEOUT
 
+[ $arch == mips && $mode == debug ]
+
+# The following tests make sure we fail gracefully in the presence of
+# absurdly long regexp, and we do in release mode. But we raise
+# assertion fail in debug mode, so skip them.
+
+ecma_3/Statements/regress-74474-003: SKIP
+ecma_3/Statements/regress-74474-002: SKIP
+ecma_3/Statements/regress-444979: SKIP
+js1_5/Regress/regress-280769: SKIP
+js1_5/Regress/regress-280769-4: SKIP
+js1_5/Regress/regress-280769-2: SKIP
 
 [ $fast == yes && $arch == arm ]
 
