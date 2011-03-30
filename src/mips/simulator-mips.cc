@@ -67,12 +67,12 @@ uint32_t get_fcsr_condition_bit(uint32_t cc) {
 // Library does not provide vsscanf.
 #define SScanF sscanf  // NOLINT
 
-// The Debugger class is used by the simulator while debugging simulated MIPS
-// code.
-class Debugger {
+// The MipsDebugger class is used by the simulator while debugging simulated
+// MIPS code.
+class MipsDebugger {
  public:
-  explicit Debugger(Simulator* sim);
-  ~Debugger();
+  explicit MipsDebugger(Simulator* sim);
+  ~MipsDebugger();
 
   void Stop(Instruction* instr);
   void Debug();
@@ -104,12 +104,12 @@ class Debugger {
   void RedoBreakpoints();
 };
 
-Debugger::Debugger(Simulator* sim) {
+MipsDebugger::MipsDebugger(Simulator* sim) {
   sim_ = sim;
 }
 
 
-Debugger::~Debugger() {
+MipsDebugger::~MipsDebugger() {
 }
 
 
@@ -125,7 +125,7 @@ static void InitializeCoverage() {
 }
 
 
-void Debugger::Stop(Instruction* instr) {
+void MipsDebugger::Stop(Instruction* instr) {
   UNIMPLEMENTED_MIPS();
   char* str = reinterpret_cast<char*>(instr->InstructionBits());
   if (strlen(str) > 0) {
@@ -146,7 +146,7 @@ void Debugger::Stop(Instruction* instr) {
 static void InitializeCoverage() {}
 
 
-void Debugger::Stop(Instruction* instr) {
+void MipsDebugger::Stop(Instruction* instr) {
   const char* str = reinterpret_cast<char*>(instr->InstructionBits());
   PrintF("Simulator hit %s\n", str);
   sim_->set_pc(sim_->get_pc() + Instruction::kInstrSize);
@@ -155,7 +155,7 @@ void Debugger::Stop(Instruction* instr) {
 #endif  // GENERATED_CODE_COVERAGE
 
 
-int32_t Debugger::GetRegisterValue(int regnum) {
+int32_t MipsDebugger::GetRegisterValue(int regnum) {
   if (regnum == kNumSimuRegisters) {
     return sim_->get_pc();
   } else {
@@ -164,7 +164,7 @@ int32_t Debugger::GetRegisterValue(int regnum) {
 }
 
 
-int32_t Debugger::GetFPURegisterValueInt(int regnum) {
+int32_t MipsDebugger::GetFPURegisterValueInt(int regnum) {
   if (regnum == kNumFPURegisters) {
     return sim_->get_pc();
   } else {
@@ -173,7 +173,7 @@ int32_t Debugger::GetFPURegisterValueInt(int regnum) {
 }
 
 
-int64_t Debugger::GetFPURegisterValueLong(int regnum) {
+int64_t MipsDebugger::GetFPURegisterValueLong(int regnum) {
   if (regnum == kNumFPURegisters) {
     return sim_->get_pc();
   } else {
@@ -182,7 +182,7 @@ int64_t Debugger::GetFPURegisterValueLong(int regnum) {
 }
 
 
-float Debugger::GetFPURegisterValueFloat(int regnum) {
+float MipsDebugger::GetFPURegisterValueFloat(int regnum) {
   if (regnum == kNumFPURegisters) {
     return sim_->get_pc();
   } else {
@@ -191,7 +191,7 @@ float Debugger::GetFPURegisterValueFloat(int regnum) {
 }
 
 
-double Debugger::GetFPURegisterValueDouble(int regnum) {
+double MipsDebugger::GetFPURegisterValueDouble(int regnum) {
   if (regnum == kNumFPURegisters) {
     return sim_->get_pc();
   } else {
@@ -200,7 +200,7 @@ double Debugger::GetFPURegisterValueDouble(int regnum) {
 }
 
 
-bool Debugger::GetValue(const char* desc, int32_t* value) {
+bool MipsDebugger::GetValue(const char* desc, int32_t* value) {
   int regnum = Registers::Number(desc);
   int fpuregnum = FPURegisters::Number(desc);
 
@@ -219,7 +219,7 @@ bool Debugger::GetValue(const char* desc, int32_t* value) {
 }
 
 
-bool Debugger::SetBreakpoint(Instruction* breakpc) {
+bool MipsDebugger::SetBreakpoint(Instruction* breakpc) {
   // Check if a breakpoint can be set. If not return without any side-effects.
   if (sim_->break_pc_ != NULL) {
     return false;
@@ -234,7 +234,7 @@ bool Debugger::SetBreakpoint(Instruction* breakpc) {
 }
 
 
-bool Debugger::DeleteBreakpoint(Instruction* breakpc) {
+bool MipsDebugger::DeleteBreakpoint(Instruction* breakpc) {
   if (sim_->break_pc_ != NULL) {
     sim_->break_pc_->SetInstructionBits(sim_->break_instr_);
   }
@@ -245,21 +245,21 @@ bool Debugger::DeleteBreakpoint(Instruction* breakpc) {
 }
 
 
-void Debugger::UndoBreakpoints() {
+void MipsDebugger::UndoBreakpoints() {
   if (sim_->break_pc_ != NULL) {
     sim_->break_pc_->SetInstructionBits(sim_->break_instr_);
   }
 }
 
 
-void Debugger::RedoBreakpoints() {
+void MipsDebugger::RedoBreakpoints() {
   if (sim_->break_pc_ != NULL) {
     sim_->break_pc_->SetInstructionBits(kBreakpointInstr);
   }
 }
 
 
-void Debugger::PrintAllRegs() {
+void MipsDebugger::PrintAllRegs() {
 #define REG_INFO(n) Registers::Name(n), GetRegisterValue(n), GetRegisterValue(n)
 
   PrintF("\n");
@@ -298,7 +298,7 @@ void Debugger::PrintAllRegs() {
 }
 
 
-void Debugger::PrintAllRegsIncludingFPU() {
+void MipsDebugger::PrintAllRegsIncludingFPU() {
 #define FPU_REG_INFO(n) FPURegisters::Name(n), FPURegisters::Name(n+1), \
         GetFPURegisterValueInt(n+1), \
         GetFPURegisterValueInt(n), \
@@ -330,7 +330,7 @@ void Debugger::PrintAllRegsIncludingFPU() {
 }
 
 
-void Debugger::Debug() {
+void MipsDebugger::Debug() {
   intptr_t last_pc = -1;
   bool done = false;
 
@@ -664,7 +664,9 @@ static bool AllOnOnePage(uintptr_t start, int size) {
 }
 
 
-void Simulator::FlushICache(void* start_addr, size_t size) {
+void Simulator::FlushICache(v8::internal::HashMap* i_cache,
+                            void* start_addr,
+                            size_t size) {
   intptr_t start = reinterpret_cast<intptr_t>(start_addr);
   int intra_line = (start & CachePage::kLineMask);
   start -= intra_line;
@@ -673,22 +675,22 @@ void Simulator::FlushICache(void* start_addr, size_t size) {
   int offset = (start & CachePage::kPageMask);
   while (!AllOnOnePage(start, size - 1)) {
     int bytes_to_flush = CachePage::kPageSize - offset;
-    FlushOnePage(start, bytes_to_flush);
+    FlushOnePage(i_cache, start, bytes_to_flush);
     start += bytes_to_flush;
     size -= bytes_to_flush;
     ASSERT_EQ(0, start & CachePage::kPageMask);
     offset = 0;
   }
   if (size != 0) {
-    FlushOnePage(start, size);
+    FlushOnePage(i_cache, start, size);
   }
 }
 
 
-CachePage* Simulator::GetCachePage(void* page) {
-  v8::internal::HashMap::Entry* entry = i_cache_->Lookup(page,
-                                                         ICacheHash(page),
-                                                         true);
+CachePage* Simulator::GetCachePage(v8::internal::HashMap* i_cache, void* page) {
+  v8::internal::HashMap::Entry* entry = i_cache->Lookup(page,
+                                                        ICacheHash(page),
+                                                        true);
   if (entry->value == NULL) {
     CachePage* new_page = new CachePage();
     entry->value = new_page;
@@ -698,25 +700,28 @@ CachePage* Simulator::GetCachePage(void* page) {
 
 
 // Flush from start up to and not including start + size.
-void Simulator::FlushOnePage(intptr_t start, int size) {
+void Simulator::FlushOnePage(v8::internal::HashMap* i_cache,
+                             intptr_t start,
+                             int size) {
   ASSERT(size <= CachePage::kPageSize);
   ASSERT(AllOnOnePage(start, size - 1));
   ASSERT((start & CachePage::kLineMask) == 0);
   ASSERT((size & CachePage::kLineMask) == 0);
   void* page = reinterpret_cast<void*>(start & (~CachePage::kPageMask));
   int offset = (start & CachePage::kPageMask);
-  CachePage* cache_page = GetCachePage(page);
+  CachePage* cache_page = GetCachePage(i_cache, page);
   char* valid_bytemap = cache_page->ValidityByte(offset);
   memset(valid_bytemap, CachePage::LINE_INVALID, size >> CachePage::kLineShift);
 }
 
 
-void Simulator::CheckICache(Instruction* instr) {
+void Simulator::CheckICache(v8::internal::HashMap* i_cache,
+                            Instruction* instr) {
   intptr_t address = reinterpret_cast<intptr_t>(instr);
   void* page = reinterpret_cast<void*>(address & (~CachePage::kPageMask));
   void* line = reinterpret_cast<void*>(address & (~CachePage::kLineMask));
   int offset = (address & CachePage::kPageMask);
-  CachePage* cache_page = GetCachePage(page);
+  CachePage* cache_page = GetCachePage(i_cache, page);
   char* cache_valid_byte = cache_page->ValidityByte(offset);
   bool cache_hit = (*cache_valid_byte == CachePage::LINE_VALID);
   char* cached_line = cache_page->CachedData(offset & ~CachePage::kLineMask);
@@ -732,27 +737,18 @@ void Simulator::CheckICache(Instruction* instr) {
   }
 }
 
-
-// Create one simulator per thread and keep it in thread local storage.
-static v8::internal::Thread::LocalStorageKey simulator_key;
-
-
-bool Simulator::initialized_ = false;
-
-
 void Simulator::Initialize() {
-  if (initialized_) return;
-  simulator_key = v8::internal::Thread::CreateThreadLocalKey();
-  initialized_ = true;
+  if (Isolate::Current()->simulator_initialized()) return;
+  Isolate::Current()->set_simulator_initialized(true);
   ::v8::internal::ExternalReference::set_redirector(&RedirectExternalReference);
 }
 
 
-v8::internal::HashMap* Simulator::i_cache_ = NULL;
-
-Simulator::Simulator() {
+Simulator::Simulator() : isolate_(Isolate::Current()) {
+  i_cache_ = isolate_->simulator_i_cache();
   if (i_cache_ == NULL) {
     i_cache_ = new v8::internal::HashMap(&ICacheMatch);
+    isolate_->set_simulator_i_cache(i_cache_);
   }
   Initialize();
   // Setup simulator support first. Some of this information is needed to
@@ -802,11 +798,14 @@ class Redirection {
       : external_function_(external_function),
         swi_instruction_(rtCallRedirInstr),
         type_(type),
-        next_(list_) {
-    Simulator::current()->
-        FlushICache(reinterpret_cast<void*>(&swi_instruction_),
+        next_(NULL) {
+    Isolate* isolate = Isolate::Current();
+    next_ = isolate->simulator_redirection();
+    Simulator::current(isolate)->
+        FlushICache(isolate->simulator_i_cache(),
+                    reinterpret_cast<void*>(&swi_instruction_),
                     Instruction::kInstrSize);
-    list_ = this;
+    isolate->set_simulator_redirection(this);
   }
 
   void* address_of_swi_instruction() {
@@ -818,8 +817,9 @@ class Redirection {
 
   static Redirection* Get(void* external_function,
                           ExternalReference::Type type) {
-    Redirection* current;
-    for (current = list_; current != NULL; current = current->next_) {
+    Isolate* isolate = Isolate::Current();
+    Redirection* current = isolate->simulator_redirection();
+    for (; current != NULL; current = current->next_) {
       if (current->external_function_ == external_function) return current;
     }
     return new Redirection(external_function, type);
@@ -837,11 +837,7 @@ class Redirection {
   uint32_t swi_instruction_;
   ExternalReference::Type type_;
   Redirection* next_;
-  static Redirection* list_;
 };
-
-
-Redirection* Redirection::list_ = NULL;
 
 
 void* Simulator::RedirectExternalReference(void* external_function,
@@ -852,14 +848,20 @@ void* Simulator::RedirectExternalReference(void* external_function,
 
 
 // Get the active Simulator for the current thread.
-Simulator* Simulator::current() {
-  Initialize();
-  Simulator* sim = reinterpret_cast<Simulator*>(
-      v8::internal::Thread::GetThreadLocal(simulator_key));
+Simulator* Simulator::current(Isolate* isolate) {
+  v8::internal::Isolate::PerIsolateThreadData* isolate_data =
+      Isolate::CurrentPerIsolateThreadData();
+  if (isolate_data == NULL) {
+    Isolate::EnterDefaultIsolate();
+    isolate_data = Isolate::CurrentPerIsolateThreadData();
+  }
+  ASSERT(isolate_data != NULL);
+
+  Simulator* sim = isolate_data->simulator();
   if (sim == NULL) {
-    // TODO(146): delete the simulator object when a thread goes away.
+    // TODO(146): delete the simulator object when a thread/isolate goes away.
     sim = new Simulator();
-    v8::internal::Thread::SetThreadLocal(simulator_key, sim);
+    isolate_data->set_simulator(sim);
   }
   return sim;
 }
@@ -992,7 +994,7 @@ int32_t Simulator::get_pc() const {
 int Simulator::ReadW(int32_t addr, Instruction* instr) {
   if (addr >=0 && addr < 0x400) {
     // this has to be a NULL-dereference
-    Debugger dbg(this);
+    MipsDebugger dbg(this);
     dbg.Debug();
   }
   if ((addr & kPointerAlignmentMask) == 0) {
@@ -1002,7 +1004,7 @@ int Simulator::ReadW(int32_t addr, Instruction* instr) {
   PrintF("Unaligned read at 0x%08x, pc=0x%08" V8PRIxPTR "\n",
          addr,
          reinterpret_cast<intptr_t>(instr));
-  Debugger dbg(this);
+  MipsDebugger dbg(this);
   dbg.Debug();
   return 0;
 }
@@ -1011,7 +1013,7 @@ int Simulator::ReadW(int32_t addr, Instruction* instr) {
 void Simulator::WriteW(int32_t addr, int value, Instruction* instr) {
   if (addr >= 0 && addr < 0x400) {
     // this has to be a NULL-dereference
-    Debugger dbg(this);
+    MipsDebugger dbg(this);
     dbg.Debug();
   }
   if ((addr & kPointerAlignmentMask) == 0) {
@@ -1022,7 +1024,7 @@ void Simulator::WriteW(int32_t addr, int value, Instruction* instr) {
   PrintF("Unaligned write at 0x%08x, pc=0x%08" V8PRIxPTR "\n",
          addr,
          reinterpret_cast<intptr_t>(instr));
-  Debugger dbg(this);
+  MipsDebugger dbg(this);
   dbg.Debug();
 }
 
@@ -1155,7 +1157,8 @@ typedef int64_t (*SimulatorRuntimeCall)(int32_t arg0,
                                         int32_t arg1,
                                         int32_t arg2,
                                         int32_t arg3,
-                                        int32_t arg4);
+                                        int32_t arg4,
+                                        int32_t arg5);
 typedef double (*SimulatorRuntimeFPCall)(int32_t arg0,
                                          int32_t arg1,
                                          int32_t arg2,
@@ -1182,15 +1185,18 @@ void Simulator::SoftwareInterrupt(Instruction* instr) {
     int32_t arg2 = get_register(a2);
     int32_t arg3 = get_register(a3);
     int32_t arg4 = 0;
+    int32_t arg5 = 0;
 
-    // We try to make arg4 = *sp, but need to check if sp is valid first.
+    // We need to check if sp is valid before dereferencing it.
     // This is basically a fix for cctest test-api/CatchStackOverflow which
-    // causes the stack to overflow. For some reason arm doesn't need this
+    // causes the stack to overflow. For some reason ARM doesn't need this
     // stack check here.
     int32_t* stack_pointer = reinterpret_cast<int32_t*>(get_register(sp));
     int32_t* stack = reinterpret_cast<int32_t*>(stack_);
-    if (stack_pointer >= stack && stack_pointer < stack + stack_size_) {
-      arg4 = *stack_pointer;
+    if (stack_pointer >= stack && stack_pointer < stack + stack_size_ - 5) {
+      // Args 4 and 5 are on the stack after the reserved space for args 0..3.
+      arg4 = stack_pointer[4];
+      arg5 = stack_pointer[5];
     }
     // This is dodgy but it works because the C entry stubs are never moved.
     // See comment in codegen-arm.cc and bug 1242173.
@@ -1242,15 +1248,17 @@ void Simulator::SoftwareInterrupt(Instruction* instr) {
                   reinterpret_cast<SimulatorRuntimeCall>(external);
       if (::v8::internal::FLAG_trace_sim) {
         PrintF(
-            "Call to host function at %p args %08x, %08x, %08x, %08x, %0xc\n",
+            "Call to host function at %p "
+            "args %08x, %08x, %08x, %08x, %08x, %08x\n",
             FUNCTION_ADDR(target),
             arg0,
             arg1,
             arg2,
             arg3,
-            arg4);
+            arg4,
+            arg5);
       }
-      int64_t result = target(arg0, arg1, arg2, arg3, arg4);
+      int64_t result = target(arg0, arg1, arg2, arg3, arg4, arg5);
       set_register(v0, static_cast<int32_t>(result));
       set_register(v1, static_cast<int32_t>(result >> 32));
     }
@@ -1262,7 +1270,7 @@ void Simulator::SoftwareInterrupt(Instruction* instr) {
 
   } else if (func == BREAK && code >= 0 && code < 16) {
     // First 16 break_ codes interpreted as debug markers.
-    Debugger dbg(this);
+    MipsDebugger dbg(this);
     ++break_count_;
     PrintF("\n---- break %d marker: %3d  (instr count: %8d) ----------"
            "----------------------------------",
@@ -1270,7 +1278,7 @@ void Simulator::SoftwareInterrupt(Instruction* instr) {
     dbg.PrintAllRegs();  // Print registers and continue running.
   } else {
     // All remaining break_ codes, and all traps are handled here.
-    Debugger dbg(this);
+    MipsDebugger dbg(this);
     dbg.Debug();
   }
 }
@@ -2242,7 +2250,7 @@ void Simulator::DecodeTypeJump(Instruction* instr) {
 // Executes the current instruction.
 void Simulator::InstructionDecode(Instruction* instr) {
   if (v8::internal::FLAG_check_icache) {
-    CheckICache(instr);
+    CheckICache(isolate_->simulator_i_cache(), instr);
   }
   pc_modified_ = false;
   if (::v8::internal::FLAG_trace_sim) {
@@ -2296,7 +2304,7 @@ void Simulator::Execute() {
       Instruction* instr = reinterpret_cast<Instruction*>(program_counter);
       icount_++;
       if (icount_ == ::v8::internal::FLAG_stop_sim_at) {
-        Debugger dbg(this);
+        MipsDebugger dbg(this);
         dbg.Debug();
       } else {
         InstructionDecode(instr);

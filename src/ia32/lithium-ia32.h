@@ -70,6 +70,7 @@ class LCodeGen;
   V(CheckFunction)                              \
   V(CheckInstanceType)                          \
   V(CheckMap)                                   \
+  V(CheckNonSmi)                                \
   V(CheckPrototypeMaps)                         \
   V(CheckSmi)                                   \
   V(ClassOfTest)                                \
@@ -123,9 +124,10 @@ class LCodeGen;
   V(LoadGlobal)                                 \
   V(LoadKeyedFastElement)                       \
   V(LoadKeyedGeneric)                           \
+  V(LoadKeyedSpecializedArrayElement)           \
   V(LoadNamedField)                             \
+  V(LoadNamedFieldPolymorphic)                  \
   V(LoadNamedGeneric)                           \
-  V(LoadPixelArrayElement)                      \
   V(ModI)                                       \
   V(MulI)                                       \
   V(NumberTagD)                                 \
@@ -147,15 +149,16 @@ class LCodeGen;
   V(StoreGlobal)                                \
   V(StoreKeyedFastElement)                      \
   V(StoreKeyedGeneric)                          \
+  V(StoreKeyedSpecializedArrayElement)          \
   V(StoreNamedField)                            \
   V(StoreNamedGeneric)                          \
-  V(StorePixelArrayElement)                     \
   V(StringCharCodeAt)                           \
   V(StringCharFromCode)                         \
   V(StringLength)                               \
   V(SubI)                                       \
   V(TaggedToI)                                  \
   V(Throw)                                      \
+  V(ToFastProperties)                           \
   V(Typeof)                                     \
   V(TypeofIs)                                   \
   V(TypeofIsAndBranch)                          \
@@ -1169,6 +1172,21 @@ class LLoadNamedField: public LTemplateInstruction<1, 1, 0> {
 
   DECLARE_CONCRETE_INSTRUCTION(LoadNamedField, "load-named-field")
   DECLARE_HYDROGEN_ACCESSOR(LoadNamedField)
+
+  LOperand* object() { return inputs_[0]; }
+};
+
+
+class LLoadNamedFieldPolymorphic: public LTemplateInstruction<1, 1, 0> {
+ public:
+  explicit LLoadNamedFieldPolymorphic(LOperand* object) {
+    inputs_[0] = object;
+  }
+
+  DECLARE_CONCRETE_INSTRUCTION(LoadNamedField, "load-named-field-polymorphic")
+  DECLARE_HYDROGEN_ACCESSOR(LoadNamedFieldPolymorphic)
+
+  LOperand* object() { return inputs_[0]; }
 };
 
 
@@ -1238,19 +1256,23 @@ class LLoadKeyedFastElement: public LTemplateInstruction<1, 2, 0> {
 };
 
 
-class LLoadPixelArrayElement: public LTemplateInstruction<1, 2, 0> {
+class LLoadKeyedSpecializedArrayElement: public LTemplateInstruction<1, 2, 0> {
  public:
-  LLoadPixelArrayElement(LOperand* external_pointer, LOperand* key) {
+  LLoadKeyedSpecializedArrayElement(LOperand* external_pointer,
+                                    LOperand* key) {
     inputs_[0] = external_pointer;
     inputs_[1] = key;
   }
 
-  DECLARE_CONCRETE_INSTRUCTION(LoadPixelArrayElement,
-                               "load-pixel-array-element")
-  DECLARE_HYDROGEN_ACCESSOR(LoadPixelArrayElement)
+  DECLARE_CONCRETE_INSTRUCTION(LoadKeyedSpecializedArrayElement,
+                               "load-keyed-specialized-array-element")
+  DECLARE_HYDROGEN_ACCESSOR(LoadKeyedSpecializedArrayElement)
 
   LOperand* external_pointer() { return inputs_[0]; }
   LOperand* key() { return inputs_[1]; }
+  ExternalArrayType array_type() const {
+    return hydrogen()->array_type();
+  }
 };
 
 
@@ -1490,7 +1512,7 @@ class LCallRuntime: public LTemplateInstruction<1, 0, 0> {
   DECLARE_CONCRETE_INSTRUCTION(CallRuntime, "call-runtime")
   DECLARE_HYDROGEN_ACCESSOR(CallRuntime)
 
-  Runtime::Function* function() const { return hydrogen()->function(); }
+  const Runtime::Function* function() const { return hydrogen()->function(); }
   int arity() const { return hydrogen()->argument_count(); }
 };
 
@@ -1656,25 +1678,28 @@ class LStoreKeyedFastElement: public LTemplateInstruction<0, 3, 0> {
 };
 
 
-class LStorePixelArrayElement: public LTemplateInstruction<0, 3, 1> {
+class LStoreKeyedSpecializedArrayElement: public LTemplateInstruction<0, 3, 1> {
  public:
-  LStorePixelArrayElement(LOperand* external_pointer,
-                          LOperand* key,
-                          LOperand* val,
-                          LOperand* clamped) {
+  LStoreKeyedSpecializedArrayElement(LOperand* external_pointer,
+                                     LOperand* key,
+                                     LOperand* val,
+                                     LOperand* temp) {
     inputs_[0] = external_pointer;
     inputs_[1] = key;
     inputs_[2] = val;
-    temps_[0] = clamped;
+    temps_[0] = temp;
   }
 
-  DECLARE_CONCRETE_INSTRUCTION(StorePixelArrayElement,
-                               "store-pixel-array-element")
-  DECLARE_HYDROGEN_ACCESSOR(StorePixelArrayElement)
+  DECLARE_CONCRETE_INSTRUCTION(StoreKeyedSpecializedArrayElement,
+                               "store-keyed-specialized-array-element")
+  DECLARE_HYDROGEN_ACCESSOR(StoreKeyedSpecializedArrayElement)
 
   LOperand* external_pointer() { return inputs_[0]; }
   LOperand* key() { return inputs_[1]; }
   LOperand* value() { return inputs_[2]; }
+  ExternalArrayType array_type() const {
+    return hydrogen()->array_type();
+  }
 };
 
 
@@ -1792,20 +1817,21 @@ class LCheckPrototypeMaps: public LTemplateInstruction<0, 0, 1> {
 
 class LCheckSmi: public LTemplateInstruction<0, 1, 0> {
  public:
-  LCheckSmi(LOperand* value, Condition condition)
-      : condition_(condition) {
+  explicit LCheckSmi(LOperand* value) {
     inputs_[0] = value;
   }
 
-  Condition condition() const { return condition_; }
+  DECLARE_CONCRETE_INSTRUCTION(CheckSmi, "check-smi")
+};
 
-  virtual void CompileToNative(LCodeGen* generator);
-  virtual const char* Mnemonic() const {
-    return (condition_ == zero) ? "check-non-smi" : "check-smi";
+
+class LCheckNonSmi: public LTemplateInstruction<0, 1, 0> {
+ public:
+  explicit LCheckNonSmi(LOperand* value) {
+    inputs_[0] = value;
   }
 
- private:
-  Condition condition_;
+  DECLARE_CONCRETE_INSTRUCTION(CheckNonSmi, "check-non-smi")
 };
 
 
@@ -1842,6 +1868,17 @@ class LFunctionLiteral: public LTemplateInstruction<1, 0, 0> {
   DECLARE_HYDROGEN_ACCESSOR(FunctionLiteral)
 
   Handle<SharedFunctionInfo> shared_info() { return hydrogen()->shared_info(); }
+};
+
+
+class LToFastProperties: public LTemplateInstruction<1, 1, 0> {
+ public:
+  explicit LToFastProperties(LOperand* value) {
+    inputs_[0] = value;
+  }
+
+  DECLARE_CONCRETE_INSTRUCTION(ToFastProperties, "to-fast-properties")
+  DECLARE_HYDROGEN_ACCESSOR(ToFastProperties)
 };
 
 

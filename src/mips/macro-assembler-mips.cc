@@ -43,7 +43,7 @@ MacroAssembler::MacroAssembler(void* buffer, int size)
     : Assembler(buffer, size),
       generating_stub_(false),
       allow_stub_calls_(true),
-      code_object_(Heap::undefined_value()) {
+      code_object_(HEAP->undefined_value()) {
 }
 
 
@@ -196,8 +196,11 @@ void MacroAssembler::InNewSpace(Register object,
                                 Condition cc,
                                 Label* branch) {
   ASSERT(cc == eq || cc == ne);
-  And(scratch, object, Operand(ExternalReference::new_space_mask()));
-  Branch(branch, cc, scratch, Operand(ExternalReference::new_space_start()));
+  And(scratch, object, Operand(ExternalReference::new_space_mask(isolate())));
+  Branch(branch,
+         cc,
+         scratch,
+         Operand(ExternalReference::new_space_start(isolate())));
 }
 
 
@@ -838,7 +841,7 @@ void MacroAssembler::ConvertToInt32(Register source,
   Subu(scratch2, scratch2, Operand(zero_exponent));
   // Dest already has a Smi zero.
   Branch(&done, lt, scratch2, Operand(zero_reg));
-  if (!CpuFeatures::IsSupported(FPU)) {
+  if (!Isolate::Current()->cpu_features()->IsSupported(FPU)) {
     // We have a shifted exponent between 0 and 30 in scratch2.
     srl(dest, scratch2, HeapNumber::kExponentShift);
     // We now have the exponent in dest.  Subtract from 30 to get
@@ -847,7 +850,7 @@ void MacroAssembler::ConvertToInt32(Register source,
     subu(dest, at, dest);
   }
   bind(&right_exponent);
-  if (CpuFeatures::IsSupported(FPU)) {
+  if (Isolate::Current()->cpu_features()->IsSupported(FPU)) {
     CpuFeatures::Scope scope(FPU);
     // MIPS FPU instructions implementing double precision to integer
     // conversion using round to zero. Since the FP value was qualified
@@ -1807,7 +1810,7 @@ void MacroAssembler::Move(Register dst, Register src) {
 void MacroAssembler::DebugBreak() {
   ASSERT(allow_stub_calls());
   mov(a0, zero_reg);
-  li(a1, Operand(ExternalReference(Runtime::kDebugBreak)));
+  li(a1, Operand(ExternalReference(Runtime::kDebugBreak, isolate())));
   CEntryStub ces(1);
   Call(ces.GetCode(), RelocInfo::DEBUG_BREAK);
 }
@@ -1834,7 +1837,8 @@ void MacroAssembler::PushTryHandler(CodeLocation try_location,
            && StackHandlerConstants::kPCOffset == 3 * kPointerSize
            && StackHandlerConstants::kNextOffset == 0 * kPointerSize);
     // Save the current handler as the next handler.
-    LoadExternalReference(t2, ExternalReference(Top::k_handler_address));
+    LoadExternalReference(t2, ExternalReference(Isolate::k_handler_address,
+                                                isolate()));
     lw(t1, MemOperand(t2));
 
     addiu(sp, sp, -StackHandlerConstants::kSize);
@@ -1860,7 +1864,8 @@ void MacroAssembler::PushTryHandler(CodeLocation try_location,
     li(t0, Operand(StackHandler::ENTRY));
 
     // Save the current handler as the next handler.
-    LoadExternalReference(t2, ExternalReference(Top::k_handler_address));
+    LoadExternalReference(t2, ExternalReference(Isolate::k_handler_address,
+                                                isolate()));
     lw(t1, MemOperand(t2));
 
     addiu(sp, sp, -StackHandlerConstants::kSize);
@@ -1879,7 +1884,8 @@ void MacroAssembler::PopTryHandler() {
   ASSERT_EQ(0, StackHandlerConstants::kNextOffset);
   pop(a1);
   Addu(sp, sp, Operand(StackHandlerConstants::kSize - kPointerSize));
-  li(at, Operand(ExternalReference(Top::k_handler_address)));
+  li(at, Operand(ExternalReference(Isolate::k_handler_address,
+                                   isolate())));
   sw(a1, MemOperand(at));
 }
 
@@ -1918,9 +1924,9 @@ void MacroAssembler::AllocateInNewSpace(int object_size,
   // ARM adds additional checks to make sure the ldm instruction can be
   // used. On MIPS we don't have ldm so we don't need additional checks either.
   ExternalReference new_space_allocation_top =
-      ExternalReference::new_space_allocation_top_address();
+      ExternalReference::new_space_allocation_top_address(isolate());
   ExternalReference new_space_allocation_limit =
-      ExternalReference::new_space_allocation_limit_address();
+      ExternalReference::new_space_allocation_limit_address(isolate());
   intptr_t top   =
       reinterpret_cast<intptr_t>(new_space_allocation_top.address());
   intptr_t limit =
@@ -1989,9 +1995,9 @@ void MacroAssembler::AllocateInNewSpace(Register object_size,
   // ARM adds additional checks to make sure the ldm instruction can be
   // used. On MIPS we don't have ldm so we don't need additional checks either.
   ExternalReference new_space_allocation_top =
-      ExternalReference::new_space_allocation_top_address();
+      ExternalReference::new_space_allocation_top_address(isolate());
   ExternalReference new_space_allocation_limit =
-      ExternalReference::new_space_allocation_limit_address();
+      ExternalReference::new_space_allocation_limit_address(isolate());
   intptr_t top   =
       reinterpret_cast<intptr_t>(new_space_allocation_top.address());
   intptr_t limit =
@@ -2047,7 +2053,7 @@ void MacroAssembler::AllocateInNewSpace(Register object_size,
 void MacroAssembler::UndoAllocationInNewSpace(Register object,
                                               Register scratch) {
   ExternalReference new_space_allocation_top =
-      ExternalReference::new_space_allocation_top_address();
+      ExternalReference::new_space_allocation_top_address(isolate());
 
   // Make sure the object has no tag before resetting top.
   And(object, object, Operand(~kHeapObjectTagMask));
@@ -2318,7 +2324,7 @@ void MacroAssembler::InvokePrologue(const ParameterCount& expected,
     }
 
     Handle<Code> adaptor =
-        Handle<Code>(Builtins::builtin(Builtins::ArgumentsAdaptorTrampoline));
+        isolate()->builtins()->ArgumentsAdaptorTrampoline();
     if (flag == CALL_FUNCTION) {
       Call(adaptor, RelocInfo::CODE_TARGET);
       if (post_call_generator != NULL) post_call_generator->Generate();
@@ -2587,7 +2593,8 @@ void MacroAssembler::SmiToDoubleFPURegister(Register smi,
 }
 
 
-void MacroAssembler::CallRuntime(Runtime::Function* f, int num_arguments) {
+void MacroAssembler::CallRuntime(const Runtime::Function* f,
+                                 int num_arguments) {
   // All parameters are on the stack. v0 has the return value after call.
 
   // If the expected number of arguments of the runtime function is
@@ -2603,16 +2610,16 @@ void MacroAssembler::CallRuntime(Runtime::Function* f, int num_arguments) {
   // should remove this need and make the runtime routine entry code
   // smarter.
   li(a0, num_arguments);
-  LoadExternalReference(a1, ExternalReference(f));
+  LoadExternalReference(a1, ExternalReference(f, isolate()));
   CEntryStub stub(1);
   CallStub(&stub);
 }
 
 
 void MacroAssembler::CallRuntimeSaveDoubles(Runtime::FunctionId id) {
-  Runtime::Function* function = Runtime::FunctionForId(id);
+  const Runtime::Function* function = Runtime::FunctionForId(id);
   li(a0, Operand(function->nargs));
-  li(a1, Operand(ExternalReference(function)));
+  li(a1, Operand(ExternalReference(function, isolate())));
   CEntryStub stub(1);
   stub.SaveDoubles();
   CallStub(&stub);
@@ -2649,7 +2656,9 @@ void MacroAssembler::TailCallExternalReference(const ExternalReference& ext,
 void MacroAssembler::TailCallRuntime(Runtime::FunctionId fid,
                                      int num_arguments,
                                      int result_size) {
-  TailCallExternalReference(ExternalReference(fid), num_arguments, result_size);
+  TailCallExternalReference(ExternalReference(fid, isolate()),
+                            num_arguments,
+                            result_size);
 }
 
 
@@ -2927,9 +2936,11 @@ void MacroAssembler::EnterExitFrame(Register hold_argc,
   Push(t8);  // Accessed from ExitFrame::code_slot.
 
   // Save the frame pointer and the context in top.
-  LoadExternalReference(t8, ExternalReference(Top::k_c_entry_fp_address));
+  LoadExternalReference(t8, ExternalReference(Isolate::k_c_entry_fp_address,
+                                              isolate()));
   sw(fp, MemOperand(t8));
-  LoadExternalReference(t8, ExternalReference(Top::k_context_address));
+  LoadExternalReference(t8, ExternalReference(Isolate::k_context_address,
+                                              isolate()));
   sw(cp, MemOperand(t8));
 
   // Setup argc and the builtin function in callee-saved registers.
@@ -2977,11 +2988,13 @@ void MacroAssembler::LeaveExitFrame(bool save_doubles) {
   }
 
   // Clear top frame.
-  LoadExternalReference(t8, ExternalReference(Top::k_c_entry_fp_address));
+  LoadExternalReference(t8, ExternalReference(Isolate::k_c_entry_fp_address,
+                                              isolate()));
   sw(zero_reg, MemOperand(t8));
 
   // Restore current context from top and clear it in debug mode.
-  LoadExternalReference(t8, ExternalReference(Top::k_context_address));
+  LoadExternalReference(t8, ExternalReference(Isolate::k_context_address,
+                                              isolate()));
   lw(cp, MemOperand(t8));
 #ifdef DEBUG
   sw(a3, MemOperand(t8));
@@ -3208,15 +3221,22 @@ void MacroAssembler::JumpIfInstanceTypeIsNotSequentialAscii(Register type,
 }
 
 
+static const int kRegisterPassedArguments = 4;
+
 void MacroAssembler::PrepareCallCFunction(int num_arguments, Register scratch) {
   int frame_alignment = ActivationFrameAlignment();
+
+  // Reserve space for Isolate address which is always passed as last parameter
+  num_arguments += 1;
+
   // Up to four simple arguments are passed in registers a0..a3.
   // Those four arguments must have reserved argument slots on the stack for
   // mips, even though those argument slots are not normally used.
   // Remaining arguments are pushed on the stack, above (higher address than)
   // the argument slots.
   ASSERT(StandardFrameConstants::kCArgsSlotsSize % kPointerSize == 0);
-  int stack_passed_arguments = ((num_arguments <= 4) ? 0 : num_arguments - 4) +
+  int stack_passed_arguments = ((num_arguments <= kRegisterPassedArguments) ?
+                               0 : num_arguments - kRegisterPassedArguments) +
                                StandardFrameConstants::kCArgsSlotsSize /
                                kPointerSize;
   if (frame_alignment > kPointerSize) {
@@ -3235,12 +3255,37 @@ void MacroAssembler::PrepareCallCFunction(int num_arguments, Register scratch) {
 
 void MacroAssembler::CallCFunction(ExternalReference function,
                                    int num_arguments) {
-  li(t9, Operand(function));
-  CallCFunction(t9, num_arguments);
+  CallCFunctionHelper(no_reg, function, t8, num_arguments);
 }
 
 
-void MacroAssembler::CallCFunction(Register function, int num_arguments) {
+void MacroAssembler::CallCFunction(Register function,
+                                   Register scratch,
+                                   int num_arguments) {
+  CallCFunctionHelper(function,
+                      ExternalReference::the_hole_value_location(isolate()),
+                      scratch,
+                      num_arguments);
+}
+
+
+
+void MacroAssembler::CallCFunctionHelper(Register function,
+                                         ExternalReference function_reference,
+                                         Register scratch,
+                                         int num_arguments) {
+  // Push Isolate address as the last argument.
+  if (num_arguments < kRegisterPassedArguments) {
+    Register arg_to_reg[] = {a0, a1, a2, a3};
+    Register r = arg_to_reg[num_arguments];
+    li(r, Operand(ExternalReference::isolate_address()));
+  } else {
+    // Push Isolate address on the stack after the arguments.
+    li(scratch, Operand(ExternalReference::isolate_address()));
+    sw(scratch, MemOperand(sp, num_arguments * kPointerSize));
+  }
+  num_arguments += 1;
+
   // Make sure that the stack is aligned before calling a C function unless
   // running in the simulator. The simulator has its own alignment check which
   // provides more information.
@@ -3266,13 +3311,19 @@ void MacroAssembler::CallCFunction(Register function, int num_arguments) {
   // Just call directly. The function called cannot cause a GC, or
   // allow preemption, so the return address in the link register
   // stays correct.
-  if (!function.is(t9)) {
+
+  if (function.is(no_reg)) {
+    function = t9;
+    li(function, Operand(function_reference));
+  } else if (!function.is(t9)) {
     mov(t9, function);
   }
+
   Call(t9);
 
   ASSERT(StandardFrameConstants::kCArgsSlotsSize % kPointerSize == 0);
-  int stack_passed_arguments = ((num_arguments <= 4) ? 0 : num_arguments - 4) +
+  int stack_passed_arguments = ((num_arguments <= kRegisterPassedArguments) ?
+                               0 : num_arguments - kRegisterPassedArguments) +
                                StandardFrameConstants::kCArgsSlotsSize /
                                kPointerSize;
 

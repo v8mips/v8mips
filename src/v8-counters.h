@@ -207,8 +207,6 @@ namespace internal {
   SC(memcopy_noxmm, V8.MemCopyNoXMM)                                  \
   SC(enum_cache_hits, V8.EnumCacheHits)                               \
   SC(enum_cache_misses, V8.EnumCacheMisses)                           \
-  SC(reloc_info_count, V8.RelocInfoCount)                             \
-  SC(reloc_info_size, V8.RelocInfoSize)                               \
   SC(zone_segment_bytes, V8.ZoneSegmentBytes)                         \
   SC(compute_entry_frame, V8.ComputeEntryFrame)                       \
   SC(generic_binary_stub_calls, V8.GenericBinaryStubCalls)            \
@@ -254,15 +252,15 @@ namespace internal {
 
 
 // This file contains all the v8 counters that are in use.
-class Counters : AllStatic {
+class Counters {
  public:
 #define HT(name, caption) \
-  static HistogramTimer name;
+  HistogramTimer* name() { return &name##_; }
   HISTOGRAM_TIMER_LIST(HT)
 #undef HT
 
 #define SC(name, caption) \
-  static StatsCounter name;
+  StatsCounter* name() { return &name##_; }
   STATS_COUNTER_LIST_1(SC)
   STATS_COUNTER_LIST_2(SC)
 #undef SC
@@ -272,17 +270,43 @@ class Counters : AllStatic {
     HISTOGRAM_TIMER_LIST(RATE_ID)
 #undef RATE_ID
 #define COUNTER_ID(name, caption) k_##name,
-  STATS_COUNTER_LIST_1(COUNTER_ID)
-  STATS_COUNTER_LIST_2(COUNTER_ID)
+    STATS_COUNTER_LIST_1(COUNTER_ID)
+    STATS_COUNTER_LIST_2(COUNTER_ID)
 #undef COUNTER_ID
 #define COUNTER_ID(name) k_##name,
-  STATE_TAG_LIST(COUNTER_ID)
+    STATE_TAG_LIST(COUNTER_ID)
 #undef COUNTER_ID
     stats_counter_count
   };
 
+  StatsCounter* state_counters(StateTag state) {
+    return &state_counters_[state];
+  }
+
+ private:
+#define HT(name, caption) \
+  HistogramTimer name##_;
+  HISTOGRAM_TIMER_LIST(HT)
+#undef HT
+
+#define SC(name, caption) \
+  StatsCounter name##_;
+  STATS_COUNTER_LIST_1(SC)
+  STATS_COUNTER_LIST_2(SC)
+#undef SC
+
+  enum {
+#define COUNTER_ID(name) __##name,
+    STATE_TAG_LIST(COUNTER_ID)
+#undef COUNTER_ID
+    kSlidingStateWindowCounterCount
+  };
+
   // Sliding state window counters.
-  static StatsCounter state_counters[];
+  StatsCounter state_counters_[kSlidingStateWindowCounterCount];
+  friend class Isolate;
+
+  DISALLOW_IMPLICIT_CONSTRUCTORS(Counters);
 };
 
 } }  // namespace v8::internal

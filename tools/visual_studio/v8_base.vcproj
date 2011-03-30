@@ -781,7 +781,7 @@
         >
       </File>
       <File
-        RelativePath="..\..\src\memory.h"
+        RelativePath="..\..\src\v8memory.h"
         >
       </File>
       <File
@@ -867,6 +867,14 @@
       </File>
       <File
         RelativePath="..\..\src\profile-generator-inl.h"
+        >
+      </File>
+      <File
+        RelativePath="..\..\src\platform-tls-win32.h"
+        >
+      </File>
+      <File
+        RelativePath="..\..\src\platform-tls.h"
         >
       </File>
       <File
@@ -1023,6 +1031,10 @@
       </File>
       <File
         RelativePath="..\..\src\shell.h"
+        >
+      </File>
+      <File
+        RelativePath="..\..\src\small-pointer-list.h"
         >
       </File>
       <File

@@ -25,6 +25,8 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+#include "v8.h"
+
 #include "lithium-allocator-inl.h"
 #include "arm/lithium-arm.h"
 #include "arm/lithium-codegen-arm.h"
@@ -1343,29 +1345,25 @@ LInstruction* LChunkBuilder::DoDiv(HDiv* instr) {
 
 LInstruction* LChunkBuilder::DoMod(HMod* instr) {
   if (instr->representation().IsInteger32()) {
-    // TODO(1042) The fixed register allocation
-    // is needed because we call GenericBinaryOpStub from
-    // the generated code, which requires registers r0
-    // and r1 to be used. We should remove that
-    // when we provide a native implementation.
     ASSERT(instr->left()->representation().IsInteger32());
     ASSERT(instr->right()->representation().IsInteger32());
 
-    LInstruction* result;
+    LModI* mod;
     if (instr->HasPowerOf2Divisor()) {
       ASSERT(!instr->CheckFlag(HValue::kCanBeDivByZero));
       LOperand* value = UseRegisterAtStart(instr->left());
-      LModI* mod = new LModI(value, UseOrConstant(instr->right()));
-      result = DefineSameAsFirst(mod);
-      result = AssignEnvironment(result);
+      mod = new LModI(value, UseOrConstant(instr->right()));
     } else {
-      LOperand* value = UseFixed(instr->left(), r0);
-      LOperand* divisor = UseFixed(instr->right(), r1);
-      result = DefineFixed(new LModI(value, divisor), r0);
-      result = AssignEnvironment(AssignPointerMap(result));
+      LOperand* dividend = UseRegister(instr->left());
+      LOperand* divisor = UseRegisterAtStart(instr->right());
+      mod = new LModI(dividend,
+                      divisor,
+                      TempRegister(),
+                      FixedTemp(d1),
+                      FixedTemp(d2));
     }
 
-    return result;
+    return AssignEnvironment(DefineSameAsFirst(mod));
   } else if (instr->representation().IsTagged()) {
     return DoArithmeticT(Token::MOD, instr);
   } else {
@@ -1667,7 +1665,7 @@ LInstruction* LChunkBuilder::DoChange(HChange* instr) {
 
 LInstruction* LChunkBuilder::DoCheckNonSmi(HCheckNonSmi* instr) {
   LOperand* value = UseRegisterAtStart(instr->value());
-  return AssignEnvironment(new LCheckSmi(value, eq));
+  return AssignEnvironment(new LCheckNonSmi(value));
 }
 
 
@@ -1688,7 +1686,7 @@ LInstruction* LChunkBuilder::DoCheckPrototypeMaps(HCheckPrototypeMaps* instr) {
 
 LInstruction* LChunkBuilder::DoCheckSmi(HCheckSmi* instr) {
   LOperand* value = UseRegisterAtStart(instr->value());
-  return AssignEnvironment(new LCheckSmi(value, ne));
+  return AssignEnvironment(new LCheckSmi(value));
 }
 
 
@@ -1771,6 +1769,21 @@ LInstruction* LChunkBuilder::DoLoadNamedField(HLoadNamedField* instr) {
 }
 
 
+LInstruction* LChunkBuilder::DoLoadNamedFieldPolymorphic(
+    HLoadNamedFieldPolymorphic* instr) {
+  ASSERT(instr->representation().IsTagged());
+  if (instr->need_generic()) {
+    LOperand* obj = UseFixed(instr->object(), r0);
+    LLoadNamedFieldPolymorphic* result = new LLoadNamedFieldPolymorphic(obj);
+    return MarkAsCall(DefineFixed(result, r0), instr);
+  } else {
+    LOperand* obj = UseRegisterAtStart(instr->object());
+    LLoadNamedFieldPolymorphic* result = new LLoadNamedFieldPolymorphic(obj);
+    return AssignEnvironment(DefineAsRegister(result));
+  }
+}
+
+
 LInstruction* LChunkBuilder::DoLoadNamedGeneric(HLoadNamedGeneric* instr) {
   LOperand* object = UseFixed(instr->object(), r0);
   LInstruction* result = DefineFixed(new LLoadNamedGeneric(object), r0);
@@ -1809,15 +1822,22 @@ LInstruction* LChunkBuilder::DoLoadKeyedFastElement(
 }
 
 
-LInstruction* LChunkBuilder::DoLoadPixelArrayElement(
-    HLoadPixelArrayElement* instr) {
+LInstruction* LChunkBuilder::DoLoadKeyedSpecializedArrayElement(
+    HLoadKeyedSpecializedArrayElement* instr) {
+  // TODO(danno): Add support for other external array types.
+  if (instr->array_type() != kExternalPixelArray) {
+    Abort("unsupported load for external array type.");
+    return NULL;
+  }
+
   ASSERT(instr->representation().IsInteger32());
   ASSERT(instr->key()->representation().IsInteger32());
   LOperand* external_pointer =
       UseRegisterAtStart(instr->external_pointer());
   LOperand* key = UseRegisterAtStart(instr->key());
-  LLoadPixelArrayElement* result =
-      new LLoadPixelArrayElement(external_pointer, key);
+  LLoadKeyedSpecializedArrayElement* result =
+      new LLoadKeyedSpecializedArrayElement(external_pointer,
+                                            key);
   return DefineAsRegister(result);
 }
 
@@ -1851,8 +1871,14 @@ LInstruction* LChunkBuilder::DoStoreKeyedFastElement(
 }
 
 
-LInstruction* LChunkBuilder::DoStorePixelArrayElement(
-    HStorePixelArrayElement* instr) {
+LInstruction* LChunkBuilder::DoStoreKeyedSpecializedArrayElement(
+    HStoreKeyedSpecializedArrayElement* instr) {
+  // TODO(danno): Add support for other external array types.
+  if (instr->array_type() != kExternalPixelArray) {
+    Abort("unsupported store for external array type.");
+    return NULL;
+  }
+
   ASSERT(instr->value()->representation().IsInteger32());
   ASSERT(instr->external_pointer()->representation().IsExternal());
   ASSERT(instr->key()->representation().IsInteger32());
@@ -1861,7 +1887,9 @@ LInstruction* LChunkBuilder::DoStorePixelArrayElement(
   LOperand* value = UseTempRegister(instr->value());  // changed by clamp.
   LOperand* key = UseRegister(instr->key());
 
-  return new LStorePixelArrayElement(external_pointer, key, value);
+  return new LStoreKeyedSpecializedArrayElement(external_pointer,
+                                                key,
+                                                value);
 }
 
 
@@ -1991,6 +2019,13 @@ LInstruction* LChunkBuilder::DoAccessArgumentsAt(HAccessArgumentsAt* instr) {
   LOperand* index = UseRegister(instr->index());
   LAccessArgumentsAt* result = new LAccessArgumentsAt(arguments, length, index);
   return AssignEnvironment(DefineAsRegister(result));
+}
+
+
+LInstruction* LChunkBuilder::DoToFastProperties(HToFastProperties* instr) {
+  LOperand* object = UseFixed(instr->value(), r0);
+  LToFastProperties* result = new LToFastProperties(object);
+  return MarkAsCall(DefineFixed(result, r0), instr);
 }
 
 

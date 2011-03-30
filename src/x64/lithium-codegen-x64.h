@@ -67,6 +67,9 @@ class LCodeGen BASE_EMBEDDED {
   // Simple accessors.
   MacroAssembler* masm() const { return masm_; }
   CompilationInfo* info() const { return info_; }
+  Isolate* isolate() const { return info_->isolate(); }
+  Factory* factory() const { return isolate()->factory(); }
+  Heap* heap() const { return isolate()->heap(); }
 
   // Support for converting LOperands to assembler types.
   Register ToRegister(LOperand* op) const;
@@ -156,13 +159,13 @@ class LCodeGen BASE_EMBEDDED {
   void CallCode(Handle<Code> code,
                 RelocInfo::Mode mode,
                 LInstruction* instr);
-  void CallRuntime(Runtime::Function* function,
+  void CallRuntime(const Runtime::Function* function,
                    int num_arguments,
                    LInstruction* instr);
   void CallRuntime(Runtime::FunctionId id,
                    int num_arguments,
                    LInstruction* instr) {
-    Runtime::Function* function = Runtime::FunctionForId(id);
+    const Runtime::Function* function = Runtime::FunctionForId(id);
     CallRuntime(function, num_arguments, instr);
   }
 
@@ -237,6 +240,11 @@ class LCodeGen BASE_EMBEDDED {
   // Emits optimized code for %_IsConstructCall().
   // Caller should branch on equal condition.
   void EmitIsConstructCall(Register temp);
+
+  void EmitLoadField(Register result,
+                     Register object,
+                     Handle<Map> type,
+                     Handle<String> name);
 
   // Emits code for pushing a constant operand.
   void EmitPushConstantOperand(LOperand* operand);

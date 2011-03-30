@@ -101,6 +101,11 @@ class SafepointTableDeoptimiztionEntryIterator {
 };
 
 
+void Deoptimizer::EnsureRelocSpaceForLazyDeoptimization(Handle<Code> code) {
+  // TODO(1276): Implement.
+}
+
+
 void Deoptimizer::DeoptimizeFunction(JSFunction* function) {
   HandleScope scope;
   AssertNoAllocation no_allocation;
@@ -187,8 +192,9 @@ void Deoptimizer::DeoptimizeFunction(JSFunction* function) {
 
   // Add the deoptimizing code to the list.
   DeoptimizingCodeListNode* node = new DeoptimizingCodeListNode(code);
-  node->set_next(deoptimizing_code_list_);
-  deoptimizing_code_list_ = node;
+  DeoptimizerData* data = code->GetIsolate()->deoptimizer_data();
+  node->set_next(data->deoptimizing_code_list_);
+  data->deoptimizing_code_list_ = node;
 
   // Set the code for the function to non-optimized version.
   function->ReplaceCode(function->shared()->code());
@@ -388,7 +394,8 @@ void Deoptimizer::DoComputeOsrOutputFrame() {
         optimized_code_->entry() + pc_offset);
     output_[0]->SetPc(pc);
   }
-  Code* continuation = Builtins::builtin(Builtins::NotifyOSR);
+  Code* continuation =
+      function->GetIsolate()->builtins()->builtin(Builtins::kNotifyOSR);
   output_[0]->SetContinuation(
       reinterpret_cast<intptr_t>(continuation->entry()));
 
@@ -560,8 +567,8 @@ void Deoptimizer::DoComputeFrame(TranslationIterator* iterator,
   // Set the continuation for the topmost frame.
   if (is_topmost) {
     Code* continuation = (bailout_type_ == EAGER)
-        ? Builtins::builtin(Builtins::NotifyDeoptimized)
-        : Builtins::builtin(Builtins::NotifyLazyDeoptimized);
+        ? isolate_->builtins()->builtin(Builtins::kNotifyDeoptimized)
+        : isolate_->builtins()->builtin(Builtins::kNotifyLazyDeoptimized);
     output_frame->SetContinuation(
         reinterpret_cast<intptr_t>(continuation->entry()));
   }
@@ -651,7 +658,9 @@ void Deoptimizer::EntryGenerator::Generate() {
   __ movq(r8, arg5);
 #endif
 
-  __ CallCFunction(ExternalReference::new_deoptimizer_function(), 5);
+  Isolate* isolate = masm()->isolate();
+
+  __ CallCFunction(ExternalReference::new_deoptimizer_function(isolate), 5);
   // Preserve deoptimizer object in register rax and get the input
   // frame descriptor pointer.
   __ movq(rbx, Operand(rax, Deoptimizer::input_offset()));
@@ -696,7 +705,8 @@ void Deoptimizer::EntryGenerator::Generate() {
   __ push(rax);
   __ PrepareCallCFunction(1);
   __ movq(arg1, rax);
-  __ CallCFunction(ExternalReference::compute_output_frames_function(), 1);
+  __ CallCFunction(
+      ExternalReference::compute_output_frames_function(isolate), 1);
   __ pop(rax);
 
   // Replace the current frame with the output frames.
@@ -754,7 +764,6 @@ void Deoptimizer::EntryGenerator::Generate() {
   }
 
   // Set up the roots register.
-  ExternalReference roots_address = ExternalReference::roots_address();
   __ InitializeRootRegister();
   __ InitializeSmiConstantRegister();
 

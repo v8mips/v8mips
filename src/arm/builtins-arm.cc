@@ -68,7 +68,7 @@ void Builtins::Generate_Adaptor(MacroAssembler* masm,
   // JumpToExternalReference expects r0 to contain the number of arguments
   // including the receiver and the extra arguments.
   __ add(r0, r0, Operand(num_extra_args + 1));
-  __ JumpToExternalReference(ExternalReference(id));
+  __ JumpToExternalReference(ExternalReference(id, masm->isolate()));
 }
 
 
@@ -310,6 +310,7 @@ static void AllocateJSArray(MacroAssembler* masm,
 // construct call and normal call.
 static void ArrayNativeCode(MacroAssembler* masm,
                             Label* call_generic_code) {
+  Counters* counters = masm->isolate()->counters();
   Label argc_one_or_more, argc_two_or_more;
 
   // Check for array construction with zero arguments or one.
@@ -325,7 +326,7 @@ static void ArrayNativeCode(MacroAssembler* masm,
                        r5,
                        JSArray::kPreallocatedArrayElements,
                        call_generic_code);
-  __ IncrementCounter(&Counters::array_function_native, 1, r3, r4);
+  __ IncrementCounter(counters->array_function_native(), 1, r3, r4);
   // Setup return value, remove receiver from stack and return.
   __ mov(r0, r2);
   __ add(sp, sp, Operand(kPointerSize));
@@ -361,7 +362,7 @@ static void ArrayNativeCode(MacroAssembler* masm,
                   r7,
                   true,
                   call_generic_code);
-  __ IncrementCounter(&Counters::array_function_native, 1, r2, r4);
+  __ IncrementCounter(counters->array_function_native(), 1, r2, r4);
   // Setup return value, remove receiver and argument from stack and return.
   __ mov(r0, r3);
   __ add(sp, sp, Operand(2 * kPointerSize));
@@ -385,7 +386,7 @@ static void ArrayNativeCode(MacroAssembler* masm,
                   r7,
                   false,
                   call_generic_code);
-  __ IncrementCounter(&Counters::array_function_native, 1, r2, r6);
+  __ IncrementCounter(counters->array_function_native(), 1, r2, r6);
 
   // Fill arguments as array elements. Copy from the top of the stack (last
   // element) to the array backing store filling it backwards. Note:
@@ -442,8 +443,9 @@ void Builtins::Generate_ArrayCode(MacroAssembler* masm) {
   // Jump to the generic array code if the specialized code cannot handle
   // the construction.
   __ bind(&generic_array_code);
-  Code* code = Builtins::builtin(Builtins::ArrayCodeGeneric);
-  Handle<Code> array_code(code);
+
+  Handle<Code> array_code =
+      masm->isolate()->builtins()->ArrayCodeGeneric();
   __ Jump(array_code, RelocInfo::CODE_TARGET);
 }
 
@@ -474,8 +476,8 @@ void Builtins::Generate_ArrayConstructCode(MacroAssembler* masm) {
   // Jump to the generic construct code in case the specialized code cannot
   // handle the construction.
   __ bind(&generic_constructor);
-  Code* code = Builtins::builtin(Builtins::JSConstructStubGeneric);
-  Handle<Code> generic_construct_stub(code);
+  Handle<Code> generic_construct_stub =
+      masm->isolate()->builtins()->JSConstructStubGeneric();
   __ Jump(generic_construct_stub, RelocInfo::CODE_TARGET);
 }
 
@@ -488,7 +490,8 @@ void Builtins::Generate_StringConstructCode(MacroAssembler* masm) {
   //  -- sp[(argc - n - 1) * 4] : arg[n] (zero based)
   //  -- sp[argc * 4]           : receiver
   // -----------------------------------
-  __ IncrementCounter(&Counters::string_ctor_calls, 1, r2, r3);
+  Counters* counters = masm->isolate()->counters();
+  __ IncrementCounter(counters->string_ctor_calls(), 1, r2, r3);
 
   Register function = r1;
   if (FLAG_debug_code) {
@@ -518,7 +521,7 @@ void Builtins::Generate_StringConstructCode(MacroAssembler* masm) {
       r5,        // Scratch.
       false,     // Is it a Smi?
       &not_cached);
-  __ IncrementCounter(&Counters::string_ctor_cached_number, 1, r3, r4);
+  __ IncrementCounter(counters->string_ctor_cached_number(), 1, r3, r4);
   __ bind(&argument_is_string);
 
   // ----------- S t a t e -------------
@@ -572,13 +575,13 @@ void Builtins::Generate_StringConstructCode(MacroAssembler* masm) {
   __ tst(r3, Operand(kIsNotStringMask));
   __ b(ne, &convert_argument);
   __ mov(argument, r0);
-  __ IncrementCounter(&Counters::string_ctor_conversions, 1, r3, r4);
+  __ IncrementCounter(counters->string_ctor_conversions(), 1, r3, r4);
   __ b(&argument_is_string);
 
   // Invoke the conversion builtin and put the result into r2.
   __ bind(&convert_argument);
   __ push(function);  // Preserve the function.
-  __ IncrementCounter(&Counters::string_ctor_conversions, 1, r3, r4);
+  __ IncrementCounter(counters->string_ctor_conversions(), 1, r3, r4);
   __ EnterInternalFrame();
   __ push(r0);
   __ InvokeBuiltin(Builtins::TO_STRING, CALL_JS);
@@ -597,7 +600,7 @@ void Builtins::Generate_StringConstructCode(MacroAssembler* masm) {
   // At this point the argument is already a string. Call runtime to
   // create a string wrapper.
   __ bind(&gc_required);
-  __ IncrementCounter(&Counters::string_ctor_gc_required, 1, r3, r4);
+  __ IncrementCounter(counters->string_ctor_gc_required(), 1, r3, r4);
   __ EnterInternalFrame();
   __ push(argument);
   __ CallRuntime(Runtime::kNewStringWrapper, 1);
@@ -633,7 +636,7 @@ void Builtins::Generate_JSConstructCall(MacroAssembler* masm) {
   // Set expected number of arguments to zero (not changing r0).
   __ mov(r2, Operand(0, RelocInfo::NONE));
   __ GetBuiltinEntry(r3, Builtins::CALL_NON_FUNCTION_AS_CONSTRUCTOR);
-  __ Jump(Handle<Code>(builtin(ArgumentsAdaptorTrampoline)),
+  __ Jump(masm->isolate()->builtins()->ArgumentsAdaptorTrampoline(),
           RelocInfo::CODE_TARGET);
 }
 
@@ -643,6 +646,8 @@ static void Generate_JSConstructStubHelper(MacroAssembler* masm,
                                            bool count_constructions) {
   // Should never count constructions for api objects.
   ASSERT(!is_api_function || !count_constructions);
+
+  Isolate* isolate = masm->isolate();
 
   // Enter a construct frame.
   __ EnterConstructFrame();
@@ -659,7 +664,7 @@ static void Generate_JSConstructStubHelper(MacroAssembler* masm,
     Label undo_allocation;
 #ifdef ENABLE_DEBUGGER_SUPPORT
     ExternalReference debug_step_in_fp =
-        ExternalReference::debug_step_in_fp_address();
+        ExternalReference::debug_step_in_fp_address(isolate);
     __ mov(r2, Operand(debug_step_in_fp));
     __ ldr(r2, MemOperand(r2));
     __ tst(r2, r2);
@@ -905,8 +910,8 @@ static void Generate_JSConstructStubHelper(MacroAssembler* masm,
   // r1: constructor function
   if (is_api_function) {
     __ ldr(cp, FieldMemOperand(r1, JSFunction::kContextOffset));
-    Handle<Code> code = Handle<Code>(
-        Builtins::builtin(Builtins::HandleApiCallConstruct));
+    Handle<Code> code =
+        masm->isolate()->builtins()->HandleApiCallConstruct();
     ParameterCount expected(0);
     __ InvokeCode(code, expected, expected,
                   RelocInfo::CODE_TARGET, CALL_FUNCTION);
@@ -963,7 +968,7 @@ static void Generate_JSConstructStubHelper(MacroAssembler* masm,
   __ LeaveConstructFrame();
   __ add(sp, sp, Operand(r1, LSL, kPointerSizeLog2 - 1));
   __ add(sp, sp, Operand(kPointerSize));
-  __ IncrementCounter(&Counters::constructed_objects, 1, r1, r2);
+  __ IncrementCounter(isolate->counters()->constructed_objects(), 1, r1, r2);
   __ Jump(lr);
 }
 
@@ -1003,7 +1008,8 @@ static void Generate_JSEntryTrampolineHelper(MacroAssembler* masm,
   __ ldr(cp, FieldMemOperand(r1, JSFunction::kContextOffset));
 
   // Set up the roots register.
-  ExternalReference roots_address = ExternalReference::roots_address();
+  ExternalReference roots_address =
+      ExternalReference::roots_address(masm->isolate());
   __ mov(r10, Operand(roots_address));
 
   // Push the function and the receiver onto the stack.
@@ -1039,7 +1045,7 @@ static void Generate_JSEntryTrampolineHelper(MacroAssembler* masm,
   // Invoke the code and pass argc as r0.
   __ mov(r0, Operand(r3));
   if (is_construct) {
-    __ Call(Handle<Code>(Builtins::builtin(Builtins::JSConstructCall)),
+    __ Call(masm->isolate()->builtins()->JSConstructCall(),
             RelocInfo::CODE_TARGET);
   } else {
     ParameterCount actual(r0);
@@ -1169,7 +1175,7 @@ void Builtins::Generate_NotifyOSR(MacroAssembler* masm) {
 void Builtins::Generate_OnStackReplacement(MacroAssembler* masm) {
   // Probe the CPU to set the supported features, because this builtin
   // may be called before the initialization performs CPU setup.
-  CpuFeatures::Probe(false);
+  masm->isolate()->cpu_features()->Probe(false);
 
   // Lookup the function in the JavaScript frame and push it as an
   // argument to the on-stack replacement function.
@@ -1332,8 +1338,8 @@ void Builtins::Generate_FunctionCall(MacroAssembler* masm) {
     // Expected number of arguments is 0 for CALL_NON_FUNCTION.
     __ mov(r2, Operand(0, RelocInfo::NONE));
     __ GetBuiltinEntry(r3, Builtins::CALL_NON_FUNCTION);
-    __ Jump(Handle<Code>(builtin(ArgumentsAdaptorTrampoline)),
-                         RelocInfo::CODE_TARGET);
+    __ Jump(masm->isolate()->builtins()->ArgumentsAdaptorTrampoline(),
+            RelocInfo::CODE_TARGET);
     __ bind(&function);
   }
 
@@ -1348,8 +1354,9 @@ void Builtins::Generate_FunctionCall(MacroAssembler* masm) {
   __ mov(r2, Operand(r2, ASR, kSmiTagSize));
   __ ldr(r3, FieldMemOperand(r1, JSFunction::kCodeEntryOffset));
   __ cmp(r2, r0);  // Check formal and actual parameter counts.
-  __ Jump(Handle<Code>(builtin(ArgumentsAdaptorTrampoline)),
-          RelocInfo::CODE_TARGET, ne);
+  __ Jump(masm->isolate()->builtins()->ArgumentsAdaptorTrampoline(),
+          RelocInfo::CODE_TARGET,
+          ne);
 
   ParameterCount expected(0);
   __ InvokeCode(r3, expected, expected, JUMP_FUNCTION);

@@ -307,7 +307,7 @@ void VirtualFrame::CallJSFunction(int arg_count) {
 }
 
 
-void VirtualFrame::CallRuntime(Runtime::Function* f, int arg_count) {
+void VirtualFrame::CallRuntime(const Runtime::Function* f, int arg_count) {
   SpillAll();
   Forget(arg_count);
   ASSERT(cgen()->HasValidEntryRegisters());
@@ -340,7 +340,8 @@ void VirtualFrame::InvokeBuiltin(Builtins::JavaScript id,
 
 
 void VirtualFrame::CallLoadIC(Handle<String> name, RelocInfo::Mode mode) {
-  Handle<Code> ic(Builtins::builtin(Builtins::LoadIC_Initialize));
+  Handle<Code> ic(
+      Isolate::Current()->builtins()->builtin(Builtins::kLoadIC_Initialize));
   PopToA0();
   SpillAll();
   __ li(a2, Operand(name));
@@ -351,9 +352,9 @@ void VirtualFrame::CallLoadIC(Handle<String> name, RelocInfo::Mode mode) {
 void VirtualFrame::CallStoreIC(Handle<String> name,
                                bool is_contextual,
                                StrictModeFlag strict_mode) {
-  Handle<Code> ic(Builtins::builtin(
-      (strict_mode == kStrictMode) ? Builtins::StoreIC_Initialize_Strict
-                                   : Builtins::StoreIC_Initialize));
+  Handle<Code> ic(Isolate::Current()->builtins()->builtin(
+      (strict_mode == kStrictMode) ? Builtins::kStoreIC_Initialize_Strict
+                                   : Builtins::kStoreIC_Initialize));
   PopToA0();
   RelocInfo::Mode mode;
   if (is_contextual) {
@@ -371,7 +372,8 @@ void VirtualFrame::CallStoreIC(Handle<String> name,
 
 
 void VirtualFrame::CallKeyedLoadIC() {
-  Handle<Code> ic(Builtins::builtin(Builtins::KeyedLoadIC_Initialize));
+  Handle<Code> ic(Isolate::Current()->builtins()->builtin(
+      Builtins::kKeyedLoadIC_Initialize));
   PopToA1A0();
   SpillAll();
   CallCodeObject(ic, RelocInfo::CODE_TARGET, 0);
@@ -379,9 +381,9 @@ void VirtualFrame::CallKeyedLoadIC() {
 
 
 void VirtualFrame::CallKeyedStoreIC(StrictModeFlag strict_mode) {
-  Handle<Code> ic(Builtins::builtin(
-      (strict_mode == kStrictMode) ? Builtins::KeyedStoreIC_Initialize_Strict
-                                   : Builtins::KeyedStoreIC_Initialize));
+  Handle<Code> ic(Isolate::Current()->builtins()->builtin(
+      (strict_mode == kStrictMode) ? Builtins::kKeyedStoreIC_Initialize_Strict
+                                   : Builtins::kKeyedStoreIC_Initialize));
   PopToA1A0();
   SpillAll();
   EmitPop(a2);
@@ -406,7 +408,8 @@ void VirtualFrame::CallCodeObject(Handle<Code> code,
       break;
 
     case Code::BUILTIN:
-      ASSERT(*code == Builtins::builtin(Builtins::JSConstructCall));
+      ASSERT(*code == Isolate::Current()->builtins()->builtin(
+          Builtins::kJSConstructCall));
       break;
 
     default:
@@ -442,9 +445,6 @@ const VirtualFrame::TopOfStack VirtualFrame::kStateAfterPop[TOS_STATES] =
 // slots then one register must be physically pushed onto the stack.
 const VirtualFrame::TopOfStack VirtualFrame::kStateAfterPush[TOS_STATES] =
     { A0_TOS, A1_A0_TOS, A0_A1_TOS, A0_A1_TOS, A1_A0_TOS };
-
-
-bool VirtualFrame::SpilledScope::is_spilled_ = false;
 
 
 void VirtualFrame::Drop(int count) {

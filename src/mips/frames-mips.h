@@ -30,7 +30,6 @@
 #ifndef V8_MIPS_FRAMES_MIPS_H_
 #define V8_MIPS_FRAMES_MIPS_H_
 
-
 namespace v8 {
 namespace internal {
 

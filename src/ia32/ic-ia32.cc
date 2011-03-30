@@ -93,7 +93,7 @@ static void GenerateStringDictionaryReceiverCheck(MacroAssembler* masm,
   __ j(not_zero, miss, not_taken);
 
   __ mov(r0, FieldOperand(receiver, JSObject::kPropertiesOffset));
-  __ CheckMap(r0, Factory::hash_table_map(), miss, true);
+  __ CheckMap(r0, FACTORY->hash_table_map(), miss, true);
 }
 
 
@@ -475,7 +475,7 @@ static void GenerateFastArrayLoad(MacroAssembler* masm,
   __ mov(scratch, FieldOperand(receiver, JSObject::kElementsOffset));
   if (not_fast_array != NULL) {
     // Check that the object is in fast mode and writable.
-    __ CheckMap(scratch, Factory::fixed_array_map(), not_fast_array, true);
+    __ CheckMap(scratch, FACTORY->fixed_array_map(), not_fast_array, true);
   } else {
     __ AssertFastElements(scratch);
   }
@@ -485,7 +485,7 @@ static void GenerateFastArrayLoad(MacroAssembler* masm,
   // Fast case: Do the load.
   ASSERT((kPointerSize == 4) && (kSmiTagSize == 1) && (kSmiTag == 0));
   __ mov(scratch, FieldOperand(scratch, key, times_2, FixedArray::kHeaderSize));
-  __ cmp(Operand(scratch), Immediate(Factory::the_hole_value()));
+  __ cmp(Operand(scratch), Immediate(FACTORY->the_hole_value()));
   // In case the loaded value is the_hole we have to consult GetProperty
   // to ensure the prototype chain is searched.
   __ j(equal, out_of_range);
@@ -555,7 +555,9 @@ void KeyedLoadIC::GenerateGeneric(MacroAssembler* masm) {
                         eax,
                         NULL,
                         &slow);
-  __ IncrementCounter(&Counters::keyed_load_generic_smi, 1);
+  Isolate* isolate = masm->isolate();
+  Counters* counters = isolate->counters();
+  __ IncrementCounter(counters->keyed_load_generic_smi(), 1);
   __ ret(0);
 
   __ bind(&check_number_dictionary);
@@ -568,7 +570,7 @@ void KeyedLoadIC::GenerateGeneric(MacroAssembler* masm) {
   // ebx: untagged index
   // eax: key
   // ecx: elements
-  __ CheckMap(ecx, Factory::hash_table_map(), &slow, true);
+  __ CheckMap(ecx, isolate->factory()->hash_table_map(), &slow, true);
   Label slow_pop_receiver;
   // Push receiver on the stack to free up a register for the dictionary
   // probing.
@@ -593,7 +595,7 @@ void KeyedLoadIC::GenerateGeneric(MacroAssembler* masm) {
   // Slow case: jump to runtime.
   // edx: receiver
   // eax: key
-  __ IncrementCounter(&Counters::keyed_load_generic_slow, 1);
+  __ IncrementCounter(counters->keyed_load_generic_slow(), 1);
   GenerateRuntimeGetProperty(masm);
 
   __ bind(&check_string);
@@ -606,7 +608,7 @@ void KeyedLoadIC::GenerateGeneric(MacroAssembler* masm) {
   // cache. Otherwise probe the dictionary.
   __ mov(ebx, FieldOperand(edx, JSObject::kPropertiesOffset));
   __ cmp(FieldOperand(ebx, HeapObject::kMapOffset),
-         Immediate(Factory::hash_table_map()));
+         Immediate(isolate->factory()->hash_table_map()));
   __ j(equal, &probe_dictionary);
 
   // Load the map of the receiver, compute the keyed lookup cache hash
@@ -621,8 +623,8 @@ void KeyedLoadIC::GenerateGeneric(MacroAssembler* masm) {
 
   // Load the key (consisting of map and symbol) from the cache and
   // check for match.
-  ExternalReference cache_keys
-      = ExternalReference::keyed_lookup_cache_keys();
+  ExternalReference cache_keys =
+      ExternalReference::keyed_lookup_cache_keys(masm->isolate());
   __ mov(edi, ecx);
   __ shl(edi, kPointerSizeLog2 + 1);
   __ cmp(ebx, Operand::StaticArray(edi, times_1, cache_keys));
@@ -636,8 +638,8 @@ void KeyedLoadIC::GenerateGeneric(MacroAssembler* masm) {
   // ebx     : receiver's map
   // eax     : key
   // ecx     : lookup cache index
-  ExternalReference cache_field_offsets
-      = ExternalReference::keyed_lookup_cache_field_offsets();
+  ExternalReference cache_field_offsets =
+      ExternalReference::keyed_lookup_cache_field_offsets(masm->isolate());
   __ mov(edi,
          Operand::StaticArray(ecx, times_pointer_size, cache_field_offsets));
   __ movzx_b(ecx, FieldOperand(ebx, Map::kInObjectPropertiesOffset));
@@ -648,7 +650,7 @@ void KeyedLoadIC::GenerateGeneric(MacroAssembler* masm) {
   __ movzx_b(ecx, FieldOperand(ebx, Map::kInstanceSizeOffset));
   __ add(ecx, Operand(edi));
   __ mov(eax, FieldOperand(edx, ecx, times_pointer_size, 0));
-  __ IncrementCounter(&Counters::keyed_load_generic_lookup_cache, 1);
+  __ IncrementCounter(counters->keyed_load_generic_lookup_cache(), 1);
   __ ret(0);
 
   // Load property array property.
@@ -656,7 +658,7 @@ void KeyedLoadIC::GenerateGeneric(MacroAssembler* masm) {
   __ mov(eax, FieldOperand(edx, JSObject::kPropertiesOffset));
   __ mov(eax, FieldOperand(eax, edi, times_pointer_size,
                            FixedArray::kHeaderSize));
-  __ IncrementCounter(&Counters::keyed_load_generic_lookup_cache, 1);
+  __ IncrementCounter(counters->keyed_load_generic_lookup_cache(), 1);
   __ ret(0);
 
   // Do a quick inline probe of the receiver's dictionary, if it
@@ -668,7 +670,7 @@ void KeyedLoadIC::GenerateGeneric(MacroAssembler* masm) {
   GenerateGlobalInstanceTypeCheck(masm, ecx, &slow);
 
   GenerateDictionaryLoad(masm, &slow, ebx, eax, ecx, edi, eax);
-  __ IncrementCounter(&Counters::keyed_load_generic_symbol, 1);
+  __ IncrementCounter(counters->keyed_load_generic_symbol(), 1);
   __ ret(0);
 
   __ bind(&index_string);
@@ -745,8 +747,9 @@ void KeyedLoadIC::GenerateIndexedInterceptor(MacroAssembler* masm) {
   __ push(ecx);  // return address
 
   // Perform tail call to the entry.
-  ExternalReference ref = ExternalReference(
-      IC_Utility(kKeyedLoadPropertyWithInterceptor));
+  ExternalReference ref =
+      ExternalReference(IC_Utility(kKeyedLoadPropertyWithInterceptor),
+                        masm->isolate());
   __ TailCallExternalReference(ref, 2, 1);
 
   __ bind(&slow);
@@ -789,7 +792,7 @@ void KeyedStoreIC::GenerateGeneric(MacroAssembler* masm,
   // ecx: key (a smi)
   __ mov(edi, FieldOperand(edx, JSObject::kElementsOffset));
   // Check that the object is in fast mode and writable.
-  __ CheckMap(edi, Factory::fixed_array_map(), &slow, true);
+  __ CheckMap(edi, FACTORY->fixed_array_map(), &slow, true);
   __ cmp(ecx, FieldOperand(edi, FixedArray::kLengthOffset));
   __ j(below, &fast, taken);
 
@@ -822,7 +825,7 @@ void KeyedStoreIC::GenerateGeneric(MacroAssembler* masm,
   // edx: receiver, a JSArray
   // ecx: key, a smi.
   __ mov(edi, FieldOperand(edx, JSObject::kElementsOffset));
-  __ CheckMap(edi, Factory::fixed_array_map(), &slow, true);
+  __ CheckMap(edi, FACTORY->fixed_array_map(), &slow, true);
 
   // Check the key against the length in the array, compute the
   // address to store into and fall through to fast case.
@@ -861,7 +864,8 @@ static void GenerateMonomorphicCacheProbe(MacroAssembler* masm,
                                          Code::kNoExtraICState,
                                          NORMAL,
                                          argc);
-  StubCache::GenerateProbe(masm, flags, edx, ecx, ebx, eax);
+  Isolate::Current()->stub_cache()->GenerateProbe(masm, flags, edx, ecx, ebx,
+                                                  eax);
 
   // If the stub cache probing failed, the receiver might be a value.
   // For value objects, we use the map of the prototype objects for
@@ -888,9 +892,9 @@ static void GenerateMonomorphicCacheProbe(MacroAssembler* masm,
 
   // Check for boolean.
   __ bind(&non_string);
-  __ cmp(edx, Factory::true_value());
+  __ cmp(edx, FACTORY->true_value());
   __ j(equal, &boolean, not_taken);
-  __ cmp(edx, Factory::false_value());
+  __ cmp(edx, FACTORY->false_value());
   __ j(not_equal, &miss, taken);
   __ bind(&boolean);
   StubCompiler::GenerateLoadGlobalFunctionPrototype(
@@ -898,7 +902,8 @@ static void GenerateMonomorphicCacheProbe(MacroAssembler* masm,
 
   // Probe the stub cache for the value object.
   __ bind(&probe);
-  StubCache::GenerateProbe(masm, flags, edx, ecx, ebx, no_reg);
+  Isolate::Current()->stub_cache()->GenerateProbe(masm, flags, edx, ecx, ebx,
+                                                  no_reg);
   __ bind(&miss);
 }
 
@@ -964,10 +969,11 @@ static void GenerateCallMiss(MacroAssembler* masm,
   //  -- esp[(argc + 1) * 4] : receiver
   // -----------------------------------
 
+  Counters* counters = masm->isolate()->counters();
   if (id == IC::kCallIC_Miss) {
-    __ IncrementCounter(&Counters::call_miss, 1);
+    __ IncrementCounter(counters->call_miss(), 1);
   } else {
-    __ IncrementCounter(&Counters::keyed_call_miss, 1);
+    __ IncrementCounter(counters->keyed_call_miss(), 1);
   }
 
   // Get the receiver of the function from the stack; 1 ~ return address.
@@ -983,7 +989,7 @@ static void GenerateCallMiss(MacroAssembler* masm,
   // Call the entry.
   CEntryStub stub(1);
   __ mov(eax, Immediate(2));
-  __ mov(ebx, Immediate(ExternalReference(IC_Utility(id))));
+  __ mov(ebx, Immediate(ExternalReference(IC_Utility(id), masm->isolate())));
   __ CallStub(&stub);
 
   // Move result to edi and exit the internal frame.
@@ -1089,7 +1095,9 @@ void KeyedCallIC::GenerateMegamorphic(MacroAssembler* masm, int argc) {
 
   GenerateFastArrayLoad(
       masm, edx, ecx, eax, edi, &check_number_dictionary, &slow_load);
-  __ IncrementCounter(&Counters::keyed_call_generic_smi_fast, 1);
+  Isolate* isolate = masm->isolate();
+  Counters* counters = isolate->counters();
+  __ IncrementCounter(counters->keyed_call_generic_smi_fast(), 1);
 
   __ bind(&do_call);
   // receiver in edx is not used after this point.
@@ -1101,14 +1109,14 @@ void KeyedCallIC::GenerateMegamorphic(MacroAssembler* masm, int argc) {
   // eax: elements
   // ecx: smi key
   // Check whether the elements is a number dictionary.
-  __ CheckMap(eax, Factory::hash_table_map(), &slow_load, true);
+  __ CheckMap(eax, isolate->factory()->hash_table_map(), &slow_load, true);
   __ mov(ebx, ecx);
   __ SmiUntag(ebx);
   // ebx: untagged index
   // Receiver in edx will be clobbered, need to reload it on miss.
   GenerateNumberDictionaryLoad(
       masm, &slow_reload_receiver, eax, ecx, ebx, edx, edi, edi);
-  __ IncrementCounter(&Counters::keyed_call_generic_smi_dict, 1);
+  __ IncrementCounter(counters->keyed_call_generic_smi_dict(), 1);
   __ jmp(&do_call);
 
   __ bind(&slow_reload_receiver);
@@ -1117,7 +1125,7 @@ void KeyedCallIC::GenerateMegamorphic(MacroAssembler* masm, int argc) {
   __ bind(&slow_load);
   // This branch is taken when calling KeyedCallIC_Miss is neither required
   // nor beneficial.
-  __ IncrementCounter(&Counters::keyed_call_generic_slow_load, 1);
+  __ IncrementCounter(counters->keyed_call_generic_slow_load(), 1);
   __ EnterInternalFrame();
   __ push(ecx);  // save the key
   __ push(edx);  // pass the receiver
@@ -1139,14 +1147,17 @@ void KeyedCallIC::GenerateMegamorphic(MacroAssembler* masm, int argc) {
       masm, edx, eax, Map::kHasNamedInterceptor, &lookup_monomorphic_cache);
 
   __ mov(ebx, FieldOperand(edx, JSObject::kPropertiesOffset));
-  __ CheckMap(ebx, Factory::hash_table_map(), &lookup_monomorphic_cache, true);
+  __ CheckMap(ebx,
+              isolate->factory()->hash_table_map(),
+              &lookup_monomorphic_cache,
+              true);
 
   GenerateDictionaryLoad(masm, &slow_load, ebx, ecx, eax, edi, edi);
-  __ IncrementCounter(&Counters::keyed_call_generic_lookup_dict, 1);
+  __ IncrementCounter(counters->keyed_call_generic_lookup_dict(), 1);
   __ jmp(&do_call);
 
   __ bind(&lookup_monomorphic_cache);
-  __ IncrementCounter(&Counters::keyed_call_generic_lookup_cache, 1);
+  __ IncrementCounter(counters->keyed_call_generic_lookup_cache(), 1);
   GenerateMonomorphicCacheProbe(masm, argc, Code::KEYED_CALL_IC);
   // Fall through on miss.
 
@@ -1157,7 +1168,7 @@ void KeyedCallIC::GenerateMegamorphic(MacroAssembler* masm, int argc) {
   // - the value loaded is not a function,
   // - there is hope that the runtime will create a monomorphic call stub
   //   that will get fetched next time.
-  __ IncrementCounter(&Counters::keyed_call_generic_slow, 1);
+  __ IncrementCounter(counters->keyed_call_generic_slow(), 1);
   GenerateMiss(masm, argc);
 
   __ bind(&index_string);
@@ -1212,7 +1223,8 @@ void LoadIC::GenerateMegamorphic(MacroAssembler* masm) {
   Code::Flags flags = Code::ComputeFlags(Code::LOAD_IC,
                                          NOT_IN_LOOP,
                                          MONOMORPHIC);
-  StubCache::GenerateProbe(masm, flags, eax, ecx, ebx, edx);
+  Isolate::Current()->stub_cache()->GenerateProbe(masm, flags, eax, ecx, ebx,
+                                                  edx);
 
   // Cache miss: Jump to runtime.
   GenerateMiss(masm);
@@ -1247,7 +1259,7 @@ void LoadIC::GenerateMiss(MacroAssembler* masm) {
   //  -- esp[0] : return address
   // -----------------------------------
 
-  __ IncrementCounter(&Counters::load_miss, 1);
+  __ IncrementCounter(masm->isolate()->counters()->load_miss(), 1);
 
   __ pop(ebx);
   __ push(eax);  // receiver
@@ -1255,7 +1267,8 @@ void LoadIC::GenerateMiss(MacroAssembler* masm) {
   __ push(ebx);  // return address
 
   // Perform tail call to the entry.
-  ExternalReference ref = ExternalReference(IC_Utility(kLoadIC_Miss));
+  ExternalReference ref =
+      ExternalReference(IC_Utility(kLoadIC_Miss), masm->isolate());
   __ TailCallExternalReference(ref, 2, 1);
 }
 
@@ -1375,7 +1388,7 @@ bool StoreIC::PatchInlinedStore(Address address, Object* map, int offset) {
   // (-1) or we should be clearing the inlined version.
   ASSERT(*reinterpret_cast<int*>(offset_address) == kMaxInt - 1 ||
          *reinterpret_cast<int*>(offset_address) == -1 ||
-         (offset == 0 && map == Heap::null_value()));
+         (offset == 0 && map == HEAP->null_value()));
   *reinterpret_cast<int*>(offset_address) = offset - kHeapObjectTag;
 
   // Patch the offset in the write-barrier code. The offset is the
@@ -1385,7 +1398,7 @@ bool StoreIC::PatchInlinedStore(Address address, Object* map, int offset) {
   // (-1) or we should be clearing the inlined version.
   ASSERT(*reinterpret_cast<int*>(offset_address) == kMaxInt ||
          *reinterpret_cast<int*>(offset_address) == -1 ||
-         (offset == 0 && map == Heap::null_value()));
+         (offset == 0 && map == HEAP->null_value()));
   *reinterpret_cast<int*>(offset_address) = offset - kHeapObjectTag;
 
   return true;
@@ -1433,7 +1446,7 @@ void KeyedLoadIC::GenerateMiss(MacroAssembler* masm) {
   //  -- esp[0] : return address
   // -----------------------------------
 
-  __ IncrementCounter(&Counters::keyed_load_miss, 1);
+  __ IncrementCounter(masm->isolate()->counters()->keyed_load_miss(), 1);
 
   __ pop(ebx);
   __ push(edx);  // receiver
@@ -1441,7 +1454,8 @@ void KeyedLoadIC::GenerateMiss(MacroAssembler* masm) {
   __ push(ebx);  // return address
 
   // Perform tail call to the entry.
-  ExternalReference ref = ExternalReference(IC_Utility(kKeyedLoadIC_Miss));
+  ExternalReference ref =
+      ExternalReference(IC_Utility(kKeyedLoadIC_Miss), masm->isolate());
   __ TailCallExternalReference(ref, 2, 1);
 }
 
@@ -1476,7 +1490,8 @@ void StoreIC::GenerateMegamorphic(MacroAssembler* masm,
                                          NOT_IN_LOOP,
                                          MONOMORPHIC,
                                          strict_mode);
-  StubCache::GenerateProbe(masm, flags, edx, ecx, ebx, no_reg);
+  Isolate::Current()->stub_cache()->GenerateProbe(masm, flags, edx, ecx, ebx,
+                                                  no_reg);
 
   // Cache miss: Jump to runtime.
   GenerateMiss(masm);
@@ -1498,7 +1513,8 @@ void StoreIC::GenerateMiss(MacroAssembler* masm) {
   __ push(ebx);
 
   // Perform tail call to the entry.
-  ExternalReference ref = ExternalReference(IC_Utility(kStoreIC_Miss));
+  ExternalReference ref =
+      ExternalReference(IC_Utility(kStoreIC_Miss), masm->isolate());
   __ TailCallExternalReference(ref, 3, 1);
 }
 
@@ -1553,7 +1569,8 @@ void StoreIC::GenerateArrayLength(MacroAssembler* masm) {
   __ push(value);
   __ push(scratch);  // return address
 
-  ExternalReference ref = ExternalReference(IC_Utility(kStoreIC_ArrayLength));
+  ExternalReference ref =
+      ExternalReference(IC_Utility(kStoreIC_ArrayLength), masm->isolate());
   __ TailCallExternalReference(ref, 2, 1);
 
   __ bind(&miss);
@@ -1580,14 +1597,15 @@ void StoreIC::GenerateNormal(MacroAssembler* masm) {
   __ push(edx);
   GenerateDictionaryStore(masm, &restore_miss, ebx, ecx, eax, edx, edi);
   __ Drop(1);
-  __ IncrementCounter(&Counters::store_normal_hit, 1);
+  Counters* counters = masm->isolate()->counters();
+  __ IncrementCounter(counters->store_normal_hit(), 1);
   __ ret(0);
 
   __ bind(&restore_miss);
   __ pop(edx);
 
   __ bind(&miss);
-  __ IncrementCounter(&Counters::store_normal_miss, 1);
+  __ IncrementCounter(counters->store_normal_miss(), 1);
   GenerateMiss(masm);
 }
 
@@ -1650,7 +1668,8 @@ void KeyedStoreIC::GenerateMiss(MacroAssembler* masm) {
   __ push(ebx);
 
   // Do tail-call to runtime routine.
-  ExternalReference ref = ExternalReference(IC_Utility(kKeyedStoreIC_Miss));
+  ExternalReference ref =
+      ExternalReference(IC_Utility(kKeyedStoreIC_Miss), masm->isolate());
   __ TailCallExternalReference(ref, 3, 1);
 }
 

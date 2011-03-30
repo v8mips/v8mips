@@ -41,6 +41,7 @@
           'ENABLE_LOGGING_AND_PROFILING',
           'ENABLE_DEBUGGER_SUPPORT',
           'ENABLE_VMSTATE_TRACKING',
+          'V8_FAST_TLS',
         ],
         'conditions': [
           ['OS!="mac"', {
@@ -209,38 +210,6 @@
                '../../include',
             ],
           },
-        },
-        {
-          'target_name': 'v8_preparser',
-          'include_dirs': [
-            '../../include',
-            '../../src',
-          ],
-          'sources': [
-            '../../src/allocation.cc',
-            '../../src/hashmap.cc',
-            '../../src/preparse-data.cc',
-            '../../src/preparser.cc',
-            '../../src/preparser-api.cc',
-            '../../src/scanner-base.cc',
-            '../../src/token.cc',
-            '../../src/unicode.cc',
-          ],
-          'conditions': [
-            ['OS=="win" and component=="shared_library"', {
-              'sources': [ '../../src/v8preparserdll-main.cc' ],
-              'defines': [ 'BUILDING_V8_SHARED' ],
-              'direct_dependent_settings': {
-                'defines': [ 'USING_V8_SHARED' ]
-              },
-              'type': '<(component)',
-            } , {
-              'type': 'none'
-            }],
-            ['OS!="win"', {
-              'type': '<(library)'
-            }],
-          ]
         },
         {
           'target_name': 'v8_snapshot',
@@ -435,6 +404,8 @@
             '../../src/jump-target.h',
             '../../src/jsregexp.cc',
             '../../src/jsregexp.h',
+            '../../src/isolate.cc',
+            '../../src/isolate.h',
             '../../src/list-inl.h',
             '../../src/list.h',
             '../../src/lithium.cc',
@@ -455,7 +426,6 @@
             '../../src/macro-assembler.h',
             '../../src/mark-compact.cc',
             '../../src/mark-compact.h',
-            '../../src/memory.h',
             '../../src/messages.cc',
             '../../src/messages.h',
             '../../src/natives.h',
@@ -468,6 +438,9 @@
             '../../src/objects.h',
             '../../src/parser.cc',
             '../../src/parser.h',
+            '../../src/platform-tls-mac.h',
+            '../../src/platform-tls-win32.h',
+            '../../src/platform-tls.h',
             '../../src/platform.h',
             '../../src/preparse-data.cc',
             '../../src/preparse-data.h',
@@ -511,6 +484,7 @@
             '../../src/serialize.cc',
             '../../src/serialize.h',
             '../../src/shell.h',
+            '../../src/small-pointer-list.h',
             '../../src/smart-pointer.h',
             '../../src/snapshot-common.cc',
             '../../src/snapshot.h',
@@ -544,6 +518,7 @@
             '../../src/v8.h',
             '../../src/v8checks.h',
             '../../src/v8globals.h',
+            '../../src/v8memory.h',
             '../../src/v8threads.cc',
             '../../src/v8threads.h',
             '../../src/v8utils.h',

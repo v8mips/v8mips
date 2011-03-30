@@ -782,7 +782,7 @@
         >
       </File>
       <File
-        RelativePath="..\..\src\memory.h"
+        RelativePath="..\..\src\v8memory.h"
         >
       </File>
       <File
@@ -1023,6 +1023,10 @@
       </File>
       <File
         RelativePath="..\..\src\shell.h"
+        >
+      </File>
+      <File
+        RelativePath="..\..\src\small-pointer-list.h"
         >
       </File>
       <File

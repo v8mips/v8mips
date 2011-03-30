@@ -128,6 +128,9 @@ LIBRARY_FLAGS = {
     'inspector:on': {
       'CPPDEFINES':   ['INSPECTOR'],
     },
+    'fasttls:on': {
+      'CPPDEFINES':   ['V8_FAST_TLS'],
+    },
     'liveobjectlist:on': {
       'CPPDEFINES':   ['ENABLE_DEBUGGER_SUPPORT', 'INSPECTOR',
                        'LIVE_OBJECT_LIST', 'OBJECT_PRINT'],
@@ -174,6 +177,7 @@ LIBRARY_FLAGS = {
       'CPPPATH' : ['/usr/local/include'],
       'LIBPATH' : ['/usr/local/lib'],
       'CCFLAGS':      ['-ansi'],
+      'LIBS': ['execinfo']
     },
     'os:openbsd': {
       'CPPPATH' : ['/usr/local/include'],
@@ -625,11 +629,11 @@ SAMPLE_FLAGS = {
       }
     },
     'arch:ia32': {
-      'CPPDEFINES': ['V8_TARGET_ARCH_IA32'],
+      'CPPDEFINES': ['V8_TARGET_ARCH_IA32', 'WIN32'],
       'LINKFLAGS': ['/MACHINE:X86']
     },
     'arch:x64': {
-      'CPPDEFINES': ['V8_TARGET_ARCH_X64'],
+      'CPPDEFINES': ['V8_TARGET_ARCH_X64', 'WIN32'],
       'LINKFLAGS': ['/MACHINE:X64', '/STACK:2091752']
     },
     'mode:debug': {
@@ -831,6 +835,12 @@ SIMPLE_OPTIONS = {
     'values': ['on', 'off'],
     'default': 'off',
     'help': 'enable the disassembler to inspect generated code'
+  },
+  'fasttls': {
+    'values': ['on', 'off'],
+    'default': 'on',
+    'help': 'enable fast thread local storage support '
+            '(if available on the current architecture/platform)'
   },
   'sourcesignatures': {
     'values': ['MD5', 'timestamp'],

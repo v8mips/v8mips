@@ -95,7 +95,9 @@ typedef int (*F0)();
 static void EntryCode(MacroAssembler* masm) {
   // Smi constant register is callee save.
   __ push(v8::internal::kSmiConstantRegister);
+  __ push(v8::internal::kRootRegister);
   __ InitializeSmiConstantRegister();
+  __ InitializeRootRegister();
 }
 
 
@@ -105,6 +107,7 @@ static void ExitCode(MacroAssembler* masm) {
   __ cmpq(rdx, v8::internal::kSmiConstantRegister);
   __ movq(rdx, Immediate(-1));
   __ cmovq(not_equal, rax, rdx);
+  __ pop(v8::internal::kRootRegister);
   __ pop(v8::internal::kSmiConstantRegister);
 }
 
@@ -146,6 +149,7 @@ static void TestMoveSmi(MacroAssembler* masm, Label* exit, int id, Smi* value) {
 
 // Test that we can move a Smi value literally into a register.
 TEST(SmiMove) {
+  v8::internal::V8::Initialize(NULL);
   // Allocate an executable page of memory.
   size_t actual_size;
   byte* buffer = static_cast<byte*>(OS::Allocate(Assembler::kMinimalBufferSize,
@@ -232,7 +236,7 @@ void TestSmiCompare(MacroAssembler* masm, Label* exit, int id, int x, int y) {
 
 // Test that we can compare smis for equality (and more).
 TEST(SmiCompare) {
-  v8::V8::Initialize();
+  v8::internal::V8::Initialize(NULL);
   // Allocate an executable page of memory.
   size_t actual_size;
   byte* buffer =
@@ -283,6 +287,7 @@ TEST(SmiCompare) {
 
 
 TEST(Integer32ToSmi) {
+  v8::internal::V8::Initialize(NULL);
   // Allocate an executable page of memory.
   size_t actual_size;
   byte* buffer = static_cast<byte*>(OS::Allocate(Assembler::kMinimalBufferSize,
@@ -410,6 +415,7 @@ void TestI64PlusConstantToSmi(MacroAssembler* masm,
 
 
 TEST(Integer64PlusConstantToSmi) {
+  v8::internal::V8::Initialize(NULL);
   // Allocate an executable page of memory.
   size_t actual_size;
   byte* buffer = static_cast<byte*>(OS::Allocate(Assembler::kMinimalBufferSize,
@@ -453,6 +459,7 @@ TEST(Integer64PlusConstantToSmi) {
 
 
 TEST(SmiCheck) {
+  v8::internal::V8::Initialize(NULL);
   // Allocate an executable page of memory.
   size_t actual_size;
   byte* buffer = static_cast<byte*>(OS::Allocate(Assembler::kMinimalBufferSize,
@@ -699,6 +706,7 @@ void TestSmiNeg(MacroAssembler* masm, Label* exit, int id, int x) {
 
 
 TEST(SmiNeg) {
+  v8::internal::V8::Initialize(NULL);
   // Allocate an executable page of memory.
   size_t actual_size;
   byte* buffer =
@@ -787,6 +795,7 @@ static void SmiAddTest(MacroAssembler* masm,
 }
 
 TEST(SmiAdd) {
+  v8::internal::V8::Initialize(NULL);
   // Allocate an executable page of memory.
   size_t actual_size;
   byte* buffer = static_cast<byte*>(OS::Allocate(Assembler::kMinimalBufferSize,
@@ -975,6 +984,7 @@ static void SmiSubOverflowTest(MacroAssembler* masm,
 
 
 TEST(SmiSub) {
+  v8::internal::V8::Initialize(NULL);
   // Allocate an executable page of memory.
   size_t actual_size;
   byte* buffer =
@@ -1065,6 +1075,7 @@ void TestSmiMul(MacroAssembler* masm, Label* exit, int id, int x, int y) {
 
 
 TEST(SmiMul) {
+  v8::internal::V8::Initialize(NULL);
   // Allocate an executable page of memory.
   size_t actual_size;
   byte* buffer = static_cast<byte*>(OS::Allocate(Assembler::kMinimalBufferSize,
@@ -1169,6 +1180,7 @@ void TestSmiDiv(MacroAssembler* masm, Label* exit, int id, int x, int y) {
 
 
 TEST(SmiDiv) {
+  v8::internal::V8::Initialize(NULL);
   // Allocate an executable page of memory.
   size_t actual_size;
   byte* buffer =
@@ -1278,6 +1290,7 @@ void TestSmiMod(MacroAssembler* masm, Label* exit, int id, int x, int y) {
 
 
 TEST(SmiMod) {
+  v8::internal::V8::Initialize(NULL);
   // Allocate an executable page of memory.
   size_t actual_size;
   byte* buffer =
@@ -1373,6 +1386,7 @@ void TestSmiIndex(MacroAssembler* masm, Label* exit, int id, int x) {
 }
 
 TEST(SmiIndex) {
+  v8::internal::V8::Initialize(NULL);
   // Allocate an executable page of memory.
   size_t actual_size;
   byte* buffer =
@@ -1441,6 +1455,7 @@ void TestSelectNonSmi(MacroAssembler* masm, Label* exit, int id, int x, int y) {
 
 
 TEST(SmiSelectNonSmi) {
+  v8::internal::V8::Initialize(NULL);
   // Allocate an executable page of memory.
   size_t actual_size;
   byte* buffer =
@@ -1519,6 +1534,7 @@ void TestSmiAnd(MacroAssembler* masm, Label* exit, int id, int x, int y) {
 
 
 TEST(SmiAnd) {
+  v8::internal::V8::Initialize(NULL);
   // Allocate an executable page of memory.
   size_t actual_size;
   byte* buffer =
@@ -1599,6 +1615,7 @@ void TestSmiOr(MacroAssembler* masm, Label* exit, int id, int x, int y) {
 
 
 TEST(SmiOr) {
+  v8::internal::V8::Initialize(NULL);
   // Allocate an executable page of memory.
   size_t actual_size;
   byte* buffer =
@@ -1681,6 +1698,7 @@ void TestSmiXor(MacroAssembler* masm, Label* exit, int id, int x, int y) {
 
 
 TEST(SmiXor) {
+  v8::internal::V8::Initialize(NULL);
   // Allocate an executable page of memory.
   size_t actual_size;
   byte* buffer =
@@ -1747,6 +1765,7 @@ void TestSmiNot(MacroAssembler* masm, Label* exit, int id, int x) {
 
 
 TEST(SmiNot) {
+  v8::internal::V8::Initialize(NULL);
   // Allocate an executable page of memory.
   size_t actual_size;
   byte* buffer =
@@ -1842,6 +1861,7 @@ void TestSmiShiftLeft(MacroAssembler* masm, Label* exit, int id, int x) {
 
 
 TEST(SmiShiftLeft) {
+  v8::internal::V8::Initialize(NULL);
   // Allocate an executable page of memory.
   size_t actual_size;
   byte* buffer =
@@ -1947,6 +1967,7 @@ void TestSmiShiftLogicalRight(MacroAssembler* masm,
 
 
 TEST(SmiShiftLogicalRight) {
+  v8::internal::V8::Initialize(NULL);
   // Allocate an executable page of memory.
   size_t actual_size;
   byte* buffer =
@@ -2015,6 +2036,7 @@ void TestSmiShiftArithmeticRight(MacroAssembler* masm,
 
 
 TEST(SmiShiftArithmeticRight) {
+  v8::internal::V8::Initialize(NULL);
   // Allocate an executable page of memory.
   size_t actual_size;
   byte* buffer =
@@ -2078,7 +2100,7 @@ void TestPositiveSmiPowerUp(MacroAssembler* masm, Label* exit, int id, int x) {
 
 
 TEST(PositiveSmiTimesPowerOfTwoToInteger64) {
-  v8::V8::Initialize();
+  v8::internal::V8::Initialize(NULL);
   // Allocate an executable page of memory.
   size_t actual_size;
   byte* buffer =
@@ -2118,6 +2140,7 @@ TEST(PositiveSmiTimesPowerOfTwoToInteger64) {
 
 
 TEST(OperandOffset) {
+  v8::internal::V8::Initialize(NULL);
   int data[256];
   for (int i = 0; i < 256; i++) { data[i] = i * 0x01010101; }
 

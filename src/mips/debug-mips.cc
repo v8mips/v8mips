@@ -59,7 +59,8 @@ void BreakLocationIterator::SetDebugBreakAtReturn() {
   CodePatcher patcher(rinfo()->pc(), Assembler::kJSReturnSequenceInstructions);
   // li and Call pseudo-instructions emit two instructions each.
   patcher.masm()->li(v8::internal::t9,
-      Operand(reinterpret_cast<int32_t>(Debug::debug_break_return()->entry())));
+      Operand(reinterpret_cast<int32_t>(
+          Isolate::Current()->debug()->debug_break_return()->entry())));
   patcher.masm()->Call(v8::internal::t9);
   patcher.masm()->nop();
   patcher.masm()->nop();
@@ -103,8 +104,8 @@ void BreakLocationIterator::SetDebugBreakAtSlot() {
   //   li t9, address   (lui t9 / ori t9 instruction pair)
   //   call t9          (jalr t9 / nop instruction pair)
   CodePatcher patcher(rinfo()->pc(), Assembler::kDebugBreakSlotInstructions);
-  patcher.masm()->li(v8::internal::t9,
-      Operand(reinterpret_cast<int32_t>(Debug::debug_break_return()->entry())));
+  patcher.masm()->li(v8::internal::t9, Operand(reinterpret_cast<int32_t>(
+      Isolate::Current()->debug()->debug_break_return()->entry())));
   patcher.masm()->Call(v8::internal::t9);
 }
 
@@ -150,7 +151,7 @@ static void Generate_DebugBreakCallHelper(MacroAssembler* masm,
   __ RecordComment("// Calling from debug break to runtime - come in - over");
 #endif
   __ mov(a0, zero_reg);  // no arguments
-  __ li(a1, Operand(ExternalReference::debug_break()));
+  __ li(a1, Operand(ExternalReference::debug_break(masm->isolate())));
 
   CEntryStub ceb(1);
   __ CallStub(&ceb);
@@ -176,7 +177,8 @@ static void Generate_DebugBreakCallHelper(MacroAssembler* masm,
   // Now that the break point has been handled, resume normal execution by
   // jumping to the target address intended by the caller and that was
   // overwritten by the address of DebugBreakXXX.
-  __ li(t9, Operand(ExternalReference(Debug_Address::AfterBreakTarget())));
+  __ li(t9, Operand(
+      ExternalReference(Debug_Address::AfterBreakTarget(), masm->isolate())));
   __ lw(t9, MemOperand(t9));
   __ Jump(t9);
 }

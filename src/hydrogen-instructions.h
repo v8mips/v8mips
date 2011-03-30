@@ -29,7 +29,9 @@
 #define V8_HYDROGEN_INSTRUCTIONS_H_
 
 #include "v8.h"
+
 #include "code-stubs.h"
+#include "small-pointer-list.h"
 #include "string-stream.h"
 #include "zone.h"
 
@@ -125,9 +127,10 @@ class LChunkBuilder;
   V(LoadGlobal)                                \
   V(LoadKeyedFastElement)                      \
   V(LoadKeyedGeneric)                          \
+  V(LoadKeyedSpecializedArrayElement)          \
   V(LoadNamedField)                            \
+  V(LoadNamedFieldPolymorphic)                 \
   V(LoadNamedGeneric)                          \
-  V(LoadPixelArrayElement)                     \
   V(Mod)                                       \
   V(Mul)                                       \
   V(ObjectLiteral)                             \
@@ -146,7 +149,7 @@ class LChunkBuilder;
   V(StoreContextSlot)                          \
   V(StoreGlobal)                               \
   V(StoreKeyedFastElement)                     \
-  V(StorePixelArrayElement)                    \
+  V(StoreKeyedSpecializedArrayElement)         \
   V(StoreKeyedGeneric)                         \
   V(StoreNamedField)                           \
   V(StoreNamedGeneric)                         \
@@ -156,6 +159,7 @@ class LChunkBuilder;
   V(Sub)                                       \
   V(Test)                                      \
   V(Throw)                                     \
+  V(ToFastProperties)                          \
   V(Typeof)                                    \
   V(TypeofIs)                                  \
   V(UnaryMathOperation)                        \
@@ -167,7 +171,7 @@ class LChunkBuilder;
   V(InobjectFields)                            \
   V(BackingStoreFields)                        \
   V(ArrayElements)                             \
-  V(PixelArrayElements)                        \
+  V(SpecializedArrayElements)                  \
   V(GlobalVars)                                \
   V(Maps)                                      \
   V(ArrayLengths)                              \
@@ -450,7 +454,6 @@ class HValue: public ZoneObject {
 
   HValue() : block_(NULL),
              id_(kNoNumber),
-             uses_(2),
              type_(HType::Tagged()),
              range_(NULL),
              flags_(0) {}
@@ -462,7 +465,7 @@ class HValue: public ZoneObject {
   int id() const { return id_; }
   void set_id(int id) { id_ = id; }
 
-  ZoneList<HValue*>* uses() { return &uses_; }
+  SmallPointerList<HValue>* uses() { return &uses_; }
 
   virtual bool EmitAtUses() { return false; }
   Representation representation() const { return representation_; }
@@ -606,7 +609,7 @@ class HValue: public ZoneObject {
   int id_;
 
   Representation representation_;
-  ZoneList<HValue*> uses_;
+  SmallPointerList<HValue> uses_;
   HType type_;
   Range* range_;
   int flags_;
@@ -757,15 +760,33 @@ class HBlockEntry: public HTemplateInstruction<0> {
 };
 
 
-class HDeoptimize: public HTemplateControlInstruction<0> {
+class HDeoptimize: public HControlInstruction {
  public:
-  HDeoptimize() : HTemplateControlInstruction<0>(NULL, NULL) { }
+  explicit HDeoptimize(int environment_length)
+      : HControlInstruction(NULL, NULL),
+        values_(environment_length) { }
 
   virtual Representation RequiredInputRepresentation(int index) const {
     return Representation::None();
   }
 
+  virtual int OperandCount() { return values_.length(); }
+  virtual HValue* OperandAt(int index) { return values_[index]; }
+
+  void AddEnvironmentValue(HValue* value) {
+    values_.Add(NULL);
+    SetOperandAt(values_.length() - 1, value);
+  }
+
   DECLARE_CONCRETE_INSTRUCTION(Deoptimize, "deoptimize")
+
+ protected:
+  virtual void InternalSetOperandAt(int index, HValue* value) {
+    values_[index] = value;
+  }
+
+ private:
+  ZoneList<HValue*> values_;
 };
 
 
@@ -1226,7 +1247,8 @@ class HCallConstantFunction: public HCall<0> {
   Handle<JSFunction> function() const { return function_; }
 
   bool IsApplyFunction() const {
-    return function_->code() == Builtins::builtin(Builtins::FunctionApply);
+    return function_->code() ==
+        Isolate::Current()->builtins()->builtin(Builtins::kFunctionApply);
   }
 
   virtual void PrintDataTo(StringStream* stream);
@@ -1359,12 +1381,12 @@ class HCallNew: public HBinaryCall {
 class HCallRuntime: public HCall<0> {
  public:
   HCallRuntime(Handle<String> name,
-               Runtime::Function* c_function,
+               const Runtime::Function* c_function,
                int argument_count)
       : HCall<0>(argument_count), c_function_(c_function), name_(name) { }
   virtual void PrintDataTo(StringStream* stream);
 
-  Runtime::Function* function() const { return c_function_; }
+  const Runtime::Function* function() const { return c_function_; }
   Handle<String> name() const { return name_; }
 
   virtual Representation RequiredInputRepresentation(int index) const {
@@ -1374,7 +1396,7 @@ class HCallRuntime: public HCall<0> {
   DECLARE_CONCRETE_INSTRUCTION(CallRuntime, "call_runtime")
 
  private:
-  Runtime::Function* c_function_;
+  const Runtime::Function* c_function_;
   Handle<String> name_;
 };
 
@@ -1386,8 +1408,9 @@ class HJSArrayLength: public HUnaryOperation {
     // object. It is guaranteed to be 32 bit integer, but it can be
     // represented as either a smi or heap number.
     set_representation(Representation::Tagged());
-    SetFlag(kDependsOnArrayLengths);
     SetFlag(kUseGVN);
+    SetFlag(kDependsOnArrayLengths);
+    SetFlag(kDependsOnMaps);
   }
 
   virtual Representation RequiredInputRepresentation(int index) const {
@@ -1405,8 +1428,8 @@ class HFixedArrayLength: public HUnaryOperation {
  public:
   explicit HFixedArrayLength(HValue* value) : HUnaryOperation(value) {
     set_representation(Representation::Tagged());
-    SetFlag(kDependsOnArrayLengths);
     SetFlag(kUseGVN);
+    SetFlag(kDependsOnArrayLengths);
   }
 
   virtual Representation RequiredInputRepresentation(int index) const {
@@ -1564,7 +1587,7 @@ class HLoadExternalArrayPointer: public HUnaryOperation {
       : HUnaryOperation(value) {
     set_representation(Representation::External());
     // The result of this instruction is idempotent as long as its inputs don't
-    // change.  The external array of a pixel array elements object cannot
+    // change.  The external array of a specialized array elements object cannot
     // change once set, so it's no necessary to introduce any additional
     // dependencies on top of the inputs.
     SetFlag(kUseGVN);
@@ -1752,7 +1775,7 @@ class HCheckPrototypeMaps: public HTemplateInstruction<0> {
   }
 
   virtual intptr_t Hashcode() {
-    ASSERT(!Heap::IsAllocationAllowed());
+    ASSERT(!HEAP->IsAllocationAllowed());
     intptr_t hash = reinterpret_cast<intptr_t>(*prototype());
     hash = 17 * hash + reinterpret_cast<intptr_t>(*holder());
     return hash;
@@ -1916,7 +1939,7 @@ class HConstant: public HTemplateInstruction<0> {
 
   Handle<Object> handle() const { return handle_; }
 
-  bool InOldSpace() const { return !Heap::InNewSpace(*handle_); }
+  bool InOldSpace() const { return !HEAP->InNewSpace(*handle_); }
 
   virtual Representation RequiredInputRepresentation(int index) const {
     return Representation::None();
@@ -1941,7 +1964,7 @@ class HConstant: public HTemplateInstruction<0> {
   bool HasStringValue() const { return handle_->IsString(); }
 
   virtual intptr_t Hashcode() {
-    ASSERT(!Heap::allow_allocation(false));
+    ASSERT(!HEAP->allow_allocation(false));
     return reinterpret_cast<intptr_t>(*handle());
   }
 
@@ -2236,6 +2259,7 @@ class HCompareJSObjectEq: public HBinaryOperation {
       : HBinaryOperation(left, right) {
     set_representation(Representation::Tagged());
     SetFlag(kUseGVN);
+    SetFlag(kDependsOnMaps);
   }
 
   virtual bool EmitAtUses() {
@@ -2800,7 +2824,7 @@ class HLoadGlobal: public HTemplateInstruction<0> {
   virtual void PrintDataTo(StringStream* stream);
 
   virtual intptr_t Hashcode() {
-    ASSERT(!Heap::allow_allocation(false));
+    ASSERT(!HEAP->allow_allocation(false));
     return reinterpret_cast<intptr_t>(*cell_);
   }
 
@@ -2921,6 +2945,7 @@ class HLoadNamedField: public HUnaryOperation {
         offset_(offset) {
     set_representation(Representation::Tagged());
     SetFlag(kUseGVN);
+    SetFlag(kDependsOnMaps);
     if (is_in_object) {
       SetFlag(kDependsOnInobjectFields);
     } else {
@@ -2949,6 +2974,37 @@ class HLoadNamedField: public HUnaryOperation {
   bool is_in_object_;
   int offset_;
 };
+
+
+class HLoadNamedFieldPolymorphic: public HUnaryOperation {
+ public:
+  HLoadNamedFieldPolymorphic(HValue* object,
+                             ZoneMapList* types,
+                             Handle<String> name);
+
+  HValue* object() { return OperandAt(0); }
+  ZoneMapList* types() { return &types_; }
+  Handle<String> name() { return name_; }
+  bool need_generic() { return need_generic_; }
+
+  virtual Representation RequiredInputRepresentation(int index) const {
+    return Representation::Tagged();
+  }
+
+  DECLARE_CONCRETE_INSTRUCTION(LoadNamedFieldPolymorphic,
+                               "load_named_field_polymorphic")
+
+  static const int kMaxLoadPolymorphism = 4;
+
+ protected:
+  virtual bool DataEquals(HValue* value);
+
+ private:
+  ZoneMapList types_;
+  Handle<String> name_;
+  bool need_generic_;
+};
+
 
 
 class HLoadNamedGeneric: public HBinaryOperation {
@@ -3023,13 +3079,20 @@ class HLoadKeyedFastElement: public HBinaryOperation {
 };
 
 
-class HLoadPixelArrayElement: public HBinaryOperation {
+class HLoadKeyedSpecializedArrayElement: public HBinaryOperation {
  public:
-  HLoadPixelArrayElement(HValue* external_elements, HValue* key)
-      : HBinaryOperation(external_elements, key) {
-    set_representation(Representation::Integer32());
-    SetFlag(kDependsOnPixelArrayElements);
-    // Native code could change the pixel array.
+  HLoadKeyedSpecializedArrayElement(HValue* external_elements,
+                                    HValue* key,
+                                    ExternalArrayType array_type)
+      : HBinaryOperation(external_elements, key),
+        array_type_(array_type) {
+    if (array_type == kExternalFloatArray) {
+      set_representation(Representation::Double());
+    } else {
+      set_representation(Representation::Integer32());
+    }
+    SetFlag(kDependsOnSpecializedArrayElements);
+    // Native code could change the specialized array.
     SetFlag(kDependsOnCalls);
     SetFlag(kUseGVN);
   }
@@ -3045,12 +3108,21 @@ class HLoadPixelArrayElement: public HBinaryOperation {
 
   HValue* external_pointer() { return OperandAt(0); }
   HValue* key() { return OperandAt(1); }
+  ExternalArrayType array_type() const { return array_type_; }
 
-  DECLARE_CONCRETE_INSTRUCTION(LoadPixelArrayElement,
-                               "load_pixel_array_element")
+  DECLARE_CONCRETE_INSTRUCTION(LoadKeyedSpecializedArrayElement,
+                               "load_keyed_specialized_array_element")
 
  protected:
-  virtual bool DataEquals(HValue* other) { return true; }
+  virtual bool DataEquals(HValue* other) {
+    if (!other->IsLoadKeyedSpecializedArrayElement()) return false;
+    HLoadKeyedSpecializedArrayElement* cast_other =
+        HLoadKeyedSpecializedArrayElement::cast(other);
+    return array_type_ == cast_other->array_type();
+  }
+
+ private:
+  ExternalArrayType array_type_;
 };
 
 
@@ -3185,10 +3257,14 @@ class HStoreKeyedFastElement: public HTemplateInstruction<3> {
 };
 
 
-class HStorePixelArrayElement: public HTemplateInstruction<3> {
+class HStoreKeyedSpecializedArrayElement: public HTemplateInstruction<3> {
  public:
-  HStorePixelArrayElement(HValue* external_elements, HValue* key, HValue* val) {
-    SetFlag(kChangesPixelArrayElements);
+  HStoreKeyedSpecializedArrayElement(HValue* external_elements,
+                                     HValue* key,
+                                     HValue* val,
+                                     ExternalArrayType array_type)
+      : array_type_(array_type) {
+    SetFlag(kChangesSpecializedArrayElements);
     SetOperandAt(0, external_elements);
     SetOperandAt(1, key);
     SetOperandAt(2, val);
@@ -3200,16 +3276,23 @@ class HStorePixelArrayElement: public HTemplateInstruction<3> {
     if (index == 0) {
       return Representation::External();
     } else {
-      return Representation::Integer32();
+      if (index == 2 && array_type() == kExternalFloatArray) {
+        return Representation::Double();
+      } else {
+        return Representation::Integer32();
+      }
     }
   }
 
   HValue* external_pointer() { return OperandAt(0); }
   HValue* key() { return OperandAt(1); }
   HValue* value() { return OperandAt(2); }
+  ExternalArrayType array_type() const { return array_type_; }
 
-  DECLARE_CONCRETE_INSTRUCTION(StorePixelArrayElement,
-                               "store_pixel_array_element")
+  DECLARE_CONCRETE_INSTRUCTION(StoreKeyedSpecializedArrayElement,
+                               "store_keyed_specialized_array_element")
+ private:
+  ExternalArrayType array_type_;
 };
 
 
@@ -3247,6 +3330,7 @@ class HStringCharCodeAt: public HBinaryOperation {
       : HBinaryOperation(string, index) {
     set_representation(Representation::Integer32());
     SetFlag(kUseGVN);
+    SetFlag(kDependsOnMaps);
   }
 
   virtual Representation RequiredInputRepresentation(int index) const {
@@ -3291,6 +3375,7 @@ class HStringLength: public HUnaryOperation {
   explicit HStringLength(HValue* string) : HUnaryOperation(string) {
     set_representation(Representation::Tagged());
     SetFlag(kUseGVN);
+    SetFlag(kDependsOnMaps);
   }
 
   virtual Representation RequiredInputRepresentation(int index) const {
@@ -3363,10 +3448,12 @@ class HObjectLiteral: public HMaterializedLiteral<1> {
                  Handle<FixedArray> constant_properties,
                  bool fast_elements,
                  int literal_index,
-                 int depth)
+                 int depth,
+                 bool has_function)
       : HMaterializedLiteral<1>(literal_index, depth),
         constant_properties_(constant_properties),
-        fast_elements_(fast_elements) {
+        fast_elements_(fast_elements),
+        has_function_(has_function) {
     SetOperandAt(0, context);
   }
 
@@ -3375,6 +3462,7 @@ class HObjectLiteral: public HMaterializedLiteral<1> {
     return constant_properties_;
   }
   bool fast_elements() const { return fast_elements_; }
+  bool has_function() const { return has_function_; }
 
   virtual Representation RequiredInputRepresentation(int index) const {
     return Representation::Tagged();
@@ -3385,6 +3473,7 @@ class HObjectLiteral: public HMaterializedLiteral<1> {
  private:
   Handle<FixedArray> constant_properties_;
   bool fast_elements_;
+  bool has_function_;
 };
 
 
@@ -3445,6 +3534,24 @@ class HTypeof: public HUnaryOperation {
   }
 
   DECLARE_CONCRETE_INSTRUCTION(Typeof, "typeof")
+};
+
+
+class HToFastProperties: public HUnaryOperation {
+ public:
+  explicit HToFastProperties(HValue* value) : HUnaryOperation(value) {
+    // This instruction is not marked as having side effects, but
+    // changes the map of the input operand. Use it only when creating
+    // object literals.
+    ASSERT(value->IsObjectLiteral());
+    set_representation(Representation::Tagged());
+  }
+
+  virtual Representation RequiredInputRepresentation(int index) const {
+    return Representation::Tagged();
+  }
+
+  DECLARE_CONCRETE_INSTRUCTION(ToFastProperties, "to_fast_properties")
 };
 
 

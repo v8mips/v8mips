@@ -36,13 +36,13 @@
 namespace v8 {
 namespace internal {
 
-unsigned AstNode::current_id_ = 0;
-unsigned AstNode::count_ = 0;
-VariableProxySentinel VariableProxySentinel::this_proxy_(true);
-VariableProxySentinel VariableProxySentinel::identifier_proxy_(false);
-ValidLeftHandSideSentinel ValidLeftHandSideSentinel::instance_;
-Property Property::this_property_(VariableProxySentinel::this_proxy(), NULL, 0);
-Call Call::sentinel_(NULL, NULL, 0);
+AstSentinels::AstSentinels()
+    : this_proxy_(true),
+      identifier_proxy_(false),
+      valid_left_hand_side_sentinel_(),
+      this_property_(&this_proxy_, NULL, 0),
+      call_sentinel_(NULL, NULL, 0) {
+}
 
 
 // ----------------------------------------------------------------------------
@@ -170,7 +170,7 @@ ObjectLiteral::Property::Property(Literal* key, Expression* value) {
   key_ = key;
   value_ = value;
   Object* k = *key->handle();
-  if (k->IsSymbol() && Heap::Proto_symbol()->Equals(String::cast(k))) {
+  if (k->IsSymbol() && HEAP->Proto_symbol()->Equals(String::cast(k))) {
     kind_ = PROTOTYPE;
   } else if (value_->AsMaterializedLiteral() != NULL) {
     kind_ = MATERIALIZED_LITERAL;
@@ -249,10 +249,11 @@ void ObjectLiteral::CalculateEmitStore() {
     uint32_t hash;
     HashMap* table;
     void* key;
+    Factory* factory = Isolate::Current()->factory();
     if (handle->IsSymbol()) {
       Handle<String> name(String::cast(*handle));
       if (name->AsArrayIndex(&hash)) {
-        Handle<Object> key_handle = Factory::NewNumberFromUint(hash);
+        Handle<Object> key_handle = factory->NewNumberFromUint(hash);
         key = key_handle.location();
         table = &elements;
       } else {
@@ -269,7 +270,7 @@ void ObjectLiteral::CalculateEmitStore() {
       char arr[100];
       Vector<char> buffer(arr, ARRAY_SIZE(arr));
       const char* str = DoubleToCString(num, buffer);
-      Handle<String> name = Factory::NewStringFromAscii(CStrVector(str));
+      Handle<String> name = factory->NewStringFromAscii(CStrVector(str));
       key = name.location();
       hash = name->Hash();
       table = &properties;
@@ -526,12 +527,12 @@ void Property::RecordTypeFeedback(TypeFeedbackOracle* oracle) {
   // Record type feedback from the oracle in the AST.
   is_monomorphic_ = oracle->LoadIsMonomorphic(this);
   if (key()->IsPropertyName()) {
-    if (oracle->LoadIsBuiltin(this, Builtins::LoadIC_ArrayLength)) {
+    if (oracle->LoadIsBuiltin(this, Builtins::kLoadIC_ArrayLength)) {
       is_array_length_ = true;
-    } else if (oracle->LoadIsBuiltin(this, Builtins::LoadIC_StringLength)) {
+    } else if (oracle->LoadIsBuiltin(this, Builtins::kLoadIC_StringLength)) {
       is_string_length_ = true;
     } else if (oracle->LoadIsBuiltin(this,
-                                     Builtins::LoadIC_FunctionPrototype)) {
+                                     Builtins::kLoadIC_FunctionPrototype)) {
       is_function_prototype_ = true;
     } else {
       Literal* lit_key = key()->AsLiteral();
@@ -540,7 +541,7 @@ void Property::RecordTypeFeedback(TypeFeedbackOracle* oracle) {
       ZoneMapList* types = oracle->LoadReceiverTypes(this, name);
       receiver_types_ = types;
     }
-  } else if (oracle->LoadIsBuiltin(this, Builtins::KeyedLoadIC_String)) {
+  } else if (oracle->LoadIsBuiltin(this, Builtins::kKeyedLoadIC_String)) {
     is_string_access_ = true;
   } else if (is_monomorphic_) {
     monomorphic_receiver_type_ = oracle->LoadMonomorphicReceiverType(this);
@@ -634,7 +635,7 @@ bool Call::ComputeGlobalTarget(Handle<GlobalObject> global,
       Handle<JSFunction> candidate(JSFunction::cast(cell_->value()));
       // If the function is in new space we assume it's more likely to
       // change and thus prefer the general IC code.
-      if (!Heap::InNewSpace(*candidate) &&
+      if (!HEAP->InNewSpace(*candidate) &&
           CanCallWithoutIC(candidate, arguments()->length())) {
         target_ = candidate;
         return true;
@@ -699,7 +700,7 @@ void CompareOperation::RecordTypeFeedback(TypeFeedbackOracle* oracle) {
 
 bool AstVisitor::CheckStackOverflow() {
   if (stack_overflow_) return true;
-  StackLimitCheck check;
+  StackLimitCheck check(isolate_);
   if (!check.HasOverflowed()) return false;
   return (stack_overflow_ = true);
 }
