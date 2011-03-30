@@ -78,7 +78,7 @@ class LInstruction: public ZoneObject {
 
   bool HasEnvironment() const {
     UNIMPLEMENTED();
-    return NULL;
+    return false;
   }
 
   virtual void PrintTo(StringStream* stream) const { UNIMPLEMENTED(); }
