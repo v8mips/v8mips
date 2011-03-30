@@ -1098,7 +1098,8 @@ void Assembler::addiu(Register rd, Register rs, int32_t j) {
             emit(lw_instr);
           }
           if (FLAG_print_peephole_optimization) {
-            PrintF("%x push/pop -dead ldr fp + offset in middle\n", pc_offset());
+            PrintF("%x push/pop -dead ldr fp + offset in middle\n",
+                   pc_offset());
           }
         } else {
           // Pattern: push & pop from/to different registers
@@ -1497,8 +1498,8 @@ void Assembler::tlt(Register rs, Register rt, uint16_t code) {
 
 void Assembler::tltu(Register rs, Register rt, uint16_t code) {
   ASSERT(is_uint10(code));
-  Instr instr = 
-      SPECIAL | TLTU | rs.code() << kRsShift | rt.code() << kRtShift | code << 6;
+  Instr instr = SPECIAL | TLTU | rs.code() << kRsShift
+      | rt.code() << kRtShift | code << 6;
   emit(instr);
 }
 
