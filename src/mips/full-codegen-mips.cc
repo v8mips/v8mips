@@ -2174,9 +2174,10 @@ void FullCodeGenerator::VisitCall(Call* expr) {
         ASSERT(prop->key()->AsLiteral() != NULL);
         ASSERT(prop->key()->AsLiteral()->handle()->IsSmi());
         __ li(a0, Operand(prop->key()->AsLiteral()->handle()));
+
         // Record source code position for IC call.
         SetSourcePosition(prop->position());
-        __ pop(a1);  // We do not need to keep the receiver.
+
         Handle<Code> ic(Builtins::builtin(Builtins::KeyedLoadIC_Initialize));
         EmitCallIC(ic, RelocInfo::CODE_TARGET);
         __ lw(a1, GlobalObjectOperand());
