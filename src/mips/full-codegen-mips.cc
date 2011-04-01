@@ -1646,7 +1646,10 @@ void FullCodeGenerator::EmitBinaryOp(Token::Value op,
                                      OverwriteMode mode) {
   __ mov(a0, result_register());
   __ pop(a1);
-  TypeRecordingBinaryOpStub stub(op, mode);
+  // This stub is not functioning properly, likely because we do 
+  // no use it everywhere. This is a temporary hack ......
+  // TypeRecordingBinaryOpStub stub(op, mode); // ..................fix this ............
+  GenericBinaryOpStub stub(op, mode, a1, a0);
   __ CallStub(&stub);
   context()->Plug(v0);
 }
