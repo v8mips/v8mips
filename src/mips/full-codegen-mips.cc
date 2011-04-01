@@ -2908,6 +2908,7 @@ void FullCodeGenerator::EmitMathSin(ZoneList<Expression*>* args) {
                                TranscendentalCacheStub::TAGGED);
   ASSERT(args->length() == 1);
   VisitForStackValue(args->at(0));
+  __ mov(a0, result_register());  // Stub requires parameter in a0 and on tos.
   __ CallStub(&stub);
   context()->Plug(v0);
 }
@@ -2919,6 +2920,7 @@ void FullCodeGenerator::EmitMathCos(ZoneList<Expression*>* args) {
                                TranscendentalCacheStub::TAGGED);
   ASSERT(args->length() == 1);
   VisitForStackValue(args->at(0));
+  __ mov(a0, result_register());  // Stub requires parameter in a0 and on tos.
   __ CallStub(&stub);
   context()->Plug(v0);
 }
@@ -2930,6 +2932,7 @@ void FullCodeGenerator::EmitMathLog(ZoneList<Expression*>* args) {
                                TranscendentalCacheStub::TAGGED);
   ASSERT(args->length() == 1);
   VisitForStackValue(args->at(0));
+  __ mov(a0, result_register());  // Stub requires parameter in a0 and on tos.
   __ CallStub(&stub);
   context()->Plug(v0);
 }
