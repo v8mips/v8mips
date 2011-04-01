@@ -349,13 +349,13 @@ class CpuFeatures {
   void Probe(bool portable);
 
   // Check whether a feature is supported by the target CPU.
-  bool IsSupported(CpuFeature f) {
+  bool IsSupported(CpuFeature f) const {
     if (f == FPU && !FLAG_enable_fpu) return false;
     return (supported_ & (1u << f)) != 0;
   }
 
   // Check whether a feature is currently enabled.
-  bool IsEnabled(CpuFeature f) {
+  bool IsEnabled(CpuFeature f) const {
     return (enabled_ & (1u << f)) != 0;
   }
 
@@ -368,7 +368,7 @@ class CpuFeatures {
           isolate_(Isolate::Current()) {
       ASSERT(cpu_features_->IsSupported(f));
       ASSERT(!Serializer::enabled() ||
-          (cpu_features_->found_by_runtime_probing_ & (1u << f)) == 0);
+             (cpu_features_->found_by_runtime_probing_ & (1u << f)) == 0);
       old_enabled_ = cpu_features_->enabled_;
       cpu_features_->enabled_ |= 1u << f;
     }
@@ -397,6 +397,7 @@ class CpuFeatures {
 
   DISALLOW_COPY_AND_ASSIGN(CpuFeatures);
 };
+
 
 class Assembler : public AssemblerBase {
  public:

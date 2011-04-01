@@ -199,7 +199,7 @@ MemOperand::MemOperand(Register rm, int32_t offset) : Operand(rm) {
 // -----------------------------------------------------------------------------
 // Specific instructions, constants, and masks.
 
-static const int kMinimalBufferSize = 4*KB;
+static const int kMinimalBufferSize = 4 * KB;
 static const int kNegOffset = 0x00008000;
 // addiu(sp, sp, 4) aka Pop() operation or part of Pop(r)
 // operations as post-increment of sp.
@@ -1865,6 +1865,7 @@ void Assembler::bc1f(int16_t offset, uint16_t cc) {
 
 
 void Assembler::bc1t(int16_t offset, uint16_t cc) {
+  ASSERT(isolate()->cpu_features()->IsEnabled(FPU));
   ASSERT(is_uint3(cc));
   Instr instr = COP1 | BC1 | cc << 18 | 1 << 16 | (offset & kImm16Mask);
   emit(instr);

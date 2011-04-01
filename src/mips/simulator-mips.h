@@ -54,11 +54,9 @@ typedef int (*mips_regexp_matcher)(String*, int, const byte*, const byte*,
 
 
 // Call the generated regexp code directly. The code at the entry address
-// should act as a function matching the type mips_regexp_matcher.
-
-// On ARM the fifth argument is a dummy that reserves the space used for
-// the return address added by the ExitFrame in native calls. It seems that
-// MIPS never included this argument.
+// should act as a function matching the type arm_regexp_matcher.
+// The fifth argument is a dummy that reserves the space used for
+// the return address added by the ExitFrame in native calls.
 #define CALL_GENERATED_REGEXP_CODE(entry, p0, p1, p2, p3, p4, p5, p6, p7) \
   (FUNCTION_CAST<mips_regexp_matcher>(entry)(p0, p1, p2, p3, p4, p5, p6, p7))
 
@@ -272,7 +270,6 @@ class Simulator {
   inline int32_t SetDoubleHIW(double* addr);
   inline int32_t SetDoubleLOW(double* addr);
 
-
   // Executing is handled based on the instruction type.
   void DecodeTypeRegister(Instruction* instr);
 
@@ -321,9 +318,8 @@ class Simulator {
   void SignalExceptions();
 
   // Runtime call support.
-  static void* RedirectExternalReference(
-      void* external_function,
-      v8::internal::ExternalReference::Type type);
+  static void* RedirectExternalReference(void* external_function,
+                                         ExternalReference::Type type);
 
   // Used for real time calls that takes two double values as arguments and
   // returns a double.

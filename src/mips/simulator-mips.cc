@@ -68,7 +68,7 @@ uint32_t get_fcsr_condition_bit(uint32_t cc) {
 #define SScanF sscanf  // NOLINT
 
 // The MipsDebugger class is used by the simulator while debugging simulated
-// MIPS code.
+// code.
 class MipsDebugger {
  public:
   explicit MipsDebugger(Simulator* sim);
@@ -737,6 +737,7 @@ void Simulator::CheckICache(v8::internal::HashMap* i_cache,
   }
 }
 
+
 void Simulator::Initialize() {
   if (Isolate::Current()->simulator_initialized()) return;
   Isolate::Current()->set_simulator_initialized(true);
@@ -1187,9 +1188,9 @@ void Simulator::SoftwareInterrupt(Instruction* instr) {
     int32_t arg4 = 0;
     int32_t arg5 = 0;
 
-    // We need to check if sp is valid before dereferencing it.
-    // This is basically a fix for cctest test-api/CatchStackOverflow which
-    // causes the stack to overflow. For some reason ARM doesn't need this
+    // Need to check if sp is valid before assigning arg4, arg5.
+    // This is a fix for cctest test-api/CatchStackOverflow which causes
+    // the stack to overflow. For some reason arm doesn't need this
     // stack check here.
     int32_t* stack_pointer = reinterpret_cast<int32_t*>(get_register(sp));
     int32_t* stack = reinterpret_cast<int32_t*>(stack_);

@@ -197,9 +197,7 @@ void MacroAssembler::InNewSpace(Register object,
                                 Label* branch) {
   ASSERT(cc == eq || cc == ne);
   And(scratch, object, Operand(ExternalReference::new_space_mask(isolate())));
-  Branch(branch,
-         cc,
-         scratch,
+  Branch(branch, cc, scratch,
          Operand(ExternalReference::new_space_start(isolate())));
 }
 
@@ -1837,8 +1835,7 @@ void MacroAssembler::PushTryHandler(CodeLocation try_location,
            && StackHandlerConstants::kPCOffset == 3 * kPointerSize
            && StackHandlerConstants::kNextOffset == 0 * kPointerSize);
     // Save the current handler as the next handler.
-    LoadExternalReference(t2, ExternalReference(Isolate::k_handler_address,
-                                                isolate()));
+    li(t2, Operand(ExternalReference(Isolate::k_handler_address, isolate())));
     lw(t1, MemOperand(t2));
 
     addiu(sp, sp, -StackHandlerConstants::kSize);
@@ -1864,8 +1861,7 @@ void MacroAssembler::PushTryHandler(CodeLocation try_location,
     li(t0, Operand(StackHandler::ENTRY));
 
     // Save the current handler as the next handler.
-    LoadExternalReference(t2, ExternalReference(Isolate::k_handler_address,
-                                                isolate()));
+    li(t2, Operand(ExternalReference(Isolate::k_handler_address, isolate())));
     lw(t1, MemOperand(t2));
 
     addiu(sp, sp, -StackHandlerConstants::kSize);
@@ -1884,8 +1880,7 @@ void MacroAssembler::PopTryHandler() {
   ASSERT_EQ(0, StackHandlerConstants::kNextOffset);
   pop(a1);
   Addu(sp, sp, Operand(StackHandlerConstants::kSize - kPointerSize));
-  li(at, Operand(ExternalReference(Isolate::k_handler_address,
-                                   isolate())));
+  li(at, Operand(ExternalReference(Isolate::k_handler_address, isolate())));
   sw(a1, MemOperand(at));
 }
 
@@ -2610,7 +2605,7 @@ void MacroAssembler::CallRuntime(const Runtime::Function* f,
   // should remove this need and make the runtime routine entry code
   // smarter.
   li(a0, num_arguments);
-  LoadExternalReference(a1, ExternalReference(f, isolate()));
+  li(a1, Operand(ExternalReference(f, isolate())));
   CEntryStub stub(1);
   CallStub(&stub);
 }
@@ -2936,11 +2931,9 @@ void MacroAssembler::EnterExitFrame(Register hold_argc,
   Push(t8);  // Accessed from ExitFrame::code_slot.
 
   // Save the frame pointer and the context in top.
-  LoadExternalReference(t8, ExternalReference(Isolate::k_c_entry_fp_address,
-                                              isolate()));
+  li(t8, Operand(ExternalReference(Isolate::k_c_entry_fp_address, isolate())));
   sw(fp, MemOperand(t8));
-  LoadExternalReference(t8, ExternalReference(Isolate::k_context_address,
-                                              isolate()));
+  li(t8, Operand(ExternalReference(Isolate::k_context_address, isolate())));
   sw(cp, MemOperand(t8));
 
   // Setup argc and the builtin function in callee-saved registers.
@@ -2988,13 +2981,11 @@ void MacroAssembler::LeaveExitFrame(bool save_doubles) {
   }
 
   // Clear top frame.
-  LoadExternalReference(t8, ExternalReference(Isolate::k_c_entry_fp_address,
-                                              isolate()));
+  li(t8, Operand(ExternalReference(Isolate::k_c_entry_fp_address, isolate())));
   sw(zero_reg, MemOperand(t8));
 
   // Restore current context from top and clear it in debug mode.
-  LoadExternalReference(t8, ExternalReference(Isolate::k_context_address,
-                                              isolate()));
+  li(t8, Operand(ExternalReference(Isolate::k_context_address, isolate())));
   lw(cp, MemOperand(t8));
 #ifdef DEBUG
   sw(a3, MemOperand(t8));
@@ -3028,16 +3019,15 @@ int MacroAssembler::ActivationFrameAlignment() {
 #if defined(V8_HOST_ARCH_MIPS)
   // Running on the real platform. Use the alignment as mandated by the local
   // environment.
-  // Note: This will break if we ever start generating snapshots on one ARM
-  // platform for another ARM platform with a different alignment.
+  // Note: This will break if we ever start generating snapshots on one Mips
+  // platform for another Mips platform with a different alignment.
   return OS::ActivationFrameAlignment();
 #else  // defined(V8_HOST_ARCH_MIPS)
   // If we are using the simulator then we should always align to the expected
   // alignment. As the simulator is used to generate snapshots we do not know
   // if the target platform will need alignment, so this is controlled from a
   // flag.
-  // return FLAG_sim_stack_alignment;  // TODO(REBASE): uncomment
-  return 2 * kPointerSize;  // TODO(REBASE): use above flog & remove this line.
+  return FLAG_sim_stack_alignment;
 #endif  // defined(V8_HOST_ARCH_MIPS)
 }
 
@@ -3236,9 +3226,9 @@ void MacroAssembler::PrepareCallCFunction(int num_arguments, Register scratch) {
   // the argument slots.
   ASSERT(StandardFrameConstants::kCArgsSlotsSize % kPointerSize == 0);
   int stack_passed_arguments = ((num_arguments <= kRegisterPassedArguments) ?
-                               0 : num_arguments - kRegisterPassedArguments) +
-                               StandardFrameConstants::kCArgsSlotsSize /
-                               kPointerSize;
+                                 0 : num_arguments - kRegisterPassedArguments) +
+                               (StandardFrameConstants::kCArgsSlotsSize /
+                               kPointerSize);
   if (frame_alignment > kPointerSize) {
     // Make stack end at alignment and make room for num_arguments - 4 words
     // and the original value of sp.
@@ -3269,7 +3259,6 @@ void MacroAssembler::CallCFunction(Register function,
 }
 
 
-
 void MacroAssembler::CallCFunctionHelper(Register function,
                                          ExternalReference function_reference,
                                          Register scratch,
@@ -3280,9 +3269,12 @@ void MacroAssembler::CallCFunctionHelper(Register function,
     Register r = arg_to_reg[num_arguments];
     li(r, Operand(ExternalReference::isolate_address()));
   } else {
+    int stack_passed_arguments = num_arguments - kRegisterPassedArguments +
+                                 (StandardFrameConstants::kCArgsSlotsSize /
+                                  kPointerSize);
     // Push Isolate address on the stack after the arguments.
     li(scratch, Operand(ExternalReference::isolate_address()));
-    sw(scratch, MemOperand(sp, num_arguments * kPointerSize));
+    sw(scratch, MemOperand(sp, stack_passed_arguments * kPointerSize));
   }
   num_arguments += 1;
 
@@ -3291,6 +3283,7 @@ void MacroAssembler::CallCFunctionHelper(Register function,
   // provides more information.
   // The argument stots are presumed to have been set up by
   // PrepareCallCFunction. The C function must be called via t9, for mips ABI.
+
 #if defined(V8_HOST_ARCH_MIPS)
   if (emit_debug_code()) {
     int frame_alignment = OS::ActivationFrameAlignment();
@@ -3317,15 +3310,16 @@ void MacroAssembler::CallCFunctionHelper(Register function,
     li(function, Operand(function_reference));
   } else if (!function.is(t9)) {
     mov(t9, function);
+    function = t9;
   }
 
-  Call(t9);
+  Call(function);
 
   ASSERT(StandardFrameConstants::kCArgsSlotsSize % kPointerSize == 0);
   int stack_passed_arguments = ((num_arguments <= kRegisterPassedArguments) ?
-                               0 : num_arguments - kRegisterPassedArguments) +
-                               StandardFrameConstants::kCArgsSlotsSize /
-                               kPointerSize;
+                                0 : num_arguments - kRegisterPassedArguments) +
+                               (StandardFrameConstants::kCArgsSlotsSize /
+                               kPointerSize);
 
   if (OS::ActivationFrameAlignment() > kPointerSize) {
     lw(sp, MemOperand(sp, stack_passed_arguments * kPointerSize));

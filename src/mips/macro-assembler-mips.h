@@ -225,11 +225,6 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
                  Heap::RootListIndex index,
                  Condition cond, Register src1, const Operand& src2);
 
-  // Load an external reference.
-  void LoadExternalReference(Register reg, ExternalReference ext) {
-    li(reg, Operand(ext));
-  }
-
 
   // Check if object is in new space.
   // scratch can be object itself, but it will be clobbered.
