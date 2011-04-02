@@ -174,8 +174,8 @@ SOURCES = {
     mips/debug-mips.cc
     mips/deoptimizer-mips.cc
     mips/disasm-mips.cc
-    mips/full-codegen-mips.cc
     mips/frames-mips.cc
+    mips/full-codegen-mips.cc
     mips/ic-mips.cc
     mips/jump-target-mips.cc
     mips/macro-assembler-mips.cc

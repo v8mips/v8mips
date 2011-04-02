@@ -247,8 +247,8 @@ int OS::ActivationFrameAlignment() {
 
 void OS::ReleaseStore(volatile AtomicWord* ptr, AtomicWord value) {
 #if (defined(V8_TARGET_ARCH_ARM) && defined(__arm__)) || \
-  (defined(V8_TARGET_ARCH_MIPS) && defined(__mips__))
-  // Only use on ARM and MIPS hardware.
+    (defined(V8_TARGET_ARCH_MIPS) && defined(__mips__))
+  // Only use on ARM or MIPS hardware.
   MemoryBarrier();
 #else
   __asm__ __volatile__("" : : : "memory");
@@ -917,9 +917,9 @@ static void ProfilerSignalHandler(int signal, siginfo_t* info, void* context) {
   sample->fp = reinterpret_cast<Address>(mcontext.arm_fp);
 #endif
 #elif V8_HOST_ARCH_MIPS
-    sample.pc = reinterpret_cast<Address>(mcontext.pc);
-    sample.sp = reinterpret_cast<Address>(mcontext.gregs[29]);
-    sample.fp = reinterpret_cast<Address>(mcontext.gregs[30]);
+  sample.pc = reinterpret_cast<Address>(mcontext.pc);
+  sample.sp = reinterpret_cast<Address>(mcontext.gregs[29]);
+  sample.fp = reinterpret_cast<Address>(mcontext.gregs[30]);
 #endif
   sampler->SampleStack(sample);
   sampler->Tick(sample);

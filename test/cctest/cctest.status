@@ -72,6 +72,9 @@ test-debug/DebugBreakLoop: SKIP
 
 ##############################################################################
 [ $arch == mips ]
+test-deoptimization: SKIP
+test-parsing: SKIP
+test-profile-generator: SKIP
 
 ##############################################################################
 # Tests that time out with Isolates

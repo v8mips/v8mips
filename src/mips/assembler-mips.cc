@@ -43,7 +43,6 @@
 namespace v8 {
 namespace internal {
 
-
 CpuFeatures::CpuFeatures()
     : supported_(0),
       enabled_(0),
@@ -199,7 +198,6 @@ MemOperand::MemOperand(Register rm, int32_t offset) : Operand(rm) {
 // -----------------------------------------------------------------------------
 // Specific instructions, constants, and masks.
 
-static const int kMinimalBufferSize = 4 * KB;
 static const int kNegOffset = 0x00008000;
 // addiu(sp, sp, 4) aka Pop() operation or part of Pop(r)
 // operations as post-increment of sp.
@@ -231,6 +229,10 @@ const Instr kRtMask = kRtFieldMask;
 const Instr kLwSwInstrTypeMask = 0xffe00000;
 const Instr kLwSwInstrArgumentMask  = ~kLwSwInstrTypeMask;
 const Instr kLwSwOffsetMask = kImm16Mask;
+
+
+// Spare buffer.
+static const int kMinimalBufferSize = 4 * KB;
 
 
 Assembler::Assembler(void* buffer, int buffer_size)
@@ -790,7 +792,6 @@ int32_t Assembler::get_trampoline_entry(int32_t pos, bool next_pool) {
       internal_trampoline_exception_ = true;
     }
   }
-
   return trampoline_entry;
 }
 
@@ -1498,7 +1499,8 @@ void Assembler::tlt(Register rs, Register rt, uint16_t code) {
 
 void Assembler::tltu(Register rs, Register rt, uint16_t code) {
   ASSERT(is_uint10(code));
-  Instr instr = SPECIAL | TLTU | rs.code() << kRsShift
+  Instr instr =
+      SPECIAL | TLTU | rs.code() << kRsShift
       | rt.code() << kRtShift | code << 6;
   emit(instr);
 }
