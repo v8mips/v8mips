@@ -64,7 +64,7 @@ TEST(MIPS0) {
   InitializeVM();
   v8::HandleScope scope;
 
-  MacroAssembler assm(NULL, 0);
+  MacroAssembler assm(Isolate::Current(), NULL, 0);
 
   // Addition.
   __ addu(v0, a0, a1);
@@ -89,7 +89,7 @@ TEST(MIPS1) {
   InitializeVM();
   v8::HandleScope scope;
 
-  MacroAssembler assm(NULL, 0);
+  MacroAssembler assm(Isolate::Current(), NULL, 0);
   Label L, C;
 
   __ mov(a1, a0);
@@ -127,7 +127,7 @@ TEST(MIPS2) {
   InitializeVM();
   v8::HandleScope scope;
 
-  MacroAssembler assm(NULL, 0);
+  MacroAssembler assm(Isolate::Current(), NULL, 0);
 
   Label exit, error;
 
@@ -281,7 +281,7 @@ TEST(MIPS3) {
 
   // Create a function that accepts &t, and loads, manipulates, and stores
   // the doubles t.a ... t.f.
-  MacroAssembler assm(NULL, 0);
+  MacroAssembler assm(Isolate::Current(), NULL, 0);
   Label L, C;
 
   if (CpuFeatures::IsSupported(FPU)) {
@@ -563,7 +563,7 @@ TEST(MIPS7) {
 
   // Create a function that accepts &t, and loads, manipulates, and stores
   // the doubles t.a ... t.f.
-  MacroAssembler assm(NULL, 0);
+  MacroAssembler assm(Isolate::Current(), NULL, 0);
   Label neither_is_nan, less_than, outa_here;
 
   if (CpuFeatures::IsSupported(FPU)) {
@@ -645,7 +645,7 @@ TEST(MIPS8) {
   } T;
   T t;
 
-  MacroAssembler assm(NULL, 0);
+  MacroAssembler assm(Isolate::Current(), NULL, 0);
 
   // Basic word load.
   __ lw(t0, MemOperand(a0, OFFSET_OF(T, input)) );
@@ -730,7 +730,7 @@ TEST(MIPS9) {
   InitializeVM();
   v8::HandleScope scope;
 
-  MacroAssembler assm(NULL, 0);
+  MacroAssembler assm(Isolate::Current(), NULL, 0);
   Label exit, exit2, exit3;
 
   __ Branch(&exit, ge, a0, Operand(0x00000000));
@@ -986,7 +986,7 @@ TEST(MIPS12) {
   } T;
   T t;
 
-  MacroAssembler assm(NULL, 0);
+  MacroAssembler assm(Isolate::Current(), NULL, 0);
 
   __ mov(t6, fp);  // Save frame pointer.
   __ mov(fp, a0);  // Access struct T by fp.
@@ -1077,7 +1077,7 @@ TEST(MIPS13) {
   } T;
   T t;
 
-  MacroAssembler assm(NULL, 0);
+  MacroAssembler assm(Isolate::Current(), NULL, 0);
 
   if (CpuFeatures::IsSupported(FPU)) {
     CpuFeatures::Scope scope(FPU);
@@ -1160,7 +1160,7 @@ TEST(MIPS14) {
 
 #undef ROUND_STRUCT_ELEMENT
 
-  MacroAssembler assm(NULL, 0);
+  MacroAssembler assm(Isolate::Current(), NULL, 0);
 
   if (CpuFeatures::IsSupported(FPU)) {
     CpuFeatures::Scope scope(FPU);
