@@ -345,7 +345,7 @@ void RegExpMacroAssemblerMIPS::CheckNotBackReferenceIgnoreCase(
         current_character().bit() | backtrack_stackpointer().bit();
     __ MultiPush(regexp_registers_to_retain);
 
-    int argument_count = 3;
+    int argument_count = 4;
     __ PrepareCallCFunction(argument_count, a2);
 
     // a0 - offset of start of capture
@@ -356,6 +356,7 @@ void RegExpMacroAssemblerMIPS::CheckNotBackReferenceIgnoreCase(
     //   a0: Address byte_offset1 - Address captured substring's start.
     //   a1: Address byte_offset2 - Address of current character position.
     //   a2: size_t byte_length - length of capture in bytes(!)
+    //   a3: Isolate* isolate
 
     // Address of start of capture.
     __ Addu(a0, a0, Operand(end_of_input_address()));
@@ -365,6 +366,8 @@ void RegExpMacroAssemblerMIPS::CheckNotBackReferenceIgnoreCase(
     __ mov(s3, a1);
     // Address of current input position.
     __ Addu(a1, current_input_offset(), Operand(end_of_input_address()));
+    // Isolate.
+    __ li(a3, Operand(ExternalReference::isolate_address()));
 
     ExternalReference function =
         ExternalReference::re_case_insensitive_compare_uc16(masm_->isolate());
@@ -776,10 +779,11 @@ Handle<Object> RegExpMacroAssemblerMIPS::GetCode(Handle<String> source) {
       __ MultiPush(regexp_registers);
       Label grow_failed;
       // Call GrowStack(backtrack_stackpointer())
-      static const int num_arguments = 2;
+      static const int num_arguments = 3;
       __ PrepareCallCFunction(num_arguments, a0);
       __ mov(a0, backtrack_stackpointer());
       __ Addu(a1, frame_pointer(), Operand(kStackHighEnd));
+      __ li(a2, Operand(ExternalReference::isolate_address()));
       ExternalReference grow_stack =
           ExternalReference::re_grow_stack(masm_->isolate());
       __ CallCFunction(grow_stack, num_arguments);

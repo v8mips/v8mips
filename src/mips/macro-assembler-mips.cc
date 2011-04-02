@@ -3216,9 +3216,6 @@ static const int kRegisterPassedArguments = 4;
 void MacroAssembler::PrepareCallCFunction(int num_arguments, Register scratch) {
   int frame_alignment = ActivationFrameAlignment();
 
-  // Reserve space for Isolate address which is always passed as last parameter
-  num_arguments += 1;
-
   // Up to four simple arguments are passed in registers a0..a3.
   // Those four arguments must have reserved argument slots on the stack for
   // mips, even though those argument slots are not normally used.
@@ -3263,21 +3260,6 @@ void MacroAssembler::CallCFunctionHelper(Register function,
                                          ExternalReference function_reference,
                                          Register scratch,
                                          int num_arguments) {
-  // Push Isolate address as the last argument.
-  if (num_arguments < kRegisterPassedArguments) {
-    Register arg_to_reg[] = {a0, a1, a2, a3};
-    Register r = arg_to_reg[num_arguments];
-    li(r, Operand(ExternalReference::isolate_address()));
-  } else {
-    int stack_passed_arguments = num_arguments - kRegisterPassedArguments +
-                                 (StandardFrameConstants::kCArgsSlotsSize /
-                                  kPointerSize);
-    // Push Isolate address on the stack after the arguments.
-    li(scratch, Operand(ExternalReference::isolate_address()));
-    sw(scratch, MemOperand(sp, stack_passed_arguments * kPointerSize));
-  }
-  num_arguments += 1;
-
   // Make sure that the stack is aligned before calling a C function unless
   // running in the simulator. The simulator has its own alignment check which
   // provides more information.

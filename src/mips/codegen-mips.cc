@@ -5417,8 +5417,9 @@ void CodeGenerator::GenerateRandomHeapNumber(
   // by computing:
   // ( 1.(20 0s)(32 random bits) x 2^20 ) - (1.0 x 2^20)).
   if (Isolate::Current()->cpu_features()->IsSupported(FPU)) {
-    __ PrepareCallCFunction(0, a1);
-    __ CallCFunction(ExternalReference::random_uint32_function(isolate()), 0);
+    __ PrepareCallCFunction(1, a0);
+    __ li(a0, Operand(ExternalReference::isolate_address()));
+    __ CallCFunction(ExternalReference::random_uint32_function(isolate()), 1);
 
     CpuFeatures::Scope scope(FPU);
     // 0x41300000 is the top half of 1.0 x 2^20 as a double.
@@ -5434,10 +5435,11 @@ void CodeGenerator::GenerateRandomHeapNumber(
     __ sdc1(f0, MemOperand(s0, HeapNumber::kValueOffset - kHeapObjectTag));
     frame_->EmitPush(s0);
   } else {
+    __ PrepareCallCFunction(2, a0);
     __ mov(a0, s0);
-    __ PrepareCallCFunction(1, a1);
+    __ li(a1, Operand(ExternalReference::isolate_address()));
     __ CallCFunction(
-        ExternalReference::fill_heap_number_with_random_function(isolate()), 1);
+        ExternalReference::fill_heap_number_with_random_function(isolate()), 2);
     frame_->EmitPush(v0);
   }
 }
