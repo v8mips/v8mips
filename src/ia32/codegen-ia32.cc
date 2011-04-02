@@ -556,7 +556,7 @@ void CodeGenerator::ConvertInt32ResultToNumber(Result* value) {
     __ sar(val, 1);
     // If there was an overflow, bits 30 and 31 of the original number disagree.
     __ xor_(val, 0x80000000u);
-    if (masm()->isolate()->cpu_features()->IsSupported(SSE2)) {
+    if (CpuFeatures::IsSupported(SSE2)) {
       CpuFeatures::Scope fscope(SSE2);
       __ cvtsi2sd(xmm0, Operand(val));
     } else {
@@ -574,7 +574,7 @@ void CodeGenerator::ConvertInt32ResultToNumber(Result* value) {
                           no_reg, &allocation_failed);
     VirtualFrame* clone = new VirtualFrame(frame_);
     scratch.Unuse();
-    if (masm()->isolate()->cpu_features()->IsSupported(SSE2)) {
+    if (CpuFeatures::IsSupported(SSE2)) {
       CpuFeatures::Scope fscope(SSE2);
       __ movdbl(FieldOperand(val, HeapNumber::kValueOffset), xmm0);
     } else {
@@ -587,7 +587,7 @@ void CodeGenerator::ConvertInt32ResultToNumber(Result* value) {
     RegisterFile empty_regs;
     SetFrame(clone, &empty_regs);
     __ bind(&allocation_failed);
-    if (!masm()->isolate()->cpu_features()->IsSupported(SSE2)) {
+    if (!CpuFeatures::IsSupported(SSE2)) {
       // Pop the value from the floating point stack.
       __ fstp(0);
     }
@@ -614,7 +614,7 @@ void CodeGenerator::Load(Expression* expr) {
       safe_int32_mode_enabled() &&
       expr->side_effect_free() &&
       expr->num_bit_ops() > 2 &&
-      masm()->isolate()->cpu_features()->IsSupported(SSE2)) {
+      CpuFeatures::IsSupported(SSE2)) {
     BreakTarget unsafe_bailout;
     JumpTarget done;
     unsafe_bailout.set_expected_height(frame_->height());
@@ -995,7 +995,7 @@ class DeferredInlineBinaryOperation: public DeferredCode {
 
 Label* DeferredInlineBinaryOperation::NonSmiInputLabel() {
   if (Token::IsBitOp(op_) &&
-      masm()->isolate()->cpu_features()->IsSupported(SSE2)) {
+      CpuFeatures::IsSupported(SSE2)) {
     return &non_smi_input_;
   } else {
     return entry_label();
@@ -1018,7 +1018,7 @@ void DeferredInlineBinaryOperation::JumpToConstantRhs(Condition cond,
 void DeferredInlineBinaryOperation::Generate() {
   // Registers are not saved implicitly for this stub, so we should not
   // tread on the registers that were not passed to us.
-  if (masm()->isolate()->cpu_features()->IsSupported(SSE2) &&
+  if (CpuFeatures::IsSupported(SSE2) &&
       ((op_ == Token::ADD) ||
        (op_ == Token::SUB) ||
        (op_ == Token::MUL) ||
@@ -1154,7 +1154,7 @@ void DeferredInlineBinaryOperation::GenerateNonSmiInput() {
     // The left_ and right_ registers have not been initialized yet.
     __ mov(right_, Immediate(smi_value_));
     __ mov(left_, Operand(dst_));
-    if (!masm()->isolate()->cpu_features()->IsSupported(SSE2)) {
+    if (!CpuFeatures::IsSupported(SSE2)) {
       __ jmp(entry_label());
       return;
     } else {
@@ -1267,7 +1267,7 @@ void DeferredInlineBinaryOperation::GenerateAnswerOutOfRange() {
   // This trashes right_.
   __ AllocateHeapNumber(left_, right_, no_reg, &after_alloc_failure2);
   __ bind(&allocation_ok);
-  if (masm()->isolate()->cpu_features()->IsSupported(SSE2) &&
+  if (CpuFeatures::IsSupported(SSE2) &&
       op_ != Token::SHR) {
     CpuFeatures::Scope use_sse2(SSE2);
     ASSERT(Token::IsBitOp(op_));
@@ -3032,7 +3032,7 @@ void CodeGenerator::ConstantSmiComparison(Condition cc,
       // constant smi.  If the non-smi is a heap number and this is not
       // a loop condition, inline the floating point code.
       if (!is_loop_condition &&
-          masm()->isolate()->cpu_features()->IsSupported(SSE2)) {
+          CpuFeatures::IsSupported(SSE2)) {
         // Right side is a constant smi and left side has been checked
         // not to be a smi.
         CpuFeatures::Scope use_sse2(SSE2);
@@ -3196,7 +3196,7 @@ void CodeGenerator::GenerateInlineNumberComparison(Result* left_side,
   ASSERT(right_side->is_register());
 
   JumpTarget not_numbers;
-  if (masm()->isolate()->cpu_features()->IsSupported(SSE2)) {
+  if (CpuFeatures::IsSupported(SSE2)) {
     CpuFeatures::Scope use_sse2(SSE2);
 
     // Load left and right operand into registers xmm0 and xmm1 and compare.
@@ -7457,7 +7457,7 @@ void CodeGenerator::GenerateRandomHeapNumber(
   // by computing:
   // ( 1.(20 0s)(32 random bits) x 2^20 ) - (1.0 x 2^20)).
   // This is implemented on both SSE2 and FPU.
-  if (masm()->isolate()->cpu_features()->IsSupported(SSE2)) {
+  if (CpuFeatures::IsSupported(SSE2)) {
     CpuFeatures::Scope fscope(SSE2);
     __ mov(ebx, Immediate(0x49800000));  // 1.0 x 2^20 as single.
     __ movd(xmm1, Operand(ebx));
@@ -7863,7 +7863,7 @@ void CodeGenerator::GenerateMathPow(ZoneList<Expression*>* args) {
   ASSERT(args->length() == 2);
   Load(args->at(0));
   Load(args->at(1));
-  if (!masm()->isolate()->cpu_features()->IsSupported(SSE2)) {
+  if (!CpuFeatures::IsSupported(SSE2)) {
     Result res = frame_->CallRuntime(Runtime::kMath_pow, 2);
     frame_->Push(&res);
   } else {
@@ -8080,7 +8080,7 @@ void CodeGenerator::GenerateMathSqrt(ZoneList<Expression*>* args) {
   ASSERT_EQ(args->length(), 1);
   Load(args->at(0));
 
-  if (!masm()->isolate()->cpu_features()->IsSupported(SSE2)) {
+  if (!CpuFeatures::IsSupported(SSE2)) {
     Result result = frame()->CallRuntime(Runtime::kMath_sqrt, 1);
     frame()->Push(&result);
   } else {
@@ -10177,7 +10177,13 @@ static void MemCopyWrapper(void* dest, const void* src, size_t size) {
 
 OS::MemCopyFunction CreateMemCopyFunction() {
   HandleScope scope;
-  MacroAssembler masm(NULL, 1 * KB);
+  size_t actual_size;
+  // Allocate buffer in executable space.
+  byte* buffer = static_cast<byte*>(OS::Allocate(1 * KB,
+                                                 &actual_size,
+                                                 true));
+  if (buffer == NULL) return &MemCopyWrapper;
+  MacroAssembler masm(buffer, static_cast<int>(actual_size));
 
   // Generated code is put into a fixed, unmovable, buffer, and not into
   // the V8 heap. We can't, and don't, refer to any relocatable addresses
@@ -10205,7 +10211,7 @@ OS::MemCopyFunction CreateMemCopyFunction() {
     __ int3();
     __ bind(&ok);
   }
-  if (masm.isolate()->cpu_features()->IsSupported(SSE2)) {
+  if (CpuFeatures::IsSupported(SSE2)) {
     CpuFeatures::Scope enable(SSE2);
     __ push(edi);
     __ push(esi);
@@ -10233,7 +10239,6 @@ OS::MemCopyFunction CreateMemCopyFunction() {
     __ test(Operand(src), Immediate(0x0F));
     __ j(not_zero, &unaligned_source);
     {
-      __ IncrementCounter(masm.isolate()->counters()->memcopy_aligned(), 1);
       // Copy loop for aligned source and destination.
       __ mov(edx, count);
       Register loop_count = ecx;
@@ -10281,7 +10286,6 @@ OS::MemCopyFunction CreateMemCopyFunction() {
       // Copy loop for unaligned source and aligned destination.
       // If source is not aligned, we can't read it as efficiently.
       __ bind(&unaligned_source);
-      __ IncrementCounter(masm.isolate()->counters()->memcopy_unaligned(), 1);
       __ mov(edx, ecx);
       Register loop_count = ecx;
       Register count = edx;
@@ -10325,7 +10329,6 @@ OS::MemCopyFunction CreateMemCopyFunction() {
     }
 
   } else {
-    __ IncrementCounter(masm.isolate()->counters()->memcopy_noxmm(), 1);
     // SSE2 not supported. Unlikely to happen in practice.
     __ push(edi);
     __ push(esi);
@@ -10372,13 +10375,8 @@ OS::MemCopyFunction CreateMemCopyFunction() {
   masm.GetCode(&desc);
   ASSERT(desc.reloc_size == 0);
 
-  // Copy the generated code into an executable chunk and return a pointer
-  // to the first instruction in it as a C++ function pointer.
-  LargeObjectChunk* chunk = LargeObjectChunk::New(desc.instr_size, EXECUTABLE);
-  if (chunk == NULL) return &MemCopyWrapper;
-  memcpy(chunk->GetStartAddress(), desc.buffer, desc.instr_size);
-  CPU::FlushICache(chunk->GetStartAddress(), desc.instr_size);
-  return FUNCTION_CAST<OS::MemCopyFunction>(chunk->GetStartAddress());
+  CPU::FlushICache(buffer, actual_size);
+  return FUNCTION_CAST<OS::MemCopyFunction>(buffer);
 }
 
 #undef __

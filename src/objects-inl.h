@@ -2886,6 +2886,34 @@ Heap* Map::heap() {
 }
 
 
+Heap* Code::heap() {
+  // NOTE: address() helper is not used to save one instruction.
+  Heap* heap = Page::FromAddress(reinterpret_cast<Address>(this))->heap_;
+  ASSERT(heap != NULL);
+  ASSERT(heap->isolate() == Isolate::Current());
+  return heap;
+}
+
+
+Isolate* Code::isolate() {
+  return heap()->isolate();
+}
+
+
+Heap* JSGlobalPropertyCell::heap() {
+  // NOTE: address() helper is not used to save one instruction.
+  Heap* heap = Page::FromAddress(reinterpret_cast<Address>(this))->heap_;
+  ASSERT(heap != NULL);
+  ASSERT(heap->isolate() == Isolate::Current());
+  return heap;
+}
+
+
+Isolate* JSGlobalPropertyCell::isolate() {
+  return heap()->isolate();
+}
+
+
 Object* Code::GetObjectFromEntryAddress(Address location_of_address) {
   return HeapObject::
       FromAddress(Memory::Address_at(location_of_address) - Code::kHeaderSize);
