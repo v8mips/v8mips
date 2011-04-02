@@ -7448,9 +7448,10 @@ void CodeGenerator::GenerateRandomHeapNumber(
 
   __ bind(&heapnumber_allocated);
 
-  __ PrepareCallCFunction(0, ebx);
+  __ PrepareCallCFunction(1, ebx);
+  __ mov(Operand(esp, 0), Immediate(ExternalReference::isolate_address()));
   __ CallCFunction(ExternalReference::random_uint32_function(masm()->isolate()),
-                   0);
+                   1);
 
   // Convert 32 random bits in eax to 0.(32 random bits) in a double
   // by computing:
@@ -10174,7 +10175,7 @@ static void MemCopyWrapper(void* dest, const void* src, size_t size) {
 }
 
 
-MemCopyFunction CreateMemCopyFunction() {
+OS::MemCopyFunction CreateMemCopyFunction() {
   HandleScope scope;
   MacroAssembler masm(NULL, 1 * KB);
 
@@ -10198,7 +10199,7 @@ MemCopyFunction CreateMemCopyFunction() {
 
   if (FLAG_debug_code) {
     __ cmp(Operand(esp, kSizeOffset + stack_offset),
-           Immediate(kMinComplexMemCopy));
+           Immediate(OS::kMinComplexMemCopy));
     Label ok;
     __ j(greater_equal, &ok);
     __ int3();
@@ -10377,7 +10378,7 @@ MemCopyFunction CreateMemCopyFunction() {
   if (chunk == NULL) return &MemCopyWrapper;
   memcpy(chunk->GetStartAddress(), desc.buffer, desc.instr_size);
   CPU::FlushICache(chunk->GetStartAddress(), desc.instr_size);
-  return FUNCTION_CAST<MemCopyFunction>(chunk->GetStartAddress());
+  return FUNCTION_CAST<OS::MemCopyFunction>(chunk->GetStartAddress());
 }
 
 #undef __
