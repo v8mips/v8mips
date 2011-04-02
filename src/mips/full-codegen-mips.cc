@@ -2404,11 +2404,71 @@ void FullCodeGenerator::EmitIsStringWrapperSafeForDefaultValueOf(
   context()->PrepareTest(&materialize_true, &materialize_false,
                          &if_true, &if_false, &fall_through);
 
-  // Just indicate false, as %_IsStringWrapperSafeForDefaultValueOf() is only
-  // used in a few functions in runtime.js which should not normally be hit by
-  // this compiler.
+  if (FLAG_debug_code) __ AbortIfSmi(v0);
+
+  __ lw(a1, FieldMemOperand(v0, HeapObject::kMapOffset));
+  __ lbu(t0, FieldMemOperand(a1, Map::kBitField2Offset));
+  __ And(t0, t0, 1 << Map::kStringWrapperSafeForDefaultValueOf);
+  __ Branch(if_true, ne, t0, Operand(zero_reg));
+
+  // Check for fast case object. Generate false result for slow case object.
+  __ lw(a2, FieldMemOperand(v0, JSObject::kPropertiesOffset));
+  __ lw(a2, FieldMemOperand(a2, HeapObject::kMapOffset));
+  __ LoadRoot(t0, Heap::kHashTableMapRootIndex);
+  __ Branch(if_false, eq, a2, Operand(t0));
+
+  // Look for valueOf symbol in the descriptor array, and indicate false if
+  // found. The type is not checked, so if it is a transition it is a false
+  // negative.
+  __ lw(t0, FieldMemOperand(a1, Map::kInstanceDescriptorsOffset));
+  __ lw(a3, FieldMemOperand(t0, FixedArray::kLengthOffset));
+  // t0: descriptor array
+  // a3: length of descriptor array
+  // Calculate the end of the descriptor array.
+  STATIC_ASSERT(kSmiTag == 0);
+  STATIC_ASSERT(kSmiTagSize == 1);
+  STATIC_ASSERT(kPointerSize == 4);
+  __ Addu(a2, t0, Operand(FixedArray::kHeaderSize - kHeapObjectTag));
+  __ sll(t1, a3, kPointerSizeLog2 - kSmiTagSize);
+  __ Addu(a2, a2, t1);
+
+  // Calculate location of the first key name.
+  __ Addu(t0,
+          t0,
+          Operand(FixedArray::kHeaderSize - kHeapObjectTag +
+                  DescriptorArray::kFirstIndex * kPointerSize));
+  // Loop through all the keys in the descriptor array. If one of these is the
+  // symbol valueOf the result is false.
+  Label entry, loop;
+  // The use of t2 to store the valueOf symbol asumes that it is not otherwise
+  // used in the loop below.
+  __ li(t2, Operand(FACTORY->value_of_symbol()));
+  __ jmp(&entry);
+  __ bind(&loop);
+  __ lw(a3, MemOperand(t0, 0));
+  __ Branch(if_false, eq, a3, Operand(t2));
+  __ Addu(t0, t0, Operand(kPointerSize));
+  __ bind(&entry);
+  __ Branch(&loop, ne, t0, Operand(a2));
+
+  // If a valueOf property is not found on the object check that it's
+  // prototype is the un-modified String prototype. If not result is false.
+  __ lw(a2, FieldMemOperand(a1, Map::kPrototypeOffset));
+  __ JumpIfSmi(a2, if_false);
+  __ lw(a2, FieldMemOperand(a2, HeapObject::kMapOffset));
+  __ lw(a3, ContextOperand(cp, Context::GLOBAL_INDEX));
+  __ lw(a3, FieldMemOperand(a3, GlobalObject::kGlobalContextOffset));
+  __ lw(a3, ContextOperand(a3, Context::STRING_FUNCTION_PROTOTYPE_MAP_INDEX));
+  __ Branch(if_false, ne, a2, Operand(a3));
+
+  // Set the bit in the map to indicate that it has been checked safe for
+  // default valueOf and set true result.
+  __ lbu(a2, FieldMemOperand(t0, Map::kBitField2Offset));
+  __ Or(a2, a2, Operand(1 << Map::kStringWrapperSafeForDefaultValueOf));
+  __ sb(a2, FieldMemOperand(t0, Map::kBitField2Offset));
+  __ jmp(if_true);
+
   PrepareForBailoutBeforeSplit(TOS_REG, true, if_true, if_false);
-  __ jmp(if_false);
   context()->Plug(if_true, if_false);
 }
 
