@@ -40,10 +40,10 @@ namespace v8 {
 namespace internal {
 
 MacroAssembler::MacroAssembler(void* buffer, int size)
-    : Assembler(buffer, size),
+    : Assembler(Isolate::Current(), buffer, size),
       generating_stub_(false),
       allow_stub_calls_(true),
-      code_object_(HEAP->undefined_value()) {
+      code_object_(isolate()->heap()->undefined_value()) {
 }
 
 
@@ -839,7 +839,7 @@ void MacroAssembler::ConvertToInt32(Register source,
   Subu(scratch2, scratch2, Operand(zero_exponent));
   // Dest already has a Smi zero.
   Branch(&done, lt, scratch2, Operand(zero_reg));
-  if (!Isolate::Current()->cpu_features()->IsSupported(FPU)) {
+  if (!CpuFeatures::IsSupported(FPU)) {
     // We have a shifted exponent between 0 and 30 in scratch2.
     srl(dest, scratch2, HeapNumber::kExponentShift);
     // We now have the exponent in dest.  Subtract from 30 to get
@@ -848,7 +848,7 @@ void MacroAssembler::ConvertToInt32(Register source,
     subu(dest, at, dest);
   }
   bind(&right_exponent);
-  if (Isolate::Current()->cpu_features()->IsSupported(FPU)) {
+  if (CpuFeatures::IsSupported(FPU)) {
     CpuFeatures::Scope scope(FPU);
     // MIPS FPU instructions implementing double precision to integer
     // conversion using round to zero. Since the FP value was qualified

@@ -235,7 +235,7 @@ class TypeRecordingBinaryOpStub: public CodeStub {
         operands_type_(TRBinaryOpIC::UNINITIALIZED),
         result_type_(TRBinaryOpIC::UNINITIALIZED),
         name_(NULL) {
-    use_fpu_ = Isolate::Current()->cpu_features()->IsSupported(FPU);
+    use_fpu_ = CpuFeatures::IsSupported(FPU);
     ASSERT(OpBits::is_valid(Token::NUM_TOKENS));
   }
 

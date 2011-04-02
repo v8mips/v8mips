@@ -48,11 +48,12 @@ namespace internal {
 
 
 void CPU::Setup() {
-  CpuFeatures* cpu_features = Isolate::Current()->cpu_features();
-  cpu_features->Probe(true);
-  if (!cpu_features->IsSupported(FPU) || Serializer::enabled()) {
-    V8::DisableCrankshaft();
-  }
+  CpuFeatures::Probe();
+}
+
+
+bool CPU::SupportsCrankshaft() {
+  return CpuFeatures::IsSupported(FPU);
 }
 
 

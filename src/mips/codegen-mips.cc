@@ -764,7 +764,7 @@ void CodeGenerator::ToBoolean(JumpTarget* true_target,
     __ And(at, tos, Operand(kSmiTagMask));
     true_target->Branch(eq, at, Operand(zero_reg));
 
-    if (Isolate::Current()->cpu_features()->IsSupported(FPU)) {
+    if (CpuFeatures::IsSupported(FPU)) {
       CpuFeatures::Scope scope(FPU);
       // Implements the slow case by using ToBooleanStub.
       // The ToBooleanStub takes a single argument, and
@@ -977,8 +977,7 @@ void DeferredInlineSmiOperation::JumpToAnswerOutOfRange(Condition cond,
                                                         const Operand& cmp2) {
   ASSERT(Token::IsBitOp(op_));
 
-  if ((op_ == Token::SHR) &&
-      !Isolate::Current()->cpu_features()->IsSupported(FPU)) {
+  if ((op_ == Token::SHR) && !CpuFeatures::IsSupported(FPU)) {
     // >>> requires an unsigned to double conversion and the non FPU code
     // does not support this conversion.
     __ Branch(entry_label(), cond, cmp1, cmp2);
@@ -1073,7 +1072,7 @@ void DeferredInlineSmiOperation::Generate() {
 void DeferredInlineSmiOperation::WriteNonSmiAnswer(Register answer,
                                                    Register heap_number,
                                                    Register scratch) {
-  if (Isolate::Current()->cpu_features()->IsSupported(FPU)) {
+  if (CpuFeatures::IsSupported(FPU)) {
     CpuFeatures::Scope scope(FPU);
     __ mtc1(answer, f0);
     if (op_ == Token::SHR) {
@@ -1145,7 +1144,7 @@ void DeferredInlineSmiOperation::GenerateNonSmiInput() {
         __ srl(int32, int32, shift_value);
       }
       // SHR is special because it is required to produce a positive answer.
-      if (Isolate::Current()->cpu_features()->IsSupported(FPU)) {
+      if (CpuFeatures::IsSupported(FPU)) {
         __ Branch(&result_not_a_smi, lt, int32, Operand(zero_reg));
       } else {
         // Non FPU code cannot convert from unsigned to double, so fall back
@@ -4643,7 +4642,7 @@ void CodeGenerator::GenerateMathPow(ZoneList<Expression*>* args) {
   Load(args->at(0));
   Load(args->at(1));
 
-  if (!Isolate::Current()->cpu_features()->IsSupported(FPU)) {
+  if (!CpuFeatures::IsSupported(FPU)) {
     frame_->CallRuntime(Runtime::kMath_pow, 2);
     frame_->EmitPush(v0);
   } else {
@@ -4824,7 +4823,7 @@ void CodeGenerator::GenerateMathSqrt(ZoneList<Expression*>* args) {
   ASSERT(args->length() == 1);
   Load(args->at(0));
 
-  if (!Isolate::Current()->cpu_features()->IsSupported(FPU)) {
+  if (!CpuFeatures::IsSupported(FPU)) {
     frame_->CallRuntime(Runtime::kMath_sqrt, 1);
     frame_->EmitPush(v0);
   } else {
@@ -5416,7 +5415,7 @@ void CodeGenerator::GenerateRandomHeapNumber(
   // Convert 32 random bits in r0 to 0.(32 random bits) in a double
   // by computing:
   // ( 1.(20 0s)(32 random bits) x 2^20 ) - (1.0 x 2^20)).
-  if (Isolate::Current()->cpu_features()->IsSupported(FPU)) {
+  if (CpuFeatures::IsSupported(FPU)) {
     __ PrepareCallCFunction(1, a0);
     __ li(a0, Operand(ExternalReference::isolate_address()));
     __ CallCFunction(ExternalReference::random_uint32_function(isolate()), 1);
@@ -5744,7 +5743,7 @@ void CodeGenerator::GenerateCallFunction(ZoneList<Expression*>* args) {
 void CodeGenerator::GenerateMathSin(ZoneList<Expression*>* args) {
   ASSERT_EQ(args->length(), 1);
   Load(args->at(0));
-  if (Isolate::Current()->cpu_features()->IsSupported(FPU)) {
+  if (CpuFeatures::IsSupported(FPU)) {
     TranscendentalCacheStub stub(TranscendentalCache::SIN,
                                  TranscendentalCacheStub::TAGGED);
     frame_->SpillAllButCopyTOSToA0();
@@ -5759,7 +5758,7 @@ void CodeGenerator::GenerateMathSin(ZoneList<Expression*>* args) {
 void CodeGenerator::GenerateMathCos(ZoneList<Expression*>* args) {
   ASSERT_EQ(args->length(), 1);
   Load(args->at(0));
-  if (Isolate::Current()->cpu_features()->IsSupported(FPU)) {
+  if (CpuFeatures::IsSupported(FPU)) {
     TranscendentalCacheStub stub(TranscendentalCache::COS,
                                  TranscendentalCacheStub::TAGGED);
     frame_->SpillAllButCopyTOSToA0();
@@ -5774,7 +5773,7 @@ void CodeGenerator::GenerateMathCos(ZoneList<Expression*>* args) {
 void CodeGenerator::GenerateMathLog(ZoneList<Expression*>* args) {
   ASSERT_EQ(args->length(), 1);
   Load(args->at(0));
-  if (Isolate::Current()->cpu_features()->IsSupported(FPU)) {
+  if (CpuFeatures::IsSupported(FPU)) {
     TranscendentalCacheStub stub(TranscendentalCache::LOG,
                                  TranscendentalCacheStub::TAGGED);
     frame_->SpillAllButCopyTOSToA0();

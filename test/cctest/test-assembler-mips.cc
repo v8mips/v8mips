@@ -284,7 +284,7 @@ TEST(MIPS3) {
   MacroAssembler assm(NULL, 0);
   Label L, C;
 
-  if (Isolate::Current()->cpu_features()->IsSupported(FPU)) {
+  if (CpuFeatures::IsSupported(FPU)) {
     CpuFeatures::Scope scope(FPU);
 
     __ ldc1(f4, MemOperand(a0, OFFSET_OF(T, a)) );
@@ -354,10 +354,10 @@ TEST(MIPS4) {
   } T;
   T t;
 
-  Assembler assm(NULL, 0);
+  Assembler assm(Isolate::Current(), NULL, 0);
   Label L, C;
 
-  if (Isolate::Current()->cpu_features()->IsSupported(FPU)) {
+  if (CpuFeatures::IsSupported(FPU)) {
     CpuFeatures::Scope scope(FPU);
 
     __ ldc1(f4, MemOperand(a0, OFFSET_OF(T, a)) );
@@ -415,10 +415,10 @@ TEST(MIPS5) {
   } T;
   T t;
 
-  Assembler assm(NULL, 0);
+  Assembler assm(Isolate::Current(), NULL, 0);
   Label L, C;
 
-  if (Isolate::Current()->cpu_features()->IsSupported(FPU)) {
+  if (CpuFeatures::IsSupported(FPU)) {
     CpuFeatures::Scope scope(FPU);
 
     // Load all structure elements to registers.
@@ -490,7 +490,7 @@ TEST(MIPS6) {
   } T;
   T t;
 
-  Assembler assm(NULL, 0);
+  Assembler assm(Isolate::Current(), NULL, 0);
   Label L, C;
 
   // Basic word load/store.
@@ -566,7 +566,7 @@ TEST(MIPS7) {
   MacroAssembler assm(NULL, 0);
   Label neither_is_nan, less_than, outa_here;
 
-  if (Isolate::Current()->cpu_features()->IsSupported(FPU)) {
+  if (CpuFeatures::IsSupported(FPU)) {
     CpuFeatures::Scope scope(FPU);
 
     __ ldc1(f4, MemOperand(a0, OFFSET_OF(T, a)) );
@@ -771,10 +771,10 @@ TEST(MIPS10) {
   } T;
   T t;
 
-  Assembler assm(NULL, 0);
+  Assembler assm(Isolate::Current(), NULL, 0);
   Label L, C;
 
-  if (Isolate::Current()->cpu_features()->IsSupported(FPU)) {
+  if (CpuFeatures::IsSupported(FPU)) {
     CpuFeatures::Scope scope(FPU);
 
     // Load all structure elements to registers.
@@ -855,7 +855,7 @@ TEST(MIPS11) {
   } T;
   T t;
 
-  Assembler assm(NULL, 0);
+  Assembler assm(Isolate::Current(), NULL, 0);
 
   // Test all combinations of LWL and vAddr.
   __ lw(t0, MemOperand(a0, OFFSET_OF(T, reg_init)) );
@@ -1079,7 +1079,7 @@ TEST(MIPS13) {
 
   MacroAssembler assm(NULL, 0);
 
-  if (Isolate::Current()->cpu_features()->IsSupported(FPU)) {
+  if (CpuFeatures::IsSupported(FPU)) {
     CpuFeatures::Scope scope(FPU);
 
     __ sw(t0, MemOperand(a0, OFFSET_OF(T, cvt_small_in)));
@@ -1162,7 +1162,7 @@ TEST(MIPS14) {
 
   MacroAssembler assm(NULL, 0);
 
-  if (Isolate::Current()->cpu_features()->IsSupported(FPU)) {
+  if (CpuFeatures::IsSupported(FPU)) {
     CpuFeatures::Scope scope(FPU);
 
     // Save FCSR.

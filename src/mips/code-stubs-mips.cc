@@ -431,7 +431,7 @@ void FloatingPointHelper::LoadSmis(MacroAssembler* masm,
                                    FloatingPointHelper::Destination destination,
                                    Register scratch1,
                                    Register scratch2) {
-  if (Isolate::Current()->cpu_features()->IsSupported(FPU)) {
+  if (CpuFeatures::IsSupported(FPU)) {
     CpuFeatures::Scope scope(FPU);
     __ sra(scratch1, a0, kSmiTagSize);
     __ mtc1(scratch1, f14);
@@ -502,7 +502,7 @@ void FloatingPointHelper::LoadNumber(MacroAssembler* masm,
   __ JumpIfNotHeapNumber(object, heap_number_map, scratch1, not_number);
 
   // Handle loading a double from a heap number.
-  if (Isolate::Current()->cpu_features()->IsSupported(FPU) &&
+  if (CpuFeatures::IsSupported(FPU) &&
       destination == kFPURegisters) {
     CpuFeatures::Scope scope(FPU);
     // Load the double from tagged HeapNumber to double register.
@@ -522,7 +522,7 @@ void FloatingPointHelper::LoadNumber(MacroAssembler* masm,
 
   // Handle loading a double from a smi.
   __ bind(&is_smi);
-  if (Isolate::Current()->cpu_features()->IsSupported(FPU)) {
+  if (CpuFeatures::IsSupported(FPU)) {
     CpuFeatures::Scope scope(FPU);
     // Convert smi to double using FPU instructions.
     __ SmiUntag(scratch1, object);
@@ -827,7 +827,7 @@ static void EmitSmiNonsmiComparison(MacroAssembler* masm,
 
   // Rhs is a smi, lhs is a number.
   // Convert smi rhs to double.
-  if (Isolate::Current()->cpu_features()->IsSupported(FPU)) {
+  if (CpuFeatures::IsSupported(FPU)) {
     CpuFeatures::Scope scope(FPU);
     __ sra(at, rhs, kSmiTagSize);
     __ mtc1(at, f14);
@@ -866,7 +866,7 @@ static void EmitSmiNonsmiComparison(MacroAssembler* masm,
 
   // Lhs is a smi, rhs is a number.
   // Convert smi lhs to double.
-  if (Isolate::Current()->cpu_features()->IsSupported(FPU)) {
+  if (CpuFeatures::IsSupported(FPU)) {
     CpuFeatures::Scope scope(FPU);
     __ sra(at, lhs, kSmiTagSize);
     __ mtc1(at, f12);
@@ -894,7 +894,7 @@ static void EmitSmiNonsmiComparison(MacroAssembler* masm,
 
 void EmitNanCheck(MacroAssembler* masm, Condition cc) {
   bool exp_first = (HeapNumber::kExponentOffset == HeapNumber::kValueOffset);
-  if (Isolate::Current()->cpu_features()->IsSupported(FPU)) {
+  if (CpuFeatures::IsSupported(FPU)) {
     CpuFeatures::Scope scope(FPU);
     // Lhs and rhs are already loaded to f12 and f14 register pairs
     __ mfc1(t0, f14);  // f14 has LS 32 bits of rhs.
@@ -962,7 +962,7 @@ static void EmitTwoNonNanDoubleComparison(MacroAssembler* masm, Condition cc) {
     // Doubles are not equal unless they have the same bit pattern.
     // Exception: 0 and -0.
     bool exp_first = (HeapNumber::kExponentOffset == HeapNumber::kValueOffset);
-    if (Isolate::Current()->cpu_features()->IsSupported(FPU)) {
+    if (CpuFeatures::IsSupported(FPU)) {
     CpuFeatures::Scope scope(FPU);
       // Lhs and rhs are already loaded to f12 and f14 register pairs
       __ mfc1(t0, f14);  // f14 has LS 32 bits of rhs.
@@ -1001,7 +1001,7 @@ static void EmitTwoNonNanDoubleComparison(MacroAssembler* masm, Condition cc) {
 
   __ bind(&return_result_not_equal);
 
-  if (!Isolate::Current()->cpu_features()->IsSupported(FPU)) {
+  if (!CpuFeatures::IsSupported(FPU)) {
     __ Push(ra);
     __ PrepareCallCFunction(4, t4);  // Two doubles count as 4 arguments.
     if (!IsMipsSoftFloatABI) {
@@ -1097,7 +1097,7 @@ static void EmitCheckForTwoHeapNumbers(MacroAssembler* masm,
 
   // Both are heap numbers. Load them up then jump to the code we have
   // for that.
-  if (Isolate::Current()->cpu_features()->IsSupported(FPU)) {
+  if (CpuFeatures::IsSupported(FPU)) {
     CpuFeatures::Scope scope(FPU);
     __ ldc1(f12, FieldMemOperand(lhs, HeapNumber::kValueOffset));
     __ ldc1(f14, FieldMemOperand(rhs, HeapNumber::kValueOffset));
@@ -1192,7 +1192,7 @@ void NumberToStringStub::GenerateLookupNumberStringCache(MacroAssembler* masm,
   Label load_result_from_cache;
   if (!object_is_smi) {
     __ JumpIfSmi(object, &is_smi);
-    if (isolate->cpu_features()->IsSupported(FPU)) {
+    if (CpuFeatures::IsSupported(FPU)) {
       CpuFeatures::Scope scope(FPU);
       __ CheckMap(object,
                   scratch1,
@@ -1330,7 +1330,7 @@ void CompareStub::Generate(MacroAssembler* masm) {
   // left hand side and a0, a1 represent right hand side.
 
   Isolate* isolate = masm->isolate();
-  if (isolate->cpu_features()->IsSupported(FPU)) {
+  if (CpuFeatures::IsSupported(FPU)) {
     CpuFeatures::Scope scope(FPU);
     Label nan;
     __ li(t0, Operand(LESS));
@@ -1453,7 +1453,7 @@ void CompareStub::Generate(MacroAssembler* masm) {
 // The stub returns zero for false, and a non-zero value for true.
 void ToBooleanStub::Generate(MacroAssembler* masm) {
   // This stub uses FPU instructions.
-  ASSERT(Isolate::Current()->cpu_features()->IsEnabled(FPU));
+  ASSERT(CpuFeatures::IsEnabled(FPU));
 
   Label false_result;
   Label not_heap_number;
@@ -1533,7 +1533,7 @@ void GenericBinaryOpStub::HandleBinaryOpSlowCases(MacroAssembler* masm,
                                     Register rhs,
                                     const Builtins::JavaScript& builtin) {
   Label slow, slow_reverse, do_the_call;
-  bool use_fp_registers = Isolate::Current()->cpu_features()->IsSupported(FPU)
+  bool use_fp_registers = CpuFeatures::IsSupported(FPU)
       && Token::MOD != op_;
 
   ASSERT((lhs.is(a0) && rhs.is(a1)) || (lhs.is(a1) && rhs.is(a0)));
@@ -1554,7 +1554,7 @@ void GenericBinaryOpStub::HandleBinaryOpSlowCases(MacroAssembler* masm,
 
     // If we have floating point hardware, inline ADD, SUB, MUL, and DIV,
     // using registers f12 and f14 for the double values.
-    if (Isolate::Current()->cpu_features()->IsSupported(FPU)) {
+    if (CpuFeatures::IsSupported(FPU)) {
       CpuFeatures::Scope scope(FPU);
       // Convert lhs to double in f12
       __ sra(t3, lhs, kSmiTagSize);
@@ -1659,7 +1659,7 @@ void GenericBinaryOpStub::HandleBinaryOpSlowCases(MacroAssembler* masm,
       __ AllocateHeapNumber(t1, t0, t3, heap_number_map, &slow);
       }
 
-      if (Isolate::Current()->cpu_features()->IsSupported(FPU)) {
+      if (CpuFeatures::IsSupported(FPU)) {
        CpuFeatures::Scope scope(FPU);
        // Convert smi in a0 (rhs) to double in f14.
        __ sra(t3, a0, kSmiTagSize);
@@ -1715,7 +1715,7 @@ void GenericBinaryOpStub::HandleBinaryOpSlowCases(MacroAssembler* masm,
       __ AllocateHeapNumber(t1, t0, t3, heap_number_map, &slow);
       }
 
-      if (Isolate::Current()->cpu_features()->IsSupported(FPU)) {
+      if (CpuFeatures::IsSupported(FPU)) {
         CpuFeatures::Scope scope(FPU);
         // Convert smi in a1 (lhs) to double in f12.
         __ sra(t3, a1, kSmiTagSize);
@@ -1941,7 +1941,7 @@ void GenericBinaryOpStub::HandleNonSmiBitwiseOp(MacroAssembler* masm,
       // the register as an unsigned int so we go to slow case if we hit this
       // case.
       __ And(t3, v1, Operand(0x80000000));
-      if (Isolate::Current()->cpu_features()->IsSupported(FPU)) {
+      if (CpuFeatures::IsSupported(FPU)) {
         CpuFeatures::Scope scope(FPU);
         __ Branch(&result_not_a_smi, ne, t3, Operand(zero_reg));
       } else {
@@ -1991,7 +1991,7 @@ void GenericBinaryOpStub::HandleNonSmiBitwiseOp(MacroAssembler* masm,
   // result.
   __ mov(v0, t5);
 
-  if (Isolate::Current()->cpu_features()->IsSupported(FPU)) {
+  if (CpuFeatures::IsSupported(FPU)) {
     CpuFeatures::Scope scope(FPU);
     __ mov(s0, v1);
     if (op_ == Token::SHR) {
@@ -2598,7 +2598,7 @@ void TypeRecordingBinaryOpStub::GenerateFPOperation(MacroAssembler* masm,
       // Load left and right operands into f12 and f14 or a0/a1 and a2/a3
       // depending on whether FPU is available or not.
       FloatingPointHelper::Destination destination =
-          Isolate::Current()->cpu_features()->IsSupported(FPU) &&
+          CpuFeatures::IsSupported(FPU) &&
           op_ != Token::MOD ?
               FloatingPointHelper::kFPURegisters :
               FloatingPointHelper::kCoreRegisters;
@@ -2739,7 +2739,7 @@ void TypeRecordingBinaryOpStub::GenerateFPOperation(MacroAssembler* masm,
           // The code below for writing into heap numbers isn't capable of
           // writing the register as an unsigned int so we go to slow case if we
           // hit this case.
-          if (Isolate::Current()->cpu_features()->IsSupported(FPU)) {
+          if (CpuFeatures::IsSupported(FPU)) {
             __ Branch(&result_not_a_smi, lt, a2, Operand(zero_reg));
           } else {
             __ Branch(not_numbers, lt, a2, Operand(zero_reg));
@@ -2777,7 +2777,7 @@ void TypeRecordingBinaryOpStub::GenerateFPOperation(MacroAssembler* masm,
       // result.
       __ mov(v0, t1);
 
-      if (Isolate::Current()->cpu_features()->IsSupported(FPU)) {
+      if (CpuFeatures::IsSupported(FPU)) {
         // Convert the int32 in a2 to the heap number in a0. As
         // mentioned above SHR needs to always produce a positive result.
         CpuFeatures::Scope scope(FPU);
@@ -3031,7 +3031,7 @@ void TranscendentalCacheStub::Generate(MacroAssembler* masm) {
   const Register cache_entry = a0;
   const bool tagged = (argument_type_ == TAGGED);
 
-  if (Isolate::Current()->cpu_features()->IsSupported(FPU)) {
+  if (CpuFeatures::IsSupported(FPU)) {
     CpuFeatures::Scope scope(FPU);
 
     if (tagged) {
@@ -3128,7 +3128,7 @@ void TranscendentalCacheStub::Generate(MacroAssembler* masm) {
       __ ldc1(f4, FieldMemOperand(t2, HeapNumber::kValueOffset));
     }
     __ Ret();
-  }  // if (Isolate::Current()->cpu_features()->IsSupported(FPU))
+  }  // if (CpuFeatures::IsSupported(FPU))
 
   __ bind(&calculate);
   if (tagged) {
@@ -3138,7 +3138,7 @@ void TranscendentalCacheStub::Generate(MacroAssembler* masm) {
                                  1,
                                  1);
   } else {
-    if (!Isolate::Current()->cpu_features()->IsSupported(FPU)) UNREACHABLE();
+    if (!CpuFeatures::IsSupported(FPU)) UNREACHABLE();
     CpuFeatures::Scope scope(FPU);
 
     Label no_update;
@@ -3347,7 +3347,7 @@ void GenericUnaryOpStub::Generate(MacroAssembler* masm) {
       __ mov(v0, a2);
     }
 
-    if (Isolate::Current()->cpu_features()->IsSupported(FPU)) {
+    if (CpuFeatures::IsSupported(FPU)) {
       CpuFeatures::Scope scope(FPU);
       __ mov(s0, a1);
       __ mtc1(s0, f0);
@@ -3393,7 +3393,7 @@ void GenericUnaryOpStub::Generate(MacroAssembler* masm) {
 void MathPowStub::Generate(MacroAssembler* masm) {
   Label call_runtime;
 
-  if (Isolate::Current()->cpu_features()->IsSupported(FPU)) {
+  if (CpuFeatures::IsSupported(FPU)) {
     CpuFeatures::Scope scope(FPU);
 
     Label base_not_smi;
@@ -6142,7 +6142,7 @@ void ICCompareStub::GenerateHeapNumbers(MacroAssembler* masm) {
 
   // Inlining the double comparison and falling back to the general compare
   // stub if NaN is involved or FPU is unsupported.
-  if (Isolate::Current()->cpu_features()->IsSupported(FPU)) {
+  if (CpuFeatures::IsSupported(FPU)) {
     CpuFeatures::Scope scope(FPU);
 
     // Load left and right operand

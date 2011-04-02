@@ -43,13 +43,17 @@
 namespace v8 {
 namespace internal {
 
-CpuFeatures::CpuFeatures()
-    : supported_(0),
-      enabled_(0),
-      found_by_runtime_probing_(0) {
-}
+#ifdef DEBUG
+bool CpuFeatures::initialized_ = false;
+#endif
+unsigned CpuFeatures::supported_ = 0;
+unsigned CpuFeatures::found_by_runtime_probing_ = 0;
 
-void CpuFeatures::Probe(bool portable) {
+void CpuFeatures::Probe() {
+  ASSERT(!initialized_);
+#ifdef DEBUG
+  initialized_ = true;
+#endif
   // If the compiler is allowed to use fpu then we can use fpu too in our
   // code generation.
 #if !defined(__mips__)
@@ -58,7 +62,7 @@ void CpuFeatures::Probe(bool portable) {
       supported_ |= 1u << FPU;
   }
 #else
-  if (portable && Serializer::enabled()) {
+  if (Serializer::enabled()) {
     supported_ |= OS::CpuFeaturesImpliedByPlatform();
     return;  // No features if we might serialize.
   }
@@ -69,8 +73,6 @@ void CpuFeatures::Probe(bool portable) {
     supported_ |= 1u << FPU;
     found_by_runtime_probing_ |= 1u << FPU;
   }
-
-  if (!portable) found_by_runtime_probing_ = 0;
 #endif
 }
 
@@ -235,8 +237,8 @@ const Instr kLwSwOffsetMask = kImm16Mask;
 static const int kMinimalBufferSize = 4 * KB;
 
 
-Assembler::Assembler(void* buffer, int buffer_size)
-    : AssemblerBase(Isolate::Current()),
+Assembler::Assembler(Isolate* arg_isolate, void* buffer, int buffer_size)
+    : AssemblerBase(arg_isolate),
       positions_recorder_(this),
       allow_peephole_optimization_(false),
       emit_debug_code_(FLAG_debug_code) {
@@ -661,7 +663,7 @@ void Assembler::GenInstrRegister(Opcode opcode,
                                  FPURegister fd,
                                  SecondaryField func) {
   ASSERT(fd.is_valid() && fs.is_valid() && ft.is_valid());
-  ASSERT(isolate()->cpu_features()->IsEnabled(FPU));
+  ASSERT(CpuFeatures::IsEnabled(FPU));
   Instr instr = opcode | fmt | (ft.code() << kFtShift) | (fs.code() << kFsShift)
       | (fd.code() << kFdShift) | func;
   emit(instr);
@@ -675,7 +677,7 @@ void Assembler::GenInstrRegister(Opcode opcode,
                                  FPURegister fd,
                                  SecondaryField func) {
   ASSERT(fd.is_valid() && fs.is_valid() && rt.is_valid());
-  ASSERT(isolate()->cpu_features()->IsEnabled(FPU));
+  ASSERT(CpuFeatures::IsEnabled(FPU));
   Instr instr = opcode | fmt | (rt.code() << kRtShift)
       | (fs.code() << kFsShift) | (fd.code() << kFdShift) | func;
   emit(instr);
@@ -688,7 +690,7 @@ void Assembler::GenInstrRegister(Opcode opcode,
                                  FPUControlRegister fs,
                                  SecondaryField func) {
   ASSERT(fs.is_valid() && rt.is_valid());
-  ASSERT(isolate()->cpu_features()->IsEnabled(FPU));
+  ASSERT(CpuFeatures::IsEnabled(FPU));
   Instr instr =
       opcode | fmt | (rt.code() << kRtShift) | (fs.code() << kFsShift) | func;
   emit(instr);
@@ -723,7 +725,7 @@ void Assembler::GenInstrImmediate(Opcode opcode,
                                   FPURegister ft,
                                   int32_t j) {
   ASSERT(rs.is_valid() && ft.is_valid() && (is_int16(j) || is_uint16(j)));
-  ASSERT(isolate()->cpu_features()->IsEnabled(FPU));
+  ASSERT(CpuFeatures::IsEnabled(FPU));
   Instr instr = opcode | (rs.code() << kRsShift) | (ft.code() << kFtShift)
       | (j & kImm16Mask);
   emit(instr);
@@ -1839,7 +1841,7 @@ void Assembler::cvt_d_s(FPURegister fd, FPURegister fs) {
 // Conditions.
 void Assembler::c(FPUCondition cond, SecondaryField fmt,
     FPURegister fs, FPURegister ft, uint16_t cc) {
-  ASSERT(isolate()->cpu_features()->IsEnabled(FPU));
+  ASSERT(CpuFeatures::IsEnabled(FPU));
   ASSERT(is_uint3(cc));
   ASSERT((fmt & ~(31 << kRsShift)) == 0);
   Instr instr = COP1 | fmt | ft.code() << 16 | fs.code() << kFsShift
@@ -1850,7 +1852,7 @@ void Assembler::c(FPUCondition cond, SecondaryField fmt,
 
 void Assembler::fcmp(FPURegister src1, const double src2,
       FPUCondition cond) {
-  ASSERT(isolate()->cpu_features()->IsEnabled(FPU));
+  ASSERT(CpuFeatures::IsEnabled(FPU));
   ASSERT(src2 == 0.0);
   mtc1(zero_reg, f14);
   cvt_d_w(f14, f14);
@@ -1859,7 +1861,7 @@ void Assembler::fcmp(FPURegister src1, const double src2,
 
 
 void Assembler::bc1f(int16_t offset, uint16_t cc) {
-  ASSERT(isolate()->cpu_features()->IsEnabled(FPU));
+  ASSERT(CpuFeatures::IsEnabled(FPU));
   ASSERT(is_uint3(cc));
   Instr instr = COP1 | BC1 | cc << 18 | 0 << 16 | (offset & kImm16Mask);
   emit(instr);
@@ -1867,7 +1869,7 @@ void Assembler::bc1f(int16_t offset, uint16_t cc) {
 
 
 void Assembler::bc1t(int16_t offset, uint16_t cc) {
-  ASSERT(isolate()->cpu_features()->IsEnabled(FPU));
+  ASSERT(CpuFeatures::IsEnabled(FPU));
   ASSERT(is_uint3(cc));
   Instr instr = COP1 | BC1 | cc << 18 | 1 << 16 | (offset & kImm16Mask);
   emit(instr);

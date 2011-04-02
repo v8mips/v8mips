@@ -920,7 +920,7 @@ static void StoreIntAsFloat(MacroAssembler* masm,
                             Register fval,
                             Register scratch1,
                             Register scratch2) {
-  if (masm->isolate()->cpu_features()->IsSupported(FPU)) {
+  if (CpuFeatures::IsSupported(FPU)) {
     CpuFeatures::Scope scope(FPU);
     __ mtc1(ival, f0);
     __ cvt_s_w(f0, f0);
@@ -1991,7 +1991,7 @@ MaybeObject* CallStubCompiler::CompileMathFloorCall(Object* object,
   //  -- sp[argc * 4]           : receiver
   // -----------------------------------
 
-  if (!masm()->isolate()->cpu_features()->IsSupported(FPU))
+  if (!CpuFeatures::IsSupported(FPU))
     return heap()->undefined_value();
   CpuFeatures::Scope scope_fpu(FPU);
 
@@ -3431,7 +3431,7 @@ MaybeObject* ExternalArrayStubCompiler::CompileKeyedLoadStub(
       __ lw(value, MemOperand(t3, 0));
       break;
     case kExternalFloatArray:
-      if (masm()->isolate()->cpu_features()->IsSupported(FPU)) {
+      if (CpuFeatures::IsSupported(FPU)) {
         CpuFeatures::Scope scope(FPU);
         __ sll(t3, t2, 2);
         __ addu(t3, a3, t3);
@@ -3472,7 +3472,7 @@ MaybeObject* ExternalArrayStubCompiler::CompileKeyedLoadStub(
     __ LoadRoot(t1, Heap::kHeapNumberMapRootIndex);
     __ AllocateHeapNumber(v0, a3, t0, t1, &slow);
 
-    if (masm()->isolate()->cpu_features()->IsSupported(FPU)) {
+    if (CpuFeatures::IsSupported(FPU)) {
       CpuFeatures::Scope scope(FPU);
       __ mtc1(value, f0);
       __ cvt_d_w(f0, f0);
@@ -3486,7 +3486,7 @@ MaybeObject* ExternalArrayStubCompiler::CompileKeyedLoadStub(
     // The test is different for unsigned int values. Since we need
     // the value to be in the range of a positive smi, we can't
     // handle either of the top two bits being set in the value.
-    if (masm()->isolate()->cpu_features()->IsSupported(FPU)) {
+    if (CpuFeatures::IsSupported(FPU)) {
       CpuFeatures::Scope scope(FPU);
       Label pl_box_int;
       __ And(t2, value, Operand(0xC0000000));
@@ -3556,7 +3556,7 @@ MaybeObject* ExternalArrayStubCompiler::CompileKeyedLoadStub(
   } else if (array_type == kExternalFloatArray) {
     // For the floating-point array type, we need to always allocate a
     // HeapNumber.
-    if (masm()->isolate()->cpu_features()->IsSupported(FPU)) {
+    if (CpuFeatures::IsSupported(FPU)) {
       CpuFeatures::Scope scope(FPU);
       // Allocate a HeapNumber for the result. Don't use a0 and a1 as
       // AllocateHeapNumber clobbers all registers - also when jumping due to
@@ -3767,7 +3767,7 @@ MaybeObject* ExternalArrayStubCompiler::CompileKeyedStoreStub(
     // +/-Infinity into integer arrays basically undefined. For more
     // reproducible behavior, convert these to zero.
 
-    if (masm()->isolate()->cpu_features()->IsSupported(FPU)) {
+    if (CpuFeatures::IsSupported(FPU)) {
       CpuFeatures::Scope scope(FPU);
 
       __ ldc1(f0, MemOperand(a0, HeapNumber::kValueOffset - kHeapObjectTag));
