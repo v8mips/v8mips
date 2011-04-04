@@ -1764,6 +1764,7 @@ void GenericBinaryOpStub::HandleBinaryOpSlowCases(MacroAssembler* masm,
         __ Push(t1);
         __ PrepareCallCFunction(4, t0);  // Two doubles count as 4 arguments.
         if (!IsMipsSoftFloatABI) {
+          CpuFeatures::Scope scope(FPU);
           // We are not using MIPS FPU instructions, and parameters for the
           // run-time function call are prepared in a0-a3 registers, but the
           // function we are calling is compiled with hard-float flag and
@@ -1780,6 +1781,7 @@ void GenericBinaryOpStub::HandleBinaryOpSlowCases(MacroAssembler* masm,
         __ Pop(ra);
         // Store answer in the overwritable heap number.
         if (!IsMipsSoftFloatABI) {
+          CpuFeatures::Scope scope(FPU);
           // Double returned in fp coprocessor register f0 and f1.
           __ sdc1(f0, FieldMemOperand(t1, HeapNumber::kValueOffset));
         } else {
