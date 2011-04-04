@@ -1705,8 +1705,8 @@ void FullCodeGenerator::EmitAssignment(Expression* expr, int bailout_ast_id) {
       __ pop(a0);  // Restore value.
       __ li(a2, Operand(prop->key()->AsLiteral()->handle()));
       Handle<Code> ic = is_strict_mode()
-          ? isolate()->builtins()->KeyedStoreIC_Initialize_Strict()
-          : isolate()->builtins()->KeyedStoreIC_Initialize();
+          ? isolate()->builtins()->StoreIC_Initialize_Strict()
+          : isolate()->builtins()->StoreIC_Initialize();
       EmitCallIC(ic, RelocInfo::CODE_TARGET);
       break;
     }
@@ -1728,8 +1728,8 @@ void FullCodeGenerator::EmitAssignment(Expression* expr, int bailout_ast_id) {
       }
       __ pop(a0);  // Restore value.
       Handle<Code> ic = is_strict_mode()
-        ? isolate()->builtins()->StoreIC_Initialize_Strict()
-        : isolate()->builtins()->StoreIC_Initialize();
+        ? isolate()->builtins()->KeyedStoreIC_Initialize_Strict()
+        : isolate()->builtins()->KeyedStoreIC_Initialize();
       EmitCallIC(ic, RelocInfo::CODE_TARGET);
       break;
     }
