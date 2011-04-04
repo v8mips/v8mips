@@ -549,10 +549,29 @@ SAMPLE_FLAGS = {
     },
     'arch:mips': {
       'CPPDEFINES':   ['V8_TARGET_ARCH_MIPS'],
+      'mips_arch_variant:mips32r2': {
+        'CPPDEFINES':    ['_MIPS_ARCH_MIPS32R2']
+      },
       'simulator:none': {
-        'CCFLAGS':      ['-EL', '-mips32r2', '-Wa,-mips32r2', '-fno-inline'],
+        'CCFLAGS':      ['-EL'],
         'LINKFLAGS':    ['-EL'],
-        'LDFLAGS':      ['-EL']
+        'mips_arch_variant:mips32r2': {
+          'CCFLAGS':      ['-mips32r2', '-Wa,-mips32r2']
+        },
+        'mips_arch_variant:mips32r1': {
+          'CCFLAGS':      ['-mips32', '-Wa,-mips32']
+        },
+        'library:static': {
+          'LINKFLAGS':    ['-static', '-static-libgcc']
+        },
+        'mipsabi:softfloat': {
+          'CCFLAGS':      ['-msoft-float'],
+          'LINKFLAGS':    ['-msoft-float']
+        },
+        'mipsabi:hardfloat': {
+          'CCFLAGS':      ['-mhard-float'],
+          'LINKFLAGS':    ['-mhard-float']
+        }
       }
     },
     'simulator:arm': {
