@@ -267,9 +267,6 @@ const FPURegister f31 = { 31 };
 // FPU (coprocessor 1) control registers.
 // Currently only FCSR (#31) is implemented.
 struct FPUControlRegister {
-  static const int kFCSRRegister = 31;
-  static const int kInvalidFPUControlRegister = -1;
-
   bool is_valid() const { return code_ == kFCSRRegister; }
   bool is(FPUControlRegister creg) const { return code_ == creg.code_; }
   int code() const {
@@ -288,7 +285,7 @@ struct FPUControlRegister {
   int code_;
 };
 
-const FPUControlRegister no_fpucreg = { -1 };
+const FPUControlRegister no_fpucreg = { kInvalidFPUControlRegister };
 const FPUControlRegister FCSR = { kFCSRRegister };
 
 

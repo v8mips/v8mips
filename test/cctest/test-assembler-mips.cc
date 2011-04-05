@@ -1134,10 +1134,10 @@ TEST(MIPS14) {
   int32_t x##_down_out; \
   int32_t neg_##x##_up_out; \
   int32_t neg_##x##_down_out; \
-  int32_t x##_err1_out; \
-  int32_t x##_err2_out; \
-  int32_t x##_err3_out; \
-  int32_t x##_err4_out; \
+  uint32_t x##_err1_out; \
+  uint32_t x##_err2_out; \
+  uint32_t x##_err3_out; \
+  uint32_t x##_err4_out; \
   int32_t x##_invalid_result;
 
   typedef struct {
@@ -1246,20 +1246,20 @@ TEST(MIPS14) {
     Object* dummy = CALL_GENERATED_CODE(f, &t, 0, 0, 0, 0);
     USE(dummy);
 
-#define GET_FPU_ERR(x) ((x >> 2) & (32 - 1))
+#define GET_FPU_ERR(x) (static_cast<int>((x >> kFCSRFlagShift) & kFCSRFlagMask))
 
     CHECK_EQ(124, t.round_up_out);
     CHECK_EQ(123, t.round_down_out);
     CHECK_EQ(-124, t.neg_round_up_out);
     CHECK_EQ(-123, t.neg_round_down_out);
 
-    // Inaccurate.
-    CHECK_EQ(1, GET_FPU_ERR(t.round_err1_out));
+    // Inexact.
+    CHECK_EQ(kFCSRInexactFlagBit, GET_FPU_ERR(t.round_err1_out));
     // No error.
     CHECK_EQ(0, GET_FPU_ERR(t.round_err2_out));
     // Invalid operation.
-    CHECK_EQ(16, GET_FPU_ERR(t.round_err3_out));
-    CHECK_EQ(16, GET_FPU_ERR(t.round_err4_out));
+    CHECK_EQ(kFCSRInvalidOpFlagBit, GET_FPU_ERR(t.round_err3_out));
+    CHECK_EQ(kFCSRInvalidOpFlagBit, GET_FPU_ERR(t.round_err4_out));
     CHECK_EQ(kFPUInvalidResult, t.round_invalid_result);
 
     CHECK_EQ(123, t.floor_up_out);
@@ -1267,13 +1267,13 @@ TEST(MIPS14) {
     CHECK_EQ(-124, t.neg_floor_up_out);
     CHECK_EQ(-124, t.neg_floor_down_out);
 
-    // Inaccurate.
-    CHECK_EQ(1, GET_FPU_ERR(t.floor_err1_out));
+    // Inexact.
+    CHECK_EQ(kFCSRInexactFlagBit, GET_FPU_ERR(t.floor_err1_out));
     // No error.
     CHECK_EQ(0, GET_FPU_ERR(t.floor_err2_out));
     // Invalid operation.
-    CHECK_EQ(16, GET_FPU_ERR(t.floor_err3_out));
-    CHECK_EQ(16, GET_FPU_ERR(t.floor_err4_out));
+    CHECK_EQ(kFCSRInvalidOpFlagBit, GET_FPU_ERR(t.floor_err3_out));
+    CHECK_EQ(kFCSRInvalidOpFlagBit, GET_FPU_ERR(t.floor_err4_out));
     CHECK_EQ(kFPUInvalidResult, t.floor_invalid_result);
 
     CHECK_EQ(124, t.ceil_up_out);
@@ -1281,13 +1281,13 @@ TEST(MIPS14) {
     CHECK_EQ(-123, t.neg_ceil_up_out);
     CHECK_EQ(-123, t.neg_ceil_down_out);
 
-    // Inaccurate.
-    CHECK_EQ(1, GET_FPU_ERR(t.ceil_err1_out));
+    // Inexact.
+    CHECK_EQ(kFCSRInexactFlagBit, GET_FPU_ERR(t.ceil_err1_out));
     // No error.
     CHECK_EQ(0, GET_FPU_ERR(t.ceil_err2_out));
     // Invalid operation.
-    CHECK_EQ(16, GET_FPU_ERR(t.ceil_err3_out));
-    CHECK_EQ(16, GET_FPU_ERR(t.ceil_err4_out));
+    CHECK_EQ(kFCSRInvalidOpFlagBit, GET_FPU_ERR(t.ceil_err3_out));
+    CHECK_EQ(kFCSRInvalidOpFlagBit, GET_FPU_ERR(t.ceil_err4_out));
     CHECK_EQ(kFPUInvalidResult, t.ceil_invalid_result);
 
     // In rounding mode 0 cvt should behave like round.
@@ -1296,13 +1296,13 @@ TEST(MIPS14) {
     CHECK_EQ(t.neg_round_up_out, t.neg_cvt_up_out);
     CHECK_EQ(t.neg_round_down_out, t.neg_cvt_down_out);
 
-    // Inaccurate.
-    CHECK_EQ(1, GET_FPU_ERR(t.cvt_err1_out));
+    // Inexact.
+    CHECK_EQ(kFCSRInexactFlagBit, GET_FPU_ERR(t.cvt_err1_out));
     // No error.
     CHECK_EQ(0, GET_FPU_ERR(t.cvt_err2_out));
     // Invalid operation.
-    CHECK_EQ(16, GET_FPU_ERR(t.cvt_err3_out));
-    CHECK_EQ(16, GET_FPU_ERR(t.cvt_err4_out));
+    CHECK_EQ(kFCSRInvalidOpFlagBit, GET_FPU_ERR(t.cvt_err3_out));
+    CHECK_EQ(kFCSRInvalidOpFlagBit, GET_FPU_ERR(t.cvt_err4_out));
     CHECK_EQ(kFPUInvalidResult, t.cvt_invalid_result);
   }
 }
