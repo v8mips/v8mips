@@ -257,7 +257,12 @@ class Page {
   static const int kMaxHeapObjectSize = kObjectAreaSize;
 
   static const int kDirtyFlagOffset = 2 * kPointerSize;
+#if defined(V8_TARGET_ARCH_MIPS)  && defined(__mips__)
+  // For MIPS, page size is 16K bytes, so we need region size to be 512.
+  static const int kRegionSizeLog2 = 9;
+#else
   static const int kRegionSizeLog2 = 8;
+#endif //V8_TARGET_ARCH_MIPS
   static const int kRegionSize = 1 << kRegionSizeLog2;
   static const intptr_t kRegionAlignmentMask = (kRegionSize - 1);
 
