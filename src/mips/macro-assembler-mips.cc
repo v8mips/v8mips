@@ -2255,7 +2255,9 @@ void MacroAssembler::GetCFunctionDoubleResult(const DoubleRegister dst) {
     mtc1(v0, dst);
     mtc1(v1, FPURegister::from_code(dst.code() + 1));
   } else {
-    mov_d(dst, f0);
+    if (!dst.is(f0)) {
+      mov_d(dst, f0);  // Reg f0 is o32 ABI FP return value.
+    }
   }
 }
 

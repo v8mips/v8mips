@@ -3383,15 +3383,17 @@ void MathPowStub::Generate(MacroAssembler* masm) {
     Label convert_exponent;
 
     const Register base = a0;
-    const Register exponent = a1;
+    const Register exponent = a2;
     const Register heapnumbermap = t1;
-    const Register heapnumber = t2;
-    const DoubleRegister double_base = f0;
-    const DoubleRegister double_exponent = f2;
-    const DoubleRegister double_result = f4;
-    const DoubleRegister double_scratch = f6;
-    const Register scratch = t5;
+    const Register heapnumber = s0;  // Callee-saved register.
+    const Register scratch = t2;
     const Register scratch2 = t3;
+
+    // Alocate FP values in the ABI-parameter-passing regs.
+    const DoubleRegister double_base = f12;
+    const DoubleRegister double_exponent = f14;
+    const DoubleRegister double_result = f0;
+    const DoubleRegister double_scratch = f2;
 
     __ LoadRoot(heapnumbermap, Heap::kHeapNumberMapRootIndex);
     __ lw(base, MemOperand(sp, 1 * kPointerSize));
@@ -3426,10 +3428,16 @@ void MathPowStub::Generate(MacroAssembler* masm) {
                           &call_runtime);
     __ push(ra);
     __ PrepareCallCFunction(3, scratch);
-    __ mov(a2, exponent);
-    __ mfc1(a0, double_base);
-    __ mfc1(a1, FPURegister::from_code(double_base.code() + 1));
-    __ CallCFunction(ExternalReference::power_double_int_function(), 3);
+    // ABI (o32) for func(double d, int x): d in f12, x in a2.
+    ASSERT(double_base.is(f12));
+    ASSERT(exponent.is(a2));
+    if (IsMipsSoftFloatABI) {
+      // Simulator case, supports FPU, but with soft-float passing.
+      __ mfc1(a0, double_base);
+      __ mfc1(a1, FPURegister::from_code(double_base.code() + 1));
+    }
+    __ CallCFunction(
+        ExternalReference::power_double_int_function(), 3);
     __ pop(ra);
     __ GetCFunctionDoubleResult(double_result);
     __ sdc1(double_result,
@@ -3455,11 +3463,17 @@ void MathPowStub::Generate(MacroAssembler* masm) {
                           &call_runtime);
     __ push(ra);
     __ PrepareCallCFunction(4, scratch);
-    __ mfc1(a0, double_base);
-    __ mfc1(a1, FPURegister::from_code(double_base.code() + 1));
-    __ mfc1(a2, double_exponent);
-    __ mfc1(a3, FPURegister::from_code(double_exponent.code() + 1));
-    __ CallCFunction(ExternalReference::power_double_double_function(), 4);
+    // ABI (o32) for func(double a, double b): a in f12, b in f14.
+    ASSERT(double_base.is(f12));
+    ASSERT(double_exponent.is(f14));
+    if (IsMipsSoftFloatABI) {
+      __ mfc1(a0, double_base);
+      __ mfc1(a1, FPURegister::from_code(double_base.code() + 1));
+      __ mfc1(a2, double_exponent);
+      __ mfc1(a3, FPURegister::from_code(double_exponent.code() + 1));
+    }
+    __ CallCFunction(
+        ExternalReference::power_double_double_function(), 4);
     __ pop(ra);
     __ GetCFunctionDoubleResult(double_result);
     __ sdc1(double_result,
