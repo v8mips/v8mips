@@ -392,7 +392,7 @@ uint32_t Assembler::GetImmediate16(Instr instr) {
 
 uint32_t Assembler::GetLabelConst(Instr instr) {
   return instr & ~kImm16Mask;
-}  
+}
 
 
 bool Assembler::IsPop(Instr instr) {
@@ -466,6 +466,16 @@ bool Assembler::IsBranch(Instr instr) {
 }
 
 
+bool Assembler::IsBEQ(Instr instr) {
+  return GetOpcodeField(instr) == BEQ;
+}
+
+
+bool Assembler::IsBNE(Instr instr) {
+  return GetOpcodeField(instr) == BNE;
+}
+
+
 bool Assembler::IsNop(Instr instr, unsigned int type) {
   // See Assembler::nop(type).
   ASSERT(type < 32);
@@ -534,6 +544,11 @@ bool Assembler::IsAddImmediate(Instr instr) {
 Instr Assembler::SetAddImmediateOffset(Instr instr, int16_t offset) {
   ASSERT(IsAddImmediate(instr));
   return ((instr & ~kImm16Mask) | (offset & kImm16Mask));
+}
+
+
+bool Assembler::IsAndImmediate(Instr instr) {
+  return GetOpcodeField(instr) == ANDI;
 }
 
 
@@ -2125,7 +2140,8 @@ Address Assembler::target_address_at(Address pc) {
     } else if (GetOpcodeField(instr2) == LUI) {
       return reinterpret_cast<Address>(GetImmediate16(instr2) << 16);
     }
-  } else if ((GetOpcodeField(instr1) == LUI) && (GetOpcodeField(instr2) == ORI)) {
+  } else if ((GetOpcodeField(instr1) == LUI) &&
+             (GetOpcodeField(instr2) == ORI)) {
     // 32 bit value.
     return reinterpret_cast<Address>(
         (GetImmediate16(instr1) << 16) | GetImmediate16(instr2));

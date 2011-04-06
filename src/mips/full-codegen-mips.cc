@@ -53,6 +53,67 @@ namespace internal {
 
 #define __ ACCESS_MASM(masm_)
 
+
+// A patch site is a location in the code which it is possible to patch. This
+// class has a number of methods to emit the code which is patchable and the
+// method EmitPatchInfo to record a marker back to the patchable code. This
+// marker is a andi at, rx, #yyy instruction, and x * 0x0000ffff + yyy (raw 16
+// bit immediate value is used) is the delta from the pc to the first
+// instruction of the patchable code.
+class JumpPatchSite BASE_EMBEDDED {
+ public:
+  explicit JumpPatchSite(MacroAssembler* masm) : masm_(masm) {
+#ifdef DEBUG
+    info_emitted_ = false;
+#endif
+  }
+
+  ~JumpPatchSite() {
+    ASSERT(patch_site_.is_bound() == info_emitted_);
+  }
+
+  // When initially emitting this ensure that a jump is always generated to skip
+  // the inlined smi code.
+  void EmitJumpIfNotSmi(Register reg, Label* target) {
+    ASSERT(!patch_site_.is_bound() && !info_emitted_);
+    Assembler::BlockTrampolinePoolScope block_trampoline_pool(masm_);
+    __ bind(&patch_site_);
+    __ andi(at, reg, 0);
+    // Always taken before patched.
+    __ Branch(target, eq, at, Operand(zero_reg));
+  }
+
+  // When initially emitting this ensure that a jump is never generated to skip
+  // the inlined smi code.
+  void EmitJumpIfSmi(Register reg, Label* target) {
+    Assembler::BlockTrampolinePoolScope block_trampoline_pool(masm_);
+    ASSERT(!patch_site_.is_bound() && !info_emitted_);
+    __ bind(&patch_site_);
+    __ andi(at, reg, 0);
+    // Never taken before patched.
+    __ Branch(target, ne, at, Operand(zero_reg));
+  }
+
+  void EmitPatchInfo() {
+    int delta_to_patch_site = masm_->InstructionsGeneratedSince(&patch_site_);
+    Register reg = Register::from_code(delta_to_patch_site / kImm16Mask);
+    __ andi(at, reg, delta_to_patch_site % kImm16Mask);
+#ifdef DEBUG
+    info_emitted_ = true;
+#endif
+  }
+
+  bool is_bound() const { return patch_site_.is_bound(); }
+
+ private:
+  MacroAssembler* masm_;
+  Label patch_site_;
+#ifdef DEBUG
+  bool info_emitted_;
+#endif
+};
+
+
 // Generate code for a JS function.  On entry to the function the receiver
 // and arguments have been pushed on the stack left to right.  The actual
 // argument count matches the formal parameter count expected by the
@@ -784,11 +845,12 @@ void FullCodeGenerator::VisitSwitchStatement(SwitchStatement* stmt) {
     // Perform the comparison as if via '==='.
     __ lw(a1, MemOperand(sp, 0));  // Switch value.
     bool inline_smi_code = ShouldInlineSmiCase(Token::EQ_STRICT);
+    JumpPatchSite patch_site(masm_);
     if (inline_smi_code) {
       Label slow_case;
       __ or_(a2, a1, a0);
-      __ And(at, a2, Operand(kSmiTagMask));
-      __ Branch(&slow_case, ne, at, Operand(zero_reg));
+      patch_site.EmitJumpIfNotSmi(a2, &slow_case);
+
       __ Branch(&next_test, ne, a1, Operand(a0));
       __ Drop(1);  // Switch value is no longer needed.
       __ Branch(clause->body_target()->entry_label());
@@ -796,11 +858,10 @@ void FullCodeGenerator::VisitSwitchStatement(SwitchStatement* stmt) {
       __ bind(&slow_case);
     }
 
-    CompareFlags flags = inline_smi_code
-        ? NO_SMI_COMPARE_IN_STUB
-        : NO_COMPARE_FLAGS;
-    CompareStub stub(eq, true, flags, a1, a0);
-    __ CallStub(&stub);
+    // Record position before stub call for type feedback.
+    SetSourcePosition(clause->position());
+    Handle<Code> ic = CompareIC::GetUninitialized(Token::EQ_STRICT);
+    EmitCallIC(ic, &patch_site);
     __ Branch(&next_test, ne, v0, Operand(zero_reg));
     __ Drop(1);  // Switch value is no longer needed.
     __ Branch(clause->body_target()->entry_label());
@@ -3849,18 +3910,18 @@ void FullCodeGenerator::VisitCompareOperation(CompareOperation* expr) {
       }
 
       bool inline_smi_code = ShouldInlineSmiCase(op);
+      JumpPatchSite patch_site(masm_);
       if (inline_smi_code) {
         Label slow_case;
         __ Or(a2, a0, Operand(a1));
-        __ JumpIfNotSmi(a2, &slow_case);
+        patch_site.EmitJumpIfNotSmi(a2, &slow_case);
         Split(cc, a1, Operand(a0), if_true, if_false, NULL);
         __ bind(&slow_case);
       }
-      CompareFlags flags = inline_smi_code
-          ? NO_SMI_COMPARE_IN_STUB
-          : NO_COMPARE_FLAGS;
-      CompareStub stub(cc, strict, flags, a1, a0);
-      __ CallStub(&stub);
+      // Record position and call the compare IC.
+      SetSourcePosition(expr->position());
+      Handle<Code> ic = CompareIC::GetUninitialized(op);
+      EmitCallIC(ic, &patch_site);
       PrepareForBailoutBeforeSplit(TOS_REG, true, if_true, if_false);
       Split(cc, v0, Operand(zero_reg), if_true, if_false, fall_through);
     }
@@ -3940,6 +4001,33 @@ void FullCodeGenerator::EmitCallIC(Handle<Code> ic, RelocInfo::Mode mode) {
   }
 
   __ Call(ic, mode);
+}
+
+
+void FullCodeGenerator::EmitCallIC(Handle<Code> ic, JumpPatchSite* patch_site) {
+  Counters* counters = isolate()->counters();
+  switch (ic->kind()) {
+    case Code::LOAD_IC:
+      __ IncrementCounter(counters->named_load_full(), 1, a1, a2);
+      break;
+    case Code::KEYED_LOAD_IC:
+      __ IncrementCounter(counters->keyed_load_full(), 1, a1, a2);
+      break;
+    case Code::STORE_IC:
+      __ IncrementCounter(counters->named_store_full(), 1, a1, a2);
+      break;
+    case Code::KEYED_STORE_IC:
+      __ IncrementCounter(counters->keyed_store_full(), 1, a1, a2);
+    default:
+      break;
+  }
+
+  __ Call(ic, RelocInfo::CODE_TARGET);
+  if (patch_site != NULL && patch_site->is_bound()) {
+    patch_site->EmitPatchInfo();
+  } else {
+    __ nop();  // Signals no inlined code.
+  }
 }
 
 

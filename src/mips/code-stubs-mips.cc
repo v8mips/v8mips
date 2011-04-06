@@ -1457,7 +1457,7 @@ void ToBooleanStub::Generate(MacroAssembler* masm) {
 
   Label false_result;
   Label not_heap_number;
-  Register scratch0 = VirtualFrame::scratch0();
+  Register scratch0 = t5.is(tos_) ? t3 : t5;
 
   __ LoadRoot(scratch0, Heap::kNullValueRootIndex);
   __ Branch(&false_result, eq, tos_, Operand(scratch0));
@@ -6122,16 +6122,10 @@ void ICCompareStub::GenerateSmis(MacroAssembler* masm) {
     // For equality we do not care about the sign of the result.
     __ Subu(v0, a0, a1);
   } else {
+    // Untag before subtracting to avoid handling overflow.
+    __ SmiUntag(a1);
+    __ SmiUntag(a0);
     __ Subu(v0, a1, a0);
-    // Check for overflow.
-    __ xor_(t0, v0, a0);
-    __ xor_(t1, v0, a1);
-    __ and_(t0, t0, t1);    // Overflow occurred if result is negative.
-    Label done;
-    __ Branch(&done, ge, t0, Operand(zero_reg));
-    // Correct sign of result in case of overflow.
-    __ Subu(v0, zero_reg, v0);
-    __ bind(&done);
   }
   __ Ret();
 

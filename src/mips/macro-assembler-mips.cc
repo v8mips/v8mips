@@ -3319,7 +3319,6 @@ void MacroAssembler::CallCFunctionHelper(Register function,
 #undef BRANCH_ARGS_CHECK
 
 
-#ifdef ENABLE_DEBUGGER_SUPPORT
 CodePatcher::CodePatcher(byte* address, int instructions)
     : address_(address),
       instructions_(instructions),
@@ -3342,8 +3341,8 @@ CodePatcher::~CodePatcher() {
 }
 
 
-void CodePatcher::Emit(Instr x) {
-  masm()->emit(x);
+void CodePatcher::Emit(Instr instr) {
+  masm()->emit(instr);
 }
 
 
@@ -3352,7 +3351,26 @@ void CodePatcher::Emit(Address addr) {
 }
 
 
-#endif  // ENABLE_DEBUGGER_SUPPORT
+void CodePatcher::ChangeBranchCondition(Condition cond) {
+  Instr instr = Assembler::instr_at(masm_.pc_);
+  ASSERT(Assembler::IsBranch(instr));
+  uint32_t opcode = Assembler::GetOpcodeField(instr);
+  // Currently only the 'eq' and 'ne' cond values are supported and the simple
+  // branch instructions (with opcode being the branch type).
+  // There are some special cases (see Assembler::IsBranch()) so extending this
+  // would be tricky.
+  ASSERT(opcode == BEQ ||
+         opcode == BNE ||
+        opcode == BLEZ ||
+        opcode == BGTZ ||
+        opcode == BEQL ||
+        opcode == BNEL ||
+       opcode == BLEZL ||
+       opcode == BGTZL);
+  opcode = (cond == eq) ? BEQ : BNE;
+  instr = (instr & ~kOpcodeMask) | opcode;
+  masm_.emit(instr);
+}
 
 
 } }  // namespace v8::internal

@@ -999,7 +999,6 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
 };
 
 
-#ifdef ENABLE_DEBUGGER_SUPPORT
 // The code patcher is used to patch (typically) small parts of code e.g. for
 // debugging and other types of instrumentation. When using the code patcher
 // the exact number of bytes specified must be emitted. It is not legal to emit
@@ -1014,10 +1013,14 @@ class CodePatcher {
   MacroAssembler* masm() { return &masm_; }
 
   // Emit an instruction directly.
-  void Emit(Instr x);
+  void Emit(Instr instr);
 
   // Emit an address directly.
   void Emit(Address addr);
+
+  // Change the condition part of an instruction leaving the rest of the current
+  // instruction unchanged.
+  void ChangeBranchCondition(Condition cond);
 
  private:
   byte* address_;  // The address of the code being patched.
@@ -1025,7 +1028,6 @@ class CodePatcher {
   int size_;  // Number of bytes of the expected patch size.
   MacroAssembler masm_;  // Macro assembler used to generate the code.
 };
-#endif  // ENABLE_DEBUGGER_SUPPORT
 
 
 // Helper class for generating code or data associated with the code

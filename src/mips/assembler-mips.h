@@ -841,6 +841,8 @@ class Assembler : public AssemblerBase {
 
   // Check if an instruction is a branch of some kind.
   static bool IsBranch(Instr instr);
+  static bool IsBEQ(Instr instr);
+  static bool IsBNE(Instr instr);
 
   static bool IsNop(Instr instr, unsigned int type);
   static bool IsPop(Instr instr);
@@ -875,6 +877,8 @@ class Assembler : public AssemblerBase {
   static Instr SetSwOffset(Instr instr, int16_t offset);
   static bool IsAddImmediate(Instr instr);
   static Instr SetAddImmediateOffset(Instr instr, int16_t offset);
+
+  static bool IsAndImmediate(Instr instr);
 
   void CheckTrampolinePool(bool force_emit = false);
 
