@@ -3900,8 +3900,7 @@ void FullCodeGenerator::VisitCompareToNull(CompareToNull* expr) {
     __ lw(a1, FieldMemOperand(a0, HeapObject::kMapOffset));
     __ lbu(a1, FieldMemOperand(a1, Map::kBitFieldOffset));
     __ And(a1, a1, Operand(1 << Map::kIsUndetectable));
-    Split(eq, a1, Operand(1 << Map::kIsUndetectable),  // plind badly optimized
-          if_true, if_false, fall_through);
+    Split(ne, a1, Operand(zero_reg), if_true, if_false, fall_through);
   }
   context()->Plug(if_true, if_false);
 }
