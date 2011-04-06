@@ -1591,6 +1591,7 @@ void FullCodeGenerator::VisitAssignment(Assignment* expr) {
         ? OVERWRITE_RIGHT
         : NO_OVERWRITE;
     SetSourcePosition(expr->position() + 1);
+    AccumulatorValueContext context(this);
     if (ShouldInlineSmiCase(op)) {
       EmitInlineSmiBinaryOp(expr,
                             op,
@@ -1598,13 +1599,11 @@ void FullCodeGenerator::VisitAssignment(Assignment* expr) {
                             expr->target(),
                             expr->value());
     } else {
-      { AccumulatorValueContext context(this);  // plind HACK, will break stuff
-        EmitBinaryOp(op, mode);
-      }
+      EmitBinaryOp(op, mode);
+    }
 
     // Deoptimization point in case the binary operation may have side effects.
     PrepareForBailout(expr->binary_operation(), TOS_REG);
-    }
   } else {
     VisitForAccumulatorValue(expr->value());
   }
@@ -1663,7 +1662,7 @@ void FullCodeGenerator::EmitBinaryOp(Token::Value op,
                                      OverwriteMode mode) {
   __ mov(a0, result_register());
   __ pop(a1);
-  // This stub is not functioning properly, likely because we do 
+  // This stub is not functioning properly, likely because we do
   // no use it everywhere. This is a temporary hack ......
   // TypeRecordingBinaryOpStub stub(op, mode); // ..................fix this ............
   GenericBinaryOpStub stub(op, mode, a1, a0);
