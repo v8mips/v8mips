@@ -1269,8 +1269,8 @@ void Simulator::SoftwareInterrupt(Instruction* instr) {
     set_register(ra, saved_ra);
     set_pc(get_register(ra));
 
-  } else if (func == BREAK && code >= 0 && code < 16) {
-    // First 16 break_ codes interpreted as debug markers.
+  } else if (func == BREAK && code >= 0 && code < 32) {
+    // First 32 break_ codes interpreted as debug-markers/watchpoints.
     MipsDebugger dbg(this);
     ++break_count_;
     PrintF("\n---- break %d marker: %3d  (instr count: %8d) ----------"
