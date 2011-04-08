@@ -375,9 +375,6 @@ void FullCodeGenerator::TestContext::Plug(Handle<Object> lit) const {
   } else if (lit->IsString()) {
     if (String::cast(*lit)->length() == 0) {
       if (false_label_ != fall_through_) __ Branch(false_label_);
-      // This comes from an ARM commit, however having this branch
-      // here may be an error.
-      __ Branch(false_label_);
     } else {
       if (true_label_ != fall_through_) __ Branch(true_label_);
     }
