@@ -413,6 +413,76 @@ class FloatingPointHelper : public AllStatic {
                                    FPURegister double_scratch,
                                    Label* not_int32);
 
+  // Load the number from object into double_dst in the double format.
+  // Control will jump to not_int32 if the value cannot be exactly represented
+  // by a 32-bit integer.
+  // Floating point value in the 32-bit integer range that are not exact integer
+  // won't be loaded.
+  static void LoadNumberAsInt32Double(MacroAssembler* masm,
+                                      Register object,
+                                      Destination destination,
+                                      FPURegister double_dst,
+                                      Register dst1,
+                                      Register dst2,
+                                      Register heap_number_map,
+                                      Register scratch1,
+                                      Register scratch2,
+                                      FPURegister single_scratch,
+                                      Label* not_int32);
+
+  // Loads the number from object into dst as a 32-bit integer.
+  // Control will jump to not_int32 if the object cannot be exactly represented
+  // by a 32-bit integer.
+  // Floating point value in the 32-bit integer range that are not exact integer
+  // won't be converted.
+  // scratch3 is not used when FPU is supported.
+  static void LoadNumberAsInt32(MacroAssembler* masm,
+                                Register object,
+                                Register dst,
+                                Register heap_number_map,
+                                Register scratch1,
+                                Register scratch2,
+                                Register scratch3,
+                                FPURegister double_scratch,
+                                Label* not_int32);
+
+  // Generate non FPU code to check if a double can be exactly represented by a
+  // 32-bit integer. This does not check for 0 or -0, which need
+  // to be checked for separately.
+  // Control jumps to not_int32 if the value is not a 32-bit integer, and falls
+  // through otherwise.
+  // src1 and src2 will be cloberred.
+  //
+  // Expected input:
+  // - src1: higher (exponent) part of the double value.
+  // - src2: lower (mantissa) part of the double value.
+  // Output status:
+  // - dst: 32 higher bits of the mantissa. (mantissa[51:20])
+  // - src2: contains 1.
+  // - other registers are clobbered.
+  static void DoubleIs32BitInteger(MacroAssembler* masm,
+                                   Register src1,
+                                   Register src2,
+                                   Register dst,
+                                   Register scratch,
+                                   Label* not_int32);
+
+  // Generates code to call a C function to do a double operation using core
+  // registers. (Used when FPU is not supported.)
+  // This code never falls through, but returns with a heap number containing
+  // the result in v0.
+  // Register heapnumber_result must be a heap number in which the
+  // result of the operation will be stored.
+  // Requires the following layout on entry:
+  // a0: Left value (least significant part of mantissa).
+  // a1: Left value (sign, exponent, top of mantissa).
+  // a2: Right value (least significant part of mantissa).
+  // a3: Right value (sign, exponent, top of mantissa).
+  static void CallCCodeForDoubleOperation(MacroAssembler* masm,
+                                          Token::Value op,
+                                          Register heap_number_result,
+                                          Register scratch);
+
  private:
   static void LoadNumber(MacroAssembler* masm,
                          FloatingPointHelper::Destination destination,
@@ -577,68 +647,377 @@ void FloatingPointHelper::ConvertNumberToInt32(MacroAssembler* masm,
   __ jmp(&done);
 
   __ bind(&not_in_int32_range);
-  __ lw(scratch2, FieldMemOperand(object, HeapNumber::kExponentOffset));
-  __ lw(scratch1, FieldMemOperand(object, HeapNumber::kMantissaOffset));
+  __ lw(scratch1, FieldMemOperand(object, HeapNumber::kExponentOffset));
+  __ lw(scratch2, FieldMemOperand(object, HeapNumber::kMantissaOffset));
 
-  // Register scratch1 contains mantissa word, scratch2 contains
-  // sign, exponent and mantissa. Extract biased exponent into dst.
-  __ Ext(dst,
-         scratch2,
-         HeapNumber::kExponentShift,
-         HeapNumber::kExponentBits);
+  __ EmitOutOfInt32RangeTruncate(dst,
+                                 scratch1,
+                                 scratch2,
+                                 scratch3);
 
-  // Express exponent as delta to 31.
-  __ Subu(dst, dst, Operand(HeapNumber::kExponentBias + 31));
-
-  Label normal_exponent;
-  // If the delta is larger than kMantissaBits plus one, all bits
-  // would be shifted away, which means that we can return 0.
-  __ Branch(&normal_exponent, lt, dst, Operand(HeapNumber::kMantissaBits + 1));
-  __ mov(dst, zero_reg);
-  __ jmp(&done);
-
-  __ bind(&normal_exponent);
-  const int kShiftBase = HeapNumber::kNonMantissaBitsInTopWord - 1;
-  // Calculate shift.
-  __ Addu(scratch3, dst, Operand(kShiftBase));
-
-  // Put implicit 1 before the mantissa part in scratch2.
-  __ Or(scratch2,
-        scratch2,
-        Operand(1 << HeapNumber::kMantissaBitsInTopWord));
-
-  // Save sign.
-  Register sign = dst;
-  __ And(sign, scratch2, Operand(HeapNumber::kSignMask));
-
-  // Shift mantisssa bits the correct position in high word.
-  __ sllv(scratch2, scratch2, scratch3);
-
-  // Replace the shifted bits with bits from the lower mantissa word.
-  Label pos_shift, shift_done;
-  __ li(at, 32);
-  __ subu(scratch3, at, scratch3);
-  __ Branch(&pos_shift, ge, scratch3, Operand(zero_reg));
-
-  // Negate scratch3.
-  __ Subu(scratch3, zero_reg, scratch3);
-  __ sllv(scratch1, scratch1, scratch3);
-  __ jmp(&shift_done);
-
-  __ bind(&pos_shift);
-  __ srlv(scratch1, scratch1, scratch3);
-
-  __ bind(&shift_done);
-  __ Or(scratch2, scratch2, Operand(scratch1));
-
-  // Restore sign if necessary.
-  __ Subu(dst, zero_reg, scratch2);
-  __ movz(dst, scratch2, sign);
   __ jmp(&done);
 
   __ bind(&is_smi);
   __ SmiUntag(dst, object);
   __ bind(&done);
+}
+
+
+void FloatingPointHelper::LoadNumberAsInt32Double(MacroAssembler* masm,
+                                                  Register object,
+                                                  Destination destination,
+                                                  FPURegister double_dst,
+                                                  Register dst1,
+                                                  Register dst2,
+                                                  Register heap_number_map,
+                                                  Register scratch1,
+                                                  Register scratch2,
+                                                  FPURegister single_scratch,
+                                                  Label* not_int32) {
+  ASSERT(!scratch1.is(object) && !scratch2.is(object));
+  ASSERT(!scratch1.is(scratch2));
+  ASSERT(!heap_number_map.is(object) &&
+         !heap_number_map.is(scratch1) &&
+         !heap_number_map.is(scratch2));
+
+  Label done, obj_is_not_smi;
+
+  __ JumpIfNotSmi(object, &obj_is_not_smi);
+  __ SmiUntag(scratch1, object);
+  if (CpuFeatures::IsSupported(FPU)) {
+    CpuFeatures::Scope scope(FPU);
+    __ mtc1(scratch1, single_scratch);
+    __ cvt_d_w(double_dst, single_scratch);
+    if (destination == kCoreRegisters) {
+      __ mfc1(dst1, double_dst);
+      __ mfc1(dst2, FPURegister::from_code(double_dst.code() + 1));
+    }
+  } else {
+    Label fewer_than_20_useful_bits;
+    // Expected output:
+    // |         dst1            |         dst2            |
+    // | s |   exp   |              mantissa               |
+
+    // Check for zero.
+    __ mov(dst1, scratch1);
+    __ mov(dst2, scratch1);
+    __ Branch(&done, eq, scratch1, Operand(zero_reg));
+
+    // Preload the sign of the value.
+    __ And(dst1, scratch1, Operand(HeapNumber::kSignMask));
+    // Get the absolute value of the object (as an unsigned integer).
+    Label skip_sub;
+    __ Branch(&skip_sub, ge, dst1, Operand(zero_reg));
+    __ Subu(scratch1, zero_reg, scratch1);
+    __ bind(&skip_sub);
+
+    // Get mantisssa[51:20].
+
+    // Get the position of the first set bit.
+    __ clz(dst2, scratch1);
+    __ li(scratch2, 31);
+    __ Subu(dst2, scratch2, dst2);
+
+    // Set the exponent.
+    __ Addu(scratch2, dst2, Operand(HeapNumber::kExponentBias));
+    __ Ins(dst1, scratch2,
+        HeapNumber::kExponentShift, HeapNumber::kExponentBits);
+
+    // Clear the first non null bit.
+    __ li(scratch2, Operand(1));
+    __ sllv(scratch2, scratch2, dst2);
+    __ li(at, -1);
+    __ Xor(scratch2, scratch2, at);
+    __ And(scratch1, scratch1, scratch2);
+
+    // Get the number of bits to set in the lower part of the mantissa.
+    __ Subu(scratch2, dst2, Operand(HeapNumber::kMantissaBitsInTopWord));
+    __ Branch(&fewer_than_20_useful_bits, lt, scratch2, Operand(zero_reg));
+    // Set the higher 20 bits of the mantissa.
+    __ srlv(at, scratch1, scratch2);
+    __ or_(dst1, dst1, at);
+    __ li(at, 32);
+    __ subu(scratch2, at, scratch2);
+    __ sllv(dst2, scratch1, scratch2);
+    __ Branch(&done);
+
+    __ bind(&fewer_than_20_useful_bits);
+    __ li(at, HeapNumber::kMantissaBitsInTopWord);
+    __ subu(scratch2, at, dst2);
+    __ sllv(scratch2, scratch1, scratch2);
+    __ Or(dst1, dst1, scratch2);
+    // Set dst2 to 0.
+    __ mov(dst2, zero_reg);
+  }
+
+  __ Branch(&done);
+
+  __ bind(&obj_is_not_smi);
+  if (FLAG_debug_code) {
+    __ AbortIfNotRootValue(heap_number_map,
+                           Heap::kHeapNumberMapRootIndex,
+                           "HeapNumberMap register clobbered.");
+  }
+  __ JumpIfNotHeapNumber(object, heap_number_map, scratch1, not_int32);
+
+  // Load the number.
+  if (CpuFeatures::IsSupported(FPU)) {
+    CpuFeatures::Scope scope(FPU);
+    // Load the double value.
+    __ ldc1(double_dst, FieldMemOperand(object, HeapNumber::kValueOffset));
+
+    // NOTE: ARM uses a MacroAssembler function here (EmitVFPTruncate).
+    // On MIPS a lot of things cannot be implemented the same way so right
+    // now it makes a lot more sense to just do things manually.
+
+    // Save FCSR.
+    __ cfc1(scratch1, FCSR);
+    // Disable FPU exceptions.
+    __ ctc1(zero_reg, FCSR);
+    __ trunc_w_d(single_scratch, double_dst);
+    // Retrieve FCSR.
+    __ cfc1(scratch2, FCSR);
+    // Restore FCSR.
+    __ ctc1(scratch1, FCSR);
+
+    // Check for inexact conversion.
+    __ srl(scratch2, scratch2, kFCSRFlagShift);
+    __ And(scratch2, scratch2, (kFCSRFlagMask | kFCSRInexactFlagBit));
+
+    // Jump to not_int32 if the operation did not succeed.
+    __ Branch(not_int32, ne, scratch2, Operand(zero_reg));
+
+    if (destination == kCoreRegisters) {
+      __ mfc1(dst1, double_dst);
+      __ mfc1(dst2, FPURegister::from_code(double_dst.code() + 1));
+    }
+
+  } else {
+    ASSERT(!scratch1.is(object) && !scratch2.is(object));
+    // Load the double value in the destination registers.
+    __ lw(dst2, FieldMemOperand(object, HeapNumber::kExponentOffset));
+    __ lw(dst1, FieldMemOperand(object, HeapNumber::kMantissaOffset));
+
+    // Check for 0 and -0.
+    __ And(scratch1, dst1, Operand(~HeapNumber::kSignMask));
+    __ Or(scratch1, scratch1, Operand(dst2));
+    __ Branch(&done, eq, scratch1, Operand(zero_reg));
+
+    // Check that the value can be exactly represented by a 32-bit integer.
+    // Jump to not_int32 if that's not the case.
+    DoubleIs32BitInteger(masm, dst1, dst2, scratch1, scratch2, not_int32);
+
+    // dst1 and dst2 were trashed. Reload the double value.
+    __ lw(dst2, FieldMemOperand(object, HeapNumber::kExponentOffset));
+    __ lw(dst1, FieldMemOperand(object, HeapNumber::kMantissaOffset));
+  }
+
+  __ bind(&done);
+}
+
+
+void FloatingPointHelper::LoadNumberAsInt32(MacroAssembler* masm,
+                                            Register object,
+                                            Register dst,
+                                            Register heap_number_map,
+                                            Register scratch1,
+                                            Register scratch2,
+                                            Register scratch3,
+                                            FPURegister double_scratch,
+                                            Label* not_int32) {
+  ASSERT(!dst.is(object));
+  ASSERT(!scratch1.is(object) && !scratch2.is(object) && !scratch3.is(object));
+  ASSERT(!scratch1.is(scratch2) &&
+         !scratch1.is(scratch3) &&
+         !scratch2.is(scratch3));
+
+  Label done;
+
+  // Untag the object into the destination register.
+  __ SmiUntag(dst, object);
+  // Just return if the object is a smi.
+  __ JumpIfSmi(object, &done);
+
+  if (FLAG_debug_code) {
+    __ AbortIfNotRootValue(heap_number_map,
+                           Heap::kHeapNumberMapRootIndex,
+                           "HeapNumberMap register clobbered.");
+  }
+  __ JumpIfNotHeapNumber(object, heap_number_map, scratch1, not_int32);
+
+  // Object is a heap number.
+  // Convert the floating point value to a 32-bit integer.
+  if (CpuFeatures::IsSupported(FPU)) {
+    CpuFeatures::Scope scope(FPU);
+    // Load the double value.
+    __ ldc1(double_scratch, FieldMemOperand(object, HeapNumber::kValueOffset));
+
+    // NOTE: ARM uses a MacroAssembler function here (EmitVFPTruncate).
+    // On MIPS a lot of things cannot be implemented the same way so right
+    // now it makes a lot more sense to just do things manually.
+
+    // Save FCSR.
+    __ cfc1(scratch1, FCSR);
+    // Disable FPU exceptions.
+    __ ctc1(zero_reg, FCSR);
+    __ trunc_w_d(double_scratch, double_scratch);
+    // Retrieve FCSR.
+    __ cfc1(scratch2, FCSR);
+    // Restore FCSR.
+    __ ctc1(scratch1, FCSR);
+
+    // Check for inexact conversion.
+    __ srl(scratch2, scratch2, kFCSRFlagShift);
+    __ And(scratch2, scratch2, (kFCSRFlagMask | kFCSRInexactFlagBit));
+
+    // Jump to not_int32 if the operation did not succeed.
+    __ Branch(not_int32, ne, scratch2, Operand(zero_reg));
+    // Get the result in the destination register.
+    __ mfc1(dst, double_scratch);
+
+  } else {
+    // Load the double value in the destination registers.
+    __ lw(scratch2, FieldMemOperand(object, HeapNumber::kExponentOffset));
+    __ lw(scratch1, FieldMemOperand(object, HeapNumber::kMantissaOffset));
+
+    // Check for 0 and -0.
+    __ And(dst, scratch1, Operand(~HeapNumber::kSignMask));
+    __ Or(dst, scratch2, Operand(dst));
+    __ Branch(&done, eq, dst, Operand(zero_reg));
+
+    DoubleIs32BitInteger(masm, scratch1, scratch2, dst, scratch3, not_int32);
+
+    // Registers state after DoubleIs32BitInteger.
+    // dst: mantissa[51:20].
+    // scratch2: 1
+
+    // Shift back the higher bits of the mantissa.
+    __ srlv(dst, dst, scratch3);
+    // Set the implicit first bit.
+    __ li(at, 32);
+    __ subu(scratch3, at, scratch3);
+    __ sllv(scratch2, scratch2, scratch3);
+    __ Or(dst, dst, scratch2);
+    // Set the sign.
+    __ lw(scratch1, FieldMemOperand(object, HeapNumber::kExponentOffset));
+    __ And(scratch1, scratch1, Operand(HeapNumber::kSignMask));
+    Label skip_sub;
+    __ Branch(&skip_sub, ge, scratch1, Operand(zero_reg));
+    __ Subu(dst, zero_reg, dst);
+    __ bind(&skip_sub);
+  }
+
+  __ bind(&done);
+}
+
+
+void FloatingPointHelper::DoubleIs32BitInteger(MacroAssembler* masm,
+                                               Register src1,
+                                               Register src2,
+                                               Register dst,
+                                               Register scratch,
+                                               Label* not_int32) {
+  // Get exponent alone in scratch.
+  __ Ext(scratch,
+         src1,
+         HeapNumber::kExponentShift,
+         HeapNumber::kExponentBits);
+
+  // Substract the bias from the exponent.
+  __ Subu(scratch, scratch, Operand(HeapNumber::kExponentBias));
+
+  // src1: higher (exponent) part of the double value.
+  // src2: lower (mantissa) part of the double value.
+  // scratch: unbiased exponent.
+
+  // Fast cases. Check for obvious non 32-bit integer values.
+  // Negative exponent cannot yield 32-bit integers.
+  __ Branch(not_int32, lt, scratch, Operand(zero_reg));
+  // Exponent greater than 31 cannot yield 32-bit integers.
+  // Also, a positive value with an exponent equal to 31 is outside of the
+  // signed 32-bit integer range.
+  // Another way to put it is that if (exponent - signbit) > 30 then the
+  // number cannot be represented as an int32.
+  Register tmp = dst;
+  __ srl(at, src1, 31);
+  __ subu(tmp, scratch, at);
+  __ Branch(not_int32, gt, tmp, Operand(30));
+  // - Bits [21:0] in the mantissa are not null.
+  __ And(tmp, src2, 0x3fffff);
+  __ Branch(not_int32, ne, tmp, Operand(zero_reg));
+
+  // Otherwise the exponent needs to be big enough to shift left all the
+  // non zero bits left. So we need the (30 - exponent) last bits of the
+  // 31 higher bits of the mantissa to be null.
+  // Because bits [21:0] are null, we can check instead that the
+  // (32 - exponent) last bits of the 32 higher bits of the mantisssa are null.
+
+  // Get the 32 higher bits of the mantissa in dst.
+  __ Ext(dst,
+         src2,
+         HeapNumber::kMantissaBitsInTopWord,
+         32 - HeapNumber::kMantissaBitsInTopWord);
+  __ sll(at, src1, HeapNumber::kNonMantissaBitsInTopWord);
+  __ or_(dst, dst, at);
+
+  // Create the mask and test the lower bits (of the higher bits).
+  __ li(at, 32);
+  __ subu(scratch, at, scratch);
+  __ li(src2, 1);
+  __ sllv(src1, src2, scratch);
+  __ Subu(src1, src1, Operand(1));
+  __ And(src1, dst, src1);
+  __ Branch(not_int32, ne, src1, Operand(zero_reg));
+}
+
+
+void FloatingPointHelper::CallCCodeForDoubleOperation(
+    MacroAssembler* masm,
+    Token::Value op,
+    Register heap_number_result,
+    Register scratch) {
+  // Using core registers:
+  // a0: Left value (least significant part of mantissa).
+  // a1: Left value (sign, exponent, top of mantissa).
+  // a2: Right value (least significant part of mantissa).
+  // a3: Right value (sign, exponent, top of mantissa).
+
+  // Assert that heap_number_result is saved.
+  // We currently always use s0 to pass it.
+  ASSERT(heap_number_result.is(s0));
+
+  // Push the current return address before the C call.
+  __ push(ra);
+  __ PrepareCallCFunction(4, scratch);  // Two doubles are 4 arguments.
+  if (!IsMipsSoftFloatABI) {
+    CpuFeatures::Scope scope(FPU);
+    // We are not using MIPS FPU instructions, and parameters for the runtime
+    // function call are prepaired in a0-a3 registers, but function we are
+    // calling is compiled with hard-float flag and expecting hard float ABI
+    // (parameters in f12/f14 registers). We need to copy parameters from
+    // a0-a3 registers to f12/f14 register pairs.
+    __ mtc1(a0, f12);
+    __ mtc1(a1, f13);
+    __ mtc1(a2, f14);
+    __ mtc1(a3, f15);
+  }
+  // Call C routine that may not cause GC or other trouble.
+  __ CallCFunction(ExternalReference::double_fp_operation(op, masm->isolate()),
+                   4);
+  // Store answer in the overwritable heap number.
+  if (!IsMipsSoftFloatABI) {
+    CpuFeatures::Scope scope(FPU);
+    // Double returned in register f0.
+    __ sdc1(f0, FieldMemOperand(heap_number_result, HeapNumber::kValueOffset));
+  } else {
+    // Double returned in registers v0 and v1.
+    __ sw(v1, FieldMemOperand(heap_number_result, HeapNumber::kExponentOffset));
+    __ sw(v0, FieldMemOperand(heap_number_result, HeapNumber::kMantissaOffset));
+  }
+  // Place heap_number_result in v0 and return to the pushed return address.
+  __ mov(v0, heap_number_result);
+  __ pop(ra);
+  __ Ret();
 }
 
 
@@ -2392,6 +2771,9 @@ void TypeRecordingBinaryOpStub::Generate(MacroAssembler* masm) {
     case TRBinaryOpIC::HEAP_NUMBER:
       GenerateHeapNumberStub(masm);
       break;
+    case TRBinaryOpIC::ODDBALL:
+      GenerateOddballStub(masm);
+      break;
     case TRBinaryOpIC::STRING:
       GenerateStringStub(masm);
       break;
@@ -2606,7 +2988,7 @@ void TypeRecordingBinaryOpStub::GenerateFPOperation(MacroAssembler* masm,
               FloatingPointHelper::kCoreRegisters;
 
       // Allocate new heap number for result.
-      Register result = t1;
+      Register result = s0;
       GenerateHeapResultAllocation(
           masm, result, heap_number_map, scratch1, scratch2, gc_required);
 
@@ -2652,37 +3034,11 @@ void TypeRecordingBinaryOpStub::GenerateFPOperation(MacroAssembler* masm,
         __ mov(v0, result);
         __ Ret();
       } else {
-        // Using core registers:
-        // a0: Left value (least significant part of mantissa).
-        // a1: Left value (sign, exponent, top of mantissa).
-        // a2: Right value (least significant part of mantissa).
-        // a3: Right value (sign, exponent, top of mantissa).
-
-        // Push the current return address before the C call.
-        __ push(ra);
-        __ push(result);
-        __ PrepareCallCFunction(4, scratch1);  // Two doubles are 4 arguments.
-        // Call C routine that may not cause GC or other trouble.
-        __ CallCFunction(
-            ExternalReference::double_fp_operation(op_, masm->isolate()), 4);
-        // Store answer in the overwritable heap number.
-        __ pop(result);
-        if (!IsMipsSoftFloatABI) {
-          // Double returned in register f0.
-          // ARM uses a workaround here because of the unaligned HeapNumber
-          // kValueOffset. On MIPS this workaround is built into sdc1 so
-          // there's no point in generating even more instructions.
-          __ sdc1(f0, FieldMemOperand(result, HeapNumber::kValueOffset));
-        } else {
-          // Double returned in registers v0 and v1.
-          __ sw(v0, FieldMemOperand(result, HeapNumber::kValueOffset));
-          __ sw(v1, FieldMemOperand(result,
-                                  HeapNumber::kValueOffset + kPointerSize));
-        }
-        // Place result in v0 and return.
-        __ mov(v0, result);
-        __ pop(ra);
-        __ Ret();
+        // Call the C function to handle the double operation.
+        FloatingPointHelper::CallCCodeForDoubleOperation(masm,
+                                                         op_,
+                                                         result,
+                                                         scratch1);
       }
       break;
     }
@@ -2729,7 +3085,6 @@ void TypeRecordingBinaryOpStub::GenerateFPOperation(MacroAssembler* masm,
           break;
         case Token::SAR:
           // Use only the 5 least significant bits of the shift count.
-          __ And(a2, a2, Operand(0x1f));
           __ GetLeastBitsFromInt32(a2, a2, 5);
           __ srav(a2, a3, a2);
           break;
@@ -2873,14 +3228,353 @@ void TypeRecordingBinaryOpStub::GenerateStringStub(MacroAssembler* masm) {
 void TypeRecordingBinaryOpStub::GenerateInt32Stub(MacroAssembler* masm) {
   ASSERT(operands_type_ == TRBinaryOpIC::INT32);
 
-  GenerateTypeTransition(masm);
+  Register left = a1;
+  Register right = a0;
+  Register scratch1 = t3;
+  Register scratch2 = t5;
+  FPURegister double_scratch = f0;
+  FPURegister single_scratch = f6;
+
+  Register heap_number_result = no_reg;
+  Register heap_number_map = t2;
+  __ LoadRoot(heap_number_map, Heap::kHeapNumberMapRootIndex);
+
+  Label call_runtime;
+  // Labels for type transition, used for wrong input or output types.
+  // Both label are currently actually bound to the same position. We use two
+  // different label to differentiate the cause leading to type transition.
+  Label transition;
+
+  // Smi-smi fast case.
+  Label skip;
+  __ Or(scratch1, left, right);
+  __ JumpIfNotSmi(scratch1, &skip);
+  GenerateSmiSmiOperation(masm);
+  // Fall through if the result is not a smi.
+  __ bind(&skip);
+
+  switch (op_) {
+    case Token::ADD:
+    case Token::SUB:
+    case Token::MUL:
+    case Token::DIV:
+    case Token::MOD: {
+    // Load both operands and check that they are 32-bit integer.
+    // Jump to type transition if they are not. The registers a0 and a1 (right
+    // and left) are preserved for the runtime call.
+    FloatingPointHelper::Destination destination =
+        CpuFeatures::IsSupported(FPU) &&
+        op_ != Token::MOD ?
+        FloatingPointHelper::kFPURegisters :
+        FloatingPointHelper::kCoreRegisters;
+
+    FloatingPointHelper::LoadNumberAsInt32Double(masm,
+                                                 right,
+                                                 destination,
+                                                 f14,
+                                                 a2,
+                                                 a3,
+                                                 heap_number_map,
+                                                 scratch1,
+                                                 scratch2,
+                                                 f2,
+                                                 &transition);
+    FloatingPointHelper::LoadNumberAsInt32Double(masm,
+                                                 left,
+                                                 destination,
+                                                 f12,
+                                                 t0,
+                                                 t1,
+                                                 heap_number_map,
+                                                 scratch1,
+                                                 scratch2,
+                                                 f2,
+                                                 &transition);
+
+      if (destination == FloatingPointHelper::kFPURegisters) {
+        CpuFeatures::Scope scope(FPU);
+        Label return_heap_number;
+        switch (op_) {
+          case Token::ADD:
+            __ add_d(f10, f12, f14);
+            break;
+          case Token::SUB:
+            __ sub_d(f10, f12, f14);
+            break;
+          case Token::MUL:
+            __ mul_d(f10, f12, f14);
+            break;
+          case Token::DIV:
+            __ div_d(f10, f12, f14);
+            break;
+          default:
+            UNREACHABLE();
+        }
+
+        if (op_ != Token::DIV) {
+          // These operations produce an integer result.
+          // Try to return a smi if we can.
+          // Otherwise return a heap number if allowed, or jump to type
+          // transition.
+
+          // NOTE: ARM uses a MacroAssembler function here (EmitVFPTruncate).
+          // On MIPS a lot of things cannot be implemented the same way so right
+          // now it makes a lot more sense to just do things manually.
+
+          // Save FCSR.
+          __ cfc1(scratch1, FCSR);
+          // Disable FPU exceptions.
+          __ ctc1(zero_reg, FCSR);
+          __ trunc_w_d(single_scratch, f10);
+          // Retrieve FCSR.
+          __ cfc1(scratch2, FCSR);
+          // Restore FCSR.
+          __ ctc1(scratch1, FCSR);
+
+          // Check for inexact conversion.
+          __ srl(scratch2, scratch2, kFCSRFlagShift);
+          __ And(scratch2, scratch2, kFCSRFlagMask);
+
+          if (result_type_ <= TRBinaryOpIC::INT32) {
+            // If scratch2 != 0, result does not fit in a 32-bit integer.
+            __ Branch(&transition, ne, scratch2, Operand(zero_reg));
+          }
+
+          // Check if the result fits in a smi.
+          __ mfc1(scratch1, single_scratch);
+          __ Addu(scratch2, scratch1, Operand(0x40000000));
+          // If not try to return a heap number.
+          __ Branch(&return_heap_number, lt, scratch2, Operand(zero_reg));
+          // Check for minus zero. Return heap number for minus zero.
+          Label not_zero;
+          __ Branch(&not_zero, ne, scratch1, Operand(zero_reg));
+          __ mfc1(scratch2, f11);
+          __ And(scratch2, scratch2, HeapNumber::kSignMask);
+          __ Branch(&return_heap_number, ne, scratch2, Operand(zero_reg));
+          __ bind(&not_zero);
+
+          // Tag the result and return.
+          __ SmiTag(v0, scratch1);
+          __ Ret();
+        } else {
+          // DIV just falls through to allocating a heap number.
+        }
+
+        if (result_type_ >= (op_ == Token::DIV) ? TRBinaryOpIC::HEAP_NUMBER
+                                                : TRBinaryOpIC::INT32) {
+          __ bind(&return_heap_number);
+          // We are using FPU registers so s0 is available.
+          heap_number_result = s0;
+          GenerateHeapResultAllocation(masm,
+                                       heap_number_result,
+                                       heap_number_map,
+                                       scratch1,
+                                       scratch2,
+                                       &call_runtime);
+          __ mov(v0, heap_number_result);
+          __ sdc1(f10, FieldMemOperand(v0, HeapNumber::kValueOffset));
+          __ Ret();
+        }
+
+        // A DIV operation expecting an integer result falls through
+        // to type transition.
+
+      } else {
+        // We preserved a0 and a1 to be able to call runtime.
+        // Save the left value on the stack.
+        __ Push(t1, t0);
+
+        // Allocate a heap number to store the result.
+        heap_number_result = s0;
+        GenerateHeapResultAllocation(masm,
+                                     heap_number_result,
+                                     heap_number_map,
+                                     scratch1,
+                                     scratch2,
+                                     &call_runtime);
+
+        // Load the left value from the value saved on the stack.
+        __ Pop(a1, a0);
+
+        // Call the C function to handle the double operation.
+        FloatingPointHelper::CallCCodeForDoubleOperation(
+            masm, op_, heap_number_result, scratch1);
+      }
+
+      break;
+    }
+
+    case Token::BIT_OR:
+    case Token::BIT_XOR:
+    case Token::BIT_AND:
+    case Token::SAR:
+    case Token::SHR:
+    case Token::SHL: {
+      Label return_heap_number;
+      Register scratch3 = t1;
+      // Convert operands to 32-bit integers. Right in a2 and left in a3. The
+      // registers a0 and a1 (right and left) are preserved for the runtime
+      // call.
+      FloatingPointHelper::LoadNumberAsInt32(masm,
+                                             left,
+                                             a3,
+                                             heap_number_map,
+                                             scratch1,
+                                             scratch2,
+                                             scratch3,
+                                             f0,
+                                             &transition);
+      FloatingPointHelper::LoadNumberAsInt32(masm,
+                                             right,
+                                             a2,
+                                             heap_number_map,
+                                             scratch1,
+                                             scratch2,
+                                             scratch3,
+                                             f0,
+                                             &transition);
+
+      // The ECMA-262 standard specifies that, for shift operations, only the
+      // 5 least significant bits of the shift value should be used.
+      switch (op_) {
+        case Token::BIT_OR:
+          __ Or(a2, a3, Operand(a2));
+          break;
+        case Token::BIT_XOR:
+          __ Xor(a2, a3, Operand(a2));
+          break;
+        case Token::BIT_AND:
+          __ And(a2, a3, Operand(a2));
+          break;
+        case Token::SAR:
+          __ And(a2, a2, Operand(0x1f));
+          __ srav(a2, a3, a2);
+          break;
+        case Token::SHR:
+          __ And(a2, a2, Operand(0x1f));
+          __ srlv(a2, a3, a2);
+          // SHR is special because it is required to produce a positive answer.
+          // We only get a negative result if the shift value (a2) is 0.
+          // This result cannot be respresented as a signed 32-bit integer, try
+          // to return a heap number if we can.
+          // The non FPU code does not support this special case, so jump to
+          // runtime if we don't support it.
+          if (CpuFeatures::IsSupported(FPU)) {
+            __ Branch((result_type_ <= TRBinaryOpIC::INT32)
+                        ? &transition
+                        : &return_heap_number,
+                       lt,
+                       a2,
+                       Operand(zero_reg));
+          } else {
+            __ Branch((result_type_ <= TRBinaryOpIC::INT32)
+                        ? &transition
+                        : &call_runtime,
+                       lt,
+                       a2,
+                       Operand(zero_reg));
+          }
+          break;
+        case Token::SHL:
+          __ And(a2, a2, Operand(0x1f));
+          __ sllv(a2, a3, a2);
+          break;
+        default:
+          UNREACHABLE();
+      }
+
+      // Check if the result fits in a smi.
+      __ Addu(scratch1, a2, Operand(0x40000000));
+      // If not try to return a heap number. (We know the result is an int32.)
+      __ Branch(&return_heap_number, lt, scratch1, Operand(zero_reg));
+      // Tag the result and return.
+      __ SmiTag(v0, a2);
+      __ Ret();
+
+      __ bind(&return_heap_number);
+      if (CpuFeatures::IsSupported(FPU)) {
+        CpuFeatures::Scope scope(FPU);
+        heap_number_result = t1;
+        GenerateHeapResultAllocation(masm,
+                                     heap_number_result,
+                                     heap_number_map,
+                                     scratch1,
+                                     scratch2,
+                                     &call_runtime);
+
+        if (op_ != Token::SHR) {
+          // Convert the result to a floating point value.
+          __ mtc1(a2, double_scratch);
+          __ cvt_d_w(double_scratch, double_scratch);
+        } else {
+          // The result must be interpreted as an unsigned 32-bit integer.
+          __ mtc1(a2, double_scratch);
+          __ Cvt_d_uw(double_scratch, double_scratch);
+        }
+
+        // Store the result.
+        __ mov(v0, heap_number_result);
+        __ sdc1(double_scratch, FieldMemOperand(v0, HeapNumber::kValueOffset));
+        __ Ret();
+      } else {
+        // Tail call that writes the int32 in a2 to the heap number in v0, using
+        // a3 and a1 as scratch. v0 is preserved and returned.
+        WriteInt32ToHeapNumberStub stub(a2, v0, a3, a1);
+        __ TailCallStub(&stub);
+      }
+
+      break;
+    }
+
+    default:
+      UNREACHABLE();
+  }
+
+  if (transition.is_linked()) {
+    __ bind(&transition);
+    GenerateTypeTransition(masm);
+  }
+
+  __ bind(&call_runtime);
+  GenerateCallRuntime(masm);
+}
+
+
+void TypeRecordingBinaryOpStub::GenerateOddballStub(MacroAssembler* masm) {
+  Label call_runtime;
+
+  if (op_ == Token::ADD) {
+    // Handle string addition here, because it is the only operation
+    // that does not do a ToNumber conversion on the operands.
+    GenerateAddStrings(masm);
+  }
+
+  // Convert oddball arguments to numbers.
+  Label check, done;
+  __ LoadRoot(t0, Heap::kUndefinedValueRootIndex);
+  __ Branch(&check, ne, a1, Operand(t0));
+  if (Token::IsBitOp(op_)) {
+    __ li(a1, Operand(Smi::FromInt(0)));
+  } else {
+    __ LoadRoot(a1, Heap::kNanValueRootIndex);
+  }
+  __ jmp(&done);
+  __ bind(&check);
+  __ LoadRoot(t0, Heap::kUndefinedValueRootIndex);
+  __ Branch(&done, ne, a0, Operand(t0));
+  if (Token::IsBitOp(op_)) {
+    __ li(a0, Operand(Smi::FromInt(0)));
+  } else {
+    __ LoadRoot(a0, Heap::kNanValueRootIndex);
+  }
+  __ bind(&done);
+
+  GenerateHeapNumberStub(masm);
 }
 
 
 void TypeRecordingBinaryOpStub::GenerateHeapNumberStub(MacroAssembler* masm) {
   Label call_runtime;
-  ASSERT(operands_type_ == TRBinaryOpIC::HEAP_NUMBER);
-
   GenerateFPOperation(masm, false, &call_runtime, &call_runtime);
 
   __ bind(&call_runtime);

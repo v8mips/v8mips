@@ -1720,11 +1720,11 @@ void FullCodeGenerator::EmitBinaryOp(Token::Value op,
                                      OverwriteMode mode) {
   __ mov(a0, result_register());
   __ pop(a1);
-  // This stub is not functioning properly, likely because we do
-  // no use it everywhere. This is a temporary hack ......
-  // TypeRecordingBinaryOpStub stub(op, mode); // ..................fix this ............
+  // TODO(kalmard) TypeRecordingBinaryOpStub causes a segfault in the SunSpider
+  // benchmarks. This will need to be revisited.
+  //TypeRecordingBinaryOpStub stub(op, mode);
   GenericBinaryOpStub stub(op, mode, a1, a0);
-  __ CallStub(&stub);
+  EmitCallIC(stub.GetCode(), NULL);
   context()->Plug(v0);
 }
 

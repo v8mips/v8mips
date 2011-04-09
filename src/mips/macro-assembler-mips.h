@@ -481,7 +481,7 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
   inline void pop(Register src) { Pop(src); }
 
   void Push(Register src, Condition cond, Register tst1, Register tst2) {
-    // Since we don't have conditionnal execution we use a Branch.
+    // Since we don't have conditional execution we use a Branch.
     Branch(3, cond, tst1, Operand(tst2));
     Addu(sp, sp, Operand(-kPointerSize));
     sw(src, MemOperand(sp, 0));
@@ -492,10 +492,21 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
   // registers specified in regs. Pop order is the opposite as in MultiPush.
   void MultiPop(RegList regs);
   void MultiPopReversed(RegList regs);
+
   void Pop(Register dst) {
     lw(dst, MemOperand(sp, 0));
     Addu(sp, sp, Operand(kPointerSize));
   }
+
+  // Pop two registers. Pops rightmost register first (from lower address).
+  void Pop(Register src1, Register src2, Condition cond = al) {
+    ASSERT(!src1.is(src2));
+    ASSERT(cond == al);
+    lw(src2, MemOperand(sp, 0 * kPointerSize));
+    lw(src1, MemOperand(sp, 1 * kPointerSize));
+    Addu(sp, sp, 2 * kPointerSize);
+  }
+
   void Pop(uint32_t count = 1) {
     Addu(sp, sp, Operand(count * kPointerSize));
   }
@@ -551,6 +562,17 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
                       Register scratch2,
                       FPURegister double_scratch,
                       Label *not_int32);
+
+  // Helper for EmitECMATruncate.
+  // This will truncate a floating-point value outside of the singed 32bit
+  // integer range to a 32bit signed integer.
+  // Expects the double value loaded in input_high and input_low.
+  // Exits with the answer in 'result'.
+  // Note that this code does not work for values in the 32bit range!
+  void EmitOutOfInt32RangeTruncate(Register result,
+                                   Register input_high,
+                                   Register input_low,
+                                   Register scratch);
 
   // -------------------------------------------------------------------------
   // Activation frames
