@@ -669,7 +669,7 @@ class ELF BASE_EMBEDDED {
   void WriteHeader(Writer* w) {
     ASSERT(w->position() == 0);
     Writer::Slot<ELFHeader> header = w->CreateSlotHere<ELFHeader>();
-#if defined(V8_TARGET_ARCH_IA32) || defined(V8_TARGET_ARCH_ARM) || \\
+#if defined(V8_TARGET_ARCH_IA32) || defined(V8_TARGET_ARCH_ARM) || \
     defined(V8_TARGET_ARCH_MIPS)
     const uint8_t ident[16] =
         { 0x7f, 'E', 'L', 'F', 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0};
@@ -784,7 +784,7 @@ class ELFSymbol BASE_EMBEDDED {
   Binding binding() const {
     return static_cast<Binding>(info >> 4);
   }
-#if defined(V8_TARGET_ARCH_IA32) || defined(V8_TARGET_ARCH_ARM) || \\
+#if defined(V8_TARGET_ARCH_IA32) || defined(V8_TARGET_ARCH_ARM) || \
     defined(V8_TARGET_ARCH_MIPS)
   struct SerializedLayout {
     SerializedLayout(uint32_t name,
@@ -1817,7 +1817,7 @@ extern "C" {
     JITCodeEntry* prev_;
     Address symfile_addr_;
     uint64_t symfile_size_;
-  };
+  } __attribute__((packed));
 #endif
 
   struct JITDescriptor {
