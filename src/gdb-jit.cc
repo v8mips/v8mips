@@ -396,7 +396,7 @@ class ELF BASE_EMBEDDED {
   void WriteHeader(Writer* w) {
     ASSERT(w->position() == 0);
     Writer::Slot<ELFHeader> header = w->CreateSlotHere<ELFHeader>();
-#if defined(V8_TARGET_ARCH_IA32) || defined(V8_TARGET_ARCH_ARM)
+#if defined(V8_TARGET_ARCH_IA32) || defined(V8_TARGET_ARCH_ARM) || defined(V8_TARGET_ARCH_MIPS)
     const uint8_t ident[16] =
         { 0x7f, 'E', 'L', 'F', 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 #elif defined(V8_TARGET_ARCH_X64)
@@ -418,6 +418,8 @@ class ELF BASE_EMBEDDED {
     // Set to EM_ARM, defined as 40, in "ARM ELF File Format" at
     // infocenter.arm.com/help/topic/com.arm.doc.dui0101a/DUI0101A_Elf.pdf
     header->machine = 40;
+#elif defined(V8_TARGET_ARCH_MIPS)
+    header->machine = 8;
 #else
 #error Unsupported target architecture.
 #endif
@@ -508,7 +510,7 @@ class ELFSymbol BASE_EMBEDDED {
   Binding binding() const {
     return static_cast<Binding>(info >> 4);
   }
-#if defined(V8_TARGET_ARCH_IA32) || defined(V8_TARGET_ARCH_ARM)
+#if defined(V8_TARGET_ARCH_IA32) || defined(V8_TARGET_ARCH_ARM) || defined(V8_TARGET_ARCH_MIPS)
   struct SerializedLayout {
     SerializedLayout(uint32_t name,
                      uintptr_t value,
