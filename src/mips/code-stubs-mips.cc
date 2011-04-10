@@ -4235,12 +4235,33 @@ void CEntryStub::GenerateThrowTOS(MacroAssembler* masm) {
   __ bind(&done);
 
 #ifdef DEBUG
-  // TODO(MIPS): Implement debug code.
+  // When emitting debug_code, set ra as return address for the jump.
+  // 5 instructions: add: 1, pop: 2, jump: 2.
+  const int kOffsetRaInstructions = 5;
+  Label find_ra;
+
+  if (FLAG_debug_code) {  // TODO(plind): use emit_debug_code() when moved to masm.
+    // Compute ra for the Jump(t9).
+    const int kOffsetRaBytes = kOffsetRaInstructions * Assembler::kInstrSize;
+
+    // This branch-and-link sequence is needed to get the current PC on mips,
+    // saved to the ra register. Then adjusted for instruction count.
+    masm->bal(&find_ra);
+    masm->nop();  // Branch delay slot nop.
+    masm->bind(&find_ra);
+    masm->addiu(ra, ra, kOffsetRaBytes);
+  }
 #endif
 
   STATIC_ASSERT(StackHandlerConstants::kPCOffset == 3 * kPointerSize);
-  __ Pop(t9);
-  __ Jump(t9);
+  masm->pop(t9);  // 2 instructions: lw, add sp.
+  masm->Jump(t9);  // 2 instructions: jr, nop (in delay slot).
+
+  if (FLAG_debug_code) {  // TODO(plind): use emit_debug_code() when moved to masm.
+    // Make sure that the expected number of instructions were generated.
+    ASSERT_EQ(kOffsetRaInstructions,
+              masm->InstructionsGeneratedSince(&find_ra));
+  }
 }
 
 
@@ -4291,12 +4312,12 @@ void CEntryStub::GenerateThrowUncatchable(MacroAssembler* masm,
   // Stack layout at this point. See also StackHandlerConstants.
   // sp ->   state (ENTRY)
   //         fp
-  //         lr
+  //         ra
 
-  // Discard handler state (r2 is not used) and restore frame pointer.
+  // Discard handler state (a2 is not used) and restore frame pointer.
   STATIC_ASSERT(StackHandlerConstants::kFPOffset == 2 * kPointerSize);
   __ MultiPop(a2.bit() | fp.bit());  // a2: discarded state.
-  // Before returning we restore the context from the frame pointer if
+  // Before returning, we restore the context from the frame pointer if
   // not NULL.  The frame pointer is NULL in the exception handler of a
   // JS entry frame.
   // Set cp to NULL if fp is NULL, else restore cp.
@@ -4307,14 +4328,32 @@ void CEntryStub::GenerateThrowUncatchable(MacroAssembler* masm,
   __ bind(&cp_null);
 
 #ifdef DEBUG
-  // TODO(MIPS): Implement debug code.
-  // if (FLAG_debug_code) {
-  //   __ mov(lr, Operand(pc));
-  // }
+  // When emitting debug_code, set ra as return address for the jump.
+  // 5 instructions: add: 1, pop: 2, jump: 2.
+  const int kOffsetRaInstructions = 5;
+  Label find_ra;
+
+  if (FLAG_debug_code) {  // TODO(plind): use emit_debug_code() when moved to masm.
+    // Compute ra for the Jump(t9).
+    const int kOffsetRaBytes = kOffsetRaInstructions * Assembler::kInstrSize;
+
+    // This branch-and-link sequence is needed to get the current PC on mips,
+    // saved to the ra register. Then adjusted for instruction count.
+    masm->bal(&find_ra);
+    masm->nop();  // Branch delay slot nop.
+    masm->bind(&find_ra);
+    masm->addiu(ra, ra, kOffsetRaBytes);
+  }
 #endif
   STATIC_ASSERT(StackHandlerConstants::kPCOffset == 3 * kPointerSize);
-  __ Pop(t9);
-  __ Jump(t9);
+  masm->pop(t9);  // 2 instructions: lw, add sp.
+  masm->Jump(t9);  // 2 instructions: jr, nop (in delay slot).
+
+  if (FLAG_debug_code) {  // TODO(plind): use emit_debug_code() when moved to masm.
+    // Make sure that the expected number of instructions were generated.
+    ASSERT_EQ(kOffsetRaInstructions,
+              masm->InstructionsGeneratedSince(&find_ra));
+  }
 }
 
 
