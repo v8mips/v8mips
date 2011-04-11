@@ -890,8 +890,8 @@ class CodeMarkingVisitor : public ThreadVisitor {
   explicit CodeMarkingVisitor(MarkCompactCollector* collector)
       : collector_(collector) {}
 
-  void VisitThread(ThreadLocalTop* top) {
-    for (StackFrameIterator it(top); !it.done(); it.Advance()) {
+  void VisitThread(Isolate* isolate, ThreadLocalTop* top) {
+    for (StackFrameIterator it(isolate, top); !it.done(); it.Advance()) {
       collector_->MarkObject(it.frame()->unchecked_code());
     }
   }
@@ -1218,13 +1218,14 @@ void MarkCompactCollector::MarkObjectGroups() {
   List<ObjectGroup*>* object_groups =
       heap()->isolate()->global_handles()->object_groups();
 
+  int last = 0;
   for (int i = 0; i < object_groups->length(); i++) {
     ObjectGroup* entry = object_groups->at(i);
-    if (entry == NULL) continue;
+    ASSERT(entry != NULL);
 
-    List<Object**>& objects = entry->objects_;
+    Object*** objects = entry->objects_;
     bool group_marked = false;
-    for (int j = 0; j < objects.length(); j++) {
+    for (size_t j = 0; j < entry->length_; j++) {
       Object* object = *objects[j];
       if (object->IsHeapObject() && HeapObject::cast(object)->IsMarked()) {
         group_marked = true;
@@ -1232,21 +1233,24 @@ void MarkCompactCollector::MarkObjectGroups() {
       }
     }
 
-    if (!group_marked) continue;
+    if (!group_marked) {
+      (*object_groups)[last++] = entry;
+      continue;
+    }
 
-    // An object in the group is marked, so mark as gray all white heap
-    // objects in the group.
-    for (int j = 0; j < objects.length(); ++j) {
+    // An object in the group is marked, so mark all heap objects in
+    // the group.
+    for (size_t j = 0; j < entry->length_; ++j) {
       if ((*objects[j])->IsHeapObject()) {
         MarkObject(HeapObject::cast(*objects[j]));
       }
     }
 
-    // Once the entire group has been colored gray, set the object group
-    // to NULL so it won't be processed again.
-    delete entry;
-    object_groups->at(i) = NULL;
+    // Once the entire group has been marked, dispose it because it's
+    // not needed anymore.
+    entry->Dispose();
   }
+  object_groups->Rewind(last);
 }
 
 
@@ -1254,26 +1258,29 @@ void MarkCompactCollector::MarkImplicitRefGroups() {
   List<ImplicitRefGroup*>* ref_groups =
       heap()->isolate()->global_handles()->implicit_ref_groups();
 
+  int last = 0;
   for (int i = 0; i < ref_groups->length(); i++) {
     ImplicitRefGroup* entry = ref_groups->at(i);
-    if (entry == NULL) continue;
+    ASSERT(entry != NULL);
 
-    if (!entry->parent_->IsMarked()) continue;
+    if (!(*entry->parent_)->IsMarked()) {
+      (*ref_groups)[last++] = entry;
+      continue;
+    }
 
-    List<Object**>& children = entry->children_;
-    // A parent object is marked, so mark as gray all child white heap
-    // objects.
-    for (int j = 0; j < children.length(); ++j) {
+    Object*** children = entry->children_;
+    // A parent object is marked, so mark all child heap objects.
+    for (size_t j = 0; j < entry->length_; ++j) {
       if ((*children[j])->IsHeapObject()) {
         MarkObject(HeapObject::cast(*children[j]));
       }
     }
 
-    // Once the entire group has been colored gray, set the  group
-    // to NULL so it won't be processed again.
-    delete entry;
-    ref_groups->at(i) = NULL;
+    // Once the entire group has been marked, dispose it because it's
+    // not needed anymore.
+    entry->Dispose();
   }
+  ref_groups->Rewind(last);
 }
 
 

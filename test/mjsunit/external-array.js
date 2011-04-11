@@ -25,38 +25,16 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#ifndef V8_PLATFORM_TLS_MAC_H_
-#define V8_PLATFORM_TLS_MAC_H_
-
-#include "globals.h"
-
-namespace v8 {
-namespace internal {
-
-#if defined(V8_HOST_ARCH_IA32) || defined(V8_HOST_ARCH_X64)
-
-#define V8_FAST_TLS_SUPPORTED 1
-
-extern intptr_t kMacTlsBaseOffset;
-
-INLINE(intptr_t InternalGetExistingThreadLocal(intptr_t index));
-
-inline intptr_t InternalGetExistingThreadLocal(intptr_t index) {
-  intptr_t result;
-#if defined(V8_HOST_ARCH_IA32)
-  asm("movl %%gs:(%1,%2,4), %0;"
-      :"=r"(result)  // Output must be a writable register.
-      :"r"(kMacTlsBaseOffset), "r"(index));
-#else
-  asm("movq %%gs:(%1,%2,8), %0;"
-      :"=r"(result)
-      :"r"(kMacTlsBaseOffset), "r"(index));
-#endif
-  return result;
+// This is a regression test for overlapping key and value registers.
+function f(a) {
+  a[0] = 0;
+  a[1] = 0;
 }
 
-#endif
+var a = new Int32Array(2);
+for (var i = 0; i < 1000000; i++) {
+  f(a);
+}
 
-} }  // namespace v8::internal
-
-#endif  // V8_PLATFORM_TLS_MAC_H_
+assertEquals(0, a[0]);
+assertEquals(0, a[1]);

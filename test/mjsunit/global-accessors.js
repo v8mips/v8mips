@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2010 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -25,38 +25,28 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#ifndef V8_PLATFORM_TLS_MAC_H_
-#define V8_PLATFORM_TLS_MAC_H_
+// Test accessors on the global object.
 
-#include "globals.h"
+var x_ = 0;
 
-namespace v8 {
-namespace internal {
+__defineSetter__('x', function(x) { x_ = x; });
+__defineGetter__('x', function() { return x_; });
 
-#if defined(V8_HOST_ARCH_IA32) || defined(V8_HOST_ARCH_X64)
+__defineSetter__('y', function(x) { });
+__defineGetter__('y', function() { return 7; });
 
-#define V8_FAST_TLS_SUPPORTED 1
-
-extern intptr_t kMacTlsBaseOffset;
-
-INLINE(intptr_t InternalGetExistingThreadLocal(intptr_t index));
-
-inline intptr_t InternalGetExistingThreadLocal(intptr_t index) {
-  intptr_t result;
-#if defined(V8_HOST_ARCH_IA32)
-  asm("movl %%gs:(%1,%2,4), %0;"
-      :"=r"(result)  // Output must be a writable register.
-      :"r"(kMacTlsBaseOffset), "r"(index));
-#else
-  asm("movq %%gs:(%1,%2,8), %0;"
-      :"=r"(result)
-      :"r"(kMacTlsBaseOffset), "r"(index));
-#endif
-  return result;
+function f(a) {
+  x = x + a;
+  return x;
 }
 
-#endif
+function g(a) {
+  y = y + a;
+  return y;
+}
 
-} }  // namespace v8::internal
+assertEquals(1, f(1));
+assertEquals(3, f(2));
 
-#endif  // V8_PLATFORM_TLS_MAC_H_
+assertEquals(7, g(1));
+assertEquals(7, g(2));
