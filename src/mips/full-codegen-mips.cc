@@ -1710,9 +1710,105 @@ void FullCodeGenerator::EmitKeyedPropertyLoad(Property* prop) {
 void FullCodeGenerator::EmitInlineSmiBinaryOp(Expression* expr,
                                               Token::Value op,
                                               OverwriteMode mode,
-                                              Expression* left,
-                                              Expression* right) {
-  EmitBinaryOp(op, mode);
+                                              Expression* left_expr,
+                                              Expression* right_expr) {
+  Label done, smi_case, stub_call;
+
+  Register scratch1 = a2;
+  Register scratch2 = a3;
+
+  // Get the arguments.
+  Register left = a1;
+  Register right = a0;
+  __ pop(left);
+  __ mov(a0, result_register());
+
+  // Perform combined smi check on both operands.
+  __ Or(scratch1, left, Operand(right));
+  STATIC_ASSERT(kSmiTag == 0);
+  JumpPatchSite patch_site(masm_);
+  patch_site.EmitJumpIfSmi(scratch1, &smi_case);
+
+  __ bind(&stub_call);
+  TypeRecordingBinaryOpStub stub(op, mode);
+  EmitCallIC(stub.GetCode(), &patch_site);
+  __ jmp(&done);
+
+  __ bind(&smi_case);
+  // Smi case. This code works the same way as the smi-smi case in the type
+  // recording binary operation stub, see
+  // TypeRecordingBinaryOpStub::GenerateSmiSmiOperation for comments.
+  switch (op) {
+    case Token::SAR:
+      __ Branch(&stub_call);
+      __ GetLeastBitsFromSmi(scratch1, right, 5);
+      __ srav(right, left, scratch1);
+      __ And(v0, right, Operand(~kSmiTagMask));
+      break;
+    case Token::SHL: {
+      __ Branch(&stub_call);
+      __ SmiUntag(scratch1, left);
+      __ GetLeastBitsFromSmi(scratch2, right, 5);
+      __ sllv(scratch1, scratch1, scratch2);
+      __ Addu(scratch2, scratch1, Operand(0x40000000));
+      __ Branch(&stub_call, lt, scratch2, Operand(zero_reg));
+      __ SmiTag(v0, scratch1);
+      break;
+    }
+    case Token::SHR: {
+      __ Branch(&stub_call);
+      __ SmiUntag(scratch1, left);
+      __ GetLeastBitsFromSmi(scratch2, right, 5);
+      __ srlv(scratch1, scratch1, scratch2);
+      __ And(scratch2, scratch1, 0xc0000000);
+      __ Branch(&stub_call, ne, scratch2, Operand(zero_reg));
+      __ SmiTag(v0, scratch1);
+      break;
+    }
+    case Token::ADD:
+      __ Addu(v0, left, right);
+      __ Xor(scratch1, v0, left);
+      __ Xor(scratch2, v0, right);
+      __ And(scratch1, scratch1, scratch2);
+      __ Branch(&stub_call, lt, scratch1, Operand(zero_reg));
+      break;
+    case Token::SUB:
+      __ Subu(v0, left, right);
+      __ Xor(scratch1, v0, left);
+      __ Xor(scratch2, left, right);
+      __ And(scratch1, scratch1, scratch2);
+      __ Branch(&stub_call, lt, scratch1, Operand(zero_reg));
+      break;
+    case Token::MUL: {
+      __ SmiUntag(scratch1, right);
+      __ Mult(left, scratch1);
+      __ mflo(scratch1);
+      __ mfhi(scratch2);
+      __ sra(scratch1, scratch1, 31);
+      __ Branch(&stub_call, ne, scratch1, Operand(scratch2));
+      __ mflo(v0);
+      __ Branch(&done, ne, v0, Operand(zero_reg));
+      __ Addu(scratch2, right, left);
+      __ Branch(&stub_call, lt, scratch2, Operand(zero_reg));
+      ASSERT(Smi::FromInt(0) == 0);
+      __ mov(v0, zero_reg);
+      break;
+    }
+    case Token::BIT_OR:
+      __ Or(v0, left, Operand(right));
+      break;
+    case Token::BIT_AND:
+      __ And(v0, left, Operand(right));
+      break;
+    case Token::BIT_XOR:
+      __ Xor(v0, left, Operand(right));
+      break;
+    default:
+      UNREACHABLE();
+  }
+
+  __ bind(&done);
+  context()->Plug(v0);
 }
 
 
@@ -1720,10 +1816,7 @@ void FullCodeGenerator::EmitBinaryOp(Token::Value op,
                                      OverwriteMode mode) {
   __ mov(a0, result_register());
   __ pop(a1);
-  // TODO(kalmard) TypeRecordingBinaryOpStub causes a segfault in the SunSpider
-  // benchmarks. This will need to be revisited.
-  //TypeRecordingBinaryOpStub stub(op, mode);
-  GenericBinaryOpStub stub(op, mode, a1, a0);
+  TypeRecordingBinaryOpStub stub(op, mode);
   EmitCallIC(stub.GetCode(), NULL);
   context()->Plug(v0);
 }
@@ -3623,6 +3716,8 @@ void FullCodeGenerator::VisitCountOperation(CountOperation* expr) {
 
   // Inline smi case if we are in a loop.
   Label stub_call, done;
+  JumpPatchSite patch_site(masm_);
+
   int count_value = expr->op() == Token::INC ? 1 : -1;
   __ li(a1, Operand(Smi::FromInt(count_value)));
 
@@ -3637,15 +3732,15 @@ void FullCodeGenerator::VisitCountOperation(CountOperation* expr) {
 
     // We could eliminate this smi check if we split the code at
     // the first smi check before calling ToNumber.
-    __ JumpIfSmi(v0, &done);
+    patch_site.EmitJumpIfSmi(v0, &done);
     __ bind(&stub_call);
   }
 
   // Record position before stub call.
   SetSourcePosition(expr->position());
 
-  GenericBinaryOpStub stub(Token::ADD, NO_OVERWRITE, a1, a0);
-  __ CallStub(&stub);
+  TypeRecordingBinaryOpStub stub(Token::ADD, NO_OVERWRITE);
+  EmitCallIC(stub.GetCode(), &patch_site);
   __ bind(&done);
 
   // Store the value returned in v0.
