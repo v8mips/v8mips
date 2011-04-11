@@ -38,7 +38,7 @@
 // next call: mov(a0, v0). This is not needed on the other architectures.
 
 #include "code-stubs.h"
-#include "codegen-inl.h"
+#include "codegen.h"
 #include "compiler.h"
 #include "debug.h"
 #include "full-codegen.h"
@@ -826,7 +826,7 @@ void FullCodeGenerator::VisitSwitchStatement(SwitchStatement* stmt) {
   // Compile all the tests with branches to their bodies.
   for (int i = 0; i < clauses->length(); i++) {
     CaseClause* clause = clauses->at(i);
-    clause->body_target()->entry_label()->Unuse();
+    clause->body_target()->Unuse();
 
     // The default is not a test, but remember it as final fall through.
     if (clause->is_default()) {
@@ -853,7 +853,7 @@ void FullCodeGenerator::VisitSwitchStatement(SwitchStatement* stmt) {
 
       __ Branch(&next_test, ne, a1, Operand(a0));
       __ Drop(1);  // Switch value is no longer needed.
-      __ Branch(clause->body_target()->entry_label());
+      __ Branch(clause->body_target());
 
       __ bind(&slow_case);
     }
@@ -864,7 +864,7 @@ void FullCodeGenerator::VisitSwitchStatement(SwitchStatement* stmt) {
     EmitCallIC(ic, &patch_site);
     __ Branch(&next_test, ne, v0, Operand(zero_reg));
     __ Drop(1);  // Switch value is no longer needed.
-    __ Branch(clause->body_target()->entry_label());
+    __ Branch(clause->body_target());
   }
 
   // Discard the test value and jump to the default if present, otherwise to
@@ -874,14 +874,14 @@ void FullCodeGenerator::VisitSwitchStatement(SwitchStatement* stmt) {
   if (default_clause == NULL) {
     __ Branch(nested_statement.break_target());
   } else {
-    __ Branch(default_clause->body_target()->entry_label());
+    __ Branch(default_clause->body_target());
   }
 
   // Compile all the case bodies.
   for (int i = 0; i < clauses->length(); i++) {
     Comment cmnt(masm_, "[ Case body");
     CaseClause* clause = clauses->at(i);
-    __ bind(clause->body_target()->entry_label());
+    __ bind(clause->body_target());
     PrepareForBailoutForId(clause->EntryId(), NO_REGISTERS);
     VisitStatements(clause->statements());
   }

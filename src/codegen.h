@@ -81,9 +81,4 @@ enum TypeofState { INSIDE_TYPEOF, NOT_INSIDE_TYPEOF };
 #error Unsupported target architecture.
 #endif
 
-#ifndef V8_TARGET_ARCH_MIPS
-#else
-  inline void Branch(Condition cc, Register src1 = zero_reg,
-                                  const Operand& src2 = Operand(zero_reg));
-#endif
 #endif  // V8_CODEGEN_H_

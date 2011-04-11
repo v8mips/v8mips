@@ -31,7 +31,7 @@
 
 #include "bootstrapper.h"
 #include "code-stubs.h"
-#include "codegen-inl.h"
+#include "codegen.h"
 #include "regexp-macro-assembler.h"
 
 namespace v8 {
@@ -1900,6 +1900,30 @@ void ToBooleanStub::Generate(MacroAssembler* masm) {
 }
 
 
+const char* GenericBinaryOpStub::GetName() {
+  if (name_ != NULL) return name_;
+  const int len = 100;
+  name_ = Isolate::Current()->bootstrapper()->AllocateAutoDeletedArray(len);
+  if (name_ == NULL) return "OOM";
+  const char* op_name = Token::Name(op_);
+  const char* overwrite_name;
+  switch (mode_) {
+    case NO_OVERWRITE: overwrite_name = "Alloc"; break;
+    case OVERWRITE_RIGHT: overwrite_name = "OverwriteRight"; break;
+    case OVERWRITE_LEFT: overwrite_name = "OverwriteLeft"; break;
+    default: overwrite_name = "UnknownOverwrite"; break;
+  }
+
+  OS::SNPrintF(Vector<char>(name_, len),
+               "GenericBinaryOpStub_%s_%s%s_%s",
+               op_name,
+               overwrite_name,
+               specialized_on_rhs_ ? "_ConstantRhs" : "",
+               BinaryOpIC::GetName(runtime_operands_type_));
+  return name_;
+}
+
+
 // We fall into this code if the operands were Smis, but the result was
 // not (eg. overflow).  We branch into this code (to the not_smi label) if
 // the operands were not both Smi.  The operands are in lhs and rhs.
@@ -1974,7 +1998,7 @@ void GenericBinaryOpStub::HandleBinaryOpSlowCases(MacroAssembler* masm,
 
   // After this point we have the left hand side in a1 and the right hand side
   // in a0.
-  Register scratch  = VirtualFrame::scratch0();
+  Register scratch  = t4;
   if (lhs.is(a0)) {
     __ Swap(a0, a1, scratch);
   }
@@ -2443,8 +2467,8 @@ void GenericBinaryOpStub::Generate(MacroAssembler* masm) {
   ASSERT(result.is(v0) &&
           (((lhs.is(a1)) && (rhs.is(a0))) || ((lhs.is(a0)) && (rhs.is(a1)))));
 
-  Register smi_test_reg = VirtualFrame::scratch0();
-  Register scratch = VirtualFrame::scratch1();
+  Register smi_test_reg = t4;
+  Register scratch = t5;
 
   // All ops need to know whether we are dealing with two Smis.  Set up t2 to
   // tell us that.
@@ -3977,7 +4001,7 @@ void GenericUnaryOpStub::Generate(MacroAssembler* masm) {
       }
       __ bind(&try_float);
     } else if (FLAG_debug_code) {
-      Register scratch = VirtualFrame::scratch0();
+      Register scratch = t4;
       __ And(scratch, a0, kSmiTagMask);
       __ Assert(ne, "Unexpected smi operand.", scratch, Operand(zero_reg));
     }
@@ -4009,7 +4033,7 @@ void GenericUnaryOpStub::Generate(MacroAssembler* masm) {
       __ Ret();
       __ bind(&non_smi);
     } else if (FLAG_debug_code) {
-      Register scratch = VirtualFrame::scratch0();
+      Register scratch = t4;
       __ And(scratch, a0, kSmiTagMask);
       __ Assert(ne, "Unexpected smi operand.",
           scratch, Operand(zero_reg));
