@@ -1408,10 +1408,6 @@ void Simulator::ConfigureTypeRegister(Instruction* instr,
         case MULTU:
           u64hilo = static_cast<uint64_t>(rs_u) * static_cast<uint64_t>(rt_u);
           break;
-        case DIV:
-        case DIVU:
-            exceptions[kDivideByZero] = rt == 0;
-          break;
         case ADD:
           if (HaveSameSign(rs, rt)) {
             if (rs > 0) {
@@ -1483,6 +1479,10 @@ void Simulator::ConfigureTypeRegister(Instruction* instr,
         case MOVZ:
         case MOVCI:
           // No action taken on decode.
+          break;
+        case DIV:
+        case DIVU:
+          // div and divu never raise exceptions.
           break;
         default:
           UNREACHABLE();
@@ -1823,13 +1823,19 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
           set_register(HI, static_cast<int32_t>(u64hilo >> 32));
           break;
         case DIV:
-          // Divide by zero was checked in the configuration step.
-          set_register(LO, rs / rt);
-          set_register(HI, rs % rt);
+          // Divide by zero was not checked in the configuration step - div and
+          // divu do not raise exceptions. On division by 0, the result will
+          // be UNPREDICTABLE.
+          if (rt != 0) {
+            set_register(LO, rs / rt);
+            set_register(HI, rs % rt);
+          }
           break;
         case DIVU:
-          set_register(LO, rs_u / rt_u);
-          set_register(HI, rs_u % rt_u);
+          if (rt_u != 0) {
+            set_register(LO, rs_u / rt_u);
+            set_register(HI, rs_u % rt_u);
+          }
           break;
         // Break and trap instructions.
         case BREAK:

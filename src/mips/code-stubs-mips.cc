@@ -2898,33 +2898,53 @@ void TypeRecordingBinaryOpStub::GenerateSmiSmiOperation(
       // that would mean we should produce -0.
       }
       break;
-    case Token::DIV:
-      // Check for power of two on the right hand side.
-      __ JumpIfNotPowerOfTwoOrZero(right, scratch1, &not_smi_result);
-      // Check for positive and no remainder (scratch1 contains right - 1).
-      __ Or(scratch2, scratch1, Operand(0x80000000u));
-      __ And(v0, left, scratch2);
-      __ Branch(&not_smi_result, ne, v0, Operand(zero_reg));
-
-      // Perform division by shifting.
-      __ clz(scratch1, scratch1);
-      __ li(v0, 31);
-      __ Subu(scratch1, v0, scratch1);
-      __ srlv(v0, left, scratch1);
+    case Token::DIV: {
+      Label done;
+      __ SmiUntag(scratch2, right);
+      __ SmiUntag(scratch1, left);
+      __ Div(scratch1, scratch2);
+      // A minor optimization: div may be calculated asynchronously, so we check
+      // for division by zero before getting the result.
+      __ Branch(&not_smi_result, eq, scratch2, Operand(zero_reg));
+      // If the result is 0, we need to make sure the dividsor (right) is
+      // positive, otherwise it is a -0 case.
+      // Quotient is in 'lo', remainder is in 'hi'.
+      // Check for no remainder first.
+      __ mfhi(scratch1);
+      __ Branch(&not_smi_result, ne, scratch1, Operand(zero_reg));
+      __ mflo(scratch1);
+      __ Branch(&done, ne, scratch1, Operand(zero_reg));
+      __ Branch(&not_smi_result, lt, scratch2, Operand(zero_reg));
+      __ bind(&done);
+      // Check that the signed result fits in a Smi.
+      __ Addu(scratch2, scratch1, Operand(0x40000000));
+      __ Branch(&not_smi_result, lt, scratch2, Operand(zero_reg));
+      __ SmiTag(v0, scratch1);
       __ Ret();
+      }
       break;
-    case Token::MOD:
-      // Check for two positive smis.
-      __ Or(scratch1, left, Operand(right));
-      __ And(scratch2, scratch1, Operand(0x80000000u | kSmiTagMask));
-      __ Branch(&not_smi_result, ne, scratch2, Operand(zero_reg));
-
-      // Check for power of two on the right hand side.
-      __ JumpIfNotPowerOfTwoOrZero(right, scratch1, &not_smi_result);
-
-      // Perform modulus by masking.
-      __ And(v0, left, Operand(scratch1));
+    case Token::MOD: {
+      Label done;
+      __ SmiUntag(scratch2, right);
+      __ SmiUntag(scratch1, left);
+      __ Div(scratch1, scratch2);
+      // A minor optimization: div may be calculated asynchronously, so we check
+      // for division by 0 before calling mfhi.
+      // Check for zero on the right hand side.
+      __ Branch(&not_smi_result, eq, scratch2, Operand(zero_reg));
+      // If the result is 0, we need to make sure the dividend (left) is
+      // positive (or 0), otherwise it is a -0 case.
+      // Remainder is in 'hi'.
+      __ mfhi(scratch2);
+      __ Branch(&done, ne, scratch2, Operand(zero_reg));
+      __ Branch(&not_smi_result, lt, scratch1, Operand(zero_reg));
+      __ bind(&done);
+      // Check that the signed result fits in a Smi.
+      __ Addu(scratch1, scratch2, Operand(0x40000000));
+      __ Branch(&not_smi_result, lt, scratch1, Operand(zero_reg));
+      __ SmiTag(v0, scratch2);
       __ Ret();
+      }
       break;
     case Token::BIT_OR:
       __ Or(v0, left, Operand(right));
