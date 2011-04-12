@@ -7405,6 +7405,16 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_DeoptimizeFunction) {
 }
 
 
+RUNTIME_FUNCTION(MaybeObject*, Runtime_OptimizeFunctionOnNextCall) {
+  HandleScope scope(isolate);
+  ASSERT(args.length() == 1);
+  CONVERT_ARG_CHECKED(JSFunction, function, 0);
+  if (!function->IsOptimizable()) return isolate->heap()->undefined_value();
+  function->MarkForLazyRecompilation();
+  return isolate->heap()->undefined_value();
+}
+
+
 RUNTIME_FUNCTION(MaybeObject*, Runtime_CompileForOnStackReplacement) {
   HandleScope scope(isolate);
   ASSERT(args.length() == 1);
@@ -10161,8 +10171,7 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_GetThreadDetails) {
     details->set(kThreadDetailsCurrentThreadIndex,
                  isolate->heap()->true_value());
     details->set(kThreadDetailsThreadIdIndex,
-                 Smi::FromInt(
-                     isolate->thread_manager()->CurrentId()));
+                 Smi::FromInt(ThreadId::Current().ToInteger()));
   } else {
     // Find the thread with the requested index.
     int n = 1;
@@ -10179,7 +10188,8 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_GetThreadDetails) {
     // Fill the details.
     details->set(kThreadDetailsCurrentThreadIndex,
                  isolate->heap()->false_value());
-    details->set(kThreadDetailsThreadIdIndex, Smi::FromInt(thread->id()));
+    details->set(kThreadDetailsThreadIdIndex,
+                 Smi::FromInt(thread->id().ToInteger()));
   }
 
   // Convert to JS array and return.

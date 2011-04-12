@@ -167,7 +167,7 @@ class PropertyDetails BASE_EMBEDDED {
   }
 
   // Conversion for storing details as Object*.
-  inline PropertyDetails(Smi* smi);
+  explicit inline PropertyDetails(Smi* smi);
   inline Smi* AsSmi();
 
   PropertyType type() { return TypeField::decode(value_); }
@@ -2571,6 +2571,9 @@ class Dictionary: public HashTable<Shape, Key> {
   // Sets the entry to (key, value) pair.
   inline void SetEntry(int entry,
                        Object* key,
+                       Object* value);
+  inline void SetEntry(int entry,
+                       Object* key,
                        Object* value,
                        PropertyDetails details);
 
@@ -4523,6 +4526,9 @@ class JSFunction: public JSObject {
   // Tells whether or not this function has been optimized.
   inline bool IsOptimized();
 
+  // Tells whether or not this function can be optimized.
+  inline bool IsOptimizable();
+
   // Mark this function for lazy recompilation. The function will be
   // recompiled the next time it is executed.
   void MarkForLazyRecompilation();
@@ -5147,7 +5153,7 @@ enum RobustnessFlag {ROBUST_STRING_TRAVERSAL, FAST_STRING_TRAVERSAL};
 
 class StringHasher {
  public:
-  inline StringHasher(int length);
+  explicit inline StringHasher(int length);
 
   // Returns true if the hash of this string can be computed without
   // looking at the contents.
@@ -5894,7 +5900,7 @@ class StringInputBuffer: public unibrow::InputBuffer<String, String*, 1024> {
  public:
   virtual void Seek(unsigned pos);
   inline StringInputBuffer(): unibrow::InputBuffer<String, String*, 1024>() {}
-  inline StringInputBuffer(String* backing):
+  explicit inline StringInputBuffer(String* backing):
       unibrow::InputBuffer<String, String*, 1024>(backing) {}
 };
 
@@ -5905,7 +5911,7 @@ class SafeStringInputBuffer
   virtual void Seek(unsigned pos);
   inline SafeStringInputBuffer()
       : unibrow::InputBuffer<String, String**, 256>() {}
-  inline SafeStringInputBuffer(String** backing)
+  explicit inline SafeStringInputBuffer(String** backing)
       : unibrow::InputBuffer<String, String**, 256>(backing) {}
 };
 
