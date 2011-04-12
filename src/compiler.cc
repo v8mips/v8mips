@@ -604,6 +604,12 @@ bool Compiler::CompileLazy(CompilationInfo* info) {
     // parsing statistics.
     HistogramTimerScope timer(isolate->counters()->compile_lazy());
 
+    // After parsing we know function's strict mode. Remember it.
+    if (info->function()->strict_mode()) {
+      shared->set_strict_mode(true);
+      info->MarkAsStrictMode();
+    }
+
     // Compile the code.
     if (!MakeCode(info)) {
       if (!isolate->has_pending_exception()) {
@@ -784,7 +790,7 @@ void Compiler::RecordFunctionCompilation(Logger::LogEventsAndTags tag,
     }
   }
 
-  GDBJIT(AddCode(name,
+  GDBJIT(AddCode(Handle<String>(shared->DebugName()),
                  Handle<Script>(info->script()),
                  Handle<Code>(info->code())));
 }

@@ -431,8 +431,7 @@ void FullCodeGenerator::TestContext::Plug(Handle<Object> lit) const {
     if (true_label_ != fall_through_) __ b(true_label_);
   } else if (lit->IsString()) {
     if (String::cast(*lit)->length() == 0) {
-    if (false_label_ != fall_through_) __ b(false_label_);
-      __ b(false_label_);
+      if (false_label_ != fall_through_) __ b(false_label_);
     } else {
       if (true_label_ != fall_through_) __ b(true_label_);
     }
@@ -2595,9 +2594,9 @@ void FullCodeGenerator::EmitIsStringWrapperSafeForDefaultValueOf(
 
   // Set the bit in the map to indicate that it has been checked safe for
   // default valueOf and set true result.
-  __ ldrb(r2, FieldMemOperand(r4, Map::kBitField2Offset));
+  __ ldrb(r2, FieldMemOperand(r1, Map::kBitField2Offset));
   __ orr(r2, r2, Operand(1 << Map::kStringWrapperSafeForDefaultValueOf));
-  __ strb(r2, FieldMemOperand(r4, Map::kBitField2Offset));
+  __ strb(r2, FieldMemOperand(r1, Map::kBitField2Offset));
   __ jmp(if_true);
 
   PrepareForBailoutBeforeSplit(TOS_REG, true, if_true, if_false);
