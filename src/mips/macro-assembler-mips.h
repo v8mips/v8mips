@@ -750,6 +750,43 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
                               Register scratch1);
 
   // -------------------------------------------------------------------------
+  // Overflow handling functions
+  // Usage: first call the appropriate arithmetic function, then call one of the
+  // jump functions with the overflow_dst register as the second parameter.
+
+  void AdduAndCheckForOverflow(Register dst,
+                               Register left,
+                               Register right,
+                               Register overflow_dst,
+                               Register scratch = at);
+
+  void SubuAndCheckForOverflow(Register dst,
+                               Register left,
+                               Register right,
+                               Register overflow_dst,
+                               Register scratch = at);
+
+  void BranchOnOverflow(Label* label,
+                        Register overflow_check,
+                        BranchDelaySlot bd = PROTECT) {
+    Branch(label, lt, overflow_check, Operand(zero_reg), bd);
+  }
+
+  void BranchOnNoOverflow(Label* label,
+                          Register overflow_check,
+                          BranchDelaySlot bd = PROTECT) {
+    Branch(label, ge, overflow_check, Operand(zero_reg), bd);
+  }
+
+  void RetOnOverflow(Register overflow_check, BranchDelaySlot bd = PROTECT) {
+    Ret(lt, overflow_check, Operand(zero_reg), bd);
+  }
+
+  void RetOnNoOverflow(Register overflow_check, BranchDelaySlot bd = PROTECT) {
+    Ret(ge, overflow_check, Operand(zero_reg), bd);
+  }
+
+  // -------------------------------------------------------------------------
   // Runtime calls
 
   // Call a code stub.

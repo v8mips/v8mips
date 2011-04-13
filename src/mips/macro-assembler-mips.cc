@@ -2733,6 +2733,84 @@ void MacroAssembler::SmiToDoubleFPURegister(Register smi,
 }
 
 
+void MacroAssembler::AdduAndCheckForOverflow(Register dst,
+                                             Register left,
+                                             Register right,
+                                             Register overflow_dst,
+                                             Register scratch) {
+  ASSERT(!dst.is(overflow_dst));
+  ASSERT(!dst.is(scratch));
+  ASSERT(!overflow_dst.is(scratch));
+  ASSERT(!overflow_dst.is(left));
+  ASSERT(!overflow_dst.is(right));
+  ASSERT(!left.is(right));
+
+  // TODO(kalmard) There must be a way to optimize dst == left and dst == right
+  // cases.
+
+  if (dst.is(left)) {
+    addu(overflow_dst, left, right);
+    xor_(dst, overflow_dst, left);
+    xor_(scratch, overflow_dst, right);
+    and_(scratch, scratch, dst);
+    mov(dst, overflow_dst);
+    mov(overflow_dst, scratch);
+  } else if (dst.is(right)) {
+    addu(overflow_dst, left, right);
+    xor_(dst, overflow_dst, right);
+    xor_(scratch, overflow_dst, left);
+    and_(scratch, scratch, dst);
+    mov(dst, overflow_dst);
+    mov(overflow_dst, scratch);
+  } else {
+    addu(dst, left, right);
+    xor_(overflow_dst, dst, left);
+    xor_(scratch, dst, right);
+    and_(overflow_dst, scratch, overflow_dst);
+  }
+}
+
+
+void MacroAssembler::SubuAndCheckForOverflow(Register dst,
+                                             Register left,
+                                             Register right,
+                                             Register overflow_dst,
+                                             Register scratch) {
+  ASSERT(!dst.is(overflow_dst));
+  ASSERT(!dst.is(scratch));
+  ASSERT(!overflow_dst.is(scratch));
+  ASSERT(!overflow_dst.is(left));
+  ASSERT(!overflow_dst.is(right));
+  ASSERT(!left.is(right));
+  ASSERT(!scratch.is(left));
+  ASSERT(!scratch.is(right));
+
+  // TODO(kalmard) There must be a way to optimize dst == left and dst == right
+  // cases.
+
+  if (dst.is(left)) {
+    subu(overflow_dst, left, right);
+    xor_(scratch, overflow_dst, left);
+    xor_(dst, left, right);
+    and_(scratch, scratch, dst);
+    mov(dst, overflow_dst);
+    mov(overflow_dst, scratch);
+  } else if (dst.is(right)) {
+    subu(overflow_dst, left, right);
+    xor_(dst, left, right);
+    xor_(scratch, overflow_dst, left);
+    and_(scratch, scratch, dst);
+    mov(dst, overflow_dst);
+    mov(overflow_dst, scratch);
+  } else {
+    subu(dst, left, right);
+    xor_(overflow_dst, dst, left);
+    xor_(scratch, left, right);
+    and_(overflow_dst, scratch, overflow_dst);
+  }
+}
+
+
 void MacroAssembler::CallRuntime(const Runtime::Function* f,
                                  int num_arguments) {
   // All parameters are on the stack. v0 has the return value after call.

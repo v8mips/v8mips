@@ -1766,18 +1766,12 @@ void FullCodeGenerator::EmitInlineSmiBinaryOp(Expression* expr,
       break;
     }
     case Token::ADD:
-      __ Addu(v0, left, right);
-      __ Xor(scratch1, v0, left);
-      __ Xor(scratch2, v0, right);
-      __ And(scratch1, scratch1, scratch2);
-      __ Branch(&stub_call, lt, scratch1, Operand(zero_reg));
+      __ AdduAndCheckForOverflow(v0, left, right, scratch1);
+      __ BranchOnOverflow(&stub_call, scratch1);
       break;
     case Token::SUB:
-      __ Subu(v0, left, right);
-      __ Xor(scratch1, v0, left);
-      __ Xor(scratch2, left, right);
-      __ And(scratch1, scratch1, scratch2);
-      __ Branch(&stub_call, lt, scratch1, Operand(zero_reg));
+      __ SubuAndCheckForOverflow(v0, left, right, scratch1);
+      __ BranchOnOverflow(&stub_call, scratch1);
       break;
     case Token::MUL: {
       __ SmiUntag(scratch1, right);
@@ -3490,14 +3484,8 @@ void FullCodeGenerator::EmitFastAsciiArrayJoin(ZoneList<Expression*>* args) {
   __ lbu(scratch1, FieldMemOperand(scratch1, Map::kInstanceTypeOffset));
   __ JumpIfInstanceTypeIsNotSequentialAscii(scratch1, scratch2, &bailout);
   __ lw(scratch1, FieldMemOperand(string, SeqAsciiString::kLengthOffset));
-  __ Addu(scratch3, string_length, Operand(scratch1));
-  // Check for overflow.
-  __ Xor(scratch4, scratch3, string_length);
-  __ Xor(at, scratch3, scratch1);
-  __ And(scratch4, at, scratch4);
-  // Overflow occurred if result is negative.
-  __ Branch(&bailout, lt, scratch4, Operand(zero_reg), USE_DELAY_SLOT);
-  __ mov(string_length, scratch3);  // In the delay slot.
+  __ AdduAndCheckForOverflow(string_length, string_length, scratch1, scratch3);
+  __ BranchOnOverflow(&bailout, scratch3);
   __ Branch(&loop, lt, element, Operand(elements_end));
 
   // If array_length is 1, return elements[0], a string.
@@ -3532,14 +3520,9 @@ void FullCodeGenerator::EmitFastAsciiArrayJoin(ZoneList<Expression*>* args) {
   __ mflo(scratch2);
   __ And(scratch3, scratch2, Operand(0x80000000));
   __ Branch(&bailout, ne, scratch3, Operand(zero_reg));
-  __ Addu(scratch3, string_length, Operand(scratch2));
-  // Check for overflow.
-  __ Xor(scratch4, scratch3, string_length);
-  __ Xor(at, scratch3, scratch2);
-  __ And(scratch4, at, scratch4);
-  // Overflow occurred if result is negative.
-  __ Branch(&bailout, lt, scratch4, Operand(zero_reg), USE_DELAY_SLOT);
-  __ SmiUntag(string_length, scratch3);  // In the delay slot.
+  __ AdduAndCheckForOverflow(string_length, string_length, scratch2, scratch3);
+  __ BranchOnOverflow(&bailout, scratch3);
+  __ SmiUntag(string_length);
 
   // Get first element in the array to free up the elements register to be used
   // for the result.
@@ -3957,13 +3940,8 @@ void FullCodeGenerator::VisitCountOperation(CountOperation* expr) {
   __ li(a1, Operand(Smi::FromInt(count_value)));
 
   if (ShouldInlineSmiCase(expr->op())) {
-    __ Addu(v0, a0, a1);
-
-    // Check for overflow of a0 + smi:count_value (in a1).
-    __ Xor(t0, v0, a0);
-    __ Xor(t1, v0, a1);
-    __ and_(t0, t0, t1);    // Overflow occurred if result is negative.
-    __ Branch(&stub_call, lt, t0, Operand(zero_reg));  // Do stub on overflow.
+    __ AdduAndCheckForOverflow(v0, a0, a1, t0);
+    __ BranchOnOverflow(&stub_call, t0);  // Do stub on overflow.
 
     // We could eliminate this smi check if we split the code at
     // the first smi check before calling ToNumber.

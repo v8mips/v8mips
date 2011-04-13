@@ -2000,21 +2000,13 @@ void TypeRecordingBinaryOpStub::GenerateSmiSmiOperation(
   Label not_smi_result;
   switch (op_) {
     case Token::ADD:
-      __ Addu(v0, left, right);  // Add optimistically.
-      // Check for overflow.
-      __ Xor(scratch1, v0, left);
-      __ Xor(scratch2, v0, right);
-      __ And(scratch1, scratch1, scratch2);
-      __ Ret(ge, scratch1, Operand(zero_reg));  // Return on NO overflow (ge 0).
+      __ AdduAndCheckForOverflow(v0, left, right, scratch1);
+      __ RetOnNoOverflow(scratch1);
       // No need to revert anything - right and left are intact.
       break;
     case Token::SUB:
-      __ Subu(v0, left, right);  // Subtract optimistically.
-      // Check for overflow.
-      __ Xor(scratch1, v0, left);
-      __ Xor(scratch2, left, right);
-      __ And(scratch1, scratch1, scratch2);
-      __ Ret(ge, scratch1, Operand(zero_reg));  // Return on NO overflow (ge 0).
+      __ SubuAndCheckForOverflow(v0, left, right, scratch1);
+      __ RetOnNoOverflow(scratch1);
       // No need to revert anything - right and left are intact.
       break;
     case Token::MUL: {
