@@ -2308,6 +2308,64 @@ void MacroAssembler::CopyFields(Register dst,
 }
 
 
+void MacroAssembler::CopyBytes(Register src,
+                               Register dst,
+                               Register length,
+                               Register scratch) {
+  Label align_loop, align_loop_1, word_loop, byte_loop, byte_loop_1, done;
+
+  // Align src before copying in word size chunks.
+  bind(&align_loop);
+  Branch(&done, eq, length, Operand(zero_reg));
+  bind(&align_loop_1);
+  And(scratch, src, kPointerSize - 1);
+  Branch(&word_loop, eq, scratch, Operand(zero_reg));
+  lbu(scratch, MemOperand(src));
+  Addu(src, src, 1);
+  sb(scratch, MemOperand(dst));
+  Addu(dst, dst, 1);
+  Subu(length, length, Operand(1));
+  Branch(&byte_loop_1, ne, length, Operand(zero_reg));
+
+  // Copy bytes in word size chunks.
+  bind(&word_loop);
+  if (FLAG_debug_code) {
+    And(scratch, src, kPointerSize - 1);
+    Assert(eq, "Expecting alignment for CopyBytes",
+        scratch, Operand(zero_reg));
+  }
+  Branch(&byte_loop, lt, length, Operand(kPointerSize));
+  lw(scratch, MemOperand(src));
+  Addu(src, src, kPointerSize);
+
+  // TODO(kalmard) check if this can be optimized to use sw in most cases.
+  // Can't use unaligned access - copy byte by byte.
+  sb(scratch, MemOperand(dst, 0));
+  srl(scratch, scratch, 8);
+  sb(scratch, MemOperand(dst, 1));
+  srl(scratch, scratch, 8);
+  sb(scratch, MemOperand(dst, 2));
+  srl(scratch, scratch, 8);
+  sb(scratch, MemOperand(dst, 3));
+  Addu(dst, dst, 4);
+
+  Subu(length, length, Operand(kPointerSize));
+  Branch(&word_loop);
+
+  // Copy the last bytes if any left.
+  bind(&byte_loop);
+  Branch(&done, eq, length, Operand(zero_reg));
+  bind(&byte_loop_1);
+  lbu(scratch, MemOperand(src));
+  Addu(src, src, 1);
+  sb(scratch, MemOperand(dst));
+  Addu(dst, dst, 1);
+  Subu(length, length, Operand(1));
+  Branch(&byte_loop_1, ne, length, Operand(zero_reg));
+  bind(&done);
+}
+
+
 void MacroAssembler::CheckMap(Register obj,
                               Register scratch,
                               Handle<Map> map,
