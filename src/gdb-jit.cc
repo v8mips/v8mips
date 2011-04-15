@@ -1243,7 +1243,7 @@ extern "C" {
     JITCodeEntry* prev_;
     Address symfile_addr_;
     uint64_t symfile_size_;
-  };
+  } __attribute__((packed));
 
   struct JITDescriptor {
     uint32_t version_;
