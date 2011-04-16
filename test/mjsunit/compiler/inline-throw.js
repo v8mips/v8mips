@@ -25,30 +25,45 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#ifndef V8_EXTENSIONS_EXPERIMENTAL_I18N_EXTENSION_H_
-#define V8_EXTENSIONS_EXPERIMENTAL_I18N_EXTENSION_H_
+// Flags: --allow-natives-syntax
 
-#include <v8.h>
+// Test inlined functions contain throw.
+function doThrow() {
+  throw "uha";
+}
 
-namespace v8 {
-namespace internal {
+function f(x) {
+  if (x == 42) throw doThrow();
+  if (x == 43) throw "wow";
+  return x == 0;
+}
 
+function g(x) {
+  return f(x);
+}
 
-class I18NExtension : public v8::Extension {
- public:
-  I18NExtension();
+for (var i = 0; i < 5; i++) g(0);
+%OptimizeFunctionOnNextCall(g);
+assertEquals(true, g(0));
 
-  virtual v8::Handle<v8::FunctionTemplate> GetNativeFunction(
-      v8::Handle<v8::String> name);
+try {
+  g(42);
+} catch(e) {
+  assertEquals("uha", e);
+}
 
-  // V8 code prefers Register, while Chrome and WebKit use get kind of methods.
-  static void Register();
-  static I18NExtension* get();
+// Test inlining in a test context.
+function h(x) {
+  return f(x) ? "yes" : "no";
+}
 
- private:
-  static I18NExtension* extension_;
-};
+for (var i = 0; i < 5; i++) h(0);
+%OptimizeFunctionOnNextCall(h);
+assertEquals("yes", h(0));
 
-} }  // namespace v8::internal
+try {
+  h(43);
+} catch(e) {
+  assertEquals("wow", e);
+}
 
-#endif  // V8_EXTENSIONS_EXPERIMENTAL_I18N_EXTENSION_H_
