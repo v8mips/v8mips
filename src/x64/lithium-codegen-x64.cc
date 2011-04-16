@@ -149,7 +149,7 @@ bool LCodeGen::GeneratePrologue() {
   int slots = StackSlotCount();
   if (slots > 0) {
     if (FLAG_debug_code) {
-      __ movl(rax, Immediate(slots));
+      __ Set(rax, slots);
       __ movq(kScratchRegister, kSlotsZapValue, RelocInfo::NONE);
       Label loop;
       __ bind(&loop);
@@ -1099,7 +1099,7 @@ void LCodeGen::DoSubI(LSubI* instr) {
 
 void LCodeGen::DoConstantI(LConstantI* instr) {
   ASSERT(instr->result()->IsRegister());
-  __ movl(ToRegister(instr->result()), Immediate(instr->value()));
+  __ Set(ToRegister(instr->result()), instr->value());
 }
 
 
@@ -1514,10 +1514,11 @@ void LCodeGen::DoIsNull(LIsNull* instr) {
 
   __ CompareRoot(reg, Heap::kNullValueRootIndex);
   if (instr->is_strict()) {
+    ASSERT(Heap::kTrueValueRootIndex >= 0);
     __ movl(result, Immediate(Heap::kTrueValueRootIndex));
     NearLabel load;
     __ j(equal, &load);
-    __ movl(result, Immediate(Heap::kFalseValueRootIndex));
+    __ Set(result, Heap::kFalseValueRootIndex);
     __ bind(&load);
     __ LoadRootIndexed(result, result, 0);
   } else {
@@ -1976,11 +1977,11 @@ void LCodeGen::DoDeferredLInstanceOfKnownGlobal(LInstanceOfKnownGlobal* instr,
     __ Push(instr->function());
 
     Register temp = ToRegister(instr->TempAt(0));
-    static const int kAdditionalDelta = 13;
+    static const int kAdditionalDelta = 10;
     int delta =
         masm_->SizeOfCodeGeneratedSince(map_check) + kAdditionalDelta;
-    __ movq(temp, Immediate(delta));
-    __ push(temp);
+    ASSERT(delta >= 0);
+    __ push_imm32(delta);
 
     // We are pushing three values on the stack but recording a
     // safepoint with two arguments because stub is going to
@@ -1992,6 +1993,8 @@ void LCodeGen::DoDeferredLInstanceOfKnownGlobal(LInstanceOfKnownGlobal* instr,
                     RECORD_SAFEPOINT_WITH_REGISTERS,
                     2);
     ASSERT(delta == masm_->SizeOfCodeGeneratedSince(map_check));
+    // Move result to a register that survives the end of the
+    // PushSafepointRegisterScope.
     __ movq(kScratchRegister, rax);
   }
   __ testq(kScratchRegister, kScratchRegister);
@@ -2426,14 +2429,14 @@ void LCodeGen::DoArgumentsLength(LArgumentsLength* instr) {
   } else {
     __ cmpq(rbp, ToOperand(instr->InputAt(0)));
   }
-  __ movq(result, Immediate(scope()->num_parameters()));
+  __ movl(result, Immediate(scope()->num_parameters()));
   __ j(equal, &done);
 
   // Arguments adaptor frame present. Get argument length from there.
   __ movq(result, Operand(rbp, StandardFrameConstants::kCallerFPOffset));
-  __ movq(result, Operand(result,
-                          ArgumentsAdaptorFrameConstants::kLengthOffset));
-  __ SmiToInteger32(result, result);
+  __ SmiToInteger32(result,
+                    Operand(result,
+                            ArgumentsAdaptorFrameConstants::kLengthOffset));
 
   // Argument length is in result register.
   __ bind(&done);
@@ -2718,33 +2721,44 @@ void LCodeGen::DoMathRound(LUnaryMathOperation* instr) {
   Register output_reg = ToRegister(instr->result());
   XMMRegister input_reg = ToDoubleRegister(instr->InputAt(0));
 
+  Label done;
   // xmm_scratch = 0.5
   __ movq(kScratchRegister, V8_INT64_C(0x3FE0000000000000), RelocInfo::NONE);
   __ movq(xmm_scratch, kScratchRegister);
-
+  NearLabel below_half;
+  __ ucomisd(xmm_scratch, input_reg);
+  __ j(above, &below_half);  // If input_reg is NaN, this doesn't jump.
   // input = input + 0.5
+  // This addition might give a result that isn't the correct for
+  // rounding, due to loss of precision, but only for a number that's
+  // so big that the conversion below will overflow anyway.
   __ addsd(input_reg, xmm_scratch);
-
-  // We need to return -0 for the input range [-0.5, 0[, otherwise
-  // compute Math.floor(value + 0.5).
-  if (instr->hydrogen()->CheckFlag(HValue::kBailoutOnMinusZero)) {
-    __ ucomisd(input_reg, xmm_scratch);
-    DeoptimizeIf(below_equal, instr->environment());
-  } else {
-    // If we don't need to bailout on -0, we check only bailout
-    // on negative inputs.
-    __ xorpd(xmm_scratch, xmm_scratch);  // Zero the register.
-    __ ucomisd(input_reg, xmm_scratch);
-    DeoptimizeIf(below, instr->environment());
-  }
-
-  // Compute Math.floor(value + 0.5).
+  // Compute Math.floor(input).
   // Use truncating instruction (OK because input is positive).
   __ cvttsd2si(output_reg, input_reg);
-
   // Overflow is signalled with minint.
   __ cmpl(output_reg, Immediate(0x80000000));
   DeoptimizeIf(equal, instr->environment());
+  __ jmp(&done);
+
+  __ bind(&below_half);
+  if (instr->hydrogen()->CheckFlag(HValue::kBailoutOnMinusZero)) {
+    // Bailout if negative (including -0).
+    __ movq(output_reg, input_reg);
+    __ testq(output_reg, output_reg);
+    DeoptimizeIf(negative, instr->environment());
+  } else {
+    // Bailout if below -0.5, otherwise round to (positive) zero, even
+    // if negative.
+    // xmm_scrach = -0.5
+    __ movq(kScratchRegister, V8_INT64_C(0xBFE0000000000000), RelocInfo::NONE);
+    __ movq(xmm_scratch, kScratchRegister);
+    __ ucomisd(input_reg, xmm_scratch);
+    DeoptimizeIf(below, instr->environment());
+  }
+  __ xorl(output_reg, output_reg);
+
+  __ bind(&done);
 }
 
 
@@ -3415,7 +3429,7 @@ void LCodeGen::DoDeferredTaggedToI(LTaggedToI* instr) {
     // conversions.
     __ CompareRoot(input_reg, Heap::kUndefinedValueRootIndex);
     DeoptimizeIf(not_equal, instr->environment());
-    __ movl(input_reg, Immediate(0));
+    __ Set(input_reg, 0);
     __ jmp(&done);
 
     __ bind(&heap_number);

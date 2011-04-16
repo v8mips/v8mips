@@ -1,4 +1,4 @@
-// Copyright 2006-2008 the V8 project authors. All rights reserved.
+// Copyright 2011 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -25,39 +25,26 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#ifndef V8_NATIVES_H_
-#define V8_NATIVES_H_
+// Flags: --allow-natives-syntax
 
-namespace v8 {
-namespace internal {
+// Regression test for load/store operating with wrong number of bits.
+function get(a, index) {
+  return a[index];
+}
 
-typedef bool (*NativeSourceCallback)(Vector<const char> name,
-                                     Vector<const char> source,
-                                     int index);
+var a = new Float32Array(2);
+a[0] = 2.5;
+a[1] = 3.5;
+for (var i = 0; i < 5; i++) get(a, 0);
+%OptimizeFunctionOnNextCall(get);
+assertEquals(2.5, get(a, 0));
+assertEquals(3.5, get(a, 1));
 
-enum NativeType {
-  CORE, D8, I18N
-};
-
-template <NativeType type>
-class NativesCollection {
- public:
-  // Number of built-in scripts.
-  static int GetBuiltinsCount();
-  // Number of debugger implementation scripts.
-  static int GetDebuggerCount();
-
-  // These are used to access built-in scripts.  The debugger implementation
-  // scripts have an index in the interval [0, GetDebuggerCount()).  The
-  // non-debugger scripts have an index in the interval [GetDebuggerCount(),
-  // GetNativesCount()).
-  static int GetIndex(const char* name);
-  static Vector<const char> GetScriptSource(int index);
-  static Vector<const char> GetScriptName(int index);
-};
-
-typedef NativesCollection<CORE> Natives;
-
-} }  // namespace v8::internal
-
-#endif  // V8_NATIVES_H_
+function set(a, index, value) {
+  a[index] = value;
+}
+for (var i = 0; i < 5; i++) set(a, 0, 4.5);
+%OptimizeFunctionOnNextCall(set);
+set(a, 0, 4.5);
+assertEquals(4.5, a[0]);
+assertEquals(3.5, a[1]);
