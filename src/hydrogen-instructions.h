@@ -155,6 +155,7 @@ class LChunkBuilder;
   V(StoreKeyedGeneric)                         \
   V(StoreNamedField)                           \
   V(StoreNamedGeneric)                         \
+  V(StringAdd)                                 \
   V(StringCharCodeAt)                          \
   V(StringCharFromCode)                        \
   V(StringLength)                              \
@@ -1707,6 +1708,16 @@ class HCheckInstanceType: public HUnaryOperation {
   virtual void Verify();
 #endif
 
+  virtual HValue* Canonicalize() {
+    if (!value()->type().IsUninitialized() &&
+        value()->type().IsString() &&
+        first() == FIRST_STRING_TYPE &&
+        last() == LAST_STRING_TYPE) {
+      return NULL;
+    }
+    return this;
+  }
+
   static HCheckInstanceType* NewIsJSObjectOrJSFunction(HValue* value);
 
   InstanceType first() const { return first_; }
@@ -1747,6 +1758,18 @@ class HCheckNonSmi: public HUnaryOperation {
 #ifdef DEBUG
   virtual void Verify();
 #endif
+
+  virtual HValue* Canonicalize() {
+    HType value_type = value()->type();
+    if (!value_type.IsUninitialized() &&
+        (value_type.IsHeapNumber() ||
+         value_type.IsString() ||
+         value_type.IsBoolean() ||
+         value_type.IsNonPrimitive())) {
+      return NULL;
+    }
+    return this;
+  }
 
   DECLARE_CONCRETE_INSTRUCTION(CheckNonSmi, "check_non_smi")
 
@@ -1990,14 +2013,13 @@ class HConstant: public HTemplateInstruction<0> {
 
  private:
   Handle<Object> handle_;
-  HType constant_type_;
 
   // The following two values represent the int32 and the double value of the
   // given constant if there is a lossless conversion between the constant
   // and the specific representation.
-  bool has_int32_value_;
+  bool has_int32_value_ : 1;
+  bool has_double_value_ : 1;
   int32_t int32_value_;
-  bool has_double_value_;
   double double_value_;
 };
 
@@ -3405,6 +3427,29 @@ class HStoreKeyedGeneric: public HTemplateInstruction<4> {
 
  private:
   bool strict_mode_;
+};
+
+
+class HStringAdd: public HBinaryOperation {
+ public:
+  HStringAdd(HValue* left, HValue* right) : HBinaryOperation(left, right) {
+    set_representation(Representation::Tagged());
+    SetFlag(kUseGVN);
+    SetFlag(kDependsOnMaps);
+  }
+
+  virtual Representation RequiredInputRepresentation(int index) const {
+    return Representation::Tagged();
+  }
+
+  virtual HType CalculateInferredType() {
+    return HType::String();
+  }
+
+  DECLARE_CONCRETE_INSTRUCTION(StringAdd, "string_add")
+
+ protected:
+  virtual bool DataEquals(HValue* other) { return true; }
 };
 
 

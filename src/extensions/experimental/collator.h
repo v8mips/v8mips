@@ -1,4 +1,4 @@
-// Copyright 2010 the V8 project authors. All rights reserved.
+// Copyright 2011 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -25,42 +25,45 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#include "v8.h"
+#ifndef V8_EXTENSIONS_EXPERIMENTAL_COLLATOR_H
+#define V8_EXTENSIONS_EXPERIMENTAL_COLLATOR_H_
 
-#include "data-flow.h"
-#include "scopes.h"
+#include <v8.h>
+
+#include "unicode/uversion.h"
+
+namespace U_ICU_NAMESPACE {
+class Collator;
+class UnicodeString;
+}
 
 namespace v8 {
 namespace internal {
 
-#ifdef DEBUG
-void BitVector::Print() {
-  bool first = true;
-  PrintF("{");
-  for (int i = 0; i < length(); i++) {
-    if (Contains(i)) {
-      if (!first) PrintF(",");
-      first = false;
-      PrintF("%d", i);
-    }
-  }
-  PrintF("}");
-}
-#endif
+class Collator {
+ public:
+  static v8::Handle<v8::Value> JSCollator(const v8::Arguments& args);
 
+  // Helper methods for various bindings.
 
-void BitVector::Iterator::Advance() {
-  current_++;
-  uint32_t val = current_value_;
-  while (val == 0) {
-    current_index_++;
-    if (Done()) return;
-    val = target_->data_[current_index_];
-    current_ = current_index_ << 5;
-  }
-  val = SkipZeroBytes(val);
-  val = SkipZeroBits(val);
-  current_value_ = val >> 1;
-}
+  // Unpacks collator object from corresponding JavaScript object.
+  static icu::Collator* UnpackCollator(v8::Handle<v8::Object> obj);
+
+  // Release memory we allocated for the Collator once the JS object that
+  // holds the pointer gets garbage collected.
+  static void DeleteCollator(v8::Persistent<v8::Value> object, void* param);
+
+  // Compare two strings and returns -1, 0 and 1 depending on
+  // whether string1 is smaller than, equal to or larger than string2.
+  static v8::Handle<v8::Value> CollatorCompare(const v8::Arguments& args);
+
+ private:
+  Collator() {}
+
+  static v8::Persistent<v8::FunctionTemplate> collator_template_;
+};
 
 } }  // namespace v8::internal
+
+#endif  // V8_EXTENSIONS_EXPERIMENTAL_COLLATOR
+

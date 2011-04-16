@@ -71,22 +71,21 @@ void LOsrEntry::MarkSpilledDoubleRegister(int allocation_index,
 
 #ifdef DEBUG
 void LInstruction::VerifyCall() {
-  // Call instructions can use only fixed registers as
-  // temporaries and outputs because all registers
-  // are blocked by the calling convention.
-  // Inputs must use a fixed register.
+  // Call instructions can use only fixed registers as temporaries and
+  // outputs because all registers are blocked by the calling convention.
+  // Inputs operands must use a fixed register or use-at-start policy or
+  // a non-register policy.
   ASSERT(Output() == NULL ||
          LUnallocated::cast(Output())->HasFixedPolicy() ||
          !LUnallocated::cast(Output())->HasRegisterPolicy());
   for (UseIterator it(this); it.HasNext(); it.Advance()) {
-    LOperand* operand = it.Next();
-    ASSERT(LUnallocated::cast(operand)->HasFixedPolicy() ||
-           !LUnallocated::cast(operand)->HasRegisterPolicy());
+    LUnallocated* operand = LUnallocated::cast(it.Next());
+    ASSERT(operand->HasFixedPolicy() ||
+           operand->IsUsedAtStart());
   }
   for (TempIterator it(this); it.HasNext(); it.Advance()) {
-    LOperand* operand = it.Next();
-    ASSERT(LUnallocated::cast(operand)->HasFixedPolicy() ||
-           !LUnallocated::cast(operand)->HasRegisterPolicy());
+    LUnallocated* operand = LUnallocated::cast(it.Next());
+    ASSERT(operand->HasFixedPolicy() ||!operand->HasRegisterPolicy());
   }
 }
 #endif
@@ -1941,6 +1940,13 @@ LInstruction* LChunkBuilder::DoStoreNamedGeneric(HStoreNamedGeneric* instr) {
 }
 
 
+LInstruction* LChunkBuilder::DoStringAdd(HStringAdd* instr) {
+  LOperand* left = UseOrConstantAtStart(instr->left());
+  LOperand* right = UseOrConstantAtStart(instr->right());
+  return MarkAsCall(DefineFixed(new LStringAdd(left, right), rax), instr);
+}
+
+
 LInstruction* LChunkBuilder::DoStringCharCodeAt(HStringCharCodeAt* instr) {
   LOperand* string = UseRegister(instr->string());
   LOperand* index = UseRegisterOrConstant(instr->index());
@@ -1984,7 +1990,8 @@ LInstruction* LChunkBuilder::DoFunctionLiteral(HFunctionLiteral* instr) {
 
 LInstruction* LChunkBuilder::DoDeleteProperty(HDeleteProperty* instr) {
   LDeleteProperty* result =
-      new LDeleteProperty(Use(instr->object()), UseOrConstant(instr->key()));
+      new LDeleteProperty(UseAtStart(instr->object()),
+                          UseOrConstantAtStart(instr->key()));
   return MarkAsCall(DefineFixed(result, rax), instr);
 }
 
