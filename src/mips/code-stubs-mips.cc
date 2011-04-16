@@ -1949,6 +1949,9 @@ void TypeRecordingBinaryOpStub::Generate(MacroAssembler* masm) {
     case TRBinaryOpIC::ODDBALL:
       GenerateOddballStub(masm);
       break;
+    case TRBinaryOpIC::BOTH_STRING:
+      GenerateBothStringStub(masm);
+      break;
     case TRBinaryOpIC::STRING:
       GenerateStringStub(masm);
       break;
@@ -2415,6 +2418,36 @@ void TypeRecordingBinaryOpStub::GenerateStringStub(MacroAssembler* masm) {
   // Try to add arguments as strings, otherwise, transition to the generic
   // TRBinaryOpIC type.
   GenerateAddStrings(masm);
+  GenerateTypeTransition(masm);
+}
+
+
+void TypeRecordingBinaryOpStub::GenerateBothStringStub(MacroAssembler* masm) {
+  Label call_runtime;
+  ASSERT(operands_type_ == TRBinaryOpIC::BOTH_STRING);
+  ASSERT(op_ == Token::ADD);
+  // If both arguments are strings, call the string add stub.
+  // Otherwise, do a transition.
+
+  // Registers containing left and right operands respectively.
+  Register left = a1;
+  Register right = a0;
+
+  // Test if left operand is a string.
+  __ JumpIfSmi(left, &call_runtime);
+  __ GetObjectType(left, a2, a2);
+  __ Branch(&call_runtime, ge, a2, Operand(FIRST_NONSTRING_TYPE));
+
+  // Test if right operand is a string.
+  __ JumpIfSmi(right, &call_runtime);
+  __ GetObjectType(right, a2, a2);
+  __ Branch(&call_runtime, ge, a2, Operand(FIRST_NONSTRING_TYPE));
+
+  StringAddStub string_add_stub(NO_STRING_CHECK_IN_STUB);
+  GenerateRegisterArgsPush(masm);
+  __ TailCallStub(&string_add_stub);
+
+  __ bind(&call_runtime);
   GenerateTypeTransition(masm);
 }
 
