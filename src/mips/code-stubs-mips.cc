@@ -1090,7 +1090,7 @@ static void EmitIdenticalObjectComparison(MacroAssembler* masm,
   if (cc != eq || !never_nan_nan) {
     __ li(exp_mask_reg, Operand(HeapNumber::kExponentMask));
 
-    // Test for NaN. Sadly, we can't just compare to FACTORY->nan_value(),
+    // Test for NaN. Sadly, we can't just compare to factory->nan_value(),
     // so we do the second best thing - test it ourselves.
     // They are both equal and they are not both Smis so both of them are not
     // Smis. If it's not a heap number, then return equal.
