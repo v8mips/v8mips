@@ -1238,12 +1238,21 @@ extern "C" {
     JIT_UNREGISTER_FN
   } JITAction;
 
+#ifdef V8_TARGET_ARCH_MIPS
   struct JITCodeEntry {
     JITCodeEntry* next_;
     JITCodeEntry* prev_;
     Address symfile_addr_;
     uint64_t symfile_size_;
   } __attribute__((packed));
+#else
+  struct JITCodeEntry {
+    JITCodeEntry* next_;
+    JITCodeEntry* prev_;
+    Address symfile_addr_;
+    uint64_t symfile_size_;
+  };
+#endif
 
   struct JITDescriptor {
     uint32_t version_;
