@@ -3580,7 +3580,7 @@ void FullCodeGenerator::EmitFastAsciiArrayJoin(ZoneList<Expression*>* args) {
   __ Addu(element, element, kPointerSize);
   __ lw(string_length, FieldMemOperand(string, String::kLengthOffset));
   __ SmiUntag(string_length);
-  __ Addu(string, string, Operand(SeqAsciiString::kHeaderSize - kHeapObjectTag));
+  __ Addu(string, string, SeqAsciiString::kHeaderSize - kHeapObjectTag);
   __ CopyBytes(string, result_pos, string_length, scratch1);
   // End while (element < elements_end).
   __ Branch(&empty_separator_loop, lt, element, Operand(elements_end));
