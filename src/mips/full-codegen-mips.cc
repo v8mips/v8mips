@@ -786,7 +786,7 @@ void FullCodeGenerator::EmitDeclaration(Variable* variable,
       Handle<Code> ic = is_strict_mode()
           ? isolate()->builtins()->KeyedStoreIC_Initialize_Strict()
           : isolate()->builtins()->KeyedStoreIC_Initialize();
-      EmitCallIC(ic, RelocInfo::CODE_TARGET, AstNode::kNoNumber);
+      EmitCallIC(ic, RelocInfo::CODE_TARGET);
       // Value in v0 is ignored (declarations are statements).
     }
   }
@@ -1161,7 +1161,7 @@ void FullCodeGenerator::EmitLoadGlobalSlotCheckExtensions(
       ? RelocInfo::CODE_TARGET
       : RelocInfo::CODE_TARGET_CONTEXT;
   Handle<Code> ic = isolate()->builtins()->LoadIC_Initialize();
-  EmitCallIC(ic, mode, AstNode::kNoNumber);
+  EmitCallIC(ic, mode);
 }
 
 
@@ -1242,7 +1242,7 @@ void FullCodeGenerator::EmitDynamicLoadFromSlotFastCase(
           __ li(a0, Operand(key_literal->handle()));
           Handle<Code> ic =
               isolate()->builtins()->KeyedLoadIC_Initialize();
-          EmitCallIC(ic, RelocInfo::CODE_TARGET, AstNode::kNoNumber);
+          EmitCallIC(ic, RelocInfo::CODE_TARGET);
           __ Branch(done);
         }
       }
@@ -1265,7 +1265,7 @@ void FullCodeGenerator::EmitVariableLoad(Variable* var) {
     __ lw(a0, GlobalObjectOperand());
     __ li(a2, Operand(var->name()));
     Handle<Code> ic = isolate()->builtins()->LoadIC_Initialize();
-    EmitCallIC(ic, RelocInfo::CODE_TARGET_CONTEXT, AstNode::kNoNumber);
+    EmitCallIC(ic, RelocInfo::CODE_TARGET_CONTEXT);
     context()->Plug(v0);
 
   } else if (slot != NULL && slot->type() == Slot::LOOKUP) {
@@ -1324,7 +1324,7 @@ void FullCodeGenerator::EmitVariableLoad(Variable* var) {
 
     // Call keyed load IC. It has arguments key and receiver in a0 and a1.
     Handle<Code> ic = isolate()->builtins()->KeyedLoadIC_Initialize();
-    EmitCallIC(ic, RelocInfo::CODE_TARGET, AstNode::kNoNumber);
+    EmitCallIC(ic, RelocInfo::CODE_TARGET);
     context()->Plug(v0);
   }
 }
@@ -1695,7 +1695,7 @@ void FullCodeGenerator::EmitNamedPropertyLoad(Property* prop) {
   // Call load IC. It has arguments receiver and property name a0 and a2.
   Handle<Code> ic = isolate()->builtins()->LoadIC_Initialize();
   if (prop->is_synthetic()) {
-    EmitCallIC(ic, RelocInfo::CODE_TARGET, AstNode::kNoNumber);
+    EmitCallIC(ic, RelocInfo::CODE_TARGET);
   } else {
     EmitCallIC(ic, RelocInfo::CODE_TARGET_WITH_ID, prop->id());
   }
@@ -1708,7 +1708,7 @@ void FullCodeGenerator::EmitKeyedPropertyLoad(Property* prop) {
   // Call keyed load IC. It has arguments key and receiver in a0 and a1.
   Handle<Code> ic = isolate()->builtins()->KeyedLoadIC_Initialize();
   if (prop->is_synthetic()) {
-    EmitCallIC(ic, RelocInfo::CODE_TARGET, AstNode::kNoNumber);
+    EmitCallIC(ic, RelocInfo::CODE_TARGET);
   } else {
     EmitCallIC(ic, RelocInfo::CODE_TARGET_WITH_ID, prop->id());
   }
@@ -1860,7 +1860,7 @@ void FullCodeGenerator::EmitAssignment(Expression* expr, int bailout_ast_id) {
       Handle<Code> ic = is_strict_mode()
           ? isolate()->builtins()->StoreIC_Initialize_Strict()
           : isolate()->builtins()->StoreIC_Initialize();
-      EmitCallIC(ic, RelocInfo::CODE_TARGET, AstNode::kNoNumber);
+      EmitCallIC(ic, RelocInfo::CODE_TARGET);
       break;
     }
     case KEYED_PROPERTY: {
@@ -1883,7 +1883,7 @@ void FullCodeGenerator::EmitAssignment(Expression* expr, int bailout_ast_id) {
       Handle<Code> ic = is_strict_mode()
         ? isolate()->builtins()->KeyedStoreIC_Initialize_Strict()
         : isolate()->builtins()->KeyedStoreIC_Initialize();
-      EmitCallIC(ic, RelocInfo::CODE_TARGET, AstNode::kNoNumber);
+      EmitCallIC(ic, RelocInfo::CODE_TARGET);
       break;
     }
   }
@@ -1910,7 +1910,7 @@ void FullCodeGenerator::EmitVariableAssignment(Variable* var,
     Handle<Code> ic = is_strict_mode()
         ? isolate()->builtins()->StoreIC_Initialize_Strict()
         : isolate()->builtins()->StoreIC_Initialize();
-    EmitCallIC(ic, RelocInfo::CODE_TARGET_CONTEXT, AstNode::kNoNumber);
+    EmitCallIC(ic, RelocInfo::CODE_TARGET_CONTEXT);
 
   } else if (op == Token::INIT_CONST) {
     // Like var declarations, const declarations are hoisted to function
@@ -2356,7 +2356,7 @@ void FullCodeGenerator::VisitCall(Call* expr) {
         SetSourcePosition(prop->position());
 
         Handle<Code> ic = isolate()->builtins()->KeyedLoadIC_Initialize();
-        EmitCallIC(ic, RelocInfo::CODE_TARGET, AstNode::kNoNumber);
+        EmitCallIC(ic, RelocInfo::CODE_TARGET);
         __ lw(a1, GlobalObjectOperand());
         __ lw(a1, FieldMemOperand(a1, GlobalObject::kGlobalReceiverOffset));
         __ Push(v0, a1);  // Function, receiver.
@@ -4037,7 +4037,7 @@ void FullCodeGenerator::VisitForTypeofValue(Expression* expr) {
     Handle<Code> ic = isolate()->builtins()->LoadIC_Initialize();
     // Use a regular load, not a contextual load, to avoid a reference
     // error.
-    EmitCallIC(ic, RelocInfo::CODE_TARGET, AstNode::kNoNumber);
+    EmitCallIC(ic, RelocInfo::CODE_TARGET);
     PrepareForBailout(expr, TOS_REG);
     context()->Plug(v0);
   } else if (proxy != NULL &&
