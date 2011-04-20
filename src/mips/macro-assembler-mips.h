@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2010 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -184,14 +184,6 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
 #undef DECLARE_RELOC_PROTOTYPE
 #undef DECLARE_JUMP_CALL_PROTOTYPES
 #undef DECLARE_BRANCH_PROTOTYPES
-
-  void CallWithAstId(Handle<Code> code,
-                     RelocInfo::Mode rmode,
-                     unsigned ast_id,
-                     Condition cond = cc_always,
-                     Register r1 = zero_reg,
-                     const Operand& r2 = Operand(zero_reg),
-                     BranchDelaySlot bd = PROTECT);
 
   // Emit code to discard a non-negative number of pointer-sized elements
   // from the stack, clobbering only the sp register.
@@ -1032,23 +1024,15 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
                            Register scratch,
                            int num_arguments);
 
-  void Jump(intptr_t target,
-            RelocInfo::Mode rmode,
+  void Jump(intptr_t target, RelocInfo::Mode rmode,
             BranchDelaySlot bd = PROTECT);
-  void Jump(intptr_t target,
-            RelocInfo::Mode rmode,
-            Condition cond = cc_always,
-            Register r1 = zero_reg,
-            const Operand& r2 = Operand(zero_reg),
+  void Jump(intptr_t target, RelocInfo::Mode rmode, Condition cond = cc_always,
+            Register r1 = zero_reg, const Operand& r2 = Operand(zero_reg),
             BranchDelaySlot bd = PROTECT);
-  void Call(intptr_t target,
-            RelocInfo::Mode rmode,
+  void Call(intptr_t target, RelocInfo::Mode rmode,
             BranchDelaySlot bd = PROTECT);
-  void Call(intptr_t target,
-            RelocInfo::Mode rmode,
-            Condition cond = cc_always,
-            Register r1 = zero_reg,
-            const Operand& r2 = Operand(zero_reg),
+  void Call(intptr_t target, RelocInfo::Mode rmode, Condition cond = cc_always,
+            Register r1 = zero_reg, const Operand& r2 = Operand(zero_reg),
             BranchDelaySlot bd = PROTECT);
 
   // Helper functions for generating invokes.
