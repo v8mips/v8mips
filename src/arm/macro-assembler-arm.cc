@@ -83,7 +83,7 @@ void MacroAssembler::Jump(Register target, Condition cond) {
 void MacroAssembler::Jump(intptr_t target, RelocInfo::Mode rmode,
                           Condition cond) {
 #if USE_BX
-  mov(ip, Operand(target, rmode), LeaveCC, cond);
+  mov(ip, Operand(target, rmode));
   bx(ip, cond);
 #else
   mov(pc, Operand(target, rmode), LeaveCC, cond);
@@ -148,9 +148,8 @@ int MacroAssembler::CallSize(
 }
 
 
-void MacroAssembler::Call(intptr_t target,
-                          RelocInfo::Mode rmode,
-                          Condition cond) {
+void MacroAssembler::Call(
+    intptr_t target, RelocInfo::Mode rmode, Condition cond) {
   // Block constant pool for the call instruction sequence.
   BlockConstPoolScope block_const_pool(this);
 #ifdef DEBUG
@@ -168,7 +167,7 @@ void MacroAssembler::Call(intptr_t target,
   // we have to do it explicitly.
   positions_recorder()->WriteRecordedPositions();
 
-  mov(ip, Operand(target, rmode), LeaveCC, cond);
+  mov(ip, Operand(target, rmode));
   blx(ip, cond);
 
   ASSERT(kCallTargetAddressOffset == 2 * kInstrSize);
@@ -215,31 +214,8 @@ int MacroAssembler::CallSize(
 }
 
 
-void MacroAssembler::CallWithAstId(Handle<Code> code,
-                                   RelocInfo::Mode rmode,
-                                   unsigned ast_id,
-                                   Condition cond) {
-#ifdef DEBUG
-  int pre_position = pc_offset();
-#endif
-
-  ASSERT(rmode == RelocInfo::CODE_TARGET_WITH_ID);
-  ASSERT(ast_id != kNoASTId);
-  ASSERT(ast_id_for_reloc_info_ == kNoASTId);
-  ast_id_for_reloc_info_ = ast_id;
-  // 'code' is always generated ARM code, never THUMB code
-  Call(reinterpret_cast<intptr_t>(code.location()), rmode, cond);
-
-#ifdef DEBUG
-  int post_position = pc_offset();
-  CHECK_EQ(pre_position + CallSize(code, rmode, cond), post_position);
-#endif
-}
-
-
-void MacroAssembler::Call(Handle<Code> code,
-                          RelocInfo::Mode rmode,
-                          Condition cond) {
+void MacroAssembler::Call(
+    Handle<Code> code, RelocInfo::Mode rmode, Condition cond) {
 #ifdef DEBUG
   int pre_position = pc_offset();
 #endif
@@ -2887,7 +2863,7 @@ void MacroAssembler::CallCFunctionHelper(Register function,
   Call(function);
   int stack_passed_arguments = (num_arguments <= kRegisterPassedArguments) ?
                                0 : num_arguments - kRegisterPassedArguments;
-  if (OS::ActivationFrameAlignment() > kPointerSize) {
+  if (ActivationFrameAlignment() > kPointerSize) {
     ldr(sp, MemOperand(sp, stack_passed_arguments * kPointerSize));
   } else {
     add(sp, sp, Operand(stack_passed_arguments * sizeof(kPointerSize)));
