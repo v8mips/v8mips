@@ -2392,7 +2392,7 @@ MaybeObject* CallStubCompiler::CompileCallInterceptor(JSObject* object,
   LookupPostInterceptor(holder, name, &lookup);
 
   // Get the receiver from the stack.
-  __ lw(a0, MemOperand(sp, argc * kPointerSize));
+  __ lw(a1, MemOperand(sp, argc * kPointerSize));
 
   CallInterceptorCompiler compiler(this, arguments(), a2);
   compiler.Compile(masm(),
