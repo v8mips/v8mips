@@ -138,8 +138,6 @@ class FPURegisters {
 // On MIPS all instructions are 32 bits.
 typedef int32_t Instr;
 
-typedef unsigned char byte_;
-
 // Special Software Interrupt codes when used in the presence of the MIPS
 // simulator.
 enum SoftwareInterruptCodes {
@@ -692,7 +690,7 @@ class Instruction {
   // reference to an instruction is to convert a pointer. There is no way
   // to allocate or create instances of class Instruction.
   // Use the At(pc) function to create references to Instruction.
-  static Instruction* At(byte_* pc) {
+  static Instruction* At(byte* pc) {
     return reinterpret_cast<Instruction*>(pc);
   }
 
