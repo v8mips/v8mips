@@ -47,14 +47,16 @@ namespace internal {
 void Builtins::Generate_Adaptor(MacroAssembler* masm,
                                 CFunctionId id,
                                 BuiltinExtraArguments extra_args) {
-  // a0                 : number of arguments excluding receiver
-  // a1                 : called function (only guaranteed when
-  //                      extra_args requires it)
-  // cp                 : context
-  // sp[0]              : last argument
-  // ...
-  // sp[4 * (argc - 1)] : first argument
-  // sp[4 * agrc]       : receiver
+  // ----------- S t a t e -------------
+  //  -- a0                 : number of arguments excluding receiver
+  //  -- a1                 : called function (only guaranteed when
+  //  --                      extra_args requires it)
+  //  -- cp                 : context
+  //  -- sp[0]              : last argument
+  //  -- ...
+  //  -- sp[4 * (argc - 1)] : first argument
+  //  -- sp[4 * agrc]       : receiver
+  // -----------------------------------
 
   // Insert extra arguments.
   int num_extra_args = 0;
@@ -613,10 +615,12 @@ void Builtins::Generate_StringConstructCode(MacroAssembler* masm) {
 
 
 void Builtins::Generate_JSConstructCall(MacroAssembler* masm) {
-  // a0     : number of arguments
-  // a1     : constructor function
-  // ra     : return address
-  // sp[...]: constructor arguments
+  // ----------- S t a t e -------------
+  //  -- a0     : number of arguments
+  //  -- a1     : constructor function
+  //  -- ra     : return address
+  //  -- sp[...]: constructor arguments
+  // -----------------------------------
 
   Label non_function_call;
   // Check that the function is not a smi.
@@ -654,10 +658,12 @@ static void Generate_JSConstructStubHelper(MacroAssembler* masm,
 
   Isolate* isolate = masm->isolate();
 
-  // a0     : number of arguments
-  // a1     : constructor function
-  // ra     : return address
-  // sp[...]: constructor arguments
+  // ----------- S t a t e -------------
+  //  -- a0     : number of arguments
+  //  -- a1     : constructor function
+  //  -- ra     : return address
+  //  -- sp[...]: constructor arguments
+  // -----------------------------------
 
   // Enter a construct frame.
   __ EnterConstructFrame();
@@ -711,7 +717,7 @@ static void Generate_JSConstructStubHelper(MacroAssembler* masm,
 
       __ Push(a1, a2);
 
-      __ push(a1);  // constructor
+      __ push(a1);  // Constructor.
       // The call will replace the stub, so the countdown is only done once.
       __ CallRuntime(Runtime::kFinalizeInstanceSize, 1);
 
@@ -721,9 +727,8 @@ static void Generate_JSConstructStubHelper(MacroAssembler* masm,
       __ bind(&allocate);
     }
 
-
     // Now allocate the JSObject on the heap.
-    // constructor function
+    // a1: constructor function
     // a2: initial map
     __ lbu(a3, FieldMemOperand(a2, Map::kInstanceSizeOffset));
     __ AllocateInNewSpace(a3, t4, t5, t6, &rt_call, SIZE_IN_WORDS);
@@ -852,14 +857,14 @@ static void Generate_JSConstructStubHelper(MacroAssembler* masm,
     }
 
     // Store the initialized FixedArray into the properties field of
-    // the JSObject
+    // the JSObject.
     // a1: constructor function
     // t4: JSObject
     // t5: FixedArray (not tagged)
     __ Addu(t5, t5, Operand(kHeapObjectTag));  // Add the heap tag.
     __ sw(t5, FieldMemOperand(t4, JSObject::kPropertiesOffset));
 
-    // Continue with JSObject being successfully allocated
+    // Continue with JSObject being successfully allocated.
     // a1: constructor function
     // a4: JSObject
     __ jmp(&allocated);
@@ -1012,12 +1017,13 @@ static void Generate_JSEntryTrampolineHelper(MacroAssembler* masm,
                                              bool is_construct) {
   // Called from JSEntryStub::GenerateBody
 
-  // Registers:
-  // a0: code entry
-  // a1: function
-  // a2: reveiver_pointer
-  // a3: argc
-  // s0: argv
+  // ----------- S t a t e -------------
+  //  -- a0: code entry
+  //  -- a1: function
+  //  -- a2: reveiver_pointer
+  //  -- a3: argc
+  //  -- s0: argv
+  // -----------------------------------
 
   // Clear the context before we push it when entering the JS frame.
   __ mov(cp, zero_reg);
@@ -1099,7 +1105,7 @@ void Builtins::Generate_LazyCompile(MacroAssembler* masm) {
 
   // Push the function on the stack as the argument to the runtime function.
   __ Push(a1);
-  // Call the runtime function
+  // Call the runtime function.
   __ CallRuntime(Runtime::kLazyCompile, 1);
   // Calculate the entry point.
   __ addiu(t9, v0, Code::kHeaderSize - kHeapObjectTag);
@@ -1460,7 +1466,9 @@ static void EnterArgumentsAdaptorFrame(MacroAssembler* masm) {
 
 
 static void LeaveArgumentsAdaptorFrame(MacroAssembler* masm) {
-  // v0 : result being passed through
+  // ----------- S t a t e -------------
+  //  -- v0 : result being passed through
+  // -----------------------------------
   // Get the number of arguments passed (as a smi), tear down the frame and
   // then tear down the parameters.
   __ lw(a1, MemOperand(fp, -3 * kPointerSize));
@@ -1475,10 +1483,12 @@ static void LeaveArgumentsAdaptorFrame(MacroAssembler* masm) {
 
 void Builtins::Generate_ArgumentsAdaptorTrampoline(MacroAssembler* masm) {
   // State setup as expected by MacroAssembler::InvokePrologue.
-  // a0: actual arguments count
-  // a1: function (passed through to callee)
-  // a2: expected arguments count
-  // a3: callee code entry
+  // ----------- S t a t e -------------
+  //  -- a0: actual arguments count
+  //  -- a1: function (passed through to callee)
+  //  -- a2: expected arguments count
+  //  -- a3: callee code entry
+  // -----------------------------------
 
   Label invoke, dont_adapt_arguments;
 
@@ -1521,7 +1531,7 @@ void Builtins::Generate_ArgumentsAdaptorTrampoline(MacroAssembler* masm) {
     __ jmp(&invoke);
   }
 
-  {  // Too few parameters: Actual < expected
+  {  // Too few parameters: Actual < expected.
     __ bind(&too_few);
     EnterArgumentsAdaptorFrame(masm);
 
