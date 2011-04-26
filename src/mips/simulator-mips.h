@@ -211,7 +211,7 @@ class Simulator {
   // V8 generally calls into generated JS code with 5 parameters and into
   // generated RegExp code with 7 parameters. This is a convenience function,
   // which sets up the simulator state and grabs the result on return.
-  int32_t Call(byte_* entry, int argument_count, ...);
+  int32_t Call(byte* entry, int argument_count, ...);
 
   // Push an address onto the JS stack.
   uintptr_t PushAddress(uintptr_t address);

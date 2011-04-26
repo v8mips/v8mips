@@ -361,7 +361,7 @@ void MipsDebugger::Debug() {
       // use a reasonably large buffer
       v8::internal::EmbeddedVector<char, 256> buffer;
       dasm.InstructionDecode(buffer,
-                             reinterpret_cast<byte_*>(sim_->get_pc()));
+                             reinterpret_cast<byte*>(sim_->get_pc()));
       PrintF("  0x%08x  %s\n", sim_->get_pc(), buffer.start());
       last_pc = sim_->get_pc();
     }
@@ -507,16 +507,16 @@ void MipsDebugger::Debug() {
         // use a reasonably large buffer
         v8::internal::EmbeddedVector<char, 256> buffer;
 
-        byte_* cur = NULL;
-        byte_* end = NULL;
+        byte* cur = NULL;
+        byte* end = NULL;
 
         if (argc == 1) {
-          cur = reinterpret_cast<byte_*>(sim_->get_pc());
+          cur = reinterpret_cast<byte*>(sim_->get_pc());
           end = cur + (10 * Instruction::kInstrSize);
         } else if (argc == 2) {
           int32_t value;
           if (GetValue(arg1, &value)) {
-            cur = reinterpret_cast<byte_*>(value);
+            cur = reinterpret_cast<byte*>(value);
             // no length parameter passed, assume 10 instructions
             end = cur + (10 * Instruction::kInstrSize);
           }
@@ -524,7 +524,7 @@ void MipsDebugger::Debug() {
           int32_t value1;
           int32_t value2;
           if (GetValue(arg1, &value1) && GetValue(arg2, &value2)) {
-            cur = reinterpret_cast<byte_*>(value1);
+            cur = reinterpret_cast<byte*>(value1);
             end = cur + (value2 * Instruction::kInstrSize);
           }
         }
@@ -570,16 +570,16 @@ void MipsDebugger::Debug() {
         // use a reasonably large buffer
         v8::internal::EmbeddedVector<char, 256> buffer;
 
-        byte_* cur = NULL;
-        byte_* end = NULL;
+        byte* cur = NULL;
+        byte* end = NULL;
 
         if (argc == 1) {
-          cur = reinterpret_cast<byte_*>(sim_->get_pc());
+          cur = reinterpret_cast<byte*>(sim_->get_pc());
           end = cur + (10 * Instruction::kInstrSize);
         } else if (argc == 2) {
           int32_t value;
           if (GetValue(arg1, &value)) {
-            cur = reinterpret_cast<byte_*>(value);
+            cur = reinterpret_cast<byte*>(value);
             // no length parameter passed, assume 10 instructions
             end = cur + (10 * Instruction::kInstrSize);
           }
@@ -587,7 +587,7 @@ void MipsDebugger::Debug() {
           int32_t value1;
           int32_t value2;
           if (GetValue(arg1, &value1) && GetValue(arg2, &value2)) {
-            cur = reinterpret_cast<byte_*>(value1);
+            cur = reinterpret_cast<byte*>(value1);
             end = cur + (value2 * Instruction::kInstrSize);
           }
         }
@@ -2265,7 +2265,7 @@ void Simulator::InstructionDecode(Instruction* instr) {
     disasm::Disassembler dasm(converter);
     // use a reasonably large buffer
     v8::internal::EmbeddedVector<char, 256> buffer;
-    dasm.InstructionDecode(buffer, reinterpret_cast<byte_*>(instr));
+    dasm.InstructionDecode(buffer, reinterpret_cast<byte*>(instr));
     PrintF("  0x%08x  %s\n", reinterpret_cast<intptr_t>(instr),
         buffer.start());
   }
@@ -2322,7 +2322,7 @@ void Simulator::Execute() {
 }
 
 
-int32_t Simulator::Call(byte_* entry, int argument_count, ...) {
+int32_t Simulator::Call(byte* entry, int argument_count, ...) {
   va_list parameters;
   va_start(parameters, argument_count);
   // Setup arguments

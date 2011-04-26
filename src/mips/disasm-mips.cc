@@ -33,7 +33,7 @@
 //
 //   NameConverter converter;
 //   Disassembler d(converter);
-//   for (byte_* pc = begin; pc < end;) {
+//   for (byte* pc = begin; pc < end;) {
 //     v8::internal::EmbeddedVector<char, 256> buffer;
 //     byte* prev_pc = pc;
 //     pc += d.InstructionDecode(buffer, pc);
@@ -85,7 +85,7 @@ class Decoder {
 
   // Writes one disassembled instruction into 'buffer' (0-terminated).
   // Returns the length of the disassembled machine instruction in bytes.
-  int InstructionDecode(byte_* instruction);
+  int InstructionDecode(byte* instruction);
 
  private:
   // Bottleneck functions to print into the out_buffer.
@@ -909,7 +909,7 @@ void Decoder::DecodeTypeJump(Instruction* instr) {
 
 
 // Disassemble the instruction at *instr_ptr into the output buffer.
-int Decoder::InstructionDecode(byte_* instr_ptr) {
+int Decoder::InstructionDecode(byte* instr_ptr) {
   Instruction* instr = Instruction::At(instr_ptr);
   // Print raw instruction bytes.
   out_buffer_pos_ += OS::SNPrintF(out_buffer_ + out_buffer_pos_,
@@ -944,15 +944,13 @@ int Decoder::InstructionDecode(byte_* instr_ptr) {
 
 namespace disasm {
 
-using v8::internal::byte_;
-
-const char* NameConverter::NameOfAddress(byte_* addr) const {
+const char* NameConverter::NameOfAddress(byte* addr) const {
   v8::internal::OS::SNPrintF(tmp_buffer_, "%p", addr);
   return tmp_buffer_.start();
 }
 
 
-const char* NameConverter::NameOfConstant(byte_* addr) const {
+const char* NameConverter::NameOfConstant(byte* addr) const {
   return NameOfAddress(addr);
 }
 
@@ -973,7 +971,7 @@ const char* NameConverter::NameOfByteCPURegister(int reg) const {
 }
 
 
-const char* NameConverter::NameInCode(byte_* addr) const {
+const char* NameConverter::NameInCode(byte* addr) const {
   // The default name converter is called for unknown code. So we will not try
   // to access any memory.
   return "";
@@ -990,25 +988,25 @@ Disassembler::~Disassembler() {}
 
 
 int Disassembler::InstructionDecode(v8::internal::Vector<char> buffer,
-                                    byte_* instruction) {
+                                    byte* instruction) {
   v8::internal::Decoder d(converter_, buffer);
   return d.InstructionDecode(instruction);
 }
 
 
 // The MIPS assembler does not currently use constant pools.
-int Disassembler::ConstantPoolSizeAt(byte_* instruction) {
+int Disassembler::ConstantPoolSizeAt(byte* instruction) {
   return -1;
 }
 
 
-void Disassembler::Disassemble(FILE* f, byte_* begin, byte_* end) {
+void Disassembler::Disassemble(FILE* f, byte* begin, byte* end) {
   NameConverter converter;
   Disassembler d(converter);
-  for (byte_* pc = begin; pc < end;) {
+  for (byte* pc = begin; pc < end;) {
     v8::internal::EmbeddedVector<char, 128> buffer;
     buffer[0] = '\0';
-    byte_* prev_pc = pc;
+    byte* prev_pc = pc;
     pc += d.InstructionDecode(buffer, pc);
     fprintf(f, "%p    %08x      %s\n",
             prev_pc, *reinterpret_cast<int32_t*>(prev_pc), buffer.start());
