@@ -53,17 +53,14 @@ void Builtins::Generate_Adaptor(MacroAssembler* masm,
   // cp                 : context
   // sp[0]              : last argument
   // ...
-  // sp[4 * (argc - 1) + builtins arguments slots] : first argument
-  // sp[4 * agc + builtins arguments slots]       : receiver
+  // sp[4 * (argc - 1)] : first argument
+  // sp[4 * agrc]       : receiver
 
   // Insert extra arguments.
   int num_extra_args = 0;
   if (extra_args == NEEDS_CALLED_FUNCTION) {
-    // We need to push a1 after the original arguments and before the arguments
-    // slots.
     num_extra_args = 1;
-    __ Addu(sp, sp, -4);
-    __ sw(a1, MemOperand(sp, StandardFrameConstants::kBArgsSlotsSize));
+    __ push(a1);
   } else {
     ASSERT(extra_args == NO_EXTRA_ARGUMENTS);
   }
@@ -619,7 +616,7 @@ void Builtins::Generate_JSConstructCall(MacroAssembler* masm) {
   // a0     : number of arguments
   // a1     : constructor function
   // ra     : return address
-  // sp + args slots [...]: constructor arguments
+  // sp[...]: constructor arguments
 
   Label non_function_call;
   // Check that the function is not a smi.
@@ -660,7 +657,7 @@ static void Generate_JSConstructStubHelper(MacroAssembler* masm,
   // a0     : number of arguments
   // a1     : constructor function
   // ra     : return address
-  // sp + args slots [...]: constructor arguments
+  // sp[...]: constructor arguments
 
   // Enter a construct frame.
   __ EnterConstructFrame();
@@ -904,10 +901,9 @@ static void Generate_JSConstructStubHelper(MacroAssembler* masm,
   __ lw(a3, MemOperand(sp, 4 * kPointerSize));
 
   // Setup pointer to last argument.
-  __ Addu(a2, fp, Operand(StandardFrameConstants::kCallerSPOffset
-                          + StandardFrameConstants::kBArgsSlotsSize));
+  __ Addu(a2, fp, Operand(StandardFrameConstants::kCallerSPOffset));
 
-  // Setup number of arguments for function call below
+  // Setup number of arguments for function call below.
   __ srl(a0, a3, kSmiTagSize);
 
   // Copy arguments and receiver to the expression stack.
@@ -1017,19 +1013,11 @@ static void Generate_JSEntryTrampolineHelper(MacroAssembler* masm,
   // Called from JSEntryStub::GenerateBody
 
   // Registers:
-  // a0: entry_address
+  // a0: code entry
   // a1: function
   // a2: reveiver_pointer
   // a3: argc
   // s0: argv
-  //
-  // Stack:
-  // arguments slots
-  // handler frame
-  // entry frame
-  // callee saved registers + ra
-  // 4 args slots
-  // args
 
   // Clear the context before we push it when entering the JS frame.
   __ mov(cp, zero_reg);
@@ -1046,7 +1034,7 @@ static void Generate_JSEntryTrampolineHelper(MacroAssembler* masm,
   __ li(s6, Operand(roots_address));
 
   // Push the function and the receiver onto the stack.
-  __ MultiPushReversed(a1.bit() | a2.bit());
+  __ Push(a1, a2);
 
   // Copy arguments to the stack in a loop.
   // a3: argc
@@ -1064,25 +1052,6 @@ static void Generate_JSEntryTrampolineHelper(MacroAssembler* masm,
   __ Push(t0);  // Push parameter.
   __ bind(&entry);
   __ Branch(&loop, ne, s0, Operand(t2));
-
-  // Registers:
-  // a0: entry_address
-  // a1: function
-  // a2: reveiver_pointer
-  // a3: argc
-  // s0: argv
-  // s6: roots_address
-  //
-  // Stack:
-  // arguments
-  // receiver
-  // function
-  // arguments slots
-  // handler frame
-  // entry frame
-  // callee saved registers + ra
-  // 4 args slots
-  // args
 
   // Initialize all JavaScript callee-saved registers, since they will be seen
   // by the garbage collector as part of handlers.
@@ -1190,8 +1159,6 @@ void Builtins::Generate_OnStackReplacement(MacroAssembler* masm) {
 
 
 void Builtins::Generate_FunctionCall(MacroAssembler* masm) {
-  // CAREFUL! : Implemented without Builtins args slots.
-
   // 1. Make sure we have at least one argument.
   // a0: actual number of arguments
   { Label done;
@@ -1230,7 +1197,7 @@ void Builtins::Generate_FunctionCall(MacroAssembler* masm) {
     __ Branch(&shift_arguments, ne, t0, Operand(zero_reg));
 
     // Compute the receiver in non-strict mode.
-    // Load first argument in a2. a2 = -kPointerSize(sp + n_args << 2)
+    // Load first argument in a2. a2 = -kPointerSize(sp + n_args << 2).
     __ sll(at, a0, kPointerSizeLog2);
     __ addu(a2, sp, at);
     __ lw(a2, MemOperand(a2, -kPointerSize));
@@ -1360,9 +1327,9 @@ void Builtins::Generate_FunctionApply(MacroAssembler* masm) {
 
   __ EnterInternalFrame();
 
-  __ lw(a0, MemOperand(fp, kFunctionOffset));  // get the function
+  __ lw(a0, MemOperand(fp, kFunctionOffset));  // Get the function.
   __ push(a0);
-  __ lw(a0, MemOperand(fp, kArgsOffset));  // get the args array
+  __ lw(a0, MemOperand(fp, kArgsOffset));  // Get the args array.
   __ push(a0);
   // Returns (in v0) number of arguments to copy to stack as Smi.
   __ InvokeBuiltin(Builtins::APPLY_PREPARE, CALL_JS);
@@ -1501,9 +1468,8 @@ static void LeaveArgumentsAdaptorFrame(MacroAssembler* masm) {
   __ MultiPop(fp.bit() | ra.bit());
   __ sll(t0, a1, kPointerSizeLog2 - kSmiTagSize);
   __ Addu(sp, sp, t0);
-  // Adjust for the receiver and arguments slots.
-  __ Addu(sp, sp,
-      Operand(kPointerSize + StandardFrameConstants::kBArgsSlotsSize));
+  // Adjust for the receiver.
+  __ Addu(sp, sp, Operand(kPointerSize));
 }
 
 
@@ -1532,7 +1498,6 @@ void Builtins::Generate_ArgumentsAdaptorTrampoline(MacroAssembler* masm) {
 
     // Calculate copy start address into a0 and copy end address into a2.
     __ sll(a0, a0, kPointerSizeLog2 - kSmiTagSize);
-    __ Addu(a0, a0, StandardFrameConstants::kBArgsSlotsSize);
     __ Addu(a0, fp, a0);
     // Adjust for return address and receiver.
     __ Addu(a0, a0, Operand(2 * kPointerSize));
@@ -1562,19 +1527,17 @@ void Builtins::Generate_ArgumentsAdaptorTrampoline(MacroAssembler* masm) {
 
     // TODO(MIPS): Optimize these loops.
 
-    // Calculate copy start address into a0.
-    // Copy end address is not in fp, as we have allocated arguments slots.
+    // Calculate copy start address into a0 and copy end address is fp.
     // a0: actual number of arguments as a smi
     // a1: function
     // a2: expected number of arguments
     // a3: code entry to call
     __ sll(a0, a0, kPointerSizeLog2 - kSmiTagSize);
-    __ Addu(a0, a0, StandardFrameConstants::kBArgsSlotsSize);
     __ Addu(a0, fp, a0);
     // Adjust for return address and receiver.
     __ Addu(a0, a0, Operand(2 * kPointerSize));
     // Compute copy end address. Also adjust for return address.
-    __ Addu(t1, fp, StandardFrameConstants::kBArgsSlotsSize + kPointerSize);
+    __ Addu(t1, fp, kPointerSize);
 
     // Copy the arguments (including the receiver) to the new stack frame.
     // a0: copy start address
@@ -1584,10 +1547,9 @@ void Builtins::Generate_ArgumentsAdaptorTrampoline(MacroAssembler* masm) {
     // t1: copy end address
     Label copy;
     __ bind(&copy);
-    // Adjust load for return address and receiver.
-    __ lw(t0, MemOperand(a0));
+    __ lw(t0, MemOperand(a0));  // Adjusted above for return addr and receiver.
     __ Push(t0);
-    __ Addu(a0, a0, -kPointerSize);
+    __ Subu(a0, a0, kPointerSize);
     __ Branch(&copy, ne, a0, Operand(t1));
 
     // Fill the remaining expected arguments with undefined.
@@ -1619,7 +1581,6 @@ void Builtins::Generate_ArgumentsAdaptorTrampoline(MacroAssembler* masm) {
   // Don't adapt arguments.
   // -------------------------------------------
   __ bind(&dont_adapt_arguments);
-  __ Addu(sp,  sp,  StandardFrameConstants::kBArgsSlotsSize);
   __ Jump(a3);
 }
 
