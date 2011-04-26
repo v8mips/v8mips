@@ -650,16 +650,16 @@ class CallInterceptorCompiler BASE_EMBEDDED {
         arguments_(arguments),
         name_(name) {}
 
-  void Compile(MacroAssembler* masm,
-               JSObject* object,
-               JSObject* holder,
-               String* name,
-               LookupResult* lookup,
-               Register receiver,
-               Register scratch1,
-               Register scratch2,
-               Register scratch3,
-               Label* miss) {
+  MaybeObject* Compile(MacroAssembler* masm,
+                       JSObject* object,
+                       JSObject* holder,
+                       String* name,
+                       LookupResult* lookup,
+                       Register receiver,
+                       Register scratch1,
+                       Register scratch2,
+                       Register scratch3,
+                       Label* miss) {
     ASSERT(holder->HasNamedInterceptor());
     ASSERT(!holder->GetNamedInterceptor()->getter()->IsUndefined());
 
@@ -669,17 +669,17 @@ class CallInterceptorCompiler BASE_EMBEDDED {
     CallOptimization optimization(lookup);
 
     if (optimization.is_constant_call()) {
-      CompileCacheable(masm,
-                       object,
-                       receiver,
-                       scratch1,
-                       scratch2,
-                       scratch3,
-                       holder,
-                       lookup,
-                       name,
-                       optimization,
-                       miss);
+      return CompileCacheable(masm,
+                              object,
+                              receiver,
+                              scratch1,
+                              scratch2,
+                              scratch3,
+                              holder,
+                              lookup,
+                              name,
+                              optimization,
+                              miss);
     } else {
       CompileRegular(masm,
                      object,
@@ -690,21 +690,22 @@ class CallInterceptorCompiler BASE_EMBEDDED {
                      name,
                      holder,
                      miss);
+      return masm->isolate()->heap()->undefined_value();
     }
   }
 
  private:
-  void CompileCacheable(MacroAssembler* masm,
-                       JSObject* object,
-                       Register receiver,
-                       Register scratch1,
-                       Register scratch2,
-                       Register scratch3,
-                       JSObject* interceptor_holder,
-                       LookupResult* lookup,
-                       String* name,
-                       const CallOptimization& optimization,
-                       Label* miss_label) {
+  MaybeObject* CompileCacheable(MacroAssembler* masm,
+                                JSObject* object,
+                                Register receiver,
+                                Register scratch1,
+                                Register scratch2,
+                                Register scratch3,
+                                JSObject* interceptor_holder,
+                                LookupResult* lookup,
+                                String* name,
+                                const CallOptimization& optimization,
+                                Label* miss_label) {
     ASSERT(optimization.is_constant_call());
     ASSERT(!lookup->holder()->IsGlobalObject());
 
@@ -714,17 +715,17 @@ class CallInterceptorCompiler BASE_EMBEDDED {
     int depth2 = kInvalidProtoDepth;
     bool can_do_fast_api_call = false;
     if (optimization.is_simple_api_call() &&
-       !lookup->holder()->IsGlobalObject()) {
-     depth1 =
-         optimization.GetPrototypeDepthOfExpectedType(object,
+        !lookup->holder()->IsGlobalObject()) {
+      depth1 =
+          optimization.GetPrototypeDepthOfExpectedType(object,
                                                       interceptor_holder);
-     if (depth1 == kInvalidProtoDepth) {
-       depth2 =
-           optimization.GetPrototypeDepthOfExpectedType(interceptor_holder,
+      if (depth1 == kInvalidProtoDepth) {
+        depth2 =
+            optimization.GetPrototypeDepthOfExpectedType(interceptor_holder,
                                                         lookup->holder());
-     }
-     can_do_fast_api_call = (depth1 != kInvalidProtoDepth) ||
-                            (depth2 != kInvalidProtoDepth);
+      }
+      can_do_fast_api_call = (depth1 != kInvalidProtoDepth) ||
+                             (depth2 != kInvalidProtoDepth);
     }
 
     __ IncrementCounter(counters->call_const_interceptor(), 1,
@@ -788,6 +789,8 @@ class CallInterceptorCompiler BASE_EMBEDDED {
     if (can_do_fast_api_call) {
       FreeSpaceForFastApiCall(masm);
     }
+
+    return masm->isolate()->heap()->undefined_value();
   }
 
   void CompileRegular(MacroAssembler* masm,
@@ -848,7 +851,7 @@ class CallInterceptorCompiler BASE_EMBEDDED {
 
     // If interceptor returns no-result sentinel, call the constant function.
     __ LoadRoot(scratch, Heap::kNoInterceptorResultSentinelRootIndex);
-    __ Branch(interceptor_succeeded, ne, a0, Operand(scratch));
+    __ Branch(interceptor_succeeded, ne, v0, Operand(scratch));
   }
 
   StubCompiler* stub_compiler_;
@@ -2431,16 +2434,19 @@ MaybeObject* CallStubCompiler::CompileCallInterceptor(JSObject* object,
   __ lw(a1, MemOperand(sp, argc * kPointerSize));
 
   CallInterceptorCompiler compiler(this, arguments(), a2);
-  compiler.Compile(masm(),
-                   object,
-                   holder,
-                   name,
-                   &lookup,
-                   a1,
-                   a3,
-                   t0,
-                   a0,
-                   &miss);
+  MaybeObject* result = compiler.Compile(masm(),
+                                         object,
+                                         holder,
+                                         name,
+                                         &lookup,
+                                         a1,
+                                         a3,
+                                         t0,
+                                         a0,
+                                         &miss);
+   if (result->IsFailure()) {
+       return result;
+   }
 
   // Move returned value, the function to call, to a1.
   __ mov(a1, v0);
