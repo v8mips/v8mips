@@ -242,7 +242,7 @@ void Decoder::PrintUImm16(Instruction* instr) {
 
 // Print 16-bit signed immediate value.
 void Decoder::PrintSImm16(Instruction* instr) {
-  int32_t imm = ((instr->Imm16Value())<<16)>>16;
+  int32_t imm = ((instr->Imm16Value()) << 16) >> 16;
   out_buffer_pos_ += OS::SNPrintF(out_buffer_ + out_buffer_pos_, "%d", imm);
 }
 

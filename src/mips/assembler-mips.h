@@ -67,12 +67,12 @@ namespace internal {
 
 
 // -----------------------------------------------------------------------------
-// Implementation of Register and FPURegister
+// Implementation of Register and FPURegister.
 
 // Core register.
 struct Register {
   static const int kNumRegisters = v8::internal::kNumRegisters;
-  static const int kNumAllocatableRegisters = 14;  // v0 through t7
+  static const int kNumAllocatableRegisters = 14;  // v0 through t7.
 
   static int ToAllocationIndex(Register reg) {
     return reg.code() - 2;  // zero_reg and 'at' are skipped.
@@ -315,7 +315,7 @@ class Operand BASE_EMBEDDED {
 
  private:
   Register rm_;
-  int32_t imm32_;  // Valid if rm_ == no_reg
+  int32_t imm32_;  // Valid if rm_ == no_reg.
   RelocInfo::Mode rmode_;
 
   friend class Assembler;
@@ -476,10 +476,10 @@ class Assembler : public AssemblerBase {
   //
   // Note: The same Label can be used for forward and backward branches
   // but it may be bound only once.
-  void bind(Label* L);  // binds an unbound label L to the current code position
+  void bind(Label* L);  // Binds an unbound label L to current code position.
 
-  // Returns the branch offset to the given label from the current code position
-  // Links the label to the current position if it is still unbound
+  // Returns the branch offset to the given label from the current code
+  // position. Links the label to the current position if it is still unbound.
   // Manages the jump elimination optimization if the second parameter is true.
   int32_t branch_offset(Label* L, bool jump_elimination_allowed);
   int32_t shifted_branch_offset(Label* L, bool jump_elimination_allowed) {
@@ -578,14 +578,14 @@ class Assembler : public AssemblerBase {
     FIRST_IC_MARKER = PROPERTY_ACCESS_INLINED
   };
 
-  // type == 0 is the default non-marking type.
+  // Type == 0 is the default non-marking type.
   void nop(unsigned int type = 0) {
     ASSERT(type < 32);
     sll(zero_reg, zero_reg, type, true);
   }
 
 
-  //------- Branch and jump  instructions --------
+  // --------Branch-and-jump-instructions----------
   // We don't use likely variant of instructions.
   void b(int16_t offset);
   void b(Label* L) { b(branch_offset(L, false)>>2); }
@@ -608,7 +608,7 @@ class Assembler : public AssemblerBase {
   }
 
   // Never use the int16_t b(l)cond version with a branch offset
-  // instead of using the Label* version. See Twiki for infos.
+  // instead of using the Label* version.
 
   // Jump targets must be in the current 256 MB-aligned region. ie 28 bits.
   void j(int32_t target);

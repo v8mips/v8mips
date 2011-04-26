@@ -1195,7 +1195,7 @@ static void EmitSmiNonsmiComparison(MacroAssembler* masm,
   __ GetObjectType(lhs, t4, t4);
   if (strict) {
     // If lhs was not a number and rhs was a Smi then strict equality cannot
-    // succeed. Return non-equal (lhs is already not zero)
+    // succeed. Return non-equal (lhs is already not zero).
     __ mov(v0, lhs);
     __ Ret(ne, t4, Operand(HEAP_NUMBER_TYPE));
   } else {
@@ -1275,13 +1275,13 @@ void EmitNanCheck(MacroAssembler* masm, Condition cc) {
   bool exp_first = (HeapNumber::kExponentOffset == HeapNumber::kValueOffset);
   if (CpuFeatures::IsSupported(FPU)) {
     CpuFeatures::Scope scope(FPU);
-    // Lhs and rhs are already loaded to f12 and f14 register pairs
+    // Lhs and rhs are already loaded to f12 and f14 register pairs.
     __ mfc1(t0, f14);  // f14 has LS 32 bits of rhs.
     __ mfc1(t1, f15);  // f15 has MS 32 bits of rhs.
     __ mfc1(t2, f12);  // f12 has LS 32 bits of lhs.
     __ mfc1(t3, f13);  // f13 has MS 32 bits of lhs.
   } else {
-    // Lhs and rhs are already loaded to GP registers
+    // Lhs and rhs are already loaded to GP registers.
     __ mov(t0, a0);  // a0 has LS 32 bits of rhs.
     __ mov(t1, a1);  // a1 has MS 32 bits of rhs.
     __ mov(t2, a2);  // a2 has LS 32 bits of lhs.
@@ -1343,13 +1343,13 @@ static void EmitTwoNonNanDoubleComparison(MacroAssembler* masm, Condition cc) {
     bool exp_first = (HeapNumber::kExponentOffset == HeapNumber::kValueOffset);
     if (CpuFeatures::IsSupported(FPU)) {
     CpuFeatures::Scope scope(FPU);
-      // Lhs and rhs are already loaded to f12 and f14 register pairs
+      // Lhs and rhs are already loaded to f12 and f14 register pairs.
       __ mfc1(t0, f14);  // f14 has LS 32 bits of rhs.
       __ mfc1(t1, f15);  // f15 has MS 32 bits of rhs.
       __ mfc1(t2, f12);  // f12 has LS 32 bits of lhs.
       __ mfc1(t3, f13);  // f13 has MS 32 bits of lhs.
     } else {
-      // Lhs and rhs are already loaded to GP registers
+      // Lhs and rhs are already loaded to GP registers.
       __ mov(t0, a0);  // a0 has LS 32 bits of rhs.
       __ mov(t1, a1);  // a1 has MS 32 bits of rhs.
       __ mov(t2, a2);  // a2 has LS 32 bits of lhs.
@@ -1365,7 +1365,7 @@ static void EmitTwoNonNanDoubleComparison(MacroAssembler* masm, Condition cc) {
 
     __ subu(v0, rhs_exponent, lhs_exponent);
     __ Branch(&return_result_equal, eq, v0, Operand(zero_reg));
-    // 0, -0 case
+    // 0, -0 case.
     __ sll(rhs_exponent, rhs_exponent, kSmiTagSize);
     __ sll(lhs_exponent, lhs_exponent, kSmiTagSize);
     __ or_(t4, rhs_exponent, lhs_exponent);
@@ -1705,7 +1705,7 @@ void CompareStub::Generate(MacroAssembler* masm) {
 
   __ bind(&both_loaded_as_doubles);
   // f12, f14 are the double representations of the left hand side
-  // and the right hand side if we have FPU. Otherwise a2, a3 are representing
+  // and the right hand side if we have FPU. Otherwise a2, a3 represent
   // left hand side and a0, a1 represent right hand side.
 
   Isolate* isolate = masm->isolate();
@@ -1716,7 +1716,7 @@ void CompareStub::Generate(MacroAssembler* masm) {
     __ li(t1, Operand(GREATER));
     __ li(t2, Operand(EQUAL));
 
-    // Check if either rhs or lhs is NaN
+    // Check if either rhs or lhs is NaN.
     __ c(UN, D, f12, f14);
     __ bc1t(&nan);
     __ nop();
@@ -1811,11 +1811,11 @@ void CompareStub::Generate(MacroAssembler* masm) {
     native = strict_ ? Builtins::STRICT_EQUALS : Builtins::EQUALS;
   } else {
     native = Builtins::COMPARE;
-    int ncr;  // NaN compare result
+    int ncr;  // NaN compare result.
     if (cc_ == lt || cc_ == le) {
       ncr = GREATER;
     } else {
-      ASSERT(cc_ == gt || cc_ == ge);  // remaining cases
+      ASSERT(cc_ == gt || cc_ == ge);  // Remaining cases.
       ncr = LESS;
     }
     __ li(a0, Operand(Smi::FromInt(ncr)));
@@ -1879,7 +1879,7 @@ void ToBooleanStub::Generate(MacroAssembler* masm) {
   // condition is satisfied.
   __ Ret(gt, scratch0, Operand(FIRST_JS_OBJECT_TYPE));
 
-  // Check for string
+  // Check for string.
   __ lw(scratch0, FieldMemOperand(tos_, HeapObject::kMapOffset));
   __ lbu(scratch0, FieldMemOperand(scratch0, Map::kInstanceTypeOffset));
   // "tos_" is a register and contains a non-zero value.
@@ -1887,13 +1887,13 @@ void ToBooleanStub::Generate(MacroAssembler* masm) {
   // condition is satisfied.
   __ Ret(gt, scratch0, Operand(FIRST_NONSTRING_TYPE));
 
-  // String value => false iff empty, i.e., length is zero
+  // String value => false iff empty, i.e., length is zero.
   __ lw(tos_, FieldMemOperand(tos_, String::kLengthOffset));
   // If length is zero, "tos_" contains zero ==> false.
   // If length is not zero, "tos_" contains a non-zero value ==> true.
   __ Ret();
 
-  // Return 0 in "tos_" for false .
+  // Return 0 in "tos_" for false.
   __ bind(&false_result);
   __ mov(tos_, zero_reg);
   __ Ret();
@@ -2016,7 +2016,7 @@ void TypeRecordingBinaryOpStub::GenerateSmiSmiOperation(
       // Remove tag from one of the operands. This way the multiplication result
       // will be a smi if it fits the smi range.
       __ SmiUntag(scratch1, right);
-      // Do multiplication
+      // Do multiplication.
       // lo = lower 32 bits of scratch1 * left.
       // hi = higher 32 bits of scratch1 * left.
       __ Mult(left, scratch1);
@@ -2197,8 +2197,8 @@ void TypeRecordingBinaryOpStub::GenerateFPOperation(MacroAssembler* masm,
       // Calculate the result.
       if (destination == FloatingPointHelper::kFPURegisters) {
         // Using FPU registers:
-        // f12: Left value
-        // f14: Right value
+        // f12: Left value.
+        // f14: Right value.
         CpuFeatures::Scope scope(FPU);
         switch (op_) {
         case Token::ADD:
@@ -2993,8 +2993,8 @@ void TranscendentalCacheStub::Generate(MacroAssembler* masm) {
       __ mfc1(a3, f5);
     }
     __ bind(&loaded);
-    // a2 = low 32 bits of double value
-    // a3 = high 32 bits of double value
+    // a2 = low 32 bits of double value.
+    // a3 = high 32 bits of double value.
     // Compute hash (the shifts are arithmetic):
     //   h = (low ^ high); h ^= h >> 16; h ^= h >> 8; h = h & (cacheSize - 1);
     __ Xor(a1, a2, a3);
@@ -3191,8 +3191,9 @@ void GenericUnaryOpStub::Generate(MacroAssembler* masm) {
       // to make sure that we switch between 0 and -0.
       if (negative_zero_ == kStrictNegativeZero) {
         // If we have to check for zero, then we can check for the max negative
-        // smi while we are at it. (This is kind of expensive on mips, and
-        // it seems that we should be able to find a more optimal test.)
+        // smi while we are at it.
+        // TODO(mips): This is kind of expensive on mips, and we should be able
+        // to find a more optimal test.
         __ And(at, a0, Operand(~0x80000000));  // Emit 3 instr: lui, ori, and.
         __ Branch(&slow, eq, at, Operand(zero_reg));
         __ subu(v0, zero_reg, a0);
@@ -3259,7 +3260,7 @@ void GenericUnaryOpStub::Generate(MacroAssembler* masm) {
     // fits in a smi.
     Label try_float;
     __ nor(a1, a1, zero_reg);
-    // check that the *signed* result fits in a smi
+    // Check that the *signed* result fits in a smi.
     __ Addu(a2, a1, Operand(0x40000000));
     __ Branch(&try_float, lt, a2, Operand(zero_reg));
 
@@ -3472,13 +3473,13 @@ void CEntryStub::GenerateThrowTOS(MacroAssembler* masm) {
   const int kOffsetRaInstructions = 5;
   Label find_ra;
 
-  if (FLAG_debug_code) {  // TODO(plind): use emit_debug_code() when moved to masm.
+  if (FLAG_debug_code) {  // TODO(plind): use emit_debug_code().
     // Compute ra for the Jump(t9).
     const int kOffsetRaBytes = kOffsetRaInstructions * Assembler::kInstrSize;
 
     // This branch-and-link sequence is needed to get the current PC on mips,
     // saved to the ra register. Then adjusted for instruction count.
-    masm->bal(&find_ra);
+    masm->bal(&find_ra);  // bal exposes branch-delay.
     masm->nop();  // Branch delay slot nop.
     masm->bind(&find_ra);
     masm->addiu(ra, ra, kOffsetRaBytes);
@@ -3489,7 +3490,7 @@ void CEntryStub::GenerateThrowTOS(MacroAssembler* masm) {
   masm->pop(t9);  // 2 instructions: lw, add sp.
   masm->Jump(t9);  // 2 instructions: jr, nop (in delay slot).
 
-  if (FLAG_debug_code) {  // TODO(plind): use emit_debug_code() when moved to masm.
+  if (FLAG_debug_code) {  // TODO(plind): use emit_debug_code().
     // Make sure that the expected number of instructions were generated.
     ASSERT_EQ(kOffsetRaInstructions,
               masm->InstructionsGeneratedSince(&find_ra));
@@ -3565,13 +3566,13 @@ void CEntryStub::GenerateThrowUncatchable(MacroAssembler* masm,
   const int kOffsetRaInstructions = 5;
   Label find_ra;
 
-  if (FLAG_debug_code) {  // TODO(plind): use emit_debug_code() when moved to masm.
+  if (FLAG_debug_code) {  // TODO(plind): use emit_debug_code().
     // Compute ra for the Jump(t9).
     const int kOffsetRaBytes = kOffsetRaInstructions * Assembler::kInstrSize;
 
     // This branch-and-link sequence is needed to get the current PC on mips,
     // saved to the ra register. Then adjusted for instruction count.
-    masm->bal(&find_ra);
+    masm->bal(&find_ra);  // bal exposes branch-delay slot.
     masm->nop();  // Branch delay slot nop.
     masm->bind(&find_ra);
     masm->addiu(ra, ra, kOffsetRaBytes);
@@ -3581,7 +3582,7 @@ void CEntryStub::GenerateThrowUncatchable(MacroAssembler* masm,
   masm->pop(t9);  // 2 instructions: lw, add sp.
   masm->Jump(t9);  // 2 instructions: jr, nop (in delay slot).
 
-  if (FLAG_debug_code) {  // TODO(plind): use emit_debug_code() when moved to masm.
+  if (FLAG_debug_code) {  // TODO(plind): use emit_debug_code().
     // Make sure that the expected number of instructions were generated.
     ASSERT_EQ(kOffsetRaInstructions,
               masm->InstructionsGeneratedSince(&find_ra));
@@ -3659,7 +3660,7 @@ void CEntryStub::GenerateCore(MacroAssembler* masm,
   // Use masm-> here instead of the double-underscore macro since extra
   // coverage code can interfere with the proper calculation of ra.
   Label find_ra;
-  masm->bal(&find_ra);
+  masm->bal(&find_ra);  // bal exposes branch delay slot.
   masm->nop();  // Branch delay slot nop.
   masm->bind(&find_ra);
 
@@ -3859,7 +3860,7 @@ void JSEntryStub::GenerateBody(MacroAssembler* masm, bool is_construct) {
   #endif
 
   // Call a faked try-block that does the invoke.
-  __ bal(&invoke);
+  __ bal(&invoke);  // bal exposes branch delay slot.
   __ nop();   // Branch delay slot nop.
 
   // Caught exception: Store result (exception) in the pending
@@ -3870,7 +3871,7 @@ void JSEntryStub::GenerateBody(MacroAssembler* masm, bool is_construct) {
                                       masm->isolate())));
   __ sw(v0, MemOperand(t0));  // We come back from 'invoke'. result is in v0.
   __ li(v0, Operand(reinterpret_cast<int32_t>(Failure::Exception())));
-  __ b(&exit);
+  __ b(&exit);  // b exposes branch delay slot.
   __ nop();   // Branch delay slot nop.
 
   // Invoke: Link this frame into the handler chain.
@@ -4798,8 +4799,7 @@ int CompareStub::MinorKey() {
 }
 
 
-// StringCharCodeAtGenerator
-
+// StringCharCodeAtGenerator.
 void StringCharCodeAtGenerator::GenerateFast(MacroAssembler* masm) {
   Label flat_string;
   Label ascii_string;
@@ -5205,7 +5205,7 @@ void StringHelper::GenerateCopyCharactersLong(MacroAssembler* masm,
 
   // Copy bytes from src to dest until dest hits limit.
   __ bind(&byte_loop);
-  // Test if dest has already reached the limit
+  // Test if dest has already reached the limit.
   __ Branch(&done, ge, dest, Operand(limit));
   __ lbu(scratch1, MemOperand(src));
   __ addiu(src, src, 1);
@@ -5241,7 +5241,7 @@ void StringHelper::GenerateTwoCharacterSymbolTableProbe(MacroAssembler* masm,
 
   // If check failed combine both characters into single halfword.
   // This is required by the contract of the method: code at the
-  // not_found branch expects this combination in c1 register
+  // not_found branch expects this combination in c1 register.
   Label tmp;
   __ sll(scratch1, c2, kBitsPerByte);
   __ Branch(&tmp, Ugreater, scratch, Operand(static_cast<int>('9' - '0')));
@@ -5267,7 +5267,7 @@ void StringHelper::GenerateTwoCharacterSymbolTableProbe(MacroAssembler* masm,
   // chars: two character string, char 1 in byte 0 and char 2 in byte 1.
   // hash:  hash of two character string.
 
-  // Load symbol table
+  // Load symbol table.
   // Load address of first element of the symbol table.
   Register symbol_table = c2;
   __ LoadRoot(symbol_table, Heap::kSymbolTableRootIndex);
@@ -5286,7 +5286,7 @@ void StringHelper::GenerateTwoCharacterSymbolTableProbe(MacroAssembler* masm,
   __ Addu(first_symbol_table_element, symbol_table,
          Operand(SymbolTable::kElementsStartOffset - kHeapObjectTag));
 
-  // Registers
+  // Registers.
   // chars: two character string, char 1 in byte 0 and char 2 in byte 1.
   // hash:  hash of two character string
   // mask:  capacity mask
@@ -5301,8 +5301,6 @@ void StringHelper::GenerateTwoCharacterSymbolTableProbe(MacroAssembler* masm,
   Label next_probe[kProbes];
   Register candidate = scratch5;  // Scratch register contains candidate.
   for (int i = 0; i < kProbes; i++) {
-    // Register candidate = scratch5;  // Scratch register contains candidate.
-
     // Calculate entry in symbol table.
     if (i > 0) {
       __ Addu(candidate, hash, Operand(SymbolTable::GetProbeOffset(i)));
@@ -5442,7 +5440,7 @@ void SubStringStub::Generate(MacroAssembler* masm) {
   // a3: from index (untagged smi)
   // t5: to index (untagged smi)
 
-  __ Branch(&sub_string_runtime, lt, a3, Operand(zero_reg));  // From < 0
+  __ Branch(&sub_string_runtime, lt, a3, Operand(zero_reg));  // From < 0.
 
   __ subu(a2, t5, a3);
   __ Branch(&sub_string_runtime, gt, a3, Operand(t5));  // Fail if from > to.
@@ -5636,7 +5634,7 @@ void StringCompareStub::GenerateCompareFlatAsciiStrings(MacroAssembler* masm,
   __ subu(length_delta, scratch1, scratch2);
   Register min_length = scratch1;
   STATIC_ASSERT(kSmiTag == 0);
-  // set min_length to the smaller of the two string lengths.
+  // Set min_length to the smaller of the two string lengths.
   __ slt(scratch3, scratch1, scratch2);
   __ movz(min_length, scratch2, scratch3);
 
@@ -5701,8 +5699,8 @@ void StringCompareStub::Generate(MacroAssembler* masm) {
   // Stack frame on entry.
   //  sp[0]: right string
   //  sp[4]: left string
-  __ lw(a1, MemOperand(sp, 1 * kPointerSize));  // left
-  __ lw(a0, MemOperand(sp, 0 * kPointerSize));  // right
+  __ lw(a1, MemOperand(sp, 1 * kPointerSize));  // Left.
+  __ lw(a0, MemOperand(sp, 0 * kPointerSize));  // Right.
 
   Label not_same;
   __ Branch(&not_same, ne, a0, Operand(a1));
@@ -5847,7 +5845,7 @@ void StringAddStub::Generate(MacroAssembler* masm) {
   // are combined into single halfword in a2 register.
   // So we can fill resulting string without two loops by a single
   // halfword store instruction (which assumes that processor is
-  // in a little endian mode)
+  // in a little endian mode).
   __ li(t2, Operand(2));
   __ AllocateAsciiString(v0, t2, t0, t1, t4, &string_add_runtime);
   __ sh(a2, FieldMemOperand(v0, SeqAsciiString::kHeaderSize));
@@ -6118,7 +6116,7 @@ void ICCompareStub::GenerateHeapNumbers(MacroAssembler* masm) {
   if (CpuFeatures::IsSupported(FPU)) {
     CpuFeatures::Scope scope(FPU);
 
-    // Load left and right operand
+    // Load left and right operand.
     __ Subu(a2, a1, Operand(kHeapObjectTag));
     __ ldc1(f0, MemOperand(a2, HeapNumber::kValueOffset));
     __ Subu(a2, a0, Operand(kHeapObjectTag));

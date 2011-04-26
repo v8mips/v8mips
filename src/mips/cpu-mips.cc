@@ -58,7 +58,7 @@ bool CPU::SupportsCrankshaft() {
 
 
 void CPU::FlushICache(void* start, size_t size) {
-  // Nothing to do flushing no instructions.
+  // Nothing to do, flushing no instructions.
   if (size == 0) {
     return;
   }
@@ -66,7 +66,7 @@ void CPU::FlushICache(void* start, size_t size) {
 #if !defined (USE_SIMULATOR)
   int res;
 
-  // See http://www.linux-mips.org/wiki/Cacheflush_Syscall
+  // See http://www.linux-mips.org/wiki/Cacheflush_Syscall.
   res = syscall(__NR_cacheflush, start, size, ICACHE);
 
   if (res) {

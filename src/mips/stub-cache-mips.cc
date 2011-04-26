@@ -2444,9 +2444,9 @@ MaybeObject* CallStubCompiler::CompileCallInterceptor(JSObject* object,
                                          t0,
                                          a0,
                                          &miss);
-   if (result->IsFailure()) {
-       return result;
-   }
+  if (result->IsFailure()) {
+    return result;
+  }
 
   // Move returned value, the function to call, to a1.
   __ mov(a1, v0);

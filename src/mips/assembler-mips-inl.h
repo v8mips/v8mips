@@ -45,7 +45,7 @@ namespace v8 {
 namespace internal {
 
 // -----------------------------------------------------------------------------
-// Operand and MemOperand
+// Operand and MemOperand.
 
 Operand::Operand(int32_t immediate, RelocInfo::Mode rmode)  {
   rm_ = no_reg;
@@ -80,7 +80,7 @@ bool Operand::is_reg() const {
 
 
 // -----------------------------------------------------------------------------
-// RelocInfo
+// RelocInfo.
 
 void RelocInfo::apply(intptr_t delta) {
   // On MIPS we do not use pc relative addressing, so we don't need to patch the
@@ -299,7 +299,7 @@ void RelocInfo::Visit(Heap* heap) {
 
 
 // -----------------------------------------------------------------------------
-// Assembler
+// Assembler.
 
 
 void Assembler::CheckBuffer() {
