@@ -3412,40 +3412,50 @@ MaybeObject* ExternalArrayStubCompiler::CompileKeyedLoadStub(
   Register value = a2;
   switch (array_type) {
     case kExternalByteArray:
+      __ srl(t2, key, 1);
       __ addu(t3, a3, t2);
       __ lb(value, MemOperand(t3, 0));
       break;
     case kExternalPixelArray:
     case kExternalUnsignedByteArray:
+      __ srl(t2, key, 1);
       __ addu(t3, a3, t2);
       __ lbu(value, MemOperand(t3, 0));
       break;
     case kExternalShortArray:
-      __ sll(t3, t2, 1);
-      __ addu(t3, a3, t3);
+      __ addu(t3, a3, key);
       __ lh(value, MemOperand(t3, 0));
       break;
     case kExternalUnsignedShortArray:
-      __ sll(t3, t2, 1);
-      __ addu(t3, a3, t3);
+      __ addu(t3, a3, key);
       __ lhu(value, MemOperand(t3, 0));
       break;
     case kExternalIntArray:
     case kExternalUnsignedIntArray:
-      __ sll(t3, t2, 2);
-      __ addu(t3, a3, t3);
+      __ sll(t2, key, 1);
+      __ addu(t3, a3, t2);
       __ lw(value, MemOperand(t3, 0));
       break;
     case kExternalFloatArray:
+      __ sll(t3, t2, 2);
+      __ addu(t3, a3, t3);
       if (CpuFeatures::IsSupported(FPU)) {
         CpuFeatures::Scope scope(FPU);
-        __ sll(t3, t2, 2);
-        __ addu(t3, a3, t3);
         __ lwc1(f0, MemOperand(t3, 0));
       } else {
-        __ sll(t3, t2, 2);
-        __ addu(t3, a3, t3);
         __ lw(value, MemOperand(t3, 0));
+      }
+      break;
+    case kExternalDoubleArray:
+      __ sll(t2, key, 2);
+      __ addu(t3, a3, t2);
+      if (CpuFeatures::IsSupported(FPU)) {
+        CpuFeatures::Scope scope(FPU);
+        __ ldc1(f0, MemOperand(t3, 0));
+      } else {
+        // t3: pointer to the beginning of the double we want to load.
+        __ lw(a2, MemOperand(t3, 0));
+        __ lw(a3, MemOperand(t3, Register::kSizeInBytes));
       }
       break;
     default:
@@ -3455,9 +3465,12 @@ MaybeObject* ExternalArrayStubCompiler::CompileKeyedLoadStub(
 
   // For integer array types:
   // a2: value
-  // For floating-point array type
+  // For float array type:
   // f0: value (if FPU is supported)
   // a2: value (if FPU is not supported)
+  // For double array type:
+  // f0: value (if FPU is supported)
+  // a2/a3: value (if FPU is not supported)
 
   if (array_type == kExternalIntArray) {
     // For the Int and UnsignedInt array types, we need to see whether
@@ -3626,6 +3639,29 @@ MaybeObject* ExternalArrayStubCompiler::CompileKeyedLoadStub(
       __ Ret();
     }
 
+  } else if (array_type == kExternalDoubleArray) {
+    if (CpuFeatures::IsSupported(FPU)) {
+      CpuFeatures::Scope scope(FPU);
+      // Allocate a HeapNumber for the result. Don't use a0 and a1 as
+      // AllocateHeapNumber clobbers all registers - also when jumping due to
+      // exhausted young space.
+      __ LoadRoot(t6, Heap::kHeapNumberMapRootIndex);
+      __ AllocateHeapNumber(v0, t3, t5, t6, &slow);
+      // The double value is already in f0
+      __ sdc1(f0, FieldMemOperand(v0, HeapNumber::kValueOffset));
+      __ Ret();
+    } else {
+      // Allocate a HeapNumber for the result. Don't use a0 and a1 as
+      // AllocateHeapNumber clobbers all registers - also when jumping due to
+      // exhausted young space.
+      __ LoadRoot(t6, Heap::kHeapNumberMapRootIndex);
+      __ AllocateHeapNumber(v0, t3, t5, t6, &slow);
+
+      __ sw(a2, FieldMemOperand(v0, HeapNumber::kMantissaOffset));
+      __ sw(a3, FieldMemOperand(v0, HeapNumber::kExponentOffset));
+      __ Ret();
+    }
+
   } else {
     // Tag integer as smi and return it.
     __ sll(v0, value, kSmiTagSize);
@@ -3748,6 +3784,28 @@ MaybeObject* ExternalArrayStubCompiler::CompileKeyedStoreStub(
       // Perform int-to-float conversion and store to memory.
       StoreIntAsFloat(masm(), a3, t0, t1, t2, t3, t4);
       break;
+    case kExternalDoubleArray:
+      __ sll(t8, t0, 3);
+      __ addu(a3, a3, t8);
+      // a3: effective address of the double element
+      FloatingPointHelper::Destination destination;
+      if (CpuFeatures::IsSupported(FPU)) {
+        destination = FloatingPointHelper::kFPURegisters;
+      } else {
+        destination = FloatingPointHelper::kCoreRegisters;
+      }
+      FloatingPointHelper::ConvertIntToDouble(
+          masm(), t1, destination,
+          f0, t2, t3,  // These are: double_dst, dst1, dst2.
+          t0, f2);  // These are: scratch2, single_scratch.
+      if (destination == FloatingPointHelper::kFPURegisters) {
+        CpuFeatures::Scope scope(FPU);
+        __ sdc1(f0, MemOperand(a3, 0));
+      } else {
+        __ sw(t2, MemOperand(a3, 0));
+        __ sw(t3, MemOperand(a3, Register::kSizeInBytes));
+      }
+      break;
     default:
       UNREACHABLE();
       break;
@@ -3776,13 +3834,17 @@ MaybeObject* ExternalArrayStubCompiler::CompileKeyedStoreStub(
     if (CpuFeatures::IsSupported(FPU)) {
       CpuFeatures::Scope scope(FPU);
 
-      __ ldc1(f0, MemOperand(a0, HeapNumber::kValueOffset - kHeapObjectTag));
+      __ ldc1(f0, FieldMemOperand(a0, HeapNumber::kValueOffset));
 
       if (array_type == kExternalFloatArray) {
         __ cvt_s_d(f0, f0);
         __ sll(t8, t0, 2);
         __ addu(t8, a3, t8);
         __ swc1(f0, MemOperand(t8, 0));
+      } else if (array_type == kExternalDoubleArray) {
+        __ sll(t8, t0, 3);
+        __ addu(t8, a3, t8);
+        __ sdc1(f0, MemOperand(t8, 0));
       } else {
         Label done;
 
@@ -3904,6 +3966,13 @@ MaybeObject* ExternalArrayStubCompiler::CompileKeyedStoreStub(
         __ srl(t4, t4, kMantissaInLoWordShift);
         __ or_(t3, t6, t4);
         __ Branch(&done);
+      } else if (array_type == kExternalDoubleArray) {
+        __ sll(t8, t0, 3);
+        __ addu(t8, a3, t8);
+        // t8: effective address of destination element.
+        __ sw(t4, MemOperand(t8, 0));
+        __ sw(t3, MemOperand(t8, Register::kSizeInBytes));
+        __ Ret();
       } else {
         bool is_signed_type  = IsElementTypeSigned(array_type);
         int meaningfull_bits = is_signed_type ? (kBitsPerInt - 1) : kBitsPerInt;
