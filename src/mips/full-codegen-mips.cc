@@ -1419,7 +1419,7 @@ void FullCodeGenerator::VisitObjectLiteral(ObjectLiteral* expr) {
     Literal* key = property->key();
     Expression* value = property->value();
     if (!result_saved) {
-      __ push(v0);  // Save result on stack
+      __ push(v0);  // Save result on stack.
       result_saved = true;
     }
     switch (property->kind()) {
@@ -1451,7 +1451,7 @@ void FullCodeGenerator::VisitObjectLiteral(ObjectLiteral* expr) {
         VisitForStackValue(key);
         VisitForStackValue(value);
         if (property->emit_store()) {
-          __ li(a0, Operand(Smi::FromInt(NONE)));  // PropertyAttributes
+          __ li(a0, Operand(Smi::FromInt(NONE)));  // PropertyAttributes.
           __ push(a0);
           __ CallRuntime(Runtime::kSetProperty, 4);
         } else {
@@ -1965,7 +1965,7 @@ void FullCodeGenerator::EmitVariableAssignment(Variable* var,
       }
 
       case Slot::LOOKUP:
-        // Call the runtime for the assignment
+        // Call the runtime for the assignment.
         __ push(v0);  // Value.
         __ li(a1, Operand(slot->var()->name()));
         __ li(a0, Operand(Smi::FromInt(strict_mode_flag())));
@@ -3258,7 +3258,7 @@ void FullCodeGenerator::EmitSwapElements(ZoneList<Expression*>* args) {
   Label new_space;
   __ InNewSpace(elements, scratch1, eq, &new_space);
   // Possible optimization: do a check that both values are Smis
-  // (or them and test against Smi mask.)
+  // (or them and test against Smi mask).
 
   __ mov(scratch1, elements);
   __ RecordWriteHelper(elements, index1, scratch2);
@@ -3419,7 +3419,7 @@ void FullCodeGenerator::EmitFastAsciiArrayJoin(ZoneList<Expression*>* args) {
   Register result = no_reg;  // Will be v0.
   Register separator = a1;
   Register array_length = a2;
-  Register result_pos = no_reg;  // Will be a2
+  Register result_pos = no_reg;  // Will be a2.
   Register string_length = a3;
   Register string = t0;
   Register element = t1;
@@ -3508,7 +3508,7 @@ void FullCodeGenerator::EmitFastAsciiArrayJoin(ZoneList<Expression*>* args) {
 
   // Add (separator length times array_length) - separator length to the
   // string_length to get the length of the result string. array_length is not
-  // smi but the other values are, so the result is a smi
+  // smi but the other values are, so the result is a smi.
   __ lw(scratch1, FieldMemOperand(separator, SeqAsciiString::kLengthOffset));
   __ Subu(string_length, string_length, Operand(scratch1));
   __ Mult(array_length, scratch1);
@@ -3557,7 +3557,7 @@ void FullCodeGenerator::EmitFastAsciiArrayJoin(ZoneList<Expression*>* args) {
   __ Branch(&one_char_separator, eq, scratch1, Operand(at));
   __ Branch(&long_separator, gt, scratch1, Operand(at));
 
-  // Empty separator case
+  // Empty separator case.
   __ bind(&empty_separator_loop);
   // Live values in registers:
   //   result_pos: the position to which we are currently copying characters.
@@ -3576,12 +3576,12 @@ void FullCodeGenerator::EmitFastAsciiArrayJoin(ZoneList<Expression*>* args) {
   ASSERT(result.is(v0));
   __ Branch(&done);
 
-  // One-character separator case
+  // One-character separator case.
   __ bind(&one_char_separator);
   // Replace separator with its ascii character value.
   __ lbu(separator, FieldMemOperand(separator, SeqAsciiString::kHeaderSize));
   // Jump into the loop after the code that copies the separator, so the first
-  // element is not preceded by a separator
+  // element is not preceded by a separator.
   __ jmp(&one_char_separator_loop_entry);
 
   __ bind(&one_char_separator_loop);
@@ -4182,7 +4182,7 @@ void FullCodeGenerator::VisitCompareOperation(CompareOperation* expr) {
       switch (op) {
         case Token::EQ_STRICT:
           strict = true;
-          // Fall through
+          // Fall through.
         case Token::EQ:
           cc = eq;
           __ mov(a0, result_register());
@@ -4354,7 +4354,7 @@ void FullCodeGenerator::EnterFinallyBlock() {
   ASSERT(!result_register().is(a1));
   // Store result register while executing finally block.
   __ push(result_register());
-  // Cook return address in link register to stack (smi encoded Code* delta)
+  // Cook return address in link register to stack (smi encoded Code* delta).
   __ Subu(a1, ra, Operand(masm_->CodeObject()));
   ASSERT_EQ(1, kSmiTagSize + kSmiShiftSize);
   ASSERT_EQ(0, kSmiTag);

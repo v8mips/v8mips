@@ -298,15 +298,15 @@ void Decoder::PrintInstructionName(Instruction* instr) {
 // complexity of FormatOption.
 int Decoder::FormatRegister(Instruction* instr, const char* format) {
   ASSERT(format[0] == 'r');
-  if (format[1] == 's') {  // 'rs: Rs register
+  if (format[1] == 's') {  // 'rs: Rs register.
     int reg = instr->RsValue();
     PrintRegister(reg);
     return 2;
-  } else if (format[1] == 't') {  // 'rt: rt register
+  } else if (format[1] == 't') {  // 'rt: rt register.
     int reg = instr->RtValue();
     PrintRegister(reg);
     return 2;
-  } else if (format[1] == 'd') {  // 'rd: rd register
+  } else if (format[1] == 'd') {  // 'rd: rd register.
     int reg = instr->RdValue();
     PrintRegister(reg);
     return 2;
@@ -320,15 +320,15 @@ int Decoder::FormatRegister(Instruction* instr, const char* format) {
 // complexity of FormatOption.
 int Decoder::FormatFPURegister(Instruction* instr, const char* format) {
   ASSERT(format[0] == 'f');
-  if (format[1] == 's') {  // 'fs: fs register
+  if (format[1] == 's') {  // 'fs: fs register.
     int reg = instr->FsValue();
     PrintFPURegister(reg);
     return 2;
-  } else if (format[1] == 't') {  // 'ft: ft register
+  } else if (format[1] == 't') {  // 'ft: ft register.
     int reg = instr->FtValue();
     PrintFPURegister(reg);
     return 2;
-  } else if (format[1] == 'd') {  // 'fd: fd register
+  } else if (format[1] == 'd') {  // 'fd: fd register.
     int reg = instr->FdValue();
     PrintFPURegister(reg);
     return 2;
@@ -345,12 +345,12 @@ int Decoder::FormatFPURegister(Instruction* instr, const char* format) {
 // characters that were consumed from the formatting string.
 int Decoder::FormatOption(Instruction* instr, const char* format) {
   switch (format[0]) {
-    case 'c': {   // 'code for break or trap instructions
+    case 'c': {   // 'code for break or trap instructions.
       ASSERT(STRING_STARTS_WITH(format, "code"));
       PrintCode(instr);
       return 4;
     }
-    case 'i': {   // 'imm16u or 'imm26
+    case 'i': {   // 'imm16u or 'imm26.
       if (format[3] == '1') {
         ASSERT(STRING_STARTS_WITH(format, "imm16"));
         if (format[5] == 's') {
@@ -370,13 +370,13 @@ int Decoder::FormatOption(Instruction* instr, const char* format) {
         return 5;
       }
     }
-    case 'r': {   // 'r: registers
+    case 'r': {   // 'r: registers.
       return FormatRegister(instr, format);
     }
-    case 'f': {   // 'f: FPUregisters
+    case 'f': {   // 'f: FPUregisters.
       return FormatFPURegister(instr, format);
     }
-    case 's': {   // 'sa
+    case 's': {   // 'sa.
       switch (format[1]) {
         case 'a': {
           ASSERT(STRING_STARTS_WITH(format, "sa"));
@@ -432,7 +432,7 @@ void Decoder::Unknown(Instruction* instr) {
 
 void Decoder::DecodeTypeRegister(Instruction* instr) {
   switch (instr->OpcodeFieldRaw()) {
-    case COP1:    // Coprocessor instructions
+    case COP1:    // Coprocessor instructions.
       switch (instr->RsFieldRaw()) {
         case BC1:   // bc1 handled in DecodeTypeImmediate.
           UNREACHABLE();
@@ -966,7 +966,7 @@ const char* NameConverter::NameOfXMMRegister(int reg) const {
 
 
 const char* NameConverter::NameOfByteCPURegister(int reg) const {
-  UNREACHABLE();  // MIPS does not have the concept of a byte register
+  UNREACHABLE();  // MIPS does not have the concept of a byte register.
   return "nobytereg";
 }
 

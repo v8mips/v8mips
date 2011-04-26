@@ -58,7 +58,7 @@ namespace v8 {
 namespace internal {
 
 // -----------------------------------------------------------------------------
-// Registers and FPURegister.
+// Registers and FPURegisters.
 
 // Number of general purpose registers.
 static const int kNumRegisters = 32;
@@ -178,7 +178,7 @@ static const int kFBccBits      = 3;
 static const int kFBtrueShift   = 16;
 static const int kFBtrueBits    = 1;
 
-// ----- Miscellianous useful masks.
+// ----- Miscellaneous useful masks.
 // Instruction bit masks.
 static const int  kOpcodeMask   = ((1 << kOpcodeBits) - 1) << kOpcodeShift;
 static const int  kImm16Mask    = ((1 << kImm16Bits) - 1) << kImm16Shift;
@@ -218,7 +218,7 @@ enum Opcode {
   XORI      =   ((1 << 3) + 6) << kOpcodeShift,
   LUI       =   ((1 << 3) + 7) << kOpcodeShift,
 
-  COP1      =   ((2 << 3) + 1) << kOpcodeShift,  // Coprocessor 1 class
+  COP1      =   ((2 << 3) + 1) << kOpcodeShift,  // Coprocessor 1 class.
   BEQL      =   ((2 << 3) + 4) << kOpcodeShift,
   BNEL      =   ((2 << 3) + 5) << kOpcodeShift,
   BLEZL     =   ((2 << 3) + 6) << kOpcodeShift,
@@ -396,7 +396,7 @@ enum Condition {
 
   cc_always     = 16,
 
-  // aliases
+  // Aliases.
   carry         = Uless,
   not_carry     = Ugreater_equal,
   zero          = equal,
@@ -458,14 +458,14 @@ inline Condition ReverseCondition(Condition cc) {
 
 // ----- Coprocessor conditions.
 enum FPUCondition {
-  F,    // False
-  UN,   // Unordered
-  EQ,   // Equal
-  UEQ,  // Unordered or Equal
-  OLT,  // Ordered or Less Than
-  ULT,  // Unordered or Less Than
-  OLE,  // Ordered or Less Than or Equal
-  ULE   // Unordered or Less Than or Equal
+  F,    // False.
+  UN,   // Unordered.
+  EQ,   // Equal.
+  UEQ,  // Unordered or Equal.
+  OLT,  // Ordered or Less Than.
+  ULT,  // Unordered or Less Than.
+  OLE,  // Ordered or Less Than or Equal.
+  ULE   // Unordered or Less Than or Equal.
 };
 
 
@@ -497,7 +497,7 @@ extern const Instr kPopInstruction;
 extern const Instr kPushInstruction;
 // sw(r, MemOperand(sp, 0))
 extern const Instr kPushRegPattern;
-//  lw(r, MemOperand(sp, 0))
+// lw(r, MemOperand(sp, 0))
 extern const Instr kPopRegPattern;
 extern const Instr kLwRegFpOffsetPattern;
 extern const Instr kSwRegFpOffsetPattern;

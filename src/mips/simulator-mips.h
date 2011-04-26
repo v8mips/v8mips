@@ -152,7 +152,7 @@ class Simulator {
     sp,
     s8,
     ra,
-    // LO, HI, and pc
+    // LO, HI, and pc.
     LO,
     HI,
     pc,   // pc must be the last register.
@@ -165,7 +165,7 @@ class Simulator {
   // Generated code will always use doubles. So we will only use even registers.
   enum FPURegister {
     f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11,
-    f12, f13, f14, f15,   // f12 and f14 are arguments FPURegisters
+    f12, f13, f14, f15,   // f12 and f14 are arguments FPURegisters.
     f16, f17, f18, f19, f20, f21, f22, f23, f24, f25,
     f26, f27, f28, f29, f30, f31,
     kNumFPURegisters
@@ -183,7 +183,7 @@ class Simulator {
   // instruction.
   void set_register(int reg, int32_t value);
   int32_t get_register(int reg) const;
-  // Same for FPURegisters
+  // Same for FPURegisters.
   void set_fpu_register(int fpureg, int32_t value);
   void set_fpu_register_float(int fpureg, float value);
   void set_fpu_register_double(int fpureg, double value);
@@ -341,7 +341,7 @@ class Simulator {
   int icount_;
   int break_count_;
 
-  // Icache simulation
+  // Icache simulation.
   v8::internal::HashMap* i_cache_;
 
   v8::internal::Isolate* isolate_;

@@ -253,7 +253,7 @@ static void GenerateDictionaryStore(MacroAssembler* masm,
 
   // If probing finds an entry in the dictionary check that the value
   // is a normal property that is not read only.
-  __ bind(&done);  // scratch2 == elements + 4 * index
+  __ bind(&done);  // scratch2 == elements + 4 * index.
   const int kElementsStartOffset = StringDictionary::kHeaderSize +
       StringDictionary::kElementsStartIndex * kPointerSize;
   const int kDetailsOffset = kElementsStartOffset + 2 * kPointerSize;
@@ -370,7 +370,7 @@ static void GenerateNumberDictionaryLoad(MacroAssembler* masm,
 
   __ bind(&done);
   // Check that the value is a normal property.
-  // reg2: elements + (index * kPointerSize)
+  // reg2: elements + (index * kPointerSize).
   const int kDetailsOffset =
       NumberDictionary::kElementsStartOffset + 2 * kPointerSize;
   __ lw(reg1, FieldMemOperand(reg2, kDetailsOffset));
@@ -385,11 +385,12 @@ static void GenerateNumberDictionaryLoad(MacroAssembler* masm,
 
 
 void LoadIC::GenerateArrayLength(MacroAssembler* masm) {
-  // a2    : name
-  // ra    : return address
-  // a0    : receiver
-  // sp[0] : receiver
-
+  // ----------- S t a t e -------------
+  //  -- a2    : name
+  //  -- ra    : return address
+  //  -- a0    : receiver
+  //  -- sp[0] : receiver
+  // -----------------------------------
   Label miss;
 
   StubCompiler::GenerateLoadArrayLength(masm, a0, a3, &miss);
@@ -399,10 +400,12 @@ void LoadIC::GenerateArrayLength(MacroAssembler* masm) {
 
 
 void LoadIC::GenerateStringLength(MacroAssembler* masm, bool support_wrappers) {
-  // a2    : name
-  // lr    : return address
-  // a0    : receiver
-  // sp[0] : receiver
+  // ----------- S t a t e -------------
+  //  -- a2    : name
+  //  -- lr    : return address
+  //  -- a0    : receiver
+  //  -- sp[0] : receiver
+  // -----------------------------------
   Label miss;
 
   StubCompiler::GenerateLoadStringLength(masm, a0, a1, a3, &miss,
@@ -414,11 +417,12 @@ void LoadIC::GenerateStringLength(MacroAssembler* masm, bool support_wrappers) {
 
 
 void LoadIC::GenerateFunctionPrototype(MacroAssembler* masm) {
-  // a2    : name
-  // lr    : return address
-  // a0    : receiver
-  // sp[0] : receiver
-
+  // ----------- S t a t e -------------
+  //  -- a2    : name
+  //  -- lr    : return address
+  //  -- a0    : receiver
+  //  -- sp[0] : receiver
+  // -----------------------------------
   Label miss;
 
   StubCompiler::GenerateLoadFunctionPrototype(masm, a0, a1, a3, &miss);
@@ -801,10 +805,10 @@ void KeyedCallIC::GenerateMegamorphic(MacroAssembler* masm, int argc) {
   // nor beneficial.
   __ IncrementCounter(counters->keyed_call_generic_slow_load(), 1, a0, a3);
   __ EnterInternalFrame();
-  __ push(a2);  // save the key
-  __ Push(a1, a2);  // pass the receiver and the key
+  __ push(a2);  // Save the key.
+  __ Push(a1, a2);  // Pass the receiver and the key.
   __ CallRuntime(Runtime::kKeyedGetProperty, 2);
-  __ pop(a2);  // restore the key
+  __ pop(a2);  // Restore the key.
   __ LeaveInternalFrame();
   __ mov(a1, v0);
   __ jmp(&do_call);
@@ -838,7 +842,7 @@ void KeyedCallIC::GenerateMegamorphic(MacroAssembler* masm, int argc) {
   // - the receiver requires boxing or access check,
   // - the key is neither smi nor symbol,
   // - the value loaded is not a function,
-  // - there is hope that the runtime will create a monomorphic call stub
+  // - there is hope that the runtime will create a monomorphic call stub,
   //   that will get fetched next time.
   __ IncrementCounter(counters->keyed_call_generic_slow(), 1, a0, a3);
   GenerateMiss(masm, argc);
@@ -871,10 +875,12 @@ void KeyedCallIC::GenerateNormal(MacroAssembler* masm, int argc) {
 Object* LoadIC_Miss(Arguments args);
 
 void LoadIC::GenerateMegamorphic(MacroAssembler* masm) {
-  // a2    : name
-  // ra    : return address
-  // a0    : receiver
-  // sp[0] : receiver
+  // ----------- S t a t e -------------
+  //  -- a2    : name
+  //  -- ra    : return address
+  //  -- a0    : receiver
+  //  -- sp[0] : receiver
+  // -----------------------------------
 
   // Probe the stub cache.
   Code::Flags flags = Code::ComputeFlags(Code::LOAD_IC,
@@ -910,10 +916,11 @@ void LoadIC::GenerateNormal(MacroAssembler* masm) {
 
 
 void LoadIC::GenerateMiss(MacroAssembler* masm) {
-  // a2    : name
-  // ra    : return address
-  // a0    : receiver
-  // sp[0] : receiver
+  // ----------- S t a t e -------------
+  //  -- a2    : name
+  //  -- ra    : return address
+  //  -- a0    : receiver
+  //  -- sp[0] : receiver
   // -----------------------------------
   Isolate* isolate = masm->isolate();
 
@@ -1166,7 +1173,7 @@ void KeyedStoreIC::GenerateRuntimeSetProperty(MacroAssembler* masm,
 
   // Push receiver, key and value for runtime call.
   __ Push(a2, a1, a0);
-  __ li(a1, Operand(Smi::FromInt(NONE)));          // PropertyAttributes
+  __ li(a1, Operand(Smi::FromInt(NONE)));          // PropertyAttributes.
   __ li(a0, Operand(Smi::FromInt(strict_mode)));   // Strict mode.
   __ Push(a1, a0);
 
@@ -1341,10 +1348,12 @@ void KeyedStoreIC::GenerateMiss(MacroAssembler* masm) {
 
 void StoreIC::GenerateMegamorphic(MacroAssembler* masm,
                                   StrictModeFlag strict_mode) {
-  // a0    : value
-  // a1    : receiver
-  // a2    : name
-  // ra    : return address
+  // ----------- S t a t e -------------
+  //  -- a0    : value
+  //  -- a1    : receiver
+  //  -- a2    : name
+  //  -- ra    : return address
+  // -----------------------------------
 
   // Get the receiver from the stack and probe the stub cache.
   Code::Flags flags = Code::ComputeFlags(Code::STORE_IC,
@@ -1360,10 +1369,12 @@ void StoreIC::GenerateMegamorphic(MacroAssembler* masm,
 
 
 void StoreIC::GenerateMiss(MacroAssembler* masm) {
-  // a0    : value
-  // a1    : receiver
-  // a2    : name
-  // ra    : return address
+  // ----------- S t a t e -------------
+  //  -- a0    : value
+  //  -- a1    : receiver
+  //  -- a2    : name
+  //  -- ra    : return address
+  // -----------------------------------
 
   __ Push(a1, a2, a0);
   // Perform tail call to the entry.
@@ -1456,7 +1467,7 @@ void StoreIC::GenerateGlobalProxy(MacroAssembler* masm,
 
   __ Push(a1, a2, a0);
 
-  __ li(a1, Operand(Smi::FromInt(NONE)));  // PropertyAttributes
+  __ li(a1, Operand(Smi::FromInt(NONE)));  // PropertyAttributes.
   __ li(a0, Operand(Smi::FromInt(strict_mode)));
   __ Push(a1, a0);
 
@@ -1558,10 +1569,10 @@ void PatchInlinedSmiCode(Address address) {
   ASSERT(Assembler::IsBranch(branch_instr));
   if (Assembler::IsBEQ(branch_instr)) {
     // This is patching a "jump if not smi" site to be active.
-    // Changing
+    // Changing:
     //   andi at, rx, 0
     //   Branch <target>, eq, at, Operand(zero_reg)
-    // to
+    // to:
     //   andi at, rx, #kSmiTagMask
     //   Branch <target>, ne, at, Operand(zero_reg)
     CodePatcher patcher(patch_address, 2);
@@ -1571,10 +1582,10 @@ void PatchInlinedSmiCode(Address address) {
   } else {
     ASSERT(Assembler::IsBNE(branch_instr));
     // This is patching a "jump if smi" site to be active.
-    // Changing
+    // Changing:
     //   andi at, rx, 0
     //   Branch <target>, ne, at, Operand(zero_reg)
-    // to
+    // to:
     //   andi at, rx, #kSmiTagMask
     //   Branch <target>, eq, at, Operand(zero_reg)
     CodePatcher patcher(patch_address, 2);

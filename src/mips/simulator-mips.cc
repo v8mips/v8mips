@@ -35,7 +35,7 @@
 
 #include "disasm.h"
 #include "assembler.h"
-#include "globals.h"    // Need the BitCast
+#include "globals.h"    // Need the BitCast.
 #include "mips/constants-mips.h"
 #include "mips/simulator-mips.h"
 
@@ -46,7 +46,7 @@
 namespace v8 {
 namespace internal {
 
-// Utils functions
+// Utils functions.
 bool HaveSameSign(int32_t a, int32_t b) {
   return ((a ^ b) >= 0);
 }
@@ -139,7 +139,7 @@ void MipsDebugger::Stop(Instruction* instr) {
 }
 
 
-#else  // ndef GENERATED_CODE_COVERAGE
+#else  // GENERATED_CODE_COVERAGE
 
 #define UNSUPPORTED() printf("Unsupported instruction.\n");
 
@@ -263,15 +263,15 @@ void MipsDebugger::PrintAllRegs() {
 #define REG_INFO(n) Registers::Name(n), GetRegisterValue(n), GetRegisterValue(n)
 
   PrintF("\n");
-  // at, v0, a0
+  // at, v0, a0.
   PrintF("%3s: 0x%08x %10d\t%3s: 0x%08x %10d\t%3s: 0x%08x %10d\n",
          REG_INFO(1), REG_INFO(2), REG_INFO(4));
-  // v1, a1
+  // v1, a1.
   PrintF("%26s\t%3s: 0x%08x %10d\t%3s: 0x%08x %10d\n",
          "", REG_INFO(3), REG_INFO(5));
-  // a2
+  // a2.
   PrintF("%26s\t%26s\t%3s: 0x%08x %10d\n", "", "", REG_INFO(6));
-  // a3
+  // a3.
   PrintF("%26s\t%26s\t%3s: 0x%08x %10d\n", "", "", REG_INFO(7));
   PrintF("\n");
   // t0-t7, s0-s7
@@ -280,16 +280,16 @@ void MipsDebugger::PrintAllRegs() {
            REG_INFO(8+i), REG_INFO(16+i));
   }
   PrintF("\n");
-  // t8, k0, LO
+  // t8, k0, LO.
   PrintF("%3s: 0x%08x %10d\t%3s: 0x%08x %10d\t%3s: 0x%08x %10d\n",
          REG_INFO(24), REG_INFO(26), REG_INFO(32));
-  // t9, k1, HI
+  // t9, k1, HI.
   PrintF("%3s: 0x%08x %10d\t%3s: 0x%08x %10d\t%3s: 0x%08x %10d\n",
          REG_INFO(25), REG_INFO(27), REG_INFO(33));
-  // sp, fp, gp
+  // sp, fp, gp.
   PrintF("%3s: 0x%08x %10d\t%3s: 0x%08x %10d\t%3s: 0x%08x %10d\n",
          REG_INFO(29), REG_INFO(30), REG_INFO(28));
-  // pc
+  // pc.
   PrintF("%3s: 0x%08x %10d\t%3s: 0x%08x %10d\n",
          REG_INFO(31), REG_INFO(34));
 
@@ -307,7 +307,7 @@ void MipsDebugger::PrintAllRegsIncludingFPU() {
   PrintAllRegs();
 
   PrintF("\n\n");
-  // f0, f1, f2, ... f31
+  // f0, f1, f2, ... f31.
   PrintF("%3s,%3s: 0x%08x%08x %16.4e\n", FPU_REG_INFO(0) );
   PrintF("%3s,%3s: 0x%08x%08x %16.4e\n", FPU_REG_INFO(2) );
   PrintF("%3s,%3s: 0x%08x%08x %16.4e\n", FPU_REG_INFO(4) );
@@ -345,7 +345,7 @@ void MipsDebugger::Debug() {
   char arg2[ARG_SIZE + 1];
   char* argv[3] = { cmd, arg1, arg2 };
 
-  // make sure to have a proper terminating character if reaching the limit
+  // Make sure to have a proper terminating character if reaching the limit.
   cmd[COMMAND_SIZE] = 0;
   arg1[ARG_SIZE] = 0;
   arg2[ARG_SIZE] = 0;
@@ -358,7 +358,7 @@ void MipsDebugger::Debug() {
     if (last_pc != sim_->get_pc()) {
       disasm::NameConverter converter;
       disasm::Disassembler dasm(converter);
-      // use a reasonably large buffer
+      // Use a reasonably large buffer.
       v8::internal::EmbeddedVector<char, 256> buffer;
       dasm.InstructionDecode(buffer,
                              reinterpret_cast<byte*>(sim_->get_pc()));
@@ -475,7 +475,7 @@ void MipsDebugger::Debug() {
 
         if (strcmp(cmd, "stack") == 0) {
           cur = reinterpret_cast<int32_t*>(sim_->get_register(Simulator::sp));
-        } else {  // "mem"
+        } else {  // Command "mem".
           int32_t value;
           if (!GetValue(arg1, &value)) {
             PrintF("%s unrecognized\n", arg1);
@@ -504,7 +504,7 @@ void MipsDebugger::Debug() {
       } else if ((strcmp(cmd, "disasm") == 0) || (strcmp(cmd, "dpc") == 0)) {
         disasm::NameConverter converter;
         disasm::Disassembler dasm(converter);
-        // use a reasonably large buffer
+        // Use a reasonably large buffer.
         v8::internal::EmbeddedVector<char, 256> buffer;
 
         byte* cur = NULL;
@@ -517,7 +517,7 @@ void MipsDebugger::Debug() {
           int32_t value;
           if (GetValue(arg1, &value)) {
             cur = reinterpret_cast<byte*>(value);
-            // no length parameter passed, assume 10 instructions
+            // No length parameter passed, assume 10 instructions.
             end = cur + (10 * Instruction::kInstrSize);
           }
         } else {
@@ -561,13 +561,13 @@ void MipsDebugger::Debug() {
       } else if (strcmp(cmd, "unstop") == 0) {
           PrintF("Unstop command not implemented on MIPS.");
       } else if ((strcmp(cmd, "stat") == 0) || (strcmp(cmd, "st") == 0)) {
-        // Print registers and disassemble
+        // Print registers and disassemble.
         PrintAllRegs();
         PrintF("\n");
 
         disasm::NameConverter converter;
         disasm::Disassembler dasm(converter);
-        // use a reasonably large buffer
+        // Use a reasonably large buffer.
         v8::internal::EmbeddedVector<char, 256> buffer;
 
         byte* cur = NULL;
@@ -876,7 +876,7 @@ void Simulator::set_register(int reg, int32_t value) {
     pc_modified_ = true;
   }
 
-  // zero register always hold 0.
+  // Zero register always holds 0.
   registers_[reg] = (reg == 0) ? 0 : value;
 }
 
@@ -994,7 +994,7 @@ int32_t Simulator::get_pc() const {
 
 int Simulator::ReadW(int32_t addr, Instruction* instr) {
   if (addr >=0 && addr < 0x400) {
-    // this has to be a NULL-dereference
+    // This has to be a NULL-dereference, drop into debugger.
     MipsDebugger dbg(this);
     dbg.Debug();
   }
@@ -1013,7 +1013,7 @@ int Simulator::ReadW(int32_t addr, Instruction* instr) {
 
 void Simulator::WriteW(int32_t addr, int value, Instruction* instr) {
   if (addr >= 0 && addr < 0x400) {
-    // this has to be a NULL-dereference
+    // This has to be a NULL-dereference, drop into debugger.
     MipsDebugger dbg(this);
     dbg.Debug();
   }
@@ -1320,9 +1320,9 @@ void Simulator::ConfigureTypeRegister(Instruction* instr,
   const int32_t  fs_reg = instr->FsValue();
 
 
-  // ---------- Configuration
+  // ---------- Configuration.
   switch (op) {
-    case COP1:    // Coprocessor instructions
+    case COP1:    // Coprocessor instructions.
       switch (instr->RsFieldRaw()) {
         case BC1:   // Handled in DecodeTypeImmed, should never come here.
           UNREACHABLE();
@@ -1371,7 +1371,7 @@ void Simulator::ConfigureTypeRegister(Instruction* instr,
           } else {
             // Logical right-rotate of a word by a fixed number of bits. This
             // is special case of SRL instruction, added in MIPS32 Release 2.
-            // RS field is equal to 00001
+            // RS field is equal to 00001.
             alu_out = (rt_u >> sa) | (rt_u << (32 - sa));
           }
           break;
@@ -1389,7 +1389,7 @@ void Simulator::ConfigureTypeRegister(Instruction* instr,
           } else {
             // Logical right-rotate of a word by a variable number of bits.
             // This is special case od SRLV instruction, added in MIPS32
-            // Release 2. SA field is equal to 00001
+            // Release 2. SA field is equal to 00001.
             alu_out = (rt_u >> rs_u) | (rt_u << (32 - rs_u));
           }
           break;
@@ -1452,7 +1452,7 @@ void Simulator::ConfigureTypeRegister(Instruction* instr,
         case SLTU:
           alu_out = rs_u < rt_u ? 1 : 0;
           break;
-        // Break and trap instructions
+        // Break and trap instructions.
         case BREAK:
 
           do_interrupt = true;
@@ -1503,7 +1503,7 @@ void Simulator::ConfigureTypeRegister(Instruction* instr,
     case SPECIAL3:
       switch (instr->FunctionFieldRaw()) {
         case INS: {   // Mips32r2 instruction.
-          // Interpret Rd field as 5-bit msb of insert.
+          // Interpret rd field as 5-bit msb of insert.
           uint16_t msb = rd_reg;
           // Interpret sa field as 5-bit lsb of insert.
           uint16_t lsb = sa;
@@ -1513,7 +1513,7 @@ void Simulator::ConfigureTypeRegister(Instruction* instr,
           break;
         }
         case EXT: {   // Mips32r2 instruction.
-          // Interpret Rd field as 5-bit msb of extract.
+          // Interpret rd field as 5-bit msb of extract.
           uint16_t msb = rd_reg;
           // Interpret sa field as 5-bit lsb of extract.
           uint16_t lsb = sa;
@@ -1549,7 +1549,7 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
   int64_t  i64hilo = 0;
   uint64_t u64hilo = 0;
 
-  // ALU output
+  // ALU output.
   // It should not be used as is. Instructions using it should always
   // initialize it first.
   int32_t alu_out = 0x12345678;
@@ -1557,7 +1557,7 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
   // For break and trap instructions.
   bool do_interrupt = false;
 
-  // For jr and jalr
+  // For jr and jalr.
   // Get current pc.
   int32_t current_pc = get_pc();
   // Next pc
@@ -1574,11 +1574,11 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
   // ---------- Raise exceptions triggered.
   SignalExceptions();
 
-  // ---------- Execution
+  // ---------- Execution.
   switch (op) {
     case COP1:
       switch (instr->RsFieldRaw()) {
-        case BC1:   // branch on coprocessor condition
+        case BC1:   // Branch on coprocessor condition.
           UNREACHABLE();
           break;
         case CFC1:
@@ -1856,7 +1856,7 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
         case MOVCI: {
           uint32_t cc = instr->FCccValue();
           uint32_t fcsr_cc = get_fcsr_condition_bit(cc);
-          if (instr->Bit(16)) {  // Read Tf bit
+          if (instr->Bit(16)) {  // Read Tf bit.
             if (test_fcsr_bit(fcsr_cc)) set_register(rd_reg, rs);
           } else {
             if (!test_fcsr_bit(fcsr_cc)) set_register(rd_reg, rs);
@@ -1905,17 +1905,17 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
 }
 
 
-// Type 2: instructions using a 16 bytes immediate. (eg: addi, beq)
+// Type 2: instructions using a 16 bytes immediate. (eg: addi, beq).
 void Simulator::DecodeTypeImmediate(Instruction* instr) {
   // Instruction fields.
   Opcode   op     = instr->OpcodeFieldRaw();
   int32_t  rs     = get_register(instr->RsValue());
   uint32_t rs_u   = static_cast<uint32_t>(rs);
-  int32_t  rt_reg = instr->RtValue();  // destination register
+  int32_t  rt_reg = instr->RtValue();  // Destination register.
   int32_t  rt     = get_register(rt_reg);
   int16_t  imm16  = instr->Imm16Value();
 
-  int32_t  ft_reg = instr->FtValue();  // destination register
+  int32_t  ft_reg = instr->FtValue();  // Destination register.
 
   // Zero extended immediate.
   uint32_t  oe_imm16 = 0xffff & imm16;
@@ -1939,10 +1939,10 @@ void Simulator::DecodeTypeImmediate(Instruction* instr) {
 
   // Used for memory instructions.
   int32_t addr = 0x0;
-  // Value to be written in memory
+  // Value to be written in memory.
   uint32_t mem_value = 0x0;
 
-  // ---------- Configuration (and execution for REGIMM)
+  // ---------- Configuration (and execution for REGIMM).
   switch (op) {
     // ------------- COP1. Coprocessor instructions.
     case COP1:
@@ -1953,7 +1953,7 @@ void Simulator::DecodeTypeImmediate(Instruction* instr) {
           cc_value = test_fcsr_bit(fcsr_cc);
           do_branch = (instr->FBtrueValue()) ? cc_value : !cc_value;
           execute_branch_delay_instruction = true;
-          // Set next_pc
+          // Set next_pc.
           if (do_branch) {
             next_pc = current_pc + (imm16 << 2) + Instruction::kInstrSize;
           } else {
@@ -1964,7 +1964,7 @@ void Simulator::DecodeTypeImmediate(Instruction* instr) {
           UNREACHABLE();
       };
       break;
-    // ------------- REGIMM class
+    // ------------- REGIMM class.
     case REGIMM:
       switch (instr->RtFieldRaw()) {
         case BLTZ:
@@ -1989,7 +1989,7 @@ void Simulator::DecodeTypeImmediate(Instruction* instr) {
         case BGEZAL:
           // Branch instructions common part.
           execute_branch_delay_instruction = true;
-          // Set next_pc
+          // Set next_pc.
           if (do_branch) {
             next_pc = current_pc + (imm16 << 2) + Instruction::kInstrSize;
             if (instr->IsLinkingInstruction()) {
@@ -2001,8 +2001,8 @@ void Simulator::DecodeTypeImmediate(Instruction* instr) {
         default:
           break;
         };
-    break;  // case REGIMM
-    // ------------- Branch instructions
+    break;  // case REGIMM.
+    // ------------- Branch instructions.
     // When comparing to zero, the encoding of rt field is always 0, so we don't
     // need to replace rt with zero.
     case BEQ:
@@ -2017,7 +2017,7 @@ void Simulator::DecodeTypeImmediate(Instruction* instr) {
     case BGTZ:
       do_branch = rs  > 0;
       break;
-    // ------------- Arithmetic instructions
+    // ------------- Arithmetic instructions.
     case ADDI:
       if (HaveSameSign(rs, se_imm16)) {
         if (rs > 0) {
@@ -2050,7 +2050,7 @@ void Simulator::DecodeTypeImmediate(Instruction* instr) {
     case LUI:
         alu_out = (oe_imm16 << 16);
       break;
-    // ------------- Memory instructions
+    // ------------- Memory instructions.
     case LB:
       addr = rs + se_imm16;
       alu_out = ReadB(addr);
@@ -2060,7 +2060,7 @@ void Simulator::DecodeTypeImmediate(Instruction* instr) {
       alu_out = ReadH(addr, instr);
       break;
     case LWL: {
-      // al_offset is an offset of the effective address within an aligned word
+      // al_offset is offset of the effective address within an aligned word.
       uint8_t al_offset = (rs + se_imm16) & kPointerAlignmentMask;
       uint8_t byte_shift = kPointerAlignmentMask - al_offset;
       uint32_t mask = (1 << byte_shift * 8) - 1;
@@ -2083,7 +2083,7 @@ void Simulator::DecodeTypeImmediate(Instruction* instr) {
       alu_out = ReadHU(addr, instr);
       break;
     case LWR: {
-      // al_offset is an offset of the effective address within an aligned word
+      // al_offset is offset of the effective address within an aligned word.
       uint8_t al_offset = (rs + se_imm16) & kPointerAlignmentMask;
       uint8_t byte_shift = kPointerAlignmentMask - al_offset;
       uint32_t mask = al_offset ? (~0 << (byte_shift + 1) * 8) : 0;
@@ -2138,16 +2138,16 @@ void Simulator::DecodeTypeImmediate(Instruction* instr) {
   // ---------- Raise exceptions triggered.
   SignalExceptions();
 
-  // ---------- Execution
+  // ---------- Execution.
   switch (op) {
-    // ------------- Branch instructions
+    // ------------- Branch instructions.
     case BEQ:
     case BNE:
     case BLEZ:
     case BGTZ:
       // Branch instructions common part.
       execute_branch_delay_instruction = true;
-      // Set next_pc
+      // Set next_pc.
       if (do_branch) {
         next_pc = current_pc + (imm16 << 2) + Instruction::kInstrSize;
         if (instr->IsLinkingInstruction()) {
@@ -2157,7 +2157,7 @@ void Simulator::DecodeTypeImmediate(Instruction* instr) {
         next_pc = current_pc + 2 * Instruction::kInstrSize;
       }
       break;
-    // ------------- Arithmetic instructions
+    // ------------- Arithmetic instructions.
     case ADDI:
     case ADDIU:
     case SLTI:
@@ -2168,7 +2168,7 @@ void Simulator::DecodeTypeImmediate(Instruction* instr) {
     case LUI:
       set_register(rt_reg, alu_out);
       break;
-    // ------------- Memory instructions
+    // ------------- Memory instructions.
     case LB:
     case LH:
     case LWL:
@@ -2228,16 +2228,16 @@ void Simulator::DecodeTypeImmediate(Instruction* instr) {
 }
 
 
-// Type 3: instructions using a 26 bytes immediate. (eg: j, jal)
+// Type 3: instructions using a 26 bytes immediate. (eg: j, jal).
 void Simulator::DecodeTypeJump(Instruction* instr) {
   // Get current pc.
   int32_t current_pc = get_pc();
   // Get unchanged bits of pc.
   int32_t pc_high_bits = current_pc & 0xf0000000;
-  // Next pc
+  // Next pc.
   int32_t next_pc = pc_high_bits | (instr->Imm26Value() << 2);
 
-  // Execute branch delay slot
+  // Execute branch delay slot.
   // We don't check for end_sim_pc. First it should not be met as the current pc
   // is valid. Secondly a jump should always execute its branch delay slot.
   Instruction* branch_delay_instr =
@@ -2263,7 +2263,7 @@ void Simulator::InstructionDecode(Instruction* instr) {
   if (::v8::internal::FLAG_trace_sim) {
     disasm::NameConverter converter;
     disasm::Disassembler dasm(converter);
-    // use a reasonably large buffer
+    // Use a reasonably large buffer.
     v8::internal::EmbeddedVector<char, 256> buffer;
     dasm.InstructionDecode(buffer, reinterpret_cast<byte*>(instr));
     PrintF("  0x%08x  %s\n", reinterpret_cast<intptr_t>(instr),
@@ -2325,7 +2325,7 @@ void Simulator::Execute() {
 int32_t Simulator::Call(byte* entry, int argument_count, ...) {
   va_list parameters;
   va_start(parameters, argument_count);
-  // Setup arguments
+  // Setup arguments.
 
   // First four arguments passed in registers.
   ASSERT(argument_count >= 4);
@@ -2350,7 +2350,7 @@ int32_t Simulator::Call(byte* entry, int argument_count, ...) {
   va_end(parameters);
   set_register(sp, entry_stack);
 
-  // Prepare to execute the code at entry
+  // Prepare to execute the code at entry.
   set_register(pc, reinterpret_cast<int32_t>(entry));
   // Put down marker for end of simulation. The simulator will stop simulation
   // when the PC reaches this value. By saving the "end simulation" value into
@@ -2386,7 +2386,7 @@ int32_t Simulator::Call(byte* entry, int argument_count, ...) {
   set_register(gp, callee_saved_value);
   set_register(fp, callee_saved_value);
 
-  // Start the simulation
+  // Start the simulation.
   Execute();
 
   // Check that the callee-saved registers have been preserved.

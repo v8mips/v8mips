@@ -427,7 +427,7 @@ void StubCompiler::GenerateStoreField(MacroAssembler* masm,
                                       Register name_reg,
                                       Register scratch,
                                       Label* miss_label) {
-  // a0 : value
+  // a0 : value.
   Label exit;
 
   // Check that the receiver isn't a smi.
@@ -486,7 +486,7 @@ void StubCompiler::GenerateStoreField(MacroAssembler* masm,
   } else {
     // Write to the properties array.
     int offset = index * kPointerSize + FixedArray::kHeaderSize;
-    // Get the properties array
+    // Get the properties array.
     __ lw(scratch, FieldMemOperand(receiver_reg, JSObject::kPropertiesOffset));
     __ sw(a0, FieldMemOperand(scratch, offset));
 
@@ -1089,7 +1089,7 @@ Register StubCompiler::CheckPrototypes(JSObject* object,
                                        scratch1,
                                        scratch2);
       __ lw(scratch1, FieldMemOperand(reg, HeapObject::kMapOffset));
-      reg = holder_reg;  // from now the object is in holder_reg
+      reg = holder_reg;  // From now the object is in holder_reg.
       __ lw(reg, FieldMemOperand(scratch1, Map::kPrototypeOffset));
     } else if (heap()->InNewSpace(prototype)) {
       // Get the map of the current object.
@@ -1109,7 +1109,7 @@ Register StubCompiler::CheckPrototypes(JSObject* object,
         __ lw(scratch1, FieldMemOperand(reg, HeapObject::kMapOffset));
       }
 
-      reg = holder_reg;  // from now the object is in holder_reg
+      reg = holder_reg;  // From now the object is in holder_reg.
       // The prototype is in new space; we cannot store a reference
       // to it in the code. Load it from the map.
       __ lw(reg, FieldMemOperand(scratch1, Map::kPrototypeOffset));
@@ -1125,7 +1125,7 @@ Register StubCompiler::CheckPrototypes(JSObject* object,
         __ CheckAccessGlobalProxy(reg, scratch1, miss);
       }
       // The prototype is in old space; load it directly.
-      reg = holder_reg;  // from now the object is in holder_reg
+      reg = holder_reg;  // From now the object is in holder_reg.
       __ li(reg, Operand(Handle<JSObject>(prototype)));
     }
 
@@ -1299,7 +1299,7 @@ void StubCompiler::GenerateLoadInterceptor(JSObject* object,
 
     // Invoke an interceptor.  Note: map checks from receiver to
     // interceptor's holder has been compiled before (see a caller
-    // of this method.)
+    // of this method).
     CompileCallLoadPropertyWithInterceptor(masm(),
                                            receiver,
                                            holder_reg,
@@ -1516,7 +1516,7 @@ MaybeObject* CallStubCompiler::CompileArrayPushCall(Object* object,
 
   Register receiver = a1;
 
-  // Get the receiver from the stack
+  // Get the receiver from the stack.
   const int argc = arguments().immediate();
   __ lw(receiver, MemOperand(sp, argc * kPointerSize));
 
@@ -1676,7 +1676,7 @@ MaybeObject* CallStubCompiler::CompileArrayPopCall(Object* object,
 
   GenerateNameCheck(name, &miss);
 
-  // Get the receiver from the stack
+  // Get the receiver from the stack.
   const int argc = arguments().immediate();
   __ lw(receiver, MemOperand(sp, argc * kPointerSize));
 
@@ -2108,7 +2108,7 @@ MaybeObject* CallStubCompiler::CompileMathFloorCall(Object* object,
   __ InvokeFunction(function, arguments(), JUMP_FUNCTION);
 
   __ bind(&miss);
-  // r2: function name.
+  // a2: function name.
   MaybeObject* obj = GenerateMissBranch();
   if (obj->IsFailure()) return obj;
 
@@ -2294,7 +2294,7 @@ MaybeObject* CallStubCompiler::CompileCallConstant(Object* object,
         object, holder, NULL, function, name);
     Object* result;
     if (!maybe_result->ToObject(&result)) return maybe_result;
-    // undefined means bail out to regular compiler.
+    // Undefined means bail out to regular compiler.
     if (!result->IsUndefined()) return result;
   }
 
@@ -2302,7 +2302,7 @@ MaybeObject* CallStubCompiler::CompileCallConstant(Object* object,
 
   GenerateNameCheck(name, &miss);
 
-  // Get the receiver from the stack
+  // Get the receiver from the stack.
   const int argc = arguments().immediate();
   __ lw(a1, MemOperand(sp, argc * kPointerSize));
 
@@ -2480,7 +2480,7 @@ MaybeObject* CallStubCompiler::CompileCallGlobal(JSObject* object,
         object, holder, cell, function, name);
     Object* result;
     if (!maybe_result->ToObject(&result)) return maybe_result;
-    // undefined means bail out to regular compiler.
+    // Undefined means bail out to regular compiler.
     if (!result->IsUndefined()) return result;
   }
 
@@ -2540,7 +2540,7 @@ MaybeObject* StoreStubCompiler::CompileStoreField(JSObject* object,
   // -----------------------------------
   Label miss;
 
-  // name register might be clobbered.
+  // Name register might be clobbered.
   GenerateStoreField(masm(),
                      object,
                      index,
@@ -2633,7 +2633,7 @@ MaybeObject* StoreStubCompiler::CompileStoreInterceptor(JSObject* receiver,
   __ Push(a1, a2, a0);  // Receiver, name, value.
 
   __ li(a0, Operand(Smi::FromInt(strict_mode_)));
-  __ push(a0);  // strict mode
+  __ push(a0);  // Strict mode.
 
   // Do tail-call to the runtime system.
   ExternalReference store_ic_property =
@@ -2942,7 +2942,7 @@ MaybeObject* KeyedLoadStubCompiler::CompileLoadConstant(String* name,
   // -----------------------------------
   Label miss;
 
-  // Check the key is the cached one
+  // Check the key is the cached one.
   __ Branch(&miss, ne, a0, Operand(Handle<String>(name)));
 
   GenerateLoadConstant(receiver, holder, a1, a2, a3, t0, value, name, &miss);
@@ -3258,7 +3258,7 @@ MaybeObject* ConstructStubCompiler::CompileConstructStub(JSFunction* function) {
   // a2: initial map
   // a3: object size (in words)
   // t4: JSObject (not tagged)
-  // r7: undefined
+  // t7: undefined
   __ LoadRoot(t6, Heap::kEmptyFixedArrayRootIndex);
   __ mov(t5, t4);
   __ sw(a2, MemOperand(t5, JSObject::kMapOffset));
@@ -3382,7 +3382,7 @@ MaybeObject* ExternalArrayStubCompiler::CompileKeyedLoadStub(
   Register key = a0;
   Register receiver = a1;
 
-  // Check that the object isn't a smi
+  // Check that the object isn't a smi.
   __ JumpIfSmi(receiver, &slow);
 
   // Check that the key is a smi.
@@ -3919,7 +3919,7 @@ MaybeObject* ExternalArrayStubCompiler::CompileKeyedStoreStub(
         __ Branch(&done, eq, t6, Operand(zero_reg));
 
         __ xor_(t2, t6, t5);
-        __ movz(t3, zero_reg, t2);  // Only if t6 is equal to t5
+        __ movz(t3, zero_reg, t2);  // Only if t6 is equal to t5.
         __ Branch(&done, eq, t6, Operand(t5));
 
         // Unbias exponent.
@@ -4001,7 +4001,7 @@ MaybeObject* ExternalArrayStubCompiler::CompileKeyedStoreStub(
   // Push receiver, key and value for runtime call.
   __ Push(a2, a1, a0);
 
-  __ li(a1, Operand(Smi::FromInt(NONE)));  // PropertyAttributes
+  __ li(a1, Operand(Smi::FromInt(NONE)));  // PropertyAttributes.
   __ li(a0, Operand(Smi::FromInt(
        Code::ExtractExtraICStateFromFlags(flags) & kStrictMode)));
   __ Push(a1, a0);

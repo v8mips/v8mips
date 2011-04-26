@@ -25,7 +25,7 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#include <limits.h>  // For LONG_MIN, LONG_MAX
+#include <limits.h>  // For LONG_MIN, LONG_MAX.
 
 #include "v8.h"
 
@@ -50,7 +50,7 @@ MacroAssembler::MacroAssembler(Isolate* arg_isolate, void* buffer, int size)
 }
 
 
-// Arguments macros
+// Arguments macros.
 #define COND_TYPED_ARGS Condition cond, Register r1, const Operand& r2
 #define COND_ARGS cond, r1, r2
 
@@ -274,7 +274,7 @@ void MacroAssembler::RecordWrite(Register object,
 
 
 // -----------------------------------------------------------------------------
-// Allocation support
+// Allocation support.
 
 
 void MacroAssembler::CheckAccessGlobalProxy(Register holder_reg,
@@ -349,7 +349,7 @@ void MacroAssembler::CheckAccessGlobalProxy(Register holder_reg,
 
 
 // ---------------------------------------------------------------------------
-// Instruction macros
+// Instruction macros.
 
 void MacroAssembler::Addu(Register rd, Register rs, const Operand& rt) {
   if (rt.is_reg()) {
@@ -601,7 +601,7 @@ void MacroAssembler::li(Register rd, Operand j, bool gen2instr) {
 }
 
 
-// Exception-generating instructions and debugging support
+// Exception-generating instructions and debugging support.
 void MacroAssembler::stop(const char* msg) {
   // TO_UPGRADE: Just a break for now. Maybe we could upgrade it.
   // We use the 0x54321 value to be able to find it easily when reading memory.
@@ -730,11 +730,11 @@ void MacroAssembler::Cvt_d_uw(FPURegister fd, Register rs) {
   ASSERT(!rs.is(t9));
   ASSERT(!rs.is(t8));
 
-  // Save rs's MSB to t8
+  // Save rs's MSB to t8.
   And(t8, rs, 0x80000000);
   // Remove rs's MSB.
   And(t9, rs, 0x7FFFFFFF);
-  // Move t9 to fd
+  // Move t9 to fd.
   mtc1(t9, fd);
 
   // Convert fd to a real FP value.
@@ -1036,7 +1036,7 @@ void MacroAssembler::Branch(int16_t offset, Condition cond, Register rs,
       case ne:
         bne(rs, r2, offset);
         break;
-      // Signed comparison
+      // Signed comparison.
       case greater:
         if (r2.is(zero_reg)) {
           bgtz(rs, offset);
@@ -1127,7 +1127,7 @@ void MacroAssembler::Branch(int16_t offset, Condition cond, Register rs,
         li(r2, rt);
         bne(rs, r2, offset);
         break;
-      // Signed comparison
+      // Signed comparison.
       case greater:
         if (rt.imm32_ == 0) {
           bgtz(rs, offset);
@@ -1269,7 +1269,7 @@ void MacroAssembler::Branch(Label* L, Condition cond, Register rs,
         offset = shifted_branch_offset(L, false);
         bne(rs, r2, offset);
         break;
-      // Signed comparison
+      // Signed comparison.
       case greater:
         if (r2.is(zero_reg)) {
           offset = shifted_branch_offset(L, false);
@@ -1375,7 +1375,7 @@ void MacroAssembler::Branch(Label* L, Condition cond, Register rs,
         offset = shifted_branch_offset(L, false);
         bne(rs, r2, offset);
         break;
-      // Signed comparison
+      // Signed comparison.
       case greater:
         if (rt.imm32_ == 0) {
           offset = shifted_branch_offset(L, false);
@@ -1543,7 +1543,7 @@ void MacroAssembler::BranchAndLink(int16_t offset, Condition cond, Register rs,
       bal(offset);
       break;
 
-    // Signed comparison
+    // Signed comparison.
     case greater:
       slt(scratch, r2, rs);
       addiu(scratch, scratch, -1);
@@ -1638,7 +1638,7 @@ void MacroAssembler::BranchAndLink(Label* L, Condition cond, Register rs,
       bal(offset);
       break;
 
-    // Signed comparison
+    // Signed comparison.
     case greater:
       slt(scratch, r2, rs);
       addiu(scratch, scratch, -1);
@@ -1741,7 +1741,7 @@ void MacroAssembler::Jump(const Operand& target,
         Branch(2, NegateCondition(cond), rs, rt);
         j(target.imm32_);  // Will generate only one instruction.
       }
-    } else {  // MustUseReg(target)
+    } else {  // MustUseReg(target).
       li(t9, target);
       if (cond == cc_always) {
         jr(t9);
@@ -1762,10 +1762,10 @@ void MacroAssembler::Call(const Operand& target, BranchDelaySlot bdslot) {
   BlockTrampolinePoolScope block_trampoline_pool(this);
   if (target.is_reg()) {
       jalr(target.rm());
-  } else {    // !target.is_reg()
+  } else {  // !target.is_reg().
     if (!MustUseReg(target.rmode_)) {
       jal(target.imm32_);
-    } else {  // MustUseReg(target)
+    } else {  // MustUseReg(target).
       // Must record previous source positions before the
       // li() generates a new code target.
       positions_recorder()->WriteRecordedPositions();
@@ -1792,7 +1792,7 @@ void MacroAssembler::Call(const Operand& target,
       Branch(2, NegateCondition(cond), rs, rt);
       jalr(target.rm());
     }
-  } else {    // !target.is_reg()
+  } else {  // !target.is_reg().
     if (!MustUseReg(target.rmode_)) {
       if (cond == cc_always) {
         jal(target.imm32_);
@@ -1902,7 +1902,7 @@ void MacroAssembler::DebugBreak() {
 
 
 // ---------------------------------------------------------------------------
-// Exception handling
+// Exception handling.
 
 void MacroAssembler::PushTryHandler(CodeLocation try_location,
                                     HandlerType type) {
@@ -2407,7 +2407,7 @@ void MacroAssembler::GetCFunctionDoubleResult(const DoubleRegister dst) {
 
 
 // -----------------------------------------------------------------------------
-// JavaScript invokes
+// JavaScript invokes.
 
 void MacroAssembler::InvokePrologue(const ParameterCount& expected,
                                     const ParameterCount& actual,
@@ -2648,7 +2648,7 @@ void MacroAssembler::GetObjectType(Register object,
 
 
 // -----------------------------------------------------------------------------
-// Runtime calls
+// Runtime calls.
 
 void MacroAssembler::CallStub(CodeStub* stub, Condition cond,
                               Register r1, const Operand& r2) {
@@ -2658,7 +2658,7 @@ void MacroAssembler::CallStub(CodeStub* stub, Condition cond,
 
 
 void MacroAssembler::TailCallStub(CodeStub* stub) {
-  ASSERT(allow_stub_calls());  // stub calls are not allowed in some stubs
+  ASSERT(allow_stub_calls());  // Stub calls are not allowed in some stubs.
   Jump(stub->GetCode(), RelocInfo::CODE_TARGET);
 }
 
@@ -2955,7 +2955,7 @@ void MacroAssembler::DecrementCounter(StatsCounter* counter, int value,
 
 
 // -----------------------------------------------------------------------------
-// Debugging
+// Debugging.
 
 void MacroAssembler::Assert(Condition cc, const char* msg,
                             Register rs, Operand rt) {
@@ -2995,7 +2995,7 @@ void MacroAssembler::Check(Condition cc, const char* msg,
   Label L;
   Branch(&L, cc, rs, rt);
   Abort(msg);
-  // will not return here
+  // Will not return here.
   bind(&L);
 }
 
@@ -3025,7 +3025,7 @@ void MacroAssembler::Abort(const char* msg) {
   li(a0, Operand(Smi::FromInt(p1 - p0)));
   Push(a0);
   CallRuntime(Runtime::kAbort, 2);
-  // will not return here
+  // Will not return here.
   if (is_trampoline_pool_blocked()) {
     // If the calling code cares about the exact number of
     // instructions generated, we insert padding here to keep the size
@@ -3134,11 +3134,6 @@ void MacroAssembler::EnterExitFrame(Register hold_argc,
   // popping the args.
   // t9 = sp + kPointerSize * #args
   addu(t9, sp, t8);
-
-  // Compute the argv pointer and keep it in a callee-saved register.
-  // This only seems to be needed for crankshaft and may cause problems
-  // so it's disabled for now.
-  // Subu(s6, t9, Operand(kPointerSize));
 
   // Align the stack at this point.
   AlignStack(0);

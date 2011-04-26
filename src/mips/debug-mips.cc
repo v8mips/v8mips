@@ -79,7 +79,7 @@ void BreakLocationIterator::ClearDebugBreakAtReturn() {
 
 
 // A debug break in the exit code is identified by the JS frame exit code
-// having been patched with li/call psuedo-instrunction (liu/ori/jalr)
+// having been patched with li/call psuedo-instrunction (liu/ori/jalr).
 bool Debug::IsDebugBreakAtReturn(RelocInfo* rinfo) {
   ASSERT(RelocInfo::IsJSReturn(rinfo->rmode()));
   return rinfo->IsPatchedReturnSequence();
@@ -95,7 +95,7 @@ bool BreakLocationIterator::IsDebugBreakAtSlot() {
 
 void BreakLocationIterator::SetDebugBreakAtSlot() {
   ASSERT(IsDebugBreakSlot());
-  // Patch the code changing the debug break slot code from
+  // Patch the code changing the debug break slot code from:
   //   nop(DEBUG_BREAK_NOP) - nop(1) is sll(zero_reg, zero_reg, 1)
   //   nop(DEBUG_BREAK_NOP)
   //   nop(DEBUG_BREAK_NOP)
@@ -150,7 +150,7 @@ static void Generate_DebugBreakCallHelper(MacroAssembler* masm,
 #ifdef DEBUG
   __ RecordComment("// Calling from debug break to runtime - come in - over");
 #endif
-  __ mov(a0, zero_reg);  // no arguments
+  __ mov(a0, zero_reg);  // No arguments.
   __ li(a1, Operand(ExternalReference::debug_break(masm->isolate())));
 
   CEntryStub ceb(1);
@@ -232,7 +232,7 @@ void Debug::GenerateKeyedStoreICDebugBreak(MacroAssembler* masm) {
 
 
 void Debug::GenerateCallICDebugBreak(MacroAssembler* masm) {
-  // Calling convention for IC call (from ic-mips.cc)
+  // Calling convention for IC call (from ic-mips.cc).
   // ----------- S t a t e -------------
   //  -- a2: name
   // -----------------------------------
@@ -241,7 +241,7 @@ void Debug::GenerateCallICDebugBreak(MacroAssembler* masm) {
 
 
 void Debug::GenerateConstructCallDebugBreak(MacroAssembler* masm) {
-  // Calling convention for construct call (from builtins-mips.cc)
+  // Calling convention for construct call (from builtins-mips.cc).
   //  -- a0     : number of arguments (not smi)
   //  -- a1     : constructor function
   Generate_DebugBreakCallHelper(masm, a1.bit(), a0.bit());
