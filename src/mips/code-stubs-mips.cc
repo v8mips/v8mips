@@ -2588,6 +2588,8 @@ void TypeRecordingBinaryOpStub::GenerateInt32Stub(MacroAssembler* masm) {
         // Save the left value on the stack.
         __ Push(t1, t0);
 
+        Label pop_and_call_runtime;
+
         // Allocate a heap number to store the result.
         heap_number_result = s0;
         GenerateHeapResultAllocation(masm,
@@ -2595,7 +2597,7 @@ void TypeRecordingBinaryOpStub::GenerateInt32Stub(MacroAssembler* masm) {
                                      heap_number_map,
                                      scratch1,
                                      scratch2,
-                                     &call_runtime);
+                                     &pop_and_call_runtime);
 
         // Load the left value from the value saved on the stack.
         __ Pop(a1, a0);
@@ -2606,6 +2608,10 @@ void TypeRecordingBinaryOpStub::GenerateInt32Stub(MacroAssembler* masm) {
         if (FLAG_debug_code) {
           __ stop("Unreachable code.");
         }
+
+        __ bind(&pop_and_call_runtime);
+        __ Drop(2);
+        __ Branch(&call_runtime);
       }
 
       break;
