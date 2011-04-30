@@ -56,6 +56,16 @@ static void EmitStrictTwoHeapObjectCompare(MacroAssembler* masm,
                                            Register rhs);
 
 
+// Check if the operand is a heap number.
+static void EmitCheckForHeapNumber(MacroAssembler* masm, Register operand,
+                                   Register scratch1, Register scratch2,
+                                   Label* not_a_heap_number) {
+  __ lw(scratch1, FieldMemOperand(operand, HeapObject::kMapOffset));
+  __ LoadRoot(scratch2, Heap::kHeapNumberMapRootIndex);
+  __ Branch(not_a_heap_number, ne, scratch1, Operand(scratch2));
+}
+
+
 void ToNumberStub::Generate(MacroAssembler* masm) {
   // The ToNumber stub takes one argument in a0.
   Label check_heap_number, call_builtin;
@@ -64,9 +74,7 @@ void ToNumberStub::Generate(MacroAssembler* masm) {
   __ Ret();
 
   __ bind(&check_heap_number);
-  __ lw(a1, FieldMemOperand(a0, HeapObject::kMapOffset));
-  __ LoadRoot(t0, Heap::kHeapNumberMapRootIndex);
-  __ Branch(&call_builtin, ne, a0, Operand(t0));
+  EmitCheckForHeapNumber(masm, a0, a1, t0, &call_builtin);
   __ mov(v0, a0);
   __ Ret();
 
@@ -1784,6 +1792,299 @@ void ToBooleanStub::Generate(MacroAssembler* masm) {
   __ bind(&false_result);
   __ mov(tos_, zero_reg);
   __ Ret();
+}
+
+
+Handle<Code> GetTypeRecordingUnaryOpStub(int key,
+                                         TRUnaryOpIC::TypeInfo type_info) {
+  TypeRecordingUnaryOpStub stub(key, type_info);
+  return stub.GetCode();
+}
+
+
+const char* TypeRecordingUnaryOpStub::GetName() {
+  if (name_ != NULL) return name_;
+  const int kMaxNameLength = 100;
+  name_ = Isolate::Current()->bootstrapper()->AllocateAutoDeletedArray(
+      kMaxNameLength);
+  if (name_ == NULL) return "OOM";
+  const char* op_name = Token::Name(op_);
+  const char* overwrite_name;
+  switch (mode_) {
+    case UNARY_NO_OVERWRITE: overwrite_name = "Alloc"; break;
+    case UNARY_OVERWRITE: overwrite_name = "Overwrite"; break;
+  }
+
+  OS::SNPrintF(Vector<char>(name_, kMaxNameLength),
+               "TypeRecordingUnaryOpStub_%s_%s_%s",
+               op_name,
+               overwrite_name,
+               TRUnaryOpIC::GetName(operand_type_));
+  return name_;
+}
+
+
+// TODO(svenpanne): Use virtual functions instead of switch.
+void TypeRecordingUnaryOpStub::Generate(MacroAssembler* masm) {
+  switch (operand_type_) {
+    case TRUnaryOpIC::UNINITIALIZED:
+      GenerateTypeTransition(masm);
+      break;
+    case TRUnaryOpIC::SMI:
+      GenerateSmiStub(masm);
+      break;
+    case TRUnaryOpIC::HEAP_NUMBER:
+      GenerateHeapNumberStub(masm);
+      break;
+    case TRUnaryOpIC::GENERIC:
+      GenerateGenericStub(masm);
+      break;
+  }
+}
+
+
+void TypeRecordingUnaryOpStub::GenerateTypeTransition(MacroAssembler* masm) {
+  // Argument is in a0 and v0 at this point, so we can overwrite a0.
+  // Push this stub's key. Although the operation and the type info are
+  // encoded into the key, the encoding is opaque, so push them too.
+  __ li(a2, Operand(Smi::FromInt(MinorKey())));
+  __ li(a1, Operand(Smi::FromInt(op_)));
+  __ li(a0, Operand(Smi::FromInt(operand_type_)));
+
+  __ Push(v0, a2, a1, a0);
+
+  __ TailCallExternalReference(
+      ExternalReference(IC_Utility(IC::kTypeRecordingUnaryOp_Patch),
+                        masm->isolate()),
+      4,
+      1);
+}
+
+
+// TODO(svenpanne): Use virtual functions instead of switch.
+void TypeRecordingUnaryOpStub::GenerateSmiStub(MacroAssembler* masm) {
+  switch (op_) {
+    case Token::SUB:
+      GenerateSmiStubSub(masm);
+      break;
+    case Token::BIT_NOT:
+      GenerateSmiStubBitNot(masm);
+      break;
+    default:
+      UNREACHABLE();
+  }
+}
+
+
+void TypeRecordingUnaryOpStub::GenerateSmiStubSub(MacroAssembler* masm) {
+  Label non_smi, slow;
+  GenerateSmiCodeSub(masm, &non_smi, &slow);
+  __ bind(&non_smi);
+  __ bind(&slow);
+  GenerateTypeTransition(masm);
+}
+
+
+void TypeRecordingUnaryOpStub::GenerateSmiStubBitNot(MacroAssembler* masm) {
+  Label non_smi;
+  GenerateSmiCodeBitNot(masm, &non_smi);
+  __ bind(&non_smi);
+  GenerateTypeTransition(masm);
+}
+
+
+void TypeRecordingUnaryOpStub::GenerateSmiCodeSub(MacroAssembler* masm,
+                                                  Label* non_smi,
+                                                  Label* slow) {
+  __ JumpIfNotSmi(a0, non_smi);
+
+  // The result of negating zero or the smallest negative smi is not a smi.
+  __ And(t0, a0, ~0x80000000);
+  __ Branch(slow, eq, t0, Operand(zero_reg));
+
+  // Return '0 - value'.
+  __ Subu(v0, zero_reg, a0);
+  __ Ret();
+}
+
+
+void TypeRecordingUnaryOpStub::GenerateSmiCodeBitNot(MacroAssembler* masm,
+                                                     Label* non_smi) {
+  __ JumpIfNotSmi(a0, non_smi);
+
+  // Flip bits and revert inverted smi-tag.
+  __ Neg(v0, a0);
+  __ And(v0, v0, ~kSmiTagMask);
+  __ Ret();
+}
+
+
+// TODO(svenpanne): Use virtual functions instead of switch.
+void TypeRecordingUnaryOpStub::GenerateHeapNumberStub(MacroAssembler* masm) {
+  switch (op_) {
+    case Token::SUB:
+      GenerateHeapNumberStubSub(masm);
+      break;
+    case Token::BIT_NOT:
+      GenerateHeapNumberStubBitNot(masm);
+      break;
+    default:
+      UNREACHABLE();
+  }
+}
+
+
+void TypeRecordingUnaryOpStub::GenerateHeapNumberStubSub(MacroAssembler* masm) {
+  Label non_smi, slow;
+  GenerateSmiCodeSub(masm, &non_smi, &slow);
+  __ bind(&non_smi);
+  GenerateHeapNumberCodeSub(masm, &slow);
+  __ bind(&slow);
+  GenerateTypeTransition(masm);
+}
+
+
+void TypeRecordingUnaryOpStub::GenerateHeapNumberStubBitNot(
+    MacroAssembler* masm) {
+  Label non_smi, slow;
+  GenerateSmiCodeBitNot(masm, &non_smi);
+  __ bind(&non_smi);
+  GenerateHeapNumberCodeBitNot(masm, &slow);
+  __ bind(&slow);
+  GenerateTypeTransition(masm);
+}
+
+void TypeRecordingUnaryOpStub::GenerateHeapNumberCodeSub(MacroAssembler* masm,
+                                                         Label* slow) {
+  EmitCheckForHeapNumber(masm, a0, a1, t2, slow);
+  // a0 is a heap number.  Get a new heap number in a1.
+  if (mode_ == UNARY_OVERWRITE) {
+    __ lw(a2, FieldMemOperand(a0, HeapNumber::kExponentOffset));
+    __ Xor(a2, a2, Operand(HeapNumber::kSignMask));  // Flip sign.
+    __ sw(a2, FieldMemOperand(a0, HeapNumber::kExponentOffset));
+  } else {
+    Label slow_allocate_heapnumber, heapnumber_allocated;
+    __ AllocateHeapNumber(a1, a2, a3, t2, &slow_allocate_heapnumber);
+    __ jmp(&heapnumber_allocated);
+
+    __ bind(&slow_allocate_heapnumber);
+    __ EnterInternalFrame();
+    __ push(a0);
+    __ CallRuntime(Runtime::kNumberAlloc, 0);
+    __ mov(a1, v0);
+    __ pop(a0);
+    __ LeaveInternalFrame();
+
+    __ bind(&heapnumber_allocated);
+    __ lw(a3, FieldMemOperand(a0, HeapNumber::kMantissaOffset));
+    __ lw(a2, FieldMemOperand(a0, HeapNumber::kExponentOffset));
+    __ sw(a3, FieldMemOperand(a1, HeapNumber::kMantissaOffset));
+    __ Xor(a2, a2, Operand(HeapNumber::kSignMask));  // Flip sign.
+    __ sw(a2, FieldMemOperand(a1, HeapNumber::kExponentOffset));
+    __ mov(v0, a1);
+  }
+  __ Ret();
+}
+
+
+void TypeRecordingUnaryOpStub::GenerateHeapNumberCodeBitNot(
+    MacroAssembler* masm, Label* slow) {
+  EmitCheckForHeapNumber(masm, a0, a1, t2, slow);
+  // Convert the heap number in a0 to an untagged integer in a1.
+  __ ConvertToInt32(a0, a1, a2, a3, f0, slow);
+
+  // Do the bitwise operation and check if the result fits in a smi.
+  Label try_float;
+  __ Neg(a1, a1);
+  __ Addu(a2, a1, Operand(0x40000000));
+  __ Branch(&try_float, lt, a2, Operand(zero_reg));
+
+  // Tag the result as a smi and we're done.
+  __ SmiTag(v0, a1);
+  __ Ret();
+
+  // Try to store the result in a heap number.
+  __ bind(&try_float);
+  if (mode_ == UNARY_NO_OVERWRITE) {
+    Label slow_allocate_heapnumber, heapnumber_allocated;
+    __ AllocateHeapNumber(v0, a2, a3, t2, &slow_allocate_heapnumber);
+    __ jmp(&heapnumber_allocated);
+
+    __ bind(&slow_allocate_heapnumber);
+    __ EnterInternalFrame();
+    __ push(a1);
+    __ CallRuntime(Runtime::kNumberAlloc, 0);
+    __ pop(a1);
+    __ LeaveInternalFrame();
+
+    __ bind(&heapnumber_allocated);
+  }
+
+  if (CpuFeatures::IsSupported(FPU)) {
+    // Convert the int32 in a1 to the heap number in v0. a2 is corrupted.
+    CpuFeatures::Scope scope(FPU);
+    __ mtc1(a1, f0);
+    __ cvt_d_w(f0, f0);
+    __ sdc1(f0, FieldMemOperand(v0, HeapNumber::kValueOffset));
+    __ Ret();
+  } else {
+    // WriteInt32ToHeapNumberStub does not trigger GC, so we do not
+    // have to set up a frame.
+    WriteInt32ToHeapNumberStub stub(a1, v0, a2, a3);
+    __ Jump(stub.GetCode(), RelocInfo::CODE_TARGET);
+  }
+}
+
+
+// TODO(svenpanne): Use virtual functions instead of switch.
+void TypeRecordingUnaryOpStub::GenerateGenericStub(MacroAssembler* masm) {
+  switch (op_) {
+    case Token::SUB:
+      GenerateGenericStubSub(masm);
+      break;
+    case Token::BIT_NOT:
+      GenerateGenericStubBitNot(masm);
+      break;
+    default:
+      UNREACHABLE();
+  }
+}
+
+
+void TypeRecordingUnaryOpStub::GenerateGenericStubSub(MacroAssembler* masm) {
+  Label non_smi, slow;
+  GenerateSmiCodeSub(masm, &non_smi, &slow);
+  __ bind(&non_smi);
+  GenerateHeapNumberCodeSub(masm, &slow);
+  __ bind(&slow);
+  GenerateGenericCodeFallback(masm);
+}
+
+
+void TypeRecordingUnaryOpStub::GenerateGenericStubBitNot(MacroAssembler* masm) {
+  Label non_smi, slow;
+  GenerateSmiCodeBitNot(masm, &non_smi);
+  __ bind(&non_smi);
+  GenerateHeapNumberCodeBitNot(masm, &slow);
+  __ bind(&slow);
+  GenerateGenericCodeFallback(masm);
+}
+
+
+void TypeRecordingUnaryOpStub::GenerateGenericCodeFallback(
+    MacroAssembler* masm) {
+  // Handle the slow case by jumping to the JavaScript builtin.
+  __ push(a0);
+  switch (op_) {
+    case Token::SUB:
+      __ InvokeBuiltin(Builtins::UNARY_MINUS, JUMP_JS);
+      break;
+    case Token::BIT_NOT:
+      __ InvokeBuiltin(Builtins::BIT_NOT, JUMP_JS);
+      break;
+    default:
+      UNREACHABLE();
+  }
 }
 
 

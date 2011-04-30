@@ -503,6 +503,15 @@ void MacroAssembler::Nor(Register rd, Register rs, const Operand& rt) {
 }
 
 
+void MacroAssembler::Neg(Register rs, const Operand& rt) {
+  ASSERT(rt.is_reg());
+  ASSERT(!at.is(rs));
+  ASSERT(!at.is(rt.rm()));
+  li(at, -1);
+  xor_(rs, rt.rm(), at);
+}
+
+
 void MacroAssembler::Slt(Register rd, Register rs, const Operand& rt) {
   if (rt.is_reg()) {
     slt(rd, rs, rt.rm());

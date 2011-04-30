@@ -3803,52 +3803,34 @@ void FullCodeGenerator::VisitUnaryOperation(UnaryOperation* expr) {
       break;
     }
 
-    case Token::SUB: {
-      Comment cmt(masm_, "[ UnaryOperation (SUB)");
-      bool can_overwrite = expr->expression()->ResultOverwriteAllowed();
-      UnaryOverwriteMode overwrite =
-          can_overwrite ? UNARY_OVERWRITE : UNARY_NO_OVERWRITE;
-      GenericUnaryOpStub stub(Token::SUB, overwrite, NO_UNARY_FLAGS);
-      // GenericUnaryOpStub expects the argument to be in the
-      // register a0.
-      VisitForAccumulatorValue(expr->expression());
-      __ mov(a0, result_register());
-      __ CallStub(&stub);
-      context()->Plug(v0);
+    case Token::SUB:
+      EmitUnaryOperation(expr, "[ UnaryOperation (SUB)");
       break;
-    }
 
-    case Token::BIT_NOT: {
-      Comment cmt(masm_, "[ UnaryOperation (BIT_NOT)");
-      VisitForAccumulatorValue(expr->expression());
-      Label done;
-      bool inline_smi_code = ShouldInlineSmiCase(expr->op());
-      if (inline_smi_code) {
-        Label call_stub;
-        __ JumpIfNotSmi(result_register(), &call_stub);
-        // Invert all bits except Smi tag, which stays 0.
-        __ Xor(result_register(), result_register(), 0xfffffffe);
-        __ Branch(&done);
-        __ bind(&call_stub);
-      }
-      bool overwrite = expr->expression()->ResultOverwriteAllowed();
-      UnaryOpFlags flags = inline_smi_code
-          ? NO_UNARY_SMI_CODE_IN_STUB
-          : NO_UNARY_FLAGS;
-      UnaryOverwriteMode mode =
-          overwrite ? UNARY_OVERWRITE : UNARY_NO_OVERWRITE;
-      GenericUnaryOpStub stub(Token::BIT_NOT, mode, flags);
-      // GenericUnaryOpStub expects the argument to be in register a0.
-      __ mov(a0, result_register());
-      __ CallStub(&stub);
-      __ bind(&done);
-      context()->Plug(result_register());
+    case Token::BIT_NOT:
+      EmitUnaryOperation(expr, "[ UnaryOperation (BIT_NOT)");
       break;
-    }
 
     default:
       UNREACHABLE();
   }
+}
+
+
+void FullCodeGenerator::EmitUnaryOperation(UnaryOperation* expr,
+                                           const char* comment) {
+  // TODO(svenpanne): Allowing format strings in Comment would be nice here...
+  Comment cmt(masm_, comment);
+  bool can_overwrite = expr->expression()->ResultOverwriteAllowed();
+  UnaryOverwriteMode overwrite =
+      can_overwrite ? UNARY_OVERWRITE : UNARY_NO_OVERWRITE;
+  TypeRecordingUnaryOpStub stub(expr->op(), overwrite);
+  // TypeRecordingGenericUnaryOpStub expects the argument to be in a0.
+  VisitForAccumulatorValue(expr->expression());
+  SetSourcePosition(expr->position());
+  __ mov(a0, result_register());
+  EmitCallIC(stub.GetCode(), NULL, expr->id());
+  context()->Plug(v0);
 }
 
 
