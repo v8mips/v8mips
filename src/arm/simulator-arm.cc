@@ -1012,7 +1012,7 @@ double Simulator::get_double_from_d_register(int dreg) {
 // For use in calls that take two double values, constructed either
 // from r0-r3 or d0 and d1.
 void Simulator::GetFpArgs(double* x, double* y) {
-  if (FLAG_hardfloat) {
+  if (use_eabi_hardfloat()) {
     *x = vfp_register[0];
     *y = vfp_register[1];
   } else {
@@ -1031,7 +1031,7 @@ void Simulator::GetFpArgs(double* x, double* y) {
 // For use in calls that take one double value, constructed either
 // from r0 and r1 or d0.
 void Simulator::GetFpArgs(double* x) {
-  if (FLAG_hardfloat) {
+  if (use_eabi_hardfloat()) {
     *x = vfp_register[0];
   } else {
     // We use a char buffer to get around the strict-aliasing rules which
@@ -1047,7 +1047,7 @@ void Simulator::GetFpArgs(double* x) {
 // For use in calls that take two double values, constructed either
 // from r0-r3 or d0 and d1.
 void Simulator::GetFpArgs(double* x, int32_t* y) {
-  if (FLAG_hardfloat) {
+  if (use_eabi_hardfloat()) {
     *x = vfp_register[0];
     *y = registers_[1];
   } else {
@@ -1066,7 +1066,7 @@ void Simulator::GetFpArgs(double* x, int32_t* y) {
 
 // The return value is either in r0/r1 or d0.
 void Simulator::SetFpResult(const double& result) {
-  if (FLAG_hardfloat) {
+  if (use_eabi_hardfloat()) {
     char buffer[2 * sizeof(vfp_register[0])];
     memcpy(buffer, &result, sizeof(buffer));
     // Copy result to d0.
@@ -1738,7 +1738,7 @@ void Simulator::SoftwareInterrupt(Instruction* instr) {
          (redirection->type() == ExternalReference::BUILTIN_COMPARE_CALL) ||
          (redirection->type() == ExternalReference::BUILTIN_FP_CALL) ||
          (redirection->type() == ExternalReference::BUILTIN_FP_INT_CALL);
-      if (FLAG_hardfloat) {
+      if (use_eabi_hardfloat()) {
         // With the hard floating point calling convention, double
         // arguments are passed in VFP registers. Fetch the arguments
         // from there and call the builtin using soft floating point
@@ -1770,9 +1770,9 @@ void Simulator::SoftwareInterrupt(Instruction* instr) {
       intptr_t external =
           reinterpret_cast<intptr_t>(redirection->external_function());
       if (fp_call) {
-        SimulatorRuntimeFPCall target =
-            reinterpret_cast<SimulatorRuntimeFPCall>(external);
         if (::v8::internal::FLAG_trace_sim || !stack_aligned) {
+          SimulatorRuntimeFPCall target =
+              reinterpret_cast<SimulatorRuntimeFPCall>(external);
           double dval0, dval1;
           int32_t ival;
           switch (redirection->type()) {
@@ -1785,7 +1785,7 @@ void Simulator::SoftwareInterrupt(Instruction* instr) {
           case ExternalReference::BUILTIN_FP_CALL:
             GetFpArgs(&dval0);
             PrintF("Call to host function at %p with arg %f",
-                FUNCTION_ADDR(target), dval1);
+                FUNCTION_ADDR(target), dval0);
             break;
           case ExternalReference::BUILTIN_FP_INT_CALL:
             GetFpArgs(&dval0, &ival);
@@ -1802,9 +1802,22 @@ void Simulator::SoftwareInterrupt(Instruction* instr) {
           PrintF("\n");
         }
         CHECK(stack_aligned);
-        double result = target(arg0, arg1, arg2, arg3);
         if (redirection->type() != ExternalReference::BUILTIN_COMPARE_CALL) {
+          SimulatorRuntimeFPCall target =
+              reinterpret_cast<SimulatorRuntimeFPCall>(external);
+          double result = target(arg0, arg1, arg2, arg3);
           SetFpResult(result);
+        } else {
+          SimulatorRuntimeCall target =
+              reinterpret_cast<SimulatorRuntimeCall>(external);
+          int64_t result = target(arg0, arg1, arg2, arg3, arg4, arg5);
+          int32_t lo_res = static_cast<int32_t>(result);
+          int32_t hi_res = static_cast<int32_t>(result >> 32);
+          if (::v8::internal::FLAG_trace_sim) {
+            PrintF("Returned %08x\n", lo_res);
+          }
+          set_register(r0, lo_res);
+          set_register(r1, hi_res);
         }
       } else if (redirection->type() == ExternalReference::DIRECT_API_CALL) {
         SimulatorRuntimeDirectApiCall target =
