@@ -1683,7 +1683,7 @@ void LiveEditFunctionTracker::RecordRootFunctionInfo(Handle<Code> code) {
 }
 
 
-bool LiveEditFunctionTracker::IsActive() {
+bool LiveEditFunctionTracker::IsActive(Isolate* isolate) {
   return false;
 }
 
