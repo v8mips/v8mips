@@ -917,7 +917,7 @@ void FullCodeGenerator::VisitForInStatement(ForInStatement* stmt) {
   __ Branch(&done_convert, hs, a1, Operand(FIRST_JS_OBJECT_TYPE));
   __ bind(&convert);
   __ push(a0);
-  __ InvokeBuiltin(Builtins::TO_OBJECT, CALL_JS);
+  __ InvokeBuiltin(Builtins::TO_OBJECT, CALL_FUNCTION);
   __ mov(a0, v0);
   __ bind(&done_convert);
   __ push(a0);
@@ -1037,7 +1037,7 @@ void FullCodeGenerator::VisitForInStatement(ForInStatement* stmt) {
   // just skip it.
   __ push(a1);  // Enumerable.
   __ push(a3);  // Current entry.
-  __ InvokeBuiltin(Builtins::FILTER_KEY, CALL_JS);
+  __ InvokeBuiltin(Builtins::FILTER_KEY, CALL_FUNCTION);
   __ mov(a3, result_register());
   __ Branch(loop_statement.continue_target(), eq, a3, Operand(zero_reg));
 
@@ -3714,7 +3714,7 @@ void FullCodeGenerator::VisitUnaryOperation(UnaryOperation* expr) {
           VisitForStackValue(prop->key());
           __ li(a1, Operand(Smi::FromInt(strict_mode_flag())));
           __ push(a1);
-          __ InvokeBuiltin(Builtins::DELETE, CALL_JS);
+          __ InvokeBuiltin(Builtins::DELETE, CALL_FUNCTION);
           context()->Plug(v0);
         }
       } else if (var != NULL) {
@@ -3726,7 +3726,7 @@ void FullCodeGenerator::VisitUnaryOperation(UnaryOperation* expr) {
           __ li(a1, Operand(var->name()));
           __ li(a0, Operand(Smi::FromInt(kNonStrictMode)));
           __ Push(a2, a1, a0);
-          __ InvokeBuiltin(Builtins::DELETE, CALL_JS);
+          __ InvokeBuiltin(Builtins::DELETE, CALL_FUNCTION);
           context()->Plug(v0);
         } else if (var->AsSlot() != NULL &&
                    var->AsSlot()->type() != Slot::LOOKUP) {
@@ -4154,7 +4154,7 @@ void FullCodeGenerator::VisitCompareOperation(CompareOperation* expr) {
   switch (op) {
     case Token::IN:
       VisitForStackValue(expr->right());
-      __ InvokeBuiltin(Builtins::IN, CALL_JS);
+      __ InvokeBuiltin(Builtins::IN, CALL_FUNCTION);
       PrepareForBailoutBeforeSplit(TOS_REG, false, NULL, NULL);
       __ LoadRoot(t0, Heap::kTrueValueRootIndex);
       Split(eq, v0, Operand(t0), if_true, if_false, fall_through);

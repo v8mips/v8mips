@@ -589,7 +589,7 @@ void Builtins::Generate_StringConstructCode(MacroAssembler* masm) {
   __ IncrementCounter(counters->string_ctor_conversions(), 1, a3, t0);
   __ EnterInternalFrame();
   __ push(v0);
-  __ InvokeBuiltin(Builtins::TO_STRING, CALL_JS);
+  __ InvokeBuiltin(Builtins::TO_STRING, CALL_FUNCTION);
   __ LeaveInternalFrame();
   __ pop(function);
   __ mov(argument, v0);
@@ -1227,7 +1227,7 @@ void Builtins::Generate_FunctionCall(MacroAssembler* masm) {
     __ Push(a0);
 
     __ Push(a2);
-    __ InvokeBuiltin(Builtins::TO_OBJECT, CALL_JS);
+    __ InvokeBuiltin(Builtins::TO_OBJECT, CALL_FUNCTION);
     __ mov(a2, v0);
 
     __ Pop(a0);
@@ -1338,7 +1338,7 @@ void Builtins::Generate_FunctionApply(MacroAssembler* masm) {
   __ lw(a0, MemOperand(fp, kArgsOffset));  // Get the args array.
   __ push(a0);
   // Returns (in v0) number of arguments to copy to stack as Smi.
-  __ InvokeBuiltin(Builtins::APPLY_PREPARE, CALL_JS);
+  __ InvokeBuiltin(Builtins::APPLY_PREPARE, CALL_FUNCTION);
 
   // Check the stack for overflow. We are not trying need to catch
   // interruptions (e.g. debug break and preemption) here, so the "real stack
@@ -1356,7 +1356,7 @@ void Builtins::Generate_FunctionApply(MacroAssembler* masm) {
   __ lw(a1, MemOperand(fp, kFunctionOffset));
   __ push(a1);
   __ push(v0);
-  __ InvokeBuiltin(Builtins::APPLY_OVERFLOW, CALL_JS);
+  __ InvokeBuiltin(Builtins::APPLY_OVERFLOW, CALL_FUNCTION);
   // End of stack check.
 
   // Push current limit and index.
@@ -1399,7 +1399,7 @@ void Builtins::Generate_FunctionApply(MacroAssembler* masm) {
   // a0: receiver
   __ bind(&call_to_object);
   __ push(a0);
-  __ InvokeBuiltin(Builtins::TO_OBJECT, CALL_JS);
+  __ InvokeBuiltin(Builtins::TO_OBJECT, CALL_FUNCTION);
   __ mov(a0, v0);  // Put object in a0 to match other paths to push_receiver.
   __ Branch(&push_receiver);
 
