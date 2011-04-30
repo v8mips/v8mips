@@ -185,6 +185,13 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
 #undef DECLARE_JUMP_CALL_PROTOTYPES
 #undef DECLARE_BRANCH_PROTOTYPES
 
+  void CallWithAstId(Handle<Code> code,
+                     RelocInfo::Mode rmode,
+                     unsigned ast_id,
+                     Condition cond = al,
+                     Register r1 = zero_reg,
+                     const Operand& r2 = Operand(zero_reg));
+
   // Emit code to discard a non-negative number of pointer-sized elements
   // from the stack, clobbering only the sp register.
   void Drop(int count,

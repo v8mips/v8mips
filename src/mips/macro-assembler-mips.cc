@@ -1816,6 +1816,20 @@ void MacroAssembler::Call(const Operand& target,
 }
 
 
+void MacroAssembler::CallWithAstId(Handle<Code> code,
+                                   RelocInfo::Mode rmode,
+                                   unsigned ast_id,
+                                   Condition cond,
+                                   Register r1,
+                                   const Operand& r2) {
+  ASSERT(rmode == RelocInfo::CODE_TARGET_WITH_ID);
+  ASSERT(ast_id != kNoASTId);
+  ASSERT(ast_id_for_reloc_info_ == kNoASTId);
+  ast_id_for_reloc_info_ = ast_id;
+  Call(reinterpret_cast<intptr_t>(code.location()), rmode, cond, r1, r2);
+}
+
+
 void MacroAssembler::Drop(int count,
                           Condition cond,
                           Register reg,

@@ -279,6 +279,8 @@ Assembler::Assembler(Isolate* arg_isolate, void* buffer, int buffer_size)
   trampoline_pool_blocked_nesting_ = 0;
   next_buffer_check_ = kMaxBranchOffset - kTrampolineSize;
   internal_trampoline_exception_ = false;
+
+  ast_id_for_reloc_info_ = kNoASTId;
 }
 
 
@@ -2058,7 +2060,14 @@ void Assembler::RecordRelocInfo(RelocInfo::Mode rmode, intptr_t data) {
       return;
     }
     ASSERT(buffer_space() >= kMaxRelocSize);  // Too late to grow buffer here.
-    reloc_info_writer.Write(&rinfo);
+    if (rmode == RelocInfo::CODE_TARGET_WITH_ID) {
+      ASSERT(ast_id_for_reloc_info_ != kNoASTId);
+      RelocInfo reloc_info_with_ast_id(pc_, rmode, ast_id_for_reloc_info_);
+      ast_id_for_reloc_info_ = kNoASTId;
+      reloc_info_writer.Write(&reloc_info_with_ast_id);
+    } else {
+      reloc_info_writer.Write(&rinfo);
+    }
   }
 }
 
