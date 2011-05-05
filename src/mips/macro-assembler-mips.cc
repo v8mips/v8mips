@@ -593,19 +593,8 @@ void MacroAssembler::li(Register rd, Operand j, bool gen2instr) {
     }
     // We need always the same number of instructions as we may need to patch
     // this code to load another value which may need 2 instructions to load.
-    if (is_int16(j.imm32_)) {
-      nop();
-      addiu(rd, zero_reg, j.imm32_);
-    } else if (!(j.imm32_ & kHiMask)) {
-      nop();
-      ori(rd, zero_reg, j.imm32_);
-    } else if (!(j.imm32_ & kImm16Mask)) {
-      nop();
-      lui(rd, (j.imm32_ & kHiMask) >> kLuiShift);
-    } else {
-      lui(rd, (j.imm32_ & kHiMask) >> kLuiShift);
-      ori(rd, rd, (j.imm32_ & kImm16Mask));
-    }
+    lui(rd, (j.imm32_ & kHiMask) >> kLuiShift);
+    ori(rd, rd, (j.imm32_ & kImm16Mask));
   }
 }
 
