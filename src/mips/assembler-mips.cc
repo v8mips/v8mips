@@ -2061,45 +2061,25 @@ Address Assembler::target_address_at(Address pc) {
 
 
 void Assembler::set_target_address_at(Address pc, Address target) {
-  // On MIPS we need to patch the code to generate.
+  // On MIPS we patch the address into lui/ori instruction pair.
 
-  // First check we have a li.
+  // First check we have an li (lui/ori pair).
   Instr instr2 = instr_at(pc + kInstrSize);
 #ifdef DEBUG
   Instr instr1 = instr_at(pc);
 
   // Check we have indeed the result from a li with MustUseReg true.
-  CHECK(((instr1 & kOpcodeMask) == LUI && (instr2 & kOpcodeMask) == ORI) ||
-        ((instr1 == 0) && ((instr2 & kOpcodeMask)== ADDIU ||
-                           (instr2 & kOpcodeMask)== ORI ||
-                           (instr2 & kOpcodeMask)== LUI)));
+  CHECK((GetOpcodeField(instr1) == LUI && GetOpcodeField(instr2) == ORI));
 #endif
 
   uint32_t rt_code = (instr2 & kRtFieldMask);
   uint32_t* p = reinterpret_cast<uint32_t*>(pc);
   uint32_t itarget = reinterpret_cast<uint32_t>(target);
 
-  if (is_int16(itarget)) {
-    // nop.
-    // addiu rt zero_reg j.
-    *p = nopInstr;
-    *(p+1) = ADDIU | rt_code | (itarget & kImm16Mask);
-  } else if (!(itarget & kHiMask)) {
-    // nop.
-    // ori rt zero_reg j.
-    *p = nopInstr;
-    *(p+1) = ORI | rt_code | (itarget & kImm16Mask);
-  } else if (!(itarget & kImm16Mask)) {
-    // nop.
-    // lui rt (kHiMask & itarget) >> kLuiShift.
-    *p = nopInstr;
-    *(p+1) = LUI | rt_code | ((itarget & kHiMask) >> kLuiShift);
-  } else {
-    // lui rt (kHiMask & itarget) >> kLuiShift.
-    // ori rt rt, (kImm16Mask & itarget).
-    *p = LUI | rt_code | ((itarget & kHiMask) >> kLuiShift);
-    *(p+1) = ORI | rt_code | (rt_code << 5) | (itarget & kImm16Mask);
-  }
+  // lui rt, high-16.
+  // ori rt rt, low-16.
+  *p = LUI | rt_code | ((itarget & kHiMask) >> kLuiShift);
+  *(p+1) = ORI | rt_code | (rt_code << 5) | (itarget & kImm16Mask);
 
   CPU::FlushICache(pc, 2 * sizeof(int32_t));
 }
