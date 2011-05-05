@@ -406,6 +406,13 @@ bool Object::IsExternalFloatArray() {
 }
 
 
+bool Object::IsExternalDoubleArray() {
+  return Object::IsHeapObject() &&
+      HeapObject::cast(this)->map()->instance_type() ==
+      EXTERNAL_DOUBLE_ARRAY_TYPE;
+}
+
+
 bool MaybeObject::IsFailure() {
   return HAS_FAILURE_TAG(this);
 }
@@ -1925,6 +1932,7 @@ CAST_ACCESSOR(ExternalUnsignedShortArray)
 CAST_ACCESSOR(ExternalIntArray)
 CAST_ACCESSOR(ExternalUnsignedIntArray)
 CAST_ACCESSOR(ExternalFloatArray)
+CAST_ACCESSOR(ExternalDoubleArray)
 CAST_ACCESSOR(ExternalPixelArray)
 CAST_ACCESSOR(Struct)
 
@@ -2339,6 +2347,20 @@ void ExternalFloatArray::set(int index, float value) {
 }
 
 
+double ExternalDoubleArray::get(int index) {
+  ASSERT((index >= 0) && (index < this->length()));
+  double* ptr = static_cast<double*>(external_pointer());
+  return ptr[index];
+}
+
+
+void ExternalDoubleArray::set(int index, double value) {
+  ASSERT((index >= 0) && (index < this->length()));
+  double* ptr = static_cast<double*>(external_pointer());
+  ptr[index] = value;
+}
+
+
 int Map::visitor_id() {
   return READ_BYTE_FIELD(this, kVisitorIdOffset);
 }
@@ -2539,6 +2561,12 @@ JSFunction* Map::unchecked_constructor() {
 }
 
 
+FixedArray* Map::unchecked_prototype_transitions() {
+  return reinterpret_cast<FixedArray*>(
+      READ_FIELD(this, kPrototypeTransitionsOffset));
+}
+
+
 Code::Flags Code::flags() {
   return static_cast<Flags>(READ_INT_FIELD(this, kFlagsOffset));
 }
@@ -2605,6 +2633,7 @@ int Code::major_key() {
 
 void Code::set_major_key(int major) {
   ASSERT(kind() == STUB ||
+         kind() == TYPE_RECORDING_UNARY_OP_IC ||
          kind() == TYPE_RECORDING_BINARY_OP_IC ||
          kind() == COMPARE_IC);
   ASSERT(0 <= major && major < 256);
@@ -2710,6 +2739,18 @@ ExternalArrayType Code::external_array_type() {
 void Code::set_external_array_type(ExternalArrayType value) {
   ASSERT(is_external_array_load_stub() || is_external_array_store_stub());
   WRITE_BYTE_FIELD(this, kExternalArrayTypeOffset, value);
+}
+
+
+byte Code::type_recording_unary_op_type() {
+  ASSERT(is_type_recording_unary_op_stub());
+  return READ_BYTE_FIELD(this, kUnaryOpTypeOffset);
+}
+
+
+void Code::set_type_recording_unary_op_type(byte value) {
+  ASSERT(is_type_recording_unary_op_stub());
+  WRITE_BYTE_FIELD(this, kUnaryOpTypeOffset, value);
 }
 
 
@@ -2947,6 +2988,7 @@ MaybeObject* Map::GetSlowElementsMap() {
 ACCESSORS(Map, instance_descriptors, DescriptorArray,
           kInstanceDescriptorsOffset)
 ACCESSORS(Map, code_cache, Object, kCodeCacheOffset)
+ACCESSORS(Map, prototype_transitions, FixedArray, kPrototypeTransitionsOffset)
 ACCESSORS(Map, constructor, Object, kConstructorOffset)
 
 ACCESSORS(JSFunction, shared, SharedFunctionInfo, kSharedFunctionInfoOffset)
@@ -3662,14 +3704,18 @@ JSObject::ElementsKind JSObject::GetElementsKind() {
         return EXTERNAL_INT_ELEMENTS;
       case EXTERNAL_UNSIGNED_INT_ARRAY_TYPE:
         return EXTERNAL_UNSIGNED_INT_ELEMENTS;
+      case EXTERNAL_FLOAT_ARRAY_TYPE:
+        return EXTERNAL_FLOAT_ELEMENTS;
+      case EXTERNAL_DOUBLE_ARRAY_TYPE:
+        return EXTERNAL_DOUBLE_ELEMENTS;
       case EXTERNAL_PIXEL_ARRAY_TYPE:
         return EXTERNAL_PIXEL_ELEMENTS;
       default:
         break;
     }
   }
-  ASSERT(array->map()->instance_type() == EXTERNAL_FLOAT_ARRAY_TYPE);
-  return EXTERNAL_FLOAT_ELEMENTS;
+  UNREACHABLE();
+  return DICTIONARY_ELEMENTS;
 }
 
 
@@ -3710,6 +3756,8 @@ EXTERNAL_ELEMENTS_CHECK(UnsignedInt,
                         EXTERNAL_UNSIGNED_INT_ARRAY_TYPE)
 EXTERNAL_ELEMENTS_CHECK(Float,
                         EXTERNAL_FLOAT_ARRAY_TYPE)
+EXTERNAL_ELEMENTS_CHECK(Double,
+                        EXTERNAL_DOUBLE_ARRAY_TYPE)
 EXTERNAL_ELEMENTS_CHECK(Pixel, EXTERNAL_PIXEL_ARRAY_TYPE)
 
 

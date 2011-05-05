@@ -1,4 +1,4 @@
-// Copyright 2006-2008 the V8 project authors. All rights reserved.
+// Copyright 2011 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -25,30 +25,26 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// Used for building without snapshots.
+#ifndef V8_ISOLATE_INL_H_
+#define V8_ISOLATE_INL_H_
 
-#include "v8.h"
+#include "isolate.h"
 
-#include "snapshot.h"
+#include "debug.h"
 
 namespace v8 {
 namespace internal {
 
-const byte Snapshot::data_[] = { 0 };
-const byte* Snapshot::raw_data_ = NULL;
-const int Snapshot::size_ = 0;
-const int Snapshot::raw_size_ = 0;
-const byte Snapshot::context_data_[] = { 0 };
-const byte* Snapshot::context_raw_data_ = NULL;
-const int Snapshot::context_size_ = 0;
-const int Snapshot::context_raw_size_ = 0;
 
-const int Snapshot::new_space_used_ = 0;
-const int Snapshot::pointer_space_used_ = 0;
-const int Snapshot::data_space_used_ = 0;
-const int Snapshot::code_space_used_ = 0;
-const int Snapshot::map_space_used_ = 0;
-const int Snapshot::cell_space_used_ = 0;
-const int Snapshot::large_space_used_ = 0;
+bool Isolate::DebuggerHasBreakPoints() {
+#ifdef ENABLE_DEBUGGER_SUPPORT
+  return debug()->has_break_points();
+#else
+  return false;
+#endif
+}
+
 
 } }  // namespace v8::internal
+
+#endif  // V8_ISOLATE_INL_H_

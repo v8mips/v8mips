@@ -503,6 +503,15 @@ void MacroAssembler::Nor(Register rd, Register rs, const Operand& rt) {
 }
 
 
+void MacroAssembler::Neg(Register rs, const Operand& rt) {
+  ASSERT(rt.is_reg());
+  ASSERT(!at.is(rs));
+  ASSERT(!at.is(rt.rm()));
+  li(at, -1);
+  xor_(rs, rt.rm(), at);
+}
+
+
 void MacroAssembler::Slt(Register rd, Register rs, const Operand& rt) {
   if (rt.is_reg()) {
     slt(rd, rs, rt.rm());
@@ -1816,6 +1825,20 @@ void MacroAssembler::Call(const Operand& target,
 }
 
 
+void MacroAssembler::CallWithAstId(Handle<Code> code,
+                                   RelocInfo::Mode rmode,
+                                   unsigned ast_id,
+                                   Condition cond,
+                                   Register r1,
+                                   const Operand& r2) {
+  ASSERT(rmode == RelocInfo::CODE_TARGET_WITH_ID);
+  ASSERT(ast_id != kNoASTId);
+  ASSERT(ast_id_for_reloc_info_ == kNoASTId);
+  ast_id_for_reloc_info_ = ast_id;
+  Call(reinterpret_cast<intptr_t>(code.location()), rmode, cond, r1, r2);
+}
+
+
 void MacroAssembler::Drop(int count,
                           Condition cond,
                           Register reg,
@@ -2888,14 +2911,14 @@ void MacroAssembler::JumpToExternalReference(const ExternalReference& builtin) {
 
 
 void MacroAssembler::InvokeBuiltin(Builtins::JavaScript id,
-                                   InvokeJSFlags flags,
+                                   InvokeFlag flag,
                                    PostCallGenerator* post_call_generator) {
   GetBuiltinEntry(t9, id);
-  if (flags == CALL_JS) {
+  if (flag == CALL_FUNCTION) {
     Call(t9);
     if (post_call_generator != NULL) post_call_generator->Generate();
   } else {
-    ASSERT(flags == JUMP_JS);
+    ASSERT(flag == JUMP_FUNCTION);
     Jump(t9);
   }
 }

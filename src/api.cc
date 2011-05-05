@@ -1,4 +1,4 @@
-// Copyright 2010 the V8 project authors. All rights reserved.
+// Copyright 2011 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -308,6 +308,61 @@ static inline i::Isolate* EnterIsolateIfNeeded() {
   i::Isolate::EnterDefaultIsolate();
   isolate = i::Isolate::Current();
   return isolate;
+}
+
+
+StartupData::CompressionAlgorithm V8::GetCompressedStartupDataAlgorithm() {
+#ifdef COMPRESS_STARTUP_DATA_BZ2
+  return StartupData::kBZip2;
+#else
+  return StartupData::kUncompressed;
+#endif
+}
+
+
+enum CompressedStartupDataItems {
+  kSnapshot = 0,
+  kSnapshotContext,
+  kCompressedStartupDataCount
+};
+
+int V8::GetCompressedStartupDataCount() {
+#ifdef COMPRESS_STARTUP_DATA_BZ2
+  return kCompressedStartupDataCount;
+#else
+  return 0;
+#endif
+}
+
+
+void V8::GetCompressedStartupData(StartupData* compressed_data) {
+#ifdef COMPRESS_STARTUP_DATA_BZ2
+  compressed_data[kSnapshot].data =
+      reinterpret_cast<const char*>(i::Snapshot::data());
+  compressed_data[kSnapshot].compressed_size = i::Snapshot::size();
+  compressed_data[kSnapshot].raw_size = i::Snapshot::raw_size();
+
+  compressed_data[kSnapshotContext].data =
+      reinterpret_cast<const char*>(i::Snapshot::context_data());
+  compressed_data[kSnapshotContext].compressed_size =
+      i::Snapshot::context_size();
+  compressed_data[kSnapshotContext].raw_size = i::Snapshot::context_raw_size();
+#endif
+}
+
+
+void V8::SetDecompressedStartupData(StartupData* decompressed_data) {
+#ifdef COMPRESS_STARTUP_DATA_BZ2
+  ASSERT_EQ(i::Snapshot::raw_size(), decompressed_data[kSnapshot].raw_size);
+  i::Snapshot::set_raw_data(
+      reinterpret_cast<const i::byte*>(decompressed_data[kSnapshot].data));
+
+  ASSERT_EQ(i::Snapshot::context_raw_size(),
+            decompressed_data[kSnapshotContext].raw_size);
+  i::Snapshot::set_context_raw_data(
+      reinterpret_cast<const i::byte*>(
+          decompressed_data[kSnapshotContext].data));
+#endif
 }
 
 
@@ -2751,6 +2806,15 @@ bool Object::SetAccessor(Handle<String> name,
 }
 
 
+bool v8::Object::HasOwnProperty(Handle<String> key) {
+  i::Isolate* isolate = Utils::OpenHandle(this)->GetIsolate();
+  ON_BAILOUT(isolate, "v8::Object::HasOwnProperty()",
+             return false);
+  return Utils::OpenHandle(this)->HasLocalProperty(
+      *Utils::OpenHandle(*key));
+}
+
+
 bool v8::Object::HasRealNamedProperty(Handle<String> key) {
   i::Isolate* isolate = Utils::OpenHandle(this)->GetIsolate();
   ON_BAILOUT(isolate, "v8::Object::HasRealNamedProperty()",
@@ -3161,6 +3225,8 @@ ExternalArrayType v8::Object::GetIndexedPropertiesExternalArrayDataType() {
       return kExternalUnsignedIntArray;
     case i::EXTERNAL_FLOAT_ARRAY_TYPE:
       return kExternalFloatArray;
+    case i::EXTERNAL_DOUBLE_ARRAY_TYPE:
+      return kExternalDoubleArray;
     case i::EXTERNAL_PIXEL_ARRAY_TYPE:
       return kExternalPixelArray;
     default:

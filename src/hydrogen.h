@@ -277,11 +277,10 @@ class HGraph: public ZoneObject {
   void InsertTypeConversions(HInstruction* instr);
   void PropagateMinusZeroChecks(HValue* value, BitVector* visited);
   void InsertRepresentationChangeForUse(HValue* value,
-                                        HValue* use,
+                                        HValue* use_value,
+                                        int use_index,
                                         Representation to);
-  void InsertRepresentationChangesForValue(HValue* current,
-                                           ZoneList<HValue*>* value_list,
-                                           ZoneList<Representation>* rep_list);
+  void InsertRepresentationChangesForValue(HValue* value);
   void InferTypes(ZoneList<HValue*>* worklist);
   void InitializeInferredTypes(int from_inclusive, int to_inclusive);
   void CheckForBackEdge(HBasicBlock* block, HBasicBlock* successor);
@@ -832,7 +831,9 @@ class HGraphBuilder: public AstVisitor {
   HInstruction* BuildBinaryOperation(BinaryOperation* expr,
                                      HValue* left,
                                      HValue* right);
-  HInstruction* BuildIncrement(HValue* value, bool increment);
+  HInstruction* BuildIncrement(HValue* value,
+                               bool increment,
+                               CountOperation* expr);
   HLoadNamedField* BuildLoadNamedField(HValue* object,
                                        Property* expr,
                                        Handle<Map> type,

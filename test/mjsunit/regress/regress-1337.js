@@ -1,4 +1,4 @@
-// Copyright 2006-2008 the V8 project authors. All rights reserved.
+// Copyright 2011 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -25,30 +25,16 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// Used for building without snapshots.
+// Flags: --allow-natives-syntax
 
-#include "v8.h"
+// Test that the throw is not inlined if object literals cannot be
+// inlined.
+function bar() { throw {}; }
 
-#include "snapshot.h"
+function foo() { bar(); }
 
-namespace v8 {
-namespace internal {
-
-const byte Snapshot::data_[] = { 0 };
-const byte* Snapshot::raw_data_ = NULL;
-const int Snapshot::size_ = 0;
-const int Snapshot::raw_size_ = 0;
-const byte Snapshot::context_data_[] = { 0 };
-const byte* Snapshot::context_raw_data_ = NULL;
-const int Snapshot::context_size_ = 0;
-const int Snapshot::context_raw_size_ = 0;
-
-const int Snapshot::new_space_used_ = 0;
-const int Snapshot::pointer_space_used_ = 0;
-const int Snapshot::data_space_used_ = 0;
-const int Snapshot::code_space_used_ = 0;
-const int Snapshot::map_space_used_ = 0;
-const int Snapshot::cell_space_used_ = 0;
-const int Snapshot::large_space_used_ = 0;
-
-} }  // namespace v8::internal
+for (var i = 0; i < 5; ++i) {
+    try { foo() } catch (e) { }
+}
+%OptimizeFunctionOnNextCall(foo)
+try { foo() } catch (e) { }

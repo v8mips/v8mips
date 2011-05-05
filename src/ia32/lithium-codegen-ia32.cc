@@ -689,7 +689,7 @@ void LCodeGen::DoLabel(LLabel* label) {
   }
   __ bind(label->label());
   current_block_ = label->block_id();
-  LCodeGen::DoGap(label);
+  DoGap(label);
 }
 
 
@@ -712,6 +712,11 @@ void LCodeGen::DoGap(LGap* gap) {
     int pc = masm()->pc_offset();
     safepoints_.SetPcAfterGap(pc);
   }
+}
+
+
+void LCodeGen::DoInstructionGap(LInstructionGap* instr) {
+  DoGap(instr);
 }
 
 
@@ -794,20 +799,61 @@ void LCodeGen::DoModI(LModI* instr) {
     __ and_(dividend, divisor - 1);
     __ bind(&done);
   } else {
-    LOperand* right = instr->InputAt(1);
-    ASSERT(ToRegister(instr->InputAt(0)).is(eax));
-    ASSERT(ToRegister(instr->result()).is(edx));
+    NearLabel done, remainder_eq_dividend, slow, do_subtraction, both_positive;
+    Register left_reg = ToRegister(instr->InputAt(0));
+    Register right_reg = ToRegister(instr->InputAt(1));
+    Register result_reg = ToRegister(instr->result());
 
-    Register right_reg = ToRegister(right);
+    ASSERT(left_reg.is(eax));
+    ASSERT(result_reg.is(edx));
     ASSERT(!right_reg.is(eax));
     ASSERT(!right_reg.is(edx));
 
     // Check for x % 0.
     if (instr->hydrogen()->CheckFlag(HValue::kCanBeDivByZero)) {
-      __ test(right_reg, ToOperand(right));
+      __ test(right_reg, Operand(right_reg));
       DeoptimizeIf(zero, instr->environment());
     }
 
+    __ test(left_reg, Operand(left_reg));
+    __ j(zero, &remainder_eq_dividend);
+    __ j(sign, &slow);
+
+    __ test(right_reg, Operand(right_reg));
+    __ j(not_sign, &both_positive);
+    // The sign of the divisor doesn't matter.
+    __ neg(right_reg);
+
+    __ bind(&both_positive);
+    // If the dividend is smaller than the nonnegative
+    // divisor, the dividend is the result.
+    __ cmp(left_reg, Operand(right_reg));
+    __ j(less, &remainder_eq_dividend);
+
+    // Check if the divisor is a PowerOfTwo integer.
+    Register scratch = ToRegister(instr->TempAt(0));
+    __ mov(scratch, right_reg);
+    __ sub(Operand(scratch), Immediate(1));
+    __ test(scratch, Operand(right_reg));
+    __ j(not_zero, &do_subtraction);
+    __ and_(left_reg, Operand(scratch));
+    __ jmp(&remainder_eq_dividend);
+
+    __ bind(&do_subtraction);
+    const int kUnfolds = 3;
+    // Try a few subtractions of the dividend.
+    __ mov(scratch, left_reg);
+    for (int i = 0; i < kUnfolds; i++) {
+      // Reduce the dividend by the divisor.
+      __ sub(left_reg, Operand(right_reg));
+      // Check if the dividend is less than the divisor.
+      __ cmp(left_reg, Operand(right_reg));
+      __ j(less, &remainder_eq_dividend);
+    }
+    __ mov(left_reg, scratch);
+
+    // Slow case, using idiv instruction.
+    __ bind(&slow);
     // Sign extend to edx.
     __ cdq();
 
@@ -815,12 +861,12 @@ void LCodeGen::DoModI(LModI* instr) {
     if (instr->hydrogen()->CheckFlag(HValue::kBailoutOnMinusZero)) {
       NearLabel positive_left;
       NearLabel done;
-      __ test(eax, Operand(eax));
+      __ test(left_reg, Operand(left_reg));
       __ j(not_sign, &positive_left);
       __ idiv(right_reg);
 
       // Test the remainder for 0, because then the result would be -0.
-      __ test(edx, Operand(edx));
+      __ test(result_reg, Operand(result_reg));
       __ j(not_zero, &done);
 
       DeoptimizeIf(no_condition, instr->environment());
@@ -830,6 +876,12 @@ void LCodeGen::DoModI(LModI* instr) {
     } else {
       __ idiv(right_reg);
     }
+    __ jmp(&done);
+
+    __ bind(&remainder_eq_dividend);
+    __ mov(result_reg, left_reg);
+
+    __ bind(&done);
   }
 }
 
@@ -2338,6 +2390,9 @@ void LCodeGen::DoLoadKeyedSpecializedArrayElement(
     XMMRegister result(ToDoubleRegister(instr->result()));
     __ movss(result, Operand(external_pointer, key, times_4, 0));
     __ cvtss2sd(result, result);
+  } else if (array_type == kExternalDoubleArray) {
+    __ movdbl(ToDoubleRegister(instr->result()),
+              Operand(external_pointer, key, times_8, 0));
   } else {
     Register result(ToRegister(instr->result()));
     switch (array_type) {
@@ -2366,6 +2421,7 @@ void LCodeGen::DoLoadKeyedSpecializedArrayElement(
         DeoptimizeIf(negative, instr->environment());
         break;
       case kExternalFloatArray:
+      case kExternalDoubleArray:
         UNREACHABLE();
         break;
     }
@@ -3047,6 +3103,9 @@ void LCodeGen::DoStoreKeyedSpecializedArrayElement(
   if (array_type == kExternalFloatArray) {
     __ cvtsd2ss(xmm0, ToDoubleRegister(instr->value()));
     __ movss(Operand(external_pointer, key, times_4, 0), xmm0);
+  } else if (array_type == kExternalDoubleArray) {
+    __ movdbl(Operand(external_pointer, key, times_8, 0),
+              ToDoubleRegister(instr->value()));
   } else {
     Register value = ToRegister(instr->value());
     switch (array_type) {
@@ -3081,6 +3140,7 @@ void LCodeGen::DoStoreKeyedSpecializedArrayElement(
         __ mov(Operand(external_pointer, key, times_4, 0), value);
         break;
       case kExternalFloatArray:
+      case kExternalDoubleArray:
         UNREACHABLE();
         break;
     }
@@ -4207,6 +4267,35 @@ void LCodeGen::DoOsrEntry(LOsrEntry* instr) {
   RegisterEnvironmentForDeoptimization(environment);
   ASSERT(osr_pc_offset_ == -1);
   osr_pc_offset_ = masm()->pc_offset();
+}
+
+
+void LCodeGen::DoIn(LIn* instr) {
+  LOperand* obj = instr->object();
+  LOperand* key = instr->key();
+  if (key->IsConstantOperand()) {
+    __ push(ToImmediate(key));
+  } else {
+    __ push(ToOperand(key));
+  }
+  if (obj->IsConstantOperand()) {
+    __ push(ToImmediate(obj));
+  } else {
+    __ push(ToOperand(obj));
+  }
+  ASSERT(instr->HasPointerMap() && instr->HasDeoptimizationEnvironment());
+  LPointerMap* pointers = instr->pointer_map();
+  LEnvironment* env = instr->deoptimization_environment();
+  RecordPosition(pointers->position());
+  RegisterEnvironmentForDeoptimization(env);
+  // Create safepoint generator that will also ensure enough space in the
+  // reloc info for patching in deoptimization (since this is invoking a
+  // builtin)
+  SafepointGenerator safepoint_generator(this,
+                                         pointers,
+                                         env->deoptimization_index());
+  __ mov(esi, Operand(ebp, StandardFrameConstants::kContextOffset));
+  __ InvokeBuiltin(Builtins::IN, CALL_FUNCTION, &safepoint_generator);
 }
 
 

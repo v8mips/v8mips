@@ -56,6 +56,16 @@ static void EmitStrictTwoHeapObjectCompare(MacroAssembler* masm,
                                            Register rhs);
 
 
+// Check if the operand is a heap number.
+static void EmitCheckForHeapNumber(MacroAssembler* masm, Register operand,
+                                   Register scratch1, Register scratch2,
+                                   Label* not_a_heap_number) {
+  __ lw(scratch1, FieldMemOperand(operand, HeapObject::kMapOffset));
+  __ LoadRoot(scratch2, Heap::kHeapNumberMapRootIndex);
+  __ Branch(not_a_heap_number, ne, scratch1, Operand(scratch2));
+}
+
+
 void ToNumberStub::Generate(MacroAssembler* masm) {
   // The ToNumber stub takes one argument in a0.
   Label check_heap_number, call_builtin;
@@ -64,15 +74,13 @@ void ToNumberStub::Generate(MacroAssembler* masm) {
   __ Ret();
 
   __ bind(&check_heap_number);
-  __ lw(a1, FieldMemOperand(a0, HeapObject::kMapOffset));
-  __ LoadRoot(t0, Heap::kHeapNumberMapRootIndex);
-  __ Branch(&call_builtin, ne, a0, Operand(t0));
+  EmitCheckForHeapNumber(masm, a0, a1, t0, &call_builtin);
   __ mov(v0, a0);
   __ Ret();
 
   __ bind(&call_builtin);
   __ push(a0);
-  __ InvokeBuiltin(Builtins::TO_NUMBER, JUMP_JS);
+  __ InvokeBuiltin(Builtins::TO_NUMBER, JUMP_FUNCTION);
 }
 
 
@@ -367,136 +375,6 @@ void ConvertToDoubleStub::Generate(MacroAssembler* masm) {
 }
 
 
-class FloatingPointHelper : public AllStatic {
- public:
-
-  enum Destination {
-    kFPURegisters,
-    kCoreRegisters
-  };
-
-
-  // Loads smis from a0 and a1 (right and left in binary operations) into
-  // floating point registers. Depending on the destination the values ends up
-  // either f14 and f12 or in a2/a3 and a0/a1 respectively. If the destination
-  // is floating point registers FPU must be supported. If core registers are
-  // requested when FPU is supported f12 and f14 will be scratched.
-  static void LoadSmis(MacroAssembler* masm,
-                       Destination destination,
-                       Register scratch1,
-                       Register scratch2);
-
-  // Loads objects from a0 and a1 (right and left in binary operations) into
-  // floating point registers. Depending on the destination the values ends up
-  // either f14 and f12 or in a2/a3 and a0/a1 respectively. If the destination
-  // is floating point registers FPU must be supported. If core registers are
-  // requested when FPU is supported f12 and f14 will still be scratched. If
-  // either a0 or a1 is not a number (not smi and not heap number object) the
-  // not_number label is jumped to with a0 and a1 intact.
-  static void LoadOperands(MacroAssembler* masm,
-                           FloatingPointHelper::Destination destination,
-                           Register heap_number_map,
-                           Register scratch1,
-                           Register scratch2,
-                           Label* not_number);
-
-  // Convert the smi or heap number in object to an int32 using the rules
-  // for ToInt32 as described in ECMAScript 9.5.: the value is truncated
-  // and brought into the range -2^31 .. +2^31 - 1.
-  static void ConvertNumberToInt32(MacroAssembler* masm,
-                                   Register object,
-                                   Register dst,
-                                   Register heap_number_map,
-                                   Register scratch1,
-                                   Register scratch2,
-                                   Register scratch3,
-                                   FPURegister double_scratch,
-                                   Label* not_int32);
-
-  // Load the number from object into double_dst in the double format.
-  // Control will jump to not_int32 if the value cannot be exactly represented
-  // by a 32-bit integer.
-  // Floating point value in the 32-bit integer range that are not exact integer
-  // won't be loaded.
-  static void LoadNumberAsInt32Double(MacroAssembler* masm,
-                                      Register object,
-                                      Destination destination,
-                                      FPURegister double_dst,
-                                      Register dst1,
-                                      Register dst2,
-                                      Register heap_number_map,
-                                      Register scratch1,
-                                      Register scratch2,
-                                      FPURegister single_scratch,
-                                      Label* not_int32);
-
-  // Loads the number from object into dst as a 32-bit integer.
-  // Control will jump to not_int32 if the object cannot be exactly represented
-  // by a 32-bit integer.
-  // Floating point value in the 32-bit integer range that are not exact integer
-  // won't be converted.
-  // scratch3 is not used when FPU is supported.
-  static void LoadNumberAsInt32(MacroAssembler* masm,
-                                Register object,
-                                Register dst,
-                                Register heap_number_map,
-                                Register scratch1,
-                                Register scratch2,
-                                Register scratch3,
-                                FPURegister double_scratch,
-                                Label* not_int32);
-
-  // Generate non FPU code to check if a double can be exactly represented by a
-  // 32-bit integer. This does not check for 0 or -0, which need
-  // to be checked for separately.
-  // Control jumps to not_int32 if the value is not a 32-bit integer, and falls
-  // through otherwise.
-  // src1 and src2 will be cloberred.
-  //
-  // Expected input:
-  // - src1: higher (exponent) part of the double value.
-  // - src2: lower (mantissa) part of the double value.
-  // Output status:
-  // - dst: 32 higher bits of the mantissa. (mantissa[51:20])
-  // - src2: contains 1.
-  // - other registers are clobbered.
-  static void DoubleIs32BitInteger(MacroAssembler* masm,
-                                   Register src1,
-                                   Register src2,
-                                   Register dst,
-                                   Register scratch,
-                                   Label* not_int32);
-
-  // Generates code to call a C function to do a double operation using core
-  // registers. (Used when FPU is not supported.)
-  // This code never falls through, but returns with a heap number containing
-  // the result in v0.
-  // Register heapnumber_result must be a heap number in which the
-  // result of the operation will be stored.
-  // Requires the following layout on entry:
-  // a0: Left value (least significant part of mantissa).
-  // a1: Left value (sign, exponent, top of mantissa).
-  // a2: Right value (least significant part of mantissa).
-  // a3: Right value (sign, exponent, top of mantissa).
-  static void CallCCodeForDoubleOperation(MacroAssembler* masm,
-                                          Token::Value op,
-                                          Register heap_number_result,
-                                          Register scratch);
-
- private:
-  static void LoadNumber(MacroAssembler* masm,
-                         FloatingPointHelper::Destination destination,
-                         Register object,
-                         FPURegister dst,
-                         Register dst1,
-                         Register dst2,
-                         Register heap_number_map,
-                         Register scratch1,
-                         Register scratch2,
-                         Label* not_number);
-};
-
-
 void FloatingPointHelper::LoadSmis(MacroAssembler* masm,
                                    FloatingPointHelper::Destination destination,
                                    Register scratch1,
@@ -663,6 +541,87 @@ void FloatingPointHelper::ConvertNumberToInt32(MacroAssembler* masm,
 }
 
 
+void FloatingPointHelper::ConvertIntToDouble(MacroAssembler* masm,
+                                             Register int_scratch,
+                                             Destination destination,
+                                             FPURegister double_dst,
+                                             Register dst1,
+                                             Register dst2,
+                                             Register scratch2,
+                                             FPURegister single_scratch) {
+  ASSERT(!int_scratch.is(scratch2));
+
+  Label done;
+
+  if (CpuFeatures::IsSupported(FPU)) {
+    CpuFeatures::Scope scope(FPU);
+    __ mtc1(int_scratch, single_scratch);
+    __ cvt_d_w(double_dst, single_scratch);
+    if (destination == kCoreRegisters) {
+      __ mfc1(dst1, double_dst);
+      __ mfc1(dst2, FPURegister::from_code(double_dst.code() + 1));
+    }
+  } else {
+    Label fewer_than_20_useful_bits;
+    // Expected output:
+    // |         dst2            |         dst1            |
+    // | s |   exp   |              mantissa               |
+
+    // Check for zero.
+    __ mov(dst2, int_scratch);
+    __ mov(dst1, int_scratch);
+    __ Branch(&done, eq, int_scratch, Operand(zero_reg));
+
+    // Preload the sign of the value.
+    __ And(dst2, int_scratch, Operand(HeapNumber::kSignMask));
+    // Get the absolute value of the object (as an unsigned integer).
+    Label skip_sub;
+    __ Branch(&skip_sub, ge, dst2, Operand(zero_reg));
+    __ Subu(int_scratch, zero_reg, int_scratch);
+    __ bind(&skip_sub);
+
+    // Get mantisssa[51:20].
+
+    // Get the position of the first set bit.
+    __ clz(dst1, int_scratch);
+    __ li(scratch2, 31);
+    __ Subu(dst1, scratch2, dst1);
+
+    // Set the exponent.
+    __ Addu(scratch2, dst1, Operand(HeapNumber::kExponentBias));
+    __ Ins(dst2, scratch2,
+        HeapNumber::kExponentShift, HeapNumber::kExponentBits);
+
+    // Clear the first non null bit.
+    __ li(scratch2, Operand(1));
+    __ sllv(scratch2, scratch2, dst1);
+    __ li(at, -1);
+    __ Xor(scratch2, scratch2, at);
+    __ And(int_scratch, int_scratch, scratch2);
+
+    // Get the number of bits to set in the lower part of the mantissa.
+    __ Subu(scratch2, dst1, Operand(HeapNumber::kMantissaBitsInTopWord));
+    __ Branch(&fewer_than_20_useful_bits, lt, scratch2, Operand(zero_reg));
+    // Set the higher 20 bits of the mantissa.
+    __ srlv(at, int_scratch, scratch2);
+    __ or_(dst2, dst2, at);
+    __ li(at, 32);
+    __ subu(scratch2, at, scratch2);
+    __ sllv(dst1, int_scratch, scratch2);
+    __ Branch(&done);
+
+    __ bind(&fewer_than_20_useful_bits);
+    __ li(at, HeapNumber::kMantissaBitsInTopWord);
+    __ subu(scratch2, at, dst1);
+    __ sllv(scratch2, int_scratch, scratch2);
+    __ Or(dst2, dst2, scratch2);
+    // Set dst1 to 0.
+    __ mov(dst1, zero_reg);
+  }
+  __ bind(&done);
+}
+
+
 void FloatingPointHelper::LoadNumberAsInt32Double(MacroAssembler* masm,
                                                   Register object,
                                                   Destination destination,
@@ -684,72 +643,8 @@ void FloatingPointHelper::LoadNumberAsInt32Double(MacroAssembler* masm,
 
   __ JumpIfNotSmi(object, &obj_is_not_smi);
   __ SmiUntag(scratch1, object);
-  if (CpuFeatures::IsSupported(FPU)) {
-    CpuFeatures::Scope scope(FPU);
-    __ mtc1(scratch1, single_scratch);
-    __ cvt_d_w(double_dst, single_scratch);
-    if (destination == kCoreRegisters) {
-      __ mfc1(dst1, double_dst);
-      __ mfc1(dst2, FPURegister::from_code(double_dst.code() + 1));
-    }
-  } else {
-    Label fewer_than_20_useful_bits;
-    // Expected output:
-    // |         dst2            |         dst1            |
-    // | s |   exp   |              mantissa               |
-
-    // Check for zero.
-    __ mov(dst2, scratch1);
-    __ mov(dst1, scratch1);
-    __ Branch(&done, eq, scratch1, Operand(zero_reg));
-
-    // Preload the sign of the value.
-    __ And(dst2, scratch1, Operand(HeapNumber::kSignMask));
-    // Get the absolute value of the object (as an unsigned integer).
-    Label skip_sub;
-    __ Branch(&skip_sub, ge, dst2, Operand(zero_reg));
-    __ Subu(scratch1, zero_reg, scratch1);
-    __ bind(&skip_sub);
-
-    // Get mantisssa[51:20].
-
-    // Get the position of the first set bit.
-    __ clz(dst1, scratch1);
-    __ li(scratch2, 31);
-    __ Subu(dst1, scratch2, dst1);
-
-    // Set the exponent.
-    __ Addu(scratch2, dst1, Operand(HeapNumber::kExponentBias));
-    __ Ins(dst2, scratch2,
-        HeapNumber::kExponentShift, HeapNumber::kExponentBits);
-
-    // Clear the first non null bit.
-    __ li(scratch2, Operand(1));
-    __ sllv(scratch2, scratch2, dst1);
-    __ li(at, -1);
-    __ Xor(scratch2, scratch2, at);
-    __ And(scratch1, scratch1, scratch2);
-
-    // Get the number of bits to set in the lower part of the mantissa.
-    __ Subu(scratch2, dst1, Operand(HeapNumber::kMantissaBitsInTopWord));
-    __ Branch(&fewer_than_20_useful_bits, lt, scratch2, Operand(zero_reg));
-    // Set the higher 20 bits of the mantissa.
-    __ srlv(at, scratch1, scratch2);
-    __ or_(dst2, dst1, at);
-    __ li(at, 32);
-    __ subu(scratch2, at, scratch2);
-    __ sllv(dst1, scratch1, scratch2);
-    __ Branch(&done);
-
-    __ bind(&fewer_than_20_useful_bits);
-    __ li(at, HeapNumber::kMantissaBitsInTopWord);
-    __ subu(scratch2, at, dst1);
-    __ sllv(scratch2, scratch1, scratch2);
-    __ Or(dst2, dst2, scratch2);
-    // Set dst1 to 0.
-    __ mov(dst1, zero_reg);
-  }
-
+  ConvertIntToDouble(masm, scratch1, destination, double_dst, dst1, dst2,
+                     scratch2, single_scratch);
   __ Branch(&done);
 
   __ bind(&obj_is_not_smi);
@@ -1824,7 +1719,7 @@ void CompareStub::Generate(MacroAssembler* masm) {
 
   // Call the native; it returns -1 (less), 0 (equal), or 1 (greater)
   // tagged as a small integer.
-  __ InvokeBuiltin(native, JUMP_JS);
+  __ InvokeBuiltin(native, JUMP_FUNCTION);
 }
 
 
@@ -1897,6 +1792,299 @@ void ToBooleanStub::Generate(MacroAssembler* masm) {
   __ bind(&false_result);
   __ mov(tos_, zero_reg);
   __ Ret();
+}
+
+
+Handle<Code> GetTypeRecordingUnaryOpStub(int key,
+                                         TRUnaryOpIC::TypeInfo type_info) {
+  TypeRecordingUnaryOpStub stub(key, type_info);
+  return stub.GetCode();
+}
+
+
+const char* TypeRecordingUnaryOpStub::GetName() {
+  if (name_ != NULL) return name_;
+  const int kMaxNameLength = 100;
+  name_ = Isolate::Current()->bootstrapper()->AllocateAutoDeletedArray(
+      kMaxNameLength);
+  if (name_ == NULL) return "OOM";
+  const char* op_name = Token::Name(op_);
+  const char* overwrite_name = NULL;  // Make g++ happy.
+  switch (mode_) {
+    case UNARY_NO_OVERWRITE: overwrite_name = "Alloc"; break;
+    case UNARY_OVERWRITE: overwrite_name = "Overwrite"; break;
+  }
+
+  OS::SNPrintF(Vector<char>(name_, kMaxNameLength),
+               "TypeRecordingUnaryOpStub_%s_%s_%s",
+               op_name,
+               overwrite_name,
+               TRUnaryOpIC::GetName(operand_type_));
+  return name_;
+}
+
+
+// TODO(svenpanne): Use virtual functions instead of switch.
+void TypeRecordingUnaryOpStub::Generate(MacroAssembler* masm) {
+  switch (operand_type_) {
+    case TRUnaryOpIC::UNINITIALIZED:
+      GenerateTypeTransition(masm);
+      break;
+    case TRUnaryOpIC::SMI:
+      GenerateSmiStub(masm);
+      break;
+    case TRUnaryOpIC::HEAP_NUMBER:
+      GenerateHeapNumberStub(masm);
+      break;
+    case TRUnaryOpIC::GENERIC:
+      GenerateGenericStub(masm);
+      break;
+  }
+}
+
+
+void TypeRecordingUnaryOpStub::GenerateTypeTransition(MacroAssembler* masm) {
+  // Argument is in a0 and v0 at this point, so we can overwrite a0.
+  // Push this stub's key. Although the operation and the type info are
+  // encoded into the key, the encoding is opaque, so push them too.
+  __ li(a2, Operand(Smi::FromInt(MinorKey())));
+  __ li(a1, Operand(Smi::FromInt(op_)));
+  __ li(a0, Operand(Smi::FromInt(operand_type_)));
+
+  __ Push(v0, a2, a1, a0);
+
+  __ TailCallExternalReference(
+      ExternalReference(IC_Utility(IC::kTypeRecordingUnaryOp_Patch),
+                        masm->isolate()),
+      4,
+      1);
+}
+
+
+// TODO(svenpanne): Use virtual functions instead of switch.
+void TypeRecordingUnaryOpStub::GenerateSmiStub(MacroAssembler* masm) {
+  switch (op_) {
+    case Token::SUB:
+      GenerateSmiStubSub(masm);
+      break;
+    case Token::BIT_NOT:
+      GenerateSmiStubBitNot(masm);
+      break;
+    default:
+      UNREACHABLE();
+  }
+}
+
+
+void TypeRecordingUnaryOpStub::GenerateSmiStubSub(MacroAssembler* masm) {
+  Label non_smi, slow;
+  GenerateSmiCodeSub(masm, &non_smi, &slow);
+  __ bind(&non_smi);
+  __ bind(&slow);
+  GenerateTypeTransition(masm);
+}
+
+
+void TypeRecordingUnaryOpStub::GenerateSmiStubBitNot(MacroAssembler* masm) {
+  Label non_smi;
+  GenerateSmiCodeBitNot(masm, &non_smi);
+  __ bind(&non_smi);
+  GenerateTypeTransition(masm);
+}
+
+
+void TypeRecordingUnaryOpStub::GenerateSmiCodeSub(MacroAssembler* masm,
+                                                  Label* non_smi,
+                                                  Label* slow) {
+  __ JumpIfNotSmi(a0, non_smi);
+
+  // The result of negating zero or the smallest negative smi is not a smi.
+  __ And(t0, a0, ~0x80000000);
+  __ Branch(slow, eq, t0, Operand(zero_reg));
+
+  // Return '0 - value'.
+  __ Subu(v0, zero_reg, a0);
+  __ Ret();
+}
+
+
+void TypeRecordingUnaryOpStub::GenerateSmiCodeBitNot(MacroAssembler* masm,
+                                                     Label* non_smi) {
+  __ JumpIfNotSmi(a0, non_smi);
+
+  // Flip bits and revert inverted smi-tag.
+  __ Neg(v0, a0);
+  __ And(v0, v0, ~kSmiTagMask);
+  __ Ret();
+}
+
+
+// TODO(svenpanne): Use virtual functions instead of switch.
+void TypeRecordingUnaryOpStub::GenerateHeapNumberStub(MacroAssembler* masm) {
+  switch (op_) {
+    case Token::SUB:
+      GenerateHeapNumberStubSub(masm);
+      break;
+    case Token::BIT_NOT:
+      GenerateHeapNumberStubBitNot(masm);
+      break;
+    default:
+      UNREACHABLE();
+  }
+}
+
+
+void TypeRecordingUnaryOpStub::GenerateHeapNumberStubSub(MacroAssembler* masm) {
+  Label non_smi, slow;
+  GenerateSmiCodeSub(masm, &non_smi, &slow);
+  __ bind(&non_smi);
+  GenerateHeapNumberCodeSub(masm, &slow);
+  __ bind(&slow);
+  GenerateTypeTransition(masm);
+}
+
+
+void TypeRecordingUnaryOpStub::GenerateHeapNumberStubBitNot(
+    MacroAssembler* masm) {
+  Label non_smi, slow;
+  GenerateSmiCodeBitNot(masm, &non_smi);
+  __ bind(&non_smi);
+  GenerateHeapNumberCodeBitNot(masm, &slow);
+  __ bind(&slow);
+  GenerateTypeTransition(masm);
+}
+
+void TypeRecordingUnaryOpStub::GenerateHeapNumberCodeSub(MacroAssembler* masm,
+                                                         Label* slow) {
+  EmitCheckForHeapNumber(masm, a0, a1, t2, slow);
+  // a0 is a heap number.  Get a new heap number in a1.
+  if (mode_ == UNARY_OVERWRITE) {
+    __ lw(a2, FieldMemOperand(a0, HeapNumber::kExponentOffset));
+    __ Xor(a2, a2, Operand(HeapNumber::kSignMask));  // Flip sign.
+    __ sw(a2, FieldMemOperand(a0, HeapNumber::kExponentOffset));
+  } else {
+    Label slow_allocate_heapnumber, heapnumber_allocated;
+    __ AllocateHeapNumber(a1, a2, a3, t2, &slow_allocate_heapnumber);
+    __ jmp(&heapnumber_allocated);
+
+    __ bind(&slow_allocate_heapnumber);
+    __ EnterInternalFrame();
+    __ push(a0);
+    __ CallRuntime(Runtime::kNumberAlloc, 0);
+    __ mov(a1, v0);
+    __ pop(a0);
+    __ LeaveInternalFrame();
+
+    __ bind(&heapnumber_allocated);
+    __ lw(a3, FieldMemOperand(a0, HeapNumber::kMantissaOffset));
+    __ lw(a2, FieldMemOperand(a0, HeapNumber::kExponentOffset));
+    __ sw(a3, FieldMemOperand(a1, HeapNumber::kMantissaOffset));
+    __ Xor(a2, a2, Operand(HeapNumber::kSignMask));  // Flip sign.
+    __ sw(a2, FieldMemOperand(a1, HeapNumber::kExponentOffset));
+    __ mov(v0, a1);
+  }
+  __ Ret();
+}
+
+
+void TypeRecordingUnaryOpStub::GenerateHeapNumberCodeBitNot(
+    MacroAssembler* masm, Label* slow) {
+  EmitCheckForHeapNumber(masm, a0, a1, t2, slow);
+  // Convert the heap number in a0 to an untagged integer in a1.
+  __ ConvertToInt32(a0, a1, a2, a3, f0, slow);
+
+  // Do the bitwise operation and check if the result fits in a smi.
+  Label try_float;
+  __ Neg(a1, a1);
+  __ Addu(a2, a1, Operand(0x40000000));
+  __ Branch(&try_float, lt, a2, Operand(zero_reg));
+
+  // Tag the result as a smi and we're done.
+  __ SmiTag(v0, a1);
+  __ Ret();
+
+  // Try to store the result in a heap number.
+  __ bind(&try_float);
+  if (mode_ == UNARY_NO_OVERWRITE) {
+    Label slow_allocate_heapnumber, heapnumber_allocated;
+    __ AllocateHeapNumber(v0, a2, a3, t2, &slow_allocate_heapnumber);
+    __ jmp(&heapnumber_allocated);
+
+    __ bind(&slow_allocate_heapnumber);
+    __ EnterInternalFrame();
+    __ push(a1);
+    __ CallRuntime(Runtime::kNumberAlloc, 0);
+    __ pop(a1);
+    __ LeaveInternalFrame();
+
+    __ bind(&heapnumber_allocated);
+  }
+
+  if (CpuFeatures::IsSupported(FPU)) {
+    // Convert the int32 in a1 to the heap number in v0. a2 is corrupted.
+    CpuFeatures::Scope scope(FPU);
+    __ mtc1(a1, f0);
+    __ cvt_d_w(f0, f0);
+    __ sdc1(f0, FieldMemOperand(v0, HeapNumber::kValueOffset));
+    __ Ret();
+  } else {
+    // WriteInt32ToHeapNumberStub does not trigger GC, so we do not
+    // have to set up a frame.
+    WriteInt32ToHeapNumberStub stub(a1, v0, a2, a3);
+    __ Jump(stub.GetCode(), RelocInfo::CODE_TARGET);
+  }
+}
+
+
+// TODO(svenpanne): Use virtual functions instead of switch.
+void TypeRecordingUnaryOpStub::GenerateGenericStub(MacroAssembler* masm) {
+  switch (op_) {
+    case Token::SUB:
+      GenerateGenericStubSub(masm);
+      break;
+    case Token::BIT_NOT:
+      GenerateGenericStubBitNot(masm);
+      break;
+    default:
+      UNREACHABLE();
+  }
+}
+
+
+void TypeRecordingUnaryOpStub::GenerateGenericStubSub(MacroAssembler* masm) {
+  Label non_smi, slow;
+  GenerateSmiCodeSub(masm, &non_smi, &slow);
+  __ bind(&non_smi);
+  GenerateHeapNumberCodeSub(masm, &slow);
+  __ bind(&slow);
+  GenerateGenericCodeFallback(masm);
+}
+
+
+void TypeRecordingUnaryOpStub::GenerateGenericStubBitNot(MacroAssembler* masm) {
+  Label non_smi, slow;
+  GenerateSmiCodeBitNot(masm, &non_smi);
+  __ bind(&non_smi);
+  GenerateHeapNumberCodeBitNot(masm, &slow);
+  __ bind(&slow);
+  GenerateGenericCodeFallback(masm);
+}
+
+
+void TypeRecordingUnaryOpStub::GenerateGenericCodeFallback(
+    MacroAssembler* masm) {
+  // Handle the slow case by jumping to the JavaScript builtin.
+  __ push(a0);
+  switch (op_) {
+    case Token::SUB:
+      __ InvokeBuiltin(Builtins::UNARY_MINUS, JUMP_FUNCTION);
+      break;
+    case Token::BIT_NOT:
+      __ InvokeBuiltin(Builtins::BIT_NOT, JUMP_FUNCTION);
+      break;
+    default:
+      UNREACHABLE();
+  }
 }
 
 
@@ -2611,6 +2799,8 @@ void TypeRecordingBinaryOpStub::GenerateInt32Stub(MacroAssembler* masm) {
         // Save the left value on the stack.
         __ Push(t1, t0);
 
+        Label pop_and_call_runtime;
+
         // Allocate a heap number to store the result.
         heap_number_result = s0;
         GenerateHeapResultAllocation(masm,
@@ -2618,7 +2808,7 @@ void TypeRecordingBinaryOpStub::GenerateInt32Stub(MacroAssembler* masm) {
                                      heap_number_map,
                                      scratch1,
                                      scratch2,
-                                     &call_runtime);
+                                     &pop_and_call_runtime);
 
         // Load the left value from the value saved on the stack.
         __ Pop(a1, a0);
@@ -2629,6 +2819,10 @@ void TypeRecordingBinaryOpStub::GenerateInt32Stub(MacroAssembler* masm) {
         if (FLAG_debug_code) {
           __ stop("Unreachable code.");
         }
+
+        __ bind(&pop_and_call_runtime);
+        __ Drop(2);
+        __ Branch(&call_runtime);
       }
 
       break;
@@ -2866,37 +3060,37 @@ void TypeRecordingBinaryOpStub::GenerateCallRuntime(MacroAssembler* masm) {
   GenerateRegisterArgsPush(masm);
   switch (op_) {
     case Token::ADD:
-      __ InvokeBuiltin(Builtins::ADD, JUMP_JS);
+      __ InvokeBuiltin(Builtins::ADD, JUMP_FUNCTION);
       break;
     case Token::SUB:
-      __ InvokeBuiltin(Builtins::SUB, JUMP_JS);
+      __ InvokeBuiltin(Builtins::SUB, JUMP_FUNCTION);
       break;
     case Token::MUL:
-      __ InvokeBuiltin(Builtins::MUL, JUMP_JS);
+      __ InvokeBuiltin(Builtins::MUL, JUMP_FUNCTION);
       break;
     case Token::DIV:
-      __ InvokeBuiltin(Builtins::DIV, JUMP_JS);
+      __ InvokeBuiltin(Builtins::DIV, JUMP_FUNCTION);
       break;
     case Token::MOD:
-      __ InvokeBuiltin(Builtins::MOD, JUMP_JS);
+      __ InvokeBuiltin(Builtins::MOD, JUMP_FUNCTION);
       break;
     case Token::BIT_OR:
-      __ InvokeBuiltin(Builtins::BIT_OR, JUMP_JS);
+      __ InvokeBuiltin(Builtins::BIT_OR, JUMP_FUNCTION);
       break;
     case Token::BIT_AND:
-      __ InvokeBuiltin(Builtins::BIT_AND, JUMP_JS);
+      __ InvokeBuiltin(Builtins::BIT_AND, JUMP_FUNCTION);
       break;
     case Token::BIT_XOR:
-      __ InvokeBuiltin(Builtins::BIT_XOR, JUMP_JS);
+      __ InvokeBuiltin(Builtins::BIT_XOR, JUMP_FUNCTION);
       break;
     case Token::SAR:
-      __ InvokeBuiltin(Builtins::SAR, JUMP_JS);
+      __ InvokeBuiltin(Builtins::SAR, JUMP_FUNCTION);
       break;
     case Token::SHR:
-      __ InvokeBuiltin(Builtins::SHR, JUMP_JS);
+      __ InvokeBuiltin(Builtins::SHR, JUMP_FUNCTION);
       break;
     case Token::SHL:
-      __ InvokeBuiltin(Builtins::SHL, JUMP_JS);
+      __ InvokeBuiltin(Builtins::SHL, JUMP_FUNCTION);
       break;
     default:
       UNREACHABLE();
@@ -3172,150 +3366,6 @@ Runtime::FunctionId TranscendentalCacheStub::RuntimeFunction() {
 
 void StackCheckStub::Generate(MacroAssembler* masm) {
   __ TailCallRuntime(Runtime::kStackGuard, 0, 1);
-}
-
-
-void GenericUnaryOpStub::Generate(MacroAssembler* masm) {
-  Label slow, done;
-
-  Register heap_number_map = t6;
-  __ LoadRoot(heap_number_map, Heap::kHeapNumberMapRootIndex);
-
-  if (op_ == Token::SUB) {
-    if (include_smi_code_) {
-      // Check whether the value is a smi.
-      Label try_float;
-      __ JumpIfNotSmi(a0, &try_float);
-
-      // Go slow case if the value of the expression is zero
-      // to make sure that we switch between 0 and -0.
-      if (negative_zero_ == kStrictNegativeZero) {
-        // If we have to check for zero, then we can check for the max negative
-        // smi while we are at it.
-        // TODO(mips): This is kind of expensive on mips, and we should be able
-        // to find a more optimal test.
-        __ And(at, a0, Operand(~0x80000000));  // Emit 3 instr: lui, ori, and.
-        __ Branch(&slow, eq, at, Operand(zero_reg));
-        __ subu(v0, zero_reg, a0);
-        __ Ret();
-      } else {
-        // The value of the expression is a smi and 0 is OK for -0.  Try
-        // optimistic subtraction '0 - value'.
-        __ subu(v0, zero_reg, a0);
-        // Check for overflow. For v=0-x, overflow only occurs on x=0x80000000.
-        // We don't have to reverse the optimistic neg since we did not
-        // change input register a0.
-        __ Branch(&slow, eq, a0, Operand(0x80000000));  // Go slow on overflow.
-        __ Ret();
-      }
-      __ bind(&try_float);
-    } else if (FLAG_debug_code) {
-      Register scratch = t4;
-      __ And(scratch, a0, kSmiTagMask);
-      __ Assert(ne, "Unexpected smi operand.", scratch, Operand(zero_reg));
-    }
-
-    __ lw(a1, FieldMemOperand(a0, HeapObject::kMapOffset));
-    __ AssertRegisterIsRoot(heap_number_map, Heap::kHeapNumberMapRootIndex);
-    __ Branch(&slow, ne, a1, Operand(heap_number_map));
-    // a0 is a heap number.  Get a new heap number in a1.
-    if (overwrite_ == UNARY_OVERWRITE) {
-      __ lw(a2, FieldMemOperand(a0, HeapNumber::kExponentOffset));
-      __ Xor(a2, a2, Operand(HeapNumber::kSignMask));  // Flip sign.
-      __ sw(a2, FieldMemOperand(a0, HeapNumber::kExponentOffset));
-    } else {
-      __ AllocateHeapNumber(a1, a2, a3, heap_number_map, &slow);
-      __ lw(a3, FieldMemOperand(a0, HeapNumber::kMantissaOffset));
-      __ lw(a2, FieldMemOperand(a0, HeapNumber::kExponentOffset));
-      __ sw(a3, FieldMemOperand(a1, HeapNumber::kMantissaOffset));
-      __ Xor(a2, a2, Operand(HeapNumber::kSignMask));  // Flip sign.
-      __ sw(a2, FieldMemOperand(a1, HeapNumber::kExponentOffset));
-      __ mov(v0, a1);
-    }
-  } else if (op_ == Token::BIT_NOT) {
-    if (include_smi_code_) {
-      Label non_smi;
-      __ JumpIfNotSmi(a0, &non_smi);
-      __ srl(v0, a0, kSmiTagSize);
-      __ nor(v0, v0, v0);
-      __ sll(v0, v0, kSmiTagSize);
-      __ Ret();
-      __ bind(&non_smi);
-    } else if (FLAG_debug_code) {
-      Register scratch = t4;
-      __ And(scratch, a0, kSmiTagMask);
-      __ Assert(ne, "Unexpected smi operand.",
-          scratch, Operand(zero_reg));
-    }
-    // Check if the operand is a heap number.
-    __ lw(a1, FieldMemOperand(a0, HeapObject::kMapOffset));
-    __ AssertRegisterIsRoot(heap_number_map, Heap::kHeapNumberMapRootIndex);
-    __ Branch(&slow, ne, a1, Operand(heap_number_map));
-
-    // Convert the heap number in a0 to an untagged integer in a1.
-    // Go slow if HeapNumber won't fit in 32-bit (untagged) int.
-    __ ConvertToInt32(a0, a1, a2, a3, f0, &slow);
-
-    // Do the bitwise operation (use NOR) and check if the result
-    // fits in a smi.
-    Label try_float;
-    __ nor(a1, a1, zero_reg);
-    // Check that the *signed* result fits in a smi.
-    __ Addu(a2, a1, Operand(0x40000000));
-    __ Branch(&try_float, lt, a2, Operand(zero_reg));
-
-    // Smi tag result.
-    __ sll(v0, a1, kSmiTagMask);
-    __ Ret();
-
-    __ bind(&try_float);
-    if (!overwrite_ == UNARY_OVERWRITE) {
-      // Allocate a fresh heap number, but don't overwrite a0 in-case
-      // we need to go slow. Return new heap number in v0.
-      __ AllocateHeapNumber(a2, a3, t0, heap_number_map, &slow);
-      __ mov(v0, a2);
-    }
-
-    if (CpuFeatures::IsSupported(FPU)) {
-      CpuFeatures::Scope scope(FPU);
-      __ mov(s0, a1);
-      __ mtc1(s0, f0);
-      __ cvt_d_w(f0, f0);
-
-      __ Subu(t3, v0, Operand(kHeapObjectTag));
-      __ sdc1(f0, MemOperand(t3, HeapNumber::kValueOffset));
-      __ Ret();
-    } else {
-    // WriteInt32ToHeapNumberStub does not trigger GC, so we do not
-    // have to set up a frame.
-    WriteInt32ToHeapNumberStub stub(a1, v0, a2, a3);
-    __ Push(ra);
-    __ Call(stub.GetCode(), RelocInfo::CODE_TARGET);
-    __ Pop(ra);
-    // Fall thru to done.
-    }
-  } else {
-    UNIMPLEMENTED();
-    __ break_(__LINE__);
-  }
-
-  __ bind(&done);
-  __ Ret();
-
-  // Handle the slow case by jumping to the JavaScript builtin.
-  __ bind(&slow);
-  __ Push(a0);
-
-  switch (op_) {
-    case Token::SUB:
-      __ InvokeBuiltin(Builtins::UNARY_MINUS, JUMP_JS);
-      break;
-    case Token::BIT_NOT:
-      __ InvokeBuiltin(Builtins::BIT_NOT, JUMP_JS);
-      break;
-    default:
-      UNREACHABLE();
-  }
 }
 
 
@@ -4059,7 +4109,7 @@ void InstanceofStub::Generate(MacroAssembler* masm) {
   if (HasArgsInRegisters()) {
     __ Push(a0, a1);
   }
-  __ InvokeBuiltin(Builtins::INSTANCE_OF, JUMP_JS);
+  __ InvokeBuiltin(Builtins::INSTANCE_OF, JUMP_FUNCTION);
 }
 
 
@@ -4691,7 +4741,7 @@ void CallFunctionStub::Generate(MacroAssembler* masm) {
     // We need natives to execute this.
     __ EnterInternalFrame();
     __ Push(a1);
-    __ InvokeBuiltin(Builtins::TO_OBJECT, CALL_JS);
+    __ InvokeBuiltin(Builtins::TO_OBJECT, CALL_FUNCTION);
     __ LeaveInternalFrame();
     __ sw(v0, MemOperand(sp, argc_ * kPointerSize));
 
@@ -6024,7 +6074,7 @@ void StringAddStub::Generate(MacroAssembler* masm) {
 
   if (call_builtin.is_linked()) {
     __ bind(&call_builtin);
-    __ InvokeBuiltin(builtin_id, JUMP_JS);
+    __ InvokeBuiltin(builtin_id, JUMP_FUNCTION);
   }
 }
 

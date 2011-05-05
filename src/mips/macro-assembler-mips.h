@@ -59,11 +59,6 @@ const Register fp = s8_fp;  // Alias for fp.
 const Register condReg1 = s4;
 const Register condReg2 = s5;
 
-enum InvokeJSFlags {
-  CALL_JS,
-  JUMP_JS
-};
-
 
 // Flags used for the AllocateInNewSpace functions.
 enum AllocationFlags {
@@ -184,6 +179,13 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
 #undef DECLARE_RELOC_PROTOTYPE
 #undef DECLARE_JUMP_CALL_PROTOTYPES
 #undef DECLARE_BRANCH_PROTOTYPES
+
+  void CallWithAstId(Handle<Code> code,
+                     RelocInfo::Mode rmode,
+                     unsigned ast_id,
+                     Condition cond = al,
+                     Register r1 = zero_reg,
+                     const Operand& r2 = Operand(zero_reg));
 
   // Emit code to discard a non-negative number of pointer-sized elements
   // from the stack, clobbering only the sp register.
@@ -409,6 +411,7 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
   DEFINE_INSTRUCTION(Or);
   DEFINE_INSTRUCTION(Xor);
   DEFINE_INSTRUCTION(Nor);
+  DEFINE_INSTRUCTION2(Neg);
 
   DEFINE_INSTRUCTION(Slt);
   DEFINE_INSTRUCTION(Sltu);
@@ -851,7 +854,7 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
   // Invoke specified builtin JavaScript function. Adds an entry to
   // the unresolved list if the name does not resolve.
   void InvokeBuiltin(Builtins::JavaScript id,
-                     InvokeJSFlags flags,
+                     InvokeFlag flag,
                      PostCallGenerator* post_call_generator = NULL);
 
   // Store the code object for the given builtin in the target register and

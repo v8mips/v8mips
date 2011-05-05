@@ -1199,6 +1199,13 @@ void Simulator::SoftwareInterrupt(Instruction* instr) {
       arg4 = stack_pointer[4];
       arg5 = stack_pointer[5];
     }
+
+    bool fp_call =
+         (redirection->type() == ExternalReference::BUILTIN_FP_FP_CALL) ||
+         (redirection->type() == ExternalReference::BUILTIN_COMPARE_CALL) ||
+         (redirection->type() == ExternalReference::BUILTIN_FP_CALL) ||
+         (redirection->type() == ExternalReference::BUILTIN_FP_INT_CALL);
+
     // This is dodgy but it works because the C entry stubs are never moved.
     // See comment in codegen-arm.cc and bug 1242173.
     int32_t saved_ra = get_register(ra);
@@ -1216,7 +1223,7 @@ void Simulator::SoftwareInterrupt(Instruction* instr) {
     // than the usual int64_t return. The data is returned in different
     // registers and cannot be cast from one type to the other. However, the
     // calling arguments are passed the same way in both cases.
-    if (redirection->type() == ExternalReference::FP_RETURN_CALL) {
+    if (fp_call) {
       SimulatorRuntimeFPCall target =
                   reinterpret_cast<SimulatorRuntimeFPCall>(external);
       if (::v8::internal::FLAG_trace_sim) {

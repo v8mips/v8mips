@@ -72,6 +72,92 @@ class ToBooleanStub: public CodeStub {
 };
 
 
+class TypeRecordingUnaryOpStub: public CodeStub {
+ public:
+  TypeRecordingUnaryOpStub(Token::Value op, UnaryOverwriteMode mode)
+      : op_(op),
+        mode_(mode),
+        operand_type_(TRUnaryOpIC::UNINITIALIZED),
+        name_(NULL) {
+  }
+
+  TypeRecordingUnaryOpStub(
+      int key,
+      TRUnaryOpIC::TypeInfo operand_type)
+      : op_(OpBits::decode(key)),
+        mode_(ModeBits::decode(key)),
+        operand_type_(operand_type),
+        name_(NULL) {
+  }
+
+ private:
+  Token::Value op_;
+  UnaryOverwriteMode mode_;
+
+  // Operand type information determined at runtime.
+  TRUnaryOpIC::TypeInfo operand_type_;
+
+  char* name_;
+
+  const char* GetName();
+
+#ifdef DEBUG
+  void Print() {
+    PrintF("TypeRecordingUnaryOpStub %d (op %s), "
+           "(mode %d, runtime_type_info %s)\n",
+           MinorKey(),
+           Token::String(op_),
+           static_cast<int>(mode_),
+           TRUnaryOpIC::GetName(operand_type_));
+  }
+#endif
+
+  class ModeBits: public BitField<UnaryOverwriteMode, 0, 1> {};
+  class OpBits: public BitField<Token::Value, 1, 7> {};
+  class OperandTypeInfoBits: public BitField<TRUnaryOpIC::TypeInfo, 8, 3> {};
+
+  Major MajorKey() { return TypeRecordingUnaryOp; }
+  int MinorKey() {
+    return ModeBits::encode(mode_)
+           | OpBits::encode(op_)
+           | OperandTypeInfoBits::encode(operand_type_);
+  }
+
+  // Note: A lot of the helper functions below will vanish when we use virtual
+  // function instead of switch more often.
+  void Generate(MacroAssembler* masm);
+
+  void GenerateTypeTransition(MacroAssembler* masm);
+
+  void GenerateSmiStub(MacroAssembler* masm);
+  void GenerateSmiStubSub(MacroAssembler* masm);
+  void GenerateSmiStubBitNot(MacroAssembler* masm);
+  void GenerateSmiCodeSub(MacroAssembler* masm, Label* non_smi, Label* slow);
+  void GenerateSmiCodeBitNot(MacroAssembler* masm, Label* slow);
+
+  void GenerateHeapNumberStub(MacroAssembler* masm);
+  void GenerateHeapNumberStubSub(MacroAssembler* masm);
+  void GenerateHeapNumberStubBitNot(MacroAssembler* masm);
+  void GenerateHeapNumberCodeSub(MacroAssembler* masm, Label* slow);
+  void GenerateHeapNumberCodeBitNot(MacroAssembler* masm, Label* slow);
+
+  void GenerateGenericStub(MacroAssembler* masm);
+  void GenerateGenericStubSub(MacroAssembler* masm);
+  void GenerateGenericStubBitNot(MacroAssembler* masm);
+  void GenerateGenericCodeFallback(MacroAssembler* masm);
+
+  virtual int GetCodeKind() { return Code::TYPE_RECORDING_UNARY_OP_IC; }
+
+  virtual InlineCacheState GetICState() {
+    return TRUnaryOpIC::ToState(operand_type_);
+  }
+
+  virtual void FinishCode(Code* code) {
+    code->set_type_recording_unary_op_type(operand_type_);
+  }
+};
+
+
 class TypeRecordingBinaryOpStub: public CodeStub {
  public:
   TypeRecordingBinaryOpStub(Token::Value op, OverwriteMode mode)
@@ -352,6 +438,149 @@ class RegExpCEntryStub: public CodeStub {
   bool NeedsImmovableCode() { return true; }
 
   const char* GetName() { return "RegExpCEntryStub"; }
+};
+
+
+class FloatingPointHelper : public AllStatic {
+ public:
+
+  enum Destination {
+    kFPURegisters,
+    kCoreRegisters
+  };
+
+
+  // Loads smis from a0 and a1 (right and left in binary operations) into
+  // floating point registers. Depending on the destination the values ends up
+  // either f14 and f12 or in a2/a3 and a0/a1 respectively. If the destination
+  // is floating point registers FPU must be supported. If core registers are
+  // requested when FPU is supported f12 and f14 will be scratched.
+  static void LoadSmis(MacroAssembler* masm,
+                       Destination destination,
+                       Register scratch1,
+                       Register scratch2);
+
+  // Loads objects from a0 and a1 (right and left in binary operations) into
+  // floating point registers. Depending on the destination the values ends up
+  // either f14 and f12 or in a2/a3 and a0/a1 respectively. If the destination
+  // is floating point registers FPU must be supported. If core registers are
+  // requested when FPU is supported f12 and f14 will still be scratched. If
+  // either a0 or a1 is not a number (not smi and not heap number object) the
+  // not_number label is jumped to with a0 and a1 intact.
+  static void LoadOperands(MacroAssembler* masm,
+                           FloatingPointHelper::Destination destination,
+                           Register heap_number_map,
+                           Register scratch1,
+                           Register scratch2,
+                           Label* not_number);
+
+  // Convert the smi or heap number in object to an int32 using the rules
+  // for ToInt32 as described in ECMAScript 9.5.: the value is truncated
+  // and brought into the range -2^31 .. +2^31 - 1.
+  static void ConvertNumberToInt32(MacroAssembler* masm,
+                                   Register object,
+                                   Register dst,
+                                   Register heap_number_map,
+                                   Register scratch1,
+                                   Register scratch2,
+                                   Register scratch3,
+                                   FPURegister double_scratch,
+                                   Label* not_int32);
+
+  // Converts the integer (untagged smi) in |int_scratch| to a double, storing
+  // the result either in |double_dst| or |dst2:dst1|, depending on
+  // |destination|.
+  // Warning: The value in |int_scratch| will be changed in the process!
+  static void ConvertIntToDouble(MacroAssembler* masm,
+                                 Register int_scratch,
+                                 Destination destination,
+                                 FPURegister double_dst,
+                                 Register dst1,
+                                 Register dst2,
+                                 Register scratch2,
+                                 FPURegister single_scratch);
+
+  // Load the number from object into double_dst in the double format.
+  // Control will jump to not_int32 if the value cannot be exactly represented
+  // by a 32-bit integer.
+  // Floating point value in the 32-bit integer range that are not exact integer
+  // won't be loaded.
+  static void LoadNumberAsInt32Double(MacroAssembler* masm,
+                                      Register object,
+                                      Destination destination,
+                                      FPURegister double_dst,
+                                      Register dst1,
+                                      Register dst2,
+                                      Register heap_number_map,
+                                      Register scratch1,
+                                      Register scratch2,
+                                      FPURegister single_scratch,
+                                      Label* not_int32);
+
+  // Loads the number from object into dst as a 32-bit integer.
+  // Control will jump to not_int32 if the object cannot be exactly represented
+  // by a 32-bit integer.
+  // Floating point value in the 32-bit integer range that are not exact integer
+  // won't be converted.
+  // scratch3 is not used when FPU is supported.
+  static void LoadNumberAsInt32(MacroAssembler* masm,
+                                Register object,
+                                Register dst,
+                                Register heap_number_map,
+                                Register scratch1,
+                                Register scratch2,
+                                Register scratch3,
+                                FPURegister double_scratch,
+                                Label* not_int32);
+
+  // Generate non FPU code to check if a double can be exactly represented by a
+  // 32-bit integer. This does not check for 0 or -0, which need
+  // to be checked for separately.
+  // Control jumps to not_int32 if the value is not a 32-bit integer, and falls
+  // through otherwise.
+  // src1 and src2 will be cloberred.
+  //
+  // Expected input:
+  // - src1: higher (exponent) part of the double value.
+  // - src2: lower (mantissa) part of the double value.
+  // Output status:
+  // - dst: 32 higher bits of the mantissa. (mantissa[51:20])
+  // - src2: contains 1.
+  // - other registers are clobbered.
+  static void DoubleIs32BitInteger(MacroAssembler* masm,
+                                   Register src1,
+                                   Register src2,
+                                   Register dst,
+                                   Register scratch,
+                                   Label* not_int32);
+
+  // Generates code to call a C function to do a double operation using core
+  // registers. (Used when FPU is not supported.)
+  // This code never falls through, but returns with a heap number containing
+  // the result in v0.
+  // Register heapnumber_result must be a heap number in which the
+  // result of the operation will be stored.
+  // Requires the following layout on entry:
+  // a0: Left value (least significant part of mantissa).
+  // a1: Left value (sign, exponent, top of mantissa).
+  // a2: Right value (least significant part of mantissa).
+  // a3: Right value (sign, exponent, top of mantissa).
+  static void CallCCodeForDoubleOperation(MacroAssembler* masm,
+                                          Token::Value op,
+                                          Register heap_number_result,
+                                          Register scratch);
+
+ private:
+  static void LoadNumber(MacroAssembler* masm,
+                         FloatingPointHelper::Destination destination,
+                         Register object,
+                         FPURegister dst,
+                         Register dst1,
+                         Register dst2,
+                         Register heap_number_map,
+                         Register scratch1,
+                         Register scratch2,
+                         Label* not_number);
 };
 
 
