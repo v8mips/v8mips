@@ -1861,7 +1861,7 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
           if (rt) set_register(rd_reg, rs);
           break;
         case MOVCI: {
-          uint32_t cc = instr->FCccValue();
+          uint32_t cc = instr->FBccValue();
           uint32_t fcsr_cc = get_fcsr_condition_bit(cc);
           if (instr->Bit(16)) {  // Read Tf bit.
             if (test_fcsr_bit(fcsr_cc)) set_register(rd_reg, rs);

@@ -136,7 +136,7 @@
         ['v8_target_arch=="mips"', {
           'sources': [
             'test-assembler-mips.cc',
-            'test-mips.cc',
+            'test-disasm-mips.cc',
           ],
         }],
         [ 'OS=="linux"', {

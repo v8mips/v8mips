@@ -103,6 +103,8 @@ class Decoder {
   void PrintFd(Instruction* instr);
   void PrintSa(Instruction* instr);
   void PrintSd(Instruction* instr);
+  void PrintSs1(Instruction* instr);
+  void PrintSs2(Instruction* instr);
   void PrintBc(Instruction* instr);
   void PrintCc(Instruction* instr);
   void PrintFunction(Instruction* instr);
@@ -216,6 +218,21 @@ void Decoder::PrintSa(Instruction* instr) {
 void Decoder::PrintSd(Instruction* instr) {
   int sd = instr->RdValue();
   out_buffer_pos_ += OS::SNPrintF(out_buffer_ + out_buffer_pos_, "%d", sd);
+}
+
+
+// Print the integer value of the rd field, (when used as ext size).
+void Decoder::PrintSs1(Instruction* instr) {
+  int ss = instr->RdValue();
+  out_buffer_pos_ += OS::SNPrintF(out_buffer_ + out_buffer_pos_, "%d", ss+1);
+}
+
+
+// Print the integer value of the rd field, (when used as ins size).
+void Decoder::PrintSs2(Instruction* instr) {
+  int ss = instr->RdValue();
+  int pos = instr->SaValue();
+  out_buffer_pos_ += OS::SNPrintF(out_buffer_ + out_buffer_pos_, "%d", ss-pos+1);
 }
 
 
@@ -387,6 +404,17 @@ int Decoder::FormatOption(Instruction* instr, const char* format) {
           ASSERT(STRING_STARTS_WITH(format, "sd"));
           PrintSd(instr);
           return 2;
+        }
+        case 's': {
+          if (format[2] == '1') {
+              ASSERT(STRING_STARTS_WITH(format, "ss1"));  /* ext size */
+              PrintSs1(instr);
+              return 3;
+          } else {
+              ASSERT(STRING_STARTS_WITH(format, "ss2"));  /* ins size */
+              PrintSs2(instr);
+              return 3;
+          }
         }
       }
     }
@@ -662,7 +690,7 @@ void Decoder::DecodeTypeRegister(Instruction* instr) {
           Format(instr, "sub     'rd, 'rs, 'rt");
           break;
         case SUBU:
-          Format(instr, "sub     'rd, 'rs, 'rt");
+          Format(instr, "subu    'rd, 'rs, 'rt");
           break;
         case AND:
           Format(instr, "and     'rd, 'rs, 'rt");
@@ -717,9 +745,9 @@ void Decoder::DecodeTypeRegister(Instruction* instr) {
           break;
         case MOVCI:
           if (instr->Bit(16)) {
-            Format(instr, "movt    'rd, 'rs, 'Cc");
+            Format(instr, "movt    'rd, 'rs, 'bc");
           } else {
-            Format(instr, "movf    'rd, 'rs, 'Cc");
+            Format(instr, "movf    'rd, 'rs, 'bc");
           }
           break;
         default:
@@ -742,7 +770,7 @@ void Decoder::DecodeTypeRegister(Instruction* instr) {
       switch (instr->FunctionFieldRaw()) {
         case INS: {
           if (mips32r2) {
-            Format(instr, "ins     'rt, 'rs, 'sd, 'sa");
+            Format(instr, "ins     'rt, 'rs, 'sa, 'ss2");
           } else {
             Unknown(instr);
           }
@@ -750,7 +778,7 @@ void Decoder::DecodeTypeRegister(Instruction* instr) {
         }
         case EXT: {
           if (mips32r2) {
-            Format(instr, "ext     'rt, 'rs, 'sd, 'sa");
+            Format(instr, "ext     'rt, 'rs, 'sa, 'ss1");
           } else {
             Unknown(instr);
           }
