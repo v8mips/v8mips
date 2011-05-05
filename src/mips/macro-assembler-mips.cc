@@ -302,13 +302,13 @@ void MacroAssembler::CheckAccessGlobalProxy(Register holder_reg,
   // Check the context is a global context.
   if (emit_debug_code()) {
     // TODO(119): Avoid push(holder_reg)/pop(holder_reg).
-    Push(holder_reg);  // Temporarily save holder on the stack.
+    push(holder_reg);  // Temporarily save holder on the stack.
     // Read the first word and compare to the global_context_map.
     lw(holder_reg, FieldMemOperand(scratch, HeapObject::kMapOffset));
     LoadRoot(at, Heap::kGlobalContextMapRootIndex);
     Check(eq, "JSGlobalObject::global_context should be a global context.",
           holder_reg, Operand(at));
-    Pop(holder_reg);  // Restore holder.
+    pop(holder_reg);  // Restore holder.
   }
 
   // Check if both contexts are the same.
@@ -318,7 +318,7 @@ void MacroAssembler::CheckAccessGlobalProxy(Register holder_reg,
   // Check the context is a global context.
   if (emit_debug_code()) {
     // TODO(119): Avoid push(holder_reg)/pop(holder_reg).
-    Push(holder_reg);  // Temporarily save holder on the stack.
+    push(holder_reg);  // Temporarily save holder on the stack.
     mov(holder_reg, at);  // Move at to its holding place.
     LoadRoot(at, Heap::kNullValueRootIndex);
     Check(ne, "JSGlobalProxy::context() should not be null.",
@@ -329,7 +329,7 @@ void MacroAssembler::CheckAccessGlobalProxy(Register holder_reg,
     Check(eq, "JSGlobalObject::global_context should be a global context.",
           holder_reg, Operand(at));
     // Restore at is not needed. at is reloaded below.
-    Pop(holder_reg);  // Restore holder.
+    pop(holder_reg);  // Restore holder.
     // Restore at to holder's context.
     lw(at, FieldMemOperand(holder_reg, JSGlobalProxy::kContextOffset));
   }
@@ -2989,7 +2989,7 @@ void MacroAssembler::AssertFastElements(Register elements) {
   if (emit_debug_code()) {
     ASSERT(!elements.is(at));
     Label ok;
-    Push(elements);
+    push(elements);
     lw(elements, FieldMemOperand(elements, HeapObject::kMapOffset));
     LoadRoot(at, Heap::kFixedArrayMapRootIndex);
     Branch(&ok, eq, elements, Operand(at));
@@ -2997,7 +2997,7 @@ void MacroAssembler::AssertFastElements(Register elements) {
     Branch(&ok, eq, elements, Operand(at));
     Abort("JSObject with fast elements map has slow elements");
     bind(&ok);
-    Pop(elements);
+    pop(elements);
   }
 }
 
@@ -3033,9 +3033,9 @@ void MacroAssembler::Abort(const char* msg) {
   AllowStubCallsScope allow_scope(this, true);
 
   li(a0, Operand(p0));
-  Push(a0);
+  push(a0);
   li(a0, Operand(Smi::FromInt(p1 - p0)));
-  Push(a0);
+  push(a0);
   CallRuntime(Runtime::kAbort, 2);
   // Will not return here.
   if (is_trampoline_pool_blocked()) {
@@ -3158,7 +3158,7 @@ void MacroAssembler::EnterExitFrame(Register hold_argc,
   mov(fp, sp);  // Setup new frame pointer.
 
   li(t8, Operand(CodeObject()));
-  Push(t8);  // Accessed from ExitFrame::code_slot.
+  push(t8);  // Accessed from ExitFrame::code_slot.
 
   // Save the frame pointer and the context in top.
   li(t8, Operand(ExternalReference(Isolate::k_c_entry_fp_address, isolate())));

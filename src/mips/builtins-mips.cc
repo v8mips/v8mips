@@ -400,7 +400,7 @@ static void ArrayNativeCode(MacroAssembler* masm,
   Label loop, entry;
   __ Branch(&entry);
   __ bind(&loop);
-  __ Pop(a2);
+  __ pop(a2);
   __ Addu(t1, t1, -kPointerSize);
   __ sw(a2, MemOperand(t1));
   __ bind(&entry);
@@ -880,14 +880,14 @@ static void Generate_JSConstructStubHelper(MacroAssembler* masm,
   __ bind(&rt_call);
   // Allocate the new receiver object using the runtime call.
   // a1: constructor function
-  __ Push(a1);  // Argument for Runtime_NewObject.
+  __ push(a1);  // Argument for Runtime_NewObject.
   __ CallRuntime(Runtime::kNewObject, 1);
   __ mov(t4, v0);
 
   // Receiver for constructor call allocated.
   // t4: JSObject
   __ bind(&allocated);
-  __ Push(t4);
+  __ push(t4);
 
   // Push the function and the allocated receiver from the stack.
   // sp[0]: receiver (newly allocated object)
@@ -927,7 +927,7 @@ static void Generate_JSConstructStubHelper(MacroAssembler* masm,
   __ sll(t0, a3, kPointerSizeLog2 - kSmiTagSize);
   __ Addu(t0, a2, Operand(t0));
   __ lw(t1, MemOperand(t0));
-  __ Push(t1);
+  __ push(t1);
   __ bind(&entry);
   __ Addu(a3, a3, Operand(-2));
   __ Branch(&loop, greater_equal, a3, Operand(zero_reg));
@@ -1055,7 +1055,7 @@ static void Generate_JSEntryTrampolineHelper(MacroAssembler* masm,
   __ lw(t0, MemOperand(s0));  // Read next parameter.
   __ addiu(s0, s0, kPointerSize);
   __ lw(t0, MemOperand(t0));  // Dereference handle.
-  __ Push(t0);  // Push parameter.
+  __ push(t0);  // Push parameter.
   __ bind(&entry);
   __ Branch(&loop, ne, s0, Operand(t2));
 
@@ -1101,16 +1101,16 @@ void Builtins::Generate_LazyCompile(MacroAssembler* masm) {
   __ EnterInternalFrame();
 
   // Preserve the function.
-  __ Push(a1);
+  __ push(a1);
 
   // Push the function on the stack as the argument to the runtime function.
-  __ Push(a1);
+  __ push(a1);
   // Call the runtime function.
   __ CallRuntime(Runtime::kLazyCompile, 1);
   // Calculate the entry point.
   __ addiu(t9, v0, Code::kHeaderSize - kHeapObjectTag);
   // Restore saved function.
-  __ Pop(a1);
+  __ pop(a1);
 
   // Tear down temporary frame.
   __ LeaveInternalFrame();
@@ -1170,7 +1170,7 @@ void Builtins::Generate_FunctionCall(MacroAssembler* masm) {
   { Label done;
     __ Branch(&done, ne, a0, Operand(zero_reg));
     __ LoadRoot(t2, Heap::kUndefinedValueRootIndex);
-    __ Push(t2);
+    __ push(t2);
     __ Addu(a0, a0, Operand(1));
     __ bind(&done);
   }
@@ -1224,13 +1224,13 @@ void Builtins::Generate_FunctionCall(MacroAssembler* masm) {
     __ bind(&convert_to_object);
     __ EnterInternalFrame();  // In order to preserve argument count.
     __ sll(a0, a0, kSmiTagSize);  // Smi tagged.
-    __ Push(a0);
+    __ push(a0);
 
-    __ Push(a2);
+    __ push(a2);
     __ InvokeBuiltin(Builtins::TO_OBJECT, CALL_FUNCTION);
     __ mov(a2, v0);
 
-    __ Pop(a0);
+    __ pop(a0);
     __ sra(a0, a0, kSmiTagSize);  // Un-tag.
     __ LeaveInternalFrame();
     // Restore the function to a1.
@@ -1524,7 +1524,7 @@ void Builtins::Generate_ArgumentsAdaptorTrampoline(MacroAssembler* masm) {
     Label copy;
     __ bind(&copy);
     __ lw(t0, MemOperand(a0));
-    __ Push(t0);
+    __ push(t0);
     __ Branch(USE_DELAY_SLOT, &copy, ne, a0, Operand(a2));
     __ addiu(a0, a0, -kPointerSize);  // In delay slot.
 
@@ -1558,7 +1558,7 @@ void Builtins::Generate_ArgumentsAdaptorTrampoline(MacroAssembler* masm) {
     Label copy;
     __ bind(&copy);
     __ lw(t0, MemOperand(a0));  // Adjusted above for return addr and receiver.
-    __ Push(t0);
+    __ push(t0);
     __ Subu(a0, a0, kPointerSize);
     __ Branch(&copy, ne, a0, Operand(t1));
 
@@ -1573,7 +1573,7 @@ void Builtins::Generate_ArgumentsAdaptorTrampoline(MacroAssembler* masm) {
 
     Label fill;
     __ bind(&fill);
-    __ Push(t0);
+    __ push(t0);
     __ Branch(&fill, ne, sp, Operand(a2));
   }
 

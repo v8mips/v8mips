@@ -996,18 +996,18 @@ TEST(MIPS12) {
   __ addu(t1, t0, t3);
   __ subu(t4, t0, t3);
   __ nop();
-  __ Push(t0);  // These instructions disappear after opt.
+  __ push(t0);  // These instructions disappear after opt.
   __ Pop();
   __ addu(t0, t0, t0);
   __ nop();
   __ Pop();     // These instructions disappear after opt.
-  __ Push(t3);
+  __ push(t3);
   __ nop();
-  __ Push(t3);  // These instructions disappear after opt.
-  __ Pop(t3);
+  __ push(t3);  // These instructions disappear after opt.
+  __ pop(t3);
   __ nop();
-  __ Push(t3);
-  __ Pop(t4);
+  __ push(t3);
+  __ pop(t4);
   __ nop();
   __ sw(t0, MemOperand(fp, OFFSET_OF(T, y)) );
   __ lw(t0, MemOperand(fp, OFFSET_OF(T, y)) );
@@ -1015,25 +1015,25 @@ TEST(MIPS12) {
   __ sw(t0, MemOperand(fp, OFFSET_OF(T, y)) );
   __ lw(t1, MemOperand(fp, OFFSET_OF(T, y)) );
   __ nop();
-  __ Push(t1);
+  __ push(t1);
   __ lw(t1, MemOperand(fp, OFFSET_OF(T, y)) );
-  __ Pop(t1);
+  __ pop(t1);
   __ nop();
-  __ Push(t1);
+  __ push(t1);
   __ lw(t2, MemOperand(fp, OFFSET_OF(T, y)) );
-  __ Pop(t1);
+  __ pop(t1);
   __ nop();
-  __ Push(t1);
+  __ push(t1);
   __ lw(t2, MemOperand(fp, OFFSET_OF(T, y)) );
-  __ Pop(t2);
+  __ pop(t2);
   __ nop();
-  __ Push(t2);
+  __ push(t2);
   __ lw(t2, MemOperand(fp, OFFSET_OF(T, y)) );
-  __ Pop(t1);
+  __ pop(t1);
   __ nop();
-  __ Push(t1);
+  __ push(t1);
   __ lw(t2, MemOperand(fp, OFFSET_OF(T, y)) );
-  __ Pop(t3);
+  __ pop(t3);
   __ nop();
 
   __ mov(fp, t6);

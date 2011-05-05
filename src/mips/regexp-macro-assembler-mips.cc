@@ -610,8 +610,8 @@ Handle<Object> RegExpMacroAssemblerMIPS::GetCode(Handle<String> source) {
     __ MultiPush(argument_registers | registers_to_retain | ra.bit());
     // Set frame pointer just above the arguments.
     __ Addu(frame_pointer(), sp, Operand(4 * kPointerSize));
-    __ Push(a0);  // Make room for "position - 1" constant (value irrelevant).
-    __ Push(a0);  // Make room for "at start" constant (value irrelevant).
+    __ push(a0);  // Make room for "position - 1" constant (value irrelevant).
+    __ push(a0);  // Make room for "at start" constant (value irrelevant).
 
     // Check if we have space on the stack for registers.
     Label stack_limit_hit;
@@ -1132,7 +1132,7 @@ void RegExpMacroAssemblerMIPS::SafeCall(Label* to, Condition cond, Register rs,
 
 
 void RegExpMacroAssemblerMIPS::SafeReturn() {
-  __ Pop(ra);
+  __ pop(ra);
   __ Addu(t5, ra, Operand(masm_->CodeObject()));
   __ Jump(t5);
 }
@@ -1141,7 +1141,7 @@ void RegExpMacroAssemblerMIPS::SafeReturn() {
 void RegExpMacroAssemblerMIPS::SafeCallTarget(Label* name) {
   __ bind(name);
   __ Subu(ra, ra, Operand(masm_->CodeObject()));
-  __ Push(ra);
+  __ push(ra);
 }
 
 

@@ -90,7 +90,7 @@ void FastNewClosureStub::Generate(MacroAssembler* masm) {
   Label gc;
 
   // Pop the function info from the stack.
-  __ Pop(a3);
+  __ pop(a3);
 
   // Attempt to allocate new JSFunction in new space.
   __ AllocateInNewSpace(JSFunction::kSize,
@@ -224,12 +224,12 @@ void FastCloneShallowArrayStub::Generate(MacroAssembler* masm) {
       message = "Expected copy-on-write fixed array";
       expected_map_index = Heap::kFixedCOWArrayMapRootIndex;
     }
-    __ Push(a3);
+    __ push(a3);
     __ lw(a3, FieldMemOperand(a3, JSArray::kElementsOffset));
     __ lw(a3, FieldMemOperand(a3, HeapObject::kMapOffset));
     __ LoadRoot(at, expected_map_index);
     __ Assert(eq, message, a3, Operand(at));
-    __ Pop(a3);
+    __ pop(a3);
   }
 
   // Allocate both the JS array and the elements array in one big
@@ -1115,10 +1115,10 @@ static void EmitSmiNonsmiComparison(MacroAssembler* masm,
     // Write Smi from rhs to a1 and a0 in double format. t5 is scratch.
     __ mov(t6, rhs);
     ConvertToDoubleStub stub1(a1, a0, t6, t5);
-    __ Push(ra);
+    __ push(ra);
     __ Call(stub1.GetCode(), RelocInfo::CODE_TARGET);
 
-    __ Pop(ra);
+    __ pop(ra);
   }
 
   // We now have both loaded as doubles.
@@ -1150,9 +1150,9 @@ static void EmitSmiNonsmiComparison(MacroAssembler* masm,
     // Convert lhs to a double format. t5 is scratch.
     __ mov(t6, lhs);
     ConvertToDoubleStub stub2(a3, a2, t6, t5);
-    __ Push(ra);
+    __ push(ra);
     __ Call(stub2.GetCode(), RelocInfo::CODE_TARGET);
-    __ Pop(ra);
+    __ pop(ra);
     // Load rhs to a double in a1, a0.
     if (rhs.is(a0)) {
       __ lw(a1, FieldMemOperand(rhs, HeapNumber::kValueOffset + 4));
@@ -1276,7 +1276,7 @@ static void EmitTwoNonNanDoubleComparison(MacroAssembler* masm, Condition cc) {
   __ bind(&return_result_not_equal);
 
   if (!CpuFeatures::IsSupported(FPU)) {
-    __ Push(ra);
+    __ push(ra);
     __ PrepareCallCFunction(4, t4);  // Two doubles count as 4 arguments.
     if (!IsMipsSoftFloatABI) {
       // We are not using MIPS FPU instructions, and parameters for the runtime
@@ -1290,7 +1290,7 @@ static void EmitTwoNonNanDoubleComparison(MacroAssembler* masm, Condition cc) {
       __ mtc1(a3, f15);
     }
     __ CallCFunction(ExternalReference::compare_doubles(masm->isolate()), 4);
-    __ Pop(ra);  // Because this function returns int, result is in v0.
+    __ pop(ra);  // Because this function returns int, result is in v0.
     __ Ret();
   } else {
     CpuFeatures::Scope scope(FPU);
@@ -1714,7 +1714,7 @@ void CompareStub::Generate(MacroAssembler* masm) {
       ncr = LESS;
     }
     __ li(a0, Operand(Smi::FromInt(ncr)));
-    __ Push(a0);
+    __ push(a0);
   }
 
   // Call the native; it returns -1 (less), 0 (equal), or 1 (greater)
@@ -3502,7 +3502,7 @@ void CEntryStub::GenerateThrowTOS(MacroAssembler* masm) {
 
   // Restore the next handler and frame pointer, discard handler state.
   STATIC_ASSERT(StackHandlerConstants::kNextOffset == 0);
-  __ Pop(a2);
+  __ pop(a2);
   __ sw(a2, MemOperand(a3));
   STATIC_ASSERT(StackHandlerConstants::kFPOffset == 2 * kPointerSize);
   __ MultiPop(a3.bit() | fp.bit());
@@ -3573,7 +3573,7 @@ void CEntryStub::GenerateThrowUncatchable(MacroAssembler* masm,
 
   // Set the top handler address to next handler past the current ENTRY handler.
   STATIC_ASSERT(StackHandlerConstants::kNextOffset == 0);
-  __ Pop(a2);
+  __ pop(a2);
   __ sw(a2, MemOperand(a3));
 
   if (type == OUT_OF_MEMORY) {
@@ -3999,7 +3999,7 @@ void JSEntryStub::GenerateBody(MacroAssembler* masm, bool is_construct) {
 
   __ bind(&exit);  // v0 holds result.
   // Restore the top frame descriptors from the stack.
-  __ Pop(t1);
+  __ pop(t1);
   __ li(t0, Operand(ExternalReference(Isolate::k_c_entry_fp_address,
                                       masm->isolate())));
   __ sw(t1, MemOperand(t0));
@@ -4161,7 +4161,7 @@ void ArgumentsAccessStub::GenerateReadElement(MacroAssembler* masm) {
   // Slow-case: Handle non-smi or out-of-bounds access to arguments
   // by calling the runtime system.
   __ bind(&slow);
-  __ Push(a1);
+  __ push(a1);
   __ TailCallRuntime(Runtime::kGetArgumentsProperty, 1, 1);
 }
 
@@ -4482,7 +4482,7 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
 
   // Isolates: note we add an additional parameter here (isolate pointer).
   static const int kRegExpExecuteArguments = 8;
-  __ Push(ra);
+  __ push(ra);
   __ PrepareCallCFunction(kRegExpExecuteArguments, a0);
 
   // Argument 8: Pass current isolate address.
@@ -4530,7 +4530,7 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
   // Locate the code entry and call it.
   __ Addu(t9, t9, Operand(Code::kHeaderSize - kHeapObjectTag));
   __ CallCFunction(t9, t8, kRegExpExecuteArguments);
-  __ Pop(ra);
+  __ pop(ra);
 
   // v0: result
   // subject: subject string (callee saved)
@@ -4740,7 +4740,7 @@ void CallFunctionStub::Generate(MacroAssembler* masm) {
     __ bind(&receiver_is_value);
     // We need natives to execute this.
     __ EnterInternalFrame();
-    __ Push(a1);
+    __ push(a1);
     __ InvokeBuiltin(Builtins::TO_OBJECT, CALL_FUNCTION);
     __ LeaveInternalFrame();
     __ sw(v0, MemOperand(sp, argc_ * kPointerSize));
@@ -4967,8 +4967,8 @@ void StringCharCodeAtGenerator::GenerateSlow(
 
   __ Move(scratch_, v0);
 
-  __ Pop(index_);
-  __ Pop(object_);
+  __ pop(index_);
+  __ pop(object_);
   // Reload the instance type.
   __ lw(result_, FieldMemOperand(object_, HeapObject::kMapOffset));
   __ lbu(result_, FieldMemOperand(result_, Map::kInstanceTypeOffset));

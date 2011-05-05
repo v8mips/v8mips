@@ -450,7 +450,7 @@ void StubCompiler::GenerateStoreField(MacroAssembler* masm,
   if ((transition != NULL) && (object->map()->unused_property_fields() == 0)) {
     // The properties must be extended before we can store the value.
     // We jump to a runtime call that extends the properties array.
-    __ Push(receiver_reg);
+    __ push(receiver_reg);
     __ li(a2, Operand(Handle<Map>(transition)));
     __ Push(a2, a0);
     __ TailCallExternalReference(
@@ -549,14 +549,14 @@ static void PushInterceptorArguments(MacroAssembler* masm,
                                      Register holder,
                                      Register name,
                                      JSObject* holder_obj) {
-  __ Push(name);
+  __ push(name);
   InterceptorInfo* interceptor = holder_obj->GetNamedInterceptor();
   ASSERT(!masm->isolate()->heap()->InNewSpace(interceptor));
   Register scratch = name;
   __ li(scratch, Operand(Handle<Object>(interceptor)));
   __ Push(scratch, receiver, holder);
   __ lw(scratch, FieldMemOperand(scratch, InterceptorInfo::kDataOffset));
-  __ Push(scratch);
+  __ push(scratch);
 }
 
 
@@ -810,7 +810,7 @@ class CallInterceptorCompiler BASE_EMBEDDED {
     // Call a runtime function to load the interceptor property.
     __ EnterInternalFrame();
     // Save the name_ register across the call.
-    __ Push(name_);
+    __ push(name_);
 
     PushInterceptorArguments(masm,
                              receiver,
@@ -825,7 +825,7 @@ class CallInterceptorCompiler BASE_EMBEDDED {
           5);
 
     // Restore the name_ register.
-    __ Pop(name_);
+    __ pop(name_);
     __ LeaveInternalFrame();
   }
 
@@ -845,8 +845,8 @@ class CallInterceptorCompiler BASE_EMBEDDED {
                                            name_,
                                            holder_obj);
 
-    __ Pop(name_);  // Restore the name.
-    __ Pop(receiver);  // Restore the holder.
+    __ pop(name_);  // Restore the name.
+    __ pop(receiver);  // Restore the holder.
     __ LeaveInternalFrame();
 
     // If interceptor returns no-result sentinel, call the constant function.
@@ -1230,7 +1230,7 @@ MaybeObject* StubCompiler::GenerateLoadCallback(JSObject* object,
                     name, miss);
 
   // Push the arguments on the JS stack of the caller.
-  __ Push(receiver);  // Receiver.
+  __ push(receiver);  // Receiver.
   __ li(scratch3, Operand(Handle<AccessorInfo>(callback)));  // Callback data.
   // scratch2 is used here as ARM's ip. This may cause problems if scratch2
   // will be used to hold a value in the future.
@@ -2584,7 +2584,7 @@ MaybeObject* StoreStubCompiler::CompileStoreCallback(JSObject* object,
   // checks.
   ASSERT(object->IsJSGlobalProxy() || !object->IsAccessCheckNeeded());
 
-  __ Push(a1);  // Receiver.
+  __ push(a1);  // Receiver.
   __ li(a3, Operand(Handle<AccessorInfo>(callback)));  // Callback info.
   __ Push(a3, a2, a0);
 

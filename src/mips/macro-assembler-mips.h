@@ -446,22 +446,21 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
   void MultiPush(RegList regs);
   void MultiPushReversed(RegList regs);
 
-  void Push(Register src) {
+  // Lower case push() for compatibility with arch-independent code.
+  void push(Register src) {
     Addu(sp, sp, Operand(-kPointerSize));
     sw(src, MemOperand(sp, 0));
   }
 
   // Push two registers. Pushes leftmost register first (to highest address).
-  void Push(Register src1, Register src2, Condition cond = al) {
-    ASSERT(cond == al);  // Do not support conditional versions yet.
+  void Push(Register src1, Register src2) {
     Subu(sp, sp, Operand(2 * kPointerSize));
     sw(src1, MemOperand(sp, 1 * kPointerSize));
     sw(src2, MemOperand(sp, 0 * kPointerSize));
   }
 
   // Push three registers. Pushes leftmost register first (to highest address).
-  void Push(Register src1, Register src2, Register src3, Condition cond = al) {
-    ASSERT(cond == al);  // Do not support conditional versions yet.
+  void Push(Register src1, Register src2, Register src3) {
     Subu(sp, sp, Operand(3 * kPointerSize));
     sw(src1, MemOperand(sp, 2 * kPointerSize));
     sw(src2, MemOperand(sp, 1 * kPointerSize));
@@ -469,18 +468,13 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
   }
 
   // Push four registers. Pushes leftmost register first (to highest address).
-  void Push(Register src1, Register src2,
-            Register src3, Register src4, Condition cond = al) {
-    ASSERT(cond == al);  // Do not support conditional versions yet.
+  void Push(Register src1, Register src2, Register src3, Register src4) {
     Subu(sp, sp, Operand(4 * kPointerSize));
     sw(src1, MemOperand(sp, 3 * kPointerSize));
     sw(src2, MemOperand(sp, 2 * kPointerSize));
     sw(src3, MemOperand(sp, 1 * kPointerSize));
     sw(src4, MemOperand(sp, 0 * kPointerSize));
   }
-
-  inline void push(Register src) { Push(src); }
-  inline void pop(Register src) { Pop(src); }
 
   void Push(Register src, Condition cond, Register tst1, Register tst2) {
     // Since we don't have conditional execution we use a Branch.
@@ -489,21 +483,20 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
     sw(src, MemOperand(sp, 0));
   }
 
-
   // Pops multiple values from the stack and load them in the
   // registers specified in regs. Pop order is the opposite as in MultiPush.
   void MultiPop(RegList regs);
   void MultiPopReversed(RegList regs);
 
-  void Pop(Register dst) {
+  // Lower case pop() for compatibility with arch-independent code.
+  void pop(Register dst) {
     lw(dst, MemOperand(sp, 0));
     Addu(sp, sp, Operand(kPointerSize));
   }
 
   // Pop two registers. Pops rightmost register first (from lower address).
-  void Pop(Register src1, Register src2, Condition cond = al) {
+  void Pop(Register src1, Register src2) {
     ASSERT(!src1.is(src2));
-    ASSERT(cond == al);
     lw(src2, MemOperand(sp, 0 * kPointerSize));
     lw(src1, MemOperand(sp, 1 * kPointerSize));
     Addu(sp, sp, 2 * kPointerSize);

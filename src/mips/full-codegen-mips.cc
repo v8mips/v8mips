@@ -2141,9 +2141,9 @@ void FullCodeGenerator::EmitKeyedCallWithIC(Call* expr,
 
   // Swap the name of the function and the receiver on the stack to follow
   // the calling convention for call ICs.
-  __ Pop(a1);
-  __ Push(v0);
-  __ Push(a1);
+  __ pop(a1);
+  __ push(v0);
+  __ push(a1);
 
   // Code common for calls using the IC.
   ZoneList<Expression*>* args = expr->arguments();
