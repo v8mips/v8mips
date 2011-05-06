@@ -224,7 +224,7 @@ void Decoder::PrintSd(Instruction* instr) {
 // Print the integer value of the rd field, (when used as ext size).
 void Decoder::PrintSs1(Instruction* instr) {
   int ss = instr->RdValue();
-  out_buffer_pos_ += OS::SNPrintF(out_buffer_ + out_buffer_pos_, "%d", ss+1);
+  out_buffer_pos_ += OS::SNPrintF(out_buffer_ + out_buffer_pos_, "%d", ss + 1);
 }
 
 
@@ -232,7 +232,8 @@ void Decoder::PrintSs1(Instruction* instr) {
 void Decoder::PrintSs2(Instruction* instr) {
   int ss = instr->RdValue();
   int pos = instr->SaValue();
-  out_buffer_pos_ += OS::SNPrintF(out_buffer_ + out_buffer_pos_, "%d", ss-pos+1);
+  out_buffer_pos_ += 
+      OS::SNPrintF(out_buffer_ + out_buffer_pos_, "%d", ss - pos + 1);
 }
 
 
