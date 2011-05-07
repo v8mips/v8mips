@@ -1197,10 +1197,18 @@ void Builtins::Generate_FunctionCall(MacroAssembler* masm) {
 
     // Do not transform the receiver for strict mode functions.
     __ lw(a2, FieldMemOperand(a1, JSFunction::kSharedFunctionInfoOffset));
-    __ lw(a2, FieldMemOperand(a2, SharedFunctionInfo::kCompilerHintsOffset));
-    __ And(t0, a2, Operand(1 << (SharedFunctionInfo::kStrictModeFunction +
+    __ lw(a3, FieldMemOperand(a2, SharedFunctionInfo::kCompilerHintsOffset));
+    __ And(t0, a3, Operand(1 << (SharedFunctionInfo::kStrictModeFunction +
                                  kSmiTagSize)));
     __ Branch(&shift_arguments, ne, t0, Operand(zero_reg));
+
+    // Do not transform the receiver for native (shared already in r2).
+    __ lw(a2, FieldMemOperand(a2, SharedFunctionInfo::kScriptOffset));
+    __ LoadRoot(a3, Heap::kUndefinedValueRootIndex);
+    __ Branch(&shift_arguments, eq, a2, Operand(a3));
+    __ lw(a2, FieldMemOperand(a2, Script::kTypeOffset));
+    __ sra(a2, a2, kSmiTagSize);
+    __ Branch(&shift_arguments, eq, a2, Operand(Script::TYPE_NATIVE));
 
     // Compute the receiver in non-strict mode.
     // Load first argument in a2. a2 = -kPointerSize(sp + n_args << 2).
@@ -1212,10 +1220,10 @@ void Builtins::Generate_FunctionCall(MacroAssembler* masm) {
     // a2: first argument
     __ JumpIfSmi(a2, &convert_to_object, t2);
 
-    __ LoadRoot(t3, Heap::kNullValueRootIndex);
-    __ Branch(&use_global_receiver, eq, a2, Operand(t3));
-    __ LoadRoot(t3, Heap::kUndefinedValueRootIndex);
-    __ Branch(&use_global_receiver, eq, a2, Operand(t3));
+    // Heap::kUndefinedValueRootIndex is already in a3.
+    __ Branch(&use_global_receiver, eq, a2, Operand(a3));
+    __ LoadRoot(a3, Heap::kNullValueRootIndex);
+    __ Branch(&use_global_receiver, eq, a2, Operand(a3));
 
     __ GetObjectType(a2, a3, a3);
     __ Branch(&convert_to_object, lt, a3, Operand(FIRST_JS_OBJECT_TYPE));
@@ -1376,18 +1384,26 @@ void Builtins::Generate_FunctionApply(MacroAssembler* masm) {
   __ lw(a0, MemOperand(fp, kRecvOffset));
 
   // Do not transform the receiver for strict mode functions.
-  __ lw(a1, FieldMemOperand(a1, SharedFunctionInfo::kCompilerHintsOffset));
-  __ And(t0, a1, Operand(1 << (SharedFunctionInfo::kStrictModeFunction +
+  __ lw(a2, FieldMemOperand(a1, SharedFunctionInfo::kCompilerHintsOffset));
+  __ And(t0, a2, Operand(1 << (SharedFunctionInfo::kStrictModeFunction +
                                kSmiTagSize)));
   __ Branch(&push_receiver, ne, t0, Operand(zero_reg));
+
+  // Do not transform the receiver for native (shared already in a1).
+  __ lw(a1, FieldMemOperand(a1, SharedFunctionInfo::kScriptOffset));
+  __ LoadRoot(a2, Heap::kUndefinedValueRootIndex);
+  __ Branch(&push_receiver, eq, a1, Operand(a2));
+  __ lw(a1, FieldMemOperand(a1, Script::kTypeOffset));
+  __ sra(a1, a1, kSmiTagSize);
+  __ Branch(&push_receiver, eq, a1, Operand(Script::TYPE_NATIVE));
 
   // Compute the receiver in non-strict mode.
   __ And(t0, a0, Operand(kSmiTagMask));
   __ Branch(&call_to_object, eq, t0, Operand(zero_reg));
   __ LoadRoot(a1, Heap::kNullValueRootIndex);
   __ Branch(&use_global_receiver, eq, a0, Operand(a1));
-  __ LoadRoot(a1, Heap::kUndefinedValueRootIndex);
-  __ Branch(&use_global_receiver, eq, a0, Operand(a1));
+  // Heap::kUndefinedValueRootIndex is already in a2.
+  __ Branch(&use_global_receiver, eq, a0, Operand(a2));
 
   // Check if the receiver is already a JavaScript object.
   // a0: receiver
