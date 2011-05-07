@@ -30,6 +30,7 @@
 
 #include "v8.h"
 
+#include "allocation.h"
 #include "code-stubs.h"
 #include "data-flow.h"
 #include "small-pointer-list.h"
@@ -3310,7 +3311,7 @@ class HLoadKeyedSpecializedArrayElement: public HBinaryOperation {
 
 class HLoadKeyedGeneric: public HTemplateInstruction<3> {
  public:
-  HLoadKeyedGeneric(HContext* context, HValue* obj, HValue* key) {
+  HLoadKeyedGeneric(HValue* context, HValue* obj, HValue* key) {
     set_representation(Representation::Tagged());
     SetOperandAt(0, obj);
     SetOperandAt(1, key);
