@@ -29,7 +29,6 @@
 #include "hydrogen.h"
 
 #include "codegen.h"
-#include "data-flow.h"
 #include "full-codegen.h"
 #include "hashmap.h"
 #include "lithium-allocator.h"
@@ -1575,14 +1574,12 @@ Representation HInferRepresentation::TryChange(HValue* value) {
   }
 
   if (non_tagged_count >= tagged_count) {
-    // More untagged than tagged.
-    if (double_count > 0) {
-      // There is at least one usage that is a double => guess that the
-      // correct representation is double.
-      return Representation::Double();
-    } else if (int32_count > 0) {
-      return Representation::Integer32();
+    if (int32_count > 0) {
+      if (!value->IsPhi() || value->IsConvertibleToInteger()) {
+        return Representation::Integer32();
+      }
     }
+    if (double_count > 0) return Representation::Double();
   }
   return Representation::None();
 }
@@ -1595,11 +1592,12 @@ void HInferRepresentation::Analyze() {
   // bit-vector of length <number of phis>.
   const ZoneList<HPhi*>* phi_list = graph_->phi_list();
   int phi_count = phi_list->length();
-  ScopedVector<BitVector*> connected_phis(phi_count);
+  ZoneList<BitVector*> connected_phis(phi_count);
   for (int i = 0; i < phi_count; ++i) {
     phi_list->at(i)->InitRealUses(i);
-    connected_phis[i] = new(zone()) BitVector(phi_count);
-    connected_phis[i]->Add(i);
+    BitVector* connected_set = new(zone()) BitVector(phi_count);
+    connected_set->Add(i);
+    connected_phis.Add(connected_set);
   }
 
   // (2) Do a fixed point iteration to find the set of connected phis.  A
@@ -1635,6 +1633,25 @@ void HInferRepresentation::Analyze() {
       }
     }
   }
+
+  // (4) Compute phis that definitely can't be converted to integer
+  // without deoptimization and mark them to avoid unnecessary deoptimization.
+  change = true;
+  while (change) {
+    change = false;
+    for (int i = 0; i < phi_count; ++i) {
+      HPhi* phi = phi_list->at(i);
+      for (int j = 0; j < phi->OperandCount(); ++j) {
+        if (phi->IsConvertibleToInteger() &&
+            !phi->OperandAt(j)->IsConvertibleToInteger()) {
+          phi->set_is_convertible_to_integer(false);
+          change = true;
+          break;
+        }
+      }
+    }
+  }
+
 
   for (int i = 0; i < graph_->blocks()->length(); ++i) {
     HBasicBlock* block = graph_->blocks()->at(i);
@@ -1943,6 +1960,9 @@ void EffectContext::ReturnValue(HValue* value) {
 void ValueContext::ReturnValue(HValue* value) {
   // The value is tracked in the bailout environment, and communicated
   // through the environment as the result of the expression.
+  if (!arguments_allowed() && value->CheckFlag(HValue::kIsArguments)) {
+    owner()->Bailout("bad value context for arguments value");
+  }
   owner()->Push(value);
 }
 
@@ -1959,6 +1979,9 @@ void EffectContext::ReturnInstruction(HInstruction* instr, int ast_id) {
 
 
 void ValueContext::ReturnInstruction(HInstruction* instr, int ast_id) {
+  if (!arguments_allowed() && instr->CheckFlag(HValue::kIsArguments)) {
+    owner()->Bailout("bad value context for arguments object value");
+  }
   owner()->AddInstruction(instr);
   owner()->Push(instr);
   if (instr->HasSideEffects()) owner()->AddSimulate(ast_id);
@@ -1985,6 +2008,9 @@ void TestContext::BuildBranch(HValue* value) {
   // property by always adding an empty block on the outgoing edges of this
   // branch.
   HGraphBuilder* builder = owner();
+  if (value->CheckFlag(HValue::kIsArguments)) {
+    builder->Bailout("arguments object value in a test context");
+  }
   HBasicBlock* empty_true = builder->graph()->CreateBasicBlock();
   HBasicBlock* empty_false = builder->graph()->CreateBasicBlock();
   HTest* test = new(zone()) HTest(value, empty_true, empty_false);
@@ -2026,14 +2052,14 @@ void HGraphBuilder::VisitForEffect(Expression* expr) {
 }
 
 
-void HGraphBuilder::VisitForValue(Expression* expr) {
-  ValueContext for_value(this);
+void HGraphBuilder::VisitForValue(Expression* expr, ArgumentsAllowedFlag flag) {
+  ValueContext for_value(this, flag);
   Visit(expr);
 }
 
 
 void HGraphBuilder::VisitForTypeOf(Expression* expr) {
-  ValueContext for_value(this);
+  ValueContext for_value(this, ARGUMENTS_NOT_ALLOWED);
   for_value.set_for_typeof(true);
   Visit(expr);
 }
@@ -2879,9 +2905,6 @@ void HGraphBuilder::VisitVariableProxy(VariableProxy* expr) {
   if (variable == NULL) {
     return Bailout("reference to rewritten variable");
   } else if (variable->IsStackAllocated()) {
-    if (environment()->Lookup(variable)->CheckFlag(HValue::kIsArguments)) {
-      return Bailout("unsupported context for arguments object");
-    }
     ast_context()->ReturnValue(environment()->Lookup(variable));
   } else if (variable->IsContextSlot()) {
     if (variable->mode() == Variable::CONST) {
@@ -3451,19 +3474,11 @@ void HGraphBuilder::VisitAssignment(Assignment* expr) {
 
     // Handle the assignment.
     if (var->IsStackAllocated()) {
-      HValue* value = NULL;
-      // Handle stack-allocated variables on the right-hand side directly.
       // We do not allow the arguments object to occur in a context where it
       // may escape, but assignments to stack-allocated locals are
-      // permitted.  Handling such assignments here bypasses the check for
-      // the arguments object in VisitVariableProxy.
-      Variable* rhs_var = expr->value()->AsVariableProxy()->AsVariable();
-      if (rhs_var != NULL && rhs_var->IsStackAllocated()) {
-        value = environment()->Lookup(rhs_var);
-      } else {
-        CHECK_ALIVE(VisitForValue(expr->value()));
-        value = Pop();
-      }
+      // permitted.
+      CHECK_ALIVE(VisitForValue(expr->value(), ARGUMENTS_ALLOWED));
+      HValue* value = Pop();
       Bind(var, value);
       ast_context()->ReturnValue(value);
 
@@ -4091,7 +4106,10 @@ bool HGraphBuilder::TryInline(Call* expr) {
 
   HConstant* undefined = graph()->GetConstantUndefined();
   HEnvironment* inner_env =
-      environment()->CopyForInlining(target, function, true, undefined);
+      environment()->CopyForInlining(target,
+                                     function,
+                                     HEnvironment::HYDROGEN,
+                                     undefined);
   HBasicBlock* body_entry = CreateBasicBlock(inner_env);
   current_block()->Goto(body_entry);
 
@@ -5720,7 +5738,7 @@ HEnvironment* HEnvironment::CopyAsLoopHeader(HBasicBlock* loop_header) const {
 
 HEnvironment* HEnvironment::CopyForInlining(Handle<JSFunction> target,
                                             FunctionLiteral* function,
-                                            bool is_speculative,
+                                            CompilationPhase compilation_phase,
                                             HConstant* undefined) const {
   // Outer environment is a copy of this one without the arguments.
   int arity = function->scope()->num_parameters();
@@ -5731,14 +5749,16 @@ HEnvironment* HEnvironment::CopyForInlining(Handle<JSFunction> target,
   HEnvironment* inner =
       new(zone) HEnvironment(outer, function->scope(), target);
   // Get the argument values from the original environment.
-  if (is_speculative) {
+  if (compilation_phase == HYDROGEN) {
     for (int i = 0; i <= arity; ++i) {  // Include receiver.
       HValue* push = ExpressionStackAt(arity - i);
       inner->SetValueAt(i, push);
     }
   } else {
+    ASSERT(compilation_phase == LITHIUM);
     for (int i = 0; i <= arity; ++i) {  // Include receiver.
-      inner->SetValueAt(i, ExpressionStackAt(arity - i));
+      HValue* push = ExpressionStackAt(arity - i);
+      inner->SetValueAt(i, push);
     }
   }
 

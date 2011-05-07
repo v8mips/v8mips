@@ -36,7 +36,6 @@ namespace internal {
 
 // Forward declaration.
 class JumpTarget;
-class PostCallGenerator;
 
 // Reserved Register Usage Summary.
 //
@@ -614,7 +613,7 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
                   const ParameterCount& expected,
                   const ParameterCount& actual,
                   InvokeFlag flag,
-                  PostCallGenerator* post_call_generator = NULL);
+                  const CallWrapper& call_wrapper = NullCallWrapper());
 
   void InvokeCode(Handle<Code> code,
                   const ParameterCount& expected,
@@ -627,7 +626,7 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
   void InvokeFunction(Register function,
                       const ParameterCount& actual,
                       InvokeFlag flag,
-                      PostCallGenerator* post_call_generator = NULL);
+                      const CallWrapper& call_wrapper = NullCallWrapper());
 
   void InvokeFunction(JSFunction* function,
                       const ParameterCount& actual,
@@ -848,7 +847,7 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
   // the unresolved list if the name does not resolve.
   void InvokeBuiltin(Builtins::JavaScript id,
                      InvokeFlag flag,
-                     PostCallGenerator* post_call_generator = NULL);
+                     const CallWrapper& call_wrapper = NullCallWrapper());
 
   // Store the code object for the given builtin in the target register and
   // setup the function in a1.
@@ -1037,7 +1036,7 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
                       Register code_reg,
                       Label* done,
                       InvokeFlag flag,
-                      PostCallGenerator* post_call_generator = NULL);
+                      const CallWrapper& call_wrapper = NullCallWrapper());
 
   // Get the code for the given builtin. Returns if able to resolve
   // the function in the 'resolved' flag.
@@ -1089,17 +1088,6 @@ class CodePatcher {
   int instructions_;  // Number of instructions of the expected patch size.
   int size_;  // Number of bytes of the expected patch size.
   MacroAssembler masm_;  // Macro assembler used to generate the code.
-};
-
-
-// Helper class for generating code or data associated with the code
-// right after a call instruction. As an example this can be used to
-// generate safepoint data after calls for crankshaft.
-class PostCallGenerator {
- public:
-  PostCallGenerator() { }
-  virtual ~PostCallGenerator() { }
-  virtual void Generate() = 0;
 };
 
 

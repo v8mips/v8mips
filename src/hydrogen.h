@@ -32,7 +32,6 @@
 
 #include "ast.h"
 #include "compiler.h"
-#include "data-flow.h"
 #include "hydrogen-instructions.h"
 #include "zone.h"
 
@@ -40,6 +39,7 @@ namespace v8 {
 namespace internal {
 
 // Forward declarations.
+class BitVector;
 class HEnvironment;
 class HGraph;
 class HLoopInformation;
@@ -308,6 +308,8 @@ Zone* HBasicBlock::zone() { return graph_->zone(); }
 
 class HEnvironment: public ZoneObject {
  public:
+  enum CompilationPhase { HYDROGEN, LITHIUM };
+
   HEnvironment(HEnvironment* outer,
                Scope* scope,
                Handle<JSFunction> closure);
@@ -384,7 +386,7 @@ class HEnvironment: public ZoneObject {
   // instructions, otherwise they are the actual values.
   HEnvironment* CopyForInlining(Handle<JSFunction> target,
                                 FunctionLiteral* function,
-                                bool is_speculative,
+                                CompilationPhase compilation_phase,
                                 HConstant* undefined) const;
 
   void AddIncomingEdge(HBasicBlock* block, HEnvironment* other);
@@ -438,6 +440,11 @@ class HEnvironment: public ZoneObject {
 
 
 class HGraphBuilder;
+
+enum ArgumentsAllowedFlag {
+  ARGUMENTS_NOT_ALLOWED,
+  ARGUMENTS_ALLOWED
+};
 
 // This class is not BASE_EMBEDDED because our inlining implementation uses
 // new and delete.
@@ -497,13 +504,18 @@ class EffectContext: public AstContext {
 
 class ValueContext: public AstContext {
  public:
-  explicit ValueContext(HGraphBuilder* owner)
-      : AstContext(owner, Expression::kValue) {
+  explicit ValueContext(HGraphBuilder* owner, ArgumentsAllowedFlag flag)
+      : AstContext(owner, Expression::kValue), flag_(flag) {
   }
   virtual ~ValueContext();
 
   virtual void ReturnValue(HValue* value);
   virtual void ReturnInstruction(HInstruction* instr, int ast_id);
+
+  bool arguments_allowed() { return flag_ == ARGUMENTS_ALLOWED; }
+
+ private:
+  ArgumentsAllowedFlag flag_;
 };
 
 
@@ -666,6 +678,8 @@ class HGraphBuilder: public AstVisitor {
   void Push(HValue* value) { environment()->Push(value); }
   HValue* Pop() { return environment()->Pop(); }
 
+  void Bailout(const char* reason);
+
  private:
   // Type of a member function that generates inline code for a native function.
   typedef void (HGraphBuilder::*InlineFunctionGenerator)(CallRuntime* call);
@@ -720,8 +734,6 @@ class HGraphBuilder: public AstVisitor {
   INLINE_RUNTIME_FUNCTION_LIST(INLINE_FUNCTION_GENERATOR_DECLARATION)
 #undef INLINE_FUNCTION_GENERATOR_DECLARATION
 
-  void Bailout(const char* reason);
-
   void PreProcessOsrEntry(IterationStatement* statement);
   // True iff. we are compiling for OSR and the statement is the entry.
   bool HasOsrEntryAt(IterationStatement* statement);
@@ -751,7 +763,11 @@ class HGraphBuilder: public AstVisitor {
   void Drop(int n) { environment()->Drop(n); }
   void Bind(Variable* var, HValue* value) { environment()->Bind(var, value); }
 
-  void VisitForValue(Expression* expr);
+  // The value of the arguments object is allowed in some but not most value
+  // contexts.  (It's allowed in all effect contexts and disallowed in all
+  // test contexts.)
+  void VisitForValue(Expression* expr,
+                     ArgumentsAllowedFlag flag = ARGUMENTS_NOT_ALLOWED);
   void VisitForTypeOf(Expression* expr);
   void VisitForEffect(Expression* expr);
   void VisitForControl(Expression* expr,
