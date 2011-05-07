@@ -6399,6 +6399,245 @@ void ICCompareStub::GenerateMiss(MacroAssembler* masm) {
 }
 
 
+void StringDictionaryLookupStub::GenerateNegativeLookup(MacroAssembler* masm,
+                                                        Label* miss,
+                                                        Label* done,
+                                                        Register receiver,
+                                                        Register properties,
+                                                        String* name,
+                                                        Register scratch0) {
+  // If names of slots in range from 1 to kProbes - 1 for the hash value are
+  // not equal to the name and kProbes-th slot is not used (its name is the
+  // undefined value), it guarantees the hash table doesn't contain the
+  // property. It's true even if some slots represent deleted properties
+  // (their names are the null value).
+  for (int i = 0; i < kInlinedProbes; i++) {
+    // scratch0 points to properties hash.
+    // Compute the masked index: (hash + i + i * i) & mask.
+    Register index = scratch0;
+    // Capacity is smi 2^n.
+    __ lw(index, FieldMemOperand(properties, kCapacityOffset));
+    __ Subu(index, index, Operand(1));
+    __ And(index, index, Operand(
+         Smi::FromInt(name->Hash() + StringDictionary::GetProbeOffset(i))));
+
+    // Scale the index by multiplying by the entry size.
+    ASSERT(StringDictionary::kEntrySize == 3);
+    // index *= 3.
+    __ mov(at, index);
+    __ sll(index, index, 1);
+    __ Addu(index, index, at);
+
+    Register entity_name = scratch0;
+    // Having undefined at this place means the name is not contained.
+    ASSERT_EQ(kSmiTagSize, 1);
+    Register tmp = properties;
+
+    __ sll(scratch0, index, 1);
+    __ Addu(tmp, properties, scratch0);
+    __ lw(entity_name, FieldMemOperand(tmp, kElementsStartOffset));
+
+    ASSERT(!tmp.is(entity_name));
+    __ LoadRoot(tmp, Heap::kUndefinedValueRootIndex);
+    __ Branch(done, eq, entity_name, Operand(tmp));
+
+    if (i != kInlinedProbes - 1) {
+      // Stop if found the property.
+      __ Branch(miss, eq, entity_name, Operand(Handle<String>(name)));
+
+      // Check if the entry name is not a symbol.
+      __ lw(entity_name, FieldMemOperand(entity_name, HeapObject::kMapOffset));
+      __ lbu(entity_name,
+             FieldMemOperand(entity_name, Map::kInstanceTypeOffset));
+      __ And(scratch0, entity_name, Operand(kIsSymbolMask));
+      __ Branch(miss, eq, scratch0, Operand(zero_reg));
+
+      // Restore the properties.
+      __ lw(properties,
+            FieldMemOperand(receiver, JSObject::kPropertiesOffset));
+    }
+  }
+
+  const int spill_mask =
+      (ra.bit() | t2.bit() | t1.bit() | t0.bit() | a3.bit() |
+       a2.bit() | a1.bit() | a0.bit());
+
+  __ MultiPush(spill_mask);
+  __ lw(a0, FieldMemOperand(receiver, JSObject::kPropertiesOffset));
+  __ li(a1, Operand(Handle<String>(name)));
+  StringDictionaryLookupStub stub(NEGATIVE_LOOKUP);
+  __ CallStub(&stub);
+  __ MultiPop(spill_mask);
+
+  __ Branch(done, eq, v0, Operand(zero_reg));
+  __ Branch(miss, ne, v0, Operand(zero_reg));
+}
+
+
+// Probe the string dictionary in the |elements| register. Jump to the
+// |done| label if a property with the given name is found. Jump to
+// the |miss| label otherwise.
+// If lookup was successful |scratch2| will be equal to elements + 4 * index.
+void StringDictionaryLookupStub::GeneratePositiveLookup(MacroAssembler* masm,
+                                                        Label* miss,
+                                                        Label* done,
+                                                        Register elements,
+                                                        Register name,
+                                                        Register scratch1,
+                                                        Register scratch2) {
+  // Assert that name contains a string.
+  if (FLAG_debug_code) __ AbortIfNotString(name);
+
+  // Compute the capacity mask.
+  __ lw(scratch1, FieldMemOperand(elements, kCapacityOffset));
+  __ sra(scratch1, scratch1, kSmiTagSize);  // convert smi to int
+  __ Subu(scratch1, scratch1, Operand(1));
+
+  // Generate an unrolled loop that performs a few probes before
+  // giving up. Measurements done on Gmail indicate that 2 probes
+  // cover ~93% of loads from dictionaries.
+  for (int i = 0; i < kInlinedProbes; i++) {
+    // Compute the masked index: (hash + i + i * i) & mask.
+    __ lw(scratch2, FieldMemOperand(name, String::kHashFieldOffset));
+    if (i > 0) {
+      // Add the probe offset (i + i * i) left shifted to avoid right shifting
+      // the hash in a separate instruction. The value hash + i + i * i is right
+      // shifted in the following and instruction.
+      ASSERT(StringDictionary::GetProbeOffset(i) <
+             1 << (32 - String::kHashFieldOffset));
+      __ Addu(scratch2, scratch2, Operand(
+           StringDictionary::GetProbeOffset(i) << String::kHashShift));
+    }
+    __ srl(scratch2, scratch2, String::kHashShift);
+    __ And(scratch2, scratch1, scratch2);
+
+    // Scale the index by multiplying by the element size.
+    ASSERT(StringDictionary::kEntrySize == 3);
+    // scratch2 = scratch2 * 3.
+
+    __ mov(at, scratch2);
+    __ sll(scratch2, scratch2, 1);
+    __ Addu(scratch2, scratch2, at);
+
+    // Check if the key is identical to the name.
+    __ sll(at, scratch2, 2);
+    __ Addu(scratch2, elements, at);
+    __ lw(at, FieldMemOperand(scratch2, kElementsStartOffset));
+    __ Branch(done, eq, name, Operand(at));
+  }
+
+  const int spill_mask =
+      (ra.bit() | t2.bit() | t1.bit() | t0.bit() |
+       a3.bit() | a2.bit() | a1.bit() | a0.bit()) &
+      ~(scratch1.bit() | scratch2.bit());
+
+  __ MultiPush(spill_mask);
+  __ Move(a0, elements);
+  __ Move(a1, name);
+  StringDictionaryLookupStub stub(POSITIVE_LOOKUP);
+  __ CallStub(&stub);
+  __ mov(scratch2, a2);
+  __ MultiPop(spill_mask);
+
+  __ Branch(done, ne, v0, Operand(zero_reg));
+  __ Branch(miss, eq, v0, Operand(zero_reg));
+}
+
+
+void StringDictionaryLookupStub::Generate(MacroAssembler* masm) {
+  // Registers:
+  //  result: StringDictionary to probe
+  //  a1: key
+  //  : StringDictionary to probe.
+  //  index_: will hold an index of entry if lookup is successful.
+  //          might alias with result_.
+  // Returns:
+  //  result_ is zero if lookup failed, non zero otherwise.
+
+  Register result = v0;
+  Register dictionary = a0;
+  Register key = a1;
+  Register index = a2;
+  Register mask = a3;
+  Register hash = t0;
+  Register undefined = t1;
+  Register entry_key = t2;
+
+  Label in_dictionary, maybe_in_dictionary, not_in_dictionary;
+
+  __ lw(mask, FieldMemOperand(dictionary, kCapacityOffset));
+  __ sra(mask, mask, kSmiTagSize);
+  __ Subu(mask, mask, Operand(1));
+
+  __ lw(hash, FieldMemOperand(key, String::kHashFieldOffset));
+
+  __ LoadRoot(undefined, Heap::kUndefinedValueRootIndex);
+
+  for (int i = kInlinedProbes; i < kTotalProbes; i++) {
+    // Compute the masked index: (hash + i + i * i) & mask.
+    // Capacity is smi 2^n.
+    if (i > 0) {
+      // Add the probe offset (i + i * i) left shifted to avoid right shifting
+      // the hash in a separate instruction. The value hash + i + i * i is right
+      // shifted in the following and instruction.
+      ASSERT(StringDictionary::GetProbeOffset(i) <
+             1 << (32 - String::kHashFieldOffset));
+      __ Addu(index, hash, Operand(
+           StringDictionary::GetProbeOffset(i) << String::kHashShift));
+    } else {
+      __ mov(index, hash);
+    }
+    __ srl(index, index, String::kHashShift);
+    __ And(index, mask, index);
+
+    // Scale the index by multiplying by the entry size.
+    ASSERT(StringDictionary::kEntrySize == 3);
+    // index *= 3.
+    __ mov(at, index);
+    __ sll(index, index, 1);
+    __ Addu(index, index, at);
+
+
+    ASSERT_EQ(kSmiTagSize, 1);
+    __ sll(index, index, 2);
+    __ Addu(index, index, dictionary);
+    __ lw(entry_key, FieldMemOperand(index, kElementsStartOffset));
+
+    // Having undefined at this place means the name is not contained.
+    __ Branch(&not_in_dictionary, eq, entry_key, Operand(undefined));
+
+    // Stop if found the property.
+    __ Branch(&in_dictionary, eq, entry_key, Operand(key));
+
+    if (i != kTotalProbes - 1 && mode_ == NEGATIVE_LOOKUP) {
+      // Check if the entry name is not a symbol.
+      __ lw(entry_key, FieldMemOperand(entry_key, HeapObject::kMapOffset));
+      __ lbu(entry_key,
+             FieldMemOperand(entry_key, Map::kInstanceTypeOffset));
+      __ And(result, entry_key, Operand(kIsSymbolMask));
+      __ Branch(&maybe_in_dictionary, eq, result, Operand(zero_reg));
+    }
+  }
+
+  __ bind(&maybe_in_dictionary);
+  // If we are doing negative lookup then probing failure should be
+  // treated as a lookup success. For positive lookup probing failure
+  // should be treated as lookup failure.
+  if (mode_ == POSITIVE_LOOKUP) {
+    __ mov(result, zero_reg);
+    __ Ret();
+  }
+
+  __ bind(&in_dictionary);
+  __ li(result, 1);
+  __ Ret();
+
+  __ bind(&not_in_dictionary);
+  __ mov(result, zero_reg);
+  __ Ret();
+}
+
+
 #undef __
 
 } }  // namespace v8::internal

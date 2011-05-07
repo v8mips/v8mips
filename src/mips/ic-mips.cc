@@ -100,67 +100,6 @@ static void GenerateStringDictionaryReceiverCheck(MacroAssembler* masm,
 }
 
 
-// Probe the string dictionary in the |elements| register. Jump to the
-// |done| label if a property with the given name is found. Jump to
-// the |miss| label otherwise.
-static void GenerateStringDictionaryProbes(MacroAssembler* masm,
-                                           Label* miss,
-                                           Label* done,
-                                           Register elements,
-                                           Register name,
-                                           Register scratch1,
-                                           Register scratch2) {
-  // Assert that name contains a string.
-  if (FLAG_debug_code) __ AbortIfNotString(name);
-
-  // Compute the capacity mask.
-  const int kCapacityOffset = StringDictionary::kHeaderSize +
-      StringDictionary::kCapacityIndex * kPointerSize;
-  __ lw(scratch1, FieldMemOperand(elements, kCapacityOffset));
-  __ sra(scratch1, scratch1, kSmiTagSize);  // Convert smi to int.
-  __ Subu(scratch1, scratch1, Operand(1));
-
-  const int kElementsStartOffset = StringDictionary::kHeaderSize +
-      StringDictionary::kElementsStartIndex * kPointerSize;
-
-  // Generate an unrolled loop that performs a few probes before
-  // giving up. Measurements done on Gmail indicate that 2 probes
-  // cover ~93% of loads from dictionaries.
-  static const int kProbes = 4;
-  for (int i = 0; i < kProbes; i++) {
-    // Compute the masked index: (hash + i + i * i) & mask.
-    __ lw(scratch2, FieldMemOperand(name, String::kHashFieldOffset));
-    if (i > 0) {
-      // Add the probe offset (i + i * i) left shifted to avoid right shifting
-      // the hash in a separate instruction. The value hash + i + i * i is right
-      // shifted in the following and instruction.
-      ASSERT(StringDictionary::GetProbeOffset(i) <
-             1 << (32 - String::kHashFieldOffset));
-      __ Addu(scratch2, scratch2, Operand(
-          StringDictionary::GetProbeOffset(i) << String::kHashShift));
-    }
-
-    __ srl(scratch2, scratch2, String::kHashShift);
-    __ And(scratch2, scratch1, scratch2);
-
-    // Scale the index by multiplying by the element size.
-    ASSERT(StringDictionary::kEntrySize == 3);
-    __ sll(at, scratch2, 1);  // at = scratch2 * 2.
-    __ addu(scratch2, scratch2, at);  // scratch2 = scratch2 * 3.
-
-    // Check if the key is identical to the name.
-    __ sll(at, scratch2, 2);
-    __ addu(scratch2, elements, at);
-    __ lw(at, FieldMemOperand(scratch2, kElementsStartOffset));
-    if (i != kProbes - 1) {
-      __ Branch(done, eq, name, Operand(at));
-    } else {
-      __ Branch(miss, ne, name, Operand(at));
-    }
-  }
-}
-
-
 // Helper function used from LoadIC/CallIC GenerateNormal.
 //
 // elements: Property dictionary. It is not clobbered if a jump to the miss
@@ -190,13 +129,13 @@ static void GenerateDictionaryLoad(MacroAssembler* masm,
   Label done;
 
   // Probe the dictionary.
-  GenerateStringDictionaryProbes(masm,
-                                 miss,
-                                 &done,
-                                 elements,
-                                 name,
-                                 scratch1,
-                                 scratch2);
+  StringDictionaryLookupStub::GeneratePositiveLookup(masm,
+                                                     miss,
+                                                     &done,
+                                                     elements,
+                                                     name,
+                                                     scratch1,
+                                                     scratch2);
 
   // If probing finds an entry check that the value is a normal
   // property.
@@ -243,13 +182,13 @@ static void GenerateDictionaryStore(MacroAssembler* masm,
   Label done;
 
   // Probe the dictionary.
-  GenerateStringDictionaryProbes(masm,
-                                 miss,
-                                 &done,
-                                 elements,
-                                 name,
-                                 scratch1,
-                                 scratch2);
+  StringDictionaryLookupStub::GeneratePositiveLookup(masm,
+                                                     miss,
+                                                     &done,
+                                                     elements,
+                                                     name,
+                                                     scratch1,
+                                                     scratch2);
 
   // If probing finds an entry in the dictionary check that the value
   // is a normal property that is not read only.
