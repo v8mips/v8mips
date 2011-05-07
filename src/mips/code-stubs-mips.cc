@@ -5706,28 +5706,9 @@ void StringCompareStub::GenerateFlatAsciiStringEquals(MacroAssembler* masm,
   // Compare characters.
   __ bind(&compare_chars);
 
-  // Change index to run from -length to -1 by adding length to string
-  // start. This means that loop ends when index reaches zero, which
-  // doesn't need an additional compare.
-  __ SmiUntag(length);
-  __ Addu(scratch2, length,
-          Operand(SeqAsciiString::kHeaderSize - kHeapObjectTag));
-  __ Addu(left, left, Operand(scratch2));
-  __ Addu(right, right, Operand(scratch2));
-  __ Subu(length, zero_reg, length);
-  Register index = length;  // index = -length;
-
-  // Compare loop.
-  Register scratch4 = v0;
-  Label loop;
-  __ bind(&loop);
-  __ Addu(scratch4, left, index);
-  __ lbu(scratch2, MemOperand(scratch4));
-  __ Addu(scratch4, right, index);
-  __ lbu(scratch3, MemOperand(scratch4));
-  __ Branch(&strings_not_equal, ne, scratch2, Operand(scratch3));
-  __ Addu(index, index, 1);
-  __ Branch(&loop, ne, index, Operand(zero_reg));
+  GenerateAsciiCharsCompareLoop(masm,
+                                left, right, length, scratch2, scratch3, v0,
+                                &strings_not_equal);
 
   // Characters are equal.
   __ li(v0, Operand(Smi::FromInt(EQUAL)));
@@ -5742,68 +5723,75 @@ void StringCompareStub::GenerateCompareFlatAsciiStrings(MacroAssembler* masm,
                                                         Register scratch2,
                                                         Register scratch3,
                                                         Register scratch4) {
-  Label compare_lengths;
+  Label result_not_equal, compare_lengths;
   // Find minimum length and length difference.
   __ lw(scratch1, FieldMemOperand(left, String::kLengthOffset));
   __ lw(scratch2, FieldMemOperand(right, String::kLengthOffset));
-  Register length_delta = v0;   // This will later become result.
-  __ subu(length_delta, scratch1, scratch2);
+  __ Subu(scratch3, scratch1, Operand(scratch2));
+  Register length_delta = scratch3;
+  __ slt(scratch4, scratch2, scratch1);
+  __ movn(scratch1, scratch2, scratch4);
   Register min_length = scratch1;
   STATIC_ASSERT(kSmiTag == 0);
-  // Set min_length to the smaller of the two string lengths.
-  __ slt(scratch3, scratch1, scratch2);
-  __ movz(min_length, scratch2, scratch3);
+  __ Branch(&compare_lengths, eq, min_length, Operand(zero_reg));
 
-  // Untag smi.
-  __ sra(min_length, min_length, kSmiTagSize);
+  // Compare loop.
+  GenerateAsciiCharsCompareLoop(masm,
+                                left, right, min_length, scratch2, scratch4, v0,
+                                &result_not_equal);
 
-  // Setup registers left and right to point to character[0].
-  __ Addu(left, left, Operand(SeqAsciiString::kHeaderSize - kHeapObjectTag));
-  __ Addu(right, right, Operand(SeqAsciiString::kHeaderSize - kHeapObjectTag));
-
-  {
-    // Compare loop.
-    Label loop;
-    __ bind(&loop);
-    // Exit if remaining length is 0.
-    __ Branch(&compare_lengths, eq, min_length, Operand(zero_reg));
-
-    // Load chars.
-    __ lbu(scratch2, MemOperand(left));
-    __ addiu(left, left, 1);
-    __ lbu(scratch4, MemOperand(right));
-    __ addiu(right, right, 1);
-
-    // Repeat loop while chars are equal. Use Branch-delay slot.
-    __ Branch(USE_DELAY_SLOT, &loop, eq, scratch2, Operand(scratch4));
-    __ addiu(min_length, min_length, -1);  // In delay-slot.
-  }
-
-  // We fall thru here when the chars are not equal.
-  // The result is <, =, >,  based on non-matching char, or
-  // non-matching length.
-  // Re-purpose the length_delta reg for char diff.
-  Register result = length_delta;   // This is v0.
-  __ subu(result, scratch2, scratch4);
-
-  // We branch here when all 'min-length' chars are equal, and there is
-  // a string-length difference in 'result' reg.
-  // We fall in here when there is a character difference in 'result'.
-
-  // A zero 'difference' is directly returned as EQUAL.
-  ASSERT(Smi::FromInt(EQUAL) == static_cast<Smi*>(0));
-
+  // Compare lengths - strings up to min-length are equal.
   __ bind(&compare_lengths);
+  ASSERT(Smi::FromInt(EQUAL) == static_cast<Smi*>(0));
+  // Use length_delta as result if it's zero.
+  __ mov(scratch2, length_delta);
+  __ mov(scratch4, zero_reg);
+  __ mov(v0, zero_reg);
 
-  // Branchless code converts negative value to LESS,
-  // postive value to GREATER.
-  __ li(scratch1, Operand(Smi::FromInt(LESS)));
-  __ slt(scratch2, result, zero_reg);
-  __ movn(result, scratch1, scratch2);
-  __ li(scratch1, Operand(Smi::FromInt(GREATER)));
-  __ slt(scratch2, zero_reg, result);
-  __ movn(result, scratch1, scratch2);
-  __ Ret();  // Result is (in) register v0.
+  __ bind(&result_not_equal);
+  // Conditionally update the result based either on length_delta or
+  // the last comparion performed in the loop above.
+  Label ret;
+  __ Branch(&ret, eq, scratch2, Operand(scratch4));
+  __ li(v0, Operand(Smi::FromInt(GREATER)));
+  __ Branch(&ret, gt, scratch2, Operand(scratch4));
+  __ li(v0, Operand(Smi::FromInt(LESS)));
+  __ bind(&ret);
+  __ Ret();
+}
+
+
+void StringCompareStub::GenerateAsciiCharsCompareLoop(
+    MacroAssembler* masm,
+    Register left,
+    Register right,
+    Register length,
+    Register scratch1,
+    Register scratch2,
+    Register scratch3,
+    Label* chars_not_equal) {
+  // Change index to run from -length to -1 by adding length to string
+  // start. This means that loop ends when index reaches zero, which
+  // doesn't need an additional compare.
+  __ SmiUntag(length);
+  __ Addu(scratch1, length,
+          Operand(SeqAsciiString::kHeaderSize - kHeapObjectTag));
+  __ Addu(left, left, Operand(scratch1));
+  __ Addu(right, right, Operand(scratch1));
+  __ Subu(length, zero_reg, length);
+  Register index = length;  // index = -length;
+
+
+  // Compare loop.
+  Label loop;
+  __ bind(&loop);
+  __ Addu(scratch3, left, index);
+  __ lbu(scratch1, MemOperand(scratch3));
+  __ Addu(scratch3, right, index);
+  __ lbu(scratch2, MemOperand(scratch3));
+  __ Branch(chars_not_equal, ne, scratch1, Operand(scratch2));
+  __ Addu(index, index, 1);
+  __ Branch(&loop, ne, index, Operand(zero_reg));
 }
 
 
