@@ -1756,14 +1756,12 @@ void MacroAssembler::Jump(const Operand& target,
 
 
 int MacroAssembler::CallSize(Handle<Code> code, RelocInfo::Mode rmode) {
-  UNIMPLEMENTED_MIPS();
-  return 0;
+  return 4 * kInstrSize;
 }
 
 
 int MacroAssembler::CallSize(Register reg) {
-  UNIMPLEMENTED_MIPS();
-  return 0;
+  return 2 * kInstrSize;
 }
 
 

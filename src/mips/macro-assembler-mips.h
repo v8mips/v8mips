@@ -186,6 +186,9 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
                      Register r1 = zero_reg,
                      const Operand& r2 = Operand(zero_reg));
 
+  int CallSize(Register reg);
+  int CallSize(Handle<Code> code, RelocInfo::Mode rmode);
+  
   // Emit code to discard a non-negative number of pointer-sized elements
   // from the stack, clobbering only the sp register.
   void Drop(int count,
