@@ -1014,6 +1014,7 @@ int RegExpMacroAssemblerMIPS::CheckStackGuardState(Address* return_address,
   ASSERT(isolate == Isolate::Current());
   if (isolate->stack_guard()->IsStackOverflow()) {
     isolate->StackOverflow();
+    return EXCEPTION;
   }
 
   // If not real stack overflow the stack guard was used to interrupt
