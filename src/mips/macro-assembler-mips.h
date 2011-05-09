@@ -581,15 +581,14 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
   void LeaveConstructFrame() { LeaveFrame(StackFrame::CONSTRUCT); }
 
   // Enter exit frame.
-  // Expects the number of arguments in register a0 and
-  // the builtin function to call in register a1.
-  // On output hold_argc, hold_function, and hold_argv are setup.
-  void EnterExitFrame(Register hold_argc,
-                      Register hold_argv,
-                      Register hold_function,
-                      bool save_doubles);
+  // argc - argument count to be dropped by LeaveExitFrame.
+  // save_doubles - saves FPU registers on stack, currently disabled.
+  // stack_space - extra stack space.
+  void EnterExitFrame(const Operand& argc,
+                      bool save_doubles,
+                      int stack_space = 0);
 
-  // Leave the current exit frame. Expects the return value in v0.
+  // Leave the current exit frame.
   void LeaveExitFrame(bool save_doubles);
 
   // Align the stack by optionally pushing a Smi zero.
@@ -793,6 +792,15 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
   // Tail call a code stub (jump).
   void TailCallStub(CodeStub* stub);
 
+  // Tail call a code stub (jump) and return the code object called.  Try to
+  // generate the code if necessary.  Do not perform a GC but instead return
+  // a retry after GC failure.
+  MUST_USE_RESULT MaybeObject* TryTailCallStub(CodeStub* stub,
+                                               Condition cond = al,
+                                               Register r1 = zero_reg,
+                                               const Operand& r2 =
+                                                   Operand(zero_reg));
+
   void CallJSExitStub(CodeStub* stub);
 
   // Call a runtime routine.
@@ -812,6 +820,12 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
   void TailCallExternalReference(const ExternalReference& ext,
                                  int num_arguments,
                                  int result_size);
+
+  // Tail call of a runtime routine (jump). Try to generate the code if
+  // necessary. Do not perform a GC but instead return a retry after GC
+  // failure.
+  MUST_USE_RESULT MaybeObject* TryTailCallExternalReference(
+      const ExternalReference& ext, int num_arguments, int result_size);
 
   // Convenience function: tail call a runtime routine (jump).
   void TailCallRuntime(Runtime::FunctionId fid,
@@ -840,11 +854,16 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
   // function).
   void CallCFunction(ExternalReference function, int num_arguments);
   void CallCFunction(Register function, Register scratch, int num_arguments);
-
   void GetCFunctionDoubleResult(const DoubleRegister dst);
+
+  // Calls an API function. Allocates HandleScope, extracts returned value
+  // from handle and propagates exceptions. Restores context.
+  MaybeObject* TryCallApiFunctionAndReturn(ExternalReference function);
 
   // Jump to the builtin routine.
   void JumpToExternalReference(const ExternalReference& builtin);
+
+  MaybeObject* TryJumpToExternalReference(const ExternalReference& ext);
 
   // Invoke specified builtin JavaScript function. Adds an entry to
   // the unresolved list if the name does not resolve.

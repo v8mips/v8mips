@@ -3808,8 +3808,17 @@ void CEntryStub::Generate(MacroAssembler* masm) {
   // this by performing a garbage collection and retrying the
   // builtin once.
 
+  // Compute the argv pointer in a callee-saved register.
+  __ sll(s1, a0, kPointerSizeLog2);
+  __ Addu(s1, sp, s1);
+  __ Subu(s1, s1, Operand(kPointerSize));
+
   // Enter the exit frame that transitions from JavaScript to C++.
-  __ EnterExitFrame(s0, s1, s2, save_doubles_);
+  __ EnterExitFrame(Operand(a0), save_doubles_);
+
+  // Setup argc and the builtin function in callee-saved registers.
+  __ mov(s0, a0);
+  __ mov(s2, a1);
 
   // s0: number of arguments (C callee-saved)
   // s1: pointer to first argument (C callee-saved)
@@ -6384,6 +6393,60 @@ void ICCompareStub::GenerateMiss(MacroAssembler* masm) {
   __ pop(a0);
   __ pop(a1);
   __ Jump(a2);
+}
+
+
+void DirectCEntryStub::Generate(MacroAssembler* masm) {
+  // No need to pop or drop anything, LeaveExitFrame will restore the old
+  // stack.
+  __ lw(t9, MemOperand(sp, 4 * kPointerSize));
+
+  if (FLAG_debug_code && EnableSlowAsserts()) {
+    // In case of an error the return address may point to a memory area
+    // filled with kZapValue by the GC.
+    // Dereference the address and check for this.
+    __ lw(t0, MemOperand(t9));
+    __ Assert(ne, "Received invalid return address.", t0,
+        Operand(reinterpret_cast<uint32_t>(kZapValue)));
+  }
+  __ Jump(t9);
+}
+
+
+void DirectCEntryStub::GenerateCall(MacroAssembler* masm,
+                                    ExternalReference function) {
+  // Block the trampoline pool through the whole function to make sure the
+  // number of generated instructions is constant.
+  Assembler::BlockTrampolinePoolScope block_trampoline_pool(masm);
+
+  // We need to get the current 'pc' value, which is not available on MIPS.
+  Label find_ra;
+  masm->bal(&find_ra);  // ra = pc + 8
+  masm->nop();  // Branch delay slot nop.
+  masm->bind(&find_ra);
+
+  // Currently the called functions return a Handle class. The O32 ABI requires
+  // us to pass a pointer in a0 where the returned struct (4 bytes) will be
+  // placed. This is also built into the Simulator.
+  // We also need to allocate 4 slots for the passed arguments.
+
+  int kNumInstructionsToJump = 10;
+  masm->addiu(ra, ra, kNumInstructionsToJump * kPointerSize);
+  masm->addiu(sp, sp, -6 * kPointerSize);
+  masm->addiu(a0, sp, 5 * kPointerSize);
+  masm->sw(ra, MemOperand(sp, 4 * kPointerSize));
+
+  // Push return address (accessible to GC through exit frame pc).
+  masm->li(ra, Operand(reinterpret_cast<intptr_t>(GetCode().location()),
+                    RelocInfo::CODE_TARGET), true);
+  // Call the api function.
+  masm->Jump(Operand(function));
+  // Make sure the stored 'ra' points to this position.
+  ASSERT_EQ(kNumInstructionsToJump, masm->InstructionsGeneratedSince(&find_ra));
+
+  // As mentioned above, on MIPS a pointer is returned - we need to dereference
+  // it to get the actual return value (which is also a pointer).
+  __ lw(v0, MemOperand(v0));
 }
 
 

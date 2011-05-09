@@ -2685,6 +2685,107 @@ void MacroAssembler::TailCallStub(CodeStub* stub) {
   Jump(stub->GetCode(), RelocInfo::CODE_TARGET);
 }
 
+MaybeObject* MacroAssembler::TryTailCallStub(CodeStub* stub,
+                                             Condition cond,
+                                             Register r1,
+                                             const Operand& r2) {
+  ASSERT(allow_stub_calls());  // Stub calls are not allowed in some stubs.
+  Object* result;
+  { MaybeObject* maybe_result = stub->TryGetCode();
+    if (!maybe_result->ToObject(&result)) return maybe_result;
+  }
+  Jump(stub->GetCode(), RelocInfo::CODE_TARGET, cond, r1, r2);
+  return result;
+}
+
+
+static int AddressOffset(ExternalReference ref0, ExternalReference ref1) {
+  return ref0.address() - ref1.address();
+}
+
+
+MaybeObject* MacroAssembler::TryCallApiFunctionAndReturn(
+    ExternalReference function) {
+  ExternalReference next_address =
+      ExternalReference::handle_scope_next_address();
+  const int kNextOffset = 0;
+  const int kLimitOffset = AddressOffset(
+      ExternalReference::handle_scope_limit_address(),
+      next_address);
+  const int kLevelOffset = AddressOffset(
+      ExternalReference::handle_scope_level_address(),
+      next_address);
+
+  // Allocate HandleScope in callee-save registers.
+  li(s3, Operand(next_address));
+  lw(s0, MemOperand(s3, kNextOffset));
+  lw(s1, MemOperand(s3, kLimitOffset));
+  lw(s2, MemOperand(s3, kLevelOffset));
+  Addu(s2, s2, Operand(1));
+  sw(s2, MemOperand(s3, kLevelOffset));
+
+  // Native call returns to the DirectCEntry stub which redirects to the
+  // return address pushed on stack (could have moved after GC).
+  // DirectCEntry stub itself is generated early and never moves.
+  DirectCEntryStub stub;
+  stub.GenerateCall(this, function);
+
+  Label promote_scheduled_exception;
+  Label delete_allocated_handles;
+  Label leave_exit_frame;
+
+  // If result is non-zero, dereference to get the result value
+  // otherwise set it to undefined.
+  Label skip;
+  LoadRoot(a0, Heap::kUndefinedValueRootIndex);
+  Branch(&skip, eq, v0, Operand(zero_reg));
+  lw(a0, MemOperand(v0));
+  bind(&skip);
+  mov(v0, a0);
+
+  // No more valid handles (the result handle was the last one). Restore
+  // previous handle scope.
+  sw(s0, MemOperand(s3, kNextOffset));
+  if (FLAG_debug_code) {
+    lw(a1, MemOperand(s3, kLevelOffset));
+    Check(eq, "Unexpected level after return from api call", a1, Operand(s2));
+  }
+  Subu(s2, s2, Operand(1));
+  sw(s2, MemOperand(s3, kLevelOffset));
+  lw(at, MemOperand(s3, kLimitOffset));
+  Branch(&delete_allocated_handles, ne, s1, Operand(at));
+
+  // Check if the function scheduled an exception.
+  bind(&leave_exit_frame);
+  LoadRoot(t0, Heap::kTheHoleValueRootIndex);
+  li(at, Operand(ExternalReference::scheduled_exception_address(isolate())));
+  lw(t1, MemOperand(at));
+  Branch(&promote_scheduled_exception, ne, t0, Operand(t1));
+
+  LeaveExitFrame(false);
+
+  bind(&promote_scheduled_exception);
+  MaybeObject* result = TryTailCallExternalReference(
+      ExternalReference(Runtime::kPromoteScheduledException, isolate()), 0, 1);
+  if (result->IsFailure()) {
+    return result;
+  }
+
+  // HandleScope limit has changed. Delete allocated extensions.
+  bind(&delete_allocated_handles);
+  sw(s1, MemOperand(s3, kLimitOffset));
+  mov(s0, v0);
+  mov(a0, v0);
+  PrepareCallCFunction(1, s1);
+  li(a0, Operand(ExternalReference::isolate_address()));
+  CallCFunction(ExternalReference::delete_handle_scope_extensions(isolate()),
+      1);
+  mov(v0, s0);
+  jmp(&leave_exit_frame);
+
+  return result;
+}
+
 
 void MacroAssembler::IllegalOperation(int num_arguments) {
   if (num_arguments > 0) {
@@ -2893,6 +2994,16 @@ void MacroAssembler::TailCallExternalReference(const ExternalReference& ext,
   JumpToExternalReference(ext);
 }
 
+MaybeObject* MacroAssembler::TryTailCallExternalReference(
+    const ExternalReference& ext, int num_arguments, int result_size) {
+  // TODO(1236192): Most runtime routines don't need the number of
+  // arguments passed in because it is constant. At some point we
+  // should remove this need and make the runtime routine entry code
+  // smarter.
+  li(a0, num_arguments);
+  return TryJumpToExternalReference(ext);
+}
+
 
 void MacroAssembler::TailCallRuntime(Runtime::FunctionId fid,
                                      int num_arguments,
@@ -2907,6 +3018,14 @@ void MacroAssembler::JumpToExternalReference(const ExternalReference& builtin) {
   li(a1, Operand(builtin));
   CEntryStub stub(1);
   Jump(stub.GetCode(), RelocInfo::CODE_TARGET);
+}
+
+
+MaybeObject* MacroAssembler::TryJumpToExternalReference(
+    const ExternalReference& builtin) {
+  li(a1, Operand(builtin));
+  CEntryStub stub(1);
+  return TryTailCallStub(&stub);
 }
 
 
@@ -3144,26 +3263,27 @@ void MacroAssembler::LeaveFrame(StackFrame::Type type) {
 }
 
 
-void MacroAssembler::EnterExitFrame(Register hold_argc,
-                                    Register hold_argv,
-                                    Register hold_function,
-                                    bool save_doubles) {
-  // a0 is argc.
-  sll(t8, a0, kPointerSizeLog2);
-  addu(hold_argv, sp, t8);
-  addiu(hold_argv, hold_argv, -kPointerSize);
-
+void MacroAssembler::EnterExitFrame(const Operand& argc,
+                                    bool save_doubles,
+                                    int stack_space) {
   // Compute callee's stack pointer before making changes and save it as
   // t9 register so that it is restored as sp register on exit, thereby
   // popping the args.
   // t9 = sp + kPointerSize * #args
-  addu(t9, sp, t8);
+  if (argc.is_reg()) {
+    sll(t9, argc.rm(), kPointerSizeLog2);
+    addu(t9, sp, t9);
+  } else {
+    addiu(t9, sp, argc.imm32_ * kPointerSize);
+  }
 
   // Align the stack at this point.
   AlignStack(0);
 
+  // Reserve place for the registers.
+  addiu(sp, sp, -kNumStackStoredRegisters * kPointerSize);
   // Save registers.
-  addiu(sp, sp, -12);
+  ASSERT(kNumStackStoredRegisters == 3);
   sw(t9, MemOperand(sp, 8));
   sw(ra, MemOperand(sp, 4));
   sw(fp, MemOperand(sp, 0));
@@ -3178,50 +3298,14 @@ void MacroAssembler::EnterExitFrame(Register hold_argc,
   li(t8, Operand(ExternalReference(Isolate::k_context_address, isolate())));
   sw(cp, MemOperand(t8));
 
-  // Setup argc and the builtin function in callee-saved registers.
-  mov(hold_argc, a0);
-  mov(hold_function, a1);
-
-  // Optionally save all double registers.
-  if (save_doubles) {
-#ifdef DEBUG
-    int frame_alignment = ActivationFrameAlignment();
-#endif
-    // The stack alignment code above made sp unaligned, so add space for one
-    // more double register and use aligned addresses.
-    ASSERT(kDoubleSize == frame_alignment);
-    // Mark the frame as containing doubles by pushing a non-valid return
-    // address, i.e. 0.
-    ASSERT(ExitFrameConstants::kMarkerOffset == -2 * kPointerSize);
-    push(zero_reg);  // Marker and alignment word.
-    int space = FPURegister::kNumRegisters * kDoubleSize + kPointerSize;
-    Subu(sp, sp, Operand(space));
-    // Remember: we only need to save every 2nd double FPU value.
-    for (int i = 0; i < FPURegister::kNumRegisters; i+=2) {
-      FPURegister reg = FPURegister::from_code(i);
-      sdc1(reg, MemOperand(sp, i * kDoubleSize + kPointerSize));
-    }
-    // Note that f0 will be accessible at fp - 2*kPointerSize -
-    // FPURegister::kNumRegisters * kDoubleSize, since the code slot and the
-    // alignment word were pushed after the fp.
-  }
+  // Make sure the stack stays aligned.
+  if (stack_space % 2 != 0)
+      stack_space += 1;
+  addiu(sp, sp, - stack_space * kPointerSize);
 }
 
 
 void MacroAssembler::LeaveExitFrame(bool save_doubles) {
-  // Optionally restore all double registers.
-  if (save_doubles) {
-    // TODO(regis): Use vldrm instruction.
-    // Remember: we only need to restore every 2nd double FPU value.
-    for (int i = 0; i < FPURegister::kNumRegisters; i+=2) {
-      FPURegister reg = FPURegister::from_code(i);
-      // Register f30-f31 is just below the marker.
-      const int offset = ExitFrameConstants::kMarkerOffset;
-      ldc1(reg, MemOperand(fp,
-          (i - FPURegister::kNumRegisters) * kDoubleSize + offset));
-    }
-  }
-
   // Clear top frame.
   li(t8, Operand(ExternalReference(Isolate::k_c_entry_fp_address, isolate())));
   sw(zero_reg, MemOperand(t8));
@@ -3235,6 +3319,7 @@ void MacroAssembler::LeaveExitFrame(bool save_doubles) {
 
   // Pop the arguments, restore registers, and return.
   mov(sp, fp);  // Respect ABI stack constraint.
+  ASSERT(kNumStackStoredRegisters == 3);
   lw(fp, MemOperand(sp, 0));
   lw(ra, MemOperand(sp, 4));
   lw(sp, MemOperand(sp, 8));

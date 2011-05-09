@@ -523,68 +523,102 @@ static void CompileCallLoadPropertyWithInterceptor(MacroAssembler* masm,
 }
 
 
+static const int kFastApiCallArguments = 3;
+
+
 // Reserves space for the extra arguments to FastHandleApiCall in the
 // caller's frame.
 //
-// These arguments are set by CheckPrototypes and GenerateFastApiCall.
+// These arguments are set by CheckPrototypes and GenerateFastApiDirectCall.
 static void ReserveSpaceForFastApiCall(MacroAssembler* masm,
                                        Register scratch) {
   ASSERT(Smi::FromInt(0) == 0);
-  __ Push(zero_reg, zero_reg, zero_reg, zero_reg);
+  for (int i = 0; i < kFastApiCallArguments; i++) {
+    __ push(zero_reg);
+  }
 }
 
 
 // Undoes the effects of ReserveSpaceForFastApiCall.
 static void FreeSpaceForFastApiCall(MacroAssembler* masm) {
-  __ Addu(sp, sp, Operand(4 * kPointerSize));
+  __ Drop(kFastApiCallArguments);
 }
 
 
-// Generates call to FastHandleApiCall builtin.
-static void GenerateFastApiCall(MacroAssembler* masm,
-                                const CallOptimization& optimization,
-                                int argc) {
+static MaybeObject* GenerateFastApiDirectCall(MacroAssembler* masm,
+                                      const CallOptimization& optimization,
+                                      int argc) {
+  // ----------- S t a t e -------------
+  //  -- sp[0]              : holder (set by CheckPrototypes)
+  //  -- sp[4]              : callee js function
+  //  -- sp[8]              : call data
+  //  -- sp[12]             : last js argument
+  //  -- ...
+  //  -- sp[(argc + 3) * 4] : first js argument
+  //  -- sp[(argc + 4) * 4] : receiver
+  // -----------------------------------
   // Get the function and setup the context.
   JSFunction* function = optimization.constant_function();
   __ li(t1, Operand(Handle<JSFunction>(function)));
   __ lw(cp, FieldMemOperand(t1, JSFunction::kContextOffset));
 
   // Pass the additional arguments FastHandleApiCall expects.
-  bool info_loaded = false;
-  Object* callback = optimization.api_call_info()->callback();
-  if (masm->isolate()->heap()->InNewSpace(callback)) {
-    info_loaded = true;
-    __ li(a0, Operand(Handle<CallHandlerInfo>(optimization.api_call_info())));
-    __ lw(t3, FieldMemOperand(a0, CallHandlerInfo::kCallbackOffset));
-  } else {
-    __ li(t3, Operand(Handle<Object>(callback)));
-  }
   Object* call_data = optimization.api_call_info()->data();
+  Handle<CallHandlerInfo> api_call_info_handle(optimization.api_call_info());
   if (masm->isolate()->heap()->InNewSpace(call_data)) {
-    if (!info_loaded) {
-      __ li(a0, Operand(Handle<CallHandlerInfo>(optimization.api_call_info())));
-    }
+    __ li(a0, api_call_info_handle);
     __ lw(t2, FieldMemOperand(a0, CallHandlerInfo::kDataOffset));
   } else {
     __ li(t2, Operand(Handle<Object>(call_data)));
   }
 
-  // Store the values on the stack (the space is pre-allocated).
+  // Store js function and call data.
   __ sw(t1, MemOperand(sp, 1 * kPointerSize));
   __ sw(t2, MemOperand(sp, 2 * kPointerSize));
-  __ sw(t3, MemOperand(sp, 3 * kPointerSize));
 
+  // a2 points to call data as expected by Arguments
+  // (refer to layout above).
+  __ Addu(a2, sp, Operand(2 * kPointerSize));
 
-  // Set the number of arguments.
-  __ li(a0, Operand(argc + 4));
+  Object* callback = optimization.api_call_info()->callback();
+  Address api_function_address = v8::ToCData<Address>(callback);
+  ApiFunction fun(api_function_address);
 
-  // Jump to the fast api call builtin (tail call).
-  Handle<Code> code = masm->isolate()->builtins()->FastHandleApiCall();
-  ParameterCount expected(0);
-  __ InvokeCode(code, expected, expected,
-                RelocInfo::CODE_TARGET, JUMP_FUNCTION);
+  const int kApiStackSpace = 4;
+
+  __ EnterExitFrame(Operand(argc + kFastApiCallArguments + 1),
+      false, kApiStackSpace);
+
+  // NOTE: the O32 abi requires a0 to hold a special pointer when returning a
+  // struct from the function (which is currently the case). This means we pass
+  // the first argument in a1 instead of a0. DirectCEntryStub::GenerateCall
+  // will handle setting up a0.
+
+  // a1 = v8::Arguments&
+  // Arguments is built on the end of the stack.
+  __ mov(a1, sp);
+
+  // v8::Arguments::implicit_args = data
+  __ sw(a2, MemOperand(a1, 0 * kPointerSize));
+  // v8::Arguments::values = last argument
+  __ Addu(t0, a2, Operand(argc * kPointerSize));
+  __ sw(t0, MemOperand(a1, 1 * kPointerSize));
+  // v8::Arguments::length_ = argc
+  __ li(t0, Operand(argc));
+  __ sw(t0, MemOperand(a1, 2 * kPointerSize));
+  // v8::Arguments::is_construct_call = 0
+  __ sw(zero_reg, MemOperand(a1, 3 * kPointerSize));
+
+  // Emitting a stub call may try to allocate (if the code is not
+  // already generated). Do not allow the assembler to perform a
+  // garbage collection but instead return the allocation failure
+  // object.
+  ExternalReference ref =
+      ExternalReference(&fun,
+                        ExternalReference::DIRECT_API_CALL,
+                        masm->isolate());
+  return masm->TryCallApiFunctionAndReturn(ref);
 }
-
 
 class CallInterceptorCompiler BASE_EMBEDDED {
  public:
@@ -716,7 +750,10 @@ class CallInterceptorCompiler BASE_EMBEDDED {
 
     // Invoke function.
     if (can_do_fast_api_call) {
-      GenerateFastApiCall(masm, optimization, arguments_.immediate());
+      MaybeObject* result = GenerateFastApiDirectCall(masm,
+                                                      optimization,
+                                                      arguments_.immediate());
+      if (result->IsFailure()) return result;
     } else {
       __ InvokeFunction(optimization.constant_function(), arguments_,
                         JUMP_FUNCTION);
@@ -1174,21 +1211,47 @@ MaybeObject* StubCompiler::GenerateLoadCallback(JSObject* object,
     CheckPrototypes(object, receiver, holder, scratch1, scratch2, scratch3,
                     name, miss);
 
-  // Push the arguments on the JS stack of the caller.
-  __ push(receiver);  // Receiver.
-  __ li(scratch3, Operand(Handle<AccessorInfo>(callback)));  // Callback data.
-  // scratch2 is used here as ARM's ip. This may cause problems if scratch2
-  // will be used to hold a value in the future.
-  __ lw(scratch2, FieldMemOperand(scratch3, AccessorInfo::kDataOffset));
-  __ Push(reg, scratch2, scratch3, name_reg);
+  // Build AccessorInfo::args_ list on the stack and push property name below
+  // the exit frame to make GC aware of them and store pointers to them.
+  __ push(receiver);
+  __ mov(scratch2, sp);  // scratch2 = AccessorInfo::args_
+  Handle<AccessorInfo> callback_handle(callback);
+  if (heap()->InNewSpace(callback_handle->data())) {
+    __ li(scratch3, callback_handle);
+    __ lw(scratch3, FieldMemOperand(scratch3, AccessorInfo::kDataOffset));
+  } else {
+    __ li(scratch3, Handle<Object>(callback_handle->data()));
+  }
+  __ Push(reg, scratch3, name_reg);
+  __ mov(a2, scratch2);  // Saved in case scratch2 == a1.
+  __ mov(a1, sp);  // a1 (first argument - see note below) = Handle<String>
 
-  // Do tail-call to the runtime system.
-  ExternalReference load_callback_property =
-      ExternalReference(IC_Utility(IC::kLoadCallbackProperty),
+  Address getter_address = v8::ToCData<Address>(callback->getter());
+  ApiFunction fun(getter_address);
+
+  // NOTE: the O32 abi requires a0 to hold a special pointer when returning a
+  // struct from the function (which is currently the case). This means we pass
+  // the arguments in a1-a2 instead of a0-a1. DirectCEntryStub::GenerateCall
+  // will handle setting up a0.
+
+  const int kApiStackSpace = 1;
+  // 4 args - will be freed later by LeaveExitFrame.
+  __ EnterExitFrame(Operand(4), false, kApiStackSpace);
+  // Create AccessorInfo instance on the stack above the exit frame with
+  // scratch2 (internal::Object **args_) as the data.
+  __ sw(a2, MemOperand(sp));
+  // a2 (second argument - see note above) = AccessorInfo&
+  __ mov(a2, sp);
+
+  // Emitting a stub call may try to allocate (if the code is not
+  // already generated).  Do not allow the assembler to perform a
+  // garbage collection but instead return the allocation failure
+  // object.
+  ExternalReference ref =
+      ExternalReference(&fun,
+                        ExternalReference::DIRECT_GETTER_CALL,
                         masm()->isolate());
-  __ TailCallExternalReference(load_callback_property, 5, 1);
-
-  return heap()->undefined_value();  // Success.
+  return masm()->TryCallApiFunctionAndReturn(ref);
 }
 
 
@@ -2205,13 +2268,8 @@ MaybeObject* CallStubCompiler::CompileFastApiCall(
   CheckPrototypes(JSObject::cast(object), a1, holder, a0, a3, t0, name,
                   depth, &miss);
 
-  // This is disabled until FastApiDirectCall is implemented.
-#if 0
   MaybeObject* result = GenerateFastApiDirectCall(masm(), optimization, argc);
   if (result->IsFailure()) return result;
-#else
-  GenerateFastApiCall(masm(), optimization, argc);
-#endif
 
   __ bind(&miss);
   FreeSpaceForFastApiCall(masm());
