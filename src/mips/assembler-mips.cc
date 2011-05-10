@@ -279,6 +279,7 @@ Assembler::Assembler(Isolate* arg_isolate, void* buffer, int buffer_size)
   trampoline_pool_blocked_nesting_ = 0;
   next_buffer_check_ = kMaxBranchOffset - kTrampolineSize;
   internal_trampoline_exception_ = false;
+  last_bound_pos_ = 0;
 
   ast_id_for_reloc_info_ = kNoASTId;
 }
