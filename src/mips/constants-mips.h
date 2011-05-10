@@ -88,9 +88,6 @@ static const uint32_t kFCSROverflowFlagBit = 1 << 2;
 static const uint32_t kFCSRDivideByZeroFlagBit = 1 << 3;
 static const uint32_t kFCSRInvalidOpFlagBit = 1 << 4;
 
-// Number of registers stored in the stack frame in EnterExitFrame.
-static const int kNumStackStoredRegisters = 3;
-
 // Helper functions for converting between register numbers and names.
 class Registers {
  public:

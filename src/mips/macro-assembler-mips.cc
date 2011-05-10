@@ -3277,20 +3277,35 @@ void MacroAssembler::EnterExitFrame(const Operand& argc,
     addiu(t9, sp, argc.imm32_ * kPointerSize);
   }
 
-  // Align the stack at this point.
-  AlignStack(0);
+  // Setup the frame structure on the stack.
+  STATIC_ASSERT(3 * kPointerSize == ExitFrameConstants::kCallerSPDisplacement);
+  STATIC_ASSERT(2 * kPointerSize == ExitFrameConstants::kCallerSPOffset);
+  STATIC_ASSERT(1 * kPointerSize == ExitFrameConstants::kCallerPCOffset);
+  STATIC_ASSERT(0 * kPointerSize == ExitFrameConstants::kCallerFPOffset);
 
-  // Reserve place for the registers.
-  addiu(sp, sp, -kNumStackStoredRegisters * kPointerSize);
+  // This is how the stack will look:
+  // fp + 3 (==kCallerSPDisplacement) - old stack's end
+  // [fp + 2 (==kCallerSPOffset)] - saved old sp (as calculated above into t9).
+  // [fp + 1 (==kCallerPCOffset)] - saved old ra
+  // [fp + 0 (==kCallerFPOffset)] - saved old fp
+  // [fp - 1 (==kSPOffset)] - sp of the called function
+  // [fp - 2 (==kCodeOffset)] - CodeObject
+  // fp - (2 + stack_space + alignment) == sp == [fp - kSPOffset] - stack of
+  //   the called function
+
   // Save registers.
-  ASSERT(kNumStackStoredRegisters == 3);
-  sw(t9, MemOperand(sp, 8));
-  sw(ra, MemOperand(sp, 4));
-  sw(fp, MemOperand(sp, 0));
-  mov(fp, sp);  // Setup new frame pointer.
+  addiu(sp, sp, -5 * kPointerSize);
+  sw(t9, MemOperand(sp, 4 * kPointerSize));
+  sw(ra, MemOperand(sp, 3 * kPointerSize));
+  sw(fp, MemOperand(sp, 2 * kPointerSize));
+  addiu(fp, sp, 2 * kPointerSize);  // Setup new frame pointer.
 
-  li(t8, Operand(CodeObject()));
-  push(t8);  // Accessed from ExitFrame::code_slot.
+  if (emit_debug_code()) {
+    sw(zero_reg, MemOperand(fp, ExitFrameConstants::kSPOffset));
+  }
+
+  li(t8, Operand(CodeObject()));  // Accessed from ExitFrame::code_slot.
+  sw(t8, MemOperand(fp, ExitFrameConstants::kCodeOffset));
 
   // Save the frame pointer and the context in top.
   li(t8, Operand(ExternalReference(Isolate::k_c_entry_fp_address, isolate())));
@@ -3298,10 +3313,19 @@ void MacroAssembler::EnterExitFrame(const Operand& argc,
   li(t8, Operand(ExternalReference(Isolate::k_context_address, isolate())));
   sw(cp, MemOperand(t8));
 
-  // Make sure the stack stays aligned.
-  if (stack_space % 2 != 0)
-      stack_space += 1;
+  ASSERT(stack_space >= 0);
+
+  // Reserve an extra spot for the ra that will be saved.
+  ++stack_space;
   addiu(sp, sp, - stack_space * kPointerSize);
+
+  // Align the stack at this point.
+  AlignStack(0);
+
+  // Set the exit frame sp value to point just before the return address
+  // location.
+  addiu(at, sp, kPointerSize);
+  sw(at, MemOperand(fp, ExitFrameConstants::kSPOffset));
 }
 
 
@@ -3319,10 +3343,9 @@ void MacroAssembler::LeaveExitFrame(bool save_doubles) {
 
   // Pop the arguments, restore registers, and return.
   mov(sp, fp);  // Respect ABI stack constraint.
-  ASSERT(kNumStackStoredRegisters == 3);
-  lw(fp, MemOperand(sp, 0));
-  lw(ra, MemOperand(sp, 4));
-  lw(sp, MemOperand(sp, 8));
+  lw(fp, MemOperand(sp, ExitFrameConstants::kCallerFPOffset));
+  lw(ra, MemOperand(sp, ExitFrameConstants::kCallerPCOffset));
+  lw(sp, MemOperand(sp, ExitFrameConstants::kCallerSPOffset));
   jr(ra);
   nop();  // Branch delay slot nop.
 }

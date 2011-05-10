@@ -3687,22 +3687,6 @@ void CEntryStub::GenerateCore(MacroAssembler* masm,
   // TODO(MIPS): As of 26May10, Arm code has frame-alignment checks
   // and modification code here.
 
-  // The mips __ EnterExitFrame(), which is called in CEntryStub::Generate,
-  // does stack alignment to activation_frame_alignment. In this routine,
-  // that alignment must be preserved. We do need to push one kPointerSize
-  // value (below), plus the argument slots. See comments, caveats in
-  // MacroAssembler::AlignStack() function.
-#if defined(V8_HOST_ARCH_MIPS)
-  int activation_frame_alignment = OS::ActivationFrameAlignment();
-#else  // !defined(V8_HOST_ARCH_MIPS)
-  int activation_frame_alignment = 2 * kPointerSize;
-#endif  // defined(V8_HOST_ARCH_MIPS)
-
-  int stack_adjustment = (StandardFrameConstants::kCArgsSlotsSize
-                       + kPointerSize
-                       + (activation_frame_alignment - 1))
-                       & ~(activation_frame_alignment - 1);
-
   __ li(a2, Operand(ExternalReference::isolate_address()));
 
   // From arm version of this function:
@@ -3726,9 +3710,10 @@ void CEntryStub::GenerateCore(MacroAssembler* masm,
   // Adjust the value in ra to point to the correct return location, 2nd
   // instruction past the real call into C code (the jalr(t9)), and push it.
   // This is the return address of the exit frame.
-  masm->Addu(ra, ra, 20);  // 5 instructions is 20 bytes.
-  masm->addiu(sp, sp, -(stack_adjustment));
-  masm->sw(ra, MemOperand(sp, stack_adjustment - kPointerSize));
+  masm->Addu(ra, ra, 5 * kPointerSize);  // 5 instructions.
+  masm->sw(ra, MemOperand(sp));  // This spot was reserved in EnterExitFrame.
+  masm->addiu(sp, sp, -4 * kPointerSize);  // 4 slots for saved a0-a3.
+  // Stack is still aligned.
 
   // Call the C routine.
   { Assembler::BlockTrampolinePoolScope block_trampoline_pool(masm);
@@ -3737,8 +3722,8 @@ void CEntryStub::GenerateCore(MacroAssembler* masm,
     masm->nop();    // Branch delay slot nop.
   }
 
-  // Restore stack (remove arg slots and extra parameter).
-  masm->addiu(sp, sp, stack_adjustment);
+  // Restore stack (remove arg slots).
+  masm->addiu(sp, sp, 4 * kPointerSize);
 
   if (always_allocate) {
     // It's okay to clobber a2 and a3 here. v0 & v1 contain result.
@@ -6399,7 +6384,7 @@ void ICCompareStub::GenerateMiss(MacroAssembler* masm) {
 void DirectCEntryStub::Generate(MacroAssembler* masm) {
   // No need to pop or drop anything, LeaveExitFrame will restore the old
   // stack.
-  __ lw(t9, MemOperand(sp, 4 * kPointerSize));
+  __ lw(t9, MemOperand(sp, 6 * kPointerSize));
 
   if (FLAG_debug_code && EnableSlowAsserts()) {
     // In case of an error the return address may point to a memory area
@@ -6432,9 +6417,9 @@ void DirectCEntryStub::GenerateCall(MacroAssembler* masm,
 
   int kNumInstructionsToJump = 10;
   masm->addiu(ra, ra, kNumInstructionsToJump * kPointerSize);
-  masm->addiu(sp, sp, -6 * kPointerSize);
+  masm->sw(ra, MemOperand(sp));  // This spot was reserved in EnterExitFrame.
+  masm->addiu(sp, sp, -6 * kPointerSize);  // 6 - need to keep alignment.
   masm->addiu(a0, sp, 5 * kPointerSize);
-  masm->sw(ra, MemOperand(sp, 4 * kPointerSize));
 
   // Push return address (accessible to GC through exit frame pc).
   masm->li(ra, Operand(reinterpret_cast<intptr_t>(GetCode().location()),

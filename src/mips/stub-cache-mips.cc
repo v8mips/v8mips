@@ -595,8 +595,8 @@ static MaybeObject* GenerateFastApiDirectCall(MacroAssembler* masm,
   // will handle setting up a0.
 
   // a1 = v8::Arguments&
-  // Arguments is built on the end of the stack.
-  __ mov(a1, sp);
+  // Arguments is built at sp + 1 (sp is a reserved spot for ra).
+  __ Addu(a1, sp, kPointerSize);
 
   // v8::Arguments::implicit_args = data
   __ sw(a2, MemOperand(a1, 0 * kPointerSize));
@@ -1239,9 +1239,9 @@ MaybeObject* StubCompiler::GenerateLoadCallback(JSObject* object,
   __ EnterExitFrame(Operand(4), false, kApiStackSpace);
   // Create AccessorInfo instance on the stack above the exit frame with
   // scratch2 (internal::Object **args_) as the data.
-  __ sw(a2, MemOperand(sp));
+  __ sw(a2, MemOperand(sp, kPointerSize));
   // a2 (second argument - see note above) = AccessorInfo&
-  __ mov(a2, sp);
+  __ Addu(a2, sp, kPointerSize);
 
   // Emitting a stub call may try to allocate (if the code is not
   // already generated).  Do not allow the assembler to perform a
