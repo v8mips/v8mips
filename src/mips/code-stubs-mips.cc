@@ -3684,8 +3684,7 @@ void CEntryStub::GenerateCore(MacroAssembler* masm,
   // We are calling compiled C/C++ code. a0 and a1 hold our two arguments. We
   // also need to reserve the 4 argument slots on the stack.
 
-  // TODO(MIPS): As of 26May10, Arm code has frame-alignment checks
-  // and modification code here.
+  __ AssertStackIsAligned();
 
   __ li(a2, Operand(ExternalReference::isolate_address()));
 
@@ -3803,6 +3802,8 @@ void CEntryStub::Generate(MacroAssembler* masm) {
   __ Subu(s1, s1, Operand(kPointerSize));
 
   // Enter the exit frame that transitions from JavaScript to C++.
+  // a0 holds argc - those args will be dropped from the stack in
+  // LeaveExitFrame.
   __ EnterExitFrame(Operand(a0), save_doubles_);
 
   // Setup argc and the builtin function in callee-saved registers.
@@ -6411,6 +6412,8 @@ void DirectCEntryStub::Generate(MacroAssembler* masm) {
 
 void DirectCEntryStub::GenerateCall(MacroAssembler* masm,
                                     ExternalReference function) {
+  __ AssertStackIsAligned();
+
   // Block the trampoline pool through the whole function to make sure the
   // number of generated instructions is constant.
   Assembler::BlockTrampolinePoolScope block_trampoline_pool(masm);

@@ -594,6 +594,9 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
   // Get the actual activation frame alignment for target environment.
   static int ActivationFrameAlignment();
 
+  // Make sure the stack is aligned. Only emits code in debug mode.
+  void AssertStackIsAligned();
+
   void LoadContext(Register dst, int context_chain_length);
 
   void LoadGlobalFunction(int index, Register function);

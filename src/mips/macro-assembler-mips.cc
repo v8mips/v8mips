@@ -3388,6 +3388,23 @@ int MacroAssembler::ActivationFrameAlignment() {
 #endif  // defined(V8_HOST_ARCH_MIPS)
 }
 
+void MacroAssembler::AssertStackIsAligned() {
+  if (emit_debug_code()) {
+      const int frame_alignment = ActivationFrameAlignment();
+      const int frame_alignment_mask = frame_alignment - 1;
+
+      if (frame_alignment > kPointerSize) {
+        Label alignment_as_expected;
+        ASSERT(IsPowerOf2(frame_alignment));
+        andi(at, sp, frame_alignment_mask);
+        Branch(&alignment_as_expected, eq, at, Operand(zero_reg));
+        // Don't use Check here, as it will call Runtime_Abort re-entering here.
+        stop("Unexpected stack alignment");
+        bind(&alignment_as_expected);
+      }
+    }
+}
+
 
 void MacroAssembler::JumpIfNotPowerOfTwoOrZero(
     Register reg,
