@@ -6271,6 +6271,44 @@ void ICCompareStub::GenerateHeapNumbers(MacroAssembler* masm) {
 }
 
 
+void ICCompareStub::GenerateSymbols(MacroAssembler* masm) {
+  ASSERT(state_ == CompareIC::SYMBOLS);
+  Label miss;
+
+  // Registers containing left and right operands respectively.
+  Register left = a1;
+  Register right = a0;
+  Register tmp1 = a2;
+  Register tmp2 = a3;
+
+  // Check that both operands are heap objects.
+  __ JumpIfEitherSmi(left, right, &miss);
+
+  // Check that both operands are symbols.
+  __ lw(tmp1, FieldMemOperand(left, HeapObject::kMapOffset));
+  __ lw(tmp2, FieldMemOperand(right, HeapObject::kMapOffset));
+  __ lbu(tmp1, FieldMemOperand(tmp1, Map::kInstanceTypeOffset));
+  __ lbu(tmp2, FieldMemOperand(tmp2, Map::kInstanceTypeOffset));
+  STATIC_ASSERT(kSymbolTag != 0);
+  __ And(tmp1, tmp1, Operand(tmp2));
+  __ And(tmp1, tmp1, kIsSymbolMask);
+  __ Branch(&miss, eq, tmp1, Operand(zero_reg));
+  // Make sure a0 is non-zero. At this point input operands are
+  // guaranteed to be non-zero.
+  ASSERT(right.is(a0));
+  STATIC_ASSERT(EQUAL == 0);
+  STATIC_ASSERT(kSmiTag == 0);
+  __ mov(v0, right);
+  // Symbols are compared by identity.
+  __ Ret(ne, left, Operand(right));
+  __ li(v0, Operand(Smi::FromInt(EQUAL)));
+  __ Ret();
+
+  __ bind(&miss);
+  GenerateMiss(masm);
+}
+
+
 void ICCompareStub::GenerateStrings(MacroAssembler* masm) {
   ASSERT(state_ == CompareIC::STRINGS);
   Label miss;
