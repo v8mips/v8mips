@@ -3698,32 +3698,36 @@ void CEntryStub::GenerateCore(MacroAssembler* masm,
   // this is OK because the CEntryStub gets generated so early in the V8 boot
   // sequence that it is not moving ever.
 
-  // This branch-and-link sequence is needed to find the current PC on mips,
-  // saved to the ra register.
-  // Use masm-> here instead of the double-underscore macro since extra
-  // coverage code can interfere with the proper calculation of ra.
-  Label find_ra;
-  masm->bal(&find_ra);  // bal exposes branch delay slot.
-  masm->nop();  // Branch delay slot nop.
-  masm->bind(&find_ra);
-
-  // Adjust the value in ra to point to the correct return location, 2nd
-  // instruction past the real call into C code (the jalr(t9)), and push it.
-  // This is the return address of the exit frame.
-  masm->Addu(ra, ra, 5 * kPointerSize);  // 5 instructions.
-  masm->sw(ra, MemOperand(sp));  // This spot was reserved in EnterExitFrame.
-  masm->addiu(sp, sp, -4 * kPointerSize);  // 4 slots for saved a0-a3.
-  // Stack is still aligned.
-
-  // Call the C routine.
   { Assembler::BlockTrampolinePoolScope block_trampoline_pool(masm);
+    // This branch-and-link sequence is needed to find the current PC on mips,
+    // saved to the ra register.
+    // Use masm-> here instead of the double-underscore macro since extra
+    // coverage code can interfere with the proper calculation of ra.
+    Label find_ra;
+    masm->bal(&find_ra);  // bal exposes branch delay slot.
+    masm->nop();  // Branch delay slot nop.
+    masm->bind(&find_ra);
+
+    // Adjust the value in ra to point to the correct return location, 2nd
+    // instruction past the real call into C code (the jalr(t9)), and push it.
+    // This is the return address of the exit frame.
+    const int kNumInstructionsToJump = 6;
+    masm->Addu(ra, ra, kNumInstructionsToJump * kPointerSize);
+    masm->sw(ra, MemOperand(sp));  // This spot was reserved in EnterExitFrame.
+    masm->Subu(sp, sp, StandardFrameConstants::kCArgsSlotsSize);
+    // Stack is still aligned.
+
+    // Call the C routine.
     masm->mov(t9, s2);  // Function pointer to t9 to conform to ABI for PIC.
     masm->jalr(t9);
     masm->nop();    // Branch delay slot nop.
+    // Make sure the stored 'ra' points to this position.
+    ASSERT_EQ(kNumInstructionsToJump,
+              masm->InstructionsGeneratedSince(&find_ra));
   }
 
   // Restore stack (remove arg slots).
-  masm->addiu(sp, sp, 4 * kPointerSize);
+  __ Addu(sp, sp, StandardFrameConstants::kCArgsSlotsSize);
 
   if (always_allocate) {
     // It's okay to clobber a2 and a3 here. v0 & v1 contain result.
@@ -6381,10 +6385,17 @@ void ICCompareStub::GenerateMiss(MacroAssembler* masm) {
 }
 
 
+// We will need 6 extra slots: 1 for the a0 pointer (see comments in
+// DirectCentryStub::GenerateCall), 4 for the saved arg slots and 1 for
+// alignment.
+static const int kDirectCallStackSpace = 2 * kPointerSize +
+    StandardFrameConstants::kCArgsSlotsSize;
+
 void DirectCEntryStub::Generate(MacroAssembler* masm) {
   // No need to pop or drop anything, LeaveExitFrame will restore the old
-  // stack.
-  __ lw(t9, MemOperand(sp, 6 * kPointerSize));
+  // stack, thus dropping the allocated space for the return value.
+  // The saved ra is after the extra reserved stack space.
+  __ lw(t9, MemOperand(sp, kDirectCallStackSpace));
 
   if (FLAG_debug_code && EnableSlowAsserts()) {
     // In case of an error the return address may point to a memory area
@@ -6406,7 +6417,7 @@ void DirectCEntryStub::GenerateCall(MacroAssembler* masm,
 
   // We need to get the current 'pc' value, which is not available on MIPS.
   Label find_ra;
-  masm->bal(&find_ra);  // ra = pc + 8
+  masm->bal(&find_ra);  // ra = pc + 8.
   masm->nop();  // Branch delay slot nop.
   masm->bind(&find_ra);
 
@@ -6414,12 +6425,15 @@ void DirectCEntryStub::GenerateCall(MacroAssembler* masm,
   // us to pass a pointer in a0 where the returned struct (4 bytes) will be
   // placed. This is also built into the Simulator.
   // We also need to allocate 4 slots for the passed arguments.
+  // These slots are contained in kDirectCallStackSpace.
 
-  int kNumInstructionsToJump = 10;
+  const int kNumInstructionsToJump = 10;
   masm->addiu(ra, ra, kNumInstructionsToJump * kPointerSize);
   masm->sw(ra, MemOperand(sp));  // This spot was reserved in EnterExitFrame.
-  masm->addiu(sp, sp, -6 * kPointerSize);  // 6 - need to keep alignment.
-  masm->addiu(a0, sp, 5 * kPointerSize);
+  // Allocate space for arg slots, returned struct and alignment.
+  masm->Subu(sp, sp, kDirectCallStackSpace);
+  // Set up the pointer to the returned value (a0).
+  masm->addiu(a0, sp, kDirectCallStackSpace - kPointerSize);
 
   // Push return address (accessible to GC through exit frame pc).
   masm->li(ra, Operand(reinterpret_cast<intptr_t>(GetCode().location()),

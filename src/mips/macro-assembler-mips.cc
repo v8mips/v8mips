@@ -3290,8 +3290,8 @@ void MacroAssembler::EnterExitFrame(const Operand& argc,
   // [fp + 0 (==kCallerFPOffset)] - saved old fp
   // [fp - 1 (==kSPOffset)] - sp of the called function
   // [fp - 2 (==kCodeOffset)] - CodeObject
-  // fp - (2 + stack_space + alignment) == sp == [fp - kSPOffset] - stack of
-  //   the called function
+  // fp - (2 + stack_space + alignment) == sp == [fp - kSPOffset] - top of the
+  //   new stack (will contain saved ra)
 
   // Save registers.
   addiu(sp, sp, -5 * kPointerSize);
