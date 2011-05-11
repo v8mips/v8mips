@@ -591,9 +591,6 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
   // Leave the current exit frame.
   void LeaveExitFrame(bool save_doubles);
 
-  // Align the stack by optionally pushing a Smi zero.
-  void AlignStack(int offset);    // TODO(mips) : remove this function.
-
   // Get the actual activation frame alignment for target environment.
   static int ActivationFrameAlignment();
 

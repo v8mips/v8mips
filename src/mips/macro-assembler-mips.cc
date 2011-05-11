@@ -3313,14 +3313,18 @@ void MacroAssembler::EnterExitFrame(const Operand& argc,
   li(t8, Operand(ExternalReference(Isolate::k_context_address, isolate())));
   sw(cp, MemOperand(t8));
 
+  // Ensure we are not saving doubles, since it's not implemented yet.
+  ASSERT(save_doubles == 0);
+
+  // Reserve place for the return address and stack space and align the frame
+  // preparing for calling the runtime function.
   ASSERT(stack_space >= 0);
-
-  // Reserve an extra spot for the ra that will be saved.
-  ++stack_space;
-  addiu(sp, sp, - stack_space * kPointerSize);
-
-  // Align the stack at this point.
-  AlignStack(0);
+  const int frame_alignment = MacroAssembler::ActivationFrameAlignment();
+  Subu(sp, sp, Operand((stack_space + 1) * kPointerSize));
+  if (frame_alignment > 0) {
+    ASSERT(IsPowerOf2(frame_alignment));
+    And(sp, sp, Operand(-frame_alignment));  // Align stack.
+  }
 
   // Set the exit frame sp value to point just before the return address
   // location.
@@ -3330,6 +3334,9 @@ void MacroAssembler::EnterExitFrame(const Operand& argc,
 
 
 void MacroAssembler::LeaveExitFrame(bool save_doubles) {
+  // Ensure we are not restoring doubles, since it's not implemented yet.
+  ASSERT(save_doubles == 0);
+
   // Clear top frame.
   li(t8, Operand(ExternalReference(Isolate::k_c_entry_fp_address, isolate())));
   sw(zero_reg, MemOperand(t8));
@@ -3380,38 +3387,6 @@ int MacroAssembler::ActivationFrameAlignment() {
   return FLAG_sim_stack_alignment;
 #endif  // defined(V8_HOST_ARCH_MIPS)
 }
-
-
-void MacroAssembler::AlignStack(int offset) {
-  // On MIPS an offset of 0 aligns to 0 modulo 8 bytes,
-  //     and an offset of 1 aligns to 4 modulo 8 bytes.
-#if defined(V8_HOST_ARCH_MIPS)
-  // Running on the real platform. Use the alignment as mandated by the local
-  // environment.
-  // Note: This will break if we ever start generating snapshots on one MIPS
-  // platform for another MIPS platform with a different alignment.
-  int activation_frame_alignment = OS::ActivationFrameAlignment();
-#else  // defined(V8_HOST_ARCH_MIPS)
-  // If we are using the simulator then we should always align to the expected
-  // alignment. As the simulator is used to generate snapshots we do not know
-  // if the target platform will need alignment, so we will always align at
-  // this point here.
-  int activation_frame_alignment = 2 * kPointerSize;
-#endif  // defined(V8_HOST_ARCH_MIPS)
-  if (activation_frame_alignment != kPointerSize) {
-    // This code needs to be made more general if this assert doesn't hold.
-    ASSERT(activation_frame_alignment == 2 * kPointerSize);
-    if (offset == 0) {
-      andi(t8, sp, activation_frame_alignment - 1);
-      Push(zero_reg, eq, t8, zero_reg);
-    } else {
-      andi(t8, sp, activation_frame_alignment - 1);
-      addiu(t8, t8, -4);
-      Push(zero_reg, eq, t8, zero_reg);
-    }
-  }
-}
-
 
 
 void MacroAssembler::JumpIfNotPowerOfTwoOrZero(
