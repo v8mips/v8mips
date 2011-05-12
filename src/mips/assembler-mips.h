@@ -846,8 +846,8 @@ class Assembler : public AssemblerBase {
 
   // Check if an instruction is a branch of some kind.
   static bool IsBranch(Instr instr);
-  static bool IsBEQ(Instr instr);
-  static bool IsBNE(Instr instr);
+  static bool IsBeq(Instr instr);
+  static bool IsBne(Instr instr);
 
   static bool IsNop(Instr instr, unsigned int type);
   static bool IsPop(Instr instr);

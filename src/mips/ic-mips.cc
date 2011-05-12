@@ -1506,7 +1506,7 @@ void PatchInlinedSmiCode(Address address) {
   ASSERT(Assembler::IsAndImmediate(instr_at_patch));
   ASSERT_EQ(0, Assembler::GetImmediate16(instr_at_patch));
   ASSERT(Assembler::IsBranch(branch_instr));
-  if (Assembler::IsBEQ(branch_instr)) {
+  if (Assembler::IsBeq(branch_instr)) {
     // This is patching a "jump if not smi" site to be active.
     // Changing:
     //   andi at, rx, 0
@@ -1519,7 +1519,7 @@ void PatchInlinedSmiCode(Address address) {
     patcher.masm()->andi(at, reg, kSmiTagMask);
     patcher.ChangeBranchCondition(ne);
   } else {
-    ASSERT(Assembler::IsBNE(branch_instr));
+    ASSERT(Assembler::IsBne(branch_instr));
     // This is patching a "jump if smi" site to be active.
     // Changing:
     //   andi at, rx, 0

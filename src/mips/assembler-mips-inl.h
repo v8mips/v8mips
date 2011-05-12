@@ -259,7 +259,7 @@ void RelocInfo::Visit(ObjectVisitor* visitor) {
     // do not need it.
     visitor->VisitExternalReference(target_reference_address(), this);
 #ifdef ENABLE_DEBUGGER_SUPPORT
-    // TODO(isolates): Get a cached isolate below.
+  // TODO(isolates): Get a cached isolate below.
   } else if (((RelocInfo::IsJSReturn(mode) &&
               IsPatchedReturnSequence()) ||
              (RelocInfo::IsDebugBreakSlot(mode) &&

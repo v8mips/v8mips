@@ -214,21 +214,21 @@ void Decoder::PrintSa(Instruction* instr) {
 }
 
 
-// Print the integer value of the rd field, (when it is not used as reg).
+// Print the integer value of the rd field, when it is not used as reg.
 void Decoder::PrintSd(Instruction* instr) {
   int sd = instr->RdValue();
   out_buffer_pos_ += OS::SNPrintF(out_buffer_ + out_buffer_pos_, "%d", sd);
 }
 
 
-// Print the integer value of the rd field, (when used as ext size).
+// Print the integer value of the rd field, when used as 'ext' size.
 void Decoder::PrintSs1(Instruction* instr) {
   int ss = instr->RdValue();
   out_buffer_pos_ += OS::SNPrintF(out_buffer_ + out_buffer_pos_, "%d", ss + 1);
 }
 
 
-// Print the integer value of the rd field, (when used as ins size).
+// Print the integer value of the rd field, when used as 'ins' size.
 void Decoder::PrintSs2(Instruction* instr) {
   int ss = instr->RdValue();
   int pos = instr->SaValue();
