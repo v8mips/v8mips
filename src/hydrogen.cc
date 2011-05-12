@@ -4834,6 +4834,18 @@ void HGraphBuilder::VisitCountOperation(CountOperation* expr) {
 }
 
 
+HCompareSymbolEq* HGraphBuilder::BuildSymbolCompare(HValue* left,
+                                                    HValue* right,
+                                                    Token::Value op) {
+  ASSERT(op == Token::EQ || op == Token::EQ_STRICT);
+  AddInstruction(new(zone()) HCheckNonSmi(left));
+  AddInstruction(HCheckInstanceType::NewIsSymbol(left));
+  AddInstruction(new(zone()) HCheckNonSmi(right));
+  AddInstruction(HCheckInstanceType::NewIsSymbol(right));
+  return new(zone()) HCompareSymbolEq(left, right, op);
+}
+
+
 HStringCharCodeAt* HGraphBuilder::BuildStringCharCodeAt(HValue* string,
                                                         HValue* index) {
   AddInstruction(new(zone()) HCheckNonSmi(string));
@@ -5153,6 +5165,9 @@ void HGraphBuilder::VisitCompareOperation(CompareOperation* expr) {
         return Bailout("Unsupported non-primitive compare");
         break;
     }
+  } else if (type_info.IsString() && oracle()->IsSymbolCompare(expr) &&
+             (op == Token::EQ || op == Token::EQ_STRICT)) {
+    instr = BuildSymbolCompare(left, right, op);
   } else {
     HCompare* compare = new(zone()) HCompare(left, right, op);
     Representation r = ToRepresentation(type_info);
@@ -5274,7 +5289,11 @@ void HGraphBuilder::GenerateIsNonNegativeSmi(CallRuntime* call) {
 
 
 void HGraphBuilder::GenerateIsUndetectableObject(CallRuntime* call) {
-  return Bailout("inlined runtime function: IsUndetectableObject");
+  ASSERT(call->arguments()->length() == 1);
+  CHECK_ALIVE(VisitForValue(call->arguments()->at(0)));
+  HValue* value = Pop();
+  ast_context()->ReturnInstruction(new(zone()) HIsUndetectable(value),
+                                   call->id());
 }
 
 
