@@ -587,7 +587,7 @@ void RegExpMacroAssemblerMIPS::Fail() {
 }
 
 
-Handle<Object> RegExpMacroAssemblerMIPS::GetCode(Handle<String> source) {
+Handle<HeapObject> RegExpMacroAssemblerMIPS::GetCode(Handle<String> source) {
   if (masm_->has_exception()) {
     // If the code gets corrupted due to long regular expressions and lack of
     // space on trampolines, an internal exception flag is set. If this case
@@ -815,7 +815,7 @@ Handle<Object> RegExpMacroAssemblerMIPS::GetCode(Handle<String> source) {
                                        Code::ComputeFlags(Code::REGEXP),
                                        masm_->CodeObject());
   LOG(Isolate::Current(), RegExpCodeCreateEvent(*code, *source));
-  return Handle<Object>::cast(code);
+  return Handle<HeapObject>::cast(code);
 }
 
 
