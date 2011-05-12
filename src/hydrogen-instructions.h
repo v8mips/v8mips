@@ -628,7 +628,9 @@ class HValue: public ZoneObject {
   // Printing support.
   virtual void PrintTo(StringStream* stream) = 0;
   void PrintNameTo(StringStream* stream);
-  static void PrintTypeTo(HType type, StringStream* stream);
+  void PrintTypeTo(StringStream* stream);
+  void PrintRangeTo(StringStream* stream);
+  void PrintChangesTo(StringStream* stream);
 
   const char* Mnemonic() const;
 
@@ -740,6 +742,8 @@ class HInstruction: public HValue {
     ASSERT(!IsLinked());
     SetBlock(block);
   }
+
+  void PrintMnemonicTo(StringStream* stream);
 
   HInstruction* next_;
   HInstruction* previous_;
@@ -3322,7 +3326,7 @@ class HLoadKeyedSpecializedArrayElement: public HBinaryOperation {
 
 class HLoadKeyedGeneric: public HTemplateInstruction<3> {
  public:
-  HLoadKeyedGeneric(HContext* context, HValue* obj, HValue* key) {
+  HLoadKeyedGeneric(HValue* context, HValue* obj, HValue* key) {
     set_representation(Representation::Tagged());
     SetOperandAt(0, obj);
     SetOperandAt(1, key);
