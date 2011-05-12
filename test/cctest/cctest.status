@@ -82,5 +82,6 @@ test-debug/DebugBreakLoop: SKIP
 ##############################################################################
 [ $arch == mips ]
 test-deoptimization: SKIP
+test-lockers: SKIP
 test-parsing: SKIP
 test-profile-generator: SKIP

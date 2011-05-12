@@ -232,7 +232,7 @@ void Decoder::PrintSs1(Instruction* instr) {
 void Decoder::PrintSs2(Instruction* instr) {
   int ss = instr->RdValue();
   int pos = instr->SaValue();
-  out_buffer_pos_ += 
+  out_buffer_pos_ +=
       OS::SNPrintF(out_buffer_ + out_buffer_pos_, "%d", ss - pos + 1);
 }
 
