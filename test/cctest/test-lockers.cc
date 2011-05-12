@@ -240,7 +240,7 @@ class IsolateNonlockingThread : public JoinableThread {
 
 // Run many threads each accessing its own isolate without locking
 TEST(MultithreadedParallelIsolates) {
-#ifdef V8_TARGET_ARCH_ARM
+#if defined(V8_TARGET_ARCH_ARM) || defined(V8_TARGET_ARCH_MIPS)
   const int kNThreads = 10;
 #else
   const int kNThreads = 50;
