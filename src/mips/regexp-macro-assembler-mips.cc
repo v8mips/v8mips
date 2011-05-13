@@ -56,50 +56,58 @@ namespace internal {
  * - sp : points to tip of C stack.
  *
  * The remaining registers are free for computations.
- *
  * Each call to a public method should retain this convention.
+ *
  * The stack will have the following structure:
- *       - Isolate* isolate   (Address of the current isolate)
- *       - direct_call        (if 1, direct call from JavaScript code, if 0 call
- *                             through the runtime system)
- *       - stack_area_base    (High end of the memory area to use as
- *                             backtracking stack)
- *       - int* capture_array (int[num_saved_registers_], for output).
- *       - stack frame header (16 bytes in size)
- *       --- sp when called ---
- *       - link address
- *       - backup of registers s0..s7
- *       - end of input       (Address of end of string)
- *       - start of input     (Address of first character in string)
- *       - start index        (character index of start)
- *       --- frame pointer ----
- *       - void* input_string (location of a handle containing the string)
- *       - Offset of location before start of input (effectively character
- *         position -1). Used to initialize capture registers to a non-position.
- *       - At start (if 1, we are starting at the start of the
- *         string, otherwise 0)
- *       - register 0         (Only positions must be stored in the first
- *       - register 1          num_saved_registers_ registers)
- *       - ...
- *       - register num_registers-1
- *       --- sp ---
+ *
+ *  - fp[56]  direct_call  (if 1, direct call from JavaScript code,
+ *                          if 0, call through the runtime system).
+ *  - fp[52]  stack_area_base (High end of the memory area to use as
+ *                             backtracking stack).
+ *  - fp[48]  int* capture_array (int[num_saved_registers_], for output).
+ *  - fp[44]  secondary link/return address used by native call.
+ *  --- sp when called ---
+ *  - fp[40]  return address (lr).
+ *  - fp[36]  old frame pointer (r11).
+ *  - fp[0..32]  backup of registers s0..s7.
+ *  --- frame pointer ----
+ *  - fp[-4]  end of input       (Address of end of string).
+ *  - fp[-8]  start of input     (Address of first character in string).
+ *  - fp[-12] start index        (character index of start).
+ *  - fp[-16] void* input_string (location of a handle containing the string).
+ *  - fp[-20] Offset of location before start of input (effectively character
+ *            position -1). Used to initialize capture registers to a
+ *            non-position.
+ *  - fp[-24] At start (if 1, we are starting at the start of the
+ *    string, otherwise 0)
+ *  - fp[-28] register 0         (Only positions must be stored in the first
+ *  -         register 1          num_saved_registers_ registers)
+ *  -         ...
+ *  -         register num_registers-1
+ *  --- sp ---
  *
  * The first num_saved_registers_ registers are initialized to point to
  * "character -1" in the string (i.e., char_size() bytes before the first
  * character of the string). The remaining registers start out as garbage.
  *
  * The data up to the return address must be placed there by the calling
- * code, by calling the code entry as cast to a function with the signature:
+ * code and the remaining arguments are passed in registers, e.g. by calling the
+ * code entry as cast to a function with the signature:
  * int (*match)(String* input_string,
  *              int start_index,
  *              Address start,
  *              Address end,
+ *              Address secondary_return_address,  // Only used by native call.
  *              int* capture_output_array,
- *              bool at_start,
  *              byte* stack_area_base,
- *              bool direct_call)
+ *              bool direct_call = false)
  * The call is performed by NativeRegExpMacroAssembler::Execute()
- * (in regexp-macro-assembler.cc).
+ * (in regexp-macro-assembler.cc) via the CALL_GENERATED_REGEXP_CODE macro
+ * in mips/simulator-mips.h.
+ * When calling as a non-direct call (i.e., from C++ code), the return address
+ * area is overwritten with the ra register by the RegExp code. When doing a
+ * direct call from generated code, the return address is placed there by
+ * the calling code, as in a normal exit frame.
  */
 
 #define __ ACCESS_MASM(masm_)
@@ -599,16 +607,17 @@ Handle<HeapObject> RegExpMacroAssemblerMIPS::GetCode(Handle<String> source) {
 
     // Entry code:
     __ bind(&entry_label_);
-    // Push Link register.
     // Push arguments
     // Save callee-save registers.
     // Start new stack frame.
+    // Store link register in existing stack-cell.
     // Order here should correspond to order of offset constants in header file.
     RegList registers_to_retain = s0.bit() | s1.bit() | s2.bit() |
         s3.bit() | s4.bit() | s5.bit() | s6.bit() | s7.bit() | fp.bit();
     RegList argument_registers = a0.bit() | a1.bit() | a2.bit() | a3.bit();
     __ MultiPush(argument_registers | registers_to_retain | ra.bit());
-    // Set frame pointer just above the arguments.
+    // Set frame pointer in space for it if this is not a direct call
+    // from generated code.
     __ Addu(frame_pointer(), sp, Operand(4 * kPointerSize));
     __ push(a0);  // Make room for "position - 1" constant (value irrelevant).
     __ push(a0);  // Make room for "at start" constant (value irrelevant).
@@ -778,7 +787,7 @@ Handle<HeapObject> RegExpMacroAssemblerMIPS::GetCode(Handle<String> source) {
           current_character().bit();
       __ MultiPush(regexp_registers);
       Label grow_failed;
-      // Call GrowStack(backtrack_stackpointer())
+      // Call GrowStack(backtrack_stackpointer(), &stack_base)
       static const int num_arguments = 3;
       __ PrepareCallCFunction(num_arguments, a0);
       __ mov(a0, backtrack_stackpointer());
@@ -1008,8 +1017,8 @@ static T& frame_entry(Address re_frame, int frame_offset) {
 
 
 int RegExpMacroAssemblerMIPS::CheckStackGuardState(Address* return_address,
-                                                  Code* re_code,
-                                                  Address re_frame) {
+                                                   Code* re_code,
+                                                   Address re_frame) {
   Isolate* isolate = frame_entry<Isolate*>(re_frame, kIsolate);
   ASSERT(isolate == Isolate::Current());
   if (isolate->stack_guard()->IsStackOverflow()) {

@@ -102,6 +102,9 @@ class EntryFrameConstants : public AllStatic {
 class ExitFrameConstants : public AllStatic {
  public:
   // See some explanation in MacroAssembler::EnterExitFrame.
+  // This marks the top of the extra allocated stack space.
+  static const int kStackSpaceOffset = -3 * kPointerSize;
+
   static const int kCodeOffset = -2 * kPointerSize;
 
   static const int kSPOffset = -1 * kPointerSize;

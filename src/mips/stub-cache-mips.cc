@@ -595,7 +595,7 @@ static MaybeObject* GenerateFastApiDirectCall(MacroAssembler* masm,
 
   // NOTE: the O32 abi requires a0 to hold a special pointer when returning a
   // struct from the function (which is currently the case). This means we pass
-  // the first argument in a1 instead of a0. DirectCEntryStub::GenerateCall
+  // the first argument in a1 instead of a0. TryCallApiFunctionAndReturn
   // will handle setting up a0.
 
   // a1 = v8::Arguments&
@@ -1241,11 +1241,11 @@ MaybeObject* StubCompiler::GenerateLoadCallback(JSObject* object,
 
   // NOTE: the O32 abi requires a0 to hold a special pointer when returning a
   // struct from the function (which is currently the case). This means we pass
-  // the arguments in a1-a2 instead of a0-a1. DirectCEntryStub::GenerateCall
+  // the arguments in a1-a2 instead of a0-a1. TryCallApiFunctionAndReturn
   // will handle setting up a0.
 
   const int kApiStackSpace = 1;
- 
+
   __ EnterExitFrame(false, kApiStackSpace);
   // Create AccessorInfo instance on the stack above the exit frame with
   // scratch2 (internal::Object **args_) as the data.

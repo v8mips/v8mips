@@ -121,10 +121,11 @@ class RegExpMacroAssemblerMIPS: public NativeRegExpMacroAssembler {
   static const int kStoredRegisters = kFramePointer;
   // Return address (stored from link register, read into pc on return).
   static const int kReturnAddress = kStoredRegisters + 9 * kPointerSize;
+  static const int kSecondaryReturnAddress = kReturnAddress + kPointerSize;
   // Stack frame header.
   static const int kStackFrameHeader = kReturnAddress + kPointerSize;
   // Stack parameters placed by caller.
-  static const int kRegisterOutput = kStackFrameHeader + 16;
+  static const int kRegisterOutput = kStackFrameHeader + 20;
   static const int kStackHighEnd = kRegisterOutput + kPointerSize;
   static const int kDirectCall = kStackHighEnd + kPointerSize;
   static const int kIsolate = kDirectCall + kPointerSize;

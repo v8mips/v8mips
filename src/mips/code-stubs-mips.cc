@@ -3499,153 +3499,13 @@ bool CEntryStub::NeedsImmovableCode() {
 
 
 void CEntryStub::GenerateThrowTOS(MacroAssembler* masm) {
-  // v0 holds the exception.
-
-  // Adjust this code if not the case.
-  STATIC_ASSERT(StackHandlerConstants::kSize == 4 * kPointerSize);
-
-  // Drop the sp to the top of the handler.
-  __ li(a3, Operand(ExternalReference(Isolate::k_handler_address,
-                                      masm->isolate())));
-  __ lw(sp, MemOperand(a3));
-
-  // Restore the next handler and frame pointer, discard handler state.
-  STATIC_ASSERT(StackHandlerConstants::kNextOffset == 0);
-  __ pop(a2);
-  __ sw(a2, MemOperand(a3));
-  STATIC_ASSERT(StackHandlerConstants::kFPOffset == 2 * kPointerSize);
-  __ MultiPop(a3.bit() | fp.bit());
-
-  // Before returning we restore the context from the frame pointer if
-  // not NULL. The frame pointer is NULL in the exception handler of a
-  // JS entry frame.
-  // Set cp to NULL if fp is NULL.
-  Label done;
-  __ Branch(USE_DELAY_SLOT, &done, eq, fp, Operand(zero_reg));
-  __ mov(cp, zero_reg);   // In branch delay slot.
-  __ lw(cp, MemOperand(fp, StandardFrameConstants::kContextOffset));
-  __ bind(&done);
-
-#ifdef DEBUG
-  // When emitting debug_code, set ra as return address for the jump.
-  // 5 instructions: add: 1, pop: 2, jump: 2.
-  const int kOffsetRaInstructions = 5;
-  Label find_ra;
-
-  if (FLAG_debug_code) {  // TODO(plind): use emit_debug_code().
-    // Compute ra for the Jump(t9).
-    const int kOffsetRaBytes = kOffsetRaInstructions * Assembler::kInstrSize;
-
-    // This branch-and-link sequence is needed to get the current PC on mips,
-    // saved to the ra register. Then adjusted for instruction count.
-    masm->bal(&find_ra);  // bal exposes branch-delay.
-    masm->nop();  // Branch delay slot nop.
-    masm->bind(&find_ra);
-    masm->addiu(ra, ra, kOffsetRaBytes);
-  }
-#endif
-
-  STATIC_ASSERT(StackHandlerConstants::kPCOffset == 3 * kPointerSize);
-  masm->pop(t9);  // 2 instructions: lw, add sp.
-  masm->Jump(t9);  // 2 instructions: jr, nop (in delay slot).
-
-  if (FLAG_debug_code) {  // TODO(plind): use emit_debug_code().
-    // Make sure that the expected number of instructions were generated.
-    ASSERT_EQ(kOffsetRaInstructions,
-              masm->InstructionsGeneratedSince(&find_ra));
-  }
+  __ Throw(v0);
 }
 
 
 void CEntryStub::GenerateThrowUncatchable(MacroAssembler* masm,
                                           UncatchableExceptionType type) {
-  // Adjust this code if not the case.
-  STATIC_ASSERT(StackHandlerConstants::kSize == 4 * kPointerSize);
-
-  // Drop sp to the top stack handler.
-  __ li(a3, Operand(ExternalReference(Isolate::k_handler_address,
-                                      masm->isolate())));
-  __ lw(sp, MemOperand(a3));
-
-  // Unwind the handlers until the ENTRY handler is found.
-  Label loop, done;
-  __ bind(&loop);
-  // Load the type of the current stack handler.
-  const int kStateOffset = StackHandlerConstants::kStateOffset;
-  __ lw(a2, MemOperand(sp, kStateOffset));
-  __ Branch(&done, eq, a2, Operand(StackHandler::ENTRY));
-  // Fetch the next handler in the list.
-  const int kNextOffset = StackHandlerConstants::kNextOffset;
-  __ lw(sp, MemOperand(sp, kNextOffset));
-  __ jmp(&loop);
-  __ bind(&done);
-
-  // Set the top handler address to next handler past the current ENTRY handler.
-  STATIC_ASSERT(StackHandlerConstants::kNextOffset == 0);
-  __ pop(a2);
-  __ sw(a2, MemOperand(a3));
-
-  if (type == OUT_OF_MEMORY) {
-    // Set external caught exception to false.
-    ExternalReference external_caught(
-        Isolate::k_external_caught_exception_address, masm->isolate());
-    __ li(a0, Operand(false));
-    __ li(a2, Operand(external_caught));
-    __ sw(a0, MemOperand(a2));
-
-    // Set pending exception and v0 to out of memory exception.
-    Failure* out_of_memory = Failure::OutOfMemoryException();
-    __ li(v0, Operand(reinterpret_cast<int32_t>(out_of_memory)));
-    __ li(a2, Operand(ExternalReference(Isolate::k_pending_exception_address,
-                                        masm->isolate())));
-    __ sw(v0, MemOperand(a2));
-  }
-
-  // Stack layout at this point. See also StackHandlerConstants.
-  // sp ->   state (ENTRY)
-  //         fp
-  //         ra
-
-  // Discard handler state (a2 is not used) and restore frame pointer.
-  STATIC_ASSERT(StackHandlerConstants::kFPOffset == 2 * kPointerSize);
-  __ MultiPop(a2.bit() | fp.bit());  // a2: discarded state.
-  // Before returning, we restore the context from the frame pointer if
-  // not NULL.  The frame pointer is NULL in the exception handler of a
-  // JS entry frame.
-  // Set cp to NULL if fp is NULL, else restore cp.
-  Label cp_null;
-  __ Branch(USE_DELAY_SLOT, &cp_null, eq, fp, Operand(zero_reg));
-  __ mov(cp, zero_reg);   // In the branch delay slot.
-  __ lw(cp, MemOperand(fp, StandardFrameConstants::kContextOffset));
-  __ bind(&cp_null);
-
-#ifdef DEBUG
-  // When emitting debug_code, set ra as return address for the jump.
-  // 5 instructions: add: 1, pop: 2, jump: 2.
-  const int kOffsetRaInstructions = 5;
-  Label find_ra;
-
-  if (FLAG_debug_code) {  // TODO(plind): use emit_debug_code().
-    // Compute ra for the Jump(t9).
-    const int kOffsetRaBytes = kOffsetRaInstructions * Assembler::kInstrSize;
-
-    // This branch-and-link sequence is needed to get the current PC on mips,
-    // saved to the ra register. Then adjusted for instruction count.
-    masm->bal(&find_ra);  // bal exposes branch-delay slot.
-    masm->nop();  // Branch delay slot nop.
-    masm->bind(&find_ra);
-    masm->addiu(ra, ra, kOffsetRaBytes);
-  }
-#endif
-  STATIC_ASSERT(StackHandlerConstants::kPCOffset == 3 * kPointerSize);
-  masm->pop(t9);  // 2 instructions: lw, add sp.
-  masm->Jump(t9);  // 2 instructions: jr, nop (in delay slot).
-
-  if (FLAG_debug_code) {  // TODO(plind): use emit_debug_code().
-    // Make sure that the expected number of instructions were generated.
-    ASSERT_EQ(kOffsetRaInstructions,
-              masm->InstructionsGeneratedSince(&find_ra));
-  }
+  __ ThrowUncatchable(type, v0);
 }
 
 
@@ -3748,6 +3608,7 @@ void CEntryStub::GenerateCore(MacroAssembler* masm,
   // sp: stack pointer
   // fp: frame pointer
   __ LeaveExitFrame(save_doubles_, s0);
+  __ Ret();
 
   // Check if we should retry or throw exception.
   Label retry;
@@ -4488,17 +4349,30 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
 
   // Isolates: note we add an additional parameter here (isolate pointer).
   static const int kRegExpExecuteArguments = 8;
-  __ push(ra);
-  __ PrepareCallCFunction(kRegExpExecuteArguments, a0);
+  static const int kParameterRegisters = 4;
+  __ EnterExitFrame(false, kRegExpExecuteArguments - kParameterRegisters);
+
+  // Stack pointer now points to cell where return address is to be written.
+  // Arguments are before that on the stack or in registers, meaning we
+  // treat the return address as argument 5. Thus every argument after that
+  // needs to be shifted back by 1. Since DirectCEntryStub will handle
+  // allocating space for the c argument slots, we don't need to calculate
+  // that into the argument positions on the stack. This is how the stack will
+  // look (sp meaning the value of sp at this moment):
+  // [sp + 4] - Argument 8
+  // [sp + 3] - Argument 7
+  // [sp + 2] - Argument 6
+  // [sp + 1] - Argument 5
+  // [sp + 0] - saved ra
 
   // Argument 8: Pass current isolate address.
   // CFunctionArgumentOperand handles MIPS stack argument slots.
   __ li(a0, Operand(ExternalReference::isolate_address()));
-  __ sw(a0, CFunctionArgumentOperand(8));
+  __ sw(a0, MemOperand(sp, 4 * kPointerSize));
 
   // Argument 7: Indicate that this is a direct call from JavaScript.
   __ li(a0, Operand(1));
-  __ sw(a0, CFunctionArgumentOperand(7));
+  __ sw(a0, MemOperand(sp, 3 * kPointerSize));
 
   // Argument 6: Start (high end) of backtracking stack memory area.
   __ li(a0, Operand(address_of_regexp_stack_memory_address));
@@ -4506,12 +4380,12 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
   __ li(a2, Operand(address_of_regexp_stack_memory_size));
   __ lw(a2, MemOperand(a2, 0));
   __ addu(a0, a0, a2);
-  __ sw(a0, CFunctionArgumentOperand(6));
+  __ sw(a0, MemOperand(sp, 2 * kPointerSize));
 
   // Argument 5: static offsets vector buffer.
   __ li(a0, Operand(
         ExternalReference::address_of_static_offsets_vector(masm->isolate())));
-  __ sw(a0, CFunctionArgumentOperand(5));
+  __ sw(a0, MemOperand(sp, 1 * kPointerSize));
 
   // For arguments 4 and 3 get string length, calculate start of string data
   // and calculate the shift of the index (0 for ASCII and 1 for two byte).
@@ -4535,8 +4409,10 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
 
   // Locate the code entry and call it.
   __ Addu(t9, t9, Operand(Code::kHeaderSize - kHeapObjectTag));
-  __ CallCFunction(t9, t8, kRegExpExecuteArguments);
-  __ pop(ra);
+  DirectCEntryStub stub;
+  stub.GenerateCall(masm, t9);
+
+  __ LeaveExitFrame(false, no_reg);
 
   // v0: result
   // subject: subject string (callee saved)
@@ -4544,6 +4420,7 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
   // last_match_info_elements: Last match info elements (callee saved)
 
   // Check the result.
+
   Label success;
   __ Branch(&success, eq, v0, Operand(NativeRegExpMacroAssembler::SUCCESS));
   Label failure;
@@ -4554,13 +4431,26 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
   // stack overflow (on the backtrack stack) was detected in RegExp code but
   // haven't created the exception yet. Handle that in the runtime system.
   // TODO(592): Rerunning the RegExp to get the stack overflow exception.
-  __ li(a0, Operand(
+  __ li(a1, Operand(
       ExternalReference::the_hole_value_location(masm->isolate())));
-  __ lw(a0, MemOperand(a0, 0));
-  __ li(a1, Operand(ExternalReference(Isolate::k_pending_exception_address,
-                                      masm->isolate())));
   __ lw(a1, MemOperand(a1, 0));
-  __ Branch(&runtime, eq, a0, Operand(a1));
+  __ li(a2, Operand(ExternalReference(Isolate::k_pending_exception_address,
+                                      masm->isolate())));
+  __ lw(v0, MemOperand(a2, 0));
+  __ Branch(&runtime, eq, v0, Operand(a1));
+
+  __ sw(a1, MemOperand(a2, 0));  // Clear pending exception.
+
+  // Check if the exception is a termination. If so, throw as uncatchable.
+  __ LoadRoot(a0, Heap::kTerminationExceptionRootIndex);
+  Label termination_exception;
+  __ Branch(&termination_exception, eq, v0, Operand(a0));
+
+  __ Throw(a0);  // Expects thrown value in v0.
+
+  __ bind(&termination_exception);
+  __ ThrowUncatchable(TERMINATION, v0);  // Expects thrown value in v0.
+
   __ bind(&failure);
   // For failure and exception return null.
   __ li(v0, Operand(masm->isolate()->factory()->null_value()));
@@ -6421,18 +6311,11 @@ void ICCompareStub::GenerateMiss(MacroAssembler* masm) {
   __ Jump(a2);
 }
 
-
-// We will need 6 extra slots: 1 for the a0 pointer (see comments in
-// DirectCentryStub::GenerateCall), 4 for the saved arg slots and 1 for
-// alignment.
-static const int kDirectCallStackSpace = 2 * kPointerSize +
-    StandardFrameConstants::kCArgsSlotsSize;
-
 void DirectCEntryStub::Generate(MacroAssembler* masm) {
   // No need to pop or drop anything, LeaveExitFrame will restore the old
   // stack, thus dropping the allocated space for the return value.
-  // The saved ra is after the extra reserved stack space.
-  __ lw(t9, MemOperand(sp, kDirectCallStackSpace));
+  // The saved ra is after the reserved stack space for the 4 args.
+  __ lw(t9, MemOperand(sp, kCArgsSlotsSize));
 
   if (FLAG_debug_code && EnableSlowAsserts()) {
     // In case of an error the return address may point to a memory area
@@ -6448,7 +6331,16 @@ void DirectCEntryStub::Generate(MacroAssembler* masm) {
 
 void DirectCEntryStub::GenerateCall(MacroAssembler* masm,
                                     ExternalReference function) {
+  __ li(t9, Operand(function));
+  this->GenerateCall(masm, t9);
+}
+
+void DirectCEntryStub::GenerateCall(MacroAssembler* masm,
+                                    Register target) {
+  __ Move(t9, target);
   __ AssertStackIsAligned();
+  // Allocate space for arg slots.
+  __ Subu(sp, sp, kCArgsSlotsSize);
 
   // Block the trampoline pool through the whole function to make sure the
   // number of generated instructions is constant.
@@ -6460,31 +6352,17 @@ void DirectCEntryStub::GenerateCall(MacroAssembler* masm,
   masm->nop();  // Branch delay slot nop.
   masm->bind(&find_ra);
 
-  // Currently the called functions return a Handle class. The O32 ABI requires
-  // us to pass a pointer in a0 where the returned struct (4 bytes) will be
-  // placed. This is also built into the Simulator.
-  // We also need to allocate 4 slots for the passed arguments.
-  // These slots are contained in kDirectCallStackSpace.
-
-  const int kNumInstructionsToJump = 10;
+  const int kNumInstructionsToJump = 6;
   masm->addiu(ra, ra, kNumInstructionsToJump * kPointerSize);
-  masm->sw(ra, MemOperand(sp));  // This spot was reserved in EnterExitFrame.
-  // Allocate space for arg slots, returned struct and alignment.
-  masm->Subu(sp, sp, kDirectCallStackSpace);
-  // Set up the pointer to the returned value (a0).
-  masm->addiu(a0, sp, kDirectCallStackSpace - kPointerSize);
-
   // Push return address (accessible to GC through exit frame pc).
+  // This spot for ra was reserved in EnterExitFrame.
+  masm->sw(ra, MemOperand(sp, kCArgsSlotsSize));
   masm->li(ra, Operand(reinterpret_cast<intptr_t>(GetCode().location()),
                     RelocInfo::CODE_TARGET), true);
-  // Call the api function.
-  masm->Jump(Operand(function));
+  // Call the function.
+  masm->Jump(t9);
   // Make sure the stored 'ra' points to this position.
   ASSERT_EQ(kNumInstructionsToJump, masm->InstructionsGeneratedSince(&find_ra));
-
-  // As mentioned above, on MIPS a pointer is returned - we need to dereference
-  // it to get the actual return value (which is also a pointer).
-  __ lw(v0, MemOperand(v0));
 }
 
 
