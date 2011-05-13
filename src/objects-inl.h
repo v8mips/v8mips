@@ -3242,6 +3242,18 @@ void SharedFunctionInfo::set_strict_mode(bool value) {
 }
 
 
+bool SharedFunctionInfo::es5_native() {
+  return BooleanBit::get(compiler_hints(), kES5Native);
+}
+
+
+void SharedFunctionInfo::set_es5_native(bool value) {
+  set_compiler_hints(BooleanBit::set(compiler_hints(),
+                                     kES5Native,
+                                     value));
+}
+
+
 ACCESSORS(CodeCache, default_cache, FixedArray, kDefaultCacheOffset)
 ACCESSORS(CodeCache, normal_type_cache, Object, kNormalTypeCacheOffset)
 
@@ -3572,6 +3584,8 @@ JSMessageObject* JSMessageObject::cast(Object* obj) {
 INT_ACCESSORS(Code, instruction_size, kInstructionSizeOffset)
 ACCESSORS(Code, relocation_info, ByteArray, kRelocationInfoOffset)
 ACCESSORS(Code, deoptimization_data, FixedArray, kDeoptimizationDataOffset)
+ACCESSORS(Code, next_code_flushing_candidate,
+          Object, kNextCodeFlushingCandidateOffset)
 
 
 byte* Code::instruction_start()  {

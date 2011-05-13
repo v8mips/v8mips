@@ -125,8 +125,8 @@ class HBasicBlock: public ZoneObject {
   void AddSimulate(int id) { AddInstruction(CreateSimulate(id)); }
   void AssignCommonDominator(HBasicBlock* other);
 
-  void FinishExitWithDeoptimization() {
-    FinishExit(CreateDeoptimize());
+  void FinishExitWithDeoptimization(HDeoptimize::UseEnvironment has_uses) {
+    FinishExit(CreateDeoptimize(has_uses));
   }
 
   // Add the inlined function exit sequence, adding an HLeaveInlined
@@ -153,7 +153,7 @@ class HBasicBlock: public ZoneObject {
   void AddDominatedBlock(HBasicBlock* block);
 
   HSimulate* CreateSimulate(int id);
-  HDeoptimize* CreateDeoptimize();
+  HDeoptimize* CreateDeoptimize(HDeoptimize::UseEnvironment has_uses);
 
   int block_id_;
   HGraph* graph_;
@@ -819,7 +819,11 @@ class HGraphBuilder: public AstVisitor {
   // to push them as outgoing parameters.
   template <int V> HInstruction* PreProcessCall(HCall<V>* call);
 
-  void AssumeRepresentation(HValue* value, Representation r);
+  void TraceRepresentation(Token::Value op,
+                           TypeInfo info,
+                           HValue* value,
+                           Representation rep);
+  void AssumeRepresentation(HValue* value, Representation rep);
   static Representation ToRepresentation(TypeInfo info);
 
   void SetupScope(Scope* scope);
