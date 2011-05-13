@@ -586,8 +586,7 @@ static MaybeObject* GenerateFastApiDirectCall(MacroAssembler* masm,
 
   const int kApiStackSpace = 4;
 
-  __ EnterExitFrame(Operand(argc + kFastApiCallArguments + 1),
-      false, kApiStackSpace);
+  __ EnterExitFrame(false, kApiStackSpace);
 
   // NOTE: the O32 abi requires a0 to hold a special pointer when returning a
   // struct from the function (which is currently the case). This means we pass
@@ -613,11 +612,12 @@ static MaybeObject* GenerateFastApiDirectCall(MacroAssembler* masm,
   // already generated). Do not allow the assembler to perform a
   // garbage collection but instead return the allocation failure
   // object.
+  const int kStackUnwindSpace = argc + kFastApiCallArguments + 1;
   ExternalReference ref =
       ExternalReference(&fun,
                         ExternalReference::DIRECT_API_CALL,
                         masm->isolate());
-  return masm->TryCallApiFunctionAndReturn(ref);
+  return masm->TryCallApiFunctionAndReturn(ref, kStackUnwindSpace);
 }
 
 class CallInterceptorCompiler BASE_EMBEDDED {
@@ -1235,8 +1235,8 @@ MaybeObject* StubCompiler::GenerateLoadCallback(JSObject* object,
   // will handle setting up a0.
 
   const int kApiStackSpace = 1;
-  // 4 args - will be freed later by LeaveExitFrame.
-  __ EnterExitFrame(Operand(4), false, kApiStackSpace);
+ 
+  __ EnterExitFrame(false, kApiStackSpace);
   // Create AccessorInfo instance on the stack above the exit frame with
   // scratch2 (internal::Object **args_) as the data.
   __ sw(a2, MemOperand(sp, kPointerSize));
@@ -1251,7 +1251,8 @@ MaybeObject* StubCompiler::GenerateLoadCallback(JSObject* object,
       ExternalReference(&fun,
                         ExternalReference::DIRECT_GETTER_CALL,
                         masm()->isolate());
-  return masm()->TryCallApiFunctionAndReturn(ref);
+  // 4 args - will be freed later by LeaveExitFrame.
+  return masm()->TryCallApiFunctionAndReturn(ref, 4);
 }
 
 

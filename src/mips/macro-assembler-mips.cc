@@ -2705,7 +2705,7 @@ static int AddressOffset(ExternalReference ref0, ExternalReference ref1) {
 
 
 MaybeObject* MacroAssembler::TryCallApiFunctionAndReturn(
-    ExternalReference function) {
+    ExternalReference function, int stack_space) {
   ExternalReference next_address =
       ExternalReference::handle_scope_next_address();
   const int kNextOffset = 0;
@@ -2761,8 +2761,8 @@ MaybeObject* MacroAssembler::TryCallApiFunctionAndReturn(
   li(at, Operand(ExternalReference::scheduled_exception_address(isolate())));
   lw(t1, MemOperand(at));
   Branch(&promote_scheduled_exception, ne, t0, Operand(t1));
-
-  LeaveExitFrame(false);
+  li(s0, Operand(stack_space));
+  LeaveExitFrame(false, s0);
 
   bind(&promote_scheduled_exception);
   MaybeObject* result = TryTailCallExternalReference(
@@ -3263,29 +3263,15 @@ void MacroAssembler::LeaveFrame(StackFrame::Type type) {
 }
 
 
-void MacroAssembler::EnterExitFrame(const Operand& argc,
-                                    bool save_doubles,
+void MacroAssembler::EnterExitFrame(bool save_doubles,
                                     int stack_space) {
-  // Compute callee's stack pointer before making changes and save it as
-  // t9 register so that it is restored as sp register on exit, thereby
-  // popping the args.
-  // t9 = sp + kPointerSize * #args
-  if (argc.is_reg()) {
-    sll(t9, argc.rm(), kPointerSizeLog2);
-    addu(t9, sp, t9);
-  } else {
-    addiu(t9, sp, argc.imm32_ * kPointerSize);
-  }
-
   // Setup the frame structure on the stack.
-  STATIC_ASSERT(3 * kPointerSize == ExitFrameConstants::kCallerSPDisplacement);
-  STATIC_ASSERT(2 * kPointerSize == ExitFrameConstants::kCallerSPOffset);
+  STATIC_ASSERT(2 * kPointerSize == ExitFrameConstants::kCallerSPDisplacement);
   STATIC_ASSERT(1 * kPointerSize == ExitFrameConstants::kCallerPCOffset);
   STATIC_ASSERT(0 * kPointerSize == ExitFrameConstants::kCallerFPOffset);
 
   // This is how the stack will look:
-  // fp + 3 (==kCallerSPDisplacement) - old stack's end
-  // [fp + 2 (==kCallerSPOffset)] - saved old sp (as calculated above into t9).
+  // fp + 2 (==kCallerSPDisplacement) - old stack's end
   // [fp + 1 (==kCallerPCOffset)] - saved old ra
   // [fp + 0 (==kCallerFPOffset)] - saved old fp
   // [fp - 1 (==kSPOffset)] - sp of the called function
@@ -3294,8 +3280,7 @@ void MacroAssembler::EnterExitFrame(const Operand& argc,
   //   new stack (will contain saved ra)
 
   // Save registers.
-  addiu(sp, sp, -5 * kPointerSize);
-  sw(t9, MemOperand(sp, 4 * kPointerSize));
+  addiu(sp, sp, -4 * kPointerSize);
   sw(ra, MemOperand(sp, 3 * kPointerSize));
   sw(fp, MemOperand(sp, 2 * kPointerSize));
   addiu(fp, sp, 2 * kPointerSize);  // Setup new frame pointer.
@@ -3333,7 +3318,8 @@ void MacroAssembler::EnterExitFrame(const Operand& argc,
 }
 
 
-void MacroAssembler::LeaveExitFrame(bool save_doubles) {
+void MacroAssembler::LeaveExitFrame(bool save_doubles, 
+                                    Register argument_count) {
   // Ensure we are not restoring doubles, since it's not implemented yet.
   ASSERT(save_doubles == 0);
 
@@ -3352,7 +3338,11 @@ void MacroAssembler::LeaveExitFrame(bool save_doubles) {
   mov(sp, fp);  // Respect ABI stack constraint.
   lw(fp, MemOperand(sp, ExitFrameConstants::kCallerFPOffset));
   lw(ra, MemOperand(sp, ExitFrameConstants::kCallerPCOffset));
-  lw(sp, MemOperand(sp, ExitFrameConstants::kCallerSPOffset));
+  addiu(sp, sp, 8);
+  if(argument_count.is_valid()) {
+    sll(t8, argument_count, kPointerSizeLog2);
+    addu(sp, sp, t8);
+  }
   jr(ra);
   nop();  // Branch delay slot nop.
 }

@@ -584,12 +584,11 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
   // argc - argument count to be dropped by LeaveExitFrame.
   // save_doubles - saves FPU registers on stack, currently disabled.
   // stack_space - extra stack space.
-  void EnterExitFrame(const Operand& argc,
-                      bool save_doubles,
+  void EnterExitFrame(bool save_doubles,
                       int stack_space = 0);
 
   // Leave the current exit frame.
-  void LeaveExitFrame(bool save_doubles);
+  void LeaveExitFrame(bool save_doubles, Register arg_count);
 
   // Get the actual activation frame alignment for target environment.
   static int ActivationFrameAlignment();
@@ -858,7 +857,8 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
 
   // Calls an API function. Allocates HandleScope, extracts returned value
   // from handle and propagates exceptions. Restores context.
-  MaybeObject* TryCallApiFunctionAndReturn(ExternalReference function);
+  MaybeObject* TryCallApiFunctionAndReturn(ExternalReference function,
+                                           int stack_space);
 
   // Jump to the builtin routine.
   void JumpToExternalReference(const ExternalReference& builtin);
