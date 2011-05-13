@@ -3940,6 +3940,38 @@ THREADED_TEST(UndetectableString) {
 }
 
 
+TEST(UndetectableOptimized) {
+  i::FLAG_allow_natives_syntax = true;
+  v8::HandleScope scope;
+  LocalContext env;
+
+  Local<String> obj = String::NewUndetectable("foo");
+  env->Global()->Set(v8_str("undetectable"), obj);
+  env->Global()->Set(v8_str("detectable"), v8_str("bar"));
+
+  ExpectString(
+      "function testBranch() {"
+      "  if (!%_IsUndetectableObject(undetectable)) throw 1;"
+      "  if (%_IsUndetectableObject(detectable)) throw 2;"
+      "}\n"
+      "function testBool() {"
+      "  var b1 = !%_IsUndetectableObject(undetectable);"
+      "  var b2 = %_IsUndetectableObject(detectable);"
+      "  if (b1) throw 3;"
+      "  if (b2) throw 4;"
+      "  return b1 == b2;"
+      "}\n"
+      "%OptimizeFunctionOnNextCall(testBranch);"
+      "%OptimizeFunctionOnNextCall(testBool);"
+      "for (var i = 0; i < 10; i++) {"
+      "  testBranch();"
+      "  testBool();"
+      "}\n"
+      "\"PASS\"",
+      "PASS");
+}
+
+
 template <typename T> static void USE(T) { }
 
 
@@ -7260,6 +7292,49 @@ THREADED_TEST(CallAsFunction) {
     String::AsciiValue exception_value2(try_catch.Exception());
     CHECK_EQ("23", *exception_value2);
     try_catch.Reset();
+  }
+}
+
+
+// Check whether a non-function object is callable.
+THREADED_TEST(CallableObject) {
+  v8::HandleScope scope;
+  LocalContext context;
+
+  { Local<ObjectTemplate> instance_template = ObjectTemplate::New();
+    instance_template->SetCallAsFunctionHandler(call_as_function);
+    Local<Object> instance = instance_template->NewInstance();
+    v8::TryCatch try_catch;
+
+    CHECK(instance->IsCallable());
+    CHECK(!try_catch.HasCaught());
+  }
+
+  { Local<ObjectTemplate> instance_template = ObjectTemplate::New();
+    Local<Object> instance = instance_template->NewInstance();
+    v8::TryCatch try_catch;
+
+    CHECK(!instance->IsCallable());
+    CHECK(!try_catch.HasCaught());
+  }
+
+  { Local<FunctionTemplate> function_template =
+        FunctionTemplate::New(call_as_function);
+    Local<Function> function = function_template->GetFunction();
+    Local<Object> instance = function;
+    v8::TryCatch try_catch;
+
+    CHECK(instance->IsCallable());
+    CHECK(!try_catch.HasCaught());
+  }
+
+  { Local<FunctionTemplate> function_template = FunctionTemplate::New();
+    Local<Function> function = function_template->GetFunction();
+    Local<Object> instance = function;
+    v8::TryCatch try_catch;
+
+    CHECK(instance->IsCallable());
+    CHECK(!try_catch.HasCaught());
   }
 }
 
@@ -11909,35 +11984,6 @@ static void ExternalArrayTestHelper(v8::ExternalArrayType array_type,
     result = CompileRun(test_buf.start());
     CHECK_EQ(true, result->BooleanValue());
   }
-
-  // Test crankshaft external array loads
-  for (int i = 0; i < kElementCount; i++) {
-    array->set(i, static_cast<ElementType>(i));
-  }
-  result = CompileRun("function ee_load_test_func(sum) {"
-                      " for (var i = 0; i < 40; ++i)"
-                      "   sum += ext_array[i];"
-                      " return sum;"
-                      "}"
-                      "sum=0;"
-                      "for (var i=0;i<10000;++i) {"
-                      "  sum=ee_load_test_func(sum);"
-                      "}"
-                      "sum;");
-  CHECK_EQ(7800000, result->Int32Value());
-
-  // Test crankshaft external array stores
-  result = CompileRun("function ee_store_test_func(sum) {"
-                      " for (var i = 0; i < 40; ++i)"
-                      "   sum += ext_array[i] = i;"
-                      " return sum;"
-                      "}"
-                      "sum=0;"
-                      "for (var i=0;i<10000;++i) {"
-                      "  sum=ee_store_test_func(sum);"
-                      "}"
-                      "sum;");
-  CHECK_EQ(7800000, result->Int32Value());
 
   for (int i = 0; i < kElementCount; i++) {
     array->set(i, static_cast<ElementType>(i));

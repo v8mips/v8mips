@@ -91,6 +91,7 @@ class LChunkBuilder;
   V(Compare)                                   \
   V(CompareJSObjectEq)                         \
   V(CompareMap)                                \
+  V(CompareSymbolEq)                           \
   V(Constant)                                  \
   V(Context)                                   \
   V(DeleteProperty)                            \
@@ -110,10 +111,11 @@ class LChunkBuilder;
   V(InstanceOf)                                \
   V(InstanceOfKnownGlobal)                     \
   V(InvokeFunction)                            \
+  V(IsConstructCall)                           \
   V(IsNull)                                    \
   V(IsObject)                                  \
   V(IsSmi)                                     \
-  V(IsConstructCall)                           \
+  V(IsUndetectable)                            \
   V(JSArrayLength)                             \
   V(LeaveInlined)                              \
   V(LoadContextSlot)                           \
@@ -628,7 +630,9 @@ class HValue: public ZoneObject {
   // Printing support.
   virtual void PrintTo(StringStream* stream) = 0;
   void PrintNameTo(StringStream* stream);
-  static void PrintTypeTo(HType type, StringStream* stream);
+  void PrintTypeTo(StringStream* stream);
+  void PrintRangeTo(StringStream* stream);
+  void PrintChangesTo(StringStream* stream);
 
   const char* Mnemonic() const;
 
@@ -740,6 +744,8 @@ class HInstruction: public HValue {
     ASSERT(!IsLinked());
     SetBlock(block);
   }
+
+  void PrintMnemonicTo(StringStream* stream);
 
   HInstruction* next_;
   HInstruction* previous_;
@@ -1757,19 +1763,17 @@ class HCheckFunction: public HUnaryOperation {
 
 class HCheckInstanceType: public HUnaryOperation {
  public:
-  // Check that the instance type is in the range [first, last] where
-  // both first and last are included.
-  HCheckInstanceType(HValue* value, InstanceType first, InstanceType last)
-      : HUnaryOperation(value), first_(first), last_(last) {
-    ASSERT(first <= last);
-    set_representation(Representation::Tagged());
-    SetFlag(kUseGVN);
-    if ((FIRST_STRING_TYPE < first && last <= LAST_STRING_TYPE) ||
-        (FIRST_STRING_TYPE <= first && last < LAST_STRING_TYPE)) {
-      // A particular string instance type can change because of GC or
-      // externalization, but the value still remains a string.
-      SetFlag(kDependsOnMaps);
-    }
+  static HCheckInstanceType* NewIsJSObjectOrJSFunction(HValue* value) {
+    return new HCheckInstanceType(value, IS_JS_OBJECT_OR_JS_FUNCTION);
+  }
+  static HCheckInstanceType* NewIsJSArray(HValue* value) {
+    return new HCheckInstanceType(value, IS_JS_ARRAY);
+  }
+  static HCheckInstanceType* NewIsString(HValue* value) {
+    return new HCheckInstanceType(value, IS_STRING);
+  }
+  static HCheckInstanceType* NewIsSymbol(HValue* value) {
+    return new HCheckInstanceType(value, IS_SYMBOL);
   }
 
   virtual bool IsCheckInstruction() const { return true; }
@@ -1785,17 +1789,15 @@ class HCheckInstanceType: public HUnaryOperation {
   virtual HValue* Canonicalize() {
     if (!value()->type().IsUninitialized() &&
         value()->type().IsString() &&
-        first() == FIRST_STRING_TYPE &&
-        last() == LAST_STRING_TYPE) {
+        check_ == IS_STRING) {
       return NULL;
     }
     return this;
   }
 
-  static HCheckInstanceType* NewIsJSObjectOrJSFunction(HValue* value);
-
-  InstanceType first() const { return first_; }
-  InstanceType last() const { return last_; }
+  bool is_interval_check() const { return check_ <= LAST_INTERVAL_CHECK; }
+  void GetCheckInterval(InstanceType* first, InstanceType* last);
+  void GetCheckMaskAndTag(uint8_t* mask, uint8_t* tag);
 
   DECLARE_CONCRETE_INSTRUCTION(CheckInstanceType)
 
@@ -1805,12 +1807,25 @@ class HCheckInstanceType: public HUnaryOperation {
   // with a larger range.
   virtual bool DataEquals(HValue* other) {
     HCheckInstanceType* b = HCheckInstanceType::cast(other);
-    return (first_ == b->first()) && (last_ == b->last());
+    return check_ == b->check_;
   }
 
  private:
-  InstanceType first_;
-  InstanceType last_;
+  enum Check {
+    IS_JS_OBJECT_OR_JS_FUNCTION,
+    IS_JS_ARRAY,
+    IS_STRING,
+    IS_SYMBOL,
+    LAST_INTERVAL_CHECK = IS_JS_ARRAY
+  };
+
+  HCheckInstanceType(HValue* value, Check check)
+      : HUnaryOperation(value), check_(check) {
+    set_representation(Representation::Tagged());
+    SetFlag(kUseGVN);
+  }
+
+  const Check check_;
 };
 
 
@@ -2396,6 +2411,40 @@ class HCompareJSObjectEq: public HBinaryOperation {
 };
 
 
+class HCompareSymbolEq: public HBinaryOperation {
+ public:
+  HCompareSymbolEq(HValue* left, HValue* right, Token::Value op)
+      : HBinaryOperation(left, right), op_(op) {
+    ASSERT(op == Token::EQ || op == Token::EQ_STRICT);
+    set_representation(Representation::Tagged());
+    SetFlag(kUseGVN);
+    SetFlag(kDependsOnMaps);
+  }
+
+  Token::Value op() const { return op_; }
+
+  virtual bool EmitAtUses() {
+    return !HasSideEffects() && !HasMultipleUses();
+  }
+
+  virtual Representation RequiredInputRepresentation(int index) const {
+    return Representation::Tagged();
+  }
+
+  virtual HType CalculateInferredType() { return HType::Boolean(); }
+
+  DECLARE_CONCRETE_INSTRUCTION(CompareSymbolEq);
+
+ protected:
+  virtual bool DataEquals(HValue* other) {
+    return op_ == HCompareSymbolEq::cast(other)->op_;
+  }
+
+ private:
+  const Token::Value op_;
+};
+
+
 class HUnaryPredicate: public HUnaryOperation {
  public:
   explicit HUnaryPredicate(HValue* value) : HUnaryOperation(value) {
@@ -2450,6 +2499,17 @@ class HIsSmi: public HUnaryPredicate {
   explicit HIsSmi(HValue* value) : HUnaryPredicate(value) { }
 
   DECLARE_CONCRETE_INSTRUCTION(IsSmi)
+
+ protected:
+  virtual bool DataEquals(HValue* other) { return true; }
+};
+
+
+class HIsUndetectable: public HUnaryPredicate {
+ public:
+  explicit HIsUndetectable(HValue* value) : HUnaryPredicate(value) { }
+
+  DECLARE_CONCRETE_INSTRUCTION(IsUndetectable)
 
  protected:
   virtual bool DataEquals(HValue* other) { return true; }
@@ -3254,6 +3314,8 @@ class HLoadKeyedFastElement: public HBinaryOperation {
   }
 
   virtual void PrintDataTo(StringStream* stream);
+
+  bool RequiresHoleCheck() const;
 
   DECLARE_CONCRETE_INSTRUCTION(LoadKeyedFastElement)
 

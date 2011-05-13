@@ -188,7 +188,7 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
 
   int CallSize(Register reg);
   int CallSize(Handle<Code> code, RelocInfo::Mode rmode);
-  
+
   // Emit code to discard a non-negative number of pointer-sized elements
   // from the stack, clobbering only the sp register.
   void Drop(int count,
@@ -788,6 +788,15 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
   void CallStub(CodeStub* stub, Condition cond = cc_always,
                 Register r1 = zero_reg, const Operand& r2 = Operand(zero_reg));
 
+  // Call a code stub and return the code object called.  Try to generate
+  // the code if necessary.  Do not perform a GC but instead return a retry
+  // after GC failure.
+  MUST_USE_RESULT MaybeObject* TryCallStub(CodeStub* stub,
+                                           Condition cond = cc_always,
+                                           Register r1 = zero_reg,
+                                           const Operand& r2 =
+                                               Operand(zero_reg));
+
   // Tail call a code stub (jump).
   void TailCallStub(CodeStub* stub);
 
@@ -795,7 +804,7 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
   // generate the code if necessary.  Do not perform a GC but instead return
   // a retry after GC failure.
   MUST_USE_RESULT MaybeObject* TryTailCallStub(CodeStub* stub,
-                                               Condition cond = al,
+                                               Condition cond = cc_always,
                                                Register r1 = zero_reg,
                                                const Operand& r2 =
                                                    Operand(zero_reg));

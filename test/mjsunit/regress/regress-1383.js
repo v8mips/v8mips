@@ -25,42 +25,16 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// Flags: --allow-natives-syntax
+// Test that passing the strict_mode flag in extra ic state from
+// StubCache::ComputeKeyedLoadOrStoreExternalArray does not
+// hit an assertion in Code::ComputeFlags.
 
-// An exception thrown in a function optimized by on-stack replacement (OSR)
-// should be able to construct a receiver from all optimized stack frames.
-
-function A() { }
-A.prototype.f = function() { }
-
-function B() { }
-
-var o = new A();
-
-// This function throws if o does not have an f property, and should not be
-// inlined.
-function g() { try { return o.f(); } finally { }}
-
-// Optimization status (see runtime.cc):
-// 1 - yes, 2 - no, 3 - always, 4 - never.
-
-// This function should be optimized via OSR.
-function h() {
-  var optstatus = %GetOptimizationStatus(h);
-  if (optstatus == 4) {
-    // Optimizations are globally disabled; just run once.
-    g();
-  } else {
-    // Run for a bit as long as h is unoptimized.
-    while (%GetOptimizationStatus(h) == 2) {
-      for (var j = 0; j < 100; j++) g();
-    }
-    assertTrue(%GetOptimizationStatus(h) == 1 ||
-               %GetOptimizationStatus(h) == 3);
-    g();
-  }
+x="";
+function foo(){
+  "use strict";
+  var wxemsx=(4);
+  var wxemsx_0=Float32Array(wxemsx);
+  wxemsx_0[0]={};
 }
 
-h();
-o = new B();
-assertThrows("h()");
+foo()

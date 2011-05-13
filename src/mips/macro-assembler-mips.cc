@@ -2680,6 +2680,19 @@ void MacroAssembler::CallStub(CodeStub* stub, Condition cond,
 }
 
 
+MaybeObject* MacroAssembler::TryCallStub(CodeStub* stub, Condition cond,
+                                         Register r1, const Operand& r2) {
+  ASSERT(allow_stub_calls());  // Stub calls are not allowed in some stubs.
+  Object* result;
+  { MaybeObject* maybe_result = stub->TryGetCode();
+    if (!maybe_result->ToObject(&result)) return maybe_result;
+  }
+  Call(Handle<Code>(Code::cast(result)), RelocInfo::CODE_TARGET, cond, r1, r2);
+  return result;
+}
+
+
+
 void MacroAssembler::TailCallStub(CodeStub* stub) {
   ASSERT(allow_stub_calls());  // Stub calls are not allowed in some stubs.
   Jump(stub->GetCode(), RelocInfo::CODE_TARGET);
