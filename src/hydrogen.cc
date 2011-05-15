@@ -4633,6 +4633,10 @@ void HGraphBuilder::VisitSub(UnaryOperation* expr) {
   CHECK_ALIVE(VisitForValue(expr->expression()));
   HValue* value = Pop();
   HInstruction* instr = new(zone()) HMul(value, graph_->GetConstantMinus1());
+  TypeInfo info = oracle()->UnaryType(expr);
+  Representation rep = ToRepresentation(info);
+  TraceRepresentation(expr->op(), info, instr, rep);
+  instr->AssumeRepresentation(rep);
   ast_context()->ReturnInstruction(instr, expr->id());
 }
 
@@ -4703,7 +4707,7 @@ HInstruction* HGraphBuilder::BuildIncrement(HValue* value,
     rep = Representation::Integer32();
   }
   TraceRepresentation(expr->op(), info, instr, rep);
-  AssumeRepresentation(instr, rep);
+  instr->AssumeRepresentation(rep);
   return instr;
 }
 
@@ -4881,7 +4885,7 @@ HInstruction* HGraphBuilder::BuildBinaryOperation(BinaryOperation* expr,
     rep = Representation::Integer32();
   }
   TraceRepresentation(expr->op(), info, instr, rep);
-  AssumeRepresentation(instr, rep);
+  instr->AssumeRepresentation(rep);
   return instr;
 }
 
@@ -5066,16 +5070,6 @@ void HGraphBuilder::TraceRepresentation(Token::Value op,
          graph_->GetMaximumValueID(),
          value->representation().Mnemonic(),
          rep.Mnemonic());
-}
-
-
-void HGraphBuilder::AssumeRepresentation(HValue* value, Representation rep) {
-  if (value->CheckFlag(HValue::kFlexibleRepresentation)) {
-    value->ChangeRepresentation(rep);
-    // The representation of the value is dictated by type feedback and
-    // will not be changed later.
-    value->ClearFlag(HValue::kFlexibleRepresentation);
-  }
 }
 
 
