@@ -50,15 +50,18 @@ class JumpTarget;
 // trying to update gp register for position-independent-code. Whenever
 // MIPS generated code calls C code, it must be via t9 register.
 
-// Registers aliases
+
+// TODO(plind): Consider freeing t8 from macro-asm reservation list,
+// and use it for Lithium scratch register (below).
+
+// Register aliases.
 // cp is assumed to be a callee saved register.
+const Register lithiumScratchReg = s4;  // Scratch register.
+const Register condReg = s5;  // Simulated (partial) condition code for mips.
 const Register roots = s6;  // Roots array pointer.
 const Register cp = s7;     // JavaScript context pointer.
 const Register fp = s8_fp;  // Alias for fp.
-// Registers used for condition evaluation.
-const Register condReg1 = s4;
-const Register condReg2 = s5;
-
+const DoubleRegister lithiumScratchDouble = f30;  // Double scratch register.
 
 // Flags used for the AllocateInNewSpace functions.
 enum AllocationFlags {

@@ -168,24 +168,26 @@ Register ToRegister(int num);
 // Coprocessor register.
 struct FPURegister {
   static const int kNumRegisters = v8::internal::kNumFPURegisters;
-  // f0 has been excluded from allocation. This is following ia32
-  // where xmm0 is excluded.
+  // f30 has been excluded from allocation. This is following ia32
+  // where xmm0 is excluded. (Chose not use use f0 as scratch, since
+  // that is float/double return value per mips ABI).
   static const int kNumAllocatableRegisters = 15;
 
   static int ToAllocationIndex(FPURegister reg) {
     ASSERT(reg.code() != 0);
     ASSERT(reg.code() % 2 == 0);
-    return (reg.code() / 2) - 1;
+    return (reg.code() / 2);
   }
 
   static FPURegister FromAllocationIndex(int index) {
     ASSERT(index >= 0 && index < kNumAllocatableRegisters);
-    return from_code((index + 1) * 2);
+    return from_code(index * 2);
   }
 
   static const char* AllocationIndexToString(int index) {
     ASSERT(index >= 0 && index < kNumAllocatableRegisters);
     const char* const names[] = {
+      "f0",
       "f2",
       "f4",
       "f6",
@@ -199,8 +201,7 @@ struct FPURegister {
       "f22",
       "f24",
       "f26",
-      "f28",
-      "f30"
+      "f28"
     };
     return names[index];
   }
@@ -228,9 +229,19 @@ struct FPURegister {
   int code_;
 };
 
-typedef FPURegister DoubleRegister;
+// V8 now supports the O32 ABI, and the FPU Registers are organized as 32
+// 32-bit registers, f0 through f31. When used as 'double' they are used
+// in pairs, starting with the even numbered register. So a double operation
+// on f0 really uses f0 and f1.
+// (Modern mips hardware also supports 32 64-bit registers, via setting (priviledged)
+// Status Register FR bit to 1. This is used by the N32 ABI, but it is not in common
+// use. Someday we will want to support this in v8.)
 
-const FPURegister no_creg = { -1 };
+// For O32 ABI, Floats and Doubles refer to same set of 32 32-bit registers.
+typedef FPURegister DoubleRegister;
+typedef FPURegister FloatRegister;
+
+const FPURegister no_freg = { -1 };
 
 const FPURegister f0 = { 0 };  // Return value in hard float mode.
 const FPURegister f1 = { 1 };
@@ -330,6 +341,10 @@ class MemOperand : public Operand {
  public:
 
   explicit MemOperand(Register rn, int32_t offset = 0);
+
+  bool OffsetIsInt16Encodable() const {
+    return is_int16(offset_);
+  }
 
  private:
   int32_t offset_;

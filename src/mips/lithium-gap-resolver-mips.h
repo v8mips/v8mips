@@ -25,73 +25,60 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+#ifndef V8_MIPS_LITHIUM_GAP_RESOLVER_MIPS_H_
+#define V8_MIPS_LITHIUM_GAP_RESOLVER_MIPS_H_
+
 #include "v8.h"
 
-#include "codegen.h"
-#include "deoptimizer.h"
-#include "full-codegen.h"
-#include "safepoint-table.h"
-
-// Note: this file was taken from the X64 version. ARM has a partially working
-// lithium implementation, but for now it is not ported to mips.
+#include "lithium.h"
 
 namespace v8 {
 namespace internal {
 
+class LCodeGen;
+class LGapResolver;
 
-int Deoptimizer::table_entry_size_ = 10;
+class LGapResolver BASE_EMBEDDED {
+ public:
 
+  explicit LGapResolver(LCodeGen* owner);
 
-int Deoptimizer::patch_size() {
-  const int kCallInstructionSizeInWords = 3;
-  return kCallInstructionSizeInWords * Assembler::kInstrSize;
-}
+  // Resolve a set of parallel moves, emitting assembler instructions.
+  void Resolve(LParallelMove* parallel_move);
 
+ private:
+  // Build the initial list of moves.
+  void BuildInitialMoveList(LParallelMove* parallel_move);
 
-void Deoptimizer::EnsureRelocSpaceForLazyDeoptimization(Handle<Code> code) {
-  // Nothing to do. No new relocation information is written for lazy
-  // deoptimization on MIPS.
-}
+  // Perform the move at the moves_ index in question (possibly requiring
+  // other moves to satisfy dependencies).
+  void PerformMove(int index);
 
+  // If a cycle is found in the series of moves, save the blocking value to
+  // a scratch register.  The cycle must be found by hitting the root of the
+  // depth-first search.
+  void BreakCycle(int index);
 
-void Deoptimizer::DeoptimizeFunction(JSFunction* function) {
-  UNIMPLEMENTED();
-}
+  // After a cycle has been resolved, restore the value from the scratch
+  // register to its proper destination.
+  void RestoreValue();
 
+  // Emit a move and remove it from the move graph.
+  void EmitMove(int index);
 
-void Deoptimizer::PatchStackCheckCodeAt(Address pc_after,
-                                        Code* check_code,
-                                        Code* replacement_code) {
-  UNIMPLEMENTED();
-}
+  // Verify the move list before performing moves.
+  void Verify();
 
+  LCodeGen* cgen_;
 
-void Deoptimizer::RevertStackCheckCodeAt(Address pc_after,
-                                         Code* check_code,
-                                         Code* replacement_code) {
-  UNIMPLEMENTED();
-}
+  // List of moves not yet resolved.
+  ZoneList<LMoveOperands> moves_;
 
-
-void Deoptimizer::DoComputeOsrOutputFrame() {
-  UNIMPLEMENTED();
-}
-
-
-void Deoptimizer::DoComputeFrame(TranslationIterator* iterator,
-                                 int frame_index) {
-  UNIMPLEMENTED();
-}
-
-
-void Deoptimizer::EntryGenerator::Generate() {
-  UNIMPLEMENTED();
-}
-
-
-void Deoptimizer::TableEntryGenerator::GeneratePrologue() {
-  UNIMPLEMENTED();
-}
-
+  int root_index_;
+  bool in_cycle_;
+  LOperand* saved_destination_;
+};
 
 } }  // namespace v8::internal
+
+#endif  // V8_MIPS_LITHIUM_GAP_RESOLVER_MIPS_H_
