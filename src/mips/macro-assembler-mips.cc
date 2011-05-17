@@ -2860,7 +2860,7 @@ MaybeObject* MacroAssembler::TryTailCallStub(CodeStub* stub,
   { MaybeObject* maybe_result = stub->TryGetCode();
     if (!maybe_result->ToObject(&result)) return maybe_result;
   }
-  Jump(stub->GetCode(), RelocInfo::CODE_TARGET, cond, r1, r2);
+  Jump(Handle<Code>(Code::cast(result)), RelocInfo::CODE_TARGET, cond, r1, r2);
   return result;
 }
 

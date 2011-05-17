@@ -3513,7 +3513,8 @@ MaybeObject* ExternalArrayStubCompiler::CompileKeyedLoadStub(
       __ Ret();
     } else {
       WriteInt32ToHeapNumberStub stub(value, v0, t2, t3);
-      __ TailCallStub(&stub);
+      MaybeObject* stub_code = masm()->TryTailCallStub(&stub);
+      if (stub_code->IsFailure()) return stub_code;
     }
   } else if (array_type == kExternalUnsignedIntArray) {
     // The test is different for unsigned int values. Since we need
