@@ -1736,12 +1736,33 @@ void CompareStub::Generate(MacroAssembler* masm) {
 // The stub returns zero for false, and a non-zero value for true.
 void ToBooleanStub::Generate(MacroAssembler* masm) {
   // This stub uses FPU instructions.
-  ASSERT(CpuFeatures::IsEnabled(FPU));
+  CpuFeatures::Scope scope(FPU);
 
   Label false_result;
   Label not_heap_number;
   Register scratch0 = t5.is(tos_) ? t3 : t5;
 
+  // undefined -> false
+  __ LoadRoot(scratch0, Heap::kUndefinedValueRootIndex);
+  __ Branch(&false_result, eq, tos_, Operand(scratch0));
+
+  // Boolean -> its value
+  __ LoadRoot(scratch0, Heap::kFalseValueRootIndex);
+  __ Branch(&false_result, eq, tos_, Operand(scratch0));
+  __ LoadRoot(scratch0, Heap::kTrueValueRootIndex);
+  // "tos_" is a register and contains a non-zero value.  Hence we implicitly
+  // return true if the equal condition is satisfied.
+  __ Ret(eq, tos_, Operand(scratch0));
+
+  // Smis: 0 -> false, all other -> true
+  __ And(scratch0, tos_, tos_);
+  __ Branch(&false_result, eq, scratch0, Operand(zero_reg));
+  __ And(scratch0, tos_, Operand(kSmiTagMask));
+  // "tos_" is a register and contains a non-zero value.  Hence we implicitly
+  // return true if the not equal condition is satisfied.
+  __ Ret(eq, scratch0, Operand(zero_reg));
+
+  // 'null' -> false
   __ LoadRoot(scratch0, Heap::kNullValueRootIndex);
   __ Branch(&false_result, eq, tos_, Operand(scratch0));
 
@@ -1750,8 +1771,7 @@ void ToBooleanStub::Generate(MacroAssembler* masm) {
   __ LoadRoot(at, Heap::kHeapNumberMapRootIndex);
   __ Branch(&not_heap_number, ne, scratch0, Operand(at));
 
-  __ Subu(at, tos_, Operand(kHeapObjectTag));
-  __ ldc1(f12, MemOperand(at, HeapNumber::kValueOffset));
+  __ ldc1(f12, FieldMemOperand(tos_, HeapNumber::kValueOffset));
   __ fcmp(f12, 0.0, UEQ);
 
   // "tos_" is a register, and contains a non zero value by default.
@@ -1761,11 +1781,6 @@ void ToBooleanStub::Generate(MacroAssembler* masm) {
   __ Ret();
 
   __ bind(&not_heap_number);
-
-  // Check if the value is 'null'.
-  // 'null' => false.
-  __ LoadRoot(at, Heap::kNullValueRootIndex);
-  __ Branch(&false_result, eq, tos_, Operand(at));
 
   // It can be an undetectable object.
   // Undetectable => false.
