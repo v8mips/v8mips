@@ -1472,7 +1472,7 @@ void NumberToStringStub::GenerateLookupNumberStringCache(MacroAssembler* masm,
                   scratch1,
                   Heap::kHeapNumberMapRootIndex,
                   not_found,
-                  true);
+                  DONT_DO_SMI_CHECK);
 
       STATIC_ASSERT(8 == kDoubleSize);
       __ Addu(scratch1,
@@ -3185,7 +3185,7 @@ void TranscendentalCacheStub::Generate(MacroAssembler* masm) {
                   a1,
                   Heap::kHeapNumberMapRootIndex,
                   &calculate,
-                  true);
+                  DONT_DO_SMI_CHECK);
       // Input is a HeapNumber. Store the
       // low and high words into a2, a3.
       __ lw(a2, FieldMemOperand(a0, HeapNumber::kValueOffset));
@@ -4840,7 +4840,7 @@ void StringCharCodeAtGenerator::GenerateSlow(
               scratch_,
               Heap::kHeapNumberMapRootIndex,
               index_not_number_,
-              true);
+              DONT_DO_SMI_CHECK);
   call_helper.BeforeCall(masm);
   // Consumed by runtime conversion function:
   __ Push(object_, index_, index_);

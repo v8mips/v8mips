@@ -1561,8 +1561,11 @@ MaybeObject* CallStubCompiler::CompileArrayPushCall(Object* object,
     __ lw(elements, FieldMemOperand(receiver, JSArray::kElementsOffset));
 
     // Check that the elements are in fast mode and writable.
-    __ CheckMap(elements, v0,
-                Heap::kFixedArrayMapRootIndex, &call_builtin, true);
+    __ CheckMap(elements,
+                v0,
+                Heap::kFixedArrayMapRootIndex,
+                &call_builtin,
+                DONT_DO_SMI_CHECK);
 
     if (argc == 1) {  // Otherwise fall through to call the builtin.
       Label exit, with_write_barrier, attempt_to_grow_elements;
@@ -1710,7 +1713,11 @@ MaybeObject* CallStubCompiler::CompileArrayPopCall(Object* object,
   __ lw(elements, FieldMemOperand(receiver, JSArray::kElementsOffset));
 
   // Check that the elements are in fast mode and writable.
-  __ CheckMap(elements, v0, Heap::kFixedArrayMapRootIndex, &call_builtin, true);
+  __ CheckMap(elements,
+              v0,
+              Heap::kFixedArrayMapRootIndex,
+              &call_builtin,
+              DONT_DO_SMI_CHECK);
 
   // Get the array's length into t0 and calculate new length.
   __ lw(t0, FieldMemOperand(receiver, JSArray::kLengthOffset));
@@ -2049,7 +2056,7 @@ MaybeObject* CallStubCompiler::CompileMathFloorCall(Object* object,
   __ Drop(argc + 1, eq, t0, Operand(zero_reg));
   __ Ret(eq, t0, Operand(zero_reg));
 
-  __ CheckMap(v0, a1, Heap::kHeapNumberMapRootIndex, &slow, true);
+  __ CheckMap(v0, a1, Heap::kHeapNumberMapRootIndex, &slow, DONT_DO_SMI_CHECK);
 
   Label wont_fit_smi, no_fpu_error, restore_fcsr_and_return;
 
@@ -2200,7 +2207,7 @@ MaybeObject* CallStubCompiler::CompileMathAbsCall(Object* object,
   // Check if the argument is a heap number and load its exponent and
   // sign.
   __ bind(&not_smi);
-  __ CheckMap(v0, a1, Heap::kHeapNumberMapRootIndex, &slow, true);
+  __ CheckMap(v0, a1, Heap::kHeapNumberMapRootIndex, &slow, DONT_DO_SMI_CHECK);
   __ lw(a1, FieldMemOperand(v0, HeapNumber::kExponentOffset));
 
   // Check the sign of the argument. If the argument is positive,

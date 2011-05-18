@@ -2545,8 +2545,8 @@ void MacroAssembler::CheckMap(Register obj,
                               Register scratch,
                               Handle<Map> map,
                               Label* fail,
-                              bool is_heap_object) {
-  if (!is_heap_object) {
+                              SmiCheckType smi_check_type) {
+  if (smi_check_type == DO_SMI_CHECK) {
     JumpIfSmi(obj, fail);
   }
   lw(scratch, FieldMemOperand(obj, HeapObject::kMapOffset));
@@ -2559,8 +2559,8 @@ void MacroAssembler::CheckMap(Register obj,
                               Register scratch,
                               Heap::RootListIndex index,
                               Label* fail,
-                              bool is_heap_object) {
-  if (!is_heap_object) {
+                              SmiCheckType smi_check_type) {
+  if (smi_check_type == DO_SMI_CHECK) {
     JumpIfSmi(obj, fail);
   }
   lw(scratch, FieldMemOperand(obj, HeapObject::kMapOffset));
@@ -3410,7 +3410,7 @@ void MacroAssembler::LoadGlobalFunctionInitialMap(Register function,
   lw(map, FieldMemOperand(function, JSFunction::kPrototypeOrInitialMapOffset));
   if (emit_debug_code()) {
     Label ok, fail;
-    CheckMap(map, scratch, Heap::kMetaMapRootIndex, &fail, false);
+    CheckMap(map, scratch, Heap::kMetaMapRootIndex, &fail, DO_SMI_CHECK);
     Branch(&ok);
     bind(&fail);
     Abort("Global functions must have initial map");
