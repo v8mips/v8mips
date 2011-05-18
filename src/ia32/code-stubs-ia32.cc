@@ -244,9 +244,25 @@ void FastCloneShallowArrayStub::Generate(MacroAssembler* masm) {
 void ToBooleanStub::Generate(MacroAssembler* masm) {
   Label false_result, true_result, not_string;
   __ mov(eax, Operand(esp, 1 * kPointerSize));
+  Factory* factory = masm->isolate()->factory();
+
+  // undefined -> false
+  __ cmp(eax, factory->undefined_value());
+  __ j(equal, &false_result);
+
+  // Boolean -> its value
+  __ cmp(eax, factory->true_value());
+  __ j(equal, &true_result);
+  __ cmp(eax, factory->false_value());
+  __ j(equal, &false_result);
+
+  // Smis: 0 -> false, all other -> true
+  __ test(eax, Operand(eax));
+  __ j(zero, &false_result);
+  __ test(eax, Immediate(kSmiTagMask));
+  __ j(zero, &true_result);
 
   // 'null' => false.
-  Factory* factory = masm->isolate()->factory();
   __ cmp(eax, factory->null_value());
   __ j(equal, &false_result, Label::kNear);
 
@@ -746,15 +762,24 @@ void TypeRecordingUnaryOpStub::GenerateHeapNumberCodeBitNot(
   __ bind(&try_float);
   if (mode_ == UNARY_NO_OVERWRITE) {
     Label slow_allocate_heapnumber, heapnumber_allocated;
+    __ mov(ebx, eax);
     __ AllocateHeapNumber(eax, edx, edi, &slow_allocate_heapnumber);
     __ jmp(&heapnumber_allocated);
 
     __ bind(&slow_allocate_heapnumber);
     __ EnterInternalFrame();
-    __ push(ecx);
+    // Push the original HeapNumber on the stack. The integer value can't
+    // be stored since it's untagged and not in the smi range (so we can't
+    // smi-tag it). We'll recalculate the value after the GC instead.
+    __ push(ebx);
     __ CallRuntime(Runtime::kNumberAlloc, 0);
-    __ pop(ecx);
+    // New HeapNumber is in eax.
+    __ pop(edx);
     __ LeaveInternalFrame();
+    // IntegerConvert uses ebx and edi as scratch registers.
+    // This conversion won't go slow-case.
+    IntegerConvert(masm, edx, CpuFeatures::IsSupported(SSE3), slow);
+    __ not_(ecx);
 
     __ bind(&heapnumber_allocated);
   }
