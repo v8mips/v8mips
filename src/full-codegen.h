@@ -307,7 +307,7 @@ class FullCodeGenerator: public AstVisitor {
              Label* if_true,
              Label* if_false,
              Label* fall_through);
-#else  // All non-mips arch
+#else  // All non-mips arch.
   void Split(Condition cc,
              Label* if_true,
              Label* if_false,
