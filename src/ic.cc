@@ -2200,9 +2200,23 @@ TRUnaryOpIC::TypeInfo TRUnaryOpIC::GetTypeInfo(Handle<Object> operand) {
 }
 
 
-TRUnaryOpIC::TypeInfo TRUnaryOpIC::JoinTypes(TRUnaryOpIC::TypeInfo x,
-                                             TRUnaryOpIC::TypeInfo y) {
-  return x >= y ? x : y;
+TRUnaryOpIC::TypeInfo TRUnaryOpIC::ComputeNewType(
+    TRUnaryOpIC::TypeInfo type,
+    TRUnaryOpIC::TypeInfo previous) {
+  switch (previous) {
+    case TRUnaryOpIC::UNINITIALIZED:
+      return type;
+    case TRUnaryOpIC::SMI:
+      return (type == TRUnaryOpIC::GENERIC)
+          ? TRUnaryOpIC::GENERIC
+          : TRUnaryOpIC::HEAP_NUMBER;
+    case TRUnaryOpIC::HEAP_NUMBER:
+      return TRUnaryOpIC::GENERIC;
+    case TRUnaryOpIC::GENERIC:
+      // We should never do patching if we are in GENERIC state.
+      UNREACHABLE();
+      return TRUnaryOpIC::GENERIC;
+  }
 }
 
 
@@ -2314,7 +2328,7 @@ RUNTIME_FUNCTION(MaybeObject*, TypeRecordingUnaryOp_Patch) {
       static_cast<TRUnaryOpIC::TypeInfo>(Smi::cast(args[3])->value());
 
   TRUnaryOpIC::TypeInfo type = TRUnaryOpIC::GetTypeInfo(operand);
-  type = TRUnaryOpIC::JoinTypes(type, previous_type);
+  type = TRUnaryOpIC::ComputeNewType(type, previous_type);
 
   Handle<Code> code = GetTypeRecordingUnaryOpStub(key, type);
   if (!code.is_null()) {
@@ -2379,7 +2393,10 @@ RUNTIME_FUNCTION(MaybeObject*, TypeRecordingBinaryOp_Patch) {
     type = TRBinaryOpIC::GENERIC;
   }
   if (type == TRBinaryOpIC::SMI && previous_type == TRBinaryOpIC::SMI) {
-    if (op == Token::DIV || op == Token::MUL || kSmiValueSize == 32) {
+    if (op == Token::DIV ||
+        op == Token::MUL ||
+        op == Token::SHR ||
+        kSmiValueSize == 32) {
       // Arithmetic on two Smi inputs has yielded a heap number.
       // That is the only way to get here from the Smi stub.
       // With 32-bit Smis, all overflows give heap numbers, but with
