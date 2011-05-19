@@ -858,11 +858,11 @@ class MarkingVisitor : public ObjectVisitor {
  public:
   explicit MarkingVisitor(Heap* heap) : heap_(heap) { }
 
-  void VisitPointer(Object** p, RelocInfo* rinfo = 0) {
+  void VisitPointer(Object** p) {
     StaticMarkingVisitor::VisitPointer(heap_, p);
   }
 
-  void VisitPointers(Object** start, Object** end, RelocInfo* rinfo = 0) {
+  void VisitPointers(Object** start, Object** end) {
     StaticMarkingVisitor::VisitPointers(heap_, start, end);
   }
 
@@ -904,11 +904,11 @@ class SharedFunctionInfoMarkingVisitor : public ObjectVisitor {
   explicit SharedFunctionInfoMarkingVisitor(MarkCompactCollector* collector)
       : collector_(collector) {}
 
-  void VisitPointers(Object** start, Object** end, RelocInfo* rinfo = 0) {
+  void VisitPointers(Object** start, Object** end) {
     for (Object** p = start; p < end; p++) VisitPointer(p);
   }
 
-  void VisitPointer(Object** slot, RelocInfo* rinfo = 0) {
+  void VisitPointer(Object** slot) {
     Object* obj = *slot;
     if (obj->IsSharedFunctionInfo()) {
       SharedFunctionInfo* shared = reinterpret_cast<SharedFunctionInfo*>(obj);
@@ -969,11 +969,11 @@ class RootMarkingVisitor : public ObjectVisitor {
   explicit RootMarkingVisitor(Heap* heap)
     : collector_(heap->mark_compact_collector()) { }
 
-  void VisitPointer(Object** p, RelocInfo* rinfo = 0) {
+  void VisitPointer(Object** p) {
     MarkObjectByPointer(p);
   }
 
-  void VisitPointers(Object** start, Object** end, RelocInfo* rinfo = 0) {
+  void VisitPointers(Object** start, Object** end) {
     for (Object** p = start; p < end; p++) MarkObjectByPointer(p);
   }
 
@@ -1008,8 +1008,7 @@ class SymbolTableCleaner : public ObjectVisitor {
   explicit SymbolTableCleaner(Heap* heap)
     : heap_(heap), pointers_removed_(0) { }
 
-  virtual void VisitPointers(Object** start, Object** end,
-                             RelocInfo* rinfo = 0) {
+  virtual void VisitPointers(Object** start, Object** end) {
     // Visit all HeapObject pointers in [start, end).
     for (Object** p = start; p < end; p++) {
       if ((*p)->IsHeapObject() && !HeapObject::cast(*p)->IsMarked()) {
@@ -1895,11 +1894,11 @@ class PointersToNewGenUpdatingVisitor: public ObjectVisitor {
  public:
   explicit PointersToNewGenUpdatingVisitor(Heap* heap) : heap_(heap) { }
 
-  void VisitPointer(Object** p, RelocInfo* rinfo = 0) {
+  void VisitPointer(Object** p) {
     StaticPointersToNewGenUpdatingVisitor::VisitPointer(heap_, p);
   }
 
-  void VisitPointers(Object** start, Object** end, RelocInfo* rinfo = 0) {
+  void VisitPointers(Object** start, Object** end) {
     for (Object** p = start; p < end; p++) {
       StaticPointersToNewGenUpdatingVisitor::VisitPointer(heap_, p);
     }
@@ -2376,11 +2375,11 @@ class MapCompact {
   public:
     MapUpdatingVisitor() {}
 
-    void VisitPointer(Object** p, RelocInfo* rinfo = 0) {
+    void VisitPointer(Object** p) {
       UpdateMapPointer(p);
     }
 
-    void VisitPointers(Object** start, Object** end, RelocInfo* rinfo = 0) {
+    void VisitPointers(Object** start, Object** end) {
       for (Object** p = start; p < end; p++) UpdateMapPointer(p);
     }
 
@@ -2607,13 +2606,18 @@ class UpdatingVisitor: public ObjectVisitor {
  public:
   explicit UpdatingVisitor(Heap* heap) : heap_(heap) {}
 
-  void VisitPointer(Object** p, RelocInfo* rinfo = 0) {
+  void VisitPointer(Object** p) {
+    UpdatePointer(p, NULL);
+  }
+
+  void VisitPointer(Object** p, RelocInfo* rinfo) {
+    // Variant of UpdatePointer, for arch's where RelocInfo is needed.
     UpdatePointer(p, rinfo);
   }
 
-  void VisitPointers(Object** start, Object** end, RelocInfo* rinfo = 0) {
+  void VisitPointers(Object** start, Object** end) {
     // Mark all HeapObject pointers in [start, end)
-    for (Object** p = start; p < end; p++) UpdatePointer(p, rinfo);
+    for (Object** p = start; p < end; p++) UpdatePointer(p, NULL);
   }
 
   void VisitCodeTarget(RelocInfo* rinfo) {
@@ -2686,10 +2690,10 @@ class UpdatingVisitor: public ObjectVisitor {
 
     if (rinfo) {
       // For arch (like mips) without natural pointers in embedded code
-      // objects, RelocInfo is passed to allow proper pointer update.
+      // objects, rinfo->set_target_object() allows proper pointer update.
       rinfo->set_target_object(HeapObject::FromAddress(new_addr));
     } else {
-      // Do standard indirect pointer update when there is no reloc info.
+      // Do normal indirect pointer update when there is no reloc info.
       *p = HeapObject::FromAddress(new_addr);
     }
 

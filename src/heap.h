@@ -1694,7 +1694,7 @@ class LinearAllocationScope {
 // objects in a heap space but above the allocation pointer.
 class VerifyPointersVisitor: public ObjectVisitor {
  public:
-  void VisitPointers(Object** start, Object** end, RelocInfo* rinfo = 0) {
+  void VisitPointers(Object** start, Object** end) {
     for (Object** current = start; current < end; current++) {
       if ((*current)->IsHeapObject()) {
         HeapObject* object = HeapObject::cast(*current);
@@ -1712,7 +1712,7 @@ class VerifyPointersVisitor: public ObjectVisitor {
 // for regions covering intergenerational references.
 class VerifyPointersAndDirtyRegionsVisitor: public ObjectVisitor {
  public:
-  void VisitPointers(Object** start, Object** end, RelocInfo* rinfo = 0) {
+  void VisitPointers(Object** start, Object** end) {
     for (Object** current = start; current < end; current++) {
       if ((*current)->IsHeapObject()) {
         HeapObject* object = HeapObject::cast(*current);
@@ -2242,9 +2242,7 @@ class PathTracer : public ObjectVisitor {
         object_stack_(20),
         no_alloc() {}
 
-  virtual void VisitPointers(Object** start,
-                             Object** end,
-                             RelocInfo* rinfo = 0);
+  virtual void VisitPointers(Object** start, Object** end);
 
   void Reset();
   void TracePathFrom(Object** root);

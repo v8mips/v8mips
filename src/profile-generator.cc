@@ -1767,7 +1767,7 @@ class IndexedReferencesExtractor : public ObjectVisitor {
         parent_(parent_entry),
         next_index_(1) {
   }
-  void VisitPointers(Object** start, Object** end, RelocInfo* rinfo = 0) {
+  void VisitPointers(Object** start, Object** end) {
     for (Object** p = start; p < end; p++) {
       if (CheckVisitedAndUnmark(p)) continue;
       generator_->SetHiddenReference(parent_obj_, parent_, next_index_++, *p);
@@ -2021,7 +2021,7 @@ class RootsReferencesExtractor : public ObjectVisitor {
   explicit RootsReferencesExtractor(V8HeapExplorer* explorer)
       : explorer_(explorer) {
   }
-  void VisitPointers(Object** start, Object** end, RelocInfo* rinfo = 0) {
+  void VisitPointers(Object** start, Object** end) {
     for (Object** p = start; p < end; p++) explorer_->SetGcRootsReference(*p);
   }
  private:
@@ -2209,9 +2209,7 @@ class GlobalHandlesExtractor : public ObjectVisitor {
   explicit GlobalHandlesExtractor(NativeObjectsExplorer* explorer)
       : explorer_(explorer) {}
   virtual ~GlobalHandlesExtractor() {}
-  virtual void VisitPointers(Object** start,
-                             Object** end,
-                             RelocInfo* rinfo = 0) {
+  virtual void VisitPointers(Object** start, Object** end) {
     UNREACHABLE();
   }
   virtual void VisitEmbedderReference(Object** p, uint16_t class_id) {

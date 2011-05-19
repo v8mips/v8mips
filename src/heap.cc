@@ -532,7 +532,7 @@ void Heap::PerformScavenge() {
 // Helper class for verifying the symbol table.
 class SymbolTableVerifier : public ObjectVisitor {
  public:
-  void VisitPointers(Object** start, Object** end, RelocInfo* rinfo = 0) {
+  void VisitPointers(Object** start, Object** end) {
     // Visit all HeapObject pointers in [start, end).
     for (Object** p = start; p < end; p++) {
       if ((*p)->IsHeapObject()) {
@@ -872,9 +872,9 @@ class ScavengeVisitor: public ObjectVisitor {
  public:
   explicit ScavengeVisitor(Heap* heap) : heap_(heap) {}
 
-  void VisitPointer(Object** p, RelocInfo* rinfo = 0) { ScavengePointer(p); }
+  void VisitPointer(Object** p) { ScavengePointer(p); }
 
-  void VisitPointers(Object** start, Object** end, RelocInfo* rinfo = 0) {
+  void VisitPointers(Object** start, Object** end) {
     // Copy all HeapObject pointers in [start, end)
     for (Object** p = start; p < end; p++) ScavengePointer(p);
   }
@@ -896,7 +896,7 @@ class ScavengeVisitor: public ObjectVisitor {
 // new space.
 class VerifyNonPointerSpacePointersVisitor: public ObjectVisitor {
  public:
-  void VisitPointers(Object** start, Object**end, RelocInfo* rinfo = 0) {
+  void VisitPointers(Object** start, Object**end) {
     for (Object** current = start; current < end; current++) {
       if ((*current)->IsHeapObject()) {
         ASSERT(!HEAP->InNewSpace(HeapObject::cast(*current)));
@@ -4712,7 +4712,7 @@ class HeapDebugUtils {
    public:
     explicit MarkObjectVisitor(HeapDebugUtils* utils) : utils_(utils) { }
 
-    void VisitPointers(Object** start, Object** end, RelocInfo* rinfo = 0) {
+    void VisitPointers(Object** start, Object** end) {
       // Copy all HeapObject pointers in [start, end)
       for (Object** p = start; p < end; p++) {
         if ((*p)->IsHeapObject())
@@ -4763,7 +4763,7 @@ class HeapDebugUtils {
    public:
     explicit UnmarkObjectVisitor(HeapDebugUtils* utils) : utils_(utils) { }
 
-    void VisitPointers(Object** start, Object** end, RelocInfo* rinfo = 0) {
+    void VisitPointers(Object** start, Object** end) {
       // Copy all HeapObject pointers in [start, end)
       for (Object** p = start; p < end; p++) {
         if ((*p)->IsHeapObject())
@@ -5138,7 +5138,7 @@ void Heap::RemoveGCEpilogueCallback(GCEpilogueCallback callback) {
 
 class PrintHandleVisitor: public ObjectVisitor {
  public:
-  void VisitPointers(Object** start, Object** end, RelocInfo* rinfo = 0) {
+  void VisitPointers(Object** start, Object** end) {
     for (Object** p = start; p < end; p++)
       PrintF("  handle %p to %p\n",
              reinterpret_cast<void*>(p),
@@ -5352,7 +5352,7 @@ class UnreachableObjectsFilter : public HeapObjectsFilter {
    public:
     UnmarkingVisitor() : list_(10) {}
 
-    void VisitPointers(Object** start, Object** end, RelocInfo* rinfo = 0) {
+    void VisitPointers(Object** start, Object** end) {
       for (Object** p = start; p < end; p++) {
         if (!(*p)->IsHeapObject()) continue;
         HeapObject* obj = HeapObject::cast(*p);
@@ -5490,7 +5490,7 @@ Object* const PathTracer::kAnyGlobalObject = reinterpret_cast<Object*>(NULL);
 class PathTracer::MarkVisitor: public ObjectVisitor {
  public:
   explicit MarkVisitor(PathTracer* tracer) : tracer_(tracer) {}
-  void VisitPointers(Object** start, Object** end, RelocInfo* rinfo = 0) {
+  void VisitPointers(Object** start, Object** end) {
     // Scan all HeapObject pointers in [start, end)
     for (Object** p = start; !tracer_->found() && (p < end); p++) {
       if ((*p)->IsHeapObject())
@@ -5506,7 +5506,7 @@ class PathTracer::MarkVisitor: public ObjectVisitor {
 class PathTracer::UnmarkVisitor: public ObjectVisitor {
  public:
   explicit UnmarkVisitor(PathTracer* tracer) : tracer_(tracer) {}
-  void VisitPointers(Object** start, Object** end, RelocInfo* rinfo = 0) {
+  void VisitPointers(Object** start, Object** end) {
     // Scan all HeapObject pointers in [start, end)
     for (Object** p = start; p < end; p++) {
       if ((*p)->IsHeapObject())
@@ -5519,7 +5519,7 @@ class PathTracer::UnmarkVisitor: public ObjectVisitor {
 };
 
 
-void PathTracer::VisitPointers(Object** start, Object** end, RelocInfo* rinfo) {
+void PathTracer::VisitPointers(Object** start, Object** end) {
   bool done = ((what_to_find_ == FIND_FIRST) && found_target_);
   // Visit all HeapObject pointers in [start, end)
   for (Object** p = start; !done && (p < end); p++) {
