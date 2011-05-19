@@ -2253,19 +2253,17 @@ MaybeObject* CallStubCompiler::CompileFastApiCall(
     JSFunction* function,
     String* name) {
 
-  Isolate* isolate = masm()->isolate();
-  Heap* heap = isolate->heap();
-  Counters* counters = isolate->counters();
+  Counters* counters = isolate()->counters();
 
   ASSERT(optimization.is_simple_api_call());
   // Bail out if object is a global object as we don't want to
   // repatch it to global receiver.
-  if (object->IsGlobalObject()) return heap->undefined_value();
-  if (cell != NULL) return heap->undefined_value();
-  if (!object->IsJSObject()) return heap->undefined_value();
+  if (object->IsGlobalObject()) return heap()->undefined_value();
+  if (cell != NULL) return heap()->undefined_value();
+  if (!object->IsJSObject()) return heap()->undefined_value();
   int depth = optimization.GetPrototypeDepthOfExpectedType(
             JSObject::cast(object), holder);
-  if (depth == kInvalidProtoDepth) return heap->undefined_value();
+  if (depth == kInvalidProtoDepth) return heap()->undefined_value();
 
   Label miss, miss_before_stack_reserved;
 
