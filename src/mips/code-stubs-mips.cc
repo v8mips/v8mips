@@ -6622,4 +6622,3 @@ void StringDictionaryLookupStub::Generate(MacroAssembler* masm) {
 } }  // namespace v8::internal
 
 #endif  // V8_TARGET_ARCH_MIPS
-
