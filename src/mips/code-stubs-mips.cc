@@ -388,11 +388,8 @@ void FloatingPointHelper::LoadSmis(MacroAssembler* masm,
     __ mtc1(scratch1, f12);
     __ cvt_d_w(f12, f12);
     if (destination == kCoreRegisters) {
-      __ mfc1(a2, f14);
-      __ mfc1(a3, f15);
-
-      __ mfc1(a0, f12);
-      __ mfc1(a1, f13);
+      __ Move(a2, a3, f14);
+      __ Move(a0, a1, f12);
     }
   } else {
     ASSERT(destination == kCoreRegisters);
@@ -478,8 +475,7 @@ void FloatingPointHelper::LoadNumber(MacroAssembler* masm,
     __ cvt_d_w(dst, dst);
     if (destination == kCoreRegisters) {
       // Load the converted smi to dst1 and dst2 in double format.
-      __ mfc1(dst1, dst);
-      __ mfc1(dst2, FPURegister::from_code(dst.code() + 1));
+      __ Move(dst1, dst2, dst);
     }
   } else {
     ASSERT(destination == kCoreRegisters);
@@ -558,8 +554,7 @@ void FloatingPointHelper::ConvertIntToDouble(MacroAssembler* masm,
     __ mtc1(int_scratch, single_scratch);
     __ cvt_d_w(double_dst, single_scratch);
     if (destination == kCoreRegisters) {
-      __ mfc1(dst1, double_dst);
-      __ mfc1(dst2, FPURegister::from_code(double_dst.code() + 1));
+      __ Move(dst1, dst2, double_dst);
     }
   } else {
     Label fewer_than_20_useful_bits;
@@ -683,8 +678,7 @@ void FloatingPointHelper::LoadNumberAsInt32Double(MacroAssembler* masm,
     __ Branch(not_int32, ne, scratch2, Operand(zero_reg));
 
     if (destination == kCoreRegisters) {
-      __ mfc1(dst1, double_dst);
-      __ mfc1(dst2, FPURegister::from_code(double_dst.code() + 1));
+      __ Move(dst1, dst2, double_dst);
     }
 
   } else {
@@ -891,10 +885,8 @@ void FloatingPointHelper::CallCCodeForDoubleOperation(
     // calling is compiled with hard-float flag and expecting hard float ABI
     // (parameters in f12/f14 registers). We need to copy parameters from
     // a0-a3 registers to f12/f14 register pairs.
-    __ mtc1(a0, f12);
-    __ mtc1(a1, f13);
-    __ mtc1(a2, f14);
-    __ mtc1(a3, f15);
+    __ Move(f12, a0, a1);
+    __ Move(f14, a2, a3);
   }
   // Call C routine that may not cause GC or other trouble.
   __ CallCFunction(ExternalReference::double_fp_operation(op, masm->isolate()),
@@ -1171,10 +1163,8 @@ void EmitNanCheck(MacroAssembler* masm, Condition cc) {
   if (CpuFeatures::IsSupported(FPU)) {
     CpuFeatures::Scope scope(FPU);
     // Lhs and rhs are already loaded to f12 and f14 register pairs.
-    __ mfc1(t0, f14);  // f14 has LS 32 bits of rhs.
-    __ mfc1(t1, f15);  // f15 has MS 32 bits of rhs.
-    __ mfc1(t2, f12);  // f12 has LS 32 bits of lhs.
-    __ mfc1(t3, f13);  // f13 has MS 32 bits of lhs.
+    __ Move(t0, t1, f14);
+    __ Move(t2, t3, f12);
   } else {
     // Lhs and rhs are already loaded to GP registers.
     __ mov(t0, a0);  // a0 has LS 32 bits of rhs.
@@ -1237,12 +1227,10 @@ static void EmitTwoNonNanDoubleComparison(MacroAssembler* masm, Condition cc) {
     // Exception: 0 and -0.
     bool exp_first = (HeapNumber::kExponentOffset == HeapNumber::kValueOffset);
     if (CpuFeatures::IsSupported(FPU)) {
-    CpuFeatures::Scope scope(FPU);
+      CpuFeatures::Scope scope(FPU);
       // Lhs and rhs are already loaded to f12 and f14 register pairs.
-      __ mfc1(t0, f14);  // f14 has LS 32 bits of rhs.
-      __ mfc1(t1, f15);  // f15 has MS 32 bits of rhs.
-      __ mfc1(t2, f12);  // f12 has LS 32 bits of lhs.
-      __ mfc1(t3, f13);  // f13 has MS 32 bits of lhs.
+      __ Move(t0, t1, f14);
+      __ Move(t2, t3, f12);
     } else {
       // Lhs and rhs are already loaded to GP registers.
       __ mov(t0, a0);  // a0 has LS 32 bits of rhs.
@@ -1284,10 +1272,8 @@ static void EmitTwoNonNanDoubleComparison(MacroAssembler* masm, Condition cc) {
       // calling is compiled with hard-float flag and expecting hard float ABI
       // (parameters in f12/f14 registers). We need to copy parameters from
       // a0-a3 registers to f12/f14 register pairs.
-      __ mtc1(a0, f12);
-      __ mtc1(a1, f13);
-      __ mtc1(a2, f14);
-      __ mtc1(a3, f15);
+      __ Move(f12, a0, a1);
+      __ Move(f14, a2, a3);
     }
     __ CallCFunction(ExternalReference::compare_doubles(masm->isolate()), 4);
     __ pop(ra);  // Because this function returns int, result is in v0.
@@ -3192,8 +3178,7 @@ void TranscendentalCacheStub::Generate(MacroAssembler* masm) {
       __ sra(t0, a0, kSmiTagSize);
       __ mtc1(t0, f4);
       __ cvt_d_w(f4, f4);
-      __ mfc1(a2, f4);
-      __ mfc1(a3, f5);
+      __ Move(a2, a3, f4);
       __ Branch(&loaded);
 
       __ bind(&input_not_smi);
@@ -3209,8 +3194,7 @@ void TranscendentalCacheStub::Generate(MacroAssembler* masm) {
       __ lw(a3, FieldMemOperand(a0, HeapNumber::kValueOffset + 4));
     } else {
       // Input is untagged double in f4. Output goes to f4.
-      __ mfc1(a2, f4);
-      __ mfc1(a3, f5);
+      __ Move(a2, a3, f4);
     }
     __ bind(&loaded);
     // a2 = low 32 bits of double value.
@@ -3354,8 +3338,11 @@ void TranscendentalCacheStub::GenerateCallCFunction(MacroAssembler* masm,
                                                     Register scratch) {
   __ push(ra);
   __ PrepareCallCFunction(2, scratch);
-  __ mfc1(v0, f4);
-  __ mfc1(v1, f5);
+  if (IsMipsSoftFloatABI) {
+    __ Move(v0, v1, f4);
+  } else {
+    __ mov_d(f12, f4);
+  }
   switch (type_) {
     case TranscendentalCache::SIN:
       __ CallCFunction(
@@ -3451,16 +3438,9 @@ void MathPowStub::Generate(MacroAssembler* masm) {
                           &call_runtime);
     __ push(ra);
     __ PrepareCallCFunction(3, scratch);
-    // ABI (o32) for func(double d, int x): d in f12, x in a2.
-    ASSERT(double_base.is(f12));
-    ASSERT(exponent.is(a2));
-    if (IsMipsSoftFloatABI) {
-      // Simulator case, supports FPU, but with soft-float passing.
-      __ mfc1(a0, double_base);
-      __ mfc1(a1, FPURegister::from_code(double_base.code() + 1));
-    }
+    __ SetCallCDoubleArguments(double_base, double_exponent);
     __ CallCFunction(
-        ExternalReference::power_double_int_function(masm->isolate()), 3);
+        ExternalReference::power_double_int_function(masm->isolate()), 4);
     __ pop(ra);
     __ GetCFunctionDoubleResult(double_result);
     __ sdc1(double_result,
@@ -3489,12 +3469,7 @@ void MathPowStub::Generate(MacroAssembler* masm) {
     // ABI (o32) for func(double a, double b): a in f12, b in f14.
     ASSERT(double_base.is(f12));
     ASSERT(double_exponent.is(f14));
-    if (IsMipsSoftFloatABI) {
-      __ mfc1(a0, double_base);
-      __ mfc1(a1, FPURegister::from_code(double_base.code() + 1));
-      __ mfc1(a2, double_exponent);
-      __ mfc1(a3, FPURegister::from_code(double_exponent.code() + 1));
-    }
+    __ SetCallCDoubleArguments(double_base, double_exponent);
     __ CallCFunction(
         ExternalReference::power_double_double_function(masm->isolate()), 4);
     __ pop(ra);

@@ -210,6 +210,9 @@ LIBRARY_FLAGS = {
       'LINKFLAGS':    ['-m32'],
       'mipsabi:softfloat': {
         'CPPDEFINES':    ['__mips_soft_float=1'],
+      },
+      'mipsabi:hardfloat': {
+        'CPPDEFINES':    ['__mips_hard_float=1'],
       }
     },
     'arch:x64': {
@@ -697,6 +700,9 @@ PREPARSER_FLAGS = {
       'LINKFLAGS':    ['-m32'],
       'mipsabi:softfloat': {
         'CPPDEFINES':    ['__mips_soft_float=1'],
+      },
+      'mipsabi:hardfloat': {
+        'CPPDEFINES':    ['__mips_hard_float=1'],
       }
     },
     'mode:release': {
@@ -1257,10 +1263,6 @@ def PostprocessOptions(options, os):
     if 'msvcltcg' in ARGUMENTS:
       print "Warning: forcing msvcltcg on as it is required for pgo (%s)" % options['pgo']
     options['msvcltcg'] = 'on'
-  if (options['simulator'] == 'mips' and options['mipsabi'] != 'softfloat'):
-    # Print a warning if soft-float ABI is not selected for mips simulator
-    print "Warning: forcing soft-float mips ABI when running on simulator"
-    options['mipsabi'] = 'softfloat'
   if (options['mipsabi'] != 'none') and (options['arch'] != 'mips') and (options['simulator'] != 'mips'):
     options['mipsabi'] = 'none'
   if options['liveobjectlist'] == 'on':

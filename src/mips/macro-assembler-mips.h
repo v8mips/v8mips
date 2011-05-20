@@ -207,9 +207,28 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
   void Swap(Register reg1, Register reg2, Register scratch = no_reg);
 
   void Call(Label* target);
-  // May do nothing if the registers are identical.
-  void Move(Register dst, Register src);
 
+  inline void Move(Register dst, Register src) {
+    if (!dst.is(src)) {
+        mov(dst, src);
+    }
+  }
+
+  inline void Move(FPURegister dst, FPURegister src) {
+    if (!dst.is(src)) {
+      mov_d(dst, src);
+    }
+  }
+
+  inline void Move(Register dst_low, Register dst_high, FPURegister src) {
+    mfc1(dst_low, src);
+    mfc1(dst_high, FPURegister::from_code(src.code() + 1));
+  }
+
+  inline void Move(FPURegister dst, Register src_low, Register src_high) {
+    mtc1(src_low, dst);
+    mtc1(src_high, FPURegister::from_code(dst.code() + 1));
+  }
 
   // Jump unconditionally to given label.
   // We NEED a nop in the branch delay slot, as it used by v8, for example in
@@ -880,6 +899,14 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
   void CallCFunction(ExternalReference function, int num_arguments);
   void CallCFunction(Register function, Register scratch, int num_arguments);
   void GetCFunctionDoubleResult(const DoubleRegister dst);
+
+  // There are two ways of passing double arguments on MIPS, depending on
+  // whether soft or hard floating point ABI is used. These functions
+  // abstract parameter passing for the three different ways we call
+  // C functions from generated code.
+  void SetCallCDoubleArguments(DoubleRegister dreg);
+  void SetCallCDoubleArguments(DoubleRegister dreg1, DoubleRegister dreg2);
+  void SetCallCDoubleArguments(DoubleRegister dreg, Register reg);
 
   // Calls an API function. Allocates HandleScope, extracts returned value
   // from handle and propagates exceptions. Restores context.

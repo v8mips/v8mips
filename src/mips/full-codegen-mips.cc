@@ -2866,11 +2866,9 @@ void FullCodeGenerator::EmitRandomHeapNumber(ZoneList<Expression*>* args) {
     // 0x41300000 is the top half of 1.0 x 2^20 as a double.
     __ li(a1, Operand(0x41300000));
     // Move 0x41300000xxxxxxxx (x = random bits in v0) to FPU.
-    __ mtc1(a1, f13);
-    __ mtc1(v0, f12);
+    __ Move(f12, v0, a1);
     // Move 0x4130000000000000 to FPU.
-    __ mtc1(a1, f15);
-    __ mtc1(zero_reg, f14);
+    __ Move(f14, zero_reg, a1);
     // Subtract and store the result in the heap number.
     __ sub_d(f0, f12, f14);
     __ sdc1(f0, MemOperand(s0, HeapNumber::kValueOffset - kHeapObjectTag));

@@ -1903,13 +1903,6 @@ void MacroAssembler::Call(Label* target) {
 }
 
 
-void MacroAssembler::Move(Register dst, Register src) {
-  if (!dst.is(src)) {
-    mov(dst, src);
-  }
-}
-
-
 #ifdef ENABLE_DEBUGGER_SUPPORT
 
 void MacroAssembler::DebugBreak() {
@@ -2585,16 +2578,55 @@ void MacroAssembler::CheckMap(Register obj,
 
 
 void MacroAssembler::GetCFunctionDoubleResult(const DoubleRegister dst) {
+  CpuFeatures::Scope scope(FPU);
   if (IsMipsSoftFloatABI) {
-    mtc1(v0, dst);
-    mtc1(v1, FPURegister::from_code(dst.code() + 1));
+    Move(v0, v1, dst);
   } else {
-    if (!dst.is(f0)) {
-      mov_d(dst, f0);  // Reg f0 is o32 ABI FP return value.
-    }
+    Move(f0, dst);  // Reg f0 is o32 ABI FP return value.
   }
 }
 
+
+void MacroAssembler::SetCallCDoubleArguments(DoubleRegister dreg) {
+  CpuFeatures::Scope scope(FPU);
+  if (!IsMipsSoftFloatABI) {
+    Move(f12, dreg);
+  } else {
+    Move(a0, a1, dreg);
+  }
+}
+
+
+void MacroAssembler::SetCallCDoubleArguments(DoubleRegister dreg1,
+                                             DoubleRegister dreg2) {
+  CpuFeatures::Scope scope(FPU);
+  if (!IsMipsSoftFloatABI) {
+    if (dreg2.is(f12)) {
+      ASSERT(!dreg1.is(f14));
+      Move(f14, dreg2);
+      Move(f12, dreg1);
+    } else {
+      Move(f12, dreg1);
+      Move(f14, dreg2);
+    }
+  } else {
+    Move(a0, a1, dreg1);
+    Move(a2, a3, dreg2);
+  }
+}
+
+
+void MacroAssembler::SetCallCDoubleArguments(DoubleRegister dreg,
+                                             Register reg) {
+  CpuFeatures::Scope scope(FPU);
+  if (!IsMipsSoftFloatABI) {
+    Move(f12, dreg);
+    Move(a2, reg);
+  } else {
+    Move(a2, reg);
+    Move(a0, a1, dreg);
+  }
+}
 
 // -----------------------------------------------------------------------------
 // JavaScript invokes.
