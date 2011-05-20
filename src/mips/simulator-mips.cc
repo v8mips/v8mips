@@ -496,12 +496,27 @@ void MipsDebugger::Debug() {
         end = cur + words;
 
         while (cur < end) {
-          PrintF("  0x%08x:  0x%08x %10d\n",
+          PrintF("  0x%08x:  0x%08x %10d",
                  reinterpret_cast<intptr_t>(cur), *cur, *cur);
+          HeapObject* obj = reinterpret_cast<HeapObject*>(*cur);
+          int value = *cur;
+          Heap* current_heap = v8::internal::Isolate::Current()->heap();
+          if (current_heap->Contains(obj) || ((value & 1) == 0)) {
+            PrintF(" (");
+            if ((value & 1) == 0) {
+              PrintF("smi %d", value / 2);
+            } else {
+              obj->ShortPrint();
+            }
+            PrintF(")");
+          }
+          PrintF("\n");
           cur++;
         }
 
-      } else if ((strcmp(cmd, "disasm") == 0) || (strcmp(cmd, "dpc") == 0)) {
+      } else if ((strcmp(cmd, "disasm") == 0) ||
+                 (strcmp(cmd, "dpc") == 0) ||
+                 (strcmp(cmd, "di") == 0)) {
         disasm::NameConverter converter;
         disasm::Disassembler dasm(converter);
         // Use a reasonably large buffer.
@@ -514,11 +529,23 @@ void MipsDebugger::Debug() {
           cur = reinterpret_cast<byte*>(sim_->get_pc());
           end = cur + (10 * Instruction::kInstrSize);
         } else if (argc == 2) {
-          int32_t value;
-          if (GetValue(arg1, &value)) {
-            cur = reinterpret_cast<byte*>(value);
-            // No length parameter passed, assume 10 instructions.
-            end = cur + (10 * Instruction::kInstrSize);
+          int regnum = Registers::Number(arg1);
+          if (regnum != kInvalidRegister || strncmp(arg1, "0x", 2) == 0) {
+            // The argument is an address or a register name.
+            int32_t value;
+            if (GetValue(arg1, &value)) {
+              cur = reinterpret_cast<byte*>(value);
+              // Disassemble 10 instructions at <arg1>.
+              end = cur + (10 * Instruction::kInstrSize);
+            }
+          } else {
+            // The argument is the number of instructions.
+            int32_t value;
+            if (GetValue(arg1, &value)) {
+              cur = reinterpret_cast<byte*>(sim_->get_pc());
+              // Disassemble <arg1> instructions.
+              end = cur + (value * Instruction::kInstrSize);
+            }
           }
         } else {
           int32_t value1;
@@ -615,8 +642,10 @@ void MipsDebugger::Debug() {
         PrintF("flags\n");
         PrintF("  print flags\n");
         PrintF("disasm [<instructions>]\n");
-        PrintF("disasm [[<address>] <instructions>]\n");
-        PrintF("  disassemble code, default is 10 instructions from pc\n");
+        PrintF("disasm [<address/register>]\n");
+        PrintF("disasm [[<address/register>] <instructions>]\n");
+        PrintF("  disassemble code, default is 10 instructions\n");
+        PrintF("  from pc (alias 'di')\n");
         PrintF("gdb\n");
         PrintF("  enter gdb\n");
         PrintF("break <address>\n");
