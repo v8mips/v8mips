@@ -3892,18 +3892,31 @@ void JSEntryStub::GenerateBody(MacroAssembler* masm, bool is_construct) {
 }
 
 
-// Uses registers a0 to t0. Expected input is
-// object in a0 (or at sp+1*kPointerSize) and function in
-// a1 (or at sp), depending on whether or not
-// args_in_registers() is true.
+// Uses registers a0 to t0.
+// Expected input (depending on whether args are in registers or on the stack):
+// * object: a0 or at sp + 1 * kPointerSize.
+// * function: a1 or at sp.
+//
+// Inlined call site patching is a crankshaft-specific feature that is not
+// implemented on MIPS.
 void InstanceofStub::Generate(MacroAssembler* masm) {
+  // This is a crankshaft-specific feature that has not been implemented yet.
+  ASSERT(!HasCallSiteInlineCheck());
+  // Call site inlining and patching implies arguments in registers.
+  ASSERT(HasArgsInRegisters() || !HasCallSiteInlineCheck());
+  // ReturnTrueFalse is only implemented for inlined call sites.
+  ASSERT(!ReturnTrueFalseObject() || HasCallSiteInlineCheck());
+
   // Fixed register usage throughout the stub:
   const Register object = a0;  // Object (lhs).
-  const Register map = a3;  // Map of the object.
+  Register map = a3;  // Map of the object.
   const Register function = a1;  // Function (rhs).
   const Register prototype = t0;  // Prototype of the function.
+  const Register inline_site = t5;
   const Register scratch = a2;
+
   Label slow, loop, is_instance, is_not_instance, not_js_object;
+
   if (!HasArgsInRegisters()) {
     __ lw(object, MemOperand(sp, 1 * kPointerSize));
     __ lw(function, MemOperand(sp, 0));
@@ -3913,47 +3926,70 @@ void InstanceofStub::Generate(MacroAssembler* masm) {
   __ JumpIfSmi(object, &not_js_object);
   __ IsObjectJSObjectType(object, map, scratch, &not_js_object);
 
-  // Look up the function and the map in the instanceof cache.
-  Label miss;
-  __ LoadRoot(t1, Heap::kInstanceofCacheFunctionRootIndex);
-  __ Branch(&miss, ne, function, Operand(t1));
-  __ LoadRoot(t1, Heap::kInstanceofCacheMapRootIndex);
-  __ Branch(&miss, ne, map, Operand(t1));
-  __ LoadRoot(v0, Heap::kInstanceofCacheAnswerRootIndex);
-  __ DropAndRet(HasArgsInRegisters() ? 0 : 2);
+  // If there is a call site cache don't look in the global cache, but do the
+  // real lookup and update the call site cache.
+  if (!HasCallSiteInlineCheck()) {
+    Label miss;
+    __ LoadRoot(t1, Heap::kInstanceofCacheFunctionRootIndex);
+    __ Branch(&miss, ne, function, Operand(t1));
+    __ LoadRoot(t1, Heap::kInstanceofCacheMapRootIndex);
+    __ Branch(&miss, ne, map, Operand(t1));
+    __ LoadRoot(v0, Heap::kInstanceofCacheAnswerRootIndex);
+    __ DropAndRet(HasArgsInRegisters() ? 0 : 2);
 
-  __ bind(&miss);
+    __ bind(&miss);
+  }
+
+  // Get the prototype of the function.
   __ TryGetFunctionPrototype(function, prototype, scratch, &slow);
 
   // Check that the function prototype is a JS object.
   __ JumpIfSmi(prototype, &slow);
   __ IsObjectJSObjectType(prototype, scratch, scratch, &slow);
 
-  __ StoreRoot(function, Heap::kInstanceofCacheFunctionRootIndex);
-  __ StoreRoot(map, Heap::kInstanceofCacheMapRootIndex);
+  // Update the global instanceof or call site inlined cache with the current
+  // map and function. The cached answer will be set when it is known below.
+  if (!HasCallSiteInlineCheck()) {
+    __ StoreRoot(function, Heap::kInstanceofCacheFunctionRootIndex);
+    __ StoreRoot(map, Heap::kInstanceofCacheMapRootIndex);
+  } else {
+    UNIMPLEMENTED_MIPS();
+  }
 
   // Register mapping: a3 is object map and t0 is function prototype.
   // Get prototype of object into a2.
   __ lw(scratch, FieldMemOperand(map, Map::kPrototypeOffset));
 
+  // We don't need map any more. Use it as a scratch register.
+  Register scratch2 = map;
+  map = no_reg;
+
   // Loop through the prototype chain looking for the function prototype.
+  __ LoadRoot(scratch2, Heap::kNullValueRootIndex);
   __ bind(&loop);
   __ Branch(&is_instance, eq, scratch, Operand(prototype));
-  __ LoadRoot(t1, Heap::kNullValueRootIndex);
-  __ Branch(&is_not_instance, eq, scratch, Operand(t1));
+  __ Branch(&is_not_instance, eq, scratch, Operand(scratch2));
   __ lw(scratch, FieldMemOperand(scratch, HeapObject::kMapOffset));
   __ lw(scratch, FieldMemOperand(scratch, Map::kPrototypeOffset));
   __ Branch(&loop);
 
   __ bind(&is_instance);
   ASSERT(Smi::FromInt(0) == 0);
-  __ mov(v0, zero_reg);
-  __ StoreRoot(v0, Heap::kInstanceofCacheAnswerRootIndex);
+  if (!HasCallSiteInlineCheck()) {
+    __ mov(v0, zero_reg);
+    __ StoreRoot(v0, Heap::kInstanceofCacheAnswerRootIndex);
+  } else {
+    UNIMPLEMENTED_MIPS();
+  }
   __ DropAndRet(HasArgsInRegisters() ? 0 : 2);
 
   __ bind(&is_not_instance);
-  __ li(v0, Operand(Smi::FromInt(1)));
-  __ StoreRoot(v0, Heap::kInstanceofCacheAnswerRootIndex);
+  if (!HasCallSiteInlineCheck()) {
+    __ li(v0, Operand(Smi::FromInt(1)));
+    __ StoreRoot(v0, Heap::kInstanceofCacheAnswerRootIndex);
+  } else {
+    UNIMPLEMENTED_MIPS();
+  }
   __ DropAndRet(HasArgsInRegisters() ? 0 : 2);
 
   Label object_not_null, object_not_null_or_smi;
@@ -3961,7 +3997,7 @@ void InstanceofStub::Generate(MacroAssembler* masm) {
   // Before null, smi and string value checks, check that the rhs is a function
   // as for a non-function rhs an exception needs to be thrown.
   __ JumpIfSmi(function, &slow);
-  __ GetObjectType(function, map, scratch);
+  __ GetObjectType(function, scratch2, scratch);
   __ Branch(&slow, ne, scratch, Operand(JS_FUNCTION_TYPE));
 
   // Null is not instance of anything.
@@ -3984,11 +4020,29 @@ void InstanceofStub::Generate(MacroAssembler* masm) {
 
   // Slow-case.  Tail call builtin.
   __ bind(&slow);
-  if (HasArgsInRegisters()) {
-    __ Push(a0, a1);
-  }
+  if (!ReturnTrueFalseObject()) {
+    if (HasArgsInRegisters()) {
+      __ Push(a0, a1);
+    }
   __ InvokeBuiltin(Builtins::INSTANCE_OF, JUMP_FUNCTION);
+  } else {
+    __ EnterInternalFrame();
+    __ Push(a0, a1);
+    __ InvokeBuiltin(Builtins::INSTANCE_OF, CALL_FUNCTION);
+    __ LeaveInternalFrame();
+    __ mov(a0, v0);
+    __ LoadRoot(v0, Heap::kTrueValueRootIndex);
+    __ DropAndRet(HasArgsInRegisters() ? 0 : 2, eq, a0, Operand(zero_reg));
+    __ LoadRoot(v0, Heap::kFalseValueRootIndex);
+    __ DropAndRet(HasArgsInRegisters() ? 0 : 2);
+  }
 }
+
+
+Register InstanceofStub::left() { return a0; }
+
+
+Register InstanceofStub::right() { return a1; }
 
 
 void ArgumentsAccessStub::GenerateReadElement(MacroAssembler* masm) {
