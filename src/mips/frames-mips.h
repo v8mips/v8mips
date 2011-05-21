@@ -41,12 +41,21 @@ static const int kNumRegs = 32;
 
 static const RegList kJSCallerSaved =
   1 << 2 |  // v0
+  1 << 3 |  // v1
   1 << 4 |  // a0
   1 << 5 |  // a1
   1 << 6 |  // a2
-  1 << 7;   // a3
+  1 << 7 |  // a3
+  1 << 8  |  // t0
+  1 << 9  |  // t1
+  1 << 10 |  // t2
+  1 << 11 |  // t3
+  1 << 12 |  // t4
+  1 << 13 |  // t5
+  1 << 14 |  // t6
+  1 << 15;   // t7
 
-static const int kNumJSCallerSaved = 5;
+static const int kNumJSCallerSaved = 14;
 
 
 // Return the code of the n-th caller-saved register available to JavaScript

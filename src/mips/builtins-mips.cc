@@ -1157,13 +1157,43 @@ void Builtins::Generate_LazyRecompile(MacroAssembler* masm) {
 
 
 // These functions are called from C++ but cannot be used in live code.
+static void Generate_NotifyDeoptimizedHelper(MacroAssembler* masm,
+                                             Deoptimizer::BailoutType type) {
+  __ EnterInternalFrame();
+  // Pass the function and deoptimization type to the runtime system.
+  __ li(a0, Operand(Smi::FromInt(static_cast<int>(type))));
+  __ push(a0);
+  __ CallRuntime(Runtime::kNotifyDeoptimized, 1);
+  __ LeaveInternalFrame();
+
+  // Get the full codegen state from the stack and untag it -> t2.
+  __ lw(t2, MemOperand(sp, 0 * kPointerSize));
+  __ SmiUntag(t2);
+  // Switch on the state.
+  Label with_tos_register, unknown_state;
+  __ Branch(&with_tos_register, ne, t2, Operand(FullCodeGenerator::NO_REGISTERS));
+  __ Addu(sp, sp, Operand(1 * kPointerSize));  // Remove state.
+  __ Ret();
+
+  __ bind(&with_tos_register);
+  __ lw(v0, MemOperand(sp, 1 * kPointerSize));
+  __ Branch(&unknown_state, ne, t2, Operand(FullCodeGenerator::TOS_REG));
+  
+  __ Addu(sp, sp, Operand(2 * kPointerSize));  // Remove state.
+  __ Ret();
+
+  __ bind(&unknown_state);
+  __ stop("no cases left");
+}
+
+
 void Builtins::Generate_NotifyDeoptimized(MacroAssembler* masm) {
-  __ Abort("Call to unimplemented function in builtins-mips.cc");
+  Generate_NotifyDeoptimizedHelper(masm, Deoptimizer::EAGER);
 }
 
 
 void Builtins::Generate_NotifyLazyDeoptimized(MacroAssembler* masm) {
-  __ Abort("Call to unimplemented function in builtins-mips.cc");
+  Generate_NotifyDeoptimizedHelper(masm, Deoptimizer::LAZY);
 }
 
 

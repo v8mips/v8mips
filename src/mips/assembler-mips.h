@@ -168,6 +168,11 @@ Register ToRegister(int num);
 // Coprocessor register.
 struct FPURegister {
   static const int kNumRegisters = v8::internal::kNumFPURegisters;
+  
+  // TODO(plind): Warning, inconsistent numbering here. kNumFPURegisters refers
+  // to number of 32-bit FPU regs, but kNumAllocatableRegisters refers to 
+  // number of Double regs (64-bit regs, or FPU-reg-pairs).
+   
   // f30 has been excluded from allocation. This is following ia32
   // where xmm0 is excluded. (Chose not use use f0 as scratch, since
   // that is float/double return value per mips ABI).
