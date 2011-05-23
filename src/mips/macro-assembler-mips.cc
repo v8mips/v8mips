@@ -3593,14 +3593,27 @@ void MacroAssembler::EnterExitFrame(bool save_doubles,
   li(t8, Operand(ExternalReference(Isolate::k_context_address, isolate())));
   sw(cp, MemOperand(t8));
 
-  // Ensure we are not saving doubles, since it's not implemented yet.
-  ASSERT(save_doubles == 0);
+  const int frame_alignment = MacroAssembler::ActivationFrameAlignment();
+  if (save_doubles) {
+    // The stack  must be allign to 0 modulo 8 for stores with sdc1.
+    ASSERT(kDoubleSize == frame_alignment);
+    if (frame_alignment > 0) {
+      ASSERT(IsPowerOf2(frame_alignment));
+      And(sp, sp, Operand(-frame_alignment));  // Align stack.
+    }
+    int space = FPURegister::kNumRegisters * kDoubleSize + kPointerSize;
+    Subu(sp, sp, Operand(space));
+    // Remember: we only need to save every 2nd double FPU value.
+    for (int i = 0; i < FPURegister::kNumRegisters; i+=2) {
+      FPURegister reg = FPURegister::from_code(i);
+      sdc1(reg, MemOperand(sp, i * kDoubleSize + kPointerSize));
+    }
+  }
 
   // Reserve place for the return address, stack space and an optional slot
   // (used by the DirectCEntryStub to hold the return value if a struct is
   // returned) and align the frame preparing for calling the runtime function.
   ASSERT(stack_space >= 0);
-  const int frame_alignment = MacroAssembler::ActivationFrameAlignment();
   Subu(sp, sp, Operand((stack_space + 2) * kPointerSize));
   if (frame_alignment > 0) {
     ASSERT(IsPowerOf2(frame_alignment));
@@ -3616,8 +3629,15 @@ void MacroAssembler::EnterExitFrame(bool save_doubles,
 
 void MacroAssembler::LeaveExitFrame(bool save_doubles,
                                     Register argument_count) {
-  // Ensure we are not restoring doubles, since it's not implemented yet.
-  ASSERT(save_doubles == 0);
+  // Optionally restore all double registers.
+  if (save_doubles) {
+    // Remember: we only need to restore every 2nd double FPU value.
+    lw(t8, MemOperand(fp, ExitFrameConstants::kSPOffset));
+    for (int i = 0; i < FPURegister::kNumRegisters; i+=2) {
+      FPURegister reg = FPURegister::from_code(i);
+      ldc1(reg, MemOperand(t8, i  * kDoubleSize + kPointerSize));
+    }
+  }
 
   // Clear top frame.
   li(t8, Operand(ExternalReference(Isolate::k_c_entry_fp_address, isolate())));
