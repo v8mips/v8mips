@@ -3601,12 +3601,12 @@ void MacroAssembler::EnterExitFrame(bool save_doubles,
       ASSERT(IsPowerOf2(frame_alignment));
       And(sp, sp, Operand(-frame_alignment));  // Align stack.
     }
-    int space = FPURegister::kNumRegisters * kDoubleSize + kPointerSize;
+    int space = FPURegister::kNumRegisters * kDoubleSize;
     Subu(sp, sp, Operand(space));
     // Remember: we only need to save every 2nd double FPU value.
     for (int i = 0; i < FPURegister::kNumRegisters; i+=2) {
       FPURegister reg = FPURegister::from_code(i);
-      sdc1(reg, MemOperand(sp, i * kDoubleSize + kPointerSize));
+      sdc1(reg, MemOperand(sp, i * kDoubleSize));
     }
   }
 
