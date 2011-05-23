@@ -2129,28 +2129,130 @@ Address Assembler::target_address_at(Address pc) {
 }
 
 
+// TODO(plind): move these to correct place.
+uint32_t Assembler::GetFunctionField(Instr instr) {
+  return instr & kFunctionFieldMask;
+}
+
+bool Assembler::IsJ(Instr instr) {
+  return GetOpcodeField(instr) == J;
+}
+
+bool Assembler::IsJal(Instr instr) {
+  return GetOpcodeField(instr) == JAL;
+}
+
+bool Assembler::IsJr(Instr instr) {
+  return GetOpcodeField(instr) == SPECIAL && GetFunctionField(instr) == JR;
+}
+
+bool Assembler::IsJalr(Instr instr) {
+  return GetOpcodeField(instr) == SPECIAL && GetFunctionField(instr) == JALR;
+}
+
+
+
+// On Mips, a target address is stored in a lui/ori instruction pair, each
+// of which load 16 bits of the 32-bit address to a register.
+// Patching the address must replace both instr, and flush the i-cache.
+//
+// There is an optimization below, which emits a nop when the address
+// fits in just 16 bits. This is unlikely to help, and should be benchmarked,
+// and possibly removed.
 void Assembler::set_target_address_at(Address pc, Address target) {
-  // On MIPS we patch the address into lui/ori instruction pair.
-
-  // First check we have an li (lui/ori pair).
   Instr instr2 = instr_at(pc + kInstrSize);
-#ifdef DEBUG
-  Instr instr1 = instr_at(pc);
-
-  // Check we have indeed the result from a li with MustUseReg true.
-  CHECK((GetOpcodeField(instr1) == LUI && GetOpcodeField(instr2) == ORI));
-#endif
-
   uint32_t rt_code = GetRtField(instr2);
   uint32_t* p = reinterpret_cast<uint32_t*>(pc);
   uint32_t itarget = reinterpret_cast<uint32_t>(target);
 
-  // lui rt, high-16.
-  // ori rt rt, low-16.
-  *p = LUI | rt_code | ((itarget & kHiMask) >> kLuiShift);
-  *(p+1) = ORI | rt_code | (rt_code << 5) | (itarget & kImm16Mask);
+#ifdef DEBUG
+  // Check we have the result from a li macro-instruction, using instr pair.
+  Instr instr1 = instr_at(pc);
+  CHECK((GetOpcodeField(instr1) == LUI && GetOpcodeField(instr2) == ORI));
+#endif
 
-  CPU::FlushICache(pc, 2 * sizeof(int32_t));
+  if (is_int16(itarget)) {
+    // nop.
+    // addiu rt, zero_reg, signed-16.
+    *p = nopInstr;
+    *(p+1) = ADDIU | rt_code | (itarget & kImm16Mask);
+  } else if (!(itarget & kHiMask)) {
+    // nop.
+    // ori rt, zero_reg, unsigned-16.
+    *p = nopInstr;
+    *(p+1) = ORI | rt_code | (itarget & kImm16Mask);
+  } else if (!(itarget & kImm16Mask)) {
+    // nop.
+    // lui rt, upper-16.
+    *p = nopInstr;
+    *(p+1) = LUI | rt_code | ((itarget & kHiMask) >> kLuiShift);
+  } else {
+    // lui rt, upper-16.
+    // ori rt rt, lower-16.
+    *p = LUI | rt_code | ((itarget & kHiMask) >> kLuiShift);
+    *(p+1) = ORI | rt_code | (rt_code << 5) | (itarget & kImm16Mask);
+  }
+
+  // The following code is an optimization for the common case of Call()
+  // or Jump() which is load to register, and jump through register:
+  //     li(t9, address); jalr(t9)    (or jr(t9)).
+  // If the destination address is in the same 256 MB page as the call, it
+  // is faster to do a direct jal, or j, rather than jump thru register, since
+  // that lets the cpu pipeline prefetch the target address. However each
+  // time the address above is patched, we have to patch the direct jal/j
+  // instruction, as well as possibly revert to jalr/jr if we now cross a
+  // 256 MB page. Note that with the jal/j instructions, we do not need to
+  // load the register, but that code is left, since it makes it easy to
+  // revert this process. A further optimization could try replacing the
+  // li sequence with nops.
+  // There is an assumption that the rt-code from instr2 is the register
+  // used for the jalr/jr. Finally, we have to skip 'jr ra', which is
+  // mips return. Occasionally this lands after an li().
+
+  Instr instr3 = instr_at(pc + 2 * kInstrSize);
+  uint32_t ipc = reinterpret_cast<uint32_t>(pc);
+  bool in_range = ((ipc & ~kJumpAddrMask) == (itarget & ~kJumpAddrMask));
+  bool patched_jump = false;
+
+  if (IsJalr(instr3)) {
+    // Try to convert JALR to JAL.
+    if (in_range) {
+      *(p+2) = JAL | (itarget & kJumpAddrMask) >> kImmFieldShift;
+      patched_jump = true;
+    }
+  } else if (IsJr(instr3)) {
+    // Try to convert JR to J, skip returns (jr ra).
+    bool is_ret = static_cast<int>(GetRs(instr3)) == ra.code();
+    if (in_range && ! is_ret) {
+      *(p+2) = J | (itarget & kJumpAddrMask) >> kImmFieldShift;
+      patched_jump = true;
+    }
+  } else if (IsJal(instr3)) {
+    if (in_range) {
+      // We are patching an already converted JAL.
+      *(p+2) = JAL | (itarget & kJumpAddrMask) >> 2;
+    } else {
+      // Patch JAL, but out of range, revert to JALR.
+      // JALR rs reg is the rt reg specified in the ORI instruction.
+      uint32_t rs_field = GetRt(instr2) << kRsShift;
+      uint32_t rd_field = ra.code() << kRdShift;  // Return-address (ra) reg.
+      *(p+2) = SPECIAL | rs_field | rd_field | JALR;
+    }
+    patched_jump = true;
+  } else if (IsJ(instr3)) {
+    if (in_range) {
+      // We are patching an already converted J (jump).
+      *(p+2) = J | (itarget & kJumpAddrMask) >> kImmFieldShift;
+    } else {
+      // Trying patch J, but out of range, just go back to JR.
+      // JR 'rs' reg is the 'rt' reg specified in the ORI instruction (instr2).
+      uint32_t rs_field = GetRt(instr2) << kRsShift;
+      *(p+2) = SPECIAL | rs_field | JR;
+    }
+    patched_jump = true;
+  }
+
+  CPU::FlushICache(pc, (patched_jump ? 3 : 2) * sizeof(int32_t));
 }
 
 

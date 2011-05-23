@@ -791,6 +791,11 @@ class Assembler : public Malloced {
   // Check if an instruction is a branch of some kind.
   static bool IsBranch(Instr instr);
 
+  static bool IsJ(Instr instr);
+  static bool IsJal(Instr instr);
+  static bool IsJr(Instr instr);
+  static bool IsJalr(Instr instr);
+
   static bool IsNop(Instr instr, unsigned int type);
   static bool IsPop(Instr instr);
   static bool IsPush(Instr instr);
@@ -812,6 +817,7 @@ class Assembler : public Malloced {
   static uint32_t GetSa(Instr instr);
   static uint32_t GetSaField(Instr instr);
   static uint32_t GetOpcodeField(Instr instr);
+  static uint32_t GetFunctionField(Instr instr);
   static uint32_t GetImmediate16(Instr instr);
   static uint32_t GetLabelConst(Instr instr);
 

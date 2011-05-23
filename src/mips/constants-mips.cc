@@ -191,6 +191,7 @@ bool Instruction::IsLinkingInstruction() const {
   const int op = OpcodeFieldRaw();
   switch (op) {
     case JAL:
+      return true;
     case REGIMM:
       switch (RtFieldRaw()) {
         case BGEZAL:

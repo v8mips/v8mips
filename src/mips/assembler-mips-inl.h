@@ -230,8 +230,9 @@ bool RelocInfo::IsPatchedReturnSequence() {
   Instr instr2 = Assembler::instr_at(pc_ + 2 * Assembler::kInstrSize);
   bool patched_return = ((instr0 & kOpcodeMask) == LUI &&
                          (instr1 & kOpcodeMask) == ORI &&
-                         (instr2 & kOpcodeMask) == SPECIAL &&
-                         (instr2 & kFunctionFieldMask) == JALR);
+                         ((instr2 & kOpcodeMask) == JAL ||
+                          ((instr2 & kOpcodeMask) == SPECIAL &&
+                           (instr2 & kFunctionFieldMask) == JALR)));
   return patched_return;
 }
 
