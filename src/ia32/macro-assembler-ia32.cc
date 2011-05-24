@@ -73,7 +73,12 @@ void MacroAssembler::RecordWriteHelper(Register object,
   shr(addr, Page::kRegionSizeLog2);
 
   // Set dirty mark for region.
-  bts(Operand(object, Page::kDirtyFlagOffset), addr);
+  // Bit tests with a memory operand should be avoided on Intel processors,
+  // as they usually have long latency and multiple uops. We load the bit base
+  // operand to a register at first and store it back after bit set.
+  mov(scratch, Operand(object, Page::kDirtyFlagOffset));
+  bts(Operand(scratch), addr);
+  mov(Operand(object, Page::kDirtyFlagOffset), scratch);
 }
 
 
@@ -291,7 +296,7 @@ void MacroAssembler::DispatchMap(Register obj,
                                  Handle<Code> success,
                                  SmiCheckType smi_check_type) {
   Label fail;
-  if (smi_check_type == DONT_DO_SMI_CHECK) {
+  if (smi_check_type == DO_SMI_CHECK) {
     JumpIfSmi(obj, &fail);
   }
   cmp(FieldOperand(obj, HeapObject::kMapOffset), Immediate(map));
@@ -1966,6 +1971,17 @@ void MacroAssembler::Abort(const char* msg) {
   CallRuntime(Runtime::kAbort, 2);
   // will not return here
   int3();
+}
+
+
+void MacroAssembler::LoadInstanceDescriptors(Register map,
+                                             Register descriptors) {
+  mov(descriptors,
+      FieldOperand(map, Map::kInstanceDescriptorsOrBitField3Offset));
+  Label not_smi;
+  JumpIfNotSmi(descriptors, &not_smi);
+  mov(descriptors, isolate()->factory()->empty_descriptor_array());
+  bind(&not_smi);
 }
 
 

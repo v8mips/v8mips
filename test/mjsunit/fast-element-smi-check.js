@@ -25,9 +25,46 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// In strict mode, it's illegal to assign to "arguments" as a lhs variable.
+// Flags: --allow-natives-syntax --expose-gc
 
-function test() {
-  "use strict";
-  arguments++;
+var a = new Array(10);
+
+function test_load_set_smi(a) {
+  return a[0] = a[0] = 1;
 }
+
+test_load_set_smi(a);
+test_load_set_smi(a);
+test_load_set_smi(123);
+
+function test_load_set_smi_2(a) {
+  return a[0] = a[0] = 1;
+}
+
+test_load_set_smi_2(a);
+%OptimizeFunctionOnNextCall(test_load_set_smi_2);
+test_load_set_smi_2(a);
+test_load_set_smi_2(0);
+%DeoptimizeFunction(test_load_set_smi_2);
+gc();  // Makes V8 forget about type information for test_load_set_smi.
+
+var b = new Object();
+
+function test_load_set_smi_3(b) {
+  return b[0] = b[0] = 1;
+}
+
+test_load_set_smi_3(b);
+test_load_set_smi_3(b);
+test_load_set_smi_3(123);
+
+function test_load_set_smi_4(b) {
+  return b[0] = b[0] = 1;
+}
+
+test_load_set_smi_4(b);
+%OptimizeFunctionOnNextCall(test_load_set_smi_4);
+test_load_set_smi_4(b);
+test_load_set_smi_4(0);
+%DeoptimizeFunction(test_load_set_smi_4);
+gc();  // Makes V8 forget about type information for test_load_set_smi.
