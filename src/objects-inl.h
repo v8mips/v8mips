@@ -2564,14 +2564,14 @@ bool Map::attached_to_shared_function_info() {
 
 void Map::set_is_shared(bool value) {
   if (value) {
-    set_bit_field2(bit_field2() | (1 << kIsShared));
+    set_bit_field3(bit_field3() | (1 << kIsShared));
   } else {
-    set_bit_field2(bit_field2() & ~(1 << kIsShared));
+    set_bit_field3(bit_field3() & ~(1 << kIsShared));
   }
 }
 
 bool Map::is_shared() {
-  return ((1 << kIsShared) & bit_field2()) != 0;
+  return ((1 << kIsShared) & bit_field3()) != 0;
 }
 
 
@@ -2643,7 +2643,8 @@ int Code::arguments_count() {
 
 int Code::major_key() {
   ASSERT(kind() == STUB ||
-         kind() == TYPE_RECORDING_BINARY_OP_IC ||
+         kind() == UNARY_OP_IC ||
+         kind() == BINARY_OP_IC ||
          kind() == COMPARE_IC);
   return READ_BYTE_FIELD(this, kStubMajorKeyOffset);
 }
@@ -2651,8 +2652,8 @@ int Code::major_key() {
 
 void Code::set_major_key(int major) {
   ASSERT(kind() == STUB ||
-         kind() == TYPE_RECORDING_UNARY_OP_IC ||
-         kind() == TYPE_RECORDING_BINARY_OP_IC ||
+         kind() == UNARY_OP_IC ||
+         kind() == BINARY_OP_IC ||
          kind() == COMPARE_IC);
   ASSERT(0 <= major && major < 256);
   WRITE_BYTE_FIELD(this, kStubMajorKeyOffset, major);
@@ -2760,38 +2761,38 @@ void Code::set_external_array_type(ExternalArrayType value) {
 }
 
 
-byte Code::type_recording_unary_op_type() {
-  ASSERT(is_type_recording_unary_op_stub());
+byte Code::unary_op_type() {
+  ASSERT(is_unary_op_stub());
   return READ_BYTE_FIELD(this, kUnaryOpTypeOffset);
 }
 
 
-void Code::set_type_recording_unary_op_type(byte value) {
-  ASSERT(is_type_recording_unary_op_stub());
+void Code::set_unary_op_type(byte value) {
+  ASSERT(is_unary_op_stub());
   WRITE_BYTE_FIELD(this, kUnaryOpTypeOffset, value);
 }
 
 
-byte Code::type_recording_binary_op_type() {
-  ASSERT(is_type_recording_binary_op_stub());
+byte Code::binary_op_type() {
+  ASSERT(is_binary_op_stub());
   return READ_BYTE_FIELD(this, kBinaryOpTypeOffset);
 }
 
 
-void Code::set_type_recording_binary_op_type(byte value) {
-  ASSERT(is_type_recording_binary_op_stub());
+void Code::set_binary_op_type(byte value) {
+  ASSERT(is_binary_op_stub());
   WRITE_BYTE_FIELD(this, kBinaryOpTypeOffset, value);
 }
 
 
-byte Code::type_recording_binary_op_result_type() {
-  ASSERT(is_type_recording_binary_op_stub());
+byte Code::binary_op_result_type() {
+  ASSERT(is_binary_op_stub());
   return READ_BYTE_FIELD(this, kBinaryOpReturnTypeOffset);
 }
 
 
-void Code::set_type_recording_binary_op_result_type(byte value) {
-  ASSERT(is_type_recording_binary_op_stub());
+void Code::set_binary_op_result_type(byte value) {
+  ASSERT(is_binary_op_stub());
   WRITE_BYTE_FIELD(this, kBinaryOpReturnTypeOffset, value);
 }
 
@@ -2821,11 +2822,10 @@ Code::Flags Code::ComputeFlags(Kind kind,
                                PropertyType type,
                                int argc,
                                InlineCacheHolderFlag holder) {
-  // Extra IC state is only allowed for monomorphic call IC stubs
-  // or for store IC stubs.
+  // Extra IC state is only allowed for call IC stubs or for store IC
+  // stubs.
   ASSERT(extra_ic_state == kNoExtraICState ||
-         (kind == CALL_IC && (ic_state == MONOMORPHIC ||
-                              ic_state == MONOMORPHIC_PROTOTYPE_FAILURE)) ||
+         (kind == CALL_IC) ||
          (kind == STORE_IC) ||
          (kind == KEYED_STORE_IC));
   // Compute the bit mask.
