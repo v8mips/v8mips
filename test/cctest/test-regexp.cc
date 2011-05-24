@@ -69,7 +69,7 @@ using namespace v8::internal;
 static bool CheckParse(const char* input) {
   V8::Initialize(NULL);
   v8::HandleScope scope;
-  ZoneScope zone_scope(DELETE_ON_EXIT);
+  ZoneScope zone_scope(Isolate::Current(), DELETE_ON_EXIT);
   FlatStringReader reader(Isolate::Current(), CStrVector(input));
   RegExpCompileData result;
   return v8::internal::RegExpParser::ParseRegExp(&reader, false, &result);
@@ -79,7 +79,7 @@ static bool CheckParse(const char* input) {
 static SmartPointer<const char> Parse(const char* input) {
   V8::Initialize(NULL);
   v8::HandleScope scope;
-  ZoneScope zone_scope(DELETE_ON_EXIT);
+  ZoneScope zone_scope(Isolate::Current(), DELETE_ON_EXIT);
   FlatStringReader reader(Isolate::Current(), CStrVector(input));
   RegExpCompileData result;
   CHECK(v8::internal::RegExpParser::ParseRegExp(&reader, false, &result));
@@ -93,7 +93,7 @@ static bool CheckSimple(const char* input) {
   V8::Initialize(NULL);
   v8::HandleScope scope;
   unibrow::Utf8InputBuffer<> buffer(input, StrLength(input));
-  ZoneScope zone_scope(DELETE_ON_EXIT);
+  ZoneScope zone_scope(Isolate::Current(), DELETE_ON_EXIT);
   FlatStringReader reader(Isolate::Current(), CStrVector(input));
   RegExpCompileData result;
   CHECK(v8::internal::RegExpParser::ParseRegExp(&reader, false, &result));
@@ -111,7 +111,7 @@ static MinMaxPair CheckMinMaxMatch(const char* input) {
   V8::Initialize(NULL);
   v8::HandleScope scope;
   unibrow::Utf8InputBuffer<> buffer(input, StrLength(input));
-  ZoneScope zone_scope(DELETE_ON_EXIT);
+  ZoneScope zone_scope(Isolate::Current(), DELETE_ON_EXIT);
   FlatStringReader reader(Isolate::Current(), CStrVector(input));
   RegExpCompileData result;
   CHECK(v8::internal::RegExpParser::ParseRegExp(&reader, false, &result));
@@ -382,7 +382,7 @@ static void ExpectError(const char* input,
                         const char* expected) {
   V8::Initialize(NULL);
   v8::HandleScope scope;
-  ZoneScope zone_scope(DELETE_ON_EXIT);
+  ZoneScope zone_scope(Isolate::Current(), DELETE_ON_EXIT);
   FlatStringReader reader(Isolate::Current(), CStrVector(input));
   RegExpCompileData result;
   CHECK(!v8::internal::RegExpParser::ParseRegExp(&reader, false, &result));
@@ -464,7 +464,7 @@ static bool NotWord(uc16 c) {
 
 
 static void TestCharacterClassEscapes(uc16 c, bool (pred)(uc16 c)) {
-  ZoneScope scope(DELETE_ON_EXIT);
+  ZoneScope scope(Isolate::Current(), DELETE_ON_EXIT);
   ZoneList<CharacterRange>* ranges = new ZoneList<CharacterRange>(2);
   CharacterRange::AddClassEscape(c, ranges);
   for (unsigned i = 0; i < (1 << 16); i++) {
@@ -510,7 +510,7 @@ static void Execute(const char* input,
                     bool is_ascii,
                     bool dot_output = false) {
   v8::HandleScope scope;
-  ZoneScope zone_scope(DELETE_ON_EXIT);
+  ZoneScope zone_scope(Isolate::Current(), DELETE_ON_EXIT);
   RegExpNode* node = Compile(input, multiline, is_ascii);
   USE(node);
 #ifdef DEBUG
@@ -551,7 +551,7 @@ static unsigned PseudoRandom(int i, int j) {
 TEST(SplayTreeSimple) {
   v8::internal::V8::Initialize(NULL);
   static const unsigned kLimit = 1000;
-  ZoneScope zone_scope(DELETE_ON_EXIT);
+  ZoneScope zone_scope(Isolate::Current(), DELETE_ON_EXIT);
   ZoneSplayTree<TestConfig> tree;
   bool seen[kLimit];
   for (unsigned i = 0; i < kLimit; i++) seen[i] = false;
@@ -619,7 +619,7 @@ TEST(DispatchTableConstruction) {
     }
   }
   // Enter test data into dispatch table.
-  ZoneScope zone_scope(DELETE_ON_EXIT);
+  ZoneScope zone_scope(Isolate::Current(), DELETE_ON_EXIT);
   DispatchTable table;
   for (int i = 0; i < kRangeCount; i++) {
     uc16* range = ranges[i];
@@ -686,7 +686,7 @@ typedef RegExpMacroAssemblerMIPS ArchRegExpMacroAssembler;
 class ContextInitializer {
  public:
   ContextInitializer()
-      : env_(), scope_(), zone_(DELETE_ON_EXIT) {
+      : env_(), scope_(), zone_(Isolate::Current(), DELETE_ON_EXIT) {
     env_ = v8::Context::New();
     env_->Enter();
   }
@@ -1381,7 +1381,7 @@ TEST(AddInverseToTable) {
   static const int kLimit = 1000;
   static const int kRangeCount = 16;
   for (int t = 0; t < 10; t++) {
-    ZoneScope zone_scope(DELETE_ON_EXIT);
+    ZoneScope zone_scope(Isolate::Current(), DELETE_ON_EXIT);
     ZoneList<CharacterRange>* ranges =
         new ZoneList<CharacterRange>(kRangeCount);
     for (int i = 0; i < kRangeCount; i++) {
@@ -1402,7 +1402,7 @@ TEST(AddInverseToTable) {
       CHECK_EQ(is_on, set->Get(0) == false);
     }
   }
-  ZoneScope zone_scope(DELETE_ON_EXIT);
+  ZoneScope zone_scope(Isolate::Current(), DELETE_ON_EXIT);
   ZoneList<CharacterRange>* ranges =
           new ZoneList<CharacterRange>(1);
   ranges->Add(CharacterRange(0xFFF0, 0xFFFE));
@@ -1515,7 +1515,7 @@ TEST(UncanonicalizeEquivalence) {
 
 static void TestRangeCaseIndependence(CharacterRange input,
                                       Vector<CharacterRange> expected) {
-  ZoneScope zone_scope(DELETE_ON_EXIT);
+  ZoneScope zone_scope(Isolate::Current(), DELETE_ON_EXIT);
   int count = expected.length();
   ZoneList<CharacterRange>* list = new ZoneList<CharacterRange>(count);
   input.AddCaseEquivalents(list, false);
@@ -1579,7 +1579,7 @@ static bool InClass(uc16 c, ZoneList<CharacterRange>* ranges) {
 
 TEST(CharClassDifference) {
   v8::internal::V8::Initialize(NULL);
-  ZoneScope zone_scope(DELETE_ON_EXIT);
+  ZoneScope zone_scope(Isolate::Current(), DELETE_ON_EXIT);
   ZoneList<CharacterRange>* base = new ZoneList<CharacterRange>(1);
   base->Add(CharacterRange::Everything());
   Vector<const uc16> overlay = CharacterRange::GetWordBounds();
@@ -1606,7 +1606,7 @@ TEST(CharClassDifference) {
 
 TEST(CanonicalizeCharacterSets) {
   v8::internal::V8::Initialize(NULL);
-  ZoneScope scope(DELETE_ON_EXIT);
+  ZoneScope scope(Isolate::Current(), DELETE_ON_EXIT);
   ZoneList<CharacterRange>* list = new ZoneList<CharacterRange>(4);
   CharacterSet set(list);
 
@@ -1677,7 +1677,7 @@ static bool CharacterInSet(ZoneList<CharacterRange>* set, uc16 value) {
 
 TEST(CharacterRangeMerge) {
   v8::internal::V8::Initialize(NULL);
-  ZoneScope zone_scope(DELETE_ON_EXIT);
+  ZoneScope zone_scope(Isolate::Current(), DELETE_ON_EXIT);
   ZoneList<CharacterRange> l1(4);
   ZoneList<CharacterRange> l2(4);
   // Create all combinations of intersections of ranges, both singletons and
