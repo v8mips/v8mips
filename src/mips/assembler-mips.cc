@@ -1026,7 +1026,12 @@ void Assembler::bne(Register rs, Register rt, int16_t offset) {
 
 
 void Assembler::j(int32_t target) {
-  ASSERT(is_uint28(target) && ((target & 3) == 0));
+#if DEBUG
+  // Get pc of delay slot.
+  uint32_t ipc = reinterpret_cast<uint32_t>(pc_ + 1 * kInstrSize);
+  bool in_range = ((uint32_t)(ipc^target) >> (kImm26Bits+kImmFieldShift)) == 0;
+  ASSERT(in_range && ((target & 3) == 0));
+#endif
   GenInstrJump(J, target >> 2);
 }
 
@@ -1042,8 +1047,13 @@ void Assembler::jr(Register rs) {
 
 
 void Assembler::jal(int32_t target) {
+#ifdef DEBUG
+  // Get pc of delay slot.
+  uint32_t ipc = reinterpret_cast<uint32_t>(pc_ + 1 * kInstrSize);
+  bool in_range = ((uint32_t)(ipc^target) >> (kImm26Bits+kImmFieldShift)) == 0;
+  ASSERT(in_range && ((target & 3) == 0));
+#endif
   positions_recorder()->WriteRecordedPositions();
-  ASSERT(is_uint28(target) && ((target & 3) == 0));
   GenInstrJump(JAL, target >> 2);
 }
 
@@ -1053,6 +1063,32 @@ void Assembler::jalr(Register rs, Register rd) {
   positions_recorder()->WriteRecordedPositions();
   GenInstrRegister(SPECIAL, rs, zero_reg, rd, 0, JALR);
   BlockTrampolinePoolFor(1);  // For associated delay slot.
+}
+
+
+void Assembler::j_or_jr(int32_t target, Register rs) {
+  // Get pc of delay slot.
+  uint32_t ipc = reinterpret_cast<uint32_t>(pc_ + 1 * kInstrSize);
+  bool in_range = ((uint32_t)(ipc^target) >> (kImm26Bits+kImmFieldShift)) == 0;
+
+  if (in_range) {
+      j(target);
+  } else {
+      jr(t9);
+  }
+}
+
+
+void Assembler::jal_or_jalr(int32_t target, Register rs) {
+  // Get pc of delay slot.
+  uint32_t ipc = reinterpret_cast<uint32_t>(pc_ + 1 * kInstrSize);
+  bool in_range = ((uint32_t)(ipc^target) >> (kImm26Bits+kImmFieldShift)) == 0;
+
+  if (in_range) {
+      jal(target);
+  } else {
+      jalr(t9);
+  }
 }
 
 
@@ -2174,27 +2210,11 @@ void Assembler::set_target_address_at(Address pc, Address target) {
   CHECK((GetOpcodeField(instr1) == LUI && GetOpcodeField(instr2) == ORI));
 #endif
 
-  if (is_int16(itarget)) {
-    // nop.
-    // addiu rt, zero_reg, signed-16.
-    *p = nopInstr;
-    *(p+1) = ADDIU | rt_code | (itarget & kImm16Mask);
-  } else if (!(itarget & kHiMask)) {
-    // nop.
-    // ori rt, zero_reg, unsigned-16.
-    *p = nopInstr;
-    *(p+1) = ORI | rt_code | (itarget & kImm16Mask);
-  } else if (!(itarget & kImm16Mask)) {
-    // nop.
-    // lui rt, upper-16.
-    *p = nopInstr;
-    *(p+1) = LUI | rt_code | ((itarget & kHiMask) >> kLuiShift);
-  } else {
-    // lui rt, upper-16.
-    // ori rt rt, lower-16.
-    *p = LUI | rt_code | ((itarget & kHiMask) >> kLuiShift);
-    *(p+1) = ORI | rt_code | (rt_code << 5) | (itarget & kImm16Mask);
-  }
+  // Must use 2 instructions to insure patchable code => just use lui and ori.
+  // lui rt, upper-16.
+  // ori rt rt, lower-16.
+  *p = LUI | rt_code | ((itarget & kHiMask) >> kLuiShift);
+  *(p+1) = ORI | rt_code | (rt_code << 5) | (itarget & kImm16Mask);
 
   // The following code is an optimization for the common case of Call()
   // or Jump() which is load to register, and jump through register:
@@ -2213,27 +2233,29 @@ void Assembler::set_target_address_at(Address pc, Address target) {
   // mips return. Occasionally this lands after an li().
 
   Instr instr3 = instr_at(pc + 2 * kInstrSize);
-  uint32_t ipc = reinterpret_cast<uint32_t>(pc);
-  bool in_range = ((ipc & ~kJumpAddrMask) == (itarget & ~kJumpAddrMask));
+  uint32_t ipc = reinterpret_cast<uint32_t>(pc + 3 * kInstrSize);
+  bool in_range =
+             ((uint32_t)(ipc ^ itarget) >> (kImm26Bits + kImmFieldShift)) == 0;
+  uint32_t target_field = (uint32_t)(itarget & kJumpAddrMask) >> kImmFieldShift;
   bool patched_jump = false;
 
   if (IsJalr(instr3)) {
     // Try to convert JALR to JAL.
     if (in_range) {
-      *(p+2) = JAL | (itarget & kJumpAddrMask) >> kImmFieldShift;
+      *(p+2) = JAL | target_field;
       patched_jump = true;
     }
   } else if (IsJr(instr3)) {
     // Try to convert JR to J, skip returns (jr ra).
     bool is_ret = static_cast<int>(GetRs(instr3)) == ra.code();
     if (in_range && !is_ret) {
-      *(p+2) = J | (itarget & kJumpAddrMask) >> kImmFieldShift;
+      *(p+2) = J | target_field;
       patched_jump = true;
     }
   } else if (IsJal(instr3)) {
     if (in_range) {
       // We are patching an already converted JAL.
-      *(p+2) = JAL | (itarget & kJumpAddrMask) >> 2;
+      *(p+2) = JAL | target_field;
     } else {
       // Patch JAL, but out of range, revert to JALR.
       // JALR rs reg is the rt reg specified in the ORI instruction.
@@ -2245,7 +2267,7 @@ void Assembler::set_target_address_at(Address pc, Address target) {
   } else if (IsJ(instr3)) {
     if (in_range) {
       // We are patching an already converted J (jump).
-      *(p+2) = J | (itarget & kJumpAddrMask) >> kImmFieldShift;
+      *(p+2) = J | target_field;
     } else {
       // Trying patch J, but out of range, just go back to JR.
       // JR 'rs' reg is the 'rt' reg specified in the ORI instruction (instr2).

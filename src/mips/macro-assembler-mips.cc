@@ -1609,14 +1609,13 @@ void MacroAssembler::BranchAndLink(Label* L, Condition cond, Register rs,
 void MacroAssembler::Jump(const Operand& target, BranchDelaySlot bdslot) {
   BlockTrampolinePoolScope block_trampoline_pool(this);
   if (target.is_reg()) {
-      jr(target.rm());
+    jr(target.rm());
   } else {
-    if (!MustUseReg(target.rmode_)) {
-        j(target.imm32_);
-    } else {
-      li(t9, target);
-      jr(t9);
-    }
+    // For Mips, all calls are relocatable => MustUseReg must be true.
+    ASSERT(MustUseReg(target.rmode_));
+    li(t9, target);
+    jr(t9);
+    //j_or_jr(target.imm32_, t9);  // this generates 1 instr + 1 delay slot
   }
   // Emit a nop in the branch delay slot if required.
   if (bdslot == PROTECT)
@@ -1630,29 +1629,19 @@ void MacroAssembler::Jump(const Operand& target,
   BlockTrampolinePoolScope block_trampoline_pool(this);
   BRANCH_ARGS_CHECK(cond, rs, rt);
   if (target.is_reg()) {
-    if (cond == cc_always) {
-      jr(target.rm());
-    } else {
+    if (cond != cc_always) {
       Branch(2, NegateCondition(cond), rs, rt);
-      jr(target.rm());
     }
+    jr(target.rm());
   } else {  // Not register target.
-    if (!MustUseReg(target.rmode_)) {
-      if (cond == cc_always) {
-        j(target.imm32_);
-      } else {
-        Branch(2, NegateCondition(cond), rs, rt);
-        j(target.imm32_);  // Will generate only one instruction.
-      }
-    } else {  // MustUseReg(target)
-      li(t9, target);
-      if (cond == cc_always) {
-        jr(t9);
-      } else {
-        Branch(2, NegateCondition(cond), rs, rt);
-        jr(t9);  // Will generate only one instruction.
-      }
+    // For Mips, all calls are relocatable => MustUseReg must be true.
+    ASSERT(MustUseReg(target.rmode_));
+    if (cond != cc_always) {
+      Branch(4, NegateCondition(cond), rs, rt);
     }
+    li(t9, target);
+    jr(t9);
+    //j_or_jr(target.imm32_, t9);  // this generates 1 instr + 1 delay slot
   }
   // Emit a nop in the branch delay slot if required.
   if (bdslot == PROTECT)
@@ -1666,15 +1655,15 @@ void MacroAssembler::Call(const Operand& target, BranchDelaySlot bdslot) {
   if (target.is_reg()) {
       jalr(target.rm());
   } else {    // !target.is_reg()
-    if (!MustUseReg(target.rmode_)) {
-      jal(target.imm32_);
-    } else {  // MustUseReg(target)
-      // Must record previous source positions before the
-      // li() generates a new code target.
-      positions_recorder()->WriteRecordedPositions();
-      li(t9, target);
-      jalr(t9);
-    }
+    // For Mips, all calls are relocatable => MustUseReg must be true.
+    ASSERT(MustUseReg(target.rmode_));
+
+    // Must record previous source positions before the
+    // li() generates a new code target.
+    positions_recorder()->WriteRecordedPositions();
+    li(t9, target);
+    jalr(t9);
+    //jal_or_jalr(target.imm32_, t9);  // this generates 1 instr + 1 delay slot
   }
   // Emit a nop in the branch delay slot if required.
   if (bdslot == PROTECT)
@@ -1689,29 +1678,19 @@ void MacroAssembler::Call(const Operand& target,
   BlockTrampolinePoolScope block_trampoline_pool(this);
   BRANCH_ARGS_CHECK(cond, rs, rt);
   if (target.is_reg()) {
-    if (cond == cc_always) {
-      jalr(target.rm());
-    } else {
+    if (cond != cc_always) {
       Branch(2, NegateCondition(cond), rs, rt);
-      jalr(target.rm());
     }
+    jalr(target.rm());
   } else {    // !target.is_reg()
-    if (!MustUseReg(target.rmode_)) {
-      if (cond == cc_always) {
-        jal(target.imm32_);
-      } else {
-        Branch(2, NegateCondition(cond), rs, rt);
-        jal(target.imm32_);  // Will generate only one instruction.
-      }
-    } else {  // MustUseReg(target)
-      li(t9, target);
-      if (cond == cc_always) {
-        jalr(t9);
-      } else {
-        Branch(2, NegateCondition(cond), rs, rt);
-        jalr(t9);  // Will generate only one instruction.
-      }
+    // For Mips, all calls are relocatable => MustUseReg must be true.
+    ASSERT(MustUseReg(target.rmode_));
+    if (cond != cc_always) {
+      Branch(4, NegateCondition(cond), rs, rt);
     }
+    li(t9, target);
+    jalr(t9);
+    //jal_or_jalr(target.imm32_, t9);  // this generates 1 instr + 1 delay slot
   }
   // Emit a nop in the branch delay slot if required.
   if (bdslot == PROTECT)

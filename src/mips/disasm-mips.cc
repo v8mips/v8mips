@@ -256,8 +256,7 @@ void Decoder::PrintXImm16(Instruction* instr) {
 
 // Print 26-bit immediate value.
 void Decoder::PrintXImm26(Instruction* instr) {
-  // TODO(plind): replace with def const.
-  uint32_t imm = instr->Imm26Value() << 2;
+  uint32_t imm = instr->Imm26Value() << kImmFieldShift;
   out_buffer_pos_ += OS::SNPrintF(out_buffer_ + out_buffer_pos_, "0x%x", imm);
 }
 

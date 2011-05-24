@@ -564,6 +564,8 @@ class Assembler : public Malloced {
   void jal(int32_t target);
   void jalr(Register rs, Register rd = ra);
   void jr(Register target);
+  void j_or_jr(int32_t target, Register rs);
+  void jal_or_jalr(int32_t target, Register rs);
 
 
   //-------Data-processing-instructions---------
