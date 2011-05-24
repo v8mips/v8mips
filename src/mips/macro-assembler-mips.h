@@ -1072,6 +1072,8 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
                                            Register scratch2,
                                            Label* failure);
 
+  void LoadInstanceDescriptors(Register map, Register descriptors);
+
  private:
   void CallCFunctionHelper(Register function,
                            ExternalReference function_reference,

@@ -3960,6 +3960,17 @@ void MacroAssembler::CallCFunctionHelper(Register function,
 #undef BRANCH_ARGS_CHECK
 
 
+void MacroAssembler::LoadInstanceDescriptors(Register map,
+                                             Register descriptors) {
+  lw(descriptors,
+     FieldMemOperand(map, Map::kInstanceDescriptorsOrBitField3Offset));
+  Label not_smi;
+  JumpIfNotSmi(descriptors, &not_smi);
+  li(descriptors, Operand(FACTORY->empty_descriptor_array()));
+  bind(&not_smi);
+}
+
+
 CodePatcher::CodePatcher(byte* address, int instructions)
     : address_(address),
       instructions_(instructions),
