@@ -84,22 +84,22 @@ static const int kUndefIndex = -1;
 static const int kSafepointRegisterStackIndexMap[kNumRegs] = {
   kUndefIndex,
   kUndefIndex,
-  0, // v0 
+  0,  // v0
   kUndefIndex,
-  1, // a0
-  2, // a1
-  3, // a2
-  4, // a3
-  kUndefIndex,
-  kUndefIndex,
+  1,  // a0
+  2,  // a1
+  3,  // a2
+  4,  // a3
   kUndefIndex,
   kUndefIndex,
   kUndefIndex,
   kUndefIndex,
   kUndefIndex,
-  kUndefIndex, 
-  5, // Saved temporaries.
-  6, 
+  kUndefIndex,
+  kUndefIndex,
+  kUndefIndex,
+  5,  // Saved temporaries.
+  6,
   7,
   8,
   9,
