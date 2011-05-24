@@ -229,10 +229,12 @@ bool RelocInfo::IsPatchedDebugBreakSlotSequence() {
 void RelocInfo::Visit(ObjectVisitor* visitor) {
   RelocInfo::Mode mode = rmode();
   if (mode == RelocInfo::EMBEDDED_OBJECT) {
-    // RelocInfo is needed when pointer must be updated, such as
-    // UpdatingVisitor in mark-compact.cc. It ignored by visitors
-    // that do not need it.
-    visitor->VisitPointer(target_object_address(), this);
+    Object** p = target_object_address();
+    Object* orig = *p;
+    visitor->VisitPointer(p);
+    if (*p != orig) {
+      set_target_object(*p);
+    }
   } else if (RelocInfo::IsCodeTarget(mode)) {
     visitor->VisitCodeTarget(this);
   } else if (mode == RelocInfo::GLOBAL_PROPERTY_CELL) {

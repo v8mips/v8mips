@@ -113,9 +113,7 @@ regress/regress-1132: SKIP
 ##############################################################################
 [ $arch == mips ]
 
-# BUG(3251035): Timeouts in long looping crankshaft optimization
-# tests. Skipping because having them timeout takes too long on the
-# buildbot.
+# Skip long-running tests.
 compiler/alloc-number: SKIP
 compiler/array-length: SKIP
 compiler/assignment-deopt: SKIP
@@ -141,8 +139,3 @@ regress/regress-create-exception: SKIP
 regress/regress-3218915: SKIP
 regress/regress-3247124: SKIP
 
-##############################################################################
-[ $arch == x64 ]
-
-# Stack manipulations in LiveEdit is implemented for ia32 only.
-debug-liveedit-check-stack: SKIP

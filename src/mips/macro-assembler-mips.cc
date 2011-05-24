@@ -213,16 +213,16 @@ void MacroAssembler::PushSafepointRegistersAndDoubles() {
   PushSafepointRegisters();
   Subu(sp, sp, Operand(FPURegister::kNumAllocatableRegisters * kDoubleSize));
   for (int i = 0; i < FPURegister::kNumAllocatableRegisters; i+=2) {
-      FPURegister reg = FPURegister::FromAllocationIndex(i);
-      sdc1(reg, MemOperand(sp, i * kDoubleSize));
-    }
+    FPURegister reg = FPURegister::FromAllocationIndex(i);
+    sdc1(reg, MemOperand(sp, i * kDoubleSize));
+  }
 }
 
 void MacroAssembler::PopSafepointRegistersAndDoubles() {
   for (int i = 0; i < FPURegister::kNumAllocatableRegisters; i+=2) {
-      FPURegister reg = FPURegister::FromAllocationIndex(i);
-      ldc1(reg, MemOperand(sp, i * kDoubleSize));
-    }
+    FPURegister reg = FPURegister::FromAllocationIndex(i);
+    ldc1(reg, MemOperand(sp, i * kDoubleSize));
+  }
   Addu(sp, sp, Operand(FPURegister::kNumAllocatableRegisters * kDoubleSize));
   PopSafepointRegisters();
 }

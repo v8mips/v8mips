@@ -210,7 +210,7 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
 
   inline void Move(Register dst, Register src) {
     if (!dst.is(src)) {
-        mov(dst, src);
+      mov(dst, src);
     }
   }
 
@@ -1203,4 +1203,3 @@ static inline MemOperand CFunctionArgumentOperand(int index) {
 } }  // namespace v8::internal
 
 #endif  // V8_MIPS_MACRO_ASSEMBLER_MIPS_H_
-
