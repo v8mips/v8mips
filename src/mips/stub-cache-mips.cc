@@ -3410,7 +3410,7 @@ MaybeObject* ExternalArrayStoreStubCompiler::CompileStore(
                  a3,
                  Handle<Map>(receiver->map()),
                  Handle<Code>(stub),
-                 DONT_DO_SMI_CHECK);
+                 DO_SMI_CHECK);
 
   Handle<Code> ic = isolate()->builtins()->KeyedStoreIC_Miss();
   __ Jump(ic, RelocInfo::CODE_TARGET);
