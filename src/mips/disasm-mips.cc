@@ -256,7 +256,8 @@ void Decoder::PrintXImm16(Instruction* instr) {
 
 // Print 26-bit immediate value.
 void Decoder::PrintXImm26(Instruction* instr) {
-  uint32_t imm = instr->Imm26Value() << 2;  // TODO(plind): replace with def const.
+  // TODO(plind): replace with def const.
+  uint32_t imm = instr->Imm26Value() << 2;
   out_buffer_pos_ += OS::SNPrintF(out_buffer_ + out_buffer_pos_, "0x%x", imm);
 }
 
@@ -268,7 +269,7 @@ void Decoder::PrintCode(Instruction* instr) {
   switch (instr->FunctionFieldRaw()) {
     case BREAK: {
       int32_t code = instr->Bits(25, 6);
-      out_buffer_pos_ += OS::SNPrintF(out_buffer_ + out_buffer_pos_, 
+      out_buffer_pos_ += OS::SNPrintF(out_buffer_ + out_buffer_pos_,
                                       "0x%05x (%d)", code, code);
       break;
                 }

@@ -386,7 +386,7 @@ uint32_t Assembler::GetImmediate16(Instr instr) {
 
 uint32_t Assembler::GetLabelConst(Instr instr) {
   return instr & ~kImm16Mask;
-}  
+}
 
 
 bool Assembler::IsPop(Instr instr) {
@@ -1165,7 +1165,8 @@ void Assembler::addiu(Register rd, Register rs, int32_t j) {
             emit(lw_instr);
           }
           if (FLAG_print_peephole_optimization) {
-            PrintF("%x push/pop -dead ldr fp + offset in middle\n", pc_offset());
+            PrintF("%x push/pop -dead ldr fp + offset in middle\n",
+                   pc_offset());
           }
         } else {
           // Pattern: push & pop from/to different registers
@@ -1564,8 +1565,9 @@ void Assembler::tlt(Register rs, Register rt, uint16_t code) {
 
 void Assembler::tltu(Register rs, Register rt, uint16_t code) {
   ASSERT(is_uint10(code));
-  Instr instr = 
-      SPECIAL | TLTU | rs.code() << kRsShift | rt.code() << kRtShift | code << 6;
+  Instr instr =
+      SPECIAL | TLTU | rs.code() << kRsShift | rt.code() << kRtShift |
+      code << 6;
   emit(instr);
 }
 
@@ -2117,7 +2119,8 @@ Address Assembler::target_address_at(Address pc) {
     } else if (GetOpcodeField(instr2) == LUI) {
       return reinterpret_cast<Address>(GetImmediate16(instr2) << 16);
     }
-  } else if ((GetOpcodeField(instr1) == LUI) && (GetOpcodeField(instr2) == ORI)) {
+  } else if ((GetOpcodeField(instr1) == LUI) &&
+             (GetOpcodeField(instr2) == ORI)) {
     // 32 bit value.
     return reinterpret_cast<Address>(
         (GetImmediate16(instr1) << 16) | GetImmediate16(instr2));
@@ -2223,7 +2226,7 @@ void Assembler::set_target_address_at(Address pc, Address target) {
   } else if (IsJr(instr3)) {
     // Try to convert JR to J, skip returns (jr ra).
     bool is_ret = static_cast<int>(GetRs(instr3)) == ra.code();
-    if (in_range && ! is_ret) {
+    if (in_range && !is_ret) {
       *(p+2) = J | (itarget & kJumpAddrMask) >> kImmFieldShift;
       patched_jump = true;
     }
