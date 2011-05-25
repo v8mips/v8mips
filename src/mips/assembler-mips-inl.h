@@ -109,8 +109,9 @@ Address RelocInfo::target_address_address() {
   // and written.  In this case the target_address_address function should
   // return the end of the instructions to be patched, allowing the
   // deserializer to deserialize the instructions as raw bytes and put them in
-  // place, ready to be patched with the target. In our case, that is the
-  // address of the instruction that follows LUI/ORI instruction pair.
+  // place, ready to be patched with the target. In our case, after jump
+  // optimization, that is the address of the instruction that follows
+  // J/JAL/JR/JALR instruction.
   return reinterpret_cast<Address>(
     pc_ + Assembler::kInstructionsFor32BitConstant * Assembler::kInstrSize);
 }

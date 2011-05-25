@@ -475,9 +475,13 @@ class Assembler : public Malloced {
   static const int kExternalTargetSize = 0 * kInstrSize;
 
   // Number of consecutive instructions used to store 32bit constant.
-  // Used in RelocInfo::target_address_address() function to tell serializer
-  // address of the instruction that follows LUI/ORI instruction pair.
-  static const int kInstructionsFor32BitConstant = 2;
+  // Before jump-optimizations, this constant was used in
+  // RelocInfo::target_address_address() function to tell serializer address of
+  // the instruction that follows LUI/ORI instruction pair. Now, with new jump
+  // optimization, where jump-through-register instruction that usually
+  // follows LUI/ORI pair is substituted with J/JAL, this constant equals
+  // to 3 instructions (LUI+ORI+J/JAL/JR/JALR).
+  static const int kInstructionsFor32BitConstant = 3;
 
   // Distance between the instruction referring to the address of the call
   // target and the return address.
