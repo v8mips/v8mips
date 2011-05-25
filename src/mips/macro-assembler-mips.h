@@ -562,14 +562,13 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
   void EnterConstructFrame() { EnterFrame(StackFrame::CONSTRUCT); }
   void LeaveConstructFrame() { LeaveFrame(StackFrame::CONSTRUCT); }
 
-  // Enter exit frame.
-  // Expects the number of arguments in register a0 and
-  // the builtin function to call in register a1.
-  // On output hold_argc, hold_function, and hold_argv are setup.
-  void EnterExitFrame(Register hold_argc,
-                      Register hold_argv,
-                      Register hold_function,
-                      bool save_doubles);
+ // Enter exit frame.
+  // argc - argument count to be dropped by LeaveExitFrame.
+  // save_doubles - saves FPU registers on stack, currently disabled.
+  // stack_space - extra stack space.
+  void EnterExitFrame(const Operand& argc,
+                      bool save_doubles,
+                      int stack_space = 0);
 
   // Leave the current exit frame. Expects the return value in v0.
   void LeaveExitFrame(bool save_doubles);
