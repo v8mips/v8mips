@@ -616,7 +616,7 @@ void MipsDebugger::Debug() {
               Instruction::kInstrSize);
         if ((argc == 2) && (strcmp(arg1, "unstop") == 0)) {
           // Remove the current stop.
-          if (sim_->isStopInstruction(stop_instr)) {
+          if (sim_->IsStopInstruction(stop_instr)) {
             stop_instr->SetInstructionBits(kNopInstr);
             msg_address->SetInstructionBits(kNopInstr);
           } else {
@@ -1538,11 +1538,11 @@ void Simulator::SoftwareInterrupt(Instruction* instr) {
     set_pc(get_register(ra));
 
   } else if (func == BREAK && code <= kMaxStopCode) {
-    if (isWatchpoint(code)) {
-      printWatchpoint(code);
+    if (IsWatchpoint(code)) {
+      PrintWatchpoint(code);
     } else {
       IncreaseStopCounter(code);
-      handleStop(code, instr);
+      HandleStop(code, instr);
     }
   } else {
     // All remaining break_ codes, and all traps are handled here.
@@ -1553,12 +1553,12 @@ void Simulator::SoftwareInterrupt(Instruction* instr) {
 
 
 // Stop helper functions.
-bool Simulator::isWatchpoint(uint32_t code) {
+bool Simulator::IsWatchpoint(uint32_t code) {
   return (code <= kMaxWatchpointCode);
 }
 
 
-void Simulator::printWatchpoint(uint32_t code) {
+void Simulator::PrintWatchpoint(uint32_t code) {
   MipsDebugger dbg(this);
   ++break_count_;
   PrintF("\n---- break %d marker: %3d  (instr count: %8d) ----------"
@@ -1568,10 +1568,10 @@ void Simulator::printWatchpoint(uint32_t code) {
 }
 
 
-void Simulator::handleStop(uint32_t code, Instruction* instr) {
+void Simulator::HandleStop(uint32_t code, Instruction* instr) {
   // Stop if it is enabled, otherwise go on jumping over the stop
   // and the message address.
-  if (isEnabledStop(code)) {
+  if (IsEnabledStop(code)) {
     MipsDebugger dbg(this);
     dbg.Stop(instr);
   } else {
@@ -1580,14 +1580,14 @@ void Simulator::handleStop(uint32_t code, Instruction* instr) {
 }
 
 
-bool Simulator::isStopInstruction(Instruction* instr) {
+bool Simulator::IsStopInstruction(Instruction* instr) {
   int32_t func = instr->FunctionFieldRaw();
   uint32_t code = static_cast<uint32_t>(instr->Bits(25, 6));
   return (func == BREAK) && code > kMaxWatchpointCode && code <= kMaxStopCode;
 }
 
 
-bool Simulator::isEnabledStop(uint32_t code) {
+bool Simulator::IsEnabledStop(uint32_t code) {
   ASSERT(code <= kMaxStopCode);
   ASSERT(code > kMaxWatchpointCode);
   return !(watched_stops[code].count & kStopDisabledBit);
@@ -1595,14 +1595,14 @@ bool Simulator::isEnabledStop(uint32_t code) {
 
 
 void Simulator::EnableStop(uint32_t code) {
-  if (!isEnabledStop(code)) {
+  if (!IsEnabledStop(code)) {
     watched_stops[code].count &= ~kStopDisabledBit;
   }
 }
 
 
 void Simulator::DisableStop(uint32_t code) {
-  if (isEnabledStop(code)) {
+  if (IsEnabledStop(code)) {
     watched_stops[code].count |= kStopDisabledBit;
   }
 }
@@ -1630,7 +1630,7 @@ void Simulator::PrintStopInfo(uint32_t code) {
     PrintF("Code too large, only %u stops can be used\n", kMaxStopCode + 1);
     return;
   }
-  const char* state = isEnabledStop(code) ? "Enabled" : "Disabled";
+  const char* state = IsEnabledStop(code) ? "Enabled" : "Disabled";
   int32_t count = watched_stops[code].count & ~kStopDisabledBit;
   // Don't print the state of unused breakpoints.
   if (count != 0) {
