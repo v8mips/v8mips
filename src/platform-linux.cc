@@ -704,8 +704,8 @@ void Thread::Start() {
     pthread_attr_setstacksize(&attr, static_cast<size_t>(stack_size_));
     attr_ptr = &attr;
   }
-  pthread_create(&data_->thread_, attr_ptr, ThreadEntry, this);
-  ASSERT(data_->thread_ != kNoThread);
+  int result = pthread_create(&data_->thread_, attr_ptr, ThreadEntry, this);
+  CHECK_EQ(0, result);
 }
 
 
