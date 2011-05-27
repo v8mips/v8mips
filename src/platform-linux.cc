@@ -62,6 +62,10 @@
 #include "v8threads.h"
 #include "vm-state-inl.h"
 
+#if defined(ANDROID)
+#define SYS_gettid __NR_gettid
+#define SYS_tgkill __NR_tgkill
+#endif
 
 namespace v8 {
 namespace internal {
