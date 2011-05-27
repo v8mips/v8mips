@@ -253,6 +253,12 @@ bool CodeGenerator::MakeCode(CompilationInfo* info) {
   CodeGenerator cgen(&masm);
   CodeGeneratorScope scope(&cgen);
   cgen.Generate(info);
+#ifdef V8_TARGET_ARCH_MIPS
+  // Temporary workaround to leave if the generated function got corrupted.
+  if (masm.has_exception()) {
+    return false;
+  }
+#endif
   if (cgen.HasStackOverflow()) {
     ASSERT(!Top::has_pending_exception());
     return false;

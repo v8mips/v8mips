@@ -839,6 +839,10 @@ class Assembler : public Malloced {
 
   void CheckTrampolinePool(bool force_emit = false);
 
+  bool has_exception() const {
+    return internal_trampoline_exception_;
+  }
+
  protected:
   bool emit_debug_code() const { return emit_debug_code_; }
 
@@ -871,10 +875,6 @@ class Assembler : public Malloced {
 
   bool is_trampoline_pool_blocked() const {
     return trampoline_pool_blocked_nesting_ > 0;
-  }
-
-  bool has_exception() const {
-    return internal_trampoline_exception_;
   }
 
  private:
