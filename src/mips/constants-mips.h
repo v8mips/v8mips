@@ -93,13 +93,23 @@ static const int kInvalidFPUControlRegister = -1;
 static const uint32_t kFPUInvalidResult = (uint32_t) (1 << 31) - 1;
 
 // FCSR constants.
-static const uint32_t kFCSRFlagMask = (1 << 6) - 1;
-static const uint32_t kFCSRFlagShift = 2;
-static const uint32_t kFCSRInexactFlagBit = 1 << 0;
-static const uint32_t kFCSRUnderflowFlagBit = 1 << 1;
-static const uint32_t kFCSROverflowFlagBit = 1 << 2;
-static const uint32_t kFCSRDivideByZeroFlagBit = 1 << 3;
-static const uint32_t kFCSRInvalidOpFlagBit = 1 << 4;
+static const uint32_t kFCSRInexactFlagBit = 2;
+static const uint32_t kFCSRUnderflowFlagBit = 3;
+static const uint32_t kFCSROverflowFlagBit = 4;
+static const uint32_t kFCSRDivideByZeroFlagBit = 5;
+static const uint32_t kFCSRInvalidOpFlagBit = 6;
+
+static const uint32_t kFCSRInexactFlagMask = 1 << kFCSRInexactFlagBit;
+static const uint32_t kFCSRUnderflowFlagMask = 1 << kFCSRUnderflowFlagBit;
+static const uint32_t kFCSROverflowFlagMask = 1 << kFCSROverflowFlagBit;
+static const uint32_t kFCSRDivideByZeroFlagMask = 1 << kFCSRDivideByZeroFlagBit;
+static const uint32_t kFCSRInvalidOpFlagMask = 1 << kFCSRInvalidOpFlagBit;
+
+static const uint32_t kFCSRFlagMask = kFCSRInexactFlagMask |
+                                      kFCSRUnderflowFlagMask |
+                                      kFCSROverflowFlagMask |
+                                      kFCSRDivideByZeroFlagMask |
+                                      kFCSRInvalidOpFlagMask;
 
 // Helper functions for converting between register numbers and names.
 class Registers {
