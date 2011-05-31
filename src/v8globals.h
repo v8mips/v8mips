@@ -88,7 +88,7 @@ const uint32_t kDebugZapValue = 0xbadbaddb;
 #endif
 
 
-#if defined(V8_TARGET_ARCH_MIPS) && defined(__mips__)
+#if defined(V8_TARGET_ARCH_MIPS)
 // Number of bits to represent the page size for paged spaces. For MIPS we need
 // the value of 14, which gives 16K bytes per page.
 const int kPageSizeBits = 14;

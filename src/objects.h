@@ -7404,6 +7404,7 @@ class ObjectVisitor BASE_EMBEDDED {
 
   // Handy shorthand for visiting a single pointer.
   virtual void VisitPointer(Object** p) { VisitPointers(p, p + 1); }
+  virtual void VisitPointer(Object** p, RelocInfo* rinfo) { VisitPointers(p, p + 1); }
 
   // Visits a contiguous arrays of external references (references to the C++
   // heap) in the half-open range [start, end). Any or all of the values
@@ -7416,6 +7417,11 @@ class ObjectVisitor BASE_EMBEDDED {
 
   // Visits a handle that has an embedder-assigned class ID.
   virtual void VisitEmbedderReference(Object** p, uint16_t class_id) {}
+  // Variant of VisitExternalReference() can be defined in visitors where
+  // reloc info is needed (initially defined for mips).
+  virtual void VisitExternalReference(Address* p, RelocInfo* rinfo) {
+    VisitExternalReferences(p, p + 1);
+  }
 
 #ifdef DEBUG
   // Intended for serialization/deserialization checking: insert, or

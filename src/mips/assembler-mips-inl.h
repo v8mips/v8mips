@@ -261,16 +261,22 @@ void RelocInfo::Visit(ObjectVisitor* visitor) {
   if (mode == RelocInfo::EMBEDDED_OBJECT) {
     Object** p = target_object_address();
     Object* orig = *p;
-    visitor->VisitPointer(p);
+    visitor->VisitPointer(p, this);
     if (*p != orig) {
       set_target_object(*p);
     }
+    // RelocInfo is needed when pointer must be updated/serialized, such as
+    // UpdatingVisitor in mark-compact.cc or Serializer in serialize.cc.
+    // It is ignored by visitors that do not need it.
   } else if (RelocInfo::IsCodeTarget(mode)) {
     visitor->VisitCodeTarget(this);
   } else if (mode == RelocInfo::GLOBAL_PROPERTY_CELL) {
     visitor->VisitGlobalPropertyCell(this);
   } else if (mode == RelocInfo::EXTERNAL_REFERENCE) {
-    visitor->VisitExternalReference(target_reference_address());
+    // RelocInfo is needed when external-references must be serialized by
+    // Serializer Visitor in serialize.cc. It is ignored by visitors that
+    // do not need it.
+    visitor->VisitExternalReference(target_reference_address(), this);
 #ifdef ENABLE_DEBUGGER_SUPPORT
   // TODO(isolates): Get a cached isolate below.
   } else if (((RelocInfo::IsJSReturn(mode) &&
