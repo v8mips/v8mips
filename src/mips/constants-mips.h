@@ -111,6 +111,9 @@ static const uint32_t kFCSRFlagMask = kFCSRInexactFlagMask |
                                       kFCSRDivideByZeroFlagMask |
                                       kFCSRInvalidOpFlagMask;
 
+static const uint32_t kFCSRExceptionFlagMask = kFCSRFlagMask ^
+                                               kFCSRInexactFlagMask;
+
 // Helper functions for converting between register numbers and names.
 class Registers {
  public:

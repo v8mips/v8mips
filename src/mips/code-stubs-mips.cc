@@ -672,8 +672,8 @@ void FloatingPointHelper::LoadNumberAsInt32Double(MacroAssembler* masm,
     // Restore FCSR.
     __ ctc1(scratch1, FCSR);
 
-    // Check for inexact conversion.
-    __ And(scratch2, scratch2, kFCSRInexactFlagMask);
+    // Check for inexact conversion or exception.
+    __ And(scratch2, scratch2, kFCSRFlagMask);
 
     // Jump to not_int32 if the operation did not succeed.
     __ Branch(not_int32, ne, scratch2, Operand(zero_reg));
@@ -756,8 +756,8 @@ void FloatingPointHelper::LoadNumberAsInt32(MacroAssembler* masm,
     // Restore FCSR.
     __ ctc1(scratch1, FCSR);
 
-    // Check for inexact conversion.
-    __ And(scratch2, scratch2, kFCSRInexactFlagMask);
+    // Check for inexact conversion or exception.
+    __ And(scratch2, scratch2, kFCSRFlagMask);
 
     // Jump to not_int32 if the operation did not succeed.
     __ Branch(not_int32, ne, scratch2, Operand(zero_reg));
@@ -2775,8 +2775,8 @@ void BinaryOpStub::GenerateInt32Stub(MacroAssembler* masm) {
           // Restore FCSR.
           __ ctc1(scratch1, FCSR);
 
-          // Check for inexact conversion.
-          __ And(scratch2, scratch2, kFCSRInexactFlagMask);
+          // Check for inexact conversion or exception.
+          __ And(scratch2, scratch2, kFCSRFlagMask);
 
           if (result_type_ <= BinaryOpIC::INT32) {
             // If scratch2 != 0, result does not fit in a 32-bit integer.

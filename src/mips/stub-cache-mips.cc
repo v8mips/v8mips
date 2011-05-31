@@ -2086,8 +2086,7 @@ MaybeObject* CallStubCompiler::CompileMathFloorCall(Object* object,
 
   // Retrieve FCSR and check for fpu errors.
   __ cfc1(t5, FCSR);
-  // The inexact flag marks an inaccurate but still good result so we ignore it.
-  __ And(t5, t5, Operand(kFCSRFlagMask ^ kFCSRInexactFlagMask));
+  __ And(t5, t5, Operand(kFCSRExceptionFlagMask));
   __ Branch(&no_fpu_error, eq, t5, Operand(zero_reg));
 
   // Check for NaN, Infinity, and -Infinity.
