@@ -66,7 +66,7 @@ static uint64_t CpuFeaturesImpliedByCompiler() {
   // compilation.
 #if(defined(__mips_hard_float) && __mips_hard_float != 0)
   answer |= 1u << FPU;
-#endif // defined(__mips_hard_float) && __mips_hard_float != 0
+#endif  // defined(__mips_hard_float) && __mips_hard_float != 0
 #endif  // def __mips__
 
   return answer;
