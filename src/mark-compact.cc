@@ -2617,17 +2617,12 @@ class UpdatingVisitor: public ObjectVisitor {
   explicit UpdatingVisitor(Heap* heap) : heap_(heap) {}
 
   void VisitPointer(Object** p) {
-    UpdatePointer(p, NULL);
-  }
-
-  void VisitPointer(Object** p, RelocInfo* rinfo) {
-    // Variant of UpdatePointer, for arch's where RelocInfo is needed.
-    UpdatePointer(p, rinfo);
+    UpdatePointer(p);
   }
 
   void VisitPointers(Object** start, Object** end) {
     // Mark all HeapObject pointers in [start, end)
-    for (Object** p = start; p < end; p++) UpdatePointer(p, NULL);
+    for (Object** p = start; p < end; p++) UpdatePointer(p);
   }
 
   void VisitCodeTarget(RelocInfo* rinfo) {
@@ -2652,7 +2647,7 @@ class UpdatingVisitor: public ObjectVisitor {
   inline Heap* heap() const { return heap_; }
 
  private:
-  void UpdatePointer(Object** p, RelocInfo* rinfo) {
+  void UpdatePointer(Object** p) {
     if (!(*p)->IsHeapObject()) return;
 
     HeapObject* obj = HeapObject::cast(*p);
@@ -2698,14 +2693,7 @@ class UpdatingVisitor: public ObjectVisitor {
              original_space->MCSpaceOffsetForAddress(old_addr));
     }
 
-    if (rinfo) {
-      // For arch (like mips) without natural pointers in embedded code
-      // objects, rinfo->set_target_object() allows proper pointer update.
-      rinfo->set_target_object(HeapObject::FromAddress(new_addr));
-    } else {
-      // Do normal indirect pointer update when there is no reloc info.
-      *p = HeapObject::FromAddress(new_addr);
-    }
+    *p = HeapObject::FromAddress(new_addr);
 
 #ifdef DEBUG
     if (FLAG_gc_verbose) {
