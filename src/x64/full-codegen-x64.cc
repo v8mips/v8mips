@@ -3978,7 +3978,7 @@ void FullCodeGenerator::VisitForTypeofValue(Expression* expr) {
     context()->Plug(rax);
   } else {
     // This expression cannot throw a reference error at the top level.
-    context()->HandleExpression(expr);
+    VisitInCurrentContext(expr);
   }
 }
 
