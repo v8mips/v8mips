@@ -39,7 +39,7 @@ namespace v8 {
 namespace internal {
 
 
-int Deoptimizer::table_entry_size_ = 24;
+int Deoptimizer::table_entry_size_ = 32;
 
 
 int Deoptimizer::patch_size() {
@@ -525,6 +525,7 @@ void Deoptimizer::EntryGenerator::Generate() {
 
 
 void Deoptimizer::TableEntryGenerator::GeneratePrologue() {
+  Assembler::BlockTrampolinePoolScope block_trampoline_pool(masm());
   // Create a sequence of deoptimization entries. Note that any
   // registers may be still live.
   Label done;
@@ -533,14 +534,15 @@ void Deoptimizer::TableEntryGenerator::GeneratePrologue() {
     USE(start);
     if (type() == EAGER) {
       __ nop();
+      __ nop();
     } else {
       // Emulate ia32 like call by pushing return address to stack.
       __ push(ra);
     }
-    __ li(at, Operand(i));
+    __ li(at, Operand(i), true);
     __ push(at);
     __ Branch(&done);
-    ASSERT_EQ(masm()->pc_offset() - start, table_entry_size_);
+    ASSERT_EQ(table_entry_size_, masm()->pc_offset() - start);
   }
   __ bind(&done);
 }
