@@ -851,7 +851,7 @@ void Assembler::GenInstrImmediate(Opcode opcode,
 
 // Registers are in the order of the instruction encoding, from left to right.
 void Assembler::GenInstrJump(Opcode opcode,
-                              uint32_t address) {
+                             uint32_t address) {
   BlockTrampolinePoolScope block_trampoline_pool(this);
   ASSERT(is_uint26(address));
   Instr instr = opcode | address;
@@ -1096,7 +1096,8 @@ void Assembler::jr(Register rs) {
 
 void Assembler::jal(int32_t target) {
   positions_recorder()->WriteRecordedPositions();
-  ASSERT(is_uint28(target) && ((target & 3) == 0));
+  ASSERT(is_uint28(target));
+  ASSERT((target & 3) == 0);
   GenInstrJump(JAL, target >> 2);
 }
 
