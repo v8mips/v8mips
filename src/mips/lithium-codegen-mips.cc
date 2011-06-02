@@ -1011,17 +1011,44 @@ void LCodeGen::DoBranch(LBranch* instr) {
 
 
 void LCodeGen::EmitGoto(int block, LDeferredCode* deferred_stack_check) {
-  Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
+  block = chunk_->LookupDestination(block);
+  int next_block = GetNextEmittedBlock(current_block_);
+  if (block != next_block) {
+    // Perform stack overflow check if this goto needs it before jumping.
+    if (deferred_stack_check != NULL) {
+      // TODO(kalmard) can t0 be used here?
+      __ LoadRoot(t0, Heap::kStackLimitRootIndex);
+      __ Branch(chunk_->GetAssemblyLabel(block), hs, sp, Operand(t0));
+      __ jmp(deferred_stack_check->entry());
+      deferred_stack_check->SetExit(chunk_->GetAssemblyLabel(block));
+    } else {
+      __ jmp(chunk_->GetAssemblyLabel(block));
+    }
+  }
 }
 
 
 void LCodeGen::DoDeferredStackCheck(LGoto* instr) {
-  Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
+  PushSafepointRegistersScope scope(this, Safepoint::kWithRegisters);
+  CallRuntimeFromDeferred(Runtime::kStackGuard, 0, instr);
 }
 
 
 void LCodeGen::DoGoto(LGoto* instr) {
-  Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
+  class DeferredStackCheck: public LDeferredCode {
+   public:
+    DeferredStackCheck(LCodeGen* codegen, LGoto* instr)
+        : LDeferredCode(codegen), instr_(instr) { }
+    virtual void Generate() { codegen()->DoDeferredStackCheck(instr_); }
+   private:
+    LGoto* instr_;
+  };
+
+  DeferredStackCheck* deferred = NULL;
+  if (instr->include_stack_check()) {
+    deferred = new DeferredStackCheck(this, instr);
+  }
+  EmitGoto(instr->block_id(), deferred);
 }
 
 
@@ -1477,15 +1504,14 @@ void LCodeGen::DoReturn(LReturn* instr) {
 
 
 void LCodeGen::DoLoadGlobalCell(LLoadGlobalCell* instr) {
-  Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
-  // Register result = ToRegister(instr->result());
-  // __ mov(ip, Operand(Handle<Object>(instr->hydrogen()->cell())));
-  // __ ldr(result, FieldMemOperand(ip, JSGlobalPropertyCell::kValueOffset));
-  // if (instr->hydrogen()->check_hole_value()) {
-  //   __ LoadRoot(ip, Heap::kTheHoleValueRootIndex);
-  //   __ cmp(result, ip);
-  //   DeoptimizeIf(eq, instr->environment());
-  // }
+  Register result = ToRegister(instr->result());
+  // TODO(kalmard) can t0 be used here?
+  __ li(t0, Operand(Handle<Object>(instr->hydrogen()->cell())));
+  __ lw(result, FieldMemOperand(t0, JSGlobalPropertyCell::kValueOffset));
+  if (instr->hydrogen()->check_hole_value()) {
+    __ LoadRoot(t0, Heap::kTheHoleValueRootIndex);
+    DeoptimizeIf(eq, instr->environment(), result, Operand(t0));
+  }
 }
 
 
@@ -1516,8 +1542,9 @@ void LCodeGen::DoStoreGlobalCell(LStoreGlobalCell* instr) {
     Register scratch2 = ToRegister(instr->TempAt(0));
     __ lw(scratch2,
           FieldMemOperand(scratch, JSGlobalPropertyCell::kValueOffset));
-    __ LoadRoot(at, Heap::kTheHoleValueRootIndex);
-    DeoptimizeIf(eq, instr->environment(), scratch2, Operand(at));
+    // TODO(kalmard) can t0 be used here?
+    __ LoadRoot(t0, Heap::kTheHoleValueRootIndex);
+    DeoptimizeIf(eq, instr->environment(), scratch2, Operand(t0));
   }
 
   // Store the value.

@@ -688,7 +688,7 @@ void MacroAssembler::MultiPush(RegList regs) {
   int16_t NumToPush = NumberOfBitsSet(regs);
 
   addiu(sp, sp, -4 * NumToPush);
-  for (int16_t i = kNumRegisters; i > 0; i--) {
+  for (int16_t i = kNumRegisters - 1; i >= 0; i--) {
     if ((regs & (1 << i)) != 0) {
       sw(ToRegister(i), MemOperand(sp, 4 * (NumToPush - ++NumSaved)));
     }
@@ -724,7 +724,7 @@ void MacroAssembler::MultiPop(RegList regs) {
 void MacroAssembler::MultiPopReversed(RegList regs) {
   int16_t NumSaved = 0;
 
-  for (int16_t i = kNumRegisters; i > 0; i--) {
+  for (int16_t i = kNumRegisters - 1; i >= 0; i--) {
     if ((regs & (1 << i)) != 0) {
       lw(ToRegister(i), MemOperand(sp, 4 * (NumSaved++)));
     }

@@ -100,11 +100,7 @@ private:
 DEFINE_bool(harmony_proxies, false, "enable harmony proxies")
 
 // Flags for Crankshaft.
-#ifdef V8_TARGET_ARCH_MIPS
-  DEFINE_bool(crankshaft, false, "use crankshaft")
-#else
-  DEFINE_bool(crankshaft, true, "use crankshaft")
-#endif
+DEFINE_bool(crankshaft, true, "use crankshaft")
 DEFINE_string(hydrogen_filter, "", "hydrogen use/trace filter")
 DEFINE_bool(use_hydrogen, true, "use generated hydrogen for compilation")
 DEFINE_bool(build_lithium, true, "use lithium chunk builder")

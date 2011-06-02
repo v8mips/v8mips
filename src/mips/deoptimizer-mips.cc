@@ -39,7 +39,7 @@ namespace v8 {
 namespace internal {
 
 
-int Deoptimizer::table_entry_size_ = 10;
+int Deoptimizer::table_entry_size_ = 24;
 
 
 int Deoptimizer::patch_size() {
@@ -137,19 +137,19 @@ void Deoptimizer::DeoptimizeFunction(JSFunction* function) {
 void Deoptimizer::PatchStackCheckCodeAt(Address pc_after,
                                         Code* check_code,
                                         Code* replacement_code) {
-  UNIMPLEMENTED();
+  //UNIMPLEMENTED();
 }
 
 
 void Deoptimizer::RevertStackCheckCodeAt(Address pc_after,
                                          Code* check_code,
                                          Code* replacement_code) {
-  UNIMPLEMENTED();
+  //UNIMPLEMENTED();
 }
 
 
 void Deoptimizer::DoComputeOsrOutputFrame() {
-  UNIMPLEMENTED();
+  //UNIMPLEMENTED();
 }
 
 
@@ -361,7 +361,7 @@ void Deoptimizer::EntryGenerator::Generate() {
   // Push all 32 registers (needed to populate FrameDescription::registers_).
   // TODO(plind): This seems WACKY to save all regs, like at, k0, k1, and junk..... revisit this.
   //              Maybe we want to save useful regs, but leave gaps ??
-  __ MultiPush(restored_regs  | sp.bit() | ra.bit());
+  __ MultiPush(restored_regs | sp.bit() | ra.bit());
 
   const int kSavedRegistersAreaSize =
       (kNumberOfRegisters * kPointerSize) + kDoubleRegsSize;
@@ -510,7 +510,7 @@ void Deoptimizer::EntryGenerator::Generate() {
 
   // Restore the registers from the stack.
   __ MultiPop(restored_regs);  // All but pc registers.
-  __ Pop(at, at);  // Remove sp and ra.
+  __ Drop(2);  // Remove sp and ra.
 
   // Set up the roots register.
   ExternalReference roots_address = ExternalReference::roots_address(isolate);
@@ -539,8 +539,8 @@ void Deoptimizer::TableEntryGenerator::GeneratePrologue() {
     }
     __ li(at, Operand(i));
     __ push(at);
-    __ b(&done);
-    ASSERT(masm()->pc_offset() - start == table_entry_size_);
+    __ Branch(&done);
+    ASSERT_EQ(masm()->pc_offset() - start, table_entry_size_);
   }
   __ bind(&done);
 }
