@@ -137,19 +137,19 @@ void Deoptimizer::DeoptimizeFunction(JSFunction* function) {
 void Deoptimizer::PatchStackCheckCodeAt(Address pc_after,
                                         Code* check_code,
                                         Code* replacement_code) {
-  //UNIMPLEMENTED();
+  UNIMPLEMENTED();
 }
 
 
 void Deoptimizer::RevertStackCheckCodeAt(Address pc_after,
                                          Code* check_code,
                                          Code* replacement_code) {
-  //UNIMPLEMENTED();
+  UNIMPLEMENTED();
 }
 
 
 void Deoptimizer::DoComputeOsrOutputFrame() {
-  //UNIMPLEMENTED();
+  UNIMPLEMENTED();
 }
 
 
