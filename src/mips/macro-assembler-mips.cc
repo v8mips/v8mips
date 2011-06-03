@@ -1144,7 +1144,8 @@ void MacroAssembler::Branch(int16_t offset, Condition cond, Register rs,
 
   if (rt.is_reg()) {
     // We don't want any other register but scratch clobbered.
-    ASSERT(!scratch.is(rs) && !scratch.is(rt.rm_));
+    // TODO(kalmard): temporarily removed, check if this is needed:
+    // ASSERT(!scratch.is(rs) && !scratch.is(rt.rm_));
     r2 = rt.rm_;
     switch (cond) {
       case cc_always:

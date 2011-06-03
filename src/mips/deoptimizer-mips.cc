@@ -43,7 +43,7 @@ int Deoptimizer::table_entry_size_ = 32;
 
 
 int Deoptimizer::patch_size() {
-  const int kCallInstructionSizeInWords = 3;
+  const int kCallInstructionSizeInWords = 4;
   return kCallInstructionSizeInWords * Assembler::kInstrSize;
 }
 
@@ -396,7 +396,7 @@ void Deoptimizer::EntryGenerator::Generate() {
   // a3: code address or 0 already loaded.
   __ sw(t0, CFunctionArgumentOperand(5));  // Fp-to-sp delta.
   __ li(t1, Operand(ExternalReference::isolate_address()));
-  __ sw(t2, CFunctionArgumentOperand(6));  // Isolate.
+  __ sw(t1, CFunctionArgumentOperand(6));  // Isolate.
   // Call Deoptimizer::New().
   __ CallCFunction(ExternalReference::new_deoptimizer_function(isolate), 6);
 
@@ -526,25 +526,34 @@ void Deoptimizer::EntryGenerator::Generate() {
 
 void Deoptimizer::TableEntryGenerator::GeneratePrologue() {
   Assembler::BlockTrampolinePoolScope block_trampoline_pool(masm());
+
   // Create a sequence of deoptimization entries. Note that any
   // registers may be still live.
-  Label done;
+
+  // TODO (kalmard): This is pretty hacky. Instead of one big Branch that would
+  // involve the trampoline pool, create a series of small ones. This helps if
+  // table_entry_size_ gets larger but probably slows things down quite a bit.
+  Vector<Label> skip = Vector<Label>::New(count() + 1);
   for (int i = 0; i < count(); i++) {
     int start = masm()->pc_offset();
     USE(start);
-    if (type() == EAGER) {
-      __ nop();
-      __ nop();
-    } else {
+    if (type() != EAGER) {
       // Emulate ia32 like call by pushing return address to stack.
       __ push(ra);
     }
-    __ li(at, Operand(i), true);
+    __ li(at, Operand(i));
     __ push(at);
-    __ Branch(&done);
+    __ bind(&skip[i]);
+    __ Branch(&skip[i+1]);
+
+    // Pad the rest of the code.
+    while(table_entry_size_ > (masm()->pc_offset() - start)) {
+      __ nop();
+    }
+
     ASSERT_EQ(table_entry_size_, masm()->pc_offset() - start);
   }
-  __ bind(&done);
+  __ bind(&skip[count()]);
 }
 
 #undef __
