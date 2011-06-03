@@ -1027,7 +1027,7 @@ void LCodeGen::DoBranch(LBranch* instr) {
   Representation r = instr->hydrogen()->representation();
   if (r.IsInteger32()) {
     Register reg = ToRegister(instr->InputAt(0));
-    EmitBranch(true_block, false_block, ne, reg, Operand(0));
+    EmitBranch(true_block, false_block, ne, reg, Operand(zero_reg));
   } else if (r.IsDouble()) {
     Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
     // DoubleRegister reg = ToDoubleRegister(instr->InputAt(0));
@@ -1056,9 +1056,8 @@ void LCodeGen::DoBranch(LBranch* instr) {
       __ Branch(true_label, eq, reg, Operand(at));
       __ LoadRoot(at, Heap::kFalseValueRootIndex);
       __ Branch(false_label, eq, reg, Operand(at));
-      __ Branch(false_label, eq, reg, Operand(0));
-      __ And(at, reg, Operand(kSmiTagMask));
-      __ Branch(true_label, eq, at, Operand(0));
+      __ Branch(false_label, eq, reg, Operand(zero_reg));
+      __ JumpIfSmi(reg, true_label);
     
       // Test double values. Zero and NaN are false.
 
