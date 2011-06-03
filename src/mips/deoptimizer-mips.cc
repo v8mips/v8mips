@@ -367,7 +367,9 @@ void Deoptimizer::EntryGenerator::Generate() {
       (kNumberOfRegisters * kPointerSize) + kDoubleRegsSize;
 
   // Get the bailout id from the stack.
-  __ lw(a2, MemOperand(sp, kSavedRegistersAreaSize));
+  // TODO(kalmard): this adjustment by 8 is needed for some reason. This needs
+  // to be revisited once the number and format of saved registers are finalized.
+  __ lw(a2, MemOperand(sp, kSavedRegistersAreaSize - 8));
 
   // Get the address of the location in the code object if possible (a3) (return
   // address for lazy deoptimization) and compute the fp-to-sp delta in
