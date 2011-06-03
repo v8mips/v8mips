@@ -83,8 +83,14 @@ bool Operand::is_reg() const {
 // RelocInfo
 
 void RelocInfo::apply(intptr_t delta) {
-  // On MIPS we do not use pc relative addressing, so we don't need to patch the
-  // code here.
+  if (IsCodeTarget(rmode_)) {
+    uint32_t scope1 = (uint32_t) target_address() & ~kImm28Mask;
+    uint32_t scope2 = reinterpret_cast<uint32_t>(pc_) & ~kImm28Mask;
+
+    if (scope1 != scope2) {
+      Assembler::JumpLabelToJumpRegister(pc_);
+    }
+  }
 }
 
 

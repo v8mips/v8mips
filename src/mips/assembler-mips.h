@@ -445,6 +445,8 @@ class Assembler : public Malloced {
   static Address target_address_at(Address pc);
   static void set_target_address_at(Address pc, Address target);
 
+  static void JumpLabelToJumpRegister(Address pc);
+
   // This sets the branch destination (which gets loaded at the call address).
   // This is for calls and branches within generated code.
   inline static void set_target_at(Address instruction_payload,

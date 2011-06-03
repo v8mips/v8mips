@@ -138,7 +138,7 @@ Register ToRegister(int num) {
 // -----------------------------------------------------------------------------
 // Implementation of RelocInfo.
 
-const int RelocInfo::kApplyMask = 0;
+const int RelocInfo::kApplyMask = RelocInfo::kCodeTargetMask;
 
 
 bool RelocInfo::IsCodedSpecially() {
@@ -2280,6 +2280,38 @@ void Assembler::set_target_address_at(Address pc, Address target) {
   CPU::FlushICache(pc, (patched_jump ? 3 : 2) * sizeof(int32_t));
 }
 
+void Assembler::JumpLabelToJumpRegister(Address pc) {
+  // Address pc points to lui/ori instructions.
+  // Jump to label may follow at pc + 2 * kInstrSize.
+  uint32_t* p = reinterpret_cast<uint32_t*>(pc);
+#ifdef DEBUG
+  Instr instr1 = instr_at(pc);
+#endif
+  Instr instr2 = instr_at(pc + 1 * kInstrSize);
+  Instr instr3 = instr_at(pc + 2 * kInstrSize);
+  bool patched = false;
+
+  if (IsJal(instr3)) {
+    ASSERT(GetOpcodeField(instr1) == LUI);
+    ASSERT(GetOpcodeField(instr2) == ORI);
+
+    uint32_t rs_field = GetRt(instr2) << kRsShift;
+    uint32_t rd_field = ra.code() << kRdShift;  // Return-address (ra) reg.
+    *(p+2) = SPECIAL | rs_field | rd_field | JALR;
+    patched = true;
+  } else if (IsJ(instr3)) {
+    ASSERT(GetOpcodeField(instr1) == LUI);
+    ASSERT(GetOpcodeField(instr2) == ORI);
+
+    uint32_t rs_field = GetRt(instr2) << kRsShift;
+    *(p+2) = SPECIAL | rs_field | JR;
+    patched = true;
+  }
+
+  if (patched) {
+      CPU::FlushICache(pc+2, sizeof(Address));
+  }
+}
 
 } }  // namespace v8::internal
 
