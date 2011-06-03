@@ -195,6 +195,9 @@ void Deoptimizer::DoComputeFrame(TranslationIterator* iterator,
   uint32_t top_address;
   if (is_bottommost) {
     // 2 = context and function in the frame.
+    // TODO(kalmard): top_address gets a wrong value and that causes an error at
+    // the assertion around line 287. The adjustment from fp or the position of
+    // fp is probably broken and needs to be checked.
     top_address =
         input_->GetRegister(fp.code()) - (2 * kPointerSize) - height_in_bytes;
   } else {
@@ -369,6 +372,7 @@ void Deoptimizer::EntryGenerator::Generate() {
   // Get the bailout id from the stack.
   // TODO(kalmard): this adjustment by 8 is needed for some reason. This needs
   // to be revisited once the number and format of saved registers are finalized.
+  // This may relate to the top_address issue in Deoptimizer::DoComputeFrame.
   __ lw(a2, MemOperand(sp, kSavedRegistersAreaSize - 8));
 
   // Get the address of the location in the code object if possible (a3) (return
@@ -387,7 +391,10 @@ void Deoptimizer::EntryGenerator::Generate() {
     // Correct two words for bailout id and return address.
     __ Addu(t0, sp, Operand(kSavedRegistersAreaSize + (2 * kPointerSize)));
   }
-  __ Subu(t0, fp, t0);
+  // TODO(kalmard): another adjustment by 8 to satisfy the Deoptimizer
+  // constructor. See my comment above.
+  //__ Subu(t0, fp, t0);
+  __ li(t0, 8);
 
   // Allocate a new deoptimizer object.
   // Pass four arguments in a0 to a3 and fifth & sixth arguments on stack.
