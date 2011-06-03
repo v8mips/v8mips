@@ -1340,7 +1340,7 @@ static void UnregisterCodeEntry(JITCodeEntry* entry) {
 
 
 static JITCodeEntry* CreateELFObject(CodeDescription* desc) {
-  ZoneScope zone_scope(DELETE_ON_EXIT);
+  ZoneScope zone_scope(Isolate::Current(), DELETE_ON_EXIT);
 
   ELF elf;
   Writer w(&elf);
