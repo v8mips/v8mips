@@ -1016,9 +1016,8 @@ void LCodeGen::EmitGoto(int block, LDeferredCode* deferred_stack_check) {
   if (block != next_block) {
     // Perform stack overflow check if this goto needs it before jumping.
     if (deferred_stack_check != NULL) {
-      // TODO(kalmard) can t0 be used here?
-      __ LoadRoot(t0, Heap::kStackLimitRootIndex);
-      __ Branch(chunk_->GetAssemblyLabel(block), hs, sp, Operand(t0));
+      __ LoadRoot(at, Heap::kStackLimitRootIndex);
+      __ Branch(chunk_->GetAssemblyLabel(block), hs, sp, Operand(at));
       __ jmp(deferred_stack_check->entry());
       deferred_stack_check->SetExit(chunk_->GetAssemblyLabel(block));
     } else {
@@ -1505,12 +1504,11 @@ void LCodeGen::DoReturn(LReturn* instr) {
 
 void LCodeGen::DoLoadGlobalCell(LLoadGlobalCell* instr) {
   Register result = ToRegister(instr->result());
-  // TODO(kalmard) can t0 be used here?
-  __ li(t0, Operand(Handle<Object>(instr->hydrogen()->cell())));
-  __ lw(result, FieldMemOperand(t0, JSGlobalPropertyCell::kValueOffset));
+  __ li(at, Operand(Handle<Object>(instr->hydrogen()->cell())));
+  __ lw(result, FieldMemOperand(at, JSGlobalPropertyCell::kValueOffset));
   if (instr->hydrogen()->check_hole_value()) {
-    __ LoadRoot(t0, Heap::kTheHoleValueRootIndex);
-    DeoptimizeIf(eq, instr->environment(), result, Operand(t0));
+    __ LoadRoot(at, Heap::kTheHoleValueRootIndex);
+    DeoptimizeIf(eq, instr->environment(), result, Operand(at));
   }
 }
 
@@ -1542,9 +1540,8 @@ void LCodeGen::DoStoreGlobalCell(LStoreGlobalCell* instr) {
     Register scratch2 = ToRegister(instr->TempAt(0));
     __ lw(scratch2,
           FieldMemOperand(scratch, JSGlobalPropertyCell::kValueOffset));
-    // TODO(kalmard) can t0 be used here?
-    __ LoadRoot(t0, Heap::kTheHoleValueRootIndex);
-    DeoptimizeIf(eq, instr->environment(), scratch2, Operand(t0));
+    __ LoadRoot(at, Heap::kTheHoleValueRootIndex);
+    DeoptimizeIf(eq, instr->environment(), scratch2, Operand(at));
   }
 
   // Store the value.
