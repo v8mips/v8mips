@@ -265,7 +265,11 @@ class LCodeGen BASE_EMBEDDED {
 
   static Condition TokenToCondition(Token::Value op, bool is_unsigned);
   void EmitGoto(int block, LDeferredCode* deferred_stack_check = NULL);
-  void EmitBranch(int left_block, int right_block, Condition cc);
+  void EmitBranch(int left_block,
+                  int right_block,
+                  Condition cc,
+                  Register src1,
+                  const Operand& src2);
   void EmitCmpI(LOperand* left, LOperand* right);
   void EmitNumberUntagD(Register input,
                         DoubleRegister result,

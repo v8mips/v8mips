@@ -1000,13 +1000,97 @@ int LCodeGen::GetNextEmittedBlock(int block) {
 }
 
 
-void LCodeGen::EmitBranch(int left_block, int right_block, Condition cc) {
-  Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
+void LCodeGen::EmitBranch(int left_block, int right_block, 
+                          Condition cc, Register src1, const Operand& src2) {
+  int next_block = GetNextEmittedBlock(current_block_);
+  right_block = chunk_->LookupDestination(right_block);
+  left_block = chunk_->LookupDestination(left_block);
+
+  if (right_block == left_block) {
+    EmitGoto(left_block);
+  } else if (left_block == next_block) {
+    __ Branch(chunk_->GetAssemblyLabel(right_block),
+              NegateCondition(cc), src1, src2);
+  } else if (right_block == next_block) {
+    __ Branch(chunk_->GetAssemblyLabel(left_block), cc, src1, src2);
+  } else {
+    __ Branch(chunk_->GetAssemblyLabel(left_block), cc, src1, src2);
+    __ Branch(chunk_->GetAssemblyLabel(right_block));
+  }
 }
 
 
 void LCodeGen::DoBranch(LBranch* instr) {
-  Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
+  int true_block = chunk_->LookupDestination(instr->true_block_id());
+  int false_block = chunk_->LookupDestination(instr->false_block_id());
+
+  Representation r = instr->hydrogen()->representation();
+  if (r.IsInteger32()) {
+    Register reg = ToRegister(instr->InputAt(0));
+    EmitBranch(true_block, false_block, ne, reg, Operand(0));
+  } else if (r.IsDouble()) {
+    Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
+    // DoubleRegister reg = ToDoubleRegister(instr->InputAt(0));
+    // Register scratch = scratch0();
+    // 
+    // // Test the double value. Zero and NaN are false.
+    // __ VFPCompareAndLoadFlags(reg, 0.0, scratch);
+    // __ tst(scratch, Operand(kVFPZConditionFlagBit | kVFPVConditionFlagBit));
+    // EmitBranch(true_block, false_block, ne);
+  } else {
+    ASSERT(r.IsTagged());
+
+    // TODO(plind): this function VERY QUICKLY written, and POORLY tested. Review it.....
+    
+    Register reg = ToRegister(instr->InputAt(0));
+    if (instr->hydrogen()->type().IsBoolean()) {
+      __ LoadRoot(at, Heap::kTrueValueRootIndex);
+      EmitBranch(true_block, false_block, eq, reg, Operand(at));
+    } else {
+      Label* true_label = chunk_->GetAssemblyLabel(true_block);
+      Label* false_label = chunk_->GetAssemblyLabel(false_block);
+
+      __ LoadRoot(at, Heap::kUndefinedValueRootIndex);
+      __ Branch(false_label, eq, reg, Operand(at));
+      __ LoadRoot(at, Heap::kTrueValueRootIndex);
+      __ Branch(true_label, eq, reg, Operand(at));
+      __ LoadRoot(at, Heap::kFalseValueRootIndex);
+      __ Branch(false_label, eq, reg, Operand(at));
+      __ Branch(false_label, eq, reg, Operand(0));
+      __ And(at, reg, Operand(kSmiTagMask));
+      __ Branch(true_label, eq, at, Operand(0));
+    
+      // Test double values. Zero and NaN are false.
+
+      // TODO(plind): I think this is optimization, and stub below
+      // can handle everything.
+
+      Label call_stub;
+      // DoubleRegister dbl_scratch = d0;
+      // Register scratch = scratch0();
+      // __ ldr(scratch, FieldMemOperand(reg, HeapObject::kMapOffset));
+      // __ LoadRoot(ip, Heap::kHeapNumberMapRootIndex);
+      // __ cmp(scratch, Operand(ip));
+      // __ b(ne, &call_stub);
+      // __ sub(ip, reg, Operand(kHeapObjectTag));
+      // __ vldr(dbl_scratch, ip, HeapNumber::kValueOffset);
+      // __ VFPCompareAndLoadFlags(dbl_scratch, 0.0, scratch);
+      // __ tst(scratch, Operand(kVFPZConditionFlagBit | kVFPVConditionFlagBit));
+      // __ b(ne, false_label);
+      // __ b(true_label);
+    
+      // The conversion stub doesn't cause garbage collections so it's
+      // safe to not record a safepoint after the call.
+      __ bind(&call_stub);
+      ToBooleanStub stub(reg);
+      RegList saved_regs = kJSCallerSaved | kCalleeSaved;
+      __ MultiPush(saved_regs);
+      __ CallStub(&stub);
+      __ mov(at, v0);  // Save result.
+      __ MultiPop(saved_regs);
+      EmitBranch(true_block, false_block, ne, at, Operand(zero_reg));
+    }
+  }
 }
 
 
@@ -1099,7 +1183,7 @@ void LCodeGen::DoCmpJSObjectEq(LCmpJSObjectEq* instr) {
   // Register left = ToRegister(instr->InputAt(0));
   // Register right = ToRegister(instr->InputAt(1));
   // Register result = ToRegister(instr->result());
-  // 
+  //
   // __ cmp(left, Operand(right));
   // __ LoadRoot(result, Heap::kTrueValueRootIndex, eq);
   // __ LoadRoot(result, Heap::kFalseValueRootIndex, ne);
@@ -1112,7 +1196,7 @@ void LCodeGen::DoCmpJSObjectEqAndBranch(LCmpJSObjectEqAndBranch* instr) {
   // Register right = ToRegister(instr->InputAt(1));
   // int false_block = chunk_->LookupDestination(instr->false_block_id());
   // int true_block = chunk_->LookupDestination(instr->true_block_id());
-  // 
+  //
   // __ cmp(left, Operand(right));
   // EmitBranch(true_block, false_block, eq);
 }
@@ -1123,7 +1207,7 @@ void LCodeGen::DoCmpSymbolEq(LCmpSymbolEq* instr) {
   // Register left = ToRegister(instr->InputAt(0));
   // Register right = ToRegister(instr->InputAt(1));
   // Register result = ToRegister(instr->result());
-  // 
+  //
   // __ cmp(left, Operand(right));
   // __ LoadRoot(result, Heap::kTrueValueRootIndex, eq);
   // __ LoadRoot(result, Heap::kFalseValueRootIndex, ne);
@@ -1136,7 +1220,7 @@ void LCodeGen::DoCmpSymbolEqAndBranch(LCmpSymbolEqAndBranch* instr) {
   // Register right = ToRegister(instr->InputAt(1));
   // int false_block = chunk_->LookupDestination(instr->false_block_id());
   // int true_block = chunk_->LookupDestination(instr->true_block_id());
-  // 
+  //
   // __ cmp(left, Operand(right));
   // EmitBranch(true_block, false_block, eq);
 }
@@ -1190,7 +1274,7 @@ void LCodeGen::DoIsSmiAndBranch(LIsSmiAndBranch* instr) {
   Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
   // int true_block = chunk_->LookupDestination(instr->true_block_id());
   // int false_block = chunk_->LookupDestination(instr->false_block_id());
-  // 
+  //
   // Register input_reg = EmitLoadRegister(instr->InputAt(0), ip);
   // __ tst(input_reg, Operand(kSmiTagMask));
   // EmitBranch(true_block, false_block, eq);
@@ -1206,10 +1290,10 @@ void LCodeGen::DoIsUndetectableAndBranch(LIsUndetectableAndBranch* instr) {
   Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
   // Register input = ToRegister(instr->InputAt(0));
   // Register temp = ToRegister(instr->TempAt(0));
-  // 
+  //
   // int true_block = chunk_->LookupDestination(instr->true_block_id());
   // int false_block = chunk_->LookupDestination(instr->false_block_id());
-  // 
+  //
   // __ JumpIfSmi(input, chunk_->GetAssemblyLabel(false_block));
   // __ ldr(temp, FieldMemOperand(input, HeapObject::kMapOffset));
   // __ ldrb(temp, FieldMemOperand(temp, Map::kBitFieldOffset));
@@ -1226,8 +1310,8 @@ void LCodeGen::DoIsUndetectableAndBranch(LIsUndetectableAndBranch* instr) {
 //   ASSERT(from == to || to == LAST_TYPE);
 //   return from;
 // }
-// 
-// 
+//
+//
 // static Condition BranchCondition(HHasInstanceType* instr) {
 //   InstanceType from = instr->from();
 //   InstanceType to = instr->to();
@@ -1243,7 +1327,7 @@ void LCodeGen::DoHasInstanceType(LHasInstanceType* instr) {
   Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
   // Register input = ToRegister(instr->InputAt(0));
   // Register result = ToRegister(instr->result());
-  // 
+  //
   // ASSERT(instr->hydrogen()->value()->representation().IsTagged());
   // Label done;
   // __ tst(input, Operand(kSmiTagMask));
@@ -1261,15 +1345,15 @@ void LCodeGen::DoHasInstanceTypeAndBranch(LHasInstanceTypeAndBranch* instr) {
   Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
   // Register scratch = scratch0();
   // Register input = ToRegister(instr->InputAt(0));
-  // 
+  //
   // int true_block = chunk_->LookupDestination(instr->true_block_id());
   // int false_block = chunk_->LookupDestination(instr->false_block_id());
-  // 
+  //
   // Label* false_label = chunk_->GetAssemblyLabel(false_block);
-  // 
+  //
   // __ tst(input, Operand(kSmiTagMask));
   // __ b(eq, false_label);
-  // 
+  //
   // __ CompareObjectType(input, scratch, scratch, TestType(instr->hydrogen()));
   // EmitBranch(true_block, false_block, BranchCondition(instr->hydrogen()));
 }
@@ -1293,7 +1377,7 @@ void LCodeGen::DoHasCachedArrayIndex(LHasCachedArrayIndex* instr) {
   // Register input = ToRegister(instr->InputAt(0));
   // Register result = ToRegister(instr->result());
   // Register scratch = scratch0();
-  // 
+  //
   // ASSERT(instr->hydrogen()->value()->representation().IsTagged());
   // __ ldr(scratch,
   //        FieldMemOperand(input, String::kHashFieldOffset));
@@ -1308,10 +1392,10 @@ void LCodeGen::DoHasCachedArrayIndexAndBranch(
   Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
   // Register input = ToRegister(instr->InputAt(0));
   // Register scratch = scratch0();
-  // 
+  //
   // int true_block = chunk_->LookupDestination(instr->true_block_id());
   // int false_block = chunk_->LookupDestination(instr->false_block_id());
-  // 
+  //
   // __ ldr(scratch,
   //        FieldMemOperand(input, String::kHashFieldOffset));
   // __ tst(scratch, Operand(String::kContainsCachedArrayIndexMask));
@@ -1337,16 +1421,16 @@ void LCodeGen::DoClassOfTest(LClassOfTest* instr) {
   // Register result = ToRegister(instr->result());
   // ASSERT(input.is(result));
   // Handle<String> class_name = instr->hydrogen()->class_name();
-  // 
+  //
   // Label done, is_true, is_false;
-  // 
+  //
   // EmitClassOfTest(&is_true, &is_false, class_name, input, scratch0(), input);
   // __ b(ne, &is_false);
-  // 
+  //
   // __ bind(&is_true);
   // __ LoadRoot(result, Heap::kTrueValueRootIndex);
   // __ jmp(&done);
-  // 
+  //
   // __ bind(&is_false);
   // __ LoadRoot(result, Heap::kFalseValueRootIndex);
   // __ bind(&done);
@@ -1359,15 +1443,15 @@ void LCodeGen::DoClassOfTestAndBranch(LClassOfTestAndBranch* instr) {
   // Register temp = scratch0();
   // Register temp2 = ToRegister(instr->TempAt(0));
   // Handle<String> class_name = instr->hydrogen()->class_name();
-  // 
+  //
   // int true_block = chunk_->LookupDestination(instr->true_block_id());
   // int false_block = chunk_->LookupDestination(instr->false_block_id());
-  // 
+  //
   // Label* true_label = chunk_->GetAssemblyLabel(true_block);
   // Label* false_label = chunk_->GetAssemblyLabel(false_block);
-  // 
+  //
   // EmitClassOfTest(true_label, false_label, class_name, input, temp, temp2);
-  // 
+  //
   // EmitBranch(true_block, false_block, eq);
 }
 
@@ -1378,7 +1462,7 @@ void LCodeGen::DoCmpMapAndBranch(LCmpMapAndBranch* instr) {
   // Register temp = ToRegister(instr->TempAt(0));
   // int true_block = instr->true_block_id();
   // int false_block = instr->false_block_id();
-  // 
+  //
   // __ ldr(temp, FieldMemOperand(reg, HeapObject::kMapOffset));
   // __ cmp(temp, Operand(instr->map()));
   // EmitBranch(true_block, false_block, eq);
@@ -1389,10 +1473,10 @@ void LCodeGen::DoInstanceOf(LInstanceOf* instr) {
   Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
   // ASSERT(ToRegister(instr->InputAt(0)).is(r0));  // Object is in r0.
   // ASSERT(ToRegister(instr->InputAt(1)).is(r1));  // Function is in r1.
-  // 
+  //
   // InstanceofStub stub(InstanceofStub::kArgsInRegisters);
   // CallCode(stub.GetCode(), RelocInfo::CODE_TARGET, instr);
-  // 
+  //
   // __ cmp(r0, Operand(0));
   // __ mov(r0, Operand(factory()->false_value()), LeaveCC, ne);
   // __ mov(r0, Operand(factory()->true_value()), LeaveCC, eq);
@@ -1403,10 +1487,10 @@ void LCodeGen::DoInstanceOfAndBranch(LInstanceOfAndBranch* instr) {
   Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
   // ASSERT(ToRegister(instr->InputAt(0)).is(r0));  // Object is in r0.
   // ASSERT(ToRegister(instr->InputAt(1)).is(r1));  // Function is in r1.
-  // 
+  //
   // int true_block = chunk_->LookupDestination(instr->true_block_id());
   // int false_block = chunk_->LookupDestination(instr->false_block_id());
-  // 
+  //
   // InstanceofStub stub(InstanceofStub::kArgsInRegisters);
   // CallCode(stub.GetCode(), RelocInfo::CODE_TARGET, instr);
   // __ cmp(r0, Operand(0));
@@ -1425,45 +1509,47 @@ void LCodeGen::DoDeferredLInstanceOfKnownGlobal(LInstanceOfKnownGlobal* instr,
 }
 
 
-// TODO(plind): Routine not called yet, commenting out.
-// static Condition ComputeCompareCondition(Token::Value op) {
-//   switch (op) {
-//     case Token::EQ_STRICT:
-//     case Token::EQ:
-//       return eq;
-//     case Token::LT:
-//       return lt;
-//     case Token::GT:
-//       return gt;
-//     case Token::LTE:
-//       return le;
-//     case Token::GTE:
-//       return ge;
-//     default:
-//       UNREACHABLE();
-//       return kNoCondition;
-//   }
-// }
+static Condition ComputeCompareCondition(Token::Value op) {
+  switch (op) {
+    case Token::EQ_STRICT:
+    case Token::EQ:
+      return eq;
+    case Token::LT:
+      return lt;
+    case Token::GT:
+      return gt;
+    case Token::LTE:
+      return le;
+    case Token::GTE:
+      return ge;
+    default:
+      UNREACHABLE();
+      return kNoCondition;
+  }
+}
 
 
 void LCodeGen::DoCmpT(LCmpT* instr) {
-  Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
-  // Token::Value op = instr->op();
-  // 
-  // Handle<Code> ic = CompareIC::GetUninitialized(op);
-  // CallCode(ic, RelocInfo::CODE_TARGET, instr);
-  // __ cmp(r0, Operand(0));  // This instruction also signals no smi code inlined.
-  // 
-  // Condition condition = ComputeCompareCondition(op);
-  // if (op == Token::GT || op == Token::LTE) {
-  //   condition = ReverseCondition(condition);
-  // }
-  // __ LoadRoot(ToRegister(instr->result()),
-  //             Heap::kTrueValueRootIndex,
-  //             condition);
-  // __ LoadRoot(ToRegister(instr->result()),
-  //             Heap::kFalseValueRootIndex,
-  //             NegateCondition(condition));
+  Token::Value op = instr->op();
+
+  Handle<Code> ic = CompareIC::GetUninitialized(op);
+  CallCode(ic, RelocInfo::CODE_TARGET, instr);
+  __ nop();  // This instruction signals no smi code inlined.
+
+  Condition condition = ComputeCompareCondition(op);
+  if (op == Token::GT || op == Token::LTE) {
+    condition = ReverseCondition(condition);
+  }
+  __ LoadRoot(ToRegister(instr->result()),
+              Heap::kTrueValueRootIndex,
+              condition,
+              v0,
+              Operand(0));
+  __ LoadRoot(ToRegister(instr->result()),
+              Heap::kFalseValueRootIndex,
+              NegateCondition(condition),
+              v0,
+              Operand(0));
 }
 
 
@@ -1472,10 +1558,10 @@ void LCodeGen::DoCmpTAndBranch(LCmpTAndBranch* instr) {
   // Token::Value op = instr->op();
   // int true_block = chunk_->LookupDestination(instr->true_block_id());
   // int false_block = chunk_->LookupDestination(instr->false_block_id());
-  // 
+  //
   // Handle<Code> ic = CompareIC::GetUninitialized(op);
   // CallCode(ic, RelocInfo::CODE_TARGET, instr);
-  // 
+  //
   // // The compare stub expects compare condition and the input operands
   // // reversed for GT and LTE.
   // Condition condition = ComputeCompareCondition(op);
@@ -1625,7 +1711,7 @@ void LCodeGen::DoLoadElements(LLoadElements* instr) {
   // Register result = ToRegister(instr->result());
   // Register input = ToRegister(instr->InputAt(0));
   // Register scratch = scratch0();
-  // 
+  //
   // __ ldr(result, FieldMemOperand(input, JSObject::kElementsOffset));
   // if (FLAG_debug_code) {
   //   Label done;
@@ -2123,7 +2209,7 @@ void LCodeGen::DoCheckInstanceType(LCheckInstanceType* instr) {
 void LCodeGen::DoCheckFunction(LCheckFunction* instr) {
   ASSERT(instr->InputAt(0)->IsRegister());
   Register reg = ToRegister(instr->InputAt(0));
-  DeoptimizeIf(ne, instr->environment(), reg, 
+  DeoptimizeIf(ne, instr->environment(), reg,
                Operand(instr->hydrogen()->target()));
 }
 
