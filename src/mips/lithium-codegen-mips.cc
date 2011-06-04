@@ -972,7 +972,25 @@ void LCodeGen::DoThrow(LThrow* instr) {
 
 
 void LCodeGen::DoAddI(LAddI* instr) {
-  Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
+  LOperand* left = instr->InputAt(0);
+  LOperand* right = instr->InputAt(1);
+  ASSERT(left->Equals(instr->result()));
+  bool can_overflow = instr->hydrogen()->CheckFlag(HValue::kCanOverflow);
+
+  // TODO(plind): Must add OVERFLOW checks. Skipping for now.
+
+  if (right->IsStackSlot() || right->IsArgument()) {
+    Register right_reg = EmitLoadRegister(right, at);
+    __ Addu(ToRegister(left), ToRegister(left), Operand(right_reg));
+  } else {
+    ASSERT(right->IsRegister() || right->IsConstantOperand());
+    __ Addu(ToRegister(left), ToRegister(left), ToOperand(right));
+  }
+
+  if (can_overflow) {
+    // TODO(plind): Must add OVERFLOW checks. Skipping for now.
+    // DeoptimizeIf(vs, instr->environment());
+  }
 }
 
 
@@ -2121,12 +2139,72 @@ void LCodeGen::DoInteger32ToDouble(LInteger32ToDouble* instr) {
 
 
 void LCodeGen::DoNumberTagI(LNumberTagI* instr) {
-  Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
+  // class DeferredNumberTagI: public LDeferredCode {
+  //  public:
+  //   DeferredNumberTagI(LCodeGen* codegen, LNumberTagI* instr)
+  //       : LDeferredCode(codegen), instr_(instr) { }
+  //   virtual void Generate() { codegen()->DoDeferredNumberTagI(instr_); }
+  //  private:
+  //   LNumberTagI* instr_;
+  // };
+
+  LOperand* input = instr->InputAt(0);
+  ASSERT(input->IsRegister() && input->Equals(instr->result()));
+  Register reg = ToRegister(input);
+
+  // DeferredNumberTagI* deferred = new DeferredNumberTagI(this, instr);
+  // __ SmiTag(reg, SetCC);
+  __ SmiTag(reg);
+  // __ b(vs, deferred->entry());
+  // __ bind(deferred->exit());
 }
 
 
 void LCodeGen::DoDeferredNumberTagI(LNumberTagI* instr) {
-  Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
+
+  // TODO(plind): IMPLEMENT THIS THING
+  
+  
+  // Label slow;
+  // Register reg = ToRegister(instr->InputAt(0));
+  // DoubleRegister dbl_scratch = d0;
+  // SwVfpRegister flt_scratch = s0;
+  // 
+  // // Preserve the value of all registers.
+  // PushSafepointRegistersScope scope(this, Safepoint::kWithRegisters);
+  // 
+  // // There was overflow, so bits 30 and 31 of the original integer
+  // // disagree. Try to allocate a heap number in new space and store
+  // // the value in there. If that fails, call the runtime system.
+  // Label done;
+  // __ SmiUntag(reg);
+  // __ eor(reg, reg, Operand(0x80000000));
+  // __ vmov(flt_scratch, reg);
+  // __ vcvt_f64_s32(dbl_scratch, flt_scratch);
+  // if (FLAG_inline_new) {
+  //   __ LoadRoot(r6, Heap::kHeapNumberMapRootIndex);
+  //   __ AllocateHeapNumber(r5, r3, r4, r6, &slow);
+  //   if (!reg.is(r5)) __ mov(reg, r5);
+  //   __ b(&done);
+  // }
+  // 
+  // // Slow case: Call the runtime system to do the number allocation.
+  // __ bind(&slow);
+  // 
+  // // TODO(3095996): Put a valid pointer value in the stack slot where the result
+  // // register is stored, as this register is in the pointer map, but contains an
+  // // integer value.
+  // __ mov(ip, Operand(0));
+  // __ StoreToSafepointRegisterSlot(ip, reg);
+  // CallRuntimeFromDeferred(Runtime::kAllocateHeapNumber, 0, instr);
+  // if (!reg.is(r0)) __ mov(reg, r0);
+  // 
+  // // Done. Put the value in dbl_scratch into the value of the allocated heap
+  // // number.
+  // __ bind(&done);
+  // __ sub(ip, reg, Operand(kHeapObjectTag));
+  // __ vstr(dbl_scratch, ip, HeapNumber::kValueOffset);
+  // __ StoreToSafepointRegisterSlot(reg, reg);
 }
 
 
@@ -2171,12 +2249,118 @@ class DeferredTaggedToI: public LDeferredCode {
 
 
 void LCodeGen::DoDeferredTaggedToI(LTaggedToI* instr) {
-  Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
+  Register input_reg = ToRegister(instr->InputAt(0));
+  Register scratch1 = scratch0();
+  Register scratch2 = ToRegister(instr->TempAt(0));
+  FPURegister double_scratch = double_scratch0();
+  FPURegister single_scratch = double_scratch.low();
+
+  ASSERT(!scratch1.is(input_reg) && !scratch1.is(scratch2));
+  ASSERT(!scratch2.is(input_reg) && !scratch2.is(scratch1));
+
+  Label done;
+
+  // The input is a tagged HeapObject.
+  // Heap number map check.
+  __ lw(scratch1, FieldMemOperand(input_reg, HeapObject::kMapOffset));
+  __ LoadRoot(at, Heap::kHeapNumberMapRootIndex);
+  // __ cmp(scratch1, Operand(ip)); ...................................................plind
+
+  if (instr->truncating()) {
+    Register scratch3 = ToRegister(instr->TempAt(1));
+    FPURegister double_scratch2 = ToDoubleRegister(instr->TempAt(2));
+    ASSERT(!scratch3.is(input_reg) &&
+           !scratch3.is(scratch1) &&
+           !scratch3.is(scratch2));
+    // Performs a truncating conversion of a floating point number as used by
+    // the JS bitwise operations.
+    Label heap_number;
+    __ Branch(&heap_number, eq, scratch1, Operand(at));  // HeapNumber map?
+    // Check for undefined. Undefined is converted to zero for truncating
+    // conversions.
+    __ LoadRoot(at, Heap::kUndefinedValueRootIndex);
+    // __ cmp(input_reg, Operand(ip));  // ............................................plind
+    DeoptimizeIf(ne, instr->environment(), input_reg, Operand(at));
+    __ mov(input_reg, zero_reg);  // TODO(plind): result really in input reg ???????
+    __ b(&done);
+
+    __ bind(&heap_number);
+    // __ sub(scratch1, input_reg, Operand(kHeapObjectTag));
+    // __ vldr(double_scratch2, scratch1, HeapNumber::kValueOffset); .....................plind
+    __ ldc1(double_scratch2,
+            FieldMemOperand(input_reg, HeapNumber::kValueOffset));
+    __ EmitECMATruncate(input_reg,
+                        double_scratch2,
+                        single_scratch,
+                        scratch1,
+                        scratch2,
+                        scratch3);
+
+  } else {
+    // TODO(plind): if this scope is needed, then we also need one above ... top-level scope?
+    CpuFeatures::Scope scope(FPU);
+
+    // Deoptimize if we don't have a heap number.
+    DeoptimizeIf(ne, instr->environment(), scratch1, Operand(at));
+
+    // Load the double value.
+    __ ldc1(double_scratch,
+            FieldMemOperand(input_reg, HeapNumber::kValueOffset));
+
+    // TODO(plind): ARM uses a MacroAssembler function here (EmitVFPTruncate).
+    // On MIPS a lot of things cannot be implemented the same way so right
+    // now it makes a lot more sense to just do things manually.
+
+    // Save FCSR.
+    __ cfc1(scratch1, FCSR);
+    // Disable FPU exceptions.
+    __ ctc1(zero_reg, FCSR);
+    // TODO(plind): it appears this instuction rounds towards zero regardless
+    // of the rounding mode in FCSR. Verify, fix if needed, and remove comment.
+    __ trunc_w_d(single_scratch, double_scratch);
+    // Retrieve FCSR.
+    __ cfc1(scratch2, FCSR);
+    // Restore FCSR.
+    __ ctc1(scratch1, FCSR);
+
+    // Check for inexact conversion or exception (non-zero flags).
+    __ And(scratch2, scratch2, kFCSRFlagMask);
+
+    // Deopt if the operation did not succeed.
+    DeoptimizeIf(ne, instr->environment(), scratch2, Operand(zero_reg));
+
+    // Load the result.
+    __ mfc1(input_reg, single_scratch);
+
+    if (instr->hydrogen()->CheckFlag(HValue::kBailoutOnMinusZero)) {
+      // __ cmp(input_reg, Operand(0));
+      // __ b(ne, &done);
+      __ Branch(&done, ne, input_reg, Operand(zero_reg));
+
+      __ mfc1(scratch1, double_scratch.high());
+      __ And(scratch1, scratch1, Operand(HeapNumber::kSignMask));
+      DeoptimizeIf(ne, instr->environment(), scratch1, Operand(zero_reg));
+    }
+  }
+  __ bind(&done);
 }
 
 
 void LCodeGen::DoTaggedToI(LTaggedToI* instr) {
-  Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
+  LOperand* input = instr->InputAt(0);
+  ASSERT(input->IsRegister());
+  ASSERT(input->Equals(instr->result()));  // TODO(plind): maybe bad assumption for mips?
+
+  Register input_reg = ToRegister(input);
+
+  DeferredTaggedToI* deferred = new DeferredTaggedToI(this, instr);
+
+  // Let the deferred code handle the HeapObject case.
+  __ JumpIfNotSmi(input_reg, deferred->entry());
+
+  // Smi to int32 conversion.
+  __ SmiUntag(input_reg);
+  __ bind(deferred->exit());
 }
 
 

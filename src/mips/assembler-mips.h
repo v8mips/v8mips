@@ -218,6 +218,23 @@ struct FPURegister {
 
   bool is_valid() const { return 0 <= code_ && code_ < kNumFPURegisters ; }
   bool is(FPURegister creg) const { return code_ == creg.code_; }
+  FPURegister low() const {
+    // Find low reg of a Double-reg pair, which is the reg itself.
+    ASSERT(code_ % 2 == 0);  // Specified Double reg must be even.
+    FPURegister reg;
+    reg.code_ = code_;
+    ASSERT(reg.is_valid());
+    return reg;
+  }
+  FPURegister high() const {
+    // Find high reg of a Doubel-reg pair, which is reg + 1.
+    ASSERT(code_ % 2 == 0);  // Specified Double reg must be even.
+    FPURegister reg;
+    reg.code_ = code_ + 1;
+    ASSERT(reg.is_valid());
+    return reg;
+  }
+  
   int code() const {
     ASSERT(is_valid());
     return code_;
