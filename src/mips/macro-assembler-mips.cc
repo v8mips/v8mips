@@ -198,76 +198,84 @@ void MacroAssembler::RecordWriteHelper(Register object,
 void MacroAssembler::PushSafepointRegisters() {
   // Safepoints expect a block of kNumSafepointRegisters values on the
   // stack, so adjust the stack for unsaved registers.
-  const int num_unsaved = kNumSafepointRegisters - kNumSafepointSavedRegisters;
-  ASSERT(num_unsaved >= 0);
-  Subu(sp, sp, Operand(num_unsaved * kPointerSize));
-  MultiPush(kSafepointSavedRegisters);
+  UNIMPLEMENTED_MIPS();
+  // const int num_unsaved = kNumSafepointRegisters - kNumSafepointSavedRegisters;
+  // ASSERT(num_unsaved >= 0);
+  // Subu(sp, sp, Operand(num_unsaved * kPointerSize));
+  // MultiPush(kSafepointSavedRegisters);
 }
 
 
 void MacroAssembler::PopSafepointRegisters() {
-  const int num_unsaved = kNumSafepointRegisters - kNumSafepointSavedRegisters;
-  MultiPop(kSafepointSavedRegisters);
-  Addu(sp, sp, Operand(num_unsaved * kPointerSize));
+  UNIMPLEMENTED_MIPS();
+  // const int num_unsaved = kNumSafepointRegisters - kNumSafepointSavedRegisters;
+  // MultiPop(kSafepointSavedRegisters);
+  // Addu(sp, sp, Operand(num_unsaved * kPointerSize));
 }
 
 
 void MacroAssembler::PushSafepointRegistersAndDoubles() {
-  PushSafepointRegisters();
-  Subu(sp, sp, Operand(FPURegister::kNumAllocatableRegisters * kDoubleSize));
-  for (int i = 0; i < FPURegister::kNumAllocatableRegisters; i+=2) {
-    FPURegister reg = FPURegister::FromAllocationIndex(i);
-    sdc1(reg, MemOperand(sp, i * kDoubleSize));
-  }
+  UNIMPLEMENTED_MIPS();
+  // PushSafepointRegisters();
+  // Subu(sp, sp, Operand(FPURegister::kNumAllocatableRegisters * kDoubleSize));
+  // for (int i = 0; i < FPURegister::kNumAllocatableRegisters; i+=2) {
+  //   FPURegister reg = FPURegister::FromAllocationIndex(i);
+  //   sdc1(reg, MemOperand(sp, i * kDoubleSize));
+  // }
 }
 
 
 void MacroAssembler::PopSafepointRegistersAndDoubles() {
-  for (int i = 0; i < FPURegister::kNumAllocatableRegisters; i+=2) {
-    FPURegister reg = FPURegister::FromAllocationIndex(i);
-    ldc1(reg, MemOperand(sp, i * kDoubleSize));
-  }
-  Addu(sp, sp, Operand(FPURegister::kNumAllocatableRegisters * kDoubleSize));
-  PopSafepointRegisters();
+  UNIMPLEMENTED_MIPS();
+  // for (int i = 0; i < FPURegister::kNumAllocatableRegisters; i+=2) {
+  //   FPURegister reg = FPURegister::FromAllocationIndex(i);
+  //   ldc1(reg, MemOperand(sp, i * kDoubleSize));
+  // }
+  // Addu(sp, sp, Operand(FPURegister::kNumAllocatableRegisters * kDoubleSize));
+  // PopSafepointRegisters();
 }
 
 
 void MacroAssembler::StoreToSafepointRegistersAndDoublesSlot(Register src,
                                                              Register dst) {
-  sw(src, SafepointRegistersAndDoublesSlot(dst));
+  UNIMPLEMENTED_MIPS();
+  // sw(src, SafepointRegistersAndDoublesSlot(dst));
 }
 
 
 void MacroAssembler::StoreToSafepointRegisterSlot(Register src, Register dst) {
-  sw(src, SafepointRegisterSlot(dst));
+  UNIMPLEMENTED_MIPS();
+  // sw(src, SafepointRegisterSlot(dst));
 }
 
 
 void MacroAssembler::LoadFromSafepointRegisterSlot(Register dst, Register src) {
-  lw(dst, SafepointRegisterSlot(src));
+  UNIMPLEMENTED_MIPS();
+  // lw(dst, SafepointRegisterSlot(src));
 }
 
 
 int MacroAssembler::SafepointRegisterStackIndex(int reg_code) {
   // The registers are pushed starting with the highest encoding,
   // which means that lowest encodings are closest to the stack pointer.
+  UNIMPLEMENTED_MIPS();
   return kSafepointRegisterStackIndexMap[reg_code];
 }
 
 
 MemOperand MacroAssembler::SafepointRegisterSlot(Register reg) {
+  UNIMPLEMENTED_MIPS();
   return MemOperand(sp, SafepointRegisterStackIndex(reg.code()) * kPointerSize);
 }
 
 
 MemOperand MacroAssembler::SafepointRegistersAndDoublesSlot(Register reg) {
+  UNIMPLEMENTED_MIPS();
   // General purpose registers are pushed last on the stack.
   int doubles_size = FPURegister::kNumAllocatableRegisters * kDoubleSize;
   int register_offset = SafepointRegisterStackIndex(reg.code()) * kPointerSize;
   return MemOperand(sp, doubles_size + register_offset);
 }
-
-
 
 
 void MacroAssembler::InNewSpace(Register object,
