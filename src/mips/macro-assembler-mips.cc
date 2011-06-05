@@ -1053,22 +1053,21 @@ void MacroAssembler::EmitECMATruncate(Register result,
                                       FPURegister double_input,
                                       FPURegister single_scratch,
                                       Register scratch,
-                                      Register input_high,
-                                      Register input_low) {
+                                      Register scratch2,
+                                      Register scratch3) {
   CpuFeatures::Scope scope(FPU);
-  ASSERT(!input_high.is(result));
-  ASSERT(!input_low.is(result));
-  ASSERT(!input_low.is(input_high));
+  ASSERT(!scratch2.is(result));
+  ASSERT(!scratch3.is(result));
+  ASSERT(!scratch3.is(scratch2));
   ASSERT(!scratch.is(result) &&
-         !scratch.is(input_high) &&
-         !scratch.is(input_low));
+         !scratch.is(scratch2) &&
+         !scratch.is(scratch3));
   ASSERT(!single_scratch.is(double_input));
 
   Label done;
   Label manual;
 
   // Clear cumulative exception flags and save the FCSR.
-  Register scratch2 = input_high;
   cfc1(scratch2, FCSR);
   ctc1(zero_reg, FCSR);
   // Try a conversion to a signed integer.
@@ -1085,6 +1084,8 @@ void MacroAssembler::EmitECMATruncate(Register result,
   Branch(&done, eq, scratch, Operand(zero_reg));
 
   // Load the double value and perform a manual truncation.
+  Register input_high = scratch2;
+  Register input_low = scratch3;
   Move(input_low, input_high, double_input);
   EmitOutOfInt32RangeTruncate(result,
                               input_high,
