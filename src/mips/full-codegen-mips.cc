@@ -2479,7 +2479,8 @@ void FullCodeGenerator::EmitIsObject(ZoneList<Expression*>* args) {
   __ lbu(a1, FieldMemOperand(a2, Map::kInstanceTypeOffset));
   __ Branch(if_false, lt, a1, Operand(FIRST_NONCALLABLE_SPEC_OBJECT_TYPE));
   PrepareForBailoutBeforeSplit(TOS_REG, true, if_true, if_false);
-  Split(le, a1, Operand(LAST_NONCALLABLE_SPEC_OBJECT_TYPE), if_true, if_false, fall_through);
+  Split(le, a1, Operand(LAST_NONCALLABLE_SPEC_OBJECT_TYPE),
+        if_true, if_false, fall_through);
 
   context()->Plug(if_true, if_false);
 }
