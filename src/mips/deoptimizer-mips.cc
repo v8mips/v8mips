@@ -195,9 +195,6 @@ void Deoptimizer::DoComputeFrame(TranslationIterator* iterator,
   uint32_t top_address;
   if (is_bottommost) {
     // 2 = context and function in the frame.
-    // TODO(kalmard): top_address gets a wrong value and that causes an error at
-    // the assertion around line 287. The adjustment from fp or the position of
-    // fp is probably broken and needs to be checked.
     top_address =
         input_->GetRegister(fp.code()) - (2 * kPointerSize) - height_in_bytes;
   } else {
@@ -340,6 +337,9 @@ void Deoptimizer::DoComputeFrame(TranslationIterator* iterator,
 void Deoptimizer::EntryGenerator::Generate() {
   GeneratePrologue();
 
+  // TODO(kalmard) this whole function contains a lot of stack operations which
+  // cost a lot more than on ARM. Should be optimized.
+
   Isolate* isolate = masm()->isolate();
 
   CpuFeatures::Scope scope(FPU);
@@ -347,8 +347,7 @@ void Deoptimizer::EntryGenerator::Generate() {
   const int kNumberOfRegisters = Register::kNumRegisters;
 
   // Everything but ra and ip which will be saved but not restored.
-  RegList restored_regs = kJSCallerSaved | kCalleeSaved | zero_reg.bit() | at.bit()
-                        | k0.bit() | k1.bit() | gp.bit() ;   // TODO(plind): check this.......
+  RegList restored_regs = (kJSCallerSaved | kCalleeSaved) & ~sp.bit();   // TODO(plind): check this.......
 
   const int kDoubleRegsSize =
       kDoubleSize * FPURegister::kNumAllocatableRegisters;
@@ -364,16 +363,13 @@ void Deoptimizer::EntryGenerator::Generate() {
   // Push all 32 registers (needed to populate FrameDescription::registers_).
   // TODO(plind): This seems WACKY to save all regs, like at, k0, k1, and junk..... revisit this.
   //              Maybe we want to save useful regs, but leave gaps ??
-  __ MultiPush(restored_regs | sp.bit() | ra.bit());
+  __ MultiPush(0xffffffff);
 
   const int kSavedRegistersAreaSize =
       (kNumberOfRegisters * kPointerSize) + kDoubleRegsSize;
 
   // Get the bailout id from the stack.
-  // TODO(kalmard): this adjustment by 8 is needed for some reason. This needs
-  // to be revisited once the number and format of saved registers are finalized.
-  // This may relate to the top_address issue in Deoptimizer::DoComputeFrame.
-  __ lw(a2, MemOperand(sp, kSavedRegistersAreaSize - 8));
+  __ lw(a2, MemOperand(sp, kSavedRegistersAreaSize));
 
   // Get the address of the location in the code object if possible (a3) (return
   // address for lazy deoptimization) and compute the fp-to-sp delta in
@@ -391,10 +387,8 @@ void Deoptimizer::EntryGenerator::Generate() {
     // Correct two words for bailout id and return address.
     __ Addu(t0, sp, Operand(kSavedRegistersAreaSize + (2 * kPointerSize)));
   }
-  // TODO(kalmard): another adjustment by 8 to satisfy the Deoptimizer
-  // constructor. See my comment above.
-  //__ Subu(t0, fp, t0);
-  __ li(t0, 8);
+
+  __ Subu(t0, fp, t0);
 
   // Allocate a new deoptimizer object.
   // Pass four arguments in a0 to a3 and fifth & sixth arguments on stack.
@@ -408,6 +402,7 @@ void Deoptimizer::EntryGenerator::Generate() {
   __ sw(t1, CFunctionArgumentOperand(6));  // Isolate.
   // Call Deoptimizer::New().
   __ CallCFunction(ExternalReference::new_deoptimizer_function(isolate), 6);
+
 
   // Preserve "deoptimizer" object in register v0 and get the input
   // frame descriptor pointer to a1 (deoptimizer->input_);
@@ -514,18 +509,25 @@ void Deoptimizer::EntryGenerator::Generate() {
   for (int i = kNumberOfRegisters - 1; i >= 0; i--) {
     int offset = (i * kPointerSize) + FrameDescription::registers_offset();
     __ lw(t2, MemOperand(a2, offset));
+    // TODO(kalmard) this should be reworked to only adjust sp once
     __ push(t2);
   }
 
   // Restore the registers from the stack.
-  __ MultiPop(restored_regs);  // All but pc registers.
-  __ Drop(2);  // Remove sp and ra.
+  // Can't use MultiPop here as that can't pop while leaving gaps.
+  for (int16_t i = 0; i < kNumRegisters; i++) {
+    if ((restored_regs & (1 << i)) != 0) {
+      __ lw(ToRegister(i), MemOperand(sp, 4 * i));
+    }
+  }
+  __ Drop(kNumberOfRegisters);
 
   // Set up the roots register.
   ExternalReference roots_address = ExternalReference::roots_address(isolate);
   __ li(roots, Operand(roots_address));
 
-  __ pop(at);  // Remove pc.
+
+  __ Drop(1);  // Remove pc.
   __ pop(t3);  // Get continuation, leave pc on stack.
   __ pop(ra);
   __ Jump(t3);
