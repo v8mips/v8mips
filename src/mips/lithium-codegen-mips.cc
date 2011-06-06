@@ -1031,19 +1031,35 @@ void LCodeGen::DoAddI(LAddI* instr) {
   ASSERT(left->Equals(instr->result()));
   bool can_overflow = instr->hydrogen()->CheckFlag(HValue::kCanOverflow);
 
-  // TODO(plind): Must add OVERFLOW checks. Skipping for now.
-
-  if (right->IsStackSlot() || right->IsArgument()) {
-    Register right_reg = EmitLoadRegister(right, at);
-    __ Addu(ToRegister(left), ToRegister(left), Operand(right_reg));
-  } else {
-    ASSERT(right->IsRegister() || right->IsConstantOperand());
-    __ Addu(ToRegister(left), ToRegister(left), ToOperand(right));
-  }
-
-  if (can_overflow) {
-    // TODO(plind): Must add OVERFLOW checks. Skipping for now.
-    // DeoptimizeIf(vs, instr->environment());
+  if (!can_overflow) {
+    if (right->IsStackSlot() || right->IsArgument()) {
+      Register right_reg = EmitLoadRegister(right, at);
+      __ Addu(ToRegister(left), ToRegister(left), Operand(right_reg));
+    } else {
+      ASSERT(right->IsRegister() || right->IsConstantOperand());
+      __ Addu(ToRegister(left), ToRegister(left), ToOperand(right));
+    }
+  } else {  // can_overflow.
+    Register overflow = scratch0();
+    Register scratch = scratch1();
+    if (right->IsStackSlot() ||
+        right->IsArgument() ||
+        right->IsConstantOperand()) {
+      Register right_reg = EmitLoadRegister(right, scratch);
+      __ AdduAndCheckForOverflow(ToRegister(left),
+                                 ToRegister(left),
+                                 right_reg,
+                                 overflow);  // Reg at also used as scratch.
+    } else {
+      ASSERT(right->IsRegister());
+      // Due to overflow check macros not supporting constant operands,
+      // handling the IsConstantOperand case was moved to prev if clause.
+      __ AdduAndCheckForOverflow(ToRegister(left),
+                                 ToRegister(left),
+                                 ToRegister(right),
+                                 overflow);  // Reg at also used as scratch.
+    }
+    DeoptimizeIf(ne, instr->environment(), overflow, Operand(zero_reg));
   }
 }
 
@@ -1654,21 +1670,24 @@ void LCodeGen::DoCmpT(LCmpT* instr) {
   Handle<Code> ic = CompareIC::GetUninitialized(op);
   CallCode(ic, RelocInfo::CODE_TARGET, instr);
   __ nop();  // This instruction signals no smi code inlined.
+  // TODO(plind): Understand what conditions willlet this be patched.
 
   Condition condition = ComputeCompareCondition(op);
   if (op == Token::GT || op == Token::LTE) {
     condition = ReverseCondition(condition);
   }
+  // TODO(plind): optimize this a bit.
+  __ mov(at, v0);
   __ LoadRoot(ToRegister(instr->result()),
               Heap::kTrueValueRootIndex,
               condition,
-              v0,
-              Operand(0));
+              at,
+              Operand(zero_reg));
   __ LoadRoot(ToRegister(instr->result()),
               Heap::kFalseValueRootIndex,
               NegateCondition(condition),
-              v0,
-              Operand(0));
+              at,
+              Operand(zero_reg));
 }
 
 
@@ -2267,72 +2286,67 @@ void LCodeGen::DoInteger32ToDouble(LInteger32ToDouble* instr) {
 
 
 void LCodeGen::DoNumberTagI(LNumberTagI* instr) {
-  // class DeferredNumberTagI: public LDeferredCode {
-  //  public:
-  //   DeferredNumberTagI(LCodeGen* codegen, LNumberTagI* instr)
-  //       : LDeferredCode(codegen), instr_(instr) { }
-  //   virtual void Generate() { codegen()->DoDeferredNumberTagI(instr_); }
-  //  private:
-  //   LNumberTagI* instr_;
-  // };
+  class DeferredNumberTagI: public LDeferredCode {
+   public:
+    DeferredNumberTagI(LCodeGen* codegen, LNumberTagI* instr)
+        : LDeferredCode(codegen), instr_(instr) { }
+    virtual void Generate() { codegen()->DoDeferredNumberTagI(instr_); }
+   private:
+    LNumberTagI* instr_;
+  };
 
   LOperand* input = instr->InputAt(0);
   ASSERT(input->IsRegister() && input->Equals(instr->result()));
   Register reg = ToRegister(input);
+  Register overflow = scratch0();
 
-  // DeferredNumberTagI* deferred = new DeferredNumberTagI(this, instr);
-  // __ SmiTag(reg, SetCC);
-  __ SmiTag(reg);
-  // __ b(vs, deferred->entry());
-  // __ bind(deferred->exit());
+  DeferredNumberTagI* deferred = new DeferredNumberTagI(this, instr);
+  __ SmiTagCheckOverflow(reg, overflow);
+  __ BranchOnOverflow(deferred->entry(), overflow);
+  __ bind(deferred->exit());
 }
 
 
 void LCodeGen::DoDeferredNumberTagI(LNumberTagI* instr) {
 
-  // TODO(plind): IMPLEMENT THIS THING
+  Label slow;
+  Register reg = ToRegister(instr->InputAt(0));
+  FPURegister dbl_scratch = lithiumScratchDouble;
   
+  // Preserve the value of all registers.
+  PushSafepointRegistersScope scope(this, Safepoint::kWithRegisters);
   
-  // Label slow;
-  // Register reg = ToRegister(instr->InputAt(0));
-  // DoubleRegister dbl_scratch = d0;
-  // SwVfpRegister flt_scratch = s0;
-  // 
-  // // Preserve the value of all registers.
-  // PushSafepointRegistersScope scope(this, Safepoint::kWithRegisters);
-  // 
-  // // There was overflow, so bits 30 and 31 of the original integer
-  // // disagree. Try to allocate a heap number in new space and store
-  // // the value in there. If that fails, call the runtime system.
-  // Label done;
-  // __ SmiUntag(reg);
-  // __ eor(reg, reg, Operand(0x80000000));
-  // __ vmov(flt_scratch, reg);
-  // __ vcvt_f64_s32(dbl_scratch, flt_scratch);
-  // if (FLAG_inline_new) {
-  //   __ LoadRoot(r6, Heap::kHeapNumberMapRootIndex);
-  //   __ AllocateHeapNumber(r5, r3, r4, r6, &slow);
-  //   if (!reg.is(r5)) __ mov(reg, r5);
-  //   __ b(&done);
-  // }
-  // 
-  // // Slow case: Call the runtime system to do the number allocation.
-  // __ bind(&slow);
-  // 
-  // // TODO(3095996): Put a valid pointer value in the stack slot where the result
-  // // register is stored, as this register is in the pointer map, but contains an
-  // // integer value.
-  // __ mov(ip, Operand(0));
-  // __ StoreToSafepointRegisterSlot(ip, reg);
-  // CallRuntimeFromDeferred(Runtime::kAllocateHeapNumber, 0, instr);
-  // if (!reg.is(r0)) __ mov(reg, r0);
-  // 
-  // // Done. Put the value in dbl_scratch into the value of the allocated heap
-  // // number.
-  // __ bind(&done);
-  // __ sub(ip, reg, Operand(kHeapObjectTag));
-  // __ vstr(dbl_scratch, ip, HeapNumber::kValueOffset);
-  // __ StoreToSafepointRegisterSlot(reg, reg);
+  // There was overflow, so bits 30 and 31 of the original integer
+  // disagree. Try to allocate a heap number in new space and store
+  // the value in there. If that fails, call the runtime system.
+  Label done;
+  __ SmiUntag(reg);
+  __ Xor(reg, reg, Operand(0x80000000));
+  __ mtc1(reg, dbl_scratch);
+  __ cvt_d_w(dbl_scratch, dbl_scratch);
+  if (FLAG_inline_new) {
+    // TODO(plind): why did they choose r5, r3, r4, r6 for Arm version?
+    __ LoadRoot(t2, Heap::kHeapNumberMapRootIndex);
+    __ AllocateHeapNumber(t1, a3, t0, t2, &slow);
+    if (!reg.is(t1)) __ mov(reg, t1);
+    __ b(&done);
+  }
+  
+  // Slow case: Call the runtime system to do the number allocation.
+  __ bind(&slow);
+  
+  // TODO(3095996): Put a valid pointer value in the stack slot where the result
+  // register is stored, as this register is in the pointer map, but contains an
+  // integer value.
+  __ StoreToSafepointRegisterSlot(zero_reg, reg);
+  CallRuntimeFromDeferred(Runtime::kAllocateHeapNumber, 0, instr);
+  if (!reg.is(v0)) __ mov(reg, v0);
+  
+  // Done. Put the value in dbl_scratch into the value of the allocated heap
+  // number.
+  __ bind(&done);
+  __ sdc1(dbl_scratch, FieldMemOperand(reg, HeapNumber::kValueOffset));
+  __ StoreToSafepointRegisterSlot(reg, reg);
 }
 
 
@@ -2392,7 +2406,8 @@ void LCodeGen::DoDeferredTaggedToI(LTaggedToI* instr) {
   // Heap number map check.
   __ lw(scratch1, FieldMemOperand(input_reg, HeapObject::kMapOffset));
   __ LoadRoot(at, Heap::kHeapNumberMapRootIndex);
-  // __ cmp(scratch1, Operand(ip)); ...................................................plind
+  // This 'at' value and scratch1 map value are used for tests in both clauses
+  // of the if.
 
   if (instr->truncating()) {
     Register scratch3 = ToRegister(instr->TempAt(1));
@@ -2407,14 +2422,11 @@ void LCodeGen::DoDeferredTaggedToI(LTaggedToI* instr) {
     // Check for undefined. Undefined is converted to zero for truncating
     // conversions.
     __ LoadRoot(at, Heap::kUndefinedValueRootIndex);
-    // __ cmp(input_reg, Operand(ip));  // ............................................plind
     DeoptimizeIf(ne, instr->environment(), input_reg, Operand(at));
-    __ mov(input_reg, zero_reg);  // TODO(plind): result really in input reg ???????
+    __ mov(input_reg, zero_reg);  // TODO(plind): result really in input reg?
     __ b(&done);
 
     __ bind(&heap_number);
-    // __ sub(scratch1, input_reg, Operand(kHeapObjectTag));
-    // __ vldr(double_scratch2, scratch1, HeapNumber::kValueOffset); .....................plind
     __ ldc1(double_scratch2,
             FieldMemOperand(input_reg, HeapNumber::kValueOffset));
     __ EmitECMATruncate(input_reg,
@@ -2425,7 +2437,8 @@ void LCodeGen::DoDeferredTaggedToI(LTaggedToI* instr) {
                         scratch3);
 
   } else {
-    // TODO(plind): if this scope is needed, then we also need one above ... top-level scope?
+    // TODO(plind): if this scope is needed, then we also need one above?
+    // I don't think it is needed at all, we have a top-level FPU scope.
     CpuFeatures::Scope scope(FPU);
 
     // Deoptimize if we don't have a heap number.
@@ -2437,7 +2450,9 @@ void LCodeGen::DoDeferredTaggedToI(LTaggedToI* instr) {
 
     // TODO(plind): ARM uses a MacroAssembler function here (EmitVFPTruncate).
     // On MIPS a lot of things cannot be implemented the same way so right
-    // now it makes a lot more sense to just do things manually.
+    // now it makes more sense to just do things manually.
+
+    // TODO(plind): this code is still untested.
 
     // Save FCSR.
     __ cfc1(scratch1, FCSR);

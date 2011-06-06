@@ -148,6 +148,7 @@ class LCodeGen BASE_EMBEDDED {
   HGraph* graph() const { return chunk_->graph(); }
 
   Register scratch0() { return lithiumScratchReg; }
+  Register scratch1() { return lithiumScratchReg2; }
   DoubleRegister double_scratch0() { return lithiumScratchDouble; }
 
   int GetNextEmittedBlock(int block);

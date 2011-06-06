@@ -56,7 +56,8 @@ class JumpTarget;
 
 // Register aliases.
 // cp is assumed to be a callee saved register.
-const Register lithiumScratchReg = s4;  // Scratch register.
+const Register lithiumScratchReg = s3;  // Scratch register.
+const Register lithiumScratchReg2 = s4;  // Scratch register.
 const Register condReg = s5;  // Simulated (partial) condition code for mips.
 const Register roots = s6;  // Roots array pointer.
 const Register cp = s7;     // JavaScript context pointer.
@@ -1011,6 +1012,13 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
 
   void SmiTag(Register reg) {
     Addu(reg, reg, reg);
+  }
+
+  // Test for overflow < 0: use BranchOnOverflow() or BranchOnNoOverflow().
+  void SmiTagCheckOverflow(Register reg, Register overflow) {
+    mov(overflow, reg);  // Save original value.
+    addu(reg, reg, reg);
+    xor_(overflow, overflow, reg);  // Overflow if (value ^ 2 * value) < 0.
   }
 
   void SmiTag(Register dst, Register src) {
