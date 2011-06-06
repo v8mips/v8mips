@@ -138,12 +138,33 @@ void Deoptimizer::PatchStackCheckCodeAt(Address pc_after,
                                         Code* check_code,
                                         Code* replacement_code) {
   UNIMPLEMENTED();
+  // The call of the stack guard check has the following form:
+  // sltu at, sp, t0
+  // beq at, zero_reg, ok
+  // nop
+  // lui t9, <stack guard address> upper
+  // ori t9, <stack guard address> lower
+  // jalr t9
+
+  // TODO(kalmard) the patched code could be something like:
+  // We patch the code to the following form:
+  // sltu at, sp, t0
+  // nop
+  // nop
+  // lui t9, <on-stack replacement address> upper
+  // ori t9, <on-stack replacement address> lower
+  // jalr t9
+
+  // TODO(kalmard): this should probably be based on the x64 version.
+  // The ARM version relies on const pools.
 }
 
 
 void Deoptimizer::RevertStackCheckCodeAt(Address pc_after,
                                          Code* check_code,
                                          Code* replacement_code) {
+  // TODO(kalmard): this should probably be based on the x64 version.
+  // The ARM version relies on const pools.
   UNIMPLEMENTED();
 }
 
