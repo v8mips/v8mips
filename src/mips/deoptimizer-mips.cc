@@ -347,12 +347,12 @@ void Deoptimizer::EntryGenerator::Generate() {
   const int kNumberOfRegisters = Register::kNumRegisters;
 
   // Everything but ra and ip which will be saved but not restored.
-  RegList restored_regs = (kJSCallerSaved | kCalleeSaved) & ~sp.bit();   // TODO(plind): check this.......
+  RegList restored_regs = (kJSCallerSaved | kCalleeSaved) & ~sp.bit() & ~ra.bit();   // TODO(plind): check this.......
 
   const int kDoubleRegsSize =
       kDoubleSize * FPURegister::kNumAllocatableRegisters;
 
-  // Save all general purpose registers before messing with them.
+  // Save all FPU registers before messing with them.
   __ Subu(sp, sp, Operand(kDoubleRegsSize));
   for (int i = 0; i < FPURegister::kNumAllocatableRegisters; ++i) {
     FPURegister fpu_reg = FPURegister::FromAllocationIndex(i);
@@ -375,7 +375,7 @@ void Deoptimizer::EntryGenerator::Generate() {
   // address for lazy deoptimization) and compute the fp-to-sp delta in
   // register t0.
   if (type() == EAGER) {
-    __ li(a3, Operand(0));
+    __ mov(a3, zero_reg);
     // Correct one word for bailout id.
     __ Addu(t0, sp, Operand(kSavedRegistersAreaSize + (1 * kPointerSize)));
   } else if (type() == OSR) {
@@ -455,7 +455,7 @@ void Deoptimizer::EntryGenerator::Generate() {
 // __ cmp(r2, sp);
 // __ b(ne, &pop_loop);
   __ Branch(USE_DELAY_SLOT, &pop_loop, ne, a2, Operand(sp));
-  __ Addu(a3, a3, Operand(sizeof(uint32_t)));  // In delay slot.
+  __ addiu(a3, a3, sizeof(uint32_t));  // In delay slot.
   
   // Compute the output frame in the deoptimizer.
   __ push(a0);  // Preserve deoptimizer object across call.
@@ -526,8 +526,6 @@ void Deoptimizer::EntryGenerator::Generate() {
   ExternalReference roots_address = ExternalReference::roots_address(isolate);
   __ li(roots, Operand(roots_address));
 
-
-  __ Drop(1);  // Remove pc.
   __ pop(t3);  // Get continuation, leave pc on stack.
   __ pop(ra);
   __ Jump(t3);
