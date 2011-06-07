@@ -68,13 +68,13 @@ void LInstruction::VerifyCall() {
   ASSERT(Output() == NULL ||
          LUnallocated::cast(Output())->HasFixedPolicy() ||
          !LUnallocated::cast(Output())->HasRegisterPolicy());
-  for (UseIterator it(this); it.HasNext(); it.Advance()) {
-    LUnallocated* operand = LUnallocated::cast(it.Next());
+  for (UseIterator it(this); !it.Done(); it.Advance()) {
+    LUnallocated* operand = LUnallocated::cast(it.Current());
     ASSERT(operand->HasFixedPolicy() ||
            operand->IsUsedAtStart());
   }
-  for (TempIterator it(this); it.HasNext(); it.Advance()) {
-    LUnallocated* operand = LUnallocated::cast(it.Next());
+  for (TempIterator it(this); !it.Done(); it.Advance()) {
+    LUnallocated* operand = LUnallocated::cast(it.Current());
     ASSERT(operand->HasFixedPolicy() ||!operand->HasRegisterPolicy());
   }
 }
@@ -808,6 +808,11 @@ LInstruction* LChunkBuilder::DoBlockEntry(HBlockEntry* instr) {
 }
 
 
+LInstruction* LChunkBuilder::DoSoftDeoptimize(HSoftDeoptimize* instr) {
+  return AssignEnvironment(new LDeoptimize);
+}
+
+
 LInstruction* LChunkBuilder::DoDeoptimize(HDeoptimize* instr) {
   return AssignEnvironment(new LDeoptimize);
 }
@@ -1412,13 +1417,16 @@ LInstruction* LChunkBuilder::DoMul(HMul* instr) {
     LOperand* left = UseRegisterAtStart(instr->LeastConstantOperand());
     LOperand* right = UseOrConstant(instr->MostConstantOperand());
     LOperand* temp = NULL;
-    if (instr->CheckFlag(HValue::kBailoutOnMinusZero)) {
+    if (instr->CheckFlag(HValue::kBailoutOnMinusZero) &&
+        (instr->CheckFlag(HValue::kCanOverflow) ||
+        !right->IsConstantOperand())) {
       temp = TempRegister();
     }
-    LMulI* mul = new LMulI(left, right, temp);
-    return AssignEnvironment(DefineSameAsFirst(mul));
+    return AssignEnvironment(DefineSameAsFirst(new LMulI(left, right, temp)));
+
   } else if (instr->representation().IsDouble()) {
     return DoArithmeticD(Token::MUL, instr);
+
   } else {
     return DoArithmeticT(Token::MUL, instr);
   }

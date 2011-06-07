@@ -1964,6 +1964,7 @@ void UnaryOpStub::GenerateHeapNumberStubBitNot(MacroAssembler* masm) {
   GenerateTypeTransition(masm);
 }
 
+
 void UnaryOpStub::GenerateHeapNumberCodeSub(MacroAssembler* masm,
                                             Label* slow) {
   EmitCheckForHeapNumber(masm, a0, a1, t2, slow);
@@ -6371,6 +6372,7 @@ void ICCompareStub::GenerateMiss(MacroAssembler* masm) {
   __ Jump(a2);
 }
 
+
 void DirectCEntryStub::Generate(MacroAssembler* masm) {
   // No need to pop or drop anything, LeaveExitFrame will restore the old
   // stack, thus dropping the allocated space for the return value.
@@ -6394,6 +6396,7 @@ void DirectCEntryStub::GenerateCall(MacroAssembler* masm,
   __ li(t9, Operand(function));
   this->GenerateCall(masm, t9);
 }
+
 
 void DirectCEntryStub::GenerateCall(MacroAssembler* masm,
                                     Register target) {
