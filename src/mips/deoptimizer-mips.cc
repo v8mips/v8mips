@@ -531,17 +531,15 @@ void Deoptimizer::DoComputeFrame(TranslationIterator* iterator,
 void Deoptimizer::EntryGenerator::Generate() {
   GeneratePrologue();
 
-  // TODO(kalmard) this whole function contains a lot of stack operations which
-  // cost a lot more than on ARM. Should be optimized.
-
   Isolate* isolate = masm()->isolate();
 
   CpuFeatures::Scope scope(FPU);
-  // Save all general purpose registers before messing with them.
+  // Unlike on ARM we don't save all the registers, just the useful ones.
+  // For the rest, there are gaps on the stack, so the offsets remain the same.
   const int kNumberOfRegisters = Register::kNumRegisters;
 
-  // Everything but ra and ip which will be saved but not restored.
   RegList restored_regs = (kJSCallerSaved | kCalleeSaved) & ~sp.bit() & ~ra.bit();   // TODO(plind): check this.......
+  RegList saved_regs = restored_regs | sp.bit() | ra.bit();
 
   const int kDoubleRegsSize =
       kDoubleSize * FPURegister::kNumAllocatableRegisters;
@@ -554,10 +552,14 @@ void Deoptimizer::EntryGenerator::Generate() {
     __ sdc1(fpu_reg, MemOperand(sp, offset));
   }
 
-  // Push all 32 registers (needed to populate FrameDescription::registers_).
-  // TODO(plind): This seems WACKY to save all regs, like at, k0, k1, and junk..... revisit this.
-  //              Maybe we want to save useful regs, but leave gaps ??
-  __ MultiPush(0xffffffff);
+  // Push saved_regs registers (needed to populate FrameDescription::registers_).
+  // Leave gaps for other registers.
+  __ Subu(sp, sp, kNumberOfRegisters * kPointerSize);
+  for (int16_t i = kNumberOfRegisters - 1; i >= 0; i--) {
+    if ((saved_regs & (1 << i)) != 0) {
+      __ sw(ToRegister(i), MemOperand(sp, 4 * i));
+    }
+  }
 
   const int kSavedRegistersAreaSize =
       (kNumberOfRegisters * kPointerSize) + kDoubleRegsSize;
@@ -607,9 +609,11 @@ void Deoptimizer::EntryGenerator::Generate() {
   // Copy core registers into FrameDescription::registers_[kNumRegisters].
   ASSERT(Register::kNumRegisters == kNumberOfRegisters);
   for (int i = 0; i < kNumberOfRegisters; i++) {
-    int offset = (i * kPointerSize) + FrameDescription::registers_offset();
-    __ lw(a2, MemOperand(sp, i * kPointerSize));
-    __ sw(a2, MemOperand(a1, offset));
+    if ((saved_regs & (1 << i)) != 0) {
+      int offset = (i * kPointerSize) + FrameDescription::registers_offset();
+      __ lw(a2, MemOperand(sp, i * kPointerSize));
+      __ sw(a2, MemOperand(a1, offset));
+    }
   }
 
   // Copy FPU registers to
@@ -621,9 +625,6 @@ void Deoptimizer::EntryGenerator::Generate() {
     __ ldc1(f0, MemOperand(sp, src_offset));
     __ sdc1(f0, MemOperand(a1, dst_offset));
   }
-
-  // TODO(plind): If we are removing from the stack here, why did we push them,
-  // rather than just save them to the FrameDescription::registers_ ? .........................???
 
   // Remove the bailout id, eventually return address, and the saved registers
   // from the stack.
@@ -646,14 +647,12 @@ void Deoptimizer::EntryGenerator::Generate() {
   __ bind(&pop_loop);
   __ pop(t0);
   __ sw(t0, MemOperand(a3, 0));
-// __ cmp(r2, sp);
-// __ b(ne, &pop_loop);
   __ Branch(USE_DELAY_SLOT, &pop_loop, ne, a2, Operand(sp));
   __ addiu(a3, a3, sizeof(uint32_t));  // In delay slot.
   
   // Compute the output frame in the deoptimizer.
   __ push(a0);  // Preserve deoptimizer object across call.
-  // a0: deoptimizer object; r1: scratch.
+  // a0: deoptimizer object; a1: scratch.
   __ PrepareCallCFunction(1, a1);
   // Call Deoptimizer::ComputeOutputFrames().
   __ CallCFunction(
@@ -678,13 +677,9 @@ void Deoptimizer::EntryGenerator::Generate() {
   __ Addu(t2, a2, Operand(a3));
   __ lw(t3, MemOperand(t2, FrameDescription::frame_content_offset()));
   __ push(t3);
-// __ cmp(r3, Operand(0));
-// __ b(ne, &inner_push_loop);  // test for gt?
   __ Branch(&inner_push_loop, ne, a3, Operand(zero_reg));
 
   __ Addu(a0, a0, Operand(kPointerSize));
-// __ cmp(r0, r1);
-// __ b(lt, &outer_push_loop);
   __ Branch(&outer_push_loop, lt, a0, Operand(a1));
   
 
@@ -699,22 +694,18 @@ void Deoptimizer::EntryGenerator::Generate() {
   __ lw(t2, MemOperand(a2, FrameDescription::continuation_offset()));
   __ push(t2);
 
-  // Push the registers from the last output frame.
+
+  // Technically restoring 'at' should work unless zero_reg is also restored
+  // but it's safer to check for this.
+  ASSERT(!(at.bit() & restored_regs));
+  // Restore the registers from the last output frame.
+  __ mov(at, a2);
   for (int i = kNumberOfRegisters - 1; i >= 0; i--) {
     int offset = (i * kPointerSize) + FrameDescription::registers_offset();
-    __ lw(t2, MemOperand(a2, offset));
-    // TODO(kalmard) this should be reworked to only adjust sp once
-    __ push(t2);
-  }
-
-  // Restore the registers from the stack.
-  // Can't use MultiPop here as that can't pop while leaving gaps.
-  for (int16_t i = 0; i < kNumRegisters; i++) {
     if ((restored_regs & (1 << i)) != 0) {
-      __ lw(ToRegister(i), MemOperand(sp, 4 * i));
+      __ lw(ToRegister(i), MemOperand(at, offset));
     }
   }
-  __ Drop(kNumberOfRegisters);
 
   // Set up the roots register.
   ExternalReference roots_address = ExternalReference::roots_address(isolate);
