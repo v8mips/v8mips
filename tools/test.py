@@ -622,7 +622,7 @@ def CarCdr(path):
 
 # Use this to run several variants of the tests, e.g.:
 # VARIANT_FLAGS = [[], ['--always_compact', '--noflush_code']]
-VARIANT_FLAGS = [['--crankshaft']]
+VARIANT_FLAGS = [['--nocrankshaft']]
 
 
 class TestConfiguration(object):
