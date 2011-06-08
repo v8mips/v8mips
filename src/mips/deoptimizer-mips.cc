@@ -137,40 +137,213 @@ void Deoptimizer::DeoptimizeFunction(JSFunction* function) {
 void Deoptimizer::PatchStackCheckCodeAt(Address pc_after,
                                         Code* check_code,
                                         Code* replacement_code) {
-  UNIMPLEMENTED();
+  const int kInstrSize = Assembler::kInstrSize;
   // The call of the stack guard check has the following form:
   // sltu at, sp, t0
   // beq at, zero_reg, ok
   // nop
-  // lui t9, <stack guard address> upper
+  // lui t9, <stack guard address> upper  ;; pc_after points here
   // ori t9, <stack guard address> lower
   // jalr t9
 
-  // TODO(kalmard) the patched code could be something like:
-  // We patch the code to the following form:
-  // sltu at, sp, t0
-  // nop
-  // nop
-  // lui t9, <on-stack replacement address> upper
-  // ori t9, <on-stack replacement address> lower
-  // jalr t9
+  // TODO(kalmard): why does pc_after point there? Is it the same on the
+  // other architectures?
+  ASSERT(Assembler::IsBeq(Assembler::instr_at(pc_after - 2 * kInstrSize)));
+  ASSERT(MacroAssembler::IsNop(
+      Assembler::instr_at(pc_after - 1 * kInstrSize), 0));
 
-  // TODO(kalmard): this should probably be based on the x64 version.
-  // The ARM version relies on const pools.
+  // Replace the sltu instruction so beq is not executed.
+  CodePatcher patcher(pc_after - 3 * kInstrSize, 1);
+  patcher.masm()->addiu(at, zero_reg, 1);
+
+  Assembler::set_target_address_at(pc_after, replacement_code->entry());
+
+  // We patched the code to the following form:
+  // addiu at, zero_reg, 1
+  // beq at, zero_reg, ok  ;; Not changed
+  // nop  ;; Not changed
+  // lui t9, <on-stack replacement address> upper  ;; pc_after points here
+  // ori t9, <on-stack replacement address> lower
+  // jalr t9  ;; Not changed
+}
+
+
+static int LookupBailoutId(DeoptimizationInputData* data, unsigned ast_id) {
+  ByteArray* translations = data->TranslationByteArray();
+  int length = data->DeoptCount();
+  for (int i = 0; i < length; i++) {
+    if (static_cast<unsigned>(data->AstId(i)->value()) == ast_id) {
+      TranslationIterator it(translations,  data->TranslationIndex(i)->value());
+      int value = it.Next();
+      ASSERT(Translation::BEGIN == static_cast<Translation::Opcode>(value));
+      // Read the number of frames.
+      value = it.Next();
+      if (value == 1) return i;
+    }
+  }
+  UNREACHABLE();
+  return -1;
 }
 
 
 void Deoptimizer::RevertStackCheckCodeAt(Address pc_after,
                                          Code* check_code,
                                          Code* replacement_code) {
-  // TODO(kalmard): this should probably be based on the x64 version.
-  // The ARM version relies on const pools.
-  UNIMPLEMENTED();
+  // Exact opposite of the function above.
+  const int kInstrSize = Assembler::kInstrSize;
+  ASSERT(Assembler::IsAddImmediate(
+      Assembler::instr_at(pc_after - 3 * kInstrSize)));
+  ASSERT(MacroAssembler::IsNop(
+      Assembler::instr_at(pc_after - 1 * kInstrSize), 0));
+
+  // Rstore the sltu instruction so beq is possibly executed.
+  CodePatcher patcher(pc_after - 3 * kInstrSize, 1);
+  patcher.masm()->sltu(at, sp, t0);
+
+  Assembler::set_target_address_at(pc_after, check_code->entry());
 }
 
 
 void Deoptimizer::DoComputeOsrOutputFrame() {
-  UNIMPLEMENTED();
+  DeoptimizationInputData* data = DeoptimizationInputData::cast(
+      optimized_code_->deoptimization_data());
+  unsigned ast_id = data->OsrAstId()->value();
+
+  int bailout_id = LookupBailoutId(data, ast_id);
+  unsigned translation_index = data->TranslationIndex(bailout_id)->value();
+  ByteArray* translations = data->TranslationByteArray();
+
+  TranslationIterator iterator(translations, translation_index);
+  Translation::Opcode opcode =
+      static_cast<Translation::Opcode>(iterator.Next());
+  ASSERT(Translation::BEGIN == opcode);
+  USE(opcode);
+  int count = iterator.Next();
+  ASSERT(count == 1);
+  USE(count);
+
+  opcode = static_cast<Translation::Opcode>(iterator.Next());
+  USE(opcode);
+  ASSERT(Translation::FRAME == opcode);
+  unsigned node_id = iterator.Next();
+  USE(node_id);
+  ASSERT(node_id == ast_id);
+  JSFunction* function = JSFunction::cast(ComputeLiteral(iterator.Next()));
+  USE(function);
+  ASSERT(function == function_);
+  unsigned height = iterator.Next();
+  unsigned height_in_bytes = height * kPointerSize;
+  USE(height_in_bytes);
+
+  unsigned fixed_size = ComputeFixedSize(function_);
+  unsigned input_frame_size = input_->GetFrameSize();
+  ASSERT(fixed_size + height_in_bytes == input_frame_size);
+
+  unsigned stack_slot_size = optimized_code_->stack_slots() * kPointerSize;
+  unsigned outgoing_height = data->ArgumentsStackHeight(bailout_id)->value();
+  unsigned outgoing_size = outgoing_height * kPointerSize;
+  unsigned output_frame_size = fixed_size + stack_slot_size + outgoing_size;
+  ASSERT(outgoing_size == 0);  // OSR does not happen in the middle of a call.
+
+  if (FLAG_trace_osr) {
+    PrintF("[on-stack replacement: begin 0x%08" V8PRIxPTR " ",
+           reinterpret_cast<intptr_t>(function_));
+    function_->PrintName();
+    PrintF(" => node=%u, frame=%d->%d]\n",
+           ast_id,
+           input_frame_size,
+           output_frame_size);
+  }
+
+  // There's only one output frame in the OSR case.
+  output_count_ = 1;
+  output_ = new FrameDescription*[1];
+  output_[0] = new(output_frame_size) FrameDescription(
+      output_frame_size, function_);
+
+  // Clear the incoming parameters in the optimized frame to avoid
+  // confusing the garbage collector.
+  unsigned output_offset = output_frame_size - kPointerSize;
+  int parameter_count = function_->shared()->formal_parameter_count() + 1;
+  for (int i = 0; i < parameter_count; ++i) {
+    output_[0]->SetFrameSlot(output_offset, 0);
+    output_offset -= kPointerSize;
+  }
+
+  // Translate the incoming parameters. This may overwrite some of the
+  // incoming argument slots we've just cleared.
+  int input_offset = input_frame_size - kPointerSize;
+  bool ok = true;
+  int limit = input_offset - (parameter_count * kPointerSize);
+  while (ok && input_offset > limit) {
+    ok = DoOsrTranslateCommand(&iterator, &input_offset);
+  }
+
+  // There are no translation commands for the caller's pc and fp, the
+  // context, and the function.  Set them up explicitly.
+  for (int i =  StandardFrameConstants::kCallerPCOffset;
+       ok && i >=  StandardFrameConstants::kMarkerOffset;
+       i -= kPointerSize) {
+    uint32_t input_value = input_->GetFrameSlot(input_offset);
+    if (FLAG_trace_osr) {
+      const char* name = "UNKNOWN";
+      switch (i) {
+        case StandardFrameConstants::kCallerPCOffset:
+          name = "caller's pc";
+          break;
+        case StandardFrameConstants::kCallerFPOffset:
+          name = "fp";
+          break;
+        case StandardFrameConstants::kContextOffset:
+          name = "context";
+          break;
+        case StandardFrameConstants::kMarkerOffset:
+          name = "function";
+          break;
+      }
+      PrintF("    [sp + %d] <- 0x%08x ; [sp + %d] (fixed part - %s)\n",
+             output_offset,
+             input_value,
+             input_offset,
+             name);
+    }
+
+    output_[0]->SetFrameSlot(output_offset, input_->GetFrameSlot(input_offset));
+    input_offset -= kPointerSize;
+    output_offset -= kPointerSize;
+  }
+
+  // Translate the rest of the frame.
+  while (ok && input_offset >= 0) {
+    ok = DoOsrTranslateCommand(&iterator, &input_offset);
+  }
+
+  // If translation of any command failed, continue using the input frame.
+  if (!ok) {
+    delete output_[0];
+    output_[0] = input_;
+    output_[0]->SetPc(reinterpret_cast<uint32_t>(from_));
+  } else {
+    // Setup the frame pointer and the context pointer.
+    output_[0]->SetRegister(fp.code(), input_->GetRegister(fp.code()));
+    output_[0]->SetRegister(cp.code(), input_->GetRegister(cp.code()));
+
+    unsigned pc_offset = data->OsrPcOffset()->value();
+    uint32_t pc = reinterpret_cast<uint32_t>(
+        optimized_code_->entry() + pc_offset);
+    output_[0]->SetPc(pc);
+  }
+  Code* continuation = isolate_->builtins()->builtin(Builtins::kNotifyOSR);
+  output_[0]->SetContinuation(
+      reinterpret_cast<uint32_t>(continuation->entry()));
+
+  if (FLAG_trace_osr) {
+    PrintF("[on-stack replacement translation %s: 0x%08" V8PRIxPTR " ",
+           ok ? "finished" : "aborted",
+           reinterpret_cast<intptr_t>(function));
+    function->PrintName();
+    PrintF(" => pc=0x%0x]\n", output_[0]->GetPc());
+  }
 }
 
 
