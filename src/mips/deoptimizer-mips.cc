@@ -138,33 +138,37 @@ void Deoptimizer::PatchStackCheckCodeAt(Address pc_after,
                                         Code* check_code,
                                         Code* replacement_code) {
   const int kInstrSize = Assembler::kInstrSize;
+  // This structure comes from FullCodeGenerator::EmitStackCheck.
   // The call of the stack guard check has the following form:
   // sltu at, sp, t0
   // beq at, zero_reg, ok
   // nop
-  // lui t9, <stack guard address> upper  ;; pc_after points here
+  // lui t9, <stack guard address> upper
   // ori t9, <stack guard address> lower
   // jalr t9
+  // nop
+  // ----- pc_after points here
 
-  // TODO(kalmard): why does pc_after point there? Is it the same on the
-  // other architectures?
-  ASSERT(Assembler::IsBeq(Assembler::instr_at(pc_after - 2 * kInstrSize)));
+  ASSERT(Assembler::IsBeq(Assembler::instr_at(pc_after - 6 * kInstrSize)));
   ASSERT(MacroAssembler::IsNop(
-      Assembler::instr_at(pc_after - 1 * kInstrSize), 0));
+      Assembler::instr_at(pc_after - 5 * kInstrSize), 0));
 
   // Replace the sltu instruction so beq is not executed.
-  CodePatcher patcher(pc_after - 3 * kInstrSize, 1);
+  CodePatcher patcher(pc_after - 7 * kInstrSize, 1);
   patcher.masm()->addiu(at, zero_reg, 1);
 
-  Assembler::set_target_address_at(pc_after, replacement_code->entry());
+  Assembler::set_target_address_at(pc_after - 4 * kInstrSize,
+                                   replacement_code->entry());
 
   // We patched the code to the following form:
   // addiu at, zero_reg, 1
   // beq at, zero_reg, ok  ;; Not changed
   // nop  ;; Not changed
-  // lui t9, <on-stack replacement address> upper  ;; pc_after points here
+  // lui t9, <on-stack replacement address> upper
   // ori t9, <on-stack replacement address> lower
   // jalr t9  ;; Not changed
+  // nop  ;; Not changed
+  // ----- pc_after points here
 }
 
 
@@ -192,15 +196,16 @@ void Deoptimizer::RevertStackCheckCodeAt(Address pc_after,
   // Exact opposite of the function above.
   const int kInstrSize = Assembler::kInstrSize;
   ASSERT(Assembler::IsAddImmediate(
-      Assembler::instr_at(pc_after - 3 * kInstrSize)));
+      Assembler::instr_at(pc_after - 7 * kInstrSize)));
   ASSERT(MacroAssembler::IsNop(
-      Assembler::instr_at(pc_after - 1 * kInstrSize), 0));
+      Assembler::instr_at(pc_after - 5 * kInstrSize), 0));
 
-  // Rstore the sltu instruction so beq is possibly executed.
-  CodePatcher patcher(pc_after - 3 * kInstrSize, 1);
+  // Restore the sltu instruction so beq can possibly be executed again.
+  CodePatcher patcher(pc_after - 7 * kInstrSize, 1);
   patcher.masm()->sltu(at, sp, t0);
 
-  Assembler::set_target_address_at(pc_after, check_code->entry());
+  Assembler::set_target_address_at(pc_after - 4 * kInstrSize,
+                                   check_code->entry());
 }
 
 

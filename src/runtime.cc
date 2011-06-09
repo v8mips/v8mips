@@ -7800,12 +7800,7 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_CompileForOnStackReplacement) {
     for (unsigned i = 0; i < table_length; ++i) {
       // Table entries are (AST id, pc offset) pairs.
       uint32_t pc_offset = Memory::uint32_at(table_cursor + kIntSize);
-      if (pc_offset == target_pc_offset
-      //TODO(kalmard) this adjustment by 16 is a dirty hack to make it work
-#ifdef V8_TARGET_ARCH_MIPS
-          - 16
-#endif
-          ) {
+      if (pc_offset == target_pc_offset) {
         ast_id = static_cast<int>(Memory::uint32_at(table_cursor));
         break;
       }
