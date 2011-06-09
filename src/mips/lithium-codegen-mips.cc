@@ -2711,16 +2711,126 @@ void LCodeGen::DoTypeofIs(LTypeofIs* instr) {
 
 
 void LCodeGen::DoTypeofIsAndBranch(LTypeofIsAndBranch* instr) {
-  Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
+  Register input = ToRegister(instr->InputAt(0));
+  int true_block = chunk_->LookupDestination(instr->true_block_id());
+  int false_block = chunk_->LookupDestination(instr->false_block_id());
+  Label* true_label = chunk_->GetAssemblyLabel(true_block);
+  Label* false_label = chunk_->GetAssemblyLabel(false_block);
+
+  Register cmp1 = no_reg;
+  Operand cmp2 = Operand(no_reg);
+
+  Condition final_branch_condition = EmitTypeofIs(true_label,
+                                                  false_label,
+                                                  input,
+                                                  instr->type_literal(),
+                                                  cmp1,
+                                                  cmp2);
+
+  ASSERT(cmp1.is_valid());
+  ASSERT(!cmp2.is_reg() || cmp2.rm().is_valid());
+
+  EmitBranch(true_block, false_block, final_branch_condition, cmp1, cmp2);
 }
 
 
 Condition LCodeGen::EmitTypeofIs(Label* true_label,
                                  Label* false_label,
                                  Register input,
-                                 Handle<String> type_name) {
-  Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
-  return al;
+                                 Handle<String> type_name,
+                                 Register& cmp1,
+                                 Operand& cmp2) {
+  Condition final_branch_condition = kNoCondition;
+  Register scratch = scratch0();
+  if (type_name->Equals(heap()->number_symbol())) {
+    __ JumpIfSmi(input, true_label);
+    __ lw(input, FieldMemOperand(input, HeapObject::kMapOffset));
+    __ LoadRoot(at, Heap::kHeapNumberMapRootIndex);
+    cmp1 = input;
+    cmp2 = Operand(at);
+    final_branch_condition = eq;
+
+  } else if (type_name->Equals(heap()->string_symbol())) {
+    __ JumpIfSmi(input, false_label);
+    __ GetObjectType(input, input, scratch);
+    __ Branch(USE_DELAY_SLOT,
+              false_label,
+              ge,
+              scratch,
+              Operand(FIRST_NONSTRING_TYPE));
+    __ lbu(at, FieldMemOperand(input, Map::kBitFieldOffset));
+    __ And(at, at, 1 << Map::kIsUndetectable);
+    cmp1 = at;
+    cmp2 = Operand(zero_reg);
+    final_branch_condition = eq;
+
+  } else if (type_name->Equals(heap()->boolean_symbol())) {
+    __ LoadRoot(at, Heap::kTrueValueRootIndex);
+    __ Branch(USE_DELAY_SLOT,
+              true_label,
+              eq,
+              at,
+              Operand(input));
+    __ LoadRoot(at, Heap::kFalseValueRootIndex);
+    cmp1 = at;
+    cmp2 = Operand(input);
+    final_branch_condition = eq;
+
+  } else if (type_name->Equals(heap()->undefined_symbol())) {
+    __ LoadRoot(at, Heap::kUndefinedValueRootIndex);
+    __ Branch(USE_DELAY_SLOT,
+              true_label,
+              eq,
+              at,
+              Operand(input));
+    __ JumpIfSmi(input, false_label);
+    // Check for undetectable objects => true.
+    __ lw(input, FieldMemOperand(input, HeapObject::kMapOffset));
+    __ lbu(at, FieldMemOperand(input, Map::kBitFieldOffset));
+    __ And(at, at, 1 << Map::kIsUndetectable);
+    cmp1 = at;
+    cmp2 = Operand(zero_reg);
+    final_branch_condition = ne;
+
+  } else if (type_name->Equals(heap()->function_symbol())) {
+    __ JumpIfSmi(input, false_label);
+    __ GetObjectType(input, input, scratch);
+    cmp1 = scratch;
+    cmp2 = Operand(FIRST_CALLABLE_SPEC_OBJECT_TYPE);
+    final_branch_condition = ge;
+
+  } else if (type_name->Equals(heap()->object_symbol())) {
+    __ JumpIfSmi(input, false_label);
+    __ LoadRoot(at, Heap::kNullValueRootIndex);
+    __ Branch(USE_DELAY_SLOT,
+              true_label,
+              eq,
+              at,
+              Operand(input));
+    __ GetObjectType(input, input, scratch);
+    __ Branch(false_label,
+              lt,
+              scratch,
+              Operand(FIRST_NONCALLABLE_SPEC_OBJECT_TYPE));
+    __ lbu(scratch, FieldMemOperand(input, Map::kInstanceTypeOffset));
+    __ Branch(false_label,
+              gt,
+              scratch,
+              Operand(LAST_NONCALLABLE_SPEC_OBJECT_TYPE));
+    // Check for undetectable objects => false.
+    __ lbu(at, FieldMemOperand(input, Map::kBitFieldOffset));
+    __ And(at, at, 1 << Map::kIsUndetectable);
+    cmp1 = at;
+    cmp2 = Operand(zero_reg);
+    final_branch_condition = eq;
+
+  } else {
+    final_branch_condition = ne;
+    __ Branch(false_label);
+    // A dead branch instruction will be generated after this point.
+  }
+
+  return final_branch_condition;
 }
 
 
