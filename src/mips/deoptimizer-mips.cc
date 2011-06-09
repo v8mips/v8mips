@@ -353,7 +353,7 @@ void Deoptimizer::DoComputeOsrOutputFrame() {
 
 
 // This code is very similar to ia32/arm code, but relies on register names
-//  (fp, sp) and how the frame is laid out.
+// (fp, sp) and how the frame is laid out.
 void Deoptimizer::DoComputeFrame(TranslationIterator* iterator,
                                  int frame_index) {
   // Read the ast node id, function, and frame height for this output frame.
@@ -505,8 +505,10 @@ void Deoptimizer::DoComputeFrame(TranslationIterator* iterator,
   uint32_t pc_value = reinterpret_cast<uint32_t>(start + pc_offset);
   output_frame->SetPc(pc_value);
   if (is_topmost) {
-    // output_frame->SetRegister(pc.code(), pc_value);  // TODO(plind): BROKEN here, setting pc .......
-    output_frame->SetRegister(ra.code(), pc_value);  // TODO(plind): HACKEDhere, just so it compiles .....
+    // TODO(plind): BROKEN here, setting pc ..........................................
+    // output_frame->SetRegister(pc.code(), pc_value);
+    // TODO(plind): HACKEDhere, just so it compiles
+    output_frame->SetRegister(ra.code(), pc_value);
   }
 
   FullCodeGenerator::State state =
@@ -533,6 +535,9 @@ void Deoptimizer::DoComputeFrame(TranslationIterator* iterator,
 
 // This code tries to be close to ia32 code so that any changes can be
 // easily ported.
+// TODO(kalmard): This function emits reloc info and causes an assertion error
+// in deoptimizer.cc. The deopt system seems to be working with the assertion
+// disabled but this needs to be fixed.
 void Deoptimizer::EntryGenerator::Generate() {
   GeneratePrologue();
 
@@ -543,7 +548,12 @@ void Deoptimizer::EntryGenerator::Generate() {
   // For the rest, there are gaps on the stack, so the offsets remain the same.
   const int kNumberOfRegisters = Register::kNumRegisters;
 
-  RegList restored_regs = (kJSCallerSaved | kCalleeSaved) & ~sp.bit() & ~ra.bit();   // TODO(plind): check this.......
+  // TODO(kalmard): This can probably be optimized even further. Caller-saved
+  // registers should not be pushed to the stack unnecessarily.
+  // TODO(plind): check this
+  RegList restored_regs = (kJSCallerSaved | kCalleeSaved) &
+      ~sp.bit() &
+      ~ra.bit();
   RegList saved_regs = restored_regs | sp.bit() | ra.bit();
 
   const int kDoubleRegsSize =
@@ -557,7 +567,7 @@ void Deoptimizer::EntryGenerator::Generate() {
     __ sdc1(fpu_reg, MemOperand(sp, offset));
   }
 
-  // Push saved_regs registers (needed to populate FrameDescription::registers_).
+  // Push saved_regs (needed to populate FrameDescription::registers_).
   // Leave gaps for other registers.
   __ Subu(sp, sp, kNumberOfRegisters * kPointerSize);
   for (int16_t i = kNumberOfRegisters - 1; i >= 0; i--) {
@@ -657,7 +667,7 @@ void Deoptimizer::EntryGenerator::Generate() {
   __ sw(t0, MemOperand(a3, 0));
   __ Branch(USE_DELAY_SLOT, &pop_loop, ne, a2, Operand(sp));
   __ addiu(a3, a3, sizeof(uint32_t));  // In delay slot.
-  
+
   // Compute the output frame in the deoptimizer.
   __ push(a0);  // Preserve deoptimizer object across call.
   // a0: deoptimizer object; a1: scratch.
@@ -689,7 +699,7 @@ void Deoptimizer::EntryGenerator::Generate() {
 
   __ Addu(a0, a0, Operand(kPointerSize));
   __ Branch(&outer_push_loop, lt, a0, Operand(a1));
-  
+
 
   // Push state, pc, and continuation from the last output frame.
   if (type() != OSR) {
@@ -719,8 +729,8 @@ void Deoptimizer::EntryGenerator::Generate() {
   ExternalReference roots_address = ExternalReference::roots_address(isolate);
   __ li(roots, Operand(roots_address));
 
-  // TODO(kalmard) can we use 'at' here? It seems like a bad idea to use anything
-  // else, we just restored the registers.
+  // TODO(kalmard): can we use 'at' here? It seems like a bad idea to use
+  // anything else, we just restored the registers.
   __ pop(at);  // Get continuation, leave pc on stack.
   __ pop(ra);
   __ Jump(at);
@@ -734,7 +744,7 @@ void Deoptimizer::TableEntryGenerator::GeneratePrologue() {
   // Create a sequence of deoptimization entries. Note that any
   // registers may be still live.
 
-  // TODO (kalmard): This is pretty hacky. Instead of one big Branch that would
+  // TODO(kalmard): This is pretty hacky. Instead of one big Branch that would
   // involve the trampoline pool, create a series of small ones. This helps if
   // table_entry_size_ gets larger but probably slows things down quite a bit.
   Vector<Label> skip = Vector<Label>::New(count() + 1);
@@ -751,7 +761,7 @@ void Deoptimizer::TableEntryGenerator::GeneratePrologue() {
     __ Branch(&skip[i+1]);
 
     // Pad the rest of the code.
-    while(table_entry_size_ > (masm()->pc_offset() - start)) {
+    while (table_entry_size_ > (masm()->pc_offset() - start)) {
       __ nop();
     }
 
