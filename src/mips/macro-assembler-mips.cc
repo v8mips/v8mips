@@ -1885,15 +1885,11 @@ void MacroAssembler::Call(const Operand& target, BranchDelaySlot bdslot) {
   if (target.is_reg()) {
       jalr(target.rm());
   } else {  // !target.is_reg().
-    if (!MustUseReg(target.rmode_)) {
-      jal(target.imm32_);
-    } else {  // MustUseReg(target).
-      // Must record previous source positions before the
-      // li() generates a new code target.
-      positions_recorder()->WriteRecordedPositions();
-      li(t9, target);
-      jalr(t9);
-    }
+    // Must record previous source positions before the
+    // li() generates a new code target.
+    positions_recorder()->WriteRecordedPositions();
+    li(t9, target);
+    jalr(t9);
   }
   // Emit a nop in the branch delay slot if required.
   if (bdslot == PROTECT)
