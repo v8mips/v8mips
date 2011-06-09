@@ -25,38 +25,41 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#ifndef V8_PREPARSE_DATA_FORMAT_H_
-#define V8_PREPARSE_DATA_FORMAT_H_
+// Flags: --allow-natives-syntax
 
-namespace v8 {
-namespace internal {
+gW=gH=175;
+g=[];
 
-// Generic and general data used by preparse data recorders and readers.
+for(var n=0; n<gW; n++){
+ var l=[];
+ for(var p=0; p<gH; p++){
+   l.push(1)
+ }
+ g.push(l)
+}
 
-struct PreparseDataConstants {
- public:
-  // Layout and constants of the preparse data exchange format.
-  static const unsigned kMagicNumber = 0xBadDead;
-  static const unsigned kCurrentVersion = 7;
+function k(a,b){
+ if(a<0||b<0||a>=gW||b>=gH)
+   return 0;
+ return g[a][b];
+}
 
-  static const int kMagicOffset = 0;
-  static const int kVersionOffset = 1;
-  static const int kHasErrorOffset = 2;
-  static const int kFunctionsSizeOffset = 3;
-  static const int kSymbolCountOffset = 4;
-  static const int kSizeOffset = 5;
-  static const int kHeaderSize = 6;
+function f(){
+ for(var a=[],f=0; f<gW; f++){
+   var b=[];
+   for(var h=0; h<gH; h++){
+     var e=0;
+     for(var i=-1; i<=1; i++)
+       for(var j=-1; j<=1; j++)
+          e+=k(f+i,h+j);
+     e=k(f,h)==1?1:0;
+     b.push(e)
+   }
+   a.push(b)
+ }
+}
 
-  // If encoding a message, the following positions are fixed.
-  static const int kMessageStartPos = 0;
-  static const int kMessageEndPos = 1;
-  static const int kMessageArgCountPos = 2;
-  static const int kMessageTextPos = 3;
+f();
+%OptimizeFunctionOnNextCall(f);
+f();
 
-  static const unsigned char kNumberTerminator = 0x80u;
-};
-
-
-} }  // namespace v8::internal.
-
-#endif  // V8_PREPARSE_DATA_FORMAT_H_
