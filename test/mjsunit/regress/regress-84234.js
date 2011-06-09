@@ -25,40 +25,31 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// Flags: --allow-natives-syntax
+// Flags: --expose-gc --noopt
 
-// An exception thrown in a function optimized by on-stack replacement (OSR)
-// should be able to construct a receiver from all optimized stack frames.
+var gTestcases = new Array();
 
-function A() { }
-A.prototype.f = function() { }
-
-function B() { }
-
-var o = new A();
-
-// This function throws if o does not have an f property, and should not be
-// inlined.
-function g() { try { return o.f(); } finally { }}
-
-// Optimization status (see runtime.cc):
-// 1 - yes, 2 - no, 3 - always, 4 - never.
-
-// This function should be optimized via OSR.
-function h() {
-  var optstatus = %GetOptimizationStatus(h);
-  if (optstatus == 4) {
-    // Optimizations are globally disabled; just run once.
-    g();
-  } else {
-    // Run for a bit as long as h is unoptimized.
-    while (%GetOptimizationStatus(h) == 2) {
-      for (var j = 0; j < 100; j++) g();
-    }
-    g();
-  }
+function TestCase(n, d, e, a) {
+  gTestcases[gTc++] = this;
+  for ( gTc=0; gTc < gTestcases.length; gTc++ );
 }
 
-h();
-o = new B();
-assertThrows("h()");
+for ( var i = 0x0530; i <= 0x058F; i++ ) {
+  new TestCase("15.5.4.11-6",
+               eval("var s = new String(String.fromCharCode(i)); s.toLowerCase().charCodeAt(0)"));
+}
+var gTc= 0;
+
+
+for (var j = 0; j < 10; j++) {
+  test();
+  function test() {
+    for ( 0; gTc < gTestcases.length; gTc++ ) {
+      var MYOBJECT = new MyObject();
+    }
+    gc();
+  }
+  function MyObject( n ) {
+    this.__proto__ = Number.prototype;
+  }
+}

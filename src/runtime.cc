@@ -2365,6 +2365,7 @@ class CompiledReplacement {
   int parts() {
     return parts_.length();
   }
+
  private:
   enum PartType {
     SUBJECT_PREFIX = 1,
@@ -2641,7 +2642,7 @@ MUST_USE_RESULT static MaybeObject* StringReplaceRegExpWithString(
   int capture_count = regexp_handle->CaptureCount();
 
   // CompiledReplacement uses zone allocation.
-  CompilationZoneScope zone(isolate, DELETE_ON_EXIT);
+  ZoneScope zone(isolate, DELETE_ON_EXIT);
   CompiledReplacement compiled_replacement;
   compiled_replacement.Compile(replacement_handle,
                                capture_count,
@@ -3155,7 +3156,7 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_StringMatch) {
   }
   int length = subject->length();
 
-  CompilationZoneScope zone_space(isolate, DELETE_ON_EXIT);
+  ZoneScope zone_space(isolate, DELETE_ON_EXIT);
   ZoneList<int> offsets(8);
   do {
     int start;

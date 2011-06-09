@@ -1,4 +1,4 @@
-// Copyright 2010 the V8 project authors. All rights reserved.
+// Copyright 2011 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -105,14 +105,15 @@ static const uint32_t kFCSROverflowFlagMask = 1 << kFCSROverflowFlagBit;
 static const uint32_t kFCSRDivideByZeroFlagMask = 1 << kFCSRDivideByZeroFlagBit;
 static const uint32_t kFCSRInvalidOpFlagMask = 1 << kFCSRInvalidOpFlagBit;
 
-static const uint32_t kFCSRFlagMask = kFCSRInexactFlagMask |
-                                      kFCSRUnderflowFlagMask |
-                                      kFCSROverflowFlagMask |
-                                      kFCSRDivideByZeroFlagMask |
-                                      kFCSRInvalidOpFlagMask;
+static const uint32_t kFCSRFlagMask =
+    kFCSRInexactFlagMask |
+    kFCSRUnderflowFlagMask |
+    kFCSROverflowFlagMask |
+    kFCSRDivideByZeroFlagMask |
+    kFCSRInvalidOpFlagMask;
 
-static const uint32_t kFCSRExceptionFlagMask = kFCSRFlagMask ^
-                                               kFCSRInexactFlagMask;
+static const uint32_t kFCSRExceptionFlagMask =
+    kFCSRFlagMask ^ kFCSRInexactFlagMask;
 
 // Helper functions for converting between register numbers and names.
 class Registers {
@@ -132,7 +133,6 @@ class Registers {
   static const int32_t kMinValue = 0x80000000;
 
  private:
-
   static const char* names_[kNumSimuRegisters];
   static const RegisterAlias aliases_[];
 };
@@ -152,7 +152,6 @@ class FPURegisters {
   };
 
  private:
-
   static const char* names_[kNumFPURegisters];
   static const RegisterAlias aliases_[];
 };
@@ -761,4 +760,3 @@ static const int kDoubleAlignmentMask = kDoubleAlignment - 1;
 } }   // namespace v8::internal
 
 #endif    // #ifndef V8_MIPS_CONSTANTS_H_
-
