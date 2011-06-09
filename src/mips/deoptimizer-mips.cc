@@ -172,24 +172,6 @@ void Deoptimizer::PatchStackCheckCodeAt(Address pc_after,
 }
 
 
-static int LookupBailoutId(DeoptimizationInputData* data, unsigned ast_id) {
-  ByteArray* translations = data->TranslationByteArray();
-  int length = data->DeoptCount();
-  for (int i = 0; i < length; i++) {
-    if (static_cast<unsigned>(data->AstId(i)->value()) == ast_id) {
-      TranslationIterator it(translations,  data->TranslationIndex(i)->value());
-      int value = it.Next();
-      ASSERT(Translation::BEGIN == static_cast<Translation::Opcode>(value));
-      // Read the number of frames.
-      value = it.Next();
-      if (value == 1) return i;
-    }
-  }
-  UNREACHABLE();
-  return -1;
-}
-
-
 void Deoptimizer::RevertStackCheckCodeAt(Address pc_after,
                                          Code* check_code,
                                          Code* replacement_code) {
@@ -206,6 +188,24 @@ void Deoptimizer::RevertStackCheckCodeAt(Address pc_after,
 
   Assembler::set_target_address_at(pc_after - 4 * kInstrSize,
                                    check_code->entry());
+}
+
+
+static int LookupBailoutId(DeoptimizationInputData* data, unsigned ast_id) {
+  ByteArray* translations = data->TranslationByteArray();
+  int length = data->DeoptCount();
+  for (int i = 0; i < length; i++) {
+    if (static_cast<unsigned>(data->AstId(i)->value()) == ast_id) {
+      TranslationIterator it(translations,  data->TranslationIndex(i)->value());
+      int value = it.Next();
+      ASSERT(Translation::BEGIN == static_cast<Translation::Opcode>(value));
+      // Read the number of frames.
+      value = it.Next();
+      if (value == 1) return i;
+    }
+  }
+  UNREACHABLE();
+  return -1;
 }
 
 
