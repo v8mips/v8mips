@@ -614,9 +614,12 @@ void Deoptimizer::EntryGenerator::Generate() {
   // Copy core registers into FrameDescription::registers_[kNumRegisters].
   ASSERT(Register::kNumRegisters == kNumberOfRegisters);
   for (int i = 0; i < kNumberOfRegisters; i++) {
+    int offset = (i * kPointerSize) + FrameDescription::registers_offset();
     if ((saved_regs & (1 << i)) != 0) {
-      int offset = (i * kPointerSize) + FrameDescription::registers_offset();
       __ lw(a2, MemOperand(sp, i * kPointerSize));
+      __ sw(a2, MemOperand(a1, offset));
+    } else if (FLAG_debug_code) {
+      __ li(a2, kDebugZapValue);
       __ sw(a2, MemOperand(a1, offset));
     }
   }
