@@ -2613,10 +2613,12 @@ MaybeObject* NormalizedMapCache::Get(JSObject* obj,
                                      PropertyNormalizationMode mode) {
   Isolate* isolate = obj->GetIsolate();
   Map* fast = obj->map();
-  int index = Hash(fast) % kEntries;
+  int index = fast->Hash() % kEntries;
   Object* result = get(index);
-  if (result->IsMap() && CheckHit(Map::cast(result), fast, mode)) {
+  if (result->IsMap() &&
+      Map::cast(result)->EquivalentToForNormalization(fast, mode)) {
 #ifdef DEBUG
+    Map::cast(result)->SharedMapVerify();
     if (FLAG_enable_slow_asserts) {
       // The cached map should match newly created normalized map bit-by-bit.
       Object* fresh;
@@ -2649,43 +2651,6 @@ void NormalizedMapCache::Clear() {
   for (int i = 0; i != entries; i++) {
     set_undefined(i);
   }
-}
-
-
-int NormalizedMapCache::Hash(Map* fast) {
-  // For performance reasons we only hash the 3 most variable fields of a map:
-  // constructor, prototype and bit_field2.
-
-  // Shift away the tag.
-  int hash = (static_cast<uint32_t>(
-        reinterpret_cast<uintptr_t>(fast->constructor())) >> 2);
-
-  // XOR-ing the prototype and constructor directly yields too many zero bits
-  // when the two pointers are close (which is fairly common).
-  // To avoid this we shift the prototype 4 bits relatively to the constructor.
-  hash ^= (static_cast<uint32_t>(
-        reinterpret_cast<uintptr_t>(fast->prototype())) << 2);
-
-  return hash ^ (hash >> 16) ^ fast->bit_field2();
-}
-
-
-bool NormalizedMapCache::CheckHit(Map* slow,
-                                  Map* fast,
-                                  PropertyNormalizationMode mode) {
-#ifdef DEBUG
-  slow->SharedMapVerify();
-#endif
-  return
-    slow->constructor() == fast->constructor() &&
-    slow->prototype() == fast->prototype() &&
-    slow->inobject_properties() == ((mode == CLEAR_INOBJECT_PROPERTIES) ?
-                                    0 :
-                                    fast->inobject_properties()) &&
-    slow->instance_type() == fast->instance_type() &&
-    slow->bit_field() == fast->bit_field() &&
-    slow->bit_field2() == fast->bit_field2() &&
-    (slow->bit_field3() & ~(1<<Map::kIsShared)) == fast->bit_field3();
 }
 
 
@@ -3928,39 +3893,68 @@ void Map::RemoveFromCodeCache(String* name, Code* code, int index) {
 
 
 void Map::TraverseTransitionTree(TraverseCallback callback, void* data) {
+  // Traverse the transition tree without using a stack.  We do this by
+  // reversing the pointers in the maps and descriptor arrays.
   Map* current = this;
   Map* meta_map = heap()->meta_map();
+  Object** map_or_index_field = NULL;
   while (current != meta_map) {
     DescriptorArray* d = reinterpret_cast<DescriptorArray*>(
         *RawField(current, Map::kInstanceDescriptorsOrBitField3Offset));
-    if (d->IsEmpty()) {
-      Map* prev = current->map();
-      current->set_map(meta_map);
-      callback(current, data);
-      current = prev;
-      continue;
+    if (!d->IsEmpty()) {
+      FixedArray* contents = reinterpret_cast<FixedArray*>(
+          d->get(DescriptorArray::kContentArrayIndex));
+      map_or_index_field = RawField(contents, HeapObject::kMapOffset);
+      Object* map_or_index = *map_or_index_field;
+      bool map_done = true;  // Controls a nested continue statement.
+      for (int i = map_or_index->IsSmi() ? Smi::cast(map_or_index)->value() : 0;
+           i < contents->length();
+           i += 2) {
+        PropertyDetails details(Smi::cast(contents->get(i + 1)));
+        if (details.IsTransition()) {
+          // Found a map in the transition array.  We record our progress in
+          // the transition array by recording the current map in the map field
+          // of the next map and recording the index in the transition array in
+          // the map field of the array.
+          Map* next = Map::cast(contents->get(i));
+          next->set_map(current);
+          *map_or_index_field = Smi::FromInt(i + 2);
+          current = next;
+          map_done = false;
+          break;
+        }
+      }
+      if (!map_done) continue;
     }
-
-    FixedArray* contents = reinterpret_cast<FixedArray*>(
-        d->get(DescriptorArray::kContentArrayIndex));
-    Object** map_or_index_field = RawField(contents, HeapObject::kMapOffset);
-    Object* map_or_index = *map_or_index_field;
-    bool map_done = true;
-    for (int i = map_or_index->IsSmi() ? Smi::cast(map_or_index)->value() : 0;
-         i < contents->length();
-         i += 2) {
-      PropertyDetails details(Smi::cast(contents->get(i + 1)));
-      if (details.IsTransition()) {
-        Map* next = reinterpret_cast<Map*>(contents->get(i));
+    // That was the regular transitions, now for the prototype transitions.
+    FixedArray* prototype_transitions =
+        current->unchecked_prototype_transitions();
+    Object** proto_map_or_index_field =
+        RawField(prototype_transitions, HeapObject::kMapOffset);
+    Object* map_or_index = *proto_map_or_index_field;
+    const int start = kProtoTransitionHeaderSize + kProtoTransitionMapOffset;
+    int i = map_or_index->IsSmi() ? Smi::cast(map_or_index)->value() : start;
+    if (i < prototype_transitions->length()) {
+      // Found a map in the prototype transition array.  Record progress in
+      // an analogous way to the regular transitions array above.
+      Object* perhaps_map = prototype_transitions->get(i);
+      if (perhaps_map->IsMap()) {
+        Map* next = Map::cast(perhaps_map);
         next->set_map(current);
-        *map_or_index_field = Smi::FromInt(i + 2);
+        *proto_map_or_index_field =
+            Smi::FromInt(i + kProtoTransitionElementsPerEntry);
         current = next;
-        map_done = false;
-        break;
+        continue;
       }
     }
-    if (!map_done) continue;
-    *map_or_index_field = heap()->fixed_array_map();
+    *proto_map_or_index_field = heap()->fixed_array_map();
+    if (map_or_index_field != NULL) {
+      *map_or_index_field = heap()->fixed_array_map();
+    }
+
+    // The callback expects a map to have a real map as its map, so we save
+    // the map field, which is being used to track the traversal and put the
+    // correct map (the meta_map) in place while we do the callback.
     Map* prev = current->map();
     current->set_map(meta_map);
     callback(current, data);
@@ -4190,6 +4184,7 @@ class CodeCacheHashTableKey : public HashTableKey {
  private:
   String* name_;
   Code::Flags flags_;
+  // TODO(jkummerow): We should be able to get by without this.
   Code* code_;
 };
 
@@ -4209,7 +4204,7 @@ MaybeObject* CodeCacheHashTable::Put(String* name, Code* code) {
     if (!maybe_obj->ToObject(&obj)) return maybe_obj;
   }
 
-  // Don't use this, as the table might have grown.
+  // Don't use |this|, as the table might have grown.
   CodeCacheHashTable* cache = reinterpret_cast<CodeCacheHashTable*>(obj);
 
   int entry = cache->FindInsertionEntry(key.Hash());
@@ -4252,6 +4247,165 @@ static bool HasKey(FixedArray* array, Object* key) {
     }
   }
   return false;
+}
+
+
+MaybeObject* PolymorphicCodeCache::Update(MapList* maps,
+                                          Code::Flags flags,
+                                          Code* code) {
+  // Initialize cache if necessary.
+  if (cache()->IsUndefined()) {
+    Object* result;
+    { MaybeObject* maybe_result =
+          PolymorphicCodeCacheHashTable::Allocate(
+              PolymorphicCodeCacheHashTable::kInitialSize);
+      if (!maybe_result->ToObject(&result)) return maybe_result;
+    }
+    set_cache(result);
+  } else {
+    // This entry shouldn't be contained in the cache yet.
+    ASSERT(PolymorphicCodeCacheHashTable::cast(cache())
+               ->Lookup(maps, flags)->IsUndefined());
+  }
+  PolymorphicCodeCacheHashTable* hash_table =
+      PolymorphicCodeCacheHashTable::cast(cache());
+  Object* new_cache;
+  { MaybeObject* maybe_new_cache = hash_table->Put(maps, flags, code);
+    if (!maybe_new_cache->ToObject(&new_cache)) return maybe_new_cache;
+  }
+  set_cache(new_cache);
+  return this;
+}
+
+
+Object* PolymorphicCodeCache::Lookup(MapList* maps, Code::Flags flags) {
+  if (!cache()->IsUndefined()) {
+    PolymorphicCodeCacheHashTable* hash_table =
+        PolymorphicCodeCacheHashTable::cast(cache());
+    return hash_table->Lookup(maps, flags);
+  } else {
+    return GetHeap()->undefined_value();
+  }
+}
+
+
+// Despite their name, object of this class are not stored in the actual
+// hash table; instead they're temporarily used for lookups. It is therefore
+// safe to have a weak (non-owning) pointer to a MapList as a member field.
+class PolymorphicCodeCacheHashTableKey : public HashTableKey {
+ public:
+  // Callers must ensure that |maps| outlives the newly constructed object.
+  PolymorphicCodeCacheHashTableKey(MapList* maps, int code_flags)
+      : maps_(maps),
+        code_flags_(code_flags) {}
+
+  bool IsMatch(Object* other) {
+    MapList other_maps(kDefaultListAllocationSize);
+    int other_flags;
+    FromObject(other, &other_flags, &other_maps);
+    if (code_flags_ != other_flags) return false;
+    if (maps_->length() != other_maps.length()) return false;
+    // Compare just the hashes first because it's faster.
+    int this_hash = MapsHashHelper(maps_, code_flags_);
+    int other_hash = MapsHashHelper(&other_maps, other_flags);
+    if (this_hash != other_hash) return false;
+
+    // Full comparison: for each map in maps_, look for an equivalent map in
+    // other_maps. This implementation is slow, but probably good enough for
+    // now because the lists are short (<= 4 elements currently).
+    for (int i = 0; i < maps_->length(); ++i) {
+      bool match_found = false;
+      for (int j = 0; j < other_maps.length(); ++j) {
+        if (maps_->at(i)->EquivalentTo(other_maps.at(j))) {
+          match_found = true;
+          break;
+        }
+      }
+      if (!match_found) return false;
+    }
+    return true;
+  }
+
+  static uint32_t MapsHashHelper(MapList* maps, int code_flags) {
+    uint32_t hash = code_flags;
+    for (int i = 0; i < maps->length(); ++i) {
+      hash ^= maps->at(i)->Hash();
+    }
+    return hash;
+  }
+
+  uint32_t Hash() {
+    return MapsHashHelper(maps_, code_flags_);
+  }
+
+  uint32_t HashForObject(Object* obj) {
+    MapList other_maps(kDefaultListAllocationSize);
+    int other_flags;
+    FromObject(obj, &other_flags, &other_maps);
+    return MapsHashHelper(&other_maps, other_flags);
+  }
+
+  MUST_USE_RESULT MaybeObject* AsObject() {
+    Object* obj;
+    // The maps in |maps_| must be copied to a newly allocated FixedArray,
+    // both because the referenced MapList is short-lived, and because C++
+    // objects can't be stored in the heap anyway.
+    { MaybeObject* maybe_obj =
+        HEAP->AllocateUninitializedFixedArray(maps_->length() + 1);
+      if (!maybe_obj->ToObject(&obj)) return maybe_obj;
+    }
+    FixedArray* list = FixedArray::cast(obj);
+    list->set(0, Smi::FromInt(code_flags_));
+    for (int i = 0; i < maps_->length(); ++i) {
+      list->set(i + 1, maps_->at(i));
+    }
+    return list;
+  }
+
+ private:
+  static MapList* FromObject(Object* obj, int* code_flags, MapList* maps) {
+    FixedArray* list = FixedArray::cast(obj);
+    maps->Rewind(0);
+    *code_flags = Smi::cast(list->get(0))->value();
+    for (int i = 1; i < list->length(); ++i) {
+      maps->Add(Map::cast(list->get(i)));
+    }
+    return maps;
+  }
+
+  MapList* maps_;  // weak.
+  int code_flags_;
+  static const int kDefaultListAllocationSize =
+      KeyedIC::kMaxKeyedPolymorphism + 1;
+};
+
+
+Object* PolymorphicCodeCacheHashTable::Lookup(MapList* maps, int code_flags) {
+  PolymorphicCodeCacheHashTableKey key(maps, code_flags);
+  int entry = FindEntry(&key);
+  if (entry == kNotFound) return GetHeap()->undefined_value();
+  return get(EntryToIndex(entry) + 1);
+}
+
+
+MaybeObject* PolymorphicCodeCacheHashTable::Put(MapList* maps,
+                                                int code_flags,
+                                                Code* code) {
+  PolymorphicCodeCacheHashTableKey key(maps, code_flags);
+  Object* obj;
+  { MaybeObject* maybe_obj = EnsureCapacity(1, &key);
+    if (!maybe_obj->ToObject(&obj)) return maybe_obj;
+  }
+  PolymorphicCodeCacheHashTable* cache =
+      reinterpret_cast<PolymorphicCodeCacheHashTable*>(obj);
+  int entry = cache->FindInsertionEntry(key.Hash());
+  { MaybeObject* maybe_obj = key.AsObject();
+    if (!maybe_obj->ToObject(&obj)) return maybe_obj;
+  }
+  cache->set(EntryToIndex(entry), obj);
+  cache->set(EntryToIndex(entry) + 1, code);
+  cache->ElementAdded();
+  return cache;
 }
 
 
@@ -5900,6 +6054,40 @@ void Map::ClearNonLiveTransitions(Heap* heap, Object* real_prototype) {
 }
 
 
+int Map::Hash() {
+  // For performance reasons we only hash the 3 most variable fields of a map:
+  // constructor, prototype and bit_field2.
+
+  // Shift away the tag.
+  int hash = (static_cast<uint32_t>(
+        reinterpret_cast<uintptr_t>(constructor())) >> 2);
+
+  // XOR-ing the prototype and constructor directly yields too many zero bits
+  // when the two pointers are close (which is fairly common).
+  // To avoid this we shift the prototype 4 bits relatively to the constructor.
+  hash ^= (static_cast<uint32_t>(
+        reinterpret_cast<uintptr_t>(prototype())) << 2);
+
+  return hash ^ (hash >> 16) ^ bit_field2();
+}
+
+
+bool Map::EquivalentToForNormalization(Map* other,
+                                       PropertyNormalizationMode mode) {
+  return
+    constructor() == other->constructor() &&
+    prototype() == other->prototype() &&
+    inobject_properties() == ((mode == CLEAR_INOBJECT_PROPERTIES) ?
+                              0 :
+                              other->inobject_properties()) &&
+    instance_type() == other->instance_type() &&
+    bit_field() == other->bit_field() &&
+    bit_field2() == other->bit_field2() &&
+    (bit_field3() & ~(1<<Map::kIsShared)) ==
+        (other->bit_field3() & ~(1<<Map::kIsShared));
+}
+
+
 void JSFunction::JSFunctionIterateBody(int object_size, ObjectVisitor* v) {
   // Iterate over all fields in the body but take care in dealing with
   // the code entry.
@@ -6398,6 +6586,7 @@ void SharedFunctionInfo::CompleteInobjectSlackTracking() {
   if (slack != 0) {
     // Resize the initial map and all maps in its transition tree.
     map->TraverseTransitionTree(&ShrinkInstanceSize, &slack);
+
     // Give the correct expected_nof_properties to initial maps created later.
     ASSERT(expected_nof_properties() >= slack);
     set_expected_nof_properties(expected_nof_properties() - slack);
@@ -7117,42 +7306,59 @@ MaybeObject* JSObject::SetElementsLength(Object* len) {
 
 Object* Map::GetPrototypeTransition(Object* prototype) {
   FixedArray* cache = prototype_transitions();
-  int capacity = cache->length();
-  if (capacity == 0) return NULL;
-  int finger = Smi::cast(cache->get(0))->value();
-  for (int i = 1; i < finger; i += 2) {
-    if (cache->get(i) == prototype) return cache->get(i + 1);
+  int number_of_transitions = NumberOfProtoTransitions();
+  const int proto_offset =
+      kProtoTransitionHeaderSize + kProtoTransitionPrototypeOffset;
+  const int map_offset = kProtoTransitionHeaderSize + kProtoTransitionMapOffset;
+  const int step = kProtoTransitionElementsPerEntry;
+  for (int i = 0; i < number_of_transitions; i++) {
+    if (cache->get(proto_offset + i * step) == prototype) {
+      Object* map = cache->get(map_offset + i * step);
+      ASSERT(map->IsMap());
+      return map;
+    }
   }
   return NULL;
 }
 
 
 MaybeObject* Map::PutPrototypeTransition(Object* prototype, Map* map) {
+  ASSERT(map->IsMap());
+  ASSERT(HeapObject::cast(prototype)->map()->IsMap());
   // Don't cache prototype transition if this map is shared.
   if (is_shared() || !FLAG_cache_prototype_transitions) return this;
 
   FixedArray* cache = prototype_transitions();
 
-  int capacity = cache->length();
+  const int step = kProtoTransitionElementsPerEntry;
+  const int header = kProtoTransitionHeaderSize;
 
-  int finger = (capacity == 0) ? 1 : Smi::cast(cache->get(0))->value();
+  int capacity = (cache->length() - header) / step;
 
-  if (finger >= capacity) {
+  int transitions = NumberOfProtoTransitions() + 1;
+
+  if (transitions > capacity) {
     if (capacity > kMaxCachedPrototypeTransitions) return this;
 
     FixedArray* new_cache;
-    { MaybeObject* maybe_cache = heap()->AllocateFixedArray(finger * 2 + 1);
+    // Grow array by factor 2 over and above what we need.
+    { MaybeObject* maybe_cache =
+          heap()->AllocateFixedArray(transitions * 2 * step + header);
       if (!maybe_cache->To<FixedArray>(&new_cache)) return maybe_cache;
     }
 
-    for (int i = 1; i < capacity; i++) new_cache->set(i, cache->get(i));
+    for (int i = 0; i < capacity * step; i++) {
+      new_cache->set(i + header, cache->get(i + header));
+    }
     cache = new_cache;
     set_prototype_transitions(cache);
   }
 
-  cache->set(finger, prototype);
-  cache->set(finger + 1, map);
-  cache->set(0, Smi::FromInt(finger + 2));
+  int last = transitions - 1;
+
+  cache->set(header + last * step + kProtoTransitionPrototypeOffset, prototype);
+  cache->set(header + last * step + kProtoTransitionMapOffset, map);
+  SetNumberOfProtoTransitions(transitions);
 
   return cache;
 }
@@ -7160,6 +7366,10 @@ MaybeObject* Map::PutPrototypeTransition(Object* prototype, Map* map) {
 
 MaybeObject* JSReceiver::SetPrototype(Object* value,
                                       bool skip_hidden_prototypes) {
+#ifdef DEBUG
+  int size = Size();
+#endif
+
   Heap* heap = GetHeap();
   // Silently ignore the change if value is not a JSObject or null.
   // SpiderMonkey behaves this way.
@@ -7230,7 +7440,7 @@ MaybeObject* JSReceiver::SetPrototype(Object* value,
   real_receiver->set_map(Map::cast(new_map));
 
   heap->ClearInstanceofCache();
-
+  ASSERT(size == Size());
   return value;
 }
 
@@ -9745,6 +9955,7 @@ class TwoCharHashTableKey : public HashTableKey {
     UNREACHABLE();
     return NULL;
   }
+
  private:
   uint32_t c1_;
   uint32_t c2_;

@@ -361,7 +361,6 @@ class Operand BASE_EMBEDDED {
 // Class MemOperand represents a memory operand in load and store instructions.
 class MemOperand : public Operand {
  public:
-
   explicit MemOperand(Register rn, int32_t offset = 0);
 
   bool OffsetIsInt16Encodable() const {
@@ -409,6 +408,7 @@ class CpuFeatures : public AllStatic {
   // Enable a specified feature within a scope.
   class Scope BASE_EMBEDDED {
 #ifdef DEBUG
+
    public:
     explicit Scope(CpuFeature f) {
       unsigned mask = 1u << f;
@@ -428,11 +428,13 @@ class CpuFeatures : public AllStatic {
         isolate_->set_enabled_cpu_features(old_enabled_);
       }
     }
-   private:
+
+ private:
     Isolate* isolate_;
     unsigned old_enabled_;
 #else
-   public:
+
+ public:
     explicit Scope(CpuFeature f) {}
 #endif
   };
@@ -1127,6 +1129,7 @@ class Assembler : public AssemblerBase {
       next_label_ += kInstrSize;
       return label_pos;
     }
+
    private:
     int start_;
     int end_;
