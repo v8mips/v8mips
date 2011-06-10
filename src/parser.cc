@@ -1922,7 +1922,7 @@ Block* Parser::WithHelper(Expression* obj, ZoneStringList* labels, bool* ok) {
   Block* result = new(zone()) Block(NULL, 2, false);
 
   if (result != NULL) {
-    result->AddStatement(new(zone()) WithEnterStatement(obj));
+    result->AddStatement(new(zone()) EnterWithContextStatement(obj));
 
     // Create body block.
     Block* body = new(zone()) Block(NULL, 1, false);
@@ -1930,7 +1930,7 @@ Block* Parser::WithHelper(Expression* obj, ZoneStringList* labels, bool* ok) {
 
     // Create exit block.
     Block* exit = new(zone()) Block(NULL, 1, false);
-    exit->AddStatement(new(zone()) WithExitStatement());
+    exit->AddStatement(new(zone()) ExitContextStatement());
 
     // Return a try-finally statement.
     TryFinallyStatement* wrapper = new(zone()) TryFinallyStatement(body, exit);
@@ -2089,8 +2089,8 @@ TryStatement* Parser::ParseTryStatement(bool* ok) {
     Expect(Token::RPAREN, CHECK_OK);
 
     if (peek() == Token::LBRACE) {
-        // Rewrite the catch body B to a single statement block
-        // { try B finally { PopContext }}.
+      // Rewrite the catch body B to a single statement block
+      // { try B finally { PopContext }}.
       Block* inner_body;
       // We need to collect escapes from the body for both the inner
       // try/finally used to pop the catch context and any possible outer
@@ -2107,7 +2107,7 @@ TryStatement* Parser::ParseTryStatement(bool* ok) {
 
       // Create exit block.
       Block* inner_finally = new(zone()) Block(NULL, 1, false);
-      inner_finally->AddStatement(new(zone()) WithExitStatement());
+      inner_finally->AddStatement(new(zone()) ExitContextStatement());
 
       // Create a try/finally statement.
       TryFinallyStatement* inner_try_finally =
@@ -3635,6 +3635,7 @@ FunctionLiteral* Parser::ParseFunctionLiteral(Handle<String> var_name,
       scanner().SeekForward(end_pos - 1);
       materialized_literal_count = entry.literal_count();
       expected_property_count = entry.property_count();
+      if (entry.strict_mode()) top_scope_->EnableStrictMode();
       only_simple_this_property_assignments = false;
       this_property_assignments = isolate()->factory()->empty_fixed_array();
       Expect(Token::RBRACE, CHECK_OK);

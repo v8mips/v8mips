@@ -1297,8 +1297,8 @@ class LLoadKeyedSpecializedArrayElement: public LTemplateInstruction<1, 2, 0> {
 
   LOperand* external_pointer() { return inputs_[0]; }
   LOperand* key() { return inputs_[1]; }
-  ExternalArrayType array_type() const {
-    return hydrogen()->array_type();
+  JSObject::ElementsKind elements_kind() const {
+    return hydrogen()->elements_kind();
   }
 };
 
@@ -1651,6 +1651,7 @@ class LNumberUntagD: public LTemplateInstruction<1, 1, 0> {
   }
 
   DECLARE_CONCRETE_INSTRUCTION(NumberUntagD, "double-untag")
+  DECLARE_HYDROGEN_ACCESSOR(Change);
 };
 
 
@@ -1750,8 +1751,8 @@ class LStoreKeyedSpecializedArrayElement: public LTemplateInstruction<0, 3, 0> {
   LOperand* external_pointer() { return inputs_[0]; }
   LOperand* key() { return inputs_[1]; }
   LOperand* value() { return inputs_[2]; }
-  ExternalArrayType array_type() const {
-    return hydrogen()->array_type();
+  JSObject::ElementsKind elements_kind() const {
+    return hydrogen()->elements_kind();
   }
 };
 

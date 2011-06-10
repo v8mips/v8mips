@@ -171,20 +171,6 @@ CheckType TypeFeedbackOracle::GetCallCheckType(Call* expr) {
   return check;
 }
 
-ExternalArrayType TypeFeedbackOracle::GetKeyedLoadExternalArrayType(
-    Property* expr) {
-  Handle<Object> stub = GetInfo(expr->id());
-  ASSERT(stub->IsCode());
-  return Code::cast(*stub)->external_array_type();
-}
-
-ExternalArrayType TypeFeedbackOracle::GetKeyedStoreExternalArrayType(
-    Expression* expr) {
-  Handle<Object> stub = GetInfo(expr->id());
-  ASSERT(stub->IsCode());
-  return Code::cast(*stub)->external_array_type();
-}
-
 Handle<JSObject> TypeFeedbackOracle::GetPrototypeForPrimitiveCheck(
     CheckType check) {
   JSFunction* function = NULL;
@@ -407,7 +393,7 @@ void TypeFeedbackOracle::SetInfo(unsigned ast_id, Object* target) {
   MaybeObject* maybe_result = dictionary_->AtNumberPut(ast_id, target);
   USE(maybe_result);
 #ifdef DEBUG
-  Object* result;
+  Object* result = NULL;
   // Dictionary has been allocated with sufficient size for all elements.
   ASSERT(maybe_result->ToObject(&result));
   ASSERT(*dictionary_ == result);

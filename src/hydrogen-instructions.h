@@ -487,6 +487,7 @@ class HValue: public ZoneObject {
     kCanOverflow,
     kBailoutOnMinusZero,
     kCanBeDivByZero,
+    kDeoptimizeOnUndefined,
     kIsArguments,
     kTruncatingToInt32,
     kLastFlag = kTruncatingToInt32
@@ -595,6 +596,7 @@ class HValue: public ZoneObject {
   void SetOperandAt(int index, HValue* value);
 
   void DeleteAndReplaceWith(HValue* other);
+  void ReplaceAllUsesWith(HValue* other);
   bool HasNoUses() const { return use_list_ == NULL; }
   bool HasMultipleUses() const {
     return use_list_ != NULL && use_list_->tail() != NULL;
@@ -683,8 +685,6 @@ class HValue: public ZoneObject {
   // Remove the matching use from the use list if present.  Returns the
   // removed list node or NULL.
   HUseListNode* RemoveUse(HValue* value, int index);
-
-  void ReplaceAllUsesWith(HValue* other);
 
   void RegisterUse(int index, HValue* new_value);
 
@@ -1068,8 +1068,11 @@ class HChange: public HUnaryOperation {
   HChange(HValue* value,
           Representation from,
           Representation to,
-          bool is_truncating)
-      : HUnaryOperation(value), from_(from) {
+          bool is_truncating,
+          bool deoptimize_on_undefined)
+      : HUnaryOperation(value),
+        from_(from),
+        deoptimize_on_undefined_(deoptimize_on_undefined) {
     ASSERT(!from.IsNone() && !to.IsNone());
     ASSERT(!from.Equals(to));
     set_representation(to);
@@ -1085,6 +1088,7 @@ class HChange: public HUnaryOperation {
 
   Representation from() const { return from_; }
   Representation to() const { return representation(); }
+  bool deoptimize_on_undefined() const { return deoptimize_on_undefined_; }
   virtual Representation RequiredInputRepresentation(int index) const {
     return from_;
   }
@@ -1098,11 +1102,13 @@ class HChange: public HUnaryOperation {
     if (!other->IsChange()) return false;
     HChange* change = HChange::cast(other);
     return value() == change->value()
-        && to().Equals(change->to());
+        && to().Equals(change->to())
+        && deoptimize_on_undefined() == change->deoptimize_on_undefined();
   }
 
  private:
   Representation from_;
+  bool deoptimize_on_undefined_;
 };
 
 
@@ -2403,6 +2409,7 @@ class HBoundsCheck: public HBinaryOperation {
  public:
   HBoundsCheck(HValue* index, HValue* length)
       : HBinaryOperation(index, length) {
+    set_representation(Representation::Integer32());
     SetFlag(kUseGVN);
   }
 
@@ -3467,11 +3474,11 @@ class HLoadKeyedSpecializedArrayElement: public HBinaryOperation {
  public:
   HLoadKeyedSpecializedArrayElement(HValue* external_elements,
                                     HValue* key,
-                                    ExternalArrayType array_type)
+                                    JSObject::ElementsKind elements_kind)
       : HBinaryOperation(external_elements, key),
-        array_type_(array_type) {
-    if (array_type == kExternalFloatArray ||
-        array_type == kExternalDoubleArray) {
+        elements_kind_(elements_kind) {
+    if (elements_kind == JSObject::EXTERNAL_FLOAT_ELEMENTS ||
+        elements_kind == JSObject::EXTERNAL_DOUBLE_ELEMENTS) {
       set_representation(Representation::Double());
     } else {
       set_representation(Representation::Integer32());
@@ -3493,7 +3500,7 @@ class HLoadKeyedSpecializedArrayElement: public HBinaryOperation {
 
   HValue* external_pointer() { return OperandAt(0); }
   HValue* key() { return OperandAt(1); }
-  ExternalArrayType array_type() const { return array_type_; }
+  JSObject::ElementsKind elements_kind() const { return elements_kind_; }
 
   DECLARE_CONCRETE_INSTRUCTION(LoadKeyedSpecializedArrayElement)
 
@@ -3502,11 +3509,11 @@ class HLoadKeyedSpecializedArrayElement: public HBinaryOperation {
     if (!other->IsLoadKeyedSpecializedArrayElement()) return false;
     HLoadKeyedSpecializedArrayElement* cast_other =
         HLoadKeyedSpecializedArrayElement::cast(other);
-    return array_type_ == cast_other->array_type();
+    return elements_kind_ == cast_other->elements_kind();
   }
 
  private:
-  ExternalArrayType array_type_;
+  JSObject::ElementsKind elements_kind_;
 };
 
 
@@ -3649,8 +3656,8 @@ class HStoreKeyedSpecializedArrayElement: public HTemplateInstruction<3> {
   HStoreKeyedSpecializedArrayElement(HValue* external_elements,
                                      HValue* key,
                                      HValue* val,
-                                     ExternalArrayType array_type)
-      : array_type_(array_type) {
+                                     JSObject::ElementsKind elements_kind)
+      : elements_kind_(elements_kind) {
     SetFlag(kChangesSpecializedArrayElements);
     SetOperandAt(0, external_elements);
     SetOperandAt(1, key);
@@ -3663,8 +3670,10 @@ class HStoreKeyedSpecializedArrayElement: public HTemplateInstruction<3> {
     if (index == 0) {
       return Representation::External();
     } else {
-      if (index == 2 && (array_type() == kExternalFloatArray ||
-                         array_type() == kExternalDoubleArray)) {
+      bool float_or_double_elements =
+          elements_kind() == JSObject::EXTERNAL_FLOAT_ELEMENTS ||
+          elements_kind() == JSObject::EXTERNAL_DOUBLE_ELEMENTS;
+      if (index == 2 && float_or_double_elements) {
         return Representation::Double();
       } else {
         return Representation::Integer32();
@@ -3675,12 +3684,12 @@ class HStoreKeyedSpecializedArrayElement: public HTemplateInstruction<3> {
   HValue* external_pointer() { return OperandAt(0); }
   HValue* key() { return OperandAt(1); }
   HValue* value() { return OperandAt(2); }
-  ExternalArrayType array_type() const { return array_type_; }
+  JSObject::ElementsKind elements_kind() const { return elements_kind_; }
 
   DECLARE_CONCRETE_INSTRUCTION(StoreKeyedSpecializedArrayElement)
 
  private:
-  ExternalArrayType array_type_;
+  JSObject::ElementsKind elements_kind_;
 };
 
 
