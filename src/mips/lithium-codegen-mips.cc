@@ -1336,7 +1336,45 @@ void LCodeGen::DoCmpSymbolEqAndBranch(LCmpSymbolEqAndBranch* instr) {
 
 
 void LCodeGen::DoIsNull(LIsNull* instr) {
-  Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
+  Register reg = ToRegister(instr->InputAt(0));
+  Register result = ToRegister(instr->result());
+  
+  // TODO(plind): maybe too conservative here .... avoiding potential problem
+  // of conditional LoadRoot overwriting input regs.
+  Register input;
+  if (result.is(reg)) {
+    input = scratch0();
+    __ mov(input, reg);
+  } else {
+    input = reg;
+  }
+  __ LoadRoot(at, Heap::kNullValueRootIndex);
+  if (instr->is_strict()) {
+    __ LoadRoot(result, Heap::kTrueValueRootIndex, eq, input, Operand(at));
+    __ LoadRoot(result, Heap::kFalseValueRootIndex, ne, input, Operand(at));
+  } else {
+    Label true_value, false_value, done;
+    __ Branch(&true_value, eq, reg, Operand(at));
+    __ LoadRoot(at, Heap::kUndefinedValueRootIndex);
+    __ Branch(&true_value, eq, reg, Operand(at));
+    __ andi(at, reg, kSmiTagMask);
+    __ Branch(&false_value, eq, at, Operand(zero_reg));
+
+    // Check for undetectable objects by looking in the bit field in
+    // the map. The object has already been smi checked.
+    Register scratch = result;
+    __ lw(scratch, FieldMemOperand(reg, HeapObject::kMapOffset));
+    __ lbu(scratch, FieldMemOperand(scratch, Map::kBitFieldOffset));
+    __ And(at, scratch, Operand(1 << Map::kIsUndetectable));
+    __ Branch(&true_value, ne, at, Operand(zero_reg));
+
+    __ bind(&false_value);
+    __ LoadRoot(result, Heap::kFalseValueRootIndex);
+    __ jmp(&done);
+    __ bind(&true_value);
+    __ LoadRoot(result, Heap::kTrueValueRootIndex);
+    __ bind(&done);
+  }
 }
 
 
@@ -1592,15 +1630,13 @@ void LCodeGen::DoClassOfTestAndBranch(LClassOfTestAndBranch* instr) {
 
 
 void LCodeGen::DoCmpMapAndBranch(LCmpMapAndBranch* instr) {
-  Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
-  // Register reg = ToRegister(instr->InputAt(0));
-  // Register temp = ToRegister(instr->TempAt(0));
-  // int true_block = instr->true_block_id();
-  // int false_block = instr->false_block_id();
-  //
-  // __ ldr(temp, FieldMemOperand(reg, HeapObject::kMapOffset));
-  // __ cmp(temp, Operand(instr->map()));
-  // EmitBranch(true_block, false_block, eq);
+  Register reg = ToRegister(instr->InputAt(0));
+  Register temp = ToRegister(instr->TempAt(0));
+  int true_block = instr->true_block_id();
+  int false_block = instr->false_block_id();
+
+  __ lw(temp, FieldMemOperand(reg, HeapObject::kMapOffset));
+  EmitBranch(true_block, false_block, eq, temp, Operand(instr->map()));
 }
 
 
@@ -1670,7 +1706,7 @@ void LCodeGen::DoCmpT(LCmpT* instr) {
   Handle<Code> ic = CompareIC::GetUninitialized(op);
   CallCode(ic, RelocInfo::CODE_TARGET, instr);
   __ nop();  // This instruction signals no smi code inlined.
-  // TODO(plind): Understand what conditions willlet this be patched.
+  // TODO(plind): Understand what conditions will let this be patched.
 
   Condition condition = ComputeCompareCondition(op);
   if (op == Token::GT || op == Token::LTE) {
@@ -2197,7 +2233,34 @@ void LCodeGen::DoCallRuntime(LCallRuntime* instr) {
 
 
 void LCodeGen::DoStoreNamedField(LStoreNamedField* instr) {
-  Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
+  Register object = ToRegister(instr->object());
+  Register value = ToRegister(instr->value());
+  Register scratch = scratch0();
+  int offset = instr->offset();
+
+  ASSERT(!object.is(value));
+
+  if (!instr->transition().is_null()) {
+    __ li(scratch, Operand(instr->transition()));
+    __ sw(scratch, FieldMemOperand(object, HeapObject::kMapOffset));
+  }
+
+  // Do the store.
+  if (instr->is_in_object()) {
+    __ sw(value, FieldMemOperand(object, offset));
+    if (instr->needs_write_barrier()) {
+      // Update the write barrier for the object for in-object properties.
+      __ RecordWrite(object, Operand(offset), value, scratch);
+    }
+  } else {
+    __ lw(scratch, FieldMemOperand(object, JSObject::kPropertiesOffset));
+    __ sw(value, FieldMemOperand(scratch, offset));
+    if (instr->needs_write_barrier()) {
+      // Update the write barrier for the properties array.
+      // object is used as a scratch register.
+      __ RecordWrite(scratch, Operand(offset), value, object);
+    }
+  }
 }
 
 
@@ -2223,7 +2286,29 @@ void LCodeGen::DoBoundsCheck(LBoundsCheck* instr) {
 
 
 void LCodeGen::DoStoreKeyedFastElement(LStoreKeyedFastElement* instr) {
-  Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
+  Register value = ToRegister(instr->value());
+  Register elements = ToRegister(instr->object());
+  Register key = instr->key()->IsRegister() ? ToRegister(instr->key()) : no_reg;
+  Register scratch = scratch0();
+
+  // Do the store.
+  if (instr->key()->IsConstantOperand()) {
+    ASSERT(!instr->hydrogen()->NeedsWriteBarrier());
+    LConstantOperand* const_operand = LConstantOperand::cast(instr->key());
+    int offset =
+        ToInteger32(const_operand) * kPointerSize + FixedArray::kHeaderSize;
+    __ sw(value, FieldMemOperand(elements, offset));
+  } else {
+    __ sll(scratch, key, kPointerSizeLog2);
+    __ addu(scratch, elements, scratch);
+    __ sw(value, FieldMemOperand(scratch, FixedArray::kHeaderSize));
+  }
+
+  if (instr->hydrogen()->NeedsWriteBarrier()) {
+    // Compute address of modified element and store it into key register.
+    __ Addu(key, scratch, Operand(FixedArray::kHeaderSize));
+    __ RecordWrite(elements, key, value);
+  }
 }
 
 
@@ -2657,7 +2742,30 @@ void LCodeGen::DoCheckPrototypeMaps(LCheckPrototypeMaps* instr) {
 
 
 void LCodeGen::DoArrayLiteral(LArrayLiteral* instr) {
-  Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
+  __ lw(a3, MemOperand(fp, JavaScriptFrameConstants::kFunctionOffset));
+  __ lw(a3, FieldMemOperand(a3, JSFunction::kLiteralsOffset));
+  __ li(a2, Operand(Smi::FromInt(instr->hydrogen()->literal_index())));
+  __ li(a1, Operand(instr->hydrogen()->constant_elements()));
+  __ Push(a3, a2, a1);
+
+  // Pick the right runtime function or stub to call.
+  int length = instr->hydrogen()->length();
+  if (instr->hydrogen()->IsCopyOnWrite()) {
+    ASSERT(instr->hydrogen()->depth() == 1);
+    FastCloneShallowArrayStub::Mode mode =
+        FastCloneShallowArrayStub::COPY_ON_WRITE_ELEMENTS;
+    FastCloneShallowArrayStub stub(mode, length);
+    CallCode(stub.GetCode(), RelocInfo::CODE_TARGET, instr);
+  } else if (instr->hydrogen()->depth() > 1) {
+    CallRuntime(Runtime::kCreateArrayLiteral, 3, instr);
+  } else if (length > FastCloneShallowArrayStub::kMaximumClonedLength) {
+    CallRuntime(Runtime::kCreateArrayLiteralShallow, 3, instr);
+  } else {
+    FastCloneShallowArrayStub::Mode mode =
+        FastCloneShallowArrayStub::CLONE_ELEMENTS;
+    FastCloneShallowArrayStub stub(mode, length);
+    CallCode(stub.GetCode(), RelocInfo::CODE_TARGET, instr);
+  }
 }
 
 
