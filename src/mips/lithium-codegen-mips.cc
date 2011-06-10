@@ -1753,21 +1753,6 @@ void LCodeGen::DoInstanceOf(LInstanceOf* instr) {
 }
 
 
-void LCodeGen::DoInstanceOfAndBranch(LInstanceOfAndBranch* instr) {
-  Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
-  // ASSERT(ToRegister(instr->InputAt(0)).is(r0));  // Object is in r0.
-  // ASSERT(ToRegister(instr->InputAt(1)).is(r1));  // Function is in r1.
-  //
-  // int true_block = chunk_->LookupDestination(instr->true_block_id());
-  // int false_block = chunk_->LookupDestination(instr->false_block_id());
-  //
-  // InstanceofStub stub(InstanceofStub::kArgsInRegisters);
-  // CallCode(stub.GetCode(), RelocInfo::CODE_TARGET, instr);
-  // __ cmp(r0, Operand(0));
-  // EmitBranch(true_block, false_block, eq);
-}
-
-
 void LCodeGen::DoInstanceOfKnownGlobal(LInstanceOfKnownGlobal* instr) {
   Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
 }
@@ -1823,26 +1808,6 @@ void LCodeGen::DoCmpT(LCmpT* instr) {
               NegateCondition(condition),
               at,
               Operand(zero_reg));
-}
-
-
-void LCodeGen::DoCmpTAndBranch(LCmpTAndBranch* instr) {
-  Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
-  // Token::Value op = instr->op();
-  // int true_block = chunk_->LookupDestination(instr->true_block_id());
-  // int false_block = chunk_->LookupDestination(instr->false_block_id());
-  //
-  // Handle<Code> ic = CompareIC::GetUninitialized(op);
-  // CallCode(ic, RelocInfo::CODE_TARGET, instr);
-  //
-  // // The compare stub expects compare condition and the input operands
-  // // reversed for GT and LTE.
-  // Condition condition = ComputeCompareCondition(op);
-  // if (op == Token::GT || op == Token::LTE) {
-  //   condition = ReverseCondition(condition);
-  // }
-  // __ cmp(r0, Operand(0));
-  // EmitBranch(true_block, false_block, condition);
 }
 
 
