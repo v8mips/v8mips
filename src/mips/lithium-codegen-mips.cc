@@ -603,11 +603,19 @@ void LCodeGen::DeoptimizeIf(Condition cc,
   } else {
     // We often have several deopts to the same entry, reuse the last
     // jump entry if this is the case.
+    Comment(";;; Jump to deopt entry");
+    // TODO(kalmard): This was taken from ARM. Seems to create infinite
+    // loops like this:
+    // beq s3, at, -1
+#if 0
     if (deopt_jump_table_.is_empty() ||
         (deopt_jump_table_.last().address != entry)) {
       deopt_jump_table_.Add(JumpTableEntry(entry));
     }
     __ Branch(&deopt_jump_table_.last().label, cc, src1, src2);
+#else
+    __ Jump(entry, RelocInfo::RUNTIME_ENTRY, cc, src1, src2);
+#endif
   }
 }
 
