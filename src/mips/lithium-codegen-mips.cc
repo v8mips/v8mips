@@ -2524,6 +2524,7 @@ void LCodeGen::DoSmiUntag(LSmiUntag* instr) {
 
 void LCodeGen::EmitNumberUntagD(Register input_reg,
                                 DoubleRegister result_reg,
+                                bool deoptimize_on_undefined,
                                 LEnvironment* env) {
   Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
 }
