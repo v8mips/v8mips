@@ -1215,6 +1215,7 @@ int32_t Simulator::get_pc() const {
 int Simulator::ReadW(int32_t addr, Instruction* instr) {
   if (addr >=0 && addr < 0x400) {
     // This has to be a NULL-dereference, drop into debugger.
+    PrintF("Memory dereference to an unavailable address: 0x%08x.", addr);
     MipsDebugger dbg(this);
     dbg.Debug();
   }

@@ -1502,11 +1502,10 @@ void LCodeGen::DoIsNullAndBranch(LIsNullAndBranch* instr) {
     __ Branch(USE_DELAY_SLOT, true_label, eq, reg, Operand(at));
     __ LoadRoot(at, Heap::kUndefinedValueRootIndex);  // In the delay slot.
     __ Branch(USE_DELAY_SLOT, true_label, eq, reg, Operand(at));
-    __ And(at, reg, kSmiTagMask);  // In the delay slot.
-    __ Branch(USE_DELAY_SLOT, false_label, eq, at, Operand(zero_reg));
+    __ JumpIfSmi(reg, false_label);  // In the delay slot.
     // Check for undetectable objects by looking in the bit field in
     // the map. The object has already been smi checked.
-    __ lw(scratch, FieldMemOperand(reg, HeapObject::kMapOffset));  // In the delay slot.
+    __ lw(scratch, FieldMemOperand(reg, HeapObject::kMapOffset));
     __ lbu(scratch, FieldMemOperand(scratch, Map::kBitFieldOffset));
     __ And(scratch, scratch, 1 << Map::kIsUndetectable);
     EmitBranch(true_block, false_block, ne, scratch, Operand(zero_reg));
