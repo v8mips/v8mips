@@ -2995,6 +2995,8 @@ Condition LCodeGen::EmitTypeofIs(Label* true_label,
     final_branch_condition = eq;
 
   } else {
+    cmp1 = at;
+    cmp2 = Operand(zero_reg);  // Set to valid regs, to avoid caller assertion.
     final_branch_condition = ne;
     __ Branch(false_label);
     // A dead branch instruction will be generated after this point.
