@@ -2947,6 +2947,9 @@ Condition LCodeGen::EmitTypeofIs(Label* true_label,
                                  Handle<String> type_name,
                                  Register& cmp1,
                                  Operand& cmp2) {
+  // TODO(kalmard): This function utilizes the delay slot heavily. Verify that
+  // it doesn't cause problems and add some comments/explanation. Try to find a
+  // simple "name" that describes this behavior and use it in comments.
   Condition final_branch_condition = kNoCondition;
   Register scratch = scratch0();
   if (type_name->Equals(heap()->number_symbol())) {
@@ -2960,11 +2963,8 @@ Condition LCodeGen::EmitTypeofIs(Label* true_label,
   } else if (type_name->Equals(heap()->string_symbol())) {
     __ JumpIfSmi(input, false_label);
     __ GetObjectType(input, input, scratch);
-    __ Branch(USE_DELAY_SLOT,
-              false_label,
-              ge,
-              scratch,
-              Operand(FIRST_NONSTRING_TYPE));
+    __ Branch(USE_DELAY_SLOT, false_label,
+        ge, scratch, Operand(FIRST_NONSTRING_TYPE));
     __ lbu(at, FieldMemOperand(input, Map::kBitFieldOffset));
     __ And(at, at, 1 << Map::kIsUndetectable);
     cmp1 = at;
@@ -2973,11 +2973,7 @@ Condition LCodeGen::EmitTypeofIs(Label* true_label,
 
   } else if (type_name->Equals(heap()->boolean_symbol())) {
     __ LoadRoot(at, Heap::kTrueValueRootIndex);
-    __ Branch(USE_DELAY_SLOT,
-              true_label,
-              eq,
-              at,
-              Operand(input));
+    __ Branch(USE_DELAY_SLOT, true_label, eq, at, Operand(input));
     __ LoadRoot(at, Heap::kFalseValueRootIndex);
     cmp1 = at;
     cmp2 = Operand(input);
@@ -2985,11 +2981,7 @@ Condition LCodeGen::EmitTypeofIs(Label* true_label,
 
   } else if (type_name->Equals(heap()->undefined_symbol())) {
     __ LoadRoot(at, Heap::kUndefinedValueRootIndex);
-    __ Branch(USE_DELAY_SLOT,
-              true_label,
-              eq,
-              at,
-              Operand(input));
+    __ Branch(USE_DELAY_SLOT, true_label, eq, at, Operand(input));
     __ JumpIfSmi(input, false_label);
     // Check for undetectable objects => true.
     __ lw(input, FieldMemOperand(input, HeapObject::kMapOffset));
@@ -3009,21 +3001,13 @@ Condition LCodeGen::EmitTypeofIs(Label* true_label,
   } else if (type_name->Equals(heap()->object_symbol())) {
     __ JumpIfSmi(input, false_label);
     __ LoadRoot(at, Heap::kNullValueRootIndex);
-    __ Branch(USE_DELAY_SLOT,
-              true_label,
-              eq,
-              at,
-              Operand(input));
+    __ Branch(USE_DELAY_SLOT, true_label, eq, at, Operand(input));
     __ GetObjectType(input, input, scratch);
-    __ Branch(false_label,
-              lt,
-              scratch,
-              Operand(FIRST_NONCALLABLE_SPEC_OBJECT_TYPE));
+    __ Branch(USE_DELAY_SLOT, false_label, lt,
+        scratch, Operand(FIRST_NONCALLABLE_SPEC_OBJECT_TYPE));
     __ lbu(scratch, FieldMemOperand(input, Map::kInstanceTypeOffset));
-    __ Branch(false_label,
-              gt,
-              scratch,
-              Operand(LAST_NONCALLABLE_SPEC_OBJECT_TYPE));
+    __ Branch(USE_DELAY_SLOT, false_label, gt,
+        scratch, Operand(LAST_NONCALLABLE_SPEC_OBJECT_TYPE));
     // Check for undetectable objects => false.
     __ lbu(at, FieldMemOperand(input, Map::kBitFieldOffset));
     __ And(at, at, 1 << Map::kIsUndetectable);
