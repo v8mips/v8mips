@@ -138,33 +138,56 @@ void Deoptimizer::PatchStackCheckCodeAt(Address pc_after,
                                         Code* check_code,
                                         Code* replacement_code) {
   const int kInstrSize = Assembler::kInstrSize;
+  // This structure comes from FullCodeGenerator::EmitStackCheck.
   // The call of the stack guard check has the following form:
   // sltu at, sp, t0
   // beq at, zero_reg, ok
   // nop
-  // lui t9, <stack guard address> upper  ;; pc_after points here
+  // lui t9, <stack guard address> upper
   // ori t9, <stack guard address> lower
   // jalr t9
+  // nop
+  // ----- pc_after points here
 
-  // TODO(kalmard): why does pc_after point there? Is it the same on the
-  // other architectures?
-  ASSERT(Assembler::IsBeq(Assembler::instr_at(pc_after - 2 * kInstrSize)));
+  ASSERT(Assembler::IsBeq(Assembler::instr_at(pc_after - 6 * kInstrSize)));
   ASSERT(MacroAssembler::IsNop(
-      Assembler::instr_at(pc_after - 1 * kInstrSize), 0));
+      Assembler::instr_at(pc_after - 5 * kInstrSize), 0));
 
   // Replace the sltu instruction so beq is not executed.
-  CodePatcher patcher(pc_after - 3 * kInstrSize, 1);
+  CodePatcher patcher(pc_after - 7 * kInstrSize, 1);
   patcher.masm()->addiu(at, zero_reg, 1);
 
-  Assembler::set_target_address_at(pc_after, replacement_code->entry());
+  Assembler::set_target_address_at(pc_after - 4 * kInstrSize,
+                                   replacement_code->entry());
 
   // We patched the code to the following form:
   // addiu at, zero_reg, 1
   // beq at, zero_reg, ok  ;; Not changed
   // nop  ;; Not changed
-  // lui t9, <on-stack replacement address> upper  ;; pc_after points here
+  // lui t9, <on-stack replacement address> upper
   // ori t9, <on-stack replacement address> lower
   // jalr t9  ;; Not changed
+  // nop  ;; Not changed
+  // ----- pc_after points here
+}
+
+
+void Deoptimizer::RevertStackCheckCodeAt(Address pc_after,
+                                         Code* check_code,
+                                         Code* replacement_code) {
+  // Exact opposite of the function above.
+  const int kInstrSize = Assembler::kInstrSize;
+  ASSERT(Assembler::IsAddImmediate(
+      Assembler::instr_at(pc_after - 7 * kInstrSize)));
+  ASSERT(MacroAssembler::IsNop(
+      Assembler::instr_at(pc_after - 5 * kInstrSize), 0));
+
+  // Restore the sltu instruction so beq can possibly be executed again.
+  CodePatcher patcher(pc_after - 7 * kInstrSize, 1);
+  patcher.masm()->sltu(at, sp, t0);
+
+  Assembler::set_target_address_at(pc_after - 4 * kInstrSize,
+                                   check_code->entry());
 }
 
 
@@ -183,24 +206,6 @@ static int LookupBailoutId(DeoptimizationInputData* data, unsigned ast_id) {
   }
   UNREACHABLE();
   return -1;
-}
-
-
-void Deoptimizer::RevertStackCheckCodeAt(Address pc_after,
-                                         Code* check_code,
-                                         Code* replacement_code) {
-  // Exact opposite of the function above.
-  const int kInstrSize = Assembler::kInstrSize;
-  ASSERT(Assembler::IsAddImmediate(
-      Assembler::instr_at(pc_after - 3 * kInstrSize)));
-  ASSERT(MacroAssembler::IsNop(
-      Assembler::instr_at(pc_after - 1 * kInstrSize), 0));
-
-  // Rstore the sltu instruction so beq is possibly executed.
-  CodePatcher patcher(pc_after - 3 * kInstrSize, 1);
-  patcher.masm()->sltu(at, sp, t0);
-
-  Assembler::set_target_address_at(pc_after, check_code->entry());
 }
 
 
@@ -348,7 +353,7 @@ void Deoptimizer::DoComputeOsrOutputFrame() {
 
 
 // This code is very similar to ia32/arm code, but relies on register names
-//  (fp, sp) and how the frame is laid out.
+// (fp, sp) and how the frame is laid out.
 void Deoptimizer::DoComputeFrame(TranslationIterator* iterator,
                                  int frame_index) {
   // Read the ast node id, function, and frame height for this output frame.
@@ -500,8 +505,10 @@ void Deoptimizer::DoComputeFrame(TranslationIterator* iterator,
   uint32_t pc_value = reinterpret_cast<uint32_t>(start + pc_offset);
   output_frame->SetPc(pc_value);
   if (is_topmost) {
-    // output_frame->SetRegister(pc.code(), pc_value);  // TODO(plind): BROKEN here, setting pc .......
-    output_frame->SetRegister(ra.code(), pc_value);  // TODO(plind): HACKEDhere, just so it compiles .....
+    // TODO(plind): BROKEN here, setting pc ..........................................
+    // output_frame->SetRegister(pc.code(), pc_value);
+    // TODO(plind): HACKEDhere, just so it compiles
+    output_frame->SetRegister(ra.code(), pc_value);
   }
 
   FullCodeGenerator::State state =
@@ -528,6 +535,9 @@ void Deoptimizer::DoComputeFrame(TranslationIterator* iterator,
 
 // This code tries to be close to ia32 code so that any changes can be
 // easily ported.
+// TODO(kalmard): This function emits reloc info and causes an assertion error
+// in deoptimizer.cc. The deopt system seems to be working with the assertion
+// disabled but this needs to be fixed.
 void Deoptimizer::EntryGenerator::Generate() {
   GeneratePrologue();
 
@@ -538,7 +548,12 @@ void Deoptimizer::EntryGenerator::Generate() {
   // For the rest, there are gaps on the stack, so the offsets remain the same.
   const int kNumberOfRegisters = Register::kNumRegisters;
 
-  RegList restored_regs = (kJSCallerSaved | kCalleeSaved) & ~sp.bit() & ~ra.bit();   // TODO(plind): check this.......
+  // TODO(kalmard): This can probably be optimized even further. Caller-saved
+  // registers should not be pushed to the stack unnecessarily.
+  // TODO(plind): check this
+  RegList restored_regs = (kJSCallerSaved | kCalleeSaved) &
+      ~sp.bit() &
+      ~ra.bit();
   RegList saved_regs = restored_regs | sp.bit() | ra.bit();
 
   const int kDoubleRegsSize =
@@ -552,7 +567,7 @@ void Deoptimizer::EntryGenerator::Generate() {
     __ sdc1(fpu_reg, MemOperand(sp, offset));
   }
 
-  // Push saved_regs registers (needed to populate FrameDescription::registers_).
+  // Push saved_regs (needed to populate FrameDescription::registers_).
   // Leave gaps for other registers.
   __ Subu(sp, sp, kNumberOfRegisters * kPointerSize);
   for (int16_t i = kNumberOfRegisters - 1; i >= 0; i--) {
@@ -609,9 +624,12 @@ void Deoptimizer::EntryGenerator::Generate() {
   // Copy core registers into FrameDescription::registers_[kNumRegisters].
   ASSERT(Register::kNumRegisters == kNumberOfRegisters);
   for (int i = 0; i < kNumberOfRegisters; i++) {
+    int offset = (i * kPointerSize) + FrameDescription::registers_offset();
     if ((saved_regs & (1 << i)) != 0) {
-      int offset = (i * kPointerSize) + FrameDescription::registers_offset();
       __ lw(a2, MemOperand(sp, i * kPointerSize));
+      __ sw(a2, MemOperand(a1, offset));
+    } else if (FLAG_debug_code) {
+      __ li(a2, kDebugZapValue);
       __ sw(a2, MemOperand(a1, offset));
     }
   }
@@ -649,7 +667,7 @@ void Deoptimizer::EntryGenerator::Generate() {
   __ sw(t0, MemOperand(a3, 0));
   __ Branch(USE_DELAY_SLOT, &pop_loop, ne, a2, Operand(sp));
   __ addiu(a3, a3, sizeof(uint32_t));  // In delay slot.
-  
+
   // Compute the output frame in the deoptimizer.
   __ push(a0);  // Preserve deoptimizer object across call.
   // a0: deoptimizer object; a1: scratch.
@@ -681,7 +699,7 @@ void Deoptimizer::EntryGenerator::Generate() {
 
   __ Addu(a0, a0, Operand(kPointerSize));
   __ Branch(&outer_push_loop, lt, a0, Operand(a1));
-  
+
 
   // Push state, pc, and continuation from the last output frame.
   if (type() != OSR) {
@@ -711,9 +729,11 @@ void Deoptimizer::EntryGenerator::Generate() {
   ExternalReference roots_address = ExternalReference::roots_address(isolate);
   __ li(roots, Operand(roots_address));
 
-  __ pop(t3);  // Get continuation, leave pc on stack.
+  // TODO(kalmard): can we use 'at' here? It seems like a bad idea to use
+  // anything else, we just restored the registers.
+  __ pop(at);  // Get continuation, leave pc on stack.
   __ pop(ra);
-  __ Jump(t3);
+  __ Jump(at);
   __ stop("Unreachable.");
 }
 
@@ -724,7 +744,7 @@ void Deoptimizer::TableEntryGenerator::GeneratePrologue() {
   // Create a sequence of deoptimization entries. Note that any
   // registers may be still live.
 
-  // TODO (kalmard): This is pretty hacky. Instead of one big Branch that would
+  // TODO(kalmard): This is pretty hacky. Instead of one big Branch that would
   // involve the trampoline pool, create a series of small ones. This helps if
   // table_entry_size_ gets larger but probably slows things down quite a bit.
   Vector<Label> skip = Vector<Label>::New(count() + 1);
@@ -741,7 +761,7 @@ void Deoptimizer::TableEntryGenerator::GeneratePrologue() {
     __ Branch(&skip[i+1]);
 
     // Pad the rest of the code.
-    while(table_entry_size_ > (masm()->pc_offset() - start)) {
+    while (table_entry_size_ > (masm()->pc_offset() - start)) {
       __ nop();
     }
 
