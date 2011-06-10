@@ -863,7 +863,106 @@ void LCodeGen::DoDeferredBinaryOpStub(LTemplateInstruction<1, 2, T>* instr,
 
 
 void LCodeGen::DoMulI(LMulI* instr) {
-  Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
+  ASSERT(instr->result()->Equals(instr->InputAt(0)));
+  Register scratch = scratch0();
+  Register result = ToRegister(instr->result());
+  Register left = ToRegister(instr->InputAt(0));
+  LOperand* right_op = instr->InputAt(1);
+
+  bool can_overflow = instr->hydrogen()->CheckFlag(HValue::kCanOverflow);
+  bool bailout_on_minus_zero =
+    instr->hydrogen()->CheckFlag(HValue::kBailoutOnMinusZero);
+
+  if (right_op->IsConstantOperand() && !can_overflow) {
+    // Use optimized code for specific constants.
+    int32_t constant = ToInteger32(LConstantOperand::cast(right_op));
+
+    if (bailout_on_minus_zero && (constant < 0)) {
+      // The case of a null constant will be handled separately.
+      // If constant is negative and left is null, the result should be -0.
+      DeoptimizeIf(eq, instr->environment(), left, Operand(zero_reg));
+    }
+
+    switch (constant) {
+      case -1:
+        __ Subu(result, zero_reg, left);
+        break;
+      case 0:
+        if (bailout_on_minus_zero) {
+          // If left is strictly negative and the constant is null, the
+          // result is -0. Deoptimize if required, otherwise return 0.
+          DeoptimizeIf(lt, instr->environment(), left, Operand(zero_reg));
+        }
+        __ mov(result, zero_reg);
+        break;
+      case 1:
+        // Nothing to do.
+        break;
+      default:
+        // Multiplying by powers of two and powers of two plus or minus
+        // one can be done faster with shifted operands.
+        // For other constants we emit standard code.
+        int32_t mask = constant >> 31;
+        uint32_t constant_abs = (constant + mask) ^ mask;
+
+        if (IsPowerOf2(constant_abs) ||
+            IsPowerOf2(constant_abs - 1) ||
+            IsPowerOf2(constant_abs + 1)) {
+          if (IsPowerOf2(constant_abs)) {
+            int32_t shift = WhichPowerOf2(constant_abs);
+            __ sll(result, left, shift);
+          } else if (IsPowerOf2(constant_abs - 1)) {
+            int32_t shift = WhichPowerOf2(constant_abs - 1);
+            __ sll(result, left, shift);
+            __ Addu(result, result, left);
+          } else if (IsPowerOf2(constant_abs + 1)) {
+            int32_t shift = WhichPowerOf2(constant_abs + 1);
+            __ sll(result, left, shift);
+            __ Subu(result, result, left);
+          }
+
+          // Correct the sign of the result is the constant is negative.
+          if (constant < 0)  {
+            __ Subu(result, zero_reg, result);
+          }
+
+        } else {
+          // Generate standard code.
+          __ li(at, constant);
+          __ mul(result, left, at);
+        }
+    }
+
+  } else {
+    Register right = EmitLoadRegister(right_op, scratch);
+    if (bailout_on_minus_zero) {
+      __ Or(ToRegister(instr->TempAt(0)), left, right);
+    }
+
+    if (can_overflow) {
+      // hi:lo = left * right.
+      __ mult(left, right);
+      __ mfhi(scratch);
+      __ mflo(result);
+      __ sra(at, result, 31);
+      // TODO(kalmard): is this correct? Shouldn't we specifically compare both
+      // sides with zero?
+      DeoptimizeIf(ne, instr->environment(), scratch, Operand(at));
+    } else {
+      __ mul(result, left, right);
+    }
+
+    if (bailout_on_minus_zero) {
+      // Bail out if the result is supposed to be negative zero.
+      Label done;
+      __ Branch(&done, ne, result, Operand(zero_reg));
+      DeoptimizeIf(lt,
+                   instr->environment(),
+                   ToRegister(instr->TempAt(0)),
+                   Operand(zero_reg));
+      __ bind(&done);
+    }
+  }
 }
 
 
