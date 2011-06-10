@@ -589,19 +589,25 @@ void LCodeGen::DeoptimizeIf(Condition cc,
     return;
   }
 
+  if (FLAG_trap_on_deopt) {
+    Label skip;
+    if (cc != al) {
+      __ Branch(&skip, NegateCondition(cc), src1, src2);
+    }
+    __ stop("trap_on_deopt");
+    __ bind(&skip);
+  }
+
   if (cc == al) {
-    if (FLAG_trap_on_deopt) __ stop("trap_on_deopt");
     __ Jump(entry, RelocInfo::RUNTIME_ENTRY);
   } else {
-    if (FLAG_trap_on_deopt) {
-      Label done;
-      __ Branch(&done, NegateCondition(cc), src1, src2);
-      __ stop("trap_on_deopt");
-      __ Jump(entry, RelocInfo::RUNTIME_ENTRY);
-      __ bind(&done);
-    } else {
-      __ Jump(entry, RelocInfo::RUNTIME_ENTRY, cc, src1, src2);
+    // We often have several deopts to the same entry, reuse the last
+    // jump entry if this is the case.
+    if (deopt_jump_table_.is_empty() ||
+        (deopt_jump_table_.last().address != entry)) {
+      deopt_jump_table_.Add(JumpTableEntry(entry));
     }
+    __ Branch(&deopt_jump_table_.last().label, cc, src1, src2);
   }
 }
 
@@ -1158,7 +1164,7 @@ void LCodeGen::DoAddI(LAddI* instr) {
                                  ToRegister(right),
                                  overflow);  // Reg at also used as scratch.
     }
-    DeoptimizeIf(ne, instr->environment(), overflow, Operand(zero_reg));
+    DeoptimizeIf(lt, instr->environment(), overflow, Operand(zero_reg));
   }
 }
 
