@@ -693,7 +693,7 @@ void LCodeGen::RecordSafepointWithRegisters(LPointerMap* pointers,
 
 
 void LCodeGen::RecordPosition(int position) {
-  if (!FLAG_debug_info || position == RelocInfo::kNoPosition) return;
+  if (position == RelocInfo::kNoPosition) return;
   masm()->positions_recorder()->RecordPosition(position);
 }
 
@@ -2678,8 +2678,8 @@ void LCodeGen::DoContext(LContext* instr) {
 void LCodeGen::DoOuterContext(LOuterContext* instr) {
   Register context = ToRegister(instr->context());
   Register result = ToRegister(instr->result());
-  __ mov(result, Operand(context, Context::SlotOffset(Context::CLOSURE_INDEX)));
-  __ mov(result, FieldOperand(result, JSFunction::kContextOffset));
+  __ mov(result,
+         Operand(context, Context::SlotOffset(Context::PREVIOUS_INDEX)));
 }
 
 

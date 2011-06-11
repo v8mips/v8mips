@@ -770,7 +770,7 @@ void LCodeGen::RecordSafepointWithRegistersAndDoubles(
 
 
 void LCodeGen::RecordPosition(int position) {
-  if (!FLAG_debug_info || position == RelocInfo::kNoPosition) return;
+  if (position == RelocInfo::kNoPosition) return;
   masm()->positions_recorder()->RecordPosition(position);
 }
 
@@ -2847,8 +2847,7 @@ void LCodeGen::DoOuterContext(LOuterContext* instr) {
   Register context = ToRegister(instr->context());
   Register result = ToRegister(instr->result());
   __ ldr(result,
-         MemOperand(context, Context::SlotOffset(Context::CLOSURE_INDEX)));
-  __ ldr(result, FieldMemOperand(result, JSFunction::kContextOffset));
+         MemOperand(context, Context::SlotOffset(Context::PREVIOUS_INDEX)));
 }
 
 
