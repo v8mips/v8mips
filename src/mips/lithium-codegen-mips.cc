@@ -1201,7 +1201,7 @@ int LCodeGen::GetNextEmittedBlock(int block) {
 }
 
 
-void LCodeGen::EmitBranch(int left_block, int right_block, 
+void LCodeGen::EmitBranch(int left_block, int right_block,
                           Condition cc, Register src1, const Operand& src2) {
   int next_block = GetNextEmittedBlock(current_block_);
   right_block = chunk_->LookupDestination(right_block);
@@ -1232,7 +1232,7 @@ void LCodeGen::DoBranch(LBranch* instr) {
     Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
     // DoubleRegister reg = ToDoubleRegister(instr->InputAt(0));
     // Register scratch = scratch0();
-    // 
+    //
     // // Test the double value. Zero and NaN are false.
     // __ VFPCompareAndLoadFlags(reg, 0.0, scratch);
     // __ tst(scratch, Operand(kVFPZConditionFlagBit | kVFPVConditionFlagBit));
@@ -1241,7 +1241,7 @@ void LCodeGen::DoBranch(LBranch* instr) {
     ASSERT(r.IsTagged());
 
     // TODO(plind): this function VERY QUICKLY written, and POORLY tested. Review it.....
-    
+
     Register reg = ToRegister(instr->InputAt(0));
     if (instr->hydrogen()->type().IsBoolean()) {
       __ LoadRoot(at, Heap::kTrueValueRootIndex);
@@ -1258,7 +1258,7 @@ void LCodeGen::DoBranch(LBranch* instr) {
       __ Branch(false_label, eq, reg, Operand(at));
       __ Branch(false_label, eq, reg, Operand(zero_reg));
       __ JumpIfSmi(reg, true_label);
-    
+
       // Test double values. Zero and NaN are false.
 
       // TODO(plind): I think this is optimization, and stub below
@@ -1277,7 +1277,7 @@ void LCodeGen::DoBranch(LBranch* instr) {
       // __ tst(scratch, Operand(kVFPZConditionFlagBit | kVFPVConditionFlagBit));
       // __ b(ne, false_label);
       // __ b(true_label);
-    
+
       // The conversion stub doesn't cause garbage collections so it's
       // safe to not record a safepoint after the call.
       __ bind(&call_stub);
@@ -1451,7 +1451,7 @@ void LCodeGen::DoCmpSymbolEqAndBranch(LCmpSymbolEqAndBranch* instr) {
 void LCodeGen::DoIsNull(LIsNull* instr) {
   Register reg = ToRegister(instr->InputAt(0));
   Register result = ToRegister(instr->result());
-  
+
   // TODO(plind): maybe too conservative here .... avoiding potential problem
   // of conditional LoadRoot overwriting input regs.
   Register input;
@@ -2254,7 +2254,7 @@ void LCodeGen::DoCallNamed(LCallNamed* instr) {
 
   int arity = instr->arity();
   RelocInfo::Mode mode = RelocInfo::CODE_TARGET;
-  Handle<Code> ic = 
+  Handle<Code> ic =
       isolate()->stub_cache()->ComputeCallInitialize(arity, NOT_IN_LOOP, mode);
   __ li(a2, Operand(instr->name()));
   CallCode(ic, mode, instr);
@@ -2474,10 +2474,10 @@ void LCodeGen::DoDeferredNumberTagI(LNumberTagI* instr) {
   Label slow;
   Register reg = ToRegister(instr->InputAt(0));
   FPURegister dbl_scratch = lithiumScratchDouble;
-  
+
   // Preserve the value of all registers.
   PushSafepointRegistersScope scope(this, Safepoint::kWithRegisters);
-  
+
   // There was overflow, so bits 30 and 31 of the original integer
   // disagree. Try to allocate a heap number in new space and store
   // the value in there. If that fails, call the runtime system.
@@ -2493,17 +2493,17 @@ void LCodeGen::DoDeferredNumberTagI(LNumberTagI* instr) {
     if (!reg.is(t1)) __ mov(reg, t1);
     __ b(&done);
   }
-  
+
   // Slow case: Call the runtime system to do the number allocation.
   __ bind(&slow);
-  
+
   // TODO(3095996): Put a valid pointer value in the stack slot where the result
   // register is stored, as this register is in the pointer map, but contains an
   // integer value.
   __ StoreToSafepointRegisterSlot(zero_reg, reg);
   CallRuntimeFromDeferred(Runtime::kAllocateHeapNumber, 0, instr);
   if (!reg.is(v0)) __ mov(reg, v0);
-  
+
   // Done. Put the value in dbl_scratch into the value of the allocated heap
   // number.
   __ bind(&done);
