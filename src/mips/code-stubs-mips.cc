@@ -890,7 +890,7 @@ void FloatingPointHelper::CallCCodeForDoubleOperation(
   }
   // Call C routine that may not cause GC or other trouble.
   __ CallCFunction(ExternalReference::double_fp_operation(op, masm->isolate()),
-                   4);
+                   0, 2);
   // Store answer in the overwritable heap number.
   if (!IsMipsSoftFloatABI) {
     CpuFeatures::Scope scope(FPU);
@@ -1265,7 +1265,7 @@ static void EmitTwoNonNanDoubleComparison(MacroAssembler* masm, Condition cc) {
 
   if (!CpuFeatures::IsSupported(FPU)) {
     __ push(ra);
-    __ PrepareCallCFunction(4, t4);  // Two doubles count as 4 arguments.
+    __ PrepareCallCFunction(0, 2, t4);  // Two doubles count as 4 arguments.
     if (!IsMipsSoftFloatABI) {
       // We are not using MIPS FPU instructions, and parameters for the runtime
       // function call are prepaired in a0-a3 registers, but function we are
@@ -1275,7 +1275,8 @@ static void EmitTwoNonNanDoubleComparison(MacroAssembler* masm, Condition cc) {
       __ Move(f12, a0, a1);
       __ Move(f14, a2, a3);
     }
-    __ CallCFunction(ExternalReference::compare_doubles(masm->isolate()), 4);
+    __ CallCFunction(ExternalReference::compare_doubles(masm->isolate()),
+       0, 2);
     __ pop(ra);  // Because this function returns int, result is in v0.
     __ Ret();
   } else {
@@ -3356,22 +3357,25 @@ void TranscendentalCacheStub::GenerateCallCFunction(MacroAssembler* masm,
   __ push(ra);
   __ PrepareCallCFunction(2, scratch);
   if (IsMipsSoftFloatABI) {
-    __ Move(v0, v1, f4);
+    __ Move(a0, a1, f4);
   } else {
     __ mov_d(f12, f4);
   }
   switch (type_) {
     case TranscendentalCache::SIN:
       __ CallCFunction(
-          ExternalReference::math_sin_double_function(masm->isolate()), 2);
+          ExternalReference::math_sin_double_function(masm->isolate()),
+          0, 1);
       break;
     case TranscendentalCache::COS:
       __ CallCFunction(
-          ExternalReference::math_cos_double_function(masm->isolate()), 2);
+          ExternalReference::math_cos_double_function(masm->isolate()),
+          0, 1);
       break;
     case TranscendentalCache::LOG:
       __ CallCFunction(
-          ExternalReference::math_log_double_function(masm->isolate()), 2);
+          ExternalReference::math_log_double_function(masm->isolate()),
+          0, 1);
       break;
     default:
       UNIMPLEMENTED();
@@ -3454,10 +3458,11 @@ void MathPowStub::Generate(MacroAssembler* masm) {
                           heapnumbermap,
                           &call_runtime);
     __ push(ra);
-    __ PrepareCallCFunction(3, scratch);
+    __ PrepareCallCFunction(1, 1, scratch);
     __ SetCallCDoubleArguments(double_base, exponent);
     __ CallCFunction(
-        ExternalReference::power_double_int_function(masm->isolate()), 3);
+        ExternalReference::power_double_int_function(masm->isolate()),
+        1, 1);
     __ pop(ra);
     __ GetCFunctionDoubleResult(double_result);
     __ sdc1(double_result,
@@ -3482,13 +3487,14 @@ void MathPowStub::Generate(MacroAssembler* masm) {
                           heapnumbermap,
                           &call_runtime);
     __ push(ra);
-    __ PrepareCallCFunction(4, scratch);
+    __ PrepareCallCFunction(0, 2, scratch);
     // ABI (o32) for func(double a, double b): a in f12, b in f14.
     ASSERT(double_base.is(f12));
     ASSERT(double_exponent.is(f14));
     __ SetCallCDoubleArguments(double_base, double_exponent);
     __ CallCFunction(
-        ExternalReference::power_double_double_function(masm->isolate()), 4);
+        ExternalReference::power_double_double_function(masm->isolate()),
+        0, 2);
     __ pop(ra);
     __ GetCFunctionDoubleResult(double_result);
     __ sdc1(double_result,
@@ -3532,9 +3538,10 @@ void CEntryStub::GenerateCore(MacroAssembler* masm,
   if (do_gc) {
     // Move result passed in v0 into a0 to call PerformGC.
     __ mov(a0, v0);
-    __ PrepareCallCFunction(1, a1);
+    __ PrepareCallCFunction(1, 0, a1);
     __ CallCFunction(
-        ExternalReference::perform_gc_function(masm->isolate()), 1);
+        ExternalReference::perform_gc_function(masm->isolate()),
+        1, 0);
   }
 
   ExternalReference scope_depth =

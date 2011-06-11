@@ -3953,7 +3953,23 @@ void MacroAssembler::JumpIfInstanceTypeIsNotSequentialAscii(Register type,
 
 static const int kRegisterPassedArguments = 4;
 
-void MacroAssembler::PrepareCallCFunction(int num_arguments, Register scratch) {
+int MacroAssembler::CalculateStackPassedWords(int num_reg_arguments,
+                                              int num_double_arguments) {
+  int stack_passed_words = 0;
+  num_reg_arguments += 2 * num_double_arguments;
+
+  // Up to four simple arguments are passed in registers a0..a3.
+  if (num_reg_arguments > kRegisterPassedArguments) {
+    stack_passed_words += num_reg_arguments - kRegisterPassedArguments;
+  }
+  stack_passed_words += StandardFrameConstants::kCArgsSlotsSize / kPointerSize;
+  return stack_passed_words;
+}
+
+
+void MacroAssembler::PrepareCallCFunction(int num_reg_arguments,
+                                          int num_double_arguments,
+                                          Register scratch) {
   int frame_alignment = ActivationFrameAlignment();
 
   // Up to four simple arguments are passed in registers a0..a3.
@@ -3962,10 +3978,8 @@ void MacroAssembler::PrepareCallCFunction(int num_arguments, Register scratch) {
   // Remaining arguments are pushed on the stack, above (higher address than)
   // the argument slots.
   ASSERT(StandardFrameConstants::kCArgsSlotsSize % kPointerSize == 0);
-  int stack_passed_arguments = ((num_arguments <= kRegisterPassedArguments) ?
-                                 0 : num_arguments - kRegisterPassedArguments) +
-                               (StandardFrameConstants::kCArgsSlotsSize /
-                               kPointerSize);
+  int stack_passed_arguments = CalculateStackPassedWords(
+      num_reg_arguments, num_double_arguments);
   if (frame_alignment > kPointerSize) {
     // Make stack end at alignment and make room for num_arguments - 4 words
     // and the original value of sp.
@@ -3980,26 +3994,53 @@ void MacroAssembler::PrepareCallCFunction(int num_arguments, Register scratch) {
 }
 
 
+void MacroAssembler::PrepareCallCFunction(int num_reg_arguments,
+                                          Register scratch) {
+  PrepareCallCFunction(num_reg_arguments, 0, scratch);
+}
+
+
+void MacroAssembler::CallCFunction(ExternalReference function,
+                                   int num_reg_arguments,
+                                   int num_double_arguments) {
+  CallCFunctionHelper(no_reg,
+                     function,
+                     t8,
+                     num_reg_arguments,
+                     num_double_arguments);
+}
+
+
+void MacroAssembler::CallCFunction(Register function,
+                                   Register scratch,
+                                   int num_reg_arguments,
+                                   int num_double_arguments) {
+  CallCFunctionHelper(function,
+                      ExternalReference::the_hole_value_location(isolate()),
+                      scratch,
+                      num_reg_arguments,
+                      num_double_arguments);
+}
+
+
 void MacroAssembler::CallCFunction(ExternalReference function,
                                    int num_arguments) {
-  CallCFunctionHelper(no_reg, function, t8, num_arguments);
+  CallCFunction(function, num_arguments, 0);
 }
 
 
 void MacroAssembler::CallCFunction(Register function,
                                    Register scratch,
                                    int num_arguments) {
-  CallCFunctionHelper(function,
-                      ExternalReference::the_hole_value_location(isolate()),
-                      scratch,
-                      num_arguments);
+  CallCFunction(function, scratch, num_arguments, 0);
 }
 
 
 void MacroAssembler::CallCFunctionHelper(Register function,
                                          ExternalReference function_reference,
                                          Register scratch,
-                                         int num_arguments) {
+                                         int num_reg_arguments,
+                                         int num_double_arguments) {
   // Make sure that the stack is aligned before calling a C function unless
   // running in the simulator. The simulator has its own alignment check which
   // provides more information.
@@ -4038,10 +4079,8 @@ void MacroAssembler::CallCFunctionHelper(Register function,
   Call(function);
 
   ASSERT(StandardFrameConstants::kCArgsSlotsSize % kPointerSize == 0);
-  int stack_passed_arguments = ((num_arguments <= kRegisterPassedArguments) ?
-                                0 : num_arguments - kRegisterPassedArguments) +
-                               (StandardFrameConstants::kCArgsSlotsSize /
-                               kPointerSize);
+  int stack_passed_arguments = CalculateStackPassedWords(
+      num_reg_arguments, num_double_arguments);
 
   if (OS::ActivationFrameAlignment() > kPointerSize) {
     lw(sp, MemOperand(sp, stack_passed_arguments * kPointerSize));
