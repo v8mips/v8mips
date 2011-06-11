@@ -2943,7 +2943,7 @@ Condition LCodeGen::EmitTypeofIs(Label* true_label,
     __ JumpIfSmi(input, false_label);
     __ GetObjectType(input, input, scratch);
     __ Branch(USE_DELAY_SLOT, false_label,
-        ge, scratch, Operand(FIRST_NONSTRING_TYPE));
+              ge, scratch, Operand(FIRST_NONSTRING_TYPE));
     __ lbu(at, FieldMemOperand(input, Map::kBitFieldOffset));
     __ And(at, at, 1 << Map::kIsUndetectable);
     cmp1 = at;
@@ -2982,11 +2982,11 @@ Condition LCodeGen::EmitTypeofIs(Label* true_label,
     __ LoadRoot(at, Heap::kNullValueRootIndex);
     __ Branch(USE_DELAY_SLOT, true_label, eq, at, Operand(input));
     __ GetObjectType(input, input, scratch);
-    __ Branch(USE_DELAY_SLOT, false_label, lt,
-        scratch, Operand(FIRST_NONCALLABLE_SPEC_OBJECT_TYPE));
+    __ Branch(USE_DELAY_SLOT, false_label,
+              lt, scratch, Operand(FIRST_NONCALLABLE_SPEC_OBJECT_TYPE));
     __ lbu(scratch, FieldMemOperand(input, Map::kInstanceTypeOffset));
-    __ Branch(USE_DELAY_SLOT, false_label, gt,
-        scratch, Operand(LAST_NONCALLABLE_SPEC_OBJECT_TYPE));
+    __ Branch(USE_DELAY_SLOT, false_label,
+              gt, scratch, Operand(LAST_NONCALLABLE_SPEC_OBJECT_TYPE));
     // Check for undetectable objects => false.
     __ lbu(at, FieldMemOperand(input, Map::kBitFieldOffset));
     __ And(at, at, 1 << Map::kIsUndetectable);
