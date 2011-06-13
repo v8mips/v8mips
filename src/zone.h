@@ -81,7 +81,11 @@ class Zone {
   friend class ZoneScope;
 
   // All pointers returned from New() have this alignment.
+#if defined(V8_TARGET_ARCH_ARM) || defined(V8_TARGET_ARCH_MIPS)
+  static const int kAlignment = 2 * kPointerSize;
+#else
   static const int kAlignment = kPointerSize;
+#endif
 
   // Never allocate segments smaller than this size in bytes.
   static const int kMinimumSegmentSize = 8 * KB;
