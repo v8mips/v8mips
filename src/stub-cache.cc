@@ -29,6 +29,7 @@
 
 #include "api.h"
 #include "arguments.h"
+#include "code-stubs.h"
 #include "gdb-jit.h"
 #include "ic-inl.h"
 #include "stub-cache.h"
@@ -502,12 +503,13 @@ MaybeObject* StubCache::ComputeKeyedLoadOrStoreElement(
   if (!maybe_code->IsUndefined()) return Code::cast(maybe_code);
 
   MaybeObject* maybe_new_code = NULL;
+  Map* receiver_map = receiver->map();
   if (is_store) {
     KeyedStoreStubCompiler compiler(strict_mode);
-    maybe_new_code = compiler.CompileStoreElement(receiver->map());
+    maybe_new_code = compiler.CompileStoreElement(receiver_map);
   } else {
     KeyedLoadStubCompiler compiler;
-    maybe_new_code = compiler.CompileLoadElement(receiver->map());
+    maybe_new_code = compiler.CompileLoadElement(receiver_map);
   }
   Code* code;
   if (!maybe_new_code->To(&code)) return maybe_new_code;
@@ -1368,8 +1370,7 @@ RUNTIME_FUNCTION(MaybeObject*, StoreInterceptorProperty) {
   JSObject* recv = JSObject::cast(args[0]);
   String* name = String::cast(args[1]);
   Object* value = args[2];
-  StrictModeFlag strict_mode =
-      static_cast<StrictModeFlag>(Smi::cast(args[3])->value());
+  StrictModeFlag strict_mode = static_cast<StrictModeFlag>(args.smi_at(3));
   ASSERT(strict_mode == kStrictMode || strict_mode == kNonStrictMode);
   ASSERT(recv->HasNamedInterceptor());
   PropertyAttributes attr = NONE;
@@ -1381,8 +1382,8 @@ RUNTIME_FUNCTION(MaybeObject*, StoreInterceptorProperty) {
 
 RUNTIME_FUNCTION(MaybeObject*, KeyedLoadPropertyWithInterceptor) {
   JSObject* receiver = JSObject::cast(args[0]);
-  ASSERT(Smi::cast(args[1])->value() >= 0);
-  uint32_t index = Smi::cast(args[1])->value();
+  ASSERT(args.smi_at(1) >= 0);
+  uint32_t index = args.smi_at(1);
   return receiver->GetElementWithInterceptor(receiver, index);
 }
 
@@ -1645,6 +1646,21 @@ MaybeObject* KeyedLoadStubCompiler::GetCode(PropertyType type,
 }
 
 
+MaybeObject* KeyedLoadStubCompiler::ComputeSharedKeyedLoadElementStub(
+    Map* receiver_map) {
+  MaybeObject* maybe_stub = NULL;
+  if (receiver_map->has_fast_elements()) {
+    maybe_stub = KeyedLoadFastElementStub().TryGetCode();
+  } else if (receiver_map->has_external_array_elements()) {
+    JSObject::ElementsKind elements_kind = receiver_map->elements_kind();
+    maybe_stub = KeyedLoadExternalArrayStub(elements_kind).TryGetCode();
+  } else {
+    UNREACHABLE();
+  }
+  return maybe_stub;
+}
+
+
 MaybeObject* StoreStubCompiler::GetCode(PropertyType type, String* name) {
   Code::Flags flags = Code::ComputeMonomorphicFlags(
       Code::STORE_IC, type, strict_mode_);
@@ -1678,6 +1694,22 @@ MaybeObject* KeyedStoreStubCompiler::GetCode(PropertyType type,
                    Code::cast(result->ToObjectUnchecked())));
   }
   return result;
+}
+
+
+MaybeObject* KeyedStoreStubCompiler::ComputeSharedKeyedStoreElementStub(
+    Map* receiver_map) {
+  MaybeObject* maybe_stub = NULL;
+  if (receiver_map->has_fast_elements()) {
+    bool is_js_array = receiver_map->instance_type() == JS_ARRAY_TYPE;
+    maybe_stub = KeyedStoreFastElementStub(is_js_array).TryGetCode();
+  } else if (receiver_map->has_external_array_elements()) {
+    JSObject::ElementsKind elements_kind = receiver_map->elements_kind();
+    maybe_stub = KeyedStoreExternalArrayStub(elements_kind).TryGetCode();
+  } else {
+    UNREACHABLE();
+  }
+  return maybe_stub;
 }
 
 
