@@ -73,10 +73,9 @@ static const RegList kCalleeSaved =
   1 << 21 |  // s5
   1 << 22 |  // s6 (roots in Javascript code)
   1 << 23 |  // s7 (cp in Javascript code)
-  1 << 29 |  // sp
   1 << 30;   // fp/s8
 
-static const int kNumCalleeSaved = 10;
+static const int kNumCalleeSaved = 9;
 
 // Number of registers for which space is reserved in safepoints. Must be a
 // multiple of 8.
