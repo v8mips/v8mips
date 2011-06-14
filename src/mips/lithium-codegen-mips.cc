@@ -835,7 +835,27 @@ void LCodeGen::DoUnknownOSRValue(LUnknownOSRValue* instr) {
 
 
 void LCodeGen::DoModI(LModI* instr) {
-  Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
+  const Register left = ToRegister(instr->InputAt(0));
+  const Register right = ToRegister(instr->InputAt(1));
+  const Register result = ToRegister(instr->result());
+
+  // Check for x % 0.
+  if (instr->hydrogen()->CheckFlag(HValue::kCanBeDivByZero)) {
+    DeoptimizeIf(eq, instr->environment(), right, Operand(zero_reg));
+  }
+
+  // Since Mips has a div instr, we just do the divide
+  // and take the remainder as the result.
+  __ div(left, right);
+  __ mfhi(result);
+
+  if (instr->hydrogen()->CheckFlag(HValue::kBailoutOnMinusZero)) {
+    // Result always take the sign of the dividend (left).
+    Label done; 
+    __ Branch(&done, ge, left, Operand(zero_reg));
+    DeoptimizeIf(eq, instr->environment(), result, Operand(zero_reg));
+    __ bind(&done);
+  }
 }
 
 
