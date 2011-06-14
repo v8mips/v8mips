@@ -1073,7 +1073,41 @@ void LCodeGen::DoShiftI(LShiftI* instr) {
 
 
 void LCodeGen::DoSubI(LSubI* instr) {
-  Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
+  LOperand* left = instr->InputAt(0);
+  LOperand* right = instr->InputAt(1);
+  ASSERT(left->Equals(instr->result()));
+  bool can_overflow = instr->hydrogen()->CheckFlag(HValue::kCanOverflow);
+
+  if (!can_overflow) {
+    if (right->IsStackSlot() || right->IsArgument()) {
+      Register right_reg = EmitLoadRegister(right, at);
+      __ Subu(ToRegister(left), ToRegister(left), Operand(right_reg));
+    } else {
+      ASSERT(right->IsRegister() || right->IsConstantOperand());
+      __ Subu(ToRegister(left), ToRegister(left), ToOperand(right));
+    }
+  } else {  // can_overflow.
+    Register overflow = scratch0();
+    Register scratch = scratch1();
+    if (right->IsStackSlot() ||
+        right->IsArgument() ||
+        right->IsConstantOperand()) {
+      Register right_reg = EmitLoadRegister(right, scratch);
+      __ SubuAndCheckForOverflow(ToRegister(left),
+                                 ToRegister(left),
+                                 right_reg,
+                                 overflow);  // Reg at also used as scratch.
+    } else {
+      ASSERT(right->IsRegister());
+      // Due to overflow check macros not supporting constant operands,
+      // handling the IsConstantOperand case was moved to prev if clause.
+      __ SubuAndCheckForOverflow(ToRegister(left),
+                                 ToRegister(left),
+                                 ToRegister(right),
+                                 overflow);  // Reg at also used as scratch.
+    }
+    DeoptimizeIf(lt, instr->environment(), overflow, Operand(zero_reg));
+  }
 }
 
 
