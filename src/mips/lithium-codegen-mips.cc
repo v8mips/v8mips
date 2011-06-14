@@ -1261,7 +1261,7 @@ void LCodeGen::EmitBranchF(int left_block, int right_block,
   right_block = chunk_->LookupDestination(right_block);
   left_block = chunk_->LookupDestination(left_block);
 
-  bool should_negate;
+  bool should_negate = false;
   FPUCondition cond = ToFPUCondition(cc, should_negate);
   ASSERT(cond != kNoFPUCondition);
   if (should_negate) {
