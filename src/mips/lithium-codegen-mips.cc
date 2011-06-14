@@ -1464,8 +1464,9 @@ void LCodeGen::DoCmpIDAndBranch(LCmpIDAndBranch* instr) {
     // jump to false block label.
     // TODO(kalmard): This may not be necessary, EmitBranchF probably jumps to
     // false on NaN.
+
     __ BranchF(chunk_->GetAssemblyLabel(false_block), NULL, CHECK_NAN,
-               left_reg, right_reg, USE_DELAY_SLOT);
+               left_reg, right_reg);
 
     EmitBranchF(true_block, false_block, cc, left_reg, right_reg);
   } else {
@@ -1622,27 +1623,24 @@ void LCodeGen::DoIsObjectAndBranch(LIsObjectAndBranch* instr) {
 
 
 void LCodeGen::DoIsSmi(LIsSmi* instr) {
-  Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
-  // ASSERT(instr->hydrogen()->value()->representation().IsTagged());
-  // Register result = ToRegister(instr->result());
-  // Register input_reg = EmitLoadRegister(instr->InputAt(0), ip);
-  // __ tst(input_reg, Operand(kSmiTagMask));
-  // __ LoadRoot(result, Heap::kTrueValueRootIndex);
-  // Label done;
-  // __ b(eq, &done);
-  // __ LoadRoot(result, Heap::kFalseValueRootIndex);
-  // __ bind(&done);
+  ASSERT(instr->hydrogen()->value()->representation().IsTagged());
+  Register result = ToRegister(instr->result());
+  Register input_reg = EmitLoadRegister(instr->InputAt(0), at);
+  __ LoadRoot(result, Heap::kTrueValueRootIndex);
+  Label done;
+  __ JumpIfSmi(input_reg, &done);
+  __ LoadRoot(result, Heap::kFalseValueRootIndex);
+  __ bind(&done);
 }
 
 
 void LCodeGen::DoIsSmiAndBranch(LIsSmiAndBranch* instr) {
-  Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
-  // int true_block = chunk_->LookupDestination(instr->true_block_id());
-  // int false_block = chunk_->LookupDestination(instr->false_block_id());
-  //
-  // Register input_reg = EmitLoadRegister(instr->InputAt(0), ip);
-  // __ tst(input_reg, Operand(kSmiTagMask));
-  // EmitBranch(true_block, false_block, eq);
+  int true_block = chunk_->LookupDestination(instr->true_block_id());
+  int false_block = chunk_->LookupDestination(instr->false_block_id());
+
+  Register input_reg = EmitLoadRegister(instr->InputAt(0), at);
+  __ And(at, input_reg, kSmiTagMask);
+  EmitBranch(true_block, false_block, eq, at, Operand(zero_reg));
 }
 
 
@@ -2674,7 +2672,43 @@ void LCodeGen::EmitNumberUntagD(Register input_reg,
                                 DoubleRegister result_reg,
                                 bool deoptimize_on_undefined,
                                 LEnvironment* env) {
-  Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
+  Register scratch = scratch0();
+
+  Label load_smi, heap_number, done;
+
+  // Smi check.
+  __ JumpIfSmi(input_reg, &load_smi);
+
+  // Heap number map check.
+  __ lw(scratch, FieldMemOperand(input_reg, HeapObject::kMapOffset));
+  __ LoadRoot(at, Heap::kHeapNumberMapRootIndex);
+  if (deoptimize_on_undefined) {
+    DeoptimizeIf(ne, env, scratch, Operand(at));
+  } else {
+    Label heap_number;
+    __ Branch(&heap_number, eq, scratch, Operand(at));
+
+    __ LoadRoot(at, Heap::kUndefinedValueRootIndex);
+    DeoptimizeIf(ne, env, input_reg, Operand(at));
+
+    // Convert undefined to NaN.
+    __ LoadRoot(at, Heap::kNanValueRootIndex);
+    __ ldc1(result_reg, FieldMemOperand(at, HeapNumber::kValueOffset));
+    __ Branch(&done);
+
+    __ bind(&heap_number);
+  }
+  // Heap number to double register conversion.
+  __ ldc1(result_reg, FieldMemOperand(at, HeapNumber::kValueOffset));
+  __ Branch(&done);
+
+  // Smi to double register conversion
+  __ bind(&load_smi);
+  __ SmiUntag(input_reg);  // Untag smi before converting to float.
+  __ mtc1(input_reg, result_reg);
+  __ cvt_d_w(result_reg, result_reg);
+  __ SmiTag(input_reg);  // Retag smi.
+  __ bind(&done);
 }
 
 
@@ -2806,7 +2840,17 @@ void LCodeGen::DoTaggedToI(LTaggedToI* instr) {
 
 
 void LCodeGen::DoNumberUntagD(LNumberUntagD* instr) {
-  Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
+  LOperand* input = instr->InputAt(0);
+  ASSERT(input->IsRegister());
+  LOperand* result = instr->result();
+  ASSERT(result->IsDoubleRegister());
+
+  Register input_reg = ToRegister(input);
+  DoubleRegister result_reg = ToDoubleRegister(result);
+
+  EmitNumberUntagD(input_reg, result_reg,
+                   instr->hydrogen()->deoptimize_on_undefined(),
+                   instr->environment());
 }
 
 
