@@ -3228,9 +3228,9 @@ bool JSObject::ReferencesObject(Object* obj) {
       }
     }
 
-    // Check the context extension if any.
-    if (context->has_extension()) {
-      return context->extension()->ReferencesObject(obj);
+    // Check the context extension (if any) if it can have references.
+    if (context->has_extension() && !context->IsCatchContext()) {
+      return JSObject::cast(context->extension())->ReferencesObject(obj);
     }
   }
 
