@@ -840,7 +840,37 @@ void LCodeGen::DoModI(LModI* instr) {
 
 
 void LCodeGen::DoDivI(LDivI* instr) {
-  Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
+  const Register left = ToRegister(instr->InputAt(0));
+  const Register right = ToRegister(instr->InputAt(1));
+  const Register result = ToRegister(instr->result());
+
+  // Check for x / 0.
+  if (instr->hydrogen()->CheckFlag(HValue::kCanBeDivByZero)) {
+    DeoptimizeIf(eq, instr->environment(), right, Operand(zero_reg));
+  }
+
+  // Check for (0 / -x) that will produce negative zero.
+  if (instr->hydrogen()->CheckFlag(HValue::kBailoutOnMinusZero)) {
+    Label left_not_zero;
+    __ Branch(&left_not_zero, ne, left, Operand(zero_reg));
+    DeoptimizeIf(lt, instr->environment(), right, Operand(zero_reg));
+    __ bind(&left_not_zero);
+  }
+
+  // Check for (-kMinInt / -1).
+  if (instr->hydrogen()->CheckFlag(HValue::kCanOverflow)) {
+    Label left_not_min_int;
+    __ Branch(&left_not_min_int, ne, left, Operand(kMinInt));
+    DeoptimizeIf(eq, instr->environment(), right, Operand(-1));
+    __ bind(&left_not_min_int);
+  }
+
+  // Since Mips has a div instr, we just do the divide.
+  // If remainder != 0, then deoptimize, else we are done.
+  __ div(left, right);
+  __ mfhi(result);
+  DeoptimizeIf(ne, instr->environment(), result, Operand(zero_reg));
+  __ mflo(result);
 }
 
 
