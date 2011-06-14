@@ -847,11 +847,9 @@ void MacroAssembler::Trunc_uw_d(FPURegister fd, Register rs) {
   Cvt_d_uw(f22, t6);
 
   // Test if f22 > fd.
-  c(OLT, D, fd, f22);
-
-  Label simple_convert;
   // If fd < 2^31 we can convert it normally.
-  bc1t(&simple_convert);
+  Label simple_convert;
+  BranchF(&simple_convert, NULL, OLT, fd, f22);
 
   // First we subtract 2^31 from fd, then trunc it to rs
   // and add 2^31 to rs.
@@ -869,6 +867,31 @@ void MacroAssembler::Trunc_uw_d(FPURegister fd, Register rs) {
   mfc1(rs, f22);
 
   bind(&done);
+}
+
+
+void MacroAssembler::BranchF(Label* true_label,
+                             Label* false_label,
+                             FPUCondition cc,
+                             FPURegister cmp1,
+                             FPURegister cmp2,
+                             BranchDelaySlot bd) {
+  ASSERT(true_label || false_label);
+  c(cc, D, cmp1, cmp2);
+
+  if (true_label) {
+    bc1t(true_label);
+    if (bd == PROTECT || false_label) {
+      nop();
+    }
+  }
+
+  if (false_label) {
+    bc1f(false_label);
+    if (bd == PROTECT) {
+      nop();
+    }
+  }
 }
 
 

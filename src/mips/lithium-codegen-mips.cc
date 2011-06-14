@@ -1254,6 +1254,46 @@ void LCodeGen::EmitBranch(int left_block, int right_block,
 }
 
 
+// This is just a wrapper that sets up a proper EmitBranchF based on the non-fpu
+// condition code in cc.
+void LCodeGen::EmitBranchF(int left_block, int right_block,
+                           Condition cc, FPURegister src1, FPURegister src2) {
+  right_block = chunk_->LookupDestination(right_block);
+  left_block = chunk_->LookupDestination(left_block);
+
+  bool should_negate;
+  FPUCondition cond = ToFPUCondition(cc, should_negate);
+  ASSERT(cond != kNoFPUCondition);
+  if (should_negate) {
+    EmitBranchF(right_block, left_block, cond, src1, src2);
+  } else {
+    EmitBranchF(left_block, right_block, cond, src1, src2);
+  }
+}
+
+
+void LCodeGen::EmitBranchF(int left_block,
+                           int right_block,
+                           FPUCondition cc,
+                           FPURegister src1,
+                           FPURegister src2) {
+  int next_block = GetNextEmittedBlock(current_block_);
+  right_block = chunk_->LookupDestination(right_block);
+  left_block = chunk_->LookupDestination(left_block);
+  if (right_block == left_block) {
+    EmitGoto(left_block);
+  } else if (left_block == next_block) {
+    // Note: the labels are reversed here.
+    __ BranchF(NULL, chunk_->GetAssemblyLabel(right_block), cc, src1, src2);
+  } else if (right_block == next_block) {
+    __ BranchF(chunk_->GetAssemblyLabel(left_block), NULL, cc, src1, src2);
+  } else {
+    __ BranchF(chunk_->GetAssemblyLabel(left_block),
+               chunk_->GetAssemblyLabel(right_block),cc, src1, src2);
+  }
+}
+
+
 void LCodeGen::DoBranch(LBranch* instr) {
   int true_block = chunk_->LookupDestination(instr->true_block_id());
   int false_block = chunk_->LookupDestination(instr->false_block_id());
@@ -1263,14 +1303,11 @@ void LCodeGen::DoBranch(LBranch* instr) {
     Register reg = ToRegister(instr->InputAt(0));
     EmitBranch(true_block, false_block, ne, reg, Operand(zero_reg));
   } else if (r.IsDouble()) {
-    Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
-    // DoubleRegister reg = ToDoubleRegister(instr->InputAt(0));
-    // Register scratch = scratch0();
-    //
-    // // Test the double value. Zero and NaN are false.
-    // __ VFPCompareAndLoadFlags(reg, 0.0, scratch);
-    // __ tst(scratch, Operand(kVFPZConditionFlagBit | kVFPVConditionFlagBit));
-    // EmitBranch(true_block, false_block, ne);
+    FPURegister scratch = double_scratch0();
+    __ Move(scratch, zero_reg, zero_reg);
+    DoubleRegister reg = ToDoubleRegister(instr->InputAt(0));
+    // Test the double value. Zero and NaN are false.
+    EmitBranchF(false_block, true_block, UEQ, reg, scratch);
   } else {
     ASSERT(r.IsTagged());
 
@@ -1297,6 +1334,9 @@ void LCodeGen::DoBranch(LBranch* instr) {
 
       // TODO(plind): I think this is optimization, and stub below
       // can handle everything.
+      // TODO(kalmard): This could be ported to MIPS using BranchF but would
+      // require two double scratches and lithium only has one. Can we get
+      // another one without too much hassle?
 
       Label call_stub;
       // DoubleRegister dbl_scratch = d0;
@@ -1415,13 +1455,19 @@ void LCodeGen::DoCmpIDAndBranch(LCmpIDAndBranch* instr) {
   Condition cc = TokenToCondition(instr->op(), instr->is_double());
 
   if (instr->is_double()) {
-    Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
     // Compare left and right as doubles and load the
     // resulting flags into the normal status register.
-    //__ VFPCompareAndSetFlags(ToDoubleRegister(left), ToDoubleRegister(right));
-    // If a NaN is involved, i.e. the result is unordered (V set),
+    FPURegister left_reg = ToDoubleRegister(left);
+    FPURegister right_reg = ToDoubleRegister(right);
+
+    // If a NaN is involved, i.e. the result is unordered,
     // jump to false block label.
-    //__ b(vs, chunk_->GetAssemblyLabel(false_block));
+    // TODO(kalmard): This may not be necessary, EmitBranchF probably jumps to
+    // false on NaN.
+    __ BranchF(chunk_->GetAssemblyLabel(false_block), NULL, CHECK_NAN,
+               left_reg, right_reg, USE_DELAY_SLOT);
+
+    EmitBranchF(true_block, false_block, cc, left_reg, right_reg);
   } else {
     // EmitCmpI cannot be used on MIPS.
     // EmitCmpI(left, right);

@@ -271,6 +271,16 @@ class LCodeGen BASE_EMBEDDED {
                   Condition cc,
                   Register src1,
                   const Operand& src2);
+  void EmitBranchF(int left_block,
+                   int right_block,
+                   Condition cc,
+                   FPURegister src1,
+                   FPURegister src2);
+  void EmitBranchF(int left_block,
+                   int right_block,
+                   FPUCondition cc,
+                   FPURegister src1,
+                   FPURegister src2);
   void EmitCmpI(LOperand* left, LOperand* right);
   void EmitNumberUntagD(Register input,
                         DoubleRegister result,

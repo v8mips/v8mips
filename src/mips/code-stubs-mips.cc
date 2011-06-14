@@ -1281,13 +1281,8 @@ static void EmitTwoNonNanDoubleComparison(MacroAssembler* masm, Condition cc) {
   } else {
     CpuFeatures::Scope scope(FPU);
     Label equal, less_than;
-    __ c(EQ, D, f12, f14);
-    __ bc1t(&equal);
-    __ nop();
-
-    __ c(OLT, D, f12, f14);
-    __ bc1t(&less_than);
-    __ nop();
+    __ BranchF(&equal, NULL, EQ, f12, f14);
+    __ BranchF(&less_than, NULL, OLT, f12, f14);
 
     // Not equal, not less, not NaN, must be greater.
     __ li(v0, Operand(GREATER));
@@ -1480,9 +1475,7 @@ void NumberToStringStub::GenerateLookupNumberStringCache(MacroAssembler* masm,
       __ JumpIfSmi(probe, not_found);
       __ ldc1(f12, FieldMemOperand(object, HeapNumber::kValueOffset));
       __ ldc1(f14, FieldMemOperand(probe, HeapNumber::kValueOffset));
-      __ c(EQ, D, f12, f14);
-      __ bc1t(&load_result_from_cache);
-      __ nop();   // bc1t() requires explicit fill of branch delay slot.
+      __ BranchF(&load_result_from_cache, NULL, EQ, f12, f14);
       __ Branch(not_found);
     } else {
       // Note that there is no cache check for non-FPU case, even though
@@ -1598,9 +1591,7 @@ void CompareStub::Generate(MacroAssembler* masm) {
     __ li(t2, Operand(EQUAL));
 
     // Check if either rhs or lhs is NaN.
-    __ c(UN, D, f12, f14);
-    __ bc1t(&nan);
-    __ nop();
+    __ BranchF(&nan, NULL, UN, f12, f14);
 
     // Check if LESS condition is satisfied. If true, move conditionally
     // result to v0.
@@ -6162,24 +6153,15 @@ void ICCompareStub::GenerateHeapNumbers(MacroAssembler* masm) {
 
     Label fpu_eq, fpu_lt, fpu_gt;
     // Compare operands (test if unordered).
-    __ c(UN, D, f0, f2);
     // Don't base result on status bits when a NaN is involved.
-    __ bc1t(&unordered);
-    __ nop();
+    __ BranchF(&unordered, NULL, UN, f0, f2);
 
     // Test if equal.
-    __ c(EQ, D, f0, f2);
-    __ bc1t(&fpu_eq);
-    __ nop();
+    __ BranchF(&fpu_eq, NULL, EQ, f0, f2);
 
     // Test if unordered or less (unordered case is already handled).
-    __ c(ULT, D, f0, f2);
-    __ bc1t(&fpu_lt);
-    __ nop();
-
     // Otherwise it's greater.
-    __ bc1f(&fpu_gt);
-    __ nop();
+    __ BranchF(&fpu_lt, &fpu_gt, ULT, f0, f2);
 
     // Return a result of -1, 0, or 1.
     __ bind(&fpu_eq);

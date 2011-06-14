@@ -495,15 +495,45 @@ inline Condition ReverseCondition(Condition cc) {
 
 // ----- Coprocessor conditions.
 enum FPUCondition {
-  F,    // False.
-  UN,   // Unordered.
-  EQ,   // Equal.
-  UEQ,  // Unordered or Equal.
-  OLT,  // Ordered or Less Than.
-  ULT,  // Unordered or Less Than.
-  OLE,  // Ordered or Less Than or Equal.
-  ULE   // Unordered or Less Than or Equal.
+  kNoFPUCondition = -1,
+
+  F     = 0,  // False.
+  UN    = 1,  // Unordered.
+  EQ    = 2,  // Equal.
+  UEQ   = 3,  // Unordered or Equal.
+  OLT   = 4,  // Ordered or Less Than.
+  ULT   = 5,  // Unordered or Less Than.
+  OLE   = 6,  // Ordered or Less Than or Equal.
+  ULE   = 7,  // Unordered or Less Than or Equal.
+
+  // Aliases.
+
+  CHECK_NAN = UN
 };
+
+
+inline FPUCondition ToFPUCondition(Condition cc,
+                                   bool& should_negate) {
+  switch (cc) {
+    case less:
+      should_negate = false;
+      return OLT;
+    case greater:
+      should_negate = true;
+      return ULE;
+    case greater_equal:
+      should_negate = true;
+      return ULT;
+    case less_equal:
+      should_negate = false;
+      return OLE;
+    case eq:
+      should_negate = false;
+      return EQ;
+    default:
+      return kNoFPUCondition;
+  };
+}
 
 
 // -----------------------------------------------------------------------------
