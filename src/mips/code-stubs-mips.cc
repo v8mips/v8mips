@@ -1281,8 +1281,8 @@ static void EmitTwoNonNanDoubleComparison(MacroAssembler* masm, Condition cc) {
   } else {
     CpuFeatures::Scope scope(FPU);
     Label equal, less_than;
-    __ BranchF(&equal, NULL, EQ, f12, f14);
-    __ BranchF(&less_than, NULL, OLT, f12, f14);
+    __ BranchF(&equal, NULL, eq, f12, f14);
+    __ BranchF(&less_than, NULL, lt, f12, f14);
 
     // Not equal, not less, not NaN, must be greater.
     __ li(v0, Operand(GREATER));
@@ -1475,7 +1475,7 @@ void NumberToStringStub::GenerateLookupNumberStringCache(MacroAssembler* masm,
       __ JumpIfSmi(probe, not_found);
       __ ldc1(f12, FieldMemOperand(object, HeapNumber::kValueOffset));
       __ ldc1(f14, FieldMemOperand(probe, HeapNumber::kValueOffset));
-      __ BranchF(&load_result_from_cache, NULL, EQ, f12, f14);
+      __ BranchF(&load_result_from_cache, NULL, eq, f12, f14);
       __ Branch(not_found);
     } else {
       // Note that there is no cache check for non-FPU case, even though
@@ -1591,7 +1591,7 @@ void CompareStub::Generate(MacroAssembler* masm) {
     __ li(t2, Operand(EQUAL));
 
     // Check if either rhs or lhs is NaN.
-    __ BranchF(&nan, NULL, UN, f12, f14);
+    __ BranchF(NULL, &nan, eq, f12, f14);
 
     // Check if LESS condition is satisfied. If true, move conditionally
     // result to v0.
@@ -6152,16 +6152,15 @@ void ICCompareStub::GenerateHeapNumbers(MacroAssembler* masm) {
     __ ldc1(f2, MemOperand(a2, HeapNumber::kValueOffset));
 
     Label fpu_eq, fpu_lt, fpu_gt;
-    // Compare operands (test if unordered).
+    // Compare operands (test if unordered) - built into the eq test below.
     // Don't base result on status bits when a NaN is involved.
-    __ BranchF(&unordered, NULL, UN, f0, f2);
-
     // Test if equal.
-    __ BranchF(&fpu_eq, NULL, EQ, f0, f2);
+    __ BranchF(&fpu_eq, &unordered, eq, f0, f2);
 
     // Test if unordered or less (unordered case is already handled).
     // Otherwise it's greater.
-    __ BranchF(&fpu_lt, &fpu_gt, ULT, f0, f2);
+    __ BranchF(&fpu_lt, NULL, lt, f0, f2, USE_DELAY_SLOT);
+    __ BranchF(&fpu_gt, NULL, gt, f0, f2, USE_DELAY_SLOT);
 
     // Return a result of -1, 0, or 1.
     __ bind(&fpu_eq);

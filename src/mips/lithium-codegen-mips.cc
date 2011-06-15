@@ -1254,43 +1254,23 @@ void LCodeGen::EmitBranch(int left_block, int right_block,
 }
 
 
-// This is just a wrapper that sets up a proper EmitBranchF based on the non-fpu
-// condition code in cc.
 void LCodeGen::EmitBranchF(int left_block, int right_block,
                            Condition cc, FPURegister src1, FPURegister src2) {
-  right_block = chunk_->LookupDestination(right_block);
-  left_block = chunk_->LookupDestination(left_block);
-
-  bool should_negate = false;
-  FPUCondition cond = ToFPUCondition(cc, should_negate);
-  ASSERT(cond != kNoFPUCondition);
-  if (should_negate) {
-    EmitBranchF(right_block, left_block, cond, src1, src2);
-  } else {
-    EmitBranchF(left_block, right_block, cond, src1, src2);
-  }
-}
-
-
-void LCodeGen::EmitBranchF(int left_block,
-                           int right_block,
-                           FPUCondition cc,
-                           FPURegister src1,
-                           FPURegister src2) {
   int next_block = GetNextEmittedBlock(current_block_);
   right_block = chunk_->LookupDestination(right_block);
   left_block = chunk_->LookupDestination(left_block);
   if (right_block == left_block) {
     EmitGoto(left_block);
   } else if (left_block == next_block) {
-    // Note: the labels are reversed here.
-    __ BranchF(NULL, chunk_->GetAssemblyLabel(right_block), cc, src1, src2);
+    __ BranchF(chunk_->GetAssemblyLabel(right_block), NULL,
+               NegateCondition(cc), src1, src2);
   } else if (right_block == next_block) {
     __ BranchF(chunk_->GetAssemblyLabel(left_block), NULL, cc, src1, src2);
   } else {
-    __ BranchF(chunk_->GetAssemblyLabel(left_block),
-               chunk_->GetAssemblyLabel(right_block),cc, src1, src2);
+    __ BranchF(chunk_->GetAssemblyLabel(left_block), NULL, cc, src1, src2);
+    __ Branch(chunk_->GetAssemblyLabel(right_block));
   }
+  __ Abort("Unhandled NaN case in EmitBranchF");
 }
 
 
@@ -1307,7 +1287,7 @@ void LCodeGen::DoBranch(LBranch* instr) {
     __ Move(scratch, zero_reg, zero_reg);
     DoubleRegister reg = ToDoubleRegister(instr->InputAt(0));
     // Test the double value. Zero and NaN are false.
-    EmitBranchF(false_block, true_block, UEQ, reg, scratch);
+    EmitBranchF(true_block, false_block, ne, reg, scratch);
   } else {
     ASSERT(r.IsTagged());
 
@@ -1462,10 +1442,8 @@ void LCodeGen::DoCmpIDAndBranch(LCmpIDAndBranch* instr) {
 
     // If a NaN is involved, i.e. the result is unordered,
     // jump to false block label.
-    // TODO(kalmard): This may not be necessary, EmitBranchF probably jumps to
-    // false on NaN.
 
-    __ BranchF(chunk_->GetAssemblyLabel(false_block), NULL, CHECK_NAN,
+    __ BranchF(NULL, chunk_->GetAssemblyLabel(false_block), eq,
                left_reg, right_reg);
 
     EmitBranchF(true_block, false_block, cc, left_reg, right_reg);
@@ -2699,7 +2677,7 @@ void LCodeGen::EmitNumberUntagD(Register input_reg,
     __ bind(&heap_number);
   }
   // Heap number to double register conversion.
-  __ ldc1(result_reg, FieldMemOperand(at, HeapNumber::kValueOffset));
+  __ ldc1(result_reg, FieldMemOperand(input_reg, HeapNumber::kValueOffset));
   __ Branch(&done);
 
   // Smi to double register conversion

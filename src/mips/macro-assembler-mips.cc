@@ -849,7 +849,10 @@ void MacroAssembler::Trunc_uw_d(FPURegister fd, Register rs) {
   // Test if f22 > fd.
   // If fd < 2^31 we can convert it normally.
   Label simple_convert;
-  BranchF(&simple_convert, NULL, OLT, fd, f22);
+  // TODO(kalmard): the fd == NaN case is not covered in this function.
+  // We could toggle the appropriate FSCR bit but this function is rarely used
+  // (if at all) and never in such an environment.
+  BranchF(&simple_convert, NULL, lt, fd, f22);
 
   // First we subtract 2^31 from fd, then trunc it to rs
   // and add 2^31 to rs.
@@ -870,27 +873,55 @@ void MacroAssembler::Trunc_uw_d(FPURegister fd, Register rs) {
 }
 
 
-void MacroAssembler::BranchF(Label* true_label,
-                             Label* false_label,
-                             FPUCondition cc,
+void MacroAssembler::BranchF(Label* target,
+                             Label* nan,
+                             Condition cc,
                              FPURegister cmp1,
                              FPURegister cmp2,
                              BranchDelaySlot bd) {
-  ASSERT(true_label || false_label);
-  c(cc, D, cmp1, cmp2);
-
-  if (true_label) {
-    bc1t(true_label);
-    if (bd == PROTECT || false_label) {
-      nop();
-    }
+  ASSERT(nan || target);
+  // Check for unordered (NaN) cases.
+  if (nan) {
+    c(UN, D, cmp1, cmp2);
+    bc1t(nan);
   }
 
-  if (false_label) {
-    bc1f(false_label);
-    if (bd == PROTECT) {
-      nop();
-    }
+  if (target) {
+    // Now we can check for 'unordered or ...' cases, as !unordered is
+    // guaranteed here (or if nan is not set, we assume the caller handled
+    // it somewhere else).
+    switch (cc) {
+      case less:
+        c(ULT, D, cmp1, cmp2);
+        bc1t(target);
+        break;
+      case greater:
+        c(ULE, D, cmp2, cmp1);
+        bc1t(target);
+        break;
+      case greater_equal:
+        c(ULT, D, cmp2, cmp1);
+        bc1t(target);
+        break;
+      case less_equal:
+        c(ULE, D, cmp1, cmp2);
+        bc1t(target);
+        break;
+      case eq:
+        c(EQ, D, cmp1, cmp2);
+        bc1t(target);
+        break;
+      case ne:
+        c(EQ, D, cmp1, cmp2);
+        bc1f(target);
+        break;
+      default:
+        CHECK(0);
+    };
+  }
+
+  if (bd == PROTECT) {
+    nop();
   }
 }
 

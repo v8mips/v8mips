@@ -563,9 +563,9 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
   void Trunc_uw_d(FPURegister fd, Register rs);
 
   // Wrapper function for the different cmp/branch types.
-  void BranchF(Label* true_label,
-               Label* false_label,
-               FPUCondition cc,
+  void BranchF(Label* target,
+               Label* nan,
+               Condition cc,
                FPURegister cmp1,
                FPURegister cmp2,
                BranchDelaySlot bd = PROTECT);

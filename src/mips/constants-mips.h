@@ -504,36 +504,8 @@ enum FPUCondition {
   OLT   = 4,  // Ordered or Less Than.
   ULT   = 5,  // Unordered or Less Than.
   OLE   = 6,  // Ordered or Less Than or Equal.
-  ULE   = 7,  // Unordered or Less Than or Equal.
-
-  // Aliases.
-
-  CHECK_NAN = UN
+  ULE   = 7   // Unordered or Less Than or Equal.
 };
-
-
-inline FPUCondition ToFPUCondition(Condition cc,
-                                   bool& should_negate) {
-  switch (cc) {
-    case less:
-      should_negate = false;
-      return OLT;
-    case greater:
-      should_negate = true;
-      return ULE;
-    case greater_equal:
-      should_negate = true;
-      return ULT;
-    case less_equal:
-      should_negate = false;
-      return OLE;
-    case eq:
-      should_negate = false;
-      return EQ;
-    default:
-      return kNoFPUCondition;
-  };
-}
 
 
 // -----------------------------------------------------------------------------
