@@ -879,6 +879,11 @@ void MacroAssembler::BranchF(Label* target,
                              FPURegister cmp1,
                              FPURegister cmp2,
                              BranchDelaySlot bd) {
+  if (cc == al) {
+    Branch(bd, target);
+    return;
+  }
+
   ASSERT(nan || target);
   // Check for unordered (NaN) cases.
   if (nan) {
@@ -890,19 +895,25 @@ void MacroAssembler::BranchF(Label* target,
     // Now we can check for 'unordered or ...' cases, as !unordered is
     // guaranteed here (or if nan is not set, we assume the caller handled
     // it somewhere else).
+    // TODO(kalmard): Can unsigned conditions be treated as signed? Seems
+    // to be working...
     switch (cc) {
+      case Uless:
       case less:
         c(ULT, D, cmp1, cmp2);
         bc1t(target);
         break;
+      case Ugreater:
       case greater:
         c(ULE, D, cmp2, cmp1);
         bc1t(target);
         break;
+      case Ugreater_equal:
       case greater_equal:
         c(ULT, D, cmp2, cmp1);
         bc1t(target);
         break;
+      case Uless_equal:
       case less_equal:
         c(ULE, D, cmp1, cmp2);
         bc1t(target);

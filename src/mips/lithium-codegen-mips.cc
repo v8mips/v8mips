@@ -1270,7 +1270,6 @@ void LCodeGen::EmitBranchF(int left_block, int right_block,
     __ BranchF(chunk_->GetAssemblyLabel(left_block), NULL, cc, src1, src2);
     __ Branch(chunk_->GetAssemblyLabel(right_block));
   }
-  __ Abort("Unhandled NaN case in EmitBranchF");
 }
 
 
@@ -1442,7 +1441,6 @@ void LCodeGen::DoCmpIDAndBranch(LCmpIDAndBranch* instr) {
 
     // If a NaN is involved, i.e. the result is unordered,
     // jump to false block label.
-
     __ BranchF(NULL, chunk_->GetAssemblyLabel(false_block), eq,
                left_reg, right_reg);
 
