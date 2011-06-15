@@ -890,6 +890,9 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
                        int num_arguments,
                        int result_size);
 
+  int CalculateStackPassedWords(int num_reg_arguments,
+                                int num_double_arguments);
+
   // Before calling a C-function from generated code, align arguments on stack
   // and add space for the four mips argument slots.
   // After aligning the frame, non-register arguments must be stored on the
@@ -899,7 +902,11 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
   // C++ code.
   // Needs a scratch register to do some arithmetic. This register will be
   // trashed.
-  void PrepareCallCFunction(int num_arguments, Register scratch);
+  void PrepareCallCFunction(int num_reg_arguments,
+                            int num_double_registers,
+                            Register scratch);
+  void PrepareCallCFunction(int num_reg_arguments,
+                            Register scratch);
 
   // Arguments 1-4 are placed in registers a0 thru a3 respectively.
   // Arguments 5..n are stored to stack using following:
@@ -912,6 +919,12 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
   // function).
   void CallCFunction(ExternalReference function, int num_arguments);
   void CallCFunction(Register function, Register scratch, int num_arguments);
+  void CallCFunction(ExternalReference function,
+                     int num_reg_arguments,
+                     int num_double_arguments);
+  void CallCFunction(Register function, Register scratch,
+                     int num_reg_arguments,
+                     int num_double_arguments);
   void GetCFunctionDoubleResult(const DoubleRegister dst);
 
   // There are two ways of passing double arguments on MIPS, depending on
@@ -1114,7 +1127,8 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
   void CallCFunctionHelper(Register function,
                            ExternalReference function_reference,
                            Register scratch,
-                           int num_arguments);
+                           int num_reg_arguments,
+                           int num_double_arguments);
 
   void Jump(intptr_t target, RelocInfo::Mode rmode,
             BranchDelaySlot bd = PROTECT);

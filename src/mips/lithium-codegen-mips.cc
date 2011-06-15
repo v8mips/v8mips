@@ -1212,7 +1212,42 @@ void LCodeGen::DoAddI(LAddI* instr) {
 
 
 void LCodeGen::DoArithmeticD(LArithmeticD* instr) {
-  Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
+  DoubleRegister left = ToDoubleRegister(instr->InputAt(0));
+  DoubleRegister right = ToDoubleRegister(instr->InputAt(1));
+  switch (instr->op()) {
+    case Token::ADD:
+      __ add_d(left, left, right);
+      break;
+    case Token::SUB:
+      __ sub_d(left, left, right);
+      break;
+    case Token::MUL:
+      __ mul_d(left, left, right);
+      break;
+    case Token::DIV:
+      __ div_d(left, left, right);
+      break;
+    case Token::MOD: {
+      // Save a0-a3 on the stack.
+      RegList saved_regs = a0.bit() | a1.bit() | a2.bit() | a3.bit();
+      __ MultiPush(saved_regs);
+
+      __ PrepareCallCFunction(0, 2, scratch0());
+      __ SetCallCDoubleArguments(left, right);
+      __ CallCFunction(
+          ExternalReference::double_fp_operation(Token::MOD, isolate()),
+          0, 2);
+      // Move the result in the double result register.
+      __ GetCFunctionDoubleResult(ToDoubleRegister(instr->result()));
+
+      // Restore saved register.
+      __ MultiPop(saved_regs);
+      break;
+    }
+    default:
+      UNREACHABLE();
+      break;
+  }
 }
 
 
@@ -2532,7 +2567,19 @@ void LCodeGen::DoStringLength(LStringLength* instr) {
 
 
 void LCodeGen::DoInteger32ToDouble(LInteger32ToDouble* instr) {
-  Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
+  LOperand* input = instr->InputAt(0);
+  ASSERT(input->IsRegister() || input->IsStackSlot());
+  LOperand* output = instr->result();
+  ASSERT(output->IsDoubleRegister());
+  FPURegister single_scratch = double_scratch0().low();
+  if (input->IsStackSlot()) {
+    Register scratch = scratch0();
+    __ lw(scratch, ToMemOperand(input));
+    __ mtc1(scratch, single_scratch);
+  } else {
+    __ mtc1(ToRegister(input), single_scratch);
+  }
+  __ cvt_d_w(ToDoubleRegister(output), single_scratch);
 }
 
 
@@ -2968,7 +3015,24 @@ void LCodeGen::DoRegExpLiteral(LRegExpLiteral* instr) {
 
 
 void LCodeGen::DoFunctionLiteral(LFunctionLiteral* instr) {
-  Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
+  // Use the fast case closure allocation code that allocates in new
+  // space for nested functions that don't need literals cloning.
+  Handle<SharedFunctionInfo> shared_info = instr->shared_info();
+  bool pretenure = instr->hydrogen()->pretenure();
+  if (!pretenure && shared_info->num_literals() == 0) {
+    FastNewClosureStub stub(
+        shared_info->strict_mode() ? kStrictMode : kNonStrictMode);
+    __ li(a1, Operand(shared_info));
+    __ push(a1);
+    CallCode(stub.GetCode(), RelocInfo::CODE_TARGET, instr);
+  } else {
+    __ li(a2, Operand(shared_info));
+    __ li(a1, Operand(pretenure
+                       ? factory()->true_value()
+                       : factory()->false_value()));
+    __ Push(cp, a2, a1);
+    CallRuntime(Runtime::kNewClosure, 3, instr);
+  }
 }
 
 
