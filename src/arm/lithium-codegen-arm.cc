@@ -888,6 +888,8 @@ void LCodeGen::DoModI(LModI* instr) {
     if (instr->hydrogen()->CheckFlag(HValue::kBailoutOnMinusZero)) {
       __ b(ne, &done);
       DeoptimizeIf(al, instr->environment());
+    } else {
+      __ b(&done);
     }
     __ bind(&positive_dividend);
     __ and_(dividend, dividend, Operand(divisor - 1));
@@ -2672,6 +2674,7 @@ void LCodeGen::DoLoadKeyedSpecializedArrayElement(
       case JSObject::FAST_DOUBLE_ELEMENTS:
       case JSObject::FAST_ELEMENTS:
       case JSObject::DICTIONARY_ELEMENTS:
+      case JSObject::NON_STRICT_ARGUMENTS_ELEMENTS:
         UNREACHABLE();
         break;
     }
@@ -3476,6 +3479,7 @@ void LCodeGen::DoStoreKeyedSpecializedArrayElement(
       case JSObject::FAST_DOUBLE_ELEMENTS:
       case JSObject::FAST_ELEMENTS:
       case JSObject::DICTIONARY_ELEMENTS:
+      case JSObject::NON_STRICT_ARGUMENTS_ELEMENTS:
         UNREACHABLE();
         break;
     }
