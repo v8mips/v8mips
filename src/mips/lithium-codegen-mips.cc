@@ -835,8 +835,9 @@ void LCodeGen::DoUnknownOSRValue(LUnknownOSRValue* instr) {
 
 
 void LCodeGen::DoModI(LModI* instr) {
+  Register scratch = scratch0();
   const Register left = ToRegister(instr->InputAt(0));
-  const Register right = ToRegister(instr->InputAt(1));
+  const Register right = EmitLoadRegister(instr->InputAt(1), scratch);
   const Register result = ToRegister(instr->result());
 
   // Check for x % 0.
@@ -860,8 +861,9 @@ void LCodeGen::DoModI(LModI* instr) {
 
 
 void LCodeGen::DoDivI(LDivI* instr) {
+  Register scratch = scratch0();
   const Register left = ToRegister(instr->InputAt(0));
-  const Register right = ToRegister(instr->InputAt(1));
+  const Register right = EmitLoadRegister(instr->InputAt(1), scratch);
   const Register result = ToRegister(instr->result());
 
   // Check for x / 0.
