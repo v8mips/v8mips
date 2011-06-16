@@ -179,8 +179,9 @@ struct FPURegister {
   static const int kNumAllocatableRegisters = 15;
 
   static int ToAllocationIndex(FPURegister reg) {
-    ASSERT(reg.code() != 0);
     ASSERT(reg.code() % 2 == 0);
+    ASSERT(reg.code() < kNumAllocatableRegisters);
+    ASSERT(reg.is_valid());
     return (reg.code() / 2);
   }
 

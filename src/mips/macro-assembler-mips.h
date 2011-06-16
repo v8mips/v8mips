@@ -550,6 +550,10 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
   void Ins(Register rt, Register rs, uint16_t pos, uint16_t size);
   void Ext(Register rt, Register rs, uint16_t pos, uint16_t size);
 
+
+  // ---------------------------------------------------------------------------
+  // FPU macros.
+
   // Convert unsigned word to double.
   void Cvt_d_uw(FPURegister fd, FPURegister fs);
   void Cvt_d_uw(FPURegister fd, Register rs);
@@ -557,6 +561,14 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
   // Convert double to unsigned word.
   void Trunc_uw_d(FPURegister fd, FPURegister fs);
   void Trunc_uw_d(FPURegister fd, Register rs);
+
+  // Wrapper function for the different cmp/branch types.
+  void BranchF(Label* target,
+               Label* nan,
+               Condition cc,
+               FPURegister cmp1,
+               FPURegister cmp2,
+               BranchDelaySlot bd = PROTECT);
 
   // Convert the HeapNumber pointed to by source to a 32bits signed integer
   // dest. If the HeapNumber does not fit into a 32bits signed integer branch
@@ -589,6 +601,7 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
                         Register scratch,
                         Register scratch2,
                         Register scratch3);
+
 
   // -------------------------------------------------------------------------
   // Activation frames.

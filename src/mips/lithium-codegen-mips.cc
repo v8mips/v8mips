@@ -1289,6 +1289,25 @@ void LCodeGen::EmitBranch(int left_block, int right_block,
 }
 
 
+void LCodeGen::EmitBranchF(int left_block, int right_block,
+                           Condition cc, FPURegister src1, FPURegister src2) {
+  int next_block = GetNextEmittedBlock(current_block_);
+  right_block = chunk_->LookupDestination(right_block);
+  left_block = chunk_->LookupDestination(left_block);
+  if (right_block == left_block) {
+    EmitGoto(left_block);
+  } else if (left_block == next_block) {
+    __ BranchF(chunk_->GetAssemblyLabel(right_block), NULL,
+               NegateCondition(cc), src1, src2);
+  } else if (right_block == next_block) {
+    __ BranchF(chunk_->GetAssemblyLabel(left_block), NULL, cc, src1, src2);
+  } else {
+    __ BranchF(chunk_->GetAssemblyLabel(left_block), NULL, cc, src1, src2);
+    __ Branch(chunk_->GetAssemblyLabel(right_block));
+  }
+}
+
+
 void LCodeGen::DoBranch(LBranch* instr) {
   int true_block = chunk_->LookupDestination(instr->true_block_id());
   int false_block = chunk_->LookupDestination(instr->false_block_id());
@@ -1298,14 +1317,11 @@ void LCodeGen::DoBranch(LBranch* instr) {
     Register reg = ToRegister(instr->InputAt(0));
     EmitBranch(true_block, false_block, ne, reg, Operand(zero_reg));
   } else if (r.IsDouble()) {
-    Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
-    // DoubleRegister reg = ToDoubleRegister(instr->InputAt(0));
-    // Register scratch = scratch0();
-    //
-    // // Test the double value. Zero and NaN are false.
-    // __ VFPCompareAndLoadFlags(reg, 0.0, scratch);
-    // __ tst(scratch, Operand(kVFPZConditionFlagBit | kVFPVConditionFlagBit));
-    // EmitBranch(true_block, false_block, ne);
+    FPURegister scratch = double_scratch0();
+    __ Move(scratch, zero_reg, zero_reg);
+    DoubleRegister reg = ToDoubleRegister(instr->InputAt(0));
+    // Test the double value. Zero and NaN are false.
+    EmitBranchF(true_block, false_block, ne, reg, scratch);
   } else {
     ASSERT(r.IsTagged());
 
@@ -1332,6 +1348,9 @@ void LCodeGen::DoBranch(LBranch* instr) {
 
       // TODO(plind): I think this is optimization, and stub below
       // can handle everything.
+      // TODO(kalmard): This could be ported to MIPS using BranchF but would
+      // require two double scratches and lithium only has one. Can we get
+      // another one without too much hassle?
 
       Label call_stub;
       // DoubleRegister dbl_scratch = d0;
@@ -1450,13 +1469,17 @@ void LCodeGen::DoCmpIDAndBranch(LCmpIDAndBranch* instr) {
   Condition cc = TokenToCondition(instr->op(), instr->is_double());
 
   if (instr->is_double()) {
-    Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
     // Compare left and right as doubles and load the
     // resulting flags into the normal status register.
-    //__ VFPCompareAndSetFlags(ToDoubleRegister(left), ToDoubleRegister(right));
-    // If a NaN is involved, i.e. the result is unordered (V set),
+    FPURegister left_reg = ToDoubleRegister(left);
+    FPURegister right_reg = ToDoubleRegister(right);
+
+    // If a NaN is involved, i.e. the result is unordered,
     // jump to false block label.
-    //__ b(vs, chunk_->GetAssemblyLabel(false_block));
+    __ BranchF(NULL, chunk_->GetAssemblyLabel(false_block), eq,
+               left_reg, right_reg);
+
+    EmitBranchF(true_block, false_block, cc, left_reg, right_reg);
   } else {
     // EmitCmpI cannot be used on MIPS.
     // EmitCmpI(left, right);
@@ -1611,27 +1634,24 @@ void LCodeGen::DoIsObjectAndBranch(LIsObjectAndBranch* instr) {
 
 
 void LCodeGen::DoIsSmi(LIsSmi* instr) {
-  Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
-  // ASSERT(instr->hydrogen()->value()->representation().IsTagged());
-  // Register result = ToRegister(instr->result());
-  // Register input_reg = EmitLoadRegister(instr->InputAt(0), ip);
-  // __ tst(input_reg, Operand(kSmiTagMask));
-  // __ LoadRoot(result, Heap::kTrueValueRootIndex);
-  // Label done;
-  // __ b(eq, &done);
-  // __ LoadRoot(result, Heap::kFalseValueRootIndex);
-  // __ bind(&done);
+  ASSERT(instr->hydrogen()->value()->representation().IsTagged());
+  Register result = ToRegister(instr->result());
+  Register input_reg = EmitLoadRegister(instr->InputAt(0), at);
+  __ LoadRoot(result, Heap::kTrueValueRootIndex);
+  Label done;
+  __ JumpIfSmi(input_reg, &done);
+  __ LoadRoot(result, Heap::kFalseValueRootIndex);
+  __ bind(&done);
 }
 
 
 void LCodeGen::DoIsSmiAndBranch(LIsSmiAndBranch* instr) {
-  Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
-  // int true_block = chunk_->LookupDestination(instr->true_block_id());
-  // int false_block = chunk_->LookupDestination(instr->false_block_id());
-  //
-  // Register input_reg = EmitLoadRegister(instr->InputAt(0), ip);
-  // __ tst(input_reg, Operand(kSmiTagMask));
-  // EmitBranch(true_block, false_block, eq);
+  int true_block = chunk_->LookupDestination(instr->true_block_id());
+  int false_block = chunk_->LookupDestination(instr->false_block_id());
+
+  Register input_reg = EmitLoadRegister(instr->InputAt(0), at);
+  __ And(at, input_reg, kSmiTagMask);
+  EmitBranch(true_block, false_block, eq, at, Operand(zero_reg));
 }
 
 
@@ -2675,7 +2695,43 @@ void LCodeGen::EmitNumberUntagD(Register input_reg,
                                 DoubleRegister result_reg,
                                 bool deoptimize_on_undefined,
                                 LEnvironment* env) {
-  Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
+  Register scratch = scratch0();
+
+  Label load_smi, heap_number, done;
+
+  // Smi check.
+  __ JumpIfSmi(input_reg, &load_smi);
+
+  // Heap number map check.
+  __ lw(scratch, FieldMemOperand(input_reg, HeapObject::kMapOffset));
+  __ LoadRoot(at, Heap::kHeapNumberMapRootIndex);
+  if (deoptimize_on_undefined) {
+    DeoptimizeIf(ne, env, scratch, Operand(at));
+  } else {
+    Label heap_number;
+    __ Branch(&heap_number, eq, scratch, Operand(at));
+
+    __ LoadRoot(at, Heap::kUndefinedValueRootIndex);
+    DeoptimizeIf(ne, env, input_reg, Operand(at));
+
+    // Convert undefined to NaN.
+    __ LoadRoot(at, Heap::kNanValueRootIndex);
+    __ ldc1(result_reg, FieldMemOperand(at, HeapNumber::kValueOffset));
+    __ Branch(&done);
+
+    __ bind(&heap_number);
+  }
+  // Heap number to double register conversion.
+  __ ldc1(result_reg, FieldMemOperand(input_reg, HeapNumber::kValueOffset));
+  __ Branch(&done);
+
+  // Smi to double register conversion
+  __ bind(&load_smi);
+  __ SmiUntag(input_reg);  // Untag smi before converting to float.
+  __ mtc1(input_reg, result_reg);
+  __ cvt_d_w(result_reg, result_reg);
+  __ SmiTag(input_reg);  // Retag smi.
+  __ bind(&done);
 }
 
 
@@ -2807,7 +2863,17 @@ void LCodeGen::DoTaggedToI(LTaggedToI* instr) {
 
 
 void LCodeGen::DoNumberUntagD(LNumberUntagD* instr) {
-  Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
+  LOperand* input = instr->InputAt(0);
+  ASSERT(input->IsRegister());
+  LOperand* result = instr->result();
+  ASSERT(result->IsDoubleRegister());
+
+  Register input_reg = ToRegister(input);
+  DoubleRegister result_reg = ToDoubleRegister(result);
+
+  EmitNumberUntagD(input_reg, result_reg,
+                   instr->hydrogen()->deoptimize_on_undefined(),
+                   instr->environment());
 }
 
 
