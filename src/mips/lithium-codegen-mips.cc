@@ -1584,14 +1584,12 @@ void LCodeGen::DoCmpJSObjectEq(LCmpJSObjectEq* instr) {
 
 
 void LCodeGen::DoCmpJSObjectEqAndBranch(LCmpJSObjectEqAndBranch* instr) {
-  Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
-  // Register left = ToRegister(instr->InputAt(0));
-  // Register right = ToRegister(instr->InputAt(1));
-  // int false_block = chunk_->LookupDestination(instr->false_block_id());
-  // int true_block = chunk_->LookupDestination(instr->true_block_id());
-  //
-  // __ cmp(left, Operand(right));
-  // EmitBranch(true_block, false_block, eq);
+  Register left = ToRegister(instr->InputAt(0));
+  Register right = ToRegister(instr->InputAt(1));
+  int false_block = chunk_->LookupDestination(instr->false_block_id());
+  int true_block = chunk_->LookupDestination(instr->true_block_id());
+
+  EmitBranch(true_block, false_block, eq, left, Operand(right));
 }
 
 
@@ -2176,7 +2174,45 @@ void LCodeGen::DoLoadNamedGeneric(LLoadNamedGeneric* instr) {
 
 
 void LCodeGen::DoLoadFunctionPrototype(LLoadFunctionPrototype* instr) {
-  Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
+  Register scratch = scratch0();
+  Register function = ToRegister(instr->function());
+  Register result = ToRegister(instr->result());
+
+  // Check that the function really is a function. Load map into the
+  // result register.
+  __ GetObjectType(function, result, scratch);
+  DeoptimizeIf(ne, instr->environment(), scratch, Operand(JS_FUNCTION_TYPE));
+
+  // Make sure that the function has an instance prototype.
+  Label non_instance;
+  __ lbu(scratch, FieldMemOperand(result, Map::kBitFieldOffset));
+  __ And(scratch, scratch, Operand(1 << Map::kHasNonInstancePrototype));
+  __ Branch(&non_instance, ne, scratch, Operand(zero_reg));
+
+  // Get the prototype or initial map from the function.
+  __ lw(result,
+         FieldMemOperand(function, JSFunction::kPrototypeOrInitialMapOffset));
+
+  // Check that the function has a prototype or an initial map.
+  __ LoadRoot(at, Heap::kTheHoleValueRootIndex);
+  DeoptimizeIf(eq, instr->environment(), result, Operand(at));
+
+  // If the function does not have an initial map, we're done.
+  Label done;
+  __ GetObjectType(result, scratch, scratch);
+  __ Branch(&done, ne, scratch, Operand(MAP_TYPE));
+
+  // Get the prototype from the initial map.
+  __ lw(result, FieldMemOperand(result, Map::kPrototypeOffset));
+  __ Branch(&done);
+
+  // Non-instance prototype: Fetch prototype from constructor field
+  // in initial map.
+  __ bind(&non_instance);
+  __ lw(result, FieldMemOperand(result, Map::kConstructorOffset));
+
+  // All done.
+  __ bind(&done);
 }
 
 
