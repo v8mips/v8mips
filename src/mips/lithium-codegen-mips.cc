@@ -2904,7 +2904,6 @@ void LCodeGen::DoDeferredTaggedToI(LTaggedToI* instr) {
                         scratch1,
                         scratch2,
                         scratch3);
-
   } else {
     // TODO(plind): if this scope is needed, then we also need one above?
     // I don't think it is needed at all, we have a top-level FPU scope.
@@ -2945,8 +2944,6 @@ void LCodeGen::DoDeferredTaggedToI(LTaggedToI* instr) {
     __ mfc1(input_reg, single_scratch);
 
     if (instr->hydrogen()->CheckFlag(HValue::kBailoutOnMinusZero)) {
-      // __ cmp(input_reg, Operand(0));
-      // __ b(ne, &done);
       __ Branch(&done, ne, input_reg, Operand(zero_reg));
 
       __ mfc1(scratch1, double_scratch.high());
