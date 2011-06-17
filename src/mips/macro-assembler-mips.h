@@ -571,7 +571,7 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
                BranchDelaySlot bd = PROTECT);
 
   // Alternate (inline) version for better readability with USE_DELAY_SLOT.
-  inline void BranchF(BranchDelaySlot bd, 
+  inline void BranchF(BranchDelaySlot bd,
                       Label* target,
                       Label* nan,
                       Condition cc,

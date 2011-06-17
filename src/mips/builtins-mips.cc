@@ -1170,14 +1170,15 @@ static void Generate_NotifyDeoptimizedHelper(MacroAssembler* masm,
   __ SmiUntag(t2);
   // Switch on the state.
   Label with_tos_register, unknown_state;
-  __ Branch(&with_tos_register, ne, t2, Operand(FullCodeGenerator::NO_REGISTERS));
+  __ Branch(&with_tos_register,
+            ne, t2, Operand(FullCodeGenerator::NO_REGISTERS));
   __ Addu(sp, sp, Operand(1 * kPointerSize));  // Remove state.
   __ Ret();
 
   __ bind(&with_tos_register);
   __ lw(v0, MemOperand(sp, 1 * kPointerSize));
   __ Branch(&unknown_state, ne, t2, Operand(FullCodeGenerator::TOS_REG));
-  
+
   __ Addu(sp, sp, Operand(2 * kPointerSize));  // Remove state.
   __ Ret();
 

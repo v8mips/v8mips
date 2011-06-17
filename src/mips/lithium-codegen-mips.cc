@@ -264,7 +264,8 @@ bool LCodeGen::GenerateDeferredCode() {
   }
   // Deferred code is the last part of the instruction sequence. Mark
   // the generated code as done unless we bailed out.
-  if (!is_aborted()) status_ = DONE;  return !is_aborted();
+  if (!is_aborted()) status_ = DONE;
+  return !is_aborted();
 }
 
 
@@ -852,7 +853,7 @@ void LCodeGen::DoModI(LModI* instr) {
 
   if (instr->hydrogen()->CheckFlag(HValue::kBailoutOnMinusZero)) {
     // Result always take the sign of the dividend (left).
-    Label done; 
+    Label done;
     __ Branch(&done, ge, left, Operand(zero_reg));
     DeoptimizeIf(eq, instr->environment(), result, Operand(zero_reg));
     __ bind(&done);
@@ -2296,7 +2297,6 @@ void LCodeGen::DoOuterContext(LOuterContext* instr) {
   Register result = ToRegister(instr->result());
   __ lw(result,
         MemOperand(context, Context::SlotOffset(Context::PREVIOUS_INDEX)));
-
 }
 
 

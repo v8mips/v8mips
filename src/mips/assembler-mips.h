@@ -168,11 +168,11 @@ Register ToRegister(int num);
 // Coprocessor register.
 struct FPURegister {
   static const int kNumRegisters = v8::internal::kNumFPURegisters;
-  
+
   // TODO(plind): Warning, inconsistent numbering here. kNumFPURegisters refers
-  // to number of 32-bit FPU regs, but kNumAllocatableRegisters refers to 
+  // to number of 32-bit FPU regs, but kNumAllocatableRegisters refers to
   // number of Double regs (64-bit regs, or FPU-reg-pairs).
-   
+
   // f30 has been excluded from allocation. This is following ia32
   // where xmm0 is excluded. (Chose not use use f0 as scratch, since
   // that is float/double return value per mips ABI).
@@ -235,7 +235,7 @@ struct FPURegister {
     ASSERT(reg.is_valid());
     return reg;
   }
-  
+
   int code() const {
     ASSERT(is_valid());
     return code_;
@@ -256,9 +256,9 @@ struct FPURegister {
 // 32-bit registers, f0 through f31. When used as 'double' they are used
 // in pairs, starting with the even numbered register. So a double operation
 // on f0 really uses f0 and f1.
-// (Modern mips hardware also supports 32 64-bit registers, via setting (priviledged)
-// Status Register FR bit to 1. This is used by the N32 ABI, but it is not in common
-// use. Someday we will want to support this in v8.)
+// (Modern mips hardware also supports 32 64-bit registers, via setting
+// (priviledged) Status Register FR bit to 1. This is used by the N32 ABI,
+// but it is not in common use. Someday we will want to support this in v8.)
 
 // For O32 ABI, Floats and Doubles refer to same set of 32 32-bit registers.
 typedef FPURegister DoubleRegister;
