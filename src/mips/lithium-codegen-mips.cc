@@ -1503,12 +1503,38 @@ Condition LCodeGen::TokenToCondition(Token::Value op, bool is_unsigned) {
 
 
 void LCodeGen::EmitCmpI(LOperand* left, LOperand* right) {
+  // This function must never be called for Mips.
+  // It is just a compare, it should be generated inline as
+  // part of the branch that uses it. It should always remain
+  // as un-implemented function.
+  // arm: __ cmp(ToRegister(left), ToRegister(right));
   Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
 }
 
 
 void LCodeGen::DoCmpID(LCmpID* instr) {
-  Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
+  LOperand* left = instr->InputAt(0);
+  LOperand* right = instr->InputAt(1);
+  LOperand* result = instr->result();
+
+  Label unordered, done;
+  Condition cc = TokenToCondition(instr->op(), instr->is_double());
+
+  // Note that result register is often same as left register.
+  // This code relies on LoadRoot() being a single instruction in delay slot.
+  if (instr->is_double()) {
+    __ BranchF(USE_DELAY_SLOT, &done, &unordered,
+               cc, ToDoubleRegister(left), ToDoubleRegister(right));
+    __ LoadRoot(ToRegister(result), Heap::kTrueValueRootIndex);  // Delay slot.
+  } else {
+    __ Branch(USE_DELAY_SLOT, &done,
+              cc, ToRegister(left), Operand(ToRegister(right)));
+    __ LoadRoot(ToRegister(result), Heap::kTrueValueRootIndex);  // Delay slot.
+  }
+
+  __ bind(&unordered);
+  __ LoadRoot(ToRegister(result), Heap::kFalseValueRootIndex);
+  __ bind(&done);
 }
 
 

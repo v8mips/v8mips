@@ -570,6 +570,16 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
                FPURegister cmp2,
                BranchDelaySlot bd = PROTECT);
 
+  // Alternate (inline) version for better readability with USE_DELAY_SLOT.
+  inline void BranchF(BranchDelaySlot bd, 
+                      Label* target,
+                      Label* nan,
+                      Condition cc,
+                      FPURegister cmp1,
+                      FPURegister cmp2) {
+    BranchF(target, nan, cc, cmp1, cmp2, bd);
+  };
+
   // Convert the HeapNumber pointed to by source to a 32bits signed integer
   // dest. If the HeapNumber does not fit into a 32bits signed integer branch
   // to not_int32 label. If FPU is available double_scratch is used but not
