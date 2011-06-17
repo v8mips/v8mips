@@ -841,6 +841,9 @@ void LCodeGen::DoModI(LModI* instr) {
   const Register right = EmitLoadRegister(instr->InputAt(1), scratch);
   const Register result = ToRegister(instr->result());
 
+  // TODO(douglas): Do we need to optimize for PowerOf2Divisor???
+  //    If not, then we should remove right=constant option.
+
   // Check for x % 0.
   if (instr->hydrogen()->CheckFlag(HValue::kCanBeDivByZero)) {
     DeoptimizeIf(eq, instr->environment(), right, Operand(zero_reg));
@@ -862,9 +865,8 @@ void LCodeGen::DoModI(LModI* instr) {
 
 
 void LCodeGen::DoDivI(LDivI* instr) {
-  Register scratch = scratch0();
   const Register left = ToRegister(instr->InputAt(0));
-  const Register right = EmitLoadRegister(instr->InputAt(1), scratch);
+  const Register right = ToRegister(instr->InputAt(1));
   const Register result = ToRegister(instr->result());
 
   // Check for x / 0.
