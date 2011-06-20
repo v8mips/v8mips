@@ -2789,8 +2789,8 @@ void BinaryOpStub::GenerateInt32Stub(MacroAssembler* masm) {
           // DIV just falls through to allocating a heap number.
         }
 
-        if (result_type_ >= ((op_ == Token::DIV) ? BinaryOpIC::HEAP_NUMBER
-                                                 : BinaryOpIC::INT32)) {
+        if (result_type_ >= (op_ == Token::DIV) ? BinaryOpIC::HEAP_NUMBER
+                                                : BinaryOpIC::INT32) {
           __ bind(&return_heap_number);
           // We are using FPU registers so s0 is available.
           heap_number_result = s0;
