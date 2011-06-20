@@ -1,4 +1,4 @@
-// Copyright 2008 the V8 project authors. All rights reserved.
+// Copyright 2011 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -25,24 +25,16 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-function f() {
-  return/* Counts as non-line-terminating whitespace */1;
-};
+// Avoid excessive expansions of regexp repetitions inside regexp repetitions.
+// Some of these caused stack overflows, others cause out-of-memory.
+var r1 = /(?:a(?:b(?:c(?:d(?:e(?:f(?:g(?:h(?:i(?:j(?:k(?:l(?:m(?:n(?:o(?:p(?:q(?:r(?:s(?:t(?:u(?:v(?:w(?:x(?:y(?:z(?:FooBar)+)+)+)+)+)+)+)+)+)+)+)+)+)+)+)+)+)+)+)+)+)+)+)+)+)+)/;
+"xxx".match(r1);
 
-// According to ECMA-262, this comment should be parsed as a
-// line terminator making g() return undefined.
-function g() {
-  return/* Counts as line-terminator whitespace.
-          */2;
-};
+var r2 = /(?:a(?:b(?:c(?:d(?:e(?:f(?:g(?:h(?:i(?:j(?:k(?:l(?:FooBar){0,2}){0,2}){0,2}){0,2}){0,2}){0,2}){0,2}){0,2}){0,2}){0,2}){0,2}){0,2}){0,2}/;
+"xxx".match(r2);
 
-function h() {
-  return// Comment doesn't include line-terminator at end.
-      3;
-};
+var r3 = /(?:a(?:b(?:c(?:d(?:e(?:f(?:g(?:h(?:i(?:j(?:k(?:l(?:FooBar){2}){2}){2}){2}){2}){2}){2}){2}){2}){2}){2}){2}){2}/;
+"xxx".match(r3);
 
-
-assertEquals(1, f());
-assertEquals(undefined, g());
-assertEquals(undefined, h());
-
+var r4 = /(?:a(?:b(?:c(?:d(?:e(?:f(?:g(?:h(?:i(?:FooBar){3,6}){3,6}){3,6}){3,6}){3,6}){3,6}){3,6}){3,6}){3,6}){3,6}/;
+"xxx".match(r4);
