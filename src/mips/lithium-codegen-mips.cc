@@ -1585,7 +1585,7 @@ void LCodeGen::DoCmpIDAndBranch(LCmpIDAndBranch* instr) {
 }
 
 
-void LCodeGen::DoCmpJSObjectEq(LCmpJSObjectEq* instr) {
+void LCodeGen::DoCmpObjectEq(LCmpObjectEq* instr) {
   Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
   // Register left = ToRegister(instr->InputAt(0));
   // Register right = ToRegister(instr->InputAt(1));
@@ -1597,29 +1597,7 @@ void LCodeGen::DoCmpJSObjectEq(LCmpJSObjectEq* instr) {
 }
 
 
-void LCodeGen::DoCmpJSObjectEqAndBranch(LCmpJSObjectEqAndBranch* instr) {
-  Register left = ToRegister(instr->InputAt(0));
-  Register right = ToRegister(instr->InputAt(1));
-  int false_block = chunk_->LookupDestination(instr->false_block_id());
-  int true_block = chunk_->LookupDestination(instr->true_block_id());
-
-  EmitBranch(true_block, false_block, eq, left, Operand(right));
-}
-
-
-void LCodeGen::DoCmpSymbolEq(LCmpSymbolEq* instr) {
-  Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
-  // Register left = ToRegister(instr->InputAt(0));
-  // Register right = ToRegister(instr->InputAt(1));
-  // Register result = ToRegister(instr->result());
-  //
-  // __ cmp(left, Operand(right));
-  // __ LoadRoot(result, Heap::kTrueValueRootIndex, eq);
-  // __ LoadRoot(result, Heap::kFalseValueRootIndex, ne);
-}
-
-
-void LCodeGen::DoCmpSymbolEqAndBranch(LCmpSymbolEqAndBranch* instr) {
+void LCodeGen::DoCmpObjectEqAndBranch(LCmpObjectEqAndBranch* instr) {
   Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
   // Register left = ToRegister(instr->InputAt(0));
   // Register right = ToRegister(instr->InputAt(1));
