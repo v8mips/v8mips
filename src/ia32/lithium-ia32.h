@@ -75,12 +75,12 @@ class LCodeGen;
   V(ClassOfTestAndBranch)                       \
   V(CmpID)                                      \
   V(CmpIDAndBranch)                             \
-  V(CmpJSObjectEq)                              \
-  V(CmpJSObjectEqAndBranch)                     \
-  V(CmpSymbolEq)                                \
-  V(CmpSymbolEqAndBranch)                       \
+  V(CmpObjectEq)                                \
+  V(CmpObjectEqAndBranch)                       \
   V(CmpMapAndBranch)                            \
   V(CmpT)                                       \
+  V(CmpConstantEq)                              \
+  V(CmpConstantEqAndBranch)                     \
   V(ConstantD)                                  \
   V(ConstantI)                                  \
   V(ConstantT)                                  \
@@ -89,6 +89,7 @@ class LCodeGen;
   V(Deoptimize)                                 \
   V(DivI)                                       \
   V(DoubleToI)                                  \
+  V(ElementsKind)                               \
   V(ExternalArrayLength)                        \
   V(FixedArrayLength)                           \
   V(FunctionLiteral)                            \
@@ -619,48 +620,49 @@ class LUnaryMathOperation: public LTemplateInstruction<1, 1, 0> {
 };
 
 
-class LCmpJSObjectEq: public LTemplateInstruction<1, 2, 0> {
+class LCmpObjectEq: public LTemplateInstruction<1, 2, 0> {
  public:
-  LCmpJSObjectEq(LOperand* left, LOperand* right) {
+  LCmpObjectEq(LOperand* left, LOperand* right) {
     inputs_[0] = left;
     inputs_[1] = right;
   }
 
-  DECLARE_CONCRETE_INSTRUCTION(CmpJSObjectEq, "cmp-jsobject-eq")
+  DECLARE_CONCRETE_INSTRUCTION(CmpObjectEq, "cmp-object-eq")
 };
 
 
-class LCmpJSObjectEqAndBranch: public LControlInstruction<2, 0> {
+class LCmpObjectEqAndBranch: public LControlInstruction<2, 0> {
  public:
-  LCmpJSObjectEqAndBranch(LOperand* left, LOperand* right) {
+  LCmpObjectEqAndBranch(LOperand* left, LOperand* right) {
     inputs_[0] = left;
     inputs_[1] = right;
   }
 
-  DECLARE_CONCRETE_INSTRUCTION(CmpJSObjectEqAndBranch,
-                               "cmp-jsobject-eq-and-branch")
+  DECLARE_CONCRETE_INSTRUCTION(CmpObjectEqAndBranch,
+                               "cmp-object-eq-and-branch")
 };
 
 
-class LCmpSymbolEq: public LTemplateInstruction<1, 2, 0> {
+class LCmpConstantEq: public LTemplateInstruction<1, 1, 0> {
  public:
-  LCmpSymbolEq(LOperand* left, LOperand* right) {
+  explicit LCmpConstantEq(LOperand* left) {
     inputs_[0] = left;
-    inputs_[1] = right;
   }
 
-  DECLARE_CONCRETE_INSTRUCTION(CmpSymbolEq, "cmp-symbol-eq")
+  DECLARE_CONCRETE_INSTRUCTION(CmpConstantEq, "cmp-constant-eq")
+  DECLARE_HYDROGEN_ACCESSOR(CompareConstantEq)
 };
 
 
-class LCmpSymbolEqAndBranch: public LControlInstruction<2, 0> {
+class LCmpConstantEqAndBranch: public LControlInstruction<1, 0> {
  public:
-  LCmpSymbolEqAndBranch(LOperand* left, LOperand* right) {
+  explicit LCmpConstantEqAndBranch(LOperand* left) {
     inputs_[0] = left;
-    inputs_[1] = right;
   }
 
-  DECLARE_CONCRETE_INSTRUCTION(CmpSymbolEqAndBranch, "cmp-symbol-eq-and-branch")
+  DECLARE_CONCRETE_INSTRUCTION(CmpConstantEqAndBranch,
+                               "cmp-constant-eq-and-branch")
+  DECLARE_HYDROGEN_ACCESSOR(CompareConstantEq)
 };
 
 
@@ -1075,6 +1077,17 @@ class LFixedArrayLength: public LTemplateInstruction<1, 1, 0> {
 
   DECLARE_CONCRETE_INSTRUCTION(FixedArrayLength, "fixed-array-length")
   DECLARE_HYDROGEN_ACCESSOR(FixedArrayLength)
+};
+
+
+class LElementsKind: public LTemplateInstruction<1, 1, 0> {
+ public:
+  explicit LElementsKind(LOperand* value) {
+    inputs_[0] = value;
+  }
+
+  DECLARE_CONCRETE_INSTRUCTION(ElementsKind, "elements-kind")
+  DECLARE_HYDROGEN_ACCESSOR(ElementsKind)
 };
 
 

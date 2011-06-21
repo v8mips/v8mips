@@ -888,6 +888,8 @@ void LCodeGen::DoModI(LModI* instr) {
     if (instr->hydrogen()->CheckFlag(HValue::kBailoutOnMinusZero)) {
       __ b(ne, &done);
       DeoptimizeIf(al, instr->environment());
+    } else {
+      __ b(&done);
     }
     __ bind(&positive_dividend);
     __ and_(dividend, dividend, Operand(divisor - 1));
@@ -1368,6 +1370,20 @@ void LCodeGen::DoFixedArrayLength(LFixedArrayLength* instr) {
 }
 
 
+void LCodeGen::DoElementsKind(LElementsKind* instr) {
+  Register result = ToRegister(instr->result());
+  Register input = ToRegister(instr->InputAt(0));
+
+  // Load map into |result|.
+  __ ldr(result, FieldMemOperand(input, HeapObject::kMapOffset));
+  // Load the map's "bit field 2" into |result|. We only need the first byte,
+  // but the following bit field extraction takes care of that anyway.
+  __ ldr(result, FieldMemOperand(result, Map::kBitField2Offset));
+  // Retrieve elements_kind from bit field 2.
+  __ ubfx(result, result, Map::kElementsKindShift, Map::kElementsKindBitCount);
+}
+
+
 void LCodeGen::DoValueOf(LValueOf* instr) {
   Register input = ToRegister(instr->InputAt(0));
   Register result = ToRegister(instr->result());
@@ -1376,8 +1392,7 @@ void LCodeGen::DoValueOf(LValueOf* instr) {
   Label done;
 
   // If the object is a smi return the object.
-  __ tst(input, Operand(kSmiTagMask));
-  __ b(eq, &done);
+  __ JumpIfSmi(input, &done);
 
   // If the object is not a value type, return the object.
   __ CompareObjectType(input, map, map, JS_VALUE_TYPE);
@@ -1542,8 +1557,7 @@ void LCodeGen::DoBranch(LBranch* instr) {
       __ b(eq, false_label);
       __ cmp(reg, Operand(0));
       __ b(eq, false_label);
-      __ tst(reg, Operand(kSmiTagMask));
-      __ b(eq, true_label);
+      __ JumpIfSmi(reg, true_label);
 
       // Test double values. Zero and NaN are false.
       Label call_stub;
@@ -1700,7 +1714,7 @@ void LCodeGen::DoCmpIDAndBranch(LCmpIDAndBranch* instr) {
 }
 
 
-void LCodeGen::DoCmpJSObjectEq(LCmpJSObjectEq* instr) {
+void LCodeGen::DoCmpObjectEq(LCmpObjectEq* instr) {
   Register left = ToRegister(instr->InputAt(0));
   Register right = ToRegister(instr->InputAt(1));
   Register result = ToRegister(instr->result());
@@ -1711,7 +1725,7 @@ void LCodeGen::DoCmpJSObjectEq(LCmpJSObjectEq* instr) {
 }
 
 
-void LCodeGen::DoCmpJSObjectEqAndBranch(LCmpJSObjectEqAndBranch* instr) {
+void LCodeGen::DoCmpObjectEqAndBranch(LCmpObjectEqAndBranch* instr) {
   Register left = ToRegister(instr->InputAt(0));
   Register right = ToRegister(instr->InputAt(1));
   int false_block = chunk_->LookupDestination(instr->false_block_id());
@@ -1722,24 +1736,23 @@ void LCodeGen::DoCmpJSObjectEqAndBranch(LCmpJSObjectEqAndBranch* instr) {
 }
 
 
-void LCodeGen::DoCmpSymbolEq(LCmpSymbolEq* instr) {
+void LCodeGen::DoCmpConstantEq(LCmpConstantEq* instr) {
   Register left = ToRegister(instr->InputAt(0));
-  Register right = ToRegister(instr->InputAt(1));
   Register result = ToRegister(instr->result());
 
-  __ cmp(left, Operand(right));
+  Label done;
+  __ cmp(left, Operand(instr->hydrogen()->right()));
   __ LoadRoot(result, Heap::kTrueValueRootIndex, eq);
   __ LoadRoot(result, Heap::kFalseValueRootIndex, ne);
 }
 
 
-void LCodeGen::DoCmpSymbolEqAndBranch(LCmpSymbolEqAndBranch* instr) {
+void LCodeGen::DoCmpConstantEqAndBranch(LCmpConstantEqAndBranch* instr) {
   Register left = ToRegister(instr->InputAt(0));
-  Register right = ToRegister(instr->InputAt(1));
-  int false_block = chunk_->LookupDestination(instr->false_block_id());
   int true_block = chunk_->LookupDestination(instr->true_block_id());
+  int false_block = chunk_->LookupDestination(instr->false_block_id());
 
-  __ cmp(left, Operand(right));
+  __ cmp(left, Operand(instr->hydrogen()->right()));
   EmitBranch(true_block, false_block, eq);
 }
 
@@ -1759,8 +1772,7 @@ void LCodeGen::DoIsNull(LIsNull* instr) {
     __ LoadRoot(ip, Heap::kUndefinedValueRootIndex);
     __ cmp(ip, reg);
     __ b(eq, &true_value);
-    __ tst(reg, Operand(kSmiTagMask));
-    __ b(eq, &false_value);
+    __ JumpIfSmi(reg, &false_value);
     // Check for undetectable objects by looking in the bit field in
     // the map. The object has already been smi checked.
     Register scratch = result;
@@ -1799,8 +1811,7 @@ void LCodeGen::DoIsNullAndBranch(LIsNullAndBranch* instr) {
     __ LoadRoot(ip, Heap::kUndefinedValueRootIndex);
     __ cmp(reg, ip);
     __ b(eq, true_label);
-    __ tst(reg, Operand(kSmiTagMask));
-    __ b(eq, false_label);
+    __ JumpIfSmi(reg, false_label);
     // Check for undetectable objects by looking in the bit field in
     // the map. The object has already been smi checked.
     __ ldr(scratch, FieldMemOperand(reg, HeapObject::kMapOffset));
@@ -1879,10 +1890,9 @@ void LCodeGen::DoIsSmi(LIsSmi* instr) {
   ASSERT(instr->hydrogen()->value()->representation().IsTagged());
   Register result = ToRegister(instr->result());
   Register input_reg = EmitLoadRegister(instr->InputAt(0), ip);
-  __ tst(input_reg, Operand(kSmiTagMask));
-  __ LoadRoot(result, Heap::kTrueValueRootIndex);
   Label done;
-  __ b(eq, &done);
+  __ LoadRoot(result, Heap::kTrueValueRootIndex);
+  __ JumpIfSmi(input_reg, &done);
   __ LoadRoot(result, Heap::kFalseValueRootIndex);
   __ bind(&done);
 }
@@ -1978,8 +1988,7 @@ void LCodeGen::DoHasInstanceTypeAndBranch(LHasInstanceTypeAndBranch* instr) {
 
   Label* false_label = chunk_->GetAssemblyLabel(false_block);
 
-  __ tst(input, Operand(kSmiTagMask));
-  __ b(eq, false_label);
+  __ JumpIfSmi(input, false_label);
 
   __ CompareObjectType(input, scratch, scratch, TestType(instr->hydrogen()));
   EmitBranch(true_block, false_block, BranchCondition(instr->hydrogen()));
@@ -2038,8 +2047,7 @@ void LCodeGen::EmitClassOfTest(Label* is_true,
                                Register temp2) {
   ASSERT(!input.is(temp));
   ASSERT(!temp.is(temp2));  // But input and temp2 may be the same register.
-  __ tst(input, Operand(kSmiTagMask));
-  __ b(eq, is_false);
+  __ JumpIfSmi(input, is_false);
   __ CompareObjectType(input, temp, temp2, FIRST_SPEC_OBJECT_TYPE);
   __ b(lt, is_false);
 
@@ -2542,7 +2550,7 @@ void LCodeGen::DoLoadElements(LLoadElements* instr) {
 
   __ ldr(result, FieldMemOperand(input, JSObject::kElementsOffset));
   if (FLAG_debug_code) {
-    Label done;
+    Label done, fail;
     __ ldr(scratch, FieldMemOperand(result, HeapObject::kMapOffset));
     __ LoadRoot(ip, Heap::kFixedArrayMapRootIndex);
     __ cmp(scratch, ip);
@@ -2550,11 +2558,18 @@ void LCodeGen::DoLoadElements(LLoadElements* instr) {
     __ LoadRoot(ip, Heap::kFixedCOWArrayMapRootIndex);
     __ cmp(scratch, ip);
     __ b(eq, &done);
-    __ ldr(scratch, FieldMemOperand(result, HeapObject::kMapOffset));
-    __ ldrb(scratch, FieldMemOperand(scratch, Map::kInstanceTypeOffset));
-    __ sub(scratch, scratch, Operand(FIRST_EXTERNAL_ARRAY_TYPE));
-    __ cmp(scratch, Operand(kExternalArrayTypeCount));
-    __ Check(cc, "Check for fast elements failed.");
+    // |scratch| still contains |input|'s map.
+    __ ldr(scratch, FieldMemOperand(scratch, Map::kBitField2Offset));
+    __ ubfx(scratch, scratch, Map::kElementsKindShift,
+            Map::kElementsKindBitCount);
+    __ cmp(scratch, Operand(JSObject::FAST_ELEMENTS));
+    __ b(eq, &done);
+    __ cmp(scratch, Operand(JSObject::FIRST_EXTERNAL_ARRAY_ELEMENTS_KIND));
+    __ b(lt, &fail);
+    __ cmp(scratch, Operand(JSObject::LAST_EXTERNAL_ARRAY_ELEMENTS_KIND));
+    __ b(le, &done);
+    __ bind(&fail);
+    __ Abort("Check for fast or external elements failed.");
     __ bind(&done);
   }
 }
@@ -2672,6 +2687,7 @@ void LCodeGen::DoLoadKeyedSpecializedArrayElement(
       case JSObject::FAST_DOUBLE_ELEMENTS:
       case JSObject::FAST_ELEMENTS:
       case JSObject::DICTIONARY_ELEMENTS:
+      case JSObject::NON_STRICT_ARGUMENTS_ELEMENTS:
         UNREACHABLE();
         break;
     }
@@ -3476,6 +3492,7 @@ void LCodeGen::DoStoreKeyedSpecializedArrayElement(
       case JSObject::FAST_DOUBLE_ELEMENTS:
       case JSObject::FAST_ELEMENTS:
       case JSObject::DICTIONARY_ELEMENTS:
+      case JSObject::NON_STRICT_ARGUMENTS_ELEMENTS:
         UNREACHABLE();
         break;
     }
@@ -3852,8 +3869,7 @@ void LCodeGen::EmitNumberUntagD(Register input_reg,
   Label load_smi, heap_number, done;
 
   // Smi check.
-  __ tst(input_reg, Operand(kSmiTagMask));
-  __ b(eq, &load_smi);
+  __ JumpIfSmi(input_reg, &load_smi);
 
   // Heap number map check.
   __ ldr(scratch, FieldMemOperand(input_reg, HeapObject::kMapOffset));

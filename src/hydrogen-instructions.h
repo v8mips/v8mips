@@ -91,14 +91,15 @@ class LChunkBuilder;
   V(ClampToUint8)                              \
   V(ClassOfTest)                               \
   V(Compare)                                   \
-  V(CompareJSObjectEq)                         \
+  V(CompareObjectEq)                           \
   V(CompareMap)                                \
-  V(CompareSymbolEq)                           \
+  V(CompareConstantEq)                         \
   V(Constant)                                  \
   V(Context)                                   \
   V(DeleteProperty)                            \
   V(Deoptimize)                                \
   V(Div)                                       \
+  V(ElementsKind)                              \
   V(EnterInlined)                              \
   V(ExternalArrayLength)                       \
   V(FixedArrayLength)                          \
@@ -402,7 +403,7 @@ class HType {
     kBoolean = 0x85,         // 0000 0000 1000 0101
     kNonPrimitive = 0x101,   // 0000 0001 0000 0001
     kJSObject = 0x301,       // 0000 0011 0000 0001
-    kJSArray = 0x701,        // 0000 0111 1000 0001
+    kJSArray = 0x701,        // 0000 0111 0000 0001
     kUninitialized = 0x1fff  // 0001 1111 1111 1111
   };
 
@@ -484,6 +485,10 @@ class HValue: public ZoneObject {
     GVN_FLAG_LIST(DECLARE_DO)
   #undef DECLARE_DO
     kFlexibleRepresentation,
+    // Participate in Global Value Numbering, i.e. elimination of
+    // unnecessary recomputations. If an instruction sets this flag, it must
+    // implement DataEquals(), which will be used to determine if other
+    // occurrences of the instruction are indeed the same.
     kUseGVN,
     kCanOverflow,
     kBailoutOnMinusZero,
@@ -1707,6 +1712,25 @@ class HExternalArrayLength: public HUnaryOperation {
 };
 
 
+class HElementsKind: public HUnaryOperation {
+ public:
+  explicit HElementsKind(HValue* value) : HUnaryOperation(value) {
+    set_representation(Representation::Integer32());
+    SetFlag(kUseGVN);
+    SetFlag(kDependsOnMaps);
+  }
+
+  virtual Representation RequiredInputRepresentation(int index) const {
+    return Representation::Tagged();
+  }
+
+  DECLARE_CONCRETE_INSTRUCTION(ElementsKind)
+
+ protected:
+  virtual bool DataEquals(HValue* other) { return true; }
+};
+
+
 class HBitNot: public HUnaryOperation {
  public:
   explicit HBitNot(HValue* value) : HUnaryOperation(value) {
@@ -2530,9 +2554,9 @@ class HCompare: public HBinaryOperation {
 };
 
 
-class HCompareJSObjectEq: public HBinaryOperation {
+class HCompareObjectEq: public HBinaryOperation {
  public:
-  HCompareJSObjectEq(HValue* left, HValue* right)
+  HCompareObjectEq(HValue* left, HValue* right)
       : HBinaryOperation(left, right) {
     set_representation(Representation::Tagged());
     SetFlag(kUseGVN);
@@ -2548,44 +2572,47 @@ class HCompareJSObjectEq: public HBinaryOperation {
   }
   virtual HType CalculateInferredType();
 
-  DECLARE_CONCRETE_INSTRUCTION(CompareJSObjectEq)
+  DECLARE_CONCRETE_INSTRUCTION(CompareObjectEq)
 
  protected:
   virtual bool DataEquals(HValue* other) { return true; }
 };
 
 
-class HCompareSymbolEq: public HBinaryOperation {
+class HCompareConstantEq: public HUnaryOperation {
  public:
-  HCompareSymbolEq(HValue* left, HValue* right, Token::Value op)
-      : HBinaryOperation(left, right), op_(op) {
-    ASSERT(op == Token::EQ || op == Token::EQ_STRICT);
+  HCompareConstantEq(HValue* left, int right, Token::Value op)
+      : HUnaryOperation(left), op_(op), right_(right) {
+    ASSERT(op == Token::EQ_STRICT);
     set_representation(Representation::Tagged());
     SetFlag(kUseGVN);
-    SetFlag(kDependsOnMaps);
   }
 
   Token::Value op() const { return op_; }
+  int right() const { return right_; }
 
   virtual bool EmitAtUses() {
     return !HasSideEffects() && !HasMultipleUses();
   }
 
   virtual Representation RequiredInputRepresentation(int index) const {
-    return Representation::Tagged();
+    return Representation::Integer32();
   }
 
   virtual HType CalculateInferredType() { return HType::Boolean(); }
 
-  DECLARE_CONCRETE_INSTRUCTION(CompareSymbolEq);
+  DECLARE_CONCRETE_INSTRUCTION(CompareConstantEq);
 
  protected:
   virtual bool DataEquals(HValue* other) {
-    return op_ == HCompareSymbolEq::cast(other)->op_;
+    HCompareConstantEq* other_instr = HCompareConstantEq::cast(other);
+    return (op_ == other_instr->op_ &&
+        right_ == other_instr->right_);
   }
 
  private:
   const Token::Value op_;
+  const int right_;
 };
 
 
@@ -2694,6 +2721,10 @@ class HHasInstanceType: public HUnaryPredicate {
   InstanceType from() { return from_; }
   InstanceType to() { return to_; }
 
+  virtual bool EmitAtUses() {
+    return !HasSideEffects() && !HasMultipleUses();
+  }
+
   virtual void PrintDataTo(StringStream* stream);
 
   DECLARE_CONCRETE_INSTRUCTION(HasInstanceType)
@@ -2789,13 +2820,11 @@ class HInstanceOf: public HTemplateInstruction<3> {
   HValue* left() { return OperandAt(1); }
   HValue* right() { return OperandAt(2); }
 
-  virtual bool EmitAtUses() {
-    return !HasSideEffects() && !HasMultipleUses();
-  }
-
   virtual Representation RequiredInputRepresentation(int index) const {
     return Representation::Tagged();
   }
+
+  virtual HType CalculateInferredType();
 
   virtual void PrintDataTo(StringStream* stream);
 
@@ -2816,6 +2845,8 @@ class HInstanceOfKnownGlobal: public HUnaryOperation {
   virtual Representation RequiredInputRepresentation(int index) const {
     return Representation::Tagged();
   }
+
+  virtual HType CalculateInferredType();
 
   DECLARE_CONCRETE_INSTRUCTION(InstanceOfKnownGlobal)
 
@@ -4004,6 +4035,8 @@ class HDeleteProperty: public HBinaryOperation {
   virtual Representation RequiredInputRepresentation(int index) const {
     return Representation::Tagged();
   }
+
+  virtual HType CalculateInferredType();
 
   DECLARE_CONCRETE_INSTRUCTION(DeleteProperty)
 

@@ -209,9 +209,6 @@ PreParser::Statement PreParser::ParseStatement(bool* ok) {
     case i::Token::FUNCTION:
       return ParseFunctionDeclaration(ok);
 
-    case i::Token::NATIVE:
-      return ParseNativeDeclaration(ok);
-
     case i::Token::DEBUGGER:
       return ParseDebuggerStatement(ok);
 
@@ -243,29 +240,6 @@ PreParser::Statement PreParser::ParseFunctionDeclaration(bool* ok) {
     *ok = false;
   }
   return Statement::FunctionDeclaration();
-}
-
-
-// Language extension which is only enabled for source files loaded
-// through the API's extension mechanism.  A native function
-// declaration is resolved by looking up the function through a
-// callback provided by the extension.
-PreParser::Statement PreParser::ParseNativeDeclaration(bool* ok) {
-  Expect(i::Token::NATIVE, CHECK_OK);
-  Expect(i::Token::FUNCTION, CHECK_OK);
-  ParseIdentifier(CHECK_OK);
-  Expect(i::Token::LPAREN, CHECK_OK);
-  bool done = (peek() == i::Token::RPAREN);
-  while (!done) {
-    ParseIdentifier(CHECK_OK);
-    done = (peek() == i::Token::RPAREN);
-    if (!done) {
-      Expect(i::Token::COMMA, CHECK_OK);
-    }
-  }
-  Expect(i::Token::RPAREN, CHECK_OK);
-  Expect(i::Token::SEMICOLON, CHECK_OK);
-  return Statement::Default();
 }
 
 
@@ -362,8 +336,9 @@ PreParser::Statement PreParser::ParseExpressionOrLabelledStatement(bool* ok) {
   //   Identifier ':' Statement
 
   Expression expr = ParseExpression(true, CHECK_OK);
-  if (peek() == i::Token::COLON && expr.IsRawIdentifier()) {
-    if (!strict_mode() || !expr.AsIdentifier().IsFutureReserved()) {
+  if (expr.IsRawIdentifier()) {
+    if (peek() == i::Token::COLON &&
+        (!strict_mode() || !expr.AsIdentifier().IsFutureReserved())) {
       Consume(i::Token::COLON);
       i::Scanner::Location start_location = scanner_->peek_location();
       Statement statement = ParseStatement(CHECK_OK);
@@ -375,6 +350,9 @@ PreParser::Statement PreParser::ParseExpressionOrLabelledStatement(bool* ok) {
       }
       return Statement::Default();
     }
+    // Preparsing is disabled for extensions (because the extension details
+    // aren't passed to lazily compiled functions), so we don't
+    // accept "native function" in the preparser.
   }
   // Parsed expression statement.
   ExpectSemicolon(CHECK_OK);
@@ -405,7 +383,7 @@ PreParser::Statement PreParser::ParseContinueStatement(bool* ok) {
 
   Expect(i::Token::CONTINUE, CHECK_OK);
   i::Token::Value tok = peek();
-  if (!scanner_->has_line_terminator_before_next() &&
+  if (!scanner_->HasAnyLineTerminatorBeforeNext() &&
       tok != i::Token::SEMICOLON &&
       tok != i::Token::RBRACE &&
       tok != i::Token::EOS) {
@@ -422,7 +400,7 @@ PreParser::Statement PreParser::ParseBreakStatement(bool* ok) {
 
   Expect(i::Token::BREAK, CHECK_OK);
   i::Token::Value tok = peek();
-  if (!scanner_->has_line_terminator_before_next() &&
+  if (!scanner_->HasAnyLineTerminatorBeforeNext() &&
       tok != i::Token::SEMICOLON &&
       tok != i::Token::RBRACE &&
       tok != i::Token::EOS) {
@@ -448,7 +426,7 @@ PreParser::Statement PreParser::ParseReturnStatement(bool* ok) {
   // This is not handled during preparsing.
 
   i::Token::Value tok = peek();
-  if (!scanner_->has_line_terminator_before_next() &&
+  if (!scanner_->HasAnyLineTerminatorBeforeNext() &&
       tok != i::Token::SEMICOLON &&
       tok != i::Token::RBRACE &&
       tok != i::Token::EOS) {
@@ -599,7 +577,7 @@ PreParser::Statement PreParser::ParseThrowStatement(bool* ok) {
   //   'throw' [no line terminator] Expression ';'
 
   Expect(i::Token::THROW, CHECK_OK);
-  if (scanner_->has_line_terminator_before_next()) {
+  if (scanner_->HasAnyLineTerminatorBeforeNext()) {
     i::JavaScriptScanner::Location pos = scanner_->location();
     ReportMessageAt(pos.beg_pos, pos.end_pos,
                     "newline_after_throw", NULL);
@@ -822,7 +800,7 @@ PreParser::Expression PreParser::ParsePostfixExpression(bool* ok) {
 
   i::Scanner::Location before = scanner_->peek_location();
   Expression expression = ParseLeftHandSideExpression(CHECK_OK);
-  if (!scanner_->has_line_terminator_before_next() &&
+  if (!scanner_->HasAnyLineTerminatorBeforeNext() &&
       i::Token::IsCountOp(peek())) {
     if (strict_mode() && expression.IsIdentifier() &&
         expression.AsIdentifier().IsEvalOrArguments()) {
@@ -1296,7 +1274,7 @@ void PreParser::ExpectSemicolon(bool* ok) {
     Next();
     return;
   }
-  if (scanner_->has_line_terminator_before_next() ||
+  if (scanner_->HasAnyLineTerminatorBeforeNext() ||
       tok == i::Token::RBRACE ||
       tok == i::Token::EOS) {
     return;

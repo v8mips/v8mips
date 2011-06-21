@@ -1389,6 +1389,7 @@ void HLoadKeyedSpecializedArrayElement::PrintDataTo(
     case JSObject::FAST_ELEMENTS:
     case JSObject::FAST_DOUBLE_ELEMENTS:
     case JSObject::DICTIONARY_ELEMENTS:
+    case JSObject::NON_STRICT_ARGUMENTS_ELEMENTS:
       UNREACHABLE();
       break;
   }
@@ -1474,6 +1475,7 @@ void HStoreKeyedSpecializedArrayElement::PrintDataTo(
     case JSObject::FAST_ELEMENTS:
     case JSObject::FAST_DOUBLE_ELEMENTS:
     case JSObject::DICTIONARY_ELEMENTS:
+    case JSObject::NON_STRICT_ARGUMENTS_ELEMENTS:
       UNREACHABLE();
       break;
   }
@@ -1569,12 +1571,27 @@ HType HCompare::CalculateInferredType() {
 }
 
 
-HType HCompareJSObjectEq::CalculateInferredType() {
+HType HCompareObjectEq::CalculateInferredType() {
   return HType::Boolean();
 }
 
 
 HType HUnaryPredicate::CalculateInferredType() {
+  return HType::Boolean();
+}
+
+
+HType HInstanceOf::CalculateInferredType() {
+  return HType::Boolean();
+}
+
+
+HType HDeleteProperty::CalculateInferredType() {
+  return HType::Boolean();
+}
+
+
+HType HInstanceOfKnownGlobal::CalculateInferredType() {
   return HType::Boolean();
 }
 
