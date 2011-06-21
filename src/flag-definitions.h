@@ -143,7 +143,7 @@ DEFINE_bool(trace_osr, false, "trace on-stack replacement")
 DEFINE_int(stress_runs, 0, "number of stress runs")
 DEFINE_bool(optimize_closures, true, "optimize closures")
 
-// assembler-ia32.cc / assembler-arm.cc / assembler-x64.cc
+// assembler-ia32.cc / assembler-arm.cc / assembler-x64.cc / assembler-mips.cc
 DEFINE_bool(debug_code, false,
             "generate extra code (assertions) for debugging")
 DEFINE_bool(code_comments, false, "emit comments in code disassembly")
