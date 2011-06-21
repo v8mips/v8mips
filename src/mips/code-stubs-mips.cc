@@ -4151,12 +4151,13 @@ void ArgumentsAccessStub::GenerateNewNonStrictFast(MacroAssembler* masm) {
       FixedArray::kHeaderSize + 2 * kPointerSize;
   // If there are no mapped parameters, we do not need the parameter_map.
   Label skip1_eq, skip1_ne;
-  __ Branch (&skip1_eq, eq, a1, Operand(Smi::FromInt(0)));
+  ASSERT_EQ(0, Smi::FromInt(0));
+  __ Branch(&skip1_eq, eq, a1, Operand(zero_reg));
   __ sll(t5, a1, 1);
   __ addiu(t5, t5, kParameterMapHeaderSize);
   __ bind(&skip1_eq);
 
-  __ Branch (&skip1_ne, ne, a1, Operand(Smi::FromInt(0)));
+  __ Branch(&skip1_ne, ne, a1, Operand(zero_reg));
   __ mov(t5, zero_reg);
   __ bind(&skip1_ne);
 
