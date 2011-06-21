@@ -4169,7 +4169,7 @@ void ArgumentsAccessStub::GenerateNewNonStrictFast(MacroAssembler* masm) {
 
   // v0 = address of new object(s) (tagged)
   // a2 = argument count (tagged)
-  // Get the arguments boilerplate from the current (global) context into r4.
+  // Get the arguments boilerplate from the current (global) context into t0.
   const int kNormalOffset =
       Context::SlotOffset(Context::ARGUMENTS_BOILERPLATE_INDEX);
   const int kAliasedOffset =
