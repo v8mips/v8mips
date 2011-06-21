@@ -1202,6 +1202,20 @@ void LCodeGen::DoFixedArrayLength(LFixedArrayLength* instr) {
 }
 
 
+void LCodeGen::DoElementsKind(LElementsKind* instr) {
+  Register result = ToRegister(instr->result());
+  Register input = ToRegister(instr->InputAt(0));
+
+  // Load map into |result|.
+  __ lw(result, FieldMemOperand(input, HeapObject::kMapOffset));
+  // Load the map's "bit field 2" into |result|. We only need the first byte,
+  // but the following bit field extraction takes care of that anyway.
+  __ lw(result, FieldMemOperand(result, Map::kBitField2Offset));
+  // Retrieve elements_kind from bit field 2.
+  __ Ext(result, result, Map::kElementsKindShift, Map::kElementsKindBitCount);
+}
+
+
 void LCodeGen::DoValueOf(LValueOf* instr) {
   Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
 }
@@ -1614,6 +1628,34 @@ void LCodeGen::DoCmpSymbolEqAndBranch(LCmpSymbolEqAndBranch* instr) {
   //
   // __ cmp(left, Operand(right));
   // EmitBranch(true_block, false_block, eq);
+}
+
+
+void LCodeGen::DoCmpConstantEq(LCmpConstantEq* instr) {
+  Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
+  // TODO(palfia): not tested, just quickly ported to MIPS
+//  Register left = ToRegister(instr->InputAt(0));
+//  Register result = ToRegister(instr->result());
+//
+//  Label done;
+//  Label left_eq_right;
+//  __ Branch(USE_DELAY_SLOT, &left_eq_right, eq, left,
+//            Operand(instr->hydrogen()->right()));
+//  __ LoadRoot(result, Heap::kTrueValueRootIndex);  // In delay slot
+//  __ LoadRoot(result, Heap::kFalseValueRootIndex);
+//  __ bind(&left_eq_right);
+}
+
+
+void LCodeGen::DoCmpConstantEqAndBranch(LCmpConstantEqAndBranch* instr) {
+  Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
+  // TODO(palfia): not tested, just quickly ported to MIPS
+//  Register left = ToRegister(instr->InputAt(0));
+//  int true_block = chunk_->LookupDestination(instr->true_block_id());
+//  int false_block = chunk_->LookupDestination(instr->false_block_id());
+//
+//  EmitBranch(true_block, false_block, eq, left,
+//             Operand(instr->hydrogen()->right()));
 }
 
 
@@ -2223,18 +2265,24 @@ void LCodeGen::DoLoadElements(LLoadElements* instr) {
 
   __ lw(result, FieldMemOperand(input, JSObject::kElementsOffset));
   if (FLAG_debug_code) {
-    Label done;
+    Label done, fail;
     __ lw(scratch, FieldMemOperand(result, HeapObject::kMapOffset));
     __ LoadRoot(at, Heap::kFixedArrayMapRootIndex);
     __ Branch(USE_DELAY_SLOT, &done, eq, scratch, Operand(at));
     __ LoadRoot(at, Heap::kFixedCOWArrayMapRootIndex);  // In the delay slot.
-    __ Branch(USE_DELAY_SLOT, &done, eq, scratch, Operand(at));
-    __ GetObjectType(result, scratch, scratch);  // In the delay slot.
-    __ Subu(scratch, scratch, Operand(FIRST_EXTERNAL_ARRAY_TYPE));
-    __ Check(lo,
-             "Check for fast elements failed.",
-             scratch,
-             Operand(kExternalArrayTypeCount));
+    __ Branch(&done, eq, scratch, Operand(at));
+    // |scratch| still contains |input|'s map.
+    __ lw(scratch, FieldMemOperand(scratch, Map::kBitField2Offset));
+    __ Ext(scratch, scratch, Map::kElementsKindShift,
+           Map::kElementsKindBitCount);
+    __ Branch(&done, eq, scratch,
+              Operand(JSObject::FAST_ELEMENTS));
+    __ Branch(&fail, lt, scratch,
+              Operand(JSObject::FIRST_EXTERNAL_ARRAY_ELEMENTS_KIND));
+    __ Branch(&done, le, scratch,
+              Operand(JSObject::LAST_EXTERNAL_ARRAY_ELEMENTS_KIND));
+    __ bind(&fail);
+    __ Abort("Check for fast or external elements failed.");
     __ bind(&done);
   }
 }
