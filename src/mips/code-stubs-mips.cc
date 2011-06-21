@@ -4086,7 +4086,8 @@ void ArgumentsAccessStub::GenerateNewNonStrictSlow(MacroAssembler* masm) {
   Label runtime;
   __ lw(a3, MemOperand(fp, StandardFrameConstants::kCallerFPOffset));
   __ lw(a2, MemOperand(a3, StandardFrameConstants::kContextOffset));
-  __ Branch(&runtime, ne, a2, Operand(Smi::FromInt(StackFrame::ARGUMENTS_ADAPTOR)));
+  __ Branch(&runtime, ne,
+            a2, Operand(Smi::FromInt(StackFrame::ARGUMENTS_ADAPTOR)));
 
   // Patch the arguments.length and the parameters pointer in the current frame.
   __ lw(a2, MemOperand(a3, ArgumentsAdaptorFrameConstants::kLengthOffset));
