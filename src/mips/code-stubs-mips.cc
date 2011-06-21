@@ -1897,8 +1897,7 @@ void GenericBinaryOpStub::HandleNonSmiBitwiseOp(MacroAssembler* masm,
   __ Branch(&slow, ne, t4, Operand(heap_number_map));
   // Convert HeapNum a1 to integer a3.
   __ ConvertToInt32(lhs, a3, t2, t3, f0, &slow);
-  __ b(&done_checking_lhs);
-  __ nop();   // NOP_ADDED
+  __ Branch(&done_checking_lhs);
 
   __ bind(&lhs_is_smi);
   __ sra(a3, lhs, kSmiTagSize);  // Remove tag from Smi.
@@ -1910,8 +1909,7 @@ void GenericBinaryOpStub::HandleNonSmiBitwiseOp(MacroAssembler* masm,
   __ Branch(&slow, ne, t4, Operand(heap_number_map));
   // Convert HeapNum a0 to integer a2.
   __ ConvertToInt32(rhs, a2, t2, t3, f0, &slow);
-  __ b(&done_checking_rhs);
-  __ nop();   // NOP_ADDED
+  __ Branch(&done_checking_rhs);
 
   __ bind(&rhs_is_smi);
   __ sra(a2, rhs, kSmiTagSize);  // Remove tag from Smi.
@@ -2008,8 +2006,7 @@ void GenericBinaryOpStub::HandleNonSmiBitwiseOp(MacroAssembler* masm,
     __ bind(&have_to_allocate);
     // Get a new heap number in t5.  t4 and t7 are scratch.
     __ AllocateHeapNumber(t5, t4, t7, heap_number_map, &slow);
-    __ b(&got_a_heap_number);
-    __ nop();   // NOP_ADDED
+    __ Branch(&got_a_heap_number);
   }
 
   // If all else failed then we go to the runtime system.
@@ -3869,8 +3866,7 @@ void JSEntryStub::GenerateBody(MacroAssembler* masm, bool is_construct) {
       ExternalReference(Top::k_pending_exception_address));
   __ sw(v0, MemOperand(t0));  // We come back from 'invoke'. result is in v0.
   __ li(v0, Operand(reinterpret_cast<int32_t>(Failure::Exception())));
-  __ b(&exit);
-  __ nop();   // Branch delay slot nop.
+  __ Branch(&exit);
 
   // Invoke: Link this frame into the handler chain.
   __ bind(&invoke);

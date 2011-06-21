@@ -1047,8 +1047,7 @@ static void Generate_JSEntryTrampolineHelper(MacroAssembler* masm,
   Label loop, entry;
   __ sll(t0, a3, kPointerSizeLog2);
   __ addu(t2, s0, t0);
-  __ b(&entry);
-  __ nop();   // Branch delay slot nop.
+  __ Branch(&entry);
   // t2 points past last arg.
   __ bind(&loop);
   __ lw(t0, MemOperand(s0));  // Read next parameter.

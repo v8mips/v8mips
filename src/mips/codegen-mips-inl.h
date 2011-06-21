@@ -39,8 +39,7 @@ namespace internal {
 // Platform-specific inline functions.
 
 void DeferredCode::Jump() {
-  __ b(&entry_label_);
-  __ nop();
+  __ Branch(&entry_label_);
 }
 
 

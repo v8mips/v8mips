@@ -79,8 +79,7 @@ void JumpTarget::DoJump() {
     // frame with less precise type info branches to them.
     ASSERT(direction_ != FORWARD_ONLY);
   }
-  __ b(&entry_label_);
-  __ nop();   // Branch delay slot nop.
+  __ Branch(&entry_label_);
 }
 
 
