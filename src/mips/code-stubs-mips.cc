@@ -4148,16 +4148,13 @@ void ArgumentsAccessStub::GenerateNewNonStrictFast(MacroAssembler* masm) {
   const int kParameterMapHeaderSize =
       FixedArray::kHeaderSize + 2 * kPointerSize;
   // If there are no mapped parameters, we do not need the parameter_map.
-  Label skip1_eq, skip1_ne;
+  Label param_map_size;
   ASSERT_EQ(0, Smi::FromInt(0));
-  __ Branch(&skip1_eq, eq, a1, Operand(zero_reg));
+  __ Branch(USE_DELAY_SLOT, &param_map_size, eq, a1, Operand(zero_reg));
+  __ mov(t5, zero_reg);  // In delay slot: param map size = 0 when a1 == 0.
   __ sll(t5, a1, 1);
   __ addiu(t5, t5, kParameterMapHeaderSize);
-  __ bind(&skip1_eq);
-
-  __ Branch(&skip1_ne, ne, a1, Operand(zero_reg));
-  __ mov(t5, zero_reg);
-  __ bind(&skip1_ne);
+  __ bind(&param_map_size);
 
   // 2. Backing store.
   __ sll(t6, a2, 1);
