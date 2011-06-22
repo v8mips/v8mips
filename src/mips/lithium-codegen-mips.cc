@@ -1171,7 +1171,10 @@ void LCodeGen::DoConstantI(LConstantI* instr) {
 
 
 void LCodeGen::DoConstantD(LConstantD* instr) {
-  Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
+  ASSERT(instr->result()->IsDoubleRegister());
+  DoubleRegister result = ToDoubleRegister(instr->result());
+  double v = instr->value();
+  __ Move(result, v);
 }
 
 
@@ -2827,7 +2830,18 @@ void LCodeGen::DoSmiTag(LSmiTag* instr) {
 
 
 void LCodeGen::DoSmiUntag(LSmiUntag* instr) {
-  Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
+  Register scratch = scratch0();
+  LOperand* input = instr->InputAt(0);
+  ASSERT(input->IsRegister() && input->Equals(instr->result()));
+  if (instr->needs_check()) {
+    ASSERT(kHeapObjectTag == 1);
+    // If the input is a HeapObject, value of scratch won't be zero.
+    __ And(scratch, ToRegister(input), Operand(kHeapObjectTag));
+    __ SmiUntag(ToRegister(input));
+    DeoptimizeIf(ne, instr->environment(), scratch, Operand(zero_reg));
+  } else {
+    __ SmiUntag(ToRegister(input));
+  }
 }
 
 

@@ -1582,6 +1582,13 @@ void Assembler::cfc1(Register rt, FPUControlRegister fs) {
   GenInstrRegister(COP1, CFC1, rt, fs);
 }
 
+void Assembler::DoubleAsTwoUInt32(double d, uint32_t* lo, uint32_t* hi) {
+  uint64_t i;
+  memcpy(&i, &d, 8);
+
+  *lo = i & 0xffffffff;
+  *hi = i >> 32;
+}
 
 // Arithmetic.
 

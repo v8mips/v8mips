@@ -965,6 +965,8 @@ class Assembler : public AssemblerBase {
     return internal_trampoline_exception_;
   }
 
+  void DoubleAsTwoUInt32(double d, uint32_t* lo, uint32_t* hi);
+
  private:
   // Code buffer:
   // The buffer into which code and relocation info are generated.

@@ -234,6 +234,8 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
     mtc1(src_high, FPURegister::from_code(dst.code() + 1));
   }
 
+  void Move(FPURegister dst, double imm);
+
   // Jump unconditionally to given label.
   // We NEED a nop in the branch delay slot, as it used by v8, for example in
   // CodeGenerator::ProcessDeferred().
