@@ -25,45 +25,14 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#ifndef V8_EXTENSIONS_EXPERIMENTAL_I18N_UTILS_H_
-#define V8_EXTENSIONS_EXPERIMENTAL_I18N_UTILS_H_
+// Test that the Array length accessor correctly deals with non-array
+// receivers.
 
-#include "include/v8.h"
+// Create an object with an array as the prototype.
+var o = Object.create([]);
 
-#include "unicode/uversion.h"
-
-namespace U_ICU_NAMESPACE {
-class UnicodeString;
-}
-
-namespace v8 {
-namespace internal {
-
-class I18NUtils {
- public:
-  // Safe string copy. Null terminates the destination. Copies at most
-  // (length - 1) bytes.
-  // We can't use snprintf since it's not supported on all relevant platforms.
-  // We can't use OS::SNPrintF, it's only for internal code.
-  static void StrNCopy(char* dest, int length, const char* src);
-
-  // Extract a string setting named in |settings| and set it to |result|.
-  // Return true if it's specified. Otherwise, return false.
-  static bool ExtractStringSetting(const v8::Handle<v8::Object>& settings,
-                                   const char* setting,
-                                   icu::UnicodeString* result);
-
-  // Converts ASCII array into UChar array.
-  // Target is always \0 terminated.
-  static void AsciiToUChar(const char* source,
-                           int32_t source_length,
-                           UChar* target,
-                           int32_t target_length);
-
- private:
-  I18NUtils() {}
-};
-
-} }  // namespace v8::internal
-
-#endif  // V8_EXTENSIONS_EXPERIMENTAL_I18N_UTILS_H_
+// Check that writing the length property of the non-array object
+// works as expected.
+var value = "asdf";
+o.length = value;
+assertEquals(value, o.length);

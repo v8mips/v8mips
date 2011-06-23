@@ -2060,7 +2060,7 @@ HashTable<Shape, Key>* HashTable<Shape, Key>::cast(Object* obj) {
 SMI_ACCESSORS(FixedArrayBase, length, kLengthOffset)
 SMI_ACCESSORS(ByteArray, length, kLengthOffset)
 
-// TODO(jkummerow): Investigate if it's possible to s/INT/SMI/ here (and
+// TODO(1493): Investigate if it's possible to s/INT/SMI/ here (and
 // subsequently unify H{Fixed,External}ArrayLength).
 INT_ACCESSORS(ExternalArray, length, kLengthOffset)
 
@@ -3232,6 +3232,8 @@ ACCESSORS(FunctionTemplateInfo, instance_call_handler, Object,
 ACCESSORS(FunctionTemplateInfo, access_check_info, Object,
           kAccessCheckInfoOffset)
 ACCESSORS(FunctionTemplateInfo, flag, Smi, kFlagOffset)
+ACCESSORS(FunctionTemplateInfo, prototype_attributes, Smi,
+          kPrototypeAttributesOffset)
 
 ACCESSORS(ObjectTemplateInfo, constructor, Object, kConstructorOffset)
 ACCESSORS(ObjectTemplateInfo, internal_field_count, Object,
