@@ -1576,14 +1576,12 @@ void LCodeGen::DoCmpObjectEq(LCmpObjectEq* instr) {
 
 
 void LCodeGen::DoCmpObjectEqAndBranch(LCmpObjectEqAndBranch* instr) {
-  Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
-  // Register left = ToRegister(instr->InputAt(0));
-  // Register right = ToRegister(instr->InputAt(1));
-  // int false_block = chunk_->LookupDestination(instr->false_block_id());
-  // int true_block = chunk_->LookupDestination(instr->true_block_id());
-  //
-  // __ cmp(left, Operand(right));
-  // EmitBranch(true_block, false_block, eq);
+  Register left = ToRegister(instr->InputAt(0));
+  Register right = ToRegister(instr->InputAt(1));
+  int false_block = chunk_->LookupDestination(instr->false_block_id());
+  int true_block = chunk_->LookupDestination(instr->true_block_id());
+
+  EmitBranch(true_block, false_block, eq, left, Operand(right));
 }
 
 
