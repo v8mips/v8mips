@@ -2812,12 +2812,43 @@ void LCodeGen::DoDeferredNumberTagI(LNumberTagI* instr) {
 
 
 void LCodeGen::DoNumberTagD(LNumberTagD* instr) {
-  Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
+  class DeferredNumberTagD: public LDeferredCode {
+   public:
+    DeferredNumberTagD(LCodeGen* codegen, LNumberTagD* instr)
+        : LDeferredCode(codegen), instr_(instr) { }
+    virtual void Generate() { codegen()->DoDeferredNumberTagD(instr_); }
+   private:
+    LNumberTagD* instr_;
+  };
+
+  DoubleRegister input_reg = ToDoubleRegister(instr->InputAt(0));
+  Register scratch = scratch0();
+  Register reg = ToRegister(instr->result());
+  Register temp1 = ToRegister(instr->TempAt(0));
+  Register temp2 = ToRegister(instr->TempAt(1));
+
+  DeferredNumberTagD* deferred = new DeferredNumberTagD(this, instr);
+  if (FLAG_inline_new) {
+    __ LoadRoot(scratch, Heap::kHeapNumberMapRootIndex);
+    __ AllocateHeapNumber(reg, temp1, temp2, scratch, deferred->entry());
+  } else {
+    __ jmp(deferred->entry());
+  }
+  __ bind(deferred->exit());
+  __ sdc1(input_reg, FieldMemOperand(reg, HeapNumber::kValueOffset));
 }
 
 
 void LCodeGen::DoDeferredNumberTagD(LNumberTagD* instr) {
-  Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
+  // TODO(3095996): Get rid of this. For now, we need to make the
+  // result register contain a valid pointer because it is already
+  // contained in the register pointer map.
+  Register reg = ToRegister(instr->result());
+  __ mov(reg, zero_reg);
+
+  PushSafepointRegistersScope scope(this, Safepoint::kWithRegisters);
+  CallRuntimeFromDeferred(Runtime::kAllocateHeapNumber, 0, instr);
+  __ StoreToSafepointRegisterSlot(v0, reg);
 }
 
 
@@ -3029,7 +3060,49 @@ void LCodeGen::DoNumberUntagD(LNumberUntagD* instr) {
 
 
 void LCodeGen::DoDoubleToI(LDoubleToI* instr) {
-  Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
+  Register result_reg = ToRegister(instr->result());
+  Register scratch1 = scratch0();
+  Register scratch2 = ToRegister(instr->TempAt(0));
+  FPURegister double_input = ToDoubleRegister(instr->InputAt(0));
+  FPURegister double_scratch = double_scratch0();
+  FPURegister single_scratch = double_scratch0();
+
+  Label done;
+
+  if (instr->truncating()) {
+    Register scratch3 = ToRegister(instr->TempAt(1));
+    __ EmitECMATruncate(result_reg,
+                        double_input,
+                        single_scratch,
+                        scratch1,
+                        scratch2,
+                        scratch3);
+  } else {
+    // TODO(kalmard): ARM uses a MacroAssembler function here (EmitVFPTruncate).
+    // On MIPS a lot of things cannot be implemented the same way so right
+    // now it makes more sense to just do things manually.
+
+    // Save FCSR.
+    __ cfc1(scratch1, FCSR);
+    // Disable FPU exceptions.
+    __ ctc1(zero_reg, FCSR);
+    __ floor_w_d(single_scratch, double_scratch);
+    // Retrieve FCSR.
+    __ cfc1(scratch2, FCSR);
+    // Restore FCSR.
+    __ ctc1(scratch1, FCSR);
+
+    // Check for inexact conversion or exception (non-zero flags).
+    __ And(scratch2, scratch2, kFCSRFlagMask);
+
+    // Deoptimize if we had a FPU invalid exception,
+    // including inexact operation.
+    DeoptimizeIf(ne, instr->environment(), scratch2, Operand(zero_reg));
+
+    // Retrieve the result.
+    __ mfc1(result_reg, single_scratch);
+  }
+    __ bind(&done);
 }
 
 
@@ -3408,7 +3481,18 @@ void LCodeGen::DoDeleteProperty(LDeleteProperty* instr) {
 
 
 void LCodeGen::DoIn(LIn* instr) {
-  Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
+  Register obj = ToRegister(instr->object());
+  Register key = ToRegister(instr->key());
+  __ Push(key, obj);
+  ASSERT(instr->HasPointerMap() && instr->HasDeoptimizationEnvironment());
+  LPointerMap* pointers = instr->pointer_map();
+  LEnvironment* env = instr->deoptimization_environment();
+  RecordPosition(pointers->position());
+  RegisterEnvironmentForDeoptimization(env);
+  SafepointGenerator safepoint_generator(this,
+                                         pointers,
+                                         env->deoptimization_index());
+  __ InvokeBuiltin(Builtins::IN, CALL_FUNCTION, safepoint_generator);
 }
 
 
