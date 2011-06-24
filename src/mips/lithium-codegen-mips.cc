@@ -2411,7 +2411,41 @@ void LCodeGen::DoMathAbs(LUnaryMathOperation* instr) {
 
 
 void LCodeGen::DoMathFloor(LUnaryMathOperation* instr) {
-  Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
+  DoubleRegister input = ToDoubleRegister(instr->InputAt(0));
+  Register result = ToRegister(instr->result());
+  FPURegister single_scratch = double_scratch0().low();
+  Register scratch1 = scratch0();
+  Register scratch2 = ToRegister(instr->TempAt(0));
+
+  // Save FCSR.
+  __ cfc1(scratch1, FCSR);
+  // Disable FPU exceptions.
+  __ ctc1(zero_reg, FCSR);
+  // Do floor operation.
+  __ floor_w_d(single_scratch, input);
+  // Retrieve FCSR.
+  __ cfc1(scratch2, FCSR);
+  // Restore FCSR.
+  __ ctc1(scratch1, FCSR);
+
+  // Check for inexact conversion or exception (non-zero flags).
+  __ And(scratch2, scratch2, kFCSRFlagMask);
+
+  // Deopt if the operation did not succeed.
+  DeoptimizeIf(ne, instr->environment(), scratch2, Operand(zero_reg));
+
+  // Load the result.
+  __ mfc1(result, single_scratch);
+
+  if (instr->hydrogen()->CheckFlag(HValue::kBailoutOnMinusZero)) {
+    // Test for -0.
+    Label done;
+    __ Branch(&done, ne, result, Operand(zero_reg));
+    __ mfc1(scratch1, input.high());
+    __ And(scratch1, scratch1, Operand(HeapNumber::kSignMask));
+    DeoptimizeIf(ne, instr->environment(), scratch1, Operand(zero_reg));
+    __ bind(&done);
+  }
 }
 
 
