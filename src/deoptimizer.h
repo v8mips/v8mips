@@ -319,7 +319,13 @@ class FrameDescription {
   }
 
   double GetDoubleFrameSlot(unsigned offset) {
-    return *reinterpret_cast<double*>(GetFrameSlotPointer(offset));
+    intptr_t* ptr = GetFrameSlotPointer(offset);
+#if V8_TARGET_ARCH_MIPS
+    // Doubles can only be read from 8-byte aligned addresses on MIPS.
+    ASSERT(offset % 8 == 0);
+    ASSERT(reinterpret_cast<unsigned>(ptr) % 8 == 0);
+#endif
+    return *reinterpret_cast<double*>(ptr);
   }
 
   void SetFrameSlot(unsigned offset, intptr_t value) {
