@@ -837,11 +837,11 @@ void MacroAssembler::Trunc_uw_d(FPURegister fd, FPURegister fs) {
 
 void MacroAssembler::Trunc_uw_d(FPURegister fd, Register rs) {
   ASSERT(!fd.is(f22));
-  ASSERT(!rs.is(t6));
+  ASSERT(!rs.is(t8));
 
   // Load 2^31 into f22.
-  Or(t6, zero_reg, 0x80000000);
-  Cvt_d_uw(f22, t6);
+  Or(t8, zero_reg, 0x80000000);
+  Cvt_d_uw(f22, t8);
 
   // Test if f22 > fd.
   c(OLT, D, fd, f22);
@@ -856,7 +856,7 @@ void MacroAssembler::Trunc_uw_d(FPURegister fd, Register rs) {
   sub_d(f22, fd, f22);
   trunc_w_d(f22, f22);
   mfc1(rs, f22);
-  or_(rs, rs, t6);
+  or_(rs, rs, t8);
 
   Label done;
   Branch(&done);
@@ -2694,8 +2694,8 @@ void MacroAssembler::AllocateHeapNumberWithValue(Register result,
                                                  Register scratch1,
                                                  Register scratch2,
                                                  Label* gc_required) {
-  LoadRoot(t6, Heap::kHeapNumberMapRootIndex);
-  AllocateHeapNumber(result, scratch1, scratch2, t6, gc_required);
+  LoadRoot(t8, Heap::kHeapNumberMapRootIndex);
+  AllocateHeapNumber(result, scratch1, scratch2, t8, gc_required);
   sdc1(value, FieldMemOperand(result, HeapNumber::kValueOffset));
 }
 
