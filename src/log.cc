@@ -149,10 +149,6 @@ class Profiler: public Thread {
 void StackTracer::Trace(Isolate* isolate, TickSample* sample) {
   ASSERT(isolate->IsInitialized());
 
-  sample->tos = NULL;
-  sample->frames_count = 0;
-  sample->has_external_callback = false;
-
   // Avoid collecting traces while doing GC.
   if (sample->state == GC) return;
 
@@ -400,8 +396,10 @@ class Logger::NameMap {
 
   void Remove(Address code_address) {
     HashMap::Entry* entry = FindEntry(code_address);
-    if (entry != NULL) DeleteArray(static_cast<const char*>(entry->value));
-    RemoveEntry(entry);
+    if (entry != NULL) {
+      DeleteArray(static_cast<char*>(entry->value));
+      RemoveEntry(entry);
+    }
   }
 
   void Move(Address from, Address to) {
@@ -1545,8 +1543,12 @@ class EnumerateOptimizedFunctionsVisitor: public OptimizedFunctionVisitor {
   virtual void LeaveContext(Context* context) {}
 
   virtual void VisitFunction(JSFunction* function) {
+    SharedFunctionInfo* sfi = SharedFunctionInfo::cast(function->shared());
+    Object* maybe_script = sfi->script();
+    if (maybe_script->IsScript()
+        && !Script::cast(maybe_script)->HasValidSource()) return;
     if (sfis_ != NULL) {
-      sfis_[*count_] = Handle<SharedFunctionInfo>(function->shared());
+      sfis_[*count_] = Handle<SharedFunctionInfo>(sfi);
     }
     if (code_objects_ != NULL) {
       ASSERT(function->code()->kind() == Code::OPTIMIZED_FUNCTION);

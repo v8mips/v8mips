@@ -143,11 +143,9 @@ class MacroAssembler: public Assembler {
 
   // Register move. May do nothing if the registers are identical.
   void Move(Register dst, Handle<Object> value);
-  void Move(Register dst, Register src);
+  void Move(Register dst, Register src, Condition cond = al);
   void Move(DoubleRegister dst, DoubleRegister src);
 
-  // Jumps to the label at the index given by the Smi in "index".
-  void SmiJumpTable(Register index, Vector<Label*> targets);
   // Load an object from the root table.
   void LoadRoot(Register destination,
                 Heap::RootListIndex index,
@@ -313,6 +311,10 @@ class MacroAssembler: public Assembler {
                               const double src2,
                               const Register fpscr_flags,
                               const Condition cond = al);
+
+  void Vmov(const DwVfpRegister dst,
+            const double imm,
+            const Condition cond = al);
 
 
   // ---------------------------------------------------------------------------

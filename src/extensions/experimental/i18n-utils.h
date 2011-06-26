@@ -53,6 +53,13 @@ class I18NUtils {
                                    const char* setting,
                                    icu::UnicodeString* result);
 
+  // Converts ASCII array into UChar array.
+  // Target is always \0 terminated.
+  static void AsciiToUChar(const char* source,
+                           int32_t source_length,
+                           UChar* target,
+                           int32_t target_length);
+
  private:
   I18NUtils() {}
 };

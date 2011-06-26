@@ -1171,7 +1171,10 @@ void LCodeGen::DoConstantI(LConstantI* instr) {
 
 
 void LCodeGen::DoConstantD(LConstantD* instr) {
-  Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
+  ASSERT(instr->result()->IsDoubleRegister());
+  DoubleRegister result = ToDoubleRegister(instr->result());
+  double v = instr->value();
+  __ Move(result, v);
 }
 
 
@@ -1199,6 +1202,20 @@ void LCodeGen::DoFixedArrayLength(LFixedArrayLength* instr) {
   Register result = ToRegister(instr->result());
   Register array = ToRegister(instr->InputAt(0));
   __ lw(result, FieldMemOperand(array, FixedArray::kLengthOffset));
+}
+
+
+void LCodeGen::DoElementsKind(LElementsKind* instr) {
+  Register result = ToRegister(instr->result());
+  Register input = ToRegister(instr->InputAt(0));
+
+  // Load map into |result|.
+  __ lw(result, FieldMemOperand(input, HeapObject::kMapOffset));
+  // Load the map's "bit field 2" into |result|. We only need the first byte,
+  // but the following bit field extraction takes care of that anyway.
+  __ lw(result, FieldMemOperand(result, Map::kBitField2Offset));
+  // Retrieve elements_kind from bit field 2.
+  __ Ext(result, result, Map::kElementsKindShift, Map::kElementsKindBitCount);
 }
 
 
@@ -1571,7 +1588,7 @@ void LCodeGen::DoCmpIDAndBranch(LCmpIDAndBranch* instr) {
 }
 
 
-void LCodeGen::DoCmpJSObjectEq(LCmpJSObjectEq* instr) {
+void LCodeGen::DoCmpObjectEq(LCmpObjectEq* instr) {
   Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
   // Register left = ToRegister(instr->InputAt(0));
   // Register right = ToRegister(instr->InputAt(1));
@@ -1583,29 +1600,7 @@ void LCodeGen::DoCmpJSObjectEq(LCmpJSObjectEq* instr) {
 }
 
 
-void LCodeGen::DoCmpJSObjectEqAndBranch(LCmpJSObjectEqAndBranch* instr) {
-  Register left = ToRegister(instr->InputAt(0));
-  Register right = ToRegister(instr->InputAt(1));
-  int false_block = chunk_->LookupDestination(instr->false_block_id());
-  int true_block = chunk_->LookupDestination(instr->true_block_id());
-
-  EmitBranch(true_block, false_block, eq, left, Operand(right));
-}
-
-
-void LCodeGen::DoCmpSymbolEq(LCmpSymbolEq* instr) {
-  Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
-  // Register left = ToRegister(instr->InputAt(0));
-  // Register right = ToRegister(instr->InputAt(1));
-  // Register result = ToRegister(instr->result());
-  //
-  // __ cmp(left, Operand(right));
-  // __ LoadRoot(result, Heap::kTrueValueRootIndex, eq);
-  // __ LoadRoot(result, Heap::kFalseValueRootIndex, ne);
-}
-
-
-void LCodeGen::DoCmpSymbolEqAndBranch(LCmpSymbolEqAndBranch* instr) {
+void LCodeGen::DoCmpObjectEqAndBranch(LCmpObjectEqAndBranch* instr) {
   Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
   // Register left = ToRegister(instr->InputAt(0));
   // Register right = ToRegister(instr->InputAt(1));
@@ -1614,6 +1609,34 @@ void LCodeGen::DoCmpSymbolEqAndBranch(LCmpSymbolEqAndBranch* instr) {
   //
   // __ cmp(left, Operand(right));
   // EmitBranch(true_block, false_block, eq);
+}
+
+
+void LCodeGen::DoCmpConstantEq(LCmpConstantEq* instr) {
+  Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
+  // TODO(palfia): not tested, just quickly ported to MIPS
+//  Register left = ToRegister(instr->InputAt(0));
+//  Register result = ToRegister(instr->result());
+//
+//  Label done;
+//  Label left_eq_right;
+//  __ Branch(USE_DELAY_SLOT, &left_eq_right, eq, left,
+//            Operand(instr->hydrogen()->right()));
+//  __ LoadRoot(result, Heap::kTrueValueRootIndex);  // In delay slot
+//  __ LoadRoot(result, Heap::kFalseValueRootIndex);
+//  __ bind(&left_eq_right);
+}
+
+
+void LCodeGen::DoCmpConstantEqAndBranch(LCmpConstantEqAndBranch* instr) {
+  Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
+  // TODO(palfia): not tested, just quickly ported to MIPS
+//  Register left = ToRegister(instr->InputAt(0));
+//  int true_block = chunk_->LookupDestination(instr->true_block_id());
+//  int false_block = chunk_->LookupDestination(instr->false_block_id());
+//
+//  EmitBranch(true_block, false_block, eq, left,
+//             Operand(instr->hydrogen()->right()));
 }
 
 
@@ -2223,18 +2246,24 @@ void LCodeGen::DoLoadElements(LLoadElements* instr) {
 
   __ lw(result, FieldMemOperand(input, JSObject::kElementsOffset));
   if (FLAG_debug_code) {
-    Label done;
+    Label done, fail;
     __ lw(scratch, FieldMemOperand(result, HeapObject::kMapOffset));
     __ LoadRoot(at, Heap::kFixedArrayMapRootIndex);
     __ Branch(USE_DELAY_SLOT, &done, eq, scratch, Operand(at));
     __ LoadRoot(at, Heap::kFixedCOWArrayMapRootIndex);  // In the delay slot.
-    __ Branch(USE_DELAY_SLOT, &done, eq, scratch, Operand(at));
-    __ GetObjectType(result, scratch, scratch);  // In the delay slot.
-    __ Subu(scratch, scratch, Operand(FIRST_EXTERNAL_ARRAY_TYPE));
-    __ Check(lo,
-             "Check for fast elements failed.",
-             scratch,
-             Operand(kExternalArrayTypeCount));
+    __ Branch(&done, eq, scratch, Operand(at));
+    // |scratch| still contains |input|'s map.
+    __ lw(scratch, FieldMemOperand(scratch, Map::kBitField2Offset));
+    __ Ext(scratch, scratch, Map::kElementsKindShift,
+           Map::kElementsKindBitCount);
+    __ Branch(&done, eq, scratch,
+              Operand(JSObject::FAST_ELEMENTS));
+    __ Branch(&fail, lt, scratch,
+              Operand(JSObject::FIRST_EXTERNAL_ARRAY_ELEMENTS_KIND));
+    __ Branch(&done, le, scratch,
+              Operand(JSObject::LAST_EXTERNAL_ARRAY_ELEMENTS_KIND));
+    __ bind(&fail);
+    __ Abort("Check for fast or external elements failed.");
     __ bind(&done);
   }
 }
@@ -2801,7 +2830,18 @@ void LCodeGen::DoSmiTag(LSmiTag* instr) {
 
 
 void LCodeGen::DoSmiUntag(LSmiUntag* instr) {
-  Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
+  Register scratch = scratch0();
+  LOperand* input = instr->InputAt(0);
+  ASSERT(input->IsRegister() && input->Equals(instr->result()));
+  if (instr->needs_check()) {
+    ASSERT(kHeapObjectTag == 1);
+    // If the input is a HeapObject, value of scratch won't be zero.
+    __ And(scratch, ToRegister(input), Operand(kHeapObjectTag));
+    __ SmiUntag(ToRegister(input));
+    DeoptimizeIf(ne, instr->environment(), scratch, Operand(zero_reg));
+  } else {
+    __ SmiUntag(ToRegister(input));
+  }
 }
 
 

@@ -309,9 +309,9 @@ void MacroAssembler::Move(Register dst, Handle<Object> value) {
 }
 
 
-void MacroAssembler::Move(Register dst, Register src) {
+void MacroAssembler::Move(Register dst, Register src, Condition cond) {
   if (!dst.is(src)) {
-    mov(dst, src);
+    mov(dst, src, LeaveCC, cond);
   }
 }
 
@@ -441,20 +441,6 @@ void MacroAssembler::Usat(Register dst, int satpos, const Operand& src,
     bind(&done);
   } else {
     usat(dst, satpos, src, cond);
-  }
-}
-
-
-void MacroAssembler::SmiJumpTable(Register index, Vector<Label*> targets) {
-  // Empty the const pool.
-  CheckConstPool(true, true);
-  add(pc, pc, Operand(index,
-                      LSL,
-                      Instruction::kInstrSizeLog2 - kSmiTagSize));
-  BlockConstPoolBefore(pc_offset() + (targets.length() + 1) * kInstrSize);
-  nop();  // Jump table alignment.
-  for (int i = 0; i < targets.length(); i++) {
-    b(targets[i]);
   }
 }
 
@@ -661,19 +647,36 @@ void MacroAssembler::Ldrd(Register dst1, Register dst2,
   ASSERT_EQ(0, dst1.code() % 2);
   ASSERT_EQ(dst1.code() + 1, dst2.code());
 
+  // V8 does not use this addressing mode, so the fallback code
+  // below doesn't support it yet.
+  ASSERT((src.am() != PreIndex) && (src.am() != NegPreIndex));
+
   // Generate two ldr instructions if ldrd is not available.
   if (CpuFeatures::IsSupported(ARMv7)) {
     CpuFeatures::Scope scope(ARMv7);
     ldrd(dst1, dst2, src, cond);
   } else {
-    MemOperand src2(src);
-    src2.set_offset(src2.offset() + 4);
-    if (dst1.is(src.rn())) {
-      ldr(dst2, src2, cond);
-      ldr(dst1, src, cond);
-    } else {
-      ldr(dst1, src, cond);
-      ldr(dst2, src2, cond);
+    if ((src.am() == Offset) || (src.am() == NegOffset)) {
+      MemOperand src2(src);
+      src2.set_offset(src2.offset() + 4);
+      if (dst1.is(src.rn())) {
+        ldr(dst2, src2, cond);
+        ldr(dst1, src, cond);
+      } else {
+        ldr(dst1, src, cond);
+        ldr(dst2, src2, cond);
+      }
+    } else {  // PostIndex or NegPostIndex.
+      ASSERT((src.am() == PostIndex) || (src.am() == NegPostIndex));
+      if (dst1.is(src.rn())) {
+        ldr(dst2, MemOperand(src.rn(), 4, Offset), cond);
+        ldr(dst1, src, cond);
+      } else {
+        MemOperand src2(src);
+        src2.set_offset(src2.offset() - 4);
+        ldr(dst1, MemOperand(src.rn(), 4, PostIndex), cond);
+        ldr(dst2, src2, cond);
+      }
     }
   }
 }
@@ -686,15 +689,26 @@ void MacroAssembler::Strd(Register src1, Register src2,
   ASSERT_EQ(0, src1.code() % 2);
   ASSERT_EQ(src1.code() + 1, src2.code());
 
+  // V8 does not use this addressing mode, so the fallback code
+  // below doesn't support it yet.
+  ASSERT((dst.am() != PreIndex) && (dst.am() != NegPreIndex));
+
   // Generate two str instructions if strd is not available.
   if (CpuFeatures::IsSupported(ARMv7)) {
     CpuFeatures::Scope scope(ARMv7);
     strd(src1, src2, dst, cond);
   } else {
     MemOperand dst2(dst);
-    dst2.set_offset(dst2.offset() + 4);
-    str(src1, dst, cond);
-    str(src2, dst2, cond);
+    if ((dst.am() == Offset) || (dst.am() == NegOffset)) {
+      dst2.set_offset(dst2.offset() + 4);
+      str(src1, dst, cond);
+      str(src2, dst2, cond);
+    } else {  // PostIndex or NegPostIndex.
+      ASSERT((dst.am() == PostIndex) || (dst.am() == NegPostIndex));
+      dst2.set_offset(dst2.offset() - 4);
+      str(src1, MemOperand(dst.rn(), 4, PostIndex), cond);
+      str(src2, dst2, cond);
+    }
   }
 }
 
@@ -739,6 +753,23 @@ void MacroAssembler::VFPCompareAndLoadFlags(const DwVfpRegister src1,
   // Compare and load FPSCR.
   vcmp(src1, src2, cond);
   vmrs(fpscr_flags, cond);
+}
+
+void MacroAssembler::Vmov(const DwVfpRegister dst,
+                          const double imm,
+                          const Condition cond) {
+  ASSERT(CpuFeatures::IsEnabled(VFP3));
+  static const DoubleRepresentation minus_zero(-0.0);
+  static const DoubleRepresentation zero(0.0);
+  DoubleRepresentation value(imm);
+  // Handle special values first.
+  if (value.bits == zero.bits) {
+    vmov(dst, kDoubleRegZero, cond);
+  } else if (value.bits == minus_zero.bits) {
+    vneg(dst, kDoubleRegZero, cond);
+  } else {
+    vmov(dst, imm, cond);
+  }
 }
 
 
@@ -2706,8 +2737,7 @@ void MacroAssembler::JumpIfNotBothSequentialAsciiStrings(Register first,
   // Check that neither is a smi.
   STATIC_ASSERT(kSmiTag == 0);
   and_(scratch1, first, Operand(second));
-  tst(scratch1, Operand(kSmiTagMask));
-  b(eq, failure);
+  JumpIfSmi(scratch1, failure);
   JumpIfNonSmisNotBothSequentialAsciiStrings(first,
                                              second,
                                              scratch1,
@@ -3099,7 +3129,7 @@ void MacroAssembler::ClampDoubleToUint8(Register result_reg,
   Label done;
   Label in_bounds;
 
-  vmov(temp_double_reg, 0.0);
+  Vmov(temp_double_reg, 0.0);
   VFPCompareAndSetFlags(input_reg, temp_double_reg);
   b(gt, &above_zero);
 
@@ -3109,7 +3139,7 @@ void MacroAssembler::ClampDoubleToUint8(Register result_reg,
 
   // Double value is >= 255, return 255.
   bind(&above_zero);
-  vmov(temp_double_reg, 255.0);
+  Vmov(temp_double_reg, 255.0);
   VFPCompareAndSetFlags(input_reg, temp_double_reg);
   b(le, &in_bounds);
   mov(result_reg, Operand(255));
@@ -3117,7 +3147,7 @@ void MacroAssembler::ClampDoubleToUint8(Register result_reg,
 
   // In 0-255 range, round and truncate.
   bind(&in_bounds);
-  vmov(temp_double_reg, 0.5);
+  Vmov(temp_double_reg, 0.5);
   vadd(temp_double_reg, input_reg, temp_double_reg);
   vcvt_u32_f64(s0, temp_double_reg);
   vmov(result_reg, s0);

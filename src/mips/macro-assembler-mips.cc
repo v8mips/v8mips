@@ -936,6 +936,20 @@ void MacroAssembler::BranchF(Label* target,
   }
 }
 
+void MacroAssembler::Move(FPURegister dst, double imm) {
+  ASSERT(CpuFeatures::IsEnabled(FPU));
+  uint32_t lo, hi;
+  DoubleAsTwoUInt32(imm, &lo, &hi);
+  // Move the low part of the double into the lower of the corresponding FPU
+  // register of FPU register pair.
+  li(at, Operand(lo));
+  mtc1(at, dst);
+  // Move the high part of the double into the higher of the corresponding FPU
+  // register of FPU register pair.
+  li(at, Operand(hi));
+  mtc1(at, FPURegister::from_code(dst.code() + 1));
+}
+
 
 // Tries to get a signed int32 out of a double precision floating point heap
 // number. Rounds towards 0. Branch to 'not_int32' if the double is out of the

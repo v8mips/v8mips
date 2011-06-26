@@ -595,7 +595,7 @@ FunctionLiteral* Parser::ParseProgram(Handle<String> source,
 
   HistogramTimerScope timer(isolate()->counters()->parse());
   isolate()->counters()->total_parse_size()->Increment(source->length());
-  fni_ = new(zone()) FuncNameInferrer();
+  fni_ = new(zone()) FuncNameInferrer(isolate());
 
   // Initialize parser state.
   source->TryFlatten();
@@ -657,6 +657,7 @@ FunctionLiteral* Parser::DoParseProgram(Handle<String> source,
           0,
           0,
           source->length(),
+          false,
           false);
     } else if (stack_overflow_) {
       isolate()->StackOverflow();
@@ -706,7 +707,7 @@ FunctionLiteral* Parser::ParseLazy(CompilationInfo* info,
   ASSERT(target_stack_ == NULL);
 
   Handle<String> name(String::cast(shared_info->name()));
-  fni_ = new(zone()) FuncNameInferrer();
+  fni_ = new(zone()) FuncNameInferrer(isolate());
   fni_->PushEnclosingName(name);
 
   mode_ = PARSE_EAGERLY;
@@ -1268,9 +1269,6 @@ Statement* Parser::ParseStatement(ZoneStringList* labels, bool* ok) {
       return ParseFunctionDeclaration(ok);
     }
 
-    case Token::NATIVE:
-      return ParseNativeDeclaration(ok);
-
     case Token::DEBUGGER:
       stmt = ParseDebuggerStatement(ok);
       break;
@@ -1391,13 +1389,6 @@ VariableProxy* Parser::Declare(Handle<String> name,
 // declaration is resolved by looking up the function through a
 // callback provided by the extension.
 Statement* Parser::ParseNativeDeclaration(bool* ok) {
-  if (extension_ == NULL) {
-    ReportUnexpectedToken(Token::NATIVE);
-    *ok = false;
-    return NULL;
-  }
-
-  Expect(Token::NATIVE, CHECK_OK);
   Expect(Token::FUNCTION, CHECK_OK);
   Handle<String> name = ParseIdentifier(CHECK_OK);
   Expect(Token::LPAREN, CHECK_OK);
@@ -1622,7 +1613,11 @@ Block* Parser::ParseVariableDeclarations(bool accept_IN,
       position = scanner().location().beg_pos;
       value = ParseAssignmentExpression(accept_IN, CHECK_OK);
       // Don't infer if it is "a = function(){...}();"-like expression.
-      if (fni_ != NULL && value->AsCall() == NULL) fni_->Infer();
+      if (fni_ != NULL &&
+          value->AsCall() == NULL &&
+          value->AsCallNew() == NULL) {
+        fni_->Infer();
+      }
     }
 
     // Make sure that 'const c' actually initializes 'c' to undefined
@@ -1750,7 +1745,7 @@ Statement* Parser::ParseExpressionOrLabelledStatement(ZoneStringList* labels,
   //   Identifier ':' Statement
   bool starts_with_idenfifier = peek_any_identifier();
   Expression* expr = ParseExpression(true, CHECK_OK);
-  if (peek() == Token::COLON && starts_with_idenfifier && expr &&
+  if (peek() == Token::COLON && starts_with_idenfifier && expr != NULL &&
       expr->AsVariableProxy() != NULL &&
       !expr->AsVariableProxy()->is_this()) {
     // Expression is a single identifier, and not, e.g., a parenthesized
@@ -1778,6 +1773,20 @@ Statement* Parser::ParseExpressionOrLabelledStatement(ZoneStringList* labels,
     top_scope_->RemoveUnresolved(var);
     Expect(Token::COLON, CHECK_OK);
     return ParseStatement(labels, ok);
+  }
+
+  // If we have an extension, we allow a native function declaration.
+  // A native function declaration starts with "native function" with
+  // no line-terminator between the two words.
+  if (extension_ != NULL &&
+      peek() == Token::FUNCTION &&
+      !scanner().HasAnyLineTerminatorBeforeNext() &&
+      expr != NULL &&
+      expr->AsVariableProxy() != NULL &&
+      expr->AsVariableProxy()->name()->Equals(
+          isolate()->heap()->native_symbol()) &&
+      !scanner().literal_contains_escapes()) {
+    return ParseNativeDeclaration(ok);
   }
 
   // Parsed expression statement.
@@ -1813,7 +1822,7 @@ Statement* Parser::ParseContinueStatement(bool* ok) {
   Expect(Token::CONTINUE, CHECK_OK);
   Handle<String> label = Handle<String>::null();
   Token::Value tok = peek();
-  if (!scanner().has_line_terminator_before_next() &&
+  if (!scanner().HasAnyLineTerminatorBeforeNext() &&
       tok != Token::SEMICOLON && tok != Token::RBRACE && tok != Token::EOS) {
     label = ParseIdentifier(CHECK_OK);
   }
@@ -1843,7 +1852,7 @@ Statement* Parser::ParseBreakStatement(ZoneStringList* labels, bool* ok) {
   Expect(Token::BREAK, CHECK_OK);
   Handle<String> label;
   Token::Value tok = peek();
-  if (!scanner().has_line_terminator_before_next() &&
+  if (!scanner().HasAnyLineTerminatorBeforeNext() &&
       tok != Token::SEMICOLON && tok != Token::RBRACE && tok != Token::EOS) {
     label = ParseIdentifier(CHECK_OK);
   }
@@ -1892,7 +1901,7 @@ Statement* Parser::ParseReturnStatement(bool* ok) {
   }
 
   Token::Value tok = peek();
-  if (scanner().has_line_terminator_before_next() ||
+  if (scanner().HasAnyLineTerminatorBeforeNext() ||
       tok == Token::SEMICOLON ||
       tok == Token::RBRACE ||
       tok == Token::EOS) {
@@ -2027,7 +2036,7 @@ Statement* Parser::ParseThrowStatement(bool* ok) {
 
   Expect(Token::THROW, CHECK_OK);
   int pos = scanner().location().beg_pos;
-  if (scanner().has_line_terminator_before_next()) {
+  if (scanner().HasAnyLineTerminatorBeforeNext()) {
     ReportMessage("newline_after_throw", Vector<const char*>::empty());
     *ok = false;
     return NULL;
@@ -2375,7 +2384,7 @@ Expression* Parser::ParseAssignmentExpression(bool accept_IN, bool* ok) {
     if ((op == Token::INIT_VAR
          || op == Token::INIT_CONST
          || op == Token::ASSIGN)
-        && (right->AsCall() == NULL)) {
+        && (right->AsCall() == NULL && right->AsCallNew() == NULL)) {
       fni_->Infer();
     }
     fni_->Leave();
@@ -2544,18 +2553,26 @@ Expression* Parser::ParseUnaryExpression(bool* ok) {
     int position = scanner().location().beg_pos;
     Expression* expression = ParseUnaryExpression(CHECK_OK);
 
-    // Compute some expressions involving only number literals.
-    if (expression != NULL && expression->AsLiteral() &&
-        expression->AsLiteral()->handle()->IsNumber()) {
-      double value = expression->AsLiteral()->handle()->Number();
-      switch (op) {
-        case Token::ADD:
-          return expression;
-        case Token::SUB:
-          return NewNumberLiteral(-value);
-        case Token::BIT_NOT:
-          return NewNumberLiteral(~DoubleToInt32(value));
-        default: break;
+    if (expression != NULL && (expression->AsLiteral() != NULL)) {
+      Handle<Object> literal = expression->AsLiteral()->handle();
+      if (op == Token::NOT) {
+        // Convert the literal to a boolean condition and negate it.
+        bool condition = literal->ToBoolean()->IsTrue();
+        Handle<Object> result(isolate()->heap()->ToBoolean(!condition));
+        return new(zone()) Literal(result);
+      } else if (literal->IsNumber()) {
+        // Compute some expressions involving only number literals.
+        double value = literal->Number();
+        switch (op) {
+          case Token::ADD:
+            return expression;
+          case Token::SUB:
+            return NewNumberLiteral(-value);
+          case Token::BIT_NOT:
+            return NewNumberLiteral(~DoubleToInt32(value));
+          default:
+            break;
+        }
       }
     }
 
@@ -2606,7 +2623,7 @@ Expression* Parser::ParsePostfixExpression(bool* ok) {
   //   LeftHandSideExpression ('++' | '--')?
 
   Expression* expression = ParseLeftHandSideExpression(CHECK_OK);
-  if (!scanner().has_line_terminator_before_next() &&
+  if (!scanner().HasAnyLineTerminatorBeforeNext() &&
       Token::IsCountOp(peek())) {
     // Signal a reference error if the expression is an invalid
     // left-hand side expression.  We could report this as a syntax
@@ -2774,6 +2791,14 @@ Expression* Parser::ParseMemberWithNewPrefixesExpression(PositionStack* stack,
         int pos = scanner().location().beg_pos;
         Expression* index = ParseExpression(true, CHECK_OK);
         result = new(zone()) Property(result, index, pos);
+        if (fni_ != NULL) {
+          if (index->IsPropertyName()) {
+            fni_->PushLiteralName(index->AsLiteral()->AsPropertyName());
+          } else {
+            fni_->PushLiteralName(
+                isolate()->factory()->anonymous_function_symbol());
+          }
+        }
         Expect(Token::RBRACK, CHECK_OK);
         break;
       }
@@ -3549,6 +3574,7 @@ FunctionLiteral* Parser::ParseFunctionLiteral(Handle<String> var_name,
   int end_pos;
   bool only_simple_this_property_assignments;
   Handle<FixedArray> this_property_assignments;
+  bool has_duplicate_parameters = false;
   // Parse function body.
   { LexicalScope lexical_scope(this, scope, isolate());
     top_scope_->SetScopeName(name);
@@ -3572,6 +3598,7 @@ FunctionLiteral* Parser::ParseFunctionLiteral(Handle<String> var_name,
         name_loc = scanner().location();
       }
       if (!dupe_loc.IsValid() && top_scope_->IsDeclared(param_name)) {
+        has_duplicate_parameters = true;
         dupe_loc = scanner().location();
       }
       if (!reserved_loc.IsValid() && is_reserved) {
@@ -3707,7 +3734,8 @@ FunctionLiteral* Parser::ParseFunctionLiteral(Handle<String> var_name,
                                   num_parameters,
                                   start_pos,
                                   end_pos,
-                                  (function_name->length() > 0));
+                                  (function_name->length() > 0),
+                                  has_duplicate_parameters);
   function_literal->set_function_token_position(function_token_position);
 
   if (fni_ != NULL && !is_named) fni_->AddFunction(function_literal);
@@ -3802,7 +3830,7 @@ void Parser::ExpectSemicolon(bool* ok) {
     Next();
     return;
   }
-  if (scanner().has_line_terminator_before_next() ||
+  if (scanner().HasAnyLineTerminatorBeforeNext() ||
       tok == Token::RBRACE ||
       tok == Token::EOS) {
     return;
@@ -4898,7 +4926,7 @@ static ScriptDataImpl* DoPreParse(UC16CharacterStream* source,
                                   bool allow_lazy,
                                   ParserRecorder* recorder) {
   Isolate* isolate = Isolate::Current();
-  V8JavaScriptScanner scanner(isolate->unicode_cache());
+  JavaScriptScanner scanner(isolate->unicode_cache());
   scanner.Initialize(source);
   intptr_t stack_limit = isolate->stack_guard()->real_climit();
   if (!preparser::PreParser::PreParseProgram(&scanner,
@@ -4970,6 +4998,7 @@ bool ParserApi::Parse(CompilationInfo* info) {
     Parser parser(script, true, NULL, NULL);
     result = parser.ParseLazy(info);
   } else {
+    // Whether we allow %identifier(..) syntax.
     bool allow_natives_syntax =
         info->allows_natives_syntax() || FLAG_allow_natives_syntax;
     ScriptDataImpl* pre_data = info->pre_parse_data();

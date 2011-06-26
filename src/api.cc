@@ -884,6 +884,7 @@ static void InitializeFunctionTemplate(
       i::Handle<i::FunctionTemplateInfo> info) {
   info->set_tag(i::Smi::FromInt(Consts::FUNCTION_TEMPLATE));
   info->set_flag(0);
+  info->set_prototype_attributes(i::Smi::FromInt(v8::None));
 }
 
 
@@ -1103,6 +1104,17 @@ void FunctionTemplate::SetHiddenPrototype(bool value) {
   }
   ENTER_V8(isolate);
   Utils::OpenHandle(this)->set_hidden_prototype(value);
+}
+
+
+void FunctionTemplate::SetPrototypeAttributes(int attributes) {
+  i::Isolate* isolate = Utils::OpenHandle(this)->GetIsolate();
+  if (IsDeadCheck(isolate, "v8::FunctionTemplate::SetPrototypeAttributes()")) {
+    return;
+  }
+  ENTER_V8(isolate);
+  Utils::OpenHandle(this)->set_prototype_attributes(
+      i::Smi::FromInt(attributes));
 }
 
 
@@ -5882,6 +5894,29 @@ const HeapGraphNode* HeapSnapshot::GetNodeById(uint64_t id) const {
       ToInternal(this)->GetEntryById(id));
 #else
   return NULL;
+#endif
+}
+
+
+int HeapSnapshot::GetNodesCount() const {
+#ifdef ENABLE_LOGGING_AND_PROFILING
+  i::Isolate* isolate = i::Isolate::Current();
+  IsDeadCheck(isolate, "v8::HeapSnapshot::GetNodesCount");
+  return ToInternal(this)->entries()->length();
+#else
+  return 0;
+#endif
+}
+
+
+const HeapGraphNode* HeapSnapshot::GetNode(int index) const {
+#ifdef ENABLE_LOGGING_AND_PROFILING
+  i::Isolate* isolate = i::Isolate::Current();
+  IsDeadCheck(isolate, "v8::HeapSnapshot::GetNode");
+  return reinterpret_cast<const HeapGraphNode*>(
+      ToInternal(this)->entries()->at(index));
+#else
+  return 0;
 #endif
 }
 

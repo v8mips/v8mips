@@ -1,4 +1,4 @@
-// Copyright 2009 the V8 project authors. All rights reserved.
+// Copyright 2011 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -613,19 +613,6 @@ void Shell::Initialize() {
   utility_context_->SetSecurityToken(Undefined());
   Context::Scope utility_scope(utility_context_);
 
-  i::JSArguments js_args = i::FLAG_js_arguments;
-  i::Handle<i::FixedArray> arguments_array =
-      FACTORY->NewFixedArray(js_args.argc());
-  for (int j = 0; j < js_args.argc(); j++) {
-    i::Handle<i::String> arg =
-        FACTORY->NewStringFromUtf8(i::CStrVector(js_args[j]));
-    arguments_array->set(j, *arg);
-  }
-  i::Handle<i::JSArray> arguments_jsarray =
-      FACTORY->NewJSArrayWithElements(arguments_array);
-  global_template->Set(String::New("arguments"),
-                       Utils::ToLocal(arguments_jsarray));
-
 #ifdef ENABLE_DEBUGGER_SUPPORT
   // Install the debugger object in the utility scope
   i::Debug* debug = i::Isolate::Current()->debug();
@@ -649,6 +636,20 @@ void Shell::RenewEvaluationContext() {
   }
   evaluation_context_ = Context::New(NULL, global_template);
   evaluation_context_->SetSecurityToken(Undefined());
+
+  Context::Scope utility_scope(utility_context_);
+  i::JSArguments js_args = i::FLAG_js_arguments;
+  i::Handle<i::FixedArray> arguments_array =
+      FACTORY->NewFixedArray(js_args.argc());
+  for (int j = 0; j < js_args.argc(); j++) {
+    i::Handle<i::String> arg =
+        FACTORY->NewStringFromUtf8(i::CStrVector(js_args[j]));
+    arguments_array->set(j, *arg);
+  }
+  i::Handle<i::JSArray> arguments_jsarray =
+      FACTORY->NewJSArrayWithElements(arguments_array);
+  evaluation_context_->Global()->Set(String::New("arguments"),
+                                     Utils::ToLocal(arguments_jsarray));
 
 #ifdef ENABLE_DEBUGGER_SUPPORT
   i::Debug* debug = i::Isolate::Current()->debug();
@@ -921,7 +922,7 @@ int Shell::Main(int argc, char* argv[]) {
   // optimization in the last run.
   bool FLAG_stress_opt = false;
   bool FLAG_stress_deopt = false;
-  bool run_shell = (argc == 1);
+  bool FLAG_run_shell = false;
 
   for (int i = 0; i < argc; i++) {
     if (strcmp(argv[i], "--stress-opt") == 0) {
@@ -935,12 +936,16 @@ int Shell::Main(int argc, char* argv[]) {
       FLAG_stress_opt = false;
       FLAG_stress_deopt = false;
     } else if (strcmp(argv[i], "--shell") == 0) {
-      run_shell = true;
+      FLAG_run_shell = true;
       argv[i] = NULL;
     }
   }
 
   v8::V8::SetFlagsFromCommandLine(&argc, argv, true);
+
+  // Allow SetFlagsFromCommandLine to decrement argc before deciding to
+  // run the shell or not.
+  bool run_shell = FLAG_run_shell || (argc == 1);
 
   Initialize();
 
