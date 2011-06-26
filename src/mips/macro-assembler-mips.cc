@@ -4024,7 +4024,7 @@ int MacroAssembler::CalculateStackPassedWords(int num_reg_arguments,
   if (num_reg_arguments > kRegisterPassedArguments) {
     stack_passed_words += num_reg_arguments - kRegisterPassedArguments;
   }
-  stack_passed_words += StandardFrameConstants::kCArgsSlotsSize / kPointerSize;
+  stack_passed_words += kCArgSlotCount;
   return stack_passed_words;
 }
 
@@ -4039,7 +4039,6 @@ void MacroAssembler::PrepareCallCFunction(int num_reg_arguments,
   // mips, even though those argument slots are not normally used.
   // Remaining arguments are pushed on the stack, above (higher address than)
   // the argument slots.
-  ASSERT(StandardFrameConstants::kCArgsSlotsSize % kPointerSize == 0);
   int stack_passed_arguments = CalculateStackPassedWords(
       num_reg_arguments, num_double_arguments);
   if (frame_alignment > kPointerSize) {
@@ -4140,7 +4139,6 @@ void MacroAssembler::CallCFunctionHelper(Register function,
 
   Call(function);
 
-  ASSERT(StandardFrameConstants::kCArgsSlotsSize % kPointerSize == 0);
   int stack_passed_arguments = CalculateStackPassedWords(
       num_reg_arguments, num_double_arguments);
 

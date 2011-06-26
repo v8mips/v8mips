@@ -3566,7 +3566,7 @@ void CEntryStub::GenerateCore(MacroAssembler* masm,
     const int kNumInstructionsToJump = 6;
     masm->Addu(ra, ra, kNumInstructionsToJump * kPointerSize);
     masm->sw(ra, MemOperand(sp));  // This spot was reserved in EnterExitFrame.
-    masm->Subu(sp, sp, StandardFrameConstants::kCArgsSlotsSize);
+    masm->Subu(sp, sp, kCArgsSlotsSize);
     // Stack is still aligned.
 
     // Call the C routine.
@@ -3579,7 +3579,7 @@ void CEntryStub::GenerateCore(MacroAssembler* masm,
   }
 
   // Restore stack (remove arg slots).
-  __ Addu(sp, sp, StandardFrameConstants::kCArgsSlotsSize);
+  __ Addu(sp, sp, kCArgsSlotsSize);
 
   if (always_allocate) {
     // It's okay to clobber a2 and a3 here. v0 & v1 contain result.
@@ -3725,7 +3725,7 @@ void JSEntryStub::GenerateBody(MacroAssembler* masm, bool is_construct) {
 
   // Load argv in s0 register.
   __ lw(s0, MemOperand(sp, (kNumCalleeSaved + 1) * kPointerSize +
-                           StandardFrameConstants::kCArgsSlotsSize));
+                           kCArgsSlotsSize));
 
   // We build an EntryFrame.
   __ li(t3, Operand(-1));  // Push a bad frame pointer to fail if it is used.
