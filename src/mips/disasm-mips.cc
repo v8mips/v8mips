@@ -958,7 +958,7 @@ int Decoder::InstructionDecode(byte* instr_ptr) {
       break;
     }
     default: {
-      UNSUPPORTED_MIPS();
+      Unknown(instr);
     }
   }
   return Instruction::kInstrSize;

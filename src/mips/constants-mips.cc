@@ -272,7 +272,7 @@ Instruction::Type Instruction::InstructionType() const {
         case MOVCI:
           return kRegisterType;
         default:
-          UNREACHABLE();
+          return kUnsupported;
       };
       break;
     case SPECIAL2:
