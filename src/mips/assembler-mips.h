@@ -363,6 +363,7 @@ class Operand BASE_EMBEDDED {
 class MemOperand : public Operand {
  public:
   explicit MemOperand(Register rn, int32_t offset = 0);
+  int32_t offset() const { return offset_; }
 
   bool OffsetIsInt16Encodable() const {
     return is_int16(offset_);
@@ -518,6 +519,9 @@ class Assembler : public AssemblerBase {
   // Note: The same Label can be used for forward and backward branches
   // but it may be bound only once.
   void bind(Label* L);  // Binds an unbound label L to current code position.
+  // Determines if Label is bound and near enough so that branch instruction
+  // can be used to reach it, instead of jump instruction.
+  bool is_near(Label* L);
 
   // Returns the branch offset to the given label from the current code
   // position. Links the label to the current position if it is still unbound.
@@ -528,6 +532,7 @@ class Assembler : public AssemblerBase {
     ASSERT((o & 3) == 0);   // Assert the offset is aligned.
     return o >> 2;
   }
+  uint32_t jump_address(Label* L);
 
   // Puts a labels target address at the given position.
   // The high 8 bits are set to zero.
@@ -678,9 +683,9 @@ class Assembler : public AssemblerBase {
   void nor(Register rd, Register rs, Register rt);
 
   void andi(Register rd, Register rs, int32_t j);
-  void ori(Register rd, Register rs, int32_t j);
+  void ori(Register rd, Register rs, int32_t j, bool check_buffer = true);
   void xori(Register rd, Register rs, int32_t j);
-  void lui(Register rd, int32_t j);
+  void lui(Register rd, int32_t j, bool check_buffer = true);
 
   // Shifts.
   // Please note: sll(zero_reg, zero_reg, x) instructions are reserved as nop
@@ -848,6 +853,8 @@ class Assembler : public AssemblerBase {
   // Use --code-comments to enable.
   void RecordComment(const char* msg);
 
+  static void RelocateInternalReference(byte* pc, intptr_t pc_delta);
+
   // Writes a single byte or word of data in the code stream.  Used for
   // inline tables, e.g., jump-tables.
   void db(uint8_t data);
@@ -884,6 +891,11 @@ class Assembler : public AssemblerBase {
   static bool IsBeq(Instr instr);
   static bool IsBne(Instr instr);
 
+  static bool IsJump(Instr instr);
+  static bool IsJ(Instr instr);
+  static bool IsLui(Instr instr);
+  static bool IsOri(Instr instr);
+
   static bool IsNop(Instr instr, unsigned int type);
   static bool IsPop(Instr instr);
   static bool IsPush(Instr instr);
@@ -905,6 +917,8 @@ class Assembler : public AssemblerBase {
   static uint32_t GetSa(Instr instr);
   static uint32_t GetSaField(Instr instr);
   static uint32_t GetOpcodeField(Instr instr);
+  static uint32_t GetFunction(Instr instr);
+  static uint32_t GetFunctionField(Instr instr);
   static uint32_t GetImmediate16(Instr instr);
   static uint32_t GetLabelConst(Instr instr);
 
@@ -920,7 +934,7 @@ class Assembler : public AssemblerBase {
 
   static bool IsAndImmediate(Instr instr);
 
-  void CheckTrampolinePool(bool force_emit = false);
+  void CheckTrampolinePool();
 
  protected:
   // Relocation for a type-recording IC has the AST id added to it.  This
@@ -967,6 +981,10 @@ class Assembler : public AssemblerBase {
 
   void DoubleAsTwoUInt32(double d, uint32_t* lo, uint32_t* hi);
 
+  bool is_trampoline_emitted() const {
+    return trampoline_emitted_;
+  }
+
  private:
   // Code buffer:
   // The buffer into which code and relocation info are generated.
@@ -983,8 +1001,10 @@ class Assembler : public AssemblerBase {
   // The relocation writer's position is at least kGap bytes below the end of
   // the generated instructions. This is so that multi-instruction sequences do
   // not have to check for overflow. The same is true for writes of large
-  // relocation info entries.
-  static const int kGap = 32;
+  // relocation info entries. MIPS uses 8 bytes more than other architectures,
+  // because it does not check for this gap when instructions with internal
+  // reference relocation info are emitted.
+  static const int kGap = 40;
   byte* pc_;  // The program counter - moves forward.
 
 
@@ -1014,7 +1034,7 @@ class Assembler : public AssemblerBase {
   // Code emission.
   inline void CheckBuffer();
   void GrowBuffer();
-  inline void emit(Instr x);
+  inline void emit(Instr x, bool check_buffer = true);
   inline void CheckTrampolinePoolQuick();
 
   // Instruction generation.
@@ -1063,7 +1083,8 @@ class Assembler : public AssemblerBase {
   void GenInstrImmediate(Opcode opcode,
                          Register rs,
                          Register rt,
-                         int32_t  j);
+                         int32_t  j,
+                         bool check_buffer = true);
   void GenInstrImmediate(Opcode opcode,
                          Register rs,
                          SecondaryField SF,
@@ -1083,7 +1104,6 @@ class Assembler : public AssemblerBase {
   // Labels.
   void print(Label* L);
   void bind_to(Label* L, int pos);
-  void link_to(Label* L, Label* appendix);
   void next(Label* L);
 
   // One trampoline consists of:
@@ -1096,13 +1116,17 @@ class Assembler : public AssemblerBase {
   // label_count *  kInstrSize.
   class Trampoline {
    public:
-    Trampoline(int start, int slot_count, int label_count) {
+    Trampoline() {
+      start_ = 0;
+      next_slot_ = 0;
+      free_slot_count_ = 0;
+      end_ = 0;
+    }
+    Trampoline(int start, int slot_count) {
       start_ = start;
       next_slot_ = start;
       free_slot_count_ = slot_count;
-      next_label_ = start + slot_count * 2 * kInstrSize;
-      free_label_count_ = label_count;
-      end_ = next_label_ + (label_count - 1) * kInstrSize;
+      end_ = start + slot_count * kTrampolineSlotsSize;
     }
     int start() {
       return start_;
@@ -1121,41 +1145,30 @@ class Assembler : public AssemblerBase {
       } else {
         trampoline_slot = next_slot_;
         free_slot_count_--;
-        next_slot_ += 2*kInstrSize;
+        next_slot_ += kTrampolineSlotsSize;
       }
       return trampoline_slot;
     }
-    int take_label() {
-      int label_pos = next_label_;
-      ASSERT(free_label_count_ > 0);
-      free_label_count_--;
-      next_label_ += kInstrSize;
-      return label_pos;
-    }
-
    private:
     int start_;
     int end_;
     int next_slot_;
     int free_slot_count_;
-    int next_label_;
-    int free_label_count_;
   };
 
-  int32_t get_label_entry(int32_t pos, bool next_pool = true);
-  int32_t get_trampoline_entry(int32_t pos, bool next_pool = true);
-
-  static const int kSlotsPerTrampoline = 2304;
-  static const int kLabelsPerTrampoline = 8;
-  static const int kTrampolineInst =
-      2 * kSlotsPerTrampoline + kLabelsPerTrampoline;
-  static const int kTrampolineSize = kTrampolineInst * kInstrSize;
+  int32_t get_trampoline_entry(int32_t pos);
+  int unbound_labels_count;
+  // If trampoline is emitted, generated code is becoming large. As this is
+  // already a slow case which can possibly break our code generation for
+  // extreme case, we use this information to trigger different mode for
+  // branch instruction generation, where we use jump instructions rather
+  // than regular branch instructions.
+  bool trampoline_emitted_;
+  static const int kTrampolineSlotsSize = 4 * kInstrSize;
   static const int kMaxBranchOffset = (1 << (18 - 1)) - 1;
-  static const int kMaxDistBetweenPools =
-      kMaxBranchOffset - 2 * kTrampolineSize;
   static const int kInvalidSlotPos = -1;
 
-  List<Trampoline> trampolines_;
+  Trampoline trampoline_;
   bool internal_trampoline_exception_;
 
   friend class RegExpMacroAssemblerMIPS;
