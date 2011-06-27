@@ -2938,8 +2938,10 @@ void MacroAssembler::InvokeCode(Register code,
   InvokePrologue(expected, actual, Handle<Code>::null(), code, &done, flag,
                  call_wrapper, call_kind);
   if (flag == CALL_FUNCTION) {
+    call_wrapper.BeforeCall(CallSize(code));
     SetCallKind(t1, call_kind);
     Call(code);
+    call_wrapper.AfterCall();
   } else {
     ASSERT(flag == JUMP_FUNCTION);
     SetCallKind(t1, call_kind);
