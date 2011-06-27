@@ -958,6 +958,7 @@ int Decoder::InstructionDecode(byte* instr_ptr) {
       break;
     }
     default: {
+      Format(instr, "UNSUPPORTED");
       UNSUPPORTED_MIPS();
     }
   }
