@@ -1908,9 +1908,12 @@ void MacroAssembler::J(Label* L, BranchDelaySlot bdslot) {
   uint32_t imm28;
   imm28 = jump_address(L);
   imm28 &= kImm28Mask;
-  RecordRelocInfo(RelocInfo::INTERNAL_REFERENCE);
-  j(imm28);
-
+  { BlockGrowBufferScope block_buf_growth(this);
+    // Buffer growth (and relocation) must be blocked for internal references
+    // until associated instructions are emitted and available to be patched.
+    RecordRelocInfo(RelocInfo::INTERNAL_REFERENCE);
+    j(imm28);
+  }
   // Emit a nop in the branch delay slot if required.
   if (bdslot == PROTECT)
     nop();
@@ -1922,9 +1925,13 @@ void MacroAssembler::Jr(Label* L, BranchDelaySlot bdslot) {
 
   uint32_t imm32;
   imm32 = jump_address(L);
-  RecordRelocInfo(RelocInfo::INTERNAL_REFERENCE);
-  lui(at, (imm32 & kHiMask) >> kLuiShift, false);
-  ori(at, at, (imm32 & kImm16Mask), false);
+  { BlockGrowBufferScope block_buf_growth(this);
+    // Buffer growth (and relocation) must be blocked for internal references
+    // until associated instructions are emitted and available to be patched.
+    RecordRelocInfo(RelocInfo::INTERNAL_REFERENCE);
+    lui(at, (imm32 & kHiMask) >> kLuiShift);
+    ori(at, at, (imm32 & kImm16Mask));
+  }
   jr(at);
 
   // Emit a nop in the branch delay slot if required.
@@ -1938,9 +1945,13 @@ void MacroAssembler::Jalr(Label* L, BranchDelaySlot bdslot) {
 
   uint32_t imm32;
   imm32 = jump_address(L);
-  RecordRelocInfo(RelocInfo::INTERNAL_REFERENCE);
-  lui(at, (imm32 & kHiMask) >> kLuiShift, false);
-  ori(at, at, (imm32 & kImm16Mask), false);
+  { BlockGrowBufferScope block_buf_growth(this);
+    // Buffer growth (and relocation) must be blocked for internal references
+    // until associated instructions are emitted and available to be patched.
+    RecordRelocInfo(RelocInfo::INTERNAL_REFERENCE);
+    lui(at, (imm32 & kHiMask) >> kLuiShift);
+    ori(at, at, (imm32 & kImm16Mask));
+  }
   jalr(at);
 
   // Emit a nop in the branch delay slot if required.

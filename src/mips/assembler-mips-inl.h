@@ -86,8 +86,8 @@ void RelocInfo::apply(intptr_t delta) {
   if (IsInternalReference(rmode_)) {
     // Absolute code pointer inside code object moves with the code object.
     byte* p = reinterpret_cast<byte*>(pc_);
-    Assembler::RelocateInternalReference(p, delta);
-    CPU::FlushICache(p, sizeof(uint32_t));
+    int count = Assembler::RelocateInternalReference(p, delta);
+    CPU::FlushICache(p, count * sizeof(uint32_t));
   }
 }
 
@@ -303,8 +303,8 @@ void Assembler::CheckTrampolinePoolQuick() {
 }
 
 
-void Assembler::emit(Instr x, bool check_buffer) {
-  if (check_buffer) {
+void Assembler::emit(Instr x) {
+  if (!is_buffer_growth_blocked()) {
     CheckBuffer();
   }
   *reinterpret_cast<Instr*>(pc_) = x;
