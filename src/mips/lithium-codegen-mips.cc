@@ -2850,12 +2850,49 @@ void LCodeGen::DoDeferredStringCharCodeAt(LStringCharCodeAt* instr) {
 
 
 void LCodeGen::DoStringCharFromCode(LStringCharFromCode* instr) {
-  Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
+  class DeferredStringCharFromCode: public LDeferredCode {
+   public:
+    DeferredStringCharFromCode(LCodeGen* codegen, LStringCharFromCode* instr)
+        : LDeferredCode(codegen), instr_(instr) { }
+    virtual void Generate() { codegen()->DoDeferredStringCharFromCode(instr_); }
+   private:
+    LStringCharFromCode* instr_;
+  };
+
+  DeferredStringCharFromCode* deferred =
+      new DeferredStringCharFromCode(this, instr);
+
+  ASSERT(instr->hydrogen()->value()->representation().IsInteger32());
+  Register char_code = ToRegister(instr->char_code());
+  Register result = ToRegister(instr->result());
+  Register scratch = scratch0();
+  ASSERT(!char_code.is(result));
+
+  __ Branch(deferred->entry(), hi, char_code, Operand(String::kMaxAsciiCharCode));
+  __ LoadRoot(result, Heap::kSingleCharacterStringCacheRootIndex);
+  __ sll(scratch, char_code, kPointerSizeLog2);
+  __ Addu(result, result, scratch);
+  __ lw(result, FieldMemOperand(result, FixedArray::kHeaderSize));
+  __ LoadRoot(scratch, Heap::kUndefinedValueRootIndex);
+  __ Branch(deferred->entry(), eq, result, Operand(scratch));
+  __ bind(deferred->exit());
 }
 
 
 void LCodeGen::DoDeferredStringCharFromCode(LStringCharFromCode* instr) {
-  Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
+  Register char_code = ToRegister(instr->char_code());
+  Register result = ToRegister(instr->result());
+
+  // TODO(3095996): Get rid of this. For now, we need to make the
+  // result register contain a valid pointer because it is already
+  // contained in the register pointer map.
+  __ mov(result, zero_reg);
+
+  PushSafepointRegistersScope scope(this, Safepoint::kWithRegisters);
+  __ SmiTag(char_code);
+  __ push(char_code);
+  CallRuntimeFromDeferred(Runtime::kCharFromCode, 1, instr);
+  __ StoreToSafepointRegisterSlot(v0, result);
 }
 
 
