@@ -1691,18 +1691,63 @@ Condition LCodeGen::EmitIsObject(Register input,
                                  Register temp2,
                                  Label* is_not_object,
                                  Label* is_object) {
-  Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
-  return al;
+  __ JumpIfSmi(input, is_not_object);
+
+  __ LoadRoot(temp1, Heap::kNullValueRootIndex);
+  __ Branch(is_object, eq, input, Operand(temp1));
+
+  // Load map.
+  __ lw(temp1, FieldMemOperand(input, HeapObject::kMapOffset));
+  // Undetectable objects behave like undefined.
+  __ lbu(temp2, FieldMemOperand(temp1, Map::kBitFieldOffset));
+  __ And(temp2, temp2, Operand(1 << Map::kIsUndetectable));
+  __ Branch(is_not_object, ne, temp2,
+            Operand(1 << Map::kIsUndetectable));
+
+  // Load instance type and check that it is in object type range.
+  __ lbu(temp2, FieldMemOperand(temp1, Map::kInstanceTypeOffset));
+  __ Branch(is_not_object, lt, temp2, Operand(FIRST_NONCALLABLE_SPEC_OBJECT_TYPE));
+
+  return le;
 }
 
 
 void LCodeGen::DoIsObject(LIsObject* instr) {
-  Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
+  Register reg = ToRegister(instr->InputAt(0));
+  Register result = ToRegister(instr->result());
+  Register temp = scratch0();
+  Label is_false, is_true, done;
+
+  Condition true_cond = EmitIsObject(reg, result, temp, &is_false, &is_true);
+  __ Branch(&is_true, true_cond, temp,
+            Operand(LAST_NONCALLABLE_SPEC_OBJECT_TYPE));
+
+  __ bind(&is_false);
+  __ LoadRoot(result, Heap::kFalseValueRootIndex);
+  __ Branch(&done);
+
+  __ bind(&is_true);
+  __ LoadRoot(result, Heap::kTrueValueRootIndex);
+
+  __ bind(&done);
 }
 
 
 void LCodeGen::DoIsObjectAndBranch(LIsObjectAndBranch* instr) {
-  Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
+  Register reg = ToRegister(instr->InputAt(0));
+  Register temp1 = ToRegister(instr->TempAt(0));
+  Register temp2 = scratch0();
+
+  int true_block = chunk_->LookupDestination(instr->true_block_id());
+  int false_block = chunk_->LookupDestination(instr->false_block_id());
+  Label* true_label = chunk_->GetAssemblyLabel(true_block);
+  Label* false_label = chunk_->GetAssemblyLabel(false_block);
+
+  Condition true_cond =
+      EmitIsObject(reg, temp1, temp2, false_label, true_label);
+
+  EmitBranch(true_block, false_block, true_cond, temp2,
+             Operand(LAST_NONCALLABLE_SPEC_OBJECT_TYPE));
 }
 
 
