@@ -2259,14 +2259,19 @@ void LCodeGen::DoAccessArgumentsAt(LAccessArgumentsAt* instr) {
 
   // Bailout index is not a valid argument index. Use unsigned check to get
   // negative check for free.
+  
+  // TODO(plind): I cannot quite grok the negative index bit. I am sure
+  // this can be optimized to the the sub before the DeoptimizeIf(),
+  // as they do in Arm. It will save us an instruction.
   DeoptimizeIf(ls, instr->environment(), length, Operand(index));
 
   // There are two words between the frame pointer and the last argument.
-  // Subtracting from length accounts for one of them add one more.
+  // Subtracting from length accounts for one of them, add one more.
+  __ subu(length, length, index);
   __ Addu(length, length, Operand(1));
   __ sll(length, length, kPointerSizeLog2);
-  __ Addu(arguments, arguments, Operand(length));
-  __ lw(result, MemOperand(arguments, 0));
+  __ Addu(at, arguments, Operand(length));
+  __ lw(result, MemOperand(at, 0));
 }
 
 
