@@ -1436,7 +1436,7 @@ void LCodeGen::DoBranch(LBranch* instr) {
       // __ VFPCompareAndLoadFlags(dbl_scratch, 0.0, scratch);
       // __ tst(scratch, Operand(kVFPZConditionFlagBit | kVFPVConditionFlagBit));
       // __ b(ne, false_label);
-      // __ b(true_label);
+      // __ Branch(true_label);
 
       // The conversion stub doesn't cause garbage collections so it's
       // safe to not record a safepoint after the call.
@@ -3057,7 +3057,7 @@ void LCodeGen::DoDeferredNumberTagI(LNumberTagI* instr) {
     __ LoadRoot(t2, Heap::kHeapNumberMapRootIndex);
     __ AllocateHeapNumber(t1, a3, t0, t2, &slow);
     if (!reg.is(t1)) __ mov(reg, t1);
-    __ b(&done);
+    __ Branch(&done);
   }
 
   // Slow case: Call the runtime system to do the number allocation.
