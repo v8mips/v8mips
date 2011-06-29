@@ -837,11 +837,11 @@ void MacroAssembler::Trunc_uw_d(FPURegister fd, FPURegister fs) {
 
 void MacroAssembler::Trunc_uw_d(FPURegister fd, Register rs) {
   ASSERT(!fd.is(f22));
-  ASSERT(!rs.is(t8));
+  ASSERT(!rs.is(t7));
 
   // Load 2^31 into f22.
-  Or(t8, zero_reg, 0x80000000);
-  Cvt_d_uw(f22, t8);
+  Or(t4, zero_reg, 0x80000000);
+  Cvt_d_uw(f22, t4);
 
   // Test if f22 > fd.
   c(OLT, D, fd, f22);
