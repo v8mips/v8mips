@@ -2298,7 +2298,23 @@ void LCodeGen::DoArgumentsElements(LArgumentsElements* instr) {
 
 
 void LCodeGen::DoArgumentsLength(LArgumentsLength* instr) {
-  Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
+  Register elem = ToRegister(instr->InputAt(0));
+  Register result = ToRegister(instr->result());
+
+  Label done;
+
+  // If no arguments adaptor frame the number of arguments is fixed.
+  __ Addu(result, zero_reg, Operand(scope()->num_parameters()));
+  __ Branch(&done, eq, fp, Operand(elem));
+
+  // Arguments adaptor frame present. Get argument length from there.
+  __ lw(result, MemOperand(fp, StandardFrameConstants::kCallerFPOffset));
+  __ lw(result,
+        MemOperand(result, ArgumentsAdaptorFrameConstants::kLengthOffset));
+  __ SmiUntag(result);
+
+  // Argument length is in result register.
+  __ bind(&done);
 }
 
 
