@@ -2252,7 +2252,21 @@ void LCodeGen::DoLoadExternalArrayPointer(
 
 
 void LCodeGen::DoAccessArgumentsAt(LAccessArgumentsAt* instr) {
-  Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
+  Register arguments = ToRegister(instr->arguments());
+  Register length = ToRegister(instr->length());
+  Register index = ToRegister(instr->index());
+  Register result = ToRegister(instr->result());
+
+  // Bailout index is not a valid argument index. Use unsigned check to get
+  // negative check for free.
+  DeoptimizeIf(ls, instr->environment(), length, Operand(index));
+
+  // There are two words between the frame pointer and the last argument.
+  // Subtracting from length accounts for one of them add one more.
+  __ Addu(length, length, Operand(1));
+  __ sll(length, length, kPointerSizeLog2);
+  __ Addu(arguments, arguments, Operand(length));
+  __ lw(result, MemOperand(arguments, 0));
 }
 
 
