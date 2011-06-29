@@ -3155,7 +3155,7 @@ void LCodeGen::DoDeferredTaggedToI(LTaggedToI* instr) {
     __ LoadRoot(at, Heap::kUndefinedValueRootIndex);
     DeoptimizeIf(ne, instr->environment(), input_reg, Operand(at));
     __ mov(input_reg, zero_reg);  // TODO(plind): result really in input reg?
-    __ b(&done);
+    __ Branch(&done);
 
     __ bind(&heap_number);
     __ ldc1(double_scratch2,
