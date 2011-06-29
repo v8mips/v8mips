@@ -1701,12 +1701,12 @@ Condition LCodeGen::EmitIsObject(Register input,
   // Undetectable objects behave like undefined.
   __ lbu(temp2, FieldMemOperand(temp1, Map::kBitFieldOffset));
   __ And(temp2, temp2, Operand(1 << Map::kIsUndetectable));
-  __ Branch(is_not_object, ne, temp2,
-            Operand(1 << Map::kIsUndetectable));
+  __ Branch(is_not_object, ne, temp2, Operand(zero_reg));
 
   // Load instance type and check that it is in object type range.
   __ lbu(temp2, FieldMemOperand(temp1, Map::kInstanceTypeOffset));
-  __ Branch(is_not_object, lt, temp2, Operand(FIRST_NONCALLABLE_SPEC_OBJECT_TYPE));
+  __ Branch(is_not_object, 
+            lt, temp2, Operand(FIRST_NONCALLABLE_SPEC_OBJECT_TYPE));
 
   return le;
 }
@@ -1723,8 +1723,8 @@ void LCodeGen::DoIsObject(LIsObject* instr) {
             Operand(LAST_NONCALLABLE_SPEC_OBJECT_TYPE));
 
   __ bind(&is_false);
-  __ LoadRoot(result, Heap::kFalseValueRootIndex);
-  __ Branch(&done);
+  __ Branch(USE_DELAY_SLOT, &done);
+  __ LoadRoot(result, Heap::kFalseValueRootIndex);  // In delay slot.
 
   __ bind(&is_true);
   __ LoadRoot(result, Heap::kTrueValueRootIndex);
