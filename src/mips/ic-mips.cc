@@ -903,8 +903,13 @@ static MemOperand GenerateMappedArgumentsLookup(MacroAssembler* masm,
                                                 Label* slow_case) {
   Heap* heap = masm->isolate()->heap();
 
-  // Check that the receiver isn't a smi.
+  // Check that the receiver is a JSObject. Because of the map check
+  // later, we do not need to check for interceptors or whether it
+  // requires access checks.
   __ JumpIfSmi(object, slow_case);
+  // Check that the object is some kind of JSObject.
+  __ GetObjectType(object, scratch1, scratch2);
+  __ Branch(slow_case, lt, scratch2, Operand(FIRST_JS_RECEIVER_TYPE));
 
   // Check that the key is a positive smi.
   __ And(scratch1, key, Operand(0x8000001));
@@ -1006,6 +1011,9 @@ void KeyedStoreIC::GenerateNonStrictArguments(MacroAssembler* masm) {
   MemOperand mapped_location =
       GenerateMappedArgumentsLookup(masm, a2, a1, a3, t0, t1, &notin, &slow);
   __ sw(a0, mapped_location);
+  // Verify mapped_location MemOperand is register, with no offset.
+  ASSERT_EQ(mapped_location.offset(), 0);
+  __ RecordWrite(a3, mapped_location.rm(), t5);
   __ Ret(USE_DELAY_SLOT);
   __ mov(v0, a0);  // (In delay slot) return the value stored in v0.
   __ bind(&notin);
@@ -1013,6 +1021,8 @@ void KeyedStoreIC::GenerateNonStrictArguments(MacroAssembler* masm) {
   MemOperand unmapped_location =
       GenerateUnmappedArgumentsLookup(masm, a1, a3, t0, &slow);
   __ sw(a0, unmapped_location);
+  ASSERT_EQ(unmapped_location.offset(), 0);
+  __ RecordWrite(a3, unmapped_location.rm(), t5);
   __ Ret(USE_DELAY_SLOT);
   __ mov(v0, a0);  // (In delay slot) return the value stored in v0.
   __ bind(&slow);

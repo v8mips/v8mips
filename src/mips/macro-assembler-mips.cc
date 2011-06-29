@@ -840,11 +840,11 @@ void MacroAssembler::Trunc_uw_d(FPURegister fd, FPURegister fs) {
 
 void MacroAssembler::Trunc_uw_d(FPURegister fd, Register rs) {
   ASSERT(!fd.is(f22));
-  ASSERT(!rs.is(t6));
+  ASSERT(!rs.is(t8));
 
   // Load 2^31 into f22.
-  Or(t6, zero_reg, 0x80000000);
-  Cvt_d_uw(f22, t6);
+  Or(t8, zero_reg, 0x80000000);
+  Cvt_d_uw(f22, t8);
 
   // Test if f22 > fd.
   // If fd < 2^31 we can convert it normally.
@@ -860,7 +860,7 @@ void MacroAssembler::Trunc_uw_d(FPURegister fd, Register rs) {
   sub_d(f22, fd, f22);
   trunc_w_d(f22, f22);
   mfc1(rs, f22);
-  or_(rs, rs, t6);
+  or_(rs, rs, t8);
 
   Label done;
   Branch(&done);
@@ -1199,7 +1199,54 @@ void MacroAssembler::GetLeastBitsFromInt32(Register dst,
     (cond != cc_always && (!rs.is(zero_reg) || !rt.rm().is(zero_reg))))
 
 
+bool MacroAssembler::UseAbsoluteCodePointers() {
+  if (is_trampoline_emitted()) {
+    return true;
+  } else {
+    return false;
+  }
+}
+
+
 void MacroAssembler::Branch(int16_t offset, BranchDelaySlot bdslot) {
+  BranchShort(offset, bdslot);
+}
+
+
+void MacroAssembler::Branch(int16_t offset, Condition cond, Register rs,
+                            const Operand& rt,
+                            BranchDelaySlot bdslot) {
+  BranchShort(offset, cond, rs, rt, bdslot);
+}
+
+
+void MacroAssembler::Branch(Label* L, BranchDelaySlot bdslot) {
+  bool is_label_near = is_near(L);
+  if (UseAbsoluteCodePointers() && !is_label_near) {
+    Jr(L, bdslot);
+  } else {
+    BranchShort(L, bdslot);
+  }
+}
+
+
+void MacroAssembler::Branch(Label* L, Condition cond, Register rs,
+                            const Operand& rt,
+                            BranchDelaySlot bdslot) {
+  bool is_label_near = is_near(L);
+  if (UseAbsoluteCodePointers() && !is_label_near) {
+    Label skip;
+    Condition neg_cond = NegateCondition(cond);
+    BranchShort(&skip, neg_cond, rs, rt);
+    Jr(L, bdslot);
+    bind(&skip);
+  } else {
+    BranchShort(L, cond, rs, rt, bdslot);
+  }
+}
+
+
+void MacroAssembler::BranchShort(int16_t offset, BranchDelaySlot bdslot) {
   b(offset);
 
   // Emit a nop in the branch delay slot if required.
@@ -1208,9 +1255,9 @@ void MacroAssembler::Branch(int16_t offset, BranchDelaySlot bdslot) {
 }
 
 
-void MacroAssembler::Branch(int16_t offset, Condition cond, Register rs,
-                            const Operand& rt,
-                            BranchDelaySlot bdslot) {
+void MacroAssembler::BranchShort(int16_t offset, Condition cond, Register rs,
+                                 const Operand& rt,
+                                 BranchDelaySlot bdslot) {
   BRANCH_ARGS_CHECK(cond, rs, rt);
   ASSERT(!rs.is(zero_reg));
   Register r2 = no_reg;
@@ -1283,7 +1330,8 @@ void MacroAssembler::Branch(int16_t offset, Condition cond, Register rs,
         break;
       case Uless:
         if (r2.is(zero_reg)) {
-          b(offset);
+          // No code needs to be emitted.
+          return;
         } else {
           sltu(scratch, rs, r2);
           bne(scratch, zero_reg, offset);
@@ -1342,7 +1390,7 @@ void MacroAssembler::Branch(int16_t offset, Condition cond, Register rs,
         } else {
           r2 = scratch;
           li(r2, rt);
-          sltu(scratch, rs, r2);
+          slt(scratch, rs, r2);
           beq(scratch, zero_reg, offset);
         }
         break;
@@ -1395,7 +1443,8 @@ void MacroAssembler::Branch(int16_t offset, Condition cond, Register rs,
         break;
       case Uless:
         if (rt.imm32_ == 0) {
-          b(offset);
+          // No code needs to be emitted.
+          return;
         } else if (is_int16(rt.imm32_)) {
           sltiu(scratch, rs, rt.imm32_);
           bne(scratch, zero_reg, offset);
@@ -1426,7 +1475,7 @@ void MacroAssembler::Branch(int16_t offset, Condition cond, Register rs,
 }
 
 
-void MacroAssembler::Branch(Label* L, BranchDelaySlot bdslot) {
+void MacroAssembler::BranchShort(Label* L, BranchDelaySlot bdslot) {
   // We use branch_offset as an argument for the branch instructions to be sure
   // it is called just before generating the branch instruction, as needed.
 
@@ -1438,9 +1487,9 @@ void MacroAssembler::Branch(Label* L, BranchDelaySlot bdslot) {
 }
 
 
-void MacroAssembler::Branch(Label* L, Condition cond, Register rs,
-                            const Operand& rt,
-                            BranchDelaySlot bdslot) {
+void MacroAssembler::BranchShort(Label* L, Condition cond, Register rs,
+                                 const Operand& rt,
+                                 BranchDelaySlot bdslot) {
   BRANCH_ARGS_CHECK(cond, rs, rt);
 
   int32_t offset;
@@ -1528,8 +1577,8 @@ void MacroAssembler::Branch(Label* L, Condition cond, Register rs,
         break;
       case Uless:
         if (r2.is(zero_reg)) {
-          offset = shifted_branch_offset(L, false);
-          b(offset);
+          // No code needs to be emitted.
+          return;
         } else {
           sltu(scratch, rs, r2);
           offset = shifted_branch_offset(L, false);
@@ -1594,7 +1643,7 @@ void MacroAssembler::Branch(Label* L, Condition cond, Register rs,
         } else {
           r2 = scratch;
           li(r2, rt);
-          sltu(scratch, rs, r2);
+          slt(scratch, rs, r2);
           offset = shifted_branch_offset(L, false);
           beq(scratch, zero_reg, offset);
         }
@@ -1658,8 +1707,8 @@ void MacroAssembler::Branch(Label* L, Condition cond, Register rs,
         break;
      case Uless:
         if (rt.imm32_ == 0) {
-          offset = shifted_branch_offset(L, false);
-          b(offset);
+          // No code needs to be emitted.
+          return;
         } else if (is_int16(rt.imm32_)) {
           sltiu(scratch, rs, rt.imm32_);
           offset = shifted_branch_offset(L, false);
@@ -1696,11 +1745,49 @@ void MacroAssembler::Branch(Label* L, Condition cond, Register rs,
 }
 
 
+void MacroAssembler::BranchAndLink(int16_t offset, BranchDelaySlot bdslot) {
+  BranchAndLinkShort(offset, bdslot);
+}
+
+
+void MacroAssembler::BranchAndLink(int16_t offset, Condition cond, Register rs,
+                                   const Operand& rt,
+                                   BranchDelaySlot bdslot) {
+  BranchAndLinkShort(offset, cond, rs, rt, bdslot);
+}
+
+
+void MacroAssembler::BranchAndLink(Label* L, BranchDelaySlot bdslot) {
+  bool is_label_near = is_near(L);
+  if (UseAbsoluteCodePointers() && !is_label_near) {
+    Jalr(L, bdslot);
+  } else {
+    BranchAndLinkShort(L, bdslot);
+  }
+}
+
+
+void MacroAssembler::BranchAndLink(Label* L, Condition cond, Register rs,
+                                   const Operand& rt,
+                                   BranchDelaySlot bdslot) {
+  bool is_label_near = is_near(L);
+  if (UseAbsoluteCodePointers() && !is_label_near) {
+    Label skip;
+    Condition neg_cond = NegateCondition(cond);
+    BranchShort(&skip, neg_cond, rs, rt);
+    Jalr(L, bdslot);
+    bind(&skip);
+  } else {
+    BranchAndLinkShort(L, cond, rs, rt, bdslot);
+  }
+}
+
+
 // We need to use a bgezal or bltzal, but they can't be used directly with the
 // slt instructions. We could use sub or add instead but we would miss overflow
 // cases, so we keep slt and add an intermediate third instruction.
-void MacroAssembler::BranchAndLink(int16_t offset,
-                                   BranchDelaySlot bdslot) {
+void MacroAssembler::BranchAndLinkShort(int16_t offset,
+                                        BranchDelaySlot bdslot) {
   bal(offset);
 
   // Emit a nop in the branch delay slot if required.
@@ -1709,9 +1796,9 @@ void MacroAssembler::BranchAndLink(int16_t offset,
 }
 
 
-void MacroAssembler::BranchAndLink(int16_t offset, Condition cond, Register rs,
-                                   const Operand& rt,
-                                   BranchDelaySlot bdslot) {
+void MacroAssembler::BranchAndLinkShort(int16_t offset, Condition cond,
+                                        Register rs, const Operand& rt,
+                                        BranchDelaySlot bdslot) {
   BRANCH_ARGS_CHECK(cond, rs, rt);
   Register r2 = no_reg;
   Register scratch = at;
@@ -1791,7 +1878,7 @@ void MacroAssembler::BranchAndLink(int16_t offset, Condition cond, Register rs,
 }
 
 
-void MacroAssembler::BranchAndLink(Label* L, BranchDelaySlot bdslot) {
+void MacroAssembler::BranchAndLinkShort(Label* L, BranchDelaySlot bdslot) {
   bal(shifted_branch_offset(L, false));
 
   // Emit a nop in the branch delay slot if required.
@@ -1800,9 +1887,9 @@ void MacroAssembler::BranchAndLink(Label* L, BranchDelaySlot bdslot) {
 }
 
 
-void MacroAssembler::BranchAndLink(Label* L, Condition cond, Register rs,
-                                   const Operand& rt,
-                                   BranchDelaySlot bdslot) {
+void MacroAssembler::BranchAndLinkShort(Label* L, Condition cond, Register rs,
+                                        const Operand& rt,
+                                        BranchDelaySlot bdslot) {
   BRANCH_ARGS_CHECK(cond, rs, rt);
 
   int32_t offset;
@@ -1891,6 +1978,64 @@ void MacroAssembler::BranchAndLink(Label* L, Condition cond, Register rs,
 
   // Check that offset could actually hold on an int16_t.
   ASSERT(is_int16(offset));
+
+  // Emit a nop in the branch delay slot if required.
+  if (bdslot == PROTECT)
+    nop();
+}
+
+
+void MacroAssembler::J(Label* L, BranchDelaySlot bdslot) {
+  BlockTrampolinePoolScope block_trampoline_pool(this);
+
+  uint32_t imm28;
+  imm28 = jump_address(L);
+  imm28 &= kImm28Mask;
+  { BlockGrowBufferScope block_buf_growth(this);
+    // Buffer growth (and relocation) must be blocked for internal references
+    // until associated instructions are emitted and available to be patched.
+    RecordRelocInfo(RelocInfo::INTERNAL_REFERENCE);
+    j(imm28);
+  }
+  // Emit a nop in the branch delay slot if required.
+  if (bdslot == PROTECT)
+    nop();
+}
+
+
+void MacroAssembler::Jr(Label* L, BranchDelaySlot bdslot) {
+  BlockTrampolinePoolScope block_trampoline_pool(this);
+
+  uint32_t imm32;
+  imm32 = jump_address(L);
+  { BlockGrowBufferScope block_buf_growth(this);
+    // Buffer growth (and relocation) must be blocked for internal references
+    // until associated instructions are emitted and available to be patched.
+    RecordRelocInfo(RelocInfo::INTERNAL_REFERENCE);
+    lui(at, (imm32 & kHiMask) >> kLuiShift);
+    ori(at, at, (imm32 & kImm16Mask));
+  }
+  jr(at);
+
+  // Emit a nop in the branch delay slot if required.
+  if (bdslot == PROTECT)
+    nop();
+}
+
+
+void MacroAssembler::Jalr(Label* L, BranchDelaySlot bdslot) {
+  BlockTrampolinePoolScope block_trampoline_pool(this);
+
+  uint32_t imm32;
+  imm32 = jump_address(L);
+  { BlockGrowBufferScope block_buf_growth(this);
+    // Buffer growth (and relocation) must be blocked for internal references
+    // until associated instructions are emitted and available to be patched.
+    RecordRelocInfo(RelocInfo::INTERNAL_REFERENCE);
+    lui(at, (imm32 & kHiMask) >> kLuiShift);
+    ori(at, at, (imm32 & kImm16Mask));
+  }
+  jalr(at);
 
   // Emit a nop in the branch delay slot if required.
   if (bdslot == PROTECT)
@@ -2643,8 +2788,8 @@ void MacroAssembler::AllocateHeapNumberWithValue(Register result,
                                                  Register scratch1,
                                                  Register scratch2,
                                                  Label* gc_required) {
-  LoadRoot(t6, Heap::kHeapNumberMapRootIndex);
-  AllocateHeapNumber(result, scratch1, scratch2, t6, gc_required);
+  LoadRoot(t8, Heap::kHeapNumberMapRootIndex);
+  AllocateHeapNumber(result, scratch1, scratch2, t8, gc_required);
   sdc1(value, FieldMemOperand(result, HeapNumber::kValueOffset));
 }
 
@@ -2737,9 +2882,8 @@ void MacroAssembler::CheckFastElements(Register map,
                                        Register scratch,
                                        Label* fail) {
   STATIC_ASSERT(JSObject::FAST_ELEMENTS == 0);
-  lbu(scratch, FieldMemOperand(map, Map::kBitField2Offset));
-  And(scratch, scratch, Operand(Map::kMaximumBitField2FastElementValue));
-  Branch(fail, hi, scratch, Operand(zero_reg));
+  lbu(scratch, FieldMemOperand(map, Map::kInstanceTypeOffset));
+  Branch(fail, hi, scratch, Operand(Map::kMaximumBitField2FastElementValue));
 }
 
 
@@ -3335,23 +3479,18 @@ void MacroAssembler::AdduAndCheckForOverflow(Register dst,
   ASSERT(!overflow_dst.is(right));
   ASSERT(!left.is(right));
 
-  // TODO(kalmard) There must be a way to optimize dst == left and dst == right
-  // cases.
-
   if (dst.is(left)) {
-    addu(overflow_dst, left, right);
-    xor_(dst, overflow_dst, left);
-    xor_(scratch, overflow_dst, right);
-    and_(scratch, scratch, dst);
-    mov(dst, overflow_dst);
-    mov(overflow_dst, scratch);
+    mov(scratch, left);  // Preserve left.
+    addu(dst, left, right);  // Left is overwritten.
+    xor_(scratch, dst, scratch);  // Original left.
+    xor_(overflow_dst, dst, right);
+    and_(overflow_dst, overflow_dst, scratch);
   } else if (dst.is(right)) {
-    addu(overflow_dst, left, right);
-    xor_(dst, overflow_dst, right);
-    xor_(scratch, overflow_dst, left);
-    and_(scratch, scratch, dst);
-    mov(dst, overflow_dst);
-    mov(overflow_dst, scratch);
+    mov(scratch, right);  // Preserve right.
+    addu(dst, left, right);  // Right is overwritten.
+    xor_(scratch, dst, scratch);  // Original right.
+    xor_(overflow_dst, dst, left);
+    and_(overflow_dst, overflow_dst, scratch);
   } else {
     addu(dst, left, right);
     xor_(overflow_dst, dst, left);
@@ -3375,23 +3514,18 @@ void MacroAssembler::SubuAndCheckForOverflow(Register dst,
   ASSERT(!scratch.is(left));
   ASSERT(!scratch.is(right));
 
-  // TODO(kalmard) There must be a way to optimize dst == left and dst == right
-  // cases.
-
   if (dst.is(left)) {
-    subu(overflow_dst, left, right);
-    xor_(scratch, overflow_dst, left);
-    xor_(dst, left, right);
-    and_(scratch, scratch, dst);
-    mov(dst, overflow_dst);
-    mov(overflow_dst, scratch);
+    mov(scratch, left);  // Preserve left.
+    subu(dst, left, right);  // Left is overwritten.
+    xor_(overflow_dst, dst, scratch);  // scratch is original left.
+    xor_(scratch, scratch, right);  // scratch is original left.
+    and_(overflow_dst, scratch, overflow_dst);
   } else if (dst.is(right)) {
-    subu(overflow_dst, left, right);
-    xor_(dst, left, right);
-    xor_(scratch, overflow_dst, left);
-    and_(scratch, scratch, dst);
-    mov(dst, overflow_dst);
-    mov(overflow_dst, scratch);
+    mov(scratch, right);  // Preserve right.
+    subu(dst, left, right);  // Right is overwritten.
+    xor_(overflow_dst, dst, left);
+    xor_(scratch, left, scratch);  // Original right.
+    and_(overflow_dst, scratch, overflow_dst);
   } else {
     subu(dst, left, right);
     xor_(overflow_dst, dst, left);

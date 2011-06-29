@@ -1208,8 +1208,13 @@ static Operand GenerateMappedArgumentsLookup(MacroAssembler* masm,
                                              Label* slow_case) {
   Heap* heap = masm->isolate()->heap();
 
-  // Check that the receiver isn't a smi.
+  // Check that the receiver is a JSObject. Because of the elements
+  // map check later, we do not need to check for interceptors or
+  // whether it requires access checks.
   __ JumpIfSmi(object, slow_case);
+  // Check that the object is some kind of JSObject.
+  __ CmpObjectType(object, FIRST_JS_RECEIVER_TYPE, scratch1);
+  __ j(below, slow_case);
 
   // Check that the key is a positive smi.
   Condition check = masm->CheckNonNegativeSmi(key);
@@ -1308,12 +1313,18 @@ void KeyedStoreIC::GenerateNonStrictArguments(MacroAssembler* masm) {
   Operand mapped_location = GenerateMappedArgumentsLookup(
       masm, rdx, rcx, rbx, rdi, r8, &notin, &slow);
   __ movq(mapped_location, rax);
+  __ lea(r9, mapped_location);
+  __ movq(r8, rax);
+  __ RecordWrite(rbx, r9, r8);
   __ Ret();
   __ bind(&notin);
   // The unmapped lookup expects that the parameter map is in rbx.
   Operand unmapped_location =
       GenerateUnmappedArgumentsLookup(masm, rcx, rbx, rdi, &slow);
   __ movq(unmapped_location, rax);
+  __ lea(r9, unmapped_location);
+  __ movq(r8, rax);
+  __ RecordWrite(rbx, r9, r8);
   __ Ret();
   __ bind(&slow);
   GenerateMiss(masm, false);

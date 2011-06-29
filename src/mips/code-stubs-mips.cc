@@ -1729,7 +1729,8 @@ void ToBooleanStub::Generate(MacroAssembler* masm) {
   __ LoadRoot(scratch0, Heap::kTrueValueRootIndex);
   // "tos_" is a register and contains a non-zero value.  Hence we implicitly
   // return true if the equal condition is satisfied.
-  __ Ret(eq, tos_, Operand(scratch0));
+  __ Ret(USE_DELAY_SLOT, eq, tos_, Operand(scratch0));
+  __ mov(v0, tos_);
 
   // Smis: 0 -> false, all other -> true
   __ And(scratch0, tos_, tos_);
@@ -1737,7 +1738,8 @@ void ToBooleanStub::Generate(MacroAssembler* masm) {
   __ And(scratch0, tos_, Operand(kSmiTagMask));
   // "tos_" is a register and contains a non-zero value.  Hence we implicitly
   // return true if the not equal condition is satisfied.
-  __ Ret(eq, scratch0, Operand(zero_reg));
+  __ Ret(USE_DELAY_SLOT, eq, scratch0, Operand(zero_reg));
+  __ mov(v0, tos_);
 
   // 'null' -> false
   __ LoadRoot(scratch0, Heap::kNullValueRootIndex);
@@ -1755,7 +1757,8 @@ void ToBooleanStub::Generate(MacroAssembler* masm) {
   // Hence we only need to overwrite "tos_" with zero to return false for
   // FP_ZERO or FP_NAN cases. Otherwise, by default it returns true.
   __ movt(tos_, zero_reg);
-  __ Ret();
+  __ Ret(USE_DELAY_SLOT);
+  __ mov(v0, tos_);
 
   __ bind(&not_heap_number);
 
@@ -1773,7 +1776,8 @@ void ToBooleanStub::Generate(MacroAssembler* masm) {
   // "tos_" is a register and contains a non-zero value.
   // Hence we implicitly return true if the greater than
   // condition is satisfied.
-  __ Ret(ge, scratch0, Operand(FIRST_SPEC_OBJECT_TYPE));
+  __ Ret(USE_DELAY_SLOT, ge, scratch0, Operand(FIRST_SPEC_OBJECT_TYPE));
+  __ mov(v0, tos_);
 
   // Check for string.
   __ lw(scratch0, FieldMemOperand(tos_, HeapObject::kMapOffset));
@@ -1781,18 +1785,21 @@ void ToBooleanStub::Generate(MacroAssembler* masm) {
   // "tos_" is a register and contains a non-zero value.
   // Hence we implicitly return true if the greater than
   // condition is satisfied.
-  __ Ret(ge, scratch0, Operand(FIRST_NONSTRING_TYPE));
+  __ Ret(USE_DELAY_SLOT, ge, scratch0, Operand(FIRST_NONSTRING_TYPE));
+  __ mov(v0, tos_);
 
   // String value => false iff empty, i.e., length is zero.
   __ lw(tos_, FieldMemOperand(tos_, String::kLengthOffset));
   // If length is zero, "tos_" contains zero ==> false.
   // If length is not zero, "tos_" contains a non-zero value ==> true.
-  __ Ret();
+  __ Ret(USE_DELAY_SLOT);
+  __ mov(v0, tos_);
 
   // Return 0 in "tos_" for false.
   __ bind(&false_result);
   __ mov(tos_, zero_reg);
-  __ Ret();
+  __ Ret(USE_DELAY_SLOT);
+  __ mov(v0, tos_);
 }
 
 
