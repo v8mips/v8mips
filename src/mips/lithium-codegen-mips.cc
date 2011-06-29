@@ -2293,7 +2293,20 @@ void LCodeGen::DoLoadKeyedGeneric(LLoadKeyedGeneric* instr) {
 
 
 void LCodeGen::DoArgumentsElements(LArgumentsElements* instr) {
-  Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
+  Register scratch = scratch0();
+  Register temp = scratch1();
+  Register result = ToRegister(instr->result());
+
+  // Check if the calling frame is an arguments adaptor frame.
+  Label done, adapted;
+  __ lw(scratch, MemOperand(fp, StandardFrameConstants::kCallerFPOffset));
+  __ lw(result, MemOperand(scratch, StandardFrameConstants::kContextOffset));
+  __ Xor(temp, result, Operand(Smi::FromInt(StackFrame::ARGUMENTS_ADAPTOR)));
+
+  // Result is the frame pointer for the frame if not adapted and for the real
+  // frame below the adaptor frame if adapted.
+  __ movn(result, fp, temp);  // move only if temp is not equal to zero (ne)
+  __ movz(result, scratch, temp);  // move only if temp is equal to zero (eq)
 }
 
 
