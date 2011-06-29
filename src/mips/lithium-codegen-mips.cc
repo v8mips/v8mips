@@ -3436,7 +3436,33 @@ void LCodeGen::DoTypeof(LTypeof* instr) {
 
 
 void LCodeGen::DoTypeofIs(LTypeofIs* instr) {
-  Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
+  Register input = ToRegister(instr->InputAt(0));
+  Register result = ToRegister(instr->result());
+  Label true_label;
+  Label false_label;
+  Label done;
+  Register cmp1 = no_reg;
+  Operand cmp2 = Operand(no_reg);
+
+  Condition final_branch_condition = EmitTypeofIs(&true_label,
+                                                  &false_label,
+                                                  input,
+                                                  instr->type_literal(),
+                                                  cmp1,
+                                                  cmp2);
+
+  ASSERT(cmp1.is_valid());
+  ASSERT(!cmp2.is_reg() || cmp2.rm().is_valid());
+
+  __ Branch(&true_label, final_branch_condition, cmp1, cmp2);
+  __ bind(&false_label);
+  __ LoadRoot(result, Heap::kFalseValueRootIndex);
+  __ Branch(&done);
+
+  __ bind(&true_label);
+  __ LoadRoot(result, Heap::kTrueValueRootIndex);
+
+  __ bind(&done);
 }
 
 
