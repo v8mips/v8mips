@@ -6950,7 +6950,7 @@ Map* Code::FindFirstMap() {
 }
 
 
-#if defined(OBJECT_PRINT) || defined(ENABLE_DISASSEMBLER)
+#ifdef ENABLE_DISASSEMBLER
 
 void DeoptimizationInputData::DeoptimizationInputDataPrint(FILE* out) {
   disasm::NameConverter converter;
@@ -7098,10 +7098,6 @@ void DeoptimizationOutputData::DeoptimizationOutputDataPrint(FILE* out) {
   }
 }
 
-#endif  // defined(OBJECT_PRINT) || defined(ENABLE_DISASSEMBLER)
-
-
-#ifdef ENABLE_DISASSEMBLER
 
 // Identify kind of code.
 const char* Code::Kind2String(Kind kind) {
@@ -7191,6 +7187,9 @@ void Code::Disassemble(const char* name, FILE* out) {
     PrintF(out, "ic_in_loop = %d\n", ic_in_loop() == IN_LOOP);
     if (ic_state() == MONOMORPHIC) {
       PrintF(out, "type = %s\n", PropertyType2String(type()));
+    }
+    if (is_call_stub() || is_keyed_call_stub()) {
+      PrintF(out, "argc = %d\n", arguments_count());
     }
   }
   if ((name != NULL) && (name[0] != '\0')) {
