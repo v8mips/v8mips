@@ -3354,7 +3354,37 @@ void LCodeGen::DoNumberUntagD(LNumberUntagD* instr) {
 
 
 void LCodeGen::DoDoubleToI(LDoubleToI* instr) {
-  Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
+  Register result_reg = ToRegister(instr->result());
+  Register scratch1 = scratch0();
+  Register scratch2 = ToRegister(instr->TempAt(0));
+  DoubleRegister double_input = ToDoubleRegister(instr->InputAt(0));
+  DoubleRegister double_scratch = double_scratch0();
+  FPURegister single_scratch = double_scratch0().low();
+
+  if (instr->truncating()) {
+    Register scratch3 = ToRegister(instr->TempAt(1));
+    __ EmitECMATruncate(result_reg,
+                        double_input,
+                        single_scratch,
+                        scratch1,
+                        scratch2,
+                        scratch3);
+  } else {
+    Register except_flag = scratch2;
+
+    __ EmitVFPTruncate(kRoundToMinusInf,
+                       single_scratch,
+                       double_input,
+                       scratch1,
+                       except_flag,
+                       kCheckForInexactConversion);
+
+    // Deopt if the operation did not succeed (except_flag != 0).
+    DeoptimizeIf(ne, instr->environment(), except_flag, Operand(zero_reg));
+
+    // Load the result.
+    __ mfc1(result_reg, single_scratch);
+  }
 }
 
 
