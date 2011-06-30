@@ -1073,10 +1073,11 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
 
   // Jump the register contains a smi.
   inline void JumpIfSmi(Register value, Label* smi_label,
-                        Register scratch = at) {
+                        Register scratch = at,
+                        BranchDelaySlot bd = PROTECT) {
     ASSERT_EQ(0, kSmiTag);
     andi(scratch, value, kSmiTagMask);
-    Branch(smi_label, eq, scratch, Operand(zero_reg));
+    Branch(bd, smi_label, eq, scratch, Operand(zero_reg));
   }
 
   // Jump if the register contains a non-smi.

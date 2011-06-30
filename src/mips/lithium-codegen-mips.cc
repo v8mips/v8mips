@@ -1774,7 +1774,21 @@ void LCodeGen::DoIsSmiAndBranch(LIsSmiAndBranch* instr) {
 
 
 void LCodeGen::DoIsUndetectable(LIsUndetectable* instr) {
-  Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
+  Register input = ToRegister(instr->InputAt(0));
+  Register result = ToRegister(instr->result());
+
+  ASSERT(instr->hydrogen()->value()->representation().IsTagged());
+  Label false_label, done;
+  __ JumpIfSmi(input, &false_label, at, USE_DELAY_SLOT);
+  __ lw(result, FieldMemOperand(input, HeapObject::kMapOffset));
+  __ lbu(result, FieldMemOperand(result, Map::kBitFieldOffset));
+  __ And(result, result, Operand(1 << Map::kIsUndetectable));
+  __ Branch(&false_label, eq, result, Operand(zero_reg));
+  __ Branch(USE_DELAY_SLOT, &done);
+  __ LoadRoot(result, Heap::kTrueValueRootIndex);
+  __ bind(&false_label);
+  __ LoadRoot(result, Heap::kFalseValueRootIndex);
+  __ bind(&done);
 }
 
 
@@ -3701,17 +3715,52 @@ Condition LCodeGen::EmitTypeofIs(Label* true_label,
 
 
 void LCodeGen::DoIsConstructCall(LIsConstructCall* instr) {
-  Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
+  Register result = ToRegister(instr->result());
+  Label true_label;
+  Label false_label;
+  Label done;
+
+  EmitIsConstructCall(result, scratch0());
+  __ Branch(&true_label, eq, result,
+            Operand(Smi::FromInt(StackFrame::CONSTRUCT)));
+
+  __ Branch(USE_DELAY_SLOT, &done);
+  __ LoadRoot(result, Heap::kFalseValueRootIndex);
+
+  __ bind(&true_label);
+  __ LoadRoot(result, Heap::kTrueValueRootIndex);
+
+  __ bind(&done);
 }
 
 
 void LCodeGen::DoIsConstructCallAndBranch(LIsConstructCallAndBranch* instr) {
-  Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
+  Register temp1 = ToRegister(instr->TempAt(0));
+  int true_block = chunk_->LookupDestination(instr->true_block_id());
+  int false_block = chunk_->LookupDestination(instr->false_block_id());
+
+  EmitIsConstructCall(temp1, scratch0());
+
+  EmitBranch(true_block, false_block, eq, temp1,
+             Operand(Smi::FromInt(StackFrame::CONSTRUCT)));
 }
 
 
 void LCodeGen::EmitIsConstructCall(Register temp1, Register temp2) {
-  Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
+  ASSERT(!temp1.is(temp2));
+  // Get the frame pointer for the calling frame.
+  __ lw(temp1, MemOperand(fp, StandardFrameConstants::kCallerFPOffset));
+
+  // Skip the arguments adaptor frame if it exists.
+  Label check_frame_marker;
+  __ lw(temp2, MemOperand(temp1, StandardFrameConstants::kContextOffset));
+  __ Branch(&check_frame_marker, ne, temp2,
+            Operand(Smi::FromInt(StackFrame::ARGUMENTS_ADAPTOR)));
+  __ lw(temp1, MemOperand(temp1, StandardFrameConstants::kCallerFPOffset));
+
+  // Check the marker in the calling frame.
+  __ bind(&check_frame_marker);
+  __ lw(temp1, MemOperand(temp1, StandardFrameConstants::kMarkerOffset));
 }
 
 
