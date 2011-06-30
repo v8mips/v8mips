@@ -321,11 +321,12 @@ class FrameDescription {
   double GetDoubleFrameSlot(unsigned offset) {
     intptr_t* ptr = GetFrameSlotPointer(offset);
 #if V8_TARGET_ARCH_MIPS
-    // Doubles can only be read from 8-byte aligned addresses on MIPS.
-    ASSERT(offset % 8 == 0);
-    ASSERT(reinterpret_cast<unsigned>(ptr) % 8 == 0);
-#endif
+    // Prevent gcc from using load-double (mips ldc1) on (possibly)
+    // non-64-bit aligned double. Uses two lwc1 instructions.
+    return read_double_field(reinterpret_cast<void*>(ptr), 0);
+#else
     return *reinterpret_cast<double*>(ptr);
+#endif
   }
 
   void SetFrameSlot(unsigned offset, intptr_t value) {

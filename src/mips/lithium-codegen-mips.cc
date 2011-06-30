@@ -3079,12 +3079,43 @@ void LCodeGen::DoDeferredNumberTagI(LNumberTagI* instr) {
 
 
 void LCodeGen::DoNumberTagD(LNumberTagD* instr) {
-  Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
+  class DeferredNumberTagD: public LDeferredCode {
+   public:
+    DeferredNumberTagD(LCodeGen* codegen, LNumberTagD* instr)
+        : LDeferredCode(codegen), instr_(instr) { }
+    virtual void Generate() { codegen()->DoDeferredNumberTagD(instr_); }
+   private:
+    LNumberTagD* instr_;
+  };
+
+  DoubleRegister input_reg = ToDoubleRegister(instr->InputAt(0));
+  Register scratch = scratch0();
+  Register reg = ToRegister(instr->result());
+  Register temp1 = ToRegister(instr->TempAt(0));
+  Register temp2 = ToRegister(instr->TempAt(1));
+
+  DeferredNumberTagD* deferred = new DeferredNumberTagD(this, instr);
+  if (FLAG_inline_new) {
+    __ LoadRoot(scratch, Heap::kHeapNumberMapRootIndex);
+    __ AllocateHeapNumber(reg, temp1, temp2, scratch, deferred->entry());
+  } else {
+    __ Branch(deferred->entry());
+  }
+  __ bind(deferred->exit());
+  __ sdc1(input_reg, FieldMemOperand(reg, HeapNumber::kValueOffset));
 }
 
 
 void LCodeGen::DoDeferredNumberTagD(LNumberTagD* instr) {
-  Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
+  // TODO(3095996): Get rid of this. For now, we need to make the
+  // result register contain a valid pointer because it is already
+  // contained in the register pointer map.
+  Register reg = ToRegister(instr->result());
+  __ mov(reg, zero_reg);
+
+  PushSafepointRegistersScope scope(this, Safepoint::kWithRegisters);
+  CallRuntimeFromDeferred(Runtime::kAllocateHeapNumber, 0, instr);
+  __ StoreToSafepointRegisterSlot(v0, reg);
 }
 
 
