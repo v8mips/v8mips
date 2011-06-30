@@ -2521,8 +2521,8 @@ void LCodeGen::DoMathFloor(LUnaryMathOperation* instr) {
   // Restore FCSR.
   __ ctc1(scratch1, FCSR);
 
-  // Check for inexact conversion or exception (non-zero flags).
-  __ And(scratch2, scratch2, kFCSRFlagMask);
+  // Check for exception (ignore inexact errors).
+  __ And(scratch2, scratch2, Operand(kFCSRFlagMask & ~kFCSRInexactFlagMask));
 
   // Deopt if the operation did not succeed.
   DeoptimizeIf(ne, instr->environment(), scratch2, Operand(zero_reg));
