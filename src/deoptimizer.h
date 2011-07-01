@@ -323,7 +323,13 @@ class FrameDescription {
 #if V8_TARGET_ARCH_MIPS
     // Prevent gcc from using load-double (mips ldc1) on (possibly)
     // non-64-bit aligned double. Uses two lwc1 instructions.
-    return read_double_field(reinterpret_cast<void*>(ptr), 0);
+    union conversion {
+      double d;
+      uint32_t u[2];
+    } c;
+    c.u[0] = *reinterpret_cast<uint32_t*>(ptr);
+    c.u[1] = *(reinterpret_cast<uint32_t*>(ptr) + 1);
+    return c.d;
 #else
     return *reinterpret_cast<double*>(ptr);
 #endif
