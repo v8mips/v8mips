@@ -400,6 +400,9 @@ DTOA_EXTRA_FLAGS = {
 CCTEST_EXTRA_FLAGS = {
   'all': {
     'CPPPATH': [join(root_dir, 'src')],
+    'library:shared': {
+      'CPPDEFINES': ['USING_V8_SHARED']
+    },
   },
   'gcc': {
     'all': {
@@ -436,9 +439,6 @@ CCTEST_EXTRA_FLAGS = {
       'CPPDEFINES': ['_HAS_EXCEPTIONS=0'],
       'LIBS': ['winmm', 'ws2_32']
     },
-    'library:shared': {
-      'CPPDEFINES': ['USING_V8_SHARED']
-    },
     'arch:ia32': {
       'CPPDEFINES': ['V8_TARGET_ARCH_IA32']
     },
@@ -453,6 +453,9 @@ CCTEST_EXTRA_FLAGS = {
 SAMPLE_FLAGS = {
   'all': {
     'CPPPATH': [join(abspath('.'), 'include')],
+    'library:shared': {
+      'CPPDEFINES': ['USING_V8_SHARED']
+    },
   },
   'gcc': {
     'all': {
@@ -572,9 +575,6 @@ SAMPLE_FLAGS = {
     'verbose:on': {
       'LINKFLAGS': ['/VERBOSE']
     },
-    'library:shared': {
-      'CPPDEFINES': ['USING_V8_SHARED']
-    },
     'prof:on': {
       'LINKFLAGS': ['/MAP']
     },
@@ -625,7 +625,10 @@ SAMPLE_FLAGS = {
 
 PREPARSER_FLAGS = {
   'all': {
-    'CPPPATH': [join(abspath('.'), 'include'), join(abspath('.'), 'src')]
+    'CPPPATH': [join(abspath('.'), 'include'), join(abspath('.'), 'src')],
+    'library:shared': {
+      'CPPDEFINES': ['USING_V8_SHARED']
+    },
   },
   'gcc': {
     'all': {
@@ -726,9 +729,6 @@ PREPARSER_FLAGS = {
     },
     'verbose:on': {
       'LINKFLAGS': ['/VERBOSE']
-    },
-    'library:shared': {
-      'CPPDEFINES': ['USING_V8_SHARED']
     },
     'prof:on': {
       'LINKFLAGS': ['/MAP']
@@ -1155,8 +1155,8 @@ def VerifyOptions(env):
     return False
   if env['os'] == 'win32' and env['library'] == 'shared' and env['prof'] == 'on':
     Abort("Profiling on windows only supported for static library.")
-  if env['gdbjit'] == 'on' and (env['os'] != 'linux' or (env['arch'] != 'ia32' and env['arch'] != 'x64' and env['arch'] != 'arm' and env['arch'] != 'mips')):
-    Abort("GDBJIT interface is supported only for Intel-compatible (ia32 or x64) Linux target.")
+  if env['gdbjit'] == 'on' and ((env['os'] != 'linux' and env['os'] != 'macos') or (env['arch'] != 'ia32' and env['arch'] != 'x64' and env['arch'] != 'arm' and env['arch'] != 'mips')):
+    Abort("GDBJIT interface is supported only for Intel-compatible (ia32 or x64) Linux/OSX target.")
   if env['os'] == 'win32' and env['soname'] == 'on':
     Abort("Shared Object soname not applicable for Windows.")
   if env['soname'] == 'on' and env['library'] == 'static':

@@ -3574,6 +3574,39 @@ void FullCodeGenerator::EmitFastAsciiArrayJoin(ZoneList<Expression*>* args) {
 }
 
 
+void FullCodeGenerator::EmitIsNativeOrStrictMode(ZoneList<Expression*>* args) {
+  ASSERT(args->length() == 1);
+
+  // Load the function into r0.
+  VisitForAccumulatorValue(args->at(0));
+
+  // Prepare for the test.
+  Label materialize_true, materialize_false;
+  Label* if_true = NULL;
+  Label* if_false = NULL;
+  Label* fall_through = NULL;
+  context()->PrepareTest(&materialize_true, &materialize_false,
+                         &if_true, &if_false, &fall_through);
+
+  // Test for strict mode function.
+  __ ldr(r1, FieldMemOperand(r0, JSFunction::kSharedFunctionInfoOffset));
+  __ ldr(r1, FieldMemOperand(r1, SharedFunctionInfo::kCompilerHintsOffset));
+  __ tst(r1, Operand(1 << (SharedFunctionInfo::kStrictModeFunction +
+                           kSmiTagSize)));
+  __ b(ne, if_true);
+
+  // Test for native function.
+  __ tst(r1, Operand(1 << (SharedFunctionInfo::kNative + kSmiTagSize)));
+  __ b(ne, if_true);
+
+  // Not native or strict-mode function.
+  __ b(if_false);
+
+  PrepareForBailoutBeforeSplit(TOS_REG, true, if_true, if_false);
+  context()->Plug(if_true, if_false);
+}
+
+
 void FullCodeGenerator::VisitCallRuntime(CallRuntime* expr) {
   Handle<String> name = expr->name();
   if (name->length() > 0 && name->Get(0) == '_') {
@@ -4200,12 +4233,7 @@ void FullCodeGenerator::EmitCallIC(Handle<Code> ic,
                                    unsigned ast_id) {
   ASSERT(mode == RelocInfo::CODE_TARGET ||
          mode == RelocInfo::CODE_TARGET_CONTEXT);
-  if (ast_id == kNoASTId || mode == RelocInfo::CODE_TARGET_CONTEXT) {
-    __ Call(ic, mode);
-  } else {
-    ASSERT(mode == RelocInfo::CODE_TARGET);
-    __ CallWithAstId(ic, RelocInfo::CODE_TARGET_WITH_ID, ast_id);
-  }
+  __ Call(ic, mode, ast_id);
 }
 
 
