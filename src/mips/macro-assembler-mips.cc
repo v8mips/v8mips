@@ -900,22 +900,22 @@ void MacroAssembler::BranchF(Label* target,
     switch (cc) {
       case Uless:
       case less:
-        c(ULT, D, cmp1, cmp2);
+        c(OLT, D, cmp1, cmp2);
         bc1t(target);
         break;
       case Ugreater:
       case greater:
-        c(ULE, D, cmp2, cmp1);
-        bc1t(target);
+        c(ULE, D, cmp1, cmp2);
+        bc1f(target);
         break;
       case Ugreater_equal:
       case greater_equal:
-        c(ULT, D, cmp2, cmp1);
-        bc1t(target);
+        c(ULT, D, cmp1, cmp2);
+        bc1f(target);
         break;
       case Uless_equal:
       case less_equal:
-        c(ULE, D, cmp1, cmp2);
+        c(OLE, D, cmp1, cmp2);
         bc1t(target);
         break;
       case eq:
