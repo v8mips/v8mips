@@ -511,6 +511,28 @@ enum FPUCondition {
 };
 
 
+// FPU rounding modes.
+enum FPURoundingMode {
+  RN = 0 << 0,  // Round to Nearest.
+  RZ = 1 << 0,  // Round towards zero.
+  RP = 2 << 0,  // Round towards Plus Infinity.
+  RM = 3 << 0,  // Round towards Minus Infinity.
+
+  // Aliases.
+  kRoundToNearest = RN,
+  kRoundToZero = RZ,
+  kRoundToPlusInf = RP,
+  kRoundToMinusInf = RM
+};
+
+static const uint32_t kFPURoundingModeMask = 3 << 0;
+
+enum CheckForInexactConversion {
+  kCheckForInexactConversion,
+  kDontCheckForInexactConversion
+};
+
+
 // -----------------------------------------------------------------------------
 // Hints.
 

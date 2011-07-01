@@ -561,6 +561,18 @@ class MacroAssembler: public Assembler {
                       FPURegister double_scratch,
                       Label *not_int32);
 
+  // Truncates a double using a specific rounding mode.
+  // The except_flag will contain any exceptions caused by the instruction.
+  // If check_inexact is kDontCheckForInexactConversion, then the inexacat
+  // exception is masked.
+  void EmitVFPTruncate(FPURoundingMode rounding_mode,
+                       FPURegister result,
+                       DoubleRegister double_input,
+                       Register scratch1,
+                       Register except_flag,
+                       CheckForInexactConversion check_inexact
+                           = kDontCheckForInexactConversion);
+
   // Helper for EmitECMATruncate.
   // This will truncate a floating-point value outside of the singed 32bit
   // integer range to a 32bit signed integer.
