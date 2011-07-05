@@ -1925,7 +1925,8 @@ int MacroAssembler::CallSize(Address target,
                              const Operand& rt,
                              BranchDelaySlot bd) {
   int size = 0;
-  if (!MustUseReg(rmode)) {
+  int32_t target_int = reinterpret_cast<int32_t>(target);
+  if (!MustUseReg(rmode) && is_uint28(target_int)) {
     if (cond == cc_always) {
       size += 1;
     } else {
@@ -1958,7 +1959,7 @@ void MacroAssembler::Call(Address target,
   bind(&start);
   int32_t target_int = reinterpret_cast<int32_t>(target);
 
-  if (!MustUseReg(rmode)) {
+  if (!MustUseReg(rmode)  && is_uint28(target_int)) {
     if (cond == cc_always) {
       jal(target_int);
     } else {
