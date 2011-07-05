@@ -155,8 +155,9 @@ class MacroAssembler: public Assembler {
             unsigned ast_id = kNoASTId,
             COND_ARGS);
   void Ret(COND_ARGS);
-  inline void Ret(BranchDelaySlot bd) {
-    Ret(al, zero_reg, Operand(zero_reg), bd);
+  inline void Ret(BranchDelaySlot bd, Condition cond = al,
+    Register rs = zero_reg, const Operand& rt = Operand(zero_reg)) {
+    Ret(cond, rs, rt, bd);
   }
 
 #undef COND_ARGS
