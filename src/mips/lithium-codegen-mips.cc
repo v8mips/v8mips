@@ -841,6 +841,7 @@ void LCodeGen::DoModI(LModI* instr) {
   const Register right = EmitLoadRegister(instr->InputAt(1), scratch);
   const Register result = ToRegister(instr->result());
 
+  ASSERT(result.is(left));
   // TODO(douglas): Do we need to optimize for PowerOf2Divisor???
   //    If not, then we should remove right=constant option.
 
@@ -852,14 +853,17 @@ void LCodeGen::DoModI(LModI* instr) {
   // Since Mips has a div instr, we just do the divide
   // and take the remainder as the result.
   __ div(left, right);
-  __ mfhi(result);
+  __ mfhi(scratch);
 
   if (instr->hydrogen()->CheckFlag(HValue::kBailoutOnMinusZero)) {
     // Result always take the sign of the dividend (left).
     Label done;
-    __ Branch(&done, ge, left, Operand(zero_reg));
+    __ Branch(USE_DELAY_SLOT, &done, ge, left, Operand(zero_reg));
+    __ Move(result, scratch);
     DeoptimizeIf(eq, instr->environment(), result, Operand(zero_reg));
     __ bind(&done);
+  } else {
+    __ Move(result, scratch);
   }
 }
 
