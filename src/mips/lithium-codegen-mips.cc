@@ -841,7 +841,6 @@ void LCodeGen::DoModI(LModI* instr) {
   const Register right = EmitLoadRegister(instr->InputAt(1), scratch);
   const Register result = ToRegister(instr->result());
 
-  ASSERT(result.is(left));
   // TODO(douglas): Do we need to optimize for PowerOf2Divisor???
   //    If not, then we should remove right=constant option.
 
