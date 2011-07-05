@@ -5745,6 +5745,27 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_StringTrim) {
 }
 
 
+void FindAsciiStringIndices(Vector<const char> subject,
+                            char pattern,
+                            ZoneList<int>* indices,
+                            unsigned int limit) {
+  ASSERT(limit > 0);
+  // Collect indices of pattern in subject using memchr.
+  // Stop after finding at most limit values.
+  const char* subject_start = reinterpret_cast<const char*>(subject.start());
+  const char* subject_end = subject_start + subject.length();
+  const char* pos = subject_start;
+  while (limit > 0) {
+    pos = reinterpret_cast<const char*>(
+        memchr(pos, pattern, subject_end - pos));
+    if (pos == NULL) return;
+    indices->Add(pos - subject_start);
+    pos++;
+    limit--;
+  }
+}
+
+
 template <typename SubjectChar, typename PatternChar>
 void FindStringIndices(Isolate* isolate,
                        Vector<const SubjectChar> subject,
@@ -5752,11 +5773,11 @@ void FindStringIndices(Isolate* isolate,
                        ZoneList<int>* indices,
                        unsigned int limit) {
   ASSERT(limit > 0);
-  // Collect indices of pattern in subject, and the end-of-string index.
+  // Collect indices of pattern in subject.
   // Stop after finding at most limit values.
-  StringSearch<PatternChar, SubjectChar> search(isolate, pattern);
   int pattern_length = pattern.length();
   int index = 0;
+  StringSearch<PatternChar, SubjectChar> search(isolate, pattern);
   while (limit > 0) {
     index = search.Search(subject, index);
     if (index < 0) return;
@@ -5799,11 +5820,19 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_StringSplit) {
     if (subject->IsAsciiRepresentation()) {
       Vector<const char> subject_vector = subject->ToAsciiVector();
       if (pattern->IsAsciiRepresentation()) {
-        FindStringIndices(isolate,
-                          subject_vector,
-                          pattern->ToAsciiVector(),
-                          &indices,
-                          limit);
+        Vector<const char> pattern_vector = pattern->ToAsciiVector();
+        if (pattern_vector.length() == 1) {
+          FindAsciiStringIndices(subject_vector,
+                                 pattern_vector[0],
+                                 &indices,
+                                 limit);
+        } else {
+          FindStringIndices(isolate,
+                            subject_vector,
+                            pattern_vector,
+                            &indices,
+                            limit);
+        }
       } else {
         FindStringIndices(isolate,
                           subject_vector,
@@ -12107,22 +12136,14 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_SummarizeLOL) {
 #ifdef ENABLE_LOGGING_AND_PROFILING
 RUNTIME_FUNCTION(MaybeObject*, Runtime_ProfilerResume) {
   NoHandleAllocation ha;
-  ASSERT(args.length() == 2);
-
-  CONVERT_CHECKED(Smi, smi_modules, args[0]);
-  CONVERT_CHECKED(Smi, smi_tag, args[1]);
-  v8::V8::ResumeProfilerEx(smi_modules->value(), smi_tag->value());
+  v8::V8::ResumeProfiler();
   return isolate->heap()->undefined_value();
 }
 
 
 RUNTIME_FUNCTION(MaybeObject*, Runtime_ProfilerPause) {
   NoHandleAllocation ha;
-  ASSERT(args.length() == 2);
-
-  CONVERT_CHECKED(Smi, smi_modules, args[0]);
-  CONVERT_CHECKED(Smi, smi_tag, args[1]);
-  v8::V8::PauseProfilerEx(smi_modules->value(), smi_tag->value());
+  v8::V8::PauseProfiler();
   return isolate->heap()->undefined_value();
 }
 
@@ -12483,6 +12504,28 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_IS_VAR) {
   return NULL;
 }
 
+
+#define ELEMENTS_KIND_CHECK_RUNTIME_FUNCTION(Name)        \
+  RUNTIME_FUNCTION(MaybeObject*, Runtime_Has##Name) {     \
+    CONVERT_CHECKED(JSObject, obj, args[0]);              \
+    return isolate->heap()->ToBoolean(obj->Has##Name());  \
+  }
+
+ELEMENTS_KIND_CHECK_RUNTIME_FUNCTION(FastElements)
+ELEMENTS_KIND_CHECK_RUNTIME_FUNCTION(FastDoubleElements)
+ELEMENTS_KIND_CHECK_RUNTIME_FUNCTION(DictionaryElements)
+ELEMENTS_KIND_CHECK_RUNTIME_FUNCTION(ExternalPixelElements)
+ELEMENTS_KIND_CHECK_RUNTIME_FUNCTION(ExternalArrayElements)
+ELEMENTS_KIND_CHECK_RUNTIME_FUNCTION(ExternalByteElements)
+ELEMENTS_KIND_CHECK_RUNTIME_FUNCTION(ExternalUnsignedByteElements)
+ELEMENTS_KIND_CHECK_RUNTIME_FUNCTION(ExternalShortElements)
+ELEMENTS_KIND_CHECK_RUNTIME_FUNCTION(ExternalUnsignedShortElements)
+ELEMENTS_KIND_CHECK_RUNTIME_FUNCTION(ExternalIntElements)
+ELEMENTS_KIND_CHECK_RUNTIME_FUNCTION(ExternalUnsignedIntElements)
+ELEMENTS_KIND_CHECK_RUNTIME_FUNCTION(ExternalFloatElements)
+ELEMENTS_KIND_CHECK_RUNTIME_FUNCTION(ExternalDoubleElements)
+
+#undef ELEMENTS_KIND_CHECK_RUNTIME_FUNCTION
 
 // ----------------------------------------------------------------------------
 // Implementation of Runtime
