@@ -173,14 +173,18 @@ struct FPURegister {
   // to number of 32-bit FPU regs, but kNumAllocatableRegisters refers to
   // number of Double regs (64-bit regs, or FPU-reg-pairs).
 
-  // f30 has been excluded from allocation. This is following ia32
-  // where xmm0 is excluded. (Chose not use use f0 as scratch, since
-  // that is float/double return value per mips ABI).
-  static const int kNumAllocatableRegisters = 15;
+  // A few double registers are reserved: one as a scratch register and one to
+  // hold 0.0.
+  //  f28: 0.0
+  //  f30: scratch register.
+  static const int kNumReservedRegisters = 2;
+  static const int kNumAllocatableRegisters = kNumRegisters / 2 -
+      kNumReservedRegisters;
+
 
   static int ToAllocationIndex(FPURegister reg) {
     ASSERT(reg.code() % 2 == 0);
-    ASSERT(reg.code() < kNumAllocatableRegisters);
+    ASSERT(reg.code() / 2 < kNumAllocatableRegisters);
     ASSERT(reg.is_valid());
     return (reg.code() / 2);
   }
@@ -206,8 +210,7 @@ struct FPURegister {
       "f20",
       "f22",
       "f24",
-      "f26",
-      "f28"
+      "f26"
     };
     return names[index];
   }
@@ -298,6 +301,8 @@ const FPURegister f28 = { 28 };
 const FPURegister f29 = { 29 };
 const FPURegister f30 = { 30 };
 const FPURegister f31 = { 31 };
+
+const FPURegister kDoubleRegZero = f28;
 
 // FPU (coprocessor 1) control registers.
 // Currently only FCSR (#31) is implemented.

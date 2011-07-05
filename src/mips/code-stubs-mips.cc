@@ -3728,6 +3728,13 @@ void JSEntryStub::GenerateBody(MacroAssembler* masm, bool is_construct) {
   // Save callee saved registers on the stack.
   __ MultiPush(kCalleeSaved | ra.bit());
 
+  if (CpuFeatures::IsSupported(FPU)) {
+    CpuFeatures::Scope scope(FPU);
+    // TODO(kalmard): ARM saves all FPU regs here, why don't we?
+    // Set up the reserved register for 0.0.
+    __ Move(kDoubleRegZero, 0.0);
+  }
+
   // Load argv in s0 register.
   __ lw(s0, MemOperand(sp, (kNumCalleeSaved + 1) * kPointerSize +
                            kCArgsSlotsSize));

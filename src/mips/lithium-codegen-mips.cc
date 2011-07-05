@@ -932,9 +932,9 @@ void LCodeGen::DoDeferredBinaryOpStub(LTemplateInstruction<1, 2, T>* instr,
 
 
 void LCodeGen::DoMulI(LMulI* instr) {
-  ASSERT(instr->result()->Equals(instr->InputAt(0)));
   Register scratch = scratch0();
   Register result = ToRegister(instr->result());
+  // Note that result may alias left.
   Register left = ToRegister(instr->InputAt(0));
   LOperand* right_op = instr->InputAt(1);
 
@@ -966,6 +966,7 @@ void LCodeGen::DoMulI(LMulI* instr) {
         break;
       case 1:
         // Nothing to do.
+        __ Move(result, left);
         break;
       default:
         // Multiplying by powers of two and powers of two plus or minus
@@ -1005,7 +1006,7 @@ void LCodeGen::DoMulI(LMulI* instr) {
   } else {
     Register right = EmitLoadRegister(right_op, scratch);
     if (bailout_on_minus_zero) {
-      __ Or(ToRegister(instr->TempAt(0)), left, right);
+      __ Or(result, left, right);
     }
 
     if (can_overflow) {
@@ -1036,30 +1037,29 @@ void LCodeGen::DoMulI(LMulI* instr) {
 
 
 void LCodeGen::DoBitI(LBitI* instr) {
-  LOperand* left = instr->InputAt(0);
-  LOperand* right = instr->InputAt(1);
-  ASSERT(left->Equals(instr->result()));
-  ASSERT(left->IsRegister());
-  Register result = ToRegister(left);
-  Operand right_operand(no_reg);
+  LOperand* left_op = instr->InputAt(0);
+  LOperand* right_op = instr->InputAt(1);
+  ASSERT(left_op->IsRegister());
+  Register left = ToRegister(left_op);
+  Register result = ToRegister(instr->result());
+  Operand right(no_reg);
 
-  if (right->IsStackSlot() || right->IsArgument()) {
-    Register right_reg = EmitLoadRegister(right, at);
-    right_operand = Operand(right_reg);
+  if (right_op->IsStackSlot() || right_op->IsArgument()) {
+    right = Operand(EmitLoadRegister(right_op, at));
   } else {
-    ASSERT(right->IsRegister() || right->IsConstantOperand());
-    right_operand = ToOperand(right);
+    ASSERT(right_op->IsRegister() || right_op->IsConstantOperand());
+    right = ToOperand(right_op);
   }
 
   switch (instr->op()) {
     case Token::BIT_AND:
-      __ And(result, ToRegister(left), right_operand);
+      __ And(result, left, right);
       break;
     case Token::BIT_OR:
-      __ Or(result, ToRegister(left), right_operand);
+      __ Or(result, left, right);
       break;
     case Token::BIT_XOR:
-      __ Xor(result, ToRegister(left), right_operand);
+      __ Xor(result, left, right);
       break;
     default:
       UNREACHABLE();
@@ -1069,54 +1069,63 @@ void LCodeGen::DoBitI(LBitI* instr) {
 
 
 void LCodeGen::DoShiftI(LShiftI* instr) {
+  // Both 'left' and 'right' are "used at start" (see LCodeGen::DoShift), so
+  // result may alias either of them.
+  LOperand* right_op = instr->InputAt(1);
+  Register left = ToRegister(instr->InputAt(0));
+  Register result = ToRegister(instr->result());
   Register scratch = scratch0();
-  LOperand* left = instr->InputAt(0);
-  LOperand* right = instr->InputAt(1);
-  ASSERT(left->Equals(instr->result()));
-  ASSERT(left->IsRegister());
-  Register result = ToRegister(left);
-  if (right->IsRegister()) {
-    // Mask the right operand.
+
+  if (right_op->IsRegister()) {
+    // Mask the right_op operand.
     // TODO(kalmard): This is probably not needed on MIPS, at least not in all
     // cases.
-    __ And(scratch, ToRegister(right), Operand(0x1F));
+    __ And(scratch, ToRegister(right_op), Operand(0x1F));
     switch (instr->op()) {
       case Token::SAR:
-        __ srav(result, result, scratch);
+        __ srav(result, left, scratch);
         break;
       case Token::SHR:
-        __ srlv(result, result, scratch);
+        __ srlv(result, left, scratch);
         if (instr->can_deopt()) {
           DeoptimizeIf(lt, instr->environment(), result, Operand(zero_reg));
         }
         break;
       case Token::SHL:
-        __ sllv(result, result, scratch);
+        __ sllv(result, left, scratch);
         break;
       default:
         UNREACHABLE();
         break;
     }
   } else {
-    int value = ToInteger32(LConstantOperand::cast(right));
+    // Mask the right_op operand.
+    int value = ToInteger32(LConstantOperand::cast(right_op));
     uint8_t shift_count = static_cast<uint8_t>(value & 0x1F);
     switch (instr->op()) {
       case Token::SAR:
         if (shift_count != 0) {
-          __ sra(result, result, shift_count);
+          __ sra(result, left, shift_count);
+        } else {
+          __ Move(result, left);
         }
         break;
       case Token::SHR:
-        if (shift_count == 0 && instr->can_deopt()) {
-          __ And(at, result, Operand(0x80000000));
-          DeoptimizeIf(ne, instr->environment(), at, Operand(zero_reg));
+        if (shift_count != 0) {
+          __ srl(result, left, shift_count);
         } else {
-          __ srl(result, result, shift_count);
+          if (instr->can_deopt()) {
+            __ And(at, result, Operand(0x80000000));
+            DeoptimizeIf(ne, instr->environment(), at, Operand(zero_reg));
+          }
+          __ Move(result, left);
         }
         break;
       case Token::SHL:
         if (shift_count != 0) {
-          __ sll(result, result, shift_count);
+          __ sll(result, left, shift_count);
+        } else {
+          __ Move(result, left);
         }
         break;
       default:
@@ -1130,16 +1139,16 @@ void LCodeGen::DoShiftI(LShiftI* instr) {
 void LCodeGen::DoSubI(LSubI* instr) {
   LOperand* left = instr->InputAt(0);
   LOperand* right = instr->InputAt(1);
-  ASSERT(left->Equals(instr->result()));
+  LOperand* result = instr->result();
   bool can_overflow = instr->hydrogen()->CheckFlag(HValue::kCanOverflow);
 
   if (!can_overflow) {
     if (right->IsStackSlot() || right->IsArgument()) {
       Register right_reg = EmitLoadRegister(right, at);
-      __ Subu(ToRegister(left), ToRegister(left), Operand(right_reg));
+      __ Subu(ToRegister(result), ToRegister(left), Operand(right_reg));
     } else {
       ASSERT(right->IsRegister() || right->IsConstantOperand());
-      __ Subu(ToRegister(left), ToRegister(left), ToOperand(right));
+      __ Subu(ToRegister(result), ToRegister(left), ToOperand(right));
     }
   } else {  // can_overflow.
     Register overflow = scratch0();
@@ -1148,7 +1157,7 @@ void LCodeGen::DoSubI(LSubI* instr) {
         right->IsArgument() ||
         right->IsConstantOperand()) {
       Register right_reg = EmitLoadRegister(right, scratch);
-      __ SubuAndCheckForOverflow(ToRegister(left),
+      __ SubuAndCheckForOverflow(ToRegister(result),
                                  ToRegister(left),
                                  right_reg,
                                  overflow);  // Reg at also used as scratch.
@@ -1156,7 +1165,7 @@ void LCodeGen::DoSubI(LSubI* instr) {
       ASSERT(right->IsRegister());
       // Due to overflow check macros not supporting constant operands,
       // handling the IsConstantOperand case was moved to prev if clause.
-      __ SubuAndCheckForOverflow(ToRegister(left),
+      __ SubuAndCheckForOverflow(ToRegister(result),
                                  ToRegister(left),
                                  ToRegister(right),
                                  overflow);  // Reg at also used as scratch.
@@ -1227,9 +1236,9 @@ void LCodeGen::DoValueOf(LValueOf* instr) {
 
 
 void LCodeGen::DoBitNotI(LBitNotI* instr) {
-  LOperand* input = instr->InputAt(0);
-  ASSERT(input->Equals(instr->result()));
-  __ Nor(ToRegister(input), zero_reg, Operand(ToRegister(input)));
+  Register input = ToRegister(instr->InputAt(0));
+  Register result = ToRegister(instr->result());
+  __ Nor(result, zero_reg, Operand(input));
 }
 
 
@@ -1247,16 +1256,16 @@ void LCodeGen::DoThrow(LThrow* instr) {
 void LCodeGen::DoAddI(LAddI* instr) {
   LOperand* left = instr->InputAt(0);
   LOperand* right = instr->InputAt(1);
-  ASSERT(left->Equals(instr->result()));
+  LOperand* result = instr->result();
   bool can_overflow = instr->hydrogen()->CheckFlag(HValue::kCanOverflow);
 
   if (!can_overflow) {
     if (right->IsStackSlot() || right->IsArgument()) {
       Register right_reg = EmitLoadRegister(right, at);
-      __ Addu(ToRegister(left), ToRegister(left), Operand(right_reg));
+      __ Addu(ToRegister(result), ToRegister(left), Operand(right_reg));
     } else {
       ASSERT(right->IsRegister() || right->IsConstantOperand());
-      __ Addu(ToRegister(left), ToRegister(left), ToOperand(right));
+      __ Addu(ToRegister(result), ToRegister(left), ToOperand(right));
     }
   } else {  // can_overflow.
     Register overflow = scratch0();
@@ -1265,7 +1274,7 @@ void LCodeGen::DoAddI(LAddI* instr) {
         right->IsArgument() ||
         right->IsConstantOperand()) {
       Register right_reg = EmitLoadRegister(right, scratch);
-      __ AdduAndCheckForOverflow(ToRegister(left),
+      __ AdduAndCheckForOverflow(ToRegister(result),
                                  ToRegister(left),
                                  right_reg,
                                  overflow);  // Reg at also used as scratch.
@@ -1273,7 +1282,7 @@ void LCodeGen::DoAddI(LAddI* instr) {
       ASSERT(right->IsRegister());
       // Due to overflow check macros not supporting constant operands,
       // handling the IsConstantOperand case was moved to prev if clause.
-      __ AdduAndCheckForOverflow(ToRegister(left),
+      __ AdduAndCheckForOverflow(ToRegister(result),
                                  ToRegister(left),
                                  ToRegister(right),
                                  overflow);  // Reg at also used as scratch.
@@ -1286,18 +1295,19 @@ void LCodeGen::DoAddI(LAddI* instr) {
 void LCodeGen::DoArithmeticD(LArithmeticD* instr) {
   DoubleRegister left = ToDoubleRegister(instr->InputAt(0));
   DoubleRegister right = ToDoubleRegister(instr->InputAt(1));
+  DoubleRegister result = ToDoubleRegister(instr->result());
   switch (instr->op()) {
     case Token::ADD:
-      __ add_d(left, left, right);
+      __ add_d(result, left, right);
       break;
     case Token::SUB:
-      __ sub_d(left, left, right);
+      __ sub_d(result, left, right);
       break;
     case Token::MUL:
-      __ mul_d(left, left, right);
+      __ mul_d(result, left, right);
       break;
     case Token::DIV:
-      __ div_d(left, left, right);
+      __ div_d(result, left, right);
       break;
     case Token::MOD: {
       // Save a0-a3 on the stack.
@@ -1310,7 +1320,7 @@ void LCodeGen::DoArithmeticD(LArithmeticD* instr) {
           ExternalReference::double_fp_operation(Token::MOD, isolate()),
           0, 2);
       // Move the result in the double result register.
-      __ GetCFunctionDoubleResult(ToDoubleRegister(instr->result()));
+      __ GetCFunctionDoubleResult(result);
 
       // Restore saved register.
       __ MultiPop(saved_regs);
@@ -1389,11 +1399,9 @@ void LCodeGen::DoBranch(LBranch* instr) {
     Register reg = ToRegister(instr->InputAt(0));
     EmitBranch(true_block, false_block, ne, reg, Operand(zero_reg));
   } else if (r.IsDouble()) {
-    FPURegister scratch = double_scratch0();
-    __ Move(scratch, zero_reg, zero_reg);
     DoubleRegister reg = ToDoubleRegister(instr->InputAt(0));
     // Test the double value. Zero and NaN are false.
-    EmitBranchF(true_block, false_block, ne, reg, scratch);
+    EmitBranchF(true_block, false_block, ne, reg, kDoubleRegZero);
   } else {
     ASSERT(r.IsTagged());
 
@@ -2339,8 +2347,6 @@ void LCodeGen::DoLoadKeyedFastElement(LLoadKeyedFastElement* instr) {
   Register key = EmitLoadRegister(instr->key(), scratch0());
   Register result = ToRegister(instr->result());
   Register scratch = scratch0();
-  // TODO(plind): expect this ASSERT to break on mips.......
-  ASSERT(result.is(elements));
 
   // Load the result.
   __ sll(scratch, key, kPointerSizeLog2);  // Key indexes words.
@@ -3104,7 +3110,7 @@ void LCodeGen::DoDeferredNumberTagI(LNumberTagI* instr) {
 
   Label slow;
   Register reg = ToRegister(instr->InputAt(0));
-  FPURegister dbl_scratch = lithiumScratchDouble;
+  FPURegister dbl_scratch = double_scratch0();
 
   // Preserve the value of all registers.
   PushSafepointRegistersScope scope(this, Safepoint::kWithRegisters);

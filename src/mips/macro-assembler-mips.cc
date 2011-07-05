@@ -938,16 +938,30 @@ void MacroAssembler::BranchF(Label* target,
 
 void MacroAssembler::Move(FPURegister dst, double imm) {
   ASSERT(CpuFeatures::IsEnabled(FPU));
-  uint32_t lo, hi;
-  DoubleAsTwoUInt32(imm, &lo, &hi);
-  // Move the low part of the double into the lower of the corresponding FPU
-  // register of FPU register pair.
-  li(at, Operand(lo));
-  mtc1(at, dst);
-  // Move the high part of the double into the higher of the corresponding FPU
-  // register of FPU register pair.
-  li(at, Operand(hi));
-  mtc1(at, FPURegister::from_code(dst.code() + 1));
+  static const DoubleRepresentation minus_zero(-0.0);
+  static const DoubleRepresentation zero(0.0);
+  DoubleRepresentation value(imm);
+  // Handle special values first.
+  // TODO(kalmard): kDoubleRegZero is only used for crankshaft. Although it
+  // (f28) is not used anywhere at the moment, what guarantees that doesn't
+  // change?
+  bool force_load = dst.is(kDoubleRegZero);
+  if (value.bits == zero.bits && !force_load) {
+    mov_d(dst, kDoubleRegZero);
+  } else if (value.bits == minus_zero.bits && !force_load) {
+    neg_d(dst, kDoubleRegZero);
+  } else {
+    uint32_t lo, hi;
+    DoubleAsTwoUInt32(imm, &lo, &hi);
+    // Move the low part of the double into the lower of the corresponding FPU
+    // register of FPU register pair.
+    li(at, Operand(lo));
+    mtc1(at, dst);
+    // Move the high part of the double into the higher of the corresponding FPU
+    // register of FPU register pair.
+    li(at, Operand(hi));
+    mtc1(at, FPURegister::from_code(dst.code() + 1));
+  }
 }
 
 
