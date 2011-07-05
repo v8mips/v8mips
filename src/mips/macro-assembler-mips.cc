@@ -1943,8 +1943,27 @@ void MacroAssembler::Jump(intptr_t target,
                           Register rs,
                           const Operand& rt,
                           BranchDelaySlot bd) {
-  li(t9, Operand(target, rmode));
-  Jump(t9, cond, rs, rt, bd);
+  if (!MustUseReg(rmode)  && is_uint28(target)) {
+    if (cond == cc_always) {
+      j(target);
+    } else {
+      BRANCH_ARGS_CHECK(cond, rs, rt);
+      Branch(2, NegateCondition(cond), rs, rt);
+      j(target);  // Will generate only one instruction.
+    }
+  } else {  // MustUseReg
+    li(t9, Operand(target, rmode), true);
+    if (cond == cc_always) {
+      jr(t9);
+    } else {
+      BRANCH_ARGS_CHECK(cond, rs, rt);
+      Branch(2, NegateCondition(cond), rs, rt);
+      jr(t9);  // Will generate only one instruction.
+    }
+  }
+
+  if (bd == PROTECT)
+    nop();
 }
 
 
@@ -2022,7 +2041,8 @@ int MacroAssembler::CallSize(Address target,
                              const Operand& rt,
                              BranchDelaySlot bd) {
   int size = 0;
-  if (!MustUseReg(rmode)) {
+  int32_t target_int = reinterpret_cast<int32_t>(target);
+  if (!MustUseReg(rmode) && is_uint28(target_int)) {
     if (cond == cc_always) {
       size += 1;
     } else {
@@ -2055,7 +2075,7 @@ void MacroAssembler::Call(Address target,
   bind(&start);
   int32_t target_int = reinterpret_cast<int32_t>(target);
 
-  if (!MustUseReg(rmode)) {
+  if (!MustUseReg(rmode)  && is_uint28(target_int)) {
     if (cond == cc_always) {
       jal(target_int);
     } else {
