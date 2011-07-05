@@ -1688,13 +1688,13 @@ void LCodeGen::DoIsNullAndBranch(LIsNullAndBranch* instr) {
 
 Condition LCodeGen::EmitIsObject(Register input,
                                  Register temp1,
-                                 Register temp2,
                                  Label* is_not_object,
                                  Label* is_object) {
+  Register temp2 = scratch0();
   __ JumpIfSmi(input, is_not_object);
 
-  __ LoadRoot(temp1, Heap::kNullValueRootIndex);
-  __ Branch(is_object, eq, input, Operand(temp1));
+  __ LoadRoot(temp2, Heap::kNullValueRootIndex);
+  __ Branch(is_object, eq, input, Operand(temp2));
 
   // Load map.
   __ lw(temp1, FieldMemOperand(input, HeapObject::kMapOffset));
@@ -1718,7 +1718,7 @@ void LCodeGen::DoIsObject(LIsObject* instr) {
   Register temp = scratch0();
   Label is_false, is_true, done;
 
-  Condition true_cond = EmitIsObject(reg, result, temp, &is_false, &is_true);
+  Condition true_cond = EmitIsObject(reg, temp, &is_false, &is_true);
   __ Branch(&is_true, true_cond, temp,
             Operand(LAST_NONCALLABLE_SPEC_OBJECT_TYPE));
 
@@ -1744,7 +1744,7 @@ void LCodeGen::DoIsObjectAndBranch(LIsObjectAndBranch* instr) {
   Label* false_label = chunk_->GetAssemblyLabel(false_block);
 
   Condition true_cond =
-      EmitIsObject(reg, temp1, temp2, false_label, true_label);
+      EmitIsObject(reg, temp1, false_label, true_label);
 
   EmitBranch(true_block, false_block, true_cond, temp2,
              Operand(LAST_NONCALLABLE_SPEC_OBJECT_TYPE));
