@@ -109,8 +109,6 @@ void CompilationInfo::DisableOptimization() {
 void CompilationInfo::AbortOptimization() {
   Handle<Code> code(shared_info()->code());
   SetCode(code);
-  Isolate* isolate = code->GetIsolate();
-  isolate->compilation_cache()->MarkForLazyOptimizing(closure());
 }
 
 
@@ -618,6 +616,7 @@ bool Compiler::CompileLazy(CompilationInfo* info) {
       RecordFunctionCompilation(Logger::LAZY_COMPILE_TAG, info, shared);
 
       if (info->IsOptimizing()) {
+        ASSERT(shared->scope_info() != SerializedScopeInfo::Empty());
         function->ReplaceCode(*code);
       } else {
         // Update the shared function info with the compiled code and the
@@ -659,9 +658,6 @@ bool Compiler::CompileLazy(CompilationInfo* info) {
             CompilationInfo optimized(function);
             optimized.SetOptimizing(AstNode::kNoNumber);
             return CompileLazy(&optimized);
-          } else if (isolate->compilation_cache()->ShouldOptimizeEagerly(
-              function)) {
-            isolate->runtime_profiler()->OptimizeSoon(*function);
           }
         }
       }

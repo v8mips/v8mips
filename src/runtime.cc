@@ -45,6 +45,7 @@
 #include "json-parser.h"
 #include "liveedit.h"
 #include "liveobjectlist-inl.h"
+#include "misc-intrinsics.h"
 #include "parser.h"
 #include "platform.h"
 #include "runtime-profiler.h"
@@ -6642,50 +6643,69 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_SmiLexicographicCompare) {
   // If the integers are equal so are the string representations.
   if (x_value == y_value) return Smi::FromInt(EQUAL);
 
-  // If one of the integers are zero the normal integer order is the
+  // If one of the integers is zero the normal integer order is the
   // same as the lexicographic order of the string representations.
-  if (x_value == 0 || y_value == 0) return Smi::FromInt(x_value - y_value);
+  if (x_value == 0 || y_value == 0)
+    return Smi::FromInt(x_value < y_value ? LESS : GREATER);
 
   // If only one of the integers is negative the negative number is
   // smallest because the char code of '-' is less than the char code
   // of any digit.  Otherwise, we make both values positive.
+
+  // Use unsigned values otherwise the logic is incorrect for -MIN_INT on
+  // architectures using 32-bit Smis.
+  uint32_t x_scaled = x_value;
+  uint32_t y_scaled = y_value;
   if (x_value < 0 || y_value < 0) {
     if (y_value >= 0) return Smi::FromInt(LESS);
     if (x_value >= 0) return Smi::FromInt(GREATER);
-    x_value = -x_value;
-    y_value = -y_value;
+    x_scaled = -x_value;
+    y_scaled = -y_value;
   }
 
-  // Arrays for the individual characters of the two Smis.  Smis are
-  // 31 bit integers and 10 decimal digits are therefore enough.
-  // TODO(isolates): maybe we should simply allocate 20 bytes on the stack.
-  int* x_elms = isolate->runtime_state()->smi_lexicographic_compare_x_elms();
-  int* y_elms = isolate->runtime_state()->smi_lexicographic_compare_y_elms();
+  static const uint32_t kPowersOf10[] = {
+    1, 10, 100, 1000, 10*1000, 100*1000,
+    1000*1000, 10*1000*1000, 100*1000*1000,
+    1000*1000*1000
+  };
 
+  // If the integers have the same number of decimal digits they can be
+  // compared directly as the numeric order is the same as the
+  // lexicographic order.  If one integer has fewer digits, it is scaled
+  // by some power of 10 to have the same number of digits as the longer
+  // integer.  If the scaled integers are equal it means the shorter
+  // integer comes first in the lexicographic order.
 
-  // Convert the integers to arrays of their decimal digits.
-  int x_index = 0;
-  int y_index = 0;
-  while (x_value > 0) {
-    x_elms[x_index++] = x_value % 10;
-    x_value /= 10;
+  // From http://graphics.stanford.edu/~seander/bithacks.html#IntegerLog10
+  int x_log2 = IntegerLog2(x_scaled);
+  int x_log10 = ((x_log2 + 1) * 1233) >> 12;
+  x_log10 -= x_scaled < kPowersOf10[x_log10];
+
+  int y_log2 = IntegerLog2(y_scaled);
+  int y_log10 = ((y_log2 + 1) * 1233) >> 12;
+  y_log10 -= y_scaled < kPowersOf10[y_log10];
+
+  int tie = EQUAL;
+
+  if (x_log10 < y_log10) {
+    // X has fewer digits.  We would like to simply scale up X but that
+    // might overflow, e.g when comparing 9 with 1_000_000_000, 9 would
+    // be scaled up to 9_000_000_000. So we scale up by the next
+    // smallest power and scale down Y to drop one digit. It is OK to
+    // drop one digit from the longer integer since the final digit is
+    // past the length of the shorter integer.
+    x_scaled *= kPowersOf10[y_log10 - x_log10 - 1];
+    y_scaled /= 10;
+    tie = LESS;
+  } else if (y_log10 < x_log10) {
+    y_scaled *= kPowersOf10[x_log10 - y_log10 - 1];
+    x_scaled /= 10;
+    tie = GREATER;
   }
-  while (y_value > 0) {
-    y_elms[y_index++] = y_value % 10;
-    y_value /= 10;
-  }
 
-  // Loop through the arrays of decimal digits finding the first place
-  // where they differ.
-  while (--x_index >= 0 && --y_index >= 0) {
-    int diff = x_elms[x_index] - y_elms[y_index];
-    if (diff != 0) return Smi::FromInt(diff);
-  }
-
-  // If one array is a suffix of the other array, the longest array is
-  // the representation of the largest of the Smis in the
-  // lexicographic ordering.
-  return Smi::FromInt(x_index - y_index);
+  if (x_scaled < y_scaled) return Smi::FromInt(LESS);
+  if (x_scaled > y_scaled) return Smi::FromInt(GREATER);
+  return Smi::FromInt(tie);
 }
 
 
@@ -7801,7 +7821,6 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_NotifyDeoptimized) {
     }
   }
 
-  isolate->compilation_cache()->MarkForLazyOptimizing(function);
   if (type == Deoptimizer::EAGER) {
     RUNTIME_ASSERT(function->IsOptimized());
   } else {
@@ -9918,7 +9937,10 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_GetFrameCount) {
     // If there is no JavaScript stack frame count is 0.
     return Smi::FromInt(0);
   }
-  for (JavaScriptFrameIterator it(isolate, id); !it.done(); it.Advance()) n++;
+
+  for (JavaScriptFrameIterator it(isolate, id); !it.done(); it.Advance()) {
+    n += it.frame()->GetInlineCount();
+  }
   return Smi::FromInt(n);
 }
 
@@ -9931,7 +9953,7 @@ static const int kFrameDetailsLocalCountIndex = 4;
 static const int kFrameDetailsSourcePositionIndex = 5;
 static const int kFrameDetailsConstructCallIndex = 6;
 static const int kFrameDetailsAtReturnIndex = 7;
-static const int kFrameDetailsDebuggerFrameIndex = 8;
+static const int kFrameDetailsFlagsIndex = 8;
 static const int kFrameDetailsFirstDynamicIndex = 9;
 
 // Return an array with frame details
@@ -9947,7 +9969,7 @@ static const int kFrameDetailsFirstDynamicIndex = 9;
 // 5: Source position
 // 6: Constructor call
 // 7: Is at return
-// 8: Debugger frame
+// 8: Flags
 // Arguments name, value
 // Locals name, value
 // Return value if any
@@ -9970,16 +9992,26 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_GetFrameDetails) {
     // If there are no JavaScript stack frames return undefined.
     return heap->undefined_value();
   }
+
+  int deoptimized_frame_index = -1;  // Frame index in optimized frame.
+  DeoptimizedFrameInfo* deoptimized_frame = NULL;
+
   int count = 0;
   JavaScriptFrameIterator it(isolate, id);
   for (; !it.done(); it.Advance()) {
-    if (count == index) break;
-    count++;
+    if (index < count + it.frame()->GetInlineCount()) break;
+    count += it.frame()->GetInlineCount();
   }
   if (it.done()) return heap->undefined_value();
 
-  bool is_optimized_frame =
-      it.frame()->LookupCode()->kind() == Code::OPTIMIZED_FUNCTION;
+  if (it.frame()->is_optimized()) {
+    deoptimized_frame_index =
+        it.frame()->GetInlineCount() - (index - count) - 1;
+    deoptimized_frame = Deoptimizer::DebuggerInspectableFrame(
+        it.frame(),
+        deoptimized_frame_index,
+        isolate);
+  }
 
   // Traverse the saved contexts chain to find the active context for the
   // selected frame.
@@ -10002,6 +10034,7 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_GetFrameDetails) {
   // Get scope info and read from it for local variable information.
   Handle<JSFunction> function(JSFunction::cast(it.frame()->function()));
   Handle<SerializedScopeInfo> scope_info(function->shared()->scope_info());
+  ASSERT(*scope_info != SerializedScopeInfo::Empty());
   ScopeInfo<> info(*scope_info);
 
   // Get the locals names and values into a temporary array.
@@ -10013,38 +10046,33 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_GetFrameDetails) {
       isolate->factory()->NewFixedArray(info.NumberOfLocals() * 2);
 
   // Fill in the values of the locals.
-  if (is_optimized_frame) {
-    // If we are inspecting an optimized frame use undefined as the
-    // value for all locals.
-    //
-    // TODO(1140): We should be able to get the correct values
-    // for locals in optimized frames.
-    for (int i = 0; i < info.NumberOfLocals(); i++) {
-      locals->set(i * 2, *info.LocalName(i));
-      locals->set(i * 2 + 1, isolate->heap()->undefined_value());
-    }
-  } else {
-    int i = 0;
-    for (; i < info.number_of_stack_slots(); ++i) {
-      // Use the value from the stack.
-      locals->set(i * 2, *info.LocalName(i));
+  int i = 0;
+  for (; i < info.number_of_stack_slots(); ++i) {
+    // Use the value from the stack.
+    locals->set(i * 2, *info.LocalName(i));
+    if (it.frame()->is_optimized()) {
+      // Get the value from the deoptimized frame.
+      locals->set(i * 2 + 1,
+                  deoptimized_frame->GetExpression(i));
+    } else {
+      // Get the value from the stack.
       locals->set(i * 2 + 1, it.frame()->GetExpression(i));
     }
-    // Get the context containing declarations.
-    Handle<Context> context(
-        Context::cast(it.frame()->context())->declaration_context());
-    for (; i < info.NumberOfLocals(); ++i) {
-      Handle<String> name = info.LocalName(i);
-      locals->set(i * 2, *name);
-      locals->set(i * 2 + 1,
-                  context->get(scope_info->ContextSlotIndex(*name, NULL)));
-    }
+  }
+  // Get the context containing declarations.
+  Handle<Context> context(
+      Context::cast(it.frame()->context())->declaration_context());
+  for (; i < info.NumberOfLocals(); ++i) {
+    Handle<String> name = info.LocalName(i);
+    locals->set(i * 2, *name);
+    locals->set(i * 2 + 1,
+                context->get(scope_info->ContextSlotIndex(*name, NULL)));
   }
 
   // Check whether this frame is positioned at return. If not top
   // frame or if the frame is optimized it cannot be at a return.
   bool at_return = false;
-  if (!is_optimized_frame && index == 0) {
+  if (!it.frame()->is_optimized() && index == 0) {
     at_return = isolate->debug()->IsBreakAtReturn(it.frame());
   }
 
@@ -10125,10 +10153,21 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_GetFrameDetails) {
   // Add the at return information.
   details->set(kFrameDetailsAtReturnIndex, heap->ToBoolean(at_return));
 
-  // Add information on whether this frame is invoked in the debugger context.
-  details->set(kFrameDetailsDebuggerFrameIndex,
-               heap->ToBoolean(*save->context() ==
-                   *isolate->debug()->debug_context()));
+  // Add flags to indicate information on whether this frame is
+  //   bit 0: invoked in the debugger context.
+  //   bit 1: optimized frame.
+  //   bit 2: inlined in optimized frame
+  int flags = 0;
+  if (*save->context() == *isolate->debug()->debug_context()) {
+    flags |= 1 << 0;
+  }
+  if (it.frame()->is_optimized()) {
+    flags |= 1 << 1;
+    if (deoptimized_frame_index > 0) {
+      flags |= 1 << 2;
+    }
+  }
+  details->set(kFrameDetailsFlagsIndex, Smi::FromInt(flags));
 
   // Fill the dynamic part.
   int details_index = kFrameDetailsFirstDynamicIndex;
@@ -10147,7 +10186,7 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_GetFrameDetails) {
     //
     // TODO(3141533): We should be able to get the actual parameter
     // value for optimized frames.
-    if (!is_optimized_frame &&
+    if (!it.frame()->is_optimized() &&
         (i < it.frame()->ComputeParametersCount())) {
       details->set(details_index++, it.frame()->GetParameter(i));
     } else {
@@ -10182,6 +10221,12 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_GetFrameDetails) {
         isolate->factory()->ToObject(receiver, calling_frames_global_context);
   }
   details->set(kFrameDetailsReceiverIndex, *receiver);
+
+  // Get rid of the calculated deoptimized frame if any.
+  if (deoptimized_frame != NULL) {
+    Deoptimizer::DeleteDebuggerInspectableFrame(deoptimized_frame,
+                                                isolate);
+  }
 
   ASSERT_EQ(details_size, details_index);
   return *isolate->factory()->NewJSArrayWithElements(details);
@@ -11148,7 +11193,8 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_DebugEvaluate) {
 
   if (additional_context->IsJSObject()) {
     Handle<JSObject> extension = Handle<JSObject>::cast(additional_context);
-    context = isolate->factory()->NewWithContext(go_between, context, extension);
+    context =
+        isolate->factory()->NewWithContext(go_between, context, extension);
   }
 
   // Wrap the evaluation statement in a new function compiled in the newly

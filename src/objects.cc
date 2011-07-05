@@ -6287,19 +6287,6 @@ void JSFunction::MarkForLazyRecompilation() {
 }
 
 
-uint32_t JSFunction::SourceHash() {
-  uint32_t hash = 0;
-  Object* script = shared()->script();
-  if (!script->IsUndefined()) {
-    Object* source = Script::cast(script)->source();
-    if (source->IsUndefined()) hash = String::cast(source)->Hash();
-  }
-  hash ^= ComputeIntegerHash(shared()->start_position_and_type());
-  hash += ComputeIntegerHash(shared()->end_position());
-  return hash;
-}
-
-
 bool JSFunction::IsInlineable() {
   if (IsBuiltin()) return false;
   SharedFunctionInfo* shared_info = shared();
@@ -6950,7 +6937,7 @@ Map* Code::FindFirstMap() {
 }
 
 
-#if defined(OBJECT_PRINT) || defined(ENABLE_DISASSEMBLER)
+#ifdef ENABLE_DISASSEMBLER
 
 void DeoptimizationInputData::DeoptimizationInputDataPrint(FILE* out) {
   disasm::NameConverter converter;
@@ -7098,10 +7085,6 @@ void DeoptimizationOutputData::DeoptimizationOutputDataPrint(FILE* out) {
   }
 }
 
-#endif  // defined(OBJECT_PRINT) || defined(ENABLE_DISASSEMBLER)
-
-
-#ifdef ENABLE_DISASSEMBLER
 
 // Identify kind of code.
 const char* Code::Kind2String(Kind kind) {
@@ -7191,6 +7174,9 @@ void Code::Disassemble(const char* name, FILE* out) {
     PrintF(out, "ic_in_loop = %d\n", ic_in_loop() == IN_LOOP);
     if (ic_state() == MONOMORPHIC) {
       PrintF(out, "type = %s\n", PropertyType2String(type()));
+    }
+    if (is_call_stub() || is_keyed_call_stub()) {
+      PrintF(out, "argc = %d\n", arguments_count());
     }
   }
   if ((name != NULL) && (name[0] != '\0')) {
