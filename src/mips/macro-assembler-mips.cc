@@ -1846,8 +1846,27 @@ void MacroAssembler::Jump(intptr_t target,
                           Register rs,
                           const Operand& rt,
                           BranchDelaySlot bd) {
-  li(t9, Operand(target, rmode));
-  Jump(t9, cond, rs, rt, bd);
+  if (!MustUseReg(rmode)  && is_uint28(target)) {
+    if (cond == cc_always) {
+      j(target);
+    } else {
+      BRANCH_ARGS_CHECK(cond, rs, rt);
+      Branch(2, NegateCondition(cond), rs, rt);
+      j(target);  // Will generate only one instruction.
+    }
+  } else {  // MustUseReg
+    li(t9, Operand(target, rmode), true);
+    if (cond == cc_always) {
+      jr(t9);
+    } else {
+      BRANCH_ARGS_CHECK(cond, rs, rt);
+      Branch(2, NegateCondition(cond), rs, rt);
+      jr(t9);  // Will generate only one instruction.
+    }
+  }
+
+  if (bd == PROTECT)
+    nop();
 }
 
 
