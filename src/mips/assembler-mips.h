@@ -858,6 +858,7 @@ class Assembler : public Malloced {
   static uint32_t GetLabelConst(Instr instr);
 
   static int32_t GetBranchOffset(Instr instr);
+  static int32_t GetJumpOffset(Address addr_instr);
   static bool IsLw(Instr instr);
   static int16_t GetLwOffset(Instr instr);
   static Instr SetLwOffset(Instr instr, int16_t offset);
@@ -872,6 +873,10 @@ class Assembler : public Malloced {
   bool has_exception() const {
     return internal_trampoline_exception_;
   }
+
+  bool is_trampoline_emitted() const {
+    return trampoline_emitted_;
+  };
 
  protected:
   bool emit_debug_code() const { return emit_debug_code_; }
@@ -906,10 +911,6 @@ class Assembler : public Malloced {
 
   bool is_trampoline_pool_blocked() const {
     return trampoline_pool_blocked_nesting_ > 0;
-  }
-
-  bool is_trampoline_emitted() const {
-    return trampoline_emitted_;
   }
 
   // Temporarily block automatic assembly buffer growth.

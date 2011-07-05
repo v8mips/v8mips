@@ -2856,9 +2856,9 @@ void MacroAssembler::AssertFastElements(Register elements) {
     Push(elements);
     lw(elements, FieldMemOperand(elements, HeapObject::kMapOffset));
     LoadRoot(at, Heap::kFixedArrayMapRootIndex);
-    Branch(&ok, eq, elements, Operand(at));
+    BranchShort(&ok, eq, elements, Operand(at));
     LoadRoot(at, Heap::kFixedCOWArrayMapRootIndex);
-    Branch(&ok, eq, elements, Operand(at));
+    BranchShort(&ok, eq, elements, Operand(at));
     Abort("JSObject with fast elements map has slow elements");
     bind(&ok);
     Pop(elements);
@@ -2869,7 +2869,7 @@ void MacroAssembler::AssertFastElements(Register elements) {
 void MacroAssembler::Check(Condition cc, const char* msg,
                            Register rs, Operand rt) {
   Label L;
-  Branch(&L, cc, rs, rt);
+  BranchShort(&L, cc, rs, rt);
   Abort(msg);
   // will not return here
   bind(&L);

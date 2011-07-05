@@ -6982,6 +6982,9 @@ void CodeGenerator::EmitNamedLoad(Handle<String> name, bool is_contextual) {
 #ifdef DEBUG
       // 6 instructions. lw:1, li:2, Branch:2, lw:1 (in both branches below).
       int InlinedNamedLoadInstructions = 6;
+      if (masm()->is_trampoline_emitted()) {
+        InlinedNamedLoadInstructions += 4;
+      }
       Label check_inlined_codesize;
       masm_->bind(&check_inlined_codesize);
 #endif
@@ -7016,6 +7019,9 @@ void CodeGenerator::EmitNamedLoad(Handle<String> name, bool is_contextual) {
 #ifdef DEBUG
           // hidden li: 2, b: 1, nop: 1 (delay slot protection)
           InlinedNamedLoadInstructions += 4;
+          if (masm()->is_trampoline_emitted()) {
+            InlinedNamedLoadInstructions += 4;
+          }
 #endif
           deferred->Branch(eq, receiver, Operand(Factory::the_hole_value()));
         } else if (FLAG_debug_code) {
@@ -7023,7 +7029,7 @@ void CodeGenerator::EmitNamedLoad(Handle<String> name, bool is_contextual) {
           // hidden li: 2, b: 1, nop: 1 (delay slot protection)
           InlinedNamedLoadInstructions += 4;
 #endif
-          __ Branch(&check_the_hole, eq,
+          __ BranchShort(&check_the_hole, eq,
               receiver, Operand(Factory::the_hole_value()));
           __ bind(&cont);
         }
@@ -7125,10 +7131,12 @@ void CodeGenerator::EmitNamedStore(Handle<String> name, bool is_contextual) {
               masm()->InstructionsGeneratedSince(&record_write_start)));
       inlined_write_barrier_size_ =
           masm()->InstructionsGeneratedSince(&record_write_start);
-
       // Make sure that the expected number of instructions are generated.
-      ASSERT_EQ(GetInlinedNamedStoreInstructionsAfterPatch(),
+#ifdef DEBUG
+      bool long_branch_mode = masm()->is_trampoline_emitted();
+      ASSERT_EQ(GetInlinedNamedStoreInstructionsAfterPatch(long_branch_mode),
                 masm_->InstructionsGeneratedSince(&check_inlined_codesize));
+#endif
     }
     deferred->BindExit();
   }
@@ -7209,8 +7217,11 @@ void CodeGenerator::EmitKeyedLoad() {
       deferred->Branch(eq, scratch1, Operand(scratch2));
 
       __ mov(v0, scratch1);
-      ASSERT_EQ(GetInlinedKeyedLoadInstructionsAfterPatch(),
+#ifdef DEBUG
+      bool long_branch_mode = masm()->is_trampoline_emitted();
+      ASSERT_EQ(GetInlinedKeyedLoadInstructionsAfterPatch(long_branch_mode),
                 masm_->InstructionsGeneratedSince(&check_inlined_codesize));
+#endif
     }
 
     deferred->BindExit();
@@ -7340,8 +7351,11 @@ void CodeGenerator::EmitKeyedStore(StaticType* key_type,
 
       // Make sure that the expected number of instructions are generated.
       // If fail, KeyedStoreIC::PatchInlinedStore() must be fixed as well.
-      ASSERT_EQ(kInlinedKeyedStoreInstructionsAfterPatch,
+#ifdef DEBUG
+      bool long_branch_mode = masm()->is_trampoline_emitted();
+      ASSERT_EQ(GetInlinedKeyedStoreInstructionsAfterPatch(long_branch_mode),
                 masm_->InstructionsGeneratedSince(&check_inlined_codesize));
+#endif
     }
 
     ASSERT(we_remembered_the_write_barrier);

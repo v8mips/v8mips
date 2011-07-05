@@ -944,14 +944,21 @@ static inline int InlinedICSiteMarker(Address address,
   // There may be some reg-reg move and frame merging code to skip over before
   // the branch back from the DeferredReferenceGetKeyedValue code to the inlined
   // code.
-  while (!Assembler::IsBranch(instr_after_nop)) {
+  while (!(Assembler::IsBranch(instr_after_nop) ||
+           Assembler::IsJr(instr_after_nop))) {
     address_after_nop += Assembler::kInstrSize;
     instr_after_nop = Assembler::instr_at(address_after_nop);
   }
 
   // Find the end of the inlined code for handling the load.
-  int b_offset =
-  Assembler::GetBranchOffset(instr_after_nop) + Assembler::kPcLoadDelta;
+  int b_offset = 0;
+  if (Assembler::IsBranch(instr_after_nop)) {
+    b_offset = Assembler::GetBranchOffset(instr_after_nop) +
+        Assembler::kPcLoadDelta;
+  } else {
+    b_offset = Assembler::GetJumpOffset(address_after_nop);
+  }
+
   ASSERT(b_offset < 0);  // Jumping back from deferred code.
   *inline_end_address = address_after_nop + b_offset;
 
@@ -992,10 +999,24 @@ bool LoadIC::PatchInlinedLoad(Address address, Object* map, int offset) {
   // Patch the map check.
   // For PROPERTY_ACCESS_INLINED, the load map instruction is generated
   // 5 instructions before the end of the inlined code.
-  // See codgen-arm.cc CodeGenerator::EmitNamedLoad.
+  // See codegen-mips.cc CodeGenerator::EmitNamedLoad.
   int lw_map_offset = -5;
   Address li_map_instr_address = inline_end_address + lw_map_offset *
       Assembler::kInstrSize;
+  Instr instr = Assembler::instr_at(li_map_instr_address);
+  if (!Assembler::IsLui(instr)) {
+    lw_map_offset = -9;
+    li_map_instr_address = inline_end_address +
+        lw_map_offset * Assembler::kInstrSize;
+    ASSERT(Assembler::IsLui(Assembler::instr_at(li_map_instr_address)));
+  }
+#ifdef DEBUG
+  Instr instr_lw =
+      Assembler::instr_at(li_map_instr_address - 1 * Assembler::kInstrSize);
+  Instr instr_branch =
+      Assembler::instr_at(li_map_instr_address + 2 * Assembler::kInstrSize);
+  ASSERT(Assembler::IsLw(instr_lw) && Assembler::IsBranch(instr_branch));
+#endif
 
   Assembler::set_target_address_at(li_map_instr_address,
                                    reinterpret_cast<Address>(map));
@@ -1021,24 +1042,51 @@ bool LoadIC::PatchInlinedContextualLoad(Address address,
       marker == Assembler::PROPERTY_ACCESS_INLINED_CONTEXT_DONT_DELETE;
 
   // These are the offsets from the end of the inlined code.
-  // See codgen-mips.cc CodeGenerator::EmitNamedLoad.
-  int lw_map_offset = marker_is_dont_delete ? -7: -11;
-  int lw_cell_offset = marker_is_dont_delete ? -3: -7;
+  // See codegen-mips.cc CodeGenerator::EmitNamedLoad.
+  int li_map_offset = marker_is_dont_delete ? -7: -11;
+  int li_cell_offset = marker_is_dont_delete ? -3: -7;
   if (FLAG_debug_code && marker_is_dont_delete) {
     // Three extra instructions were generated to check for the_hole_value.
-    lw_map_offset -= 4;
-    lw_cell_offset -= 4;
+    li_map_offset -= 4;
+    li_cell_offset -= 4;
   }
-  Address lw_map_instr_address =
-      inline_end_address + lw_map_offset * Assembler::kInstrSize;
-  Address lw_cell_instr_address =
-      inline_end_address + lw_cell_offset * Assembler::kInstrSize;
+  Address li_map_instr_address =
+      inline_end_address + li_map_offset * Assembler::kInstrSize;
+  Address li_cell_instr_address =
+      inline_end_address + li_cell_offset * Assembler::kInstrSize;
+  Instr instr_li_map = Assembler::instr_at(li_map_instr_address);
+  Instr instr_li_cell = Assembler::instr_at(li_cell_instr_address);
+  if (!(Assembler::IsLui(instr_li_map) && Assembler::IsLui(instr_li_cell))) {
+    li_map_offset = marker_is_dont_delete ? -11: -19;
+    li_cell_offset = marker_is_dont_delete ? -3: -11;
+    if (FLAG_debug_code && marker_is_dont_delete) {
+      // Three extra instructions were generated to check for the_hole_value.
+      li_map_offset -= 4;
+      li_cell_offset -= 4;
+    }
+    li_map_instr_address =
+        inline_end_address + li_map_offset * Assembler::kInstrSize;
+    li_cell_instr_address =
+        inline_end_address + li_cell_offset * Assembler::kInstrSize;
+#ifdef DEBUG
+    instr_li_map = Assembler::instr_at(li_map_instr_address);
+    instr_li_cell = Assembler::instr_at(li_cell_instr_address);
+    ASSERT(Assembler::IsLui(instr_li_map) && Assembler::IsLui(instr_li_cell));
+#endif
+  }
+#ifdef DEBUG
+  Instr instr_lw =
+      Assembler::instr_at(li_cell_instr_address + 2 * Assembler::kInstrSize);
+  Instr instr_branch =
+      Assembler::instr_at(li_map_instr_address + 2 * Assembler::kInstrSize);
+  ASSERT(Assembler::IsLw(instr_lw) && Assembler::IsBranch(instr_branch));
+#endif
 
   // Patch the map check.
-  Assembler::set_target_address_at(lw_map_instr_address,
+  Assembler::set_target_address_at(li_map_instr_address,
                                    reinterpret_cast<Address>(map));
   // Patch the cell address.
-  Assembler::set_target_address_at(lw_cell_instr_address,
+  Assembler::set_target_address_at(li_cell_instr_address,
                                    reinterpret_cast<Address>(cell));
 
   return true;
@@ -1057,10 +1105,28 @@ bool StoreIC::PatchInlinedStore(Address address, Object* map, int offset) {
   }
 
   // Compute the address of the map load instruction.
+  bool after_trampoline_emission = false;
   Address li_map_instr_address =
       inline_end_address -
-      (CodeGenerator::GetInlinedNamedStoreInstructionsAfterPatch() *
+      (CodeGenerator::GetInlinedNamedStoreInstructionsAfterPatch(false) *
        Assembler::kInstrSize);
+  Instr instr = Assembler::instr_at(li_map_instr_address);
+  if (!Assembler::IsLui(instr)) {
+    li_map_instr_address =
+      inline_end_address -
+      (CodeGenerator::GetInlinedNamedStoreInstructionsAfterPatch(true) *
+       Assembler::kInstrSize);
+    instr = Assembler::instr_at(li_map_instr_address);
+    ASSERT(Assembler::IsLui(instr));
+    after_trampoline_emission = true;
+  }
+#ifdef DEBUG
+  Instr instr_lw =
+      Assembler::instr_at(li_map_instr_address - 1 * Assembler::kInstrSize);
+  Instr instr_branch =
+      Assembler::instr_at(li_map_instr_address + 2 * Assembler::kInstrSize);
+  ASSERT(Assembler::IsLw(instr_lw) && Assembler::IsBranch(instr_branch));
+#endif
 
   // Update the offsets if initializing the inlined store. No reason
   // to update the offsets when clearing the inlined version because
@@ -1071,6 +1137,9 @@ bool StoreIC::PatchInlinedStore(Address address, Object* map, int offset) {
     // These are: li(liu & ori), and Branch (bne & nop).
     Address sw_property_instr_address =
         li_map_instr_address + 4 * Assembler::kInstrSize;
+    if (after_trampoline_emission) {
+      sw_property_instr_address += 4 * Assembler::kInstrSize;
+    }
     Instr sw_property_instr = Assembler::instr_at(sw_property_instr_address);
     ASSERT(Assembler::IsSw(sw_property_instr));
     sw_property_instr = Assembler::SetSwOffset(
@@ -1115,11 +1184,26 @@ bool KeyedLoadIC::PatchInlinedLoad(Address address, Object* map) {
   // This code patches CodeGenerator::EmitKeyedLoad(), at the
   // li(scratch2, Operand(Factory::null_value()), true); which at
   // present is 24 instructions from the end of the routine.
-  Address ldr_map_instr_address =
+  Address li_map_instr_address = 0;
+  li_map_instr_address =
       inline_end_address -
-      (CodeGenerator::GetInlinedKeyedLoadInstructionsAfterPatch() *
+      (CodeGenerator::GetInlinedKeyedLoadInstructionsAfterPatch(false) *
       Assembler::kInstrSize);
-  Assembler::set_target_address_at(ldr_map_instr_address,
+  Instr instr = Assembler::instr_at(li_map_instr_address);
+  if (!Assembler::IsLui(instr)) {
+    li_map_instr_address =
+      inline_end_address -
+      (CodeGenerator::GetInlinedKeyedLoadInstructionsAfterPatch(true) *
+      Assembler::kInstrSize);
+    instr = Assembler::instr_at(li_map_instr_address);
+    ASSERT(Assembler::IsLui(instr));
+  }
+#ifdef DEBUG
+  Instr instr_branch =
+      Assembler::instr_at(li_map_instr_address + 2 * Assembler::kInstrSize);
+  ASSERT(Assembler::IsBranch(instr_branch));
+#endif
+  Assembler::set_target_address_at(li_map_instr_address,
                                    reinterpret_cast<Address>(map));
   return true;
 }
@@ -1141,11 +1225,27 @@ bool KeyedStoreIC::PatchInlinedStore(Address address, Object* map) {
   // __ li(t1, Operand(Factory::fixed_array_map()), true);
   // which is 'kInlinedKeyedStoreInstructionsAfterPatch'
   // instructions from the end of the routine.
-  Address ldr_map_instr_address =
+  Address li_map_instr_address =
       inline_end_address -
-      (CodeGenerator::kInlinedKeyedStoreInstructionsAfterPatch *
+      (CodeGenerator::GetInlinedKeyedStoreInstructionsAfterPatch(false) *
       Assembler::kInstrSize);
-  Assembler::set_target_address_at(ldr_map_instr_address,
+  Instr instr = Assembler::instr_at(li_map_instr_address);
+  if (!Assembler::IsLui(instr)) {
+    Address li_map_instr_address =
+      inline_end_address -
+      (CodeGenerator::GetInlinedKeyedStoreInstructionsAfterPatch(true) *
+      Assembler::kInstrSize);
+    instr = Assembler::instr_at(li_map_instr_address);
+    ASSERT(Assembler::IsLui(instr));
+  }
+#ifdef DEBUG
+  Instr instr_lw =
+      Assembler::instr_at(li_map_instr_address - 1 * Assembler::kInstrSize);
+  Instr instr_branch =
+      Assembler::instr_at(li_map_instr_address + 2 * Assembler::kInstrSize);
+  ASSERT(Assembler::IsLw(instr_lw) && Assembler::IsBranch(instr_branch));
+#endif
+  Assembler::set_target_address_at(li_map_instr_address,
                                    reinterpret_cast<Address>(map));
   return true;
 }

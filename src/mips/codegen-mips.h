@@ -300,16 +300,28 @@ class CodeGenerator: public AstVisitor {
   void AddDeferred(DeferredCode* code) { deferred_.Add(code); }
 
   // Constants related to patching of inlined load/store.
-  static int GetInlinedKeyedLoadInstructionsAfterPatch() {
+  static int GetInlinedKeyedLoadInstructionsAfterPatch(bool long_branches) {
     // This is in correlation with the padding in MacroAssembler::Abort.
-    return FLAG_debug_code ? 45 : 20;
+    if (long_branches) {
+      return FLAG_debug_code ? 61 : 36;
+    } else {
+      return FLAG_debug_code ? 45 : 20;
+    }
   }
-  static const int kInlinedKeyedStoreInstructionsAfterPatch = 13;
-  static int GetInlinedNamedStoreInstructionsAfterPatch() {
+
+  static int GetInlinedKeyedStoreInstructionsAfterPatch(bool long_branches) {
+    if (long_branches) {
+      return 21;
+    } else {
+      return 13;
+    }
+  }
+
+  static int GetInlinedNamedStoreInstructionsAfterPatch(bool long_branches) {
     ASSERT(inlined_write_barrier_size_ != -1);
     // Magic number 5: instruction count after patched map load:
     //  li: 2 (liu & ori), Branch : 2 (bne & nop), sw : 1
-    return inlined_write_barrier_size_ + 5;
+    return inlined_write_barrier_size_ + 5 + (long_branches ? 4 : 0);
   }
 
  private:

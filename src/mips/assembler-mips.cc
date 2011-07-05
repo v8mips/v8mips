@@ -514,6 +514,19 @@ int32_t Assembler::GetBranchOffset(Instr instr) {
 }
 
 
+int32_t Assembler::GetJumpOffset(Address addr_instr) {
+  byte *instruction_address = reinterpret_cast<byte*>(addr_instr);
+  Instr instr_lui = instr_at(instruction_address - 2 * Assembler::kInstrSize);
+  Instr instr_ori = instr_at(instruction_address - 1 * Assembler::kInstrSize);
+  ASSERT(IsLui(instr_lui) && IsOri(instr_ori));
+  int32_t imm = (instr_lui & static_cast<int32_t>(kImm16Mask)) << kLuiShift;
+  imm |= (instr_ori & static_cast<int32_t>(kImm16Mask));
+  uint32_t instr_address = reinterpret_cast<int32_t>(addr_instr);
+  int32_t delta = imm - instr_address;
+  return delta;
+}
+
+
 bool Assembler::IsLw(Instr instr) {
   return ((instr & kOpcodeMask) == LW);
 }
