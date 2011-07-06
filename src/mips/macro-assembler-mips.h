@@ -1004,8 +1004,6 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
                            Register scratch2);
 
 
-  bool UseAbsoluteCodePointers();
-
   bool generating_stub_;
   bool allow_stub_calls_;
   // This handle will be patched with the code object on installation.

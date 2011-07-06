@@ -908,14 +908,6 @@ void MacroAssembler::GetLeastBitsFromInt32(Register dst,
     (cond != cc_always && (!rs.is(zero_reg) || !rt.rm().is(zero_reg))))
 
 
-bool MacroAssembler::UseAbsoluteCodePointers() {
-  if (is_trampoline_emitted()) {
-    return true;
-  } else {
-    return false;
-  }
-}
-
 
 void MacroAssembler::Branch(int16_t offset, BranchDelaySlot bdslot) {
   BranchShort(offset, bdslot);
@@ -930,11 +922,10 @@ void MacroAssembler::Branch(int16_t offset, Condition cond, Register rs,
 
 
 void MacroAssembler::Branch(Label* L, BranchDelaySlot bdslot) {
-  bool is_label_near = is_near(L);
-  if (UseAbsoluteCodePointers() && !is_label_near) {
-    Jr(L, bdslot);
-  } else {
+  if (!is_trampoline_emitted() || is_near(L)) {
     BranchShort(L, bdslot);
+  } else {
+    Jr(L, bdslot);
   }
 }
 
@@ -942,15 +933,14 @@ void MacroAssembler::Branch(Label* L, BranchDelaySlot bdslot) {
 void MacroAssembler::Branch(Label* L, Condition cond, Register rs,
                             const Operand& rt,
                             BranchDelaySlot bdslot) {
-  bool is_label_near = is_near(L);
-  if (UseAbsoluteCodePointers() && !is_label_near) {
+  if (!is_trampoline_emitted() || is_near(L)) {
+    BranchShort(L, cond, rs, rt, bdslot);
+  } else {
     Label skip;
     Condition neg_cond = NegateCondition(cond);
     BranchShort(&skip, neg_cond, rs, rt);
     Jr(L, bdslot);
     bind(&skip);
-  } else {
-    BranchShort(L, cond, rs, rt, bdslot);
   }
 }
 
@@ -1466,11 +1456,10 @@ void MacroAssembler::BranchAndLink(int16_t offset, Condition cond, Register rs,
 
 
 void MacroAssembler::BranchAndLink(Label* L, BranchDelaySlot bdslot) {
-  bool is_label_near = is_near(L);
-  if (UseAbsoluteCodePointers() && !is_label_near) {
-    Jalr(L, bdslot);
-  } else {
+  if (!is_trampoline_emitted() || is_near(L)) {
     BranchAndLinkShort(L, bdslot);
+  } else {
+    Jalr(L, bdslot);
   }
 }
 
@@ -1478,15 +1467,14 @@ void MacroAssembler::BranchAndLink(Label* L, BranchDelaySlot bdslot) {
 void MacroAssembler::BranchAndLink(Label* L, Condition cond, Register rs,
                                    const Operand& rt,
                                    BranchDelaySlot bdslot) {
-  bool is_label_near = is_near(L);
-  if (UseAbsoluteCodePointers() && !is_label_near) {
+  if (!is_trampoline_emitted() || is_near(L)) {
+    BranchAndLinkShort(L, cond, rs, rt, bdslot);
+  } else {
     Label skip;
     Condition neg_cond = NegateCondition(cond);
     BranchShort(&skip, neg_cond, rs, rt);
     Jalr(L, bdslot);
     bind(&skip);
-  } else {
-    BranchAndLinkShort(L, cond, rs, rt, bdslot);
   }
 }
 
