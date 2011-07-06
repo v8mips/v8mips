@@ -1009,7 +1009,7 @@ void LCodeGen::DoMulI(LMulI* instr) {
   } else {
     Register right = EmitLoadRegister(right_op, scratch);
     if (bailout_on_minus_zero) {
-      __ Or(result, left, right);
+      __ Or(ToRegister(instr->TempAt(0)), left, right);
     }
 
     if (can_overflow) {
