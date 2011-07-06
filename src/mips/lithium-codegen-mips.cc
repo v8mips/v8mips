@@ -2376,12 +2376,25 @@ void LCodeGen::DoMathRound(LUnaryMathOperation* instr) {
 
 
 void LCodeGen::DoMathSqrt(LUnaryMathOperation* instr) {
-  Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
+  DoubleRegister input = ToDoubleRegister(instr->InputAt(0));
+  DoubleRegister result = ToDoubleRegister(instr->result());
+  __ sqrt_d(result, input);
 }
 
 
 void LCodeGen::DoMathPowHalf(LUnaryMathOperation* instr) {
-  Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
+  DoubleRegister input = ToDoubleRegister(instr->InputAt(0));
+  Register scratch = scratch0();
+  FPURegister single_scratch = double_scratch0().low();
+  DoubleRegister double_scratch = double_scratch0();
+  ASSERT(ToDoubleRegister(instr->result()).is(input));
+
+  // Add +0 to convert -0 to +0.
+  __ li(scratch, Operand(0));
+  __ mtc1(scratch, single_scratch);
+  __ cvt_d_w(double_scratch, single_scratch);
+  __ add_d(input, input, double_scratch);
+  __ sqrt_d(input, input);
 }
 
 
