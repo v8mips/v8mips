@@ -1619,7 +1619,7 @@ Condition LCodeGen::EmitIsObject(Register input,
 
   // Load instance type and check that it is in object type range.
   __ lbu(temp2, FieldMemOperand(temp1, Map::kInstanceTypeOffset));
-  __ Branch(is_not_object, 
+  __ Branch(is_not_object,
             lt, temp2, Operand(FIRST_NONCALLABLE_SPEC_OBJECT_TYPE));
 
   return le;
@@ -2171,7 +2171,7 @@ void LCodeGen::DoAccessArgumentsAt(LAccessArgumentsAt* instr) {
 
   // Bailout index is not a valid argument index. Use unsigned check to get
   // negative check for free.
-  
+
   // TODO(plind): I cannot quite grok the negative index bit. I am sure
   // this can be optimized to the the sub before the DeoptimizeIf(),
   // as they do in Arm. It will save us an instruction.
@@ -2966,7 +2966,8 @@ void LCodeGen::DoStringCharFromCode(LStringCharFromCode* instr) {
   Register scratch = scratch0();
   ASSERT(!char_code.is(result));
 
-  __ Branch(deferred->entry(), hi, char_code, Operand(String::kMaxAsciiCharCode));
+  __ Branch(deferred->entry(), hi,
+            char_code, Operand(String::kMaxAsciiCharCode));
   __ LoadRoot(result, Heap::kSingleCharacterStringCacheRootIndex);
   __ sll(scratch, char_code, kPointerSizeLog2);
   __ Addu(result, result, scratch);
@@ -3041,7 +3042,6 @@ void LCodeGen::DoNumberTagI(LNumberTagI* instr) {
 
 
 void LCodeGen::DoDeferredNumberTagI(LNumberTagI* instr) {
-
   Label slow;
   Register reg = ToRegister(instr->InputAt(0));
   FPURegister dbl_scratch = double_scratch0();
@@ -3301,7 +3301,7 @@ void LCodeGen::DoDeferredTaggedToI(LTaggedToI* instr) {
 void LCodeGen::DoTaggedToI(LTaggedToI* instr) {
   LOperand* input = instr->InputAt(0);
   ASSERT(input->IsRegister());
-  ASSERT(input->Equals(instr->result()));  // TODO(plind): maybe bad assumption for mips?
+  ASSERT(input->Equals(instr->result()));
 
   Register input_reg = ToRegister(input);
 
