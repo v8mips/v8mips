@@ -1738,34 +1738,80 @@ void LCodeGen::DoHasCachedArrayIndexAndBranch(
 }
 
 
-// Branches to a label or falls through with the answer in flags.  Trashes
-// the temp registers, but not the input.  Only input and temp2 may alias.
+// Branches to a label or falls through with this instance class-name adr
+// returned in temp reg, available for comparison by the caller. Trashes the
+// temp registers, but not the input. Only input and temp2 may alias.
 void LCodeGen::EmitClassOfTest(Label* is_true,
                                Label* is_false,
                                Handle<String>class_name,
                                Register input,
                                Register temp,
                                Register temp2) {
-  Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
+  ASSERT(!input.is(temp));
+  ASSERT(!temp.is(temp2));  // But input and temp2 may be the same register.
+  __ JumpIfSmi(input, is_false);
+  __ GetObjectType(input, temp, temp2);
+  __ Branch(is_false, lt, temp2, Operand(FIRST_SPEC_OBJECT_TYPE));
+
+  // Map is now in temp.
+  // Functions have class 'Function'.
+  __ lbu(temp2, FieldMemOperand(temp, Map::kInstanceTypeOffset));
+  if (class_name->IsEqualTo(CStrVector("Function"))) {
+    __ Branch(is_true, ge, temp2, Operand(FIRST_CALLABLE_SPEC_OBJECT_TYPE));
+  } else {
+    __ Branch(is_false, ge, temp2, Operand(FIRST_CALLABLE_SPEC_OBJECT_TYPE));
+  }
+
+  // Check if the constructor in the map is a function.
+  __ lw(temp, FieldMemOperand(temp, Map::kConstructorOffset));
+
+  // As long as LAST_CALLABLE_SPEC_OBJECT_TYPE is the last instance type and
+  // FIRST_CALLABLE_SPEC_OBJECT_TYPE comes right after
+  // LAST_NONCALLABLE_SPEC_OBJECT_TYPE, we can avoid checking for the latter.
+  STATIC_ASSERT(LAST_TYPE == LAST_CALLABLE_SPEC_OBJECT_TYPE);
+  STATIC_ASSERT(FIRST_CALLABLE_SPEC_OBJECT_TYPE ==
+                LAST_NONCALLABLE_SPEC_OBJECT_TYPE + 1);
+
+  // Objects with a non-function constructor have class 'Object'.
+  __ GetObjectType(temp, temp2, temp2);
+  if (class_name->IsEqualTo(CStrVector("Object"))) {
+    __ Branch(is_true, ne, temp2, Operand(JS_FUNCTION_TYPE));
+  } else {
+    __ Branch(is_false, ne, temp2, Operand(JS_FUNCTION_TYPE));
+  }
+
+  // temp now contains the constructor function. Grab the
+  // instance class name from there.
+  __ lw(temp, FieldMemOperand(temp, JSFunction::kSharedFunctionInfoOffset));
+  __ lw(temp, FieldMemOperand(temp,
+                               SharedFunctionInfo::kInstanceClassNameOffset));
+  // The class name we are testing against is a symbol because it's a literal.
+  // The name in the constructor is a symbol because of the way the context is
+  // booted.  This routine isn't expected to work for random API-created
+  // classes and it doesn't have to because you can't access it with natives
+  // syntax.  Since both sides are symbols it is sufficient to use an identity
+  // comparison.
+
+  // End with the address of this class_name instance in temp register.
+  // On MIPS, the caller must do the comparison with Handle<String>class_name.
 }
 
 
 void LCodeGen::DoClassOfTestAndBranch(LClassOfTestAndBranch* instr) {
-  Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
-  // Register input = ToRegister(instr->InputAt(0));
-  // Register temp = scratch0();
-  // Register temp2 = ToRegister(instr->TempAt(0));
-  // Handle<String> class_name = instr->hydrogen()->class_name();
-  //
-  // int true_block = chunk_->LookupDestination(instr->true_block_id());
-  // int false_block = chunk_->LookupDestination(instr->false_block_id());
-  //
-  // Label* true_label = chunk_->GetAssemblyLabel(true_block);
-  // Label* false_label = chunk_->GetAssemblyLabel(false_block);
-  //
-  // EmitClassOfTest(true_label, false_label, class_name, input, temp, temp2);
-  //
-  // EmitBranch(true_block, false_block, eq);
+  Register input = ToRegister(instr->InputAt(0));
+  Register temp = scratch0();
+  Register temp2 = ToRegister(instr->TempAt(0));
+  Handle<String> class_name = instr->hydrogen()->class_name();
+
+  int true_block = chunk_->LookupDestination(instr->true_block_id());
+  int false_block = chunk_->LookupDestination(instr->false_block_id());
+
+  Label* true_label = chunk_->GetAssemblyLabel(true_block);
+  Label* false_label = chunk_->GetAssemblyLabel(false_block);
+
+  EmitClassOfTest(true_label, false_label, class_name, input, temp, temp2);
+
+  EmitBranch(true_block, false_block, eq, temp, Operand(class_name));
 }
 
 
