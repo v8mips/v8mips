@@ -278,6 +278,7 @@ bool LCodeGen::GenerateDeferredCode() {
     int code_generated =
         masm_->InstructionsGeneratedSince(&last_jump) * Assembler::kInstrSize;
     ASSERT(Deoptimizer::patch_size() <= code_generated);
+    USE(code_generated);
   }
   // Deferred code is the last part of the instruction sequence. Mark
   // the generated code as done unless we bailed out.
