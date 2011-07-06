@@ -2215,7 +2215,96 @@ void LCodeGen::DoArgumentsLength(LArgumentsLength* instr) {
 
 
 void LCodeGen::DoApplyArguments(LApplyArguments* instr) {
-  Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
+  Register receiver = ToRegister(instr->receiver());
+  Register function = ToRegister(instr->function());
+  Register length = ToRegister(instr->length());
+  Register elements = ToRegister(instr->elements());
+  Register scratch = scratch0();
+  ASSERT(receiver.is(a0));  // Used for parameter count.
+  ASSERT(function.is(a1));  // Required by InvokeFunction.
+  ASSERT(ToRegister(instr->result()).is(v0));
+
+  // If the receiver is null or undefined, we have to pass the global
+  // object as a receiver to normal functions. Values have to be
+  // passed unchanged to builtins and strict-mode functions.
+  Label global_object, receiver_ok;
+
+  // Do not transform the receiver to object for strict mode
+  // functions.
+  __ lw(scratch,
+         FieldMemOperand(function, JSFunction::kSharedFunctionInfoOffset));
+  __ lw(scratch,
+         FieldMemOperand(scratch, SharedFunctionInfo::kCompilerHintsOffset));
+
+  // Do not transform the receiver to object for builtins.
+  int32_t strict_mode_function_mask =
+                  1 <<  (SharedFunctionInfo::kStrictModeFunction + kSmiTagSize);
+  int32_t native_mask = 1 << (SharedFunctionInfo::kNative + kSmiTagSize);
+  __ And(scratch, scratch, Operand(strict_mode_function_mask | native_mask));
+  __ Branch(&receiver_ok, ne, scratch, Operand(zero_reg));
+
+  // Normal function. Replace undefined or null with global receiver.
+  __ LoadRoot(scratch, Heap::kNullValueRootIndex);
+  __ Branch(&global_object, eq, receiver, Operand(scratch));
+  __ LoadRoot(scratch, Heap::kUndefinedValueRootIndex);
+  __ Branch(&global_object, eq, receiver, Operand(scratch));
+
+  // Deoptimize if the receiver is not a JS object.
+  __ And(scratch, receiver, Operand(kSmiTagMask));
+  DeoptimizeIf(eq, instr->environment(), scratch, Operand(zero_reg));
+
+  __ GetObjectType(receiver, scratch, scratch);
+  DeoptimizeIf(lt, instr->environment(),
+               scratch, Operand(FIRST_SPEC_OBJECT_TYPE));
+  __ Branch(&receiver_ok);
+
+  __ bind(&global_object);
+  __ lw(receiver, GlobalObjectOperand());
+  __ lw(receiver,
+         FieldMemOperand(receiver, JSGlobalObject::kGlobalReceiverOffset));
+  __ bind(&receiver_ok);
+
+  // Copy the arguments to this function possibly from the
+  // adaptor frame below it.
+  const uint32_t kArgumentsLimit = 1 * KB;
+  DeoptimizeIf(hi, instr->environment(), length, Operand(kArgumentsLimit));
+
+  // Push the receiver and use the register to keep the original
+  // number of arguments.
+  __ push(receiver);
+  __ Move(receiver, length);
+  // The arguments are at a one pointer size offset from elements.
+  __ Addu(elements, elements, Operand(1 * kPointerSize));
+
+  // Loop through the arguments pushing them onto the execution
+  // stack.
+  Label invoke, loop;
+  // length is a small non-negative integer, due to the test above.
+  __ Branch(USE_DELAY_SLOT, &invoke, eq, length, Operand(zero_reg));
+  __ sll(scratch, length, 2);
+  __ bind(&loop);
+  __ Addu(scratch, elements, scratch);
+  __ lw(scratch, MemOperand(scratch));
+  __ push(scratch);
+  __ Subu(length, length, Operand(1));
+  __ Branch(USE_DELAY_SLOT, &loop, ne, length, Operand(zero_reg));
+  __ sll(scratch, length, 2);
+
+  __ bind(&invoke);
+  ASSERT(instr->HasPointerMap() && instr->HasDeoptimizationEnvironment());
+  LPointerMap* pointers = instr->pointer_map();
+  LEnvironment* env = instr->deoptimization_environment();
+  RecordPosition(pointers->position());
+  RegisterEnvironmentForDeoptimization(env);
+  SafepointGenerator safepoint_generator(this,
+                                         pointers,
+                                         env->deoptimization_index());
+  // The number of arguments is stored in receiver which is a0, as expected
+  // by InvokeFunction.
+  v8::internal::ParameterCount actual(receiver);
+  __ InvokeFunction(function, actual, CALL_FUNCTION,
+                    safepoint_generator, CALL_AS_METHOD);
+  __ lw(cp, MemOperand(fp, StandardFrameConstants::kContextOffset));
 }
 
 
