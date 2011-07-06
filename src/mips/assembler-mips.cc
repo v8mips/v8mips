@@ -279,7 +279,8 @@ Assembler::Assembler(void* buffer, int buffer_size)
   internal_trampoline_exception_ = false;
 
   trampoline_emitted_ = false;
-  unbound_labels_count = 0;
+  unbound_labels_count_ = 0;
+  block_buffer_growth_ = false;
 }
 
 
@@ -584,7 +585,7 @@ int Assembler::target_at(int32_t pos) {
   } else if (IsLui(instr)) {
     Instr instr_lui = instr_at(pos + 0 * Assembler::kInstrSize);
     Instr instr_ori = instr_at(pos + 1 * Assembler::kInstrSize);
-    ASSERT(IsLui(instr_lui) && IsOri(instr_ori));
+    ASSERT(IsOri(instr_ori));
     int32_t imm = (instr_lui & static_cast<int32_t>(kImm16Mask)) << kLuiShift;
     imm |= (instr_ori & static_cast<int32_t>(kImm16Mask));
 
@@ -636,7 +637,7 @@ void Assembler::target_at_put(int32_t pos, int32_t target_pos) {
   } else if (IsLui(instr)) {
     Instr instr_lui = instr_at(pos + 0 * Assembler::kInstrSize);
     Instr instr_ori = instr_at(pos + 1 * Assembler::kInstrSize);
-    ASSERT(IsLui(instr_lui) && IsOri(instr_ori));
+    ASSERT(IsOri(instr_ori));
     uint32_t imm = (uint32_t)buffer_ + target_pos;
     ASSERT((imm & 3) == 0);
 
@@ -689,7 +690,7 @@ void Assembler::bind_to(Label* L, int pos) {
   ASSERT(0 <= pos && pos <= pc_offset());  // Must have valid binding position.
   int32_t trampoline_pos = kInvalidSlotPos;
   if (L->is_linked() && !trampoline_emitted_) {
-    unbound_labels_count--;
+    unbound_labels_count_--;
     next_buffer_check_ += kTrampolineSlotsSize;
   }
 
@@ -829,12 +830,11 @@ void Assembler::GenInstrRegister(Opcode opcode,
 void Assembler::GenInstrImmediate(Opcode opcode,
                                   Register rs,
                                   Register rt,
-                                  int32_t j,
-                                  bool check_buffer) {
+                                  int32_t j) {
   ASSERT(rs.is_valid() && rt.is_valid() && (is_int16(j) || is_uint16(j)));
   Instr instr = opcode | (rs.code() << kRsShift) | (rt.code() << kRtShift)
       | (j & kImm16Mask);
-  emit(instr, check_buffer);
+  emit(instr);
 }
 
 
@@ -860,15 +860,12 @@ void Assembler::GenInstrImmediate(Opcode opcode,
 }
 
 
-// Registers are in the order of the instruction encoding, from left to right.
 void Assembler::GenInstrJump(Opcode opcode,
                               uint32_t address) {
   BlockTrampolinePoolScope block_trampoline_pool(this);
   ASSERT(is_uint26(address));
   Instr instr = opcode | address;
-  // Prevent buffer growth as internal reference in relocation info is linked
-  // to the instruction that has not been emitted yet.
-  emit(instr, false);
+  emit(instr);
   BlockTrampolinePoolFor(1);  // For associated delay slot.
 }
 
@@ -924,7 +921,7 @@ int32_t Assembler::branch_offset(Label* L, bool jump_elimination_allowed) {
     } else {
       L->link_to(pc_offset());
       if (!trampoline_emitted_) {
-        unbound_labels_count++;
+        unbound_labels_count_++;
         next_buffer_check_ -= kTrampolineSlotsSize;
       }
       return kEndOfChain;
@@ -956,7 +953,7 @@ void Assembler::label_at_put(Label* L, int at_offset) {
       target_pos = kEndOfChain;
       instr_at_put(at_offset, 0);
       if (!trampoline_emitted_) {
-        unbound_labels_count++;
+        unbound_labels_count_++;
         next_buffer_check_ -= kTrampolineSlotsSize;
       }
     }
@@ -1316,8 +1313,8 @@ void Assembler::or_(Register rd, Register rs, Register rt) {
 }
 
 
-void Assembler::ori(Register rt, Register rs, int32_t j, bool check_buffer) {
-  GenInstrImmediate(ORI, rs, rt, j, check_buffer);
+void Assembler::ori(Register rt, Register rs, int32_t j) {
+  GenInstrImmediate(ORI, rs, rt, j);
 }
 
 
@@ -1571,8 +1568,8 @@ void Assembler::swr(Register rd, const MemOperand& rs) {
 }
 
 
-void Assembler::lui(Register rd, int32_t j, bool check_buffer) {
-  GenInstrImmediate(LUI, zero_reg, rd, j, check_buffer);
+void Assembler::lui(Register rd, int32_t j) {
+  GenInstrImmediate(LUI, zero_reg, rd, j);
 }
 
 
@@ -2009,17 +2006,17 @@ void Assembler::RecordComment(const char* msg) {
 }
 
 
-void Assembler::RelocateInternalReference(byte* pc, intptr_t pc_delta) {
+int Assembler::RelocateInternalReference(byte* pc, intptr_t pc_delta) {
   Instr instr = instr_at(pc);
   ASSERT(IsJ(instr) || IsLui(instr));
   if (IsLui(instr)) {
     Instr instr_lui = instr_at(pc + 0 * Assembler::kInstrSize);
     Instr instr_ori = instr_at(pc + 1 * Assembler::kInstrSize);
-    ASSERT(IsLui(instr_lui) && IsOri(instr_ori));
+    ASSERT(IsOri(instr_ori));
     int32_t imm = (instr_lui & static_cast<int32_t>(kImm16Mask)) << kLuiShift;
     imm |= (instr_ori & static_cast<int32_t>(kImm16Mask));
     if (imm == kEndOfJumpChain) {
-      return;
+      return 0;  // Number of instructions patched.
     }
     imm += pc_delta;
     ASSERT((imm & 3) == 0);
@@ -2031,10 +2028,11 @@ void Assembler::RelocateInternalReference(byte* pc, intptr_t pc_delta) {
                  instr_lui | ((imm >> kLuiShift) & kImm16Mask));
     instr_at_put(pc + 1 * Assembler::kInstrSize,
                  instr_ori | (imm & kImm16Mask));
+    return 2;  // Number of instructions patched.
   } else {
     uint32_t imm28 = (instr & static_cast<int32_t>(kImm26Mask)) << 2;
     if ((int32_t)imm28 == kEndOfJumpChain) {
-      return;
+      return 0;  // Number of instructions patched.
     }
     imm28 += pc_delta;
     imm28 &= kImm28Mask;
@@ -2045,6 +2043,7 @@ void Assembler::RelocateInternalReference(byte* pc, intptr_t pc_delta) {
     ASSERT(is_uint26(imm26));
 
     instr_at_put(pc, instr | (imm26 & kImm26Mask));
+    return 1;  // Number of instructions patched.
   }
 }
 
@@ -2158,8 +2157,8 @@ void Assembler::CheckTrampolinePool() {
   }
 
   ASSERT(!trampoline_emitted_);
-  ASSERT(unbound_labels_count >= 0);
-  if (unbound_labels_count > 0) {
+  ASSERT(unbound_labels_count_ >= 0);
+  if (unbound_labels_count_ > 0) {
     // First we emit jump (2 instructions), then we emit trampoline pool.
     { BlockTrampolinePoolScope block_trampoline_pool(this);
       Label after_pool;
@@ -2167,17 +2166,23 @@ void Assembler::CheckTrampolinePool() {
       nop();
 
       int pool_start = pc_offset();
-      for (int i = 0; i < unbound_labels_count; i++) {
+      for (int i = 0; i < unbound_labels_count_; i++) {
         uint32_t imm32;
         imm32 = jump_address(&after_pool);
-        RecordRelocInfo(RelocInfo::INTERNAL_REFERENCE);
-        lui(at, (imm32 & kHiMask) >> kLuiShift, false);
-        ori(at, at, (imm32 & kImm16Mask), false);
+
+        { BlockGrowBufferScope block_buf_growth(this);
+          // Buffer growth (and relocation) must be blocked for internal
+          // references until associated instructions are emitted and available
+          // to be patched.
+          RecordRelocInfo(RelocInfo::INTERNAL_REFERENCE);
+          lui(at, (imm32 & kHiMask) >> kLuiShift);
+          ori(at, at, (imm32 & kImm16Mask));
+        }
         jr(at);
         nop();
       }
       bind(&after_pool);
-      trampoline_ = Trampoline(pool_start, unbound_labels_count);
+      trampoline_ = Trampoline(pool_start, unbound_labels_count_);
 
       trampoline_emitted_ = true;
       // As we are only going to emit trampoline once, we need to prevent any
@@ -2187,8 +2192,8 @@ void Assembler::CheckTrampolinePool() {
   } else {
     // Number of branches to unbound label at this point is zero, so we can
     // move next buffer check to maximum.
-    next_buffer_check_ = pc_offset() + kMaxBranchOffset
-                       - kTrampolineSlotsSize * 16;
+    next_buffer_check_ = pc_offset() +
+        kMaxBranchOffset - kTrampolineSlotsSize * 16;
   }
   return;
 }

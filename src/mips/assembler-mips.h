@@ -598,9 +598,9 @@ class Assembler : public Malloced {
   void nor(Register rd, Register rs, Register rt);
 
   void andi(Register rd, Register rs, int32_t j);
-  void ori(Register rd, Register rs, int32_t j, bool check_buffer = true);
+  void ori(Register rd, Register rs, int32_t j);
   void xori(Register rd, Register rs, int32_t j);
-  void lui(Register rd, int32_t j, bool check_buffer = true);
+  void lui(Register rd, int32_t j);
 
   // Shifts.
   // Please note: sll(zero_reg, zero_reg, x) instructions are reserved as nop
@@ -751,6 +751,25 @@ class Assembler : public Malloced {
     DISALLOW_IMPLICIT_CONSTRUCTORS(BlockTrampolinePoolScope);
   };
 
+  // Class for postponing the assembly buffer growth. Typically used for
+  // sequences of instructions that must be emitted as a unit, before
+  // buffer growth (and relocation) can occur.
+  // This blocking scope is not nestable.
+  class BlockGrowBufferScope {
+   public:
+    explicit BlockGrowBufferScope(Assembler* assem) : assem_(assem) {
+      assem_->StartBlockGrowBuffer();
+    }
+    ~BlockGrowBufferScope() {
+      assem_->EndBlockGrowBuffer();
+    }
+
+    private:
+     Assembler* assem_;
+
+     DISALLOW_IMPLICIT_CONSTRUCTORS(BlockGrowBufferScope);
+  };
+
   // Debugging.
 
   // Mark address of the ExitJSFrame code.
@@ -763,7 +782,7 @@ class Assembler : public Malloced {
   // Use --code-comments to enable.
   void RecordComment(const char* msg);
 
-  static void RelocateInternalReference(byte* pc, intptr_t pc_delta);
+  static int RelocateInternalReference(byte* pc, intptr_t pc_delta);
 
   // Writes a single byte or word of data in the code stream.  Used for
   // inline tables, e.g., jump-tables.
@@ -880,6 +899,7 @@ class Assembler : public Malloced {
   void StartBlockTrampolinePool() {
     trampoline_pool_blocked_nesting_++;
   }
+
   void EndBlockTrampolinePool() {
     trampoline_pool_blocked_nesting_--;
   }
@@ -890,6 +910,21 @@ class Assembler : public Malloced {
 
   bool is_trampoline_emitted() const {
     return trampoline_emitted_;
+  }
+
+  // Temporarily block automatic assembly buffer growth.
+  void StartBlockGrowBuffer() {
+    ASSERT(!block_buffer_growth_);
+    block_buffer_growth_ = true;
+  }
+
+  void EndBlockGrowBuffer() {
+    ASSERT(block_buffer_growth_);
+    block_buffer_growth_ = false;
+  }
+
+  bool is_buffer_growth_blocked() const {
+    return block_buffer_growth_;
   }
 
  private:
@@ -908,10 +943,8 @@ class Assembler : public Malloced {
   // The relocation writer's position is at least kGap bytes below the end of
   // the generated instructions. This is so that multi-instruction sequences do
   // not have to check for overflow. The same is true for writes of large
-  // relocation info entries. MIPS uses 8 bytes more than other architectures,
-  // because it does not check for this gap when instructions with internal
-  // reference relocation info are emitted.
-  static const int kGap = 40;
+  // relocation info entries.
+  static const int kGap = 32;
   byte* pc_;  // The program counter - moves forward.
 
 
@@ -930,6 +963,9 @@ class Assembler : public Malloced {
   // Keep track of the last emitted pool to guarantee a maximal distance.
   int last_trampoline_pool_end_;  // pc offset of the end of the last pool.
 
+  // Automatic growth of the assembly buffer may be blocked for some sequences.
+  bool block_buffer_growth_;  // Block growth when true.
+
   // Relocation information generation.
   // Each relocation is encoded as a variable size value.
   static const int kMaxRelocSize = RelocInfoWriter::kMaxSize;
@@ -941,7 +977,7 @@ class Assembler : public Malloced {
   // Code emission.
   inline void CheckBuffer();
   void GrowBuffer();
-  inline void emit(Instr x, bool check_buffer = true);
+  inline void emit(Instr x);
   inline void CheckTrampolinePoolQuick();
 
   // Instruction generation.
@@ -990,8 +1026,7 @@ class Assembler : public Malloced {
   void GenInstrImmediate(Opcode opcode,
                          Register rs,
                          Register rt,
-                         int32_t  j,
-                         bool check_buffer = true);
+                         int32_t  j);
   void GenInstrImmediate(Opcode opcode,
                          Register rs,
                          SecondaryField SF,
@@ -1064,7 +1099,7 @@ class Assembler : public Malloced {
   };
 
   int32_t get_trampoline_entry(int32_t pos);
-  int unbound_labels_count;
+  int unbound_labels_count_;
   // If trampoline is emitted, generated code is becoming large. As this is
   // already a slow case which can possibly break our code generation for
   // extreme case, we use this information to trigger different mode for
