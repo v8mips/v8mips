@@ -3527,9 +3527,16 @@ void MacroAssembler::SubuAndCheckForOverflow(Register dst,
   ASSERT(!overflow_dst.is(scratch));
   ASSERT(!overflow_dst.is(left));
   ASSERT(!overflow_dst.is(right));
-  ASSERT(!left.is(right));
   ASSERT(!scratch.is(left));
   ASSERT(!scratch.is(right));
+
+  // This happens with some crankshaft code. Since Subu works fine if
+  // left == right, let's not make that restriction here.
+  if (left.is(right)) {
+    mov(dst, zero_reg);
+    mov(overflow_dst, zero_reg);
+    return;
+  }
 
   if (dst.is(left)) {
     mov(scratch, left);  // Preserve left.
