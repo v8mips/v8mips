@@ -2708,7 +2708,80 @@ void LCodeGen::DoMathFloor(LUnaryMathOperation* instr) {
 
 
 void LCodeGen::DoMathRound(LUnaryMathOperation* instr) {
-  Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
+  DoubleRegister input = ToDoubleRegister(instr->InputAt(0));
+  Register result = ToRegister(instr->result());
+  Register scratch1 = result;
+  Register scratch2 = scratch0();
+  Label done, check_sign_on_zero;
+
+  // Extract exponent bits.
+  __ mfc1(scratch1, input.high());
+  __ Ext(scratch2,
+         scratch1,
+         HeapNumber::kExponentShift,
+         HeapNumber::kExponentBits);
+
+  // If the number is in ]-0.5, +0.5[, the result is +/- 0.
+  Label skip1;
+  __ Branch(&skip1, gt, scratch2, Operand(HeapNumber::kExponentBias - 2));
+  __ mov(result, zero_reg);
+  if (instr->hydrogen()->CheckFlag(HValue::kBailoutOnMinusZero)) {
+    __ Branch(&check_sign_on_zero);
+  } else {
+    __ Branch(&done);
+  }
+  __ bind(&skip1);
+
+  // The following conversion will not work with numbers
+  // outside of ]-2^32, 2^32[.
+  DeoptimizeIf(ge, instr->environment(), scratch2,
+               Operand(HeapNumber::kExponentBias + 32));
+
+  // Save the original sign for later comparison.
+  __ And(scratch2, scratch1, Operand(HeapNumber::kSignMask));
+
+  __ Move(double_scratch0(), 0.5);
+  __ add_d(input, input, double_scratch0());
+
+  // Check sign of the result: if the sign changed, the input
+  // value was in ]0.5, 0[ and the result should be -0.
+  __ mfc1(scratch1, input.high());
+  __ Xor(scratch1, scratch1, Operand(scratch2));
+  if (instr->hydrogen()->CheckFlag(HValue::kBailoutOnMinusZero)) {
+    // ARM uses 'mi' here, which is 'lt'
+    DeoptimizeIf(lt, instr->environment(), scratch1,
+                 Operand(zero_reg));
+  } else {
+    Label skip2;
+    // ARM uses 'mi' here, which is 'lt'
+    // Negating it results in 'ge'
+    __ Branch(&skip2, ge, scratch1, Operand(zero_reg));
+    __ mov(result, zero_reg);
+    __ Branch(&done);
+    __ bind(&skip2);
+  }
+
+  Register except_flag = scratch2;
+
+  __ EmitVFPTruncate(kRoundToMinusInf,
+                     double_scratch0().low(),
+                     input,
+                     scratch1,
+                     except_flag);
+
+  DeoptimizeIf(ne, instr->environment(), except_flag, Operand(zero_reg));
+
+  __ mfc1(result, double_scratch0().low());
+
+  if (instr->hydrogen()->CheckFlag(HValue::kBailoutOnMinusZero)) {
+    // Test for -0.
+    __ Branch(&done, ne, result, Operand(zero_reg));
+    __ bind(&check_sign_on_zero);
+    __ mfc1(scratch1, input.high());
+    __ And(scratch1, scratch1, Operand(HeapNumber::kSignMask));
+    DeoptimizeIf(ne, instr->environment(), scratch1, Operand(zero_reg));
+  }
+  __ bind(&done);
 }
 
 
