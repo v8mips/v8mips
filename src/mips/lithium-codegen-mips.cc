@@ -256,11 +256,20 @@ LInstruction* LCodeGen::GetNextInstruction() {
 
 bool LCodeGen::GenerateDeferredCode() {
   ASSERT(is_generating());
-  for (int i = 0; !is_aborted() && i < deferred_.length(); i++) {
-    LDeferredCode* code = deferred_[i];
-    __ bind(code->entry());
-    code->Generate();
-    __ jmp(code->exit());
+  if (deferred_.length() > 0) {
+    for (int i = 0; !is_aborted() && i < deferred_.length(); i++) {
+      LDeferredCode* code = deferred_[i];
+      __ bind(code->entry());
+      code->Generate();
+      __ jmp(code->exit());
+    }
+
+    // Pad code to ensure that the last piece of deferred code have
+    // room for lazy bailout.
+    while ((masm()->pc_offset() - LastSafepointEnd())
+           < Deoptimizer::patch_size()) {
+      __ nop();
+    }
   }
   // Deferred code is the last part of the instruction sequence. Mark
   // the generated code as done unless we bailed out.
@@ -1009,7 +1018,7 @@ void LCodeGen::DoMulI(LMulI* instr) {
   } else {
     Register right = EmitLoadRegister(right_op, scratch);
     if (bailout_on_minus_zero) {
-      __ Or(result, left, right);
+      __ Or(ToRegister(instr->TempAt(0)), left, right);
     }
 
     if (can_overflow) {
@@ -2502,12 +2511,25 @@ void LCodeGen::DoMathRound(LUnaryMathOperation* instr) {
 
 
 void LCodeGen::DoMathSqrt(LUnaryMathOperation* instr) {
-  Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
+  DoubleRegister input = ToDoubleRegister(instr->InputAt(0));
+  DoubleRegister result = ToDoubleRegister(instr->result());
+  __ sqrt_d(result, input);
 }
 
 
 void LCodeGen::DoMathPowHalf(LUnaryMathOperation* instr) {
-  Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
+  DoubleRegister input = ToDoubleRegister(instr->InputAt(0));
+  Register scratch = scratch0();
+  FPURegister single_scratch = double_scratch0().low();
+  DoubleRegister double_scratch = double_scratch0();
+  ASSERT(ToDoubleRegister(instr->result()).is(input));
+
+  // Add +0 to convert -0 to +0.
+  __ li(scratch, Operand(0));
+  __ mtc1(scratch, single_scratch);
+  __ cvt_d_w(double_scratch, single_scratch);
+  __ add_d(input, input, double_scratch);
+  __ sqrt_d(input, input);
 }
 
 
@@ -3737,8 +3759,16 @@ void LCodeGen::DoIn(LIn* instr) {
 
 
 void LCodeGen::DoDeferredStackCheck(LStackCheck* instr) {
-  PushSafepointRegistersScope scope(this, Safepoint::kWithRegisters);
-  CallRuntimeFromDeferred(Runtime::kStackGuard, 0, instr);
+  {
+    PushSafepointRegistersScope scope(this, Safepoint::kWithRegisters);
+    __ CallRuntimeSaveDoubles(Runtime::kStackGuard);
+    RegisterLazyDeoptimization(
+        instr, RECORD_SAFEPOINT_WITH_REGISTERS_AND_NO_ARGUMENTS);
+  }
+
+  // The gap code includes the restoring of the safepoint registers.
+  int pc = masm()->pc_offset();
+  safepoints_.SetPcAfterGap(pc);
 }
 
 

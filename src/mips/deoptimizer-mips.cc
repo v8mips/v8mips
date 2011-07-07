@@ -142,19 +142,16 @@ void Deoptimizer::PatchStackCheckCodeAt(Address pc_after,
   // The call of the stack guard check has the following form:
   // sltu at, sp, t0
   // beq at, zero_reg, ok
-  // nop
   // lui t9, <stack guard address> upper
   // ori t9, <stack guard address> lower
   // jalr t9
   // nop
   // ----- pc_after points here
 
-  ASSERT(Assembler::IsBeq(Assembler::instr_at(pc_after - 6 * kInstrSize)));
-  ASSERT(MacroAssembler::IsNop(
-      Assembler::instr_at(pc_after - 5 * kInstrSize), 0));
+  ASSERT(Assembler::IsBeq(Assembler::instr_at(pc_after - 5 * kInstrSize)));
 
   // Replace the sltu instruction so beq is not executed.
-  CodePatcher patcher(pc_after - 7 * kInstrSize, 1);
+  CodePatcher patcher(pc_after - 6 * kInstrSize, 1);
   patcher.masm()->addiu(at, zero_reg, 1);
 
   Assembler::set_target_address_at(pc_after - 4 * kInstrSize,
@@ -163,7 +160,6 @@ void Deoptimizer::PatchStackCheckCodeAt(Address pc_after,
   // We patched the code to the following form:
   // addiu at, zero_reg, 1
   // beq at, zero_reg, ok  ;; Not changed
-  // nop  ;; Not changed
   // lui t9, <on-stack replacement address> upper
   // ori t9, <on-stack replacement address> lower
   // jalr t9  ;; Not changed
@@ -178,12 +174,11 @@ void Deoptimizer::RevertStackCheckCodeAt(Address pc_after,
   // Exact opposite of the function above.
   const int kInstrSize = Assembler::kInstrSize;
   ASSERT(Assembler::IsAddImmediate(
-      Assembler::instr_at(pc_after - 7 * kInstrSize)));
-  ASSERT(MacroAssembler::IsNop(
-      Assembler::instr_at(pc_after - 5 * kInstrSize), 0));
+      Assembler::instr_at(pc_after - 6 * kInstrSize)));
+  ASSERT(Assembler::IsBeq(Assembler::instr_at(pc_after - 5 * kInstrSize)));
 
   // Restore the sltu instruction so beq can possibly be executed again.
-  CodePatcher patcher(pc_after - 7 * kInstrSize, 1);
+  CodePatcher patcher(pc_after - 6 * kInstrSize, 1);
   patcher.masm()->sltu(at, sp, t0);
 
   Assembler::set_target_address_at(pc_after - 4 * kInstrSize,

@@ -1416,6 +1416,7 @@ void SlotRef::ComputeSlotMappingForArguments(JavaScriptFrame* frame,
 DeoptimizedFrameInfo::DeoptimizedFrameInfo(
     Deoptimizer* deoptimizer, int frame_index) {
   FrameDescription* output_frame = deoptimizer->output_[frame_index];
+  SetFunction(output_frame->GetFunction());
   expression_count_ = output_frame->GetExpressionCount(deoptimizer);
   expression_stack_ = new Object*[expression_count_];
   for (int i = 0; i < expression_count_; i++) {
@@ -1429,6 +1430,7 @@ DeoptimizedFrameInfo::~DeoptimizedFrameInfo() {
 }
 
 void DeoptimizedFrameInfo::Iterate(ObjectVisitor* v) {
+  v->VisitPointer(reinterpret_cast<Object**>(&function_));
   v->VisitPointers(expression_stack_, expression_stack_ + expression_count_);
 }
 

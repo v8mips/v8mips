@@ -2021,27 +2021,8 @@ int MacroAssembler::CallSize(Address target,
                              Register rs,
                              const Operand& rt,
                              BranchDelaySlot bd) {
-  int size = 0;
-  int32_t target_int = reinterpret_cast<int32_t>(target);
-  if (!MustUseReg(rmode) && is_uint28(target_int)) {
-    if (cond == cc_always) {
-      size += 1;
-    } else {
-      size += 3;
-    }
-  } else {  // MustUseReg
-    size += 2;
-    if (cond == cc_always) {
-      size += 1;
-    } else {
-      size += 3;
-    }
-  }
-
-  if (bd == PROTECT)
-    size += 1;
-
-  return size * kInstrSize;
+  int size = CallSize(t9, cond, rs, rt, bd);
+  return size + 2 * kInstrSize;
 }
 
 
@@ -2055,32 +2036,11 @@ void MacroAssembler::Call(Address target,
   Label start;
   bind(&start);
   int32_t target_int = reinterpret_cast<int32_t>(target);
-
-  if (!MustUseReg(rmode)  && is_uint28(target_int)) {
-    if (cond == cc_always) {
-      jal(target_int);
-    } else {
-      BRANCH_ARGS_CHECK(cond, rs, rt);
-      Branch(2, NegateCondition(cond), rs, rt);
-      jal(target_int);  // Will generate only one instruction.
-    }
-  } else {  // MustUseReg
-    // Must record previous source positions before the
-    // li() generates a new code target.
-    positions_recorder()->WriteRecordedPositions();
-    li(t9, Operand(target_int, rmode), true);
-    if (cond == cc_always) {
-      jalr(t9);
-    } else {
-      BRANCH_ARGS_CHECK(cond, rs, rt);
-      Branch(2, NegateCondition(cond), rs, rt);
-      jalr(t9);  // Will generate only one instruction.
-    }
-  }
-
-  if (bd == PROTECT)
-    nop();
-
+  // Must record previous source positions before the
+  // li() generates a new code target.
+  positions_recorder()->WriteRecordedPositions();
+  li(t9, Operand(target_int, rmode), true);
+  Call(t9, cond, rs, rt, bd);
   ASSERT_EQ(CallSize(target, rmode, cond, rs, rt, bd),
             SizeOfCodeGeneratedSince(&start));
 }
