@@ -621,7 +621,7 @@ void FloatingPointHelper::ConvertIntToDouble(MacroAssembler* masm,
 void FloatingPointHelper::LoadNumberAsInt32Double(MacroAssembler* masm,
                                                   Register object,
                                                   Destination destination,
-                                                  FPURegister double_dst,
+                                                  DoubleRegister double_dst,
                                                   Register dst1,
                                                   Register dst2,
                                                   Register heap_number_map,
@@ -657,25 +657,16 @@ void FloatingPointHelper::LoadNumberAsInt32Double(MacroAssembler* masm,
     // Load the double value.
     __ ldc1(double_dst, FieldMemOperand(object, HeapNumber::kValueOffset));
 
-    // NOTE: ARM uses a MacroAssembler function here (EmitVFPTruncate).
-    // On MIPS a lot of things cannot be implemented the same way so right
-    // now it makes a lot more sense to just do things manually.
-
-    // Save FCSR.
-    __ cfc1(scratch1, FCSR);
-    // Disable FPU exceptions.
-    __ ctc1(zero_reg, FCSR);
-    __ trunc_w_d(single_scratch, double_dst);
-    // Retrieve FCSR.
-    __ cfc1(scratch2, FCSR);
-    // Restore FCSR.
-    __ ctc1(scratch1, FCSR);
-
-    // Check for inexact conversion or exception.
-    __ And(scratch2, scratch2, kFCSRFlagMask);
+    Register except_flag = scratch2;
+    __ EmitVFPTruncate(kRoundToZero,
+                       single_scratch,
+                       double_dst,
+                       scratch1,
+                       except_flag,
+                       kCheckForInexactConversion);
 
     // Jump to not_int32 if the operation did not succeed.
-    __ Branch(not_int32, ne, scratch2, Operand(zero_reg));
+    __ Branch(not_int32, ne, except_flag, Operand(zero_reg));
 
     if (destination == kCoreRegisters) {
       __ Move(dst1, dst2, double_dst);
@@ -712,7 +703,7 @@ void FloatingPointHelper::LoadNumberAsInt32(MacroAssembler* masm,
                                             Register scratch1,
                                             Register scratch2,
                                             Register scratch3,
-                                            FPURegister double_scratch,
+                                            DoubleRegister double_scratch,
                                             Label* not_int32) {
   ASSERT(!dst.is(object));
   ASSERT(!scratch1.is(object) && !scratch2.is(object) && !scratch3.is(object));
@@ -741,27 +732,19 @@ void FloatingPointHelper::LoadNumberAsInt32(MacroAssembler* masm,
     // Load the double value.
     __ ldc1(double_scratch, FieldMemOperand(object, HeapNumber::kValueOffset));
 
-    // NOTE: ARM uses a MacroAssembler function here (EmitVFPTruncate).
-    // On MIPS a lot of things cannot be implemented the same way so right
-    // now it makes a lot more sense to just do things manually.
-
-    // Save FCSR.
-    __ cfc1(scratch1, FCSR);
-    // Disable FPU exceptions.
-    __ ctc1(zero_reg, FCSR);
-    __ trunc_w_d(double_scratch, double_scratch);
-    // Retrieve FCSR.
-    __ cfc1(scratch2, FCSR);
-    // Restore FCSR.
-    __ ctc1(scratch1, FCSR);
-
-    // Check for inexact conversion or exception.
-    __ And(scratch2, scratch2, kFCSRFlagMask);
+    FPURegister single_scratch = double_scratch.low();
+    Register except_flag = scratch2;
+    __ EmitVFPTruncate(kRoundToZero,
+                       single_scratch,
+                       double_scratch,
+                       scratch1,
+                       except_flag,
+                       kCheckForInexactConversion);
 
     // Jump to not_int32 if the operation did not succeed.
-    __ Branch(not_int32, ne, scratch2, Operand(zero_reg));
+    __ Branch(not_int32, ne, except_flag, Operand(zero_reg));
     // Get the result in the destination register.
-    __ mfc1(dst, double_scratch);
+    __ mfc1(dst, single_scratch);
 
   } else {
     // Load the double value in the destination registers.
@@ -2738,26 +2721,16 @@ void BinaryOpStub::GenerateInt32Stub(MacroAssembler* masm) {
           // Otherwise return a heap number if allowed, or jump to type
           // transition.
 
-          // NOTE: ARM uses a MacroAssembler function here (EmitVFPTruncate).
-          // On MIPS a lot of things cannot be implemented the same way so right
-          // now it makes a lot more sense to just do things manually.
-
-          // Save FCSR.
-          __ cfc1(scratch1, FCSR);
-          // Disable FPU exceptions.
-          __ ctc1(zero_reg, FCSR);
-          __ trunc_w_d(single_scratch, f10);
-          // Retrieve FCSR.
-          __ cfc1(scratch2, FCSR);
-          // Restore FCSR.
-          __ ctc1(scratch1, FCSR);
-
-          // Check for inexact conversion or exception.
-          __ And(scratch2, scratch2, kFCSRFlagMask);
+          Register except_flag = scratch2;
+          __ EmitVFPTruncate(kRoundToZero,
+                             single_scratch,
+                             f10,
+                             scratch1,
+                             except_flag);
 
           if (result_type_ <= BinaryOpIC::INT32) {
-            // If scratch2 != 0, result does not fit in a 32-bit integer.
-            __ Branch(&transition, ne, scratch2, Operand(zero_reg));
+            // If except_flag != 0, result does not fit in a 32-bit integer.
+            __ Branch(&transition, ne, except_flag, Operand(zero_reg));
           }
 
           // Check if the result fits in a smi.

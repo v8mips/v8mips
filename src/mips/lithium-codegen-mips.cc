@@ -2673,24 +2673,16 @@ void LCodeGen::DoMathFloor(LUnaryMathOperation* instr) {
   Register result = ToRegister(instr->result());
   FPURegister single_scratch = double_scratch0().low();
   Register scratch1 = scratch0();
-  Register scratch2 = ToRegister(instr->TempAt(0));
+  Register except_flag = ToRegister(instr->TempAt(0));
 
-  // Save FCSR.
-  __ cfc1(scratch1, FCSR);
-  // Disable FPU exceptions.
-  __ ctc1(zero_reg, FCSR);
-  // Do floor operation.
-  __ floor_w_d(single_scratch, input);
-  // Retrieve FCSR.
-  __ cfc1(scratch2, FCSR);
-  // Restore FCSR.
-  __ ctc1(scratch1, FCSR);
-
-  // Check for exception (ignore inexact errors).
-  __ And(scratch2, scratch2, Operand(kFCSRFlagMask & ~kFCSRInexactFlagMask));
+  __ EmitVFPTruncate(kRoundToMinusInf,
+                     single_scratch,
+                     input,
+                     scratch1,
+                     except_flag);
 
   // Deopt if the operation did not succeed.
-  DeoptimizeIf(ne, instr->environment(), scratch2, Operand(zero_reg));
+  DeoptimizeIf(ne, instr->environment(), except_flag, Operand(zero_reg));
 
   // Load the result.
   __ mfc1(result, single_scratch);
@@ -3581,7 +3573,7 @@ void LCodeGen::DoDeferredTaggedToI(LTaggedToI* instr) {
   Register input_reg = ToRegister(instr->InputAt(0));
   Register scratch1 = scratch0();
   Register scratch2 = ToRegister(instr->TempAt(0));
-  FPURegister double_scratch = double_scratch0();
+  DoubleRegister double_scratch = double_scratch0();
   FPURegister single_scratch = double_scratch.low();
 
   ASSERT(!scratch1.is(input_reg) && !scratch1.is(scratch2));
@@ -3598,7 +3590,7 @@ void LCodeGen::DoDeferredTaggedToI(LTaggedToI* instr) {
 
   if (instr->truncating()) {
     Register scratch3 = ToRegister(instr->TempAt(1));
-    FPURegister double_scratch2 = ToDoubleRegister(instr->TempAt(2));
+    DoubleRegister double_scratch2 = ToDoubleRegister(instr->TempAt(2));
     ASSERT(!scratch3.is(input_reg) &&
            !scratch3.is(scratch1) &&
            !scratch3.is(scratch2));
@@ -3634,29 +3626,16 @@ void LCodeGen::DoDeferredTaggedToI(LTaggedToI* instr) {
     __ ldc1(double_scratch,
             FieldMemOperand(input_reg, HeapNumber::kValueOffset));
 
-    // TODO(plind): ARM uses a MacroAssembler function here (EmitVFPTruncate).
-    // On MIPS a lot of things cannot be implemented the same way so right
-    // now it makes more sense to just do things manually.
-
-    // TODO(plind): this code is still untested.
-
-    // Save FCSR.
-    __ cfc1(scratch1, FCSR);
-    // Disable FPU exceptions.
-    __ ctc1(zero_reg, FCSR);
-    // TODO(plind): it appears this instuction rounds towards zero regardless
-    // of the rounding mode in FCSR. Verify, fix if needed, and remove comment.
-    __ trunc_w_d(single_scratch, double_scratch);
-    // Retrieve FCSR.
-    __ cfc1(scratch2, FCSR);
-    // Restore FCSR.
-    __ ctc1(scratch1, FCSR);
-
-    // Check for inexact conversion or exception (non-zero flags).
-    __ And(scratch2, scratch2, kFCSRFlagMask);
+    Register except_flag = scratch2;
+    __ EmitVFPTruncate(kRoundToZero,
+                       single_scratch,
+                       double_scratch,
+                       scratch1,
+                       except_flag,
+                       kCheckForInexactConversion);
 
     // Deopt if the operation did not succeed.
-    DeoptimizeIf(ne, instr->environment(), scratch2, Operand(zero_reg));
+    DeoptimizeIf(ne, instr->environment(), except_flag, Operand(zero_reg));
 
     // Load the result.
     __ mfc1(input_reg, single_scratch);
