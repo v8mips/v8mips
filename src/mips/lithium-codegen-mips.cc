@@ -1593,6 +1593,7 @@ void LCodeGen::DoCmpConstantEqAndBranch(LCmpConstantEqAndBranch* instr) {
 }
 
 
+
 void LCodeGen::DoIsNullAndBranch(LIsNullAndBranch* instr) {
   Register scratch = scratch0();
   Register reg = ToRegister(instr->InputAt(0));
@@ -2237,7 +2238,85 @@ void LCodeGen::DoLoadKeyedFastElement(LLoadKeyedFastElement* instr) {
 
 void LCodeGen::DoLoadKeyedSpecializedArrayElement(
     LLoadKeyedSpecializedArrayElement* instr) {
-  Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
+  Register external_pointer = ToRegister(instr->external_pointer());
+  Register key = no_reg;
+  JSObject::ElementsKind elements_kind = instr->elements_kind();
+  bool key_is_constant = instr->key()->IsConstantOperand();
+  int constant_key = 0;
+  if (key_is_constant) {
+    constant_key = ToInteger32(LConstantOperand::cast(instr->key()));
+    if (constant_key & 0xF0000000) {
+      Abort("array index constant value too big.");
+    }
+  } else {
+    key = ToRegister(instr->key());
+  }
+  int shift_size = ElementsKindToShiftSize(elements_kind);
+
+  if (elements_kind == JSObject::EXTERNAL_FLOAT_ELEMENTS ||
+      elements_kind == JSObject::EXTERNAL_DOUBLE_ELEMENTS) {
+    CpuFeatures::Scope scope(FPU);
+    FPURegister result(ToDoubleRegister(instr->result()));
+    if (key_is_constant) {
+      __ Addu(scratch0(), external_pointer, constant_key * (1 << shift_size));
+    } else {
+      __ sll(scratch0(), key, shift_size);
+      __ Addu(scratch0(), scratch0(), external_pointer);
+    }
+
+    if (elements_kind == JSObject::EXTERNAL_FLOAT_ELEMENTS) {
+      __ lwc1(result, MemOperand(scratch0()));
+      __ cvt_d_s(result, result);
+    } else  {  // i.e. elements_kind == JSObject::EXTERNAL_DOUBLE_ELEMENTS
+      __ ldc1(result, MemOperand(scratch0()));
+    }
+  } else {
+    Register result(ToRegister(instr->result()));
+    Register scratch = scratch0();
+    MemOperand mem_operand(zero_reg);
+    if (key_is_constant) {
+      mem_operand = MemOperand(external_pointer,
+                               constant_key * (1 << shift_size));
+    } else {
+      __ sll(scratch, key, shift_size);
+      __ Addu(scratch, scratch, external_pointer);
+      mem_operand = MemOperand(scratch);
+    }
+    switch (elements_kind) {
+      case JSObject::EXTERNAL_BYTE_ELEMENTS:
+        __ lb(result, mem_operand);
+        break;
+      case JSObject::EXTERNAL_PIXEL_ELEMENTS:
+      case JSObject::EXTERNAL_UNSIGNED_BYTE_ELEMENTS:
+        __ lbu(result, mem_operand);
+        break;
+      case JSObject::EXTERNAL_SHORT_ELEMENTS:
+        __ lh(result, mem_operand);
+        break;
+      case JSObject::EXTERNAL_UNSIGNED_SHORT_ELEMENTS:
+        __ lhu(result, mem_operand);
+        break;
+      case JSObject::EXTERNAL_INT_ELEMENTS:
+        __ lw(result, mem_operand);
+        break;
+      case JSObject::EXTERNAL_UNSIGNED_INT_ELEMENTS:
+        __ lw(result, mem_operand);
+        // TODO(danno): we could be more clever here, perhaps having a special
+        // version of the stub that detects if the overflow case actually
+        // happens, and generate code that returns a double rather than int.
+        DeoptimizeIf(Ugreater_equal, instr->environment(),
+            result, Operand(0x80000000));
+        break;
+      case JSObject::EXTERNAL_FLOAT_ELEMENTS:
+      case JSObject::EXTERNAL_DOUBLE_ELEMENTS:
+      case JSObject::FAST_DOUBLE_ELEMENTS:
+      case JSObject::FAST_ELEMENTS:
+      case JSObject::DICTIONARY_ELEMENTS:
+      case JSObject::NON_STRICT_ARGUMENTS_ELEMENTS:
+        UNREACHABLE();
+        break;
+    }
+  }
 }
 
 
@@ -2939,9 +3018,76 @@ void LCodeGen::DoStoreKeyedFastElement(LStoreKeyedFastElement* instr) {
 
 void LCodeGen::DoStoreKeyedSpecializedArrayElement(
     LStoreKeyedSpecializedArrayElement* instr) {
-  Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
-}
 
+  Register external_pointer = ToRegister(instr->external_pointer());
+  Register key = no_reg;
+  JSObject::ElementsKind elements_kind = instr->elements_kind();
+  bool key_is_constant = instr->key()->IsConstantOperand();
+  int constant_key = 0;
+  if (key_is_constant) {
+    constant_key = ToInteger32(LConstantOperand::cast(instr->key()));
+    if (constant_key & 0xF0000000) {
+      Abort("array index constant value too big.");
+    }
+  } else {
+    key = ToRegister(instr->key());
+  }
+  int shift_size = ElementsKindToShiftSize(elements_kind);
+
+  if (elements_kind == JSObject::EXTERNAL_FLOAT_ELEMENTS ||
+      elements_kind == JSObject::EXTERNAL_DOUBLE_ELEMENTS) {
+    CpuFeatures::Scope scope(FPU);
+    FPURegister value(ToDoubleRegister(instr->value()));
+    if (key_is_constant) {
+      __ Addu(scratch0(), external_pointer, constant_key * (1 << shift_size));
+    } else {
+      __ sll(scratch0(), key, shift_size);
+      __ Addu(scratch0(), scratch0(), external_pointer);
+    }
+
+    if (elements_kind == JSObject::EXTERNAL_FLOAT_ELEMENTS) {
+      __ cvt_s_d(double_scratch0(), value);
+      __ swc1(double_scratch0(), MemOperand(scratch0()));
+    } else {  // i.e. elements_kind == JSObject::EXTERNAL_DOUBLE_ELEMENTS
+      __ sdc1(value, MemOperand(scratch0()));
+    }
+  } else {
+    Register value(ToRegister(instr->value()));
+    MemOperand mem_operand(zero_reg);
+    Register scratch = scratch0();
+    if (key_is_constant) {
+      mem_operand = MemOperand(external_pointer,
+                               constant_key * (1 << shift_size));
+    } else {
+      __ sll(scratch, key, shift_size);
+      __ Addu(scratch, scratch, external_pointer);
+      mem_operand = MemOperand(scratch);
+    }
+    switch (elements_kind) {
+      case JSObject::EXTERNAL_PIXEL_ELEMENTS:
+      case JSObject::EXTERNAL_BYTE_ELEMENTS:
+      case JSObject::EXTERNAL_UNSIGNED_BYTE_ELEMENTS:
+        __ sb(value, mem_operand);
+        break;
+      case JSObject::EXTERNAL_SHORT_ELEMENTS:
+      case JSObject::EXTERNAL_UNSIGNED_SHORT_ELEMENTS:
+        __ sh(value, mem_operand);
+        break;
+      case JSObject::EXTERNAL_INT_ELEMENTS:
+      case JSObject::EXTERNAL_UNSIGNED_INT_ELEMENTS:
+        __ sw(value, mem_operand);
+        break;
+      case JSObject::EXTERNAL_FLOAT_ELEMENTS:
+      case JSObject::EXTERNAL_DOUBLE_ELEMENTS:
+      case JSObject::FAST_DOUBLE_ELEMENTS:
+      case JSObject::FAST_ELEMENTS:
+      case JSObject::DICTIONARY_ELEMENTS:
+      case JSObject::NON_STRICT_ARGUMENTS_ELEMENTS:
+        UNREACHABLE();
+        break;
+    }
+  }
+}
 
 void LCodeGen::DoStoreKeyedGeneric(LStoreKeyedGeneric* instr) {
   ASSERT(ToRegister(instr->object()).is(a2));
@@ -3601,21 +3747,50 @@ void LCodeGen::DoClampDToUint8(LClampDToUint8* instr) {
   DoubleRegister value_reg = ToDoubleRegister(instr->unclamped());
   Register result_reg = ToRegister(instr->result());
   DoubleRegister temp_reg = ToDoubleRegister(instr->TempAt(0));
-  Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
-  // __ ClampDoubleToUint8(result_reg, value_reg, temp_reg);
+  __ ClampDoubleToUint8(result_reg, value_reg, temp_reg);
 }
 
 
 void LCodeGen::DoClampIToUint8(LClampIToUint8* instr) {
   Register unclamped_reg = ToRegister(instr->unclamped());
   Register result_reg = ToRegister(instr->result());
-  Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
-  // __ ClampUint8(result_reg, unclamped_reg);
+  __ ClampUint8(result_reg, unclamped_reg);
 }
 
 
 void LCodeGen::DoClampTToUint8(LClampTToUint8* instr) {
-  Abort("Unimplemented: %s (line %d)", __func__, __LINE__);
+  Register scratch = scratch0();
+  Register input_reg = ToRegister(instr->unclamped());
+  Register result_reg = ToRegister(instr->result());
+  DoubleRegister temp_reg = ToDoubleRegister(instr->TempAt(0));
+  Label is_smi, done, heap_number;
+
+  // Both smi and heap number cases are handled.
+  __ JumpIfSmi(input_reg, &is_smi);
+
+  // Check for heap number
+  __ lw(scratch, FieldMemOperand(input_reg, HeapObject::kMapOffset));
+  __ Branch(&heap_number, eq, scratch, Operand(factory()->heap_number_map()));
+
+  // Check for undefined. Undefined is converted to zero for clamping
+  // conversions.
+  DeoptimizeIf(ne, instr->environment(), input_reg, Operand(factory()->undefined_value()));
+  __ Ext(input_reg, input_reg, 0, 16);
+  __ jmp(&done);
+
+  // Heap number
+  __ bind(&heap_number);
+  __ ldc1(double_scratch0(), FieldMemOperand(input_reg,
+                                             HeapNumber::kValueOffset));
+  __ ClampDoubleToUint8(result_reg, double_scratch0(), temp_reg);
+  __ jmp(&done);
+
+  // smi
+  __ bind(&is_smi);
+  __ SmiUntag(scratch, input_reg);
+  __ ClampUint8(result_reg, scratch);
+
+  __ bind(&done);
 }
 
 
