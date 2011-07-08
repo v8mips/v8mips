@@ -1127,7 +1127,7 @@ void LCodeGen::DoShiftI(LShiftI* instr) {
           __ srl(result, left, shift_count);
         } else {
           if (instr->can_deopt()) {
-            __ And(at, result, Operand(0x80000000));
+            __ And(at, left, Operand(0x80000000));
             DeoptimizeIf(ne, instr->environment(), at, Operand(zero_reg));
           }
           __ Move(result, left);
