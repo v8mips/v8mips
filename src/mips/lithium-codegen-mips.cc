@@ -2786,17 +2786,14 @@ void LCodeGen::DoMathSqrt(LUnaryMathOperation* instr) {
 
 void LCodeGen::DoMathPowHalf(LUnaryMathOperation* instr) {
   DoubleRegister input = ToDoubleRegister(instr->InputAt(0));
-  Register scratch = scratch0();
-  FPURegister single_scratch = double_scratch0().low();
+  DoubleRegister result = ToDoubleRegister(instr->result());
   DoubleRegister double_scratch = double_scratch0();
-  ASSERT(ToDoubleRegister(instr->result()).is(input));
 
   // Add +0 to convert -0 to +0.
-  __ li(scratch, Operand(0));
-  __ mtc1(scratch, single_scratch);
-  __ cvt_d_w(double_scratch, single_scratch);
-  __ add_d(input, input, double_scratch);
-  __ sqrt_d(input, input);
+  __ mtc1(zero_reg, double_scratch.low());
+  __ mtc1(zero_reg, double_scratch.high());
+  __ add_d(result, input, double_scratch);
+  __ sqrt_d(result, result);
 }
 
 
