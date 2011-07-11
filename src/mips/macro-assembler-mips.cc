@@ -780,6 +780,20 @@ void MacroAssembler::Ext(Register rt,
 }
 
 
+void MacroAssembler::FlushICache(Register address, unsigned instructions) {
+  RegList saved_regs = kJSCallerSaved | ra.bit();
+  MultiPush(saved_regs);
+
+  // Save to a0 in case address == t0.
+  Move(a0, address);
+  PrepareCallCFunction(2, t0);
+
+  li(a1, instructions * kInstrSize);
+  CallCFunction(ExternalReference::flush_icache_function(isolate()), 2);
+  MultiPop(saved_regs);
+}
+
+
 void MacroAssembler::Ins(Register rt,
                          Register rs,
                          uint16_t pos,
@@ -4434,6 +4448,37 @@ void MacroAssembler::LoadInstanceDescriptors(Register map,
   JumpIfNotSmi(descriptors, &not_smi);
   li(descriptors, Operand(FACTORY->empty_descriptor_array()));
   bind(&not_smi);
+}
+
+
+void MacroAssembler::PatchRelocatedValue(Register li_location,
+                                         Register scratch,
+                                         Register new_value) {
+  lw(scratch, MemOperand(li_location));
+  // At this point scratch is a lui(at, ...) instruction.
+  if (emit_debug_code()) {
+    And(scratch, scratch, kOpcodeMask);
+    Check(eq, "The instruction to patch should be a lui.",
+        scratch, Operand(LUI));
+    lw(scratch, MemOperand(li_location));
+  }
+  srl(t9, new_value, kImm16Bits);
+  Ins(scratch, t9, 0, kImm16Bits);
+  sw(scratch, MemOperand(li_location));
+
+  lw(scratch, MemOperand(li_location, kInstrSize));
+  // scratch is now ori(at, ...).
+  if (emit_debug_code()) {
+    And(scratch, scratch, kOpcodeMask);
+    Check(eq, "The instruction to patch should be an ori.",
+        scratch, Operand(ORI));
+    lw(scratch, MemOperand(li_location, kInstrSize));
+  }
+  Ins(scratch, new_value, 0, kImm16Bits);
+  sw(scratch, MemOperand(li_location, kInstrSize));
+
+  // Update the I-cache so the new lui and ori can be executed.
+  FlushICache(li_location, 2);
 }
 
 

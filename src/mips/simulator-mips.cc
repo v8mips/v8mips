@@ -33,6 +33,7 @@
 
 #if defined(V8_TARGET_ARCH_MIPS)
 
+#include "cpu.h"
 #include "disasm.h"
 #include "assembler.h"
 #include "globals.h"    // Need the BitCast.

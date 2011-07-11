@@ -530,6 +530,9 @@ class MacroAssembler: public Assembler {
   void Ins(Register rt, Register rs, uint16_t pos, uint16_t size);
   void Ext(Register rt, Register rs, uint16_t pos, uint16_t size);
 
+  // Flush the I-cache from asm code. You should use CPU::FlushICache from C.
+  // Does not handle errors.
+  void FlushICache(Register address, unsigned instructions);
 
   // ---------------------------------------------------------------------------
   // FPU macros.
@@ -1137,6 +1140,13 @@ class MacroAssembler: public Assembler {
                                            Register scratch2,
                                            Label* failure);
 
+  // ---------------------------------------------------------------------------
+  // Patching helpers.
+
+  // Patch the relocated value (lui/ori pair).
+  void PatchRelocatedValue(Register li_location,
+                           Register scratch,
+                           Register new_value);
 
   void ClampUint8(Register output_reg, Register input_reg);
 

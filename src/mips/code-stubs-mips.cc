@@ -3826,11 +3826,10 @@ void JSEntryStub::GenerateBody(MacroAssembler* masm, bool is_construct) {
 // * object: a0 or at sp + 1 * kPointerSize.
 // * function: a1 or at sp.
 //
-// Inlined call site patching is a crankshaft-specific feature that is not
-// implemented on MIPS.
+// An inlined call site may have been generated before calling this stub.
+// In this case the offset to the inline site to patch is passed on the stack,
+// in the safepoint slot for register t0.
 void InstanceofStub::Generate(MacroAssembler* masm) {
-  // This is a crankshaft-specific feature that has not been implemented yet.
-  ASSERT(!HasCallSiteInlineCheck());
   // Call site inlining and patching implies arguments in registers.
   ASSERT(HasArgsInRegisters() || !HasCallSiteInlineCheck());
   // ReturnTrueFalse is only implemented for inlined call sites.
@@ -3843,6 +3842,8 @@ void InstanceofStub::Generate(MacroAssembler* masm) {
   const Register prototype = t0;  // Prototype of the function.
   const Register inline_site = t5;
   const Register scratch = a2;
+
+  const int32_t kDeltaToLoadBoolResult = 4 * kPointerSize;
 
   Label slow, loop, is_instance, is_not_instance, not_js_object;
 
@@ -3859,10 +3860,10 @@ void InstanceofStub::Generate(MacroAssembler* masm) {
   // real lookup and update the call site cache.
   if (!HasCallSiteInlineCheck()) {
     Label miss;
-    __ LoadRoot(t1, Heap::kInstanceofCacheFunctionRootIndex);
-    __ Branch(&miss, ne, function, Operand(t1));
-    __ LoadRoot(t1, Heap::kInstanceofCacheMapRootIndex);
-    __ Branch(&miss, ne, map, Operand(t1));
+    __ LoadRoot(at, Heap::kInstanceofCacheFunctionRootIndex);
+    __ Branch(&miss, ne, function, Operand(at));
+    __ LoadRoot(at, Heap::kInstanceofCacheMapRootIndex);
+    __ Branch(&miss, ne, map, Operand(at));
     __ LoadRoot(v0, Heap::kInstanceofCacheAnswerRootIndex);
     __ DropAndRet(HasArgsInRegisters() ? 0 : 2);
 
@@ -3882,7 +3883,15 @@ void InstanceofStub::Generate(MacroAssembler* masm) {
     __ StoreRoot(function, Heap::kInstanceofCacheFunctionRootIndex);
     __ StoreRoot(map, Heap::kInstanceofCacheMapRootIndex);
   } else {
-    UNIMPLEMENTED_MIPS();
+    ASSERT(HasArgsInRegisters());
+    // Patch the (relocated) inlined map check.
+
+    // The offset was stored in t0 safepoint slot.
+    // (See LCodeGen::DoDeferredLInstanceOfKnownGlobal)
+    __ LoadFromSafepointRegisterSlot(scratch, t0);
+    __ Subu(inline_site, ra, scratch);
+    // Patch the relocated value to map.
+    __ PatchRelocatedValue(inline_site, scratch, map);
   }
 
   // Register mapping: a3 is object map and t0 is function prototype.
@@ -3908,7 +3917,16 @@ void InstanceofStub::Generate(MacroAssembler* masm) {
     __ mov(v0, zero_reg);
     __ StoreRoot(v0, Heap::kInstanceofCacheAnswerRootIndex);
   } else {
-    UNIMPLEMENTED_MIPS();
+    // Patch the call site to return true.
+    __ LoadRoot(v0, Heap::kTrueValueRootIndex);
+    __ Addu(inline_site, inline_site, Operand(kDeltaToLoadBoolResult));
+    // Get the boolean result location in scratch and patch it.
+    __ PatchRelocatedValue(inline_site, scratch, v0);
+
+    if (!ReturnTrueFalseObject()) {
+      ASSERT_EQ(Smi::FromInt(0), 0);
+      __ mov(v0, zero_reg);
+    }
   }
   __ DropAndRet(HasArgsInRegisters() ? 0 : 2);
 
@@ -3917,8 +3935,17 @@ void InstanceofStub::Generate(MacroAssembler* masm) {
     __ li(v0, Operand(Smi::FromInt(1)));
     __ StoreRoot(v0, Heap::kInstanceofCacheAnswerRootIndex);
   } else {
-    UNIMPLEMENTED_MIPS();
+    // Patch the call site to return false.
+    __ LoadRoot(v0, Heap::kFalseValueRootIndex);
+    __ Addu(inline_site, inline_site, Operand(kDeltaToLoadBoolResult));
+    // Get the boolean result location in scratch and patch it.
+    __ PatchRelocatedValue(inline_site, scratch, v0);
+
+    if (!ReturnTrueFalseObject()) {
+      __ li(v0, Operand(Smi::FromInt(1)));
+    }
   }
+
   __ DropAndRet(HasArgsInRegisters() ? 0 : 2);
 
   Label object_not_null, object_not_null_or_smi;
