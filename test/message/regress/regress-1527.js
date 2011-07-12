@@ -25,58 +25,9 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-function fnGlobalObject() { return (function() { return this; })(); }
-
-var ES5Harness = (function() {
-  var currentTest = {};
-  var $this = this;
-
-  function Test262Error(id, path, description, codeString,
-                        preconditionString, result, error) {
-    this.id = id;
-    this.path = path;
-    this.description = description;
-    this.result = result;
-    this.error = error;
-    this.code = codeString;
-    this.pre = preconditionString;
-  }
-
-  Test262Error.prototype.toString = function() {
-    return this.result + " " + this.error;
-  }
-
-  function registerTest(test) {
-    if (!(test.precondition && !test.precondition())) {
-      var error;
-      try {
-        var res = test.test.call($this);
-      } catch(e) {
-        res = 'fail';
-        error = e;
-      }
-      var retVal = /^s/i.test(test.id)
-          ? (res === true || typeof res == 'undefined' ? 'pass' : 'fail')
-          : (res === true ? 'pass' : 'fail');
-
-      if (retVal != 'pass') {
-         var precondition = (test.precondition !== undefined)
-             ? test.precondition.toString()
-             : '';
-
-         throw new Test262Error(
-            test.id,
-            test.path,
-            test.description,
-            test.test.toString(),
-            precondition,
-            retVal,
-            error);
-      }
-    }
-  }
-
-  return {
-    registerTest: registerTest
-  }
-})();
+var o1 = {foo: 'bar'};
+var o2 = {
+  1: 'blah',
+  2: o1.foo,
+  3: foo
+}

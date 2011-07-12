@@ -1640,6 +1640,11 @@ class JSObject: public JSReceiver {
   MUST_USE_RESULT inline MaybeObject* SetHiddenPropertiesObject(
       Object* hidden_obj);
 
+  MUST_USE_RESULT MaybeObject* GetHiddenProperties(bool create_if_needed);
+
+  // Retrieves a permanent object identity hash code.
+  MUST_USE_RESULT MaybeObject* GetIdentityHash();
+
   MUST_USE_RESULT MaybeObject* DeleteProperty(String* name, DeleteMode mode);
   MUST_USE_RESULT MaybeObject* DeleteElement(uint32_t index, DeleteMode mode);
 
@@ -2770,10 +2775,13 @@ class Dictionary: public HashTable<Shape, Key> {
   // Returns the number of enumerable elements in the dictionary.
   int NumberOfEnumElements();
 
+  enum SortMode { UNSORTED, SORTED };
   // Copies keys to preallocated fixed array.
-  void CopyKeysTo(FixedArray* storage, PropertyAttributes filter);
+  void CopyKeysTo(FixedArray* storage,
+                  PropertyAttributes filter,
+                  SortMode sort_mode);
   // Fill in details for properties into storage.
-  void CopyKeysTo(FixedArray* storage);
+  void CopyKeysTo(FixedArray* storage, SortMode sort_mode);
 
   // Accessors for next enumeration index.
   void SetNextEnumerationIndex(int index) {
@@ -2915,6 +2923,29 @@ class NumberDictionary: public Dictionary<NumberDictionaryShape, uint32_t> {
   static const int kRequiresSlowElementsMask = 1;
   static const int kRequiresSlowElementsTagSize = 1;
   static const uint32_t kRequiresSlowElementsLimit = (1 << 29) - 1;
+};
+
+
+class ObjectDictionaryShape {
+ public:
+  static inline bool IsMatch(JSObject* key, Object* other);
+  static inline uint32_t Hash(JSObject* key);
+  static inline uint32_t HashForObject(JSObject* key, Object* object);
+  MUST_USE_RESULT static inline MaybeObject* AsObject(JSObject* key);
+  static const int kPrefixSize = 2;
+  static const int kEntrySize = 3;
+  static const bool kIsEnumerable = false;
+};
+
+
+class ObjectDictionary: public Dictionary<ObjectDictionaryShape, JSObject*> {
+ public:
+  static inline ObjectDictionary* cast(Object* obj) {
+    ASSERT(obj->IsDictionary());
+    return reinterpret_cast<ObjectDictionary*>(obj);
+  }
+
+  MUST_USE_RESULT MaybeObject* AddChecked(JSObject* key, Object* value);
 };
 
 

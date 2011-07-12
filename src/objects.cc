@@ -1883,13 +1883,9 @@ void JSObject::LookupCallbackSetterInPrototypes(String* name,
        pt = pt->GetPrototype()) {
     JSObject::cast(pt)->LocalLookupRealNamedProperty(name, result);
     if (result->IsProperty()) {
-      if (result->IsReadOnly()) {
-        result->NotFound();
-        return;
-      }
-      if (result->type() == CALLBACKS) {
-        return;
-      }
+      if (result->type() == CALLBACKS && !result->IsReadOnly()) return;
+      // Found non-callback or read-only callback, stop looking.
+      break;
     }
   }
   result->NotFound();
@@ -2273,10 +2269,10 @@ MUST_USE_RESULT PropertyAttributes JSProxy::GetPropertyAttributeWithHandler(
 
 
 MaybeObject* JSObject::SetPropertyForResult(LookupResult* result,
-                                   String* name,
-                                   Object* value,
-                                   PropertyAttributes attributes,
-                                   StrictModeFlag strict_mode) {
+                                            String* name,
+                                            Object* value,
+                                            PropertyAttributes attributes,
+                                            StrictModeFlag strict_mode) {
   Heap* heap = GetHeap();
   // Make sure that the top context does not change when doing callbacks or
   // interceptor calls.
@@ -2894,6 +2890,84 @@ MaybeObject* JSObject::NormalizeElements() {
 }
 
 
+MaybeObject* JSObject::GetHiddenProperties(bool create_if_needed) {
+  Isolate* isolate = GetIsolate();
+  Heap* heap = isolate->heap();
+  if (HasFastProperties()) {
+    // If the object has fast properties, check whether the first slot
+    // in the descriptor array matches the hidden symbol. Since the
+    // hidden symbols hash code is zero (and no other string has hash
+    // code zero) it will always occupy the first entry if present.
+    DescriptorArray* descriptors = map()->instance_descriptors();
+    if ((descriptors->number_of_descriptors() > 0) &&
+        (descriptors->GetKey(0) == heap->hidden_symbol()) &&
+        descriptors->IsProperty(0)) {
+      ASSERT(descriptors->GetType(0) == FIELD);
+      return FastPropertyAt(descriptors->GetFieldIndex(0));
+    }
+  }
+
+  // Only attempt to find the hidden properties in the local object and not
+  // in the prototype chain.  Note that HasLocalProperty() can cause a GC in
+  // the general case in the presence of interceptors.
+  if (!HasHiddenPropertiesObject()) {
+    // Hidden properties object not found. Allocate a new hidden properties
+    // object if requested. Otherwise return the undefined value.
+    if (create_if_needed) {
+      Object* hidden_obj;
+      { MaybeObject* maybe_obj = heap->AllocateJSObject(
+            isolate->context()->global_context()->object_function());
+        if (!maybe_obj->ToObject(&hidden_obj)) return maybe_obj;
+      }
+      return SetHiddenPropertiesObject(hidden_obj);
+    } else {
+      return heap->undefined_value();
+    }
+  }
+  return GetHiddenPropertiesObject();
+}
+
+
+MaybeObject* JSObject::GetIdentityHash() {
+  Isolate* isolate = GetIsolate();
+  Object* hidden_props_obj;
+  { MaybeObject* maybe_obj = GetHiddenProperties(true);
+    if (!maybe_obj->ToObject(&hidden_props_obj)) return maybe_obj;
+  }
+  if (!hidden_props_obj->IsJSObject()) {
+    // We failed to create hidden properties.  That's a detached
+    // global proxy.
+    ASSERT(hidden_props_obj->IsUndefined());
+    return Smi::FromInt(0);
+  }
+  JSObject* hidden_props = JSObject::cast(hidden_props_obj);
+  String* hash_symbol = isolate->heap()->identity_hash_symbol();
+  if (hidden_props->HasLocalProperty(hash_symbol)) {
+    MaybeObject* hash = hidden_props->GetProperty(hash_symbol);
+    return Smi::cast(hash->ToObjectChecked());
+  }
+
+  int hash_value;
+  int attempts = 0;
+  do {
+    // Generate a random 32-bit hash value but limit range to fit
+    // within a smi.
+    hash_value = V8::Random(isolate) & Smi::kMaxValue;
+    attempts++;
+  } while (hash_value == 0 && attempts < 30);
+  hash_value = hash_value != 0 ? hash_value : 1;  // never return 0
+
+  Smi* hash = Smi::FromInt(hash_value);
+  { MaybeObject* result = hidden_props->SetLocalPropertyIgnoreAttributes(
+        hash_symbol,
+        hash,
+        static_cast<PropertyAttributes>(None));
+    if (result->IsFailure()) return result;
+  }
+  return hash;
+}
+
+
 MaybeObject* JSObject::DeletePropertyPostInterceptor(String* name,
                                                      DeleteMode mode) {
   // Check local property, ignore interceptor.
@@ -3068,7 +3142,9 @@ MaybeObject* JSObject::DeleteDictionaryElement(uint32_t index,
   Isolate* isolate = GetIsolate();
   Heap* heap = isolate->heap();
   FixedArray* backing_store = FixedArray::cast(elements());
-  if (backing_store->map() == heap->non_strict_arguments_elements_map()) {
+  bool is_arguments =
+      (GetElementsKind() == JSObject::NON_STRICT_ARGUMENTS_ELEMENTS);
+  if (is_arguments) {
     backing_store = FixedArray::cast(backing_store->get(1));
   }
   NumberDictionary* dictionary = NumberDictionary::cast(backing_store);
@@ -3081,7 +3157,11 @@ MaybeObject* JSObject::DeleteDictionaryElement(uint32_t index,
       if (!maybe_elements->To(&new_elements)) {
         return maybe_elements;
       }
-      set_elements(new_elements);
+      if (is_arguments) {
+        FixedArray::cast(elements())->set(1, new_elements);
+      } else {
+        set_elements(new_elements);
+      }
     }
     if (mode == STRICT_DELETION && result == heap->false_value()) {
       // In strict mode, attempting to delete a non-configurable property
@@ -3375,23 +3455,22 @@ MaybeObject* JSObject::PreventExtensions() {
   }
 
   // If there are fast elements we normalize.
-  if (HasFastElements()) {
-    MaybeObject* result = NormalizeElements();
-    if (result->IsFailure()) return result;
+  NumberDictionary* dictionary = NULL;
+  { MaybeObject* maybe = NormalizeElements();
+    if (!maybe->To<NumberDictionary>(&dictionary)) return maybe;
   }
-  // TODO(kmillikin): Handle arguments object with dictionary elements.
-  ASSERT(HasDictionaryElements());
+  ASSERT(HasDictionaryElements() || HasDictionaryArgumentsElements());
   // Make sure that we never go back to fast case.
-  element_dictionary()->set_requires_slow_elements();
+  dictionary->set_requires_slow_elements();
 
   // Do a map transition, other objects with this map may still
   // be extensible.
-  Object* new_map;
-  { MaybeObject* maybe_new_map = map()->CopyDropTransitions();
-    if (!maybe_new_map->ToObject(&new_map)) return maybe_new_map;
+  Map* new_map;
+  { MaybeObject* maybe = map()->CopyDropTransitions();
+    if (!maybe->To<Map>(&new_map)) return maybe;
   }
-  Map::cast(new_map)->set_is_extensible(false);
-  set_map(Map::cast(new_map));
+  new_map->set_is_extensible(false);
+  set_map(new_map);
   ASSERT(!map()->is_extensible());
   return new_map;
 }
@@ -4117,6 +4196,8 @@ void Map::TraverseTransitionTree(TraverseCallback callback, void* data) {
         }
       }
       if (!map_done) continue;
+    } else {
+      map_or_index_field = NULL;
     }
     // That was the regular transitions, now for the prototype transitions.
     FixedArray* prototype_transitions =
@@ -9428,7 +9509,7 @@ void JSObject::GetLocalPropertyNames(FixedArray* storage, int index) {
     }
     ASSERT(storage->length() >= index);
   } else {
-    property_dictionary()->CopyKeysTo(storage);
+    property_dictionary()->CopyKeysTo(storage, StringDictionary::UNSORTED);
   }
 }
 
@@ -9505,32 +9586,48 @@ int JSObject::GetLocalElementKeys(FixedArray* storage,
       break;
     case DICTIONARY_ELEMENTS: {
       if (storage != NULL) {
-        element_dictionary()->CopyKeysTo(storage, filter);
+        element_dictionary()->CopyKeysTo(storage,
+                                         filter,
+                                         NumberDictionary::SORTED);
       }
       counter += element_dictionary()->NumberOfElementsFilterAttributes(filter);
       break;
     }
     case NON_STRICT_ARGUMENTS_ELEMENTS: {
       FixedArray* parameter_map = FixedArray::cast(elements());
-      int length = parameter_map->length();
-      for (int i = 2; i < length; ++i) {
-        if (!parameter_map->get(i)->IsTheHole()) {
-          if (storage != NULL) storage->set(i - 2, Smi::FromInt(i - 2));
-          ++counter;
-        }
-      }
+      int mapped_length = parameter_map->length() - 2;
       FixedArray* arguments = FixedArray::cast(parameter_map->get(1));
       if (arguments->IsDictionary()) {
+        // Copy the keys from arguments first, because Dictionary::CopyKeysTo
+        // will insert in storage starting at index 0.
         NumberDictionary* dictionary = NumberDictionary::cast(arguments);
-        if (storage != NULL) dictionary->CopyKeysTo(storage, filter);
+        if (storage != NULL) {
+          dictionary->CopyKeysTo(storage, filter, NumberDictionary::UNSORTED);
+        }
         counter += dictionary->NumberOfElementsFilterAttributes(filter);
-      } else {
-        int length = arguments->length();
-        for (int i = 0; i < length; ++i) {
-          if (!arguments->get(i)->IsTheHole()) {
-            if (storage != NULL) storage->set(i, Smi::FromInt(i));
+        for (int i = 0; i < mapped_length; ++i) {
+          if (!parameter_map->get(i + 2)->IsTheHole()) {
+            if (storage != NULL) storage->set(counter, Smi::FromInt(i));
             ++counter;
           }
+        }
+        if (storage != NULL) storage->SortPairs(storage, counter);
+
+      } else {
+        int backing_length = arguments->length();
+        int i = 0;
+        for (; i < mapped_length; ++i) {
+          if (!parameter_map->get(i + 2)->IsTheHole()) {
+            if (storage != NULL) storage->set(counter, Smi::FromInt(i));
+            ++counter;
+          } else if (i < backing_length && !arguments->get(i)->IsTheHole()) {
+            if (storage != NULL) storage->set(counter, Smi::FromInt(i));
+            ++counter;
+          }
+        }
+        for (; i < backing_length; ++i) {
+          if (storage != NULL) storage->set(counter, Smi::FromInt(i));
+          ++counter;
         }
       }
       break;
@@ -10116,10 +10213,15 @@ template class Dictionary<StringDictionaryShape, String*>;
 
 template class Dictionary<NumberDictionaryShape, uint32_t>;
 
+template class Dictionary<ObjectDictionaryShape, JSObject*>;
+
 template MaybeObject* Dictionary<NumberDictionaryShape, uint32_t>::Allocate(
     int);
 
 template MaybeObject* Dictionary<StringDictionaryShape, String*>::Allocate(
+    int);
+
+template MaybeObject* Dictionary<ObjectDictionaryShape, JSObject*>::Allocate(
     int);
 
 template MaybeObject* Dictionary<NumberDictionaryShape, uint32_t>::AtPut(
@@ -10132,7 +10234,9 @@ template Object* Dictionary<StringDictionaryShape, String*>::SlowReverseLookup(
     Object*);
 
 template void Dictionary<NumberDictionaryShape, uint32_t>::CopyKeysTo(
-    FixedArray*, PropertyAttributes);
+    FixedArray*,
+    PropertyAttributes,
+    Dictionary<NumberDictionaryShape, uint32_t>::SortMode);
 
 template Object* Dictionary<StringDictionaryShape, String*>::DeleteProperty(
     int, JSObject::DeleteMode);
@@ -10147,7 +10251,8 @@ template MaybeObject* Dictionary<NumberDictionaryShape, uint32_t>::Shrink(
     uint32_t);
 
 template void Dictionary<StringDictionaryShape, String*>::CopyKeysTo(
-    FixedArray*);
+    FixedArray*,
+    Dictionary<StringDictionaryShape, String*>::SortMode);
 
 template int
 Dictionary<StringDictionaryShape, String*>::NumberOfElementsFilterAttributes(
@@ -10155,6 +10260,9 @@ Dictionary<StringDictionaryShape, String*>::NumberOfElementsFilterAttributes(
 
 template MaybeObject* Dictionary<StringDictionaryShape, String*>::Add(
     String*, Object*, PropertyDetails);
+
+template MaybeObject* Dictionary<ObjectDictionaryShape, JSObject*>::Add(
+    JSObject*, Object*, PropertyDetails);
 
 template MaybeObject*
 Dictionary<StringDictionaryShape, String*>::GenerateNewEnumerationIndices();
@@ -11115,7 +11223,8 @@ MaybeObject* Dictionary<Shape, Key>::AddEntry(Key key,
   }
   SetEntry(entry, k, value, details);
   ASSERT((Dictionary<Shape, Key>::KeyAt(entry)->IsNumber()
-          || Dictionary<Shape, Key>::KeyAt(entry)->IsString()));
+          || Dictionary<Shape, Key>::KeyAt(entry)->IsString()
+          || Dictionary<Shape, Key>::KeyAt(entry)->IsJSObject()));
   HashTable<Shape, Key>::ElementAdded();
   return this;
 }
@@ -11199,8 +11308,10 @@ int Dictionary<Shape, Key>::NumberOfEnumElements() {
 
 
 template<typename Shape, typename Key>
-void Dictionary<Shape, Key>::CopyKeysTo(FixedArray* storage,
-                                        PropertyAttributes filter) {
+void Dictionary<Shape, Key>::CopyKeysTo(
+    FixedArray* storage,
+    PropertyAttributes filter,
+    typename Dictionary<Shape, Key>::SortMode sort_mode) {
   ASSERT(storage->length() >= NumberOfEnumElements());
   int capacity = HashTable<Shape, Key>::Capacity();
   int index = 0;
@@ -11213,7 +11324,9 @@ void Dictionary<Shape, Key>::CopyKeysTo(FixedArray* storage,
        if ((attr & filter) == 0) storage->set(index++, k);
      }
   }
-  storage->SortPairs(storage, index);
+  if (sort_mode == Dictionary<Shape, Key>::SORTED) {
+    storage->SortPairs(storage, index);
+  }
   ASSERT(storage->length() >= index);
 }
 
@@ -11239,7 +11352,9 @@ void StringDictionary::CopyEnumKeysTo(FixedArray* storage,
 
 
 template<typename Shape, typename Key>
-void Dictionary<Shape, Key>::CopyKeysTo(FixedArray* storage) {
+void Dictionary<Shape, Key>::CopyKeysTo(
+    FixedArray* storage,
+    typename Dictionary<Shape, Key>::SortMode sort_mode) {
   ASSERT(storage->length() >= NumberOfElementsFilterAttributes(
       static_cast<PropertyAttributes>(NONE)));
   int capacity = HashTable<Shape, Key>::Capacity();
@@ -11251,6 +11366,9 @@ void Dictionary<Shape, Key>::CopyKeysTo(FixedArray* storage) {
       if (details.IsDeleted()) continue;
       storage->set(index++, k);
     }
+  }
+  if (sort_mode == Dictionary<Shape, Key>::SORTED) {
+    storage->SortPairs(storage, index);
   }
   ASSERT(storage->length() >= index);
 }
@@ -11408,6 +11526,15 @@ MaybeObject* StringDictionary::TransformPropertiesToFastFor(
   ASSERT(obj->HasFastProperties());
 
   return obj;
+}
+
+
+MaybeObject* ObjectDictionary::AddChecked(JSObject* key, Object* value) {
+  // Make sure the key object has an identity hash code.
+  MaybeObject* maybe_hash = key->GetIdentityHash();
+  if (maybe_hash->IsFailure()) return maybe_hash;
+  PropertyDetails details(NONE, NORMAL);
+  return Add(key, value, details);
 }
 
 

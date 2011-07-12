@@ -25,58 +25,39 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-function fnGlobalObject() { return (function() { return this; })(); }
+#include "v8.h"
 
-var ES5Harness = (function() {
-  var currentTest = {};
-  var $this = this;
+#include "api.h"
+#include "debug.h"
+#include "execution.h"
+#include "factory.h"
+#include "macro-assembler.h"
+#include "objects.h"
+#include "global-handles.h"
+#include "cctest.h"
 
-  function Test262Error(id, path, description, codeString,
-                        preconditionString, result, error) {
-    this.id = id;
-    this.path = path;
-    this.description = description;
-    this.result = result;
-    this.error = error;
-    this.code = codeString;
-    this.pre = preconditionString;
-  }
+using namespace v8::internal;
 
-  Test262Error.prototype.toString = function() {
-    return this.result + " " + this.error;
-  }
+static Handle<ObjectDictionary> NewObjectDictionary(int at_least_space_for) {
+  ASSERT(0 <= at_least_space_for);
+  CALL_HEAP_FUNCTION(Isolate::Current(),
+                     ObjectDictionary::Allocate(at_least_space_for),
+                     ObjectDictionary);
+}
 
-  function registerTest(test) {
-    if (!(test.precondition && !test.precondition())) {
-      var error;
-      try {
-        var res = test.test.call($this);
-      } catch(e) {
-        res = 'fail';
-        error = e;
-      }
-      var retVal = /^s/i.test(test.id)
-          ? (res === true || typeof res == 'undefined' ? 'pass' : 'fail')
-          : (res === true ? 'pass' : 'fail');
+TEST(ObjectDictionary) {
+  v8::HandleScope scope;
+  LocalContext context;
+  Handle<ObjectDictionary> dict = NewObjectDictionary(23);
+  Handle<JSObject> a = FACTORY->NewJSArray(7);
+  Handle<JSObject> b = FACTORY->NewJSArray(11);
+  MaybeObject* result = dict->AddChecked(*a, *b);
+  CHECK(!result->IsFailure());
+  CHECK_NE(dict->FindEntry(*a), ObjectDictionary::kNotFound);
+  CHECK_EQ(dict->FindEntry(*b), ObjectDictionary::kNotFound);
 
-      if (retVal != 'pass') {
-         var precondition = (test.precondition !== undefined)
-             ? test.precondition.toString()
-             : '';
-
-         throw new Test262Error(
-            test.id,
-            test.path,
-            test.description,
-            test.test.toString(),
-            precondition,
-            retVal,
-            error);
-      }
-    }
-  }
-
-  return {
-    registerTest: registerTest
-  }
-})();
+  // Keys still have to be valid after objects were moved.
+  HEAP->CollectGarbage(NEW_SPACE);
+  CHECK_NE(dict->FindEntry(*a), ObjectDictionary::kNotFound);
+  CHECK_EQ(dict->FindEntry(*b), ObjectDictionary::kNotFound);
+}
