@@ -2168,7 +2168,7 @@ void LCodeGen::DoLoadElements(LLoadElements* instr) {
     __ LoadRoot(at, Heap::kFixedCOWArrayMapRootIndex);  // In the delay slot.
     __ Branch(&done, eq, scratch, Operand(at));
     // |scratch| still contains |input|'s map.
-    __ lw(scratch, FieldMemOperand(scratch, Map::kBitField2Offset));
+    __ lbu(scratch, FieldMemOperand(scratch, Map::kBitField2Offset));
     __ Ext(scratch, scratch, Map::kElementsKindShift,
            Map::kElementsKindBitCount);
     __ Branch(&done, eq, scratch,
