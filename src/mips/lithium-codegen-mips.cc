@@ -911,38 +911,6 @@ void LCodeGen::DoDivI(LDivI* instr) {
 }
 
 
-template<int T>
-void LCodeGen::DoDeferredBinaryOpStub(LTemplateInstruction<1, 2, T>* instr,
-                                      Token::Value op) {
-  Register left = ToRegister(instr->InputAt(0));
-  Register right = ToRegister(instr->InputAt(1));
-
-  PushSafepointRegistersScope scope(this, Safepoint::kWithRegistersAndDoubles);
-  // Move left to a1 and right to a0 for the stub call.
-  if (left.is(a1)) {
-    __ Move(a0, right);
-  } else if (left.is(a0) && right.is(a1)) {
-    __ Swap(a0, a1, a2);
-  } else if (left.is(a0)) {
-    ASSERT(!right.is(a1));
-    __ mov(a1, a0);
-    __ mov(a0, right);
-  } else {
-    ASSERT(!left.is(a0) && !right.is(a0));
-    __ mov(a0, right);
-    __ mov(a1, left);
-  }
-  BinaryOpStub stub(op, OVERWRITE_LEFT);
-  __ CallStub(&stub);
-  RecordSafepointWithRegistersAndDoubles(instr->pointer_map(),
-                                         0,
-                                         Safepoint::kNoDeoptimizationIndex);
-  // Overwrite the stored value of v0 with the result of the stub.
-  // TODO(plind): validate this is correct.....
-  __ StoreToSafepointRegistersAndDoublesSlot(v0, v0);
-}
-
-
 void LCodeGen::DoMulI(LMulI* instr) {
   Register scratch = scratch0();
   Register result = ToRegister(instr->result());
