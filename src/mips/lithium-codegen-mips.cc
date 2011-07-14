@@ -1860,7 +1860,7 @@ void LCodeGen::DoInstanceOf(LInstanceOf* instr) {
   ASSERT(ToRegister(instr->InputAt(1)).is(a1));  // Function is in a1.
   Register result = ToRegister(instr->result());
   ASSERT(result.is(v0));
-  
+
   InstanceofStub stub(InstanceofStub::kArgsInRegisters);
   CallCode(stub.GetCode(), RelocInfo::CODE_TARGET, instr);
 
@@ -2616,7 +2616,6 @@ void LCodeGen::DoDeferredMathAbsTaggedHeapNumber(LUnaryMathOperation* instr) {
   }
 
   __ bind(&done);
-  
 }
 
 
@@ -2631,7 +2630,6 @@ void LCodeGen::EmitIntegerMathAbs(LUnaryMathOperation* instr) {
   // Overflow if result is still negative, ie 0x80000000.
   DeoptimizeIf(lt, instr->environment(), result, Operand(zero_reg));
   __ bind(&done);
-
 }
 
 
@@ -3826,7 +3824,8 @@ void LCodeGen::DoClampTToUint8(LClampTToUint8* instr) {
 
   // Check for undefined. Undefined is converted to zero for clamping
   // conversions.
-  DeoptimizeIf(ne, instr->environment(), input_reg, Operand(factory()->undefined_value()));
+  DeoptimizeIf(ne, instr->environment(), input_reg,
+               Operand(factory()->undefined_value()));
   __ Ext(input_reg, input_reg, 0, 16);
   __ jmp(&done);
 
