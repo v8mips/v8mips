@@ -63,9 +63,11 @@ static unsigned GetPropertyId(Property* property) {
 // A patch site is a location in the code which it is possible to patch. This
 // class has a number of methods to emit the code which is patchable and the
 // method EmitPatchInfo to record a marker back to the patchable code. This
-// marker is a andi at, rx, #yyy instruction, and x * 0x0000ffff + yyy (raw 16
-// bit immediate value is used) is the delta from the pc to the first
+// marker is a andi zero_reg, rx, #yyyy instruction, and rx * 0x0000ffff + yyyy
+// (raw 16 bit immediate value is used) is the delta from the pc to the first
 // instruction of the patchable code.
+// The marker instruction is effectively a NOP (dest is zero_reg) and will
+// never be emitted by normal code.
 class JumpPatchSite BASE_EMBEDDED {
  public:
   explicit JumpPatchSite(MacroAssembler* masm) : masm_(masm) {
@@ -104,7 +106,7 @@ class JumpPatchSite BASE_EMBEDDED {
     if (patch_site_.is_bound()) {
       int delta_to_patch_site = masm_->InstructionsGeneratedSince(&patch_site_);
       Register reg = Register::from_code(delta_to_patch_site / kImm16Mask);
-      __ andi(at, reg, delta_to_patch_site % kImm16Mask);
+      __ andi(zero_reg, reg, delta_to_patch_site % kImm16Mask);
 #ifdef DEBUG
       info_emitted_ = true;
 #endif
