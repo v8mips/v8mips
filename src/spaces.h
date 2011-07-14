@@ -1252,7 +1252,6 @@ class PagedSpace : public Space {
 };
 
 
-#if defined(DEBUG) || defined(ENABLE_LOGGING_AND_PROFILING)
 class NumberAndSizeInfo BASE_EMBEDDED {
  public:
   NumberAndSizeInfo() : number_(0), bytes_(0) {}
@@ -1275,9 +1274,7 @@ class NumberAndSizeInfo BASE_EMBEDDED {
 
 
 // HistogramInfo class for recording a single "bar" of a histogram.  This
-// class is used for collecting statistics to print to stdout (when compiled
-// with DEBUG) or to the log file (when compiled with
-// ENABLE_LOGGING_AND_PROFILING).
+// class is used for collecting statistics to print to the log file.
 class HistogramInfo: public NumberAndSizeInfo {
  public:
   HistogramInfo() : NumberAndSizeInfo() {}
@@ -1288,7 +1285,6 @@ class HistogramInfo: public NumberAndSizeInfo {
  private:
   const char* name_;
 };
-#endif
 
 
 // -----------------------------------------------------------------------------
@@ -1611,7 +1607,6 @@ class NewSpace : public Space {
   virtual void Print() { to_space_.Print(); }
 #endif
 
-#if defined(DEBUG) || defined(ENABLE_LOGGING_AND_PROFILING)
   // Iterates the active semispace to collect statistics.
   void CollectStatistics();
   // Reports previously collected statistics of the active semispace.
@@ -1624,7 +1619,6 @@ class NewSpace : public Space {
   // to space during a scavenge GC.
   void RecordAllocation(HeapObject* obj);
   void RecordPromotion(HeapObject* obj);
-#endif
 
   // Return whether the operation succeded.
   bool CommitFromSpaceIfNeeded() {
@@ -1653,10 +1647,8 @@ class NewSpace : public Space {
   AllocationInfo allocation_info_;
   AllocationInfo mc_forwarding_info_;
 
-#if defined(DEBUG) || defined(ENABLE_LOGGING_AND_PROFILING)
   HistogramInfo* allocated_histogram_;
   HistogramInfo* promoted_histogram_;
-#endif
 
   // Implementation of AllocateRaw and MCAllocateRaw.
   MUST_USE_RESULT inline MaybeObject* AllocateRawInternal(

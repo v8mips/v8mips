@@ -58,11 +58,6 @@ namespace internal {
 const int kGetterIndex = 0;
 const int kSetterIndex = 1;
 
-uint64_t FixedDoubleArray::kHoleNanInt64 = -1;
-uint64_t FixedDoubleArray::kCanonicalNonHoleNanLower32 = 0x7FF00000;
-uint64_t FixedDoubleArray::kCanonicalNonHoleNanInt64 =
-    kCanonicalNonHoleNanLower32 << 32;
-
 MUST_USE_RESULT static MaybeObject* CreateJSValue(JSFunction* constructor,
                                                   Object* value) {
   Object* result;
@@ -2811,16 +2806,18 @@ MaybeObject* JSObject::NormalizeElements() {
   ASSERT(!HasExternalArrayElements());
 
   // Find the backing store.
-  FixedArray* array = FixedArray::cast(elements());
+  FixedArrayBase* array = FixedArrayBase::cast(elements());
   Map* old_map = array->map();
   bool is_arguments =
       (old_map == old_map->heap()->non_strict_arguments_elements_map());
   if (is_arguments) {
-    array = FixedArray::cast(array->get(1));
+    array = FixedArrayBase::cast(FixedArray::cast(array)->get(1));
   }
   if (array->IsDictionary()) return array;
 
-  ASSERT(HasFastElements() || HasFastArgumentsElements());
+  ASSERT(HasFastElements() ||
+         HasFastDoubleElements() ||
+         HasFastArgumentsElements());
   // Compute the effective length and allocate a new backing store.
   int length = IsJSArray()
       ? Smi::cast(JSArray::cast(this)->length())->value()
@@ -2833,7 +2830,7 @@ MaybeObject* JSObject::NormalizeElements() {
   }
 
   // Copy the elements to the new backing store.
-  bool has_double_elements = old_map->has_fast_double_elements();
+  bool has_double_elements = array->IsFixedDoubleArray();
   for (int i = 0; i < length; i++) {
     Object* value = NULL;
     if (has_double_elements) {
@@ -2851,7 +2848,7 @@ MaybeObject* JSObject::NormalizeElements() {
       }
     } else {
       ASSERT(old_map->has_fast_elements());
-      value = array->get(i);
+      value = FixedArray::cast(array)->get(i);
     }
     PropertyDetails details = PropertyDetails(NONE, NORMAL);
     if (!value->IsTheHole()) {
@@ -2887,84 +2884,6 @@ MaybeObject* JSObject::NormalizeElements() {
 
   ASSERT(HasDictionaryElements() || HasDictionaryArgumentsElements());
   return dictionary;
-}
-
-
-MaybeObject* JSObject::GetHiddenProperties(bool create_if_needed) {
-  Isolate* isolate = GetIsolate();
-  Heap* heap = isolate->heap();
-  if (HasFastProperties()) {
-    // If the object has fast properties, check whether the first slot
-    // in the descriptor array matches the hidden symbol. Since the
-    // hidden symbols hash code is zero (and no other string has hash
-    // code zero) it will always occupy the first entry if present.
-    DescriptorArray* descriptors = map()->instance_descriptors();
-    if ((descriptors->number_of_descriptors() > 0) &&
-        (descriptors->GetKey(0) == heap->hidden_symbol()) &&
-        descriptors->IsProperty(0)) {
-      ASSERT(descriptors->GetType(0) == FIELD);
-      return FastPropertyAt(descriptors->GetFieldIndex(0));
-    }
-  }
-
-  // Only attempt to find the hidden properties in the local object and not
-  // in the prototype chain.  Note that HasLocalProperty() can cause a GC in
-  // the general case in the presence of interceptors.
-  if (!HasHiddenPropertiesObject()) {
-    // Hidden properties object not found. Allocate a new hidden properties
-    // object if requested. Otherwise return the undefined value.
-    if (create_if_needed) {
-      Object* hidden_obj;
-      { MaybeObject* maybe_obj = heap->AllocateJSObject(
-            isolate->context()->global_context()->object_function());
-        if (!maybe_obj->ToObject(&hidden_obj)) return maybe_obj;
-      }
-      return SetHiddenPropertiesObject(hidden_obj);
-    } else {
-      return heap->undefined_value();
-    }
-  }
-  return GetHiddenPropertiesObject();
-}
-
-
-MaybeObject* JSObject::GetIdentityHash() {
-  Isolate* isolate = GetIsolate();
-  Object* hidden_props_obj;
-  { MaybeObject* maybe_obj = GetHiddenProperties(true);
-    if (!maybe_obj->ToObject(&hidden_props_obj)) return maybe_obj;
-  }
-  if (!hidden_props_obj->IsJSObject()) {
-    // We failed to create hidden properties.  That's a detached
-    // global proxy.
-    ASSERT(hidden_props_obj->IsUndefined());
-    return Smi::FromInt(0);
-  }
-  JSObject* hidden_props = JSObject::cast(hidden_props_obj);
-  String* hash_symbol = isolate->heap()->identity_hash_symbol();
-  if (hidden_props->HasLocalProperty(hash_symbol)) {
-    MaybeObject* hash = hidden_props->GetProperty(hash_symbol);
-    return Smi::cast(hash->ToObjectChecked());
-  }
-
-  int hash_value;
-  int attempts = 0;
-  do {
-    // Generate a random 32-bit hash value but limit range to fit
-    // within a smi.
-    hash_value = V8::Random(isolate) & Smi::kMaxValue;
-    attempts++;
-  } while (hash_value == 0 && attempts < 30);
-  hash_value = hash_value != 0 ? hash_value : 1;  // never return 0
-
-  Smi* hash = Smi::FromInt(hash_value);
-  { MaybeObject* result = hidden_props->SetLocalPropertyIgnoreAttributes(
-        hash_symbol,
-        hash,
-        static_cast<PropertyAttributes>(None));
-    if (result->IsFailure()) return result;
-  }
-  return hash;
 }
 
 
@@ -7395,22 +7314,28 @@ MaybeObject* JSObject::SetFastElementsCapacityAndLength(int capacity,
     new_map = Map::cast(object);
   }
 
-  AssertNoAllocation no_gc;
-  WriteBarrierMode mode = new_elements->GetWriteBarrierMode(no_gc);
   switch (GetElementsKind()) {
-    case FAST_ELEMENTS:
+    case FAST_ELEMENTS: {
+      AssertNoAllocation no_gc;
+      WriteBarrierMode mode = new_elements->GetWriteBarrierMode(no_gc);
       CopyFastElementsToFast(FixedArray::cast(elements()), new_elements, mode);
       set_map(new_map);
       set_elements(new_elements);
       break;
-    case DICTIONARY_ELEMENTS:
+    }
+    case DICTIONARY_ELEMENTS: {
+      AssertNoAllocation no_gc;
+      WriteBarrierMode mode = new_elements->GetWriteBarrierMode(no_gc);
       CopySlowElementsToFast(NumberDictionary::cast(elements()),
                              new_elements,
                              mode);
       set_map(new_map);
       set_elements(new_elements);
       break;
+    }
     case NON_STRICT_ARGUMENTS_ELEMENTS: {
+      AssertNoAllocation no_gc;
+      WriteBarrierMode mode = new_elements->GetWriteBarrierMode(no_gc);
       // The object's map and the parameter map are unchanged, the unaliased
       // arguments are copied to the new backing store.
       FixedArray* parameter_map = FixedArray::cast(elements());
@@ -7446,6 +7371,8 @@ MaybeObject* JSObject::SetFastElementsCapacityAndLength(int capacity,
           new_elements->set(i, obj, UPDATE_WRITE_BARRIER);
         }
       }
+      set_map(new_map);
+      set_elements(new_elements);
       break;
     }
     case EXTERNAL_BYTE_ELEMENTS:
@@ -7508,7 +7435,9 @@ MaybeObject* JSObject::SetFastDoubleElementsCapacityAndLength(
       break;
   }
 
+  ASSERT(new_map->has_fast_double_elements());
   set_map(new_map);
+  ASSERT(elems->IsFixedDoubleArray());
   set_elements(elems);
 
   if (IsJSArray()) {
@@ -8485,8 +8414,9 @@ MaybeObject* JSObject::SetDictionaryElement(uint32_t index,
     } else {
       new_length = dictionary->max_number_key() + 1;
     }
-    MaybeObject* result =
-        SetFastElementsCapacityAndLength(new_length, new_length);
+    MaybeObject* result = ShouldConvertToFastDoubleElements()
+        ? SetFastDoubleElementsCapacityAndLength(new_length, new_length)
+        : SetFastElementsCapacityAndLength(new_length, new_length);
     if (result->IsFailure()) return result;
 #ifdef DEBUG
     if (FLAG_trace_normalization) {
@@ -8573,6 +8503,9 @@ MUST_USE_RESULT MaybeObject* JSObject::SetFastDoubleElement(
   }
 
   // Otherwise default to slow case.
+  ASSERT(HasFastDoubleElements());
+  ASSERT(map()->has_fast_double_elements());
+  ASSERT(elements()->IsFixedDoubleArray());
   Object* obj;
   { MaybeObject* maybe_obj = NormalizeElements();
     if (!maybe_obj->ToObject(&obj)) return maybe_obj;
@@ -9026,10 +8959,13 @@ bool JSObject::HasDenseElements() {
   int capacity = 0;
   int number_of_elements = 0;
 
-  FixedArray* backing_store = FixedArray::cast(elements());
+  FixedArrayBase* backing_store_base = FixedArrayBase::cast(elements());
+  FixedArray* backing_store = NULL;
   switch (GetElementsKind()) {
     case NON_STRICT_ARGUMENTS_ELEMENTS:
-      backing_store = FixedArray::cast(backing_store->get(1));
+      backing_store_base =
+          FixedArray::cast(FixedArray::cast(backing_store_base)->get(1));
+      backing_store = FixedArray::cast(backing_store_base);
       if (backing_store->IsDictionary()) {
         NumberDictionary* dictionary = NumberDictionary::cast(backing_store);
         capacity = dictionary->Capacity();
@@ -9038,13 +8974,15 @@ bool JSObject::HasDenseElements() {
       }
       // Fall through.
     case FAST_ELEMENTS:
+      backing_store = FixedArray::cast(backing_store_base);
       capacity = backing_store->length();
       for (int i = 0; i < capacity; ++i) {
         if (!backing_store->get(i)->IsTheHole()) ++number_of_elements;
       }
       break;
     case DICTIONARY_ELEMENTS: {
-      NumberDictionary* dictionary = NumberDictionary::cast(backing_store);
+      NumberDictionary* dictionary =
+          NumberDictionary::cast(FixedArray::cast(elements()));
       capacity = dictionary->Capacity();
       number_of_elements = dictionary->NumberOfElements();
       break;
@@ -10213,15 +10151,10 @@ template class Dictionary<StringDictionaryShape, String*>;
 
 template class Dictionary<NumberDictionaryShape, uint32_t>;
 
-template class Dictionary<ObjectDictionaryShape, JSObject*>;
-
 template MaybeObject* Dictionary<NumberDictionaryShape, uint32_t>::Allocate(
     int);
 
 template MaybeObject* Dictionary<StringDictionaryShape, String*>::Allocate(
-    int);
-
-template MaybeObject* Dictionary<ObjectDictionaryShape, JSObject*>::Allocate(
     int);
 
 template MaybeObject* Dictionary<NumberDictionaryShape, uint32_t>::AtPut(
@@ -10260,9 +10193,6 @@ Dictionary<StringDictionaryShape, String*>::NumberOfElementsFilterAttributes(
 
 template MaybeObject* Dictionary<StringDictionaryShape, String*>::Add(
     String*, Object*, PropertyDetails);
-
-template MaybeObject* Dictionary<ObjectDictionaryShape, JSObject*>::Add(
-    JSObject*, Object*, PropertyDetails);
 
 template MaybeObject*
 Dictionary<StringDictionaryShape, String*>::GenerateNewEnumerationIndices();
@@ -11223,8 +11153,7 @@ MaybeObject* Dictionary<Shape, Key>::AddEntry(Key key,
   }
   SetEntry(entry, k, value, details);
   ASSERT((Dictionary<Shape, Key>::KeyAt(entry)->IsNumber()
-          || Dictionary<Shape, Key>::KeyAt(entry)->IsString()
-          || Dictionary<Shape, Key>::KeyAt(entry)->IsJSObject()));
+          || Dictionary<Shape, Key>::KeyAt(entry)->IsString()));
   HashTable<Shape, Key>::ElementAdded();
   return this;
 }
@@ -11526,15 +11455,6 @@ MaybeObject* StringDictionary::TransformPropertiesToFastFor(
   ASSERT(obj->HasFastProperties());
 
   return obj;
-}
-
-
-MaybeObject* ObjectDictionary::AddChecked(JSObject* key, Object* value) {
-  // Make sure the key object has an identity hash code.
-  MaybeObject* maybe_hash = key->GetIdentityHash();
-  if (maybe_hash->IsFailure()) return maybe_hash;
-  PropertyDetails details(NONE, NORMAL);
-  return Add(key, value, details);
 }
 
 

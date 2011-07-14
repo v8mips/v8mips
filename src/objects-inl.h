@@ -1610,6 +1610,21 @@ void FixedArray::set(int index, Object* value) {
 }
 
 
+inline bool FixedDoubleArray::is_the_hole_nan(double value) {
+  return BitCast<uint64_t, double>(value) == kHoleNanInt64;
+}
+
+
+inline double FixedDoubleArray::hole_nan_as_double() {
+  return BitCast<double, uint64_t>(kHoleNanInt64);
+}
+
+
+inline double FixedDoubleArray::canonical_not_the_hole_nan_as_double() {
+  return BitCast<double, uint64_t>(kCanonicalNonHoleNanInt64);
+}
+
+
 double FixedDoubleArray::get(int index) {
   ASSERT(map() != HEAP->fixed_cow_array_map() &&
          map() != HEAP->fixed_array_map());
@@ -4298,32 +4313,6 @@ uint32_t StringDictionaryShape::HashForObject(String* key, Object* other) {
 
 
 MaybeObject* StringDictionaryShape::AsObject(String* key) {
-  return key;
-}
-
-
-bool ObjectDictionaryShape::IsMatch(JSObject* key, Object* other) {
-  ASSERT(other->IsJSObject());
-  return key == JSObject::cast(other);
-}
-
-
-uint32_t ObjectDictionaryShape::Hash(JSObject* key) {
-  MaybeObject* maybe_hash = key->GetIdentityHash();
-  ASSERT(!maybe_hash->IsFailure());
-  return Smi::cast(maybe_hash->ToObjectUnchecked())->value();
-}
-
-
-uint32_t ObjectDictionaryShape::HashForObject(JSObject* key, Object* other) {
-  ASSERT(other->IsJSObject());
-  MaybeObject* maybe_hash = JSObject::cast(other)->GetIdentityHash();
-  ASSERT(!maybe_hash->IsFailure());
-  return Smi::cast(maybe_hash->ToObjectUnchecked())->value();
-}
-
-
-MaybeObject* ObjectDictionaryShape::AsObject(JSObject* key) {
   return key;
 }
 
