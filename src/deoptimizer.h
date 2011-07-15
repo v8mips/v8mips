@@ -194,7 +194,7 @@ class Deoptimizer : public Malloced {
   void MaterializeHeapNumbers();
 #ifdef ENABLE_DEBUGGER_SUPPORT
   void MaterializeHeapNumbersForDebuggerInspectableFrame(
-      Address top, intptr_t size, DeoptimizedFrameInfo* info);
+      Address top, uint32_t size, DeoptimizedFrameInfo* info);
 #endif
 
   static void ComputeOutputFrames(Deoptimizer* deoptimizer);
@@ -412,6 +412,12 @@ class FrameDescription {
   Code::Kind GetKind() const { return kind_; }
   void SetKind(Code::Kind kind) { kind_ = kind; }
 #endif
+
+  // Get the incoming arguments count.
+  int ComputeParametersCount();
+
+  // Get a parameter value for an unoptimized frame.
+  Object* GetParameter(Deoptimizer* deoptimizer, int index);
 
   // Get the expression stack height for a unoptimized frame.
   unsigned GetExpressionCount(Deoptimizer* deoptimizer);
@@ -675,12 +681,21 @@ class DeoptimizedFrameInfo : public Malloced {
   // GC support.
   void Iterate(ObjectVisitor* v);
 
+  // Return the number of incoming arguments.
+  int parameters_count() { return parameters_count_; }
+
   // Return the height of the expression stack.
   int expression_count() { return expression_count_; }
 
   // Get the frame function.
   JSFunction* GetFunction() {
     return function_;
+  }
+
+  // Get an incoming argument.
+  Object* GetParameter(int index) {
+    ASSERT(0 <= index && index < parameters_count());
+    return parameters_[index];
   }
 
   // Get an expression from the expression stack.
@@ -695,6 +710,12 @@ class DeoptimizedFrameInfo : public Malloced {
     function_ = function;
   }
 
+  // Set an incoming argument.
+  void SetParameter(int index, Object* obj) {
+    ASSERT(0 <= index && index < parameters_count());
+    parameters_[index] = obj;
+  }
+
   // Set an expression on the expression stack.
   void SetExpression(int index, Object* obj) {
     ASSERT(0 <= index && index < expression_count());
@@ -702,7 +723,9 @@ class DeoptimizedFrameInfo : public Malloced {
   }
 
   JSFunction* function_;
+  int parameters_count_;
   int expression_count_;
+  Object** parameters_;
   Object** expression_stack_;
 
   friend class Deoptimizer;

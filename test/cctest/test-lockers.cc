@@ -317,10 +317,15 @@ class SeparateIsolatesLocksNonexclusiveThread : public JoinableThread {
 
 // Run parallel threads that lock and access different isolates in parallel
 TEST(SeparateIsolatesLocksNonexclusive) {
+#if defined(V8_TARGET_ARCH_ARM) || defined(V8_TARGET_ARCH_MIPS)
+  const int kNThreads = 50;
+#else
+  const int kNThreads = 100;
+#endif
   v8::Isolate* isolate1 = v8::Isolate::New();
   v8::Isolate* isolate2 = v8::Isolate::New();
-  i::List<JoinableThread*> threads(kNNormalThreads);
-  for (int i = 0; i < kNNormalThreads; i++) {
+  i::List<JoinableThread*> threads(kNThreads);
+  for (int i = 0; i < kNThreads; i++) {
     threads.Add(new SeparateIsolatesLocksNonexclusiveThread(isolate1,
                                                              isolate2));
   }
@@ -385,9 +390,14 @@ class LockerUnlockerThread : public JoinableThread {
 
 // Use unlocker inside of a Locker, multiple threads.
 TEST(LockerUnlocker) {
-  i::List<JoinableThread*> threads(kNNormalThreads);
+#if defined(V8_TARGET_ARCH_ARM) || defined(V8_TARGET_ARCH_MIPS)
+  const int kNThreads = 50;
+#else
+  const int kNThreads = 100;
+#endif
+  i::List<JoinableThread*> threads(kNThreads);
   v8::Isolate* isolate = v8::Isolate::New();
-  for (int i = 0; i < kNNormalThreads; i++) {
+  for (int i = 0; i < kNThreads; i++) {
     threads.Add(new LockerUnlockerThread(isolate));
   }
   StartJoinAndDeleteThreads(threads);
@@ -432,9 +442,14 @@ class LockTwiceAndUnlockThread : public JoinableThread {
 
 // Use Unlocker inside two Lockers.
 TEST(LockTwiceAndUnlock) {
-  i::List<JoinableThread*> threads(kNNormalThreads);
+#if defined(V8_TARGET_ARCH_ARM) || defined(V8_TARGET_ARCH_MIPS)
+  const int kNThreads = 50;
+#else
+  const int kNThreads = 100;
+#endif
+  i::List<JoinableThread*> threads(kNThreads);
   v8::Isolate* isolate = v8::Isolate::New();
-  for (int i = 0; i < kNNormalThreads; i++) {
+  for (int i = 0; i < kNThreads; i++) {
     threads.Add(new LockTwiceAndUnlockThread(isolate));
   }
   StartJoinAndDeleteThreads(threads);

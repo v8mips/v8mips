@@ -2173,23 +2173,9 @@ class FixedDoubleArray: public FixedArrayBase {
     return kHeaderSize + length * kDoubleSize;
   }
 
-  // The following can't be declared inline as const static
-  // because they're 64-bit.
-  static uint64_t kCanonicalNonHoleNanLower32;
-  static uint64_t kCanonicalNonHoleNanInt64;
-  static uint64_t kHoleNanInt64;
-
-  inline static bool is_the_hole_nan(double value) {
-    return BitCast<uint64_t, double>(value) == kHoleNanInt64;
-  }
-
-  inline static double hole_nan_as_double() {
-    return BitCast<double, uint64_t>(kHoleNanInt64);
-  }
-
-  inline static double canonical_not_the_hole_nan_as_double() {
-    return BitCast<double, uint64_t>(kCanonicalNonHoleNanInt64);
-  }
+  inline static bool is_the_hole_nan(double value);
+  inline static double hole_nan_as_double();
+  inline static double canonical_not_the_hole_nan_as_double();
 
   // Casting.
   static inline FixedDoubleArray* cast(Object* obj);
@@ -2770,10 +2756,13 @@ class Dictionary: public HashTable<Shape, Key> {
   // Returns the number of enumerable elements in the dictionary.
   int NumberOfEnumElements();
 
+  enum SortMode { UNSORTED, SORTED };
   // Copies keys to preallocated fixed array.
-  void CopyKeysTo(FixedArray* storage, PropertyAttributes filter);
+  void CopyKeysTo(FixedArray* storage,
+                  PropertyAttributes filter,
+                  SortMode sort_mode);
   // Fill in details for properties into storage.
-  void CopyKeysTo(FixedArray* storage);
+  void CopyKeysTo(FixedArray* storage, SortMode sort_mode);
 
   // Accessors for next enumeration index.
   void SetNextEnumerationIndex(int index) {

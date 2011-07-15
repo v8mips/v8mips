@@ -58,11 +58,6 @@ namespace internal {
 const int kGetterIndex = 0;
 const int kSetterIndex = 1;
 
-uint64_t FixedDoubleArray::kHoleNanInt64 = -1;
-uint64_t FixedDoubleArray::kCanonicalNonHoleNanLower32 = 0x7FF00000;
-uint64_t FixedDoubleArray::kCanonicalNonHoleNanInt64 =
-    kCanonicalNonHoleNanLower32 << 32;
-
 MUST_USE_RESULT static MaybeObject* CreateJSValue(JSFunction* constructor,
                                                   Object* value) {
   Object* result;
@@ -1883,13 +1878,9 @@ void JSObject::LookupCallbackSetterInPrototypes(String* name,
        pt = pt->GetPrototype()) {
     JSObject::cast(pt)->LocalLookupRealNamedProperty(name, result);
     if (result->IsProperty()) {
-      if (result->IsReadOnly()) {
-        result->NotFound();
-        return;
-      }
-      if (result->type() == CALLBACKS) {
-        return;
-      }
+      if (result->type() == CALLBACKS && !result->IsReadOnly()) return;
+      // Found non-callback or read-only callback, stop looking.
+      break;
     }
   }
   result->NotFound();
@@ -2273,10 +2264,10 @@ MUST_USE_RESULT PropertyAttributes JSProxy::GetPropertyAttributeWithHandler(
 
 
 MaybeObject* JSObject::SetPropertyForResult(LookupResult* result,
-                                   String* name,
-                                   Object* value,
-                                   PropertyAttributes attributes,
-                                   StrictModeFlag strict_mode) {
+                                            String* name,
+                                            Object* value,
+                                            PropertyAttributes attributes,
+                                            StrictModeFlag strict_mode) {
   Heap* heap = GetHeap();
   // Make sure that the top context does not change when doing callbacks or
   // interceptor calls.
@@ -2815,16 +2806,18 @@ MaybeObject* JSObject::NormalizeElements() {
   ASSERT(!HasExternalArrayElements());
 
   // Find the backing store.
-  FixedArray* array = FixedArray::cast(elements());
+  FixedArrayBase* array = FixedArrayBase::cast(elements());
   Map* old_map = array->map();
   bool is_arguments =
       (old_map == old_map->heap()->non_strict_arguments_elements_map());
   if (is_arguments) {
-    array = FixedArray::cast(array->get(1));
+    array = FixedArrayBase::cast(FixedArray::cast(array)->get(1));
   }
   if (array->IsDictionary()) return array;
 
-  ASSERT(HasFastElements() || HasFastArgumentsElements());
+  ASSERT(HasFastElements() ||
+         HasFastDoubleElements() ||
+         HasFastArgumentsElements());
   // Compute the effective length and allocate a new backing store.
   int length = IsJSArray()
       ? Smi::cast(JSArray::cast(this)->length())->value()
@@ -2837,7 +2830,7 @@ MaybeObject* JSObject::NormalizeElements() {
   }
 
   // Copy the elements to the new backing store.
-  bool has_double_elements = old_map->has_fast_double_elements();
+  bool has_double_elements = array->IsFixedDoubleArray();
   for (int i = 0; i < length; i++) {
     Object* value = NULL;
     if (has_double_elements) {
@@ -2855,7 +2848,7 @@ MaybeObject* JSObject::NormalizeElements() {
       }
     } else {
       ASSERT(old_map->has_fast_elements());
-      value = array->get(i);
+      value = FixedArray::cast(array)->get(i);
     }
     PropertyDetails details = PropertyDetails(NONE, NORMAL);
     if (!value->IsTheHole()) {
@@ -3068,7 +3061,9 @@ MaybeObject* JSObject::DeleteDictionaryElement(uint32_t index,
   Isolate* isolate = GetIsolate();
   Heap* heap = isolate->heap();
   FixedArray* backing_store = FixedArray::cast(elements());
-  if (backing_store->map() == heap->non_strict_arguments_elements_map()) {
+  bool is_arguments =
+      (GetElementsKind() == JSObject::NON_STRICT_ARGUMENTS_ELEMENTS);
+  if (is_arguments) {
     backing_store = FixedArray::cast(backing_store->get(1));
   }
   NumberDictionary* dictionary = NumberDictionary::cast(backing_store);
@@ -3081,7 +3076,11 @@ MaybeObject* JSObject::DeleteDictionaryElement(uint32_t index,
       if (!maybe_elements->To(&new_elements)) {
         return maybe_elements;
       }
-      set_elements(new_elements);
+      if (is_arguments) {
+        FixedArray::cast(elements())->set(1, new_elements);
+      } else {
+        set_elements(new_elements);
+      }
     }
     if (mode == STRICT_DELETION && result == heap->false_value()) {
       // In strict mode, attempting to delete a non-configurable property
@@ -3375,23 +3374,22 @@ MaybeObject* JSObject::PreventExtensions() {
   }
 
   // If there are fast elements we normalize.
-  if (HasFastElements()) {
-    MaybeObject* result = NormalizeElements();
-    if (result->IsFailure()) return result;
+  NumberDictionary* dictionary = NULL;
+  { MaybeObject* maybe = NormalizeElements();
+    if (!maybe->To<NumberDictionary>(&dictionary)) return maybe;
   }
-  // TODO(kmillikin): Handle arguments object with dictionary elements.
-  ASSERT(HasDictionaryElements());
+  ASSERT(HasDictionaryElements() || HasDictionaryArgumentsElements());
   // Make sure that we never go back to fast case.
-  element_dictionary()->set_requires_slow_elements();
+  dictionary->set_requires_slow_elements();
 
   // Do a map transition, other objects with this map may still
   // be extensible.
-  Object* new_map;
-  { MaybeObject* maybe_new_map = map()->CopyDropTransitions();
-    if (!maybe_new_map->ToObject(&new_map)) return maybe_new_map;
+  Map* new_map;
+  { MaybeObject* maybe = map()->CopyDropTransitions();
+    if (!maybe->To<Map>(&new_map)) return maybe;
   }
-  Map::cast(new_map)->set_is_extensible(false);
-  set_map(Map::cast(new_map));
+  new_map->set_is_extensible(false);
+  set_map(new_map);
   ASSERT(!map()->is_extensible());
   return new_map;
 }
@@ -4117,6 +4115,8 @@ void Map::TraverseTransitionTree(TraverseCallback callback, void* data) {
         }
       }
       if (!map_done) continue;
+    } else {
+      map_or_index_field = NULL;
     }
     // That was the regular transitions, now for the prototype transitions.
     FixedArray* prototype_transitions =
@@ -7314,22 +7314,28 @@ MaybeObject* JSObject::SetFastElementsCapacityAndLength(int capacity,
     new_map = Map::cast(object);
   }
 
-  AssertNoAllocation no_gc;
-  WriteBarrierMode mode = new_elements->GetWriteBarrierMode(no_gc);
   switch (GetElementsKind()) {
-    case FAST_ELEMENTS:
+    case FAST_ELEMENTS: {
+      AssertNoAllocation no_gc;
+      WriteBarrierMode mode = new_elements->GetWriteBarrierMode(no_gc);
       CopyFastElementsToFast(FixedArray::cast(elements()), new_elements, mode);
       set_map(new_map);
       set_elements(new_elements);
       break;
-    case DICTIONARY_ELEMENTS:
+    }
+    case DICTIONARY_ELEMENTS: {
+      AssertNoAllocation no_gc;
+      WriteBarrierMode mode = new_elements->GetWriteBarrierMode(no_gc);
       CopySlowElementsToFast(NumberDictionary::cast(elements()),
                              new_elements,
                              mode);
       set_map(new_map);
       set_elements(new_elements);
       break;
+    }
     case NON_STRICT_ARGUMENTS_ELEMENTS: {
+      AssertNoAllocation no_gc;
+      WriteBarrierMode mode = new_elements->GetWriteBarrierMode(no_gc);
       // The object's map and the parameter map are unchanged, the unaliased
       // arguments are copied to the new backing store.
       FixedArray* parameter_map = FixedArray::cast(elements());
@@ -7365,6 +7371,8 @@ MaybeObject* JSObject::SetFastElementsCapacityAndLength(int capacity,
           new_elements->set(i, obj, UPDATE_WRITE_BARRIER);
         }
       }
+      set_map(new_map);
+      set_elements(new_elements);
       break;
     }
     case EXTERNAL_BYTE_ELEMENTS:
@@ -7427,7 +7435,9 @@ MaybeObject* JSObject::SetFastDoubleElementsCapacityAndLength(
       break;
   }
 
+  ASSERT(new_map->has_fast_double_elements());
   set_map(new_map);
+  ASSERT(elems->IsFixedDoubleArray());
   set_elements(elems);
 
   if (IsJSArray()) {
@@ -8404,8 +8414,9 @@ MaybeObject* JSObject::SetDictionaryElement(uint32_t index,
     } else {
       new_length = dictionary->max_number_key() + 1;
     }
-    MaybeObject* result =
-        SetFastElementsCapacityAndLength(new_length, new_length);
+    MaybeObject* result = ShouldConvertToFastDoubleElements()
+        ? SetFastDoubleElementsCapacityAndLength(new_length, new_length)
+        : SetFastElementsCapacityAndLength(new_length, new_length);
     if (result->IsFailure()) return result;
 #ifdef DEBUG
     if (FLAG_trace_normalization) {
@@ -8492,6 +8503,9 @@ MUST_USE_RESULT MaybeObject* JSObject::SetFastDoubleElement(
   }
 
   // Otherwise default to slow case.
+  ASSERT(HasFastDoubleElements());
+  ASSERT(map()->has_fast_double_elements());
+  ASSERT(elements()->IsFixedDoubleArray());
   Object* obj;
   { MaybeObject* maybe_obj = NormalizeElements();
     if (!maybe_obj->ToObject(&obj)) return maybe_obj;
@@ -8945,10 +8959,13 @@ bool JSObject::HasDenseElements() {
   int capacity = 0;
   int number_of_elements = 0;
 
-  FixedArray* backing_store = FixedArray::cast(elements());
+  FixedArrayBase* backing_store_base = FixedArrayBase::cast(elements());
+  FixedArray* backing_store = NULL;
   switch (GetElementsKind()) {
     case NON_STRICT_ARGUMENTS_ELEMENTS:
-      backing_store = FixedArray::cast(backing_store->get(1));
+      backing_store_base =
+          FixedArray::cast(FixedArray::cast(backing_store_base)->get(1));
+      backing_store = FixedArray::cast(backing_store_base);
       if (backing_store->IsDictionary()) {
         NumberDictionary* dictionary = NumberDictionary::cast(backing_store);
         capacity = dictionary->Capacity();
@@ -8957,13 +8974,15 @@ bool JSObject::HasDenseElements() {
       }
       // Fall through.
     case FAST_ELEMENTS:
+      backing_store = FixedArray::cast(backing_store_base);
       capacity = backing_store->length();
       for (int i = 0; i < capacity; ++i) {
         if (!backing_store->get(i)->IsTheHole()) ++number_of_elements;
       }
       break;
     case DICTIONARY_ELEMENTS: {
-      NumberDictionary* dictionary = NumberDictionary::cast(backing_store);
+      NumberDictionary* dictionary =
+          NumberDictionary::cast(FixedArray::cast(elements()));
       capacity = dictionary->Capacity();
       number_of_elements = dictionary->NumberOfElements();
       break;
@@ -9428,7 +9447,7 @@ void JSObject::GetLocalPropertyNames(FixedArray* storage, int index) {
     }
     ASSERT(storage->length() >= index);
   } else {
-    property_dictionary()->CopyKeysTo(storage);
+    property_dictionary()->CopyKeysTo(storage, StringDictionary::UNSORTED);
   }
 }
 
@@ -9505,32 +9524,48 @@ int JSObject::GetLocalElementKeys(FixedArray* storage,
       break;
     case DICTIONARY_ELEMENTS: {
       if (storage != NULL) {
-        element_dictionary()->CopyKeysTo(storage, filter);
+        element_dictionary()->CopyKeysTo(storage,
+                                         filter,
+                                         NumberDictionary::SORTED);
       }
       counter += element_dictionary()->NumberOfElementsFilterAttributes(filter);
       break;
     }
     case NON_STRICT_ARGUMENTS_ELEMENTS: {
       FixedArray* parameter_map = FixedArray::cast(elements());
-      int length = parameter_map->length();
-      for (int i = 2; i < length; ++i) {
-        if (!parameter_map->get(i)->IsTheHole()) {
-          if (storage != NULL) storage->set(i - 2, Smi::FromInt(i - 2));
-          ++counter;
-        }
-      }
+      int mapped_length = parameter_map->length() - 2;
       FixedArray* arguments = FixedArray::cast(parameter_map->get(1));
       if (arguments->IsDictionary()) {
+        // Copy the keys from arguments first, because Dictionary::CopyKeysTo
+        // will insert in storage starting at index 0.
         NumberDictionary* dictionary = NumberDictionary::cast(arguments);
-        if (storage != NULL) dictionary->CopyKeysTo(storage, filter);
+        if (storage != NULL) {
+          dictionary->CopyKeysTo(storage, filter, NumberDictionary::UNSORTED);
+        }
         counter += dictionary->NumberOfElementsFilterAttributes(filter);
-      } else {
-        int length = arguments->length();
-        for (int i = 0; i < length; ++i) {
-          if (!arguments->get(i)->IsTheHole()) {
-            if (storage != NULL) storage->set(i, Smi::FromInt(i));
+        for (int i = 0; i < mapped_length; ++i) {
+          if (!parameter_map->get(i + 2)->IsTheHole()) {
+            if (storage != NULL) storage->set(counter, Smi::FromInt(i));
             ++counter;
           }
+        }
+        if (storage != NULL) storage->SortPairs(storage, counter);
+
+      } else {
+        int backing_length = arguments->length();
+        int i = 0;
+        for (; i < mapped_length; ++i) {
+          if (!parameter_map->get(i + 2)->IsTheHole()) {
+            if (storage != NULL) storage->set(counter, Smi::FromInt(i));
+            ++counter;
+          } else if (i < backing_length && !arguments->get(i)->IsTheHole()) {
+            if (storage != NULL) storage->set(counter, Smi::FromInt(i));
+            ++counter;
+          }
+        }
+        for (; i < backing_length; ++i) {
+          if (storage != NULL) storage->set(counter, Smi::FromInt(i));
+          ++counter;
         }
       }
       break;
@@ -10132,7 +10167,9 @@ template Object* Dictionary<StringDictionaryShape, String*>::SlowReverseLookup(
     Object*);
 
 template void Dictionary<NumberDictionaryShape, uint32_t>::CopyKeysTo(
-    FixedArray*, PropertyAttributes);
+    FixedArray*,
+    PropertyAttributes,
+    Dictionary<NumberDictionaryShape, uint32_t>::SortMode);
 
 template Object* Dictionary<StringDictionaryShape, String*>::DeleteProperty(
     int, JSObject::DeleteMode);
@@ -10147,7 +10184,8 @@ template MaybeObject* Dictionary<NumberDictionaryShape, uint32_t>::Shrink(
     uint32_t);
 
 template void Dictionary<StringDictionaryShape, String*>::CopyKeysTo(
-    FixedArray*);
+    FixedArray*,
+    Dictionary<StringDictionaryShape, String*>::SortMode);
 
 template int
 Dictionary<StringDictionaryShape, String*>::NumberOfElementsFilterAttributes(
@@ -11199,8 +11237,10 @@ int Dictionary<Shape, Key>::NumberOfEnumElements() {
 
 
 template<typename Shape, typename Key>
-void Dictionary<Shape, Key>::CopyKeysTo(FixedArray* storage,
-                                        PropertyAttributes filter) {
+void Dictionary<Shape, Key>::CopyKeysTo(
+    FixedArray* storage,
+    PropertyAttributes filter,
+    typename Dictionary<Shape, Key>::SortMode sort_mode) {
   ASSERT(storage->length() >= NumberOfEnumElements());
   int capacity = HashTable<Shape, Key>::Capacity();
   int index = 0;
@@ -11213,7 +11253,9 @@ void Dictionary<Shape, Key>::CopyKeysTo(FixedArray* storage,
        if ((attr & filter) == 0) storage->set(index++, k);
      }
   }
-  storage->SortPairs(storage, index);
+  if (sort_mode == Dictionary<Shape, Key>::SORTED) {
+    storage->SortPairs(storage, index);
+  }
   ASSERT(storage->length() >= index);
 }
 
@@ -11239,7 +11281,9 @@ void StringDictionary::CopyEnumKeysTo(FixedArray* storage,
 
 
 template<typename Shape, typename Key>
-void Dictionary<Shape, Key>::CopyKeysTo(FixedArray* storage) {
+void Dictionary<Shape, Key>::CopyKeysTo(
+    FixedArray* storage,
+    typename Dictionary<Shape, Key>::SortMode sort_mode) {
   ASSERT(storage->length() >= NumberOfElementsFilterAttributes(
       static_cast<PropertyAttributes>(NONE)));
   int capacity = HashTable<Shape, Key>::Capacity();
@@ -11251,6 +11295,9 @@ void Dictionary<Shape, Key>::CopyKeysTo(FixedArray* storage) {
       if (details.IsDeleted()) continue;
       storage->set(index++, k);
     }
+  }
+  if (sort_mode == Dictionary<Shape, Key>::SORTED) {
+    storage->SortPairs(storage, index);
   }
   ASSERT(storage->length() >= index);
 }

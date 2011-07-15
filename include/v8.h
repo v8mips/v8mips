@@ -80,9 +80,11 @@ namespace v8 {
 
 class Context;
 class String;
+class StringObject;
 class Value;
 class Utils;
 class Number;
+class NumberObject;
 class Object;
 class Array;
 class Int32;
@@ -90,6 +92,7 @@ class Uint32;
 class External;
 class Primitive;
 class Boolean;
+class BooleanObject;
 class Integer;
 class Function;
 class Date;
@@ -929,6 +932,26 @@ class Value : public Data {
   V8EXPORT bool IsDate() const;
 
   /**
+   * Returns true if this value is a Boolean object.
+   */
+  V8EXPORT bool IsBooleanObject() const;
+
+  /**
+   * Returns true if this value is a Number object.
+   */
+  V8EXPORT bool IsNumberObject() const;
+
+  /**
+   * Returns true if this value is a String object.
+   */
+  V8EXPORT bool IsStringObject() const;
+
+  /**
+   * Returns true if this value is a NativeError.
+   */
+  V8EXPORT bool IsNativeError() const;
+
+  /**
    * Returns true if this value is a RegExp.
    */
   V8EXPORT bool IsRegExp() const;
@@ -1738,6 +1761,63 @@ class Date : public Object {
    * negatively impact the performance of date operations.
    */
   V8EXPORT static void DateTimeConfigurationChangeNotification();
+
+ private:
+  V8EXPORT static void CheckCast(v8::Value* obj);
+};
+
+
+/**
+ * A Number object (ECMA-262, 4.3.21).
+ */
+class NumberObject : public Object {
+ public:
+  V8EXPORT static Local<Value> New(double value);
+
+  /**
+   * Returns the Number held by the object.
+   */
+  V8EXPORT double NumberValue() const;
+
+  static inline NumberObject* Cast(v8::Value* obj);
+
+ private:
+  V8EXPORT static void CheckCast(v8::Value* obj);
+};
+
+
+/**
+ * A Boolean object (ECMA-262, 4.3.15).
+ */
+class BooleanObject : public Object {
+ public:
+  V8EXPORT static Local<Value> New(bool value);
+
+  /**
+   * Returns the Boolean held by the object.
+   */
+  V8EXPORT bool BooleanValue() const;
+
+  static inline BooleanObject* Cast(v8::Value* obj);
+
+ private:
+  V8EXPORT static void CheckCast(v8::Value* obj);
+};
+
+
+/**
+ * A String object (ECMA-262, 4.3.18).
+ */
+class StringObject : public Object {
+ public:
+  V8EXPORT static Local<Value> New(Handle<String> value);
+
+  /**
+   * Returns the String held by the object.
+   */
+  V8EXPORT Local<String> StringValue() const;
+
+  static inline StringObject* Cast(v8::Value* obj);
 
  private:
   V8EXPORT static void CheckCast(v8::Value* obj);
@@ -2984,31 +3064,6 @@ class V8EXPORT V8 {
   static bool IsProfilerPaused();
 
   /**
-   * If logging is performed into a memory buffer (via --logfile=*), allows to
-   * retrieve previously written messages. This can be used for retrieving
-   * profiler log data in the application. This function is thread-safe.
-   *
-   * Caller provides a destination buffer that must exist during GetLogLines
-   * call. Only whole log lines are copied into the buffer.
-   *
-   * \param from_pos specified a point in a buffer to read from, 0 is the
-   *   beginning of a buffer. It is assumed that caller updates its current
-   *   position using returned size value from the previous call.
-   * \param dest_buf destination buffer for log data.
-   * \param max_size size of the destination buffer.
-   * \returns actual size of log data copied into buffer.
-   */
-  static int GetLogLines(int from_pos, char* dest_buf, int max_size);
-
-  /**
-   * The minimum allowed size for a log lines buffer.  If the size of
-   * the buffer given will not be enough to hold a line of the maximum
-   * length, an attempt to find a log line end in GetLogLines will
-   * fail, and an empty result will be returned.
-   */
-  static const int kMinimumSizeForLogLinesBuffer = 2048;
-
-  /**
    * Retrieve the V8 thread id of the calling thread.
    *
    * The thread id for a thread should only be retrieved after the V8
@@ -4032,6 +4087,30 @@ Date* Date::Cast(v8::Value* value) {
   CheckCast(value);
 #endif
   return static_cast<Date*>(value);
+}
+
+
+StringObject* StringObject::Cast(v8::Value* value) {
+#ifdef V8_ENABLE_CHECKS
+  CheckCast(value);
+#endif
+  return static_cast<StringObject*>(value);
+}
+
+
+NumberObject* NumberObject::Cast(v8::Value* value) {
+#ifdef V8_ENABLE_CHECKS
+  CheckCast(value);
+#endif
+  return static_cast<NumberObject*>(value);
+}
+
+
+BooleanObject* BooleanObject::Cast(v8::Value* value) {
+#ifdef V8_ENABLE_CHECKS
+  CheckCast(value);
+#endif
+  return static_cast<BooleanObject*>(value);
 }
 
 
