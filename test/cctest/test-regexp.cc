@@ -63,10 +63,6 @@
 #include "ia32/macro-assembler-ia32.h"
 #include "ia32/regexp-macro-assembler-ia32.h"
 #endif
-#ifdef V8_TARGET_ARCH_MIPS
-#include "mips/macro-assembler-mips.h"
-#include "mips/regexp-macro-assembler-mips.h"
-#endif
 #endif  // V8_INTERPRETED_REGEXP
 
 using namespace v8::internal;
