@@ -4436,7 +4436,7 @@ void KeyedStoreStubCompiler::GenerateStoreFastDoubleElement(
   __ lw(mantissa_reg, FieldMemOperand(value_reg, HeapNumber::kMantissaOffset));
   __ Branch(&have_double_value, eq, mantissa_reg, Operand(zero_reg));
 
- __ bind(&is_nan);
+  __ bind(&is_nan);
   // Load canonical NaN for storing into the double array.
   uint64_t nan_int64 = BitCast<uint64_t>(
       FixedDoubleArray::canonical_not_the_hole_nan_as_double());
