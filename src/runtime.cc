@@ -615,6 +615,14 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_GetHandler) {
 }
 
 
+RUNTIME_FUNCTION(MaybeObject*, Runtime_Fix) {
+  ASSERT(args.length() == 1);
+  CONVERT_CHECKED(JSProxy, proxy, args[0]);
+  proxy->Fix();
+  return proxy;
+}
+
+
 RUNTIME_FUNCTION(MaybeObject*, Runtime_ClassOf) {
   NoHandleAllocation ha;
   ASSERT(args.length() == 1);
@@ -10128,7 +10136,8 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_GetFrameDetails) {
 
   // Get scope info and read from it for local variable information.
   Handle<JSFunction> function(JSFunction::cast(it.frame()->function()));
-  Handle<SerializedScopeInfo> scope_info(function->shared()->scope_info());
+  Handle<SharedFunctionInfo> shared(function->shared());
+  Handle<SerializedScopeInfo> scope_info(shared->scope_info());
   ASSERT(*scope_info != SerializedScopeInfo::Empty());
   ScopeInfo<> info(*scope_info);
 
@@ -10300,10 +10309,11 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_GetFrameDetails) {
   // THIS MUST BE DONE LAST SINCE WE MIGHT ADVANCE
   // THE FRAME ITERATOR TO WRAP THE RECEIVER.
   Handle<Object> receiver(it.frame()->receiver(), isolate);
-  if (!receiver->IsJSObject()) {
-    // If the receiver is NOT a JSObject we have hit an optimization
-    // where a value object is not converted into a wrapped JS objects.
-    // To hide this optimization from the debugger, we wrap the receiver
+  if (!receiver->IsJSObject() && !shared->strict_mode() && !shared->native()) {
+    // If the receiver is not a JSObject and the function is not a
+    // builtin or strict-mode we have hit an optimization where a
+    // value object is not converted into a wrapped JS objects. To
+    // hide this optimization from the debugger, we wrap the receiver
     // by creating correct wrapper object based on the calling frame's
     // global context.
     it.Advance();
