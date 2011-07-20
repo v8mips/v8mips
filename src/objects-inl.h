@@ -4007,7 +4007,8 @@ bool JSObject::HasIndexedInterceptor() {
 
 
 bool JSObject::AllowsSetElementsLength() {
-  bool result = elements()->IsFixedArray();
+  bool result = elements()->IsFixedArray() ||
+      elements()->IsFixedDoubleArray();
   ASSERT(result == !HasExternalArrayElements());
   return result;
 }
@@ -4154,6 +4155,22 @@ bool String::AsArrayIndex(uint32_t* index) {
 
 Object* JSReceiver::GetPrototype() {
   return HeapObject::cast(this)->map()->prototype();
+}
+
+
+bool JSReceiver::HasProperty(String* name) {
+  if (IsJSProxy()) {
+    return JSProxy::cast(this)->HasPropertyWithHandler(name);
+  }
+  return GetPropertyAttribute(name) != ABSENT;
+}
+
+
+bool JSReceiver::HasLocalProperty(String* name) {
+  if (IsJSProxy()) {
+    return JSProxy::cast(this)->HasPropertyWithHandler(name);
+  }
+  return GetLocalPropertyAttribute(name) != ABSENT;
 }
 
 

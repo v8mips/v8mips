@@ -4370,8 +4370,10 @@ void KeyedStoreStubCompiler::GenerateStoreFastDoubleElement(
   //  -- a2    : receiver
   //  -- ra    : return address
   //  -- a3    : scratch
-  //  -- t0    : scratch
-  //  -- t1    : scratch
+  //  -- t0    : scratch (elements_reg)
+  //  -- t1    : scratch (mantissa_reg)
+  //  -- t2    : scratch (exponent_reg)
+  //  -- t3    : scratch4
   // -----------------------------------
   Label miss_force_generic, smi_value, is_nan, maybe_nan, have_double_value;
 
