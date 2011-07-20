@@ -869,7 +869,6 @@ static int GetThreadID() {
 
 
 static void ProfilerSignalHandler(int signal, siginfo_t* info, void* context) {
-#ifndef V8_HOST_ARCH_MIPS
   USE(info);
   if (signal != SIGPROF) return;
   Isolate* isolate = Isolate::UncheckedCurrent();
@@ -913,13 +912,12 @@ static void ProfilerSignalHandler(int signal, siginfo_t* info, void* context) {
   sample->fp = reinterpret_cast<Address>(mcontext.arm_fp);
 #endif
 #elif V8_HOST_ARCH_MIPS
-  sample.pc = reinterpret_cast<Address>(mcontext.pc);
-  sample.sp = reinterpret_cast<Address>(mcontext.gregs[29]);
-  sample.fp = reinterpret_cast<Address>(mcontext.gregs[30]);
+  sample->pc = reinterpret_cast<Address>(mcontext.pc);
+  sample->sp = reinterpret_cast<Address>(mcontext.gregs[29]);
+  sample->fp = reinterpret_cast<Address>(mcontext.gregs[30]);
 #endif
   sampler->SampleStack(sample);
   sampler->Tick(sample);
-#endif
 }
 
 
