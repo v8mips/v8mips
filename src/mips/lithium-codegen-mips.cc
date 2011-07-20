@@ -2356,6 +2356,47 @@ void LCodeGen::DoLoadKeyedFastElement(LLoadKeyedFastElement* instr) {
 }
 
 
+void LCodeGen::DoLoadKeyedFastDoubleElement(
+    LLoadKeyedFastDoubleElement* instr) {
+  Register elements = ToRegister(instr->elements());
+  bool key_is_constant = instr->key()->IsConstantOperand();
+  Register key = no_reg;
+  DoubleRegister result = ToDoubleRegister(instr->result());
+  Register scratch = scratch0();
+
+  int shift_size =
+      ElementsKindToShiftSize(JSObject::FAST_DOUBLE_ELEMENTS);
+  int constant_key = 0;
+  if (key_is_constant) {
+    constant_key = ToInteger32(LConstantOperand::cast(instr->key()));
+    if (constant_key & 0xF0000000) {
+      Abort("array index constant value too big.");
+    }
+  } else {
+    key = ToRegister(instr->key());
+  }
+
+  if (key_is_constant) {
+    __ Addu(elements, elements, Operand(constant_key * (1 << shift_size) +
+            FixedDoubleArray::kHeaderSize - kHeapObjectTag));
+  } else {
+    __ sll(scratch, key, shift_size);
+    __ Addu(elements, elements, Operand(scratch));
+    __ Addu(elements, elements,
+            Operand(FixedDoubleArray::kHeaderSize - kHeapObjectTag));
+  }
+
+  if (instr->hydrogen()->RequiresHoleCheck()) {
+    // TODO(danno): If no hole check is required, there is no need to allocate
+    // elements into a temporary register, instead scratch can be used.
+    __ lw(scratch, MemOperand(elements, sizeof(kHoleNanLower32)));
+    DeoptimizeIf(eq, instr->environment(), scratch, Operand(kHoleNanUpper32));
+  }
+
+  __ ldc1(result, MemOperand(elements));
+}
+
+
 void LCodeGen::DoLoadKeyedSpecializedArrayElement(
     LLoadKeyedSpecializedArrayElement* instr) {
   Register external_pointer = ToRegister(instr->external_pointer());
@@ -2376,7 +2417,7 @@ void LCodeGen::DoLoadKeyedSpecializedArrayElement(
   if (elements_kind == JSObject::EXTERNAL_FLOAT_ELEMENTS ||
       elements_kind == JSObject::EXTERNAL_DOUBLE_ELEMENTS) {
     CpuFeatures::Scope scope(FPU);
-    FPURegister result(ToDoubleRegister(instr->result()));
+    FPURegister result = ToDoubleRegister(instr->result());
     if (key_is_constant) {
       __ Addu(scratch0(), external_pointer, constant_key * (1 << shift_size));
     } else {
@@ -2391,7 +2432,7 @@ void LCodeGen::DoLoadKeyedSpecializedArrayElement(
       __ ldc1(result, MemOperand(scratch0()));
     }
   } else {
-    Register result(ToRegister(instr->result()));
+    Register result = ToRegister(instr->result());
     Register scratch = scratch0();
     MemOperand mem_operand(zero_reg);
     if (key_is_constant) {
@@ -3193,6 +3234,51 @@ void LCodeGen::DoStoreKeyedFastElement(LStoreKeyedFastElement* instr) {
     __ Addu(key, scratch, Operand(FixedArray::kHeaderSize));
     __ RecordWrite(elements, key, value);
   }
+}
+
+
+void LCodeGen::DoStoreKeyedFastDoubleElement(
+    LStoreKeyedFastDoubleElement* instr) {
+  DoubleRegister value = ToDoubleRegister(instr->value());
+  Register elements = ToRegister(instr->elements());
+  Register key = no_reg;
+  Register scratch = scratch0();
+  bool key_is_constant = instr->key()->IsConstantOperand();
+  int constant_key = 0;
+  Label not_nan;
+
+  // Calculate the effective address of the slot in the array to store the
+  // double value.
+  if (key_is_constant) {
+    constant_key = ToInteger32(LConstantOperand::cast(instr->key()));
+    if (constant_key & 0xF0000000) {
+      Abort("array index constant value too big.");
+    }
+  } else {
+    key = ToRegister(instr->key());
+  }
+  int shift_size = ElementsKindToShiftSize(JSObject::FAST_DOUBLE_ELEMENTS);
+  if (key_is_constant) {
+    __ Addu(scratch, elements, Operand(constant_key * (1 << shift_size) +
+            FixedDoubleArray::kHeaderSize - kHeapObjectTag));
+  } else {
+    __ sll(scratch, key, shift_size);
+    __ Addu(scratch, elements, Operand(scratch));
+    __ Addu(scratch, scratch,
+            Operand(FixedDoubleArray::kHeaderSize - kHeapObjectTag));
+  }
+
+  Label is_nan;
+  // Check for NaN. All NaNs must be canonicalized.
+  __ BranchF(NULL, &is_nan, eq, value, value);
+  __ Branch(&not_nan);
+
+  // Only load canonical NaN if the comparison above set the overflow.
+  __ bind(&is_nan);
+  __ Move(value, FixedDoubleArray::canonical_not_the_hole_nan_as_double());
+
+  __ bind(&not_nan);
+  __ sdc1(value, MemOperand(scratch));
 }
 
 
