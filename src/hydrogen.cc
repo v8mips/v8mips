@@ -3274,8 +3274,8 @@ void HGraphBuilder::VisitArrayLiteral(ArrayLiteral* expr) {
 
     // Load the elements array before the first store.
     if (elements == NULL)  {
-     elements = new(zone()) HLoadElements(literal);
-     AddInstruction(elements);
+      elements = new(zone()) HLoadElements(literal);
+      AddInstruction(elements);
     }
 
     HValue* key = AddInstruction(
@@ -3901,17 +3901,23 @@ HInstruction* HGraphBuilder::BuildMonomorphicElementAccess(HValue* object,
                                                            bool is_store) {
   ASSERT(expr->IsMonomorphic());
   Handle<Map> map = expr->GetMonomorphicReceiverType();
-  if (!map->has_fast_elements() && !map->has_external_array_elements()) {
+  if (!map->has_fast_elements() &&
+      !map->has_fast_double_elements() &&
+      !map->has_external_array_elements()) {
     return is_store ? BuildStoreKeyedGeneric(object, key, val)
                     : BuildLoadKeyedGeneric(object, key);
   }
   AddInstruction(new(zone()) HCheckNonSmi(object));
-  AddInstruction(new(zone()) HCheckMap(object, map));
-  HInstruction* elements = new(zone()) HLoadElements(object);
+  HInstruction* mapcheck = AddInstruction(new(zone()) HCheckMap(object, map));
+  HInstruction* elements = AddInstruction(new(zone()) HLoadElements(object));
+  bool fast_double_elements = map->has_fast_double_elements();
+  if (is_store && !fast_double_elements) {
+    AddInstruction(new(zone()) HCheckMap(
+        elements, isolate()->factory()->fixed_array_map()));
+  }
   HInstruction* length = NULL;
   HInstruction* checked_key = NULL;
   if (map->has_external_array_elements()) {
-    AddInstruction(elements);
     length = AddInstruction(new(zone()) HExternalArrayLength(elements));
     checked_key = AddInstruction(new(zone()) HBoundsCheck(key, length));
     HLoadExternalArrayPointer* external_elements =
@@ -3920,28 +3926,27 @@ HInstruction* HGraphBuilder::BuildMonomorphicElementAccess(HValue* object,
     return BuildExternalArrayElementAccess(external_elements, checked_key,
                                            val, map->elements_kind(), is_store);
   }
-  ASSERT(map->has_fast_elements());
+  ASSERT(map->has_fast_elements() || fast_double_elements);
   if (map->instance_type() == JS_ARRAY_TYPE) {
-    length = AddInstruction(new(zone()) HJSArrayLength(object));
-    checked_key = AddInstruction(new(zone()) HBoundsCheck(key, length));
-    AddInstruction(elements);
-    if (is_store) {
-      AddInstruction(new(zone()) HCheckMap(
-          elements, isolate()->factory()->fixed_array_map()));
-    }
+    length = AddInstruction(new(zone()) HJSArrayLength(object, mapcheck));
   } else {
-    AddInstruction(elements);
-    if (is_store) {
-      AddInstruction(new(zone()) HCheckMap(
-          elements, isolate()->factory()->fixed_array_map()));
-    }
     length = AddInstruction(new(zone()) HFixedArrayLength(elements));
-    checked_key = AddInstruction(new(zone()) HBoundsCheck(key, length));
   }
+  checked_key = AddInstruction(new(zone()) HBoundsCheck(key, length));
   if (is_store) {
-    return new(zone()) HStoreKeyedFastElement(elements, checked_key, val);
+    if (fast_double_elements) {
+      return new(zone()) HStoreKeyedFastDoubleElement(elements,
+                                                      checked_key,
+                                                      val);
+    } else {
+      return new(zone()) HStoreKeyedFastElement(elements, checked_key, val);
+    }
   } else {
-    return new(zone()) HLoadKeyedFastElement(elements, checked_key);
+    if (fast_double_elements) {
+      return new(zone()) HLoadKeyedFastDoubleElement(elements, checked_key);
+    } else {
+      return new(zone()) HLoadKeyedFastElement(elements, checked_key);
+    }
   }
 }
 
@@ -3974,14 +3979,13 @@ HValue* HGraphBuilder::HandlePolymorphicElementAccess(HValue* object,
       todo_external_array = true;
     }
   }
-  // Support for FAST_DOUBLE_ELEMENTS isn't implemented yet, so we deopt.
-  type_todo[JSObject::FAST_DOUBLE_ELEMENTS] = false;
 
   HBasicBlock* join = graph()->CreateBasicBlock();
 
   HInstruction* elements_kind_instr =
       AddInstruction(new(zone()) HElementsKind(object));
-  HInstruction* elements = NULL;
+  HCompareConstantEqAndBranch* elements_kind_branch = NULL;
+  HInstruction* elements = AddInstruction(new(zone()) HLoadElements(object));
   HLoadExternalArrayPointer* external_elements = NULL;
   HInstruction* checked_key = NULL;
 
@@ -3997,14 +4001,6 @@ HValue* HGraphBuilder::HandlePolymorphicElementAccess(HValue* object,
                   JSObject::LAST_ELEMENTS_KIND);
     if (elements_kind == JSObject::FIRST_EXTERNAL_ARRAY_ELEMENTS_KIND
         && todo_external_array) {
-      elements = AddInstruction(new(zone()) HLoadElements(object));
-      // We need to forcibly prevent some ElementsKind-dependent instructions
-      // from being hoisted out of any loops they might occur in, because
-      // the current loop-invariant-code-motion algorithm isn't clever enough
-      // to deal with them properly.
-      // There's some performance to be gained by developing a smarter
-      // solution for this.
-      elements->ClearFlag(HValue::kUseGVN);
       HInstruction* length =
           AddInstruction(new(zone()) HExternalArrayLength(elements));
       checked_key = AddInstruction(new(zone()) HBoundsCheck(key, length));
@@ -4014,17 +4010,22 @@ HValue* HGraphBuilder::HandlePolymorphicElementAccess(HValue* object,
     if (type_todo[elements_kind]) {
       HBasicBlock* if_true = graph()->CreateBasicBlock();
       HBasicBlock* if_false = graph()->CreateBasicBlock();
-      HCompareConstantEqAndBranch* compare =
-          new(zone()) HCompareConstantEqAndBranch(elements_kind_instr,
-                                                  elements_kind,
-                                                  Token::EQ_STRICT);
-      compare->SetSuccessorAt(0, if_true);
-      compare->SetSuccessorAt(1, if_false);
-      current_block()->Finish(compare);
+      elements_kind_branch = new(zone()) HCompareConstantEqAndBranch(
+          elements_kind_instr, elements_kind, Token::EQ_STRICT);
+      elements_kind_branch->SetSuccessorAt(0, if_true);
+      elements_kind_branch->SetSuccessorAt(1, if_false);
+      current_block()->Finish(elements_kind_branch);
 
       set_current_block(if_true);
       HInstruction* access;
-      if (elements_kind == JSObject::FAST_ELEMENTS) {
+      if (elements_kind == JSObject::FAST_ELEMENTS ||
+          elements_kind == JSObject::FAST_DOUBLE_ELEMENTS) {
+        bool fast_double_elements =
+            elements_kind == JSObject::FAST_DOUBLE_ELEMENTS;
+        if (is_store && !fast_double_elements) {
+          AddInstruction(new(zone()) HCheckMap(
+              elements, isolate()->factory()->fixed_array_map()));
+        }
         HBasicBlock* if_jsarray = graph()->CreateBasicBlock();
         HBasicBlock* if_fastobject = graph()->CreateBasicBlock();
         HHasInstanceTypeAndBranch* typecheck =
@@ -4034,20 +4035,27 @@ HValue* HGraphBuilder::HandlePolymorphicElementAccess(HValue* object,
         current_block()->Finish(typecheck);
 
         set_current_block(if_jsarray);
-        HInstruction* length = new(zone()) HJSArrayLength(object);
+        HInstruction* length = new(zone()) HJSArrayLength(object, typecheck);
         AddInstruction(length);
-        length->ClearFlag(HValue::kUseGVN);
         checked_key = AddInstruction(new(zone()) HBoundsCheck(key, length));
-        elements = AddInstruction(new(zone()) HLoadElements(object));
-        elements->ClearFlag(HValue::kUseGVN);
         if (is_store) {
-          AddInstruction(new(zone()) HCheckMap(
-              elements, isolate()->factory()->fixed_array_map()));
-          access = AddInstruction(
-              new(zone()) HStoreKeyedFastElement(elements, checked_key, val));
+          if (fast_double_elements) {
+            access = AddInstruction(
+                new(zone()) HStoreKeyedFastDoubleElement(elements,
+                                                         checked_key,
+                                                         val));
+          } else {
+            access = AddInstruction(
+                new(zone()) HStoreKeyedFastElement(elements, checked_key, val));
+          }
         } else {
-          access = AddInstruction(
-              new(zone()) HLoadKeyedFastElement(elements, checked_key));
+          if (fast_double_elements) {
+            access = AddInstruction(
+                new(zone()) HLoadKeyedFastDoubleElement(elements, checked_key));
+          } else {
+            access = AddInstruction(
+                new(zone()) HLoadKeyedFastElement(elements, checked_key));
+          }
           Push(access);
         }
         *has_side_effects |= access->HasSideEffects();
@@ -4057,20 +4065,26 @@ HValue* HGraphBuilder::HandlePolymorphicElementAccess(HValue* object,
         if_jsarray->Goto(join);
 
         set_current_block(if_fastobject);
-        elements = AddInstruction(new(zone()) HLoadElements(object));
-        elements->ClearFlag(HValue::kUseGVN);
-        if (is_store) {
-          AddInstruction(new(zone()) HCheckMap(
-              elements, isolate()->factory()->fixed_array_map()));
-        }
         length = AddInstruction(new(zone()) HFixedArrayLength(elements));
         checked_key = AddInstruction(new(zone()) HBoundsCheck(key, length));
         if (is_store) {
-          access = AddInstruction(
-              new(zone()) HStoreKeyedFastElement(elements, checked_key, val));
+          if (fast_double_elements) {
+            access = AddInstruction(
+                new(zone()) HStoreKeyedFastDoubleElement(elements,
+                                                         checked_key,
+                                                         val));
+          } else {
+            access = AddInstruction(
+                new(zone()) HStoreKeyedFastElement(elements, checked_key, val));
+          }
         } else {
-          access = AddInstruction(
-              new(zone()) HLoadKeyedFastElement(elements, checked_key));
+          if (fast_double_elements) {
+            access = AddInstruction(
+                new(zone()) HLoadKeyedFastDoubleElement(elements, checked_key));
+          } else {
+            access = AddInstruction(
+                new(zone()) HLoadKeyedFastElement(elements, checked_key));
+          }
         }
       } else if (elements_kind == JSObject::DICTIONARY_ELEMENTS) {
         if (is_store) {
@@ -4195,8 +4209,9 @@ void HGraphBuilder::VisitProperty(Property* expr) {
   if (expr->IsArrayLength()) {
     HValue* array = Pop();
     AddInstruction(new(zone()) HCheckNonSmi(array));
-    AddInstruction(HCheckInstanceType::NewIsJSArray(array));
-    instr = new(zone()) HJSArrayLength(array);
+    HInstruction* mapcheck =
+        AddInstruction(HCheckInstanceType::NewIsJSArray(array));
+    instr = new(zone()) HJSArrayLength(array, mapcheck);
 
   } else if (expr->IsStringLength()) {
     HValue* string = Pop();

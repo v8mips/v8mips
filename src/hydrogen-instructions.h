@@ -131,6 +131,7 @@ class LChunkBuilder;
   V(LoadFunctionPrototype)                     \
   V(LoadGlobalCell)                            \
   V(LoadGlobalGeneric)                         \
+  V(LoadKeyedFastDoubleElement)                \
   V(LoadKeyedFastElement)                      \
   V(LoadKeyedGeneric)                          \
   V(LoadKeyedSpecializedArrayElement)          \
@@ -156,6 +157,7 @@ class LChunkBuilder;
   V(StoreContextSlot)                          \
   V(StoreGlobalCell)                           \
   V(StoreGlobalGeneric)                        \
+  V(StoreKeyedFastDoubleElement)               \
   V(StoreKeyedFastElement)                     \
   V(StoreKeyedGeneric)                         \
   V(StoreKeyedSpecializedArrayElement)         \
@@ -1661,12 +1663,14 @@ class HCallRuntime: public HCall<1> {
 };
 
 
-class HJSArrayLength: public HUnaryOperation {
+class HJSArrayLength: public HTemplateInstruction<2> {
  public:
-  explicit HJSArrayLength(HValue* value) : HUnaryOperation(value) {
+  HJSArrayLength(HValue* value, HValue* typecheck) {
     // The length of an array is stored as a tagged value in the array
     // object. It is guaranteed to be 32 bit integer, but it can be
     // represented as either a smi or heap number.
+    SetOperandAt(0, value);
+    SetOperandAt(1, typecheck);
     set_representation(Representation::Tagged());
     SetFlag(kUseGVN);
     SetFlag(kDependsOnArrayLengths);
@@ -1676,6 +1680,8 @@ class HJSArrayLength: public HUnaryOperation {
   virtual Representation RequiredInputRepresentation(int index) const {
     return Representation::Tagged();
   }
+
+  HValue* value() { return OperandAt(0); }
 
   DECLARE_CONCRETE_INSTRUCTION(JSArrayLength)
 
@@ -1907,10 +1913,6 @@ class HCheckMap: public HUnaryOperation {
   virtual void PrintDataTo(StringStream* stream);
   virtual HType CalculateInferredType();
 
-#ifdef DEBUG
-  virtual void Verify();
-#endif
-
   Handle<Map> map() const { return map_; }
 
   DECLARE_CONCRETE_INSTRUCTION(CheckMap)
@@ -1977,10 +1979,6 @@ class HCheckInstanceType: public HUnaryOperation {
   virtual Representation RequiredInputRepresentation(int index) const {
     return Representation::Tagged();
   }
-
-#ifdef DEBUG
-  virtual void Verify();
-#endif
 
   virtual HValue* Canonicalize();
 
@@ -2455,10 +2453,6 @@ class HBoundsCheck: public HTemplateInstruction<2> {
   virtual Representation RequiredInputRepresentation(int index) const {
     return Representation::Integer32();
   }
-
-#ifdef DEBUG
-  virtual void Verify();
-#endif
 
   HValue* index() { return OperandAt(0); }
   HValue* length() { return OperandAt(1); }
@@ -3519,6 +3513,37 @@ class HLoadKeyedFastElement: public HTemplateInstruction<2> {
 };
 
 
+class HLoadKeyedFastDoubleElement: public HTemplateInstruction<2> {
+ public:
+  HLoadKeyedFastDoubleElement(HValue* elements, HValue* key) {
+    SetOperandAt(0, elements);
+    SetOperandAt(1, key);
+    set_representation(Representation::Double());
+    SetFlag(kDependsOnArrayElements);
+    SetFlag(kUseGVN);
+  }
+
+  HValue* elements() { return OperandAt(0); }
+  HValue* key() { return OperandAt(1); }
+
+  virtual Representation RequiredInputRepresentation(int index) const {
+    // The key is supposed to be Integer32.
+    return index == 0
+      ? Representation::Tagged()
+      : Representation::Integer32();
+  }
+
+  virtual void PrintDataTo(StringStream* stream);
+
+  bool RequiresHoleCheck() const;
+
+  DECLARE_CONCRETE_INSTRUCTION(LoadKeyedFastDoubleElement)
+
+ protected:
+  virtual bool DataEquals(HValue* other) { return true; }
+};
+
+
 class HLoadKeyedSpecializedArrayElement: public HTemplateInstruction<2> {
  public:
   HLoadKeyedSpecializedArrayElement(HValue* external_elements,
@@ -3701,6 +3726,41 @@ class HStoreKeyedFastElement: public HTemplateInstruction<3> {
   virtual void PrintDataTo(StringStream* stream);
 
   DECLARE_CONCRETE_INSTRUCTION(StoreKeyedFastElement)
+};
+
+
+class HStoreKeyedFastDoubleElement: public HTemplateInstruction<3> {
+ public:
+  HStoreKeyedFastDoubleElement(HValue* elements,
+                               HValue* key,
+                               HValue* val) {
+    SetOperandAt(0, elements);
+    SetOperandAt(1, key);
+    SetOperandAt(2, val);
+    SetFlag(kChangesArrayElements);
+  }
+
+  virtual Representation RequiredInputRepresentation(int index) const {
+    if (index == 1) {
+      return Representation::Integer32();
+    } else if (index == 2) {
+      return Representation::Double();
+    } else {
+      return Representation::Tagged();
+    }
+  }
+
+  HValue* elements() { return OperandAt(0); }
+  HValue* key() { return OperandAt(1); }
+  HValue* value() { return OperandAt(2); }
+
+  bool NeedsWriteBarrier() {
+    return StoringValueNeedsWriteBarrier(value());
+  }
+
+  virtual void PrintDataTo(StringStream* stream);
+
+  DECLARE_CONCRETE_INSTRUCTION(StoreKeyedFastDoubleElement)
 };
 
 

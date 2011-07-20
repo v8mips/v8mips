@@ -2196,6 +2196,31 @@ MaybeObject* JSReceiver::SetProperty(LookupResult* result,
 }
 
 
+bool JSProxy::HasPropertyWithHandler(String* name_raw) {
+  Isolate* isolate = GetIsolate();
+  HandleScope scope(isolate);
+  Handle<Object> receiver(this);
+  Handle<Object> name(name_raw);
+  Handle<Object> handler(this->handler());
+
+  // Extract trap function.
+  Handle<String> trap_name = isolate->factory()->LookupAsciiSymbol("has");
+  Handle<Object> trap(v8::internal::GetProperty(handler, trap_name));
+  if (trap->IsUndefined()) {
+    trap = isolate->derived_has_trap();
+  }
+
+  // Call trap function.
+  Object** args[] = { name.location() };
+  bool has_exception;
+  Handle<Object> result =
+      Execution::Call(trap, handler, ARRAY_SIZE(args), args, &has_exception);
+  if (has_exception) return Failure::Exception();
+
+  return result->ToBoolean()->IsTrue();
+}
+
+
 MUST_USE_RESULT MaybeObject* JSProxy::SetPropertyWithHandler(
     String* name_raw,
     Object* value_raw,
@@ -2220,8 +2245,7 @@ MUST_USE_RESULT MaybeObject* JSProxy::SetPropertyWithHandler(
       receiver.location(), name.location(), value.location()
   };
   bool has_exception;
-  Handle<Object> result =
-      Execution::Call(trap, handler, ARRAY_SIZE(args), args, &has_exception);
+  Execution::Call(trap, handler, ARRAY_SIZE(args), args, &has_exception);
   if (has_exception) return Failure::Exception();
 
   return *value;
@@ -3182,7 +3206,7 @@ MaybeObject* JSObject::DeleteElement(uint32_t index, DeleteMode mode) {
     case FAST_DOUBLE_ELEMENTS: {
       int length = IsJSArray()
           ? Smi::cast(JSArray::cast(this)->length())->value()
-          : FixedArray::cast(elements())->length();
+          : FixedDoubleArray::cast(elements())->length();
       if (index < static_cast<uint32_t>(length)) {
         FixedDoubleArray::cast(elements())->set_the_hole(index);
       }
@@ -3632,6 +3656,7 @@ MaybeObject* JSObject::DefineGetterSetter(String* name,
   if (is_element) {
     switch (GetElementsKind()) {
       case FAST_ELEMENTS:
+      case FAST_DOUBLE_ELEMENTS:
         break;
       case EXTERNAL_PIXEL_ELEMENTS:
       case EXTERNAL_BYTE_ELEMENTS:
@@ -3642,7 +3667,6 @@ MaybeObject* JSObject::DefineGetterSetter(String* name,
       case EXTERNAL_UNSIGNED_INT_ELEMENTS:
       case EXTERNAL_FLOAT_ELEMENTS:
       case EXTERNAL_DOUBLE_ELEMENTS:
-      case FAST_DOUBLE_ELEMENTS:
         // Ignore getters and setters on pixel and external array
         // elements.
         return heap->undefined_value();
@@ -3881,6 +3905,7 @@ MaybeObject* JSObject::DefineAccessor(AccessorInfo* info) {
     // Accessors overwrite previous callbacks (cf. with getters/setters).
     switch (GetElementsKind()) {
       case FAST_ELEMENTS:
+      case FAST_DOUBLE_ELEMENTS:
         break;
       case EXTERNAL_PIXEL_ELEMENTS:
       case EXTERNAL_BYTE_ELEMENTS:
@@ -3891,7 +3916,6 @@ MaybeObject* JSObject::DefineAccessor(AccessorInfo* info) {
       case EXTERNAL_UNSIGNED_INT_ELEMENTS:
       case EXTERNAL_FLOAT_ELEMENTS:
       case EXTERNAL_DOUBLE_ELEMENTS:
-      case FAST_DOUBLE_ELEMENTS:
         // Ignore getters and setters on pixel and external array
         // elements.
         return isolate->heap()->undefined_value();
@@ -4664,6 +4688,9 @@ MaybeObject* FixedArray::AddKeysFromJSArray(JSArray* array) {
   switch (array->GetElementsKind()) {
     case JSObject::FAST_ELEMENTS:
       return UnionOfKeys(FixedArray::cast(array->elements()));
+    case JSObject::FAST_DOUBLE_ELEMENTS:
+      UNIMPLEMENTED();
+      break;
     case JSObject::DICTIONARY_ELEMENTS: {
       NumberDictionary* dict = array->element_dictionary();
       int size = dict->NumberOfElements();
@@ -4698,7 +4725,6 @@ MaybeObject* FixedArray::AddKeysFromJSArray(JSArray* array) {
     case JSObject::EXTERNAL_FLOAT_ELEMENTS:
     case JSObject::EXTERNAL_DOUBLE_ELEMENTS:
     case JSObject::EXTERNAL_PIXEL_ELEMENTS:
-    case JSObject::FAST_DOUBLE_ELEMENTS:
       break;
   }
   UNREACHABLE();
@@ -7602,32 +7628,57 @@ MaybeObject* JSObject::SetElementsLength(Object* len) {
   if (maybe_smi_length->ToObject(&smi_length) && smi_length->IsSmi()) {
     const int value = Smi::cast(smi_length)->value();
     if (value < 0) return ArrayLengthRangeError(GetHeap());
-    switch (GetElementsKind()) {
-      case FAST_ELEMENTS: {
-        int old_capacity = FixedArray::cast(elements())->length();
+    JSObject::ElementsKind elements_kind = GetElementsKind();
+    switch (elements_kind) {
+      case FAST_ELEMENTS:
+      case FAST_DOUBLE_ELEMENTS: {
+        int old_capacity = FixedArrayBase::cast(elements())->length();
         if (value <= old_capacity) {
           if (IsJSArray()) {
             Object* obj;
-            { MaybeObject* maybe_obj = EnsureWritableFastElements();
+            if (elements_kind == FAST_ELEMENTS) {
+              MaybeObject* maybe_obj = EnsureWritableFastElements();
               if (!maybe_obj->ToObject(&obj)) return maybe_obj;
             }
-            FixedArray* fast_elements = FixedArray::cast(elements());
             if (2 * value <= old_capacity) {
               // If more than half the elements won't be used, trim the array.
               if (value == 0) {
                 initialize_elements();
               } else {
-                fast_elements->set_length(value);
-                Address filler_start = fast_elements->address() +
-                                       FixedArray::OffsetOfElementAt(value);
-                int filler_size = (old_capacity - value) * kPointerSize;
+                Address filler_start;
+                int filler_size;
+                if (GetElementsKind() == FAST_ELEMENTS) {
+                  FixedArray* fast_elements = FixedArray::cast(elements());
+                  fast_elements->set_length(value);
+                  filler_start = fast_elements->address() +
+                      FixedArray::OffsetOfElementAt(value);
+                  filler_size = (old_capacity - value) * kPointerSize;
+                } else {
+                  ASSERT(GetElementsKind() == FAST_DOUBLE_ELEMENTS);
+                  FixedDoubleArray* fast_double_elements =
+                      FixedDoubleArray::cast(elements());
+                  fast_double_elements->set_length(value);
+                  filler_start = fast_double_elements->address() +
+                      FixedDoubleArray::OffsetOfElementAt(value);
+                  filler_size = (old_capacity - value) * kDoubleSize;
+                }
                 GetHeap()->CreateFillerObjectAt(filler_start, filler_size);
               }
             } else {
               // Otherwise, fill the unused tail with holes.
               int old_length = FastD2I(JSArray::cast(this)->length()->Number());
-              for (int i = value; i < old_length; i++) {
-                fast_elements->set_the_hole(i);
+              if (GetElementsKind() == FAST_ELEMENTS) {
+                FixedArray* fast_elements = FixedArray::cast(elements());
+                for (int i = value; i < old_length; i++) {
+                  fast_elements->set_the_hole(i);
+                }
+              } else {
+                ASSERT(GetElementsKind() == FAST_DOUBLE_ELEMENTS);
+                FixedDoubleArray* fast_double_elements =
+                    FixedDoubleArray::cast(elements());
+                for (int i = value; i < old_length; i++) {
+                  fast_double_elements->set_the_hole(i);
+                }
               }
             }
             JSArray::cast(this)->set_length(Smi::cast(smi_length));
@@ -7636,10 +7687,15 @@ MaybeObject* JSObject::SetElementsLength(Object* len) {
         }
         int min = NewElementsCapacity(old_capacity);
         int new_capacity = value > min ? value : min;
-        if (new_capacity <= kMaxFastElementsLength ||
-            !ShouldConvertToSlowElements(new_capacity)) {
-          MaybeObject* result =
-              SetFastElementsCapacityAndLength(new_capacity, value);
+        if (!ShouldConvertToSlowElements(new_capacity)) {
+          MaybeObject* result;
+          if (GetElementsKind() == FAST_ELEMENTS) {
+            result = SetFastElementsCapacityAndLength(new_capacity, value);
+          }  else {
+            ASSERT(GetElementsKind() == FAST_DOUBLE_ELEMENTS);
+            result = SetFastDoubleElementsCapacityAndLength(new_capacity,
+                                                            value);
+          }
           if (result->IsFailure()) return result;
           return this;
         }
@@ -7675,7 +7731,6 @@ MaybeObject* JSObject::SetElementsLength(Object* len) {
       case EXTERNAL_FLOAT_ELEMENTS:
       case EXTERNAL_DOUBLE_ELEMENTS:
       case EXTERNAL_PIXEL_ELEMENTS:
-      case FAST_DOUBLE_ELEMENTS:
         UNREACHABLE();
         break;
     }
@@ -7984,6 +8039,17 @@ JSObject::LocalElementType JSObject::HasLocalElement(uint32_t index) {
       }
       break;
     }
+    case FAST_DOUBLE_ELEMENTS: {
+      uint32_t length = IsJSArray() ?
+          static_cast<uint32_t>
+              (Smi::cast(JSArray::cast(this)->length())->value()) :
+          static_cast<uint32_t>(FixedDoubleArray::cast(elements())->length());
+      if ((index < length) &&
+          !FixedDoubleArray::cast(elements())->is_the_hole(index)) {
+        return FAST_ELEMENT;
+      }
+      break;
+    }
     case EXTERNAL_PIXEL_ELEMENTS: {
       ExternalPixelArray* pixels = ExternalPixelArray::cast(elements());
       if (index < static_cast<uint32_t>(pixels->length())) return FAST_ELEMENT;
@@ -8001,9 +8067,6 @@ JSObject::LocalElementType JSObject::HasLocalElement(uint32_t index) {
       if (index < static_cast<uint32_t>(array->length())) return FAST_ELEMENT;
       break;
     }
-    case FAST_DOUBLE_ELEMENTS:
-      UNREACHABLE();
-      break;
     case DICTIONARY_ELEMENTS: {
       if (element_dictionary()->FindEntry(index) !=
           NumberDictionary::kNotFound) {
@@ -8088,6 +8151,15 @@ bool JSObject::HasElementWithReceiver(JSReceiver* receiver, uint32_t index) {
           !FixedArray::cast(elements())->get(index)->IsTheHole()) return true;
       break;
     }
+    case FAST_DOUBLE_ELEMENTS: {
+      uint32_t length = IsJSArray() ?
+          static_cast<uint32_t>
+              (Smi::cast(JSArray::cast(this)->length())->value()) :
+          static_cast<uint32_t>(FixedDoubleArray::cast(elements())->length());
+      if ((index < length) &&
+          !FixedDoubleArray::cast(elements())->is_the_hole(index)) return true;
+      break;
+    }
     case EXTERNAL_PIXEL_ELEMENTS: {
       ExternalPixelArray* pixels = ExternalPixelArray::cast(elements());
       if (index < static_cast<uint32_t>(pixels->length())) {
@@ -8109,9 +8181,6 @@ bool JSObject::HasElementWithReceiver(JSReceiver* receiver, uint32_t index) {
       }
       break;
     }
-    case FAST_DOUBLE_ELEMENTS:
-      UNREACHABLE();
-      break;
     case DICTIONARY_ELEMENTS: {
       if (element_dictionary()->FindEntry(index)
           != NumberDictionary::kNotFound) {
@@ -8364,8 +8433,7 @@ MaybeObject* JSObject::SetFastElement(uint32_t index,
   if ((index - length) < kMaxGap) {
     // Try allocating extra space.
     int new_capacity = NewElementsCapacity(index + 1);
-    if (new_capacity <= kMaxFastElementsLength ||
-        !ShouldConvertToSlowElements(new_capacity)) {
+    if (!ShouldConvertToSlowElements(new_capacity)) {
       ASSERT(static_cast<uint32_t>(new_capacity) > index);
       Object* new_elements;
       MaybeObject* maybe =
@@ -8547,8 +8615,7 @@ MUST_USE_RESULT MaybeObject* JSObject::SetFastDoubleElement(
   if ((index - elms_length) < kMaxGap) {
     // Try allocating extra space.
     int new_capacity = NewElementsCapacity(index+1);
-    if (new_capacity <= kMaxFastElementsLength ||
-        !ShouldConvertToSlowElements(new_capacity)) {
+    if (!ShouldConvertToSlowElements(new_capacity)) {
       ASSERT(static_cast<uint32_t>(new_capacity) > index);
       Object* obj;
       { MaybeObject* maybe_obj =
@@ -9071,21 +9138,22 @@ bool JSObject::HasDenseElements() {
 
 
 bool JSObject::ShouldConvertToSlowElements(int new_capacity) {
+  if (new_capacity <= kMaxFastElementsLength) return false;
   // Keep the array in fast case if the current backing storage is
   // almost filled and if the new capacity is no more than twice the
   // old capacity.
-  int elements_length = 0;
+  int old_capacity = 0;
   if (elements()->map() == GetHeap()->non_strict_arguments_elements_map()) {
     FixedArray* backing_store = FixedArray::cast(elements());
-    elements_length = FixedArray::cast(backing_store->get(1))->length();
+    old_capacity = FixedArray::cast(backing_store->get(1))->length();
   } else if (HasFastElements()) {
-    elements_length = FixedArray::cast(elements())->length();
+    old_capacity = FixedArray::cast(elements())->length();
   } else if (HasFastDoubleElements()) {
-    elements_length = FixedDoubleArray::cast(elements())->length();
+    old_capacity = FixedDoubleArray::cast(elements())->length();
   } else {
     UNREACHABLE();
   }
-  return !HasDenseElements() || ((new_capacity / 2) > elements_length);
+  return !HasDenseElements() || ((new_capacity / 2) > old_capacity);
 }
 
 
@@ -9549,6 +9617,21 @@ int JSObject::GetLocalElementKeys(FixedArray* storage,
       ASSERT(!storage || storage->length() >= counter);
       break;
     }
+    case FAST_DOUBLE_ELEMENTS: {
+      int length = IsJSArray() ?
+          Smi::cast(JSArray::cast(this)->length())->value() :
+          FixedDoubleArray::cast(elements())->length();
+      for (int i = 0; i < length; i++) {
+        if (!FixedDoubleArray::cast(elements())->is_the_hole(i)) {
+          if (storage != NULL) {
+            storage->set(counter, Smi::FromInt(i));
+          }
+          counter++;
+        }
+      }
+      ASSERT(!storage || storage->length() >= counter);
+      break;
+    }
     case EXTERNAL_PIXEL_ELEMENTS: {
       int length = ExternalPixelArray::cast(elements())->length();
       while (counter < length) {
@@ -9578,9 +9661,6 @@ int JSObject::GetLocalElementKeys(FixedArray* storage,
       ASSERT(!storage || storage->length() >= counter);
       break;
     }
-    case FAST_DOUBLE_ELEMENTS:
-      UNREACHABLE();
-      break;
     case DICTIONARY_ELEMENTS: {
       if (storage != NULL) {
         element_dictionary()->CopyKeysTo(storage,

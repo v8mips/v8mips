@@ -1394,14 +1394,8 @@ class JSReceiver: public HeapObject {
   PropertyAttributes GetLocalPropertyAttribute(String* name);
 
   // Can cause a GC.
-  bool HasProperty(String* name) {
-    return GetPropertyAttribute(name) != ABSENT;
-  }
-
-  // Can cause a GC.
-  bool HasLocalProperty(String* name) {
-    return GetLocalPropertyAttribute(name) != ABSENT;
-  }
+  inline bool HasProperty(String* name);
+  inline bool HasLocalProperty(String* name);
 
   // Return the object's prototype (might be Heap::null_value()).
   inline Object* GetPrototype();
@@ -2174,6 +2168,9 @@ class FixedDoubleArray: public FixedArrayBase {
   inline static int SizeFor(int length) {
     return kHeaderSize + length * kDoubleSize;
   }
+
+  // Code Generation support.
+  static int OffsetOfElementAt(int index) { return SizeFor(index); }
 
   inline static bool is_the_hole_nan(double value);
   inline static double hole_nan_as_double();
@@ -6480,6 +6477,8 @@ class JSProxy: public JSReceiver {
 
   // Casting.
   static inline JSProxy* cast(Object* obj);
+
+  bool HasPropertyWithHandler(String* name);
 
   MUST_USE_RESULT MaybeObject* SetPropertyWithHandler(
       String* name,
