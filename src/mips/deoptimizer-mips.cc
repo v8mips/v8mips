@@ -32,9 +32,6 @@
 #include "full-codegen.h"
 #include "safepoint-table.h"
 
-// Note: this file was taken from the X64 version. ARM has a partially working
-// lithium implementation, but for now it is not ported to mips.
-
 namespace v8 {
 namespace internal {
 
@@ -766,10 +763,7 @@ void Deoptimizer::TableEntryGenerator::GeneratePrologue() {
   // Create a sequence of deoptimization entries. Note that any
   // registers may be still live.
 
-  // TODO(kalmard): This is pretty hacky. Instead of one big Branch that would
-  // involve the trampoline pool, create a series of small ones. This helps if
-  // table_entry_size_ gets larger but probably slows things down quite a bit.
-  Vector<Label> skip = Vector<Label>::New(count() + 1);
+  Label done;
   for (int i = 0; i < count(); i++) {
     int start = masm()->pc_offset();
     USE(start);
@@ -779,8 +773,7 @@ void Deoptimizer::TableEntryGenerator::GeneratePrologue() {
     }
     __ li(at, Operand(i));
     __ push(at);
-    __ bind(&skip[i]);
-    __ Branch(&skip[i+1]);
+    __ Branch(&done);
 
     // Pad the rest of the code.
     while (table_entry_size_ > (masm()->pc_offset() - start)) {
@@ -789,7 +782,7 @@ void Deoptimizer::TableEntryGenerator::GeneratePrologue() {
 
     ASSERT_EQ(table_entry_size_, masm()->pc_offset() - start);
   }
-  __ bind(&skip[count()]);
+  __ bind(&done);
 }
 
 #undef __
