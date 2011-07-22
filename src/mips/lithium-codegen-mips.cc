@@ -3990,7 +3990,7 @@ void LCodeGen::DoClampTToUint8(LClampTToUint8* instr) {
   // conversions.
   DeoptimizeIf(ne, instr->environment(), input_reg,
                Operand(factory()->undefined_value()));
-  __ Ext(input_reg, input_reg, 0, 16);
+  __ mov(result_reg, zero_reg);
   __ jmp(&done);
 
   // Heap number
