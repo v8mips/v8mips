@@ -3675,14 +3675,18 @@ void JSEntryStub::GenerateBody(MacroAssembler* masm, bool is_construct) {
 
   if (CpuFeatures::IsSupported(FPU)) {
     CpuFeatures::Scope scope(FPU);
-    // TODO(kalmard): ARM saves all FPU regs here, why don't we?
-    // Set up the reserved register for 0.0.
-    __ Move(kDoubleRegZero, 0.0);
+    // Save callee-saved FPU registers.
+    __ MultiPushFPU(kCalleeSavedFPU);
   }
 
+
   // Load argv in s0 register.
-  __ lw(s0, MemOperand(sp, (kNumCalleeSaved + 1) * kPointerSize +
-                           kCArgsSlotsSize));
+  int offset_to_argv = (kNumCalleeSaved + 1) * kPointerSize;
+  if (CpuFeatures::IsSupported(FPU)) {
+    offset_to_argv += kNumCalleeSavedFPU * kDoubleSize;
+  }
+
+  __ lw(s0, MemOperand(sp, offset_to_argv + kCArgsSlotsSize));
 
   // We build an EntryFrame.
   __ li(t3, Operand(-1));  // Push a bad frame pointer to fail if it is used.
@@ -3813,6 +3817,8 @@ void JSEntryStub::GenerateBody(MacroAssembler* masm, bool is_construct) {
 
   // Reset the stack to the callee saved registers.
   __ addiu(sp, sp, -EntryFrameConstants::kCallerFPOffset);
+
+  __ MultiPopFPU(kCalleeSavedFPU);
 
   // Restore callee saved registers from the stack.
   __ MultiPop((kCalleeSaved | ra.bit()) & ~sp.bit());
