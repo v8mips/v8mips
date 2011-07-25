@@ -752,6 +752,64 @@ void MacroAssembler::MultiPopReversed(RegList regs) {
 }
 
 
+void MacroAssembler::MultiPushFPU(RegList regs) {
+  CpuFeatures::Scope scope(FPU);
+  int16_t NumSaved = 0;
+  int16_t NumToPush = NumberOfBitsSet(regs);
+
+  addiu(sp, sp, -8 * NumToPush);
+  for (int16_t i = kNumRegisters; i > 0; i--) {
+    if ((regs & (1 << i)) != 0) {
+      sdc1(FPURegister::from_code(i),
+           MemOperand(sp, 8 * (NumToPush - ++NumSaved)));
+    }
+  }
+}
+
+
+void MacroAssembler::MultiPushReversedFPU(RegList regs) {
+  CpuFeatures::Scope scope(FPU);
+  int16_t NumSaved = 0;
+  int16_t NumToPush = NumberOfBitsSet(regs);
+
+  addiu(sp, sp, -8 * NumToPush);
+  for (int16_t i = 0; i < kNumRegisters; i++) {
+    if ((regs & (1 << i)) != 0) {
+      sdc1(FPURegister::from_code(i),
+           MemOperand(sp, 8 * (NumToPush - ++NumSaved)));
+    }
+  }
+}
+
+
+void MacroAssembler::MultiPopFPU(RegList regs) {
+  CpuFeatures::Scope scope(FPU);
+  int16_t NumSaved = 0;
+
+  for (int16_t i = 0; i < kNumRegisters; i++) {
+    if ((regs & (1 << i)) != 0) {
+      ldc1(FPURegister::from_code(i),
+           MemOperand(sp, 8 * (NumSaved++)));
+    }
+  }
+  addiu(sp, sp, 8 * NumSaved);
+}
+
+
+void MacroAssembler::MultiPopReversedFPU(RegList regs) {
+  CpuFeatures::Scope scope(FPU);
+  int16_t NumSaved = 0;
+
+  for (int16_t i = kNumRegisters; i > 0; i--) {
+    if ((regs & (1 << i)) != 0) {
+      ldc1(FPURegister::from_code(i),
+           MemOperand(sp, 8 * (NumSaved++)));
+    }
+  }
+  addiu(sp, sp, 8 * NumSaved);
+}
+
+
 void MacroAssembler::Ext(Register rt,
                          Register rs,
                          uint16_t pos,

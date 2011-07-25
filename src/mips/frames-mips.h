@@ -30,7 +30,6 @@
 #ifndef V8_MIPS_FRAMES_MIPS_H_
 #define V8_MIPS_FRAMES_MIPS_H_
 
-
 namespace v8 {
 namespace internal {
 
@@ -64,6 +63,10 @@ static const RegList kCalleeSaved =
 
 static const int kNumCalleeSaved = 9;
 
+static const RegList kCalleeSavedFPU =
+    1 << 20 | 1 << 22 | 1 << 24 | 1 << 26 | 1 << 28 | 1 << 30;
+
+static const int kNumCalleeSavedFPU = 6;
 
 // Number of registers for which space is reserved in safepoints. Must be a
 // multiple of 8.
