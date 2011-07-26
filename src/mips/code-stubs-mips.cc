@@ -3677,6 +3677,8 @@ void JSEntryStub::GenerateBody(MacroAssembler* masm, bool is_construct) {
     CpuFeatures::Scope scope(FPU);
     // Save callee-saved FPU registers.
     __ MultiPushFPU(kCalleeSavedFPU);
+    // Set up the reserved register for 0.0.
+    __ Move(kDoubleRegZero, 0.0);
   }
 
 
