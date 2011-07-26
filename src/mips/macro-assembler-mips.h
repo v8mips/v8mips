@@ -514,6 +514,14 @@ class MacroAssembler: public Assembler {
     Addu(sp, sp, 2 * kPointerSize);
   }
 
+  // Pop three registers. Pops rightmost register first (from lower address).
+  void Pop(Register src1, Register src2, Register src3) {
+    lw(src3, MemOperand(sp, 0 * kPointerSize));
+    lw(src2, MemOperand(sp, 1 * kPointerSize));
+    lw(src1, MemOperand(sp, 2 * kPointerSize));
+    Addu(sp, sp, 3 * kPointerSize);
+  }
+
   void Pop(uint32_t count = 1) {
     Addu(sp, sp, Operand(count * kPointerSize));
   }
