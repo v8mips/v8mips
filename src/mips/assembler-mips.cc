@@ -1980,10 +1980,15 @@ void Assembler::RecordRelocInfo(RelocInfo::Mode rmode, intptr_t data) {
   }
   if (rinfo.rmode() != RelocInfo::NONE) {
     // Don't record external references unless the heap will be serialized.
-    if (rmode == RelocInfo::EXTERNAL_REFERENCE &&
-        !Serializer::enabled() &&
-        !FLAG_debug_code) {
-      return;
+    if (rmode == RelocInfo::EXTERNAL_REFERENCE) {
+#ifdef DEBUG
+      if (!Serializer::enabled()) {
+        Serializer::TooLateToEnableNow();
+      }
+#endif
+      if (!Serializer::enabled() && !emit_debug_code()) {
+        return;
+      }
     }
     ASSERT(buffer_space() >= kMaxRelocSize);  // Too late to grow buffer here.
     if (rmode == RelocInfo::CODE_TARGET_WITH_ID) {

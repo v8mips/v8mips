@@ -553,9 +553,6 @@ void Deoptimizer::FillInputFrame(Address tos, JavaScriptFrame* frame) {
 
 // This code tries to be close to ia32 code so that any changes can be
 // easily ported.
-// TODO(kalmard): This function emits reloc info and causes an assertion error
-// in deoptimizer.cc. The deopt system seems to be working with the assertion
-// disabled but this needs to be fixed.
 void Deoptimizer::EntryGenerator::Generate() {
   GeneratePrologue();
 
