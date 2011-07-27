@@ -312,11 +312,10 @@ void FullCodeGenerator::ClearAccumulator() {
 
 void FullCodeGenerator::EmitStackCheck(IterationStatement* stmt) {
   // The generated code is used in Deoptimizer::PatchStackCheckCodeAt so we need
-  // to make sure it is constant.
-  // TODO(kalmard): some new Branch and trampoline pool changes can cause Branch
-  // to emit a skip-or-jump sequence instead of the normal Branch. It seems that
-  // the "skip" part of that sequence is about as long as this Branch would be
-  // so it is safe to ignore that. Still, this may cause problems.
+  // to make sure it is constant. Branch may emit a skip-or-jump sequence
+  // instead of the normal Branch. It seems that the "skip" part of that
+  // sequence is about as long as this Branch would be so it is safe to ignore
+  // that.
   Assembler::BlockTrampolinePoolScope block_trampoline_pool(masm_);
   Comment cmnt(masm_, "[ Stack check");
   Label ok;

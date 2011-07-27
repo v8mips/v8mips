@@ -748,8 +748,6 @@ void Deoptimizer::EntryGenerator::Generate() {
   ExternalReference roots_address = ExternalReference::roots_address(isolate);
   __ li(roots, Operand(roots_address));
 
-  // TODO(kalmard): can we use 'at' here? It seems like a bad idea to use
-  // anything else, we just restored the registers.
   __ pop(at);  // Get continuation, leave pc on stack.
   __ pop(ra);
   __ Jump(at);

@@ -94,6 +94,36 @@ enum BranchDelaySlot {
   PROTECT
 };
 
+
+// -----------------------------------------------------------------------------
+// Static helper functions.
+
+static MemOperand ContextOperand(Register context, int index) {
+  return MemOperand(context, Context::SlotOffset(index));
+}
+
+
+static inline MemOperand GlobalObjectOperand()  {
+  return ContextOperand(cp, Context::GLOBAL_INDEX);
+}
+
+
+// Generate a MemOperand for loading a field from an object.
+static inline MemOperand FieldMemOperand(Register object, int offset) {
+  return MemOperand(object, offset - kHeapObjectTag);
+}
+
+
+// Generate a MemOperand for storing arguments 5..N on the stack
+// when calling CallCFunction().
+static inline MemOperand CFunctionArgumentOperand(int index) {
+  ASSERT(index > kCArgSlotCount);
+  // Argument 5 takes the slot just past the four Arg-slots.
+  int offset = (index - 5) * kPointerSize + kCArgsSlotsSize;
+  return MemOperand(sp, offset);
+}
+
+
 // MacroAssembler implements a collection of frequently used macros.
 class MacroAssembler: public Assembler {
  public:
@@ -549,7 +579,7 @@ class MacroAssembler: public Assembler {
   void FlushICache(Register address, unsigned instructions);
 
   // ---------------------------------------------------------------------------
-  // FPU macros.
+  // FPU macros. These do not handle special cases like NaN or +- inf.
 
   // Convert unsigned word to double.
   void Cvt_d_uw(FPURegister fd, FPURegister fs, FPURegister scratch);
@@ -796,6 +826,21 @@ class MacroAssembler: public Assembler {
   // Generates code for reporting that an illegal operation has
   // occurred.
   void IllegalOperation(int num_arguments);
+
+
+  // Load and check the instance type of an object for being a string.
+  // Loads the type into the second argument register.
+  // Returns a condition that will be enabled if the object was a string.
+  Condition IsObjectStringType(Register obj,
+                               Register type,
+                               Register result) {
+    lw(type, FieldMemOperand(obj, HeapObject::kMapOffset));
+    lbu(type, FieldMemOperand(type, Map::kInstanceTypeOffset));
+    And(type, type, Operand(kIsNotStringMask));
+    ASSERT_EQ(0, kStringTag);
+    return eq;
+  }
+
 
   // Picks out an array index from the hash field.
   // Register use:
@@ -1270,34 +1315,6 @@ class CodePatcher {
   MacroAssembler masm_;  // Macro assembler used to generate the code.
 };
 
-
-// -----------------------------------------------------------------------------
-// Static helper functions.
-
-static MemOperand ContextOperand(Register context, int index) {
-  return MemOperand(context, Context::SlotOffset(index));
-}
-
-
-static inline MemOperand GlobalObjectOperand()  {
-  return ContextOperand(cp, Context::GLOBAL_INDEX);
-}
-
-
-// Generate a MemOperand for loading a field from an object.
-static inline MemOperand FieldMemOperand(Register object, int offset) {
-  return MemOperand(object, offset - kHeapObjectTag);
-}
-
-
-// Generate a MemOperand for storing arguments 5..N on the stack
-// when calling CallCFunction().
-static inline MemOperand CFunctionArgumentOperand(int index) {
-  ASSERT(index > kCArgSlotCount);
-  // Argument 5 takes the slot just past the four Arg-slots.
-  int offset = (index - 5) * kPointerSize + kCArgsSlotsSize;
-  return MemOperand(sp, offset);
-}
 
 
 #ifdef GENERATED_CODE_COVERAGE
