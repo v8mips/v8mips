@@ -49,7 +49,8 @@ inline Atomic32 NoBarrier_CompareAndSwap(volatile Atomic32* ptr,
                                          Atomic32 old_value,
                                          Atomic32 new_value) {
   Atomic32 prev;
-  __asm__ __volatile__("1:\n"
+  __asm__ __volatile__(".set noreorder\n"
+                       "1:\n"
                        "ll %0, %1\n"  // prev = *ptr
                        "bne %0, %3, 2f\n"  // if (prev != old_value) goto 2
                        "nop\n"  // delay slot nop
@@ -57,6 +58,7 @@ inline Atomic32 NoBarrier_CompareAndSwap(volatile Atomic32* ptr,
                        "beqz %2, 1b\n"  // start again on atomic error
                        "nop\n"  // delay slot nop
                        "2:\n"
+                       ".set reorder\n"
                        : "=&r" (prev), "=m" (*ptr), "+&r" (new_value)
                        : "Ir" (old_value), "r" (new_value), "m" (*ptr)
                        : "memory");
@@ -68,12 +70,14 @@ inline Atomic32 NoBarrier_CompareAndSwap(volatile Atomic32* ptr,
 inline Atomic32 NoBarrier_AtomicExchange(volatile Atomic32* ptr,
                                          Atomic32 new_value) {
   Atomic32 temp, old;
-  __asm__ __volatile__("1:\n"
+  __asm__ __volatile__(".set noreorder\n"
+                       "1:\n"
                        "ll %1, %2\n"  // old = *ptr
                        "move %0, %3\n"  // temp = new_value
                        "sc %0, %2\n"  // *ptr = temp (with atomic check)
                        "beqz %0, 1b\n"  // start again on atomic error
                        "nop\n"  // delay slot nop
+                       ".set reorder\n"
                        : "=&r" (temp), "=&r" (old), "=m" (*ptr)
                        : "r" (new_value), "m" (*ptr)
                        : "memory");
@@ -87,13 +91,14 @@ inline Atomic32 NoBarrier_AtomicIncrement(volatile Atomic32* ptr,
                                           Atomic32 increment) {
   Atomic32 temp, temp2;
 
-  __asm__ __volatile__("1:\n"
+  __asm__ __volatile__(".set noreorder\n"
+                       "1:\n"
                        "ll %0, %2\n"  // temp = *ptr
-                       "addu %0, %3\n"  // temp = temp + increment
-                       "move %1, %0\n"  // temp2 = temp
-                       "sc %0, %2\n"  // *ptr = temp (with atomic check)
-                       "beqz %0, 1b\n"  // start again on atomic error
-                       "nop\n"  // delay slot nop
+                       "addu %1, %0, %3\n"  // temp2 = temp + increment
+                       "sc %1, %2\n"  // *ptr = temp2 (with atomic check)
+                       "beqz %1, 1b\n"  // start again on atomic error
+                       "addu %1, %0, %3\n" // temp2 = temp + increment
+                       ".set reorder\n"
                        : "=&r" (temp), "=&r" (temp2), "=m" (*ptr)
                        : "Ir" (increment), "m" (*ptr)
                        : "memory");
