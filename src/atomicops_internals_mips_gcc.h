@@ -97,7 +97,7 @@ inline Atomic32 NoBarrier_AtomicIncrement(volatile Atomic32* ptr,
                        "addu %1, %0, %3\n"  // temp2 = temp + increment
                        "sc %1, %2\n"  // *ptr = temp2 (with atomic check)
                        "beqz %1, 1b\n"  // start again on atomic error
-                       "addu %1, %0, %3\n" // temp2 = temp + increment
+                       "addu %1, %0, %3\n"  // temp2 = temp + increment
                        ".set reorder\n"
                        : "=&r" (temp), "=&r" (temp2), "=m" (*ptr)
                        : "Ir" (increment), "m" (*ptr)
