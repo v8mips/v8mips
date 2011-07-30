@@ -281,7 +281,7 @@ bool LCodeGen::GenerateDeferredCode() {
 bool LCodeGen::GenerateDeoptJumpTable() {
   // TODO(plind): this will need a different implementation for MIPS.
   // Skipping it for now. Raised issue #100 for this.
-  Abort("Unimplemented: %s", "EmitLoadDoubleRegister");
+  Abort("Unimplemented: %s", "GenerateDeoptJumpTable");
   return false;
 }
 
@@ -333,7 +333,29 @@ DoubleRegister LCodeGen::ToDoubleRegister(LOperand* op) const {
 DoubleRegister LCodeGen::EmitLoadDoubleRegister(LOperand* op,
                                                 FloatRegister flt_scratch,
                                                 DoubleRegister dbl_scratch) {
-  Abort("Unimplemented: %s", "EmitLoadDoubleRegister");
+  if (op->IsDoubleRegister()) {
+    return ToDoubleRegister(op->index());
+  } else if (op->IsConstantOperand()) {
+    LConstantOperand* const_op = LConstantOperand::cast(op);
+    Handle<Object> literal = chunk_->LookupLiteral(const_op);
+    Representation r = chunk_->LookupLiteralRepresentation(const_op);
+    if (r.IsInteger32()) {
+      ASSERT(literal->IsNumber());
+      __ li(at, Operand(static_cast<int32_t>(literal->Number())));
+      __ mtc1(at, flt_scratch);
+      __ cvt_d_w(dbl_scratch, flt_scratch);
+      return dbl_scratch;
+    } else if (r.IsDouble()) {
+      Abort("unsupported double immediate");
+    } else if (r.IsTagged()) {
+      Abort("unsupported tagged immediate");
+    }
+  } else if (op->IsStackSlot() || op->IsArgument()) {
+    MemOperand mem_op = ToMemOperand(op);
+    __ ldc1(dbl_scratch, mem_op);
+    return dbl_scratch;
+  }
+  UNREACHABLE();
   return dbl_scratch;
 }
 
