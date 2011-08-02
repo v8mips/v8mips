@@ -1339,6 +1339,8 @@ void JSObject::set_elements(HeapObject* value, WriteBarrierMode mode) {
   ASSERT(map()->has_fast_elements() ==
          (value->map() == GetHeap()->fixed_array_map() ||
           value->map() == GetHeap()->fixed_cow_array_map()));
+  ASSERT(map()->has_fast_double_elements() ==
+         value->IsFixedDoubleArray());
   ASSERT(value->HasValidElements());
   WRITE_FIELD(this, kElementsOffset, value);
   CONDITIONAL_WRITE_BARRIER(GetHeap(), this, kElementsOffset, mode);
@@ -4252,6 +4254,11 @@ MaybeObject* JSObject::SetHiddenPropertiesObject(Object* hidden_obj) {
 }
 
 
+bool JSObject::HasHiddenProperties() {
+  return !GetHiddenProperties(OMIT_CREATION)->ToObjectChecked()->IsUndefined();
+}
+
+
 bool JSObject::HasElement(uint32_t index) {
   return HasElementWithReceiver(this, index);
 }
@@ -4363,6 +4370,31 @@ uint32_t StringDictionaryShape::HashForObject(String* key, Object* other) {
 
 
 MaybeObject* StringDictionaryShape::AsObject(String* key) {
+  return key;
+}
+
+
+bool ObjectHashTableShape::IsMatch(JSObject* key, Object* other) {
+  return key == JSObject::cast(other);
+}
+
+
+uint32_t ObjectHashTableShape::Hash(JSObject* key) {
+  MaybeObject* maybe_hash = key->GetIdentityHash(JSObject::OMIT_CREATION);
+  ASSERT(!maybe_hash->IsFailure());
+  return Smi::cast(maybe_hash->ToObjectUnchecked())->value();
+}
+
+
+uint32_t ObjectHashTableShape::HashForObject(JSObject* key, Object* other) {
+  MaybeObject* maybe_hash = JSObject::cast(other)->GetIdentityHash(
+      JSObject::OMIT_CREATION);
+  ASSERT(!maybe_hash->IsFailure());
+  return Smi::cast(maybe_hash->ToObjectUnchecked())->value();
+}
+
+
+MaybeObject* ObjectHashTableShape::AsObject(JSObject* key) {
   return key;
 }
 

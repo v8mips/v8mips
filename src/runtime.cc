@@ -1172,7 +1172,7 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_DeclareGlobals) {
             return ThrowRedeclarationError(isolate, "const", name);
           }
           // Otherwise, we check for locally conflicting declarations.
-          if (is_local && (is_read_only || is_const_property)) {
+          if (is_local && is_const_property) {
             const char* type = (is_read_only) ? "const" : "var";
             return ThrowRedeclarationError(isolate, type, name);
           }
@@ -1406,12 +1406,11 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_InitializeVarGlobal) {
           // make sure to introduce it.
           found = false;
         } else if ((intercepted & READ_ONLY) != 0) {
-          // The property is present, but read-only. Since we're trying to
-          // overwrite it with a variable declaration we must throw a
-          // re-declaration error.  However if we found readonly property
+          // The property is present, but read-only, so we ignore the
+          // redeclaration. However if we found readonly property
           // on one of hidden prototypes, just shadow it.
           if (real_holder != isolate->context()->global()) break;
-          return ThrowRedeclarationError(isolate, "const", name);
+          return isolate->heap()->undefined_value();
         }
       }
 
@@ -4532,7 +4531,7 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_GetLocalPropertyNames) {
   for (int i = 0; i < length; i++) {
     jsproto->GetLocalPropertyNames(*names,
                                    i == 0 ? 0 : local_property_count[i - 1]);
-    if (!GetHiddenProperties(jsproto, false)->IsUndefined()) {
+    if (jsproto->HasHiddenProperties()) {
       proto_with_hidden_properties++;
     }
     if (i < length - 1) {
@@ -9590,6 +9589,9 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_MoveArrayContents) {
   if (new_elements->map() == isolate->heap()->fixed_array_map() ||
       new_elements->map() == isolate->heap()->fixed_cow_array_map()) {
     maybe_new_map = to->map()->GetFastElementsMap();
+  } else if (new_elements->map() ==
+             isolate->heap()->fixed_double_array_map()) {
+    maybe_new_map = to->map()->GetFastDoubleElementsMap();
   } else {
     maybe_new_map = to->map()->GetSlowElementsMap();
   }
@@ -9677,12 +9679,13 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_GetArrayKeys) {
     }
     return *isolate->factory()->NewJSArrayWithElements(keys);
   } else {
-    ASSERT(array->HasFastElements());
+    ASSERT(array->HasFastElements() || array->HasFastDoubleElements());
     Handle<FixedArray> single_interval = isolate->factory()->NewFixedArray(2);
     // -1 means start of array.
     single_interval->set(0, Smi::FromInt(-1));
+    FixedArrayBase* elements = FixedArrayBase::cast(array->elements());
     uint32_t actual_length =
-        static_cast<uint32_t>(FixedArray::cast(array->elements())->length());
+        static_cast<uint32_t>(elements->length());
     uint32_t min_length = actual_length < length ? actual_length : length;
     Handle<Object> length_object =
         isolate->factory()->NewNumber(static_cast<double>(min_length));
