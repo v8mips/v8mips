@@ -1004,7 +1004,14 @@ bool LoadIC::PatchInlinedLoad(Address address, Object* map, int offset) {
   Address li_map_instr_address = inline_end_address + lw_map_offset *
       Assembler::kInstrSize;
   Instr instr = Assembler::instr_at(li_map_instr_address);
-  if (!Assembler::IsLui(instr)) {
+  // This li instruction pair needs to be patched:
+  // __ li(scratch2, Operand(Factory::null_value()), true);
+  // scratch2 is not assembler temporary (at) register which is used for
+  // load immediate in Branch macro. So, in that case, different code position
+  // needs to be patched.
+  if (!Assembler::IsLui(instr) ||
+      (Assembler::IsLui(instr) &&
+       Assembler::GetRt(instr) == (uint32_t)at.code())) {
     lw_map_offset = -9;
     li_map_instr_address = inline_end_address +
         lw_map_offset * Assembler::kInstrSize;
@@ -1056,7 +1063,15 @@ bool LoadIC::PatchInlinedContextualLoad(Address address,
       inline_end_address + li_cell_offset * Assembler::kInstrSize;
   Instr instr_li_map = Assembler::instr_at(li_map_instr_address);
   Instr instr_li_cell = Assembler::instr_at(li_cell_instr_address);
-  if (!(Assembler::IsLui(instr_li_map) && Assembler::IsLui(instr_li_cell))) {
+  // These li instruction pairs need to be patched:
+  // 1. li(receiver, Operand(Factory::null_value()), true);
+  // 2. li(scratch2, Operand(Factory::null_value()), true);
+  // scratch2 is not assembler temporary (at) register which is used for
+  // load immediate in Branch macro. So, in that case, different code position
+  // needs to be patched.
+  if ((Assembler::IsLui(instr_li_map) && Assembler::IsLui(instr_li_cell) &&
+      (Assembler::GetRt(instr_li_map) == (uint32_t)at.code())) ||
+      (Assembler::IsLui(instr_li_map) && Assembler::IsOri(instr_li_cell))) {
     li_map_offset = marker_is_dont_delete ? -11: -19;
     li_cell_offset = marker_is_dont_delete ? -3: -11;
     if (FLAG_debug_code && marker_is_dont_delete) {
@@ -1111,7 +1126,14 @@ bool StoreIC::PatchInlinedStore(Address address, Object* map, int offset) {
       (CodeGenerator::GetInlinedNamedStoreInstructionsAfterPatch(false) *
        Assembler::kInstrSize);
   Instr instr = Assembler::instr_at(li_map_instr_address);
-  if (!Assembler::IsLui(instr)) {
+  // This li instruction pair needs to be patched:
+  // __ li(scratch0, Operand(Factory::null_value()), true);
+  // scratch0 is not assembler temporary (at) register which is used for
+  // load immediate in Branch macro. So, in that case, different code position
+  // needs to be patched.
+  if (!Assembler::IsLui(instr) ||
+      (Assembler::IsLui(instr) &&
+       Assembler::GetRt(instr) == (uint32_t)at.code())) {
     li_map_instr_address =
       inline_end_address -
       (CodeGenerator::GetInlinedNamedStoreInstructionsAfterPatch(true) *

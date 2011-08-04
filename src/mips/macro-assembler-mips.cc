@@ -922,10 +922,18 @@ void MacroAssembler::Branch(int16_t offset, Condition cond, Register rs,
 
 
 void MacroAssembler::Branch(Label* L, BranchDelaySlot bdslot) {
-  if (!is_trampoline_emitted() || is_near(L)) {
-    BranchShort(L, bdslot);
+  if (L->is_bound()) {
+    if (is_near(L)) {
+      BranchShort(L, bdslot);
+    } else {
+      Jr(L, bdslot);
+    }
   } else {
-    Jr(L, bdslot);
+    if (is_trampoline_emitted()) {
+      Jr(L, bdslot);
+    } else {
+      BranchShort(L, bdslot);
+    }
   }
 }
 
@@ -933,14 +941,26 @@ void MacroAssembler::Branch(Label* L, BranchDelaySlot bdslot) {
 void MacroAssembler::Branch(Label* L, Condition cond, Register rs,
                             const Operand& rt,
                             BranchDelaySlot bdslot) {
-  if (!is_trampoline_emitted() || is_near(L)) {
-    BranchShort(L, cond, rs, rt, bdslot);
+  if (L->is_bound()) {
+    if (is_near(L)) {
+      BranchShort(L, cond, rs, rt, bdslot);
+    } else {
+      Label skip;
+      Condition neg_cond = NegateCondition(cond);
+      BranchShort(&skip, neg_cond, rs, rt);
+      Jr(L, bdslot);
+      bind(&skip);
+    }
   } else {
-    Label skip;
-    Condition neg_cond = NegateCondition(cond);
-    BranchShort(&skip, neg_cond, rs, rt);
-    Jr(L, bdslot);
-    bind(&skip);
+    if (is_trampoline_emitted()) {
+      Label skip;
+      Condition neg_cond = NegateCondition(cond);
+      BranchShort(&skip, neg_cond, rs, rt);
+      Jr(L, bdslot);
+      bind(&skip);
+    } else {
+      BranchShort(L, cond, rs, rt, bdslot);
+    }
   }
 }
 
@@ -1456,10 +1476,18 @@ void MacroAssembler::BranchAndLink(int16_t offset, Condition cond, Register rs,
 
 
 void MacroAssembler::BranchAndLink(Label* L, BranchDelaySlot bdslot) {
-  if (!is_trampoline_emitted() || is_near(L)) {
-    BranchAndLinkShort(L, bdslot);
+  if (L->is_bound()) {
+    if (is_near(L)) {
+      BranchAndLinkShort(L, bdslot);
+    } else {
+      Jalr(L, bdslot);
+    }
   } else {
-    Jalr(L, bdslot);
+    if (is_trampoline_emitted()) {
+      Jalr(L, bdslot);
+    } else {
+      BranchAndLinkShort(L, bdslot);
+    }
   }
 }
 
@@ -1467,14 +1495,26 @@ void MacroAssembler::BranchAndLink(Label* L, BranchDelaySlot bdslot) {
 void MacroAssembler::BranchAndLink(Label* L, Condition cond, Register rs,
                                    const Operand& rt,
                                    BranchDelaySlot bdslot) {
-  if (!is_trampoline_emitted() || is_near(L)) {
-    BranchAndLinkShort(L, cond, rs, rt, bdslot);
+  if (L->is_bound()) {
+    if (is_near(L)) {
+      BranchAndLinkShort(L, cond, rs, rt, bdslot);
+    } else {
+      Label skip;
+      Condition neg_cond = NegateCondition(cond);
+      BranchShort(&skip, neg_cond, rs, rt);
+      Jalr(L, bdslot);
+      bind(&skip);
+    }
   } else {
-    Label skip;
-    Condition neg_cond = NegateCondition(cond);
-    BranchShort(&skip, neg_cond, rs, rt);
-    Jalr(L, bdslot);
-    bind(&skip);
+    if (is_trampoline_emitted()) {
+      Label skip;
+      Condition neg_cond = NegateCondition(cond);
+      BranchShort(&skip, neg_cond, rs, rt);
+      Jalr(L, bdslot);
+      bind(&skip);
+    } else {
+      BranchAndLinkShort(L, cond, rs, rt, bdslot);
+    }
   }
 }
 

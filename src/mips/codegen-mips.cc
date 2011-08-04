@@ -7112,7 +7112,8 @@ void CodeGenerator::EmitNamedStore(Handle<String> name, bool is_contextual) {
       __ Addu(scratch0, receiver, Operand(offset));
       // Test that the object is not in the new space.  We cannot set
       // region marks for new space pages.
-      __ InNewSpace(receiver, scratch1, eq, &record_write_done);
+      __ And(scratch1, receiver, Operand(ExternalReference::new_space_mask()));
+      __ BranchShort(&record_write_done, eq, scratch1, Operand(ExternalReference::new_space_start()));
       // Record the actual write.
       __ RecordWriteHelper(receiver, scratch0, scratch1);
       __ bind(&record_write_done);
