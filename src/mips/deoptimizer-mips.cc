@@ -563,13 +563,8 @@ void Deoptimizer::EntryGenerator::Generate() {
   // For the rest, there are gaps on the stack, so the offsets remain the same.
   const int kNumberOfRegisters = Register::kNumRegisters;
 
-  // TODO(kalmard): This can probably be optimized even further. Callee-saved
-  // registers should not be pushed to the stack unnecessarily.
   // TODO(plind): check this
   RegList restored_regs = kJSCallerSaved | kCalleeSaved;
-  // TODO(kalmard): Is saving sp and ra important? If they're only saved so we
-  // can inspect them during deoptimization then maybe we should only save them
-  // in debug mode.
   RegList saved_regs = restored_regs | sp.bit() | ra.bit();
 
   const int kDoubleRegsSize =
