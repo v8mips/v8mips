@@ -4433,6 +4433,7 @@ void KeyedStoreStubCompiler::GenerateStoreFastDoubleElement(
   __ sw(mantissa_reg, FieldMemOperand(scratch, FixedDoubleArray::kHeaderSize));
   uint32_t offset = FixedDoubleArray::kHeaderSize + sizeof(kHoleNanLower32);
   __ sw(exponent_reg, FieldMemOperand(scratch, offset));
+  __ mov(v0, a0);
   __ Ret();
 
   __ bind(&maybe_nan);
@@ -4483,6 +4484,7 @@ void KeyedStoreStubCompiler::GenerateStoreFastDoubleElement(
     __ sw(mantissa_reg, MemOperand(scratch, 0));
     __ sw(exponent_reg, MemOperand(scratch, Register::kSizeInBytes));
   }
+  __ mov(v0, a0);
   __ Ret();
 
   // Handle store cache miss, replacing the ic with the generic stub.
