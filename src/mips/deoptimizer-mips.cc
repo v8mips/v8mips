@@ -523,8 +523,6 @@ void Deoptimizer::DoComputeFrame(TranslationIterator* iterator,
     output_frame->SetContinuation(
         reinterpret_cast<uint32_t>(continuation->entry()));
   }
-
-  if (output_count_ - 1 == frame_index) iterator->Done();
 }
 
 void Deoptimizer::FillInputFrame(Address tos, JavaScriptFrame* frame) {
