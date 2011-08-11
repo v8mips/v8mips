@@ -51,6 +51,7 @@
 //       - JSReceiver  (suitable for property access)
 //         - JSObject
 //           - JSArray
+//           - JSWeakMap
 //           - JSRegExp
 //           - JSFunction
 //           - GlobalObject
@@ -71,17 +72,19 @@
 //         - ExternalIntArray
 //         - ExternalUnsignedIntArray
 //         - ExternalFloatArray
-//       - FixedArray
-//         - DescriptorArray
-//         - HashTable
-//           - Dictionary
-//           - SymbolTable
-//           - CompilationCacheTable
-//           - CodeCacheHashTable
-//           - MapCache
-//         - Context
-//         - JSFunctionResultCache
-//         - SerializedScopeInfo
+//       - FixedArrayBase
+//         - FixedArray
+//           - DescriptorArray
+//           - HashTable
+//             - Dictionary
+//             - SymbolTable
+//             - CompilationCacheTable
+//             - CodeCacheHashTable
+//             - MapCache
+//           - Context
+//           - JSFunctionResultCache
+//           - SerializedScopeInfo
+//         - FixedDoubleArray
 //       - String
 //         - SeqString
 //           - SeqAsciiString
@@ -331,6 +334,7 @@ static const int kVariableSizeSentinel = 0;
   V(JS_GLOBAL_PROXY_TYPE)                                                      \
   V(JS_ARRAY_TYPE)                                                             \
   V(JS_PROXY_TYPE)                                                             \
+  V(JS_WEAK_MAP_TYPE)                                                          \
   V(JS_REGEXP_TYPE)                                                            \
                                                                                \
   V(JS_FUNCTION_TYPE)                                                          \
@@ -568,6 +572,7 @@ enum InstanceType {
   JS_GLOBAL_PROXY_TYPE,
   JS_ARRAY_TYPE,
   JS_PROXY_TYPE,
+  JS_WEAK_MAP_TYPE,
 
   JS_REGEXP_TYPE,  // LAST_NONCALLABLE_SPEC_OBJECT_TYPE
 
@@ -630,8 +635,10 @@ enum CompareResult {
                          WriteBarrierMode mode = UPDATE_WRITE_BARRIER); \
 
 
+class ElementsAccessor;
 class StringStream;
 class ObjectVisitor;
+class DictionaryElementsAccessor;
 
 struct ValueInfo : public Malloced {
   ValueInfo() : type(FIRST_TYPE), ptr(NULL), str(NULL), number(0) { }
@@ -748,6 +755,7 @@ class MaybeObject BASE_EMBEDDED {
   V(JSArray)                                   \
   V(JSProxy)                                   \
   V(JSFunctionProxy)                           \
+  V(JSWeakMap)                                 \
   V(JSRegExp)                                  \
   V(HashTable)                                 \
   V(Dictionary)                                \
@@ -1488,6 +1496,7 @@ class JSObject: public JSReceiver {
   inline void initialize_elements();
   MUST_USE_RESULT inline MaybeObject* ResetElements();
   inline ElementsKind GetElementsKind();
+  inline ElementsAccessor* GetElementsAccessor();
   inline bool HasFastElements();
   inline bool HasFastDoubleElements();
   inline bool HasDictionaryElements();
@@ -1730,13 +1739,7 @@ class JSObject: public JSReceiver {
 
   // Returns the index'th element.
   // The undefined object if index is out of bounds.
-  MaybeObject* GetElementWithReceiver(Object* receiver, uint32_t index);
   MaybeObject* GetElementWithInterceptor(Object* receiver, uint32_t index);
-
-  // Get external element value at index if there is one and undefined
-  // otherwise. Can return a failure if allocation of a heap number
-  // failed.
-  MaybeObject* GetExternalElement(uint32_t index);
 
   // Replace the elements' backing store with fast elements of the given
   // capacity.  Update the length for JSArrays.  Returns the new backing
@@ -2001,6 +2004,8 @@ class JSObject: public JSReceiver {
   };
 
  private:
+  friend class DictionaryElementsAccessor;
+
   MUST_USE_RESULT MaybeObject* GetElementWithCallback(Object* receiver,
                                                       Object* structure,
                                                       uint32_t index,
@@ -2021,14 +2026,10 @@ class JSObject: public JSReceiver {
       StrictModeFlag strict_mode,
       bool check_prototype);
 
-  MaybeObject* GetElementPostInterceptor(Object* receiver, uint32_t index);
-
   MUST_USE_RESULT MaybeObject* DeletePropertyPostInterceptor(String* name,
                                                              DeleteMode mode);
   MUST_USE_RESULT MaybeObject* DeletePropertyWithInterceptor(String* name);
 
-  MUST_USE_RESULT MaybeObject* DeleteElementPostInterceptor(uint32_t index,
-                                                            DeleteMode mode);
   MUST_USE_RESULT MaybeObject* DeleteElementWithInterceptor(uint32_t index);
 
   MUST_USE_RESULT MaybeObject* DeleteFastElement(uint32_t index);
@@ -2092,6 +2093,7 @@ class FixedArray: public FixedArrayBase {
   inline Object* get(int index);
   // Setter that uses write barrier.
   inline void set(int index, Object* value);
+  inline bool is_the_hole(int index);
 
   // Setter that doesn't need write barrier).
   inline void set(int index, Smi* value);
@@ -2197,7 +2199,8 @@ class FixedDoubleArray: public FixedArrayBase {
   inline void Initialize(NumberDictionary* from);
 
   // Setter and getter for elements.
-  inline double get(int index);
+  inline double get_scalar(int index);
+  inline MaybeObject* get(int index);
   inline void set(int index, double value);
   inline void set_the_hole(int index);
 
@@ -2805,7 +2808,7 @@ class Dictionary: public HashTable<Shape, Key> {
                   PropertyAttributes filter,
                   SortMode sort_mode);
   // Fill in details for properties into storage.
-  void CopyKeysTo(FixedArray* storage, SortMode sort_mode);
+  void CopyKeysTo(FixedArray* storage, int index, SortMode sort_mode);
 
   // Accessors for next enumeration index.
   void SetNextEnumerationIndex(int index) {
@@ -2979,8 +2982,16 @@ class ObjectHashTable: public HashTable<ObjectHashTableShape, JSObject*> {
   MUST_USE_RESULT MaybeObject* Put(JSObject* key, Object* value);
 
  private:
+  friend class MarkCompactCollector;
+
   void AddEntry(int entry, JSObject* key, Object* value);
-  void RemoveEntry(int entry);
+  void RemoveEntry(int entry, Heap* heap);
+  inline void RemoveEntry(int entry);
+
+  // Returns the index to the value of an entry.
+  static inline int EntryToValueIndex(int entry) {
+    return EntryToIndex(entry) + 1;
+  }
 };
 
 
@@ -3129,6 +3140,8 @@ class ExternalArray: public HeapObject {
   inline int length();
   inline void set_length(int value);
 
+  inline bool is_the_hole(int index) { return false; }
+
   // [external_pointer]: The pointer to the external memory area backing this
   // external array.
   DECL_ACCESSORS(external_pointer, void)  // Pointer to the data store.
@@ -3164,7 +3177,8 @@ class ExternalPixelArray: public ExternalArray {
   inline uint8_t* external_pixel_pointer();
 
   // Setter and getter.
-  inline uint8_t get(int index);
+  inline uint8_t get_scalar(int index);
+  inline MaybeObject* get(int index);
   inline void set(int index, uint8_t value);
 
   // This accessor applies the correct conversion from Smi, HeapNumber and
@@ -3192,7 +3206,8 @@ class ExternalPixelArray: public ExternalArray {
 class ExternalByteArray: public ExternalArray {
  public:
   // Setter and getter.
-  inline int8_t get(int index);
+  inline int8_t get_scalar(int index);
+  inline MaybeObject* get(int index);
   inline void set(int index, int8_t value);
 
   // This accessor applies the correct conversion from Smi, HeapNumber
@@ -3220,7 +3235,8 @@ class ExternalByteArray: public ExternalArray {
 class ExternalUnsignedByteArray: public ExternalArray {
  public:
   // Setter and getter.
-  inline uint8_t get(int index);
+  inline uint8_t get_scalar(int index);
+  inline MaybeObject* get(int index);
   inline void set(int index, uint8_t value);
 
   // This accessor applies the correct conversion from Smi, HeapNumber
@@ -3248,7 +3264,8 @@ class ExternalUnsignedByteArray: public ExternalArray {
 class ExternalShortArray: public ExternalArray {
  public:
   // Setter and getter.
-  inline int16_t get(int index);
+  inline int16_t get_scalar(int index);
+  inline MaybeObject* get(int index);
   inline void set(int index, int16_t value);
 
   // This accessor applies the correct conversion from Smi, HeapNumber
@@ -3276,7 +3293,8 @@ class ExternalShortArray: public ExternalArray {
 class ExternalUnsignedShortArray: public ExternalArray {
  public:
   // Setter and getter.
-  inline uint16_t get(int index);
+  inline uint16_t get_scalar(int index);
+  inline MaybeObject* get(int index);
   inline void set(int index, uint16_t value);
 
   // This accessor applies the correct conversion from Smi, HeapNumber
@@ -3304,7 +3322,8 @@ class ExternalUnsignedShortArray: public ExternalArray {
 class ExternalIntArray: public ExternalArray {
  public:
   // Setter and getter.
-  inline int32_t get(int index);
+  inline int32_t get_scalar(int index);
+  inline MaybeObject* get(int index);
   inline void set(int index, int32_t value);
 
   // This accessor applies the correct conversion from Smi, HeapNumber
@@ -3332,7 +3351,8 @@ class ExternalIntArray: public ExternalArray {
 class ExternalUnsignedIntArray: public ExternalArray {
  public:
   // Setter and getter.
-  inline uint32_t get(int index);
+  inline uint32_t get_scalar(int index);
+  inline MaybeObject* get(int index);
   inline void set(int index, uint32_t value);
 
   // This accessor applies the correct conversion from Smi, HeapNumber
@@ -3360,7 +3380,8 @@ class ExternalUnsignedIntArray: public ExternalArray {
 class ExternalFloatArray: public ExternalArray {
  public:
   // Setter and getter.
-  inline float get(int index);
+  inline float get_scalar(int index);
+  inline MaybeObject* get(int index);
   inline void set(int index, float value);
 
   // This accessor applies the correct conversion from Smi, HeapNumber
@@ -3388,7 +3409,8 @@ class ExternalFloatArray: public ExternalArray {
 class ExternalDoubleArray: public ExternalArray {
  public:
   // Setter and getter.
-  inline double get(int index);
+  inline double get_scalar(int index);
+  inline MaybeObject* get(int index);
   inline void set(int index, double value);
 
   // This accessor applies the correct conversion from Smi, HeapNumber
@@ -6617,6 +6639,40 @@ class JSFunctionProxy: public JSProxy {
 
  private:
   DISALLOW_IMPLICIT_CONSTRUCTORS(JSFunctionProxy);
+};
+
+
+// The JSWeakMap describes EcmaScript Harmony weak maps
+class JSWeakMap: public JSObject {
+ public:
+  // [table]: the backing hash table mapping keys to values.
+  DECL_ACCESSORS(table, ObjectHashTable)
+
+  // [next]: linked list of encountered weak maps during GC.
+  DECL_ACCESSORS(next, Object)
+
+  // Unchecked accessors to be used during GC.
+  inline ObjectHashTable* unchecked_table();
+
+  // Casting.
+  static inline JSWeakMap* cast(Object* obj);
+
+#ifdef OBJECT_PRINT
+  inline void JSWeakMapPrint() {
+    JSWeakMapPrint(stdout);
+  }
+  void JSWeakMapPrint(FILE* out);
+#endif
+#ifdef DEBUG
+  void JSWeakMapVerify();
+#endif
+
+  static const int kTableOffset = JSObject::kHeaderSize;
+  static const int kNextOffset = kTableOffset + kPointerSize;
+  static const int kSize = kNextOffset + kPointerSize;
+
+ private:
+  DISALLOW_IMPLICIT_CONSTRUCTORS(JSWeakMap);
 };
 
 

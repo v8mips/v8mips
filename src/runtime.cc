@@ -635,6 +635,43 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_Fix) {
 }
 
 
+RUNTIME_FUNCTION(MaybeObject*, Runtime_WeakMapInitialize) {
+  HandleScope scope(isolate);
+  ASSERT(args.length() == 1);
+  CONVERT_ARG_CHECKED(JSWeakMap, weakmap, 0);
+  ASSERT(weakmap->map()->inobject_properties() == 0);
+  Handle<ObjectHashTable> table = isolate->factory()->NewObjectHashTable(0);
+  weakmap->set_table(*table);
+  weakmap->set_next(Smi::FromInt(0));
+  return *weakmap;
+}
+
+
+RUNTIME_FUNCTION(MaybeObject*, Runtime_WeakMapGet) {
+  NoHandleAllocation ha;
+  ASSERT(args.length() == 2);
+  CONVERT_ARG_CHECKED(JSWeakMap, weakmap, 0);
+  // TODO(mstarzinger): Currently we cannot use JSProxy objects as keys
+  // because they cannot be cast to JSObject to get an identity hash code.
+  CONVERT_ARG_CHECKED(JSObject, key, 1);
+  return weakmap->table()->Lookup(*key);
+}
+
+
+RUNTIME_FUNCTION(MaybeObject*, Runtime_WeakMapSet) {
+  HandleScope scope(isolate);
+  ASSERT(args.length() == 3);
+  CONVERT_ARG_CHECKED(JSWeakMap, weakmap, 0);
+  // TODO(mstarzinger): See Runtime_WeakMapGet above.
+  CONVERT_ARG_CHECKED(JSObject, key, 1);
+  Handle<Object> value(args[2]);
+  Handle<ObjectHashTable> table(weakmap->table());
+  Handle<ObjectHashTable> new_table = PutIntoObjectHashTable(table, key, value);
+  weakmap->set_table(*new_table);
+  return *value;
+}
+
+
 RUNTIME_FUNCTION(MaybeObject*, Runtime_ClassOf) {
   NoHandleAllocation ha;
   ASSERT(args.length() == 1);
@@ -1172,7 +1209,7 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_DeclareGlobals) {
             return ThrowRedeclarationError(isolate, "const", name);
           }
           // Otherwise, we check for locally conflicting declarations.
-          if (is_local && is_const_property) {
+          if (is_local && (is_read_only || is_const_property)) {
             const char* type = (is_read_only) ? "const" : "var";
             return ThrowRedeclarationError(isolate, type, name);
           }
@@ -1406,11 +1443,12 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_InitializeVarGlobal) {
           // make sure to introduce it.
           found = false;
         } else if ((intercepted & READ_ONLY) != 0) {
-          // The property is present, but read-only, so we ignore the
-          // redeclaration. However if we found readonly property
+          // The property is present, but read-only. Since we're trying to
+          // overwrite it with a variable declaration we must throw a
+          // re-declaration error.  However if we found readonly property
           // on one of hidden prototypes, just shadow it.
           if (real_holder != isolate->context()->global()) break;
-          return isolate->heap()->undefined_value();
+          return ThrowRedeclarationError(isolate, "const", name);
         }
       }
 
@@ -1963,6 +2001,24 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_FunctionSetLength) {
   CONVERT_CHECKED(Smi, length, args[1]);
   fun->shared()->set_length(length->value());
   return length;
+}
+
+
+// Creates a local, readonly, property called length with the correct
+// length (when read by the user). This effectively overwrites the
+// interceptor used to normally provide the length.
+RUNTIME_FUNCTION(MaybeObject*, Runtime_BoundFunctionSetLength) {
+  NoHandleAllocation ha;
+  ASSERT(args.length() == 2);
+  CONVERT_CHECKED(JSFunction, fun, args[0]);
+  CONVERT_CHECKED(Smi, length, args[1]);
+  MaybeObject* maybe_name =
+      isolate->heap()->AllocateStringFromAscii(CStrVector("length"));
+  String* name;
+  if (!maybe_name->To(&name)) return maybe_name;
+  PropertyAttributes attr =
+      static_cast<PropertyAttributes>(DONT_DELETE | DONT_ENUM | READ_ONLY);
+  return fun->AddProperty(name, length, attr, kNonStrictMode);
 }
 
 
@@ -4528,9 +4584,10 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_GetLocalPropertyNames) {
   // Get the property names.
   jsproto = obj;
   int proto_with_hidden_properties = 0;
+  int next_copy_index = 0;
   for (int i = 0; i < length; i++) {
-    jsproto->GetLocalPropertyNames(*names,
-                                   i == 0 ? 0 : local_property_count[i - 1]);
+    jsproto->GetLocalPropertyNames(*names, next_copy_index);
+    next_copy_index += local_property_count[i];
     if (jsproto->HasHiddenProperties()) {
       proto_with_hidden_properties++;
     }
@@ -9199,13 +9256,13 @@ static void IterateExternalArrayElements(Isolate* isolate,
     if (elements_are_guaranteed_smis) {
       for (uint32_t j = 0; j < len; j++) {
         HandleScope loop_scope;
-        Handle<Smi> e(Smi::FromInt(static_cast<int>(array->get(j))));
+        Handle<Smi> e(Smi::FromInt(static_cast<int>(array->get_scalar(j))));
         visitor->visit(j, e);
       }
     } else {
       for (uint32_t j = 0; j < len; j++) {
         HandleScope loop_scope;
-        int64_t val = static_cast<int64_t>(array->get(j));
+        int64_t val = static_cast<int64_t>(array->get_scalar(j));
         if (Smi::IsValid(static_cast<intptr_t>(val))) {
           Handle<Smi> e(Smi::FromInt(static_cast<int>(val)));
           visitor->visit(j, e);
@@ -9219,7 +9276,7 @@ static void IterateExternalArrayElements(Isolate* isolate,
   } else {
     for (uint32_t j = 0; j < len; j++) {
       HandleScope loop_scope(isolate);
-      Handle<Object> e = isolate->factory()->NewNumber(array->get(j));
+      Handle<Object> e = isolate->factory()->NewNumber(array->get_scalar(j));
       visitor->visit(j, e);
     }
   }
@@ -9405,7 +9462,7 @@ static bool IterateElements(Isolate* isolate,
       Handle<ExternalPixelArray> pixels(ExternalPixelArray::cast(
           receiver->elements()));
       for (uint32_t j = 0; j < length; j++) {
-        Handle<Smi> e(Smi::FromInt(pixels->get(j)));
+        Handle<Smi> e(Smi::FromInt(pixels->get_scalar(j)));
         visitor->visit(j, e);
       }
       break;

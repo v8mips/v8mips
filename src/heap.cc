@@ -438,7 +438,9 @@ void Heap::GarbageCollectionEpilogue() {
 #if defined(DEBUG)
   ReportStatisticsAfterGC();
 #endif  // DEBUG
+#ifdef ENABLE_DEBUGGER_SUPPORT
   isolate_->debug()->AfterGarbageCollection();
+#endif  // ENABLE_DEBUGGER_SUPPORT
 }
 
 
@@ -1291,6 +1293,10 @@ class ScavengingVisitor : public StaticVisitorBase {
     table_.Register(kVisitSharedFunctionInfo,
                     &ObjectEvacuationStrategy<POINTER_OBJECT>::
                         template VisitSpecialized<SharedFunctionInfo::kSize>);
+
+    table_.Register(kVisitJSWeakMap,
+                    &ObjectEvacuationStrategy<POINTER_OBJECT>::
+                    Visit);
 
     table_.Register(kVisitJSRegExp,
                     &ObjectEvacuationStrategy<POINTER_OBJECT>::

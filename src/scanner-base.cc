@@ -171,7 +171,7 @@ Token::Value JavaScriptScanner::SkipMultiLineComment() {
   Advance();
 
   while (c0_ >= 0) {
-    char ch = c0_;
+    uc32 ch = c0_;
     Advance();
     if (unicode_cache_->IsLineTerminator(ch)) {
       // Following ECMA-262, section 7.4, a comment containing
@@ -788,7 +788,7 @@ bool JavaScriptScanner::ScanRegExpFlags() {
 // ----------------------------------------------------------------------------
 // Keyword Matcher
 
-KeywordMatcher::FirstState KeywordMatcher::first_states_[] = {
+const KeywordMatcher::FirstState KeywordMatcher::first_states_[] = {
   { "break",  KEYWORD_PREFIX, Token::BREAK },
   { NULL,     C,              Token::ILLEGAL },
   { NULL,     D,              Token::ILLEGAL },
