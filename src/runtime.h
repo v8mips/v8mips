@@ -209,6 +209,7 @@ namespace internal {
   /* Reflection */ \
   F(FunctionSetInstanceClassName, 2, 1) \
   F(FunctionSetLength, 2, 1) \
+  F(BoundFunctionSetLength, 2, 1)    \
   F(FunctionSetPrototype, 2, 1) \
   F(FunctionSetReadOnlyPrototype, 1, 1) \
   F(FunctionGetName, 1, 1) \
@@ -286,6 +287,11 @@ namespace internal {
   F(IsJSProxy, 1, 1) \
   F(GetHandler, 1, 1) \
   F(Fix, 1, 1) \
+  \
+  /* Harmony weakmaps */ \
+  F(WeakMapInitialize, 1, 1) \
+  F(WeakMapGet, 2, 1) \
+  F(WeakMapSet, 3, 1) \
   \
   /* Statements */ \
   F(NewClosure, 3, 1) \

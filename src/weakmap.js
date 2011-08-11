@@ -25,72 +25,71 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#include "v8.h"
 
-#include "codegen.h"
-#include "deoptimizer.h"
-#include "full-codegen.h"
-#include "safepoint-table.h"
+// This file relies on the fact that the following declaration has been made
+// in runtime.js:
+// const $Object = global.Object;
+const $WeakMap = global.WeakMap;
 
-// Note: this file was taken from the X64 version. ARM has a partially working
-// lithium implementation, but for now it is not ported to mips.
+// -------------------------------------------------------------------
 
-namespace v8 {
-namespace internal {
+// Set the WeakMap function and constructor.
+%SetCode($WeakMap, function(x) {
+  if (%_IsConstructCall()) {
+    %WeakMapInitialize(this);
+  } else {
+    return new $WeakMap();
+  }
+});
 
 
-const int Deoptimizer::table_entry_size_ = 10;
-
-
-int Deoptimizer::patch_size() {
-  const int kCallInstructionSizeInWords = 3;
-  return kCallInstructionSizeInWords * Assembler::kInstrSize;
+function WeakMapGet(key) {
+  if (!IS_SPEC_OBJECT(key)) {
+    throw %MakeTypeError('invalid_weakmap_key', [this, key]);
+  }
+  return %WeakMapGet(this, key);
 }
 
 
-void Deoptimizer::DeoptimizeFunction(JSFunction* function) {
-  UNIMPLEMENTED();
+function WeakMapSet(key, value) {
+  if (!IS_SPEC_OBJECT(key)) {
+    throw %MakeTypeError('invalid_weakmap_key', [this, key]);
+  }
+  return %WeakMapSet(this, key, value);
 }
 
 
-void Deoptimizer::PatchStackCheckCodeAt(Address pc_after,
-                                        Code* check_code,
-                                        Code* replacement_code) {
-  UNIMPLEMENTED();
+function WeakMapHas(key) {
+  if (!IS_SPEC_OBJECT(key)) {
+    throw %MakeTypeError('invalid_weakmap_key', [this, key]);
+  }
+  return !IS_UNDEFINED(%WeakMapGet(this, key));
 }
 
 
-void Deoptimizer::RevertStackCheckCodeAt(Address pc_after,
-                                         Code* check_code,
-                                         Code* replacement_code) {
-  UNIMPLEMENTED();
+function WeakMapDelete(key) {
+  if (!IS_SPEC_OBJECT(key)) {
+    throw %MakeTypeError('invalid_weakmap_key', [this, key]);
+  }
+  if (!IS_UNDEFINED(%WeakMapGet(this, key))) {
+    %WeakMapSet(this, key, void 0);
+    return true;
+  } else {
+    return false;
+  }
+}
+
+// -------------------------------------------------------------------
+
+function SetupWeakMap() {
+  // Setup the non-enumerable functions on the WeakMap prototype object.
+  InstallFunctionsOnHiddenPrototype($WeakMap.prototype, DONT_ENUM, $Array(
+    "get", WeakMapGet,
+    "set", WeakMapSet,
+    "has", WeakMapHas,
+    "delete", WeakMapDelete
+  ));
 }
 
 
-void Deoptimizer::DoComputeOsrOutputFrame() {
-  UNIMPLEMENTED();
-}
-
-
-void Deoptimizer::DoComputeFrame(TranslationIterator* iterator,
-                                 int frame_index) {
-  UNIMPLEMENTED();
-}
-
-
-void Deoptimizer::FillInputFrame(Address tos, JavaScriptFrame* frame) {
-  UNIMPLEMENTED();
-}
-
-
-void Deoptimizer::EntryGenerator::Generate() {
-  UNIMPLEMENTED();
-}
-
-
-void Deoptimizer::TableEntryGenerator::GeneratePrologue() {
-  UNIMPLEMENTED();
-}
-
-
-} }  // namespace v8::internal
+SetupWeakMap();

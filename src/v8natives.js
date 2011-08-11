@@ -162,14 +162,13 @@ function GlobalEval(x) {
 
 function SetupGlobal() {
   // ECMA 262 - 15.1.1.1.
-  %SetProperty(global, "NaN", $NaN, DONT_ENUM | DONT_DELETE | READ_ONLY);
+  %SetProperty(global, "NaN", $NaN, DONT_ENUM | DONT_DELETE);
 
   // ECMA-262 - 15.1.1.2.
-  %SetProperty(global, "Infinity", 1/0, DONT_ENUM | DONT_DELETE | READ_ONLY);
+  %SetProperty(global, "Infinity", 1/0, DONT_ENUM | DONT_DELETE);
 
   // ECMA-262 - 15.1.1.3.
-  %SetProperty(global, "undefined", void 0,
-               DONT_ENUM | DONT_DELETE | READ_ONLY);
+  %SetProperty(global, "undefined", void 0, DONT_ENUM | DONT_DELETE);
 
   // Setup non-enumerable function on the global object.
   InstallFunctions(global, DONT_ENUM, $Array(
@@ -1499,9 +1498,9 @@ function FunctionBind(this_arg) { // Length is 1.
 
   // Set the correct length.
   var length = (this.length - argc_bound) > 0 ? this.length - argc_bound : 0;
-  %FunctionSetLength(result, length);
   %FunctionRemovePrototype(result);
   %FunctionSetBound(result);
+  %BoundFunctionSetLength(result, length);
   return result;
 }
 

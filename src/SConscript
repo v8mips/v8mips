@@ -65,6 +65,7 @@ SOURCES = {
     disassembler.cc
     diy-fp.cc
     dtoa.cc
+    elements.cc
     execution.cc
     factory.cc
     flags.cc
@@ -307,6 +308,7 @@ debug-debugger.js
 
 EXPERIMENTAL_LIBRARY_FILES = '''
 proxy.js
+weakmap.js
 '''.split()
 
 
