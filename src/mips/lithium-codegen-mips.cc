@@ -1427,46 +1427,18 @@ void LCodeGen::DoBranch(LBranch* instr) {
         // undefined -> false.
         __ LoadRoot(at, Heap::kUndefinedValueRootIndex);
         __ Branch(false_label, eq, reg, Operand(at));
-      } else if (expected.Contains(ToBooleanStub::INTERNAL_OBJECT)) {
-        // We've seen undefined for the first time -> deopt.
-        __ LoadRoot(at, Heap::kUndefinedValueRootIndex);
-        DeoptimizeIf(eq, instr->environment(), at, Operand(reg));
       }
-
       if (expected.Contains(ToBooleanStub::BOOLEAN)) {
         // Boolean -> its value.
         __ LoadRoot(at, Heap::kTrueValueRootIndex);
         __ Branch(true_label, eq, reg, Operand(at));
         __ LoadRoot(at, Heap::kFalseValueRootIndex);
         __ Branch(false_label, eq, reg, Operand(at));
-      } else if (expected.Contains(ToBooleanStub::INTERNAL_OBJECT)) {
-        // We've seen a boolean for the first time -> deopt.
-        __ LoadRoot(at, Heap::kTrueValueRootIndex);
-        DeoptimizeIf(eq, instr->environment(), reg, Operand(at));
-        __ LoadRoot(at, Heap::kFalseValueRootIndex);
-        DeoptimizeIf(eq, instr->environment(), reg, Operand(at));
       }
-
-#if 0
-      if (expected.Contains(ToBooleanStub::BOOLEAN)) {
-        // false -> false.
-        __ LoadRoot(at, Heap::kFalseValueRootIndex);
-        __ Branch(false_label, eq, reg, Operand(at));
-      } else if (expected.Contains(ToBooleanStub::INTERNAL_OBJECT)) {
-        // We've seen a boolean for the first time -> deopt.
-        __ LoadRoot(at, Heap::kFalseValueRootIndex);
-        DeoptimizeIf(eq, instr->environment(), reg, Operand(at));
-      }
-#endif
-
       if (expected.Contains(ToBooleanStub::NULL_TYPE)) {
         // 'null' -> false.
         __ LoadRoot(at, Heap::kNullValueRootIndex);
         __ Branch(false_label, eq, reg, Operand(at));
-      } else if (expected.Contains(ToBooleanStub::INTERNAL_OBJECT)) {
-        // We've seen null for the first time -> deopt.
-        __ LoadRoot(at, Heap::kNullValueRootIndex);
-        DeoptimizeIf(eq, instr->environment(), reg, Operand(at));
       }
 
       if (expected.Contains(ToBooleanStub::SMI)) {
@@ -1482,21 +1454,18 @@ void LCodeGen::DoBranch(LBranch* instr) {
       const Register map = scratch0();
       if (expected.NeedsMap()) {
         __ lw(map, FieldMemOperand(reg, HeapObject::kMapOffset));
-        // Everything with a map could be undetectable, so check this now.
-        __ lbu(at, FieldMemOperand(map, Map::kBitFieldOffset));
-        __ And(at, at, Operand(1 << Map::kIsUndetectable));
-        __ Branch(false_label, ne, at, Operand(zero_reg));
+        if (expected.CanBeUndetectable()) {
+          // Undetectable -> false.
+          __ lbu(at, FieldMemOperand(map, Map::kBitFieldOffset));
+          __ And(at, at, Operand(1 << Map::kIsUndetectable));
+          __ Branch(false_label, ne, at, Operand(zero_reg));
+        }
       }
 
       if (expected.Contains(ToBooleanStub::SPEC_OBJECT)) {
         // spec object -> true.
         __ lbu(at, FieldMemOperand(map, Map::kInstanceTypeOffset));
         __ Branch(true_label, ge, at, Operand(FIRST_SPEC_OBJECT_TYPE));
-      } else if (expected.Contains(ToBooleanStub::INTERNAL_OBJECT)) {
-        // We've seen a spec object for the first time -> deopt.
-        __ lbu(at, FieldMemOperand(map, Map::kInstanceTypeOffset));
-        DeoptimizeIf(ge, instr->environment(),
-            at, Operand(FIRST_SPEC_OBJECT_TYPE));
       }
 
       if (expected.Contains(ToBooleanStub::STRING)) {
@@ -1508,11 +1477,6 @@ void LCodeGen::DoBranch(LBranch* instr) {
         __ Branch(true_label, ne, at, Operand(zero_reg));
         __ Branch(false_label);
         __ bind(&not_string);
-      } else if (expected.Contains(ToBooleanStub::INTERNAL_OBJECT)) {
-        // We've seen a string for the first time -> deopt
-        __ lbu(at, FieldMemOperand(map, Map::kInstanceTypeOffset));
-        DeoptimizeIf(lt, instr->environment(),
-            at, Operand(FIRST_NONSTRING_TYPE));
       }
 
       if (expected.Contains(ToBooleanStub::HEAP_NUMBER)) {
@@ -1526,19 +1490,10 @@ void LCodeGen::DoBranch(LBranch* instr) {
         // Falls through if dbl_scratch == 0.
         __ Branch(false_label);
         __ bind(&not_heap_number);
-      } else if (expected.Contains(ToBooleanStub::INTERNAL_OBJECT)) {
-        // We've seen a heap number for the first time -> deopt.
-        __ LoadRoot(at, Heap::kHeapNumberMapRootIndex);
-        DeoptimizeIf(eq, instr->environment(), map, Operand(at));
       }
 
-      if (expected.Contains(ToBooleanStub::INTERNAL_OBJECT)) {
-        // internal objects -> true
-        __ Branch(true_label);
-      } else {
-        // We've seen something for the first time -> deopt.
-        DeoptimizeIf(al, instr->environment(), zero_reg, Operand(zero_reg));
-      }
+      // We've seen something for the first time -> deopt.
+      DeoptimizeIf(al, instr->environment(), zero_reg, Operand(zero_reg));
     }
   }
 }

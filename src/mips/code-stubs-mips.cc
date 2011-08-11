@@ -1696,14 +1696,14 @@ void ToBooleanStub::Generate(MacroAssembler* masm) {
   const Register map = t5.is(tos_) ? t3 : t5;
 
   // undefined -> false.
-  CheckOddball(masm, UNDEFINED, Heap::kUndefinedValueRootIndex, false, &patch);
+  CheckOddball(masm, UNDEFINED, Heap::kUndefinedValueRootIndex, false);
 
   // Boolean -> its value.
-  CheckOddball(masm, BOOLEAN, Heap::kFalseValueRootIndex, false, &patch);
-  CheckOddball(masm, BOOLEAN, Heap::kTrueValueRootIndex, true, &patch);
+  CheckOddball(masm, BOOLEAN, Heap::kFalseValueRootIndex, false);
+  CheckOddball(masm, BOOLEAN, Heap::kTrueValueRootIndex, true);
 
   // 'null' -> false.
-  CheckOddball(masm, NULL_TYPE, Heap::kNullValueRootIndex, false, &patch);
+  CheckOddball(masm, NULL_TYPE, Heap::kNullValueRootIndex, false);
 
   if (types_.Contains(SMI)) {
     // Smis: 0 -> false, all other -> true
@@ -1718,12 +1718,13 @@ void ToBooleanStub::Generate(MacroAssembler* masm) {
   if (types_.NeedsMap()) {
     __ lw(map, FieldMemOperand(tos_, HeapObject::kMapOffset));
 
-    // Everything with a map could be undetectable, so check this now.
-    __ lbu(at, FieldMemOperand(map, Map::kBitFieldOffset));
-    __ And(at, at, Operand(1 << Map::kIsUndetectable));
-    // Undetectable -> false.
-    __ movn(tos_, zero_reg, at);
-    __ Ret(ne, at, Operand(zero_reg));
+    if (types_.CanBeUndetectable()) {
+      __ lbu(at, FieldMemOperand(map, Map::kBitFieldOffset));
+      __ And(at, at, Operand(1 << Map::kIsUndetectable));
+      // Undetectable -> false.
+      __   movn(tos_, zero_reg, at);
+      __ Ret(ne, at, Operand(zero_reg));
+    }
   }
 
   if (types_.Contains(SPEC_OBJECT)) {
@@ -1731,24 +1732,16 @@ void ToBooleanStub::Generate(MacroAssembler* masm) {
     __ lbu(at, FieldMemOperand(map, Map::kInstanceTypeOffset));
     // tos_ contains the correct non-zero return value already.
     __ Ret(ge, at, Operand(FIRST_SPEC_OBJECT_TYPE));
-  } else if (types_.Contains(INTERNAL_OBJECT)) {
-    // We've seen a spec object for the first time -> patch.
-    __ lbu(at, FieldMemOperand(map, Map::kInstanceTypeOffset));
-    __ Branch(&patch, ge, at, Operand(FIRST_SPEC_OBJECT_TYPE));
   }
 
   if (types_.Contains(STRING)) {
     // String value -> false iff empty.
-  __ lbu(at, FieldMemOperand(map, Map::kInstanceTypeOffset));
-  Label skip;
-  __ Branch(&skip, ge, at, Operand(FIRST_NONSTRING_TYPE));
-  __ lw(tos_, FieldMemOperand(tos_, String::kLengthOffset));
-  __ Ret();  // the string length is OK as the return value
-  __ bind(&skip);
-  } else if (types_.Contains(INTERNAL_OBJECT)) {
-    // We've seen a string for the first time -> patch
     __ lbu(at, FieldMemOperand(map, Map::kInstanceTypeOffset));
-    __ Branch(&patch, lt, at, Operand(FIRST_NONSTRING_TYPE));
+    Label skip;
+    __ Branch(&skip, ge, at, Operand(FIRST_NONSTRING_TYPE));
+    __ lw(tos_, FieldMemOperand(tos_, String::kLengthOffset));
+    __ Ret();  // the string length is OK as the return value
+    __ bind(&skip);
   }
 
   if (types_.Contains(HEAP_NUMBER)) {
@@ -1767,30 +1760,17 @@ void ToBooleanStub::Generate(MacroAssembler* masm) {
     __ bind(&number);
     __ Ret();
     __ bind(&not_heap_number);
-  } else if (types_.Contains(INTERNAL_OBJECT)) {
-    // We've seen a heap number for the first time -> patch
-    __ LoadRoot(at, Heap::kHeapNumberMapRootIndex);
-    __ Branch(&patch, eq, map, Operand(at));
   }
 
-  if (types_.Contains(INTERNAL_OBJECT)) {
-    // Internal objects -> true.
-    __ li(tos_, 1);
-    __ Ret();
-  }
-
-  if (!types_.IsAll()) {
-    __ bind(&patch);
-    GenerateTypeTransition(masm);
-  }
+  __ bind(&patch);
+  GenerateTypeTransition(masm);
 }
 
 
 void ToBooleanStub::CheckOddball(MacroAssembler* masm,
                                  Type type,
                                  Heap::RootListIndex value,
-                                 bool result,
-                                 Label* patch) {
+                                 bool result) {
   if (types_.Contains(type)) {
     // If we see an expected oddball, return its ToBoolean value tos_.
     __ LoadRoot(at, value);
@@ -1801,11 +1781,6 @@ void ToBooleanStub::CheckOddball(MacroAssembler* masm,
       __ movz(tos_, zero_reg, at);
     }
     __ Ret(eq, at, Operand(zero_reg));
-  } else if (types_.Contains(INTERNAL_OBJECT)) {
-    // If we see an unexpected oddball and handle internal objects, we must
-    // patch because the code for internal objects doesn't handle it explictly.
-    __ LoadRoot(at, value);
-    __ Branch(patch, eq, tos_, Operand(at));
   }
 }
 
