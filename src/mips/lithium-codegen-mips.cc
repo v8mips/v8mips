@@ -4338,6 +4338,12 @@ Condition LCodeGen::EmitTypeofIs(Label* true_label,
     cmp2 = Operand(input);
     final_branch_condition = eq;
 
+  } else if (FLAG_harmony_typeof && type_name->Equals(heap()->null_symbol())) {
+    __ LoadRoot(at, Heap::kNullValueRootIndex);
+    cmp1 = at;
+    cmp2 = Operand(input);
+    final_branch_condition = eq;
+
   } else if (type_name->Equals(heap()->undefined_symbol())) {
     __ LoadRoot(at, Heap::kUndefinedValueRootIndex);
     __ Branch(USE_DELAY_SLOT, true_label, eq, at, Operand(input));
@@ -4361,8 +4367,10 @@ Condition LCodeGen::EmitTypeofIs(Label* true_label,
 
   } else if (type_name->Equals(heap()->object_symbol())) {
     __ JumpIfSmi(input, false_label);
-    __ LoadRoot(at, Heap::kNullValueRootIndex);
-    __ Branch(USE_DELAY_SLOT, true_label, eq, at, Operand(input));
+    if (!FLAG_harmony_typeof) {
+      __ LoadRoot(at, Heap::kNullValueRootIndex);
+      __ Branch(USE_DELAY_SLOT, true_label, eq, at, Operand(input));
+    }
     // input is an object, it is safe to use GetObjectType in the delay slot.
     __ GetObjectType(input, input, scratch);
     __ Branch(USE_DELAY_SLOT, false_label,
