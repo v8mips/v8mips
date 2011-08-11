@@ -172,14 +172,14 @@ class MacroAssembler: public Assembler {
   void Jump(intptr_t target, RelocInfo::Mode rmode, COND_ARGS);
   void Jump(Address target, RelocInfo::Mode rmode, COND_ARGS);
   void Jump(Handle<Code> code, RelocInfo::Mode rmode, COND_ARGS);
-  int CallSize(Register target, COND_ARGS);
+  static int CallSize(Register target, COND_ARGS);
   void Call(Register target, COND_ARGS);
-  int CallSize(Address target, RelocInfo::Mode rmode, COND_ARGS);
+  static int CallSize(Address target, RelocInfo::Mode rmode, COND_ARGS);
   void Call(Address target, RelocInfo::Mode rmode, COND_ARGS);
-  int CallSize(Handle<Code> code,
-               RelocInfo::Mode rmode = RelocInfo::CODE_TARGET,
-               unsigned ast_id = kNoASTId,
-               COND_ARGS);
+  static int CallSize(Handle<Code> code,
+                      RelocInfo::Mode rmode = RelocInfo::CODE_TARGET,
+                      unsigned ast_id = kNoASTId,
+                      COND_ARGS);
   void Call(Handle<Code> code,
             RelocInfo::Mode rmode = RelocInfo::CODE_TARGET,
             unsigned ast_id = kNoASTId,
