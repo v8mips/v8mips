@@ -204,6 +204,10 @@ static const int kImm26Bits  = 26;
 static const int kImm28Shift = 0;
 static const int kImm28Bits  = 28;
 
+// In branches and jumps immediate fields point to words, not bytes,
+// and are therefore shifted by 2.
+static const int kImmFieldShift = 2;
+
 static const int kFsShift       = 11;
 static const int kFsBits        = 5;
 static const int kFtShift       = 16;
@@ -233,7 +237,7 @@ static const int  kFunctionFieldMask =
 static const int  kHiMask       =   0xffff << 16;
 static const int  kLoMask       =   0xffff;
 static const int  kSignMask     =   0x80000000;
-
+static const int  kJumpAddrMask = (1 << (kImm26Bits + kImmFieldShift)) - 1;
 
 // ----- MIPS Opcodes and Function Fields.
 // We use this presentation to stay close to the table representation in
@@ -740,7 +744,7 @@ class Instruction {
 
   inline int32_t Imm26Value() const {
     ASSERT(InstructionType() == kJumpType);
-    return Bits(kImm16Shift + kImm26Bits - 1, kImm26Shift);
+    return Bits(kImm26Shift + kImm26Bits - 1, kImm26Shift);
   }
 
   // Say if the instruction should not be used in a branch delay slot.

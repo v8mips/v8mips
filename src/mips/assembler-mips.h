@@ -547,6 +547,8 @@ class Assembler : public AssemblerBase {
   static Address target_address_at(Address pc);
   static void set_target_address_at(Address pc, Address target);
 
+  static void JumpLabelToJumpRegister(Address pc);
+
   // This sets the branch destination (which gets loaded at the call address).
   // This is for calls and branches within generated code.
   inline static void set_target_at(Address instruction_payload,
@@ -577,9 +579,13 @@ class Assembler : public AssemblerBase {
   static const int kExternalTargetSize = 0 * kInstrSize;
 
   // Number of consecutive instructions used to store 32bit constant.
-  // Used in RelocInfo::target_address_address() function to tell serializer
-  // address of the instruction that follows LUI/ORI instruction pair.
-  static const int kInstructionsFor32BitConstant = 2;
+  // Before jump-optimizations, this constant was used in
+  // RelocInfo::target_address_address() function to tell serializer address of
+  // the instruction that follows LUI/ORI instruction pair. Now, with new jump
+  // optimization, where jump-through-register instruction that usually
+  // follows LUI/ORI pair is substituted with J/JAL, this constant equals
+  // to 3 instructions (LUI+ORI+J/JAL/JR/JALR).
+  static const int kInstructionsFor32BitConstant = 3;
 
   // Distance between the instruction referring to the address of the call
   // target and the return address.
@@ -666,6 +672,8 @@ class Assembler : public AssemblerBase {
   void jal(int32_t target);
   void jalr(Register rs, Register rd = ra);
   void jr(Register target);
+  void j_or_jr(int32_t target, Register rs);
+  void jal_or_jalr(int32_t target, Register rs);
 
 
   //-------Data-processing-instructions---------
@@ -934,6 +942,10 @@ class Assembler : public AssemblerBase {
   static bool IsJ(Instr instr);
   static bool IsLui(Instr instr);
   static bool IsOri(Instr instr);
+
+  static bool IsJal(Instr instr);
+  static bool IsJr(Instr instr);
+  static bool IsJalr(Instr instr);
 
   static bool IsNop(Instr instr, unsigned int type);
   static bool IsPop(Instr instr);

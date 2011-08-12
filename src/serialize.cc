@@ -778,6 +778,11 @@ void Deserializer::ReadObject(int space_number,
 
 static const int kUnknownOffsetFromStart = -1;
 
+#ifdef V8_TARGET_ARCH_MIPS
+#define BRANCH_LOCATION_ADJUST (- 3 * Assembler::kInstrSize)
+#else
+#define BRANCH_LOCATION_ADJUST 0
+#endif
 
 void Deserializer::ReadChunk(Object** current,
                              Object** limit,
