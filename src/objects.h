@@ -322,6 +322,7 @@ static const int kVariableSizeSentinel = 0;
   V(POLYMORPHIC_CODE_CACHE_TYPE)                                               \
                                                                                \
   V(FIXED_ARRAY_TYPE)                                                          \
+  V(FIXED_DOUBLE_ARRAY_TYPE)                                                   \
   V(SHARED_FUNCTION_INFO_TYPE)                                                 \
                                                                                \
   V(JS_MESSAGE_OBJECT_TYPE)                                                    \
@@ -635,10 +636,11 @@ enum CompareResult {
                          WriteBarrierMode mode = UPDATE_WRITE_BARRIER); \
 
 
-class ElementsAccessor;
-class StringStream;
-class ObjectVisitor;
 class DictionaryElementsAccessor;
+class ElementsAccessor;
+class FixedArrayBase;
+class ObjectVisitor;
+class StringStream;
 
 struct ValueInfo : public Malloced {
   ValueInfo() : type(FIRST_TYPE), ptr(NULL), str(NULL), number(0) { }
@@ -1493,7 +1495,7 @@ class JSObject: public JSReceiver {
   // In the slow mode the elements is either a NumberDictionary, an
   // ExternalArray, or a FixedArray parameter map for a (non-strict)
   // arguments object.
-  DECL_ACCESSORS(elements, HeapObject)
+  DECL_ACCESSORS(elements, FixedArrayBase)
   inline void initialize_elements();
   MUST_USE_RESULT inline MaybeObject* ResetElements();
   inline ElementsKind GetElementsKind();

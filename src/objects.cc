@@ -4637,7 +4637,20 @@ MaybeObject* PolymorphicCodeCacheHashTable::Put(MapList* maps,
 
 
 MaybeObject* FixedArray::AddKeysFromJSArray(JSArray* array) {
-  return array->GetElementsAccessor()->AddJSArrayKeysToFixedArray(array, this);
+  ElementsAccessor* accessor = array->GetElementsAccessor();
+  MaybeObject* maybe_result =
+      accessor->AddElementsToFixedArray(array->elements(), this);
+  FixedArray* result;
+  if (!maybe_result->To<FixedArray>(&result)) return maybe_result;
+#ifdef DEBUG
+  if (FLAG_enable_slow_asserts) {
+    for (int i = 0; i < result->length(); i++) {
+      Object* current = result->get(i);
+      ASSERT(current->IsNumber() || current->IsString());
+    }
+  }
+#endif
+  return result;
 }
 
 
@@ -8407,14 +8420,14 @@ MaybeObject* JSObject::SetDictionaryElement(uint32_t index,
         return isolate->Throw(*error);
       }
     }
-    Object* new_dictionary;
+    FixedArrayBase* new_dictionary;
     MaybeObject* maybe = dictionary->AtNumberPut(index, value);
-    if (!maybe->ToObject(&new_dictionary)) return maybe;
+    if (!maybe->To<FixedArrayBase>(&new_dictionary)) return maybe;
     if (dictionary != NumberDictionary::cast(new_dictionary)) {
       if (is_arguments) {
         elements->set(1, new_dictionary);
       } else {
-        set_elements(HeapObject::cast(new_dictionary));
+        set_elements(new_dictionary);
       }
       dictionary = NumberDictionary::cast(new_dictionary);
     }
