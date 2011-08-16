@@ -2022,18 +2022,16 @@ void LCodeGen::DoCmpT(LCmpT* instr) {
   if (op == Token::GT || op == Token::LTE) {
     condition = ReverseCondition(condition);
   }
-  // TODO(plind): optimize this a bit.
-  __ mov(at, v0);
-  __ LoadRoot(ToRegister(instr->result()),
-              Heap::kTrueValueRootIndex,
-              condition,
-              at,
-              Operand(zero_reg));
-  __ LoadRoot(ToRegister(instr->result()),
-              Heap::kFalseValueRootIndex,
-              NegateCondition(condition),
-              at,
-              Operand(zero_reg));
+  // A minor optimization that relies on LoadRoot always emitting one
+  // instruction.
+  Assembler::BlockTrampolinePoolScope block_trampoline_pool(masm());
+  ASSERT(ToRegister(instr->result()).is(v0));
+  Label done;
+  __ Branch(USE_DELAY_SLOT, &done, condition, v0, Operand(zero_reg));
+  __ LoadRoot(ToRegister(instr->result()), Heap::kTrueValueRootIndex);
+  __ LoadRoot(ToRegister(instr->result()), Heap::kFalseValueRootIndex);
+  ASSERT_EQ(3, masm()->InstructionsGeneratedSince(&done));
+  __ bind(&done);
 }
 
 
