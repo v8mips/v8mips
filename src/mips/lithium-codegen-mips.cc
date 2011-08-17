@@ -80,6 +80,10 @@ bool LCodeGen::GenerateCode() {
   HPhase phase("Code generation", chunk());
   ASSERT(is_unused());
   status_ = GENERATING;
+  // TODO(kalmard): Some functions below use their own FPU scope even though
+  // this one should cover them. We could remove those scopes or just keep them
+  // to maintain the similarity with ARM as they should have close to zero
+  // impact on performance.
   CpuFeatures::Scope scope(FPU);
   return GeneratePrologue() &&
       GenerateBody() &&
@@ -3789,7 +3793,8 @@ void LCodeGen::DoDeferredTaggedToI(LTaggedToI* instr) {
     // conversions.
     __ LoadRoot(at, Heap::kUndefinedValueRootIndex);
     DeoptimizeIf(ne, instr->environment(), input_reg, Operand(at));
-    __ mov(input_reg, zero_reg);  // TODO(plind): result really in input reg?
+    ASSERT(ToRegister(instr->result()).is(input_reg));
+    __ mov(input_reg, zero_reg);
     __ Branch(&done);
 
     __ bind(&heap_number);
@@ -3802,8 +3807,6 @@ void LCodeGen::DoDeferredTaggedToI(LTaggedToI* instr) {
                         scratch2,
                         scratch3);
   } else {
-    // TODO(plind): if this scope is needed, then we also need one above?
-    // I don't think it is needed at all, we have a top-level FPU scope.
     CpuFeatures::Scope scope(FPU);
 
     // Deoptimize if we don't have a heap number.
