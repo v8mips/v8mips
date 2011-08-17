@@ -2019,8 +2019,7 @@ void LCodeGen::DoCmpT(LCmpT* instr) {
 
   Handle<Code> ic = CompareIC::GetUninitialized(op);
   CallCode(ic, RelocInfo::CODE_TARGET, instr);
-  __ nop();  // This instruction signals no smi code inlined.
-  // TODO(plind): Understand what conditions will let this be patched.
+  // On MIPS there is no need for a "no inlined smi code" marker (nop).
 
   Condition condition = ComputeCompareCondition(op);
   if (op == Token::GT || op == Token::LTE) {
@@ -2029,7 +2028,6 @@ void LCodeGen::DoCmpT(LCmpT* instr) {
   // A minor optimization that relies on LoadRoot always emitting one
   // instruction.
   Assembler::BlockTrampolinePoolScope block_trampoline_pool(masm());
-  ASSERT(ToRegister(instr->result()).is(v0));
   Label done;
   __ Branch(USE_DELAY_SLOT, &done, condition, v0, Operand(zero_reg));
   __ LoadRoot(ToRegister(instr->result()), Heap::kTrueValueRootIndex);
