@@ -80,10 +80,6 @@ bool LCodeGen::GenerateCode() {
   HPhase phase("Code generation", chunk());
   ASSERT(is_unused());
   status_ = GENERATING;
-  // TODO(kalmard): Some functions below use their own FPU scope even though
-  // this one should cover them. We could remove those scopes or just keep them
-  // to maintain the similarity with ARM as they should have close to zero
-  // impact on performance.
   CpuFeatures::Scope scope(FPU);
   return GeneratePrologue() &&
       GenerateBody() &&
@@ -2405,7 +2401,6 @@ void LCodeGen::DoLoadKeyedSpecializedArrayElement(
 
   if (elements_kind == JSObject::EXTERNAL_FLOAT_ELEMENTS ||
       elements_kind == JSObject::EXTERNAL_DOUBLE_ELEMENTS) {
-    CpuFeatures::Scope scope(FPU);
     FPURegister result = ToDoubleRegister(instr->result());
     if (key_is_constant) {
       __ Addu(scratch0(), external_pointer, constant_key * (1 << shift_size));
@@ -3290,7 +3285,6 @@ void LCodeGen::DoStoreKeyedSpecializedArrayElement(
 
   if (elements_kind == JSObject::EXTERNAL_FLOAT_ELEMENTS ||
       elements_kind == JSObject::EXTERNAL_DOUBLE_ELEMENTS) {
-    CpuFeatures::Scope scope(FPU);
     FPURegister value(ToDoubleRegister(instr->value()));
     if (key_is_constant) {
       __ Addu(scratch0(), external_pointer, constant_key * (1 << shift_size));
@@ -3805,8 +3799,6 @@ void LCodeGen::DoDeferredTaggedToI(LTaggedToI* instr) {
                         scratch2,
                         scratch3);
   } else {
-    CpuFeatures::Scope scope(FPU);
-
     // Deoptimize if we don't have a heap number.
     DeoptimizeIf(ne, instr->environment(), scratch1, Operand(at));
 
