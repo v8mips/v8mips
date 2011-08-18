@@ -858,27 +858,56 @@ void LCodeGen::DoUnknownOSRValue(LUnknownOSRValue* instr) {
 void LCodeGen::DoModI(LModI* instr) {
   Register scratch = scratch0();
   const Register left = ToRegister(instr->InputAt(0));
-  const Register right = EmitLoadRegister(instr->InputAt(1), scratch);
   const Register result = ToRegister(instr->result());
 
-  // TODO(douglas): Do we need to optimize for PowerOf2Divisor???
-  //    If not, then we should remove right=constant option.
+  bool can_be_zero = true;  // Marks if the right side can be 0.
 
-  // Check for x % 0.
-  if (instr->hydrogen()->CheckFlag(HValue::kCanBeDivByZero)) {
+  // p2constant holds the right side value if it's a positive power of 2 constant.
+  // In other cases it is 0.
+  int32_t p2constant = 0;
+  // We need the right value in the register to execute div first.
+  Register right = EmitLoadRegister(instr->InputAt(1), scratch);
+
+  if (instr->InputAt(1)->IsConstantOperand()) {
+      p2constant = ToInteger32(LConstantOperand::cast(instr->InputAt(1)));
+      if (p2constant != 0) {
+        can_be_zero = false;
+      }
+
+      if (p2constant % 2 != 0) {
+        p2constant = 0;
+      }
+      // Result always takes the sign of the dividend (left).
+      p2constant = abs(p2constant);
+  }
+
+  // div runs in the background while we check for special cases.
+  __ div(left, right);
+
+  // Check for x % 0 (if needed).
+  if (can_be_zero && instr->hydrogen()->CheckFlag(HValue::kCanBeDivByZero)) {
     DeoptimizeIf(eq, instr->environment(), right, Operand(zero_reg));
   }
 
-  // Since Mips has a div instr, we just do the divide
-  // and take the remainder as the result.
-  __ div(left, right);
+  Label skip_div, do_div;
+  if (p2constant != 0) {
+    // Fall back to the result of the div instruction if we could have sign
+    // problems.
+    __ Branch(&do_div, lt, left, Operand(zero_reg));
+    // Modulo by masking.
+    __ And(scratch, left, p2constant - 1);
+    __ Branch(&skip_div);
+  }
+
+  __ bind(&do_div);
   __ mfhi(scratch);
+  __ bind(&skip_div);
 
   if (instr->hydrogen()->CheckFlag(HValue::kBailoutOnMinusZero)) {
-    // Result always take the sign of the dividend (left).
+    // Result always takes the sign of the dividend (left).
     Label done;
     __ Branch(USE_DELAY_SLOT, &done, ge, left, Operand(zero_reg));
-    __ Move(result, scratch);
+    __ mov(result, scratch);
     DeoptimizeIf(eq, instr->environment(), result, Operand(zero_reg));
     __ bind(&done);
   } else {
