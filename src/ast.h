@@ -60,7 +60,7 @@ namespace internal {
   V(ContinueStatement)                          \
   V(BreakStatement)                             \
   V(ReturnStatement)                            \
-  V(EnterWithContextStatement)                  \
+  V(WithStatement)                              \
   V(ExitContextStatement)                       \
   V(SwitchStatement)                            \
   V(DoWhileStatement)                           \
@@ -359,9 +359,13 @@ class Block: public BreakableStatement {
   ZoneList<Statement*>* statements() { return &statements_; }
   bool is_initializer_block() const { return is_initializer_block_; }
 
+  Scope* block_scope() const { return block_scope_; }
+  void set_block_scope(Scope* block_scope) { block_scope_ = block_scope; }
+
  private:
   ZoneList<Statement*> statements_;
   bool is_initializer_block_;
+  Scope* block_scope_;
 };
 
 
@@ -371,9 +375,11 @@ class Declaration: public AstNode {
       : proxy_(proxy),
         mode_(mode),
         fun_(fun) {
-    ASSERT(mode == Variable::VAR || mode == Variable::CONST);
+    ASSERT(mode == Variable::VAR ||
+           mode == Variable::CONST ||
+           mode == Variable::LET);
     // At the moment there are no "const functions"'s in JavaScript...
-    ASSERT(fun == NULL || mode == Variable::VAR);
+    ASSERT(fun == NULL || mode == Variable::VAR || mode == Variable::LET);
   }
 
   DECLARE_NODE_TYPE(Declaration)
@@ -627,19 +633,21 @@ class ReturnStatement: public Statement {
 };
 
 
-class EnterWithContextStatement: public Statement {
+class WithStatement: public Statement {
  public:
-  explicit EnterWithContextStatement(Expression* expression)
-      : expression_(expression) { }
+  WithStatement(Expression* expression, Statement* statement)
+      : expression_(expression), statement_(statement) { }
 
-  DECLARE_NODE_TYPE(EnterWithContextStatement)
+  DECLARE_NODE_TYPE(WithStatement)
 
   Expression* expression() const { return expression_; }
+  Statement* statement() const { return statement_; }
 
   virtual bool IsInlineable() const;
 
  private:
   Expression* expression_;
+  Statement* statement_;
 };
 
 
@@ -1711,6 +1719,12 @@ class Throw: public Expression {
 
 class FunctionLiteral: public Expression {
  public:
+  enum Type {
+    ANONYMOUS_EXPRESSION,
+    NAMED_EXPRESSION,
+    DECLARATION
+  };
+
   FunctionLiteral(Isolate* isolate,
                   Handle<String> name,
                   Scope* scope,
@@ -1722,7 +1736,7 @@ class FunctionLiteral: public Expression {
                   int num_parameters,
                   int start_position,
                   int end_position,
-                  bool is_expression,
+                  Type type,
                   bool has_duplicate_parameters)
       : Expression(isolate),
         name_(name),
@@ -1738,7 +1752,8 @@ class FunctionLiteral: public Expression {
         end_position_(end_position),
         function_token_position_(RelocInfo::kNoPosition),
         inferred_name_(HEAP->empty_string()),
-        is_expression_(is_expression),
+        is_expression_(type != DECLARATION),
+        is_anonymous_(type == ANONYMOUS_EXPRESSION),
         pretenure_(false),
         has_duplicate_parameters_(has_duplicate_parameters) {
   }
@@ -1753,6 +1768,7 @@ class FunctionLiteral: public Expression {
   int start_position() const { return start_position_; }
   int end_position() const { return end_position_; }
   bool is_expression() const { return is_expression_; }
+  bool is_anonymous() const { return is_anonymous_; }
   bool strict_mode() const;
 
   int materialized_literal_count() { return materialized_literal_count_; }
@@ -1797,6 +1813,7 @@ class FunctionLiteral: public Expression {
   int function_token_position_;
   Handle<String> inferred_name_;
   bool is_expression_;
+  bool is_anonymous_;
   bool pretenure_;
   bool has_duplicate_parameters_;
 };

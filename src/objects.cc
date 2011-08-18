@@ -4637,51 +4637,20 @@ MaybeObject* PolymorphicCodeCacheHashTable::Put(MapList* maps,
 
 
 MaybeObject* FixedArray::AddKeysFromJSArray(JSArray* array) {
-  ASSERT(!array->HasExternalArrayElements());
-  switch (array->GetElementsKind()) {
-    case JSObject::FAST_ELEMENTS:
-      return UnionOfKeys(FixedArray::cast(array->elements()));
-    case JSObject::FAST_DOUBLE_ELEMENTS:
-      return UnionOfDoubleKeys(FixedDoubleArray::cast(array->elements()));
-      break;
-    case JSObject::DICTIONARY_ELEMENTS: {
-      NumberDictionary* dict = array->element_dictionary();
-      int size = dict->NumberOfElements();
-
-      // Allocate a temporary fixed array.
-      Object* object;
-      { MaybeObject* maybe_object = GetHeap()->AllocateFixedArray(size);
-        if (!maybe_object->ToObject(&object)) return maybe_object;
-      }
-      FixedArray* key_array = FixedArray::cast(object);
-
-      int capacity = dict->Capacity();
-      int pos = 0;
-      // Copy the elements from the JSArray to the temporary fixed array.
-      for (int i = 0; i < capacity; i++) {
-        if (dict->IsKey(dict->KeyAt(i))) {
-          key_array->set(pos++, dict->ValueAt(i));
-        }
-      }
-      // Compute the union of this and the temporary fixed array.
-      return UnionOfKeys(key_array);
+  ElementsAccessor* accessor = array->GetElementsAccessor();
+  MaybeObject* maybe_result =
+      accessor->AddElementsToFixedArray(array->elements(), this);
+  FixedArray* result;
+  if (!maybe_result->To<FixedArray>(&result)) return maybe_result;
+#ifdef DEBUG
+  if (FLAG_enable_slow_asserts) {
+    for (int i = 0; i < result->length(); i++) {
+      Object* current = result->get(i);
+      ASSERT(current->IsNumber() || current->IsString());
     }
-    case JSObject::NON_STRICT_ARGUMENTS_ELEMENTS:
-      UNIMPLEMENTED();
-      break;
-    case JSObject::EXTERNAL_BYTE_ELEMENTS:
-    case JSObject::EXTERNAL_UNSIGNED_BYTE_ELEMENTS:
-    case JSObject::EXTERNAL_SHORT_ELEMENTS:
-    case JSObject::EXTERNAL_UNSIGNED_SHORT_ELEMENTS:
-    case JSObject::EXTERNAL_INT_ELEMENTS:
-    case JSObject::EXTERNAL_UNSIGNED_INT_ELEMENTS:
-    case JSObject::EXTERNAL_FLOAT_ELEMENTS:
-    case JSObject::EXTERNAL_DOUBLE_ELEMENTS:
-    case JSObject::EXTERNAL_PIXEL_ELEMENTS:
-      break;
   }
-  UNREACHABLE();
-  return GetHeap()->null_value();  // Failure case needs to "return" a value.
+#endif
+  return result;
 }
 
 
@@ -4732,69 +4701,6 @@ MaybeObject* FixedArray::UnionOfKeys(FixedArray* other) {
       ASSERT(e->IsString() || e->IsNumber());
       result->set(len0 + index, e, mode);
       index++;
-    }
-  }
-  ASSERT(extra == index);
-  return result;
-}
-
-
-MaybeObject* FixedArray::UnionOfDoubleKeys(FixedDoubleArray* other) {
-  int len0 = length();
-#ifdef DEBUG
-  if (FLAG_enable_slow_asserts) {
-    for (int i = 0; i < len0; i++) {
-      ASSERT(get(i)->IsString() || get(i)->IsNumber());
-    }
-  }
-#endif
-  int len1 = other->length();
-  // Optimize if 'other' is empty.
-  // We cannot optimize if 'this' is empty, as other may have holes
-  // or non keys.
-  if (len1 == 0) return this;
-
-  // Compute how many elements are not in this.
-  int extra = 0;
-  Heap* heap = GetHeap();
-  Object* obj;
-  for (int y = 0; y < len1; y++) {
-    if (!other->is_the_hole(y)) {
-      MaybeObject* maybe_obj = heap->NumberFromDouble(other->get_scalar(y));
-      if (!maybe_obj->ToObject(&obj)) return maybe_obj;
-      if (!HasKey(this, obj)) extra++;
-    }
-  }
-
-  if (extra == 0) return this;
-
-  // Allocate the result
-  { MaybeObject* maybe_obj = GetHeap()->AllocateFixedArray(len0 + extra);
-    if (!maybe_obj->ToObject(&obj)) return maybe_obj;
-  }
-  // Fill in the content
-  FixedArray* result = FixedArray::cast(obj);
-  {
-    // Limit the scope of the AssertNoAllocation
-    AssertNoAllocation no_gc;
-    WriteBarrierMode mode = result->GetWriteBarrierMode(no_gc);
-    for (int i = 0; i < len0; i++) {
-      Object* e = get(i);
-      ASSERT(e->IsString() || e->IsNumber());
-      result->set(i, e, mode);
-    }
-  }
-
-  // Fill in the extra keys.
-  int index = 0;
-  for (int y = 0; y < len1; y++) {
-    if (!other->is_the_hole(y)) {
-      MaybeObject* maybe_obj = heap->NumberFromDouble(other->get_scalar(y));
-      if (!maybe_obj->ToObject(&obj)) return maybe_obj;
-      if (!HasKey(this, obj)) {
-        result->set(len0 + index, obj);
-        index++;
-      }
     }
   }
   ASSERT(extra == index);
@@ -7068,126 +6974,99 @@ void DeoptimizationInputData::DeoptimizationInputDataPrint(FILE* out) {
   PrintF(out, "Deoptimization Input Data (deopt points = %d)\n", deopt_count);
   if (0 == deopt_count) return;
 
-  PrintF(out, "%6s  %6s  %6s  %12s\n", "index", "ast id", "argc", "commands");
+  PrintF(out, "%6s  %6s  %6s  %12s\n", "index", "ast id", "argc",
+         FLAG_print_code_verbose ? "commands" : "");
   for (int i = 0; i < deopt_count; i++) {
-    int command_count = 0;
     PrintF(out, "%6d  %6d  %6d",
            i, AstId(i)->value(), ArgumentsStackHeight(i)->value());
+
+    if (!FLAG_print_code_verbose) {
+      PrintF(out, "\n");
+      continue;
+    }
+    // Print details of the frame translation.
     int translation_index = TranslationIndex(i)->value();
     TranslationIterator iterator(TranslationByteArray(), translation_index);
     Translation::Opcode opcode =
         static_cast<Translation::Opcode>(iterator.Next());
     ASSERT(Translation::BEGIN == opcode);
     int frame_count = iterator.Next();
-    if (FLAG_print_code_verbose) {
-      PrintF(out, "  %s {count=%d}\n", Translation::StringFor(opcode),
-             frame_count);
-    }
+    PrintF(out, "  %s {count=%d}\n", Translation::StringFor(opcode),
+           frame_count);
 
-    for (int i = 0; i < frame_count; ++i) {
-      opcode = static_cast<Translation::Opcode>(iterator.Next());
-      ASSERT(Translation::FRAME == opcode);
-      int ast_id = iterator.Next();
-      int function_id = iterator.Next();
-      JSFunction* function =
-          JSFunction::cast(LiteralArray()->get(function_id));
-      unsigned height = iterator.Next();
-      if (FLAG_print_code_verbose) {
-        PrintF(out, "%24s  %s {ast_id=%d, function=",
-               "", Translation::StringFor(opcode), ast_id);
-        function->PrintName(out);
-        PrintF(out, ", height=%u}\n", height);
+    while (iterator.HasNext() &&
+           Translation::BEGIN !=
+           (opcode = static_cast<Translation::Opcode>(iterator.Next()))) {
+      PrintF(out, "%24s    %s ", "", Translation::StringFor(opcode));
+
+      switch (opcode) {
+        case Translation::BEGIN:
+          UNREACHABLE();
+          break;
+
+        case Translation::FRAME: {
+          int ast_id = iterator.Next();
+          int function_id = iterator.Next();
+          JSFunction* function =
+              JSFunction::cast(LiteralArray()->get(function_id));
+          unsigned height = iterator.Next();
+          PrintF(out, "{ast_id=%d, \nfunction=", ast_id);
+          function->PrintName(out);
+          PrintF(out, ", height=%u}", height);
+          break;
+        }
+
+        case Translation::DUPLICATE:
+          break;
+
+        case Translation::REGISTER: {
+          int reg_code = iterator.Next();
+            PrintF(out, "{input=%s}", converter.NameOfCPURegister(reg_code));
+          break;
+        }
+
+        case Translation::INT32_REGISTER: {
+          int reg_code = iterator.Next();
+          PrintF(out, "{input=%s}", converter.NameOfCPURegister(reg_code));
+          break;
+        }
+
+        case Translation::DOUBLE_REGISTER: {
+          int reg_code = iterator.Next();
+          PrintF(out, "{input=%s}",
+                 DoubleRegister::AllocationIndexToString(reg_code));
+          break;
+        }
+
+        case Translation::STACK_SLOT: {
+          int input_slot_index = iterator.Next();
+          PrintF(out, "{input=%d}", input_slot_index);
+          break;
+        }
+
+        case Translation::INT32_STACK_SLOT: {
+          int input_slot_index = iterator.Next();
+          PrintF(out, "{input=%d}", input_slot_index);
+          break;
+        }
+
+        case Translation::DOUBLE_STACK_SLOT: {
+          int input_slot_index = iterator.Next();
+          PrintF(out, "{input=%d}", input_slot_index);
+          break;
+        }
+
+        case Translation::LITERAL: {
+          unsigned literal_index = iterator.Next();
+          PrintF(out, "{literal_id=%u}", literal_index);
+          break;
+        }
+
+        case Translation::ARGUMENTS_OBJECT:
+          break;
       }
-
-      // Size of translation is height plus all incoming arguments including
-      // receiver.
-      int size = height + function->shared()->formal_parameter_count() + 1;
-      command_count += size;
-      for (int j = 0; j < size; ++j) {
-        opcode = static_cast<Translation::Opcode>(iterator.Next());
-        if (FLAG_print_code_verbose) {
-          PrintF(out, "%24s    %s ", "", Translation::StringFor(opcode));
-        }
-
-        if (opcode == Translation::DUPLICATE) {
-          opcode = static_cast<Translation::Opcode>(iterator.Next());
-          if (FLAG_print_code_verbose) {
-            PrintF(out, "%s ", Translation::StringFor(opcode));
-          }
-          --j;  // Two commands share the same frame index.
-        }
-
-        switch (opcode) {
-          case Translation::BEGIN:
-          case Translation::FRAME:
-          case Translation::DUPLICATE:
-            UNREACHABLE();
-            break;
-
-          case Translation::REGISTER: {
-            int reg_code = iterator.Next();
-            if (FLAG_print_code_verbose)  {
-              PrintF(out, "{input=%s}", converter.NameOfCPURegister(reg_code));
-            }
-            break;
-          }
-
-          case Translation::INT32_REGISTER: {
-            int reg_code = iterator.Next();
-            if (FLAG_print_code_verbose)  {
-              PrintF(out, "{input=%s}", converter.NameOfCPURegister(reg_code));
-            }
-            break;
-          }
-
-          case Translation::DOUBLE_REGISTER: {
-            int reg_code = iterator.Next();
-            if (FLAG_print_code_verbose)  {
-              PrintF(out, "{input=%s}",
-                     DoubleRegister::AllocationIndexToString(reg_code));
-            }
-            break;
-          }
-
-          case Translation::STACK_SLOT: {
-            int input_slot_index = iterator.Next();
-            if (FLAG_print_code_verbose)  {
-              PrintF(out, "{input=%d}", input_slot_index);
-            }
-            break;
-          }
-
-          case Translation::INT32_STACK_SLOT: {
-            int input_slot_index = iterator.Next();
-            if (FLAG_print_code_verbose)  {
-              PrintF(out, "{input=%d}", input_slot_index);
-            }
-            break;
-          }
-
-          case Translation::DOUBLE_STACK_SLOT: {
-            int input_slot_index = iterator.Next();
-            if (FLAG_print_code_verbose)  {
-              PrintF(out, "{input=%d}", input_slot_index);
-            }
-            break;
-          }
-
-          case Translation::LITERAL: {
-            unsigned literal_index = iterator.Next();
-            if (FLAG_print_code_verbose)  {
-              PrintF(out, "{literal_id=%u}", literal_index);
-            }
-            break;
-          }
-
-          case Translation::ARGUMENTS_OBJECT:
-            break;
-        }
-        if (FLAG_print_code_verbose) PrintF(out, "\n");
-      }
+      PrintF(out, "\n");
     }
-    if (!FLAG_print_code_verbose) PrintF(out, "  %12d\n", command_count);
   }
 }
 
@@ -8541,14 +8420,14 @@ MaybeObject* JSObject::SetDictionaryElement(uint32_t index,
         return isolate->Throw(*error);
       }
     }
-    Object* new_dictionary;
+    FixedArrayBase* new_dictionary;
     MaybeObject* maybe = dictionary->AtNumberPut(index, value);
-    if (!maybe->ToObject(&new_dictionary)) return maybe;
+    if (!maybe->To<FixedArrayBase>(&new_dictionary)) return maybe;
     if (dictionary != NumberDictionary::cast(new_dictionary)) {
       if (is_arguments) {
         elements->set(1, new_dictionary);
       } else {
-        set_elements(HeapObject::cast(new_dictionary));
+        set_elements(new_dictionary);
       }
       dictionary = NumberDictionary::cast(new_dictionary);
     }

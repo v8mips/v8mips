@@ -1745,6 +1745,12 @@ bool Heap::CreateInitialMaps() {
   set_fixed_cow_array_map(Map::cast(obj));
   ASSERT(fixed_array_map() != fixed_cow_array_map());
 
+  { MaybeObject* maybe_obj =
+        AllocateMap(FIXED_ARRAY_TYPE, kVariableSizeSentinel);
+    if (!maybe_obj->ToObject(&obj)) return false;
+  }
+  set_serialized_scope_info_map(Map::cast(obj));
+
   { MaybeObject* maybe_obj = AllocateMap(HEAP_NUMBER_TYPE, HeapNumber::kSize);
     if (!maybe_obj->ToObject(&obj)) return false;
   }
@@ -1905,6 +1911,12 @@ bool Heap::CreateInitialMaps() {
     if (!maybe_obj->ToObject(&obj)) return false;
   }
   set_with_context_map(Map::cast(obj));
+
+  { MaybeObject* maybe_obj =
+        AllocateMap(FIXED_ARRAY_TYPE, kVariableSizeSentinel);
+    if (!maybe_obj->ToObject(&obj)) return false;
+  }
+  set_block_context_map(Map::cast(obj));
 
   { MaybeObject* maybe_obj =
         AllocateMap(FIXED_ARRAY_TYPE, kVariableSizeSentinel);
@@ -2399,40 +2411,41 @@ MaybeObject* Heap::AllocateForeign(Address address, PretenureFlag pretenure) {
 
 
 MaybeObject* Heap::AllocateSharedFunctionInfo(Object* name) {
-  Object* result;
-  { MaybeObject* maybe_result =
-        Allocate(shared_function_info_map(), OLD_POINTER_SPACE);
-    if (!maybe_result->ToObject(&result)) return maybe_result;
-  }
+  SharedFunctionInfo* share;
+  MaybeObject* maybe = Allocate(shared_function_info_map(), OLD_POINTER_SPACE);
+  if (!maybe->To<SharedFunctionInfo>(&share)) return maybe;
 
-  SharedFunctionInfo* share = SharedFunctionInfo::cast(result);
+  // Set pointer fields.
   share->set_name(name);
   Code* illegal = isolate_->builtins()->builtin(Builtins::kIllegal);
   share->set_code(illegal);
   share->set_scope_info(SerializedScopeInfo::Empty());
-  Code* construct_stub = isolate_->builtins()->builtin(
-      Builtins::kJSConstructStubGeneric);
+  Code* construct_stub =
+      isolate_->builtins()->builtin(Builtins::kJSConstructStubGeneric);
   share->set_construct_stub(construct_stub);
-  share->set_expected_nof_properties(0);
-  share->set_length(0);
-  share->set_formal_parameter_count(0);
   share->set_instance_class_name(Object_symbol());
   share->set_function_data(undefined_value());
   share->set_script(undefined_value());
-  share->set_start_position_and_type(0);
   share->set_debug_info(undefined_value());
   share->set_inferred_name(empty_string());
-  share->set_compiler_hints(0);
-  share->set_deopt_counter(Smi::FromInt(FLAG_deopt_every_n_times));
   share->set_initial_map(undefined_value());
-  share->set_this_property_assignments_count(0);
   share->set_this_property_assignments(undefined_value());
-  share->set_opt_count(0);
+  share->set_deopt_counter(Smi::FromInt(FLAG_deopt_every_n_times));
+
+  // Set integer fields (smi or int, depending on the architecture).
+  share->set_length(0);
+  share->set_formal_parameter_count(0);
+  share->set_expected_nof_properties(0);
   share->set_num_literals(0);
+  share->set_start_position_and_type(0);
   share->set_end_position(0);
   share->set_function_token_position(0);
-  share->set_native(false);
-  return result;
+  // All compiler hints default to false or 0.
+  share->set_compiler_hints(0);
+  share->set_this_property_assignments_count(0);
+  share->set_opt_count(0);
+
+  return share;
 }
 
 
@@ -4013,6 +4026,37 @@ MaybeObject* Heap::AllocateWithContext(JSFunction* function,
   context->set_extension(extension);
   context->set_global(previous->global());
   return context;
+}
+
+
+MaybeObject* Heap::AllocateBlockContext(JSFunction* function,
+                                        Context* previous,
+                                        SerializedScopeInfo* scope_info) {
+  Object* result;
+  { MaybeObject* maybe_result =
+        AllocateFixedArray(scope_info->NumberOfContextSlots());
+    if (!maybe_result->ToObject(&result)) return maybe_result;
+  }
+  // TODO(keuchel): properly initialize context slots.
+  Context* context = reinterpret_cast<Context*>(result);
+  context->set_map(block_context_map());
+  context->set_closure(function);
+  context->set_previous(previous);
+  context->set_extension(scope_info);
+  context->set_global(previous->global());
+  return context;
+}
+
+
+MaybeObject* Heap::AllocateSerializedScopeInfo(int length) {
+  Object* result;
+  { MaybeObject* maybe_result = AllocateFixedArray(length, TENURED);
+    if (!maybe_result->ToObject(&result)) return maybe_result;
+  }
+  SerializedScopeInfo* scope_info =
+      reinterpret_cast<SerializedScopeInfo*>(result);
+  scope_info->set_map(serialized_scope_info_map());
+  return scope_info;
 }
 
 

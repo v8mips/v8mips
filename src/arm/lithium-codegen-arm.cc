@@ -1378,17 +1378,10 @@ void LCodeGen::DoJSArrayLength(LJSArrayLength* instr) {
 }
 
 
-void LCodeGen::DoExternalArrayLength(LExternalArrayLength* instr) {
+void LCodeGen::DoFixedArrayBaseLength(LFixedArrayBaseLength* instr) {
   Register result = ToRegister(instr->result());
   Register array = ToRegister(instr->InputAt(0));
-  __ ldr(result, FieldMemOperand(array, ExternalArray::kLengthOffset));
-}
-
-
-void LCodeGen::DoFixedArrayLength(LFixedArrayLength* instr) {
-  Register result = ToRegister(instr->result());
-  Register array = ToRegister(instr->InputAt(0));
-  __ ldr(result, FieldMemOperand(array, FixedArray::kLengthOffset));
+  __ ldr(result, FieldMemOperand(array, FixedArrayBase::kLengthOffset));
 }
 
 
@@ -1564,52 +1557,96 @@ void LCodeGen::DoBranch(LBranch* instr) {
   } else {
     ASSERT(r.IsTagged());
     Register reg = ToRegister(instr->InputAt(0));
-    if (instr->hydrogen()->value()->type().IsBoolean()) {
-      __ LoadRoot(ip, Heap::kTrueValueRootIndex);
-      __ cmp(reg, ip);
+    HType type = instr->hydrogen()->value()->type();
+    if (type.IsBoolean()) {
+      __ CompareRoot(reg, Heap::kTrueValueRootIndex);
       EmitBranch(true_block, false_block, eq);
+    } else if (type.IsSmi()) {
+      __ cmp(reg, Operand(0));
+      EmitBranch(true_block, false_block, ne);
     } else {
       Label* true_label = chunk_->GetAssemblyLabel(true_block);
       Label* false_label = chunk_->GetAssemblyLabel(false_block);
 
-      __ LoadRoot(ip, Heap::kUndefinedValueRootIndex);
-      __ cmp(reg, ip);
-      __ b(eq, false_label);
-      __ LoadRoot(ip, Heap::kTrueValueRootIndex);
-      __ cmp(reg, ip);
-      __ b(eq, true_label);
-      __ LoadRoot(ip, Heap::kFalseValueRootIndex);
-      __ cmp(reg, ip);
-      __ b(eq, false_label);
-      __ cmp(reg, Operand(0));
-      __ b(eq, false_label);
-      __ JumpIfSmi(reg, true_label);
+      ToBooleanStub::Types expected = instr->hydrogen()->expected_input_types();
+      // Avoid deopts in the case where we've never executed this path before.
+      if (expected.IsEmpty()) expected = ToBooleanStub::all_types();
 
-      // Test double values. Zero and NaN are false.
-      Label call_stub;
-      DoubleRegister dbl_scratch = double_scratch0();
-      Register scratch = scratch0();
-      __ ldr(scratch, FieldMemOperand(reg, HeapObject::kMapOffset));
-      __ LoadRoot(ip, Heap::kHeapNumberMapRootIndex);
-      __ cmp(scratch, Operand(ip));
-      __ b(ne, &call_stub);
-      __ sub(ip, reg, Operand(kHeapObjectTag));
-      __ vldr(dbl_scratch, ip, HeapNumber::kValueOffset);
-      __ VFPCompareAndLoadFlags(dbl_scratch, 0.0, scratch);
-      __ tst(scratch, Operand(kVFPZConditionFlagBit | kVFPVConditionFlagBit));
-      __ b(ne, false_label);
-      __ b(true_label);
+      if (expected.Contains(ToBooleanStub::UNDEFINED)) {
+        // undefined -> false.
+        __ CompareRoot(reg, Heap::kUndefinedValueRootIndex);
+        __ b(eq, false_label);
+      }
+      if (expected.Contains(ToBooleanStub::BOOLEAN)) {
+        // Boolean -> its value.
+        __ CompareRoot(reg, Heap::kTrueValueRootIndex);
+        __ b(eq, true_label);
+        __ CompareRoot(reg, Heap::kFalseValueRootIndex);
+        __ b(eq, false_label);
+      }
+      if (expected.Contains(ToBooleanStub::NULL_TYPE)) {
+        // 'null' -> false.
+        __ CompareRoot(reg, Heap::kNullValueRootIndex);
+        __ b(eq, false_label);
+      }
 
-      // The conversion stub doesn't cause garbage collections so it's
-      // safe to not record a safepoint after the call.
-      __ bind(&call_stub);
-      ToBooleanStub stub(reg);
-      RegList saved_regs = kJSCallerSaved | kCalleeSaved;
-      __ stm(db_w, sp, saved_regs);
-      __ CallStub(&stub);
-      __ cmp(reg, Operand(0));
-      __ ldm(ia_w, sp, saved_regs);
-      EmitBranch(true_block, false_block, ne);
+      if (expected.Contains(ToBooleanStub::SMI)) {
+        // Smis: 0 -> false, all other -> true.
+        __ cmp(reg, Operand(0));
+        __ b(eq, false_label);
+        __ JumpIfSmi(reg, true_label);
+      } else if (expected.NeedsMap()) {
+        // If we need a map later and have a Smi -> deopt.
+        __ tst(reg, Operand(kSmiTagMask));
+        DeoptimizeIf(eq, instr->environment());
+      }
+
+      const Register map = scratch0();
+      if (expected.NeedsMap()) {
+        __ ldr(map, FieldMemOperand(reg, HeapObject::kMapOffset));
+
+        if (expected.CanBeUndetectable()) {
+          // Undetectable -> false.
+          __ ldrb(ip, FieldMemOperand(map, Map::kBitFieldOffset));
+          __ tst(ip, Operand(1 << Map::kIsUndetectable));
+          __ b(ne, false_label);
+        }
+      }
+
+      if (expected.Contains(ToBooleanStub::SPEC_OBJECT)) {
+        // spec object -> true.
+        __ CompareInstanceType(map, ip, FIRST_SPEC_OBJECT_TYPE);
+        __ b(ge, true_label);
+      }
+
+      if (expected.Contains(ToBooleanStub::STRING)) {
+        // String value -> false iff empty.
+        Label not_string;
+        __ CompareInstanceType(map, ip, FIRST_NONSTRING_TYPE);
+        __ b(ge, &not_string);
+        __ ldr(ip, FieldMemOperand(reg, String::kLengthOffset));
+        __ cmp(ip, Operand(0));
+        __ b(ne, true_label);
+        __ b(false_label);
+        __ bind(&not_string);
+      }
+
+      if (expected.Contains(ToBooleanStub::HEAP_NUMBER)) {
+        // heap number -> false iff +0, -0, or NaN.
+        DoubleRegister dbl_scratch = double_scratch0();
+        Label not_heap_number;
+        __ CompareRoot(map, Heap::kHeapNumberMapRootIndex);
+        __ b(ne, &not_heap_number);
+        __ vldr(dbl_scratch, FieldMemOperand(reg, HeapNumber::kValueOffset));
+        __ VFPCompareAndSetFlags(dbl_scratch, 0.0);
+        __ b(vs, false_label);  // NaN -> false.
+        __ b(eq, false_label);  // +0, -0 -> false.
+        __ b(true_label);
+        __ bind(&not_heap_number);
+      }
+
+      // We've seen something for the first time -> deopt.
+      DeoptimizeIf(al, instr->environment());
     }
   }
 }
@@ -2928,19 +2965,18 @@ void LCodeGen::DoMathFloor(LUnaryMathOperation* instr) {
 void LCodeGen::DoMathRound(LUnaryMathOperation* instr) {
   DoubleRegister input = ToDoubleRegister(instr->InputAt(0));
   Register result = ToRegister(instr->result());
-  Register scratch1 = result;
-  Register scratch2 = scratch0();
+  Register scratch = scratch0();
   Label done, check_sign_on_zero;
 
   // Extract exponent bits.
-  __ vmov(scratch1, input.high());
-  __ ubfx(scratch2,
-          scratch1,
+  __ vmov(result, input.high());
+  __ ubfx(scratch,
+          result,
           HeapNumber::kExponentShift,
           HeapNumber::kExponentBits);
 
   // If the number is in ]-0.5, +0.5[, the result is +/- 0.
-  __ cmp(scratch2, Operand(HeapNumber::kExponentBias - 2));
+  __ cmp(scratch, Operand(HeapNumber::kExponentBias - 2));
   __ mov(result, Operand(0), LeaveCC, le);
   if (instr->hydrogen()->CheckFlag(HValue::kBailoutOnMinusZero)) {
     __ b(le, &check_sign_on_zero);
@@ -2950,19 +2986,19 @@ void LCodeGen::DoMathRound(LUnaryMathOperation* instr) {
 
   // The following conversion will not work with numbers
   // outside of ]-2^32, 2^32[.
-  __ cmp(scratch2, Operand(HeapNumber::kExponentBias + 32));
+  __ cmp(scratch, Operand(HeapNumber::kExponentBias + 32));
   DeoptimizeIf(ge, instr->environment());
 
   // Save the original sign for later comparison.
-  __ and_(scratch2, scratch1, Operand(HeapNumber::kSignMask));
+  __ and_(scratch, result, Operand(HeapNumber::kSignMask));
 
   __ Vmov(double_scratch0(), 0.5);
   __ vadd(input, input, double_scratch0());
 
   // Check sign of the result: if the sign changed, the input
   // value was in ]0.5, 0[ and the result should be -0.
-  __ vmov(scratch1, input.high());
-  __ eor(scratch1, scratch1, Operand(scratch2), SetCC);
+  __ vmov(result, input.high());
+  __ eor(result, result, Operand(scratch), SetCC);
   if (instr->hydrogen()->CheckFlag(HValue::kBailoutOnMinusZero)) {
     DeoptimizeIf(mi, instr->environment());
   } else {
@@ -2973,8 +3009,8 @@ void LCodeGen::DoMathRound(LUnaryMathOperation* instr) {
   __ EmitVFPTruncate(kRoundToMinusInf,
                      double_scratch0().low(),
                      input,
-                     scratch1,
-                     scratch2);
+                     result,
+                     scratch);
   DeoptimizeIf(ne, instr->environment());
   __ vmov(result, double_scratch0().low());
 
@@ -2983,8 +3019,8 @@ void LCodeGen::DoMathRound(LUnaryMathOperation* instr) {
     __ cmp(result, Operand(0));
     __ b(ne, &done);
     __ bind(&check_sign_on_zero);
-    __ vmov(scratch1, input.high());
-    __ tst(scratch1, Operand(HeapNumber::kSignMask));
+    __ vmov(scratch, input.high());
+    __ tst(scratch, Operand(HeapNumber::kSignMask));
     DeoptimizeIf(ne, instr->environment());
   }
   __ bind(&done);
@@ -4309,6 +4345,10 @@ Condition LCodeGen::EmitTypeofIs(Label* true_label,
     __ CompareRoot(input, Heap::kFalseValueRootIndex);
     final_branch_condition = eq;
 
+  } else if (FLAG_harmony_typeof && type_name->Equals(heap()->null_symbol())) {
+    __ CompareRoot(input, Heap::kNullValueRootIndex);
+    final_branch_condition = eq;
+
   } else if (type_name->Equals(heap()->undefined_symbol())) {
     __ CompareRoot(input, Heap::kUndefinedValueRootIndex);
     __ b(eq, true_label);
@@ -4327,8 +4367,10 @@ Condition LCodeGen::EmitTypeofIs(Label* true_label,
 
   } else if (type_name->Equals(heap()->object_symbol())) {
     __ JumpIfSmi(input, false_label);
-    __ CompareRoot(input, Heap::kNullValueRootIndex);
-    __ b(eq, true_label);
+    if (!FLAG_harmony_typeof) {
+      __ CompareRoot(input, Heap::kNullValueRootIndex);
+      __ b(eq, true_label);
+    }
     __ CompareObjectType(input, input, scratch,
                          FIRST_NONCALLABLE_SPEC_OBJECT_TYPE);
     __ b(lt, false_label);

@@ -2311,7 +2311,13 @@ void MacroAssembler::DebugBreak() {
 void MacroAssembler::PushTryHandler(CodeLocation try_location,
                                     HandlerType type) {
   // Adjust this code if not the case.
-  ASSERT(StackHandlerConstants::kSize == 4 * kPointerSize);
+  STATIC_ASSERT(StackHandlerConstants::kSize == 5 * kPointerSize);
+  STATIC_ASSERT(StackHandlerConstants::kNextOffset == 0 * kPointerSize);
+  STATIC_ASSERT(StackHandlerConstants::kStateOffset == 1 * kPointerSize);
+  STATIC_ASSERT(StackHandlerConstants::kContextOffset == 2 * kPointerSize);
+  STATIC_ASSERT(StackHandlerConstants::kFPOffset == 3 * kPointerSize);
+  STATIC_ASSERT(StackHandlerConstants::kPCOffset == 4 * kPointerSize);
+
   // The return address is passed in register ra.
   if (try_location == IN_JAVASCRIPT) {
     if (type == TRY_CATCH_HANDLER) {
@@ -2319,19 +2325,16 @@ void MacroAssembler::PushTryHandler(CodeLocation try_location,
     } else {
       li(t0, Operand(StackHandler::TRY_FINALLY));
     }
-    ASSERT(StackHandlerConstants::kStateOffset == 1 * kPointerSize
-           && StackHandlerConstants::kFPOffset == 2 * kPointerSize
-           && StackHandlerConstants::kPCOffset == 3 * kPointerSize
-           && StackHandlerConstants::kNextOffset == 0 * kPointerSize);
     // Save the current handler as the next handler.
     li(t2, Operand(ExternalReference(Isolate::k_handler_address, isolate())));
     lw(t1, MemOperand(t2));
 
     addiu(sp, sp, -StackHandlerConstants::kSize);
-    sw(ra, MemOperand(sp, 12));
-    sw(fp, MemOperand(sp, 8));
-    sw(t0, MemOperand(sp, 4));
-    sw(t1, MemOperand(sp, 0));
+    sw(ra, MemOperand(sp, StackHandlerConstants::kPCOffset));
+    sw(fp, MemOperand(sp, StackHandlerConstants::kFPOffset));
+    sw(cp, MemOperand(sp, StackHandlerConstants::kContextOffset));
+    sw(t0, MemOperand(sp, StackHandlerConstants::kStateOffset));
+    sw(t1, MemOperand(sp, StackHandlerConstants::kNextOffset));
 
     // Link this handler as the new current one.
     sw(sp, MemOperand(t2));
@@ -2339,11 +2342,6 @@ void MacroAssembler::PushTryHandler(CodeLocation try_location,
   } else {
     // Must preserve a0-a3, and s0 (argv).
     ASSERT(try_location == IN_JS_ENTRY);
-    ASSERT(StackHandlerConstants::kStateOffset == 1 * kPointerSize
-           && StackHandlerConstants::kFPOffset == 2 * kPointerSize
-           && StackHandlerConstants::kPCOffset == 3 * kPointerSize
-           && StackHandlerConstants::kNextOffset == 0 * kPointerSize);
-
     // The frame pointer does not point to a JS frame so we save NULL
     // for fp. We expect the code throwing an exception to check fp
     // before dereferencing it to restore the context.
@@ -2353,11 +2351,14 @@ void MacroAssembler::PushTryHandler(CodeLocation try_location,
     li(t2, Operand(ExternalReference(Isolate::k_handler_address, isolate())));
     lw(t1, MemOperand(t2));
 
+    ASSERT(Smi::FromInt(0) == 0);  // Used for no context.
+
     addiu(sp, sp, -StackHandlerConstants::kSize);
-    sw(ra, MemOperand(sp, 12));
-    sw(zero_reg, MemOperand(sp, 8));
-    sw(t0, MemOperand(sp, 4));
-    sw(t1, MemOperand(sp, 0));
+    sw(ra, MemOperand(sp, StackHandlerConstants::kPCOffset));
+    sw(zero_reg, MemOperand(sp, StackHandlerConstants::kFPOffset));
+    sw(zero_reg, MemOperand(sp, StackHandlerConstants::kContextOffset));
+    sw(t0, MemOperand(sp, StackHandlerConstants::kStateOffset));
+    sw(t1, MemOperand(sp, StackHandlerConstants::kNextOffset));
 
     // Link this handler as the new current one.
     sw(sp, MemOperand(t2));
@@ -2366,7 +2367,7 @@ void MacroAssembler::PushTryHandler(CodeLocation try_location,
 
 
 void MacroAssembler::PopTryHandler() {
-  ASSERT_EQ(0, StackHandlerConstants::kNextOffset);
+  STATIC_ASSERT(StackHandlerConstants::kNextOffset == 0);
   pop(a1);
   Addu(sp, sp, Operand(StackHandlerConstants::kSize - kPointerSize));
   li(at, Operand(ExternalReference(Isolate::k_handler_address, isolate())));
@@ -2379,28 +2380,31 @@ void MacroAssembler::Throw(Register value) {
   Move(v0, value);
 
   // Adjust this code if not the case.
-  STATIC_ASSERT(StackHandlerConstants::kSize == 4 * kPointerSize);
+  STATIC_ASSERT(StackHandlerConstants::kSize == 5 * kPointerSize);
+  STATIC_ASSERT(StackHandlerConstants::kNextOffset == 0 * kPointerSize);
+  STATIC_ASSERT(StackHandlerConstants::kStateOffset == 1 * kPointerSize);
+  STATIC_ASSERT(StackHandlerConstants::kContextOffset == 2 * kPointerSize);
+  STATIC_ASSERT(StackHandlerConstants::kFPOffset == 3 * kPointerSize);
+  STATIC_ASSERT(StackHandlerConstants::kPCOffset == 4 * kPointerSize);
 
   // Drop the sp to the top of the handler.
   li(a3, Operand(ExternalReference(Isolate::k_handler_address,
-                                      isolate())));
+                                   isolate())));
   lw(sp, MemOperand(a3));
 
-  // Restore the next handler and frame pointer, discard handler state.
-  STATIC_ASSERT(StackHandlerConstants::kNextOffset == 0);
+  // Restore the next handler.
   pop(a2);
   sw(a2, MemOperand(a3));
-  STATIC_ASSERT(StackHandlerConstants::kFPOffset == 2 * kPointerSize);
-  MultiPop(a3.bit() | fp.bit());
 
-  // Before returning we restore the context from the frame pointer if
-  // not NULL.  The frame pointer is NULL in the exception handler of a
-  // JS entry frame.
-  // Set cp to NULL if fp is NULL.
+  // Restore context and frame pointer, discard state (a3).
+  MultiPop(a3.bit() | cp.bit() | fp.bit());
+
+  // If the handler is a JS frame, restore the context to the frame.
+  // (a3 == ENTRY) == (fp == 0) == (cp == 0), so we could test any
+  // of them.
   Label done;
-  Branch(USE_DELAY_SLOT, &done, eq, fp, Operand(zero_reg));
-  mov(cp, zero_reg);   // In branch delay slot.
-  lw(cp, MemOperand(fp, StandardFrameConstants::kContextOffset));
+  Branch(&done, eq, fp, Operand(zero_reg));
+  sw(cp, MemOperand(fp, StandardFrameConstants::kContextOffset));
   bind(&done);
 
 #ifdef DEBUG
@@ -2422,7 +2426,6 @@ void MacroAssembler::Throw(Register value) {
   }
 #endif
 
-  STATIC_ASSERT(StackHandlerConstants::kPCOffset == 3 * kPointerSize);
   pop(t9);  // 2 instructions: lw, add sp.
   Jump(t9);  // 2 instructions: jr, nop (in delay slot).
 
@@ -2437,7 +2440,12 @@ void MacroAssembler::Throw(Register value) {
 void MacroAssembler::ThrowUncatchable(UncatchableExceptionType type,
                                       Register value) {
   // Adjust this code if not the case.
-  STATIC_ASSERT(StackHandlerConstants::kSize == 4 * kPointerSize);
+  STATIC_ASSERT(StackHandlerConstants::kSize == 5 * kPointerSize);
+  STATIC_ASSERT(StackHandlerConstants::kNextOffset == 0 * kPointerSize);
+  STATIC_ASSERT(StackHandlerConstants::kStateOffset == 1 * kPointerSize);
+  STATIC_ASSERT(StackHandlerConstants::kContextOffset == 2 * kPointerSize);
+  STATIC_ASSERT(StackHandlerConstants::kFPOffset == 3 * kPointerSize);
+  STATIC_ASSERT(StackHandlerConstants::kPCOffset == 4 * kPointerSize);
 
   // v0 is expected to hold the exception.
   Move(v0, value);
@@ -2460,7 +2468,6 @@ void MacroAssembler::ThrowUncatchable(UncatchableExceptionType type,
   bind(&done);
 
   // Set the top handler address to next handler past the current ENTRY handler.
-  STATIC_ASSERT(StackHandlerConstants::kNextOffset == 0);
   pop(a2);
   sw(a2, MemOperand(a3));
 
@@ -2482,20 +2489,12 @@ void MacroAssembler::ThrowUncatchable(UncatchableExceptionType type,
 
   // Stack layout at this point. See also StackHandlerConstants.
   // sp ->   state (ENTRY)
+  //         cp
   //         fp
   //         ra
 
-  // Discard handler state (a2 is not used) and restore frame pointer.
-  STATIC_ASSERT(StackHandlerConstants::kFPOffset == 2 * kPointerSize);
-  MultiPop(a2.bit() | fp.bit());  // a2: discarded state.
-  // Before returning we restore the context from the frame pointer if
-  // not NULL.  The frame pointer is NULL in the exception handler of a
-  // JS entry frame.
-  Label cp_null;
-  Branch(USE_DELAY_SLOT, &cp_null, eq, fp, Operand(zero_reg));
-  mov(cp, zero_reg);   // In the branch delay slot.
-  lw(cp, MemOperand(fp, StandardFrameConstants::kContextOffset));
-  bind(&cp_null);
+  // Restore context and frame pointer, discard state (r2).
+  MultiPop(a2.bit() | cp.bit() | fp.bit());
 
 #ifdef DEBUG
   // When emitting debug_code, set ra as return address for the jump.
@@ -2515,7 +2514,6 @@ void MacroAssembler::ThrowUncatchable(UncatchableExceptionType type,
     addiu(ra, ra, kOffsetRaBytes);
   }
 #endif
-  STATIC_ASSERT(StackHandlerConstants::kPCOffset == 3 * kPointerSize);
   pop(t9);  // 2 instructions: lw, add sp.
   Jump(t9);  // 2 instructions: jr, nop (in delay slot).
 

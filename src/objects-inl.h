@@ -552,7 +552,8 @@ bool Object::IsContext() {
     return (map == heap->function_context_map() ||
             map == heap->catch_context_map() ||
             map == heap->with_context_map() ||
-            map == heap->global_context_map());
+            map == heap->global_context_map() ||
+            map == heap->block_context_map());
   }
   return false;
 }
@@ -562,6 +563,13 @@ bool Object::IsGlobalContext() {
   return Object::IsHeapObject() &&
       HeapObject::cast(this)->map() ==
       HeapObject::cast(this)->GetHeap()->global_context_map();
+}
+
+
+bool Object::IsSerializedScopeInfo() {
+  return Object::IsHeapObject() &&
+      HeapObject::cast(this)->map() ==
+      HeapObject::cast(this)->GetHeap()->serialized_scope_info_map();
 }
 
 
@@ -1335,14 +1343,14 @@ int HeapNumber::get_sign() {
 ACCESSORS(JSObject, properties, FixedArray, kPropertiesOffset)
 
 
-HeapObject* JSObject::elements() {
+FixedArrayBase* JSObject::elements() {
   Object* array = READ_FIELD(this, kElementsOffset);
   ASSERT(array->HasValidElements());
-  return reinterpret_cast<HeapObject*>(array);
+  return static_cast<FixedArrayBase*>(array);
 }
 
 
-void JSObject::set_elements(HeapObject* value, WriteBarrierMode mode) {
+void JSObject::set_elements(FixedArrayBase* value, WriteBarrierMode mode) {
   ASSERT(map()->has_fast_elements() ==
          (value->map() == GetHeap()->fixed_array_map() ||
           value->map() == GetHeap()->fixed_cow_array_map()));
@@ -2114,12 +2122,6 @@ HashTable<Shape, Key>* HashTable<Shape, Key>::cast(Object* obj) {
 
 
 SMI_ACCESSORS(FixedArrayBase, length, kLengthOffset)
-SMI_ACCESSORS(ByteArray, length, kLengthOffset)
-
-// TODO(1493): Investigate if it's possible to s/INT/SMI/ here (and
-// subsequently unify H{Fixed,External}ArrayLength).
-INT_ACCESSORS(ExternalArray, length, kLengthOffset)
-
 
 SMI_ACCESSORS(String, length, kLengthOffset)
 
@@ -3534,35 +3536,14 @@ void SharedFunctionInfo::set_optimization_disabled(bool disable) {
 }
 
 
-BOOL_ACCESSORS(SharedFunctionInfo,
-               compiler_hints,
-               strict_mode,
+BOOL_ACCESSORS(SharedFunctionInfo, compiler_hints, strict_mode,
                kStrictModeFunction)
-
-
-bool SharedFunctionInfo::native() {
-  return BooleanBit::get(compiler_hints(), kNative);
-}
-
-
-void SharedFunctionInfo::set_native(bool value) {
-  set_compiler_hints(BooleanBit::set(compiler_hints(),
-                                     kNative,
-                                     value));
-}
-
-
-bool SharedFunctionInfo::bound() {
-  return BooleanBit::get(compiler_hints(), kBoundFunction);
-}
-
-
-void SharedFunctionInfo::set_bound(bool value) {
-  set_compiler_hints(BooleanBit::set(compiler_hints(),
-                                     kBoundFunction,
-                                     value));
-}
-
+BOOL_ACCESSORS(SharedFunctionInfo, compiler_hints, native, kNative)
+BOOL_ACCESSORS(SharedFunctionInfo, compiler_hints,
+               name_should_print_as_anonymous,
+               kNameShouldPrintAsAnonymous)
+BOOL_ACCESSORS(SharedFunctionInfo, compiler_hints, bound, kBoundFunction)
+BOOL_ACCESSORS(SharedFunctionInfo, compiler_hints, is_anonymous, kIsAnonymous)
 
 ACCESSORS(CodeCache, default_cache, FixedArray, kDefaultCacheOffset)
 ACCESSORS(CodeCache, normal_type_cache, Object, kNormalTypeCacheOffset)

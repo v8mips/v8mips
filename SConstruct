@@ -153,13 +153,19 @@ LIBRARY_FLAGS = {
         }
       },
       'armeabi:softfp' : {
-        'CPPDEFINES' : ['USE_EABI_HARDFLOAT=0', 'CAN_USE_VFP_INSTRUCTIONS'],
+        'CPPDEFINES' : ['USE_EABI_HARDFLOAT=0'],
+        'vfp3:on': {
+          'CPPDEFINES' : ['CAN_USE_VFP_INSTRUCTIONS']
+        },
         'simulator:none': {
           'CCFLAGS':     ['-mfloat-abi=softfp'],
         }
       },
       'armeabi:hard' : {
-        'CPPDEFINES' : ['USE_EABI_HARDFLOAT=1', 'CAN_USE_VFP_INSTRUCTIONS'],
+        'CPPDEFINES' : ['USE_EABI_HARDFLOAT=1'],
+        'vfp3:on': {
+          'CPPDEFINES' : ['CAN_USE_VFP_INSTRUCTIONS']
+        },
         'simulator:none': {
           'CCFLAGS':     ['-mfloat-abi=hard'],
         }
@@ -496,7 +502,10 @@ SAMPLE_FLAGS = {
         }
       },
       'armeabi:hard' : {
-        'CPPDEFINES' : ['USE_EABI_HARDFLOAT=1', 'CAN_USE_VFP_INSTRUCTIONS'],
+        'CPPDEFINES' : ['USE_EABI_HARDFLOAT=1'],
+        'vfp3:on': {
+          'CPPDEFINES' : ['CAN_USE_VFP_INSTRUCTIONS']
+        },
         'simulator:none': {
           'CCFLAGS':     ['-mfloat-abi=hard'],
         }
@@ -1090,6 +1099,12 @@ SIMPLE_OPTIONS = {
     'default': 'off',
     'help': 'compress startup data (snapshot) [Linux only]'
   },
+  'vfp3': {
+    'values': ['on', 'off'],
+    'default': 'on',
+    'help': 'use vfp3 instructions when building the snapshot [Arm only]'
+  },
+
 }
 
 ALL_OPTIONS = dict(PLATFORM_OPTIONS, **SIMPLE_OPTIONS)
@@ -1394,10 +1409,12 @@ def BuildSpecific(env, mode, env_overrides, tools):
     env['SONAME'] = soname
 
   # Build the object files by invoking SCons recursively.
+  d8_env = Environment(tools=tools)
+  d8_env.Replace(**context.flags['d8'])
   (object_files, shell_files, mksnapshot, preparser_files) = env.SConscript(
     join('src', 'SConscript'),
     build_dir=join('obj', target_id),
-    exports='context tools',
+    exports='context tools d8_env',
     duplicate=False
   )
 
@@ -1426,8 +1443,6 @@ def BuildSpecific(env, mode, env_overrides, tools):
   context.library_targets.append(library)
   context.library_targets.append(preparser_library)
 
-  d8_env = Environment(tools=tools)
-  d8_env.Replace(**context.flags['d8'])
   context.ApplyEnvOverrides(d8_env)
   if context.options['library'] == 'static':
     shell = d8_env.Program('d8' + suffix, object_files + shell_files)

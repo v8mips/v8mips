@@ -1,4 +1,4 @@
-// Copyright 2006-2008 the V8 project authors. All rights reserved.
+// Copyright 2011 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -24,32 +24,44 @@
 // THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-// A simple interactive shell.  Enable with --shell.
 
-#ifndef V8_SHELL_H_
-#define V8_SHELL_H_
+// Flags: --harmony-block-scoping
 
-#include "../public/debug.h"
+// Test let declarations in various settings.
 
-namespace v8 {
-namespace internal {
+// Global
+let x;
+let y = 2;
 
-// Debug event handler for interactive debugging.
-void handle_debug_event(v8::DebugEvent event,
-                        v8::Handle<v8::Object> exec_state,
-                        v8::Handle<v8::Object> event_data,
-                        v8::Handle<Value> data);
+// Block local
+{
+  let y;
+  let x = 3;
+}
 
+assertEquals(undefined, x);
+assertEquals(2,y);
 
-class Shell {
- public:
-  static void PrintObject(v8::Handle<v8::Value> obj);
-  // Run the read-eval loop, executing code in the specified
-  // environment.
-  static void Run(v8::Handle<v8::Context> context);
-};
+if (true) {
+  let y;
+  assertEquals(undefined, y);
+}
 
-} }  // namespace v8::internal
+function TestLocalThrows(str, expect) {
+  assertThrows("(function(){" + str + "})()", expect);
+}
 
-#endif  // V8_SHELL_H_
+function TestLocalDoesNotThrow(str) {
+  assertDoesNotThrow("(function(){" + str + "})()");
+}
+
+// Unprotected statement
+TestLocalThrows("if (true) let x;", SyntaxError);
+TestLocalThrows("with ({}) let x;", SyntaxError);
+TestLocalThrows("do let x; while (false)", SyntaxError);
+TestLocalThrows("while (false) let x;", SyntaxError);
+
+TestLocalDoesNotThrow("if (true) var x;");
+TestLocalDoesNotThrow("with ({}) var x;");
+TestLocalDoesNotThrow("do var x; while (false)");
+TestLocalDoesNotThrow("while (false) var x;");

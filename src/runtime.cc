@@ -615,8 +615,7 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_CreateJSProxy) {
 RUNTIME_FUNCTION(MaybeObject*, Runtime_IsJSProxy) {
   ASSERT(args.length() == 1);
   Object* obj = args[0];
-  return obj->IsJSProxy()
-      ? isolate->heap()->true_value() : isolate->heap()->false_value();
+  return isolate->heap()->ToBoolean(obj->IsJSProxy());
 }
 
 
@@ -1038,8 +1037,7 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_IsExtensible) {
     ASSERT(proto->IsJSGlobalObject());
     obj = JSObject::cast(proto);
   }
-  return obj->map()->is_extensible() ? isolate->heap()->true_value()
-                                     : isolate->heap()->false_value();
+  return isolate->heap()->ToBoolean(obj->map()->is_extensible());
 }
 
 
@@ -1105,8 +1103,7 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_DisableAccessChecks) {
     Map::cast(new_map)->set_is_access_check_needed(false);
     object->set_map(Map::cast(new_map));
   }
-  return needs_access_checks ? isolate->heap()->true_value()
-                             : isolate->heap()->false_value();
+  return isolate->heap()->ToBoolean(needs_access_checks);
 }
 
 
@@ -1917,6 +1914,24 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_FunctionSetName) {
 }
 
 
+RUNTIME_FUNCTION(MaybeObject*, Runtime_FunctionNameShouldPrintAsAnonymous) {
+  NoHandleAllocation ha;
+  ASSERT(args.length() == 1);
+  CONVERT_CHECKED(JSFunction, f, args[0]);
+  return isolate->heap()->ToBoolean(
+      f->shared()->name_should_print_as_anonymous());
+}
+
+
+RUNTIME_FUNCTION(MaybeObject*, Runtime_FunctionMarkNameShouldPrintAsAnonymous) {
+  NoHandleAllocation ha;
+  ASSERT(args.length() == 1);
+  CONVERT_CHECKED(JSFunction, f, args[0]);
+  f->shared()->set_name_should_print_as_anonymous(true);
+  return isolate->heap()->undefined_value();
+}
+
+
 RUNTIME_FUNCTION(MaybeObject*, Runtime_FunctionSetBound) {
   HandleScope scope(isolate);
   ASSERT(args.length() == 1);
@@ -2097,8 +2112,7 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_FunctionIsAPIFunction) {
   ASSERT(args.length() == 1);
 
   CONVERT_CHECKED(JSFunction, f, args[0]);
-  return f->shared()->IsApiFunction() ? isolate->heap()->true_value()
-                                      : isolate->heap()->false_value();
+  return isolate->heap()->ToBoolean(f->shared()->IsApiFunction());
 }
 
 
@@ -2107,8 +2121,7 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_FunctionIsBuiltin) {
   ASSERT(args.length() == 1);
 
   CONVERT_CHECKED(JSFunction, f, args[0]);
-  return f->IsBuiltin() ? isolate->heap()->true_value() :
-                          isolate->heap()->false_value();
+  return isolate->heap()->ToBoolean(f->IsBuiltin());
 }
 
 
@@ -4840,7 +4853,9 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_Typeof) {
         return isolate->heap()->boolean_symbol();
       }
       if (heap_obj->IsNull()) {
-        return isolate->heap()->object_symbol();
+        return FLAG_harmony_typeof
+            ? isolate->heap()->null_symbol()
+            : isolate->heap()->object_symbol();
       }
       ASSERT(heap_obj->IsUndefined());
       return isolate->heap()->undefined_symbol();
@@ -8301,6 +8316,30 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_PushCatchContext) {
 }
 
 
+RUNTIME_FUNCTION(MaybeObject*, Runtime_PushBlockContext) {
+  NoHandleAllocation ha;
+  ASSERT(args.length() == 2);
+  SerializedScopeInfo* scope_info = SerializedScopeInfo::cast(args[0]);
+  JSFunction* function;
+  if (args[1]->IsSmi()) {
+    // A smi sentinel indicates a context nested inside global code rather
+    // than some function.  There is a canonical empty function that can be
+    // gotten from the global context.
+    function = isolate->context()->global_context()->closure();
+  } else {
+    function = JSFunction::cast(args[1]);
+  }
+  Context* context;
+  MaybeObject* maybe_context =
+      isolate->heap()->AllocateBlockContext(function,
+                                            isolate->context(),
+                                            scope_info);
+  if (!maybe_context->To(&context)) return maybe_context;
+  isolate->set_context(context);
+  return context;
+}
+
+
 RUNTIME_FUNCTION(MaybeObject*, Runtime_DeleteContextSlot) {
   HandleScope scope(isolate);
   ASSERT(args.length() == 2);
@@ -9641,7 +9680,7 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_MoveArrayContents) {
   ASSERT(args.length() == 2);
   CONVERT_CHECKED(JSArray, from, args[0]);
   CONVERT_CHECKED(JSArray, to, args[1]);
-  HeapObject* new_elements = from->elements();
+  FixedArrayBase* new_elements = from->elements();
   MaybeObject* maybe_new_map;
   if (new_elements->map() == isolate->heap()->fixed_array_map() ||
       new_elements->map() == isolate->heap()->fixed_cow_array_map()) {
@@ -9980,9 +10019,7 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_DebugGetPropertyDetails) {
       details->set(0, *value);
       details->set(1, property_details);
       if (hasJavaScriptAccessors) {
-        details->set(2,
-                     caught_exception ? isolate->heap()->true_value()
-                                      : isolate->heap()->false_value());
+        details->set(2, isolate->heap()->ToBoolean(caught_exception));
         details->set(3, FixedArray::cast(*result_callback_obj)->get(0));
         details->set(4, FixedArray::cast(*result_callback_obj)->get(1));
       }
@@ -10628,6 +10665,34 @@ static Handle<JSObject> MaterializeCatchScope(Isolate* isolate,
 }
 
 
+// Create a plain JSObject which materializes the block scope for the specified
+// block context.
+static Handle<JSObject> MaterializeBlockScope(
+    Isolate* isolate,
+    Handle<Context> context) {
+  ASSERT(context->IsBlockContext());
+  Handle<SerializedScopeInfo> serialized_scope_info(
+      SerializedScopeInfo::cast(context->extension()));
+  ScopeInfo<> scope_info(*serialized_scope_info);
+
+  // Allocate and initialize a JSObject with all the arguments, stack locals
+  // heap locals and extension properties of the debugged function.
+  Handle<JSObject> block_scope =
+      isolate->factory()->NewJSObject(isolate->object_function());
+
+  // Fill all context locals.
+  if (scope_info.number_of_context_slots() > Context::MIN_CONTEXT_SLOTS) {
+    if (!CopyContextLocalsToScopeObject(isolate,
+                                        serialized_scope_info, scope_info,
+                                        context, block_scope)) {
+      return Handle<JSObject>();
+    }
+  }
+
+  return block_scope;
+}
+
+
 // Iterate over the actual scopes visible from a stack frame. All scopes are
 // backed by an actual context except the local scope, which is inserted
 // "artifically" in the context chain.
@@ -10638,7 +10703,8 @@ class ScopeIterator {
     ScopeTypeLocal,
     ScopeTypeWith,
     ScopeTypeClosure,
-    ScopeTypeCatch
+    ScopeTypeCatch,
+    ScopeTypeBlock
   };
 
   ScopeIterator(Isolate* isolate,
@@ -10664,8 +10730,10 @@ class ScopeIterator {
     } else if (context_->IsFunctionContext()) {
       at_local_ = true;
     } else if (context_->closure() != *function_) {
-      // The context_ is a with or catch block from the outer function.
-      ASSERT(context_->IsWithContext() || context_->IsCatchContext());
+      // The context_ is a block or with or catch block from the outer function.
+      ASSERT(context_->IsWithContext() ||
+             context_->IsCatchContext() ||
+             context_->IsBlockContext());
       at_local_ = true;
     }
   }
@@ -10720,6 +10788,9 @@ class ScopeIterator {
     if (context_->IsCatchContext()) {
       return ScopeTypeCatch;
     }
+    if (context_->IsBlockContext()) {
+      return ScopeTypeBlock;
+    }
     ASSERT(context_->IsWithContext());
     return ScopeTypeWith;
   }
@@ -10740,6 +10811,8 @@ class ScopeIterator {
       case ScopeIterator::ScopeTypeClosure:
         // Materialize the content of the closure scope into a JSObject.
         return MaterializeClosure(isolate_, CurrentContext());
+      case ScopeIterator::ScopeTypeBlock:
+        return MaterializeBlockScope(isolate_, CurrentContext());
     }
     UNREACHABLE();
     return Handle<JSObject>();
@@ -11296,7 +11369,18 @@ static Handle<Context> CopyWithContextChain(Isolate* isolate,
                                             new_previous,
                                             name,
                                             thrown_object);
+  } else if (current->IsBlockContext()) {
+    Handle<SerializedScopeInfo> scope_info(
+        SerializedScopeInfo::cast(current->extension()));
+    new_current =
+        isolate->factory()->NewBlockContext(function, new_previous, scope_info);
+    // Copy context slots.
+    int num_context_slots = scope_info->NumberOfContextSlots();
+    for (int i = Context::MIN_CONTEXT_SLOTS; i < num_context_slots; ++i) {
+      new_current->set(i, current->get(i));
+    }
   } else {
+    ASSERT(current->IsWithContext());
     Handle<JSObject> extension(JSObject::cast(current->extension()));
     new_current =
         isolate->factory()->NewWithContext(function, new_previous, extension);
@@ -11434,7 +11518,11 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_DebugEvaluate) {
   context->set_extension(*local_scope);
   // Copy any with contexts present and chain them in front of this context.
   Handle<Context> frame_context(Context::cast(frame->context()));
-  Handle<Context> function_context(frame_context->declaration_context());
+  Handle<Context> function_context;
+  // Get the function's context if it has one.
+  if (scope_info->HasHeapAllocatedLocals()) {
+    function_context = Handle<Context>(frame_context->declaration_context());
+  }
   context = CopyWithContextChain(isolate, go_between, frame_context, context);
 
   if (additional_context->IsJSObject()) {
@@ -12165,8 +12253,7 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_DeleteLOL) {
 #ifdef LIVE_OBJECT_LIST
   CONVERT_SMI_ARG_CHECKED(id, 0);
   bool success = LiveObjectList::Delete(id);
-  return success ? isolate->heap()->true_value() :
-                   isolate->heap()->false_value();
+  return isolate->heap()->ToBoolean(success);
 #else
   return isolate->heap()->undefined_value();
 #endif

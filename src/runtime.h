@@ -214,6 +214,8 @@ namespace internal {
   F(FunctionSetReadOnlyPrototype, 1, 1) \
   F(FunctionGetName, 1, 1) \
   F(FunctionSetName, 2, 1) \
+  F(FunctionNameShouldPrintAsAnonymous, 1, 1) \
+  F(FunctionMarkNameShouldPrintAsAnonymous, 1, 1) \
   F(FunctionSetBound, 1, 1) \
   F(FunctionRemovePrototype, 1, 1) \
   F(FunctionGetSourceCode, 1, 1) \
@@ -308,6 +310,7 @@ namespace internal {
   F(NewFunctionContext, 1, 1) \
   F(PushWithContext, 2, 1) \
   F(PushCatchContext, 3, 1) \
+  F(PushBlockContext, 2, 1) \
   F(DeleteContextSlot, 2, 1) \
   F(LoadContextSlot, 2, 2) \
   F(LoadContextSlotNoReferenceError, 2, 2) \
