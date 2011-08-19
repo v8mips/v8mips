@@ -860,20 +860,12 @@ void LCodeGen::DoModI(LModI* instr) {
   const Register left = ToRegister(instr->InputAt(0));
   const Register result = ToRegister(instr->result());
 
-  bool can_be_zero = true;  // Marks if the right side can be 0.
-
-  // p2constant holds the right side value if it's a positive power of 2 constant.
+  // p2constant holds the right side value if it's a power of 2 constant.
   // In other cases it is 0.
   int32_t p2constant = 0;
-  // We need the right value in the register to execute div first.
-  Register right = EmitLoadRegister(instr->InputAt(1), scratch);
 
   if (instr->InputAt(1)->IsConstantOperand()) {
       p2constant = ToInteger32(LConstantOperand::cast(instr->InputAt(1)));
-      if (p2constant != 0) {
-        can_be_zero = false;
-      }
-
       if (p2constant % 2 != 0) {
         p2constant = 0;
       }
@@ -882,10 +874,11 @@ void LCodeGen::DoModI(LModI* instr) {
   }
 
   // div runs in the background while we check for special cases.
+  Register right = EmitLoadRegister(instr->InputAt(1), scratch);
   __ div(left, right);
 
-  // Check for x % 0 (if needed).
-  if (can_be_zero && instr->hydrogen()->CheckFlag(HValue::kCanBeDivByZero)) {
+  // Check for x % 0.
+  if (instr->hydrogen()->CheckFlag(HValue::kCanBeDivByZero)) {
     DeoptimizeIf(eq, instr->environment(), right, Operand(zero_reg));
   }
 
@@ -921,6 +914,10 @@ void LCodeGen::DoDivI(LDivI* instr) {
   const Register right = ToRegister(instr->InputAt(1));
   const Register result = ToRegister(instr->result());
 
+  // On MIPS div is asynchronous - it will run in the background while we
+  // check for special cases.
+  __ div(left, right);
+
   // Check for x / 0.
   if (instr->hydrogen()->CheckFlag(HValue::kCanBeDivByZero)) {
     DeoptimizeIf(eq, instr->environment(), right, Operand(zero_reg));
@@ -942,9 +939,6 @@ void LCodeGen::DoDivI(LDivI* instr) {
     __ bind(&left_not_min_int);
   }
 
-  // Since Mips has a div instr, we just do the divide.
-  // If remainder != 0, then deoptimize, else we are done.
-  __ div(left, right);
   __ mfhi(result);
   DeoptimizeIf(ne, instr->environment(), result, Operand(zero_reg));
   __ mflo(result);
