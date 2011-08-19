@@ -505,12 +505,6 @@ void Deoptimizer::DoComputeFrame(TranslationIterator* iterator,
   unsigned pc_offset = FullCodeGenerator::PcField::decode(pc_and_state);
   uint32_t pc_value = reinterpret_cast<uint32_t>(start + pc_offset);
   output_frame->SetPc(pc_value);
-  if (is_topmost) {
-    // TODO(plind): BROKEN here, setting pc ..........................................
-    // output_frame->SetRegister(pc.code(), pc_value);
-    // TODO(plind): HACKEDhere, just so it compiles
-    output_frame->SetRegister(ra.code(), pc_value);
-  }
 
   FullCodeGenerator::State state =
       FullCodeGenerator::StateField::decode(pc_and_state);
