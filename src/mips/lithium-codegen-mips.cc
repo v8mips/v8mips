@@ -4166,7 +4166,7 @@ void LCodeGen::DoRegExpLiteral(LRegExpLiteral* instr) {
       instr->hydrogen()->literal_index() * kPointerSize;
   __ lw(a1, FieldMemOperand(t3, literal_offset));
   __ LoadRoot(at, Heap::kUndefinedValueRootIndex);
-  __ Branch(&materialized, ne, a1, Operand(at));  // TODO(plind): tweak Operand.
+  __ Branch(&materialized, ne, a1, Operand(at));
 
   // Create regexp literal using runtime function
   // Result will be in v0.
@@ -4175,13 +4175,13 @@ void LCodeGen::DoRegExpLiteral(LRegExpLiteral* instr) {
   __ li(t0, Operand(instr->hydrogen()->flags()));
   __ Push(t3, t2, t1, t0);
   CallRuntime(Runtime::kMaterializeRegExpLiteral, 4, instr);
-  __ mov(a1, v0);  // TODO(plind): tweak to v0,
+  __ mov(a1, v0);
 
   __ bind(&materialized);
   int size = JSRegExp::kSize + JSRegExp::kInObjectFieldCount * kPointerSize;
   Label allocated, runtime_allocate;
 
-  __ AllocateInNewSpace(size, v0, a2, a3, &runtime_allocate, TAG_OBJECT);  // TODO(plind) tweak v0.
+  __ AllocateInNewSpace(size, v0, a2, a3, &runtime_allocate, TAG_OBJECT);
   __ jmp(&allocated);
 
   __ bind(&runtime_allocate);
