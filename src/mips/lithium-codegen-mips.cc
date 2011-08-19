@@ -2788,10 +2788,12 @@ void LCodeGen::EmitIntegerMathAbs(LUnaryMathOperation* instr) {
   // Auto-generated function, 7-July-2011.
   Register input = ToRegister(instr->InputAt(0));
   Register result = ToRegister(instr->result());
+  Assembler::BlockTrampolinePoolScope block_trampoline_pool(masm_);
   Label done;
-  __ Move(result, input);
-  __ Branch(&done, ge, input, Operand(zero_reg));
-  __ subu(result, zero_reg, input);  // TODO(plind): tweak negu instruction.
+  __ Branch(USE_DELAY_SLOT, &done, ge, input, Operand(zero_reg));
+  __ mov(result, input);
+  ASSERT_EQ(2, masm()->InstructionsGeneratedSince(&done));
+  __ subu(result, zero_reg, input);
   // Overflow if result is still negative, ie 0x80000000.
   DeoptimizeIf(lt, instr->environment(), result, Operand(zero_reg));
   __ bind(&done);
