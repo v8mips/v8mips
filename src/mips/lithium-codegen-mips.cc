@@ -1233,7 +1233,6 @@ void LCodeGen::DoElementsKind(LElementsKind* instr) {
 
 
 void LCodeGen::DoValueOf(LValueOf* instr) {
-  // Auto-generated function, 7-July-2011.
   Register input = ToRegister(instr->InputAt(0));
   Register result = ToRegister(instr->result());
   Register map = ToRegister(instr->TempAt(0));
@@ -1610,7 +1609,6 @@ void LCodeGen::DoCmpObjectEqAndBranch(LCmpObjectEqAndBranch* instr) {
 
 
 void LCodeGen::DoCmpConstantEqAndBranch(LCmpConstantEqAndBranch* instr) {
-  // Auto-generated function, 7-July-2011.
   Register left = ToRegister(instr->InputAt(0));
   int true_block = chunk_->LookupDestination(instr->true_block_id());
   int false_block = chunk_->LookupDestination(instr->false_block_id());
@@ -1775,7 +1773,6 @@ void LCodeGen::DoGetCachedArrayIndex(LGetCachedArrayIndex* instr) {
 
 void LCodeGen::DoHasCachedArrayIndexAndBranch(
     LHasCachedArrayIndexAndBranch* instr) {
-  // Auto-generated function, 7-July-2011.
   Register input = ToRegister(instr->InputAt(0));
   Register scratch = scratch0();
 
@@ -1878,7 +1875,6 @@ void LCodeGen::DoCmpMapAndBranch(LCmpMapAndBranch* instr) {
 
 
 void LCodeGen::DoInstanceOf(LInstanceOf* instr) {
-  // Auto-generated function, 7-July-2011, with some hand-tweaking.
   Label true_label, done;
   ASSERT(ToRegister(instr->InputAt(0)).is(a0));  // Object is in a0.
   ASSERT(ToRegister(instr->InputAt(1)).is(a1));  // Function is in a1.
@@ -2719,7 +2715,6 @@ void LCodeGen::DoCallConstantFunction(LCallConstantFunction* instr) {
 
 
 void LCodeGen::DoDeferredMathAbsTaggedHeapNumber(LUnaryMathOperation* instr) {
-  // Auto-generated function, 7-July-2011.
   Register input = ToRegister(instr->InputAt(0));
   Register result = ToRegister(instr->result());
   Register scratch = scratch0();
@@ -2785,7 +2780,6 @@ void LCodeGen::DoDeferredMathAbsTaggedHeapNumber(LUnaryMathOperation* instr) {
 
 
 void LCodeGen::EmitIntegerMathAbs(LUnaryMathOperation* instr) {
-  // Auto-generated function, 7-July-2011.
   Register input = ToRegister(instr->InputAt(0));
   Register result = ToRegister(instr->result());
   Assembler::BlockTrampolinePoolScope block_trampoline_pool(masm_);
@@ -2801,7 +2795,6 @@ void LCodeGen::EmitIntegerMathAbs(LUnaryMathOperation* instr) {
 
 
 void LCodeGen::DoMathAbs(LUnaryMathOperation* instr) {
-  // Auto-generated function, 7-July-2011.
   // Class for deferred case.
   class DeferredMathAbsTaggedHeapNumber: public LDeferredCode {
    public:
@@ -3021,7 +3014,6 @@ void LCodeGen::DoPower(LPower* instr) {
 
 
 void LCodeGen::DoMathLog(LUnaryMathOperation* instr) {
-  // Auto-generated function, 7-July-2011.
   ASSERT(ToDoubleRegister(instr->result()).is(f4));
   TranscendentalCacheStub stub(TranscendentalCache::LOG,
                                TranscendentalCacheStub::UNTAGGED);
@@ -3038,7 +3030,6 @@ void LCodeGen::DoMathCos(LUnaryMathOperation* instr) {
 
 
 void LCodeGen::DoMathSin(LUnaryMathOperation* instr) {
-  // Auto-generated function, 7-July-2011.
   ASSERT(ToDoubleRegister(instr->result()).is(f4));
   TranscendentalCacheStub stub(TranscendentalCache::SIN,
                                TranscendentalCacheStub::UNTAGGED);
@@ -3926,7 +3917,6 @@ void LCodeGen::DoDoubleToI(LDoubleToI* instr) {
 
 
 void LCodeGen::DoCheckSmi(LCheckSmi* instr) {
-  // Auto-generated function, 7-July-2011.
   LOperand* input = instr->InputAt(0);
   __ And(at, ToRegister(input), Operand(kSmiTagMask));
   DeoptimizeIf(ne, instr->environment(), at, Operand(zero_reg));
@@ -4152,7 +4142,6 @@ void LCodeGen::DoToFastProperties(LToFastProperties* instr) {
 
 
 void LCodeGen::DoRegExpLiteral(LRegExpLiteral* instr) {
-  // Auto-generated function, 7-July-2011. Hand-tweaked by plind.
   Label materialized;
   // Registers will be used as follows:
   // a3 = JS function.
@@ -4193,7 +4182,6 @@ void LCodeGen::DoRegExpLiteral(LRegExpLiteral* instr) {
   __ bind(&allocated);
   // Copy the content into the newly allocated memory.
   // (Unroll copy loop once for better throughput).
-  // TODO(plind): tweaked store base reg to v0 below.
   for (int i = 0; i < size - kPointerSize; i += 2 * kPointerSize) {
     __ lw(a3, FieldMemOperand(a1, i));
     __ lw(a2, FieldMemOperand(a1, i + kPointerSize));
@@ -4404,7 +4392,6 @@ void LCodeGen::DoDeoptimize(LDeoptimize* instr) {
 
 
 void LCodeGen::DoDeleteProperty(LDeleteProperty* instr) {
-  // Auto-generated function, 7-July-2011.
   Register object = ToRegister(instr->object());
   Register key = ToRegister(instr->key());
   Register strict = scratch0();
