@@ -44,11 +44,11 @@ import utils
 from Queue import Queue, Empty
 
 from unittest_output import UnitTestOutput
+import core_dump
 
 VERBOSE = False
 XMLOUT = None
 XMLTESTSUITE = None
-
 
 # ---------------------------------------------
 # --- P r o g r e s s   I n d i c a t o r s ---
@@ -504,7 +504,6 @@ def KillProcessWithID(pid):
   else:
     os.kill(pid, signal.SIGTERM)
 
-
 MAX_SLEEP_TIME = 0.1
 INITIAL_SLEEP_TIME = 0.0001
 SLEEP_TIME_FACTOR = 1.25
@@ -562,6 +561,9 @@ def RunProcess(context, timeout, args, **rest):
       sleep_time = sleep_time * SLEEP_TIME_FACTOR
       if sleep_time > MAX_SLEEP_TIME:
         sleep_time = MAX_SLEEP_TIME
+
+  name = "_".join(args).replace("/", "_")
+  core_dump.HandleCoreDump(process.pid, name)
   return (process, exit_code, timed_out)
 
 
@@ -1295,6 +1297,10 @@ def BuildOptions():
                     default=1, type="int")
   result.add_option("--noprof", help="Disable profiling support",
                     default=False)
+  result.add_option("--savecore", help="Save core dump files. Linux-only. Requires enabled core dumps (ulimit -c unlimited)" +
+                    " and the following pattern: " + core_dump.CORE_PATTERN + " in " + core_dump.CORE_PATTERN_FILE,
+                    default=False, action="store_true")
+  result.add_option("--core-dir", help="Directory to save core dumps under cores.log/", default="all")
   return result
 
 
@@ -1338,6 +1344,9 @@ def ProcessOptions(options):
     VARIANT_FLAGS = [[],['--nocrankshaft']]
   global XMLTESTSUITE
   XMLTESTSUITE = options.xmltestsuite
+
+  if options.savecore:
+      core_dump.init(options.core_dir)
 
   if options.crankshaft:
     if options.special_command:
