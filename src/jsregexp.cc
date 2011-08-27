@@ -212,19 +212,7 @@ static void SetAtomLastCapture(FixedArray* array,
   RegExpImpl::SetCapture(array, 1, to);
 }
 
-  /* template <typename SubjectChar>, typename PatternChar>
-static int ReStringMatch(Vector<const SubjectChar> sub_vector,
-                         Vector<const PatternChar> pat_vector,
-                         int start_index) {
 
-  int pattern_length = pat_vector.length();
-  if (pattern_length == 0) return start_index;
-
-  int subject_length = sub_vector.length();
-  if (start_index + pattern_length > subject_length) return -1;
-  return SearchString(sub_vector, pat_vector, start_index);
-}
-  */
 Handle<Object> RegExpImpl::AtomExec(Handle<JSRegExp> re,
                                     Handle<String> subject,
                                     int index,
@@ -236,36 +224,40 @@ Handle<Object> RegExpImpl::AtomExec(Handle<JSRegExp> re,
 
   if (!subject->IsFlat()) FlattenString(subject);
   AssertNoAllocation no_heap_allocation;  // ensure vectors stay valid
-  // Extract flattened substrings of cons strings before determining asciiness.
-  String* seq_sub = *subject;
-  if (seq_sub->IsConsString()) seq_sub = ConsString::cast(seq_sub)->first();
 
   String* needle = String::cast(re->DataAt(JSRegExp::kAtomPatternIndex));
+  ASSERT(StringShape(needle).IsSequential());
   int needle_len = needle->length();
+  ASSERT(needle->IsFlat());
 
   if (needle_len != 0) {
-    if (index + needle_len > subject->length())
-        return isolate->factory()->null_value();
+    if (index + needle_len > subject->length()) {
+      return isolate->factory()->null_value();
+    }
 
+    String::FlatContent needle_content = needle->GetFlatContent();
+    String::FlatContent subject_content = subject->GetFlatContent();
+    ASSERT(needle_content.IsFlat());
+    ASSERT(subject_content.IsFlat());
     // dispatch on type of strings
-    index = (needle->IsAsciiRepresentation()
-             ? (seq_sub->IsAsciiRepresentation()
+    index = (needle_content.IsAscii()
+             ? (subject_content.IsAscii()
                 ? SearchString(isolate,
-                               seq_sub->ToAsciiVector(),
-                               needle->ToAsciiVector(),
+                               subject_content.ToAsciiVector(),
+                               needle_content.ToAsciiVector(),
                                index)
                 : SearchString(isolate,
-                               seq_sub->ToUC16Vector(),
-                               needle->ToAsciiVector(),
+                               subject_content.ToUC16Vector(),
+                               needle_content.ToAsciiVector(),
                                index))
-             : (seq_sub->IsAsciiRepresentation()
+             : (subject_content.IsAscii()
                 ? SearchString(isolate,
-                               seq_sub->ToAsciiVector(),
-                               needle->ToUC16Vector(),
+                               subject_content.ToAsciiVector(),
+                               needle_content.ToUC16Vector(),
                                index)
                 : SearchString(isolate,
-                               seq_sub->ToUC16Vector(),
-                               needle->ToUC16Vector(),
+                               subject_content.ToUC16Vector(),
+                               needle_content.ToUC16Vector(),
                                index)));
     if (index == -1) return isolate->factory()->null_value();
   }
@@ -355,10 +347,7 @@ bool RegExpImpl::CompileIrregexp(Handle<JSRegExp> re, bool is_ascii) {
   JSRegExp::Flags flags = re->GetFlags();
 
   Handle<String> pattern(re->Pattern());
-  if (!pattern->IsFlat()) {
-    FlattenString(pattern);
-  }
-
+  if (!pattern->IsFlat()) FlattenString(pattern);
   RegExpCompileData compile_data;
   FlatStringReader reader(isolate, pattern);
   if (!RegExpParser::ParseRegExp(&reader, flags.is_multiline(),
@@ -442,22 +431,12 @@ void RegExpImpl::IrregexpInitialize(Handle<JSRegExp> re,
 
 int RegExpImpl::IrregexpPrepare(Handle<JSRegExp> regexp,
                                 Handle<String> subject) {
-  if (!subject->IsFlat()) {
-    FlattenString(subject);
-  }
+  if (!subject->IsFlat()) FlattenString(subject);
+
   // Check the asciiness of the underlying storage.
-  bool is_ascii;
-  {
-    AssertNoAllocation no_gc;
-    String* sequential_string = *subject;
-    if (subject->IsConsString()) {
-      sequential_string = ConsString::cast(*subject)->first();
-    }
-    is_ascii = sequential_string->IsAsciiRepresentation();
-  }
-  if (!EnsureCompiledIrregexp(regexp, is_ascii)) {
-    return -1;
-  }
+  bool is_ascii = subject->IsAsciiRepresentationUnderneath();
+  if (!EnsureCompiledIrregexp(regexp, is_ascii)) return -1;
+
 #ifdef V8_INTERPRETED_REGEXP
   // Byte-code regexp needs space allocated for all its registers.
   return IrregexpNumberOfRegisters(FixedArray::cast(regexp->data()));
@@ -482,15 +461,11 @@ RegExpImpl::IrregexpResult RegExpImpl::IrregexpExecOnce(
   ASSERT(index <= subject->length());
   ASSERT(subject->IsFlat());
 
-  // A flat ASCII string might have a two-byte first part.
-  if (subject->IsConsString()) {
-    subject = Handle<String>(ConsString::cast(*subject)->first(), isolate);
-  }
+  bool is_ascii = subject->IsAsciiRepresentationUnderneath();
 
 #ifndef V8_INTERPRETED_REGEXP
   ASSERT(output.length() >= (IrregexpNumberOfCaptures(*irregexp) + 1) * 2);
   do {
-    bool is_ascii = subject->IsAsciiRepresentation();
     EnsureCompiledIrregexp(regexp, is_ascii);
     Handle<Code> code(IrregexpNativeCode(*irregexp, is_ascii), isolate);
     NativeRegExpMacroAssembler::Result res =
@@ -518,13 +493,13 @@ RegExpImpl::IrregexpResult RegExpImpl::IrregexpExecOnce(
     // being internal and external, and even between being ASCII and UC16,
     // but the characters are always the same).
     IrregexpPrepare(regexp, subject);
+    is_ascii = subject->IsAsciiRepresentationUnderneath();
   } while (true);
   UNREACHABLE();
   return RE_EXCEPTION;
 #else  // V8_INTERPRETED_REGEXP
 
   ASSERT(output.length() >= IrregexpNumberOfRegisters(*irregexp));
-  bool is_ascii = subject->IsAsciiRepresentation();
   // We must have done EnsureCompiledIrregexp, so we can get the number of
   // registers.
   int* register_vector = output.start();
