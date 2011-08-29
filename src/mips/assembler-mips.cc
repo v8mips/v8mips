@@ -87,6 +87,8 @@ void CpuFeatures::Probe() {
 
   if (Serializer::enabled()) {
     // No probing for features if we might serialize (generate snapshot).
+    // To avoid taking any chances the E156 bug is enabled.
+    supported_ |= 1u << BUG_E156;
     return;
   }
 
@@ -104,6 +106,11 @@ void CpuFeatures::Probe() {
     // runtime detection of FPU returns true.
     supported_ |= 1u << FPU;
     found_by_runtime_probing_ |= 1u << FPU;
+  }
+
+  if (OS::MipsCpuHasFeature(BUG_E156)) {
+    supported_ |= 1u << BUG_E156;
+    found_by_runtime_probing_ |= 1u << BUG_E156;
   }
 #endif
 }
@@ -2181,6 +2188,19 @@ void Assembler::set_target_address_at(Address pc, Address target) {
              ((uint32_t)(ipc ^ itarget) >> (kImm26Bits + kImmFieldShift)) == 0;
   uint32_t target_field = (uint32_t)(itarget & kJumpAddrMask) >> kImmFieldShift;
   bool patched_jump = false;
+
+  if (in_range && CpuFeatures::IsSupported(BUG_E156)) {
+    uint32_t segment_mask = (1 << 29) - 1;
+    uint32_t ipc_segment_addr = ipc & segment_mask;
+    // The E156 bug has some very specific requirements, we only check the most
+    // simple one: if the address of the delay slot instruction is in the first
+    // or last 32 KB of the 256 MB segment.
+    if (ipc_segment_addr < 32 * KB) {
+      in_range = false;
+    } else if (ipc_segment_addr >= segment_mask - 32 * KB) {
+      in_range = false;
+    }
+  }
 
   if (IsJalr(instr3)) {
     // Try to convert JALR to JAL.

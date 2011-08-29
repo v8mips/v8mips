@@ -253,14 +253,65 @@ bool OS::ArmUsingHardFloat() {
 
 #ifdef __mips__
 bool OS::MipsCpuHasFeature(CpuFeature feature) {
-  const char* search_string = NULL;
   const char* file_name = "/proc/cpuinfo";
-  // Simple detection of FPU at runtime for Linux.
+
+  // Simple detection of features at runtime for Linux.
   // It is based on /proc/cpuinfo, which reveals hardware configuration
   // to user-space applications.  According to MIPS (early 2010), no similar
   // facility is universally available on the MIPS architectures,
   // so it's up to individual OSes to provide such.
-  //
+
+  FILE* f = NULL;
+  f = fopen(file_name, "r");
+
+  // The E156 bug requires different regexp matching than the FPU does.
+  if (feature == BUG_E156) {
+    if (f == NULL)
+      return true;
+
+    int k;
+    int line = 0;
+    // The CPU version info is on the 3rd line, skip the previous 2.
+    while (EOF != (k = fgetc(f))) {
+      if (k == '\n') ++line;
+      if (line == 2)
+        break;
+    }
+
+    char cpu[256] = "";
+    int major = 0;
+    int minor = 0;
+
+    if (k != EOF) {
+      // RegExp matching based on the kernel's output.
+      fscanf(f, "cpu model\t\t: MIPS %s V%d.%d", cpu, &major, &minor);
+    }
+
+    fclose(f);
+
+    if (k == EOF)
+      // This means cpuinfo is corrupted. Return true just in case.
+      return true;
+
+    // Only the 24K CPU has this bug.
+    if (strncmp(cpu, "24K", 3) != 0)
+      return false;
+
+    ASSERT(major >= 0);
+    ASSERT(minor >= 0);
+
+    unsigned version = major << 4 | minor;
+    if (version < 0x81)
+      return true;
+
+    return false;
+  }
+
+  if (f == NULL)
+    return false;
+
+ const char* search_string = NULL;
+
   // This is written as a straight shot one pass parser
   // and not using STL string and ifstream because,
   // on Linux, it's reading from a (non-mmap-able)
@@ -274,11 +325,7 @@ bool OS::MipsCpuHasFeature(CpuFeature feature) {
       UNREACHABLE();
   }
 
-  FILE* f = NULL;
   const char* what = search_string;
-
-  if (NULL == (f = fopen(file_name, "r")))
-    return false;
 
   int k;
   while (EOF != (k = fgetc(f))) {
