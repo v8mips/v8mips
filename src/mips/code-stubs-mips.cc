@@ -4580,8 +4580,8 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
   // a sequential string or an external string.
   // In the case of a sliced string its offset has to be taken into account.
   Label cons_string, check_encoding;
-  STATIC_ASSERT((kConsStringTag < kExternalStringTag));
-  STATIC_ASSERT((kSlicedStringTag > kExternalStringTag));
+  STATIC_ASSERT(kConsStringTag < kExternalStringTag);
+  STATIC_ASSERT(kSlicedStringTag > kExternalStringTag);
   __ Branch(&cons_string, lt, at, Operand(kExternalStringTag));
   __ Branch(&runtime, eq, at, Operand(kExternalStringTag));
 
@@ -4726,11 +4726,14 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
   // Check the result.
 
   Label success;
-  __ Branch(&success, eq, subject, Operand(NativeRegExpMacroAssembler::SUCCESS));
+  __ Branch(&success, eq,
+            subject, Operand(NativeRegExpMacroAssembler::SUCCESS));
   Label failure;
-  __ Branch(&failure, eq, subject, Operand(NativeRegExpMacroAssembler::FAILURE));
+  __ Branch(&failure, eq,
+            subject, Operand(NativeRegExpMacroAssembler::FAILURE));
   // If not exception it can only be retry. Handle that in the runtime system.
-  __ Branch(&runtime, ne, subject, Operand(NativeRegExpMacroAssembler::EXCEPTION));
+  __ Branch(&runtime, ne,
+            subject, Operand(NativeRegExpMacroAssembler::EXCEPTION));
   // Result must now be exception. If there is no pending exception already a
   // stack overflow (on the backtrack stack) was detected in RegExp code but
   // haven't created the exception yet. Handle that in the runtime system.
@@ -5061,8 +5064,8 @@ void StringCharCodeAtGenerator::GenerateFast(MacroAssembler* masm) {
 
   // Handle non-flat strings.
   __ And(result_, result_, Operand(kStringRepresentationMask));
-  STATIC_ASSERT((kConsStringTag < kExternalStringTag));
-  STATIC_ASSERT((kSlicedStringTag > kExternalStringTag));
+  STATIC_ASSERT(kConsStringTag < kExternalStringTag);
+  STATIC_ASSERT(kSlicedStringTag > kExternalStringTag);
   __ Branch(&sliced_string, gt, result_, Operand(kExternalStringTag));
   __ Branch(&call_runtime_, eq, result_, Operand(kExternalStringTag));
 
