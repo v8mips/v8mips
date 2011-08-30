@@ -88,7 +88,7 @@ void CpuFeatures::Probe() {
   if (Serializer::enabled()) {
     // No probing for features if we might serialize (generate snapshot).
     // To avoid taking any chances the E156 bug is enabled.
-    supported_ |= 1u << BUG_E156;
+    supported_ |= 1u << BUG_24K_E156;
     return;
   }
 
@@ -108,9 +108,9 @@ void CpuFeatures::Probe() {
     found_by_runtime_probing_ |= 1u << FPU;
   }
 
-  if (OS::MipsCpuHasFeature(BUG_E156)) {
-    supported_ |= 1u << BUG_E156;
-    found_by_runtime_probing_ |= 1u << BUG_E156;
+  if (OS::MipsCpuHasFeature(BUG_24K_E156)) {
+    supported_ |= 1u << BUG_24K_E156;
+    found_by_runtime_probing_ |= 1u << BUG_24K_E156;
   }
 #endif
 }
@@ -2189,7 +2189,7 @@ void Assembler::set_target_address_at(Address pc, Address target) {
   uint32_t target_field = (uint32_t)(itarget & kJumpAddrMask) >> kImmFieldShift;
   bool patched_jump = false;
 
-  if (in_range && CpuFeatures::IsSupported(BUG_E156)) {
+  if (in_range && CpuFeatures::IsSupported(BUG_24K_E156)) {
     uint32_t segment_mask = (1 << 29) - 1;
     uint32_t ipc_segment_addr = ipc & segment_mask;
     // The E156 bug has some very specific requirements, we only check the most

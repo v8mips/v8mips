@@ -265,7 +265,7 @@ bool OS::MipsCpuHasFeature(CpuFeature feature) {
   f = fopen(file_name, "r");
 
   // The E156 bug requires different regexp matching than the FPU does.
-  if (feature == BUG_E156) {
+  if (feature == BUG_24K_E156) {
     if (f == NULL)
       return true;
 
@@ -278,13 +278,14 @@ bool OS::MipsCpuHasFeature(CpuFeature feature) {
         break;
     }
 
-    char cpu[256] = "";
+    char cpu[128] = "";
+    char vendor[128] = "";
     int major = 0;
     int minor = 0;
 
     if (k != EOF) {
       // RegExp matching based on the kernel's output.
-      fscanf(f, "cpu model\t\t: MIPS %s V%d.%d", cpu, &major, &minor);
+      fscanf(f, "cpu model\t\t: %s %s V%d.%d", vendor, cpu, &major, &minor);
     }
 
     fclose(f);
@@ -293,12 +294,12 @@ bool OS::MipsCpuHasFeature(CpuFeature feature) {
       // This means cpuinfo is corrupted. Return true just in case.
       return true;
 
-    // Only the 24K CPU has this bug.
-    if (strncmp(cpu, "24K", 3) != 0)
+    // Only the 24K CPU and Ingenic Xburst CPU have this bug.
+    if (strncmp(cpu, "24K", 3) != 0 && strncmp(cpu, "Xburst", 6) != 0)
       return false;
 
-    ASSERT(major >= 0);
-    ASSERT(minor >= 0);
+    ASSERT(major >= 0 && major <= 15);
+    ASSERT(minor >= 0 && minor <= 15);
 
     unsigned version = major << 4 | minor;
     if (version < 0x81)

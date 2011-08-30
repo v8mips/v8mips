@@ -485,7 +485,7 @@ enum CpuFeature { SSE4_1 = 32 + 19,  // x86
                   ARMv7 = 2,         // ARM
                   SAHF = 0,          // x86
                   FPU = 1,           // MIPS
-                  BUG_E156 = 2};     // MIPS 24K Erratum 156
+                  BUG_24K_E156 = 2}; // MIPS 24K Erratum 156
 
 // The Strict Mode (ECMA-262 5th edition, 4.2.2).
 enum StrictModeFlag {
