@@ -2182,6 +2182,21 @@ void Assembler::set_target_address_at(Address pc, Address target) {
   uint32_t target_field = (uint32_t)(itarget & kJumpAddrMask) >> kImmFieldShift;
   bool patched_jump = false;
 
+#ifndef ALLOW_JAL_IN_BOUNDARY_REGION
+  // This is a workaround to the 24k core E156 bug (affect some 34k cores also).
+  // Since the excluded space is only 64KB out of 256MB (0.02 %), we will just 
+  // apply this workaround for all cores so we don't have to identify the core.
+  if (in_range) {
+    // The 24k core E156 bug has some very specific requirements, we only check
+    // the most simple one: if the address of the delay slot instruction is in
+    // the first or last 32 KB of the 256 MB segment.
+    uint32_t segment_mask = ((256 * MB) - 1) ^ ((32 * KB) - 1);
+    uint32_t ipc_segment_addr = ipc & segment_mask;
+    if (ipc_segment_addr == 0 || ipc_segment_addr == segment_mask)
+      in_range = false;
+  }
+#endif
+
   if (IsJalr(instr3)) {
     // Try to convert JALR to JAL.
     if (in_range && GetRt(instr2) == GetRs(instr3)) {
