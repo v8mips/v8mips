@@ -3717,7 +3717,16 @@ void MacroAssembler::AdduAndCheckForOverflow(Register dst,
   ASSERT(!overflow_dst.is(scratch));
   ASSERT(!overflow_dst.is(left));
   ASSERT(!overflow_dst.is(right));
-  ASSERT(!left.is(right));
+
+  if (left.is(right) && dst.is(left)) {
+    ASSERT(!dst.is(t9));
+    ASSERT(!scratch.is(t9));
+    ASSERT(!left.is(t9));
+    ASSERT(!right.is(t9));
+    ASSERT(!overflow_dst.is(t9));
+    mov(t9, right);
+    right = t9;
+  }
 
   if (dst.is(left)) {
     mov(scratch, left);  // Preserve left.
