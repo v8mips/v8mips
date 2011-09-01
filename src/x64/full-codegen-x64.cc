@@ -742,9 +742,8 @@ void FullCodeGenerator::DeclareGlobals(Handle<FixedArray> pairs) {
   // Call the runtime to declare the globals.
   __ push(rsi);  // The context is the first argument.
   __ Push(pairs);
-  __ Push(Smi::FromInt(is_eval() ? 1 : 0));
-  __ Push(Smi::FromInt(strict_mode_flag()));
-  __ CallRuntime(Runtime::kDeclareGlobals, 4);
+  __ Push(Smi::FromInt(DeclareGlobalsFlags()));
+  __ CallRuntime(Runtime::kDeclareGlobals, 3);
   // Return value is ignored.
 }
 
@@ -2070,8 +2069,13 @@ void FullCodeGenerator::EmitResolvePossiblyDirectEval(ResolveEvalFlag flag,
   // Push the receiver of the enclosing function and do runtime call.
   __ push(Operand(rbp, (2 + info_->scope()->num_parameters()) * kPointerSize));
 
-  // Push the strict mode flag.
-  __ Push(Smi::FromInt(strict_mode_flag()));
+  // Push the strict mode flag. In harmony mode every eval call
+  // is a strict mode eval call.
+  StrictModeFlag strict_mode = strict_mode_flag();
+  if (FLAG_harmony_block_scoping) {
+    strict_mode = kStrictMode;
+  }
+  __ Push(Smi::FromInt(strict_mode));
 
   __ CallRuntime(flag == SKIP_CONTEXT_LOOKUP
                  ? Runtime::kResolvePossiblyDirectEvalNoLookup

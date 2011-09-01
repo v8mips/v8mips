@@ -1382,7 +1382,7 @@ void HGlobalValueNumberer::ComputeBlockSideEffects() {
     int id = block->block_id();
     int side_effects = 0;
     while (instr != NULL) {
-      side_effects |= (instr->flags() & HValue::ChangesFlagsMask());
+      side_effects |= instr->ChangesFlags();
       instr = instr->next();
     }
     block_side_effects_[id] |= side_effects;
@@ -1499,7 +1499,7 @@ void HGlobalValueNumberer::AnalyzeBlock(HBasicBlock* block, HValueMap* map) {
   HInstruction* instr = block->first();
   while (instr != NULL) {
     HInstruction* next = instr->next();
-    int flags = (instr->flags() & HValue::ChangesFlagsMask());
+    int flags = instr->ChangesFlags();
     if (flags != 0) {
       ASSERT(!instr->CheckFlag(HValue::kUseGVN));
       // Clear all instructions in the map that are affected by side effects.
@@ -4813,13 +4813,15 @@ bool HGraphBuilder::TryCallApply(Call* expr) {
   // Found pattern f.apply(receiver, arguments).
   VisitForValue(prop->obj());
   if (HasStackOverflow() || current_block() == NULL) return true;
-  HValue* function = Pop();
+  HValue* function = Top();
+  AddCheckConstantFunction(expr, function, function_map, true);
+  Drop(1);
+
   VisitForValue(args->at(0));
   if (HasStackOverflow() || current_block() == NULL) return true;
   HValue* receiver = Pop();
   HInstruction* elements = AddInstruction(new(zone()) HArgumentsElements);
   HInstruction* length = AddInstruction(new(zone()) HArgumentsLength(elements));
-  AddCheckConstantFunction(expr, function, function_map, true);
   HInstruction* result =
       new(zone()) HApplyArguments(function, receiver, length, elements);
   result->set_position(expr->position());
