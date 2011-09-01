@@ -1382,7 +1382,7 @@ void HGlobalValueNumberer::ComputeBlockSideEffects() {
     int id = block->block_id();
     int side_effects = 0;
     while (instr != NULL) {
-      side_effects |= (instr->flags() & HValue::ChangesFlagsMask());
+      side_effects |= instr->ChangesFlags();
       instr = instr->next();
     }
     block_side_effects_[id] |= side_effects;
@@ -1499,7 +1499,7 @@ void HGlobalValueNumberer::AnalyzeBlock(HBasicBlock* block, HValueMap* map) {
   HInstruction* instr = block->first();
   while (instr != NULL) {
     HInstruction* next = instr->next();
-    int flags = (instr->flags() & HValue::ChangesFlagsMask());
+    int flags = instr->ChangesFlags();
     if (flags != 0) {
       ASSERT(!instr->CheckFlag(HValue::kUseGVN));
       // Clear all instructions in the map that are affected by side effects.
@@ -2298,11 +2298,7 @@ HGraph* HGraphBuilder::CreateGraph() {
     // Handle implicit declaration of the function name in named function
     // expressions before other declarations.
     if (scope->is_function_scope() && scope->function() != NULL) {
-      if (!scope->function()->IsStackAllocated()) {
-        Bailout("unsupported declaration");
-        return NULL;
-      }
-      environment()->Bind(scope->function(), graph()->GetConstantHole());
+      HandleDeclaration(scope->function(), Variable::CONST, NULL);
     }
     VisitDeclarations(scope->declarations());
     AddSimulate(AstNode::kDeclarationsId);
@@ -4813,13 +4809,15 @@ bool HGraphBuilder::TryCallApply(Call* expr) {
   // Found pattern f.apply(receiver, arguments).
   VisitForValue(prop->obj());
   if (HasStackOverflow() || current_block() == NULL) return true;
-  HValue* function = Pop();
+  HValue* function = Top();
+  AddCheckConstantFunction(expr, function, function_map, true);
+  Drop(1);
+
   VisitForValue(args->at(0));
   if (HasStackOverflow() || current_block() == NULL) return true;
   HValue* receiver = Pop();
   HInstruction* elements = AddInstruction(new(zone()) HArgumentsElements);
   HInstruction* length = AddInstruction(new(zone()) HArgumentsLength(elements));
-  AddCheckConstantFunction(expr, function, function_map, true);
   HInstruction* result =
       new(zone()) HApplyArguments(function, receiver, length, elements);
   result->set_position(expr->position());
@@ -5820,20 +5818,51 @@ void HGraphBuilder::VisitThisFunction(ThisFunction* expr) {
 
 
 void HGraphBuilder::VisitDeclaration(Declaration* decl) {
-  // We support only declarations that do not require code generation.
-  Variable* var = decl->proxy()->var();
-  if (!var->IsStackAllocated() ||
-      decl->mode() == Variable::LET) {
-    return Bailout("unsupported declaration");
-  }
+  HandleDeclaration(decl->proxy(), decl->mode(), decl->fun());
+}
 
-  if (decl->mode() == Variable::CONST) {
-    ASSERT(var->IsStackAllocated());
-    environment()->Bind(var, graph()->GetConstantHole());
-  } else if (decl->fun() != NULL) {
-    VisitForValue(decl->fun());
-    HValue* function = Pop();
-    environment()->Bind(var, function);
+
+void HGraphBuilder::HandleDeclaration(VariableProxy* proxy,
+                                    Variable::Mode mode,
+                                    FunctionLiteral* function) {
+  if (mode == Variable::LET) return Bailout("unsupported let declaration");
+  Variable* var = proxy->var();
+  Slot* slot = var->AsSlot();
+  ASSERT(slot != NULL);
+  switch (slot->type()) {
+    case Slot::PARAMETER:
+    case Slot::LOCAL:
+      if (mode == Variable::CONST) {
+        environment()->Bind(var, graph()->GetConstantHole());
+      } else if (function != NULL) {
+        VisitForValue(function);
+        HValue* function_value = Pop();
+        environment()->Bind(var, function_value);
+      }
+      break;
+    case Slot::CONTEXT: {
+      HValue* context = environment()->LookupContext();
+      if (mode == Variable::CONST) {
+        HStoreContextSlot* store =
+            new HStoreContextSlot(context,
+                                  slot->index(),
+                                  graph()->GetConstantHole());
+        AddInstruction(store);
+        if (store->HasSideEffects()) AddSimulate(proxy->id());
+      } else if (function != NULL) {
+        VisitForValue(function);
+        HValue* function_value = Pop();
+        HStoreContextSlot* store =
+            new HStoreContextSlot(context,
+                                  slot->index(),
+                                  function_value);
+        AddInstruction(store);
+        if (store->HasSideEffects()) AddSimulate(proxy->id());
+      }
+      break;
+    }
+    case Slot::LOOKUP:
+      return Bailout("unsupported lookup slot in declaration");
   }
 }
 
