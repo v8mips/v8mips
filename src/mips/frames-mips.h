@@ -39,12 +39,12 @@ namespace internal {
 static const int kNumRegs = 32;
 
 static const RegList kJSCallerSaved =
-  1 << 2 |  // v0
-  1 << 3 |  // v1
-  1 << 4 |  // a0
-  1 << 5 |  // a1
-  1 << 6 |  // a2
-  1 << 7 |  // a3
+  1 << 2  |  // v0
+  1 << 3  |  // v1
+  1 << 4  |  // a0
+  1 << 5  |  // a1
+  1 << 6  |  // a2
+  1 << 7  |  // a3
   1 << 8  |  // t0
   1 << 9  |  // t1
   1 << 10 |  // t2
@@ -77,7 +77,12 @@ static const RegList kCalleeSaved =
 static const int kNumCalleeSaved = 9;
 
 static const RegList kCalleeSavedFPU =
-    1 << 20 | 1 << 22 | 1 << 24 | 1 << 26 | 1 << 28 | 1 << 30;
+  1 << 20 |  // f20
+  1 << 22 |  // f22
+  1 << 24 |  // f24
+  1 << 26 |  // f26
+  1 << 28 |  // f28
+  1 << 30;   // f30
 
 static const int kNumCalleeSavedFPU = 6;
 // Number of registers for which space is reserved in safepoints. Must be a
@@ -126,8 +131,8 @@ static const int kSafepointRegisterStackIndexMap[kNumRegs] = {
   kUndefIndex,  // k0
   kUndefIndex,  // k1
   kUndefIndex,  // gp
-  22,  // sp
-  23,  // fp
+  kUndefIndex,  // sp
+  22,  // fp
   kUndefIndex
 };
 
