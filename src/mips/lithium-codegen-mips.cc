@@ -3437,7 +3437,8 @@ void LCodeGen::DoStringCharCodeAt(LStringCharCodeAt* instr) {
 
   // Dispatch on the encoding: ASCII or two-byte.
   Label ascii_string;
-  STATIC_ASSERT(kAsciiStringTag != 0);
+  STATIC_ASSERT((kStringEncodingMask & kAsciiStringTag) != 0);
+  STATIC_ASSERT((kStringEncodingMask & kTwoByteStringTag) == 0);
   __ And(temp, result, Operand(kStringEncodingMask));
   __ Branch(&ascii_string, ne, temp, Operand(zero_reg));
 

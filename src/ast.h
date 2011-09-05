@@ -134,6 +134,10 @@ class AstNode: public ZoneObject {
 
   static const int kNoNumber = -1;
   static const int kFunctionEntryId = 2;  // Using 0 could disguise errors.
+  // This AST id identifies the point after the declarations have been
+  // visited. We need it to capture the environment effects of declarations
+  // that emit code (function declarations).
+  static const int kDeclarationsId = 3;
 
   // Override ZoneObject's new to count allocated AST nodes.
   void* operator new(size_t size, Zone* zone) {
@@ -404,10 +408,14 @@ class Block: public BreakableStatement {
 
 class Declaration: public AstNode {
  public:
-  Declaration(VariableProxy* proxy, Variable::Mode mode, FunctionLiteral* fun)
+  Declaration(VariableProxy* proxy,
+              Variable::Mode mode,
+              FunctionLiteral* fun,
+              Scope* scope)
       : proxy_(proxy),
         mode_(mode),
-        fun_(fun) {
+        fun_(fun),
+        scope_(scope) {
     ASSERT(mode == Variable::VAR ||
            mode == Variable::CONST ||
            mode == Variable::LET);
@@ -421,11 +429,15 @@ class Declaration: public AstNode {
   Variable::Mode mode() const { return mode_; }
   FunctionLiteral* fun() const { return fun_; }  // may be NULL
   virtual bool IsInlineable() const;
+  Scope* scope() const { return scope_; }
 
  private:
   VariableProxy* proxy_;
   Variable::Mode mode_;
   FunctionLiteral* fun_;
+
+  // Nested scope from which the declaration originated.
+  Scope* scope_;
 };
 
 

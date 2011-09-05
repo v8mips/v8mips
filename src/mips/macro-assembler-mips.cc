@@ -706,65 +706,69 @@ void MacroAssembler::li(Register rd, Operand j, bool gen2instr) {
 
 
 void MacroAssembler::MultiPush(RegList regs) {
-  int16_t NumSaved = 0;
-  int16_t NumToPush = NumberOfBitsSet(regs);
+  int16_t num_to_push = NumberOfBitsSet(regs);
+  int16_t stack_offset = num_to_push * kPointerSize;
 
-  addiu(sp, sp, -4 * NumToPush);
+  Subu(sp, sp, Operand(stack_offset));
   for (int16_t i = kNumRegisters - 1; i >= 0; i--) {
     if ((regs & (1 << i)) != 0) {
-      sw(ToRegister(i), MemOperand(sp, 4 * (NumToPush - ++NumSaved)));
+      stack_offset -= kPointerSize;
+      sw(ToRegister(i), MemOperand(sp, stack_offset));
     }
   }
 }
 
 
 void MacroAssembler::MultiPushReversed(RegList regs) {
-  int16_t NumSaved = 0;
-  int16_t NumToPush = NumberOfBitsSet(regs);
+  int16_t num_to_push = NumberOfBitsSet(regs);
+  int16_t stack_offset = num_to_push * kPointerSize;
 
-  addiu(sp, sp, -4 * NumToPush);
+  Subu(sp, sp, Operand(stack_offset));
   for (int16_t i = 0; i < kNumRegisters; i++) {
     if ((regs & (1 << i)) != 0) {
-      sw(ToRegister(i), MemOperand(sp, 4 * (NumToPush - ++NumSaved)));
+      stack_offset -= kPointerSize;
+      sw(ToRegister(i), MemOperand(sp, stack_offset));
     }
   }
 }
 
 
 void MacroAssembler::MultiPop(RegList regs) {
-  int16_t NumSaved = 0;
+  int16_t stack_offset = 0;
 
   for (int16_t i = 0; i < kNumRegisters; i++) {
     if ((regs & (1 << i)) != 0) {
-      lw(ToRegister(i), MemOperand(sp, 4 * (NumSaved++)));
+      lw(ToRegister(i), MemOperand(sp, stack_offset));
+      stack_offset += kPointerSize;
     }
   }
-  addiu(sp, sp, 4 * NumSaved);
+  addiu(sp, sp, stack_offset);
 }
 
 
 void MacroAssembler::MultiPopReversed(RegList regs) {
-  int16_t NumSaved = 0;
+  int16_t stack_offset = 0;
 
   for (int16_t i = kNumRegisters - 1; i >= 0; i--) {
     if ((regs & (1 << i)) != 0) {
-      lw(ToRegister(i), MemOperand(sp, 4 * (NumSaved++)));
+      lw(ToRegister(i), MemOperand(sp, stack_offset));
+      stack_offset += kPointerSize;
     }
   }
-  addiu(sp, sp, 4 * NumSaved);
+  addiu(sp, sp, stack_offset);
 }
 
 
 void MacroAssembler::MultiPushFPU(RegList regs) {
   CpuFeatures::Scope scope(FPU);
-  int16_t NumSaved = 0;
-  int16_t NumToPush = NumberOfBitsSet(regs);
+  int16_t num_to_push = NumberOfBitsSet(regs);
+  int16_t stack_offset = num_to_push * kDoubleSize;
 
-  addiu(sp, sp, -8 * NumToPush);
+  Subu(sp, sp, Operand(stack_offset));
   for (int16_t i = kNumRegisters; i > 0; i--) {
     if ((regs & (1 << i)) != 0) {
-      sdc1(FPURegister::from_code(i),
-           MemOperand(sp, 8 * (NumToPush - ++NumSaved)));
+      stack_offset -= kDoubleSize;
+      sdc1(FPURegister::from_code(i), MemOperand(sp, stack_offset));
     }
   }
 }
@@ -772,14 +776,14 @@ void MacroAssembler::MultiPushFPU(RegList regs) {
 
 void MacroAssembler::MultiPushReversedFPU(RegList regs) {
   CpuFeatures::Scope scope(FPU);
-  int16_t NumSaved = 0;
-  int16_t NumToPush = NumberOfBitsSet(regs);
+  int16_t num_to_push = NumberOfBitsSet(regs);
+  int16_t stack_offset = num_to_push * kDoubleSize;
 
-  addiu(sp, sp, -8 * NumToPush);
+  Subu(sp, sp, Operand(stack_offset));
   for (int16_t i = 0; i < kNumRegisters; i++) {
     if ((regs & (1 << i)) != 0) {
-      sdc1(FPURegister::from_code(i),
-           MemOperand(sp, 8 * (NumToPush - ++NumSaved)));
+      stack_offset -= kDoubleSize;
+      sdc1(FPURegister::from_code(i), MemOperand(sp, stack_offset));
     }
   }
 }
@@ -787,29 +791,29 @@ void MacroAssembler::MultiPushReversedFPU(RegList regs) {
 
 void MacroAssembler::MultiPopFPU(RegList regs) {
   CpuFeatures::Scope scope(FPU);
-  int16_t NumSaved = 0;
+  int16_t stack_offset = 0;
 
   for (int16_t i = 0; i < kNumRegisters; i++) {
     if ((regs & (1 << i)) != 0) {
-      ldc1(FPURegister::from_code(i),
-           MemOperand(sp, 8 * (NumSaved++)));
+      ldc1(FPURegister::from_code(i), MemOperand(sp, stack_offset));
+      stack_offset += kDoubleSize;
     }
   }
-  addiu(sp, sp, 8 * NumSaved);
+  addiu(sp, sp, stack_offset);
 }
 
 
 void MacroAssembler::MultiPopReversedFPU(RegList regs) {
   CpuFeatures::Scope scope(FPU);
-  int16_t NumSaved = 0;
+  int16_t stack_offset = 0;
 
   for (int16_t i = kNumRegisters; i > 0; i--) {
     if ((regs & (1 << i)) != 0) {
-      ldc1(FPURegister::from_code(i),
-           MemOperand(sp, 8 * (NumSaved++)));
+      ldc1(FPURegister::from_code(i), MemOperand(sp, stack_offset));
+      stack_offset += kDoubleSize;
     }
   }
-  addiu(sp, sp, 8 * NumSaved);
+  addiu(sp, sp, stack_offset);
 }
 
 
@@ -2996,6 +3000,46 @@ void MacroAssembler::AllocateAsciiConsString(Register result,
 }
 
 
+void MacroAssembler::AllocateTwoByteSlicedString(Register result,
+                                                 Register length,
+                                                 Register scratch1,
+                                                 Register scratch2,
+                                                 Label* gc_required) {
+  AllocateInNewSpace(SlicedString::kSize,
+                     result,
+                     scratch1,
+                     scratch2,
+                     gc_required,
+                     TAG_OBJECT);
+
+  InitializeNewString(result,
+                      length,
+                      Heap::kSlicedStringMapRootIndex,
+                      scratch1,
+                      scratch2);
+}
+
+
+void MacroAssembler::AllocateAsciiSlicedString(Register result,
+                                               Register length,
+                                               Register scratch1,
+                                               Register scratch2,
+                                               Label* gc_required) {
+  AllocateInNewSpace(SlicedString::kSize,
+                     result,
+                     scratch1,
+                     scratch2,
+                     gc_required,
+                     TAG_OBJECT);
+
+  InitializeNewString(result,
+                      length,
+                      Heap::kSlicedAsciiStringMapRootIndex,
+                      scratch1,
+                      scratch2);
+}
+
+
 // Allocates a heap number or jumps to the label if the young space is full and
 // a scavenge is needed.
 void MacroAssembler::AllocateHeapNumber(Register result,
@@ -3713,7 +3757,16 @@ void MacroAssembler::AdduAndCheckForOverflow(Register dst,
   ASSERT(!overflow_dst.is(scratch));
   ASSERT(!overflow_dst.is(left));
   ASSERT(!overflow_dst.is(right));
-  ASSERT(!left.is(right));
+
+  if (left.is(right) && dst.is(left)) {
+    ASSERT(!dst.is(t9));
+    ASSERT(!scratch.is(t9));
+    ASSERT(!left.is(t9));
+    ASSERT(!right.is(t9));
+    ASSERT(!overflow_dst.is(t9));
+    mov(t9, right);
+    right = t9;
+  }
 
   if (dst.is(left)) {
     mov(scratch, left);  // Preserve left.

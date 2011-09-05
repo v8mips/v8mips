@@ -268,6 +268,7 @@ void FullCodeGenerator::Generate(CompilationInfo* info) {
     scope()->VisitIllegalRedeclaration(this);
 
   } else {
+    PrepareForBailoutForId(AstNode::kFunctionEntryId, NO_REGISTERS);
     { Comment cmnt(masm_, "[ Declarations");
       // For named function expressions, declare the function name as a
       // constant.
@@ -278,7 +279,7 @@ void FullCodeGenerator::Generate(CompilationInfo* info) {
     }
 
     { Comment cmnt(masm_, "[ Stack check");
-      PrepareForBailoutForId(AstNode::kFunctionEntryId, NO_REGISTERS);
+      PrepareForBailoutForId(AstNode::kDeclarationsId, NO_REGISTERS);
       Label ok;
       __ LoadRoot(t0, Heap::kStackLimitRootIndex);
       __ Branch(&ok, hs, sp, Operand(t0));
@@ -700,10 +701,11 @@ void FullCodeGenerator::Move(Slot* dst,
 }
 
 
-void FullCodeGenerator::EmitDeclaration(Variable* variable,
+void FullCodeGenerator::EmitDeclaration(VariableProxy* proxy,
                                         Variable::Mode mode,
                                         FunctionLiteral* function) {
   Comment cmnt(masm_, "[ Declaration");
+  Variable* variable = proxy->var();
   ASSERT(variable != NULL);  // Must have been resolved.
   Slot* slot = variable->AsSlot();
   ASSERT(slot != NULL);
@@ -743,10 +745,12 @@ void FullCodeGenerator::EmitDeclaration(Variable* variable,
         // We know that we have written a function, which is not a smi.
         __ mov(a1, cp);
         __ RecordWrite(a1, Operand(offset), a2, result_register());
+        PrepareForBailoutForId(proxy->id(), NO_REGISTERS);
       } else if (mode == Variable::CONST || mode == Variable::LET) {
           __ LoadRoot(at, Heap::kTheHoleValueRootIndex);
           __ sw(at, ContextOperand(cp, slot->index()));
           // No write barrier since the_hole_value is in old space.
+          PrepareForBailoutForId(proxy->id(), NO_REGISTERS);
       }
       break;
 
@@ -783,18 +787,17 @@ void FullCodeGenerator::EmitDeclaration(Variable* variable,
 
 
 void FullCodeGenerator::VisitDeclaration(Declaration* decl) {
-  EmitDeclaration(decl->proxy()->var(), decl->mode(), decl->fun());
+  EmitDeclaration(decl->proxy(), decl->mode(), decl->fun());
 }
 
 
 void FullCodeGenerator::DeclareGlobals(Handle<FixedArray> pairs) {
   // Call the runtime to declare the globals.
   // The context is the first argument.
-  __ li(a2, Operand(pairs));
-  __ li(a1, Operand(Smi::FromInt(is_eval() ? 1 : 0)));
-  __ li(a0, Operand(Smi::FromInt(strict_mode_flag())));
-  __ Push(cp, a2, a1, a0);
-  __ CallRuntime(Runtime::kDeclareGlobals, 4);
+  __ li(a1, Operand(pairs));
+  __ li(a0, Operand(Smi::FromInt(DeclareGlobalsFlags())));
+  __ Push(cp, a1, a0);
+  __ CallRuntime(Runtime::kDeclareGlobals, 3);
   // Return value is ignored.
 }
 
@@ -2186,8 +2189,13 @@ void FullCodeGenerator::EmitResolvePossiblyDirectEval(ResolveEvalFlag flag,
   int receiver_offset = 2 + info_->scope()->num_parameters();
   __ lw(a1, MemOperand(fp, receiver_offset * kPointerSize));
   __ push(a1);
-  // Push the strict mode flag.
-  __ li(a1, Operand(Smi::FromInt(strict_mode_flag())));
+  // Push the strict mode flag. In harmony mode every eval call
+  // is a strict mode eval call.
+  StrictModeFlag strict_mode = strict_mode_flag();
+  if (FLAG_harmony_block_scoping) {
+    strict_mode = kStrictMode;
+  }
+  __ li(a1, Operand(Smi::FromInt(strict_mode)));
   __ push(a1);
 
   __ CallRuntime(flag == SKIP_CONTEXT_LOOKUP

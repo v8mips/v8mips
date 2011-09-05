@@ -39,12 +39,12 @@ namespace internal {
 static const int kNumRegs = 32;
 
 static const RegList kJSCallerSaved =
-  1 << 2 |  // v0
-  1 << 3 |  // v1
-  1 << 4 |  // a0
-  1 << 5 |  // a1
-  1 << 6 |  // a2
-  1 << 7 |  // a3
+  1 << 2  |  // v0
+  1 << 3  |  // v1
+  1 << 4  |  // a0
+  1 << 5  |  // a1
+  1 << 6  |  // a2
+  1 << 7  |  // a3
   1 << 8  |  // t0
   1 << 9  |  // t1
   1 << 10 |  // t2

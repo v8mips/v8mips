@@ -176,8 +176,8 @@ bool Shell::ExecuteString(Handle<String> source,
         // If all went well and the result wasn't undefined then print
         // the returned value.
         v8::String::Utf8Value str(result);
-        const char* cstr = ToCString(str);
-        printf("%s\n", cstr);
+        fwrite(*str, sizeof(**str), str.length(), stdout);
+        printf("\n");
       }
       return true;
     }
@@ -678,9 +678,9 @@ Handle<ObjectTemplate> Shell::CreateGlobalTemplate() {
                        FunctionTemplate::New(PixelArray));
 
 #ifdef LIVE_OBJECT_LIST
-  global_template->Set(String::New("lol_is_enabled"), Boolean::New(true));
+  global_template->Set(String::New("lol_is_enabled"), True());
 #else
-  global_template->Set(String::New("lol_is_enabled"), Boolean::New(false));
+  global_template->Set(String::New("lol_is_enabled"), False());
 #endif
 
 #ifndef V8_SHARED

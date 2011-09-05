@@ -774,7 +774,7 @@ TEST(MIPS10) {
   Assembler assm(Isolate::Current(), NULL, 0);
   Label L, C;
 
-  if (CpuFeatures::IsSupported(FPU)) {
+  if (CpuFeatures::IsSupported(FPU) && mips32r2) {
     CpuFeatures::Scope scope(FPU);
 
     // Load all structure elements to registers.
@@ -1268,7 +1268,9 @@ TEST(MIPS15) {
 
   Label target;
   __ beq(v0, v1, &target);
+  __ nop();
   __ bne(v0, v1, &target);
+  __ nop();
   __ bind(&target);
   __ nop();
 }
