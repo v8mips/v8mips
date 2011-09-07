@@ -49,6 +49,7 @@ import core_dump
 VERBOSE = False
 XMLOUT = None
 XMLTESTSUITE = None
+ANDROID_ADB = False
 
 # ---------------------------------------------
 # --- P r o g r e s s   I n d i c a t o r s ---
@@ -590,6 +591,11 @@ def CheckedUnlink(name):
 def Execute(args, context, timeout=None):
   (fd_out, outname) = tempfile.mkstemp()
   (fd_err, errname) = tempfile.mkstemp()
+  
+  if context.android_adb:
+      args.insert(0, "shell");
+      args.insert(0, "adb");
+  
   (process, exit_code, timed_out) = RunProcess(
     context,
     timeout,
@@ -739,7 +745,7 @@ TIMEOUT_SCALEFACTOR = {
 
 class Context(object):
 
-  def __init__(self, workspace, buildspace, verbose, vm, timeout, processor, suppress_dialogs, store_unexpected_output):
+  def __init__(self, workspace, buildspace, verbose, vm, timeout, processor, suppress_dialogs, store_unexpected_output, android_adb):
     self.workspace = workspace
     self.buildspace = buildspace
     self.verbose = verbose
@@ -748,6 +754,7 @@ class Context(object):
     self.processor = processor
     self.suppress_dialogs = suppress_dialogs
     self.store_unexpected_output = store_unexpected_output
+    self.android_adb = android_adb
 
   def GetVm(self, mode):
     name = self.vm_root + SUFFIX[mode]
@@ -1302,6 +1309,8 @@ def BuildOptions():
                     " and the following pattern: " + core_dump.CORE_PATTERN + " in " + core_dump.CORE_PATTERN_FILE,
                     default=False, action="store_true")
   result.add_option("--core-dir", help="Directory to save core dumps under cores.log/", default="all")
+  result.add_option("--android", help="Run tests using \"adb shell\"",
+                    default=False, action="store_true")
   return result
 
 
@@ -1372,6 +1381,15 @@ def ProcessOptions(options):
     if options.build_only:
       print "--build-only not supported for gyp, please build manually."
       options.build_only = False
+  global ANDROID_ADB
+  ANDROID_ADB = options.android
+  if options.android:
+      if options.simulator != 'none':
+          print '--android is not supported on simulator'
+          return False
+      if not options.arch in ['arm', 'mips']:
+          print '--android is only supported on arm and mips arch'
+          return False
   return True
 
 
@@ -1508,7 +1526,8 @@ def Main():
                     options.timeout,
                     GetSpecialCommandProcessor(options.special_command),
                     options.suppress_dialogs,
-                    options.store_unexpected_output)
+                    options.store_unexpected_output,
+                    ANDROID_ADB)
   # First build the required targets
   if not options.no_build:
     reqs = [ ]

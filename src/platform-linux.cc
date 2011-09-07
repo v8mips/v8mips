@@ -126,6 +126,10 @@ void OS::Setup() {
 #endif
   }
 #endif
+
+#if V8_HOST_ARCH_MIPS
+  CHECK_GE(Page::kPageSize, getpagesize());
+#endif
 }
 
 

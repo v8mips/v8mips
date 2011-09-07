@@ -30,6 +30,7 @@
 #include "api.h"
 #include "ast-inl.h"
 #include "bootstrapper.h"
+#include "char-predicates-inl.h"
 #include "codegen.h"
 #include "compiler.h"
 #include "func-name-inferrer.h"
@@ -1559,9 +1560,6 @@ Block* Parser::ParseScopedBlock(ZoneStringList* labels, bool* ok) {
   Scope* block_scope = NewScope(top_scope_,
                                 Scope::BLOCK_SCOPE,
                                 inside_with());
-  body->set_block_scope(block_scope);
-  block_scope->DeclareLocal(isolate()->factory()->block_scope_symbol(),
-                            Variable::VAR);
   if (top_scope_->is_strict_mode()) {
     block_scope->EnableStrictMode();
   }
@@ -1584,21 +1582,11 @@ Block* Parser::ParseScopedBlock(ZoneStringList* labels, bool* ok) {
     }
   }
   Expect(Token::RBRACE, CHECK_OK);
-
-  // Create exit block.
-  Block* exit = new(zone()) Block(isolate(), NULL, 1, false);
-  exit->AddStatement(new(zone()) ExitContextStatement());
-
-  // Create a try-finally statement.
-  TryFinallyStatement* try_finally =
-      new(zone()) TryFinallyStatement(body, exit);
-  try_finally->set_escaping_targets(collector.targets());
   top_scope_ = saved_scope;
 
-  // Create a result block.
-  Block* result = new(zone()) Block(isolate(), NULL, 1, false);
-  result->AddStatement(try_finally);
-  return result;
+  block_scope = block_scope->FinalizeBlockScope();
+  body->set_block_scope(block_scope);
+  return body;
 }
 
 
@@ -1845,18 +1833,21 @@ Block* Parser::ParseVariableDeclarations(VariableDeclarationContext var_context,
       block->AddStatement(new(zone()) ExpressionStatement(initialize));
     }
 
-    // Add an assignment node to the initialization statement block if
-    // we still have a pending initialization value. We must distinguish
-    // between variables and constants: Variable initializations are simply
+    // Add an assignment node to the initialization statement block if we still
+    // have a pending initialization value. We must distinguish between
+    // different kinds of declarations: 'var' initializations are simply
     // assignments (with all the consequences if they are inside a 'with'
     // statement - they may change a 'with' object property). Constant
     // initializations always assign to the declared constant which is
     // always at the function scope level. This is only relevant for
     // dynamically looked-up variables and constants (the start context
     // for constant lookups is always the function context, while it is
-    // the top context for variables). Sigh...
+    // the top context for var declared variables). Sigh...
+    // For 'let' declared variables the initialization is in the same scope
+    // as the declaration. Thus dynamic lookups are unnecessary even if the
+    // block scope is inside a with.
     if (value != NULL) {
-      bool in_with = is_const ? false : inside_with();
+      bool in_with = mode == Variable::VAR ? inside_with() : false;
       VariableProxy* proxy =
           initialization_scope->NewUnresolved(name, in_with);
       Assignment* assignment =
