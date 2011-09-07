@@ -851,10 +851,11 @@ void FullCodeGenerator::VisitInCurrentContext(Expression* expr) {
 
 void FullCodeGenerator::VisitBlock(Block* stmt) {
   Comment cmnt(masm_, "[ Block");
-  Breakable nested_statement(this, stmt);
+  NestedBlock nested_block(this, stmt);
   SetStatementPosition(stmt);
 
   Scope* saved_scope = scope();
+  // Push a block context when entering a block with block scoped variables.
   if (stmt->block_scope() != NULL) {
     { Comment cmnt(masm_, "[ Extend block context");
       scope_ = stmt->block_scope();
@@ -871,8 +872,16 @@ void FullCodeGenerator::VisitBlock(Block* stmt) {
   PrepareForBailoutForId(stmt->EntryId(), NO_REGISTERS);
   VisitStatements(stmt->statements());
   scope_ = saved_scope;
-  __ bind(nested_statement.break_label());
+  __ bind(nested_block.break_label());
   PrepareForBailoutForId(stmt->ExitId(), NO_REGISTERS);
+
+  // Pop block context if necessary.
+  if (stmt->block_scope() != NULL) {
+    LoadContextField(context_register(), Context::PREVIOUS_INDEX);
+    // Update local stack frame context field.
+    StoreToFrameField(StandardFrameConstants::kContextOffset,
+                      context_register());
+  }
 }
 
 
