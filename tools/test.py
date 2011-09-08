@@ -31,6 +31,7 @@
 import imp
 import optparse
 import os
+import fnmatch
 from os.path import join, dirname, abspath, basename, isdir, exists
 import platform
 import re
@@ -42,6 +43,7 @@ import time
 import threading
 import utils
 from Queue import Queue, Empty
+import tarfile
 
 from unittest_output import UnitTestOutput
 
@@ -586,11 +588,38 @@ def CheckedUnlink(name):
       time.sleep(retry_count * 0.1)
   PrintError("os.unlink() " + str(e))
 
+
+def ADBPushSingle(context, file, android_push_path):
+  file_relpath = os.path.relpath(file, context.workspace)
+  tar = tarfile.open(name=tempfile.mktemp(suffix=".tar"), mode="w")
+  tar.add(file, file_relpath)
+  tar.close()
+  
+  tar_remote_path = os.path.join(android_push_path, os.path.basename(tar.name))
+  
+  ExecuteNoCapture([ "adb", "push", tar.name, android_push_path ], context)
+  ExecuteNoCapture([ "adb", "shell", "busybox", "tar", "-x", "-f", tar_remote_path, "-C", android_push_path ], context)
+  ExecuteNoCapture([ "adb", "shell", "busybox", "rm", tar_remote_path ], context)
+  
+  context.android_file_mappings[file] = os.path.join(android_push_path, file_relpath)
+  
+  CheckedUnlink(tar.name)
+
+
 def Execute(args, context, timeout=None):
   (fd_out, outname) = tempfile.mkstemp()
   (fd_err, errname) = tempfile.mkstemp()
   
-  if context.android_adb:
+  if context.android_push_path is not None:
+    for i in range(len(args)):
+      arg = args[i]
+      if os.path.isfile(arg):
+        if arg not in context.android_file_mappings:
+          # Lazy sending non-sent files
+          ADBPushSingle(context, arg, context.android_push_path)
+        args[i] = context.android_file_mappings[arg]
+  
+  if context.android_adb or context.android_push_path is not None:
       args.insert(0, "shell");
       args.insert(0, "adb");
   
@@ -742,7 +771,7 @@ TIMEOUT_SCALEFACTOR = {
 
 class Context(object):
 
-  def __init__(self, workspace, buildspace, verbose, vm, timeout, processor, suppress_dialogs, store_unexpected_output, android_adb):
+  def __init__(self, workspace, buildspace, verbose, vm, timeout, processor, suppress_dialogs, store_unexpected_output, android_adb, android_push_path, android_file_mappings):
     self.workspace = workspace
     self.buildspace = buildspace
     self.verbose = verbose
@@ -752,6 +781,8 @@ class Context(object):
     self.suppress_dialogs = suppress_dialogs
     self.store_unexpected_output = store_unexpected_output
     self.android_adb = android_adb
+    self.android_push_path = android_push_path
+    self.android_file_mappings = android_file_mappings
 
   def GetVm(self, mode):
     name = self.vm_root + SUFFIX[mode]
@@ -1304,6 +1335,8 @@ def BuildOptions():
                     default=False)
   result.add_option("--android", help="Run tests using \"adb shell\"",
                     default=False, action="store_true")
+  result.add_option("--android-push-path", help="Workspace path on Android device (if specified, necessary test files will be pushed to android device, using \"adb push\"",
+                    default=None)
   return result
 
 
@@ -1374,12 +1407,9 @@ def ProcessOptions(options):
   global ANDROID_ADB
   ANDROID_ADB = options.android
   if options.android:
-      if options.simulator != 'none':
-          print '--android is not supported on simulator'
-          return False
-      if not options.arch in ['arm', 'mips']:
-          print '--android is only supported on arm and mips arch'
-          return False
+    if options.simulator != 'none':
+      print '--android is not supported on simulator'
+      return False
   return True
 
 
@@ -1510,6 +1540,8 @@ def Main():
 
   shell = abspath(options.shell)
   buildspace = dirname(shell)
+  
+  android_file_mappings = { }
 
   context = Context(workspace, buildspace, VERBOSE,
                     shell,
@@ -1517,7 +1549,9 @@ def Main():
                     GetSpecialCommandProcessor(options.special_command),
                     options.suppress_dialogs,
                     options.store_unexpected_output,
-                    ANDROID_ADB)
+                    ANDROID_ADB,
+                    options.android_push_path,
+                    android_file_mappings)
   # First build the required targets
   if not options.no_build:
     reqs = [ ]
@@ -1533,6 +1567,18 @@ def Main():
   # Just return if we are only building the targets for running the tests.
   if options.build_only:
     return 0
+
+  if options.android_push_path is not None:
+    print("Cleaning up remote android workspace: " + options.android_push_path)
+    ExecuteNoCapture([ "adb", "shell", "busybox", "rm", "-rf", options.android_push_path ], context)
+    ExecuteNoCapture([ "adb", "shell", "busybox", "mkdir", "-p", options.android_push_path ], context)
+    
+    # We have to set a temp dir under workspace, otherwise,
+    # we cannot pack tempfiles
+    new_tmp_path = os.path.join(context.workspace, "tmp")
+    if not os.path.isdir(new_tmp_path):
+      os.mkdir(new_tmp_path)
+    tempfile.tempdir = new_tmp_path
 
   # Get status for tests
   sections = [ ]
@@ -1564,6 +1610,27 @@ def Main():
         globally_unused_rules = globally_unused_rules.intersection(unused_rules)
       all_cases += ShardTests(cases, options)
       all_unused.append(unused_rules)
+
+  if options.android_push_path is not None:
+    tar = tarfile.open(name=tempfile.mktemp(suffix=".tar"), mode="w")
+    for test in unclassified_tests:
+      command = test.GetCommand()
+      for cmd in command:
+        if os.path.isfile(cmd):
+          if cmd not in android_file_mappings:
+            file_relpath = os.path.relpath(cmd, context.workspace)
+            tar.add(cmd, file_relpath)
+            print ("Archiving file: " + cmd)
+            android_file_mappings[cmd] = os.path.join(options.android_push_path, file_relpath)
+    tar.close()
+    
+    tar_remote_path = os.path.join(options.android_push_path, os.path.basename(tar.name))
+    
+    ExecuteNoCapture([ "adb", "push", tar.name, options.android_push_path ], context)
+    ExecuteNoCapture([ "adb", "shell", "busybox", "tar", "-x", "-f", tar_remote_path, "-C", options.android_push_path ], context)
+    ExecuteNoCapture([ "adb", "shell", "busybox", "rm", tar_remote_path ], context)
+  
+    CheckedUnlink(tar.name)
 
   if options.cat:
     visited = set()
