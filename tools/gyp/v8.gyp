@@ -71,6 +71,13 @@
                     ],
                   },
                 }],
+                ['soname_version!=""', {
+                  # Ideally, we'd like to specify the full filename for the
+                  # library and set it to "libv8.so.<(soname_version)",
+                  # but currently the best we can do is use 'product_name' and
+                  # get "libv8-<(soname_version).so".
+                  'product_name': 'v8-<(soname_version)',
+                }],
               ],
             },
             {
@@ -407,10 +414,10 @@
             '../../src/runtime-profiler.h',
             '../../src/safepoint-table.cc',
             '../../src/safepoint-table.h',
-            '../../src/scanner-base.cc',
-            '../../src/scanner-base.h',
             '../../src/scanner.cc',
             '../../src/scanner.h',
+            '../../src/scanner-character-streams.cc',
+            '../../src/scanner-character-streams.h',
             '../../src/scopeinfo.cc',
             '../../src/scopeinfo.h',
             '../../src/scopes.cc',
@@ -825,8 +832,8 @@
             '../../src/preparser.cc',
             '../../src/preparser.h',
             '../../src/preparser-api.cc',
-            '../../src/scanner-base.cc',
-            '../../src/scanner-base.h',
+            '../../src/scanner.cc',
+            '../../src/scanner.h',
             '../../src/strtod.cc',
             '../../src/strtod.h',
             '../../src/token.cc',
