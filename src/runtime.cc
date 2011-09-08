@@ -2881,7 +2881,7 @@ MUST_USE_RESULT static MaybeObject* StringReplaceStringWithString(
     Handle<JSRegExp> pattern_regexp,
     Handle<String> replacement = Handle<String>::null()) {
   ASSERT(subject->IsFlat());
-  ASSERT(replacement->IsFlat());
+  ASSERT(replacement.is_null() || replacement->IsFlat());
 
   ZoneScope zone_space(isolate, DELETE_ON_EXIT);
   ZoneList<int> indices(8);
@@ -6195,11 +6195,13 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_StringSplit) {
   }
 
   if (limit == 0xffffffffu) {
-    StringSplitCache::Enter(isolate->heap(),
-                            isolate->heap()->string_split_cache(),
-                            *subject,
-                            *pattern,
-                            *elements);
+    if (result->HasFastElements()) {
+      StringSplitCache::Enter(isolate->heap(),
+                              isolate->heap()->string_split_cache(),
+                              *subject,
+                              *pattern,
+                              *elements);
+    }
   }
 
   return *result;
