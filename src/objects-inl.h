@@ -2000,7 +2000,7 @@ bool DescriptorArray::IsProperty(int descriptor_number) {
 bool DescriptorArray::IsTransition(int descriptor_number) {
   PropertyType t = GetType(descriptor_number);
   return t == MAP_TRANSITION || t == CONSTANT_TRANSITION ||
-      t == EXTERNAL_ARRAY_TRANSITION;
+      t == ELEMENTS_TRANSITION;
 }
 
 
@@ -3259,7 +3259,7 @@ MaybeObject* Map::GetFastElementsMap() {
     if (!maybe_obj->ToObject(&obj)) return maybe_obj;
   }
   Map* new_map = Map::cast(obj);
-  new_map->set_elements_kind(JSObject::FAST_ELEMENTS);
+  new_map->set_elements_kind(FAST_ELEMENTS);
   isolate()->counters()->map_to_fast_elements()->Increment();
   return new_map;
 }
@@ -3272,7 +3272,7 @@ MaybeObject* Map::GetFastDoubleElementsMap() {
     if (!maybe_obj->ToObject(&obj)) return maybe_obj;
   }
   Map* new_map = Map::cast(obj);
-  new_map->set_elements_kind(JSObject::FAST_DOUBLE_ELEMENTS);
+  new_map->set_elements_kind(FAST_DOUBLE_ELEMENTS);
   isolate()->counters()->map_to_fast_double_elements()->Increment();
   return new_map;
 }
@@ -3285,7 +3285,7 @@ MaybeObject* Map::GetSlowElementsMap() {
     if (!maybe_obj->ToObject(&obj)) return maybe_obj;
   }
   Map* new_map = Map::cast(obj);
-  new_map->set_elements_kind(JSObject::DICTIONARY_ELEMENTS);
+  new_map->set_elements_kind(DICTIONARY_ELEMENTS);
   isolate()->counters()->map_to_slow_elements()->Increment();
   return new_map;
 }
@@ -4098,7 +4098,7 @@ void JSRegExp::SetDataAtUnchecked(int index, Object* value, Heap* heap) {
 }
 
 
-JSObject::ElementsKind JSObject::GetElementsKind() {
+ElementsKind JSObject::GetElementsKind() {
   ElementsKind kind = map()->elements_kind();
   ASSERT((kind == FAST_ELEMENTS &&
           (elements()->map() == GetHeap()->fixed_array_map() ||

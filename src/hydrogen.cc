@@ -220,6 +220,17 @@ bool HBasicBlock::Dominates(HBasicBlock* other) const {
 }
 
 
+int HBasicBlock::LoopNestingDepth() const {
+  const HBasicBlock* current = this;
+  int result  = (current->IsLoopHeader()) ? 1 : 0;
+  while (current->parent_loop_header() != NULL) {
+    current = current->parent_loop_header();
+    result++;
+  }
+  return result;
+}
+
+
 void HBasicBlock::PostProcessLoopHeader(IterationStatement* stmt) {
   ASSERT(IsLoopHeader());
 
@@ -1690,40 +1701,25 @@ void HInferRepresentation::Analyze() {
     }
   }
 
-  // (3) Sum up the non-phi use counts of all connected phis.  Don't include
-  // the non-phi uses of the phi itself.
+  // (3) Use the phi reachability information from step 2 to
+  //     (a) sum up the non-phi use counts of all connected phis.
+  //     (b) push information about values which can't be converted to integer
+  //         without deoptimization through the phi use-def chains, avoiding
+  //         unnecessary deoptimizations later.
   for (int i = 0; i < phi_count; ++i) {
     HPhi* phi = phi_list->at(i);
+    bool cti = phi->AllOperandsConvertibleToInteger();
     for (BitVector::Iterator it(connected_phis.at(i));
          !it.Done();
          it.Advance()) {
       int index = it.Current();
-      if (index != i) {
-        HPhi* it_use = phi_list->at(it.Current());
-        phi->AddNonPhiUsesFrom(it_use);
-      }
+      HPhi* it_use = phi_list->at(it.Current());
+      if (index != i) phi->AddNonPhiUsesFrom(it_use);  // Don't count twice!
+      if (!cti) it_use->set_is_convertible_to_integer(false);
     }
   }
 
-  // (4) Compute phis that definitely can't be converted to integer
-  // without deoptimization and mark them to avoid unnecessary deoptimization.
-  change = true;
-  while (change) {
-    change = false;
-    for (int i = 0; i < phi_count; ++i) {
-      HPhi* phi = phi_list->at(i);
-      for (int j = 0; j < phi->OperandCount(); ++j) {
-        if (phi->IsConvertibleToInteger() &&
-            !phi->OperandAt(j)->IsConvertibleToInteger()) {
-          phi->set_is_convertible_to_integer(false);
-          change = true;
-          break;
-        }
-      }
-    }
-  }
-
-
+  // Initialize work list
   for (int i = 0; i < graph_->blocks()->length(); ++i) {
     HBasicBlock* block = graph_->blocks()->at(i);
     const ZoneList<HPhi*>* phis = block->phis();
@@ -1738,6 +1734,7 @@ void HInferRepresentation::Analyze() {
     }
   }
 
+  // Do a fixed point iteration, trying to improve representations
   while (!worklist_.is_empty()) {
     HValue* current = worklist_.RemoveLast();
     in_worklist_.Remove(current->id());
@@ -3904,35 +3901,35 @@ HInstruction* HGraphBuilder::BuildExternalArrayElementAccess(
     HValue* external_elements,
     HValue* checked_key,
     HValue* val,
-    JSObject::ElementsKind elements_kind,
+    ElementsKind elements_kind,
     bool is_store) {
   if (is_store) {
     ASSERT(val != NULL);
     switch (elements_kind) {
-      case JSObject::EXTERNAL_PIXEL_ELEMENTS: {
+      case EXTERNAL_PIXEL_ELEMENTS: {
         HClampToUint8* clamp = new(zone()) HClampToUint8(val);
         AddInstruction(clamp);
         val = clamp;
         break;
       }
-      case JSObject::EXTERNAL_BYTE_ELEMENTS:
-      case JSObject::EXTERNAL_UNSIGNED_BYTE_ELEMENTS:
-      case JSObject::EXTERNAL_SHORT_ELEMENTS:
-      case JSObject::EXTERNAL_UNSIGNED_SHORT_ELEMENTS:
-      case JSObject::EXTERNAL_INT_ELEMENTS:
-      case JSObject::EXTERNAL_UNSIGNED_INT_ELEMENTS: {
+      case EXTERNAL_BYTE_ELEMENTS:
+      case EXTERNAL_UNSIGNED_BYTE_ELEMENTS:
+      case EXTERNAL_SHORT_ELEMENTS:
+      case EXTERNAL_UNSIGNED_SHORT_ELEMENTS:
+      case EXTERNAL_INT_ELEMENTS:
+      case EXTERNAL_UNSIGNED_INT_ELEMENTS: {
         HToInt32* floor_val = new(zone()) HToInt32(val);
         AddInstruction(floor_val);
         val = floor_val;
         break;
       }
-      case JSObject::EXTERNAL_FLOAT_ELEMENTS:
-      case JSObject::EXTERNAL_DOUBLE_ELEMENTS:
+      case EXTERNAL_FLOAT_ELEMENTS:
+      case EXTERNAL_DOUBLE_ELEMENTS:
         break;
-      case JSObject::FAST_ELEMENTS:
-      case JSObject::FAST_DOUBLE_ELEMENTS:
-      case JSObject::DICTIONARY_ELEMENTS:
-      case JSObject::NON_STRICT_ARGUMENTS_ELEMENTS:
+      case FAST_ELEMENTS:
+      case FAST_DOUBLE_ELEMENTS:
+      case DICTIONARY_ELEMENTS:
+      case NON_STRICT_ARGUMENTS_ELEMENTS:
         UNREACHABLE();
         break;
     }
@@ -4016,7 +4013,7 @@ HValue* HGraphBuilder::HandlePolymorphicElementAccess(HValue* object,
   SmallMapList* maps = prop->GetReceiverTypes();
   bool todo_external_array = false;
 
-  static const int kNumElementTypes = JSObject::kElementsKindCount;
+  static const int kNumElementTypes = kElementsKindCount;
   bool type_todo[kNumElementTypes];
   for (int i = 0; i < kNumElementTypes; ++i) {
     type_todo[i] = false;
@@ -4026,7 +4023,7 @@ HValue* HGraphBuilder::HandlePolymorphicElementAccess(HValue* object,
     ASSERT(maps->at(i)->IsMap());
     type_todo[maps->at(i)->elements_kind()] = true;
     if (maps->at(i)->elements_kind()
-        >= JSObject::FIRST_EXTERNAL_ARRAY_ELEMENTS_KIND) {
+        >= FIRST_EXTERNAL_ARRAY_ELEMENTS_KIND) {
       todo_external_array = true;
     }
   }
@@ -4041,16 +4038,16 @@ HValue* HGraphBuilder::HandlePolymorphicElementAccess(HValue* object,
   HInstruction* checked_key = NULL;
 
   // FAST_ELEMENTS is assumed to be the first case.
-  STATIC_ASSERT(JSObject::FAST_ELEMENTS == 0);
+  STATIC_ASSERT(FAST_ELEMENTS == 0);
 
-  for (JSObject::ElementsKind elements_kind = JSObject::FAST_ELEMENTS;
-       elements_kind <= JSObject::LAST_ELEMENTS_KIND;
-       elements_kind = JSObject::ElementsKind(elements_kind + 1)) {
+  for (ElementsKind elements_kind = FAST_ELEMENTS;
+       elements_kind <= LAST_ELEMENTS_KIND;
+       elements_kind = ElementsKind(elements_kind + 1)) {
     // After having handled FAST_ELEMENTS and DICTIONARY_ELEMENTS, we
     // need to add some code that's executed for all external array cases.
-    STATIC_ASSERT(JSObject::LAST_EXTERNAL_ARRAY_ELEMENTS_KIND ==
-                  JSObject::LAST_ELEMENTS_KIND);
-    if (elements_kind == JSObject::FIRST_EXTERNAL_ARRAY_ELEMENTS_KIND
+    STATIC_ASSERT(LAST_EXTERNAL_ARRAY_ELEMENTS_KIND ==
+                  LAST_ELEMENTS_KIND);
+    if (elements_kind == FIRST_EXTERNAL_ARRAY_ELEMENTS_KIND
         && todo_external_array) {
       HInstruction* length =
           AddInstruction(new(zone()) HFixedArrayBaseLength(elements));
@@ -4069,11 +4066,11 @@ HValue* HGraphBuilder::HandlePolymorphicElementAccess(HValue* object,
 
       set_current_block(if_true);
       HInstruction* access;
-      if (elements_kind == JSObject::FAST_ELEMENTS ||
-          elements_kind == JSObject::FAST_DOUBLE_ELEMENTS) {
+      if (elements_kind == FAST_ELEMENTS ||
+          elements_kind == FAST_DOUBLE_ELEMENTS) {
         bool fast_double_elements =
-            elements_kind == JSObject::FAST_DOUBLE_ELEMENTS;
-        if (is_store && elements_kind == JSObject::FAST_ELEMENTS) {
+            elements_kind == FAST_DOUBLE_ELEMENTS;
+        if (is_store && elements_kind == FAST_ELEMENTS) {
           AddInstruction(new(zone()) HCheckMap(
               elements, isolate()->factory()->fixed_array_map(),
               elements_kind_branch));
@@ -4138,7 +4135,7 @@ HValue* HGraphBuilder::HandlePolymorphicElementAccess(HValue* object,
                 new(zone()) HLoadKeyedFastElement(elements, checked_key));
           }
         }
-      } else if (elements_kind == JSObject::DICTIONARY_ELEMENTS) {
+      } else if (elements_kind == DICTIONARY_ELEMENTS) {
         if (is_store) {
           access = AddInstruction(BuildStoreKeyedGeneric(object, key, val));
         } else {
@@ -6566,6 +6563,8 @@ void HTracer::Trace(const char* name, HGraph* graph, LChunk* chunk) {
     if (current->dominator() != NULL) {
       PrintBlockProperty("dominator", current->dominator()->block_id());
     }
+
+    PrintIntProperty("loop_depth", current->LoopNestingDepth());
 
     if (chunk != NULL) {
       int first_index = current->first_instruction_index();
