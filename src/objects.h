@@ -135,6 +135,37 @@ enum PropertyAttributes {
 namespace v8 {
 namespace internal {
 
+enum ElementsKind {
+  // The "fast" kind for tagged values. Must be first to make it possible
+  // to efficiently check maps if they have fast elements.
+  FAST_ELEMENTS,
+
+  // The "fast" kind for unwrapped, non-tagged double values.
+  FAST_DOUBLE_ELEMENTS,
+
+  // The "slow" kind.
+  DICTIONARY_ELEMENTS,
+  NON_STRICT_ARGUMENTS_ELEMENTS,
+  // The "fast" kind for external arrays
+  EXTERNAL_BYTE_ELEMENTS,
+  EXTERNAL_UNSIGNED_BYTE_ELEMENTS,
+  EXTERNAL_SHORT_ELEMENTS,
+  EXTERNAL_UNSIGNED_SHORT_ELEMENTS,
+  EXTERNAL_INT_ELEMENTS,
+  EXTERNAL_UNSIGNED_INT_ELEMENTS,
+  EXTERNAL_FLOAT_ELEMENTS,
+  EXTERNAL_DOUBLE_ELEMENTS,
+  EXTERNAL_PIXEL_ELEMENTS,
+
+  // Derived constants from ElementsKind
+  FIRST_EXTERNAL_ARRAY_ELEMENTS_KIND = EXTERNAL_BYTE_ELEMENTS,
+  LAST_EXTERNAL_ARRAY_ELEMENTS_KIND = EXTERNAL_PIXEL_ELEMENTS,
+  FIRST_ELEMENTS_KIND = FAST_ELEMENTS,
+  LAST_ELEMENTS_KIND = EXTERNAL_PIXEL_ELEMENTS
+};
+
+static const int kElementsKindCount =
+    LAST_ELEMENTS_KIND - FIRST_ELEMENTS_KIND + 1;
 
 // PropertyDetails captures type and attributes for a property.
 // They are used both in property dictionaries and instance descriptors.
@@ -143,7 +174,7 @@ class PropertyDetails BASE_EMBEDDED {
   PropertyDetails(PropertyAttributes attributes,
                   PropertyType type,
                   int index = 0) {
-    ASSERT(type != EXTERNAL_ARRAY_TRANSITION);
+    ASSERT(type != ELEMENTS_TRANSITION);
     ASSERT(TypeField::is_valid(type));
     ASSERT(AttributesField::is_valid(attributes));
     ASSERT(StorageField::is_valid(index));
@@ -159,19 +190,19 @@ class PropertyDetails BASE_EMBEDDED {
 
   PropertyDetails(PropertyAttributes attributes,
                   PropertyType type,
-                  ExternalArrayType array_type) {
-    ASSERT(type == EXTERNAL_ARRAY_TRANSITION);
+                  ElementsKind elements_kind) {
+    ASSERT(type == ELEMENTS_TRANSITION);
     ASSERT(TypeField::is_valid(type));
     ASSERT(AttributesField::is_valid(attributes));
-    ASSERT(StorageField::is_valid(static_cast<int>(array_type)));
+    ASSERT(StorageField::is_valid(static_cast<int>(elements_kind)));
 
     value_ = TypeField::encode(type)
         | AttributesField::encode(attributes)
-        | StorageField::encode(static_cast<int>(array_type));
+        | StorageField::encode(static_cast<int>(elements_kind));
 
     ASSERT(type == this->type());
     ASSERT(attributes == this->attributes());
-    ASSERT(array_type == this->array_type());
+    ASSERT(elements_kind == this->elements_kind());
   }
 
   // Conversion for storing details as Object*.
@@ -184,7 +215,7 @@ class PropertyDetails BASE_EMBEDDED {
     PropertyType t = type();
     ASSERT(t != INTERCEPTOR);
     return t == MAP_TRANSITION || t == CONSTANT_TRANSITION ||
-        t == EXTERNAL_ARRAY_TRANSITION;
+        t == ELEMENTS_TRANSITION;
   }
 
   bool IsProperty() {
@@ -195,9 +226,9 @@ class PropertyDetails BASE_EMBEDDED {
 
   int index() { return StorageField::decode(value_); }
 
-  ExternalArrayType array_type() {
-    ASSERT(type() == EXTERNAL_ARRAY_TRANSITION);
-    return static_cast<ExternalArrayType>(StorageField::decode(value_));
+  ElementsKind elements_kind() {
+    ASSERT(type() == ELEMENTS_TRANSITION);
+    return static_cast<ElementsKind>(StorageField::decode(value_));
   }
 
   inline PropertyDetails AsDeleted();
@@ -1463,38 +1494,6 @@ class JSReceiver: public HeapObject {
 // caching.
 class JSObject: public JSReceiver {
  public:
-  enum ElementsKind {
-    // The "fast" kind for tagged values. Must be first to make it possible
-    // to efficiently check maps if they have fast elements.
-    FAST_ELEMENTS,
-
-    // The "fast" kind for unwrapped, non-tagged double values.
-    FAST_DOUBLE_ELEMENTS,
-
-    // The "slow" kind.
-    DICTIONARY_ELEMENTS,
-    NON_STRICT_ARGUMENTS_ELEMENTS,
-    // The "fast" kind for external arrays
-    EXTERNAL_BYTE_ELEMENTS,
-    EXTERNAL_UNSIGNED_BYTE_ELEMENTS,
-    EXTERNAL_SHORT_ELEMENTS,
-    EXTERNAL_UNSIGNED_SHORT_ELEMENTS,
-    EXTERNAL_INT_ELEMENTS,
-    EXTERNAL_UNSIGNED_INT_ELEMENTS,
-    EXTERNAL_FLOAT_ELEMENTS,
-    EXTERNAL_DOUBLE_ELEMENTS,
-    EXTERNAL_PIXEL_ELEMENTS,
-
-    // Derived constants from ElementsKind
-    FIRST_EXTERNAL_ARRAY_ELEMENTS_KIND = EXTERNAL_BYTE_ELEMENTS,
-    LAST_EXTERNAL_ARRAY_ELEMENTS_KIND = EXTERNAL_PIXEL_ELEMENTS,
-    FIRST_ELEMENTS_KIND = FAST_ELEMENTS,
-    LAST_ELEMENTS_KIND = EXTERNAL_PIXEL_ELEMENTS
-  };
-
-  static const int kElementsKindCount =
-    LAST_ELEMENTS_KIND - FIRST_ELEMENTS_KIND + 1;
-
   // [properties]: Backing storage for properties.
   // properties is a FixedArray in the fast case and a Dictionary in the
   // slow case.
@@ -4020,37 +4019,37 @@ class Map: public HeapObject {
   inline void set_is_extensible(bool value);
   inline bool is_extensible();
 
-  inline void set_elements_kind(JSObject::ElementsKind elements_kind) {
-    ASSERT(elements_kind < JSObject::kElementsKindCount);
-    ASSERT(JSObject::kElementsKindCount <= (1 << kElementsKindBitCount));
+  inline void set_elements_kind(ElementsKind elements_kind) {
+    ASSERT(elements_kind < kElementsKindCount);
+    ASSERT(kElementsKindCount <= (1 << kElementsKindBitCount));
     set_bit_field2((bit_field2() & ~kElementsKindMask) |
         (elements_kind << kElementsKindShift));
     ASSERT(this->elements_kind() == elements_kind);
   }
 
-  inline JSObject::ElementsKind elements_kind() {
-    return static_cast<JSObject::ElementsKind>(
+  inline ElementsKind elements_kind() {
+    return static_cast<ElementsKind>(
         (bit_field2() & kElementsKindMask) >> kElementsKindShift);
   }
 
   // Tells whether the instance has fast elements.
   // Equivalent to instance->GetElementsKind() == FAST_ELEMENTS.
   inline bool has_fast_elements() {
-    return elements_kind() == JSObject::FAST_ELEMENTS;
+    return elements_kind() == FAST_ELEMENTS;
   }
 
   inline bool has_fast_double_elements() {
-    return elements_kind() == JSObject::FAST_DOUBLE_ELEMENTS;
+    return elements_kind() == FAST_DOUBLE_ELEMENTS;
   }
 
   inline bool has_external_array_elements() {
-    JSObject::ElementsKind kind(elements_kind());
-    return kind >= JSObject::FIRST_EXTERNAL_ARRAY_ELEMENTS_KIND &&
-        kind <= JSObject::LAST_EXTERNAL_ARRAY_ELEMENTS_KIND;
+    ElementsKind kind(elements_kind());
+    return kind >= FIRST_EXTERNAL_ARRAY_ELEMENTS_KIND &&
+        kind <= LAST_EXTERNAL_ARRAY_ELEMENTS_KIND;
   }
 
   inline bool has_dictionary_elements() {
-    return elements_kind() == JSObject::DICTIONARY_ELEMENTS;
+    return elements_kind() == DICTIONARY_ELEMENTS;
   }
 
   // Tells whether the map is attached to SharedFunctionInfo
@@ -4155,9 +4154,9 @@ class Map: public HeapObject {
   MUST_USE_RESULT inline MaybeObject* GetSlowElementsMap();
 
   // Returns a new map with all transitions dropped from the descriptors and the
-  // ElementsKind set to one of the value corresponding to array_type.
-  MUST_USE_RESULT MaybeObject* GetExternalArrayElementsMap(
-      ExternalArrayType array_type,
+  // ElementsKind set.
+  MUST_USE_RESULT MaybeObject* GetElementsTransitionMap(
+      ElementsKind elements_kind,
       bool safe_to_add_transition);
 
   // Returns the property index for name (only valid for FAST MODE).
@@ -4322,7 +4321,7 @@ class Map: public HeapObject {
   static const int kElementsKindMask = (-1 << kElementsKindShift) &
       ((1 << (kElementsKindShift + kElementsKindBitCount)) - 1);
   static const int8_t kMaximumBitField2FastElementValue = static_cast<int8_t>(
-      (JSObject::FAST_ELEMENTS + 1) << Map::kElementsKindShift) - 1;
+      (FAST_ELEMENTS + 1) << Map::kElementsKindShift) - 1;
 
   // Bit positions for bit field 3
   static const int kIsShared = 0;
