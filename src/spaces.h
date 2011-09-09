@@ -1237,8 +1237,8 @@ class PagedSpace : public Space {
   // Returns the number of total pages in this space.
   int CountTotalPages();
 #endif
- private:
 
+ private:
   // Returns a pointer to the page of the relocation pointer.
   Page* MCRelocationTopPage() { return TopPageOf(mc_forwarding_info_); }
 
@@ -1821,7 +1821,6 @@ class FixedSizeFreeList BASE_EMBEDDED {
   void MarkNodes();
 
  private:
-
   Heap* heap_;
 
   // Available bytes on the free list.
