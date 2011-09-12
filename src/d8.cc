@@ -295,18 +295,20 @@ Handle<Value> Shell::CreateExternalArray(const Arguments& args,
   size_t length = 0;
   if (args[0]->IsUint32()) {
     length = args[0]->Uint32Value();
-  } else if (args[0]->IsNumber()) {
-    double raw_length = args[0]->NumberValue();
+  } else {
+    Local<Number> number = args[0]->ToNumber();
+    if (number.IsEmpty() || !number->IsNumber()) {
+      return ThrowException(String::New("Array length must be a number."));
+    }
+    int32_t raw_length = number->ToInt32()->Int32Value();
     if (raw_length < 0) {
       return ThrowException(String::New("Array length must not be negative."));
     }
-    if (raw_length > kMaxLength) {
+    if (raw_length > static_cast<int32_t>(kMaxLength)) {
       return ThrowException(
           String::New("Array length exceeds maximum length."));
     }
     length = static_cast<size_t>(raw_length);
-  } else {
-    return ThrowException(String::New("Array length must be a number."));
   }
   if (length > static_cast<size_t>(kMaxLength)) {
     return ThrowException(String::New("Array length exceeds maximum length."));
