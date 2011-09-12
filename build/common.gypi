@@ -50,12 +50,24 @@
     # probing when running on the target.
     'v8_can_use_vfp_instructions%': 'false',
 
+    # Setting 'v8_can_use_fpu_instructions' to 'true' will enable use of
+    # MIPS FPU instructions in the V8 generated code. FPU instructions will be
+    # enabled both for the snapshot and for the MIPS target. Leaving the default
+    # value of 'false' will avoid FPU instructions in the snapshot and use CPU
+    # feature probing when running on the target.
+    'v8_can_use_fpu_instructions%': 'true',
+
     # Setting v8_use_arm_eabi_hardfloat to true will turn on V8 support for ARM
     # EABI calling convention where double arguments are passed in VFP
     # registers. Note that the GCC flag '-mfloat-abi=hard' should be used as
     # well when compiling for the ARM target.
     'v8_use_arm_eabi_hardfloat%': 'false',
 
+    # Setting v8_use_mips_abi_hardfloat to true will turn on V8 support for MIPS
+    # ABI calling convention where double arguments are passed in FPU
+    # registers. Note that the GCC flag '-mhard-float' should be used as
+    # well when compiling for the MIPS target.
+    'v8_use_mips_abi_hardfloat%': 'true',
     'v8_enable_debugger_support%': 1,
 
     'v8_enable_disassembler%': 0,
@@ -148,6 +160,75 @@
             'defines': [
               'V8_TARGET_ARCH_MIPS',
             ],
+            'conditions': [
+              [ 'v8_can_use_fpu_instructions=="true"', {
+                'defines': [
+                   'CAN_USE_FPU_INSTRUCTIONS',
+                 ],
+              }],
+              [ 'v8_target_arch_variant=="mips32r2"', {
+                'defines': [
+                  '_MIPS_ARCH_MIPS32R2',
+                 ],
+              }],
+              [ 'v8_use_mips_abi_hardfloat=="true"', {
+                'defines': [
+                  '__mips_hard_float=1',
+                  'CAN_USE_FPU_INSTRUCTIONS',
+                ],
+                'conditions': [
+                 ['target_arch=="mips"', {
+                  'cflags': [
+                    '-mhard-float',
+                   ],
+                   'ldflags': [
+                      '-mhard-float'
+                   ],
+                 }],
+                ],
+              }, {
+                  'defines': [
+                  '__mips_soft_float=1',
+                  ],
+                  'conditions': [
+                   ['target_arch=="mips"', {
+                    'cflags': [
+                      '-msoft-float',
+                    ],
+                    'ldflags': [
+                      '-msoft-float'
+                    ],
+                  }],
+                 ],
+              }],
+              ['host_arch=="x64"', {
+                'target_conditions': [
+                  ['_toolset=="host"', {
+                    'cflags': ['-m32'],
+                    'cflags!': [ '-EL', '-mips32r2', '-Wa,-mips32r2'],
+                    'ldflags': ['-m32'],
+                    'ldflags!': ['-EL', '-static', '-static-libgcc'],
+                    'conditions': [
+                     [ 'v8_use_mips_abi_hardfloat=="true"', {
+                       'cflags!': [
+                         '-mhard-float',
+                        ],
+                       'ldflags': [
+                         '-mhard-float'
+                        ],
+                     }, {
+                         'cflags!': [
+                           '-msoft-float',
+                          ],
+                         'ldflags!': [
+                           '-msoft-float',
+                         ],
+                      }],
+                    ],
+                  }],
+                ],
+              }],
+            ],
           }],
           ['v8_target_arch=="x64"', {
             'defines': [
@@ -181,6 +262,15 @@
           [ 'target_arch=="ia32"', {
             'cflags': [ '-m32' ],
             'ldflags': [ '-m32' ],
+          }],
+          [ 'target_arch=="mips"', {
+            'cflags': [ '-EL', '-mips32r2', '-Wa,-mips32r2' ],
+            'ldflags': ['-EL'],
+            'conditions': [
+              [ 'component=="static_library"', {
+                'ldflags': ['-static', '-static-libgcc' ],
+              }],
+            ],
           }],
         ],
       }],

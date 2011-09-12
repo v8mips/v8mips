@@ -518,6 +518,52 @@
                 '../../src/arm/stub-cache-arm.cc',
               ],
             }],
+            ['v8_target_arch=="mips"', {
+              'sources': [
+                '../../src/mips/assembler-mips-inl.h',
+                '../../src/mips/assembler-mips.cc',
+                '../../src/mips/assembler-mips.h',
+                '../../src/mips/builtins-mips.cc',
+                '../../src/mips/code-stubs-mips.cc',
+                '../../src/mips/code-stubs-mips.h',
+                '../../src/mips/codegen-mips.cc',
+                '../../src/mips/codegen-mips.h',
+                '../../src/mips/constants-mips.h',
+                '../../src/mips/constants-mips.cc',
+                '../../src/mips/cpu-mips.cc',
+                '../../src/mips/debug-mips.cc',
+                '../../src/mips/deoptimizer-mips.cc',
+                '../../src/mips/disasm-mips.cc',
+                '../../src/mips/frames-mips.cc',
+                '../../src/mips/frames-mips.h',
+                '../../src/mips/full-codegen-mips.cc',
+                '../../src/mips/ic-mips.cc',
+                '../../src/mips/lithium-mips.cc',
+                '../../src/mips/lithium-mips.h',
+                '../../src/mips/lithium-codegen-mips.cc',
+                '../../src/mips/lithium-codegen-mips.h',
+                '../../src/mips/lithium-gap-resolver-mips.cc',
+                '../../src/mips/lithium-gap-resolver-mips.h',
+                '../../src/mips/macro-assembler-mips.cc',
+                '../../src/mips/macro-assembler-mips.h',
+                '../../src/mips/regexp-macro-assembler-mips.cc',
+                '../../src/mips/regexp-macro-assembler-mips.h',
+                '../../src/mips/simulator-mips.cc',
+                '../../src/mips/stub-cache-mips.cc',
+              ],
+              'conditions': [
+                [ 'host_arch=="x64"', {
+                  'target_conditions': [
+                  ['_toolset=="host"', {
+                    'cflags': ['-m32'],
+                    'cflags!': ['-EL', '-mips32r2', '-Wa,-mips32r2'],
+                    'ldflags': ['-m32'],
+                    'ldflags!': ['-EL', '-static', '-static-libgcc'],
+                  }],
+                ],
+              }],
+            ],
+           }],
             ['v8_target_arch=="ia32" or v8_target_arch=="mac" or OS=="mac"', {
               'sources': [
                 '../../src/ia32/assembler-ia32-inl.h',
@@ -757,6 +803,16 @@
             }, {
               'toolsets': ['target'],
             }],
+            ['v8_target_arch=="mips" and host_arch=="x64"', {
+              'target_conditions': [
+                ['_toolset=="host"', {
+                  'cflags': ['-m32'],
+                  'cflags!': ['-EL', '-mips32r2', '-Wa,-mips32r2'],
+                  'ldflags': ['-m32'],
+                  'ldflags!': ['-EL', '-static', '-static-libgcc'],
+                }],
+              ],
+            }],
             ['v8_compress_startup_data=="bz2"', {
               'libraries': [
                 '-lbz2',
@@ -864,6 +920,16 @@
               'toolsets': ['host', 'target'],
             }, {
               'toolsets': ['target'],
+            }],
+            [ 'v8_target_arch=="mips" and host_arch=="x64"', {
+              'target_conditions': [
+                ['_toolset=="host"', {
+                  'cflags': ['-m32'],
+                  'cflags!': ['-EL', '-mips32r2', '-Wa,-mips32r2'],
+                  'ldflags': ['-m32'],
+                  'ldflags!': ['-EL', '-static', '-static-libgcc'],
+                }],
+              ],
             }],
           ],
           'link_settings': {

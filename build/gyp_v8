@@ -161,6 +161,11 @@ if __name__ == '__main__':
     gyp_args.append('-S-ia32')
   run_gyp(gyp_args)
 
+  gyp_args = list(args)
+  gyp_args.append('-I' + v8_root + '/build/mips.gypi')
+  gyp_args.append('-S-mips')
+  run_gyp(gyp_args)
+
   if utils.GuessOS() == 'linux':
     gyp_args = list(args)
     gyp_args.append('-Dtarget_arch=x64')
@@ -170,4 +175,9 @@ if __name__ == '__main__':
     gyp_args = list(args)
     gyp_args.append('-I' + v8_root + '/build/armu.gypi')
     gyp_args.append('-S-armu')
+    run_gyp(gyp_args)
+
+    gyp_args = list(args)
+    gyp_args.append('-I' + v8_root + '/build/mipsu.gypi')
+    gyp_args.append('-S-mipsu')
     run_gyp(gyp_args)

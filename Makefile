@@ -32,7 +32,7 @@ LINK ?= "g++"
 OUTDIR ?= out
 TESTJOBS ?= -j16
 GYPFLAGS ?=
-
+GYPINCLUDE_MIPS ?=
 # Special build flags. Use them like this: "make library=shared"
 
 # library=shared || component=shared_library
@@ -68,6 +68,18 @@ ifeq ($(vfp3), off)
 else
   GYPFLAGS += -Dv8_can_use_vfp_instructions=true
 endif
+ifeq ($(fpu), off)
+  GYPFLAGS += -Dv8_can_use_fpu_instructions=false
+else
+  GYPFLAGS += -Dv8_can_use_fpu_instructions=true
+endif
+#arch=mips
+#Option to build(native or cross) v8 for mips target arhitecture.
+ifeq ($(arch), mips)
+  GYPINCLUDE_MIPS = -Ibuild/mips.gypi
+else
+  GYPINCLUDE_MIPS = -Ibuild/mipsu.gypi
+endif
 # soname_version=1.2.3
 ifdef soname_version
   GYPFLAGS += -Dsoname_version=$(soname_version)
@@ -88,7 +100,7 @@ endif
 
 # Architectures and modes to be compiled. Consider these to be internal
 # variables, don't override them (use the targets instead).
-ARCHES = ia32 x64 arm
+ARCHES = ia32 x64 arm mips
 MODES = release debug
 
 # List of files that trigger Makefile regeneration:
@@ -119,7 +131,6 @@ $(ARCHES): $(addprefix $$@.,$(MODES))
 # Defines how to build a particular target (e.g. ia32.release).
 $(BUILDS): $(OUTDIR)/Makefile-$$(basename $$@)
 	@$(MAKE) -C "$(OUTDIR)" -f Makefile-$(basename $@) \
-	         CXX="$(CXX)" LINK="$(LINK)" \
 	         BUILDTYPE=$(shell echo $(subst .,,$(suffix $@)) | \
 	                     python -c "print raw_input().capitalize()") \
 	         builddir="$(shell pwd)/$(OUTDIR)/$@"
@@ -164,6 +175,11 @@ $(OUTDIR)/Makefile-arm: $(GYPFILES) $(ENVFILE)
 	build/gyp/gyp --generator-output="$(OUTDIR)" build/all.gyp \
 	              -Ibuild/standalone.gypi --depth=. -Ibuild/armu.gypi \
 	              -S-arm $(GYPFLAGS)
+
+$(OUTDIR)/Makefile-mips: $(GYPFILES) $(ENVFILE)
+	build/gyp/gyp --generator-output="$(OUTDIR)" build/all.gyp \
+	              -Ibuild/standalone.gypi --depth=. $(GYPINCLUDE_MIPS) \
+	              -S-mips $(GYPFLAGS)
 
 # Replaces the old with the new environment file if they're different, which
 # will trigger GYP to regenerate Makefiles.

@@ -142,7 +142,7 @@ def ProcessOptions(options):
       return False
   options.arch = options.arch.split(',')
   for arch in options.arch:
-    if not arch in ['ia32', 'x64', 'arm']:
+    if not arch in ['ia32', 'x64', 'arm', 'mips']:
       print "Unknown architecture %s" % arch
       return False
 
