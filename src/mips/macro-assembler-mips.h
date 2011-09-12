@@ -230,6 +230,8 @@ class MacroAssembler: public Assembler {
   }
 
   void Move(FPURegister dst, double imm);
+  void Movz(Register rd, Register rs, Register rt);
+  void Movn(Register rd, Register rs, Register rt);
 
   // Jump unconditionally to given label.
   // We NEED a nop in the branch delay slot, as it used by v8, for example in

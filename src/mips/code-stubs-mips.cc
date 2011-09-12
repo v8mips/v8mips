@@ -326,7 +326,7 @@ void ConvertToDoubleStub::Generate(MacroAssembler* masm) {
   __ And(exponent, source_, Operand(HeapNumber::kSignMask));
   // Subtract from 0 if source was negative.
   __ subu(at, zero_reg, source_);
-  __ movn(source_, at, exponent);
+  __ Movn(source_, at, exponent);
 
   // We have -1, 0 or 1, which we treat specially. Register source_ contains
   // absolute value: it is either equal to 1 (special case of -1 and 1),
@@ -338,7 +338,7 @@ void ConvertToDoubleStub::Generate(MacroAssembler* masm) {
       HeapNumber::kExponentBias << HeapNumber::kExponentShift;
   // Safe to use 'at' as dest reg here.
   __ Or(at, exponent, Operand(exponent_word_for_1));
-  __ movn(exponent, at, source_);  // Write exp when source not 0.
+  __ Movn(exponent, at, source_);  // Write exp when source not 0.
   // 1, 0 and -1 all have 0 for the second word.
   __ mov(mantissa, zero_reg);
   __ Ret();
@@ -903,7 +903,7 @@ void WriteInt32ToHeapNumberStub::Generate(MacroAssembler* masm) {
   __ or_(scratch_, scratch_, sign_);
   // Subtract from 0 if the value was negative.
   __ subu(at, zero_reg, the_int_);
-  __ movn(the_int_, at, sign_);
+  __ Movn(the_int_, at, sign_);
   // We should be masking the implict first digit of the mantissa away here,
   // but it just ends up combining harmlessly with the last digit of the
   // exponent that happens to be 1.  The sign bit is 0 so we shift 10 to get
@@ -1570,6 +1570,25 @@ void CompareStub::Generate(MacroAssembler* masm) {
     // Check if either rhs or lhs is NaN.
     __ BranchF(NULL, &nan, eq, f12, f14);
 
+#ifdef _MIPS_ISA_MIPS2
+    Label greater_equal, equal;
+    // Check if GREATER or EQUAL condition is satisfied. If false, move result
+    // (LESS) to v0.
+    __ BranchF(&greater_equal, NULL, ge, f12, f14);
+    __ Ret(USE_DELAY_SLOT);
+    __ mov(v0, t0);  // In delay slot.
+    // Check if EQUAL condition is satisfied. If false, move result (GREATER)
+    // to v0. If rhs is equal to lhs, this will be corrected in last step.
+    __ bind(&greater_equal);
+    __ BranchF(&equal, NULL, eq, f12, f14);
+    __ Ret(USE_DELAY_SLOT);
+    __ mov(v0, t1);  // In delay slot.
+    // No need for check, since all other cases are covered previously.
+    // Move result (EQUAL) to v0.
+    __ bind(&equal);
+    __ Ret(USE_DELAY_SLOT);
+    __ mov(v0, t2);  // In delay slot.
+#else
     // Check if LESS condition is satisfied. If true, move conditionally
     // result to v0.
     __ c(OLT, D, f12, f14);
@@ -1584,6 +1603,7 @@ void CompareStub::Generate(MacroAssembler* masm) {
     __ movt(v0, t2);
 
     __ Ret();
+#endif
 
     __ bind(&nan);
     // NaN comparisons always fail.
@@ -1722,7 +1742,7 @@ void ToBooleanStub::Generate(MacroAssembler* masm) {
       __ lbu(at, FieldMemOperand(map, Map::kBitFieldOffset));
       __ And(at, at, Operand(1 << Map::kIsUndetectable));
       // Undetectable -> false.
-      __   movn(tos_, zero_reg, at);
+      __ Movn(tos_, zero_reg, at);
       __ Ret(ne, at, Operand(zero_reg));
     }
   }
@@ -1778,7 +1798,7 @@ void ToBooleanStub::CheckOddball(MacroAssembler* masm,
     // The value of a root is never NULL, so we can avoid loading a non-null
     // value into tos_ when we want to return 'true'.
     if (!result) {
-      __ movz(tos_, zero_reg, at);
+      __ Movz(tos_, zero_reg, at);
     }
     __ Ret(eq, at, Operand(zero_reg));
   }
@@ -4621,7 +4641,7 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
   __ lw(t9, FieldMemOperand(regexp_data, JSRegExp::kDataAsciiCodeOffset));
   __ sra(a3, a0, 2);  // a3 is 1 for ascii, 0 for UC16 (usyed below).
   __ lw(t1, FieldMemOperand(regexp_data, JSRegExp::kDataUC16CodeOffset));
-  __ movz(t9, t1, a0);  // If UC16 (a0 is 0), replace t9 w/kDataUC16CodeOffset.
+  __ Movz(t9, t1, a0);  // If UC16 (a0 is 0), replace t9 w/kDataUC16CodeOffset.
 
   // Check that the irregexp code has been generated for the actual string
   // encoding. If it has, the field contains a code object otherwise it contains
@@ -5643,7 +5663,7 @@ void StringHelper::GenerateHashGetHash(MacroAssembler* masm,
 
   // if (hash == 0) hash = 27;
   __ ori(at, zero_reg, 27);
-  __ movz(hash, at, hash);
+  __ Movz(hash, at, hash);
 }
 
 
@@ -5994,7 +6014,7 @@ void StringCompareStub::GenerateCompareFlatAsciiStrings(MacroAssembler* masm,
   __ Subu(scratch3, scratch1, Operand(scratch2));
   Register length_delta = scratch3;
   __ slt(scratch4, scratch2, scratch1);
-  __ movn(scratch1, scratch2, scratch4);
+  __ Movn(scratch1, scratch2, scratch4);
   Register min_length = scratch1;
   STATIC_ASSERT(kSmiTag == 0);
   __ Branch(&compare_lengths, eq, min_length, Operand(zero_reg));
@@ -6152,7 +6172,7 @@ void StringAddStub::Generate(MacroAssembler* masm) {
     __ lw(a2, FieldMemOperand(a0, String::kLengthOffset));
     __ lw(a3, FieldMemOperand(a1, String::kLengthOffset));
     __ mov(v0, a0);       // Assume we'll return first string (from a0).
-    __ movz(v0, a1, a2);  // If first is empty, return second (from a1).
+    __ Movz(v0, a1, a2);  // If first is empty, return second (from a1).
     __ slt(t4, zero_reg, a2);   // if (a2 > 0) t4 = 1.
     __ slt(t5, zero_reg, a3);   // if (a3 > 0) t5 = 1.
     __ and_(t4, t4, t5);        // Branch if both strings were non-empty.

@@ -1221,7 +1221,7 @@ void FullCodeGenerator::EmitDynamicLookupFastCase(Variable* var,
       __ LoadRoot(at, Heap::kTheHoleValueRootIndex);
       __ subu(at, v0, at);  // Sub as compare: at == 0 on eq.
       __ LoadRoot(a0, Heap::kUndefinedValueRootIndex);
-      __ movz(v0, a0, at);  // Conditional move: return Undefined if TheHole.
+      __ Movz(v0, a0, at);  // Conditional move: return Undefined if TheHole.
     }
     __ Branch(done);
   }
@@ -1270,7 +1270,7 @@ void FullCodeGenerator::EmitVariableLoad(VariableProxy* proxy) {
           __ bind(&done);
         } else {
           __ LoadRoot(a0, Heap::kUndefinedValueRootIndex);
-          __ movz(v0, a0, at);  // Conditional move: Undefined if TheHole.
+          __ Movz(v0, a0, at);  // Conditional move: Undefined if TheHole.
         }
         context()->Plug(v0);
       }

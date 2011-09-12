@@ -263,7 +263,7 @@ static void AllocateJSArray(MacroAssembler* masm,
   // JSArrays. The length of a FixedArray is stored as a smi.
   STATIC_ASSERT(kSmiTag == 0);
   __ li(at, Operand(Smi::FromInt(JSArray::kPreallocatedArrayElements)));
-  __ movz(array_size, at, array_size);
+  __ Movz(array_size, at, array_size);
 
   ASSERT_EQ(1 * kPointerSize, FixedArray::kLengthOffset);
   __ sw(array_size, MemOperand(elements_array_storage));

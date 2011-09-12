@@ -2505,8 +2505,8 @@ void LCodeGen::DoArgumentsElements(LArgumentsElements* instr) {
 
   // Result is the frame pointer for the frame if not adapted and for the real
   // frame below the adaptor frame if adapted.
-  __ movn(result, fp, temp);  // move only if temp is not equal to zero (ne)
-  __ movz(result, scratch, temp);  // move only if temp is equal to zero (eq)
+  __ Movn(result, fp, temp);  // move only if temp is not equal to zero (ne)
+  __ Movz(result, scratch, temp);  // move only if temp is equal to zero (eq)
 }
 
 

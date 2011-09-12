@@ -669,7 +669,7 @@ Handle<HeapObject> RegExpMacroAssemblerMIPS::GetCode(Handle<String> source) {
     // string, and store that value in a local variable.
     __ mov(t5, a1);
     __ li(a1, Operand(1));
-    __ movn(a1, zero_reg, t5);
+    __ Movn(a1, zero_reg, t5);
     __ sw(a1, MemOperand(frame_pointer(), kAtStart));
 
     if (num_saved_registers_ > 0) {  // Always is, if generated from a regexp.

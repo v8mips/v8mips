@@ -1074,6 +1074,30 @@ void MacroAssembler::Move(FPURegister dst, double imm) {
 }
 
 
+void MacroAssembler::Movz(Register rd, Register rs, Register rt) {
+#ifdef _MIPS_ISA_MIPS2
+  Label done;
+  Branch(&done, ne, rt, Operand(zero_reg));
+  mov(rd, rs);
+  bind(&done);
+#else
+  movz(rd, rs, rt);
+#endif
+}
+
+
+void MacroAssembler::Movn(Register rd, Register rs, Register rt) {
+#ifdef _MIPS_ISA_MIPS2
+  Label done;
+  Branch(&done, eq, rt, Operand(zero_reg));
+  mov(rd, rs);
+  bind(&done);
+#else
+  movn(rd, rs, rt);
+#endif
+}
+
+
 // Tries to get a signed int32 out of a double precision floating point heap
 // number. Rounds towards 0. Branch to 'not_int32' if the double is out of the
 // 32bits signed integer range.
@@ -1165,7 +1189,7 @@ void MacroAssembler::ConvertToInt32(Register source,
     // Trick to check sign bit (msb) held in dest, count leading zero.
     // 0 indicates negative, save negative version with conditional move.
     clz(dest, dest);
-    movz(scratch, scratch2, dest);
+    Movz(scratch, scratch2, dest);
     mov(dest, scratch);
   }
   bind(&done);
@@ -1232,7 +1256,7 @@ void MacroAssembler::EmitOutOfInt32RangeTruncate(Register result,
 
   // Check for Infinity and NaNs, which should return 0.
   Subu(scratch, result, HeapNumber::kExponentMask);
-  movz(result, zero_reg, scratch);
+  Movz(result, zero_reg, scratch);
   Branch(&done, eq, scratch, Operand(zero_reg));
 
   // Express exponent as delta to (number of mantissa bits + 31).
@@ -1296,7 +1320,7 @@ void MacroAssembler::EmitOutOfInt32RangeTruncate(Register result,
   result = sign;
   sign = no_reg;
   Subu(result, zero_reg, input_high);
-  movz(result, input_high, scratch);
+  Movz(result, input_high, scratch);
   bind(&done);
 }
 
