@@ -1262,7 +1262,6 @@ LInstruction* LChunkBuilder::DoDiv(HDiv* instr) {
     // the generated code, which requires registers a0
     // and a1 to be used. We should remove that
     // when we provide a native implementation.
-    // TODO(plind): can we easily provide a native DIV here?
     LOperand* dividend = UseFixed(instr->left(), a0);
     LOperand* divisor = UseFixed(instr->right(), a1);
     return AssignEnvironment(AssignPointerMap(
@@ -1278,7 +1277,6 @@ LInstruction* LChunkBuilder::DoMod(HMod* instr) {
     ASSERT(instr->left()->representation().IsInteger32());
     ASSERT(instr->right()->representation().IsInteger32());
 
-    // TODO(plind): revisit entire MOD op, especially double ABI.
     LModI* mod;
     if (instr->HasPowerOf2Divisor()) {
       ASSERT(!instr->CheckFlag(HValue::kCanBeDivByZero));
@@ -1386,7 +1384,6 @@ LInstruction* LChunkBuilder::DoPower(HPower* instr) {
   ASSERT(instr->representation().IsDouble());
   // We call a C function for double power. It can't trigger a GC.
   // We need to use fixed result register for the call.
-  // TODO(plind): revisit C function ABI with double operands.
   Representation exponent_type = instr->right()->representation();
   ASSERT(instr->left()->representation().IsDouble());
   LOperand* left = UseFixedDouble(instr->left(), f2);

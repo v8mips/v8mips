@@ -51,9 +51,6 @@ class JumpTarget;
 // MIPS generated code calls C code, it must be via t9 register.
 
 
-// TODO(plind): Consider freeing t8 from macro-asm reservation list,
-// and use it for Lithium scratch register (below).
-
 // Register aliases.
 // cp is assumed to be a callee saved register.
 const Register lithiumScratchReg = s3;  // Scratch register.

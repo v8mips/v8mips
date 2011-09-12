@@ -280,7 +280,7 @@ bool LCodeGen::GenerateDeferredCode() {
 
 
 bool LCodeGen::GenerateDeoptJumpTable() {
-  // TODO(plind): this will need a different implementation for MIPS.
+  // TODO(plind): not clear that this will have advantage for MIPS.
   // Skipping it for now. Raised issue #100 for this.
   Abort("Unimplemented: %s", "GenerateDeoptJumpTable");
   return false;
@@ -634,9 +634,8 @@ void LCodeGen::DeoptimizeIf(Condition cc,
   if (cc == al) {
     __ Jump(entry, RelocInfo::RUNTIME_ENTRY);
   } else {
-    // NOTE: ARM has a little different code here. It is part of ab8e3bd92
-    // which hasn't been ported yet. Be careful - the ARM code would compile
-    // but cause silent errors later.
+    // TODO(plind): The Arm port is a little different here, due to their
+    // DeOpt jump table, which is not used for Mips yet.
     __ Jump(entry, RelocInfo::RUNTIME_ENTRY, cc, src1, src2);
   }
 }
@@ -2327,8 +2326,7 @@ void LCodeGen::DoAccessArgumentsAt(LAccessArgumentsAt* instr) {
   // Bailout index is not a valid argument index. Use unsigned check to get
   // negative check for free.
 
-  // TODO(plind): I cannot quite grok the negative index bit. I am sure
-  // this can be optimized to the the sub before the DeoptimizeIf(),
+  // TODO(plind): Shoud be optimized to do the sub before the DeoptimizeIf(),
   // as they do in Arm. It will save us an instruction.
   DeoptimizeIf(ls, instr->environment(), length, Operand(index));
 
@@ -3611,7 +3609,6 @@ void LCodeGen::DoDeferredNumberTagI(LNumberTagI* instr) {
   __ mtc1(reg, dbl_scratch);
   __ cvt_d_w(dbl_scratch, dbl_scratch);
   if (FLAG_inline_new) {
-    // TODO(plind): why did they choose r5, r3, r4, r6 for Arm version?
     __ LoadRoot(t2, Heap::kHeapNumberMapRootIndex);
     __ AllocateHeapNumber(t1, a3, t0, t2, &slow);
     if (!reg.is(t1)) __ mov(reg, t1);

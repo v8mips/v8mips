@@ -547,6 +547,19 @@ bool Assembler::IsJ(Instr instr) {
 }
 
 
+bool Assembler::IsJal(Instr instr) {
+  return GetOpcodeField(instr) == JAL;
+}
+
+bool Assembler::IsJr(Instr instr) {
+  return GetOpcodeField(instr) == SPECIAL && GetFunctionField(instr) == JR;
+}
+
+bool Assembler::IsJalr(Instr instr) {
+  return GetOpcodeField(instr) == SPECIAL && GetFunctionField(instr) == JALR;
+}
+
+
 bool Assembler::IsLui(Instr instr) {
   uint32_t opcode = GetOpcodeField(instr);
   // Checks if the instruction is a load upper immediate.
@@ -2117,21 +2130,6 @@ Address Assembler::target_address_at(Address pc) {
   UNREACHABLE();
   return (Address)0x0;
 }
-
-
-// TODO(plind): move these to correct place.
-bool Assembler::IsJal(Instr instr) {
-  return GetOpcodeField(instr) == JAL;
-}
-
-bool Assembler::IsJr(Instr instr) {
-  return GetOpcodeField(instr) == SPECIAL && GetFunctionField(instr) == JR;
-}
-
-bool Assembler::IsJalr(Instr instr) {
-  return GetOpcodeField(instr) == SPECIAL && GetFunctionField(instr) == JALR;
-}
-
 
 
 // On Mips, a target address is stored in a lui/ori instruction pair, each
