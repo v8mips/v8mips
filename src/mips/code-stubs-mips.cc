@@ -652,7 +652,7 @@ void FloatingPointHelper::LoadNumberAsInt32Double(MacroAssembler* masm,
     __ ldc1(double_dst, FieldMemOperand(object, HeapNumber::kValueOffset));
 
     Register except_flag = scratch2;
-    __ EmitVFPTruncate(kRoundToZero,
+    __ EmitFPUTruncate(kRoundToZero,
                        single_scratch,
                        double_dst,
                        scratch1,
@@ -728,7 +728,7 @@ void FloatingPointHelper::LoadNumberAsInt32(MacroAssembler* masm,
 
     FPURegister single_scratch = double_scratch.low();
     Register except_flag = scratch2;
-    __ EmitVFPTruncate(kRoundToZero,
+    __ EmitFPUTruncate(kRoundToZero,
                        single_scratch,
                        double_scratch,
                        scratch1,
@@ -2720,7 +2720,7 @@ void BinaryOpStub::GenerateInt32Stub(MacroAssembler* masm) {
           // transition.
 
           Register except_flag = scratch2;
-          __ EmitVFPTruncate(kRoundToZero,
+          __ EmitFPUTruncate(kRoundToZero,
                              single_scratch,
                              f10,
                              scratch1,

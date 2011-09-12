@@ -632,7 +632,7 @@ class MacroAssembler: public Assembler {
   // The except_flag will contain any exceptions caused by the instruction.
   // If check_inexact is kDontCheckForInexactConversion, then the inexacat
   // exception is masked.
-  void EmitVFPTruncate(FPURoundingMode rounding_mode,
+  void EmitFPUTruncate(FPURoundingMode rounding_mode,
                        FPURegister result,
                        DoubleRegister double_input,
                        Register scratch1,

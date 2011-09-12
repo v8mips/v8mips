@@ -1172,7 +1172,7 @@ void MacroAssembler::ConvertToInt32(Register source,
 }
 
 
-void MacroAssembler::EmitVFPTruncate(FPURoundingMode rounding_mode,
+void MacroAssembler::EmitFPUTruncate(FPURoundingMode rounding_mode,
                                      FPURegister result,
                                      DoubleRegister double_input,
                                      Register scratch1,

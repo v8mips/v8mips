@@ -2837,7 +2837,7 @@ void LCodeGen::DoMathFloor(LUnaryMathOperation* instr) {
   Register scratch1 = scratch0();
   Register except_flag = ToRegister(instr->TempAt(0));
 
-  __ EmitVFPTruncate(kRoundToMinusInf,
+  __ EmitFPUTruncate(kRoundToMinusInf,
                      single_scratch,
                      input,
                      scratch1,
@@ -2916,7 +2916,7 @@ void LCodeGen::DoMathRound(LUnaryMathOperation* instr) {
 
   Register except_flag = scratch;
 
-  __ EmitVFPTruncate(kRoundToMinusInf,
+  __ EmitFPUTruncate(kRoundToMinusInf,
                      double_scratch0().low(),
                      input,
                      result,
@@ -3810,7 +3810,7 @@ void LCodeGen::DoDeferredTaggedToI(LTaggedToI* instr) {
             FieldMemOperand(input_reg, HeapNumber::kValueOffset));
 
     Register except_flag = scratch2;
-    __ EmitVFPTruncate(kRoundToZero,
+    __ EmitFPUTruncate(kRoundToZero,
                        single_scratch,
                        double_scratch,
                        scratch1,
@@ -3887,7 +3887,7 @@ void LCodeGen::DoDoubleToI(LDoubleToI* instr) {
   } else {
     Register except_flag = scratch2;
 
-    __ EmitVFPTruncate(kRoundToMinusInf,
+    __ EmitFPUTruncate(kRoundToMinusInf,
                        single_scratch,
                        double_input,
                        scratch1,
