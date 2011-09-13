@@ -1212,7 +1212,10 @@ void Assembler::subu(Register rd, Register rs, Register rt) {
 
 
 void Assembler::mul(Register rd, Register rs, Register rt) {
-  GenInstrRegister(SPECIAL2, rs, rt, rd, 0, MUL);
+  // GenInstrRegister(SPECIAL2, rs, rt, rd, 0, MUL);
+  // Hack for Jason ... Loongson.
+  mult(rs, rt);
+  mflo(rd);
 }
 
 
