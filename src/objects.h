@@ -3653,7 +3653,6 @@ class Code: public HeapObject {
   inline Kind kind();
   inline InlineCacheState ic_state();  // Only valid for IC stubs.
   inline ExtraICState extra_ic_state();  // Only valid for IC stubs.
-  inline InLoopFlag ic_in_loop();  // Only valid for IC stubs.
   inline PropertyType type();  // Only valid for monomorphic IC stubs.
   inline int arguments_count();  // Only valid for call IC stubs.
 
@@ -3746,7 +3745,6 @@ class Code: public HeapObject {
   // Flags operations.
   static inline Flags ComputeFlags(
       Kind kind,
-      InLoopFlag in_loop = NOT_IN_LOOP,
       InlineCacheState ic_state = UNINITIALIZED,
       ExtraICState extra_ic_state = kNoExtraICState,
       PropertyType type = NORMAL,
@@ -3758,11 +3756,9 @@ class Code: public HeapObject {
       PropertyType type,
       ExtraICState extra_ic_state = kNoExtraICState,
       InlineCacheHolderFlag holder = OWN_MAP,
-      InLoopFlag in_loop = NOT_IN_LOOP,
       int argc = -1);
 
   static inline InlineCacheState ExtractICStateFromFlags(Flags flags);
-  static inline InLoopFlag ExtractICInLoopFromFlags(Flags flags);
   static inline PropertyType ExtractTypeFromFlags(Flags flags);
   static inline Kind ExtractKindFromFlags(Flags flags);
   static inline InlineCacheHolderFlag ExtractCacheHolderFromFlags(Flags flags);
@@ -3894,18 +3890,17 @@ class Code: public HeapObject {
 
   // Flags layout.  BitField<type, shift, size>.
   class ICStateField: public BitField<InlineCacheState, 0, 3> {};
-  class ICInLoopField: public BitField<InLoopFlag, 3, 1> {};
-  class TypeField: public BitField<PropertyType, 4, 4> {};
-  class KindField: public BitField<Kind, 8, 4> {};
-  class CacheHolderField: public BitField<InlineCacheHolderFlag, 12, 1> {};
-  class ExtraICStateField: public BitField<ExtraICState, 13, 2> {};
+  class TypeField: public BitField<PropertyType, 3, 4> {};
+  class KindField: public BitField<Kind, 7, 4> {};
+  class CacheHolderField: public BitField<InlineCacheHolderFlag, 11, 1> {};
+  class ExtraICStateField: public BitField<ExtraICState, 12, 2> {};
 
   // Signed field cannot be encoded using the BitField class.
-  static const int kFlagsArgumentsCountShift = 15;
-  static const int kFlagsArgumentsCountMask = 0xffff8000;
+  static const int kArgumentsCountShift = 14;
+  static const int kArgumentsCountMask = ~((1 << kArgumentsCountShift) - 1);
 
   static const int kFlagsNotUsedInLookup =
-      ICInLoopField::kMask | TypeField::kMask | CacheHolderField::kMask;
+      TypeField::kMask | CacheHolderField::kMask;
 
  private:
   DISALLOW_IMPLICIT_CONSTRUCTORS(Code);
@@ -4740,7 +4735,7 @@ class SharedFunctionInfo: public HeapObject {
   DECL_BOOLEAN_ACCESSORS(has_duplicate_parameters)
 
   // Indicates whether the function is a native function.
-  // These needs special threatment in .call and .apply since
+  // These needs special treatment in .call and .apply since
   // null passed as the receiver should not be translated to the
   // global object.
   DECL_BOOLEAN_ACCESSORS(native)
@@ -5007,7 +5002,7 @@ class JSFunction: public JSObject {
   // [prototype_or_initial_map]:
   DECL_ACCESSORS(prototype_or_initial_map, Object)
 
-  // [shared_function_info]: The information about the function that
+  // [shared]: The information about the function that
   // can be shared by instances.
   DECL_ACCESSORS(shared, SharedFunctionInfo)
 
@@ -6724,9 +6719,6 @@ class JSProxy: public JSReceiver {
   // [handler]: The handler property.
   DECL_ACCESSORS(handler, Object)
 
-  // [padding]: The padding slot (unused, see below).
-  DECL_ACCESSORS(padding, Object)
-
   // Casting.
   static inline JSProxy* cast(Object* obj);
 
@@ -6750,6 +6742,9 @@ class JSProxy: public JSReceiver {
   // Turn this into an (empty) JSObject.
   void Fix();
 
+  // Initializes the body after the handler slot.
+  inline void InitializeBody(int object_size, Object* value);
+
   // Dispatched behavior.
 #ifdef OBJECT_PRINT
   inline void JSProxyPrint() {
@@ -6766,9 +6761,11 @@ class JSProxy: public JSReceiver {
   // upon freeze.
   static const int kHandlerOffset = HeapObject::kHeaderSize;
   static const int kPaddingOffset = kHandlerOffset + kPointerSize;
-  static const int kSize = kPaddingOffset + kPointerSize;
+  static const int kSize = JSObject::kHeaderSize;
+  static const int kHeaderSize = kPaddingOffset;
+  static const int kPaddingSize = kSize - kPaddingOffset;
 
-  STATIC_CHECK(kSize == JSObject::kHeaderSize);
+  STATIC_CHECK(kPaddingSize >= 0);
 
   typedef FixedBodyDescriptor<kHandlerOffset,
                               kHandlerOffset + kPointerSize,
@@ -6779,11 +6776,40 @@ class JSProxy: public JSReceiver {
 };
 
 
-// TODO(rossberg): Only a stub for now.
 class JSFunctionProxy: public JSProxy {
  public:
+  // [call_trap]: The call trap.
+  DECL_ACCESSORS(call_trap, Object)
+
+  // [construct_trap]: The construct trap.
+  DECL_ACCESSORS(construct_trap, Object)
+
   // Casting.
   static inline JSFunctionProxy* cast(Object* obj);
+
+  // Dispatched behavior.
+#ifdef OBJECT_PRINT
+  inline void JSFunctionProxyPrint() {
+    JSFunctionProxyPrint(stdout);
+  }
+  void JSFunctionProxyPrint(FILE* out);
+#endif
+#ifdef DEBUG
+  void JSFunctionProxyVerify();
+#endif
+
+  // Layout description.
+  static const int kCallTrapOffset = kHandlerOffset + kPointerSize;
+  static const int kConstructTrapOffset = kCallTrapOffset + kPointerSize;
+  static const int kPaddingOffset = kConstructTrapOffset + kPointerSize;
+  static const int kSize = JSFunction::kSize;
+  static const int kPaddingSize = kSize - kPaddingOffset;
+
+  STATIC_CHECK(kPaddingSize >= 0);
+
+  typedef FixedBodyDescriptor<kHandlerOffset,
+                              kConstructTrapOffset + kPointerSize,
+                              kSize> BodyDescriptor;
 
  private:
   DISALLOW_IMPLICIT_CONSTRUCTORS(JSFunctionProxy);
