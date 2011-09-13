@@ -1098,6 +1098,58 @@ void MacroAssembler::Movn(Register rd, Register rs, Register rt) {
 }
 
 
+void MacroAssembler::Movt(Register rd, Register rs, uint16_t cc){
+#ifdef _MIPS_ISA_MIPS2
+  // Tests an FP condition code and then conditionally move rs to rd.
+  // We do not currently use any FPU cc bit other than bit 0.
+  ASSERT(cc == 0);
+  ASSERT(!(rs.is(t8) || rd.is(t8)));
+  Label done;
+  Register scratch = t8;
+  // For testing purposes we need to fetch content of the FCSR register and
+  // than test its cc (floating point condition code) bit (for cc = 0, it is
+  // 24. bit of the FCSR).
+  cfc1(scratch, FCSR);
+  // For the MIPS I, II and III architectures, the contents of scratch is
+  // UNPREDICTABLE for the instruction immediately following CFC1.
+  nop();
+  srl(scratch, scratch, 16);
+  andi(scratch, scratch, 0x0080);
+  Branch(&done, eq, scratch, Operand(zero_reg));
+  mov(rd, rs);
+  bind(&done);
+#else
+  movt(rd, rs, cc);
+#endif
+}
+
+
+void MacroAssembler::Movf(Register rd, Register rs, uint16_t cc){
+#ifdef _MIPS_ISA_MIPS2
+  // Tests an FP condition code and then conditionally move rs to rd.
+  // We do not currently use any FPU cc bit other than bit 0.
+  ASSERT(cc == 0);
+  ASSERT(!(rs.is(t8) || rd.is(t8)));
+  Label done;
+  Register scratch = t8;
+  // For testing purposes we need to fetch content of the FCSR register and
+  // than test its cc (floating point condition code) bit (for cc = 0, it is
+  // 24. bit of the FCSR).
+  cfc1(scratch, FCSR);
+  // For the MIPS I, II and III architectures, the contents of scratch is
+  // UNPREDICTABLE for the instruction immediately following CFC1.
+  nop();
+  srl(scratch, scratch, 16);
+  andi(scratch, scratch, 0x0080);
+  Branch(&done, ne, scratch, Operand(zero_reg));
+  mov(rd, rs);
+  bind(&done);
+#else
+  movf(rd, rs, cc);
+#endif
+}
+
+
 // Tries to get a signed int32 out of a double precision floating point heap
 // number. Rounds towards 0. Branch to 'not_int32' if the double is out of the
 // 32bits signed integer range.

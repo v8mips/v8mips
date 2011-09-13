@@ -1570,40 +1570,20 @@ void CompareStub::Generate(MacroAssembler* masm) {
     // Check if either rhs or lhs is NaN.
     __ BranchF(NULL, &nan, eq, f12, f14);
 
-#ifdef _MIPS_ISA_MIPS2
-    Label greater_equal, equal;
-    // Check if GREATER or EQUAL condition is satisfied. If false, move result
-    // (LESS) to v0.
-    __ BranchF(&greater_equal, NULL, ge, f12, f14);
-    __ Ret(USE_DELAY_SLOT);
-    __ mov(v0, t0);  // In delay slot.
-    // Check if EQUAL condition is satisfied. If false, move result (GREATER)
-    // to v0. If rhs is equal to lhs, this will be corrected in last step.
-    __ bind(&greater_equal);
-    __ BranchF(&equal, NULL, eq, f12, f14);
-    __ Ret(USE_DELAY_SLOT);
-    __ mov(v0, t1);  // In delay slot.
-    // No need for check, since all other cases are covered previously.
-    // Move result (EQUAL) to v0.
-    __ bind(&equal);
-    __ Ret(USE_DELAY_SLOT);
-    __ mov(v0, t2);  // In delay slot.
-#else
     // Check if LESS condition is satisfied. If true, move conditionally
     // result to v0.
     __ c(OLT, D, f12, f14);
-    __ movt(v0, t0);
+    __ Movt(v0, t0);
     // Use previous check to store conditionally to v0 oposite condition
     // (GREATER). If rhs is equal to lhs, this will be corrected in next
     // check.
-    __ movf(v0, t1);
+    __ Movf(v0, t1);
     // Check if EQUAL condition is satisfied. If true, move conditionally
     // result to v0.
     __ c(EQ, D, f12, f14);
-    __ movt(v0, t2);
+    __ Movt(v0, t2);
 
     __ Ret();
-#endif
 
     __ bind(&nan);
     // NaN comparisons always fail.

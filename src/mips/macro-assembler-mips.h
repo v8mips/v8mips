@@ -229,9 +229,12 @@ class MacroAssembler: public Assembler {
     mtc1(src_high, FPURegister::from_code(dst.code() + 1));
   }
 
+  // Conditional move.
   void Move(FPURegister dst, double imm);
   void Movz(Register rd, Register rs, Register rt);
   void Movn(Register rd, Register rs, Register rt);
+  void Movt(Register rd, Register rs, uint16_t cc = 0);
+  void Movf(Register rd, Register rs, uint16_t cc = 0);
 
   // Jump unconditionally to given label.
   // We NEED a nop in the branch delay slot, as it used by v8, for example in
