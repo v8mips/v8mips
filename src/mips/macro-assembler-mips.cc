@@ -1150,6 +1150,27 @@ void MacroAssembler::Movf(Register rd, Register rs, uint16_t cc){
 }
 
 
+void MacroAssembler::Clz(Register rd, Register rs) {
+#ifdef _MIPS_ISA_MIPS2
+  ASSERT(!(rd.is(t8) || rd.is(t9)) && !(rs.is(t8) || rs.is(t9)));
+  Register mask = t8;
+  Register scratch = t9;
+  Label loop, end;
+  mov(rd, zero_reg);
+  lui(mask, 0x8000);
+  bind(&loop);
+  and_(scratch, rs, mask);
+  Branch(&end, ne, scratch, Operand(zero_reg));
+  addiu(rd, rd, 1);
+  Branch(&loop, ne, mask, Operand(zero_reg), USE_DELAY_SLOT);
+  srl(mask, mask, 1);
+  bind(&end);
+#else
+  clz(rd, rs);
+#endif
+}
+
+
 // Tries to get a signed int32 out of a double precision floating point heap
 // number. Rounds towards 0. Branch to 'not_int32' if the double is out of the
 // 32bits signed integer range.
@@ -1240,7 +1261,7 @@ void MacroAssembler::ConvertToInt32(Register source,
     subu(scratch2, zero_reg, scratch);
     // Trick to check sign bit (msb) held in dest, count leading zero.
     // 0 indicates negative, save negative version with conditional move.
-    clz(dest, dest);
+    Clz(dest, dest);
     Movz(scratch, scratch2, dest);
     mov(dest, scratch);
   }

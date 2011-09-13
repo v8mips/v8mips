@@ -960,7 +960,7 @@ static void StoreIntAsFloat(MacroAssembler* masm,
     // Count leading zeros.
     // Gets the wrong answer for 0, but we already checked for that case above.
     Register zeros = scratch2;
-    __ clz(zeros, ival);
+    __ Clz(zeros, ival);
 
     // Compute exponent and or it into the exponent register.
     __ li(scratch1, (kBitsPerInt - 1) + kBinary32ExponentBias);

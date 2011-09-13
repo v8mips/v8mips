@@ -236,6 +236,8 @@ class MacroAssembler: public Assembler {
   void Movt(Register rd, Register rs, uint16_t cc = 0);
   void Movf(Register rd, Register rs, uint16_t cc = 0);
 
+  void Clz(Register rd, Register rs);
+
   // Jump unconditionally to given label.
   // We NEED a nop in the branch delay slot, as it used by v8, for example in
   // CodeGenerator::ProcessDeferred().

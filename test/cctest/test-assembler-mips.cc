@@ -219,12 +219,12 @@ TEST(MIPS2) {
 
   // Bit twiddling instructions & conditional moves.
   // Uses t0-t7 as set above.
-  __ clz(v0, t0);       // 29
-  __ clz(v1, t1);       // 19
+  __ Clz(v0, t0);       // 29
+  __ Clz(v1, t1);       // 19
   __ addu(v0, v0, v1);  // 48
-  __ clz(v1, t2);       // 3
+  __ Clz(v1, t2);       // 3
   __ addu(v0, v0, v1);  // 51
-  __ clz(v1, t7);       // 0
+  __ Clz(v1, t7);       // 0
   __ addu(v0, v0, v1);  // 51
   __ Branch(&error, ne, v0, Operand(51));
   __ movn(a0, t3, t0);  // Move a0<-t3 (t0 is NOT 0).

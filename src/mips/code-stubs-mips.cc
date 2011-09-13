@@ -346,7 +346,7 @@ void ConvertToDoubleStub::Generate(MacroAssembler* masm) {
   __ bind(&not_special);
   // Count leading zeros.
   // Gets the wrong answer for 0, but we already checked for that case above.
-  __ clz(zeros_, source_);
+  __ Clz(zeros_, source_);
   // Compute exponent and or it into the exponent register.
   // We use mantissa as a scratch register here.
   __ li(mantissa, Operand(31 + HeapNumber::kExponentBias));
@@ -573,7 +573,7 @@ void FloatingPointHelper::ConvertIntToDouble(MacroAssembler* masm,
     // Get mantisssa[51:20].
 
     // Get the position of the first set bit.
-    __ clz(dst1, int_scratch);
+    __ Clz(dst1, int_scratch);
     __ li(scratch2, 31);
     __ Subu(dst1, scratch2, dst1);
 
