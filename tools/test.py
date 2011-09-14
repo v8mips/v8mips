@@ -618,8 +618,13 @@ def Execute(args, context, timeout=None):
           # Lazy sending non-sent files
           ADBPushSingle(context, arg, context.android_push_path)
         args[i] = context.android_file_mappings[arg]
+        
+  if context.android_bin_path is not None:
+    (bin_path_head, bin_path_tail) = os.path.split(args[0])
+    args[0] = os.path.join(context.android_bin_path, bin_path_tail);
   
   if context.android_adb or context.android_push_path is not None:
+      args.insert(0, context.android_file_mappings[os.path.join(context.workspace, "adb.retval")])
       args.insert(0, "shell");
       args.insert(0, "adb");
   
@@ -636,6 +641,16 @@ def Execute(args, context, timeout=None):
   errors = file(errname).read()
   CheckedUnlink(outname)
   CheckedUnlink(errname)
+  
+  if context.android_adb or context.android_push_path is not None:
+    out = ""
+    for output_line in output.split("\n"):
+      if "RETVAL:" in output_line:
+        exit_code = int(output_line.replace("RETVAL: ", "").strip())
+      else:
+        out += output_line + "\n"
+    output = out
+  
   return CommandOutput(exit_code, timed_out, output, errors)
 
 
@@ -771,7 +786,7 @@ TIMEOUT_SCALEFACTOR = {
 
 class Context(object):
 
-  def __init__(self, workspace, buildspace, verbose, vm, timeout, processor, suppress_dialogs, store_unexpected_output, android_adb, android_push_path, android_file_mappings):
+  def __init__(self, workspace, buildspace, verbose, vm, timeout, processor, suppress_dialogs, store_unexpected_output, android_adb, android_push_path, android_bin_path, android_file_mappings):
     self.workspace = workspace
     self.buildspace = buildspace
     self.verbose = verbose
@@ -782,6 +797,7 @@ class Context(object):
     self.store_unexpected_output = store_unexpected_output
     self.android_adb = android_adb
     self.android_push_path = android_push_path
+    self.android_bin_path = android_bin_path
     self.android_file_mappings = android_file_mappings
 
   def GetVm(self, mode):
@@ -1337,6 +1353,8 @@ def BuildOptions():
                     default=False, action="store_true")
   result.add_option("--android-push-path", help="Workspace path on Android device (if specified, necessary test files will be pushed to android device, using \"adb push\"",
                     default=None)
+  result.add_option("--android-bin-path", help="Path to v8 binaries on Android device",
+                    default=None)
   return result
 
 
@@ -1551,6 +1569,7 @@ def Main():
                     options.store_unexpected_output,
                     ANDROID_ADB,
                     options.android_push_path,
+                    options.android_bin_path,
                     android_file_mappings)
   # First build the required targets
   if not options.no_build:
@@ -1579,6 +1598,22 @@ def Main():
     if not os.path.isdir(new_tmp_path):
       os.mkdir(new_tmp_path)
     tempfile.tempdir = new_tmp_path
+    
+  if ANDROID_ADB:
+    # workaround
+    # adb does not correctly return the exit value of the executed program
+    # we need to push a wrapper script to the device
+    retval_path = os.path.join(context.workspace, "adb.retval")
+    retval_file = open(retval_path, "w")
+    retval_file.write("#!/system/bin/sh\n\"$@\"\necho RETVAL: $?\n")
+    retval_file.close()
+    os.chmod(retval_path, 0755)
+    android_file_mappings[retval_path] = retval_path
+    if options.android_push_path is not None:
+      retval_remote_path = os.path.join(options.android_push_path, "adb.retval")
+      ExecuteNoCapture([ "adb", "push", retval_path, options.android_push_path ], context)
+      ExecuteNoCapture([ "adb", "shell", "chmod", "755", retval_remote_path], context)
+      android_file_mappings[retval_path] = retval_remote_path
 
   # Get status for tests
   sections = [ ]
