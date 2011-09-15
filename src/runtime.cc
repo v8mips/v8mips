@@ -2243,6 +2243,11 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_SetCode) {
     // are guaranteed to be in old space.
     target->set_literals(*literals, SKIP_WRITE_BARRIER);
     target->set_next_function_link(isolate->heap()->undefined_value());
+
+    if (isolate->logger()->is_logging() || CpuProfiler::is_profiling(isolate)) {
+      isolate->logger()->LogExistingFunction(
+          shared, Handle<Code>(shared->code()));
+    }
   }
 
   target->set_context(*context);
@@ -2888,7 +2893,7 @@ void FindStringIndicesDispatch(Isolate* isolate,
       }
     } else {
       Vector<const uc16> subject_vector = subject_content.ToUC16Vector();
-      if (pattern->IsAsciiRepresentation()) {
+      if (pattern_content.IsAscii()) {
         FindStringIndices(isolate,
                           subject_vector,
                           pattern_content.ToAsciiVector(),
@@ -8229,8 +8234,6 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_NotifyDeoptimized) {
 
   if (type == Deoptimizer::EAGER) {
     RUNTIME_ASSERT(function->IsOptimized());
-  } else {
-    RUNTIME_ASSERT(!function->IsOptimized());
   }
 
   // Avoid doing too much work when running with --always-opt and keep
@@ -8249,8 +8252,6 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_NotifyDeoptimized) {
     it.Advance();
   }
 
-  // TODO(kasperl): For now, we cannot support removing the optimized
-  // code when we have recursive invocations of the same function.
   if (activations == 0) {
     if (FLAG_trace_deopt) {
       PrintF("[removing optimized code for: ");
@@ -8258,6 +8259,8 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_NotifyDeoptimized) {
       PrintF("]\n");
     }
     function->ReplaceCode(function->shared()->code());
+  } else {
+    Deoptimizer::DeoptimizeFunction(*function);
   }
   return isolate->heap()->undefined_value();
 }
@@ -11963,6 +11966,8 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_DebugEvaluateGlobal) {
   Handle<Object> result =
     Execution::Call(compiled_function, receiver, 0, NULL,
                     &has_pending_exception);
+  // Clear the oneshot breakpoints so that the debugger does not step further.
+  isolate->debug()->ClearStepping();
   if (has_pending_exception) return Failure::Exception();
   return *result;
 }
