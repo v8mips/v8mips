@@ -2056,6 +2056,15 @@ void Heap::CreateFixedStubs() {
   // To workaround the problem, make separate functions without inlining.
   Heap::CreateJSEntryStub();
   Heap::CreateJSConstructEntryStub();
+
+  // Create stubs that should be there, so we don't unexpectedly have to
+  // create them if we need them during the creation of another stub.
+  // Stub creation mixes raw pointers and handles in an unsafe manner so
+  // we cannot create stubs while we are creating stubs.
+  CEntryStub ces(1);
+  ces.GetCode();
+
+  CodeStub::GenerateStubsAheadOfTime();
 }
 
 
@@ -3625,6 +3634,7 @@ MaybeObject* Heap::ReinitializeJSReceiver(
 
   // Functions require some minimal initialization.
   if (type == JS_FUNCTION_TYPE) {
+    map->set_function_with_prototype(true);
     String* name;
     MaybeObject* maybe_name = LookupAsciiSymbol("<freezing call trap>");
     if (!maybe_name->To<String>(&name)) return maybe_name;
