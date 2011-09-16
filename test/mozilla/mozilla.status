@@ -72,9 +72,6 @@ js1_2/function/Number: SKIP
 # prints too much crap to the screen, polluting logfiles.
 js1_5/extensions/regress-342960: SKIP
 
-# Causes assert to be triggered: http://code.google.com/p/v8/issues/detail?id=1689
-js1_5/GC/regress-311497: SKIP
-
 ##################### SLOW TESTS #####################
 
 # This takes a long time to run (~100 seconds). It should only be run
