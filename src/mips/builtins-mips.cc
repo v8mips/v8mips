@@ -1300,7 +1300,7 @@ void Builtins::Generate_FunctionCall(MacroAssembler* masm) {
   __ bind(&slow);
   __ li(t0, Operand(1, RelocInfo::NONE));  // Indicate function proxy.
   __ Branch(&shift_arguments, eq, a2, Operand(JS_FUNCTION_PROXY_TYPE));
-  
+
   __ bind(&non_function);
   __ li(t0, Operand(2, RelocInfo::NONE));  // Indicate non-function.
 
@@ -1437,7 +1437,7 @@ void Builtins::Generate_FunctionApply(MacroAssembler* masm) {
 
     // Change context eagerly to get the right global object if necessary.
     __ lw(cp, FieldMemOperand(a1, JSFunction::kContextOffset));
-    // Load the shared function info while the function is still in r1.
+    // Load the shared function info while the function is still in a1.
     __ lw(a2, FieldMemOperand(a1, JSFunction::kSharedFunctionInfoOffset));
 
     // Compute the receiver.
@@ -1523,7 +1523,7 @@ void Builtins::Generate_FunctionApply(MacroAssembler* masm) {
     __ lw(a1, MemOperand(fp, kFunctionOffset));
     __ GetObjectType(a1, a2, a2);
     __ Branch(&call_proxy, ne, a2, Operand(JS_FUNCTION_TYPE));
-  
+
     __ InvokeFunction(a1, actual, CALL_FUNCTION,
                       NullCallWrapper(), CALL_AS_METHOD);
 
@@ -1541,7 +1541,6 @@ void Builtins::Generate_FunctionApply(MacroAssembler* masm) {
     __ GetBuiltinEntry(a3, Builtins::CALL_FUNCTION_PROXY);
     __ Call(masm->isolate()->builtins()->ArgumentsAdaptorTrampoline(),
             RelocInfo::CODE_TARGET);
-
     // Tear down the internal frame and remove function, receiver and args.
   }
 
