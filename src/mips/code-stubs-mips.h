@@ -324,7 +324,15 @@ class WriteInt32ToHeapNumberStub : public CodeStub {
       : the_int_(the_int),
         the_heap_number_(the_heap_number),
         scratch_(scratch),
-        sign_(scratch2) { }
+        sign_(scratch2) {
+    ASSERT(IntRegisterBits::is_valid(the_int_.code()));
+    ASSERT(HeapNumberRegisterBits::is_valid(the_heap_number_.code()));
+    ASSERT(ScratchRegisterBits::is_valid(scratch_.code()));
+    ASSERT(SignRegisterBits::is_valid(sign_.code()));
+  }
+
+  bool CompilingCallsToThisStubIsGCSafe();
+  static void GenerateStubsAheadOfTime();
 
  private:
   Register the_int_;
@@ -336,13 +344,15 @@ class WriteInt32ToHeapNumberStub : public CodeStub {
   class IntRegisterBits: public BitField<int, 0, 4> {};
   class HeapNumberRegisterBits: public BitField<int, 4, 4> {};
   class ScratchRegisterBits: public BitField<int, 8, 4> {};
+  class SignRegisterBits: public BitField<int, 12, 4> {};
 
   Major MajorKey() { return WriteInt32ToHeapNumber; }
   int MinorKey() {
     // Encode the parameters in a unique 16 bit value.
     return IntRegisterBits::encode(the_int_.code())
            | HeapNumberRegisterBits::encode(the_heap_number_.code())
-           | ScratchRegisterBits::encode(scratch_.code());
+           | ScratchRegisterBits::encode(scratch_.code())
+           | SignRegisterBits::encode(sign_.code());
   }
 
   void Generate(MacroAssembler* masm);

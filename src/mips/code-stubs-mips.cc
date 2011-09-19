@@ -886,6 +886,35 @@ void FloatingPointHelper::CallCCodeForDoubleOperation(
 }
 
 
+bool WriteInt32ToHeapNumberStub::CompilingCallsToThisStubIsGCSafe() {
+  // These variants are compiled ahead of time.  See next method.
+  if (the_int_.is(a1) &&
+      the_heap_number_.is(v0) &&
+      scratch_.is(a2) &&
+      sign_.is(a3)) {
+    return true;
+  }
+  if (the_int_.is(a2) &&
+      the_heap_number_.is(v0) &&
+      scratch_.is(a3) &&
+      sign_.is(a0)) {
+    return true;
+  }
+  // Other register combinations are generated as and when they are needed,
+  // so it is unsafe to call them from stubs (we can't generate a stub while
+  // we are generating a stub).
+  return false;
+}
+
+
+void WriteInt32ToHeapNumberStub::GenerateStubsAheadOfTime() {
+  WriteInt32ToHeapNumberStub stub1(a1, v0, a2, a3);
+  WriteInt32ToHeapNumberStub stub2(a2, v0, a3, a0);
+  Handle<Code> code1 = stub1.GetCode();
+  Handle<Code> code2 = stub2.GetCode();
+}
+
+
 // See comment for class, this does NOT work for int32's that are in Smi range.
 void WriteInt32ToHeapNumberStub::Generate(MacroAssembler* masm) {
   Label max_negative_int;
@@ -1253,6 +1282,8 @@ static void EmitTwoNonNanDoubleComparison(MacroAssembler* masm, Condition cc) {
       __ Move(f12, a0, a1);
       __ Move(f14, a2, a3);
     }
+
+    AllowExternalCallThatCantCauseGC scope(masm);
     __ CallCFunction(ExternalReference::compare_doubles(masm->isolate()),
        0, 2);
     __ pop(ra);  // Because this function returns int, result is in v0.
@@ -2925,9 +2956,9 @@ void BinaryOpStub::GenerateInt32Stub(MacroAssembler* masm) {
         __ Ret();
       } else {
         // Tail call that writes the int32 in a2 to the heap number in v0, using
-        // a3 and a1 as scratch. v0 is preserved and returned.
+        // a3 and a0 as scratch. v0 is preserved and returned.
         __ mov(a0, t1);
-        WriteInt32ToHeapNumberStub stub(a2, v0, a3, a1);
+        WriteInt32ToHeapNumberStub stub(a2, v0, a3, a0);
         __ TailCallStub(&stub);
       }
 
@@ -3484,6 +3515,7 @@ bool CEntryStub::CompilingCallsToThisStubIsGCSafe() {
 
 
 void CodeStub::GenerateStubsAheadOfTime() {
+  WriteInt32ToHeapNumberStub::GenerateStubsAheadOfTime();
 }
 
 
