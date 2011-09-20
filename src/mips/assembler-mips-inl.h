@@ -120,6 +120,11 @@ int RelocInfo::target_address_size() {
 void RelocInfo::set_target_address(Address target) {
   ASSERT(IsCodeTarget(rmode_) || rmode_ == RUNTIME_ENTRY);
   Assembler::set_target_address_at(pc_, target);
+  if (host() != NULL && IsCodeTarget(rmode_)) {
+    Object* target_code = Code::GetCodeFromTargetAddress(target);
+    host()->GetHeap()->incremental_marking()->RecordWriteIntoCode(
+        host(), this, HeapObject::cast(target_code));
+  }
 }
 
 
@@ -149,6 +154,10 @@ Object** RelocInfo::target_object_address() {
 void RelocInfo::set_target_object(Object* target) {
   ASSERT(IsCodeTarget(rmode_) || rmode_ == EMBEDDED_OBJECT);
   Assembler::set_target_address_at(pc_, reinterpret_cast<Address>(target));
+  if (host() != NULL && target->IsHeapObject()) {
+    host()->GetHeap()->incremental_marking()->RecordWrite(
+        host(), &Memory::Object_at(pc_), HeapObject::cast(target));
+  }
 }
 
 
@@ -180,6 +189,12 @@ void RelocInfo::set_target_cell(JSGlobalPropertyCell* cell) {
   ASSERT(rmode_ == RelocInfo::GLOBAL_PROPERTY_CELL);
   Address address = cell->address() + JSGlobalPropertyCell::kValueOffset;
   Memory::Address_at(pc_) = address;
+  if (host() != NULL) {
+    // TODO(1550) We are passing NULL as a slot because cell can never be on
+    // evacuation candidate.
+    host()->GetHeap()->incremental_marking()->RecordWrite(
+        host(), NULL, cell);
+  }
 }
 
 
@@ -200,6 +215,11 @@ void RelocInfo::set_call_address(Address target) {
   // debug-mips.cc BreakLocationIterator::SetDebugBreakAtReturn(), or
   // debug break slot per BreakLocationIterator::SetDebugBreakAtSlot().
   Assembler::set_target_address_at(pc_, target);
+  if (host() != NULL) {
+    Object* target_code = Code::GetCodeFromTargetAddress(target);
+    host()->GetHeap()->incremental_marking()->RecordWriteIntoCode(
+        host(), this, HeapObject::cast(target_code));
+  }
 }
 
 
@@ -242,12 +262,28 @@ bool RelocInfo::IsPatchedDebugBreakSlotSequence() {
 void RelocInfo::Visit(ObjectVisitor* visitor) {
   RelocInfo::Mode mode = rmode();
   if (mode == RelocInfo::EMBEDDED_OBJECT) {
-    Object** p = target_object_address();
-    Object* orig = *p;
-    visitor->VisitPointer(p);
-    if (*p != orig) {
-      set_target_object(*p);
-    }
+    // The GC system expects our address to be in the code. This is a workaround
+    // that satisfies this requirement.
+
+    Instr lui = Assembler::instr_at(pc_);
+#ifdef DEBUG
+    Instr ori = Assembler::instr_at(pc_ + Assembler::kInstrSize);
+    CHECK((Assembler::GetOpcodeField(lui) == LUI &&
+        Assembler::GetOpcodeField(ori) == ORI));
+#endif
+
+    Address target_address = Assembler::target_address_at(pc_);
+    // Dump the actual address into the code (where lui was).
+    Assembler::instr_at_put(pc_, reinterpret_cast<Instr>(target_address));
+
+    Object** opc = reinterpret_cast<Object**>(pc_);
+    visitor->VisitPointer(opc, kStoreIndirectPointers);
+
+    // Save the new address from GC, revert to the old lui instruction then use
+    // the standard address patching mechanism to set the new address.
+    Address new_target_address = reinterpret_cast<Address>(*opc);
+    Assembler::instr_at_put(pc_, lui);
+    Assembler::set_target_address_at(pc_, new_target_address);
   } else if (RelocInfo::IsCodeTarget(mode)) {
     visitor->VisitCodeTarget(this);
   } else if (mode == RelocInfo::GLOBAL_PROPERTY_CELL) {
@@ -273,7 +309,28 @@ template<typename StaticVisitor>
 void RelocInfo::Visit(Heap* heap) {
   RelocInfo::Mode mode = rmode();
   if (mode == RelocInfo::EMBEDDED_OBJECT) {
-    StaticVisitor::VisitPointer(heap, target_object_address());
+    // The GC system expects our address to be in the code. This is a workaround
+    // that satisfies this requirement.
+
+    Instr lui = Assembler::instr_at(pc_);
+#ifdef DEBUG
+    Instr ori = Assembler::instr_at(pc_ + Assembler::kInstrSize);
+    CHECK((Assembler::GetOpcodeField(lui) == LUI &&
+        Assembler::GetOpcodeField(ori) == ORI));
+#endif
+
+    Address target_address = Assembler::target_address_at(pc_);
+    // Dump the actual address into the code (where lui was).
+    Assembler::instr_at_put(pc_, reinterpret_cast<Instr>(target_address));
+
+    Object** opc = reinterpret_cast<Object**>(pc_);
+    StaticVisitor::VisitPointer(heap, opc, kStoreIndirectPointers);
+
+    // Save the new address from GC, revert to the old lui instruction then use
+    // the standard address patching mechanism to set the new address.
+    Address new_target_address = reinterpret_cast<Address>(*opc);
+    Assembler::instr_at_put(pc_, lui);
+    Assembler::set_target_address_at(pc_, new_target_address);
   } else if (RelocInfo::IsCodeTarget(mode)) {
     StaticVisitor::VisitCodeTarget(heap, this);
   } else if (mode == RelocInfo::GLOBAL_PROPERTY_CELL) {

@@ -786,11 +786,15 @@ class StaticMarkingVisitor : public StaticVisitorBase {
                                    kVisitStructGeneric>();
   }
 
-  INLINE(static void VisitPointer(Heap* heap, Object** p)) {
-    MarkObjectByPointer(heap->mark_compact_collector(), p, p);
+  INLINE(static void VisitPointer(Heap* heap, Object** p, int flags = 0)) {
+    MarkObjectByPointer(heap->mark_compact_collector(), p, p,
+        flags & kStoreIndirectPointers);
   }
 
-  INLINE(static void VisitPointers(Heap* heap, Object** start, Object** end)) {
+  INLINE(static void VisitPointers(Heap* heap,
+                                   Object** start,
+                                   Object** end,
+                                   int flags = 0)) {
     // Mark all objects pointed to in [start, end).
     const int kMinRangeForMarkingRecursion = 64;
     if (end - start >= kMinRangeForMarkingRecursion) {
@@ -799,7 +803,7 @@ class StaticMarkingVisitor : public StaticVisitorBase {
     }
     MarkCompactCollector* collector = heap->mark_compact_collector();
     for (Object** p = start; p < end; p++) {
-      MarkObjectByPointer(collector, start, p);
+      MarkObjectByPointer(collector, start, p, flags & kStoreIndirectPointers);
     }
   }
 
@@ -840,10 +844,11 @@ class StaticMarkingVisitor : public StaticVisitorBase {
   // Mark object pointed to by p.
   INLINE(static void MarkObjectByPointer(MarkCompactCollector* collector,
                                          Object** anchor_slot,
-                                         Object** p)) {
+                                         Object** p,
+                                         bool indirect)) {
     if (!(*p)->IsHeapObject()) return;
     HeapObject* object = ShortCircuitConsString(p);
-    collector->RecordSlot(anchor_slot, p, object);
+    collector->RecordSlot(anchor_slot, p, object, indirect);
     MarkBit mark = Marking::MarkBitFrom(object);
     collector->MarkObject(object, mark);
   }
@@ -2664,17 +2669,17 @@ class EvacuationWeakObjectRetainer : public WeakObjectRetainer {
 };
 
 
-static inline void UpdateSlot(Object** slot) {
-  Object* obj = *slot;
+static inline void UpdateSlot(SlotsBuffer::ObjectSlot* slot) {
+  Object* obj = slot->GetPointer();
   if (!obj->IsHeapObject()) return;
 
   HeapObject* heap_obj = HeapObject::cast(obj);
 
   MapWord map_word = heap_obj->map_word();
   if (map_word.IsForwardingAddress()) {
-    ASSERT(MarkCompactCollector::IsOnEvacuationCandidate(*slot));
-    *slot = map_word.ToForwardingAddress();
-    ASSERT(!MarkCompactCollector::IsOnEvacuationCandidate(*slot));
+    ASSERT(MarkCompactCollector::IsOnEvacuationCandidate(slot->GetPointer()));
+    slot->SetPointer(map_word.ToForwardingAddress());
+    ASSERT(!MarkCompactCollector::IsOnEvacuationCandidate(slot->GetPointer()));
   }
 }
 
@@ -3506,8 +3511,32 @@ void MarkCompactCollector::Initialize() {
 }
 
 
+#ifdef V8_TARGET_ARCH_MIPS
+Object* SlotsBuffer::ObjectSlot::GetPointer() const {
+  ASSERT(IsValid());
+  if (indirect_) {
+    Address addr = reinterpret_cast<Address>(ptr_);
+    return reinterpret_cast<Object*>(Assembler::target_address_at(addr));
+  } else {
+    return *ptr_;
+  }
+}
+
+void SlotsBuffer::ObjectSlot::SetPointer(Object* target) {
+  ASSERT(IsValid());
+  if (indirect_) {
+    Address addr = reinterpret_cast<Address>(ptr_);
+    Address tar = reinterpret_cast<Address>(target);
+    Assembler::set_target_address_at(addr, tar);
+  } else {
+    *ptr_ = target;
+  }
+}
+#endif
+
+
 bool SlotsBuffer::IsTypedSlot(ObjectSlot slot) {
-  return reinterpret_cast<uintptr_t>(slot) < NUMBER_OF_SLOT_TYPES;
+  return reinterpret_cast<uintptr_t>(slot.GetRaw()) < NUMBER_OF_SLOT_TYPES;
 }
 
 
@@ -3526,8 +3555,8 @@ bool SlotsBuffer::AddTo(SlotsBufferAllocator* allocator,
     *buffer_address = buffer;
   }
   ASSERT(buffer->HasSpaceForTypedSlot());
-  buffer->Add(reinterpret_cast<ObjectSlot>(type));
-  buffer->Add(reinterpret_cast<ObjectSlot>(addr));
+  buffer->Add(ObjectSlot(reinterpret_cast<Object**>(type)));
+  buffer->Add(ObjectSlot(reinterpret_cast<Object**>(addr)));
   return true;
 }
 
@@ -3580,7 +3609,8 @@ void MarkCompactCollector::RecordCodeEntrySlot(Address slot, Code* target) {
 
 static inline SlotsBuffer::SlotType DecodeSlotType(
     SlotsBuffer::ObjectSlot slot) {
-  return static_cast<SlotsBuffer::SlotType>(reinterpret_cast<intptr_t>(slot));
+  return static_cast<SlotsBuffer::SlotType>(
+      reinterpret_cast<intptr_t>(slot.GetRaw()));
 }
 
 
@@ -3590,13 +3620,13 @@ void SlotsBuffer::UpdateSlots(Heap* heap) {
   for (int slot_idx = 0; slot_idx < idx_; ++slot_idx) {
     ObjectSlot slot = slots_[slot_idx];
     if (!IsTypedSlot(slot)) {
-      UpdateSlot(slot);
+      UpdateSlot(&slot);
     } else {
       ++slot_idx;
       ASSERT(slot_idx < idx_);
       UpdateSlot(&v,
                  DecodeSlotType(slot),
-                 reinterpret_cast<Address>(slots_[slot_idx]));
+                 reinterpret_cast<Address>(slots_[slot_idx].GetRaw()));
     }
   }
 }

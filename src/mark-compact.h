@@ -296,7 +296,46 @@ class SlotsBufferAllocator {
 // is the first element of typed slot's pair.
 class SlotsBuffer {
  public:
-  typedef Object** ObjectSlot;
+
+  // A helper class that lets us store "indirect" pointers. These are Object*
+  // types that are specially encoded in the code and cannot be dereferenced
+  // directly. Currently only MIPS needs this. On other arches this class
+  // should have no performance impact.
+  class ObjectSlot BASE_EMBEDDED {
+    public:
+    ObjectSlot(Object** ptr = NULL, bool indirect = false) :
+      ptr_(ptr), indirect_(indirect) {
+    }
+
+    inline Object** GetRaw() const {
+      return ptr_;
+    }
+
+#ifdef V8_TARGET_ARCH_MIPS
+    inline Object* GetPointer() const;
+    inline void SetPointer(Object* target);
+#else
+    inline Object* GetPointer() const {
+      ASSERT(IsValid());
+      ASSERT(!indirect_);
+      return *ptr_;
+    }
+
+    inline void SetPointer(Object* target) {
+      ASSERT(IsValid());
+      ASSERT(!indirect_);
+      *ptr_ = target;
+    }
+#endif  // V8_TARGET_ARCH_MIPS
+
+    inline bool IsValid() const {
+      return ptr_ != NULL;
+    }
+
+    private:
+    Object** ptr_;
+    bool indirect_;
+  };
 
   explicit SlotsBuffer(SlotsBuffer* next_buffer)
       : idx_(0), chain_length_(1), next_(next_buffer) {
@@ -530,7 +569,10 @@ class MarkCompactCollector {
   void RecordRelocSlot(RelocInfo* rinfo, Code* target);
   void RecordCodeEntrySlot(Address slot, Code* target);
 
-  INLINE(void RecordSlot(Object** anchor_slot, Object** slot, Object* object));
+  INLINE(void RecordSlot(Object** anchor_slot,
+                         Object** slot,
+                         Object* object,
+                         bool indirect = false));
 
   void MigrateObject(Address dst,
                      Address src,
