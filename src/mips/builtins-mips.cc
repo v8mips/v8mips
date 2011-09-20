@@ -770,20 +770,23 @@ static void Generate_JSConstructStubHelper(MacroAssembler* masm,
       __ sll(t0, a3, kPointerSizeLog2);
       __ addu(t6, t4, t0);   // End of object.
       ASSERT_EQ(3 * kPointerSize, JSObject::kHeaderSize);
-      { Label loop, entry;
-        if (count_constructions) {
-          // To allow for truncation.
-          __ LoadRoot(t7, Heap::kOnePointerFillerMapRootIndex);
-        } else {
-          __ LoadRoot(t7, Heap::kUndefinedValueRootIndex);
+      __ LoadRoot(t7, Heap::kUndefinedValueRootIndex);
+      if (count_constructions) {
+        __ lw(a0, FieldMemOperand(a2, Map::kInstanceSizesOffset));
+        __ Ext(a0, a0, Map::kPreAllocatedPropertyFieldsByte * kBitsPerByte,
+                kBitsPerByte);
+        __ sll(t0, a0, kPointerSizeLog2);
+        __ addu(a0, t5, t0);
+        // a0: offset of first field after pre-allocated fields
+        if (FLAG_debug_code) {
+          __ Assert(le, "Unexpected number of pre-allocated property fields.",
+              a0, Operand(t6));
         }
-        __ jmp(&entry);
-        __ bind(&loop);
-        __ sw(t7, MemOperand(t5, 0));
-        __ addiu(t5, t5, kPointerSize);
-        __ bind(&entry);
-        __ Branch(&loop, Uless, t5, Operand(t6));
+        __ InitializeFieldsWithFiller(t5, a0, t7);
+        // To allow for truncation.
+        __ LoadRoot(t7, Heap::kOnePointerFillerMapRootIndex);
       }
+      __ InitializeFieldsWithFiller(t5, t6, t7);
 
       // Add the object tag to make the JSObject real, so that we can continue
       // and jump into the continuation code at any time from now on. Any
@@ -800,14 +803,12 @@ static void Generate_JSConstructStubHelper(MacroAssembler* masm,
       // The field instance sizes contains both pre-allocated property fields
       // and in-object properties.
       __ lw(a0, FieldMemOperand(a2, Map::kInstanceSizesOffset));
-      __ And(t6,
-             a0,
-             Operand(0x000000FF << Map::kPreAllocatedPropertyFieldsByte * 8));
-      __ srl(t0, t6, Map::kPreAllocatedPropertyFieldsByte * 8);
-      __ Addu(a3, a3, Operand(t0));
-      __ And(t6, a0, Operand(0x000000FF << Map::kInObjectPropertiesByte * 8));
-      __ srl(t0, t6, Map::kInObjectPropertiesByte * 8);
-      __ subu(a3, a3, t0);
+      __ Ext(t6, a0, Map::kPreAllocatedPropertyFieldsByte * kBitsPerByte,
+             kBitsPerByte);
+      __ Addu(a3, a3, Operand(t6));
+      __ Ext(t6, a0, Map::kInObjectPropertiesByte * kBitsPerByte,
+              kBitsPerByte);
+      __ subu(a3, a3, t6);
 
       // Done if no extra properties are to be allocated.
       __ Branch(&allocated, eq, a3, Operand(zero_reg));

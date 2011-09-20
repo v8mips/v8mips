@@ -3210,6 +3210,19 @@ void MacroAssembler::CopyBytes(Register src,
 }
 
 
+void MacroAssembler::InitializeFieldsWithFiller(Register start_offset,
+                                                Register end_offset,
+                                                Register filler) {
+  Label loop, entry;
+  Branch(&entry);
+  bind(&loop);
+  sw(filler, MemOperand(start_offset));
+  Addu(start_offset, start_offset, kPointerSize);
+  bind(&entry);
+  Branch(&loop, lt, start_offset, Operand(end_offset));
+}
+
+
 void MacroAssembler::CheckFastElements(Register map,
                                        Register scratch,
                                        Label* fail) {
