@@ -2697,18 +2697,23 @@ void FullCodeGenerator::EmitClassOf(ZoneList<Expression*>* args) {
 
   // Check that the object is a JS object but take special care of JS
   // functions to make sure they have 'Function' as their class.
+  // Assume that there are only two callable types, and one of them is at
+  // either end of the type range for JS object types. Saves extra comparisons.
+  STATIC_ASSERT(NUM_OF_CALLABLE_SPEC_OBJECT_TYPES == 2);
   __ GetObjectType(v0, v0, a1);  // Map is now in v0.
   __ Branch(&null, lt, a1, Operand(FIRST_SPEC_OBJECT_TYPE));
 
-  // As long as LAST_CALLABLE_SPEC_OBJECT_TYPE is the last instance type, and
-  // FIRST_CALLABLE_SPEC_OBJECT_TYPE comes right after
-  // LAST_NONCALLABLE_SPEC_OBJECT_TYPE, we can avoid checking for the latter.
-  STATIC_ASSERT(LAST_TYPE == LAST_CALLABLE_SPEC_OBJECT_TYPE);
-  STATIC_ASSERT(FIRST_CALLABLE_SPEC_OBJECT_TYPE ==
-                LAST_NONCALLABLE_SPEC_OBJECT_TYPE + 1);
-  __ Branch(&function, ge, a1, Operand(FIRST_CALLABLE_SPEC_OBJECT_TYPE));
+  STATIC_ASSERT(FIRST_NONCALLABLE_SPEC_OBJECT_TYPE ==
+                FIRST_SPEC_OBJECT_TYPE + 1);
+  __ Branch(&function, eq, a1, Operand(FIRST_SPEC_OBJECT_TYPE));
 
-  // Check if the constructor in the map is a function.
+  STATIC_ASSERT(LAST_NONCALLABLE_SPEC_OBJECT_TYPE ==
+                LAST_SPEC_OBJECT_TYPE - 1);
+  __ Branch(&function, eq, a1, Operand(LAST_SPEC_OBJECT_TYPE));
+  // Assume that there is no larger type.
+  STATIC_ASSERT(LAST_NONCALLABLE_SPEC_OBJECT_TYPE == LAST_TYPE - 1);
+
+  // Check if the constructor in the map is a JS function.
   __ lw(v0, FieldMemOperand(v0, Map::kConstructorOffset));
   __ GetObjectType(v0, a1, a1);
   __ Branch(&non_function_constructor, ne, a1, Operand(JS_FUNCTION_TYPE));
@@ -4011,10 +4016,11 @@ void FullCodeGenerator::EmitLiteralCompareTypeof(Expression* expr,
     Split(ne, a1, Operand(zero_reg), if_true, if_false, fall_through);
   } else if (check->Equals(isolate()->heap()->function_symbol())) {
     __ JumpIfSmi(v0, if_false);
-    __ GetObjectType(v0, a1, v0);  // Leave map in a1.
-    Split(ge, v0, Operand(FIRST_CALLABLE_SPEC_OBJECT_TYPE),
-        if_true, if_false, fall_through);
-
+    STATIC_ASSERT(NUM_OF_CALLABLE_SPEC_OBJECT_TYPES == 2);
+    __ GetObjectType(v0, v0, a1);
+    __ Branch(if_true, eq, a1, Operand(JS_FUNCTION_TYPE));
+    Split(eq, a1, Operand(JS_FUNCTION_PROXY_TYPE),
+          if_true, if_false, fall_through);
   } else if (check->Equals(isolate()->heap()->object_symbol())) {
     __ JumpIfSmi(v0, if_false);
     if (!FLAG_harmony_typeof) {
