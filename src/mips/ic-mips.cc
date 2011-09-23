@@ -1294,6 +1294,22 @@ void KeyedStoreIC::GenerateGeneric(MacroAssembler* masm,
   __ bind(&fast);
   Register scratch_value = t0;
   Register address = t1;
+  if (FLAG_smi_only_arrays) {
+    Label not_smi_only;
+    // Make sure the elements are smi-only.
+    __ lw(scratch_value, FieldMemOperand(receiver, HeapObject::kMapOffset));
+    __ CheckFastSmiOnlyElements(scratch_value, scratch_value, &not_smi_only);
+    // Non-smis need to call into the runtime if the array is smi only.
+    __ JumpIfNotSmi(value, &slow);
+    __ Addu(address, elements,
+            Operand(FixedArray::kHeaderSize - kHeapObjectTag));
+    __ sll(at, key, kPointerSizeLog2 - kSmiTagSize);
+    __ addu(address, address, at);
+    __ sw(value, MemOperand(address));
+    __ mov(v0, a0);  // Return the value written.
+    __ Ret();
+    __ bind(&not_smi_only);
+  }
   // Fast case, store the value to the elements backing store.
   __ Addu(address, elements, Operand(FixedArray::kHeaderSize - kHeapObjectTag));
   __ sll(scratch_value, key, kPointerSizeLog2 - kSmiTagSize);
