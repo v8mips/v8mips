@@ -766,7 +766,7 @@ void MacroAssembler::MultiPushFPU(RegList regs) {
   int16_t stack_offset = num_to_push * kDoubleSize;
 
   Subu(sp, sp, Operand(stack_offset));
-  for (int16_t i = kNumRegisters; i > 0; i--) {
+  for (int16_t i = kNumRegisters - 1; i >= 0; i--) {
     if ((regs & (1 << i)) != 0) {
       stack_offset -= kDoubleSize;
       sdc1(FPURegister::from_code(i), MemOperand(sp, stack_offset));
@@ -808,7 +808,7 @@ void MacroAssembler::MultiPopReversedFPU(RegList regs) {
   CpuFeatures::Scope scope(FPU);
   int16_t stack_offset = 0;
 
-  for (int16_t i = kNumRegisters; i > 0; i--) {
+  for (int16_t i = kNumRegisters - 1; i >= 0; i--) {
     if ((regs & (1 << i)) != 0) {
       ldc1(FPURegister::from_code(i), MemOperand(sp, stack_offset));
       stack_offset += kDoubleSize;
