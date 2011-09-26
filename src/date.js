@@ -376,8 +376,17 @@ function MakeDate(day, time) {
 
 // ECMA 262 - 15.9.1.14
 function TimeClip(time) {
-  if (!$isFinite(time)) return $NaN;
-  if ($abs(time) > MAX_TIME_MS) return $NaN;
+  if (!$isFinite(time)) {
+    if ($isNaN(time)) {
+      // Preserve NaN represntation.
+      return time;
+    } else {
+      return time - time; // Inf - Inf creates NaN.
+    }
+  }
+  if ($abs(time) > MAX_TIME_MS) {
+      return  0/(time - time);
+  }
   return TO_INTEGER(time);
 }
 
