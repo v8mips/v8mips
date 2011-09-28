@@ -624,24 +624,30 @@ enum InstanceType {
 
   JS_MESSAGE_OBJECT_TYPE,
 
-  JS_VALUE_TYPE,  // FIRST_NON_CALLABLE_OBJECT_TYPE, FIRST_JS_RECEIVER_TYPE
+  // All the following types are subtypes of JSReceiver, which corresponds to
+  // objects in the JS sense. The first and the last type in this range are
+  // the two forms of function. This organization enables using the same
+  // compares for checking the JS_RECEIVER/SPEC_OBJECT range and the
+  // NONCALLABLE_JS_OBJECT range.
+  JS_FUNCTION_PROXY_TYPE,  // FIRST_JS_RECEIVER_TYPE, FIRST_JS_PROXY_TYPE
+  JS_PROXY_TYPE,  // LAST_JS_PROXY_TYPE
+
+  JS_VALUE_TYPE,  // FIRST_JS_OBJECT_TYPE
   JS_OBJECT_TYPE,
   JS_CONTEXT_EXTENSION_OBJECT_TYPE,
   JS_GLOBAL_OBJECT_TYPE,
   JS_BUILTINS_OBJECT_TYPE,
   JS_GLOBAL_PROXY_TYPE,
   JS_ARRAY_TYPE,
-  JS_PROXY_TYPE,
   JS_WEAK_MAP_TYPE,
 
-  JS_REGEXP_TYPE,  // LAST_NONCALLABLE_SPEC_OBJECT_TYPE
+  JS_REGEXP_TYPE,
 
-  JS_FUNCTION_TYPE,  // FIRST_CALLABLE_SPEC_OBJECT_TYPE
-  JS_FUNCTION_PROXY_TYPE,  // LAST_CALLABLE_SPEC_OBJECT_TYPE
+  JS_FUNCTION_TYPE,  // LAST_JS_OBJECT_TYPE, LAST_JS_RECEIVER_TYPE
 
   // Pseudo-types
   FIRST_TYPE = 0x0,
-  LAST_TYPE = JS_FUNCTION_PROXY_TYPE,
+  LAST_TYPE = JS_FUNCTION_TYPE,
   INVALID_TYPE = FIRST_TYPE - 1,
   FIRST_NONSTRING_TYPE = MAP_TYPE,
   // Boundaries for testing for an external array.
@@ -654,17 +660,23 @@ enum InstanceType {
   // are not continuous in this enum! The enum ranges instead reflect the
   // external class names, where proxies are treated as either ordinary objects,
   // or functions.
-  FIRST_JS_RECEIVER_TYPE = JS_VALUE_TYPE,
+  FIRST_JS_RECEIVER_TYPE = JS_FUNCTION_PROXY_TYPE,
   LAST_JS_RECEIVER_TYPE = LAST_TYPE,
-  // Boundaries for testing the types for which typeof is "object".
-  FIRST_NONCALLABLE_SPEC_OBJECT_TYPE = JS_VALUE_TYPE,
-  LAST_NONCALLABLE_SPEC_OBJECT_TYPE = JS_REGEXP_TYPE,
-  // Boundaries for testing the types for which typeof is "function".
-  FIRST_CALLABLE_SPEC_OBJECT_TYPE = JS_FUNCTION_TYPE,
-  LAST_CALLABLE_SPEC_OBJECT_TYPE = JS_FUNCTION_PROXY_TYPE,
+  // Boundaries for testing the types represented as JSObject
+  FIRST_JS_OBJECT_TYPE = JS_VALUE_TYPE,
+  LAST_JS_OBJECT_TYPE = LAST_TYPE,
+  // Boundaries for testing the types represented as JSProxy
+  FIRST_JS_PROXY_TYPE = JS_FUNCTION_PROXY_TYPE,
+  LAST_JS_PROXY_TYPE = JS_PROXY_TYPE,
   // Boundaries for testing whether the type is a JavaScript object.
-  FIRST_SPEC_OBJECT_TYPE = FIRST_NONCALLABLE_SPEC_OBJECT_TYPE,
-  LAST_SPEC_OBJECT_TYPE = LAST_CALLABLE_SPEC_OBJECT_TYPE
+  FIRST_SPEC_OBJECT_TYPE = FIRST_JS_RECEIVER_TYPE,
+  LAST_SPEC_OBJECT_TYPE = LAST_JS_RECEIVER_TYPE,
+  // Boundaries for testing the types for which typeof is "object".
+  FIRST_NONCALLABLE_SPEC_OBJECT_TYPE = JS_PROXY_TYPE,
+  LAST_NONCALLABLE_SPEC_OBJECT_TYPE = JS_REGEXP_TYPE,
+  // Note that the types for which typeof is "function" are not continuous.
+  // Define this so that we can put assertions on discrete checks.
+  NUM_OF_CALLABLE_SPEC_OBJECT_TYPES = 2
 };
 
 static const int kExternalArrayTypeCount = LAST_EXTERNAL_ARRAY_TYPE -
@@ -6130,6 +6142,9 @@ class SeqString: public String {
   // Casting.
   static inline SeqString* cast(Object* obj);
 
+  // Layout description.
+  static const int kHeaderSize = String::kSize;
+
  private:
   DISALLOW_IMPLICIT_CONSTRUCTORS(SeqString);
 };
@@ -6162,10 +6177,6 @@ class SeqAsciiString: public SeqString {
   static int SizeFor(int length) {
     return OBJECT_POINTER_ALIGN(kHeaderSize + length * kCharSize);
   }
-
-  // Layout description.
-  static const int kHeaderSize = String::kSize;
-  static const int kAlignedSize = POINTER_SIZE_ALIGN(kHeaderSize);
 
   // Maximal memory usage for a single sequential ASCII string.
   static const int kMaxSize = 512 * MB - 1;
@@ -6216,10 +6227,6 @@ class SeqTwoByteString: public SeqString {
   static int SizeFor(int length) {
     return OBJECT_POINTER_ALIGN(kHeaderSize + length * kShortSize);
   }
-
-  // Layout description.
-  static const int kHeaderSize = String::kSize;
-  static const int kAlignedSize = POINTER_SIZE_ALIGN(kHeaderSize);
 
   // Maximal memory usage for a single sequential two-byte string.
   static const int kMaxSize = 512 * MB - 1;
@@ -6384,8 +6391,8 @@ class ExternalAsciiString: public ExternalString {
   typedef v8::String::ExternalAsciiStringResource Resource;
 
   // The underlying resource.
-  inline Resource* resource();
-  inline void set_resource(Resource* buffer);
+  inline const Resource* resource();
+  inline void set_resource(const Resource* buffer);
 
   // Dispatched behavior.
   uint16_t ExternalAsciiStringGet(int index);
@@ -6421,8 +6428,8 @@ class ExternalTwoByteString: public ExternalString {
   typedef v8::String::ExternalStringResource Resource;
 
   // The underlying string resource.
-  inline Resource* resource();
-  inline void set_resource(Resource* buffer);
+  inline const Resource* resource();
+  inline void set_resource(const Resource* buffer);
 
   // Dispatched behavior.
   uint16_t ExternalTwoByteStringGet(int index);

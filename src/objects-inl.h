@@ -531,20 +531,23 @@ Failure* Failure::cast(MaybeObject* obj) {
 
 
 bool Object::IsJSReceiver() {
+  STATIC_ASSERT(LAST_JS_RECEIVER_TYPE == LAST_TYPE);
   return IsHeapObject() &&
       HeapObject::cast(this)->map()->instance_type() >= FIRST_JS_RECEIVER_TYPE;
 }
 
 
 bool Object::IsJSObject() {
-  return IsJSReceiver() && !IsJSProxy();
+  STATIC_ASSERT(LAST_JS_OBJECT_TYPE == LAST_TYPE);
+  return IsHeapObject() &&
+      HeapObject::cast(this)->map()->instance_type() >= FIRST_JS_OBJECT_TYPE;
 }
 
 
 bool Object::IsJSProxy() {
-  return Object::IsHeapObject() &&
-     (HeapObject::cast(this)->map()->instance_type() == JS_PROXY_TYPE ||
-      HeapObject::cast(this)->map()->instance_type() == JS_FUNCTION_PROXY_TYPE);
+  if (!Object::IsHeapObject()) return false;
+  InstanceType type = HeapObject::cast(this)->map()->instance_type();
+  return FIRST_JS_PROXY_TYPE <= type && type <= LAST_JS_PROXY_TYPE;
 }
 
 
@@ -2299,25 +2302,27 @@ void ConsString::set_second(String* value, WriteBarrierMode mode) {
 }
 
 
-ExternalAsciiString::Resource* ExternalAsciiString::resource() {
+const ExternalAsciiString::Resource* ExternalAsciiString::resource() {
   return *reinterpret_cast<Resource**>(FIELD_ADDR(this, kResourceOffset));
 }
 
 
 void ExternalAsciiString::set_resource(
-    ExternalAsciiString::Resource* resource) {
-  *reinterpret_cast<Resource**>(FIELD_ADDR(this, kResourceOffset)) = resource;
+    const ExternalAsciiString::Resource* resource) {
+  *reinterpret_cast<const Resource**>(
+      FIELD_ADDR(this, kResourceOffset)) = resource;
 }
 
 
-ExternalTwoByteString::Resource* ExternalTwoByteString::resource() {
+const ExternalTwoByteString::Resource* ExternalTwoByteString::resource() {
   return *reinterpret_cast<Resource**>(FIELD_ADDR(this, kResourceOffset));
 }
 
 
 void ExternalTwoByteString::set_resource(
-    ExternalTwoByteString::Resource* resource) {
-  *reinterpret_cast<Resource**>(FIELD_ADDR(this, kResourceOffset)) = resource;
+    const ExternalTwoByteString::Resource* resource) {
+  *reinterpret_cast<const Resource**>(
+      FIELD_ADDR(this, kResourceOffset)) = resource;
 }
 
 

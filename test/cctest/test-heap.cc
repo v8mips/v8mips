@@ -1221,26 +1221,44 @@ TEST(TestSizeOfObjectsVsHeapIteratorPrecision) {
 }
 
 
-class HeapIteratorTestHelper {
- public:
-  HeapIteratorTestHelper(Object* a, Object* b)
-      : a_(a), b_(b), a_found_(false), b_found_(false) {}
-  bool a_found() { return a_found_; }
-  bool b_found() { return b_found_; }
-  void IterateHeap() {
-    HeapIterator iterator;
-    for (HeapObject* obj = iterator.next();
-         obj != NULL;
-         obj = iterator.next()) {
-      if (obj == a_)
-        a_found_ = true;
-      else if (obj == b_)
-        b_found_ = true;
-    }
+TEST(GrowAndShrinkNewSpace) {
+  InitializeVM();
+  v8::HandleScope scope;
+  NewSpace* new_space = HEAP->new_space();
+
+  // Explicitly growing should double the space capacity.
+  int old_capacity, new_capacity;
+  old_capacity = new_space->Capacity();
+  new_space->Grow();
+  new_capacity = new_space->Capacity();
+  ASSERT_EQ(2 * old_capacity, new_capacity);
+
+  // Fill up new space to the point that it is almost full.
+  while (new_space->SizeAsInt() + FixedArray::SizeFor(1000) < new_capacity) {
+    ASSERT(HEAP->InNewSpace(*FACTORY->NewFixedArray(1000, NOT_TENURED)));
   }
- private:
-  Object* a_;
-  Object* b_;
-  bool a_found_;
-  bool b_found_;
-};
+
+  // Explicitly shrinking should not affect space capacity.
+  old_capacity = new_space->Capacity();
+  new_space->Shrink();
+  new_capacity = new_space->Capacity();
+  ASSERT_EQ(old_capacity, new_capacity);
+
+  // Perform scavenge to empty the new space.
+  HEAP->CollectGarbage(NEW_SPACE);
+  ASSERT_LE(new_space->SizeAsInt(), old_capacity);
+
+  // Explicitly shrinking should halve the space capacity.
+  old_capacity = new_space->Capacity();
+  new_space->Shrink();
+  new_capacity = new_space->Capacity();
+  ASSERT_EQ(old_capacity, 2 * new_capacity);
+
+  // Consecutive shrinking should not affect space capacity.
+  old_capacity = new_space->Capacity();
+  new_space->Shrink();
+  new_space->Shrink();
+  new_space->Shrink();
+  new_capacity = new_space->Capacity();
+  ASSERT_EQ(old_capacity, new_capacity);
+}

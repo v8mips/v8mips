@@ -27,15 +27,16 @@
 
 prefix mjsunit
 
-# BUG(1698): Fix Harmony-related crashes in these tests
-harmony/proxies: SKIP
-
 # All tests in the bug directory are expected to fail.
 bugs: FAIL
 
 ##############################################################################
 # Fails.
 regress/regress-1119: FAIL
+
+##############################################################################
+# NewGC: http://code.google.com/p/v8/issues/detail?id=1701
+array-join: SKIP
 
 ##############################################################################
 # Too slow in debug mode with --stress-opt
@@ -62,11 +63,6 @@ regress/regress-524: (PASS || TIMEOUT), SKIP if $mode == debug
 # Stack manipulations in LiveEdit are buggy - see bug 915
 debug-liveedit-check-stack: SKIP
 debug-liveedit-patch-positions-replace: SKIP
-
-# Known failures after merge from the bleeding edge (issue 1672)
-debug-scopes: PASS, SKIP if ($mode == debug)
-mirror-object: PASS, SKIP if ($mode == debug)
-harmony/debug-blockscopes: PASS, SKIP if ($mode == debug)
 
 ##############################################################################
 [ $arch == arm ]

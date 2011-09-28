@@ -4942,7 +4942,6 @@ void HGraphBuilder::VisitCall(Call* expr) {
 
   } else {
     VariableProxy* proxy = expr->expression()->AsVariableProxy();
-    // FIXME.
     bool global_call = proxy != NULL && proxy->var()->IsUnallocated();
 
     if (global_call) {
@@ -5937,9 +5936,7 @@ void HGraphBuilder::GenerateIsFunction(CallRuntime* call) {
   CHECK_ALIVE(VisitForValue(call->arguments()->at(0)));
   HValue* value = Pop();
   HHasInstanceTypeAndBranch* result =
-      new(zone()) HHasInstanceTypeAndBranch(value,
-                                            JS_FUNCTION_TYPE,
-                                            JS_FUNCTION_PROXY_TYPE);
+      new(zone()) HHasInstanceTypeAndBranch(value, JS_FUNCTION_TYPE);
   return ast_context()->ReturnControl(result, call->id());
 }
 

@@ -1241,7 +1241,7 @@ static void EmitStrictTwoHeapObjectCompare(MacroAssembler* masm,
     // If either operand is a JS object or an oddball value, then they are
     // not equal since their pointers are different.
     // There is no test for undetectability in strict equality.
-    STATIC_ASSERT(LAST_TYPE == LAST_CALLABLE_SPEC_OBJECT_TYPE);
+    STATIC_ASSERT(LAST_TYPE == LAST_SPEC_OBJECT_TYPE);
     Label first_non_object;
     // Get the type of the first operand into r2 and compare it with
     // FIRST_SPEC_OBJECT_TYPE.
@@ -4575,8 +4575,7 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
 
   // For arguments 4 and 3 get string length, calculate start of string data and
   // calculate the shift of the index (0 for ASCII and 1 for two byte).
-  STATIC_ASSERT(SeqAsciiString::kHeaderSize == SeqTwoByteString::kHeaderSize);
-  __ add(r8, subject, Operand(SeqAsciiString::kHeaderSize - kHeapObjectTag));
+  __ add(r8, subject, Operand(SeqString::kHeaderSize - kHeapObjectTag));
   __ eor(r3, r3, Operand(1));
   // Load the length from the original subject string from the previous stack
   // frame. Therefore we have to use fp, which points exactly to two pointer
