@@ -60,6 +60,8 @@
 #include "objects-inl.h"
 #include "spaces-inl.h"
 #include "heap-inl.h"
+#include "incremental-marking-inl.h"
+#include "mark-compact-inl.h"
 #include "log-inl.h"
 #include "cpu-profiler-inl.h"
 #include "handles-inl.h"
@@ -123,6 +125,15 @@ class V8 : public AllStatic {
   // True if we are using the crankshaft optimizing compiler.
   static bool use_crankshaft_;
 };
+
+
+// JavaScript defines two kinds of 'nil'.
+enum NilValue { kNullValue, kUndefinedValue };
+
+
+// JavaScript defines two kinds of equality.
+enum EqualityKind { kStrictEquality, kNonStrictEquality };
+
 
 } }  // namespace v8::internal
 

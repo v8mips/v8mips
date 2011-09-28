@@ -214,13 +214,11 @@ bool LCodeGen::GeneratePrologue() {
         // Load parameter from stack.
         __ ldr(r0, MemOperand(fp, parameter_offset));
         // Store it in the context.
-        __ mov(r1, Operand(Context::SlotOffset(var->index())));
-        __ str(r0, MemOperand(cp, r1));
-        // Update the write barrier. This clobbers all involved
-        // registers, so we have to use two more registers to avoid
-        // clobbering cp.
-        __ mov(r2, Operand(cp));
-        __ RecordWrite(r2, Operand(r1), r3, r0);
+        MemOperand target = ContextOperand(cp, var->index());
+        __ str(r0, target);
+        // Update the write barrier. This clobbers r3 and r0.
+        __ RecordWriteContextSlot(
+            cp, target.offset(), r0, r3, kLRHasBeenSaved, kSaveFPRegs);
       }
     }
     Comment(";;; End allocate local context");
@@ -747,7 +745,7 @@ void LCodeGen::RecordSafepoint(
     int deoptimization_index) {
   ASSERT(expected_safepoint_kind_ == kind);
 
-  const ZoneList<LOperand*>* operands = pointers->operands();
+  const ZoneList<LOperand*>* operands = pointers->GetNormalizedOperands();
   Safepoint safepoint = safepoints_.DefineSafepoint(masm(),
       kind, arguments, deoptimization_index);
   for (int i = 0; i < operands->length(); i++) {
@@ -1751,25 +1749,35 @@ void LCodeGen::DoCmpConstantEqAndBranch(LCmpConstantEqAndBranch* instr) {
 }
 
 
-void LCodeGen::DoIsNullAndBranch(LIsNullAndBranch* instr) {
+void LCodeGen::DoIsNilAndBranch(LIsNilAndBranch* instr) {
   Register scratch = scratch0();
   Register reg = ToRegister(instr->InputAt(0));
-
-  // TODO(fsc): If the expression is known to be a smi, then it's
-  // definitely not null. Jump to the false block.
-
-  int true_block = chunk_->LookupDestination(instr->true_block_id());
   int false_block = chunk_->LookupDestination(instr->false_block_id());
 
-  __ LoadRoot(ip, Heap::kNullValueRootIndex);
+  // If the expression is known to be untagged or a smi, then it's definitely
+  // not null, and it can't be a an undetectable object.
+  if (instr->hydrogen()->representation().IsSpecialization() ||
+      instr->hydrogen()->type().IsSmi()) {
+    EmitGoto(false_block);
+    return;
+  }
+
+  int true_block = chunk_->LookupDestination(instr->true_block_id());
+  Heap::RootListIndex nil_value = instr->nil() == kNullValue ?
+      Heap::kNullValueRootIndex :
+      Heap::kUndefinedValueRootIndex;
+  __ LoadRoot(ip, nil_value);
   __ cmp(reg, ip);
-  if (instr->is_strict()) {
+  if (instr->kind() == kStrictEquality) {
     EmitBranch(true_block, false_block, eq);
   } else {
+    Heap::RootListIndex other_nil_value = instr->nil() == kNullValue ?
+        Heap::kUndefinedValueRootIndex :
+        Heap::kNullValueRootIndex;
     Label* true_label = chunk_->GetAssemblyLabel(true_block);
     Label* false_label = chunk_->GetAssemblyLabel(false_block);
     __ b(eq, true_label);
-    __ LoadRoot(ip, Heap::kUndefinedValueRootIndex);
+    __ LoadRoot(ip, other_nil_value);
     __ cmp(reg, ip);
     __ b(eq, true_label);
     __ JumpIfSmi(reg, false_label);
@@ -2211,6 +2219,7 @@ void LCodeGen::DoLoadGlobalGeneric(LLoadGlobalGeneric* instr) {
 void LCodeGen::DoStoreGlobalCell(LStoreGlobalCell* instr) {
   Register value = ToRegister(instr->InputAt(0));
   Register scratch = scratch0();
+  Register scratch2 = ToRegister(instr->TempAt(0));
 
   // Load the cell.
   __ mov(scratch, Operand(Handle<Object>(instr->hydrogen()->cell())));
@@ -2220,7 +2229,6 @@ void LCodeGen::DoStoreGlobalCell(LStoreGlobalCell* instr) {
   // to update the property details in the property dictionary to mark
   // it as no longer deleted.
   if (instr->hydrogen()->check_hole_value()) {
-    Register scratch2 = ToRegister(instr->TempAt(0));
     __ ldr(scratch2,
            FieldMemOperand(scratch, JSGlobalPropertyCell::kValueOffset));
     __ LoadRoot(ip, Heap::kTheHoleValueRootIndex);
@@ -2230,6 +2238,15 @@ void LCodeGen::DoStoreGlobalCell(LStoreGlobalCell* instr) {
 
   // Store the value.
   __ str(value, FieldMemOperand(scratch, JSGlobalPropertyCell::kValueOffset));
+
+  // Cells are always in the remembered set.
+  __ RecordWriteField(scratch,
+                      JSGlobalPropertyCell::kValueOffset,
+                      value,
+                      scratch2,
+                      kLRHasBeenSaved,
+                      kSaveFPRegs,
+                      OMIT_REMEMBERED_SET);
 }
 
 
@@ -2255,10 +2272,15 @@ void LCodeGen::DoLoadContextSlot(LLoadContextSlot* instr) {
 void LCodeGen::DoStoreContextSlot(LStoreContextSlot* instr) {
   Register context = ToRegister(instr->context());
   Register value = ToRegister(instr->value());
-  __ str(value, ContextOperand(context, instr->slot_index()));
+  MemOperand target = ContextOperand(context, instr->slot_index());
+  __ str(value, target);
   if (instr->needs_write_barrier()) {
-    int offset = Context::SlotOffset(instr->slot_index());
-    __ RecordWrite(context, Operand(offset), value, scratch0());
+    __ RecordWriteContextSlot(context,
+                              target.offset(),
+                              value,
+                              scratch0(),
+                              kLRHasBeenSaved,
+                              kSaveFPRegs);
   }
 }
 
@@ -3270,7 +3292,8 @@ void LCodeGen::DoStoreNamedField(LStoreNamedField* instr) {
     __ str(value, FieldMemOperand(object, offset));
     if (instr->needs_write_barrier()) {
       // Update the write barrier for the object for in-object properties.
-      __ RecordWrite(object, Operand(offset), value, scratch);
+      __ RecordWriteField(
+          object, offset, value, scratch, kLRHasBeenSaved, kSaveFPRegs);
     }
   } else {
     __ ldr(scratch, FieldMemOperand(object, JSObject::kPropertiesOffset));
@@ -3278,7 +3301,8 @@ void LCodeGen::DoStoreNamedField(LStoreNamedField* instr) {
     if (instr->needs_write_barrier()) {
       // Update the write barrier for the properties array.
       // object is used as a scratch register.
-      __ RecordWrite(scratch, Operand(offset), value, object);
+      __ RecordWriteField(
+          scratch, offset, value, object, kLRHasBeenSaved, kSaveFPRegs);
     }
   }
 }
@@ -3324,7 +3348,7 @@ void LCodeGen::DoStoreKeyedFastElement(LStoreKeyedFastElement* instr) {
   if (instr->hydrogen()->NeedsWriteBarrier()) {
     // Compute address of modified element and store it into key register.
     __ add(key, scratch, Operand(FixedArray::kHeaderSize));
-    __ RecordWrite(elements, key, value);
+    __ RecordWrite(elements, key, value, kLRHasBeenSaved, kSaveFPRegs);
   }
 }
 

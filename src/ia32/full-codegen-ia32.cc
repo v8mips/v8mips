@@ -205,11 +205,12 @@ void FullCodeGenerator::Generate(CompilationInfo* info) {
         // Store it in the context.
         int context_offset = Context::SlotOffset(var->index());
         __ mov(Operand(esi, context_offset), eax);
-        // Update the write barrier. This clobbers all involved
-        // registers, so we have use a third register to avoid
-        // clobbering esi.
-        __ mov(ecx, esi);
-        __ RecordWrite(ecx, context_offset, eax, ebx);
+        // Update the write barrier. This clobbers eax and ebx.
+        __ RecordWriteContextSlot(esi,
+                                  context_offset,
+                                  eax,
+                                  ebx,
+                                  kDontSaveFPRegs);
       }
     }
   }
@@ -666,11 +667,12 @@ void FullCodeGenerator::SetVar(Variable* var,
   ASSERT(!scratch1.is(src));
   MemOperand location = VarOperand(var, scratch0);
   __ mov(location, src);
+
   // Emit the write barrier code if the location is in the heap.
   if (var->IsContextSlot()) {
     int offset = Context::SlotOffset(var->index());
     ASSERT(!scratch0.is(esi) && !src.is(esi) && !scratch1.is(esi));
-    __ RecordWrite(scratch0, offset, src, scratch1);
+    __ RecordWriteContextSlot(scratch0, offset, src, scratch1, kDontSaveFPRegs);
   }
 }
 
@@ -743,9 +745,14 @@ void FullCodeGenerator::EmitDeclaration(VariableProxy* proxy,
         Comment cmnt(masm_, "[ Declaration");
         VisitForAccumulatorValue(function);
         __ mov(ContextOperand(esi, variable->index()), result_register());
-        int offset = Context::SlotOffset(variable->index());
-        __ mov(ebx, esi);
-        __ RecordWrite(ebx, offset, result_register(), ecx);
+        // We know that we have written a function, which is not a smi.
+        __ RecordWriteContextSlot(esi,
+                                  Context::SlotOffset(variable->index()),
+                                  result_register(),
+                                  ecx,
+                                  kDontSaveFPRegs,
+                                  EMIT_REMEMBERED_SET,
+                                  OMIT_SMI_CHECK);
         PrepareForBailoutForId(proxy->id(), NO_REGISTERS);
       } else if (mode == Variable::CONST || mode == Variable::LET) {
         Comment cmnt(masm_, "[ Declaration");
@@ -1486,7 +1493,7 @@ void FullCodeGenerator::VisitArrayLiteral(ArrayLiteral* expr) {
     __ mov(FieldOperand(ebx, offset), result_register());
 
     // Update the write barrier for the array store.
-    __ RecordWrite(ebx, offset, result_register(), ecx);
+    __ RecordWriteField(ebx, offset, result_register(), ecx, kDontSaveFPRegs);
 
     PrepareForBailoutForId(expr->GetIdForElement(i), NO_REGISTERS);
   }
@@ -1864,7 +1871,8 @@ void FullCodeGenerator::EmitVariableAssignment(Variable* var,
       __ mov(location, eax);
       if (var->IsContextSlot()) {
         __ mov(edx, eax);
-        __ RecordWrite(ecx, Context::SlotOffset(var->index()), edx, ebx);
+        int offset = Context::SlotOffset(var->index());
+        __ RecordWriteContextSlot(ecx, offset, edx, ebx, kDontSaveFPRegs);
       }
     }
 
@@ -1882,7 +1890,8 @@ void FullCodeGenerator::EmitVariableAssignment(Variable* var,
       __ mov(location, eax);
       if (var->IsContextSlot()) {
         __ mov(edx, eax);
-        __ RecordWrite(ecx, Context::SlotOffset(var->index()), edx, ebx);
+        int offset = Context::SlotOffset(var->index());
+        __ RecordWriteContextSlot(ecx, offset, edx, ebx, kDontSaveFPRegs);
       }
     } else {
       ASSERT(var->IsLookupSlot());
@@ -2848,10 +2857,11 @@ void FullCodeGenerator::EmitSetValueOf(ZoneList<Expression*>* args) {
 
   // Store the value.
   __ mov(FieldOperand(ebx, JSValue::kValueOffset), eax);
+
   // Update the write barrier.  Save the value as it will be
   // overwritten by the write barrier code and is needed afterward.
   __ mov(edx, eax);
-  __ RecordWrite(ebx, JSValue::kValueOffset, edx, ecx);
+  __ RecordWriteField(ebx, JSValue::kValueOffset, edx, ecx, kDontSaveFPRegs);
 
   __ bind(&done);
   context()->Plug(eax);
@@ -3144,14 +3154,27 @@ void FullCodeGenerator::EmitSwapElements(ZoneList<Expression*>* args) {
   __ mov(Operand(index_2, 0), object);
   __ mov(Operand(index_1, 0), temp);
 
-  Label new_space;
-  __ InNewSpace(elements, temp, equal, &new_space);
+  Label no_remembered_set;
+  __ CheckPageFlag(elements,
+                   temp,
+                   1 << MemoryChunk::SCAN_ON_SCAVENGE,
+                   not_zero,
+                   &no_remembered_set,
+                   Label::kNear);
+  // Possible optimization: do a check that both values are Smis
+  // (or them and test against Smi mask.)
 
-  __ mov(object, elements);
-  __ RecordWriteHelper(object, index_1, temp);
-  __ RecordWriteHelper(elements, index_2, temp);
+  // We are swapping two objects in an array and the incremental marker never
+  // pauses in the middle of scanning a single object.  Therefore the
+  // incremental marker is not disturbed, so we don't need to call the
+  // RecordWrite stub that notifies the incremental marker.
+  __ RememberedSetHelper(
+      index_1, temp, kDontSaveFPRegs, MacroAssembler::kFallThroughAtEnd);
+  __ RememberedSetHelper(
+      index_2, temp, kDontSaveFPRegs, MacroAssembler::kFallThroughAtEnd);
 
-  __ bind(&new_space);
+  __ bind(&no_remembered_set);
+
   // We are done. Drop elements from the stack, and return undefined.
   __ add(Operand(esp), Immediate(3 * kPointerSize));
   __ mov(eax, isolate()->factory()->undefined_value());
@@ -3961,10 +3984,14 @@ void FullCodeGenerator::VisitForTypeofValue(Expression* expr) {
 
 
 void FullCodeGenerator::EmitLiteralCompareTypeof(Expression* expr,
-                                                 Handle<String> check,
-                                                 Label* if_true,
-                                                 Label* if_false,
-                                                 Label* fall_through) {
+                                                 Handle<String> check) {
+  Label materialize_true, materialize_false;
+  Label* if_true = NULL;
+  Label* if_false = NULL;
+  Label* fall_through = NULL;
+  context()->PrepareTest(&materialize_true, &materialize_false,
+                         &if_true, &if_false, &fall_through);
+
   { AccumulatorValueContext context(this);
     VisitForTypeofValue(expr);
   }
@@ -4022,18 +4049,7 @@ void FullCodeGenerator::EmitLiteralCompareTypeof(Expression* expr,
   } else {
     if (if_false != fall_through) __ jmp(if_false);
   }
-}
-
-
-void FullCodeGenerator::EmitLiteralCompareUndefined(Expression* expr,
-                                                    Label* if_true,
-                                                    Label* if_false,
-                                                    Label* fall_through) {
-  VisitForAccumulatorValue(expr);
-  PrepareForBailoutBeforeSplit(TOS_REG, true, if_true, if_false);
-
-  __ cmp(eax, isolate()->factory()->undefined_value());
-  Split(equal, if_true, if_false, fall_through);
+  context()->Plug(if_true, if_false);
 }
 
 
@@ -4041,9 +4057,12 @@ void FullCodeGenerator::VisitCompareOperation(CompareOperation* expr) {
   Comment cmnt(masm_, "[ CompareOperation");
   SetSourcePosition(expr->position());
 
+  // First we try a fast inlined version of the compare when one of
+  // the operands is a literal.
+  if (TryLiteralCompare(expr)) return;
+
   // Always perform the comparison for its control flow.  Pack the result
   // into the expression's context after the comparison is performed.
-
   Label materialize_true, materialize_false;
   Label* if_true = NULL;
   Label* if_false = NULL;
@@ -4051,16 +4070,9 @@ void FullCodeGenerator::VisitCompareOperation(CompareOperation* expr) {
   context()->PrepareTest(&materialize_true, &materialize_false,
                          &if_true, &if_false, &fall_through);
 
-  // First we try a fast inlined version of the compare when one of
-  // the operands is a literal.
-  if (TryLiteralCompare(expr, if_true, if_false, fall_through)) {
-    context()->Plug(if_true, if_false);
-    return;
-  }
-
   Token::Value op = expr->op();
   VisitForStackValue(expr->left());
-  switch (expr->op()) {
+  switch (op) {
     case Token::IN:
       VisitForStackValue(expr->right());
       __ InvokeBuiltin(Builtins::IN, CALL_FUNCTION);
@@ -4151,19 +4163,30 @@ void FullCodeGenerator::VisitCompareOperation(CompareOperation* expr) {
 }
 
 
-void FullCodeGenerator::EmitLiteralCompareNull(Expression* expr,
-                                               bool is_strict,
-                                               Label* if_true,
-                                               Label* if_false,
-                                               Label* fall_through) {
-  VisitForAccumulatorValue(expr);
+void FullCodeGenerator::EmitLiteralCompareNil(CompareOperation* expr,
+                                              Expression* sub_expr,
+                                              NilValue nil) {
+  Label materialize_true, materialize_false;
+  Label* if_true = NULL;
+  Label* if_false = NULL;
+  Label* fall_through = NULL;
+  context()->PrepareTest(&materialize_true, &materialize_false,
+                         &if_true, &if_false, &fall_through);
+
+  VisitForAccumulatorValue(sub_expr);
   PrepareForBailoutBeforeSplit(TOS_REG, true, if_true, if_false);
-  __ cmp(eax, isolate()->factory()->null_value());
-  if (is_strict) {
+  Handle<Object> nil_value = nil == kNullValue ?
+      isolate()->factory()->null_value() :
+      isolate()->factory()->undefined_value();
+  __ cmp(eax, nil_value);
+  if (expr->op() == Token::EQ_STRICT) {
     Split(equal, if_true, if_false, fall_through);
   } else {
+    Handle<Object> other_nil_value = nil == kNullValue ?
+        isolate()->factory()->undefined_value() :
+        isolate()->factory()->null_value();
     __ j(equal, if_true);
-    __ cmp(eax, isolate()->factory()->undefined_value());
+    __ cmp(eax, other_nil_value);
     __ j(equal, if_true);
     __ JumpIfSmi(eax, if_false);
     // It can be an undetectable object.
@@ -4172,6 +4195,7 @@ void FullCodeGenerator::EmitLiteralCompareNull(Expression* expr,
     __ test(edx, Immediate(1 << Map::kIsUndetectable));
     Split(not_zero, if_true, if_false, fall_through);
   }
+  context()->Plug(if_true, if_false);
 }
 
 

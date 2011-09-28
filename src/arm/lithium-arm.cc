@@ -212,10 +212,11 @@ void LCmpIDAndBranch::PrintDataTo(StringStream* stream) {
 }
 
 
-void LIsNullAndBranch::PrintDataTo(StringStream* stream) {
+void LIsNilAndBranch::PrintDataTo(StringStream* stream) {
   stream->Add("if ");
   InputAt(0)->PrintTo(stream);
-  stream->Add(is_strict() ? " === null" : " == null");
+  stream->Add(kind() == kStrictEquality ? " === " : " == ");
+  stream->Add(nil() == kNullValue ? "null" : "undefined");
   stream->Add(" then B%d else B%d", true_block_id(), false_block_id());
 }
 
@@ -1444,9 +1445,9 @@ LInstruction* LChunkBuilder::DoCompareConstantEqAndBranch(
 }
 
 
-LInstruction* LChunkBuilder::DoIsNullAndBranch(HIsNullAndBranch* instr) {
+LInstruction* LChunkBuilder::DoIsNilAndBranch(HIsNilAndBranch* instr) {
   ASSERT(instr->value()->representation().IsTagged());
-  return new LIsNullAndBranch(UseRegisterAtStart(instr->value()));
+  return new LIsNilAndBranch(UseRegisterAtStart(instr->value()));
 }
 
 
@@ -1748,14 +1749,11 @@ LInstruction* LChunkBuilder::DoLoadGlobalGeneric(HLoadGlobalGeneric* instr) {
 
 
 LInstruction* LChunkBuilder::DoStoreGlobalCell(HStoreGlobalCell* instr) {
-  if (instr->check_hole_value()) {
-    LOperand* temp = TempRegister();
-    LOperand* value = UseRegister(instr->value());
-    return AssignEnvironment(new LStoreGlobalCell(value, temp));
-  } else {
-    LOperand* value = UseRegisterAtStart(instr->value());
-    return new LStoreGlobalCell(value, NULL);
-  }
+  LOperand* temp = TempRegister();
+  LOperand* value = UseTempRegister(instr->value());
+  LInstruction* result = new LStoreGlobalCell(value, temp);
+  if (instr->check_hole_value()) result = AssignEnvironment(result);
+  return result;
 }
 
 

@@ -212,11 +212,12 @@ bool LCodeGen::GeneratePrologue() {
         // Store it in the context.
         int context_offset = Context::SlotOffset(var->index());
         __ mov(Operand(esi, context_offset), eax);
-        // Update the write barrier. This clobbers all involved
-        // registers, so we have to use a third register to avoid
-        // clobbering esi.
-        __ mov(ecx, esi);
-        __ RecordWrite(ecx, context_offset, eax, ebx);
+        // Update the write barrier. This clobbers eax and ebx.
+        __ RecordWriteContextSlot(esi,
+                                  context_offset,
+                                  eax,
+                                  ebx,
+                                  kDontSaveFPRegs);
       }
     }
     Comment(";;; End allocate local context");
@@ -677,7 +678,7 @@ void LCodeGen::RecordSafepoint(
     int arguments,
     int deoptimization_index) {
   ASSERT(kind == expected_safepoint_kind_);
-  const ZoneList<LOperand*>* operands = pointers->operands();
+  const ZoneList<LOperand*>* operands = pointers->GetNormalizedOperands();
   Safepoint safepoint = safepoints_.DefineSafepoint(masm(),
       kind, arguments, deoptimization_index);
   for (int i = 0; i < operands->length(); i++) {
@@ -1585,23 +1586,33 @@ void LCodeGen::DoCmpConstantEqAndBranch(LCmpConstantEqAndBranch* instr) {
 }
 
 
-void LCodeGen::DoIsNullAndBranch(LIsNullAndBranch* instr) {
+void LCodeGen::DoIsNilAndBranch(LIsNilAndBranch* instr) {
   Register reg = ToRegister(instr->InputAt(0));
-
-  // TODO(fsc): If the expression is known to be a smi, then it's
-  // definitely not null. Jump to the false block.
-
-  int true_block = chunk_->LookupDestination(instr->true_block_id());
   int false_block = chunk_->LookupDestination(instr->false_block_id());
 
-  __ cmp(reg, factory()->null_value());
-  if (instr->is_strict()) {
+  // If the expression is known to be untagged or a smi, then it's definitely
+  // not null, and it can't be a an undetectable object.
+  if (instr->hydrogen()->representation().IsSpecialization() ||
+      instr->hydrogen()->type().IsSmi()) {
+    EmitGoto(false_block);
+    return;
+  }
+
+  int true_block = chunk_->LookupDestination(instr->true_block_id());
+  Handle<Object> nil_value = instr->nil() == kNullValue ?
+      factory()->null_value() :
+      factory()->undefined_value();
+  __ cmp(reg, nil_value);
+  if (instr->kind() == kStrictEquality) {
     EmitBranch(true_block, false_block, equal);
   } else {
+    Handle<Object> other_nil_value = instr->nil() == kNullValue ?
+        factory()->undefined_value() :
+        factory()->null_value();
     Label* true_label = chunk_->GetAssemblyLabel(true_block);
     Label* false_label = chunk_->GetAssemblyLabel(false_block);
     __ j(equal, true_label);
-    __ cmp(reg, factory()->undefined_value());
+    __ cmp(reg, other_nil_value);
     __ j(equal, true_label);
     __ JumpIfSmi(reg, false_label);
     // Check for undetectable objects by looking in the bit field in
@@ -2027,20 +2038,34 @@ void LCodeGen::DoLoadGlobalGeneric(LLoadGlobalGeneric* instr) {
 
 
 void LCodeGen::DoStoreGlobalCell(LStoreGlobalCell* instr) {
+  Register object = ToRegister(instr->TempAt(0));
+  Register address = ToRegister(instr->TempAt(1));
   Register value = ToRegister(instr->InputAt(0));
-  Operand cell_operand = Operand::Cell(instr->hydrogen()->cell());
+  ASSERT(!value.is(object));
+  Handle<JSGlobalPropertyCell> cell_handle(instr->hydrogen()->cell());
+
+  int offset = JSGlobalPropertyCell::kValueOffset;
+  __ mov(object, Immediate(cell_handle));
 
   // If the cell we are storing to contains the hole it could have
   // been deleted from the property dictionary. In that case, we need
   // to update the property details in the property dictionary to mark
   // it as no longer deleted. We deoptimize in that case.
   if (instr->hydrogen()->check_hole_value()) {
-    __ cmp(cell_operand, factory()->the_hole_value());
+    __ cmp(FieldOperand(object, offset), factory()->the_hole_value());
     DeoptimizeIf(equal, instr->environment());
   }
 
   // Store the value.
-  __ mov(cell_operand, value);
+  __ mov(FieldOperand(object, offset), value);
+
+  // Cells are always in the remembered set.
+  __ RecordWriteField(object,
+                      offset,
+                      value,
+                      address,
+                      kSaveFPRegs,
+                      OMIT_REMEMBERED_SET);
 }
 
 
@@ -2071,7 +2096,7 @@ void LCodeGen::DoStoreContextSlot(LStoreContextSlot* instr) {
   if (instr->needs_write_barrier()) {
     Register temp = ToRegister(instr->TempAt(0));
     int offset = Context::SlotOffset(instr->slot_index());
-    __ RecordWrite(context, offset, value, temp);
+    __ RecordWriteContextSlot(context, offset, value, temp, kSaveFPRegs);
   }
 }
 
@@ -3070,7 +3095,7 @@ void LCodeGen::DoStoreNamedField(LStoreNamedField* instr) {
     if (instr->needs_write_barrier()) {
       Register temp = ToRegister(instr->TempAt(0));
       // Update the write barrier for the object for in-object properties.
-      __ RecordWrite(object, offset, value, temp);
+      __ RecordWriteField(object, offset, value, temp, kSaveFPRegs);
     }
   } else {
     Register temp = ToRegister(instr->TempAt(0));
@@ -3079,7 +3104,7 @@ void LCodeGen::DoStoreNamedField(LStoreNamedField* instr) {
     if (instr->needs_write_barrier()) {
       // Update the write barrier for the properties array.
       // object is used as a scratch register.
-      __ RecordWrite(temp, offset, value, object);
+      __ RecordWriteField(temp, offset, value, object, kSaveFPRegs);
     }
   }
 }
@@ -3176,7 +3201,7 @@ void LCodeGen::DoStoreKeyedFastElement(LStoreKeyedFastElement* instr) {
                         key,
                         times_pointer_size,
                         FixedArray::kHeaderSize));
-    __ RecordWrite(elements, key, value);
+    __ RecordWrite(elements, key, value, kSaveFPRegs);
   }
 }
 

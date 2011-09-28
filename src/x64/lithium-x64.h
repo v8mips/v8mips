@@ -107,7 +107,7 @@ class LCodeGen;
   V(Integer32ToDouble)                          \
   V(InvokeFunction)                             \
   V(IsConstructCallAndBranch)                   \
-  V(IsNullAndBranch)                            \
+  V(IsNilAndBranch)                             \
   V(IsObjectAndBranch)                          \
   V(IsSmiAndBranch)                             \
   V(IsUndetectableAndBranch)                    \
@@ -609,17 +609,18 @@ class LCmpConstantEqAndBranch: public LControlInstruction<1, 0> {
 };
 
 
-class LIsNullAndBranch: public LControlInstruction<1, 1> {
+class LIsNilAndBranch: public LControlInstruction<1, 1> {
  public:
-  LIsNullAndBranch(LOperand* value, LOperand* temp) {
+  LIsNilAndBranch(LOperand* value, LOperand* temp) {
     inputs_[0] = value;
     temps_[0] = temp;
   }
 
-  DECLARE_CONCRETE_INSTRUCTION(IsNullAndBranch, "is-null-and-branch")
-  DECLARE_HYDROGEN_ACCESSOR(IsNullAndBranch)
+  DECLARE_CONCRETE_INSTRUCTION(IsNilAndBranch, "is-nil-and-branch")
+  DECLARE_HYDROGEN_ACCESSOR(IsNilAndBranch)
 
-  bool is_strict() const { return hydrogen()->is_strict(); }
+  EqualityKind kind() const { return hydrogen()->kind(); }
+  NilValue nil() const { return hydrogen()->nil(); }
 
   virtual void PrintDataTo(StringStream* stream);
 };
@@ -1197,11 +1198,12 @@ class LLoadGlobalGeneric: public LTemplateInstruction<1, 1, 0> {
 };
 
 
-class LStoreGlobalCell: public LTemplateInstruction<0, 1, 1> {
+class LStoreGlobalCell: public LTemplateInstruction<0, 1, 2> {
  public:
-  explicit LStoreGlobalCell(LOperand* value, LOperand* temp) {
+  explicit LStoreGlobalCell(LOperand* value, LOperand* temp1, LOperand* temp2) {
     inputs_[0] = value;
-    temps_[0] = temp;
+    temps_[0] = temp1;
+    temps_[1] = temp2;
   }
 
   DECLARE_CONCRETE_INSTRUCTION(StoreGlobalCell, "store-global-cell")

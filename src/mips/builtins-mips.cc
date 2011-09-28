@@ -640,7 +640,7 @@ void Builtins::Generate_JSConstructCall(MacroAssembler* masm) {
 
   // a0: number of arguments
   // a1: called object
-  // r2: object type
+  // a2: object type
   Label do_call;
   __ bind(&slow);
   __ Branch(&non_function_call, ne, a2, Operand(JS_FUNCTION_PROXY_TYPE));
