@@ -3816,17 +3816,18 @@ void SlotsBuffer::UpdateSlotsWithFilter(Heap* heap) {
   for (int slot_idx = 0; slot_idx < idx_; ++slot_idx) {
     ObjectSlot slot = slots_[slot_idx];
     if (!IsTypedSlot(slot)) {
-      if (!IsOnInvalidatedCodeObject(reinterpret_cast<Address>(slot))) {
-        UpdateSlot(slot);
+      if (!IsOnInvalidatedCodeObject(
+          reinterpret_cast<Address>(slot.GetRaw()))) {
+        UpdateSlot(&slot);
       }
     } else {
       ++slot_idx;
       ASSERT(slot_idx < idx_);
-      Address pc = reinterpret_cast<Address>(slots_[slot_idx]);
+      Address pc = reinterpret_cast<Address>(slots_[slot_idx].GetRaw());
       if (!IsOnInvalidatedCodeObject(pc)) {
         UpdateSlot(&v,
                    DecodeSlotType(slot),
-                   reinterpret_cast<Address>(slots_[slot_idx]));
+                   reinterpret_cast<Address>(slots_[slot_idx].GetRaw()));
       }
     }
   }
