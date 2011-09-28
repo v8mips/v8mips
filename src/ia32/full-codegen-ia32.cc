@@ -3168,10 +3168,16 @@ void FullCodeGenerator::EmitSwapElements(ZoneList<Expression*>* args) {
   // pauses in the middle of scanning a single object.  Therefore the
   // incremental marker is not disturbed, so we don't need to call the
   // RecordWrite stub that notifies the incremental marker.
-  __ RememberedSetHelper(
-      index_1, temp, kDontSaveFPRegs, MacroAssembler::kFallThroughAtEnd);
-  __ RememberedSetHelper(
-      index_2, temp, kDontSaveFPRegs, MacroAssembler::kFallThroughAtEnd);
+  __ RememberedSetHelper(elements,
+                         index_1,
+                         temp,
+                         kDontSaveFPRegs,
+                         MacroAssembler::kFallThroughAtEnd);
+  __ RememberedSetHelper(elements,
+                         index_2,
+                         temp,
+                         kDontSaveFPRegs,
+                         MacroAssembler::kFallThroughAtEnd);
 
   __ bind(&no_remembered_set);
 
@@ -4097,11 +4103,8 @@ void FullCodeGenerator::VisitCompareOperation(CompareOperation* expr) {
     default: {
       VisitForAccumulatorValue(expr->right());
       Condition cc = no_condition;
-      bool strict = false;
       switch (op) {
         case Token::EQ_STRICT:
-          strict = true;
-          // Fall through
         case Token::EQ:
           cc = equal;
           __ pop(edx);

@@ -181,7 +181,8 @@ class MacroAssembler: public Assembler {
   // Record in the remembered set the fact that we have a pointer to new space
   // at the address pointed to by the addr register.  Only works if addr is not
   // in new space.
-  void RememberedSetHelper(Register addr,
+  void RememberedSetHelper(Register object,  // Used for debug code.
+                           Register addr,
                            Register scratch,
                            SaveFPRegsMode save_fp,
                            RememberedSetFinalAction and_then);
@@ -193,7 +194,7 @@ class MacroAssembler: public Assembler {
                      Label* condition_met);
 
   // Check if object is in new space.  Jumps if the object is not in new space.
-  // The register scratch can be object itself, but it will be clobbered.
+  // The register scratch can be object itself, but scratch will be clobbered.
   void JumpIfNotInNewSpace(Register object,
                            Register scratch,
                            Label* branch) {
@@ -652,6 +653,13 @@ class MacroAssembler: public Assembler {
                  Register dst,
                  Register length,
                  Register scratch);
+
+  // Initialize fields with filler values.  Fields starting at |start_offset|
+  // not including end_offset are overwritten with the value in |filler|.  At
+  // the end the loop, |start_offset| takes the value of |end_offset|.
+  void InitializeFieldsWithFiller(Register start_offset,
+                                  Register end_offset,
+                                  Register filler);
 
   // ---------------------------------------------------------------------------
   // Support functions.

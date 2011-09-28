@@ -197,13 +197,14 @@ void MacroAssembler::CompareRoot(const Operand& with,
 }
 
 
-void MacroAssembler::RememberedSetHelper(Register addr,
+void MacroAssembler::RememberedSetHelper(Register object,  // For debug tests.
+                                         Register addr,
                                          Register scratch,
                                          SaveFPRegsMode save_fp,
                                          RememberedSetFinalAction and_then) {
   if (FLAG_debug_code) {
     Label ok;
-    JumpIfNotInNewSpace(addr, scratch, &ok, Label::kNear);
+    JumpIfNotInNewSpace(object, scratch, &ok, Label::kNear);
     int3();
     bind(&ok);
   }
@@ -3851,6 +3852,20 @@ void MacroAssembler::CopyBytes(Register destination,
 }
 
 
+void MacroAssembler::InitializeFieldsWithFiller(Register start_offset,
+                                                Register end_offset,
+                                                Register filler) {
+  Label loop, entry;
+  jmp(&entry);
+  bind(&loop);
+  movq(Operand(start_offset, 0), filler);
+  addq(start_offset, Immediate(kPointerSize));
+  bind(&entry);
+  cmpq(start_offset, end_offset);
+  j(less, &loop);
+}
+
+
 void MacroAssembler::LoadContext(Register dst, int context_chain_length) {
   if (context_chain_length > 0) {
     // Move up the chain of contexts to the context containing the slot.
@@ -4170,7 +4185,7 @@ void MacroAssembler::EnsureNotWhite(
   addq(length, Immediate(0x04));
   // Value now either 4 (if ASCII) or 8 (if UC16), i.e. char-size shifted by 2.
   imul(length, FieldOperand(value, String::kLengthOffset));
-  shr(length, Immediate(2 + kSmiTagSize));
+  shr(length, Immediate(2 + kSmiTagSize + kSmiShiftSize));
   addq(length, Immediate(SeqString::kHeaderSize + kObjectAlignmentMask));
   and_(length, Immediate(~kObjectAlignmentMask));
 

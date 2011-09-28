@@ -79,6 +79,7 @@ void MacroAssembler::InNewSpace(
 
 
 void MacroAssembler::RememberedSetHelper(
+    Register object,  // Only used for debug checks.
     Register addr,
     Register scratch,
     SaveFPRegsMode save_fp,
@@ -86,7 +87,7 @@ void MacroAssembler::RememberedSetHelper(
   Label done;
   if (FLAG_debug_code) {
     Label ok;
-    JumpIfNotInNewSpace(addr, scratch, &ok, Label::kNear);
+    JumpIfNotInNewSpace(object, scratch, &ok, Label::kNear);
     int3();
     bind(&ok);
   }
@@ -1379,6 +1380,20 @@ void MacroAssembler::CopyBytes(Register source,
 }
 
 
+void MacroAssembler::InitializeFieldsWithFiller(Register start_offset,
+                                                Register end_offset,
+                                                Register filler) {
+  Label loop, entry;
+  jmp(&entry);
+  bind(&loop);
+  mov(Operand(start_offset, 0), filler);
+  add(Operand(start_offset), Immediate(kPointerSize));
+  bind(&entry);
+  cmp(start_offset, Operand(end_offset));
+  j(less, &loop);
+}
+
+
 void MacroAssembler::NegativeZeroTest(Register result,
                                       Register op,
                                       Label* then_label) {
@@ -2581,7 +2596,7 @@ void MacroAssembler::EnsureNotWhite(
   ASSERT(SeqAsciiString::kMaxSize <=
          static_cast<int>(0xffffffffu >> (2 + kSmiTagSize)));
   imul(length, FieldOperand(value, String::kLengthOffset));
-  shr(length, 2 + kSmiTagSize);
+  shr(length, 2 + kSmiTagSize + kSmiShiftSize);
   add(Operand(length),
       Immediate(SeqString::kHeaderSize + kObjectAlignmentMask));
   and_(Operand(length),
@@ -2595,6 +2610,11 @@ void MacroAssembler::EnsureNotWhite(
   and_(bitmap_scratch, Immediate(~Page::kPageAlignmentMask));
   add(Operand(bitmap_scratch, MemoryChunk::kLiveBytesOffset),
       length);
+  if (FLAG_debug_code) {
+    mov(length, Operand(bitmap_scratch, MemoryChunk::kLiveBytesOffset));
+    cmp(length, Operand(bitmap_scratch, MemoryChunk::kSizeOffset));
+    Check(less_equal, "Live Bytes Count overflow chunk size");
+  }
 
   bind(&done);
 }

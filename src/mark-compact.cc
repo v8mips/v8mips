@@ -281,7 +281,7 @@ void MarkCompactCollector::CollectGarbage() {
 
   if (!collect_maps_) ReattachInitialMaps();
 
-  heap_->isolate()->pc_to_code_cache()->Flush();
+  heap_->isolate()->inner_pointer_to_code_cache()->Flush();
 
   Finish();
 
@@ -295,7 +295,8 @@ void MarkCompactCollector::VerifyMarkbitsAreClean(PagedSpace* space) {
 
   while (it.has_next()) {
     Page* p = it.next();
-    ASSERT(p->markbits()->IsClean());
+    CHECK(p->markbits()->IsClean());
+    CHECK_EQ(0, p->LiveBytes());
   }
 }
 
@@ -304,7 +305,8 @@ void MarkCompactCollector::VerifyMarkbitsAreClean(NewSpace* space) {
 
   while (it.has_next()) {
     NewSpacePage* p = it.next();
-    ASSERT(p->markbits()->IsClean());
+    CHECK(p->markbits()->IsClean());
+    CHECK_EQ(0, p->LiveBytes());
   }
 }
 
@@ -402,7 +404,7 @@ bool Marking::TransferMark(Address old_start, Address new_start) {
 }
 
 
-static const char* AllocationSpaceName(AllocationSpace space) {
+const char* AllocationSpaceName(AllocationSpace space) {
   switch (space) {
     case NEW_SPACE: return "NEW_SPACE";
     case OLD_POINTER_SPACE: return "OLD_POINTER_SPACE";
@@ -2533,9 +2535,10 @@ void MarkCompactCollector::EvacuateNewSpace() {
     MarkBit mark_bit = Marking::MarkBitFrom(object);
     if (mark_bit.Get()) {
       mark_bit.Clear();
+      // Don't bother decrementing live bytes count. We'll discard the
+      // entire page at the end.
       int size = object->Size();
       survivors_size += size;
-      MemoryChunk::IncrementLiveBytes(object->address(), -size);
 
       // Aggressively promote young survivors to the old space.
       if (TryPromoteObject(object, size)) {
@@ -2626,6 +2629,7 @@ void MarkCompactCollector::EvacuateLiveObjectsFromPage(Page* p) {
     // Clear marking bits for current cell.
     cells[cell_index] = 0;
   }
+  p->ResetLiveBytes();
 }
 
 
@@ -2689,7 +2693,7 @@ static inline void UpdateSlot(ObjectVisitor* v,
                               Address addr) {
   switch (slot_type) {
     case SlotsBuffer::CODE_TARGET_SLOT: {
-      RelocInfo rinfo(addr, RelocInfo::CODE_TARGET, NULL, NULL);
+      RelocInfo rinfo(addr, RelocInfo::CODE_TARGET, 0, NULL);
       rinfo.Visit(v);
       break;
     }
@@ -2703,12 +2707,12 @@ static inline void UpdateSlot(ObjectVisitor* v,
       break;
     }
     case SlotsBuffer::DEBUG_TARGET_SLOT: {
-      RelocInfo rinfo(addr, RelocInfo::DEBUG_BREAK_SLOT, NULL, NULL);
+      RelocInfo rinfo(addr, RelocInfo::DEBUG_BREAK_SLOT, 0, NULL);
       if (rinfo.IsPatchedDebugBreakSlotSequence()) rinfo.Visit(v);
       break;
     }
     case SlotsBuffer::JS_RETURN_SLOT: {
-      RelocInfo rinfo(addr, RelocInfo::JS_RETURN, NULL, NULL);
+      RelocInfo rinfo(addr, RelocInfo::JS_RETURN, 0, NULL);
       if (rinfo.IsPatchedReturnSequence()) rinfo.Visit(v);
       break;
     }
@@ -2824,6 +2828,7 @@ static void SweepPrecisely(PagedSpace* space,
   if (free_start != p->ObjectAreaEnd()) {
     space->Free(free_start, static_cast<int>(p->ObjectAreaEnd() - free_start));
   }
+  p->ResetLiveBytes();
 }
 
 
@@ -3313,6 +3318,7 @@ intptr_t MarkCompactCollector::SweepConservatively(PagedSpace* space, Page* p) {
   if (cell_index == last_cell_index) {
     freed_bytes += static_cast<int>(space->Free(p->ObjectAreaStart(),
                                                 static_cast<int>(size)));
+    ASSERT_EQ(0, p->LiveBytes());
     return freed_bytes;
   }
   // Grow the size of the start-of-page free space a little to get up to the
@@ -3369,6 +3375,7 @@ intptr_t MarkCompactCollector::SweepConservatively(PagedSpace* space, Page* p) {
                                static_cast<int>(block_address - free_start));
   }
 
+  p->ResetLiveBytes();
   return freed_bytes;
 }
 
