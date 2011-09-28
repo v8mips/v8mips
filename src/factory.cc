@@ -404,10 +404,12 @@ Handle<JSGlobalPropertyCell> Factory::NewJSGlobalPropertyCell(
 }
 
 
-Handle<Map> Factory::NewMap(InstanceType type, int instance_size) {
+Handle<Map> Factory::NewMap(InstanceType type,
+                            int instance_size,
+                            ElementsKind elements_kind) {
   CALL_HEAP_FUNCTION(
       isolate(),
-      isolate()->heap()->AllocateMap(type, instance_size),
+      isolate()->heap()->AllocateMap(type, instance_size, elements_kind),
       Map);
 }
 
@@ -710,7 +712,12 @@ Handle<JSFunction> Factory::NewFunctionWithPrototype(Handle<String> name,
   if (force_initial_map ||
       type != JS_OBJECT_TYPE ||
       instance_size != JSObject::kHeaderSize) {
-    Handle<Map> initial_map = NewMap(type, instance_size);
+    ElementsKind default_elements_kind = FLAG_smi_only_arrays
+        ? FAST_SMI_ONLY_ELEMENTS
+        : FAST_ELEMENTS;
+    Handle<Map> initial_map = NewMap(type,
+                                     instance_size,
+                                     default_elements_kind);
     function->set_initial_map(*initial_map);
     initial_map->set_constructor(*function);
   }
@@ -896,8 +903,23 @@ Handle<JSArray> Factory::NewJSArrayWithElements(Handle<FixedArray> elements,
   Handle<JSArray> result =
       Handle<JSArray>::cast(NewJSObject(isolate()->array_function(),
                                         pretenure));
-  result->SetContent(*elements);
+  SetContent(result, elements);
   return result;
+}
+
+
+void Factory::SetContent(Handle<JSArray> array,
+                         Handle<FixedArray> elements) {
+  CALL_HEAP_FUNCTION_VOID(
+      isolate(),
+      array->SetContent(*elements));
+}
+
+
+void Factory::EnsureCanContainNonSmiElements(Handle<JSArray> array) {
+  CALL_HEAP_FUNCTION_VOID(
+      isolate(),
+      array->EnsureCanContainNonSmiElements());
 }
 
 
@@ -975,6 +997,12 @@ Handle<SharedFunctionInfo> Factory::NewSharedFunctionInfo(Handle<String> name) {
 Handle<String> Factory::NumberToString(Handle<Object> number) {
   CALL_HEAP_FUNCTION(isolate(),
                      isolate()->heap()->NumberToString(*number), String);
+}
+
+
+Handle<String> Factory::Uint32ToString(uint32_t value) {
+  CALL_HEAP_FUNCTION(isolate(),
+                     isolate()->heap()->Uint32ToString(value), String);
 }
 
 
@@ -1284,6 +1312,15 @@ void Factory::ConfigureInstance(Handle<FunctionTemplateInfo> desc,
   } else {
     *pending_exception = false;
   }
+}
+
+
+Handle<Object> Factory::GlobalConstantFor(Handle<String> name) {
+  Heap* h = isolate()->heap();
+  if (name->Equals(h->undefined_symbol())) return undefined_value();
+  if (name->Equals(h->nan_symbol())) return nan_value();
+  if (name->Equals(h->infinity_symbol())) return infinity_value();
+  return Handle<Object>::null();
 }
 
 

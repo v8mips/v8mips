@@ -3226,7 +3226,8 @@ void MacroAssembler::InitializeFieldsWithFiller(Register start_offset,
 void MacroAssembler::CheckFastElements(Register map,
                                        Register scratch,
                                        Label* fail) {
-  STATIC_ASSERT(FAST_ELEMENTS == 0);
+  STATIC_ASSERT(FAST_SMI_ONLY_ELEMENTS == 0);
+  STATIC_ASSERT(FAST_ELEMENTS == 1);
   lbu(scratch, FieldMemOperand(map, Map::kBitField2Offset));
   Branch(fail, hi, scratch, Operand(Map::kMaximumBitField2FastElementValue));
 }

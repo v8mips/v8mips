@@ -185,7 +185,10 @@ void i::V8::FatalProcessOutOfMemory(const char* location, bool take_snapshot) {
   int end_marker;
   heap_stats.end_marker = &end_marker;
   i::Isolate* isolate = i::Isolate::Current();
-  isolate->heap()->RecordStats(&heap_stats, take_snapshot);
+  // BUG(1718):
+  // Don't use the take_snapshot since we don't support HeapIterator here
+  // without doing a special GC.
+  isolate->heap()->RecordStats(&heap_stats, false);
   i::V8::SetFatalError();
   FatalErrorCallback callback = GetFatalErrorHandler();
   {
@@ -3209,7 +3212,7 @@ bool v8::Object::SetHiddenValue(v8::Handle<v8::String> key,
   i::Handle<i::JSObject> self = Utils::OpenHandle(this);
   i::Handle<i::Object> hidden_props(i::GetHiddenProperties(
       self,
-      i::JSObject::ALLOW_CREATION));
+      i::ALLOW_CREATION));
   i::Handle<i::Object> key_obj = Utils::OpenHandle(*key);
   i::Handle<i::Object> value_obj = Utils::OpenHandle(*value);
   EXCEPTION_PREAMBLE(isolate);
@@ -3233,7 +3236,7 @@ v8::Local<v8::Value> v8::Object::GetHiddenValue(v8::Handle<v8::String> key) {
   i::Handle<i::JSObject> self = Utils::OpenHandle(this);
   i::Handle<i::Object> hidden_props(i::GetHiddenProperties(
       self,
-      i::JSObject::OMIT_CREATION));
+      i::OMIT_CREATION));
   if (hidden_props->IsUndefined()) {
     return v8::Local<v8::Value>();
   }
@@ -3257,7 +3260,7 @@ bool v8::Object::DeleteHiddenValue(v8::Handle<v8::String> key) {
   i::Handle<i::JSObject> self = Utils::OpenHandle(this);
   i::Handle<i::Object> hidden_props(i::GetHiddenProperties(
       self,
-      i::JSObject::OMIT_CREATION));
+      i::OMIT_CREATION));
   if (hidden_props->IsUndefined()) {
     return true;
   }

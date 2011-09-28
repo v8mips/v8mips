@@ -81,8 +81,8 @@ Heap::Heap()
       reserved_semispace_size_(8 * Max(LUMP_OF_MEMORY, Page::kPageSize)),
       max_semispace_size_(8 * Max(LUMP_OF_MEMORY, Page::kPageSize)),
       initial_semispace_size_(Max(LUMP_OF_MEMORY, Page::kPageSize)),
-      max_old_generation_size_(1400ul * LUMP_OF_MEMORY),
-      max_executable_size_(256l * LUMP_OF_MEMORY),
+      max_old_generation_size_(700ul * LUMP_OF_MEMORY),
+      max_executable_size_(128l * LUMP_OF_MEMORY),
 
 // Variables set based on semispace_size_ and old_generation_size_ in
 // ConfigureHeap (survived_since_last_expansion_, external_allocation_limit_)
@@ -1700,7 +1700,9 @@ MaybeObject* Heap::AllocatePartialMap(InstanceType instance_type,
 }
 
 
-MaybeObject* Heap::AllocateMap(InstanceType instance_type, int instance_size) {
+MaybeObject* Heap::AllocateMap(InstanceType instance_type,
+                               int instance_size,
+                               ElementsKind elements_kind) {
   Object* result;
   { MaybeObject* maybe_result = AllocateRawMap();
     if (!maybe_result->ToObject(&result)) return maybe_result;
@@ -1722,7 +1724,7 @@ MaybeObject* Heap::AllocateMap(InstanceType instance_type, int instance_size) {
   map->set_unused_property_fields(0);
   map->set_bit_field(0);
   map->set_bit_field2(1 << Map::kIsExtensible);
-  map->set_elements_kind(FAST_ELEMENTS);
+  map->set_elements_kind(elements_kind);
 
   // If the map object is aligned fill the padding area with Smi 0 objects.
   if (Map::kPadStart < Map::kSize) {
@@ -2112,7 +2114,13 @@ bool Heap::CreateApiObjects() {
   { MaybeObject* maybe_obj = AllocateMap(JS_OBJECT_TYPE, JSObject::kHeaderSize);
     if (!maybe_obj->ToObject(&obj)) return false;
   }
-  set_neander_map(Map::cast(obj));
+  // Don't use Smi-only elements optimizations for objects with the neander
+  // map. There are too many cases where element values are set directly with a
+  // bottleneck to trap the Smi-only -> fast elements transition, and there
+  // appears to be no benefit for optimize this case.
+  Map* new_neander_map = Map::cast(obj);
+  new_neander_map->set_elements_kind(FAST_ELEMENTS);
+  set_neander_map(new_neander_map);
 
   { MaybeObject* maybe_obj = AllocateJSObjectFromMap(neander_map());
     if (!maybe_obj->ToObject(&obj)) return false;
@@ -2183,6 +2191,11 @@ bool Heap::CreateInitialObjects() {
     if (!maybe_obj->ToObject(&obj)) return false;
   }
   set_nan_value(obj);
+
+  { MaybeObject* maybe_obj = AllocateHeapNumber(V8_INFINITY, TENURED);
+    if (!maybe_obj->ToObject(&obj)) return false;
+  }
+  set_infinity_value(obj);
 
   { MaybeObject* maybe_obj = Allocate(oddball_map(), OLD_POINTER_SPACE);
     if (!maybe_obj->ToObject(&obj)) return false;
@@ -2529,6 +2542,15 @@ MaybeObject* Heap::NumberToString(Object* number,
     SetNumberStringCache(number, String::cast(js_string));
   }
   return maybe_js_string;
+}
+
+
+MaybeObject* Heap::Uint32ToString(uint32_t value,
+                                  bool check_number_string_cache) {
+  Object* number;
+  MaybeObject* maybe = NumberFromUint32(value);
+  if (!maybe->To<Object>(&number)) return maybe;
+  return NumberToString(number, check_number_string_cache);
 }
 
 
@@ -3248,8 +3270,18 @@ MaybeObject* Heap::AllocateFunctionPrototype(JSFunction* function) {
   // different context.
   JSFunction* object_function =
       function->context()->global_context()->object_function();
+
+  // Each function prototype gets a copy of the object function map.
+  // This avoid unwanted sharing of maps between prototypes of different
+  // constructors.
+  Map* new_map;
+  ASSERT(object_function->has_initial_map());
+  { MaybeObject* maybe_map =
+        object_function->initial_map()->CopyDropTransitions();
+    if (!maybe_map->To<Map>(&new_map)) return maybe_map;
+  }
   Object* prototype;
-  { MaybeObject* maybe_prototype = AllocateJSObject(object_function);
+  { MaybeObject* maybe_prototype = AllocateJSObjectFromMap(new_map);
     if (!maybe_prototype->ToObject(&prototype)) return maybe_prototype;
   }
   // When creating the prototype for the function we must set its
@@ -3494,7 +3526,8 @@ MaybeObject* Heap::AllocateJSObjectFromMap(Map* map, PretenureFlag pretenure) {
   InitializeJSObjectFromMap(JSObject::cast(obj),
                             FixedArray::cast(properties),
                             map);
-  ASSERT(JSObject::cast(obj)->HasFastElements());
+  ASSERT(JSObject::cast(obj)->HasFastSmiOnlyElements() ||
+         JSObject::cast(obj)->HasFastElements());
   return obj;
 }
 
@@ -3537,6 +3570,7 @@ MaybeObject* Heap::AllocateJSProxy(Object* handler, Object* prototype) {
   if (!maybe_result->To<JSProxy>(&result)) return maybe_result;
   result->InitializeBody(map->instance_size(), Smi::FromInt(0));
   result->set_handler(handler);
+  result->set_hash(undefined_value());
   return result;
 }
 
@@ -3560,6 +3594,7 @@ MaybeObject* Heap::AllocateJSFunctionProxy(Object* handler,
   if (!maybe_result->To<JSFunctionProxy>(&result)) return maybe_result;
   result->InitializeBody(map->instance_size(), Smi::FromInt(0));
   result->set_handler(handler);
+  result->set_hash(undefined_value());
   result->set_call_trap(call_trap);
   result->set_construct_trap(construct_trap);
   return result;
@@ -3676,6 +3711,7 @@ MaybeObject* Heap::CopyJSObject(JSObject* source) {
               object_size);
   }
 
+  ASSERT(JSObject::cast(clone)->GetElementsKind() == source->GetElementsKind());
   FixedArrayBase* elements = FixedArrayBase::cast(source->elements());
   FixedArray* properties = FixedArray::cast(source->properties());
   // Update elements if necessary.
@@ -3708,13 +3744,16 @@ MaybeObject* Heap::CopyJSObject(JSObject* source) {
 
 MaybeObject* Heap::ReinitializeJSReceiver(
     JSReceiver* object, InstanceType type, int size) {
-  ASSERT(type >= FIRST_JS_RECEIVER_TYPE);
+  ASSERT(type >= FIRST_JS_OBJECT_TYPE);
+
+  // Save identity hash.
+  MaybeObject* maybe_hash = object->GetIdentityHash(OMIT_CREATION);
 
   // Allocate fresh map.
   // TODO(rossberg): Once we optimize proxies, cache these maps.
   Map* map;
-  MaybeObject* maybe_map_obj = AllocateMap(type, size);
-  if (!maybe_map_obj->To<Map>(&map)) return maybe_map_obj;
+  MaybeObject* maybe = AllocateMap(type, size);
+  if (!maybe->To<Map>(&map)) return maybe;
 
   // Check that the receiver has at least the size of the fresh object.
   int size_difference = object->map()->instance_size() - map->instance_size();
@@ -3731,24 +3770,24 @@ MaybeObject* Heap::ReinitializeJSReceiver(
 
   // Reset the map for the object.
   object->set_map(map);
+  JSObject* jsobj = JSObject::cast(object);
 
   // Reinitialize the object from the constructor map.
-  InitializeJSObjectFromMap(JSObject::cast(object),
-                            FixedArray::cast(properties), map);
+  InitializeJSObjectFromMap(jsobj, FixedArray::cast(properties), map);
 
   // Functions require some minimal initialization.
   if (type == JS_FUNCTION_TYPE) {
     map->set_function_with_prototype(true);
     String* name;
-    MaybeObject* maybe_name = LookupAsciiSymbol("<freezing call trap>");
-    if (!maybe_name->To<String>(&name)) return maybe_name;
+    maybe = LookupAsciiSymbol("<freezing call trap>");
+    if (!maybe->To<String>(&name)) return maybe;
     SharedFunctionInfo* shared;
-    MaybeObject* maybe_shared = AllocateSharedFunctionInfo(name);
-    if (!maybe_shared->To<SharedFunctionInfo>(&shared)) return maybe_shared;
+    maybe = AllocateSharedFunctionInfo(name);
+    if (!maybe->To<SharedFunctionInfo>(&shared)) return maybe;
     JSFunction* func;
-    MaybeObject* maybe_func =
-        InitializeFunction(JSFunction::cast(object), shared, the_hole_value());
-    if (!maybe_func->To<JSFunction>(&func)) return maybe_func;
+    maybe = InitializeFunction(
+        JSFunction::cast(object), shared, the_hole_value());
+    if (!maybe->To<JSFunction>(&func)) return maybe;
     func->set_context(isolate()->context()->global_context());
   }
 
@@ -3756,6 +3795,13 @@ MaybeObject* Heap::ReinitializeJSReceiver(
   if (size_difference > 0) {
     CreateFillerObjectAt(
         object->address() + map->instance_size(), size_difference);
+  }
+
+  // Inherit identity, if it was present.
+  Object* hash;
+  if (maybe_hash->To<Object>(&hash) && hash->IsSmi()) {
+    maybe = jsobj->SetIdentityHash(hash, ALLOW_CREATION);
+    if (maybe->IsFailure()) return maybe;
   }
 
   return object;

@@ -672,7 +672,8 @@ TEST(JSArray) {
   // Set array length to 0.
   ok = array->SetElementsLength(Smi::FromInt(0))->ToObjectChecked();
   CHECK_EQ(Smi::FromInt(0), array->length());
-  CHECK(array->HasFastElements());  // Must be in fast mode.
+  // Must be in fast mode.
+  CHECK(array->HasFastTypeElements());
 
   // array[length] = name.
   ok = array->SetElement(0, *name, kNonStrictMode, true)->ToObjectChecked();
@@ -1223,36 +1224,45 @@ TEST(TestSizeOfObjectsVsHeapIteratorPrecision) {
 
 TEST(GrowAndShrinkNewSpace) {
   InitializeVM();
-  v8::HandleScope scope;
   NewSpace* new_space = HEAP->new_space();
 
   // Explicitly growing should double the space capacity.
-  int old_capacity, new_capacity;
+  intptr_t old_capacity, new_capacity;
   old_capacity = new_space->Capacity();
   new_space->Grow();
   new_capacity = new_space->Capacity();
-  ASSERT_EQ(2 * old_capacity, new_capacity);
+  CHECK(2 * old_capacity == new_capacity);
 
-  // Fill up new space to the point that it is almost full.
-  while (new_space->SizeAsInt() + FixedArray::SizeFor(1000) < new_capacity) {
-    ASSERT(HEAP->InNewSpace(*FACTORY->NewFixedArray(1000, NOT_TENURED)));
+  // Fill up new space to the point that it is completely full. Make sure
+  // that the scavenger does not undo the filling.
+  old_capacity = new_space->Capacity();
+  {
+    v8::HandleScope scope;
+    AlwaysAllocateScope always_allocate;
+    intptr_t available = new_space->EffectiveCapacity() - new_space->Size();
+    intptr_t number_of_fillers = (available / FixedArray::SizeFor(1000)) - 10;
+    for (intptr_t i = 0; i < number_of_fillers; i++) {
+      CHECK(HEAP->InNewSpace(*FACTORY->NewFixedArray(1000, NOT_TENURED)));
+    }
   }
+  new_capacity = new_space->Capacity();
+  CHECK(old_capacity == new_capacity);
 
   // Explicitly shrinking should not affect space capacity.
   old_capacity = new_space->Capacity();
   new_space->Shrink();
   new_capacity = new_space->Capacity();
-  ASSERT_EQ(old_capacity, new_capacity);
+  CHECK(old_capacity == new_capacity);
 
-  // Perform scavenge to empty the new space.
+  // Let the scavenger empty the new space.
   HEAP->CollectGarbage(NEW_SPACE);
-  ASSERT_LE(new_space->SizeAsInt(), old_capacity);
+  CHECK_LE(new_space->Size(), old_capacity);
 
   // Explicitly shrinking should halve the space capacity.
   old_capacity = new_space->Capacity();
   new_space->Shrink();
   new_capacity = new_space->Capacity();
-  ASSERT_EQ(old_capacity, 2 * new_capacity);
+  CHECK(old_capacity == 2 * new_capacity);
 
   // Consecutive shrinking should not affect space capacity.
   old_capacity = new_space->Capacity();
@@ -1260,5 +1270,5 @@ TEST(GrowAndShrinkNewSpace) {
   new_space->Shrink();
   new_space->Shrink();
   new_capacity = new_space->Capacity();
-  ASSERT_EQ(old_capacity, new_capacity);
+  CHECK(old_capacity == new_capacity);
 }

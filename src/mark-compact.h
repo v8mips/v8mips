@@ -363,6 +363,8 @@ class SlotsBuffer {
 
   void UpdateSlots(Heap* heap);
 
+  void UpdateSlotsWithFilter(Heap* heap);
+
   SlotsBuffer* next() { return next_; }
 
   static int SizeOfChain(SlotsBuffer* buffer) {
@@ -379,9 +381,15 @@ class SlotsBuffer {
     return idx_ < kNumberOfElements - 1;
   }
 
-  static void UpdateSlotsRecordedIn(Heap* heap, SlotsBuffer* buffer) {
+  static void UpdateSlotsRecordedIn(Heap* heap,
+                                    SlotsBuffer* buffer,
+                                    bool code_slots_filtering_required) {
     while (buffer != NULL) {
-      buffer->UpdateSlots(heap);
+      if (code_slots_filtering_required) {
+        buffer->UpdateSlotsWithFilter(heap);
+      } else {
+        buffer->UpdateSlots(heap);
+      }
       buffer = buffer->next();
     }
   }
@@ -588,9 +596,16 @@ class MarkCompactCollector {
     encountered_weak_maps_ = weak_map;
   }
 
+  void InvalidateCode(Code* code);
+
  private:
   MarkCompactCollector();
   ~MarkCompactCollector();
+
+  bool MarkInvalidatedCode();
+  void RemoveDeadInvalidatedCode();
+  void ProcessInvalidatedCode(ObjectVisitor* visitor);
+
 
 #ifdef DEBUG
   enum CollectorState {
@@ -614,6 +629,8 @@ class MarkCompactCollector {
   // True if we are collecting slots to perform evacuation from evacuation
   // candidates.
   bool compacting_;
+
+  bool was_marked_incrementally_;
 
   bool collect_maps_;
 
@@ -804,6 +821,7 @@ class MarkCompactCollector {
   Object* encountered_weak_maps_;
 
   List<Page*> evacuation_candidates_;
+  List<Code*> invalidated_code_;
 
   friend class Heap;
 };

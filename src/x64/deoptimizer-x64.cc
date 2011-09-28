@@ -197,12 +197,18 @@ void Deoptimizer::DeoptimizeFunction(JSFunction* function) {
   // Destroy the code which is not supposed to run again.
   ZapCodeRange(previous_pc, jump_table_address);
 #endif
+  Isolate* isolate = code->GetIsolate();
 
   // Add the deoptimizing code to the list.
   DeoptimizingCodeListNode* node = new DeoptimizingCodeListNode(code);
-  DeoptimizerData* data = code->GetIsolate()->deoptimizer_data();
+  DeoptimizerData* data = isolate->deoptimizer_data();
   node->set_next(data->deoptimizing_code_list_);
   data->deoptimizing_code_list_ = node;
+
+  // We might be in the middle of incremental marking with compaction.
+  // Tell collector to treat this code object in a special way and
+  // ignore all slots that might have been recorded on it.
+  isolate->heap()->mark_compact_collector()->InvalidateCode(code);
 
   // Set the code for the function to non-optimized version.
   function->ReplaceCode(function->shared()->code());

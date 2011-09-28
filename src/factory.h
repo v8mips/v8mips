@@ -203,7 +203,9 @@ class Factory {
   Handle<JSGlobalPropertyCell> NewJSGlobalPropertyCell(
       Handle<Object> value);
 
-  Handle<Map> NewMap(InstanceType type, int instance_size);
+  Handle<Map> NewMap(InstanceType type,
+                     int instance_size,
+                     ElementsKind elements_kind = FAST_ELEMENTS);
 
   Handle<JSObject> NewFunctionPrototype(Handle<JSFunction> function);
 
@@ -252,6 +254,10 @@ class Factory {
   Handle<JSArray> NewJSArrayWithElements(
       Handle<FixedArray> elements,
       PretenureFlag pretenure = NOT_TENURED);
+
+  void SetContent(Handle<JSArray> array, Handle<FixedArray> elements);
+
+  void EnsureCanContainNonSmiElements(Handle<JSArray> array);
 
   Handle<JSProxy> NewJSProxy(Handle<Object> handler, Handle<Object> prototype);
 
@@ -351,6 +357,7 @@ class Factory {
       PropertyAttributes attributes);
 
   Handle<String> NumberToString(Handle<Object> number);
+  Handle<String> Uint32ToString(uint32_t value);
 
   enum ApiInstanceType {
     JavaScriptObject,
@@ -436,6 +443,11 @@ class Factory {
                              Handle<String> source,
                              JSRegExp::Flags flags,
                              int capture_count);
+
+  // Returns the value for a known global constant (a property of the global
+  // object which is neither configurable nor writable) like 'undefined'.
+  // Returns a null handle when the given name is unknown.
+  Handle<Object> GlobalConstantFor(Handle<String> name);
 
  private:
   Isolate* isolate() { return reinterpret_cast<Isolate*>(this); }

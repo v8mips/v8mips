@@ -126,6 +126,7 @@ inline Heap* _inline_get_heap_();
   V(Map, message_object_map, JSMessageObjectMap)                               \
   V(Map, foreign_map, ForeignMap)                                              \
   V(Object, nan_value, NanValue)                                               \
+  V(Object, infinity_value, InfinityValue)                                     \
   V(Object, minus_zero_value, MinusZeroValue)                                  \
   V(Map, neander_map, NeanderMap)                                              \
   V(JSObject, message_listeners, MessageListeners)                             \
@@ -229,7 +230,9 @@ inline Heap* _inline_get_heap_();
   V(closure_symbol, "(closure)")                                         \
   V(use_strict, "use strict")                                            \
   V(dot_symbol, ".")                                                     \
-  V(anonymous_function_symbol, "(anonymous function)")
+  V(anonymous_function_symbol, "(anonymous function)")                   \
+  V(infinity_symbol, "Infinity")                                         \
+  V(minus_infinity_symbol, "-Infinity")
 
 // Forward declarations.
 class GCTracer;
@@ -495,6 +498,7 @@ class Heap {
   // size, but keeping the original prototype.  The receiver must have at least
   // the size of the new object.  The object is reinitialized and behaves as an
   // object that has been freshly allocated.
+  // Returns failure if an error occured, otherwise object.
   MUST_USE_RESULT MaybeObject* ReinitializeJSReceiver(JSReceiver* object,
                                                       InstanceType type,
                                                       int size);
@@ -523,8 +527,10 @@ class Heap {
   // Returns Failure::RetryAfterGC(requested_bytes, space) if the allocation
   // failed.
   // Please note this function does not perform a garbage collection.
-  MUST_USE_RESULT MaybeObject* AllocateMap(InstanceType instance_type,
-                                           int instance_size);
+  MUST_USE_RESULT MaybeObject* AllocateMap(
+      InstanceType instance_type,
+      int instance_size,
+      ElementsKind elements_kind = FAST_ELEMENTS);
 
   // Allocates a partial map for bootstrapping.
   MUST_USE_RESULT MaybeObject* AllocatePartialMap(InstanceType instance_type,
@@ -1291,6 +1297,8 @@ class Heap {
 
   MUST_USE_RESULT MaybeObject* NumberToString(
       Object* number, bool check_number_string_cache = true);
+  MUST_USE_RESULT MaybeObject* Uint32ToString(
+      uint32_t value, bool check_number_string_cache = true);
 
   Map* MapForExternalArrayType(ExternalArrayType array_type);
   RootListIndex RootIndexForExternalArrayType(

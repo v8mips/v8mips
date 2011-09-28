@@ -174,6 +174,13 @@ bool Object::IsSpecObject() {
 }
 
 
+bool Object::IsSpecFunction() {
+  if (!Object::IsHeapObject()) return false;
+  InstanceType type = HeapObject::cast(this)->map()->instance_type();
+  return type == JS_FUNCTION_TYPE || type == JS_FUNCTION_PROXY_TYPE;
+}
+
+
 bool Object::IsSymbol() {
   if (!this->IsHeapObject()) return false;
   uint32_t type = HeapObject::cast(this)->map()->instance_type();
@@ -1300,14 +1307,82 @@ FixedArrayBase* JSObject::elements() {
   return static_cast<FixedArrayBase*>(array);
 }
 
+void JSObject::ValidateSmiOnlyElements() {
+#if DEBUG
+  if (FLAG_smi_only_arrays &&
+      map()->elements_kind() == FAST_SMI_ONLY_ELEMENTS) {
+    Heap* heap = GetHeap();
+    // Don't use elements, since integrity checks will fail if there
+    // are filler pointers in the array.
+    FixedArray* fixed_array =
+        reinterpret_cast<FixedArray*>(READ_FIELD(this, kElementsOffset));
+    Map* map = fixed_array->map();
+    // Arrays that have been shifted in place can't be verified.
+    if (map != heap->raw_unchecked_one_pointer_filler_map() &&
+        map != heap->raw_unchecked_two_pointer_filler_map() &&
+        map != heap->free_space_map()) {
+      for (int i = 0; i < fixed_array->length(); i++) {
+        Object* current = fixed_array->get(i);
+        ASSERT(current->IsSmi() || current == heap->the_hole_value());
+      }
+    }
+  }
+#endif
+}
+
+
+MaybeObject* JSObject::EnsureCanContainNonSmiElements() {
+#if DEBUG
+  ValidateSmiOnlyElements();
+#endif
+  if (FLAG_smi_only_arrays &&
+      (map()->elements_kind() == FAST_SMI_ONLY_ELEMENTS)) {
+    Object* obj;
+    MaybeObject* maybe_obj = GetElementsTransitionMap(FAST_ELEMENTS);
+    if (!maybe_obj->ToObject(&obj)) return maybe_obj;
+    set_map(Map::cast(obj));
+  }
+  return this;
+}
+
+
+MaybeObject* JSObject::EnsureCanContainElements(Object** objects,
+                                                uint32_t count) {
+  if (FLAG_smi_only_arrays &&
+      map()->elements_kind() == FAST_SMI_ONLY_ELEMENTS) {
+    for (uint32_t i = 0; i < count; ++i) {
+      Object* current = *objects++;
+      if (!current->IsSmi() && current != GetHeap()->the_hole_value()) {
+        return EnsureCanContainNonSmiElements();
+      }
+    }
+  }
+  return this;
+}
+
+
+MaybeObject* JSObject::EnsureCanContainElements(FixedArray* elements) {
+  if (FLAG_smi_only_arrays) {
+    Object** objects = reinterpret_cast<Object**>(
+        FIELD_ADDR(elements, elements->OffsetOfElementAt(0)));
+    return EnsureCanContainElements(objects, elements->length());
+  } else {
+    return this;
+  }
+}
+
 
 void JSObject::set_elements(FixedArrayBase* value, WriteBarrierMode mode) {
-  ASSERT(map()->has_fast_elements() ==
+  ASSERT((map()->has_fast_elements() ||
+          map()->has_fast_smi_only_elements()) ==
          (value->map() == GetHeap()->fixed_array_map() ||
           value->map() == GetHeap()->fixed_cow_array_map()));
   ASSERT(map()->has_fast_double_elements() ==
          value->IsFixedDoubleArray());
   ASSERT(value->HasValidElements());
+#ifdef DEBUG
+  ValidateSmiOnlyElements();
+#endif
   WRITE_FIELD(this, kElementsOffset, value);
   CONDITIONAL_WRITE_BARRIER(GetHeap(), this, kElementsOffset, value, mode);
 }
@@ -1320,7 +1395,7 @@ void JSObject::initialize_properties() {
 
 
 void JSObject::initialize_elements() {
-  ASSERT(map()->has_fast_elements());
+  ASSERT(map()->has_fast_elements() || map()->has_fast_smi_only_elements());
   ASSERT(!GetHeap()->InNewSpace(GetHeap()->empty_fixed_array()));
   WRITE_FIELD(this, kElementsOffset, GetHeap()->empty_fixed_array());
 }
@@ -1328,9 +1403,11 @@ void JSObject::initialize_elements() {
 
 MaybeObject* JSObject::ResetElements() {
   Object* obj;
-  { MaybeObject* maybe_obj = GetElementsTransitionMap(FAST_ELEMENTS);
-    if (!maybe_obj->ToObject(&obj)) return maybe_obj;
-  }
+  ElementsKind elements_kind = FLAG_smi_only_arrays
+      ? FAST_SMI_ONLY_ELEMENTS
+      : FAST_ELEMENTS;
+  MaybeObject* maybe_obj = GetElementsTransitionMap(elements_kind);
+  if (!maybe_obj->ToObject(&obj)) return maybe_obj;
   set_map(Map::cast(obj));
   initialize_elements();
   return this;
@@ -1686,7 +1763,7 @@ void FixedDoubleArray::Initialize(FixedDoubleArray* from) {
 
 void FixedDoubleArray::Initialize(FixedArray* from) {
   int old_length = from->length();
-  ASSERT(old_length < length());
+  ASSERT(old_length <= length());
   for (int i = 0; i < old_length; i++) {
     Object* hole_or_object = from->get(i);
     if (hole_or_object->IsTheHole()) {
@@ -3764,6 +3841,7 @@ void JSBuiltinsObject::set_javascript_builtin_code(Builtins::JavaScript id,
 
 
 ACCESSORS(JSProxy, handler, Object, kHandlerOffset)
+ACCESSORS(JSProxy, hash, Object, kHashOffset)
 ACCESSORS(JSFunctionProxy, call_trap, Object, kCallTrapOffset)
 ACCESSORS(JSFunctionProxy, construct_trap, Object, kConstructTrapOffset)
 
@@ -3957,15 +4035,20 @@ void JSRegExp::SetDataAtUnchecked(int index, Object* value, Heap* heap) {
 
 ElementsKind JSObject::GetElementsKind() {
   ElementsKind kind = map()->elements_kind();
-  ASSERT((kind == FAST_ELEMENTS &&
-          (elements()->map() == GetHeap()->fixed_array_map() ||
-           elements()->map() == GetHeap()->fixed_cow_array_map())) ||
+#if DEBUG
+  FixedArrayBase* fixed_array =
+      reinterpret_cast<FixedArrayBase*>(READ_FIELD(this, kElementsOffset));
+  Map* map = fixed_array->map();
+    ASSERT(((kind == FAST_ELEMENTS || kind == FAST_SMI_ONLY_ELEMENTS) &&
+          (map == GetHeap()->fixed_array_map() ||
+           map == GetHeap()->fixed_cow_array_map())) ||
          (kind == FAST_DOUBLE_ELEMENTS &&
-          elements()->IsFixedDoubleArray()) ||
+          fixed_array->IsFixedDoubleArray()) ||
          (kind == DICTIONARY_ELEMENTS &&
-          elements()->IsFixedArray() &&
-          elements()->IsDictionary()) ||
+          fixed_array->IsFixedArray() &&
+          fixed_array->IsDictionary()) ||
          (kind > DICTIONARY_ELEMENTS));
+#endif
   return kind;
 }
 
@@ -3980,6 +4063,18 @@ bool JSObject::HasFastElements() {
 }
 
 
+bool JSObject::HasFastSmiOnlyElements() {
+  return GetElementsKind() == FAST_SMI_ONLY_ELEMENTS;
+}
+
+
+bool JSObject::HasFastTypeElements() {
+  ElementsKind elements_kind = GetElementsKind();
+  return elements_kind == FAST_SMI_ONLY_ELEMENTS ||
+      elements_kind == FAST_ELEMENTS;
+}
+
+
 bool JSObject::HasFastDoubleElements() {
   return GetElementsKind() == FAST_DOUBLE_ELEMENTS;
 }
@@ -3987,6 +4082,11 @@ bool JSObject::HasFastDoubleElements() {
 
 bool JSObject::HasDictionaryElements() {
   return GetElementsKind() == DICTIONARY_ELEMENTS;
+}
+
+
+bool JSObject::HasNonStrictArgumentsElements() {
+  return GetElementsKind() == NON_STRICT_ARGUMENTS_ELEMENTS;
 }
 
 
@@ -4041,7 +4141,7 @@ bool JSObject::AllowsSetElementsLength() {
 
 
 MaybeObject* JSObject::EnsureWritableFastElements() {
-  ASSERT(HasFastElements());
+  ASSERT(HasFastTypeElements());
   FixedArray* elems = FixedArray::cast(elements());
   Isolate* isolate = GetIsolate();
   if (elems->map() != isolate->heap()->fixed_cow_array_map()) return elems;
@@ -4217,6 +4317,13 @@ Object* JSObject::BypassGlobalProxy() {
 }
 
 
+MaybeObject* JSReceiver::GetIdentityHash(CreationFlag flag) {
+  return IsJSProxy()
+      ? JSProxy::cast(this)->GetIdentityHash(flag)
+      : JSObject::cast(this)->GetIdentityHash(flag);
+}
+
+
 bool JSObject::HasHiddenPropertiesObject() {
   ASSERT(!IsJSGlobalProxy());
   return GetPropertyAttributePostInterceptor(this,
@@ -4253,8 +4360,11 @@ bool JSObject::HasHiddenProperties() {
 }
 
 
-bool JSObject::HasElement(uint32_t index) {
-  return HasElementWithReceiver(this, index);
+bool JSReceiver::HasElement(uint32_t index) {
+  if (IsJSProxy()) {
+    return JSProxy::cast(this)->HasElementWithHandler(index);
+  }
+  return JSObject::cast(this)->HasElementWithReceiver(this, index);
 }
 
 
@@ -4366,27 +4476,27 @@ MaybeObject* StringDictionaryShape::AsObject(String* key) {
 }
 
 
-bool ObjectHashTableShape::IsMatch(JSObject* key, Object* other) {
-  return key == JSObject::cast(other);
+bool ObjectHashTableShape::IsMatch(JSReceiver* key, Object* other) {
+  return key == JSReceiver::cast(other);
 }
 
 
-uint32_t ObjectHashTableShape::Hash(JSObject* key) {
-  MaybeObject* maybe_hash = key->GetIdentityHash(JSObject::OMIT_CREATION);
+uint32_t ObjectHashTableShape::Hash(JSReceiver* key) {
+  MaybeObject* maybe_hash = key->GetIdentityHash(OMIT_CREATION);
   ASSERT(!maybe_hash->IsFailure());
   return Smi::cast(maybe_hash->ToObjectUnchecked())->value();
 }
 
 
-uint32_t ObjectHashTableShape::HashForObject(JSObject* key, Object* other) {
-  MaybeObject* maybe_hash = JSObject::cast(other)->GetIdentityHash(
-      JSObject::OMIT_CREATION);
+uint32_t ObjectHashTableShape::HashForObject(JSReceiver* key, Object* other) {
+  MaybeObject* maybe_hash =
+      JSReceiver::cast(other)->GetIdentityHash(OMIT_CREATION);
   ASSERT(!maybe_hash->IsFailure());
   return Smi::cast(maybe_hash->ToObjectUnchecked())->value();
 }
 
 
-MaybeObject* ObjectHashTableShape::AsObject(JSObject* key) {
+MaybeObject* ObjectHashTableShape::AsObject(JSReceiver* key) {
   return key;
 }
 
@@ -4406,7 +4516,7 @@ void Map::ClearCodeCache(Heap* heap) {
 
 
 void JSArray::EnsureSize(int required_size) {
-  ASSERT(HasFastElements());
+  ASSERT(HasFastTypeElements());
   FixedArray* elts = FixedArray::cast(elements());
   const int kArraySizeThatFitsComfortablyInNewSpace = 128;
   if (elts->length() < required_size) {
@@ -4429,9 +4539,12 @@ void JSArray::set_length(Smi* length) {
 }
 
 
-void JSArray::SetContent(FixedArray* storage) {
+MaybeObject* JSArray::SetContent(FixedArray* storage) {
+  MaybeObject* maybe_object = EnsureCanContainElements(storage);
+  if (maybe_object->IsFailure()) return maybe_object;
   set_length(Smi::FromInt(storage->length()));
   set_elements(storage);
+  return this;
 }
 
 
