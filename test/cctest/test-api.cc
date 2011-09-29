@@ -33,6 +33,7 @@
 #include "isolate.h"
 #include "compilation-cache.h"
 #include "execution.h"
+#include "handles.h"
 #include "snapshot.h"
 #include "platform.h"
 #include "utils.h"
@@ -80,6 +81,11 @@ static void ExpectString(const char* code, const char* expected) {
   CHECK_EQ(expected, *ascii);
 }
 
+static void ExpectInt32(const char* code, int expected) {
+  Local<Value> result = CompileRun(code);
+  CHECK(result->IsInt32());
+  CHECK_EQ(expected, result->Int32Value());
+}
 
 static void ExpectBoolean(const char* code, bool expected) {
   Local<Value> result = CompileRun(code);
@@ -1296,6 +1302,197 @@ static v8::Handle<Value> EchoNamedProperty(Local<String> name,
   return name;
 }
 
+// Helper functions for Interceptor/Accessor interaction tests
+
+Handle<Value> SimpleAccessorGetter(Local<String> name,
+                                   const AccessorInfo& info) {
+  Handle<Object> self = info.This();
+  return self->Get(String::Concat(v8_str("accessor_"), name));
+}
+
+void SimpleAccessorSetter(Local<String> name, Local<Value> value,
+                          const AccessorInfo& info) {
+  Handle<Object> self = info.This();
+  self->Set(String::Concat(v8_str("accessor_"), name), value);
+}
+
+Handle<Value> EmptyInterceptorGetter(Local<String> name,
+                                     const AccessorInfo& info) {
+  return Handle<Value>();
+}
+
+Handle<Value> EmptyInterceptorSetter(Local<String> name,
+                                     Local<Value> value,
+                                     const AccessorInfo& info) {
+  return Handle<Value>();
+}
+
+Handle<Value> InterceptorGetter(Local<String> name,
+                                const AccessorInfo& info) {
+  // Intercept names that start with 'interceptor_'.
+  String::AsciiValue ascii(name);
+  char* name_str = *ascii;
+  char prefix[] = "interceptor_";
+  int i;
+  for (i = 0; name_str[i] && prefix[i]; ++i) {
+    if (name_str[i] != prefix[i]) return Handle<Value>();
+  }
+  Handle<Object> self = info.This();
+  return self->GetHiddenValue(v8_str(name_str + i));
+}
+
+Handle<Value> InterceptorSetter(Local<String> name,
+                                Local<Value> value,
+                                const AccessorInfo& info) {
+  // Intercept accesses that set certain integer values.
+  if (value->IsInt32() && value->Int32Value() < 10000) {
+    Handle<Object> self = info.This();
+    self->SetHiddenValue(name, value);
+    return value;
+  }
+  return Handle<Value>();
+}
+
+void AddAccessor(Handle<FunctionTemplate> templ,
+                 Handle<String> name,
+                 v8::AccessorGetter getter,
+                 v8::AccessorSetter setter) {
+  templ->PrototypeTemplate()->SetAccessor(name, getter, setter);
+}
+
+void AddInterceptor(Handle<FunctionTemplate> templ,
+                    v8::NamedPropertyGetter getter,
+                    v8::NamedPropertySetter setter) {
+  templ->InstanceTemplate()->SetNamedPropertyHandler(getter, setter);
+}
+
+THREADED_TEST(EmptyInterceptorDoesNotShadowAccessors) {
+  v8::HandleScope scope;
+  Handle<FunctionTemplate> parent = FunctionTemplate::New();
+  Handle<FunctionTemplate> child = FunctionTemplate::New();
+  child->Inherit(parent);
+  AddAccessor(parent, v8_str("age"),
+              SimpleAccessorGetter, SimpleAccessorSetter);
+  AddInterceptor(child, EmptyInterceptorGetter, EmptyInterceptorSetter);
+  LocalContext env;
+  env->Global()->Set(v8_str("Child"), child->GetFunction());
+  CompileRun("var child = new Child;"
+             "child.age = 10;");
+  ExpectBoolean("child.hasOwnProperty('age')", false);
+  ExpectInt32("child.age", 10);
+  ExpectInt32("child.accessor_age", 10);
+}
+
+THREADED_TEST(EmptyInterceptorDoesNotShadowJSAccessors) {
+  v8::HandleScope scope;
+  Handle<FunctionTemplate> parent = FunctionTemplate::New();
+  Handle<FunctionTemplate> child = FunctionTemplate::New();
+  child->Inherit(parent);
+  AddInterceptor(child, EmptyInterceptorGetter, EmptyInterceptorSetter);
+  LocalContext env;
+  env->Global()->Set(v8_str("Child"), child->GetFunction());
+  CompileRun("var child = new Child;"
+             "var parent = child.__proto__;"
+             "Object.defineProperty(parent, 'age', "
+             "  {get: function(){ return this.accessor_age; }, "
+             "   set: function(v){ this.accessor_age = v; }, "
+             "   enumerable: true, configurable: true});"
+             "child.age = 10;");
+  ExpectBoolean("child.hasOwnProperty('age')", false);
+  ExpectInt32("child.age", 10);
+  ExpectInt32("child.accessor_age", 10);
+}
+
+THREADED_TEST(EmptyInterceptorDoesNotAffectJSProperties) {
+  v8::HandleScope scope;
+  Handle<FunctionTemplate> parent = FunctionTemplate::New();
+  Handle<FunctionTemplate> child = FunctionTemplate::New();
+  child->Inherit(parent);
+  AddInterceptor(child, EmptyInterceptorGetter, EmptyInterceptorSetter);
+  LocalContext env;
+  env->Global()->Set(v8_str("Child"), child->GetFunction());
+  CompileRun("var child = new Child;"
+             "var parent = child.__proto__;"
+             "parent.name = 'Alice';");
+  ExpectBoolean("child.hasOwnProperty('name')", false);
+  ExpectString("child.name", "Alice");
+  CompileRun("child.name = 'Bob';");
+  ExpectString("child.name", "Bob");
+  ExpectBoolean("child.hasOwnProperty('name')", true);
+  ExpectString("parent.name", "Alice");
+}
+
+THREADED_TEST(SwitchFromInterceptorToAccessor) {
+  v8::HandleScope scope;
+  Handle<FunctionTemplate> parent = FunctionTemplate::New();
+  Handle<FunctionTemplate> child = FunctionTemplate::New();
+  child->Inherit(parent);
+  AddAccessor(parent, v8_str("age"),
+              SimpleAccessorGetter, SimpleAccessorSetter);
+  AddInterceptor(child, InterceptorGetter, InterceptorSetter);
+  LocalContext env;
+  env->Global()->Set(v8_str("Child"), child->GetFunction());
+  CompileRun("var child = new Child;"
+             "function setAge(i){ child.age = i; };"
+             "for(var i = 0; i <= 10000; i++) setAge(i);");
+  // All i < 10000 go to the interceptor.
+  ExpectInt32("child.interceptor_age", 9999);
+  // The last i goes to the accessor.
+  ExpectInt32("child.accessor_age", 10000);
+}
+
+THREADED_TEST(SwitchFromAccessorToInterceptor) {
+  v8::HandleScope scope;
+  Handle<FunctionTemplate> parent = FunctionTemplate::New();
+  Handle<FunctionTemplate> child = FunctionTemplate::New();
+  child->Inherit(parent);
+  AddAccessor(parent, v8_str("age"),
+              SimpleAccessorGetter, SimpleAccessorSetter);
+  AddInterceptor(child, InterceptorGetter, InterceptorSetter);
+  LocalContext env;
+  env->Global()->Set(v8_str("Child"), child->GetFunction());
+  CompileRun("var child = new Child;"
+             "function setAge(i){ child.age = i; };"
+             "for(var i = 20000; i >= 9999; i--) setAge(i);");
+  // All i >= 10000 go to the accessor.
+  ExpectInt32("child.accessor_age", 10000);
+  // The last i goes to the interceptor.
+  ExpectInt32("child.interceptor_age", 9999);
+}
+
+THREADED_TEST(SwitchFromInterceptorToProperty) {
+  v8::HandleScope scope;
+  Handle<FunctionTemplate> parent = FunctionTemplate::New();
+  Handle<FunctionTemplate> child = FunctionTemplate::New();
+  child->Inherit(parent);
+  AddInterceptor(child, InterceptorGetter, InterceptorSetter);
+  LocalContext env;
+  env->Global()->Set(v8_str("Child"), child->GetFunction());
+  CompileRun("var child = new Child;"
+             "function setAge(i){ child.age = i; };"
+             "for(var i = 0; i <= 10000; i++) setAge(i);");
+  // All i < 10000 go to the interceptor.
+  ExpectInt32("child.interceptor_age", 9999);
+  // The last i goes to child's own property.
+  ExpectInt32("child.age", 10000);
+}
+
+THREADED_TEST(SwitchFromPropertyToInterceptor) {
+  v8::HandleScope scope;
+  Handle<FunctionTemplate> parent = FunctionTemplate::New();
+  Handle<FunctionTemplate> child = FunctionTemplate::New();
+  child->Inherit(parent);
+  AddInterceptor(child, InterceptorGetter, InterceptorSetter);
+  LocalContext env;
+  env->Global()->Set(v8_str("Child"), child->GetFunction());
+  CompileRun("var child = new Child;"
+             "function setAge(i){ child.age = i; };"
+             "for(var i = 20000; i >= 9999; i--) setAge(i);");
+  // All i >= 10000 go to child's own property.
+  ExpectInt32("child.age", 10000);
+  // The last i goes to the interceptor.
+  ExpectInt32("child.interceptor_age", 9999);
+}
 
 THREADED_TEST(NamedPropertyHandlerGetter) {
   echo_named_call_count = 0;
@@ -1807,6 +2004,34 @@ THREADED_TEST(HiddenProperties) {
 
   CHECK(obj->DeleteHiddenValue(key));
   CHECK(obj->GetHiddenValue(key).IsEmpty());
+}
+
+
+THREADED_TEST(Regress97784) {
+  // Regression test for crbug.com/97784
+  // Messing with the Object.prototype should not have effect on
+  // hidden properties.
+  v8::HandleScope scope;
+  LocalContext env;
+
+  v8::Local<v8::Object> obj = v8::Object::New();
+  v8::Local<v8::String> key = v8_str("hidden");
+
+  CompileRun(
+      "set_called = false;"
+      "Object.defineProperty("
+      "    Object.prototype,"
+      "    'hidden',"
+      "    {get: function() { return 45; },"
+      "     set: function() { set_called = true; }})");
+
+  CHECK(obj->GetHiddenValue(key).IsEmpty());
+  // Make sure that the getter and setter from Object.prototype is not invoked.
+  // If it did we would have full access to the hidden properties in
+  // the accessor.
+  CHECK(obj->SetHiddenValue(key, v8::Integer::New(42)));
+  ExpectFalse("set_called");
+  CHECK_EQ(42, obj->GetHiddenValue(key)->Int32Value());
 }
 
 
@@ -15227,4 +15452,224 @@ THREADED_TEST(ForeignFunctionReceiver) {
   TestReceiver(o, context->Global(), "(1,func)()");
 
   foreign_context.Dispose();
+}
+
+
+
+class SimpleTestResource: public String::ExternalStringResource {
+ public:
+  explicit SimpleTestResource(const uint16_t* data) : data_(data), length_(0) {
+    while (data[length_] != 0) length_++;
+  }
+  virtual ~SimpleTestResource() { }
+  virtual const uint16_t* data() const { return data_; }
+  virtual size_t length() const { return length_; }
+ private:
+  const uint16_t* data_;
+  int length_;
+};
+
+
+THREADED_TEST(StringLock) {
+  v8::HandleScope scope;
+  LocalContext env;
+
+  i::Isolate* isolate = i::Isolate::Current();
+  i::Heap* heap = isolate->heap();
+
+  // ASCII text of test strings.
+  const char* text = "Lorem ipsum dolor sic amet.";
+  const size_t kTextLength = 27;
+  CHECK(strlen(text) == kTextLength);
+  // UC16 version of string.
+  uint16_t uc16_text[kTextLength + 1];
+  for (unsigned i = 0; i <= kTextLength; i++) {
+    uc16_text[i] = static_cast<uint16_t>(text[i]);
+  }
+
+  // Create some different strings and move them to old-space,
+  // so that externalization can succeede.
+  Local<String> s1 = v8_str(text);
+  Local<String> s2 = v8_str(text + 1);
+  Local<String> s3 = v8_str(text + 2);
+  heap->CollectGarbage(i::NEW_SPACE);
+  heap->CollectGarbage(i::NEW_SPACE);
+
+  SimpleTestResource* r1 = new SimpleTestResource(uc16_text);
+  SimpleTestResource* r2 = new SimpleTestResource(uc16_text + 1);
+  SimpleTestResource* r3 = new SimpleTestResource(uc16_text + 2);
+
+  // Check that externalization works.
+  CHECK(!s1->IsExternal());
+  CHECK(s1->MakeExternal(r1));
+  CHECK(s1->IsExternal());
+
+  // Externalize while the string is locked.
+
+  // Use the direct interface to string locking.
+  i::Handle<i::String> s2i(v8::Utils::OpenHandle(*s2));
+  CHECK(!heap->IsStringLocked(*s2i));
+  LockString(s2i);  // Use handle version, not Heap::LockString, to allow GC.
+  CHECK(isolate->heap()->IsStringLocked(*s2i));
+
+  CHECK(!s2->IsExternal());
+  CHECK(!s2->MakeExternal(r2));
+  CHECK(!s2->IsExternal());
+
+  CHECK(heap->IsStringLocked(*s2i));
+  heap->UnlockString(*s2i);
+  CHECK(!heap->IsStringLocked(*s2i));
+
+  CHECK(!s2->IsExternal());
+  CHECK(s2->MakeExternal(r2));
+  CHECK(s2->IsExternal());
+
+  // Use the Handle-based scoped StringLock.
+  i::Handle<i::String> s3i(v8::Utils::OpenHandle(*s3));
+  {
+    CHECK(!heap->IsStringLocked(*s3i));
+    i::StringLock lock(s3i);
+    CHECK(heap->IsStringLocked(*s3i));
+
+    CHECK(!s3->IsExternal());
+    CHECK(!s3->MakeExternal(r3));
+    CHECK(!s3->IsExternal());
+
+    CHECK(heap->IsStringLocked(*s3i));
+  }
+  CHECK(!heap->IsStringLocked(*s3i));
+
+  CHECK(!s3->IsExternal());
+  CHECK(s3->MakeExternal(r3));
+  CHECK(s3->IsExternal());
+}
+
+
+THREADED_TEST(MultiStringLock) {
+  v8::HandleScope scope;
+  LocalContext env;
+  i::Isolate* isolate = i::Isolate::Current();
+  i::Heap* heap = isolate->heap();
+  const char* text = "Lorem ipsum dolor sic amet.";
+
+  const int N = 16;  // Must be power of 2.
+  CHECK_GT(strlen(text), static_cast<size_t>(N));
+
+  // Create a bunch of different strings.
+  i::Handle<i::String> strings[N];
+
+  for (int i = 0; i < N; i++) {
+    Local<String> s = v8_str(text + i);
+    strings[i] = v8::Utils::OpenHandle(*s);
+  }
+
+  heap->CollectGarbage(i::NEW_SPACE);
+  heap->CollectGarbage(i::NEW_SPACE);
+
+  // Check that start out are unlocked.
+  for (int i = 0; i < N; i++) {
+    CHECK(!heap->IsStringLocked(*strings[i]));
+  }
+
+  // Lock them, one at a time.
+  for (int i = 0; i < N; i++) {
+    LockString(strings[i]);
+    for (int j = 0; j < N; j++) {
+      if (j <= i) {
+        CHECK(heap->IsStringLocked(*strings[j]));
+      } else {
+        CHECK(!heap->IsStringLocked(*strings[j]));
+      }
+    }
+  }
+
+  // Unlock them in a slightly different order (not same as locking,
+  // nor the reverse order).
+  for (int i = 0; i < N; i++) {
+    int mix_i = i ^ 3;
+    heap->UnlockString(*strings[mix_i]);
+    for (int j = 0; j < N; j++) {
+      int unmix_j =  j ^ 3;
+      if (unmix_j <= i) {
+        CHECK(!heap->IsStringLocked(*strings[j]));
+      } else {
+        CHECK(heap->IsStringLocked(*strings[j]));
+      }
+    }
+  }
+}
+
+
+THREADED_TEST(DuplicateStringLock) {
+  v8::HandleScope scope;
+  LocalContext env;
+  i::Isolate* isolate = i::Isolate::Current();
+  i::Heap* heap = isolate->heap();
+  const char* text = "Lorem ipsum dolor sic amet.";
+
+  const int N = 16;  // Must be power of 2.
+  CHECK_GT(strlen(text), static_cast<size_t>(N));
+
+  // Create a bunch of different strings.
+  i::Handle<i::String> strings[N];
+
+  for (int i = 0; i < N; i++) {
+    Local<String> s = v8_str(text + i);
+    strings[i] = v8::Utils::OpenHandle(*s);
+  }
+
+  heap->CollectGarbage(i::NEW_SPACE);
+  heap->CollectGarbage(i::NEW_SPACE);
+
+  // Check that strings start out unlocked.
+  for (int i = 0; i < N; i++) {
+    CHECK(!heap->IsStringLocked(*strings[i]));
+  }
+
+  // Lock them, one at a time.
+  for (int i = 0; i < N; i++) {
+    LockString(strings[i]);
+    for (int j = 0; j < N; j++) {
+      if (j <= i) {
+        CHECK(heap->IsStringLocked(*strings[j]));
+      } else {
+        CHECK(!heap->IsStringLocked(*strings[j]));
+      }
+    }
+  }
+
+  // Lock the first half of them a second time.
+  for (int i = 0; i < N / 2; i++) {
+    LockString(strings[i]);
+    for (int j = 0; j < N; j++) {
+      CHECK(heap->IsStringLocked(*strings[j]));
+    }
+  }
+
+  // Unlock them in a slightly different order (not same as locking,
+  // nor the reverse order).
+  for (int i = 0; i < N; i++) {
+    int mix_i = i ^ 3;
+    heap->UnlockString(*strings[mix_i]);
+    for (int j = 0; j < N; j++) {
+      int unmix_j =  j ^ 3;
+      if (unmix_j <= i && j >= N / 2) {
+        CHECK(!heap->IsStringLocked(*strings[j]));
+      } else {
+        CHECK(heap->IsStringLocked(*strings[j]));
+      }
+    }
+  }
+
+  // Unlock the first half again.
+  for (int i = 0; i < N / 2; i++) {
+    heap->UnlockString(*strings[i]);
+    for (int j = 0; j < N; j++) {
+      if (j <= i || j >= N/ 2) {
+        CHECK(!heap->IsStringLocked(*strings[j]));
+      } else {
+        CHECK(heap->IsStringLocked(*strings[j]));
+      }
+    }
+  }
 }

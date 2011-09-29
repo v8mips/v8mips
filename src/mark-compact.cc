@@ -244,7 +244,10 @@ bool MarkCompactCollector::StartCompaction() {
 
     CollectEvacuationCandidates(heap()->old_pointer_space());
     CollectEvacuationCandidates(heap()->old_data_space());
-    CollectEvacuationCandidates(heap()->code_space());
+
+    if (FLAG_compact_code_space) {
+      CollectEvacuationCandidates(heap()->code_space());
+    }
 
     heap()->old_pointer_space()->EvictEvacuationCandidatesFromFreeLists();
     heap()->old_data_space()->EvictEvacuationCandidatesFromFreeLists();
@@ -480,7 +483,9 @@ void MarkCompactCollector::Prepare(GCTracer* tracer) {
   ASSERT(state_ == IDLE);
   state_ = PREPARE_GC;
 #endif
-  ASSERT(!FLAG_always_compact || !FLAG_never_compact);
+
+  // TODO(1726) Revert this into an assertion when compaction is enabled.
+  ASSERT(!FLAG_never_compact || !FLAG_always_compact);
 
   if (collect_maps_) CreateBackPointers();
 #ifdef ENABLE_GDB_JIT_INTERFACE
@@ -2367,6 +2372,7 @@ void MarkCompactCollector::MigrateObject(Address dst,
                                          Address src,
                                          int size,
                                          AllocationSpace dest) {
+  HEAP_PROFILE(heap(), ObjectMoveEvent(src, dst));
   if (dest == OLD_POINTER_SPACE || dest == LO_SPACE) {
     Address src_slot = src;
     Address dst_slot = dst;
@@ -2456,11 +2462,13 @@ class PointersUpdatingVisitor: public ObjectVisitor {
 
     HeapObject* obj = HeapObject::cast(*p);
 
-    if (heap_->InNewSpace(obj) ||
-        MarkCompactCollector::IsOnEvacuationCandidate(obj)) {
-      ASSERT(obj->map_word().IsForwardingAddress());
+    MapWord map_word = obj->map_word();
+    if (map_word.IsForwardingAddress()) {
+      ASSERT(heap_->InFromSpace(obj) ||
+             MarkCompactCollector::IsOnEvacuationCandidate(obj));
       *p = obj->map_word().ToForwardingAddress();
-      ASSERT(!MarkCompactCollector::IsOnEvacuationCandidate(*p));
+      ASSERT(!heap_->InFromSpace(*p) &&
+             !MarkCompactCollector::IsOnEvacuationCandidate(*p));
     }
   }
 
@@ -2790,10 +2798,9 @@ enum SkipListRebuildingMode {
 // over it.  Map space is swept precisely, because it is not compacted.
 // Slots in live objects pointing into evacuation candidates are updated
 // if requested.
-template<SkipListRebuildingMode skip_list_mode>
+template<SweepingMode sweeping_mode, SkipListRebuildingMode skip_list_mode>
 static void SweepPrecisely(PagedSpace* space,
                            Page* p,
-                           SweepingMode mode,
                            ObjectVisitor* v) {
   ASSERT(!p->IsEvacuationCandidate() && !p->WasSwept());
   ASSERT_EQ(skip_list_mode == REBUILD_SKIP_LIST,
@@ -2838,7 +2845,7 @@ static void SweepPrecisely(PagedSpace* space,
       ASSERT(Marking::IsBlack(Marking::MarkBitFrom(live_object)));
       Map* map = live_object->map();
       int size = live_object->SizeFromMap(map);
-      if (mode == SWEEP_AND_VISIT_LIVE_OBJECTS) {
+      if (sweeping_mode == SWEEP_AND_VISIT_LIVE_OBJECTS) {
         live_object->IterateBody(map->instance_type(), size, v);
       }
       if ((skip_list_mode == REBUILD_SKIP_LIST) && skip_list != NULL) {
@@ -3066,16 +3073,12 @@ void MarkCompactCollector::EvacuateNewSpaceAndCandidates() {
           SweepConservatively(space, p);
           break;
         case OLD_POINTER_SPACE:
-          SweepPrecisely<IGNORE_SKIP_LIST>(space,
-                                           p,
-                                           SWEEP_AND_VISIT_LIVE_OBJECTS,
-                                           &updating_visitor);
+          SweepPrecisely<SWEEP_AND_VISIT_LIVE_OBJECTS, IGNORE_SKIP_LIST>(
+              space, p, &updating_visitor);
           break;
         case CODE_SPACE:
-          SweepPrecisely<REBUILD_SKIP_LIST>(space,
-                                            p,
-                                            SWEEP_AND_VISIT_LIVE_OBJECTS,
-                                            &updating_visitor);
+          SweepPrecisely<SWEEP_AND_VISIT_LIVE_OBJECTS, REBUILD_SKIP_LIST>(
+              space, p, &updating_visitor);
           break;
         default:
           UNREACHABLE();
@@ -3615,9 +3618,9 @@ void MarkCompactCollector::SweepSpace(PagedSpace* space,
       }
       case PRECISE: {
         if (space->identity() == CODE_SPACE) {
-          SweepPrecisely<REBUILD_SKIP_LIST>(space, p, SWEEP_ONLY, NULL);
+          SweepPrecisely<SWEEP_ONLY, REBUILD_SKIP_LIST>(space, p, NULL);
         } else {
-          SweepPrecisely<IGNORE_SKIP_LIST>(space, p, SWEEP_ONLY, NULL);
+          SweepPrecisely<SWEEP_ONLY, IGNORE_SKIP_LIST>(space, p, NULL);
         }
         break;
       }

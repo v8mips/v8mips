@@ -4479,6 +4479,9 @@ bool v8::String::MakeExternal(v8::String::ExternalStringResource* resource) {
   if (isolate->string_tracker()->IsFreshUnusedString(obj)) {
     return false;
   }
+  if (isolate->heap()->IsStringLocked(*obj)) {
+    return false;
+  }
   if (isolate->heap()->IsInGCPostProcessing()) {
     return false;
   }
@@ -5805,6 +5808,16 @@ const HeapGraphNode* HeapGraphNode::GetDominatorNode() const {
   i::Isolate* isolate = i::Isolate::Current();
   IsDeadCheck(isolate, "v8::HeapSnapshot::GetDominatorNode");
   return reinterpret_cast<const HeapGraphNode*>(ToInternal(this)->dominator());
+}
+
+
+v8::Handle<v8::Value> HeapGraphNode::GetHeapValue() const {
+  i::Isolate* isolate = i::Isolate::Current();
+  IsDeadCheck(isolate, "v8::HeapGraphNode::GetHeapValue");
+  i::Handle<i::HeapObject> object = ToInternal(this)->GetHeapObject();
+  return v8::Handle<Value>(!object.is_null() ?
+                           ToApi<Value>(object) : ToApi<Value>(
+                               isolate->factory()->undefined_value()));
 }
 
 
