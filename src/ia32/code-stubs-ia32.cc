@@ -4325,6 +4325,7 @@ void CallFunctionStub::Generate(MacroAssembler* masm) {
     // megamorphic.
     __ cmp(Operand(ecx), Immediate(UninitializedSentinel(isolate)));
     __ j(equal, &initialize, Label::kNear);
+    // MegamorphicSentinel is a root so no write-barrier is needed.
     __ mov(FieldOperand(ebx, JSGlobalPropertyCell::kValueOffset),
            Immediate(MegamorphicSentinel(isolate)));
     __ jmp(&call, Label::kNear);
@@ -4332,6 +4333,14 @@ void CallFunctionStub::Generate(MacroAssembler* masm) {
     // An uninitialized cache is patched with the function.
     __ bind(&initialize);
     __ mov(FieldOperand(ebx, JSGlobalPropertyCell::kValueOffset), edi);
+    __ mov(ecx, edi);
+    __ RecordWriteField(ebx,
+                        JSGlobalPropertyCell::kValueOffset,
+                        ecx,
+                        edx,
+                        kDontSaveFPRegs,
+                        OMIT_REMEMBERED_SET,  // Cells are rescanned.
+                        OMIT_SMI_CHECK);
 
     __ bind(&call);
   }
@@ -4415,6 +4424,7 @@ void CodeStub::GenerateStubsAheadOfTime() {
 void CodeStub::GenerateFPStubs() {
   CEntryStub save_doubles(1, kSaveFPRegs);
   Handle<Code> code = save_doubles.GetCode();
+  code->set_is_pregenerated(true);
   code->GetIsolate()->set_fp_stubs_generated(true);
 }
 
@@ -6658,7 +6668,7 @@ struct AheadOfTimeWriteBarrierStubList kAheadOfTime[] = {
   { ebx, eax, edi, EMIT_REMEMBERED_SET },
   // Used in CompileArrayPushCall.
   { ebx, ecx, edx, EMIT_REMEMBERED_SET },
-  // Used in CompileStoreGlobal.
+  // Used in CompileStoreGlobal and CallFunctionStub.
   { ebx, ecx, edx, OMIT_REMEMBERED_SET },
   // Used in StoreStubCompiler::CompileStoreField and
   // KeyedStoreStubCompiler::CompileStoreField via GenerateStoreField.
@@ -6695,12 +6705,12 @@ bool RecordWriteStub::IsPregenerated() {
 
 void StoreBufferOverflowStub::GenerateFixedRegStubsAheadOfTime() {
   StoreBufferOverflowStub stub1(kDontSaveFPRegs);
-  stub1.GetCode();
+  stub1.GetCode()->set_is_pregenerated(true);
 
   CpuFeatures::TryForceFeatureScope scope(SSE2);
   if (CpuFeatures::IsSupported(SSE2)) {
     StoreBufferOverflowStub stub2(kSaveFPRegs);
-    stub2.GetCode();
+    stub2.GetCode()->set_is_pregenerated(true);
   }
 }
 
@@ -6714,7 +6724,7 @@ void RecordWriteStub::GenerateFixedRegStubsAheadOfTime() {
                          entry->address,
                          entry->action,
                          kDontSaveFPRegs);
-    stub.GetCode();
+    stub.GetCode()->set_is_pregenerated(true);
   }
 }
 
