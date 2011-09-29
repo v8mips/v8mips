@@ -816,15 +816,13 @@ class StaticMarkingVisitor : public StaticVisitorBase {
                                    kVisitStructGeneric>();
   }
 
-  INLINE(static void VisitPointer(Heap* heap, Object** p, int flags = 0)) {
-    MarkObjectByPointer(heap->mark_compact_collector(), p, p,
-        flags & kStoreIndirectPointers);
+  INLINE(static void VisitPointer(Heap* heap, Object** p)) {
+    MarkObjectByPointer(heap->mark_compact_collector(), p, p, false);
   }
 
   INLINE(static void VisitPointers(Heap* heap,
                                    Object** start,
-                                   Object** end,
-                                   int flags = 0)) {
+                                   Object** end)) {
     // Mark all objects pointed to in [start, end).
     const int kMinRangeForMarkingRecursion = 64;
     if (end - start >= kMinRangeForMarkingRecursion) {
@@ -833,7 +831,7 @@ class StaticMarkingVisitor : public StaticVisitorBase {
     }
     MarkCompactCollector* collector = heap->mark_compact_collector();
     for (Object** p = start; p < end; p++) {
-      MarkObjectByPointer(collector, start, p, flags & kStoreIndirectPointers);
+      MarkObjectByPointer(collector, start, p, false);
     }
   }
 
@@ -848,7 +846,8 @@ class StaticMarkingVisitor : public StaticVisitorBase {
   static inline void VisitEmbeddedPointer(Heap* heap, Code* host, Object** p) {
     MarkObjectByPointer(heap->mark_compact_collector(),
                         reinterpret_cast<Object**>(host),
-                        p);
+                        p,
+                        true);
   }
 
   static inline void VisitCodeTarget(Heap* heap, RelocInfo* rinfo) {

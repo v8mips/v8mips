@@ -7465,10 +7465,6 @@ class BreakPointInfo: public Struct {
 #undef DECL_ACCESSORS
 
 
-// Special flag that can be passed to visitor functions.
-static const int kStoreIndirectPointers = 1;
-
-
 // Abstract base class for visiting, and optionally modifying, the
 // pointers contained in Objects. Used in GC and serialization/deserialization.
 class ObjectVisitor BASE_EMBEDDED {
@@ -7478,9 +7474,6 @@ class ObjectVisitor BASE_EMBEDDED {
   // Visits a contiguous arrays of pointers in the half-open range
   // [start, end). Any or all of the values may be modified on return.
   virtual void VisitPointers(Object** start, Object** end) = 0;
-  virtual void VisitPointers(Object** start, Object** end, int flags) {
-    VisitPointers(start, end);
-  }
 
   // To allow lazy clearing of inline caches the visitor has
   // a rich interface for iterating over Code objects..
@@ -7508,9 +7501,6 @@ class ObjectVisitor BASE_EMBEDDED {
 
   // Handy shorthand for visiting a single pointer.
   virtual void VisitPointer(Object** p) { VisitPointers(p, p + 1); }
-  virtual void VisitPointer(Object** p, int flags) {
-    VisitPointers(p, p + 1, flags);
-  }
 
   // Visit pointer embedded into a code object.
   virtual void VisitEmbeddedPointer(Code* host, Object** p) {
