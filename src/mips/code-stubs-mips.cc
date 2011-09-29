@@ -886,7 +886,7 @@ void FloatingPointHelper::CallCCodeForDoubleOperation(
 }
 
 
-bool WriteInt32ToHeapNumberStub::IsPreGenerated() {
+bool WriteInt32ToHeapNumberStub::IsPregenerated() {
   // These variants are compiled ahead of time.  See next method.
   if (the_int_.is(a1) &&
       the_heap_number_.is(v0) &&
@@ -3558,6 +3558,8 @@ void CodeStub::GenerateFPStubs() {
   CEntryStub save_doubles(1, kSaveFPRegs);
   Handle<Code> code = save_doubles.GetCode();
   code->set_is_pregenerated(true);
+  StoreBufferOverflowStub stub(kSaveFPRegs);
+  stub.GetCode()->set_is_pregenerated(true);
   code->GetIsolate()->set_fp_stubs_generated(true);
 }
 
@@ -7150,7 +7152,7 @@ struct AheadOfTimeWriteBarrierStubList kAheadOfTime[] = {
 };
 
 
-bool RecordWriteStub::IsPreGenerated() {
+bool RecordWriteStub::IsPregenerated() {
   for (AheadOfTimeWriteBarrierStubList* entry = kAheadOfTime;
        !entry->object.is(no_reg);
        entry++) {
@@ -7166,11 +7168,14 @@ bool RecordWriteStub::IsPreGenerated() {
 }
 
 
+bool StoreBufferOverflowStub::IsPregenerated() {
+  return save_doubles_ == kDontSaveFPRegs || ISOLATE->fp_stubs_generated();
+}
+
+
 void StoreBufferOverflowStub::GenerateFixedRegStubsAheadOfTime() {
   StoreBufferOverflowStub stub1(kDontSaveFPRegs);
   stub1.GetCode()->set_is_pregenerated(true);
-  StoreBufferOverflowStub stub2(kSaveFPRegs);
-  stub2.GetCode()->set_is_pregenerated(true);
 }
 
 

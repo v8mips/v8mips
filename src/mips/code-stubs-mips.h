@@ -66,7 +66,7 @@ class StoreBufferOverflowStub: public CodeStub {
 
   void Generate(MacroAssembler* masm);
 
-  virtual bool IsPreGenerated() { return true; }
+  virtual bool IsPregenerated();
   static void GenerateFixedRegStubsAheadOfTime();
   virtual bool SometimesSetsUpAFrame() { return false; }
 
@@ -350,7 +350,7 @@ class WriteInt32ToHeapNumberStub : public CodeStub {
     ASSERT(SignRegisterBits::is_valid(sign_.code()));
   }
 
-  bool IsPreGenerated();
+  bool IsPregenerated();
   static void GenerateFixedRegStubsAheadOfTime();
 
  private:
@@ -427,7 +427,7 @@ class RecordWriteStub: public CodeStub {
     INCREMENTAL_COMPACTION
   };
 
-  virtual bool IsPreGenerated();
+  virtual bool IsPregenerated();
   static void GenerateFixedRegStubsAheadOfTime();
   virtual bool SometimesSetsUpAFrame() { return false; }
 
