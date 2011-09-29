@@ -4559,7 +4559,9 @@ bool HGraphBuilder::TryInline(Call* expr) {
   HEnvironment* env = environment();
   int current_level = 1;
   while (env->outer() != NULL) {
-    if (FLAG_limit_inlining && current_level == Compiler::kMaxInliningLevels) {
+    if (current_level == (FLAG_limit_inlining
+                          ? Compiler::kMaxInliningLevels
+                          : 2 * Compiler::kMaxInliningLevels)) {
       TraceInline(target, caller, "inline depth limit reached");
       return false;
     }
@@ -6472,7 +6474,6 @@ void HEnvironment::Initialize(const HEnvironment* other) {
   pop_count_ = other->pop_count_;
   push_count_ = other->push_count_;
   ast_id_ = other->ast_id_;
-  CheckDepth();
 }
 
 
