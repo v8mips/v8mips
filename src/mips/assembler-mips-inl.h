@@ -277,7 +277,7 @@ void RelocInfo::Visit(ObjectVisitor* visitor) {
     Assembler::instr_at_put(pc_, reinterpret_cast<Instr>(target_address));
 
     Object** opc = reinterpret_cast<Object**>(pc_);
-    visitor->VisitPointer(opc, kStoreIndirectPointers);
+    visitor->VisitEmbeddedPointer(host(), opc);
 
     // Save the new address from GC, revert to the old lui instruction then use
     // the standard address patching mechanism to set the new address.
@@ -324,7 +324,7 @@ void RelocInfo::Visit(Heap* heap) {
     Assembler::instr_at_put(pc_, reinterpret_cast<Instr>(target_address));
 
     Object** opc = reinterpret_cast<Object**>(pc_);
-    StaticVisitor::VisitPointer(heap, opc, kStoreIndirectPointers);
+    StaticVisitor::VisitEmbeddedPointer(heap, host(), opc);
 
     // Save the new address from GC, revert to the old lui instruction then use
     // the standard address patching mechanism to set the new address.
