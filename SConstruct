@@ -189,6 +189,9 @@ LIBRARY_FLAGS = {
         'mips_arch_variant:mips32r1': {
           'CCFLAGS':      ['-mips32', '-Wa,-mips32']
         },
+        'mips_arch_variant:loongson2f': {
+          'CCFLAGS':      ['-march=loongson2f', '-Wa,-march=loongson2f']
+        },
         'library:static': {
           'LINKFLAGS':    ['-static', '-static-libgcc']
         },
@@ -291,7 +294,6 @@ V8_EXTRA_FLAGS = {
   'gcc': {
     'all': {
       'WARNINGFLAGS': ['-Wall',
-                       '-Werror',
                        '-W',
                        '-Wno-unused-parameter',
                        '-Wnon-virtual-dtor']
@@ -385,7 +387,7 @@ MKSNAPSHOT_EXTRA_FLAGS = {
 DTOA_EXTRA_FLAGS = {
   'gcc': {
     'all': {
-      'WARNINGFLAGS': ['-Werror', '-Wno-uninitialized'],
+      'WARNINGFLAGS': ['-Wno-uninitialized'],
       'CCFLAGS': GCC_DTOA_EXTRA_CCFLAGS
     }
   },
@@ -535,6 +537,9 @@ SAMPLE_FLAGS = {
         },
         'mips_arch_variant:mips32r1': {
           'CCFLAGS':      ['-mips32', '-Wa,-mips32']
+        },
+        'mips_arch_variant:loongson2f': {
+          'CCFLAGS':      ['-march=loongson2f', '-Wa,-march=loongson2f']
         },
         'library:static': {
           'LINKFLAGS':    ['-static', '-static-libgcc']
@@ -690,6 +695,9 @@ PREPARSER_FLAGS = {
         },
         'mips_arch_variant:mips32r1': {
           'CCFLAGS':      ['-mips32', '-Wa,-mips32']
+        },
+        'mips_arch_variant:loongson2f': {
+          'CCFLAGS':      ['-march=loongson2f', '-Wa,-march=loongson2f']
         },
         'library:static': {
           'LINKFLAGS':    ['-static', '-static-libgcc']
@@ -1096,7 +1104,7 @@ SIMPLE_OPTIONS = {
     'help': 'generate calling conventiont according to selected mips ABI'
   },
   'mips_arch_variant': {
-    'values': ['mips32r2', 'mips32r1'],
+    'values': ['mips32r2', 'mips32r1', 'loongson2f'],
     'default': 'mips32r2',
     'help': 'mips variant'
   },

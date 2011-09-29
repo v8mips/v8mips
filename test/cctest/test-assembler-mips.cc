@@ -579,8 +579,13 @@ TEST(MIPS7) {
 
     __ bind(&neither_is_nan);
 
+#ifdef _MIPS_ISA_MIPS2
+    __ c(OLT, D, f6, f4);
+    __ bc1t(&less_than);
+#else
     __ c(OLT, D, f6, f4, 2);
     __ bc1t(&less_than, 2);
+#endif
     __ nop();
     __ sw(zero_reg, MemOperand(a0, OFFSET_OF(T, result)) );
     __ Branch(&outa_here);

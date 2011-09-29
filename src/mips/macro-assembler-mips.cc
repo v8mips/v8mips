@@ -866,27 +866,39 @@ void MacroAssembler::Ins(Register rt,
   } else {
     ASSERT(!rt.is(t8) && !rs.is(t8));
 
-    srl(t8, rt, pos + size);
-    // The left chunk from rt that needs to
-    // be saved is on the right side of t8.
-    sll(at, t8, pos + size);
-    // The 'at' register now contains the left chunk on
-    // the left (proper position) and zeroes.
-    sll(t8, rt, 32 - pos);
-    // t8 now contains the right chunk on the left and zeroes.
-    srl(t8, t8, 32 - pos);
-    // t8 now contains the right chunk on
-    // the right (proper position) and zeroes.
-    or_(rt, at, t8);
-    // rt now contains the left and right chunks from the original rt
-    // in their proper position and zeroes in the middle.
-    sll(t8, rs, 32 - size);
-    // t8 now contains the chunk from rs on the left and zeroes.
-    srl(t8, t8, 32 - size - pos);
-    // t8 now contains the original chunk from rs in
-    // the middle (proper position).
-    or_(rt, rt, t8);
-    // rt now contains the result of the ins instruction in R2 mode.
+    if (pos == 0) {
+      srl(t8, rt, size);
+      sll(at, t8, size);
+      // The 'at' register now contains the left chunk on
+      // the left (proper position) and zeroes.
+      sll(t8, rs, 32 - size);
+      srl(t8, t8, 32 - size);
+      // t8 now contains the original chunk from rs in
+      // the right (proper position).
+      or_(rt, at, t8);
+    } else {
+      srl(t8, rt, pos + size);
+      // The left chunk from rt that needs to
+      // be saved is on the right side of t8.
+      sll(at, t8, pos + size);
+      // The 'at' register now contains the left chunk on
+      // the left (proper position) and zeroes.
+      sll(t8, rt, 32 - pos);
+      // t8 now contains the right chunk on the left and zeroes.
+      srl(t8, t8, 32 - pos);
+      // t8 now contains the right chunk on
+      // the right (proper position) and zeroes.
+      or_(rt, at, t8);
+      // rt now contains the left and right chunks from the original rt
+      // in their proper position and zeroes in the middle.
+      sll(t8, rs, 32 - size);
+      // t8 now contains the chunk from rs on the left and zeroes.
+      srl(t8, t8, 32 - size - pos);
+      // t8 now contains the original chunk from rs in
+      // the middle (proper position).
+      or_(rt, rt, t8);
+      // rt now contains the result of the ins instruction in R2 mode.
+    }
   }
 }
 

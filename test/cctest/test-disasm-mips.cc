@@ -146,12 +146,14 @@ TEST(Type0) {
   COMPARE(divu(v0, v1),
           "0043001b       divu    v0, v1");
 
+#ifndef _MIPS_ISA_MIPS2
   COMPARE(mul(a0, a1, a2),
           "70a62002       mul     a0, a1, a2");
   COMPARE(mul(t2, t3, t4),
           "716c5002       mul     t2, t3, t4");
   COMPARE(mul(v0, v1, s0),
           "70701002       mul     v0, v1, s0");
+#endif
 
   COMPARE(addiu(a0, a1, 0x0),
           "24a40000       addiu   a0, a1, 0");
