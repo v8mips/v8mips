@@ -467,8 +467,6 @@ void MarkCompactCollector::AbortCompaction() {
 
 
 void MarkCompactCollector::Prepare(GCTracer* tracer) {
-  FLAG_flush_code = false;
-
   was_marked_incrementally_ = heap()->incremental_marking()->IsMarking();
 
   // Disable collection of maps if incremental marking is enabled.
@@ -485,7 +483,6 @@ void MarkCompactCollector::Prepare(GCTracer* tracer) {
   state_ = PREPARE_GC;
 #endif
 
-  // TODO(1726) Revert this into an assertion when compaction is enabled.
   ASSERT(!FLAG_never_compact || !FLAG_always_compact);
 
   if (collect_maps_) CreateBackPointers();
@@ -1426,7 +1423,8 @@ class SharedFunctionInfoMarkingVisitor : public ObjectVisitor {
 void MarkCompactCollector::PrepareForCodeFlushing() {
   ASSERT(heap() == Isolate::Current()->heap());
 
-  if (!FLAG_flush_code) {
+  // TODO(1609) Currently incremental marker does not support code flushing.
+  if (!FLAG_flush_code || was_marked_incrementally_) {
     EnableCodeFlushing(false);
     return;
   }
@@ -1438,6 +1436,7 @@ void MarkCompactCollector::PrepareForCodeFlushing() {
     return;
   }
 #endif
+
   EnableCodeFlushing(true);
 
   // Ensure that empty descriptor array is marked. Method MarkDescriptorArray
@@ -2472,20 +2471,27 @@ class PointersUpdatingVisitor: public ObjectVisitor {
     rinfo->set_call_address(Code::cast(target)->instruction_start());
   }
 
+  static inline void UpdateSlot(Heap* heap, Object** slot) {
+    Object* obj = *slot;
+
+    if (!obj->IsHeapObject()) return;
+
+    HeapObject* heap_obj = HeapObject::cast(obj);
+
+    MapWord map_word = heap_obj->map_word();
+    if (map_word.IsForwardingAddress()) {
+      ASSERT(heap->InFromSpace(heap_obj) ||
+             MarkCompactCollector::IsOnEvacuationCandidate(heap_obj));
+      HeapObject* target = map_word.ToForwardingAddress();
+      *slot = target;
+      ASSERT(!heap->InFromSpace(target) &&
+             !MarkCompactCollector::IsOnEvacuationCandidate(target));
+    }
+  }
+
  private:
   inline void UpdatePointer(Object** p) {
-    if (!(*p)->IsHeapObject()) return;
-
-    HeapObject* obj = HeapObject::cast(*p);
-
-    MapWord map_word = obj->map_word();
-    if (map_word.IsForwardingAddress()) {
-      ASSERT(heap_->InFromSpace(obj) ||
-             MarkCompactCollector::IsOnEvacuationCandidate(obj));
-      *p = obj->map_word().ToForwardingAddress();
-      ASSERT(!heap_->InFromSpace(*p) &&
-             !MarkCompactCollector::IsOnEvacuationCandidate(*p));
-    }
+    UpdateSlot(heap_, p);
   }
 
   Heap* heap_;
@@ -2731,21 +2737,6 @@ class EvacuationWeakObjectRetainer : public WeakObjectRetainer {
 };
 
 
-static inline void UpdateSlot(SlotsBuffer::ObjectSlot* slot) {
-  Object* obj = slot->GetPointer();
-  if (!obj->IsHeapObject()) return;
-
-  HeapObject* heap_obj = HeapObject::cast(obj);
-
-  MapWord map_word = heap_obj->map_word();
-  if (map_word.IsForwardingAddress()) {
-    ASSERT(MarkCompactCollector::IsOnEvacuationCandidate(slot->GetPointer()));
-    slot->SetPointer(map_word.ToForwardingAddress());
-    ASSERT(!MarkCompactCollector::IsOnEvacuationCandidate(slot->GetPointer()));
-  }
-}
-
-
 static inline void UpdateSlot(ObjectVisitor* v,
                               SlotsBuffer::SlotType slot_type,
                               Address addr) {
@@ -2777,23 +2768,6 @@ static inline void UpdateSlot(ObjectVisitor* v,
     default:
       UNREACHABLE();
       break;
-  }
-}
-
-
-static inline void UpdateSlotsInRange(Object** start, Object** end) {
-  for (Object** slot = start;
-       slot < end;
-       slot++) {
-    Object* obj = *slot;
-    if (obj->IsHeapObject() &&
-        MarkCompactCollector::IsOnEvacuationCandidate(obj)) {
-      MapWord map_word = HeapObject::cast(obj)->map_word();
-      if (map_word.IsForwardingAddress()) {
-        *slot = map_word.ToForwardingAddress();
-        ASSERT(!MarkCompactCollector::IsOnEvacuationCandidate(*slot));
-      }
-    }
   }
 }
 
@@ -3161,52 +3135,6 @@ void MarkCompactCollector::EvacuateNewSpaceAndCandidates() {
   }
   evacuation_candidates_.Rewind(0);
   compacting_ = false;
-}
-
-
-INLINE(static uint32_t SweepFree(PagedSpace* space,
-                                 Page* p,
-                                 uint32_t free_start,
-                                 uint32_t region_end,
-                                 uint32_t* cells));
-
-
-static uint32_t SweepFree(PagedSpace* space,
-                          Page* p,
-                          uint32_t free_start,
-                          uint32_t region_end,
-                          uint32_t* cells) {
-  uint32_t free_cell_index = Bitmap::IndexToCell(free_start);
-  ASSERT(cells[free_cell_index] == 0);
-  while (free_cell_index < region_end && cells[free_cell_index] == 0) {
-    free_cell_index++;
-  }
-
-  if (free_cell_index >= region_end) {
-    return free_cell_index;
-  }
-
-  uint32_t free_end = Bitmap::CellToIndex(free_cell_index);
-  space->FreeOrUnmapPage(p,
-                         p->MarkbitIndexToAddress(free_start),
-                         (free_end - free_start) << kPointerSizeLog2);
-
-  return free_cell_index;
-}
-
-
-INLINE(static uint32_t NextCandidate(uint32_t cell_index,
-                                     uint32_t last_cell_index,
-                                     uint32_t* cells));
-
-
-static uint32_t NextCandidate(uint32_t cell_index,
-                              uint32_t last_cell_index,
-                              uint32_t* cells) {
-  do {
-    cell_index++;
-  } while (cell_index < last_cell_index && cells[cell_index] != 0);
-  return cell_index;
 }
 
 
@@ -3593,6 +3521,7 @@ void MarkCompactCollector::SweepSpace(PagedSpace* space,
   intptr_t freed_bytes = 0;
   intptr_t newspace_size = space->heap()->new_space()->Size();
   bool lazy_sweeping_active = false;
+  bool unused_page_present = false;
 
   while (it.has_next()) {
     Page* p = it.next();
@@ -3619,6 +3548,19 @@ void MarkCompactCollector::SweepSpace(PagedSpace* space,
       continue;
     }
 
+    // One unused page is kept, all further are released before sweeping them.
+    if (p->LiveBytes() == 0) {
+      if (unused_page_present) {
+        if (FLAG_gc_verbose) {
+          PrintF("Sweeping 0x%" V8PRIxPTR " released page.\n",
+                 reinterpret_cast<intptr_t>(p));
+        }
+        space->ReleasePage(p);
+        continue;
+      }
+      unused_page_present = true;
+    }
+
     if (FLAG_gc_verbose) {
       PrintF("Sweeping 0x%" V8PRIxPTR " with sweeper %d.\n",
              reinterpret_cast<intptr_t>(p),
@@ -3633,7 +3575,7 @@ void MarkCompactCollector::SweepSpace(PagedSpace* space,
       case LAZY_CONSERVATIVE: {
         freed_bytes += SweepConservatively(space, p);
         if (freed_bytes >= newspace_size && p != space->LastPage()) {
-          space->SetPagesToSweep(p->next_page(), space->LastPage());
+          space->SetPagesToSweep(p->next_page(), space->anchor());
           lazy_sweeping_active = true;
         }
         break;
@@ -3651,6 +3593,9 @@ void MarkCompactCollector::SweepSpace(PagedSpace* space,
       }
     }
   }
+
+  // Give pages that are queued to be freed back to the OS.
+  heap()->FreeQueuedChunks();
 }
 
 
@@ -3691,9 +3636,6 @@ void MarkCompactCollector::SweepSpaces() {
 }
 
 
-// TODO(1466) ReportDeleteIfNeeded is not called currently.
-// Our profiling tools do not expect intersections between
-// code objects. We should either reenable it or change our tools.
 void MarkCompactCollector::EnableCodeFlushing(bool enable) {
   if (enable) {
     if (code_flusher_ != NULL) return;
@@ -3706,6 +3648,9 @@ void MarkCompactCollector::EnableCodeFlushing(bool enable) {
 }
 
 
+// TODO(1466) ReportDeleteIfNeeded is not called currently.
+// Our profiling tools do not expect intersections between
+// code objects. We should either reenable it or change our tools.
 void MarkCompactCollector::ReportDeleteIfNeeded(HeapObject* obj,
                                                 Isolate* isolate) {
 #ifdef ENABLE_GDB_JIT_INTERFACE
@@ -3833,7 +3778,7 @@ void SlotsBuffer::UpdateSlots(Heap* heap) {
   for (int slot_idx = 0; slot_idx < idx_; ++slot_idx) {
     ObjectSlot slot = slots_[slot_idx];
     if (!IsTypedSlot(slot)) {
-      UpdateSlot(&slot);
+      PointersUpdatingVisitor::UpdateSlot(heap, slot);
     } else {
       ++slot_idx;
       ASSERT(slot_idx < idx_);
@@ -3853,7 +3798,7 @@ void SlotsBuffer::UpdateSlotsWithFilter(Heap* heap) {
     if (!IsTypedSlot(slot)) {
       if (!IsOnInvalidatedCodeObject(
           reinterpret_cast<Address>(slot.GetRaw()))) {
-        UpdateSlot(&slot);
+        PointersUpdatingVisitor::UpdateSlot(heap, slot);
       }
     } else {
       ++slot_idx;

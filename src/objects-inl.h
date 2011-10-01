@@ -1239,6 +1239,12 @@ void HeapObject::set_map(Map* value) {
 }
 
 
+// Unsafe accessor omitting write barrier.
+void HeapObject::set_map_unsafe(Map* value) {
+  set_map_word(MapWord::FromMap(value));
+}
+
+
 MapWord HeapObject::map_word() {
   return MapWord(reinterpret_cast<uintptr_t>(READ_FIELD(this, kMapOffset)));
 }
@@ -2986,6 +2992,21 @@ void Code::set_has_debug_break_slots(bool value) {
   ASSERT(kind() == FUNCTION);
   byte flags = READ_BYTE_FIELD(this, kFullCodeFlags);
   flags = FullCodeFlagsHasDebugBreakSlotsField::update(flags, value);
+  WRITE_BYTE_FIELD(this, kFullCodeFlags, flags);
+}
+
+
+bool Code::is_compiled_optimizable() {
+  ASSERT(kind() == FUNCTION);
+  byte flags = READ_BYTE_FIELD(this, kFullCodeFlags);
+  return FullCodeFlagsIsCompiledOptimizable::decode(flags);
+}
+
+
+void Code::set_compiled_optimizable(bool value) {
+  ASSERT(kind() == FUNCTION);
+  byte flags = READ_BYTE_FIELD(this, kFullCodeFlags);
+  flags = FullCodeFlagsIsCompiledOptimizable::update(flags, value);
   WRITE_BYTE_FIELD(this, kFullCodeFlags, flags);
 }
 
