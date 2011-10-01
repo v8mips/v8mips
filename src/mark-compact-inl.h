@@ -87,7 +87,13 @@ void MarkCompactCollector::RecordSlot(Object** anchor_slot,
   Page* object_page = Page::FromAddress(reinterpret_cast<Address>(object));
   if (object_page->IsEvacuationCandidate() &&
       !ShouldSkipEvacuationSlotRecording(anchor_slot)) {
-    SlotsBuffer::ObjectSlot oslot(slot, indirect);
+    // Only MIPS uses indirect pointers.
+#ifndef V8_TARGET_ARCH_MIPS
+    bool use_indirect = false;
+#else
+    bool use_indirect = indirect;
+#endif
+    SlotsBuffer::ObjectSlot oslot(slot, use_indirect);
     if (!SlotsBuffer::AddTo(&slots_buffer_allocator_,
                             object_page->slots_buffer_address(),
                             oslot,
