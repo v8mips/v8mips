@@ -3694,7 +3694,7 @@ void SlotsBuffer::ObjectSlot::SetPointer(Object* target) const {
 #endif
 
 
-bool SlotsBuffer::IsTypedSlot(ObjectSlot slot) {
+bool SlotsBuffer::IsTypedSlot(const ObjectSlot& slot) {
   return reinterpret_cast<uintptr_t>(slot.GetRaw()) < NUMBER_OF_SLOT_TYPES;
 }
 
@@ -3714,8 +3714,8 @@ bool SlotsBuffer::AddTo(SlotsBufferAllocator* allocator,
     *buffer_address = buffer;
   }
   ASSERT(buffer->HasSpaceForTypedSlot());
-  buffer->Add(ObjectSlot(reinterpret_cast<Object**>(type)));
-  buffer->Add(ObjectSlot(reinterpret_cast<Object**>(addr)));
+  buffer->Add(reinterpret_cast<Object**>(type));
+  buffer->Add(reinterpret_cast<Object**>(addr));
   return true;
 }
 
@@ -3767,7 +3767,7 @@ void MarkCompactCollector::RecordCodeEntrySlot(Address slot, Code* target) {
 
 
 static inline SlotsBuffer::SlotType DecodeSlotType(
-    SlotsBuffer::ObjectSlot slot) {
+    const SlotsBuffer::ObjectSlot& slot) {
   return static_cast<SlotsBuffer::SlotType>(
       reinterpret_cast<intptr_t>(slot.GetRaw()));
 }
@@ -3777,7 +3777,7 @@ void SlotsBuffer::UpdateSlots(Heap* heap) {
   PointersUpdatingVisitor v(heap);
 
   for (int slot_idx = 0; slot_idx < idx_; ++slot_idx) {
-    ObjectSlot slot = slots_[slot_idx];
+    const ObjectSlot& slot = slots_[slot_idx];
     if (!IsTypedSlot(slot)) {
       PointersUpdatingVisitor::UpdateSlot(heap, slot);
     } else {
@@ -3795,7 +3795,7 @@ void SlotsBuffer::UpdateSlotsWithFilter(Heap* heap) {
   PointersUpdatingVisitor v(heap);
 
   for (int slot_idx = 0; slot_idx < idx_; ++slot_idx) {
-    ObjectSlot slot = slots_[slot_idx];
+    const ObjectSlot& slot = slots_[slot_idx];
     if (!IsTypedSlot(slot)) {
       if (!IsOnInvalidatedCodeObject(
           reinterpret_cast<Address>(slot.GetRaw()))) {

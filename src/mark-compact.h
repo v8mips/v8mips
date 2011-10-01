@@ -347,7 +347,7 @@ class SlotsBuffer {
   ~SlotsBuffer() {
   }
 
-  void Add(ObjectSlot slot) {
+  void Add(const ObjectSlot& slot) {
     ASSERT(0 <= idx_ && idx_ < kNumberOfElements);
     slots_[idx_++] = slot;
   }
@@ -405,7 +405,7 @@ class SlotsBuffer {
 
   static bool AddTo(SlotsBufferAllocator* allocator,
                     SlotsBuffer** buffer_address,
-                    ObjectSlot slot,
+                    const ObjectSlot& slot,
                     AdditionMode mode) {
     SlotsBuffer* buffer = *buffer_address;
     if (buffer == NULL || buffer->IsFull()) {
@@ -420,7 +420,7 @@ class SlotsBuffer {
     return true;
   }
 
-  static bool IsTypedSlot(ObjectSlot slot);
+  static bool IsTypedSlot(const ObjectSlot& slot);
 
   static bool AddTo(SlotsBufferAllocator* allocator,
                     SlotsBuffer** buffer_address,
