@@ -2471,8 +2471,9 @@ class PointersUpdatingVisitor: public ObjectVisitor {
     rinfo->set_call_address(Code::cast(target)->instruction_start());
   }
 
-  static inline void UpdateSlot(Heap* heap, Object** slot) {
-    Object* obj = *slot;
+  static inline void UpdateSlot(Heap* heap,
+                                const SlotsBuffer::ObjectSlot& slot) {
+    Object* obj = slot.GetPointer();
 
     if (!obj->IsHeapObject()) return;
 
@@ -2483,7 +2484,7 @@ class PointersUpdatingVisitor: public ObjectVisitor {
       ASSERT(heap->InFromSpace(heap_obj) ||
              MarkCompactCollector::IsOnEvacuationCandidate(heap_obj));
       HeapObject* target = map_word.ToForwardingAddress();
-      *slot = target;
+      slot.SetPointer(target);
       ASSERT(!heap->InFromSpace(target) &&
              !MarkCompactCollector::IsOnEvacuationCandidate(target));
     }
@@ -3680,7 +3681,7 @@ Object* SlotsBuffer::ObjectSlot::GetPointer() const {
   }
 }
 
-void SlotsBuffer::ObjectSlot::SetPointer(Object* target) {
+void SlotsBuffer::ObjectSlot::SetPointer(Object* target) const {
   ASSERT(IsValid());
   if (indirect_) {
     Address addr = reinterpret_cast<Address>(ptr_);

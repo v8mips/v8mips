@@ -313,7 +313,7 @@ class SlotsBuffer {
 
 #ifdef V8_TARGET_ARCH_MIPS
     inline Object* GetPointer() const;
-    inline void SetPointer(Object* target);
+    inline void SetPointer(Object* target) const;
 #else
     inline Object* GetPointer() const {
       ASSERT(IsValid());
@@ -321,7 +321,7 @@ class SlotsBuffer {
       return *ptr_;
     }
 
-    inline void SetPointer(Object* target) {
+    inline void SetPointer(Object* target) const {
       ASSERT(IsValid());
       ASSERT(!indirect_);
       *ptr_ = target;
