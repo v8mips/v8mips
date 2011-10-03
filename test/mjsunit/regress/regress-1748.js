@@ -25,41 +25,11 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#ifndef V8_ISOLATE_INL_H_
-#define V8_ISOLATE_INL_H_
+// Test that /^/ only matches at beginning of string.
+// Bug in x64 caused it to match when executing the RegExp on a part
+// of a string that starts at a multiplum of 256.
 
-#include "isolate.h"
-
-#include "debug.h"
-
-namespace v8 {
-namespace internal {
-
-
-SaveContext::SaveContext(Isolate* isolate) : prev_(isolate->save_context()) {
-  if (isolate->context() != NULL) {
-    context_ = Handle<Context>(isolate->context());
-#if __GNUC_VERSION__ >= 40100 && __GNUC_VERSION__ < 40300
-    dummy_ = Handle<Context>(isolate->context());
-#endif
-  }
-  isolate->set_save_context(this);
-
-  // If there is no JS frame under the current C frame, use the value 0.
-  JavaScriptFrameIterator it(isolate);
-  js_sp_ = it.done() ? 0 : it.frame()->sp();
-}
-
-
-bool Isolate::DebuggerHasBreakPoints() {
-#ifdef ENABLE_DEBUGGER_SUPPORT
-  return debug()->has_break_points();
-#else
-  return false;
-#endif
-}
-
-
-} }  // namespace v8::internal
-
-#endif  // V8_ISOLATE_INL_H_
+var str = Array(10000).join("X");
+str.replace(/^|X/g, function(m, i, s) {
+  if (i > 0) assertEquals("X", m, "at position 0x" + i.toString(16));
+});
