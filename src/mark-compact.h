@@ -31,6 +31,11 @@
 #include "compiler-intrinsics.h"
 #include "spaces.h"
 
+// See SlotsBuffer::ObjectSlot for some explanation.
+#ifdef V8_TARGET_ARCH_MIPS
+#define V8_ENABLE_GC_INDIRECT_POINTERS 1
+#endif
+
 namespace v8 {
 namespace internal {
 
@@ -311,7 +316,7 @@ class SlotsBuffer {
       return ptr_;
     }
 
-#ifdef V8_TARGET_ARCH_MIPS
+#ifdef V8_ENABLE_GC_INDIRECT_POINTERS
     inline Object* GetPointer() const;
     inline void SetPointer(Object* target) const;
 #else
@@ -326,7 +331,7 @@ class SlotsBuffer {
       ASSERT(!indirect_);
       *ptr_ = target;
     }
-#endif  // V8_TARGET_ARCH_MIPS
+#endif
 
     inline bool IsValid() const {
       return ptr_ != NULL;

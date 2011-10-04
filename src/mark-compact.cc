@@ -3673,7 +3673,7 @@ void MarkCompactCollector::Initialize() {
 }
 
 
-#ifdef V8_TARGET_ARCH_MIPS
+#ifdef V8_ENABLE_GC_INDIRECT_POINTERS
 Object* SlotsBuffer::ObjectSlot::GetPointer() const {
   ASSERT(IsValid());
   if (indirect_) {
