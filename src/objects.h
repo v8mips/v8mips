@@ -7504,7 +7504,9 @@ class ObjectVisitor BASE_EMBEDDED {
   virtual void VisitPointer(Object** p) { VisitPointers(p, p + 1); }
 
   // Visit pointer embedded into a code object.
-  virtual void VisitEmbeddedPointer(Code* host, Object** p) {
+  virtual void VisitEmbeddedPointer(Code* host,
+                                    Object** p,
+                                    bool store_indirect = false) {
     // Default implementation for the convenience of users that do
     // not care about the host object.
     VisitPointer(p);
