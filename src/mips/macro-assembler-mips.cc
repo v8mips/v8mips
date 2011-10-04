@@ -4616,23 +4616,15 @@ void MacroAssembler::PrepareCallCFunction(int num_reg_arguments,
 void MacroAssembler::CallCFunction(ExternalReference function,
                                    int num_reg_arguments,
                                    int num_double_arguments) {
-  CallCFunctionHelper(no_reg,
-                      function,
-                      t8,
-                      num_reg_arguments,
-                      num_double_arguments);
+  li(t8, Operand(function));
+  CallCFunctionHelper(t8, num_reg_arguments, num_double_arguments);
 }
 
 
 void MacroAssembler::CallCFunction(Register function,
-                                   Register scratch,
                                    int num_reg_arguments,
                                    int num_double_arguments) {
-  CallCFunctionHelper(function,
-                      ExternalReference::the_hole_value_location(isolate()),
-                      scratch,
-                      num_reg_arguments,
-                      num_double_arguments);
+  CallCFunctionHelper(function, num_reg_arguments, num_double_arguments);
 }
 
 
@@ -4643,15 +4635,12 @@ void MacroAssembler::CallCFunction(ExternalReference function,
 
 
 void MacroAssembler::CallCFunction(Register function,
-                                   Register scratch,
                                    int num_arguments) {
-  CallCFunction(function, scratch, num_arguments, 0);
+  CallCFunction(function, num_arguments, 0);
 }
 
 
 void MacroAssembler::CallCFunctionHelper(Register function,
-                                         ExternalReference function_reference,
-                                         Register scratch,
                                          int num_reg_arguments,
                                          int num_double_arguments) {
   ASSERT(has_frame());
@@ -4682,10 +4671,7 @@ void MacroAssembler::CallCFunctionHelper(Register function,
   // allow preemption, so the return address in the link register
   // stays correct.
 
-  if (function.is(no_reg)) {
-    function = t9;
-    li(function, Operand(function_reference));
-  } else if (!function.is(t9)) {
+  if (!function.is(t9)) {
     mov(t9, function);
     function = t9;
   }

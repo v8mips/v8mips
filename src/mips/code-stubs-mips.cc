@@ -3593,17 +3593,17 @@ void CEntryStub::GenerateCore(MacroAssembler* masm,
   // s1: pointer to the first argument          (C callee-saved)
   // s2: pointer to builtin function            (C callee-saved)
 
+  Isolate* isolate = masm->isolate();
+
   if (do_gc) {
     // Move result passed in v0 into a0 to call PerformGC.
     __ mov(a0, v0);
     __ PrepareCallCFunction(1, 0, a1);
-    __ CallCFunction(
-        ExternalReference::perform_gc_function(masm->isolate()),
-        1, 0);
+    __ CallCFunction(ExternalReference::perform_gc_function(isolate), 1, 0);
   }
 
   ExternalReference scope_depth =
-      ExternalReference::heap_always_allocate_scope_depth(masm->isolate());
+      ExternalReference::heap_always_allocate_scope_depth(isolate);
   if (always_allocate) {
     __ li(a0, Operand(scope_depth));
     __ lw(a1, MemOperand(a0));
@@ -3692,18 +3692,16 @@ void CEntryStub::GenerateCore(MacroAssembler* masm,
             v0, Operand(reinterpret_cast<int32_t>(out_of_memory)));
 
   // Retrieve the pending exception and clear the variable.
-  __ li(t0,
-        Operand(ExternalReference::the_hole_value_location(masm->isolate())));
-  __ lw(a3, MemOperand(t0));
+  __ li(a3, Operand(isolate->factory()->the_hole_value()));
   __ li(t0, Operand(ExternalReference(Isolate::kPendingExceptionAddress,
-                                      masm->isolate())));
+                                      isolate)));
   __ lw(v0, MemOperand(t0));
   __ sw(a3, MemOperand(t0));
 
   // Special handling of termination exceptions which are uncatchable
   // by javascript code.
   __ Branch(throw_termination_exception, eq,
-            v0, Operand(masm->isolate()->factory()->termination_exception()));
+            v0, Operand(isolate->factory()->termination_exception()));
 
   // Handle normal exception.
   __ jmp(throw_normal_exception);
@@ -3786,6 +3784,7 @@ void CEntryStub::Generate(MacroAssembler* masm) {
 
 void JSEntryStub::GenerateBody(MacroAssembler* masm, bool is_construct) {
   Label invoke, exit;
+  Isolate* isolate = masm->isolate();
 
   // Registers:
   // a0: entry address
@@ -3823,7 +3822,7 @@ void JSEntryStub::GenerateBody(MacroAssembler* masm, bool is_construct) {
   __ li(t2, Operand(Smi::FromInt(marker)));
   __ li(t1, Operand(Smi::FromInt(marker)));
   __ li(t0, Operand(ExternalReference(Isolate::kCEntryFPAddress,
-                                      masm->isolate())));
+                                      isolate)));
   __ lw(t0, MemOperand(t0));
   __ Push(t3, t2, t1, t0);
   // Setup frame pointer for the frame to be pushed.
@@ -3847,8 +3846,7 @@ void JSEntryStub::GenerateBody(MacroAssembler* masm, bool is_construct) {
 
   // If this is the outermost JS call, set js_entry_sp value.
   Label non_outermost_js;
-  ExternalReference js_entry_sp(Isolate::kJSEntrySPAddress,
-                                masm->isolate());
+  ExternalReference js_entry_sp(Isolate::kJSEntrySPAddress, isolate);
   __ li(t1, Operand(ExternalReference(js_entry_sp)));
   __ lw(t2, MemOperand(t1));
   __ Branch(&non_outermost_js, ne, t2, Operand(zero_reg));
@@ -3871,7 +3869,7 @@ void JSEntryStub::GenerateBody(MacroAssembler* masm, bool is_construct) {
   // Coming in here the fp will be invalid because the PushTryHandler below
   // sets it to 0 to signal the existence of the JSEntry frame.
   __ li(t0, Operand(ExternalReference(Isolate::kPendingExceptionAddress,
-                                      masm->isolate())));
+                                      isolate)));
   __ sw(v0, MemOperand(t0));  // We come back from 'invoke'. result is in v0.
   __ li(v0, Operand(reinterpret_cast<int32_t>(Failure::Exception())));
   __ b(&exit);  // b exposes branch delay slot.
@@ -3886,11 +3884,9 @@ void JSEntryStub::GenerateBody(MacroAssembler* masm, bool is_construct) {
   // saved values before returning a failure to C.
 
   // Clear any pending exceptions.
-  __ li(t0,
-        Operand(ExternalReference::the_hole_value_location(masm->isolate())));
-  __ lw(t1, MemOperand(t0));
+  __ li(t1, Operand(isolate->factory()->the_hole_value()));
   __ li(t0, Operand(ExternalReference(Isolate::kPendingExceptionAddress,
-                                      masm->isolate())));
+                                      isolate)));
   __ sw(t1, MemOperand(t0));
 
   // Invoke the function by calling through JS entry trampoline builtin.
@@ -3913,7 +3909,7 @@ void JSEntryStub::GenerateBody(MacroAssembler* masm, bool is_construct) {
 
   if (is_construct) {
     ExternalReference construct_entry(Builtins::kJSConstructEntryTrampoline,
-                                      masm->isolate());
+                                      isolate);
     __ li(t0, Operand(construct_entry));
   } else {
     ExternalReference entry(Builtins::kJSEntryTrampoline, masm->isolate());
@@ -3941,7 +3937,7 @@ void JSEntryStub::GenerateBody(MacroAssembler* masm, bool is_construct) {
   // Restore the top frame descriptors from the stack.
   __ pop(t1);
   __ li(t0, Operand(ExternalReference(Isolate::kCEntryFPAddress,
-                                      masm->isolate())));
+                                      isolate)));
   __ sw(t1, MemOperand(t0));
 
   // Reset the stack to the callee saved registers.
@@ -4563,6 +4559,8 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
   static const int kSubjectOffset = 2 * kPointerSize;
   static const int kJSRegExpOffset = 3 * kPointerSize;
 
+  Isolate* isolate = masm->isolate();
+
   Label runtime, invoke_regexp;
 
   // Allocation of registers for this function. These are in callee save
@@ -4578,9 +4576,9 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
   // Ensure that a RegExp stack is allocated.
   ExternalReference address_of_regexp_stack_memory_address =
       ExternalReference::address_of_regexp_stack_memory_address(
-          masm->isolate());
+          isolate);
   ExternalReference address_of_regexp_stack_memory_size =
-      ExternalReference::address_of_regexp_stack_memory_size(masm->isolate());
+      ExternalReference::address_of_regexp_stack_memory_size(isolate);
   __ li(a0, Operand(address_of_regexp_stack_memory_size));
   __ lw(a0, MemOperand(a0, 0));
   __ Branch(&runtime, eq, a0, Operand(zero_reg));
@@ -4661,7 +4659,7 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
          FieldMemOperand(a0, JSArray::kElementsOffset));
   __ lw(a0, FieldMemOperand(last_match_info_elements, HeapObject::kMapOffset));
   __ Branch(&runtime, ne, a0, Operand(
-      masm->isolate()->factory()->fixed_array_map()));
+      isolate->factory()->fixed_array_map()));
   // Check that the last match info has space for the capture registers and the
   // additional information.
   __ lw(a0,
@@ -4752,7 +4750,7 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
   // subject: Subject string
   // regexp_data: RegExp data (FixedArray)
   // All checks done. Now push arguments for native regexp code.
-  __ IncrementCounter(masm->isolate()->counters()->regexp_entry_native(),
+  __ IncrementCounter(isolate->counters()->regexp_entry_native(),
                       1, a0, a2);
 
   // Isolates: note we add an additional parameter here (isolate pointer).
@@ -4792,7 +4790,7 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
 
   // Argument 5: static offsets vector buffer.
   __ li(a0, Operand(
-        ExternalReference::address_of_static_offsets_vector(masm->isolate())));
+        ExternalReference::address_of_static_offsets_vector(isolate)));
   __ sw(a0, MemOperand(sp, 1 * kPointerSize));
 
   // For arguments 4 and 3 get string length, calculate start of string data
@@ -4850,11 +4848,9 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
   // stack overflow (on the backtrack stack) was detected in RegExp code but
   // haven't created the exception yet. Handle that in the runtime system.
   // TODO(592): Rerunning the RegExp to get the stack overflow exception.
-  __ li(a1, Operand(
-      ExternalReference::the_hole_value_location(masm->isolate())));
-  __ lw(a1, MemOperand(a1, 0));
+  __ li(a1, Operand(isolate->factory()->the_hole_value()));
   __ li(a2, Operand(ExternalReference(Isolate::kPendingExceptionAddress,
-                                      masm->isolate())));
+                                      isolate)));
   __ lw(v0, MemOperand(a2, 0));
   __ Branch(&runtime, eq, v0, Operand(a1));
 
@@ -4872,7 +4868,7 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
 
   __ bind(&failure);
   // For failure and exception return null.
-  __ li(v0, Operand(masm->isolate()->factory()->null_value()));
+  __ li(v0, Operand(isolate->factory()->null_value()));
   __ Addu(sp, sp, Operand(4 * kPointerSize));
   __ Ret();
 
@@ -4914,7 +4910,7 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
 
   // Get the static offsets vector filled by the native regexp code.
   ExternalReference address_of_static_offsets_vector =
-      ExternalReference::address_of_static_offsets_vector(masm->isolate());
+      ExternalReference::address_of_static_offsets_vector(isolate);
   __ li(a2, Operand(address_of_static_offsets_vector));
 
   // a1: number of capture registers
