@@ -4469,15 +4469,15 @@ void KeyedStoreStubCompiler::GenerateStoreFastDoubleElement(
   //  -- t2    : scratch (exponent_reg)
   //  -- t3    : scratch4
   // -----------------------------------
-  Label miss_force_generic, smi_value, is_nan, maybe_nan, have_double_value;
+  Label miss_force_generic;
 
   Register value_reg = a0;
   Register key_reg = a1;
   Register receiver_reg = a2;
-  Register scratch = a3;
-  Register elements_reg = t0;
-  Register mantissa_reg = t1;
-  Register exponent_reg = t2;
+  Register elements_reg = a3;
+  Register scratch1 = t0;
+  Register scratch2 = t1;
+  Register scratch3 = t2;
   Register scratch4 = t3;
 
   // This stub is meant to be tail-jumped to, the receiver must already
@@ -4489,90 +4489,25 @@ void KeyedStoreStubCompiler::GenerateStoreFastDoubleElement(
 
   // Check that the key is within bounds.
   if (is_js_array) {
-    __ lw(scratch, FieldMemOperand(receiver_reg, JSArray::kLengthOffset));
+    __ lw(scratch1, FieldMemOperand(receiver_reg, JSArray::kLengthOffset));
   } else {
-    __ lw(scratch,
+    __ lw(scratch1,
           FieldMemOperand(elements_reg, FixedArray::kLengthOffset));
   }
   // Compare smis, unsigned compare catches both negative and out-of-bound
   // indexes.
-  __ Branch(&miss_force_generic, hs, key_reg, Operand(scratch));
+  __ Branch(&miss_force_generic, hs, key_reg, Operand(scratch1));
 
-  // Handle smi values specially.
-  __ JumpIfSmi(value_reg, &smi_value);
+  __ StoreNumberToDoubleElements(value_reg,
+                                 key_reg,
+                                 receiver_reg,
+                                 elements_reg,
+                                 scratch1,
+                                 scratch2,
+                                 scratch3,
+                                 scratch4,
+                                 &miss_force_generic);
 
-  // Ensure that the object is a heap number
-  __ CheckMap(value_reg,
-              scratch,
-              masm->isolate()->factory()->heap_number_map(),
-              &miss_force_generic,
-              DONT_DO_SMI_CHECK);
-
-  // Check for nan: all NaN values have a value greater (signed) than 0x7ff00000
-  // in the exponent.
-  __ li(scratch, Operand(kNaNOrInfinityLowerBoundUpper32));
-  __ lw(exponent_reg, FieldMemOperand(value_reg, HeapNumber::kExponentOffset));
-  __ Branch(&maybe_nan, ge, exponent_reg, Operand(scratch));
-
-  __ lw(mantissa_reg, FieldMemOperand(value_reg, HeapNumber::kMantissaOffset));
-
-  __ bind(&have_double_value);
-  __ sll(scratch4, key_reg, kDoubleSizeLog2 - kSmiTagSize);
-  __ Addu(scratch, elements_reg, Operand(scratch4));
-  __ sw(mantissa_reg, FieldMemOperand(scratch, FixedDoubleArray::kHeaderSize));
-  uint32_t offset = FixedDoubleArray::kHeaderSize + sizeof(kHoleNanLower32);
-  __ sw(exponent_reg, FieldMemOperand(scratch, offset));
-  __ Ret(USE_DELAY_SLOT);
-  __ mov(v0, value_reg);  // In delay slot.
-
-  __ bind(&maybe_nan);
-  // Could be NaN or Infinity. If fraction is not zero, it's NaN, otherwise
-  // it's an Infinity, and the non-NaN code path applies.
-  __ li(scratch, Operand(kNaNOrInfinityLowerBoundUpper32));
-  __ Branch(&is_nan, gt, exponent_reg, Operand(scratch));
-  __ lw(mantissa_reg, FieldMemOperand(value_reg, HeapNumber::kMantissaOffset));
-  __ Branch(&have_double_value, eq, mantissa_reg, Operand(zero_reg));
-
-  __ bind(&is_nan);
-  // Load canonical NaN for storing into the double array.
-  uint64_t nan_int64 = BitCast<uint64_t>(
-      FixedDoubleArray::canonical_not_the_hole_nan_as_double());
-  __ li(mantissa_reg, Operand(static_cast<uint32_t>(nan_int64)));
-  __ li(exponent_reg, Operand(static_cast<uint32_t>(nan_int64 >> 32)));
-  __ jmp(&have_double_value);
-
-  __ bind(&smi_value);
-  __ Addu(scratch, elements_reg,
-          Operand(FixedDoubleArray::kHeaderSize - kHeapObjectTag));
-  __ sll(scratch4, key_reg, kDoubleSizeLog2 - kSmiTagSize);
-  __ Addu(scratch, scratch, scratch4);
-  // scratch is now effective address of the double element
-
-  FloatingPointHelper::Destination destination;
-  if (CpuFeatures::IsSupported(FPU)) {
-    destination = FloatingPointHelper::kFPURegisters;
-  } else {
-    destination = FloatingPointHelper::kCoreRegisters;
-  }
-
-  Register untagged_value = receiver_reg;
-  __ SmiUntag(untagged_value, value_reg);
-  FloatingPointHelper::ConvertIntToDouble(
-      masm,
-      untagged_value,
-      destination,
-      f0,
-      mantissa_reg,
-      exponent_reg,
-      scratch4,
-      f2);
-  if (destination == FloatingPointHelper::kFPURegisters) {
-    CpuFeatures::Scope scope(FPU);
-    __ sdc1(f0, MemOperand(scratch, 0));
-  } else {
-    __ sw(mantissa_reg, MemOperand(scratch, 0));
-    __ sw(exponent_reg, MemOperand(scratch, Register::kSizeInBytes));
-  }
   __ Ret(USE_DELAY_SLOT);
   __ mov(v0, value_reg);  // In delay slot.
 
