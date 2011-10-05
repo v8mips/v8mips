@@ -1233,9 +1233,7 @@ void KeyedStoreIC::GenerateGeneric(MacroAssembler* masm,
 
   __ Branch(&array, eq, t3, Operand(JS_ARRAY_TYPE));
   // Check that the object is some kind of JSObject.
-  __ Branch(&slow, lt, t3, Operand(FIRST_JS_RECEIVER_TYPE));
-  __ Branch(&slow, eq, t3, Operand(JS_PROXY_TYPE));
-  __ Branch(&slow, eq, t3, Operand(JS_FUNCTION_PROXY_TYPE));
+  __ Branch(&slow, lt, t3, Operand(FIRST_JS_OBJECT_TYPE));
 
   // Object case: Check key against length in the elements array.
   __ lw(elements, FieldMemOperand(receiver, JSObject::kElementsOffset));
