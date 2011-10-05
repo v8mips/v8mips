@@ -1,4 +1,4 @@
-// Copyright 2008 the V8 project authors. All rights reserved.
+// Copyright 2011 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -25,13 +25,15 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-Number.prototype.toLocaleString = function() { return 'invalid'; };
-assertEquals('invalid', [1].toLocaleString());  // invalid
+// Calling Array.sort on an external array is not supposed to crash.
 
-Number.prototype.toLocaleString = 'invalid';
-assertThrows(function() { [1].toLocaleString(); });  // Not callable.
+var array = new Int16Array(23);
+array[7] = 7; array[9] = 9;
+assertEquals(23, array.length);
+assertEquals(7, array[7]);
+assertEquals(9, array[9]);
 
-delete Number.prototype.toLocaleString;
-Number.prototype.toString = function() { return 'invalid' };
-assertEquals([1].toLocaleString(), 'invalid');  // Uses ToObject on elements.
-assertEquals([1].toString(), '1');        // Uses ToString directly on elements.
+Array.prototype.sort.call(array);
+assertEquals(23, array.length);
+assertEquals(7, array[21]);
+assertEquals(9, array[22]);
