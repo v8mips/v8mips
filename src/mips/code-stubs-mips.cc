@@ -190,6 +190,71 @@ void FastNewContextStub::Generate(MacroAssembler* masm) {
 }
 
 
+void FastNewBlockContextStub::Generate(MacroAssembler* masm) {
+  // Stack layout on entry:
+  //
+  // [sp]: function.
+  // [sp + kPointerSize]: serialized scope info
+
+  // Try to allocate the context in new space.
+  Label gc;
+  int length = slots_ + Context::MIN_CONTEXT_SLOTS;
+  __ AllocateInNewSpace(FixedArray::SizeFor(length),
+                        v0, a1, a2, &gc, TAG_OBJECT);
+
+  // Load the function from the stack.
+  __ lw(a3, MemOperand(sp, 0));
+
+  // Load the serialized scope info from the stack.
+  __ lw(a1, MemOperand(sp, 1 * kPointerSize));
+
+  // Setup the object header.
+  __ LoadRoot(a2, Heap::kBlockContextMapRootIndex);
+  __ sw(a2, FieldMemOperand(v0, HeapObject::kMapOffset));
+  __ li(a2, Operand(Smi::FromInt(length)));
+  __ sw(a2, FieldMemOperand(v0, FixedArray::kLengthOffset));
+
+  // If this block context is nested in the global context we get a smi
+  // sentinel instead of a function. The block context should get the
+  // canonical empty function of the global context as its closure which
+  // we still have to look up.
+  Label after_sentinel;
+  __ JumpIfNotSmi(a3, &after_sentinel);
+  if (FLAG_debug_code) {
+    const char* message = "Expected 0 as a Smi sentinel";
+    __ Assert(eq, message, a3, Operand(zero_reg));
+  }
+  __ lw(a3, GlobalObjectOperand());
+  __ lw(a3, FieldMemOperand(a3, GlobalObject::kGlobalContextOffset));
+  __ lw(a3, ContextOperand(a3, Context::CLOSURE_INDEX));
+  __ bind(&after_sentinel);
+
+  // Setup the fixed slots.
+  __ sw(a3, ContextOperand(v0, Context::CLOSURE_INDEX));
+  __ sw(cp, ContextOperand(v0, Context::PREVIOUS_INDEX));
+  __ sw(a1, ContextOperand(v0, Context::EXTENSION_INDEX));
+
+  // Copy the global object from the previous context.
+  __ lw(a1, ContextOperand(cp, Context::GLOBAL_INDEX));
+  __ sw(a1, ContextOperand(v0, Context::GLOBAL_INDEX));
+
+  // Initialize the rest of the slots to the hole value.
+  __ LoadRoot(a1, Heap::kTheHoleValueRootIndex);
+  for (int i = 0; i < slots_; i++) {
+    __ sw(a1, ContextOperand(v0, i + Context::MIN_CONTEXT_SLOTS));
+  }
+
+  // Remove the on-stack argument and return.
+  __ mov(cp, v0);
+  __ Addu(sp, sp, Operand(2 * kPointerSize));
+  __ Ret();
+
+  // Need to collect. Call into runtime system.
+  __ bind(&gc);
+  __ TailCallRuntime(Runtime::kPushBlockContext, 2, 1);
+}
+
+
 void FastCloneShallowArrayStub::Generate(MacroAssembler* masm) {
   // Stack layout on entry:
   // [sp]: constant elements.
