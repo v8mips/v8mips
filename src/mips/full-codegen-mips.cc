@@ -1229,11 +1229,19 @@ void FullCodeGenerator::EmitDynamicLookupFastCase(Variable* var,
   } else if (var->mode() == Variable::DYNAMIC_LOCAL) {
     Variable* local = var->local_if_not_shadowed();
     __ lw(v0, ContextSlotOperandCheckExtensions(local, slow));
-    if (local->mode() == Variable::CONST) {
+    if (local->mode() == Variable::CONST ||
+        local->mode() == Variable::LET) {
       __ LoadRoot(at, Heap::kTheHoleValueRootIndex);
       __ subu(at, v0, at);  // Sub as compare: at == 0 on eq.
-      __ LoadRoot(a0, Heap::kUndefinedValueRootIndex);
-      __ movz(v0, a0, at);  // Conditional move: return Undefined if TheHole.
+      if (local->mode() == Variable::CONST) {
+        __ LoadRoot(a0, Heap::kUndefinedValueRootIndex);
+        __ movz(v0, a0, at);  // Conditional move: return Undefined if TheHole.
+      } else {  // Variable::LET
+        __ Branch(done, ne, at, Operand(zero_reg));
+        __ li(a0, Operand(var->name()));
+        __ push(a0);
+        __ CallRuntime(Runtime::kThrowReferenceError, 1);
+      }
     }
     __ Branch(done);
   }
