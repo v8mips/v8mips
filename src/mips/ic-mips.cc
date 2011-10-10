@@ -1308,10 +1308,8 @@ void KeyedStoreIC::GenerateGeneric(MacroAssembler* masm,
   __ mov(v0, value);
 
   __ bind(&non_smi_value);
-  if (FLAG_smi_only_arrays) {
-    // Escape to slow case when writing non-smi into smi-only array.
-    __ CheckFastObjectElements(receiver_map, scratch_value, &slow);
-  }
+  // Escape to slow case when writing non-smi into smi-only array.
+  __ CheckFastObjectElements(receiver_map, scratch_value, &slow);
   // Fast elements array, store the value to the elements backing store.
   __ Addu(address, elements, Operand(FixedArray::kHeaderSize - kHeapObjectTag));
   __ sll(scratch_value, key, kPointerSizeLog2 - kSmiTagSize);

@@ -1639,10 +1639,8 @@ MaybeObject* CallStubCompiler::CompileArrayPushCall(Object* object,
 
       __ bind(&with_write_barrier);
 
-      if (FLAG_smi_only_arrays) {
-        __ lw(t2, FieldMemOperand(receiver, HeapObject::kMapOffset));
-        __ CheckFastSmiOnlyElements(t2, t2, &call_builtin);
-      }
+      __ lw(t2, FieldMemOperand(receiver, HeapObject::kMapOffset));
+      __ CheckFastSmiOnlyElements(t2, t2, &call_builtin);
 
       // Save new length.
       __ sw(v0, FieldMemOperand(receiver, JSArray::kLengthOffset));
@@ -1674,15 +1672,13 @@ MaybeObject* CallStubCompiler::CompileArrayPushCall(Object* object,
       }
 
       __ lw(a2, MemOperand(sp, (argc - 1) * kPointerSize));
-      if (FLAG_smi_only_arrays) {
-        // Growing elements that are SMI-only requires special handling in case
-        // the new element is non-Smi. For now, delegate to the builtin.
-        Label no_fast_elements_check;
-        __ JumpIfSmi(a2, &no_fast_elements_check);
-        __ lw(t3, FieldMemOperand(receiver, HeapObject::kMapOffset));
-        __ CheckFastObjectElements(t3, t3, &call_builtin);
-        __ bind(&no_fast_elements_check);
-      }
+      // Growing elements that are SMI-only requires special handling in case
+      // the new element is non-Smi. For now, delegate to the builtin.
+      Label no_fast_elements_check;
+      __ JumpIfSmi(a2, &no_fast_elements_check);
+      __ lw(t3, FieldMemOperand(receiver, HeapObject::kMapOffset));
+      __ CheckFastObjectElements(t3, t3, &call_builtin);
+      __ bind(&no_fast_elements_check);
 
       ExternalReference new_space_allocation_top =
           ExternalReference::new_space_allocation_top_address(

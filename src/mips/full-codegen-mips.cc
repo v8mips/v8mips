@@ -1533,12 +1533,10 @@ void FullCodeGenerator::VisitArrayLiteral(ArrayLiteral* expr) {
     __ RecordWriteField(
         a1, offset, result_register(), a2, kRAHasBeenSaved, kDontSaveFPRegs,
         EMIT_REMEMBERED_SET, OMIT_SMI_CHECK);
-    if (FLAG_smi_only_arrays) {
-      __ lw(a3, FieldMemOperand(a1, HeapObject::kMapOffset));
-      __ CheckFastSmiOnlyElements(a3, a2, &no_map_change);
-      __ push(t6);  // Copy of array literal.
-      __ CallRuntime(Runtime::kNonSmiElementStored, 1);
-    }
+    __ lw(a3, FieldMemOperand(a1, HeapObject::kMapOffset));
+    __ CheckFastSmiOnlyElements(a3, a2, &no_map_change);
+    __ push(t6);  // Copy of array literal.
+    __ CallRuntime(Runtime::kNonSmiElementStored, 1);
     __ bind(&no_map_change);
 
     PrepareForBailoutForId(expr->GetIdForElement(i), NO_REGISTERS);
