@@ -347,6 +347,7 @@ bool IncrementalMarking::WorthActivating() {
 #endif
 
   return FLAG_incremental_marking &&
+      !Serializer::enabled() &&
       heap_->PromotedSpaceSize() > kActivationThreshold;
 }
 
@@ -518,7 +519,11 @@ void IncrementalMarking::UpdateMarkingDequeAfterScavenge() {
         array[new_top] = dest;
         new_top = ((new_top + 1) & mask);
         ASSERT(new_top != marking_deque_.bottom());
-        ASSERT(Marking::IsGrey(Marking::MarkBitFrom(obj)));
+#ifdef DEBUG
+        MarkBit mark_bit = Marking::MarkBitFrom(obj);
+        ASSERT(Marking::IsGrey(mark_bit) ||
+               (obj->IsFiller() && Marking::IsWhite(mark_bit)));
+#endif
       }
     } else if (obj->map() != filler_map) {
       // Skip one word filler objects that appear on the
@@ -526,7 +531,11 @@ void IncrementalMarking::UpdateMarkingDequeAfterScavenge() {
       array[new_top] = obj;
       new_top = ((new_top + 1) & mask);
       ASSERT(new_top != marking_deque_.bottom());
-      ASSERT(Marking::IsGrey(Marking::MarkBitFrom(obj)));
+#ifdef DEBUG
+        MarkBit mark_bit = Marking::MarkBitFrom(obj);
+        ASSERT(Marking::IsGrey(mark_bit) ||
+               (obj->IsFiller() && Marking::IsWhite(mark_bit)));
+#endif
     }
   }
   marking_deque_.set_top(new_top);
@@ -711,7 +720,6 @@ void IncrementalMarking::Step(intptr_t allocated_bytes) {
       Map* map = obj->map();
       if (map == filler_map) continue;
 
-      ASSERT(Marking::IsGrey(Marking::MarkBitFrom(obj)));
       int size = obj->SizeFromMap(map);
       bytes_to_process -= size;
       MarkBit map_mark_bit = Marking::MarkBitFrom(map);
@@ -734,7 +742,8 @@ void IncrementalMarking::Step(intptr_t allocated_bytes) {
       }
 
       MarkBit obj_mark_bit = Marking::MarkBitFrom(obj);
-      ASSERT(!Marking::IsBlack(obj_mark_bit));
+      ASSERT(Marking::IsGrey(obj_mark_bit) ||
+             (obj->IsFiller() && Marking::IsWhite(obj_mark_bit)));
       Marking::MarkBlack(obj_mark_bit);
       MemoryChunk::IncrementLiveBytes(obj->address(), size);
     }

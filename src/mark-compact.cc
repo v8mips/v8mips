@@ -433,7 +433,15 @@ void MarkCompactCollector::CollectEvacuationCandidates(PagedSpace* space) {
   if (it.has_next()) it.next();  // Never compact the first page.
   while (it.has_next()) {
     Page* p = it.next();
-    if (space->IsFragmented(p)) {
+    bool evacuate = false;
+    if (FLAG_stress_compaction) {
+      int counter = space->heap()->ms_count();
+      uintptr_t page_number = reinterpret_cast<uintptr_t>(p) >> kPageSizeBits;
+      if ((counter & 1) == (page_number & 1)) evacuate = true;
+    } else {
+      if (space->IsFragmented(p)) evacuate = true;
+    }
+    if (evacuate) {
       AddEvacuationCandidate(p);
       count++;
     } else {
@@ -716,6 +724,7 @@ static inline HeapObject* ShortCircuitConsString(Object** p) {
   // except the maps for the object and its possible substrings might be
   // marked.
   HeapObject* object = HeapObject::cast(*p);
+  if (!FLAG_clever_optimizations) return object;
   Map* map = object->map();
   InstanceType type = map->instance_type();
   if ((type & kShortcutTypeMask) != kShortcutTypeTag) return object;
