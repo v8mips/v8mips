@@ -278,7 +278,7 @@ void FullCodeGenerator::Generate(CompilationInfo* info) {
       // constant.
       if (scope()->is_function_scope() && scope()->function() != NULL) {
         int ignored = 0;
-        EmitDeclaration(scope()->function(), Variable::CONST, NULL, &ignored);
+        EmitDeclaration(scope()->function(), CONST, NULL, &ignored);
       }
       VisitDeclarations(scope()->declarations());
     }
@@ -721,7 +721,7 @@ void FullCodeGenerator::PrepareForBailoutBeforeSplit(State state,
 
 
 void FullCodeGenerator::EmitDeclaration(VariableProxy* proxy,
-                                        Variable::Mode mode,
+                                        VariableMode mode,
                                         FunctionLiteral* function,
                                         int* global_count) {
   // If it was not possible to allocate the variable at compile time, we
@@ -739,7 +739,7 @@ void FullCodeGenerator::EmitDeclaration(VariableProxy* proxy,
         Comment cmnt(masm_, "[ Declaration");
         VisitForAccumulatorValue(function);
         __ sw(result_register(), StackOperand(variable));
-      } else if (mode == Variable::CONST || mode == Variable::LET) {
+      } else if (mode == CONST || mode == LET) {
           Comment cmnt(masm_, "[ Declaration");
           __ LoadRoot(t0, Heap::kTheHoleValueRootIndex);
           __ sw(t0, StackOperand(variable));
@@ -775,7 +775,7 @@ void FullCodeGenerator::EmitDeclaration(VariableProxy* proxy,
                                   EMIT_REMEMBERED_SET,
                                   OMIT_SMI_CHECK);
         PrepareForBailoutForId(proxy->id(), NO_REGISTERS);
-      } else if (mode == Variable::CONST || mode == Variable::LET) {
+      } else if (mode == CONST || mode == LET) {
           Comment cmnt(masm_, "[ Declaration");
           __ LoadRoot(at, Heap::kTheHoleValueRootIndex);
           __ sw(at, ContextOperand(cp, variable->index()));
@@ -788,10 +788,8 @@ void FullCodeGenerator::EmitDeclaration(VariableProxy* proxy,
       Comment cmnt(masm_, "[ Declaration");
       __ li(a2, Operand(variable->name()));
       // Declaration nodes are always introduced in one of three modes.
-      ASSERT(mode == Variable::VAR ||
-             mode == Variable::CONST ||
-             mode == Variable::LET);
-      PropertyAttributes attr = (mode == Variable::CONST) ? READ_ONLY : NONE;
+      ASSERT(mode == VAR || mode == CONST || mode == LET);
+      PropertyAttributes attr = (mode == CONST) ? READ_ONLY : NONE;
       __ li(a1, Operand(Smi::FromInt(attr)));
       // Push initial value, if any.
       // Note: For variables we must not push an initial value (such as
@@ -801,7 +799,7 @@ void FullCodeGenerator::EmitDeclaration(VariableProxy* proxy,
         __ Push(cp, a2, a1);
         // Push initial value for function declaration.
         VisitForStackValue(function);
-      } else if (mode == Variable::CONST || mode == Variable::LET) {
+      } else if (mode == CONST || mode == LET) {
           __ LoadRoot(a0, Heap::kTheHoleValueRootIndex);
           __ Push(cp, a2, a1, a0);
       } else {
@@ -1223,20 +1221,20 @@ void FullCodeGenerator::EmitDynamicLookupFastCase(Variable* var,
   // introducing variables.  In those cases, we do not want to
   // perform a runtime call for all variables in the scope
   // containing the eval.
-  if (var->mode() == Variable::DYNAMIC_GLOBAL) {
+  if (var->mode() == DYNAMIC_GLOBAL) {
     EmitLoadGlobalCheckExtensions(var, typeof_state, slow);
     __ Branch(done);
-  } else if (var->mode() == Variable::DYNAMIC_LOCAL) {
+  } else if (var->mode() == DYNAMIC_LOCAL) {
     Variable* local = var->local_if_not_shadowed();
     __ lw(v0, ContextSlotOperandCheckExtensions(local, slow));
-    if (local->mode() == Variable::CONST ||
-        local->mode() == Variable::LET) {
+    if (local->mode() == CONST ||
+        local->mode() == LET) {
       __ LoadRoot(at, Heap::kTheHoleValueRootIndex);
       __ subu(at, v0, at);  // Sub as compare: at == 0 on eq.
-      if (local->mode() == Variable::CONST) {
+      if (local->mode() == CONST) {
         __ LoadRoot(a0, Heap::kUndefinedValueRootIndex);
         __ movz(v0, a0, at);  // Conditional move: return Undefined if TheHole.
-      } else {  // Variable::LET
+      } else {  // LET
         __ Branch(done, ne, at, Operand(zero_reg));
         __ li(a0, Operand(var->name()));
         __ push(a0);
@@ -1274,14 +1272,14 @@ void FullCodeGenerator::EmitVariableLoad(VariableProxy* proxy) {
       Comment cmnt(masm_, var->IsContextSlot()
                               ? "Context variable"
                               : "Stack variable");
-      if (var->mode() != Variable::LET && var->mode() != Variable::CONST) {
+      if (var->mode() != LET && var->mode() != CONST) {
         context()->Plug(var);
       } else {
         // Let and const need a read barrier.
         GetVar(v0, var);
         __ LoadRoot(at, Heap::kTheHoleValueRootIndex);
         __ subu(at, v0, at);  // Sub as compare: at == 0 on eq.
-        if (var->mode() == Variable::LET) {
+        if (var->mode() == LET) {
           Label done;
           __ Branch(&done, ne, at, Operand(zero_reg));
           __ li(a0, Operand(var->name()));
@@ -1889,7 +1887,7 @@ void FullCodeGenerator::EmitVariableAssignment(Variable* var,
       __ CallRuntime(Runtime::kInitializeConstContextSlot, 3);
     }
 
-  } else if (var->mode() == Variable::LET && op != Token::INIT_LET) {
+  } else if (var->mode() == LET && op != Token::INIT_LET) {
     // Non-initializing assignment to let variable needs a write barrier.
     if (var->IsLookupSlot()) {
       __ push(v0);  // Value.
@@ -1919,7 +1917,7 @@ void FullCodeGenerator::EmitVariableAssignment(Variable* var,
       }
     }
 
-  } else if (var->mode() != Variable::CONST) {
+  } else if (var->mode() != CONST) {
     // Assignment to var or initializing assignment to let.
     if (var->IsStackAllocated() || var->IsContextSlot()) {
       MemOperand location = VarOperand(var, a1);
@@ -2212,7 +2210,7 @@ void FullCodeGenerator::VisitCall(Call* expr) {
       // context lookup in the runtime system.
       Label done;
       Variable* var = proxy->var();
-      if (!var->IsUnallocated() && var->mode() == Variable::DYNAMIC_GLOBAL) {
+      if (!var->IsUnallocated() && var->mode() == DYNAMIC_GLOBAL) {
         Label slow;
         EmitLoadGlobalCheckExtensions(var, NOT_INSIDE_TYPEOF, &slow);
         // Push the function and resolve eval.
