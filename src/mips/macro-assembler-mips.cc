@@ -308,7 +308,7 @@ void MacroAssembler::RememberedSetHelper(Register object,  // For debug tests.
     Branch(&done, eq, t8, Operand(zero_reg));
   } else {
     ASSERT(and_then == kReturnAtEnd);
-    Ret(ne, t8, Operand(zero_reg));
+    Ret(eq, t8, Operand(zero_reg));
   }
   push(ra);
   StoreBufferOverflowStub store_buffer_overflow =
