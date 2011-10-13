@@ -117,14 +117,13 @@ class IncrementalMarkingMarkingVisitor : public ObjectVisitor {
         incremental_marking_(incremental_marking) {
   }
 
-  void VisitEmbeddedPointer(Code* host, Object** p, bool store_indirect) {
+  void VisitEmbeddedPointer(Code* host, Object** p) {
     Object* obj = *p;
     if (obj->NonFailureIsHeapObject()) {
       heap_->mark_compact_collector()->RecordSlot(
           reinterpret_cast<Object**>(host),
           p,
-          obj,
-          store_indirect);
+          obj);
       MarkObject(obj);
     }
   }

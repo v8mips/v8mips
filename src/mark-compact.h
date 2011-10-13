@@ -31,11 +31,6 @@
 #include "compiler-intrinsics.h"
 #include "spaces.h"
 
-// See SlotsBuffer::ObjectSlot for some explanation.
-#ifdef V8_TARGET_ARCH_MIPS
-#define V8_ENABLE_GC_INDIRECT_POINTERS 1
-#endif
-
 namespace v8 {
 namespace internal {
 
@@ -302,46 +297,7 @@ class SlotsBufferAllocator {
 // is the first element of typed slot's pair.
 class SlotsBuffer {
  public:
-
-  // A helper class that lets us store "indirect" pointers. These are Object*
-  // types that are specially encoded in the code and cannot be dereferenced
-  // directly. Currently only MIPS needs this. On other arches this class
-  // should have no performance impact.
-  class ObjectSlot BASE_EMBEDDED {
-    public:
-    ObjectSlot(Object** ptr = NULL, bool indirect = false) :
-      ptr_(ptr), indirect_(indirect) {
-    }
-
-    inline Object** GetRaw() const {
-      return ptr_;
-    }
-
-#ifdef V8_ENABLE_GC_INDIRECT_POINTERS
-    inline Object* GetPointer() const;
-    inline void SetPointer(Object* target) const;
-#else
-    inline Object* GetPointer() const {
-      ASSERT(IsValid());
-      ASSERT(!indirect_);
-      return *ptr_;
-    }
-
-    inline void SetPointer(Object* target) const {
-      ASSERT(IsValid());
-      ASSERT(!indirect_);
-      *ptr_ = target;
-    }
-#endif
-
-    inline bool IsValid() const {
-      return ptr_ != NULL;
-    }
-
-    private:
-    Object** ptr_;
-    bool indirect_;
-  };
+  typedef Object** ObjectSlot;
 
   explicit SlotsBuffer(SlotsBuffer* next_buffer)
       : idx_(0), chain_length_(1), next_(next_buffer) {
@@ -353,7 +309,7 @@ class SlotsBuffer {
   ~SlotsBuffer() {
   }
 
-  void Add(const ObjectSlot& slot) {
+  void Add(ObjectSlot slot) {
     ASSERT(0 <= idx_ && idx_ < kNumberOfElements);
     slots_[idx_++] = slot;
   }
@@ -411,7 +367,7 @@ class SlotsBuffer {
 
   static bool AddTo(SlotsBufferAllocator* allocator,
                     SlotsBuffer** buffer_address,
-                    const ObjectSlot& slot,
+                    ObjectSlot slot,
                     AdditionMode mode) {
     SlotsBuffer* buffer = *buffer_address;
     if (buffer == NULL || buffer->IsFull()) {
@@ -426,7 +382,7 @@ class SlotsBuffer {
     return true;
   }
 
-  static bool IsTypedSlot(const ObjectSlot& slot);
+  static bool IsTypedSlot(ObjectSlot slot);
 
   static bool AddTo(SlotsBufferAllocator* allocator,
                     SlotsBuffer** buffer_address,
@@ -585,10 +541,7 @@ class MarkCompactCollector {
   void RecordRelocSlot(RelocInfo* rinfo, Code* target);
   void RecordCodeEntrySlot(Address slot, Code* target);
 
-  INLINE(void RecordSlot(Object** anchor_slot,
-                         Object** slot,
-                         Object* object,
-                         bool indirect = false));
+  INLINE(void RecordSlot(Object** anchor_slot, Object** slot, Object* object));
 
   void MigrateObject(Address dst,
                      Address src,
