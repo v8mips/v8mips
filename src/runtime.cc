@@ -961,7 +961,7 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_GetOwnProperty) {
   HandleScope scope(isolate);
   Handle<FixedArray> elms = isolate->factory()->NewFixedArray(DESCRIPTOR_SIZE);
   Handle<JSArray> desc = isolate->factory()->NewJSArrayWithElements(elms);
-  LookupResult result;
+  LookupResult result(isolate);
   CONVERT_ARG_CHECKED(JSObject, obj, 0);
   CONVERT_ARG_CHECKED(String, name, 1);
 
@@ -1240,7 +1240,7 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_DeclareGlobals) {
     if (value->IsUndefined() || is_const_property) {
       // Lookup the property in the global object, and don't set the
       // value of the variable if the property is already there.
-      LookupResult lookup;
+      LookupResult lookup(isolate);
       global->Lookup(*name, &lookup);
       if (lookup.IsProperty()) {
         // We found an existing property. Unless it was an interceptor
@@ -1267,7 +1267,7 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_DeclareGlobals) {
       value = function;
     }
 
-    LookupResult lookup;
+    LookupResult lookup(isolate);
     global->LocalLookup(*name, &lookup);
 
     // Compute the property attributes. According to ECMA-262, section
@@ -1399,7 +1399,7 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_DeclareContextSlot) {
     // not real JSObjects.
     if (initial_value->IsTheHole() &&
         !object->IsJSContextExtensionObject()) {
-      LookupResult lookup;
+      LookupResult lookup(isolate);
       object->Lookup(*name, &lookup);
       if (lookup.IsProperty() && (lookup.type() == CALLBACKS)) {
         return ThrowRedeclarationError(isolate, "const", name);
@@ -1443,7 +1443,7 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_InitializeVarGlobal) {
   // Note that objects can have hidden prototypes, so we need to traverse
   // the whole chain of hidden prototypes to do a 'local' lookup.
   Object* object = global;
-  LookupResult lookup;
+  LookupResult lookup(isolate);
   while (object->IsJSObject() &&
          JSObject::cast(object)->map()->is_hidden_prototype()) {
     JSObject* raw_holder = JSObject::cast(object);
@@ -1497,7 +1497,7 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_InitializeConstGlobal) {
   // add it as a local property even in case of callbacks in the
   // prototype chain (this rules out using SetProperty).
   // We use SetLocalPropertyIgnoreAttributes instead
-  LookupResult lookup;
+  LookupResult lookup(isolate);
   global->LocalLookup(*name, &lookup);
   if (!lookup.IsProperty()) {
     return global->SetLocalPropertyIgnoreAttributes(*name,
@@ -1614,7 +1614,7 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_InitializeConstContextSlot) {
     // This is the property that was introduced by the const declaration.
     // Set it if it hasn't been set before.  NOTE: We cannot use
     // GetProperty() to get the current value as it 'unholes' the value.
-    LookupResult lookup;
+    LookupResult lookup(isolate);
     object->LocalLookupRealNamedProperty(*name, &lookup);
     ASSERT(lookup.IsProperty());  // the property was declared
     ASSERT(lookup.IsReadOnly());  // and it was declared as read-only
@@ -4135,7 +4135,7 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_KeyedGetProperty) {
         return value->IsTheHole() ? isolate->heap()->undefined_value() : value;
       }
       // Lookup cache miss.  Perform lookup and update the cache if appropriate.
-      LookupResult result;
+      LookupResult result(isolate);
       receiver->LocalLookup(key, &result);
       if (result.IsProperty() && result.type() == FIELD) {
         int offset = result.GetFieldIndex();
@@ -4190,7 +4190,7 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_DefineOrRedefineAccessorProperty) {
   int unchecked = flag_attr->value();
   RUNTIME_ASSERT((unchecked & ~(READ_ONLY | DONT_ENUM | DONT_DELETE)) == 0);
   RUNTIME_ASSERT(!obj->IsNull());
-  LookupResult result;
+  LookupResult result(isolate);
   obj->LocalLookupRealNamedProperty(name, &result);
 
   PropertyAttributes attr = static_cast<PropertyAttributes>(unchecked);
@@ -4274,7 +4274,7 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_DefineOrRedefineDataProperty) {
     return *obj_value;
   }
 
-  LookupResult result;
+  LookupResult result(isolate);
   js_object->LocalLookupRealNamedProperty(*name, &result);
 
   // To be compatible with safari we do not change the value on API objects
@@ -10361,7 +10361,7 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_DebugGetPropertyDetails) {
   // Try local lookup on each of the objects.
   Handle<JSObject> jsproto = obj;
   for (int i = 0; i < length; i++) {
-    LookupResult result;
+    LookupResult result(isolate);
     jsproto->LocalLookup(*name, &result);
     if (result.IsProperty()) {
       // LookupResult is not GC safe as it holds raw object pointers.
@@ -10418,7 +10418,7 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_DebugGetProperty) {
   CONVERT_ARG_CHECKED(JSObject, obj, 0);
   CONVERT_ARG_CHECKED(String, name, 1);
 
-  LookupResult result;
+  LookupResult result(isolate);
   obj->Lookup(*name, &result);
   if (result.IsProperty()) {
     return DebugLookupResultValue(isolate->heap(), *obj, *name, &result, NULL);
@@ -11068,9 +11068,10 @@ static Handle<JSObject> MaterializeBlockScope(
 }
 
 
-// Iterate over the actual scopes visible from a stack frame. All scopes are
+// Iterate over the actual scopes visible from a stack frame. The iteration
+// proceeds from the innermost visible nested scope outwards. All scopes are
 // backed by an actual context except the local scope, which is inserted
-// "artifically" in the context chain.
+// "artificially" in the context chain.
 class ScopeIterator {
  public:
   enum ScopeType {
@@ -11090,28 +11091,44 @@ class ScopeIterator {
       inlined_frame_index_(inlined_frame_index),
       function_(JSFunction::cast(frame->function())),
       context_(Context::cast(frame->context())),
-      local_done_(false),
-      at_local_(false) {
+      nested_scope_chain_(4) {
 
-    // Check whether the first scope is actually a local scope.
-    // If there is a stack slot for .result then this local scope has been
-    // created for evaluating top level code and it is not a real local scope.
+    // Check whether we are in global code or function code. If there is a stack
+    // slot for .result then this function has been created for evaluating
+    // global code and it is not a real function.
     // Checking for the existence of .result seems fragile, but the scope info
     // saved with the code object does not otherwise have that information.
     int index = function_->shared()->scope_info()->
         StackSlotIndex(isolate_->heap()->result_symbol());
+
+    // Reparse the code and analyze the scopes.
+    ZoneScope zone_scope(isolate, DELETE_ON_EXIT);
+    Handle<SharedFunctionInfo> shared_info(function_->shared());
+    Handle<Script> script(Script::cast(shared_info->script()));
+    Scope* scope;
     if (index >= 0) {
-      local_done_ = true;
-    } else if (context_->IsGlobalContext() ||
-               context_->IsFunctionContext()) {
-      at_local_ = true;
-    } else if (context_->closure() != *function_) {
-      // The context_ is a block or with or catch block from the outer function.
-      ASSERT(context_->IsWithContext() ||
-             context_->IsCatchContext() ||
-             context_->IsBlockContext());
-      at_local_ = true;
+      // Global code
+      CompilationInfo info(script);
+      info.MarkAsGlobal();
+      bool result = ParserApi::Parse(&info);
+      ASSERT(result);
+      result = Scope::Analyze(&info);
+      ASSERT(result);
+      scope = info.function()->scope();
+    } else {
+      // Function code
+      CompilationInfo info(shared_info);
+      bool result = ParserApi::Parse(&info);
+      ASSERT(result);
+      result = Scope::Analyze(&info);
+      ASSERT(result);
+      scope = info.function()->scope();
     }
+
+    // Retrieve the scope chain for the current position.
+    int statement_position =
+        shared_info->code()->SourceStatementPosition(frame_->pc());
+    scope->GetNestedScopeChain(&nested_scope_chain_, statement_position);
   }
 
   // More scopes?
@@ -11119,40 +11136,48 @@ class ScopeIterator {
 
   // Move to the next scope.
   void Next() {
-    // If at a local scope mark the local scope as passed.
-    if (at_local_) {
-      at_local_ = false;
-      local_done_ = true;
-
-      // If the current context is not associated with the local scope the
-      // current context is the next real scope, so don't move to the next
-      // context in this case.
-      if (context_->closure() != *function_) {
-        return;
-      }
-    }
-
-    // The global scope is always the last in the chain.
-    if (context_->IsGlobalContext()) {
+    ScopeType scope_type = Type();
+    if (scope_type == ScopeTypeGlobal) {
+      // The global scope is always the last in the chain.
+      ASSERT(context_->IsGlobalContext());
       context_ = Handle<Context>();
       return;
     }
-
-    // Move to the next context.
-    context_ = Handle<Context>(context_->previous(), isolate_);
-
-    // If passing the local scope indicate that the current scope is now the
-    // local scope.
-    if (!local_done_ &&
-        (context_->IsGlobalContext() || context_->IsFunctionContext())) {
-      at_local_ = true;
+    if (nested_scope_chain_.is_empty()) {
+      context_ = Handle<Context>(context_->previous(), isolate_);
+    } else {
+      if (nested_scope_chain_.last()->HasContext()) {
+        context_ = Handle<Context>(context_->previous(), isolate_);
+      }
+      nested_scope_chain_.RemoveLast();
     }
   }
 
   // Return the type of the current scope.
   ScopeType Type() {
-    if (at_local_) {
-      return ScopeTypeLocal;
+    if (!nested_scope_chain_.is_empty()) {
+      Handle<SerializedScopeInfo> scope_info = nested_scope_chain_.last();
+      switch (scope_info->Type()) {
+        case FUNCTION_SCOPE:
+          ASSERT(context_->IsFunctionContext() ||
+                 !scope_info->HasContext());
+          return ScopeTypeLocal;
+        case GLOBAL_SCOPE:
+          ASSERT(context_->IsGlobalContext());
+          return ScopeTypeGlobal;
+        case WITH_SCOPE:
+          ASSERT(context_->IsWithContext());
+          return ScopeTypeWith;
+        case CATCH_SCOPE:
+          ASSERT(context_->IsCatchContext());
+          return ScopeTypeCatch;
+        case BLOCK_SCOPE:
+          ASSERT(!scope_info->HasContext() ||
+                 context_->IsBlockContext());
+          return ScopeTypeBlock;
+        case EVAL_SCOPE:
+          UNREACHABLE();
+      }
     }
     if (context_->IsGlobalContext()) {
       ASSERT(context_->global()->IsGlobalObject());
@@ -11178,6 +11203,7 @@ class ScopeIterator {
         return Handle<JSObject>(CurrentContext()->global());
       case ScopeIterator::ScopeTypeLocal:
         // Materialize the content of the local scope into a JSObject.
+        ASSERT(nested_scope_chain_.length() == 1);
         return MaterializeLocalScope(isolate_, frame_, inlined_frame_index_);
       case ScopeIterator::ScopeTypeWith:
         // Return the with object.
@@ -11194,13 +11220,30 @@ class ScopeIterator {
     return Handle<JSObject>();
   }
 
+  Handle<SerializedScopeInfo> CurrentScopeInfo() {
+    if (!nested_scope_chain_.is_empty()) {
+      return nested_scope_chain_.last();
+    } else if (context_->IsBlockContext()) {
+      return Handle<SerializedScopeInfo>(
+          SerializedScopeInfo::cast(context_->extension()));
+    } else if (context_->IsFunctionContext()) {
+      return Handle<SerializedScopeInfo>(
+          context_->closure()->shared()->scope_info());
+    }
+    return Handle<SerializedScopeInfo>::null();
+  }
+
   // Return the context for this scope. For the local context there might not
   // be an actual context.
   Handle<Context> CurrentContext() {
-    if (at_local_ && context_->closure() != *function_) {
+    if (Type() == ScopeTypeGlobal ||
+        nested_scope_chain_.is_empty()) {
+      return context_;
+    } else if (nested_scope_chain_.last()->HasContext()) {
+      return context_;
+    } else {
       return Handle<Context>();
     }
-    return context_;
   }
 
 #ifdef DEBUG
@@ -11263,8 +11306,7 @@ class ScopeIterator {
   int inlined_frame_index_;
   Handle<JSFunction> function_;
   Handle<Context> context_;
-  bool local_done_;
-  bool at_local_;
+  List<Handle<SerializedScopeInfo> > nested_scope_chain_;
 
   DISALLOW_IMPLICIT_CONSTRUCTORS(ScopeIterator);
 };
@@ -11727,46 +11769,65 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_ClearStepping) {
 
 // Creates a copy of the with context chain. The copy of the context chain is
 // is linked to the function context supplied.
-static Handle<Context> CopyWithContextChain(Isolate* isolate,
-                                            Handle<JSFunction> function,
-                                            Handle<Context> current,
-                                            Handle<Context> base) {
-  // At the end of the chain. Return the base context to link to.
-  if (current->IsFunctionContext() || current->IsGlobalContext()) {
-    return base;
+static Handle<Context> CopyNestedScopeContextChain(Isolate* isolate,
+                                                   Handle<JSFunction> function,
+                                                   Handle<Context> base,
+                                                   JavaScriptFrame* frame,
+                                                   int inlined_frame_index) {
+  HandleScope scope(isolate);
+  List<Handle<SerializedScopeInfo> > scope_chain;
+  List<Handle<Context> > context_chain;
+
+  ScopeIterator it(isolate, frame, inlined_frame_index);
+  for (; it.Type() != ScopeIterator::ScopeTypeGlobal &&
+         it.Type() != ScopeIterator::ScopeTypeLocal ; it.Next()) {
+    ASSERT(!it.Done());
+    scope_chain.Add(it.CurrentScopeInfo());
+    context_chain.Add(it.CurrentContext());
   }
 
-  // Recursively copy the with and catch contexts.
-  HandleScope scope(isolate);
-  Handle<Context> previous(current->previous());
-  Handle<Context> new_previous =
-      CopyWithContextChain(isolate, function, previous, base);
-  Handle<Context> new_current;
-  if (current->IsCatchContext()) {
-    Handle<String> name(String::cast(current->extension()));
-    Handle<Object> thrown_object(current->get(Context::THROWN_OBJECT_INDEX));
-    new_current =
-        isolate->factory()->NewCatchContext(function,
-                                            new_previous,
-                                            name,
-                                            thrown_object);
-  } else if (current->IsBlockContext()) {
-    Handle<SerializedScopeInfo> scope_info(
-        SerializedScopeInfo::cast(current->extension()));
-    new_current =
-        isolate->factory()->NewBlockContext(function, new_previous, scope_info);
-    // Copy context slots.
-    int num_context_slots = scope_info->NumberOfContextSlots();
-    for (int i = Context::MIN_CONTEXT_SLOTS; i < num_context_slots; ++i) {
-      new_current->set(i, current->get(i));
+  // At the end of the chain. Return the base context to link to.
+  Handle<Context> context = base;
+
+  // Iteratively copy and or materialize the nested contexts.
+  while (!scope_chain.is_empty()) {
+    Handle<SerializedScopeInfo> scope_info = scope_chain.RemoveLast();
+    Handle<Context> current = context_chain.RemoveLast();
+    ASSERT(!(scope_info->HasContext() & current.is_null()));
+
+    if (scope_info->Type() == CATCH_SCOPE) {
+      Handle<String> name(String::cast(current->extension()));
+      Handle<Object> thrown_object(current->get(Context::THROWN_OBJECT_INDEX));
+      context =
+          isolate->factory()->NewCatchContext(function,
+                                              context,
+                                              name,
+                                              thrown_object);
+    } else if (scope_info->Type() == BLOCK_SCOPE) {
+      // Materialize the contents of the block scope into a JSObject.
+      Handle<JSObject> block_scope_object =
+          MaterializeBlockScope(isolate, current);
+      if (block_scope_object.is_null()) {
+        return Handle<Context>::null();
+      }
+      // Allocate a new function context for the debug evaluation and set the
+      // extension object.
+      Handle<Context> new_context =
+          isolate->factory()->NewFunctionContext(Context::MIN_CONTEXT_SLOTS,
+                                                 function);
+      new_context->set_extension(*block_scope_object);
+      new_context->set_previous(*context);
+      context = new_context;
+    } else {
+      ASSERT(scope_info->Type() == WITH_SCOPE);
+      ASSERT(current->IsWithContext());
+      Handle<JSObject> extension(JSObject::cast(current->extension()));
+      context =
+          isolate->factory()->NewWithContext(function, context, extension);
     }
-  } else {
-    ASSERT(current->IsWithContext());
-    Handle<JSObject> extension(JSObject::cast(current->extension()));
-    new_current =
-        isolate->factory()->NewWithContext(function, new_previous, extension);
   }
-  return scope.CloseAndEscape(new_current);
+
+  return scope.CloseAndEscape(context);
 }
 
 
@@ -11904,7 +11965,11 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_DebugEvaluate) {
   if (scope_info->HasHeapAllocatedLocals()) {
     function_context = Handle<Context>(frame_context->declaration_context());
   }
-  context = CopyWithContextChain(isolate, go_between, frame_context, context);
+  context = CopyNestedScopeContextChain(isolate,
+                                        go_between,
+                                        context,
+                                        frame,
+                                        inlined_frame_index);
 
   if (additional_context->IsJSObject()) {
     Handle<JSObject> extension = Handle<JSObject>::cast(additional_context);
