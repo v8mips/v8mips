@@ -7212,7 +7212,7 @@ struct AheadOfTimeWriteBarrierStubList kAheadOfTime[] = {
   // and FastElementsConversionStub::GenerateDoubleToObject
   { a2, a3, t5, EMIT_REMEMBERED_SET },
   // FastElementsConversionStub::GenerateDoubleToObject
-  { t2, a0, a3, EMIT_REMEMBERED_SET },
+  { t2, a0, a2, EMIT_REMEMBERED_SET },
   { a2, t2, t5, EMIT_REMEMBERED_SET },
   // Null termination.
   { no_reg, no_reg, no_reg, EMIT_REMEMBERED_SET}
@@ -7620,16 +7620,16 @@ void FastElementsConversionStub::GenerateDoubleToObject(
 
   // Prepare for conversion loop.
   __ Addu(t0, t0, Operand(FixedDoubleArray::kHeaderSize - kHeapObjectTag + 4));
-  __ Addu(a3, t2, Operand(FixedArray::kHeaderSize - 4));
+  __ Addu(a3, t2, Operand(FixedArray::kHeaderSize));
   __ Addu(t2, t2, Operand(kHeapObjectTag));
   __ sll(t1, t1, 1);
   __ Addu(t1, a3, t1);
   __ LoadRoot(t3, Heap::kTheHoleValueRootIndex);
   __ LoadRoot(t5, Heap::kHeapNumberMapRootIndex);
   // Using offsetted addresses.
-  // a3: begin of destination FixedArray element fields, not tagged, -4
+  // a3: begin of destination FixedArray element fields, not tagged
   // t0: begin of source FixedDoubleArray element fields, not tagged, +4
-  // t1: end of destination FixedArray, not tagged, -4
+  // t1: end of destination FixedArray, not tagged
   // t2: destination FixedArray
   // t3: the-hole pointer
   // t5: heap number map
@@ -7654,10 +7654,11 @@ void FastElementsConversionStub::GenerateDoubleToObject(
   __ sw(t6, FieldMemOperand(a0, HeapNumber::kMantissaOffset));
   __ lw(t6, MemOperand(t0, -8));
   __ sw(t6, FieldMemOperand(a0, HeapNumber::kExponentOffset));
-  __ Addu(a3, a3, kIntSize);
+  __ mov(a2, a3);
   __ sw(a0, MemOperand(a3));
+  __ Addu(a3, a3, kIntSize);
   __ RecordWrite(t2,
-                 a3,
+                 a2,
                  a0,
                  kRAHasBeenSaved,
                  kDontSaveFPRegs,
@@ -7667,8 +7668,8 @@ void FastElementsConversionStub::GenerateDoubleToObject(
 
   // Replace the-hole NaN with the-hole pointer.
   __ bind(&convert_hole);
-  __ Addu(a3, a3, kIntSize);
   __ sw(t3, MemOperand(a3));
+  __ Addu(a3, a3, kIntSize);
 
   __ bind(&entry);
   __ Branch(&loop, lt, a3, Operand(t1));
