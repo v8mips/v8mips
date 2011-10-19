@@ -445,23 +445,20 @@ static void LookupForRead(Handle<Object> object,
 }
 
 
-Object* CallICBase::TryCallAsFunction(Object* object) {
-  HandleScope scope(isolate());
-  Handle<Object> target(object, isolate());
-  Handle<Object> delegate = Execution::GetFunctionDelegate(target);
+Handle<Object> CallICBase::TryCallAsFunction(Handle<Object> object) {
+  Handle<Object> delegate = Execution::GetFunctionDelegate(object);
 
   if (delegate->IsJSFunction() && !object->IsJSFunctionProxy()) {
     // Patch the receiver and use the delegate as the function to
-    // invoke. This is used for invoking objects as if they were
-    // functions.
-    const int argc = this->target()->arguments_count();
+    // invoke. This is used for invoking objects as if they were functions.
+    const int argc = target()->arguments_count();
     StackFrameLocator locator;
     JavaScriptFrame* frame = locator.FindJavaScriptFrame(0);
     int index = frame->ComputeExpressionsCount() - (argc + 1);
-    frame->SetExpression(index, *target);
+    frame->SetExpression(index, *object);
   }
 
-  return *delegate;
+  return delegate;
 }
 
 
@@ -505,31 +502,27 @@ MaybeObject* CallICBase::LoadFunction(State state,
   // the element if so.
   uint32_t index;
   if (name->AsArrayIndex(&index)) {
-    Object* result;
-    { MaybeObject* maybe_result = object->GetElement(index);
-      if (!maybe_result->ToObject(&result)) return maybe_result;
-    }
-
-    if (result->IsJSFunction()) return result;
+    Handle<Object> result = Object::GetElement(object, index);
+    RETURN_IF_EMPTY_HANDLE(isolate(), result);
+    if (result->IsJSFunction()) return *result;
 
     // Try to find a suitable function delegate for the object at hand.
     result = TryCallAsFunction(result);
-    if (result->IsJSFunction()) return result;
+    if (result->IsJSFunction()) return *result;
 
     // Otherwise, it will fail in the lookup step.
   }
 
   // Lookup the property in the object.
   LookupResult lookup(isolate());
-  LookupForRead(*object, *name, &lookup);
+  LookupForRead(object, name, &lookup);
 
   if (!lookup.IsProperty()) {
     // If the object does not have the requested property, check which
     // exception we need to throw.
-    if (IsContextual(object)) {
-      return ReferenceError("not_defined", name);
-    }
-    return TypeError("undefined_method", object, name);
+    return IsContextual(object)
+        ? ReferenceError("not_defined", name)
+        : TypeError("undefined_method", object, name);
   }
 
   // Lookup is valid: Update inline cache and stub cache.
@@ -539,53 +532,42 @@ MaybeObject* CallICBase::LoadFunction(State state,
 
   // Get the property.
   PropertyAttributes attr;
-  Object* result;
-  { MaybeObject* maybe_result =
-        object->GetProperty(*object, &lookup, *name, &attr);
-    if (!maybe_result->ToObject(&result)) return maybe_result;
-  }
+  Handle<Object> result =
+      Object::GetProperty(object, object, &lookup, name, &attr);
+  RETURN_IF_EMPTY_HANDLE(isolate(), result);
 
-  if (lookup.type() == INTERCEPTOR) {
+  if (lookup.type() == INTERCEPTOR && attr == ABSENT) {
     // If the object does not have the requested property, check which
     // exception we need to throw.
-    if (attr == ABSENT) {
-      if (IsContextual(object)) {
-        return ReferenceError("not_defined", name);
-      }
-      return TypeError("undefined_method", object, name);
-    }
+    return IsContextual(object)
+        ? ReferenceError("not_defined", name)
+        : TypeError("undefined_method", object, name);
   }
 
   ASSERT(!result->IsTheHole());
 
-  HandleScope scope(isolate());
-  // Wrap result in a handle because ReceiverToObjectIfRequired may allocate
-  // new object and cause GC.
-  Handle<Object> result_handle(result);
   // Make receiver an object if the callee requires it. Strict mode or builtin
   // functions do not wrap the receiver, non-strict functions and objects
   // called as functions do.
-  ReceiverToObjectIfRequired(result_handle, object);
+  ReceiverToObjectIfRequired(result, object);
 
-  if (result_handle->IsJSFunction()) {
+  if (result->IsJSFunction()) {
+    Handle<JSFunction> function = Handle<JSFunction>::cast(result);
 #ifdef ENABLE_DEBUGGER_SUPPORT
     // Handle stepping into a function if step into is active.
     Debug* debug = isolate()->debug();
     if (debug->StepInActive()) {
       // Protect the result in a handle as the debugger can allocate and might
       // cause GC.
-      Handle<JSFunction> function(JSFunction::cast(*result_handle), isolate());
       debug->HandleStepIn(function, object, fp(), false);
-      return *function;
     }
 #endif
-
-    return *result_handle;
+    return *function;
   }
 
   // Try to find a suitable function delegate for the object at hand.
-  result_handle = Handle<Object>(TryCallAsFunction(*result_handle));
-  if (result_handle->IsJSFunction()) return *result_handle;
+  result = TryCallAsFunction(result);
+  if (result->IsJSFunction()) return *result;
 
   return TypeError("property_not_function", object, name);
 }
@@ -827,26 +809,25 @@ MaybeObject* KeyedCallIC::LoadFunction(State state,
 
   if (FLAG_use_ic && state != MEGAMORPHIC && object->IsHeapObject()) {
     int argc = target()->arguments_count();
-    Heap* heap = Handle<HeapObject>::cast(object)->GetHeap();
-    Map* map = heap->non_strict_arguments_elements_map();
+    Handle<Map> map =
+        isolate()->factory()->non_strict_arguments_elements_map();
     if (object->IsJSObject() &&
-        Handle<JSObject>::cast(object)->elements()->map() == map) {
+        Handle<JSObject>::cast(object)->elements()->map() == *map) {
       MaybeObject* maybe_code = isolate()->stub_cache()->ComputeCallArguments(
           argc, Code::KEYED_CALL_IC);
-      Object* code;
-      if (maybe_code->ToObject(&code)) {
-        set_target(Code::cast(code));
+      Code* code = NULL;
+      if (maybe_code->To(&code)) {
+        set_target(code);
 #ifdef DEBUG
         TraceIC("KeyedCallIC", key, state, target());
 #endif
       }
-    } else if (FLAG_use_ic && state != MEGAMORPHIC &&
-               !object->IsAccessCheckNeeded()) {
+    } else if (!object->IsAccessCheckNeeded()) {
       MaybeObject* maybe_code = isolate()->stub_cache()->ComputeCallMegamorphic(
           argc, Code::KEYED_CALL_IC, Code::kNoExtraICState);
-      Object* code;
-      if (maybe_code->ToObject(&code)) {
-        set_target(Code::cast(code));
+      Code* code;
+      if (maybe_code->To(&code)) {
+        set_target(code);
 #ifdef DEBUG
         TraceIC("KeyedCallIC", key, state, target());
 #endif
@@ -854,7 +835,6 @@ MaybeObject* KeyedCallIC::LoadFunction(State state,
     }
   }
 
-  HandleScope scope(isolate());
   Handle<Object> result = GetProperty(object, key);
   RETURN_IF_EMPTY_HANDLE(isolate(), result);
 
@@ -862,9 +842,9 @@ MaybeObject* KeyedCallIC::LoadFunction(State state,
   // functions do not wrap the receiver, non-strict functions and objects
   // called as functions do.
   ReceiverToObjectIfRequired(result, object);
-
   if (result->IsJSFunction()) return *result;
-  result = Handle<Object>(TryCallAsFunction(*result));
+
+  result = TryCallAsFunction(result);
   if (result->IsJSFunction()) return *result;
 
   return TypeError("property_not_function", object, key);
@@ -981,7 +961,7 @@ MaybeObject* LoadIC::Load(State state,
       (lookup.type() == INTERCEPTOR || lookup.type() == HANDLER)) {
     // Get the property.
     Handle<Object> result =
-        Object::GetProperty(isolate(), object, object, &lookup, name, &attr);
+        Object::GetProperty(object, object, &lookup, name, &attr);
     RETURN_IF_EMPTY_HANDLE(isolate(), result);
     // If the property is not present, check if we need to throw an
     // exception.
@@ -1741,49 +1721,6 @@ MaybeObject* KeyedStoreIC::GetElementStubWithoutMapCheck(
 }
 
 
-// If |map| is contained in |maps_list|, returns |map|; otherwise returns NULL.
-Map* GetMapIfPresent(Map* map, MapList* maps_list) {
-  for (int i = 0; i < maps_list->length(); ++i) {
-    if (maps_list->at(i) == map) return map;
-  }
-  return NULL;
-}
-
-
-// Returns the most generic transitioned map for |map| that's found in
-// |maps_list|, or NULL if no transitioned map for |map| is found at all.
-Map* GetTransitionedMap(Map* map, MapList* maps_list) {
-  ElementsKind elements_kind = map->elements_kind();
-  if (elements_kind == FAST_ELEMENTS) {
-    return NULL;
-  }
-  if (elements_kind == FAST_DOUBLE_ELEMENTS) {
-    bool dummy = true;
-    Map* fast_map = map->LookupElementsTransitionMap(FAST_ELEMENTS, &dummy);
-    if (fast_map == NULL) return NULL;
-    return GetMapIfPresent(fast_map, maps_list);
-  }
-  if (elements_kind == FAST_SMI_ONLY_ELEMENTS) {
-    bool dummy = true;
-    Map* double_map = map->LookupElementsTransitionMap(FAST_DOUBLE_ELEMENTS,
-                                                       &dummy);
-    // In the current implementation, if the DOUBLE map doesn't exist, the
-    // FAST map can't exist either.
-    if (double_map == NULL) return NULL;
-    Map* fast_map = map->LookupElementsTransitionMap(FAST_ELEMENTS, &dummy);
-    if (fast_map == NULL) {
-      return GetMapIfPresent(double_map, maps_list);
-    }
-    // Both double_map and fast_map are non-NULL. Return fast_map if it's in
-    // maps_list, double_map otherwise.
-    Map* fast_map_present = GetMapIfPresent(fast_map, maps_list);
-    if (fast_map_present != NULL) return fast_map_present;
-    return GetMapIfPresent(double_map, maps_list);
-  }
-  return NULL;
-}
-
-
 MaybeObject* KeyedStoreIC::ComputePolymorphicStub(
     MapList* receiver_maps,
     StrictModeFlag strict_mode) {
@@ -1793,7 +1730,7 @@ MaybeObject* KeyedStoreIC::ComputePolymorphicStub(
   for (int i = 0; i < receiver_maps->length(); ++i) {
     Map* receiver_map(receiver_maps->at(i));
     MaybeObject* maybe_cached_stub = NULL;
-    Map* transitioned_map = GetTransitionedMap(receiver_map, receiver_maps);
+    Map* transitioned_map = receiver_map->FindTransitionedMap(receiver_maps);
     if (transitioned_map != NULL) {
       maybe_cached_stub = FastElementsConversionStub(
           receiver_map->elements_kind(),  // original elements_kind
@@ -1996,19 +1933,9 @@ void KeyedStoreIC::UpdateCaches(LookupResult* lookup,
 // Static IC stub generators.
 //
 
-static JSFunction* CompileFunction(Isolate* isolate,
-                                   JSFunction* function) {
-  // Compile now with optimization.
-  HandleScope scope(isolate);
-  Handle<JSFunction> function_handle(function, isolate);
-  CompileLazy(function_handle, CLEAR_EXCEPTION);
-  return *function_handle;
-}
-
-
 // Used from ic-<arch>.cc.
 RUNTIME_FUNCTION(MaybeObject*, CallIC_Miss) {
-  NoHandleAllocation na;
+  HandleScope scope(isolate);
   ASSERT(args.length() == 2);
   CallIC ic(isolate);
   IC::State state = IC::StateFrom(ic.target(), args[0], args[1]);
@@ -2017,39 +1944,40 @@ RUNTIME_FUNCTION(MaybeObject*, CallIC_Miss) {
                                               extra_ic_state,
                                               args.at<Object>(0),
                                               args.at<String>(1));
-  Object* result;
-  if (!maybe_result->ToObject(&result)) return maybe_result;
+  // Result could be a function or a failure.
+  JSFunction* raw_function = NULL;
+  if (!maybe_result->To(&raw_function)) return maybe_result;
 
   // The first time the inline cache is updated may be the first time the
-  // function it references gets called.  If the function was lazily compiled
+  // function it references gets called.  If the function is lazily compiled
   // then the first call will trigger a compilation.  We check for this case
   // and we do the compilation immediately, instead of waiting for the stub
-  // currently attached to the JSFunction object to trigger compilation.  We
-  // do this in the case where we know that the inline cache is inside a loop,
-  // because then we know that we want to optimize the function.
-  if (!result->IsJSFunction() || JSFunction::cast(result)->is_compiled()) {
-    return result;
-  }
-  return CompileFunction(isolate, JSFunction::cast(result));
+  // currently attached to the JSFunction object to trigger compilation.
+  if (raw_function->is_compiled()) return raw_function;
+
+  Handle<JSFunction> function(raw_function);
+  JSFunction::CompileLazy(function, CLEAR_EXCEPTION);
+  return *function;
 }
 
 
 // Used from ic-<arch>.cc.
 RUNTIME_FUNCTION(MaybeObject*, KeyedCallIC_Miss) {
-  NoHandleAllocation na;
+  HandleScope scope(isolate);
   ASSERT(args.length() == 2);
   KeyedCallIC ic(isolate);
   IC::State state = IC::StateFrom(ic.target(), args[0], args[1]);
-  Object* result;
-  { MaybeObject* maybe_result =
+  MaybeObject* maybe_result =
       ic.LoadFunction(state, args.at<Object>(0), args.at<Object>(1));
-    if (!maybe_result->ToObject(&result)) return maybe_result;
-  }
+  // Result could be a function or a failure.
+  JSFunction* raw_function = NULL;
+  if (!maybe_result->To(&raw_function)) return maybe_result;
 
-  if (!result->IsJSFunction() || JSFunction::cast(result)->is_compiled()) {
-    return result;
-  }
-  return CompileFunction(isolate, JSFunction::cast(result));
+  if (raw_function->is_compiled()) return raw_function;
+
+  Handle<JSFunction> function(raw_function);
+  JSFunction::CompileLazy(function, CLEAR_EXCEPTION);
+  return *function;
 }
 
 
