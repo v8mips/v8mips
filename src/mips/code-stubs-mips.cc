@@ -7622,6 +7622,7 @@ void FastElementsConversionStub::GenerateDoubleToObject(
   // t1: number of elements (smi-tagged)
 
   // Allocate new FixedArray.
+  __ sll(a0, t1, 1);
   __ Addu(a0, a0, FixedDoubleArray::kHeaderSize);
   __ AllocateInNewSpace(a0, t2, t3, t5, &gc_required, NO_ALLOCATION_FLAGS);
   // t2: destination FixedArray, not tagged as heap object
