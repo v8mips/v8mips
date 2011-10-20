@@ -7221,7 +7221,7 @@ struct AheadOfTimeWriteBarrierStubList kAheadOfTime[] = {
   // and FastElementsConversionStub::GenerateDoubleToObject
   { a2, a3, t5, EMIT_REMEMBERED_SET },
   // FastElementsConversionStub::GenerateDoubleToObject
-  { t2, a0, a2, EMIT_REMEMBERED_SET },
+  { t2, a2, a0, EMIT_REMEMBERED_SET },
   { a2, t2, t5, EMIT_REMEMBERED_SET },
   // Null termination.
   { no_reg, no_reg, no_reg, EMIT_REMEMBERED_SET}
@@ -7539,17 +7539,17 @@ void FastElementsConversionStub::GenerateSmiOnlyToDouble(
 
   // Prepare for conversion loop.
   __ Addu(a3, t0, Operand(FixedArray::kHeaderSize - kHeapObjectTag));
-  __ Addu(t2, t2, Operand(FixedDoubleArray::kHeaderSize));
-  __ sll(t0, t1, 2);
-  __ Addu(t0, t0, t2);
-  __ li(t1, Operand(kHoleNanLower32));
-  __ li(t3, Operand(kHoleNanUpper32));
-  // a3: begin of source FixedArray element fields, not tagged
-  // t0: end of destination FixedDoubleArray, not tagged
-  // t2: begin of FixedDoubleArray element fields, not tagged
-  // t1: kHoleNanLower32
-  // t3: kHoleNanUpper32
-  if (fpu_supported) __ Push(a0, a1);
+  __ Addu(t3, t2, Operand(FixedDoubleArray::kHeaderSize));
+  __ sll(t2, t1, 2);
+  __ Addu(t2, t2, t3);
+  __ li(t0, Operand(kHoleNanLower32));
+  __ li(t1, Operand(kHoleNanUpper32));
+  // t0: kHoleNanLower32
+  // t1: kHoleNanUpper32
+  // t2: end of destination FixedDoubleArray, not tagged
+  // t3: begin of FixedDoubleArray element fields, not tagged
+
+  if (fpu_supported) __ Push(a1, a0);
 
   __ Branch(&entry);
 
@@ -7570,8 +7570,8 @@ void FastElementsConversionStub::GenerateSmiOnlyToDouble(
     CpuFeatures::Scope scope(FPU);
     __ mtc1(t5, f0);
     __ cvt_d_w(f0, f0);
-    __ sdc1(f0, MemOperand(t2));
-    __ Addu(t2, t2, kDoubleSize);
+    __ sdc1(f0, MemOperand(t3));
+    __ Addu(t3, t3, kDoubleSize);
   } else {
     FloatingPointHelper::ConvertIntToDouble(masm,
                                             t5,
@@ -7581,22 +7581,22 @@ void FastElementsConversionStub::GenerateSmiOnlyToDouble(
                                             a1,
                                             t7,
                                             f0);
-    __ sw(a0, MemOperand(t2));  // mantissa
-    __ sw(a1, MemOperand(t2, kIntSize));  // exponent
-    __ Addu(t2, t2, kDoubleSize);
+    __ sw(a0, MemOperand(t3));  // mantissa
+    __ sw(a1, MemOperand(t3, kIntSize));  // exponent
+    __ Addu(t3, t3, kDoubleSize);
   }
   __ Branch(&entry);
 
   // Hole found, store the-hole NaN.
   __ bind(&convert_hole);
-  __ sw(t1, MemOperand(t2));  // mantissa
-  __ sw(t3, MemOperand(t2, kIntSize));  // exponent
-  __ Addu(t2, t2, kDoubleSize);
+  __ sw(t0, MemOperand(t3));  // mantissa
+  __ sw(t1, MemOperand(t3, kIntSize));  // exponent
+  __ Addu(t3, t3, kDoubleSize);
 
   __ bind(&entry);
-  __ Branch(&loop, lt, t2, Operand(t0));
+  __ Branch(&loop, lt, t3, Operand(t2));
 
-  if (fpu_supported) __ Pop(a0, a1);
+  if (fpu_supported) __ Pop(a1, a0);
 }
 
 
@@ -7651,24 +7651,24 @@ void FastElementsConversionStub::GenerateDoubleToObject(
   KeyedStoreIC::GenerateRuntimeSetProperty(masm, strict_mode);
 
   __ bind(&loop);
-  __ lw(t6, MemOperand(t0));
+  __ lw(a1, MemOperand(t0));
   __ Addu(t0, t0, kDoubleSize);
-  // t6: current element's upper 32 bit
+  // a1: current element's upper 32 bit
   // t0: address of next element's upper 32 bit
-  __ Branch(&convert_hole, eq, t6, Operand(kHoleNanUpper32));
+  __ Branch(&convert_hole, eq, a1, Operand(kHoleNanUpper32));
 
   // Non-hole double, copy value into a heap number.
-  __ AllocateHeapNumber(a0, a1, a2, t5, &gc_required);
-  __ lw(t6, MemOperand(t0, -12));
-  __ sw(t6, FieldMemOperand(a0, HeapNumber::kMantissaOffset));
-  __ lw(t6, MemOperand(t0, -8));
-  __ sw(t6, FieldMemOperand(a0, HeapNumber::kExponentOffset));
-  __ mov(a2, a3);
-  __ sw(a0, MemOperand(a3));
+  __ AllocateHeapNumber(a2, a0, t6, t5, &gc_required);
+  // a2: new heap number
+  __ lw(a0, MemOperand(t0, -12));
+  __ sw(a0, FieldMemOperand(a2, HeapNumber::kMantissaOffset));
+  __ sw(a1, FieldMemOperand(a2, HeapNumber::kExponentOffset));
+  __ mov(a0, a3);
+  __ sw(a2, MemOperand(a3));
   __ Addu(a3, a3, kIntSize);
   __ RecordWrite(t2,
-                 a2,
                  a0,
+                 a2,
                  kRAHasBeenSaved,
                  kDontSaveFPRegs,
                  EMIT_REMEMBERED_SET,
