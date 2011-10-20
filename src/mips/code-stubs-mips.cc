@@ -7481,6 +7481,7 @@ void FastElementsConversionStub::GenerateSmiOnlyToObject(MacroAssembler* masm) {
                       kDontSaveFPRegs,
                       EMIT_REMEMBERED_SET,
                       OMIT_SMI_CHECK);
+  __ mov(v0, a0);
 }
 
 
@@ -7597,6 +7598,8 @@ void FastElementsConversionStub::GenerateSmiOnlyToDouble(
   __ Branch(&loop, lt, t3, Operand(t2));
 
   if (fpu_supported) __ Pop(a1, a0);
+
+  __ mov(v0, a0);
 }
 
 
@@ -7705,6 +7708,8 @@ void FastElementsConversionStub::GenerateDoubleToObject(
                       EMIT_REMEMBERED_SET,
                       OMIT_SMI_CHECK);
   __ pop(ra);
+
+  __ mov(v0, a0);
 }
 
 
