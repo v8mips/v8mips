@@ -198,11 +198,6 @@ class CallICBase: public IC {
   class Contextual: public BitField<bool, 0, 1> {};
   class StringStubState: public BitField<StringStubFeedback, 1, 1> {};
 
- protected:
-  CallICBase(Code::Kind kind, Isolate* isolate)
-      : IC(EXTRA_CALL_FRAME, isolate), kind_(kind) {}
-
- public:
   // Returns a JSFunction or a Failure.
   MUST_USE_RESULT MaybeObject* LoadFunction(State state,
                                             Code::ExtraICState extra_ic_state,
@@ -210,7 +205,8 @@ class CallICBase: public IC {
                                             Handle<String> name);
 
  protected:
-  Code::Kind kind_;
+  CallICBase(Code::Kind kind, Isolate* isolate)
+      : IC(EXTRA_CALL_FRAME, isolate), kind_(kind) {}
 
   bool TryUpdateExtraICState(LookupResult* lookup,
                              Handle<Object> object,
@@ -240,6 +236,14 @@ class CallICBase: public IC {
 
   static void Clear(Address address, Code* target);
 
+  // Platform-specific generation of misses for call and keyed call.
+  static void GenerateMiss(MacroAssembler* masm,
+                           int argc,
+                           IC::UtilityId id,
+                           Code::ExtraICState extra_state);
+
+  Code::Kind kind_;
+
   friend class IC;
 };
 
@@ -253,15 +257,20 @@ class CallIC: public CallICBase {
   // Code generator routines.
   static void GenerateInitialize(MacroAssembler* masm,
                                  int argc,
-                                 Code::ExtraICState extra_ic_state) {
-    GenerateMiss(masm, argc, extra_ic_state);
+                                 Code::ExtraICState extra_state) {
+    GenerateMiss(masm, argc, extra_state);
   }
+
   static void GenerateMiss(MacroAssembler* masm,
                            int argc,
-                           Code::ExtraICState extra_ic_state);
+                           Code::ExtraICState extra_state) {
+    CallICBase::GenerateMiss(masm, argc, IC::kCallIC_Miss, extra_state);
+  }
+
   static void GenerateMegamorphic(MacroAssembler* masm,
                                   int argc,
                                   Code::ExtraICState extra_ic_state);
+
   static void GenerateNormal(MacroAssembler* masm, int argc);
 };
 
@@ -281,7 +290,12 @@ class KeyedCallIC: public CallICBase {
   static void GenerateInitialize(MacroAssembler* masm, int argc) {
     GenerateMiss(masm, argc);
   }
-  static void GenerateMiss(MacroAssembler* masm, int argc);
+
+  static void GenerateMiss(MacroAssembler* masm, int argc) {
+    CallICBase::GenerateMiss(masm, argc, IC::kKeyedCallIC_Miss,
+                             Code::kNoExtraICState);
+  }
+
   static void GenerateMegamorphic(MacroAssembler* masm, int argc);
   static void GenerateNormal(MacroAssembler* masm, int argc);
   static void GenerateNonStrictArguments(MacroAssembler* masm, int argc);
@@ -351,7 +365,7 @@ class KeyedIC: public IC {
   explicit KeyedIC(Isolate* isolate) : IC(NO_EXTRA_FRAME, isolate) {}
   virtual ~KeyedIC() {}
 
-  virtual MaybeObject* GetElementStubWithoutMapCheck(
+  virtual Handle<Code> GetElementStubWithoutMapCheck(
       bool is_js_array,
       ElementsKind elements_kind) = 0;
 
@@ -367,27 +381,23 @@ class KeyedIC: public IC {
                            StrictModeFlag strict_mode,
                            Handle<Code> default_stub);
 
-  MaybeObject* ComputeStub(JSObject* receiver,
-                           StubKind stub_kind,
-                           StrictModeFlag strict_mode,
-                           Code* default_stub);
-
-  virtual MaybeObject* ComputePolymorphicStub(MapList* receiver_maps,
+  virtual Handle<Code> ComputePolymorphicStub(MapHandleList* receiver_maps,
                                               StrictModeFlag strict_mode) = 0;
 
-  MaybeObject* ComputeMonomorphicStubWithoutMapCheck(
-      Map* receiver_map,
+  Handle<Code> ComputeMonomorphicStubWithoutMapCheck(
+      Handle<Map> receiver_map,
       StrictModeFlag strict_mode);
 
  private:
-  void GetReceiverMapsForStub(Code* stub, MapList* result);
+  void GetReceiverMapsForStub(Handle<Code> stub, MapHandleList* result);
 
-  MaybeObject* ComputeMonomorphicStub(JSObject* receiver,
+  Handle<Code> ComputeMonomorphicStub(Handle<JSObject> receiver,
                                       StubKind stub_kind,
                                       StrictModeFlag strict_mode,
-                                      Code* default_stub);
+                                      Handle<Code> default_stub);
 
-  MaybeObject* ComputeTransitionedMap(JSObject* receiver, StubKind stub_kind);
+  Handle<Map> ComputeTransitionedMap(Handle<JSObject> receiver,
+                                     StubKind stub_kind);
 
   static bool IsTransitionStubKind(StubKind stub_kind) {
     return stub_kind > STORE_NO_TRANSITION;
@@ -427,16 +437,15 @@ class KeyedLoadIC: public KeyedIC {
   static const int kSlowCaseBitFieldMask =
       (1 << Map::kIsAccessCheckNeeded) | (1 << Map::kHasIndexedInterceptor);
 
-  virtual MaybeObject* GetElementStubWithoutMapCheck(
+  virtual Handle<Code> GetElementStubWithoutMapCheck(
       bool is_js_array,
       ElementsKind elements_kind);
 
  protected:
   virtual Code::Kind kind() const { return Code::KEYED_LOAD_IC; }
 
-  virtual MaybeObject* ComputePolymorphicStub(
-      MapList* receiver_maps,
-      StrictModeFlag strict_mode);
+  virtual Handle<Code> ComputePolymorphicStub(MapHandleList* receiver_maps,
+                                              StrictModeFlag strict_mode);
 
   virtual Handle<Code> string_stub() {
     return isolate()->builtins()->KeyedLoadIC_String();
@@ -571,16 +580,15 @@ class KeyedStoreIC: public KeyedIC {
   static void GenerateTransitionElementsSmiToDouble(MacroAssembler* masm);
   static void GenerateTransitionElementsDoubleToObject(MacroAssembler* masm);
 
-  virtual MaybeObject* GetElementStubWithoutMapCheck(
+  virtual Handle<Code> GetElementStubWithoutMapCheck(
       bool is_js_array,
       ElementsKind elements_kind);
 
  protected:
   virtual Code::Kind kind() const { return Code::KEYED_STORE_IC; }
 
-  virtual MaybeObject* ComputePolymorphicStub(
-      MapList* receiver_maps,
-      StrictModeFlag strict_mode);
+  virtual Handle<Code> ComputePolymorphicStub(MapHandleList* receiver_maps,
+                                              StrictModeFlag strict_mode);
 
   private:
   // Update the inline cache.

@@ -168,10 +168,9 @@ class StubCache {
                                       Handle<Map> transition,
                                       StrictModeFlag strict_mode);
 
-  MUST_USE_RESULT MaybeObject* ComputeKeyedLoadOrStoreElement(
-      JSObject* receiver,
-      KeyedIC::StubKind stub_kind,
-      StrictModeFlag strict_mode);
+  Handle<Code> ComputeKeyedLoadOrStoreElement(Handle<JSObject> receiver,
+                                              KeyedIC::StubKind stub_kind,
+                                              StrictModeFlag strict_mode);
 
   // ---
 
@@ -378,35 +377,32 @@ DECLARE_RUNTIME_FUNCTION(MaybeObject*, CallInterceptorProperty);
 DECLARE_RUNTIME_FUNCTION(MaybeObject*, KeyedLoadPropertyWithInterceptor);
 
 
-// The stub compiler compiles stubs for the stub cache.
+// The stub compilers compile stubs for the stub cache.
 class StubCompiler BASE_EMBEDDED {
  public:
   explicit StubCompiler(Isolate* isolate)
       : isolate_(isolate), masm_(isolate, NULL, 256), failure_(NULL) { }
 
+  // Functions to compile either CallIC or KeyedCallIC.  The specific kind
+  // is extracted from the code flags.
   Handle<Code> CompileCallInitialize(Code::Flags flags);
-  MUST_USE_RESULT MaybeObject* TryCompileCallInitialize(Code::Flags flags);
-
   Handle<Code> CompileCallPreMonomorphic(Code::Flags flags);
-  MUST_USE_RESULT MaybeObject* TryCompileCallPreMonomorphic(Code::Flags flags);
-
   Handle<Code> CompileCallNormal(Code::Flags flags);
-  MUST_USE_RESULT MaybeObject* TryCompileCallNormal(Code::Flags flags);
-
   Handle<Code> CompileCallMegamorphic(Code::Flags flags);
-  MUST_USE_RESULT MaybeObject* TryCompileCallMegamorphic(Code::Flags flags);
-
   Handle<Code> CompileCallArguments(Code::Flags flags);
-  MUST_USE_RESULT MaybeObject* TryCompileCallArguments(Code::Flags flags);
-
   Handle<Code> CompileCallMiss(Code::Flags flags);
+
+  MUST_USE_RESULT MaybeObject* TryCompileCallPreMonomorphic(Code::Flags flags);
+  MUST_USE_RESULT MaybeObject* TryCompileCallNormal(Code::Flags flags);
+  MUST_USE_RESULT MaybeObject* TryCompileCallMegamorphic(Code::Flags flags);
+  MUST_USE_RESULT MaybeObject* TryCompileCallArguments(Code::Flags flags);
   MUST_USE_RESULT MaybeObject* TryCompileCallMiss(Code::Flags flags);
 
 #ifdef ENABLE_DEBUGGER_SUPPORT
   Handle<Code> CompileCallDebugBreak(Code::Flags flags);
-  MUST_USE_RESULT MaybeObject* TryCompileCallDebugBreak(Code::Flags flags);
-
   Handle<Code> CompileCallDebugPrepareStepIn(Code::Flags flags);
+
+  MUST_USE_RESULT MaybeObject* TryCompileCallDebugBreak(Code::Flags flags);
   MUST_USE_RESULT MaybeObject* TryCompileCallDebugPrepareStepIn(
       Code::Flags flags);
 #endif
@@ -502,8 +498,12 @@ class StubCompiler BASE_EMBEDDED {
                            Label* miss);
 
  protected:
-  MaybeObject* GetCodeWithFlags(Code::Flags flags, const char* name);
-  MaybeObject* GetCodeWithFlags(Code::Flags flags, String* name);
+  Handle<Code> GetCodeWithFlags(Code::Flags flags, const char* name);
+
+  MUST_USE_RESULT MaybeObject* TryGetCodeWithFlags(Code::Flags flags,
+                                                   const char* name);
+  MUST_USE_RESULT MaybeObject* TryGetCodeWithFlags(Code::Flags flags,
+                                                   String* name);
 
   MacroAssembler* masm() { return &masm_; }
   void set_failure(Failure* failure) { failure_ = failure; }
@@ -686,7 +686,12 @@ class KeyedLoadStubCompiler: public StubCompiler {
 
   MUST_USE_RESULT MaybeObject* CompileLoadFunctionPrototype(String* name);
 
+  Handle<Code> CompileLoadElement(Handle<Map> receiver_map);
+
   MUST_USE_RESULT MaybeObject* CompileLoadElement(Map* receiver_map);
+
+  Handle<Code> CompileLoadPolymorphic(MapHandleList* receiver_maps,
+                                      CodeHandleList* handler_ics);
 
   MUST_USE_RESULT MaybeObject* CompileLoadPolymorphic(
       MapList* receiver_maps,
@@ -768,7 +773,13 @@ class KeyedStoreStubCompiler: public StubCompiler {
                                                  Map* transition,
                                                  String* name);
 
+  Handle<Code> CompileStoreElement(Handle<Map> receiver_map);
+
   MUST_USE_RESULT MaybeObject* CompileStoreElement(Map* receiver_map);
+
+  Handle<Code> CompileStorePolymorphic(MapHandleList* receiver_maps,
+                                       CodeHandleList* handler_stubs,
+                                       MapHandleList* transitioned_maps);
 
   MUST_USE_RESULT MaybeObject* CompileStorePolymorphic(
       MapList* receiver_maps,
