@@ -76,7 +76,6 @@ void ElementsTransitionGenerator::GenerateSmiOnlyToObject(
                       kDontSaveFPRegs,
                       EMIT_REMEMBERED_SET,
                       OMIT_SMI_CHECK);
-  __ mov(v0, a0);
 }
 
 
@@ -196,8 +195,6 @@ void ElementsTransitionGenerator::GenerateSmiOnlyToDouble(
 
   if (!fpu_supported) __ Pop(a1, a0);
   __ pop(ra);
-
-  __ mov(v0, a0);
 }
 
 
@@ -307,8 +304,6 @@ void ElementsTransitionGenerator::GenerateDoubleToObject(
                       EMIT_REMEMBERED_SET,
                       OMIT_SMI_CHECK);
   __ pop(ra);
-
-  __ mov(v0, a0);
 }
 
 #undef __
