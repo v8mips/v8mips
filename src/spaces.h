@@ -459,7 +459,6 @@ class MemoryChunk {
     live_byte_count_ = 0;
   }
   void IncrementLiveBytes(int by) {
-    ASSERT_LE(static_cast<unsigned>(live_byte_count_), size_);
     if (FLAG_gc_verbose) {
       printf("UpdateLiveBytes:%p:%x%c=%x->%x\n",
              static_cast<void*>(this), live_byte_count_,
@@ -1132,11 +1131,6 @@ class HeapObjectIterator: public ObjectIterator {
                          Address end,
                          PageMode mode,
                          HeapObjectCallback size_func);
-
-#ifdef DEBUG
-  // Verifies whether fields have valid values.
-  void Verify();
-#endif
 };
 
 
