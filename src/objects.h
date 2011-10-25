@@ -1365,6 +1365,9 @@ class JSReceiver: public HeapObject {
                                           StrictModeFlag strict_mode,
                                           bool check_prototype);
 
+  // Tests for the fast common case for property enumeration.
+  bool IsSimpleEnum();
+
   // Returns the class name ([[Class]] property in the specification).
   String* class_name();
 
@@ -1616,9 +1619,6 @@ class JSObject: public JSReceiver {
 
   MUST_USE_RESULT MaybeObject* DeleteProperty(String* name, DeleteMode mode);
   MUST_USE_RESULT MaybeObject* DeleteElement(uint32_t index, DeleteMode mode);
-
-  // Tests for the fast common case for property enumeration.
-  bool IsSimpleEnum();
 
   inline void ValidateSmiOnlyElements();
 
@@ -5872,14 +5872,12 @@ class PolymorphicCodeCache: public Struct {
                      Code::Flags flags,
                      Handle<Code> code);
 
-  MUST_USE_RESULT MaybeObject* Update(MapList* maps,
+  MUST_USE_RESULT MaybeObject* Update(MapHandleList* maps,
                                       Code::Flags flags,
                                       Code* code);
 
   // Returns an undefined value if the entry is not found.
   Handle<Object> Lookup(MapHandleList* maps, Code::Flags flags);
-
-  Object* Lookup(MapList* maps, Code::Flags flags);
 
   static inline PolymorphicCodeCache* cast(Object* obj);
 
@@ -5904,8 +5902,11 @@ class PolymorphicCodeCache: public Struct {
 class PolymorphicCodeCacheHashTable
     : public HashTable<CodeCacheHashTableShape, HashTableKey*> {
  public:
-  Object* Lookup(MapList* maps, int code_kind);
-  MUST_USE_RESULT MaybeObject* Put(MapList* maps, int code_kind, Code* code);
+  Object* Lookup(MapHandleList* maps, int code_kind);
+
+  MUST_USE_RESULT MaybeObject* Put(MapHandleList* maps,
+                                   int code_kind,
+                                   Code* code);
 
   static inline PolymorphicCodeCacheHashTable* cast(Object* obj);
 

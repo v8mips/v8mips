@@ -1227,6 +1227,14 @@ void Genesis::InitializeGlobal(Handle<GlobalObject> inner_global,
 
   // Initialize the data slot.
   global_context()->set_data(heap->undefined_value());
+
+  {
+    // Initialize the random seed slot.
+    Handle<ByteArray> zeroed_byte_array(
+        factory->NewByteArray(kRandomStateSize));
+    global_context()->set_random_seed(*zeroed_byte_array);
+    memset(zeroed_byte_array->GetDataStartAddress(), 0, kRandomStateSize);
+  }
 }
 
 
@@ -1368,6 +1376,7 @@ void Genesis::InstallExperimentalNativeFunctions() {
     INSTALL_NATIVE(JSFunction, "DerivedHasTrap", derived_has_trap);
     INSTALL_NATIVE(JSFunction, "DerivedGetTrap", derived_get_trap);
     INSTALL_NATIVE(JSFunction, "DerivedSetTrap", derived_set_trap);
+    INSTALL_NATIVE(JSFunction, "ProxyEnumerate", proxy_enumerate);
   }
 }
 

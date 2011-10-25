@@ -2181,46 +2181,50 @@ void Map::LookupInDescriptors(JSObject* holder,
 }
 
 
-// If |map| is contained in |maps_list|, returns |map|; otherwise returns NULL.
-static bool ContainsMap(MapList* maps_list, Map* map) {
-  for (int i = 0; i < maps_list->length(); ++i) {
-    if (maps_list->at(i) == map) return true;
+static bool ContainsMap(MapHandleList* maps, Handle<Map> map) {
+  ASSERT(!map.is_null());
+  for (int i = 0; i < maps->length(); ++i) {
+    if (!maps->at(i).is_null() && maps->at(i).is_identical_to(map)) return true;
   }
   return false;
 }
 
 
-Handle<Map> Map::FindTransitionedMap(MapHandleList* candidates) {
-  MapList raw_candidates(candidates->length());
-  Map* result = FindTransitionedMap(UnwrapHandleList(&raw_candidates,
-                                                     candidates));
-  return (result == NULL) ? Handle<Map>::null() : Handle<Map>(result);
+template <class T>
+static Handle<T> MaybeNull(T* p) {
+  if (p == NULL) return Handle<T>::null();
+  return Handle<T>(p);
 }
 
 
-Map* Map::FindTransitionedMap(MapList* candidates) {
+Handle<Map> Map::FindTransitionedMap(MapHandleList* candidates) {
   ElementsKind elms_kind = elements_kind();
   if (elms_kind == FAST_DOUBLE_ELEMENTS) {
     bool dummy = true;
-    Map* fast_map = LookupElementsTransitionMap(FAST_ELEMENTS, &dummy);
-    if (fast_map == NULL) return NULL;
-    if (ContainsMap(candidates, fast_map)) return fast_map;
-    return NULL;
+    Handle<Map> fast_map =
+        MaybeNull(LookupElementsTransitionMap(FAST_ELEMENTS, &dummy));
+    if (!fast_map.is_null() && ContainsMap(candidates, fast_map)) {
+      return fast_map;
+    }
+    return Handle<Map>::null();
   }
   if (elms_kind == FAST_SMI_ONLY_ELEMENTS) {
     bool dummy = true;
-    Map* double_map = LookupElementsTransitionMap(FAST_DOUBLE_ELEMENTS, &dummy);
+    Handle<Map> double_map =
+        MaybeNull(LookupElementsTransitionMap(FAST_DOUBLE_ELEMENTS, &dummy));
     // In the current implementation, if the DOUBLE map doesn't exist, the
     // FAST map can't exist either.
-    if (double_map == NULL) return NULL;
-    Map* fast_map = double_map->LookupElementsTransitionMap(FAST_ELEMENTS,
-                                                            &dummy);
-    if (fast_map != NULL && ContainsMap(candidates, fast_map)) return fast_map;
+    if (double_map.is_null()) return Handle<Map>::null();
+    Handle<Map> fast_map =
+        MaybeNull(double_map->LookupElementsTransitionMap(FAST_ELEMENTS,
+                                                          &dummy));
+    if (!fast_map.is_null() && ContainsMap(candidates, fast_map)) {
+      return fast_map;
+    }
     if (ContainsMap(candidates, double_map)) return double_map;
   }
-  return NULL;
+  return Handle<Map>::null();
 }
-
 
 static Map* GetElementsTransitionMapFromDescriptor(Object* descriptor_contents,
                                                    ElementsKind elements_kind) {
@@ -3517,7 +3521,7 @@ Smi* JSReceiver::GenerateIdentityHash() {
   do {
     // Generate a random 32-bit hash value but limit range to fit
     // within a smi.
-    hash_value = V8::Random(isolate) & Smi::kMaxValue;
+    hash_value = V8::RandomPrivate(isolate) & Smi::kMaxValue;
     attempts++;
   } while (hash_value == 0 && attempts < 30);
   hash_value = hash_value != 0 ? hash_value : 1;  // never return 0
@@ -4088,15 +4092,16 @@ MaybeObject* JSObject::PreventExtensions() {
 
 
 // Tests for the fast common case for property enumeration:
-// - This object and all prototypes has an enum cache (which means that it has
-//   no interceptors and needs no access checks).
+// - This object and all prototypes has an enum cache (which means that
+//   it is no proxy, has no interceptors and needs no access checks).
 // - This object has no elements.
 // - No prototype has enumerable properties/elements.
-bool JSObject::IsSimpleEnum() {
+bool JSReceiver::IsSimpleEnum() {
   Heap* heap = GetHeap();
   for (Object* o = this;
        o != heap->null_value();
        o = JSObject::cast(o)->GetPrototype()) {
+    if (!o->IsJSObject()) return false;
     JSObject* curr = JSObject::cast(o);
     if (!curr->map()->instance_descriptors()->HasEnumCache()) return false;
     ASSERT(!curr->HasNamedInterceptor());
@@ -5146,15 +5151,11 @@ void PolymorphicCodeCache::Update(Handle<PolymorphicCodeCache> cache,
                                   Code::Flags flags,
                                   Handle<Code> code) {
   Isolate* isolate = cache->GetIsolate();
-  List<Map*> raw_maps(maps->length());
-  CALL_HEAP_FUNCTION_VOID(
-      isolate,
-      (raw_maps.Clear(),
-       cache->Update(UnwrapHandleList(&raw_maps, maps), flags, *code)));
+  CALL_HEAP_FUNCTION_VOID(isolate, cache->Update(maps, flags, *code));
 }
 
 
-MaybeObject* PolymorphicCodeCache::Update(MapList* maps,
+MaybeObject* PolymorphicCodeCache::Update(MapHandleList* maps,
                                           Code::Flags flags,
                                           Code* code) {
   // Initialize cache if necessary.
@@ -5184,18 +5185,12 @@ MaybeObject* PolymorphicCodeCache::Update(MapList* maps,
 
 Handle<Object> PolymorphicCodeCache::Lookup(MapHandleList* maps,
                                             Code::Flags flags) {
-  List<Map*> raw_maps(maps->length());
-  return Handle<Object>(Lookup(UnwrapHandleList(&raw_maps, maps), flags));
-}
-
-
-Object* PolymorphicCodeCache::Lookup(MapList* maps, Code::Flags flags) {
   if (!cache()->IsUndefined()) {
     PolymorphicCodeCacheHashTable* hash_table =
         PolymorphicCodeCacheHashTable::cast(cache());
-    return hash_table->Lookup(maps, flags);
+    return Handle<Object>(hash_table->Lookup(maps, flags));
   } else {
-    return GetHeap()->undefined_value();
+    return GetIsolate()->factory()->undefined_value();
   }
 }
 
@@ -5206,12 +5201,12 @@ Object* PolymorphicCodeCache::Lookup(MapList* maps, Code::Flags flags) {
 class PolymorphicCodeCacheHashTableKey : public HashTableKey {
  public:
   // Callers must ensure that |maps| outlives the newly constructed object.
-  PolymorphicCodeCacheHashTableKey(MapList* maps, int code_flags)
+  PolymorphicCodeCacheHashTableKey(MapHandleList* maps, int code_flags)
       : maps_(maps),
         code_flags_(code_flags) {}
 
   bool IsMatch(Object* other) {
-    MapList other_maps(kDefaultListAllocationSize);
+    MapHandleList other_maps(kDefaultListAllocationSize);
     int other_flags;
     FromObject(other, &other_flags, &other_maps);
     if (code_flags_ != other_flags) return false;
@@ -5227,7 +5222,7 @@ class PolymorphicCodeCacheHashTableKey : public HashTableKey {
     for (int i = 0; i < maps_->length(); ++i) {
       bool match_found = false;
       for (int j = 0; j < other_maps.length(); ++j) {
-        if (maps_->at(i)->EquivalentTo(other_maps.at(j))) {
+        if (maps_->at(i)->EquivalentTo(*other_maps.at(j))) {
           match_found = true;
           break;
         }
@@ -5237,7 +5232,7 @@ class PolymorphicCodeCacheHashTableKey : public HashTableKey {
     return true;
   }
 
-  static uint32_t MapsHashHelper(MapList* maps, int code_flags) {
+  static uint32_t MapsHashHelper(MapHandleList* maps, int code_flags) {
     uint32_t hash = code_flags;
     for (int i = 0; i < maps->length(); ++i) {
       hash ^= maps->at(i)->Hash();
@@ -5250,7 +5245,7 @@ class PolymorphicCodeCacheHashTableKey : public HashTableKey {
   }
 
   uint32_t HashForObject(Object* obj) {
-    MapList other_maps(kDefaultListAllocationSize);
+    MapHandleList other_maps(kDefaultListAllocationSize);
     int other_flags;
     FromObject(obj, &other_flags, &other_maps);
     return MapsHashHelper(&other_maps, other_flags);
@@ -5268,29 +5263,32 @@ class PolymorphicCodeCacheHashTableKey : public HashTableKey {
     FixedArray* list = FixedArray::cast(obj);
     list->set(0, Smi::FromInt(code_flags_));
     for (int i = 0; i < maps_->length(); ++i) {
-      list->set(i + 1, maps_->at(i));
+      list->set(i + 1, *maps_->at(i));
     }
     return list;
   }
 
  private:
-  static MapList* FromObject(Object* obj, int* code_flags, MapList* maps) {
+  static MapHandleList* FromObject(Object* obj,
+                                   int* code_flags,
+                                   MapHandleList* maps) {
     FixedArray* list = FixedArray::cast(obj);
     maps->Rewind(0);
     *code_flags = Smi::cast(list->get(0))->value();
     for (int i = 1; i < list->length(); ++i) {
-      maps->Add(Map::cast(list->get(i)));
+      maps->Add(Handle<Map>(Map::cast(list->get(i))));
     }
     return maps;
   }
 
-  MapList* maps_;  // weak.
+  MapHandleList* maps_;  // weak.
   int code_flags_;
   static const int kDefaultListAllocationSize = kMaxKeyedPolymorphism + 1;
 };
 
 
-Object* PolymorphicCodeCacheHashTable::Lookup(MapList* maps, int code_flags) {
+Object* PolymorphicCodeCacheHashTable::Lookup(MapHandleList* maps,
+                                              int code_flags) {
   PolymorphicCodeCacheHashTableKey key(maps, code_flags);
   int entry = FindEntry(&key);
   if (entry == kNotFound) return GetHeap()->undefined_value();
@@ -5298,7 +5296,7 @@ Object* PolymorphicCodeCacheHashTable::Lookup(MapList* maps, int code_flags) {
 }
 
 
-MaybeObject* PolymorphicCodeCacheHashTable::Put(MapList* maps,
+MaybeObject* PolymorphicCodeCacheHashTable::Put(MapHandleList* maps,
                                                 int code_flags,
                                                 Code* code) {
   PolymorphicCodeCacheHashTableKey key(maps, code_flags);

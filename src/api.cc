@@ -2874,8 +2874,10 @@ Local<Array> v8::Object::GetPropertyNames() {
   ENTER_V8(isolate);
   i::HandleScope scope(isolate);
   i::Handle<i::JSObject> self = Utils::OpenHandle(this);
+  bool threw = false;
   i::Handle<i::FixedArray> value =
-      i::GetKeysInFixedArrayFor(self, i::INCLUDE_PROTOS);
+      i::GetKeysInFixedArrayFor(self, i::INCLUDE_PROTOS, &threw);
+  if (threw) return Local<v8::Array>();
   // Because we use caching to speed up enumeration it is important
   // to never change the result of the basic enumeration function so
   // we clone the result.
@@ -2893,8 +2895,10 @@ Local<Array> v8::Object::GetOwnPropertyNames() {
   ENTER_V8(isolate);
   i::HandleScope scope(isolate);
   i::Handle<i::JSObject> self = Utils::OpenHandle(this);
+  bool threw = false;
   i::Handle<i::FixedArray> value =
-      i::GetKeysInFixedArrayFor(self, i::LOCAL_ONLY);
+      i::GetKeysInFixedArrayFor(self, i::LOCAL_ONLY, &threw);
+  if (threw) return Local<v8::Array>();
   // Because we use caching to speed up enumeration it is important
   // to never change the result of the basic enumeration function so
   // we clone the result.
@@ -4105,8 +4109,9 @@ Persistent<Context> v8::Context::New(
   }
   // Leave V8.
 
-  if (env.is_null())
+  if (env.is_null()) {
     return Persistent<Context>();
+  }
   return Persistent<Context>(Utils::ToLocal(env));
 }
 
