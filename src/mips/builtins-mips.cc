@@ -98,8 +98,8 @@ static void AllocateEmptyJSArray(MacroAssembler* masm,
                                  Register scratch2,
                                  Register scratch3,
                                  Label* gc_required) {
-  int initial_capacity = JSArray::kPreallocatedArrayElements;
-  ASSERT(initial_capacity >= 0);
+  const int initial_capacity = JSArray::kPreallocatedArrayElements;
+  STATIC_ASSERT(initial_capacity >= 0);
   // Load the initial map from the array function.
   __ lw(scratch1, FieldMemOperand(array_function,
                                   JSFunction::kPrototypeOrInitialMapOffset));
@@ -149,12 +149,24 @@ static void AllocateEmptyJSArray(MacroAssembler* masm,
   __ sw(scratch3, MemOperand(scratch1));
   __ Addu(scratch1, scratch1, kPointerSize);
 
-  // Fill the FixedArray with the hole value.
+  // Fill the FixedArray with the hole value. Inline the code if short.
+  if (initial_capacity == 0) return;
   ASSERT_EQ(2 * kPointerSize, FixedArray::kHeaderSize);
   __ LoadRoot(scratch3, Heap::kTheHoleValueRootIndex);
-  for (int i = 0; i < initial_capacity; i++) {
+  static const int kLoopUnfoldLimit = 4;
+  if (initial_capacity <= kLoopUnfoldLimit) {
+    for (int i = 0; i < initial_capacity; i++) {
+      __ sw(scratch3, MemOperand(scratch1, i * kPointerSize));
+    }
+  } else {
+    Label loop, entry;
+    __ Addu(scratch2, scratch1, Operand(initial_capacity * kPointerSize));
+    __ Branch(&entry);
+    __ bind(&loop);
     __ sw(scratch3, MemOperand(scratch1));
     __ Addu(scratch1, scratch1, kPointerSize);
+    __ bind(&entry);
+    __ Branch(&loop, lt, scratch1, Operand(scratch2));
   }
 }
 
