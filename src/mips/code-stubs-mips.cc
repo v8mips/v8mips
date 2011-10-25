@@ -6948,7 +6948,82 @@ void DirectCEntryStub::GenerateCall(MacroAssembler* masm,
 }
 
 
-MaybeObject* StringDictionaryLookupStub::GenerateNegativeLookup(
+void StringDictionaryLookupStub::GenerateNegativeLookup(MacroAssembler* masm,
+                                                        Label* miss,
+                                                        Label* done,
+                                                        Register receiver,
+                                                        Register properties,
+                                                        Handle<String> name,
+                                                        Register scratch0) {
+  // If names of slots in range from 1 to kProbes - 1 for the hash value are
+  // not equal to the name and kProbes-th slot is not used (its name is the
+  // undefined value), it guarantees the hash table doesn't contain the
+  // property. It's true even if some slots represent deleted properties
+  // (their names are the null value).
+  for (int i = 0; i < kInlinedProbes; i++) {
+    // scratch0 points to properties hash.
+    // Compute the masked index: (hash + i + i * i) & mask.
+    Register index = scratch0;
+    // Capacity is smi 2^n.
+    __ lw(index, FieldMemOperand(properties, kCapacityOffset));
+    __ Subu(index, index, Operand(1));
+    __ And(index, index, Operand(
+        Smi::FromInt(name->Hash() + StringDictionary::GetProbeOffset(i))));
+
+    // Scale the index by multiplying by the entry size.
+    ASSERT(StringDictionary::kEntrySize == 3);
+    __ sll(at, index, 1);
+    __ Addu(index, index, at);
+
+    Register entity_name = scratch0;
+    // Having undefined at this place means the name is not contained.
+    ASSERT_EQ(kSmiTagSize, 1);
+    Register tmp = properties;
+    __ sll(tmp, index, 1);
+    __ Addu(tmp, properties, tmp);
+    __ lw(entity_name, FieldMemOperand(tmp, kElementsStartOffset));
+
+    ASSERT(!tmp.is(entity_name));
+    __ LoadRoot(tmp, Heap::kUndefinedValueRootIndex);
+    __ Branch(done, eq, entity_name, Operand(tmp));
+
+    if (i != kInlinedProbes - 1) {
+      // Stop if found the property.
+      __ Branch(miss, eq, entity_name, Operand(Handle<String>(name)));
+
+      // Check if the entry name is not a symbol.
+      __ lw(entity_name, FieldMemOperand(entity_name, HeapObject::kMapOffset));
+      __ lbu(entity_name,
+             FieldMemOperand(entity_name, Map::kInstanceTypeOffset));
+      __ And(tmp, entity_name, Operand(kIsSymbolMask));
+      __ Branch(miss, eq, tmp, Operand(zero_reg));
+
+      // Restore the properties.
+      __ lw(properties,
+            FieldMemOperand(receiver, JSObject::kPropertiesOffset));
+    }
+  }
+
+  const int spill_mask =
+      (ra.bit() | t2.bit() | t1.bit() | t0.bit() | a3.bit() |
+       a2.bit() | a1.bit() | v0.bit());
+
+  __ MultiPush(spill_mask);
+  __ lw(a0, FieldMemOperand(receiver, JSObject::kPropertiesOffset));
+  __ li(a1, Operand(Handle<String>(name)));
+  StringDictionaryLookupStub stub(NEGATIVE_LOOKUP);
+  __ CallStub(&stub);
+  __ mov(a0, v0);
+  __ MultiPop(spill_mask);
+
+  __ Branch(done, eq, a0, Operand(zero_reg));
+  __ Branch(miss, ne, a0, Operand(zero_reg));
+}
+
+
+// TODO(kmillikin): Eliminate this function when the stub cache is fully
+// handlified.
+MaybeObject* StringDictionaryLookupStub::TryGenerateNegativeLookup(
     MacroAssembler* masm,
     Label* miss,
     Label* done,
