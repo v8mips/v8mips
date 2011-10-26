@@ -2848,9 +2848,10 @@ Handle<Code> StoreStubCompiler::CompileStoreField(Handle<JSObject> object,
 }
 
 
-MaybeObject* StoreStubCompiler::CompileStoreCallback(JSObject* object,
-                                                     AccessorInfo* callback,
-                                                     String* name) {
+Handle<Code> StoreStubCompiler::CompileStoreCallback(
+    Handle<JSObject> object,
+    Handle<AccessorInfo> callback,
+    Handle<String> name) {
   // ----------- S t a t e -------------
   //  -- a0    : value
   //  -- a1    : receiver
@@ -2876,7 +2877,7 @@ MaybeObject* StoreStubCompiler::CompileStoreCallback(JSObject* object,
   ASSERT(object->IsJSGlobalProxy() || !object->IsAccessCheckNeeded());
 
   __ push(a1);  // Receiver.
-  __ li(a3, Operand(Handle<AccessorInfo>(callback)));  // Callback info.
+  __ li(a3, Operand(callback));  // Callback info.
   __ Push(a3, a2, a0);
 
   // Do tail-call to the runtime system.
@@ -2891,12 +2892,13 @@ MaybeObject* StoreStubCompiler::CompileStoreCallback(JSObject* object,
   __ Jump(ic, RelocInfo::CODE_TARGET);
 
   // Return the generated code.
-  return TryGetCode(CALLBACKS, name);
+  return GetCode(CALLBACKS, name);
 }
 
 
-MaybeObject* StoreStubCompiler::CompileStoreInterceptor(JSObject* receiver,
-                                                        String* name) {
+Handle<Code> StoreStubCompiler::CompileStoreInterceptor(
+    Handle<JSObject> receiver,
+    Handle<String> name) {
   // ----------- S t a t e -------------
   //  -- a0    : value
   //  -- a1    : receiver
@@ -2938,7 +2940,7 @@ MaybeObject* StoreStubCompiler::CompileStoreInterceptor(JSObject* receiver,
   __ Jump(ic, RelocInfo::CODE_TARGET);
 
   // Return the generated code.
-  return TryGetCode(INTERCEPTOR, name);
+  return GetCode(INTERCEPTOR, name);
 }
 
 
