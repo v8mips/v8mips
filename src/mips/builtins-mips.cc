@@ -196,8 +196,8 @@ static void AllocateJSArray(MacroAssembler* masm,
                          JSFunction::kPrototypeOrInitialMapOffset));
 
   if (FLAG_debug_code) {  // Assert that array size is not zero.
-    __ Assert(ne, "array size is unexpectedly 0",
-        array_size, Operand(zero_reg));
+    __ Assert(
+        ne, "array size is unexpectedly 0", array_size, Operand(zero_reg));
   }
 
   // Allocate the JSArray object together with space for a FixedArray with the
