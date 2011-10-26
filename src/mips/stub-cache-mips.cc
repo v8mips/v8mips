@@ -3132,11 +3132,12 @@ MaybeObject* LoadStubCompiler::CompileLoadInterceptor(JSObject* object,
 }
 
 
-MaybeObject* LoadStubCompiler::CompileLoadGlobal(JSObject* object,
-                                                 GlobalObject* holder,
-                                                 JSGlobalPropertyCell* cell,
-                                                 String* name,
-                                                 bool is_dont_delete) {
+Handle<Code> LoadStubCompiler::CompileLoadGlobal(
+    Handle<JSObject> object,
+    Handle<GlobalObject> holder,
+    Handle<JSGlobalPropertyCell> cell,
+    Handle<String> name,
+    bool is_dont_delete) {
   // ----------- S t a t e -------------
   //  -- a0    : receiver
   //  -- a2    : name
@@ -3147,7 +3148,7 @@ MaybeObject* LoadStubCompiler::CompileLoadGlobal(JSObject* object,
   // If the object is the holder then we know that it's a global
   // object which can only happen for contextual calls. In this case,
   // the receiver cannot be a smi.
-  if (object != holder) {
+  if (!object.is_identical_to(holder)) {
     __ And(t0, a0, Operand(kSmiTagMask));
     __ Branch(&miss, eq, t0, Operand(zero_reg));
   }
@@ -3156,7 +3157,7 @@ MaybeObject* LoadStubCompiler::CompileLoadGlobal(JSObject* object,
   CheckPrototypes(object, a0, holder, a3, t0, a1, name, &miss);
 
   // Get the value from the cell.
-  __ li(a3, Operand(Handle<JSGlobalPropertyCell>(cell)));
+  __ li(a3, Operand(cell));
   __ lw(t0, FieldMemOperand(a3, JSGlobalPropertyCell::kValueOffset));
 
   // Check for deleted property if property can actually be deleted.
@@ -3175,7 +3176,7 @@ MaybeObject* LoadStubCompiler::CompileLoadGlobal(JSObject* object,
   GenerateLoadMiss(masm(), Code::LOAD_IC);
 
   // Return the generated code.
-  return TryGetCode(NORMAL, name);
+  return GetCode(NORMAL, name);
 }
 
 
@@ -3355,33 +3356,29 @@ Handle<Code> KeyedLoadStubCompiler::CompileLoadFunctionPrototype(
 }
 
 
-MaybeObject* KeyedLoadStubCompiler::CompileLoadElement(Map* receiver_map) {
+Handle<Code> KeyedLoadStubCompiler::CompileLoadElement(
+    Handle<Map> receiver_map) {
   // ----------- S t a t e -------------
   //  -- ra    : return address
   //  -- a0    : key
   //  -- a1    : receiver
   // -----------------------------------
-  Code* stub;
   ElementsKind elements_kind = receiver_map->elements_kind();
-  MaybeObject* maybe_stub = KeyedLoadElementStub(elements_kind).TryGetCode();
-  if (!maybe_stub->To(&stub)) return maybe_stub;
-  __ DispatchMap(a1,
-                 a2,
-                 Handle<Map>(receiver_map),
-                 Handle<Code>(stub),
-                 DO_SMI_CHECK);
+  Handle<Code> stub = KeyedLoadElementStub(elements_kind).GetCode();
+
+  __ DispatchMap(a1, a2, receiver_map, stub, DO_SMI_CHECK);
 
   Handle<Code> ic = isolate()->builtins()->KeyedLoadIC_Miss();
   __ Jump(ic, RelocInfo::CODE_TARGET);
 
   // Return the generated code.
-  return TryGetCode(NORMAL, NULL);
+  return GetCode(NORMAL, factory()->empty_string());
 }
 
 
-MaybeObject* KeyedLoadStubCompiler::CompileLoadPolymorphic(
-    MapList* receiver_maps,
-    CodeList* handler_ics) {
+Handle<Code> KeyedLoadStubCompiler::CompileLoadPolymorphic(
+    MapHandleList* receiver_maps,
+    CodeHandleList* handler_ics) {
   // ----------- S t a t e -------------
   //  -- ra    : return address
   //  -- a0    : key
@@ -3393,9 +3390,9 @@ MaybeObject* KeyedLoadStubCompiler::CompileLoadPolymorphic(
   int receiver_count = receiver_maps->length();
   __ lw(a2, FieldMemOperand(a1, HeapObject::kMapOffset));
   for (int current = 0; current < receiver_count; ++current) {
-    Handle<Map> map(receiver_maps->at(current));
-    Handle<Code> code(handler_ics->at(current));
-    __ Jump(code, RelocInfo::CODE_TARGET, eq, a2, Operand(map));
+    __ li(at, Operand(receiver_maps->at(current)));
+    __ Jump(handler_ics->at(current), RelocInfo::CODE_TARGET,
+        eq, a2, Operand(at));
   }
 
   __ bind(&miss);
@@ -3403,7 +3400,7 @@ MaybeObject* KeyedLoadStubCompiler::CompileLoadPolymorphic(
   __ Jump(miss_ic, RelocInfo::CODE_TARGET);
 
   // Return the generated code.
-  return TryGetCode(NORMAL, NULL, MEGAMORPHIC);
+  return GetCode(NORMAL, factory()->empty_string(), MEGAMORPHIC);
 }
 
 
