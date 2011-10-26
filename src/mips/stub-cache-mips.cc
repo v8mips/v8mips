@@ -3386,9 +3386,8 @@ Handle<Code> KeyedLoadStubCompiler::CompileLoadPolymorphic(
   int receiver_count = receiver_maps->length();
   __ lw(a2, FieldMemOperand(a1, HeapObject::kMapOffset));
   for (int current = 0; current < receiver_count; ++current) {
-    __ li(at, Operand(receiver_maps->at(current)));
     __ Jump(handler_ics->at(current), RelocInfo::CODE_TARGET,
-        eq, a2, Operand(at));
+        eq, a2, Operand(receiver_maps->at(current)));
   }
 
   __ bind(&miss);
