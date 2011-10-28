@@ -3112,7 +3112,8 @@ Handle<Code> KeyedStoreStubCompiler::CompileStorePolymorphic(
 }
 
 
-MaybeObject* ConstructStubCompiler::CompileConstructStub(JSFunction* function) {
+Handle<Code> ConstructStubCompiler::CompileConstructStub(
+    Handle<JSFunction> function) {
   // a0    : argc
   // a1    : constructor
   // ra    : return address
@@ -3157,12 +3158,7 @@ MaybeObject* ConstructStubCompiler::CompileConstructStub(JSFunction* function) {
   // a2: initial map
   // t7: undefined
   __ lbu(a3, FieldMemOperand(a2, Map::kInstanceSizeOffset));
-  __ AllocateInNewSpace(a3,
-                        t4,
-                        t5,
-                        t6,
-                        &generic_stub_call,
-                        SIZE_IN_WORDS);
+  __ AllocateInNewSpace(a3, t4, t5, t6, &generic_stub_call, SIZE_IN_WORDS);
 
   // Allocated the JSObject, now initialize the fields. Map is set to initial
   // map and properties and elements are set to empty fixed array.
@@ -3197,7 +3193,7 @@ MaybeObject* ConstructStubCompiler::CompileConstructStub(JSFunction* function) {
   // t7: undefined
   // Fill the initialized properties with a constant value or a passed argument
   // depending on the this.x = ...; assignment in the function.
-  SharedFunctionInfo* shared = function->shared();
+  Handle<SharedFunctionInfo> shared(function->shared());
   for (int i = 0; i < shared->this_property_assignments_count(); i++) {
     if (shared->IsThisPropertyAssignmentArgument(i)) {
       Label not_passed, next;
