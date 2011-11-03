@@ -529,23 +529,31 @@ Declaration* Scope::CheckConflictingVarDeclarations() {
 }
 
 
-void Scope::CollectUsedVariables(ZoneList<Variable*>* locals) {
-  // Collect variables in this scope.
-  // Note that the function_ variable - if present - is not
-  // collected here but handled separately in ScopeInfo
-  // which is the current user of this function).
+void Scope::CollectStackAndContextLocals(ZoneList<Variable*>* stack_locals,
+                                         ZoneList<Variable*>* context_locals) {
+  ASSERT(stack_locals != NULL);
+  ASSERT(context_locals != NULL);
+
+  // Collect temporaries which are always allocated on the stack.
   for (int i = 0; i < temps_.length(); i++) {
     Variable* var = temps_[i];
     if (var->is_used()) {
-      locals->Add(var);
+      ASSERT(var->IsStackLocal());
+      stack_locals->Add(var);
     }
   }
+
+  // Collect declared local variables.
   for (VariableMap::Entry* p = variables_.Start();
        p != NULL;
        p = variables_.Next(p)) {
     Variable* var = reinterpret_cast<Variable*>(p->value);
     if (var->is_used()) {
-      locals->Add(var);
+      if (var->IsStackLocal()) {
+        stack_locals->Add(var);
+      } else if (var->IsContextSlot()) {
+        context_locals->Add(var);
+      }
     }
   }
 }
@@ -704,9 +712,9 @@ static void PrintVar(int indent, Variable* var) {
     PrintName(var->name());
     PrintF(";  // ");
     PrintLocation(var);
-    if (var->is_accessed_from_inner_scope()) {
+    if (var->has_forced_context_allocation()) {
       if (!var->IsUnallocated()) PrintF(", ");
-      PrintF("inner scope access");
+      PrintF("forced context allocation");
     }
     PrintF("\n");
   }
@@ -852,7 +860,9 @@ Variable* Scope::LookupRecursive(Handle<String> name,
     *binding_kind = BOUND;
   } else if (outer_scope_ != NULL) {
     var = outer_scope_->LookupRecursive(name, context, binding_kind);
-    if (*binding_kind == BOUND) var->MarkAsAccessedFromInnerScope();
+    if (*binding_kind == BOUND && (is_function_scope() || is_with_scope())) {
+      var->ForceContextAllocation();
+    }
   }
 
   if (is_with_scope()) {
@@ -984,7 +994,7 @@ bool Scope::MustAllocate(Variable* var) {
   // via an eval() call.  This is only possible if the variable has a
   // visible name.
   if ((var->is_this() || var->name()->length() > 0) &&
-      (var->is_accessed_from_inner_scope() ||
+      (var->has_forced_context_allocation() ||
        scope_calls_eval_ ||
        inner_scope_calls_eval_ ||
        scope_contains_with_ ||
@@ -1007,7 +1017,7 @@ bool Scope::MustAllocateInContext(Variable* var) {
   // catch-bound variables are always allocated in a context.
   if (var->mode() == TEMPORARY) return false;
   if (is_catch_scope() || is_block_scope()) return true;
-  return var->is_accessed_from_inner_scope() ||
+  return var->has_forced_context_allocation() ||
       scope_calls_eval_ ||
       inner_scope_calls_eval_ ||
       scope_contains_with_ ||
@@ -1071,9 +1081,8 @@ void Scope::AllocateParameterLocals() {
     Variable* var = params_[i];
     ASSERT(var->scope() == this);
     if (uses_nonstrict_arguments) {
-      // Give the parameter a use from an inner scope, to force allocation
-      // to the context.
-      var->MarkAsAccessedFromInnerScope();
+      // Force context allocation of the parameter.
+      var->ForceContextAllocation();
     }
 
     if (MustAllocate(var)) {
@@ -1162,6 +1171,19 @@ void Scope::AllocateVariablesRecursively() {
 
   // Allocation done.
   ASSERT(num_heap_slots_ == 0 || num_heap_slots_ >= Context::MIN_CONTEXT_SLOTS);
+}
+
+
+int Scope::StackLocalCount() const {
+  return num_stack_slots() -
+      (function_ != NULL && function_->var()->IsStackLocal() ? 1 : 0);
+}
+
+
+int Scope::ContextLocalCount() const {
+  if (num_heap_slots() == 0) return 0;
+  return num_heap_slots() - Context::MIN_CONTEXT_SLOTS -
+      (function_ != NULL && function_->var()->IsContextSlot() ? 1 : 0);
 }
 
 } }  // namespace v8::internal
