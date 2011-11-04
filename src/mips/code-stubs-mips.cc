@@ -5814,7 +5814,7 @@ void StringHelper::GenerateTwoCharacterSymbolTableProbe(MacroAssembler* masm,
   __ jmp(not_found);
 
   // Scratch register contains result when we fall through to here.
-  Register result = candidate;
+  Register result = scratch;
   __ bind(&found_in_symbol_table);
   __ mov(v0, result);
 }
@@ -5858,9 +5858,9 @@ void StringHelper::GenerateHashGetHash(MacroAssembler* masm,
   __ sll(at, hash, 15);
   __ addu(hash, hash, at);
 
-  // if (hash == 0) hash = 27;
+  // if (hash != 0) hash = 27;
   __ ori(at, zero_reg, 27);
-  __ movz(hash, at, hash);
+  __ movn(hash, at, hash);
 }
 
 
