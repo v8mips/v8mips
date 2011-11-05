@@ -5786,7 +5786,7 @@ void StringHelper::GenerateTwoCharacterSymbolTableProbe(MacroAssembler* masm,
     __ Branch(not_found, eq, undefined, Operand(candidate));
     // Must be null (deleted entry).
     if (FLAG_debug_code) {
-      __ LoadRoot(scratch, Heap::kNullValueRootIndex);
+      __ LoadRoot(scratch, Heap::kTheHoleValueRootIndex);
       __ Assert(eq, "oddball in symbol table is not undefined or null",
           scratch, Operand(candidate));
     }
