@@ -4479,7 +4479,7 @@ void MacroAssembler::JumpIfNotBothSmi(Register reg1,
   STATIC_ASSERT(kSmiTag == 0);
   ASSERT_EQ(1, kSmiTagMask);
   or_(at, reg1, reg2);
-  JumpIfSmi(at, on_not_both_smi);
+  JumpIfNotSmi(at, on_not_both_smi);
 }
 
 
