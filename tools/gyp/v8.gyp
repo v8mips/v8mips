@@ -27,6 +27,15 @@
 
 {
   'includes': ['../../build/common.gypi'],
+  'target_conditions': [
+    ['OS=="android" and _toolset=="target"', {
+      'link_settings': {
+        'libraries': [
+          '-llog',
+        ],
+      }
+    }],
+  ],
   'conditions': [
     ['use_system_v8==0', {
       'targets': [
@@ -392,6 +401,7 @@
             '../../src/prettyprinter.h',
             '../../src/property.cc',
             '../../src/property.h',
+            '../../src/property-details.h',
             '../../src/profile-generator-inl.h',
             '../../src/profile-generator.cc',
             '../../src/profile-generator.h',
@@ -648,13 +658,6 @@
                       '../../src/platform-linux.cc'
                     ]
                   }],
-                  ['_toolset=="target"', {
-                    'link_settings': {
-                      'libraries': [
-                        '-llog',
-                       ],
-                     }
-                  }],
                 ],
               },
             ],
@@ -789,6 +792,7 @@
           'target_name': 'mksnapshot',
           'type': 'executable',
           'dependencies': [
+            'v8_base',
             'v8_nosnapshot',
           ],
           'include_dirs+': [
