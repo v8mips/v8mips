@@ -2708,7 +2708,7 @@ void MacroAssembler::ThrowUncatchable(UncatchableExceptionType type,
     Failure* out_of_memory = Failure::OutOfMemoryException();
     li(v0, Operand(reinterpret_cast<int32_t>(out_of_memory)));
     li(a2, Operand(ExternalReference(Isolate::kPendingExceptionAddress,
-                                        isolate())));
+                                     isolate())));
     sw(v0, MemOperand(a2));
   } else if (!value.is(v0)) {
     mov(v0, value);
