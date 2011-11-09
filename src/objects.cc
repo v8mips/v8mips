@@ -7720,7 +7720,7 @@ void ObjectVisitor::VisitEmbeddedPointer(RelocInfo* rinfo) {
 
 void ObjectVisitor::VisitExternalReference(RelocInfo* rinfo) {
   Address* p = rinfo->target_reference_address();
-  VisitExternalReferences(p, p+1);
+  VisitExternalReferences(p, p + 1);
 }
 
 void Code::InvalidateRelocation() {
