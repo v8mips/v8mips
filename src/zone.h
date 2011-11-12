@@ -86,12 +86,10 @@ class Zone {
   friend class Isolate;
   friend class ZoneScope;
 
-  // All pointers returned from New() have this alignment.
-#if V8_HOST_ARCH_MIPS
-  static const int kAlignment = 2 * kPointerSize;
-#else
+  // All pointers returned from New() have this alignment.  In addition, if the
+  // object being allocated has a size that is divisible by 8 then its alignment
+  // will be 8.
   static const int kAlignment = kPointerSize;
-#endif
 
   // Never allocate segments smaller than this size in bytes.
   static const int kMinimumSegmentSize = 8 * KB;
