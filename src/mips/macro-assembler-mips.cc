@@ -239,6 +239,12 @@ void MacroAssembler::RecordWrite(Register object,
   // registers are cp.
   ASSERT(!address.is(cp) && !value.is(cp));
 
+  if (FLAG_debug_code) {
+    lw(at, MemOperand(address));
+    Assert(eq, "Wrong address or value passed to RecordWrite",
+        at, Operand(value));
+  }
+
   Label done;
 
   if (smi_check == INLINE_SMI_CHECK) {
