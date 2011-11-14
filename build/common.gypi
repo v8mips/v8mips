@@ -176,6 +176,9 @@
                   '__mips_soft_float=1'
                 ],
               }],
+              ['mips_arch_variant=="mips32r2"', {
+                'defines': ['_MIPS_ARCH_MIPS32R2',],
+              }],
               # The MIPS assembler assumes the host is 32 bits,
               # so force building 32-bit host tools.
               ['host_arch=="x64"', {
