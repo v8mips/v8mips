@@ -161,6 +161,28 @@
               'V8_TARGET_ARCH_MIPS',
             ],
             'conditions': [
+              [ 'target_arch=="mips"', {
+                'target_conditions': [
+                  ['_toolset=="target"', {
+                    'cflags': ['-EL'],
+                    'ldflags': ['-EL'],
+                    'conditions': [
+                      [ 'v8_use_mips_abi_hardfloat=="true"', {
+                        'cflags': ['-mhard-float'],
+                        'ldflags': ['-mhard-float'],
+                      }, {
+                        'cflags': ['-msoft-float'],
+                        'ldflags': ['-msoft-float'],
+                      }],
+                      ['mips_arch_variant=="mips32r2"', {
+                        'cflags': ['-mips32r2', '-Wa,-mips32r2'],
+                      }, {
+                        'cflags': ['-mips32', '-Wa,-mips32'],
+                      }],
+                    ],
+                  }],
+                ],
+              }],
               [ 'v8_can_use_fpu_instructions=="true"', {
                 'defines': [
                   'CAN_USE_FPU_INSTRUCTIONS',
