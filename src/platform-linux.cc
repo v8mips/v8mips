@@ -774,6 +774,7 @@ void Thread::Start() {
   }
   int result = pthread_create(&data_->thread_, attr_ptr, ThreadEntry, this);
   CHECK_EQ(0, result);
+  ASSERT(data_->thread_ != kNoThread);
 }
 
 
