@@ -129,6 +129,10 @@ LIBRARY_FLAGS = {
       'LIBPATH' : ['/usr/local/lib'],
       'CCFLAGS':      ['-ansi'],
     },
+    'os:netbsd': {
+      'CPPPATH' : ['/usr/pkg/include'],
+      'LIBPATH' : ['/usr/pkg/lib'],
+    },
     'os:win32': {
       'CCFLAGS':      ['-DWIN32'],
       'CXXFLAGS':     ['-DWIN32'],
@@ -367,6 +371,9 @@ MKSNAPSHOT_EXTRA_FLAGS = {
     'os:win32': {
       'LIBS': ['winmm', 'ws2_32'],
     },
+    'os:netbsd': {
+      'LIBS': ['execinfo', 'pthread']
+    },
     'compress_startup_data:bz2': {
       'os:linux': {
         'LIBS': ['bz2']
@@ -431,6 +438,9 @@ CCTEST_EXTRA_FLAGS = {
     'os:win32': {
       'LIBS': ['winmm', 'ws2_32']
     },
+    'os:netbsd': {
+      'LIBS':         ['execinfo', 'pthread']
+    },
     'arch:arm': {
       'LINKFLAGS':   ARM_LINK_FLAGS
     },
@@ -489,6 +499,10 @@ SAMPLE_FLAGS = {
     },
     'os:win32': {
       'LIBS':         ['winmm', 'ws2_32']
+    },
+    'os:netbsd': {
+      'LIBPATH' :     ['/usr/pkg/lib'],
+      'LIBS':         ['execinfo', 'pthread']
     },
     'arch:arm': {
       'LINKFLAGS':   ARM_LINK_FLAGS,
@@ -824,6 +838,9 @@ D8_FLAGS = {
     'os:win32': {
       'LIBS': ['winmm', 'ws2_32'],
     },
+    'os:netbsd': {
+      'LIBS': ['pthread'],
+    },
     'arch:arm': {
       'LINKFLAGS':   ARM_LINK_FLAGS
     },
@@ -957,7 +974,7 @@ PLATFORM_OPTIONS = {
     'help': 'the architecture to build for'
   },
   'os': {
-    'values': ['freebsd', 'linux', 'macos', 'win32', 'openbsd', 'solaris', 'cygwin'],
+    'values': ['freebsd', 'linux', 'macos', 'win32', 'openbsd', 'solaris', 'cygwin', 'netbsd'],
     'guess': GuessOS,
     'help': 'the os to build for'
   },
