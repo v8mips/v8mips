@@ -4763,7 +4763,7 @@ bool HGraphBuilder::TryInline(Call* expr, bool drop_extra) {
 
   // Parse and allocate variables.
   CompilationInfo target_info(target);
-  if (!ParserApi::Parse(&target_info) ||
+  if (!ParserApi::Parse(&target_info, kNoParsingFlags) ||
       !Scope::Analyze(&target_info)) {
     if (target_info.isolate()->has_pending_exception()) {
       // Parse or scope error, never optimize this function.
@@ -6644,6 +6644,18 @@ void HGraphBuilder::GenerateMathCos(CallRuntime* call) {
   HCallStub* result =
       new(zone()) HCallStub(context, CodeStub::TranscendentalCache, 1);
   result->set_transcendental_type(TranscendentalCache::COS);
+  Drop(1);
+  return ast_context()->ReturnInstruction(result, call->id());
+}
+
+
+void HGraphBuilder::GenerateMathTan(CallRuntime* call) {
+  ASSERT_EQ(1, call->arguments()->length());
+  CHECK_ALIVE(VisitArgumentList(call->arguments()));
+  HValue* context = environment()->LookupContext();
+  HCallStub* result =
+      new(zone()) HCallStub(context, CodeStub::TranscendentalCache, 1);
+  result->set_transcendental_type(TranscendentalCache::TAN);
   Drop(1);
   return ast_context()->ReturnInstruction(result, call->id());
 }
