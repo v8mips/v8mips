@@ -1486,10 +1486,10 @@ class ScavengingVisitor : public StaticVisitorBase {
   // Helper function used by CopyObject to copy a source object to an
   // allocated target object and update the forwarding pointer in the source
   // object.  Returns the target object.
-  INLINE(static HeapObject* MigrateObject(Heap* heap,
-                                          HeapObject* source,
-                                          HeapObject* target,
-                                          int size)) {
+  INLINE(static void MigrateObject(Heap* heap,
+                                   HeapObject* source,
+                                   HeapObject* target,
+                                   int size)) {
     // Copy the content of source to target.
     heap->CopyBlock(target->address(), source->address(), size);
 
@@ -1515,8 +1515,6 @@ class ScavengingVisitor : public StaticVisitorBase {
         MemoryChunk::IncrementLiveBytes(target->address(), size);
       }
     }
-
-    return target;
   }
 
   template<ObjectContents object_contents, SizeRestriction size_restriction>
@@ -1547,7 +1545,12 @@ class ScavengingVisitor : public StaticVisitorBase {
       Object* result = NULL;  // Initialization to please compiler.
       if (maybe_result->ToObject(&result)) {
         HeapObject* target = HeapObject::cast(result);
-        *slot = MigrateObject(heap, object , target, object_size);
+
+        // Order is important: slot might be inside of the target if target
+        // was allocated over a dead object and slot comes from the store
+        // buffer.
+        *slot = target;
+        MigrateObject(heap, object, target, object_size);
 
         if (object_contents == POINTER_OBJECT) {
           heap->promotion_queue()->insert(target, object_size);
@@ -1560,8 +1563,13 @@ class ScavengingVisitor : public StaticVisitorBase {
     MaybeObject* allocation = heap->new_space()->AllocateRaw(object_size);
     heap->promotion_queue()->SetNewLimit(heap->new_space()->top());
     Object* result = allocation->ToObjectUnchecked();
+    HeapObject* target = HeapObject::cast(result);
 
-    *slot = MigrateObject(heap, object, HeapObject::cast(result), object_size);
+    // Order is important: slot might be inside of the target if target
+    // was allocated over a dead object and slot comes from the store
+    // buffer.
+    *slot = target;
+    MigrateObject(heap, object, target, object_size);
     return;
   }
 
@@ -6296,7 +6304,19 @@ GCTracer::~GCTracer() {
     PrintF("mark=%d ", static_cast<int>(scopes_[Scope::MC_MARK]));
     PrintF("sweep=%d ", static_cast<int>(scopes_[Scope::MC_SWEEP]));
     PrintF("sweepns=%d ", static_cast<int>(scopes_[Scope::MC_SWEEP_NEWSPACE]));
-    PrintF("compact=%d ", static_cast<int>(scopes_[Scope::MC_COMPACT]));
+    PrintF("evacuate=%d ", static_cast<int>(scopes_[Scope::MC_EVACUATE_PAGES]));
+    PrintF("new_new=%d ",
+           static_cast<int>(scopes_[Scope::MC_UPDATE_NEW_TO_NEW_POINTERS]));
+    PrintF("root_new=%d ",
+           static_cast<int>(scopes_[Scope::MC_UPDATE_ROOT_TO_NEW_POINTERS]));
+    PrintF("old_new=%d ",
+           static_cast<int>(scopes_[Scope::MC_UPDATE_OLD_TO_NEW_POINTERS]));
+    PrintF("compaction_ptrs=%d ",
+           static_cast<int>(scopes_[Scope::MC_UPDATE_POINTERS_TO_EVACUATED]));
+    PrintF("intracompaction_ptrs=%d ", static_cast<int>(scopes_[
+        Scope::MC_UPDATE_POINTERS_BETWEEN_EVACUATED]));
+    PrintF("misc_compaction=%d ",
+           static_cast<int>(scopes_[Scope::MC_UPDATE_MISC_POINTERS]));
 
     PrintF("total_size_before=%" V8_PTR_PREFIX "d ", start_size_);
     PrintF("total_size_after=%" V8_PTR_PREFIX "d ", heap_->SizeOfObjects());
