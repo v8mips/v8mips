@@ -5126,8 +5126,10 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
     // Assert that we do not have a cons or slice (indirect strings) here.
     // Sequential strings have already been ruled out.
     __ And(at, a0, Operand(kIsIndirectStringMask));
-    __ Assert(eq, "external string expected, but not found",
-        at, Operand(zero_reg));
+    __ Assert(eq,
+              "external string expected, but not found",
+              at,
+              Operand(zero_reg));
   }
   __ lw(subject,
         FieldMemOperand(subject, ExternalString::kResourceDataOffset));
