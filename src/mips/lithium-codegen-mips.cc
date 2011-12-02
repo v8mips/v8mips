@@ -4599,22 +4599,36 @@ void LCodeGen::DoStackCheck(LStackCheck* instr) {
     LStackCheck* instr_;
   };
 
-  Register scratch = scratch0();
-  DeferredStackCheck* deferred_stack_check =
-      new DeferredStackCheck(this, instr);
-  __ LoadRoot(scratch, Heap::kStackLimitRootIndex);
-  __ Branch(deferred_stack_check->entry(), lo, sp, Operand(scratch));
-  EnsureSpaceForLazyDeopt();
-  __ bind(instr->done_label());
-  deferred_stack_check->SetExit(instr->done_label());
-  // There is no LLazyBailout instruction for stack-checks. We have to
-  // prepare for lazy deoptimization explicitly here.
   ASSERT(instr->HasEnvironment());
   LEnvironment* env = instr->environment();
-  RegisterEnvironmentForDeoptimization(env, Safepoint::kLazyDeopt);
-  // Don't record a deoptimization index for the safepoint here.
-  // This will be done explicitly when emitting call and the safepoint in
-  // the deferred code.
+  // There is no LLazyBailout instruction for stack-checks. We have to
+  // prepare for lazy deoptimization explicitly here.
+  if (instr->hydrogen()->is_function_entry()) {
+    // Perform stack overflow check.
+    Label done;
+    __ LoadRoot(at, Heap::kStackLimitRootIndex);
+    __ Branch(&done, hs, sp, Operand(at));
+    StackCheckStub stub;
+    CallCode(stub.GetCode(), RelocInfo::CODE_TARGET, instr);
+    EnsureSpaceForLazyDeopt();
+    __ bind(&done);
+    RegisterEnvironmentForDeoptimization(env, Safepoint::kLazyDeopt);
+    safepoints_.RecordLazyDeoptimizationIndex(env->deoptimization_index());
+  } else {
+    ASSERT(instr->hydrogen()->is_backwards_branch());
+    // Perform stack overflow check if this goto needs it before jumping.
+    DeferredStackCheck* deferred_stack_check =
+        new DeferredStackCheck(this, instr);
+    __ LoadRoot(at, Heap::kStackLimitRootIndex);
+    __ Branch(deferred_stack_check->entry(), lo, sp, Operand(at));
+    EnsureSpaceForLazyDeopt();
+    __ bind(instr->done_label());
+    deferred_stack_check->SetExit(instr->done_label());
+    RegisterEnvironmentForDeoptimization(env, Safepoint::kLazyDeopt);
+    // Don't record a deoptimization index for the safepoint here.
+    // This will be done explicitly when emitting call and the safepoint in
+    // the deferred code.
+  }
 }
 
 
