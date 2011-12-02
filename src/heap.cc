@@ -80,7 +80,7 @@ Heap::Heap()
 #endif
       reserved_semispace_size_(8 * Max(LUMP_OF_MEMORY, Page::kPageSize)),
       max_semispace_size_(8 * Max(LUMP_OF_MEMORY, Page::kPageSize)),
-      initial_semispace_size_(Max(LUMP_OF_MEMORY, Page::kPageSize)),
+      initial_semispace_size_(Page::kPageSize),
       max_old_generation_size_(700ul * LUMP_OF_MEMORY),
       max_executable_size_(128l * LUMP_OF_MEMORY),
 
@@ -1012,7 +1012,7 @@ void StoreBufferRebuilder::Callback(MemoryChunk* page, StoreBufferEvent event) {
       // Store Buffer overflowed while scanning promoted objects.  These are not
       // in any particular page, though they are likely to be clustered by the
       // allocation routines.
-      store_buffer_->HandleFullness();
+      store_buffer_->EnsureSpace(StoreBuffer::kStoreBufferSize);
     } else {
       // Store Buffer overflowed while scanning a particular old space page for
       // pointers to new space.
