@@ -2945,61 +2945,32 @@ void LCodeGen::DoMathPowHalf(LUnaryMathOperation* instr) {
 
 
 void LCodeGen::DoPower(LPower* instr) {
-  LOperand* left = instr->InputAt(0);
-  LOperand* right = instr->InputAt(1);
-  DoubleRegister result_reg = ToDoubleRegister(instr->result());
   Representation exponent_type = instr->hydrogen()->right()->representation();
+  // Having marked this as a call, we can use any registers.
+  // Just make sure that the input registers are the expected ones.
+  ASSERT(!instr->InputAt(1)->IsDoubleRegister() ||
+         ToDoubleRegister(instr->InputAt(1)).is(xmm2));
+  ASSERT(!instr->InputAt(1)->IsRegister() ||
+         ToRegister(instr->InputAt(1)).is(eax));
+  ASSERT(ToDoubleRegister(instr->InputAt(0)).is(xmm1));
+  ASSERT(ToDoubleRegister(instr->result()).is(xmm3));
 
-  if (exponent_type.IsDouble()) {
-    // It is safe to use ebx directly since the instruction is marked
-    // as a call.
-    __ PrepareCallCFunction(4, ebx);
-    __ movdbl(Operand(esp, 0 * kDoubleSize), ToDoubleRegister(left));
-    __ movdbl(Operand(esp, 1 * kDoubleSize), ToDoubleRegister(right));
-    __ CallCFunction(ExternalReference::power_double_double_function(isolate()),
-                     4);
-  } else if (exponent_type.IsInteger32()) {
-    // It is safe to use ebx directly since the instruction is marked
-    // as a call.
-    ASSERT(!ToRegister(right).is(ebx));
-    __ PrepareCallCFunction(4, ebx);
-    __ movdbl(Operand(esp, 0 * kDoubleSize), ToDoubleRegister(left));
-    __ mov(Operand(esp, 1 * kDoubleSize), ToRegister(right));
-    __ CallCFunction(ExternalReference::power_double_int_function(isolate()),
-                     4);
-  } else {
-    ASSERT(exponent_type.IsTagged());
-    CpuFeatures::Scope scope(SSE2);
-    Register right_reg = ToRegister(right);
-
-    Label non_smi, call;
-    __ JumpIfNotSmi(right_reg, &non_smi);
-    __ SmiUntag(right_reg);
-    __ cvtsi2sd(result_reg, Operand(right_reg));
-    __ jmp(&call);
-
-    __ bind(&non_smi);
-    // It is safe to use ebx directly since the instruction is marked
-    // as a call.
-    ASSERT(!right_reg.is(ebx));
-    __ CmpObjectType(right_reg, HEAP_NUMBER_TYPE , ebx);
+  if (exponent_type.IsTagged()) {
+    Label no_deopt;
+    __ JumpIfSmi(eax, &no_deopt);
+    __ CmpObjectType(eax, HEAP_NUMBER_TYPE, ecx);
     DeoptimizeIf(not_equal, instr->environment());
-    __ movdbl(result_reg, FieldOperand(right_reg, HeapNumber::kValueOffset));
-
-    __ bind(&call);
-    __ PrepareCallCFunction(4, ebx);
-    __ movdbl(Operand(esp, 0 * kDoubleSize), ToDoubleRegister(left));
-    __ movdbl(Operand(esp, 1 * kDoubleSize), result_reg);
-    __ CallCFunction(ExternalReference::power_double_double_function(isolate()),
-                     4);
+    __ bind(&no_deopt);
+    MathPowStub stub(MathPowStub::TAGGED);
+    __ CallStub(&stub);
+  } else if (exponent_type.IsInteger32()) {
+    MathPowStub stub(MathPowStub::INTEGER);
+    __ CallStub(&stub);
+  } else {
+    ASSERT(exponent_type.IsDouble());
+    MathPowStub stub(MathPowStub::DOUBLE);
+    __ CallStub(&stub);
   }
-
-  // Return value is in st(0) on ia32.
-  // Store it into the (fixed) result register.
-  __ sub(Operand(esp), Immediate(kDoubleSize));
-  __ fstp_d(Operand(esp, 0));
-  __ movdbl(result_reg, Operand(esp, 0));
-  __ add(Operand(esp), Immediate(kDoubleSize));
 }
 
 
@@ -4136,17 +4107,32 @@ void LCodeGen::DoCheckPrototypeMaps(LCheckPrototypeMaps* instr) {
 
 void LCodeGen::DoArrayLiteral(LArrayLiteral* instr) {
   ASSERT(ToRegister(instr->context()).is(esi));
+  Heap* heap = isolate()->heap();
+  ElementsKind boilerplate_elements_kind =
+      instr->hydrogen()->boilerplate_elements_kind();
 
-  Handle<FixedArray> constant_elements = instr->hydrogen()->constant_elements();
-  ASSERT_EQ(2, constant_elements->length());
-  ElementsKind constant_elements_kind =
-      static_cast<ElementsKind>(Smi::cast(constant_elements->get(0))->value());
+  // Deopt if the array literal boilerplate ElementsKind is of a type different
+  // than the expected one. The check isn't necessary if the boilerplate has
+  // already been converted to FAST_ELEMENTS.
+  if (boilerplate_elements_kind != FAST_ELEMENTS) {
+    LoadHeapObject(eax, instr->hydrogen()->boilerplate_object());
+    __ mov(ebx, FieldOperand(eax, HeapObject::kMapOffset));
+    // Load the map's "bit field 2". We only need the first byte,
+    // but the following masking takes care of that anyway.
+    __ mov(ebx, FieldOperand(ebx, Map::kBitField2Offset));
+    // Retrieve elements_kind from bit field 2.
+    __ and_(ebx, Map::kElementsKindMask);
+    __ cmp(ebx, boilerplate_elements_kind << Map::kElementsKindShift);
+    DeoptimizeIf(not_equal, instr->environment());
+  }
 
   // Setup the parameters to the stub/runtime call.
   __ mov(eax, Operand(ebp, JavaScriptFrameConstants::kFunctionOffset));
   __ push(FieldOperand(eax, JSFunction::kLiteralsOffset));
   __ push(Immediate(Smi::FromInt(instr->hydrogen()->literal_index())));
-  __ push(Immediate(constant_elements));
+  // Boilerplate already exists, constant elements are never accessed.
+  // Pass an empty fixed array.
+  __ push(Immediate(Handle<FixedArray>(heap->empty_fixed_array())));
 
   // Pick the right runtime function or stub to call.
   int length = instr->hydrogen()->length();
@@ -4162,9 +4148,9 @@ void LCodeGen::DoArrayLiteral(LArrayLiteral* instr) {
     CallRuntime(Runtime::kCreateArrayLiteralShallow, 3, instr);
   } else {
     FastCloneShallowArrayStub::Mode mode =
-        constant_elements_kind == FAST_DOUBLE_ELEMENTS
-        ? FastCloneShallowArrayStub::CLONE_DOUBLE_ELEMENTS
-        : FastCloneShallowArrayStub::CLONE_ELEMENTS;
+        boilerplate_elements_kind == FAST_DOUBLE_ELEMENTS
+            ? FastCloneShallowArrayStub::CLONE_DOUBLE_ELEMENTS
+            : FastCloneShallowArrayStub::CLONE_ELEMENTS;
     FastCloneShallowArrayStub stub(mode, length);
     CallCode(stub.GetCode(), RelocInfo::CODE_TARGET, instr);
   }
@@ -4487,9 +4473,7 @@ void LCodeGen::EnsureSpaceForLazyDeopt() {
   int patch_size = Deoptimizer::patch_size();
   if (current_pc < last_lazy_deopt_pc_ + patch_size) {
     int padding_size = last_lazy_deopt_pc_ + patch_size - current_pc;
-    while (padding_size-- > 0) {
-      __ nop();
-    }
+    __ Nop(padding_size);
   }
   last_lazy_deopt_pc_ = masm()->pc_offset();
 }
