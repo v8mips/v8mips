@@ -444,14 +444,16 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
   void MultiPush(RegList regs);
   void MultiPushReversed(RegList regs);
 
+  void MultiPushFPU(RegList regs);
+  void MultiPushReversedFPU(RegList regs);
+
   void Push(Register src) {
     Addu(sp, sp, Operand(-kPointerSize));
     sw(src, MemOperand(sp, 0));
   }
 
-  // Push two registers.  Pushes leftmost register first (to highest address).
-  void Push(Register src1, Register src2, Condition cond = al) {
-    ASSERT(cond == al);  // Do not support conditional versions yet.
+  // Push two registers. Pushes leftmost register first (to highest address).
+  void Push(Register src1, Register src2) {
     Subu(sp, sp, Operand(2 * kPointerSize));
     sw(src1, MemOperand(sp, 1 * kPointerSize));
     sw(src2, MemOperand(sp, 0 * kPointerSize));
@@ -492,6 +494,9 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
   // registers specified in regs. Pop order is the opposite as in MultiPush.
   void MultiPop(RegList regs);
   void MultiPopReversed(RegList regs);
+
+  void MultiPopFPU(RegList regs);
+  void MultiPopReversedFPU(RegList regs);
 
   void Pop(Register dst) {
     lw(dst, MemOperand(sp, 0));
