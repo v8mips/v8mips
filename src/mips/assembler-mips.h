@@ -267,9 +267,6 @@ const FPURegister f31 = { 31 };
 // FPU (coprocessor 1) control registers.
 // Currently only FCSR (#31) is implemented.
 struct FPUControlRegister {
-  static const int kFCSRRegister = 31;
-  static const int kInvalidFPUControlRegister = -1;
-
   bool is_valid() const { return code_ == kFCSRRegister; }
   bool is(FPUControlRegister creg) const { return code_ == creg.code_; }
   int code() const {
@@ -288,7 +285,7 @@ struct FPUControlRegister {
   int code_;
 };
 
-const FPUControlRegister no_fpucreg = { -1 };
+const FPUControlRegister no_fpucreg = { kInvalidFPUControlRegister };
 const FPUControlRegister FCSR = { kFCSRRegister };
 
 
@@ -342,58 +339,98 @@ class MemOperand : public Operand {
 
 // CpuFeatures keeps track of which features are supported by the target CPU.
 // Supported features must be enabled by a Scope before use.
-class CpuFeatures {
+class CpuFeatures : public AllStatic {
  public:
   // Detect features of the target CPU. Set safe defaults if the serializer
   // is enabled (snapshots must be portable).
-  void Probe(bool portable);
+  static void Probe();
 
   // Check whether a feature is supported by the target CPU.
-  bool IsSupported(CpuFeature f) const {
+  static bool IsSupported(CpuFeature f) {
+    ASSERT(initialized_);
     if (f == FPU && !FLAG_enable_fpu) return false;
     return (supported_ & (1u << f)) != 0;
   }
 
+
+#ifdef DEBUG
   // Check whether a feature is currently enabled.
-  bool IsEnabled(CpuFeature f) const {
-    return (enabled_ & (1u << f)) != 0;
+  static bool IsEnabled(CpuFeature f) {
+    ASSERT(initialized_);
+    Isolate* isolate = Isolate::UncheckedCurrent();
+    if (isolate == NULL) {
+      // When no isolate is available, work as if we're running in
+      // release mode.
+      return IsSupported(f);
+    }
+    unsigned enabled = static_cast<unsigned>(isolate->enabled_cpu_features());
+    return (enabled & (1u << f)) != 0;
   }
+#endif
 
   // Enable a specified feature within a scope.
   class Scope BASE_EMBEDDED {
 #ifdef DEBUG
    public:
-    explicit Scope(CpuFeature f)
-        : cpu_features_(Isolate::Current()->cpu_features()),
-          isolate_(Isolate::Current()) {
-      ASSERT(cpu_features_->IsSupported(f));
+    explicit Scope(CpuFeature f) {
+      unsigned mask = 1u << f;
+      ASSERT(CpuFeatures::IsSupported(f));
       ASSERT(!Serializer::enabled() ||
-             (cpu_features_->found_by_runtime_probing_ & (1u << f)) == 0);
-      old_enabled_ = cpu_features_->enabled_;
-      cpu_features_->enabled_ |= 1u << f;
+             (CpuFeatures::found_by_runtime_probing_ & mask) == 0);
+      isolate_ = Isolate::UncheckedCurrent();
+      old_enabled_ = 0;
+      if (isolate_ != NULL) {
+        old_enabled_ = static_cast<unsigned>(isolate_->enabled_cpu_features());
+        isolate_->set_enabled_cpu_features(old_enabled_ | mask);
+      }
     }
     ~Scope() {
-      ASSERT_EQ(Isolate::Current(), isolate_);
-      cpu_features_->enabled_ = old_enabled_;
-     }
+      ASSERT_EQ(Isolate::UncheckedCurrent(), isolate_);
+      if (isolate_ != NULL) {
+        isolate_->set_enabled_cpu_features(old_enabled_);
+      }
+    }
    private:
-    unsigned old_enabled_;
-    CpuFeatures* cpu_features_;
     Isolate* isolate_;
+    unsigned old_enabled_;
 #else
    public:
     explicit Scope(CpuFeature f) {}
 #endif
   };
 
+  class TryForceFeatureScope BASE_EMBEDDED {
+   public:
+    explicit TryForceFeatureScope(CpuFeature f)
+        : old_supported_(CpuFeatures::supported_) {
+      if (CanForce()) {
+        CpuFeatures::supported_ |= (1u << f);
+      }
+    }
+
+    ~TryForceFeatureScope() {
+      if (CanForce()) {
+        CpuFeatures::supported_ = old_supported_;
+      }
+    }
+
+   private:
+    static bool CanForce() {
+      // It's only safe to temporarily force support of CPU features
+      // when there's only a single isolate, which is guaranteed when
+      // the serializer is enabled.
+      return Serializer::enabled();
+    }
+
+    const unsigned old_supported_;
+  };
+
  private:
-  CpuFeatures();
-
-  unsigned supported_;
-  unsigned enabled_;
-  unsigned found_by_runtime_probing_;
-
-  friend class Isolate;
+#ifdef DEBUG
+  static bool initialized_;
+#endif
+  static unsigned supported_;
+  static unsigned found_by_runtime_probing_;
 
   DISALLOW_COPY_AND_ASSIGN(CpuFeatures);
 };
@@ -414,7 +451,7 @@ class Assembler : public AssemblerBase {
   // for code generation and assumes its size to be buffer_size. If the buffer
   // is too small, a fatal error occurs. No deallocation of the buffer is done
   // upon destruction of the assembler.
-  Assembler(void* buffer, int buffer_size);
+  Assembler(Isolate* isolate, void* buffer, int buffer_size);
   ~Assembler();
 
   // Overrides the default provided by FLAG_debug_code.
@@ -804,6 +841,8 @@ class Assembler : public AssemblerBase {
 
   // Check if an instruction is a branch of some kind.
   static bool IsBranch(Instr instr);
+  static bool IsBEQ(Instr instr);
+  static bool IsBNE(Instr instr);
 
   static bool IsNop(Instr instr, unsigned int type);
   static bool IsPop(Instr instr);
@@ -813,7 +852,21 @@ class Assembler : public AssemblerBase {
   static bool IsLwRegFpNegOffset(Instr instr);
   static bool IsSwRegFpNegOffset(Instr instr);
 
-  static Register GetRt(Instr instr);
+  static Register GetRtReg(Instr instr);
+  static Register GetRsReg(Instr instr);
+  static Register GetRdReg(Instr instr);
+
+  static uint32_t GetRt(Instr instr);
+  static uint32_t GetRtField(Instr instr);
+  static uint32_t GetRs(Instr instr);
+  static uint32_t GetRsField(Instr instr);
+  static uint32_t GetRd(Instr instr);
+  static uint32_t GetRdField(Instr instr);
+  static uint32_t GetSa(Instr instr);
+  static uint32_t GetSaField(Instr instr);
+  static uint32_t GetOpcodeField(Instr instr);
+  static uint32_t GetImmediate16(Instr instr);
+  static uint32_t GetLabelConst(Instr instr);
 
   static int32_t GetBranchOffset(Instr instr);
   static bool IsLw(Instr instr);
@@ -824,6 +877,8 @@ class Assembler : public AssemblerBase {
   static Instr SetSwOffset(Instr instr, int16_t offset);
   static bool IsAddImmediate(Instr instr);
   static Instr SetAddImmediateOffset(Instr instr, int16_t offset);
+
+  static bool IsAndImmediate(Instr instr);
 
   void CheckTrampolinePool(bool force_emit = false);
 
@@ -859,6 +914,10 @@ class Assembler : public AssemblerBase {
 
   bool is_trampoline_pool_blocked() const {
     return trampoline_pool_blocked_nesting_ > 0;
+  }
+
+  bool has_exception() const {
+    return internal_trampoline_exception_;
   }
 
  private:
@@ -1005,10 +1064,18 @@ class Assembler : public AssemblerBase {
       return end_;
     }
     int take_slot() {
-      int trampoline_slot = next_slot_;
-      ASSERT(free_slot_count_ > 0);
-      free_slot_count_--;
-      next_slot_ += 2 * kInstrSize;
+      int trampoline_slot = kInvalidSlotPos;
+      if (free_slot_count_ <= 0) {
+        // We have run out of space on trampolines.
+        // Make sure we fail in debug mode, so we become aware of each case
+        // when this happens.
+        ASSERT(0);
+        // Internal exception will be caught.
+      } else {
+        trampoline_slot = next_slot_;
+        free_slot_count_--;
+        next_slot_ += 2*kInstrSize;
+      }
       return trampoline_slot;
     }
     int take_label() {
@@ -1038,8 +1105,10 @@ class Assembler : public AssemblerBase {
   static const int kMaxBranchOffset = (1 << (18 - 1)) - 1;
   static const int kMaxDistBetweenPools =
       kMaxBranchOffset - 2 * kTrampolineSize;
+  static const int kInvalidSlotPos = -1;
 
   List<Trampoline> trampolines_;
+  bool internal_trampoline_exception_;
 
   friend class RegExpMacroAssemblerMIPS;
   friend class RelocInfo;

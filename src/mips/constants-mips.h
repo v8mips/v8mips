@@ -82,6 +82,11 @@ static const uint32_t kFPUInvalidResult = (uint32_t) (1 << 31) - 1;
 // FCSR constants.
 static const uint32_t kFCSRFlagMask = (1 << 6) - 1;
 static const uint32_t kFCSRFlagShift = 2;
+static const uint32_t kFCSRInexactFlagBit = 1 << 0;
+static const uint32_t kFCSRUnderflowFlagBit = 1 << 1;
+static const uint32_t kFCSROverflowFlagBit = 1 << 2;
+static const uint32_t kFCSRDivideByZeroFlagBit = 1 << 3;
+static const uint32_t kFCSRInvalidOpFlagBit = 1 << 4;
 
 // Helper functions for converting between register numbers and names.
 class Registers {

@@ -39,13 +39,22 @@ namespace internal {
 // TranscendentalCache runtime function.
 class TranscendentalCacheStub: public CodeStub {
  public:
-  explicit TranscendentalCacheStub(TranscendentalCache::Type type)
-      : type_(type) {}
+  enum ArgumentType {
+    TAGGED = 0 << TranscendentalCache::kTranscendentalTypeBits,
+    UNTAGGED = 1 << TranscendentalCache::kTranscendentalTypeBits
+  };
+
+  TranscendentalCacheStub(TranscendentalCache::Type type,
+                          ArgumentType argument_type)
+      : type_(type), argument_type_(argument_type) { }
   void Generate(MacroAssembler* masm);
  private:
   TranscendentalCache::Type type_;
+  ArgumentType argument_type_;
+  void GenerateCallCFunction(MacroAssembler* masm, Register scratch);
+
   Major MajorKey() { return TranscendentalCache; }
-  int MinorKey() { return type_; }
+  int MinorKey() { return type_ | argument_type_; }
   Runtime::FunctionId RuntimeFunction();
 };
 
@@ -63,161 +72,6 @@ class ToBooleanStub: public CodeStub {
 };
 
 
-class GenericBinaryOpStub : public CodeStub {
- public:
-  static const int kUnknownIntValue = -1;
-
-  GenericBinaryOpStub(Token::Value op,
-                      OverwriteMode mode,
-                      Register lhs,
-                      Register rhs,
-                      int constant_rhs = kUnknownIntValue)
-      : op_(op),
-        mode_(mode),
-        lhs_(lhs),
-        rhs_(rhs),
-        constant_rhs_(constant_rhs),
-        specialized_on_rhs_(RhsIsOneWeWantToOptimizeFor(op, constant_rhs)),
-        runtime_operands_type_(BinaryOpIC::UNINIT_OR_SMI),
-        name_(NULL) { }
-
-  GenericBinaryOpStub(int key, BinaryOpIC::TypeInfo type_info)
-      : op_(OpBits::decode(key)),
-        mode_(ModeBits::decode(key)),
-        lhs_(LhsRegister(RegisterBits::decode(key))),
-        rhs_(RhsRegister(RegisterBits::decode(key))),
-        constant_rhs_(KnownBitsForMinorKey(KnownIntBits::decode(key))),
-        specialized_on_rhs_(RhsIsOneWeWantToOptimizeFor(op_, constant_rhs_)),
-        runtime_operands_type_(type_info),
-        name_(NULL) { }
-
- private:
-  Token::Value op_;
-  OverwriteMode mode_;
-  Register lhs_;
-  Register rhs_;
-  int constant_rhs_;
-  bool specialized_on_rhs_;
-  BinaryOpIC::TypeInfo runtime_operands_type_;
-  char* name_;
-
-  static const int kMaxKnownRhs = 0x40000000;
-  static const int kKnownRhsKeyBits = 6;
-
-  // Minor key encoding in 16 bits.
-  class ModeBits: public BitField<OverwriteMode, 0, 2> {};
-  class OpBits: public BitField<Token::Value, 2, 6> {};
-  class TypeInfoBits: public BitField<int, 8, 3> {};
-  class RegisterBits: public BitField<bool, 11, 1> {};
-  class KnownIntBits: public BitField<int, 12, kKnownRhsKeyBits> {};
-
-  Major MajorKey() { return GenericBinaryOp; }
-  int MinorKey() {
-    ASSERT((lhs_.is(a0) && rhs_.is(a1)) ||
-           (lhs_.is(a1) && rhs_.is(a0)));
-    // Encode the parameters in a unique 16 bit value.
-    return OpBits::encode(op_)
-           | ModeBits::encode(mode_)
-           | KnownIntBits::encode(MinorKeyForKnownInt())
-           | TypeInfoBits::encode(runtime_operands_type_)
-           | RegisterBits::encode(lhs_.is(a0));
-  }
-
-  void Generate(MacroAssembler* masm);
-  void HandleNonSmiBitwiseOp(MacroAssembler* masm,
-                             Register lhs,
-                             Register rhs);
-  void HandleBinaryOpSlowCases(MacroAssembler* masm,
-                               Label* not_smi,
-                               Register lhs,
-                               Register rhs,
-                               const Builtins::JavaScript& builtin);
-  void GenerateTypeTransition(MacroAssembler* masm);
-
-  static bool RhsIsOneWeWantToOptimizeFor(Token::Value op, int constant_rhs) {
-    if (constant_rhs == kUnknownIntValue) return false;
-    if (op == Token::DIV) return constant_rhs >= 2 && constant_rhs <= 3;
-    if (op == Token::MOD) {
-      if (constant_rhs <= 1) return false;
-      if (constant_rhs <= 10) return true;
-      if (constant_rhs <= kMaxKnownRhs && IsPowerOf2(constant_rhs)) return true;
-      return false;
-    }
-    return false;
-  }
-
-  int MinorKeyForKnownInt() {
-    if (!specialized_on_rhs_) return 0;
-    if (constant_rhs_ <= 10) return constant_rhs_ + 1;
-    ASSERT(IsPowerOf2(constant_rhs_));
-    int key = 12;
-    int d = constant_rhs_;
-    while ((d & 1) == 0) {
-      key++;
-      d >>= 1;
-    }
-    ASSERT(key >= 0 && key < (1 << kKnownRhsKeyBits));
-    return key;
-  }
-
-  int KnownBitsForMinorKey(int key) {
-    if (!key) return 0;
-    if (key <= 11) return key - 1;
-    int d = 1;
-    while (key != 12) {
-      key--;
-      d <<= 1;
-    }
-    return d;
-  }
-
-  Register LhsRegister(bool lhs_is_a0) {
-    return lhs_is_a0 ? a0 : a1;
-  }
-
-  Register RhsRegister(bool lhs_is_a0) {
-    return lhs_is_a0 ? a1 : a0;
-  }
-
-  bool HasSmiSmiFastPath() {
-    return op_ != Token::DIV;
-  }
-
-  bool ShouldGenerateSmiCode() {
-    return ((op_ != Token::DIV && op_ != Token::MOD) || specialized_on_rhs_) &&
-        runtime_operands_type_ != BinaryOpIC::HEAP_NUMBERS &&
-        runtime_operands_type_ != BinaryOpIC::STRINGS;
-  }
-
-  bool ShouldGenerateFPCode() {
-    return runtime_operands_type_ != BinaryOpIC::STRINGS;
-  }
-
-  virtual int GetCodeKind() { return Code::BINARY_OP_IC; }
-
-  virtual InlineCacheState GetICState() {
-    return BinaryOpIC::ToState(runtime_operands_type_);
-  }
-
-  const char* GetName();
-
-  virtual void FinishCode(Code* code) {
-    code->set_binary_op_type(runtime_operands_type_);
-  }
-
-#ifdef DEBUG
-  void Print() {
-    if (!specialized_on_rhs_) {
-      PrintF("GenericBinaryOpStub (%s)\n", Token::String(op_));
-    } else {
-      PrintF("GenericBinaryOpStub (%s by %d)\n",
-             Token::String(op_),
-             constant_rhs_);
-    }
-  }
-#endif
-};
-
 class TypeRecordingBinaryOpStub: public CodeStub {
  public:
   TypeRecordingBinaryOpStub(Token::Value op, OverwriteMode mode)
@@ -226,7 +80,8 @@ class TypeRecordingBinaryOpStub: public CodeStub {
         operands_type_(TRBinaryOpIC::UNINITIALIZED),
         result_type_(TRBinaryOpIC::UNINITIALIZED),
         name_(NULL) {
-    UNIMPLEMENTED_MIPS();
+    use_fpu_ = CpuFeatures::IsSupported(FPU);
+    ASSERT(OpBits::is_valid(Token::NUM_TOKENS));
   }
 
   TypeRecordingBinaryOpStub(
@@ -301,6 +156,7 @@ class TypeRecordingBinaryOpStub: public CodeStub {
   void GenerateSmiStub(MacroAssembler* masm);
   void GenerateInt32Stub(MacroAssembler* masm);
   void GenerateHeapNumberStub(MacroAssembler* masm);
+  void GenerateOddballStub(MacroAssembler* masm);
   void GenerateStringStub(MacroAssembler* masm);
   void GenerateGenericStub(MacroAssembler* masm);
   void GenerateAddStrings(MacroAssembler* masm);
@@ -334,24 +190,36 @@ class TypeRecordingBinaryOpStub: public CodeStub {
 // Flag that indicates how to generate code for the stub StringAddStub.
 enum StringAddFlags {
   NO_STRING_ADD_FLAGS = 0,
-  NO_STRING_CHECK_IN_STUB = 1 << 0  // Omit string check in stub.
+  // Omit left string check in stub (left is definitely a string).
+  NO_STRING_CHECK_LEFT_IN_STUB = 1 << 0,
+  // Omit right string check in stub (right is definitely a string).
+  NO_STRING_CHECK_RIGHT_IN_STUB = 1 << 1,
+  // Omit both string checks in stub.
+  NO_STRING_CHECK_IN_STUB =
+      NO_STRING_CHECK_LEFT_IN_STUB | NO_STRING_CHECK_RIGHT_IN_STUB
 };
 
 
 class StringAddStub: public CodeStub {
  public:
-  explicit StringAddStub(StringAddFlags flags) {
-    string_check_ = ((flags & NO_STRING_CHECK_IN_STUB) == 0);
-  }
+  explicit StringAddStub(StringAddFlags flags) : flags_(flags) {}
 
  private:
   Major MajorKey() { return StringAdd; }
-  int MinorKey() { return string_check_ ? 0 : 1; }
+  int MinorKey() { return flags_; }
 
   void Generate(MacroAssembler* masm);
 
-  // Should the stub check whether arguments are strings?
-  bool string_check_;
+  void GenerateConvertArgument(MacroAssembler* masm,
+                               int stack_offset,
+                               Register arg,
+                               Register scratch1,
+                               Register scratch2,
+                               Register scratch3,
+                               Register scratch4,
+                               Label* slow);
+
+  const StringAddFlags flags_;
 };
 
 
@@ -483,27 +351,6 @@ class RegExpCEntryStub: public CodeStub {
 
   const char* GetName() { return "RegExpCEntryStub"; }
 };
-
-
-// Generate code the to load an element from a pixel array. The receiver is
-// assumed to not be a smi and to have elements, the caller must guarantee this
-// precondition. If the receiver does not have elements that are pixel arrays,
-// the generated code jumps to not_pixel_array. If key is not a smi, then the
-// generated code branches to key_not_smi. Callers can specify NULL for
-// key_not_smi to signal that a smi check has already been performed on key so
-// that the smi check is not generated . If key is not a valid index within the
-// bounds of the pixel array, the generated code jumps to out_of_range.
-void GenerateFastPixelArrayLoad(MacroAssembler* masm,
-                                Register receiver,
-                                Register key,
-                                Register elements_map,
-                                Register elements,
-                                Register scratch1,
-                                Register scratch2,
-                                Register result,
-                                Label* not_pixel_array,
-                                Label* key_not_smi,
-                                Label* out_of_range);
 
 
 } }  // namespace v8::internal

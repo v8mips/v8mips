@@ -109,9 +109,3 @@ regress/regress-3247124: SKIP
 # the test requires too much time to run.  However, the problem test covers
 # should be platform-independent.
 regress/regress-1132: SKIP
-
-##############################################################################
-[ $arch == mips ]
-
-# Skip all tests on MIPS.
-*: SKIP

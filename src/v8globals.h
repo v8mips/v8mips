@@ -88,9 +88,15 @@ const uint32_t kDebugZapValue = 0xbadbaddb;
 #endif
 
 
+#if defined(V8_TARGET_ARCH_MIPS) && defined(__mips__)
+// Number of bits to represent the page size for paged spaces. For MIPS we need
+// the value of 14, which gives 16K bytes per page.
+const int kPageSizeBits = 14;
+#else
 // Number of bits to represent the page size for paged spaces. The value of 13
 // gives 8K bytes per page.
 const int kPageSizeBits = 13;
+#endif //V8_TARGET_ARCH_MIPS
 
 // On Intel architecture, cache line size is 64 bytes.
 // On ARM it may be less (32 bytes), but as far this constant is

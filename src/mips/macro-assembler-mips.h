@@ -98,7 +98,11 @@ enum BranchDelaySlot {
 // MacroAssembler implements a collection of frequently used macros.
 class MacroAssembler: public Assembler {
  public:
-  MacroAssembler(void* buffer, int size);
+  // The isolate parameter can be NULL if the macro assembler should
+  // not use isolate-dependent functionality. In this case, it's the
+  // responsibility of the caller to never invoke such function on the
+  // macro assembler.
+  MacroAssembler(Isolate* isolate, void* buffer, int size);
 
 // Arguments macros
 #define COND_TYPED_ARGS Condition cond, Register r1, const Operand& r2
@@ -477,7 +481,7 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
   inline void pop(Register src) { Pop(src); }
 
   void Push(Register src, Condition cond, Register tst1, Register tst2) {
-    // Since we don't have conditionnal execution we use a Branch.
+    // Since we don't have conditional execution we use a Branch.
     Branch(3, cond, tst1, Operand(tst2));
     Addu(sp, sp, Operand(-kPointerSize));
     sw(src, MemOperand(sp, 0));
@@ -488,10 +492,21 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
   // registers specified in regs. Pop order is the opposite as in MultiPush.
   void MultiPop(RegList regs);
   void MultiPopReversed(RegList regs);
+
   void Pop(Register dst) {
     lw(dst, MemOperand(sp, 0));
     Addu(sp, sp, Operand(kPointerSize));
   }
+
+  // Pop two registers. Pops rightmost register first (from lower address).
+  void Pop(Register src1, Register src2, Condition cond = al) {
+    ASSERT(!src1.is(src2));
+    ASSERT(cond == al);
+    lw(src2, MemOperand(sp, 0 * kPointerSize));
+    lw(src1, MemOperand(sp, 1 * kPointerSize));
+    Addu(sp, sp, 2 * kPointerSize);
+  }
+
   void Pop(uint32_t count = 1) {
     Addu(sp, sp, Operand(count * kPointerSize));
   }
@@ -547,6 +562,17 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
                       Register scratch2,
                       FPURegister double_scratch,
                       Label *not_int32);
+
+  // Helper for EmitECMATruncate.
+  // This will truncate a floating-point value outside of the singed 32bit
+  // integer range to a 32bit signed integer.
+  // Expects the double value loaded in input_high and input_low.
+  // Exits with the answer in 'result'.
+  // Note that this code does not work for values in the 32bit range!
+  void EmitOutOfInt32RangeTruncate(Register result,
+                                   Register input_high,
+                                   Register input_low,
+                                   Register scratch);
 
   // -------------------------------------------------------------------------
   // Activation frames
@@ -649,6 +675,14 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
   // Copies a fixed number of fields of heap objects from src to dst.
   void CopyFields(Register dst, Register src, RegList temps, int field_count);
 
+  // Copies a number of bytes from src to dst. All registers are clobbered. On
+  // exit src and dst will point to the place just after where the last byte was
+  // read or written and length will be zero.
+  void CopyBytes(Register src,
+                 Register dst,
+                 Register length,
+                 Register scratch);
+
   // -------------------------------------------------------------------------
   // Support functions.
 
@@ -691,6 +725,10 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
   //   hash - holds the index's hash. Clobbered.
   //   index - holds the overwritten index on exit.
   void IndexFromHash(Register hash, Register index);
+
+  // Get the number of least significant bits from a register
+  void GetLeastBitsFromSmi(Register dst, Register src, int num_least_bits);
+  void GetLeastBitsFromInt32(Register dst, Register src, int mun_least_bits);
 
   // Load the value of a number object into a FPU double register. If the
   // object is not a number a jump to the label not_number is performed
@@ -769,6 +807,8 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
   void CallCFunction(ExternalReference function, int num_arguments);
   void CallCFunction(Register function, Register scratch, int num_arguments);
 
+  void GetCFunctionDoubleResult(const DoubleRegister dst);
+
   // Jump to the builtin routine.
   void JumpToExternalReference(const ExternalReference& builtin);
 
@@ -791,7 +831,10 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
     const char* name;
   };
 
-  Handle<Object> CodeObject() { return code_object_; }
+  Handle<Object> CodeObject() {
+    ASSERT(!code_object_.is_null());
+    return code_object_;
+  }
 
   // -------------------------------------------------------------------------
   // StatsCounter support
@@ -888,6 +931,9 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
   void AbortIfSmi(Register object);
   void AbortIfNotSmi(Register object);
 
+  // Abort execution if argument is a string. Used in debug code.
+  void AbortIfNotString(Register object);
+
   // Abort execution if argument is not the root value with the given index.
   void AbortIfNotRootValue(Register src,
                            Heap::RootListIndex root_value_index,
@@ -983,7 +1029,6 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
 };
 
 
-#ifdef ENABLE_DEBUGGER_SUPPORT
 // The code patcher is used to patch (typically) small parts of code e.g. for
 // debugging and other types of instrumentation. When using the code patcher
 // the exact number of bytes specified must be emitted. It is not legal to emit
@@ -998,10 +1043,14 @@ class CodePatcher {
   MacroAssembler* masm() { return &masm_; }
 
   // Emit an instruction directly.
-  void Emit(Instr x);
+  void Emit(Instr instr);
 
   // Emit an address directly.
   void Emit(Address addr);
+
+  // Change the condition part of an instruction leaving the rest of the current
+  // instruction unchanged.
+  void ChangeBranchCondition(Condition cond);
 
  private:
   byte* address_;  // The address of the code being patched.
@@ -1009,7 +1058,6 @@ class CodePatcher {
   int size_;  // Number of bytes of the expected patch size.
   MacroAssembler masm_;  // Macro assembler used to generate the code.
 };
-#endif  // ENABLE_DEBUGGER_SUPPORT
 
 
 // Helper class for generating code or data associated with the code
@@ -1041,6 +1089,16 @@ static inline MemOperand FieldMemOperand(Register object, int offset) {
   return MemOperand(object, offset - kHeapObjectTag);
 }
 
+
+// Generate a MemOperand for storing arguments 5..N on the stack
+// when calling CallCFunction().
+static inline MemOperand CFunctionArgumentOperand(int index) {
+  ASSERT(index > StandardFrameConstants::kCArgSlotCount);
+  // Argument 5 takes the slot just past the four Arg-slots.
+  int offset =
+      (index - 5) * kPointerSize + StandardFrameConstants::kCArgsSlotsSize;
+  return MemOperand(sp, offset);
+}
 
 
 #ifdef GENERATED_CODE_COVERAGE

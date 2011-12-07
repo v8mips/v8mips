@@ -43,13 +43,17 @@
 namespace v8 {
 namespace internal {
 
-CpuFeatures::CpuFeatures()
-    : supported_(0),
-      enabled_(0),
-      found_by_runtime_probing_(0) {
-}
+#ifdef DEBUG
+bool CpuFeatures::initialized_ = false;
+#endif
+unsigned CpuFeatures::supported_ = 0;
+unsigned CpuFeatures::found_by_runtime_probing_ = 0;
 
-void CpuFeatures::Probe(bool portable) {
+void CpuFeatures::Probe() {
+  ASSERT(!initialized_);
+#ifdef DEBUG
+  initialized_ = true;
+#endif
   // If the compiler is allowed to use fpu then we can use fpu too in our
   // code generation.
 #if !defined(__mips__)
@@ -58,7 +62,7 @@ void CpuFeatures::Probe(bool portable) {
       supported_ |= 1u << FPU;
   }
 #else
-  if (portable && Serializer::enabled()) {
+  if (Serializer::enabled()) {
     supported_ |= OS::CpuFeaturesImpliedByPlatform();
     return;  // No features if we might serialize.
   }
@@ -69,8 +73,6 @@ void CpuFeatures::Probe(bool portable) {
     supported_ |= 1u << FPU;
     found_by_runtime_probing_ |= 1u << FPU;
   }
-
-  if (!portable) found_by_runtime_probing_ = 0;
 #endif
 }
 
@@ -235,11 +237,11 @@ const Instr kLwSwOffsetMask = kImm16Mask;
 static const int kMinimalBufferSize = 4 * KB;
 
 
-Assembler::Assembler(void* buffer, int buffer_size)
-    : AssemblerBase(Isolate::Current()),
+Assembler::Assembler(Isolate* arg_isolate, void* buffer, int buffer_size)
+    : AssemblerBase(arg_isolate),
       positions_recorder_(this),
-      allow_peephole_optimization_(false) {
-  // BUG(3245989): disable peephole optimization if crankshaft is enabled.
+      allow_peephole_optimization_(false),
+      emit_debug_code_(FLAG_debug_code) {
   allow_peephole_optimization_ = FLAG_peephole_optimization;
   if (buffer == NULL) {
     // Do our own buffer management.
@@ -276,13 +278,14 @@ Assembler::Assembler(void* buffer, int buffer_size)
   no_trampoline_pool_before_ = 0;
   trampoline_pool_blocked_nesting_ = 0;
   next_buffer_check_ = kMaxBranchOffset - kTrampolineSize;
+  internal_trampoline_exception_ = false;
 }
 
 
 Assembler::~Assembler() {
   if (own_buffer_) {
     if (isolate()->assembler_spare_buffer() == NULL &&
-      buffer_size_ == kMinimalBufferSize) {
+        buffer_size_ == kMinimalBufferSize) {
       isolate()->set_assembler_spare_buffer(buffer_);
     } else {
       DeleteArray(buffer_);
@@ -316,10 +319,79 @@ void Assembler::CodeTargetAlign() {
 }
 
 
-Register Assembler::GetRt(Instr instr) {
+Register Assembler::GetRtReg(Instr instr) {
   Register rt;
-  rt.code_ = (instr & kRtMask) >> kRtShift;
+  rt.code_ = (instr & kRtFieldMask) >> kRtShift;
   return rt;
+}
+
+
+Register Assembler::GetRsReg(Instr instr) {
+  Register rs;
+  rs.code_ = (instr & kRsFieldMask) >> kRsShift;
+  return rs;
+}
+
+
+Register Assembler::GetRdReg(Instr instr) {
+  Register rd;
+  rd.code_ = (instr & kRdFieldMask) >> kRdShift;
+  return rd;
+}
+
+
+uint32_t Assembler::GetRt(Instr instr) {
+  return (instr & kRtFieldMask) >> kRtShift;
+}
+
+
+uint32_t Assembler::GetRtField(Instr instr) {
+  return instr & kRtFieldMask;
+}
+
+
+uint32_t Assembler::GetRs(Instr instr) {
+  return (instr & kRsFieldMask) >> kRsShift;
+}
+
+
+uint32_t Assembler::GetRsField(Instr instr) {
+  return instr & kRsFieldMask;
+}
+
+
+uint32_t Assembler::GetRd(Instr instr) {
+  return  (instr & kRdFieldMask) >> kRdShift;
+}
+
+
+uint32_t Assembler::GetRdField(Instr instr) {
+  return  instr & kRdFieldMask;
+}
+
+
+uint32_t Assembler::GetSa(Instr instr) {
+  return (instr & kSaFieldMask) >> kSaShift;
+}
+
+
+uint32_t Assembler::GetSaField(Instr instr) {
+  return instr & kSaFieldMask;
+}
+
+
+uint32_t Assembler::GetOpcodeField(Instr instr) {
+  return instr & kOpcodeMask;
+}
+
+
+uint32_t Assembler::GetImmediate16(Instr instr) {
+  return instr & kImm16Mask;
+}
+
+
+uint32_t Assembler::GetLabelConst(Instr instr) {
+  return instr & ~kImm16Mask;
 }
 
 
@@ -374,10 +446,10 @@ const int kEndOfChain = -4;
 
 
 bool Assembler::IsBranch(Instr instr) {
-  uint32_t opcode   = ((instr & kOpcodeMask));
-  uint32_t rt_field = ((instr & kRtFieldMask));
-  uint32_t rs_field = ((instr & kRsFieldMask));
-  uint32_t label_constant = (instr & ~kImm16Mask);
+  uint32_t opcode   = GetOpcodeField(instr);
+  uint32_t rt_field = GetRtField(instr);
+  uint32_t rs_field = GetRsField(instr);
+  uint32_t label_constant = GetLabelConst(instr);
   // Checks if the instruction is a branch.
   return opcode == BEQ ||
       opcode == BNE ||
@@ -394,13 +466,23 @@ bool Assembler::IsBranch(Instr instr) {
 }
 
 
+bool Assembler::IsBEQ(Instr instr) {
+  return GetOpcodeField(instr) == BEQ;
+}
+
+
+bool Assembler::IsBNE(Instr instr) {
+  return GetOpcodeField(instr) == BNE;
+}
+
+
 bool Assembler::IsNop(Instr instr, unsigned int type) {
   // See Assembler::nop(type).
   ASSERT(type < 32);
-  uint32_t opcode = ((instr & kOpcodeMask));
-  uint32_t rt = ((instr & kRtFieldMask) >> kRtShift);
-  uint32_t rs = ((instr & kRsFieldMask) >> kRsShift);
-  uint32_t sa = ((instr & kSaFieldMask) >> kSaShift);
+  uint32_t opcode = GetOpcodeField(instr);
+  uint32_t rt = GetRt(instr);
+  uint32_t rs = GetRs(instr);
+  uint32_t sa = GetSa(instr);
 
   // nop(type) == sll(zero_reg, zero_reg, type);
   // Technically all these values will be 0 but
@@ -462,6 +544,11 @@ bool Assembler::IsAddImmediate(Instr instr) {
 Instr Assembler::SetAddImmediateOffset(Instr instr, int16_t offset) {
   ASSERT(IsAddImmediate(instr));
   return ((instr & ~kImm16Mask) | (offset & kImm16Mask));
+}
+
+
+bool Assembler::IsAndImmediate(Instr instr) {
+  return GetOpcodeField(instr) == ANDI;
 }
 
 
@@ -546,6 +633,10 @@ void Assembler::bind_to(Label* L, int pos) {
     if (dist > kMaxBranchOffset) {
       do {
         int32_t trampoline_pos = get_trampoline_entry(fixup_pos);
+        if (kInvalidSlotPos == trampoline_pos) {
+          // Internal error.
+          return;
+        }
         ASSERT((trampoline_pos - fixup_pos) <= kMaxBranchOffset);
         target_at_put(fixup_pos, trampoline_pos);
         fixup_pos = trampoline_pos;
@@ -554,6 +645,10 @@ void Assembler::bind_to(Label* L, int pos) {
     } else if (dist < -kMaxBranchOffset) {
       do {
         int32_t trampoline_pos = get_trampoline_entry(fixup_pos, false);
+        if (kInvalidSlotPos == trampoline_pos) {
+          // Internal error.
+          return;
+        }
         ASSERT((trampoline_pos - fixup_pos) >= -kMaxBranchOffset);
         target_at_put(fixup_pos, trampoline_pos);
         fixup_pos = trampoline_pos;
@@ -652,7 +747,7 @@ void Assembler::GenInstrRegister(Opcode opcode,
                                  FPURegister fd,
                                  SecondaryField func) {
   ASSERT(fd.is_valid() && fs.is_valid() && ft.is_valid());
-  ASSERT(isolate()->cpu_features()->IsEnabled(FPU));
+  ASSERT(CpuFeatures::IsEnabled(FPU));
   Instr instr = opcode | fmt | (ft.code() << kFtShift) | (fs.code() << kFsShift)
       | (fd.code() << kFdShift) | func;
   emit(instr);
@@ -666,7 +761,7 @@ void Assembler::GenInstrRegister(Opcode opcode,
                                  FPURegister fd,
                                  SecondaryField func) {
   ASSERT(fd.is_valid() && fs.is_valid() && rt.is_valid());
-  ASSERT(isolate()->cpu_features()->IsEnabled(FPU));
+  ASSERT(CpuFeatures::IsEnabled(FPU));
   Instr instr = opcode | fmt | (rt.code() << kRtShift)
       | (fs.code() << kFsShift) | (fd.code() << kFdShift) | func;
   emit(instr);
@@ -679,7 +774,7 @@ void Assembler::GenInstrRegister(Opcode opcode,
                                  FPUControlRegister fs,
                                  SecondaryField func) {
   ASSERT(fs.is_valid() && rt.is_valid());
-  ASSERT(isolate()->cpu_features()->IsEnabled(FPU));
+  ASSERT(CpuFeatures::IsEnabled(FPU));
   Instr instr =
       opcode | fmt | (rt.code() << kRtShift) | (fs.code() << kFsShift) | func;
   emit(instr);
@@ -714,7 +809,7 @@ void Assembler::GenInstrImmediate(Opcode opcode,
                                   FPURegister ft,
                                   int32_t j) {
   ASSERT(rs.is_valid() && ft.is_valid() && (is_int16(j) || is_uint16(j)));
-  ASSERT(isolate()->cpu_features()->IsEnabled(FPU));
+  ASSERT(CpuFeatures::IsEnabled(FPU));
   Instr instr = opcode | (rs.code() << kRsShift) | (ft.code() << kFtShift)
       | (j & kImm16Mask);
   emit(instr);
@@ -760,22 +855,27 @@ int32_t Assembler::get_label_entry(int32_t pos, bool next_pool) {
 // Returns the next free trampoline entry from the next trampoline pool.
 int32_t Assembler::get_trampoline_entry(int32_t pos, bool next_pool) {
   int trampoline_count = trampolines_.length();
-  int32_t trampoline_entry = 0;
+  int32_t trampoline_entry = kInvalidSlotPos;
   ASSERT(trampoline_count > 0);
 
-  if (next_pool) {
-    for (int i = 0; i < trampoline_count; i++) {
-      if (trampolines_[i].start() > pos) {
-       trampoline_entry = trampolines_[i].take_slot();
-       break;
+  if (!internal_trampoline_exception_) {
+    if (next_pool) {
+      for (int i = 0; i < trampoline_count; i++) {
+        if (trampolines_[i].start() > pos) {
+         trampoline_entry = trampolines_[i].take_slot();
+         break;
+        }
+      }
+    } else {  //  Caller needs a trampoline entry from the previous pool.
+      for (int i = trampoline_count-1; i >= 0; i--) {
+        if (trampolines_[i].end() < pos) {
+         trampoline_entry = trampolines_[i].take_slot();
+         break;
+        }
       }
     }
-  } else {  // Caller needs a trampoline entry from the previous pool.
-    for (int i = trampoline_count-1; i >= 0; i--) {
-      if (trampolines_[i].end() < pos) {
-       trampoline_entry = trampolines_[i].take_slot();
-       break;
-      }
+    if (kInvalidSlotPos == trampoline_entry) {
+      internal_trampoline_exception_ = true;
     }
   }
   return trampoline_entry;
@@ -792,6 +892,10 @@ int32_t Assembler::branch_offset(Label* L, bool jump_elimination_allowed) {
     if (dist > kMaxBranchOffset) {
       do {
         int32_t trampoline_pos = get_trampoline_entry(target_pos);
+        if (kInvalidSlotPos == trampoline_pos) {
+          // Internal error.
+          return 0;
+        }
         ASSERT((trampoline_pos - target_pos) > 0);
         ASSERT((trampoline_pos - target_pos) <= kMaxBranchOffset);
         target_at_put(trampoline_pos, target_pos);
@@ -801,6 +905,10 @@ int32_t Assembler::branch_offset(Label* L, bool jump_elimination_allowed) {
     } else if (dist < -kMaxBranchOffset) {
       do {
         int32_t trampoline_pos = get_trampoline_entry(target_pos, false);
+        if (kInvalidSlotPos == trampoline_pos) {
+          // Internal error.
+          return 0;
+        }
         ASSERT((target_pos - trampoline_pos) > 0);
         ASSERT((target_pos - trampoline_pos) <= kMaxBranchOffset);
         target_at_put(trampoline_pos, target_pos);
@@ -1018,8 +1126,8 @@ void Assembler::addiu(Register rd, Register rs, int32_t j) {
         // we delete both the push & pop and insert a register move.
         // push ry, pop rx --> mov rx, ry.
         Register reg_pushed, reg_popped;
-        reg_pushed = GetRt(push_instr);
-        reg_popped = GetRt(pop_instr);
+        reg_pushed = GetRtReg(push_instr);
+        reg_popped = GetRtReg(pop_instr);
         pc_ -= 4 * kInstrSize;
         // Insert a mov instruction, which is better than a pair of push & pop.
         or_(reg_popped, reg_pushed, zero_reg);
@@ -1054,7 +1162,7 @@ void Assembler::addiu(Register rd, Register rs, int32_t j) {
         if ((mem_write_instr & kRtMask) ==
               (mem_read_instr & kRtMask)) {
           // Pattern: push & pop from/to same register,
-          // with a fp+offset lw in between.
+          // with a fp + offset lw in between.
           //
           // The following:
           // addiu sp, sp, -4
@@ -1077,7 +1185,8 @@ void Assembler::addiu(Register rd, Register rs, int32_t j) {
             emit(lw_instr);
           }
           if (FLAG_print_peephole_optimization) {
-            PrintF("%x push/pop -dead ldr fp+offset in middle\n", pc_offset());
+            PrintF("%x push/pop -dead ldr fp + offset in middle\n",
+                   pc_offset());
           }
         } else {
           // Pattern: push & pop from/to different registers
@@ -1102,14 +1211,14 @@ void Assembler::addiu(Register rd, Register rs, int32_t j) {
 
           Register reg_pushed, reg_popped;
           if ((mem_read_instr & kRtMask) == (lw_instr & kRtMask)) {
-            reg_pushed = GetRt(mem_write_instr);
-            reg_popped = GetRt(mem_read_instr);
+            reg_pushed = GetRtReg(mem_write_instr);
+            reg_popped = GetRtReg(mem_read_instr);
             pc_ -= 5 * kInstrSize;
             or_(reg_popped, reg_pushed, zero_reg);  // Move instruction.
           } else if ((mem_write_instr & kRtMask)
                                 != (lw_instr & kRtMask)) {
-            reg_pushed = GetRt(mem_write_instr);
-            reg_popped = GetRt(mem_read_instr);
+            reg_pushed = GetRtReg(mem_write_instr);
+            reg_popped = GetRtReg(mem_read_instr);
             pc_ -= 5 * kInstrSize;
             emit(lw_instr);
             or_(reg_popped, reg_pushed, zero_reg);  // Move instruction.
@@ -1117,8 +1226,8 @@ void Assembler::addiu(Register rd, Register rs, int32_t j) {
                                      != (lw_instr & kRtMask)) ||
                     ((mem_write_instr & kRtMask)
                                      == (lw_instr & kRtMask)) ) {
-            reg_pushed = GetRt(mem_write_instr);
-            reg_popped = GetRt(mem_read_instr);
+            reg_pushed = GetRtReg(mem_write_instr);
+            reg_popped = GetRtReg(mem_read_instr);
             pc_ -= 5 * kInstrSize;
             or_(reg_popped, reg_pushed, zero_reg);  // Move instruction.
             emit(lw_instr);
@@ -1354,8 +1463,8 @@ void Assembler::lw(Register rd, const MemOperand& rs) {
         // mov ry, rx
 
         Register reg_stored, reg_loaded;
-        reg_stored = GetRt(sw_instr);
-        reg_loaded = GetRt(lw_instr);
+        reg_stored = GetRtReg(sw_instr);
+        reg_loaded = GetRtReg(lw_instr);
         pc_ -= 1 * kInstrSize;
         // Insert a mov instruction, which is better than lw.
         or_(reg_loaded, reg_stored, zero_reg);  // Move instruction.
@@ -1816,7 +1925,7 @@ void Assembler::cvt_d_s(FPURegister fd, FPURegister fs) {
 // Conditions.
 void Assembler::c(FPUCondition cond, SecondaryField fmt,
     FPURegister fs, FPURegister ft, uint16_t cc) {
-  ASSERT(isolate()->cpu_features()->IsEnabled(FPU));
+  ASSERT(CpuFeatures::IsEnabled(FPU));
   ASSERT(is_uint3(cc));
   ASSERT((fmt & ~(31 << kRsShift)) == 0);
   Instr instr = COP1 | fmt | ft.code() << 16 | fs.code() << kFsShift
@@ -1827,7 +1936,7 @@ void Assembler::c(FPUCondition cond, SecondaryField fmt,
 
 void Assembler::fcmp(FPURegister src1, const double src2,
       FPUCondition cond) {
-  ASSERT(isolate()->cpu_features()->IsSupported(FPU));
+  ASSERT(CpuFeatures::IsEnabled(FPU));
   ASSERT(src2 == 0.0);
   mtc1(zero_reg, f14);
   cvt_d_w(f14, f14);
@@ -1836,7 +1945,7 @@ void Assembler::fcmp(FPURegister src1, const double src2,
 
 
 void Assembler::bc1f(int16_t offset, uint16_t cc) {
-  ASSERT(isolate()->cpu_features()->IsEnabled(FPU));
+  ASSERT(CpuFeatures::IsEnabled(FPU));
   ASSERT(is_uint3(cc));
   Instr instr = COP1 | BC1 | cc << 18 | 0 << 16 | (offset & kImm16Mask);
   emit(instr);
@@ -1844,7 +1953,7 @@ void Assembler::bc1f(int16_t offset, uint16_t cc) {
 
 
 void Assembler::bc1t(int16_t offset, uint16_t cc) {
-  ASSERT(isolate()->cpu_features()->IsEnabled(FPU));
+  ASSERT(CpuFeatures::IsEnabled(FPU));
   ASSERT(is_uint3(cc));
   Instr instr = COP1 | BC1 | cc << 18 | 1 << 16 | (offset & kImm16Mask);
   emit(instr);
@@ -2018,23 +2127,24 @@ Address Assembler::target_address_at(Address pc) {
   Instr instr1 = instr_at(pc);
   Instr instr2 = instr_at(pc + kInstrSize);
   // Check we have 2 instructions generated by li.
-  ASSERT(((instr1 & kOpcodeMask) == LUI && (instr2 & kOpcodeMask) == ORI) ||
-         ((instr1 == nopInstr) && ((instr2 & kOpcodeMask) == ADDI ||
-                            (instr2 & kOpcodeMask) == ORI ||
-                            (instr2 & kOpcodeMask) == LUI)));
+  ASSERT((GetOpcodeField(instr1) == LUI && GetOpcodeField(instr2) == ORI) ||
+         ((instr1 == nopInstr) && (GetOpcodeField(instr2) == ADDI ||
+                            GetOpcodeField(instr2) == ORI ||
+                            GetOpcodeField(instr2) == LUI)));
   // Interpret these 2 instructions.
   if (instr1 == nopInstr) {
-    if ((instr2 & kOpcodeMask) == ADDI) {
-      return reinterpret_cast<Address>(((instr2 & kImm16Mask) << 16) >> 16);
-    } else if ((instr2 & kOpcodeMask) == ORI) {
-      return reinterpret_cast<Address>(instr2 & kImm16Mask);
-    } else if ((instr2 & kOpcodeMask) == LUI) {
-      return reinterpret_cast<Address>((instr2 & kImm16Mask) << 16);
+    if (GetOpcodeField(instr2) == ADDI) {
+      return reinterpret_cast<Address>((GetImmediate16(instr2) << 16) >> 16);
+    } else if (GetOpcodeField(instr2) == ORI) {
+      return reinterpret_cast<Address>(GetImmediate16(instr2));
+    } else if (GetOpcodeField(instr2) == LUI) {
+      return reinterpret_cast<Address>(GetImmediate16(instr2) << 16);
     }
-  } else if ((instr1 & kOpcodeMask) == LUI && (instr2 & kOpcodeMask) == ORI) {
+  } else if ((GetOpcodeField(instr1) == LUI) &&
+             (GetOpcodeField(instr2) == ORI)) {
     // 32 bit value.
     return reinterpret_cast<Address>(
-        (instr1 & kImm16Mask) << 16 | (instr2 & kImm16Mask));
+        (GetImmediate16(instr1) << 16) | GetImmediate16(instr2));
   }
 
   // We should never get here.
@@ -2052,13 +2162,13 @@ void Assembler::set_target_address_at(Address pc, Address target) {
   Instr instr1 = instr_at(pc);
 
   // Check we have indeed the result from a li with MustUseReg true.
-  CHECK(((instr1 & kOpcodeMask) == LUI && (instr2 & kOpcodeMask) == ORI) ||
-        ((instr1 == 0) && ((instr2 & kOpcodeMask)== ADDIU ||
-                           (instr2 & kOpcodeMask)== ORI ||
-                           (instr2 & kOpcodeMask)== LUI)));
+  CHECK((GetOpcodeField(instr1) == LUI && GetOpcodeField(instr2) == ORI) ||
+        ((instr1 == nopInstr) && (GetOpcodeField(instr2) == ADDIU ||
+                           GetOpcodeField(instr2) == ORI ||
+                           GetOpcodeField(instr2) == LUI)));
 #endif
 
-  uint32_t rt_code = (instr2 & kRtFieldMask);
+  uint32_t rt_code = GetRtField(instr2);
   uint32_t* p = reinterpret_cast<uint32_t*>(pc);
   uint32_t itarget = reinterpret_cast<uint32_t>(target);
 

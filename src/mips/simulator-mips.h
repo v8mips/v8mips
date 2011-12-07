@@ -50,15 +50,15 @@ namespace internal {
   entry(p0, p1, p2, p3, p4)
 
 typedef int (*mips_regexp_matcher)(String*, int, const byte*, const byte*,
-                                  void*, int*, Address, int, Isolate*);
+                                   int*, Address, int, Isolate*);
+
 
 // Call the generated regexp code directly. The code at the entry address
 // should act as a function matching the type arm_regexp_matcher.
 // The fifth argument is a dummy that reserves the space used for
 // the return address added by the ExitFrame in native calls.
 #define CALL_GENERATED_REGEXP_CODE(entry, p0, p1, p2, p3, p4, p5, p6, p7) \
-  (FUNCTION_CAST<mips_regexp_matcher>(entry)(                             \
-      p0, p1, p2, p3, NULL, p4, p5, p6, p7))
+  (FUNCTION_CAST<mips_regexp_matcher>(entry)(p0, p1, p2, p3, p4, p5, p6, p7))
 
 #define TRY_CATCH_FROM_ADDRESS(try_catch_address) \
   reinterpret_cast<TryCatch*>(try_catch_address)
@@ -95,6 +95,7 @@ class SimulatorStack : public v8::internal::AllStatic {
 // Running with a simulator.
 
 #include "hashmap.h"
+#include "assembler.h"
 
 namespace v8 {
 namespace internal {
@@ -210,7 +211,7 @@ class Simulator {
   // V8 generally calls into generated JS code with 5 parameters and into
   // generated RegExp code with 7 parameters. This is a convenience function,
   // which sets up the simulator state and grabs the result on return.
-  int32_t Call(byte* entry, int argument_count, ...);
+  int32_t Call(byte_* entry, int argument_count, ...);
 
   // Push an address onto the JS stack.
   uintptr_t PushAddress(uintptr_t address);
@@ -304,7 +305,6 @@ class Simulator {
                            int size);
   static CachePage* GetCachePage(v8::internal::HashMap* i_cache, void* page);
 
-
   enum Exception {
     none,
     kIntegerOverflow,
@@ -334,8 +334,9 @@ class Simulator {
   uint32_t FCSR_;
 
   // Simulator support.
+  // Allocate 1MB for stack.
+  static const size_t stack_size_ = 1 * 1024*1024;
   char* stack_;
-  size_t stack_size_;
   bool pc_modified_;
   int icount_;
   int break_count_;
@@ -343,26 +344,26 @@ class Simulator {
   // Icache simulation
   v8::internal::HashMap* i_cache_;
 
+  v8::internal::Isolate* isolate_;
+
   // Registered breakpoints.
   Instruction* break_pc_;
   Instr break_instr_;
-
-  v8::internal::Isolate* isolate_;
 };
 
 
 // When running with the simulator transition into simulated execution at this
 // point.
 #define CALL_GENERATED_CODE(entry, p0, p1, p2, p3, p4) \
-reinterpret_cast<Object*>(Simulator::current(Isolate::Current())->Call( \
+    reinterpret_cast<Object*>(Simulator::current(Isolate::Current())->Call( \
       FUNCTION_ADDR(entry), 5, p0, p1, p2, p3, p4))
 
 #define CALL_GENERATED_REGEXP_CODE(entry, p0, p1, p2, p3, p4, p5, p6, p7) \
-  Simulator::current(Isolate::Current())->Call( \
-      entry, 9, p0, p1, p2, p3, NULL, p4, p5, p6, p7)
+    Simulator::current(Isolate::Current())->Call( \
+        entry, 8, p0, p1, p2, p3, p4, p5, p6, p7)
 
-#define TRY_CATCH_FROM_ADDRESS(try_catch_address) \
-  try_catch_address == NULL ? \
+#define TRY_CATCH_FROM_ADDRESS(try_catch_address)                              \
+  try_catch_address == NULL ?                                                  \
       NULL : *(reinterpret_cast<TryCatch**>(try_catch_address))
 
 
