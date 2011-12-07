@@ -2283,21 +2283,7 @@ void LCodeGen::DoStoreGlobalCell(LStoreGlobalCell* instr) {
 
   // Store the value.
   __ str(value, FieldMemOperand(scratch, JSGlobalPropertyCell::kValueOffset));
-
-  // Cells are always in the remembered set.
-  if (instr->hydrogen()->NeedsWriteBarrier()) {
-    HType type = instr->hydrogen()->value()->type();
-    SmiCheck check_needed =
-        type.IsHeapObject() ? OMIT_SMI_CHECK : INLINE_SMI_CHECK;
-    __ RecordWriteField(scratch,
-                        JSGlobalPropertyCell::kValueOffset,
-                        value,
-                        scratch2,
-                        kLRHasBeenSaved,
-                        kSaveFPRegs,
-                        OMIT_REMEMBERED_SET,
-                        check_needed);
-  }
+  // Cells are always rescanned, so no write barrier here.
 }
 
 
@@ -3073,11 +3059,11 @@ void LCodeGen::DoMathRound(LUnaryMathOperation* instr) {
   __ and_(scratch, result, Operand(HeapNumber::kSignMask));
 
   __ Vmov(double_scratch0(), 0.5);
-  __ vadd(input, input, double_scratch0());
+  __ vadd(double_scratch0(), input, double_scratch0());
 
   // Check sign of the result: if the sign changed, the input
   // value was in ]0.5, 0[ and the result should be -0.
-  __ vmov(result, input.high());
+  __ vmov(result, double_scratch0().high());
   __ eor(result, result, Operand(scratch), SetCC);
   if (instr->hydrogen()->CheckFlag(HValue::kBailoutOnMinusZero)) {
     DeoptimizeIf(mi, instr->environment());
@@ -3088,7 +3074,7 @@ void LCodeGen::DoMathRound(LUnaryMathOperation* instr) {
 
   __ EmitVFPTruncate(kRoundToMinusInf,
                      double_scratch0().low(),
-                     input,
+                     double_scratch0(),
                      result,
                      scratch);
   DeoptimizeIf(ne, instr->environment());

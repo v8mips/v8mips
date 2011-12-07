@@ -141,6 +141,20 @@ function test() {
   assertEquals(0.25, Math.pow(16, -0.5));
   assertEquals(NaN, Math.pow(-16, -0.5));
 
+  // Tests from Mozilla 15.8.2.13.
+  assertEquals(2, Math.pow.length);
+  assertEquals(NaN, Math.pow());
+  assertEquals(1, Math.pow(null, null));
+  assertEquals(NaN, Math.pow(void 0, void 0));
+  assertEquals(1, Math.pow(true, false));
+  assertEquals(0, Math.pow(false, true));
+  assertEquals(Infinity, Math.pow(-Infinity, Infinity));
+  assertEquals(0, Math.pow(-Infinity, -Infinity));
+  assertEquals(1, Math.pow(0, 0));
+  assertEquals(0, Math.pow(0, Infinity));
+  assertEquals(NaN, Math.pow(NaN, 0.5));
+  assertEquals(NaN, Math.pow(NaN, -0.5));
+
   // Tests from Sputnik S8.5_A13_T1.
   assertTrue(
       (1*((Math.pow(2,53))-1)*(Math.pow(2,-1074))) === 4.4501477170144023e-308);

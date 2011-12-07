@@ -2144,20 +2144,7 @@ void LCodeGen::DoStoreGlobalCell(LStoreGlobalCell* instr) {
 
   // Store the value.
   __ mov(FieldOperand(object, offset), value);
-
-  // Cells are always in the remembered set.
-  if (instr->hydrogen()->NeedsWriteBarrier()) {
-    HType type = instr->hydrogen()->value()->type();
-    SmiCheck check_needed =
-        type.IsHeapObject() ? OMIT_SMI_CHECK : INLINE_SMI_CHECK;
-    __ RecordWriteField(object,
-                        offset,
-                        value,
-                        address,
-                        kSaveFPRegs,
-                        OMIT_REMEMBERED_SET,
-                        check_needed);
-  }
+  // Cells are always rescanned, so no write barrier here.
 }
 
 
@@ -2913,12 +2900,12 @@ void LCodeGen::DoMathRound(LUnaryMathOperation* instr) {
   __ movdbl(xmm_scratch, Operand::StaticVariable(one_half));
   __ ucomisd(xmm_scratch, input_reg);
   __ j(above, &below_half);
-  // input = input + 0.5
-  __ addsd(input_reg, xmm_scratch);
+  // xmm_scratch = input + 0.5
+  __ addsd(xmm_scratch, input_reg);
 
   // Compute Math.floor(value + 0.5).
   // Use truncating instruction (OK because input is positive).
-  __ cvttsd2si(output_reg, Operand(input_reg));
+  __ cvttsd2si(output_reg, Operand(xmm_scratch));
 
   // Overflow is signalled with minint.
   __ cmp(output_reg, 0x80000000u);
@@ -2970,7 +2957,10 @@ void LCodeGen::DoMathPowHalf(LMathPowHalf* instr) {
   __ movd(xmm_scratch, scratch);
   __ cvtss2sd(xmm_scratch, xmm_scratch);
   __ ucomisd(input_reg, xmm_scratch);
+  // Comparing -Infinity with NaN results in "unordered", which sets the
+  // zero flag as if both were equal.  However, it also sets the carry flag.
   __ j(not_equal, &sqrt, Label::kNear);
+  __ j(carry, &sqrt, Label::kNear);
   // If input is -Infinity, return Infinity.
   __ xorps(input_reg, input_reg);
   __ subsd(input_reg, xmm_scratch);
@@ -2988,12 +2978,12 @@ void LCodeGen::DoMathPowHalf(LMathPowHalf* instr) {
 void LCodeGen::DoPower(LPower* instr) {
   Representation exponent_type = instr->hydrogen()->right()->representation();
   // Having marked this as a call, we can use any registers.
-  // Just make sure that the input registers are the expected ones.
+  // Just make sure that the input/output registers are the expected ones.
   ASSERT(!instr->InputAt(1)->IsDoubleRegister() ||
-         ToDoubleRegister(instr->InputAt(1)).is(xmm2));
+         ToDoubleRegister(instr->InputAt(1)).is(xmm1));
   ASSERT(!instr->InputAt(1)->IsRegister() ||
          ToRegister(instr->InputAt(1)).is(eax));
-  ASSERT(ToDoubleRegister(instr->InputAt(0)).is(xmm1));
+  ASSERT(ToDoubleRegister(instr->InputAt(0)).is(xmm2));
   ASSERT(ToDoubleRegister(instr->result()).is(xmm3));
 
   if (exponent_type.IsTagged()) {

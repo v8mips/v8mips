@@ -2047,25 +2047,7 @@ void LCodeGen::DoStoreGlobalCell(LStoreGlobalCell* instr) {
 
   // Store the value.
   __ movq(Operand(address, 0), value);
-
-  if (instr->hydrogen()->NeedsWriteBarrier()) {
-    Label smi_store;
-    HType type = instr->hydrogen()->value()->type();
-    if (!type.IsHeapNumber() && !type.IsString() && !type.IsNonPrimitive()) {
-      __ JumpIfSmi(value, &smi_store, Label::kNear);
-    }
-
-    int offset = JSGlobalPropertyCell::kValueOffset - kHeapObjectTag;
-    __ lea(object, Operand(address, -offset));
-    // Cells are always in the remembered set.
-    __ RecordWrite(object,
-                   address,
-                   value,
-                   kSaveFPRegs,
-                   OMIT_REMEMBERED_SET,
-                   OMIT_SMI_CHECK);
-    __ bind(&smi_store);
-  }
+  // Cells are always rescanned, so no write barrier here.
 }
 
 
@@ -2810,10 +2792,10 @@ void LCodeGen::DoMathRound(LUnaryMathOperation* instr) {
   // This addition might give a result that isn't the correct for
   // rounding, due to loss of precision, but only for a number that's
   // so big that the conversion below will overflow anyway.
-  __ addsd(input_reg, xmm_scratch);
+  __ addsd(xmm_scratch, input_reg);
   // Compute Math.floor(input).
   // Use truncating instruction (OK because input is positive).
-  __ cvttsd2si(output_reg, input_reg);
+  __ cvttsd2si(output_reg, xmm_scratch);
   // Overflow is signalled with minint.
   __ cmpl(output_reg, Immediate(0x80000000));
   DeoptimizeIf(equal, instr->environment());
@@ -2861,7 +2843,10 @@ void LCodeGen::DoMathPowHalf(LUnaryMathOperation* instr) {
   __ movq(kScratchRegister, V8_INT64_C(0xFFF0000000000000), RelocInfo::NONE);
   __ movq(xmm_scratch, kScratchRegister);
   __ ucomisd(xmm_scratch, input_reg);
+  // Comparing -Infinity with NaN results in "unordered", which sets the
+  // zero flag as if both were equal.  However, it also sets the carry flag.
   __ j(not_equal, &sqrt, Label::kNear);
+  __ j(carry, &sqrt, Label::kNear);
   // If input is -Infinity, return Infinity.
   __ xorps(input_reg, input_reg);
   __ subsd(input_reg, xmm_scratch);
@@ -2877,58 +2862,39 @@ void LCodeGen::DoMathPowHalf(LUnaryMathOperation* instr) {
 
 
 void LCodeGen::DoPower(LPower* instr) {
-  LOperand* left = instr->InputAt(0);
-  XMMRegister left_reg = ToDoubleRegister(left);
-  ASSERT(!left_reg.is(xmm1));
-  LOperand* right = instr->InputAt(1);
-  XMMRegister result_reg = ToDoubleRegister(instr->result());
   Representation exponent_type = instr->hydrogen()->right()->representation();
-  if (exponent_type.IsDouble()) {
-    __ PrepareCallCFunction(2);
-    // Move arguments to correct registers
-    __ movaps(xmm0, left_reg);
-    ASSERT(ToDoubleRegister(right).is(xmm1));
-    __ CallCFunction(
-        ExternalReference::power_double_double_function(isolate()), 2);
-  } else if (exponent_type.IsInteger32()) {
-    __ PrepareCallCFunction(2);
-    // Move arguments to correct registers: xmm0 and edi (not rdi).
-    // On Windows, the registers are xmm0 and edx.
-    __ movaps(xmm0, left_reg);
+  // Having marked this as a call, we can use any registers.
+  // Just make sure that the input/output registers are the expected ones.
+
+  // Choose register conforming to calling convention (when bailing out).
 #ifdef _WIN64
-    ASSERT(ToRegister(right).is(rdx));
+  Register exponent = rdx;
 #else
-    ASSERT(ToRegister(right).is(rdi));
+  Register exponent = rdi;
 #endif
-    __ CallCFunction(
-        ExternalReference::power_double_int_function(isolate()), 2);
-  } else {
-    ASSERT(exponent_type.IsTagged());
-    Register right_reg = ToRegister(right);
+  ASSERT(!instr->InputAt(1)->IsRegister() ||
+         ToRegister(instr->InputAt(1)).is(exponent));
+  ASSERT(!instr->InputAt(1)->IsDoubleRegister() ||
+         ToDoubleRegister(instr->InputAt(1)).is(xmm1));
+  ASSERT(ToDoubleRegister(instr->InputAt(0)).is(xmm2));
+  ASSERT(ToDoubleRegister(instr->result()).is(xmm3));
 
-    Label non_smi, call;
-    __ JumpIfNotSmi(right_reg, &non_smi);
-    __ SmiToInteger32(right_reg, right_reg);
-    __ cvtlsi2sd(xmm1, right_reg);
-    __ jmp(&call);
-
-    __ bind(&non_smi);
-    __ CmpObjectType(right_reg, HEAP_NUMBER_TYPE , kScratchRegister);
+  if (exponent_type.IsTagged()) {
+    Label no_deopt;
+    __ JumpIfSmi(exponent, &no_deopt);
+    __ CmpObjectType(exponent, HEAP_NUMBER_TYPE, rcx);
     DeoptimizeIf(not_equal, instr->environment());
-    __ movsd(xmm1, FieldOperand(right_reg, HeapNumber::kValueOffset));
-
-    __ bind(&call);
-    __ PrepareCallCFunction(2);
-    // Move arguments to correct registers xmm0 and xmm1.
-    __ movaps(xmm0, left_reg);
-    // Right argument is already in xmm1.
-    __ CallCFunction(
-        ExternalReference::power_double_double_function(isolate()), 2);
+    __ bind(&no_deopt);
+    MathPowStub stub(MathPowStub::TAGGED);
+    __ CallStub(&stub);
+  } else if (exponent_type.IsInteger32()) {
+    MathPowStub stub(MathPowStub::INTEGER);
+    __ CallStub(&stub);
+  } else {
+    ASSERT(exponent_type.IsDouble());
+    MathPowStub stub(MathPowStub::DOUBLE);
+    __ CallStub(&stub);
   }
-  // Return value is in xmm0.
-  __ movaps(result_reg, xmm0);
-  // Restore context register.
-  __ movq(rsi, Operand(rbp, StandardFrameConstants::kContextOffset));
 }
 
 

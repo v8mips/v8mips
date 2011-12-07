@@ -961,14 +961,14 @@ bool String::MakeExternal(v8::String::ExternalStringResource* resource) {
   // Morph the object to an external string by adjusting the map and
   // reinitializing the fields.
   if (size >= ExternalString::kSize) {
-    this->set_map(
+    this->set_map_no_write_barrier(
         is_symbol
             ? (is_ascii ?  heap->external_symbol_with_ascii_data_map()
                         :  heap->external_symbol_map())
             : (is_ascii ?  heap->external_string_with_ascii_data_map()
                         :  heap->external_string_map()));
   } else {
-    this->set_map(
+    this->set_map_no_write_barrier(
         is_symbol
             ? (is_ascii ?  heap->short_external_symbol_with_ascii_data_map()
                         :  heap->short_external_symbol_map())
@@ -1011,11 +1011,13 @@ bool String::MakeExternal(v8::String::ExternalAsciiStringResource* resource) {
   // Morph the object to an external string by adjusting the map and
   // reinitializing the fields.  Use short version if space is limited.
   if (size >= ExternalString::kSize) {
-    this->set_map(is_symbol ? heap->external_ascii_symbol_map()
-                            : heap->external_ascii_string_map());
+    this->set_map_no_write_barrier(
+        is_symbol ? heap->external_ascii_symbol_map()
+                  : heap->external_ascii_string_map());
   } else {
-    this->set_map(is_symbol ? heap->short_external_ascii_symbol_map()
-                            : heap->short_external_ascii_string_map());
+    this->set_map_no_write_barrier(
+        is_symbol ? heap->short_external_ascii_symbol_map()
+                  : heap->short_external_ascii_string_map());
   }
   ExternalAsciiString* self = ExternalAsciiString::cast(this);
   self->set_resource(resource);
@@ -4852,7 +4854,7 @@ void Map::TraverseTransitionTree(TraverseCallback callback, void* data) {
           // of the next map and recording the index in the transition array in
           // the map field of the array.
           Map* next = Map::cast(contents->get(i));
-          next->set_map_unsafe(current);
+          next->set_map_no_write_barrier(current);
           *map_or_index_field = Smi::FromInt(i + 2);
           current = next;
           map_done = false;
@@ -4877,7 +4879,7 @@ void Map::TraverseTransitionTree(TraverseCallback callback, void* data) {
       Object* perhaps_map = prototype_transitions->get(i);
       if (perhaps_map->IsMap()) {
         Map* next = Map::cast(perhaps_map);
-        next->set_map_unsafe(current);
+        next->set_map_no_write_barrier(current);
         *proto_map_or_index_field =
             Smi::FromInt(i + kProtoTransitionElementsPerEntry);
         current = next;
@@ -4893,7 +4895,7 @@ void Map::TraverseTransitionTree(TraverseCallback callback, void* data) {
     // the map field, which is being used to track the traversal and put the
     // correct map (the meta_map) in place while we do the callback.
     Map* prev = current->map();
-    current->set_map_unsafe(meta_map);
+    current->set_map_no_write_barrier(meta_map);
     callback(current, data);
     current = prev;
   }
@@ -5392,7 +5394,9 @@ MaybeObject* FixedArray::CopySize(int new_length) {
   AssertNoAllocation no_gc;
   int len = length();
   if (new_length < len) len = new_length;
-  result->set_map(map());
+  // We are taking the map from the old fixed array so the map is sure to
+  // be an immortal immutable object.
+  result->set_map_no_write_barrier(map());
   WriteBarrierMode mode = result->GetWriteBarrierMode(no_gc);
   for (int i = 0; i < len; i++) {
     result->set(i, get(i), mode);
@@ -7636,6 +7640,22 @@ void SharedFunctionInfo::CompleteInobjectSlackTracking() {
 }
 
 
+#define DECLARE_TAG(ignore1, name, ignore2) name,
+const char* const VisitorSynchronization::kTags[
+    VisitorSynchronization::kNumberOfSyncTags] = {
+  VISITOR_SYNCHRONIZATION_TAGS_LIST(DECLARE_TAG)
+};
+#undef DECLARE_TAG
+
+
+#define DECLARE_TAG(ignore1, ignore2, name) name,
+const char* const VisitorSynchronization::kTagNames[
+    VisitorSynchronization::kNumberOfSyncTags] = {
+  VISITOR_SYNCHRONIZATION_TAGS_LIST(DECLARE_TAG)
+};
+#undef DECLARE_TAG
+
+
 void ObjectVisitor::VisitCodeTarget(RelocInfo* rinfo) {
   ASSERT(RelocInfo::IsCodeTarget(rinfo->rmode()));
   Object* target = Code::GetCodeFromTargetAddress(rinfo->target_address());
@@ -8112,9 +8132,20 @@ void Code::Disassemble(const char* name, FILE* out) {
 static void CopyFastElementsToFast(FixedArray* source,
                                    FixedArray* destination,
                                    WriteBarrierMode mode) {
-  uint32_t count = static_cast<uint32_t>(source->length());
-  for (uint32_t i = 0; i < count; ++i) {
-    destination->set(i, source->get(i), mode);
+  int count = source->length();
+  if (mode == SKIP_WRITE_BARRIER ||
+      !Page::FromAddress(destination->address())->IsFlagSet(
+          MemoryChunk::POINTERS_FROM_HERE_ARE_INTERESTING)) {
+    ASSERT(count <= destination->length());
+    Address to = destination->address() + FixedArray::kHeaderSize;
+    Address from = source->address() + FixedArray::kHeaderSize;
+    memcpy(reinterpret_cast<void*>(to),
+           reinterpret_cast<void*>(from),
+           kPointerSize * count);
+  } else {
+    for (int i = 0; i < count; ++i) {
+      destination->set(i, source->get(i), mode);
+    }
   }
 }
 
@@ -10595,7 +10626,7 @@ class SymbolKey : public HashTableKey {
     // Transform string to symbol if possible.
     Map* map = heap->SymbolMapForString(string_);
     if (map != NULL) {
-      string_->set_map(map);
+      string_->set_map_no_write_barrier(map);
       ASSERT(string_->IsSymbol());
       return string_;
     }
