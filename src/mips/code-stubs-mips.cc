@@ -3459,7 +3459,7 @@ void CEntryStub::GenerateThrowTOS(MacroAssembler* masm) {
   const int kOffsetRaInstructions = 5;
   Label find_ra;
 
-  if (FLAG_debug_code) {  // TODO(plind): use emit_debug_code() when moved to masm.
+  if (FLAG_debug_code) {
     // Compute ra for the Jump(t9).
     const int kOffsetRaBytes = kOffsetRaInstructions * Assembler::kInstrSize;
 
@@ -3476,7 +3476,7 @@ void CEntryStub::GenerateThrowTOS(MacroAssembler* masm) {
   masm->pop(t9);  // 2 instructions: lw, add sp.
   masm->Jump(t9);  // 2 instructions: jr, nop (in delay slot).
 
-  if (FLAG_debug_code) {  // TODO(plind): use emit_debug_code() when moved to masm.
+  if (FLAG_debug_code) {
     // Make sure that the expected number of instructions were generated.
     ASSERT_EQ(kOffsetRaInstructions,
               masm->InstructionsGeneratedSince(&find_ra));
@@ -3552,7 +3552,7 @@ void CEntryStub::GenerateThrowUncatchable(MacroAssembler* masm,
   const int kOffsetRaInstructions = 5;
   Label find_ra;
 
-  if (FLAG_debug_code) {  // TODO(plind): use emit_debug_code() when moved to masm.
+  if (FLAG_debug_code) {
     // Compute ra for the Jump(t9).
     const int kOffsetRaBytes = kOffsetRaInstructions * Assembler::kInstrSize;
 
@@ -3568,7 +3568,7 @@ void CEntryStub::GenerateThrowUncatchable(MacroAssembler* masm,
   masm->pop(t9);  // 2 instructions: lw, add sp.
   masm->Jump(t9);  // 2 instructions: jr, nop (in delay slot).
 
-  if (FLAG_debug_code) {  // TODO(plind): use emit_debug_code() when moved to masm.
+  if (FLAG_debug_code) {
     // Make sure that the expected number of instructions were generated.
     ASSERT_EQ(kOffsetRaInstructions,
               masm->InstructionsGeneratedSince(&find_ra));

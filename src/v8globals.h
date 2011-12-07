@@ -96,7 +96,7 @@ const int kPageSizeBits = 14;
 // Number of bits to represent the page size for paged spaces. The value of 13
 // gives 8K bytes per page.
 const int kPageSizeBits = 13;
-#endif //V8_TARGET_ARCH_MIPS
+#endif  // V8_TARGET_ARCH_MIPS
 
 // On Intel architecture, cache line size is 64 bytes.
 // On ARM it may be less (32 bytes), but as far this constant is
