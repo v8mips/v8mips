@@ -284,7 +284,6 @@ Assembler::Assembler(Isolate* arg_isolate, void* buffer, int buffer_size)
   trampoline_emitted_ = false;
   unbound_labels_count_ = 0;
   block_buffer_growth_ = false;
-
 }
 
 
