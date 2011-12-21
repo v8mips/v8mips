@@ -975,7 +975,9 @@ void Deserializer::ReadChunk(Object** current,
       ONE_PER_SPACE(kNewObject, kPlain, kStartOfObject)
       // Deserialize a new object from pointer found in code and write
       // a pointer to it to the current object. Required only for MIPS.
+#if V8_TARGET_ARCH_MIPS
       ONE_PER_SPACE(kNewObject, kFromCode, kStartOfObject)
+#endif
       // Support for direct instruction pointers in functions
       ONE_PER_CODE_SPACE(kNewObject, kPlain, kFirstInstruction)
       // Deserialize a new code object and write a pointer to its first
