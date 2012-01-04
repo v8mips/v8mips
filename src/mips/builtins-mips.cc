@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -81,7 +81,7 @@ static void GenerateLoadInternalArrayFunction(MacroAssembler* masm,
 
   __ lw(result, MemOperand(cp, Context::SlotOffset(Context::GLOBAL_INDEX)));
   __ lw(result,
-         FieldMemOperand(result, GlobalObject::kGlobalContextOffset));
+        FieldMemOperand(result, GlobalObject::kGlobalContextOffset));
   // Load the InternalArray function from the global context.
   __ lw(result,
          MemOperand(result,
@@ -96,11 +96,11 @@ static void GenerateLoadArrayFunction(MacroAssembler* masm, Register result) {
 
   __ lw(result, MemOperand(cp, Context::SlotOffset(Context::GLOBAL_INDEX)));
   __ lw(result,
-         FieldMemOperand(result, GlobalObject::kGlobalContextOffset));
+        FieldMemOperand(result, GlobalObject::kGlobalContextOffset));
   // Load the Array function from the global context.
   __ lw(result,
-         MemOperand(result,
-                    Context::SlotOffset(Context::ARRAY_FUNCTION_INDEX)));
+        MemOperand(result,
+                   Context::SlotOffset(Context::ARRAY_FUNCTION_INDEX)));
 }
 
 
