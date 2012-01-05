@@ -766,30 +766,19 @@ void FloatingPointHelper::LoadNumberAsInt32Double(MacroAssembler* masm,
     // Load the double value.
     __ ldc1(double_dst, FieldMemOperand(object, HeapNumber::kValueOffset));
 
-    // NOTE: ARM uses a MacroAssembler function here (EmitVFPTruncate).
-    // On MIPS a lot of things cannot be implemented the same way so right
-    // now it makes a lot more sense to just do things manually.
-
-    // Save FCSR.
-    __ cfc1(scratch1, FCSR);
-    // Disable FPU exceptions.
-    __ ctc1(zero_reg, FCSR);
-    __ trunc_w_d(single_scratch, double_dst);
-    // Retrieve FCSR.
-    __ cfc1(scratch2, FCSR);
-    // Restore FCSR.
-    __ ctc1(scratch1, FCSR);
-
-    // Check for inexact conversion.
-    __ srl(scratch2, scratch2, kFCSRFlagShift);
-    __ And(scratch2, scratch2, (kFCSRFlagMask | kFCSRInexactFlagBit));
+    Register except_flag = scratch2;
+    __ EmitFPUTruncate(kRoundToZero,
+                       single_scratch,
+                       double_dst,
+                       scratch1,
+                       except_flag,
+                       kCheckForInexactConversion);
 
     // Jump to not_int32 if the operation did not succeed.
-    __ Branch(not_int32, ne, scratch2, Operand(zero_reg));
+    __ Branch(not_int32, ne, except_flag, Operand(zero_reg));
 
     if (destination == kCoreRegisters) {
-      __ mfc1(dst1, double_dst);
-      __ mfc1(dst2, FPURegister::from_code(double_dst.code() + 1));
+      __ Move(dst1, dst2, double_dst);
     }
 
   } else {
@@ -852,28 +841,19 @@ void FloatingPointHelper::LoadNumberAsInt32(MacroAssembler* masm,
     // Load the double value.
     __ ldc1(double_scratch, FieldMemOperand(object, HeapNumber::kValueOffset));
 
-    // NOTE: ARM uses a MacroAssembler function here (EmitVFPTruncate).
-    // On MIPS a lot of things cannot be implemented the same way so right
-    // now it makes a lot more sense to just do things manually.
-
-    // Save FCSR.
-    __ cfc1(scratch1, FCSR);
-    // Disable FPU exceptions.
-    __ ctc1(zero_reg, FCSR);
-    __ trunc_w_d(double_scratch, double_scratch);
-    // Retrieve FCSR.
-    __ cfc1(scratch2, FCSR);
-    // Restore FCSR.
-    __ ctc1(scratch1, FCSR);
-
-    // Check for inexact conversion.
-    __ srl(scratch2, scratch2, kFCSRFlagShift);
-    __ And(scratch2, scratch2, (kFCSRFlagMask | kFCSRInexactFlagBit));
+    FPURegister single_scratch = double_scratch.low();
+    Register except_flag = scratch2;
+    __ EmitFPUTruncate(kRoundToZero,
+                       single_scratch,
+                       double_scratch,
+                       scratch1,
+                       except_flag,
+                       kCheckForInexactConversion);
 
     // Jump to not_int32 if the operation did not succeed.
-    __ Branch(not_int32, ne, scratch2, Operand(zero_reg));
+    __ Branch(not_int32, ne, except_flag, Operand(zero_reg));
     // Get the result in the destination register.
-    __ mfc1(dst, double_scratch);
+    __ mfc1(dst, single_scratch);
 
   } else {
     // Load the double value in the destination registers.
@@ -2519,27 +2499,16 @@ void TypeRecordingBinaryOpStub::GenerateInt32Stub(MacroAssembler* masm) {
           // Otherwise return a heap number if allowed, or jump to type
           // transition.
 
-          // NOTE: ARM uses a MacroAssembler function here (EmitVFPTruncate).
-          // On MIPS a lot of things cannot be implemented the same way so right
-          // now it makes a lot more sense to just do things manually.
-
-          // Save FCSR.
-          __ cfc1(scratch1, FCSR);
-          // Disable FPU exceptions.
-          __ ctc1(zero_reg, FCSR);
-          __ trunc_w_d(single_scratch, f10);
-          // Retrieve FCSR.
-          __ cfc1(scratch2, FCSR);
-          // Restore FCSR.
-          __ ctc1(scratch1, FCSR);
-
-          // Check for inexact conversion.
-          __ srl(scratch2, scratch2, kFCSRFlagShift);
-          __ And(scratch2, scratch2, kFCSRFlagMask);
+          Register except_flag = scratch2;
+          __ EmitFPUTruncate(kRoundToZero,
+                             single_scratch,
+                             f10,
+                             scratch1,
+                             except_flag);
 
           if (result_type_ <= TRBinaryOpIC::INT32) {
-            // If scratch2 != 0, result does not fit in a 32-bit integer.
-            __ Branch(&transition, ne, scratch2, Operand(zero_reg));
+            // If except_flag != 0, result does not fit in a 32-bit integer.
+            __ Branch(&transition, ne, except_flag, Operand(zero_reg));
           }
 
           // Check if the result fits in a smi.
@@ -3797,22 +3766,23 @@ void JSEntryStub::GenerateBody(MacroAssembler* masm, bool is_construct) {
   // args
 
   // Save callee saved registers on the stack.
-  __ MultiPush((kCalleeSaved | ra.bit()) & ~sp.bit());
+  __ MultiPush((kCalleeSaved | ra.bit()));
 
   if (CpuFeatures::IsSupported(FPU)) {
     CpuFeatures::Scope scope(FPU);
     // Save callee-saved FPU registers.
     __ MultiPushFPU(kCalleeSavedFPU);
+    // Set up the reserved register for 0.0.
+    __ Move(kDoubleRegZero, 0.0);
   }
 
   // Load argv in s0 register.
-  int offset_to_argv = (kNumCalleeSaved + 0) * kPointerSize;
+  int offset_to_argv = (kNumCalleeSaved + 1) * kPointerSize;
   if (CpuFeatures::IsSupported(FPU)) {
     offset_to_argv += kNumCalleeSavedFPU * kDoubleSize;
   }
 
-  __ lw(s0, MemOperand(sp, offset_to_argv +
-      StandardFrameConstants::kCArgsSlotsSize));
+  __ lw(s0, MemOperand(sp, offset_to_argv + kCArgsSlotsSize));
 
   // We build an EntryFrame.
   __ li(t3, Operand(-1));  // Push a bad frame pointer to fail if it is used.
@@ -3948,10 +3918,14 @@ void JSEntryStub::GenerateBody(MacroAssembler* masm, bool is_construct) {
   // Reset the stack to the callee saved registers.
   __ addiu(sp, sp, -EntryFrameConstants::kCallerFPOffset);
 
-  __ MultiPopFPU(kCalleeSavedFPU);
+  if (CpuFeatures::IsSupported(FPU)) {
+    CpuFeatures::Scope scope(FPU);
+    // Restore callee-saved fpu registers.
+    __ MultiPopFPU(kCalleeSavedFPU);
+  }
 
   // Restore callee saved registers from the stack.
-  __ MultiPop((kCalleeSaved | ra.bit()) & ~sp.bit());
+  __ MultiPop(kCalleeSaved | ra.bit());
   // Return.
   __ Jump(ra);
 }
@@ -4054,6 +4028,12 @@ void InstanceofStub::Generate(MacroAssembler* masm) {
   }
   __ InvokeBuiltin(Builtins::INSTANCE_OF, JUMP_JS);
 }
+
+
+Register InstanceofStub::left() { return a0; }
+
+
+Register InstanceofStub::right() { return a1; }
 
 
 void ArgumentsAccessStub::GenerateReadElement(MacroAssembler* masm) {

@@ -1117,8 +1117,8 @@ void MacroAssembler::BranchShort(int16_t offset, Condition cond, Register rs,
   Register scratch = at;
 
   if (rt.is_reg()) {
-    // We don't want any other register but scratch clobbered.
-    ASSERT(!scratch.is(rs) && !scratch.is(rt.rm_));
+    // NOTE: 'at' can be clobbered by Branch but it is legal to use it as rs or
+    // rt.
     r2 = rt.rm_;
     switch (cond) {
       case cc_always:
@@ -1130,7 +1130,7 @@ void MacroAssembler::BranchShort(int16_t offset, Condition cond, Register rs,
       case ne:
         bne(rs, r2, offset);
         break;
-      // Signed comparison
+      // Signed comparison.
       case greater:
         if (r2.is(zero_reg)) {
           bgtz(rs, offset);
@@ -1222,7 +1222,7 @@ void MacroAssembler::BranchShort(int16_t offset, Condition cond, Register rs,
         li(r2, rt);
         bne(rs, r2, offset);
         break;
-      // Signed comparison
+      // Signed comparison.
       case greater:
         if (rt.imm32_ == 0) {
           bgtz(rs, offset);
@@ -1949,13 +1949,356 @@ void MacroAssembler::Jump(const Operand& target,
 }
 
 
+void MacroAssembler::AdduAndCheckForOverflow(Register dst,
+                                             Register left,
+                                             Register right,
+                                             Register overflow_dst,
+                                             Register scratch) {
+  ASSERT(!dst.is(overflow_dst));
+  ASSERT(!dst.is(scratch));
+  ASSERT(!overflow_dst.is(scratch));
+  ASSERT(!overflow_dst.is(left));
+  ASSERT(!overflow_dst.is(right));
+
+  if (left.is(right) && dst.is(left)) {
+    ASSERT(!dst.is(t9));
+    ASSERT(!scratch.is(t9));
+    ASSERT(!left.is(t9));
+    ASSERT(!right.is(t9));
+    ASSERT(!overflow_dst.is(t9));
+    mov(t9, right);
+    right = t9;
+  }
+
+  if (dst.is(left)) {
+    mov(scratch, left);  // Preserve left.
+    addu(dst, left, right);  // Left is overwritten.
+    xor_(scratch, dst, scratch);  // Original left.
+    xor_(overflow_dst, dst, right);
+    and_(overflow_dst, overflow_dst, scratch);
+  } else if (dst.is(right)) {
+    mov(scratch, right);  // Preserve right.
+    addu(dst, left, right);  // Right is overwritten.
+    xor_(scratch, dst, scratch);  // Original right.
+    xor_(overflow_dst, dst, left);
+    and_(overflow_dst, overflow_dst, scratch);
+  } else {
+    addu(dst, left, right);
+    xor_(overflow_dst, dst, left);
+    xor_(scratch, dst, right);
+    and_(overflow_dst, scratch, overflow_dst);
+  }
+}
+
+
+void MacroAssembler::SubuAndCheckForOverflow(Register dst,
+                                             Register left,
+                                             Register right,
+                                             Register overflow_dst,
+                                             Register scratch) {
+  ASSERT(!dst.is(overflow_dst));
+  ASSERT(!dst.is(scratch));
+  ASSERT(!overflow_dst.is(scratch));
+  ASSERT(!overflow_dst.is(left));
+  ASSERT(!overflow_dst.is(right));
+  ASSERT(!scratch.is(left));
+  ASSERT(!scratch.is(right));
+
+  // This happens with some crankshaft code. Since Subu works fine if
+  // left == right, let's not make that restriction here.
+  if (left.is(right)) {
+    mov(dst, zero_reg);
+    mov(overflow_dst, zero_reg);
+    return;
+  }
+
+  if (dst.is(left)) {
+    mov(scratch, left);  // Preserve left.
+    subu(dst, left, right);  // Left is overwritten.
+    xor_(overflow_dst, dst, scratch);  // scratch is original left.
+    xor_(scratch, scratch, right);  // scratch is original left.
+    and_(overflow_dst, scratch, overflow_dst);
+  } else if (dst.is(right)) {
+    mov(scratch, right);  // Preserve right.
+    subu(dst, left, right);  // Right is overwritten.
+    xor_(overflow_dst, dst, left);
+    xor_(scratch, left, scratch);  // Original right.
+    and_(overflow_dst, scratch, overflow_dst);
+  } else {
+    subu(dst, left, right);
+    xor_(overflow_dst, dst, left);
+    xor_(scratch, left, right);
+    and_(overflow_dst, scratch, overflow_dst);
+  }
+}
+
+
+void MacroAssembler::Move(FPURegister dst, double imm) {
+  ASSERT(CpuFeatures::IsEnabled(FPU));
+  static const DoubleRepresentation minus_zero(-0.0);
+  static const DoubleRepresentation zero(0.0);
+  DoubleRepresentation value(imm);
+  // Handle special values first.
+  bool force_load = dst.is(kDoubleRegZero);
+  if (value.bits == zero.bits && !force_load) {
+    mov_d(dst, kDoubleRegZero);
+  } else if (value.bits == minus_zero.bits && !force_load) {
+    neg_d(dst, kDoubleRegZero);
+  } else {
+    uint32_t lo, hi;
+    DoubleAsTwoUInt32(imm, &lo, &hi);
+    // Move the low part of the double into the lower of the corresponding FPU
+    // register of FPU register pair.
+    if (lo != 0) {
+      li(at, Operand(lo));
+      mtc1(at, dst);
+    } else {
+      mtc1(zero_reg, dst);
+    }
+    // Move the high part of the double into the higher of the corresponding FPU
+    // register of FPU register pair.
+    if (hi != 0) {
+      li(at, Operand(hi));
+      mtc1(at, dst.high());
+    } else {
+      mtc1(zero_reg, dst.high());
+    }
+  }
+}
+
+
+void MacroAssembler::SetCallCDoubleArguments(DoubleRegister dreg) {
+  CpuFeatures::Scope scope(FPU);
+  if (!IsMipsSoftFloatABI) {
+    Move(f12, dreg);
+  } else {
+    Move(a0, a1, dreg);
+  }
+}
+
+
+void MacroAssembler::SetCallCDoubleArguments(DoubleRegister dreg1,
+                                             DoubleRegister dreg2) {
+  CpuFeatures::Scope scope(FPU);
+  if (!IsMipsSoftFloatABI) {
+    if (dreg2.is(f12)) {
+      ASSERT(!dreg1.is(f14));
+      Move(f14, dreg2);
+      Move(f12, dreg1);
+    } else {
+      Move(f12, dreg1);
+      Move(f14, dreg2);
+    }
+  } else {
+    Move(a0, a1, dreg1);
+    Move(a2, a3, dreg2);
+  }
+}
+
+
+void MacroAssembler::SetCallCDoubleArguments(DoubleRegister dreg,
+                                             Register reg) {
+  CpuFeatures::Scope scope(FPU);
+  if (!IsMipsSoftFloatABI) {
+    Move(f12, dreg);
+    Move(a2, reg);
+  } else {
+    Move(a2, reg);
+    Move(a0, a1, dreg);
+  }
+}
+
+
+void MacroAssembler::BranchF(Label* target,
+                             Label* nan,
+                             Condition cc,
+                             FPURegister cmp1,
+                             FPURegister cmp2,
+                             BranchDelaySlot bd) {
+  if (cc == al) {
+    Branch(bd, target);
+    return;
+  }
+
+  ASSERT(nan || target);
+  // Check for unordered (NaN) cases.
+  if (nan) {
+    c(UN, D, cmp1, cmp2);
+    bc1t(nan);
+  }
+
+  if (target) {
+    // Here NaN cases were either handled by this function or are assumed to
+    // have been handled by the caller.
+    // Unsigned conditions are treated as their signed counterpart.
+    switch (cc) {
+      case Uless:
+      case less:
+        c(OLT, D, cmp1, cmp2);
+        bc1t(target);
+        break;
+      case Ugreater:
+      case greater:
+        c(ULE, D, cmp1, cmp2);
+        bc1f(target);
+        break;
+      case Ugreater_equal:
+      case greater_equal:
+        c(ULT, D, cmp1, cmp2);
+        bc1f(target);
+        break;
+      case Uless_equal:
+      case less_equal:
+        c(OLE, D, cmp1, cmp2);
+        bc1t(target);
+        break;
+      case eq:
+        c(EQ, D, cmp1, cmp2);
+        bc1t(target);
+        break;
+      case ne:
+        c(EQ, D, cmp1, cmp2);
+        bc1f(target);
+        break;
+      default:
+        CHECK(0);
+    };
+  }
+
+  if (bd == PROTECT) {
+    nop();
+  }
+}
+
+
+void MacroAssembler::EmitFPUTruncate(FPURoundingMode rounding_mode,
+                                     FPURegister result,
+                                     DoubleRegister double_input,
+                                     Register scratch1,
+                                     Register except_flag,
+                                     CheckForInexactConversion check_inexact) {
+  ASSERT(CpuFeatures::IsSupported(FPU));
+  CpuFeatures::Scope scope(FPU);
+
+  int32_t except_mask = kFCSRFlagMask;  // Assume interested in all exceptions.
+
+  if (check_inexact == kDontCheckForInexactConversion) {
+    // Ingore inexact exceptions.
+    except_mask &= ~kFCSRInexactFlagMask;
+  }
+
+  // Save FCSR.
+  cfc1(scratch1, FCSR);
+  // Disable FPU exceptions.
+  ctc1(zero_reg, FCSR);
+
+  // Do operation based on rounding mode.
+  switch (rounding_mode) {
+    case kRoundToNearest:
+      round_w_d(result, double_input);
+      break;
+    case kRoundToZero:
+      trunc_w_d(result, double_input);
+      break;
+    case kRoundToPlusInf:
+      ceil_w_d(result, double_input);
+      break;
+    case kRoundToMinusInf:
+      floor_w_d(result, double_input);
+      break;
+  }  // End of switch-statement.
+
+  // Retrieve FCSR.
+  cfc1(except_flag, FCSR);
+  // Restore FCSR.
+  ctc1(scratch1, FCSR);
+
+  // Check for fpu exceptions.
+  And(except_flag, except_flag, Operand(except_mask));
+}
+
+
+void MacroAssembler::ClampUint8(Register output_reg, Register input_reg) {
+  ASSERT(!output_reg.is(input_reg));
+  Label done;
+  li(output_reg, Operand(255));
+  // Normal branch: nop in delay slot.
+  Branch(&done, gt, input_reg, Operand(output_reg));
+  // Use delay slot in this branch.
+  Branch(USE_DELAY_SLOT, &done, lt, input_reg, Operand(zero_reg));
+  mov(output_reg, zero_reg);  // In delay slot.
+  mov(output_reg, input_reg);  // Value is in range 0..255.
+  bind(&done);
+}
+
+
+int MacroAssembler::CallSize(Register target) {
+  int size = 2;
+  return size * kInstrSize;
+}
+
+
+void MacroAssembler::EmitECMATruncate(Register result,
+                                      FPURegister double_input,
+                                      FPURegister single_scratch,
+                                      Register scratch,
+                                      Register scratch2,
+                                      Register scratch3) {
+  CpuFeatures::Scope scope(FPU);
+  ASSERT(!scratch2.is(result));
+  ASSERT(!scratch3.is(result));
+  ASSERT(!scratch3.is(scratch2));
+  ASSERT(!scratch.is(result) &&
+         !scratch.is(scratch2) &&
+         !scratch.is(scratch3));
+  ASSERT(!single_scratch.is(double_input));
+
+  Label done;
+  Label manual;
+
+  // Clear cumulative exception flags and save the FCSR.
+  cfc1(scratch2, FCSR);
+  ctc1(zero_reg, FCSR);
+  // Try a conversion to a signed integer.
+  trunc_w_d(single_scratch, double_input);
+  mfc1(result, single_scratch);
+  // Retrieve and restore the FCSR.
+  cfc1(scratch, FCSR);
+  ctc1(scratch2, FCSR);
+  // Check for overflow and NaNs.
+  And(scratch,
+      scratch,
+      kFCSROverflowFlagMask | kFCSRUnderflowFlagMask | kFCSRInvalidOpFlagMask);
+  // If we had no exceptions we are done.
+  Branch(&done, eq, scratch, Operand(zero_reg));
+
+  // Load the double value and perform a manual truncation.
+  Register input_high = scratch2;
+  Register input_low = scratch3;
+  Move(input_low, input_high, double_input);
+  EmitOutOfInt32RangeTruncate(result,
+                              input_high,
+                              input_low,
+                              scratch);
+  bind(&done);
+}
+
+
+int MacroAssembler::CallSize(Address target,
+                             RelocInfo::Mode rmode) {
+  int size = CallSize(t9);
+  return size + 2 * kInstrSize;
+}
+
+
 // Note: To call gcc-compiled C code on mips, you must call thru t9.
 void MacroAssembler::Call(const Operand& target, BranchDelaySlot bdslot) {
   BlockTrampolinePoolScope block_trampoline_pool(this);
   if (target.is_reg()) {
       jalr(target.rm());
   } else {    // !target.is_reg()
-    if (!MustUseReg(target.rmode_)) {
+    // TODO (kalmard) check this - jal should be avoided, right?
+    if (false && !MustUseReg(target.rmode_) && is_uint28(target.imm32_)) {
       jal(target.imm32_);
     } else {  // MustUseReg(target)
       // Must record previous source positions before the
@@ -2070,13 +2413,6 @@ void MacroAssembler::Swap(Register reg1,
 
 void MacroAssembler::Call(Label* target) {
   BranchAndLink(target);
-}
-
-
-void MacroAssembler::Move(Register dst, Register src) {
-  if (!dst.is(src)) {
-    mov(dst, src);
-  }
 }
 
 
@@ -2607,7 +2943,7 @@ void MacroAssembler::InvokePrologue(const ParameterCount& expected,
                                     Register code_reg,
                                     Label* done,
                                     InvokeFlag flag,
-                                    PostCallGenerator* post_call_generator) {
+                                    CallWrapper* call_wrapper) {
   bool definitely_matches = false;
   Label regular_invoke;
 
@@ -2659,7 +2995,7 @@ void MacroAssembler::InvokePrologue(const ParameterCount& expected,
         isolate()->builtins()->ArgumentsAdaptorTrampoline();
     if (flag == CALL_FUNCTION) {
       Call(adaptor, RelocInfo::CODE_TARGET);
-      if (post_call_generator != NULL) post_call_generator->Generate();
+      if (call_wrapper != NULL) call_wrapper->AfterCall();
       jmp(done);
     } else {
       Jump(adaptor, RelocInfo::CODE_TARGET);
@@ -2673,17 +3009,20 @@ void MacroAssembler::InvokeCode(Register code,
                                 const ParameterCount& expected,
                                 const ParameterCount& actual,
                                 InvokeFlag flag,
-                                PostCallGenerator* post_call_generator) {
+                                CallWrapper* call_wrapper) {
   Label done;
 
   InvokePrologue(expected, actual, Handle<Code>::null(), code, &done, flag,
-                 post_call_generator);
+                 call_wrapper);
   if (flag == CALL_FUNCTION) {
+    if (call_wrapper != NULL) call_wrapper->BeforeCall(CallSize(code));
     Call(code);
+    if (call_wrapper != NULL) call_wrapper->AfterCall();
   } else {
     ASSERT(flag == JUMP_FUNCTION);
     Jump(code);
   }
+
   // Continue here if InvokePrologue does handle the invocation due to
   // mismatched parameter counts.
   bind(&done);
@@ -2709,25 +3048,27 @@ void MacroAssembler::InvokeCode(Handle<Code> code,
 }
 
 
-void MacroAssembler::InvokeFunction(Register function,
+void MacroAssembler::InvokeFunction(Register fun,
                                     const ParameterCount& actual,
                                     InvokeFlag flag,
-                                    PostCallGenerator* post_call_generator) {
-  // Contract with called JS functions requires that function is passed in a1.
-  ASSERT(function.is(a1));
+                                    CallWrapper* call_wrapper) {
+  // Contract with called JS functions requires that function is passed in r1.
+  ASSERT(fun.is(a1));
+
   Register expected_reg = a2;
   Register code_reg = a3;
 
   lw(code_reg, FieldMemOperand(a1, JSFunction::kSharedFunctionInfoOffset));
   lw(cp, FieldMemOperand(a1, JSFunction::kContextOffset));
   lw(expected_reg,
-      FieldMemOperand(code_reg,
-                      SharedFunctionInfo::kFormalParameterCountOffset));
+     FieldMemOperand(code_reg,
+                     SharedFunctionInfo::kFormalParameterCountOffset));
   sra(expected_reg, expected_reg, kSmiTagSize);
-  lw(code_reg, FieldMemOperand(a1, JSFunction::kCodeEntryOffset));
+  lw(code_reg,
+     FieldMemOperand(a1, JSFunction::kCodeEntryOffset));
 
   ParameterCount expected(expected_reg);
-  InvokeCode(code_reg, expected, actual, flag, post_call_generator);
+  InvokeCode(code_reg, expected, actual, flag, call_wrapper);
 }
 
 
@@ -2744,7 +3085,11 @@ void MacroAssembler::InvokeFunction(JSFunction* function,
   Handle<Code> code(function->code());
   ParameterCount expected(function->shared()->formal_parameter_count());
   if (V8::UseCrankshaft()) {
-    UNIMPLEMENTED_MIPS();
+    // TODO(kasperl): For now, we always call indirectly through the
+    // code field in the function to allow recompilation to take effect
+    // without changing any of the call sites.
+    lw(a3, FieldMemOperand(a1, JSFunction::kCodeEntryOffset));
+    InvokeCode(a3, expected, actual, flag);
   } else {
     InvokeCode(code, expected, actual, RelocInfo::CODE_TARGET, flag);
   }
@@ -3003,11 +3348,12 @@ void MacroAssembler::JumpToExternalReference(const ExternalReference& builtin) {
 
 void MacroAssembler::InvokeBuiltin(Builtins::JavaScript id,
                                    InvokeJSFlags flags,
-                                   PostCallGenerator* post_call_generator) {
+                                   CallWrapper* call_wrapper) {
   GetBuiltinEntry(t9, id);
   if (flags == CALL_JS) {
+    if (call_wrapper != NULL) call_wrapper->BeforeCall(CallSize(t9));
     Call(t9);
-    if (post_call_generator != NULL) post_call_generator->Generate();
+    if (call_wrapper != NULL) call_wrapper->AfterCall();
   } else {
     ASSERT(flags == JUMP_JS);
     Jump(t9);
@@ -3702,6 +4048,70 @@ void CodePatcher::ChangeBranchCondition(Condition cond) {
   opcode = (cond == eq) ? BEQ : BNE;
   instr = (instr & ~kOpcodeMask) | opcode;
   masm_.emit(instr);
+}
+
+
+// Push and pop all registers that can hold pointers.
+void MacroAssembler::PushSafepointRegisters() {
+  // Safepoints expect a block of kNumSafepointRegisters values on the
+  // stack, so adjust the stack for unsaved registers.
+  const int num_unsaved = kNumSafepointRegisters - kNumSafepointSavedRegisters;
+  ASSERT(num_unsaved >= 0);
+  if (num_unsaved > 0) {
+    Subu(sp, sp, Operand(num_unsaved * kPointerSize));
+  }
+  MultiPush(kSafepointSavedRegisters);
+}
+
+
+void MacroAssembler::PopSafepointRegisters() {
+  const int num_unsaved = kNumSafepointRegisters - kNumSafepointSavedRegisters;
+  MultiPop(kSafepointSavedRegisters);
+  if (num_unsaved > 0) {
+    Addu(sp, sp, Operand(num_unsaved * kPointerSize));
+  }
+}
+
+
+void MacroAssembler::PushSafepointRegistersAndDoubles() {
+  PushSafepointRegisters();
+  Subu(sp, sp, Operand(FPURegister::kNumAllocatableRegisters * kDoubleSize));
+  for (int i = 0; i < FPURegister::kNumAllocatableRegisters; i+=2) {
+    FPURegister reg = FPURegister::FromAllocationIndex(i);
+    sdc1(reg, MemOperand(sp, i * kDoubleSize));
+  }
+}
+
+
+void MacroAssembler::PopSafepointRegistersAndDoubles() {
+  for (int i = 0; i < FPURegister::kNumAllocatableRegisters; i+=2) {
+    FPURegister reg = FPURegister::FromAllocationIndex(i);
+    ldc1(reg, MemOperand(sp, i * kDoubleSize));
+  }
+  Addu(sp, sp, Operand(FPURegister::kNumAllocatableRegisters * kDoubleSize));
+  PopSafepointRegisters();
+}
+
+
+void MacroAssembler::StoreToSafepointRegisterSlot(Register src, Register dst) {
+  sw(src, SafepointRegisterSlot(dst));
+}
+
+
+void MacroAssembler::LoadFromSafepointRegisterSlot(Register dst, Register src) {
+  lw(dst, SafepointRegisterSlot(src));
+}
+
+
+int MacroAssembler::SafepointRegisterStackIndex(int reg_code) {
+  // The registers are pushed starting with the highest encoding,
+  // which means that lowest encodings are closest to the stack pointer.
+  return kSafepointRegisterStackIndexMap[reg_code];
+}
+
+
+MemOperand MacroAssembler::SafepointRegisterSlot(Register reg) {
+  return MemOperand(sp, SafepointRegisterStackIndex(reg.code()) * kPointerSize);
 }
 
 

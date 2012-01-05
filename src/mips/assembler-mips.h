@@ -211,6 +211,23 @@ struct FPURegister {
 
   bool is_valid() const { return 0 <= code_ && code_ < kNumFPURegisters ; }
   bool is(FPURegister creg) const { return code_ == creg.code_; }
+  FPURegister low() const {
+    // Find low reg of a Double-reg pair, which is the reg itself.
+    ASSERT(code_ % 2 == 0);  // Specified Double reg must be even.
+    FPURegister reg;
+    reg.code_ = code_;
+    ASSERT(reg.is_valid());
+    return reg;
+  }
+  FPURegister high() const {
+    // Find high reg of a Doubel-reg pair, which is reg + 1.
+    ASSERT(code_ % 2 == 0);  // Specified Double reg must be even.
+    FPURegister reg;
+    reg.code_ = code_ + 1;
+    ASSERT(reg.is_valid());
+    return reg;
+  }
+
   int code() const {
     ASSERT(is_valid());
     return code_;
@@ -228,6 +245,7 @@ struct FPURegister {
 };
 
 typedef FPURegister DoubleRegister;
+typedef FPURegister FloatRegister;
 
 const FPURegister no_creg = { -1 };
 
@@ -264,6 +282,8 @@ const FPURegister f29 = { 29 };
 const FPURegister f30 = { 30 };
 const FPURegister f31 = { 31 };
 
+const FPURegister kDoubleRegZero = f28;
+
 // FPU (coprocessor 1) control registers.
 // Currently only FCSR (#31) is implemented.
 struct FPUControlRegister {
@@ -287,6 +307,15 @@ struct FPUControlRegister {
 
 const FPUControlRegister no_fpucreg = { kInvalidFPUControlRegister };
 const FPUControlRegister FCSR = { kFCSRRegister };
+
+
+inline void DoubleAsTwoUInt32(double d, uint32_t* lo, uint32_t* hi) {
+  uint64_t i;
+  memcpy(&i, &d, 8);
+
+  *lo = i & 0xffffffff;
+  *hi = i >> 32;
+}
 
 
 // -----------------------------------------------------------------------------
@@ -330,6 +359,9 @@ class MemOperand : public Operand {
 
   explicit MemOperand(Register rn, int32_t offset = 0);
 
+  bool OffsetIsInt16Encodable() const {
+    return is_int16(offset_);
+  }
  private:
   int32_t offset_;
 

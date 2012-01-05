@@ -80,13 +80,27 @@ static const int kInvalidFPUControlRegister = -1;
 static const uint32_t kFPUInvalidResult = (uint32_t) (1 << 31) - 1;
 
 // FCSR constants.
-static const uint32_t kFCSRFlagMask = (1 << 6) - 1;
-static const uint32_t kFCSRFlagShift = 2;
-static const uint32_t kFCSRInexactFlagBit = 1 << 0;
-static const uint32_t kFCSRUnderflowFlagBit = 1 << 1;
-static const uint32_t kFCSROverflowFlagBit = 1 << 2;
-static const uint32_t kFCSRDivideByZeroFlagBit = 1 << 3;
-static const uint32_t kFCSRInvalidOpFlagBit = 1 << 4;
+static const uint32_t kFCSRInexactFlagBit = 2;
+static const uint32_t kFCSRUnderflowFlagBit = 3;
+static const uint32_t kFCSROverflowFlagBit = 4;
+static const uint32_t kFCSRDivideByZeroFlagBit = 5;
+static const uint32_t kFCSRInvalidOpFlagBit = 6;
+
+static const uint32_t kFCSRInexactFlagMask = 1 << kFCSRInexactFlagBit;
+static const uint32_t kFCSRUnderflowFlagMask = 1 << kFCSRUnderflowFlagBit;
+static const uint32_t kFCSROverflowFlagMask = 1 << kFCSROverflowFlagBit;
+static const uint32_t kFCSRDivideByZeroFlagMask = 1 << kFCSRDivideByZeroFlagBit;
+static const uint32_t kFCSRInvalidOpFlagMask = 1 << kFCSRInvalidOpFlagBit;
+
+static const uint32_t kFCSRFlagMask =
+    kFCSRInexactFlagMask |
+    kFCSRUnderflowFlagMask |
+    kFCSROverflowFlagMask |
+    kFCSRDivideByZeroFlagMask |
+    kFCSRInvalidOpFlagMask;
+
+static const uint32_t kFCSRExceptionFlagMask =
+    kFCSRFlagMask ^ kFCSRInexactFlagMask;
 
 // Helper functions for converting between register numbers and names.
 class Registers {
@@ -461,14 +475,38 @@ inline Condition ReverseCondition(Condition cc) {
 
 // ----- Coprocessor conditions.
 enum FPUCondition {
-  F,    // False
-  UN,   // Unordered
-  EQ,   // Equal
-  UEQ,  // Unordered or Equal
-  OLT,  // Ordered or Less Than
-  ULT,  // Unordered or Less Than
-  OLE,  // Ordered or Less Than or Equal
-  ULE   // Unordered or Less Than or Equal
+  kNoFPUCondition = -1,
+
+  F     = 0,  // False.
+  UN    = 1,  // Unordered.
+  EQ    = 2,  // Equal.
+  UEQ   = 3,  // Unordered or Equal.
+  OLT   = 4,  // Ordered or Less Than.
+  ULT   = 5,  // Unordered or Less Than.
+  OLE   = 6,  // Ordered or Less Than or Equal.
+  ULE   = 7   // Unordered or Less Than or Equal.
+};
+
+
+// FPU rounding modes.
+enum FPURoundingMode {
+  RN = 0 << 0,  // Round to Nearest.
+  RZ = 1 << 0,  // Round towards zero.
+  RP = 2 << 0,  // Round towards Plus Infinity.
+  RM = 3 << 0,  // Round towards Minus Infinity.
+
+  // Aliases.
+  kRoundToNearest = RN,
+  kRoundToZero = RZ,
+  kRoundToPlusInf = RP,
+  kRoundToMinusInf = RM
+};
+
+static const uint32_t kFPURoundingModeMask = 3 << 0;
+
+enum CheckForInexactConversion {
+  kCheckForInexactConversion,
+  kDontCheckForInexactConversion
 };
 
 

@@ -1005,8 +1005,12 @@ int Simulator::ReadW(int32_t addr, Instruction* instr) {
   PrintF("Unaligned read at 0x%08x, pc=0x%08" V8PRIxPTR "\n",
          addr,
          reinterpret_cast<intptr_t>(instr));
+#if 0
   MipsDebugger dbg(this);
   dbg.Debug();
+#else
+  ASSERT(!"unaligned");
+#endif
   return 0;
 }
 
@@ -1025,8 +1029,12 @@ void Simulator::WriteW(int32_t addr, int value, Instruction* instr) {
   PrintF("Unaligned write at 0x%08x, pc=0x%08" V8PRIxPTR "\n",
          addr,
          reinterpret_cast<intptr_t>(instr));
+#if 0
   MipsDebugger dbg(this);
   dbg.Debug();
+#else
+  ASSERT(!"unaligned");
+#endif
 }
 
 

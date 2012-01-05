@@ -2054,9 +2054,7 @@ MaybeObject* CallStubCompiler::CompileMathFloorCall(Object* object,
 
   // Retrieve FCSR and check for fpu errors.
   __ cfc1(t5, FCSR);
-  __ srl(t5, t5, kFCSRFlagShift);
-  // Flag 1 marks an inaccurate but still good result so we ignore it.
-  __ And(t5, t5, Operand(kFCSRFlagMask ^ 1));
+  __ And(t5, t5, Operand(kFCSRExceptionFlagMask));
   __ Branch(&no_fpu_error, eq, t5, Operand(zero_reg));
 
   // Check for NaN, Infinity, and -Infinity.
@@ -2511,7 +2509,11 @@ MaybeObject* CallStubCompiler::CompileCallGlobal(JSObject* object,
   Handle<Code> code(function->code());
   ParameterCount expected(function->shared()->formal_parameter_count());
   if (V8::UseCrankshaft()) {
-    UNIMPLEMENTED_MIPS();
+    // TODO(kasperl): For now, we always call indirectly through the
+    // code field in the function to allow recompilation to take effect
+    // without changing any of the call sites.
+    __ lw(a3, FieldMemOperand(a1, JSFunction::kCodeEntryOffset));
+    __ InvokeCode(a3, expected, arguments(), JUMP_FUNCTION);
   } else {
     __ InvokeCode(code, expected, arguments(),
                   RelocInfo::CODE_TARGET, JUMP_FUNCTION);
