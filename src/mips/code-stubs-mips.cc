@@ -1834,7 +1834,8 @@ void ToBooleanStub::Generate(MacroAssembler* masm) {
   // Hence we only need to overwrite "tos_" with zero to return false for
   // FP_ZERO or FP_NAN cases. Otherwise, by default it returns true.
   __ movt(tos_, zero_reg);
-  __ Ret();
+  __ Ret(USE_DELAY_SLOT);
+  __ mov(v0, tos_);
 
   __ bind(&not_heap_number);
 
@@ -1857,7 +1858,8 @@ void ToBooleanStub::Generate(MacroAssembler* masm) {
   // "tos_" is a register and contains a non-zero value.
   // Hence we implicitly return true if the greater than
   // condition is satisfied.
-  __ Ret(gt, scratch0, Operand(FIRST_JS_OBJECT_TYPE));
+  __ Ret(USE_DELAY_SLOT, gt, scratch0, Operand(FIRST_JS_OBJECT_TYPE));
+  __ mov(v0, tos_);
 
   // Check for string
   __ lw(scratch0, FieldMemOperand(tos_, HeapObject::kMapOffset));
@@ -1865,18 +1867,21 @@ void ToBooleanStub::Generate(MacroAssembler* masm) {
   // "tos_" is a register and contains a non-zero value.
   // Hence we implicitly return true if the greater than
   // condition is satisfied.
-  __ Ret(gt, scratch0, Operand(FIRST_NONSTRING_TYPE));
+  __ Ret(USE_DELAY_SLOT, gt, scratch0, Operand(FIRST_NONSTRING_TYPE));
+  __ mov(v0, tos_);
 
   // String value => false iff empty, i.e., length is zero
   __ lw(tos_, FieldMemOperand(tos_, String::kLengthOffset));
   // If length is zero, "tos_" contains zero ==> false.
   // If length is not zero, "tos_" contains a non-zero value ==> true.
-  __ Ret();
+  __ Ret(USE_DELAY_SLOT);
+  __ mov(v0, tos_);
 
   // Return 0 in "tos_" for false .
   __ bind(&false_result);
   __ mov(tos_, zero_reg);
-  __ Ret();
+  __ Ret(USE_DELAY_SLOT);
+  __ mov(v0, tos_);
 }
 
 
