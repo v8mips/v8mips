@@ -3270,7 +3270,7 @@ void LCodeGen::DoStoreKeyedSpecializedArrayElement(
         // Clamp the value to [0..255].
         __ ClampUint8(scratch0(), value);
         __ Addu(at, external_pointer, key);
-        __ sb(value, MemOperand(at));
+        __ sb(scratch0(), MemOperand(at));
         break;
       case kExternalByteArray:
       case kExternalUnsignedByteArray:
