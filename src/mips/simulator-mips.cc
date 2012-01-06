@@ -954,15 +954,30 @@ bool Simulator::test_fcsr_bit(uint32_t cc) {
 // Sets the rounding error codes in FCSR based on the result of the rounding.
 // Returns true if the operation was invalid.
 bool Simulator::set_fcsr_round_error(double original, double rounded) {
-  if (!isfinite(original) ||
-      rounded > LONG_MAX ||
-      rounded < LONG_MIN) {
-    set_fcsr_bit(6, true);  // Invalid operation.
-    return true;
-  } else if (original != static_cast<double>(rounded)) {
-    set_fcsr_bit(2, true);  // Inexact.
+  bool ret = false;
+
+  if (!isfinite(original) || !isfinite(rounded)) {
+    set_fcsr_bit(kFCSRInvalidOpFlagBit, true);
+    ret = true;
   }
-  return false;
+
+  if (original != rounded) {
+    set_fcsr_bit(kFCSRInexactFlagBit, true);
+  }
+
+  if (rounded < DBL_MIN && rounded > -DBL_MIN && rounded != 0) {
+    set_fcsr_bit(kFCSRUnderflowFlagBit, true);
+    ret = true;
+  }
+
+  if (rounded > INT_MAX || rounded < INT_MIN) {
+    set_fcsr_bit(kFCSROverflowFlagBit, true);
+    // The reference is not really clear but it seems this is required:
+    set_fcsr_bit(kFCSRInvalidOpFlagBit, true);
+    ret = true;
+  }
+
+  return ret;
 }
 
 
@@ -1702,9 +1717,10 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
               break;
             case TRUNC_W_D:  // Truncate double to word (round towards 0).
               {
-                int32_t result = static_cast<int32_t>(fs);
+                double rounded = trunc(fs);
+                int32_t result = static_cast<int32_t>(rounded);
                 set_fpu_register(fd_reg, result);
-                if (set_fcsr_round_error(fs, static_cast<double>(result))) {
+                if (set_fcsr_round_error(fs, rounded)) {
                   set_fpu_register(fd_reg, kFPUInvalidResult);
                 }
               }
