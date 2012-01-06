@@ -72,9 +72,10 @@ static const RegList kCalleeSaved =
   1 << 21 |  // s5
   1 << 22 |  // s6 (roots in Javascript code)
   1 << 23 |  // s7 (cp in Javascript code)
+  1 << 28 |  // gp
   1 << 30;   // fp/s8
 
-static const int kNumCalleeSaved = 9;
+static const int kNumCalleeSaved = 10;
 
 static const RegList kCalleeSavedFPU =
   1 << 20 |  // f20
