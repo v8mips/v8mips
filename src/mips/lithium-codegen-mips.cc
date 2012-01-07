@@ -2036,13 +2036,15 @@ void LCodeGen::DoHasCachedArrayIndex(LHasCachedArrayIndex* instr) {
 void LCodeGen::DoHasInstanceType(LHasInstanceType* instr) {
   Register input = ToRegister(instr->InputAt(0));
   Register result = ToRegister(instr->result());
+  __ mov(scratch0(), input);
+  input = scratch0();
 
   ASSERT(instr->hydrogen()->value()->representation().IsTagged());
   Label done;
   __ LoadRoot(result, Heap::kFalseValueRootIndex);
   __ JumpIfSmi(input, &done);
   __ lw(result, FieldMemOperand(input, HeapObject::kMapOffset));
-  __ lbu(result, FieldMemOperand(result, Map::kInstanceTypeOffset));
+  __ lbu(input, FieldMemOperand(result, Map::kInstanceTypeOffset));
   Condition cond = BranchCondition(instr->hydrogen());
   __ LoadRoot(result, Heap::kTrueValueRootIndex);
   __ Branch(&done, cond, input, Operand(TestType(instr->hydrogen())));
