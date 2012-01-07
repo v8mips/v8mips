@@ -1495,8 +1495,9 @@ void LCodeGen::DoCmpID(LCmpID* instr) {
     __ BranchF(&done, &unordered, cc, ToDoubleRegister(left), ToDoubleRegister(right));
   } else {
     Condition cc = TokenToCondition(instr->op(), instr->is_double());
-    __ LoadRoot(ToRegister(result), Heap::kTrueValueRootIndex);
-    __ Branch(&done, cc, ToRegister(left), Operand(ToRegister(right)));
+    __ LoadRoot(scratch, Heap::kTrueValueRootIndex);
+    __ Branch(USE_DELAY_SLOT, &done, cc, ToRegister(left), Operand(ToRegister(right)));
+    __ mov(ToRegister(result), scratch);
   }
 
   __ bind(&unordered);
