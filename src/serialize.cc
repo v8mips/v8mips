@@ -325,6 +325,10 @@ void ExternalReferenceTable::PopulateTable(Isolate* isolate) {
       "StubCache::secondary_->value");
 
   // Runtime entries
+  Add(ExternalReference::flush_icache_function(isolate).address(),
+      RUNTIME_ENTRY,
+      2,
+      "Runtime::PerformGC");
   Add(ExternalReference::perform_gc_function(isolate).address(),
       RUNTIME_ENTRY,
       1,

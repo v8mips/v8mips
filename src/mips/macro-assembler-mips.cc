@@ -724,6 +724,20 @@ void MacroAssembler::Ext(Register rt,
 }
 
 
+void MacroAssembler::FlushICache(Register address, unsigned instructions) {
+  RegList saved_regs = kJSCallerSaved | ra.bit();
+  MultiPush(saved_regs);
+
+  // Save to a0 in case address == t0.
+  Move(a0, address);
+  PrepareCallCFunction(2, t0);
+
+  li(a1, instructions * kInstrSize);
+  CallCFunction(ExternalReference::flush_icache_function(isolate()), 2);
+  MultiPop(saved_regs);
+}
+
+
 void MacroAssembler::Ins(Register rt,
                          Register rs,
                          uint16_t pos,
@@ -3995,6 +4009,68 @@ void MacroAssembler::CallCFunctionHelper(Register function,
 
 
 #undef BRANCH_ARGS_CHECK
+
+
+void MacroAssembler::PatchRelocatedValue(Register li_location,
+                                         Register scratch,
+                                         Register new_value) {
+  lw(scratch, MemOperand(li_location));
+  // At this point scratch is a lui(at, ...) instruction.
+  if (emit_debug_code()) {
+    And(scratch, scratch, kOpcodeMask);
+    Check(eq, "The instruction to patch should be a lui.",
+        scratch, Operand(LUI));
+    lw(scratch, MemOperand(li_location));
+  }
+  srl(t9, new_value, kImm16Bits);
+  Ins(scratch, t9, 0, kImm16Bits);
+  sw(scratch, MemOperand(li_location));
+
+  lw(scratch, MemOperand(li_location, kInstrSize));
+  // scratch is now ori(at, ...).
+  if (emit_debug_code()) {
+    And(scratch, scratch, kOpcodeMask);
+    Check(eq, "The instruction to patch should be an ori.",
+        scratch, Operand(ORI));
+    lw(scratch, MemOperand(li_location, kInstrSize));
+  }
+  Ins(scratch, new_value, 0, kImm16Bits);
+  sw(scratch, MemOperand(li_location, kInstrSize));
+
+  // Update the I-cache so the new lui and ori can be executed.
+  FlushICache(li_location, 2);
+}
+
+
+void MacroAssembler::ClampDoubleToUint8(Register result_reg,
+                                        DoubleRegister input_reg,
+                                        DoubleRegister temp_double_reg) {
+  Label above_zero;
+  Label done;
+  Label in_bounds;
+
+  Move(temp_double_reg, 0.0);
+  BranchF(&above_zero, NULL, gt, input_reg, temp_double_reg);
+
+  // Double value is less than zero, NaN or Inf, return 0.
+  mov(result_reg, zero_reg);
+  Branch(&done);
+
+  // Double value is >= 255, return 255.
+  bind(&above_zero);
+  Move(temp_double_reg, 255.0);
+  BranchF(&in_bounds, NULL, le, input_reg, temp_double_reg);
+  li(result_reg, Operand(255));
+  Branch(&done);
+
+  // In 0-255 range, round and truncate.
+  bind(&in_bounds);
+  // TODO(kalmard): the ARM version adds 0.5 and then truncates.
+  // Isn't this the same as rounding?
+  round_w_d(temp_double_reg, input_reg);
+  mfc1(result_reg, temp_double_reg);
+  bind(&done);
+}
 
 
 CodePatcher::CodePatcher(byte* address, int instructions)

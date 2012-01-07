@@ -572,6 +572,13 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
   void Ins(Register rt, Register rs, uint16_t pos, uint16_t size);
   void Ext(Register rt, Register rs, uint16_t pos, uint16_t size);
 
+  // Flush the I-cache from asm code. You should use CPU::FlushICache from C.
+  // Does not handle errors.
+  void FlushICache(Register address, unsigned instructions);
+
+  // ---------------------------------------------------------------------------
+  // FPU macros.
+
   // Convert unsigned word to double.
   void Cvt_d_uw(FPURegister fd, FPURegister fs);
   void Cvt_d_uw(FPURegister fd, Register rs);
@@ -1121,6 +1128,16 @@ DECLARE_NOTARGET_PROTOTYPE(Ret)
 
   static int CallSize(Register target);
   static int CallSize(byte* target, RelocInfo::Mode rmode);
+
+  // ---------------------------------------------------------------------------
+  // Patching helpers.
+
+  // Patch the relocated value (lui/ori pair).
+  void PatchRelocatedValue(Register li_location,
+                           Register scratch,
+                           Register new_value);
+
+  void LoadInstanceDescriptors(Register map, Register descriptors);
 
  private:
   void CallCFunctionHelper(Register function,
