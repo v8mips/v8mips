@@ -2696,6 +2696,8 @@ void LCodeGen::DoGlobalObject(LGlobalObject* instr) {
   Register context = ToRegister(instr->context());
   Register result = ToRegister(instr->result());
   __ lw(result, ContextOperand(cp, Context::GLOBAL_INDEX));
+  // TODO (kalmard): remove this once the bug is fixed
+  __ Assert(ne, "got zap value", result, Operand((int)kFromSpaceZapValue));
 }
 
 
