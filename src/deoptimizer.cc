@@ -898,10 +898,7 @@ LargeObjectChunk* Deoptimizer::CreateCode(BailoutType type) {
   GenerateDeoptimizationEntries(&masm, kNumberOfEntries, type);
   CodeDesc desc;
   masm.GetCode(&desc);
-  // TODO (kalmard) check this...
-#if !V8_TARGET_ARCH_MIPS
   ASSERT(desc.reloc_size == 0);
-#endif
 
   LargeObjectChunk* chunk = LargeObjectChunk::New(desc.instr_size, EXECUTABLE);
   memcpy(chunk->GetStartAddress(), desc.buffer, desc.instr_size);
