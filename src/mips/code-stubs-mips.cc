@@ -3585,24 +3585,6 @@ void CEntryStub::GenerateCore(MacroAssembler* masm,
   // We are calling compiled C/C++ code. a0 and a1 hold our two arguments. We
   // also need to reserve the 4 argument slots on the stack.
 
-  // TODO(MIPS): As of 26May10, Arm code has frame-alignment checks
-  // and modification code here.
-
-  // The mips __ EnterExitFrame(), which is called in CEntryStub::Generate,
-  // does stack alignment to activation_frame_alignment. In this routine,
-  // that alignment must be preserved. We do need to push one kPointerSize
-  // value (below), plus the argument slots. See comments, caveats in
-  // MacroAssembler::AlignStack() function.
-#if defined(V8_HOST_ARCH_MIPS)
-  int activation_frame_alignment = OS::ActivationFrameAlignment();
-#else  // !defined(V8_HOST_ARCH_MIPS)
-  int activation_frame_alignment = 2 * kPointerSize;
-#endif  // defined(V8_HOST_ARCH_MIPS)
-
-  int stack_adjustment = (StandardFrameConstants::kCArgsSlotsSize
-                       + kPointerSize
-                       + (activation_frame_alignment - 1))
-                       & ~(activation_frame_alignment - 1);
 
   __ li(a2, Operand(ExternalReference::isolate_address()));
 
@@ -3615,31 +3597,36 @@ void CEntryStub::GenerateCore(MacroAssembler* masm,
   // this is OK because the CEntryStub gets generated so early in the V8 boot
   // sequence that it is not moving ever.
 
-  // This branch-and-link sequence is needed to find the current PC on mips,
-  // saved to the ra register.
-  // Use masm-> here instead of the double-underscore macro since extra
-  // coverage code can interfere with the proper calculation of ra.
-  Label find_ra;
-  masm->bal(&find_ra);
-  masm->nop();  // Branch delay slot nop.
-  masm->bind(&find_ra);
+    { Assembler::BlockTrampolinePoolScope block_trampoline_pool(masm);
+    // This branch-and-link sequence is needed to find the current PC on mips,
+    // saved to the ra register.
+    // Use masm-> here instead of the double-underscore macro since extra
+    // coverage code can interfere with the proper calculation of ra.
+    Label find_ra;
+    masm->bal(&find_ra);  // bal exposes branch delay slot.
+    masm->nop();  // Branch delay slot nop.
+    masm->bind(&find_ra);
 
-  // Adjust the value in ra to point to the correct return location, 2nd
-  // instruction past the real call into C code (the jalr(t9)), and push it.
-  // This is the return address of the exit frame.
-  masm->Addu(ra, ra, 20);  // 5 instructions is 20 bytes.
-  masm->addiu(sp, sp, -(stack_adjustment));
-  masm->sw(ra, MemOperand(sp, stack_adjustment - kPointerSize));
+    // Adjust the value in ra to point to the correct return location, 2nd
+    // instruction past the real call into C code (the jalr(t9)), and push it.
+    // This is the return address of the exit frame.
+    const int kNumInstructionsToJump = 6;
+    masm->Addu(ra, ra, kNumInstructionsToJump * kPointerSize);
+    masm->sw(ra, MemOperand(sp));  // This spot was reserved in EnterExitFrame.
+    masm->Subu(sp, sp, StandardFrameConstants::kCArgsSlotsSize);
+    // Stack is still aligned.
 
-  // Call the C routine.
-  { Assembler::BlockTrampolinePoolScope block_trampoline_pool(masm);
+    // Call the C routine.
     masm->mov(t9, s2);  // Function pointer to t9 to conform to ABI for PIC.
     masm->jalr(t9);
     masm->nop();    // Branch delay slot nop.
+    // Make sure the stored 'ra' points to this position.
+    ASSERT_EQ(kNumInstructionsToJump,
+              masm->InstructionsGeneratedSince(&find_ra));
   }
 
   // Restore stack (remove arg slots and extra parameter).
-  masm->addiu(sp, sp, stack_adjustment);
+  __ Addu(sp, sp, StandardFrameConstants::kCArgsSlotsSize);
 
   if (always_allocate) {
     // It's okay to clobber a2 and a3 here. v0 & v1 contain result.
@@ -3660,7 +3647,7 @@ void CEntryStub::GenerateCore(MacroAssembler* masm,
   // v0:v1: result
   // sp: stack pointer
   // fp: frame pointer
-  __ LeaveExitFrame(save_doubles_);
+  __ LeaveExitFrame(save_doubles_, s0);
 
   // Check if we should retry or throw exception.
   Label retry;
@@ -3709,8 +3696,17 @@ void CEntryStub::Generate(MacroAssembler* masm) {
   // this by performing a garbage collection and retrying the
   // builtin once.
 
+  // Compute the argv pointer in a callee-saved register.
+  __ sll(s1, a0, kPointerSizeLog2);
+  __ Addu(s1, sp, s1);
+  __ Subu(s1, s1, Operand(kPointerSize));
+
   // Enter the exit frame that transitions from JavaScript to C++.
-  __ EnterExitFrame(s0, s1, s2, save_doubles_);
+  __ EnterExitFrame(save_doubles_);
+
+  // Setup argc and the builtin function in callee-saved registers.
+  __ mov(s0, a0);
+  __ mov(s2, a1);
 
   // s0: number of arguments (C callee-saved)
   // s1: pointer to first argument (C callee-saved)
