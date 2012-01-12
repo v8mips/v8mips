@@ -79,4 +79,11 @@ test-profile-generator: SKIP
 test-serialize: SKIP
 
 ##############################################################################
+[ $arch == mips && $crankshaft ]
+
+# Tests that time out with crankshaft.
+test-debug/ThreadedDebugging: SKIP
+test-debug/DebugBreakLoop: SKIP
+
+##############################################################################
 # Tests that time out with Isolates
