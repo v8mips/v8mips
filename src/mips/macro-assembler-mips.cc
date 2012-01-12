@@ -3681,7 +3681,7 @@ void MacroAssembler::LeaveExitFrame(bool save_doubles,
   li(t8, Operand(ExternalReference(Isolate::k_context_address, isolate())));
   lw(cp, MemOperand(t8));
 #ifdef DEBUG
-  sw(a3, MemOperand(t8));
+  sw(zero_reg, MemOperand(t8));
 #endif
 
   // Pop the arguments, restore registers, and return.
