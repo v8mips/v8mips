@@ -3004,7 +3004,6 @@ void TranscendentalCacheStub::Generate(MacroAssembler* masm) {
     __ lw(t0, MemOperand(cache_entry, 0));
     __ lw(t1, MemOperand(cache_entry, 4));
     __ lw(t2, MemOperand(cache_entry, 8));
-    __ Addu(cache_entry, cache_entry, 12);
     __ Branch(&calculate, ne, a2, Operand(t0));
     __ Branch(&calculate, ne, a3, Operand(t1));
     // Cache hit. Load result, cleanup and return.
@@ -3038,13 +3037,13 @@ void TranscendentalCacheStub::Generate(MacroAssembler* masm) {
     // Register a0 holds precalculated cache entry address; preserve
     // it on the stack and pop it into register cache_entry after the
     // call.
-    __ push(cache_entry);
+    __ Push(cache_entry, a2, a3);
     GenerateCallCFunction(masm, scratch0);
     __ GetCFunctionDoubleResult(f4);
 
     // Try to update the cache. If we cannot allocate a
     // heap number, we return the result without updating.
-    __ pop(cache_entry);
+    __ Pop(cache_entry, a2, a3);
     __ LoadRoot(t1, Heap::kHeapNumberMapRootIndex);
     __ AllocateHeapNumber(t2, scratch0, scratch1, t1, &no_update);
     __ sdc1(f4, FieldMemOperand(t2, HeapNumber::kValueOffset));
@@ -3095,8 +3094,12 @@ void TranscendentalCacheStub::GenerateCallCFunction(MacroAssembler* masm,
                                                     Register scratch) {
   __ push(ra);
   __ PrepareCallCFunction(2, scratch);
-  __ mfc1(v0, f4);
-  __ mfc1(v1, f5);
+  if (IsMipsSoftFloatABI) {
+    __ mfc1(a0, f4);
+    __ mfc1(a1, f5);
+  } else {
+    __ mov_d(f12, f4);
+  }
   switch (type_) {
     case TranscendentalCache::SIN:
       __ CallCFunction(
