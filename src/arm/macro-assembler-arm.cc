@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -396,14 +396,14 @@ void MacroAssembler::Usat(Register dst, int satpos, const Operand& src,
 void MacroAssembler::LoadRoot(Register destination,
                               Heap::RootListIndex index,
                               Condition cond) {
-  ldr(destination, MemOperand(roots, index << kPointerSizeLog2), cond);
+  ldr(destination, MemOperand(kRootRegister, index << kPointerSizeLog2), cond);
 }
 
 
 void MacroAssembler::StoreRoot(Register source,
                                Heap::RootListIndex index,
                                Condition cond) {
-  str(source, MemOperand(roots, index << kPointerSizeLog2), cond);
+  str(source, MemOperand(kRootRegister, index << kPointerSizeLog2), cond);
 }
 
 
@@ -1456,8 +1456,9 @@ void MacroAssembler::LoadFromNumberDictionary(Label* miss,
   // hash = hash ^ (hash >> 4);
   eor(t0, t0, Operand(t0, LSR, 4));
   // hash = hash * 2057;
-  mov(t1, Operand(2057));
-  mul(t0, t0, t1);
+  mov(t1, Operand(t0, LSL, 11));
+  add(t0, t0, Operand(t0, LSL, 3));
+  add(t0, t0, t1);
   // hash = hash ^ (hash >> 16);
   eor(t0, t0, Operand(t0, LSR, 16));
 
@@ -1992,18 +1993,49 @@ void MacroAssembler::StoreNumberToDoubleElements(Register value_reg,
 }
 
 
+void MacroAssembler::CompareMap(Register obj,
+                                Register scratch,
+                                Handle<Map> map,
+                                Label* early_success,
+                                CompareMapMode mode) {
+  ldr(scratch, FieldMemOperand(obj, HeapObject::kMapOffset));
+  cmp(scratch, Operand(map));
+  if (mode == ALLOW_ELEMENT_TRANSITION_MAPS) {
+    Map* transitioned_fast_element_map(
+        map->LookupElementsTransitionMap(FAST_ELEMENTS, NULL));
+    ASSERT(transitioned_fast_element_map == NULL ||
+           map->elements_kind() != FAST_ELEMENTS);
+    if (transitioned_fast_element_map != NULL) {
+      b(eq, early_success);
+      cmp(scratch, Operand(Handle<Map>(transitioned_fast_element_map)));
+    }
+
+    Map* transitioned_double_map(
+        map->LookupElementsTransitionMap(FAST_DOUBLE_ELEMENTS, NULL));
+    ASSERT(transitioned_double_map == NULL ||
+           map->elements_kind() == FAST_SMI_ONLY_ELEMENTS);
+    if (transitioned_double_map != NULL) {
+      b(eq, early_success);
+      cmp(scratch, Operand(Handle<Map>(transitioned_double_map)));
+    }
+  }
+}
+
+
 void MacroAssembler::CheckMap(Register obj,
                               Register scratch,
                               Handle<Map> map,
                               Label* fail,
-                              SmiCheckType smi_check_type) {
+                              SmiCheckType smi_check_type,
+                              CompareMapMode mode) {
   if (smi_check_type == DO_SMI_CHECK) {
     JumpIfSmi(obj, fail);
   }
-  ldr(scratch, FieldMemOperand(obj, HeapObject::kMapOffset));
-  mov(ip, Operand(map));
-  cmp(scratch, ip);
+
+  Label success;
+  CompareMap(obj, scratch, map, &success, mode);
   b(ne, fail);
+  bind(&success);
 }
 
 
