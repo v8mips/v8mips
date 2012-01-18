@@ -252,10 +252,10 @@ void MacroAssembler::RecordWrite(Register object,
   // registers are cp.
   ASSERT(!address.is(cp) && !value.is(cp));
 
-  if (FLAG_debug_code) {
+  if (emit_debug_code()) {
     lw(at, MemOperand(address));
-    Assert(eq, "Wrong address or value passed to RecordWrite",
-        at, Operand(value));
+    Assert(
+        eq, "Wrong address or value passed to RecordWrite", at, Operand(value));
   }
 
   Label done;
@@ -303,7 +303,7 @@ void MacroAssembler::RememberedSetHelper(Register object,  // For debug tests.
                                          SaveFPRegsMode fp_mode,
                                          RememberedSetFinalAction and_then) {
   Label done;
-  if (FLAG_debug_code) {
+  if (emit_debug_code()) {
     Label ok;
     JumpIfNotInNewSpace(object, scratch, &ok);
     stop("Remembered set pointer is in new space");
@@ -417,7 +417,7 @@ void MacroAssembler::CheckAccessGlobalProxy(Register holder_reg,
 
 void MacroAssembler::GetNumberHash(Register reg0, Register scratch) {
   // First of all we assign the hash seed to scratch.
-  LoadRoot(scratch, Heap::kStringHashSeedRootIndex);
+  LoadRoot(scratch, Heap::kHashSeedRootIndex);
   SmiUntag(scratch);
 
   // Xor original key with a seed.
@@ -4882,7 +4882,7 @@ void MacroAssembler::EnsureNotWhite(
   And(t8, mask_scratch, load_scratch);
   Branch(&done, ne, t8, Operand(zero_reg));
 
-  if (FLAG_debug_code) {
+  if (emit_debug_code()) {
     // Check for impossible bit pattern.
     Label ok;
     // sll may overflow, making the check conservative.

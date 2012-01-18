@@ -96,7 +96,7 @@ inline Heap* _inline_get_heap_();
   V(FixedArray, single_character_string_cache, SingleCharacterStringCache)     \
   V(FixedArray, string_split_cache, StringSplitCache)                          \
   V(Object, termination_exception, TerminationException)                       \
-  V(Smi, string_hash_seed, StringHashSeed)                                     \
+  V(Smi, hash_seed, HashSeed)                                                  \
   V(Map, string_map, StringMap)                                                \
   V(Map, symbol_map, SymbolMap)                                                \
   V(Map, cons_string_map, ConsStringMap)                                       \
@@ -614,6 +614,9 @@ class Heap {
 
   // Allocates an empty PolymorphicCodeCache.
   MUST_USE_RESULT MaybeObject* AllocatePolymorphicCodeCache();
+
+  // Allocates a pre-tenured empty AccessorPair.
+  MUST_USE_RESULT MaybeObject* AllocateAccessorPair();
 
   // Clear the Instanceof cache (used when a prototype changes).
   inline void ClearInstanceofCache();
@@ -1506,9 +1509,9 @@ class Heap {
     return idle_notification_will_schedule_next_gc_;
   }
 
-  uint32_t StringHashSeed() {
-    uint32_t seed = static_cast<uint32_t>(string_hash_seed()->value());
-    ASSERT(FLAG_randomize_string_hashes || seed == 0);
+  uint32_t HashSeed() {
+    uint32_t seed = static_cast<uint32_t>(hash_seed()->value());
+    ASSERT(FLAG_randomize_hashes || seed == 0);
     return seed;
   }
 

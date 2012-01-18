@@ -1869,6 +1869,19 @@ MaybeObject* Heap::AllocatePolymorphicCodeCache() {
 }
 
 
+MaybeObject* Heap::AllocateAccessorPair() {
+  Object* result;
+  { MaybeObject* maybe_result = AllocateStruct(ACCESSOR_PAIR_TYPE);
+    if (!maybe_result->ToObject(&result)) return maybe_result;
+  }
+  AccessorPair* accessors = AccessorPair::cast(result);
+  // Later we will have to distinguish between undefined and the hole...
+  // accessors->set_getter(the_hole_value(), SKIP_WRITE_BARRIER);
+  // accessors->set_setter(the_hole_value(), SKIP_WRITE_BARRIER);
+  return accessors;
+}
+
+
 const Heap::StringTypeTable Heap::string_type_table[] = {
 #define STRING_TYPE_ELEMENT(type, size, name, camel_name)                      \
   {type, size, k##camel_name##MapRootIndex},
@@ -5644,13 +5657,13 @@ bool Heap::Setup(bool create_heap_objects) {
   if (!lo_space_->Setup()) return false;
 
   // Setup the seed that is used to randomize the string hash function.
-  ASSERT(string_hash_seed() == 0);
-  if (FLAG_randomize_string_hashes) {
-    if (FLAG_string_hash_seed == 0) {
-      set_string_hash_seed(
+  ASSERT(hash_seed() == 0);
+  if (FLAG_randomize_hashes) {
+    if (FLAG_hash_seed == 0) {
+      set_hash_seed(
           Smi::FromInt(V8::RandomPrivate(isolate()) & 0x3fffffff));
     } else {
-      set_string_hash_seed(Smi::FromInt(FLAG_string_hash_seed));
+      set_hash_seed(Smi::FromInt(FLAG_hash_seed));
     }
   }
 

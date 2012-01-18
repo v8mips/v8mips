@@ -431,7 +431,6 @@ static Handle<Object> CreateObjectLiteralBoilerplate(
 static const int kSmiOnlyLiteralMinimumLength = 1024;
 
 
-// static
 Handle<Object> Runtime::CreateArrayLiteralBoilerplate(
     Isolate* isolate,
     Handle<FixedArray> literals,
@@ -1057,14 +1056,14 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_GetOwnProperty) {
         switch (details.type()) {
           case CALLBACKS: {
             // This is an accessor property with getter and/or setter.
-            FixedArray* callbacks =
-                FixedArray::cast(dictionary->ValueAt(entry));
+            AccessorPair* accessors =
+                AccessorPair::cast(dictionary->ValueAt(entry));
             elms->set(IS_ACCESSOR_INDEX, heap->true_value());
             if (CheckElementAccess(*obj, index, v8::ACCESS_GET)) {
-              elms->set(GETTER_INDEX, callbacks->get(0));
+              elms->set(GETTER_INDEX, accessors->getter());
             }
             if (CheckElementAccess(*obj, index, v8::ACCESS_SET)) {
-              elms->set(SETTER_INDEX, callbacks->get(1));
+              elms->set(SETTER_INDEX, accessors->setter());
             }
             break;
           }
@@ -1103,18 +1102,18 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_GetOwnProperty) {
   elms->set(CONFIGURABLE_INDEX, heap->ToBoolean(!result.IsDontDelete()));
 
   bool is_js_accessor = (result.type() == CALLBACKS) &&
-                        (result.GetCallbackObject()->IsFixedArray());
+                        (result.GetCallbackObject()->IsAccessorPair());
 
   if (is_js_accessor) {
     // __defineGetter__/__defineSetter__ callback.
     elms->set(IS_ACCESSOR_INDEX, heap->true_value());
 
-    FixedArray* structure = FixedArray::cast(result.GetCallbackObject());
+    AccessorPair* accessors = AccessorPair::cast(result.GetCallbackObject());
     if (CheckAccess(*obj, *name, &result, v8::ACCESS_GET)) {
-      elms->set(GETTER_INDEX, structure->get(0));
+      elms->set(GETTER_INDEX, accessors->getter());
     }
     if (CheckAccess(*obj, *name, &result, v8::ACCESS_SET)) {
-      elms->set(SETTER_INDEX, structure->get(1));
+      elms->set(SETTER_INDEX, accessors->setter());
     }
   } else {
     elms->set(IS_ACCESSOR_INDEX, heap->false_value());
@@ -9373,20 +9372,18 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_ParseJson) {
 
 bool CodeGenerationFromStringsAllowed(Isolate* isolate,
                                       Handle<Context> context) {
-  if (context->allow_code_gen_from_strings()->IsFalse()) {
-    // Check with callback if set.
-    AllowCodeGenerationFromStringsCallback callback =
-        isolate->allow_code_gen_callback();
-    if (callback == NULL) {
-      // No callback set and code generation disallowed.
-      return false;
-    } else {
-      // Callback set. Let it decide if code generation is allowed.
-      VMState state(isolate, EXTERNAL);
-      return callback(v8::Utils::ToLocal(context));
-    }
+  ASSERT(context->allow_code_gen_from_strings()->IsFalse());
+  // Check with callback if set.
+  AllowCodeGenerationFromStringsCallback callback =
+      isolate->allow_code_gen_callback();
+  if (callback == NULL) {
+    // No callback set and code generation disallowed.
+    return false;
+  } else {
+    // Callback set. Let it decide if code generation is allowed.
+    VMState state(isolate, EXTERNAL);
+    return callback(v8::Utils::ToLocal(context));
   }
-  return true;
 }
 
 
@@ -9400,7 +9397,8 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_CompileString) {
 
   // Check if global context allows code generation from
   // strings. Throw an exception if it doesn't.
-  if (!CodeGenerationFromStringsAllowed(isolate, context)) {
+  if (context->allow_code_gen_from_strings()->IsFalse() &&
+      !CodeGenerationFromStringsAllowed(isolate, context)) {
     return isolate->Throw(*isolate->factory()->NewError(
         "code_gen_from_strings", HandleVector<Object>(NULL, 0)));
   }
@@ -9427,7 +9425,8 @@ static ObjectPair CompileGlobalEval(Isolate* isolate,
 
   // Check if global context allows code generation from
   // strings. Throw an exception if it doesn't.
-  if (!CodeGenerationFromStringsAllowed(isolate, global_context)) {
+  if (global_context->allow_code_gen_from_strings()->IsFalse() &&
+      !CodeGenerationFromStringsAllowed(isolate, global_context)) {
     isolate->Throw(*isolate->factory()->NewError(
         "code_gen_from_strings", HandleVector<Object>(NULL, 0)));
     return MakePair(Failure::Exception(), NULL);
@@ -10475,15 +10474,15 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_DebugGetPropertyDetails) {
       // If the callback object is a fixed array then it contains JavaScript
       // getter and/or setter.
       bool hasJavaScriptAccessors = result_type == CALLBACKS &&
-                                    result_callback_obj->IsFixedArray();
+                                    result_callback_obj->IsAccessorPair();
       Handle<FixedArray> details =
           isolate->factory()->NewFixedArray(hasJavaScriptAccessors ? 5 : 2);
       details->set(0, *value);
       details->set(1, property_details);
       if (hasJavaScriptAccessors) {
         details->set(2, isolate->heap()->ToBoolean(caught_exception));
-        details->set(3, FixedArray::cast(*result_callback_obj)->get(0));
-        details->set(4, FixedArray::cast(*result_callback_obj)->get(1));
+        details->set(3, AccessorPair::cast(*result_callback_obj)->getter());
+        details->set(4, AccessorPair::cast(*result_callback_obj)->setter());
       }
 
       return *isolate->factory()->NewJSArrayWithElements(details);

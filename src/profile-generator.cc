@@ -111,7 +111,7 @@ const char* StringsStorage::GetCopy(const char* src) {
   OS::StrNCpy(dst, src, len);
   dst[len] = '\0';
   uint32_t hash =
-      HashSequentialString(dst.start(), len, HEAP->StringHashSeed());
+      HashSequentialString(dst.start(), len, HEAP->HashSeed());
   return AddOrDisposeString(dst.start(), hash);
 }
 
@@ -145,7 +145,7 @@ const char* StringsStorage::GetVFormatted(const char* format, va_list args) {
     return format;
   }
   uint32_t hash = HashSequentialString(
-      str.start(), len, HEAP->StringHashSeed());
+      str.start(), len, HEAP->HashSeed());
   return AddOrDisposeString(str.start(), hash);
 }
 
@@ -156,7 +156,7 @@ const char* StringsStorage::GetName(String* name) {
     SmartArrayPointer<char> data =
         name->ToCString(DISALLOW_NULLS, ROBUST_STRING_TRAVERSAL, 0, length);
     uint32_t hash =
-        HashSequentialString(*data, length, name->GetHeap()->StringHashSeed());
+        HashSequentialString(*data, length, name->GetHeap()->HashSeed());
     return AddOrDisposeString(data.Detach(), hash);
   }
   return "";
@@ -1509,7 +1509,7 @@ uint64_t HeapObjectsMap::GenerateId(v8::RetainedObjectInfo* info) {
   const char* label = info->GetLabel();
   id ^= HashSequentialString(label,
                              static_cast<int>(strlen(label)),
-                             HEAP->StringHashSeed());
+                             HEAP->HashSeed());
   intptr_t element_count = info->GetElementCount();
   if (element_count != -1)
     id ^= ComputeIntegerHash(static_cast<uint32_t>(element_count),
@@ -2230,13 +2230,13 @@ void V8HeapExplorer::ExtractPropertyReferences(JSObject* js_obj,
           break;
         case CALLBACKS: {
           Object* callback_obj = descs->GetValue(i);
-          if (callback_obj->IsFixedArray()) {
-            FixedArray* accessors = FixedArray::cast(callback_obj);
-            if (Object* getter = accessors->get(JSObject::kGetterIndex)) {
+          if (callback_obj->IsAccessorPair()) {
+            AccessorPair* accessors = AccessorPair::cast(callback_obj);
+            if (Object* getter = accessors->getter()) {
               SetPropertyReference(js_obj, entry, descs->GetKey(i),
                                    getter, "get-%s");
             }
-            if (Object* setter = accessors->get(JSObject::kSetterIndex)) {
+            if (Object* setter = accessors->setter()) {
               SetPropertyReference(js_obj, entry, descs->GetKey(i),
                                    setter, "set-%s");
             }

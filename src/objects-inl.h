@@ -3386,6 +3386,9 @@ ACCESSORS(AccessorInfo, data, Object, kDataOffset)
 ACCESSORS(AccessorInfo, name, Object, kNameOffset)
 ACCESSORS(AccessorInfo, flag, Smi, kFlagOffset)
 
+ACCESSORS(AccessorPair, getter, Object, kGetterOffset)
+ACCESSORS(AccessorPair, setter, Object, kSetterOffset)
+
 ACCESSORS(AccessCheckInfo, named_callback, Object, kNamedCallbackOffset)
 ACCESSORS(AccessCheckInfo, indexed_callback, Object, kIndexedCallbackOffset)
 ACCESSORS(AccessCheckInfo, data, Object, kDataOffset)
@@ -4328,7 +4331,7 @@ StringHasher::StringHasher(int length, uint32_t seed)
     is_array_index_(0 < length_ && length_ <= String::kMaxArrayIndexSize),
     is_first_char_(true),
     is_valid_(true) {
-  ASSERT(FLAG_randomize_string_hashes || raw_running_hash_ == 0);
+  ASSERT(FLAG_randomize_hashes || raw_running_hash_ == 0);
 }
 
 
