@@ -4049,6 +4049,13 @@ void v8::V8::GetHeapStatistics(HeapStatistics* heap_statistics) {
 }
 
 
+void v8::V8::VisitExternalResources(ExternalResourceVisitor* visitor) {
+  i::Isolate* isolate = i::Isolate::Current();
+  IsDeadCheck(isolate, "v8::V8::VisitExternalResources");
+  isolate->heap()->VisitExternalResources(visitor);
+}
+
+
 bool v8::V8::IdleNotification(int hint) {
   // Returning true tells the caller that it need not
   // continue to call IdleNotification.
@@ -5553,7 +5560,7 @@ void Debug::DisableAgent() {
 
 
 void Debug::ProcessDebugMessages() {
-  i::Execution::ProcessDebugMesssages(true);
+  i::Execution::ProcessDebugMessages(true);
 }
 
 Local<Context> Debug::GetDebugContext() {

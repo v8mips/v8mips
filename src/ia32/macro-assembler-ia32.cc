@@ -649,7 +649,7 @@ void MacroAssembler::LeaveFrame(StackFrame::Type type) {
 
 
 void MacroAssembler::EnterExitFramePrologue() {
-  // Setup the frame structure on the stack.
+  // Set up the frame structure on the stack.
   ASSERT(ExitFrameConstants::kCallerSPDisplacement == +2 * kPointerSize);
   ASSERT(ExitFrameConstants::kCallerPCOffset == +1 * kPointerSize);
   ASSERT(ExitFrameConstants::kCallerFPOffset ==  0 * kPointerSize);
@@ -701,7 +701,7 @@ void MacroAssembler::EnterExitFrameEpilogue(int argc, bool save_doubles) {
 void MacroAssembler::EnterExitFrame(bool save_doubles) {
   EnterExitFramePrologue();
 
-  // Setup argc and argv in callee-saved registers.
+  // Set up argc and argv in callee-saved registers.
   int offset = StandardFrameConstants::kCallerSPOffset - kPointerSize;
   mov(edi, eax);
   lea(esi, Operand(ebp, eax, times_4, offset));
@@ -1002,9 +1002,10 @@ void MacroAssembler::GetNumberHash(Register r0, Register scratch) {
     ExternalReference roots_array_start =
         ExternalReference::roots_array_start(isolate());
     mov(scratch, Immediate(Heap::kHashSeedRootIndex));
-    xor_(r0, Operand::StaticArray(scratch,
-                                  times_pointer_size,
-                                  roots_array_start));
+    mov(scratch,
+        Operand::StaticArray(scratch, times_pointer_size, roots_array_start));
+    SmiUntag(scratch);
+    xor_(r0, scratch);
   } else {
     int32_t seed = isolate()->heap()->HashSeed();
     xor_(r0, Immediate(seed));
@@ -1063,7 +1064,7 @@ void MacroAssembler::LoadFromNumberDictionary(Label* miss,
   GetNumberHash(r0, r1);
 
   // Compute capacity mask.
-  mov(r1, FieldOperand(elements, NumberDictionary::kCapacityOffset));
+  mov(r1, FieldOperand(elements, SeededNumberDictionary::kCapacityOffset));
   shr(r1, kSmiTagSize);  // convert smi to int
   dec(r1);
 
@@ -1074,19 +1075,19 @@ void MacroAssembler::LoadFromNumberDictionary(Label* miss,
     mov(r2, r0);
     // Compute the masked index: (hash + i + i * i) & mask.
     if (i > 0) {
-      add(r2, Immediate(NumberDictionary::GetProbeOffset(i)));
+      add(r2, Immediate(SeededNumberDictionary::GetProbeOffset(i)));
     }
     and_(r2, r1);
 
     // Scale the index by multiplying by the entry size.
-    ASSERT(NumberDictionary::kEntrySize == 3);
+    ASSERT(SeededNumberDictionary::kEntrySize == 3);
     lea(r2, Operand(r2, r2, times_2, 0));  // r2 = r2 * 3
 
     // Check if the key matches.
     cmp(key, FieldOperand(elements,
                           r2,
                           times_pointer_size,
-                          NumberDictionary::kElementsStartOffset));
+                          SeededNumberDictionary::kElementsStartOffset));
     if (i != (kProbes - 1)) {
       j(equal, &done);
     } else {
@@ -1097,7 +1098,7 @@ void MacroAssembler::LoadFromNumberDictionary(Label* miss,
   bind(&done);
   // Check that the value is a normal propety.
   const int kDetailsOffset =
-      NumberDictionary::kElementsStartOffset + 2 * kPointerSize;
+      SeededNumberDictionary::kElementsStartOffset + 2 * kPointerSize;
   ASSERT_EQ(NORMAL, 0);
   test(FieldOperand(elements, r2, times_pointer_size, kDetailsOffset),
        Immediate(PropertyDetails::TypeField::kMask << kSmiTagSize));
@@ -1105,7 +1106,7 @@ void MacroAssembler::LoadFromNumberDictionary(Label* miss,
 
   // Get the value at the masked, scaled index.
   const int kValueOffset =
-      NumberDictionary::kElementsStartOffset + kPointerSize;
+      SeededNumberDictionary::kElementsStartOffset + kPointerSize;
   mov(result, FieldOperand(elements, r2, times_pointer_size, kValueOffset));
 }
 
@@ -1386,7 +1387,7 @@ void MacroAssembler::AllocateAsciiString(Register result,
   add(scratch1, Immediate(kObjectAlignmentMask));
   and_(scratch1, Immediate(~kObjectAlignmentMask));
 
-  // Allocate ascii string in new space.
+  // Allocate ASCII string in new space.
   AllocateInNewSpace(SeqAsciiString::kHeaderSize,
                      times_1,
                      scratch1,
@@ -1414,7 +1415,7 @@ void MacroAssembler::AllocateAsciiString(Register result,
                                          Label* gc_required) {
   ASSERT(length > 0);
 
-  // Allocate ascii string in new space.
+  // Allocate ASCII string in new space.
   AllocateInNewSpace(SeqAsciiString::SizeFor(length),
                      result,
                      scratch1,
@@ -1932,11 +1933,13 @@ void MacroAssembler::InvokePrologue(const ParameterCount& expected,
                                     Handle<Code> code_constant,
                                     const Operand& code_operand,
                                     Label* done,
+                                    bool* definitely_mismatches,
                                     InvokeFlag flag,
                                     Label::Distance done_near,
                                     const CallWrapper& call_wrapper,
                                     CallKind call_kind) {
   bool definitely_matches = false;
+  *definitely_mismatches = false;
   Label invoke;
   if (expected.is_immediate()) {
     ASSERT(actual.is_immediate());
@@ -1952,6 +1955,7 @@ void MacroAssembler::InvokePrologue(const ParameterCount& expected,
         // arguments.
         definitely_matches = true;
       } else {
+        *definitely_mismatches = true;
         mov(ebx, expected.immediate());
       }
     }
@@ -1989,7 +1993,9 @@ void MacroAssembler::InvokePrologue(const ParameterCount& expected,
       SetCallKind(ecx, call_kind);
       call(adaptor, RelocInfo::CODE_TARGET);
       call_wrapper.AfterCall();
-      jmp(done, done_near);
+      if (!*definitely_mismatches) {
+        jmp(done, done_near);
+      }
     } else {
       SetCallKind(ecx, call_kind);
       jmp(adaptor, RelocInfo::CODE_TARGET);
@@ -2009,20 +2015,23 @@ void MacroAssembler::InvokeCode(const Operand& code,
   ASSERT(flag == JUMP_FUNCTION || has_frame());
 
   Label done;
+  bool definitely_mismatches = false;
   InvokePrologue(expected, actual, Handle<Code>::null(), code,
-                 &done, flag, Label::kNear, call_wrapper,
-                 call_kind);
-  if (flag == CALL_FUNCTION) {
-    call_wrapper.BeforeCall(CallSize(code));
-    SetCallKind(ecx, call_kind);
-    call(code);
-    call_wrapper.AfterCall();
-  } else {
-    ASSERT(flag == JUMP_FUNCTION);
-    SetCallKind(ecx, call_kind);
-    jmp(code);
+                 &done, &definitely_mismatches, flag, Label::kNear,
+                 call_wrapper, call_kind);
+  if (!definitely_mismatches) {
+    if (flag == CALL_FUNCTION) {
+      call_wrapper.BeforeCall(CallSize(code));
+      SetCallKind(ecx, call_kind);
+      call(code);
+      call_wrapper.AfterCall();
+    } else {
+      ASSERT(flag == JUMP_FUNCTION);
+      SetCallKind(ecx, call_kind);
+      jmp(code);
+    }
+    bind(&done);
   }
-  bind(&done);
 }
 
 
@@ -2038,19 +2047,22 @@ void MacroAssembler::InvokeCode(Handle<Code> code,
 
   Label done;
   Operand dummy(eax, 0);
-  InvokePrologue(expected, actual, code, dummy, &done, flag, Label::kNear,
-                 call_wrapper, call_kind);
-  if (flag == CALL_FUNCTION) {
-    call_wrapper.BeforeCall(CallSize(code, rmode));
-    SetCallKind(ecx, call_kind);
-    call(code, rmode);
-    call_wrapper.AfterCall();
-  } else {
-    ASSERT(flag == JUMP_FUNCTION);
-    SetCallKind(ecx, call_kind);
-    jmp(code, rmode);
+  bool definitely_mismatches = false;
+  InvokePrologue(expected, actual, code, dummy, &done, &definitely_mismatches,
+                 flag, Label::kNear, call_wrapper, call_kind);
+  if (!definitely_mismatches) {
+    if (flag == CALL_FUNCTION) {
+      call_wrapper.BeforeCall(CallSize(code, rmode));
+      SetCallKind(ecx, call_kind);
+      call(code, rmode);
+      call_wrapper.AfterCall();
+    } else {
+      ASSERT(flag == JUMP_FUNCTION);
+      SetCallKind(ecx, call_kind);
+      jmp(code, rmode);
+    }
+    bind(&done);
   }
-  bind(&done);
 }
 
 
@@ -2463,7 +2475,7 @@ void MacroAssembler::JumpIfNotBothSequentialAsciiStrings(Register object1,
   movzx_b(scratch1, FieldOperand(scratch1, Map::kInstanceTypeOffset));
   movzx_b(scratch2, FieldOperand(scratch2, Map::kInstanceTypeOffset));
 
-  // Check that both are flat ascii strings.
+  // Check that both are flat ASCII strings.
   const int kFlatAsciiStringMask =
       kIsNotStringMask | kStringRepresentationMask | kStringEncodingMask;
   const int kFlatAsciiStringTag = ASCII_STRING_TYPE;

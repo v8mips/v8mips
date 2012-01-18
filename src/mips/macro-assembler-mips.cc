@@ -491,7 +491,7 @@ void MacroAssembler::LoadFromNumberDictionary(Label* miss,
   addu(reg0, reg0, reg1);
 
   // Compute the capacity mask.
-  lw(reg1, FieldMemOperand(elements, NumberDictionary::kCapacityOffset));
+  lw(reg1, FieldMemOperand(elements, SeededNumberDictionary::kCapacityOffset));
   sra(reg1, reg1, kSmiTagSize);
   Subu(reg1, reg1, Operand(1));
 
@@ -502,12 +502,12 @@ void MacroAssembler::LoadFromNumberDictionary(Label* miss,
     mov(reg2, reg0);
     // Compute the masked index: (hash + i + i * i) & mask.
     if (i > 0) {
-      Addu(reg2, reg2, Operand(NumberDictionary::GetProbeOffset(i)));
+      Addu(reg2, reg2, Operand(SeededNumberDictionary::GetProbeOffset(i)));
     }
     and_(reg2, reg2, reg1);
 
     // Scale the index by multiplying by the element size.
-    ASSERT(NumberDictionary::kEntrySize == 3);
+    ASSERT(SeededNumberDictionary::kEntrySize == 3);
     sll(at, reg2, 1);  // 2x.
     addu(reg2, reg2, at);  // reg2 = reg2 * 3.
 
@@ -515,7 +515,7 @@ void MacroAssembler::LoadFromNumberDictionary(Label* miss,
     sll(at, reg2, kPointerSizeLog2);
     addu(reg2, elements, at);
 
-    lw(at, FieldMemOperand(reg2, NumberDictionary::kElementsStartOffset));
+    lw(at, FieldMemOperand(reg2, SeededNumberDictionary::kElementsStartOffset));
     if (i != kProbes - 1) {
       Branch(&done, eq, key, Operand(at));
     } else {
@@ -527,14 +527,14 @@ void MacroAssembler::LoadFromNumberDictionary(Label* miss,
   // Check that the value is a normal property.
   // reg2: elements + (index * kPointerSize).
   const int kDetailsOffset =
-      NumberDictionary::kElementsStartOffset + 2 * kPointerSize;
+      SeededNumberDictionary::kElementsStartOffset + 2 * kPointerSize;
   lw(reg1, FieldMemOperand(reg2, kDetailsOffset));
   And(at, reg1, Operand(Smi::FromInt(PropertyDetails::TypeField::kMask)));
   Branch(miss, ne, at, Operand(zero_reg));
 
   // Get the value at the masked, scaled index and return.
   const int kValueOffset =
-      NumberDictionary::kElementsStartOffset + kPointerSize;
+      SeededNumberDictionary::kElementsStartOffset + kPointerSize;
   lw(result, FieldMemOperand(reg2, kValueOffset));
 }
 
@@ -1180,7 +1180,7 @@ void MacroAssembler::ConvertToInt32(Register source,
   Branch(not_int32, gt, scratch2, Operand(non_smi_exponent));
 
   // We know the exponent is smaller than 30 (biased).  If it is less than
-  // 0 (biased) then the number is smaller in magnitude than 1.0 * 2^0, ie
+  // 0 (biased) then the number is smaller in magnitude than 1.0 * 2^0, i.e.
   // it rounds to zero.
   const uint32_t zero_exponent =
       (HeapNumber::kExponentBias + 0) << HeapNumber::kExponentShift;
@@ -4317,7 +4317,7 @@ void MacroAssembler::LeaveFrame(StackFrame::Type type) {
 
 void MacroAssembler::EnterExitFrame(bool save_doubles,
                                     int stack_space) {
-  // Setup the frame structure on the stack.
+  // Set up the frame structure on the stack.
   STATIC_ASSERT(2 * kPointerSize == ExitFrameConstants::kCallerSPDisplacement);
   STATIC_ASSERT(1 * kPointerSize == ExitFrameConstants::kCallerPCOffset);
   STATIC_ASSERT(0 * kPointerSize == ExitFrameConstants::kCallerFPOffset);
@@ -4335,7 +4335,7 @@ void MacroAssembler::EnterExitFrame(bool save_doubles,
   addiu(sp, sp, -4 * kPointerSize);
   sw(ra, MemOperand(sp, 3 * kPointerSize));
   sw(fp, MemOperand(sp, 2 * kPointerSize));
-  addiu(fp, sp, 2 * kPointerSize);  // Setup new frame pointer.
+  addiu(fp, sp, 2 * kPointerSize);  // Set up new frame pointer.
 
   if (emit_debug_code()) {
     sw(zero_reg, MemOperand(fp, ExitFrameConstants::kSPOffset));

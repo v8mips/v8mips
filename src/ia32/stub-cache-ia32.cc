@@ -992,7 +992,7 @@ void StubCompiler::GenerateLoadCallback(Handle<JSObject> object,
 
   __ push(scratch3);  // Restore return address.
 
-  // 3 elements array for v8::Agruments::values_, handler for name and pointer
+  // 3 elements array for v8::Arguments::values_, handler for name and pointer
   // to the values (it considered as smi in GC).
   const int kStackSpace = 5;
   const int kApiArgc = 2;
@@ -2330,7 +2330,7 @@ Handle<Code> CallStubCompiler::CompileCallGlobal(
     __ mov(Operand(esp, (argc + 1) * kPointerSize), edx);
   }
 
-  // Setup the context (function already in edi).
+  // Set up the context (function already in edi).
   __ mov(esi, FieldOperand(edi, JSFunction::kContextOffset));
 
   // Jump to the cached code (tail call).

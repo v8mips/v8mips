@@ -233,6 +233,11 @@
           'COMPRESS_STARTUP_DATA_BZ2',
         ],
       }],
+      ['OS=="win"', {
+        'defines': [
+          'WIN32',
+        ],
+      }],
       ['OS=="win" and v8_enable_prof==1', {
         'msvs_settings': {
           'VCLinkerTool': {
@@ -252,7 +257,7 @@
       ['OS=="solaris"', {
         'defines': [ '__C99FEATURES__=1' ],  # isinf() etc.
       }],
-    ],
+    ],  # conditions
     'configurations': {
       'Debug': {
         'defines': [
@@ -293,10 +298,11 @@
                         '-Wnon-virtual-dtor' ],
           }],
         ],
-      },
+      },  # Debug
       'Release': {
         'conditions': [
-          ['OS=="linux" or OS=="freebsd" or OS=="openbsd" or OS=="netbsd"', {
+          ['OS=="linux" or OS=="freebsd" or OS=="openbsd" or OS=="netbsd" \
+            or OS=="android"', {
             'cflags!': [
               '-O2',
               '-Os',
@@ -332,7 +338,7 @@
               # is specified explicitly.
               'GCC_STRICT_ALIASING': 'YES',
             },
-          }],
+          }],  # OS=="mac"
           ['OS=="win"', {
             'msvs_configuration_attributes': {
               'OutputDirectory': '<(DEPTH)\\build\\$(ConfigurationName)',
@@ -367,9 +373,9 @@
                 # 'StackReserveSize': '297152',
               },
             },
-          }],
-        ],
-      },
-    },
-  },
+          }],  # OS=="win"
+        ],  # conditions
+      },  # Release
+    },  # configurations
+  },  # target_defaults
 }

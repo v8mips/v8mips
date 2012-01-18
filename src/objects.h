@@ -217,7 +217,7 @@ const int kVariableSizeSentinel = 0;
 // encoding is considered TWO_BYTE.  It is not mentioned in the name.  ASCII
 // encoding is mentioned explicitly in the name.  Likewise, the default
 // representation is considered sequential.  It is not mentioned in the
-// name.  The other representations (eg, CONS, EXTERNAL) are explicitly
+// name.  The other representations (e.g. CONS, EXTERNAL) are explicitly
 // mentioned.  Finally, the string is either a SYMBOL_TYPE (if it is a
 // symbol) or a STRING_TYPE (if it is not a symbol).
 //
@@ -492,7 +492,7 @@ const uint32_t kSlicedNotConsMask = kSlicedStringTag & ~kConsStringTag;
 STATIC_ASSERT(IS_POWER_OF_TWO(kSlicedNotConsMask) && kSlicedNotConsMask != 0);
 
 // If bit 7 is clear, then bit 3 indicates whether this two-byte
-// string actually contains ascii data.
+// string actually contains ASCII data.
 const uint32_t kAsciiDataHintMask = 0x08;
 const uint32_t kAsciiDataHintTag = 0x08;
 
@@ -1086,7 +1086,7 @@ class Failure: public MaybeObject {
 
 
 // Heap objects typically have a map pointer in their first word.  However,
-// during GC other data (eg, mark bits, forwarding addresses) is sometimes
+// during GC other data (e.g. mark bits, forwarding addresses) is sometimes
 // encoded in the first word.  The class MapWord is an abstraction of the
 // value in a heap object's first word.
 class MapWord BASE_EMBEDDED {
@@ -1105,7 +1105,7 @@ class MapWord BASE_EMBEDDED {
 
   // True if this map word is a forwarding address for a scavenge
   // collection.  Only valid during a scavenge collection (specifically,
-  // when all map words are heap object pointers, ie. not during a full GC).
+  // when all map words are heap object pointers, i.e. not during a full GC).
   inline bool IsForwardingAddress();
 
   // Create a map word from a forwarding address.
@@ -1485,7 +1485,7 @@ class JSObject: public JSReceiver {
   inline bool HasExternalDoubleElements();
   bool HasFastArgumentsElements();
   bool HasDictionaryArgumentsElements();
-  inline NumberDictionary* element_dictionary();  // Gets slow elements.
+  inline SeededNumberDictionary* element_dictionary();  // Gets slow elements.
 
   inline void set_map_and_elements(
       Map* map,
@@ -1908,9 +1908,10 @@ class JSObject: public JSReceiver {
       PropertyNormalizationMode mode,
       int expected_additional_properties);
 
-  // Convert and update the elements backing store to be a NumberDictionary
-  // dictionary.  Returns the backing after conversion.
-  static Handle<NumberDictionary> NormalizeElements(Handle<JSObject> object);
+  // Convert and update the elements backing store to be a
+  // SeededNumberDictionary dictionary.  Returns the backing after conversion.
+  static Handle<SeededNumberDictionary> NormalizeElements(
+      Handle<JSObject> object);
 
   MUST_USE_RESULT MaybeObject* NormalizeElements();
 
@@ -2277,7 +2278,7 @@ class FixedDoubleArray: public FixedArrayBase {
  public:
   inline void Initialize(FixedArray* from);
   inline void Initialize(FixedDoubleArray* from);
-  inline void Initialize(NumberDictionary* from);
+  inline void Initialize(SeededNumberDictionary* from);
 
   // Setter and getter for elements.
   inline double get_scalar(int index);
@@ -2603,7 +2604,7 @@ class BaseShape {
   }
   static uint32_t HashForObject(Key key, Object* object) { return 0; }
   static uint32_t SeededHashForObject(Key key, uint32_t seed, Object* object) {
-    // Won't be called if UsesSeed isn't overridden by child class.
+    ASSERT(UsesSeed);
     return HashForObject(key, object);
   }
 };
@@ -3038,27 +3039,40 @@ class StringDictionary: public Dictionary<StringDictionaryShape, String*> {
 
 class NumberDictionaryShape : public BaseShape<uint32_t> {
  public:
-  static const bool UsesSeed = true;
-
   static inline bool IsMatch(uint32_t key, Object* other);
-  static inline uint32_t Hash(uint32_t key);
-  static inline uint32_t SeededHash(uint32_t key, uint32_t seed);
-  static inline uint32_t HashForObject(uint32_t key, Object* object);
-  static inline uint32_t SeededHashForObject(uint32_t key,
-                                             uint32_t seed,
-                                             Object* object);
   MUST_USE_RESULT static inline MaybeObject* AsObject(uint32_t key);
-  static const int kPrefixSize = 2;
   static const int kEntrySize = 3;
   static const bool kIsEnumerable = false;
 };
 
 
-class NumberDictionary: public Dictionary<NumberDictionaryShape, uint32_t> {
+class SeededNumberDictionaryShape : public NumberDictionaryShape {
  public:
-  static NumberDictionary* cast(Object* obj) {
+  static const bool UsesSeed = true;
+  static const int kPrefixSize = 2;
+
+  static inline uint32_t SeededHash(uint32_t key, uint32_t seed);
+  static inline uint32_t SeededHashForObject(uint32_t key,
+                                             uint32_t seed,
+                                             Object* object);
+};
+
+
+class UnseededNumberDictionaryShape : public NumberDictionaryShape {
+ public:
+  static const int kPrefixSize = 0;
+
+  static inline uint32_t Hash(uint32_t key);
+  static inline uint32_t HashForObject(uint32_t key, Object* object);
+};
+
+
+class SeededNumberDictionary
+    : public Dictionary<SeededNumberDictionaryShape, uint32_t> {
+ public:
+  static SeededNumberDictionary* cast(Object* obj) {
     ASSERT(obj->IsDictionary());
-    return reinterpret_cast<NumberDictionary*>(obj);
+    return reinterpret_cast<SeededNumberDictionary*>(obj);
   }
 
   // Type specific at put (default NONE attributes is used when adding).
@@ -3069,8 +3083,8 @@ class NumberDictionary: public Dictionary<NumberDictionaryShape, uint32_t> {
 
   // Set an existing entry or add a new one if needed.
   // Return the updated dictionary.
-  MUST_USE_RESULT static Handle<NumberDictionary> Set(
-      Handle<NumberDictionary> dictionary,
+  MUST_USE_RESULT static Handle<SeededNumberDictionary> Set(
+      Handle<SeededNumberDictionary> dictionary,
       uint32_t index,
       Handle<Object> value,
       PropertyDetails details);
@@ -3098,6 +3112,29 @@ class NumberDictionary: public Dictionary<NumberDictionaryShape, uint32_t> {
   static const int kRequiresSlowElementsMask = 1;
   static const int kRequiresSlowElementsTagSize = 1;
   static const uint32_t kRequiresSlowElementsLimit = (1 << 29) - 1;
+};
+
+
+class UnseededNumberDictionary
+    : public Dictionary<UnseededNumberDictionaryShape, uint32_t> {
+ public:
+  static UnseededNumberDictionary* cast(Object* obj) {
+    ASSERT(obj->IsDictionary());
+    return reinterpret_cast<UnseededNumberDictionary*>(obj);
+  }
+
+  // Type specific at put (default NONE attributes is used when adding).
+  MUST_USE_RESULT MaybeObject* AtNumberPut(uint32_t key, Object* value);
+  MUST_USE_RESULT MaybeObject* AddNumberEntry(uint32_t key, Object* value);
+
+  // Set an existing entry or add a new one if needed.
+  // Return the updated dictionary.
+  MUST_USE_RESULT static Handle<UnseededNumberDictionary> Set(
+      Handle<UnseededNumberDictionary> dictionary,
+      uint32_t index,
+      Handle<Object> value);
+
+  MUST_USE_RESULT MaybeObject* Set(uint32_t key, Object* value);
 };
 
 
@@ -6452,7 +6489,7 @@ class String: public HeapObject {
   inline String* GetUnderlying();
 
   // Mark the string as an undetectable object. It only applies to
-  // ascii and two byte string types.
+  // ASCII and two byte string types.
   bool MarkAsUndetectable();
 
   // Return a substring.
@@ -6549,13 +6586,10 @@ class String: public HeapObject {
   // value into an array index.
   static const int kMaxArrayIndexSize = 10;
 
-  // Max ascii char code.
+  // Max ASCII char code.
   static const int kMaxAsciiCharCode = unibrow::Utf8::kMaxOneByteChar;
   static const unsigned kMaxAsciiCharCodeU = unibrow::Utf8::kMaxOneByteChar;
   static const int kMaxUC16CharCode = 0xffff;
-
-  // Minimum length for a cons string.
-  static const int kMinNonFlatLength = 13;
 
   // Mask constant for checking if a string has a computed hash code
   // and if it is an array index.  The least significant bit indicates
@@ -6735,8 +6769,8 @@ class SeqString: public String {
 };
 
 
-// The AsciiString class captures sequential ascii string objects.
-// Each character in the AsciiString is an ascii character.
+// The AsciiString class captures sequential ASCII string objects.
+// Each character in the AsciiString is an ASCII character.
 class SeqAsciiString: public SeqString {
  public:
   static const bool kHasAsciiEncoding = true;

@@ -295,7 +295,7 @@ class SlotsBuffer;
 
 // MemoryChunk represents a memory region owned by a specific space.
 // It is divided into the header and the body. Chunk start is always
-// 1MB aligned. Start of the body is aligned so it can accomodate
+// 1MB aligned. Start of the body is aligned so it can accommodate
 // any heap object.
 class MemoryChunk {
  public:
@@ -815,7 +815,7 @@ class CodeRange {
   // Reserves a range of virtual memory, but does not commit any of it.
   // Can only be called once, at heap initialization time.
   // Returns false on failure.
-  bool Setup(const size_t requested_size);
+  bool SetUp(const size_t requested_size);
 
   // Frees the range of virtual memory, and frees the data structures used to
   // manage it.
@@ -943,7 +943,7 @@ class MemoryAllocator {
 
   // Initializes its internal bookkeeping structures.
   // Max capacity of the total space and executable memory limit.
-  bool Setup(intptr_t max_capacity, intptr_t capacity_executable);
+  bool SetUp(intptr_t max_capacity, intptr_t capacity_executable);
 
   void TearDown();
 
@@ -1181,11 +1181,11 @@ class AllocationInfo {
 
 
 // An abstraction of the accounting statistics of a page-structured space.
-// The 'capacity' of a space is the number of object-area bytes (ie, not
+// The 'capacity' of a space is the number of object-area bytes (i.e., not
 // including page bookkeeping structures) currently in the space. The 'size'
 // of a space is the number of allocated bytes, the 'waste' in the space is
 // the number of bytes that are not allocated and not available to
-// allocation without reorganizing the space via a GC (eg, small blocks due
+// allocation without reorganizing the space via a GC (e.g. small blocks due
 // to internal fragmentation, top of page areas in map space), and the bytes
 // 'available' is the number of unallocated bytes that are not waste.  The
 // capacity is the sum of size, waste, and available.
@@ -1198,7 +1198,7 @@ class AllocationStats BASE_EMBEDDED {
  public:
   AllocationStats() { Clear(); }
 
-  // Zero out all the allocation statistics (ie, no capacity).
+  // Zero out all the allocation statistics (i.e., no capacity).
   void Clear() {
     capacity_ = 0;
     size_ = 0;
@@ -1210,7 +1210,7 @@ class AllocationStats BASE_EMBEDDED {
     waste_ = 0;
   }
 
-  // Reset the allocation statistics (ie, available = capacity with no
+  // Reset the allocation statistics (i.e., available = capacity with no
   // wasted or allocated bytes).
   void Reset() {
     size_ = 0;
@@ -1341,7 +1341,7 @@ class FreeList BASE_EMBEDDED {
   // starting at 'start' is placed on the free list.  The return value is the
   // number of bytes that have been lost due to internal fragmentation by
   // freeing the block.  Bookkeeping information will be written to the block,
-  // ie, its contents will be destroyed.  The start address should be word
+  // i.e., its contents will be destroyed.  The start address should be word
   // aligned, and the size should be a non-zero multiple of the word size.
   int Free(Address start, int size_in_bytes);
 
@@ -1419,11 +1419,11 @@ class PagedSpace : public Space {
   // the memory allocator's initial chunk) if possible.  If the block of
   // addresses is not big enough to contain a single page-aligned page, a
   // fresh chunk will be allocated.
-  bool Setup();
+  bool SetUp();
 
   // Returns true if the space has been successfully set up and not
   // subsequently torn down.
-  bool HasBeenSetup();
+  bool HasBeenSetUp();
 
   // Cleans up the space, frees all pages in this space except those belonging
   // to the initial chunk, uncommits addresses in the initial chunk.
@@ -1563,8 +1563,14 @@ class PagedSpace : public Space {
     first_unswept_page_ = first;
   }
 
-  void MarkPageForLazySweeping(Page* p) {
+  void IncreaseUnsweptFreeBytes(Page* p) {
+    ASSERT(ShouldBeSweptLazily(p));
     unswept_free_bytes_ += (Page::kObjectAreaSize - p->LiveBytes());
+  }
+
+  void DecreaseUnsweptFreeBytes(Page* p) {
+    ASSERT(ShouldBeSweptLazily(p));
+    unswept_free_bytes_ -= (Page::kObjectAreaSize - p->LiveBytes());
   }
 
   bool AdvanceSweeper(intptr_t bytes_to_sweep);
@@ -1821,14 +1827,14 @@ class SemiSpace : public Space {
       current_page_(NULL) { }
 
   // Sets up the semispace using the given chunk.
-  bool Setup(Address start, int initial_capacity, int maximum_capacity);
+  bool SetUp(Address start, int initial_capacity, int maximum_capacity);
 
   // Tear down the space.  Heap memory was not allocated by the space, so it
   // is not deallocated here.
   void TearDown();
 
   // True if the space has been set up but not torn down.
-  bool HasBeenSetup() { return start_ != NULL; }
+  bool HasBeenSetUp() { return start_ != NULL; }
 
   // Grow the semispace to the new capacity.  The new capacity
   // requested must be larger than the current capacity and less than
@@ -2067,15 +2073,15 @@ class NewSpace : public Space {
       inline_allocation_limit_step_(0) {}
 
   // Sets up the new space using the given chunk.
-  bool Setup(int reserved_semispace_size_, int max_semispace_size);
+  bool SetUp(int reserved_semispace_size_, int max_semispace_size);
 
   // Tears down the space.  Heap memory was not allocated by the space, so it
   // is not deallocated here.
   void TearDown();
 
   // True if the space has been set up but not torn down.
-  bool HasBeenSetup() {
-    return to_space_.HasBeenSetup() && from_space_.HasBeenSetup();
+  bool HasBeenSetUp() {
+    return to_space_.HasBeenSetUp() && from_space_.HasBeenSetUp();
   }
 
   // Flip the pair of spaces.
@@ -2474,7 +2480,7 @@ class LargeObjectSpace : public Space {
   virtual ~LargeObjectSpace() {}
 
   // Initializes internal data structures.
-  bool Setup();
+  bool SetUp();
 
   // Releases internal resources, frees objects in this space.
   void TearDown();

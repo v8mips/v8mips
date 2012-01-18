@@ -904,7 +904,7 @@ void ProfileGenerator::RecordTickSample(const TickSample& sample) {
       entry++;
     }
 
-    for (const Address *stack_pos = sample.stack,
+    for (const Address* stack_pos = sample.stack,
            *stack_end = stack_pos + sample.frames_count;
          stack_pos != stack_end;
          ++stack_pos) {
@@ -1231,10 +1231,10 @@ HeapSnapshot::HeapSnapshot(HeapSnapshotsCollection* collection,
       entries_sorted_(false) {
   STATIC_ASSERT(
       sizeof(HeapGraphEdge) ==
-      SnapshotSizeConstants<sizeof(void*)>::kExpectedHeapGraphEdgeSize);  // NOLINT
+      SnapshotSizeConstants<kPointerSize>::kExpectedHeapGraphEdgeSize);
   STATIC_ASSERT(
       sizeof(HeapEntry) ==
-      SnapshotSizeConstants<sizeof(void*)>::kExpectedHeapEntrySize);  // NOLINT
+      SnapshotSizeConstants<kPointerSize>::kExpectedHeapEntrySize);
   for (int i = 0; i < VisitorSynchronization::kNumberOfSyncTags; ++i) {
     gc_subroot_entries_[i] = NULL;
   }
@@ -1595,7 +1595,7 @@ Handle<HeapObject> HeapSnapshotsCollection::FindHeapObjectById(uint64_t id) {
 }
 
 
-HeapEntry *const HeapEntriesMap::kHeapEntryPlaceholder =
+HeapEntry* const HeapEntriesMap::kHeapEntryPlaceholder =
     reinterpret_cast<HeapEntry*>(1);
 
 HeapEntriesMap::HeapEntriesMap()
@@ -1724,16 +1724,16 @@ void HeapObjectsSet::SetTag(Object* obj, const char* tag) {
 }
 
 
-HeapObject *const V8HeapExplorer::kInternalRootObject =
+HeapObject* const V8HeapExplorer::kInternalRootObject =
     reinterpret_cast<HeapObject*>(
         static_cast<intptr_t>(HeapObjectsMap::kInternalRootObjectId));
-HeapObject *const V8HeapExplorer::kGcRootsObject =
+HeapObject* const V8HeapExplorer::kGcRootsObject =
     reinterpret_cast<HeapObject*>(
         static_cast<intptr_t>(HeapObjectsMap::kGcRootsObjectId));
-HeapObject *const V8HeapExplorer::kFirstGcSubrootObject =
+HeapObject* const V8HeapExplorer::kFirstGcSubrootObject =
     reinterpret_cast<HeapObject*>(
         static_cast<intptr_t>(HeapObjectsMap::kGcRootsFirstSubrootId));
-HeapObject *const V8HeapExplorer::kLastGcSubrootObject =
+HeapObject* const V8HeapExplorer::kLastGcSubrootObject =
     reinterpret_cast<HeapObject*>(
         static_cast<intptr_t>(HeapObjectsMap::kFirstAvailableObjectId));
 
@@ -2289,7 +2289,7 @@ void V8HeapExplorer::ExtractElementReferences(JSObject* js_obj,
       }
     }
   } else if (js_obj->HasDictionaryElements()) {
-    NumberDictionary* dictionary = js_obj->element_dictionary();
+    SeededNumberDictionary* dictionary = js_obj->element_dictionary();
     int length = dictionary->Capacity();
     for (int i = 0; i < length; ++i) {
       Object* k = dictionary->KeyAt(i);

@@ -54,7 +54,11 @@ class Factory {
       int size,
       PretenureFlag pretenure = NOT_TENURED);
 
-  Handle<NumberDictionary> NewNumberDictionary(int at_least_space_for);
+  Handle<SeededNumberDictionary> NewSeededNumberDictionary(
+      int at_least_space_for);
+
+  Handle<UnseededNumberDictionary> NewUnseededNumberDictionary(
+      int at_least_space_for);
 
   Handle<StringDictionary> NewStringDictionary(int at_least_space_for);
 
@@ -229,7 +233,7 @@ class Factory {
   Handle<FixedDoubleArray> CopyFixedDoubleArray(
       Handle<FixedDoubleArray> array);
 
-  // Numbers (eg, literals) are pretenured by the parser.
+  // Numbers (e.g. literals) are pretenured by the parser.
   Handle<Object> NewNumber(double value,
                            PretenureFlag pretenure = NOT_TENURED);
 
@@ -432,8 +436,13 @@ class Factory {
       Handle<Object> stack_trace,
       Handle<Object> stack_frames);
 
-  Handle<NumberDictionary> DictionaryAtNumberPut(
-      Handle<NumberDictionary>,
+  Handle<SeededNumberDictionary> DictionaryAtNumberPut(
+      Handle<SeededNumberDictionary>,
+      uint32_t key,
+      Handle<Object> value);
+
+  Handle<UnseededNumberDictionary> DictionaryAtNumberPut(
+      Handle<UnseededNumberDictionary>,
       uint32_t key,
       Handle<Object> value);
 

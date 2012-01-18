@@ -146,8 +146,8 @@ inline Heap* _inline_get_heap_();
   V(Map, neander_map, NeanderMap)                                              \
   V(JSObject, message_listeners, MessageListeners)                             \
   V(Foreign, prototype_accessors, PrototypeAccessors)                          \
-  V(NumberDictionary, code_stubs, CodeStubs)                                   \
-  V(NumberDictionary, non_monomorphic_cache, NonMonomorphicCache)              \
+  V(UnseededNumberDictionary, code_stubs, CodeStubs)                           \
+  V(UnseededNumberDictionary, non_monomorphic_cache, NonMonomorphicCache)      \
   V(PolymorphicCodeCache, polymorphic_code_cache, PolymorphicCodeCache)        \
   V(Code, js_entry_code, JsEntryCode)                                          \
   V(Code, js_construct_entry_code, JsConstructEntryCode)                       \
@@ -434,7 +434,7 @@ class ExternalStringTable {
 class Heap {
  public:
   // Configure heap size before setup. Return false if the heap has been
-  // setup already.
+  // set up already.
   bool ConfigureHeap(int max_semispace_size,
                      intptr_t max_old_gen_size,
                      intptr_t max_executable_size);
@@ -443,7 +443,7 @@ class Heap {
   // Initializes the global object heap. If create_heap_objects is true,
   // also creates the basic non-mutable objects.
   // Returns whether it succeeded.
-  bool Setup(bool create_heap_objects);
+  bool SetUp(bool create_heap_objects);
 
   // Destroys all memory allocated by the heap.
   void TearDown();
@@ -453,8 +453,8 @@ class Heap {
   // jslimit_/real_jslimit_ variable in the StackGuard.
   void SetStackLimits();
 
-  // Returns whether Setup has been called.
-  bool HasBeenSetup();
+  // Returns whether SetUp has been called.
+  bool HasBeenSetUp();
 
   // Returns the maximum amount of memory reserved for the heap.  For
   // the young generation, we reserve 4 times the amount needed for a
@@ -690,7 +690,7 @@ class Heap {
       PretenureFlag pretenure = NOT_TENURED);
 
   // Computes a single character string where the character has code.
-  // A cache is used for ascii codes.
+  // A cache is used for ASCII codes.
   // Returns Failure::RetryAfterGC(requested_bytes, space) if the allocation
   // failed. Please note this does not perform a garbage collection.
   MUST_USE_RESULT MaybeObject* LookupSingleCharacterStringFromCode(
@@ -1139,7 +1139,7 @@ class Heap {
   inline AllocationSpace TargetSpaceId(InstanceType type);
 
   // Sets the stub_cache_ (only used when expanding the dictionary).
-  void public_set_code_stubs(NumberDictionary* value) {
+  void public_set_code_stubs(UnseededNumberDictionary* value) {
     roots_[kCodeStubsRootIndex] = value;
   }
 
@@ -1151,7 +1151,7 @@ class Heap {
   }
 
   // Sets the non_monomorphic_cache_ (only used when expanding the dictionary).
-  void public_set_non_monomorphic_cache(NumberDictionary* value) {
+  void public_set_non_monomorphic_cache(UnseededNumberDictionary* value) {
     roots_[kNonMonomorphicCacheRootIndex] = value;
   }
 
@@ -1411,6 +1411,8 @@ class Heap {
       ExternalStringTableUpdaterCallback updater_func);
 
   void ProcessWeakReferences(WeakObjectRetainer* retainer);
+
+  void VisitExternalResources(v8::ExternalResourceVisitor* visitor);
 
   // Helper function that governs the promotion policy from new space to
   // old.  If the object's old address lies below the new space's age
@@ -1914,7 +1916,7 @@ class Heap {
   PromotionQueue promotion_queue_;
 
   // Flag is set when the heap has been configured.  The heap can be repeatedly
-  // configured through the API until it is setup.
+  // configured through the API until it is set up.
   bool configured_;
 
   ExternalStringTable external_string_table_;
@@ -2374,7 +2376,7 @@ class GCTracer BASE_EMBEDDED {
   intptr_t start_size_;  // Size of objects in heap set in constructor.
   GarbageCollector collector_;  // Type of collector.
 
-  // A count (including this one, eg, the first collection is 1) of the
+  // A count (including this one, e.g. the first collection is 1) of the
   // number of garbage collections.
   unsigned int gc_count_;
 

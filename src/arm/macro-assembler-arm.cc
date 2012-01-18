@@ -817,12 +817,12 @@ void MacroAssembler::LeaveFrame(StackFrame::Type type) {
 
 
 void MacroAssembler::EnterExitFrame(bool save_doubles, int stack_space) {
-  // Setup the frame structure on the stack.
+  // Set up the frame structure on the stack.
   ASSERT_EQ(2 * kPointerSize, ExitFrameConstants::kCallerSPDisplacement);
   ASSERT_EQ(1 * kPointerSize, ExitFrameConstants::kCallerPCOffset);
   ASSERT_EQ(0 * kPointerSize, ExitFrameConstants::kCallerFPOffset);
   Push(lr, fp);
-  mov(fp, Operand(sp));  // Setup new frame pointer.
+  mov(fp, Operand(sp));  // Set up new frame pointer.
   // Reserve room for saved entry sp and code object.
   sub(sp, sp, Operand(2 * kPointerSize));
   if (emit_debug_code()) {
@@ -957,10 +957,12 @@ void MacroAssembler::InvokePrologue(const ParameterCount& expected,
                                     Handle<Code> code_constant,
                                     Register code_reg,
                                     Label* done,
+                                    bool* definitely_mismatches,
                                     InvokeFlag flag,
                                     const CallWrapper& call_wrapper,
                                     CallKind call_kind) {
   bool definitely_matches = false;
+  *definitely_mismatches = false;
   Label regular_invoke;
 
   // Check whether the expected and actual arguments count match. If not,
@@ -991,6 +993,7 @@ void MacroAssembler::InvokePrologue(const ParameterCount& expected,
         // arguments.
         definitely_matches = true;
       } else {
+        *definitely_mismatches = true;
         mov(r2, Operand(expected.immediate()));
       }
     }
@@ -1018,7 +1021,9 @@ void MacroAssembler::InvokePrologue(const ParameterCount& expected,
       SetCallKind(r5, call_kind);
       Call(adaptor);
       call_wrapper.AfterCall();
-      b(done);
+      if (!*definitely_mismatches) {
+        b(done);
+      }
     } else {
       SetCallKind(r5, call_kind);
       Jump(adaptor, RelocInfo::CODE_TARGET);
@@ -1038,23 +1043,26 @@ void MacroAssembler::InvokeCode(Register code,
   ASSERT(flag == JUMP_FUNCTION || has_frame());
 
   Label done;
-
-  InvokePrologue(expected, actual, Handle<Code>::null(), code, &done, flag,
+  bool definitely_mismatches = false;
+  InvokePrologue(expected, actual, Handle<Code>::null(), code,
+                 &done, &definitely_mismatches, flag,
                  call_wrapper, call_kind);
-  if (flag == CALL_FUNCTION) {
-    call_wrapper.BeforeCall(CallSize(code));
-    SetCallKind(r5, call_kind);
-    Call(code);
-    call_wrapper.AfterCall();
-  } else {
-    ASSERT(flag == JUMP_FUNCTION);
-    SetCallKind(r5, call_kind);
-    Jump(code);
-  }
+  if (!definitely_mismatches) {
+    if (flag == CALL_FUNCTION) {
+      call_wrapper.BeforeCall(CallSize(code));
+      SetCallKind(r5, call_kind);
+      Call(code);
+      call_wrapper.AfterCall();
+    } else {
+      ASSERT(flag == JUMP_FUNCTION);
+      SetCallKind(r5, call_kind);
+      Jump(code);
+    }
 
-  // Continue here if InvokePrologue does handle the invocation due to
-  // mismatched parameter counts.
-  bind(&done);
+    // Continue here if InvokePrologue does handle the invocation due to
+    // mismatched parameter counts.
+    bind(&done);
+  }
 }
 
 
@@ -1068,20 +1076,23 @@ void MacroAssembler::InvokeCode(Handle<Code> code,
   ASSERT(flag == JUMP_FUNCTION || has_frame());
 
   Label done;
-
-  InvokePrologue(expected, actual, code, no_reg, &done, flag,
+  bool definitely_mismatches = false;
+  InvokePrologue(expected, actual, code, no_reg,
+                 &done, &definitely_mismatches, flag,
                  NullCallWrapper(), call_kind);
-  if (flag == CALL_FUNCTION) {
-    SetCallKind(r5, call_kind);
-    Call(code, rmode);
-  } else {
-    SetCallKind(r5, call_kind);
-    Jump(code, rmode);
-  }
+  if (!definitely_mismatches) {
+    if (flag == CALL_FUNCTION) {
+      SetCallKind(r5, call_kind);
+      Call(code, rmode);
+    } else {
+      SetCallKind(r5, call_kind);
+      Jump(code, rmode);
+    }
 
-  // Continue here if InvokePrologue does handle the invocation due to
-  // mismatched parameter counts.
-  bind(&done);
+    // Continue here if InvokePrologue does handle the invocation due to
+    // mismatched parameter counts.
+    bind(&done);
+  }
 }
 
 
@@ -1116,6 +1127,7 @@ void MacroAssembler::InvokeFunction(Register fun,
 void MacroAssembler::InvokeFunction(Handle<JSFunction> function,
                                     const ParameterCount& actual,
                                     InvokeFlag flag,
+                                    const CallWrapper& call_wrapper,
                                     CallKind call_kind) {
   // You can't call a function without a valid frame.
   ASSERT(flag == JUMP_FUNCTION || has_frame());
@@ -1129,7 +1141,7 @@ void MacroAssembler::InvokeFunction(Handle<JSFunction> function,
   // allow recompilation to take effect without changing any of the
   // call sites.
   ldr(r3, FieldMemOperand(r1, JSFunction::kCodeEntryOffset));
-  InvokeCode(r3, expected, actual, flag, NullCallWrapper(), call_kind);
+  InvokeCode(r3, expected, actual, flag, call_wrapper, call_kind);
 }
 
 
@@ -1472,7 +1484,7 @@ void MacroAssembler::LoadFromNumberDictionary(Label* miss,
   GetNumberHash(t0, t1);
 
   // Compute the capacity mask.
-  ldr(t1, FieldMemOperand(elements, NumberDictionary::kCapacityOffset));
+  ldr(t1, FieldMemOperand(elements, SeededNumberDictionary::kCapacityOffset));
   mov(t1, Operand(t1, ASR, kSmiTagSize));  // convert smi to int
   sub(t1, t1, Operand(1));
 
@@ -1483,17 +1495,17 @@ void MacroAssembler::LoadFromNumberDictionary(Label* miss,
     mov(t2, t0);
     // Compute the masked index: (hash + i + i * i) & mask.
     if (i > 0) {
-      add(t2, t2, Operand(NumberDictionary::GetProbeOffset(i)));
+      add(t2, t2, Operand(SeededNumberDictionary::GetProbeOffset(i)));
     }
     and_(t2, t2, Operand(t1));
 
     // Scale the index by multiplying by the element size.
-    ASSERT(NumberDictionary::kEntrySize == 3);
+    ASSERT(SeededNumberDictionary::kEntrySize == 3);
     add(t2, t2, Operand(t2, LSL, 1));  // t2 = t2 * 3
 
     // Check if the key is identical to the name.
     add(t2, elements, Operand(t2, LSL, kPointerSizeLog2));
-    ldr(ip, FieldMemOperand(t2, NumberDictionary::kElementsStartOffset));
+    ldr(ip, FieldMemOperand(t2, SeededNumberDictionary::kElementsStartOffset));
     cmp(key, Operand(ip));
     if (i != kProbes - 1) {
       b(eq, &done);
@@ -1506,14 +1518,14 @@ void MacroAssembler::LoadFromNumberDictionary(Label* miss,
   // Check that the value is a normal property.
   // t2: elements + (index * kPointerSize)
   const int kDetailsOffset =
-      NumberDictionary::kElementsStartOffset + 2 * kPointerSize;
+      SeededNumberDictionary::kElementsStartOffset + 2 * kPointerSize;
   ldr(t1, FieldMemOperand(t2, kDetailsOffset));
   tst(t1, Operand(Smi::FromInt(PropertyDetails::TypeField::kMask)));
   b(ne, miss);
 
   // Get the value at the masked, scaled index and return.
   const int kValueOffset =
-      NumberDictionary::kElementsStartOffset + kPointerSize;
+      SeededNumberDictionary::kElementsStartOffset + kPointerSize;
   ldr(result, FieldMemOperand(t2, kValueOffset));
 }
 
@@ -2387,7 +2399,7 @@ void MacroAssembler::ConvertToInt32(Register source,
     b(gt, not_int32);
 
     // We know the exponent is smaller than 30 (biased).  If it is less than
-    // 0 (biased) then the number is smaller in magnitude than 1.0 * 2^0, ie
+    // 0 (biased) then the number is smaller in magnitude than 1.0 * 2^0, i.e.
     // it rounds to zero.
     const uint32_t zero_exponent = HeapNumber::kExponentBias + 0;
     sub(scratch2, scratch2, Operand(zero_exponent - fudge_factor), SetCC);

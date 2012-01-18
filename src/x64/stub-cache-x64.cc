@@ -982,7 +982,7 @@ void StubCompiler::GenerateLoadCallback(Handle<JSObject> object,
   __ movq(name_arg, rsp);
   __ push(scratch2);  // Restore return address.
 
-  // 3 elements array for v8::Agruments::values_ and handler for name.
+  // 3 elements array for v8::Arguments::values_ and handler for name.
   const int kStackSpace = 4;
 
   // Allocate v8::AccessorInfo in non-GCed stack space.
@@ -2181,7 +2181,7 @@ Handle<Code> CallStubCompiler::CompileCallGlobal(
     __ movq(Operand(rsp, (argc + 1) * kPointerSize), rdx);
   }
 
-  // Setup the context (function already in rdi).
+  // Set up the context (function already in rdi).
   __ movq(rsi, FieldOperand(rdi, JSFunction::kContextOffset));
 
   // Jump to the cached code (tail call).
