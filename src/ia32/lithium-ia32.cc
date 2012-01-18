@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -1469,6 +1469,15 @@ LInstruction* LChunkBuilder::DoPower(HPower* instr) {
 }
 
 
+LInstruction* LChunkBuilder::DoRandom(HRandom* instr) {
+  ASSERT(instr->representation().IsDouble());
+  ASSERT(instr->global_object()->representation().IsTagged());
+  LOperand* global_object = UseFixed(instr->global_object(), eax);
+  LRandom* result = new(zone()) LRandom(global_object);
+  return MarkAsCall(DefineFixedDouble(result, xmm1), instr);
+}
+
+
 LInstruction* LChunkBuilder::DoCompareGeneric(HCompareGeneric* instr) {
   ASSERT(instr->left()->representation().IsTagged());
   ASSERT(instr->right()->representation().IsTagged());
@@ -1673,7 +1682,11 @@ LInstruction* LChunkBuilder::DoChange(HChange* instr) {
   if (from.IsTagged()) {
     if (to.IsDouble()) {
       LOperand* value = UseRegister(instr->value());
-      LNumberUntagD* res = new(zone()) LNumberUntagD(value);
+      // Temp register only necessary for minus zero check.
+      LOperand* temp = instr->deoptimize_on_minus_zero()
+                       ? TempRegister()
+                       : NULL;
+      LNumberUntagD* res = new(zone()) LNumberUntagD(value, temp);
       return AssignEnvironment(DefineAsRegister(res));
     } else {
       ASSERT(to.IsInteger32());

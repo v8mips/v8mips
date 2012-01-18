@@ -5128,6 +5128,69 @@ bool HGraphBuilder::TryInlineBuiltinFunction(Call* expr,
         return true;
       }
       break;
+    case kMathRandom:
+      if (argument_count == 1 && check_type == RECEIVER_MAP_CHECK) {
+        AddCheckConstantFunction(expr, receiver, receiver_map, true);
+        Drop(1);
+        HValue* context = environment()->LookupContext();
+        HGlobalObject* global_object = new(zone()) HGlobalObject(context);
+        AddInstruction(global_object);
+        HRandom* result = new(zone()) HRandom(global_object);
+        ast_context()->ReturnInstruction(result, expr->id());
+        return true;
+      }
+      break;
+    case kMathMax:
+    case kMathMin:
+      if (argument_count == 3 && check_type == RECEIVER_MAP_CHECK) {
+        AddCheckConstantFunction(expr, receiver, receiver_map, true);
+        HValue* right = Pop();
+        HValue* left = Pop();
+        // Do not inline if the return representation is not certain.
+        if (!left->representation().Equals(right->representation())) {
+          Push(left);
+          Push(right);
+          return false;
+        }
+
+        Pop();  // Pop receiver.
+        Token::Value op = (id == kMathMin) ? Token::LT : Token::GT;
+        HCompareIDAndBranch* compare = NULL;
+
+        if (left->representation().IsTagged()) {
+          HChange* left_cvt =
+              new(zone()) HChange(left, Representation::Double(), false, true);
+          left_cvt->SetFlag(HValue::kBailoutOnMinusZero);
+          AddInstruction(left_cvt);
+          HChange* right_cvt =
+              new(zone()) HChange(right, Representation::Double(), false, true);
+          right_cvt->SetFlag(HValue::kBailoutOnMinusZero);
+          AddInstruction(right_cvt);
+          compare = new(zone()) HCompareIDAndBranch(left_cvt, right_cvt, op);
+          compare->SetInputRepresentation(Representation::Double());
+        } else {
+          compare = new(zone()) HCompareIDAndBranch(left, right, op);
+          compare->SetInputRepresentation(left->representation());
+        }
+
+        HBasicBlock* return_left = graph()->CreateBasicBlock();
+        HBasicBlock* return_right = graph()->CreateBasicBlock();
+
+        compare->SetSuccessorAt(0, return_left);
+        compare->SetSuccessorAt(1, return_right);
+        current_block()->Finish(compare);
+
+        set_current_block(return_left);
+        Push(left);
+        set_current_block(return_right);
+        Push(right);
+
+        HBasicBlock* join = CreateJoin(return_left, return_right, expr->id());
+        set_current_block(join);
+        ast_context()->ReturnValue(Pop());
+        return true;
+      }
+      break;
     default:
       // Not yet supported for inlining.
       break;
@@ -6575,7 +6638,11 @@ void HGraphBuilder::GenerateLog(CallRuntime* call) {
 
 // Fast support for Math.random().
 void HGraphBuilder::GenerateRandomHeapNumber(CallRuntime* call) {
-  return Bailout("inlined runtime function: RandomHeapNumber");
+  HValue* context = environment()->LookupContext();
+  HGlobalObject* global_object = new(zone()) HGlobalObject(context);
+  AddInstruction(global_object);
+  HRandom* result = new(zone()) HRandom(global_object);
+  return ast_context()->ReturnInstruction(result, call->id());
 }
 
 

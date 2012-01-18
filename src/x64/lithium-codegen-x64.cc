@@ -2931,6 +2931,38 @@ void LCodeGen::DoPower(LPower* instr) {
 }
 
 
+void LCodeGen::DoRandom(LRandom* instr) {
+  // Having marked this instruction as a call we can use any
+  // registers.
+  ASSERT(ToDoubleRegister(instr->result()).is(xmm1));
+
+  // Choose the right register for the first argument depending on
+  // calling convention.
+#ifdef _WIN64
+  ASSERT(ToRegister(instr->InputAt(0)).is(rcx));
+  Register global_object = rcx;
+#else
+  ASSERT(ToRegister(instr->InputAt(0)).is(rdi));
+  Register global_object = rdi;
+#endif
+
+  __ PrepareCallCFunction(1);
+  __ movq(global_object,
+          FieldOperand(global_object, GlobalObject::kGlobalContextOffset));
+  __ CallCFunction(ExternalReference::random_uint32_function(isolate()), 1);
+
+  // Convert 32 random bits in rax to 0.(32 random bits) in a double
+  // by computing:
+  // ( 1.(20 0s)(32 random bits) x 2^20 ) - (1.0 x 2^20)).
+  __ movl(rcx, Immediate(0x49800000));  // 1.0 x 2^20 as single.
+  __ movd(xmm2, rcx);
+  __ movd(xmm1, rax);
+  __ cvtss2sd(xmm2, xmm2);
+  __ xorps(xmm1, xmm2);
+  __ subsd(xmm1, xmm2);
+}
+
+
 void LCodeGen::DoMathLog(LUnaryMathOperation* instr) {
   ASSERT(ToDoubleRegister(instr->result()).is(xmm1));
   TranscendentalCacheStub stub(TranscendentalCache::LOG,
@@ -3515,6 +3547,7 @@ void LCodeGen::DoSmiUntag(LSmiUntag* instr) {
 void LCodeGen::EmitNumberUntagD(Register input_reg,
                                 XMMRegister result_reg,
                                 bool deoptimize_on_undefined,
+                                bool deoptimize_on_minus_zero,
                                 LEnvironment* env) {
   Label load_smi, done;
 
@@ -3542,6 +3575,15 @@ void LCodeGen::EmitNumberUntagD(Register input_reg,
   }
   // Heap number to XMM conversion.
   __ movsd(result_reg, FieldOperand(input_reg, HeapNumber::kValueOffset));
+  if (deoptimize_on_minus_zero) {
+    XMMRegister xmm_scratch = xmm0;
+    __ xorps(xmm_scratch, xmm_scratch);
+    __ ucomisd(xmm_scratch, result_reg);
+    __ j(not_equal, &done, Label::kNear);
+    __ movmskpd(kScratchRegister, result_reg);
+    __ testq(kScratchRegister, Immediate(1));
+    DeoptimizeIf(not_zero, env);
+  }
   __ jmp(&done, Label::kNear);
 
   // Smi to XMM conversion
@@ -3633,6 +3675,7 @@ void LCodeGen::DoNumberUntagD(LNumberUntagD* instr) {
 
   EmitNumberUntagD(input_reg, result_reg,
                    instr->hydrogen()->deoptimize_on_undefined(),
+                   instr->hydrogen()->deoptimize_on_minus_zero(),
                    instr->environment());
 }
 

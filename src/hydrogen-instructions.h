@@ -146,6 +146,7 @@ class LChunkBuilder;
   V(Parameter)                                 \
   V(Power)                                     \
   V(PushArgument)                              \
+  V(Random)                                    \
   V(RegExpLiteral)                             \
   V(Return)                                    \
   V(Sar)                                       \
@@ -1135,6 +1136,9 @@ class HChange: public HUnaryOperation {
   Representation to() { return representation(); }
   bool deoptimize_on_undefined() const {
     return CheckFlag(kDeoptimizeOnUndefined);
+  }
+  bool deoptimize_on_minus_zero() const {
+    return CheckFlag(kBailoutOnMinusZero);
   }
   virtual Representation RequiredInputRepresentation(int index) {
     return from();
@@ -2998,6 +3002,23 @@ class HPower: public HTemplateInstruction<2> {
 };
 
 
+class HRandom: public HTemplateInstruction<1> {
+ public:
+  explicit HRandom(HValue* global_object) {
+    SetOperandAt(0, global_object);
+    set_representation(Representation::Double());
+  }
+
+  HValue* global_object() { return OperandAt(0); }
+
+  virtual Representation RequiredInputRepresentation(int index) {
+    return Representation::Tagged();
+  }
+
+  DECLARE_CONCRETE_INSTRUCTION(Random)
+};
+
+
 class HAdd: public HArithmeticBinaryOperation {
  public:
   HAdd(HValue* context, HValue* left, HValue* right)
@@ -3150,6 +3171,8 @@ class HBitwise: public HBitwiseBinaryOperation {
   Token::Value op() const { return op_; }
 
   virtual bool IsCommutative() const { return true; }
+
+  virtual HValue* Canonicalize();
 
   static HInstruction* NewHBitwise(Zone* zone,
                                    Token::Value op,

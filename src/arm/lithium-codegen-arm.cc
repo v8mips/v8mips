@@ -3195,6 +3195,30 @@ void LCodeGen::DoPower(LPower* instr) {
 }
 
 
+void LCodeGen::DoRandom(LRandom* instr) {
+  // Having marked this instruction as a call we can use any
+  // registers.
+  ASSERT(ToDoubleRegister(instr->result()).is(d7));
+  ASSERT(ToRegister(instr->InputAt(0)).is(r0));
+
+  __ PrepareCallCFunction(1, scratch0());
+  __ ldr(r0, FieldMemOperand(r0, GlobalObject::kGlobalContextOffset));
+  __ CallCFunction(ExternalReference::random_uint32_function(isolate()), 1);
+
+  // 0x41300000 is the top half of 1.0 x 2^20 as a double.
+  // Create this constant using mov/orr to avoid PC relative load.
+  __ mov(r1, Operand(0x41000000));
+  __ orr(r1, r1, Operand(0x300000));
+  // Move 0x41300000xxxxxxxx (x = random bits) to VFP.
+  __ vmov(d7, r0, r1);
+  // Move 0x4130000000000000 to VFP.
+  __ mov(r0, Operand(0, RelocInfo::NONE));
+  __ vmov(d8, r0, r1);
+  // Subtract and store the result in the heap number.
+  __ vsub(d7, d7, d8);
+}
+
+
 void LCodeGen::DoMathLog(LUnaryMathOperation* instr) {
   ASSERT(ToDoubleRegister(instr->result()).is(d2));
   TranscendentalCacheStub stub(TranscendentalCache::LOG,
@@ -3879,6 +3903,7 @@ void LCodeGen::DoSmiUntag(LSmiUntag* instr) {
 void LCodeGen::EmitNumberUntagD(Register input_reg,
                                 DoubleRegister result_reg,
                                 bool deoptimize_on_undefined,
+                                bool deoptimize_on_minus_zero,
                                 LEnvironment* env) {
   Register scratch = scratch0();
   SwVfpRegister flt_scratch = double_scratch0().low();
@@ -3914,6 +3939,14 @@ void LCodeGen::EmitNumberUntagD(Register input_reg,
   // Heap number to double register conversion.
   __ sub(ip, input_reg, Operand(kHeapObjectTag));
   __ vldr(result_reg, ip, HeapNumber::kValueOffset);
+  if (deoptimize_on_minus_zero) {
+    __ vmov(ip, result_reg.low());
+    __ cmp(ip, Operand(0));
+    __ b(ne, &done);
+    __ vmov(ip, result_reg.high());
+    __ cmp(ip, Operand(HeapNumber::kSignMask));
+    DeoptimizeIf(eq, env);
+  }
   __ jmp(&done);
 
   // Smi to double register conversion
@@ -4047,6 +4080,7 @@ void LCodeGen::DoNumberUntagD(LNumberUntagD* instr) {
 
   EmitNumberUntagD(input_reg, result_reg,
                    instr->hydrogen()->deoptimize_on_undefined(),
+                   instr->hydrogen()->deoptimize_on_minus_zero(),
                    instr->environment());
 }
 
