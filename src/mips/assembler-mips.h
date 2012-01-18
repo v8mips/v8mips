@@ -301,7 +301,6 @@ const FPURegister f31 = { 31 };
 // cp is assumed to be a callee saved register.
 static const Register& kLithiumScratchReg = s3;  // Scratch register.
 static const Register& kLithiumScratchReg2 = s4;  // Scratch register.
-static const Register& kCondReg = s5;  // Simulated (partial) condition code for mips.
 static const Register& kRootRegister = s6;  // Roots array pointer.
 static const Register& cp = s7;     // JavaScript context pointer.
 static const Register& fp = s8_fp;  // Alias for fp.
