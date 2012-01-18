@@ -467,8 +467,10 @@ void MacroAssembler::LoadFromNumberDictionary(Label* miss,
   xor_(reg0, reg0, at);
 
   // hash = hash * 2057;
-  li(reg1, Operand(2057));
-  mul(reg0, reg0, reg1);
+  sll(reg1, reg0, 11);
+  sll(at, reg0, 3);
+  addu(reg0, reg0, at);
+  addu(reg0, reg0, reg1);
 
   // hash = hash ^ (hash >> 16);
   srl(at, reg0, 16);
