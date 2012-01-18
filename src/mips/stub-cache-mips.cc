@@ -743,7 +743,7 @@ class CallInterceptorCompiler BASE_EMBEDDED {
           ? CALL_AS_FUNCTION
           : CALL_AS_METHOD;
       __ InvokeFunction(optimization.constant_function(), arguments_,
-                        JUMP_FUNCTION, call_kind);
+                        JUMP_FUNCTION, NullCallWrapper(), call_kind);
     }
 
     // Deferred code for fast API call case---clean preallocated space.
@@ -1929,7 +1929,8 @@ Handle<Code> CallStubCompiler::CompileStringFromCharCodeCall(
   // Tail call the full function. We do not have to patch the receiver
   // because the function makes no use of it.
   __ bind(&slow);
-  __ InvokeFunction(function, arguments(), JUMP_FUNCTION, CALL_AS_METHOD);
+  __ InvokeFunction(
+      function, arguments(), JUMP_FUNCTION, NullCallWrapper(), CALL_AS_METHOD);
 
   __ bind(&miss);
   // a2: function name.
@@ -2062,7 +2063,8 @@ Handle<Code> CallStubCompiler::CompileMathFloorCall(
   __ bind(&slow);
   // Tail call the full function. We do not have to patch the receiver
   // because the function makes no use of it.
-  __ InvokeFunction(function, arguments(), JUMP_FUNCTION, CALL_AS_METHOD);
+  __ InvokeFunction(
+      function, arguments(), JUMP_FUNCTION, NullCallWrapper(), CALL_AS_METHOD);
 
   __ bind(&miss);
   // a2: function name.
@@ -2162,7 +2164,8 @@ Handle<Code> CallStubCompiler::CompileMathAbsCall(
   // Tail call the full function. We do not have to patch the receiver
   // because the function makes no use of it.
   __ bind(&slow);
-  __ InvokeFunction(function, arguments(), JUMP_FUNCTION, CALL_AS_METHOD);
+  __ InvokeFunction(
+      function, arguments(), JUMP_FUNCTION, NullCallWrapper(), CALL_AS_METHOD);
 
   __ bind(&miss);
   // a2: function name.
@@ -2341,7 +2344,8 @@ Handle<Code> CallStubCompiler::CompileCallConstant(Handle<Object> object,
   CallKind call_kind = CallICBase::Contextual::decode(extra_state_)
       ? CALL_AS_FUNCTION
       : CALL_AS_METHOD;
-  __ InvokeFunction(function, arguments(), JUMP_FUNCTION, call_kind);
+  __ InvokeFunction(
+      function, arguments(), JUMP_FUNCTION, NullCallWrapper(), call_kind);
 
   // Handle call cache miss.
   __ bind(&miss);
