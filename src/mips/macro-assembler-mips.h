@@ -1342,6 +1342,10 @@ class MacroAssembler: public Assembler {
   void PatchRelocatedValue(Register li_location,
                            Register scratch,
                            Register new_value);
+  // Get the relocatad value (loaded data) from the lui/ori pair.
+  void GetRelocatedValue(Register li_location,
+                         Register value,
+                         Register scratch);
 
  private:
   void CallCFunctionHelper(Register function,
