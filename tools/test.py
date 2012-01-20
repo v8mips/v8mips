@@ -345,24 +345,24 @@ class UnitTestProgressIndicator(ProgressIndicator):
 
   def HasRun(self, output):
     if output.UnexpectedOutput():
-      failtext=""
+      failtext = ""
       stdout = output.output.stdout.strip()
       if len(stdout):
-        failtext+="stdout:\n"
-        failtext+=stdout
-        failtext+="\n"
+        failtext += "stdout:\n"
+        failtext += stdout
+        failtext += "\n"
       stderr = output.output.stderr.strip()
       if len(stderr):
-        failtext+="stderr:\n"
-        failtext+=stderr
-        failtext+="\n"
+        failtext += "stderr:\n"
+        failtext += stderr
+        failtext += "\n"
       if output.HasCrashed():
-        failtext+= "--- CRASHED ---"
+        failtext += "--- CRASHED ---"
       if output.HasTimedOut():
-        failtext+= "--- TIMEOUT ---"
-      self.outputter.finishCurrentTest(True, failtext)
+        failtext += "--- TIMEOUT ---"
+      self.outputter.finishCurrentTest(output.command, True, failtext)
     else:
-      self.outputter.finishCurrentTest(False)
+      self.outputter.finishCurrentTest(output.command, False)
 
 
 PROGRESS_INDICATORS = {
@@ -1720,5 +1720,8 @@ def Main():
 
 
 if __name__ == '__main__':
-  Main()
-  sys.exit(0)
+  if XMLOUT:
+    Main()
+    sys.exit(0)
+  else:
+    sys.exit(Main())
