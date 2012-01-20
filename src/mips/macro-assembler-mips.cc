@@ -4791,7 +4791,7 @@ void MacroAssembler::GetRelocatedValue(Register li_location,
   lw(value, MemOperand(li_location));
   if (emit_debug_code()) {
     And(value, value, kOpcodeMask);
-    Check(eq, "The instruction to patch should be a lui.",
+    Check(eq, "The instruction should be a lui.",
         value, Operand(LUI));
     lw(value, MemOperand(li_location));
   }
@@ -4802,11 +4802,11 @@ void MacroAssembler::GetRelocatedValue(Register li_location,
   lw(scratch, MemOperand(li_location, kInstrSize));
   if (emit_debug_code()) {
     And(scratch, scratch, kOpcodeMask);
-    Check(eq, "The instruction to patch should be an ori.",
+    Check(eq, "The instruction should be an ori.",
         scratch, Operand(ORI));
     lw(scratch, MemOperand(li_location, kInstrSize));
   }
-  // "scratch" now holds an ori instruction. Extract the immediscratche.
+  // "scratch" now holds an ori instruction. Extract the immediate.
   andi(scratch, scratch, kImm16Mask);
 
   // Merge the results.
