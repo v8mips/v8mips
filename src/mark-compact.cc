@@ -1623,9 +1623,7 @@ void MarkCompactCollector::ProcessNewlyMarkedObject(HeapObject* object) {
   ASSERT(HEAP->Contains(object));
   if (object->IsMap()) {
     Map* map = Map::cast(object);
-    if (FLAG_cleanup_code_caches_at_gc) {
-      map->ClearCodeCache(heap());
-    }
+    ClearCacheOnMap(map);
 
     // When map collection is enabled we have to mark through map's transitions
     // in a special way to make transition links weak.
@@ -2306,38 +2304,37 @@ void MarkCompactCollector::ClearNonLiveTransitions() {
       Object* prototype = prototype_transitions->get(proto_offset + i * step);
       Object* cached_map = prototype_transitions->get(map_offset + i * step);
       if (IsMarked(prototype) && IsMarked(cached_map)) {
+        int proto_index = proto_offset + new_number_of_transitions * step;
+        int map_index = map_offset + new_number_of_transitions * step;
         if (new_number_of_transitions != i) {
           prototype_transitions->set_unchecked(
               heap_,
-              proto_offset + new_number_of_transitions * step,
+              proto_index,
               prototype,
               UPDATE_WRITE_BARRIER);
           prototype_transitions->set_unchecked(
               heap_,
-              map_offset + new_number_of_transitions * step,
+              map_index,
               cached_map,
               SKIP_WRITE_BARRIER);
         }
+        Object** slot =
+            HeapObject::RawField(prototype_transitions,
+                                 FixedArray::OffsetOfElementAt(proto_index));
+        RecordSlot(slot, slot, prototype);
+        new_number_of_transitions++;
       }
+    }
 
-      // Fill slots that became free with undefined value.
-      Object* undefined = heap()->undefined_value();
-      for (int i = new_number_of_transitions * step;
-           i < number_of_transitions * step;
-           i++) {
-        // The undefined object is on a page that is never compacted and never
-        // in new space so it is OK to skip the write barrier.  Also it's a
-        // root.
-        prototype_transitions->set_unchecked(heap_,
-                                             header + i,
-                                             undefined,
-                                             SKIP_WRITE_BARRIER);
-
-        Object** undefined_slot =
-            prototype_transitions->data_start() + i;
-        RecordSlot(undefined_slot, undefined_slot, undefined);
-      }
+    if (new_number_of_transitions != number_of_transitions) {
       map->SetNumberOfProtoTransitions(new_number_of_transitions);
+    }
+
+    // Fill slots that became free with undefined value.
+    for (int i = new_number_of_transitions * step;
+         i < number_of_transitions * step;
+         i++) {
+      prototype_transitions->set_undefined(heap_, header + i);
     }
 
     // Follow the chain of back pointers to find the prototype.
