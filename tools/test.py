@@ -1330,9 +1330,6 @@ def BuildOptions():
       dest="store_unexpected_output", action="store_false")
   result.add_option("--xmlout", help="File name of the UnitTest output")
   result.add_option("--xmltestsuite", help="Name of the testsuite in the UnitTest XML output", default="v8tests")
-  result.add_option("--nocrankshaft-only",
-                    help="Only run tests with nocrankshaft version",
-                    default=False, action="store_true")
   result.add_option("--stress-only",
                     help="Only run tests with --always-opt --stress-opt",
                     default=False, action="store_true")
@@ -1397,8 +1394,6 @@ def ProcessOptions(options):
   global XMLOUT
   XMLOUT = options.xmlout
   global VARIANT_FLAGS
-  if options.nocrankshaft_only:
-    VARIANT_FLAGS = [['--nocrankshaft']]
   if options.stress_only:
     VARIANT_FLAGS = [['--stress-opt', '--always-opt']]
   if options.nostress:
