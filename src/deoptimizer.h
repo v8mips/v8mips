@@ -267,7 +267,7 @@ class Deoptimizer : public Malloced {
   int ConvertJSFrameIndexToFrameIndex(int jsframe_index);
 
  private:
-  static const int kNumberOfEntries = 8192;
+  static const int kNumberOfEntries = 4096;
 
   Deoptimizer(Isolate* isolate,
               JSFunction* function,
