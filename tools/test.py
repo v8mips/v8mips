@@ -1394,6 +1394,9 @@ def ProcessOptions(options):
   global XMLOUT
   XMLOUT = options.xmlout
   global VARIANT_FLAGS
+  if options.mips_arch_variant:
+    options.scons_flags.append("mips_arch_variant=" + options.mips_arch_variant)
+
   if options.stress_only:
     VARIANT_FLAGS = [['--stress-opt', '--always-opt']]
   if options.nostress:
