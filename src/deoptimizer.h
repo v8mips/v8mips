@@ -268,7 +268,7 @@ class Deoptimizer : public Malloced {
 
  private:
 #ifdef V8_TARGET_ARCH_MIPS
-  static const int kNumberOfEntries = 4681;
+  static const int kNumberOfEntries = 4096;
 #else
   static const int kNumberOfEntries = 8192;
 #endif
