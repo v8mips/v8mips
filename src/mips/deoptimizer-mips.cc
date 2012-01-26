@@ -36,7 +36,7 @@ namespace v8 {
 namespace internal {
 
 
-const int Deoptimizer::table_entry_size_ = 32;
+const int Deoptimizer::table_entry_size_ = 28;
 
 
 int Deoptimizer::patch_size() {

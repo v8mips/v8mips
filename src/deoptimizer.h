@@ -267,7 +267,11 @@ class Deoptimizer : public Malloced {
   int ConvertJSFrameIndexToFrameIndex(int jsframe_index);
 
  private:
-  static const int kNumberOfEntries = 4096;
+#ifdef V8_TARGET_ARCH_MIPS
+  static const int kNumberOfEntries = 4681;
+#else
+  static const int kNumberOfEntries = 8192;
+#endif
 
   Deoptimizer(Isolate* isolate,
               JSFunction* function,
