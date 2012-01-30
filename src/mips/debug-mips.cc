@@ -261,7 +261,7 @@ void Debug::GenerateCallFunctionStubDebugBreak(MacroAssembler* masm) {
 
 
 void Debug::GenerateCallFunctionStubRecordDebugBreak(MacroAssembler* masm) {
-  // Register state for CallFunctionStub (from code-stubs-arm.cc).
+  // Register state for CallFunctionStub (from code-stubs-mips.cc).
   // ----------- S t a t e -------------
   //  -- a1 : function
   //  -- a2 : cache cell for call target
@@ -271,17 +271,17 @@ void Debug::GenerateCallFunctionStubRecordDebugBreak(MacroAssembler* masm) {
 
 
 void Debug::GenerateCallConstructStubDebugBreak(MacroAssembler* masm) {
-  // Calling convention for CallConstructStub (from code-stubs-arm.cc)
+  // Calling convention for CallConstructStub (from code-stubs-mips.cc).
   // ----------- S t a t e -------------
   //  -- a0     : number of arguments (not smi)
   //  -- a1     : constructor function
   // -----------------------------------
-  Generate_DebugBreakCallHelper(masm, a1.bit(), a0.bit());
+  Generate_DebugBreakCallHelper(masm, a1.bit() , a0.bit());
 }
 
 
 void Debug::GenerateCallConstructStubRecordDebugBreak(MacroAssembler* masm) {
-  // Calling convention for CallConstructStub (from code-stubs-arm.cc)
+  // Calling convention for CallConstructStub (from code-stubs-mips.cc).
   // ----------- S t a t e -------------
   //  -- a0     : number of arguments (not smi)
   //  -- a1     : constructor function
