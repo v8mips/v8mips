@@ -1150,6 +1150,7 @@ MemoryChunk* Deoptimizer::CreateCode(BailoutType type) {
 
   MemoryChunk* chunk =
       Isolate::Current()->memory_allocator()->AllocateChunk(desc.instr_size,
+                                                            desc.instr_size,
                                                             EXECUTABLE,
                                                             NULL);
   if (chunk == NULL) {
@@ -1603,6 +1604,11 @@ DeoptimizedFrameInfo::DeoptimizedFrameInfo(
   SetFunction(output_frame->GetFunction());
   expression_count_ = output_frame->GetExpressionCount();
   expression_stack_ = new Object*[expression_count_];
+  // Get the source position using the unoptimized code.
+  Address pc = reinterpret_cast<Address>(output_frame->GetPc());
+  Code* code = Code::cast(Isolate::Current()->heap()->FindCodeObject(pc));
+  source_position_ = code->SourcePosition(pc);
+
   for (int i = 0; i < expression_count_; i++) {
     SetExpression(i, output_frame->GetExpression(i));
   }
@@ -1624,6 +1630,7 @@ DeoptimizedFrameInfo::~DeoptimizedFrameInfo() {
   delete[] expression_stack_;
   delete[] parameters_;
 }
+
 
 void DeoptimizedFrameInfo::Iterate(ObjectVisitor* v) {
   v->VisitPointer(BitCast<Object**>(&function_));

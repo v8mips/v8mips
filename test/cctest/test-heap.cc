@@ -612,7 +612,7 @@ TEST(ObjectProperties) {
   CHECK(!obj->HasLocalProperty(*second));
 
   // check string and symbol match
-  static const char* string1 = "fisk";
+  const char* string1 = "fisk";
   Handle<String> s1 = FACTORY->NewStringFromAscii(CStrVector(string1));
   obj->SetProperty(
       *s1, Smi::FromInt(1), NONE, kNonStrictMode)->ToObjectChecked();
@@ -620,7 +620,7 @@ TEST(ObjectProperties) {
   CHECK(obj->HasLocalProperty(*s1_symbol));
 
   // check symbol and string match
-  static const char* string2 = "fugl";
+  const char* string2 = "fugl";
   Handle<String> s2_symbol = FACTORY->LookupAsciiSymbol(string2);
   obj->SetProperty(
       *s2_symbol, Smi::FromInt(1), NONE, kNonStrictMode)->ToObjectChecked();
@@ -1236,17 +1236,14 @@ TEST(TestSizeOfObjectsVsHeapIteratorPrecision) {
        obj = iterator.next()) {
     size_of_objects_2 += obj->Size();
   }
-  // Delta must be within 5% of the larger result.
-  // TODO(gc): Tighten this up by distinguishing between byte
-  // arrays that are real and those that merely mark free space
-  // on the heap.
+  // Delta must be within 1% of the larger result.
   if (size_of_objects_1 > size_of_objects_2) {
     intptr_t delta = size_of_objects_1 - size_of_objects_2;
     PrintF("Heap::SizeOfObjects: %" V8_PTR_PREFIX "d, "
            "Iterator: %" V8_PTR_PREFIX "d, "
            "delta: %" V8_PTR_PREFIX "d\n",
            size_of_objects_1, size_of_objects_2, delta);
-    CHECK_GT(size_of_objects_1 / 20, delta);
+    CHECK_GT(size_of_objects_1 / 100, delta);
   } else {
     intptr_t delta = size_of_objects_2 - size_of_objects_1;
     PrintF("Heap::SizeOfObjects: %" V8_PTR_PREFIX "d, "

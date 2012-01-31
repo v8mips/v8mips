@@ -10747,6 +10747,11 @@ class FrameInspector {
         ? deoptimized_frame_->GetExpression(index)
         : frame_->GetExpression(index);
   }
+  int GetSourcePosition() {
+    return is_optimized_
+        ? deoptimized_frame_->GetSourcePosition()
+        : frame_->LookupCode()->SourcePosition(frame_->pc());
+  }
 
   // To inspect all the provided arguments the frame might need to be
   // replaced with the arguments frame.
@@ -10852,9 +10857,8 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_GetFrameDetails) {
   // Get the frame id.
   Handle<Object> frame_id(WrapFrameId(it.frame()->id()), isolate);
 
-  // Find source position.
-  int position =
-      it.frame()->LookupCode()->SourcePosition(it.frame()->pc());
+  // Find source position in unoptimized code.
+  int position = frame_inspector.GetSourcePosition();
 
   // Check for constructor frame. Inlined frames cannot be construct calls.
   bool inlined_frame = is_optimized && inlined_jsframe_index != 0;
