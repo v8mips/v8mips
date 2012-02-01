@@ -594,22 +594,22 @@ def ADBPushSingle(context, file, android_push_path):
   tar = tarfile.open(name=tempfile.mktemp(suffix=".tar"), mode="w")
   tar.add(file, file_relpath)
   tar.close()
-  
+
   tar_remote_path = os.path.join(android_push_path, os.path.basename(tar.name))
-  
+
   ExecuteNoCapture([ "adb", "push", tar.name, android_push_path ], context)
   ExecuteNoCapture([ "adb", "shell", "busybox", "tar", "-x", "-f", tar_remote_path, "-C", android_push_path ], context)
   ExecuteNoCapture([ "adb", "shell", "busybox", "rm", tar_remote_path ], context)
-  
+
   context.android_file_mappings[file] = os.path.join(android_push_path, file_relpath)
-  
+
   CheckedUnlink(tar.name)
 
 
 def Execute(args, context, timeout=None):
   (fd_out, outname) = tempfile.mkstemp()
   (fd_err, errname) = tempfile.mkstemp()
-  
+
   if context.android_push_path is not None:
     for i in range(len(args)):
       arg = args[i]
@@ -618,16 +618,16 @@ def Execute(args, context, timeout=None):
           # Lazy sending non-sent files
           ADBPushSingle(context, arg, context.android_push_path)
         args[i] = context.android_file_mappings[arg]
-        
+
   if context.android_bin_path is not None:
     (bin_path_head, bin_path_tail) = os.path.split(args[0])
     args[0] = os.path.join(context.android_bin_path, bin_path_tail);
-  
+
   if context.android_adb or context.android_push_path is not None:
       args.insert(0, context.android_file_mappings[os.path.join(context.workspace, "adb.retval")])
       args.insert(0, "shell");
       args.insert(0, "adb");
-  
+
   (process, exit_code, timed_out) = RunProcess(
     context,
     timeout,
@@ -641,7 +641,7 @@ def Execute(args, context, timeout=None):
   errors = file(errname).read()
   CheckedUnlink(outname)
   CheckedUnlink(errname)
-  
+
   if context.android_adb or context.android_push_path is not None:
     out = ""
     for output_line in output.split("\n"):
@@ -650,7 +650,7 @@ def Execute(args, context, timeout=None):
       else:
         out += output_line + "\n"
     output = out
-  
+
   return CommandOutput(exit_code, timed_out, output, errors)
 
 
@@ -1557,7 +1557,7 @@ def Main():
 
   shell = abspath(options.shell)
   buildspace = dirname(shell)
-  
+
   android_file_mappings = { }
 
   context = Context(workspace, buildspace, VERBOSE,
@@ -1590,14 +1590,14 @@ def Main():
     print("Cleaning up remote android workspace: " + options.android_push_path)
     ExecuteNoCapture([ "adb", "shell", "busybox", "rm", "-rf", options.android_push_path ], context)
     ExecuteNoCapture([ "adb", "shell", "busybox", "mkdir", "-p", options.android_push_path ], context)
-    
+
     # We have to set a temp dir under workspace, otherwise,
     # we cannot pack tempfiles
     new_tmp_path = os.path.join(context.workspace, "tmp")
     if not os.path.isdir(new_tmp_path):
       os.mkdir(new_tmp_path)
     tempfile.tempdir = new_tmp_path
-    
+
   if ANDROID_ADB:
     # workaround
     # adb does not correctly return the exit value of the executed program
@@ -1657,13 +1657,13 @@ def Main():
             print ("Archiving file: " + cmd)
             android_file_mappings[cmd] = os.path.join(options.android_push_path, file_relpath)
     tar.close()
-    
+
     tar_remote_path = os.path.join(options.android_push_path, os.path.basename(tar.name))
-    
+
     ExecuteNoCapture([ "adb", "push", tar.name, options.android_push_path ], context)
     ExecuteNoCapture([ "adb", "shell", "busybox", "tar", "-x", "-f", tar_remote_path, "-C", options.android_push_path ], context)
     ExecuteNoCapture([ "adb", "shell", "busybox", "rm", tar_remote_path ], context)
-  
+
     CheckedUnlink(tar.name)
 
   if options.cat:
