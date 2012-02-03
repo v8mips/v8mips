@@ -786,7 +786,7 @@ void MacroAssembler::li(Register rd, Operand j, bool gen2instr) {
     }
     // We always need the same number of instructions as we may need to patch
     // this code to load another value which may need 2 instructions to load.
-    lui(rd, (j.imm32_ >> kLuiShift)  & ~kHiMask);
+    lui(rd, (j.imm32_ >> kLuiShift) & kImm16Mask);
     ori(rd, rd, (j.imm32_ & kImm16Mask));
   }
 }
