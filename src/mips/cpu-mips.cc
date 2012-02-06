@@ -71,7 +71,7 @@ void CPU::FlushICache(void* start, size_t size) {
     reinterpret_cast<intptr_t>(start), reinterpret_cast<intptr_t>(end), 0);
 #else  // ANDROID
   int res;
-  // See http://www.linux-mips.org/wiki/Cacheflush_Syscall .
+  // See http://www.linux-mips.org/wiki/Cacheflush_Syscall.
   res = syscall(__NR_cacheflush, start, size, ICACHE);
   if (res) {
     V8_Fatal(__FILE__, __LINE__, "Failed to flush the instruction cache");
