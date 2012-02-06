@@ -49,7 +49,7 @@ _ARCH_MAP = {
   "ia32": "-m i386",
   "x64": "-m i386 -M x86-64",
   "arm": "-m arm",  # Not supported by our objdump build.
-  "mips": "-m mips"
+  "mips": "-m mips"  # Not supported by our objdump build.
 }
 
 
