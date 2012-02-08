@@ -4083,6 +4083,7 @@ void JSEntryStub::GenerateBody(MacroAssembler* masm, bool is_construct) {
     offset_to_argv += kNumCalleeSavedFPU * kDoubleSize;
   }
 
+  __ InitializeRootRegister();
   __ lw(s0, MemOperand(sp, offset_to_argv + kCArgsSlotsSize));
 
   // We build an EntryFrame.

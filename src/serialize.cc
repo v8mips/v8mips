@@ -761,7 +761,14 @@ void Deserializer::ReadObject(int space_number,
 
 static const int kUnknownOffsetFromStart = -1;
 
-static const int kInstructionsForSplitImmediate = 3*kPointerSize;
+#ifdef V8_TARGET_ARCH_MIPS
+#define PATCH_SITE_ADJUST(addr)                                                \
+  (addr - 3 * kPointerSize)
+#else
+#define PATCH_SITE_ADJUST(addr)                                                \
+  (addr)
+#endif
+
 
 void Deserializer::ReadChunk(Object** current,
                              Object** limit,
@@ -834,10 +841,9 @@ void Deserializer::ReadChunk(Object** current,
           if (how == kFromCode) {                                              \
             Address location_of_branch_data =                                  \
                 reinterpret_cast<Address>(current);                            \
-            Address patch_site = location_of_branch_data;                      \
-            if (Assembler::kCallTargetSize == 0) {                             \
+            Address patch_site = PATCH_SITE_ADJUST(location_of_branch_data);   \
+            if (patch_site != location_of_branch_data) {                       \
               current_was_incremented = true;                                  \
-              patch_site -= kInstructionsForSplitImmediate;                    \
             }                                                                  \
             Assembler::set_target_at(patch_site,                               \
                                      reinterpret_cast<Address>(new_object));   \
@@ -1012,13 +1018,6 @@ void Deserializer::ReadChunk(Object** current,
       // current object.
       CASE_STATEMENT(kRootArray, kPlain, kStartOfObject, 0)
       CASE_BODY(kRootArray, kPlain, kStartOfObject, 0, kUnknownOffsetFromStart)
-      // Required only for MIPS.
-      CASE_STATEMENT(kRootArray, kFromCode, kStartOfObject, 0)
-      CASE_BODY(kRootArray,
-                kFromCode,
-                kStartOfObject,
-                0,
-                kUnknownOffsetFromStart)
       // Find an object in the partial snapshots cache and write a pointer to it
       // to the current object.
       CASE_STATEMENT(kPartialSnapshotCache, kPlain, kStartOfObject, 0)

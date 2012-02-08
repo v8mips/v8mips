@@ -247,7 +247,7 @@ class MacroAssembler: public Assembler {
     Branch(L);
   }
 
-
+  int FindRootIndex(Object* heap_object);
   // Load an object from the root table.
   void LoadRoot(Register destination,
                 Heap::RootListIndex index);
