@@ -168,8 +168,6 @@ DEFINE_int(loop_weight, 1, "loop weight for representation inference")
 DEFINE_bool(debug_code, false,
             "generate extra code (assertions) for debugging")
 DEFINE_bool(code_comments, false, "emit comments in code disassembly")
-DEFINE_bool(peephole_optimization, true,
-            "perform peephole optimizations in assembly code")
 DEFINE_bool(enable_sse2, true,
             "enable use of SSE2 instructions if available")
 DEFINE_bool(enable_sse3, true,
@@ -219,10 +217,8 @@ DEFINE_bool(lazy, true, "use lazy compilation")
 DEFINE_bool(trace_opt, false, "trace lazy optimization")
 DEFINE_bool(trace_opt_stats, false, "trace lazy optimization statistics")
 DEFINE_bool(opt, true, "use adaptive optimizations")
-DEFINE_bool(opt_eagerly, false, "be more eager when adaptively optimizing")
 DEFINE_bool(always_opt, false, "always try to optimize functions")
 DEFINE_bool(prepare_always_opt, false, "prepare for turning on always opt")
-DEFINE_bool(deopt, true, "support deoptimization")
 DEFINE_bool(trace_deopt, false, "trace deoptimization")
 
 // compiler.cc
