@@ -109,11 +109,13 @@ private:
 // Flags for experimental language features.
 DEFINE_bool(harmony_typeof, false, "enable harmony semantics for typeof")
 DEFINE_bool(harmony_scoping, false, "enable harmony block scoping")
+DEFINE_bool(harmony_modules, false, "enable harmony modules")
 DEFINE_bool(harmony_proxies, false, "enable harmony proxies")
 DEFINE_bool(harmony_collections, false,
             "enable harmony collections (sets, maps, and weak maps)")
 DEFINE_bool(harmony, false, "enable all harmony features (except typeof)")
 DEFINE_implication(harmony, harmony_scoping)
+DEFINE_implication(harmony, harmony_modules)
 DEFINE_implication(harmony, harmony_proxies)
 DEFINE_implication(harmony, harmony_collections)
 
@@ -136,7 +138,6 @@ DEFINE_bool(use_gvn, true, "use hydrogen global value numbering")
 DEFINE_bool(use_canonicalizing, true, "use hydrogen instruction canonicalizing")
 DEFINE_bool(use_inlining, true, "use function inlining")
 DEFINE_bool(limit_inlining, true, "limit code size growth from inlining")
-DEFINE_bool(eliminate_empty_blocks, true, "eliminate empty blocks")
 DEFINE_bool(loop_invariant_code_motion, true, "loop invariant code motion")
 DEFINE_bool(collect_megamorphic_maps_from_stub_cache,
             true,
@@ -299,11 +300,9 @@ DEFINE_bool(native_code_counters, false,
 DEFINE_bool(always_compact, false, "Perform compaction on every full GC")
 DEFINE_bool(lazy_sweeping, true,
             "Use lazy sweeping for old pointer and data spaces")
-DEFINE_bool(cleanup_caches_in_maps_at_gc, true,
-            "Flush code caches in maps during mark compact cycle.")
 DEFINE_bool(never_compact, false,
             "Never perform compaction on full GC - testing only")
-DEFINE_bool(compact_code_space, false,
+DEFINE_bool(compact_code_space, true,
             "Compact code space on full non-incremental collections")
 DEFINE_bool(cleanup_code_caches_at_gc, true,
             "Flush inline caches prior to mark compact collection and "
@@ -311,14 +310,6 @@ DEFINE_bool(cleanup_code_caches_at_gc, true,
 DEFINE_int(random_seed, 0,
            "Default seed for initializing random generator "
            "(0, the default, means to use system random).")
-
-DEFINE_bool(canonicalize_object_literal_maps, true,
-            "Canonicalize maps for object literals.")
-
-DEFINE_int(max_map_space_pages, MapSpace::kMaxMapPageIndex - 1,
-           "Maximum number of pages in map space which still allows to encode "
-           "forwarding pointers.  That's actually a constant, but it's useful "
-           "to control it with a flag for better testing.")
 
 // objects.cc
 DEFINE_bool(use_verbose_printer, true, "allows verbose printing")
@@ -440,9 +431,6 @@ DEFINE_bool(print_builtin_source, false,
             "pretty print source code for builtins")
 DEFINE_bool(print_ast, false, "print source AST")
 DEFINE_bool(print_builtin_ast, false, "print source AST for builtins")
-DEFINE_bool(print_json_ast, false, "print source AST as JSON")
-DEFINE_bool(print_builtin_json_ast, false,
-            "print source AST for builtins as JSON")
 DEFINE_string(stop_at, "", "function name where to insert a breakpoint")
 
 // compiler.cc
@@ -471,10 +459,6 @@ DEFINE_bool(trace_normalization,
 
 // runtime.cc
 DEFINE_bool(trace_lazy, false, "trace lazy compilation")
-
-// serialize.cc
-DEFINE_bool(debug_serialization, false,
-            "write debug information into the snapshot.")
 
 // spaces.cc
 DEFINE_bool(collect_heap_spill_statistics, false,
