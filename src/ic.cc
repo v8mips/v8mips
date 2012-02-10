@@ -293,7 +293,7 @@ Failure* IC::ReferenceError(const char* type, Handle<String> name) {
 
 
 void IC::PostPatching() {
-  if (FLAG_counting_profiler) {
+  if (FLAG_watch_ic_patching) {
     Isolate::Current()->runtime_profiler()->NotifyICChanged();
     // We do not want to optimize until the ICs have settled down,
     // so when they are patched, we postpone optimization for the
@@ -1144,17 +1144,6 @@ MaybeObject* KeyedLoadIC::Load(State state,
           stub = indexed_interceptor_stub();
         } else if (key->IsSmi() && (target() != *non_strict_arguments_stub())) {
           stub = ComputeStub(receiver, LOAD, kNonStrictMode, stub);
-        }
-        // If the IC is being replaced by the generic stub, loads from
-        // FAST_DOUBLE_ELEMENTS arrays will cause unboxing in Crankshafted
-        // code. To prevent these expensive allocations, proactively promote
-        // arrays to FAST_ELEMENTS ElementKinds.
-        if (*stub == *generic_stub()) {
-          if (receiver->HasFastDoubleElements()) {
-            MaybeObject* maybe_object =
-                receiver->TransitionElementsKind(FAST_ELEMENTS);
-            if (maybe_object->IsFailure()) return maybe_object;
-          }
         }
       }
     } else {
