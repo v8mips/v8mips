@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -297,6 +297,9 @@ bool FullCodeGenerator::MakeCode(CompilationInfo* info) {
   code->set_stack_check_table_offset(table_offset);
   CodeGenerator::PrintCode(code, info);
   info->SetCode(code);  // May be an empty handle.
+  if (!code.is_null()) {
+    isolate->runtime_profiler()->NotifyCodeGenerated(code->instruction_size());
+  }
 #ifdef ENABLE_GDB_JIT_INTERFACE
   if (FLAG_gdbjit && !code.is_null()) {
     GDBJITLineInfo* lineinfo =
@@ -1147,7 +1150,7 @@ void FullCodeGenerator::VisitTryCatchStatement(TryCatchStatement* stmt) {
 
   // Try block code. Sets up the exception handler chain.
   __ bind(&try_entry);
-  __ PushTryHandler(IN_JAVASCRIPT, TRY_CATCH_HANDLER, stmt->index());
+  __ PushTryHandler(StackHandler::CATCH, stmt->index());
   { TryCatch try_body(this);
     Visit(stmt->try_block());
   }
@@ -1204,7 +1207,7 @@ void FullCodeGenerator::VisitTryFinallyStatement(TryFinallyStatement* stmt) {
 
   // Set up try handler.
   __ bind(&try_entry);
-  __ PushTryHandler(IN_JAVASCRIPT, TRY_FINALLY_HANDLER, stmt->index());
+  __ PushTryHandler(StackHandler::FINALLY, stmt->index());
   { TryFinally try_body(this, &finally_entry);
     Visit(stmt->try_block());
   }
