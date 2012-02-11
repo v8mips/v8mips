@@ -7332,6 +7332,7 @@ struct AheadOfTimeWriteBarrierStubList kAheadOfTime[] = {
   // ElementsTransitionGenerator::GenerateSmiOnlyToObject
   // and ElementsTransitionGenerator::GenerateSmiOnlyToDouble
   // and ElementsTransitionGenerator::GenerateDoubleToObject
+  { a2, a3, t5, EMIT_REMEMBERED_SET },
   { a2, a3, t5, OMIT_REMEMBERED_SET },
   // ElementsTransitionGenerator::GenerateDoubleToObject
   { t2, a2, a0, EMIT_REMEMBERED_SET },
