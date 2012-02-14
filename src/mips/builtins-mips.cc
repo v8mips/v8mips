@@ -417,10 +417,10 @@ static void ArrayNativeCode(MacroAssembler* masm,
   __ mov(t3, sp);
   __ bind(&loop);
   __ lw(a2, MemOperand(t3));
-  __ Addu(t3, t3, kPointerSize);
   if (FLAG_smi_only_arrays) {
     __ JumpIfNotSmi(a2, &has_non_smi_element);
   }
+  __ Addu(t3, t3, kPointerSize);
   __ Addu(t1, t1, -kPointerSize);
   __ sw(a2, MemOperand(t1));
   __ bind(&entry);
@@ -465,7 +465,6 @@ static void ArrayNativeCode(MacroAssembler* masm,
                       EMIT_REMEMBERED_SET,
                       OMIT_SMI_CHECK);
   Label loop2;
-  __ Subu(t3, t3, Operand(kPointerSize));
   __ bind(&loop2);
   __ lw(a2, MemOperand(t3));
   __ Addu(t3, t3, kPointerSize);

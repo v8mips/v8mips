@@ -1503,12 +1503,6 @@ Handle<Code> KeyedIC::ComputeStub(Handle<JSObject> receiver,
   KeyedAccessGrowMode grow_mode = IsGrowStubKind(stub_kind)
       ? ALLOW_JSARRAY_GROWTH
       : DO_NOT_ALLOW_JSARRAY_GROWTH;
-  if ((ic_state == UNINITIALIZED || ic_state == PREMONOMORPHIC) &&
-      !IsTransitionStubKind(stub_kind)) {
-    return ComputeMonomorphicStub(
-        receiver, stub_kind, strict_mode, generic_stub);
-  }
-  ASSERT(target() != *generic_stub);
 
   // Don't handle megamorphic property accesses for INTERCEPTORS or CALLBACKS
   // via megamorphic stubs, since they don't have a map in their relocation info
@@ -1518,15 +1512,39 @@ Handle<Code> KeyedIC::ComputeStub(Handle<JSObject> receiver,
     return generic_stub;
   }
 
-  // Determine the list of receiver maps that this call site has seen,
-  // adding the map that was just encountered.
+  bool monomorphic = false;
   MapHandleList target_receiver_maps;
-  Handle<Map> receiver_map(receiver->map());
-  if (ic_state == UNINITIALIZED || ic_state == PREMONOMORPHIC) {
-    target_receiver_maps.Add(receiver_map);
-  } else {
+  if (ic_state != UNINITIALIZED && ic_state != PREMONOMORPHIC) {
     GetReceiverMapsForStub(Handle<Code>(target()), &target_receiver_maps);
   }
+  if (!IsTransitionStubKind(stub_kind)) {
+    if (ic_state == UNINITIALIZED || ic_state == PREMONOMORPHIC) {
+      monomorphic = true;
+    } else {
+      if (ic_state == MONOMORPHIC) {
+        // The first time a receiver is seen that is a transitioned version of
+        // the previous monomorphic receiver type, assume the new ElementsKind
+        // is the monomorphic type. This benefits global arrays that only
+        // transition once, and all call sites accessing them are faster if they
+        // remain monomorphic. If this optimistic assumption is not true, the IC
+        // will miss again and it will become polymorphic and support both the
+        // untransitioned and transitioned maps.
+        monomorphic = IsMoreGeneralElementsKindTransition(
+            target_receiver_maps.at(0)->elements_kind(),
+            receiver->GetElementsKind());
+      }
+    }
+  }
+
+  if (monomorphic) {
+    return ComputeMonomorphicStub(
+        receiver, stub_kind, strict_mode, generic_stub);
+  }
+  ASSERT(target() != *generic_stub);
+
+  // Determine the list of receiver maps that this call site has seen,
+  // adding the map that was just encountered.
+  Handle<Map> receiver_map(receiver->map());
   bool map_added =
       AddOneReceiverMapIfMissing(&target_receiver_maps, receiver_map);
   if (IsTransitionStubKind(stub_kind)) {
