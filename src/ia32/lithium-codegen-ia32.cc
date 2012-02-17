@@ -1868,11 +1868,10 @@ void LCodeGen::EmitClassOfTest(Label* is_true,
     // Faster code path to avoid two compares: subtract lower bound from the
     // actual type and do a signed compare with the width of the type range.
     __ mov(temp, FieldOperand(input, HeapObject::kMapOffset));
-    __ mov(temp2, FieldOperand(temp, Map::kInstanceTypeOffset));
+    __ movzx_b(temp2, FieldOperand(temp, Map::kInstanceTypeOffset));
     __ sub(Operand(temp2), Immediate(FIRST_NONCALLABLE_SPEC_OBJECT_TYPE));
-    __ cmpb(Operand(temp2),
-            static_cast<int8_t>(LAST_NONCALLABLE_SPEC_OBJECT_TYPE -
-                                FIRST_NONCALLABLE_SPEC_OBJECT_TYPE));
+    __ cmp(Operand(temp2), Immediate(LAST_NONCALLABLE_SPEC_OBJECT_TYPE -
+                                     FIRST_NONCALLABLE_SPEC_OBJECT_TYPE));
     __ j(above, is_false);
   }
 
@@ -4079,7 +4078,7 @@ void LCodeGen::DoCheckInstanceType(LCheckInstanceType* instr) {
     } else {
       __ movzx_b(temp, FieldOperand(temp, Map::kInstanceTypeOffset));
       __ and_(temp, mask);
-      __ cmpb(Operand(temp), tag);
+      __ cmp(temp, tag);
       DeoptimizeIf(not_equal, instr->environment());
     }
   }
@@ -4260,27 +4259,66 @@ void LCodeGen::EmitDeepCopy(Handle<JSObject> object,
     __ Assert(equal, "Unexpected object literal boilerplate");
   }
 
+  // Only elements backing stores for non-COW arrays need to be copied.
+  Handle<FixedArrayBase> elements(object->elements());
+  bool has_elements = elements->length() > 0 &&
+      elements->map() != isolate()->heap()->fixed_cow_array_map();
+
   // Increase the offset so that subsequent objects end up right after
-  // this one.
-  int current_offset = *offset;
-  int size = object->map()->instance_size();
-  *offset += size;
+  // this object and its backing store.
+  int object_offset = *offset;
+  int object_size = object->map()->instance_size();
+  int elements_offset = *offset + object_size;
+  int elements_size = has_elements ? elements->Size() : 0;
+  *offset += object_size + elements_size;
 
   // Copy object header.
   ASSERT(object->properties()->length() == 0);
-  ASSERT(object->elements()->length() == 0 ||
-         object->elements()->map() == isolate()->heap()->fixed_cow_array_map());
   int inobject_properties = object->map()->inobject_properties();
-  int header_size = size - inobject_properties * kPointerSize;
+  int header_size = object_size - inobject_properties * kPointerSize;
   for (int i = 0; i < header_size; i += kPointerSize) {
-    __ mov(ecx, FieldOperand(source, i));
-    __ mov(FieldOperand(result, current_offset + i), ecx);
+    if (has_elements && i == JSObject::kElementsOffset) {
+      __ lea(ecx, Operand(result, elements_offset));
+    } else {
+      __ mov(ecx, FieldOperand(source, i));
+    }
+    __ mov(FieldOperand(result, object_offset + i), ecx);
   }
 
   // Copy in-object properties.
   for (int i = 0; i < inobject_properties; i++) {
-    int total_offset = current_offset + object->GetInObjectPropertyOffset(i);
+    int total_offset = object_offset + object->GetInObjectPropertyOffset(i);
     Handle<Object> value = Handle<Object>(object->InObjectPropertyAt(i));
+    if (value->IsJSObject()) {
+      Handle<JSObject> value_object = Handle<JSObject>::cast(value);
+      __ lea(ecx, Operand(result, *offset));
+      __ mov(FieldOperand(result, total_offset), ecx);
+      __ LoadHeapObject(source, value_object);
+      EmitDeepCopy(value_object, result, source, offset);
+    } else if (value->IsHeapObject()) {
+      __ LoadHeapObject(ecx, Handle<HeapObject>::cast(value));
+      __ mov(FieldOperand(result, total_offset), ecx);
+    } else {
+      __ mov(FieldOperand(result, total_offset), Immediate(value));
+    }
+  }
+
+  // Copy elements backing store header.
+  ASSERT(!has_elements || elements->IsFixedArray());
+  if (has_elements) {
+    __ LoadHeapObject(source, elements);
+    for (int i = 0; i < FixedArray::kHeaderSize; i += kPointerSize) {
+      __ mov(ecx, FieldOperand(source, i));
+      __ mov(FieldOperand(result, elements_offset + i), ecx);
+    }
+  }
+
+  // Copy elements backing store content.
+  ASSERT(!has_elements || elements->IsFixedArray());
+  int elements_length = has_elements ? elements->length() : 0;
+  for (int i = 0; i < elements_length; i++) {
+    int total_offset = elements_offset + FixedArray::OffsetOfElementAt(i);
+    Handle<Object> value = JSObject::GetElement(object, i);
     if (value->IsJSObject()) {
       Handle<JSObject> value_object = Handle<JSObject>::cast(value);
       __ lea(ecx, Operand(result, *offset));
@@ -4297,7 +4335,7 @@ void LCodeGen::EmitDeepCopy(Handle<JSObject> object,
 }
 
 
-void LCodeGen::DoObjectLiteralFast(LObjectLiteralFast* instr) {
+void LCodeGen::DoFastLiteral(LFastLiteral* instr) {
   ASSERT(ToRegister(instr->context()).is(esi));
   int size = instr->hydrogen()->total_size();
 
@@ -4319,7 +4357,7 @@ void LCodeGen::DoObjectLiteralFast(LObjectLiteralFast* instr) {
 }
 
 
-void LCodeGen::DoObjectLiteralGeneric(LObjectLiteralGeneric* instr) {
+void LCodeGen::DoObjectLiteral(LObjectLiteral* instr) {
   ASSERT(ToRegister(instr->context()).is(esi));
   Handle<FixedArray> literals(instr->environment()->closure()->literals());
   Handle<FixedArray> constant_properties =
