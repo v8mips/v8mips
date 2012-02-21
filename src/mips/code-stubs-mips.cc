@@ -4083,6 +4083,7 @@ void JSEntryStub::GenerateBody(MacroAssembler* masm, bool is_construct) {
     offset_to_argv += kNumCalleeSavedFPU * kDoubleSize;
   }
 
+  __ InitializeRootRegister();
   __ lw(s0, MemOperand(sp, offset_to_argv + kCArgsSlotsSize));
 
   // We build an EntryFrame.
@@ -7051,7 +7052,7 @@ void DirectCEntryStub::GenerateCall(MacroAssembler* masm,
   // This spot for ra was reserved in EnterExitFrame.
   masm->sw(ra, MemOperand(sp, kCArgsSlotsSize));
   masm->li(ra, Operand(reinterpret_cast<intptr_t>(GetCode().location()),
-                    RelocInfo::CODE_TARGET), true);
+                    RelocInfo::CODE_TARGET), CONSTANT_SIZE);
   // Call the function.
   masm->Jump(t9);
   // Make sure the stored 'ra' points to this position.

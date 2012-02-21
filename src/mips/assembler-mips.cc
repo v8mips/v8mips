@@ -850,6 +850,9 @@ bool Assembler::MustUseReg(RelocInfo::Mode rmode) {
   return rmode != RelocInfo::NONE;
 }
 
+bool Assembler::can_use_relative_load(RelocInfo::Mode rmode) {
+  return rmode == RelocInfo::EMBEDDED_OBJECT && Serializer::enabled();
+}
 
 void Assembler::GenInstrRegister(Opcode opcode,
                                  Register rs,

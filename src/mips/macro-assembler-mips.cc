@@ -763,12 +763,25 @@ void MacroAssembler::Ror(Register rd, Register rs, const Operand& rt) {
 }
 
 
+static const int kInvalidRootIndex = -1;
+
+int MacroAssembler::FindRootIndex(Object* heap_object) {
+  Heap* heap = HEAP;
+  if (heap->InNewSpace(heap_object)) return kInvalidRootIndex;
+  for (int i = 0; i < Heap::kRootListLength; i++) {
+    Object* root = heap->roots_array_start()[i];
+    if (!root->IsSmi() && root == heap_object) return i;
+  }
+  return kInvalidRootIndex;
+}
+
+
 //------------Pseudo-instructions-------------
 
-void MacroAssembler::li(Register rd, Operand j, bool gen2instr) {
+void MacroAssembler::li(Register rd, Operand j, LiFlags mode) {
   ASSERT(!j.is_reg());
   BlockTrampolinePoolScope block_trampoline_pool(this);
-  if (!MustUseReg(j.rmode_) && !gen2instr) {
+  if (!MustUseReg(j.rmode_) && mode == OPTIMIZE_SIZE) {
     // Normal load of an immediate value which does not need Relocation Info.
     if (is_int16(j.imm32_)) {
       addiu(rd, zero_reg, j.imm32_);
@@ -780,7 +793,20 @@ void MacroAssembler::li(Register rd, Operand j, bool gen2instr) {
       lui(rd, (j.imm32_ >> kLuiShift) & kImm16Mask);
       ori(rd, rd, (j.imm32_ & kImm16Mask));
     }
-  } else if (MustUseReg(j.rmode_) || gen2instr) {
+  } else if (can_use_relative_load(j.rmode_) && mode == OPTIMIZE_SIZE) {
+    int32_t index = FindRootIndex(*(reinterpret_cast<Object**>(j.imm32_)));
+    if(index != kInvalidRootIndex) {
+      //Replace lui/ori pair for references that are found in root array with
+      //relative load using LoadRoot with no relocation info.
+      LoadRoot(rd, static_cast<Heap::RootListIndex>(index));
+    } else {
+      if (MustUseReg(j.rmode_)) {
+        RecordRelocInfo(j.rmode_, j.imm32_);
+      }
+      lui(rd, (j.imm32_ >> kLuiShift) & kImm16Mask);
+      ori(rd, rd, (j.imm32_ & kImm16Mask));
+    }
+  } else {
     if (MustUseReg(j.rmode_)) {
       RecordRelocInfo(j.rmode_, j.imm32_);
     }
@@ -2388,7 +2414,7 @@ void MacroAssembler::Call(Address target,
   // Must record previous source positions before the
   // li() generates a new code target.
   positions_recorder()->WriteRecordedPositions();
-  li(t9, Operand(target_int, rmode), true);
+  li(t9, Operand(target_int, rmode), CONSTANT_SIZE);
   Call(t9, cond, rs, rt, bd);
   ASSERT_EQ(CallSize(target, rmode, cond, rs, rt, bd),
             SizeOfCodeGeneratedSince(&start));
@@ -2597,7 +2623,7 @@ void MacroAssembler::PushTryHandler(StackHandler::Kind kind,
   unsigned state =
       StackHandler::IndexField::encode(handler_index) |
       StackHandler::KindField::encode(kind);
-  li(t1, Operand(CodeObject()));
+  li(t1, Operand(CodeObject()), CONSTANT_SIZE);
   li(t2, Operand(state));
 
   // Push the frame pointer, context, state, and code object.
@@ -4329,7 +4355,7 @@ void MacroAssembler::LoadGlobalFunctionInitialMap(Register function,
 void MacroAssembler::EnterFrame(StackFrame::Type type) {
   addiu(sp, sp, -5 * kPointerSize);
   li(t8, Operand(Smi::FromInt(type)));
-  li(t9, Operand(CodeObject()));
+  li(t9, Operand(CodeObject()), CONSTANT_SIZE);
   sw(ra, MemOperand(sp, 4 * kPointerSize));
   sw(fp, MemOperand(sp, 3 * kPointerSize));
   sw(cp, MemOperand(sp, 2 * kPointerSize));
@@ -4373,7 +4399,8 @@ void MacroAssembler::EnterExitFrame(bool save_doubles,
     sw(zero_reg, MemOperand(fp, ExitFrameConstants::kSPOffset));
   }
 
-  li(t8, Operand(CodeObject()));  // Accessed from ExitFrame::code_slot.
+  // Accessed from ExitFrame::code_slot.
+  li(t8, Operand(CodeObject()), CONSTANT_SIZE);
   sw(t8, MemOperand(fp, ExitFrameConstants::kCodeOffset));
 
   // Save the frame pointer and the context in top.
