@@ -29,6 +29,5 @@
   'variables': {
     'target_arch': 'ia32',
     'v8_target_arch': 'mips',
-    'mips_arch_variant': 'mips32r2',
   },
 }
