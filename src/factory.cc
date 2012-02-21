@@ -148,6 +148,13 @@ Handle<AccessorPair> Factory::NewAccessorPair() {
 }
 
 
+Handle<TypeFeedbackInfo> Factory::NewTypeFeedbackInfo() {
+  CALL_HEAP_FUNCTION(isolate(),
+                     isolate()->heap()->AllocateTypeFeedbackInfo(),
+                     TypeFeedbackInfo);
+}
+
+
 // Symbols are created in the old generation (data space).
 Handle<String> Factory::LookupSymbol(Vector<const char> string) {
   CALL_HEAP_FUNCTION(isolate(),
@@ -540,11 +547,7 @@ Handle<JSFunction> Factory::NewFunctionFromSharedFunctionInfo(
                     context->global_context());
     }
     result->set_literals(*literals);
-  } else {
-    result->set_function_bindings(isolate()->heap()->empty_fixed_array());
   }
-  result->set_next_function_link(isolate()->heap()->undefined_value());
-
   if (V8::UseCrankshaft() &&
       FLAG_always_opt &&
       result->is_compiled() &&

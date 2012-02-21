@@ -130,6 +130,7 @@ namespace internal {
   V(Map, catch_context_map, CatchContextMap)                                   \
   V(Map, with_context_map, WithContextMap)                                     \
   V(Map, block_context_map, BlockContextMap)                                   \
+  V(Map, module_context_map, ModuleContextMap)                                 \
   V(Map, oddball_map, OddballMap)                                              \
   V(Map, message_object_map, JSMessageObjectMap)                               \
   V(Map, foreign_map, ForeignMap)                                              \
@@ -639,6 +640,9 @@ class Heap {
 
   // Allocates a pre-tenured empty AccessorPair.
   MUST_USE_RESULT MaybeObject* AllocateAccessorPair();
+
+  // Allocates an empty TypeFeedbackInfo.
+  MUST_USE_RESULT MaybeObject* AllocateTypeFeedbackInfo();
 
   // Clear the Instanceof cache (used when a prototype changes).
   inline void ClearInstanceofCache();
