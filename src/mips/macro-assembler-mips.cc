@@ -795,9 +795,9 @@ void MacroAssembler::li(Register rd, Operand j, LiFlags mode) {
     }
   } else if (can_use_relative_load(j.rmode_) && mode == OPTIMIZE_SIZE) {
     int32_t index = FindRootIndex(*(reinterpret_cast<Object**>(j.imm32_)));
-    if(index != kInvalidRootIndex) {
-      //Replace lui/ori pair for references that are found in root array with
-      //relative load using LoadRoot with no relocation info.
+    if (index != kInvalidRootIndex) {
+      // Replace lui/ori pair for references that are found in root array with
+      // relative load using LoadRoot with no relocation info.
       LoadRoot(rd, static_cast<Heap::RootListIndex>(index));
     } else {
       if (MustUseReg(j.rmode_)) {
