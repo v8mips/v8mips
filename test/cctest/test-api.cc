@@ -12734,6 +12734,13 @@ static int ExternalArrayElementSize(v8::ExternalArrayType array_type) {
 }
 
 
+#if defined(V8_TARGET_ARCH_MIPS) && !defined(USE_SIMULATOR)
+static int kUndefinedResult = static_cast<int>(0x80000000 - 1);
+#else
+static int kUndefinedResult = static_cast<int>(0x80000000);
+#endif
+
+
 template <class ExternalArrayClass, class ElementType>
 static void ExternalArrayTestHelper(v8::ExternalArrayType array_type,
                                     int64_t low,
@@ -12910,7 +12917,7 @@ static void ExternalArrayTestHelper(v8::ExternalArrayType array_type,
   if (array_type == v8::kExternalDoubleArray ||
       array_type == v8::kExternalFloatArray) {
     CHECK_EQ(
-        static_cast<int>(0x80000000),
+        static_cast<int>(kUndefinedResult),
         static_cast<int>(jsobj->GetElement(7)->ToObjectChecked()->Number()));
   } else {
     CHECK_EQ(0, static_cast<int>(
