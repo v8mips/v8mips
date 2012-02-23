@@ -237,8 +237,8 @@ bool IsEqualNumber(void* first, void* second) {
 
 
 void ObjectLiteral::CalculateEmitStore() {
-  HashMap properties(&IsEqualString);
-  HashMap elements(&IsEqualNumber);
+  ZoneHashMap properties(&IsEqualString);
+  ZoneHashMap elements(&IsEqualNumber);
   for (int i = this->properties()->length() - 1; i >= 0; i--) {
     ObjectLiteral::Property* property = this->properties()->at(i);
     Literal* literal = property->key();
@@ -249,7 +249,7 @@ void ObjectLiteral::CalculateEmitStore() {
     }
 
     uint32_t hash;
-    HashMap* table;
+    ZoneHashMap* table;
     void* key;
     Factory* factory = Isolate::Current()->factory();
     if (handle->IsSymbol()) {
@@ -1010,6 +1010,7 @@ INCREASE_NODE_COUNT(ReturnStatement)
 INCREASE_NODE_COUNT(Conditional)
 INCREASE_NODE_COUNT(Literal)
 INCREASE_NODE_COUNT(ObjectLiteral)
+INCREASE_NODE_COUNT(FunctionLiteral)
 INCREASE_NODE_COUNT(Assignment)
 INCREASE_NODE_COUNT(Throw)
 INCREASE_NODE_COUNT(Property)
@@ -1081,12 +1082,6 @@ void AstConstructionVisitor::VisitTryFinallyStatement(
 void AstConstructionVisitor::VisitDebuggerStatement(DebuggerStatement* node) {
   increase_node_count();
   add_flag(kDontOptimize);
-  add_flag(kDontInline);
-}
-
-
-void AstConstructionVisitor::VisitFunctionLiteral(FunctionLiteral* node) {
-  increase_node_count();
   add_flag(kDontInline);
 }
 
