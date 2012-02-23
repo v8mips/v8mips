@@ -12735,9 +12735,9 @@ static int ExternalArrayElementSize(v8::ExternalArrayType array_type) {
 
 
 #if defined(V8_TARGET_ARCH_MIPS) && !defined(USE_SIMULATOR)
-static int kUndefinedResult = static_cast<int>(0x80000000 - 1);
+static const int kUndefinedResult = static_cast<int>(0x80000000 - 1);
 #else
-static int kUndefinedResult = static_cast<int>(0x80000000);
+static const int kUndefinedResult = static_cast<int>(0x80000000);
 #endif
 
 
