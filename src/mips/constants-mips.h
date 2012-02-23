@@ -39,16 +39,20 @@
 
 #define UNSUPPORTED_MIPS() v8::internal::PrintF("Unsupported instruction.\n")
 
-enum arch_variants {mips32r2, mips32r1, loongson};
+enum ArchVariants {
+  kMips32r2,
+  kMips32r1,
+  kLoongson
+};
 
 #ifdef _MIPS_ARCH_MIPS32R2
-  static const arch_variants arch_variant = mips32r2;
+  static const ArchVariants kArchVariant = kMips32r2;
 #elif _MIPS_ARCH_LOONGSON
 // The loongson flag refers to the LOONGSON architectures based on MIPS-III,
 // which predates (and is a subset of) the mips32r2 and r1 architectures.
-  static const arch_variants arch_variant = loongson;
+  static const ArchVariants kArchVariant = kLoongson;
 #else
-  static const arch_variants arch_variant = mips32r1;
+  static const ArchVariants kArchVariant = kMips32r1;
 #endif
 
 

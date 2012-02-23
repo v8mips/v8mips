@@ -578,7 +578,7 @@ void MacroAssembler::Subu(Register rd, Register rs, const Operand& rt) {
 
 void MacroAssembler::Mul(Register rd, Register rs, const Operand& rt) {
   if (rt.is_reg()) {
-    if (arch_variant == loongson) {
+    if (kArchVariant == kLoongson) {
       mult(rs, rt.rm());
       mflo(rd);
     } else {
@@ -588,7 +588,7 @@ void MacroAssembler::Mul(Register rd, Register rs, const Operand& rt) {
     // li handles the relocation.
     ASSERT(!rs.is(at));
     li(at, rt);
-    if (arch_variant == loongson) {
+    if (kArchVariant == kLoongson) {
       mult(rs, at);
       mflo(rd);
     } else {
@@ -748,7 +748,7 @@ void MacroAssembler::Sltu(Register rd, Register rs, const Operand& rt) {
 
 
 void MacroAssembler::Ror(Register rd, Register rs, const Operand& rt) {
-  if (arch_variant == mips32r2) {
+  if (kArchVariant == kMips32r2) {
     if (rt.is_reg()) {
       rotrv(rd, rs, rt.rm());
     } else {
@@ -962,7 +962,7 @@ void MacroAssembler::Ext(Register rt,
   ASSERT(pos < 32);
   ASSERT(pos + size < 33);
 
-  if (arch_variant == mips32r2) {
+  if (kArchVariant == kMips32r2) {
     ext_(rt, rs, pos, size);
   } else {
     // Move rs to rt and shift it left then right to get the
@@ -986,7 +986,7 @@ void MacroAssembler::Ins(Register rt,
   ASSERT(pos + size <= 32);
   ASSERT(size != 0);
 
-  if (arch_variant == mips32r2) {
+  if (kArchVariant == kMips32r2) {
     ins_(rt, rs, pos, size);
   } else {
     ASSERT(!rt.is(t8) && !rs.is(t8));
@@ -1057,7 +1057,7 @@ void MacroAssembler::Trunc_uw_d(FPURegister fd,
 }
 
 void MacroAssembler::Trunc_w_d(FPURegister fd, FPURegister fs) {
-  if (arch_variant == loongson && fd.is(fs)) {
+  if (kArchVariant == kLoongson && fd.is(fs)) {
     mfc1(t8, FPURegister::from_code(fs.code() + 1));
     trunc_w_d(fd, fs);
     mtc1(t8, FPURegister::from_code(fs.code() + 1));
@@ -1067,7 +1067,7 @@ void MacroAssembler::Trunc_w_d(FPURegister fd, FPURegister fs) {
 }
 
 void MacroAssembler::Round_w_d(FPURegister fd, FPURegister fs) {
-  if (arch_variant == loongson && fd.is(fs)) {
+  if (kArchVariant == kLoongson && fd.is(fs)) {
     mfc1(t8, FPURegister::from_code(fs.code() + 1));
     round_w_d(fd, fs);
     mtc1(t8, FPURegister::from_code(fs.code() + 1));
@@ -1078,7 +1078,7 @@ void MacroAssembler::Round_w_d(FPURegister fd, FPURegister fs) {
 
 
 void MacroAssembler::Floor_w_d(FPURegister fd, FPURegister fs) {
-  if (arch_variant == loongson && fd.is(fs)) {
+  if (kArchVariant == kLoongson && fd.is(fs)) {
     mfc1(t8, FPURegister::from_code(fs.code() + 1));
     floor_w_d(fd, fs);
     mtc1(t8, FPURegister::from_code(fs.code() + 1));
@@ -1089,7 +1089,7 @@ void MacroAssembler::Floor_w_d(FPURegister fd, FPURegister fs) {
 
 
 void MacroAssembler::Ceil_w_d(FPURegister fd, FPURegister fs) {
-  if (arch_variant == loongson && fd.is(fs)) {
+  if (kArchVariant == kLoongson && fd.is(fs)) {
     mfc1(t8, FPURegister::from_code(fs.code() + 1));
     ceil_w_d(fd, fs);
     mtc1(t8, FPURegister::from_code(fs.code() + 1));
@@ -1229,7 +1229,7 @@ void MacroAssembler::Move(FPURegister dst, double imm) {
 
 
 void MacroAssembler::Movz(Register rd, Register rs, Register rt) {
-  if (arch_variant == loongson) {
+  if (kArchVariant == kLoongson) {
     Label done;
     Branch(&done, ne, rt, Operand(zero_reg));
     mov(rd, rs);
@@ -1241,7 +1241,7 @@ void MacroAssembler::Movz(Register rd, Register rs, Register rt) {
 
 
 void MacroAssembler::Movn(Register rd, Register rs, Register rt) {
-  if (arch_variant == loongson) {
+  if (kArchVariant == kLoongson) {
     Label done;
     Branch(&done, eq, rt, Operand(zero_reg));
     mov(rd, rs);
@@ -1253,7 +1253,7 @@ void MacroAssembler::Movn(Register rd, Register rs, Register rt) {
 
 
 void MacroAssembler::Movt(Register rd, Register rs, uint16_t cc) {
-  if (arch_variant == loongson) {
+  if (kArchVariant == kLoongson) {
     // Tests an FP condition code and then conditionally move rs to rd.
     // We do not currently use any FPU cc bit other than bit 0.
     ASSERT(cc == 0);
@@ -1279,7 +1279,7 @@ void MacroAssembler::Movt(Register rd, Register rs, uint16_t cc) {
 
 
 void MacroAssembler::Movf(Register rd, Register rs, uint16_t cc) {
-  if (arch_variant == loongson) {
+  if (kArchVariant == kLoongson) {
     // Tests an FP condition code and then conditionally move rs to rd.
     // We do not currently use any FPU cc bit other than bit 0.
     ASSERT(cc == 0);
@@ -1305,7 +1305,7 @@ void MacroAssembler::Movf(Register rd, Register rs, uint16_t cc) {
 
 
 void MacroAssembler::Clz(Register rd, Register rs) {
-  if (arch_variant == loongson) {
+  if (kArchVariant == kLoongson) {
     ASSERT(!(rd.is(t8) || rd.is(t9)) && !(rs.is(t8) || rs.is(t9)));
     Register mask = t8;
     Register scratch = t9;
