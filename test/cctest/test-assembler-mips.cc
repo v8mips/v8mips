@@ -579,7 +579,7 @@ TEST(MIPS7) {
 
     __ bind(&neither_is_nan);
 
-    if (arch_variant == loongson) {
+    if (kArchVariant == kLoongson) {
       __ c(OLT, D, f6, f4);
       __ bc1t(&less_than);
     } else {
@@ -779,7 +779,7 @@ TEST(MIPS10) {
   Assembler assm(Isolate::Current(), NULL, 0);
   Label L, C;
 
-  if (CpuFeatures::IsSupported(FPU) && arch_variant == mips32r2) {
+  if (CpuFeatures::IsSupported(FPU) && kArchVariant == kMips32r2) {
     CpuFeatures::Scope scope(FPU);
 
     // Load all structure elements to registers.

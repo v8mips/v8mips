@@ -146,7 +146,7 @@ TEST(Type0) {
   COMPARE(divu(v0, v1),
           "0043001b       divu    v0, v1");
 
-  if (arch_variant != loongson) {
+  if (kArchVariant != kLoongson) {
     COMPARE(mul(a0, a1, a2),
             "70a62002       mul     a0, a1, a2");
     COMPARE(mul(t2, t3, t4),
@@ -274,7 +274,7 @@ TEST(Type0) {
   COMPARE(srav(v0, v1, fp),
           "03c31007       srav    v0, v1, fp");
 
-  if (arch_variant == mips32r2) {
+  if (kArchVariant == kMips32r2) {
     COMPARE(rotr(a0, a1, 0),
             "00252002       rotr    a0, a1, 0");
     COMPARE(rotr(s0, s1, 8),
@@ -377,7 +377,7 @@ TEST(Type0) {
   COMPARE(sltiu(v0, v1, -1),
           "2c62ffff       sltiu   v0, v1, -1");
 
-  if (arch_variant != loongson) {
+  if (kArchVariant != kLoongson) {
     COMPARE(movz(a0, a1, a2),
             "00a6200a       movz    a0, a1, a2");
     COMPARE(movz(s0, s1, s2),
@@ -420,7 +420,7 @@ TEST(Type0) {
             "70621020       clz     v0, v1");
   }
 
-  if (arch_variant == mips32r2) {
+  if (kArchVariant == kMips32r2) {
     COMPARE(ins_(a0, a1, 31, 1),
             "7ca4ffc4       ins     a0, a1, 31, 1");
     COMPARE(ins_(s6, s7, 30, 2),
