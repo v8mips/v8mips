@@ -3089,6 +3089,21 @@ void Code::set_compiled_optimizable(bool value) {
 }
 
 
+bool Code::has_self_optimization_header() {
+  ASSERT(kind() == FUNCTION);
+  byte flags = READ_BYTE_FIELD(this, kFullCodeFlags);
+  return FullCodeFlagsHasSelfOptimizationHeader::decode(flags);
+}
+
+
+void Code::set_self_optimization_header(bool value) {
+  ASSERT(kind() == FUNCTION);
+  byte flags = READ_BYTE_FIELD(this, kFullCodeFlags);
+  flags = FullCodeFlagsHasSelfOptimizationHeader::update(flags, value);
+  WRITE_BYTE_FIELD(this, kFullCodeFlags, flags);
+}
+
+
 int Code::allow_osr_at_loop_nesting_level() {
   ASSERT(kind() == FUNCTION);
   return READ_BYTE_FIELD(this, kAllowOSRAtLoopNestingLevelOffset);
@@ -4804,6 +4819,9 @@ SMI_ACCESSORS(TypeFeedbackInfo, ic_with_typeinfo_count,
               kIcWithTypeinfoCountOffset)
 ACCESSORS(TypeFeedbackInfo, type_feedback_cells, TypeFeedbackCells,
           kTypeFeedbackCellsOffset)
+
+
+SMI_ACCESSORS(AliasedArgumentsEntry, aliased_context_slot, kAliasedContextSlot)
 
 
 Relocatable::Relocatable(Isolate* isolate) {
