@@ -669,7 +669,6 @@ enum ReturnHandlingFlag {
 
 class FunctionState {
  public:
-
   FunctionState(HGraphBuilder* owner,
                 CompilationInfo* info,
                 TypeFeedbackOracle* oracle,
@@ -871,10 +870,10 @@ class HGraphBuilder: public AstVisitor {
   INLINE_RUNTIME_FUNCTION_LIST(INLINE_FUNCTION_GENERATOR_DECLARATION)
 #undef INLINE_FUNCTION_GENERATOR_DECLARATION
 
-  void HandleVariableDeclaration(VariableProxy* proxy,
-                                 VariableMode mode,
-                                 FunctionLiteral* function,
-                                 int* global_count);
+  void HandleDeclaration(VariableProxy* proxy,
+                         VariableMode mode,
+                         FunctionLiteral* function,
+                         int* global_count);
 
   void VisitDelete(UnaryOperation* expr);
   void VisitVoid(UnaryOperation* expr);
