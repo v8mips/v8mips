@@ -5370,14 +5370,12 @@ static void GenerateRecordCallTarget(MacroAssembler* masm) {
   // Store a1 in the delay slot. This may or may not get overwritten depending
   // on the result of the comparison.
   __ sw(a1, FieldMemOperand(a2, JSGlobalPropertyCell::kValueOffset));
+  // No need for a write barrier here - cells are rescanned.
 
   // MegamorphicSentinel is an immortal immovable object (undefined) so no
   // write-barrier is needed.
   __ LoadRoot(at, Heap::kUndefinedValueRootIndex);
   __ sw(at, FieldMemOperand(a2, JSGlobalPropertyCell::kValueOffset));
-  __ Branch(&done);
-
-  // No need for a write barrier here - cells are rescanned.
 
   __ bind(&done);
 }

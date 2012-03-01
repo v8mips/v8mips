@@ -583,13 +583,13 @@ void LChunkBuilder::Abort(const char* format, ...) {
 
 LUnallocated* LChunkBuilder::ToUnallocated(Register reg) {
   return new(zone()) LUnallocated(LUnallocated::FIXED_REGISTER,
-                                Register::ToAllocationIndex(reg));
+                                  Register::ToAllocationIndex(reg));
 }
 
 
 LUnallocated* LChunkBuilder::ToUnallocated(DoubleRegister reg) {
   return new(zone()) LUnallocated(LUnallocated::FIXED_DOUBLE_REGISTER,
-                                DoubleRegister::ToAllocationIndex(reg));
+                                  DoubleRegister::ToAllocationIndex(reg));
 }
 
 
@@ -611,7 +611,7 @@ LOperand* LChunkBuilder::UseRegister(HValue* value) {
 LOperand* LChunkBuilder::UseRegisterAtStart(HValue* value) {
   return Use(value,
              new(zone()) LUnallocated(LUnallocated::MUST_HAVE_REGISTER,
-                                    LUnallocated::USED_AT_START));
+                                      LUnallocated::USED_AT_START));
 }
 
 
