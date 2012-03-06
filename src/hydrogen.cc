@@ -1485,6 +1485,11 @@ void HGlobalValueNumberer::ComputeBlockSideEffects() {
     GVNFlagSet side_effects;
     while (instr != NULL) {
       side_effects.Add(instr->ChangesFlags());
+      if (instr->IsSoftDeoptimize()) {
+        block_side_effects_[id].RemoveAll();
+        side_effects.RemoveAll();
+        break;
+      }
       instr = instr->next();
     }
     block_side_effects_[id].Add(side_effects);
@@ -2047,8 +2052,7 @@ void HGraph::InsertRepresentationChangesForValue(HValue* value) {
 
 
 void HGraph::InsertRepresentationChanges() {
-  HPhase phase("H_Insert representation changes", this);
-
+  HPhase phase("H_Representation changes", this);
 
   // Compute truncation flag for phis: Initially assume that all
   // int32-phis allow truncation and iteratively remove the ones that
@@ -7693,7 +7697,7 @@ HEnvironment* HEnvironment::CopyForInlining(
   // builtin function, pass undefined as the receiver for function
   // calls (instead of the global receiver).
   if ((target->shared()->native() || !function->is_classic_mode()) &&
-      call_kind == CALL_AS_FUNCTION) {
+      call_kind == CALL_AS_FUNCTION && !is_construct) {
     inner->SetValueAt(0, undefined);
   }
   inner->SetValueAt(arity + 1, LookupContext());

@@ -1360,6 +1360,13 @@ enum SetPropertyMode {
 };
 
 
+// Indicator for one component of an AccessorPair.
+enum AccessorComponent {
+  ACCESSOR_GETTER,
+  ACCESSOR_SETTER
+};
+
+
 // JSReceiver includes types on which properties can be defined, i.e.,
 // JSObject and JSProxy.
 class JSReceiver: public HeapObject {
@@ -1612,10 +1619,10 @@ class JSObject: public JSReceiver {
       bool continue_search);
 
   MUST_USE_RESULT MaybeObject* DefineAccessor(String* name,
-                                              bool is_getter,
+                                              AccessorComponent component,
                                               Object* fun,
                                               PropertyAttributes attributes);
-  Object* LookupAccessor(String* name, bool is_getter);
+  Object* LookupAccessor(String* name, AccessorComponent component);
 
   MUST_USE_RESULT MaybeObject* DefineAccessor(AccessorInfo* info);
 
@@ -1745,7 +1752,6 @@ class JSObject: public JSReceiver {
   LocalElementType HasLocalElement(uint32_t index);
 
   bool HasElementWithInterceptor(JSReceiver* receiver, uint32_t index);
-  bool HasElementPostInterceptor(JSReceiver* receiver, uint32_t index);
 
   MUST_USE_RESULT MaybeObject* SetFastElement(uint32_t index,
                                               Object* value,
@@ -2145,9 +2151,6 @@ class JSObject: public JSReceiver {
   bool ReferencesObjectFromElements(FixedArray* elements,
                                     ElementsKind kind,
                                     Object* object);
-  bool HasElementInElements(FixedArray* elements,
-                            ElementsKind kind,
-                            uint32_t index);
 
   // Returns true if most of the elements backing storage is used.
   bool HasDenseElements();
@@ -2166,12 +2169,12 @@ class JSObject: public JSReceiver {
       PropertyAttributes attributes);
   MUST_USE_RESULT MaybeObject* DefineElementAccessor(
       uint32_t index,
-      bool is_getter,
+      AccessorComponent component,
       Object* fun,
       PropertyAttributes attributes);
   MUST_USE_RESULT MaybeObject* DefinePropertyAccessor(
       String* name,
-      bool is_getter,
+      AccessorComponent component,
       Object* fun,
       PropertyAttributes attributes);
   void LookupInDescriptor(String* name, LookupResult* result);
@@ -2503,8 +2506,8 @@ class DescriptorArray: public FixedArray {
   MUST_USE_RESULT MaybeObject* CopyInsert(Descriptor* descriptor,
                                           TransitionFlag transition_flag);
 
-  // Remove all transitions.  Return  a copy of the array with all transitions
-  // removed, or a Failure object if the new array could not be allocated.
+  // Return a copy of the array with all transitions and null descriptors
+  // removed. Return a Failure object in case of an allocation failure.
   MUST_USE_RESULT MaybeObject* RemoveTransitions();
 
   // Sort the instance descriptors by the hash codes of their keys.
@@ -7927,9 +7930,14 @@ class AccessorPair: public Struct {
 
   MUST_USE_RESULT MaybeObject* CopyWithoutTransitions();
 
-  // TODO(svenpanne) Evil temporary helper, will vanish soon...
-  void set(bool modify_getter, Object* value) {
-    if (modify_getter) {
+  Object* get(AccessorComponent component) {
+    ASSERT(component == ACCESSOR_GETTER || component == ACCESSOR_SETTER);
+    return (component == ACCESSOR_GETTER) ? getter() : setter();
+  }
+
+  void set(AccessorComponent component, Object* value) {
+    ASSERT(component == ACCESSOR_GETTER || component == ACCESSOR_SETTER);
+    if (component == ACCESSOR_GETTER) {
       set_getter(value);
     } else {
       set_setter(value);
