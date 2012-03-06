@@ -224,10 +224,19 @@ typedef union {
 Object* V8::FillHeapNumberWithRandom(Object* heap_number,
                                      Context* context) {
   uint64_t random_bits = Random(context);
+#ifdef V8_HOST_ARCH_MIPS
+  // Copy the value to a local variable to avoid alignment issues.
+  double_int_union num;
+  double_int_union* r = &num;
+  memcpy(r, heap_number + HeapNumber::kValueOffset - kHeapObjectTag,
+      sizeof(num));
+#else
   // Make a double* from address (heap_number + sizeof(double)).
   double_int_union* r = reinterpret_cast<double_int_union*>(
       reinterpret_cast<char*>(heap_number) +
       HeapNumber::kValueOffset - kHeapObjectTag);
+#endif
+
   // Convert 32 random bits to 0.(32 random bits) in a double
   // by computing:
   // ( 1.(20 0s)(32 random bits) x 2^20 ) - (1.0 x 2^20)).
@@ -235,6 +244,11 @@ Object* V8::FillHeapNumberWithRandom(Object* heap_number,
   r->double_value = binary_million;
   r->uint64_t_value |=  random_bits;
   r->double_value -= binary_million;
+
+#ifdef V8_HOST_ARCH_MIPS
+  memcpy(heap_number + HeapNumber::kValueOffset - kHeapObjectTag, r,
+      sizeof(num));
+#endif
 
   return heap_number;
 }
