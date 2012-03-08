@@ -854,6 +854,8 @@ class JSReceiver;
 class Object : public MaybeObject {
  public:
   // Type testing.
+  bool IsObject() { return true; }
+
 #define IS_TYPE_FUNCTION_DECL(type_)  inline bool Is##type_();
   OBJECT_TYPE_LIST(IS_TYPE_FUNCTION_DECL)
   HEAP_OBJECT_TYPE_LIST(IS_TYPE_FUNCTION_DECL)
@@ -7943,6 +7945,9 @@ class AccessorPair: public Struct {
       set_setter(value);
     }
   }
+
+  // Same as get, but returns undefined instead of the hole.
+  Object* SafeGet(AccessorComponent component);
 
   bool ContainsAccessor() {
     return IsJSAccessor(getter()) || IsJSAccessor(setter());
