@@ -1261,6 +1261,51 @@ void LCodeGen::DoValueOf(LValueOf* instr) {
 }
 
 
+void LCodeGen::DoDateField(LDateField* instr) {
+  Register input = ToRegister(instr->InputAt(0));
+  Register result = ToRegister(instr->result());
+  Register map = ToRegister(instr->TempAt(0));
+
+#ifdef DEBUG
+  __ AbortIfSmi(input);
+  __ GetObjectType(input, map, map);
+  __ Assert(eq, "Trying to get date field from non-date.",
+      map, Operand(JS_DATE_TYPE));
+#endif
+
+  __ lw(result, FieldMemOperand(input,
+      JSDate::kValueOffset + kPointerSize * instr->index()));
+}
+
+
+void LCodeGen::DoSetDateField(LSetDateField* instr) {
+  Register date = ToRegister(instr->InputAt(0));
+  Register value = ToRegister(instr->InputAt(1));
+  Register result = ToRegister(instr->result());
+  Register temp = ToRegister(instr->TempAt(0));
+  int index = instr->index();
+
+#ifdef DEBUG
+  __ AbortIfSmi(date);
+  __ GetObjectType(date, temp, temp);
+  __ Assert(eq, "Trying to get date field from non-date.",
+      temp, Operand(JS_DATE_TYPE));
+#endif
+
+  __ sw(value,
+        FieldMemOperand(date, JSDate::kValueOffset + kPointerSize * index));
+  // Caches can only be smi or NaN, so we can skip the write barrier for them.
+  if (index < JSDate::kFirstBarrierFree) {
+    // Update the write barrier.  Save the value as it will be
+    // overwritten by the write barrier code and is needed afterward.
+    __ mov(result, value);
+    __ RecordWriteField(
+        date, JSDate::kValueOffset + kPointerSize * index,
+        value, temp, kRAHasBeenSaved, kDontSaveFPRegs);
+  }
+}
+
+
 void LCodeGen::DoBitNotI(LBitNotI* instr) {
   Register input = ToRegister(instr->InputAt(0));
   Register result = ToRegister(instr->result());
