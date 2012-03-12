@@ -3947,7 +3947,7 @@ void CEntryStub::GenerateCore(MacroAssembler* masm,
             v0, Operand(reinterpret_cast<int32_t>(out_of_memory)));
 
   // Retrieve the pending exception and clear the variable.
-  __ li(a3, Operand(isolate->factory()->the_hole_value()));
+  __ LoadRoot(a3, Heap::kTheHoleValueRootIndex);
   __ li(t0, Operand(ExternalReference(Isolate::kPendingExceptionAddress,
                                       isolate)));
   __ lw(v0, MemOperand(t0));
@@ -3955,8 +3955,9 @@ void CEntryStub::GenerateCore(MacroAssembler* masm,
 
   // Special handling of termination exceptions which are uncatchable
   // by javascript code.
+  __ LoadRoot(t0, Heap::kTerminationExceptionRootIndex);
   __ Branch(throw_termination_exception, eq,
-            v0, Operand(isolate->factory()->termination_exception()));
+            v0, Operand(t0));
 
   // Handle normal exception.
   __ jmp(throw_normal_exception);
@@ -4156,7 +4157,7 @@ void JSEntryStub::GenerateBody(MacroAssembler* masm, bool is_construct) {
   // saved values before returning a failure to C.
 
   // Clear any pending exceptions.
-  __ li(t1, Operand(isolate->factory()->the_hole_value()));
+  __ LoadRoot(t1, Heap::kTheHoleValueRootIndex);
   __ li(t0, Operand(ExternalReference(Isolate::kPendingExceptionAddress,
                                       isolate)));
   __ sw(t1, MemOperand(t0));
@@ -7081,8 +7082,10 @@ void DirectCEntryStub::GenerateCall(MacroAssembler* masm,
   // Push return address (accessible to GC through exit frame pc).
   // This spot for ra was reserved in EnterExitFrame.
   masm->sw(ra, MemOperand(sp, kCArgsSlotsSize));
-  masm->li(ra, Operand(reinterpret_cast<intptr_t>(GetCode().location()),
-                    RelocInfo::CODE_TARGET), CONSTANT_SIZE);
+  masm->li(ra,
+           Operand(reinterpret_cast<intptr_t>(
+               GetCode().location()), RelocInfo::CODE_TARGET),
+           CONSTANT_SIZE);
   // Call the function.
   masm->Jump(t9);
   // Make sure the stored 'ra' points to this position.

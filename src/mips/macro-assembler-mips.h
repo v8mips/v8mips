@@ -194,6 +194,9 @@ class MacroAssembler: public Assembler {
     Ret(cond, rs, rt, bd);
   }
 
+ void Branch(Label* L, Condition cond, Register rs,
+             Heap::RootListIndex index, BranchDelaySlot bdslot = PROTECT);
+
 #undef COND_ARGS
 
   // Emit code to discard a non-negative number of pointer-sized elements

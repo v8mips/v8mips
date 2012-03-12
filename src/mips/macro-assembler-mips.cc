@@ -803,11 +803,12 @@ void MacroAssembler::li(Register rd, Operand j, LiFlags mode) {
       lui(rd, (j.imm32_ >> kLuiShift) & kImm16Mask);
       ori(rd, rd, (j.imm32_ & kImm16Mask));
     }
-  } else if (can_use_relative_load(j.rmode_) && mode == OPTIMIZE_SIZE) {
+  } else if (SerializingTryLoadFromRoot(j.rmode_) && mode == OPTIMIZE_SIZE) {
     int32_t index = FindRootIndex(*(reinterpret_cast<Object**>(j.imm32_)));
     if (index != kInvalidRootIndex) {
       // Replace lui/ori pair for references that are found in root array with
-      // relative load using LoadRoot with no relocation info.
+      // relative load using LoadRoot with no relocation info. This replacement
+      // is performed only if serialization is turned on.
       LoadRoot(rd, static_cast<Heap::RootListIndex>(index));
     } else {
       if (MustUseReg(j.rmode_)) {
@@ -1674,6 +1675,14 @@ void MacroAssembler::Branch(Label* L, Condition cond, Register rs,
       BranchShort(L, cond, rs, rt, bdslot);
     }
   }
+}
+
+
+void MacroAssembler::Branch(Label* L, Condition cond, Register rs,
+                            Heap::RootListIndex index,
+                            BranchDelaySlot bdslot) {
+  LoadRoot(at, index);
+  Branch(L, cond, rs, Operand(at), bdslot);
 }
 
 
@@ -3402,7 +3411,7 @@ void MacroAssembler::StoreNumberToDoubleElements(Register value_reg,
   // Ensure that the object is a heap number
   CheckMap(value_reg,
            scratch1,
-           isolate()->factory()->heap_number_map(),
+           Heap::kHeapNumberMapRootIndex,
            fail,
            DONT_DO_SMI_CHECK);
 
@@ -5269,7 +5278,7 @@ void MacroAssembler::LoadInstanceDescriptors(Register map,
      FieldMemOperand(map, Map::kInstanceDescriptorsOrBitField3Offset));
   Label not_smi;
   JumpIfNotSmi(descriptors, &not_smi);
-  li(descriptors, Operand(FACTORY->empty_descriptor_array()));
+  LoadRoot(descriptors, Heap::kEmptyDescriptorArrayRootIndex);
   bind(&not_smi);
 }
 
