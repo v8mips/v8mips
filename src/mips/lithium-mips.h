@@ -1005,25 +1005,6 @@ class LDateField: public LTemplateInstruction<1, 1, 1> {
 };
 
 
-class LSetDateField: public LTemplateInstruction<1, 2, 1> {
- public:
-  LSetDateField(LOperand* date, LOperand* value, LOperand* temp, int index)
-      : index_(index) {
-    inputs_[0] = date;
-    inputs_[1] = value;
-    temps_[0] = temp;
-  }
-
-  DECLARE_CONCRETE_INSTRUCTION(DateField, "date-set-field")
-  DECLARE_HYDROGEN_ACCESSOR(DateField)
-
-  int index() const { return index_; }
-
- private:
-  int index_;
-};
-
-
 class LThrow: public LTemplateInstruction<0, 1, 0> {
  public:
   explicit LThrow(LOperand* value) {
