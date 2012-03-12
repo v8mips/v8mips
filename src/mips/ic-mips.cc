@@ -758,7 +758,6 @@ static MemOperand GenerateMappedArgumentsLookup(MacroAssembler* masm,
                                                 Register scratch3,
                                                 Label* unmapped_case,
                                                 Label* slow_case) {
-
   // Check that the receiver is a JSObject. Because of the map check
   // later, we do not need to check for interceptors or whether it
   // requires access checks.
@@ -774,7 +773,7 @@ static MemOperand GenerateMappedArgumentsLookup(MacroAssembler* masm,
   // Load the elements into scratch1 and check its map.
   __ lw(scratch1, FieldMemOperand(object, JSObject::kElementsOffset));
   __ CheckMap(scratch1, scratch2, Heap::kNonStrictArgumentsElementsMapRootIndex,
-              slow_case, DONT_DO_SMI_CHECK);
+      slow_case, DONT_DO_SMI_CHECK);
   // Check if element is in the range of mapped arguments. If not, jump
   // to the unmapped lookup with the parameter map in scratch1.
   __ lw(scratch2, FieldMemOperand(scratch1, FixedArray::kLengthOffset));
@@ -819,7 +818,7 @@ static MemOperand GenerateUnmappedArgumentsLookup(MacroAssembler* masm,
   Register backing_store = parameter_map;
   __ lw(backing_store, FieldMemOperand(parameter_map, kBackingStoreOffset));
   __ CheckMap(backing_store, scratch, Heap::kFixedArrayMapRootIndex, slow_case,
-              DONT_DO_SMI_CHECK);
+      DONT_DO_SMI_CHECK);
   __ lw(scratch, FieldMemOperand(backing_store, FixedArray::kLengthOffset));
   __ Branch(slow_case, Ugreater_equal, key, Operand(scratch));
   __ li(scratch, Operand(kPointerSize >> 1));
@@ -1251,7 +1250,7 @@ void KeyedStoreIC::GenerateGeneric(MacroAssembler* masm,
   __ Branch(&slow, hs, key, Operand(t0));
   __ lw(elements_map, FieldMemOperand(elements, HeapObject::kMapOffset));
   __ Branch(&check_if_double_array, ne, elements_map,
-            Heap::kFixedArrayMapRootIndex);
+      Heap::kFixedArrayMapRootIndex);
 
   // Calculate key + 1 as smi.
   STATIC_ASSERT(kSmiTag == 0);
@@ -1283,7 +1282,7 @@ void KeyedStoreIC::GenerateGeneric(MacroAssembler* masm,
   Register address = t1;
   __ lw(elements_map, FieldMemOperand(elements, HeapObject::kMapOffset));
   __ Branch(&fast_double_with_map_check, ne, elements_map,
-            Heap::kFixedArrayMapRootIndex);
+      Heap::kFixedArrayMapRootIndex);
   __ bind(&fast_object_without_map_check);
   // Smi stores don't require further checks.
   Label non_smi_value;

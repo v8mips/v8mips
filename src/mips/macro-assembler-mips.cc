@@ -1678,7 +1678,9 @@ void MacroAssembler::Branch(Label* L, Condition cond, Register rs,
 }
 
 
-void MacroAssembler::Branch(Label* L, Condition cond, Register rs,
+void MacroAssembler::Branch(Label* L,
+                            Condition cond,
+                            Register rs,
                             Heap::RootListIndex index,
                             BranchDelaySlot bdslot) {
   LoadRoot(at, index);

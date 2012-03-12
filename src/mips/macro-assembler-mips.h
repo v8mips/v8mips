@@ -194,8 +194,8 @@ class MacroAssembler: public Assembler {
     Ret(cond, rs, rt, bd);
   }
 
- void Branch(Label* L, Condition cond, Register rs,
-             Heap::RootListIndex index, BranchDelaySlot bdslot = PROTECT);
+  void Branch(Label* L, Condition cond, Register rs, Heap::RootListIndex index,
+      BranchDelaySlot bdslot = PROTECT);
 
 #undef COND_ARGS
 

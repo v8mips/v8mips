@@ -7082,10 +7082,8 @@ void DirectCEntryStub::GenerateCall(MacroAssembler* masm,
   // Push return address (accessible to GC through exit frame pc).
   // This spot for ra was reserved in EnterExitFrame.
   masm->sw(ra, MemOperand(sp, kCArgsSlotsSize));
-  masm->li(ra,
-           Operand(reinterpret_cast<intptr_t>(
-               GetCode().location()), RelocInfo::CODE_TARGET),
-           CONSTANT_SIZE);
+  masm->li(ra, Operand(reinterpret_cast<intptr_t>(GetCode().location()),
+      RelocInfo::CODE_TARGET), CONSTANT_SIZE);
   // Call the function.
   masm->Jump(t9);
   // Make sure the stored 'ra' points to this position.
