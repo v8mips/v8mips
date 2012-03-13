@@ -33,6 +33,7 @@
 #include "compiler.h"
 #include "global-handles.h"
 #include "messages.h"
+#include "platform.h"
 #include "natives.h"
 #include "scopeinfo.h"
 
@@ -2048,7 +2049,7 @@ static void AddUnwindInfo(CodeDescription* desc) {
 }
 
 
-Mutex* GDBJITInterface::mutex_ = OS::CreateMutex();
+static LazyMutex mutex = LAZY_MUTEX_INITIALIZER;
 
 
 void GDBJITInterface::AddCode(const char* name,
@@ -2058,7 +2059,7 @@ void GDBJITInterface::AddCode(const char* name,
                               CompilationInfo* info) {
   if (!FLAG_gdbjit) return;
 
-  ScopedLock lock(mutex_);
+  ScopedLock lock(mutex.Pointer());
   AssertNoAllocation no_gc;
 
   HashMap::Entry* e = GetEntries()->Lookup(code, HashForCodeObject(code), true);
@@ -2139,7 +2140,7 @@ void GDBJITInterface::AddCode(GDBJITInterface::CodeTag tag, Code* code) {
 void GDBJITInterface::RemoveCode(Code* code) {
   if (!FLAG_gdbjit) return;
 
-  ScopedLock lock(mutex_);
+  ScopedLock lock(mutex.Pointer());
   HashMap::Entry* e = GetEntries()->Lookup(code,
                                            HashForCodeObject(code),
                                            false);
@@ -2159,7 +2160,7 @@ void GDBJITInterface::RemoveCode(Code* code) {
 
 void GDBJITInterface::RegisterDetailedLineInfo(Code* code,
                                                GDBJITLineInfo* line_info) {
-  ScopedLock lock(mutex_);
+  ScopedLock lock(mutex.Pointer());
   ASSERT(!IsLineInfoTagged(line_info));
   HashMap::Entry* e = GetEntries()->Lookup(code, HashForCodeObject(code), true);
   ASSERT(e->value == NULL);
