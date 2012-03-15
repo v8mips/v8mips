@@ -1766,6 +1766,12 @@ void HInferRepresentation::InferBasedOnInputs(HValue* current) {
   ASSERT(current->CheckFlag(HValue::kFlexibleRepresentation));
   Representation inferred = current->InferredRepresentation();
   if (inferred.IsSpecialization()) {
+    if (FLAG_trace_representation) {
+      PrintF("Changing #%d representation %s -> %s based on inputs\n",
+             current->id(),
+             r.Mnemonic(),
+             inferred.Mnemonic());
+    }
     current->ChangeRepresentation(inferred);
     AddDependantsToWorklist(current);
   }
@@ -1793,6 +1799,12 @@ void HInferRepresentation::InferBasedOnUses(HValue* value) {
   Representation new_rep = TryChange(value);
   if (!new_rep.IsNone()) {
     if (!value->representation().Equals(new_rep)) {
+      if (FLAG_trace_representation) {
+        PrintF("Changing #%d representation %s -> %s based on uses\n",
+               value->id(),
+               r.Mnemonic(),
+               new_rep.Mnemonic());
+      }
       value->ChangeRepresentation(new_rep);
       AddDependantsToWorklist(value);
     }
@@ -3740,7 +3752,6 @@ void HGraphBuilder::VisitObjectLiteral(ObjectLiteral* expr) {
             property->RecordTypeFeedback(oracle());
             CHECK_ALIVE(VisitForValue(value));
             HValue* value = Pop();
-            Handle<String> name = Handle<String>::cast(key->handle());
             HInstruction* store = BuildStoreNamed(literal, value, property);
             AddInstruction(store);
             if (store->HasObservableSideEffects()) AddSimulate(key->id());
