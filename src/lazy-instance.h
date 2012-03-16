@@ -89,8 +89,8 @@
 namespace v8 {
 namespace internal {
 
-#define LAZY_STATIC_INSTANCE_INITIALIZER { {}, V8_ONCE_INIT }
-#define LAZY_DYNAMIC_INSTANCE_INITIALIZER { 0, V8_ONCE_INIT }
+#define LAZY_STATIC_INSTANCE_INITIALIZER { V8_ONCE_INIT, {} }
+#define LAZY_DYNAMIC_INSTANCE_INITIALIZER { V8_ONCE_INIT, 0 }
 
 // Default to static mode.
 #define LAZY_INSTANCE_INITIALIZER LAZY_STATIC_INSTANCE_INITIALIZER
@@ -178,10 +178,10 @@ struct LazyInstanceImpl {
     return *AllocationTrait::MutableInstance(&storage_);
   }
 
-  // Note that StorageType needs to be the very first field in the struct
-  // in order to fit alignment expectations (notably on MIPS).
-  mutable StorageType storage_;
   mutable OnceType once_;
+  // Note that the previous field, OnceType, is an AtomicWord which guarantees
+  // the correct alignment of the storage field below.
+  mutable StorageType storage_;
 };
 
 
