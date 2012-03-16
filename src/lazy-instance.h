@@ -104,9 +104,15 @@ struct LeakyInstanceTrait {
 
 // Traits that define how an instance is allocated and accessed.
 
+#if V8_HOST_ARCH_MIPS
+#define LAZY_ALIGN(x) __attribute__((aligned(__alignof__(x))))
+#else  // V8_HOST_ARCH_MIPS
+#define LAZY_ALIGN(x)
+#endif
+
 template <typename T>
 struct StaticallyAllocatedInstanceTrait {
-  typedef char StorageType[sizeof(T)];
+  typedef char StorageType[sizeof(T)] LAZY_ALIGN(T);
 
   static T* MutableInstance(StorageType* storage) {
     return reinterpret_cast<T*>(storage);
