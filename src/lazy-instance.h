@@ -104,9 +104,10 @@ struct LeakyInstanceTrait {
 
 // Traits that define how an instance is allocated and accessed.
 
-#if V8_HOST_ARCH_MIPS
+// TODO(kalmard): Fix alignment issue on MIPS with non-GCC compilers.
+#ifdef __GNUC__
 #define LAZY_ALIGN(x) __attribute__((aligned(__alignof__(x))))
-#else  // V8_HOST_ARCH_MIPS
+#else  // __GNUC__
 #define LAZY_ALIGN(x)
 #endif
 
@@ -123,6 +124,8 @@ struct StaticallyAllocatedInstanceTrait {
     ConstructTrait::Construct(MutableInstance(storage));
   }
 };
+
+#undef LAZY_ALIGN
 
 
 template <typename T>
@@ -186,7 +189,8 @@ struct LazyInstanceImpl {
 
   mutable OnceType once_;
   // Note that the previous field, OnceType, is an AtomicWord which guarantees
-  // the correct alignment of the storage field below.
+  // 4-byte alignment of the storage field below. If compiling with GCC, the
+  // LAZY_ALIGN macro above will guarantee correctness for any alignment.
   mutable StorageType storage_;
 };
 
