@@ -773,19 +773,6 @@ void MacroAssembler::Ror(Register rd, Register rs, const Operand& rt) {
 }
 
 
-static const int kInvalidRootIndex = -1;
-
-int MacroAssembler::FindRootIndex(Object* heap_object) {
-  Heap* heap = HEAP;
-  if (heap->InNewSpace(heap_object)) return kInvalidRootIndex;
-  for (int i = 0; i < Heap::kRootListLength; i++) {
-    Object* root = heap->roots_array_start()[i];
-    if (!root->IsSmi() && root == heap_object) return i;
-  }
-  return kInvalidRootIndex;
-}
-
-
 //------------Pseudo-instructions-------------
 
 void MacroAssembler::li(Register rd, Operand j, LiFlags mode) {
@@ -800,20 +787,6 @@ void MacroAssembler::li(Register rd, Operand j, LiFlags mode) {
     } else if (!(j.imm32_ & kImm16Mask)) {
       lui(rd, (j.imm32_ >> kLuiShift) & kImm16Mask);
     } else {
-      lui(rd, (j.imm32_ >> kLuiShift) & kImm16Mask);
-      ori(rd, rd, (j.imm32_ & kImm16Mask));
-    }
-  } else if (SerializingTryLoadFromRoot(j.rmode_) && mode == OPTIMIZE_SIZE) {
-    int32_t index = FindRootIndex(*(reinterpret_cast<Object**>(j.imm32_)));
-    if (index != kInvalidRootIndex) {
-      // Replace lui/ori pair for references that are found in root array with
-      // relative load using LoadRoot with no relocation info. This replacement
-      // is performed only if serialization is turned on.
-      LoadRoot(rd, static_cast<Heap::RootListIndex>(index));
-    } else {
-      if (MustUseReg(j.rmode_)) {
-        RecordRelocInfo(j.rmode_, j.imm32_);
-      }
       lui(rd, (j.imm32_ >> kLuiShift) & kImm16Mask);
       ori(rd, rd, (j.imm32_ & kImm16Mask));
     }

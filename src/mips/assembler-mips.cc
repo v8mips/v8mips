@@ -853,7 +853,6 @@ bool Assembler::MustUseReg(RelocInfo::Mode rmode) {
 bool Assembler::SerializingTryLoadFromRoot(RelocInfo::Mode rmode) {
   return rmode == RelocInfo::EMBEDDED_OBJECT && Serializer::enabled();
 }
-
 void Assembler::GenInstrRegister(Opcode opcode,
                                  Register rs,
                                  Register rt,

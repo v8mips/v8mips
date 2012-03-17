@@ -194,8 +194,11 @@ class MacroAssembler: public Assembler {
     Ret(cond, rs, rt, bd);
   }
 
-  void Branch(Label* L, Condition cond, Register rs, Heap::RootListIndex index,
-      BranchDelaySlot bdslot = PROTECT);
+  void Branch(Label* L,
+              Condition cond,
+              Register rs,
+              Heap::RootListIndex index,
+              BranchDelaySlot bdslot = PROTECT);
 
 #undef COND_ARGS
 
@@ -261,7 +264,6 @@ class MacroAssembler: public Assembler {
     Branch(L);
   }
 
-  int FindRootIndex(Object* heap_object);
   // Load an object from the root table.
   void LoadRoot(Register destination,
                 Heap::RootListIndex index);
