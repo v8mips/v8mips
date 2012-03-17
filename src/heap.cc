@@ -104,6 +104,7 @@ Heap::Heap()
       gc_post_processing_depth_(0),
       ms_count_(0),
       gc_count_(0),
+      remembered_unmapped_pages_index_(0),
       unflattened_strings_length_(0),
 #ifdef DEBUG
       allocation_allowed_(true),
@@ -5625,15 +5626,15 @@ void Heap::RecordStats(HeapStats* stats, bool take_snapshot) {
   *stats->end_marker = HeapStats::kEndMarker;
   *stats->new_space_size = new_space_.SizeAsInt();
   *stats->new_space_capacity = static_cast<int>(new_space_.Capacity());
-  *stats->old_pointer_space_size = old_pointer_space_->Size();
+  *stats->old_pointer_space_size = old_pointer_space_->SizeOfObjects();
   *stats->old_pointer_space_capacity = old_pointer_space_->Capacity();
-  *stats->old_data_space_size = old_data_space_->Size();
+  *stats->old_data_space_size = old_data_space_->SizeOfObjects();
   *stats->old_data_space_capacity = old_data_space_->Capacity();
-  *stats->code_space_size = code_space_->Size();
+  *stats->code_space_size = code_space_->SizeOfObjects();
   *stats->code_space_capacity = code_space_->Capacity();
-  *stats->map_space_size = map_space_->Size();
+  *stats->map_space_size = map_space_->SizeOfObjects();
   *stats->map_space_capacity = map_space_->Capacity();
-  *stats->cell_space_size = cell_space_->Size();
+  *stats->cell_space_size = cell_space_->SizeOfObjects();
   *stats->cell_space_capacity = cell_space_->Capacity();
   *stats->lo_space_size = lo_space_->Size();
   isolate_->global_handles()->RecordStats(stats);
@@ -6969,6 +6970,21 @@ void Heap::FreeQueuedChunks() {
     isolate_->memory_allocator()->Free(chunk);
   }
   chunks_queued_for_free_ = NULL;
+}
+
+
+void Heap::RememberUnmappedPage(Address page, bool compacted) {
+  uintptr_t p = reinterpret_cast<uintptr_t>(page);
+  // Tag the page pointer to make it findable in the dump file.
+  if (compacted) {
+    p ^= 0xc1ead & (Page::kPageSize - 1);  // Cleared.
+  } else {
+    p ^= 0x1d1ed & (Page::kPageSize - 1);  // I died.
+  }
+  remembered_unmapped_pages_[remembered_unmapped_pages_index_] =
+      reinterpret_cast<Address>(p);
+  remembered_unmapped_pages_index_++;
+  remembered_unmapped_pages_index_ %= kRememberedUnmappedPages;
 }
 
 } }  // namespace v8::internal
