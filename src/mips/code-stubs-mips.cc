@@ -3942,8 +3942,11 @@ void CEntryStub::GenerateCore(MacroAssembler* masm,
 
   // Special handling of out of memory exceptions.
   Failure* out_of_memory = Failure::OutOfMemoryException();
-  __ Branch(USE_DELAY_SLOT, throw_out_of_memory_exception, eq,
-            v0, Operand(reinterpret_cast<int32_t>(out_of_memory)));
+  __ Branch(USE_DELAY_SLOT,
+            throw_out_of_memory_exception,
+            eq,
+            v0,
+            Operand(reinterpret_cast<int32_t>(out_of_memory)));
   // If we throw the OOM exception, the value of a3 doesn't matter.
   // Any instruction can be in the delay slot that's not a jump.
 

@@ -1029,8 +1029,6 @@ class Assembler : public AssemblerBase {
   // Say if we need to relocate with this mode.
   bool MustUseReg(RelocInfo::Mode rmode);
 
-  bool SerializingTryLoadFromRoot(RelocInfo::Mode rmode);
-
   // Record reloc info for current pc_.
   void RecordRelocInfo(RelocInfo::Mode rmode, intptr_t data = 0);
 

@@ -772,7 +772,6 @@ void MacroAssembler::Ror(Register rd, Register rs, const Operand& rt) {
   }
 }
 
-
 //------------Pseudo-instructions-------------
 
 void MacroAssembler::li(Register rd, Operand j, LiFlags mode) {

@@ -120,7 +120,7 @@ class JumpPatchSite BASE_EMBEDDED {
 
 
 int FullCodeGenerator::self_optimization_header_size() {
-  return 11 * Instruction::kInstrSize;
+  return 10 * Instruction::kInstrSize;
 }
 
 

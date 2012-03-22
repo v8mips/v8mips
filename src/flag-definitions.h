@@ -192,7 +192,7 @@ DEFINE_bool(use_osr, true, "use on-stack replacement")
 DEFINE_bool(trace_osr, false, "trace on-stack replacement")
 DEFINE_int(stress_runs, 0, "number of stress runs")
 DEFINE_bool(optimize_closures, true, "optimize closures")
-DEFINE_bool(inline_construct, false, "inline constructor calls")
+DEFINE_bool(inline_construct, true, "inline constructor calls")
 DEFINE_bool(inline_arguments, true, "inline functions with arguments object")
 DEFINE_int(loop_weight, 1, "loop weight for representation inference")
 
@@ -200,7 +200,7 @@ DEFINE_bool(optimize_for_in, true,
             "optimize functions containing for-in loops")
 
 // Experimental profiler changes.
-DEFINE_bool(experimental_profiler, false, "enable all profiler experiments")
+DEFINE_bool(experimental_profiler, true, "enable all profiler experiments")
 DEFINE_bool(watch_ic_patching, false, "profiler considers IC stability")
 DEFINE_int(frame_count, 1, "number of stack frames inspected by the profiler")
 DEFINE_bool(self_optimization, false,
