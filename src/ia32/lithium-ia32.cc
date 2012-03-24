@@ -1083,8 +1083,7 @@ LInstruction* LChunkBuilder::DoArgumentsLength(HArgumentsLength* length) {
 
 
 LInstruction* LChunkBuilder::DoArgumentsElements(HArgumentsElements* elems) {
-  return DefineAsRegister(new(zone()) LArgumentsElements(
-      current_block_->last_environment()->outer() != NULL));
+  return DefineAsRegister(new(zone()) LArgumentsElements);
 }
 
 
@@ -1801,9 +1800,9 @@ LInstruction* LChunkBuilder::DoCheckFunction(HCheckFunction* instr) {
 }
 
 
-LInstruction* LChunkBuilder::DoCheckMap(HCheckMap* instr) {
+LInstruction* LChunkBuilder::DoCheckMaps(HCheckMaps* instr) {
   LOperand* value = UseRegisterAtStart(instr->value());
-  LCheckMap* result = new(zone()) LCheckMap(value);
+  LCheckMaps* result = new(zone()) LCheckMaps(value);
   return AssignEnvironment(result);
 }
 
@@ -2381,9 +2380,6 @@ LInstruction* LChunkBuilder::DoEnterInlined(HEnterInlined* instr) {
                                                undefined,
                                                instr->call_kind(),
                                                instr->is_construct());
-  if (instr->materializes_arguments()) {
-    inner->Bind(instr->arguments(), graph()->GetArgumentsObject());
-  }
   current_block_->UpdateEnvironment(inner);
   chunk_->AddInlinedClosure(instr->closure());
   return NULL;
@@ -2391,20 +2387,10 @@ LInstruction* LChunkBuilder::DoEnterInlined(HEnterInlined* instr) {
 
 
 LInstruction* LChunkBuilder::DoLeaveInlined(HLeaveInlined* instr) {
-  LInstruction* pop = NULL;
-
-  HEnvironment* env = current_block_->last_environment();
-
-  if (instr->arguments_pushed()) {
-    int argument_count = env->arguments_environment()->parameter_count();
-    pop = new(zone()) LPop(argument_count);
-    argument_count_ -= argument_count;
-  }
-
   HEnvironment* outer = current_block_->last_environment()->
       DiscardInlined(false);
   current_block_->UpdateEnvironment(outer);
-  return pop;
+  return NULL;
 }
 
 

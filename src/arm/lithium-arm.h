@@ -72,7 +72,7 @@ class LCodeGen;
   V(CheckFunction)                              \
   V(CheckInstanceType)                          \
   V(CheckNonSmi)                                \
-  V(CheckMap)                                   \
+  V(CheckMaps)                                  \
   V(CheckPrototypeMaps)                         \
   V(CheckSmi)                                   \
   V(ClampDToUint8)                              \
@@ -179,8 +179,7 @@ class LCodeGen;
   V(CheckMapValue)                              \
   V(LoadFieldByIndex)                           \
   V(DateField)                                  \
-  V(WrapReceiver)                               \
-  V(Pop)
+  V(WrapReceiver)
 
 
 #define DECLARE_CONCRETE_INSTRUCTION(type, mnemonic)              \
@@ -535,15 +534,9 @@ class LArgumentsLength: public LTemplateInstruction<1, 1, 0> {
 
 class LArgumentsElements: public LTemplateInstruction<1, 0, 0> {
  public:
-  explicit LArgumentsElements(bool from_inlined)
-      : from_inlined_(from_inlined) { }
-
-  bool from_inlined() const { return from_inlined_; }
+  LArgumentsElements() { }
 
   DECLARE_CONCRETE_INSTRUCTION(ArgumentsElements, "arguments-elements")
-
- private:
-  bool from_inlined_;
 };
 
 
@@ -1385,19 +1378,6 @@ class LPushArgument: public LTemplateInstruction<0, 1, 0> {
 };
 
 
-class LPop: public LTemplateInstruction<0, 0, 0> {
- public:
-  explicit LPop(int count) : count_(count) { }
-
-  int count() const { return count_; }
-
-  DECLARE_CONCRETE_INSTRUCTION(Pop, "pop")
-
- private:
-  int count_;
-};
-
-
 class LThisFunction: public LTemplateInstruction<1, 0, 0> {
  public:
   DECLARE_CONCRETE_INSTRUCTION(ThisFunction, "this-function")
@@ -1909,14 +1889,14 @@ class LCheckInstanceType: public LTemplateInstruction<0, 1, 0> {
 };
 
 
-class LCheckMap: public LTemplateInstruction<0, 1, 0> {
+class LCheckMaps: public LTemplateInstruction<0, 1, 0> {
  public:
-  explicit LCheckMap(LOperand* value) {
+  explicit LCheckMaps(LOperand* value) {
     inputs_[0] = value;
   }
 
-  DECLARE_CONCRETE_INSTRUCTION(CheckMap, "check-map")
-  DECLARE_HYDROGEN_ACCESSOR(CheckMap)
+  DECLARE_CONCRETE_INSTRUCTION(CheckMaps, "check-maps")
+  DECLARE_HYDROGEN_ACCESSOR(CheckMaps)
 };
 
 
