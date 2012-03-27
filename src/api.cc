@@ -6019,7 +6019,7 @@ Handle<String> HeapGraphNode::GetName() const {
 }
 
 
-uint64_t HeapGraphNode::GetId() const {
+SnapshotObjectId HeapGraphNode::GetId() const {
   i::Isolate* isolate = i::Isolate::Current();
   IsDeadCheck(isolate, "v8::HeapGraphNode::GetId");
   return ToInternal(this)->id();
@@ -6134,11 +6134,11 @@ const HeapGraphNode* HeapSnapshot::GetRoot() const {
 }
 
 
-const HeapGraphNode* HeapSnapshot::GetNodeById(uint64_t id) const {
+const HeapGraphNode* HeapSnapshot::GetNodeById(SnapshotObjectId id) const {
   i::Isolate* isolate = i::Isolate::Current();
   IsDeadCheck(isolate, "v8::HeapSnapshot::GetNodeById");
   return reinterpret_cast<const HeapGraphNode*>(
-      ToInternal(this)->GetEntryById(static_cast<i::SnapshotObjectId>(id)));
+      ToInternal(this)->GetEntryById(id));
 }
 
 
@@ -6154,6 +6154,13 @@ const HeapGraphNode* HeapSnapshot::GetNode(int index) const {
   IsDeadCheck(isolate, "v8::HeapSnapshot::GetNode");
   return reinterpret_cast<const HeapGraphNode*>(
       ToInternal(this)->entries()->at(index));
+}
+
+
+SnapshotObjectId HeapSnapshot::GetMaxSnapshotJSObjectId() const {
+  i::Isolate* isolate = i::Isolate::Current();
+  IsDeadCheck(isolate, "v8::HeapSnapshot::GetMaxSnapshotJSObjectId");
+  return ToInternal(this)->max_snapshot_js_object_id();
 }
 
 
