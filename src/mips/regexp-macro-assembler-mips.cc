@@ -463,7 +463,8 @@ void RegExpMacroAssemblerMIPS::CheckCharacterAfterAnd(uint32_t c,
                                                      uint32_t mask,
                                                      Label* on_equal) {
   __ And(a0, current_character(), Operand(mask));
-  BranchOrBacktrack(on_equal, eq, a0, Operand(c));
+  Operand rhs = (c == 0) ? Operand(zero_reg) : Operand(c);
+  BranchOrBacktrack(on_equal, eq, a0, rhs);
 }
 
 
@@ -471,7 +472,8 @@ void RegExpMacroAssemblerMIPS::CheckNotCharacterAfterAnd(uint32_t c,
                                                         uint32_t mask,
                                                         Label* on_not_equal) {
   __ And(a0, current_character(), Operand(mask));
-  BranchOrBacktrack(on_not_equal, ne, a0, Operand(c));
+  Operand rhs = (c == 0) ? Operand(zero_reg) : Operand(c);
+  BranchOrBacktrack(on_not_equal, ne, a0, rhs);
 }
 
 
