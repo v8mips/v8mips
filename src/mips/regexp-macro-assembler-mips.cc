@@ -513,14 +513,12 @@ void RegExpMacroAssemblerMIPS::CheckBitInTable(
   __ li(a0, Operand(table));
   if (mode_ != ASCII || kTableMask != String::kMaxAsciiCharCode) {
     __ And(a1, current_character(), Operand(kTableSize - 1));
-    __ Addu(a1, a1, Operand(ByteArray::kHeaderSize - kHeapObjectTag));
+    __ Addu(a0, a0, a1);
   } else {
-    __ Addu(a1,
-            current_character(),
-            Operand(ByteArray::kHeaderSize - kHeapObjectTag));
+    __ Addu(a0, a0, current_character());
   }
-  __ Addu(a0, a0, a1);
-  __ lbu(a0, MemOperand(a0));
+
+  __ lbu(a0, MemOperand(a0, ByteArray::kHeaderSize - kHeapObjectTag));
   BranchOrBacktrack(on_bit_set, ne, a0, Operand(zero_reg));
 }
 
