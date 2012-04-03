@@ -16334,40 +16334,6 @@ TEST(CallCompletedCallbackTwoExceptions) {
 }
 
 
-class ContextCreator : public v8::internal::Thread {
- public:
-  ContextCreator() : Thread("ContextCreator") { }
-  void Run() {
-    v8::Isolate* isolate = v8::Isolate::New();
-    {
-      v8::Isolate::Scope isolate_scope(isolate);
-      v8::Persistent<v8::Context> context = v8::Context::New();
-      context.Dispose();
-    }
-    isolate->Dispose();
-  }
-};
-
-
-TEST(ParallelContexts) {
-  const int kNThreads = 80;
-  i::List<ContextCreator*> threads(kNThreads);
-  for (int i = 0; i < kNThreads; i++) {
-    threads.Add(new ContextCreator);
-  }
-
-  for (int i = 0; i < threads.length(); i++) {
-    threads[i]->Start();
-  }
-  for (int i = 0; i < threads.length(); i++) {
-    threads[i]->Join();
-  }
-  for (int i = 0; i < threads.length(); i++) {
-    delete threads[i];
-  }
-}
-
-
 static int probes_counter = 0;
 static int misses_counter = 0;
 static int updates_counter = 0;
