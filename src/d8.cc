@@ -318,11 +318,7 @@ static size_t convertToUint(Local<Value> value_in, TryCatch* try_catch) {
 const char kArrayBufferReferencePropName[] = "_is_array_buffer_";
 const char kArrayBufferMarkerPropName[] = "_array_buffer_ref_";
 
-#if V8_TARGET_ARCH_MIPS
 static const int kExternalArrayAllocationHeaderSize = 2;
-#else
-static const int kExternalArrayAllocationHeaderSize = 1;
-#endif
 
 Handle<Value> Shell::CreateExternalArray(const Arguments& args,
                                          ExternalArrayType type,
