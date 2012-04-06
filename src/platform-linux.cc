@@ -79,10 +79,6 @@ double ceiling(double x) {
 static Mutex* limit_mutex = NULL;
 
 
-
-#if V8_HOST_ARCH_MIPS
-  CHECK_GE(Page::kPageSize, getpagesize());
-#endif
 void OS::PostSetUp() {
   POSIXPostSetUp();
 }
