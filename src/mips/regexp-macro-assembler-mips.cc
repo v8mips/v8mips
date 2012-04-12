@@ -444,15 +444,6 @@ void RegExpMacroAssemblerMIPS::CheckNotBackReference(
 }
 
 
-void RegExpMacroAssemblerMIPS::CheckNotRegistersEqual(int reg1,
-                                                      int reg2,
-                                                      Label* on_not_equal) {
-  __ lw(a0, register_location(reg1));
-  __ lw(a1, register_location(reg2));
-  BranchOrBacktrack(on_not_equal, ne, a0, Operand(a1));
-}
-
-
 void RegExpMacroAssemblerMIPS::CheckNotCharacter(uint32_t c,
                                                  Label* on_not_equal) {
   BranchOrBacktrack(on_not_equal, ne, current_character(), Operand(c));
