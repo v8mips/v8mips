@@ -1354,13 +1354,8 @@ void StubCompiler::GenerateLoadInterceptor(Handle<JSObject> object,
       // Important invariant in CALLBACKS case: the code above must be
       // structured to never clobber |receiver| register.
       __ li(scratch2, callback);
-      // holder_reg is either receiver or scratch1.
-      if (!receiver.is(holder_reg)) {
-        ASSERT(scratch1.is(holder_reg));
-        __ Push(receiver, holder_reg);
-      } else {
-        __ Push(receiver, holder_reg);
-      }
+
+      __ Push(receiver, holder_reg);
       __ lw(scratch3,
             FieldMemOperand(scratch2, AccessorInfo::kDataOffset));
       __ li(scratch1, Operand(ExternalReference::isolate_address()));
