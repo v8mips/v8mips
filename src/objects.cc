@@ -1338,6 +1338,7 @@ void HeapObject::IterateBody(InstanceType type, int object_size,
       break;
     case JS_OBJECT_TYPE:
     case JS_CONTEXT_EXTENSION_OBJECT_TYPE:
+    case JS_MODULE_TYPE:
     case JS_VALUE_TYPE:
     case JS_DATE_TYPE:
     case JS_ARRAY_TYPE:
@@ -3025,7 +3026,6 @@ MaybeObject* JSObject::SetLocalPropertyIgnoreAttributes(
     String* name,
     Object* value,
     PropertyAttributes attributes) {
-
   // Make sure that the top context does not change when doing callbacks or
   // interceptor calls.
   AssertNoContextChange ncc;
@@ -3094,7 +3094,6 @@ MaybeObject* JSObject::SetLocalPropertyIgnoreAttributes(
       return ConvertDescriptorToFieldAndMapTransition(name, value, attributes);
     case HANDLER:
       UNREACHABLE();
-      return value;
   }
   UNREACHABLE();  // keep the compiler happy
   return value;

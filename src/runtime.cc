@@ -1292,14 +1292,15 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_DeclareGlobals) {
     bool is_var = value->IsUndefined();
     bool is_const = value->IsTheHole();
     bool is_function = value->IsSharedFunctionInfo();
-    bool is_module = value->IsJSObject();
+    bool is_module = value->IsJSModule();
     ASSERT(is_var + is_const + is_function + is_module == 1);
 
     if (is_var || is_const) {
       // Lookup the property in the global object, and don't set the
       // value of the variable if the property is already there.
+      // Do the lookup locally only, see ES5 errata.
       LookupResult lookup(isolate);
-      global->Lookup(*name, &lookup);
+      global->LocalLookup(*name, &lookup);
       if (lookup.IsProperty()) {
         // We found an existing property. Unless it was an interceptor
         // that claims the property is absent, skip this declaration.
@@ -1336,40 +1337,28 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_DeclareGlobals) {
 
     LanguageMode language_mode = DeclareGlobalsLanguageMode::decode(flags);
 
-    // Safari does not allow the invocation of callback setters for
-    // function declarations. To mimic this behavior, we do not allow
-    // the invocation of setters for function values. This makes a
-    // difference for global functions with the same names as event
-    // handlers such as "function onload() {}". Firefox does call the
-    // onload setter in those case and Safari does not. We follow
-    // Safari for compatibility.
-    if (is_function || is_module) {
-      if (lookup.IsProperty() && (lookup.type() != INTERCEPTOR)) {
-        // Do not overwrite READ_ONLY properties.
-        if (lookup.GetAttributes() & READ_ONLY) {
-          if (language_mode != CLASSIC_MODE) {
-            Handle<Object> args[] = { name };
-            return isolate->Throw(*isolate->factory()->NewTypeError(
-                "strict_cannot_assign", HandleVector(args, ARRAY_SIZE(args))));
-          }
-          continue;
+    if (!lookup.IsProperty() || is_function || is_module) {
+      // If the local property exists, check that we can reconfigure it
+      // as required for function declarations.
+      if (lookup.IsProperty() && lookup.IsDontDelete()) {
+        if (lookup.IsReadOnly() || lookup.IsDontEnum() ||
+            lookup.type() == CALLBACKS) {
+          return ThrowRedeclarationError(
+              isolate, is_function ? "function" : "module", name);
         }
-        // Do not change DONT_DELETE to false from true.
-        attr |= lookup.GetAttributes() & DONT_DELETE;
+        // If the existing property is not configurable, keep its attributes.
+        attr = lookup.GetAttributes();
       }
-      PropertyAttributes attributes = static_cast<PropertyAttributes>(attr);
-
-      RETURN_IF_EMPTY_HANDLE(
-          isolate,
-          JSObject::SetLocalPropertyIgnoreAttributes(global, name, value,
-                                                     attributes));
+      // Define or redefine own property.
+      RETURN_IF_EMPTY_HANDLE(isolate,
+          JSObject::SetLocalPropertyIgnoreAttributes(
+              global, name, value, static_cast<PropertyAttributes>(attr)));
     } else {
-      RETURN_IF_EMPTY_HANDLE(
-          isolate,
-          JSReceiver::SetProperty(global, name, value,
-                                  static_cast<PropertyAttributes>(attr),
-                                  language_mode == CLASSIC_MODE
-                                      ? kNonStrictMode : kStrictMode));
+      // Do a [[Put]] on the existing (own) property.
+      RETURN_IF_EMPTY_HANDLE(isolate,
+          JSObject::SetProperty(
+              global, name, value, static_cast<PropertyAttributes>(attr),
+              language_mode == CLASSIC_MODE ? kNonStrictMode : kStrictMode));
     }
   }
 
@@ -1402,6 +1391,8 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_DeclareContextSlot) {
 
   if (attributes != ABSENT) {
     // The name was declared before; check for conflicting re-declarations.
+    // Note: this is actually inconsistent with what happens for globals (where
+    // we silently ignore such declarations).
     if (((attributes & READ_ONLY) != 0) || (mode == READ_ONLY)) {
       // Functions are not read-only.
       ASSERT(mode != READ_ONLY || initial_value->IsTheHole());
@@ -1464,9 +1455,14 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_DeclareContextSlot) {
         return ThrowRedeclarationError(isolate, "const", name);
       }
     }
-    RETURN_IF_EMPTY_HANDLE(
-        isolate,
-        JSReceiver::SetProperty(object, name, value, mode, kNonStrictMode));
+    if (object->IsJSGlobalObject()) {
+      // Define own property on the global object.
+      RETURN_IF_EMPTY_HANDLE(isolate,
+         JSObject::SetLocalPropertyIgnoreAttributes(object, name, value, mode));
+    } else {
+      RETURN_IF_EMPTY_HANDLE(isolate,
+         JSReceiver::SetProperty(object, name, value, mode, kNonStrictMode));
+    }
   }
 
   return isolate->heap()->undefined_value();
@@ -8598,6 +8594,25 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_PushBlockContext) {
                                             scope_info);
   if (!maybe_context->To(&context)) return maybe_context;
   isolate->set_context(context);
+  return context;
+}
+
+
+RUNTIME_FUNCTION(MaybeObject*, Runtime_PushModuleContext) {
+  NoHandleAllocation ha;
+  ASSERT(args.length() == 2);
+  CONVERT_ARG_CHECKED(ScopeInfo, scope_info, 0);
+  CONVERT_ARG_HANDLE_CHECKED(JSModule, instance, 1);
+
+  Context* context;
+  MaybeObject* maybe_context =
+      isolate->heap()->AllocateModuleContext(isolate->context(),
+                                             scope_info);
+  if (!maybe_context->To(&context)) return maybe_context;
+  // Also initialize the context slot of the instance object.
+  instance->set_context(context);
+  isolate->set_context(context);
+
   return context;
 }
 
