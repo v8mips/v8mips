@@ -34,6 +34,7 @@
 #include "scopeinfo.h"
 #include "unicode.h"
 #include "zone-inl.h"
+#include "debug.h"
 
 namespace v8 {
 namespace internal {
@@ -967,7 +968,7 @@ void HeapEntry::Init(HeapSnapshot* snapshot,
   snapshot_ = snapshot;
   type_ = type;
   painted_ = false;
-  reachable_from_window_ = false;
+  user_reachable_ = false;
   name_ = name;
   self_size_ = self_size;
   retained_size_ = 0;
@@ -1311,8 +1312,7 @@ const SnapshotObjectId HeapObjectsMap::kFirstAvailableObjectId =
 
 HeapObjectsMap::HeapObjectsMap()
     : next_id_(kFirstAvailableObjectId),
-      entries_map_(AddressesMatch),
-      entries_(new List<EntryInfo>()) {
+      entries_map_(AddressesMatch) {
   // This dummy element solves a problem with entries_map_.
   // When we do lookup in HashMap we see no difference between two cases:
   // it has an entry with NULL as the value or it has created
@@ -1320,12 +1320,7 @@ HeapObjectsMap::HeapObjectsMap()
   // With such dummy element we have a guaranty that all entries_map_ entries
   // will have the value field grater than 0.
   // This fact is using in MoveObject method.
-  entries_->Add(EntryInfo(0, NULL, 0));
-}
-
-
-HeapObjectsMap::~HeapObjectsMap() {
-  delete entries_;
+  entries_.Add(EntryInfo(0, NULL, 0));
 }
 
 
@@ -1342,7 +1337,7 @@ void HeapObjectsMap::MoveObject(Address from, Address to) {
   if (from_value == NULL) return;
   int from_entry_info_index =
       static_cast<int>(reinterpret_cast<intptr_t>(from_value));
-  entries_->at(from_entry_info_index).addr = to;
+  entries_.at(from_entry_info_index).addr = to;
   HashMap::Entry* to_entry = entries_map_.Lookup(to, AddressHash(to), true);
   if (to_entry->value != NULL) {
     int to_entry_info_index =
@@ -1351,7 +1346,7 @@ void HeapObjectsMap::MoveObject(Address from, Address to) {
     // value in addr field. It is bad because later at RemoveDeadEntries
     // one of this entry will be removed with the corresponding entries_map_
     // entry.
-    entries_->at(to_entry_info_index).addr = NULL;
+    entries_.at(to_entry_info_index).addr = NULL;
   }
   to_entry->value = reinterpret_cast<void*>(from_entry_info_index);
 }
@@ -1361,29 +1356,29 @@ SnapshotObjectId HeapObjectsMap::FindEntry(Address addr) {
   HashMap::Entry* entry = entries_map_.Lookup(addr, AddressHash(addr), false);
   if (entry == NULL) return 0;
   int entry_index = static_cast<int>(reinterpret_cast<intptr_t>(entry->value));
-  EntryInfo& entry_info = entries_->at(entry_index);
-  ASSERT(static_cast<uint32_t>(entries_->length()) > entries_map_.occupancy());
+  EntryInfo& entry_info = entries_.at(entry_index);
+  ASSERT(static_cast<uint32_t>(entries_.length()) > entries_map_.occupancy());
   return entry_info.id;
 }
 
 
 SnapshotObjectId HeapObjectsMap::FindOrAddEntry(Address addr,
                                                 unsigned int size) {
-  ASSERT(static_cast<uint32_t>(entries_->length()) > entries_map_.occupancy());
+  ASSERT(static_cast<uint32_t>(entries_.length()) > entries_map_.occupancy());
   HashMap::Entry* entry = entries_map_.Lookup(addr, AddressHash(addr), true);
   if (entry->value != NULL) {
     int entry_index =
         static_cast<int>(reinterpret_cast<intptr_t>(entry->value));
-    EntryInfo& entry_info = entries_->at(entry_index);
+    EntryInfo& entry_info = entries_.at(entry_index);
     entry_info.accessed = true;
     entry_info.size = size;
     return entry_info.id;
   }
-  entry->value = reinterpret_cast<void*>(entries_->length());
+  entry->value = reinterpret_cast<void*>(entries_.length());
   SnapshotObjectId id = next_id_;
   next_id_ += kObjectIdStep;
-  entries_->Add(EntryInfo(id, addr, size));
-  ASSERT(static_cast<uint32_t>(entries_->length()) > entries_map_.occupancy());
+  entries_.Add(EntryInfo(id, addr, size));
+  ASSERT(static_cast<uint32_t>(entries_.length()) > entries_map_.occupancy());
   return id;
 }
 
@@ -1409,10 +1404,10 @@ void HeapObjectsMap::PushHeapObjectsStats(OutputStream* stream) {
   UpdateHeapObjectsMap();
   time_intervals_.Add(TimeInterval(next_id_));
   int prefered_chunk_size = stream->GetChunkSize();
-  List<uint32_t> stats_buffer;
-  ASSERT(!entries_->is_empty());
-  EntryInfo* entry_info = &entries_->first();
-  EntryInfo* end_entry_info = &entries_->last() + 1;
+  List<v8::HeapStatsUpdate> stats_buffer;
+  ASSERT(!entries_.is_empty());
+  EntryInfo* entry_info = &entries_.first();
+  EntryInfo* end_entry_info = &entries_.last() + 1;
   for (int time_interval_index = 0;
        time_interval_index < time_intervals_.length();
        ++time_interval_index) {
@@ -1428,11 +1423,12 @@ void HeapObjectsMap::PushHeapObjectsStats(OutputStream* stream) {
         static_cast<uint32_t>(entry_info - start_entry_info);
     if (time_interval.count != entries_count ||
         time_interval.size != entries_size) {
-      stats_buffer.Add(time_interval_index);
-      stats_buffer.Add(time_interval.count = entries_count);
-      stats_buffer.Add(time_interval.size = entries_size);
+      stats_buffer.Add(v8::HeapStatsUpdate(
+          time_interval_index,
+          time_interval.count = entries_count,
+          time_interval.size = entries_size));
       if (stats_buffer.length() >= prefered_chunk_size) {
-        OutputStream::WriteResult result = stream->WriteUint32Chunk(
+        OutputStream::WriteResult result = stream->WriteHeapStatsChunk(
             &stats_buffer.first(), stats_buffer.length());
         if (result == OutputStream::kAbort) return;
         stats_buffer.Clear();
@@ -1441,8 +1437,8 @@ void HeapObjectsMap::PushHeapObjectsStats(OutputStream* stream) {
   }
   ASSERT(entry_info == end_entry_info);
   if (!stats_buffer.is_empty()) {
-    OutputStream::WriteResult result =
-        stream->WriteUint32Chunk(&stats_buffer.first(), stats_buffer.length());
+    OutputStream::WriteResult result = stream->WriteHeapStatsChunk(
+        &stats_buffer.first(), stats_buffer.length());
     if (result == OutputStream::kAbort) return;
   }
   stream->EndOfStream();
@@ -1450,17 +1446,17 @@ void HeapObjectsMap::PushHeapObjectsStats(OutputStream* stream) {
 
 
 void HeapObjectsMap::RemoveDeadEntries() {
-  ASSERT(entries_->length() > 0 &&
-         entries_->at(0).id == 0 &&
-         entries_->at(0).addr == NULL);
+  ASSERT(entries_.length() > 0 &&
+         entries_.at(0).id == 0 &&
+         entries_.at(0).addr == NULL);
   int first_free_entry = 1;
-  for (int i = 1; i < entries_->length(); ++i) {
-    EntryInfo& entry_info = entries_->at(i);
+  for (int i = 1; i < entries_.length(); ++i) {
+    EntryInfo& entry_info = entries_.at(i);
     if (entry_info.accessed) {
       if (first_free_entry != i) {
-        entries_->at(first_free_entry) = entry_info;
+        entries_.at(first_free_entry) = entry_info;
       }
-      entries_->at(first_free_entry).accessed = false;
+      entries_.at(first_free_entry).accessed = false;
       HashMap::Entry* entry = entries_map_.Lookup(
           entry_info.addr, AddressHash(entry_info.addr), false);
       ASSERT(entry);
@@ -1472,8 +1468,8 @@ void HeapObjectsMap::RemoveDeadEntries() {
       }
     }
   }
-  entries_->Rewind(first_free_entry);
-  ASSERT(static_cast<uint32_t>(entries_->length()) - 1 ==
+  entries_.Rewind(first_free_entry);
+  ASSERT(static_cast<uint32_t>(entries_.length()) - 1 ==
          entries_map_.occupancy());
 }
 
@@ -1986,7 +1982,15 @@ void V8HeapExplorer::ExtractReferences(HeapObject* obj) {
     // We use JSGlobalProxy because this is what embedder (e.g. browser)
     // uses for the global object.
     JSGlobalProxy* proxy = JSGlobalProxy::cast(obj);
-    SetWindowReference(proxy->map()->prototype());
+    Object* object = proxy->map()->prototype();
+    bool is_debug_object = false;
+#ifdef ENABLE_DEBUGGER_SUPPORT
+    is_debug_object = object->IsGlobalObject() &&
+        Isolate::Current()->debug()->IsDebugGlobal(GlobalObject::cast(object));
+#endif
+    if (!is_debug_object) {
+      SetUserGlobalReference(object);
+    }
   } else if (obj->IsJSObject()) {
     JSObject* js_obj = JSObject::cast(obj);
     ExtractClosureReferences(js_obj, entry);
@@ -2631,7 +2635,7 @@ void V8HeapExplorer::SetRootGcRootsReference() {
 }
 
 
-void V8HeapExplorer::SetWindowReference(Object* child_obj) {
+void V8HeapExplorer::SetUserGlobalReference(Object* child_obj) {
   HeapEntry* child_entry = GetEntry(child_obj);
   ASSERT(child_entry != NULL);
   filler_->SetNamedAutoIndexReference(
@@ -3267,30 +3271,30 @@ bool HeapSnapshotGenerator::FillReferences() {
 }
 
 
-bool HeapSnapshotGenerator::IsWindowReference(const HeapGraphEdge& edge) {
+bool HeapSnapshotGenerator::IsUserGlobalReference(const HeapGraphEdge& edge) {
   ASSERT(edge.from() == snapshot_->root());
   return edge.type() == HeapGraphEdge::kShortcut;
 }
 
 
-void HeapSnapshotGenerator::MarkWindowReachableObjects() {
+void HeapSnapshotGenerator::MarkUserReachableObjects() {
   List<HeapEntry*> worklist;
 
   Vector<HeapGraphEdge> children = snapshot_->root()->children();
   for (int i = 0; i < children.length(); ++i) {
-    if (IsWindowReference(children[i])) {
+    if (IsUserGlobalReference(children[i])) {
       worklist.Add(children[i].to());
     }
   }
 
   while (!worklist.is_empty()) {
     HeapEntry* entry = worklist.RemoveLast();
-    if (entry->reachable_from_window()) continue;
-    entry->set_reachable_from_window();
+    if (entry->user_reachable()) continue;
+    entry->set_user_reachable();
     Vector<HeapGraphEdge> children = entry->children();
     for (int i = 0; i < children.length(); ++i) {
       HeapEntry* child = children[i].to();
-      if (!child->reachable_from_window()) {
+      if (!child->user_reachable()) {
         worklist.Add(child);
       }
     }
@@ -3303,8 +3307,8 @@ static bool IsRetainingEdge(HeapGraphEdge* edge) {
   // The edge is not retaining if it goes from system domain
   // (i.e. an object not reachable from window) to the user domain
   // (i.e. a reachable object).
-  return edge->from()->reachable_from_window()
-      || !edge->to()->reachable_from_window();
+  return edge->from()->user_reachable()
+      || !edge->to()->user_reachable();
 }
 
 
@@ -3412,7 +3416,7 @@ bool HeapSnapshotGenerator::BuildDominatorTree(
 
 
 bool HeapSnapshotGenerator::SetEntriesDominators() {
-  MarkWindowReachableObjects();
+  MarkUserReachableObjects();
   // This array is used for maintaining postorder of nodes.
   ScopedVector<HeapEntry*> ordered_entries(snapshot_->entries()->length());
   FillPostorderIndexes(&ordered_entries);
