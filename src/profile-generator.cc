@@ -2024,6 +2024,7 @@ void V8HeapExplorer::ExtractReferences(HeapObject* obj) {
                            bound ? "bindings" : "literals",
                            js_fun->literals_or_bindings(),
                            JSFunction::kLiteralsOffset);
+      TagObject(shared_info, "(shared function info)");
       SetInternalReference(js_fun, entry,
                            "shared", shared_info,
                            JSFunction::kSharedFunctionInfoOffset);
@@ -2095,8 +2096,9 @@ void V8HeapExplorer::ExtractReferences(HeapObject* obj) {
     SetInternalReference(obj, entry,
                          "name", shared->name(),
                          SharedFunctionInfo::kNameOffset);
+    TagObject(shared->code(), "(code)");
     SetInternalReference(obj, entry,
-                         "code", shared->unchecked_code(),
+                         "code", shared->code(),
                          SharedFunctionInfo::kCodeOffset);
     TagObject(shared->scope_info(), "(function scope info)");
     SetInternalReference(obj, entry,
@@ -2108,6 +2110,23 @@ void V8HeapExplorer::ExtractReferences(HeapObject* obj) {
     SetInternalReference(obj, entry,
                          "script", shared->script(),
                          SharedFunctionInfo::kScriptOffset);
+    TagObject(shared->construct_stub(), "(code)");
+    SetInternalReference(obj, entry,
+                         "construct_stub", shared->construct_stub(),
+                         SharedFunctionInfo::kConstructStubOffset);
+    SetInternalReference(obj, entry,
+                         "function_data", shared->function_data(),
+                         SharedFunctionInfo::kFunctionDataOffset);
+    SetInternalReference(obj, entry,
+                         "debug_info", shared->debug_info(),
+                         SharedFunctionInfo::kDebugInfoOffset);
+    SetInternalReference(obj, entry,
+                         "inferred_name", shared->inferred_name(),
+                         SharedFunctionInfo::kInferredNameOffset);
+    SetInternalReference(obj, entry,
+                         "this_property_assignments",
+                         shared->this_property_assignments(),
+                         SharedFunctionInfo::kThisPropertyAssignmentsOffset);
     SetWeakReference(obj, entry,
                      1, shared->initial_map(),
                      SharedFunctionInfo::kInitialMapOffset);
@@ -2461,6 +2480,20 @@ void V8HeapExplorer::SetObjectName(HeapObject* object) {
 }
 
 
+bool V8HeapExplorer::IsEssentialObject(Object* object) {
+  // We have to use raw_unchecked_* versions because checked versions
+  // would fail during iteration over object properties.
+  return object->IsHeapObject()
+      && !object->IsOddball()
+      && object != heap_->raw_unchecked_empty_byte_array()
+      && object != heap_->raw_unchecked_empty_fixed_array()
+      && object != heap_->raw_unchecked_empty_descriptor_array()
+      && object != heap_->raw_unchecked_fixed_array_map()
+      && object != heap_->raw_unchecked_global_property_cell_map()
+      && object != heap_->raw_unchecked_shared_function_info_map();
+}
+
+
 void V8HeapExplorer::SetClosureReference(HeapObject* parent_obj,
                                          HeapEntry* parent_entry,
                                          String* reference_name,
@@ -2516,10 +2549,7 @@ void V8HeapExplorer::SetInternalReference(HeapObject* parent_obj,
                                           int field_offset) {
   HeapEntry* child_entry = GetEntry(child_obj);
   if (child_entry == NULL) return;
-  // We have to use raw_unchecked_* version because when the
-  // empty_fixed_array itself is being processed all its inline properties
-  // are invalid and the check in empty_fixed_array() function fails.
-  if (child_obj != heap_->raw_unchecked_empty_fixed_array()) {
+  if (IsEssentialObject(child_obj)) {
     filler_->SetNamedReference(HeapGraphEdge::kInternal,
                                parent_obj, parent_entry,
                                reference_name,
@@ -2536,8 +2566,7 @@ void V8HeapExplorer::SetInternalReference(HeapObject* parent_obj,
                                           int field_offset) {
   HeapEntry* child_entry = GetEntry(child_obj);
   if (child_entry == NULL) return;
-  // See the comment regarding raw_unchecked_* above.
-  if (child_obj != heap_->raw_unchecked_empty_fixed_array()) {
+  if (IsEssentialObject(child_obj)) {
     filler_->SetNamedReference(HeapGraphEdge::kInternal,
                                parent_obj, parent_entry,
                                collection_->names()->GetName(index),
@@ -2552,7 +2581,7 @@ void V8HeapExplorer::SetHiddenReference(HeapObject* parent_obj,
                                         int index,
                                         Object* child_obj) {
   HeapEntry* child_entry = GetEntry(child_obj);
-  if (child_entry != NULL) {
+  if (child_entry != NULL && IsEssentialObject(child_obj)) {
     filler_->SetIndexedReference(HeapGraphEdge::kHidden,
                                  parent_obj,
                                  parent_entry,
@@ -2692,11 +2721,7 @@ const char* V8HeapExplorer::GetStrongGcSubrootName(Object* object) {
 
 
 void V8HeapExplorer::TagObject(Object* obj, const char* tag) {
-  if (obj->IsHeapObject() &&
-      !obj->IsOddball() &&
-      obj != heap_->raw_unchecked_empty_byte_array() &&
-      obj != heap_->raw_unchecked_empty_fixed_array() &&
-      obj != heap_->raw_unchecked_empty_descriptor_array()) {
+  if (IsEssentialObject(obj)) {
     objects_tags_.SetTag(obj, tag);
   }
 }
