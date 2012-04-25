@@ -33,6 +33,7 @@ OUTDIR ?= out
 TESTJOBS ?= -j16
 GYPFLAGS ?=
 TESTFLAGS ?=
+BUILDTYPE ?= Release
 ANDROID_NDK_ROOT ?=
 ANDROID_TOOL_PREFIX = $(ANDROID_NDK_ROOT)/toolchain/bin/arm-linux-androideabi
 
@@ -153,7 +154,11 @@ $(BUILDS): $(OUTDIR)/Makefile-$$(basename $$@)
 
 native: $(OUTDIR)/Makefile-native
 	@$(MAKE) -C "$(OUTDIR)" -f Makefile-native \
-	         CXX="$(CXX)" LINK="$(LINK)" BUILDTYPE=Release \
+	         CXX="$(CXX)" LINK="$(LINK)" BUILDTYPE=$(BUILDTYPE) \
+	         builddir="$(shell pwd)/$(OUTDIR)/$@"
+
+cross: $(OUTDIR)/Makefile-cross
+	@$(MAKE) -C "$(OUTDIR)" -f Makefile-cross BUILDTYPE=$(BUILDTYPE) \
 	         builddir="$(shell pwd)/$(OUTDIR)/$@"
 
 # TODO(jkummerow): add "android.debug" when we need it.
@@ -207,7 +212,12 @@ android.clean:
 	rm -rf $(OUTDIR)/android.release
 	find $(OUTDIR) -regex '.*\(host\|target\)-android\.mk' -delete
 
-clean: $(addsuffix .clean,$(ARCHES)) native.clean
+cross.clean:
+	rm -f $(OUTDIR)/Makefile-cross
+	rm -rf $(OUTDIR)/cross
+	find $(OUTDIR) -regex '.*\(host\|target\)-cross\.mk' -delete
+
+clean: $(addsuffix .clean,$(ARCHES)) native.clean cross.clean
 
 # GYP file generation targets.
 $(OUTDIR)/Makefile-ia32: $(GYPFILES) $(ENVFILE)
@@ -238,6 +248,11 @@ $(OUTDIR)/Makefile-native: $(GYPFILES) $(ENVFILE)
 	GYP_GENERATORS=make \
 	build/gyp/gyp --generator-output="$(OUTDIR)" build/all.gyp \
 	              -Ibuild/standalone.gypi --depth=. -S-native $(GYPFLAGS)
+
+$(OUTDIR)/Makefile-cross: $(GYPFILES) $(ENVFILE)
+	build/gyp/gyp --generator-output="$(OUTDIR)" build/all.gyp \
+	              -Ibuild/standalone.gypi --depth=. \
+	              -Dtarget_arch=$(target) -S-cross $(GYPFLAGS)
 
 $(OUTDIR)/Makefile-android: $(GYPFILES) $(ENVFILE) build/android.gypi \
                             must-set-ANDROID_NDK_ROOT
