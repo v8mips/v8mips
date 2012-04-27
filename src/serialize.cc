@@ -749,14 +749,6 @@ void Deserializer::ReadObject(int space_number,
       ((space == HEAP->lo_space()) && (space_number == kLargeCode));
   ASSERT(HeapObject::FromAddress(address)->IsCode() == is_codespace);
 #endif
-
-#ifdef USE_SIMULATOR
-  // The serializer may have converted all x86 NaN values to MIPS NaN values.
-  // Convert them back. IsNaN returns true for both kinds of NaN.
-  // Alignment and speed are non-issues, as this only happens on the simulator.
-  HeapObject* obj = HeapObject::cast(*write_back);
-  if (obj->IsNaN()) HeapNumber::cast(obj)->set_value(OS::nan_value());
-#endif
 }
 
 
