@@ -1186,16 +1186,7 @@ class StaticMarkingVisitor : public StaticVisitorBase {
     Heap* heap = map->GetHeap();
     Code* code = reinterpret_cast<Code*>(object);
     if (FLAG_cleanup_code_caches_at_gc) {
-      Object* raw_info = code->type_feedback_info();
-      if (raw_info->IsTypeFeedbackInfo()) {
-        TypeFeedbackCells* type_feedback_cells =
-            TypeFeedbackInfo::cast(raw_info)->type_feedback_cells();
-        for (int i = 0; i < type_feedback_cells->CellCount(); i++) {
-          ASSERT(type_feedback_cells->AstId(i)->IsSmi());
-          JSGlobalPropertyCell* cell = type_feedback_cells->Cell(i);
-          cell->set_value(TypeFeedbackCells::RawUninitializedSentinel(heap));
-        }
-      }
+      code->ClearTypeFeedbackCells(heap);
     }
     code->CodeIterateBody<StaticMarkingVisitor>(heap);
   }
@@ -3838,7 +3829,7 @@ void MarkCompactCollector::SweepSpace(PagedSpace* space, SweeperType sweeper) {
   bool lazy_sweeping_active = false;
   bool unused_page_present = false;
 
-  intptr_t old_space_size = heap()->PromotedSpaceSize();
+  intptr_t old_space_size = heap()->PromotedSpaceSizeOfObjects();
   intptr_t space_left =
       Min(heap()->OldGenPromotionLimit(old_space_size),
           heap()->OldGenAllocationLimit(old_space_size)) - old_space_size;
