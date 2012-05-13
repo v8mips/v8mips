@@ -889,7 +889,6 @@ class V8HeapExplorer : public HeapEntriesAllocator {
   void AddRootEntries(SnapshotFillerInterface* filler);
   int EstimateObjectsCount(HeapIterator* iterator);
   bool IterateAndExtractReferences(SnapshotFillerInterface* filler);
-  bool IterateAndSetObjectNames(SnapshotFillerInterface* filler);
   void TagGlobalObjects();
 
   static String* GetConstructorName(JSObject* object);
@@ -968,7 +967,6 @@ class V8HeapExplorer : public HeapEntriesAllocator {
   void SetGcSubrootReference(
       VisitorSynchronization::SyncTag tag, bool is_weak, Object* child);
   const char* GetStrongGcSubrootName(Object* object);
-  void SetObjectName(HeapObject* object);
   void TagObject(Object* obj, const char* tag);
 
   HeapEntry* GetEntry(Object* obj);
