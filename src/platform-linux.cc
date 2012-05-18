@@ -38,6 +38,10 @@
 #include <sys/types.h>
 #include <stdlib.h>
 
+#ifdef __UCLIBC__
+#undef __GLIBC__
+#endif
+
 // Ubuntu Dapper requires memory pages to be marked as
 // executable. Otherwise, OS raises an exception when executing code
 // in that page.
