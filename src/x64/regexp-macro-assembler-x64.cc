@@ -794,7 +794,7 @@ Handle<HeapObject> RegExpMacroAssemblerX64::GetCode(Handle<String> source) {
 #endif
 
   __ push(Immediate(0));  // Number of successful matches in a global regexp.
-  __ push(Immediate(0));  // Make room for "at start" constant.
+  __ push(Immediate(0));  // Make room for "input start - 1" constant.
 
   // Check if we have space on the stack for registers.
   Label stack_limit_hit;
@@ -846,12 +846,24 @@ Handle<HeapObject> RegExpMacroAssemblerX64::GetCode(Handle<String> source) {
   // position registers.
   __ movq(Operand(rbp, kInputStartMinusOne), rax);
 
+#ifdef WIN32
+  // Ensure that we have written to each stack page, in order. Skipping a page
+  // on Windows can cause segmentation faults. Assuming page size is 4k.
+  const int kPageSize = 4096;
+  const int kRegistersPerPage = kPageSize / kPointerSize;
+  for (int i = num_saved_registers_ + kRegistersPerPage - 1;
+      i < num_registers_;
+      i += kRegistersPerPage) {
+    __ movq(register_location(i), rax);  // One write every page.
+  }
+#endif  // WIN32
+
   // Initialize code object pointer.
   __ Move(code_object_pointer(), masm_.CodeObject());
 
   Label load_char_start_regexp, start_regexp;
   // Load newline if index is at start, previous character otherwise.
-  __ cmpb(Operand(rbp, kStartIndex), Immediate(0));
+  __ cmpl(Operand(rbp, kStartIndex), Immediate(0));
   __ j(not_equal, &load_char_start_regexp, Label::kNear);
   __ Set(current_character(), '\n');
   __ jmp(&start_regexp, Label::kNear);
@@ -923,7 +935,7 @@ Handle<HeapObject> RegExpMacroAssemblerX64::GetCode(Handle<String> source) {
       __ incq(Operand(rbp, kSuccessfulCaptures));
       // Capture results have been stored, so the number of remaining global
       // output registers is reduced by the number of stored captures.
-      __ movq(rcx, Operand(rbp, kNumOutputRegisters));
+      __ movsxlq(rcx, Operand(rbp, kNumOutputRegisters));
       __ subq(rcx, Immediate(num_saved_registers_));
       // Check whether we have enough room for another set of capture results.
       __ cmpq(rcx, Immediate(num_saved_registers_));
