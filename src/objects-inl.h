@@ -1931,9 +1931,21 @@ String* DescriptorArray::GetKey(int descriptor_number) {
 }
 
 
+Object** DescriptorArray::GetValueSlot(int descriptor_number) {
+  ASSERT(descriptor_number < number_of_descriptors());
+  return GetContentArray()->data_start() + ToValueIndex(descriptor_number);
+}
+
+
 Object* DescriptorArray::GetValue(int descriptor_number) {
   ASSERT(descriptor_number < number_of_descriptors());
   return GetContentArray()->get(ToValueIndex(descriptor_number));
+}
+
+
+void DescriptorArray::SetNullValueUnchecked(int descriptor_number, Heap* heap) {
+  ASSERT(descriptor_number < number_of_descriptors());
+  GetContentArray()->set_null_unchecked(heap, ToValueIndex(descriptor_number));
 }
 
 
@@ -1941,6 +1953,12 @@ PropertyDetails DescriptorArray::GetDetails(int descriptor_number) {
   ASSERT(descriptor_number < number_of_descriptors());
   Object* details = GetContentArray()->get(ToDetailsIndex(descriptor_number));
   return PropertyDetails(Smi::cast(details));
+}
+
+
+void DescriptorArray::SetDetailsUnchecked(int descriptor_number, Smi* value) {
+  ASSERT(descriptor_number < number_of_descriptors());
+  GetContentArray()->set_unchecked(ToDetailsIndex(descriptor_number), value);
 }
 
 

@@ -664,12 +664,13 @@ enum CompareResult {
                          WriteBarrierMode mode = UPDATE_WRITE_BARRIER); \
 
 
+class AccessorPair;
 class DictionaryElementsAccessor;
 class ElementsAccessor;
+class Failure;
 class FixedArrayBase;
 class ObjectVisitor;
 class StringStream;
-class Failure;
 
 struct ValueInfo : public Malloced {
   ValueInfo() : type(FIRST_TYPE), ptr(NULL), str(NULL), number(0) { }
@@ -1608,6 +1609,14 @@ class JSObject: public JSReceiver {
                                               Object* getter,
                                               Object* setter,
                                               PropertyAttributes attributes);
+  // Try to define a single accessor paying attention to map transitions.
+  // Returns a JavaScript null if this was not possible and we have to use the
+  // slow case. Note that we can fail due to allocations, too.
+  MUST_USE_RESULT MaybeObject* DefineFastAccessor(
+      String* name,
+      AccessorComponent component,
+      Object* accessor,
+      PropertyAttributes attributes);
   Object* LookupAccessor(String* name, AccessorComponent component);
 
   MUST_USE_RESULT MaybeObject* DefineAccessor(AccessorInfo* info);
@@ -1828,7 +1837,6 @@ class JSObject: public JSReceiver {
   void LocalLookupRealNamedProperty(String* name, LookupResult* result);
   void LookupRealNamedProperty(String* name, LookupResult* result);
   void LookupRealNamedPropertyInPrototypes(String* name, LookupResult* result);
-  void LookupCallbackSetterInPrototypes(String* name, LookupResult* result);
   MUST_USE_RESULT MaybeObject* SetElementWithCallbackSetterInPrototypes(
       uint32_t index, Object* value, bool* found, StrictModeFlag strict_mode);
   void LookupCallback(String* name, LookupResult* result);
@@ -2113,17 +2121,16 @@ class JSObject: public JSReceiver {
       bool check_prototype,
       SetPropertyMode set_mode);
 
-  // Searches the prototype chain for a callback setter and sets the property
-  // with the setter if it finds one. The '*found' flag indicates whether
-  // a setter was found or not.
-  // This function can cause GC and can return a failure result with
-  // '*found==true'.
-  MUST_USE_RESULT MaybeObject* SetPropertyWithCallbackSetterInPrototypes(
+  // Searches the prototype chain for property 'name'. If it is found and
+  // has a setter, invoke it and set '*done' to true. If it is found and is
+  // read-only, reject and set '*done' to true. Otherwise, set '*done' to
+  // false. Can cause GC and can return a failure result with '*done==true'.
+  MUST_USE_RESULT MaybeObject* SetPropertyViaPrototypes(
       String* name,
       Object* value,
       PropertyAttributes attributes,
-      bool* found,
-      StrictModeFlag strict_mode);
+      StrictModeFlag strict_mode,
+      bool* done);
 
   MUST_USE_RESULT MaybeObject* DeletePropertyPostInterceptor(String* name,
                                                              DeleteMode mode);
@@ -2441,7 +2448,10 @@ class DescriptorArray: public FixedArray {
   // Accessors for fetching instance descriptor at descriptor number.
   inline String* GetKey(int descriptor_number);
   inline Object* GetValue(int descriptor_number);
+  inline Object** GetValueSlot(int descriptor_number);
+  inline void SetNullValueUnchecked(int descriptor_number, Heap* heap);
   inline PropertyDetails GetDetails(int descriptor_number);
+  inline void SetDetailsUnchecked(int descriptor_number, Smi* value);
   inline PropertyType GetType(int descriptor_number);
   inline int GetFieldIndex(int descriptor_number);
   inline JSFunction* GetConstantFunction(int descriptor_number);
@@ -2451,6 +2461,14 @@ class DescriptorArray: public FixedArray {
   inline bool IsTransitionOnly(int descriptor_number);
   inline bool IsNullDescriptor(int descriptor_number);
 
+  // WhitenessWitness is used to prove that a specific descriptor array is white
+  // (unmarked), so incremental write barriers can be skipped because the
+  // marking invariant cannot be broken and slots pointing into evacuation
+  // candidates will be discovered when the object is scanned. A witness is
+  // always stack-allocated right after creating a descriptor array. By
+  // allocating a witness, incremental marking is globally disabled. The witness
+  // is then passed along wherever needed to statically prove that the
+  // descriptor array is known to be white.
   class WhitenessWitness {
    public:
     inline explicit WhitenessWitness(DescriptorArray* array);
@@ -2579,6 +2597,8 @@ class DescriptorArray: public FixedArray {
   static const int kMaxNumberOfDescriptors = 1024 + 512;
 
  private:
+  friend class IntrusiveMapTransitionIterator;
+
   // An entry in a DescriptorArray, represented as an (array, index) pair.
   class Entry {
    public:
@@ -2617,6 +2637,7 @@ class DescriptorArray: public FixedArray {
   FixedArray* GetContentArray() {
     return FixedArray::cast(get(kContentArrayIndex));
   }
+
   DISALLOW_IMPLICIT_CONSTRUCTORS(DescriptorArray);
 };
 
@@ -7699,23 +7720,28 @@ class JSProxy: public JSReceiver {
       uint32_t index);
 
   MUST_USE_RESULT MaybeObject* SetPropertyWithHandler(
+      JSReceiver* receiver,
       String* name,
       Object* value,
       PropertyAttributes attributes,
       StrictModeFlag strict_mode);
   MUST_USE_RESULT MaybeObject* SetElementWithHandler(
+      JSReceiver* receiver,
       uint32_t index,
       Object* value,
       StrictModeFlag strict_mode);
 
-  // If the handler defines an accessor property, invoke its setter
-  // (or throw if only a getter exists) and set *found to true. Otherwise false.
-  MUST_USE_RESULT MaybeObject* SetPropertyWithHandlerIfDefiningSetter(
+  // If the handler defines an accessor property with a setter, invoke it.
+  // If it defines an accessor property without a setter, or a data property
+  // that is read-only, throw. In all these cases set '*done' to true,
+  // otherwise set it to false.
+  MUST_USE_RESULT MaybeObject* SetPropertyViaPrototypesWithHandler(
+      JSReceiver* receiver,
       String* name,
       Object* value,
       PropertyAttributes attributes,
       StrictModeFlag strict_mode,
-      bool* found);
+      bool* done);
 
   MUST_USE_RESULT MaybeObject* DeletePropertyWithHandler(
       String* name,
@@ -8099,6 +8125,18 @@ class AccessorPair: public Struct {
   static inline AccessorPair* cast(Object* obj);
 
   MUST_USE_RESULT MaybeObject* CopyWithoutTransitions();
+
+  Object* get(AccessorComponent component) {
+    return component == ACCESSOR_GETTER ? getter() : setter();
+  }
+
+  void set(AccessorComponent component, Object* value) {
+    if (component == ACCESSOR_GETTER) {
+      set_getter(value);
+    } else {
+      set_setter(value);
+    }
+  }
 
   // Note: Returns undefined instead in case of a hole.
   Object* GetComponent(AccessorComponent component);

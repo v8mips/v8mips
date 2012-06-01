@@ -1,4 +1,4 @@
-// Copyright 2010 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -25,19 +25,8 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// Test that readonly variables are treated correctly.
-
-// Create an object with a read-only length property in the prototype
-// chain by putting the string split function in the prototype chain.
 var o = {};
-o.__proto__ = String.prototype.split;
-
-function f() {
-  with (o) {
-    length = 23;
-    length = 24;
-    assertEquals(2, length);
-  }
-  assertEquals(2, o.length);
-}
-f();
+o.__defineGetter__('foo', function () { return null; });
+var o = {};
+o.foo = 42;
+assertEquals(42, o.foo);

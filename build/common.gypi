@@ -238,6 +238,11 @@
         'defines': [
           'WIN32',
         ],
+        'msvs_configuration_attributes': {
+          'OutputDirectory': '<(DEPTH)\\build\\$(ConfigurationName)',
+          'IntermediateDirectory': '$(OutDir)\\obj\\$(ProjectName)',
+          'CharacterSet': '1',
+        },
       }],
       ['OS=="win" and v8_enable_prof==1', {
         'msvs_settings': {
@@ -266,7 +271,7 @@
         'target_conditions': [
           ['_toolset=="host"', {
             'variables': {
-              'm32flag': '<!((echo | $(echo ${CXX_host:-${CXX:-$(which g++)}}) -m32 -E - > /dev/null 2>&1) && echo -n "-m32" || true)',
+              'm32flag': '<!((echo | $(echo ${CXX_host:-$(which g++)}) -m32 -E - > /dev/null 2>&1) && echo -n "-m32" || true)',
             },
             'cflags': [ '<(m32flag)' ],
             'ldflags': [ '<(m32flag)' ],
@@ -359,11 +364,6 @@
             },
           }],  # OS=="mac"
           ['OS=="win"', {
-            'msvs_configuration_attributes': {
-              'OutputDirectory': '<(DEPTH)\\build\\$(ConfigurationName)',
-              'IntermediateDirectory': '$(OutDir)\\obj\\$(ProjectName)',
-              'CharacterSet': '1',
-            },
             'msvs_settings': {
               'VCCLCompilerTool': {
                 'Optimization': '2',

@@ -2599,8 +2599,9 @@ void LCodeGen::DoLoadKeyedSpecializedArrayElement(
     }
     MemOperand mem_operand(zero_reg);
     if (key_is_constant) {
-      mem_operand = MemOperand(external_pointer,
-                               (constant_key << shift_size) + additional_offset);
+      mem_operand =
+          MemOperand(external_pointer,
+                     (constant_key << shift_size) + additional_offset);
     } else {
       if (instr->additional_index() == 0) {
         __ sll(scratch, key, shift_size);
@@ -3454,6 +3455,18 @@ void LCodeGen::DoStoreNamedField(LStoreNamedField* instr) {
   if (!instr->transition().is_null()) {
     __ li(scratch, Operand(instr->transition()));
     __ sw(scratch, FieldMemOperand(object, HeapObject::kMapOffset));
+    if (instr->hydrogen()->NeedsWriteBarrierForMap()) {
+      Register temp = ToRegister(instr->TempAt(0));
+      // Update the write barrier for the map field.
+      __ RecordWriteField(object,
+                          HeapObject::kMapOffset,
+                          scratch,
+                          temp,
+                          kRAHasBeenSaved,
+                          kSaveFPRegs,
+                          OMIT_REMEMBERED_SET,
+                          OMIT_SMI_CHECK);
+    }
   }
 
   // Do the store.
@@ -3641,7 +3654,7 @@ void LCodeGen::DoStoreKeyedSpecializedArrayElement(
     Register value(ToRegister(instr->value()));
     Register scratch = scratch0();
     if (instr->additional_index() != 0 && !key_is_constant) {
-      __ Addu(scratch0(), key, instr->additional_index());
+      __ Addu(scratch, key, instr->additional_index());
     }
     MemOperand mem_operand(zero_reg);
     if (key_is_constant) {
