@@ -1,4 +1,4 @@
-// Copyright 2009 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -25,42 +25,52 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// Flags: --es5_readonly
+// Flags: --allow-natives-syntax
 
-// According to ECMA-262, sections 8.6.2.2 and 8.6.2.3 you're not
-// allowed to override read-only properties, not even if the read-only
-// property is in the prototype chain.
-//
-// However, for compatibility with WebKit/JSC, we allow the overriding
-// of read-only properties in prototype chains.
+// Check that keyed stores make things go dict mode faster than non-keyed
+// stores.
 
-function F() {};
-F.prototype = Number;
-
-var original_number_max = Number.MAX_VALUE;
-
-// Assignment to a property which does not exist on the object itself,
-// but is read-only in a prototype does not take effect.
-var f = new F();
-assertEquals(original_number_max, f.MAX_VALUE);
-f.MAX_VALUE = 42;
-assertEquals(original_number_max, f.MAX_VALUE);
-
-// Assignment to a property which does not exist on the object itself,
-// but is read-only in a prototype does not take effect.
-f = new F();
-with (f) {
-  MAX_VALUE = 42;
+function AddProps(obj) {
+  for (var i = 0; i < 26; i++) {
+    obj["x" + i] = 0;
+  }
 }
-assertEquals(original_number_max, f.MAX_VALUE);
 
-// Assignment to read-only property on the object itself is ignored.
-Number.MAX_VALUE = 42;
-assertEquals(original_number_max, Number.MAX_VALUE);
 
-// G should be read-only on the global object and the assignment is
-// ignored.
-(function G() {
-  eval("G = 42;");
-  assertTrue(typeof G === 'function');
-})();
+function AddPropsNonKeyed(obj) {
+  obj.x0 = 0;
+  obj.x1 = 0;
+  obj.x2 = 0;
+  obj.x3 = 0;
+  obj.x4 = 0;
+  obj.x5 = 0;
+  obj.x6 = 0;
+  obj.x7 = 0;
+  obj.x8 = 0;
+  obj.x9 = 0;
+  obj.x10 = 0;
+  obj.x11 = 0;
+  obj.x12 = 0;
+  obj.x13 = 0;
+  obj.x14 = 0;
+  obj.x15 = 0;
+  obj.x16 = 0;
+  obj.x17 = 0;
+  obj.x18 = 0;
+  obj.x19 = 0;
+  obj.x20 = 0;
+  obj.x21 = 0;
+  obj.x22 = 0;
+  obj.x23 = 0;
+  obj.x24 = 0;
+  obj.x25 = 0;
+}
+
+
+var keyed = {};
+AddProps(keyed);
+assertFalse(%HasFastProperties(keyed));
+
+var non_keyed = {};
+AddPropsNonKeyed(non_keyed);
+assertTrue(%HasFastProperties(non_keyed));

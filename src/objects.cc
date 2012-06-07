@@ -1514,7 +1514,8 @@ static bool IsIdentifier(UnicodeCache* cache,
 
 MaybeObject* JSObject::AddFastProperty(String* name,
                                        Object* value,
-                                       PropertyAttributes attributes) {
+                                       PropertyAttributes attributes,
+                                       StoreFromKeyed store_mode) {
   ASSERT(!IsJSGlobalProxy());
 
   // Normalize the object if the name is an actual string (not the
@@ -1580,7 +1581,7 @@ MaybeObject* JSObject::AddFastProperty(String* name,
   }
 
   if (map()->unused_property_fields() == 0) {
-    if (properties()->length() > MaxFastProperties()) {
+    if (TooManyFastProperties(properties()->length(), store_mode)) {
       Object* obj;
       { MaybeObject* maybe_obj =
             NormalizeProperties(CLEAR_INOBJECT_PROPERTIES, 0);
@@ -1710,7 +1711,8 @@ MaybeObject* JSObject::AddSlowProperty(String* name,
 MaybeObject* JSObject::AddProperty(String* name,
                                    Object* value,
                                    PropertyAttributes attributes,
-                                   StrictModeFlag strict_mode) {
+                                   StrictModeFlag strict_mode,
+                                   JSReceiver::StoreFromKeyed store_mode) {
   ASSERT(!IsJSGlobalProxy());
   Map* map_of_this = map();
   Heap* heap = GetHeap();
@@ -1733,7 +1735,7 @@ MaybeObject* JSObject::AddProperty(String* name,
                                            JSFunction::cast(value),
                                            attributes);
       } else {
-        return AddFastProperty(name, value, attributes);
+        return AddFastProperty(name, value, attributes, store_mode);
       }
     } else {
       // Normalize the object to prevent very large instance descriptors.
@@ -1830,7 +1832,7 @@ MaybeObject* JSObject::ConvertDescriptorToField(String* name,
                                                 Object* new_value,
                                                 PropertyAttributes attributes) {
   if (map()->unused_property_fields() == 0 &&
-      properties()->length() > MaxFastProperties()) {
+      TooManyFastProperties(properties()->length(), MAY_BE_STORE_FROM_KEYED)) {
     Object* obj;
     { MaybeObject* maybe_obj =
           NormalizeProperties(CLEAR_INOBJECT_PROPERTIES, 0);
@@ -1945,10 +1947,11 @@ Handle<Object> JSReceiver::SetProperty(Handle<JSReceiver> object,
 MaybeObject* JSReceiver::SetProperty(String* name,
                                      Object* value,
                                      PropertyAttributes attributes,
-                                     StrictModeFlag strict_mode) {
+                                     StrictModeFlag strict_mode,
+                                     JSReceiver::StoreFromKeyed store_mode) {
   LookupResult result(GetIsolate());
   LocalLookup(name, &result);
-  return SetProperty(&result, name, value, attributes, strict_mode);
+  return SetProperty(&result, name, value, attributes, strict_mode, store_mode);
 }
 
 
@@ -2117,6 +2120,7 @@ MaybeObject* JSObject::SetPropertyViaPrototypes(
         break;
       }
       case CALLBACKS: {
+        if (!FLAG_es5_readonly && result.IsReadOnly()) break;
         *done = true;
         return SetPropertyWithCallback(result.GetCallbackObject(),
             name, value, result.holder(), strict_mode);
@@ -2134,6 +2138,7 @@ MaybeObject* JSObject::SetPropertyViaPrototypes(
   }
 
   // If we get here with *done true, we have encountered a read-only property.
+  if (!FLAG_es5_readonly) *done = false;
   if (*done) {
     if (strict_mode == kNonStrictMode) return value;
     Handle<Object> args[] = { Handle<Object>(name), Handle<Object>(this)};
@@ -2549,6 +2554,7 @@ void JSObject::LookupRealNamedPropertyInPrototypes(String* name,
       return result->HandlerResult(JSProxy::cast(pt));
     }
     JSObject::cast(pt)->LocalLookupRealNamedProperty(name, result);
+    ASSERT(!(result->IsProperty() && result->type() == INTERCEPTOR));
     if (result->IsProperty()) return;
   }
   result->NotFound();
@@ -2616,13 +2622,14 @@ MaybeObject* JSReceiver::SetProperty(LookupResult* result,
                                      String* key,
                                      Object* value,
                                      PropertyAttributes attributes,
-                                     StrictModeFlag strict_mode) {
+                                     StrictModeFlag strict_mode,
+                                     JSReceiver::StoreFromKeyed store_mode) {
   if (result->IsFound() && result->type() == HANDLER) {
     return result->proxy()->SetPropertyWithHandler(
         this, key, value, attributes, strict_mode);
   } else {
     return JSObject::cast(this)->SetPropertyForResult(
-        result, key, value, attributes, strict_mode);
+        result, key, value, attributes, strict_mode, store_mode);
   }
 }
 
@@ -2905,7 +2912,8 @@ MaybeObject* JSObject::SetPropertyForResult(LookupResult* result,
                                             String* name,
                                             Object* value,
                                             PropertyAttributes attributes,
-                                            StrictModeFlag strict_mode) {
+                                            StrictModeFlag strict_mode,
+                                            StoreFromKeyed store_mode) {
   Heap* heap = GetHeap();
   // Make sure that the top context does not change when doing callbacks or
   // interceptor calls.
@@ -2936,7 +2944,7 @@ MaybeObject* JSObject::SetPropertyForResult(LookupResult* result,
     if (proto->IsNull()) return value;
     ASSERT(proto->IsJSGlobalObject());
     return JSObject::cast(proto)->SetPropertyForResult(
-        result, name, value, attributes, strict_mode);
+        result, name, value, attributes, strict_mode, store_mode);
   }
 
   if (!result->IsProperty() && !IsJSContextExtensionObject()) {
@@ -2948,7 +2956,7 @@ MaybeObject* JSObject::SetPropertyForResult(LookupResult* result,
 
   if (!result->IsFound()) {
     // Neither properties nor transitions found.
-    return AddProperty(name, value, attributes, strict_mode);
+    return AddProperty(name, value, attributes, strict_mode, store_mode);
   }
   if (result->IsReadOnly() && result->IsProperty()) {
     if (strict_mode == kStrictMode) {
@@ -5039,6 +5047,7 @@ MaybeObject* Map::CopyDropTransitions() {
   return new_map;
 }
 
+
 void Map::UpdateCodeCache(Handle<Map> map,
                           Handle<String> name,
                           Handle<Code> code) {
@@ -6040,6 +6049,7 @@ MaybeObject* DescriptorArray::RemoveTransitions() {
     }
   }
   ASSERT(next_descriptor == new_descriptors->number_of_descriptors());
+  new_descriptors->SetNextEnumerationIndex(NextEnumerationIndex());
 
   return new_descriptors;
 }
@@ -7396,17 +7406,12 @@ void String::PrintOn(FILE* file) {
 
 // Clear a possible back pointer in case the transition leads to a dead map.
 // Return true in case a back pointer has been cleared and false otherwise.
-// Set *keep_entry to true when a live map transition has been found.
-static bool ClearBackPointer(Heap* heap, Object* target, bool* keep_entry) {
-  if (!target->IsMap()) return false;
+static bool ClearBackPointer(Heap* heap, Object* target) {
+  ASSERT(target->IsMap());
   Map* map = Map::cast(target);
-  if (Marking::MarkBitFrom(map).Get()) {
-    *keep_entry = true;
-    return false;
-  } else {
-    map->SetBackPointer(heap->undefined_value(), SKIP_WRITE_BARRIER);
-    return true;
-  }
+  if (Marking::MarkBitFrom(map).Get()) return false;
+  map->SetBackPointer(heap->undefined_value(), SKIP_WRITE_BARRIER);
+  return true;
 }
 
 
@@ -7426,17 +7431,22 @@ void Map::ClearNonLiveTransitions(Heap* heap) {
     switch (details.type()) {
       case MAP_TRANSITION:
       case CONSTANT_TRANSITION:
-        ClearBackPointer(heap, d->GetValue(i), &keep_entry);
+        keep_entry = !ClearBackPointer(heap, d->GetValue(i));
         break;
       case ELEMENTS_TRANSITION: {
         Object* object = d->GetValue(i);
         if (object->IsMap()) {
-          ClearBackPointer(heap, object, &keep_entry);
+          keep_entry = !ClearBackPointer(heap, object);
         } else {
           FixedArray* array = FixedArray::cast(object);
           for (int j = 0; j < array->length(); ++j) {
-            if (ClearBackPointer(heap, array->get(j), &keep_entry)) {
-              array->set_undefined(j);
+            Object* target = array->get(j);
+            if (target->IsMap()) {
+              if (ClearBackPointer(heap, target)) {
+                array->set_undefined(j);
+              } else {
+                keep_entry = true;
+              }
             }
           }
         }
@@ -7446,11 +7456,25 @@ void Map::ClearNonLiveTransitions(Heap* heap) {
         Object* object = d->GetValue(i);
         if (object->IsAccessorPair()) {
           AccessorPair* accessors = AccessorPair::cast(object);
-          if (ClearBackPointer(heap, accessors->getter(), &keep_entry)) {
-            accessors->set_getter(heap->the_hole_value());
+          Object* getter = accessors->getter();
+          if (getter->IsMap()) {
+            if (ClearBackPointer(heap, getter)) {
+              accessors->set_getter(heap->the_hole_value());
+            } else {
+              keep_entry = true;
+            }
+          } else if (!getter->IsTheHole()) {
+            keep_entry = true;
           }
-          if (ClearBackPointer(heap, accessors->setter(), &keep_entry)) {
-            accessors->set_setter(heap->the_hole_value());
+          Object* setter = accessors->setter();
+          if (setter->IsMap()) {
+            if (ClearBackPointer(heap, setter)) {
+              accessors->set_setter(heap->the_hole_value());
+            } else {
+              keep_entry = true;
+            }
+          } else if (!getter->IsTheHole()) {
+            keep_entry = true;
           }
         } else {
           keep_entry = true;
@@ -7594,9 +7618,57 @@ bool JSFunction::IsInlineable() {
 }
 
 
+MaybeObject* JSObject::OptimizeAsPrototype() {
+  if (IsGlobalObject()) return this;
+
+  // Make sure prototypes are fast objects and their maps have the bit set
+  // so they remain fast.
+  Map* proto_map = map();
+  if (!proto_map->used_for_prototype()) {
+    if (!HasFastProperties()) {
+      MaybeObject* new_proto = TransformToFastProperties(0);
+      if (new_proto->IsFailure()) return new_proto;
+      ASSERT(new_proto == this);
+      proto_map = map();
+      if (!proto_map->is_shared()) {
+        proto_map->set_used_for_prototype(true);
+      }
+    } else {
+      Heap* heap = GetHeap();
+      // We use the hole value as a singleton key in the prototype transition
+      // map so that we don't multiply the number of maps unnecessarily.
+      Map* new_map =
+          proto_map->GetPrototypeTransition(heap->the_hole_value());
+      if (new_map == NULL) {
+        MaybeObject* maybe_new_map = proto_map->CopyDropTransitions();
+        if (!maybe_new_map->To<Map>(&new_map)) return maybe_new_map;
+        new_map->set_used_for_prototype(true);
+        MaybeObject* ok =
+            proto_map->PutPrototypeTransition(heap->the_hole_value(),
+                                              new_map);
+        if (ok->IsFailure()) return ok;
+      }
+      ASSERT(!proto_map->is_shared() && !new_map->is_shared());
+      set_map(new_map);
+    }
+  }
+  return this;
+}
+
+
 MaybeObject* JSFunction::SetInstancePrototype(Object* value) {
   ASSERT(value->IsJSReceiver());
   Heap* heap = GetHeap();
+
+  // First some logic for the map of the prototype to make sure the
+  // used_for_prototype flag is set.
+  if (value->IsJSObject()) {
+    MaybeObject* ok = JSObject::cast(value)->OptimizeAsPrototype();
+    if (ok->IsFailure()) return ok;
+  }
+
+  // Now some logic for the maps of the objects that are created by using this
+  // function as a constructor.
   if (has_initial_map()) {
     // If the function has allocated the initial map
     // replace it with a copy containing the new prototype.
@@ -8768,7 +8840,7 @@ MaybeObject* JSArray::SetElementsLength(Object* len) {
 }
 
 
-Object* Map::GetPrototypeTransition(Object* prototype) {
+Map* Map::GetPrototypeTransition(Object* prototype) {
   FixedArray* cache = prototype_transitions();
   int number_of_transitions = NumberOfProtoTransitions();
   const int proto_offset =
@@ -8778,8 +8850,7 @@ Object* Map::GetPrototypeTransition(Object* prototype) {
   for (int i = 0; i < number_of_transitions; i++) {
     if (cache->get(proto_offset + i * step) == prototype) {
       Object* map = cache->get(map_offset + i * step);
-      ASSERT(map->IsMap());
-      return map;
+      return Map::cast(map);
     }
   }
   return NULL;
@@ -8887,21 +8958,26 @@ MaybeObject* JSReceiver::SetPrototype(Object* value,
   // Nothing to do if prototype is already set.
   if (map->prototype() == value) return value;
 
-  Object* new_map = map->GetPrototypeTransition(value);
+  if (value->IsJSObject()) {
+    MaybeObject* ok = JSObject::cast(value)->OptimizeAsPrototype();
+    if (ok->IsFailure()) return ok;
+  }
+
+  Map* new_map = map->GetPrototypeTransition(value);
   if (new_map == NULL) {
     { MaybeObject* maybe_new_map = map->CopyDropTransitions();
-      if (!maybe_new_map->ToObject(&new_map)) return maybe_new_map;
+      if (!maybe_new_map->To<Map>(&new_map)) return maybe_new_map;
     }
 
     { MaybeObject* maybe_new_cache =
-          map->PutPrototypeTransition(value, Map::cast(new_map));
+          map->PutPrototypeTransition(value, new_map);
       if (maybe_new_cache->IsFailure()) return maybe_new_cache;
     }
 
-    Map::cast(new_map)->set_prototype(value);
+    new_map->set_prototype(value);
   }
-  ASSERT(Map::cast(new_map)->prototype() == value);
-  real_receiver->set_map(Map::cast(new_map));
+  ASSERT(new_map->prototype() == value);
+  real_receiver->set_map(new_map);
 
   heap->ClearInstanceofCache();
   ASSERT(size == Size());
