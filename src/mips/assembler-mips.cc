@@ -106,6 +106,11 @@ void CpuFeatures::Probe() {
     supported_ |= 1u << FPU;
     found_by_runtime_probing_ |= 1u << FPU;
   }
+
+  if (OS::MipsCpuHasFeature(Loongson)) {
+    supported_ |= 1u << Loongson;
+    found_by_runtime_probing_ |= 1u << Loongson;
+  }
 #endif
 }
 

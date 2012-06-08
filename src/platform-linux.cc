@@ -225,6 +225,9 @@ bool OS::MipsCpuHasFeature(CpuFeature feature) {
     case FPU:
       search_string = "FPU";
       break;
+    case Loongson:
+      search_string = "Loongson-2";
+      break;
     default:
       UNREACHABLE();
   }

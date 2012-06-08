@@ -72,6 +72,13 @@ void CPU::FlushICache(void* start, size_t size) {
 #else  // ANDROID
   int res;
   // See http://www.linux-mips.org/wiki/Cacheflush_Syscall.
+  if (kArchVariant==kLoongson && CpuFeatures::IsSupported(Loongson)) {
+    // Force flushing of whole instruction cache on Loongson. This is a
+    // workaround for problem when under stress tests cache lines are not
+    // flushed through syscall for some reasons.
+    size_t iCacheSize = 64 * KB;
+    size = iCacheSize + 1;
+  }
   res = syscall(__NR_cacheflush, start, size, ICACHE);
   if (res) {
     V8_Fatal(__FILE__, __LINE__, "Failed to flush the instruction cache");
