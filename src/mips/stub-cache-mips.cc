@@ -1322,8 +1322,9 @@ void StubCompiler::GenerateLoadInterceptor(Handle<JSObject> object,
       compile_followup_inline = true;
     } else if (lookup->type() == CALLBACKS &&
         lookup->GetCallbackObject()->IsAccessorInfo()) {
-      compile_followup_inline =
-          AccessorInfo::cast(lookup->GetCallbackObject())->getter() != NULL;
+      AccessorInfo* callback = AccessorInfo::cast(lookup->GetCallbackObject());
+      compile_followup_inline = callback->getter() != NULL &&
+          callback->IsCompatibleReceiver(*object);
     }
   }
 
@@ -2830,6 +2831,44 @@ Handle<Code> LoadStubCompiler::CompileLoadCallback(
   Label miss;
   GenerateLoadCallback(object, holder, a0, a2, a3, a1, t0, callback, name,
                        &miss);
+  __ bind(&miss);
+  GenerateLoadMiss(masm(), Code::LOAD_IC);
+
+  // Return the generated code.
+  return GetCode(CALLBACKS, name);
+}
+
+
+Handle<Code> LoadStubCompiler::CompileLoadViaGetter(
+    Handle<String> name,
+    Handle<JSObject> receiver,
+    Handle<JSObject> holder,
+    Handle<JSFunction> getter) {
+  // ----------- S t a t e -------------
+  //  -- a0    : receiver
+  //  -- a2    : name
+  //  -- ra    : return address
+  // -----------------------------------
+  Label miss;
+
+  // Check that the maps haven't changed.
+  __ JumpIfSmi(a0, &miss);
+  CheckPrototypes(receiver, a0, holder, a3, t0, a1, name, &miss);
+
+  {
+    FrameScope scope(masm(), StackFrame::INTERNAL);
+
+    // Call the JavaScript getter with the receiver on the stack.
+    __ push(a0);
+    ParameterCount actual(0);
+    __ InvokeFunction(getter, actual, CALL_FUNCTION, NullCallWrapper(),
+                      CALL_AS_METHOD);
+
+    // Restore context register.
+    __ lw(cp, MemOperand(fp, StandardFrameConstants::kContextOffset));
+  }
+  __ Ret();
+
   __ bind(&miss);
   GenerateLoadMiss(masm(), Code::LOAD_IC);
 

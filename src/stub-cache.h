@@ -90,6 +90,11 @@ class StubCache {
                                    Handle<JSObject> holder,
                                    Handle<AccessorInfo> callback);
 
+  Handle<Code> ComputeLoadViaGetter(Handle<String> name,
+                                    Handle<JSObject> receiver,
+                                    Handle<JSObject> holder,
+                                    Handle<JSFunction> getter);
+
   Handle<Code> ComputeLoadConstant(Handle<String> name,
                                    Handle<JSObject> receiver,
                                    Handle<JSObject> holder,
@@ -169,7 +174,7 @@ class StubCache {
                                       Handle<Map> transition,
                                       StrictModeFlag strict_mode);
 
-  Handle<Code> ComputeKeyedLoadOrStoreElement(Handle<JSObject> receiver,
+  Handle<Code> ComputeKeyedLoadOrStoreElement(Handle<Map> receiver_map,
                                               KeyedIC::StubKind stub_kind,
                                               StrictModeFlag strict_mode);
 
@@ -595,6 +600,11 @@ class LoadStubCompiler: public StubCompiler {
                                    Handle<JSObject> object,
                                    Handle<JSObject> holder,
                                    Handle<AccessorInfo> callback);
+
+  Handle<Code> CompileLoadViaGetter(Handle<String> name,
+                                    Handle<JSObject> receiver,
+                                    Handle<JSObject> holder,
+                                    Handle<JSFunction> getter);
 
   Handle<Code> CompileLoadConstant(Handle<JSObject> object,
                                    Handle<JSObject> holder,

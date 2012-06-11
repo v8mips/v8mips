@@ -4327,6 +4327,8 @@ class Code: public HeapObject {
   inline bool has_function_cache();
   inline void set_has_function_cache(bool flag);
 
+  bool allowed_in_shared_map_code_cache();
+
   // Get the safepoint entry for the given pc.
   SafepointEntry GetSafepointEntry(Address pc);
 
@@ -4679,13 +4681,11 @@ class Map: public HeapObject {
   }
 
   inline bool has_external_array_elements() {
-    ElementsKind kind(elements_kind());
-    return kind >= FIRST_EXTERNAL_ARRAY_ELEMENTS_KIND &&
-        kind <= LAST_EXTERNAL_ARRAY_ELEMENTS_KIND;
+    return IsExternalArrayElementsKind(elements_kind());
   }
 
   inline bool has_dictionary_elements() {
-    return elements_kind() == DICTIONARY_ELEMENTS;
+    return IsDictionaryElementsKind(elements_kind());
   }
 
   inline bool has_slow_elements_kind() {
@@ -5009,11 +5009,6 @@ class Map: public HeapObject {
   static const int kIsShared = 0;
   static const int kFunctionWithPrototype = 1;
   static const int kUsedForPrototype = 2;
-
-  // Layout of the default cache. It holds alternating name and code objects.
-  static const int kCodeCacheEntrySize = 2;
-  static const int kCodeCacheEntryNameOffset = 0;
-  static const int kCodeCacheEntryCodeOffset = 1;
 
   typedef FixedBodyDescriptor<kPointerFieldsBeginOffset,
                               kPointerFieldsEndOffset,
@@ -8116,6 +8111,7 @@ class AccessorInfo: public Struct {
   DECL_ACCESSORS(data, Object)
   DECL_ACCESSORS(name, Object)
   DECL_ACCESSORS(flag, Smi)
+  DECL_ACCESSORS(expected_receiver_type, Object)
 
   inline bool all_can_read();
   inline void set_all_can_read(bool value);
@@ -8128,6 +8124,9 @@ class AccessorInfo: public Struct {
 
   inline PropertyAttributes property_attributes();
   inline void set_property_attributes(PropertyAttributes attributes);
+
+  // Checks whether the given receiver is compatible with this accessor.
+  inline bool IsCompatibleReceiver(Object* receiver);
 
   static inline AccessorInfo* cast(Object* obj);
 
@@ -8146,7 +8145,8 @@ class AccessorInfo: public Struct {
   static const int kDataOffset = kSetterOffset + kPointerSize;
   static const int kNameOffset = kDataOffset + kPointerSize;
   static const int kFlagOffset = kNameOffset + kPointerSize;
-  static const int kSize = kFlagOffset + kPointerSize;
+  static const int kExpectedReceiverTypeOffset = kFlagOffset + kPointerSize;
+  static const int kSize = kExpectedReceiverTypeOffset + kPointerSize;
 
  private:
   // Bit positions in flag.
