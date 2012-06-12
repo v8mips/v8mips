@@ -152,7 +152,7 @@ DEFINE_implication(harmony, harmony_collections)
 DEFINE_implication(harmony_modules, harmony_scoping)
 
 // Flags for experimental implementation features.
-DEFINE_bool(packed_arrays, false, "optimizes arrays that have no holes")
+DEFINE_bool(packed_arrays, true, "optimizes arrays that have no holes")
 DEFINE_bool(smi_only_arrays, true, "tracks arrays with only smi values")
 DEFINE_bool(clever_optimizations,
             true,
@@ -198,7 +198,7 @@ DEFINE_bool(trap_on_deopt, false, "put a break point before deoptimizing")
 DEFINE_bool(deoptimize_uncommon_cases, true, "deoptimize uncommon cases")
 DEFINE_bool(polymorphic_inlining, true, "polymorphic inlining")
 DEFINE_bool(use_osr, true, "use on-stack replacement")
-DEFINE_bool(array_bounds_checks_elimination, true,
+DEFINE_bool(array_bounds_checks_elimination, false,
             "perform array bounds checks elimination")
 DEFINE_bool(array_index_dehoisting, false,
             "perform array index dehoisting")
