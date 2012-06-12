@@ -681,7 +681,8 @@ HGraph::HGraph(CompilationInfo* info, Zone* zone)
       blocks_(8, zone),
       values_(16, zone),
       phi_list_(NULL),
-      zone_(zone) {
+      zone_(zone),
+      is_recursive_(false) {
   start_environment_ =
       new(zone) HEnvironment(NULL, info->scope(), info->closure(), zone);
   start_environment_->set_ast_id(AstNode::kFunctionEntryId);
@@ -4127,8 +4128,7 @@ void HGraphBuilder::VisitForInStatement(ForInStatement* stmt) {
   HValue* key = AddInstruction(
       new(zone()) HLoadKeyedFastElement(
           environment()->ExpressionStackAt(2),  // Enum cache.
-          environment()->ExpressionStackAt(0),  // Iteration index.
-          OMIT_HOLE_CHECK));
+          environment()->ExpressionStackAt(0)));  // Iteration index.
 
   // Check if the expected map still matches that of the enumerable.
   // If not just deoptimize.
@@ -5482,7 +5482,8 @@ HInstruction* HGraphBuilder::BuildFastElementAccess(HValue* elements,
   if (IsFastDoubleElementsKind(elements_kind)) {
     return new(zone()) HLoadKeyedFastDoubleElement(elements, checked_key, mode);
   } else {  // Smi or Object elements.
-    return new(zone()) HLoadKeyedFastElement(elements, checked_key, mode);
+    return new(zone()) HLoadKeyedFastElement(elements, checked_key,
+                                             elements_kind);
   }
 }
 
@@ -5530,7 +5531,8 @@ HInstruction* HGraphBuilder::BuildMonomorphicElementAccess(HValue* object,
          fast_elements ||
          map->has_fast_double_elements());
   if (map->instance_type() == JS_ARRAY_TYPE) {
-    length = AddInstruction(new(zone()) HJSArrayLength(object, mapcheck));
+    length = AddInstruction(new(zone()) HJSArrayLength(object, mapcheck,
+                                                       HType::Smi()));
   } else {
     length = AddInstruction(new(zone()) HFixedArrayBaseLength(elements));
   }
@@ -5685,7 +5687,8 @@ HValue* HGraphBuilder::HandlePolymorphicElementAccess(HValue* object,
 
         set_current_block(if_jsarray);
         HInstruction* length;
-        length = AddInstruction(new(zone()) HJSArrayLength(object, typecheck));
+        length = AddInstruction(new(zone()) HJSArrayLength(object, typecheck,
+                                                           HType::Smi()));
         checked_key = AddInstruction(new(zone()) HBoundsCheck(key, length));
         access = AddInstruction(BuildFastElementAccess(
             elements, checked_key, val, elements_kind, is_store));
@@ -5885,7 +5888,6 @@ void HGraphBuilder::VisitProperty(Property* expr) {
     HInstruction* mapcheck =
         AddInstruction(HCheckInstanceType::NewIsJSArray(array, zone()));
     instr = new(zone()) HJSArrayLength(array, mapcheck);
-
   } else if (expr->IsStringLength()) {
     HValue* string = Pop();
     AddInstruction(new(zone()) HCheckNonSmi(string));
@@ -6927,6 +6929,11 @@ void HGraphBuilder::VisitCall(Call* expr) {
           return;
         }
         if (TryInlineCall(expr)) return;
+
+        if (expr->target().is_identical_to(info()->closure())) {
+          graph()->MarkRecursive();
+        }
+
         call = PreProcessCall(new(zone()) HCallKnownGlobal(expr->target(),
                                                            argument_count));
       } else {

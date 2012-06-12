@@ -825,6 +825,7 @@ Handle<HeapObject> RegExpMacroAssemblerMIPS::GetCode(Handle<String> source) {
 
         // Prepare a0 to initialize registers with its value in the next run.
         __ lw(a0, MemOperand(frame_pointer(), kInputStartMinusOne));
+
         if (global_with_zero_length_check()) {
           // Special case for zero-length matches.
           // t7: capture start index
@@ -832,8 +833,8 @@ Handle<HeapObject> RegExpMacroAssemblerMIPS::GetCode(Handle<String> source) {
           __ Branch(
               &load_char_start_regexp, ne, current_input_offset(), Operand(t7));
           // Offset from the end is zero if we already reached the end.
-          __ Branch(
-              &exit_label_, eq, current_input_offset(), Operand(zero_reg));
+          __ Branch(&exit_label_, eq, current_input_offset(),
+                    Operand(zero_reg));
           // Advance current position after a zero-length match.
           __ Addu(current_input_offset(),
                   current_input_offset(),
