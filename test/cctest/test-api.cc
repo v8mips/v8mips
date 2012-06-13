@@ -2697,7 +2697,11 @@ TEST(HugeConsStringOutOfMemory) {
   static const int K = 1024;
   v8::ResourceConstraints constraints;
   constraints.set_max_young_space_size(256 * K);
+#if defined(V8_TARGET_ARCH_MIPS)
+  constraints.set_max_old_space_size(3 * K * K);
+#else
   constraints.set_max_old_space_size(2 * K * K);
+#endif
   v8::SetResourceConstraints(&constraints);
 
   // Execute a script that causes out of memory.
