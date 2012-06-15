@@ -152,7 +152,7 @@ DEFINE_implication(harmony, harmony_collections)
 DEFINE_implication(harmony_modules, harmony_scoping)
 
 // Flags for experimental implementation features.
-DEFINE_bool(packed_arrays, true, "optimizes arrays that have no holes")
+DEFINE_bool(packed_arrays, false, "optimizes arrays that have no holes")
 DEFINE_bool(smi_only_arrays, true, "tracks arrays with only smi values")
 DEFINE_bool(clever_optimizations,
             true,
@@ -206,6 +206,11 @@ DEFINE_bool(array_index_dehoisting, false,
 DEFINE_bool(trace_osr, false, "trace on-stack replacement")
 DEFINE_int(stress_runs, 0, "number of stress runs")
 DEFINE_bool(optimize_closures, true, "optimize closures")
+DEFINE_bool(lookup_sample_by_shared, true,
+            "when picking a function to optimize, watch for shared function "
+            "info, not JSFunction itself")
+DEFINE_bool(cache_optimized_code, true,
+            "cache optimized code for closures")
 DEFINE_bool(inline_construct, true, "inline constructor calls")
 DEFINE_bool(inline_arguments, true, "inline functions with arguments object")
 DEFINE_int(loop_weight, 1, "loop weight for representation inference")

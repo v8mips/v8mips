@@ -367,7 +367,10 @@ void LCodeGen::WriteTranslation(LEnvironment* environment,
   int height = translation_size - environment->parameter_count();
 
   WriteTranslation(environment->outer(), translation);
-  int closure_id = DefineDeoptimizationLiteral(environment->closure());
+  int closure_id = *info()->closure() != *environment->closure()
+      ? DefineDeoptimizationLiteral(environment->closure())
+      : Translation::kSelfLiteralId;
+
   switch (environment->frame_type()) {
     case JS_FUNCTION:
       translation->BeginJSFrame(environment->ast_id(), closure_id, height);
@@ -2233,6 +2236,18 @@ void LCodeGen::EmitLoadFieldOrConstantFunction(Register result,
 }
 
 
+// Check for cases where EmitLoadFieldOrConstantFunction needs to walk the
+// prototype chain, which causes unbounded code generation.
+static bool CompactEmit(
+    SmallMapList* list, Handle<String> name, int i, Isolate* isolate) {
+  LookupResult lookup(isolate);
+  Handle<Map> map = list->at(i);
+  map->LookupInDescriptors(NULL, *name, &lookup);
+  return lookup.IsFound() &&
+      (lookup.type() == FIELD || lookup.type() == CONSTANT_FUNCTION);
+}
+
+
 void LCodeGen::DoLoadNamedFieldPolymorphic(LLoadNamedFieldPolymorphic* instr) {
   Register object = ToRegister(instr->object());
   Register result = ToRegister(instr->result());
@@ -2246,16 +2261,10 @@ void LCodeGen::DoLoadNamedFieldPolymorphic(LLoadNamedFieldPolymorphic* instr) {
   }
   Handle<String> name = instr->hydrogen()->name();
   Label done;
-  bool compact_code = true;
+  bool all_are_compact = true;
   for (int i = 0; i < map_count; ++i) {
-    LookupResult lookup(isolate());
-    Handle<Map> map = instr->hydrogen()->types()->at(i);
-    map->LookupInDescriptors(NULL, *name, &lookup);
-    if (!lookup.IsFound() ||
-        (lookup.type() != FIELD && lookup.type() != CONSTANT_FUNCTION)) {
-      // The two cases above cause a bounded amount of code to be emitted.  This
-      // is not necessarily the case for other lookup results.
-      compact_code = false;
+    if (!CompactEmit(instr->hydrogen()->types(), name, i, isolate())) {
+      all_are_compact = false;
       break;
     }
   }
@@ -2271,11 +2280,13 @@ void LCodeGen::DoLoadNamedFieldPolymorphic(LLoadNamedFieldPolymorphic* instr) {
           result, object, map, name, instr->environment());
     } else {
       Label next;
-      __ j(not_equal, &next, Label::kNear);
+      bool compact = all_are_compact ? true :
+          CompactEmit(instr->hydrogen()->types(), name, i, isolate());
+      __ j(not_equal, &next, compact ? Label::kNear : Label::kFar);
       __ bind(&check_passed);
       EmitLoadFieldOrConstantFunction(
           result, object, map, name, instr->environment());
-      __ jmp(&done, compact_code ? Label::kNear: Label::kFar);
+      __ jmp(&done, all_are_compact ? Label::kNear : Label::kFar);
       __ bind(&next);
     }
   }
@@ -2723,7 +2734,7 @@ void LCodeGen::DoDrop(LDrop* instr) {
 
 void LCodeGen::DoThisFunction(LThisFunction* instr) {
   Register result = ToRegister(instr->result());
-  __ LoadHeapObject(result, instr->hydrogen()->closure());
+  __ movq(result, Operand(rbp, JavaScriptFrameConstants::kFunctionOffset));
 }
 
 

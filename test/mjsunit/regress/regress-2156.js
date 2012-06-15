@@ -25,58 +25,15 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// Flags: --expose-debug-as debug
-// Get the Debug object exposed from the debug context global object.
-Debug = debug.Debug
+// Flags: --allow-natives-syntax --harmony-collections
 
-// Simple debug event handler which just counts the number of break points hit.
-var break_point_hit_count = 0;
+var key1 = {};
+var key2 = {};
+var map = new WeakMap;
 
-function listener(event, exec_state, event_data, data) {
-  if (event == Debug.DebugEvent.Break) {
-    break_point_hit_count++;
-  }
-};
-
-// Add the debug event listener.
-Debug.setListener(listener);
-
-eval(
-  "var inner;\n" +
-  "function outer() {\n" +         // Non-trivial outer closure.
-  "  var x = 5;\n" +
-  "  function a() {\n" +
-  "    var foo = 0, y = 7;\n" +
-  "    function b() {\n" +
-  "      var bar = 0, baz = 0, z = 11;\n" +
-  "      function c() {\n" +
-  "        return x + y + z;\n" +  // Breakpoint line ( #8 )
-  "      }\n" +
-  "      inner = c;\n" +
-  "      return c();\n" +
-  "    }\n" +
-  "    return b();\n" +
-  "  }\n" +
-  "  return a();\n" +
-  "}"
-);
-
-var script = Debug.findScript(outer);
-
-// The debugger triggers compilation of inner closures.
-assertEquals(0, Debug.scriptBreakPoints().length);
-var sbp = Debug.setScriptBreakPointById(script.id, 8);
-assertEquals(1, Debug.scriptBreakPoints().length);
-
-// The compiled outer closure should behave correctly.
-assertEquals(23, outer());
-assertEquals(1, break_point_hit_count);
-
-// The compiled inner closure should behave correctly.
-assertEquals(23, inner());
-assertEquals(2, break_point_hit_count);
-
-// Remove script break point.
-assertEquals(1, Debug.scriptBreakPoints().length);
-Debug.clearBreakPoint(sbp);
-assertEquals(0, Debug.scriptBreakPoints().length);
+// Adding hidden properties preserves map sharing. Putting the key into
+// a WeakMap will cause the first hidden property to be added.
+assertTrue(%HaveSameMap(key1, key2));
+map.set(key1, 1);
+map.set(key2, 2);
+assertTrue(%HaveSameMap(key1, key2));

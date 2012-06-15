@@ -1720,11 +1720,13 @@ MaybeObject* JSObject::AddProperty(String* name,
                                    Object* value,
                                    PropertyAttributes attributes,
                                    StrictModeFlag strict_mode,
-                                   JSReceiver::StoreFromKeyed store_mode) {
+                                   JSReceiver::StoreFromKeyed store_mode,
+                                   ExtensibilityCheck extensibility_check) {
   ASSERT(!IsJSGlobalProxy());
   Map* map_of_this = map();
   Heap* heap = GetHeap();
-  if (!map_of_this->is_extensible()) {
+  if (extensibility_check == PERFORM_EXTENSIBILITY_CHECK &&
+      !map_of_this->is_extensible()) {
     if (strict_mode == kNonStrictMode) {
       return value;
     } else {
@@ -1763,7 +1765,8 @@ MaybeObject* JSObject::SetPropertyPostInterceptor(
     String* name,
     Object* value,
     PropertyAttributes attributes,
-    StrictModeFlag strict_mode) {
+    StrictModeFlag strict_mode,
+    ExtensibilityCheck extensibility_check) {
   // Check local property, ignore interceptor.
   LookupResult result(GetIsolate());
   LocalLookupRealNamedProperty(name, &result);
@@ -1778,7 +1781,8 @@ MaybeObject* JSObject::SetPropertyPostInterceptor(
       SetPropertyViaPrototypes(name, value, attributes, strict_mode, &done);
   if (done) return result_object;
   // Add a new real property.
-  return AddProperty(name, value, attributes, strict_mode);
+  return AddProperty(name, value, attributes, strict_mode,
+                     MAY_BE_STORE_FROM_KEYED, extensibility_check);
 }
 
 
@@ -1935,7 +1939,8 @@ MaybeObject* JSObject::SetPropertyWithInterceptor(
       this_handle->SetPropertyPostInterceptor(*name_handle,
                                               *value_handle,
                                               attributes,
-                                              strict_mode);
+                                              strict_mode,
+                                              PERFORM_EXTENSIBILITY_CHECK);
   RETURN_IF_SCHEDULED_EXCEPTION(isolate);
   return raw_result;
 }
@@ -3664,11 +3669,14 @@ MaybeObject* JSObject::GetHiddenPropertiesDictionary(bool create_if_absent) {
   MaybeObject* dict_alloc = StringDictionary::Allocate(kInitialSize);
   StringDictionary* dictionary;
   if (!dict_alloc->To<StringDictionary>(&dictionary)) return dict_alloc;
-  // Using AddProperty or SetPropertyPostInterceptor here could fail, because
-  // object might be non-extensible.
-  return HasFastProperties()
-      ? AddFastProperty(GetHeap()->hidden_symbol(), dictionary, DONT_ENUM)
-      : AddSlowProperty(GetHeap()->hidden_symbol(), dictionary, DONT_ENUM);
+  MaybeObject* store_result =
+      SetPropertyPostInterceptor(GetHeap()->hidden_symbol(),
+                                 dictionary,
+                                 DONT_ENUM,
+                                 kNonStrictMode,
+                                 OMIT_EXTENSIBILITY_CHECK);
+  if (store_result->IsFailure()) return store_result;
+  return dictionary;
 }
 
 
@@ -3697,7 +3705,8 @@ MaybeObject* JSObject::SetHiddenPropertiesDictionary(
       SetPropertyPostInterceptor(GetHeap()->hidden_symbol(),
                                  dictionary,
                                  DONT_ENUM,
-                                 kNonStrictMode);
+                                 kNonStrictMode,
+                                 OMIT_EXTENSIBILITY_CHECK);
   if (store_result->IsFailure()) return store_result;
   return this;
 }
@@ -7435,6 +7444,12 @@ void JSFunction::MarkForLazyRecompilation() {
 }
 
 
+bool SharedFunctionInfo::EnsureCompiled(Handle<SharedFunctionInfo> shared,
+                                        ClearExceptionFlag flag) {
+  return shared->is_compiled() || CompileLazy(shared, flag);
+}
+
+
 static bool CompileLazyHelper(CompilationInfo* info,
                               ClearExceptionFlag flag) {
   // Compile the source information to a code object.
@@ -7451,9 +7466,56 @@ static bool CompileLazyHelper(CompilationInfo* info,
 
 bool SharedFunctionInfo::CompileLazy(Handle<SharedFunctionInfo> shared,
                                      ClearExceptionFlag flag) {
-  ASSERT(shared->allows_lazy_compilation_without_context());
   CompilationInfo info(shared);
   return CompileLazyHelper(&info, flag);
+}
+
+
+void SharedFunctionInfo::ClearOptimizedCodeMap() {
+  set_optimized_code_map(Smi::FromInt(0));
+}
+
+
+void SharedFunctionInfo::AddToOptimizedCodeMap(
+    Handle<SharedFunctionInfo> shared,
+    Handle<Context> global_context,
+    Handle<Code> code,
+    Handle<FixedArray> literals) {
+  ASSERT(code->kind() == Code::OPTIMIZED_FUNCTION);
+  ASSERT(global_context->IsGlobalContext());
+  STATIC_ASSERT(kEntryLength == 3);
+  Object* value = shared->optimized_code_map();
+  Handle<FixedArray> new_code_map;
+  if (value->IsSmi()) {
+    // No optimized code map.
+    ASSERT_EQ(0, Smi::cast(value)->value());
+    // Crate 3 entries per context {context, code, literals}.
+    new_code_map = FACTORY->NewFixedArray(kEntryLength);
+    new_code_map->set(0, *global_context);
+    new_code_map->set(1, *code);
+    new_code_map->set(2, *literals);
+  } else {
+    // Copy old map and append one new entry.
+    Handle<FixedArray> old_code_map(FixedArray::cast(value));
+    ASSERT_EQ(-1, shared->SearchOptimizedCodeMap(*global_context));
+    int old_length = old_code_map->length();
+    int new_length = old_length + kEntryLength;
+    new_code_map = FACTORY->NewFixedArray(new_length);
+    old_code_map->CopyTo(0, *new_code_map, 0, old_length);
+    new_code_map->set(old_length, *global_context);
+    new_code_map->set(old_length + 1, *code);
+    new_code_map->set(old_length + 2, *literals);
+  }
+#ifdef DEBUG
+  for (int i = 0; i < new_code_map->length(); i += kEntryLength) {
+    ASSERT(new_code_map->get(i)->IsGlobalContext());
+    ASSERT(new_code_map->get(i + 1)->IsCode());
+    ASSERT(Code::cast(new_code_map->get(i + 1))->kind() ==
+           Code::OPTIMIZED_FUNCTION);
+    ASSERT(new_code_map->get(i + 2)->IsFixedArray());
+  }
+#endif
+  shared->set_optimized_code_map(*new_code_map);
 }
 
 
@@ -7464,7 +7526,6 @@ bool JSFunction::CompileLazy(Handle<JSFunction> function,
     function->ReplaceCode(function->shared()->code());
     function->shared()->set_code_age(0);
   } else {
-    ASSERT(function->shared()->allows_lazy_compilation());
     CompilationInfo info(function);
     result = CompileLazyHelper(&info, flag);
     ASSERT(!result || function->is_compiled());
@@ -7479,12 +7540,6 @@ bool JSFunction::CompileOptimized(Handle<JSFunction> function,
   CompilationInfo info(function);
   info.SetOptimizing(osr_ast_id);
   return CompileLazyHelper(&info, flag);
-}
-
-
-bool JSFunction::EnsureCompiled(Handle<JSFunction> function,
-                                ClearExceptionFlag flag) {
-  return function->is_compiled() || CompileLazy(function, flag);
 }
 
 
@@ -8033,6 +8088,22 @@ void SharedFunctionInfo::CompleteInobjectSlackTracking() {
 }
 
 
+int SharedFunctionInfo::SearchOptimizedCodeMap(Context* global_context) {
+  ASSERT(global_context->IsGlobalContext());
+  Object* value = optimized_code_map();
+  if (!value->IsSmi()) {
+    FixedArray* optimized_code_map = FixedArray::cast(value);
+    int length = optimized_code_map->length();
+    for (int i = 0; i < length; i += 3) {
+      if (optimized_code_map->get(i) == global_context) {
+        return i + 1;
+      }
+    }
+  }
+  return -1;
+}
+
+
 void SharedFunctionInfo::SharedFunctionInfoIterateBody(ObjectVisitor* v) {
   v->VisitSharedFunctionInfo(this);
   SharedFunctionInfo::BodyDescriptor::IterateBody(this, v);
@@ -8272,7 +8343,8 @@ void Code::ClearTypeFeedbackCells(Heap* heap) {
 
 
 bool Code::allowed_in_shared_map_code_cache() {
-  return is_keyed_load_stub() || is_keyed_store_stub();
+  return is_keyed_load_stub() || is_keyed_store_stub() ||
+      (is_compare_ic_stub() && compare_state() == CompareIC::KNOWN_OBJECTS);
 }
 
 
@@ -8323,11 +8395,14 @@ void DeoptimizationInputData::DeoptimizationInputDataPrint(FILE* out) {
         case Translation::JS_FRAME: {
           int ast_id = iterator.Next();
           int function_id = iterator.Next();
-          JSFunction* function =
-              JSFunction::cast(LiteralArray()->get(function_id));
           unsigned height = iterator.Next();
           PrintF(out, "{ast_id=%d, function=", ast_id);
-          function->PrintName(out);
+          if (function_id != Translation::kSelfLiteralId) {
+            Object* function = LiteralArray()->get(function_id);
+            JSFunction::cast(function)->PrintName(out);
+          } else {
+            PrintF(out, "<self>");
+          }
           PrintF(out, ", height=%u}", height);
           break;
         }
