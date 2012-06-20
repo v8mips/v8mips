@@ -528,10 +528,9 @@ MemoryChunk* MemoryAllocator::AllocateChunk(intptr_t body_size,
       size_executable_ += reservation.size();
     }
 
-#ifdef DEBUG
     ZapBlock(base, CodePageGuardStartOffset());
     ZapBlock(base + CodePageAreaStartOffset(), body_size);
-#endif
+
     area_start = base + CodePageAreaStartOffset();
     area_end = area_start + body_size;
   } else {
@@ -543,9 +542,8 @@ MemoryChunk* MemoryAllocator::AllocateChunk(intptr_t body_size,
 
     if (base == NULL) return NULL;
 
-#ifdef DEBUG
     ZapBlock(base, chunk_size);
-#endif
+
 
     area_start = base + Page::kObjectStartOffset;
     area_end = base + chunk_size;
@@ -621,9 +619,9 @@ bool MemoryAllocator::CommitBlock(Address start,
                                   size_t size,
                                   Executability executable) {
   if (!VirtualMemory::CommitRegion(start, size, executable)) return false;
-#ifdef DEBUG
+
   ZapBlock(start, size);
-#endif
+
   isolate_->counters()->memory_allocated()->Increment(static_cast<int>(size));
   return true;
 }

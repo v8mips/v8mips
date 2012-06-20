@@ -86,7 +86,8 @@ const uint64_t kDebugZapValue = V8_UINT64_C(0xbadbaddbbadbaddb);
 const uint64_t kSlotsZapValue = V8_UINT64_C(0xbeefdeadbeefdeef);
 const uint64_t kFreeListZapValue = 0xfeed1eaffeed1eaf;
 #else
-const Address kZapValue = reinterpret_cast<Address>(0xdeadbeef);
+// MIPS break instruction as Zap-value.
+const Address kZapValue = reinterpret_cast<Address>(0x0037ab4d);
 const Address kHandleZapValue = reinterpret_cast<Address>(0xbaddeaf);
 const Address kFromSpaceZapValue = reinterpret_cast<Address>(0xbeefdaf);
 const uint32_t kSlotsZapValue = 0xbeefdeef;
