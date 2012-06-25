@@ -156,6 +156,11 @@ bool FunctionLiteral::AllowsLazyCompilation() {
 }
 
 
+bool FunctionLiteral::AllowsLazyCompilationWithoutContext() {
+  return scope()->AllowsLazyCompilationWithoutContext();
+}
+
+
 int FunctionLiteral::start_position() const {
   return scope()->start_position();
 }
@@ -515,8 +520,10 @@ bool Call::ComputeTarget(Handle<Map> type, Handle<String> name) {
           return false;
         case MAP_TRANSITION:
         case CONSTANT_TRANSITION:
-        case NULL_DESCRIPTOR:
           // Perhaps something interesting is up in the prototype chain...
+          break;
+        case NONEXISTENT:
+          UNREACHABLE();
           break;
       }
     }

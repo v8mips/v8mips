@@ -1080,11 +1080,11 @@ bool Genesis::InitializeGlobal(Handle<GlobalObject> inner_global,
 #ifdef DEBUG
     LookupResult lookup(isolate);
     result->LocalLookup(heap->callee_symbol(), &lookup);
-    ASSERT(lookup.IsFound() && (lookup.type() == FIELD));
+    ASSERT(lookup.IsField());
     ASSERT(lookup.GetFieldIndex() == Heap::kArgumentsCalleeIndex);
 
     result->LocalLookup(heap->length_symbol(), &lookup);
-    ASSERT(lookup.IsFound() && (lookup.type() == FIELD));
+    ASSERT(lookup.IsField());
     ASSERT(lookup.GetFieldIndex() == Heap::kArgumentsLengthIndex);
 
     ASSERT(result->map()->inobject_properties() > Heap::kArgumentsCalleeIndex);
@@ -1178,7 +1178,7 @@ bool Genesis::InitializeGlobal(Handle<GlobalObject> inner_global,
 #ifdef DEBUG
     LookupResult lookup(isolate);
     result->LocalLookup(heap->length_symbol(), &lookup);
-    ASSERT(lookup.IsFound() && (lookup.type() == FIELD));
+    ASSERT(lookup.IsField());
     ASSERT(lookup.GetFieldIndex() == Heap::kArgumentsLengthIndex);
 
     ASSERT(result->map()->inobject_properties() > Heap::kArgumentsLengthIndex);
@@ -2193,13 +2193,13 @@ void Genesis::TransferNamedProperties(Handle<JSObject> from,
         }
         case MAP_TRANSITION:
         case CONSTANT_TRANSITION:
-        case NULL_DESCRIPTOR:
           // Ignore non-properties.
           break;
         case NORMAL:
           // Do not occur since the from object has fast properties.
         case HANDLER:
         case INTERCEPTOR:
+        case NONEXISTENT:
           // No element in instance descriptors have proxy or interceptor type.
           UNREACHABLE();
           break;

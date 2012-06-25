@@ -2438,12 +2438,11 @@ class DescriptorArray: public FixedArray {
   inline bool MayContainTransitions();
 
   DECL_ACCESSORS(elements_transition_map, Map)
+  inline void ClearElementsTransition();
 
   // Returns the number of descriptors in the array.
   int number_of_descriptors() {
-    ASSERT(length() > kFirstIndex ||
-           length() == kTransitionsIndex ||
-           IsEmpty());
+    ASSERT(length() >= kFirstIndex || IsEmpty());
     int len = length();
     return len <= kFirstIndex ? 0 : (len - kFirstIndex) / kDescriptorSize;
   }
@@ -2502,9 +2501,13 @@ class DescriptorArray: public FixedArray {
   // Accessors for fetching instance descriptor at descriptor number.
   inline String* GetKey(int descriptor_number);
   inline Object** GetKeySlot(int descriptor_number);
+  inline void SetKeyUnchecked(Heap* heap, int descriptor_number, String* value);
   inline Object* GetValue(int descriptor_number);
   inline Object** GetValueSlot(int descriptor_number);
-  inline void SetNullValueUnchecked(int descriptor_number, Heap* heap);
+  inline void SetNullValueUnchecked(Heap* heap, int descriptor_number);
+  inline void SetValueUnchecked(Heap* heap,
+                                int descriptor_number,
+                                Object* value);
   inline PropertyDetails GetDetails(int descriptor_number);
   inline void SetDetailsUnchecked(int descriptor_number, Smi* value);
   inline PropertyType GetType(int descriptor_number);
@@ -2514,7 +2517,6 @@ class DescriptorArray: public FixedArray {
   inline AccessorDescriptor* GetCallbacks(int descriptor_number);
   inline bool IsProperty(int descriptor_number);
   inline bool IsTransitionOnly(int descriptor_number);
-  inline bool IsNullDescriptor(int descriptor_number);
 
   // WhitenessWitness is used to prove that a specific descriptor array is white
   // (unmarked), so incremental write barriers can be skipped because the
@@ -2615,8 +2617,8 @@ class DescriptorArray: public FixedArray {
   static const int kNotFound = -1;
 
   static const int kBitField3StorageIndex = 0;
-  static const int kTransitionsIndex = 1;
-  static const int kEnumerationIndexIndex = 2;
+  static const int kEnumerationIndexIndex = 1;
+  static const int kTransitionsIndex = 2;
   static const int kFirstIndex = 3;
 
   // The length of the "bridge" to the enum cache.
@@ -2627,9 +2629,10 @@ class DescriptorArray: public FixedArray {
 
   // Layout description.
   static const int kBitField3StorageOffset = FixedArray::kHeaderSize;
-  static const int kTransitionsOffset = kBitField3StorageOffset + kPointerSize;
-  static const int kEnumerationIndexOffset = kTransitionsOffset + kPointerSize;
-  static const int kFirstOffset = kEnumerationIndexOffset + kPointerSize;
+  static const int kEnumerationIndexOffset =
+      kBitField3StorageOffset + kPointerSize;
+  static const int kTransitionsOffset = kEnumerationIndexOffset + kPointerSize;
+  static const int kFirstOffset = kTransitionsOffset + kPointerSize;
 
   // Layout description for the bridge array.
   static const int kEnumCacheBridgeEnumOffset = FixedArray::kHeaderSize;
@@ -3322,12 +3325,12 @@ class ObjectHashTable: public HashTable<ObjectHashTableShape<2>, Object*> {
     return reinterpret_cast<ObjectHashTable*>(obj);
   }
 
-  // Looks up the value associated with the given key. The undefined value is
+  // Looks up the value associated with the given key. The hole value is
   // returned in case the key is not present.
   Object* Lookup(Object* key);
 
   // Adds (or overwrites) the value associated with the given key. Mapping a
-  // key to the undefined value causes removal of the whole entry.
+  // key to the hole value causes removal of the whole entry.
   MUST_USE_RESULT MaybeObject* Put(Object* key, Object* value);
 
  private:
@@ -4199,6 +4202,17 @@ class Code: public HeapObject {
     LAST_IC_KIND = TO_BOOLEAN_IC
   };
 
+  // Types of stubs.
+  enum StubType {
+    NORMAL,
+    FIELD,
+    CONSTANT_FUNCTION,
+    CALLBACKS,
+    INTERCEPTOR,
+    MAP_TRANSITION,
+    NONEXISTENT
+  };
+
   enum {
     NUMBER_OF_KINDS = LAST_IC_KIND + 1
   };
@@ -4211,7 +4225,7 @@ class Code: public HeapObject {
   // Printing
   static const char* Kind2String(Kind kind);
   static const char* ICState2String(InlineCacheState state);
-  static const char* PropertyType2String(PropertyType type);
+  static const char* StubType2String(StubType type);
   static void PrintExtraICState(FILE* out, Kind kind, ExtraICState extra);
   inline void Disassemble(const char* name) {
     Disassemble(name, stdout);
@@ -4261,7 +4275,7 @@ class Code: public HeapObject {
   inline Kind kind();
   inline InlineCacheState ic_state();  // Only valid for IC stubs.
   inline ExtraICState extra_ic_state();  // Only valid for IC stubs.
-  inline PropertyType type();  // Only valid for monomorphic IC stubs.
+  inline StubType type();  // Only valid for monomorphic IC stubs.
   inline int arguments_count();  // Only valid for call IC stubs.
 
   // Testers for IC stub kinds.
@@ -4404,19 +4418,19 @@ class Code: public HeapObject {
       Kind kind,
       InlineCacheState ic_state = UNINITIALIZED,
       ExtraICState extra_ic_state = kNoExtraICState,
-      PropertyType type = NORMAL,
+      StubType type = NORMAL,
       int argc = -1,
       InlineCacheHolderFlag holder = OWN_MAP);
 
   static inline Flags ComputeMonomorphicFlags(
       Kind kind,
-      PropertyType type,
+      StubType type,
       ExtraICState extra_ic_state = kNoExtraICState,
       InlineCacheHolderFlag holder = OWN_MAP,
       int argc = -1);
 
   static inline InlineCacheState ExtractICStateFromFlags(Flags flags);
-  static inline PropertyType ExtractTypeFromFlags(Flags flags);
+  static inline StubType ExtractTypeFromFlags(Flags flags);
   static inline Kind ExtractKindFromFlags(Flags flags);
   static inline InlineCacheHolderFlag ExtractCacheHolderFromFlags(Flags flags);
   static inline ExtraICState ExtractExtraICStateFromFlags(Flags flags);
@@ -4552,14 +4566,14 @@ class Code: public HeapObject {
 
   // Flags layout.  BitField<type, shift, size>.
   class ICStateField: public BitField<InlineCacheState, 0, 3> {};
-  class TypeField: public BitField<PropertyType, 3, 4> {};
-  class CacheHolderField: public BitField<InlineCacheHolderFlag, 7, 1> {};
-  class KindField: public BitField<Kind, 8, 4> {};
-  class ExtraICStateField: public BitField<ExtraICState, 12, 2> {};
-  class IsPregeneratedField: public BitField<bool, 14, 1> {};
+  class TypeField: public BitField<StubType, 3, 3> {};
+  class CacheHolderField: public BitField<InlineCacheHolderFlag, 6, 1> {};
+  class KindField: public BitField<Kind, 7, 4> {};
+  class ExtraICStateField: public BitField<ExtraICState, 11, 2> {};
+  class IsPregeneratedField: public BitField<bool, 13, 1> {};
 
   // Signed field cannot be encoded using the BitField class.
-  static const int kArgumentsCountShift = 15;
+  static const int kArgumentsCountShift = 14;
   static const int kArgumentsCountMask = ~((1 << kArgumentsCountShift) - 1);
 
   // This constant should be encodable in an ARM instruction.
@@ -4749,14 +4763,6 @@ class Map: public HeapObject {
   inline void set_is_shared(bool value);
   inline bool is_shared();
 
-  // Tells whether the map is used for an object that is a prototype for another
-  // object or is the prototype on a function.  Such maps are made faster by
-  // tweaking the heuristics that distinguish between regular object-oriented
-  // objects and the objects that are being used as hash maps.  This flag is
-  // for optimization, not correctness.
-  inline void set_used_for_prototype(bool value);
-  inline bool used_for_prototype();
-
   // Tells whether the instance needs security checks when accessing its
   // properties.
   inline void set_is_access_check_needed(bool access_check_needed);
@@ -4776,6 +4782,10 @@ class Map: public HeapObject {
 
   // [instance descriptors]: describes the object.
   DECL_ACCESSORS(instance_descriptors, DescriptorArray)
+
+  // Should only be called to clear a descriptor array that was only used to
+  // store transitions and does not contain any live transitions anymore.
+  inline void ClearDescriptorArray();
 
   // Sets the instance descriptor array for the map to be an empty descriptor
   // array.
@@ -4944,9 +4954,7 @@ class Map: public HeapObject {
   // the original map.  That way we can transition to the same map if the same
   // prototype is set, rather than creating a new map every time.  The
   // transitions are in the form of a map where the keys are prototype objects
-  // and the values are the maps the are transitioned to.  The special key
-  // the_hole denotes the map we should transition to when the
-  // used_for_prototype flag is set.
+  // and the values are the maps the are transitioned to.
   static const int kMaxCachedPrototypeTransitions = 256;
 
   Map* GetPrototypeTransition(Object* prototype);
@@ -5042,7 +5050,6 @@ class Map: public HeapObject {
   // Bit positions for bit field 3
   static const int kIsShared = 0;
   static const int kFunctionWithPrototype = 1;
-  static const int kUsedForPrototype = 2;
 
   typedef FixedBodyDescriptor<kPointerFieldsBeginOffset,
                               kPointerFieldsEndOffset,
@@ -5237,6 +5244,10 @@ class SharedFunctionInfo: public HeapObject {
   // i - 1 is the context, position i the code, and i + 1 the literals array.
   // Returns -1 when no matching entry is found.
   int SearchOptimizedCodeMap(Context* global_context);
+
+  // Installs optimized code from the code map on the given closure. The
+  // index has to be consistent with a search result as defined above.
+  void InstallFromOptimizedCodeMap(JSFunction* function, int index);
 
   // Clear optimized code map.
   void ClearOptimizedCodeMap();
@@ -5471,6 +5482,12 @@ class SharedFunctionInfo: public HeapObject {
   // when doing GC if we expect that the function will no longer be used.
   DECL_BOOLEAN_ACCESSORS(allows_lazy_compilation)
 
+  // Indicates if this function can be lazy compiled without a context.
+  // This is used to determine if we can force compilation without reaching
+  // the function through program execution but through other means (e.g. heap
+  // iteration by the debugger).
+  DECL_BOOLEAN_ACCESSORS(allows_lazy_compilation_without_context)
+
   // Indicates how many full GCs this function has survived with assigned
   // code object. Used to determine when it is relatively safe to flush
   // this code object and replace it with lazy compilation stub.
@@ -5617,10 +5634,9 @@ class SharedFunctionInfo: public HeapObject {
 
   void ResetForNewContext(int new_ic_age);
 
-  // Helpers to compile the shared code.  Returns true on success, false on
-  // failure (e.g., stack overflow during compilation).
-  static bool EnsureCompiled(Handle<SharedFunctionInfo> shared,
-                             ClearExceptionFlag flag);
+  // Helper to compile the shared code.  Returns true on success, false on
+  // failure (e.g., stack overflow during compilation). This is only used by
+  // the debugger, it is not possible to compile without a context otherwise.
   static bool CompileLazy(Handle<SharedFunctionInfo> shared,
                           ClearExceptionFlag flag);
 
@@ -5755,6 +5771,7 @@ class SharedFunctionInfo: public HeapObject {
   enum CompilerHints {
     kHasOnlySimpleThisPropertyAssignments,
     kAllowLazyCompilation,
+    kAllowLazyCompilationWithoutContext,
     kLiveObjectsMayExist,
     kCodeAgeShift,
     kOptimizationDisabled = kCodeAgeShift + kCodeAgeSize,
@@ -5903,6 +5920,8 @@ class JSFunction: public JSObject {
 
   // Helpers to compile this function.  Returns true on success, false on
   // failure (e.g., stack overflow during compilation).
+  static bool EnsureCompiled(Handle<JSFunction> function,
+                             ClearExceptionFlag flag);
   static bool CompileLazy(Handle<JSFunction> function,
                           ClearExceptionFlag flag);
   static bool CompileOptimized(Handle<JSFunction> function,

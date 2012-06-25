@@ -1616,8 +1616,7 @@ bool JSObject::TooManyFastProperties(int properties,
   int inobject = map()->inobject_properties();
 
   int limit;
-  if (store_mode == CERTAINLY_NOT_STORE_FROM_KEYED ||
-      map()->used_for_prototype()) {
+  if (store_mode == CERTAINLY_NOT_STORE_FROM_KEYED) {
     limit = Max(inobject, kMaxFastProperties);
   } else {
     limit = Max(inobject, kFastPropertiesSoftLimit);
@@ -1864,7 +1863,7 @@ void FixedArray::set_unchecked(Heap* heap,
 
 void FixedArray::set_null_unchecked(Heap* heap, int index) {
   ASSERT(index >= 0 && index < this->length());
-  ASSERT(!HEAP->InNewSpace(heap->null_value()));
+  ASSERT(!heap->InNewSpace(heap->null_value()));
   WRITE_FIELD(this, kHeaderSize + index * kPointerSize, heap->null_value());
 }
 
@@ -1875,15 +1874,14 @@ Object** FixedArray::data_start() {
 
 
 bool DescriptorArray::IsEmpty() {
-  ASSERT(this->IsSmi() ||
-         this->MayContainTransitions() ||
+  ASSERT(length() >= kFirstIndex ||
          this == HEAP->empty_descriptor_array());
-  return this->IsSmi() || length() < kFirstIndex;
+  return length() < kFirstIndex;
 }
 
 
 bool DescriptorArray::MayContainTransitions() {
-  return length() >= kTransitionsIndex;
+  return !IsEmpty();
 }
 
 
@@ -1959,6 +1957,11 @@ void DescriptorArray::set_elements_transition_map(
 }
 
 
+void DescriptorArray::ClearElementsTransition() {
+  WRITE_FIELD(this, kTransitionsOffset, Smi::FromInt(0));
+}
+
+
 Object** DescriptorArray::GetKeySlot(int descriptor_number) {
   ASSERT(descriptor_number < number_of_descriptors());
   return HeapObject::RawField(
@@ -1970,6 +1973,17 @@ Object** DescriptorArray::GetKeySlot(int descriptor_number) {
 String* DescriptorArray::GetKey(int descriptor_number) {
   ASSERT(descriptor_number < number_of_descriptors());
   return String::cast(get(ToKeyIndex(descriptor_number)));
+}
+
+
+void DescriptorArray::SetKeyUnchecked(Heap* heap,
+                                      int descriptor_number,
+                                      String* key) {
+  ASSERT(descriptor_number < number_of_descriptors());
+  set_unchecked(heap,
+                ToKeyIndex(descriptor_number),
+                key,
+                UPDATE_WRITE_BARRIER);
 }
 
 
@@ -1987,9 +2001,21 @@ Object* DescriptorArray::GetValue(int descriptor_number) {
 }
 
 
-void DescriptorArray::SetNullValueUnchecked(int descriptor_number, Heap* heap) {
+void DescriptorArray::SetNullValueUnchecked(Heap* heap, int descriptor_number) {
   ASSERT(descriptor_number < number_of_descriptors());
   set_null_unchecked(heap, ToValueIndex(descriptor_number));
+}
+
+
+
+void DescriptorArray::SetValueUnchecked(Heap* heap,
+                                        int descriptor_number,
+                                        Object* value) {
+  ASSERT(descriptor_number < number_of_descriptors());
+  set_unchecked(heap,
+                ToValueIndex(descriptor_number),
+                value,
+                UPDATE_WRITE_BARRIER);
 }
 
 
@@ -2056,16 +2082,13 @@ bool DescriptorArray::IsTransitionOnly(int descriptor_number) {
     case CONSTANT_FUNCTION:
     case HANDLER:
     case INTERCEPTOR:
-    case NULL_DESCRIPTOR:
       return false;
+    case NONEXISTENT:
+      UNREACHABLE();
+      break;
   }
   UNREACHABLE();  // Keep the compiler happy.
   return false;
-}
-
-
-bool DescriptorArray::IsNullDescriptor(int descriptor_number) {
-  return GetType(descriptor_number) == NULL_DESCRIPTOR;
 }
 
 
@@ -2982,20 +3005,6 @@ bool Map::is_shared() {
 }
 
 
-void Map::set_used_for_prototype(bool value) {
-  if (value) {
-    set_bit_field3(bit_field3() | (1 << kUsedForPrototype));
-  } else {
-    set_bit_field3(bit_field3() & ~(1 << kUsedForPrototype));
-  }
-}
-
-
-bool Map::used_for_prototype() {
-  return ((1 << kUsedForPrototype) & bit_field3()) != 0;
-}
-
-
 JSFunction* Map::unchecked_constructor() {
   return reinterpret_cast<JSFunction*>(READ_FIELD(this, kConstructorOffset));
 }
@@ -3040,7 +3049,7 @@ Code::ExtraICState Code::extra_ic_state() {
 }
 
 
-PropertyType Code::type() {
+Code::StubType Code::type() {
   return ExtractTypeFromFlags(flags());
 }
 
@@ -3312,7 +3321,7 @@ bool Code::is_inline_cache_stub() {
 Code::Flags Code::ComputeFlags(Kind kind,
                                InlineCacheState ic_state,
                                ExtraICState extra_ic_state,
-                               PropertyType type,
+                               StubType type,
                                int argc,
                                InlineCacheHolderFlag holder) {
   // Extra IC state is only allowed for call IC stubs or for store IC
@@ -3333,7 +3342,7 @@ Code::Flags Code::ComputeFlags(Kind kind,
 
 
 Code::Flags Code::ComputeMonomorphicFlags(Kind kind,
-                                          PropertyType type,
+                                          StubType type,
                                           ExtraICState extra_ic_state,
                                           InlineCacheHolderFlag holder,
                                           int argc) {
@@ -3356,7 +3365,7 @@ Code::ExtraICState Code::ExtractExtraICStateFromFlags(Flags flags) {
 }
 
 
-PropertyType Code::ExtractTypeFromFlags(Flags flags) {
+Code::StubType Code::ExtractTypeFromFlags(Flags flags) {
   return TypeField::decode(flags);
 }
 
@@ -3475,10 +3484,23 @@ int Map::bit_field3() {
 }
 
 
+void Map::ClearDescriptorArray() {
+  int bitfield3 = bit_field3();
+#ifdef DEBUG
+  Object* object = READ_FIELD(this, kInstanceDescriptorsOrBitField3Offset);
+  if (!object->IsSmi()) {
+    ZapInstanceDescriptors();
+  }
+#endif
+  WRITE_FIELD(this,
+              kInstanceDescriptorsOrBitField3Offset,
+              Smi::FromInt(bitfield3));
+}
+
+
 void Map::set_bit_field3(int value) {
   ASSERT(Smi::IsValid(value));
-  Object* object = READ_FIELD(this,
-                              kInstanceDescriptorsOrBitField3Offset);
+  Object* object = READ_FIELD(this, kInstanceDescriptorsOrBitField3Offset);
   if (object->IsSmi()) {
     WRITE_FIELD(this,
                 kInstanceDescriptorsOrBitField3Offset,
@@ -3697,6 +3719,10 @@ BOOL_ACCESSORS(SharedFunctionInfo,
                compiler_hints,
                allows_lazy_compilation,
                kAllowLazyCompilation)
+BOOL_ACCESSORS(SharedFunctionInfo,
+               compiler_hints,
+               allows_lazy_compilation_without_context,
+               kAllowLazyCompilationWithoutContext)
 BOOL_ACCESSORS(SharedFunctionInfo,
                compiler_hints,
                uses_arguments,

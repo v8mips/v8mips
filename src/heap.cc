@@ -320,48 +320,52 @@ void Heap::ReportStatisticsBeforeGC() {
 
 void Heap::PrintShortHeapStatistics() {
   if (!FLAG_trace_gc_verbose) return;
-  PrintF("Memory allocator,   used: %8" V8_PTR_PREFIX "d"
-             ", available: %8" V8_PTR_PREFIX "d\n",
-         isolate_->memory_allocator()->Size(),
-         isolate_->memory_allocator()->Available());
-  PrintF("New space,          used: %8" V8_PTR_PREFIX "d"
-             ", available: %8" V8_PTR_PREFIX "d\n",
-         Heap::new_space_.Size(),
-         new_space_.Available());
-  PrintF("Old pointers,       used: %8" V8_PTR_PREFIX "d"
-             ", available: %8" V8_PTR_PREFIX "d"
-             ", waste: %8" V8_PTR_PREFIX "d\n",
-         old_pointer_space_->Size(),
-         old_pointer_space_->Available(),
-         old_pointer_space_->Waste());
-  PrintF("Old data space,     used: %8" V8_PTR_PREFIX "d"
-             ", available: %8" V8_PTR_PREFIX "d"
-             ", waste: %8" V8_PTR_PREFIX "d\n",
-         old_data_space_->Size(),
-         old_data_space_->Available(),
-         old_data_space_->Waste());
-  PrintF("Code space,         used: %8" V8_PTR_PREFIX "d"
-             ", available: %8" V8_PTR_PREFIX "d"
-             ", waste: %8" V8_PTR_PREFIX "d\n",
-         code_space_->Size(),
-         code_space_->Available(),
-         code_space_->Waste());
-  PrintF("Map space,          used: %8" V8_PTR_PREFIX "d"
-             ", available: %8" V8_PTR_PREFIX "d"
-             ", waste: %8" V8_PTR_PREFIX "d\n",
-         map_space_->Size(),
-         map_space_->Available(),
-         map_space_->Waste());
-  PrintF("Cell space,         used: %8" V8_PTR_PREFIX "d"
-             ", available: %8" V8_PTR_PREFIX "d"
-             ", waste: %8" V8_PTR_PREFIX "d\n",
-         cell_space_->Size(),
-         cell_space_->Available(),
-         cell_space_->Waste());
-  PrintF("Large object space, used: %8" V8_PTR_PREFIX "d"
-             ", available: %8" V8_PTR_PREFIX "d\n",
-         lo_space_->Size(),
-         lo_space_->Available());
+  PrintF("Memory allocator,   used: %6" V8_PTR_PREFIX "d KB"
+             ", available: %6" V8_PTR_PREFIX "d KB\n",
+         isolate_->memory_allocator()->Size() / KB,
+         isolate_->memory_allocator()->Available() / KB);
+  PrintF("New space,          used: %6" V8_PTR_PREFIX "d KB"
+             ", available: %6" V8_PTR_PREFIX "d KB"
+             ", committed: %6" V8_PTR_PREFIX "d KB\n",
+         new_space_.Size() / KB,
+         new_space_.Available() / KB,
+         new_space_.CommittedMemory() / KB);
+  PrintF("Old pointers,       used: %6" V8_PTR_PREFIX "d KB"
+             ", available: %6" V8_PTR_PREFIX "d KB"
+             ", committed: %6" V8_PTR_PREFIX "d KB\n",
+         old_pointer_space_->SizeOfObjects() / KB,
+         old_pointer_space_->Available() / KB,
+         old_pointer_space_->CommittedMemory() / KB);
+  PrintF("Old data space,     used: %6" V8_PTR_PREFIX "d KB"
+             ", available: %6" V8_PTR_PREFIX "d KB"
+             ", committed: %6" V8_PTR_PREFIX "d KB\n",
+         old_data_space_->SizeOfObjects() / KB,
+         old_data_space_->Available() / KB,
+         old_data_space_->CommittedMemory() / KB);
+  PrintF("Code space,         used: %6" V8_PTR_PREFIX "d KB"
+             ", available: %6" V8_PTR_PREFIX "d KB"
+             ", committed: %6" V8_PTR_PREFIX "d KB\n",
+         code_space_->SizeOfObjects() / KB,
+         code_space_->Available() / KB,
+         code_space_->CommittedMemory() / KB);
+  PrintF("Map space,          used: %6" V8_PTR_PREFIX "d KB"
+             ", available: %6" V8_PTR_PREFIX "d KB"
+             ", committed: %6" V8_PTR_PREFIX "d KB\n",
+         map_space_->SizeOfObjects() / KB,
+         map_space_->Available() / KB,
+         map_space_->CommittedMemory() / KB);
+  PrintF("Cell space,         used: %6" V8_PTR_PREFIX "d KB"
+             ", available: %6" V8_PTR_PREFIX "d KB"
+             ", committed: %6" V8_PTR_PREFIX "d KB\n",
+         cell_space_->SizeOfObjects() / KB,
+         cell_space_->Available() / KB,
+         cell_space_->CommittedMemory() / KB);
+  PrintF("Large object space, used: %6" V8_PTR_PREFIX "d KB"
+             ", available: %6" V8_PTR_PREFIX "d KB"
+             ", committed: %6" V8_PTR_PREFIX "d KB\n",
+         lo_space_->SizeOfObjects() / KB,
+         lo_space_->Available() / KB,
+         lo_space_->CommittedMemory() / KB);
 }
 
 
@@ -2822,7 +2826,7 @@ void Heap::AllocateFullSizeNumberStringCache() {
   // The idea is to have a small number string cache in the snapshot to keep
   // boot-time memory usage down.  If we expand the number string cache already
   // while creating the snapshot then that didn't work out.
-  ASSERT(!Serializer::enabled());
+  ASSERT(!Serializer::enabled() || FLAG_extra_code != NULL);
   MaybeObject* maybe_obj =
       AllocateFixedArray(FullSizeNumberStringCacheLength(), TENURED);
   Object* new_cache;
@@ -5014,7 +5018,11 @@ void Heap::AdvanceIdleIncrementalMarking(intptr_t step_size) {
 
 
 bool Heap::IdleNotification(int hint) {
+  // Hints greater than this value indicate that
+  // the embedder is requesting a lot of GC work.
   const int kMaxHint = 1000;
+  // Minimal hint that allows to do full GC.
+  const int kMinHintForFullGC = 100;
   intptr_t size_factor = Min(Max(hint, 20), kMaxHint) / 4;
   // The size factor is in range [5..250]. The numbers here are chosen from
   // experiments. If you changes them, make sure to test with
@@ -5082,16 +5090,30 @@ bool Heap::IdleNotification(int hint) {
   mark_sweeps_since_idle_round_started_ += new_mark_sweeps;
   ms_count_at_last_idle_notification_ = ms_count_;
 
-  if (mark_sweeps_since_idle_round_started_ >= kMaxMarkSweepsInIdleRound) {
+  int remaining_mark_sweeps = kMaxMarkSweepsInIdleRound -
+                              mark_sweeps_since_idle_round_started_;
+
+  if (remaining_mark_sweeps <= 0) {
     FinishIdleRound();
     return true;
   }
 
   if (incremental_marking()->IsStopped()) {
-    incremental_marking()->Start();
+    // If there are no more than two GCs left in this idle round and we are
+    // allowed to do a full GC, then make those GCs full in order to compact
+    // the code space.
+    // TODO(ulan): Once we enable code compaction for incremental marking,
+    // we can get rid of this special case and always start incremental marking.
+    if (remaining_mark_sweeps <= 2 && hint >= kMinHintForFullGC) {
+      CollectAllGarbage(kReduceMemoryFootprintMask,
+                        "idle notification: finalize idle round");
+    } else {
+      incremental_marking()->Start();
+    }
   }
-
-  AdvanceIdleIncrementalMarking(step_size);
+  if (!incremental_marking()->IsStopped()) {
+    AdvanceIdleIncrementalMarking(step_size);
+  }
   return false;
 }
 
