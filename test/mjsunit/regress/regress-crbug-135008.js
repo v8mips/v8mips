@@ -25,20 +25,21 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// Flags: --allow-natives-syntax
+// Filler long enough to trigger lazy parsing.
+var filler = "//" + new Array(1024).join('x');
 
-var pixels = new Uint8ClampedArray(8);
+var scope = { x:23 };
 
-function f() {
-  for (var i = 0; i < 8; i++) {
-    pixels[i] = (i * 1.1);
-  }
-  return pixels[1] + pixels[6];
-}
+with(scope) {
+  eval(
+    "scope.f = (function outer() {" +
+    "  function inner() {" +
+    "    return x;" +
+    "  }" +
+    "  return inner;" +
+    "})();" +
+    filler
+  );
+};
 
-f();
-f();
-assertEquals(6, pixels[5]);
-%OptimizeFunctionOnNextCall(f);
-f();
-assertEquals(6, pixels[5]);
+assertSame(23, scope.f());

@@ -1,4 +1,4 @@
-// Copyright 2012 the V8 project authors. All rights reserved.
+// Copyright 2011 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -27,18 +27,35 @@
 
 // Flags: --allow-natives-syntax
 
-var pixels = new Uint8ClampedArray(8);
+// This is a regression test for overlapping key and value registers.
 
-function f() {
-  for (var i = 0; i < 8; i++) {
-    pixels[i] = (i * 1.1);
-  }
-  return pixels[1] + pixels[6];
+var types = [Array, Int8Array, Uint8Array, Int16Array, Uint16Array,
+             Int32Array, Uint32Array, Uint8ClampedArray, Float32Array,
+             Float64Array];
+
+var results1 = [-2, -2, 254, -2, 65534, -2, 4294967294, 0, -2, -2];
+var results2 = [undefined, -1, 255, -1, 65535, -1, 4294967295, 0, -1, -1];
+var results3 = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+var results4 = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1];
+
+const kElementCount = 40;
+
+function do_slice(a) {
+  return Array.prototype.slice.call(a, 4, 8);
 }
 
-f();
-f();
-assertEquals(6, pixels[5]);
-%OptimizeFunctionOnNextCall(f);
-f();
-assertEquals(6, pixels[5]);
+for (var t = 0; t < types.length; t++) {
+  var type = types[t];
+  var a = new type(kElementCount);
+  for (var i = 0; i < kElementCount; ++i ) {
+    a[i] = i-6;
+  }
+  delete a[5];
+  var sliced = do_slice(a);
+
+  %ClearFunctionTypeFeedback(do_slice);
+  assertEquals(results1[t], sliced[0]);
+  assertEquals(results2[t], sliced[1]);
+  assertEquals(results3[t], sliced[2]);
+  assertEquals(results4[t], sliced[3]);
+}

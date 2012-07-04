@@ -148,7 +148,7 @@ def ProcessOptions(options):
       print "Unknown mode %s" % mode
       return False
   for arch in options.arch:
-    if not arch in ['ia32', 'x64', 'arm', 'mips']:
+    if not arch in ['ia32', 'x64', 'arm', 'mips', 'android']:
       print "Unknown architecture %s" % arch
       return False
   if options.buildbot:
@@ -217,9 +217,10 @@ def Main():
 
   if not options.no_presubmit:
     print ">>> running presubmit tests"
-    returncodes += subprocess.call([workspace + '/tools/presubmit.py'])
+    returncodes += subprocess.call([sys.executable,
+                                    workspace + '/tools/presubmit.py'])
 
-  args_for_children = ['python']
+  args_for_children = [sys.executable]
   args_for_children += [workspace + '/tools/test.py'] + PassOnOptions(options)
   args_for_children += ['--no-build', '--build-system=gyp']
   for arg in args:

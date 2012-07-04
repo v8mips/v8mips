@@ -25,20 +25,29 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// Flags: --allow-natives-syntax
+// Filler long enough to trigger lazy parsing.
+var filler = "//" + new Array(1024).join('x');
 
-var pixels = new Uint8ClampedArray(8);
+// Test strict eval in global context.
+eval(
+  "'use strict';" +
+  "var x = 23;" +
+  "var f = function bozo1() {" +
+  "  return x;" +
+  "};" +
+  "assertSame(23, f());" +
+  filler
+);
 
-function f() {
-  for (var i = 0; i < 8; i++) {
-    pixels[i] = (i * 1.1);
-  }
-  return pixels[1] + pixels[6];
-}
-
-f();
-f();
-assertEquals(6, pixels[5]);
-%OptimizeFunctionOnNextCall(f);
-f();
-assertEquals(6, pixels[5]);
+// Test default eval in strict context.
+(function() {
+  "use strict";
+  eval(
+    "var y = 42;" +
+    "var g = function bozo2() {" +
+    "  return y;" +
+    "};" +
+    "assertSame(42, g());" +
+    filler
+  );
+})();
