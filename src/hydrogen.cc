@@ -3053,6 +3053,7 @@ HGraph* HGraphBuilder::CreateGraph() {
 
   {
     HPhase phase("H_Block building");
+    CompilationHandleScope handle_scope(info());
     current_block_ = graph()->entry_block();
 
     Scope* scope = info()->scope();
@@ -4777,7 +4778,10 @@ void HGraphBuilder::VisitObjectLiteral(ObjectLiteral* expr) {
             CHECK_ALIVE(VisitForValue(value));
             HValue* value = Pop();
             HInstruction* store;
-            CHECK_ALIVE(store = BuildStoreNamed(literal, value, property));
+            CHECK_ALIVE(store = BuildStoreNamed(literal,
+                                                value,
+                                                property->GetReceiverType(),
+                                                property->key()));
             AddInstruction(store);
             if (store->HasObservableSideEffects()) AddSimulate(key->id());
           } else {
@@ -4917,17 +4921,18 @@ static bool ComputeLoadStoreField(Handle<Map> type,
                                   Handle<String> name,
                                   LookupResult* lookup,
                                   bool is_store) {
-  type->LookupInDescriptors(NULL, *name, lookup);
+  type->LookupTransitionOrDescriptor(NULL, *name, lookup);
   if (lookup->IsField()) return true;
-  return is_store && lookup->IsMapTransition() &&
-      (type->unused_property_fields() > 0);
+  return is_store &&
+         lookup->IsTransitionToField(*type) &&
+         (type->unused_property_fields() > 0);
 }
 
 
 static int ComputeLoadStoreFieldIndex(Handle<Map> type,
                                       Handle<String> name,
                                       LookupResult* lookup) {
-  ASSERT(lookup->IsField() || lookup->type() == MAP_TRANSITION);
+  ASSERT(lookup->IsField() || lookup->IsTransitionToField(*type));
   if (lookup->IsField()) {
     return lookup->GetLocalFieldIndexFromMap(*type);
   } else {
@@ -4988,7 +4993,7 @@ HInstruction* HGraphBuilder::BuildStoreNamedField(HValue* object,
   }
   HStoreNamedField* instr =
       new(zone()) HStoreNamedField(object, name, value, is_in_object, offset);
-  if (lookup->type() == MAP_TRANSITION) {
+  if (lookup->IsTransitionToField(*type)) {
     Handle<Map> transition(lookup->GetTransitionMapFromMap(*type));
     instr->set_transition(transition);
     // TODO(fschneider): Record the new map type of the object in the IR to
@@ -5014,40 +5019,17 @@ HInstruction* HGraphBuilder::BuildStoreNamedGeneric(HValue* object,
 
 HInstruction* HGraphBuilder::BuildStoreNamed(HValue* object,
                                              HValue* value,
-                                             ObjectLiteral::Property* prop) {
-  Literal* key = prop->key()->AsLiteral();
-  Handle<String> name = Handle<String>::cast(key->handle());
+                                             Handle<Map> type,
+                                             Expression* key) {
+  Handle<String> name = Handle<String>::cast(key->AsLiteral()->handle());
   ASSERT(!name.is_null());
 
   LookupResult lookup(isolate());
-  Handle<Map> type = prop->GetReceiverType();
-  bool is_monomorphic = prop->IsMonomorphic() &&
+  bool is_monomorphic = !type.is_null() &&
       ComputeLoadStoreField(type, name, &lookup, true);
 
   return is_monomorphic
       ? BuildStoreNamedField(object, name, value, type, &lookup,
-                             true)  // Needs smi and map check.
-      : BuildStoreNamedGeneric(object, name, value);
-}
-
-
-HInstruction* HGraphBuilder::BuildStoreNamed(HValue* object,
-                                             HValue* value,
-                                             Expression* expr) {
-  Property* prop = (expr->AsProperty() != NULL)
-      ? expr->AsProperty()
-      : expr->AsAssignment()->target()->AsProperty();
-  Literal* key = prop->key()->AsLiteral();
-  Handle<String> name = Handle<String>::cast(key->handle());
-  ASSERT(!name.is_null());
-
-  LookupResult lookup(isolate());
-  SmallMapList* types = expr->GetReceiverTypes();
-  bool is_monomorphic = expr->IsMonomorphic() &&
-      ComputeLoadStoreField(types->first(), name, &lookup, true);
-
-  return is_monomorphic
-      ? BuildStoreNamedField(object, name, value, types->first(), &lookup,
                              true)  // Needs smi and map check.
       : BuildStoreNamedGeneric(object, name, value);
 }
@@ -5204,7 +5186,12 @@ void HGraphBuilder::HandlePropertyAssignment(Assignment* expr) {
 
     SmallMapList* types = expr->GetReceiverTypes();
     if (expr->IsMonomorphic()) {
-      CHECK_ALIVE(instr = BuildStoreNamed(object, value, expr));
+      CHECK(expr->AsProperty() == NULL);
+      Property* prop = expr->AsAssignment()->target()->AsProperty();
+      CHECK_ALIVE(instr = BuildStoreNamed(object,
+                                          value,
+                                          prop->GetReceiverType(),
+                                          prop->key()));
 
     } else if (types != NULL && types->length() > 1) {
       HandlePolymorphicStoreNamedField(expr, object, value, types, name);
@@ -5384,7 +5371,10 @@ void HGraphBuilder::HandleCompoundAssignment(Assignment* expr) {
       if (instr->HasObservableSideEffects()) AddSimulate(operation->id());
 
       HInstruction* store;
-      CHECK_ALIVE(store = BuildStoreNamed(obj, instr, prop));
+      CHECK_ALIVE(store = BuildStoreNamed(obj,
+                                          instr,
+                                          prop->GetReceiverType(),
+                                          prop->key()));
       AddInstruction(store);
       // Drop the simulated receiver and value.  Return the value.
       Drop(2);
@@ -5621,12 +5611,39 @@ HInstruction* HGraphBuilder::BuildLoadNamedGeneric(HValue* obj,
 }
 
 
+static void LookupInPrototypes(Handle<Map> map,
+                               Handle<String> name,
+                               LookupResult* lookup) {
+  while (map->prototype()->IsJSObject()) {
+    Handle<JSObject> holder(JSObject::cast(map->prototype()));
+    map = Handle<Map>(holder->map());
+    map->LookupDescriptor(*holder, *name, lookup);
+    if (lookup->IsFound()) return;
+  }
+  lookup->NotFound();
+}
+
+
+HInstruction* HGraphBuilder::BuildCallGetter(HValue* obj,
+                                             Property* expr,
+                                             Handle<Map> map,
+                                             Handle<Object> callback,
+                                             Handle<JSObject> holder) {
+  if (!callback->IsAccessorPair()) return BuildLoadNamedGeneric(obj, expr);
+  Handle<Object> getter(Handle<AccessorPair>::cast(callback)->getter());
+  Handle<JSFunction> function(Handle<JSFunction>::cast(getter));
+  AddCheckConstantFunction(holder, obj, map, true);
+  AddInstruction(new(zone()) HPushArgument(obj));
+  return new(zone()) HCallConstantFunction(function, 1);
+}
+
+
 HInstruction* HGraphBuilder::BuildLoadNamed(HValue* obj,
                                             Property* expr,
                                             Handle<Map> map,
                                             Handle<String> name) {
   LookupResult lookup(isolate());
-  map->LookupInDescriptors(NULL, *name, &lookup);
+  map->LookupDescriptor(NULL, *name, &lookup);
   if (lookup.IsField()) {
     return BuildLoadNamedField(obj,
                                expr,
@@ -5638,7 +5655,17 @@ HInstruction* HGraphBuilder::BuildLoadNamed(HValue* obj,
     AddInstruction(HCheckMaps::NewWithTransitions(obj, map, zone()));
     Handle<JSFunction> function(lookup.GetConstantFunctionFromMap(*map));
     return new(zone()) HConstant(function, Representation::Tagged());
+  } else if (lookup.IsPropertyCallbacks()) {
+    Handle<Object> callback(lookup.GetValueFromMap(*map));
+    Handle<JSObject> holder;
+    return BuildCallGetter(obj, expr, map, callback, holder);
   } else {
+    LookupInPrototypes(map, name, &lookup);
+    if (lookup.IsPropertyCallbacks()) {
+      Handle<Object> callback(lookup.GetValue());
+      Handle<JSObject> holder(lookup.holder());
+      return BuildCallGetter(obj, expr, map, callback, holder);
+    }
     return BuildLoadNamedGeneric(obj, expr);
   }
 }
@@ -6283,7 +6310,7 @@ void HGraphBuilder::VisitProperty(Property* expr) {
 }
 
 
-void HGraphBuilder::AddCheckConstantFunction(Call* expr,
+void HGraphBuilder::AddCheckConstantFunction(Handle<JSObject> holder,
                                              HValue* receiver,
                                              Handle<Map> receiver_map,
                                              bool smi_and_map_check) {
@@ -6295,10 +6322,9 @@ void HGraphBuilder::AddCheckConstantFunction(Call* expr,
     AddInstruction(HCheckMaps::NewWithTransitions(receiver, receiver_map,
                                                   zone()));
   }
-  if (!expr->holder().is_null()) {
+  if (!holder.is_null()) {
     AddInstruction(new(zone()) HCheckPrototypeMaps(
-        Handle<JSObject>(JSObject::cast(receiver_map->prototype())),
-        expr->holder()));
+        Handle<JSObject>(JSObject::cast(receiver_map->prototype())), holder));
   }
 }
 
@@ -6381,7 +6407,7 @@ void HGraphBuilder::HandlePolymorphicCallNamed(Call* expr,
 
     set_current_block(if_true);
     expr->ComputeTarget(map, name);
-    AddCheckConstantFunction(expr, receiver, map, false);
+    AddCheckConstantFunction(expr->holder(), receiver, map, false);
     if (FLAG_trace_inlining && FLAG_polymorphic_inlining) {
       Handle<JSFunction> caller = info()->closure();
       SmartArrayPointer<char> caller_name =
@@ -6888,7 +6914,7 @@ bool HGraphBuilder::TryInlineBuiltinMethodCall(Call* expr,
     case kMathCos:
     case kMathTan:
       if (argument_count == 2 && check_type == RECEIVER_MAP_CHECK) {
-        AddCheckConstantFunction(expr, receiver, receiver_map, true);
+        AddCheckConstantFunction(expr->holder(), receiver, receiver_map, true);
         HValue* argument = Pop();
         HValue* context = environment()->LookupContext();
         Drop(1);  // Receiver.
@@ -6901,7 +6927,7 @@ bool HGraphBuilder::TryInlineBuiltinMethodCall(Call* expr,
       break;
     case kMathPow:
       if (argument_count == 3 && check_type == RECEIVER_MAP_CHECK) {
-        AddCheckConstantFunction(expr, receiver, receiver_map, true);
+        AddCheckConstantFunction(expr->holder(), receiver, receiver_map, true);
         HValue* right = Pop();
         HValue* left = Pop();
         Pop();  // Pop receiver.
@@ -6943,7 +6969,7 @@ bool HGraphBuilder::TryInlineBuiltinMethodCall(Call* expr,
       break;
     case kMathRandom:
       if (argument_count == 1 && check_type == RECEIVER_MAP_CHECK) {
-        AddCheckConstantFunction(expr, receiver, receiver_map, true);
+        AddCheckConstantFunction(expr->holder(), receiver, receiver_map, true);
         Drop(1);  // Receiver.
         HValue* context = environment()->LookupContext();
         HGlobalObject* global_object = new(zone()) HGlobalObject(context);
@@ -6956,7 +6982,7 @@ bool HGraphBuilder::TryInlineBuiltinMethodCall(Call* expr,
     case kMathMax:
     case kMathMin:
       if (argument_count == 3 && check_type == RECEIVER_MAP_CHECK) {
-        AddCheckConstantFunction(expr, receiver, receiver_map, true);
+        AddCheckConstantFunction(expr->holder(), receiver, receiver_map, true);
         HValue* right = Pop();
         HValue* left = Pop();
         Pop();  // Pop receiver.
@@ -7072,7 +7098,7 @@ bool HGraphBuilder::TryCallApply(Call* expr) {
   VisitForValue(prop->obj());
   if (HasStackOverflow() || current_block() == NULL) return true;
   HValue* function = Top();
-  AddCheckConstantFunction(expr, function, function_map, true);
+  AddCheckConstantFunction(expr->holder(), function, function_map, true);
   Drop(1);
 
   VisitForValue(args->at(0));
@@ -7191,7 +7217,7 @@ void HGraphBuilder::VisitCall(Call* expr) {
         call = PreProcessCall(
             new(zone()) HCallNamed(context, name, argument_count));
       } else {
-        AddCheckConstantFunction(expr, receiver, receiver_map, true);
+        AddCheckConstantFunction(expr->holder(), receiver, receiver_map, true);
 
         if (TryInlineCall(expr)) return;
         call = PreProcessCall(
@@ -7749,7 +7775,10 @@ void HGraphBuilder::VisitCountOperation(CountOperation* expr) {
       input = Pop();
 
       HInstruction* store;
-      CHECK_ALIVE(store = BuildStoreNamed(obj, after, prop));
+      CHECK_ALIVE(store = BuildStoreNamed(obj,
+                                          after,
+                                          prop->GetReceiverType(),
+                                          prop->key()));
       AddInstruction(store);
 
       // Overwrite the receiver in the bailout environment with the result

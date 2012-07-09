@@ -1138,16 +1138,19 @@ class HGraphBuilder: public AstVisitor {
                                    bool is_store,
                                    bool* has_side_effects);
 
+  HInstruction* BuildCallGetter(HValue* obj,
+                                Property* expr,
+                                Handle<Map> map,
+                                Handle<Object> callback,
+                                Handle<JSObject> holder);
   HInstruction* BuildLoadNamed(HValue* object,
                                Property* prop,
                                Handle<Map> map,
                                Handle<String> name);
   HInstruction* BuildStoreNamed(HValue* object,
                                 HValue* value,
-                                Expression* expr);
-  HInstruction* BuildStoreNamed(HValue* object,
-                                HValue* value,
-                                ObjectLiteral::Property* prop);
+                                Handle<Map> type,
+                                Expression* key);
   HInstruction* BuildStoreNamedField(HValue* object,
                                      Handle<String> name,
                                      HValue* value,
@@ -1165,7 +1168,7 @@ class HGraphBuilder: public AstVisitor {
 
   HInstruction* BuildThisFunction();
 
-  void AddCheckConstantFunction(Call* expr,
+  void AddCheckConstantFunction(Handle<JSObject> holder,
                                 HValue* receiver,
                                 Handle<Map> receiver_map,
                                 bool smi_and_map_check);

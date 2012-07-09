@@ -165,7 +165,8 @@ enum AstPropertiesFlag {
   kDontInline,
   kDontOptimize,
   kDontSelfOptimize,
-  kDontSoftInline
+  kDontSoftInline,
+  kDontCache
 };
 
 
@@ -586,23 +587,27 @@ class ExportDeclaration: public Declaration {
  protected:
   template<class> friend class AstNodeFactory;
 
-  ExportDeclaration(VariableProxy* proxy,
-                    Scope* scope)
-      : Declaration(proxy, LET, scope) {
-  }
+  ExportDeclaration(VariableProxy* proxy, Scope* scope)
+      : Declaration(proxy, LET, scope) {}
 };
 
 
 class Module: public AstNode {
  public:
   Interface* interface() const { return interface_; }
+  Block* body() const { return body_; }
 
  protected:
-  explicit Module(Zone* zone) : interface_(Interface::NewModule(zone)) {}
-  explicit Module(Interface* interface) : interface_(interface) {}
+  explicit Module(Zone* zone)
+      : interface_(Interface::NewModule(zone)),
+        body_(NULL) {}
+  explicit Module(Interface* interface, Block* body = NULL)
+      : interface_(interface),
+        body_(body) {}
 
  private:
   Interface* interface_;
+  Block* body_;
 };
 
 
@@ -610,20 +615,10 @@ class ModuleLiteral: public Module {
  public:
   DECLARE_NODE_TYPE(ModuleLiteral)
 
-  Block* body() const { return body_; }
-  Handle<Context> context() const { return context_; }
-
  protected:
   template<class> friend class AstNodeFactory;
 
-  ModuleLiteral(Block* body, Interface* interface)
-      : Module(interface),
-        body_(body) {
-  }
-
- private:
-  Block* body_;
-  Handle<Context> context_;
+  ModuleLiteral(Block* body, Interface* interface) : Module(interface, body) {}
 };
 
 
@@ -1330,7 +1325,6 @@ class ObjectLiteral: public MaterializedLiteral {
 
     // Type feedback information.
     void RecordTypeFeedback(TypeFeedbackOracle* oracle);
-    bool IsMonomorphic() { return !receiver_type_.is_null(); }
     Handle<Map> GetReceiverType() { return receiver_type_; }
 
     bool IsCompileTimeValue();
@@ -1534,6 +1528,11 @@ class Property: public Expression {
   void RecordTypeFeedback(TypeFeedbackOracle* oracle, Zone* zone);
   virtual bool IsMonomorphic() { return is_monomorphic_; }
   virtual SmallMapList* GetReceiverTypes() { return &receiver_types_; }
+
+  Handle<Map> GetReceiverType() {
+    return IsMonomorphic() ? GetReceiverTypes()->first() : Handle<Map>();
+  }
+
   bool IsArrayLength() { return is_array_length_; }
   bool IsUninitialized() { return is_uninitialized_; }
 
@@ -1584,7 +1583,12 @@ class Call: public Expression {
   virtual bool IsMonomorphic() { return is_monomorphic_; }
   CheckType check_type() const { return check_type_; }
   Handle<JSFunction> target() { return target_; }
+
+  // A cache for the holder, set as a side effect of computing the target of the
+  // call. Note that it contains the null handle when the receiver is the same
+  // as the holder!
   Handle<JSObject> holder() { return holder_; }
+
   Handle<JSGlobalPropertyCell> cell() { return cell_; }
 
   bool ComputeTarget(Handle<Map> type, Handle<String> name);

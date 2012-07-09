@@ -293,11 +293,10 @@ Handle<Context> Factory::NewGlobalContext() {
 }
 
 
-Handle<Context> Factory::NewModuleContext(Handle<Context> previous,
-                                          Handle<ScopeInfo> scope_info) {
+Handle<Context> Factory::NewModuleContext(Handle<ScopeInfo> scope_info) {
   CALL_HEAP_FUNCTION(
       isolate(),
-      isolate()->heap()->AllocateModuleContext(*previous, *scope_info),
+      isolate()->heap()->AllocateModuleContext(*scope_info),
       Context);
 }
 
@@ -894,7 +893,7 @@ MUST_USE_RESULT static inline MaybeObject* DoCopyInsert(
     Object* value,
     PropertyAttributes attributes) {
   CallbacksDescriptor desc(key, value, attributes);
-  MaybeObject* obj = array->CopyInsert(&desc, REMOVE_TRANSITIONS);
+  MaybeObject* obj = array->CopyInsert(&desc);
   return obj;
 }
 
@@ -944,7 +943,7 @@ Handle<DescriptorArray> Factory::CopyAppendCallbackDescriptors(
     Handle<String> key =
         SymbolFromString(Handle<String>(String::cast(entry->name())));
     // Check if a descriptor with this name already exists before writing.
-    if (result->LinearSearch(EXPECT_UNSORTED, *key, descriptor_count) ==
+    if (LinearSearch(*result, EXPECT_UNSORTED, *key, descriptor_count) ==
         DescriptorArray::kNotFound) {
       CallbacksDescriptor desc(*key, *entry, entry->property_attributes());
       result->Set(descriptor_count, &desc, witness);
@@ -976,10 +975,11 @@ Handle<JSObject> Factory::NewJSObject(Handle<JSFunction> constructor,
 }
 
 
-Handle<JSModule> Factory::NewJSModule() {
+Handle<JSModule> Factory::NewJSModule(Handle<Context> context,
+                                      Handle<ScopeInfo> scope_info) {
   CALL_HEAP_FUNCTION(
       isolate(),
-      isolate()->heap()->AllocateJSModule(), JSModule);
+      isolate()->heap()->AllocateJSModule(*context, *scope_info), JSModule);
 }
 
 
