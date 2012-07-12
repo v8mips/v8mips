@@ -120,6 +120,7 @@ def BuildOptions():
                     default=1, type="int")
   result.add_option("--noprof", help="Disable profiling support",
                     default=False)
+  result.add_option("--xmlout", help='File name of the UnitTest output')
 
   # Flags present in the original test.py that are unsupported in this wrapper:
   # -S [-> scons_flags] (we build with gyp/make, not scons)
@@ -202,6 +203,8 @@ def PassOnOptions(options):
     result += ['--shard-run=%s' % options.shard_run]
   if options.noprof:
     result += ['--noprof']
+  if options.xmlout:
+    result += ['--xmlout=%s' % options.xmlout]
   return result
 
 
