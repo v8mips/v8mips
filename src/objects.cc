@@ -2959,7 +2959,7 @@ MaybeObject* JSObject::SetPropertyForResult(LookupResult* result,
       // transition to the target map.
       if (constant_function == *value) {
         self->set_map(transition_map);
-        return this;
+        return constant_function;
       }
       // Otherwise, replace with a map transition to a new map with a FIELD,
       // even if the value is a constant function.
@@ -3411,9 +3411,7 @@ MaybeObject* JSObject::NormalizeProperties(PropertyNormalizationMode mode,
                                                -instance_size_delta);
   }
 
-
   set_map(new_map);
-  new_map->clear_instance_descriptors();
 
   set_properties(dictionary);
 
@@ -4862,9 +4860,9 @@ Object* JSObject::LookupAccessor(String* name, AccessorComponent component) {
   if (name->AsArrayIndex(&index)) {
     for (Object* obj = this;
          obj != heap->null_value();
-         obj = JSObject::cast(obj)->GetPrototype()) {
-      JSObject* js_object = JSObject::cast(obj);
-      if (js_object->HasDictionaryElements()) {
+         obj = JSReceiver::cast(obj)->GetPrototype()) {
+      if (obj->IsJSObject() && JSObject::cast(obj)->HasDictionaryElements()) {
+        JSObject* js_object = JSObject::cast(obj);
         SeededNumberDictionary* dictionary = js_object->element_dictionary();
         int entry = dictionary->FindEntry(index);
         if (entry != SeededNumberDictionary::kNotFound) {
@@ -4879,9 +4877,9 @@ Object* JSObject::LookupAccessor(String* name, AccessorComponent component) {
   } else {
     for (Object* obj = this;
          obj != heap->null_value();
-         obj = JSObject::cast(obj)->GetPrototype()) {
+         obj = JSReceiver::cast(obj)->GetPrototype()) {
       LookupResult result(heap->isolate());
-      JSObject::cast(obj)->LocalLookup(name, &result);
+      JSReceiver::cast(obj)->LocalLookup(name, &result);
       if (result.IsProperty()) {
         if (result.IsReadOnly()) return heap->undefined_value();
         if (result.IsPropertyCallbacks()) {
@@ -4927,12 +4925,7 @@ MaybeObject* Map::CopyDropDescriptors() {
   }
   Map::cast(result)->set_prototype(prototype());
   Map::cast(result)->set_constructor(constructor());
-  // Don't copy descriptors, so map transitions always remain a forest.
-  // If we retained the same descriptors we would have two maps
-  // pointing to the same transition which is bad because the garbage
-  // collector relies on being able to reverse pointers from transitions
-  // to maps.  If properties need to be retained use CopyDropTransitions.
-  Map::cast(result)->clear_instance_descriptors();
+
   // Please note instance_type and instance_size are set when allocated.
   Map::cast(result)->set_inobject_properties(inobject_properties());
   Map::cast(result)->set_unused_property_fields(unused_property_fields());
@@ -5147,11 +5140,11 @@ class IntrusivePrototypeTransitionIterator {
 
   void Start() {
     ASSERT(!IsIterating());
-    if (HasTransitions()) *Header() = Smi::FromInt(0);
+    *Header() = Smi::FromInt(0);
   }
 
   bool IsIterating() {
-    return HasTransitions() && (*Header())->IsSmi();
+    return (*Header())->IsSmi();
   }
 
   Map* Next() {
@@ -5166,23 +5159,17 @@ class IntrusivePrototypeTransitionIterator {
   }
 
  private:
-  bool HasTransitions() {
-    return proto_trans_->map()->IsSmi() || proto_trans_->IsFixedArray();
-  }
-
   Object** Header() {
     return HeapObject::RawField(proto_trans_, FixedArray::kMapOffset);
   }
 
   int NumberOfTransitions() {
-    ASSERT(HasTransitions());
     FixedArray* proto_trans = reinterpret_cast<FixedArray*>(proto_trans_);
     Object* num = proto_trans->get(Map::kProtoTransitionNumberOfEntriesOffset);
     return Smi::cast(num)->value();
   }
 
   Map* GetTransition(int transitionNumber) {
-    ASSERT(HasTransitions());
     FixedArray* proto_trans = reinterpret_cast<FixedArray*>(proto_trans_);
     return Map::cast(proto_trans->get(IndexFor(transitionNumber)));
   }
@@ -5232,42 +5219,41 @@ class TraversableMap : public Map {
     return old_parent;
   }
 
-  // Can either be Smi (no instance descriptors), or a descriptor array with the
-  // header overwritten as a Smi (thus iterating).
-  TransitionArray* MutatedTransitions() {
-    Object* object = *HeapObject::RawField(instance_descriptors(),
-                                           DescriptorArray::kTransitionsOffset);
-    TransitionArray* transition_array = static_cast<TransitionArray*>(object);
-    return transition_array;
-  }
-
   // Start iterating over this map's children, possibly destroying a FixedArray
   // map (see explanation above).
   void ChildIteratorStart() {
     if (HasTransitionArray()) {
+      if (HasPrototypeTransitions()) {
+        IntrusivePrototypeTransitionIterator(GetPrototypeTransitions()).Start();
+      }
+
       IntrusiveMapTransitionIterator(transitions()).Start();
     }
-    IntrusivePrototypeTransitionIterator(
-        unchecked_prototype_transitions()).Start();
   }
 
   // If we have an unvisited child map, return that one and advance. If we have
   // none, return NULL and reset any destroyed FixedArray maps.
   TraversableMap* ChildIteratorNext() {
-    IntrusivePrototypeTransitionIterator
-        proto_iterator(unchecked_prototype_transitions());
-    if (proto_iterator.IsIterating()) {
-      Map* next = proto_iterator.Next();
-      if (next != NULL) return static_cast<TraversableMap*>(next);
-    }
     if (HasTransitionArray()) {
-      IntrusiveMapTransitionIterator
-          transitions_iterator(MutatedTransitions());
-      if (transitions_iterator.IsIterating()) {
-        Map* next = transitions_iterator.Next();
+      TransitionArray* transition_array = unchecked_transition_array();
+
+      if (transition_array->HasPrototypeTransitions()) {
+        HeapObject* proto_transitions =
+            transition_array->UncheckedPrototypeTransitions();
+        IntrusivePrototypeTransitionIterator proto_iterator(proto_transitions);
+        if (proto_iterator.IsIterating()) {
+          Map* next = proto_iterator.Next();
+          if (next != NULL) return static_cast<TraversableMap*>(next);
+        }
+      }
+
+      IntrusiveMapTransitionIterator transition_iterator(transition_array);
+      if (transition_iterator.IsIterating()) {
+        Map* next = transition_iterator.Next();
         if (next != NULL) return static_cast<TraversableMap*>(next);
       }
     }
+
     return NULL;
   }
 };
@@ -5831,7 +5817,6 @@ MaybeObject* DescriptorArray::Allocate(int number_of_descriptors,
     if (!maybe_array->To(&result)) return maybe_array;
   }
 
-  result->set(kBitField3StorageIndex, Smi::FromInt(0));
   result->set(kEnumerationIndexIndex,
               Smi::FromInt(PropertyDetails::kInitialIndex));
   result->set(kTransitionsIndex, Smi::FromInt(0));
@@ -7417,8 +7402,10 @@ void Map::ClearNonLiveTransitions(Heap* heap) {
 
   // If the final transition array does not contain any live transitions, remove
   // the transition array from the map.
-  if (transition_index == 0 && !t->HasElementsTransition()) {
-    return ClearTransitions();
+  if (transition_index == 0 &&
+      !t->HasElementsTransition() &&
+      !t->HasPrototypeTransitions()) {
+    return ClearTransitions(heap);
   }
 
   int trim = t->number_of_transitions() - transition_index;
@@ -7795,25 +7782,34 @@ bool SharedFunctionInfo::CanGenerateInlineConstructor(Object* prototype) {
     return false;
   }
 
-  // If the prototype is null inline constructors cause no problems.
-  if (!prototype->IsJSObject()) {
-    ASSERT(prototype->IsNull());
-    return true;
-  }
-
   Heap* heap = GetHeap();
 
-  // Traverse the proposed prototype chain looking for setters for properties of
-  // the same names as are set by the inline constructor.
+  // Traverse the proposed prototype chain looking for properties of the
+  // same names as are set by the inline constructor.
   for (Object* obj = prototype;
        obj != heap->null_value();
        obj = obj->GetPrototype()) {
-    JSObject* js_object = JSObject::cast(obj);
+    JSReceiver* receiver = JSReceiver::cast(obj);
     for (int i = 0; i < this_property_assignments_count(); i++) {
       LookupResult result(heap->isolate());
       String* name = GetThisPropertyAssignmentName(i);
-      js_object->LocalLookupRealNamedProperty(name, &result);
-      if (result.IsCallbacks()) return false;
+      receiver->LocalLookup(name, &result);
+      if (result.IsProperty()) {
+        switch (result.type()) {
+          case NORMAL:
+          case FIELD:
+          case CONSTANT_FUNCTION:
+            break;
+          case INTERCEPTOR:
+          case CALLBACKS:
+          case HANDLER:
+            return false;
+          case TRANSITION:
+          case NONEXISTENT:
+            UNREACHABLE();
+            break;
+        }
+      }
     }
   }
 
@@ -8835,7 +8831,7 @@ MaybeObject* JSArray::SetElementsLength(Object* len) {
 
 
 Map* Map::GetPrototypeTransition(Object* prototype) {
-  FixedArray* cache = prototype_transitions();
+  FixedArray* cache = GetPrototypeTransitions();
   int number_of_transitions = NumberOfProtoTransitions();
   const int proto_offset =
       kProtoTransitionHeaderSize + kProtoTransitionPrototypeOffset;
@@ -8857,7 +8853,7 @@ MaybeObject* Map::PutPrototypeTransition(Object* prototype, Map* map) {
   // Don't cache prototype transition if this map is shared.
   if (is_shared() || !FLAG_cache_prototype_transitions) return this;
 
-  FixedArray* cache = prototype_transitions();
+  FixedArray* cache = GetPrototypeTransitions();
 
   const int step = kProtoTransitionElementsPerEntry;
   const int header = kProtoTransitionHeaderSize;
@@ -8880,7 +8876,8 @@ MaybeObject* Map::PutPrototypeTransition(Object* prototype, Map* map) {
       new_cache->set(i + header, cache->get(i + header));
     }
     cache = new_cache;
-    set_prototype_transitions(cache);
+    MaybeObject* set_result = SetPrototypeTransitions(cache);
+    if (set_result->IsFailure()) return set_result;
   }
 
   int last = transitions - 1;
