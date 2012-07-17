@@ -976,9 +976,8 @@ class HGraphBuilder: public AstVisitor {
                        HBasicBlock* true_block,
                        HBasicBlock* false_block);
 
-  // Visit an argument subexpression and emit a push to the outgoing
-  // arguments.  Returns the hydrogen value that was pushed.
-  HValue* VisitArgument(Expression* expr);
+  // Visit an argument subexpression and emit a push to the outgoing arguments.
+  void VisitArgument(Expression* expr);
 
   void VisitArgumentList(ZoneList<Expression*>* arguments);
 
@@ -1149,6 +1148,12 @@ class HGraphBuilder: public AstVisitor {
                                Property* prop,
                                Handle<Map> map,
                                Handle<String> name);
+  HInstruction* BuildCallSetter(HValue* object,
+                                Handle<String> name,
+                                HValue* value,
+                                Handle<Map> map,
+                                Handle<Object> callback,
+                                Handle<JSObject> holder);
   HInstruction* BuildStoreNamed(HValue* object,
                                 HValue* value,
                                 Handle<Map> type,
