@@ -2992,12 +2992,9 @@ void HGraphBuilder::VisitForControl(Expression* expr,
 }
 
 
-HValue* HGraphBuilder::VisitArgument(Expression* expr) {
-  VisitForValue(expr);
-  if (HasStackOverflow() || current_block() == NULL) return NULL;
-  HValue* value = Pop();
-  Push(AddInstruction(new(zone()) HPushArgument(value)));
-  return value;
+void HGraphBuilder::VisitArgument(Expression* expr) {
+  CHECK_ALIVE(VisitForValue(expr));
+  Push(AddInstruction(new(zone()) HPushArgument(Pop())));
 }
 
 
@@ -5940,7 +5937,9 @@ HValue* HGraphBuilder::HandlePolymorphicElementAccess(HValue* object,
     if (consolidated_load != NULL) {
       AddInstruction(consolidated_load);
       *has_side_effects |= consolidated_load->HasObservableSideEffects();
-      consolidated_load->set_position(position);
+      if (position != RelocInfo::kNoPosition) {
+        consolidated_load->set_position(position);
+      }
       return consolidated_load;
     }
   }
@@ -6006,7 +6005,7 @@ HValue* HGraphBuilder::HandlePolymorphicElementAccess(HValue* object,
           object, key, val, transition, untransitionable_map, is_store));
     }
     *has_side_effects |= instr->HasObservableSideEffects();
-    instr->set_position(position);
+    if (position != RelocInfo::kNoPosition) instr->set_position(position);
     return is_store ? NULL : instr;
   }
 
@@ -6108,7 +6107,7 @@ HValue* HGraphBuilder::HandlePolymorphicElementAccess(HValue* object,
             external_elements, checked_key, val, elements_kind, is_store));
       }
       *has_side_effects |= access->HasObservableSideEffects();
-      access->set_position(position);
+      if (position != RelocInfo::kNoPosition) access->set_position(position);
       if (!is_store) {
         Push(access);
       }
@@ -6155,7 +6154,7 @@ HValue* HGraphBuilder::HandleKeyedElementAccess(HValue* obj,
       instr = BuildLoadKeyedGeneric(obj, key);
     }
   }
-  instr->set_position(position);
+  if (position != RelocInfo::kNoPosition) instr->set_position(position);
   AddInstruction(instr);
   *has_side_effects = instr->HasObservableSideEffects();
   return instr;
@@ -7448,8 +7447,8 @@ void HGraphBuilder::VisitCallNew(CallNew* expr) {
   } else {
     // The constructor function is both an operand to the instruction and an
     // argument to the construct call.
-    HValue* constructor = NULL;
-    CHECK_ALIVE(constructor = VisitArgument(expr->expression()));
+    CHECK_ALIVE(VisitArgument(expr->expression()));
+    HValue* constructor = HPushArgument::cast(Top())->argument();
     CHECK_ALIVE(VisitArgumentList(expr->arguments()));
     HInstruction* call =
         new(zone()) HCallNew(context, constructor, argument_count);
@@ -7507,7 +7506,6 @@ void HGraphBuilder::VisitCallRuntime(CallRuntime* expr) {
     int argument_count = expr->arguments()->length();
     HCallRuntime* call =
         new(zone()) HCallRuntime(context, name, function, argument_count);
-    call->set_position(RelocInfo::kNoPosition);
     Drop(argument_count);
     return ast_context()->ReturnInstruction(call, expr->id());
   }

@@ -1740,9 +1740,7 @@ bool Genesis::InstallNatives() {
     Handle<DescriptorArray> array_descriptors(
         array_function->initial_map()->instance_descriptors());
     int old = array_descriptors->SearchWithCache(heap()->length_symbol());
-    MaybeObject* copy_result =
-        reresult_descriptors->CopyFrom(0, *array_descriptors, old, witness);
-    if (copy_result->IsFailure()) return false;
+    reresult_descriptors->CopyFrom(0, *array_descriptors, old, witness);
 
     reresult_descriptors->SetLastAdded(0);
 
@@ -2177,7 +2175,7 @@ void Genesis::TransferNamedProperties(Handle<JSObject> from,
           LookupResult result(isolate());
           to->LocalLookup(descs->GetKey(i), &result);
           // If the property is already there we skip it
-          if (result.IsProperty()) continue;
+          if (result.IsFound()) continue;
           HandleScope inner;
           ASSERT(!to->HasFastProperties());
           // Add to dictionary.
@@ -2210,7 +2208,7 @@ void Genesis::TransferNamedProperties(Handle<JSObject> from,
         // If the property is already there we skip it.
         LookupResult result(isolate());
         to->LocalLookup(String::cast(raw_key), &result);
-        if (result.IsProperty()) continue;
+        if (result.IsFound()) continue;
         // Set the property.
         Handle<String> key = Handle<String>(String::cast(raw_key));
         Handle<Object> value = Handle<Object>(properties->ValueAt(i));
