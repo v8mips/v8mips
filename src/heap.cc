@@ -3709,23 +3709,21 @@ MaybeObject* Heap::AllocateFunctionPrototype(JSFunction* function) {
   // constructors.
   Map* new_map;
   ASSERT(object_function->has_initial_map());
-  { MaybeObject* maybe_map =
-        object_function->initial_map()->CopyDropTransitions(
-            DescriptorArray::MAY_BE_SHARED);
-    if (!maybe_map->To<Map>(&new_map)) return maybe_map;
-  }
+  MaybeObject* maybe_map =
+      object_function->initial_map()->Copy(DescriptorArray::MAY_BE_SHARED);
+  if (!maybe_map->To(&new_map)) return maybe_map;
+
   Object* prototype;
-  { MaybeObject* maybe_prototype = AllocateJSObjectFromMap(new_map);
-    if (!maybe_prototype->ToObject(&prototype)) return maybe_prototype;
-  }
+  MaybeObject* maybe_prototype = AllocateJSObjectFromMap(new_map);
+  if (!maybe_prototype->ToObject(&prototype)) return maybe_prototype;
+
   // When creating the prototype for the function we must set its
   // constructor to the function.
-  Object* result;
-  { MaybeObject* maybe_result =
-        JSObject::cast(prototype)->SetLocalPropertyIgnoreAttributes(
-            constructor_symbol(), function, DONT_ENUM);
-    if (!maybe_result->ToObject(&result)) return maybe_result;
-  }
+  MaybeObject* maybe_failure =
+      JSObject::cast(prototype)->SetLocalPropertyIgnoreAttributes(
+          constructor_symbol(), function, DONT_ENUM);
+  if (maybe_failure->IsFailure()) return maybe_failure;
+
   return prototype;
 }
 
@@ -7211,6 +7209,20 @@ void Heap::CheckpointObjectStats() {
       static_cast<int>(object_sizes_last_time_[name]));
   INSTANCE_TYPE_LIST(ADJUST_LAST_TIME_OBJECT_COUNT)
 #undef ADJUST_LAST_TIME_OBJECT_COUNT
+  int index;
+#define ADJUST_LAST_TIME_OBJECT_COUNT(name)               \
+  index = FIRST_CODE_KIND_SUB_TYPE + Code::name;          \
+  counters->count_of_CODE_TYPE_##name()->Increment(       \
+      static_cast<int>(object_counts_[index]));           \
+  counters->count_of_CODE_TYPE_##name()->Decrement(       \
+      static_cast<int>(object_counts_last_time_[index])); \
+  counters->size_of_CODE_TYPE_##name()->Increment(        \
+      static_cast<int>(object_sizes_[index]));            \
+  counters->size_of_CODE_TYPE_##name()->Decrement(        \
+      static_cast<int>(object_sizes_last_time_[index]));
+  CODE_KIND_LIST(ADJUST_LAST_TIME_OBJECT_COUNT)
+#undef ADJUST_LAST_TIME_OBJECT_COUNT
+
   memcpy(object_counts_last_time_, object_counts_, sizeof(object_counts_));
   memcpy(object_sizes_last_time_, object_sizes_, sizeof(object_sizes_));
   ClearObjectStats();
