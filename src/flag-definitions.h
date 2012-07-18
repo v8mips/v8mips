@@ -152,7 +152,7 @@ DEFINE_implication(harmony, harmony_collections)
 DEFINE_implication(harmony_modules, harmony_scoping)
 
 // Flags for experimental implementation features.
-DEFINE_bool(packed_arrays, true, "optimizes arrays that have no holes")
+DEFINE_bool(packed_arrays, false, "optimizes arrays that have no holes")
 DEFINE_bool(smi_only_arrays, true, "tracks arrays with only smi values")
 DEFINE_bool(clever_optimizations,
             true,
@@ -409,6 +409,7 @@ DEFINE_bool(use_verbose_printer, true, "allows verbose printing")
 
 // parser.cc
 DEFINE_bool(allow_natives_syntax, false, "allow natives syntax")
+DEFINE_bool(trace_parse, false, "trace parsing and preparsing")
 
 // simulator-arm.cc and simulator-mips.cc
 DEFINE_bool(trace_sim, false, "Trace simulator execution")

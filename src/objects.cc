@@ -4424,19 +4424,19 @@ MaybeObject* JSObject::DefineAccessor(String* name,
 
 static MaybeObject* TryAccessorTransition(JSObject* self,
                                           Map* transitioned_map,
-                                          String* name,
+                                          int target_descriptor,
                                           AccessorComponent component,
                                           Object* accessor,
                                           PropertyAttributes attributes) {
   DescriptorArray* descs = transitioned_map->instance_descriptors();
-  int number = descs->LastAdded();
-  PropertyDetails details = descs->GetDetails(number);
+  PropertyDetails details = descs->GetDetails(target_descriptor);
 
   // If the transition target was not callbacks, fall back to the slow case.
   if (details.type() != CALLBACKS) return self->GetHeap()->null_value();
+  Object* descriptor = descs->GetCallbacksObject(target_descriptor);
+  if (!descriptor->IsAccessorPair()) return self->GetHeap()->null_value();
 
-  Object* target_accessor =
-      AccessorPair::cast(descs->GetCallbacksObject(number))->get(component);
+  Object* target_accessor = AccessorPair::cast(descriptor)->get(component);
   PropertyAttributes target_attributes = details.attributes();
 
   // Reuse transition if adding same accessor with same attributes.
@@ -4473,17 +4473,34 @@ MaybeObject* JSObject::DefineFastAccessor(String* name,
       if (entry == accessor && result.GetAttributes() == attributes) {
         return this;
       }
+    } else {
+      return GetHeap()->null_value();
     }
-  }
 
-  // If not, lookup a transition.
-  map()->LookupTransition(this, name, &result);
+    int descriptor_number = result.GetDescriptorIndex();
 
-  // If there is a transition, try to follow it.
-  if (result.IsFound()) {
-    Map* target = result.GetTransitionTarget();
-    return TryAccessorTransition(
-        this, target, name, component, accessor, attributes);
+    map()->LookupTransition(this, name, &result);
+
+    if (result.IsFound()) {
+      Map* target = result.GetTransitionTarget();
+      ASSERT(target->instance_descriptors()->number_of_descriptors() ==
+             map()->instance_descriptors()->number_of_descriptors());
+      ASSERT(target->instance_descriptors()->GetKey(descriptor_number) == name);
+      return TryAccessorTransition(
+          this, target, descriptor_number, component, accessor, attributes);
+    }
+  } else {
+    // If not, lookup a transition.
+    map()->LookupTransition(this, name, &result);
+
+    // If there is a transition, try to follow it.
+    if (result.IsFound()) {
+      Map* target = result.GetTransitionTarget();
+      int descriptor_number = target->instance_descriptors()->LastAdded();
+      ASSERT(target->instance_descriptors()->GetKey(descriptor_number) == name);
+      return TryAccessorTransition(
+          this, target, descriptor_number, component, accessor, attributes);
+    }
   }
 
   // If there is no transition yet, add a transition to the a new accessor pair
@@ -5683,21 +5700,20 @@ void DescriptorArray::CopyFrom(int dst_index,
   Set(dst_index, &desc, witness);
 }
 
+
 MaybeObject* DescriptorArray::CopyReplace(Descriptor* descriptor,
                                           int insertion_index) {
   ASSERT(0 <= insertion_index && insertion_index < number_of_descriptors());
 
   // Ensure the key is a symbol.
-  { MaybeObject* maybe_result = descriptor->KeyToSymbol();
-    if (maybe_result->IsFailure()) return maybe_result;
-  }
+  MaybeObject* maybe_failure = descriptor->KeyToSymbol();
+  if (maybe_failure->IsFailure()) return maybe_failure;
 
   int size = number_of_descriptors();
 
   DescriptorArray* new_descriptors;
-  { MaybeObject* maybe_result = Allocate(size, MAY_BE_SHARED);
-    if (!maybe_result->To(&new_descriptors)) return maybe_result;
-  }
+  MaybeObject* maybe_descriptors = Allocate(size, MAY_BE_SHARED);
+  if (!maybe_descriptors->To(&new_descriptors)) return maybe_descriptors;
 
   FixedArray::WhitenessWitness witness(new_descriptors);
 
@@ -5719,8 +5735,8 @@ MaybeObject* DescriptorArray::CopyReplace(Descriptor* descriptor,
 
 MaybeObject* DescriptorArray::CopyAdd(Descriptor* descriptor) {
   // Ensure the key is a symbol.
-  MaybeObject* maybe_result = descriptor->KeyToSymbol();
-  if (maybe_result->IsFailure()) return maybe_result;
+  MaybeObject* maybe_failure = descriptor->KeyToSymbol();
+  if (maybe_failure->IsFailure()) return maybe_failure;
 
   String* key = descriptor->GetKey();
   ASSERT(Search(key) == kNotFound);
@@ -5776,19 +5792,14 @@ MaybeObject* DescriptorArray::Copy(SharedMode shared_mode) {
   return new_descriptors;
 }
 
+
 // We need the whiteness witness since sort will reshuffle the entries in the
 // descriptor array. If the descriptor array were to be black, the shuffling
 // would move a slot that was already recorded as pointing into an evacuation
 // candidate. This would result in missing updates upon evacuation.
-void DescriptorArray::SortUnchecked(const WhitenessWitness& witness) {
+void DescriptorArray::Sort(const WhitenessWitness& witness) {
   // In-place heap sort.
   int len = number_of_descriptors();
-  // Nothing to sort.
-  if (len == 0) return;
-
-  ASSERT(LastAdded() == kNoneAdded ||
-         GetDetails(LastAdded()).index() == number_of_descriptors());
-
   // Bottom-up max-heap construction.
   // Index of the last node with children
   const int max_parent_index = (len / 2) - 1;
@@ -5835,36 +5846,6 @@ void DescriptorArray::SortUnchecked(const WhitenessWitness& witness) {
       parent_index = child_index;
     }
   }
-
-#ifdef DEBUG
-  // Ensure that all enumeration indexes between 1 and length occur uniquely in
-  // the descriptor array.
-  for (int i = 1; i <= len; ++i) {
-    int j;
-    for (j = 0; j < len; ++j) {
-      if (GetDetails(j).index() == i) break;
-    }
-    ASSERT(j != len);
-    for (j++; j < len; ++j) {
-      ASSERT(GetDetails(j).index() != i);
-    }
-  }
-#endif
-
-  for (int i = 0; i < len; ++i) {
-    if (GetDetails(i).index() == len) {
-      SetLastAdded(i);
-      return;
-    }
-  }
-
-  UNREACHABLE();
-}
-
-
-void DescriptorArray::Sort(const WhitenessWitness& witness) {
-  SortUnchecked(witness);
-  SLOW_ASSERT(IsSortedNoDuplicates());
 }
 
 
@@ -12538,10 +12519,10 @@ MaybeObject* StringDictionary::TransformPropertiesToFastFor(
   descriptors->Sort(witness);
   // Allocate new map.
   Map* new_map;
-  MaybeObject* maybe_new_map =
-      obj->map()->CopyReplaceDescriptors(descriptors, NULL, OMIT_TRANSITION);
+  MaybeObject* maybe_new_map = obj->map()->CopyDropDescriptors();
   if (!maybe_new_map->To(&new_map)) return maybe_new_map;
 
+  new_map->InitializeDescriptors(descriptors);
   new_map->set_unused_property_fields(unused_property_fields);
 
   // Transform the object.
