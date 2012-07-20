@@ -1711,7 +1711,10 @@ class HGlobalValueNumberer BASE_EMBEDDED {
         block_side_effects_(graph->blocks()->length(), graph->zone()),
         loop_side_effects_(graph->blocks()->length(), graph->zone()),
         visited_on_paths_(graph->zone(), graph->blocks()->length()) {
-    ASSERT(!info->isolate()->heap()->IsAllocationAllowed());
+#ifdef DEBUG
+    ASSERT(info->isolate()->optimizing_compiler_thread()->IsOptimizerThread() ||
+           !info->isolate()->heap()->IsAllocationAllowed());
+#endif
     block_side_effects_.AddBlock(GVNFlagSet(), graph_->blocks()->length(),
                                  graph_->zone());
     loop_side_effects_.AddBlock(GVNFlagSet(), graph_->blocks()->length(),
@@ -3018,7 +3021,6 @@ HGraph* HGraphBuilder::CreateGraph() {
 
   {
     HPhase phase("H_Block building");
-    CompilationHandleScope handle_scope(info());
     current_block_ = graph()->entry_block();
 
     Scope* scope = info()->scope();
@@ -3079,9 +3081,6 @@ HGraph* HGraphBuilder::CreateGraph() {
 }
 
 bool HGraph::Optimize(SmartArrayPointer<char>* bailout_reason) {
-  NoHandleAllocation no_handles;
-  AssertNoAllocation no_gc;
-
   *bailout_reason = SmartArrayPointer<char>();
   OrderBlocks();
   AssignDominators();
@@ -6550,7 +6549,7 @@ int HGraphBuilder::InliningAstSize(Handle<JSFunction> target) {
 
 bool HGraphBuilder::TryInline(CallKind call_kind,
                               Handle<JSFunction> target,
-                              ZoneList<Expression*>* arguments,
+                              int arguments_count,
                               HValue* receiver,
                               int ast_id,
                               int return_id,
@@ -6712,7 +6711,7 @@ bool HGraphBuilder::TryInline(CallKind call_kind,
   HConstant* undefined = graph()->GetConstantUndefined();
   HEnvironment* inner_env =
       environment()->CopyForInlining(target,
-                                     arguments->length(),
+                                     arguments_count,
                                      function,
                                      undefined,
                                      call_kind,
@@ -6748,7 +6747,7 @@ bool HGraphBuilder::TryInline(CallKind call_kind,
 
   HEnterInlined* enter_inlined =
       new(zone()) HEnterInlined(target,
-                                arguments->length(),
+                                arguments_count,
                                 function,
                                 call_kind,
                                 function_state()->is_construct(),
@@ -6851,7 +6850,7 @@ bool HGraphBuilder::TryInlineCall(Call* expr, bool drop_extra) {
 
   return TryInline(call_kind,
                    expr->target(),
-                   expr->arguments(),
+                   expr->arguments()->length(),
                    NULL,
                    expr->id(),
                    expr->ReturnId(),
@@ -6862,7 +6861,7 @@ bool HGraphBuilder::TryInlineCall(Call* expr, bool drop_extra) {
 bool HGraphBuilder::TryInlineConstruct(CallNew* expr, HValue* receiver) {
   return TryInline(CALL_AS_FUNCTION,
                    expr->target(),
-                   expr->arguments(),
+                   expr->arguments()->length(),
                    receiver,
                    expr->id(),
                    expr->ReturnId(),

@@ -155,7 +155,8 @@ Heap::Heap()
       scavenges_since_last_idle_round_(kIdleScavengeThreshold),
       promotion_queue_(this),
       configured_(false),
-      chunks_queued_for_free_(NULL) {
+      chunks_queued_for_free_(NULL),
+      relocation_mutex_(NULL) {
   // Allow build-time customization of the max semispace size. Building
   // V8 with snapshots and a non-default max semispace size is much
   // easier if you can define it as part of the build environment.
@@ -1199,6 +1200,7 @@ class ScavengeWeakObjectRetainer : public WeakObjectRetainer {
 
 
 void Heap::Scavenge() {
+  RelocationLock relocation_lock(this);
 #ifdef DEBUG
   if (FLAG_verify_heap) VerifyNonPointerSpacePointers();
 #endif
@@ -2044,7 +2046,8 @@ MaybeObject* Heap::AllocatePartialMap(InstanceType instance_type,
   reinterpret_cast<Map*>(result)->set_unused_property_fields(0);
   reinterpret_cast<Map*>(result)->set_bit_field(0);
   reinterpret_cast<Map*>(result)->set_bit_field2(0);
-  reinterpret_cast<Map*>(result)->set_bit_field3(0);
+  reinterpret_cast<Map*>(result)->set_bit_field3(
+      Map::LastAddedBits::encode(Map::kNoneAdded));
   return result;
 }
 
@@ -2053,9 +2056,8 @@ MaybeObject* Heap::AllocateMap(InstanceType instance_type,
                                int instance_size,
                                ElementsKind elements_kind) {
   Object* result;
-  { MaybeObject* maybe_result = AllocateRawMap();
-    if (!maybe_result->ToObject(&result)) return maybe_result;
-  }
+  MaybeObject* maybe_result = AllocateRawMap();
+  if (!maybe_result->To(&result)) return maybe_result;
 
   Map* map = reinterpret_cast<Map*>(result);
   map->set_map_no_write_barrier(meta_map());
@@ -2072,7 +2074,7 @@ MaybeObject* Heap::AllocateMap(InstanceType instance_type,
   map->set_unused_property_fields(0);
   map->set_bit_field(0);
   map->set_bit_field2(1 << Map::kIsExtensible);
-  map->set_bit_field3(0);
+  map->set_bit_field3(Map::LastAddedBits::encode(Map::kNoneAdded));
   map->set_elements_kind(elements_kind);
 
   // If the map object is aligned fill the padding area with Smi 0 objects.
@@ -6156,6 +6158,8 @@ bool Heap::SetUp(bool create_heap_objects) {
 
   store_buffer()->SetUp();
 
+  if (FLAG_parallel_recompilation) relocation_mutex_ = OS::CreateMutex();
+
   return true;
 }
 
@@ -6240,6 +6244,8 @@ void Heap::TearDown() {
   incremental_marking()->TearDown();
 
   isolate_->memory_allocator()->TearDown();
+
+  delete relocation_mutex_;
 
 #ifdef DEBUG
   delete debug_utils_;

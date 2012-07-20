@@ -33,7 +33,7 @@
 #include "elements-kind.h"
 #include "list.h"
 #include "property-details.h"
-#include "smart-array-pointer.h"
+#include "smart-pointers.h"
 #include "unicode-inl.h"
 #if V8_TARGET_ARCH_ARM
 #include "arm/constants-arm.h"
@@ -2472,43 +2472,20 @@ class DescriptorArray: public FixedArray {
   inline int number_of_entries() { return number_of_descriptors(); }
   inline int NextEnumerationIndex() { return number_of_descriptors() + 1; }
 
-  int LastAdded() {
-    ASSERT(!IsEmpty());
-    Object* obj = get(kLastAddedIndex);
-    if (obj->IsSmi()) {
-      return Smi::cast(obj)->value();
-    } else {
-      Object* index = FixedArray::cast(obj)->get(kEnumCacheBridgeLastAdded);
-      return Smi::cast(index)->value();
-    }
-  }
-
-  // Set index of the last added descriptor and flush any enum cache.
-  void SetLastAdded(int index) {
-    ASSERT(!IsEmpty() || index > 0);
-    set(kLastAddedIndex, Smi::FromInt(index));
-  }
-
-  int NumberOfSetDescriptors() {
-    ASSERT(!IsEmpty());
-    if (LastAdded() == kNoneAdded) return 0;
-    return GetDetails(LastAdded()).index();
-  }
-
   bool HasEnumCache() {
-    return !IsEmpty() && !get(kLastAddedIndex)->IsSmi();
+    return !IsEmpty() && !get(kEnumCacheIndex)->IsSmi();
   }
 
   Object* GetEnumCache() {
     ASSERT(HasEnumCache());
-    FixedArray* bridge = FixedArray::cast(get(kLastAddedIndex));
+    FixedArray* bridge = FixedArray::cast(get(kEnumCacheIndex));
     return bridge->get(kEnumCacheBridgeCacheIndex);
   }
 
   Object** GetEnumCacheSlot() {
     ASSERT(HasEnumCache());
     return HeapObject::RawField(reinterpret_cast<HeapObject*>(this),
-                                kLastAddedOffset);
+                                kEnumCacheOffset);
   }
 
   Object** GetTransitionsSlot() {
@@ -2544,8 +2521,9 @@ class DescriptorArray: public FixedArray {
   // Append automatically sets the enumeration index. This should only be used
   // to add descriptors in bulk at the end, followed by sorting the descriptor
   // array.
-  inline void Append(Descriptor* desc,
-                     const WhitenessWitness&);
+  inline int Append(Descriptor* desc,
+                    const WhitenessWitness&,
+                    int number_of_set_descriptors);
 
   // Transfer a complete descriptor from the src descriptor array to this
   // descriptor array.
@@ -2553,16 +2531,6 @@ class DescriptorArray: public FixedArray {
                 DescriptorArray* src,
                 int src_index,
                 const WhitenessWitness&);
-
-  // Copy the descriptor array, inserting new descriptor. Its enumeration index
-  // is automatically set to the size of the descriptor array to which it was
-  // added first.
-  MUST_USE_RESULT MaybeObject* CopyAdd(Descriptor* descriptor);
-
-  // Copy the descriptor array, replacing a descriptor. Its enumeration index is
-  // kept.
-  MUST_USE_RESULT MaybeObject* CopyReplace(Descriptor* descriptor,
-                                           int insertion_index);
 
   // Indicates whether the search function should expect a sorted or an unsorted
   // descriptor array as input.
@@ -2599,31 +2567,25 @@ class DescriptorArray: public FixedArray {
   // Constant for denoting key was not found.
   static const int kNotFound = -1;
 
-  // Constant for denoting that the LastAdded field was not yet set.
-  static const int kNoneAdded = -1;
-
   static const int kBackPointerStorageIndex = 0;
-  static const int kLastAddedIndex = 1;
+  static const int kEnumCacheIndex = 1;
   static const int kTransitionsIndex = 2;
   static const int kFirstIndex = 3;
 
   // The length of the "bridge" to the enum cache.
-  static const int kEnumCacheBridgeLength = 3;
-  static const int kEnumCacheBridgeLastAdded = 0;
-  static const int kEnumCacheBridgeCacheIndex = 1;
-  static const int kEnumCacheBridgeIndicesCacheIndex = 2;
+  static const int kEnumCacheBridgeLength = 2;
+  static const int kEnumCacheBridgeCacheIndex = 0;
+  static const int kEnumCacheBridgeIndicesCacheIndex = 1;
 
   // Layout description.
   static const int kBackPointerStorageOffset = FixedArray::kHeaderSize;
-  static const int kLastAddedOffset = kBackPointerStorageOffset +
+  static const int kEnumCacheOffset = kBackPointerStorageOffset +
                                       kPointerSize;
-  static const int kTransitionsOffset = kLastAddedOffset + kPointerSize;
+  static const int kTransitionsOffset = kEnumCacheOffset + kPointerSize;
   static const int kFirstOffset = kTransitionsOffset + kPointerSize;
 
   // Layout description for the bridge array.
-  static const int kEnumCacheBridgeLastAddedOffset = FixedArray::kHeaderSize;
-  static const int kEnumCacheBridgeCacheOffset =
-    kEnumCacheBridgeLastAddedOffset + kPointerSize;
+  static const int kEnumCacheBridgeCacheOffset = FixedArray::kHeaderSize;
 
   // Layout of descriptor.
   static const int kDescriptorKey = 0;
@@ -4683,6 +4645,10 @@ class Map: public HeapObject {
   inline int bit_field3();
   inline void set_bit_field3(int value);
 
+  class IsShared:              public BitField<bool, 0, 1> {};
+  class FunctionWithPrototype: public BitField<bool, 1, 1> {};
+  class LastAddedBits:         public BitField<int, 2, 11> {};
+
   // Tells whether the object in the prototype property will be used
   // for instances created from this function.  If the prototype
   // property is set to a value that is not a JSObject, the prototype
@@ -4907,11 +4873,28 @@ class Map: public HeapObject {
                         String* name,
                         LookupResult* result);
 
+  void SetLastAdded(int index) {
+    set_bit_field3(LastAddedBits::update(bit_field3(), index));
+  }
+
+  int LastAdded() {
+    return LastAddedBits::decode(bit_field3());
+  }
+
+  int NumberOfSetDescriptors() {
+    ASSERT(!instance_descriptors()->IsEmpty());
+    if (LastAdded() == kNoneAdded) return 0;
+    return instance_descriptors()->GetDetails(LastAdded()).index();
+  }
+
   MUST_USE_RESULT MaybeObject* RawCopy(int instance_size);
   MUST_USE_RESULT MaybeObject* CopyWithPreallocatedFieldDescriptors();
   MUST_USE_RESULT MaybeObject* CopyDropDescriptors();
   MUST_USE_RESULT MaybeObject* CopyReplaceDescriptors(
-      DescriptorArray* descriptors, String* name, TransitionFlag flag);
+      DescriptorArray* descriptors,
+      String* name,
+      int last_added,
+      TransitionFlag flag);
   MUST_USE_RESULT MaybeObject* CopyAddDescriptor(Descriptor* descriptor,
                                                  TransitionFlag flag);
   MUST_USE_RESULT MaybeObject* CopyInsertDescriptor(Descriptor* descriptor,
@@ -4924,6 +4907,9 @@ class Map: public HeapObject {
 
   MUST_USE_RESULT MaybeObject* CopyNormalized(PropertyNormalizationMode mode,
                                               NormalizedMapSharingMode sharing);
+
+  inline void AppendDescriptor(Descriptor* desc,
+                               const DescriptorArray::WhitenessWitness&);
 
   // Returns a copy of the map, with all transitions dropped from the
   // instance descriptors.
@@ -5035,6 +5021,9 @@ class Map: public HeapObject {
                                                       Map* map);
 
   static const int kMaxPreAllocatedPropertyFields = 255;
+
+  // Constant for denoting that the LastAdded field was not yet set.
+  static const int kNoneAdded = LastAddedBits::kMax;
 
   // Layout description.
   static const int kInstanceSizesOffset = HeapObject::kHeaderSize;
@@ -5989,6 +5978,7 @@ class JSFunction: public JSObject {
   // Mark this function for lazy recompilation. The function will be
   // recompiled the next time it is executed.
   void MarkForLazyRecompilation();
+  void MarkForParallelRecompilation();
 
   // Helpers to compile this function.  Returns true on success, false on
   // failure (e.g., stack overflow during compilation).
@@ -6003,6 +5993,11 @@ class JSFunction: public JSObject {
   // Tells whether or not the function is already marked for lazy
   // recompilation.
   inline bool IsMarkedForLazyRecompilation();
+  inline bool IsMarkedForParallelRecompilation();
+
+  // Tells whether or not the function is on the parallel
+  // recompilation queue.
+  inline bool IsInRecompileQueue();
 
   // Check whether or not this function is inlineable.
   bool IsInlineable();

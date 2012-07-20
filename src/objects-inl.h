@@ -2110,9 +2110,10 @@ void DescriptorArray::Set(int descriptor_number,
 }
 
 
-void DescriptorArray::Append(Descriptor* desc,
-                             const WhitenessWitness& witness) {
-  int descriptor_number = NumberOfSetDescriptors();
+int DescriptorArray::Append(Descriptor* desc,
+                            const WhitenessWitness& witness,
+                            int number_of_set_descriptors) {
+  int descriptor_number = number_of_set_descriptors;
   int enumeration_index = descriptor_number + 1;
   desc->SetEnumerationIndex(enumeration_index);
 
@@ -2128,7 +2129,7 @@ void DescriptorArray::Append(Descriptor* desc,
   }
 
   Set(descriptor_number, desc, witness);
-  SetLastAdded(descriptor_number);
+  return descriptor_number;
 }
 
 
@@ -2953,16 +2954,12 @@ bool Map::has_non_instance_prototype() {
 
 
 void Map::set_function_with_prototype(bool value) {
-  if (value) {
-    set_bit_field3(bit_field3() | (1 << kFunctionWithPrototype));
-  } else {
-    set_bit_field3(bit_field3() & ~(1 << kFunctionWithPrototype));
-  }
+  set_bit_field3(FunctionWithPrototype::update(bit_field3(), value));
 }
 
 
 bool Map::function_with_prototype() {
-  return ((1 << kFunctionWithPrototype) & bit_field3()) != 0;
+  return FunctionWithPrototype::decode(bit_field3());
 }
 
 
@@ -3007,15 +3004,11 @@ bool Map::attached_to_shared_function_info() {
 
 
 void Map::set_is_shared(bool value) {
-  if (value) {
-    set_bit_field3(bit_field3() | (1 << kIsShared));
-  } else {
-    set_bit_field3(bit_field3() & ~(1 << kIsShared));
-  }
+  set_bit_field3(IsShared::update(bit_field3(), value));
 }
 
 bool Map::is_shared() {
-  return ((1 << kIsShared) & bit_field3()) != 0;
+  return IsShared::decode(bit_field3());
 }
 
 
@@ -3503,11 +3496,11 @@ void Map::set_instance_descriptors(DescriptorArray* value,
 
 void Map::InitializeDescriptors(DescriptorArray* descriptors) {
   int len = descriptors->number_of_descriptors();
+  ASSERT(len <= DescriptorArray::kMaxNumberOfDescriptors);
   SLOW_ASSERT(descriptors->IsSortedNoDuplicates());
 
 #ifdef DEBUG
-  bool* used_indices =
-      reinterpret_cast<bool*>(alloca(sizeof(*used_indices) * len));
+  bool used_indices[DescriptorArray::kMaxNumberOfDescriptors];
   for (int i = 0; i < len; ++i) used_indices[i] = false;
 
   // Ensure that all enumeration indexes between 1 and length occur uniquely in
@@ -3515,22 +3508,23 @@ void Map::InitializeDescriptors(DescriptorArray* descriptors) {
   for (int i = 0; i < len; ++i) {
     int enum_index = descriptors->GetDetails(i).index() -
                      PropertyDetails::kInitialIndex;
+    ASSERT(0 <= enum_index && enum_index < len);
     ASSERT(!used_indices[enum_index]);
     used_indices[enum_index] = true;
   }
 #endif
 
+  set_instance_descriptors(descriptors);
+
   for (int i = 0; i < len; ++i) {
     if (descriptors->GetDetails(i).index() == len) {
-      descriptors->SetLastAdded(i);
+      SetLastAdded(i);
       break;
     }
   }
 
   ASSERT(len == 0 ||
-         len == descriptors->GetDetails(descriptors->LastAdded()).index());
-
-  set_instance_descriptors(descriptors);
+         len == descriptors->GetDetails(LastAdded()).index());
 }
 
 
@@ -3552,6 +3546,14 @@ void Map::ClearDescriptorArray(Heap* heap, WriteBarrierMode mode) {
       heap, this, kInstanceDescriptorsOrBackPointerOffset, back_pointer, mode);
 }
 
+
+void Map::AppendDescriptor(Descriptor* desc,
+                           const DescriptorArray::WhitenessWitness& witness) {
+  DescriptorArray* descriptors = instance_descriptors();
+  int set_descriptors = NumberOfSetDescriptors();
+  int new_last_added = descriptors->Append(desc, witness, set_descriptors);
+  SetLastAdded(new_last_added);
+}
 
 
 Object* Map::GetBackPointer() {
@@ -4245,6 +4247,18 @@ bool JSFunction::IsOptimizable() {
 
 bool JSFunction::IsMarkedForLazyRecompilation() {
   return code() == GetIsolate()->builtins()->builtin(Builtins::kLazyRecompile);
+}
+
+
+bool JSFunction::IsMarkedForParallelRecompilation() {
+  return code() ==
+      GetIsolate()->builtins()->builtin(Builtins::kParallelRecompile);
+}
+
+
+bool JSFunction::IsInRecompileQueue() {
+  return code() == GetIsolate()->builtins()->builtin(
+      Builtins::kInRecompileQueue);
 }
 
 
