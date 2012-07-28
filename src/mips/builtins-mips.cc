@@ -868,8 +868,15 @@ static void Generate_JSConstructStubHelper(MacroAssembler* masm,
       __ LoadRoot(t7, Heap::kUndefinedValueRootIndex);
       if (count_constructions) {
         __ lw(a0, FieldMemOperand(a2, Map::kInstanceSizesOffset));
+#if __BYTE_ORDER == __LITTLE_ENDIAN
         __ Ext(a0, a0, Map::kPreAllocatedPropertyFieldsByte * kBitsPerByte,
                 kBitsPerByte);
+#elif __BYTE_ORDER == __BIG_ENDIAN
+        __ Ext(a0, a0, (kPointerSize - Map::kPreAllocatedPropertyFieldsByte - 1) * kBitsPerByte,
+                kBitsPerByte);
+#else
+#error Unknown endianess
+#endif
         __ sll(t0, a0, kPointerSizeLog2);
         __ addu(a0, t5, t0);
         // a0: offset of first field after pre-allocated fields
