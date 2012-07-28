@@ -3670,8 +3670,13 @@ void KeyedLoadStubCompiler::GenerateLoadExternalArray(
         __ ldc1(f0, MemOperand(t3, 0));
       } else {
         // t3: pointer to the beginning of the double we want to load.
+#ifndef BIG_ENDIAN_FLOATING_POINT
         __ lw(a2, MemOperand(t3, 0));
         __ lw(a3, MemOperand(t3, Register::kSizeInBytes));
+#else
+        __ lw(a2, MemOperand(t3, Register::kSizeInBytes));
+        __ lw(a3, MemOperand(t3, 0));
+#endif
       }
       break;
     case FAST_ELEMENTS:
@@ -4034,8 +4039,13 @@ void KeyedStoreStubCompiler::GenerateStoreExternalArray(
         CpuFeatures::Scope scope(FPU);
         __ sdc1(f0, MemOperand(a3, 0));
       } else {
+#ifndef BIG_ENDIAN_FLOATING_POINT
         __ sw(t2, MemOperand(a3, 0));
         __ sw(t3, MemOperand(a3, Register::kSizeInBytes));
+#else
+        __ sw(t3, MemOperand(a3, 0));
+        __ sw(t2, MemOperand(a3, Register::kSizeInBytes));
+#endif
       }
       break;
     case FAST_ELEMENTS:
@@ -4198,8 +4208,13 @@ void KeyedStoreStubCompiler::GenerateStoreExternalArray(
         __ sll(t8, key, 2);
         __ addu(t8, a3, t8);
         // t8: effective address of destination element.
+#ifndef BIG_ENDIAN_FLOATING_POINT
         __ sw(t4, MemOperand(t8, 0));
         __ sw(t3, MemOperand(t8, Register::kSizeInBytes));
+#else
+        __ sw(t3, MemOperand(t8, 0));
+        __ sw(t4, MemOperand(t8, Register::kSizeInBytes));
+#endif
         __ mov(v0, a0);
         __ Ret();
       } else {
@@ -4414,11 +4429,19 @@ void KeyedLoadStubCompiler::GenerateLoadFastDoubleElement(
   // Don't need to reload the upper 32 bits of the double, it's already in
   // scratch.
   __ sw(scratch, FieldMemOperand(heap_number_reg,
+#ifndef BIG_ENDIAN_FLOATING_POINT
                                  HeapNumber::kExponentOffset));
+#else
+                                 HeapNumber::kMantissaOffset));
+#endif
   __ lw(scratch, FieldMemOperand(indexed_double_offset,
                                  FixedArray::kHeaderSize));
   __ sw(scratch, FieldMemOperand(heap_number_reg,
+#ifndef BIG_ENDIAN_FLOATING_POINT
                                  HeapNumber::kMantissaOffset));
+#else
+                                 HeapNumber::kExponentOffset));
+#endif
 
   __ mov(v0, heap_number_reg);
   __ Ret();

@@ -562,7 +562,7 @@
                 '../../src/ia32/stub-cache-ia32.cc',
               ],
             }],
-            ['v8_target_arch=="mipsel"', {
+            ['v8_target_arch=="mipsel" or v8_target_arch=="mips"', {
               'sources': [
                 '../../src/mips/assembler-mips.cc',
                 '../../src/mips/assembler-mips.h',

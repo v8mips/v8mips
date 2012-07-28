@@ -898,11 +898,21 @@ static void Generate_JSConstructStubHelper(MacroAssembler* masm,
       // The field instance sizes contains both pre-allocated property fields
       // and in-object properties.
       __ lw(a0, FieldMemOperand(a2, Map::kInstanceSizesOffset));
+#if __BYTE_ORDER == __LITTLE_ENDIAN
       __ Ext(t6, a0, Map::kPreAllocatedPropertyFieldsByte * kBitsPerByte,
              kBitsPerByte);
       __ Addu(a3, a3, Operand(t6));
       __ Ext(t6, a0, Map::kInObjectPropertiesByte * kBitsPerByte,
               kBitsPerByte);
+#elif __BYTE_ORDER == __BIG_ENDIAN
+      __ Ext(t6, a0, (kPointerSize - Map::kPreAllocatedPropertyFieldsByte - 1) * kBitsPerByte,
+             kBitsPerByte);
+      __ Addu(a3, a3, Operand(t6));
+      __ Ext(t6, a0, (kPointerSize - Map::kInObjectPropertiesByte - 1) * kBitsPerByte,
+              kBitsPerByte);
+#else
+#error Unknown endianess
+#endif
       __ subu(a3, a3, t6);
 
       // Done if no extra properties are to be allocated.
