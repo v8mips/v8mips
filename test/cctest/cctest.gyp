@@ -118,7 +118,7 @@
             'test-disasm-arm.cc'
           ],
         }],
-        ['v8_target_arch=="mipsel"', {
+        ['v8_target_arch=="mipsel" or v8_target_arch=="mips"', {
           'sources': [
             'test-assembler-mips.cc',
             'test-disasm-mips.cc',
