@@ -2149,7 +2149,7 @@ Handle<Code> CallStubCompiler::CompileMathFloorCall(
 
   // Start checking for special cases.
   // Get the argument exponent and clear the sign bit.
-  __ lw(t1, FieldMemOperand(v0, HeapNumber::kValueOffset + kPointerSize));
+  __ lw(t1, FieldMemOperand(v0, HeapNumber::kExponentOffset));
   __ And(t2, t1, Operand(~HeapNumber::kSignMask));
   __ srl(t2, t2, HeapNumber::kMantissaBitsInTopWord);
 
@@ -4414,11 +4414,16 @@ void KeyedLoadStubCompiler::GenerateLoadFastDoubleElement(
   __ lw(scratch, FieldMemOperand(elements_reg, FixedArray::kLengthOffset));
   __ Branch(&miss_force_generic, hs, key_reg, Operand(scratch));
 
-  // Load the upper word of the double in the fixed array and test for NaN.
+  // Load the exponent in the fixed array and test for NaN.
   __ sll(scratch2, key_reg, kDoubleSizeLog2 - kSmiTagSize);
   __ Addu(indexed_double_offset, elements_reg, Operand(scratch2));
-  uint32_t upper_32_offset = FixedArray::kHeaderSize + sizeof(kHoleNanLower32);
-  __ lw(scratch, FieldMemOperand(indexed_double_offset, upper_32_offset));
+#ifndef BIG_ENDIAN_FLOATING_POINT
+  __ lw(scratch, FieldMemOperand(indexed_double_offset,
+                                 FixedArray::kHeaderSize + sizeof(kHoleNanLower32)));
+#else
+  __ lw(scratch, FieldMemOperand(indexed_double_offset,
+                                 FixedArray::kHeaderSize));
+#endif
   __ Branch(&miss_force_generic, eq, scratch, Operand(kHoleNanUpper32));
 
   // Non-NaN. Allocate a new heap number and copy the double value into it.
@@ -4426,22 +4431,19 @@ void KeyedLoadStubCompiler::GenerateLoadFastDoubleElement(
   __ AllocateHeapNumber(heap_number_reg, scratch2, scratch3,
                         heap_number_map, &slow_allocate_heapnumber);
 
-  // Don't need to reload the upper 32 bits of the double, it's already in
+  // Don't need to reload the exponent (the upper 32 bits of the double), it's already in
   // scratch.
   __ sw(scratch, FieldMemOperand(heap_number_reg,
-#ifndef BIG_ENDIAN_FLOATING_POINT
                                  HeapNumber::kExponentOffset));
-#else
-                                 HeapNumber::kMantissaOffset));
-#endif
+#ifndef BIG_ENDIAN_FLOATING_POINT
   __ lw(scratch, FieldMemOperand(indexed_double_offset,
                                  FixedArray::kHeaderSize));
-  __ sw(scratch, FieldMemOperand(heap_number_reg,
-#ifndef BIG_ENDIAN_FLOATING_POINT
-                                 HeapNumber::kMantissaOffset));
 #else
-                                 HeapNumber::kExponentOffset));
+  __ lw(scratch, FieldMemOperand(indexed_double_offset,
+                                 FixedArray::kHeaderSize + sizeof(kHoleNanLower32)));
 #endif
+  __ sw(scratch, FieldMemOperand(heap_number_reg,
+                                 HeapNumber::kMantissaOffset));
 
   __ mov(v0, heap_number_reg);
   __ Ret();

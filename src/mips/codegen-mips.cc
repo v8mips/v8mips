@@ -210,8 +210,13 @@ void ElementsTransitionGenerator::GenerateSmiToDouble(
                                             a1,
                                             t7,
                                             f0);
+#ifndef BIG_ENDIAN_FLOATING_POINT
     __ sw(a0, MemOperand(t3));  // mantissa
     __ sw(a1, MemOperand(t3, kIntSize));  // exponent
+#else
+    __ sw(a1, MemOperand(t3));  // exponent
+    __ sw(a0, MemOperand(t3, kIntSize));  // mantissa
+#endif
     __ Addu(t3, t3, kDoubleSize);
   }
   __ Branch(&entry);
@@ -225,8 +230,13 @@ void ElementsTransitionGenerator::GenerateSmiToDouble(
     __ LoadRoot(at, Heap::kTheHoleValueRootIndex);
     __ Assert(eq, "object found in smi-only array", at, Operand(t5));
   }
+#ifndef BIG_ENDIAN_FLOATING_POINT
   __ sw(t0, MemOperand(t3));  // mantissa
   __ sw(t1, MemOperand(t3, kIntSize));  // exponent
+#else
+  __ sw(t1, MemOperand(t3));  // exponent
+  __ sw(t0, MemOperand(t3, kIntSize));  // mantissa
+#endif
   __ Addu(t3, t3, kDoubleSize);
 
   __ bind(&entry);
@@ -273,7 +283,11 @@ void ElementsTransitionGenerator::GenerateDoubleToObject(
   __ sw(t5, MemOperand(t2, HeapObject::kMapOffset));
 
   // Prepare for conversion loop.
+#ifndef BIG_ENDIAN_FLOATING_POINT
   __ Addu(t0, t0, Operand(FixedDoubleArray::kHeaderSize - kHeapObjectTag + 4));
+#else
+  __ Addu(t0, t0, Operand(FixedDoubleArray::kHeaderSize - kHeapObjectTag));
+#endif
   __ Addu(a3, t2, Operand(FixedArray::kHeaderSize));
   __ Addu(t2, t2, Operand(kHeapObjectTag));
   __ sll(t1, t1, 1);
@@ -282,7 +296,7 @@ void ElementsTransitionGenerator::GenerateDoubleToObject(
   __ LoadRoot(t5, Heap::kHeapNumberMapRootIndex);
   // Using offsetted addresses.
   // a3: begin of destination FixedArray element fields, not tagged
-  // t0: begin of source FixedDoubleArray element fields, not tagged, +4
+  // t0: begin of source FixedDoubleArray element fields, not tagged, +4 (for little-endian) to point at the exponent
   // t1: end of destination FixedArray, not tagged
   // t2: destination FixedArray
   // t3: the-hole pointer
@@ -296,7 +310,7 @@ void ElementsTransitionGenerator::GenerateDoubleToObject(
   __ Branch(fail);
 
   __ bind(&loop);
-  __ lw(a1, MemOperand(t0));
+  __ lw(a1, MemOperand(t0)); // exponent
   __ Addu(t0, t0, kDoubleSize);
   // a1: current element's upper 32 bit
   // t0: address of next element's upper 32 bit
@@ -305,7 +319,11 @@ void ElementsTransitionGenerator::GenerateDoubleToObject(
   // Non-hole double, copy value into a heap number.
   __ AllocateHeapNumber(a2, a0, t6, t5, &gc_required);
   // a2: new heap number
-  __ lw(a0, MemOperand(t0, -12));
+#ifndef BIG_ENDIAN_FLOATING_POINT
+  __ lw(a0, MemOperand(t0, -(kDoubleSize + sizeof(kHoleNanUpper32))));
+#else
+  __ lw(a0, MemOperand(t0, -(kDoubleSize - sizeof(kHoleNanUpper32))));
+#endif
   __ sw(a0, FieldMemOperand(a2, HeapNumber::kMantissaOffset));
   __ sw(a1, FieldMemOperand(a2, HeapNumber::kExponentOffset));
   __ mov(a0, a3);
