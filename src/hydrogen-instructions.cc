@@ -1352,7 +1352,7 @@ void HPhi::ResetInteger32Uses() {
 
 
 void HSimulate::PrintDataTo(StringStream* stream) {
-  stream->Add("id=%d", ast_id());
+  stream->Add("id=%d", ast_id().ToInt());
   if (pop_count_ > 0) stream->Add(" pop %d", pop_count_);
   if (values_.length() > 0) {
     if (pop_count_ > 0) stream->Add(" /");
@@ -1381,7 +1381,7 @@ void HDeoptimize::PrintDataTo(StringStream* stream) {
 
 void HEnterInlined::PrintDataTo(StringStream* stream) {
   SmartArrayPointer<char> name = function()->debug_name()->ToCString();
-  stream->Add("%s, id=%d", *name, function()->id());
+  stream->Add("%s, id=%d", *name, function()->id().ToInt());
 }
 
 
@@ -1743,6 +1743,10 @@ HLoadNamedFieldPolymorphic::HLoadNamedFieldPolymorphic(HValue* context,
           break;
       }
     } else if (lookup.IsCacheable() &&
+               // For dicts the lookup on the map will fail, but the object may
+               // contain the property so we cannot generate a negative lookup
+               // (which would just be a map check and return undefined).
+               !map->is_dictionary_map() &&
                PrototypeChainCanNeverResolve(map, name)) {
       negative_lookups.Add(types->at(i), zone);
     }

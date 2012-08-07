@@ -1608,6 +1608,7 @@ void JSObject::InitializeBody(Map* map,
 
 
 bool JSObject::HasFastProperties() {
+  ASSERT(properties()->IsDictionary() == map()->is_dictionary_map());
   return !properties()->IsDictionary();
 }
 
@@ -3007,8 +3008,19 @@ void Map::set_is_shared(bool value) {
   set_bit_field3(IsShared::update(bit_field3(), value));
 }
 
+
 bool Map::is_shared() {
   return IsShared::decode(bit_field3());
+}
+
+
+void Map::set_dictionary_map(bool value) {
+  set_bit_field3(DictionaryMap::update(bit_field3(), value));
+}
+
+
+bool Map::is_dictionary_map() {
+  return DictionaryMap::decode(bit_field3());
 }
 
 
@@ -5240,13 +5252,13 @@ MaybeObject* FixedDoubleArray::Copy() {
 }
 
 
-void TypeFeedbackCells::SetAstId(int index, Smi* id) {
-  set(1 + index * 2, id);
+void TypeFeedbackCells::SetAstId(int index, TypeFeedbackId id) {
+  set(1 + index * 2, Smi::FromInt(id.ToInt()));
 }
 
 
-Smi* TypeFeedbackCells::AstId(int index) {
-  return Smi::cast(get(1 + index * 2));
+TypeFeedbackId TypeFeedbackCells::AstId(int index) {
+  return TypeFeedbackId(Smi::cast(get(1 + index * 2))->value());
 }
 
 

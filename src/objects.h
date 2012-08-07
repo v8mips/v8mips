@@ -4020,7 +4020,7 @@ class DeoptimizationInputData: public FixedArray {
   static const int kFirstDeoptEntryIndex = 5;
 
   // Offsets of deopt entry elements relative to the start of the entry.
-  static const int kAstIdOffset = 0;
+  static const int kAstIdRawOffset = 0;
   static const int kTranslationIndexOffset = 1;
   static const int kArgumentsStackHeightOffset = 2;
   static const int kPcOffset = 3;
@@ -4052,12 +4052,20 @@ class DeoptimizationInputData: public FixedArray {
     set(IndexForEntry(i) + k##name##Offset, value);              \
   }
 
-  DEFINE_ENTRY_ACCESSORS(AstId, Smi)
+  DEFINE_ENTRY_ACCESSORS(AstIdRaw, Smi)
   DEFINE_ENTRY_ACCESSORS(TranslationIndex, Smi)
   DEFINE_ENTRY_ACCESSORS(ArgumentsStackHeight, Smi)
   DEFINE_ENTRY_ACCESSORS(Pc, Smi)
 
 #undef DEFINE_ENTRY_ACCESSORS
+
+  BailoutId AstId(int i) {
+    return BailoutId(AstIdRaw(i)->value());
+  }
+
+  void SetAstId(int i, BailoutId value) {
+    SetAstIdRaw(i, Smi::FromInt(value.ToInt()));
+  }
 
   int DeoptCount() {
     return (length() - kFirstDeoptEntryIndex) / kDeoptEntrySize;
@@ -4093,8 +4101,15 @@ class DeoptimizationInputData: public FixedArray {
 class DeoptimizationOutputData: public FixedArray {
  public:
   int DeoptPoints() { return length() / 2; }
-  Smi* AstId(int index) { return Smi::cast(get(index * 2)); }
-  void SetAstId(int index, Smi* id) { set(index * 2, id); }
+
+  BailoutId AstId(int index) {
+    return BailoutId(Smi::cast(get(index * 2))->value());
+  }
+
+  void SetAstId(int index, BailoutId id) {
+    set(index * 2, Smi::FromInt(id.ToInt()));
+  }
+
   Smi* PcAndState(int index) { return Smi::cast(get(1 + index * 2)); }
   void SetPcAndState(int index, Smi* offset) { set(1 + index * 2, offset); }
 
@@ -4129,8 +4144,8 @@ class TypeFeedbackCells: public FixedArray {
   static int LengthOfFixedArray(int cell_count) { return cell_count * 2; }
 
   // Accessors for AST ids associated with cache values.
-  inline Smi* AstId(int index);
-  inline void SetAstId(int index, Smi* id);
+  inline TypeFeedbackId AstId(int index);
+  inline void SetAstId(int index, TypeFeedbackId id);
 
   // Accessors for global property cells holding the cache values.
   inline JSGlobalPropertyCell* Cell(int index);
@@ -4684,7 +4699,8 @@ class Map: public HeapObject {
 
   class IsShared:              public BitField<bool, 0, 1> {};
   class FunctionWithPrototype: public BitField<bool, 1, 1> {};
-  class LastAddedBits:         public BitField<int, 2, 11> {};
+  class DictionaryMap:         public BitField<bool, 2, 1> {};
+  class LastAddedBits:         public BitField<int, 3, 11> {};
 
   // Tells whether the object in the prototype property will be used
   // for instances created from this function.  If the prototype
@@ -4829,6 +4845,13 @@ class Map: public HeapObject {
   // should be created and modified.
   inline void set_is_shared(bool value);
   inline bool is_shared();
+
+  // Tells whether the map is used for JSObjects in dictionary mode (ie
+  // normalized objects, ie objects for which HasFastProperties returns false).
+  // A map can never be used for both dictionary mode and fast mode JSObjects.
+  // False by default and for HeapObjects that are not JSObjects.
+  inline void set_dictionary_map(bool value);
+  inline bool is_dictionary_map();
 
   // Tells whether the instance needs security checks when accessing its
   // properties.
@@ -5150,6 +5173,7 @@ class Map: public HeapObject {
   // Bit positions for bit field 3
   static const int kIsShared = 0;
   static const int kFunctionWithPrototype = 1;
+  static const int kDictionaryMap = 2;
 
   typedef FixedBodyDescriptor<kPointerFieldsBeginOffset,
                               kPointerFieldsEndOffset,
@@ -5669,7 +5693,7 @@ class SharedFunctionInfo: public HeapObject {
   // Lookup the bailout ID and ASSERT that it exists in the non-optimized
   // code, returns whether it asserted (i.e., always true if assertions are
   // disabled).
-  bool VerifyBailoutId(int id);
+  bool VerifyBailoutId(BailoutId id);
 
   // Check whether a inlined constructor can be generated with the given
   // prototype.
@@ -6032,7 +6056,7 @@ class JSFunction: public JSObject {
   static bool CompileLazy(Handle<JSFunction> function,
                           ClearExceptionFlag flag);
   static bool CompileOptimized(Handle<JSFunction> function,
-                               int osr_ast_id,
+                               BailoutId osr_ast_id,
                                ClearExceptionFlag flag);
 
   // Tells whether or not the function is already marked for lazy

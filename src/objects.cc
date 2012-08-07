@@ -516,6 +516,7 @@ MaybeObject* JSObject::DeleteNormalizedProperty(String* name, DeleteMode mode) {
         MaybeObject* maybe_new_map = map()->CopyDropDescriptors();
         if (!maybe_new_map->To(&new_map)) return maybe_new_map;
 
+        ASSERT(new_map->is_dictionary_map());
         set_map(new_map);
       }
       JSGlobalPropertyCell* cell =
@@ -3218,6 +3219,7 @@ MaybeObject* NormalizedMapCache::Get(JSObject* obj,
         fast->CopyNormalized(mode, SHARED_NORMALIZED_MAP);
     if (!maybe_result->ToObject(&result)) return maybe_result;
   }
+  ASSERT(Map::cast(result)->is_dictionary_map());
   set(index, result);
   isolate->counters()->normalized_maps()->Increment();
 
@@ -3343,6 +3345,7 @@ MaybeObject* JSObject::NormalizeProperties(PropertyNormalizationMode mode,
       current_heap->isolate()->context()->global_context()->
       normalized_map_cache()->Get(this, mode);
   if (!maybe_map->To(&new_map)) return maybe_map;
+  ASSERT(new_map->is_dictionary_map());
 
   // We have now successfully allocated all the necessary objects.
   // Changes can now be made with the guarantee that all of them take effect.
@@ -4512,6 +4515,7 @@ MaybeObject* JSObject::SetPropertyCallback(String* name,
     Map* new_map;
     MaybeObject* maybe_new_map = map()->CopyDropDescriptors();
     if (!maybe_new_map->To(&new_map)) return maybe_new_map;
+    ASSERT(new_map->is_dictionary_map());
 
     set_map(new_map);
     // When running crankshaft, changing the map is not enough. We
@@ -4873,6 +4877,7 @@ MaybeObject* Map::CopyNormalized(PropertyNormalizationMode mode,
 
   result->set_code_cache(code_cache());
   result->set_is_shared(sharing == SHARED_NORMALIZED_MAP);
+  result->set_dictionary_map(true);
 
 #ifdef DEBUG
   if (FLAG_verify_heap && result->is_shared()) {
@@ -7330,7 +7335,8 @@ bool Map::EquivalentToForNormalization(Map* other,
     bit_field2() == other->bit_field2() &&
     static_cast<uint32_t>(bit_field3()) ==
         LastAddedBits::update(
-            IsShared::update(other->bit_field3(), true),
+            IsShared::update(DictionaryMap::update(other->bit_field3(), true),
+                             true),
             kNoneAdded);
 }
 
@@ -7469,7 +7475,7 @@ bool JSFunction::CompileLazy(Handle<JSFunction> function,
 
 
 bool JSFunction::CompileOptimized(Handle<JSFunction> function,
-                                  int osr_ast_id,
+                                  BailoutId osr_ast_id,
                                   ClearExceptionFlag flag) {
   CompilationInfoWithZone info(function);
   info.SetOptimizing(osr_ast_id);
@@ -7870,8 +7876,8 @@ void SharedFunctionInfo::DisableOptimization() {
 }
 
 
-bool SharedFunctionInfo::VerifyBailoutId(int id) {
-  ASSERT(id != AstNode::kNoNumber);
+bool SharedFunctionInfo::VerifyBailoutId(BailoutId id) {
+  ASSERT(!id.IsNone());
   Code* unoptimized = code();
   DeoptimizationOutputData* data =
       DeoptimizationOutputData::cast(unoptimized->deoptimization_data());
@@ -8249,7 +8255,6 @@ void Code::ClearTypeFeedbackCells(Heap* heap) {
     TypeFeedbackCells* type_feedback_cells =
         TypeFeedbackInfo::cast(raw_info)->type_feedback_cells();
     for (int i = 0; i < type_feedback_cells->CellCount(); i++) {
-      ASSERT(type_feedback_cells->AstId(i)->IsSmi());
       JSGlobalPropertyCell* cell = type_feedback_cells->Cell(i);
       cell->set_value(TypeFeedbackCells::RawUninitializedSentinel(heap));
     }
@@ -8276,7 +8281,7 @@ void DeoptimizationInputData::DeoptimizationInputDataPrint(FILE* out) {
   for (int i = 0; i < deopt_count; i++) {
     PrintF(out, "%6d  %6d  %6d %6d",
            i,
-           AstId(i)->value(),
+           AstId(i).ToInt(),
            ArgumentsStackHeight(i)->value(),
            Pc(i)->value());
 
@@ -8398,7 +8403,7 @@ void DeoptimizationOutputData::DeoptimizationOutputDataPrint(FILE* out) {
   for (int i = 0; i < this->DeoptPoints(); i++) {
     int pc_and_state = this->PcAndState(i)->value();
     PrintF("%6d  %8d  %s\n",
-           this->AstId(i)->value(),
+           this->AstId(i).ToInt(),
            FullCodeGenerator::PcField::decode(pc_and_state),
            FullCodeGenerator::State2String(
                FullCodeGenerator::StateField::decode(pc_and_state)));
@@ -12573,11 +12578,12 @@ MaybeObject* StringDictionary::TransformPropertiesToFastFor(
   Map* new_map;
   MaybeObject* maybe_new_map = obj->map()->CopyDropDescriptors();
   if (!maybe_new_map->To(&new_map)) return maybe_new_map;
+  new_map->set_dictionary_map(false);
 
   if (instance_descriptor_length == 0) {
     ASSERT_LE(unused_property_fields, inobject_props);
     // Transform the object.
-    new_map->set_unused_property_fields(unused_property_fields);
+    new_map->set_unused_property_fields(inobject_props);
     obj->set_map(new_map);
     obj->set_properties(heap->empty_fixed_array());
     // Check that it really works.

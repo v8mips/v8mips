@@ -64,7 +64,6 @@ MarkCompactCollector::MarkCompactCollector() :  // NOLINT
       abort_incremental_marking_(false),
       compacting_(false),
       was_marked_incrementally_(false),
-      flush_monomorphic_ics_(false),
       tracer_(NULL),
       migration_slots_buffer_(NULL),
       heap_(NULL),
@@ -602,7 +601,7 @@ void MarkCompactCollector::CollectEvacuationCandidates(PagedSpace* space) {
   static const int kMaxMaxEvacuationCandidates = 1000;
   int number_of_pages = space->CountTotalPages();
   int max_evacuation_candidates =
-      static_cast<int>(sqrt(static_cast<double>(number_of_pages / 2)) + 1);
+      static_cast<int>(sqrt(number_of_pages / 2.0) + 1);
 
   if (FLAG_stress_compaction || FLAG_always_compact) {
     max_evacuation_candidates = kMaxMaxEvacuationCandidates;
@@ -767,12 +766,6 @@ void MarkCompactCollector::AbortCompaction() {
 
 void MarkCompactCollector::Prepare(GCTracer* tracer) {
   was_marked_incrementally_ = heap()->incremental_marking()->IsMarking();
-
-  // Monomorphic ICs are preserved when possible, but need to be flushed
-  // when they might be keeping a Context alive, or when the heap is about
-  // to be serialized.
-  flush_monomorphic_ics_ =
-      heap()->isolate()->context_exit_happened() || Serializer::enabled();
 
   // Rather than passing the tracer around we stash it in a static member
   // variable.
@@ -1078,29 +1071,6 @@ class MarkCompactMarkingVisitor
     heap->mark_compact_collector()->MarkObject(object, mark);
   }
 
-  static inline void VisitEmbeddedPointer(Heap* heap, RelocInfo* rinfo) {
-    ASSERT(rinfo->rmode() == RelocInfo::EMBEDDED_OBJECT);
-    // TODO(mstarzinger): We do not short-circuit cons strings here, verify
-    // that there can be no such embedded pointers and add assertion here.
-    HeapObject* object = HeapObject::cast(rinfo->target_object());
-    heap->mark_compact_collector()->RecordRelocSlot(rinfo, object);
-    MarkObject(heap, object);
-  }
-
-  static inline void VisitCodeTarget(Heap* heap, RelocInfo* rinfo) {
-    ASSERT(RelocInfo::IsCodeTarget(rinfo->rmode()));
-    Code* target = Code::GetCodeFromTargetAddress(rinfo->target_address());
-    if (FLAG_cleanup_code_caches_at_gc && target->is_inline_cache_stub()
-        && (target->ic_state() == MEGAMORPHIC ||
-            heap->mark_compact_collector()->flush_monomorphic_ics_ ||
-            target->ic_age() != heap->global_ic_age())) {
-      IC::Clear(rinfo->pc());
-      target = Code::GetCodeFromTargetAddress(rinfo->target_address());
-    }
-    heap->mark_compact_collector()->RecordRelocSlot(rinfo, target);
-    MarkObject(heap, target);
-  }
-
   // Mark object pointed to by p.
   INLINE(static void MarkObjectByPointer(MarkCompactCollector* collector,
                                          Object** anchor_slot,
@@ -1151,15 +1121,6 @@ class MarkCompactMarkingVisitor
       VisitUnmarkedObject(collector, obj);
     }
     return true;
-  }
-
-  static void VisitCode(Map* map, HeapObject* object) {
-    Heap* heap = map->GetHeap();
-    Code* code = reinterpret_cast<Code*>(object);
-    if (FLAG_cleanup_code_caches_at_gc) {
-      code->ClearTypeFeedbackCells(heap);
-    }
-    code->CodeIterateBody<MarkCompactMarkingVisitor>(heap);
   }
 
   static void VisitJSWeakMap(Map* map, HeapObject* object) {

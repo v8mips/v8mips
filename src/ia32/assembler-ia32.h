@@ -587,6 +587,11 @@ class Assembler : public AssemblerBase {
   // Overrides the default provided by FLAG_debug_code.
   void set_emit_debug_code(bool value) { emit_debug_code_ = value; }
 
+  // Avoids using instructions that vary in size in unpredictable ways between
+  // the snapshot and the running VM.  This is needed by the full compiler so
+  // that it can recompile code with debug support and fix the PC.
+  void set_predictable_code_size(bool value) { predictable_code_size_ = value; }
+
   // GetCode emits any pending (non-emitted) code and fills the descriptor
   // desc. GetCode() is idempotent; it returns the same result if no other
   // Assembler functions are invoked in between GetCode() calls.
@@ -883,8 +888,8 @@ class Assembler : public AssemblerBase {
   void call(const Operand& adr);
   int CallSize(Handle<Code> code, RelocInfo::Mode mode);
   void call(Handle<Code> code,
-            RelocInfo::Mode rmode = RelocInfo::CODE_TARGET,
-            unsigned ast_id = kNoASTId);
+            RelocInfo::Mode rmode,
+            TypeFeedbackId id = TypeFeedbackId::None());
 
   // Jumps
   // unconditional jump to L
@@ -1111,6 +1116,7 @@ class Assembler : public AssemblerBase {
 
  protected:
   bool emit_debug_code() const { return emit_debug_code_; }
+  bool predictable_code_size() const { return predictable_code_size_ ; }
 
   void movsd(XMMRegister dst, const Operand& src);
   void movsd(const Operand& dst, XMMRegister src);
@@ -1136,7 +1142,7 @@ class Assembler : public AssemblerBase {
   inline void emit(Handle<Object> handle);
   inline void emit(uint32_t x,
                    RelocInfo::Mode rmode,
-                   unsigned ast_id = kNoASTId);
+                   TypeFeedbackId id = TypeFeedbackId::None());
   inline void emit(const Immediate& x);
   inline void emit_w(const Immediate& x);
 
@@ -1186,6 +1192,7 @@ class Assembler : public AssemblerBase {
   PositionsRecorder positions_recorder_;
 
   bool emit_debug_code_;
+  bool predictable_code_size_;
 
   friend class PositionsRecorder;
 };

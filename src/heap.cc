@@ -2424,6 +2424,7 @@ bool Heap::CreateInitialMaps() {
     if (!maybe_obj->ToObject(&obj)) return false;
   }
   Map* global_context_map = Map::cast(obj);
+  global_context_map->set_dictionary_map(true);
   global_context_map->set_visitor_id(StaticVisitorBase::kVisitGlobalContext);
   set_global_context_map(global_context_map);
 
@@ -4108,6 +4109,7 @@ MaybeObject* Heap::AllocateJSFunctionProxy(Object* handler,
 MaybeObject* Heap::AllocateGlobalObject(JSFunction* constructor) {
   ASSERT(constructor->has_initial_map());
   Map* map = constructor->initial_map();
+  ASSERT(map->is_dictionary_map());
 
   // Make sure no field properties are described in the initial map.
   // This guarantees us that normalizing the properties does not
@@ -4158,6 +4160,7 @@ MaybeObject* Heap::AllocateGlobalObject(JSFunction* constructor) {
   Map* new_map;
   MaybeObject* maybe_map = map->CopyDropDescriptors();
   if (!maybe_map->To(&new_map)) return maybe_map;
+  new_map->set_dictionary_map(true);
 
   // Set up the global object as a normalized object.
   global->set_map(new_map);
@@ -5793,7 +5796,7 @@ bool Heap::ConfigureHeap(int max_semispace_size,
   max_semispace_size_ = RoundUpToPowerOf2(max_semispace_size_);
   reserved_semispace_size_ = RoundUpToPowerOf2(reserved_semispace_size_);
   initial_semispace_size_ = Min(initial_semispace_size_, max_semispace_size_);
-  external_allocation_limit_ = 10 * max_semispace_size_;
+  external_allocation_limit_ = 16 * max_semispace_size_;
 
   // The old generation is paged and needs at least one page for each space.
   int paged_space_count = LAST_PAGED_SPACE - FIRST_PAGED_SPACE + 1;

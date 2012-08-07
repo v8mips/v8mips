@@ -85,7 +85,7 @@ void MacroAssembler::RememberedSetHelper(
     SaveFPRegsMode save_fp,
     MacroAssembler::RememberedSetFinalAction and_then) {
   Label done;
-  if (FLAG_debug_code) {
+  if (emit_debug_code()) {
     Label ok;
     JumpIfNotInNewSpace(object, scratch, &ok, Label::kNear);
     int3();
@@ -317,7 +317,7 @@ void MacroAssembler::RecordWrite(Register object,
     return;
   }
 
-  if (FLAG_debug_code) {
+  if (emit_debug_code()) {
     Label ok;
     cmp(value, Operand(address, 0));
     j(equal, &ok, Label::kNear);
@@ -1707,7 +1707,7 @@ void MacroAssembler::TryGetFunctionPrototype(Register function,
 }
 
 
-void MacroAssembler::CallStub(CodeStub* stub, unsigned ast_id) {
+void MacroAssembler::CallStub(CodeStub* stub, TypeFeedbackId ast_id) {
   ASSERT(AllowThisStubCall(stub));  // Calls are not allowed in some stubs.
   call(stub->GetCode(), RelocInfo::CODE_TARGET, ast_id);
 }
@@ -2793,7 +2793,7 @@ void MacroAssembler::EnsureNotWhite(
   test(mask_scratch, Operand(bitmap_scratch, MemoryChunk::kHeaderSize));
   j(not_zero, &done, Label::kNear);
 
-  if (FLAG_debug_code) {
+  if (emit_debug_code()) {
     // Check for impossible bit pattern.
     Label ok;
     push(mask_scratch);
@@ -2868,7 +2868,7 @@ void MacroAssembler::EnsureNotWhite(
   and_(bitmap_scratch, Immediate(~Page::kPageAlignmentMask));
   add(Operand(bitmap_scratch, MemoryChunk::kLiveBytesOffset),
       length);
-  if (FLAG_debug_code) {
+  if (emit_debug_code()) {
     mov(length, Operand(bitmap_scratch, MemoryChunk::kLiveBytesOffset));
     cmp(length, Operand(bitmap_scratch, MemoryChunk::kSizeOffset));
     Check(less_equal, "Live Bytes Count overflow chunk size");
