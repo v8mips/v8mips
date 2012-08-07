@@ -1731,7 +1731,7 @@ class JSObject: public JSReceiver {
 
   static int GetIdentityHash(Handle<JSObject> obj);
   MUST_USE_RESULT MaybeObject* GetIdentityHash(CreationFlag flag);
-  MUST_USE_RESULT MaybeObject* SetIdentityHash(Object* hash, CreationFlag flag);
+  MUST_USE_RESULT MaybeObject* SetIdentityHash(Smi* hash, CreationFlag flag);
 
   static Handle<Object> DeleteProperty(Handle<JSObject> obj,
                                        Handle<String> name);
@@ -2235,16 +2235,22 @@ class JSObject: public JSReceiver {
       Object* setter,
       PropertyAttributes attributes);
 
-  // Returns the hidden properties backing store object, currently
-  // a StringDictionary, stored on this object.
-  // If no hidden properties object has been put on this object,
-  // return undefined, unless create_if_absent is true, in which case
-  // a new dictionary is created, added to this object, and returned.
-  MUST_USE_RESULT MaybeObject* GetHiddenPropertiesDictionary(
-      bool create_if_absent);
-  // Updates the existing hidden properties dictionary.
-  MUST_USE_RESULT MaybeObject* SetHiddenPropertiesDictionary(
-      StringDictionary* dictionary);
+
+  enum InitializeHiddenProperties {
+    CREATE_NEW_IF_ABSENT,
+    ONLY_RETURN_INLINE_VALUE
+  };
+
+  // If create_if_absent is true, return the hash table backing store
+  // for hidden properties.  If there is no backing store, allocate one.
+  // If create_if_absent is false, return the hash table backing store
+  // or the inline stored identity hash, whatever is found.
+  MUST_USE_RESULT MaybeObject* GetHiddenPropertiesHashTable(
+      InitializeHiddenProperties init_option);
+  // Set the hidden property backing store to either a hash table or
+  // the inline-stored identity hash.
+  MUST_USE_RESULT MaybeObject* SetHiddenPropertiesHashTable(
+      Object* value);
 
   DISALLOW_IMPLICIT_CONSTRUCTORS(JSObject);
 };
@@ -2635,6 +2641,12 @@ class DescriptorArray: public FixedArray {
   // fit in a page).
   static const int kMaxNumberOfDescriptors = 1024 + 512;
 
+  // Returns the fixed array length required to hold number_of_descriptors
+  // descriptors.
+  static int LengthFor(int number_of_descriptors) {
+    return ToKeyIndex(number_of_descriptors);
+  }
+
  private:
   // An entry in a DescriptorArray, represented as an (array, index) pair.
   class Entry {
@@ -2741,6 +2753,11 @@ class BaseShape {
 template<typename Shape, typename Key>
 class HashTable: public FixedArray {
  public:
+  enum MinimumCapacity {
+    USE_DEFAULT_MINIMUM_CAPACITY,
+    USE_CUSTOM_MINIMUM_CAPACITY
+  };
+
   // Wrapper methods
   inline uint32_t Hash(Key key) {
     if (Shape::UsesSeed) {
@@ -2793,6 +2810,7 @@ class HashTable: public FixedArray {
   // Returns a new HashTable object. Might return Failure.
   MUST_USE_RESULT static MaybeObject* Allocate(
       int at_least_space_for,
+      MinimumCapacity capacity_option = USE_DEFAULT_MINIMUM_CAPACITY,
       PretenureFlag pretenure = NOT_TENURED);
 
   // Computes the required capacity for a table holding the given
@@ -4892,6 +4910,11 @@ class Map: public HeapObject {
                         String* name,
                         LookupResult* result);
 
+  // The size of transition arrays are limited so they do not end up in large
+  // object space. Otherwise ClearNonLiveTransitions would leak memory while
+  // applying in-place right trimming.
+  inline bool CanHaveMoreTransitions();
+
   void SetLastAdded(int index) {
     set_bit_field3(LastAddedBits::update(bit_field3(), index));
   }
@@ -4960,6 +4983,11 @@ class Map: public HeapObject {
                               Handle<String> name,
                               Handle<Code> code);
   MUST_USE_RESULT MaybeObject* UpdateCodeCache(String* name, Code* code);
+
+  // Extend the descriptor array of the map with the list of descriptors.
+  // In case of duplicates, the latest descriptor is used.
+  static void CopyAppendCallbackDescriptors(Handle<Map> map,
+                                            Handle<Object> descriptors);
 
   // Returns the found code or undefined if absent.
   Object* FindInCodeCache(String* name, Code::Flags flags);
@@ -5714,8 +5742,6 @@ class SharedFunctionInfo: public HeapObject {
   // the debugger, it is not possible to compile without a context otherwise.
   static bool CompileLazy(Handle<SharedFunctionInfo> shared,
                           ClearExceptionFlag flag);
-
-  void SharedFunctionInfoIterateBody(ObjectVisitor* v);
 
   // Casting.
   static inline SharedFunctionInfo* cast(Object* obj);
@@ -8843,8 +8869,6 @@ class ObjectVisitor BASE_EMBEDDED {
 
   // Visit pointer embedded into a code object.
   virtual void VisitEmbeddedPointer(RelocInfo* rinfo);
-
-  virtual void VisitSharedFunctionInfo(SharedFunctionInfo* shared) {}
 
   // Visits a contiguous arrays of external references (references to the C++
   // heap) in the half-open range [start, end). Any or all of the values

@@ -1,3 +1,54 @@
+2012-07-30: Version 3.12.18
+
+        Forced using bit-pattern for signed zero double. (issue 2239)
+
+        Made sure double to int conversion is correct. (issue 2260)
+
+        Performance and stability improvements on all platforms.
+
+
+2012-07-27: Version 3.12.17
+
+        Always set the callee's context when calling a function from optimized
+        code.
+        (Chromium issue 138887)
+
+        Fixed building with GCC 3.x
+        (issue 2016, 2017)
+
+        Improved API calls that return empty handles.
+        (issue 2245)
+
+        Performance and stability improvements on all platforms.
+
+
+2012-07-25: Version 3.12.16
+
+        Performance and stability improvements on all platforms.
+
+
+2012-07-24: Version 3.12.15
+
+        Added PRESERVE_ASCII_NULL option to String::WriteAscii.
+        (issue 2252)
+
+        Added dependency to HLoadKeyed* instructions to prevent invalid
+        hoisting. (Chromium issue 137768)
+
+        Enabled building d8 for Android on Mac.
+
+        Interpret negative hexadecimal literals as NaN.
+        (issue 2240)
+
+        Expose counters in javascript when using --track-gc-object-stats.
+
+        Enabled building and testing V8 on Android IA.
+
+        Added --trace-parse flag to parser.
+
+        Performance and stability improvements on all platforms.
+
+
 2012-07-18: Version 3.12.14
 
         Deactivated optimization of packed arrays.

@@ -2506,6 +2506,10 @@ void LCodeGen::DoLoadKeyedFastElement(LLoadKeyedFastElement* instr) {
   LOperand* key = instr->key();
   if (!key->IsConstantOperand()) {
     Register key_reg = ToRegister(key);
+    // Even though the HLoad/StoreKeyedFastElement instructions force the input
+    // representation for the key to be an integer, the input gets replaced
+    // during bound check elimination with the index argument to the bounds
+    // check, which can be tagged, so that case must be handled here, too.
     if (instr->hydrogen()->key()->representation().IsTagged()) {
       __ SmiToInteger64(key_reg, key_reg);
     } else if (instr->hydrogen()->IsDehoisted()) {
@@ -2542,6 +2546,10 @@ void LCodeGen::DoLoadKeyedFastDoubleElement(
   LOperand* key = instr->key();
   if (!key->IsConstantOperand()) {
     Register key_reg = ToRegister(key);
+    // Even though the HLoad/StoreKeyedFastElement instructions force the input
+    // representation for the key to be an integer, the input gets replaced
+    // during bound check elimination with the index argument to the bounds
+    // check, which can be tagged, so that case must be handled here, too.
     if (instr->hydrogen()->key()->representation().IsTagged()) {
       __ SmiToInteger64(key_reg, key_reg);
     } else if (instr->hydrogen()->IsDehoisted()) {
@@ -2606,6 +2614,10 @@ void LCodeGen::DoLoadKeyedSpecializedArrayElement(
   LOperand* key = instr->key();
   if (!key->IsConstantOperand()) {
     Register key_reg = ToRegister(key);
+    // Even though the HLoad/StoreKeyedFastElement instructions force the input
+    // representation for the key to be an integer, the input gets replaced
+    // during bound check elimination with the index argument to the bounds
+    // check, which can be tagged, so that case must be handled here, too.
     if (instr->hydrogen()->key()->representation().IsTagged()) {
       __ SmiToInteger64(key_reg, key_reg);
     } else if (instr->hydrogen()->IsDehoisted()) {
@@ -2892,14 +2904,8 @@ void LCodeGen::CallKnownFunction(Handle<JSFunction> function,
       __ LoadHeapObject(rdi, function);
     }
 
-    // Change context if needed.
-    bool change_context =
-        (info()->closure()->context() != function->context()) ||
-        scope()->contains_with() ||
-        (scope()->num_heap_slots() > 0);
-    if (change_context) {
-      __ movq(rsi, FieldOperand(rdi, JSFunction::kContextOffset));
-    }
+    // Change context.
+    __ movq(rsi, FieldOperand(rdi, JSFunction::kContextOffset));
 
     // Set rax to arguments count if adaption is not needed. Assumes that rax
     // is available to write to at this point.
@@ -3555,6 +3561,10 @@ void LCodeGen::DoStoreKeyedSpecializedArrayElement(
   LOperand* key = instr->key();
   if (!key->IsConstantOperand()) {
     Register key_reg = ToRegister(key);
+    // Even though the HLoad/StoreKeyedFastElement instructions force the input
+    // representation for the key to be an integer, the input gets replaced
+    // during bound check elimination with the index argument to the bounds
+    // check, which can be tagged, so that case must be handled here, too.
     if (instr->hydrogen()->key()->representation().IsTagged()) {
       __ SmiToInteger64(key_reg, key_reg);
     } else if (instr->hydrogen()->IsDehoisted()) {
@@ -3617,8 +3627,13 @@ void LCodeGen::DoBoundsCheck(LBoundsCheck* instr) {
       __ AbortIfNotZeroExtended(reg);
     }
     if (instr->index()->IsConstantOperand()) {
-      __ cmpq(reg,
-              Immediate(ToInteger32(LConstantOperand::cast(instr->index()))));
+      int constant_index =
+          ToInteger32(LConstantOperand::cast(instr->index()));
+      if (instr->hydrogen()->length()->representation().IsTagged()) {
+        __ Cmp(reg, Smi::FromInt(constant_index));
+      } else {
+        __ cmpq(reg, Immediate(constant_index));
+      }
     } else {
       Register reg2 = ToRegister(instr->index());
       if (FLAG_debug_code &&
@@ -3645,6 +3660,10 @@ void LCodeGen::DoStoreKeyedFastElement(LStoreKeyedFastElement* instr) {
   LOperand* key = instr->key();
   if (!key->IsConstantOperand()) {
     Register key_reg = ToRegister(key);
+    // Even though the HLoad/StoreKeyedFastElement instructions force the input
+    // representation for the key to be an integer, the input gets replaced
+    // during bound check elimination with the index argument to the bounds
+    // check, which can be tagged, so that case must be handled here, too.
     if (instr->hydrogen()->key()->representation().IsTagged()) {
       __ SmiToInteger64(key_reg, key_reg);
     } else if (instr->hydrogen()->IsDehoisted()) {
@@ -3688,6 +3707,10 @@ void LCodeGen::DoStoreKeyedFastDoubleElement(
   LOperand* key = instr->key();
   if (!key->IsConstantOperand()) {
     Register key_reg = ToRegister(key);
+    // Even though the HLoad/StoreKeyedFastElement instructions force the input
+    // representation for the key to be an integer, the input gets replaced
+    // during bound check elimination with the index argument to the bounds
+    // check, which can be tagged, so that case must be handled here, too.
     if (instr->hydrogen()->key()->representation().IsTagged()) {
       __ SmiToInteger64(key_reg, key_reg);
     } else if (instr->hydrogen()->IsDehoisted()) {

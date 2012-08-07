@@ -297,7 +297,7 @@ class Factory {
   void BecomeJSObject(Handle<JSReceiver> object);
   void BecomeJSFunction(Handle<JSReceiver> object);
 
-  void SetIdentityHash(Handle<JSObject> object, Object* hash);
+  void SetIdentityHash(Handle<JSObject> object, Smi* hash);
 
   Handle<JSFunction> NewFunction(Handle<String> name,
                                  Handle<Object> prototype);
@@ -495,9 +495,6 @@ class Factory {
   Handle<JSFunction> NewFunctionWithoutPrototypeHelper(
       Handle<String> name,
       LanguageMode language_mode);
-
-  void CopyAppendCallbackDescriptors(Handle<Map> map,
-                                     Handle<Object> descriptors);
 
   // Create a new map cache.
   Handle<MapCache> NewMapCache(int at_least_space_for);

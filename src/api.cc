@@ -3303,9 +3303,10 @@ bool v8::Object::SetHiddenValue(v8::Handle<v8::String> key,
   i::HandleScope scope(isolate);
   i::Handle<i::JSObject> self = Utils::OpenHandle(this);
   i::Handle<i::String> key_obj = Utils::OpenHandle(*key);
+  i::Handle<i::String> key_symbol = FACTORY->LookupSymbol(key_obj);
   i::Handle<i::Object> value_obj = Utils::OpenHandle(*value);
   i::Handle<i::Object> result =
-      i::JSObject::SetHiddenProperty(self, key_obj, value_obj);
+      i::JSObject::SetHiddenProperty(self, key_symbol, value_obj);
   return *result == *self;
 }
 
@@ -3317,7 +3318,8 @@ v8::Local<v8::Value> v8::Object::GetHiddenValue(v8::Handle<v8::String> key) {
   ENTER_V8(isolate);
   i::Handle<i::JSObject> self = Utils::OpenHandle(this);
   i::Handle<i::String> key_obj = Utils::OpenHandle(*key);
-  i::Handle<i::Object> result(self->GetHiddenProperty(*key_obj));
+  i::Handle<i::String> key_symbol = FACTORY->LookupSymbol(key_obj);
+  i::Handle<i::Object> result(self->GetHiddenProperty(*key_symbol));
   if (result->IsUndefined()) return v8::Local<v8::Value>();
   return Utils::ToLocal(result);
 }
@@ -3330,7 +3332,8 @@ bool v8::Object::DeleteHiddenValue(v8::Handle<v8::String> key) {
   i::HandleScope scope(isolate);
   i::Handle<i::JSObject> self = Utils::OpenHandle(this);
   i::Handle<i::String> key_obj = Utils::OpenHandle(*key);
-  self->DeleteHiddenProperty(*key_obj);
+  i::Handle<i::String> key_symbol = FACTORY->LookupSymbol(key_obj);
+  self->DeleteHiddenProperty(*key_symbol);
   return true;
 }
 
@@ -3847,6 +3850,9 @@ int String::WriteUtf8(char* buffer,
   LOG_API(isolate, "String::WriteUtf8");
   ENTER_V8(isolate);
   i::Handle<i::String> str = Utils::OpenHandle(this);
+  if (options & HINT_MANY_WRITES_EXPECTED) {
+    FlattenString(str);  // Flatten the string for efficiency.
+  }
   int string_length = str->length();
   if (str->IsAsciiRepresentation()) {
     int len;
@@ -3903,11 +3909,7 @@ int String::WriteUtf8(char* buffer,
   // Slow case.
   i::StringInputBuffer& write_input_buffer = *isolate->write_input_buffer();
   isolate->string_tracker()->RecordWrite(str);
-  if (options & HINT_MANY_WRITES_EXPECTED) {
-    // Flatten the string for efficiency.  This applies whether we are
-    // using StringInputBuffer or Get(i) to access the characters.
-    FlattenString(str);
-  }
+
   write_input_buffer.Reset(0, *str);
   int len = str->length();
   // Encode the first K - 3 bytes directly into the buffer since we
@@ -3949,8 +3951,9 @@ int String::WriteUtf8(char* buffer,
                                   c,
                                   unibrow::Utf16::kNoPreviousCharacter);
         if (pos + written <= capacity) {
-          for (int j = 0; j < written; j++)
+          for (int j = 0; j < written; j++) {
             buffer[pos + j] = intermediate[j];
+          }
           pos += written;
           nchars++;
         } else {
@@ -3963,8 +3966,9 @@ int String::WriteUtf8(char* buffer,
   }
   if (nchars_ref != NULL) *nchars_ref = nchars;
   if (!(options & NO_NULL_TERMINATION) &&
-      (i == len && (capacity == -1 || pos < capacity)))
+      (i == len && (capacity == -1 || pos < capacity))) {
     buffer[pos++] = '\0';
+  }
   return pos;
 }
 
@@ -3977,28 +3981,45 @@ int String::WriteAscii(char* buffer,
   if (IsDeadCheck(isolate, "v8::String::WriteAscii()")) return 0;
   LOG_API(isolate, "String::WriteAscii");
   ENTER_V8(isolate);
-  i::StringInputBuffer& write_input_buffer = *isolate->write_input_buffer();
   ASSERT(start >= 0 && length >= -1);
   i::Handle<i::String> str = Utils::OpenHandle(this);
   isolate->string_tracker()->RecordWrite(str);
   if (options & HINT_MANY_WRITES_EXPECTED) {
-    // Flatten the string for efficiency.  This applies whether we are
-    // using StringInputBuffer or Get(i) to access the characters.
-    str->TryFlatten();
+    FlattenString(str);  // Flatten the string for efficiency.
   }
+
+  if (str->IsAsciiRepresentation()) {
+    // WriteToFlat is faster than using the StringInputBuffer.
+    if (length == -1) length = str->length() + 1;
+    int len = i::Min(length, str->length() - start);
+    i::String::WriteToFlat(*str, buffer, start, start + len);
+    if (!(options & PRESERVE_ASCII_NULL)) {
+      for (int i = 0; i < len; i++) {
+        if (buffer[i] == '\0') buffer[i] = ' ';
+      }
+    }
+    if (!(options & NO_NULL_TERMINATION) && length > len) {
+      buffer[len] = '\0';
+    }
+    return len;
+  }
+
+  i::StringInputBuffer& write_input_buffer = *isolate->write_input_buffer();
   int end = length;
-  if ( (length == -1) || (length > str->length() - start) )
+  if ((length == -1) || (length > str->length() - start)) {
     end = str->length() - start;
+  }
   if (end < 0) return 0;
   write_input_buffer.Reset(start, *str);
   int i;
   for (i = 0; i < end; i++) {
     char c = static_cast<char>(write_input_buffer.GetNext());
-    if (c == '\0') c = ' ';
+    if (c == '\0' && !(options & PRESERVE_ASCII_NULL)) c = ' ';
     buffer[i] = c;
   }
-  if (!(options & NO_NULL_TERMINATION) && (length == -1 || i < length))
+  if (!(options & NO_NULL_TERMINATION) && (length == -1 || i < length)) {
     buffer[i] = '\0';
+  }
   return i;
 }
 
@@ -4017,7 +4038,7 @@ int String::Write(uint16_t* buffer,
   if (options & HINT_MANY_WRITES_EXPECTED) {
     // Flatten the string for efficiency.  This applies whether we are
     // using StringInputBuffer or Get(i) to access the characters.
-    str->TryFlatten();
+    FlattenString(str);
   }
   int end = start + length;
   if ((length == -1) || (length > str->length() - start) )
@@ -4203,8 +4224,9 @@ void v8::Object::SetPointerInInternalField(int index, void* value) {
     i::Handle<i::Foreign> foreign =
         isolate->factory()->NewForeign(
             reinterpret_cast<i::Address>(value), i::TENURED);
-    if (!foreign.is_null())
-        Utils::OpenHandle(this)->SetInternalField(index, *foreign);
+    if (!foreign.is_null()) {
+      Utils::OpenHandle(this)->SetInternalField(index, *foreign);
+    }
   }
   ASSERT_EQ(value, GetPointerFromInternalField(index));
 }

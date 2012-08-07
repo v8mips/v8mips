@@ -48,7 +48,8 @@
     # both for the snapshot and for the ARM target. Leaving the default value
     # of 'false' will avoid VFP instructions in the snapshot and use CPU feature
     # probing when running on the target.
-    'v8_can_use_vfp_instructions%': 'false',
+    'v8_can_use_vfp2_instructions%': 'false',
+    'v8_can_use_vfp3_instructions%': 'false',
 
     # Similar to vfp but on MIPS.
     'v8_can_use_fpu_instructions%': 'true',
@@ -132,9 +133,14 @@
               'CAN_USE_UNALIGNED_ACCESSES=0',
             ],
           }],
-          [ 'v8_can_use_vfp_instructions=="true"', {
+          [ 'v8_can_use_vfp2_instructions=="true"', {
             'defines': [
-              'CAN_USE_VFP_INSTRUCTIONS',
+              'CAN_USE_VFP2_INSTRUCTIONS',
+            ],
+          }],
+          [ 'v8_can_use_vfp3_instructions=="true"', {
+            'defines': [
+              'CAN_USE_VFP3_INSTRUCTIONS',
             ],
           }],
           [ 'v8_use_arm_eabi_hardfloat=="true"', {
@@ -279,7 +285,7 @@
         'target_conditions': [
           ['_toolset=="host"', {
             'variables': {
-              'm32flag': '<!((echo | $(echo ${CXX_host:-$(which g++)}) -m32 -E - > /dev/null 2>&1) && echo -n "-m32" || true)',
+              'm32flag': '<!((echo | $(echo ${CXX_host:-$(which g++)}) -m32 -E - > /dev/null 2>&1) && echo "-m32" || true)',
             },
             'cflags': [ '<(m32flag)' ],
             'ldflags': [ '<(m32flag)' ],
@@ -289,7 +295,7 @@
           }],
           ['_toolset=="target"', {
             'variables': {
-              'm32flag': '<!((echo | $(echo ${CXX_target:-${CXX:-$(which g++)}}) -m32 -E - > /dev/null 2>&1) && echo -n "-m32" || true)',
+              'm32flag': '<!((echo | $(echo ${CXX_target:-${CXX:-$(which g++)}}) -m32 -E - > /dev/null 2>&1) && echo "-m32" || true)',
             },
             'cflags': [ '<(m32flag)' ],
             'ldflags': [ '<(m32flag)' ],

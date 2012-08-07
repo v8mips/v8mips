@@ -1268,6 +1268,7 @@ static void FillUpNewSpace(NewSpace* new_space) {
   // that the scavenger does not undo the filling.
   v8::HandleScope scope;
   AlwaysAllocateScope always_allocate;
+  LinearAllocationScope allocate_linearly;
   intptr_t available = new_space->EffectiveCapacity() - new_space->Size();
   intptr_t number_of_fillers = (available / FixedArray::SizeFor(32)) - 1;
   for (intptr_t i = 0; i < number_of_fillers; i++) {
@@ -1965,4 +1966,59 @@ TEST(Regress2237) {
   CHECK(SlicedString::cast(*slice)->parent()->IsSeqAsciiString());
   HEAP->CollectAllGarbage(Heap::kNoGCFlags);
   CHECK(SlicedString::cast(*slice)->parent()->IsSeqAsciiString());
+}
+
+
+#ifdef OBJECT_PRINT
+TEST(PrintSharedFunctionInfo) {
+  InitializeVM();
+  v8::HandleScope scope;
+  const char* source = "f = function() { return 987654321; }\n"
+                       "g = function() { return 123456789; }\n";
+  CompileRun(source);
+  Handle<JSFunction> g =
+      v8::Utils::OpenHandle(
+          *v8::Handle<v8::Function>::Cast(
+              v8::Context::GetCurrent()->Global()->Get(v8_str("g"))));
+
+  AssertNoAllocation no_alloc;
+  g->shared()->PrintLn();
+}
+#endif  // OBJECT_PRINT
+
+
+TEST(Regress2211) {
+  InitializeVM();
+  v8::HandleScope scope;
+
+  v8::Handle<v8::String> value = v8_str("val string");
+  Smi* hash = Smi::FromInt(321);
+  Heap* heap = Isolate::Current()->heap();
+
+  for (int i = 0; i < 2; i++) {
+    // Store identity hash first and common hidden property second.
+    v8::Handle<v8::Object> obj = v8::Object::New();
+    Handle<JSObject> internal_obj = v8::Utils::OpenHandle(*obj);
+    CHECK(internal_obj->HasFastProperties());
+
+    // In the first iteration, set hidden value first and identity hash second.
+    // In the second iteration, reverse the order.
+    if (i == 0) obj->SetHiddenValue(v8_str("key string"), value);
+    MaybeObject* maybe_obj = internal_obj->SetIdentityHash(hash,
+                                                           ALLOW_CREATION);
+    CHECK(!maybe_obj->IsFailure());
+    if (i == 1) obj->SetHiddenValue(v8_str("key string"), value);
+
+    // Check values.
+    CHECK_EQ(hash,
+             internal_obj->GetHiddenProperty(heap->identity_hash_symbol()));
+    CHECK(value->Equals(obj->GetHiddenValue(v8_str("key string"))));
+
+    // Check size.
+    DescriptorArray* descriptors = internal_obj->map()->instance_descriptors();
+    ObjectHashTable* hashtable = ObjectHashTable::cast(
+        internal_obj->FastPropertyAt(descriptors->GetFieldIndex(0)));
+    // HashTable header (5) and 4 initial entries (8).
+    CHECK_LE(hashtable->SizeFor(hashtable->length()), 13 * kPointerSize);
+  }
 }
