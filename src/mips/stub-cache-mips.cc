@@ -1264,7 +1264,8 @@ void StubCompiler::GenerateDictionaryLoadCallback(Register receiver,
       StringDictionary::kElementsStartIndex * kPointerSize;
   const int kValueOffset = kElementsStartOffset + kPointerSize;
   __ Addu(scratch1, dictionary, Operand(kValueOffset - kHeapObjectTag));
-  __ sll(scratch1, scratch1, kPointerSizeLog2);
+  __ sll(scratch3, index, kPointerSizeLog2);
+  __ addu(scratch1, scratch1, scratch3);
   __ lw(scratch3, MemOperand(scratch1));
   __ Branch(miss, ne, scratch3, Operand(callback));
 }
