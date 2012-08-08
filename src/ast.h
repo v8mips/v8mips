@@ -1513,7 +1513,7 @@ class Property: public Expression {
   Expression* key() const { return key_; }
   virtual int position() const { return pos_; }
 
-  BailoutId ReturnId() const { return return_id_; }
+  BailoutId LoadId() const { return load_id_; }
 
   bool IsStringLength() const { return is_string_length_; }
   bool IsStringAccess() const { return is_string_access_; }
@@ -1538,7 +1538,7 @@ class Property: public Expression {
         obj_(obj),
         key_(key),
         pos_(pos),
-        return_id_(GetNextId(isolate)),
+        load_id_(GetNextId(isolate)),
         is_monomorphic_(false),
         is_uninitialized_(false),
         is_array_length_(false),
@@ -1550,7 +1550,7 @@ class Property: public Expression {
   Expression* obj_;
   Expression* key_;
   int pos_;
-  const BailoutId return_id_;
+  const BailoutId load_id_;
 
   SmallMapList receiver_types_;
   bool is_monomorphic_ : 1;
@@ -1810,11 +1810,9 @@ class CountOperation: public Expression {
   virtual SmallMapList* GetReceiverTypes() { return &receiver_types_; }
 
   BailoutId AssignmentId() const { return assignment_id_; }
-  BailoutId CountId() const { return count_id_; }
 
-  TypeFeedbackId CountBinOpFeedbackId() const { return reuse(CountId()); }
+  TypeFeedbackId CountBinOpFeedbackId() const { return count_id_; }
   TypeFeedbackId CountStoreFeedbackId() const { return reuse(id()); }
-
 
  protected:
   template<class> friend class AstNodeFactory;
@@ -1839,7 +1837,7 @@ class CountOperation: public Expression {
   Expression* expression_;
   int pos_;
   const BailoutId assignment_id_;
-  const BailoutId count_id_;
+  const TypeFeedbackId count_id_;
   SmallMapList receiver_types_;
 };
 
@@ -1961,7 +1959,6 @@ class Assignment: public Expression {
   void mark_block_start() { block_start_ = true; }
   void mark_block_end() { block_end_ = true; }
 
-  BailoutId CompoundLoadId() const { return compound_load_id_; }
   BailoutId AssignmentId() const { return assignment_id_; }
 
   // Type feedback information.
@@ -1994,7 +1991,6 @@ class Assignment: public Expression {
   Expression* value_;
   int pos_;
   BinaryOperation* binary_operation_;
-  const BailoutId compound_load_id_;
   const BailoutId assignment_id_;
 
   bool block_start_;
@@ -2040,6 +2036,11 @@ class FunctionLiteral: public Expression {
   enum IsFunctionFlag {
     kGlobalOrEval,
     kIsFunction
+  };
+
+  enum IsParenthesizedFlag {
+    kIsParenthesized,
+    kNotParenthesized
   };
 
   DECLARE_NODE_TYPE(FunctionLiteral)
@@ -2090,6 +2091,10 @@ class FunctionLiteral: public Expression {
 
   bool is_function() { return IsFunction::decode(bitfield_) == kIsFunction; }
 
+  bool is_parenthesized() {
+    return IsParenthesized::decode(bitfield_) == kIsParenthesized;
+  }
+
   int ast_node_count() { return ast_properties_.node_count(); }
   AstProperties::Flags* flags() { return ast_properties_.flags(); }
   void set_ast_properties(AstProperties* ast_properties) {
@@ -2111,7 +2116,8 @@ class FunctionLiteral: public Expression {
                   int parameter_count,
                   Type type,
                   ParameterFlag has_duplicate_parameters,
-                  IsFunctionFlag is_function)
+                  IsFunctionFlag is_function,
+                  IsParenthesizedFlag is_parenthesized)
       : Expression(isolate),
         name_(name),
         scope_(scope),
@@ -2130,7 +2136,8 @@ class FunctionLiteral: public Expression {
         IsAnonymous::encode(type == ANONYMOUS_EXPRESSION) |
         Pretenure::encode(false) |
         HasDuplicateParameters::encode(has_duplicate_parameters) |
-        IsFunction::encode(is_function);
+        IsFunction::encode(is_function) |
+        IsParenthesized::encode(is_parenthesized);
   }
 
  private:
@@ -2154,6 +2161,7 @@ class FunctionLiteral: public Expression {
   class Pretenure: public BitField<bool, 3, 1> {};
   class HasDuplicateParameters: public BitField<ParameterFlag, 4, 1> {};
   class IsFunction: public BitField<IsFunctionFlag, 5, 1> {};
+  class IsParenthesized: public BitField<IsParenthesizedFlag, 6, 1> {};
 };
 
 
@@ -2957,12 +2965,14 @@ class AstNodeFactory BASE_EMBEDDED {
       int parameter_count,
       FunctionLiteral::ParameterFlag has_duplicate_parameters,
       FunctionLiteral::Type type,
-      FunctionLiteral::IsFunctionFlag is_function) {
+      FunctionLiteral::IsFunctionFlag is_function,
+      FunctionLiteral::IsParenthesizedFlag is_parenthesized) {
     FunctionLiteral* lit = new(zone_) FunctionLiteral(
         isolate_, name, scope, body,
         materialized_literal_count, expected_property_count, handler_count,
         has_only_simple_this_property_assignments, this_property_assignments,
-        parameter_count, type, has_duplicate_parameters, is_function);
+        parameter_count, type, has_duplicate_parameters, is_function,
+        is_parenthesized);
     // Top-level literal doesn't count for the AST's properties.
     if (is_function == FunctionLiteral::kIsFunction) {
       visitor_.VisitFunctionLiteral(lit);

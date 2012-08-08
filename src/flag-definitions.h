@@ -362,12 +362,17 @@ DEFINE_bool(trace_gc, false,
 DEFINE_bool(trace_gc_nvp, false,
             "print one detailed trace line in name=value format "
             "after each garbage collection")
+DEFINE_bool(trace_gc_ignore_scavenger, false,
+            "do not print trace line after scavenger collection")
 DEFINE_bool(print_cumulative_gc_stat, false,
             "print cumulative GC statistics in name=value format on exit")
 DEFINE_bool(trace_gc_verbose, false,
             "print more details following each garbage collection")
 DEFINE_bool(trace_fragmentation, false,
             "report fragmentation for old pointer and data pages")
+DEFINE_bool(trace_external_memory, false,
+            "print amount of external allocated memory after each time "
+            "it is adjusted.")
 DEFINE_bool(collect_maps, true,
             "garbage collect maps from which no objects can be reached")
 DEFINE_bool(flush_code, true,
