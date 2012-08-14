@@ -240,7 +240,8 @@ DEFINE_bool(interrupt_at_exit, false,
             "insert an interrupt check at function exit")
 DEFINE_bool(weighted_back_edges, false,
             "weight back edges by jump distance for interrupt triggering")
-DEFINE_int(interrupt_budget, 5900,
+           // 0x1700 fits in the immediate field of an ARM instruction.
+DEFINE_int(interrupt_budget, 0x1700,
            "execution budget before interrupt is triggered")
 DEFINE_int(type_info_threshold, 15,
            "percentage of ICs that must have type info to allow optimization")

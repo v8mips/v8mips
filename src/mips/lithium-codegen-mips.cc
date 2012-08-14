@@ -461,11 +461,12 @@ void LCodeGen::WriteTranslation(LEnvironment* environment,
     case JS_CONSTRUCT:
       translation->BeginConstructStubFrame(closure_id, translation_size);
       break;
+    case JS_SETTER:
+      // TODO(svenpanne) Implement me!
+      break;
     case ARGUMENTS_ADAPTOR:
       translation->BeginArgumentsAdaptorFrame(closure_id, translation_size);
       break;
-    default:
-      UNREACHABLE();
   }
   for (int i = 0; i < translation_size; ++i) {
     LOperand* value = environment->values()->at(i);
@@ -1396,13 +1397,10 @@ void LCodeGen::DoMathMinMax(LMathMinMax* instr) {
     __ BranchF(&return_left, NULL, ne, left_reg, kDoubleRegZero);
     // At this point, both left and right are either 0 or -0.
     if (operation == HMathMinMax::kMathMin) {
-      // We could use a single 'vorr' instruction here if we had NEON support.
       __ neg_d(left_reg, left_reg);
       __ sub_d(result_reg, left_reg, right_reg);
       __ neg_d(result_reg, result_reg);
     } else {
-      // Since we operate on +0 and/or -0, vadd and vand have the same effect;
-      // the decision for vadd is easy because vand is a NEON instruction.
       __ add_d(result_reg, left_reg, right_reg);
     }
     __ Branch(&done);

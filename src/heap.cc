@@ -453,6 +453,22 @@ void Heap::GarbageCollectionEpilogue() {
   if (CommittedMemory() > 0) {
     isolate_->counters()->external_fragmentation_total()->AddSample(
         static_cast<int>(100 - (SizeOfObjects() * 100.0) / CommittedMemory()));
+
+    isolate_->counters()->heap_fraction_map_space()->AddSample(
+        static_cast<int>(
+            (map_space()->CommittedMemory() * 100.0) / CommittedMemory()));
+    isolate_->counters()->heap_fraction_cell_space()->AddSample(
+        static_cast<int>(
+            (cell_space()->CommittedMemory() * 100.0) / CommittedMemory()));
+
+    isolate_->counters()->heap_sample_total_committed()->AddSample(
+        static_cast<int>(CommittedMemory() / KB));
+    isolate_->counters()->heap_sample_total_used()->AddSample(
+        static_cast<int>(SizeOfObjects() / KB));
+    isolate_->counters()->heap_sample_map_space_committed()->AddSample(
+        static_cast<int>(map_space()->CommittedMemory() / KB));
+    isolate_->counters()->heap_sample_cell_space_committed()->AddSample(
+        static_cast<int>(cell_space()->CommittedMemory() / KB));
   }
 
 #define UPDATE_COUNTERS_FOR_SPACE(space)                                       \
@@ -3714,8 +3730,7 @@ MaybeObject* Heap::AllocateFunctionPrototype(JSFunction* function) {
   // constructors.
   Map* new_map;
   ASSERT(object_function->has_initial_map());
-  MaybeObject* maybe_map =
-      object_function->initial_map()->Copy(DescriptorArray::MAY_BE_SHARED);
+  MaybeObject* maybe_map = object_function->initial_map()->Copy();
   if (!maybe_map->To(&new_map)) return maybe_map;
 
   Object* prototype;
@@ -3859,8 +3874,7 @@ MaybeObject* Heap::AllocateInitialMap(JSFunction* fun) {
       fun->shared()->ForbidInlineConstructor();
     } else {
       DescriptorArray* descriptors;
-      MaybeObject* maybe_descriptors =
-          DescriptorArray::Allocate(count, DescriptorArray::MAY_BE_SHARED);
+      MaybeObject* maybe_descriptors = DescriptorArray::Allocate(count);
       if (!maybe_descriptors->To(&descriptors)) return maybe_descriptors;
 
       DescriptorArray::WhitenessWitness witness(descriptors);
@@ -3879,7 +3893,8 @@ MaybeObject* Heap::AllocateInitialMap(JSFunction* fun) {
       if (HasDuplicates(descriptors)) {
         fun->shared()->ForbidInlineConstructor();
       } else {
-        map->InitializeDescriptors(descriptors);
+        MaybeObject* maybe_failure = map->InitializeDescriptors(descriptors);
+        if (maybe_failure->IsFailure()) return maybe_failure;
         map->set_pre_allocated_property_fields(count);
         map->set_unused_property_fields(in_object_properties - count);
       }

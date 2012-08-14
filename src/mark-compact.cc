@@ -631,29 +631,28 @@ void MarkCompactCollector::CollectEvacuationCandidates(PagedSpace* space) {
   intptr_t over_reserved = reserved - space->SizeOfObjects();
   static const intptr_t kFreenessThreshold = 50;
 
-  if (over_reserved >= 2 * space->AreaSize()) {
+  if (reduce_memory_footprint_ && over_reserved >= space->AreaSize()) {
     // If reduction of memory footprint was requested, we are aggressive
     // about choosing pages to free.  We expect that half-empty pages
     // are easier to compact so slightly bump the limit.
-    if (reduce_memory_footprint_) {
-      mode = REDUCE_MEMORY_FOOTPRINT;
-      max_evacuation_candidates += 2;
-    }
+    mode = REDUCE_MEMORY_FOOTPRINT;
+    max_evacuation_candidates += 2;
+  }
 
+
+  if (over_reserved > reserved / 3 && over_reserved >= 2 * space->AreaSize()) {
     // If over-usage is very high (more than a third of the space), we
     // try to free all mostly empty pages.  We expect that almost empty
     // pages are even easier to compact so bump the limit even more.
-    if (over_reserved > reserved / 3) {
-      mode = REDUCE_MEMORY_FOOTPRINT;
-      max_evacuation_candidates *= 2;
-    }
+    mode = REDUCE_MEMORY_FOOTPRINT;
+    max_evacuation_candidates *= 2;
+  }
 
-    if (FLAG_trace_fragmentation && mode == REDUCE_MEMORY_FOOTPRINT) {
-      PrintF("Estimated over reserved memory: %.1f / %.1f MB (threshold %d)\n",
-             static_cast<double>(over_reserved) / MB,
-             static_cast<double>(reserved) / MB,
-             static_cast<int>(kFreenessThreshold));
-    }
+  if (FLAG_trace_fragmentation && mode == REDUCE_MEMORY_FOOTPRINT) {
+    PrintF("Estimated over reserved memory: %.1f / %.1f MB (threshold %d)\n",
+           static_cast<double>(over_reserved) / MB,
+           static_cast<double>(reserved) / MB,
+           static_cast<int>(kFreenessThreshold));
   }
 
   intptr_t estimated_release = 0;
@@ -1430,10 +1429,6 @@ class MarkCompactMarkingVisitor
   }
 
 
-#define SLOT_ADDR(obj, offset) \
-  reinterpret_cast<Object**>((obj)->address() + offset)
-
-
   static inline void VisitJSFunctionFields(Map* map,
                                            JSFunction* object,
                                            bool flush_code_candidate) {
@@ -1469,26 +1464,28 @@ class MarkCompactMarkingVisitor
         heap,
         HeapObject::RawField(object,
                              JSFunction::kCodeEntryOffset + kPointerSize),
-        HeapObject::RawField(object,
-                             JSFunction::kNonWeakFieldsEndOffset));
+        HeapObject::RawField(object, JSFunction::kNonWeakFieldsEndOffset));
   }
 
 
   static void VisitSharedFunctionInfoFields(Heap* heap,
                                             HeapObject* object,
                                             bool flush_code_candidate) {
-    VisitPointer(heap, SLOT_ADDR(object, SharedFunctionInfo::kNameOffset));
+    VisitPointer(heap,
+                 HeapObject::RawField(object, SharedFunctionInfo::kNameOffset));
 
     if (!flush_code_candidate) {
-      VisitPointer(heap, SLOT_ADDR(object, SharedFunctionInfo::kCodeOffset));
+      VisitPointer(heap,
+                   HeapObject::RawField(object,
+                                        SharedFunctionInfo::kCodeOffset));
     }
 
-    VisitPointers(heap,
-        SLOT_ADDR(object, SharedFunctionInfo::kOptimizedCodeMapOffset),
-        SLOT_ADDR(object, SharedFunctionInfo::kSize));
+    VisitPointers(
+        heap,
+        HeapObject::RawField(object,
+                             SharedFunctionInfo::kOptimizedCodeMapOffset),
+        HeapObject::RawField(object, SharedFunctionInfo::kSize));
   }
-
-  #undef SLOT_ADDR
 
   static VisitorDispatchTable<Callback> non_count_table_;
 };
@@ -1909,28 +1906,26 @@ template void Marker<MarkCompactCollector>::MarkMapContents(Map* map);
 template <class T>
 void Marker<T>::MarkMapContents(Map* map) {
   // Make sure that the back pointer stored either in the map itself or inside
-  // its prototype transitions array is marked. Treat pointers in the descriptor
-  // array as weak and also mark that array to prevent visiting it later.
+  // its transitions array is marked. Treat pointers in the transitions array as
+  // weak and also mark that array to prevent visiting it later.
   base_marker()->MarkObjectAndPush(HeapObject::cast(map->GetBackPointer()));
 
-  Object** descriptor_array_slot =
-      HeapObject::RawField(map, Map::kInstanceDescriptorsOrBackPointerOffset);
-  Object* descriptor_array = *descriptor_array_slot;
-  if (descriptor_array->IsDescriptorArray()) {
-    MarkDescriptorArray(reinterpret_cast<DescriptorArray*>(descriptor_array));
+  Object** transitions_slot =
+      HeapObject::RawField(map, Map::kTransitionsOrBackPointerOffset);
+  Object* transitions = *transitions_slot;
+  if (transitions->IsTransitionArray()) {
+    MarkTransitionArray(reinterpret_cast<TransitionArray*>(transitions));
   } else {
     // Already marked by marking map->GetBackPointer().
-    ASSERT(descriptor_array->IsMap() || descriptor_array->IsUndefined());
+    ASSERT(transitions->IsMap() || transitions->IsUndefined());
   }
 
-  // Mark the Object* fields of the Map. Since the descriptor array has been
-  // marked already, it is fine that one of these fields contains a pointer
-  // to it. But make sure to skip back pointer.
-  STATIC_ASSERT(Map::kPointerFieldsEndOffset ==
-                Map::kBitField3Offset + kPointerSize);
+  // Mark the Object* fields of the Map. Since the transitions array has been
+  // marked already, it is fine that one of these fields contains a pointer to
+  // it.
   Object** start_slot =
       HeapObject::RawField(map, Map::kPointerFieldsBeginOffset);
-  Object** end_slot = HeapObject::RawField(map, Map::kBitField3Offset);
+  Object** end_slot = HeapObject::RawField(map, Map::kPointerFieldsEndOffset);
   for (Object** slot = start_slot; slot < end_slot; slot++) {
     Object* obj = *slot;
     if (!obj->NonFailureIsHeapObject()) continue;
@@ -1941,76 +1936,14 @@ void Marker<T>::MarkMapContents(Map* map) {
 
 
 template <class T>
-void Marker<T>::MarkDescriptorArray(DescriptorArray* descriptors) {
-  // Empty descriptor array is marked as a root before any maps are marked.
-  ASSERT(descriptors != descriptors->GetHeap()->empty_descriptor_array());
-
-  if (!base_marker()->MarkObjectWithoutPush(descriptors)) return;
-  Object** descriptor_start = descriptors->data_start();
-
-  // Since the descriptor array itself is not pushed for scanning, all fields
-  // that point to objects manually have to be pushed, marked, and their slots
-  // recorded.
-  if (descriptors->HasEnumCache()) {
-    Object** enum_cache_slot = descriptors->GetEnumCacheSlot();
-    Object* enum_cache = *enum_cache_slot;
-    base_marker()->MarkObjectAndPush(
-        reinterpret_cast<HeapObject*>(enum_cache));
-    mark_compact_collector()->RecordSlot(descriptor_start,
-                                         enum_cache_slot,
-                                         enum_cache);
-  }
-
-  if (descriptors->HasTransitionArray()) {
-    Object** transitions_slot = descriptors->GetTransitionsSlot();
-    Object* transitions = *transitions_slot;
-    mark_compact_collector()->RecordSlot(descriptor_start,
-                                         transitions_slot,
-                                         transitions);
-    MarkTransitionArray(reinterpret_cast<TransitionArray*>(transitions));
-  }
-
-  // If the descriptor contains a transition (value is a Map), we don't mark the
-  // value as live. It might be removed by ClearNonLiveTransitions later.
-  for (int i = 0; i < descriptors->number_of_descriptors(); ++i) {
-    Object** key_slot = descriptors->GetKeySlot(i);
-    Object* key = *key_slot;
-    if (key->IsHeapObject()) {
-      base_marker()->MarkObjectAndPush(HeapObject::cast(key));
-      mark_compact_collector()->RecordSlot(descriptor_start, key_slot, key);
-    }
-
-    Object** value_slot = descriptors->GetValueSlot(i);
-    if (!(*value_slot)->IsHeapObject()) continue;
-    HeapObject* value = HeapObject::cast(*value_slot);
-
-    mark_compact_collector()->RecordSlot(descriptor_start,
-                                         value_slot,
-                                         value);
-
-    PropertyDetails details(descriptors->GetDetails(i));
-
-    switch (details.type()) {
-      case NORMAL:
-      case FIELD:
-      case CONSTANT_FUNCTION:
-      case HANDLER:
-      case INTERCEPTOR:
-      case CALLBACKS:
-        base_marker()->MarkObjectAndPush(value);
-        break;
-      case TRANSITION:
-      case NONEXISTENT:
-        UNREACHABLE();
-        break;
-    }
-  }
-}
-
-template <class T>
 void Marker<T>::MarkTransitionArray(TransitionArray* transitions) {
   if (!base_marker()->MarkObjectWithoutPush(transitions)) return;
   Object** transitions_start = transitions->data_start();
+
+  DescriptorArray* descriptors = transitions->descriptors();
+  base_marker()->MarkObjectAndPush(descriptors);
+  mark_compact_collector()->RecordSlot(
+      transitions_start, transitions->GetDescriptorsSlot(), descriptors);
 
   if (transitions->HasPrototypeTransitions()) {
     // Mark prototype transitions array but don't push it into marking stack.
