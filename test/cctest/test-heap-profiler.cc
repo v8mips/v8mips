@@ -1521,7 +1521,7 @@ TEST(WeakGlobalHandle) {
 }
 
 
-TEST(WeakGlobalContextRefs) {
+TEST(WeakNativeContextRefs) {
   v8::HandleScope scope;
   LocalContext env;
 
@@ -1533,10 +1533,10 @@ TEST(WeakGlobalContextRefs) {
   const v8::HeapGraphNode* global_handles = GetNode(
       gc_roots, v8::HeapGraphNode::kObject, "(Global handles)");
   CHECK_NE(NULL, global_handles);
-  const v8::HeapGraphNode* global_context = GetNode(
-      global_handles, v8::HeapGraphNode::kHidden, "system / GlobalContext");
-  CHECK_NE(NULL, global_context);
-  CHECK(HasWeakEdge(global_context));
+  const v8::HeapGraphNode* native_context = GetNode(
+      global_handles, v8::HeapGraphNode::kHidden, "system / NativeContext");
+  CHECK_NE(NULL, native_context);
+  CHECK(HasWeakEdge(native_context));
 }
 
 
@@ -1657,4 +1657,26 @@ TEST(NoRefsToNonEssentialEntries) {
   const v8::HeapGraphNode* elements =
       GetProperty(global_object, v8::HeapGraphEdge::kInternal, "elements");
   CHECK_EQ(NULL, elements);
+}
+
+
+TEST(MapHasDescriptorsAndTransitions) {
+  v8::HandleScope scope;
+  LocalContext env;
+  CompileRun("obj = { a: 10 };\n");
+  const v8::HeapSnapshot* snapshot =
+      v8::HeapProfiler::TakeSnapshot(v8_str("snapshot"));
+  const v8::HeapGraphNode* global = GetGlobalObject(snapshot);
+  const v8::HeapGraphNode* global_object =
+      GetProperty(global, v8::HeapGraphEdge::kProperty, "obj");
+  CHECK_NE(NULL, global_object);
+  const v8::HeapGraphNode* map =
+      GetProperty(global_object, v8::HeapGraphEdge::kInternal, "map");
+  CHECK_NE(NULL, map);
+  const v8::HeapGraphNode* descriptors =
+      GetProperty(map, v8::HeapGraphEdge::kInternal, "descriptors");
+  CHECK_NE(NULL, descriptors);
+  const v8::HeapGraphNode* transitions =
+      GetProperty(map, v8::HeapGraphEdge::kInternal, "transitions");
+  CHECK_NE(NULL, transitions);
 }

@@ -139,11 +139,12 @@ class CompilationInfo {
   }
 
   bool has_global_object() const {
-    return !closure().is_null() && (closure()->context()->global() != NULL);
+    return !closure().is_null() &&
+        (closure()->context()->global_object() != NULL);
   }
 
   GlobalObject* global_object() const {
-    return has_global_object() ? closure()->context()->global() : NULL;
+    return has_global_object() ? closure()->context()->global_object() : NULL;
   }
 
   // Accessors for the different compilation modes.
@@ -410,10 +411,6 @@ class OptimizingCompiler: public ZoneObject {
 
 class Compiler : public AllStatic {
  public:
-  // Default maximum number of function optimization attempts before we
-  // give up.
-  static const int kDefaultMaxOptCount = 10;
-
   static const int kMaxInliningLevels = 3;
 
   // Call count before primitive functions trigger their own optimization.

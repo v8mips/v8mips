@@ -494,7 +494,9 @@ void LCodeGen::WriteTranslation(LEnvironment* environment,
       translation->BeginConstructStubFrame(closure_id, translation_size);
       break;
     case JS_SETTER:
-      // TODO(svenpanne) Implement me!
+      ASSERT(translation_size == 2);
+      ASSERT(height == 0);
+      translation->BeginSetterStubFrame(closure_id);
       break;
     case ARGUMENTS_ADAPTOR:
       translation->BeginArgumentsAdaptorFrame(closure_id, translation_size);
@@ -3240,7 +3242,7 @@ void LCodeGen::DoDeclareGlobals(LDeclareGlobals* instr) {
 
 void LCodeGen::DoGlobalObject(LGlobalObject* instr) {
   Register result = ToRegister(instr->result());
-  __ ldr(result, ContextOperand(cp, Context::GLOBAL_INDEX));
+  __ ldr(result, ContextOperand(cp, Context::GLOBAL_OBJECT_INDEX));
 }
 
 
@@ -3596,11 +3598,11 @@ void LCodeGen::DoRandom(LRandom* instr) {
   static const int kSeedSize = sizeof(uint32_t);
   STATIC_ASSERT(kPointerSize == kSeedSize);
 
-  __ ldr(r0, FieldMemOperand(r0, GlobalObject::kGlobalContextOffset));
+  __ ldr(r0, FieldMemOperand(r0, GlobalObject::kNativeContextOffset));
   static const int kRandomSeedOffset =
       FixedArray::kHeaderSize + Context::RANDOM_SEED_INDEX * kPointerSize;
   __ ldr(r2, FieldMemOperand(r0, kRandomSeedOffset));
-  // r2: FixedArray of the global context's random seeds
+  // r2: FixedArray of the native context's random seeds
 
   // Load state[0].
   __ ldr(r1, FieldMemOperand(r2, ByteArray::kHeaderSize));
@@ -3890,7 +3892,28 @@ void LCodeGen::DoStoreNamedGeneric(LStoreNamedGeneric* instr) {
 }
 
 
+void LCodeGen::DeoptIfTaggedButNotSmi(LEnvironment* environment,
+                                      HValue* value,
+                                      LOperand* operand) {
+  if (value->representation().IsTagged() && !value->type().IsSmi()) {
+    if (operand->IsRegister()) {
+      __ tst(ToRegister(operand), Operand(kSmiTagMask));
+    } else {
+      __ mov(ip, ToOperand(operand));
+      __ tst(ip, Operand(kSmiTagMask));
+    }
+    DeoptimizeIf(ne, environment);
+  }
+}
+
+
 void LCodeGen::DoBoundsCheck(LBoundsCheck* instr) {
+  DeoptIfTaggedButNotSmi(instr->environment(),
+                         instr->hydrogen()->length(),
+                         instr->length());
+  DeoptIfTaggedButNotSmi(instr->environment(),
+                         instr->hydrogen()->index(),
+                         instr->index());
   if (instr->index()->IsConstantOperand()) {
     int constant_index =
         ToInteger32(LConstantOperand::cast(instr->index()));
