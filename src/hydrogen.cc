@@ -2933,7 +2933,9 @@ void HGraph::ComputeSafeUint32Operations() {
   Uint32Analysis analysis(zone());
   for (int i = 0; i < uint32_instructions_->length(); ++i) {
     HInstruction* current = uint32_instructions_->at(i);
-    if (current->IsLinked()) analysis.Analyze(current);
+    if (current->IsLinked() && current->representation().IsInteger32()) {
+      analysis.Analyze(current);
+    }
   }
 
   // Some phis might have been optimistically marked with kUint32 flag.
@@ -8268,7 +8270,16 @@ HInstruction* HGraphBuilder::BuildBinaryOperation(BinaryOperation* expr,
     case Token::SHR:
       instr = HShr::NewHShr(zone(), context, left, right);
       if (FLAG_opt_safe_uint32_operations && instr->IsShr()) {
-        graph()->RecordUint32Instruction(instr);
+        bool can_be_shift_by_zero = true;
+        if (right->IsConstant()) {
+          HConstant* right_const = HConstant::cast(right);
+          if (right_const->HasInteger32Value() &&
+              (right_const->Integer32Value() & 0x1f) != 0) {
+            can_be_shift_by_zero = false;
+          }
+        }
+
+        if (can_be_shift_by_zero) graph()->RecordUint32Instruction(instr);
       }
       break;
     case Token::SHL:
