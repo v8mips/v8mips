@@ -2070,7 +2070,7 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
               // In rounding mode 0 it should behave like ROUND.
             case ROUND_W_D:  // Round double to word (round half to even).
               {
-                double rounded = fs > 0 ? floor(fs + 0.5) : ceil(fs - 0.5);
+                double rounded = floor(fs + 0.5);
                 int32_t result = static_cast<int32_t>(rounded);
                 if ((result & 1) != 0 && result - fs == 0.5) {
                   // If the number is halfway between two integers,
