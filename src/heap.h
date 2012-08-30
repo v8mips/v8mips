@@ -130,6 +130,7 @@ namespace internal {
   V(Map, with_context_map, WithContextMap)                                     \
   V(Map, block_context_map, BlockContextMap)                                   \
   V(Map, module_context_map, ModuleContextMap)                                 \
+  V(Map, global_context_map, GlobalContextMap)                                 \
   V(Map, oddball_map, OddballMap)                                              \
   V(Map, message_object_map, JSMessageObjectMap)                               \
   V(Map, foreign_map, ForeignMap)                                              \
@@ -826,6 +827,10 @@ class Heap {
   // Allocate a native (but otherwise uninitialized) context.
   MUST_USE_RESULT MaybeObject* AllocateNativeContext();
 
+  // Allocate a global context.
+  MUST_USE_RESULT MaybeObject* AllocateGlobalContext(JSFunction* function,
+                                                     ScopeInfo* scope_info);
+
   // Allocate a module context.
   MUST_USE_RESULT MaybeObject* AllocateModuleContext(ScopeInfo* scope_info);
 
@@ -1074,10 +1079,7 @@ class Heap {
   void EnsureHeapIsIterable();
 
   // Notify the heap that a context has been disposed.
-  int NotifyContextDisposed() {
-    flush_monomorphic_ics_ = true;
-    return ++contexts_disposed_;
-  }
+  int NotifyContextDisposed() { return ++contexts_disposed_; }
 
   // Utility to invoke the scavenger. This is needed in test code to
   // ensure correct callback for weak global handles.
@@ -1607,8 +1609,6 @@ class Heap {
     global_ic_age_ = (global_ic_age_ + 1) & SharedFunctionInfo::ICAgeBits::kMax;
   }
 
-  bool flush_monomorphic_ics() { return flush_monomorphic_ics_; }
-
   intptr_t amount_of_external_allocated_memory() {
     return amount_of_external_allocated_memory_;
   }
@@ -1693,8 +1693,6 @@ class Heap {
   int contexts_disposed_;
 
   int global_ic_age_;
-
-  bool flush_monomorphic_ics_;
 
   int scan_on_scavenge_pages_;
 

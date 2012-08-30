@@ -118,10 +118,8 @@ Scope::Scope(Scope* outer_scope, ScopeType type, Zone* zone)
       already_resolved_(false),
       zone_(zone) {
   SetDefaults(type, outer_scope, Handle<ScopeInfo>::null());
-  // At some point we might want to provide outer scopes to
-  // eval scopes (by walking the stack and reading the scope info).
-  // In that case, the ASSERT below needs to be adjusted.
-  ASSERT_EQ(type == GLOBAL_SCOPE, outer_scope == NULL);
+  // The outermost scope must be a global scope.
+  ASSERT(type == GLOBAL_SCOPE || outer_scope != NULL);
   ASSERT(!HasIllegalRedeclaration());
 }
 
@@ -227,6 +225,12 @@ Scope* Scope::DeserializeScopeChain(Context* context, Scope* global_scope,
       for (Scope* s = innermost_scope; s != NULL; s = s->outer_scope()) {
         s->scope_inside_with_ = true;
       }
+    } else if (context->IsGlobalContext()) {
+      ScopeInfo* scope_info = ScopeInfo::cast(context->extension());
+      current_scope = new(zone) Scope(current_scope,
+                                      GLOBAL_SCOPE,
+                                      Handle<ScopeInfo>(scope_info),
+                                      zone);
     } else if (context->IsModuleContext()) {
       ScopeInfo* scope_info = ScopeInfo::cast(context->module()->scope_info());
       current_scope = new(zone) Scope(current_scope,
@@ -491,7 +495,7 @@ Variable* Scope::DeclareLocal(Handle<String> name,
 }
 
 
-Variable* Scope::DeclareGlobal(Handle<String> name) {
+Variable* Scope::DeclareDynamicGlobal(Handle<String> name) {
   ASSERT(is_global_scope());
   return variables_.Declare(this,
                             name,
@@ -1035,7 +1039,7 @@ bool Scope::ResolveVariable(CompilationInfo* info,
       // gave up on it (e.g. by encountering a local with the same in the outer
       // scope which was not promoted to a context, this can happen if we use
       // debugger to evaluate arbitrary expressions at a break point).
-      if (var->is_global()) {
+      if (var->IsGlobalObjectProperty()) {
         var = NonLocal(proxy->name(), DYNAMIC_GLOBAL);
       } else if (var->is_dynamic()) {
         var = NonLocal(proxy->name(), DYNAMIC);
@@ -1047,8 +1051,8 @@ bool Scope::ResolveVariable(CompilationInfo* info,
       break;
 
     case UNBOUND:
-      // No binding has been found. Declare a variable in global scope.
-      var = info->global_scope()->DeclareGlobal(proxy->name());
+      // No binding has been found. Declare a variable on the global object.
+      var = info->global_scope()->DeclareDynamicGlobal(proxy->name());
       break;
 
     case UNBOUND_EVAL_SHADOWED:
@@ -1156,11 +1160,12 @@ bool Scope::MustAllocate(Variable* var) {
        scope_contains_with_ ||
        is_catch_scope() ||
        is_block_scope() ||
-       is_module_scope())) {
+       is_module_scope() ||
+       is_global_scope())) {
     var->set_is_used(true);
   }
   // Global variables do not need to be allocated.
-  return !var->is_global() && var->is_used();
+  return !var->IsGlobalObjectProperty() && var->is_used();
 }
 
 
@@ -1174,11 +1179,12 @@ bool Scope::MustAllocateInContext(Variable* var) {
   // catch-bound variables are always allocated in a context.
   if (var->mode() == TEMPORARY) return false;
   if (is_catch_scope() || is_block_scope() || is_module_scope()) return true;
+  if (is_global_scope() && (var->mode() == LET || var->mode() == CONST_HARMONY))
+    return true;
   return var->has_forced_context_allocation() ||
       scope_calls_eval_ ||
       inner_scope_calls_eval_ ||
-      scope_contains_with_ ||
-      var->is_global();
+      scope_contains_with_;
 }
 
 

@@ -96,6 +96,7 @@ class LCodeGen;
   V(ElementsKind)                               \
   V(FastLiteral)                                \
   V(FixedArrayBaseLength)                       \
+  V(MapEnumLength)                              \
   V(FunctionLiteral)                            \
   V(GetCachedArrayIndex)                        \
   V(GlobalObject)                               \
@@ -999,6 +1000,16 @@ class LFixedArrayBaseLength: public LTemplateInstruction<1, 1, 0> {
   DECLARE_CONCRETE_INSTRUCTION(FixedArrayBaseLength,
                                "fixed-array-base-length")
   DECLARE_HYDROGEN_ACCESSOR(FixedArrayBaseLength)
+};
+
+
+class LMapEnumLength: public LTemplateInstruction<1, 1, 0> {
+ public:
+  explicit LMapEnumLength(LOperand* value) {
+    inputs_[0] = value;
+  }
+
+  DECLARE_CONCRETE_INSTRUCTION(MapEnumLength, "map-enum-length")
 };
 
 
@@ -2277,7 +2288,7 @@ class LChunkBuilder BASE_EMBEDDED {
   bool is_done() const { return status_ == DONE; }
   bool is_aborted() const { return status_ == ABORTED; }
 
-  void Abort(const char* format, ...);
+  void Abort(const char* reason);
 
   // Methods for getting operands for Use / Define / Temp.
   LUnallocated* ToUnallocated(Register reg);

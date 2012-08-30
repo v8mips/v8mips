@@ -97,7 +97,6 @@ Heap::Heap()
       linear_allocation_scope_depth_(0),
       contexts_disposed_(0),
       global_ic_age_(0),
-      flush_monomorphic_ics_(false),
       scan_on_scavenge_pages_(0),
       new_space_(this),
       old_pointer_space_(NULL),
@@ -993,7 +992,7 @@ void Heap::MarkCompact(GCTracer* tracer) {
 
   contexts_disposed_ = 0;
 
-  flush_monomorphic_ics_ = false;
+  isolate_->set_context_exit_happened(false);
 }
 
 
@@ -2050,9 +2049,8 @@ void Heap::ScavengeObjectSlow(HeapObject** p, HeapObject* object) {
 MaybeObject* Heap::AllocatePartialMap(InstanceType instance_type,
                                       int instance_size) {
   Object* result;
-  { MaybeObject* maybe_result = AllocateRawMap();
-    if (!maybe_result->ToObject(&result)) return maybe_result;
-  }
+  MaybeObject* maybe_result = AllocateRawMap();
+  if (!maybe_result->ToObject(&result)) return maybe_result;
 
   // Map::cast cannot be used due to uninitialized map field.
   reinterpret_cast<Map*>(result)->set_map(raw_unchecked_meta_map());
@@ -2065,8 +2063,7 @@ MaybeObject* Heap::AllocatePartialMap(InstanceType instance_type,
   reinterpret_cast<Map*>(result)->set_unused_property_fields(0);
   reinterpret_cast<Map*>(result)->set_bit_field(0);
   reinterpret_cast<Map*>(result)->set_bit_field2(0);
-  reinterpret_cast<Map*>(result)->set_bit_field3(
-      Map::LastAddedBits::encode(Map::kNoneAdded));
+  reinterpret_cast<Map*>(result)->set_bit_field3(0);
   return result;
 }
 
@@ -2093,7 +2090,8 @@ MaybeObject* Heap::AllocateMap(InstanceType instance_type,
   map->set_unused_property_fields(0);
   map->set_bit_field(0);
   map->set_bit_field2(1 << Map::kIsExtensible);
-  map->set_bit_field3(Map::LastAddedBits::encode(Map::kNoneAdded));
+  int bit_field3 = Map::EnumLengthBits::encode(Map::kInvalidEnumCache);
+  map->set_bit_field3(bit_field3);
   map->set_elements_kind(elements_kind);
 
   // If the map object is aligned fill the padding area with Smi 0 objects.
@@ -2436,6 +2434,12 @@ bool Heap::CreateInitialMaps() {
     if (!maybe_obj->ToObject(&obj)) return false;
   }
   set_module_context_map(Map::cast(obj));
+
+  { MaybeObject* maybe_obj =
+        AllocateMap(FIXED_ARRAY_TYPE, kVariableSizeSentinel);
+    if (!maybe_obj->ToObject(&obj)) return false;
+  }
+  set_global_context_map(Map::cast(obj));
 
   { MaybeObject* maybe_obj =
         AllocateMap(FIXED_ARRAY_TYPE, kVariableSizeSentinel);
@@ -3884,7 +3888,7 @@ MaybeObject* Heap::AllocateInitialMap(JSFunction* fun) {
         FieldDescriptor field(name, i, NONE, i + 1);
         descriptors->Set(i, &field, witness);
       }
-      descriptors->Sort(witness);
+      descriptors->Sort();
 
       // The descriptors may contain duplicates because the compiler does not
       // guarantee the uniqueness of property names (it would have required
@@ -4156,8 +4160,9 @@ MaybeObject* Heap::AllocateGlobalObject(JSFunction* constructor) {
   for (int i = 0; i < descs->number_of_descriptors(); i++) {
     PropertyDetails details = descs->GetDetails(i);
     ASSERT(details.type() == CALLBACKS);  // Only accessors are expected.
-    PropertyDetails d =
-        PropertyDetails(details.attributes(), CALLBACKS, details.index());
+    PropertyDetails d = PropertyDetails(details.attributes(),
+                                        CALLBACKS,
+                                        details.descriptor_index());
     Object* value = descs->GetCallbacksObject(i);
     MaybeObject* maybe_value = AllocateJSGlobalPropertyCell(value);
     if (!maybe_value->ToObject(&value)) return maybe_value;
@@ -4902,6 +4907,25 @@ MaybeObject* Heap::AllocateNativeContext() {
   ASSERT(context->IsNativeContext());
   ASSERT(result->IsContext());
   return result;
+}
+
+
+MaybeObject* Heap::AllocateGlobalContext(JSFunction* function,
+                                         ScopeInfo* scope_info) {
+  Object* result;
+  { MaybeObject* maybe_result =
+        AllocateFixedArray(scope_info->ContextLength(), TENURED);
+    if (!maybe_result->ToObject(&result)) return maybe_result;
+  }
+  Context* context = reinterpret_cast<Context*>(result);
+  context->set_map_no_write_barrier(global_context_map());
+  context->set_closure(function);
+  context->set_previous(function->context());
+  context->set_extension(scope_info);
+  context->set_global_object(function->context()->global_object());
+  ASSERT(context->IsGlobalContext());
+  ASSERT(result->IsContext());
+  return context;
 }
 
 
