@@ -537,13 +537,11 @@ Extension::Extension(const char* name,
     : name_(name),
       source_length_(source_length >= 0 ?
                      source_length :
-                     static_cast<int>(strlen(source))),
+                     (source ? static_cast<int>(strlen(source)) : 0)),
       source_(source, source_length_),
       dep_count_(dep_count),
       deps_(deps),
-      auto_enable_(false) {
-  CHECK(source);
-}
+      auto_enable_(false) { }
 
 
 v8::Handle<Primitive> Undefined() {
@@ -4260,6 +4258,15 @@ void v8::V8::SetReturnAddressLocationResolver(
 
 bool v8::V8::SetFunctionEntryHook(FunctionEntryHook entry_hook) {
   return i::ProfileEntryHookStub::SetFunctionEntryHook(entry_hook);
+}
+
+
+void v8::V8::SetJitCodeEventHandler(
+    JitCodeEventOptions options, JitCodeEventHandler event_handler) {
+  i::Isolate* isolate = i::Isolate::Current();
+  // Ensure that logging is initialized for our isolate.
+  isolate->InitializeLoggingAndCounters();
+  isolate->logger()->SetCodeEventHandler(options, event_handler);
 }
 
 
