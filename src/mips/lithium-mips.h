@@ -132,6 +132,7 @@ class LCodeGen;
   V(LoadNamedField)                             \
   V(LoadNamedFieldPolymorphic)                  \
   V(LoadNamedGeneric)                           \
+  V(MapEnumLength)                              \
   V(MathMinMax)                                 \
   V(ModI)                                       \
   V(MulI)                                       \
@@ -983,6 +984,16 @@ class LFixedArrayBaseLength: public LTemplateInstruction<1, 1, 0> {
   DECLARE_CONCRETE_INSTRUCTION(FixedArrayBaseLength,
                                "fixed-array-base-length")
   DECLARE_HYDROGEN_ACCESSOR(FixedArrayBaseLength)
+};
+
+
+class LMapEnumLength: public LTemplateInstruction<1, 1, 0> {
+ public:
+  explicit LMapEnumLength(LOperand* value) {
+    inputs_[0] = value;
+  }
+
+  DECLARE_CONCRETE_INSTRUCTION(MapEnumLength, "map-enum-length")
 };
 
 
