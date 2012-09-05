@@ -162,6 +162,24 @@
               '-mfpu=vfp3',
             ],
           }],
+          ['target_arch=="mipsel"', {
+            'cflags': [
+              '-EL',
+            ],
+            'conditions': [
+              ['mips_arch_variant=="mips32r2"', {
+                'cflags': ['-mips32r2', '-Wa,-mips32r2'],
+              }],
+              ['mips_arch_variant=="loongson"', {
+                'cflags': ['-mips3', '-Wa,-mips3'],
+              }, {
+                'cflags': ['-mips32', '-Wa,-mips32'],
+              }],
+            ],
+            'ldflags': [
+              '-EL',
+            ],
+          }],
           # NOTE: The stlport header include paths below are specified in
           # cflags rather than include_dirs because they need to come
           # after include_dirs. Think of them like system headers, but
@@ -183,6 +201,11 @@
                   '-L<(android_stlport_libs)/armeabi',
                 ],
               }],
+              ['target_arch=="mipsel"', {
+                'ldflags': [
+                  '-L<(android_ndk_root)/sources/cxx-stl/stlport/libs/mips',
+                ],
+              }],
               ['target_arch=="ia32"', {
                 'ldflags': [
                   '-L<(android_stlport_libs)/x86',
@@ -194,6 +217,16 @@
             # The x86 toolchain currently has problems with stack-protector.
             'cflags!': [
               '-fstack-protector',
+            ],
+            'cflags': [
+              '-fno-stack-protector',
+            ],
+          }],
+          ['target_arch=="mipsel"', {
+            # The mips toolchain currently has problems with stack-protector.
+            'cflags!': [
+              '-fstack-protector',
+              '-U__linux__'
             ],
             'cflags': [
               '-fno-stack-protector',
