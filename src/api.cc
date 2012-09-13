@@ -541,7 +541,9 @@ Extension::Extension(const char* name,
       source_(source, source_length_),
       dep_count_(dep_count),
       deps_(deps),
-      auto_enable_(false) { }
+      auto_enable_(false) {
+  CHECK(source != NULL || source_length_ == 0);
+}
 
 
 v8::Handle<Primitive> Undefined() {
@@ -4087,6 +4089,29 @@ void v8::String::VerifyExternalStringResource(
   CHECK_EQ(expected, value);
 }
 
+void v8::String::VerifyExternalStringResourceBase(
+    v8::String::ExternalStringResourceBase* value, Encoding encoding) const {
+  i::Handle<i::String> str = Utils::OpenHandle(this);
+  const v8::String::ExternalStringResourceBase* expected;
+  Encoding expectedEncoding;
+  if (i::StringShape(*str).IsExternalAscii()) {
+    const void* resource =
+        i::Handle<i::ExternalAsciiString>::cast(str)->resource();
+    expected = reinterpret_cast<const ExternalStringResourceBase*>(resource);
+    expectedEncoding = ASCII_ENCODING;
+  } else if (i::StringShape(*str).IsExternalTwoByte()) {
+    const void* resource =
+        i::Handle<i::ExternalTwoByteString>::cast(str)->resource();
+    expected = reinterpret_cast<const ExternalStringResourceBase*>(resource);
+    expectedEncoding = TWO_BYTE_ENCODING;
+  } else {
+    expected = NULL;
+    expectedEncoding = str->IsAsciiRepresentation() ? ASCII_ENCODING
+                                                    : TWO_BYTE_ENCODING;
+  }
+  CHECK_EQ(expected, value);
+  CHECK_EQ(expectedEncoding, encoding);
+}
 
 const v8::String::ExternalAsciiStringResource*
       v8::String::GetExternalAsciiStringResource() const {
@@ -5841,12 +5866,27 @@ void Debug::ProcessDebugMessages() {
   i::Execution::ProcessDebugMessages(true);
 }
 
+
 Local<Context> Debug::GetDebugContext() {
   i::Isolate* isolate = i::Isolate::Current();
   EnsureInitializedForIsolate(isolate, "v8::Debug::GetDebugContext()");
   ENTER_V8(isolate);
   return Utils::ToLocal(i::Isolate::Current()->debugger()->GetDebugContext());
 }
+
+
+void Debug::SetLiveEditEnabled(bool enable, Isolate* isolate) {
+  // If no isolate is supplied, use the default isolate.
+  i::Debugger* debugger;
+  if (isolate != NULL) {
+    i::Isolate* internal_isolate = reinterpret_cast<i::Isolate*>(isolate);
+    debugger = internal_isolate->debugger();
+  } else {
+    debugger = i::Isolate::GetDefaultIsolateDebugger();
+  }
+  debugger->set_live_edit_enabled(enable);
+}
+
 
 #endif  // ENABLE_DEBUGGER_SUPPORT
 
