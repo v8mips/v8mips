@@ -371,6 +371,11 @@ void LCodeGen::WriteTranslation(LEnvironment* environment,
     case JS_CONSTRUCT:
       translation->BeginConstructStubFrame(closure_id, translation_size);
       break;
+    case JS_GETTER:
+      ASSERT(translation_size == 1);
+      ASSERT(height == 0);
+      translation->BeginGetterStubFrame(closure_id);
+      break;
     case JS_SETTER:
       ASSERT(translation_size == 2);
       ASSERT(height == 0);
@@ -1421,6 +1426,11 @@ void LCodeGen::DoMathMinMax(LMathMinMax* instr) {
       __ cmpq(left_reg, right_imm);
       __ j(condition, &return_left, Label::kNear);
       __ movq(left_reg, right_imm);
+    } else if (right->IsRegister()) {
+      Register right_reg = ToRegister(right);
+      __ cmpq(left_reg, right_reg);
+      __ j(condition, &return_left, Label::kNear);
+      __ movq(left_reg, right_reg);
     } else {
       Operand right_op = ToOperand(right);
       __ cmpq(left_reg, right_op);
