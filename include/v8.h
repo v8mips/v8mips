@@ -3718,7 +3718,7 @@ class V8EXPORT Context {
    * with the debugger to provide additional information on the context through
    * the debugger API.
    */
-  void SetData(Handle<String> data);
+  void SetData(Handle<Value> data);
   Local<Value> GetData();
 
   /**
@@ -3741,6 +3741,13 @@ class V8EXPORT Context {
    * For more details see AllowCodeGenerationFromStrings(bool) documentation.
    */
   bool IsCodeGenerationFromStringsAllowed();
+
+  /**
+   * Sets the error description for the exception that is thrown when
+   * code generation from strings is not allowed and 'eval' or the 'Function'
+   * constructor are called.
+   */
+  void SetErrorMessageForCodeGenerationFromStrings(Handle<String> message);
 
   /**
    * Stack-allocated class which sets the execution context for all

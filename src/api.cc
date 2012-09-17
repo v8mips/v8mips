@@ -765,7 +765,7 @@ void Context::Exit() {
 }
 
 
-void Context::SetData(v8::Handle<String> data) {
+void Context::SetData(v8::Handle<Value> data) {
   i::Handle<i::Context> env = Utils::OpenHandle(this);
   i::Isolate* isolate = env->GetIsolate();
   if (IsDeadCheck(isolate, "v8::Context::SetData()")) return;
@@ -781,16 +781,13 @@ v8::Local<v8::Value> Context::GetData() {
   i::Handle<i::Context> env = Utils::OpenHandle(this);
   i::Isolate* isolate = env->GetIsolate();
   if (IsDeadCheck(isolate, "v8::Context::GetData()")) {
-    return v8::Local<Value>();
-  }
-  i::Object* raw_result = NULL;
-  ASSERT(env->IsNativeContext());
-  if (env->IsNativeContext()) {
-    raw_result = env->data();
-  } else {
     return Local<Value>();
   }
-  i::Handle<i::Object> result(raw_result, isolate);
+  ASSERT(env->IsNativeContext());
+  if (!env->IsNativeContext()) {
+    return Local<Value>();
+  }
+  i::Handle<i::Object> result(env->data(), isolate);
   return Utils::ToLocal(result);
 }
 
@@ -3404,7 +3401,7 @@ void v8::Object::SetIndexedPropertiesToPixelData(uint8_t* data, int length) {
   ON_BAILOUT(isolate, "v8::SetElementsToPixelData()", return);
   ENTER_V8(isolate);
   i::HandleScope scope(isolate);
-  if (!ApiCheck(length <= i::ExternalPixelArray::kMaxLength,
+  if (!ApiCheck(length >= 0 && length <= i::ExternalPixelArray::kMaxLength,
                 "v8::Object::SetIndexedPropertiesToPixelData()",
                 "length exceeds max acceptable value")) {
     return;
@@ -3460,7 +3457,7 @@ void v8::Object::SetIndexedPropertiesToExternalArrayData(
   ON_BAILOUT(isolate, "v8::SetIndexedPropertiesToExternalArrayData()", return);
   ENTER_V8(isolate);
   i::HandleScope scope(isolate);
-  if (!ApiCheck(length <= i::ExternalArray::kMaxLength,
+  if (!ApiCheck(length >= 0 && length <= i::ExternalArray::kMaxLength,
                 "v8::Object::SetIndexedPropertiesToExternalArrayData()",
                 "length exceeds max acceptable value")) {
     return;
@@ -4599,6 +4596,22 @@ bool Context::IsCodeGenerationFromStringsAllowed() {
   i::Handle<i::Context> context =
       i::Handle<i::Context>::cast(i::Handle<i::Object>(ctx));
   return !context->allow_code_gen_from_strings()->IsFalse();
+}
+
+
+void Context::SetErrorMessageForCodeGenerationFromStrings(
+    Handle<String> error) {
+  i::Isolate* isolate = i::Isolate::Current();
+  if (IsDeadCheck(isolate,
+      "v8::Context::SetErrorMessageForCodeGenerationFromStrings()")) {
+    return;
+  }
+  ENTER_V8(isolate);
+  i::Object** ctx = reinterpret_cast<i::Object**>(this);
+  i::Handle<i::Context> context =
+      i::Handle<i::Context>::cast(i::Handle<i::Object>(ctx));
+  i::Handle<i::Object> error_handle = Utils::OpenHandle(*error);
+  context->set_error_message_for_code_gen_from_strings(*error_handle);
 }
 
 

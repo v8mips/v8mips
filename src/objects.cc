@@ -487,11 +487,20 @@ MaybeObject* JSObject::SetNormalizedProperty(String* name,
     set_properties(StringDictionary::cast(dict));
     return value;
   }
-  // Preserve enumeration index.
+
+  PropertyDetails original_details = property_dictionary()->DetailsAt(entry);
+  int enumeration_index;
+  // Preserve the enumeration index unless the property was deleted.
+  if (original_details.IsDeleted()) {
+    enumeration_index = property_dictionary()->NextEnumerationIndex();
+    property_dictionary()->SetNextEnumerationIndex(enumeration_index + 1);
+  } else {
+    enumeration_index = original_details.dictionary_index();
+    ASSERT(enumeration_index > 0);
+  }
+
   details = PropertyDetails(
-      details.attributes(),
-      details.type(),
-      property_dictionary()->DetailsAt(entry).dictionary_index());
+      details.attributes(), details.type(), enumeration_index);
 
   if (IsGlobalObject()) {
     JSGlobalPropertyCell* cell =
@@ -642,11 +651,9 @@ MaybeObject* Object::GetProperty(Object* receiver,
           receiver, result->GetCallbackObject(), name);
     case HANDLER:
       return result->proxy()->GetPropertyWithHandler(receiver, name);
-    case INTERCEPTOR: {
-      JSObject* recvr = JSObject::cast(receiver);
+    case INTERCEPTOR:
       return result->holder()->GetPropertyWithInterceptor(
-          recvr, name, attributes);
-    }
+          receiver, name, attributes);
     case TRANSITION:
     case NONEXISTENT:
       UNREACHABLE();
@@ -1801,9 +1808,22 @@ MaybeObject* JSObject::ConvertTransitionToMapTransition(
     // new_map and install its descriptors in the old_map. Since the old_map
     // stores the descriptors for the new_map, remove the transition array of
     // the new_map that is only in place to store the descriptors.
-    old_map->transitions()->set_descriptors(new_map->instance_descriptors());
+    old_map->transitions()->descriptors_pointer()->set_value(
+        new_map->instance_descriptors());
     new_map->ClearTransitions(GetHeap());
     old_map->set_owns_descriptors(false);
+    Map* map;
+    JSGlobalPropertyCell* pointer =
+        old_map->transitions()->descriptors_pointer();
+    for (Object* current = old_map;
+         !current->IsUndefined();
+         current = map->GetBackPointer()) {
+      map = Map::cast(current);
+      if (!map->HasTransitionArray()) break;
+      TransitionArray* transitions = map->transitions();
+      if (transitions->descriptors_pointer() != pointer) break;
+      map->SetEnumLength(Map::kInvalidEnumCache);
+    }
   } else if (old_target->instance_descriptors() ==
              old_map->instance_descriptors()) {
     // Since the conversion above generated a new fast map with an additional
@@ -1822,6 +1842,7 @@ MaybeObject* JSObject::ConvertTransitionToMapTransition(
       if (!map->HasTransitionArray()) break;
       TransitionArray* transitions = map->transitions();
       if (transitions->descriptors_pointer() != old_pointer) break;
+      map->SetEnumLength(Map::kInvalidEnumCache);
       transitions->set_descriptors_pointer(new_pointer);
     }
     new_map->ClearTransitions(GetHeap());
@@ -4999,7 +5020,7 @@ MaybeObject* Map::ShareDescriptor(Descriptor* descriptor) {
   DescriptorArray* new_descriptors;
   MaybeObject* maybe_descriptors = DescriptorArray::Allocate(old_size + 1);
   if (!maybe_descriptors->To(&new_descriptors)) return maybe_descriptors;
-  FixedArray::WhitenessWitness witness(new_descriptors);
+  DescriptorArray::WhitenessWitness witness(new_descriptors);
 
   for (int i = 0; i < old_size; ++i) {
     new_descriptors->CopyFrom(i, descriptors, i, witness);
@@ -5189,7 +5210,7 @@ MaybeObject* Map::CopyAddDescriptor(Descriptor* descriptor,
   MaybeObject* maybe_descriptors = DescriptorArray::Allocate(old_size + 1);
   if (!maybe_descriptors->To(&new_descriptors)) return maybe_descriptors;
 
-  FixedArray::WhitenessWitness witness(new_descriptors);
+  DescriptorArray::WhitenessWitness witness(new_descriptors);
 
   // Copy the descriptors, inserting a descriptor.
   for (int i = 0; i < old_size; ++i) {
@@ -6062,6 +6083,11 @@ MaybeObject* DescriptorArray::Allocate(int number_of_descriptors) {
 
   result->set(kEnumCacheIndex, Smi::FromInt(0));
   return result;
+}
+
+
+void DescriptorArray::ClearEnumCache() {
+  set(kEnumCacheIndex, Smi::FromInt(0));
 }
 
 
@@ -7466,19 +7492,24 @@ void Map::ClearNonLiveTransitions(Heap* heap) {
 
   if (descriptors_owner_died) {
     if (number_of_own_descriptors > 0) {
-      int live_enum = NumberOfDescribedProperties(OWN_DESCRIPTORS, DONT_ENUM);
       int number_of_descriptors = descriptors->number_of_descriptors();
       int to_trim = number_of_descriptors - number_of_own_descriptors;
       if (to_trim > 0) {
         RightTrimFixedArray<FROM_GC>(
             heap, descriptors, to_trim * DescriptorArray::kDescriptorSize);
         if (descriptors->HasEnumCache()) {
-          FixedArray* enum_cache =
-              FixedArray::cast(descriptors->GetEnumCache());
-          to_trim = enum_cache->length() - live_enum;
-          if (to_trim > 0) {
-            RightTrimFixedArray<FROM_GC>(
-                heap, FixedArray::cast(descriptors->GetEnumCache()), to_trim);
+          int live_enum =
+              NumberOfDescribedProperties(OWN_DESCRIPTORS, DONT_ENUM);
+          if (live_enum == 0) {
+            descriptors->ClearEnumCache();
+          } else {
+            FixedArray* enum_cache =
+                FixedArray::cast(descriptors->GetEnumCache());
+            to_trim = enum_cache->length() - live_enum;
+            if (to_trim > 0) {
+              RightTrimFixedArray<FROM_GC>(
+                  heap, FixedArray::cast(descriptors->GetEnumCache()), to_trim);
+            }
           }
         }
         descriptors->Sort();
@@ -10450,7 +10481,7 @@ InterceptorInfo* JSObject::GetIndexedInterceptor() {
 
 
 MaybeObject* JSObject::GetPropertyPostInterceptor(
-    JSReceiver* receiver,
+    Object* receiver,
     String* name,
     PropertyAttributes* attributes) {
   // Check local property in holder, ignore interceptor.
@@ -10468,7 +10499,7 @@ MaybeObject* JSObject::GetPropertyPostInterceptor(
 
 
 MaybeObject* JSObject::GetLocalPropertyPostInterceptor(
-    JSReceiver* receiver,
+    Object* receiver,
     String* name,
     PropertyAttributes* attributes) {
   // Check local property in holder, ignore interceptor.
@@ -10482,13 +10513,13 @@ MaybeObject* JSObject::GetLocalPropertyPostInterceptor(
 
 
 MaybeObject* JSObject::GetPropertyWithInterceptor(
-    JSReceiver* receiver,
+    Object* receiver,
     String* name,
     PropertyAttributes* attributes) {
   Isolate* isolate = GetIsolate();
   InterceptorInfo* interceptor = GetNamedInterceptor();
   HandleScope scope(isolate);
-  Handle<JSReceiver> receiver_handle(receiver);
+  Handle<Object> receiver_handle(receiver);
   Handle<JSObject> holder_handle(this);
   Handle<String> name_handle(name);
 
@@ -12888,7 +12919,7 @@ MaybeObject* StringDictionary::TransformPropertiesToFastFor(
     return maybe_descriptors;
   }
 
-  FixedArray::WhitenessWitness witness(descriptors);
+  DescriptorArray::WhitenessWitness witness(descriptors);
 
   int number_of_allocated_fields =
       number_of_fields + unused_property_fields - inobject_props;

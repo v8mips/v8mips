@@ -1,4 +1,4 @@
-// Copyright 2006-2008 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -25,36 +25,30 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// Used for building without snapshots.
+// This tests that we do not share optimized code across closures that
+// were optimized using OSR (for a particular OSR entry AST id) even if
+// caching of optimized code kicks in.
 
-#include "v8.h"
+function makeClosure() {
+  function f(mode, iterations) {
+    var accumulator = 0;
+    if (mode == 1) {
+      while (--iterations > 0) accumulator = Math.ceil(accumulator);
+      return 1;
+    } else {
+      while (--iterations > 0) accumulator = Math.floor(accumulator);
+      return 2;
+    }
+  }
+  return f;
+}
 
-#include "snapshot.h"
+// Generate two closures sharing the same underlying function literal.
+var f1 = makeClosure();
+var f2 = makeClosure();
 
-namespace v8 {
-namespace internal {
+// This function should be optimized via OSR in the first tight loop.
+assertSame(1, f1(1, 100000));
 
-const byte Snapshot::data_[] = { 0 };
-const byte* Snapshot::raw_data_ = NULL;
-const int Snapshot::size_ = 0;
-const int Snapshot::raw_size_ = 0;
-const byte Snapshot::context_data_[] = { 0 };
-const byte* Snapshot::context_raw_data_ = NULL;
-const int Snapshot::context_size_ = 0;
-const int Snapshot::context_raw_size_ = 0;
-
-const int Snapshot::new_space_used_ = 0;
-const int Snapshot::pointer_space_used_ = 0;
-const int Snapshot::data_space_used_ = 0;
-const int Snapshot::code_space_used_ = 0;
-const int Snapshot::map_space_used_ = 0;
-const int Snapshot::cell_space_used_ = 0;
-
-const int Snapshot::context_new_space_used_ = 0;
-const int Snapshot::context_pointer_space_used_ = 0;
-const int Snapshot::context_data_space_used_ = 0;
-const int Snapshot::context_code_space_used_ = 0;
-const int Snapshot::context_map_space_used_ = 0;
-const int Snapshot::context_cell_space_used_ = 0;
-
-} }  // namespace v8::internal
+// This function should be optimized via OSR in the second tight loop.
+assertSame(2, f2(2, 100000));

@@ -1,4 +1,4 @@
-// Copyright 2006-2008 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -25,36 +25,29 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// Used for building without snapshots.
+// Flags: --expose-debug-as debug --expose-gc
 
-#include "v8.h"
+// If one callback causes a GC then the other callbacks don't take place.
 
-#include "snapshot.h"
+var f = eval("(function f() { return 42; })");
+var f2 = eval("(function f2() { return 43; })");
 
-namespace v8 {
-namespace internal {
+Debug = debug.Debug;
 
-const byte Snapshot::data_[] = { 0 };
-const byte* Snapshot::raw_data_ = NULL;
-const int Snapshot::size_ = 0;
-const int Snapshot::raw_size_ = 0;
-const byte Snapshot::context_data_[] = { 0 };
-const byte* Snapshot::context_raw_data_ = NULL;
-const int Snapshot::context_size_ = 0;
-const int Snapshot::context_raw_size_ = 0;
+var called = 0;
 
-const int Snapshot::new_space_used_ = 0;
-const int Snapshot::pointer_space_used_ = 0;
-const int Snapshot::data_space_used_ = 0;
-const int Snapshot::code_space_used_ = 0;
-const int Snapshot::map_space_used_ = 0;
-const int Snapshot::cell_space_used_ = 0;
+function listener(event, exec_state, event_data, data) {
+  if (event == Debug.DebugEvent.ScriptCollected) {
+    if (called != 2) {
+      called++;
+      gc();
+    }
+  }
+};
 
-const int Snapshot::context_new_space_used_ = 0;
-const int Snapshot::context_pointer_space_used_ = 0;
-const int Snapshot::context_data_space_used_ = 0;
-const int Snapshot::context_code_space_used_ = 0;
-const int Snapshot::context_map_space_used_ = 0;
-const int Snapshot::context_cell_space_used_ = 0;
-
-} }  // namespace v8::internal
+Debug.scripts();
+Debug.setListener(listener);
+f = void 0;
+f2 = void 0;
+gc();
+assertTrue(called == 2);
