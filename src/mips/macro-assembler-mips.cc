@@ -5329,7 +5329,7 @@ void MacroAssembler::LoadInstanceDescriptors(Register map,
 
 
 void MacroAssembler::NumberOfOwnDescriptors(Register dst, Register map) {
-  lbu(dst, FieldMemOperand(map, Map::kBitFieldOffset));
+  lw(dst, FieldMemOperand(map, Map::kBitField3Offset));
   DecodeField<Map::NumberOfOwnDescriptorsBits>(dst);
 }
 
