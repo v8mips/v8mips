@@ -371,6 +371,12 @@ void Heap::PrintShortHeapStatistics() {
            lo_space_->SizeOfObjects() / KB,
            lo_space_->Available() / KB,
            lo_space_->CommittedMemory() / KB);
+  PrintPID("All spaces,         used: %6" V8_PTR_PREFIX "d KB"
+               ", available: %6" V8_PTR_PREFIX "d KB"
+               ", committed: %6" V8_PTR_PREFIX "d KB\n",
+           this->SizeOfObjects() / KB,
+           this->Available() / KB,
+           this->CommittedMemory() / KB);
   PrintPID("Total time spent in GC  : %d ms\n", total_gc_time_ms_);
 }
 
@@ -4189,7 +4195,7 @@ MaybeObject* Heap::AllocateGlobalObject(JSFunction* constructor) {
   StringDictionary* dictionary;
   MaybeObject* maybe_dictionary =
       StringDictionary::Allocate(
-          map->NumberOfDescribedProperties() * 2 + initial_size);
+          map->NumberOfOwnDescriptors() * 2 + initial_size);
   if (!maybe_dictionary->To(&dictionary)) return maybe_dictionary;
 
   // The global object might be created from an object template with accessors.
