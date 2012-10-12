@@ -1295,7 +1295,7 @@ static void KeyedStoreGenerateGenericHelper(
                                          receiver_map,
                                          t0,
                                          slow);
-  ASSERT(receiver_map.is(a3));  // Transition code expects map in r3
+  ASSERT(receiver_map.is(a3));  // Transition code expects map in a3
   ElementsTransitionGenerator::GenerateSmiToDouble(masm, slow);
   __ lw(elements, FieldMemOperand(receiver, JSObject::kElementsOffset));
   __ jmp(&fast_double_without_map_check);
@@ -1307,7 +1307,7 @@ static void KeyedStoreGenerateGenericHelper(
                                          receiver_map,
                                          t0,
                                          slow);
-  ASSERT(receiver_map.is(a3));  // Transition code expects map in r3
+  ASSERT(receiver_map.is(a3));  // Transition code expects map in a3
   ElementsTransitionGenerator::GenerateMapChangeElementsTransition(masm);
   __ lw(elements, FieldMemOperand(receiver, JSObject::kElementsOffset));
   __ jmp(&finish_object_store);
@@ -1321,7 +1321,7 @@ static void KeyedStoreGenerateGenericHelper(
                                          receiver_map,
                                          t0,
                                          slow);
-  ASSERT(receiver_map.is(t0));  // Transition code expects map in r3
+  ASSERT(receiver_map.is(a3));  // Transition code expects map in a3
   ElementsTransitionGenerator::GenerateDoubleToObject(masm, slow);
   __ lw(elements, FieldMemOperand(receiver, JSObject::kElementsOffset));
   __ jmp(&finish_object_store);
