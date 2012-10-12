@@ -979,109 +979,132 @@ void LCodeGen::DoModI(LModI* instr) {
   Register left = ToRegister(instr->left());
   Register right = ToRegister(instr->right());
   Register result = ToRegister(instr->result());
+  Label done;
 
-  Register scratch = scratch0();
-  Register scratch2 = ToRegister(instr->temp());
-  DwVfpRegister dividend = ToDoubleRegister(instr->temp2());
-  DwVfpRegister divisor = ToDoubleRegister(instr->temp3());
-  DwVfpRegister quotient = double_scratch0();
+  if (CpuFeatures::IsSupported(SUDIV)) {
+    CpuFeatures::Scope scope(SUDIV);
+    // Check for x % 0.
+    if (instr->hydrogen()->CheckFlag(HValue::kCanBeDivByZero)) {
+      __ cmp(right, Operand(0));
+      DeoptimizeIf(eq, instr->environment());
+    }
 
-  ASSERT(!dividend.is(divisor));
-  ASSERT(!dividend.is(quotient));
-  ASSERT(!divisor.is(quotient));
-  ASSERT(!scratch.is(left));
-  ASSERT(!scratch.is(right));
-  ASSERT(!scratch.is(result));
+    // For  r3 = r1 % r2; we can have the following ARM code
+    // sdiv r3, r1, r2
+    // mls r3, r3, r2, r1
 
-  Label done, vfp_modulo, both_positive, right_negative;
+    __ sdiv(result, left, right);
+    __ mls(result, result, right, left);
+    __ cmp(result, Operand(0));
+    __ b(ne, &done);
 
-  // Check for x % 0.
-  if (instr->hydrogen()->CheckFlag(HValue::kCanBeDivByZero)) {
-    __ cmp(right, Operand(0));
-    DeoptimizeIf(eq, instr->environment());
-  }
-
-  __ Move(result, left);
-
-  // (0 % x) must yield 0 (if x is finite, which is the case here).
-  __ cmp(left, Operand(0));
-  __ b(eq, &done);
-  // Preload right in a vfp register.
-  __ vmov(divisor.low(), right);
-  __ b(lt, &vfp_modulo);
-
-  __ cmp(left, Operand(right));
-  __ b(lt, &done);
-
-  // Check for (positive) power of two on the right hand side.
-  __ JumpIfNotPowerOfTwoOrZeroAndNeg(right,
-                                     scratch,
-                                     &right_negative,
-                                     &both_positive);
-  // Perform modulo operation (scratch contains right - 1).
-  __ and_(result, scratch, Operand(left));
-  __ b(&done);
-
-  __ bind(&right_negative);
-  // Negate right. The sign of the divisor does not matter.
-  __ rsb(right, right, Operand(0));
-
-  __ bind(&both_positive);
-  const int kUnfolds = 3;
-  // If the right hand side is smaller than the (nonnegative)
-  // left hand side, the left hand side is the result.
-  // Else try a few subtractions of the left hand side.
-  __ mov(scratch, left);
-  for (int i = 0; i < kUnfolds; i++) {
-    // Check if the left hand side is less or equal than the
-    // the right hand side.
-    __ cmp(scratch, Operand(right));
-    __ mov(result, scratch, LeaveCC, lt);
-    __ b(lt, &done);
-    // If not, reduce the left hand side by the right hand
-    // side and check again.
-    if (i < kUnfolds - 1) __ sub(scratch, scratch, right);
-  }
-
-  __ bind(&vfp_modulo);
-  // Load the arguments in VFP registers.
-  // The divisor value is preloaded before. Be careful that 'right' is only live
-  // on entry.
-  __ vmov(dividend.low(), left);
-  // From here on don't use right as it may have been reallocated (for example
-  // to scratch2).
-  right = no_reg;
-
-  __ vcvt_f64_s32(dividend, dividend.low());
-  __ vcvt_f64_s32(divisor, divisor.low());
-
-  // We do not care about the sign of the divisor.
-  __ vabs(divisor, divisor);
-  // Compute the quotient and round it to a 32bit integer.
-  __ vdiv(quotient, dividend, divisor);
-  __ vcvt_s32_f64(quotient.low(), quotient);
-  __ vcvt_f64_s32(quotient, quotient.low());
-
-  // Compute the remainder in result.
-  DwVfpRegister double_scratch = dividend;
-  __ vmul(double_scratch, divisor, quotient);
-  __ vcvt_s32_f64(double_scratch.low(), double_scratch);
-  __ vmov(scratch, double_scratch.low());
-
-  if (!instr->hydrogen()->CheckFlag(HValue::kBailoutOnMinusZero)) {
-    __ sub(result, left, scratch);
+    if (instr->hydrogen()->CheckFlag(HValue::kBailoutOnMinusZero)) {
+       __ cmp(left, Operand(0));
+       DeoptimizeIf(lt, instr->environment());
+    }
   } else {
-    Label ok;
-    // Check for -0.
-    __ sub(scratch2, left, scratch, SetCC);
-    __ b(ne, &ok);
-    __ cmp(left, Operand(0));
-    DeoptimizeIf(mi, instr->environment());
-    __ bind(&ok);
-    // Load the result and we are done.
-    __ mov(result, scratch2);
-  }
+    Register scratch = scratch0();
+    Register scratch2 = ToRegister(instr->temp());
+    DwVfpRegister dividend = ToDoubleRegister(instr->temp2());
+    DwVfpRegister divisor = ToDoubleRegister(instr->temp3());
+    DwVfpRegister quotient = double_scratch0();
 
+    ASSERT(!dividend.is(divisor));
+    ASSERT(!dividend.is(quotient));
+    ASSERT(!divisor.is(quotient));
+    ASSERT(!scratch.is(left));
+    ASSERT(!scratch.is(right));
+    ASSERT(!scratch.is(result));
+
+    Label vfp_modulo, both_positive, right_negative;
+
+    // Check for x % 0.
+    if (instr->hydrogen()->CheckFlag(HValue::kCanBeDivByZero)) {
+      __ cmp(right, Operand(0));
+      DeoptimizeIf(eq, instr->environment());
+    }
+
+    __ Move(result, left);
+
+    // (0 % x) must yield 0 (if x is finite, which is the case here).
+    __ cmp(left, Operand(0));
+    __ b(eq, &done);
+    // Preload right in a vfp register.
+    __ vmov(divisor.low(), right);
+    __ b(lt, &vfp_modulo);
+
+    __ cmp(left, Operand(right));
+    __ b(lt, &done);
+
+    // Check for (positive) power of two on the right hand side.
+    __ JumpIfNotPowerOfTwoOrZeroAndNeg(right,
+                                       scratch,
+                                       &right_negative,
+                                       &both_positive);
+    // Perform modulo operation (scratch contains right - 1).
+    __ and_(result, scratch, Operand(left));
+    __ b(&done);
+
+    __ bind(&right_negative);
+    // Negate right. The sign of the divisor does not matter.
+    __ rsb(right, right, Operand(0));
+
+    __ bind(&both_positive);
+    const int kUnfolds = 3;
+    // If the right hand side is smaller than the (nonnegative)
+    // left hand side, the left hand side is the result.
+    // Else try a few subtractions of the left hand side.
+    __ mov(scratch, left);
+    for (int i = 0; i < kUnfolds; i++) {
+      // Check if the left hand side is less or equal than the
+      // the right hand side.
+      __ cmp(scratch, Operand(right));
+      __ mov(result, scratch, LeaveCC, lt);
+      __ b(lt, &done);
+      // If not, reduce the left hand side by the right hand
+      // side and check again.
+      if (i < kUnfolds - 1) __ sub(scratch, scratch, right);
+    }
+
+    __ bind(&vfp_modulo);
+    // Load the arguments in VFP registers.
+    // The divisor value is preloaded before. Be careful that 'right'
+    // is only live on entry.
+    __ vmov(dividend.low(), left);
+    // From here on don't use right as it may have been reallocated
+    // (for example to scratch2).
+    right = no_reg;
+
+    __ vcvt_f64_s32(dividend, dividend.low());
+    __ vcvt_f64_s32(divisor, divisor.low());
+
+    // We do not care about the sign of the divisor.
+    __ vabs(divisor, divisor);
+    // Compute the quotient and round it to a 32bit integer.
+    __ vdiv(quotient, dividend, divisor);
+    __ vcvt_s32_f64(quotient.low(), quotient);
+    __ vcvt_f64_s32(quotient, quotient.low());
+
+    // Compute the remainder in result.
+    DwVfpRegister double_scratch = dividend;
+    __ vmul(double_scratch, divisor, quotient);
+    __ vcvt_s32_f64(double_scratch.low(), double_scratch);
+    __ vmov(scratch, double_scratch.low());
+
+    if (!instr->hydrogen()->CheckFlag(HValue::kBailoutOnMinusZero)) {
+      __ sub(result, left, scratch);
+    } else {
+      Label ok;
+      // Check for -0.
+      __ sub(scratch2, left, scratch, SetCC);
+      __ b(ne, &ok);
+      __ cmp(left, Operand(0));
+      DeoptimizeIf(mi, instr->environment());
+      __ bind(&ok);
+      // Load the result and we are done.
+      __ mov(result, scratch2);
+    }
+  }
   __ bind(&done);
 }
 
@@ -3476,27 +3499,22 @@ void LCodeGen::DoMathAbs(LUnaryMathOperation* instr) {
 void LCodeGen::DoMathFloor(LUnaryMathOperation* instr) {
   DoubleRegister input = ToDoubleRegister(instr->value());
   Register result = ToRegister(instr->result());
-  SwVfpRegister single_scratch = double_scratch0().low();
-  Register scratch1 = scratch0();
-  Register scratch2 = ToRegister(instr->temp());
+  Register scratch = scratch0();
 
   __ EmitVFPTruncate(kRoundToMinusInf,
-                     single_scratch,
+                     result,
                      input,
-                     scratch1,
-                     scratch2);
+                     scratch,
+                     double_scratch0());
   DeoptimizeIf(ne, instr->environment());
-
-  // Move the result back to general purpose register r0.
-  __ vmov(result, single_scratch);
 
   if (instr->hydrogen()->CheckFlag(HValue::kBailoutOnMinusZero)) {
     // Test for -0.
     Label done;
     __ cmp(result, Operand(0));
     __ b(ne, &done);
-    __ vmov(scratch1, input.high());
-    __ tst(scratch1, Operand(HeapNumber::kSignMask));
+    __ vmov(scratch, input.high());
+    __ tst(scratch, Operand(HeapNumber::kSignMask));
     DeoptimizeIf(ne, instr->environment());
     __ bind(&done);
   }
@@ -3506,6 +3524,7 @@ void LCodeGen::DoMathFloor(LUnaryMathOperation* instr) {
 void LCodeGen::DoMathRound(LUnaryMathOperation* instr) {
   DoubleRegister input = ToDoubleRegister(instr->value());
   Register result = ToRegister(instr->result());
+  DwVfpRegister double_scratch1 = ToDoubleRegister(instr->temp());
   Register scratch = scratch0();
   Label done, check_sign_on_zero;
 
@@ -3548,12 +3567,11 @@ void LCodeGen::DoMathRound(LUnaryMathOperation* instr) {
   }
 
   __ EmitVFPTruncate(kRoundToMinusInf,
-                     double_scratch0().low(),
-                     double_scratch0(),
                      result,
-                     scratch);
+                     double_scratch0(),
+                     scratch,
+                     double_scratch1);
   DeoptimizeIf(ne, instr->environment());
-  __ vmov(result, double_scratch0().low());
 
   if (instr->hydrogen()->CheckFlag(HValue::kBailoutOnMinusZero)) {
     // Test for -0.
@@ -4579,7 +4597,7 @@ void LCodeGen::DoDeferredTaggedToI(LTaggedToI* instr) {
   Register scratch1 = scratch0();
   Register scratch2 = ToRegister(instr->temp());
   DwVfpRegister double_scratch = double_scratch0();
-  SwVfpRegister single_scratch = double_scratch.low();
+  DwVfpRegister double_scratch2 = ToDoubleRegister(instr->temp3());
 
   ASSERT(!scratch1.is(input_reg) && !scratch1.is(scratch2));
   ASSERT(!scratch2.is(input_reg) && !scratch2.is(scratch1));
@@ -4599,7 +4617,7 @@ void LCodeGen::DoDeferredTaggedToI(LTaggedToI* instr) {
 
   if (instr->truncating()) {
     Register scratch3 = ToRegister(instr->temp2());
-    DwVfpRegister double_scratch2 = ToDoubleRegister(instr->temp3());
+    SwVfpRegister single_scratch = double_scratch.low();
     ASSERT(!scratch3.is(input_reg) &&
            !scratch3.is(scratch1) &&
            !scratch3.is(scratch2));
@@ -4634,14 +4652,12 @@ void LCodeGen::DoDeferredTaggedToI(LTaggedToI* instr) {
     __ sub(ip, input_reg, Operand(kHeapObjectTag));
     __ vldr(double_scratch, ip, HeapNumber::kValueOffset);
     __ EmitVFPTruncate(kRoundToZero,
-                       single_scratch,
+                       input_reg,
                        double_scratch,
                        scratch1,
-                       scratch2,
+                       double_scratch2,
                        kCheckForInexactConversion);
     DeoptimizeIf(ne, instr->environment());
-    // Load the result.
-    __ vmov(input_reg, single_scratch);
 
     if (instr->hydrogen()->CheckFlag(HValue::kBailoutOnMinusZero)) {
       __ cmp(input_reg, Operand(0));
@@ -4705,12 +4721,12 @@ void LCodeGen::DoDoubleToI(LDoubleToI* instr) {
   Register scratch1 = scratch0();
   Register scratch2 = ToRegister(instr->temp());
   DwVfpRegister double_input = ToDoubleRegister(instr->value());
-  SwVfpRegister single_scratch = double_scratch0().low();
 
   Label done;
 
   if (instr->truncating()) {
     Register scratch3 = ToRegister(instr->temp2());
+    SwVfpRegister single_scratch = double_scratch0().low();
     __ EmitECMATruncate(result_reg,
                         double_input,
                         single_scratch,
@@ -4718,18 +4734,17 @@ void LCodeGen::DoDoubleToI(LDoubleToI* instr) {
                         scratch2,
                         scratch3);
   } else {
-    VFPRoundingMode rounding_mode = kRoundToMinusInf;
-    __ EmitVFPTruncate(rounding_mode,
-                       single_scratch,
+    DwVfpRegister double_scratch = double_scratch0();
+    __ EmitVFPTruncate(kRoundToMinusInf,
+                       result_reg,
                        double_input,
                        scratch1,
-                       scratch2,
+                       double_scratch,
                        kCheckForInexactConversion);
+
     // Deoptimize if we had a vfp invalid exception,
     // including inexact operation.
     DeoptimizeIf(ne, instr->environment());
-    // Retrieve the result.
-    __ vmov(result_reg, single_scratch);
   }
     __ bind(&done);
 }

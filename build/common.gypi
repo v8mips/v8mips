@@ -302,9 +302,14 @@
           ['_toolset=="target"', {
             'variables': {
               'm32flag': '<!((echo | $(echo ${CXX_target:-${CXX:-$(which g++)}}) -m32 -E - > /dev/null 2>&1) && echo "-m32" || true)',
+              'clang%': 0,
             },
-            'cflags': [ '<(m32flag)' ],
-            'ldflags': [ '<(m32flag)' ],
+            'conditions': [
+              ['OS!="android" or clang==1', {
+                'cflags': [ '<(m32flag)' ],
+                'ldflags': [ '<(m32flag)' ],
+              }],
+            ],
             'xcode_settings': {
               'ARCHS': [ 'i386' ],
             },
@@ -346,6 +351,7 @@
           ['OS=="linux" or OS=="freebsd" or OS=="openbsd" or OS=="netbsd"', {
             'cflags': [ '-Wall', '<(werror)', '-W', '-Wno-unused-parameter',
                         '-Wnon-virtual-dtor', '-Woverloaded-virtual' ],
+            'defines': ['ENABLE_GDB_JIT_INTERFACE',],
           }],
           ['OS=="android"', {
             'variables': {

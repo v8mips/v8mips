@@ -53,6 +53,7 @@ class LChunkBuilder;
 
 
 #define HYDROGEN_ABSTRACT_INSTRUCTION_LIST(V)  \
+  V(BinaryOperation)                           \
   V(BitwiseBinaryOperation)                    \
   V(ControlInstruction)                        \
   V(Instruction)                               \
@@ -2677,6 +2678,8 @@ class HBinaryOperation: public HTemplateInstruction<3> {
   virtual bool IsCommutative() const { return false; }
 
   virtual void PrintDataTo(StringStream* stream);
+
+  DECLARE_ABSTRACT_INSTRUCTION(BinaryOperation)
 };
 
 
@@ -4661,10 +4664,6 @@ class HTransitionElementsKind: public HTemplateInstruction<1> {
         transitioned_map_(transitioned_map) {
     SetOperandAt(0, object);
     SetFlag(kUseGVN);
-    // Don't set GVN DependOn flags here. That would defeat GVN's detection of
-    // congruent HTransitionElementsKind instructions. Instruction hoisting
-    // handles HTransitionElementsKind instruction specially, explicitly adding
-    // DependsOn flags during its dependency calculations.
     SetGVNFlag(kChangesElementsKind);
     if (original_map->has_fast_double_elements()) {
       SetGVNFlag(kChangesElementsPointer);

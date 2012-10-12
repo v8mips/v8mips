@@ -34,7 +34,6 @@ import threading
 
 from . import compression
 from . import constants
-from . import discovery
 from . import signatures
 from ..network import endpoint
 from ..objects import workpacket
@@ -77,7 +76,7 @@ class WorkHandler(SocketServer.BaseRequestHandler):
   def _SendResponse(self, error_message=None):
     try:
       if error_message:
-        compression.Send([-1, error_message], self.request)
+        compression.Send([[-1, error_message]], self.request)
       compression.Send(constants.END_OF_STREAM, self.request)
       return
     except Exception, e:
@@ -103,11 +102,22 @@ class WorkHandler(SocketServer.BaseRequestHandler):
     os.chmod(target, stat.S_IRWXU)
     return True
 
-  def _CheckoutRevision(self, base_revision):
-    code = self._Call("git checkout -f %s" % base_revision)
-    if code != 0:
+  def _CheckoutRevision(self, base_svn_revision):
+    get_hash_cmd = (
+        "git log -1 --format=%%H --remotes --grep='^git-svn-id:.*@%s'" %
+        base_svn_revision)
+    try:
+      base_revision = subprocess.check_output(get_hash_cmd, shell=True)
+      if not base_revision: raise ValueError
+    except:
       self._Call("git fetch")
-      code = self._Call("git checkout -f %s" % base_revision)
+      try:
+        base_revision = subprocess.check_output(get_hash_cmd, shell=True)
+        if not base_revision: raise ValueError
+      except:
+        self._SendResponse("Base revision not found.")
+        return False
+    code = self._Call("git checkout -f %s" % base_revision)
     if code != 0:
       self._SendResponse("Error trying to check out base revision.")
       return False
@@ -118,6 +128,7 @@ class WorkHandler(SocketServer.BaseRequestHandler):
     return True
 
   def _ApplyPatch(self, patch):
+    if not patch: return True  # Just skip if the patch is empty.
     patchfilename = "_dtest_incoming_patch.patch"
     with open(patchfilename, "w") as f:
       f.write(patch)

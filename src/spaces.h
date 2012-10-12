@@ -400,15 +400,6 @@ class MemoryChunk {
     WAS_SWEPT_PRECISELY,
     WAS_SWEPT_CONSERVATIVELY,
 
-    // Used for large objects only.  Indicates that the object has been
-    // partially scanned by the incremental mark-sweep GC.  Objects that have
-    // been partially scanned are marked black so that the write barrier
-    // triggers for them, and they are counted as live bytes.  If the mutator
-    // writes to them they may be turned grey and subtracted from the live byte
-    // list.  They move back to the marking deque either by an iteration over
-    // the large object space or in the write barrier.
-    IS_PARTIALLY_SCANNED,
-
     // Last flag, keep at bottom.
     NUM_MEMORY_CHUNK_FLAGS
   };
@@ -429,25 +420,6 @@ class MemoryChunk {
       (1 << IN_FROM_SPACE) |
       (1 << IN_TO_SPACE);
 
-  static const int kIsPartiallyScannedMask = 1 << IS_PARTIALLY_SCANNED;
-
-  void SetPartiallyScannedProgress(int progress) {
-    SetFlag(IS_PARTIALLY_SCANNED);
-    partially_scanned_progress_ = progress;
-  }
-
-  bool IsPartiallyScanned() {
-    return IsFlagSet(IS_PARTIALLY_SCANNED);
-  }
-
-  void SetCompletelyScanned() {
-    ClearFlag(IS_PARTIALLY_SCANNED);
-  }
-
-  int PartiallyScannedProgress() {
-    ASSERT(IsPartiallyScanned());
-    return partially_scanned_progress_;
-  }
 
   void SetFlag(int flag) {
     flags_ |= static_cast<uintptr_t>(1) << flag;
@@ -534,14 +506,8 @@ class MemoryChunk {
 
   static const size_t kWriteBarrierCounterOffset =
       kSlotsBufferOffset + kPointerSize + kPointerSize;
-  static const size_t kPartiallyScannedProgress =
-      kWriteBarrierCounterOffset + kPointerSize;
 
-  // Actually the partially_scanned_progress_ member is only an int, but on
-  // 64 bit the size of MemoryChunk gets rounded up to a 64 bit size so we
-  // have to have the header start kPointerSize after the
-  // partially_scanned_progress_ member.
-  static const size_t kHeaderSize = kPartiallyScannedProgress + kPointerSize;
+  static const size_t kHeaderSize = kWriteBarrierCounterOffset + kPointerSize;
 
   static const int kBodyOffset =
     CODE_POINTER_ALIGN(MAP_POINTER_ALIGN(kHeaderSize + Bitmap::kSize));
@@ -653,8 +619,6 @@ class MemoryChunk {
     return static_cast<int>(area_end() - area_start());
   }
 
-  size_t CommittedPhysicalMemory();
-
  protected:
   MemoryChunk* next_chunk_;
   MemoryChunk* prev_chunk_;
@@ -680,7 +644,6 @@ class MemoryChunk {
   SlotsBuffer* slots_buffer_;
   SkipList* skip_list_;
   intptr_t write_barrier_counter_;
-  int partially_scanned_progress_;
 
   static MemoryChunk* Initialize(Heap* heap,
                                  Address base,
@@ -1530,9 +1493,6 @@ class PagedSpace : public Space {
   // spaces this equals the capacity.
   intptr_t CommittedMemory() { return Capacity(); }
 
-  // Total amount of physical memory committed for this space.
-  size_t CommittedPhysicalMemory();
-
   // Sets the capacity, the available space and the wasted space to zero.
   // The stats are rebuilt during sweeping by adding each page to the
   // capacity and the size when it is encountered.  As free spaces are
@@ -1999,8 +1959,6 @@ class SemiSpace : public Space {
 
   static void Swap(SemiSpace* from, SemiSpace* to);
 
-  size_t CommittedPhysicalMemory();
-
  private:
   // Flips the semispace between being from-space and to-space.
   // Copies the flags into the masked positions on all pages in the space.
@@ -2196,12 +2154,6 @@ class NewSpace : public Space {
   intptr_t CommittedMemory() {
     if (from_space_.is_committed()) return 2 * Capacity();
     return Capacity();
-  }
-
-  size_t CommittedPhysicalMemory() {
-    return to_space_.CommittedPhysicalMemory()
-        + (from_space_.is_committed() ? from_space_.CommittedPhysicalMemory()
-                                      : 0);
   }
 
   // Return the available bytes without growing.
@@ -2570,8 +2522,6 @@ class LargeObjectSpace : public Space {
   intptr_t CommittedMemory() {
     return Size();
   }
-
-  size_t CommittedPhysicalMemory();
 
   int PageCount() {
     return page_count_;

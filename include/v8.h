@@ -2766,7 +2766,6 @@ class V8EXPORT HeapStatistics {
   HeapStatistics();
   size_t total_heap_size() { return total_heap_size_; }
   size_t total_heap_size_executable() { return total_heap_size_executable_; }
-  size_t total_physical_size() { return total_physical_size_; }
   size_t used_heap_size() { return used_heap_size_; }
   size_t heap_size_limit() { return heap_size_limit_; }
 
@@ -2775,15 +2774,11 @@ class V8EXPORT HeapStatistics {
   void set_total_heap_size_executable(size_t size) {
     total_heap_size_executable_ = size;
   }
-  void set_total_physical_size(size_t size) {
-    total_physical_size_ = size;
-  }
   void set_used_heap_size(size_t size) { used_heap_size_ = size; }
   void set_heap_size_limit(size_t size) { heap_size_limit_ = size; }
 
   size_t total_heap_size_;
   size_t total_heap_size_executable_;
-  size_t total_physical_size_;
   size_t used_heap_size_;
   size_t heap_size_limit_;
 
@@ -4071,7 +4066,7 @@ class Internals {
   static const int kNullValueRootIndex = 7;
   static const int kTrueValueRootIndex = 8;
   static const int kFalseValueRootIndex = 9;
-  static const int kEmptySymbolRootIndex = 116;
+  static const int kEmptySymbolRootIndex = 117;
 
   static const int kJSObjectType = 0xaa;
   static const int kFirstNonstringType = 0x80;
