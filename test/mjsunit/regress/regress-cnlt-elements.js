@@ -1,4 +1,4 @@
-// Copyright 2010 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -25,23 +25,19 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// Test that there is a limit of 131071 locals.
+// Flags: --expose-gc
 
-// Flags: --stack-size=1200
-
-function function_with_n_locals(n) {
-  test_prefix = "prefix ";
-  test_suffix = " suffix";
-  var src = "test_prefix + (function () {"
-  for (var i = 1; i <= n; i++) {
-    src += "var x" + i + ";";
-  }
-  src += "return " + n + ";})() + test_suffix";
-  return eval(src);
-}
-
-assertEquals("prefix 0 suffix", function_with_n_locals(0));
-assertEquals("prefix 16000 suffix", function_with_n_locals(16000));
-assertEquals("prefix 131071 suffix", function_with_n_locals(131071));
-
-assertThrows("function_with_n_locals(131072)");
+var a = JSON.parse('{"b":1,"c":2,"d":3,"e":4}');
+var b = JSON.parse('{"12040200":1, "a":2, "b":2}');
+var c = JSON.parse('{"24050300":1}');
+b = null;
+gc();
+gc();
+c.a1 = 2;
+c.a2 = 2;
+c.a3 = 2;
+c.a4 = 2;
+c.a5 = 2;
+c.a6 = 2;
+c.a7 = 2;
+c.a8 = 2;

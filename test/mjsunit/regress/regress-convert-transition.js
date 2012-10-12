@@ -1,4 +1,4 @@
-// Copyright 2010 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -25,23 +25,16 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// Test that there is a limit of 131071 locals.
+var input = '{ "a1":1, "a2":1, "a3":1, "a4":1, "a5":1, "a6":1, "a7":1,\
+               "a8":1, "a9":1, "a10":1, "a11":1, "a12":1, "a13":1}';
+var a = JSON.parse(input);
+a.a = function() { return 10; };
 
-// Flags: --stack-size=1200
+// Force conversion of field to slow mode.
+var b = JSON.parse(input);
+b.a = 10;
 
-function function_with_n_locals(n) {
-  test_prefix = "prefix ";
-  test_suffix = " suffix";
-  var src = "test_prefix + (function () {"
-  for (var i = 1; i <= n; i++) {
-    src += "var x" + i + ";";
-  }
-  src += "return " + n + ";})() + test_suffix";
-  return eval(src);
-}
-
-assertEquals("prefix 0 suffix", function_with_n_locals(0));
-assertEquals("prefix 16000 suffix", function_with_n_locals(16000));
-assertEquals("prefix 131071 suffix", function_with_n_locals(131071));
-
-assertThrows("function_with_n_locals(131072)");
+// Add another property to the object that would transition to a.
+var c = JSON.parse(input);
+c.x = 10;
+assertEquals(undefined, c.a);

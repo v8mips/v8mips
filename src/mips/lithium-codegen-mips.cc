@@ -3362,9 +3362,9 @@ void LCodeGen::DoPower(LPower* instr) {
   Representation exponent_type = instr->hydrogen()->right()->representation();
   // Having marked this as a call, we can use any registers.
   // Just make sure that the input/output registers are the expected ones.
-  ASSERT(!instr->InputAt(1)->IsDoubleRegister() ||
+  ASSERT(!instr->right()->IsDoubleRegister() ||
          ToDoubleRegister(instr->right()).is(f4));
-  ASSERT(!instr->InputAt(1)->IsRegister() ||
+  ASSERT(!instr->right()->IsRegister() ||
          ToRegister(instr->right()).is(a2));
   ASSERT(ToDoubleRegister(instr->left()).is(f2));
   ASSERT(ToDoubleRegister(instr->result()).is(f0));
