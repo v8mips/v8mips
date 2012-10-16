@@ -3304,6 +3304,7 @@ void MacroAssembler::CopyBytes(Register src,
 
   // TODO(kalmard) check if this can be optimized to use sw in most cases.
   // Can't use unaligned access - copy byte by byte.
+#if __BYTE_ORDER == __LITTLE_ENDIAN
   sb(scratch, MemOperand(dst, 0));
   srl(scratch, scratch, 8);
   sb(scratch, MemOperand(dst, 1));
@@ -3311,6 +3312,16 @@ void MacroAssembler::CopyBytes(Register src,
   sb(scratch, MemOperand(dst, 2));
   srl(scratch, scratch, 8);
   sb(scratch, MemOperand(dst, 3));
+#else
+  sb(scratch, MemOperand(dst, 3));
+  srl(scratch, scratch, 8);
+  sb(scratch, MemOperand(dst, 2));
+  srl(scratch, scratch, 8);
+  sb(scratch, MemOperand(dst, 1));
+  srl(scratch, scratch, 8);
+  sb(scratch, MemOperand(dst, 0));
+#endif
+
   Addu(dst, dst, 4);
 
   Subu(length, length, Operand(kPointerSize));
@@ -3416,9 +3427,15 @@ void MacroAssembler::StoreNumberToDoubleElements(Register value_reg,
   bind(&have_double_value);
   sll(scratch1, key_reg, kDoubleSizeLog2 - kSmiTagSize);
   Addu(scratch1, scratch1, elements_reg);
+#ifndef BIG_ENDIAN_FLOATING_POINT
   sw(mantissa_reg, FieldMemOperand(scratch1, FixedDoubleArray::kHeaderSize));
   uint32_t offset = FixedDoubleArray::kHeaderSize + sizeof(kHoleNanLower32);
   sw(exponent_reg, FieldMemOperand(scratch1, offset));
+#else
+  sw(exponent_reg, FieldMemOperand(scratch1, FixedDoubleArray::kHeaderSize));
+  uint32_t offset = FixedDoubleArray::kHeaderSize + sizeof(kHoleNanLower32);
+  sw(mantissa_reg, FieldMemOperand(scratch1, offset));
+#endif
   jmp(&done);
 
   bind(&maybe_nan);
@@ -3463,8 +3480,13 @@ void MacroAssembler::StoreNumberToDoubleElements(Register value_reg,
     CpuFeatures::Scope scope(FPU);
     sdc1(f0, MemOperand(scratch1, 0));
   } else {
+#ifndef BIG_ENDIAN_FLOATING_POINT
     sw(mantissa_reg, MemOperand(scratch1, 0));
     sw(exponent_reg, MemOperand(scratch1, Register::kSizeInBytes));
+#else
+    sw(exponent_reg, MemOperand(scratch1, 0));
+    sw(mantissa_reg, MemOperand(scratch1, Register::kSizeInBytes));
+#endif
   }
   bind(&done);
 }
