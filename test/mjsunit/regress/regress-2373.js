@@ -25,14 +25,5 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// Test that we invoke the correct sort function in
-// array operations.
-
-var foo =  "hest";
-Array.prototype.sort = function(fn) { foo = "fisk"; };
-Function.prototype.call = function() { foo = "caramel"; };
-var a = [2,3,1];
-a[100000] = 0;
-a.join();
-assertEquals("hest", foo);
-
+var o = JSON.parse('{"a":2600753951}');
+assertEquals(2600753951, o.a);

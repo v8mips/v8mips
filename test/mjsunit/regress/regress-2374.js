@@ -25,14 +25,9 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// Test that we invoke the correct sort function in
-// array operations.
+var msg = '{"result":{"profile":{"head":{"functionName":"(root)","url":"","lineNumber":0,"totalTime":495.7243772462511,"selfTime":0,"numberOfCalls":0,"visible":true,"callUID":2771605942,"children":[{"functionName":"(program)","url":"","lineNumber":0,"totalTime":495.7243772462511,"selfTime":495.7243772462511,"numberOfCalls":0,"visible":true,"callUID":1902715303,"children":[]}]},"bottomUpHead":{"functionName":"(root)","url":"","lineNumber":0,"totalTime":495.7243772462511,"selfTime":0,"numberOfCalls":0,"visible":true,"callUID":2771605942,"children":[{"functionName":"(program)","url":"","lineNumber":0,"totalTime":495.7243772462511,"selfTime":495.7243772462511,"numberOfCalls":0,"visible":true,"callUID":1902715303,"children":[]}]}}},"id":41}';
 
-var foo =  "hest";
-Array.prototype.sort = function(fn) { foo = "fisk"; };
-Function.prototype.call = function() { foo = "caramel"; };
-var a = [2,3,1];
-a[100000] = 0;
-a.join();
-assertEquals("hest", foo);
+var obj = JSON.parse(msg);
+var obj2 = JSON.parse(msg);
 
+assertEquals(JSON.stringify(obj), JSON.stringify(obj2));

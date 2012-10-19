@@ -1389,6 +1389,8 @@ class Integer : public Number {
  public:
   V8EXPORT static Local<Integer> New(int32_t value);
   V8EXPORT static Local<Integer> NewFromUnsigned(uint32_t value);
+  V8EXPORT static Local<Integer> New(int32_t value, Isolate*);
+  V8EXPORT static Local<Integer> NewFromUnsigned(uint32_t value, Isolate*);
   V8EXPORT int64_t Value() const;
   static inline Integer* Cast(v8::Value* obj);
  private:
@@ -2658,7 +2660,7 @@ bool V8EXPORT SetResourceConstraints(ResourceConstraints* constraints);
 typedef void (*FatalErrorCallback)(const char* location, const char* message);
 
 
-typedef void (*MessageCallback)(Handle<Message> message, Handle<Value> data);
+typedef void (*MessageCallback)(Handle<Message> message, Handle<Value> error);
 
 
 /**
@@ -3101,8 +3103,7 @@ class V8EXPORT V8 {
    * The same message listener can be added more than once and in that
    * case it will be called more than once for each message.
    */
-  static bool AddMessageListener(MessageCallback that,
-                                 Handle<Value> data = Handle<Value>());
+  static bool AddMessageListener(MessageCallback that);
 
   /**
    * Remove all message listeners from the specified callback function.

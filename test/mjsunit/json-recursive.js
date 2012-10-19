@@ -25,14 +25,20 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// Test that we invoke the correct sort function in
-// array operations.
 
-var foo =  "hest";
-Array.prototype.sort = function(fn) { foo = "fisk"; };
-Function.prototype.call = function() { foo = "caramel"; };
-var a = [2,3,1];
-a[100000] = 0;
-a.join();
-assertEquals("hest", foo);
+var a = {};
+for (i = 0; i < 10000; i++) {
+  var current = {};
+  current.a = a;
+  a = current;
+}
+
+function rec(a,b,c,d,e,f,g,h,i,j,k,l,m,n) {
+  JSON.stringify(a);
+  rec(a,b,c,d,e,f,g,h,i,j,k,l,m,n);
+}
+
+assertThrows(
+    function() { rec(1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4) },
+    RangeError);
 
