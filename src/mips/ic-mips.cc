@@ -1315,7 +1315,7 @@ static void KeyedStoreGenerateGenericHelper(
   __ bind(&transition_double_elements);
   // Elements are FAST_DOUBLE_ELEMENTS, but value is an Object that's not a
   // HeapNumber. Make sure that the receiver is a Array with FAST_ELEMENTS and
- // transition array from FAST_DOUBLE_ELEMENTS to FAST_ELEMENTS
+  // transition array from FAST_DOUBLE_ELEMENTS to FAST_ELEMENTS
   __ LoadTransitionedArrayMapConditional(FAST_DOUBLE_ELEMENTS,
                                          FAST_ELEMENTS,
                                          receiver_map,
@@ -1385,7 +1385,7 @@ void KeyedStoreIC::GenerateGeneric(MacroAssembler* masm,
   // element to the array by writing to array[array.length].
   __ bind(&extra);
   // Condition code from comparing key and array length is still available.
-  // Only support writing to writing to array[array.length].
+  // Only support writing to array[array.length].
   __ Branch(&slow, ne, key, Operand(t0));
   // Check for room in the elements backing store.
   // Both the key and the length of FixedArray are smis.
@@ -1412,7 +1412,7 @@ void KeyedStoreIC::GenerateGeneric(MacroAssembler* masm,
   __ Branch(&extra, hs, key, Operand(t0));
 
   KeyedStoreGenerateGenericHelper(masm, &fast_object, &fast_double,
-                                 &slow, kCheckMap, kDontIncrementLength,
+                                  &slow, kCheckMap, kDontIncrementLength,
                                   value, key, receiver, receiver_map,
                                   elements_map, elements);
   KeyedStoreGenerateGenericHelper(masm, &fast_object_grow, &fast_double_grow,
