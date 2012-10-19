@@ -2004,7 +2004,7 @@ void LCodeGen::DoGetCachedArrayIndex(LGetCachedArrayIndex* instr) {
   Register input = ToRegister(instr->value());
   Register result = ToRegister(instr->result());
 
-  __ AbortIfNotString(input);
+  __ AssertString(input);
 
   __ lw(result, FieldMemOperand(input, String::kHashFieldOffset));
   __ IndexFromHash(result, result);
@@ -2612,14 +2612,6 @@ void LCodeGen::DoAccessArgumentsAt(LAccessArgumentsAt* instr) {
   Register length = ToRegister(instr->length());
   Register index = ToRegister(instr->index());
   Register result = ToRegister(instr->result());
-
-  // Bailout index is not a valid argument index. Use unsigned check to get
-  // negative check for free.
-
-  // TODO(plind): Shoud be optimized to do the sub before the DeoptimizeIf(),
-  // as they do in Arm. It will save us an instruction.
-  DeoptimizeIf(ls, instr->environment(), length, Operand(index));
-
   // There are two words between the frame pointer and the last argument.
   // Subtracting from length accounts for one of them, add one more.
   __ subu(length, length, index);
@@ -4028,9 +4020,7 @@ void LCodeGen::DoDeferredStringCharCodeAt(LStringCharCodeAt* instr) {
     __ push(index);
   }
   CallRuntimeFromDeferred(Runtime::kStringCharCodeAt, 2, instr);
-  if (FLAG_debug_code) {
-    __ AbortIfNotSmi(v0);
-  }
+  __ AssertSmi(v0);
   __ SmiUntag(v0);
   __ StoreToSafepointRegisterSlot(v0, result);
 }
