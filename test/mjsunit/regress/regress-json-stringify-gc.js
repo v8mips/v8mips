@@ -25,32 +25,17 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-
-var a = {};
-for (i = 0; i < 10000; i++) {
-  var current = {};
-  current.a = a;
-  a = current;
+var a = [];
+var new_space_string = "";
+for (var i = 0; i < 128; i++) {
+  new_space_string += String.fromCharCode((Math.random() * 26 + 65) | 0);
 }
+for (var i = 0; i < 10000; i++) a.push(new_space_string);
 
-function rec(a,b,c,d,e,f,g,h,i,j,k,l,m,n) {
-  JSON.stringify(a);
-  rec(a,b,c,d,e,f,g,h,i,j,k,l,m,n);
-}
+// At some point during the first stringify, allocation causes a GC and
+// new_space_string is moved to old space. Make sure that this does not
+// screw up reading from the correct location.
+json1 = JSON.stringify(a);
+json2 = JSON.stringify(a);
+assertEquals(json1, json2);
 
-assertThrows(function() { rec(1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4) },
-             RangeError);
-
-
-var deepArray = [];
-for (var i = 0; i < 2048; i++) deepArray = [deepArray];
-JSON.stringify(deepArray);
-for (var i = 2048; i < 4097; i++) deepArray = [deepArray];
-assertThrows(function() { JSON.stringify(deepArray); }, RangeError);
-
-
-var deepObject = {};
-for (var i = 0; i < 2048; i++) deepObject = { next: deepObject };
-JSON.stringify(deepObject);
-for (var i = 2048; i < 4097; i++) deepObject = { next: deepObject };
-assertThrows(function() { JSON.stringify(deepObject); }, RangeError);

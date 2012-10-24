@@ -212,6 +212,20 @@ intptr_t Heap::CommittedMemory() {
       lo_space_->Size();
 }
 
+
+size_t Heap::CommittedPhysicalMemory() {
+  if (!HasBeenSetUp()) return 0;
+
+  return new_space_.CommittedPhysicalMemory() +
+      old_pointer_space_->CommittedPhysicalMemory() +
+      old_data_space_->CommittedPhysicalMemory() +
+      code_space_->CommittedPhysicalMemory() +
+      map_space_->CommittedPhysicalMemory() +
+      cell_space_->CommittedPhysicalMemory() +
+      lo_space_->CommittedPhysicalMemory();
+}
+
+
 intptr_t Heap::CommittedMemoryExecutable() {
   if (!HasBeenSetUp()) return 0;
 
@@ -405,6 +419,14 @@ void Heap::GarbageCollectionPrologue() {
   ClearJSFunctionResultCaches();
   gc_count_++;
   unflattened_strings_length_ = 0;
+
+  bool should_enable_code_flushing = FLAG_flush_code;
+#ifdef ENABLE_DEBUGGER_SUPPORT
+  if (isolate_->debug()->IsLoaded() || isolate_->debug()->has_break_points()) {
+    should_enable_code_flushing = false;
+  }
+#endif
+  mark_compact_collector()->EnableCodeFlushing(should_enable_code_flushing);
 
 #ifdef VERIFY_HEAP
   if (FLAG_verify_heap) {
@@ -2713,7 +2735,7 @@ bool Heap::CreateInitialObjects() {
   // hash code in place. The hash code for the hidden_symbol is zero to ensure
   // that it will always be at the first entry in property descriptors.
   { MaybeObject* maybe_obj =
-        AllocateSymbol(CStrVector(""), 0, String::kZeroHash);
+        AllocateSymbol(CStrVector(""), 0, String::kEmptyStringHash);
     if (!maybe_obj->ToObject(&obj)) return false;
   }
   hidden_symbol_ = String::cast(obj);

@@ -134,6 +134,11 @@
           'V8_TARGET_ARCH_ARM',
         ],
         'conditions': [
+          ['armv7==1', {
+            'defines': [
+              'CAN_USE_ARMV7_INSTRUCTIONS=1',
+            ],
+          }],
           [ 'v8_can_use_unaligned_accesses=="true"', {
             'defines': [
               'CAN_USE_UNALIGNED_ACCESSES=1',
@@ -175,6 +180,11 @@
         'defines': [
           'V8_TARGET_ARCH_IA32',
         ],
+        'msvs_settings': {
+          'VCLinkerTool': {
+            'StackReserveSize': '4194304',
+          },
+        },
       }],  # v8_target_arch=="ia32"
       ['v8_target_arch=="mipsel"', {
         'defines': [
@@ -242,7 +252,7 @@
         },
         'msvs_settings': {
           'VCLinkerTool': {
-            'StackReserveSize': '2097152',
+            'StackReserveSize': '8388608',
           },
         },
         'msvs_configuration_platform': 'x64',
