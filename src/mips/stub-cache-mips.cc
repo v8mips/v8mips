@@ -2149,7 +2149,7 @@ Handle<Code> CallStubCompiler::CompileMathFloorCall(
 
   // Start checking for special cases.
   // Get the argument exponent and clear the sign bit.
-  __ lw(t1, FieldMemOperand(v0, HeapNumber::kValueOffset + kPointerSize));
+  __ lw(t1, FieldMemOperand(v0, HeapNumber::kExponentOffset));
   __ And(t2, t1, Operand(~HeapNumber::kSignMask));
   __ srl(t2, t2, HeapNumber::kMantissaBitsInTopWord);
 
@@ -3670,8 +3670,8 @@ void KeyedLoadStubCompiler::GenerateLoadExternalArray(
         __ ldc1(f0, MemOperand(t3, 0));
       } else {
         // t3: pointer to the beginning of the double we want to load.
-        __ lw(a2, MemOperand(t3, 0));
-        __ lw(a3, MemOperand(t3, Register::kSizeInBytes));
+        __ lw(a2, MemOperand(t3, Register::kMantissaOffset));
+        __ lw(a3, MemOperand(t3, Register::kExponentOffset));
       }
       break;
     case FAST_ELEMENTS:
@@ -4034,8 +4034,8 @@ void KeyedStoreStubCompiler::GenerateStoreExternalArray(
         CpuFeatures::Scope scope(FPU);
         __ sdc1(f0, MemOperand(a3, 0));
       } else {
-        __ sw(t2, MemOperand(a3, 0));
-        __ sw(t3, MemOperand(a3, Register::kSizeInBytes));
+        __ sw(t2, MemOperand(a3, Register::kMantissaOffset));
+        __ sw(t3, MemOperand(a3, Register::kExponentOffset));
       }
       break;
     case FAST_ELEMENTS:
@@ -4198,8 +4198,8 @@ void KeyedStoreStubCompiler::GenerateStoreExternalArray(
         __ sll(t8, key, 2);
         __ addu(t8, a3, t8);
         // t8: effective address of destination element.
-        __ sw(t4, MemOperand(t8, 0));
-        __ sw(t3, MemOperand(t8, Register::kSizeInBytes));
+        __ sw(t4, MemOperand(t8, Register::kMantissaOffset));
+        __ sw(t3, MemOperand(t8, Register::kExponentOffset));
         __ mov(v0, a0);
         __ Ret();
       } else {
@@ -4399,11 +4399,11 @@ void KeyedLoadStubCompiler::GenerateLoadFastDoubleElement(
   __ lw(scratch, FieldMemOperand(elements_reg, FixedArray::kLengthOffset));
   __ Branch(&miss_force_generic, hs, key_reg, Operand(scratch));
 
-  // Load the upper word of the double in the fixed array and test for NaN.
+  // Load the exponent in the fixed array and test for NaN.
   __ sll(scratch2, key_reg, kDoubleSizeLog2 - kSmiTagSize);
   __ Addu(indexed_double_offset, elements_reg, Operand(scratch2));
-  uint32_t upper_32_offset = FixedArray::kHeaderSize + sizeof(kHoleNanLower32);
-  __ lw(scratch, FieldMemOperand(indexed_double_offset, upper_32_offset));
+  __ lw(scratch, FieldMemOperand(indexed_double_offset,
+                                 FixedArray::kHeaderSize + kHoleNanUpper32Offset));
   __ Branch(&miss_force_generic, eq, scratch, Operand(kHoleNanUpper32));
 
   // Non-NaN. Allocate a new heap number and copy the double value into it.
@@ -4411,12 +4411,12 @@ void KeyedLoadStubCompiler::GenerateLoadFastDoubleElement(
   __ AllocateHeapNumber(heap_number_reg, scratch2, scratch3,
                         heap_number_map, &slow_allocate_heapnumber);
 
-  // Don't need to reload the upper 32 bits of the double, it's already in
+  // Don't need to reload the exponent (the upper 32 bits of the double), it's already in
   // scratch.
   __ sw(scratch, FieldMemOperand(heap_number_reg,
                                  HeapNumber::kExponentOffset));
   __ lw(scratch, FieldMemOperand(indexed_double_offset,
-                                 FixedArray::kHeaderSize));
+                                 FixedArray::kHeaderSize + kHoleNanLower32Offset));
   __ sw(scratch, FieldMemOperand(heap_number_reg,
                                  HeapNumber::kMantissaOffset));
 

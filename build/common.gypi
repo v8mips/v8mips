@@ -159,7 +159,7 @@
           'V8_TARGET_ARCH_IA32',
         ],
       }],  # v8_target_arch=="ia32"
-      ['v8_target_arch=="mipsel"', {
+      ['v8_target_arch=="mipsel" or v8_target_arch=="mips"', {
         'defines': [
           'V8_TARGET_ARCH_MIPS',
         ],
@@ -170,9 +170,15 @@
           ['mipscompiler=="yes"', {
             'target_conditions': [
               ['_toolset=="target"', {
-                'cflags': ['-EL'],
-                'ldflags': ['-EL'],
                 'conditions': [
+                  ['v8_target_arch=="mipsel"', {
+                    'cflags': ['-EL'],
+                    'ldflags': ['-EL'],
+                  }],
+                  ['v8_target_arch=="mips"', {
+                    'cflags': ['-EB'],
+                    'ldflags': ['-EB'],
+                  }],
                   [ 'v8_use_mips_abi_hardfloat=="true"', {
                     'cflags': ['-mhard-float'],
                     'ldflags': ['-mhard-float'],
@@ -273,7 +279,7 @@
       ['(OS=="linux" or OS=="freebsd" or OS=="openbsd" or OS=="solaris" \
          or OS=="netbsd" or OS=="mac" or OS=="android") and \
         (v8_target_arch=="arm" or v8_target_arch=="ia32" or \
-         v8_target_arch=="mipsel")', {
+         v8_target_arch=="mipsel" or v8_target_arch=="mips")', {
         # Check whether the host compiler and target compiler support the
         # '-m32' option and set it if so.
         'target_conditions': [

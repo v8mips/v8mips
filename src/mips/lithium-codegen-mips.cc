@@ -2589,7 +2589,7 @@ void LCodeGen::DoLoadKeyedFastDoubleElement(
   }
 
   if (instr->hydrogen()->RequiresHoleCheck()) {
-    __ lw(scratch, MemOperand(elements, sizeof(kHoleNanLower32)));
+    __ lw(scratch, MemOperand(elements, kHoleNanUpper32Offset));
     DeoptimizeIf(eq, instr->environment(), scratch, Operand(kHoleNanUpper32));
   }
 
@@ -4682,15 +4682,14 @@ void LCodeGen::EmitDeepCopy(Handle<JSObject> object,
           Handle<FixedDoubleArray>::cast(elements);
       for (int i = 0; i < elements_length; i++) {
         int64_t value = double_array->get_representation(i);
-        // We only support little endian mode...
         int32_t value_low = value & 0xFFFFFFFF;
         int32_t value_high = value >> 32;
         int total_offset =
             elements_offset + FixedDoubleArray::OffsetOfElementAt(i);
         __ li(a2, Operand(value_low));
-        __ sw(a2, FieldMemOperand(result, total_offset));
+        __ sw(a2, FieldMemOperand(result, total_offset + Register::kMantissaOffset));
         __ li(a2, Operand(value_high));
-        __ sw(a2, FieldMemOperand(result, total_offset + 4));
+        __ sw(a2, FieldMemOperand(result, total_offset + Register::kExponentOffset));
       }
     } else if (elements->IsFixedArray()) {
       Handle<FixedArray> fast_elements = Handle<FixedArray>::cast(elements);
