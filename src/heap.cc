@@ -1576,13 +1576,21 @@ void Heap::ProcessWeakReferences(WeakObjectRetainer* retainer) {
 void Heap::VisitExternalResources(v8::ExternalResourceVisitor* visitor) {
   AssertNoAllocation no_allocation;
 
-  class VisitorAdapter : public ObjectVisitor {
+  // Both the external string table and the symbol table may contain
+  // external strings, but neither lists them exhaustively, nor is the
+  // intersection set empty.  Therefore we iterate over the external string
+  // table first, ignoring symbols, and then over the symbol table.
+
+  class ExternalStringTableVisitorAdapter : public ObjectVisitor {
    public:
-    explicit VisitorAdapter(v8::ExternalResourceVisitor* visitor)
-        : visitor_(visitor) {}
+    explicit ExternalStringTableVisitorAdapter(
+        v8::ExternalResourceVisitor* visitor) : visitor_(visitor) {}
     virtual void VisitPointers(Object** start, Object** end) {
       for (Object** p = start; p < end; p++) {
-        if ((*p)->IsExternalString()) {
+        // Visit non-symbol external strings,
+        // since symbols are listed in the symbol table.
+        if (!(*p)->IsSymbol()) {
+          ASSERT((*p)->IsExternalString());
           visitor_->VisitExternalString(Utils::ToLocal(
               Handle<String>(String::cast(*p))));
         }
@@ -1590,8 +1598,28 @@ void Heap::VisitExternalResources(v8::ExternalResourceVisitor* visitor) {
     }
    private:
     v8::ExternalResourceVisitor* visitor_;
-  } visitor_adapter(visitor);
-  external_string_table_.Iterate(&visitor_adapter);
+  } external_string_table_visitor(visitor);
+
+  external_string_table_.Iterate(&external_string_table_visitor);
+
+  class SymbolTableVisitorAdapter : public ObjectVisitor {
+   public:
+    explicit SymbolTableVisitorAdapter(
+        v8::ExternalResourceVisitor* visitor) : visitor_(visitor) {}
+    virtual void VisitPointers(Object** start, Object** end) {
+      for (Object** p = start; p < end; p++) {
+        if ((*p)->IsExternalString()) {
+          ASSERT((*p)->IsSymbol());
+          visitor_->VisitExternalString(Utils::ToLocal(
+              Handle<String>(String::cast(*p))));
+        }
+      }
+    }
+   private:
+    v8::ExternalResourceVisitor* visitor_;
+  } symbol_table_visitor(visitor);
+
+  symbol_table()->IterateElements(&symbol_table_visitor);
 }
 
 
@@ -2502,6 +2530,14 @@ bool Heap::CreateInitialMaps() {
     if (!maybe_obj->ToObject(&obj)) return false;
   }
   set_message_object_map(Map::cast(obj));
+
+  Map* external_map;
+  { MaybeObject* maybe_obj =
+        AllocateMap(JS_OBJECT_TYPE, JSObject::kHeaderSize + kPointerSize);
+    if (!maybe_obj->To(&external_map)) return false;
+  }
+  external_map->set_is_extensible(false);
+  set_external_map(external_map);
 
   ASSERT(!InNewSpace(empty_fixed_array()));
   return true;
@@ -5102,6 +5138,20 @@ MaybeObject* Heap::AllocateScopeInfo(int length) {
   if (!maybe_scope_info->To(&scope_info)) return maybe_scope_info;
   scope_info->set_map_no_write_barrier(scope_info_map());
   return scope_info;
+}
+
+
+MaybeObject* Heap::AllocateExternal(void* value) {
+  Foreign* foreign;
+  { MaybeObject* maybe_result = AllocateForeign(static_cast<Address>(value));
+    if (!maybe_result->To(&foreign)) return maybe_result;
+  }
+  JSObject* external;
+  { MaybeObject* maybe_result = AllocateJSObjectFromMap(external_map());
+    if (!maybe_result->To(&external)) return maybe_result;
+  }
+  external->SetInternalField(0, foreign);
+  return external;
 }
 
 

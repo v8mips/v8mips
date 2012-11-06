@@ -179,6 +179,7 @@ const char* LArithmeticT::Mnemonic() const {
     case Token::BIT_AND: return "bit-and-t";
     case Token::BIT_OR: return "bit-or-t";
     case Token::BIT_XOR: return "bit-xor-t";
+    case Token::ROR: return "ror-t";
     case Token::SHL: return "sal-t";
     case Token::SAR: return "sar-t";
     case Token::SHR: return "shr-t";
@@ -1160,6 +1161,11 @@ LInstruction* LChunkBuilder::DoCallRuntime(HCallRuntime* instr) {
 }
 
 
+LInstruction* LChunkBuilder::DoRor(HRor* instr) {
+  return DoShift(Token::ROR, instr);
+}
+
+
 LInstruction* LChunkBuilder::DoShr(HShr* instr) {
   return DoShift(Token::SHR, instr);
 }
@@ -1734,9 +1740,9 @@ LInstruction* LChunkBuilder::DoCheckInstanceType(HCheckInstanceType* instr) {
 
 
 LInstruction* LChunkBuilder::DoCheckPrototypeMaps(HCheckPrototypeMaps* instr) {
-  LOperand* temp = TempRegister();
+  LUnallocated* temp = TempRegister();
   LCheckPrototypeMaps* result = new(zone()) LCheckPrototypeMaps(temp);
-  return AssignEnvironment(result);
+  return AssignEnvironment(Define(result, temp));
 }
 
 
