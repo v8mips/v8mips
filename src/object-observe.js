@@ -30,21 +30,31 @@
 var InternalObjectIsFrozen = $Object.isFrozen;
 var InternalObjectFreeze = $Object.freeze;
 
-var InternalWeakMapProto = {
-  __proto__: null,
-  set: $WeakMap.prototype.set,
-  get: $WeakMap.prototype.get,
-  has: $WeakMap.prototype.has
+var observationState = %GetObservationState();
+if (IS_UNDEFINED(observationState.observerInfoMap)) {
+  observationState.observerInfoMap = %CreateObjectHashTable();
+  observationState.objectInfoMap = %CreateObjectHashTable();
 }
 
-function createInternalWeakMap() {
-  var map = new $WeakMap;
-  map.__proto__ = InternalWeakMapProto;
-  return map;
+function InternalObjectHashTable(table) {
+  this.table = table;
 }
 
-var observerInfoMap = createInternalWeakMap();
-var objectInfoMap = createInternalWeakMap();
+InternalObjectHashTable.prototype = {
+  get: function(key) {
+    return %ObjectHashTableGet(this.table, key);
+  },
+  set: function(key, value) {
+    return %ObjectHashTableSet(this.table, key, value);
+  },
+  has: function(key) {
+    return %ObjectHashTableHas(this.table, key);
+  }
+};
+
+var observerInfoMap = new InternalObjectHashTable(
+    observationState.observerInfoMap);
+var objectInfoMap = new InternalObjectHashTable(observationState.objectInfoMap);
 
 function ObjectObserve(object, callback) {
   if (!IS_SPEC_OBJECT(object))
@@ -68,6 +78,7 @@ function ObjectObserve(object, callback) {
       changeObservers: new InternalArray(callback)
     };
     objectInfoMap.set(object, objectInfo);
+    %SetIsObserved(object, true);
     return;
   }
 
@@ -109,6 +120,15 @@ function EnqueueChangeRecord(changeRecord, observers) {
   }
 }
 
+function NotifyChange(type, object, name, oldValue) {
+  var objectInfo = objectInfoMap.get(object);
+  var changeRecord = (arguments.length < 4) ?
+      { type: type, object: object, name: name } :
+      { type: type, object: object, name: name, oldValue: oldValue };
+  InternalObjectFreeze(changeRecord);
+  EnqueueChangeRecord(changeRecord, objectInfo.changeObservers);
+}
+
 function ObjectNotify(object, changeRecord) {
   // TODO: notifier needs to be [[THIS]]
   if (!IS_STRING(changeRecord.type))
@@ -119,7 +139,7 @@ function ObjectNotify(object, changeRecord) {
     return;
 
   var newRecord = {
-    object: object  // TODO: Needs to be 'object' retreived from notifier
+    object: object  // TODO: Needs to be 'object' retrieved from notifier
   };
   for (var prop in changeRecord) {
     if (prop === 'object')

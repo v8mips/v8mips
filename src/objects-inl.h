@@ -726,6 +726,11 @@ bool Object::IsMapCache() {
 }
 
 
+bool Object::IsObjectHashTable() {
+  return IsHashTable();
+}
+
+
 bool Object::IsPrimitive() {
   return IsOddball() || IsNumber() || IsString();
 }
@@ -3156,6 +3161,16 @@ void Map::set_owns_descriptors(bool is_shared) {
 
 bool Map::owns_descriptors() {
   return OwnsDescriptors::decode(bit_field3());
+}
+
+
+void Map::set_is_observed(bool is_observed) {
+  set_bit_field3(IsObserved::update(bit_field3(), is_observed));
+}
+
+
+bool Map::is_observed() {
+  return IsObserved::decode(bit_field3());
 }
 
 
