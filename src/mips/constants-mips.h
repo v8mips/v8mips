@@ -68,6 +68,8 @@ const bool IsMipsSoftFloatABI = true;
 const bool IsMipsSoftFloatABI = true;
 #endif
 
+//TODO: Here use build switch to select FPU mode.
+const bool IsFp64Mode = true;
 
 // Defines constants and accessor classes to assemble, disassemble and
 // simulate MIPS32 instructions.

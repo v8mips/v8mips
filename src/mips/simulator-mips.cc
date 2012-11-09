@@ -896,13 +896,14 @@ Simulator::Simulator(Isolate* isolate) : isolate_(isolate) {
   break_count_ = 0;
   break_pc_ = NULL;
   break_instr_ = 0;
+  fpu_reg_stride_ = IsFp64Mode ? 2 : 1;
 
   // Set up architecture state.
   // All registers are initialized to zero to start with.
   for (int i = 0; i < kNumSimuRegisters; i++) {
     registers_[i] = 0;
   }
-  for (int i = 0; i < kNumFPURegisters; i++) {
+  for (int i = 0; i < 2 * kNumFPURegisters; i++) {
     FPUregisters_[i] = 0;
   }
   FCSR_ = 0;
@@ -1018,19 +1019,19 @@ void Simulator::set_register(int reg, int32_t value) {
 
 void Simulator::set_fpu_register(int fpureg, int32_t value) {
   ASSERT((fpureg >= 0) && (fpureg < kNumFPURegisters));
-  FPUregisters_[fpureg] = value;
+  FPUregisters_[fpu_reg_stride_ * fpureg] = value;
 }
 
 
 void Simulator::set_fpu_register_float(int fpureg, float value) {
   ASSERT((fpureg >= 0) && (fpureg < kNumFPURegisters));
-  *BitCast<float*>(&FPUregisters_[fpureg]) = value;
+  *BitCast<float*>(&FPUregisters_[fpu_reg_stride_ * fpureg]) = value;
 }
 
 
 void Simulator::set_fpu_register_double(int fpureg, double value) {
   ASSERT((fpureg >= 0) && (fpureg < kNumFPURegisters) && ((fpureg % 2) == 0));
-  *BitCast<double*>(&FPUregisters_[fpureg]) = value;
+  *BitCast<double*>(&FPUregisters_[fpu_reg_stride_ * fpureg]) = value;
 }
 
 
@@ -1047,27 +1048,27 @@ int32_t Simulator::get_register(int reg) const {
 
 int32_t Simulator::get_fpu_register(int fpureg) const {
   ASSERT((fpureg >= 0) && (fpureg < kNumFPURegisters));
-  return FPUregisters_[fpureg];
+  return FPUregisters_[fpu_reg_stride_ * fpureg];
 }
 
 
 int64_t Simulator::get_fpu_register_long(int fpureg) const {
   ASSERT((fpureg >= 0) && (fpureg < kNumFPURegisters) && ((fpureg % 2) == 0));
   return *BitCast<int64_t*>(
-      const_cast<int32_t*>(&FPUregisters_[fpureg]));
+      const_cast<int32_t*>(&FPUregisters_[fpu_reg_stride_ * fpureg]));
 }
 
 
 float Simulator::get_fpu_register_float(int fpureg) const {
   ASSERT((fpureg >= 0) && (fpureg < kNumFPURegisters));
   return *BitCast<float*>(
-      const_cast<int32_t*>(&FPUregisters_[fpureg]));
+      const_cast<int32_t*>(&FPUregisters_[fpu_reg_stride_ * fpureg]));
 }
 
 
 double Simulator::get_fpu_register_double(int fpureg) const {
-  ASSERT((fpureg >= 0) && (fpureg < kNumFPURegisters) && ((fpureg % 2) == 0));
-  return *BitCast<double*>(const_cast<int32_t*>(&FPUregisters_[fpureg]));
+  ASSERT((fpureg >= 0) && (fpureg < kNumFPURegisters));
+  return *BitCast<double*>(const_cast<int32_t*>(&FPUregisters_[fpu_reg_stride_ * fpureg]));
 }
 
 
@@ -1444,18 +1445,35 @@ void Simulator::SoftwareInterrupt(Instruction* instr) {
       switch (redirection->type()) {
       case ExternalReference::BUILTIN_FP_FP_CALL:
       case ExternalReference::BUILTIN_COMPARE_CALL:
-        arg0 = get_fpu_register(f12);
-        arg1 = get_fpu_register(f13);
-        arg2 = get_fpu_register(f14);
-        arg3 = get_fpu_register(f15);
+        if (IsFp64Mode) {
+          arg0 = FPUregisters_[2 * f12];
+          arg1 = FPUregisters_[2 * f12  +1];
+          arg2 = FPUregisters_[2 * f14];
+          arg3 = FPUregisters_[2 * f14 + 1];
+        } else {
+          arg0 = get_fpu_register(f12);
+          arg1 = get_fpu_register(f13);
+          arg2 = get_fpu_register(f14);
+          arg3 = get_fpu_register(f15);
+        }
         break;
       case ExternalReference::BUILTIN_FP_CALL:
-        arg0 = get_fpu_register(f12);
-        arg1 = get_fpu_register(f13);
+        if (IsFp64Mode) {
+          arg0 = FPUregisters_[2 * f12];
+          arg1 = FPUregisters_[2 * f12  +1];
+        } else {
+          arg0 = get_fpu_register(f12);
+          arg1 = get_fpu_register(f13);
+        }
         break;
       case ExternalReference::BUILTIN_FP_INT_CALL:
-        arg0 = get_fpu_register(f12);
-        arg1 = get_fpu_register(f13);
+        if (IsFp64Mode) {
+          arg0 = FPUregisters_[2 * f12];
+          arg1 = FPUregisters_[2 * f12  +1];
+        } else {
+          arg0 = get_fpu_register(f12);
+          arg1 = get_fpu_register(f13);
+        }
         arg2 = get_register(a2);
         break;
       default:
@@ -1722,7 +1740,7 @@ void Simulator::ConfigureTypeRegister(Instruction* instr,
           alu_out = get_fpu_register(fs_reg);
           break;
         case MFHC1:
-          UNIMPLEMENTED_MIPS();
+          alu_out = FPUregisters_[ fpu_reg_stride_ * fs_reg + 1];
           break;
         case CTC1:
         case MTC1:
@@ -1973,7 +1991,7 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
           set_register(rt_reg, alu_out);
           break;
         case MFHC1:
-          UNIMPLEMENTED_MIPS();
+          set_register(rt_reg, alu_out);
           break;
         case CTC1:
           // At the moment only FCSR is supported.
@@ -1981,10 +1999,10 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
           FCSR_ = registers_[rt_reg];
           break;
         case MTC1:
-          FPUregisters_[fs_reg] = registers_[rt_reg];
+          FPUregisters_[ fpu_reg_stride_ * fs_reg] = registers_[rt_reg];
           break;
         case MTHC1:
-          UNIMPLEMENTED_MIPS();
+          FPUregisters_[ fpu_reg_stride_ * fs_reg + 1] = registers_[rt_reg];
           break;
         case S:
           float f;

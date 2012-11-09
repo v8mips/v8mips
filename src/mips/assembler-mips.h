@@ -801,7 +801,9 @@ class Assembler : public AssemblerBase {
   void sdc1(FPURegister fs, const MemOperand& dst);
 
   void mtc1(Register rt, FPURegister fs);
+  void mthc1(Register rt, FPURegister fs);
   void mfc1(Register rt, FPURegister fs);
+  void mfhc1(Register rt, FPURegister fs);
 
   void ctc1(Register rt, FPUControlRegister fs);
   void cfc1(Register rt, FPUControlRegister fs);

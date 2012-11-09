@@ -3242,7 +3242,7 @@ void LCodeGen::DoMathFloor(LUnaryMathOperation* instr) {
     // Test for -0.
     Label done;
     __ Branch(&done, ne, result, Operand(zero_reg));
-    __ mfc1(scratch1, input.high());
+    __ mfhc1(scratch1, input);
     __ And(scratch1, scratch1, Operand(HeapNumber::kSignMask));
     DeoptimizeIf(ne, instr->environment(), scratch1, Operand(zero_reg));
     __ bind(&done);
@@ -3257,7 +3257,7 @@ void LCodeGen::DoMathRound(LUnaryMathOperation* instr) {
   Label done, check_sign_on_zero;
 
   // Extract exponent bits.
-  __ mfc1(result, input.high());
+  __ mfhc1(result, input);
   __ Ext(scratch,
          result,
          HeapNumber::kExponentShift,
@@ -3287,7 +3287,7 @@ void LCodeGen::DoMathRound(LUnaryMathOperation* instr) {
 
   // Check sign of the result: if the sign changed, the input
   // value was in ]0.5, 0[ and the result should be -0.
-  __ mfc1(result, double_scratch0().high());
+  __ mfhc1(result, double_scratch0());
   __ Xor(result, result, Operand(scratch));
   if (instr->hydrogen()->CheckFlag(HValue::kBailoutOnMinusZero)) {
     // ARM uses 'mi' here, which is 'lt'
@@ -3319,7 +3319,7 @@ void LCodeGen::DoMathRound(LUnaryMathOperation* instr) {
     // Test for -0.
     __ Branch(&done, ne, result, Operand(zero_reg));
     __ bind(&check_sign_on_zero);
-    __ mfc1(scratch, input.high());
+    __ mfhc1(scratch, input);
     __ And(scratch, scratch, Operand(HeapNumber::kSignMask));
     DeoptimizeIf(ne, instr->environment(), scratch, Operand(zero_reg));
   }
@@ -4408,7 +4408,7 @@ void LCodeGen::DoDeferredTaggedToI(LTaggedToI* instr) {
     if (instr->hydrogen()->CheckFlag(HValue::kBailoutOnMinusZero)) {
       __ Branch(&done, ne, input_reg, Operand(zero_reg));
 
-      __ mfc1(scratch1, double_scratch.high());
+      __ mfhc1(scratch1, double_scratch);
       __ And(scratch1, scratch1, Operand(HeapNumber::kSignMask));
       DeoptimizeIf(ne, instr->environment(), scratch1, Operand(zero_reg));
     }

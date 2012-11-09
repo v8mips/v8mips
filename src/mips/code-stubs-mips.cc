@@ -3027,7 +3027,7 @@ void BinaryOpStub::GenerateInt32Stub(MacroAssembler* masm) {
           // Check for minus zero. Return heap number for minus zero.
           Label not_zero;
           __ Branch(&not_zero, ne, scratch1, Operand(zero_reg));
-          __ mfc1(scratch2, f11);
+          __ mfhc1(scratch2, f10);
           __ And(scratch2, scratch2, HeapNumber::kSignMask);
           __ Branch(&return_heap_number, ne, scratch2, Operand(zero_reg));
           __ bind(&not_zero);

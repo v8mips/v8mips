@@ -238,12 +238,12 @@ class MacroAssembler: public Assembler {
 
   inline void Move(Register dst_low, Register dst_high, FPURegister src) {
     mfc1(dst_low, src);
-    mfc1(dst_high, FPURegister::from_code(src.code() + 1));
+    mfhc1(dst_high, src);
   }
 
   inline void Move(FPURegister dst, Register src_low, Register src_high) {
     mtc1(src_low, dst);
-    mtc1(src_high, FPURegister::from_code(dst.code() + 1));
+    mthc1(src_high, dst);
   }
 
   // Conditional move.

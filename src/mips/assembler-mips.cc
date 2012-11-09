@@ -1628,10 +1628,16 @@ void Assembler::lwc1(FPURegister fd, const MemOperand& src) {
 void Assembler::ldc1(FPURegister fd, const MemOperand& src) {
   // Workaround for non-8-byte alignment of HeapNumber, convert 64-bit
   // load to two 32-bit loads.
-  GenInstrImmediate(LWC1, src.rm(), fd, src.offset_);
-  FPURegister nextfpreg;
-  nextfpreg.setcode(fd.code() + 1);
-  GenInstrImmediate(LWC1, src.rm(), nextfpreg, src.offset_ + 4);
+  if(IsFp64Mode) {
+    GenInstrImmediate(LWC1, src.rm(), fd, src.offset_);
+    GenInstrImmediate(LW, src.rm(), at, src.offset_ + 4);
+    mthc1(at, fd);
+  } else {
+    GenInstrImmediate(LWC1, src.rm(), fd, src.offset_);
+    FPURegister nextfpreg;
+    nextfpreg.setcode(fd.code() + 1);
+    GenInstrImmediate(LWC1, src.rm(), nextfpreg, src.offset_ + 4);
+  }
 }
 
 
@@ -1643,10 +1649,16 @@ void Assembler::swc1(FPURegister fd, const MemOperand& src) {
 void Assembler::sdc1(FPURegister fd, const MemOperand& src) {
   // Workaround for non-8-byte alignment of HeapNumber, convert 64-bit
   // store to two 32-bit stores.
-  GenInstrImmediate(SWC1, src.rm(), fd, src.offset_);
-  FPURegister nextfpreg;
-  nextfpreg.setcode(fd.code() + 1);
-  GenInstrImmediate(SWC1, src.rm(), nextfpreg, src.offset_ + 4);
+  if(IsFp64Mode) {
+    GenInstrImmediate(SWC1, src.rm(), fd, src.offset_);
+    mfhc1(at, fd);
+    GenInstrImmediate(SW, src.rm(), at, src.offset_ + 4);
+  } else {
+    GenInstrImmediate(SWC1, src.rm(), fd, src.offset_);
+    FPURegister nextfpreg;
+    nextfpreg.setcode(fd.code() + 1);
+    GenInstrImmediate(SWC1, src.rm(), nextfpreg, src.offset_ + 4);
+  }
 }
 
 
@@ -1655,8 +1667,26 @@ void Assembler::mtc1(Register rt, FPURegister fs) {
 }
 
 
+void Assembler::mthc1(Register rt, FPURegister fs) {
+  if (kArchVariant == kMips32r2) {
+    GenInstrRegister(COP1, MTHC1, rt, fs, f0);
+  } else {
+    GenInstrRegister(COP1, MTC1, rt, fs.high(), f0);
+  }
+}
+
+
 void Assembler::mfc1(Register rt, FPURegister fs) {
   GenInstrRegister(COP1, MFC1, rt, fs, f0);
+}
+
+
+void Assembler::mfhc1(Register rt, FPURegister fs) {
+  if (kArchVariant == kMips32r2) {
+    GenInstrRegister(COP1, MFHC1, rt, fs, f0);
+  } else {
+    GenInstrRegister(COP1, MFC1, rt, fs.high(), f0);
+  }
 }
 
 

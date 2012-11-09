@@ -358,7 +358,7 @@ class Simulator {
   // Registers.
   int32_t registers_[kNumSimuRegisters];
   // Coprocessor Registers.
-  int32_t FPUregisters_[kNumFPURegisters];
+  int32_t FPUregisters_[2 * kNumFPURegisters];
   // FPU control register.
   uint32_t FCSR_;
 
@@ -369,7 +369,7 @@ class Simulator {
   bool pc_modified_;
   int icount_;
   int break_count_;
-
+  int fpu_reg_stride_;
   // Debugger input.
   char* last_debugger_input_;
 
