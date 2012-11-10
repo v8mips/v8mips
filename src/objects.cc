@@ -1340,7 +1340,7 @@ void HeapObject::IterateBody(InstanceType type, int object_size,
         SlicedString::BodyDescriptor::IterateBody(this, v);
         break;
       case kExternalStringTag:
-        if ((type & kStringEncodingMask) == kAsciiStringTag) {
+        if ((type & kStringEncodingMask) == kOneByteStringTag) {
           reinterpret_cast<ExternalAsciiString*>(this)->
               ExternalAsciiStringIterateBody(v);
         } else {
@@ -2761,12 +2761,14 @@ MUST_USE_RESULT PropertyAttributes JSProxy::GetPropertyAttributeWithHandler(
 
 
 MUST_USE_RESULT PropertyAttributes JSProxy::GetElementAttributeWithHandler(
-    JSReceiver* receiver,
+    JSReceiver* receiver_raw,
     uint32_t index) {
   Isolate* isolate = GetIsolate();
   HandleScope scope(isolate);
+  Handle<JSProxy> proxy(this);
+  Handle<JSReceiver> receiver(receiver_raw);
   Handle<String> name = isolate->factory()->Uint32ToString(index);
-  return GetPropertyAttributeWithHandler(receiver, *name);
+  return proxy->GetPropertyAttributeWithHandler(*receiver, *name);
 }
 
 
@@ -2901,7 +2903,7 @@ MaybeObject* JSObject::SetPropertyForResult(LookupResult* lookup,
 
   Handle<Object> old_value(heap->the_hole_value());
   if (FLAG_harmony_observation && map()->is_observed()) {
-    // TODO(observe): save oldValue
+    old_value = handle(lookup->GetLazyValue());
   }
 
   // This is a real property that is not read-only, or it is a
@@ -2953,7 +2955,7 @@ MaybeObject* JSObject::SetPropertyForResult(LookupResult* lookup,
           result = self->ConvertDescriptorToField(*name, *value, attributes);
         }
       } else if (details.type() == CALLBACKS) {
-        result = ConvertDescriptorToField(*name, *value, attributes);
+        result = self->ConvertDescriptorToField(*name, *value, attributes);
       } else {
         ASSERT(details.type() == CONSTANT_FUNCTION);
 
@@ -2966,7 +2968,7 @@ MaybeObject* JSObject::SetPropertyForResult(LookupResult* lookup,
         } else {
           // Otherwise, replace with a map transition to a new map with a FIELD,
           // even if the value is a constant function.
-          result = ConvertTransitionToMapTransition(
+          result = self->ConvertTransitionToMapTransition(
               lookup->GetTransitionIndex(), *name, *value, attributes);
         }
       }
@@ -2981,7 +2983,16 @@ MaybeObject* JSObject::SetPropertyForResult(LookupResult* lookup,
   if (!result->ToHandle(&hresult)) return result;
 
   if (FLAG_harmony_observation && map()->is_observed()) {
-    this->EnqueueChangeRecord("updated", name, old_value);
+    if (lookup->IsTransition()) {
+      self->EnqueueChangeRecord("new", name, old_value);
+    } else {
+      LookupResult new_lookup(self->GetIsolate());
+      self->LocalLookup(*name, &new_lookup);
+      ASSERT(!new_lookup.GetLazyValue()->IsTheHole());
+      if (!new_lookup.GetLazyValue()->SameValue(*old_value)) {
+        self->EnqueueChangeRecord("updated", name, old_value);
+      }
+    }
   }
 
   return *hresult;
@@ -3010,22 +3021,22 @@ Handle<Object> JSObject::SetLocalPropertyIgnoreAttributes(
 
 
 MaybeObject* JSObject::SetLocalPropertyIgnoreAttributes(
-    String* name,
-    Object* value,
+    String* name_raw,
+    Object* value_raw,
     PropertyAttributes attributes) {
   // Make sure that the top context does not change when doing callbacks or
   // interceptor calls.
   AssertNoContextChange ncc;
   Isolate* isolate = GetIsolate();
   LookupResult lookup(isolate);
-  LocalLookup(name, &lookup);
-  if (!lookup.IsFound()) map()->LookupTransition(this, name, &lookup);
+  LocalLookup(name_raw, &lookup);
+  if (!lookup.IsFound()) map()->LookupTransition(this, name_raw, &lookup);
   // Check access rights if needed.
   if (IsAccessCheckNeeded()) {
-    if (!isolate->MayNamedAccess(this, name, v8::ACCESS_SET)) {
+    if (!isolate->MayNamedAccess(this, name_raw, v8::ACCESS_SET)) {
       return SetPropertyWithFailedAccessCheck(&lookup,
-                                              name,
-                                              value,
+                                              name_raw,
+                                              value_raw,
                                               false,
                                               kNonStrictMode);
     }
@@ -3033,47 +3044,56 @@ MaybeObject* JSObject::SetLocalPropertyIgnoreAttributes(
 
   if (IsJSGlobalProxy()) {
     Object* proto = GetPrototype();
-    if (proto->IsNull()) return value;
+    if (proto->IsNull()) return value_raw;
     ASSERT(proto->IsJSGlobalObject());
     return JSObject::cast(proto)->SetLocalPropertyIgnoreAttributes(
-        name,
-        value,
+        name_raw,
+        value_raw,
         attributes);
   }
 
   // Check for accessor in prototype chain removed here in clone.
   if (!lookup.IsFound()) {
     // Neither properties nor transitions found.
-    return AddProperty(name, value, attributes, kNonStrictMode);
+    return AddProperty(name_raw, value_raw, attributes, kNonStrictMode);
   }
 
+  // From this point on everything needs to be handlified.
+  HandleScope scope(GetIsolate());
+  Handle<JSObject> self(this);
+  Handle<String> name(name_raw);
+  Handle<Object> value(value_raw);
+
   Handle<Object> old_value(isolate->heap()->the_hole_value());
+  PropertyAttributes old_attributes = ABSENT;
   if (FLAG_harmony_observation && map()->is_observed()) {
-    // TODO(observe): save oldValue
+    old_value = handle(lookup.GetLazyValue());
+    old_attributes = lookup.GetAttributes();
   }
 
   // Check of IsReadOnly removed from here in clone.
-  MaybeObject* result = value;
+  MaybeObject* result = *value;
   switch (lookup.type()) {
     case NORMAL: {
       PropertyDetails details = PropertyDetails(attributes, NORMAL);
-      result = SetNormalizedProperty(name, value, details);
+      result = self->SetNormalizedProperty(*name, *value, details);
       break;
     }
     case FIELD:
-      result = FastPropertyAtPut(lookup.GetFieldIndex(), value);
+      result = self->FastPropertyAtPut(lookup.GetFieldIndex(), *value);
       break;
     case CONSTANT_FUNCTION:
       // Only replace the function if necessary.
-      if (value == lookup.GetConstantFunction()) return value;
-      // Preserve the attributes of this existing property.
-      attributes = lookup.GetAttributes();
-      result = ConvertDescriptorToField(name, value, attributes);
+      if (*value != lookup.GetConstantFunction()) {
+        // Preserve the attributes of this existing property.
+        attributes = lookup.GetAttributes();
+        result = self->ConvertDescriptorToField(*name, *value, attributes);
+      }
       break;
     case CALLBACKS:
     case INTERCEPTOR:
       // Override callback in clone
-      result = ConvertDescriptorToField(name, value, attributes);
+      result = self->ConvertDescriptorToField(*name, *value, attributes);
       break;
     case TRANSITION: {
       Map* transition_map = lookup.GetTransitionTarget();
@@ -3085,22 +3105,20 @@ MaybeObject* JSObject::SetLocalPropertyIgnoreAttributes(
       if (details.type() == FIELD) {
         if (attributes == details.attributes()) {
           int field_index = descriptors->GetFieldIndex(descriptor);
-          result = AddFastPropertyUsingMap(transition_map,
-                                           name,
-                                           value,
-                                           field_index);
+          result = self->AddFastPropertyUsingMap(
+              transition_map, *name, *value, field_index);
         } else {
-          result = ConvertDescriptorToField(name, value, attributes);
+          result = self->ConvertDescriptorToField(*name, *value, attributes);
         }
       } else if (details.type() == CALLBACKS) {
-        result = ConvertDescriptorToField(name, value, attributes);
+        result = self->ConvertDescriptorToField(*name, *value, attributes);
       } else {
         ASSERT(details.type() == CONSTANT_FUNCTION);
 
         // Replace transition to CONSTANT FUNCTION with a map transition to a
         // new map with a FIELD, even if the value is a function.
-        result = ConvertTransitionToMapTransition(
-            lookup.GetTransitionIndex(), name, value, attributes);
+        result = self->ConvertTransitionToMapTransition(
+            lookup.GetTransitionIndex(), *name, *value, attributes);
       }
       break;
     }
@@ -3113,9 +3131,19 @@ MaybeObject* JSObject::SetLocalPropertyIgnoreAttributes(
   if (!result->ToHandle(&hresult)) return result;
 
   if (FLAG_harmony_observation && map()->is_observed()) {
-    const char* type =
-        attributes == lookup.GetAttributes() ? "updated" : "reconfigured";
-    this->EnqueueChangeRecord(type, handle(name), old_value);
+    if (lookup.IsTransition()) {
+      self->EnqueueChangeRecord("new", name, old_value);
+    } else {
+      LookupResult new_lookup(isolate);
+      self->LocalLookup(*name, &new_lookup);
+      ASSERT(!new_lookup.GetLazyValue()->IsTheHole());
+      if (old_value->IsTheHole() ||
+          new_lookup.GetAttributes() != old_attributes) {
+        self->EnqueueChangeRecord("reconfigured", name, old_value);
+      } else if (!new_lookup.GetLazyValue()->SameValue(*old_value)) {
+        self->EnqueueChangeRecord("updated", name, old_value);
+      }
+    }
   }
 
   return *hresult;
@@ -3203,38 +3231,39 @@ PropertyAttributes JSReceiver::GetPropertyAttributeWithReceiver(
         ? NONE : ABSENT;
   }
   // Named property.
-  LookupResult result(GetIsolate());
-  Lookup(key, &result);
-  return GetPropertyAttribute(receiver, &result, key, true);
+  LookupResult lookup(GetIsolate());
+  Lookup(key, &lookup);
+  return GetPropertyAttributeForResult(receiver, &lookup, key, true);
 }
 
 
-PropertyAttributes JSReceiver::GetPropertyAttribute(JSReceiver* receiver,
-                                                    LookupResult* result,
-                                                    String* name,
-                                                    bool continue_search) {
+PropertyAttributes JSReceiver::GetPropertyAttributeForResult(
+    JSReceiver* receiver,
+    LookupResult* lookup,
+    String* name,
+    bool continue_search) {
   // Check access rights if needed.
   if (IsAccessCheckNeeded()) {
     JSObject* this_obj = JSObject::cast(this);
     Heap* heap = GetHeap();
     if (!heap->isolate()->MayNamedAccess(this_obj, name, v8::ACCESS_HAS)) {
       return this_obj->GetPropertyAttributeWithFailedAccessCheck(
-          receiver, result, name, continue_search);
+          receiver, lookup, name, continue_search);
     }
   }
-  if (result->IsFound()) {
-    switch (result->type()) {
+  if (lookup->IsFound()) {
+    switch (lookup->type()) {
       case NORMAL:  // fall through
       case FIELD:
       case CONSTANT_FUNCTION:
       case CALLBACKS:
-        return result->GetAttributes();
+        return lookup->GetAttributes();
       case HANDLER: {
-        return JSProxy::cast(result->proxy())->GetPropertyAttributeWithHandler(
+        return JSProxy::cast(lookup->proxy())->GetPropertyAttributeWithHandler(
             receiver, name);
       }
       case INTERCEPTOR:
-        return result->holder()->GetPropertyAttributeWithInterceptor(
+        return lookup->holder()->GetPropertyAttributeWithInterceptor(
             JSObject::cast(receiver), name, continue_search);
       case TRANSITION:
       case NONEXISTENT:
@@ -3253,9 +3282,9 @@ PropertyAttributes JSReceiver::GetLocalPropertyAttribute(String* name) {
     return ABSENT;
   }
   // Named property.
-  LookupResult result(GetIsolate());
-  LocalLookup(name, &result);
-  return GetPropertyAttribute(this, &result, name, false);
+  LookupResult lookup(GetIsolate());
+  LocalLookup(name, &lookup);
+  return GetPropertyAttributeForResult(this, &lookup, name, false);
 }
 
 
@@ -4039,10 +4068,14 @@ MaybeObject* JSObject::DeleteProperty(String* name, DeleteMode mode) {
     return isolate->heap()->false_value();
   }
 
+  // From this point on everything needs to be handlified.
   HandleScope scope(isolate);
+  Handle<JSObject> self(this);
+  Handle<String> hname(name);
+
   Handle<Object> old_value(isolate->heap()->the_hole_value());
   if (FLAG_harmony_observation && map()->is_observed()) {
-    // TODO(observe): save oldValue
+    old_value = handle(lookup.GetLazyValue());
   }
   MaybeObject* result;
 
@@ -4050,24 +4083,25 @@ MaybeObject* JSObject::DeleteProperty(String* name, DeleteMode mode) {
   if (lookup.IsInterceptor()) {
     // Skip interceptor if forcing a deletion.
     if (mode == FORCE_DELETION) {
-      result = DeletePropertyPostInterceptor(name, mode);
+      result = self->DeletePropertyPostInterceptor(*hname, mode);
     } else {
-      result = DeletePropertyWithInterceptor(name);
+      result = self->DeletePropertyWithInterceptor(*hname);
     }
   } else {
     // Normalize object if needed.
     Object* obj;
-    result = NormalizeProperties(CLEAR_INOBJECT_PROPERTIES, 0);
-    if (!result->ToObject(&obj)) return result;
+    result = self->NormalizeProperties(CLEAR_INOBJECT_PROPERTIES, 0);
+    if (!result->To(&obj)) return result;
     // Make sure the properties are normalized before removing the entry.
-    result = DeleteNormalizedProperty(name, mode);
+    result = self->DeleteNormalizedProperty(*hname, mode);
   }
 
   Handle<Object> hresult;
   if (!result->ToHandle(&hresult)) return result;
 
   if (FLAG_harmony_observation && map()->is_observed()) {
-    this->EnqueueChangeRecord("deleted", handle(name), old_value);
+    if (!self->HasLocalProperty(*hname))
+      self->EnqueueChangeRecord("deleted", hname, old_value);
   }
 
   return *hresult;
@@ -4669,14 +4703,14 @@ void JSObject::DefineAccessor(Handle<JSObject> object,
       object->DefineAccessor(*name, *getter, *setter, attributes));
 }
 
-MaybeObject* JSObject::DefineAccessor(String* name,
-                                      Object* getter,
-                                      Object* setter,
+MaybeObject* JSObject::DefineAccessor(String* name_raw,
+                                      Object* getter_raw,
+                                      Object* setter_raw,
                                       PropertyAttributes attributes) {
   Isolate* isolate = GetIsolate();
   // Check access rights if needed.
   if (IsAccessCheckNeeded() &&
-      !isolate->MayNamedAccess(this, name, v8::ACCESS_SET)) {
+      !isolate->MayNamedAccess(this, name_raw, v8::ACCESS_SET)) {
     isolate->ReportFailedAccessCheck(this, v8::ACCESS_SET);
     return isolate->heap()->undefined_value();
   }
@@ -4686,7 +4720,7 @@ MaybeObject* JSObject::DefineAccessor(String* name,
     if (proto->IsNull()) return this;
     ASSERT(proto->IsJSGlobalObject());
     return JSObject::cast(proto)->DefineAccessor(
-        name, getter, setter, attributes);
+        name_raw, getter_raw, setter_raw, attributes);
   }
 
   // Make sure that the top context does not change when doing callbacks or
@@ -4694,30 +4728,47 @@ MaybeObject* JSObject::DefineAccessor(String* name,
   AssertNoContextChange ncc;
 
   // Try to flatten before operating on the string.
-  name->TryFlatten();
+  name_raw->TryFlatten();
 
-  if (!CanSetCallback(name)) return isolate->heap()->undefined_value();
+  if (!CanSetCallback(name_raw)) return isolate->heap()->undefined_value();
+
+  // From this point on everything needs to be handlified.
+  HandleScope scope(GetIsolate());
+  Handle<JSObject> self(this);
+  Handle<String> name(name_raw);
+  Handle<Object> getter(getter_raw);
+  Handle<Object> setter(setter_raw);
+
+  uint32_t index = 0;
+  bool is_element = name->AsArrayIndex(&index);
 
   Handle<Object> old_value(isolate->heap()->the_hole_value());
   bool preexists = false;
   if (FLAG_harmony_observation && map()->is_observed()) {
-    LookupResult result(isolate);
-    LocalLookup(name, &result);
-    preexists = result.IsFound();
-    // TODO(observe): save oldValue
+    if (is_element) {
+      preexists = HasLocalElement(index);
+      if (preexists) {
+        // TODO(observe): distinguish the case where it's an accessor
+        old_value = Object::GetElement(self, index);
+      }
+    } else {
+      LookupResult lookup(isolate);
+      LocalLookup(*name, &lookup);
+      preexists = lookup.IsProperty();
+      if (preexists) old_value = handle(lookup.GetLazyValue());
+    }
   }
 
-  uint32_t index = 0;
-  MaybeObject* result = name->AsArrayIndex(&index)
-      ? DefineElementAccessor(index, getter, setter, attributes)
-      : DefinePropertyAccessor(name, getter, setter, attributes);
+  MaybeObject* result = is_element ?
+    self->DefineElementAccessor(index, *getter, *setter, attributes) :
+    self->DefinePropertyAccessor(*name, *getter, *setter, attributes);
 
   Handle<Object> hresult;
   if (!result->ToHandle(&hresult)) return result;
 
   if (FLAG_harmony_observation && map()->is_observed()) {
     const char* type = preexists ? "reconfigured" : "new";
-    this->EnqueueChangeRecord(type, handle(name), old_value);
+    self->EnqueueChangeRecord(type, name, old_value);
   }
 
   return *hresult;
@@ -6313,7 +6364,7 @@ String::FlatContent String::GetFlatContent() {
     ASSERT(shape.representation_tag() != kConsStringTag &&
            shape.representation_tag() != kSlicedStringTag);
   }
-  if (shape.encoding_tag() == kAsciiStringTag) {
+  if (shape.encoding_tag() == kOneByteStringTag) {
     const char* start;
     if (shape.representation_tag() == kSeqStringTag) {
       start = SeqAsciiString::cast(string)->GetChars();
@@ -7002,7 +7053,7 @@ void String::WriteToFlat(String* src,
   while (true) {
     ASSERT(0 <= from && from <= to && to <= source->length());
     switch (StringShape(source).full_representation_tag()) {
-      case kAsciiStringTag | kExternalStringTag: {
+      case kOneByteStringTag | kExternalStringTag: {
         CopyChars(sink,
                   ExternalAsciiString::cast(source)->GetChars() + from,
                   to - from);
@@ -7016,7 +7067,7 @@ void String::WriteToFlat(String* src,
                   to - from);
         return;
       }
-      case kAsciiStringTag | kSeqStringTag: {
+      case kOneByteStringTag | kSeqStringTag: {
         CopyChars(sink,
                   SeqAsciiString::cast(source)->GetChars() + from,
                   to - from);
@@ -7028,7 +7079,7 @@ void String::WriteToFlat(String* src,
                   to - from);
         return;
       }
-      case kAsciiStringTag | kConsStringTag:
+      case kOneByteStringTag | kConsStringTag:
       case kTwoByteStringTag | kConsStringTag: {
         ConsString* cons_string = ConsString::cast(source);
         String* first = cons_string->first();
@@ -7069,7 +7120,7 @@ void String::WriteToFlat(String* src,
         }
         break;
       }
-      case kAsciiStringTag | kSlicedStringTag:
+      case kOneByteStringTag | kSlicedStringTag:
       case kTwoByteStringTag | kSlicedStringTag: {
         SlicedString* slice = SlicedString::cast(source);
         unsigned offset = slice->offset();
@@ -7741,6 +7792,7 @@ void SharedFunctionInfo::InstallFromOptimizedCodeMap(JSFunction* function,
   ASSERT(code != NULL);
   ASSERT(function->context()->native_context() == code_map->get(index - 1));
   function->ReplaceCode(code);
+  code->MakeYoung();
 }
 
 
@@ -7803,6 +7855,35 @@ MaybeObject* JSObject::OptimizeAsPrototype() {
 }
 
 
+MUST_USE_RESULT static MaybeObject* CacheInitialJSArrayMaps(
+    Context* native_context, Map* initial_map) {
+  // Replace all of the cached initial array maps in the native context with
+  // the appropriate transitioned elements kind maps.
+  Heap* heap = native_context->GetHeap();
+  MaybeObject* maybe_maps =
+      heap->AllocateFixedArrayWithHoles(kElementsKindCount);
+  FixedArray* maps;
+  if (!maybe_maps->To(&maps)) return maybe_maps;
+
+  Map* current_map = initial_map;
+  ElementsKind kind = current_map->elements_kind();
+  ASSERT(kind == GetInitialFastElementsKind());
+  maps->set(kind, current_map);
+  for (int i = GetSequenceIndexFromFastElementsKind(kind) + 1;
+       i < kFastElementsKindCount; ++i) {
+    Map* new_map;
+    ElementsKind next_kind = GetFastElementsKindFromSequenceIndex(i);
+    MaybeObject* maybe_new_map =
+        current_map->CopyAsElementsKind(next_kind, INSERT_TRANSITION);
+    if (!maybe_new_map->To(&new_map)) return maybe_new_map;
+    maps->set(next_kind, new_map);
+    current_map = new_map;
+  }
+  native_context->set_js_array_maps(maps);
+  return initial_map;
+}
+
+
 MaybeObject* JSFunction::SetInstancePrototype(Object* value) {
   ASSERT(value->IsJSReceiver());
   Heap* heap = GetHeap();
@@ -7817,14 +7898,29 @@ MaybeObject* JSFunction::SetInstancePrototype(Object* value) {
   // Now some logic for the maps of the objects that are created by using this
   // function as a constructor.
   if (has_initial_map()) {
-    // If the function has allocated the initial map
-    // replace it with a copy containing the new prototype.
+    // If the function has allocated the initial map replace it with a
+    // copy containing the new prototype.  Also complete any in-object
+    // slack tracking that is in progress at this point because it is
+    // still tracking the old copy.
+    if (shared()->IsInobjectSlackTrackingInProgress()) {
+      shared()->CompleteInobjectSlackTracking();
+    }
     Map* new_map;
-    MaybeObject* maybe_new_map = initial_map()->Copy();
-    if (!maybe_new_map->To(&new_map)) return maybe_new_map;
+    MaybeObject* maybe_object = initial_map()->Copy();
+    if (!maybe_object->To(&new_map)) return maybe_object;
     new_map->set_prototype(value);
-    MaybeObject* maybe_object = set_initial_map_and_cache_transitions(new_map);
-    if (maybe_object->IsFailure()) return maybe_object;
+
+    // If the function is used as the global Array function, cache the
+    // initial map (and transitioned versions) in the native context.
+    Context* native_context = context()->native_context();
+    Object* array_function = native_context->get(Context::ARRAY_FUNCTION_INDEX);
+    if (array_function->IsJSFunction() &&
+        this == JSFunction::cast(array_function)) {
+      MaybeObject* ok = CacheInitialJSArrayMaps(native_context, new_map);
+      if (ok->IsFailure()) return ok;
+    }
+
+    set_initial_map(new_map);
   } else {
     // Put the value in the initial map field until an initial map is
     // needed.  At that point, a new initial map is created and the
@@ -8337,6 +8433,15 @@ void ObjectVisitor::VisitCodeTarget(RelocInfo* rinfo) {
 }
 
 
+void ObjectVisitor::VisitCodeAgeSequence(RelocInfo* rinfo) {
+  ASSERT(RelocInfo::IsCodeAgeSequence(rinfo->rmode()));
+  Object* stub = rinfo->code_age_stub();
+  if (stub) {
+    VisitPointer(&stub);
+  }
+}
+
+
 void ObjectVisitor::VisitCodeEntry(Address entry_address) {
   Object* code = Code::GetObjectFromEntryAddress(entry_address);
   Object* old_code = code;
@@ -8546,6 +8651,99 @@ void Code::ClearTypeFeedbackCells(Heap* heap) {
 bool Code::allowed_in_shared_map_code_cache() {
   return is_keyed_load_stub() || is_keyed_store_stub() ||
       (is_compare_ic_stub() && compare_state() == CompareIC::KNOWN_OBJECTS);
+}
+
+
+void Code::MakeCodeAgeSequenceYoung(byte* sequence) {
+  PatchPlatformCodeAge(sequence, kNoAge, NO_MARKING_PARITY);
+}
+
+
+void Code::MakeYoung() {
+  byte* sequence = FindCodeAgeSequence();
+  if (sequence != NULL) {
+    PatchPlatformCodeAge(sequence, kNoAge, NO_MARKING_PARITY);
+  }
+}
+
+
+void Code::MakeOlder(MarkingParity current_parity) {
+  byte* sequence = FindCodeAgeSequence();
+  if (sequence != NULL) {
+    Age age;
+    MarkingParity code_parity;
+    GetCodeAgeAndParity(sequence, &age, &code_parity);
+    if (age != kLastCodeAge && code_parity != current_parity) {
+      PatchPlatformCodeAge(sequence, static_cast<Age>(age + 1),
+                           current_parity);
+    }
+  }
+}
+
+
+bool Code::IsOld() {
+  byte* sequence = FindCodeAgeSequence();
+  if (sequence == NULL) return false;
+  Age age;
+  MarkingParity parity;
+  GetCodeAgeAndParity(sequence, &age, &parity);
+  return age >= kSexagenarianCodeAge;
+}
+
+
+byte* Code::FindCodeAgeSequence() {
+  if (kind() != FUNCTION && kind() != OPTIMIZED_FUNCTION) return NULL;
+  if (strlen(FLAG_stop_at) == 0 &&
+      !ProfileEntryHookStub::HasEntryHook() &&
+      (kind() == FUNCTION && !has_debug_break_slots())) {
+    return FindPlatformCodeAgeSequence();
+  }
+  return NULL;
+}
+
+
+void Code::GetCodeAgeAndParity(Code* code, Age* age,
+                               MarkingParity* parity) {
+  Isolate* isolate = Isolate::Current();
+  Builtins* builtins = isolate->builtins();
+  Code* stub = NULL;
+#define HANDLE_CODE_AGE(AGE)                                            \
+  stub = *builtins->Make##AGE##CodeYoungAgainEvenMarking();             \
+  if (code == stub) {                                                   \
+    *age = k##AGE##CodeAge;                                             \
+    *parity = EVEN_MARKING_PARITY;                                      \
+    return;                                                             \
+  }                                                                     \
+  stub = *builtins->Make##AGE##CodeYoungAgainOddMarking();              \
+  if (code == stub) {                                                   \
+    *age = k##AGE##CodeAge;                                             \
+    *parity = ODD_MARKING_PARITY;                                       \
+    return;                                                             \
+  }
+  CODE_AGE_LIST(HANDLE_CODE_AGE)
+#undef HANDLE_CODE_AGE
+  UNREACHABLE();
+}
+
+
+Code* Code::GetCodeAgeStub(Age age, MarkingParity parity) {
+  Isolate* isolate = Isolate::Current();
+  Builtins* builtins = isolate->builtins();
+  switch (age) {
+#define HANDLE_CODE_AGE(AGE)                                            \
+    case k##AGE##CodeAge: {                                             \
+      Code* stub = parity == EVEN_MARKING_PARITY                        \
+          ? *builtins->Make##AGE##CodeYoungAgainEvenMarking()           \
+          : *builtins->Make##AGE##CodeYoungAgainOddMarking();           \
+      return stub;                                                      \
+    }
+    CODE_AGE_LIST(HANDLE_CODE_AGE)
+#undef HANDLE_CODE_AGE
+    default:
+      UNREACHABLE();
+      break;
+  }
+  return NULL;
 }
 
 
