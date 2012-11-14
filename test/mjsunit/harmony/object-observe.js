@@ -227,19 +227,20 @@ Object.observe(obj, observer.callback);
 Object.observe(obj3, observer.callback);
 Object.observe(obj2, observer.callback);
 Object.notify(obj, {
-  type: 'foo',
+  type: 'foo1',
 });
 Object.notify(obj2, {
-  type: 'foo',
+  type: 'foo2',
 });
 Object.notify(obj3, {
-  type: 'foo',
+  type: 'foo3',
 });
+Object.observe(obj3, observer.callback);
 Object.deliverChangeRecords(observer.callback);
 observer.assertCallbackRecords([
-  { object: obj, type: 'foo' },
-  { object: obj2, type: 'foo' },
-  { object: obj3, type: 'foo' }
+  { object: obj, type: 'foo1' },
+  { object: obj2, type: 'foo2' },
+  { object: obj3, type: 'foo3' }
 ]);
 
 // Observing named properties.
@@ -285,4 +286,291 @@ observer.assertCallbackRecords([
   { object: obj, name: "a", type: "updated", oldValue: 9 },
   { object: obj, name: "a", type: "deleted", oldValue: 10 },
   { object: obj, name: "a", type: "new" },
+]);
+
+// Observing indexed properties.
+reset();
+var obj = {'1': 1}
+Object.observe(obj, observer.callback);
+obj[1] = 2;
+obj[1] = 3;
+delete obj[1];
+obj[1] = 4;
+obj[1] = 4;  // ignored
+obj[1] = 5;
+Object.defineProperty(obj, "1", {value: 6});
+Object.defineProperty(obj, "1", {writable: false});
+obj[1] = 7;  // ignored
+Object.defineProperty(obj, "1", {value: 8});
+Object.defineProperty(obj, "1", {value: 7, writable: true});
+Object.defineProperty(obj, "1", {get: function() {}});
+delete obj[1];
+delete obj[1];
+Object.defineProperty(obj, "1", {get: function() {}, configurable: true});
+Object.defineProperty(obj, "1", {value: 9, writable: true});
+obj[1] = 10;
+delete obj[1];
+Object.defineProperty(obj, "1", {value: 11, configurable: true});
+Object.deliverChangeRecords(observer.callback);
+observer.assertCallbackRecords([
+  { object: obj, name: "1", type: "updated", oldValue: 1 },
+  { object: obj, name: "1", type: "updated", oldValue: 2 },
+  { object: obj, name: "1", type: "deleted", oldValue: 3 },
+  { object: obj, name: "1", type: "new" },
+  { object: obj, name: "1", type: "updated", oldValue: 4 },
+  { object: obj, name: "1", type: "updated", oldValue: 5 },
+  { object: obj, name: "1", type: "reconfigured", oldValue: 6 },
+  { object: obj, name: "1", type: "updated", oldValue: 6 },
+  { object: obj, name: "1", type: "reconfigured", oldValue: 8 },
+  { object: obj, name: "1", type: "reconfigured", oldValue: 7 },
+  // TODO(observe): oldValue should not be present below.
+  { object: obj, name: "1", type: "deleted", oldValue: undefined },
+  { object: obj, name: "1", type: "new" },
+  // TODO(observe): oldValue should be absent below, and type = "reconfigured".
+  { object: obj, name: "1", type: "updated", oldValue: undefined },
+  { object: obj, name: "1", type: "updated", oldValue: 9 },
+  { object: obj, name: "1", type: "deleted", oldValue: 10 },
+  { object: obj, name: "1", type: "new" },
+]);
+
+// Observing array length (including truncation)
+reset();
+var arr = ['a', 'b', 'c', 'd'];
+var arr2 = ['alpha', 'beta'];
+var arr3 = ['hello'];
+arr3[2] = 'goodbye';
+arr3.length = 6;
+// TODO(adamk): Enable this test case when it can run in a reasonable
+// amount of time.
+//var slow_arr = new Array(1000000000);
+//slow_arr[500000000] = 'hello';
+Object.defineProperty(arr, '0', {configurable: false});
+Object.defineProperty(arr, '2', {get: function(){}});
+Object.defineProperty(arr2, '0', {get: function(){}, configurable: false});
+Object.observe(arr, observer.callback);
+Object.observe(arr2, observer.callback);
+Object.observe(arr3, observer.callback);
+arr.length = 2;
+arr.length = 0;
+arr.length = 10;
+arr2.length = 0;
+arr2.length = 1; // no change expected
+arr3.length = 0;
+Object.defineProperty(arr3, 'length', {value: 5});
+Object.defineProperty(arr3, 'length', {value: 10, writable: false});
+Object.deliverChangeRecords(observer.callback);
+observer.assertCallbackRecords([
+  { object: arr, name: '3', type: 'deleted', oldValue: 'd' },
+  // TODO(adamk): oldValue should not be present below
+  { object: arr, name: '2', type: 'deleted', oldValue: undefined },
+  { object: arr, name: 'length', type: 'updated', oldValue: 4 },
+  { object: arr, name: '1', type: 'deleted', oldValue: 'b' },
+  { object: arr, name: 'length', type: 'updated', oldValue: 2 },
+  { object: arr, name: 'length', type: 'updated', oldValue: 1 },
+  { object: arr2, name: '1', type: 'deleted', oldValue: 'beta' },
+  { object: arr2, name: 'length', type: 'updated', oldValue: 2 },
+  { object: arr3, name: '2', type: 'deleted', oldValue: 'goodbye' },
+  { object: arr3, name: '0', type: 'deleted', oldValue: 'hello' },
+  { object: arr3, name: 'length', type: 'updated', oldValue: 6 },
+  { object: arr3, name: 'length', type: 'updated', oldValue: 0 },
+  { object: arr3, name: 'length', type: 'updated', oldValue: 5 },
+  // TODO(adamk): This record should be merged with the above
+  { object: arr3, name: 'length', type: 'reconfigured' },
+]);
+
+// Assignments in loops (checking different IC states).
+reset();
+var obj = {};
+Object.observe(obj, observer.callback);
+for (var i = 0; i < 5; i++) {
+  obj["a" + i] = i;
+}
+Object.deliverChangeRecords(observer.callback);
+observer.assertCallbackRecords([
+  { object: obj, name: "a0", type: "new" },
+  { object: obj, name: "a1", type: "new" },
+  { object: obj, name: "a2", type: "new" },
+  { object: obj, name: "a3", type: "new" },
+  { object: obj, name: "a4", type: "new" },
+]);
+
+reset();
+var obj = {};
+Object.observe(obj, observer.callback);
+for (var i = 0; i < 5; i++) {
+  obj[i] = i;
+}
+Object.deliverChangeRecords(observer.callback);
+observer.assertCallbackRecords([
+  { object: obj, name: "0", type: "new" },
+  { object: obj, name: "1", type: "new" },
+  { object: obj, name: "2", type: "new" },
+  { object: obj, name: "3", type: "new" },
+  { object: obj, name: "4", type: "new" },
+]);
+
+// Adding elements past the end of an array should notify on length
+reset();
+var arr = [1, 2, 3];
+Object.observe(arr, observer.callback);
+arr[3] = 10;
+arr[100] = 20;
+Object.defineProperty(arr, '200', {value: 7});
+Object.defineProperty(arr, '400', {get: function(){}});
+arr[50] = 30; // no length change expected
+Object.deliverChangeRecords(observer.callback);
+observer.assertCallbackRecords([
+  { object: arr, name: '3', type: 'new' },
+  { object: arr, name: 'length', type: 'updated', oldValue: 3 },
+  { object: arr, name: '100', type: 'new' },
+  { object: arr, name: 'length', type: 'updated', oldValue: 4 },
+  { object: arr, name: '200', type: 'new' },
+  { object: arr, name: 'length', type: 'updated', oldValue: 101 },
+  { object: arr, name: '400', type: 'new' },
+  { object: arr, name: 'length', type: 'updated', oldValue: 201 },
+  { object: arr, name: '50', type: 'new' },
+]);
+
+// Tests for array methods, first on arrays and then on plain objects
+//
+// === ARRAYS ===
+//
+// Push
+reset();
+var array = [1, 2];
+Object.observe(array, observer.callback);
+array.push(3, 4);
+Object.deliverChangeRecords(observer.callback);
+observer.assertCallbackRecords([
+  { object: array, name: '2', type: 'new' },
+  { object: array, name: 'length', type: 'updated', oldValue: 2 },
+  { object: array, name: '3', type: 'new' },
+  { object: array, name: 'length', type: 'updated', oldValue: 3 },
+]);
+
+// Pop
+reset();
+var array = [1, 2];
+Object.observe(array, observer.callback);
+array.pop();
+array.pop();
+Object.deliverChangeRecords(observer.callback);
+observer.assertCallbackRecords([
+  { object: array, name: '1', type: 'deleted', oldValue: 2 },
+  { object: array, name: 'length', type: 'updated', oldValue: 2 },
+  { object: array, name: '0', type: 'deleted', oldValue: 1 },
+  { object: array, name: 'length', type: 'updated', oldValue: 1 },
+]);
+
+// Shift
+reset();
+var array = [1, 2];
+Object.observe(array, observer.callback);
+array.shift();
+array.shift();
+Object.deliverChangeRecords(observer.callback);
+observer.assertCallbackRecords([
+  { object: array, name: '0', type: 'updated', oldValue: 1 },
+  { object: array, name: '1', type: 'deleted', oldValue: 2 },
+  { object: array, name: 'length', type: 'updated', oldValue: 2 },
+  { object: array, name: '0', type: 'deleted', oldValue: 2 },
+  { object: array, name: 'length', type: 'updated', oldValue: 1 },
+]);
+
+// Unshift
+reset();
+var array = [1, 2];
+Object.observe(array, observer.callback);
+array.unshift(3, 4);
+Object.deliverChangeRecords(observer.callback);
+observer.assertCallbackRecords([
+  { object: array, name: '3', type: 'new' },
+  { object: array, name: 'length', type: 'updated', oldValue: 2 },
+  { object: array, name: '2', type: 'new' },
+  { object: array, name: '0', type: 'updated', oldValue: 1 },
+  { object: array, name: '1', type: 'updated', oldValue: 2 },
+]);
+
+// Splice
+reset();
+var array = [1, 2, 3];
+Object.observe(array, observer.callback);
+array.splice(1, 1, 4, 5);
+Object.deliverChangeRecords(observer.callback);
+observer.assertCallbackRecords([
+  { object: array, name: '3', type: 'new' },
+  { object: array, name: 'length', type: 'updated', oldValue: 3 },
+  { object: array, name: '1', type: 'updated', oldValue: 2 },
+  { object: array, name: '2', type: 'updated', oldValue: 3 },
+]);
+
+//
+// === PLAIN OBJECTS ===
+//
+// Push
+reset()
+var array = {0: 1, 1: 2, length: 2}
+Object.observe(array, observer.callback);
+Array.prototype.push.call(array, 3, 4);
+Object.deliverChangeRecords(observer.callback);
+observer.assertCallbackRecords([
+  { object: array, name: '2', type: 'new' },
+  { object: array, name: '3', type: 'new' },
+  { object: array, name: 'length', type: 'updated', oldValue: 2 },
+]);
+
+// Pop
+reset()
+var array = {0: 1, 1: 2, length: 2};
+Object.observe(array, observer.callback);
+Array.prototype.pop.call(array);
+Array.prototype.pop.call(array);
+Object.deliverChangeRecords(observer.callback);
+observer.assertCallbackRecords([
+  { object: array, name: '1', type: 'deleted', oldValue: 2 },
+  { object: array, name: 'length', type: 'updated', oldValue: 2 },
+  { object: array, name: '0', type: 'deleted', oldValue: 1 },
+  { object: array, name: 'length', type: 'updated', oldValue: 1 },
+]);
+
+// Shift
+reset()
+var array = {0: 1, 1: 2, length: 2};
+Object.observe(array, observer.callback);
+Array.prototype.shift.call(array);
+Array.prototype.shift.call(array);
+Object.deliverChangeRecords(observer.callback);
+observer.assertCallbackRecords([
+  { object: array, name: '0', type: 'updated', oldValue: 1 },
+  { object: array, name: '1', type: 'deleted', oldValue: 2 },
+  { object: array, name: 'length', type: 'updated', oldValue: 2 },
+  { object: array, name: '0', type: 'deleted', oldValue: 2 },
+  { object: array, name: 'length', type: 'updated', oldValue: 1 },
+]);
+
+// Unshift
+reset()
+var array = {0: 1, 1: 2, length: 2};
+Object.observe(array, observer.callback);
+Array.prototype.unshift.call(array, 3, 4);
+Object.deliverChangeRecords(observer.callback);
+observer.assertCallbackRecords([
+  { object: array, name: '3', type: 'new' },
+  { object: array, name: '2', type: 'new' },
+  { object: array, name: '0', type: 'updated', oldValue: 1 },
+  { object: array, name: '1', type: 'updated', oldValue: 2 },
+  { object: array, name: 'length', type: 'updated', oldValue: 2 },
+]);
+
+// Splice
+reset()
+var array = {0: 1, 1: 2, 2: 3, length: 3};
+Object.observe(array, observer.callback);
+Array.prototype.splice.call(array, 1, 1, 4, 5);
+Object.deliverChangeRecords(observer.callback);
+observer.assertCallbackRecords([
+  { object: array, name: '3', type: 'new' },
+  { object: array, name: '1', type: 'updated', oldValue: 2 },
+  { object: array, name: '2', type: 'updated', oldValue: 3 },
+  { object: array, name: 'length', type: 'updated', oldValue: 3 },
 ]);
