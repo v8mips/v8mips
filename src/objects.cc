@@ -641,7 +641,8 @@ MaybeObject* Object::GetProperty(Object* receiver,
       ASSERT(!value->IsTheHole() || result->IsReadOnly());
       return value->IsTheHole() ? heap->undefined_value() : value;
     case FIELD:
-      value = result->holder()->FastPropertyAt(result->GetFieldIndex());
+      value = result->holder()->FastPropertyAt(
+          result->GetFieldIndex().field_index());
       ASSERT(!value->IsTheHole() || result->IsReadOnly());
       return value->IsTheHole() ? heap->undefined_value() : value;
     case CONSTANT_FUNCTION:
@@ -2436,7 +2437,7 @@ void JSObject::LocalLookupRealNamedProperty(String* name,
     // occur as fields.
     if (result->IsField() &&
         result->IsReadOnly() &&
-        FastPropertyAt(result->GetFieldIndex())->IsTheHole()) {
+        FastPropertyAt(result->GetFieldIndex().field_index())->IsTheHole()) {
       result->DisallowCaching();
     }
     return;
@@ -2929,7 +2930,8 @@ MaybeObject* JSObject::SetPropertyForResult(LookupResult* lookup,
       result = self->SetNormalizedProperty(lookup, *value);
       break;
     case FIELD:
-      result = self->FastPropertyAtPut(lookup->GetFieldIndex(), *value);
+      result = self->FastPropertyAtPut(
+          lookup->GetFieldIndex().field_index(), *value);
       break;
     case CONSTANT_FUNCTION:
       // Only replace the function if necessary.
@@ -3095,7 +3097,8 @@ MaybeObject* JSObject::SetLocalPropertyIgnoreAttributes(
       break;
     }
     case FIELD:
-      result = self->FastPropertyAtPut(lookup.GetFieldIndex(), *value);
+      result = self->FastPropertyAtPut(
+          lookup.GetFieldIndex().field_index(), *value);
       break;
     case CONSTANT_FUNCTION:
       // Only replace the function if necessary.
@@ -3318,7 +3321,7 @@ PropertyAttributes JSObject::GetElementAttributeWithReceiver(
     Object* proto = GetPrototype();
     if (proto->IsNull()) return ABSENT;
     ASSERT(proto->IsJSGlobalObject());
-    return JSReceiver::cast(proto)->GetElementAttributeWithReceiver(
+    return JSObject::cast(proto)->GetElementAttributeWithReceiver(
         receiver, index, continue_search);
   }
 
@@ -8834,13 +8837,13 @@ bool Code::IsOld() {
 
 
 byte* Code::FindCodeAgeSequence() {
-  if (kind() != FUNCTION && kind() != OPTIMIZED_FUNCTION) return NULL;
-  if (strlen(FLAG_stop_at) == 0 &&
+  return FLAG_age_code &&
+      strlen(FLAG_stop_at) == 0 &&
       !ProfileEntryHookStub::HasEntryHook() &&
-      (kind() == FUNCTION && !has_debug_break_slots())) {
-    return FindPlatformCodeAgeSequence();
-  }
-  return NULL;
+      (kind() == OPTIMIZED_FUNCTION ||
+       (kind() == FUNCTION && !has_debug_break_slots()))
+      ? FindPlatformCodeAgeSequence()
+      : NULL;
 }
 
 
@@ -10264,25 +10267,21 @@ MaybeObject* JSObject::SetElement(uint32_t index,
                                   bool check_prototype,
                                   SetPropertyMode set_mode) {
   Isolate* isolate = GetIsolate();
-  HandleScope scope(isolate);
-  Handle<JSObject> self(this);
-  Handle<Object> value(value_raw);
 
   // Check access rights if needed.
   if (IsAccessCheckNeeded()) {
-    Heap* heap = GetHeap();
-    if (!heap->isolate()->MayIndexedAccess(*self, index, v8::ACCESS_SET)) {
-      heap->isolate()->ReportFailedAccessCheck(*self, v8::ACCESS_SET);
-      return *value;
+    if (!isolate->MayIndexedAccess(this, index, v8::ACCESS_SET)) {
+      isolate->ReportFailedAccessCheck(this, v8::ACCESS_SET);
+      return value_raw;
     }
   }
 
   if (IsJSGlobalProxy()) {
     Object* proto = GetPrototype();
-    if (proto->IsNull()) return *value;
+    if (proto->IsNull()) return value_raw;
     ASSERT(proto->IsJSGlobalObject());
     return JSObject::cast(proto)->SetElement(index,
-                                             *value,
+                                             value_raw,
                                              attributes,
                                              strict_mode,
                                              check_prototype,
@@ -10292,7 +10291,7 @@ MaybeObject* JSObject::SetElement(uint32_t index,
   // Don't allow element properties to be redefined for external arrays.
   if (HasExternalArrayElements() && set_mode == DEFINE_PROPERTY) {
     Handle<Object> number = isolate->factory()->NewNumberFromUint(index);
-    Handle<Object> args[] = { self, number };
+    Handle<Object> args[] = { handle(this), number };
     Handle<Object> error = isolate->factory()->NewTypeError(
         "redef_external_array_element", HandleVector(args, ARRAY_SIZE(args)));
     return isolate->Throw(*error);
@@ -10307,23 +10306,27 @@ MaybeObject* JSObject::SetElement(uint32_t index,
     dictionary->set_requires_slow_elements();
   }
 
+  if (!(FLAG_harmony_observation && map()->is_observed())) {
+    return HasIndexedInterceptor()
+      ? SetElementWithInterceptor(
+          index, value_raw, attributes, strict_mode, check_prototype, set_mode)
+      : SetElementWithoutInterceptor(
+          index, value_raw, attributes, strict_mode, check_prototype, set_mode);
+  }
+
   // From here on, everything has to be handlified.
-  Handle<String> name;
-  Handle<Object> old_value(isolate->heap()->the_hole_value());
-  Handle<Object> old_array_length;
-  PropertyAttributes old_attributes = ABSENT;
-  bool preexists = false;
-  if (FLAG_harmony_observation && map()->is_observed()) {
-    name = isolate->factory()->Uint32ToString(index);
-    preexists = self->HasLocalElement(index);
-    if (preexists) {
-      old_attributes = self->GetLocalPropertyAttribute(*name);
-      // TODO(observe): only read & set old_value if we have a data property
-      old_value = Object::GetElement(self, index);
-    } else if (self->IsJSArray()) {
-      // Store old array length in case adding an element grows the array.
-      old_array_length = handle(Handle<JSArray>::cast(self)->length());
-    }
+  Handle<JSObject> self(this);
+  Handle<Object> value(value_raw);
+  PropertyAttributes old_attributes = self->GetLocalElementAttribute(index);
+  Handle<Object> old_value = isolate->factory()->the_hole_value();
+  Handle<Object> old_length;
+
+  if (old_attributes != ABSENT) {
+    // TODO(observe): only read & set old_value if we have a data property
+    old_value = Object::GetElement(self, index);
+  } else if (self->IsJSArray()) {
+    // Store old array length in case adding an element grows the array.
+    old_length = handle(Handle<JSArray>::cast(self)->length());
   }
 
   // Check for lookup interceptor
@@ -10336,23 +10339,19 @@ MaybeObject* JSObject::SetElement(uint32_t index,
   Handle<Object> hresult;
   if (!result->ToHandle(&hresult)) return result;
 
-  if (FLAG_harmony_observation && map()->is_observed()) {
-    PropertyAttributes new_attributes = self->GetLocalPropertyAttribute(*name);
-    if (!preexists) {
-      EnqueueChangeRecord(self, "new", name, old_value);
-      if (self->IsJSArray() &&
-          !old_array_length->SameValue(Handle<JSArray>::cast(self)->length())) {
-        EnqueueChangeRecord(self, "updated",
-                            isolate->factory()->length_symbol(),
-                            old_array_length);
-      }
-    } else if (new_attributes != old_attributes || old_value->IsTheHole()) {
-      EnqueueChangeRecord(self, "reconfigured", name, old_value);
-    } else {
-      Handle<Object> new_value = Object::GetElement(self, index);
-      if (!new_value->SameValue(*old_value))
-        EnqueueChangeRecord(self, "updated", name, old_value);
+  Handle<String> name = isolate->factory()->Uint32ToString(index);
+  PropertyAttributes new_attributes = self->GetLocalElementAttribute(index);
+  if (old_attributes == ABSENT) {
+    EnqueueChangeRecord(self, "new", name, old_value);
+    if (self->IsJSArray() &&
+        !old_length->SameValue(Handle<JSArray>::cast(self)->length())) {
+      EnqueueChangeRecord(
+          self, "updated", isolate->factory()->length_symbol(), old_length);
     }
+  } else if (old_attributes != new_attributes || old_value->IsTheHole()) {
+    EnqueueChangeRecord(self, "reconfigured", name, old_value);
+  } else if (!old_value->SameValue(*Object::GetElement(self, index))) {
+    EnqueueChangeRecord(self, "updated", name, old_value);
   }
 
   return *hresult;

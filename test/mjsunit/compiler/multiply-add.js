@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -25,16 +25,45 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// See: http://code.google.com/p/v8/issues/detail?id=1980
+// Flags: --allow-natives-syntax
+// Test expressions that can be computed with a multiply-add instruction.
 
-var invalid_this = [ "invalid", 23, undefined, null ];
-for (var i = 0; i < invalid_this.length; i++) {
-  var exception = false;
-  try {
-    Error.prototype.toString.call(invalid_this[i]);
-  } catch (e) {
-    exception = true;
-    assertEquals("Error.prototype.toString called on non-object", e.message);
-  }
-  assertTrue(exception);
+function f(a, b, c) {
+  return a * b + c;
 }
+
+function g(a, b, c) {
+  return a + b * c;
+}
+
+function h(a, b, c, d) {
+  return a * b + c * d;
+}
+
+assertEquals(5, f(1, 2, 3));
+assertEquals(5, f(1, 2, 3));
+%OptimizeFunctionOnNextCall(f);
+assertEquals(5, f(1, 2, 3));
+assertEquals("2foo", f(1, 2, "foo"));
+assertEquals(5.41, f(1.1, 2.1, 3.1));
+assertEquals(5.41, f(1.1, 2.1, 3.1));
+%OptimizeFunctionOnNextCall(f);
+assertEquals(5.41, f(1.1, 2.1, 3.1));
+
+assertEquals(7, g(1, 2, 3));
+assertEquals(7, g(1, 2, 3));
+%OptimizeFunctionOnNextCall(g);
+assertEquals(7, g(1, 2, 3));
+assertEquals(8.36, g(1.1, 2.2, 3.3));
+assertEquals(8.36, g(1.1, 2.2, 3.3));
+%OptimizeFunctionOnNextCall(g);
+assertEquals(8.36, g(1.1, 2.2, 3.3));
+
+assertEquals(14, h(1, 2, 3, 4));
+assertEquals(14, h(1, 2, 3, 4));
+%OptimizeFunctionOnNextCall(h);
+assertEquals(14, h(1, 2, 3, 4));
+assertEquals(15.02, h(1.1, 2.1, 3.1, 4.1));
+assertEquals(15.02, h(1.1, 2.1, 3.1, 4.1));
+%OptimizeFunctionOnNextCall(h);
+assertEquals(15.02, h(1.1, 2.1, 3.1, 4.1));

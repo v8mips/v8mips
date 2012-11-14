@@ -34,7 +34,8 @@ var observationState = %GetObservationState();
 if (IS_UNDEFINED(observationState.observerInfoMap)) {
   observationState.observerInfoMap = %CreateObjectHashTable();
   observationState.objectInfoMap = %CreateObjectHashTable();
-  observationState.activeObservers = new InternalArray;
+  observationState.notifierTargetMap = %CreateObjectHashTable();
+  observationState.pendingObservers = new InternalArray;
   observationState.observerPriority = 0;
 }
 
@@ -57,6 +58,16 @@ InternalObjectHashTable.prototype = {
 
 var observerInfoMap = new InternalObjectHashTable('observerInfoMap');
 var objectInfoMap = new InternalObjectHashTable('objectInfoMap');
+var notifierTargetMap = new InternalObjectHashTable('notifierTargetMap');
+
+function CreateObjectInfo(object) {
+  var info = {
+    changeObservers: new InternalArray,
+    notifier: null,
+  };
+  objectInfoMap.set(object, info);
+  return info;
+}
 
 function ObjectObserve(object, callback) {
   if (!IS_SPEC_OBJECT(object))
@@ -75,13 +86,8 @@ function ObjectObserve(object, callback) {
 
   var objectInfo = objectInfoMap.get(object);
   if (IS_UNDEFINED(objectInfo)) {
-    // TODO: setup objectInfo.notifier
-    objectInfo = {
-      changeObservers: new InternalArray(callback)
-    };
-    objectInfoMap.set(object, objectInfo);
+    objectInfo = CreateObjectInfo(object);
     %SetIsObserved(object, true);
-    return;
   }
 
   var changeObservers = objectInfo.changeObservers;
@@ -94,6 +100,8 @@ function ObjectObserve(object, callback) {
 function ObjectUnobserve(object, callback) {
   if (!IS_SPEC_OBJECT(object))
     throw MakeTypeError("observe_non_object", ["unobserve"]);
+  if (!IS_SPEC_FUNCTION(callback))
+    throw MakeTypeError("observe_non_function", ["unobserve"]);
 
   var objectInfo = objectInfoMap.get(object);
   if (IS_UNDEFINED(objectInfo))
@@ -111,7 +119,7 @@ function EnqueueChangeRecord(changeRecord, observers) {
   for (var i = 0; i < observers.length; i++) {
     var observer = observers[i];
     var observerInfo = observerInfoMap.get(observer);
-    observationState.activeObservers[observerInfo.priority] = observer;
+    observationState.pendingObservers[observerInfo.priority] = observer;
     %SetObserverDeliveryPending();
     if (IS_NULL(observerInfo.pendingChangeRecords)) {
       observerInfo.pendingChangeRecords = new InternalArray(changeRecord);
@@ -130,17 +138,28 @@ function NotifyChange(type, object, name, oldValue) {
   EnqueueChangeRecord(changeRecord, objectInfo.changeObservers);
 }
 
-function ObjectNotify(object, changeRecord) {
-  // TODO: notifier needs to be [[THIS]]
+var notifierPrototype = {};
+
+function ObjectNotifierNotify(changeRecord) {
+  if (!IS_SPEC_OBJECT(this))
+    throw MakeTypeError("called_on_non_object", ["notify"]);
+
+  var target = notifierTargetMap.get(this);
+  if (IS_UNDEFINED(target))
+    throw MakeTypeError("observe_notify_non_notifier");
+
   if (!IS_STRING(changeRecord.type))
     throw MakeTypeError("observe_type_non_string");
 
-  var objectInfo = objectInfoMap.get(object);
+  var objectInfo = objectInfoMap.get(target);
   if (IS_UNDEFINED(objectInfo))
     return;
 
+  if (!objectInfo.changeObservers.length)
+    return;
+
   var newRecord = {
-    object: object  // TODO: Needs to be 'object' retrieved from notifier
+    object: target
   };
   for (var prop in changeRecord) {
     if (prop === 'object')
@@ -150,6 +169,27 @@ function ObjectNotify(object, changeRecord) {
   InternalObjectFreeze(newRecord);
 
   EnqueueChangeRecord(newRecord, objectInfo.changeObservers);
+}
+
+function ObjectGetNotifier(object) {
+  if (!IS_SPEC_OBJECT(object))
+    throw MakeTypeError("observe_non_object", ["getNotifier"]);
+
+  if (InternalObjectIsFrozen(object))
+    return null;
+
+  var objectInfo = objectInfoMap.get(object);
+  if (IS_UNDEFINED(objectInfo))
+    objectInfo = CreateObjectInfo(object);
+
+  if (IS_NULL(objectInfo.notifier)) {
+    objectInfo.notifier = {
+      __proto__: notifierPrototype
+    };
+    notifierTargetMap.set(objectInfo.notifier, object);
+  }
+
+  return objectInfo.notifier;
 }
 
 function DeliverChangeRecordsForObserver(observer) {
@@ -162,6 +202,7 @@ function DeliverChangeRecordsForObserver(observer) {
     return;
 
   observerInfo.pendingChangeRecords = null;
+  delete observationState.pendingObservers[observerInfo.priority];
   var delivered = [];
   %MoveArrayContents(pendingChangeRecords, delivered);
   try {
@@ -177,11 +218,11 @@ function ObjectDeliverChangeRecords(callback) {
 }
 
 function DeliverChangeRecords() {
-  while (observationState.activeObservers.length) {
-    var activeObservers = observationState.activeObservers;
-    observationState.activeObservers = new InternalArray;
-    for (var i in activeObservers) {
-      DeliverChangeRecordsForObserver(activeObservers[i]);
+  while (observationState.pendingObservers.length) {
+    var pendingObservers = observationState.pendingObservers;
+    observationState.pendingObservers = new InternalArray;
+    for (var i in pendingObservers) {
+      DeliverChangeRecordsForObserver(pendingObservers[i]);
     }
   }
 }
@@ -190,9 +231,12 @@ function SetupObjectObserve() {
   %CheckIsBootstrapping();
   InstallFunctions($Object, DONT_ENUM, $Array(
     "deliverChangeRecords", ObjectDeliverChangeRecords,
-    "notify", ObjectNotify,  // TODO: Remove when getNotifier is implemented.
+    "getNotifier", ObjectGetNotifier,
     "observe", ObjectObserve,
     "unobserve", ObjectUnobserve
+  ));
+  InstallFunctions(notifierPrototype, DONT_ENUM, $Array(
+    "notify", ObjectNotifierNotify
   ));
 }
 

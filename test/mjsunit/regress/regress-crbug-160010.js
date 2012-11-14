@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -25,16 +25,9 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// See: http://code.google.com/p/v8/issues/detail?id=1980
-
-var invalid_this = [ "invalid", 23, undefined, null ];
-for (var i = 0; i < invalid_this.length; i++) {
-  var exception = false;
-  try {
-    Error.prototype.toString.call(invalid_this[i]);
-  } catch (e) {
-    exception = true;
-    assertEquals("Error.prototype.toString called on non-object", e.message);
-  }
-  assertTrue(exception);
+var str = "a";
+for (var i = 0; i < 28; i++) {
+  str += str;
 }
+JSON.stringify(str);
+

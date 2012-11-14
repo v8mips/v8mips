@@ -2578,6 +2578,14 @@ bool Heap::CreateInitialMaps() {
   }
   set_message_object_map(Map::cast(obj));
 
+  Map* external_map;
+  { MaybeObject* maybe_obj =
+        AllocateMap(JS_OBJECT_TYPE, JSObject::kHeaderSize + kPointerSize);
+    if (!maybe_obj->To(&external_map)) return false;
+  }
+  external_map->set_is_extensible(false);
+  set_external_map(external_map);
+
   ASSERT(!InNewSpace(empty_fixed_array()));
   return true;
 }
@@ -5217,6 +5225,20 @@ MaybeObject* Heap::AllocateScopeInfo(int length) {
 }
 
 
+MaybeObject* Heap::AllocateExternal(void* value) {
+  Foreign* foreign;
+  { MaybeObject* maybe_result = AllocateForeign(static_cast<Address>(value));
+    if (!maybe_result->To(&foreign)) return maybe_result;
+  }
+  JSObject* external;
+  { MaybeObject* maybe_result = AllocateJSObjectFromMap(external_map());
+    if (!maybe_result->To(&external)) return maybe_result;
+  }
+  external->SetInternalField(0, foreign);
+  return external;
+}
+
+
 MaybeObject* Heap::AllocateStruct(InstanceType type) {
   Map* map;
   switch (type) {
@@ -7205,6 +7227,7 @@ GCTracer::~GCTracer() {
     } else {
       PrintF("stepscount=%d ", steps_count_);
       PrintF("stepstook=%d ", static_cast<int>(steps_took_));
+      PrintF("longeststep=%.f ", longest_step_);
     }
 
     PrintF("\n");

@@ -233,6 +233,7 @@ namespace internal {
   F(FunctionIsBuiltin, 1, 1) \
   F(GetScript, 1, 1) \
   F(CollectStackTrace, 3, 1) \
+  F(GetOverflowedRawStackTrace, 1, 1) \
   F(GetV8Version, 0, 1) \
   \
   F(ClassOf, 1, 1) \
@@ -267,6 +268,7 @@ namespace internal {
   F(DefineOrRedefineDataProperty, 4, 1) \
   F(DefineOrRedefineAccessorProperty, 5, 1) \
   F(IgnoreAttributesAndSetProperty, -1 /* 3 or 4 */, 1) \
+  F(GetDataProperty, 2, 1) \
   \
   /* Arrays */ \
   F(RemoveArrayHoles, 2, 1) \

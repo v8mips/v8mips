@@ -907,6 +907,7 @@ class Object : public MaybeObject {
 #undef IS_TYPE_FUNCTION_DECL
 
   inline bool IsFixedArrayBase();
+  inline bool IsExternal();
 
   // Returns true if this object is an instance of the specified
   // function template.
@@ -1483,10 +1484,6 @@ class JSReceiver: public HeapObject {
   PropertyAttributes GetLocalPropertyAttribute(String* name);
 
   inline PropertyAttributes GetElementAttribute(uint32_t index);
-  inline PropertyAttributes GetElementAttributeWithReceiver(
-      JSReceiver* receiver,
-      uint32_t index,
-      bool continue_search);
   inline PropertyAttributes GetLocalElementAttribute(uint32_t index);
 
   // Can cause a GC.
@@ -2455,6 +2452,8 @@ class FixedArray: public FixedArrayBase {
                                                   Object* value);
 
  private:
+  STATIC_CHECK(kHeaderSize == Internals::kFixedArrayHeaderSize);
+
   DISALLOW_IMPLICIT_CONSTRUCTORS(FixedArray);
 };
 
