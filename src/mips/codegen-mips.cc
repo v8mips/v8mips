@@ -539,6 +539,7 @@ void Code::PatchPlatformCodeAge(byte* sequence,
   }
 }
 
+
 #undef __
 
 } }  // namespace v8::internal
