@@ -1196,7 +1196,7 @@ void LCodeGen::DoShiftI(LShiftI* instr) {
     uint8_t shift_count = static_cast<uint8_t>(value & 0x1F);
     switch (instr->op()) {
       case Token::ROR:
-          if (shift_count != 0) {
+        if (shift_count != 0) {
           __ Ror(result, left, Operand(shift_count));
         } else {
           __ Move(result, left);

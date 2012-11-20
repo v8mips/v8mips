@@ -967,104 +967,107 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_IsInPrototypeChain) {
 }
 
 
-// Recursively traverses hidden prototypes if property is not found
-static void GetOwnPropertyImplementation(JSObject* obj,
-                                         String* name,
-                                         LookupResult* result) {
-  obj->LocalLookupRealNamedProperty(name, result);
-
-  if (result->IsFound()) return;
-
-  Object* proto = obj->GetPrototype();
-  if (proto->IsJSObject() &&
-    JSObject::cast(proto)->map()->is_hidden_prototype())
-    GetOwnPropertyImplementation(JSObject::cast(proto),
-                                 name, result);
-}
-
-
-static bool CheckAccessException(LookupResult* result,
+static bool CheckAccessException(Object* callback,
                                  v8::AccessType access_type) {
-  if (result->type() == CALLBACKS) {
-    Object* callback = result->GetCallbackObject();
-    if (callback->IsAccessorInfo()) {
-      AccessorInfo* info = AccessorInfo::cast(callback);
-      bool can_access =
-          (access_type == v8::ACCESS_HAS &&
-              (info->all_can_read() || info->all_can_write())) ||
-          (access_type == v8::ACCESS_GET && info->all_can_read()) ||
-          (access_type == v8::ACCESS_SET && info->all_can_write());
-      return can_access;
-    }
+  if (callback->IsAccessorInfo()) {
+    AccessorInfo* info = AccessorInfo::cast(callback);
+    return
+        (access_type == v8::ACCESS_HAS &&
+           (info->all_can_read() || info->all_can_write())) ||
+        (access_type == v8::ACCESS_GET && info->all_can_read()) ||
+        (access_type == v8::ACCESS_SET && info->all_can_write());
   }
-
   return false;
 }
 
 
-static bool CheckAccess(JSObject* obj,
-                        String* name,
-                        LookupResult* result,
-                        v8::AccessType access_type) {
-  ASSERT(result->IsProperty());
-
-  JSObject* holder = result->holder();
-  JSObject* current = obj;
-  Isolate* isolate = obj->GetIsolate();
-  while (true) {
+template<class Key>
+static bool CheckGenericAccess(
+    JSObject* receiver,
+    JSObject* holder,
+    Key key,
+    v8::AccessType access_type,
+    bool (Isolate::*mayAccess)(JSObject*, Key, v8::AccessType)) {
+  Isolate* isolate = receiver->GetIsolate();
+  for (JSObject* current = receiver;
+       true;
+       current = JSObject::cast(current->GetPrototype())) {
     if (current->IsAccessCheckNeeded() &&
-        !isolate->MayNamedAccess(current, name, access_type)) {
-      // Access check callback denied the access, but some properties
-      // can have a special permissions which override callbacks descision
-      // (currently see v8::AccessControl).
-      break;
+        !(isolate->*mayAccess)(current, key, access_type)) {
+      return false;
     }
+    if (current == holder) break;
+  }
+  return true;
+}
 
-    if (current == holder) {
-      return true;
-    }
 
-    current = JSObject::cast(current->GetPrototype());
+enum AccessCheckResult {
+  ACCESS_FORBIDDEN,
+  ACCESS_ALLOWED,
+  ACCESS_ABSENT
+};
+
+
+static AccessCheckResult CheckElementAccess(
+    JSObject* obj,
+    uint32_t index,
+    v8::AccessType access_type) {
+  // TODO(1095): we should traverse hidden prototype hierachy as well.
+  if (CheckGenericAccess(
+          obj, obj, index, access_type, &Isolate::MayIndexedAccess)) {
+    return ACCESS_ALLOWED;
   }
 
+  obj->GetIsolate()->ReportFailedAccessCheck(obj, access_type);
+  return ACCESS_FORBIDDEN;
+}
+
+
+static AccessCheckResult CheckPropertyAccess(
+    JSObject* obj,
+    String* name,
+    v8::AccessType access_type) {
+  uint32_t index;
+  if (name->AsArrayIndex(&index)) {
+    return CheckElementAccess(obj, index, access_type);
+  }
+
+  LookupResult lookup(obj->GetIsolate());
+  obj->LocalLookup(name, &lookup, true);
+
+  if (!lookup.IsProperty()) return ACCESS_ABSENT;
+  if (CheckGenericAccess<Object*>(
+          obj, lookup.holder(), name, access_type, &Isolate::MayNamedAccess)) {
+    return ACCESS_ALLOWED;
+  }
+
+  // Access check callback denied the access, but some properties
+  // can have a special permissions which override callbacks descision
+  // (currently see v8::AccessControl).
   // API callbacks can have per callback access exceptions.
-  switch (result->type()) {
-    case CALLBACKS: {
-      if (CheckAccessException(result, access_type)) {
-        return true;
+  switch (lookup.type()) {
+    case CALLBACKS:
+      if (CheckAccessException(lookup.GetCallbackObject(), access_type)) {
+        return ACCESS_ALLOWED;
       }
       break;
-    }
-    case INTERCEPTOR: {
+    case INTERCEPTOR:
       // If the object has an interceptor, try real named properties.
       // Overwrite the result to fetch the correct property later.
-      holder->LookupRealNamedProperty(name, result);
-      if (result->IsProperty()) {
-        if (CheckAccessException(result, access_type)) {
-          return true;
+      lookup.holder()->LookupRealNamedProperty(name, &lookup);
+      if (lookup.IsProperty() && lookup.IsPropertyCallbacks()) {
+        if (CheckAccessException(lookup.GetCallbackObject(), access_type)) {
+          return ACCESS_ALLOWED;
         }
       }
       break;
-    }
     default:
       break;
   }
 
-  isolate->ReportFailedAccessCheck(current, access_type);
-  return false;
-}
-
-
-// TODO(1095): we should traverse hidden prototype hierachy as well.
-static bool CheckElementAccess(JSObject* obj,
-                               uint32_t index,
-                               v8::AccessType access_type) {
-  if (obj->IsAccessCheckNeeded() &&
-      !obj->GetIsolate()->MayIndexedAccess(obj, index, access_type)) {
-    return false;
-  }
-
-  return true;
+  obj->GetIsolate()->ReportFailedAccessCheck(obj, access_type);
+  return ACCESS_FORBIDDEN;
 }
 
 
@@ -1085,141 +1088,43 @@ static MaybeObject* GetOwnProperty(Isolate* isolate,
                                    Handle<JSObject> obj,
                                    Handle<String> name) {
   Heap* heap = isolate->heap();
+  // Due to some WebKit tests, we want to make sure that we do not log
+  // more than one access failure here.
+  switch (CheckPropertyAccess(*obj, *name, v8::ACCESS_HAS)) {
+    case ACCESS_FORBIDDEN: return heap->false_value();
+    case ACCESS_ALLOWED: break;
+    case ACCESS_ABSENT: return heap->undefined_value();
+  }
+
+  PropertyAttributes attrs = obj->GetLocalPropertyAttribute(*name);
+  if (attrs == ABSENT) return heap->undefined_value();
+  AccessorPair* accessors = obj->GetLocalPropertyAccessorPair(*name);
+
   Handle<FixedArray> elms = isolate->factory()->NewFixedArray(DESCRIPTOR_SIZE);
-  Handle<JSArray> desc = isolate->factory()->NewJSArrayWithElements(elms);
-  LookupResult result(isolate);
-  // This could be an element.
-  uint32_t index;
-  if (name->AsArrayIndex(&index)) {
-    switch (obj->GetLocalElementKind(index)) {
-      case JSObject::UNDEFINED_ELEMENT:
-        return heap->undefined_value();
+  elms->set(ENUMERABLE_INDEX, heap->ToBoolean((attrs & DONT_ENUM) == 0));
+  elms->set(CONFIGURABLE_INDEX, heap->ToBoolean((attrs & DONT_DELETE) == 0));
+  elms->set(IS_ACCESSOR_INDEX, heap->ToBoolean(accessors != NULL));
 
-      case JSObject::STRING_CHARACTER_ELEMENT: {
-        // Special handling of string objects according to ECMAScript 5
-        // 15.5.5.2. Note that this might be a string object with elements
-        // other than the actual string value. This is covered by the
-        // subsequent cases.
-        Handle<JSValue> js_value = Handle<JSValue>::cast(obj);
-        Handle<String> str(String::cast(js_value->value()));
-        Handle<String> substr = SubString(str, index, index + 1, NOT_TENURED);
-
-        elms->set(IS_ACCESSOR_INDEX, heap->false_value());
-        elms->set(VALUE_INDEX, *substr);
-        elms->set(WRITABLE_INDEX, heap->false_value());
-        elms->set(ENUMERABLE_INDEX,  heap->true_value());
-        elms->set(CONFIGURABLE_INDEX, heap->false_value());
-        return *desc;
-      }
-
-      case JSObject::INTERCEPTED_ELEMENT:
-      case JSObject::FAST_ELEMENT: {
-        elms->set(IS_ACCESSOR_INDEX, heap->false_value());
-        Handle<Object> value = Object::GetElement(obj, index);
-        RETURN_IF_EMPTY_HANDLE(isolate, value);
-        elms->set(VALUE_INDEX, *value);
-        elms->set(WRITABLE_INDEX, heap->true_value());
-        elms->set(ENUMERABLE_INDEX,  heap->true_value());
-        elms->set(CONFIGURABLE_INDEX, heap->true_value());
-        return *desc;
-      }
-
-      case JSObject::DICTIONARY_ELEMENT: {
-        Handle<JSObject> holder = obj;
-        if (obj->IsJSGlobalProxy()) {
-          Object* proto = obj->GetPrototype();
-          if (proto->IsNull()) return heap->undefined_value();
-          ASSERT(proto->IsJSGlobalObject());
-          holder = Handle<JSObject>(JSObject::cast(proto));
-        }
-        FixedArray* elements = FixedArray::cast(holder->elements());
-        SeededNumberDictionary* dictionary = NULL;
-        if (elements->map() == heap->non_strict_arguments_elements_map()) {
-          dictionary = SeededNumberDictionary::cast(elements->get(1));
-        } else {
-          dictionary = SeededNumberDictionary::cast(elements);
-        }
-        int entry = dictionary->FindEntry(index);
-        ASSERT(entry != SeededNumberDictionary::kNotFound);
-        PropertyDetails details = dictionary->DetailsAt(entry);
-        switch (details.type()) {
-          case CALLBACKS: {
-            // This is an accessor property with getter and/or setter.
-            AccessorPair* accessors =
-                AccessorPair::cast(dictionary->ValueAt(entry));
-            elms->set(IS_ACCESSOR_INDEX, heap->true_value());
-            if (CheckElementAccess(*obj, index, v8::ACCESS_GET)) {
-              elms->set(GETTER_INDEX, accessors->GetComponent(ACCESSOR_GETTER));
-            }
-            if (CheckElementAccess(*obj, index, v8::ACCESS_SET)) {
-              elms->set(SETTER_INDEX, accessors->GetComponent(ACCESSOR_SETTER));
-            }
-            break;
-          }
-          case NORMAL: {
-            // This is a data property.
-            elms->set(IS_ACCESSOR_INDEX, heap->false_value());
-            Handle<Object> value = Object::GetElement(obj, index);
-            ASSERT(!value.is_null());
-            elms->set(VALUE_INDEX, *value);
-            elms->set(WRITABLE_INDEX, heap->ToBoolean(!details.IsReadOnly()));
-            break;
-          }
-          default:
-            UNREACHABLE();
-            break;
-        }
-        elms->set(ENUMERABLE_INDEX, heap->ToBoolean(!details.IsDontEnum()));
-        elms->set(CONFIGURABLE_INDEX, heap->ToBoolean(!details.IsDontDelete()));
-        return *desc;
-      }
-    }
-  }
-
-  // Use recursive implementation to also traverse hidden prototypes
-  GetOwnPropertyImplementation(*obj, *name, &result);
-
-  if (!result.IsProperty()) {
-    return heap->undefined_value();
-  }
-
-  if (!CheckAccess(*obj, *name, &result, v8::ACCESS_HAS)) {
-    return heap->false_value();
-  }
-
-  elms->set(ENUMERABLE_INDEX, heap->ToBoolean(!result.IsDontEnum()));
-  elms->set(CONFIGURABLE_INDEX, heap->ToBoolean(!result.IsDontDelete()));
-
-  bool is_js_accessor = result.IsPropertyCallbacks() &&
-                        (result.GetCallbackObject()->IsAccessorPair());
-
-  if (is_js_accessor) {
-    // __defineGetter__/__defineSetter__ callback.
-    elms->set(IS_ACCESSOR_INDEX, heap->true_value());
-
-    AccessorPair* accessors = AccessorPair::cast(result.GetCallbackObject());
+  if (accessors == NULL) {
+    elms->set(WRITABLE_INDEX, heap->ToBoolean((attrs & READ_ONLY) == 0));
+    // GetProperty does access check.
+    Handle<Object> value = GetProperty(obj, name);
+    if (value.is_null()) return Failure::Exception();
+    elms->set(VALUE_INDEX, *value);
+  } else {
+    // Access checks are performed for both accessors separately.
+    // When they fail, the respective field is not set in the descriptor.
     Object* getter = accessors->GetComponent(ACCESSOR_GETTER);
-    if (!getter->IsMap() && CheckAccess(*obj, *name, &result, v8::ACCESS_GET)) {
+    Object* setter = accessors->GetComponent(ACCESSOR_SETTER);
+    if (!getter->IsMap() && CheckPropertyAccess(*obj, *name, v8::ACCESS_GET)) {
       elms->set(GETTER_INDEX, getter);
     }
-    Object* setter = accessors->GetComponent(ACCESSOR_SETTER);
-    if (!setter->IsMap() && CheckAccess(*obj, *name, &result, v8::ACCESS_SET)) {
+    if (!setter->IsMap() && CheckPropertyAccess(*obj, *name, v8::ACCESS_SET)) {
       elms->set(SETTER_INDEX, setter);
     }
-  } else {
-    elms->set(IS_ACCESSOR_INDEX, heap->false_value());
-    elms->set(WRITABLE_INDEX, heap->ToBoolean(!result.IsReadOnly()));
-
-    PropertyAttributes attrs;
-    Object* value;
-    // GetProperty will check access and report any violations.
-    { MaybeObject* maybe_value = obj->GetProperty(*obj, &result, *name, &attrs);
-      if (!maybe_value->ToObject(&value)) return maybe_value;
-    }
-    elms->set(VALUE_INDEX, value);
   }
 
-  return *desc;
+  return *isolate->factory()->NewJSArrayWithElements(elms);
 }
 
 
@@ -1386,13 +1291,7 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_DeclareGlobals) {
       // Do the lookup locally only, see ES5 erratum.
       LookupResult lookup(isolate);
       if (FLAG_es52_globals) {
-        Object* obj = *global;
-        do {
-          JSObject::cast(obj)->LocalLookup(*name, &lookup);
-          if (lookup.IsFound()) break;
-          obj = obj->GetPrototype();
-        } while (obj->IsJSObject() &&
-                 JSObject::cast(obj)->map()->is_hidden_prototype());
+        global->LocalLookup(*name, &lookup, true);
       } else {
         global->Lookup(*name, &lookup);
       }
@@ -1416,7 +1315,7 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_DeclareGlobals) {
     }
 
     LookupResult lookup(isolate);
-    global->LocalLookup(*name, &lookup);
+    global->LocalLookup(*name, &lookup, true);
 
     // Compute the property attributes. According to ECMA-262,
     // the property must be non-configurable except in eval.
@@ -1595,27 +1494,20 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_InitializeVarGlobal) {
   // the whole chain of hidden prototypes to do a 'local' lookup.
   Object* object = global;
   LookupResult lookup(isolate);
-  while (object->IsJSObject() &&
-         JSObject::cast(object)->map()->is_hidden_prototype()) {
-    JSObject* raw_holder = JSObject::cast(object);
-    raw_holder->LocalLookup(*name, &lookup);
-    if (lookup.IsInterceptor()) {
-      HandleScope handle_scope(isolate);
-      Handle<JSObject> holder(raw_holder);
-      PropertyAttributes intercepted = holder->GetPropertyAttribute(*name);
-      // Update the raw pointer in case it's changed due to GC.
-      raw_holder = *holder;
-      if (intercepted != ABSENT && (intercepted & READ_ONLY) == 0) {
-        // Found an interceptor that's not read only.
-        if (assign) {
-          return raw_holder->SetProperty(
-              &lookup, *name, args[2], attributes, strict_mode_flag);
-        } else {
-          return isolate->heap()->undefined_value();
-        }
+  JSObject::cast(object)->LocalLookup(*name, &lookup, true);
+  if (lookup.IsInterceptor()) {
+    HandleScope handle_scope(isolate);
+    PropertyAttributes intercepted =
+        lookup.holder()->GetPropertyAttribute(*name);
+    if (intercepted != ABSENT && (intercepted & READ_ONLY) == 0) {
+      // Found an interceptor that's not read only.
+      if (assign) {
+        return lookup.holder()->SetProperty(
+            &lookup, *name, args[2], attributes, strict_mode_flag);
+      } else {
+        return isolate->heap()->undefined_value();
       }
     }
-    object = raw_holder->GetPrototype();
   }
 
   // Reload global in case the loop above performed a GC.
@@ -2515,7 +2407,7 @@ class ReplacementStringBuilder {
 
     Handle<String> joined_string;
     if (is_ascii_) {
-      Handle<SeqAsciiString> seq = NewRawAsciiString(character_count_);
+      Handle<SeqOneByteString> seq = NewRawOneByteString(character_count_);
       AssertNoAllocation no_alloc;
       char* char_buffer = seq->GetChars();
       StringBuilderConcatHelper(*subject_,
@@ -2546,8 +2438,8 @@ class ReplacementStringBuilder {
   }
 
  private:
-  Handle<SeqAsciiString> NewRawAsciiString(int length) {
-    return heap_->isolate()->factory()->NewRawAsciiString(length);
+  Handle<SeqOneByteString> NewRawOneByteString(int length) {
+    return heap_->isolate()->factory()->NewRawOneByteString(length);
   }
 
 
@@ -2996,7 +2888,7 @@ MUST_USE_RESULT static MaybeObject* StringReplaceAtomRegExpWithString(
   Handle<ResultSeqString> result;
   if (ResultSeqString::kHasAsciiEncoding) {
     result = Handle<ResultSeqString>::cast(
-        isolate->factory()->NewRawAsciiString(result_len));
+        isolate->factory()->NewRawOneByteString(result_len));
   } else {
     result = Handle<ResultSeqString>::cast(
         isolate->factory()->NewRawTwoByteString(result_len));
@@ -3065,7 +2957,7 @@ MUST_USE_RESULT static MaybeObject* StringReplaceRegExpWithString(
       regexp->TypeTag() == JSRegExp::ATOM &&
       simple_replace) {
     if (subject->HasOnlyAsciiChars() && replacement->HasOnlyAsciiChars()) {
-      return StringReplaceAtomRegExpWithString<SeqAsciiString>(
+      return StringReplaceAtomRegExpWithString<SeqOneByteString>(
           isolate, subject, regexp, replacement, last_match_info);
     } else {
       return StringReplaceAtomRegExpWithString<SeqTwoByteString>(
@@ -3153,9 +3045,9 @@ MUST_USE_RESULT static MaybeObject* StringReplaceRegExpWithEmptyString(
   // Shortcut for simple non-regexp global replacements
   if (is_global &&
       regexp->TypeTag() == JSRegExp::ATOM) {
-    Handle<String> empty_string(HEAP->empty_string());
+    Handle<String> empty_string = isolate->factory()->empty_string();
     if (subject->HasOnlyAsciiChars()) {
-      return StringReplaceAtomRegExpWithString<SeqAsciiString>(
+      return StringReplaceAtomRegExpWithString<SeqOneByteString>(
           isolate,
           subject,
           regexp,
@@ -3191,7 +3083,7 @@ MUST_USE_RESULT static MaybeObject* StringReplaceRegExpWithEmptyString(
   Handle<ResultSeqString> answer;
   if (ResultSeqString::kHasAsciiEncoding) {
     answer = Handle<ResultSeqString>::cast(
-        isolate->factory()->NewRawAsciiString(new_length));
+        isolate->factory()->NewRawOneByteString(new_length));
   } else {
     answer = Handle<ResultSeqString>::cast(
         isolate->factory()->NewRawTwoByteString(new_length));
@@ -3283,7 +3175,7 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_StringReplaceRegExpWithString) {
 
   if (replacement->length() == 0) {
     if (subject->HasOnlyAsciiChars()) {
-      return StringReplaceRegExpWithEmptyString<SeqAsciiString>(
+      return StringReplaceRegExpWithEmptyString<SeqOneByteString>(
           isolate, subject, regexp, last_match_info);
     } else {
       return StringReplaceRegExpWithEmptyString<SeqTwoByteString>(
@@ -4727,41 +4619,6 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_IsPropertyEnumerable) {
   CONVERT_ARG_CHECKED(JSObject, object, 0);
   CONVERT_ARG_CHECKED(String, key, 1);
 
-  uint32_t index;
-  if (key->AsArrayIndex(&index)) {
-    JSObject::LocalElementKind type = object->GetLocalElementKind(index);
-    switch (type) {
-      case JSObject::UNDEFINED_ELEMENT:
-      case JSObject::STRING_CHARACTER_ELEMENT:
-        return isolate->heap()->false_value();
-      case JSObject::INTERCEPTED_ELEMENT:
-      case JSObject::FAST_ELEMENT:
-        return isolate->heap()->true_value();
-      case JSObject::DICTIONARY_ELEMENT: {
-        if (object->IsJSGlobalProxy()) {
-          Object* proto = object->GetPrototype();
-          if (proto->IsNull()) {
-            return isolate->heap()->false_value();
-          }
-          ASSERT(proto->IsJSGlobalObject());
-          object = JSObject::cast(proto);
-        }
-        FixedArray* elements = FixedArray::cast(object->elements());
-        SeededNumberDictionary* dictionary = NULL;
-        if (elements->map() ==
-            isolate->heap()->non_strict_arguments_elements_map()) {
-          dictionary = SeededNumberDictionary::cast(elements->get(1));
-        } else {
-          dictionary = SeededNumberDictionary::cast(elements);
-        }
-        int entry = dictionary->FindEntry(index);
-        ASSERT(entry != SeededNumberDictionary::kNotFound);
-        PropertyDetails details = dictionary->DetailsAt(entry);
-        return isolate->heap()->ToBoolean(!details.IsDontEnum());
-      }
-    }
-  }
-
   PropertyAttributes att = object->GetLocalPropertyAttribute(key);
   return isolate->heap()->ToBoolean(att != ABSENT && (att & DONT_ENUM) == 0);
 }
@@ -5161,10 +5018,10 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_StringToNumber) {
 
   // Fast case: short integer or some sorts of junk values.
   int len = subject->length();
-  if (subject->IsSeqAsciiString()) {
+  if (subject->IsSeqOneByteString()) {
     if (len == 0) return Smi::FromInt(0);
 
-    char const* data = SeqAsciiString::cast(subject)->GetChars();
+    char const* data = SeqOneByteString::cast(subject)->GetChars();
     bool minus = (data[0] == '-');
     int start_pos = (minus ? 1 : 0);
 
@@ -5531,7 +5388,7 @@ MaybeObject* AllocateRawString<SeqTwoByteString>(Isolate* isolate, int length) {
 
 
 template <>
-MaybeObject* AllocateRawString<SeqAsciiString>(Isolate* isolate, int length) {
+MaybeObject* AllocateRawString<SeqOneByteString>(Isolate* isolate, int length) {
   return isolate->heap()->AllocateRawAsciiString(length);
 }
 
@@ -5683,7 +5540,7 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_QuoteJSONString) {
     return QuoteJsonString<uc16, SeqTwoByteString, false>(isolate,
                                                           flat.ToUC16Vector());
   } else {
-    return QuoteJsonString<char, SeqAsciiString, false>(isolate,
+    return QuoteJsonString<char, SeqOneByteString, false>(isolate,
                                                         flat.ToAsciiVector());
   }
 }
@@ -5706,7 +5563,7 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_QuoteJSONStringComma) {
     return QuoteJsonString<uc16, SeqTwoByteString, true>(isolate,
                                                          flat.ToUC16Vector());
   } else {
-    return QuoteJsonString<char, SeqAsciiString, true>(isolate,
+    return QuoteJsonString<char, SeqOneByteString, true>(isolate,
                                                        flat.ToAsciiVector());
   }
 }
@@ -5798,7 +5655,7 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_QuoteJSONStringArray) {
   }
 
   if (ascii) {
-    return QuoteJsonStringArray<char, SeqAsciiString>(isolate,
+    return QuoteJsonStringArray<char, SeqOneByteString>(isolate,
                                                       elements,
                                                       worst_case_length);
   } else {
@@ -6095,14 +5952,14 @@ MUST_USE_RESULT static MaybeObject* ConvertCase(
   // character is also ASCII.  This is currently the case, but it
   // might break in the future if we implement more context and locale
   // dependent upper/lower conversions.
-  if (s->IsSeqAsciiString()) {
+  if (s->IsSeqOneByteString()) {
     Object* o;
     { MaybeObject* maybe_o = isolate->heap()->AllocateRawAsciiString(length);
       if (!maybe_o->ToObject(&o)) return maybe_o;
     }
-    SeqAsciiString* result = SeqAsciiString::cast(o);
+    SeqOneByteString* result = SeqOneByteString::cast(o);
     bool has_changed_character = ConvertTraits::AsciiConverter::Convert(
-        result->GetChars(), SeqAsciiString::cast(s)->GetChars(), length);
+        result->GetChars(), SeqOneByteString::cast(s)->GetChars(), length);
     return has_changed_character ? result : s;
   }
 
@@ -6680,7 +6537,7 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_StringBuilderConcat) {
           isolate->heap()->AllocateRawAsciiString(length);
       if (!maybe_object->ToObject(&object)) return maybe_object;
     }
-    SeqAsciiString* answer = SeqAsciiString::cast(object);
+    SeqOneByteString* answer = SeqOneByteString::cast(object);
     StringBuilderConcatHelper(special,
                               answer->GetChars(),
                               fixed_array,
@@ -6842,7 +6699,7 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_SparseJoinWithSeparator) {
   bool is_ascii = separator->IsAsciiRepresentation();
   int max_string_length;
   if (is_ascii) {
-    max_string_length = SeqAsciiString::kMaxLength;
+    max_string_length = SeqOneByteString::kMaxLength;
   } else {
     max_string_length = SeqTwoByteString::kMaxLength;
   }
@@ -6894,8 +6751,8 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_SparseJoinWithSeparator) {
     MaybeObject* result_allocation =
         isolate->heap()->AllocateRawAsciiString(string_length);
     if (result_allocation->IsFailure()) return result_allocation;
-    SeqAsciiString* result_string =
-        SeqAsciiString::cast(result_allocation->ToObjectUnchecked());
+    SeqOneByteString* result_string =
+        SeqOneByteString::cast(result_allocation->ToObjectUnchecked());
     JoinSparseArrayWithSeparator<char>(elements,
                                        elements_length,
                                        array_length,
@@ -7990,7 +7847,34 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_ParallelRecompile) {
   HandleScope handle_scope(isolate);
   ASSERT(FLAG_parallel_recompilation);
   Compiler::RecompileParallel(args.at<JSFunction>(0));
-  return *isolate->factory()->undefined_value();
+  return isolate->heap()->undefined_value();
+}
+
+
+RUNTIME_FUNCTION(MaybeObject*, Runtime_ForceParallelRecompile) {
+  if (!V8::UseCrankshaft()) return isolate->heap()->undefined_value();
+  HandleScope handle_scope(isolate);
+  ASSERT(FLAG_parallel_recompilation && FLAG_manual_parallel_recompilation);
+  if (!isolate->optimizing_compiler_thread()->IsQueueAvailable()) {
+    return isolate->Throw(
+        *isolate->factory()->LookupAsciiSymbol("Recompile queue is full."));
+  }
+  CONVERT_ARG_HANDLE_CHECKED(JSFunction, fun, 0);
+  fun->ReplaceCode(isolate->builtins()->builtin(Builtins::kParallelRecompile));
+  Compiler::RecompileParallel(fun);
+  return isolate->heap()->undefined_value();
+}
+
+
+RUNTIME_FUNCTION(MaybeObject*, Runtime_InstallRecompiledCode) {
+  if (!V8::UseCrankshaft()) return isolate->heap()->undefined_value();
+  HandleScope handle_scope(isolate);
+  ASSERT(FLAG_parallel_recompilation && FLAG_manual_parallel_recompilation);
+  CONVERT_ARG_HANDLE_CHECKED(JSFunction, fun, 0);
+  OptimizingCompilerThread* opt_thread = isolate->optimizing_compiler_thread();
+  Handle<SharedFunctionInfo> shared(fun->shared());
+  while (*opt_thread->InstallNextOptimizedFunction() != *shared) { }
+  return isolate->heap()->undefined_value();
 }
 
 
@@ -9066,7 +8950,7 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_ParseJson) {
   source = Handle<String>(source->TryFlattenGetString());
   // Optimized fast case where we only have ASCII characters.
   Handle<Object> result;
-  if (source->IsSeqAsciiString()) {
+  if (source->IsSeqOneByteString()) {
     result = JsonParser<true>::Parse(source, zone);
   } else {
     result = JsonParser<false>::Parse(source, zone);

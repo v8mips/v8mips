@@ -1,4 +1,4 @@
-// Copyright 2010 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -25,61 +25,55 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#ifndef V8_CPU_PROFILER_INL_H_
-#define V8_CPU_PROFILER_INL_H_
+// Flags: --allow-natives-syntax --expose-gc
+// Flags: --parallel-recompilation --manual-parallel-recompilation
 
-#include "cpu-profiler.h"
-
-#include <new>
-#include "profile-generator-inl.h"
-#include "unbound-queue-inl.h"
-
-namespace v8 {
-namespace internal {
-
-void CodeCreateEventRecord::UpdateCodeMap(CodeMap* code_map) {
-  code_map->AddCode(start, entry, size);
-  if (shared != NULL) {
-    entry->set_shared_id(code_map->GetSharedId(shared));
-  }
+function assertOptimized(fun) {
+  // This assertion takes --always-opt and --nocrankshaft flags into account.
+  assertTrue(%GetOptimizationStatus(fun) != 2);
 }
 
-
-void CodeMoveEventRecord::UpdateCodeMap(CodeMap* code_map) {
-  code_map->MoveCode(from, to);
+function assertUnoptimized(fun) {
+  assertTrue(%GetOptimizationStatus(fun) != 1);
 }
 
-
-void SharedFunctionInfoMoveEventRecord::UpdateCodeMap(CodeMap* code_map) {
-  code_map->MoveCode(from, to);
+function f(x) {
+  var xx = x * x;
+  var xxstr = xx.toString();
+  return xxstr.length;
 }
 
-
-TickSample* ProfilerEventsProcessor::StartTickSampleEvent() {
-  if (!ticks_buffer_is_empty_ || ticks_buffer_is_initialized_) return NULL;
-  ticks_buffer_is_initialized_ = true;
-  generator_->Tick();
-  ticks_buffer_ = TickSampleEventRecord(enqueue_order_);
-  return &ticks_buffer_.sample;
+function g(x) {
+  var xxx = Math.sqrt(x) | 0;
+  var xxxstr = xxx.toString();
+  return xxxstr.length;
 }
 
-
-void ProfilerEventsProcessor::FinishTickSampleEvent() {
-  ASSERT(ticks_buffer_is_initialized_ && ticks_buffer_is_empty_);
-  ticks_buffer_is_empty_ = false;
+function k(x) {
+  return x * x;
 }
 
+f(g(1));
+f(g(2));
+assertUnoptimized(f);
+assertUnoptimized(g);
 
-bool ProfilerEventsProcessor::FilterOutCodeCreateEvent(
-    Logger::LogEventsAndTags tag) {
-  return FLAG_prof_browser_mode
-      && (tag != Logger::CALLBACK_TAG
-          && tag != Logger::FUNCTION_TAG
-          && tag != Logger::LAZY_COMPILE_TAG
-          && tag != Logger::REG_EXP_TAG
-          && tag != Logger::SCRIPT_TAG);
-}
+%ForceParallelRecompile(f);
+%ForceParallelRecompile(g);
+assertUnoptimized(f);
+assertUnoptimized(g);
 
-} }  // namespace v8::internal
+var sum = 0;
+for (var i = 0; i < 10000; i++) sum += f(i) + g(i);
+gc();
 
-#endif  // V8_CPU_PROFILER_INL_H_
+assertEquals(95274, sum);
+assertUnoptimized(f);
+assertUnoptimized(g);
+
+%InstallRecompiledCode(f);
+assertOptimized(f);
+assertUnoptimized(g);
+
+%InstallRecompiledCode(g);
+assertOptimized(g);

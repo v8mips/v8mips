@@ -574,11 +574,13 @@ BUILTIN(ArrayPush) {
       MaybeObject* maybe_obj = heap->AllocateUninitializedFixedArray(capacity);
       if (!maybe_obj->To(&new_elms)) return maybe_obj;
 
-      ElementsAccessor* accessor = array->GetElementsAccessor();
-      MaybeObject* maybe_failure =
-          accessor->CopyElements(array, 0, new_elms, kind, 0, len, elms_obj);
-      ASSERT(!maybe_failure->IsFailure());
-      USE(maybe_failure);
+      if (len > 0) {
+        ElementsAccessor* accessor = array->GetElementsAccessor();
+        MaybeObject* maybe_failure =
+            accessor->CopyElements(array, 0, new_elms, kind, 0, len, elms_obj);
+        ASSERT(!maybe_failure->IsFailure());
+        USE(maybe_failure);
+      }
       FillWithHoles(heap, new_elms, new_length, capacity);
 
       elms = new_elms;
@@ -621,11 +623,13 @@ BUILTIN(ArrayPush) {
           heap->AllocateUninitializedFixedDoubleArray(capacity);
       if (!maybe_obj->To(&new_elms)) return maybe_obj;
 
-      ElementsAccessor* accessor = array->GetElementsAccessor();
-      MaybeObject* maybe_failure =
-          accessor->CopyElements(array, 0, new_elms, kind, 0, len, elms_obj);
-      ASSERT(!maybe_failure->IsFailure());
-      USE(maybe_failure);
+      if (len > 0) {
+        ElementsAccessor* accessor = array->GetElementsAccessor();
+        MaybeObject* maybe_failure =
+            accessor->CopyElements(array, 0, new_elms, kind, 0, len, elms_obj);
+        ASSERT(!maybe_failure->IsFailure());
+        USE(maybe_failure);
+      }
 
       FillWithHoles(new_elms, len + to_add, new_elms->length());
     } else {
@@ -673,14 +677,17 @@ BUILTIN(ArrayPop) {
 
   ElementsAccessor* accessor = array->GetElementsAccessor();
   int new_length = len - 1;
-  Object* result;
-  MaybeObject* maybe_result = accessor->Get(array, array, new_length);
-  if (!maybe_result->To(&result)) return maybe_result;
+  MaybeObject* maybe_result;
+  if (accessor->HasElement(array, array, new_length, elms_obj)) {
+    maybe_result = accessor->Get(array, array, new_length, elms_obj);
+  } else {
+    maybe_result = array->GetPrototype()->GetElement(len - 1);
+  }
+  if (maybe_result->IsFailure()) return maybe_result;
   MaybeObject* maybe_failure =
       accessor->SetLength(array, Smi::FromInt(new_length));
   if (maybe_failure->IsFailure()) return maybe_failure;
-  if (!result->IsTheHole()) return result;
-  return array->GetPrototype()->GetElement(len - 1);
+  return maybe_result;
 }
 
 
@@ -711,6 +718,9 @@ BUILTIN(ArrayShift) {
   Object* first;
   MaybeObject* maybe_first = accessor->Get(receiver, array, 0, elms_obj);
   if (!maybe_first->To(&first)) return maybe_first;
+  if (first->IsTheHole()) {
+    first = heap->undefined_value();
+  }
 
   if (!heap->lo_space()->Contains(elms_obj)) {
     array->set_elements(LeftTrimFixedArray(heap, elms_obj, 1));
@@ -777,12 +787,14 @@ BUILTIN(ArrayUnshift) {
     MaybeObject* maybe_elms = heap->AllocateUninitializedFixedArray(capacity);
     if (!maybe_elms->To(&new_elms)) return maybe_elms;
 
-    ElementsKind kind = array->GetElementsKind();
-    ElementsAccessor* accessor = array->GetElementsAccessor();
-    MaybeObject* maybe_failure =
-        accessor->CopyElements(array, 0, new_elms, kind, to_add, len, elms);
-    ASSERT(!maybe_failure->IsFailure());
-    USE(maybe_failure);
+    if (len > 0) {
+      ElementsKind kind = array->GetElementsKind();
+      ElementsAccessor* accessor = array->GetElementsAccessor();
+      MaybeObject* maybe_failure =
+          accessor->CopyElements(array, 0, new_elms, kind, to_add, len, elms);
+      ASSERT(!maybe_failure->IsFailure());
+      USE(maybe_failure);
+    }
 
     FillWithHoles(heap, new_elms, new_length, capacity);
     elms = new_elms;
@@ -923,6 +935,8 @@ BUILTIN(ArraySlice) {
   MaybeObject* maybe_array = heap->AllocateJSArrayAndStorage(kind,
                                                              result_len,
                                                              result_len);
+
+  if (result_len == 0) return maybe_array;
   if (!maybe_array->To(&result_array)) return maybe_array;
 
   ElementsAccessor* accessor = object->GetElementsAccessor();
@@ -1089,19 +1103,23 @@ BUILTIN(ArraySplice) {
       MaybeObject* maybe_obj = heap->AllocateUninitializedFixedArray(capacity);
       if (!maybe_obj->To(&new_elms)) return maybe_obj;
 
-      // Copy the part before actual_start as is.
       ElementsKind kind = array->GetElementsKind();
       ElementsAccessor* accessor = array->GetElementsAccessor();
-      MaybeObject* maybe_failure = accessor->CopyElements(
-          array, 0, new_elms, kind, 0, actual_start, elms);
-      ASSERT(!maybe_failure->IsFailure());
-      USE(maybe_failure);
+      if (actual_start > 0) {
+        // Copy the part before actual_start as is.
+        MaybeObject* maybe_failure = accessor->CopyElements(
+            array, 0, new_elms, kind, 0, actual_start, elms);
+        ASSERT(!maybe_failure->IsFailure());
+        USE(maybe_failure);
+      }
       const int to_copy = len - actual_delete_count - actual_start;
-      maybe_failure = accessor->CopyElements(
-          array, actual_start + actual_delete_count, new_elms, kind,
-          actual_start + item_count, to_copy, elms);
-      ASSERT(!maybe_failure->IsFailure());
-      USE(maybe_failure);
+      if (to_copy > 0) {
+        MaybeObject* maybe_failure = accessor->CopyElements(
+            array, actual_start + actual_delete_count, new_elms, kind,
+            actual_start + item_count, to_copy, elms);
+        ASSERT(!maybe_failure->IsFailure());
+        USE(maybe_failure);
+      }
 
       FillWithHoles(heap, new_elms, new_length, capacity);
 
@@ -1180,14 +1198,9 @@ BUILTIN(ArrayConcat) {
     }
 
     ElementsKind arg_kind = JSArray::cast(arg)->map()->elements_kind();
-    ElementsKind packed_kind = GetPackedElementsKind(arg_kind);
-    if (IsMoreGeneralElementsKindTransition(
-            GetPackedElementsKind(elements_kind), packed_kind)) {
-      if (IsFastHoleyElementsKind(elements_kind)) {
-        elements_kind = GetHoleyElementsKind(arg_kind);
-      } else {
-        elements_kind = arg_kind;
-      }
+    if (IsMoreGeneralElementsKindTransition(elements_kind, arg_kind)) {
+      elements_kind = IsFastHoleyElementsKind(elements_kind)
+          ? GetHoleyElementsKind(arg_kind) : arg_kind;
     }
   }
 
@@ -1204,12 +1217,14 @@ BUILTIN(ArrayConcat) {
   FixedArrayBase* storage = result_array->elements();
   for (int i = 0; i < n_arguments; i++) {
     JSArray* array = JSArray::cast(args[i]);
-    ElementsAccessor* accessor = array->GetElementsAccessor();
     int len = Smi::cast(array->length())->value();
-    MaybeObject* maybe_failure =
-        accessor->CopyElements(array, 0, storage, elements_kind, j, len);
-    if (maybe_failure->IsFailure()) return maybe_failure;
-    j += len;
+    if (len > 0) {
+      ElementsAccessor* accessor = array->GetElementsAccessor();
+      MaybeObject* maybe_failure =
+          accessor->CopyElements(array, 0, storage, elements_kind, j, len);
+      if (maybe_failure->IsFailure()) return maybe_failure;
+      j += len;
+    }
   }
 
   ASSERT(j == result_len);
