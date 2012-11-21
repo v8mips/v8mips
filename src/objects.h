@@ -7220,13 +7220,13 @@ class String: public HeapObject {
   // be ASCII encoded.  This might be the case even if the string is
   // two-byte.  Such strings may appear when the embedder prefers
   // two-byte external representations even for ASCII data.
-  inline bool IsAsciiRepresentation();
+  inline bool IsOneByteRepresentation();
   inline bool IsTwoByteRepresentation();
 
   // Cons and slices have an encoding flag that may not represent the actual
   // encoding of the underlying string.  This is taken into account here.
   // Requires: this->IsFlat()
-  inline bool IsAsciiRepresentationUnderneath();
+  inline bool IsOneByteRepresentationUnderneath();
   inline bool IsTwoByteRepresentationUnderneath();
 
   // NOTE: this should be considered only a hint.  False negatives are
@@ -8323,6 +8323,9 @@ class Foreign: public HeapObject {
 };
 
 
+class PropertyIndex;
+
+
 // The JSArray describes JavaScript Arrays
 //  Such an array can be in one of two modes:
 //    - fast, backing storage is a FixedArray and length <= elements.length();
@@ -8375,6 +8378,9 @@ class JSArray: public JSObject {
   // Layout description.
   static const int kLengthOffset = JSObject::kHeaderSize;
   static const int kSize = kLengthOffset + kPointerSize;
+
+  static inline PropertyIndex ArrayLengthIndex();
+  STATIC_ASSERT(kLengthOffset % kPointerSize == 0);
 
  private:
   // Expand the fixed array backing of a fast-case JSArray to at least
