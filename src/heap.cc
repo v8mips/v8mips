@@ -644,13 +644,13 @@ bool Heap::CollectGarbage(AllocationSpace space,
     // Tell the tracer which collector we've selected.
     tracer.set_collector(collector);
 
-    HistogramTimer* rate = (collector == SCAVENGER)
-        ? isolate_->counters()->gc_scavenger()
-        : isolate_->counters()->gc_compactor();
-    rate->Start();
-    next_gc_likely_to_collect_more =
-        PerformGarbageCollection(collector, &tracer);
-    rate->Stop();
+    {
+      HistogramTimerScope histogram_timer_scope(
+          (collector == SCAVENGER) ? isolate_->counters()->gc_scavenger()
+                                   : isolate_->counters()->gc_compactor());
+      next_gc_likely_to_collect_more =
+          PerformGarbageCollection(collector, &tracer);
+    }
 
     ASSERT(collector == SCAVENGER || incremental_marking()->IsStopped());
 
@@ -4232,9 +4232,6 @@ MaybeObject* Heap::AllocateJSArrayAndStorage(
     ArrayStorageAllocationMode mode,
     PretenureFlag pretenure) {
   ASSERT(capacity >= length);
-  if (length != 0 && mode == INITIALIZE_ARRAY_ELEMENTS_WITH_HOLE) {
-    elements_kind = GetHoleyElementsKind(elements_kind);
-  }
   MaybeObject* maybe_array = AllocateJSArray(elements_kind, pretenure);
   JSArray* array;
   if (!maybe_array->To(&array)) return maybe_array;
