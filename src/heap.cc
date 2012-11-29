@@ -651,9 +651,6 @@ bool Heap::CollectGarbage(AllocationSpace space,
           PerformGarbageCollection(collector, &tracer);
     }
 
-    ASSERT(collector == SCAVENGER || incremental_marking()->IsStopped());
-
-    // This can do debug callbacks and restart incremental marking.
     GarbageCollectionEpilogue();
   }
 
@@ -959,6 +956,10 @@ bool Heap::PerformGarbageCollection(GarbageCollector collector,
   }
 
   isolate_->counters()->objs_since_last_young()->Set(0);
+
+  // Callbacks that fire after this point might trigger nested GCs and
+  // restart incremental marking, the assertion can't be moved down.
+  ASSERT(collector == SCAVENGER || incremental_marking()->IsStopped());
 
   gc_post_processing_depth_++;
   { DisableAssertNoAllocation allow_allocation;
@@ -5321,8 +5322,7 @@ bool Heap::IdleNotification(int hint) {
       AgeInlineCaches();
     }
     int mark_sweep_time = Min(TimeMarkSweepWouldTakeInMs(), 1000);
-    if (hint >= mark_sweep_time && !FLAG_expose_gc &&
-        incremental_marking()->IsStopped()) {
+    if (hint >= mark_sweep_time && incremental_marking()->IsStopped()) {
       HistogramTimerScope scope(isolate_->counters()->gc_context());
       CollectAllGarbage(kReduceMemoryFootprintMask,
                         "idle notification: contexts disposed");
@@ -5341,7 +5341,7 @@ bool Heap::IdleNotification(int hint) {
     return false;
   }
 
-  if (!FLAG_incremental_marking || FLAG_expose_gc || Serializer::enabled()) {
+  if (!FLAG_incremental_marking || Serializer::enabled()) {
     return IdleGlobalGC();
   }
 
