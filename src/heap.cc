@@ -3795,6 +3795,7 @@ MaybeObject* Heap::CreateCode(const CodeDesc& desc,
   code->set_handler_table(empty_fixed_array(), SKIP_WRITE_BARRIER);
   code->set_gc_metadata(Smi::FromInt(0));
   code->set_ic_age(global_ic_age_);
+  code->set_prologue_offset(kPrologueOffsetNotSet);
   // Allow self references to created code object by patching the handle to
   // point to the newly allocated Code object.
   if (!self_reference.is_null()) {
@@ -5322,7 +5323,8 @@ bool Heap::IdleNotification(int hint) {
       AgeInlineCaches();
     }
     int mark_sweep_time = Min(TimeMarkSweepWouldTakeInMs(), 1000);
-    if (hint >= mark_sweep_time && incremental_marking()->IsStopped()) {
+    if (hint >= mark_sweep_time && !FLAG_expose_gc &&
+        incremental_marking()->IsStopped()) {
       HistogramTimerScope scope(isolate_->counters()->gc_context());
       CollectAllGarbage(kReduceMemoryFootprintMask,
                         "idle notification: contexts disposed");
@@ -5337,7 +5339,7 @@ bool Heap::IdleNotification(int hint) {
     return false;
   }
 
-  if (!FLAG_incremental_marking || Serializer::enabled()) {
+  if (!FLAG_incremental_marking || FLAG_expose_gc || Serializer::enabled()) {
     return IdleGlobalGC();
   }
 

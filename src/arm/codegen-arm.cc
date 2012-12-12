@@ -262,7 +262,7 @@ void ElementsTransitionGenerator::GenerateSmiToDouble(
                       HeapObject::kMapOffset,
                       r3,
                       r9,
-                      kLRHasBeenSaved,
+                      kLRHasNotBeenSaved,
                       kDontSaveFPRegs,
                       OMIT_REMEMBERED_SET,
                       OMIT_SMI_CHECK);
@@ -612,29 +612,6 @@ static byte* GetNoCodeAgeSequence(uint32_t* length) {
     initialized = true;
   }
   return byte_sequence;
-}
-
-
-byte* Code::FindPlatformCodeAgeSequence() {
-  byte* start = instruction_start();
-  uint32_t young_length;
-  byte* young_sequence = GetNoCodeAgeSequence(&young_length);
-  if (!memcmp(start, young_sequence, young_length) ||
-      Memory::uint32_at(start) == kCodeAgePatchFirstInstruction) {
-    return start;
-  } else {
-    byte* start_after_strict = NULL;
-    if (kind() == FUNCTION) {
-      start_after_strict = start + kSizeOfFullCodegenStrictModePrologue;
-    } else {
-      ASSERT(kind() == OPTIMIZED_FUNCTION);
-      start_after_strict = start + kSizeOfOptimizedStrictModePrologue;
-    }
-    ASSERT(!memcmp(start_after_strict, young_sequence, young_length) ||
-           Memory::uint32_at(start_after_strict) ==
-           kCodeAgePatchFirstInstruction);
-    return start_after_strict;
-  }
 }
 
 

@@ -350,10 +350,6 @@ DEFINE_bool(compilation_cache, true, "enable compilation cache")
 
 DEFINE_bool(cache_prototype_transitions, true, "cache prototype transitions")
 
-// cpu-profiler.cc
-DEFINE_int(cpu_profiler_sampling_period, 1000,
-           "CPU profiler sampling period in microseconds")
-
 // debug.cc
 DEFINE_bool(trace_debug_json, false, "trace debugging JSON request/response")
 DEFINE_bool(debugger_auto_break, true,
@@ -404,7 +400,7 @@ DEFINE_bool(flush_code, true,
             "flush code that we expect not to use again (during full gc)")
 DEFINE_bool(flush_code_incrementally, false,
             "flush code that we expect not to use again (incrementally)")
-DEFINE_bool(age_code, false,
+DEFINE_bool(age_code, true,
             "track un-executed functions to age code and flush only "
             "old code")
 DEFINE_bool(incremental_marking, true, "use incremental marking")
