@@ -2360,6 +2360,16 @@ THREADED_TEST(GlobalHandle) {
 }
 
 
+THREADED_TEST(LocalHandle) {
+  v8::HandleScope scope;
+  v8::Local<String> local = v8::Local<String>::New(v8_str("str"));
+  CHECK_EQ(local->Length(), 3);
+
+  local = v8::Local<String>::New(v8::Isolate::GetCurrent(), v8_str("str"));
+  CHECK_EQ(local->Length(), 3);
+}
+
+
 class WeakCallCounter {
  public:
   explicit WeakCallCounter(int id) : id_(id), number_of_weak_calls_(0) { }
@@ -2477,23 +2487,41 @@ THREADED_TEST(ApiObjectGroupsCycle) {
   Persistent<Object> g2s2;
   Persistent<Object> g3s1;
   Persistent<Object> g3s2;
+  Persistent<Object> g4s1;
+  Persistent<Object> g4s2;
 
+  v8::Isolate* isolate = v8::Isolate::GetCurrent();
   {
     HandleScope scope;
     g1s1 = Persistent<Object>::New(Object::New());
     g1s2 = Persistent<Object>::New(Object::New());
     g1s1.MakeWeak(reinterpret_cast<void*>(&counter), &WeakPointerCallback);
     g1s2.MakeWeak(reinterpret_cast<void*>(&counter), &WeakPointerCallback);
+    CHECK(g1s1.IsWeak());
+    CHECK(g1s2.IsWeak());
 
     g2s1 = Persistent<Object>::New(Object::New());
     g2s2 = Persistent<Object>::New(Object::New());
     g2s1.MakeWeak(reinterpret_cast<void*>(&counter), &WeakPointerCallback);
     g2s2.MakeWeak(reinterpret_cast<void*>(&counter), &WeakPointerCallback);
+    CHECK(g2s1.IsWeak());
+    CHECK(g2s2.IsWeak());
 
     g3s1 = Persistent<Object>::New(Object::New());
     g3s2 = Persistent<Object>::New(Object::New());
     g3s1.MakeWeak(reinterpret_cast<void*>(&counter), &WeakPointerCallback);
     g3s2.MakeWeak(reinterpret_cast<void*>(&counter), &WeakPointerCallback);
+    CHECK(g3s1.IsWeak());
+    CHECK(g3s2.IsWeak());
+
+    g4s1 = Persistent<Object>::New(Object::New());
+    g4s2 = Persistent<Object>::New(Object::New());
+    g4s1.MakeWeak(isolate,
+                  reinterpret_cast<void*>(&counter), &WeakPointerCallback);
+    g4s2.MakeWeak(isolate,
+                  reinterpret_cast<void*>(&counter), &WeakPointerCallback);
+    CHECK(g4s1.IsWeak(isolate));
+    CHECK(g4s2.IsWeak(isolate));
   }
 
   Persistent<Object> root = Persistent<Object>::New(g1s1);  // make a root.
@@ -2507,13 +2535,17 @@ THREADED_TEST(ApiObjectGroupsCycle) {
     Persistent<Value> g2_objects[] = { g2s1, g2s2 };
     Persistent<Value> g2_children[] = { g3s1 };
     Persistent<Value> g3_objects[] = { g3s1, g3s2 };
-    Persistent<Value> g3_children[] = { g1s1 };
+    Persistent<Value> g3_children[] = { g4s1 };
+    Persistent<Value> g4_objects[] = { g4s1, g4s2 };
+    Persistent<Value> g4_children[] = { g1s1 };
     V8::AddObjectGroup(g1_objects, 2);
     V8::AddImplicitReferences(g1s1, g1_children, 1);
     V8::AddObjectGroup(g2_objects, 2);
     V8::AddImplicitReferences(g2s1, g2_children, 1);
     V8::AddObjectGroup(g3_objects, 2);
     V8::AddImplicitReferences(g3s1, g3_children, 1);
+    V8::AddObjectGroup(isolate, g4_objects, 2);
+    V8::AddImplicitReferences(g4s1, g4_children, 1);
   }
   // Do a single full GC
   HEAP->CollectAllGarbage(i::Heap::kAbortIncrementalMarkingMask);
@@ -2531,19 +2563,23 @@ THREADED_TEST(ApiObjectGroupsCycle) {
     Persistent<Value> g2_objects[] = { g2s1, g2s2 };
     Persistent<Value> g2_children[] = { g3s1 };
     Persistent<Value> g3_objects[] = { g3s1, g3s2 };
-    Persistent<Value> g3_children[] = { g1s1 };
+    Persistent<Value> g3_children[] = { g4s1 };
+    Persistent<Value> g4_objects[] = { g4s1, g4s2 };
+    Persistent<Value> g4_children[] = { g1s1 };
     V8::AddObjectGroup(g1_objects, 2);
     V8::AddImplicitReferences(g1s1, g1_children, 1);
     V8::AddObjectGroup(g2_objects, 2);
     V8::AddImplicitReferences(g2s1, g2_children, 1);
     V8::AddObjectGroup(g3_objects, 2);
     V8::AddImplicitReferences(g3s1, g3_children, 1);
+    V8::AddObjectGroup(g4_objects, 2);
+    V8::AddImplicitReferences(g4s1, g4_children, 1);
   }
 
   HEAP->CollectAllGarbage(i::Heap::kAbortIncrementalMarkingMask);
 
-  // All objects should be gone. 7 global handles in total.
-  CHECK_EQ(7, counter.NumberOfWeakCalls());
+  // All objects should be gone. 9 global handles in total.
+  CHECK_EQ(9, counter.NumberOfWeakCalls());
 }
 
 
@@ -3717,6 +3753,30 @@ THREADED_TEST(TryCatchAndFinally) {
       "  native_with_try_catch();\n"
       "}\n");
   CHECK(try_catch.HasCaught());
+}
+
+
+static void TryCatchNestedHelper(int depth) {
+  if (depth > 0) {
+    v8::TryCatch try_catch;
+    try_catch.SetVerbose(true);
+    TryCatchNestedHelper(depth - 1);
+    CHECK(try_catch.HasCaught());
+    try_catch.ReThrow();
+  } else {
+    v8::ThrowException(v8_str("back"));
+  }
+}
+
+
+TEST(TryCatchNested) {
+  v8::V8::Initialize();
+  v8::HandleScope scope;
+  LocalContext context;
+  v8::TryCatch try_catch;
+  TryCatchNestedHelper(5);
+  CHECK(try_catch.HasCaught());
+  CHECK_EQ(0, strcmp(*v8::String::Utf8Value(try_catch.Exception()), "back"));
 }
 
 
@@ -8069,12 +8129,8 @@ THREADED_TEST(ShadowObject) {
   Local<ObjectTemplate> proto = t->PrototypeTemplate();
   Local<ObjectTemplate> instance = t->InstanceTemplate();
 
-  // Only allow calls of f on instances of t.
-  Local<v8::Signature> signature = v8::Signature::New(t);
   proto->Set(v8_str("f"),
-             v8::FunctionTemplate::New(ShadowFunctionCallback,
-                                       Local<Value>(),
-                                       signature));
+             v8::FunctionTemplate::New(ShadowFunctionCallback, Local<Value>()));
   proto->Set(v8_str("x"), v8_num(12));
 
   instance->SetAccessor(v8_str("y"), ShadowYGetter, ShadowYSetter);
@@ -9939,6 +9995,7 @@ THREADED_TEST(InterceptorCallICFastApi_SimpleSignature) {
                                 v8::Signature::New(fun_templ));
   v8::Handle<v8::ObjectTemplate> proto_templ = fun_templ->PrototypeTemplate();
   proto_templ->Set(v8_str("method"), method_templ);
+  fun_templ->SetHiddenPrototype(true);
   v8::Handle<v8::ObjectTemplate> templ = fun_templ->InstanceTemplate();
   templ->SetNamedPropertyHandler(InterceptorCallICFastApi,
                                  NULL, NULL, NULL, NULL,
@@ -9969,6 +10026,7 @@ THREADED_TEST(InterceptorCallICFastApi_SimpleSignature_Miss1) {
                                 v8::Signature::New(fun_templ));
   v8::Handle<v8::ObjectTemplate> proto_templ = fun_templ->PrototypeTemplate();
   proto_templ->Set(v8_str("method"), method_templ);
+  fun_templ->SetHiddenPrototype(true);
   v8::Handle<v8::ObjectTemplate> templ = fun_templ->InstanceTemplate();
   templ->SetNamedPropertyHandler(InterceptorCallICFastApi,
                                  NULL, NULL, NULL, NULL,
@@ -10005,6 +10063,7 @@ THREADED_TEST(InterceptorCallICFastApi_SimpleSignature_Miss2) {
                                 v8::Signature::New(fun_templ));
   v8::Handle<v8::ObjectTemplate> proto_templ = fun_templ->PrototypeTemplate();
   proto_templ->Set(v8_str("method"), method_templ);
+  fun_templ->SetHiddenPrototype(true);
   v8::Handle<v8::ObjectTemplate> templ = fun_templ->InstanceTemplate();
   templ->SetNamedPropertyHandler(InterceptorCallICFastApi,
                                  NULL, NULL, NULL, NULL,
@@ -10041,6 +10100,7 @@ THREADED_TEST(InterceptorCallICFastApi_SimpleSignature_Miss3) {
                                 v8::Signature::New(fun_templ));
   v8::Handle<v8::ObjectTemplate> proto_templ = fun_templ->PrototypeTemplate();
   proto_templ->Set(v8_str("method"), method_templ);
+  fun_templ->SetHiddenPrototype(true);
   v8::Handle<v8::ObjectTemplate> templ = fun_templ->InstanceTemplate();
   templ->SetNamedPropertyHandler(InterceptorCallICFastApi,
                                  NULL, NULL, NULL, NULL,
@@ -10080,6 +10140,7 @@ THREADED_TEST(InterceptorCallICFastApi_SimpleSignature_TypeError) {
                                 v8::Signature::New(fun_templ));
   v8::Handle<v8::ObjectTemplate> proto_templ = fun_templ->PrototypeTemplate();
   proto_templ->Set(v8_str("method"), method_templ);
+  fun_templ->SetHiddenPrototype(true);
   v8::Handle<v8::ObjectTemplate> templ = fun_templ->InstanceTemplate();
   templ->SetNamedPropertyHandler(InterceptorCallICFastApi,
                                  NULL, NULL, NULL, NULL,
@@ -10142,6 +10203,7 @@ THREADED_TEST(CallICFastApi_SimpleSignature) {
                                 v8::Signature::New(fun_templ));
   v8::Handle<v8::ObjectTemplate> proto_templ = fun_templ->PrototypeTemplate();
   proto_templ->Set(v8_str("method"), method_templ);
+  fun_templ->SetHiddenPrototype(true);
   v8::Handle<v8::ObjectTemplate> templ(fun_templ->InstanceTemplate());
   CHECK(!templ.IsEmpty());
   LocalContext context;
@@ -10169,6 +10231,7 @@ THREADED_TEST(CallICFastApi_SimpleSignature_Miss1) {
                                 v8::Signature::New(fun_templ));
   v8::Handle<v8::ObjectTemplate> proto_templ = fun_templ->PrototypeTemplate();
   proto_templ->Set(v8_str("method"), method_templ);
+  fun_templ->SetHiddenPrototype(true);
   v8::Handle<v8::ObjectTemplate> templ(fun_templ->InstanceTemplate());
   CHECK(!templ.IsEmpty());
   LocalContext context;
@@ -10201,6 +10264,7 @@ THREADED_TEST(CallICFastApi_SimpleSignature_Miss2) {
                                 v8::Signature::New(fun_templ));
   v8::Handle<v8::ObjectTemplate> proto_templ = fun_templ->PrototypeTemplate();
   proto_templ->Set(v8_str("method"), method_templ);
+  fun_templ->SetHiddenPrototype(true);
   v8::Handle<v8::ObjectTemplate> templ(fun_templ->InstanceTemplate());
   CHECK(!templ.IsEmpty());
   LocalContext context;
@@ -10223,6 +10287,42 @@ THREADED_TEST(CallICFastApi_SimpleSignature_Miss2) {
       "}");
   CHECK(try_catch.HasCaught());
   CHECK_EQ(v8_str("TypeError: Object 333 has no method 'method'"),
+           try_catch.Exception()->ToString());
+  CHECK_EQ(42, context->Global()->Get(v8_str("saved_result"))->Int32Value());
+}
+
+THREADED_TEST(CallICFastApi_SimpleSignature_TypeError) {
+  v8::HandleScope scope;
+  v8::Handle<v8::FunctionTemplate> fun_templ = v8::FunctionTemplate::New();
+  v8::Handle<v8::FunctionTemplate> method_templ =
+      v8::FunctionTemplate::New(FastApiCallback_SimpleSignature,
+                                v8_str("method_data"),
+                                v8::Signature::New(fun_templ));
+  v8::Handle<v8::ObjectTemplate> proto_templ = fun_templ->PrototypeTemplate();
+  proto_templ->Set(v8_str("method"), method_templ);
+  fun_templ->SetHiddenPrototype(true);
+  v8::Handle<v8::ObjectTemplate> templ(fun_templ->InstanceTemplate());
+  CHECK(!templ.IsEmpty());
+  LocalContext context;
+  v8::Handle<v8::Function> fun = fun_templ->GetFunction();
+  GenerateSomeGarbage();
+  context->Global()->Set(v8_str("o"), fun->NewInstance());
+  v8::TryCatch try_catch;
+  CompileRun(
+      "o.foo = 17;"
+      "var receiver = {};"
+      "receiver.__proto__ = o;"
+      "var result = 0;"
+      "var saved_result = 0;"
+      "for (var i = 0; i < 100; i++) {"
+      "  result = receiver.method(41);"
+      "  if (i == 50) {"
+      "    saved_result = result;"
+      "    receiver = Object.create(receiver);"
+      "  }"
+      "}");
+  CHECK(try_catch.HasCaught());
+  CHECK_EQ(v8_str("TypeError: Illegal invocation"),
            try_catch.Exception()->ToString());
   CHECK_EQ(42, context->Global()->Get(v8_str("saved_result"))->Int32Value());
 }

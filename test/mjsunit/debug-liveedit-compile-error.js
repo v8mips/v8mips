@@ -25,17 +25,36 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-var a = [];
-var new_space_string = "";
-for (var i = 0; i < 128; i++) {
-  new_space_string += String.fromCharCode((Math.random() * 26 + 65) | 0);
-}
-for (var i = 0; i < 10000; i++) a.push(new_space_string);
+// Flags: --expose-debug-as debug
+// Get the Debug object exposed from the debug context global object.
 
-// At some point during the first stringify, allocation causes a GC and
-// new_space_string is moved to old space. Make sure that this does not
-// screw up reading from the correct location.
-json1 = JSON.stringify(a);
-json2 = JSON.stringify(a);
-assertTrue(json1 == json2, "GC caused JSON.stringify to fail.");
+Debug = debug.Debug
+
+eval("var something1 = 25; \n"
+     + " function ChooseAnimal() { return          'Cat';          } \n"
+     + " ChooseAnimal.Helper = function() { return 'Help!'; }\n");
+
+assertEquals("Cat", ChooseAnimal());
+
+var script = Debug.findScript(ChooseAnimal);
+
+var orig_animal = "Cat";
+var patch_pos = script.source.indexOf(orig_animal);
+var new_animal_patch = "Cap' + ) + 'bara";
+
+var change_log = new Array();
+var caught_exception = null;
+try {
+  Debug.LiveEdit.TestApi.ApplySingleChunkPatch(script, patch_pos,
+      orig_animal.length, new_animal_patch, change_log);
+} catch (e) {
+  caught_exception = e;
+}
+
+assertNotNull(caught_exception);
+assertEquals("Unexpected token )",
+    caught_exception.details.syntaxErrorMessage);
+
+assertEquals(2, caught_exception.details.position.start.line);
+
 
