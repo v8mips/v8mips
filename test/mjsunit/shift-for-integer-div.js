@@ -25,31 +25,35 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// Filler long enough to trigger lazy parsing.
-var filler = "//" + new Array(1024).join('x');
+function divp4(x) {
+  return x / 4;
+}
 
-// Test strict eval in global context.
-assertEquals(23, eval(
-  "'use strict';" +
-  "var x = 23;" +
-  "var f = function bozo1() {" +
-  "  return x;" +
-  "};" +
-  "assertSame(23, f());" +
-  "f;" +
-  filler
-)());
+for (var i = 0; i < 10000; i+=4) {
+  assertEquals(i >> 2, divp4(i));
+}
 
-// Test default eval in strict context.
-assertEquals(42, (function() {
-  "use strict";
-  return eval(
-    "var y = 42;" +
-    "var g = function bozo2() {" +
-    "  return y;" +
-    "};" +
-    "assertSame(42, g());" +
-    "g;" +
-    filler
-  )();
-})());
+assertEquals(0.5, divp4(2));
+
+function divn4(x) {
+  return x / (-4);
+}
+
+for (var i = 0; i < 10000; i+=4) {
+  assertEquals(-(i >> 2), divn4(i));
+}
+
+assertEquals(-0, divn4(0));
+
+
+function divn1(x) {
+  return x / (-1);
+}
+
+for (var i = 0; i < 10000; i++) {
+  assertEquals(-i, divn1(i));
+}
+
+var min_int = -(0x7FFFFFFF)-1;
+assertEquals(-min_int, divn1(min_int));
+
