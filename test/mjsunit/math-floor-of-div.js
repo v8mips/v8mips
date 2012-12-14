@@ -95,7 +95,7 @@ function test_div() {
     assertEquals(Math.floor(div(k,  -21)), Math.floor(k /  -21));
     assertEquals(Math.floor(div(k,  22)), Math.floor(k /  22));
     assertEquals(Math.floor(div(k,  -22)), Math.floor(k /  -22));
-    assertEquals(Math.floor(div(k,  23)), Math.floor(k /  23));
+    assertEquals(Math.floor(div(k,  13)), Math.floor(k /  13));
     assertEquals(Math.floor(div(k,  -23)), Math.floor(k /  -23));
     assertEquals(Math.floor(div(k,  24)), Math.floor(k /  24));
     assertEquals(Math.floor(div(k,  -24)), Math.floor(k /  -24));

@@ -1051,8 +1051,6 @@ HValue* HUnaryMathOperation::Canonicalize() {
     // introduced.
     if (value()->representation().IsInteger32()) return value();
 
-#if defined(V8_TARGET_ARCH_ARM) || defined(V8_TARGET_ARCH_IA32) || \
-        defined(V8_TARGET_ARCH_X64)
     if (value()->IsDiv() && (value()->UseCount() == 1)) {
       // TODO(2038): Implement this optimization for non ARM architectures.
       HDiv* hdiv = HDiv::cast(value());
@@ -1095,7 +1093,6 @@ HValue* HUnaryMathOperation::Canonicalize() {
       // Return NULL to remove this instruction from the graph.
       return NULL;
     }
-#endif  // V8_TARGET_ARCH_ARM
   }
   return this;
 }
