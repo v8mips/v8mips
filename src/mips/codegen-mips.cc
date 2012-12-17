@@ -544,21 +544,17 @@ void SeqStringSetCharGenerator::Generate(MacroAssembler* masm,
                     ? one_byte_seq_type : two_byte_seq_type));
   }
 
-  __ SmiUntag(value, value);
+  __ Addu(at,
+          string,
+          Operand(SeqString::kHeaderSize - kHeapObjectTag));
+  __ SmiUntag(value);
   STATIC_ASSERT(kSmiTagSize == 1 && kSmiTag == 0);
   if (encoding == String::ONE_BYTE_ENCODING) {
-    // Smis are tagged by left shift by 1, thus LSR by 1 to smi-untag inline.
-    __ srl(at, index, 1);
-    __ Addu(at, at, string);
-    __ Addu(at,
-            at,
-            Operand(SeqString::kHeaderSize - kHeapObjectTag));
+    __ SmiUntag(index);
+    __ Addu(at, at, index);
     __ sb(value, MemOperand(at));
   } else {
     // No need to untag a smi for two-byte addressing.
-    __ Addu(at,
-            string,
-            Operand(SeqString::kHeaderSize - kHeapObjectTag));
     __ Addu(at, at, index);
     __ sh(value, MemOperand(at));
   }
