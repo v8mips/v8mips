@@ -25,14 +25,9 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// Flags: --harmony-observation --allow-natives-syntax
-//
-// Test passes if it does not crash.
+// Flags: --expose_gc
 
-arr = [1.1];
-Object.observe(arr, function(){});
-arr.length = 0;
-// TODO(observe): we currently disallow fast elements for observed object.
-// assertTrue(%HasFastDoubleElements(arr));
-// Should not crash
-arr.push(1.1);
+JSON.stringify(String.fromCharCode(1, -11).toString())
+gc();
+var s = String.fromCharCode(1, -11)
+assertEquals(65525, s.charCodeAt(1))

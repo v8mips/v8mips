@@ -26,6 +26,7 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 // Flags: --harmony-observation --harmony-proxies --harmony-collections
+// Flags: --allow-natives-syntax
 
 var allObservers = [];
 function reset() {
@@ -535,16 +536,13 @@ var objects = [
   createProxy(Proxy.create, null),
   createProxy(Proxy.createFunction, function(){}),
 ];
-var properties = ["a", "1", 1, "length", "prototype"];
+var properties = ["a", "1", 1, "length", "prototype", "name", "caller"];
 
 // Cases that yield non-standard results.
-// TODO(observe): ...or don't work yet.
 function blacklisted(obj, prop) {
   return (obj instanceof Int32Array && prop == 1) ||
     (obj instanceof Int32Array && prop === "length") ||
-    (obj instanceof ArrayBuffer && prop == 1) ||
-    // TODO(observe): oldValue when reconfiguring array length
-    (obj instanceof Array && prop === "length")
+    (obj instanceof ArrayBuffer && prop == 1)
 }
 
 for (var i in objects) for (var j in properties) {
@@ -580,8 +578,10 @@ Object.observe(arr3, observer.callback);
 arr.length = 2;
 arr.length = 0;
 arr.length = 10;
+Object.defineProperty(arr, 'length', {writable: false});
 arr2.length = 0;
 arr2.length = 1; // no change expected
+Object.defineProperty(arr2, 'length', {value: 1, writable: false});
 arr3.length = 0;
 Object.defineProperty(arr3, 'length', {value: 5});
 Object.defineProperty(arr3, 'length', {value: 10, writable: false});
@@ -593,15 +593,15 @@ observer.assertCallbackRecords([
   { object: arr, name: '1', type: 'deleted', oldValue: 'b' },
   { object: arr, name: 'length', type: 'updated', oldValue: 2 },
   { object: arr, name: 'length', type: 'updated', oldValue: 1 },
+  { object: arr, name: 'length', type: 'reconfigured', oldValue: 10 },
   { object: arr2, name: '1', type: 'deleted', oldValue: 'beta' },
   { object: arr2, name: 'length', type: 'updated', oldValue: 2 },
+  { object: arr2, name: 'length', type: 'reconfigured', oldValue: 1 },
   { object: arr3, name: '2', type: 'deleted', oldValue: 'goodbye' },
   { object: arr3, name: '0', type: 'deleted', oldValue: 'hello' },
   { object: arr3, name: 'length', type: 'updated', oldValue: 6 },
   { object: arr3, name: 'length', type: 'updated', oldValue: 0 },
-  { object: arr3, name: 'length', type: 'updated', oldValue: 5 },
-  // TODO(adamk): This record should be merged with the above
-  { object: arr3, name: 'length', type: 'reconfigured' },
+  { object: arr3, name: 'length', type: 'reconfigured', oldValue: 5 },
 ]);
 
 // Assignments in loops (checking different IC states).
@@ -871,3 +871,80 @@ Object.observe(obj, observer.callback);
 obj.prototype = 7;
 Object.deliverChangeRecords(observer.callback);
 observer.assertNotCalled();
+
+
+// Check that changes in observation status are detected in all IC states and
+// in optimized code, especially in cases usually using fast elements.
+function TestFastElements(prepopulate, polymorphic, optimize) {
+  var setElement = eval(
+    "(function setElement(a, i, v) { a[i] = v " +
+    "/* " + prepopulate + " " + polymorphic + " " + optimize + " */" +
+    "})"
+  );
+  print("TestFastElements:", setElement);
+
+  var arr = prepopulate ? [1, 2, 3, 4, 5] : [0];
+  setElement(arr, 1, 210);
+  setElement(arr, 1, 211);
+  if (polymorphic) setElement(["M", "i", "l", "n", "e", "r"], 0, "m");
+  if (optimize) %OptimizeFunctionOnNextCall(setElement);
+  setElement(arr, 1, 212);
+
+  reset();
+  Object.observe(arr, observer.callback);
+  setElement(arr, 1, 989898);
+  Object.deliverChangeRecords(observer.callback);
+  observer.assertCallbackRecords([
+    { object: arr, name: '1', type: 'updated', oldValue: 212 }
+  ]);
+}
+
+for (var b1 = 0; b1 < 2; ++b1)
+  for (var b2 = 0; b2 < 2; ++b2)
+    for (var b3 = 0; b3 < 2; ++b3)
+      TestFastElements(b1 != 0, b2 != 0, b3 != 0);
+
+
+function TestFastElementsLength(polymorphic, optimize, oldSize, newSize) {
+  var setLength = eval(
+    "(function setLength(a, n) { a.length = n " +
+    "/* " + polymorphic + " " + optimize + " " + oldSize + " " + newSize + " */"
+    + "})"
+  );
+  print("TestFastElementsLength:", setLength);
+
+  function array(n) {
+    var arr = new Array(n);
+    for (var i = 0; i < n; ++i) arr[i] = i;
+    return arr;
+  }
+
+  setLength(array(oldSize), newSize);
+  setLength(array(oldSize), newSize);
+  if (polymorphic) setLength(array(oldSize).map(isNaN), newSize);
+  if (optimize) %OptimizeFunctionOnNextCall(setLength);
+  setLength(array(oldSize), newSize);
+
+  reset();
+  var arr = array(oldSize);
+  Object.observe(arr, observer.callback);
+  setLength(arr, newSize);
+  Object.deliverChangeRecords(observer.callback);
+  if (oldSize === newSize) {
+    observer.assertNotCalled();
+  } else {
+    var count = oldSize > newSize ? oldSize - newSize : 0;
+    observer.assertRecordCount(count + 1);
+    var lengthRecord = observer.records[count];
+    assertSame(arr, lengthRecord.object);
+    assertEquals('length', lengthRecord.name);
+    assertEquals('updated', lengthRecord.type);
+    assertSame(oldSize, lengthRecord.oldValue);
+  }
+}
+
+for (var b1 = 0; b1 < 2; ++b1)
+  for (var b2 = 0; b2 < 2; ++b2)
+    for (var n1 = 0; n1 < 3; ++n1)
+      for (var n2 = 0; n2 < 3; ++n2)
+        TestFastElementsLength(b1 != 0, b2 != 0, 20*n1, 20*n2);

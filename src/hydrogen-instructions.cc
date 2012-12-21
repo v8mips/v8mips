@@ -1031,8 +1031,10 @@ void HChange::PrintDataTo(StringStream* stream) {
 
 void HJSArrayLength::PrintDataTo(StringStream* stream) {
   value()->PrintNameTo(stream);
-  stream->Add(" ");
-  typecheck()->PrintNameTo(stream);
+  if (HasTypeCheck()) {
+    stream->Add(" ");
+    typecheck()->PrintNameTo(stream);
+  }
 }
 
 
@@ -1144,8 +1146,10 @@ void HCheckInstanceType::GetCheckMaskAndTag(uint8_t* mask, uint8_t* tag) {
 
 void HLoadElements::PrintDataTo(StringStream* stream) {
   value()->PrintNameTo(stream);
-  stream->Add(" ");
-  typecheck()->PrintNameTo(stream);
+  if (HasTypeCheck()) {
+    stream->Add(" ");
+    typecheck()->PrintNameTo(stream);
+  }
 }
 
 
@@ -1689,6 +1693,14 @@ void HBinaryOperation::AssumeRepresentation(Representation r) {
 }
 
 
+void HMathMinMax::InferRepresentation(HInferRepresentation* h_infer) {
+  ASSERT(CheckFlag(kFlexibleRepresentation));
+  Representation new_rep = RepresentationFromInputs();
+  UpdateRepresentation(new_rep, h_infer, "inputs");
+  // Do not care about uses.
+}
+
+
 Range* HBitwise::InferRange(Zone* zone) {
   if (op() == Token::BIT_XOR) return HValue::InferRange(zone);
   const int32_t kDefaultMask = static_cast<int32_t>(0xffffffff);
@@ -2015,12 +2027,16 @@ void HLoadKeyed::PrintDataTo(StringStream* stream) {
   stream->Add("[");
   key()->PrintNameTo(stream);
   if (IsDehoisted()) {
-    stream->Add(" + %d] ", index_offset());
+    stream->Add(" + %d]", index_offset());
   } else {
-    stream->Add("] ");
+    stream->Add("]");
   }
 
-  dependency()->PrintNameTo(stream);
+  if (HasDependency()) {
+    stream->Add(" ");
+    dependency()->PrintNameTo(stream);
+  }
+
   if (RequiresHoleCheck()) {
     stream->Add(" check_hole");
   }

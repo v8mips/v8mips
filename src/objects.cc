@@ -1753,7 +1753,7 @@ void JSObject::EnqueueChangeRecord(Handle<JSObject> object,
                                    Handle<Object> old_value) {
   Isolate* isolate = object->GetIsolate();
   HandleScope scope;
-  Handle<String> type = isolate->factory()->LookupAsciiSymbol(type_str);
+  Handle<String> type = isolate->factory()->LookupUtf8Symbol(type_str);
   if (object->IsJSGlobalObject()) {
     object = handle(JSGlobalObject::cast(*object)->global_receiver(), isolate);
   }
@@ -2656,15 +2656,16 @@ MUST_USE_RESULT MaybeObject* JSProxy::SetPropertyViaPrototypesWithHandler(
   if (has_pending_exception) return Failure::Exception();
 
   // [[GetProperty]] requires to check that all properties are configurable.
-  Handle<String> configurable_name =
-      isolate->factory()->LookupAsciiSymbol("configurable_");
+  Handle<String> configurable_name = isolate->factory()->LookupOneByteSymbol(
+      STATIC_ASCII_VECTOR("configurable_"));
   Handle<Object> configurable(
       v8::internal::GetProperty(desc, configurable_name));
   ASSERT(!isolate->has_pending_exception());
   ASSERT(configurable->IsTrue() || configurable->IsFalse());
   if (configurable->IsFalse()) {
     Handle<String> trap =
-        isolate->factory()->LookupAsciiSymbol("getPropertyDescriptor");
+        isolate->factory()->LookupOneByteSymbol(
+            STATIC_ASCII_VECTOR("getPropertyDescriptor"));
     Handle<Object> args[] = { handler, trap, name };
     Handle<Object> error = isolate->factory()->NewTypeError(
         "proxy_prop_not_configurable", HandleVector(args, ARRAY_SIZE(args)));
@@ -2674,13 +2675,15 @@ MUST_USE_RESULT MaybeObject* JSProxy::SetPropertyViaPrototypesWithHandler(
 
   // Check for DataDescriptor.
   Handle<String> hasWritable_name =
-      isolate->factory()->LookupAsciiSymbol("hasWritable_");
+      isolate->factory()->LookupOneByteSymbol(
+          STATIC_ASCII_VECTOR("hasWritable_"));
   Handle<Object> hasWritable(v8::internal::GetProperty(desc, hasWritable_name));
   ASSERT(!isolate->has_pending_exception());
   ASSERT(hasWritable->IsTrue() || hasWritable->IsFalse());
   if (hasWritable->IsTrue()) {
     Handle<String> writable_name =
-        isolate->factory()->LookupAsciiSymbol("writable_");
+        isolate->factory()->LookupOneByteSymbol(
+            STATIC_ASCII_VECTOR("writable_"));
     Handle<Object> writable(v8::internal::GetProperty(desc, writable_name));
     ASSERT(!isolate->has_pending_exception());
     ASSERT(writable->IsTrue() || writable->IsFalse());
@@ -2694,7 +2697,8 @@ MUST_USE_RESULT MaybeObject* JSProxy::SetPropertyViaPrototypesWithHandler(
   }
 
   // We have an AccessorDescriptor.
-  Handle<String> set_name = isolate->factory()->LookupAsciiSymbol("set_");
+  Handle<String> set_name = isolate->factory()->LookupOneByteSymbol(
+      STATIC_ASCII_VECTOR("set_"));
   Handle<Object> setter(v8::internal::GetProperty(desc, set_name));
   ASSERT(!isolate->has_pending_exception());
   if (!setter->IsUndefined()) {
@@ -2726,7 +2730,8 @@ MUST_USE_RESULT MaybeObject* JSProxy::DeletePropertyWithHandler(
   Object* bool_result = result->ToBoolean();
   if (mode == STRICT_DELETION && bool_result == GetHeap()->false_value()) {
     Handle<Object> handler(receiver->handler());
-    Handle<String> trap_name = isolate->factory()->LookupAsciiSymbol("delete");
+    Handle<String> trap_name = isolate->factory()->LookupOneByteSymbol(
+        STATIC_ASCII_VECTOR("delete"));
     Handle<Object> args[] = { handler, trap_name };
     Handle<Object> error = isolate->factory()->NewTypeError(
         "handler_failed", HandleVector(args, ARRAY_SIZE(args)));
@@ -2772,19 +2777,22 @@ MUST_USE_RESULT PropertyAttributes JSProxy::GetPropertyAttributeWithHandler(
   if (has_pending_exception) return NONE;
 
   // Convert result to PropertyAttributes.
-  Handle<String> enum_n = isolate->factory()->LookupAsciiSymbol("enumerable");
+  Handle<String> enum_n = isolate->factory()->LookupOneByteSymbol(
+      STATIC_ASCII_VECTOR("enumerable"));
   Handle<Object> enumerable(v8::internal::GetProperty(desc, enum_n));
   if (isolate->has_pending_exception()) return NONE;
-  Handle<String> conf_n = isolate->factory()->LookupAsciiSymbol("configurable");
+  Handle<String> conf_n = isolate->factory()->LookupOneByteSymbol(
+      STATIC_ASCII_VECTOR("configurable"));
   Handle<Object> configurable(v8::internal::GetProperty(desc, conf_n));
   if (isolate->has_pending_exception()) return NONE;
-  Handle<String> writ_n = isolate->factory()->LookupAsciiSymbol("writable");
+  Handle<String> writ_n = isolate->factory()->LookupOneByteSymbol(
+      STATIC_ASCII_VECTOR("writable"));
   Handle<Object> writable(v8::internal::GetProperty(desc, writ_n));
   if (isolate->has_pending_exception()) return NONE;
 
   if (configurable->IsFalse()) {
-    Handle<String> trap =
-        isolate->factory()->LookupAsciiSymbol("getPropertyDescriptor");
+    Handle<String> trap = isolate->factory()->LookupOneByteSymbol(
+        STATIC_ASCII_VECTOR("getPropertyDescriptor"));
     Handle<Object> args[] = { handler, trap, name };
     Handle<Object> error = isolate->factory()->NewTypeError(
         "proxy_prop_not_configurable", HandleVector(args, ARRAY_SIZE(args)));
@@ -2844,7 +2852,7 @@ MUST_USE_RESULT Handle<Object> JSProxy::CallTrap(const char* name,
   Isolate* isolate = GetIsolate();
   Handle<Object> handler(this->handler());
 
-  Handle<String> trap_name = isolate->factory()->LookupAsciiSymbol(name);
+  Handle<String> trap_name = isolate->factory()->LookupUtf8Symbol(name);
   Handle<Object> trap(v8::internal::GetProperty(handler, trap_name));
   if (isolate->has_pending_exception()) return trap;
 
@@ -2943,8 +2951,9 @@ MaybeObject* JSObject::SetPropertyForResult(LookupResult* lookup,
   }
 
   Handle<Object> old_value(heap->the_hole_value(), isolate);
-  if (FLAG_harmony_observation && map()->is_observed()) {
-    old_value = handle(lookup->GetLazyValue(), isolate);
+  if (FLAG_harmony_observation &&
+      map()->is_observed() && lookup->IsDataProperty()) {
+    old_value = Object::GetProperty(self, name);
   }
 
   // This is a real property that is not read-only, or it is a
@@ -3030,8 +3039,8 @@ MaybeObject* JSObject::SetPropertyForResult(LookupResult* lookup,
     } else {
       LookupResult new_lookup(isolate);
       self->LocalLookup(*name, &new_lookup, true);
-      ASSERT(!new_lookup.GetLazyValue()->IsTheHole());
-      if (!new_lookup.GetLazyValue()->SameValue(*old_value)) {
+      if (new_lookup.IsDataProperty() &&
+          !Object::GetProperty(self, name)->SameValue(*old_value)) {
         EnqueueChangeRecord(self, "updated", name, old_value);
       }
     }
@@ -3110,15 +3119,7 @@ MaybeObject* JSObject::SetLocalPropertyIgnoreAttributes(
   PropertyAttributes old_attributes = ABSENT;
   bool is_observed = FLAG_harmony_observation && self->map()->is_observed();
   if (is_observed) {
-    // Function prototypes are stored specially
-    if (self->IsJSFunction() &&
-        JSFunction::cast(*self)->should_have_prototype() &&
-        name->Equals(isolate->heap()->prototype_symbol())) {
-      MaybeObject* maybe = Accessors::FunctionGetPrototype(*self, NULL);
-      if (!maybe->ToHandle(&old_value, isolate)) return maybe;
-    } else {
-      old_value = handle(lookup.GetLazyValue(), isolate);
-    }
+    if (lookup.IsDataProperty()) old_value = Object::GetProperty(self, name);
     old_attributes = lookup.GetAttributes();
   }
 
@@ -3188,11 +3189,11 @@ MaybeObject* JSObject::SetLocalPropertyIgnoreAttributes(
     } else {
       LookupResult new_lookup(isolate);
       self->LocalLookup(*name, &new_lookup, true);
-      ASSERT(!new_lookup.GetLazyValue()->IsTheHole());
       if (old_value->IsTheHole() ||
           new_lookup.GetAttributes() != old_attributes) {
         EnqueueChangeRecord(self, "reconfigured", name, old_value);
-      } else if (!new_lookup.GetLazyValue()->SameValue(*old_value)) {
+      } else if (new_lookup.IsDataProperty() &&
+          !Object::GetProperty(self, name)->SameValue(*old_value)) {
         EnqueueChangeRecord(self, "updated", name, old_value);
       }
     }
@@ -4255,8 +4256,8 @@ MaybeObject* JSObject::DeleteProperty(String* name, DeleteMode mode) {
 
   Handle<Object> old_value(isolate->heap()->the_hole_value());
   bool is_observed = FLAG_harmony_observation && self->map()->is_observed();
-  if (is_observed) {
-    old_value = handle(lookup.GetLazyValue(), isolate);
+  if (is_observed && lookup.IsDataProperty()) {
+    old_value = Object::GetProperty(self, hname);
   }
   MaybeObject* result;
 
@@ -4947,7 +4948,9 @@ MaybeObject* JSObject::DefineAccessor(String* name_raw,
       LookupResult lookup(isolate);
       LocalLookup(*name, &lookup, true);
       preexists = lookup.IsProperty();
-      if (preexists) old_value = handle(lookup.GetLazyValue(), isolate);
+      if (preexists && lookup.IsDataProperty()) {
+        old_value = Object::GetProperty(self, name);
+      }
     }
   }
 
@@ -7026,71 +7029,67 @@ void StringInputBuffer::Seek(unsigned pos) {
 }
 
 
-String* ConsStringIteratorOp::Operate(ConsString* consString,
-    unsigned* outerOffset, int32_t* typeOut, unsigned* lengthOut) {
-  ASSERT(*lengthOut == (unsigned)consString->length());
+String* ConsStringIteratorOp::Operate(ConsString* cons_string,
+    unsigned* offset_out, int32_t* type_out, unsigned* length_out) {
+  ASSERT(*length_out == (unsigned)cons_string->length());
+  ASSERT(depth_ == 0);
   // Push the root string.
-  PushLeft(consString);
-  root_ = consString;
-  root_type_ = *typeOut;
-  root_length_ = *lengthOut;
-  unsigned targetOffset = *outerOffset;
+  PushLeft(cons_string);
+  root_ = cons_string;
+  root_type_ = *type_out;
+  root_length_ = *length_out;
+  consumed_ = *offset_out;
+  unsigned targetOffset = *offset_out;
   unsigned offset = 0;
   while (true) {
     // Loop until the string is found which contains the target offset.
-    String* string = consString->first();
+    String* string = cons_string->first();
     unsigned length = string->length();
     int32_t type;
     if (targetOffset < offset + length) {
       // Target offset is in the left branch.
-      // Mark the descent.
-      ClearRightDescent();
       // Keep going if we're still in a ConString.
       type = string->map()->instance_type();
       if ((type & kStringRepresentationMask) == kConsStringTag) {
-        consString = ConsString::cast(string);
-        PushLeft(consString);
+        cons_string = ConsString::cast(string);
+        PushLeft(cons_string);
         continue;
       }
+      // Tell the stack we're done decending.
+      AdjustMaximumDepth();
     } else {
       // Descend right.
       // Update progress through the string.
       offset += length;
       // Keep going if we're still in a ConString.
-      string = consString->second();
+      string = cons_string->second();
       type = string->map()->instance_type();
       if ((type & kStringRepresentationMask) == kConsStringTag) {
-        consString = ConsString::cast(string);
-        PushRight(consString, type);
+        cons_string = ConsString::cast(string);
+        PushRight(cons_string);
+        // TODO(dcarney) Add back root optimization.
         continue;
       }
-      // Mark the descent.
-      SetRightDescent();
       // Need this to be updated for the current string.
       length = string->length();
       // Account for the possibility of an empty right leaf.
-      while (length == 0) {
-        bool blewStack;
-        // Need to adjust maximum depth for NextLeaf to work.
-        AdjustMaximumDepth();
-        string = NextLeaf(&blewStack, &type);
-        if (string == NULL) {
-          // Luckily, this case is impossible.
-          ASSERT(!blewStack);
-          return NULL;
-        }
-        length = string->length();
+      // This happens only if we have asked for an offset outside the string.
+      if (length == 0) {
+        Reset();
+        return NULL;
       }
+      // Tell the stack we're done decending.
+      AdjustMaximumDepth();
+      // Pop stack so next iteration is in correct place.
+      Pop();
     }
-    // Tell the stack we're done decending.
-    AdjustMaximumDepth();
     ASSERT(length != 0);
     // Adjust return values and exit.
     unsigned innerOffset = targetOffset - offset;
     consumed_ += length - innerOffset;
-    *outerOffset = innerOffset;
-    *typeOut = type;
-    *lengthOut = length;
+    *offset_out = innerOffset;
+    *type_out = type;
+    *length_out = length;
     return string;
   }
   UNREACHABLE();
@@ -7098,52 +7097,49 @@ String* ConsStringIteratorOp::Operate(ConsString* consString,
 }
 
 
-String* ConsStringIteratorOp::NextLeaf(bool* blewStack, int32_t* typeOut) {
+String* ConsStringIteratorOp::NextLeaf(
+    bool* blew_stack, int32_t* type_out, unsigned* length_out) {
   while (true) {
     // Tree traversal complete.
     if (depth_ == 0) {
-      *blewStack = false;
+      *blew_stack = false;
       return NULL;
     }
     // We've lost track of higher nodes.
     if (maximum_depth_ - depth_ == kStackSize) {
-      *blewStack = true;
+      *blew_stack = true;
       return NULL;
     }
-    // Check if we're done with this level.
-    bool haveAlreadyReadRight = trace_ & MaskForDepth(depth_ - 1);
-    if (haveAlreadyReadRight) {
-      Pop();
-      continue;
-    }
     // Go right.
-    ConsString* consString = frames_[OffsetForDepth(depth_ - 1)];
-    String* string = consString->second();
+    ConsString* cons_string = frames_[OffsetForDepth(depth_ - 1)];
+    String* string = cons_string->second();
     int32_t type = string->map()->instance_type();
     if ((type & kStringRepresentationMask) != kConsStringTag) {
-      // Don't need to mark the descent here.
       // Pop stack so next iteration is in correct place.
       Pop();
-      *typeOut = type;
+      unsigned length = (unsigned) string->length();
+      // Could be a flattened ConsString.
+      if (length == 0) continue;
+      *length_out = length;
+      *type_out = type;
       return string;
     }
-    // No need to mark the descent.
-    consString = ConsString::cast(string);
-    PushRight(consString, type);
+    cons_string = ConsString::cast(string);
+    // TODO(dcarney) Add back root optimization.
+    PushRight(cons_string);
     // Need to traverse all the way left.
     while (true) {
       // Continue left.
-      // Update marker.
-      ClearRightDescent();
-      string = consString->first();
+      string = cons_string->first();
       type = string->map()->instance_type();
       if ((type & kStringRepresentationMask) != kConsStringTag) {
         AdjustMaximumDepth();
-        *typeOut = type;
+        *type_out = type;
+        *length_out = string->length();
         return string;
       }
-      consString = ConsString::cast(string);
-      PushLeft(consString);
+      cons_string = ConsString::cast(string);
+      PushLeft(cons_string);
     }
   }
   UNREACHABLE();
@@ -8073,11 +8069,6 @@ bool SharedFunctionInfo::CompileLazy(Handle<SharedFunctionInfo> shared,
 }
 
 
-void SharedFunctionInfo::ClearOptimizedCodeMap() {
-  set_optimized_code_map(Smi::FromInt(0));
-}
-
-
 void SharedFunctionInfo::AddToOptimizedCodeMap(
     Handle<SharedFunctionInfo> shared,
     Handle<Context> native_context,
@@ -8343,7 +8334,7 @@ MaybeObject* Oddball::Initialize(const char* to_string,
                                  byte kind) {
   String* symbol;
   { MaybeObject* maybe_symbol =
-        Isolate::Current()->heap()->LookupAsciiSymbol(to_string);
+        Isolate::Current()->heap()->LookupUtf8Symbol(CStrVector(to_string));
     if (!maybe_symbol->To(&symbol)) return maybe_symbol;
   }
   set_to_string(symbol);
@@ -9224,8 +9215,12 @@ void DeoptimizationInputData::DeoptimizationInputDataPrint(FILE* out) {
           break;
         }
 
-        case Translation::ARGUMENTS_OBJECT:
+        case Translation::ARGUMENTS_OBJECT: {
+          int args_index = iterator.Next();
+          int args_length = iterator.Next();
+          PrintF(out, "{index=%d, length=%d}", args_index, args_length);
           break;
+        }
       }
       PrintF(out, "\n");
     }
@@ -9432,6 +9427,7 @@ MaybeObject* JSObject::SetFastElementsCapacityAndLength(
   Heap* heap = GetHeap();
   // We should never end in here with a pixel or external array.
   ASSERT(!HasExternalArrayElements());
+  ASSERT(!map()->is_observed());
 
   // Allocate a new fast elements backing store.
   FixedArray* new_elements;
@@ -9496,6 +9492,7 @@ MaybeObject* JSObject::SetFastDoubleElementsCapacityAndLength(
   Heap* heap = GetHeap();
   // We should never end in here with a pixel or external array.
   ASSERT(!HasExternalArrayElements());
+  ASSERT(!map()->is_observed());
 
   FixedArrayBase* elems;
   { MaybeObject* maybe_obj =
@@ -10639,6 +10636,7 @@ Handle<Object> JSObject::TransitionElementsKind(Handle<JSObject> object,
 
 
 MaybeObject* JSObject::TransitionElementsKind(ElementsKind to_kind) {
+  ASSERT(!map()->is_observed());
   ElementsKind from_kind = map()->elements_kind();
 
   if (IsFastHoleyElementsKind(from_kind)) {
@@ -10895,6 +10893,9 @@ bool JSObject::ShouldConvertToFastElements() {
   // An object requiring access checks is never allowed to have fast
   // elements.  If it had fast elements we would skip security checks.
   if (IsAccessCheckNeeded()) return false;
+  // Observed objects may not go to fast mode because they rely on map checks,
+  // and for fast element accesses we sometimes check element kinds only.
+  if (FLAG_harmony_observation && map()->is_observed()) return false;
 
   FixedArray* elements = FixedArray::cast(this->elements());
   SeededNumberDictionary* dictionary = NULL;
@@ -12714,21 +12715,21 @@ bool SymbolTable::LookupTwoCharsSymbolIfExists(uint32_t c1,
 }
 
 
-MaybeObject* SymbolTable::LookupSymbol(Vector<const char> str,
-                                       Object** s) {
+MaybeObject* SymbolTable::LookupUtf8Symbol(Vector<const char> str,
+                                           Object** s) {
   Utf8SymbolKey key(str, GetHeap()->HashSeed());
   return LookupKey(&key, s);
 }
 
 
-MaybeObject* SymbolTable::LookupAsciiSymbol(Vector<const char> str,
-                                            Object** s) {
+MaybeObject* SymbolTable::LookupOneByteSymbol(Vector<const char> str,
+                                              Object** s) {
   AsciiSymbolKey key(str, GetHeap()->HashSeed());
   return LookupKey(&key, s);
 }
 
 
-MaybeObject* SymbolTable::LookupSubStringAsciiSymbol(
+MaybeObject* SymbolTable::LookupSubStringOneByteSymbol(
     Handle<SeqOneByteString> str,
     int from,
     int length,

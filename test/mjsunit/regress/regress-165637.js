@@ -25,14 +25,33 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// Flags: --harmony-observation --allow-natives-syntax
-//
-// Test passes if it does not crash.
+// Flags: --allow-natives-syntax
 
-arr = [1.1];
-Object.observe(arr, function(){});
-arr.length = 0;
-// TODO(observe): we currently disallow fast elements for observed object.
-// assertTrue(%HasFastDoubleElements(arr));
-// Should not crash
-arr.push(1.1);
+// Should not take a very long time (n^2 algorithms are bad)
+
+function do_slices() {
+  var data = new Array(1024 * 12); // 12kB
+
+  for (var i = 0; i < data.length; i++) {
+    data[i] = 255;
+  }
+
+  var start = Date.now();
+
+  for (i = 0; i < 20000; i++) {
+    data.slice(4, 1);
+  }
+
+  return Date.now() - start;
+}
+
+// Should never take more than 3 seconds (if the bug is fixed, the test takes
+// considerably less time than 3 seconds).
+assertTrue(do_slices() < (3 * 1000));
+
+// Make sure that packed and unpacked array slices are still properly handled
+var holey_array = [1, 2, 3, 4, 5,,,,,,];
+assertFalse(%HasFastHoleyElements(holey_array.slice(6, 1)));
+assertEquals(undefined, holey_array.slice(6, 7)[0])
+assertFalse(%HasFastHoleyElements(holey_array.slice(2, 1)));
+assertEquals(3, holey_array.slice(2, 3)[0])

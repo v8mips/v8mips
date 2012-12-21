@@ -25,14 +25,7 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// Flags: --harmony-observation --allow-natives-syntax
-//
-// Test passes if it does not crash.
+// Flags: --harmony-scoping
 
-arr = [1.1];
-Object.observe(arr, function(){});
-arr.length = 0;
-// TODO(observe): we currently disallow fast elements for observed object.
-// assertTrue(%HasFastDoubleElements(arr));
-// Should not crash
-arr.push(1.1);
+assertThrows("'use strict'; (function f() { f = 123; })", SyntaxError);
+assertThrows("(function f() { 'use strict'; f = 123; })", SyntaxError);
