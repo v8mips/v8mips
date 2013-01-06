@@ -79,6 +79,36 @@ void DeoptimizerData::Iterate(ObjectVisitor* v) {
 #endif
 
 
+Code* DeoptimizerData::FindDeoptimizingCode(Address addr) {
+  for (DeoptimizingCodeListNode* node = deoptimizing_code_list_;
+       node != NULL;
+       node = node->next()) {
+    if (node->code()->contains(addr)) return *node->code();
+  }
+  return NULL;
+}
+
+
+void DeoptimizerData::RemoveDeoptimizingCode(Code* code) {
+  for (DeoptimizingCodeListNode *prev = NULL, *cur = deoptimizing_code_list_;
+       cur != NULL;
+       prev = cur, cur = cur->next()) {
+    if (*cur->code() == code) {
+      if (prev == NULL) {
+        deoptimizing_code_list_ = cur->next();
+      } else {
+        prev->set_next(cur->next());
+      }
+      delete cur;
+      return;
+    }
+  }
+  // Deoptimizing code is removed through weak callback. Each object is expected
+  // to be removed once and only once.
+  UNREACHABLE();
+}
+
+
 // We rely on this function not causing a GC.  It is called from generated code
 // without having a real stack frame in place.
 Deoptimizer* Deoptimizer::New(JSFunction* function,
@@ -426,16 +456,17 @@ void Deoptimizer::DeoptimizeAllFunctionsWith(OptimizedFunctionFilter* filter) {
 }
 
 
-void Deoptimizer::HandleWeakDeoptimizedCode(
-    v8::Persistent<v8::Value> obj, void* data) {
+void Deoptimizer::HandleWeakDeoptimizedCode(v8::Persistent<v8::Value> obj,
+                                            void* parameter) {
   DeoptimizingCodeListNode* node =
-      reinterpret_cast<DeoptimizingCodeListNode*>(data);
-  RemoveDeoptimizingCode(*node->code());
+      reinterpret_cast<DeoptimizingCodeListNode*>(parameter);
+  DeoptimizerData* data = Isolate::Current()->deoptimizer_data();
+  data->RemoveDeoptimizingCode(*node->code());
 #ifdef DEBUG
-  node = Isolate::Current()->deoptimizer_data()->deoptimizing_code_list_;
-  while (node != NULL) {
-    ASSERT(node != reinterpret_cast<DeoptimizingCodeListNode*>(data));
-    node = node->next();
+  for (DeoptimizingCodeListNode* current = data->deoptimizing_code_list_;
+       current != NULL;
+       current = current->next()) {
+    ASSERT(current != node);
   }
 #endif
 }
@@ -443,6 +474,40 @@ void Deoptimizer::HandleWeakDeoptimizedCode(
 
 void Deoptimizer::ComputeOutputFrames(Deoptimizer* deoptimizer) {
   deoptimizer->DoComputeOutputFrames();
+}
+
+
+static Code* FindOptimizedCode(Isolate* isolate,
+                               JSFunction* function,
+                               Deoptimizer::BailoutType type,
+                               Address from,
+                               Code* optimized_code) {
+  switch (type) {
+    case Deoptimizer::EAGER:
+      ASSERT(from == NULL);
+      return function->code();
+    case Deoptimizer::LAZY: {
+      Code* compiled_code =
+          isolate->deoptimizer_data()->FindDeoptimizingCode(from);
+      return (compiled_code == NULL)
+          ? static_cast<Code*>(isolate->heap()->FindCodeObject(from))
+          : compiled_code;
+    }
+    case Deoptimizer::OSR: {
+      // The function has already been optimized and we're transitioning
+      // from the unoptimized shared version to the optimized one in the
+      // function. The return address (from) points to unoptimized code.
+      Code* compiled_code = function->code();
+      ASSERT(compiled_code->kind() == Code::OPTIMIZED_FUNCTION);
+      ASSERT(!compiled_code->contains(from));
+      return compiled_code;
+    }
+    case Deoptimizer::DEBUGGER:
+      ASSERT(optimized_code->contains(from));
+      return optimized_code;
+  }
+  UNREACHABLE();
+  return NULL;
 }
 
 
@@ -494,47 +559,10 @@ Deoptimizer::Deoptimizer(Isolate* isolate,
   if (function != NULL && function->IsOptimized()) {
     function->shared()->increment_deopt_count();
   }
-  // Find the optimized code.
-  if (type == EAGER) {
-    ASSERT(from == NULL);
-    compiled_code_ = function_->code();
-    if (FLAG_trace_deopt && FLAG_code_comments) {
-      // Print instruction associated with this bailout.
-      const char* last_comment = NULL;
-      int mask = RelocInfo::ModeMask(RelocInfo::COMMENT)
-          | RelocInfo::ModeMask(RelocInfo::RUNTIME_ENTRY);
-      for (RelocIterator it(compiled_code_, mask); !it.done(); it.next()) {
-        RelocInfo* info = it.rinfo();
-        if (info->rmode() == RelocInfo::COMMENT) {
-          last_comment = reinterpret_cast<const char*>(info->data());
-        }
-        if (info->rmode() == RelocInfo::RUNTIME_ENTRY) {
-          unsigned id = Deoptimizer::GetDeoptimizationId(
-              info->target_address(), Deoptimizer::EAGER);
-          if (id == bailout_id && last_comment != NULL) {
-            PrintF("            %s\n", last_comment);
-            break;
-          }
-        }
-      }
-    }
-  } else if (type == LAZY) {
-    compiled_code_ = FindDeoptimizingCodeFromAddress(from);
-    if (compiled_code_ == NULL) {
-      compiled_code_ =
-          static_cast<Code*>(isolate->heap()->FindCodeObject(from));
-    }
-    ASSERT(compiled_code_ != NULL);
-  } else if (type == OSR) {
-    // The function has already been optimized and we're transitioning
-    // from the unoptimized shared version to the optimized one in the
-    // function. The return address (from) points to unoptimized code.
-    compiled_code_ = function_->code();
-    ASSERT(compiled_code_->kind() == Code::OPTIMIZED_FUNCTION);
-    ASSERT(!compiled_code_->contains(from));
-  } else if (type == DEBUGGER) {
-    compiled_code_ = optimized_code;
-    ASSERT(compiled_code_->contains(from));
+  compiled_code_ =
+      FindOptimizedCode(isolate, function, type, from, optimized_code);
+  if (FLAG_trace_deopt && type == EAGER) {
+    compiled_code_->PrintDeoptLocation(bailout_id);
   }
   ASSERT(HEAP->allow_allocation(false));
   unsigned size = ComputeInputFrameSize();
@@ -1531,44 +1559,6 @@ void Deoptimizer::EnsureCodeForDeoptimizationEntry(BailoutType type,
   } else {
     data->lazy_deoptimization_entry_code_entries_ = entry_count;
   }
-}
-
-
-Code* Deoptimizer::FindDeoptimizingCodeFromAddress(Address addr) {
-  DeoptimizingCodeListNode* node =
-      Isolate::Current()->deoptimizer_data()->deoptimizing_code_list_;
-  while (node != NULL) {
-    if (node->code()->contains(addr)) return *node->code();
-    node = node->next();
-  }
-  return NULL;
-}
-
-
-void Deoptimizer::RemoveDeoptimizingCode(Code* code) {
-  DeoptimizerData* data = Isolate::Current()->deoptimizer_data();
-  ASSERT(data->deoptimizing_code_list_ != NULL);
-  // Run through the code objects to find this one and remove it.
-  DeoptimizingCodeListNode* prev = NULL;
-  DeoptimizingCodeListNode* current = data->deoptimizing_code_list_;
-  while (current != NULL) {
-    if (*current->code() == code) {
-      // Unlink from list. If prev is NULL we are looking at the first element.
-      if (prev == NULL) {
-        data->deoptimizing_code_list_ = current->next();
-      } else {
-        prev->set_next(current->next());
-      }
-      delete current;
-      return;
-    }
-    // Move to next in list.
-    prev = current;
-    current = current->next();
-  }
-  // Deoptimizing code is removed through weak callback. Each object is expected
-  // to be removed once and only once.
-  UNREACHABLE();
 }
 
 
