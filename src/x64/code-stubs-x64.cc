@@ -333,7 +333,11 @@ static void GenerateFastCloneShallowArrayCommon(
 
   // Allocate both the JS array and the elements array in one big
   // allocation. This avoids multiple limit checks.
-  __ AllocateInNewSpace(size, rax, rbx, rdx, fail, TAG_OBJECT);
+  AllocationFlags flags = TAG_OBJECT;
+  if (mode == FastCloneShallowArrayStub::CLONE_DOUBLE_ELEMENTS) {
+    flags = static_cast<AllocationFlags>(DOUBLE_ALIGNMENT | flags);
+  }
+  __ AllocateInNewSpace(size, rax, rbx, rdx, fail, flags);
 
   // Copy the JS array part.
   for (int i = 0; i < JSArray::kSize; i += kPointerSize) {
@@ -3930,8 +3934,7 @@ void CEntryStub::GenerateCore(MacroAssembler* masm,
     __ movq(rdi, rax);
 #endif
     __ movq(kScratchRegister,
-            FUNCTION_ADDR(Runtime::PerformGC),
-            RelocInfo::RUNTIME_ENTRY);
+            ExternalReference::perform_gc_function(masm->isolate()));
     __ call(kScratchRegister);
   }
 
