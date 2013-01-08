@@ -6878,7 +6878,7 @@ String* ConsStringIteratorOp::NextLeaf(bool* blew_stack,
     if ((type & kStringRepresentationMask) != kConsStringTag) {
       // Pop stack so next iteration is in correct place.
       Pop();
-      unsigned length = (unsigned) string->length();
+      unsigned length = static_cast<unsigned>(string->length());
       // Could be a flattened ConsString.
       if (length == 0) continue;
       *length_out = length;
@@ -6896,7 +6896,7 @@ String* ConsStringIteratorOp::NextLeaf(bool* blew_stack,
       type = string->map()->instance_type();
       if ((type & kStringRepresentationMask) != kConsStringTag) {
         AdjustMaximumDepth();
-        unsigned length = (unsigned) string->length();
+        unsigned length = static_cast<unsigned>(string->length());
         ASSERT(length != 0);
         *length_out = length;
         *type_out = type;
@@ -7480,6 +7480,31 @@ String* SeqString::Truncate(int new_length) {
     MemoryChunk::IncrementLiveBytesFromMutator(address(), -delta);
   }
   return this;
+}
+
+
+AllocationSiteInfo* AllocationSiteInfo::FindForJSObject(JSObject* object) {
+  // Currently, AllocationSiteInfo objects are only allocated immediately
+  // after JSArrays in NewSpace, and detecting whether a JSArray has one
+  // involves carefully checking the object immediately after the JSArray
+  // (if there is one) to see if it's an AllocationSiteInfo.
+  if (FLAG_track_allocation_sites && object->GetHeap()->InNewSpace(object)) {
+    Address ptr_end = (reinterpret_cast<Address>(object) - kHeapObjectTag) +
+        object->Size();
+    if ((ptr_end + AllocationSiteInfo::kSize) <=
+        object->GetHeap()->NewSpaceTop()) {
+      // There is room in newspace for allocation info. Do we have some?
+      Map** possible_allocation_site_info_map =
+          reinterpret_cast<Map**>(ptr_end);
+      if (*possible_allocation_site_info_map ==
+          object->GetHeap()->allocation_site_info_map()) {
+        AllocationSiteInfo* info = AllocationSiteInfo::cast(
+            reinterpret_cast<Object*>(ptr_end + 1));
+        return info;
+      }
+    }
+  }
+  return NULL;
 }
 
 
@@ -9009,6 +9034,7 @@ const char* Code::ICState2String(InlineCacheState state) {
     case PREMONOMORPHIC: return "PREMONOMORPHIC";
     case MONOMORPHIC: return "MONOMORPHIC";
     case MONOMORPHIC_PROTOTYPE_FAILURE: return "MONOMORPHIC_PROTOTYPE_FAILURE";
+    case POLYMORPHIC: return "POLYMORPHIC";
     case MEGAMORPHIC: return "MEGAMORPHIC";
     case DEBUG_BREAK: return "DEBUG_BREAK";
     case DEBUG_PREPARE_STEP_IN: return "DEBUG_PREPARE_STEP_IN";
@@ -9829,6 +9855,14 @@ MaybeObject* JSObject::SetFastElement(uint32_t index,
   }
   // Convert to fast double elements if appropriate.
   if (HasFastSmiElements() && !value->IsSmi() && value->IsNumber()) {
+    // Consider fixing the boilerplate as well if we have one.
+    ElementsKind to_kind = IsHoleyElementsKind(elements_kind)
+        ? FAST_HOLEY_DOUBLE_ELEMENTS
+        : FAST_DOUBLE_ELEMENTS;
+
+    MaybeObject* trans = PossiblyTransitionArrayBoilerplate(to_kind);
+    if (trans != NULL && trans->IsFailure()) return trans;
+
     MaybeObject* maybe =
         SetFastDoubleElementsCapacityAndLength(new_capacity, array_length);
     if (maybe->IsFailure()) return maybe;
@@ -10370,6 +10404,24 @@ Handle<Object> JSObject::TransitionElementsKind(Handle<JSObject> object,
 }
 
 
+MaybeObject* JSObject::PossiblyTransitionArrayBoilerplate(
+    ElementsKind to_kind) {
+  ASSERT(IsJSArray());
+  MaybeObject* ret = NULL;
+  AllocationSiteInfo* info = AllocationSiteInfo::FindForJSObject(this);
+  if (info != NULL) {
+    JSObject* payload = JSObject::cast(info->payload());
+    if (payload->GetElementsKind() != to_kind) {
+      if (IsMoreGeneralElementsKindTransition(payload->GetElementsKind(),
+                                              to_kind)) {
+        ret = payload->TransitionElementsKind(to_kind);
+      }
+    }
+  }
+  return ret;
+}
+
+
 MaybeObject* JSObject::TransitionElementsKind(ElementsKind to_kind) {
   ASSERT(!map()->is_observed());
   ElementsKind from_kind = map()->elements_kind();
@@ -10379,6 +10431,9 @@ MaybeObject* JSObject::TransitionElementsKind(ElementsKind to_kind) {
   }
 
   if (from_kind == to_kind) return this;
+
+  MaybeObject* trans = PossiblyTransitionArrayBoilerplate(to_kind);
+  if (trans != NULL && trans->IsFailure()) return trans;
 
   Isolate* isolate = GetIsolate();
   if (elements() == isolate->heap()->empty_fixed_array() ||
