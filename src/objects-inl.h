@@ -341,7 +341,12 @@ bool String::IsTwoByteRepresentationUnderneath() {
 
 bool String::HasOnlyAsciiChars() {
   uint32_t type = map()->instance_type();
+#ifndef ENABLE_LATIN_1
+  return (type & kStringEncodingMask) == kOneByteStringTag ||
+         (type & kAsciiDataHintMask) == kAsciiDataHintTag;
+#else
   return (type & kAsciiDataHintMask) == kAsciiDataHintTag;
+#endif
 }
 
 
@@ -3418,14 +3423,13 @@ InlineCacheState Code::ic_state() {
   // a call to code object has been replaced with a debug break call.
   ASSERT(is_inline_cache_stub() ||
          result == UNINITIALIZED ||
-         result == DEBUG_BREAK ||
-         result == DEBUG_PREPARE_STEP_IN);
+         result == DEBUG_STUB);
   return result;
 }
 
 
 Code::ExtraICState Code::extra_ic_state() {
-  ASSERT(is_inline_cache_stub());
+  ASSERT(is_inline_cache_stub() || ic_state() == DEBUG_STUB);
   return ExtractExtraICStateFromFlags(flags());
 }
 
@@ -3673,6 +3677,11 @@ void Code::set_has_function_cache(bool flag) {
 bool Code::is_inline_cache_stub() {
   Kind kind = this->kind();
   return kind >= FIRST_IC_KIND && kind <= LAST_IC_KIND;
+}
+
+
+bool Code::is_debug_break() {
+  return ic_state() == DEBUG_STUB && extra_ic_state() == DEBUG_BREAK;
 }
 
 
@@ -4373,6 +4382,19 @@ Code* SharedFunctionInfo::unchecked_code() {
 void SharedFunctionInfo::set_code(Code* value, WriteBarrierMode mode) {
   WRITE_FIELD(this, kCodeOffset, value);
   CONDITIONAL_WRITE_BARRIER(value->GetHeap(), this, kCodeOffset, value, mode);
+}
+
+
+void SharedFunctionInfo::ReplaceCode(Code* value) {
+  // If the GC metadata field is already used then the function was
+  // enqueued as a code flushing candidate and we remove it now.
+  if (code()->gc_metadata() != NULL) {
+    CodeFlusher* flusher = GetHeap()->mark_compact_collector()->code_flusher();
+    flusher->EvictCandidate(this);
+  }
+
+  ASSERT(code()->gc_metadata() == NULL && value->gc_metadata() == NULL);
+  set_code(value);
 }
 
 

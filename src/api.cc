@@ -128,8 +128,13 @@ namespace v8 {
 
 static void DefaultFatalErrorHandler(const char* location,
                                      const char* message) {
-  i::VMState __state__(i::Isolate::Current(), i::OTHER);
-  API_Fatal(location, message);
+  i::Isolate* isolate = i::Isolate::Current();
+  if (isolate->IsInitialized()) {
+    i::VMState __state__(isolate, i::OTHER);
+    API_Fatal(location, message);
+  } else {
+    API_Fatal(location, message);
+  }
 }
 
 
@@ -202,15 +207,21 @@ void i::V8::FatalProcessOutOfMemory(const char* location, bool take_snapshot) {
   int end_marker;
   heap_stats.end_marker = &end_marker;
   i::Isolate* isolate = i::Isolate::Current();
-  // BUG(1718):
-  // Don't use the take_snapshot since we don't support HeapIterator here
-  // without doing a special GC.
-  isolate->heap()->RecordStats(&heap_stats, false);
+  if (isolate->heap()->HasBeenSetUp()) {
+    // BUG(1718): Don't use the take_snapshot since we don't support
+    // HeapIterator here without doing a special GC.
+    isolate->heap()->RecordStats(&heap_stats, false);
+  }
   i::V8::SetFatalError();
   FatalErrorCallback callback = GetFatalErrorHandler();
+  const char* message = "Allocation failed - process out of memory";
   {
-    LEAVE_V8(isolate);
-    callback(location, "Allocation failed - process out of memory");
+    if (isolate->IsInitialized()) {
+      LEAVE_V8(isolate);
+      callback(location, message);
+    } else {
+      callback(location, message);
+    }
   }
   // If the callback returns, we stop execution.
   UNREACHABLE();
@@ -1851,8 +1862,7 @@ v8::Local<Value> v8::TryCatch::StackTrace() const {
     if (!raw_obj->IsJSObject()) return v8::Local<Value>();
     i::HandleScope scope(isolate_);
     i::Handle<i::JSObject> obj(i::JSObject::cast(raw_obj), isolate_);
-    i::Handle<i::String> name =
-        isolate_->factory()->LookupOneByteSymbol(STATIC_ASCII_VECTOR("stack"));
+    i::Handle<i::String> name = isolate_->factory()->stack_symbol();
     if (!obj->HasProperty(*name)) return v8::Local<Value>();
     i::Handle<i::Object> value = i::GetProperty(obj, name);
     if (value.is_null()) return v8::Local<Value>();
@@ -3882,6 +3892,15 @@ bool String::MayContainNonAscii() const {
 }
 
 
+bool String::IsOneByte() const {
+  i::Handle<i::String> str = Utils::OpenHandle(this);
+  if (IsDeadCheck(str->GetIsolate(), "v8::String::IsOneByte()")) {
+    return false;
+  }
+  return str->IsOneByteConvertible();
+}
+
+
 class Utf8LengthVisitor {
  public:
   explicit Utf8LengthVisitor()
@@ -4183,32 +4202,52 @@ int String::WriteAscii(char* buffer,
 }
 
 
+template<typename CharType>
+struct WriteHelper {
+  static inline int Write(const String* string,
+                          CharType* buffer,
+                          int start,
+                          int length,
+                          int options) {
+    i::Isolate* isolate = Utils::OpenHandle(string)->GetIsolate();
+    if (IsDeadCheck(isolate, "v8::String::Write()")) return 0;
+    LOG_API(isolate, "String::Write");
+    ENTER_V8(isolate);
+    ASSERT(start >= 0 && length >= -1);
+    i::Handle<i::String> str = Utils::OpenHandle(string);
+    isolate->string_tracker()->RecordWrite(str);
+    if (options & String::HINT_MANY_WRITES_EXPECTED) {
+      // Flatten the string for efficiency.  This applies whether we are
+      // using StringCharacterStream or Get(i) to access the characters.
+      FlattenString(str);
+    }
+    int end = start + length;
+    if ((length == -1) || (length > str->length() - start) )
+      end = str->length();
+    if (end < 0) return 0;
+    i::String::WriteToFlat(*str, buffer, start, end);
+    if (!(options & String::NO_NULL_TERMINATION) &&
+        (length == -1 || end - start < length)) {
+      buffer[end - start] = '\0';
+    }
+    return end - start;
+  }
+};
+
+
+int String::WriteOneByte(uint8_t* buffer,
+                         int start,
+                         int length,
+                         int options) const {
+  return WriteHelper<uint8_t>::Write(this, buffer, start, length, options);
+}
+
+
 int String::Write(uint16_t* buffer,
                   int start,
                   int length,
                   int options) const {
-  i::Isolate* isolate = Utils::OpenHandle(this)->GetIsolate();
-  if (IsDeadCheck(isolate, "v8::String::Write()")) return 0;
-  LOG_API(isolate, "String::Write");
-  ENTER_V8(isolate);
-  ASSERT(start >= 0 && length >= -1);
-  i::Handle<i::String> str = Utils::OpenHandle(this);
-  isolate->string_tracker()->RecordWrite(str);
-  if (options & HINT_MANY_WRITES_EXPECTED) {
-    // Flatten the string for efficiency.  This applies whether we are
-    // using StringCharacterStream or Get(i) to access the characters.
-    FlattenString(str);
-  }
-  int end = start + length;
-  if ((length == -1) || (length > str->length() - start) )
-    end = str->length();
-  if (end < 0) return 0;
-  i::String::WriteToFlat(*str, buffer, start, end);
-  if (!(options & NO_NULL_TERMINATION) &&
-      (length == -1 || end - start < length)) {
-    buffer[end - start] = '\0';
-  }
-  return end - start;
+  return WriteHelper<uint16_t>::Write(this, buffer, start, length, options);
 }
 
 
@@ -4393,14 +4432,6 @@ static void* ExternalValue(i::Object* obj) {
   if (obj->IsUndefined()) return NULL;
   i::Object* foreign = i::JSObject::cast(obj)->GetInternalField(0);
   return i::Foreign::cast(foreign)->foreign_address();
-}
-
-
-void* Object::GetPointerFromInternalField(int index) {
-  i::Handle<i::JSObject> obj = Utils::OpenHandle(this);
-  const char* location = "v8::Object::GetPointerFromInternalField()";
-  if (!InternalFieldOK(obj, index, location)) return NULL;
-  return ExternalValue(obj->GetInternalField(index));
 }
 
 

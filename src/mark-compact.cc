@@ -835,8 +835,6 @@ void MarkCompactCollector::Finish() {
   // GC, because it relies on the new address of certain old space
   // objects (empty string, illegal builtin).
   heap()->isolate()->stub_cache()->Clear();
-
-  heap()->external_string_table_.CleanUp();
 }
 
 
@@ -885,8 +883,8 @@ void CodeFlusher::ProcessJSFunctionCandidates() {
     if (!code_mark.Get()) {
       shared->set_code(lazy_compile);
       candidate->set_code(lazy_compile);
-    } else if (code == lazy_compile) {
-      candidate->set_code(lazy_compile);
+    } else {
+      candidate->set_code(code);
     }
 
     // We are in the middle of a GC cycle so the write barrier in the code
@@ -935,6 +933,34 @@ void CodeFlusher::ProcessSharedFunctionInfoCandidates() {
 }
 
 
+void CodeFlusher::EvictCandidate(SharedFunctionInfo* shared_info) {
+  // The function is no longer a candidate, make sure it gets visited
+  // again so that previous flushing decisions are revisited.
+  isolate_->heap()->incremental_marking()->RecordWrites(shared_info);
+
+  SharedFunctionInfo* candidate = shared_function_info_candidates_head_;
+  SharedFunctionInfo* next_candidate;
+  if (candidate == shared_info) {
+    next_candidate = GetNextCandidate(shared_info);
+    shared_function_info_candidates_head_ = next_candidate;
+    ClearNextCandidate(shared_info);
+  } else {
+    while (candidate != NULL) {
+      next_candidate = GetNextCandidate(candidate);
+
+      if (next_candidate == shared_info) {
+        next_candidate = GetNextCandidate(shared_info);
+        SetNextCandidate(candidate, next_candidate);
+        ClearNextCandidate(shared_info);
+        break;
+      }
+
+      candidate = next_candidate;
+    }
+  }
+}
+
+
 void CodeFlusher::EvictCandidate(JSFunction* function) {
   ASSERT(!function->next_function_link()->IsUndefined());
   Object* undefined = isolate_->heap()->undefined_value();
@@ -957,6 +983,7 @@ void CodeFlusher::EvictCandidate(JSFunction* function) {
         next_candidate = GetNextCandidate(function);
         SetNextCandidate(candidate, next_candidate);
         ClearNextCandidate(function, undefined);
+        break;
       }
 
       candidate = next_candidate;
@@ -2030,6 +2057,7 @@ void MarkCompactCollector::AfterMarking() {
   symbol_table->ElementsRemoved(v.PointersRemoved());
   heap()->external_string_table_.Iterate(&v);
   heap()->external_string_table_.CleanUp();
+  heap()->error_object_list_.RemoveUnmarked(heap());
 
   // Process the weak references.
   MarkCompactWeakObjectRetainer mark_compact_object_retainer;
@@ -3068,6 +3096,9 @@ void MarkCompactCollector::EvacuateNewSpaceAndCandidates() {
   // Update pointers from external string table.
   heap_->UpdateReferencesInExternalStringTable(
       &UpdateReferenceInExternalStringTableEntry);
+
+  // Update pointers in the new error object list.
+  heap_->error_object_list()->UpdateReferences();
 
   if (!FLAG_watch_ic_patching) {
     // Update JSFunction pointers from the runtime profiler.

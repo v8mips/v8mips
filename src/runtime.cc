@@ -1098,14 +1098,15 @@ static MaybeObject* GetOwnProperty(Isolate* isolate,
 
   PropertyAttributes attrs = obj->GetLocalPropertyAttribute(*name);
   if (attrs == ABSENT) return heap->undefined_value();
-  AccessorPair* accessors = obj->GetLocalPropertyAccessorPair(*name);
+  AccessorPair* raw_accessors = obj->GetLocalPropertyAccessorPair(*name);
+  Handle<AccessorPair> accessors(raw_accessors, isolate);
 
   Handle<FixedArray> elms = isolate->factory()->NewFixedArray(DESCRIPTOR_SIZE);
   elms->set(ENUMERABLE_INDEX, heap->ToBoolean((attrs & DONT_ENUM) == 0));
   elms->set(CONFIGURABLE_INDEX, heap->ToBoolean((attrs & DONT_DELETE) == 0));
-  elms->set(IS_ACCESSOR_INDEX, heap->ToBoolean(accessors != NULL));
+  elms->set(IS_ACCESSOR_INDEX, heap->ToBoolean(raw_accessors != NULL));
 
-  if (accessors == NULL) {
+  if (raw_accessors == NULL) {
     elms->set(WRITABLE_INDEX, heap->ToBoolean((attrs & READ_ONLY) == 0));
     // GetProperty does access check.
     Handle<Object> value = GetProperty(obj, name);
@@ -2147,7 +2148,7 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_SetCode) {
   // target function to undefined.  SetCode is only used for built-in
   // constructors like String, Array, and Object, and some web code
   // doesn't like seeing source code for constructors.
-  target_shared->set_code(source_shared->code());
+  target_shared->ReplaceCode(source_shared->code());
   target_shared->set_scope_info(source_shared->scope_info());
   target_shared->set_length(source_shared->length());
   target_shared->set_formal_parameter_count(
@@ -13219,16 +13220,46 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_CollectStackTrace) {
 }
 
 
-// Retrieve the raw stack trace collected on stack overflow and delete
-// it since it is used only once to avoid keeping it alive.
-RUNTIME_FUNCTION(MaybeObject*, Runtime_GetOverflowedRawStackTrace) {
+// Mark a function to recognize when called after GC to format the stack trace.
+RUNTIME_FUNCTION(MaybeObject*, Runtime_MarkOneShotGetter) {
+  ASSERT_EQ(args.length(), 1);
+  CONVERT_ARG_HANDLE_CHECKED(JSFunction, fun, 0);
+  HandleScope scope(isolate);
+  Handle<String> key = isolate->factory()->hidden_stack_trace_symbol();
+  JSObject::SetHiddenProperty(fun, key, key);
+  return *fun;
+}
+
+
+// Retrieve the stack trace.  This could be the raw stack trace collected
+// on stack overflow or the already formatted stack trace string.
+RUNTIME_FUNCTION(MaybeObject*, Runtime_GetOverflowedStackTrace) {
+  HandleScope scope(isolate);
   ASSERT_EQ(args.length(), 1);
   CONVERT_ARG_CHECKED(JSObject, error_object, 0);
   String* key = isolate->heap()->hidden_stack_trace_symbol();
   Object* result = error_object->GetHiddenProperty(key);
-  RUNTIME_ASSERT(result->IsJSArray() || result->IsUndefined());
-  error_object->DeleteHiddenProperty(key);
+  RUNTIME_ASSERT(result->IsJSArray() ||
+                 result->IsString() ||
+                 result->IsUndefined());
   return result;
+}
+
+
+// Set or clear the stack trace attached to an stack overflow error object.
+RUNTIME_FUNCTION(MaybeObject*, Runtime_SetOverflowedStackTrace) {
+  HandleScope scope(isolate);
+  ASSERT_EQ(args.length(), 2);
+  CONVERT_ARG_HANDLE_CHECKED(JSObject, error_object, 0);
+  CONVERT_ARG_HANDLE_CHECKED(HeapObject, value, 1);
+  Handle<String> key = isolate->factory()->hidden_stack_trace_symbol();
+  if (value->IsUndefined()) {
+    error_object->DeleteHiddenProperty(*key);
+  } else {
+    RUNTIME_ASSERT(value->IsString());
+    JSObject::SetHiddenProperty(error_object, key, value);
+  }
+  return *error_object;
 }
 
 

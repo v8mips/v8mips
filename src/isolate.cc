@@ -635,6 +635,7 @@ Handle<JSArray> Isolate::CaptureSimpleStackTrace(Handle<JSObject> error_object,
   }
   Handle<JSArray> result = factory()->NewJSArrayWithElements(elements);
   result->set_length(Smi::FromInt(cursor));
+  heap()->error_object_list()->Add(*error_object);
   return result;
 }
 
@@ -2003,7 +2004,7 @@ bool Isolate::Init(Deserializer* des) {
   const bool create_heap_objects = (des == NULL);
   ASSERT(!heap_.HasBeenSetUp());
   if (!heap_.SetUp(create_heap_objects)) {
-    V8::SetFatalError();
+    V8::FatalProcessOutOfMemory("heap setup");
     return false;
   }
 
