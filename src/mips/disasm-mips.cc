@@ -625,7 +625,7 @@ void Decoder::DecodeTypeRegister(Instruction* instr) {
     case COP1X:
       switch (instr->FunctionFieldRaw()) {
         case MADD_D:
-          Format(instr, "madd.d     'fd, 'fr, 'fs, 'ft");
+          Format(instr, "madd.d  'fd, 'fr, 'fs, 'ft");
           break;
         default:
           UNREACHABLE();

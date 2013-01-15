@@ -421,7 +421,7 @@ enum SecondaryField {
   CVT_D_L   =   ((4 << 3) + 1),
   // COP1 Encoding of Function Field When rs=PS.
   // COP1X Encoding of Function Field.
-  MADD_D   = ((4 << 3) + 1),
+  MADD_D    =   ((4 << 3) + 1),
 
   NULLSF    =   0
 };
