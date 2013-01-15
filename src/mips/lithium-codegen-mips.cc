@@ -1114,7 +1114,7 @@ void LCodeGen::EmitSignedIntegerDivisionByConstant(
     Register remainder,
     Register scratch,
     LEnvironment* environment) {
-  ASSERT(!AreAliased(dividend, scratch, ip));
+  ASSERT(!AreAliased(dividend, scratch, at, no_reg));
 
   uint32_t divisor_abs = abs(divisor);
 
