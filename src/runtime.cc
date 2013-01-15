@@ -1804,25 +1804,27 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_RegExpInitializeObject) {
   result = regexp->SetLocalPropertyIgnoreAttributes(heap->source_symbol(),
                                                     source,
                                                     final);
-  ASSERT(!result->IsFailure());
+  // TODO(jkummerow): Turn these back into ASSERTs when we can be certain
+  // that it never fires in Release mode in the wild.
+  CHECK(!result->IsFailure());
   result = regexp->SetLocalPropertyIgnoreAttributes(heap->global_symbol(),
                                                     global,
                                                     final);
-  ASSERT(!result->IsFailure());
+  CHECK(!result->IsFailure());
   result =
       regexp->SetLocalPropertyIgnoreAttributes(heap->ignore_case_symbol(),
                                                ignoreCase,
                                                final);
-  ASSERT(!result->IsFailure());
+  CHECK(!result->IsFailure());
   result = regexp->SetLocalPropertyIgnoreAttributes(heap->multiline_symbol(),
                                                     multiline,
                                                     final);
-  ASSERT(!result->IsFailure());
+  CHECK(!result->IsFailure());
   result =
       regexp->SetLocalPropertyIgnoreAttributes(heap->last_index_symbol(),
                                                Smi::FromInt(0),
                                                writable);
-  ASSERT(!result->IsFailure());
+  CHECK(!result->IsFailure());
   USE(result);
   return regexp;
 }
@@ -2913,7 +2915,7 @@ MUST_USE_RESULT static MaybeObject* StringReplaceAtomRegExpWithString(
        static_cast<int64_t>(pattern_len)) *
       static_cast<int64_t>(matches) +
       static_cast<int64_t>(subject_len);
-  if (result_len_64 > INT_MAX) return Failure::OutOfMemoryException();
+  if (result_len_64 > INT_MAX) return Failure::OutOfMemoryException(0x11);
   int result_len = static_cast<int>(result_len_64);
 
   int subject_pos = 0;
@@ -2990,7 +2992,8 @@ MUST_USE_RESULT static MaybeObject* StringReplaceRegExpWithString(
   if (is_global &&
       regexp->TypeTag() == JSRegExp::ATOM &&
       simple_replace) {
-    if (subject->HasOnlyAsciiChars() && replacement->HasOnlyAsciiChars()) {
+    if (subject->IsOneByteConvertible() &&
+        replacement->IsOneByteConvertible()) {
       return StringReplaceAtomRegExpWithString<SeqOneByteString>(
           isolate, subject, regexp, replacement, last_match_info);
     } else {
@@ -3081,7 +3084,7 @@ MUST_USE_RESULT static MaybeObject* StringReplaceRegExpWithEmptyString(
   if (is_global &&
       regexp->TypeTag() == JSRegExp::ATOM) {
     Handle<String> empty_string = isolate->factory()->empty_string();
-    if (subject->HasOnlyAsciiChars()) {
+    if (subject->IsOneByteRepresentation()) {
       return StringReplaceAtomRegExpWithString<SeqOneByteString>(
           isolate,
           subject,
@@ -3210,7 +3213,7 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_StringReplaceRegExpWithString) {
   ASSERT(last_match_info->HasFastObjectElements());
 
   if (replacement->length() == 0) {
-    if (subject->HasOnlyAsciiChars()) {
+    if (subject->IsOneByteConvertible()) {
       return StringReplaceRegExpWithEmptyString<SeqOneByteString>(
           isolate, subject, regexp, last_match_info);
     } else {
@@ -3377,7 +3380,7 @@ static int StringMatchBackwards(Vector<const schar> subject,
   if (sizeof(schar) == 1 && sizeof(pchar) > 1) {
     for (int i = 0; i < pattern_length; i++) {
       uc16 c = pattern[i];
-      if (c > String::kMaxAsciiCharCode) {
+      if (c > String::kMaxOneByteCharCode) {
         return -1;
       }
     }
@@ -5159,7 +5162,7 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_URIEscape) {
       ASSERT(String::kMaxLength < 0x7fffffff - 6);  // Cannot overflow.
       if (escaped_length > String::kMaxLength) {
         isolate->context()->mark_out_of_memory();
-        return Failure::OutOfMemoryException();
+        return Failure::OutOfMemoryException(0x12);
       }
     }
   }
@@ -5258,14 +5261,14 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_URIUnescape) {
 
   source->TryFlatten();
 
-  bool ascii = true;
+  bool one_byte = true;
   int length = source->length();
 
   int unescaped_length = 0;
   for (int i = 0; i < length; unescaped_length++) {
     int step;
-    if (Unescape(source, i, length, &step) > String::kMaxAsciiCharCode) {
-      ascii = false;
+    if (Unescape(source, i, length, &step) > String::kMaxOneByteCharCode) {
+      one_byte = false;
     }
     i += step;
   }
@@ -5276,7 +5279,7 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_URIUnescape) {
 
   Object* o;
   { MaybeObject* maybe_o =
-        ascii ?
+        one_byte ?
         isolate->heap()->AllocateRawOneByteString(unescaped_length) :
         isolate->heap()->AllocateRawTwoByteString(unescaped_length);
     if (!maybe_o->ToObject(&o)) return maybe_o;
@@ -5766,7 +5769,7 @@ MUST_USE_RESULT static MaybeObject* ConvertCaseHelper(
         current_length += char_length;
         if (current_length > Smi::kMaxValue) {
           isolate->context()->mark_out_of_memory();
-          return Failure::OutOfMemoryException();
+          return Failure::OutOfMemoryException(0x13);
         }
       }
       // Try again with the real length.
@@ -5933,6 +5936,7 @@ MUST_USE_RESULT static MaybeObject* ConvertCase(
   // Assume that the string is not empty; we need this assumption later
   if (length == 0) return s;
 
+#ifndef ENABLE_LATIN_1
   // Simpler handling of ASCII strings.
   //
   // NOTE: This assumes that the upper/lower case of an ASCII
@@ -5949,6 +5953,7 @@ MUST_USE_RESULT static MaybeObject* ConvertCase(
         result->GetChars(), SeqOneByteString::cast(s)->GetChars(), length);
     return has_changed_character ? result : s;
   }
+#endif
 
   Object* answer;
   { MaybeObject* maybe_answer =
@@ -6434,7 +6439,7 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_StringBuilderConcat) {
   CONVERT_ARG_CHECKED(JSArray, array, 0);
   if (!args[1]->IsSmi()) {
     isolate->context()->mark_out_of_memory();
-    return Failure::OutOfMemoryException();
+    return Failure::OutOfMemoryException(0x14);
   }
   int array_length = args.smi_at(1);
   CONVERT_ARG_CHECKED(String, special, 2);
@@ -6461,7 +6466,7 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_StringBuilderConcat) {
     if (first->IsString()) return first;
   }
 
-  bool ascii = special->HasOnlyAsciiChars();
+  bool one_byte = special->IsOneByteConvertible();
   int position = 0;
   for (int i = 0; i < array_length; i++) {
     int increment = 0;
@@ -6502,8 +6507,8 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_StringBuilderConcat) {
       String* element = String::cast(elt);
       int element_length = element->length();
       increment = element_length;
-      if (ascii && !element->HasOnlyAsciiChars()) {
-        ascii = false;
+      if (one_byte && !element->IsOneByteConvertible()) {
+        one_byte = false;
       }
     } else {
       ASSERT(!elt->IsTheHole());
@@ -6511,7 +6516,7 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_StringBuilderConcat) {
     }
     if (increment > String::kMaxLength - position) {
       isolate->context()->mark_out_of_memory();
-      return Failure::OutOfMemoryException();
+      return Failure::OutOfMemoryException(0x15);
     }
     position += increment;
   }
@@ -6519,7 +6524,7 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_StringBuilderConcat) {
   int length = position;
   Object* object;
 
-  if (ascii) {
+  if (one_byte) {
     { MaybeObject* maybe_object =
           isolate->heap()->AllocateRawOneByteString(length);
       if (!maybe_object->ToObject(&object)) return maybe_object;
@@ -6551,7 +6556,7 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_StringBuilderJoin) {
   CONVERT_ARG_CHECKED(JSArray, array, 0);
   if (!args[1]->IsSmi()) {
     isolate->context()->mark_out_of_memory();
-    return Failure::OutOfMemoryException();
+    return Failure::OutOfMemoryException(0x16);
   }
   int array_length = args.smi_at(1);
   CONVERT_ARG_CHECKED(String, separator, 2);
@@ -6576,7 +6581,7 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_StringBuilderJoin) {
       (String::kMaxLength + separator_length - 1) / separator_length;
   if (max_nof_separators < (array_length - 1)) {
       isolate->context()->mark_out_of_memory();
-      return Failure::OutOfMemoryException();
+      return Failure::OutOfMemoryException(0x17);
   }
   int length = (array_length - 1) * separator_length;
   for (int i = 0; i < array_length; i++) {
@@ -6589,7 +6594,7 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_StringBuilderJoin) {
     int increment = element->length();
     if (increment > String::kMaxLength - length) {
       isolate->context()->mark_out_of_memory();
-      return Failure::OutOfMemoryException();
+      return Failure::OutOfMemoryException(0x18);
     }
     length += increment;
   }
@@ -6624,7 +6629,8 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_StringBuilderJoin) {
   }
   ASSERT(sink == end);
 
-  ASSERT(!answer->HasOnlyAsciiChars());  // Use %_FastAsciiArrayJoin instead.
+  // Use %_FastAsciiArrayJoin instead.
+  ASSERT(!answer->IsOneByteRepresentation());
   return answer;
 }
 
@@ -8016,7 +8022,7 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_OptimizeFunctionOnNextCall) {
   if (args.length() == 2 &&
       unoptimized->kind() == Code::FUNCTION) {
     CONVERT_ARG_HANDLE_CHECKED(String, type, 1);
-    CHECK(type->IsEqualTo(CStrVector("osr")));
+    CHECK(type->IsOneByteEqualTo(STATIC_ASCII_VECTOR("osr")));
     isolate->runtime_profiler()->AttemptOnStackReplacement(*function);
     unoptimized->set_allow_osr_at_loop_nesting_level(
         Code::kMaxLoopNestingMarker);
@@ -13239,6 +13245,15 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_Abort) {
   OS::Abort();
   UNREACHABLE();
   return NULL;
+}
+
+
+RUNTIME_FUNCTION(MaybeObject*, Runtime_FlattenString) {
+  HandleScope scope(isolate);
+  ASSERT(args.length() == 1);
+  CONVERT_ARG_HANDLE_CHECKED(String, str, 0);
+  FlattenString(str);
+  return isolate->heap()->undefined_value();
 }
 
 
