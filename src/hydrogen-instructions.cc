@@ -737,6 +737,11 @@ void HInstruction::Verify() {
 #endif
 
 
+void HDummyUse::PrintDataTo(StringStream* stream) {
+  value()->PrintNameTo(stream);
+}
+
+
 void HUnaryCall::PrintDataTo(StringStream* stream) {
   value()->PrintNameTo(stream);
   stream->Add(" ");
@@ -757,6 +762,28 @@ void HBoundsCheck::PrintDataTo(StringStream* stream) {
   index()->PrintNameTo(stream);
   stream->Add(" ");
   length()->PrintNameTo(stream);
+}
+
+
+void HBoundsCheck::InferRepresentation(HInferRepresentation* h_infer) {
+  ASSERT(CheckFlag(kFlexibleRepresentation));
+  Representation r;
+  if (key_mode_ == DONT_ALLOW_SMI_KEY ||
+      !length()->representation().IsTagged()) {
+    r = Representation::Integer32();
+  } else if (index()->representation().IsTagged() ||
+      (index()->IsConstant() &&
+       HConstant::cast(index())->HasInteger32Value() &&
+       Smi::IsValid(HConstant::cast(index())->Integer32Value()))) {
+    // If the index is tagged, or a constant that holds a Smi, allow the length
+    // to be tagged, since it is usually already tagged from loading it out of
+    // the length field of a JSArray. This allows for direct comparison without
+    // untagging.
+    r = Representation::Tagged();
+  } else {
+    r = Representation::Integer32();
+  }
+  UpdateRepresentation(r, h_infer, "boundscheck");
 }
 
 

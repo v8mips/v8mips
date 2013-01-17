@@ -273,6 +273,7 @@ class HGraph: public ZoneObject {
   void EliminateRedundantBoundsChecks();
   void DehoistSimpleArrayIndexComputations();
   void DeadCodeElimination();
+  void ApplyActualValues();
   void PropagateDeoptimizingMark();
   void EliminateUnusedInstructions();
 
@@ -355,6 +356,14 @@ class HGraph: public ZoneObject {
     use_optimistic_licm_ = value;
   }
 
+  bool has_soft_deoptimize() {
+    return has_soft_deoptimize_;
+  }
+
+  void set_has_soft_deoptimize(bool value) {
+    has_soft_deoptimize_ = value;
+  }
+
   void MarkRecursive() {
     is_recursive_ = true;
   }
@@ -377,6 +386,7 @@ class HGraph: public ZoneObject {
                               int32_t integer_value);
 
   void MarkAsDeoptimizingRecursively(HBasicBlock* block);
+  void NullifyUnreachableInstructions();
   void InsertTypeConversions(HInstruction* instr);
   void PropagateMinusZeroChecks(HValue* value, BitVector* visited);
   void RecursivelyMarkPhiDeoptimizeOnUndefined(HPhi* phi);
@@ -414,6 +424,7 @@ class HGraph: public ZoneObject {
 
   bool is_recursive_;
   bool use_optimistic_licm_;
+  bool has_soft_deoptimize_;
   int type_change_checksum_;
 
   DISALLOW_COPY_AND_ASSIGN(HGraph);
@@ -879,7 +890,8 @@ class HGraphBuilder {
       HCheckMaps* mapcheck,
       bool is_js_array,
       ElementsKind elements_kind,
-      bool is_store);
+      bool is_store,
+      Representation checked_index_representation = Representation::None());
 
  private:
   HGraphBuilder();
@@ -955,6 +967,8 @@ class HOptimizedGraphBuilder: public HGraphBuilder, public AstVisitor {
   void set_break_scope(BreakAndContinueScope* head) { break_scope_ = head; }
 
   bool inline_bailout() { return inline_bailout_; }
+
+  void AddSoftDeoptimize();
 
   // Bailout environment manipulation.
   void Push(HValue* value) { environment()->Push(value); }

@@ -494,8 +494,6 @@ bool LCodeGen::IsInteger32(LConstantOperand* op) const {
 
 int LCodeGen::ToInteger32(LConstantOperand* op) const {
   HConstant* constant = chunk_->LookupConstant(op);
-  ASSERT(chunk_->LookupLiteralRepresentation(op).IsInteger32());
-  ASSERT(constant->HasInteger32Value());
   return constant->Integer32Value();
 }
 
@@ -5911,6 +5909,11 @@ void LCodeGen::DoLazyBailout(LLazyBailout* instr) {
 
 void LCodeGen::DoDeoptimize(LDeoptimize* instr) {
   DeoptimizeIf(al, instr->environment());
+}
+
+
+void LCodeGen::DoDummyUse(LDummyUse* instr) {
+  // Nothing to see here, move on!
 }
 
 
