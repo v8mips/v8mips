@@ -624,7 +624,9 @@ class Heap {
   // Returns a deep copy of the JavaScript object.
   // Properties and elements are copied too.
   // Returns failure if allocation failed.
-  MUST_USE_RESULT MaybeObject* CopyJSObject(JSObject* source);
+  MUST_USE_RESULT MaybeObject* CopyJSObject(
+      JSObject* source,
+      AllocationSiteMode mode = DONT_TRACK_ALLOCATION_SITE);
 
   // Allocates the function prototype.
   // Returns Failure::RetryAfterGC(requested_bytes, space) if the allocation
@@ -2840,7 +2842,7 @@ class IntrusiveMarking {
 };
 
 
-#if defined(DEBUG) || defined(LIVE_OBJECT_LIST)
+#ifdef DEBUG
 // Helper class for tracing paths to a search target Object from all roots.
 // The TracePathFrom() method can be used to trace paths from a specific
 // object to the search target object.
@@ -2897,7 +2899,7 @@ class PathTracer : public ObjectVisitor {
  private:
   DISALLOW_IMPLICIT_CONSTRUCTORS(PathTracer);
 };
-#endif  // DEBUG || LIVE_OBJECT_LIST
+#endif  // DEBUG
 
 } }  // namespace v8::internal
 

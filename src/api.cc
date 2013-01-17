@@ -668,13 +668,6 @@ void V8::MarkIndependent(i::Object** object) {
 }
 
 
-void V8::MarkIndependent(i::Isolate* isolate, i::Object** object) {
-  ASSERT(isolate == i::Isolate::Current());
-  LOG_API(isolate, "MarkIndependent");
-  isolate->global_handles()->MarkIndependent(object);
-}
-
-
 void V8::MarkPartiallyDependent(i::Object** object) {
   i::Isolate* isolate = i::Isolate::Current();
   LOG_API(isolate, "MarkPartiallyDependent");
@@ -682,23 +675,8 @@ void V8::MarkPartiallyDependent(i::Object** object) {
 }
 
 
-void V8::MarkPartiallyDependent(i::Isolate* isolate, i::Object** object) {
-  ASSERT(isolate == i::Isolate::Current());
-  LOG_API(isolate, "MarkPartiallyDependent");
-  isolate->global_handles()->MarkPartiallyDependent(object);
-}
-
-
 bool V8::IsGlobalIndependent(i::Object** obj) {
   i::Isolate* isolate = i::Isolate::Current();
-  LOG_API(isolate, "IsGlobalIndependent");
-  if (!isolate->IsInitialized()) return false;
-  return i::GlobalHandles::IsIndependent(obj);
-}
-
-
-bool V8::IsGlobalIndependent(i::Isolate* isolate, i::Object** obj) {
-  ASSERT(isolate == i::Isolate::Current());
   LOG_API(isolate, "IsGlobalIndependent");
   if (!isolate->IsInitialized()) return false;
   return i::GlobalHandles::IsIndependent(obj);
@@ -4704,6 +4682,12 @@ bool Context::InContext() {
 }
 
 
+v8::Isolate* Context::GetIsolate() {
+  i::Handle<i::Context> env = Utils::OpenHandle(this);
+  return reinterpret_cast<Isolate*>(env->GetIsolate());
+}
+
+
 v8::Local<v8::Context> Context::GetEntered() {
   i::Isolate* isolate = i::Isolate::Current();
   if (!EnsureInitializedForIsolate(isolate, "v8::Context::GetEntered()")) {
@@ -4820,16 +4804,6 @@ void Context::SetErrorMessageForCodeGenerationFromStrings(
       i::Handle<i::Context>::cast(i::Handle<i::Object>(ctx));
   i::Handle<i::Object> error_handle = Utils::OpenHandle(*error);
   context->set_error_message_for_code_gen_from_strings(*error_handle);
-}
-
-
-void V8::SetWrapperClassId(i::Object** global_handle, uint16_t class_id) {
-  i::GlobalHandles::SetWrapperClassId(global_handle, class_id);
-}
-
-
-uint16_t V8::GetWrapperClassId(internal::Object** global_handle) {
-  return i::GlobalHandles::GetWrapperClassId(global_handle);
 }
 
 

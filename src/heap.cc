@@ -37,7 +37,6 @@
 #include "global-handles.h"
 #include "heap-profiler.h"
 #include "incremental-marking.h"
-#include "liveobjectlist-inl.h"
 #include "mark-compact.h"
 #include "natives.h"
 #include "objects-visiting.h"
@@ -439,7 +438,6 @@ void Heap::GarbageCollectionPrologue() {
   ReportStatisticsBeforeGC();
 #endif  // DEBUG
 
-  LiveObjectList::GCPrologue();
   store_buffer()->GCPrologue();
 }
 
@@ -466,7 +464,6 @@ void Heap::RepairFreeListsAfterBoot() {
 
 void Heap::GarbageCollectionEpilogue() {
   store_buffer()->GCEpilogue();
-  LiveObjectList::GCEpilogue();
 
   // In release mode, we only zap the from space under heap verification.
   if (Heap::ShouldZapGarbage()) {
@@ -888,6 +885,7 @@ bool Heap::PerformGarbageCollection(GarbageCollector collector,
   if (collector == MARK_COMPACTOR && global_gc_prologue_callback_) {
     ASSERT(!allocation_allowed_);
     GCTracer::Scope scope(tracer, GCTracer::Scope::EXTERNAL);
+    VMState state(isolate_, EXTERNAL);
     global_gc_prologue_callback_();
   }
 
@@ -896,6 +894,7 @@ bool Heap::PerformGarbageCollection(GarbageCollector collector,
 
   {
     GCTracer::Scope scope(tracer, GCTracer::Scope::EXTERNAL);
+    VMState state(isolate_, EXTERNAL);
     for (int i = 0; i < gc_prologue_callbacks_.length(); ++i) {
       if (gc_type & gc_prologue_callbacks_[i].gc_type) {
         gc_prologue_callbacks_[i].callback(gc_type, kNoGCCallbackFlags);
@@ -1009,6 +1008,7 @@ bool Heap::PerformGarbageCollection(GarbageCollector collector,
 
   {
     GCTracer::Scope scope(tracer, GCTracer::Scope::EXTERNAL);
+    VMState state(isolate_, EXTERNAL);
     GCCallbackFlags callback_flags = kNoGCCallbackFlags;
     for (int i = 0; i < gc_epilogue_callbacks_.length(); ++i) {
       if (gc_type & gc_epilogue_callbacks_[i].gc_type) {
@@ -1020,6 +1020,7 @@ bool Heap::PerformGarbageCollection(GarbageCollector collector,
   if (collector == MARK_COMPACTOR && global_gc_epilogue_callback_) {
     ASSERT(!allocation_allowed_);
     GCTracer::Scope scope(tracer, GCTracer::Scope::EXTERNAL);
+    VMState state(isolate_, EXTERNAL);
     global_gc_epilogue_callback_();
   }
 
@@ -1389,7 +1390,6 @@ void Heap::Scavenge() {
 
   promotion_queue_.Destroy();
 
-  LiveObjectList::UpdateReferencesForScavengeGC();
   if (!FLAG_watch_ic_patching) {
     isolate()->runtime_profiler()->UpdateSamplesAfterScavenge();
   }
@@ -4394,7 +4394,8 @@ MaybeObject* Heap::AllocateGlobalObject(JSFunction* constructor) {
 }
 
 
-MaybeObject* Heap::CopyJSObject(JSObject* source) {
+MaybeObject* Heap::CopyJSObject(JSObject* source,
+                                AllocationSiteMode mode) {
   // Never used to copy functions.  If functions need to be copied we
   // have to be careful to clear the literals array.
   SLOW_ASSERT(!source->IsJSFunction());
@@ -4404,13 +4405,25 @@ MaybeObject* Heap::CopyJSObject(JSObject* source) {
   int object_size = map->instance_size();
   Object* clone;
 
+  bool track_origin = mode == TRACK_ALLOCATION_SITE &&
+      map->CanTrackAllocationSite();
+
   WriteBarrierMode wb_mode = UPDATE_WRITE_BARRIER;
 
   // If we're forced to always allocate, we use the general allocation
   // functions which may leave us with an object in old space.
+  int adjusted_object_size = object_size;
   if (always_allocate()) {
+    // We'll only track origin if we are certain to allocate in new space
+    if (track_origin) {
+      const int kMinFreeNewSpaceAfterGC = InitialSemiSpaceSize() * 3/4;
+      if ((object_size + AllocationSiteInfo::kSize) < kMinFreeNewSpaceAfterGC) {
+        adjusted_object_size += AllocationSiteInfo::kSize;
+      }
+    }
+
     { MaybeObject* maybe_clone =
-          AllocateRaw(object_size, NEW_SPACE, OLD_POINTER_SPACE);
+          AllocateRaw(adjusted_object_size, NEW_SPACE, OLD_POINTER_SPACE);
       if (!maybe_clone->ToObject(&clone)) return maybe_clone;
     }
     Address clone_address = HeapObject::cast(clone)->address();
@@ -4423,7 +4436,11 @@ MaybeObject* Heap::CopyJSObject(JSObject* source) {
                  (object_size - JSObject::kHeaderSize) / kPointerSize);
   } else {
     wb_mode = SKIP_WRITE_BARRIER;
-    { MaybeObject* maybe_clone = new_space_.AllocateRaw(object_size);
+    if (track_origin) {
+      adjusted_object_size += AllocationSiteInfo::kSize;
+    }
+
+    { MaybeObject* maybe_clone = new_space_.AllocateRaw(adjusted_object_size);
       if (!maybe_clone->ToObject(&clone)) return maybe_clone;
     }
     SLOW_ASSERT(InNewSpace(clone));
@@ -4432,6 +4449,13 @@ MaybeObject* Heap::CopyJSObject(JSObject* source) {
     CopyBlock(HeapObject::cast(clone)->address(),
               source->address(),
               object_size);
+  }
+
+  if (adjusted_object_size > object_size) {
+    AllocationSiteInfo* alloc_info = reinterpret_cast<AllocationSiteInfo*>(
+        reinterpret_cast<Address>(clone) + object_size);
+    alloc_info->set_map(allocation_site_info_map());
+    alloc_info->set_payload(source);
   }
 
   SLOW_ASSERT(
@@ -6744,7 +6768,7 @@ void HeapIterator::reset() {
 }
 
 
-#if defined(DEBUG) || defined(LIVE_OBJECT_LIST)
+#ifdef DEBUG
 
 Object* const PathTracer::kAnyGlobalObject = reinterpret_cast<Object*>(NULL);
 
@@ -6911,10 +6935,8 @@ void PathTracer::ProcessResults() {
     PrintF("=====================================\n");
   }
 }
-#endif  // DEBUG || LIVE_OBJECT_LIST
 
 
-#ifdef DEBUG
 // Triggers a depth-first traversal of reachable objects from one
 // given root object and finds a path to a specific heap object and
 // prints it.

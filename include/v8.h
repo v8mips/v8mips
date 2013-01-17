@@ -1135,9 +1135,9 @@ class V8EXPORT String : public Primitive {
                  int options = NO_OPTIONS) const;
   // One byte characters.
   int WriteOneByte(uint8_t* buffer,
-                            int start = 0,
-                            int length = -1,
-                            int options = NO_OPTIONS) const;
+                   int start = 0,
+                   int length = -1,
+                   int options = NO_OPTIONS) const;
   // UTF-8 encoded characters.
   int WriteUtf8(char* buffer,
                 int length = -1,
@@ -3541,9 +3541,6 @@ class V8EXPORT V8 {
   static bool IsGlobalWeak(internal::Object** global_handle);
   static bool IsGlobalWeak(internal::Isolate* isolate,
                            internal::Object** global_handle);
-  static void SetWrapperClassId(internal::Object** global_handle,
-                                uint16_t class_id);
-  static uint16_t GetWrapperClassId(internal::Object** global_handle);
 
   template <class T> friend class Handle;
   template <class T> friend class Local;
@@ -3795,6 +3792,9 @@ class V8EXPORT Context {
 
   /** Returns true if V8 has a current context. */
   static bool InContext();
+
+  /** Returns an isolate associated with a current context. */
+  v8::Isolate* GetIsolate();
 
   /**
    * Gets the embedder data with the given index, which must have been set by a
@@ -4152,11 +4152,16 @@ class Internals {
   static const int kIsolateStateOffset = 0;
   static const int kIsolateEmbedderDataOffset = 1 * kApiPointerSize;
   static const int kIsolateRootsOffset = 3 * kApiPointerSize;
+  static const int kNodeClassIdOffset = 1 * kApiPointerSize;
+  static const int kNodeFlagsOffset = 1 * kApiPointerSize + 3;
   static const int kUndefinedValueRootIndex = 5;
   static const int kNullValueRootIndex = 7;
   static const int kTrueValueRootIndex = 8;
   static const int kFalseValueRootIndex = 9;
   static const int kEmptySymbolRootIndex = 119;
+
+  static const int kNodeIsIndependentShift = 4;
+  static const int kNodeIsPartiallyDependentShift = 5;
 
   static const int kJSObjectType = 0xab;
   static const int kFirstNonstringType = 0x80;
@@ -4194,6 +4199,18 @@ class Internals {
   V8_INLINE(static bool IsInitialized(v8::Isolate* isolate)) {
     uint8_t* addr = reinterpret_cast<uint8_t*>(isolate) + kIsolateStateOffset;
     return *reinterpret_cast<int*>(addr) == 1;
+  }
+
+  V8_INLINE(static uint8_t GetNodeFlag(internal::Object** obj, int shift)) {
+      uint8_t* addr = reinterpret_cast<uint8_t*>(obj) + kNodeFlagsOffset;
+      return *addr & (1 << shift);
+  }
+
+  V8_INLINE(static void UpdateNodeFlag(internal::Object** obj,
+                                       bool value, int shift)) {
+      uint8_t* addr = reinterpret_cast<uint8_t*>(obj) + kNodeFlagsOffset;
+      uint8_t mask = 1 << shift;
+      *addr = (*addr & ~mask) | (value << shift);
   }
 
   V8_INLINE(static void SetEmbedderData(v8::Isolate* isolate, void* data)) {
@@ -4289,9 +4306,11 @@ bool Persistent<T>::IsIndependent() const {
 
 template <class T>
 bool Persistent<T>::IsIndependent(Isolate* isolate) const {
+  typedef internal::Internals I;
   if (this->IsEmpty()) return false;
-  return V8::IsGlobalIndependent(reinterpret_cast<internal::Isolate*>(isolate),
-                                 reinterpret_cast<internal::Object**>(**this));
+  if (!I::IsInitialized(isolate)) return false;
+  return I::GetNodeFlag(reinterpret_cast<internal::Object**>(**this),
+                        I::kNodeIsIndependentShift);
 }
 
 
@@ -4363,8 +4382,11 @@ void Persistent<T>::MarkIndependent() {
 
 template <class T>
 void Persistent<T>::MarkIndependent(Isolate* isolate) {
-  V8::MarkIndependent(reinterpret_cast<internal::Isolate*>(isolate),
-                      reinterpret_cast<internal::Object**>(**this));
+  typedef internal::Internals I;
+  if (this->IsEmpty()) return;
+  if (!I::IsInitialized(isolate)) return;
+  I::UpdateNodeFlag(reinterpret_cast<internal::Object**>(**this),
+                    true, I::kNodeIsIndependentShift);
 }
 
 template <class T>
@@ -4374,18 +4396,27 @@ void Persistent<T>::MarkPartiallyDependent() {
 
 template <class T>
 void Persistent<T>::MarkPartiallyDependent(Isolate* isolate) {
-  V8::MarkPartiallyDependent(reinterpret_cast<internal::Isolate*>(isolate),
-                             reinterpret_cast<internal::Object**>(**this));
+  typedef internal::Internals I;
+  if (this->IsEmpty()) return;
+  if (!I::IsInitialized(isolate)) return;
+  I::UpdateNodeFlag(reinterpret_cast<internal::Object**>(**this),
+                    true, I::kNodeIsPartiallyDependentShift);
 }
 
 template <class T>
 void Persistent<T>::SetWrapperClassId(uint16_t class_id) {
-  V8::SetWrapperClassId(reinterpret_cast<internal::Object**>(**this), class_id);
+  typedef internal::Internals I;
+  internal::Object** obj = reinterpret_cast<internal::Object**>(**this);
+  uint8_t* addr = reinterpret_cast<uint8_t*>(obj) + I::kNodeClassIdOffset;
+  *reinterpret_cast<uint16_t*>(addr) = class_id;
 }
 
 template <class T>
 uint16_t Persistent<T>::WrapperClassId() const {
-  return V8::GetWrapperClassId(reinterpret_cast<internal::Object**>(**this));
+  typedef internal::Internals I;
+  internal::Object** obj = reinterpret_cast<internal::Object**>(**this);
+  uint8_t* addr = reinterpret_cast<uint8_t*>(obj) + I::kNodeClassIdOffset;
+  return *reinterpret_cast<uint16_t*>(addr);
 }
 
 Arguments::Arguments(internal::Object** implicit_args,

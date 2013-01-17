@@ -168,6 +168,23 @@ THREADED_TEST(Handles) {
 }
 
 
+THREADED_TEST(IsolateOfContext) {
+  v8::HandleScope scope;
+  v8::Persistent<Context> env = Context::New();
+
+  CHECK(!env->InContext());
+  CHECK(env->GetIsolate() == v8::Isolate::GetCurrent());
+  env->Enter();
+  CHECK(env->InContext());
+  CHECK(env->GetIsolate() == v8::Isolate::GetCurrent());
+  env->Exit();
+  CHECK(!env->InContext());
+  CHECK(env->GetIsolate() == v8::Isolate::GetCurrent());
+
+  env.Dispose();
+}
+
+
 THREADED_TEST(ReceiverSignature) {
   v8::HandleScope scope;
   LocalContext env;
@@ -6203,6 +6220,10 @@ THREADED_TEST(StringWrite) {
   CHECK_EQ(0, strcmp("abc", buf));
   CHECK_EQ(0, buf[3]);
   CHECK_EQ(0, strcmp("def", buf + 4));
+
+  CHECK_EQ(0, str->WriteAscii(NULL, 0, 0, String::NO_NULL_TERMINATION));
+  CHECK_EQ(0, str->WriteUtf8(NULL, 0, 0, String::NO_NULL_TERMINATION));
+  CHECK_EQ(0, str->Write(NULL, 0, 0, String::NO_NULL_TERMINATION));
 }
 
 
@@ -16666,6 +16687,18 @@ TEST(PersistentHandleVisitor) {
 }
 
 
+TEST(WrapperClassId) {
+  v8::HandleScope scope;
+  LocalContext context;
+  v8::Persistent<v8::Object> object =
+      v8::Persistent<v8::Object>::New(v8::Object::New());
+  CHECK_EQ(0, object.WrapperClassId());
+  object.SetWrapperClassId(65535);
+  CHECK_EQ(65535, object.WrapperClassId());
+  object.Dispose();
+}
+
+
 TEST(RegExp) {
   v8::HandleScope scope;
   LocalContext context;
@@ -18127,4 +18160,5 @@ class ThreadInterruptTest {
 THREADED_TEST(SemaphoreInterruption) {
   ThreadInterruptTest().RunTest();
 }
+
 #endif  // WIN32
