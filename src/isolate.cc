@@ -408,9 +408,9 @@ void Isolate::EnterDefaultIsolate() {
 }
 
 
-Isolate* Isolate::GetDefaultIsolateForLocking() {
+v8::Isolate* Isolate::GetDefaultIsolateForLocking() {
   EnsureDefaultIsolate();
-  return default_isolate_;
+  return reinterpret_cast<v8::Isolate*>(default_isolate_);
 }
 
 
@@ -635,7 +635,6 @@ Handle<JSArray> Isolate::CaptureSimpleStackTrace(Handle<JSObject> error_object,
   }
   Handle<JSArray> result = factory()->NewJSArrayWithElements(elements);
   result->set_length(Smi::FromInt(cursor));
-  heap()->error_object_list()->Add(*error_object);
   return result;
 }
 
@@ -1743,7 +1742,7 @@ void Isolate::Deinit() {
     delete deoptimizer_data_;
     deoptimizer_data_ = NULL;
     if (FLAG_preemption) {
-      v8::Locker locker;
+      v8::Locker locker(reinterpret_cast<v8::Isolate*>(this));
       v8::Locker::StopPreemption();
     }
     builtins_.TearDown();
@@ -2034,7 +2033,7 @@ bool Isolate::Init(Deserializer* des) {
   }
 
   if (FLAG_preemption) {
-    v8::Locker locker;
+    v8::Locker locker(reinterpret_cast<v8::Isolate*>(this));
     v8::Locker::StartPreemption(100);
   }
 
