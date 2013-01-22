@@ -132,6 +132,19 @@ class IC {
   static inline JSObject* GetCodeCacheHolder(Object* object,
                                              InlineCacheHolderFlag holder);
 
+  MUST_USE_RESULT MaybeObject* Load(State state,
+                                    Handle<Object> object,
+                                    Handle<String> name);
+
+  MUST_USE_RESULT MaybeObject* Store(
+      State state,
+      StrictModeFlag strict_mode,
+      Handle<Object> object,
+      Handle<String> name,
+      Handle<Object> value,
+      JSReceiver::StoreFromKeyed store_mode =
+          JSReceiver::CERTAINLY_NOT_STORE_FROM_KEYED);
+
  protected:
   virtual Handle<Code> pre_monomorphic_stub() {
     UNREACHABLE();
@@ -141,9 +154,40 @@ class IC {
     UNREACHABLE();
     return Handle<Code>::null();
   }
+  virtual Handle<Code> megamorphic_stub_strict() {
+    UNREACHABLE();
+    return Handle<Code>::null();
+  }
+  virtual Handle<Code> generic_stub() const {
+    UNREACHABLE();
+    return Handle<Code>::null();
+  }
   virtual Code::Kind kind() const {
     UNREACHABLE();
     return Code::STUB;
+  }
+  virtual Handle<Code> global_proxy_stub() {
+    UNREACHABLE();
+    return Handle<Code>::null();
+  }
+  virtual Handle<Code> global_proxy_stub_strict() {
+    UNREACHABLE();
+    return Handle<Code>::null();
+  }
+
+  virtual void UpdateLoadCaches(LookupResult* lookup,
+                                State state,
+                                Handle<Object> object,
+                                Handle<String> name) {
+    UNREACHABLE();
+  }
+  virtual void UpdateStoreCaches(LookupResult* lookup,
+                                 State state,
+                                 StrictModeFlag strict_mode,
+                                 Handle<JSObject> receiver,
+                                 Handle<String> name,
+                                 Handle<Object> value) {
+    UNREACHABLE();
   }
   Address fp() const { return fp_; }
   Address pc() const { return *pc_address_; }
@@ -176,11 +220,6 @@ class IC {
   static inline Code* GetTargetAtAddress(Address address);
   static inline void SetTargetAtAddress(Address address, Code* target);
   static void PostPatching(Address address, Code* target, Code* old_target);
-
-  bool HandleLoad(State state,
-                  Handle<Object> object,
-                  Handle<String> name,
-                  MaybeObject** result);
 
  private:
   // Frame pointer for the frame that uses (calls) the IC.
@@ -340,10 +379,6 @@ class LoadIC: public IC {
     ASSERT(target()->is_load_stub());
   }
 
-  MUST_USE_RESULT MaybeObject* Load(State state,
-                                    Handle<Object> object,
-                                    Handle<String> name);
-
   // Code generator routines.
   static void GenerateInitialize(MacroAssembler* masm) { GenerateMiss(masm); }
   static void GeneratePreMonomorphic(MacroAssembler* masm) {
@@ -364,18 +399,17 @@ class LoadIC: public IC {
     return isolate()->builtins()->LoadIC_Megamorphic();
   }
 
- private:
   // Update the inline cache and the global stub cache based on the
   // lookup result.
-  void UpdateCaches(LookupResult* lookup,
-                    State state,
-                    Handle<Object> object,
-                    Handle<String> name);
+  virtual void UpdateLoadCaches(LookupResult* lookup,
+                                State state,
+                                Handle<Object> object,
+                                Handle<String> name);
 
+ private:
   // Stub accessors.
-  static Code* initialize_stub() {
-    return Isolate::Current()->builtins()->builtin(
-        Builtins::kLoadIC_Initialize);
+  static Handle<Code> initialize_stub() {
+    return Isolate::Current()->builtins()->LoadIC_Initialize();
   }
   virtual Handle<Code> pre_monomorphic_stub() {
     return isolate()->builtins()->LoadIC_PreMonomorphic();
@@ -540,6 +574,9 @@ class KeyedLoadIC: public KeyedIC {
   virtual Handle<Code> megamorphic_stub() {
     return isolate()->builtins()->KeyedLoadIC_Generic();
   }
+  virtual Handle<Code> generic_stub() const {
+    return isolate()->builtins()->KeyedLoadIC_Generic();
+  }
 
   virtual Handle<Code> ComputePolymorphicStub(MapHandleList* receiver_maps,
                                               StrictModeFlag strict_mode,
@@ -549,20 +586,16 @@ class KeyedLoadIC: public KeyedIC {
     return isolate()->builtins()->KeyedLoadIC_String();
   }
 
- private:
   // Update the inline cache.
-  void UpdateCaches(LookupResult* lookup,
-                    State state,
-                    Handle<Object> object,
-                    Handle<String> name);
+  virtual void UpdateLoadCaches(LookupResult* lookup,
+                                State state,
+                                Handle<Object> object,
+                                Handle<String> name);
 
+ private:
   // Stub accessors.
-  static Code* initialize_stub() {
-    return Isolate::Current()->builtins()->builtin(
-        Builtins::kKeyedLoadIC_Initialize);
-  }
-  Handle<Code> generic_stub() const {
-    return isolate()->builtins()->KeyedLoadIC_Generic();
+  static Handle<Code> initialize_stub() {
+    return Isolate::Current()->builtins()->KeyedLoadIC_Initialize();
   }
   virtual Handle<Code> pre_monomorphic_stub() {
     return isolate()->builtins()->KeyedLoadIC_PreMonomorphic();
@@ -586,12 +619,6 @@ class StoreIC: public IC {
     ASSERT(target()->is_store_stub());
   }
 
-  MUST_USE_RESULT MaybeObject* Store(State state,
-                                     StrictModeFlag strict_mode,
-                                     Handle<Object> object,
-                                     Handle<String> name,
-                                     Handle<Object> value);
-
   // Code generators for stub routines. Only called once at startup.
   static void GenerateInitialize(MacroAssembler* masm) { GenerateMiss(masm); }
   static void GenerateMiss(MacroAssembler* masm);
@@ -607,17 +634,28 @@ class StoreIC: public IC {
   virtual Handle<Code> megamorphic_stub() {
     return isolate()->builtins()->StoreIC_Megamorphic();
   }
+  // Stub accessors.
+  virtual Handle<Code> megamorphic_stub_strict() {
+    return isolate()->builtins()->StoreIC_Megamorphic_Strict();
+  }
+  virtual Handle<Code> global_proxy_stub() {
+    return isolate()->builtins()->StoreIC_GlobalProxy();
+  }
+  virtual Handle<Code> global_proxy_stub_strict() {
+    return isolate()->builtins()->StoreIC_GlobalProxy_Strict();
+  }
 
- private:
+
   // Update the inline cache and the global stub cache based on the
   // lookup result.
-  void UpdateCaches(LookupResult* lookup,
-                    State state,
-                    StrictModeFlag strict_mode,
-                    Handle<JSObject> receiver,
-                    Handle<String> name,
-                    Handle<Object> value);
+  virtual void UpdateStoreCaches(LookupResult* lookup,
+                                 State state,
+                                 StrictModeFlag strict_mode,
+                                 Handle<JSObject> receiver,
+                                 Handle<String> name,
+                                 Handle<Object> value);
 
+ private:
   void set_target(Code* code) {
     // Strict mode must be preserved across IC patching.
     ASSERT(Code::GetStrictMode(code->extra_ic_state()) ==
@@ -625,26 +663,12 @@ class StoreIC: public IC {
     IC::set_target(code);
   }
 
-  // Stub accessors.
-  Code* megamorphic_stub_strict() {
-    return isolate()->builtins()->builtin(
-        Builtins::kStoreIC_Megamorphic_Strict);
+  static Handle<Code> initialize_stub() {
+    return Isolate::Current()->builtins()->StoreIC_Initialize();
   }
-  static Code* initialize_stub() {
-    return Isolate::Current()->builtins()->builtin(
-        Builtins::kStoreIC_Initialize);
+  static Handle<Code> initialize_stub_strict() {
+    return Isolate::Current()->builtins()->StoreIC_Initialize_Strict();
   }
-  static Code* initialize_stub_strict() {
-    return Isolate::Current()->builtins()->builtin(
-        Builtins::kStoreIC_Initialize_Strict);
-  }
-  Handle<Code> global_proxy_stub() {
-    return isolate()->builtins()->StoreIC_GlobalProxy();
-  }
-  Handle<Code> global_proxy_stub_strict() {
-    return isolate()->builtins()->StoreIC_GlobalProxy_Strict();
-  }
-
   static void Clear(Address address, Code* target);
 
   friend class IC;
@@ -701,15 +725,22 @@ class KeyedStoreIC: public KeyedIC {
                                               StrictModeFlag strict_mode,
                                               KeyedAccessGrowMode grow_mode);
 
- private:
   // Update the inline cache.
-  void UpdateCaches(LookupResult* lookup,
-                    State state,
-                    StrictModeFlag strict_mode,
-                    Handle<JSObject> receiver,
-                    Handle<String> name,
-                    Handle<Object> value);
+  virtual void UpdateStoreCaches(LookupResult* lookup,
+                                 State state,
+                                 StrictModeFlag strict_mode,
+                                 Handle<JSObject> receiver,
+                                 Handle<String> name,
+                                 Handle<Object> value);
 
+  virtual Handle<Code> megamorphic_stub() {
+    return isolate()->builtins()->KeyedStoreIC_Generic();
+  }
+  virtual Handle<Code> megamorphic_stub_strict() {
+    return isolate()->builtins()->KeyedStoreIC_Generic_Strict();
+  }
+
+ private:
   void set_target(Code* code) {
     // Strict mode must be preserved across IC patching.
     ASSERT(Code::GetStrictMode(code->extra_ic_state()) ==
@@ -718,19 +749,11 @@ class KeyedStoreIC: public KeyedIC {
   }
 
   // Stub accessors.
-  static Code* initialize_stub() {
-    return Isolate::Current()->builtins()->builtin(
-        Builtins::kKeyedStoreIC_Initialize);
+  static Handle<Code> initialize_stub() {
+    return Isolate::Current()->builtins()->KeyedStoreIC_Initialize();
   }
-  static Code* initialize_stub_strict() {
-    return Isolate::Current()->builtins()->builtin(
-        Builtins::kKeyedStoreIC_Initialize_Strict);
-  }
-  Handle<Code> megamorphic_stub() {
-    return isolate()->builtins()->KeyedStoreIC_Generic();
-  }
-  Handle<Code> megamorphic_stub_strict() {
-    return isolate()->builtins()->KeyedStoreIC_Generic_Strict();
+  static Handle<Code> initialize_stub_strict() {
+    return Isolate::Current()->builtins()->KeyedStoreIC_Initialize_Strict();
   }
   Handle<Code> generic_stub() const {
     return isolate()->builtins()->KeyedStoreIC_Generic();
