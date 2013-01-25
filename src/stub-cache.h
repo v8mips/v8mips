@@ -172,9 +172,12 @@ class StubCache {
                                       Handle<Map> transition,
                                       StrictModeFlag strict_mode);
 
-  Handle<Code> ComputeKeyedLoadOrStoreElement(Handle<Map> receiver_map,
-                                              KeyedIC::StubKind stub_kind,
-                                              StrictModeFlag strict_mode);
+  Handle<Code> ComputeKeyedLoadElement(Handle<Map> receiver_map);
+
+  Handle<Code> ComputeKeyedStoreElement(Handle<Map> receiver_map,
+                                        KeyedStoreIC::StubKind stub_kind,
+                                        StrictModeFlag strict_mode,
+                                        KeyedAccessGrowMode grow_mode);
 
   // ---
 
@@ -224,7 +227,7 @@ class StubCache {
                                  Code::Kind kind,
                                  Code::ExtraICState state);
 
-  Handle<Code> ComputeCallArguments(int argc, Code::Kind kind);
+  Handle<Code> ComputeCallArguments(int argc);
 
   Handle<Code> ComputeCallMegamorphic(int argc,
                                       Code::Kind kind,
@@ -233,6 +236,13 @@ class StubCache {
   Handle<Code> ComputeCallMiss(int argc,
                                Code::Kind kind,
                                Code::ExtraICState state);
+
+  // ---
+
+  Handle<Code> ComputeLoadElementPolymorphic(MapHandleList* receiver_maps);
+  Handle<Code> ComputeStoreElementPolymorphic(MapHandleList* receiver_maps,
+                                              KeyedAccessGrowMode grow_mode,
+                                              StrictModeFlag strict_mode);
 
   // Finds the Code object stored in the Heap::non_monomorphic_cache().
   Code* FindCallInitialize(int argc, RelocInfo::Mode mode, Code::Kind kind);
@@ -475,8 +485,8 @@ class StubCompiler BASE_EMBEDDED {
                           Register scratch2,
                           Label* miss_label);
 
-  static void GenerateLoadMiss(MacroAssembler* masm,
-                               Code::Kind kind);
+  static void GenerateLoadMiss(MacroAssembler* masm, Code::Kind kind);
+  static void GenerateStoreMiss(MacroAssembler* masm, Code::Kind kind);
 
   static void GenerateKeyedLoadMissForceGeneric(MacroAssembler* masm);
 
@@ -666,6 +676,8 @@ class KeyedLoadStubCompiler: public StubCompiler {
   Handle<Code> CompileLoadPolymorphic(MapHandleList* receiver_maps,
                                       CodeHandleList* handler_ics);
 
+  Handle<Code> CompileLoadElementPolymorphic(MapHandleList* receiver_maps);
+
   static void GenerateLoadDictionaryElement(MacroAssembler* masm);
 
  private:
@@ -732,6 +744,8 @@ class KeyedStoreStubCompiler: public StubCompiler {
   Handle<Code> CompileStorePolymorphic(MapHandleList* receiver_maps,
                                        CodeHandleList* handler_stubs,
                                        MapHandleList* transitioned_maps);
+
+  Handle<Code> CompileStoreElementPolymorphic(MapHandleList* receiver_maps);
 
   static void GenerateStoreFastElement(MacroAssembler* masm,
                                        bool is_js_array,

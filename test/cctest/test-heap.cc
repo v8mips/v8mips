@@ -358,10 +358,11 @@ TEST(GlobalHandles) {
 
 static bool WeakPointerCleared = false;
 
-static void TestWeakGlobalHandleCallback(v8::Persistent<v8::Value> handle,
+static void TestWeakGlobalHandleCallback(v8::Isolate* isolate,
+                                         v8::Persistent<v8::Value> handle,
                                          void* id) {
   if (1234 == reinterpret_cast<intptr_t>(id)) WeakPointerCleared = true;
-  handle.Dispose();
+  handle.Dispose(isolate);
 }
 
 
@@ -386,6 +387,7 @@ TEST(WeakGlobalHandlesScavenge) {
 
   global_handles->MakeWeak(h2.location(),
                            reinterpret_cast<void*>(1234),
+                           NULL,
                            &TestWeakGlobalHandleCallback);
 
   // Scavenge treats weak pointers as normal roots.
@@ -429,6 +431,7 @@ TEST(WeakGlobalHandlesMark) {
 
   global_handles->MakeWeak(h2.location(),
                            reinterpret_cast<void*>(1234),
+                           NULL,
                            &TestWeakGlobalHandleCallback);
   CHECK(!GlobalHandles::IsNearDeath(h1.location()));
   CHECK(!GlobalHandles::IsNearDeath(h2.location()));
@@ -462,6 +465,7 @@ TEST(DeleteWeakGlobalHandle) {
 
   global_handles->MakeWeak(h.location(),
                            reinterpret_cast<void*>(1234),
+                           NULL,
                            &TestWeakGlobalHandleCallback);
 
   // Scanvenge does not recognize weak reference.
@@ -1314,7 +1318,7 @@ TEST(TestInternalWeakLists) {
 
   // Dispose the native contexts one by one.
   for (int i = 0; i < kNumTestContexts; i++) {
-    ctx[i].Dispose();
+    ctx[i].Dispose(ctx[i]->GetIsolate());
     ctx[i].Clear();
 
     // Scavenge treats these references as strong.
@@ -1617,12 +1621,12 @@ TEST(LeakNativeContextViaMap) {
     ctx2->Global()->Set(v8_str("o"), v8::Int32::New(0));
     ctx2->Exit();
     ctx1->Exit();
-    ctx1.Dispose();
+    ctx1.Dispose(ctx1->GetIsolate());
     v8::V8::ContextDisposedNotification();
   }
   HEAP->CollectAllAvailableGarbage();
   CHECK_EQ(2, NumberOfGlobalObjects());
-  ctx2.Dispose();
+  ctx2.Dispose(ctx2->GetIsolate());
   HEAP->CollectAllAvailableGarbage();
   CHECK_EQ(0, NumberOfGlobalObjects());
 }
@@ -1655,12 +1659,12 @@ TEST(LeakNativeContextViaFunction) {
     ctx2->Global()->Set(v8_str("o"), v8::Int32::New(0));
     ctx2->Exit();
     ctx1->Exit();
-    ctx1.Dispose();
+    ctx1.Dispose(ctx1->GetIsolate());
     v8::V8::ContextDisposedNotification();
   }
   HEAP->CollectAllAvailableGarbage();
   CHECK_EQ(2, NumberOfGlobalObjects());
-  ctx2.Dispose();
+  ctx2.Dispose(ctx2->GetIsolate());
   HEAP->CollectAllAvailableGarbage();
   CHECK_EQ(0, NumberOfGlobalObjects());
 }
@@ -1691,12 +1695,12 @@ TEST(LeakNativeContextViaMapKeyed) {
     ctx2->Global()->Set(v8_str("o"), v8::Int32::New(0));
     ctx2->Exit();
     ctx1->Exit();
-    ctx1.Dispose();
+    ctx1.Dispose(ctx1->GetIsolate());
     v8::V8::ContextDisposedNotification();
   }
   HEAP->CollectAllAvailableGarbage();
   CHECK_EQ(2, NumberOfGlobalObjects());
-  ctx2.Dispose();
+  ctx2.Dispose(ctx2->GetIsolate());
   HEAP->CollectAllAvailableGarbage();
   CHECK_EQ(0, NumberOfGlobalObjects());
 }
@@ -1731,12 +1735,12 @@ TEST(LeakNativeContextViaMapProto) {
     ctx2->Global()->Set(v8_str("o"), v8::Int32::New(0));
     ctx2->Exit();
     ctx1->Exit();
-    ctx1.Dispose();
+    ctx1.Dispose(ctx1->GetIsolate());
     v8::V8::ContextDisposedNotification();
   }
   HEAP->CollectAllAvailableGarbage();
   CHECK_EQ(2, NumberOfGlobalObjects());
-  ctx2.Dispose();
+  ctx2.Dispose(ctx2->GetIsolate());
   HEAP->CollectAllAvailableGarbage();
   CHECK_EQ(0, NumberOfGlobalObjects());
 }
@@ -2777,4 +2781,58 @@ TEST(Regress169928) {
   // with the bug.
   AlwaysAllocateScope aa_scope;
   v8::Script::Compile(mote_code_string)->Run();
+}
+
+
+TEST(Regress168801) {
+  i::FLAG_always_compact = true;
+  i::FLAG_cache_optimized_code = false;
+  i::FLAG_allow_natives_syntax = true;
+  i::FLAG_flush_code_incrementally = true;
+  InitializeVM();
+  v8::HandleScope scope;
+
+  // Perform one initial GC to enable code flushing.
+  HEAP->CollectAllGarbage(Heap::kAbortIncrementalMarkingMask);
+
+  // Ensure the code ends up on an evacuation candidate.
+  SimulateFullSpace(HEAP->code_space());
+
+  // Prepare an unoptimized function that is eligible for code flushing.
+  Handle<JSFunction> function;
+  {
+    HandleScope inner_scope;
+    CompileRun("function mkClosure() {"
+               "  return function(x) { return x + 1; };"
+               "}"
+               "var f = mkClosure();"
+               "f(1); f(2);");
+
+    Handle<JSFunction> f =
+        v8::Utils::OpenHandle(
+            *v8::Handle<v8::Function>::Cast(
+                v8::Context::GetCurrent()->Global()->Get(v8_str("f"))));
+    CHECK(f->is_compiled());
+    const int kAgingThreshold = 6;
+    for (int i = 0; i < kAgingThreshold; i++) {
+      f->shared()->code()->MakeOlder(static_cast<MarkingParity>(i % 2));
+    }
+
+    function = inner_scope.CloseAndEscape(handle(*f, ISOLATE));
+  }
+
+  // Simulate incremental marking so that unoptimized function is enqueued as a
+  // candidate for code flushing. The shared function info however will not be
+  // explicitly enqueued.
+  SimulateIncrementalMarking();
+
+  // Now optimize the function so that it is taken off the candidate list.
+  {
+    HandleScope inner_scope;
+    CompileRun("%OptimizeFunctionOnNextCall(f); f(3);");
+  }
+
+  // This cycle will bust the heap and subsequent cycles will go ballistic.
+  HEAP->CollectAllGarbage(Heap::kNoGCFlags);
+  HEAP->CollectAllGarbage(Heap::kNoGCFlags);
 }

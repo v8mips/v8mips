@@ -2067,17 +2067,22 @@ void StoreBufferOverflowStub::Generate(MacroAssembler* masm) {
   // store the registers in any particular way, but we do have to store and
   // restore them.
   __ stm(db_w, sp, kCallerSaved | lr.bit());
+
+  const Register scratch = r1;
+
   if (save_doubles_ == kSaveFPRegs) {
     CpuFeatures::Scope scope(VFP2);
+    // Check CPU flags for number of registers, setting the Z condition flag.
+    __ CheckFor32DRegs(scratch);
+
     __ sub(sp, sp, Operand(kDoubleSize * DwVfpRegister::kNumRegisters));
     for (int i = 0; i < DwVfpRegister::kNumRegisters; i++) {
       DwVfpRegister reg = DwVfpRegister::from_code(i);
-      __ vstr(reg, MemOperand(sp, i * kDoubleSize));
+      __ vstr(reg, MemOperand(sp, i * kDoubleSize), i < 16 ? al : ne);
     }
   }
   const int argument_count = 1;
   const int fp_argument_count = 0;
-  const Register scratch = r1;
 
   AllowExternalCallThatCantCauseGC scope(masm);
   __ PrepareCallCFunction(argument_count, fp_argument_count, scratch);
@@ -2087,9 +2092,13 @@ void StoreBufferOverflowStub::Generate(MacroAssembler* masm) {
       argument_count);
   if (save_doubles_ == kSaveFPRegs) {
     CpuFeatures::Scope scope(VFP2);
+
+    // Check CPU flags for number of registers, setting the Z condition flag.
+    __ CheckFor32DRegs(scratch);
+
     for (int i = 0; i < DwVfpRegister::kNumRegisters; i++) {
       DwVfpRegister reg = DwVfpRegister::from_code(i);
-      __ vldr(reg, MemOperand(sp, i * kDoubleSize));
+      __ vldr(reg, MemOperand(sp, i * kDoubleSize), i < 16 ? al : ne);
     }
     __ add(sp, sp, Operand(kDoubleSize * DwVfpRegister::kNumRegisters));
   }
@@ -4589,6 +4598,76 @@ void StringLengthStub::Generate(MacroAssembler* masm) {
 
   __ bind(&miss);
   StubCompiler::GenerateLoadMiss(masm, kind());
+}
+
+
+void StoreArrayLengthStub::Generate(MacroAssembler* masm) {
+  // This accepts as a receiver anything JSArray::SetElementsLength accepts
+  // (currently anything except for external arrays which means anything with
+  // elements of FixedArray type).  Value must be a number, but only smis are
+  // accepted as the most common case.
+  Label miss;
+
+  Register receiver;
+  Register value;
+  if (kind() == Code::KEYED_STORE_IC) {
+    // ----------- S t a t e -------------
+    //  -- lr    : return address
+    //  -- r0    : value
+    //  -- r1    : key
+    //  -- r2    : receiver
+    // -----------------------------------
+    __ cmp(r1, Operand(masm->isolate()->factory()->length_symbol()));
+    __ b(ne, &miss);
+    receiver = r2;
+    value = r0;
+  } else {
+    ASSERT(kind() == Code::STORE_IC);
+    // ----------- S t a t e -------------
+    //  -- lr    : return address
+    //  -- r0    : value
+    //  -- r1    : receiver
+    //  -- r2    : key
+    // -----------------------------------
+    receiver = r1;
+    value = r0;
+  }
+  Register scratch = r3;
+
+  // Check that the receiver isn't a smi.
+  __ JumpIfSmi(receiver, &miss);
+
+  // Check that the object is a JS array.
+  __ CompareObjectType(receiver, scratch, scratch, JS_ARRAY_TYPE);
+  __ b(ne, &miss);
+
+  // Check that elements are FixedArray.
+  // We rely on StoreIC_ArrayLength below to deal with all types of
+  // fast elements (including COW).
+  __ ldr(scratch, FieldMemOperand(receiver, JSArray::kElementsOffset));
+  __ CompareObjectType(scratch, scratch, scratch, FIXED_ARRAY_TYPE);
+  __ b(ne, &miss);
+
+  // Check that the array has fast properties, otherwise the length
+  // property might have been redefined.
+  __ ldr(scratch, FieldMemOperand(receiver, JSArray::kPropertiesOffset));
+  __ ldr(scratch, FieldMemOperand(scratch, FixedArray::kMapOffset));
+  __ CompareRoot(scratch, Heap::kHashTableMapRootIndex);
+  __ b(eq, &miss);
+
+  // Check that value is a smi.
+  __ JumpIfNotSmi(value, &miss);
+
+  // Prepare tail call to StoreIC_ArrayLength.
+  __ Push(receiver, value);
+
+  ExternalReference ref =
+      ExternalReference(IC_Utility(IC::kStoreIC_ArrayLength), masm->isolate());
+  __ TailCallExternalReference(ref, 2, 1);
+
+  __ bind(&miss);
+
+  StubCompiler::GenerateStoreMiss(masm, kind());
 }
 
 

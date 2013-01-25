@@ -66,7 +66,9 @@ int TokenEnumerator::GetTokenId(Object* token) {
   Handle<Object> handle = isolate->global_handles()->Create(token);
   // handle.location() points to a memory cell holding a pointer
   // to a token object in the V8's heap.
-  isolate->global_handles()->MakeWeak(handle.location(), this,
+  isolate->global_handles()->MakeWeak(handle.location(),
+                                      this,
+                                      NULL,
                                       TokenRemovedCallback);
   token_locations_.Add(handle.location());
   token_removed_.Add(false);
@@ -74,11 +76,12 @@ int TokenEnumerator::GetTokenId(Object* token) {
 }
 
 
-void TokenEnumerator::TokenRemovedCallback(v8::Persistent<v8::Value> handle,
+void TokenEnumerator::TokenRemovedCallback(v8::Isolate* isolate,
+                                           v8::Persistent<v8::Value> handle,
                                            void* parameter) {
   reinterpret_cast<TokenEnumerator*>(parameter)->TokenRemoved(
       Utils::OpenHandle(*handle).location());
-  handle.Dispose();
+  handle.Dispose(isolate);
 }
 
 
@@ -2826,8 +2829,9 @@ int NativeObjectsExplorer::EstimateObjectsCount() {
 void NativeObjectsExplorer::FillRetainedObjects() {
   if (embedder_queried_) return;
   Isolate* isolate = Isolate::Current();
+  const GCType major_gc_type = kGCTypeMarkSweepCompact;
   // Record objects that are joined into ObjectGroups.
-  isolate->heap()->CallGlobalGCPrologueCallback();
+  isolate->heap()->CallGCPrologueCallbacks(major_gc_type);
   List<ObjectGroup*>* groups = isolate->global_handles()->object_groups();
   for (int i = 0; i < groups->length(); ++i) {
     ObjectGroup* group = groups->at(i);
@@ -2841,7 +2845,7 @@ void NativeObjectsExplorer::FillRetainedObjects() {
     group->info_ = NULL;  // Acquire info object ownership.
   }
   isolate->global_handles()->RemoveObjectGroups();
-  isolate->heap()->CallGlobalGCEpilogueCallback();
+  isolate->heap()->CallGCEpilogueCallbacks(major_gc_type);
   // Record objects that are not in ObjectGroups, but have class ID.
   GlobalHandlesExtractor extractor(this);
   isolate->global_handles()->IterateAllRootsWithClassIds(&extractor);
@@ -2870,6 +2874,7 @@ void NativeObjectsExplorer::FillImplicitReferences() {
           child_entry);
     }
   }
+  isolate->global_handles()->RemoveImplicitRefGroups();
 }
 
 List<HeapObject*>* NativeObjectsExplorer::GetListMaybeDisposeInfo(

@@ -193,6 +193,7 @@ class LChunkBuilder;
   V(WrapReceiver)
 
 #define GVN_TRACKED_FLAG_LIST(V)               \
+  V(Maps)                                      \
   V(NewSpacePromotion)
 
 #define GVN_UNTRACKED_FLAG_LIST(V)             \
@@ -205,7 +206,6 @@ class LChunkBuilder;
   V(DoubleArrayElements)                       \
   V(SpecializedArrayElements)                  \
   V(GlobalVars)                                \
-  V(Maps)                                      \
   V(ArrayLengths)                              \
   V(ContextSlots)                              \
   V(OsrEntries)
@@ -769,6 +769,14 @@ class HValue: public ZoneObject {
   void PrintChangesTo(StringStream* stream);
 
   const char* Mnemonic() const;
+
+  // Type information helpers.
+  bool HasMonomorphicJSObjectType();
+
+  // TODO(mstarzinger): For now instructions can override this function to
+  // specify statically known types, once HType can convey more information
+  // it should be based on the HType.
+  virtual Handle<Map> GetMonomorphicJSObjectMap() { return Handle<Map>(); }
 
   // Updated the inferred type of this instruction and returns true if
   // it has changed.
@@ -2248,6 +2256,7 @@ class HCheckMaps: public HTemplateInstruction<2> {
     SetOperandAt(1, typecheck != NULL ? typecheck : value);
     set_representation(Representation::Tagged());
     SetFlag(kUseGVN);
+    SetFlag(kTrackSideEffectDominators);
     SetGVNFlag(kDependsOnMaps);
     SetGVNFlag(kDependsOnElementsKind);
     map_set()->Add(map, zone);
@@ -2257,6 +2266,7 @@ class HCheckMaps: public HTemplateInstruction<2> {
     SetOperandAt(1, value);
     set_representation(Representation::Tagged());
     SetFlag(kUseGVN);
+    SetFlag(kTrackSideEffectDominators);
     SetGVNFlag(kDependsOnMaps);
     SetGVNFlag(kDependsOnElementsKind);
     for (int i = 0; i < maps->length(); i++) {
@@ -2291,7 +2301,7 @@ class HCheckMaps: public HTemplateInstruction<2> {
   virtual Representation RequiredInputRepresentation(int index) {
     return Representation::Tagged();
   }
-
+  virtual void SetSideEffectDominator(GVNFlag side_effect, HValue* dominator);
   virtual void PrintDataTo(StringStream* stream);
   virtual HType CalculateInferredType();
 
@@ -3111,6 +3121,9 @@ class HMathFloorOfDiv: public HBinaryOperation {
     set_representation(Representation::Integer32());
     SetFlag(kUseGVN);
     SetFlag(kCanOverflow);
+    if (!right->IsConstant()) {
+      SetFlag(kCanBeDivByZero);
+    }
   }
 
   virtual HValue* EnsureAndPropagateNotMinusZero(BitVector* visited);
@@ -5014,6 +5027,10 @@ class HAllocateObject: public HTemplateInstruction<1> {
   virtual Representation RequiredInputRepresentation(int index) {
     return Representation::Tagged();
   }
+  virtual Handle<Map> GetMonomorphicJSObjectMap() {
+    ASSERT(constructor()->has_initial_map());
+    return Handle<Map>(constructor()->initial_map());
+  }
   virtual HType CalculateInferredType();
 
   DECLARE_CONCRETE_INSTRUCTION(AllocateObject)
@@ -5080,6 +5097,9 @@ class HFastLiteral: public HMaterializedLiteral<1> {
   int total_size() const { return total_size_; }
   virtual Representation RequiredInputRepresentation(int index) {
     return Representation::Tagged();
+  }
+  virtual Handle<Map> GetMonomorphicJSObjectMap() {
+    return Handle<Map>(boilerplate()->map());
   }
   virtual HType CalculateInferredType();
 

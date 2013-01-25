@@ -126,7 +126,8 @@ class GlobalHandles {
   // reason is that Smi::FromInt(0) does not change during garage collection.
   void MakeWeak(Object** location,
                 void* parameter,
-                WeakReferenceCallback callback);
+                WeakReferenceCallback weak_reference_callback,
+                NearDeathCallback near_death_callback);
 
   void RecordStats(HeapStats* stats);
 
@@ -172,6 +173,10 @@ class GlobalHandles {
 
   // Iterates over all handles that have embedder-assigned class ID.
   void IterateAllRootsWithClassIds(ObjectVisitor* v);
+
+  // Iterates over all handles in the new space that have embedder-assigned
+  // class ID.
+  void IterateAllRootsInNewSpaceWithClassIds(ObjectVisitor* v);
 
   // Iterates over all weak roots in heap.
   void IterateWeakRoots(ObjectVisitor* v);

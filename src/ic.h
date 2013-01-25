@@ -110,16 +110,16 @@ class IC {
 
   // Returns if this IC is for contextual (no explicit receiver)
   // access to properties.
-  bool IsContextual(Handle<Object> receiver) {
+  bool IsUndeclaredGlobal(Handle<Object> receiver) {
     if (receiver->IsGlobalObject()) {
-      return SlowIsContextual();
+      return SlowIsUndeclaredGlobal();
     } else {
-      ASSERT(!SlowIsContextual());
+      ASSERT(!SlowIsUndeclaredGlobal());
       return false;
     }
   }
 
-  bool SlowIsContextual() {
+  bool SlowIsUndeclaredGlobal() {
     return ComputeMode() == RelocInfo::CODE_TARGET_CONTEXT;
   }
 
@@ -132,63 +132,7 @@ class IC {
   static inline JSObject* GetCodeCacheHolder(Object* object,
                                              InlineCacheHolderFlag holder);
 
-  MUST_USE_RESULT MaybeObject* Load(State state,
-                                    Handle<Object> object,
-                                    Handle<String> name);
-
-  MUST_USE_RESULT MaybeObject* Store(
-      State state,
-      StrictModeFlag strict_mode,
-      Handle<Object> object,
-      Handle<String> name,
-      Handle<Object> value,
-      JSReceiver::StoreFromKeyed store_mode =
-          JSReceiver::CERTAINLY_NOT_STORE_FROM_KEYED);
-
  protected:
-  virtual Handle<Code> pre_monomorphic_stub() {
-    UNREACHABLE();
-    return Handle<Code>::null();
-  }
-  virtual Handle<Code> megamorphic_stub() {
-    UNREACHABLE();
-    return Handle<Code>::null();
-  }
-  virtual Handle<Code> megamorphic_stub_strict() {
-    UNREACHABLE();
-    return Handle<Code>::null();
-  }
-  virtual Handle<Code> generic_stub() const {
-    UNREACHABLE();
-    return Handle<Code>::null();
-  }
-  virtual Code::Kind kind() const {
-    UNREACHABLE();
-    return Code::STUB;
-  }
-  virtual Handle<Code> global_proxy_stub() {
-    UNREACHABLE();
-    return Handle<Code>::null();
-  }
-  virtual Handle<Code> global_proxy_stub_strict() {
-    UNREACHABLE();
-    return Handle<Code>::null();
-  }
-
-  virtual void UpdateLoadCaches(LookupResult* lookup,
-                                State state,
-                                Handle<Object> object,
-                                Handle<String> name) {
-    UNREACHABLE();
-  }
-  virtual void UpdateStoreCaches(LookupResult* lookup,
-                                 State state,
-                                 StrictModeFlag strict_mode,
-                                 Handle<JSObject> receiver,
-                                 Handle<String> name,
-                                 Handle<Object> value) {
-    UNREACHABLE();
-  }
   Address fp() const { return fp_; }
   Address pc() const { return *pc_address_; }
   Isolate* isolate() const { return isolate_; }
@@ -220,6 +164,21 @@ class IC {
   static inline Code* GetTargetAtAddress(Address address);
   static inline void SetTargetAtAddress(Address address, Code* target);
   static void PostPatching(Address address, Code* target, Code* old_target);
+
+  void PatchCache(State state,
+                  StrictModeFlag strict_mode,
+                  Handle<JSObject> receiver,
+                  Handle<String> name,
+                  Handle<Code> code);
+  virtual void UpdateMegamorphicCache(Map* map, String* name, Code* code);
+  virtual Handle<Code> megamorphic_stub() {
+    UNREACHABLE();
+    return Handle<Code>::null();
+  }
+  virtual Handle<Code> megamorphic_stub_strict() {
+    UNREACHABLE();
+    return Handle<Code>::null();
+  }
 
  private:
   // Frame pointer for the frame that uses (calls) the IC.
@@ -376,7 +335,7 @@ class KeyedCallIC: public CallICBase {
 class LoadIC: public IC {
  public:
   explicit LoadIC(Isolate* isolate) : IC(NO_EXTRA_FRAME, isolate) {
-    ASSERT(target()->is_load_stub());
+    ASSERT(target()->is_load_stub() || target()->is_keyed_load_stub());
   }
 
   // Code generator routines.
@@ -388,12 +347,17 @@ class LoadIC: public IC {
   static void GenerateMegamorphic(MacroAssembler* masm);
   static void GenerateNormal(MacroAssembler* masm);
 
-  // Specialized code generator routines.
-  static void GenerateArrayLength(MacroAssembler* masm);
-  static void GenerateFunctionPrototype(MacroAssembler* masm);
+  MUST_USE_RESULT MaybeObject* Load(State state,
+                                    Handle<Object> object,
+                                    Handle<String> name);
 
  protected:
   virtual Code::Kind kind() const { return Code::LOAD_IC; }
+
+  virtual Handle<Code> generic_stub() const {
+    UNREACHABLE();
+    return Handle<Code>::null();
+  }
 
   virtual Handle<Code> megamorphic_stub() {
     return isolate()->builtins()->LoadIC_Megamorphic();
@@ -401,10 +365,13 @@ class LoadIC: public IC {
 
   // Update the inline cache and the global stub cache based on the
   // lookup result.
-  virtual void UpdateLoadCaches(LookupResult* lookup,
-                                State state,
-                                Handle<Object> object,
-                                Handle<String> name);
+  void UpdateCaches(LookupResult* lookup,
+                    State state,
+                    Handle<Object> object,
+                    Handle<String> name);
+  virtual Handle<Code> ComputeLoadMonomorphic(LookupResult* lookup,
+                                              Handle<JSObject> receiver,
+                                              Handle<String> name);
 
  private:
   // Stub accessors.
@@ -421,119 +388,15 @@ class LoadIC: public IC {
 };
 
 
-class KeyedIC: public IC {
- public:
-  enum StubKind {
-    LOAD,
-    STORE_NO_TRANSITION,
-    STORE_TRANSITION_SMI_TO_OBJECT,
-    STORE_TRANSITION_SMI_TO_DOUBLE,
-    STORE_TRANSITION_DOUBLE_TO_OBJECT,
-    STORE_TRANSITION_HOLEY_SMI_TO_OBJECT,
-    STORE_TRANSITION_HOLEY_SMI_TO_DOUBLE,
-    STORE_TRANSITION_HOLEY_DOUBLE_TO_OBJECT,
-    STORE_AND_GROW_NO_TRANSITION,
-    STORE_AND_GROW_TRANSITION_SMI_TO_OBJECT,
-    STORE_AND_GROW_TRANSITION_SMI_TO_DOUBLE,
-    STORE_AND_GROW_TRANSITION_DOUBLE_TO_OBJECT,
-    STORE_AND_GROW_TRANSITION_HOLEY_SMI_TO_OBJECT,
-    STORE_AND_GROW_TRANSITION_HOLEY_SMI_TO_DOUBLE,
-    STORE_AND_GROW_TRANSITION_HOLEY_DOUBLE_TO_OBJECT
-  };
-
-  static const int kGrowICDelta = STORE_AND_GROW_NO_TRANSITION -
-      STORE_NO_TRANSITION;
-  STATIC_ASSERT(kGrowICDelta ==
-                STORE_AND_GROW_TRANSITION_SMI_TO_OBJECT -
-                STORE_TRANSITION_SMI_TO_OBJECT);
-  STATIC_ASSERT(kGrowICDelta ==
-                STORE_AND_GROW_TRANSITION_SMI_TO_DOUBLE -
-                STORE_TRANSITION_SMI_TO_DOUBLE);
-  STATIC_ASSERT(kGrowICDelta ==
-                STORE_AND_GROW_TRANSITION_DOUBLE_TO_OBJECT -
-                STORE_TRANSITION_DOUBLE_TO_OBJECT);
-
-  explicit KeyedIC(Isolate* isolate) : IC(NO_EXTRA_FRAME, isolate) {}
-  virtual ~KeyedIC() {}
-
-  static inline KeyedAccessGrowMode GetGrowModeFromStubKind(
-      StubKind stub_kind) {
-    return (stub_kind >= STORE_AND_GROW_NO_TRANSITION)
-        ? ALLOW_JSARRAY_GROWTH
-        : DO_NOT_ALLOW_JSARRAY_GROWTH;
-  }
-
-  static inline StubKind GetGrowStubKind(StubKind stub_kind) {
-    ASSERT(stub_kind != LOAD);
-    if (stub_kind < STORE_AND_GROW_NO_TRANSITION) {
-      stub_kind = static_cast<StubKind>(static_cast<int>(stub_kind) +
-                                        kGrowICDelta);
-    }
-    return stub_kind;
-  }
-
-  virtual Handle<Code> GetElementStubWithoutMapCheck(
-      bool is_js_array,
-      ElementsKind elements_kind,
-      KeyedAccessGrowMode grow_mode) = 0;
-
- protected:
-  virtual Handle<Code> string_stub() {
-    return Handle<Code>::null();
-  }
-
-  Handle<Code> ComputeStub(Handle<JSObject> receiver,
-                           StubKind stub_kind,
-                           StrictModeFlag strict_mode,
-                           Handle<Code> default_stub);
-
-  virtual Handle<Code> ComputePolymorphicStub(
-      MapHandleList* receiver_maps,
-      StrictModeFlag strict_mode,
-      KeyedAccessGrowMode grow_mode) = 0;
-
-  Handle<Code> ComputeMonomorphicStubWithoutMapCheck(
-      Handle<Map> receiver_map,
-      StrictModeFlag strict_mode,
-      KeyedAccessGrowMode grow_mode);
-
- private:
-  void GetReceiverMapsForStub(Handle<Code> stub, MapHandleList* result);
-
-  Handle<Code> ComputeMonomorphicStub(Handle<Map> receiver_map,
-                                      StubKind stub_kind,
-                                      StrictModeFlag strict_mode,
-                                      Handle<Code> default_stub);
-
-  Handle<Map> ComputeTransitionedMap(Handle<JSObject> receiver,
-                                     StubKind stub_kind);
-
-  static bool IsTransitionStubKind(StubKind stub_kind) {
-    return stub_kind > STORE_NO_TRANSITION &&
-        stub_kind != STORE_AND_GROW_NO_TRANSITION;
-  }
-
-  static bool IsGrowStubKind(StubKind stub_kind) {
-    return stub_kind >= STORE_AND_GROW_NO_TRANSITION;
-  }
-
-  static StubKind GetNoTransitionStubKind(StubKind stub_kind) {
-    if (!IsTransitionStubKind(stub_kind)) return stub_kind;
-    if (IsGrowStubKind(stub_kind)) return STORE_AND_GROW_NO_TRANSITION;
-    return STORE_NO_TRANSITION;
-  }
-};
-
-
 enum ICMissMode {
   MISS_FORCE_GENERIC,
   MISS
 };
 
 
-class KeyedLoadIC: public KeyedIC {
+class KeyedLoadIC: public LoadIC {
  public:
-  explicit KeyedLoadIC(Isolate* isolate) : KeyedIC(isolate) {
+  explicit KeyedLoadIC(Isolate* isolate) : LoadIC(isolate) {
     ASSERT(target()->is_keyed_load_stub());
   }
 
@@ -563,13 +426,10 @@ class KeyedLoadIC: public KeyedIC {
   static const int kSlowCaseBitFieldMask =
       (1 << Map::kIsAccessCheckNeeded) | (1 << Map::kHasIndexedInterceptor);
 
-  virtual Handle<Code> GetElementStubWithoutMapCheck(
-      bool is_js_array,
-      ElementsKind elements_kind,
-      KeyedAccessGrowMode grow_mode);
-
  protected:
   virtual Code::Kind kind() const { return Code::KEYED_LOAD_IC; }
+
+  Handle<Code> LoadElementStub(Handle<JSObject> receiver);
 
   virtual Handle<Code> megamorphic_stub() {
     return isolate()->builtins()->KeyedLoadIC_Generic();
@@ -578,19 +438,11 @@ class KeyedLoadIC: public KeyedIC {
     return isolate()->builtins()->KeyedLoadIC_Generic();
   }
 
-  virtual Handle<Code> ComputePolymorphicStub(MapHandleList* receiver_maps,
-                                              StrictModeFlag strict_mode,
-                                              KeyedAccessGrowMode grow_mode);
-
-  virtual Handle<Code> string_stub() {
-    return isolate()->builtins()->KeyedLoadIC_String();
-  }
-
   // Update the inline cache.
-  virtual void UpdateLoadCaches(LookupResult* lookup,
-                                State state,
-                                Handle<Object> object,
-                                Handle<String> name);
+  virtual Handle<Code> ComputeLoadMonomorphic(LookupResult* lookup,
+                                              Handle<JSObject> receiver,
+                                              Handle<String> name);
+  virtual void UpdateMegamorphicCache(Map* map, String* name, Code* code) { }
 
  private:
   // Stub accessors.
@@ -606,6 +458,9 @@ class KeyedLoadIC: public KeyedIC {
   Handle<Code> non_strict_arguments_stub() {
     return isolate()->builtins()->KeyedLoadIC_NonStrictArguments();
   }
+  Handle<Code> string_stub() {
+    return isolate()->builtins()->KeyedLoadIC_String();
+  }
 
   static void Clear(Address address, Code* target);
 
@@ -616,7 +471,7 @@ class KeyedLoadIC: public KeyedIC {
 class StoreIC: public IC {
  public:
   explicit StoreIC(Isolate* isolate) : IC(NO_EXTRA_FRAME, isolate) {
-    ASSERT(target()->is_store_stub());
+    ASSERT(target()->is_store_stub() || target()->is_keyed_store_stub());
   }
 
   // Code generators for stub routines. Only called once at startup.
@@ -624,10 +479,18 @@ class StoreIC: public IC {
   static void GenerateMiss(MacroAssembler* masm);
   static void GenerateMegamorphic(MacroAssembler* masm,
                                   StrictModeFlag strict_mode);
-  static void GenerateArrayLength(MacroAssembler* masm);
   static void GenerateNormal(MacroAssembler* masm);
   static void GenerateGlobalProxy(MacroAssembler* masm,
                                   StrictModeFlag strict_mode);
+
+  MUST_USE_RESULT MaybeObject* Store(
+      State state,
+      StrictModeFlag strict_mode,
+      Handle<Object> object,
+      Handle<String> name,
+      Handle<Object> value,
+      JSReceiver::StoreFromKeyed store_mode =
+          JSReceiver::CERTAINLY_NOT_STORE_FROM_KEYED);
 
  protected:
   virtual Code::Kind kind() const { return Code::STORE_IC; }
@@ -648,12 +511,19 @@ class StoreIC: public IC {
 
   // Update the inline cache and the global stub cache based on the
   // lookup result.
-  virtual void UpdateStoreCaches(LookupResult* lookup,
-                                 State state,
-                                 StrictModeFlag strict_mode,
-                                 Handle<JSObject> receiver,
-                                 Handle<String> name,
-                                 Handle<Object> value);
+  void UpdateCaches(LookupResult* lookup,
+                    State state,
+                    StrictModeFlag strict_mode,
+                    Handle<JSObject> receiver,
+                    Handle<String> name,
+                    Handle<Object> value);
+  // Compute the code stub for this store; used for rewriting to
+  // monomorphic state and making sure that the code stub is in the
+  // stub cache.
+  virtual Handle<Code> ComputeStoreMonomorphic(LookupResult* lookup,
+                                               StrictModeFlag strict_mode,
+                                               Handle<JSObject> receiver,
+                                               Handle<String> name);
 
  private:
   void set_target(Code* code) {
@@ -687,9 +557,46 @@ enum KeyedStoreIncrementLength {
 };
 
 
-class KeyedStoreIC: public KeyedIC {
+class KeyedStoreIC: public StoreIC {
  public:
-  explicit KeyedStoreIC(Isolate* isolate) : KeyedIC(isolate) {
+  enum StubKind {
+    STORE_NO_TRANSITION,
+    STORE_TRANSITION_SMI_TO_OBJECT,
+    STORE_TRANSITION_SMI_TO_DOUBLE,
+    STORE_TRANSITION_DOUBLE_TO_OBJECT,
+    STORE_TRANSITION_HOLEY_SMI_TO_OBJECT,
+    STORE_TRANSITION_HOLEY_SMI_TO_DOUBLE,
+    STORE_TRANSITION_HOLEY_DOUBLE_TO_OBJECT,
+    STORE_AND_GROW_NO_TRANSITION,
+    STORE_AND_GROW_TRANSITION_SMI_TO_OBJECT,
+    STORE_AND_GROW_TRANSITION_SMI_TO_DOUBLE,
+    STORE_AND_GROW_TRANSITION_DOUBLE_TO_OBJECT,
+    STORE_AND_GROW_TRANSITION_HOLEY_SMI_TO_OBJECT,
+    STORE_AND_GROW_TRANSITION_HOLEY_SMI_TO_DOUBLE,
+    STORE_AND_GROW_TRANSITION_HOLEY_DOUBLE_TO_OBJECT
+  };
+
+  static const int kGrowICDelta = STORE_AND_GROW_NO_TRANSITION -
+      STORE_NO_TRANSITION;
+  STATIC_ASSERT(kGrowICDelta ==
+                STORE_AND_GROW_TRANSITION_SMI_TO_OBJECT -
+                STORE_TRANSITION_SMI_TO_OBJECT);
+  STATIC_ASSERT(kGrowICDelta ==
+                STORE_AND_GROW_TRANSITION_SMI_TO_DOUBLE -
+                STORE_TRANSITION_SMI_TO_DOUBLE);
+  STATIC_ASSERT(kGrowICDelta ==
+                STORE_AND_GROW_TRANSITION_DOUBLE_TO_OBJECT -
+                STORE_TRANSITION_DOUBLE_TO_OBJECT);
+
+  static inline StubKind GetGrowStubKind(StubKind stub_kind) {
+    if (stub_kind < STORE_AND_GROW_NO_TRANSITION) {
+      stub_kind = static_cast<StubKind>(static_cast<int>(stub_kind) +
+                                        kGrowICDelta);
+    }
+    return stub_kind;
+  }
+
+  explicit KeyedStoreIC(Isolate* isolate) : StoreIC(isolate) {
     ASSERT(target()->is_keyed_store_stub());
   }
 
@@ -713,25 +620,14 @@ class KeyedStoreIC: public KeyedIC {
   static void GenerateTransitionElementsSmiToDouble(MacroAssembler* masm);
   static void GenerateTransitionElementsDoubleToObject(MacroAssembler* masm);
 
-  virtual Handle<Code> GetElementStubWithoutMapCheck(
-      bool is_js_array,
-      ElementsKind elements_kind,
-      KeyedAccessGrowMode grow_mode);
-
  protected:
   virtual Code::Kind kind() const { return Code::KEYED_STORE_IC; }
 
-  virtual Handle<Code> ComputePolymorphicStub(MapHandleList* receiver_maps,
-                                              StrictModeFlag strict_mode,
-                                              KeyedAccessGrowMode grow_mode);
-
-  // Update the inline cache.
-  virtual void UpdateStoreCaches(LookupResult* lookup,
-                                 State state,
-                                 StrictModeFlag strict_mode,
-                                 Handle<JSObject> receiver,
-                                 Handle<String> name,
-                                 Handle<Object> value);
+  virtual Handle<Code> ComputeStoreMonomorphic(LookupResult* lookup,
+                                               StrictModeFlag strict_mode,
+                                               Handle<JSObject> receiver,
+                                               Handle<String> name);
+  virtual void UpdateMegamorphicCache(Map* map, String* name, Code* code) { }
 
   virtual Handle<Code> megamorphic_stub() {
     return isolate()->builtins()->KeyedStoreIC_Generic();
@@ -739,6 +635,10 @@ class KeyedStoreIC: public KeyedIC {
   virtual Handle<Code> megamorphic_stub_strict() {
     return isolate()->builtins()->KeyedStoreIC_Generic_Strict();
   }
+
+  Handle<Code> StoreElementStub(Handle<JSObject> receiver,
+                                StubKind stub_kind,
+                                StrictModeFlag strict_mode);
 
  private:
   void set_target(Code* code) {
@@ -770,6 +670,24 @@ class KeyedStoreIC: public KeyedIC {
   StubKind GetStubKind(Handle<JSObject> receiver,
                        Handle<Object> key,
                        Handle<Object> value);
+
+  static bool IsTransitionStubKind(StubKind stub_kind) {
+    return stub_kind > STORE_NO_TRANSITION &&
+        stub_kind != STORE_AND_GROW_NO_TRANSITION;
+  }
+
+  static bool IsGrowStubKind(StubKind stub_kind) {
+    return stub_kind >= STORE_AND_GROW_NO_TRANSITION;
+  }
+
+  static StubKind GetNoTransitionStubKind(StubKind stub_kind) {
+    if (!IsTransitionStubKind(stub_kind)) return stub_kind;
+    if (IsGrowStubKind(stub_kind)) return STORE_AND_GROW_NO_TRANSITION;
+    return STORE_NO_TRANSITION;
+  }
+
+  Handle<Map> ComputeTransitionedMap(Handle<JSObject> receiver,
+                                     StubKind stub_kind);
 
   friend class IC;
 };
