@@ -7094,8 +7094,6 @@ bool HOptimizedGraphBuilder::TryInline(CallKind call_kind,
     return false;
   }
 
-  Handle<SharedFunctionInfo> target_shared(target->shared());
-
 #if !defined(V8_TARGET_ARCH_IA32)
   // Target must be able to use caller's context.
   CompilationInfo* outer_info = info();
@@ -7126,7 +7124,7 @@ bool HOptimizedGraphBuilder::TryInline(CallKind call_kind,
   for (FunctionState* state = function_state();
        state != NULL;
        state = state->outer()) {
-    if (state->compilation_info()->closure()->shared() == *target_shared) {
+    if (*state->compilation_info()->closure() == *target) {
       TraceInline(target, caller, "target is recursive");
       return false;
     }
@@ -7141,6 +7139,7 @@ bool HOptimizedGraphBuilder::TryInline(CallKind call_kind,
 
   // Parse and allocate variables.
   CompilationInfo target_info(target, zone());
+  Handle<SharedFunctionInfo> target_shared(target->shared());
   if (!ParserApi::Parse(&target_info, kNoParsingFlags) ||
       !Scope::Analyze(&target_info)) {
     if (target_info.isolate()->has_pending_exception()) {
@@ -10229,29 +10228,31 @@ void HStatistics::Print() {
     PrintF("%30s", names_[i]);
     double ms = static_cast<double>(timing_[i]) / 1000;
     double percent = static_cast<double>(timing_[i]) * 100 / sum;
-    PrintF(" - %7.3f ms / %4.1f %% ", ms, percent);
+    PrintF(" - %8.3f ms / %4.1f %% ", ms, percent);
 
     unsigned size = sizes_[i];
     double size_percent = static_cast<double>(size) * 100 / total_size_;
-    PrintF(" %8u bytes / %4.1f %%\n", size, size_percent);
+    PrintF(" %9u bytes / %4.1f %%\n", size, size_percent);
   }
 
-  PrintF("---------------------------------------------------------------\n");
+  PrintF("----------------------------------------"
+         "---------------------------------------\n");
   int64_t total = create_graph_ + optimize_graph_ + generate_code_;
-  PrintF("%30s - %7.3f ms / %4.1f %% \n",
+  PrintF("%30s - %8.3f ms / %4.1f %% \n",
          "Create graph",
          static_cast<double>(create_graph_) / 1000,
          static_cast<double>(create_graph_) * 100 / total);
-  PrintF("%30s - %7.3f ms / %4.1f %% \n",
+  PrintF("%30s - %8.3f ms / %4.1f %% \n",
          "Optimize graph",
          static_cast<double>(optimize_graph_) / 1000,
          static_cast<double>(optimize_graph_) * 100 / total);
-  PrintF("%30s - %7.3f ms / %4.1f %% \n",
+  PrintF("%30s - %8.3f ms / %4.1f %% \n",
          "Generate and install code",
          static_cast<double>(generate_code_) / 1000,
          static_cast<double>(generate_code_) * 100 / total);
-  PrintF("---------------------------------------------------------------\n");
-  PrintF("%30s - %7.3f ms (%.1f times slower than full code gen)\n",
+  PrintF("----------------------------------------"
+         "---------------------------------------\n");
+  PrintF("%30s - %8.3f ms (%.1f times slower than full code gen)\n",
          "Total",
          static_cast<double>(total) / 1000,
          static_cast<double>(total) / full_code_gen_);
@@ -10263,7 +10264,7 @@ void HStatistics::Print() {
   double normalized_size_in_kb = source_size_in_kb > 0
       ? total_size_ / 1024 / source_size_in_kb
       : 0;
-  PrintF("%30s - %7.3f ms           %7.3f kB allocated\n",
+  PrintF("%30s - %8.3f ms           %7.3f kB allocated\n",
          "Average per kB source",
          normalized_time, normalized_size_in_kb);
 }
@@ -10275,7 +10276,7 @@ void HStatistics::SaveTiming(const char* name, int64_t ticks, unsigned size) {
   } else {
     total_size_ += size;
     for (int i = 0; i < names_.length(); ++i) {
-      if (names_[i] == name) {
+      if (strcmp(names_[i], name) == 0) {
         timing_[i] += ticks;
         sizes_[i] += size;
         return;
