@@ -2093,8 +2093,12 @@ bool Isolate::Init(Deserializer* des) {
     Deoptimizer::EnsureCodeForDeoptimizationEntry(
         Deoptimizer::LAZY,
         kDeoptTableSerializeEntryCount - 1);
+  }
 
+  if (!Serializer::enabled()) {
     // Ensure that the stub failure trampoline has been generated.
+    HandleScope scope(this);
+    CodeStub::GenerateFPStubs();
     StubFailureTrampolineStub().GetCode();
   }
 

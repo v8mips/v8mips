@@ -72,8 +72,6 @@ bool LCodeGen::GenerateCode() {
   ASSERT(is_unused());
   status_ = GENERATING;
 
-  CodeStub::GenerateFPStubs();
-
   // Open a frame scope to indicate that there is a frame on the stack.  The
   // MANUAL indicates that the scope shouldn't actually generate code to set up
   // the frame (that is done in GeneratePrologue).
@@ -4586,7 +4584,13 @@ void LCodeGen::DoDeferredNumberTagI(LInstruction* instr,
       CpuFeatures::Scope feature_scope(SSE2);
       __ LoadUint32(xmm0, reg, xmm1);
     } else {
-      UNREACHABLE();
+      // There's no fild variant for unsigned values, so zero-extend to a 64-bit
+      // int manually.
+      __ push(Immediate(0));
+      __ push(reg);
+      __ fild_d(Operand(esp, 0));
+      __ pop(reg);
+      __ pop(reg);
     }
   }
 
@@ -4638,10 +4642,10 @@ void LCodeGen::DoNumberTagD(LNumberTagD* instr) {
   };
 
   Register reg = ToRegister(instr->result());
-  Register tmp = ToRegister(instr->temp());
 
   DeferredNumberTagD* deferred = new(zone()) DeferredNumberTagD(this, instr);
   if (FLAG_inline_new) {
+    Register tmp = ToRegister(instr->temp());
     __ AllocateHeapNumber(reg, tmp, no_reg, deferred->entry());
   } else {
     __ jmp(deferred->entry());
