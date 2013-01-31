@@ -1168,7 +1168,7 @@ static void KeyedStoreGenerateGenericHelper(
     __ Branch(fast_double, ne, elements_map,
               Operand(masm->isolate()->factory()->fixed_array_map()));
   }
- // Smi stores don't require further checks.
+  // Smi stores don't require further checks.
   Label non_smi_value;
   __ JumpIfNotSmi(value, &non_smi_value);
 
