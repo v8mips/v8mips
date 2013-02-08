@@ -1,4 +1,4 @@
-// Copyright 2012 the V8 project authors. All rights reserved.
+// Copyright 2013 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -27,35 +27,62 @@
 
 // Flags: --allow-natives-syntax
 
-// Should not take a very long time (n^2 algorithms are bad)
+var X = 1.1;
+var K = 0.5;
 
-function do_slices() {
-  var data = new Array(1024 * 12); // 12kB
+var O = 0;
+var result = new Float64Array(2);
 
-  for (var i = 0; i < data.length; i++) {
-    data[i] = 255;
-  }
-
-  var start = Date.now();
-
-  for (i = 0; i < 20000; i++) {
-    data.slice(4, 1);
-  }
-
-  return Date.now() - start;
+function spill() {
+  try { } catch (e) { }
 }
 
-// Reset the GC stress mode to be off. Needed so that the runtime of this test
-// stays within bounds even if we run in GC stress mode.
-%SetFlags("--gc-interval=-1 --noforce-marking-deque-overflows");
+function buggy() {
+  var v = X;
+  var phi1 = v + K;
+  var phi2 = v - K;
 
-// Should never take more than 3 seconds (if the bug is fixed, the test takes
-// considerably less time than 3 seconds).
-assertTrue(do_slices() < (3 * 1000));
+  spill();  // At this point initial values for phi1 and phi2 are spilled.
 
-// Make sure that packed and unpacked array slices are still properly handled
-var holey_array = [1, 2, 3, 4, 5,,,,,,];
-assertFalse(%HasFastHoleyElements(holey_array.slice(6, 1)));
-assertEquals(undefined, holey_array.slice(6, 7)[0])
-assertFalse(%HasFastHoleyElements(holey_array.slice(2, 1)));
-assertEquals(3, holey_array.slice(2, 3)[0])
+  var xmm1 = v;
+  var xmm2 = v*v*v;
+  var xmm3 = v*v*v*v;
+  var xmm4 = v*v*v*v*v;
+  var xmm5 = v*v*v*v*v*v;
+  var xmm6 = v*v*v*v*v*v*v;
+  var xmm7 = v*v*v*v*v*v*v*v;
+  var xmm8 = v*v*v*v*v*v*v*v*v;
+
+  // All registers are blocked and phis for phi1 and phi2 are spilled because
+  // their left (incoming) value is spilled, there are no free registers,
+  // and phis themselves have only ANY-policy uses.
+
+  for (var x = 0; x < 2; x++) {
+    xmm1 += xmm1 * xmm6;
+    xmm2 += xmm1 * xmm5;
+    xmm3 += xmm1 * xmm4;
+    xmm4 += xmm1 * xmm3;
+    xmm5 += xmm1 * xmm2;
+
+    // Now swap values of phi1 and phi2 to create cycle between phis.
+    var t = phi1;
+    phi1 = phi2;
+    phi2 = t;
+  }
+
+  // Now we want to get values of phi1 and phi2. However we would like to
+  // do it in a way that does not produce any uses of phi1&phi2 that have
+  // a register beneficial policy. How? We just hide these uses behind phis.
+  result[0] = (O === 0) ? phi1 : phi2;
+  result[1] = (O !== 0) ? phi1 : phi2;
+}
+
+function test() {
+  buggy();
+  assertArrayEquals([X + K, X - K], result);
+}
+
+test();
+test();
+%OptimizeFunctionOnNextCall(buggy);
+test();
