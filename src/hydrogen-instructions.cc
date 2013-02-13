@@ -790,6 +790,13 @@ void HInstruction::Verify() {
   // HValue::DataEquals.  The default implementation is UNREACHABLE.  We
   // don't actually care whether DataEquals returns true or false here.
   if (CheckFlag(kUseGVN)) DataEquals(this);
+
+  // Verify that all uses are in the graph.
+  for (HUseIterator use = uses(); !use.Done(); use.Advance()) {
+    if (use.value()->IsInstruction()) {
+      ASSERT(HInstruction::cast(use.value())->IsLinked());
+    }
+  }
 }
 #endif
 
@@ -829,9 +836,8 @@ void HBoundsCheck::InferRepresentation(HInferRepresentation* h_infer) {
       !length()->representation().IsTagged()) {
     r = Representation::Integer32();
   } else if (index()->representation().IsTagged() ||
-      (index()->IsConstant() &&
-       HConstant::cast(index())->HasInteger32Value() &&
-       Smi::IsValid(HConstant::cast(index())->Integer32Value()))) {
+      (index()->ActualValue()->IsConstant() &&
+       HConstant::cast(index()->ActualValue())->HasSmiValue())) {
     // If the index is tagged, or a constant that holds a Smi, allow the length
     // to be tagged, since it is usually already tagged from loading it out of
     // the length field of a JSArray. This allows for direct comparison without
@@ -2386,6 +2392,14 @@ HType HCheckNonSmi::CalculateInferredType() {
 
 HType HCheckSmi::CalculateInferredType() {
   return HType::Smi();
+}
+
+
+void HCheckSmiOrInt32::InferRepresentation(HInferRepresentation* h_infer) {
+  ASSERT(CheckFlag(kFlexibleRepresentation));
+  Representation r = value()->representation().IsTagged()
+      ? Representation::Tagged() : Representation::Integer32();
+  UpdateRepresentation(r, h_infer, "checksmiorint32");
 }
 
 
