@@ -56,6 +56,7 @@ class LCodeGen BASE_EMBEDDED {
         deoptimizations_(4, info->zone()),
         jump_table_(4, info->zone()),
         deoptimization_literals_(8, info->zone()),
+        prototype_maps_(0, info->zone()),
         inlined_function_count_(0),
         scope_(info->scope()),
         status_(UNUSED),
@@ -242,6 +243,7 @@ class LCodeGen BASE_EMBEDDED {
                         bool is_uint32,
                         int arguments_index,
                         int arguments_count);
+  void RegisterDependentCodeForEmbeddedMaps(Handle<Code> code);
   void PopulateDeoptimizationData(Handle<Code> code);
   int DefineDeoptimizationLiteral(Handle<Object> literal);
 
@@ -366,6 +368,7 @@ class LCodeGen BASE_EMBEDDED {
   ZoneList<LEnvironment*> deoptimizations_;
   ZoneList<JumpTableEntry> jump_table_;
   ZoneList<Handle<Object> > deoptimization_literals_;
+  ZoneList<Handle<Map> > prototype_maps_;
   int inlined_function_count_;
   Scope* const scope_;
   Status status_;

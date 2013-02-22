@@ -819,6 +819,11 @@ class HValue: public ZoneObject {
                                      : NULL;
   }
 
+  // A purely informative definition is an idef that will not emit code and
+  // should therefore be removed from the graph in the RestoreActualValues
+  // phase (so that live ranges will be shorter).
+  virtual bool IsPurelyInformativeDefinition() { return false; }
+
   // This method must always return the original HValue SSA definition
   // (regardless of any iDef of this value).
   HValue* ActualValue() {
@@ -1286,6 +1291,7 @@ class HNumericConstraint : public HTemplateInstruction<2> {
   NumericRelation relation() { return relation_; }
 
   virtual int RedefinedOperandIndex() { return 0; }
+  virtual bool IsPurelyInformativeDefinition() { return true; }
 
   virtual Representation RequiredInputRepresentation(int index) {
     return representation();
@@ -2761,6 +2767,13 @@ class HCheckPrototypeMaps: public HTemplateInstruction<0> {
     return hash;
   }
 
+  bool CanOmitPrototypeChecks() {
+    for (int i = 0; i < maps()->length(); i++) {
+      if (!maps()->at(i)->CanOmitPrototypeChecks()) return false;
+    }
+    return true;
+  }
+
  protected:
   virtual bool DataEquals(HValue* other) {
     HCheckPrototypeMaps* b = HCheckPrototypeMaps::cast(other);
@@ -2818,6 +2831,10 @@ class HCheckSmiOrInt32: public HUnaryOperation {
     return representation();
   }
   virtual void InferRepresentation(HInferRepresentation* h_infer);
+
+  virtual Representation observed_input_representation(int index) {
+    return Representation::Integer32();
+  }
 
   virtual HValue* Canonicalize() {
     if (representation().IsTagged() && !type().IsSmi()) {
@@ -3359,6 +3376,7 @@ class HBoundsCheck: public HTemplateInstruction<2> {
   HValue* length() { return OperandAt(1); }
 
   virtual int RedefinedOperandIndex() { return 0; }
+  virtual bool IsPurelyInformativeDefinition() { return skip_check(); }
   virtual void AddInformativeDefinitions();
 
   DECLARE_CONCRETE_INSTRUCTION(BoundsCheck)

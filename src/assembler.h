@@ -409,6 +409,12 @@ class RelocInfo BASE_EMBEDDED {
   // debugger.
   INLINE(bool IsPatchedDebugBreakSlotSequence());
 
+#ifdef DEBUG
+  // Check whether the given code contains relocation information that
+  // either is position-relative or movable by the garbage collector.
+  static bool RequiresRelocation(const CodeDesc& desc);
+#endif
+
 #ifdef ENABLE_DISASSEMBLER
   // Printing
   static const char* RelocModeName(Mode rmode);
@@ -844,6 +850,7 @@ class PositionsRecorder BASE_EMBEDDED {
 #ifdef ENABLE_GDB_JIT_INTERFACE
     gdbjit_lineinfo_ = NULL;
 #endif
+    jit_handler_data_ = NULL;
   }
 
 #ifdef ENABLE_GDB_JIT_INTERFACE
@@ -863,7 +870,15 @@ class PositionsRecorder BASE_EMBEDDED {
     return lineinfo;
   }
 #endif
+  void AttachJITHandlerData(void* user_data) {
+    jit_handler_data_ = user_data;
+  }
 
+  void* DetachJITHandlerData() {
+    void* old_data = jit_handler_data_;
+    jit_handler_data_ = NULL;
+    return old_data;
+  }
   // Set current position to pos.
   void RecordPosition(int pos);
 
@@ -886,6 +901,9 @@ class PositionsRecorder BASE_EMBEDDED {
   GDBJITLineInfo* gdbjit_lineinfo_;
 #endif
 
+  // Currently jit_handler_data_ is used to store JITHandler-specific data
+  // over the lifetime of a PositionsRecorder
+  void* jit_handler_data_;
   friend class PreservePositionScope;
 
   DISALLOW_COPY_AND_ASSIGN(PositionsRecorder);

@@ -245,6 +245,9 @@ DEFINE_int(parallel_recompilation_queue_length, 2,
 DEFINE_bool(manual_parallel_recompilation, false,
             "disable automatic optimization")
 DEFINE_implication(manual_parallel_recompilation, parallel_recompilation)
+DEFINE_bool(omit_prototype_checks_for_leaf_maps, true,
+            "do not emit prototype checks if all prototypes have leaf maps, "
+            "deoptimize the optimized code if the layout of the maps changes.")
 
 // Experimental profiler changes.
 DEFINE_bool(experimental_profiler, true, "enable all profiler experiments")
@@ -415,7 +418,7 @@ DEFINE_bool(trace_external_memory, false,
             "it is adjusted.")
 DEFINE_bool(collect_maps, true,
             "garbage collect maps from which no objects can be reached")
-DEFINE_bool(weak_embedded_maps_in_optimized_code, false,
+DEFINE_bool(weak_embedded_maps_in_optimized_code, true,
             "make maps embedded in optimized code weak")
 DEFINE_bool(flush_code, true,
             "flush code that we expect not to use again (during full gc)")

@@ -689,6 +689,21 @@ RelocIterator::RelocIterator(const CodeDesc& desc, int mode_mask) {
 // Implementation of RelocInfo
 
 
+#ifdef DEBUG
+bool RelocInfo::RequiresRelocation(const CodeDesc& desc) {
+  // Ensure there are no code targets or embedded objects present in the
+  // deoptimization entries, they would require relocation after code
+  // generation.
+  int mode_mask = RelocInfo::kCodeTargetMask |
+                  RelocInfo::ModeMask(RelocInfo::EMBEDDED_OBJECT) |
+                  RelocInfo::ModeMask(RelocInfo::GLOBAL_PROPERTY_CELL) |
+                  RelocInfo::kApplyMask;
+  RelocIterator it(desc, mode_mask);
+  return !it.done();
+}
+#endif
+
+
 #ifdef ENABLE_DISASSEMBLER
 const char* RelocInfo::RelocModeName(RelocInfo::Mode rmode) {
   switch (rmode) {
@@ -1522,6 +1537,10 @@ void PositionsRecorder::RecordPosition(int pos) {
     gdbjit_lineinfo_->SetPosition(assembler_->pc_offset(), pos, false);
   }
 #endif
+  LOG_CODE_EVENT(assembler_->isolate(),
+                 CodeLinePosInfoAddPositionEvent(jit_handler_data_,
+                                                 assembler_->pc_offset(),
+                                                 pos));
 }
 
 
@@ -1534,6 +1553,11 @@ void PositionsRecorder::RecordStatementPosition(int pos) {
     gdbjit_lineinfo_->SetPosition(assembler_->pc_offset(), pos, true);
   }
 #endif
+  LOG_CODE_EVENT(assembler_->isolate(),
+                 CodeLinePosInfoAddStatementPositionEvent(
+                     jit_handler_data_,
+                     assembler_->pc_offset(),
+                     pos));
 }
 
 

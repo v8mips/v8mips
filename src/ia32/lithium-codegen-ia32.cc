@@ -96,9 +96,16 @@ void LCodeGen::FinishCode(Handle<Code> code) {
   ASSERT(is_done());
   code->set_stack_slots(GetStackSlotCount());
   code->set_safepoint_table_offset(safepoints_.GetCodeOffset());
+  if (FLAG_weak_embedded_maps_in_optimized_code) {
+    RegisterDependentCodeForEmbeddedMaps(code);
+  }
   PopulateDeoptimizationData(code);
   if (!info()->IsStub()) {
     Deoptimizer::EnsureRelocSpaceForLazyDeoptimization(code);
+  }
+  for (int i = 0 ; i < prototype_maps_.length(); i++) {
+    prototype_maps_.at(i)->AddDependentCode(
+        DependentCode::kPrototypeCheckGroup, code);
   }
 }
 
@@ -892,6 +899,31 @@ void LCodeGen::DeoptimizeIf(Condition cc, LEnvironment* environment) {
     } else {
       __ j(cc, &jump_table_.last().label);
     }
+  }
+}
+
+
+void LCodeGen::RegisterDependentCodeForEmbeddedMaps(Handle<Code> code) {
+  ZoneList<Handle<Map> > maps(1, zone());
+  int mode_mask = RelocInfo::ModeMask(RelocInfo::EMBEDDED_OBJECT);
+  for (RelocIterator it(*code, mode_mask); !it.done(); it.next()) {
+    RelocInfo::Mode mode = it.rinfo()->rmode();
+    if (mode == RelocInfo::EMBEDDED_OBJECT &&
+        it.rinfo()->target_object()->IsMap()) {
+      Handle<Map> map(Map::cast(it.rinfo()->target_object()));
+      if (map->CanTransition()) {
+        maps.Add(map, zone());
+      }
+    }
+  }
+#ifdef VERIFY_HEAP
+  // This disables verification of weak embedded maps after full GC.
+  // AddDependentCode can cause a GC, which would observe the state where
+  // this code is not yet in the depended code lists of the embedded maps.
+  NoWeakEmbeddedMapsVerificationScope disable_verification_of_embedded_maps;
+#endif
+  for (int i = 0; i < maps.length(); i++) {
+    maps.at(i)->AddDependentCode(DependentCode::kWeaklyEmbeddedGroup, code);
   }
 }
 
@@ -5297,9 +5329,20 @@ void LCodeGen::DoCheckPrototypeMaps(LCheckPrototypeMaps* instr) {
 
   ASSERT(prototypes->length() == maps->length());
 
-  for (int i = 0; i < prototypes->length(); i++) {
-    __ LoadHeapObject(reg, prototypes->at(i));
-    DoCheckMapCommon(reg, maps->at(i), ALLOW_ELEMENT_TRANSITION_MAPS, instr);
+  // TODO(ulan): Move this check to hydrogen and split HCheckPrototypeMaps
+  // into two instruction: one that checks the prototypes and another that
+  // loads the holder (HConstant). Find a way to do it without breaking
+  // parallel recompilation.
+  if (instr->hydrogen()->CanOmitPrototypeChecks()) {
+    for (int i = 0; i < maps->length(); i++) {
+      prototype_maps_.Add(maps->at(i), info()->zone());
+    }
+    __ LoadHeapObject(reg, prototypes->at(prototypes->length() - 1));
+  } else {
+    for (int i = 0; i < prototypes->length(); i++) {
+      __ LoadHeapObject(reg, prototypes->at(i));
+      DoCheckMapCommon(reg, maps->at(i), ALLOW_ELEMENT_TRANSITION_MAPS, instr);
+    }
   }
 }
 
