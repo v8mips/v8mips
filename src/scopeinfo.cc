@@ -366,9 +366,11 @@ bool ScopeInfo::CopyContextLocalsToScopeObject(
     Isolate* isolate,
     Handle<Context> context,
     Handle<JSObject> scope_object) {
+  int local_count = ContextLocalCount();
+  if (local_count == 0) return true;
   // Fill all context locals to the context extension.
   int start = ContextLocalNameEntriesIndex();
-  int end = start + ContextLocalCount();
+  int end = start + local_count;
   for (int i = start; i < end; ++i) {
     int context_index = Context::MIN_CONTEXT_SLOTS + i - start;
     RETURN_IF_EMPTY_HANDLE_VALUE(

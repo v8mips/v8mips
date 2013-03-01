@@ -4472,10 +4472,14 @@ void LCodeGen::DoStoreKeyedFixedDoubleArray(LStoreKeyed* instr) {
   if (instr->NeedsCanonicalization()) {
     // Check for NaN. All NaNs must be canonicalized.
     __ VFPCompareAndSetFlags(value, value);
+    Label after_canonicalization;
+
     // Only load canonical NaN if the comparison above set the overflow.
+    __ b(vc, &after_canonicalization);
     __ Vmov(value,
-            FixedDoubleArray::canonical_not_the_hole_nan_as_double(),
-            no_reg, vs);
+            FixedDoubleArray::canonical_not_the_hole_nan_as_double());
+
+    __ bind(&after_canonicalization);
   }
 
   __ vstr(value, scratch, instr->additional_index() << element_size_shift);
@@ -5740,7 +5744,8 @@ void LCodeGen::EmitDeepCopy(Handle<JSObject> object,
   // Copy in-object properties.
   for (int i = 0; i < inobject_properties; i++) {
     int total_offset = object_offset + object->GetInObjectPropertyOffset(i);
-    Handle<Object> value = Handle<Object>(object->InObjectPropertyAt(i));
+    Handle<Object> value = Handle<Object>(object->InObjectPropertyAt(i),
+                                          isolate());
     if (value->IsJSObject()) {
       Handle<JSObject> value_object = Handle<JSObject>::cast(value);
       __ add(r2, result, Operand(*offset));
@@ -5794,7 +5799,7 @@ void LCodeGen::EmitDeepCopy(Handle<JSObject> object,
       Handle<FixedArray> fast_elements = Handle<FixedArray>::cast(elements);
       for (int i = 0; i < elements_length; i++) {
         int total_offset = elements_offset + FixedArray::OffsetOfElementAt(i);
-        Handle<Object> value(fast_elements->get(i));
+        Handle<Object> value(fast_elements->get(i), isolate());
         if (value->IsJSObject()) {
           Handle<JSObject> value_object = Handle<JSObject>::cast(value);
           __ add(r2, result, Operand(*offset));

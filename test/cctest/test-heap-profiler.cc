@@ -394,8 +394,7 @@ TEST(HeapSnapshotAddressReuse) {
     if (id < maxId1)
       ++wrong_count;
   }
-  // FIXME: Object ids should be unique but it is not so at the moment.
-  CHECK_NE(0, wrong_count);
+  CHECK_EQ(0, wrong_count);
 }
 
 
@@ -1302,9 +1301,10 @@ TEST(NoHandleLeaks) {
   CompileRun("document = { URL:\"abcdefgh\" };");
 
   v8::Handle<v8::String> name(v8_str("leakz"));
-  int count_before = i::HandleScope::NumberOfHandles();
+  i::Isolate* isolate = i::Isolate::Current();
+  int count_before = i::HandleScope::NumberOfHandles(isolate);
   v8::HeapProfiler::TakeSnapshot(name);
-  int count_after = i::HandleScope::NumberOfHandles();
+  int count_after = i::HandleScope::NumberOfHandles(isolate);
   CHECK_EQ(count_before, count_after);
 }
 

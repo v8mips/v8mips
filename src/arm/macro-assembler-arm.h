@@ -308,7 +308,7 @@ class MacroAssembler: public Assembler {
 
   // Push a handle.
   void Push(Handle<Object> handle);
-  void Push(Smi* smi) { Push(Handle<Smi>(smi)); }
+  void Push(Smi* smi) { Push(Handle<Smi>(smi, isolate())); }
 
   // Push two registers.  Pushes leftmost register first (to highest address).
   void Push(Register src1, Register src2, Condition cond = al) {
@@ -480,8 +480,7 @@ class MacroAssembler: public Assembler {
 
   void Vmov(const DwVfpRegister dst,
             const double imm,
-            const Register scratch = no_reg,
-            const Condition cond = al);
+            const Register scratch = no_reg);
 
   // Enter exit frame.
   // stack_space - extra stack space, used for alignment before call to C.
