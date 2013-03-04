@@ -897,11 +897,6 @@ void LCodeGen::DeoptimizeIf(Condition cc, LEnvironment* environment) {
     } else {
       __ jmp(entry, RelocInfo::RUNTIME_ENTRY);
     }
-  } else if (!needs_lazy_deopt && frame_is_built_) {
-    // Optimization for ia32 only that skips the indirection through a
-    // jump table entry for conditional deopts if possible.
-    ASSERT(cc != no_condition);
-    __ j(cc, entry, RelocInfo::RUNTIME_ENTRY);
   } else {
     // We often have several deopts to the same entry, reuse the last
     // jump entry if this is the case.
@@ -3755,7 +3750,7 @@ void LCodeGen::DoMathRound(LUnaryMathOperation* instr) {
     CpuFeatures::Scope scope(SSE4_1);
 
     __ addsd(xmm_scratch, input_reg);
-    __ roundsd(xmm_scratch, input_reg, Assembler::kRoundDown);
+    __ roundsd(xmm_scratch, xmm_scratch, Assembler::kRoundDown);
     __ cvttsd2si(output_reg, Operand(xmm_scratch));
     // Overflow is signalled with minint.
     __ cmp(output_reg, 0x80000000u);
