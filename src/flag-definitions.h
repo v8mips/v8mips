@@ -365,6 +365,10 @@ DEFINE_bool(compilation_cache, true, "enable compilation cache")
 
 DEFINE_bool(cache_prototype_transitions, true, "cache prototype transitions")
 
+// cpu-profiler.cc
+DEFINE_int(cpu_profiler_sampling_period, 1000,
+           "CPU profiler sampling period in microseconds")
+
 // debug.cc
 DEFINE_bool(trace_debug_json, false, "trace debugging JSON request/response")
 DEFINE_bool(trace_js_array_abuse, false,
@@ -436,7 +440,7 @@ DEFINE_bool(track_gc_object_stats, false,
             "track object counts and memory usage")
 DEFINE_bool(parallel_sweeping, true, "enable parallel sweeping")
 DEFINE_bool(concurrent_sweeping, false, "enable concurrent sweeping")
-DEFINE_int(sweeper_threads, 1,
+DEFINE_int(sweeper_threads, 2,
            "number of parallel and concurrent sweeping threads")
 DEFINE_bool(parallel_marking, false, "enable parallel marking")
 DEFINE_int(marking_threads, 1, "number of parallel marking threads")

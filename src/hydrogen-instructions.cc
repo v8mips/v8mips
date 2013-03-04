@@ -1809,7 +1809,6 @@ HConstant::HConstant(Handle<Object> handle, Representation r)
       has_double_value_(false) {
   // Dereferencing here is safe: the value of a number object does not change.
   AllowHandleDereference allow_handle_deref(Isolate::Current());
-  SetFlag(kUseGVN);
   if (handle_->IsNumber()) {
     double n = handle_->Number();
     has_int32_value_ = IsInteger32(n);
@@ -1826,7 +1825,7 @@ HConstant::HConstant(Handle<Object> handle, Representation r)
       r = Representation::Tagged();
     }
   }
-  set_representation(r);
+  Initialize(r);
 }
 
 
@@ -1835,8 +1834,7 @@ HConstant::HConstant(int32_t integer_value, Representation r)
       has_double_value_(true),
       int32_value_(integer_value),
       double_value_(FastI2D(integer_value)) {
-  set_representation(r);
-  SetFlag(kUseGVN);
+  Initialize(r);
 }
 
 
@@ -1845,8 +1843,16 @@ HConstant::HConstant(double double_value, Representation r)
       has_double_value_(true),
       int32_value_(DoubleToInt32(double_value)),
       double_value_(double_value) {
+  Initialize(r);
+}
+
+
+void HConstant::Initialize(Representation r) {
   set_representation(r);
   SetFlag(kUseGVN);
+  if (representation().IsInteger32()) {
+    ClearGVNFlag(kDependsOnOsrEntries);
+  }
 }
 
 

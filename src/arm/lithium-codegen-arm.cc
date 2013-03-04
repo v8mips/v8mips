@@ -1070,39 +1070,39 @@ void LCodeGen::DoCallStub(LCallStub* instr) {
   switch (instr->hydrogen()->major_key()) {
     case CodeStub::RegExpConstructResult: {
       RegExpConstructResultStub stub;
-      CallCode(stub.GetCode(), RelocInfo::CODE_TARGET, instr);
+      CallCode(stub.GetCode(isolate()), RelocInfo::CODE_TARGET, instr);
       break;
     }
     case CodeStub::RegExpExec: {
       RegExpExecStub stub;
-      CallCode(stub.GetCode(), RelocInfo::CODE_TARGET, instr);
+      CallCode(stub.GetCode(isolate()), RelocInfo::CODE_TARGET, instr);
       break;
     }
     case CodeStub::SubString: {
       SubStringStub stub;
-      CallCode(stub.GetCode(), RelocInfo::CODE_TARGET, instr);
+      CallCode(stub.GetCode(isolate()), RelocInfo::CODE_TARGET, instr);
       break;
     }
     case CodeStub::NumberToString: {
       NumberToStringStub stub;
-      CallCode(stub.GetCode(), RelocInfo::CODE_TARGET, instr);
+      CallCode(stub.GetCode(isolate()), RelocInfo::CODE_TARGET, instr);
       break;
     }
     case CodeStub::StringAdd: {
       StringAddStub stub(NO_STRING_ADD_FLAGS);
-      CallCode(stub.GetCode(), RelocInfo::CODE_TARGET, instr);
+      CallCode(stub.GetCode(isolate()), RelocInfo::CODE_TARGET, instr);
       break;
     }
     case CodeStub::StringCompare: {
       StringCompareStub stub;
-      CallCode(stub.GetCode(), RelocInfo::CODE_TARGET, instr);
+      CallCode(stub.GetCode(isolate()), RelocInfo::CODE_TARGET, instr);
       break;
     }
     case CodeStub::TranscendentalCache: {
       __ ldr(r0, MemOperand(sp, 0));
       TranscendentalCacheStub stub(instr->transcendental_type(),
                                    TranscendentalCacheStub::TAGGED);
-      CallCode(stub.GetCode(), RelocInfo::CODE_TARGET, instr);
+      CallCode(stub.GetCode(isolate()), RelocInfo::CODE_TARGET, instr);
       break;
     }
     default:
@@ -1475,6 +1475,18 @@ void LCodeGen::DoMultiplyAddD(LMultiplyAddD* instr) {
   ASSERT(addend.is(ToDoubleRegister(instr->result())));
 
   __ vmla(addend, multiplier, multiplicand);
+}
+
+
+void LCodeGen::DoMultiplySubD(LMultiplySubD* instr) {
+  DwVfpRegister minuend = ToDoubleRegister(instr->minuend());
+  DwVfpRegister multiplier = ToDoubleRegister(instr->multiplier());
+  DwVfpRegister multiplicand = ToDoubleRegister(instr->multiplicand());
+
+  // This is computed in-place.
+  ASSERT(minuend.is(ToDoubleRegister(instr->result())));
+
+  __ vmls(minuend, multiplier, multiplicand);
 }
 
 
@@ -2112,7 +2124,7 @@ void LCodeGen::DoArithmeticT(LArithmeticT* instr) {
   // Block literal pool emission to ensure nop indicating no inlined smi code
   // is in the correct position.
   Assembler::BlockConstPoolScope block_const_pool(masm());
-  CallCode(stub.GetCode(), RelocInfo::CODE_TARGET, instr);
+  CallCode(stub.GetCode(isolate()), RelocInfo::CODE_TARGET, instr);
   __ nop();  // Signals no inlined code.
 }
 
@@ -2526,7 +2538,7 @@ void LCodeGen::DoStringCompareAndBranch(LStringCompareAndBranch* instr) {
   int true_block = chunk_->LookupDestination(instr->true_block_id());
   int false_block = chunk_->LookupDestination(instr->false_block_id());
 
-  Handle<Code> ic = CompareIC::GetUninitialized(op);
+  Handle<Code> ic = CompareIC::GetUninitialized(isolate(), op);
   CallCode(ic, RelocInfo::CODE_TARGET, instr);
   // This instruction also signals no smi code inlined.
   __ cmp(r0, Operand::Zero());
@@ -2701,7 +2713,7 @@ void LCodeGen::DoInstanceOf(LInstanceOf* instr) {
   ASSERT(ToRegister(instr->right()).is(r1));  // Function is in r1.
 
   InstanceofStub stub(InstanceofStub::kArgsInRegisters);
-  CallCode(stub.GetCode(), RelocInfo::CODE_TARGET, instr);
+  CallCode(stub.GetCode(isolate()), RelocInfo::CODE_TARGET, instr);
 
   __ cmp(r0, Operand::Zero());
   __ mov(r0, Operand(factory()->false_value()), LeaveCC, ne);
@@ -2830,7 +2842,7 @@ void LCodeGen::DoDeferredInstanceOfKnownGlobal(LInstanceOfKnownGlobal* instr,
     __ nop();
   }
   __ StoreToSafepointRegisterSlot(temp, temp);
-  CallCodeGeneric(stub.GetCode(),
+  CallCodeGeneric(stub.GetCode(isolate()),
                   RelocInfo::CODE_TARGET,
                   instr,
                   RECORD_SAFEPOINT_WITH_REGISTERS_AND_NO_ARGUMENTS);
@@ -2853,7 +2865,7 @@ void LCodeGen::DoInstanceSize(LInstanceSize* instr) {
 void LCodeGen::DoCmpT(LCmpT* instr) {
   Token::Value op = instr->op();
 
-  Handle<Code> ic = CompareIC::GetUninitialized(op);
+  Handle<Code> ic = CompareIC::GetUninitialized(isolate(), op);
   CallCode(ic, RelocInfo::CODE_TARGET, instr);
   // This instruction also signals no smi code inlined.
   __ cmp(r0, Operand::Zero());
@@ -4122,7 +4134,7 @@ void LCodeGen::DoMathLog(LUnaryMathOperation* instr) {
   ASSERT(ToDoubleRegister(instr->result()).is(d2));
   TranscendentalCacheStub stub(TranscendentalCache::LOG,
                                TranscendentalCacheStub::UNTAGGED);
-  CallCode(stub.GetCode(), RelocInfo::CODE_TARGET, instr);
+  CallCode(stub.GetCode(isolate()), RelocInfo::CODE_TARGET, instr);
 }
 
 
@@ -4130,7 +4142,7 @@ void LCodeGen::DoMathTan(LUnaryMathOperation* instr) {
   ASSERT(ToDoubleRegister(instr->result()).is(d2));
   TranscendentalCacheStub stub(TranscendentalCache::TAN,
                                TranscendentalCacheStub::UNTAGGED);
-  CallCode(stub.GetCode(), RelocInfo::CODE_TARGET, instr);
+  CallCode(stub.GetCode(isolate()), RelocInfo::CODE_TARGET, instr);
 }
 
 
@@ -4138,7 +4150,7 @@ void LCodeGen::DoMathCos(LUnaryMathOperation* instr) {
   ASSERT(ToDoubleRegister(instr->result()).is(d2));
   TranscendentalCacheStub stub(TranscendentalCache::COS,
                                TranscendentalCacheStub::UNTAGGED);
-  CallCode(stub.GetCode(), RelocInfo::CODE_TARGET, instr);
+  CallCode(stub.GetCode(isolate()), RelocInfo::CODE_TARGET, instr);
 }
 
 
@@ -4146,7 +4158,7 @@ void LCodeGen::DoMathSin(LUnaryMathOperation* instr) {
   ASSERT(ToDoubleRegister(instr->result()).is(d2));
   TranscendentalCacheStub stub(TranscendentalCache::SIN,
                                TranscendentalCacheStub::UNTAGGED);
-  CallCode(stub.GetCode(), RelocInfo::CODE_TARGET, instr);
+  CallCode(stub.GetCode(isolate()), RelocInfo::CODE_TARGET, instr);
 }
 
 
@@ -4238,7 +4250,7 @@ void LCodeGen::DoCallFunction(LCallFunction* instr) {
 
   int arity = instr->arity();
   CallFunctionStub stub(arity, NO_CALL_FUNCTION_FLAGS);
-  CallCode(stub.GetCode(), RelocInfo::CODE_TARGET, instr);
+  CallCode(stub.GetCode(isolate()), RelocInfo::CODE_TARGET, instr);
   __ ldr(cp, MemOperand(fp, StandardFrameConstants::kContextOffset));
 }
 
@@ -4272,7 +4284,7 @@ void LCodeGen::DoCallNew(LCallNew* instr) {
 
   CallConstructStub stub(NO_CALL_FUNCTION_FLAGS);
   __ mov(r0, Operand(instr->arity()));
-  CallCode(stub.GetCode(), RelocInfo::CONSTRUCT_CALL, instr);
+  CallCode(stub.GetCode(isolate()), RelocInfo::CONSTRUCT_CALL, instr);
 }
 
 
@@ -4634,7 +4646,7 @@ void LCodeGen::DoStringAdd(LStringAdd* instr) {
   __ push(ToRegister(instr->left()));
   __ push(ToRegister(instr->right()));
   StringAddStub stub(NO_STRING_CHECK_IN_STUB);
-  CallCode(stub.GetCode(), RelocInfo::CODE_TARGET, instr);
+  CallCode(stub.GetCode(isolate()), RelocInfo::CODE_TARGET, instr);
 }
 
 
@@ -5696,7 +5708,7 @@ void LCodeGen::DoArrayLiteral(LArrayLiteral* instr) {
     FastCloneShallowArrayStub::Mode mode =
         FastCloneShallowArrayStub::COPY_ON_WRITE_ELEMENTS;
     FastCloneShallowArrayStub stub(mode, DONT_TRACK_ALLOCATION_SITE, length);
-    CallCode(stub.GetCode(), RelocInfo::CODE_TARGET, instr);
+    CallCode(stub.GetCode(isolate()), RelocInfo::CODE_TARGET, instr);
   } else if (instr->hydrogen()->depth() > 1) {
     CallRuntime(Runtime::kCreateArrayLiteral, 3, instr);
   } else if (length > FastCloneShallowArrayStub::kMaximumClonedLength) {
@@ -5707,7 +5719,7 @@ void LCodeGen::DoArrayLiteral(LArrayLiteral* instr) {
         ? FastCloneShallowArrayStub::CLONE_DOUBLE_ELEMENTS
         : FastCloneShallowArrayStub::CLONE_ELEMENTS;
     FastCloneShallowArrayStub stub(mode, allocation_site_mode, length);
-    CallCode(stub.GetCode(), RelocInfo::CODE_TARGET, instr);
+    CallCode(stub.GetCode(isolate()), RelocInfo::CODE_TARGET, instr);
   }
 }
 
@@ -5901,7 +5913,7 @@ void LCodeGen::DoObjectLiteral(LObjectLiteral* instr) {
     CallRuntime(Runtime::kCreateObjectLiteralShallow, 4, instr);
   } else {
     FastCloneShallowObjectStub stub(properties_count);
-    CallCode(stub.GetCode(), RelocInfo::CODE_TARGET, instr);
+    CallCode(stub.GetCode(isolate()), RelocInfo::CODE_TARGET, instr);
   }
 }
 
@@ -5975,7 +5987,7 @@ void LCodeGen::DoFunctionLiteral(LFunctionLiteral* instr) {
     FastNewClosureStub stub(shared_info->language_mode());
     __ mov(r1, Operand(shared_info));
     __ push(r1);
-    CallCode(stub.GetCode(), RelocInfo::CODE_TARGET, instr);
+    CallCode(stub.GetCode(isolate()), RelocInfo::CODE_TARGET, instr);
   } else {
     __ mov(r2, Operand(shared_info));
     __ mov(r1, Operand(pretenure
@@ -6213,7 +6225,7 @@ void LCodeGen::DoStackCheck(LStackCheck* instr) {
     __ b(hs, &done);
     StackCheckStub stub;
     PredictableCodeSizeScope predictable(masm_, 2 * Assembler::kInstrSize);
-    CallCode(stub.GetCode(), RelocInfo::CODE_TARGET, instr);
+    CallCode(stub.GetCode(isolate()), RelocInfo::CODE_TARGET, instr);
     EnsureSpaceForLazyDeopt();
     __ bind(&done);
     RegisterEnvironmentForDeoptimization(env, Safepoint::kLazyDeopt);
