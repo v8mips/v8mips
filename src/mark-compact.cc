@@ -557,6 +557,8 @@ void MarkCompactCollector::WaitUntilSweepingCompleted() {
     sweeping_pending_ = false;
     StealMemoryFromSweeperThreads(heap()->paged_space(OLD_DATA_SPACE));
     StealMemoryFromSweeperThreads(heap()->paged_space(OLD_POINTER_SPACE));
+    heap()->paged_space(OLD_DATA_SPACE)->ResetUnsweptFreeBytes();
+    heap()->paged_space(OLD_POINTER_SPACE)->ResetUnsweptFreeBytes();
   }
 }
 
@@ -567,6 +569,8 @@ intptr_t MarkCompactCollector::
   for (int i = 0; i < FLAG_sweeper_threads; i++) {
     freed_bytes += heap()->isolate()->sweeper_threads()[i]->StealMemory(space);
   }
+  space->AddToAccountingStats(freed_bytes);
+  space->DecrementUnsweptFreeBytes(freed_bytes);
   return freed_bytes;
 }
 
@@ -1174,7 +1178,7 @@ MarkCompactCollector::~MarkCompactCollector() {
 
 
 static inline HeapObject* ShortCircuitConsString(Object** p) {
-  // Optimization: If the heap object pointed to by p is a non-symbol
+  // Optimization: If the heap object pointed to by p is a non-internalized
   // cons string whose right substring is HEAP->empty_string, update
   // it in place to its left substring.  Return the updated value.
   //
@@ -1182,7 +1186,7 @@ static inline HeapObject* ShortCircuitConsString(Object** p) {
   // (i.e., the left substring of a cons string is always a heap object).
   //
   // The check performed is:
-  //   object->IsConsString() && !object->IsSymbol() &&
+  //   object->IsConsString() && !object->IsInternalizedString() &&
   //   (ConsString::cast(object)->second() == HEAP->empty_string())
   // except the maps for the object and its possible substrings might be
   // marked.
@@ -1559,10 +1563,10 @@ class MarkCompactMarkingVisitor::ObjectStatsTracker<
   static inline void Visit(Map* map, HeapObject* obj) {
     Heap* heap = map->GetHeap();
     FixedArray* fixed_array = FixedArray::cast(obj);
-    if (fixed_array == heap->symbol_table()) {
+    if (fixed_array == heap->string_table()) {
       heap->RecordObjectStats(
           FIXED_ARRAY_TYPE,
-          SYMBOL_TABLE_SUB_TYPE,
+          STRING_TABLE_SUB_TYPE,
           fixed_array->Size());
     }
     ObjectStatsVisitBase(kVisitFixedArray, map, obj);
@@ -1743,10 +1747,10 @@ class RootMarkingVisitor : public ObjectVisitor {
 };
 
 
-// Helper class for pruning the symbol table.
-class SymbolTableCleaner : public ObjectVisitor {
+// Helper class for pruning the string table.
+class StringTableCleaner : public ObjectVisitor {
  public:
-  explicit SymbolTableCleaner(Heap* heap)
+  explicit StringTableCleaner(Heap* heap)
     : heap_(heap), pointers_removed_(0) { }
 
   virtual void VisitPointers(Object** start, Object** end) {
@@ -1755,8 +1759,8 @@ class SymbolTableCleaner : public ObjectVisitor {
       Object* o = *p;
       if (o->IsHeapObject() &&
           !Marking::MarkBitFrom(HeapObject::cast(o)).Get()) {
-        // Check if the symbol being pruned is an external symbol. We need to
-        // delete the associated external data as this symbol is going away.
+        // Check if the internalized string being pruned is external. We need to
+        // delete the associated external data as this string is going away.
 
         // Since no objects have yet been moved we can safely access the map of
         // the object.
@@ -1916,14 +1920,14 @@ bool MarkCompactCollector::IsUnmarkedHeapObjectWithHeap(Heap* heap,
 }
 
 
-void MarkCompactCollector::MarkSymbolTable() {
-  SymbolTable* symbol_table = heap()->symbol_table();
-  // Mark the symbol table itself.
-  MarkBit symbol_table_mark = Marking::MarkBitFrom(symbol_table);
-  SetMark(symbol_table, symbol_table_mark);
+void MarkCompactCollector::MarkStringTable() {
+  StringTable* string_table = heap()->string_table();
+  // Mark the string table itself.
+  MarkBit string_table_mark = Marking::MarkBitFrom(string_table);
+  SetMark(string_table, string_table_mark);
   // Explicitly mark the prefix.
   MarkingVisitor marker(heap());
-  symbol_table->IteratePrefix(&marker);
+  string_table->IteratePrefix(&marker);
   ProcessMarkingDeque();
 }
 
@@ -1933,8 +1937,8 @@ void MarkCompactCollector::MarkRoots(RootMarkingVisitor* visitor) {
   // etc., and all objects reachable from them.
   heap()->IterateStrongRoots(visitor, VISIT_ONLY_STRONG);
 
-  // Handle the symbol table specially.
-  MarkSymbolTable();
+  // Handle the string table specially.
+  MarkStringTable();
 
   // There may be overflowed objects in the heap.  Visit them now.
   while (marking_deque_.overflowed()) {
@@ -2172,19 +2176,19 @@ void MarkCompactCollector::MarkLiveObjects() {
 
 
 void MarkCompactCollector::AfterMarking() {
-  // Object literal map caches reference symbols (cache keys) and maps
+  // Object literal map caches reference strings (cache keys) and maps
   // (cache values). At this point still useful maps have already been
   // marked. Mark the keys for the alive values before we process the
-  // symbol table.
+  // string table.
   ProcessMapCaches();
 
-  // Prune the symbol table removing all symbols only pointed to by the
-  // symbol table.  Cannot use symbol_table() here because the symbol
+  // Prune the string table removing all strings only pointed to by the
+  // string table.  Cannot use string_table() here because the string
   // table is marked.
-  SymbolTable* symbol_table = heap()->symbol_table();
-  SymbolTableCleaner v(heap());
-  symbol_table->IterateElements(&v);
-  symbol_table->ElementsRemoved(v.PointersRemoved());
+  StringTable* string_table = heap()->string_table();
+  StringTableCleaner v(heap());
+  string_table->IterateElements(&v);
+  string_table->ElementsRemoved(v.PointersRemoved());
   heap()->external_string_table_.Iterate(&v);
   heap()->external_string_table_.CleanUp();
   heap()->error_object_list_.RemoveUnmarked(heap());
@@ -3280,7 +3284,7 @@ void MarkCompactCollector::EvacuateNewSpaceAndCandidates() {
   // Update pointer from the native contexts list.
   updating_visitor.VisitPointer(heap_->native_contexts_list_address());
 
-  heap_->symbol_table()->Iterate(&updating_visitor);
+  heap_->string_table()->Iterate(&updating_visitor);
 
   // Update pointers from external string table.
   heap_->UpdateReferencesInExternalStringTable(
@@ -3843,6 +3847,7 @@ void MarkCompactCollector::SweepSpace(PagedSpace* space, SweeperType sweeper) {
                  reinterpret_cast<intptr_t>(p));
         }
         p->set_parallel_sweeping(1);
+        space->IncreaseUnsweptFreeBytes(p);
         break;
       }
       case PRECISE: {
