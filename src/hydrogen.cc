@@ -8490,8 +8490,21 @@ void HOptimizedGraphBuilder::VisitCallNew(CallNew* expr) {
     CHECK_ALIVE(VisitArgument(expr->expression()));
     HValue* constructor = HPushArgument::cast(Top())->argument();
     CHECK_ALIVE(VisitArgumentList(expr->arguments()));
-    HInstruction* call =
-        new(zone()) HCallNew(context, constructor, argument_count);
+    HCallNew* call;
+    if (FLAG_optimize_constructed_arrays &&
+        !(expr->target().is_null()) &&
+        *(expr->target()) == isolate()->global_context()->array_function()) {
+      Handle<Object> feedback = oracle()->GetInfo(expr->CallNewFeedbackId());
+      ASSERT(feedback->IsSmi());
+      Handle<JSGlobalPropertyCell> cell =
+          isolate()->factory()->NewJSGlobalPropertyCell(feedback);
+      AddInstruction(new(zone()) HCheckFunction(constructor,
+          Handle<JSFunction>(isolate()->global_context()->array_function())));
+      call = new(zone()) HCallNewArray(context, constructor, argument_count,
+                                       cell);
+    } else {
+      call = new(zone()) HCallNew(context, constructor, argument_count);
+    }
     Drop(argument_count);
     call->set_position(expr->position());
     return ast_context()->ReturnInstruction(call, expr->id());
@@ -10810,6 +10823,7 @@ void HPhase::End() const {
   // phase name matches the command line parameter FLAG_trace_phase.
   if (FLAG_trace_hydrogen &&
       OS::StrChr(const_cast<char*>(FLAG_trace_phase), name_[0]) != NULL) {
+    AllowHandleDereference allow_handle_deref(graph_->isolate());
     if (graph_ != NULL) HTracer::Instance()->TraceHydrogen(name_, graph_);
     if (chunk_ != NULL) HTracer::Instance()->TraceLithium(name_, chunk_);
     if (allocator_ != NULL) {
