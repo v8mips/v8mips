@@ -2707,8 +2707,7 @@ void BinaryOpStub_GenerateFPOperation(MacroAssembler* masm,
               masm, right, destination, f14, f16, a2, a3, heap_number_map,
               scratch1, scratch2, f2, miss);
         } else {
-          Label* fail = (right_type == BinaryOpIC::NUMBER) ? miss
-                                                           : not_numbers;
+          Label* fail = (right_type == BinaryOpIC::NUMBER) ? miss : not_numbers;
           FloatingPointHelper::LoadNumber(
               masm, destination, right, f14, a2, a3, heap_number_map,
               scratch1, scratch2, fail);
@@ -2720,8 +2719,7 @@ void BinaryOpStub_GenerateFPOperation(MacroAssembler* masm,
               masm, left, destination, f12, f16, a0, a1, heap_number_map,
               scratch1, scratch2, f2, miss);
         } else {
-          Label* fail = (left_type == BinaryOpIC::NUMBER) ? miss
-                                                          : not_numbers;
+          Label* fail = (left_type == BinaryOpIC::NUMBER) ? miss : not_numbers;
           FloatingPointHelper::LoadNumber(
               masm, destination, left, f12, a0, a1, heap_number_map,
               scratch1, scratch2, fail);
