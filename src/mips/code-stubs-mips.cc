@@ -4733,6 +4733,12 @@ Register InstanceofStub::left() { return a0; }
 Register InstanceofStub::right() { return a1; }
 
 
+void LoadFieldStub::Generate(MacroAssembler* masm) {
+  StubCompiler::DoGenerateFastPropertyLoad(masm, v0, reg_, inobject_, index_);
+  __ Ret();
+}
+
+
 void ArgumentsAccessStub::GenerateReadElement(MacroAssembler* masm) {
   // The displacement is the offset of the last parameter (if any)
   // relative to the frame pointer.
