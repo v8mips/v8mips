@@ -568,7 +568,7 @@ void Builtins::Generate_ArrayConstructCode(MacroAssembler* masm) {
     __ And(t0, a3, Operand(kSmiTagMask));
     __ Assert(ne, "Unexpected initial map for Array function (3)",
               t0, Operand(zero_reg));
-    __ GetObjectType(a1, a3, t0);
+    __ GetObjectType(a3, a3, t0);
     __ Assert(eq, "Unexpected initial map for Array function (4)",
               t0, Operand(MAP_TYPE));
 
@@ -1413,12 +1413,6 @@ void Builtins::Generate_NotifyOSR(MacroAssembler* masm) {
 
 
 void Builtins::Generate_OnStackReplacement(MacroAssembler* masm) {
-  CpuFeatures::TryForceFeatureScope scope(VFP3);
-  if (!CpuFeatures::IsSupported(FPU)) {
-    __ Abort("Unreachable code: Cannot optimize without FPU support.");
-    return;
-  }
-
   // Lookup the function in the JavaScript frame and push it as an
   // argument to the on-stack replacement function.
   __ lw(a0, MemOperand(fp, JavaScriptFrameConstants::kFunctionOffset));

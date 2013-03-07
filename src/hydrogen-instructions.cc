@@ -78,7 +78,7 @@ int HValue::LoopWeight() const {
 
 Isolate* HValue::isolate() const {
   ASSERT(block() != NULL);
-  return block()->graph()->isolate();
+  return block()->isolate();
 }
 
 
@@ -2655,6 +2655,11 @@ HType HAllocateObject::CalculateInferredType() {
 
 HType HAllocate::CalculateInferredType() {
   return type_;
+}
+
+
+void HAllocate::PrintDataTo(StringStream* stream) {
+  size()->PrintNameTo(stream);
 }
 
 
