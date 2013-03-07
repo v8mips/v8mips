@@ -2481,6 +2481,7 @@ void StoreArrayLengthStub::Generate(MacroAssembler* masm) {
   Register scratch = rbx;
   if (kind() == Code::KEYED_STORE_IC) {
     __ Cmp(rcx, masm->isolate()->factory()->length_string());
+    __ j(not_equal, &miss);
   }
 
   // Check that the receiver isn't a smi.
@@ -6261,7 +6262,7 @@ void NameDictionaryLookupStub::GenerateNegativeLookup(MacroAssembler* masm,
              Immediate(kIsInternalizedMask));
     __ j(not_zero, &good, Label::kNear);
     __ cmpb(FieldOperand(entity_name, Map::kInstanceTypeOffset),
-            Immediate(static_cast<int8_t>(SYMBOL_TYPE)));
+            Immediate(static_cast<uint8_t>(SYMBOL_TYPE)));
     __ j(not_equal, miss);
 
     __ bind(&good);
@@ -6395,7 +6396,7 @@ void NameDictionaryLookupStub::Generate(MacroAssembler* masm) {
                Immediate(kIsInternalizedMask));
       __ j(not_zero, &cont);
       __ cmpb(FieldOperand(scratch, Map::kInstanceTypeOffset),
-              Immediate(static_cast<int8_t>(SYMBOL_TYPE)));
+              Immediate(static_cast<uint8_t>(SYMBOL_TYPE)));
       __ j(not_equal, &maybe_in_dictionary);
       __ bind(&cont);
     }

@@ -67,6 +67,7 @@ MarkCompactCollector::MarkCompactCollector() :  // NOLINT
       compacting_(false),
       was_marked_incrementally_(false),
       sweeping_pending_(false),
+      sequential_sweeping_(false),
       tracer_(NULL),
       migration_slots_buffer_(NULL),
       heap_(NULL),
@@ -1058,16 +1059,6 @@ void CodeFlusher::ProcessSharedFunctionInfoCandidates() {
   }
 
   shared_function_info_candidates_head_ = NULL;
-}
-
-
-bool CodeFlusher::ContainsCandidate(SharedFunctionInfo* shared_info) {
-  SharedFunctionInfo* candidate = shared_function_info_candidates_head_;
-  while (candidate != NULL) {
-    if (candidate == shared_info) return true;
-    candidate = GetNextCandidate(candidate);
-  }
-  return false;
 }
 
 
@@ -3895,7 +3886,7 @@ void MarkCompactCollector::SweepSpaces() {
   // the map space last because freeing non-live maps overwrites them and
   // the other spaces rely on possibly non-live maps to get the sizes for
   // non-live objects.
-
+  SequentialSweepingScope scope(this);
   SweepSpace(heap()->old_pointer_space(), how_to_sweep);
   SweepSpace(heap()->old_data_space(), how_to_sweep);
 

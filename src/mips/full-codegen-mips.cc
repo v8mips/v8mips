@@ -1654,8 +1654,6 @@ void FullCodeGenerator::VisitObjectLiteral(ObjectLiteral* expr) {
           }
           break;
         }
-        // Fall through.
-      case ObjectLiteral::Property::PROTOTYPE:
         // Duplicate receiver on stack.
         __ lw(a0, MemOperand(sp));
         __ push(a0);
@@ -1667,6 +1665,17 @@ void FullCodeGenerator::VisitObjectLiteral(ObjectLiteral* expr) {
           __ CallRuntime(Runtime::kSetProperty, 4);
         } else {
           __ Drop(3);
+        }
+        break;
+      case ObjectLiteral::Property::PROTOTYPE:
+        // Duplicate receiver on stack.
+        __ lw(a0, MemOperand(sp));
+        __ push(a0);
+        VisitForStackValue(value);
+        if (property->emit_store()) {
+          __ CallRuntime(Runtime::kSetPrototype, 2);
+        } else {
+          __ Drop(2);
         }
         break;
       case ObjectLiteral::Property::GETTER:
@@ -3061,7 +3070,7 @@ void FullCodeGenerator::EmitRandomHeapNumber(CallRuntime* expr) {
     __ lw(a0, FieldMemOperand(a0, GlobalObject::kNativeContextOffset));
     __ CallCFunction(ExternalReference::random_uint32_function(isolate()), 1);
 
-    CpuFeatures::Scope scope(FPU);
+    CpuFeatureScope scope(masm(), FPU);
     // 0x41300000 is the top half of 1.0 x 2^20 as a double.
     __ li(a1, Operand(0x41300000));
     // Move 0x41300000xxxxxxxx (x = random bits in v0) to FPU.

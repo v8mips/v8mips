@@ -898,7 +898,7 @@ void MacroAssembler::PushCallerSaved(SaveFPRegsMode fp_mode,
   }
   // R12 to r15 are callee save on all platforms.
   if (fp_mode == kSaveFPRegs) {
-    CpuFeatures::Scope scope(SSE2);
+    CpuFeatureScope scope(this, SSE2);
     subq(rsp, Immediate(kDoubleSize * XMMRegister::kMaxNumRegisters));
     for (int i = 0; i < XMMRegister::kMaxNumRegisters; i++) {
       XMMRegister reg = XMMRegister::from_code(i);
@@ -913,7 +913,7 @@ void MacroAssembler::PopCallerSaved(SaveFPRegsMode fp_mode,
                                     Register exclusion2,
                                     Register exclusion3) {
   if (fp_mode == kSaveFPRegs) {
-    CpuFeatures::Scope scope(SSE2);
+    CpuFeatureScope scope(this, SSE2);
     for (int i = 0; i < XMMRegister::kMaxNumRegisters; i++) {
       XMMRegister reg = XMMRegister::from_code(i);
       movsd(reg, Operand(rsp, i * kDoubleSize));
@@ -3059,7 +3059,7 @@ Condition MacroAssembler::IsObjectNameType(Register heap_object,
                                            Register instance_type) {
   movq(map, FieldOperand(heap_object, HeapObject::kMapOffset));
   movzxbl(instance_type, FieldOperand(map, Map::kInstanceTypeOffset));
-  cmpb(instance_type, Immediate(static_cast<int8_t>(LAST_NAME_TYPE)));
+  cmpb(instance_type, Immediate(static_cast<uint8_t>(LAST_NAME_TYPE)));
   return below_equal;
 }
 

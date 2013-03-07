@@ -652,7 +652,7 @@ void FloatingPointHelper::LoadSmis(MacroAssembler* masm,
                                    Register scratch1,
                                    Register scratch2) {
   if (CpuFeatures::IsSupported(FPU)) {
-    CpuFeatures::Scope scope(FPU);
+    CpuFeatureScope scope(masm, FPU);
     __ sra(scratch1, a0, kSmiTagSize);
     __ mtc1(scratch1, f14);
     __ cvt_d_w(f14, f14);
@@ -703,7 +703,7 @@ void FloatingPointHelper::LoadNumber(MacroAssembler* masm,
   // Handle loading a double from a heap number.
   if (CpuFeatures::IsSupported(FPU) &&
       destination == kFPURegisters) {
-    CpuFeatures::Scope scope(FPU);
+    CpuFeatureScope scope(masm, FPU);
     // Load the double from tagged HeapNumber to double register.
 
     // ARM uses a workaround here because of the unaligned HeapNumber
@@ -722,7 +722,7 @@ void FloatingPointHelper::LoadNumber(MacroAssembler* masm,
   // Handle loading a double from a smi.
   __ bind(&is_smi);
   if (CpuFeatures::IsSupported(FPU)) {
-    CpuFeatures::Scope scope(FPU);
+    CpuFeatureScope scope(masm, FPU);
     // Convert smi to double using FPU instructions.
     __ mtc1(scratch1, dst);
     __ cvt_d_w(dst, dst);
@@ -798,7 +798,7 @@ void FloatingPointHelper::ConvertIntToDouble(MacroAssembler* masm,
   Label done;
 
   if (CpuFeatures::IsSupported(FPU)) {
-    CpuFeatures::Scope scope(FPU);
+    CpuFeatureScope scope(masm, FPU);
     __ mtc1(int_scratch, single_scratch);
     __ cvt_d_w(double_dst, single_scratch);
     if (destination == kCoreRegisters) {
@@ -900,7 +900,7 @@ void FloatingPointHelper::LoadNumberAsInt32Double(MacroAssembler* masm,
 
   // Load the number.
   if (CpuFeatures::IsSupported(FPU)) {
-    CpuFeatures::Scope scope(FPU);
+    CpuFeatureScope scope(masm, FPU);
     // Load the double value.
     __ ldc1(double_dst, FieldMemOperand(object, HeapNumber::kValueOffset));
 
@@ -997,7 +997,7 @@ void FloatingPointHelper::LoadNumberAsInt32(MacroAssembler* masm,
   // Object is a heap number.
   // Convert the floating point value to a 32-bit integer.
   if (CpuFeatures::IsSupported(FPU)) {
-    CpuFeatures::Scope scope(FPU);
+    CpuFeatureScope scope(masm, FPU);
     // Load the double value.
     __ ldc1(double_scratch0, FieldMemOperand(object, HeapNumber::kValueOffset));
 
@@ -1135,7 +1135,7 @@ void FloatingPointHelper::CallCCodeForDoubleOperation(
   __ push(ra);
   __ PrepareCallCFunction(4, scratch);  // Two doubles are 4 arguments.
   if (!IsMipsSoftFloatABI) {
-    CpuFeatures::Scope scope(FPU);
+    CpuFeatureScope scope(masm, FPU);
     // We are not using MIPS FPU instructions, and parameters for the runtime
     // function call are prepaired in a0-a3 registers, but function we are
     // calling is compiled with hard-float flag and expecting hard float ABI
@@ -1151,7 +1151,7 @@ void FloatingPointHelper::CallCCodeForDoubleOperation(
   }
   // Store answer in the overwritable heap number.
   if (!IsMipsSoftFloatABI) {
-    CpuFeatures::Scope scope(FPU);
+    CpuFeatureScope scope(masm, FPU);
     // Double returned in register f0.
     __ sdc1(f0, FieldMemOperand(heap_number_result, HeapNumber::kValueOffset));
   } else {
@@ -1375,7 +1375,7 @@ static void EmitSmiNonsmiComparison(MacroAssembler* masm,
   // Rhs is a smi, lhs is a number.
   // Convert smi rhs to double.
   if (CpuFeatures::IsSupported(FPU)) {
-    CpuFeatures::Scope scope(FPU);
+    CpuFeatureScope scope(masm, FPU);
     __ sra(at, rhs, kSmiTagSize);
     __ mtc1(at, f14);
     __ cvt_d_w(f14, f14);
@@ -1414,7 +1414,7 @@ static void EmitSmiNonsmiComparison(MacroAssembler* masm,
   // Lhs is a smi, rhs is a number.
   // Convert smi lhs to double.
   if (CpuFeatures::IsSupported(FPU)) {
-    CpuFeatures::Scope scope(FPU);
+    CpuFeatureScope scope(masm, FPU);
     __ sra(at, lhs, kSmiTagSize);
     __ mtc1(at, f12);
     __ cvt_d_w(f12, f12);
@@ -1442,7 +1442,7 @@ static void EmitSmiNonsmiComparison(MacroAssembler* masm,
 void EmitNanCheck(MacroAssembler* masm, Condition cc) {
   bool exp_first = (HeapNumber::kExponentOffset == HeapNumber::kValueOffset);
   if (CpuFeatures::IsSupported(FPU)) {
-    CpuFeatures::Scope scope(FPU);
+    CpuFeatureScope scope(masm, FPU);
     // Lhs and rhs are already loaded to f12 and f14 register pairs.
     __ Move(t0, t1, f14);
     __ Move(t2, t3, f12);
@@ -1509,7 +1509,7 @@ static void EmitTwoNonNanDoubleComparison(MacroAssembler* masm, Condition cc) {
     // Exception: 0 and -0.
     bool exp_first = (HeapNumber::kExponentOffset == HeapNumber::kValueOffset);
     if (CpuFeatures::IsSupported(FPU)) {
-      CpuFeatures::Scope scope(FPU);
+      CpuFeatureScope scope(masm, FPU);
       // Lhs and rhs are already loaded to f12 and f14 register pairs.
       __ Move(t0, t1, f14);
       __ Move(t2, t3, f12);
@@ -1565,7 +1565,7 @@ static void EmitTwoNonNanDoubleComparison(MacroAssembler* masm, Condition cc) {
     __ pop(ra);  // Because this function returns int, result is in v0.
     __ Ret();
   } else {
-    CpuFeatures::Scope scope(FPU);
+    CpuFeatureScope scope(masm, FPU);
     Label equal, less_than;
     __ BranchF(&equal, NULL, eq, f12, f14);
     __ BranchF(&less_than, NULL, lt, f12, f14);
@@ -1641,7 +1641,7 @@ static void EmitCheckForTwoHeapNumbers(MacroAssembler* masm,
   // Both are heap numbers. Load them up then jump to the code we have
   // for that.
   if (CpuFeatures::IsSupported(FPU)) {
-    CpuFeatures::Scope scope(FPU);
+    CpuFeatureScope scope(masm, FPU);
     __ ldc1(f12, FieldMemOperand(lhs, HeapNumber::kValueOffset));
     __ ldc1(f14, FieldMemOperand(rhs, HeapNumber::kValueOffset));
   } else {
@@ -1736,7 +1736,7 @@ void NumberToStringStub::GenerateLookupNumberStringCache(MacroAssembler* masm,
   if (!object_is_smi) {
     __ JumpIfSmi(object, &is_smi);
     if (CpuFeatures::IsSupported(FPU)) {
-      CpuFeatures::Scope scope(FPU);
+      CpuFeatureScope scope(masm, FPU);
       __ CheckMap(object,
                   scratch1,
                   Heap::kHeapNumberMapRootIndex,
@@ -1889,7 +1889,7 @@ void ICCompareStub::GenerateGeneric(MacroAssembler* masm) {
 
   Isolate* isolate = masm->isolate();
   if (CpuFeatures::IsSupported(FPU)) {
-    CpuFeatures::Scope scope(FPU);
+    CpuFeatureScope scope(masm, FPU);
     Label nan;
     __ li(t0, Operand(LESS));
     __ li(t1, Operand(GREATER));
@@ -2024,7 +2024,7 @@ void ICCompareStub::GenerateGeneric(MacroAssembler* masm) {
 // it, too: zero for false, and a non-zero value for true.
 void ToBooleanStub::Generate(MacroAssembler* masm) {
   // This stub uses FPU instructions.
-  CpuFeatures::Scope scope(FPU);
+  CpuFeatureScope scope(masm, FPU);
 
   Label patch;
   const Register map = t5.is(tos_) ? t3 : t5;
@@ -2139,7 +2139,7 @@ void StoreBufferOverflowStub::Generate(MacroAssembler* masm) {
   // restore them.
   __ MultiPush(kJSCallerSaved | ra.bit());
   if (save_doubles_ == kSaveFPRegs) {
-    CpuFeatures::Scope scope(FPU);
+    CpuFeatureScope scope(masm, FPU);
     __ MultiPushFPU(kCallerSavedFPU);
   }
   const int argument_count = 1;
@@ -2153,7 +2153,7 @@ void StoreBufferOverflowStub::Generate(MacroAssembler* masm) {
       ExternalReference::store_buffer_overflow_function(masm->isolate()),
       argument_count);
   if (save_doubles_ == kSaveFPRegs) {
-    CpuFeatures::Scope scope(FPU);
+    CpuFeatureScope scope(masm, FPU);
     __ MultiPopFPU(kCallerSavedFPU);
   }
 
@@ -2386,7 +2386,7 @@ void UnaryOpStub::GenerateHeapNumberCodeBitNot(
 
   if (CpuFeatures::IsSupported(FPU)) {
     // Convert the int32 in a1 to the heap number in v0. a2 is corrupted.
-    CpuFeatures::Scope scope(FPU);
+    CpuFeatureScope scope(masm, FPU);
     __ mtc1(a1, f0);
     __ cvt_d_w(f0, f0);
     __ sdc1(f0, FieldMemOperand(v0, HeapNumber::kValueOffset));
@@ -2731,7 +2731,7 @@ void BinaryOpStub_GenerateFPOperation(MacroAssembler* masm,
         // Using FPU registers:
         // f12: Left value.
         // f14: Right value.
-        CpuFeatures::Scope scope(FPU);
+        CpuFeatureScope scope(masm, FPU);
         switch (op) {
         case Token::ADD:
           __ add_d(f10, f12, f14);
@@ -2863,7 +2863,7 @@ void BinaryOpStub_GenerateFPOperation(MacroAssembler* masm,
       if (CpuFeatures::IsSupported(FPU)) {
         // Convert the int32 in a2 to the heap number in a0. As
         // mentioned above SHR needs to always produce a positive result.
-        CpuFeatures::Scope scope(FPU);
+        CpuFeatureScope scope(masm, FPU);
         __ mtc1(a2, f0);
         if (op == Token::SHR) {
           __ Cvt_d_uw(f0, f0, f22);
@@ -3058,7 +3058,7 @@ void BinaryOpStub::GenerateInt32Stub(MacroAssembler* masm) {
                                                    &transition);
 
       if (destination == FloatingPointHelper::kFPURegisters) {
-        CpuFeatures::Scope scope(FPU);
+        CpuFeatureScope scope(masm, FPU);
         Label return_heap_number;
         switch (op_) {
           case Token::ADD:
@@ -3272,7 +3272,7 @@ void BinaryOpStub::GenerateInt32Stub(MacroAssembler* masm) {
                                                 mode_);
 
       if (CpuFeatures::IsSupported(FPU)) {
-        CpuFeatures::Scope scope(FPU);
+        CpuFeatureScope scope(masm, FPU);
 
         if (op_ != Token::SHR) {
           // Convert the result to a floating point value.
@@ -3476,7 +3476,7 @@ void TranscendentalCacheStub::Generate(MacroAssembler* masm) {
   const bool tagged = (argument_type_ == TAGGED);
 
   if (CpuFeatures::IsSupported(FPU)) {
-    CpuFeatures::Scope scope(FPU);
+    CpuFeatureScope scope(masm, FPU);
 
     if (tagged) {
       // Argument is a number and is on stack and in a0.
@@ -3586,7 +3586,7 @@ void TranscendentalCacheStub::Generate(MacroAssembler* masm) {
                                  1);
   } else {
     ASSERT(CpuFeatures::IsSupported(FPU));
-    CpuFeatures::Scope scope(FPU);
+    CpuFeatureScope scope(masm, FPU);
 
     Label no_update;
     Label skip_cache;
@@ -3714,7 +3714,7 @@ void InterruptStub::Generate(MacroAssembler* masm) {
 
 
 void MathPowStub::Generate(MacroAssembler* masm) {
-  CpuFeatures::Scope fpu_scope(FPU);
+  CpuFeatureScope fpu_scope(masm, FPU);
   const Register base = a1;
   const Register exponent = a2;
   const Register heapnumbermap = t1;
@@ -3957,21 +3957,15 @@ void CodeStub::GenerateFPStubs(Isolate* isolate) {
   // These stubs might already be in the snapshot, detect that and don't
   // regenerate, which would lead to code stub initialization state being messed
   // up.
-  Code* save_doubles_code = NULL;
-  Code* store_buffer_overflow_code = NULL;
-  if (!save_doubles.FindCodeInCache(&save_doubles_code, ISOLATE)) {
-    if (CpuFeatures::IsSupported(FPU)) {
-      CpuFeatures::Scope scope2(FPU);
-      save_doubles_code = *save_doubles.GetCode(isolate);
-      store_buffer_overflow_code = *stub.GetCode(isolate);
-    } else {
-      save_doubles_code = *save_doubles.GetCode(isolate);
-      store_buffer_overflow_code = *stub.GetCode(isolate);
-    }
+  Code* save_doubles_code;
+  if (!save_doubles.FindCodeInCache(&save_doubles_code, isolate)) {
+    save_doubles_code = *save_doubles.GetCode(isolate);
     save_doubles_code->set_is_pregenerated(true);
+
+    Code* store_buffer_overflow_code = *stub.GetCode(isolate);
     store_buffer_overflow_code->set_is_pregenerated(true);
   }
-  ISOLATE->set_fp_stubs_generated(true);
+  isolate->set_fp_stubs_generated(true);
 }
 
 
@@ -4227,7 +4221,7 @@ void JSEntryStub::GenerateBody(MacroAssembler* masm, bool is_construct) {
   __ MultiPush(kCalleeSaved | ra.bit());
 
   if (CpuFeatures::IsSupported(FPU)) {
-    CpuFeatures::Scope scope(FPU);
+    CpuFeatureScope scope(masm, FPU);
     // Save callee-saved FPU registers.
     __ MultiPushFPU(kCalleeSavedFPU);
     // Set up the reserved register for 0.0.
@@ -4376,7 +4370,7 @@ void JSEntryStub::GenerateBody(MacroAssembler* masm, bool is_construct) {
   __ addiu(sp, sp, -EntryFrameConstants::kCallerFPOffset);
 
   if (CpuFeatures::IsSupported(FPU)) {
-    CpuFeatures::Scope scope(FPU);
+    CpuFeatureScope scope(masm, FPU);
     // Restore callee-saved fpu registers.
     __ MultiPopFPU(kCalleeSavedFPU);
   }
@@ -7154,7 +7148,7 @@ void ICCompareStub::GenerateNumbers(MacroAssembler* masm) {
   // Inlining the double comparison and falling back to the general compare
   // stub if NaN is involved or FPU is unsupported.
   if (CpuFeatures::IsSupported(FPU)) {
-    CpuFeatures::Scope scope(FPU);
+    CpuFeatureScope scope(masm, FPU);
 
     // Load left and right operand.
     Label done, left, left_smi, right_smi;

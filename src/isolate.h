@@ -292,7 +292,8 @@ class SystemThreadManager {
   enum ParallelSystemComponent {
     PARALLEL_SWEEPING,
     CONCURRENT_SWEEPING,
-    PARALLEL_MARKING
+    PARALLEL_MARKING,
+    PARALLEL_RECOMPILATION
   };
 
   static int NumberOfParallelSystemThreads(ParallelSystemComponent type);
@@ -368,7 +369,6 @@ typedef List<HeapObject*, PreallocatedStorageAllocationPolicy> DebugObjectCache;
   V(unsigned, ast_node_count, 0)                                               \
   /* SafeStackFrameIterator activations count. */                              \
   V(int, safe_stack_iterator_counter, 0)                                       \
-  V(uint64_t, enabled_cpu_features, 0)                                         \
   V(CpuProfiler*, cpu_profiler, NULL)                                          \
   V(HeapProfiler*, heap_profiler, NULL)                                        \
   V(bool, observer_delivery_pending, false)                                    \
