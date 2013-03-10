@@ -1,4 +1,4 @@
-// Copyright 2010 the V8 project authors. All rights reserved.
+// Copyright 2013 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -25,28 +25,7 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#include "v8.h"
+var o = ["\u56e7",   // Switch JSON stringifier to two-byte mode.
+         "\u00e6"];  // Latin-1 character.
 
-#if defined(V8_TARGET_ARCH_X64)
-
-#include "assembler.h"
-#include "assembler-x64.h"
-#include "assembler-x64-inl.h"
-#include "frames-inl.h"
-
-namespace v8 {
-namespace internal {
-
-
-Address ExitFrame::ComputeStackPointer(Address fp) {
-  return Memory::Address_at(fp + ExitFrameConstants::kSPOffset);
-}
-
-
-Register StubFailureTrampolineFrame::fp_register() { return rbp; }
-Register StubFailureTrampolineFrame::context_register() { return rsi; }
-
-
-} }  // namespace v8::internal
-
-#endif  // V8_TARGET_ARCH_X64
+assertEquals('["\u56e7","\u00e6"]', JSON.stringify(o));

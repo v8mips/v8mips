@@ -1,4 +1,4 @@
-// Copyright 2010 the V8 project authors. All rights reserved.
+// Copyright 2013 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -25,28 +25,23 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#include "v8.h"
+// Test whether the opening parenthesis can be eaten up by a comment.
+assertThrows('Function("/*", "*/){");', SyntaxError);
 
-#if defined(V8_TARGET_ARCH_X64)
+// Test whether the function literal can be closed prematurely.
+assertThrows('Function("});(function(){");', SyntaxError);
 
-#include "assembler.h"
-#include "assembler-x64.h"
-#include "assembler-x64-inl.h"
-#include "frames-inl.h"
+// Test whether block comments are handled correctly.
+assertDoesNotThrow('Function("/*", "*/", "/**/");');
+assertDoesNotThrow('Function("/*", "a", "*/", "/**/");');
+assertThrows('Function("a", "/*", "*/", "/**/");', SyntaxError);
 
-namespace v8 {
-namespace internal {
+// Test whether line comments are handled correctly.
+assertDoesNotThrow('Function("//", "//")');
+assertDoesNotThrow('Function("//", "//", "//")');
+assertThrows('Function("a", "//", "//")', SyntaxError);
 
-
-Address ExitFrame::ComputeStackPointer(Address fp) {
-  return Memory::Address_at(fp + ExitFrameConstants::kSPOffset);
-}
-
-
-Register StubFailureTrampolineFrame::fp_register() { return rbp; }
-Register StubFailureTrampolineFrame::context_register() { return rsi; }
-
-
-} }  // namespace v8::internal
-
-#endif  // V8_TARGET_ARCH_X64
+// Some embedders rely on the string representation of the resulting
+// function in cases where no formal parameters are specified.
+var asString = Function("return 23").toString();
+assertSame("function anonymous() {\nreturn 23\n}", asString);

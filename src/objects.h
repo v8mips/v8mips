@@ -1055,7 +1055,7 @@ class Object : public MaybeObject {
   inline bool HasSpecificClassOf(String* name);
 
   MUST_USE_RESULT MaybeObject* ToObject();             // ECMA-262 9.9.
-  Object* ToBoolean();                                 // ECMA-262 9.2.
+  bool BooleanValue();                                 // ECMA-262 9.2.
 
   // Convert to a JSObject if needed.
   // native_context is used when creating wrapper object.
@@ -1465,7 +1465,8 @@ class HeapNumber: public HeapObject {
   static inline HeapNumber* cast(Object* obj);
 
   // Dispatched behavior.
-  Object* HeapNumberToBoolean();
+  bool HeapNumberBooleanValue();
+
   inline void HeapNumberPrint() {
     HeapNumberPrint(stdout);
   }
@@ -8603,19 +8604,91 @@ class AccessorInfo: public Struct {
 };
 
 
+enum AccessorDescriptorType {
+  kDescriptorBitmaskCompare,
+  kDescriptorPointerCompare,
+  kDescriptorPrimitiveValue,
+  kDescriptorObjectDereference,
+  kDescriptorPointerDereference,
+  kDescriptorPointerShift,
+  kDescriptorReturnObject
+};
+
+
+struct BitmaskCompareDescriptor {
+  uint32_t bitmask;
+  uint32_t compare_value;
+  uint8_t size;  // Must be in {1,2,4}.
+};
+
+
+struct PointerCompareDescriptor {
+  void* compare_value;
+};
+
+
+struct PrimitiveValueDescriptor {
+  v8::DeclaredAccessorDescriptorDataType data_type;
+  uint8_t bool_offset;  // Must be in [0,7], used for kDescriptorBoolType.
+};
+
+
+struct ObjectDerefenceDescriptor {
+  uint8_t internal_field;
+};
+
+
+struct PointerShiftDescriptor {
+  int16_t byte_offset;
+};
+
+
+struct DeclaredAccessorDescriptorData {
+  AccessorDescriptorType type;
+  union {
+    struct BitmaskCompareDescriptor bitmask_compare_descriptor;
+    struct PointerCompareDescriptor pointer_compare_descriptor;
+    struct PrimitiveValueDescriptor primitive_value_descriptor;
+    struct ObjectDerefenceDescriptor object_dereference_descriptor;
+    struct PointerShiftDescriptor pointer_shift_descriptor;
+  };
+};
+
+
+class DeclaredAccessorDescriptor;
+
+
+class DeclaredAccessorDescriptorIterator {
+ public:
+  explicit DeclaredAccessorDescriptorIterator(
+      DeclaredAccessorDescriptor* descriptor);
+  const DeclaredAccessorDescriptorData* Next();
+  bool Complete() const { return length_ == offset_; }
+ private:
+  uint8_t* array_;
+  const int length_;
+  int offset_;
+  DISALLOW_IMPLICIT_CONSTRUCTORS(DeclaredAccessorDescriptorIterator);
+};
+
+
 class DeclaredAccessorDescriptor: public Struct {
  public:
-  // TODO(dcarney): Fill out this class.
-  DECL_ACCESSORS(internal_field, Smi)
+  DECL_ACCESSORS(serialized_data, ByteArray)
 
   static inline DeclaredAccessorDescriptor* cast(Object* obj);
+
+  static Handle<DeclaredAccessorDescriptor> Create(
+      Isolate* isolate,
+      const DeclaredAccessorDescriptorData& data,
+      Handle<DeclaredAccessorDescriptor> previous);
 
   // Dispatched behavior.
   DECLARE_PRINTER(DeclaredAccessorDescriptor)
   DECLARE_VERIFIER(DeclaredAccessorDescriptor)
 
-  static const int kInternalFieldOffset = HeapObject::kHeaderSize;
-  static const int kSize = kInternalFieldOffset + kPointerSize;
+  static const int kSerializedDataOffset = HeapObject::kHeaderSize;
+  static const int kSize = kSerializedDataOffset + kPointerSize;
 
  private:
   DISALLOW_IMPLICIT_CONSTRUCTORS(DeclaredAccessorDescriptor);
