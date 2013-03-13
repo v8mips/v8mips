@@ -1034,6 +1034,9 @@ void HIsNilAndBranch::PrintDataTo(StringStream* stream) {
 
 void HReturn::PrintDataTo(StringStream* stream) {
   value()->PrintNameTo(stream);
+  stream->Add(" (pop ");
+  parameter_count()->PrintNameTo(stream);
+  stream->Add(" values)");
 }
 
 
@@ -2505,6 +2508,12 @@ bool HLoadGlobalCell::RequiresHoleCheck() const {
 
 void HLoadGlobalGeneric::PrintDataTo(StringStream* stream) {
   stream->Add("%o ", *name());
+}
+
+
+void HInnerAllocatedObject::PrintDataTo(StringStream* stream) {
+  base_object()->PrintNameTo(stream);
+  stream->Add(" offset %d", offset());
 }
 
 
