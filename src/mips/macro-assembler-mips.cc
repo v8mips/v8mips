@@ -1112,6 +1112,7 @@ void MacroAssembler::BranchF(Label* target,
                              FPURegister cmp1,
                              FPURegister cmp2,
                              BranchDelaySlot bd) {
+  BlockTrampolinePoolScope block_trampoline_pool(this);
   if (cc == al) {
     Branch(bd, target);
     return;
@@ -1704,6 +1705,7 @@ void MacroAssembler::BranchShort(int16_t offset, Condition cond, Register rs,
   if (rt.is_reg()) {
     // NOTE: 'at' can be clobbered by Branch but it is legal to use it as rs or
     // rt.
+    BlockTrampolinePoolScope block_trampoline_pool(this);
     r2 = rt.rm_;
     switch (cond) {
       case cc_always:
@@ -1789,6 +1791,7 @@ void MacroAssembler::BranchShort(int16_t offset, Condition cond, Register rs,
     // Be careful to always use shifted_branch_offset only just before the
     // branch instruction, as the location will be remember for patching the
     // target.
+    BlockTrampolinePoolScope block_trampoline_pool(this);
     switch (cond) {
       case cc_always:
         b(offset);
@@ -1933,6 +1936,7 @@ void MacroAssembler::BranchShort(Label* L, Condition cond, Register rs,
   Register r2 = no_reg;
   Register scratch = at;
   if (rt.is_reg()) {
+    BlockTrampolinePoolScope block_trampoline_pool(this);
     r2 = rt.rm_;
     // Be careful to always use shifted_branch_offset only just before the
     // branch instruction, as the location will be remember for patching the
@@ -2039,6 +2043,7 @@ void MacroAssembler::BranchShort(Label* L, Condition cond, Register rs,
     // Be careful to always use shifted_branch_offset only just before the
     // branch instruction, as the location will be remember for patching the
     // target.
+    BlockTrampolinePoolScope block_trampoline_pool(this);
     switch (cond) {
       case cc_always:
         offset = shifted_branch_offset(L, false);
@@ -2275,67 +2280,70 @@ void MacroAssembler::BranchAndLinkShort(int16_t offset, Condition cond,
     li(r2, rt);
   }
 
-  switch (cond) {
-    case cc_always:
-      bal(offset);
-      break;
-    case eq:
-      bne(rs, r2, 2);
-      nop();
-      bal(offset);
-      break;
-    case ne:
-      beq(rs, r2, 2);
-      nop();
-      bal(offset);
-      break;
+  {
+    BlockTrampolinePoolScope block_trampoline_pool(this);
+    switch (cond) {
+      case cc_always:
+        bal(offset);
+        break;
+      case eq:
+        bne(rs, r2, 2);
+        nop();
+        bal(offset);
+        break;
+      case ne:
+        beq(rs, r2, 2);
+        nop();
+        bal(offset);
+        break;
 
-    // Signed comparison.
-    case greater:
-      slt(scratch, r2, rs);
-      addiu(scratch, scratch, -1);
-      bgezal(scratch, offset);
-      break;
-    case greater_equal:
-      slt(scratch, rs, r2);
-      addiu(scratch, scratch, -1);
-      bltzal(scratch, offset);
-      break;
-    case less:
-      slt(scratch, rs, r2);
-      addiu(scratch, scratch, -1);
-      bgezal(scratch, offset);
-      break;
-    case less_equal:
-      slt(scratch, r2, rs);
-      addiu(scratch, scratch, -1);
-      bltzal(scratch, offset);
-      break;
+      // Signed comparison.
+      case greater:
+        slt(scratch, r2, rs);
+        addiu(scratch, scratch, -1);
+        bgezal(scratch, offset);
+        break;
+      case greater_equal:
+        slt(scratch, rs, r2);
+        addiu(scratch, scratch, -1);
+        bltzal(scratch, offset);
+        break;
+      case less:
+        slt(scratch, rs, r2);
+        addiu(scratch, scratch, -1);
+        bgezal(scratch, offset);
+        break;
+      case less_equal:
+        slt(scratch, r2, rs);
+        addiu(scratch, scratch, -1);
+        bltzal(scratch, offset);
+        break;
 
-    // Unsigned comparison.
-    case Ugreater:
-      sltu(scratch, r2, rs);
-      addiu(scratch, scratch, -1);
-      bgezal(scratch, offset);
-      break;
-    case Ugreater_equal:
-      sltu(scratch, rs, r2);
-      addiu(scratch, scratch, -1);
-      bltzal(scratch, offset);
-      break;
-    case Uless:
-      sltu(scratch, rs, r2);
-      addiu(scratch, scratch, -1);
-      bgezal(scratch, offset);
-      break;
-    case Uless_equal:
-      sltu(scratch, r2, rs);
-      addiu(scratch, scratch, -1);
-      bltzal(scratch, offset);
-      break;
+      // Unsigned comparison.
+      case Ugreater:
+        sltu(scratch, r2, rs);
+        addiu(scratch, scratch, -1);
+        bgezal(scratch, offset);
+        break;
+      case Ugreater_equal:
+        sltu(scratch, rs, r2);
+        addiu(scratch, scratch, -1);
+        bltzal(scratch, offset);
+        break;
+      case Uless:
+        sltu(scratch, rs, r2);
+        addiu(scratch, scratch, -1);
+        bgezal(scratch, offset);
+        break;
+      case Uless_equal:
+        sltu(scratch, r2, rs);
+        addiu(scratch, scratch, -1);
+        bltzal(scratch, offset);
+        break;
 
-    default:
-      UNREACHABLE();
+      default:
+        UNREACHABLE();
+    }
   }
   // Emit a nop in the branch delay slot if required.
   if (bdslot == PROTECT)
@@ -2367,80 +2375,82 @@ void MacroAssembler::BranchAndLinkShort(Label* L, Condition cond, Register rs,
     li(r2, rt);
   }
 
-  switch (cond) {
-    case cc_always:
-      offset = shifted_branch_offset(L, false);
-      bal(offset);
-      break;
-    case eq:
-      bne(rs, r2, 2);
-      nop();
-      offset = shifted_branch_offset(L, false);
-      bal(offset);
-      break;
-    case ne:
-      beq(rs, r2, 2);
-      nop();
-      offset = shifted_branch_offset(L, false);
-      bal(offset);
-      break;
+  {
+    BlockTrampolinePoolScope block_trampoline_pool(this);
+    switch (cond) {
+      case cc_always:
+        offset = shifted_branch_offset(L, false);
+        bal(offset);
+        break;
+      case eq:
+        bne(rs, r2, 2);
+        nop();
+        offset = shifted_branch_offset(L, false);
+        bal(offset);
+        break;
+      case ne:
+        beq(rs, r2, 2);
+        nop();
+        offset = shifted_branch_offset(L, false);
+        bal(offset);
+        break;
 
-    // Signed comparison.
-    case greater:
-      slt(scratch, r2, rs);
-      addiu(scratch, scratch, -1);
-      offset = shifted_branch_offset(L, false);
-      bgezal(scratch, offset);
-      break;
-    case greater_equal:
-      slt(scratch, rs, r2);
-      addiu(scratch, scratch, -1);
-      offset = shifted_branch_offset(L, false);
-      bltzal(scratch, offset);
-      break;
-    case less:
-      slt(scratch, rs, r2);
-      addiu(scratch, scratch, -1);
-      offset = shifted_branch_offset(L, false);
-      bgezal(scratch, offset);
-      break;
-    case less_equal:
-      slt(scratch, r2, rs);
-      addiu(scratch, scratch, -1);
-      offset = shifted_branch_offset(L, false);
-      bltzal(scratch, offset);
-      break;
+      // Signed comparison.
+      case greater:
+        slt(scratch, r2, rs);
+        addiu(scratch, scratch, -1);
+        offset = shifted_branch_offset(L, false);
+        bgezal(scratch, offset);
+        break;
+      case greater_equal:
+        slt(scratch, rs, r2);
+        addiu(scratch, scratch, -1);
+        offset = shifted_branch_offset(L, false);
+        bltzal(scratch, offset);
+        break;
+      case less:
+        slt(scratch, rs, r2);
+        addiu(scratch, scratch, -1);
+        offset = shifted_branch_offset(L, false);
+        bgezal(scratch, offset);
+        break;
+      case less_equal:
+        slt(scratch, r2, rs);
+        addiu(scratch, scratch, -1);
+        offset = shifted_branch_offset(L, false);
+        bltzal(scratch, offset);
+        break;
 
-    // Unsigned comparison.
-    case Ugreater:
-      sltu(scratch, r2, rs);
-      addiu(scratch, scratch, -1);
-      offset = shifted_branch_offset(L, false);
-      bgezal(scratch, offset);
-      break;
-    case Ugreater_equal:
-      sltu(scratch, rs, r2);
-      addiu(scratch, scratch, -1);
-      offset = shifted_branch_offset(L, false);
-      bltzal(scratch, offset);
-      break;
-    case Uless:
-      sltu(scratch, rs, r2);
-      addiu(scratch, scratch, -1);
-      offset = shifted_branch_offset(L, false);
-      bgezal(scratch, offset);
-      break;
-    case Uless_equal:
-      sltu(scratch, r2, rs);
-      addiu(scratch, scratch, -1);
-      offset = shifted_branch_offset(L, false);
-      bltzal(scratch, offset);
-      break;
+      // Unsigned comparison.
+      case Ugreater:
+        sltu(scratch, r2, rs);
+        addiu(scratch, scratch, -1);
+        offset = shifted_branch_offset(L, false);
+        bgezal(scratch, offset);
+        break;
+      case Ugreater_equal:
+        sltu(scratch, rs, r2);
+        addiu(scratch, scratch, -1);
+        offset = shifted_branch_offset(L, false);
+        bltzal(scratch, offset);
+        break;
+      case Uless:
+        sltu(scratch, rs, r2);
+        addiu(scratch, scratch, -1);
+        offset = shifted_branch_offset(L, false);
+        bgezal(scratch, offset);
+        break;
+      case Uless_equal:
+        sltu(scratch, r2, rs);
+        addiu(scratch, scratch, -1);
+        offset = shifted_branch_offset(L, false);
+        bltzal(scratch, offset);
+        break;
 
-    default:
-      UNREACHABLE();
+      default:
+        UNREACHABLE();
+    }
   }
-
   // Check that offset could actually hold on an int16_t.
   ASSERT(is_int16(offset));
 
