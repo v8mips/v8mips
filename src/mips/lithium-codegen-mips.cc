@@ -237,7 +237,7 @@ bool LCodeGen::GeneratePrologue() {
         __ sw(a0, target);
         // Update the write barrier. This clobbers a3 and a0.
         __ RecordWriteContextSlot(
-            cp, target.offset(), a0, a3, kRAHasBeenSaved, kSaveFPRegs);
+            cp, target.offset(), a0, a3, GetRAState(), kSaveFPRegs);
       }
     }
     Comment(";;; End allocate local context");
@@ -2820,7 +2820,7 @@ void LCodeGen::DoStoreContextSlot(LStoreContextSlot* instr) {
                               target.offset(),
                               value,
                               scratch0(),
-                              kRAHasBeenSaved,
+                              GetRAState(),
                               kSaveFPRegs,
                               EMIT_REMEMBERED_SET,
                               check_needed);
@@ -4163,7 +4163,7 @@ void LCodeGen::DoStoreNamedField(LStoreNamedField* instr) {
                           HeapObject::kMapOffset,
                           scratch,
                           temp,
-                          kRAHasBeenSaved,
+                          GetRAState(),
                           kSaveFPRegs,
                           OMIT_REMEMBERED_SET,
                           OMIT_SMI_CHECK);
@@ -4182,7 +4182,7 @@ void LCodeGen::DoStoreNamedField(LStoreNamedField* instr) {
                           offset,
                           value,
                           scratch,
-                          kRAHasBeenSaved,
+                          GetRAState(),
                           kSaveFPRegs,
                           EMIT_REMEMBERED_SET,
                           check_needed);
@@ -4197,7 +4197,7 @@ void LCodeGen::DoStoreNamedField(LStoreNamedField* instr) {
                           offset,
                           value,
                           object,
-                          kRAHasBeenSaved,
+                          GetRAState(),
                           kSaveFPRegs,
                           EMIT_REMEMBERED_SET,
                           check_needed);
@@ -4408,7 +4408,7 @@ void LCodeGen::DoStoreKeyedFixedArray(LStoreKeyed* instr) {
     __ RecordWrite(elements,
                    key,
                    value,
-                   kRAHasBeenSaved,
+                   GetRAState(),
                    kSaveFPRegs,
                    EMIT_REMEMBERED_SET,
                    check_needed);
@@ -4459,7 +4459,7 @@ void LCodeGen::DoTransitionElementsKind(LTransitionElementsKind* instr) {
     __ sw(new_map_reg, FieldMemOperand(object_reg, HeapObject::kMapOffset));
     // Write barrier.
     __ RecordWriteField(object_reg, HeapObject::kMapOffset, new_map_reg,
-                        scratch, kRAHasBeenSaved, kDontSaveFPRegs);
+                        scratch, GetRAState(), kDontSaveFPRegs);
   } else if (FLAG_compiled_transitions) {
     PushSafepointRegistersScope scope(this, Safepoint::kWithRegisters);
     __ mov(a0, object_reg);
