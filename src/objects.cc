@@ -375,6 +375,9 @@ MaybeObject* JSProxy::GetPropertyWithHandler(Object* receiver_raw,
   Handle<Object> receiver(receiver_raw, isolate);
   Handle<Object> name(name_raw, isolate);
 
+  // TODO(rossberg): adjust once there is a story for symbols vs proxies.
+  if (name->IsSymbol()) return isolate->heap()->undefined_value();
+
   Handle<Object> args[] = { receiver, name };
   Handle<Object> result = CallTrap(
     "get", isolate->derived_get_trap(), ARRAY_SIZE(args), args);
@@ -1460,9 +1463,16 @@ void HeapObject::HeapObjectShortPrint(StringStream* accumulator) {
         accumulator->Add("<Odd Oddball>");
       break;
     }
-    case SYMBOL_TYPE:
-      accumulator->Add("<Symbol: %d>", Symbol::cast(this)->Hash());
+    case SYMBOL_TYPE: {
+      Symbol* symbol = Symbol::cast(this);
+      accumulator->Add("<Symbol: %d", symbol->Hash());
+      if (!symbol->name()->IsUndefined()) {
+        accumulator->Add(" ");
+        String::cast(symbol->name())->StringShortPrint(accumulator);
+      }
+      accumulator->Add(">");
       break;
+    }
     case HEAP_NUMBER_TYPE:
       accumulator->Add("<Number: ");
       HeapNumber::cast(this)->HeapNumberPrint(accumulator);
@@ -1572,6 +1582,8 @@ void HeapObject::IterateBody(InstanceType type, int object_size,
       JSGlobalPropertyCell::BodyDescriptor::IterateBody(this, v);
       break;
     case SYMBOL_TYPE:
+      Symbol::BodyDescriptor::IterateBody(this, v);
+      break;
     case HEAP_NUMBER_TYPE:
     case FILLER_TYPE:
     case BYTE_ARRAY_TYPE:
@@ -2748,6 +2760,9 @@ bool JSProxy::HasPropertyWithHandler(Name* name_raw) {
   Handle<Object> receiver(this, isolate);
   Handle<Object> name(name_raw, isolate);
 
+  // TODO(rossberg): adjust once there is a story for symbols vs proxies.
+  if (name->IsSymbol()) return false;
+
   Handle<Object> args[] = { name };
   Handle<Object> result = CallTrap(
     "has", isolate->derived_has_trap(), ARRAY_SIZE(args), args);
@@ -2768,6 +2783,9 @@ MUST_USE_RESULT MaybeObject* JSProxy::SetPropertyWithHandler(
   Handle<JSReceiver> receiver(receiver_raw);
   Handle<Object> name(name_raw, isolate);
   Handle<Object> value(value_raw, isolate);
+
+  // TODO(rossberg): adjust once there is a story for symbols vs proxies.
+  if (name->IsSymbol()) return *value;
 
   Handle<Object> args[] = { receiver, name, value };
   CallTrap("set", isolate->derived_set_trap(), ARRAY_SIZE(args), args);
@@ -2791,6 +2809,12 @@ MUST_USE_RESULT MaybeObject* JSProxy::SetPropertyViaPrototypesWithHandler(
   Handle<Object> value(value_raw, isolate);
   Handle<Object> handler(this->handler(), isolate);  // Trap might morph proxy.
 
+  // TODO(rossberg): adjust once there is a story for symbols vs proxies.
+  if (name->IsSymbol()) {
+    *done = false;
+    return isolate->heap()->the_hole_value();
+  }
+
   *done = true;  // except where redefined...
   Handle<Object> args[] = { name };
   Handle<Object> result = proxy->CallTrap(
@@ -2799,7 +2823,7 @@ MUST_USE_RESULT MaybeObject* JSProxy::SetPropertyViaPrototypesWithHandler(
 
   if (result->IsUndefined()) {
     *done = false;
-    return GetHeap()->the_hole_value();
+    return isolate->heap()->the_hole_value();
   }
 
   // Emulate [[GetProperty]] semantics for proxies.
@@ -2880,6 +2904,9 @@ MUST_USE_RESULT MaybeObject* JSProxy::DeletePropertyWithHandler(
   Handle<JSProxy> receiver(this);
   Handle<Object> name(name_raw, isolate);
 
+  // TODO(rossberg): adjust once there is a story for symbols vs proxies.
+  if (name->IsSymbol()) return isolate->heap()->false_value();
+
   Handle<Object> args[] = { name };
   Handle<Object> result = CallTrap(
     "delete", Handle<Object>(), ARRAY_SIZE(args), args);
@@ -2919,6 +2946,9 @@ MUST_USE_RESULT PropertyAttributes JSProxy::GetPropertyAttributeWithHandler(
   Handle<Object> handler(this->handler(), isolate);  // Trap might morph proxy.
   Handle<JSReceiver> receiver(receiver_raw);
   Handle<Object> name(name_raw, isolate);
+
+  // TODO(rossberg): adjust once there is a story for symbols vs proxies.
+  if (name->IsSymbol()) return ABSENT;
 
   Handle<Object> args[] = { name };
   Handle<Object> result = CallTrap(
@@ -11579,18 +11609,22 @@ void FixedArray::SortPairs(FixedArray* numbers, uint32_t len) {
 // Fill in the names of local properties into the supplied storage. The main
 // purpose of this function is to provide reflection information for the object
 // mirrors.
-void JSObject::GetLocalPropertyNames(FixedArray* storage, int index) {
-  ASSERT(storage->length() >= (NumberOfLocalProperties() - index));
+void JSObject::GetLocalPropertyNames(
+    FixedArray* storage, int index, PropertyAttributes filter) {
+  ASSERT(storage->length() >= (NumberOfLocalProperties(filter) - index));
   if (HasFastProperties()) {
     int real_size = map()->NumberOfOwnDescriptors();
     DescriptorArray* descs = map()->instance_descriptors();
-    ASSERT(storage->length() >= index + real_size);
     for (int i = 0; i < real_size; i++) {
-      storage->set(index + i, descs->GetKey(i));
+      if ((descs->GetDetails(i).attributes() & filter) == 0 &&
+          ((filter & SYMBOLIC) == 0 || !descs->GetKey(i)->IsSymbol())) {
+        storage->set(index++, descs->GetKey(i));
+      }
     }
   } else {
     property_dictionary()->CopyKeysTo(storage,
                                       index,
+                                      filter,
                                       NameDictionary::UNSORTED);
   }
 }
@@ -12341,6 +12375,7 @@ template MaybeObject* Dictionary<SeededNumberDictionaryShape, uint32_t>::Shrink(
 template void Dictionary<NameDictionaryShape, Name*>::CopyKeysTo(
     FixedArray*,
     int,
+    PropertyAttributes,
     Dictionary<NameDictionaryShape, Name*>::SortMode);
 
 template int
@@ -13583,6 +13618,7 @@ template<typename Shape, typename Key>
 void Dictionary<Shape, Key>::CopyKeysTo(
     FixedArray* storage,
     int index,
+    PropertyAttributes filter,
     typename Dictionary<Shape, Key>::SortMode sort_mode) {
   ASSERT(storage->length() >= NumberOfElementsFilterAttributes(
       static_cast<PropertyAttributes>(NONE)));
@@ -13592,7 +13628,8 @@ void Dictionary<Shape, Key>::CopyKeysTo(
     if (HashTable<Shape, Key>::IsKey(k)) {
       PropertyDetails details = DetailsAt(i);
       if (details.IsDeleted()) continue;
-      storage->set(index++, k);
+      PropertyAttributes attr = details.attributes();
+      if ((attr & filter) == 0) storage->set(index++, k);
     }
   }
   if (sort_mode == Dictionary<Shape, Key>::SORTED) {

@@ -37,6 +37,9 @@ function TestNew() {
   for (var i = 0; i < 2; ++i) {
     for (var j = 0; j < 5; ++j) {
       symbols.push(Symbol())
+      symbols.push(Symbol(undefined))
+      symbols.push(Symbol("66"))
+      symbols.push(Symbol(66))
       symbols.push(Symbol(Symbol()))
       symbols.push((new Symbol).valueOf())
       symbols.push((new Symbol()).valueOf())
@@ -77,6 +80,15 @@ function TestPrototype() {
   }
 }
 TestPrototype()
+
+
+function TestName() {
+  for (var i in symbols) {
+    var name = symbols[i].name
+    assertTrue(name === undefined || name === "66")
+  }
+}
+TestName()
 
 
 function TestToString() {
@@ -235,7 +247,7 @@ function TestKeyHas() {
 
 function TestKeyEnum(obj) {
   for (var name in obj) {
-    assertTrue(typeof name !== "symbol")
+    assertEquals("string", typeof name)
   }
 }
 
@@ -244,19 +256,9 @@ function TestKeyNames(obj) {
   assertEquals(0, Object.keys(obj).length)
 
   var names = Object.getOwnPropertyNames(obj)
-  assertTrue(symbols.length <= names.length)
-  // TODO(rossberg): once we have iterators, the following would be:
-  //   var expected = new Set(symbols)
-  var expected = new Set
-  for (var i = 0; i < symbols.length; ++i) expected.add(symbols[i])
-  for (var i = 0; i < names.length; ++i) {
-    var name = names[i]
-    if (typeof name === 'symbol') {
-      assertTrue(expected.has(name))
-      expected.delete(name)
-    }
+  for (var i in names) {
+    assertEquals("string", typeof names[i])
   }
-  assertEquals(0, expected.size)
 }
 
 
