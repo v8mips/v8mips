@@ -195,8 +195,6 @@ namespace internal {
   F(ParseJson, 1, 1) \
   F(BasicJSONStringify, 1, 1) \
   F(QuoteJSONString, 1, 1) \
-  F(QuoteJSONStringComma, 1, 1) \
-  F(QuoteJSONStringArray, 1, 1) \
   \
   /* Strings */ \
   F(StringCharCodeAt, 2, 1) \
@@ -514,7 +512,6 @@ namespace internal {
 #define INLINE_FUNCTION_LIST(F) \
   F(IsSmi, 1, 1)                                                             \
   F(IsNonNegativeSmi, 1, 1)                                                  \
-  F(IsSymbol, 1, 1)                                                          \
   F(IsArray, 1, 1)                                                           \
   F(IsRegExp, 1, 1)                                                          \
   F(IsConstructCall, 0, 1)                                                   \

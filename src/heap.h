@@ -213,6 +213,8 @@ namespace internal {
   V(prototype_string, "prototype")                                       \
   V(string_string, "string")                                             \
   V(String_string, "String")                                             \
+  V(symbol_string, "symbol")                                             \
+  V(Symbol_string, "Symbol")                                             \
   V(Date_string, "Date")                                                 \
   V(this_string, "this")                                                 \
   V(to_string_string, "toString")                                        \
@@ -220,6 +222,7 @@ namespace internal {
   V(undefined_string, "undefined")                                       \
   V(value_of_string, "valueOf")                                          \
   V(stack_string, "stack")                                               \
+  V(toJSON_string, "toJSON")                                             \
   V(InitializeVarGlobal_string, "InitializeVarGlobal")                   \
   V(InitializeConstGlobal_string, "InitializeConstGlobal")               \
   V(KeyedLoadElementMonomorphic_string,                                  \
