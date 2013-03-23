@@ -2036,8 +2036,9 @@ void LCodeGen::DoBranch(LBranch* instr) {
 
       if (expected.Contains(ToBooleanStub::SYMBOL)) {
         // Symbol value -> true.
-        __ lbu(at, FieldMemOperand(map, Map::kInstanceTypeOffset));
-        __ Branch(true_label, eq, at, Operand(SYMBOL_TYPE));
+        const Register scratch = scratch1();
+        __ lbu(scratch, FieldMemOperand(map, Map::kInstanceTypeOffset));
+        __ Branch(true_label, eq, scratch, Operand(SYMBOL_TYPE));
       }
 
       if (expected.Contains(ToBooleanStub::HEAP_NUMBER)) {
