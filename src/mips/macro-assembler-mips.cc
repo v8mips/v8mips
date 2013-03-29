@@ -1932,7 +1932,7 @@ void MacroAssembler::BranchShort(Label* L, Condition cond, Register rs,
                                  BranchDelaySlot bdslot) {
   BRANCH_ARGS_CHECK(cond, rs, rt);
 
-  int32_t offset;
+  int32_t offset = 0;
   Register r2 = no_reg;
   Register scratch = at;
   if (rt.is_reg()) {
@@ -2365,7 +2365,7 @@ void MacroAssembler::BranchAndLinkShort(Label* L, Condition cond, Register rs,
                                         BranchDelaySlot bdslot) {
   BRANCH_ARGS_CHECK(cond, rs, rt);
 
-  int32_t offset;
+  int32_t offset = 0;
   Register r2 = no_reg;
   Register scratch = at;
   if (rt.is_reg()) {
@@ -5518,7 +5518,6 @@ bool AreAliased(Register r1, Register r2, Register r3, Register r4) {
 
 CodePatcher::CodePatcher(byte* address, int instructions)
     : address_(address),
-      instructions_(instructions),
       size_(instructions * Assembler::kInstrSize),
       masm_(NULL, address, size_ + Assembler::kGap) {
   // Create a new macro assembler pointing to the address of the code to patch.

@@ -292,7 +292,6 @@ class LInstruction: public ZoneObject {
   SetOncePointer<LPointerMap> pointer_map_;
   HValue* hydrogen_value_;
   bool is_call_;
-  bool is_save_doubles_;
 };
 
 
