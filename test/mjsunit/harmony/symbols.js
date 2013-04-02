@@ -213,9 +213,12 @@ TestCollections()
 
 
 function TestKeySet(obj) {
+  assertTrue(%HasFastProperties(obj))
   // Set the even symbols via assignment.
   for (var i = 0; i < symbols.length; i += 2) {
     obj[symbols[i]] = i
+    // Object should remain in fast mode until too many properties were added.
+    assertTrue(%HasFastProperties(obj) || i >= 30)
   }
 }
 
@@ -298,3 +301,19 @@ for (var i in objs) {
   TestKeyDescriptor(obj)
   TestKeyDelete(obj)
 }
+
+
+function TestCachedKeyAfterScavenge() {
+  gc();
+  // Keyed property lookup are cached.  Hereby we assume that the keys are
+  // tenured, so that we only have to clear the cache between mark compacts,
+  // but not between scavenges.  This must also apply for symbol keys.
+  var key = Symbol("key");
+  var a = {};
+  a[key] = "abc";
+
+  for (var i = 0; i < 1000000; i++) {
+    a[key] += "a";  // Allocations cause a scavenge.
+  }
+}
+TestCachedKeyAfterScavenge();

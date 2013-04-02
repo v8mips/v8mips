@@ -26,6 +26,7 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include <stdlib.h>
+#include <limits>
 
 #include "v8.h"
 
@@ -774,6 +775,124 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_Fix) {
   ASSERT(args.length() == 1);
   CONVERT_ARG_CHECKED(JSProxy, proxy, 0);
   proxy->Fix();
+  return isolate->heap()->undefined_value();
+}
+
+
+static size_t ArrayBufferAllocatedLength(Isolate* isolate,
+                                         JSArrayBuffer* buffer) {
+  NoHandleAllocation hc(isolate);
+  Object* byte_length = buffer->byte_length();
+  if (byte_length->IsSmi()) {
+    return Smi::cast(byte_length)->value();
+  } else {
+    double value = HeapNumber::cast(byte_length)->value();
+    return static_cast<size_t>(value);
+  }
+}
+
+
+static void ArrayBufferWeakCallback(v8::Isolate* external_isolate,
+                                    Persistent<Value> object,
+                                    void* data) {
+  Isolate* isolate = reinterpret_cast<Isolate*>(external_isolate);
+  HandleScope scope(isolate);
+  Handle<Object> internal_object = Utils::OpenHandle(*object);
+
+  size_t allocated_length = ArrayBufferAllocatedLength(
+      isolate, JSArrayBuffer::cast(*internal_object));
+  isolate->heap()->AdjustAmountOfExternalAllocatedMemory(
+      -static_cast<intptr_t>(allocated_length));
+  if (data != NULL)
+    free(data);
+  object.Dispose(external_isolate);
+}
+
+
+RUNTIME_FUNCTION(MaybeObject*, Runtime_ArrayBufferInitialize) {
+  HandleScope scope(isolate);
+  ASSERT(args.length() == 2);
+  CONVERT_ARG_HANDLE_CHECKED(JSArrayBuffer, holder, 0);
+  CONVERT_ARG_HANDLE_CHECKED(Object, byteLength, 1);
+  size_t allocated_length;
+  if (byteLength->IsSmi()) {
+    allocated_length = Smi::cast(*byteLength)->value();
+  } else {
+    ASSERT(byteLength->IsHeapNumber());
+    double value = HeapNumber::cast(*byteLength)->value();
+
+    ASSERT(value >= 0);
+
+    if (value > std::numeric_limits<size_t>::max()) {
+      return isolate->Throw(
+          *isolate->factory()->NewRangeError("invalid_array_buffer_length",
+            HandleVector<Object>(NULL, 0)));
+    }
+
+    allocated_length = static_cast<size_t>(value);
+  }
+
+  void* data;
+  if (allocated_length != 0) {
+    data = malloc(allocated_length);
+
+    if (data == NULL) {
+      return isolate->Throw(*isolate->factory()->
+          NewRangeError("invalid_array_buffer_length",
+            HandleVector<Object>(NULL, 0)));
+    }
+
+    memset(data, 0, allocated_length);
+  } else {
+    data = NULL;
+  }
+  holder->set_backing_store(data);
+
+  Object* byte_length;
+  {
+    MaybeObject* maybe_byte_length =
+        isolate->heap()->NumberFromDouble(allocated_length);
+    if (!maybe_byte_length->ToObject(&byte_length)) return maybe_byte_length;
+  }
+  CHECK(byte_length->IsSmi() || byte_length->IsHeapNumber());
+  holder->set_byte_length(byte_length);
+
+  v8::Isolate* external_isolate = reinterpret_cast<v8::Isolate*>(isolate);
+  v8::Handle<Object> external_holder(*holder);
+  Persistent<Object> weak_handle = Persistent<Object>::New(
+      external_isolate, external_holder);
+  weak_handle.MakeWeak(external_isolate, data, ArrayBufferWeakCallback);
+  weak_handle.MarkIndependent(external_isolate);
+  isolate->heap()->AdjustAmountOfExternalAllocatedMemory(allocated_length);
+
+  return *holder;
+}
+
+
+RUNTIME_FUNCTION(MaybeObject*, Runtime_ArrayBufferGetByteLength) {
+  NoHandleAllocation ha(isolate);
+  ASSERT(args.length() == 1);
+  CONVERT_ARG_CHECKED(JSArrayBuffer, holder, 0);
+  return holder->byte_length();
+}
+
+
+RUNTIME_FUNCTION(MaybeObject*, Runtime_ArrayBufferSliceImpl) {
+  HandleScope scope(isolate);
+  ASSERT(args.length() == 3);
+  CONVERT_ARG_HANDLE_CHECKED(JSArrayBuffer, source, 0);
+  CONVERT_ARG_HANDLE_CHECKED(JSArrayBuffer, target, 1);
+  CONVERT_DOUBLE_ARG_CHECKED(first, 2);
+  size_t start = static_cast<size_t>(first);
+  size_t target_length = ArrayBufferAllocatedLength(isolate, *target);
+
+  if (target_length == 0)
+    return isolate->heap()->undefined_value();
+
+  ASSERT(ArrayBufferAllocatedLength(isolate, *source) - target_length >= start);
+  uint8_t* source_data = reinterpret_cast<uint8_t*>(source->backing_store());
+  uint8_t* target_data = reinterpret_cast<uint8_t*>(target->backing_store());
+  CopyBytes(target_data, source_data + start, target_length);
   return isolate->heap()->undefined_value();
 }
 
@@ -2245,7 +2364,7 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_SetCode) {
   target->set_literals(*literals);
 
   if (isolate->logger()->is_logging_code_events() ||
-      CpuProfiler::is_profiling(isolate)) {
+      isolate->cpu_profiler()->is_profiling()) {
     isolate->logger()->LogExistingFunction(
         source_shared, Handle<Code>(source_shared->code()));
   }
@@ -5155,10 +5274,10 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_NewString) {
 
 
 RUNTIME_FUNCTION(MaybeObject*, Runtime_TruncateString) {
-  NoHandleAllocation ha(isolate);
-  CONVERT_ARG_CHECKED(SeqString, string, 0);
+  HandleScope scope(isolate);
+  CONVERT_ARG_HANDLE_CHECKED(SeqString, string, 0);
   CONVERT_SMI_ARG_CHECKED(new_length, 1);
-  return string->Truncate(new_length);
+  return *SeqString::Truncate(string, new_length);
 }
 
 
@@ -5793,6 +5912,24 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_NumberToInteger) {
   // We do not include 0 so that we don't have to treat +0 / -0 cases.
   if (number > 0 && number <= Smi::kMaxValue) {
     return Smi::FromInt(static_cast<int>(number));
+  }
+  return isolate->heap()->NumberFromDouble(DoubleToInteger(number));
+}
+
+
+// ES6 draft 9.1.11
+RUNTIME_FUNCTION(MaybeObject*, Runtime_NumberToPositiveInteger) {
+  NoHandleAllocation ha(isolate);
+  ASSERT(args.length() == 1);
+
+  CONVERT_DOUBLE_ARG_CHECKED(number, 0);
+
+  // We do not include 0 so that we don't have to treat +0 / -0 cases.
+  if (number > 0 && number <= Smi::kMaxValue) {
+    return Smi::FromInt(static_cast<int>(number));
+  }
+  if (number <= 0) {
+    return Smi::FromInt(0);
   }
   return isolate->heap()->NumberFromDouble(DoubleToInteger(number));
 }
@@ -11481,6 +11618,13 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_ClearStepping) {
 }
 
 
+static bool IsBlockOrCatchOrWithScope(ScopeIterator::ScopeType type) {
+  return type == ScopeIterator::ScopeTypeBlock ||
+         type == ScopeIterator::ScopeTypeCatch ||
+         type == ScopeIterator::ScopeTypeWith;
+}
+
+
 // Creates a copy of the with context chain. The copy of the context chain is
 // is linked to the function context supplied.
 static Handle<Context> CopyNestedScopeContextChain(Isolate* isolate,
@@ -11495,8 +11639,7 @@ static Handle<Context> CopyNestedScopeContextChain(Isolate* isolate,
   ScopeIterator it(isolate, frame, inlined_jsframe_index);
   if (it.Failed()) return Handle<Context>::null();
 
-  for (; it.Type() != ScopeIterator::ScopeTypeGlobal &&
-         it.Type() != ScopeIterator::ScopeTypeLocal ; it.Next()) {
+  for ( ; IsBlockOrCatchOrWithScope(it.Type()); it.Next()) {
     ASSERT(!it.Done());
     scope_chain.Add(it.CurrentScopeInfo());
     context_chain.Add(it.CurrentContext());
@@ -11512,6 +11655,7 @@ static Handle<Context> CopyNestedScopeContextChain(Isolate* isolate,
     ASSERT(!(scope_info->HasContext() & current.is_null()));
 
     if (scope_info->Type() == CATCH_SCOPE) {
+      ASSERT(current->IsCatchContext());
       Handle<String> name(String::cast(current->extension()));
       Handle<Object> thrown_object(current->get(Context::THROWN_OBJECT_INDEX),
                                    isolate);
@@ -11522,6 +11666,7 @@ static Handle<Context> CopyNestedScopeContextChain(Isolate* isolate,
                                               thrown_object);
     } else if (scope_info->Type() == BLOCK_SCOPE) {
       // Materialize the contents of the block scope into a JSObject.
+      ASSERT(current->IsBlockContext());
       Handle<JSObject> block_scope_object =
           MaterializeBlockScope(isolate, current);
       CHECK(!block_scope_object.is_null());
@@ -11688,23 +11833,26 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_DebugEvaluate) {
       isolate, frame, &frame_inspector);
   RETURN_IF_EMPTY_HANDLE(isolate, local_scope);
 
-  Handle<Context> frame_context(Context::cast(frame->context()));
-  Handle<Context> function_context;
-  Handle<ScopeInfo> scope_info(function->shared()->scope_info());
-  if (scope_info->HasContext()) {
-    function_context = Handle<Context>(frame_context->declaration_context());
+  // Do not materialize the arguments object for eval or top-level code.
+  if (function->shared()->is_function()) {
+    Handle<Context> frame_context(Context::cast(frame->context()));
+    Handle<Context> function_context;
+    Handle<ScopeInfo> scope_info(function->shared()->scope_info());
+    if (scope_info->HasContext()) {
+      function_context = Handle<Context>(frame_context->declaration_context());
+    }
+    Handle<Object> arguments = GetArgumentsObject(isolate,
+                                                  frame,
+                                                  &frame_inspector,
+                                                  scope_info,
+                                                  function_context);
+    SetProperty(isolate,
+                local_scope,
+                isolate->factory()->arguments_string(),
+                arguments,
+                ::NONE,
+                kNonStrictMode);
   }
-  Handle<Object> arguments = GetArgumentsObject(isolate,
-                                                frame,
-                                                &frame_inspector,
-                                                scope_info,
-                                                function_context);
-  SetProperty(isolate,
-              local_scope,
-              isolate->factory()->arguments_string(),
-              arguments,
-              ::NONE,
-              kNonStrictMode);
 
   // Allocate a new context for the debug evaluation and set the extension
   // object build.

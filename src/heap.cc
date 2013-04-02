@@ -1858,7 +1858,7 @@ class ScavengingVisitor : public StaticVisitorBase {
       HEAP_PROFILE(heap, ObjectMoveEvent(source->address(), target->address()));
       Isolate* isolate = heap->isolate();
       if (isolate->logger()->is_logging_code_events() ||
-          CpuProfiler::is_profiling(isolate)) {
+          isolate->cpu_profiler()->is_profiling()) {
         if (target->IsSharedFunctionInfo()) {
           PROFILE(isolate, SharedFunctionInfoMoveEvent(
               source->address(), target->address()));
@@ -2114,7 +2114,7 @@ static void InitializeScavengingVisitorsTables() {
 void Heap::SelectScavengingVisitorsTable() {
   bool logging_and_profiling =
       isolate()->logger()->is_logging() ||
-      CpuProfiler::is_profiling(isolate()) ||
+      isolate()->cpu_profiler()->is_profiling() ||
       (isolate()->heap_profiler() != NULL &&
        isolate()->heap_profiler()->is_profiling());
 
@@ -5428,13 +5428,13 @@ MaybeObject* Heap::AllocateHashTable(int length, PretenureFlag pretenure) {
 }
 
 
-MaybeObject* Heap::AllocateSymbol(PretenureFlag pretenure) {
+MaybeObject* Heap::AllocateSymbol() {
   // Statically ensure that it is safe to allocate symbols in paged spaces.
   STATIC_ASSERT(Symbol::kSize <= Page::kNonCodeObjectAreaSize);
-  AllocationSpace space = pretenure == TENURED ? OLD_POINTER_SPACE : NEW_SPACE;
 
   Object* result;
-  MaybeObject* maybe = AllocateRaw(Symbol::kSize, space, OLD_POINTER_SPACE);
+  MaybeObject* maybe =
+      AllocateRaw(Symbol::kSize, OLD_POINTER_SPACE, OLD_POINTER_SPACE);
   if (!maybe->ToObject(&result)) return maybe;
 
   HeapObject::cast(result)->set_map_no_write_barrier(symbol_map());
@@ -7470,6 +7470,9 @@ void KeyedLookupCache::Update(Map* map, Name* name, int field_offset) {
     }
     name = internalized_string;
   }
+  // This cache is cleared only between mark compact passes, so we expect the
+  // cache to only contain old space names.
+  ASSERT(!HEAP->InNewSpace(name));
 
   int index = (Hash(map, name) & kHashMask);
   // After a GC there will be free slots, so we use them in order (this may

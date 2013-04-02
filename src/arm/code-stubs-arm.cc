@@ -95,7 +95,7 @@ static void InitializeArrayConstructorDescriptor(Isolate* isolate,
   // stack param count needs (constructor pointer, and single argument)
   descriptor->stack_parameter_count_ = &r0;
   descriptor->register_params_ = registers;
-  descriptor->extra_expression_stack_count_ = 1;
+  descriptor->function_mode_ = JS_FUNCTION_STUB_MODE;
   descriptor->deoptimization_handler_ =
       FUNCTION_ADDR(ArrayConstructor_StubFailure);
 }
@@ -4488,35 +4488,6 @@ void InstanceofStub::Generate(MacroAssembler* masm) {
 }
 
 
-void ArrayLengthStub::Generate(MacroAssembler* masm) {
-  Label miss;
-  Register receiver;
-  if (kind() == Code::KEYED_LOAD_IC) {
-    // ----------- S t a t e -------------
-    //  -- lr    : return address
-    //  -- r0    : key
-    //  -- r1    : receiver
-    // -----------------------------------
-    __ cmp(r0, Operand(masm->isolate()->factory()->length_string()));
-    __ b(ne, &miss);
-    receiver = r1;
-  } else {
-    ASSERT(kind() == Code::LOAD_IC);
-    // ----------- S t a t e -------------
-    //  -- r2    : name
-    //  -- lr    : return address
-    //  -- r0    : receiver
-    //  -- sp[0] : receiver
-    // -----------------------------------
-    receiver = r0;
-  }
-
-  StubCompiler::GenerateLoadArrayLength(masm, receiver, r3, &miss);
-  __ bind(&miss);
-  StubCompiler::TailCallBuiltin(masm, StubCompiler::MissBuiltin(kind()));
-}
-
-
 void FunctionPrototypeStub::Generate(MacroAssembler* masm) {
   Label miss;
   Register receiver;
@@ -7414,33 +7385,31 @@ void NameDictionaryLookupStub::GenerateNegativeLookup(MacroAssembler* masm,
     __ cmp(entity_name, tmp);
     __ b(eq, done);
 
-    if (i != kInlinedProbes - 1) {
-      // Load the hole ready for use below:
-      __ LoadRoot(tmp, Heap::kTheHoleValueRootIndex);
+    // Load the hole ready for use below:
+    __ LoadRoot(tmp, Heap::kTheHoleValueRootIndex);
 
-      // Stop if found the property.
-      __ cmp(entity_name, Operand(Handle<Name>(name)));
-      __ b(eq, miss);
+    // Stop if found the property.
+    __ cmp(entity_name, Operand(Handle<Name>(name)));
+    __ b(eq, miss);
 
-      Label good;
-      __ cmp(entity_name, tmp);
-      __ b(eq, &good);
+    Label good;
+    __ cmp(entity_name, tmp);
+    __ b(eq, &good);
 
-      // Check if the entry name is not a unique name.
-      __ ldr(entity_name, FieldMemOperand(entity_name, HeapObject::kMapOffset));
-      __ ldrb(entity_name,
-              FieldMemOperand(entity_name, Map::kInstanceTypeOffset));
-      __ tst(entity_name, Operand(kIsInternalizedMask));
-      __ b(ne, &good);
-      __ cmp(entity_name, Operand(SYMBOL_TYPE));
-      __ b(ne, miss);
+    // Check if the entry name is not a unique name.
+    __ ldr(entity_name, FieldMemOperand(entity_name, HeapObject::kMapOffset));
+    __ ldrb(entity_name,
+            FieldMemOperand(entity_name, Map::kInstanceTypeOffset));
+    __ tst(entity_name, Operand(kIsInternalizedMask));
+    __ b(ne, &good);
+    __ cmp(entity_name, Operand(SYMBOL_TYPE));
+    __ b(ne, miss);
 
-      __ bind(&good);
+    __ bind(&good);
 
-      // Restore the properties.
-      __ ldr(properties,
-             FieldMemOperand(receiver, JSObject::kPropertiesOffset));
-    }
+    // Restore the properties.
+    __ ldr(properties,
+           FieldMemOperand(receiver, JSObject::kPropertiesOffset));
   }
 
   const int spill_mask =
@@ -7993,6 +7962,9 @@ void StubFailureTrampolineStub::Generate(MacroAssembler* masm) {
   int parameter_count_offset =
       StubFailureTrampolineFrame::kCallerStackParameterCountFrameOffset;
   __ ldr(r1, MemOperand(fp, parameter_count_offset));
+  if (function_mode_ == JS_FUNCTION_STUB_MODE) {
+    __ add(r1, r1, Operand(1));
+  }
   masm->LeaveFrame(StackFrame::STUB_FAILURE_TRAMPOLINE);
   __ mov(r1, Operand(r1, LSL, kPointerSizeLog2));
   __ add(sp, sp, r1);

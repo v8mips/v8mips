@@ -4540,35 +4540,6 @@ void InstanceofStub::Generate(MacroAssembler* masm) {
 }
 
 
-void ArrayLengthStub::Generate(MacroAssembler* masm) {
-  Label miss;
-  Register receiver;
-  if (kind() == Code::KEYED_LOAD_IC) {
-    // ----------- S t a t e -------------
-    //  -- ra    : return address
-    //  -- a0    : key
-    //  -- a1    : receiver
-    // -----------------------------------
-    __ Branch(&miss, ne, a0,
-        Operand(masm->isolate()->factory()->length_string()));
-    receiver = a1;
-  } else {
-    ASSERT(kind() == Code::LOAD_IC);
-    // ----------- S t a t e -------------
-    //  -- a2    : name
-    //  -- ra    : return address
-    //  -- a0    : receiver
-    //  -- sp[0] : receiver
-    // -----------------------------------
-    receiver = a0;
-  }
-
-  StubCompiler::GenerateLoadArrayLength(masm, receiver, a3, &miss);
-  __ bind(&miss);
-  StubCompiler::TailCallBuiltin(masm, StubCompiler::MissBuiltin(kind()));
-}
-
-
 void FunctionPrototypeStub::Generate(MacroAssembler* masm) {
   Label miss;
   Register receiver;
@@ -7534,30 +7505,28 @@ void NameDictionaryLookupStub::GenerateNegativeLookup(MacroAssembler* masm,
     __ LoadRoot(tmp, Heap::kUndefinedValueRootIndex);
     __ Branch(done, eq, entity_name, Operand(tmp));
 
-    if (i != kInlinedProbes - 1) {
-      // Load the hole ready for use below:
-      __ LoadRoot(tmp, Heap::kTheHoleValueRootIndex);
+    // Load the hole ready for use below:
+    __ LoadRoot(tmp, Heap::kTheHoleValueRootIndex);
 
-      // Stop if found the property.
-      __ Branch(miss, eq, entity_name, Operand(Handle<Name>(name)));
+    // Stop if found the property.
+    __ Branch(miss, eq, entity_name, Operand(Handle<Name>(name)));
 
-      Label good;
-      __ Branch(&good, eq, entity_name, Operand(tmp));
+    Label good;
+    __ Branch(&good, eq, entity_name, Operand(tmp));
 
-      // Check if the entry name is not a unique name.
-      __ lw(entity_name, FieldMemOperand(entity_name, HeapObject::kMapOffset));
-      __ lbu(entity_name,
-             FieldMemOperand(entity_name, Map::kInstanceTypeOffset));
-      __ And(scratch0, entity_name, Operand(kIsInternalizedMask));
-      __ Branch(&good, ne, scratch0, Operand(zero_reg));
-      __ Branch(miss, ne, entity_name, Operand(SYMBOL_TYPE));
+    // Check if the entry name is not a unique name.
+    __ lw(entity_name, FieldMemOperand(entity_name, HeapObject::kMapOffset));
+    __ lbu(entity_name,
+           FieldMemOperand(entity_name, Map::kInstanceTypeOffset));
+    __ And(scratch0, entity_name, Operand(kIsInternalizedMask));
+    __ Branch(&good, ne, scratch0, Operand(zero_reg));
+    __ Branch(miss, ne, entity_name, Operand(SYMBOL_TYPE));
 
-      __ bind(&good);
+    __ bind(&good);
 
-      // Restore the properties.
-      __ lw(properties,
-            FieldMemOperand(receiver, JSObject::kPropertiesOffset));
-    }
+    // Restore the properties.
+    __ lw(properties,
+          FieldMemOperand(receiver, JSObject::kPropertiesOffset));
   }
 
   const int spill_mask =
