@@ -300,6 +300,9 @@ class Simulator {
   // Stop helper functions.
   bool IsWatchpoint(uint32_t code);
   void PrintWatchpoint(uint32_t code);
+  bool IsTracepoint(uint32_t code);
+  void CountTracepoint(uint32_t code);
+  void PrintTracepoints(uint32_t code);
   void HandleStop(uint32_t code, Instruction* instr);
   bool IsStopInstruction(Instruction* instr);
   bool IsEnabledStop(uint32_t code);
@@ -370,6 +373,7 @@ class Simulator {
   bool pc_modified_;
   int icount_;
   int break_count_;
+  int trace_count_;
 
   // Debugger input.
   char* last_debugger_input_;
