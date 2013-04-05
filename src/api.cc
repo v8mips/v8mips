@@ -3352,15 +3352,16 @@ bool v8::Object::HasRealNamedProperty(Handle<String> key) {
   ON_BAILOUT(isolate, "v8::Object::HasRealNamedProperty()",
              return false);
   return Utils::OpenHandle(this)->HasRealNamedProperty(
+      isolate,
       *Utils::OpenHandle(*key));
 }
 
 
 bool v8::Object::HasRealIndexedProperty(uint32_t index) {
-  ON_BAILOUT(Utils::OpenHandle(this)->GetIsolate(),
-             "v8::Object::HasRealIndexedProperty()",
+  i::Isolate* isolate = Utils::OpenHandle(this)->GetIsolate();
+  ON_BAILOUT(isolate, "v8::Object::HasRealIndexedProperty()",
              return false);
-  return Utils::OpenHandle(this)->HasRealElementProperty(index);
+  return Utils::OpenHandle(this)->HasRealElementProperty(isolate, index);
 }
 
 
@@ -3371,6 +3372,7 @@ bool v8::Object::HasRealNamedCallbackProperty(Handle<String> key) {
              return false);
   ENTER_V8(isolate);
   return Utils::OpenHandle(this)->HasRealNamedCallbackProperty(
+      isolate,
       *Utils::OpenHandle(*key));
 }
 
@@ -5005,6 +5007,16 @@ v8::Local<v8::Context> Context::GetCurrent() {
   if (IsDeadCheck(isolate, "v8::Context::GetCurrent()")) {
     return Local<Context>();
   }
+  i::Handle<i::Object> current = isolate->native_context();
+  if (current.is_null()) return Local<Context>();
+  i::Handle<i::Context> context = i::Handle<i::Context>::cast(current);
+  return Utils::ToLocal(context);
+}
+
+
+v8::Local<v8::Context> Context::GetCurrent(Isolate* exported_isolate) {
+  i::Isolate* isolate = reinterpret_cast<i::Isolate*>(exported_isolate);
+  ASSERT(isolate == i::Isolate::Current());
   i::Handle<i::Object> current = isolate->native_context();
   if (current.is_null()) return Local<Context>();
   i::Handle<i::Context> context = i::Handle<i::Context>::cast(current);
