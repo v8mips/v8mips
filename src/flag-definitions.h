@@ -168,7 +168,7 @@ DEFINE_bool(packed_arrays, true, "optimizes arrays that have no holes")
 DEFINE_bool(smi_only_arrays, true, "tracks arrays with only smi values")
 DEFINE_bool(compiled_transitions, false, "use optimizing compiler to "
             "generate array elements transition stubs")
-DEFINE_bool(compiled_keyed_stores, false, "use optimizing compiler to "
+DEFINE_bool(compiled_keyed_stores, true, "use optimizing compiler to "
             "generate keyed store stubs")
 DEFINE_bool(clever_optimizations,
             true,
@@ -499,6 +499,8 @@ DEFINE_int(sim_stack_alignment, 8,
            "Stack alingment in bytes in simulator (4 or 8, 8 is default)")
 
 // isolate.cc
+DEFINE_bool(abort_on_uncaught_exception, false,
+            "abort program (dump core) when an uncaught exception is thrown")
 DEFINE_bool(trace_exception, false,
             "print stack trace when throwing exceptions")
 DEFINE_bool(preallocate_message_memory, false,
