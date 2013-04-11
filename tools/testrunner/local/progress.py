@@ -29,7 +29,7 @@
 import sys
 import time
 
-from testrunner.local import junit_output
+from . import junit_output
 
 def EscapeCommand(command):
   parts = []
@@ -271,10 +271,9 @@ class JUnitTestProgressIndicator(ProgressIndicator):
       if test.output.HasTimedOut():
         fail_text += "--- TIMEOUT ---"
     self.outputter.HasRunTest(
-                              [test.GetLabel()] +
-                              self.runner.context.mode_flags +
-                              test.flags,
-                              test.duration, fail_text)
+        [test.GetLabel()] + self.runner.context.mode_flags + test.flags,
+        test.duration,
+        fail_text)
 
 
 PROGRESS_INDICATORS = {
