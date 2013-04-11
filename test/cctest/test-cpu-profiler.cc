@@ -535,4 +535,6 @@ TEST(CollectCpuProfile) {
   CheckSimpleBranch(fooNode, bazBranch, ARRAY_SIZE(bazBranch));
   const char* delayBranch[] = { "delay", "loop" };
   CheckSimpleBranch(fooNode, delayBranch, ARRAY_SIZE(delayBranch));
+
+  cpu_profiler->DeleteAllCpuProfiles();
 }
