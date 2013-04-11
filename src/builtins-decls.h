@@ -25,63 +25,16 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-"use strict";
+#ifndef V8_BUILTINS_DECLS_H_
+#define V8_BUILTINS_DECLS_H_
 
-// This file relies on the fact that the following declaration has been made
-// in runtime.js:
-// var $Array = global.Array;
+#include "arguments.h"
 
-var $Symbol = global.Symbol;
+namespace v8 {
+namespace internal {
 
-// -------------------------------------------------------------------
+DECLARE_RUNTIME_FUNCTION(MaybeObject*, ArrayConstructor_StubFailure);
 
-function SymbolConstructor(x) {
-  var value =
-    IS_SYMBOL(x) ? x : %CreateSymbol(IS_UNDEFINED(x) ? x : ToString(x));
-  if (%_IsConstructCall()) {
-    %_SetValueOf(this, value);
-  } else {
-    return value;
-  }
-}
+} }  // namespace v8::internal
 
-function SymbolGetName() {
-  var symbol = IS_SYMBOL_WRAPPER(this) ? %_ValueOf(this) : this;
-  if (!IS_SYMBOL(symbol)) {
-    throw MakeTypeError(
-        'incompatible_method_receiver', ["Symbol.prototype.name", this]);
-  }
-  return %SymbolName(symbol);
-}
-
-function SymbolToString() {
-  throw MakeTypeError('symbol_to_string');
-}
-
-function SymbolValueOf() {
-  // NOTE: Both Symbol objects and values can enter here as
-  // 'this'. This is not as dictated by ECMA-262.
-  if (!IS_SYMBOL(this) && !IS_SYMBOL_WRAPPER(this)) {
-    throw MakeTypeError(
-        'incompatible_method_receiver', ["Symbol.prototype.valueOf", this]);
-  }
-  return %_ValueOf(this);
-}
-
-//-------------------------------------------------------------------
-
-function SetUpSymbol() {
-  %CheckIsBootstrapping();
-
-  %SetCode($Symbol, SymbolConstructor);
-  %FunctionSetPrototype($Symbol, new $Symbol());
-  %SetProperty($Symbol.prototype, "constructor", $Symbol, DONT_ENUM);
-
-  InstallGetter($Symbol.prototype, "name", SymbolGetName);
-  InstallFunctions($Symbol.prototype, DONT_ENUM, $Array(
-    "toString", SymbolToString,
-    "valueOf", SymbolValueOf
-  ));
-}
-
-SetUpSymbol();
+#endif  // V8_BUILTINS_DECLS_H_
