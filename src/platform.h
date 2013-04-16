@@ -91,8 +91,10 @@ inline int lrint(double flt) {
 
 #endif  // _MSC_VER
 
+#ifndef __CYGWIN__
 // Random is missing on both Visual Studio and MinGW.
 int random();
+#endif
 
 #endif  // WIN32
 
@@ -329,16 +331,26 @@ class OS {
   static void ReleaseStore(volatile AtomicWord* ptr, AtomicWord value);
 
 #if defined(V8_TARGET_ARCH_IA32)
-  // Copy memory area to disjoint memory area.
-  static void MemCopy(void* dest, const void* src, size_t size);
   // Limit below which the extra overhead of the MemCopy function is likely
   // to outweigh the benefits of faster copying.
   static const int kMinComplexMemCopy = 64;
-  typedef void (*MemCopyFunction)(void* dest, const void* src, size_t size);
 
+  // Copy memory area. No restrictions.
+  static void MemMove(void* dest, const void* src, size_t size);
+  typedef void (*MemMoveFunction)(void* dest, const void* src, size_t size);
+
+  // Keep the distinction of "move" vs. "copy" for the benefit of other
+  // architectures.
+  static void MemCopy(void* dest, const void* src, size_t size) {
+    MemMove(dest, src, size);
+  }
 #else  // V8_TARGET_ARCH_IA32
+  // Copy memory area to disjoint memory area.
   static void MemCopy(void* dest, const void* src, size_t size) {
     memcpy(dest, src, size);
+  }
+  static void MemMove(void* dest, const void* src, size_t size) {
+    memmove(dest, src, size);
   }
   static const int kMinComplexMemCopy = 16 * kPointerSize;
 #endif  // V8_TARGET_ARCH_IA32
