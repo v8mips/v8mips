@@ -162,8 +162,7 @@ Heap::Heap()
 #endif
       promotion_queue_(this),
       configured_(false),
-      chunks_queued_for_free_(NULL),
-      relocation_mutex_(NULL) {
+      chunks_queued_for_free_(NULL) {
   // Allow build-time customization of the max semispace size. Building
   // V8 with snapshots and a non-default max semispace size is much
   // easier if you can define it as part of the build environment.
@@ -1294,8 +1293,6 @@ class ScavengeWeakObjectRetainer : public WeakObjectRetainer {
 
 
 void Heap::Scavenge() {
-  RelocationLock relocation_lock(this);
-
 #ifdef VERIFY_HEAP
   if (FLAG_verify_heap) VerifyNonPointerSpacePointers();
 #endif
@@ -4101,9 +4098,8 @@ MaybeObject* Heap::AllocateInitialMap(JSFunction* fun) {
   int instance_size;
   int in_object_properties;
   if (fun->shared()->is_generator()) {
-    // TODO(wingo): Replace with JS_GENERATOR_OBJECT_TYPE.
-    instance_type = JS_OBJECT_TYPE;
-    instance_size = JSObject::kHeaderSize;
+    instance_type = JS_GENERATOR_OBJECT_TYPE;
+    instance_size = JSGeneratorObject::kSize;
     in_object_properties = 0;
   } else {
     instance_type = JS_OBJECT_TYPE;
@@ -4349,6 +4345,22 @@ MaybeObject* Heap::AllocateJSObjectWithAllocationSite(JSFunction* constructor,
   ASSERT(!result->ToObject(&non_failure) || !non_failure->IsGlobalObject());
 #endif
   return result;
+}
+
+
+MaybeObject* Heap::AllocateJSGeneratorObject(JSFunction *function) {
+  ASSERT(function->shared()->is_generator());
+  Map *map;
+  if (function->has_initial_map()) {
+    map = function->initial_map();
+  } else {
+    // Allocate the initial map if absent.
+    MaybeObject* maybe_map = AllocateInitialMap(function);
+    if (!maybe_map->To(&map)) return maybe_map;
+    function->set_initial_map(map);
+  }
+  ASSERT(map->instance_type() == JS_GENERATOR_OBJECT_TYPE);
+  return AllocateJSObjectFromMap(map);
 }
 
 
@@ -6613,11 +6625,6 @@ bool Heap::SetUp() {
 
   store_buffer()->SetUp();
 
-  if (FLAG_parallel_recompilation) relocation_mutex_ = OS::CreateMutex();
-#ifdef DEBUG
-  relocation_mutex_locked_ = false;
-#endif  // DEBUG
-
   return true;
 }
 
@@ -6720,8 +6727,6 @@ void Heap::TearDown() {
   incremental_marking()->TearDown();
 
   isolate_->memory_allocator()->TearDown();
-
-  delete relocation_mutex_;
 }
 
 

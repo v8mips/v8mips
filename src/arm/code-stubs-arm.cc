@@ -3497,6 +3497,8 @@ void CEntryStub::GenerateCore(MacroAssembler* masm,
     masm->Jump(r5);
   }
 
+  __ VFPEnsureFPSCRState(r2);
+
   if (always_allocate) {
     // It's okay to clobber r2 and r3 here. Don't mess with r0 and r1
     // though (contain the result).
@@ -3532,11 +3534,18 @@ void CEntryStub::GenerateCore(MacroAssembler* masm,
   // Special handling of out of memory exceptions.
   JumpIfOOM(masm, r0, ip, throw_out_of_memory_exception);
 
-  // Retrieve the pending exception and clear the variable.
-  __ mov(r3, Operand(isolate->factory()->the_hole_value()));
+  // Retrieve the pending exception.
   __ mov(ip, Operand(ExternalReference(Isolate::kPendingExceptionAddress,
                                        isolate)));
   __ ldr(r0, MemOperand(ip));
+
+  // See if we just retrieved an OOM exception.
+  JumpIfOOM(masm, r0, ip, throw_out_of_memory_exception);
+
+  // Clear the pending exception.
+  __ mov(r3, Operand(isolate->factory()->the_hole_value()));
+  __ mov(ip, Operand(ExternalReference(Isolate::kPendingExceptionAddress,
+                                       isolate)));
   __ str(r3, MemOperand(ip));
 
   // Special handling of termination exceptions which are uncatchable
@@ -3658,6 +3667,7 @@ void JSEntryStub::GenerateBody(MacroAssembler* masm, bool is_construct) {
   __ vstm(db_w, sp, kFirstCalleeSavedDoubleReg, kLastCalleeSavedDoubleReg);
   // Set up the reserved register for 0.0.
   __ vmov(kDoubleRegZero, 0.0);
+  __ VFPEnsureFPSCRState(r4);
 
   // Get address of argv, see stm above.
   // r0: code entry
@@ -4448,7 +4458,7 @@ void ArgumentsAccessStub::GenerateNewStrict(MacroAssembler* masm) {
       Context::STRICT_MODE_ARGUMENTS_BOILERPLATE_INDEX)));
 
   // Copy the JS object part.
-  __ CopyFields(r0, r4, r3.bit(), JSObject::kHeaderSize / kPointerSize);
+  __ CopyFields(r0, r4, d0, s0, JSObject::kHeaderSize / kPointerSize);
 
   // Get the length (smi tagged) and set that as an in-object property too.
   STATIC_ASSERT(Heap::kArgumentsLengthIndex == 0);
@@ -6839,6 +6849,7 @@ void DirectCEntryStub::GenerateCall(MacroAssembler* masm,
   __ Jump(target);  // Call the C++ function.
   ASSERT_EQ(Assembler::kInstrSize + Assembler::kPcLoadDelta,
             masm->SizeOfCodeGeneratedSince(&start));
+  __ VFPEnsureFPSCRState(r2);
 }
 
 
@@ -7439,7 +7450,7 @@ void StoreArrayLiteralElementStub::Generate(MacroAssembler* masm) {
   __ ldr(r5, FieldMemOperand(r1, JSObject::kElementsOffset));
   __ StoreNumberToDoubleElements(r0, r3,
                                  // Overwrites all regs after this.
-                                 r5, r6, r7, r9, r2,
+                                 r5, r9, r6, r7, r2,
                                  &slow_elements);
   __ Ret();
 }

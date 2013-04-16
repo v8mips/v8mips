@@ -602,6 +602,13 @@ class Heap {
     return old_pointer_space_->allocation_limit_address();
   }
 
+  Address* OldDataSpaceAllocationTopAddress() {
+    return old_data_space_->allocation_top_address();
+  }
+  Address* OldDataSpaceAllocationLimitAddress() {
+    return old_data_space_->allocation_limit_address();
+  }
+
   // Uncommit unused semi space.
   bool UncommitFromSpace() { return new_space_.UncommitFromSpace(); }
 
@@ -617,6 +624,9 @@ class Heap {
   MUST_USE_RESULT MaybeObject* AllocateJSObjectWithAllocationSite(
       JSFunction* constructor,
       Handle<Object> allocation_site_info_payload);
+
+  MUST_USE_RESULT MaybeObject* AllocateJSGeneratorObject(
+      JSFunction* function);
 
   MUST_USE_RESULT MaybeObject* AllocateJSModule(Context* context,
                                                 ScopeInfo* scope_info);
@@ -1330,6 +1340,10 @@ class Heap {
   inline bool InOldPointerSpace(Address address);
   inline bool InOldPointerSpace(Object* object);
 
+  // Returns whether the object resides in old data space.
+  inline bool InOldDataSpace(Address address);
+  inline bool InOldDataSpace(Object* object);
+
   // Checks whether an address/object in the heap (including auxiliary
   // area and unused area).
   bool Contains(Address addr);
@@ -1832,38 +1846,6 @@ class Heap {
 
   void CheckpointObjectStats();
 
-  // We don't use a ScopedLock here since we want to lock the heap
-  // only when FLAG_parallel_recompilation is true.
-  class RelocationLock {
-   public:
-    explicit RelocationLock(Heap* heap) : heap_(heap) {
-      if (FLAG_parallel_recompilation) {
-        heap_->relocation_mutex_->Lock();
-#ifdef DEBUG
-        heap_->relocation_mutex_locked_ = true;
-#endif  // DEBUG
-      }
-    }
-
-    ~RelocationLock() {
-      if (FLAG_parallel_recompilation) {
-#ifdef DEBUG
-        heap_->relocation_mutex_locked_ = false;
-#endif  // DEBUG
-        heap_->relocation_mutex_->Unlock();
-      }
-    }
-
-#ifdef DEBUG
-    static bool IsLocked(Heap* heap) {
-      return heap->relocation_mutex_locked_;
-    }
-#endif  // DEBUG
-
-   private:
-    Heap* heap_;
-  };
-
  private:
   Heap();
 
@@ -2332,11 +2314,6 @@ class Heap {
   VisitorDispatchTable<ScavengingCallback> scavenging_visitors_table_;
 
   MemoryChunk* chunks_queued_for_free_;
-
-  Mutex* relocation_mutex_;
-#ifdef DEBUG
-  bool relocation_mutex_locked_;
-#endif  // DEBUG;
 
   friend class Factory;
   friend class GCTracer;

@@ -4431,18 +4431,14 @@ void LCodeGen::DoStoreKeyedFixedDoubleArray(LStoreKeyed* instr) {
   }
 
   if (instr->NeedsCanonicalization()) {
-    // Check for NaN. All NaNs must be canonicalized.
-    __ VFPCompareAndSetFlags(value, value);
-    Label after_canonicalization;
-
-    // Only load canonical NaN if the comparison above set the overflow.
-    __ b(vc, &after_canonicalization);
-    __ Vmov(value,
-            FixedDoubleArray::canonical_not_the_hole_nan_as_double());
-
-    __ bind(&after_canonicalization);
+    // Force a canonical NaN.
+    if (masm()->emit_debug_code()) {
+      __ vmrs(ip);
+      __ tst(ip, Operand(kVFPDefaultNaNModeControlBit));
+      __ Assert(ne, "Default NaN mode not set");
+    }
+    __ VFPCanonicalizeNaN(value);
   }
-
   __ vstr(value, scratch, instr->additional_index() << element_size_shift);
 }
 
@@ -4864,16 +4860,13 @@ void LCodeGen::DoNumberTagD(LNumberTagD* instr) {
     DwVfpRegister input_reg = ToDoubleRegister(instr->value());
     __ VFPCompareAndSetFlags(input_reg, input_reg);
     __ b(vc, &no_special_nan_handling);
-    __ vmov(reg, scratch0(), input_reg);
-    __ cmp(scratch0(), Operand(kHoleNanUpper32));
-    Label canonicalize;
-    __ b(ne, &canonicalize);
+    __ vmov(scratch, input_reg.high());
+    __ cmp(scratch, Operand(kHoleNanUpper32));
+    // If not the hole NaN, force the NaN to be canonical.
+    __ VFPCanonicalizeNaN(input_reg, ne);
+    __ b(ne, &no_special_nan_handling);
     __ Move(reg, factory()->the_hole_value());
     __ b(&done);
-    __ bind(&canonicalize);
-    __ Vmov(input_reg,
-            FixedDoubleArray::canonical_not_the_hole_nan_as_double(),
-            no_reg);
   }
 
   __ bind(&no_special_nan_handling);
@@ -5614,17 +5607,8 @@ void LCodeGen::DoRegExpLiteral(LRegExpLiteral* instr) {
 
   __ bind(&allocated);
   // Copy the content into the newly allocated memory.
-  // (Unroll copy loop once for better throughput).
-  for (int i = 0; i < size - kPointerSize; i += 2 * kPointerSize) {
-    __ ldr(r3, FieldMemOperand(r1, i));
-    __ ldr(r2, FieldMemOperand(r1, i + kPointerSize));
-    __ str(r3, FieldMemOperand(r0, i));
-    __ str(r2, FieldMemOperand(r0, i + kPointerSize));
-  }
-  if ((size % (2 * kPointerSize)) != 0) {
-    __ ldr(r3, FieldMemOperand(r1, size - kPointerSize));
-    __ str(r3, FieldMemOperand(r0, size - kPointerSize));
-  }
+  __ CopyFields(r0, r1, double_scratch0(), double_scratch0().low(),
+                size / kPointerSize);
 }
 
 
