@@ -3842,6 +3842,8 @@ class HArithmeticBinaryOperation: public HBinaryOperation {
         : representation();
   }
 
+  virtual HValue* Canonicalize();
+
  private:
   virtual bool IsDeletable() const { return true; }
 };
@@ -4400,6 +4402,8 @@ class HMul: public HArithmeticBinaryOperation {
                            HValue* right);
 
   virtual HValue* EnsureAndPropagateNotMinusZero(BitVector* visited);
+
+  virtual HValue* Canonicalize();
 
   // Only commutative if it is certain that not two objects are multiplicated.
   virtual bool IsCommutative() const {

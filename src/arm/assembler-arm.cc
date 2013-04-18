@@ -255,10 +255,13 @@ void CpuFeatures::PrintFeatures() {
     CpuFeatures::IsSupported(UNALIGNED_ACCESSES),
     CpuFeatures::IsSupported(MOVW_MOVT_IMMEDIATE_LOADS));
 #ifdef __arm__
-    printf(" USE_EABI_HARDFLOAT=%d\n", OS::ArmUsingHardFloat());
+  bool eabi_hardfloat = OS::ArmUsingHardFloat();
+#elif USE_EABI_HARDFLOAT
+  bool eabi_hardfloat = true;
 #else
-    printf(" USE_EABI_HARDFLOAT=%d\n", USE_EABI_HARDFLOAT);
+  bool eabi_hardfloat = false;
 #endif
+    printf(" USE_EABI_HARDFLOAT=%d\n", eabi_hardfloat);
 }
 
 
@@ -1680,7 +1683,6 @@ void Assembler::stop(const char* msg, Condition cond, int32_t code) {
     emit(reinterpret_cast<Instr>(msg));
   }
 #else  // def __arm__
-#ifdef CAN_USE_ARMV5_INSTRUCTIONS
   if (cond != al) {
     Label skip;
     b(&skip, NegateCondition(cond));
@@ -1689,9 +1691,6 @@ void Assembler::stop(const char* msg, Condition cond, int32_t code) {
   } else {
     bkpt(0);
   }
-#else  // ndef CAN_USE_ARMV5_INSTRUCTIONS
-  svc(0x9f0001, cond);
-#endif  // ndef CAN_USE_ARMV5_INSTRUCTIONS
 #endif  // def __arm__
 }
 

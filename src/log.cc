@@ -112,36 +112,6 @@ class Profiler: public Thread {
 
 
 //
-// StackTracer implementation
-//
-DISABLE_ASAN void StackTracer::Trace(Isolate* isolate, TickSample* sample) {
-  ASSERT(isolate->IsInitialized());
-
-  // Avoid collecting traces while doing GC.
-  if (sample->state == GC) return;
-
-  const Address js_entry_sp =
-      Isolate::js_entry_sp(isolate->thread_local_top());
-  if (js_entry_sp == 0) {
-    // Not executing JS now.
-    return;
-  }
-
-  sample->external_callback = isolate->external_callback();
-
-  SafeStackTraceFrameIterator it(isolate,
-                                 sample->fp, sample->sp,
-                                 sample->sp, js_entry_sp);
-  int i = 0;
-  while (!it.done() && i < TickSample::kMaxFramesCount) {
-    sample->stack[i++] = it.frame()->pc();
-    it.Advance();
-  }
-  sample->frames_count = i;
-}
-
-
-//
 // Ticker used to provide ticks to the profiler and the sliding state
 // window.
 //
@@ -1620,7 +1590,6 @@ void Logger::LogCodeObject(Object* object) {
       case Code::BINARY_OP_IC:   // fall through
       case Code::COMPARE_IC:  // fall through
       case Code::TO_BOOLEAN_IC:  // fall through
-      case Code::COMPILED_STUB:  // fall through
       case Code::STUB:
         description =
             CodeStub::MajorName(CodeStub::GetMajorKey(code_object), true);
@@ -1927,67 +1896,6 @@ FILE* Logger::TearDown() {
   ticker_ = NULL;
 
   return log_->Close();
-}
-
-
-// Protects the state below.
-static Mutex* active_samplers_mutex = NULL;
-
-List<Sampler*>* SamplerRegistry::active_samplers_ = NULL;
-
-
-void SamplerRegistry::SetUp() {
-  if (!active_samplers_mutex) {
-    active_samplers_mutex = OS::CreateMutex();
-  }
-}
-
-
-bool SamplerRegistry::IterateActiveSamplers(VisitSampler func, void* param) {
-  ScopedLock lock(active_samplers_mutex);
-  for (int i = 0;
-       ActiveSamplersExist() && i < active_samplers_->length();
-       ++i) {
-    func(active_samplers_->at(i), param);
-  }
-  return ActiveSamplersExist();
-}
-
-
-static void ComputeCpuProfiling(Sampler* sampler, void* flag_ptr) {
-  bool* flag = reinterpret_cast<bool*>(flag_ptr);
-  *flag |= sampler->IsProfiling();
-}
-
-
-SamplerRegistry::State SamplerRegistry::GetState() {
-  bool flag = false;
-  if (!IterateActiveSamplers(&ComputeCpuProfiling, &flag)) {
-    return HAS_NO_SAMPLERS;
-  }
-  return flag ? HAS_CPU_PROFILING_SAMPLERS : HAS_SAMPLERS;
-}
-
-
-void SamplerRegistry::AddActiveSampler(Sampler* sampler) {
-  ASSERT(sampler->IsActive());
-  ScopedLock lock(active_samplers_mutex);
-  if (active_samplers_ == NULL) {
-    active_samplers_ = new List<Sampler*>;
-  } else {
-    ASSERT(!active_samplers_->Contains(sampler));
-  }
-  active_samplers_->Add(sampler);
-}
-
-
-void SamplerRegistry::RemoveActiveSampler(Sampler* sampler) {
-  ASSERT(sampler->IsActive());
-  ScopedLock lock(active_samplers_mutex);
-  ASSERT(active_samplers_ != NULL);
-  bool removed = active_samplers_->RemoveElement(sampler);
-  ASSERT(removed);
-  USE(removed);
 }
 
 } }  // namespace v8::internal

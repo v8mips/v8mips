@@ -1,4 +1,4 @@
-// Copyright 2009 the V8 project authors. All rights reserved.
+// Copyright 2013 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -25,50 +25,37 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-var global = this;
+var realmA = Realm.current();
+var realmB = Realm.create();
+assertEquals(0, realmA);
+assertEquals(1, realmB);
 
-function ES5Error(ut) {
-  this.ut = ut;
-}
+// The global objects match the realms' this binding.
+assertSame(this, Realm.global(realmA));
+assertSame(Realm.eval(realmB, "this"), Realm.global(realmB));
+assertFalse(this === Realm.global(realmB));
 
-ES5Error.prototype.toString = function () {
-  return this.ut.res;
-};
+// The global object is not accessible cross-realm.
+var x = 3;
+Realm.shared = this;
+assertThrows("Realm.eval(realmB, 'x')");
+assertSame(undefined, Realm.eval(realmB, "this.x"));
+assertSame(undefined, Realm.eval(realmB, "Realm.shared.x"));
 
-// The harness uses the IE specific .description property of exceptions but
-// that's nothing we can't hack our way around.
-Error.prototype.__defineGetter__('description', function () {
-  return this.message;
-});
+Realm.eval(realmB, "Realm.global(0).y = 1");
+assertThrows("y");
+assertSame(undefined, this.y);
 
-function TestHarness() {
-  sth.call(this, global);
-  this._testResults = []
-}
+// Can get or set other objects' properties cross-realm.
+var p = {a: 1};
+var o = {__proto__: p, b: 2};
+Realm.shared = o;
+assertSame(1, Realm.eval(realmB, "Realm.shared.a"));
+assertSame(2, Realm.eval(realmB, "Realm.shared.b"));
 
-// Borrow sth's registerTest method.
-TestHarness.prototype.registerTest = sth.prototype.registerTest;
+// Cannot get or set a prototype cross-realm.
+assertSame(undefined, Realm.eval(realmB, "Realm.shared.__proto__"));
 
-// Drop the before/after stuff, just run the test.
-TestHarness.prototype.startTesting = function () {
-  sth.prototype.run.call(this);
-  this.report();
-};
-
-TestHarness.prototype.report = function () {
-  for (var i = 0; i < this._testResults.length; i++) {
-    var ut = this._testResults[i];
-    // We don't fail on preconditions.  Yet.
-    if (ut.res == "Precondition failed")
-      continue;
-    if (ut.res != 'pass')
-      throw new ES5Error(ut);
-  }
-};
-
-TestHarness.prototype.startingTest = function (ut) {
-  this.currentTest = ut;
-  this._testResults.push(ut);
-};
-
-var ES5Harness = new TestHarness();
+Realm.eval(realmB, "Realm.shared.__proto__ = {c: 3}");
+assertSame(1, o.a);
+assertSame(undefined, o.c);
