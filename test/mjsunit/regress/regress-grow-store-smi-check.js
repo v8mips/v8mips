@@ -25,37 +25,29 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-var realmA = Realm.current();
-var realmB = Realm.create();
-assertEquals(0, realmA);
-assertEquals(1, realmB);
+// Flags: --allow-natives-syntax
 
-// The global objects match the realms' this binding.
-assertSame(this, Realm.global(realmA));
-assertSame(Realm.eval(realmB, "this"), Realm.global(realmB));
-assertFalse(this === Realm.global(realmB));
+// The below test function was generated from part of a WebKit layout
+// test library setup routine: fast/canvas/webgl/resources/pnglib.js
 
-// The global object is not accessible cross-realm.
-var x = 3;
-Realm.shared = this;
-assertThrows("Realm.eval(realmB, 'x')");
-assertSame(undefined, Realm.eval(realmB, "this.x"));
-assertSame(undefined, Realm.eval(realmB, "Realm.shared.x"));
+function test(crc32) {
+  for (var i = 0; i < 256; i++) {
+    var c = i;
+    for (var j = 0; j < 8; j++) {
+      if (c & 1) {
+        c = -306674912 ^ ((c >> 1) & 0x7fffffff);
+      } else {
+        c = (c >> 1) & 0x7fffffff;
+      }
+    }
+    crc32[i] = c;
+  }
+}
 
-Realm.eval(realmB, "Realm.global(0).y = 1");
-assertThrows("y");
-assertSame(undefined, this.y);
+var a = [0.5];
+for (var i = 0; i < 256; ++i) a[i] = i;
 
-// Can get or set other objects' properties cross-realm.
-var p = {a: 1};
-var o = {__proto__: p, b: 2};
-Realm.shared = o;
-assertSame(1, Realm.eval(realmB, "Realm.shared.a"));
-assertSame(2, Realm.eval(realmB, "Realm.shared.b"));
-
-// Cannot get or set a prototype cross-realm.
-assertSame(undefined, Realm.eval(realmB, "Realm.shared.__proto__"));
-
-Realm.eval(realmB, "Realm.shared.__proto__ = {c: 3}");
-assertSame(1, o.a);
-assertSame(undefined, o.c);
+test([0.5]);
+test(a);
+%OptimizeFunctionOnNextCall(test);
+test(a);

@@ -36,6 +36,14 @@ namespace v8 {
 namespace internal {
 
 
+static SaveFPRegsMode GetSaveFPRegsMode() {
+  // We don't need to save floating point regs when generating the snapshot
+  return CpuFeatures::IsSafeForSnapshot(VFP32DREGS)
+      ? kSaveFPRegs
+      : kDontSaveFPRegs;
+}
+
+
 class SafepointGenerator : public CallWrapper {
  public:
   SafepointGenerator(LCodeGen* codegen,
@@ -238,7 +246,12 @@ bool LCodeGen::GeneratePrologue() {
         __ str(r0, target);
         // Update the write barrier. This clobbers r3 and r0.
         __ RecordWriteContextSlot(
-            cp, target.offset(), r0, r3, GetLinkRegisterState(), kSaveFPRegs);
+            cp,
+            target.offset(),
+            r0,
+            r3,
+            GetLinkRegisterState(),
+            GetSaveFPRegsMode());
       }
     }
     Comment(";;; End allocate local context");
@@ -304,7 +317,7 @@ bool LCodeGen::GenerateDeferredCode() {
       LDeferredCode* code = deferred_[i];
       __ bind(code->entry());
       if (NeedsDeferredFrame()) {
-        Comment(";;; Deferred build frame",
+        Comment(";;; Deferred build frame @%d: %s.",
                 code->instruction_index(),
                 code->instr()->Mnemonic());
         ASSERT(!frame_is_built_);
@@ -320,7 +333,7 @@ bool LCodeGen::GenerateDeferredCode() {
               code->instr()->Mnemonic());
       code->Generate();
       if (NeedsDeferredFrame()) {
-        Comment(";;; Deferred destroy frame",
+        Comment(";;; Deferred destroy frame @%d: %s.",
                 code->instruction_index(),
                 code->instr()->Mnemonic());
         ASSERT(frame_is_built_);
@@ -1043,11 +1056,9 @@ void LCodeGen::RecordPosition(int position) {
 
 
 void LCodeGen::DoLabel(LLabel* label) {
-  if (label->is_loop_header()) {
-    Comment(";;; B%d - LOOP entry", label->block_id());
-  } else {
-    Comment(";;; B%d", label->block_id());
-  }
+  Comment(";;; -------------------- B%d%s --------------------",
+          label->block_id(),
+          label->is_loop_header() ? " (loop header)" : "");
   __ bind(label->label());
   current_block_ = label->block_id();
   DoGap(label);
@@ -3069,7 +3080,7 @@ void LCodeGen::DoStoreContextSlot(LStoreContextSlot* instr) {
                               value,
                               scratch,
                               GetLinkRegisterState(),
-                              kSaveFPRegs,
+                              GetSaveFPRegsMode(),
                               EMIT_REMEMBERED_SET,
                               check_needed);
   }
@@ -4258,7 +4269,7 @@ void LCodeGen::DoStoreNamedField(LStoreNamedField* instr) {
                           scratch,
                           temp,
                           GetLinkRegisterState(),
-                          kSaveFPRegs,
+                          GetSaveFPRegsMode(),
                           OMIT_REMEMBERED_SET,
                           OMIT_SMI_CHECK);
     }
@@ -4277,7 +4288,7 @@ void LCodeGen::DoStoreNamedField(LStoreNamedField* instr) {
                           value,
                           scratch,
                           GetLinkRegisterState(),
-                          kSaveFPRegs,
+                          GetSaveFPRegsMode(),
                           EMIT_REMEMBERED_SET,
                           check_needed);
     }
@@ -4292,7 +4303,7 @@ void LCodeGen::DoStoreNamedField(LStoreNamedField* instr) {
                           value,
                           object,
                           GetLinkRegisterState(),
-                          kSaveFPRegs,
+                          GetSaveFPRegsMode(),
                           EMIT_REMEMBERED_SET,
                           check_needed);
     }
@@ -4486,7 +4497,7 @@ void LCodeGen::DoStoreKeyedFixedArray(LStoreKeyed* instr) {
                    key,
                    value,
                    GetLinkRegisterState(),
-                   kSaveFPRegs,
+                   GetSaveFPRegsMode(),
                    EMIT_REMEMBERED_SET,
                    check_needed);
   }
