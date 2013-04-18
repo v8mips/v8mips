@@ -36,6 +36,14 @@ namespace v8 {
 namespace internal {
 
 
+static SaveFPRegsMode GetSaveFPRegsMode() {
+  // We don't need to save floating point regs when generating the snapshot
+  return CpuFeatures::IsSafeForSnapshot(FPU)
+      ? kSaveFPRegs
+      : kDontSaveFPRegs;
+}
+
+
 class SafepointGenerator : public CallWrapper {
  public:
   SafepointGenerator(LCodeGen* codegen,
@@ -235,7 +243,12 @@ bool LCodeGen::GeneratePrologue() {
         __ sw(a0, target);
         // Update the write barrier. This clobbers a3 and a0.
         __ RecordWriteContextSlot(
-            cp, target.offset(), a0, a3, GetRAState(), kSaveFPRegs);
+            cp,
+            target.offset(),
+            a0,
+            a3,
+            GetRAState(),
+            GetSaveFPRegsMode());
       }
     }
     Comment(";;; End allocate local context");
@@ -2812,7 +2825,7 @@ void LCodeGen::DoStoreContextSlot(LStoreContextSlot* instr) {
                               value,
                               scratch0(),
                               GetRAState(),
-                              kSaveFPRegs,
+                              GetSaveFPRegsMode(),
                               EMIT_REMEMBERED_SET,
                               check_needed);
   }
@@ -4050,7 +4063,7 @@ void LCodeGen::DoStoreNamedField(LStoreNamedField* instr) {
                           scratch,
                           temp,
                           GetRAState(),
-                          kSaveFPRegs,
+                          GetSaveFPRegsMode(),
                           OMIT_REMEMBERED_SET,
                           OMIT_SMI_CHECK);
     }
@@ -4069,7 +4082,7 @@ void LCodeGen::DoStoreNamedField(LStoreNamedField* instr) {
                           value,
                           scratch,
                           GetRAState(),
-                          kSaveFPRegs,
+                          GetSaveFPRegsMode(),
                           EMIT_REMEMBERED_SET,
                           check_needed);
     }
@@ -4084,7 +4097,7 @@ void LCodeGen::DoStoreNamedField(LStoreNamedField* instr) {
                           value,
                           object,
                           GetRAState(),
-                          kSaveFPRegs,
+                          GetSaveFPRegsMode(),
                           EMIT_REMEMBERED_SET,
                           check_needed);
     }
@@ -4293,7 +4306,7 @@ void LCodeGen::DoStoreKeyedFixedArray(LStoreKeyed* instr) {
                    key,
                    value,
                    GetRAState(),
-                   kSaveFPRegs,
+                   GetSaveFPRegsMode(),
                    EMIT_REMEMBERED_SET,
                    check_needed);
   }
