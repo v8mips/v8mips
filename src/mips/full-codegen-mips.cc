@@ -1958,7 +1958,7 @@ void FullCodeGenerator::VisitYield(Yield* expr) {
       VisitForAccumulatorValue(expr->generator_object());
       __ li(a1, Operand(Smi::FromInt(JSGeneratorObject::kGeneratorClosed)));
       __ sw(a1, FieldMemOperand(result_register(),
-                               JSGeneratorObject::kContinuationOffset));
+                                JSGeneratorObject::kContinuationOffset));
       __ pop(result_register());
       // TODO(wingo): Box into { value: VALUE, done: true }.
 
