@@ -280,6 +280,8 @@ class LInstruction: public ZoneObject {
   LOperand* FirstInput() { return InputAt(0); }
   LOperand* Output() { return HasResult() ? result() : NULL; }
 
+  virtual bool HasInterestingComment(LCodeGen* gen) const { return true; }
+
 #ifdef DEBUG
   void VerifyCall();
 #endif
@@ -379,6 +381,10 @@ class LInstructionGap: public LGap {
  public:
   explicit LInstructionGap(HBasicBlock* block) : LGap(block) { }
 
+  virtual bool HasInterestingComment(LCodeGen* gen) const {
+    return !IsRedundant();
+  }
+
   DECLARE_CONCRETE_INSTRUCTION(InstructionGap, "gap")
 };
 
@@ -387,6 +393,7 @@ class LGoto: public LTemplateInstruction<0, 0, 0> {
  public:
   explicit LGoto(int block_id) : block_id_(block_id) { }
 
+  virtual bool HasInterestingComment(LCodeGen* gen) const;
   DECLARE_CONCRETE_INSTRUCTION(Goto, "goto")
   virtual void PrintDataTo(StringStream* stream);
   virtual bool IsControl() const { return true; }
@@ -434,12 +441,14 @@ class LLabel: public LGap {
   explicit LLabel(HBasicBlock* block)
       : LGap(block), replacement_(NULL) { }
 
+  virtual bool HasInterestingComment(LCodeGen* gen) const { return false; }
   DECLARE_CONCRETE_INSTRUCTION(Label, "label")
 
   virtual void PrintDataTo(StringStream* stream);
 
   int block_id() const { return block()->block_id(); }
   bool is_loop_header() const { return block()->IsLoopHeader(); }
+  bool is_osr_entry() const { return block()->is_osr_entry(); }
   Label* label() { return &label_; }
   LLabel* replacement() const { return replacement_; }
   void set_replacement(LLabel* label) { replacement_ = label; }
@@ -453,6 +462,7 @@ class LLabel: public LGap {
 
 class LParameter: public LTemplateInstruction<1, 0, 0> {
  public:
+  virtual bool HasInterestingComment(LCodeGen* gen) const { return false; }
   DECLARE_CONCRETE_INSTRUCTION(Parameter, "parameter")
 };
 
@@ -470,6 +480,7 @@ class LCallStub: public LTemplateInstruction<1, 0, 0> {
 
 class LUnknownOSRValue: public LTemplateInstruction<1, 0, 0> {
  public:
+  virtual bool HasInterestingComment(LCodeGen* gen) const { return false; }
   DECLARE_CONCRETE_INSTRUCTION(UnknownOSRValue, "unknown-osr-value")
 };
 
@@ -2527,6 +2538,7 @@ class LOsrEntry: public LTemplateInstruction<0, 0, 0> {
  public:
   LOsrEntry();
 
+  virtual bool HasInterestingComment(LCodeGen* gen) const { return false; }
   DECLARE_CONCRETE_INSTRUCTION(OsrEntry, "osr-entry")
 
   LOperand** SpilledRegisterArray() { return register_spills_; }
