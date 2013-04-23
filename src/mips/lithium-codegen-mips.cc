@@ -3017,7 +3017,7 @@ void LCodeGen::DoAccessArgumentsAt(LAccessArgumentsAt* instr) {
     Register length = ToRegister(instr->length());
     Register index = ToRegister(instr->index());
     // There are two words between the frame pointer and the last argument.
-    // Subtracting from length accounts for one of them add one more.
+    // Subtracting from length accounts for one of them, add one more.
     __ subu(length, length, index);
     __ Addu(length, length, Operand(1));
     __ sll(length, length, kPointerSizeLog2);
