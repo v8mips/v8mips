@@ -134,6 +134,19 @@ void ArrayNArgumentsConstructorStub::InitializeInterfaceDescriptor(
 }
 
 
+void CompareNilICStub::InitializeInterfaceDescriptor(
+    Isolate* isolate,
+    CodeStubInterfaceDescriptor* descriptor) {
+  static Register registers[] = { rax };
+  descriptor->register_param_count_ = 1;
+  descriptor->register_params_ = registers;
+  descriptor->deoptimization_handler_ =
+      FUNCTION_ADDR(CompareNilIC_Miss);
+  descriptor->miss_handler_ =
+      ExternalReference(IC_Utility(IC::kCompareNilIC_Miss), isolate);
+}
+
+
 #define __ ACCESS_MASM(masm)
 
 
@@ -526,9 +539,9 @@ void StoreBufferOverflowStub::Generate(MacroAssembler* masm) {
   const int argument_count = 1;
   __ PrepareCallCFunction(argument_count);
 #ifdef _WIN64
-  __ LoadAddress(rcx, ExternalReference::isolate_address());
+  __ LoadAddress(rcx, ExternalReference::isolate_address(masm->isolate()));
 #else
-  __ LoadAddress(rdi, ExternalReference::isolate_address());
+  __ LoadAddress(rdi, ExternalReference::isolate_address(masm->isolate()));
 #endif
 
   AllowExternalCallThatCantCauseGC scope(masm);
@@ -2979,9 +2992,8 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
   __ EnterApiExitFrame(argument_slots_on_stack);
 
   // Argument 9: Pass current isolate address.
-  // __ movq(Operand(rsp, (argument_slots_on_stack - 1) * kPointerSize),
-  //     Immediate(ExternalReference::isolate_address()));
-  __ LoadAddress(kScratchRegister, ExternalReference::isolate_address());
+  __ LoadAddress(kScratchRegister,
+                 ExternalReference::isolate_address(masm->isolate()));
   __ movq(Operand(rsp, (argument_slots_on_stack - 1) * kPointerSize),
           kScratchRegister);
 
@@ -4117,21 +4129,21 @@ void CEntryStub::GenerateCore(MacroAssembler* masm,
     // Pass a pointer to the Arguments object as the first argument.
     // Return result in single register (rax).
     __ lea(rcx, StackSpaceOperand(0));
-    __ LoadAddress(rdx, ExternalReference::isolate_address());
+    __ LoadAddress(rdx, ExternalReference::isolate_address(masm->isolate()));
   } else {
     ASSERT_EQ(2, result_size_);
     // Pass a pointer to the result location as the first argument.
     __ lea(rcx, StackSpaceOperand(2));
     // Pass a pointer to the Arguments object as the second argument.
     __ lea(rdx, StackSpaceOperand(0));
-    __ LoadAddress(r8, ExternalReference::isolate_address());
+    __ LoadAddress(r8, ExternalReference::isolate_address(masm->isolate()));
   }
 
 #else  // _WIN64
   // GCC passes arguments in rdi, rsi, rdx, rcx, r8, r9.
   __ movq(rdi, r14);  // argc.
   __ movq(rsi, r15);  // argv.
-  __ movq(rdx, ExternalReference::isolate_address());
+  __ movq(rdx, ExternalReference::isolate_address(masm->isolate()));
 #endif
   __ call(rbx);
   // Result is in rax - do not destroy this register!
@@ -6499,7 +6511,7 @@ void RecordWriteStub::InformIncrementalMarker(MacroAssembler* masm, Mode mode) {
   __ Move(arg1, regs_.object());
   // TODO(gc) Can we just set address arg2 in the beginning?
   __ Move(arg2, address);
-  __ LoadAddress(arg3, ExternalReference::isolate_address());
+  __ LoadAddress(arg3, ExternalReference::isolate_address(masm->isolate()));
   int argument_count = 3;
 
   AllowExternalCallThatCantCauseGC scope(masm);

@@ -1757,11 +1757,15 @@ class HChange: public HUnaryOperation {
     ASSERT(!value->representation().IsNone() && !to.IsNone());
     ASSERT(!value->representation().Equals(to));
     set_representation(to);
-    set_type(HType::TaggedNumber());
     SetFlag(kUseGVN);
     if (deoptimize_on_undefined) SetFlag(kDeoptimizeOnUndefined);
     if (is_truncating) SetFlag(kTruncatingToInt32);
-    if (to.IsTagged()) SetGVNFlag(kChangesNewSpacePromotion);
+    if (value->type().IsSmi()) {
+      set_type(HType::Smi());
+    } else {
+      set_type(HType::TaggedNumber());
+      if (to.IsTagged()) SetGVNFlag(kChangesNewSpacePromotion);
+    }
   }
 
   virtual HValue* EnsureAndPropagateNotMinusZero(BitVector* visited);
@@ -3942,6 +3946,10 @@ class HCompareObjectEqAndBranch: public HTemplateControlInstruction<2, 2> {
   virtual void PrintDataTo(StringStream* stream);
 
   virtual Representation RequiredInputRepresentation(int index) {
+    return Representation::Tagged();
+  }
+
+  virtual Representation observed_input_representation(int index) {
     return Representation::Tagged();
   }
 
