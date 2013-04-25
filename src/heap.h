@@ -240,6 +240,8 @@ namespace internal {
   V(elements_field_string, "%elements")                                  \
   V(length_field_string, "%length")                                      \
   V(function_class_string, "Function")                                   \
+  V(properties_field_symbol, "%properties")                              \
+  V(payload_field_symbol, "%payload")                                    \
   V(illegal_argument_string, "illegal argument")                         \
   V(MakeReferenceError_string, "MakeReferenceError")                     \
   V(MakeSyntaxError_string, "MakeSyntaxError")                           \
@@ -692,6 +694,12 @@ class Heap {
   // failed.
   // Please note this does not perform a garbage collection.
   MUST_USE_RESULT MaybeObject* AllocateFunctionPrototype(JSFunction* function);
+
+  // Allocates a JS ArrayBuffer object.
+  // Returns Failure::RetryAfterGC(requested_bytes, space) if the allocation
+  // failed.
+  // Please note this does not perform a garbage collection.
+  MUST_USE_RESULT MaybeObject* AllocateJSArrayBuffer();
 
   // Allocates a Harmony proxy or function proxy.
   // Returns Failure::RetryAfterGC(requested_bytes, space) if the allocation
@@ -1755,7 +1763,7 @@ class Heap {
 
   inline Isolate* isolate();
 
-  void CallGCPrologueCallbacks(GCType gc_type);
+  void CallGCPrologueCallbacks(GCType gc_type, GCCallbackFlags flags);
   void CallGCEpilogueCallbacks(GCType gc_type);
 
   inline bool OldGenerationAllocationLimitReached();
