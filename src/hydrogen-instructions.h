@@ -3143,6 +3143,8 @@ class HPhi: public HValue {
     return true;
   }
 
+  void SimplifyConstantInputs();
+
  protected:
   virtual void DeleteFromGraph();
   virtual void InternalSetOperandAt(int index, HValue* value) {
@@ -3444,10 +3446,9 @@ class HBinaryOperation: public HTemplateInstruction<3> {
     return right();
   }
 
-  void set_observed_input_representation(Representation left,
-                                         Representation right) {
-    observed_input_representation_[0] = left;
-    observed_input_representation_[1] = right;
+  void set_observed_input_representation(int index, Representation rep) {
+    ASSERT(index >= 1 && index <= 2);
+    observed_input_representation_[index - 1] = rep;
   }
 
   virtual void initialize_output_representation(Representation observed) {
@@ -4420,6 +4421,17 @@ class HMul: public HArithmeticBinaryOperation {
                            HValue* context,
                            HValue* left,
                            HValue* right);
+
+  static HInstruction* NewImul(Zone* zone,
+                               HValue* context,
+                               HValue* left,
+                               HValue* right) {
+    HMul* mul = new(zone) HMul(context, left, right);
+    // TODO(mstarzinger): Prevent bailout on minus zero for imul.
+    mul->AssumeRepresentation(Representation::Integer32());
+    mul->ClearFlag(HValue::kCanOverflow);
+    return mul;
+  }
 
   virtual HValue* EnsureAndPropagateNotMinusZero(BitVector* visited);
 

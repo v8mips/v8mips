@@ -511,6 +511,7 @@ class ReachabilityAnalyzer BASE_EMBEDDED {
 
 
 void HGraph::Verify(bool do_full_verify) const {
+  Heap::RelocationLock(isolate()->heap());
   ALLOW_HANDLE_DEREF(isolate(), "debug mode verification");
   for (int i = 0; i < blocks_.length(); i++) {
     HBasicBlock* block = blocks_.at(i);
@@ -1859,7 +1860,7 @@ HValue* HGraphBuilder::JSArrayBuilder::EmitMapCode(HValue* context) {
       HGlobalObject(context));
   HInstruction* native_context = AddInstruction(new(zone())
       HLoadNamedField(global_object, true, GlobalObject::kNativeContextOffset));
-  size_t offset = Context::kHeaderSize +
+  int offset = Context::kHeaderSize +
       kPointerSize * Context::JS_ARRAY_MAPS_INDEX;
   HInstruction* map_array = AddInstruction(new(zone())
       HLoadNamedField(native_context, true, offset));
@@ -3746,7 +3747,12 @@ void HInferRepresentation::Analyze() {
     }
   }
 
-  // (3a) Use the phi reachability information from step 2 to
+  // Simplify constant phi inputs where possible.
+  for (int i = 0; i < phi_count; ++i) {
+    phi_list->at(i)->SimplifyConstantInputs();
+  }
+
+  // Use the phi reachability information from step 2 to
   // push information about values which can't be converted to integer
   // without deoptimization through the phi use-def chains, avoiding
   // unnecessary deoptimizations later.
@@ -3763,7 +3769,7 @@ void HInferRepresentation::Analyze() {
     }
   }
 
-  // (3b) Use the phi reachability information from step 2 to
+  // Use the phi reachability information from step 2 to
   // sum up the non-phi use counts of all connected phis.
   for (int i = 0; i < phi_count; ++i) {
     HPhi* phi = phi_list->at(i);
@@ -8937,6 +8943,18 @@ bool HOptimizedGraphBuilder::TryInlineBuiltinFunctionCall(Call* expr,
         return true;
       }
       break;
+    case kMathImul:
+      if (expr->arguments()->length() == 2) {
+        HValue* right = Pop();
+        HValue* left = Pop();
+        Drop(1);  // Receiver.
+        HValue* context = environment()->LookupContext();
+        HInstruction* op = HMul::NewImul(zone(), context, left, right);
+        if (drop_extra) Drop(1);  // Optionally drop the function.
+        ast_context()->ReturnInstruction(op, expr->id());
+        return true;
+      }
+      break;
     default:
       // Not supported for inlining yet.
       break;
@@ -9080,6 +9098,18 @@ bool HOptimizedGraphBuilder::TryInlineBuiltinMethodCall(
                                                      : HMathMinMax::kMathMax;
         HInstruction* result =
             HMathMinMax::New(zone(), context, left, right, op);
+        ast_context()->ReturnInstruction(result, expr->id());
+        return true;
+      }
+      break;
+    case kMathImul:
+      if (argument_count == 3 && check_type == RECEIVER_MAP_CHECK) {
+        AddCheckConstantFunction(expr->holder(), receiver, receiver_map);
+        HValue* right = Pop();
+        HValue* left = Pop();
+        Drop(1);  // Receiver.
+        HValue* context = environment()->LookupContext();
+        HInstruction* result = HMul::NewImul(zone(), context, left, right);
         ast_context()->ReturnInstruction(result, expr->id());
         return true;
       }
@@ -9685,7 +9715,8 @@ void HOptimizedGraphBuilder::VisitSub(UnaryOperation* expr) {
     info = TypeInfo::Unknown();
   }
   if (instr->IsBinaryOperation()) {
-    HBinaryOperation::cast(instr)->set_observed_input_representation(rep, rep);
+    HBinaryOperation::cast(instr)->set_observed_input_representation(1, rep);
+    HBinaryOperation::cast(instr)->set_observed_input_representation(2, rep);
   }
   return ast_context()->ReturnInstruction(instr, expr->id());
 }
@@ -10126,7 +10157,8 @@ HInstruction* HOptimizedGraphBuilder::BuildBinaryOperation(
 
   if (instr->IsBinaryOperation()) {
     HBinaryOperation* binop = HBinaryOperation::cast(instr);
-    binop->set_observed_input_representation(left_rep, right_rep);
+    binop->set_observed_input_representation(1, left_rep);
+    binop->set_observed_input_representation(2, right_rep);
     binop->initialize_output_representation(result_rep);
   }
   return instr;
@@ -10506,7 +10538,8 @@ void HOptimizedGraphBuilder::VisitCompareOperation(CompareOperation* expr) {
     if (combined_rep.IsTagged() || combined_rep.IsNone()) {
       HCompareGeneric* result =
           new(zone()) HCompareGeneric(context, left, right, op);
-      result->set_observed_input_representation(left_rep, right_rep);
+      result->set_observed_input_representation(1, left_rep);
+      result->set_observed_input_representation(2, right_rep);
       result->set_position(expr->position());
       return ast_context()->ReturnInstruction(result, expr->id());
     } else {

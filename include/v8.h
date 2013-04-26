@@ -92,6 +92,14 @@
 #define V8_DEPRECATED(declarator) declarator
 #endif
 
+#if __GNUC__ > 2 || (__GNUC__ == 2 && (__GNUC_MINOR__ > 95))
+  #define V8_UNLIKELY(condition) __builtin_expect((condition), 0)
+  #define V8_LIKELY(condition) __builtin_expect((condition), 1)
+#else
+  #define V8_UNLIKELY(condition) (condition)
+  #define V8_LIKELY(condition) (condition)
+#endif
+
 /**
  * The v8 JavaScript engine.
  */
@@ -1175,12 +1183,10 @@ class V8EXPORT String : public Primitive {
   int Utf8Length() const;
 
   /**
-   * A fast conservative check for non-ASCII characters.  May
-   * return true even for ASCII strings, but if it returns
-   * false you can be sure that all characters are in the range
-   * 0-127.
+   * This function is no longer useful.
    */
-  bool MayContainNonAscii() const;
+  // TODO(dcarney): deprecate
+  V8_INLINE(bool MayContainNonAscii()) const { return true; }
 
   /**
    * Returns whether this string contains only one byte data.
@@ -4979,7 +4985,7 @@ void* Object::GetAlignedPointerFromInternalField(int index) {
   O* obj = *reinterpret_cast<O**>(this);
   // Fast path: If the object is a plain JSObject, which is the common case, we
   // know where to find the internal fields and can return the value directly.
-  if (I::GetInstanceType(obj) == I::kJSObjectType) {
+  if (V8_LIKELY(I::GetInstanceType(obj) == I::kJSObjectType)) {
     int offset = I::kJSObjectHeaderSize + (internal::kApiPointerSize * index);
     return I::ReadField<void*>(obj, offset);
   }
