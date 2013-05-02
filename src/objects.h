@@ -2809,6 +2809,11 @@ class DescriptorArray: public FixedArray {
                                      int new_size,
                                      DescriptorArray* other);
 
+  bool IsMoreGeneralThan(int verbatim,
+                         int valid,
+                         int new_size,
+                         DescriptorArray* other);
+
   MUST_USE_RESULT MaybeObject* CopyUpTo(int enumeration_index);
 
   // Sort the instance descriptors by the hash codes of their keys.
@@ -4624,6 +4629,9 @@ class Code: public HeapObject {
   Code* FindFirstCode();
   void FindAllCode(CodeHandleList* code_list, int length);
 
+  // Find the first name in an IC stub.
+  Name* FindFirstName();
+
   class ExtraICStateStrictMode: public BitField<StrictModeFlag, 0, 1> {};
   class ExtraICStateKeyedAccessStoreMode:
       public BitField<KeyedAccessStoreMode, 1, 4> {};  // NOLINT
@@ -5344,6 +5352,12 @@ class Map: public HeapObject {
   inline void deprecate();
   inline bool is_deprecated();
   inline bool CanBeDeprecated();
+  // Returns a non-deprecated version of the input. If the input was not
+  // deprecated, it is directly returned. Otherwise, the non-deprecated version
+  // is found by re-transitioning from the root of the transition tree using the
+  // descriptor array of the map. New maps (and transitions) may be created if
+  // no new (more general) version exists.
+  static inline Handle<Map> CurrentMapForDeprecated(Handle<Map> map);
 
   MUST_USE_RESULT MaybeObject* RawCopy(int instance_size);
   MUST_USE_RESULT MaybeObject* CopyWithPreallocatedFieldDescriptors();

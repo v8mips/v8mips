@@ -93,7 +93,7 @@ function CreateTypedArrayConstructor(name, elementSize, arrayId, constructor) {
           "start offset", name, elementSize);
     }
     var bufferByteLength = %ArrayBufferGetByteLength(buffer);
-    if (offset >= bufferByteLength) {
+    if (offset > bufferByteLength) {
       throw MakeRangeError("invalid_typed_array_offset");
     }
 
@@ -110,7 +110,7 @@ function CreateTypedArrayConstructor(name, elementSize, arrayId, constructor) {
       var newLength = TO_POSITIVE_INTEGER(length);
       newByteLength = newLength * elementSize;
     }
-    if (newByteLength > bufferByteLength) {
+    if (offset + newByteLength > bufferByteLength) {
       throw MakeRangeError("invalid_typed_array_length");
     }
     %TypedArrayInitialize(obj, arrayId, buffer, offset, newByteLength);
@@ -123,12 +123,27 @@ function CreateTypedArrayConstructor(name, elementSize, arrayId, constructor) {
     %TypedArrayInitialize(obj, arrayId, buffer, 0, byteLength);
   }
 
+  function ConstructByArrayLike(obj, arrayLike) {
+    var length = arrayLike.length;
+    var l =  IS_UNDEFINED(length) ? 0 : TO_POSITIVE_INTEGER(length);
+    var byteLength = l * elementSize;
+    var buffer = new $ArrayBuffer(byteLength);
+    %TypedArrayInitialize(obj, arrayId, buffer, 0, byteLength);
+    for (var i = 0; i < l; i++) {
+      obj[i] = arrayLike[i];
+    }
+  }
+
   return function (arg1, arg2, arg3) {
     if (%_IsConstructCall()) {
       if (IS_ARRAYBUFFER(arg1)) {
         ConstructByArrayBuffer(this, arg1, arg2, arg3);
-      } else {
+      } else if (IS_NUMBER(arg1) || IS_STRING(arg1) || IS_BOOLEAN(arg1)) {
         ConstructByLength(this, arg1);
+      } else if (!IS_UNDEFINED(arg1)){
+        ConstructByArrayLike(this, arg1);
+      } else {
+        throw MakeTypeError("parameterless_typed_array_constr", name);
       }
     } else {
       return new constructor(arg1, arg2, arg3);
@@ -201,4 +216,4 @@ SetupTypedArray(5, "Uint32Array", global.Uint32Array, 4);
 SetupTypedArray(6, "Int32Array", global.Int32Array, 4);
 SetupTypedArray(7, "Float32Array", global.Float32Array, 4);
 SetupTypedArray(8, "Float64Array", global.Float64Array, 8);
-
+SetupTypedArray(9, "Uint8ClampedArray", global.Uint8ClampedArray, 1);

@@ -223,8 +223,7 @@ Handle<Code> StubCache::ComputeLoadField(Handle<Name> name,
                                          Handle<JSObject> holder,
                                          PropertyIndex field) {
   if (receiver.is_identical_to(holder)) {
-    LoadFieldStub stub(LoadStubCompiler::receiver(),
-                       field.is_inobject(holder),
+    LoadFieldStub stub(field.is_inobject(holder),
                        field.translate(holder));
     return stub.GetCode(isolate());
   }
@@ -339,9 +338,8 @@ Handle<Code> StubCache::ComputeKeyedLoadField(Handle<Name> name,
                                               Handle<JSObject> holder,
                                               PropertyIndex field) {
   if (receiver.is_identical_to(holder)) {
-    LoadFieldStub stub(KeyedLoadStubCompiler::receiver(),
-                       field.is_inobject(holder),
-                       field.translate(holder));
+    KeyedLoadFieldStub stub(field.is_inobject(holder),
+                            field.translate(holder));
     return stub.GetCode(isolate());
   }
 
@@ -431,15 +429,7 @@ Handle<Code> StubCache::ComputeStoreTransition(Handle<Name> name,
                                                StrictModeFlag strict_mode) {
   Handle<Code> stub = FindIC(
       name, receiver, Code::STORE_IC, Code::MAP_TRANSITION, strict_mode);
-  if (!stub.is_null()) {
-    MapHandleList embedded_maps;
-    stub->FindAllMaps(&embedded_maps);
-    for (int i = 0; i < embedded_maps.length(); i++) {
-      if (embedded_maps.at(i).is_identical_to(transition)) {
-        return stub;
-      }
-    }
-  }
+  if (!stub.is_null()) return stub;
 
   StoreStubCompiler compiler(isolate_, strict_mode);
   Handle<Code> code =
@@ -589,15 +579,7 @@ Handle<Code> StubCache::ComputeKeyedStoreTransition(
     StrictModeFlag strict_mode) {
   Handle<Code> stub = FindIC(
       name, receiver, Code::KEYED_STORE_IC, Code::MAP_TRANSITION, strict_mode);
-  if (!stub.is_null()) {
-    MapHandleList embedded_maps;
-    stub->FindAllMaps(&embedded_maps);
-    for (int i = 0; i < embedded_maps.length(); i++) {
-      if (embedded_maps.at(i).is_identical_to(transition)) {
-        return stub;
-      }
-    }
-  }
+  if (!stub.is_null()) return stub;
 
   KeyedStoreStubCompiler compiler(isolate(), strict_mode, STANDARD_STORE);
   Handle<Code> code =
@@ -1059,45 +1041,40 @@ void StubCache::Clear() {
 
 
 void StubCache::CollectMatchingMaps(SmallMapList* types,
-                                    Name* name,
+                                    Handle<Name> name,
                                     Code::Flags flags,
                                     Handle<Context> native_context,
                                     Zone* zone) {
   for (int i = 0; i < kPrimaryTableSize; i++) {
-    if (primary_[i].key == name) {
+    if (primary_[i].key == *name) {
       Map* map = primary_[i].map;
       // Map can be NULL, if the stub is constant function call
       // with a primitive receiver.
       if (map == NULL) continue;
 
-      int offset = PrimaryOffset(name, flags, map);
+      int offset = PrimaryOffset(*name, flags, map);
       if (entry(primary_, offset) == &primary_[i] &&
           !TypeFeedbackOracle::CanRetainOtherContext(map, *native_context)) {
-        types->Add(Handle<Map>(map), zone);
+        types->AddMapIfMissing(Handle<Map>(map), zone);
       }
     }
   }
 
   for (int i = 0; i < kSecondaryTableSize; i++) {
-    if (secondary_[i].key == name) {
+    if (secondary_[i].key == *name) {
       Map* map = secondary_[i].map;
       // Map can be NULL, if the stub is constant function call
       // with a primitive receiver.
       if (map == NULL) continue;
 
       // Lookup in primary table and skip duplicates.
-      int primary_offset = PrimaryOffset(name, flags, map);
-      Entry* primary_entry = entry(primary_, primary_offset);
-      if (primary_entry->key == name) {
-        Map* primary_map = primary_entry->map;
-        if (map == primary_map) continue;
-      }
+      int primary_offset = PrimaryOffset(*name, flags, map);
 
       // Lookup in secondary table and add matches.
-      int offset = SecondaryOffset(name, flags, primary_offset);
+      int offset = SecondaryOffset(*name, flags, primary_offset);
       if (entry(secondary_, offset) == &secondary_[i] &&
           !TypeFeedbackOracle::CanRetainOtherContext(map, *native_context)) {
-        types->Add(Handle<Map>(map), zone);
+        types->AddMapIfMissing(Handle<Map>(map), zone);
       }
     }
   }
@@ -1525,8 +1502,7 @@ Handle<Code> BaseLoadStubCompiler::CompileLoadField(Handle<JSObject> object,
 
   Register reg = HandlerFrontendHeader(object, receiver(), holder, name, &miss);
 
-  LoadFieldStub stub(reg, field.is_inobject(holder), field.translate(holder));
-  GenerateTailCall(masm(), stub.GetCode(isolate()));
+  GenerateLoadField(reg, holder, field);
 
   __ bind(&miss);
   TailCallBuiltin(masm(), MissBuiltin(kind()));
@@ -1611,10 +1587,7 @@ void BaseLoadStubCompiler::GenerateLoadPostInterceptor(
   if (lookup->IsField()) {
     PropertyIndex field = lookup->GetFieldIndex();
     if (interceptor_holder.is_identical_to(holder)) {
-      LoadFieldStub stub(interceptor_reg,
-                         field.is_inobject(holder),
-                         field.translate(holder));
-      GenerateTailCall(masm(), stub.GetCode(isolate()));
+      GenerateLoadField(interceptor_reg, holder, field);
     } else {
       // We found FIELD property in prototype chain of interceptor's holder.
       // Retrieve a field from field's holder.

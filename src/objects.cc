@@ -2460,12 +2460,17 @@ MaybeObject* Map::GeneralizeRepresentation(int modify_index,
   // Check the state of the root map.
   DescriptorArray* updated_descriptors = updated->instance_descriptors();
 
+  int valid = updated->NumberOfOwnDescriptors();
+  if (updated_descriptors->IsMoreGeneralThan(
+          verbatim, valid, descriptors, old_descriptors)) {
+    Representation updated_representation =
+        updated_descriptors->GetDetails(modify_index).representation();
+    if (new_representation.fits_into(updated_representation)) return updated;
+  }
+
   DescriptorArray* new_descriptors;
   MaybeObject* maybe_descriptors = updated_descriptors->Merge(
-      verbatim,
-      updated->NumberOfOwnDescriptors(),
-      descriptors,
-      old_descriptors);
+      verbatim, valid, descriptors, old_descriptors);
   if (!maybe_descriptors->To(&new_descriptors)) return maybe_descriptors;
 
   old_reprepresentation =
@@ -2477,9 +2482,9 @@ MaybeObject* Map::GeneralizeRepresentation(int modify_index,
       verbatim, descriptors, new_descriptors);
 
   int split_descriptors = split_map->NumberOfOwnDescriptors();
-  // Check whether |split_map| matches what we were looking for. If so, return
-  // it.
-  if (descriptors == split_descriptors) return split_map;
+  // This is shadowed by |updated_descriptors| being more general than
+  // |old_descriptors|.
+  ASSERT(descriptors != split_descriptors);
 
   int descriptor = split_descriptors;
   split_map->DeprecateTarget(
@@ -7260,7 +7265,7 @@ void DescriptorArray::CopyFrom(int dst_index,
 }
 
 
-// Generalize the |other| descriptor array by merging it with the (at least
+// Generalize the |other| descriptor array by merging it into the (at least
 // partly) updated |this| descriptor array.
 // The method merges two descriptor array in three parts. Both descriptor arrays
 // are identical up to |verbatim|. They also overlap in keys up to |valid|.
@@ -7280,7 +7285,7 @@ MaybeObject* DescriptorArray::Merge(int verbatim,
   // Allocate a new descriptor array large enough to hold the required
   // descriptors, with minimally the exact same size as this descriptor array.
   MaybeObject* maybe_descriptors = DescriptorArray::Allocate(
-      new_size, Max(new_size, number_of_descriptors()) - new_size);
+      new_size, Max(new_size, other->number_of_descriptors()) - new_size);
   if (!maybe_descriptors->To(&result)) return maybe_descriptors;
   ASSERT(result->length() > length() ||
          result->NumberOfSlackDescriptors() > 0 ||
@@ -7340,6 +7345,37 @@ MaybeObject* DescriptorArray::Merge(int verbatim,
 
   result->Sort();
   return result;
+}
+
+
+// Checks whether a merge of |other| into |this| would return a copy of |this|.
+bool DescriptorArray::IsMoreGeneralThan(int verbatim,
+                                        int valid,
+                                        int new_size,
+                                        DescriptorArray* other) {
+  ASSERT(verbatim <= valid);
+  ASSERT(valid <= new_size);
+  if (valid != new_size) return false;
+
+  for (int descriptor = verbatim; descriptor < valid; descriptor++) {
+    PropertyDetails details = GetDetails(descriptor);
+    PropertyDetails other_details = other->GetDetails(descriptor);
+    if (details.type() != other_details.type()) {
+      if (details.type() != FIELD ||
+          other_details.type() != CONSTANT_FUNCTION) {
+        return false;
+      }
+    } else if (details.type() == CONSTANT_FUNCTION) {
+      if (GetValue(descriptor) != other->GetValue(descriptor)) {
+        return false;
+      }
+    } else if (!other_details.representation().fits_into(
+                   details.representation())) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 
@@ -9744,6 +9780,19 @@ void Code::FindAllCode(CodeHandleList* code_list, int length) {
     code_list->Add(Handle<Code>(code));
   }
   UNREACHABLE();
+}
+
+
+Name* Code::FindFirstName() {
+  ASSERT(is_inline_cache_stub());
+  AssertNoAllocation no_allocation;
+  int mask = RelocInfo::ModeMask(RelocInfo::EMBEDDED_OBJECT);
+  for (RelocIterator it(this, mask); !it.done(); it.next()) {
+    RelocInfo* info = it.rinfo();
+    Object* object = info->target_object();
+    if (object->IsName()) return Name::cast(object);
+  }
+  return NULL;
 }
 
 

@@ -191,7 +191,16 @@ function TestTypedArray(proto, elementSize, typicalElement) {
     assertSame(typicalElement, a4[i]);
   }
 
-  assertThrows(function () { new proto(ab, 256*elementSize); }, RangeError);
+  var aAtTheEnd = new proto(ab, 256*elementSize);
+  assertSame(elementSize, aAtTheEnd.BYTES_PER_ELEMENT);
+  assertSame(0, aAtTheEnd.length);
+  assertSame(0, aAtTheEnd.byteLength);
+  assertSame(256*elementSize, aAtTheEnd.byteOffset);
+
+  assertThrows(function () { new proto(ab, 257*elementSize); }, RangeError);
+  assertThrows(
+      function () { new proto(ab, 128*elementSize, 192); },
+      RangeError);
 
   if (elementSize !== 1) {
     assertThrows(function() { new proto(ab, 128*elementSize - 1, 10); },
@@ -203,8 +212,37 @@ function TestTypedArray(proto, elementSize, typicalElement) {
     assertThrows(function() { new proto(unalignedArrayBuffer)}, RangeError);
     assertThrows(function() { new proto(unalignedArrayBuffer, 5*elementSize)},
                  RangeError);
+    assertThrows(function() { new proto() }, TypeError);
   }
 
+  var aFromString = new proto("30");
+  assertSame(elementSize, aFromString.BYTES_PER_ELEMENT);
+  assertSame(30, aFromString.length);
+  assertSame(30*elementSize, aFromString.byteLength);
+  assertSame(0, aFromString.byteOffset);
+  assertSame(30*elementSize, aFromString.buffer.byteLength);
+
+  var jsArray = [];
+  for (i = 0; i < 30; i++) {
+    jsArray.push(typicalElement);
+  }
+  var aFromArray = new proto(jsArray);
+  assertSame(elementSize, aFromArray.BYTES_PER_ELEMENT);
+  assertSame(30, aFromArray.length);
+  assertSame(30*elementSize, aFromArray.byteLength);
+  assertSame(0, aFromArray.byteOffset);
+  assertSame(30*elementSize, aFromArray.buffer.byteLength);
+  for (i = 0; i < 30; i++) {
+    assertSame(typicalElement, aFromArray[i]);
+  }
+
+  var abLen0 = new ArrayBuffer(0);
+  var aOverAbLen0 = new proto(abLen0);
+  assertSame(abLen0, aOverAbLen0.buffer);
+  assertSame(elementSize, aOverAbLen0.BYTES_PER_ELEMENT);
+  assertSame(0, aOverAbLen0.length);
+  assertSame(0, aOverAbLen0.byteLength);
+  assertSame(0, aOverAbLen0.byteOffset);
 }
 
 TestTypedArray(Uint8Array, 1, 0xFF);
@@ -215,6 +253,28 @@ TestTypedArray(Uint32Array, 4, 0xFFFFFFFF);
 TestTypedArray(Int32Array, 4, -0x7FFFFFFF);
 TestTypedArray(Float32Array, 4, 0.5);
 TestTypedArray(Float64Array, 8, 0.5);
+TestTypedArray(Uint8ClampedArray, 1, 0xFF);
+
+function TestTypedArrayOutOfRange(constructor, value, result) {
+  var a = new constructor(1);
+  a[0] = value;
+  assertSame(result, a[0]);
+}
+
+TestTypedArrayOutOfRange(Uint8Array, 0x1FA, 0xFA);
+TestTypedArrayOutOfRange(Uint8Array, -1, 0xFF);
+TestTypedArrayOutOfRange(Int8Array, 0x1FA, 0x7A - 0x80);
+
+TestTypedArrayOutOfRange(Uint16Array, 0x1FFFA, 0xFFFA);
+TestTypedArrayOutOfRange(Uint16Array, -1, 0xFFFF);
+TestTypedArrayOutOfRange(Int16Array, 0x1FFFA, 0x7FFA - 0x8000);
+
+TestTypedArrayOutOfRange(Uint32Array, 0x1FFFFFFFA, 0xFFFFFFFA);
+TestTypedArrayOutOfRange(Uint32Array, -1, 0xFFFFFFFF);
+TestTypedArrayOutOfRange(Int16Array, 0x1FFFFFFFA, 0x7FFFFFFA - 0x80000000);
+
+TestTypedArrayOutOfRange(Uint8ClampedArray, 0x1FA, 0xFF);
+TestTypedArrayOutOfRange(Uint8ClampedArray, -1, 0);
 
 
 // General tests for properties
@@ -233,7 +293,13 @@ function TestEnumerable(func, obj) {
 }
 TestEnumerable(ArrayBuffer, new ArrayBuffer());
 TestEnumerable(Uint8Array);
-
+TestEnumerable(Int8Array);
+TestEnumerable(Uint16Array);
+TestEnumerable(Int16Array);
+TestEnumerable(Uint32Array);
+TestEnumerable(Int32Array);
+TestEnumerable(Float32Array);
+TestEnumerable(Uint8ClampedArray);
 
 // Test arbitrary properties on ArrayBuffer
 function TestArbitrary(m) {
