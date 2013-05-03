@@ -68,8 +68,16 @@ TestByteLengthNotWritable();
 
 function TestSlice(expectedResultLen, initialLen, start, end) {
   var ab = new ArrayBuffer(initialLen);
+  var a1 = new Uint8Array(ab);
+  for (var i = 0; i < a1.length; i++) {
+    a1[i] = 0xCA;
+  }
   var slice = ab.slice(start, end);
   assertSame(expectedResultLen, slice.byteLength);
+  var a2 = new Uint8Array(slice);
+  for (var i = 0; i < a2.length; i++) {
+    assertSame(0xCA, a2[i]);
+  }
 }
 
 function TestArrayBufferSlice() {
@@ -255,6 +263,58 @@ TestTypedArray(Float32Array, 4, 0.5);
 TestTypedArray(Float64Array, 8, 0.5);
 TestTypedArray(Uint8ClampedArray, 1, 0xFF);
 
+function SubarrayTestCase(constructor, item, expectedResultLen, expectedStartIndex,
+                          initialLen, start, end) {
+  var a = new constructor(initialLen);
+  var s = a.subarray(start, end);
+  assertSame(constructor, s.constructor);
+  assertSame(expectedResultLen, s.length);
+  if (s.length > 0) {
+    s[0] = item;
+    assertSame(item, a[expectedStartIndex]);
+  }
+}
+
+function TestSubArray(constructor, item) {
+  SubarrayTestCase(constructor, item, 512, 512, 1024, 512, 1024);
+  SubarrayTestCase(constructor, item, 512, 512, 1024, 512);
+
+  SubarrayTestCase(constructor, item, 0, undefined, 0, 1, 20);
+  SubarrayTestCase(constructor, item, 100, 0,       100, 0, 100);
+  SubarrayTestCase(constructor, item, 100, 0,       100,  0, 1000);
+  SubarrayTestCase(constructor, item, 0, undefined, 100, 5, 1);
+
+  SubarrayTestCase(constructor, item, 1, 89,        100, -11, -10);
+  SubarrayTestCase(constructor, item, 9, 90,        100, -10, 99);
+  SubarrayTestCase(constructor, item, 0, undefined, 100, -10, 80);
+  SubarrayTestCase(constructor, item, 10,80,        100, 80, -10);
+
+  SubarrayTestCase(constructor, item, 10,90,        100, 90, "100");
+  SubarrayTestCase(constructor, item, 10,90,        100, "90", "100");
+
+  SubarrayTestCase(constructor, item, 0, undefined, 100, 90, "abc");
+  SubarrayTestCase(constructor, item, 10,0,         100, "abc", 10);
+
+  SubarrayTestCase(constructor, item, 10,0,         100, 0.96, 10.96);
+  SubarrayTestCase(constructor, item, 10,0,         100, 0.96, 10.01);
+  SubarrayTestCase(constructor, item, 10,0,         100, 0.01, 10.01);
+  SubarrayTestCase(constructor, item, 10,0,         100, 0.01, 10.96);
+
+
+  SubarrayTestCase(constructor, item, 10,90,        100, 90);
+  SubarrayTestCase(constructor, item, 10,90,        100, -10);
+}
+
+TestSubArray(Uint8Array, 0xFF);
+TestSubArray(Int8Array, -0x7F);
+TestSubArray(Uint16Array, 0xFFFF);
+TestSubArray(Int16Array, -0x7FFF);
+TestSubArray(Uint32Array, 0xFFFFFFFF);
+TestSubArray(Int32Array, -0x7FFFFFFF);
+TestSubArray(Float32Array, 0.5);
+TestSubArray(Float64Array, 0.5);
+TestSubArray(Uint8ClampedArray, 0xFF);
+
 function TestTypedArrayOutOfRange(constructor, value, result) {
   var a = new constructor(1);
   a[0] = value;
@@ -263,6 +323,7 @@ function TestTypedArrayOutOfRange(constructor, value, result) {
 
 TestTypedArrayOutOfRange(Uint8Array, 0x1FA, 0xFA);
 TestTypedArrayOutOfRange(Uint8Array, -1, 0xFF);
+
 TestTypedArrayOutOfRange(Int8Array, 0x1FA, 0x7A - 0x80);
 
 TestTypedArrayOutOfRange(Uint16Array, 0x1FFFA, 0xFFFA);
@@ -271,10 +332,43 @@ TestTypedArrayOutOfRange(Int16Array, 0x1FFFA, 0x7FFA - 0x8000);
 
 TestTypedArrayOutOfRange(Uint32Array, 0x1FFFFFFFA, 0xFFFFFFFA);
 TestTypedArrayOutOfRange(Uint32Array, -1, 0xFFFFFFFF);
-TestTypedArrayOutOfRange(Int16Array, 0x1FFFFFFFA, 0x7FFFFFFA - 0x80000000);
+TestTypedArrayOutOfRange(Int32Array, 0x1FFFFFFFA, 0x7FFFFFFA - 0x80000000);
 
 TestTypedArrayOutOfRange(Uint8ClampedArray, 0x1FA, 0xFF);
 TestTypedArrayOutOfRange(Uint8ClampedArray, -1, 0);
+
+var typedArrayConstructors = [
+  Uint8Array,
+  Int8Array,
+  Uint16Array,
+  Int16Array,
+  Uint32Array,
+  Int32Array,
+  Uint8ClampedArray,
+  Float32Array,
+  Float64Array];
+
+function TestPropertyTypeChecks(constructor) {
+  var a = new constructor();
+  function CheckProperty(name) {
+    var d = Object.getOwnPropertyDescriptor(constructor.prototype, name);
+    var o = {}
+    assertThrows(function() {d.get.call(o);}, TypeError);
+    d.get.call(a); // shouldn't throw
+    for (var i = 0 ; i < typedArrayConstructors.length; i++) {
+      d.get.call(new typedArrayConstructors[i](10));
+    }
+  }
+
+  CheckProperty("buffer");
+  CheckProperty("byteOffset");
+  CheckProperty("byteLength");
+  CheckProperty("length");
+}
+
+for(i = 0; i < typedArrayConstructors.lenght; i++) {
+  TestPropertyTypeChecks(typedArrayConstructors[i]);
+}
 
 
 // General tests for properties
@@ -292,14 +386,9 @@ function TestEnumerable(func, obj) {
     assertArrayEquals([], props(obj));
 }
 TestEnumerable(ArrayBuffer, new ArrayBuffer());
-TestEnumerable(Uint8Array);
-TestEnumerable(Int8Array);
-TestEnumerable(Uint16Array);
-TestEnumerable(Int16Array);
-TestEnumerable(Uint32Array);
-TestEnumerable(Int32Array);
-TestEnumerable(Float32Array);
-TestEnumerable(Uint8ClampedArray);
+for(i = 0; i < typedArrayConstructors.lenght; i++) {
+  TestEnumerable(typedArrayConstructors[i]);
+}
 
 // Test arbitrary properties on ArrayBuffer
 function TestArbitrary(m) {
@@ -313,6 +402,11 @@ function TestArbitrary(m) {
   }
 }
 TestArbitrary(new ArrayBuffer(256));
+for(i = 0; i < typedArrayConstructors.lenght; i++) {
+  TestArbitary(new typedArrayConstructors[i](10));
+}
+
+
 
 // Test direct constructor call
 assertTrue(ArrayBuffer() instanceof ArrayBuffer);

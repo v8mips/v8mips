@@ -25,6 +25,9 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+// TODO(dcarney): remove
+#define V8_ALLOW_ACCESS_TO_PERSISTENT_IMPLICIT
+
 #include "api.h"
 
 #include <string.h>  // For memcpy, strlen.
@@ -3347,7 +3350,7 @@ Local<String> v8::Object::ObjectProtoToString() {
       const char* postfix = "]";
 
       int prefix_len = i::StrLength(prefix);
-      int str_len = str->Length();
+      int str_len = str->Utf8Length();
       int postfix_len = i::StrLength(postfix);
 
       int buf_len = prefix_len + str_len + postfix_len;
@@ -3359,7 +3362,7 @@ Local<String> v8::Object::ObjectProtoToString() {
       ptr += prefix_len;
 
       // Write real content.
-      str->WriteAscii(ptr, 0, str_len);
+      str->WriteUtf8(ptr, str_len);
       ptr += str_len;
 
       // Write postfix.
@@ -6074,6 +6077,19 @@ Local<Integer> v8::Integer::NewFromUnsigned(uint32_t value, Isolate* isolate) {
 }
 
 
+#ifdef DEBUG
+v8::AssertNoGCScope::AssertNoGCScope(v8::Isolate* isolate)
+  : isolate_(isolate),
+    last_state_(i::EnterAllocationScope(
+        reinterpret_cast<i::Isolate*>(isolate), false)) {
+}
+
+v8::AssertNoGCScope::~AssertNoGCScope() {
+  i::ExitAllocationScope(reinterpret_cast<i::Isolate*>(isolate_), last_state_);
+}
+#endif
+
+
 void V8::IgnoreOutOfMemoryException() {
   EnterIsolateIfNeeded()->set_ignore_out_of_memory(true);
 }
@@ -6486,9 +6502,10 @@ String::AsciiValue::AsciiValue(v8::Handle<v8::Value> obj)
   TryCatch try_catch;
   Handle<String> str = obj->ToString();
   if (str.IsEmpty()) return;
-  length_ = str->Length();
+  length_ = str->Utf8Length();
   str_ = i::NewArray<char>(length_ + 1);
-  str->WriteAscii(str_);
+  str->WriteUtf8(str_);
+  ASSERT(i::String::NonAsciiStart(str_, length_) >= length_);
 }
 
 
