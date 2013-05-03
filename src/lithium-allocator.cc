@@ -140,6 +140,7 @@ LiveRange::LiveRange(int id, Zone* zone)
       next_(NULL),
       current_interval_(NULL),
       last_processed_use_(NULL),
+      current_hint_operand_(NULL),
       spill_operand_(new(zone) LOperand()),
       spill_start_index_(kMaxInt) { }
 
@@ -226,13 +227,6 @@ bool LiveRange::CanBeSpilled(LifetimePosition pos) {
   if (use_pos == NULL) return true;
   return
       use_pos->pos().Value() > pos.NextInstruction().InstructionEnd().Value();
-}
-
-
-UsePosition* LiveRange::FirstPosWithHint() const {
-  UsePosition* pos = first_pos_;
-  while (pos != NULL && !pos->HasHint()) pos = pos->next();
-  return pos;
 }
 
 
@@ -459,9 +453,11 @@ void LiveRange::AddUsePosition(LifetimePosition pos,
                          id_,
                          pos.Value());
   UsePosition* use_pos = new(zone) UsePosition(pos, operand, hint);
+  UsePosition* prev_hint = NULL;
   UsePosition* prev = NULL;
   UsePosition* current = first_pos_;
   while (current != NULL && current->pos().Value() < pos.Value()) {
+    prev_hint = current->HasHint() ? current : prev_hint;
     prev = current;
     current = current->next();
   }
@@ -472,6 +468,10 @@ void LiveRange::AddUsePosition(LifetimePosition pos,
   } else {
     use_pos->next_ = prev->next_;
     prev->next_ = use_pos;
+  }
+
+  if (prev_hint == NULL && use_pos->HasHint()) {
+    current_hint_operand_ = hint;
   }
 }
 
@@ -925,7 +925,7 @@ void LAllocator::ProcessInstructions(HBasicBlock* block, BitVector* live) {
         if (phi != NULL) {
           // This is a phi resolving move.
           if (!phi->block()->IsLoopHeader()) {
-            hint = LiveRangeFor(phi->id())->FirstHint();
+            hint = LiveRangeFor(phi->id())->current_hint_operand();
           }
         } else {
           if (to->IsUnallocated()) {
@@ -1813,26 +1813,23 @@ bool LAllocator::TryAllocateFreeReg(LiveRange* current) {
     free_until_pos[cur_reg] = Min(free_until_pos[cur_reg], next_intersection);
   }
 
-  UsePosition* hinted_use = current->FirstPosWithHint();
-  if (hinted_use != NULL) {
-    LOperand* hint = hinted_use->hint();
-    if (hint->IsRegister() || hint->IsDoubleRegister()) {
-      int register_index = hint->index();
-      TraceAlloc(
-          "Found reg hint %s (free until [%d) for live range %d (end %d[).\n",
-          RegisterName(register_index),
-          free_until_pos[register_index].Value(),
-          current->id(),
-          current->End().Value());
+  LOperand* hint = current->FirstHint();
+  if (hint != NULL && (hint->IsRegister() || hint->IsDoubleRegister())) {
+    int register_index = hint->index();
+    TraceAlloc(
+        "Found reg hint %s (free until [%d) for live range %d (end %d[).\n",
+        RegisterName(register_index),
+        free_until_pos[register_index].Value(),
+        current->id(),
+        current->End().Value());
 
-      // The desired register is free until the end of the current live range.
-      if (free_until_pos[register_index].Value() >= current->End().Value()) {
-        TraceAlloc("Assigning preferred reg %s to live range %d\n",
-                   RegisterName(register_index),
-                   current->id());
-        SetLiveRangeAssignedRegister(current, register_index, mode_, zone_);
-        return true;
-      }
+    // The desired register is free until the end of the current live range.
+    if (free_until_pos[register_index].Value() >= current->End().Value()) {
+      TraceAlloc("Assigning preferred reg %s to live range %d\n",
+                 RegisterName(register_index),
+                 current->id());
+      SetLiveRangeAssignedRegister(current, register_index, mode_, zone_);
+      return true;
     }
   }
 
