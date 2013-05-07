@@ -3145,7 +3145,7 @@ void MacroAssembler::AllocateAsciiConsString(Register result,
   ExternalReference high_promotion_mode = ExternalReference::
       new_space_high_promotion_mode_active_address(isolate());
   li(scratch1, Operand(high_promotion_mode));
-  lw(scratch1, MemOperand(t0, 0));
+  lw(scratch1, MemOperand(scratch1, 0));
   Branch(&allocate_new_space, eq, scratch1, Operand(zero_reg));
 
   Allocate(ConsString::kSize,
