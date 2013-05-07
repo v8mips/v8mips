@@ -1863,6 +1863,26 @@ HValue* HGraphBuilder::BuildCreateAllocationSiteInfo(HValue* previous_object,
 }
 
 
+HInstruction* HGraphBuilder::BuildGetNativeContext(HValue* context) {
+  HInstruction* global_object = AddInstruction(new(zone())
+                                               HGlobalObject(context));
+  HInstruction* native_context = AddInstruction(new(zone())
+      HLoadNamedField(global_object, true, Representation::Tagged(),
+                      GlobalObject::kNativeContextOffset));
+  return native_context;
+}
+
+
+HInstruction* HGraphBuilder::BuildGetArrayFunction(HValue* context) {
+  HInstruction* native_context = BuildGetNativeContext(context);
+  int offset = Context::kHeaderSize +
+      kPointerSize * Context::ARRAY_FUNCTION_INDEX;
+  HInstruction* array_function = AddInstruction(new(zone())
+      HLoadNamedField(native_context, true, Representation::Tagged(), offset));
+  return array_function;
+}
+
+
 HGraphBuilder::JSArrayBuilder::JSArrayBuilder(HGraphBuilder* builder,
                                               ElementsKind kind,
                                               HValue* allocation_site_payload,
@@ -1879,12 +1899,7 @@ HGraphBuilder::JSArrayBuilder::JSArrayBuilder(HGraphBuilder* builder,
 
 
 HValue* HGraphBuilder::JSArrayBuilder::EmitMapCode(HValue* context) {
-  // Get the global context, the native context, the map array
-  HInstruction* global_object = AddInstruction(new(zone())
-      HGlobalObject(context));
-  HInstruction* native_context = AddInstruction(new(zone())
-      HLoadNamedField(global_object, true, Representation::Tagged(),
-                      GlobalObject::kNativeContextOffset));
+  HInstruction* native_context = builder()->BuildGetNativeContext(context);
   int offset = Context::kHeaderSize +
       kPointerSize * Context::JS_ARRAY_MAPS_INDEX;
   HInstruction* map_array = AddInstruction(new(zone())
@@ -7131,22 +7146,31 @@ void HOptimizedGraphBuilder::HandlePolymorphicLoadNamedField(Property* expr,
     HValue* object,
     SmallMapList* types,
     Handle<String> name) {
-  int count = 0;
-  int previous_field_offset = 0;
-  bool previous_field_is_in_object = false;
-  bool is_monomorphic_field = true;
 
   if (HandlePolymorphicArrayLengthLoad(expr, object, types, name))
     return;
 
-  Handle<Map> map;
-  LookupResult lookup(isolate());
-  for (int i = 0; i < types->length() && count < kMaxLoadPolymorphism; ++i) {
-    map = types->at(i);
-    if (ComputeLoadStoreField(map, name, &lookup, false)) {
+  AddInstruction(new(zone()) HCheckNonSmi(object));
+
+  // Use monomorphic load if property lookup results in the same field index
+  // for all maps. Requires special map check on the set of all handled maps.
+  HInstruction* instr = NULL;
+  if (types->length() > 0 && types->length() <= kMaxLoadPolymorphism) {
+    LookupResult lookup(isolate());
+    int previous_field_offset = 0;
+    bool previous_field_is_in_object = false;
+    Representation representation = Representation::None();
+    int count;
+    for (count = 0; count < types->length(); ++count) {
+      Handle<Map> map = types->at(count);
+      if (!ComputeLoadStoreField(map, name, &lookup, false)) break;
+
       int index = ComputeLoadStoreFieldIndex(map, &lookup);
+      Representation new_representation =
+          ComputeLoadStoreRepresentation(map, &lookup);
       bool is_in_object = index < 0;
       int offset = index * kPointerSize;
+
       if (index < 0) {
         // Negative property indices are in-object properties, indexed
         // from the end of the fixed part of the object.
@@ -7154,31 +7178,33 @@ void HOptimizedGraphBuilder::HandlePolymorphicLoadNamedField(Property* expr,
       } else {
         offset += FixedArray::kHeaderSize;
       }
+
       if (count == 0) {
         previous_field_offset = offset;
         previous_field_is_in_object = is_in_object;
-      } else if (is_monomorphic_field) {
-        is_monomorphic_field = (offset == previous_field_offset) &&
-                               (is_in_object == previous_field_is_in_object);
+        representation = new_representation;
+      } else if (offset != previous_field_offset ||
+                 is_in_object != previous_field_is_in_object ||
+                 (FLAG_track_fields &&
+                  !representation.IsCompatibleForLoad(new_representation))) {
+        break;
       }
-      ++count;
+
+      representation = representation.generalize(new_representation);
+    }
+
+    if (count == types->length()) {
+      AddInstruction(HCheckMaps::New(object, types, zone()));
+      instr = DoBuildLoadNamedField(
+          object, previous_field_is_in_object,
+          representation, previous_field_offset);
     }
   }
 
-  // Use monomorphic load if property lookup results in the same field index
-  // for all maps.  Requires special map check on the set of all handled maps.
-  AddInstruction(new(zone()) HCheckNonSmi(object));
-  HInstruction* instr;
-  if (count == types->length() && is_monomorphic_field) {
-    AddInstruction(HCheckMaps::New(object, types, zone()));
-    instr = BuildLoadNamedField(object, map, &lookup);
-  } else {
+  if (instr == NULL) {
     HValue* context = environment()->LookupContext();
-    instr = new(zone()) HLoadNamedFieldPolymorphic(context,
-                                                   object,
-                                                   types,
-                                                   name,
-                                                   zone());
+    instr = new(zone()) HLoadNamedFieldPolymorphic(
+        context, object, types, name, zone());
   }
 
   instr->set_position(expr->position());
@@ -7735,18 +7761,25 @@ HLoadNamedField* HOptimizedGraphBuilder::BuildLoadNamedField(
     HValue* object,
     Handle<Map> map,
     LookupResult* lookup) {
-  Representation representation = lookup->representation();
   int index = lookup->GetLocalFieldIndexFromMap(*map);
-  if (index < 0) {
-    // Negative property indices are in-object properties, indexed
-    // from the end of the fixed part of the object.
-    int offset = (index * kPointerSize) + map->instance_size();
-    return new(zone()) HLoadNamedField(object, true, representation, offset);
-  } else {
-    // Non-negative property indices are in the properties array.
-    int offset = (index * kPointerSize) + FixedArray::kHeaderSize;
-    return new(zone()) HLoadNamedField(object, false, representation, offset);
-  }
+  // Negative property indices are in-object properties, indexed from the end of
+  // the fixed part of the object. Non-negative property indices are in the
+  // properties array.
+  int inobject = index < 0;
+  Representation representation = lookup->representation();
+  int offset = inobject
+      ? index * kPointerSize + map->instance_size()
+      : index * kPointerSize + FixedArray::kHeaderSize;
+  return DoBuildLoadNamedField(object, inobject, representation, offset);
+}
+
+
+HLoadNamedField* HGraphBuilder::DoBuildLoadNamedField(
+    HValue* object,
+    bool inobject,
+    Representation representation,
+    int offset) {
+  return new(zone()) HLoadNamedField(object, inobject, representation, offset);
 }
 
 
@@ -9643,16 +9676,13 @@ void HOptimizedGraphBuilder::VisitCallNew(CallNew* expr) {
     CHECK_ALIVE(VisitArgumentList(expr->arguments()));
     HCallNew* call;
     if (use_call_new_array) {
-      AddInstruction(new(zone()) HCheckFunction(constructor,
-          Handle<JSFunction>(isolate()->global_context()->array_function())));
-      Handle<Object> feedback = oracle()->GetInfo(expr->CallNewFeedbackId());
-      ASSERT(feedback->IsSmi());
-
       // TODO(mvstanton): It would be better to use the already created global
       // property cell that is shared by full code gen. That way, any transition
       // information that happened after crankshaft won't be lost.  The right
       // way to do that is to begin passing the cell to the type feedback oracle
       // instead of just the value in the cell. Do this in a follow-up checkin.
+      Handle<Object> feedback = oracle()->GetInfo(expr->CallNewFeedbackId());
+      ASSERT(feedback->IsSmi());
       Handle<JSGlobalPropertyCell> cell =
           isolate()->factory()->NewJSGlobalPropertyCell(feedback);
 

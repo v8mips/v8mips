@@ -191,8 +191,13 @@ class UniqueId {
  * \param object the weak global object to be reclaimed by the garbage collector
  * \param parameter the value passed in when making the weak global object
  */
-typedef void (*WeakReferenceCallback)(Persistent<Value> object,
-                                      void* parameter);
+template<typename T, typename P>
+class WeakReferenceCallbacks {
+ public:
+  typedef void (*Revivable)(Isolate* isolate,
+                            Persistent<T>* object,
+                            P* parameter);
+};
 
 // TODO(svenpanne) Temporary definition until Chrome is in sync.
 typedef void (*NearDeathCallback)(Isolate* isolate,
@@ -598,8 +603,17 @@ template <class T> class Persistent // NOLINT
   // TODO(dcarney): remove before cutover
   V8_INLINE(void Dispose(Isolate* isolate));
 
-  V8_INLINE(void MakeWeak(void* parameters,
-                              WeakReferenceCallback callback));
+  template<typename S, typename P>
+  V8_INLINE(void MakeWeak(
+      Isolate* isolate,
+      P* parameters,
+      typename WeakReferenceCallbacks<S, P>::Revivable callback));
+
+  template<typename P>
+  V8_INLINE(void MakeWeak(
+      Isolate* isolate,
+      P* parameters,
+      typename WeakReferenceCallbacks<T, P>::Revivable callback));
 
   /**
    * Make the reference to this object weak.  When only weak handles
@@ -675,6 +689,11 @@ template <class T> class Persistent // NOLINT
    */
   // TODO(dcarney): remove before cutover
   V8_INLINE(uint16_t WrapperClassId(Isolate* isolate) const);
+
+  /**
+   * Disposes the current contents of the handle and replaces it.
+   */
+  V8_INLINE(void Reset(Isolate* isolate, const Handle<T>& other));
 
 #ifndef V8_USE_UNSAFE_HANDLES
 
@@ -4363,10 +4382,11 @@ class V8EXPORT V8 {
                                                internal::Object** handle);
   static void DisposeGlobal(internal::Isolate* isolate,
                             internal::Object** global_handle);
+  typedef WeakReferenceCallbacks<Value, void>::Revivable RevivableCallback;
   static void MakeWeak(internal::Isolate* isolate,
                        internal::Object** global_handle,
                        void* data,
-                       WeakReferenceCallback weak_reference_callback,
+                       RevivableCallback weak_reference_callback,
                        NearDeathCallback near_death_callback);
   static void ClearWeak(internal::Isolate* isolate,
                         internal::Object** global_handle);
@@ -5282,14 +5302,30 @@ void Persistent<T>::Dispose(Isolate* isolate) {
 
 
 template <class T>
-void Persistent<T>::MakeWeak(void* parameters, WeakReferenceCallback callback) {
-  Isolate* isolate = Isolate::GetCurrent();
+template <typename S, typename P>
+void Persistent<T>::MakeWeak(
+    Isolate* isolate,
+    P* parameters,
+    typename WeakReferenceCallbacks<S, P>::Revivable callback) {
+  TYPE_CHECK(S, T);
+  typedef typename WeakReferenceCallbacks<Value, void>::Revivable Revivable;
   V8::MakeWeak(reinterpret_cast<internal::Isolate*>(isolate),
                reinterpret_cast<internal::Object**>(this->val_),
                parameters,
-               callback,
+               reinterpret_cast<Revivable>(callback),
                NULL);
 }
+
+
+template <class T>
+template <typename P>
+void Persistent<T>::MakeWeak(
+    Isolate* isolate,
+    P* parameters,
+    typename WeakReferenceCallbacks<T, P>::Revivable callback) {
+  MakeWeak<T, P>(isolate, parameters, callback);
+}
+
 
 template <class T>
 void Persistent<T>::MakeWeak(Isolate* isolate,
@@ -5346,6 +5382,22 @@ void Persistent<T>::MarkPartiallyDependent(Isolate* isolate) {
 template <class T>
 void Persistent<T>::SetWrapperClassId(uint16_t class_id) {
   SetWrapperClassId(Isolate::GetCurrent(), class_id);
+}
+
+template <class T>
+void Persistent<T>::Reset(Isolate* isolate, const Handle<T>& other) {
+  Dispose(isolate);
+#ifdef V8_USE_UNSAFE_HANDLES
+  *this = *New(isolate, other);
+#else
+  if (other.IsEmpty()) {
+    this->val_ = NULL;
+    return;
+  }
+  internal::Object** p = reinterpret_cast<internal::Object**>(other.val_);
+  this->val_ = reinterpret_cast<T*>(
+      V8::GlobalizeReference(reinterpret_cast<internal::Isolate*>(isolate), p));
+#endif
 }
 
 template <class T>
