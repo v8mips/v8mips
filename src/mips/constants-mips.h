@@ -189,10 +189,21 @@ enum SoftwareInterruptCodes {
 // - Breaks larger than kMaxStopCode are simple breaks, dropping you into the
 //   debugger.
 const uint32_t kMaxWatchpointCode = 31;
-const uint32_t kMaxTracepointCode = 63;
+const uint32_t kNumTracepoints = 8;
+const uint32_t kMinTracepointCode = kMaxWatchpointCode + 1;
+const uint32_t kMaxTracepointCode = kMinTracepointCode + kNumTracepoints;
 const uint32_t kMaxStopCode = 127;
 STATIC_ASSERT(kMaxWatchpointCode < kMaxTracepointCode);
 STATIC_ASSERT(kMaxTracepointCode < kMaxStopCode);
+
+const uint32_t kTracepoint0 = kMinTracepointCode + 0;
+const uint32_t kTracepoint1 = kMinTracepointCode + 1;
+const uint32_t kTracepoint2 = kMinTracepointCode + 2;
+const uint32_t kTracepoint3 = kMinTracepointCode + 3;
+const uint32_t kTracepoint4 = kMinTracepointCode + 4;
+const uint32_t kTracepoint5 = kMinTracepointCode + 5;
+const uint32_t kTracepoint6 = kMinTracepointCode + 6;
+const uint32_t kTracepoint7 = kMinTracepointCode + 7;
 
 
 // ----- Fields offset and length.
