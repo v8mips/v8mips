@@ -4152,6 +4152,8 @@ void MacroAssembler::AdduAndCheckForOverflow(Register dst,
   ASSERT(!overflow_dst.is(left));
   ASSERT(!overflow_dst.is(right));
 
+  break_(kTracepoint0);  // plind - tracing.
+
   if (left.is(right) && dst.is(left)) {
     ASSERT(!dst.is(t9));
     ASSERT(!scratch.is(t9));
@@ -4203,6 +4205,9 @@ void MacroAssembler::SubuAndCheckForOverflow(Register dst,
     mov(overflow_dst, zero_reg);
     return;
   }
+
+  break_(kTracepoint1);  // plind - tracing.
+
 
   if (dst.is(left)) {
     mov(scratch, left);  // Preserve left.
