@@ -6694,10 +6694,16 @@ static bool IsFastLiteral(Handle<JSObject> boilerplate,
   if (properties->length() > 0) {
     return false;
   } else {
-    int nof = boilerplate->map()->inobject_properties();
-    for (int i = 0; i < nof; i++) {
+    Handle<DescriptorArray> descriptors(
+        boilerplate->map()->instance_descriptors());
+    int limit = boilerplate->map()->NumberOfOwnDescriptors();
+    for (int i = 0; i < limit; i++) {
+      PropertyDetails details = descriptors->GetDetails(i);
+      if (details.type() != FIELD) continue;
+      Representation representation = details.representation();
+      int index = descriptors->GetFieldIndex(i);
       if ((*max_properties)-- == 0) return false;
-      Handle<Object> value(boilerplate->InObjectPropertyAt(i), isolate);
+      Handle<Object> value(boilerplate->InObjectPropertyAt(index), isolate);
       if (value->IsJSObject()) {
         Handle<JSObject> value_object = Handle<JSObject>::cast(value);
         if (!IsFastLiteral(value_object,
@@ -6707,6 +6713,8 @@ static bool IsFastLiteral(Handle<JSObject> boilerplate,
                            pointer_size)) {
           return false;
         }
+      } else if (representation.IsDouble()) {
+        *data_size += HeapNumber::kSize;
       }
     }
   }
@@ -6756,6 +6764,7 @@ void HOptimizedGraphBuilder::VisitObjectLiteral(ObjectLiteral* expr) {
                                    expr->fast_elements(),
                                    expr->literal_index(),
                                    expr->depth(),
+                                   expr->may_store_doubles(),
                                    expr->has_function()));
   }
 
@@ -7062,9 +7071,33 @@ HInstruction* HOptimizedGraphBuilder::BuildStoreNamedField(
   } else {
     offset += FixedArray::kHeaderSize;
   }
+  bool transition_to_field = lookup->IsTransitionToField(*map);
+  if (FLAG_track_double_fields && representation.IsDouble()) {
+    if (transition_to_field) {
+      NoObservableSideEffectsScope no_side_effects(this);
+      HInstruction* heap_number_size = AddInstruction(new(zone()) HConstant(
+          HeapNumber::kSize, Representation::Integer32()));
+      HInstruction* double_box = AddInstruction(new(zone()) HAllocate(
+          environment()->LookupContext(), heap_number_size,
+          HType::HeapNumber(), HAllocate::CAN_ALLOCATE_IN_NEW_SPACE));
+      BuildStoreMap(double_box, isolate()->factory()->heap_number_map());
+      AddInstruction(new(zone()) HStoreNamedField(
+          double_box, name, value, true,
+          Representation::Double(), HeapNumber::kValueOffset));
+      value = double_box;
+      representation = Representation::Tagged();
+    } else {
+      HInstruction* double_box = AddInstruction(new(zone()) HLoadNamedField(
+          object, is_in_object, Representation::Tagged(), offset));
+      double_box->set_type(HType::HeapNumber());
+      return new(zone()) HStoreNamedField(
+          double_box, name, value, true,
+          Representation::Double(), HeapNumber::kValueOffset);
+    }
+  }
   HStoreNamedField* instr = new(zone()) HStoreNamedField(
       object, name, value, is_in_object, representation, offset);
-  if (lookup->IsTransitionToField(*map)) {
+  if (transition_to_field) {
     Handle<Map> transition(lookup->GetTransitionMapFromMap(*map));
     instr->set_transition(transition);
     // TODO(fschneider): Record the new map type of the object in the IR to
@@ -7353,14 +7386,15 @@ void HOptimizedGraphBuilder::HandlePropertyAssignment(Assignment* expr) {
     // Keyed store.
     CHECK_ALIVE(VisitForValue(prop->key()));
     CHECK_ALIVE(VisitForValue(expr->value()));
-    HValue* value = Pop();
-    HValue* key = Pop();
-    HValue* object = Pop();
+    HValue* value = environment()->ExpressionStackAt(0);
+    HValue* key = environment()->ExpressionStackAt(1);
+    HValue* object = environment()->ExpressionStackAt(2);
     bool has_side_effects = false;
     HandleKeyedElementAccess(object, key, value, expr, expr->AssignmentId(),
                              expr->position(),
                              true,  // is_store
                              &has_side_effects);
+    Drop(3);
     Push(value);
     AddSimulate(expr->AssignmentId(), REMOVABLE_SIMULATE);
     return ast_context()->ReturnValue(Pop());
@@ -7779,7 +7813,20 @@ HLoadNamedField* HGraphBuilder::DoBuildLoadNamedField(
     bool inobject,
     Representation representation,
     int offset) {
-  return new(zone()) HLoadNamedField(object, inobject, representation, offset);
+  bool load_double = false;
+  if (representation.IsDouble()) {
+    representation = Representation::Tagged();
+    load_double = FLAG_track_double_fields;
+  }
+  HLoadNamedField* field =
+      new(zone()) HLoadNamedField(object, inobject, representation, offset);
+  if (load_double) {
+    AddInstruction(field);
+    field->set_type(HType::HeapNumber());
+    return new(zone()) HLoadNamedField(
+        field, true, Representation::Double(), HeapNumber::kValueOffset);
+  }
+  return field;
 }
 
 
@@ -10095,7 +10142,7 @@ void HOptimizedGraphBuilder::VisitCountOperation(CountOperation* expr) {
       if (has_side_effects) AddSimulate(prop->LoadId(), REMOVABLE_SIMULATE);
 
       after = BuildIncrement(returns_original_input, expr);
-      input = Pop();
+      input = environment()->ExpressionStackAt(0);
 
       expr->RecordTypeFeedback(oracle(), zone());
       HandleKeyedElementAccess(obj, key, after, expr, expr->AssignmentId(),
@@ -10103,10 +10150,10 @@ void HOptimizedGraphBuilder::VisitCountOperation(CountOperation* expr) {
                                true,  // is_store
                                &has_side_effects);
 
-      // Drop the key from the bailout environment.  Overwrite the receiver
-      // with the result of the operation, and the placeholder with the
-      // original value if necessary.
-      Drop(1);
+      // Drop the key and the original value from the bailout environment.
+      // Overwrite the receiver with the result of the operation, and the
+      // placeholder with the original value if necessary.
+      Drop(2);
       environment()->SetExpressionStackAt(0, after);
       if (returns_original_input) environment()->SetExpressionStackAt(1, input);
       ASSERT(has_side_effects);  // Stores always have side effects.
@@ -10778,7 +10825,6 @@ void HOptimizedGraphBuilder::BuildEmitDeepCopy(
       elements->map() != isolate()->heap()->fixed_cow_array_map()) ?
           elements->Size() : 0;
   int elements_offset = *offset + object_size;
-  int inobject_properties = boilerplate_object->map()->inobject_properties();
   if (create_allocation_site_info) {
     elements_offset += AllocationSiteInfo::kSize;
     *offset += AllocationSiteInfo::kSize;
@@ -10792,32 +10838,49 @@ void HOptimizedGraphBuilder::BuildEmitDeepCopy(
   // Copy in-object properties.
   HValue* object_properties =
       AddInstruction(new(zone) HInnerAllocatedObject(target, object_offset));
-  for (int i = 0; i < inobject_properties; i++) {
+
+  Handle<DescriptorArray> descriptors(
+      boilerplate_object->map()->instance_descriptors());
+  int limit = boilerplate_object->map()->NumberOfOwnDescriptors();
+
+  for (int i = 0; i < limit; i++) {
+    PropertyDetails details = descriptors->GetDetails(i);
+    if (details.type() != FIELD) continue;
+    int index = descriptors->GetFieldIndex(i);
+    int property_offset = boilerplate_object->GetInObjectPropertyOffset(index);
+    Handle<Name> name(descriptors->GetKey(i));
     Handle<Object> value =
-        Handle<Object>(boilerplate_object->InObjectPropertyAt(i),
+        Handle<Object>(boilerplate_object->InObjectPropertyAt(index),
         isolate());
     if (value->IsJSObject()) {
       Handle<JSObject> value_object = Handle<JSObject>::cast(value);
       Handle<JSObject> original_value_object = Handle<JSObject>::cast(
-          Handle<Object>(original_boilerplate_object->InObjectPropertyAt(i),
+          Handle<Object>(original_boilerplate_object->InObjectPropertyAt(index),
               isolate()));
       HInstruction* value_instruction =
           AddInstruction(new(zone) HInnerAllocatedObject(target, *offset));
-      // TODO(verwaest): choose correct storage.
       AddInstruction(new(zone) HStoreNamedField(
-          object_properties, factory->unknown_field_string(), value_instruction,
-          true, Representation::Tagged(),
-          boilerplate_object->GetInObjectPropertyOffset(i)));
+          object_properties, name, value_instruction, true,
+          Representation::Tagged(), property_offset));
       BuildEmitDeepCopy(value_object, original_value_object, target,
                         offset, DONT_TRACK_ALLOCATION_SITE);
     } else {
-      // TODO(verwaest): choose correct storage.
+      Representation representation = details.representation();
       HInstruction* value_instruction = AddInstruction(new(zone) HConstant(
           value, Representation::Tagged()));
+      if (representation.IsDouble()) {
+        HInstruction* double_box =
+            AddInstruction(new(zone) HInnerAllocatedObject(target, *offset));
+        BuildStoreMap(double_box, factory->heap_number_map());
+        AddInstruction(new(zone) HStoreNamedField(
+            double_box, name, value_instruction, true,
+            Representation::Double(), HeapNumber::kValueOffset));
+        value_instruction = double_box;
+        *offset += HeapNumber::kSize;
+      }
       AddInstruction(new(zone) HStoreNamedField(
-          object_properties, factory->unknown_field_string(), value_instruction,
-          true, Representation::Tagged(),
-          boilerplate_object->GetInObjectPropertyOffset(i)));
+          object_properties, name, value_instruction, true,
+          Representation::Tagged(), property_offset));
     }
   }
 

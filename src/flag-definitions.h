@@ -193,8 +193,8 @@ DEFINE_bool(clever_optimizations,
             true,
             "Optimize object size, Array shift, DOM strings and string +")
 DEFINE_bool(pretenure_literals, true, "allocate literals in old space")
-DEFINE_bool(track_fields, true, "track fields with only smi values")
-DEFINE_bool(track_double_fields, true, "track fields with double values")
+DEFINE_bool(track_fields, false, "track fields with only smi values")
+DEFINE_bool(track_double_fields, false, "track fields with double values")
 DEFINE_implication(track_double_fields, track_fields)
 
 // Flags for data representation optimizations
@@ -231,6 +231,8 @@ DEFINE_bool(trace_gvn, false, "trace global value numbering")
 DEFINE_bool(trace_representation, false, "trace representation types")
 DEFINE_bool(trace_track_allocation_sites, false,
             "trace the tracking of allocation sites")
+DEFINE_bool(trace_migration, false, "trace object migration")
+DEFINE_bool(trace_generalization, false, "trace map generalization")
 DEFINE_bool(stress_pointer_maps, false, "pointer map for every instruction")
 DEFINE_bool(stress_environments, false, "environment for every instruction")
 DEFINE_int(deopt_every_n_times,
@@ -255,7 +257,7 @@ DEFINE_bool(unreachable_code_elimination, false,
             "eliminate unreachable code (hidden behind soft deopts)")
 DEFINE_bool(track_allocation_sites, true,
             "Use allocation site info to reduce transitions")
-DEFINE_bool(optimize_constructed_arrays, true,
+DEFINE_bool(optimize_constructed_arrays, false,
             "Use allocation site info on constructed arrays")
 DEFINE_bool(trace_osr, false, "trace on-stack replacement")
 DEFINE_int(stress_runs, 0, "number of stress runs")

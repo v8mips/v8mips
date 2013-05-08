@@ -2518,6 +2518,8 @@ HLoadNamedFieldPolymorphic::HLoadNamedFieldPolymorphic(HValue* context,
        i < types->length() && types_.length() < kMaxLoadPolymorphism;
        ++i) {
     Handle<Map> map = types->at(i);
+    // Deprecated maps are updated to the current map in the type oracle.
+    ASSERT(!map->is_deprecated());
     LookupResult lookup(map->GetIsolate());
     map->LookupDescriptor(NULL, *name, &lookup);
     if (lookup.IsFound()) {
@@ -2528,6 +2530,12 @@ HLoadNamedFieldPolymorphic::HLoadNamedFieldPolymorphic(HValue* context,
             SetGVNFlag(kDependsOnInobjectFields);
           } else {
             SetGVNFlag(kDependsOnBackingStoreFields);
+          }
+          if (FLAG_track_double_fields &&
+              lookup.representation().IsDouble()) {
+            // Since the value needs to be boxed, use a generic handler for
+            // loading doubles.
+            continue;
           }
           types_.Add(types->at(i), zone);
           break;
