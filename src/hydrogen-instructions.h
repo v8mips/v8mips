@@ -70,7 +70,6 @@ class LChunkBuilder;
   V(ArgumentsElements)                         \
   V(ArgumentsLength)                           \
   V(ArgumentsObject)                           \
-  V(ArrayLiteral)                              \
   V(Bitwise)                                   \
   V(BitNot)                                    \
   V(BlockEntry)                                \
@@ -150,7 +149,6 @@ class LChunkBuilder;
   V(Mod)                                       \
   V(Mul)                                       \
   V(NumericConstraint)                         \
-  V(ObjectLiteral)                             \
   V(OsrEntry)                                  \
   V(OuterContext)                              \
   V(Parameter)                                 \
@@ -5220,6 +5218,10 @@ class HLoadNamedField: public HTemplateInstruction<2> {
       set_representation(Representation::Tagged());
     } else if (FLAG_track_double_fields && field_representation.IsDouble()) {
       set_representation(field_representation);
+    } else if (FLAG_track_heap_object_fields &&
+               field_representation.IsHeapObject()) {
+      set_type(HType::NonPrimitive());
+      set_representation(Representation::Tagged());
     } else {
       set_representation(Representation::Tagged());
     }
@@ -6081,106 +6083,6 @@ class HMaterializedLiteral: public HTemplateInstruction<V> {
 };
 
 
-class HArrayLiteral: public HMaterializedLiteral<1> {
- public:
-  HArrayLiteral(HValue* context,
-                Handle<HeapObject> boilerplate_object,
-                Handle<FixedArray> literals,
-                int length,
-                int literal_index,
-                int depth,
-                AllocationSiteMode mode)
-      : HMaterializedLiteral<1>(literal_index, depth, mode),
-        length_(length),
-        boilerplate_object_(boilerplate_object),
-        literals_(literals) {
-    SetOperandAt(0, context);
-    SetGVNFlag(kChangesNewSpacePromotion);
-
-    boilerplate_elements_kind_ = boilerplate_object_->IsJSObject()
-        ? Handle<JSObject>::cast(boilerplate_object_)->GetElementsKind()
-        : TERMINAL_FAST_ELEMENTS_KIND;
-
-    is_copy_on_write_ = boilerplate_object_->IsJSObject() &&
-        (Handle<JSObject>::cast(boilerplate_object_)->elements()->map() ==
-         HEAP->fixed_cow_array_map());
-  }
-
-  HValue* context() { return OperandAt(0); }
-  ElementsKind boilerplate_elements_kind() const {
-    return boilerplate_elements_kind_;
-  }
-  Handle<HeapObject> boilerplate_object() const { return boilerplate_object_; }
-  Handle<FixedArray> literals() const { return literals_; }
-  int length() const { return length_; }
-  bool IsCopyOnWrite() const { return is_copy_on_write_; }
-
-  virtual Representation RequiredInputRepresentation(int index) {
-    return Representation::Tagged();
-  }
-  virtual HType CalculateInferredType();
-
-  DECLARE_CONCRETE_INSTRUCTION(ArrayLiteral)
-
- private:
-  int length_;
-  Handle<HeapObject> boilerplate_object_;
-  Handle<FixedArray> literals_;
-  ElementsKind boilerplate_elements_kind_;
-  bool is_copy_on_write_;
-};
-
-
-class HObjectLiteral: public HMaterializedLiteral<1> {
- public:
-  HObjectLiteral(HValue* context,
-                 Handle<FixedArray> constant_properties,
-                 Handle<FixedArray> literals,
-                 bool fast_elements,
-                 int literal_index,
-                 int depth,
-                 bool may_store_doubles,
-                 bool has_function)
-      : HMaterializedLiteral<1>(literal_index, depth),
-        constant_properties_(constant_properties),
-        constant_properties_length_(constant_properties->length()),
-        literals_(literals),
-        fast_elements_(fast_elements),
-        may_store_doubles_(may_store_doubles),
-        has_function_(has_function) {
-    SetOperandAt(0, context);
-    SetGVNFlag(kChangesNewSpacePromotion);
-  }
-
-  HValue* context() { return OperandAt(0); }
-  Handle<FixedArray> constant_properties() const {
-    return constant_properties_;
-  }
-  int constant_properties_length() const {
-    return constant_properties_length_;
-  }
-  Handle<FixedArray> literals() const { return literals_; }
-  bool fast_elements() const { return fast_elements_; }
-  bool may_store_doubles() const { return may_store_doubles_; }
-  bool has_function() const { return has_function_; }
-
-  virtual Representation RequiredInputRepresentation(int index) {
-    return Representation::Tagged();
-  }
-  virtual HType CalculateInferredType();
-
-  DECLARE_CONCRETE_INSTRUCTION(ObjectLiteral)
-
- private:
-  Handle<FixedArray> constant_properties_;
-  int constant_properties_length_;
-  Handle<FixedArray> literals_;
-  bool fast_elements_ : 1;
-  bool may_store_doubles_ : 1;
-  bool has_function_ : 1;
-};
-
-
 class HRegExpLiteral: public HMaterializedLiteral<1> {
  public:
   HRegExpLiteral(HValue* context,
@@ -6301,8 +6203,13 @@ class HToFastProperties: public HUnaryOperation {
   explicit HToFastProperties(HValue* value) : HUnaryOperation(value) {
     // This instruction is not marked as having side effects, but
     // changes the map of the input operand. Use it only when creating
-    // object literals.
-    ASSERT(value->IsObjectLiteral());
+    // object literals via a runtime call.
+    ASSERT(value->IsCallRuntime());
+#ifdef DEBUG
+    const Runtime::Function* function = HCallRuntime::cast(value)->function();
+    ASSERT(function->function_id == Runtime::kCreateObjectLiteral ||
+           function->function_id == Runtime::kCreateObjectLiteralShallow);
+#endif
     set_representation(Representation::Tagged());
   }
 

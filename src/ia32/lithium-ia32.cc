@@ -1538,7 +1538,8 @@ LInstruction* LChunkBuilder::DoMod(HMod* instr) {
     }
 
     return (instr->CheckFlag(HValue::kBailoutOnMinusZero) ||
-            instr->CheckFlag(HValue::kCanBeDivByZero))
+            instr->CheckFlag(HValue::kCanBeDivByZero) ||
+            instr->CheckFlag(HValue::kCanOverflow))
         ? AssignEnvironment(result)
         : result;
   } else if (instr->representation().IsTagged()) {
@@ -2457,7 +2458,9 @@ LInstruction* LChunkBuilder::DoStoreNamedField(HStoreNamedField* instr) {
 
   LStoreNamedField* result =
       new(zone()) LStoreNamedField(obj, val, temp, temp_map);
-  if (FLAG_track_fields && instr->field_representation().IsSmi()) {
+  if ((FLAG_track_fields && instr->field_representation().IsSmi()) ||
+      (FLAG_track_heap_object_fields &&
+       instr->field_representation().IsHeapObject())) {
     return AssignEnvironment(result);
   }
   return result;
@@ -2527,20 +2530,6 @@ LInstruction* LChunkBuilder::DoAllocate(HAllocate* instr) {
   LOperand* temp = TempRegister();
   LAllocate* result = new(zone()) LAllocate(context, size, temp);
   return AssignPointerMap(DefineAsRegister(result));
-}
-
-
-LInstruction* LChunkBuilder::DoArrayLiteral(HArrayLiteral* instr) {
-  LOperand* context = UseFixed(instr->context(), esi);
-  return MarkAsCall(
-      DefineFixed(new(zone()) LArrayLiteral(context), eax), instr);
-}
-
-
-LInstruction* LChunkBuilder::DoObjectLiteral(HObjectLiteral* instr) {
-  LOperand* context = UseFixed(instr->context(), esi);
-  return MarkAsCall(
-      DefineFixed(new(zone()) LObjectLiteral(context), eax), instr);
 }
 
 

@@ -1437,7 +1437,8 @@ LInstruction* LChunkBuilder::DoMod(HMod* instr) {
     }
 
     if (instr->CheckFlag(HValue::kBailoutOnMinusZero) ||
-        instr->CheckFlag(HValue::kCanBeDivByZero)) {
+        instr->CheckFlag(HValue::kCanBeDivByZero) ||
+        instr->CheckFlag(HValue::kCanOverflow)) {
       return AssignEnvironment(DefineAsRegister(mod));
     } else {
       return DefineAsRegister(mod);
@@ -2330,16 +2331,6 @@ LInstruction* LChunkBuilder::DoAllocate(HAllocate* instr) {
   LOperand* temp2 = TempRegister();
   LAllocate* result = new(zone()) LAllocate(size, temp1, temp2);
   return AssignPointerMap(DefineAsRegister(result));
-}
-
-
-LInstruction* LChunkBuilder::DoArrayLiteral(HArrayLiteral* instr) {
-  return MarkAsCall(DefineFixed(new(zone()) LArrayLiteral, v0), instr);
-}
-
-
-LInstruction* LChunkBuilder::DoObjectLiteral(HObjectLiteral* instr) {
-  return MarkAsCall(DefineFixed(new(zone()) LObjectLiteral, v0), instr);
 }
 
 

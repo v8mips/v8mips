@@ -50,7 +50,6 @@ class LCodeGen;
   V(ArgumentsLength)                            \
   V(ArithmeticD)                                \
   V(ArithmeticT)                                \
-  V(ArrayLiteral)                               \
   V(BitI)                                       \
   V(BitNotI)                                    \
   V(BoundsCheck)                                \
@@ -145,7 +144,6 @@ class LCodeGen;
   V(NumberTagI)                                 \
   V(NumberTagU)                                 \
   V(NumberUntagD)                               \
-  V(ObjectLiteral)                              \
   V(OsrEntry)                                   \
   V(OuterContext)                               \
   V(Parameter)                                  \
@@ -2562,32 +2560,6 @@ class LAllocate: public LTemplateInstruction<1, 2, 1> {
 
   DECLARE_CONCRETE_INSTRUCTION(Allocate, "allocate")
   DECLARE_HYDROGEN_ACCESSOR(Allocate)
-};
-
-
-class LArrayLiteral: public LTemplateInstruction<1, 1, 0> {
- public:
-  explicit LArrayLiteral(LOperand* context) {
-    inputs_[0] = context;
-  }
-
-  LOperand* context() { return inputs_[0]; }
-
-  DECLARE_CONCRETE_INSTRUCTION(ArrayLiteral, "array-literal")
-  DECLARE_HYDROGEN_ACCESSOR(ArrayLiteral)
-};
-
-
-class LObjectLiteral: public LTemplateInstruction<1, 1, 0> {
- public:
-  explicit LObjectLiteral(LOperand* context) {
-    inputs_[0] = context;
-  }
-
-  LOperand* context() { return inputs_[0]; }
-
-  DECLARE_CONCRETE_INSTRUCTION(ObjectLiteral, "object-literal")
-  DECLARE_HYDROGEN_ACCESSOR(ObjectLiteral)
 };
 
 

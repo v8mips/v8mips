@@ -1675,6 +1675,7 @@ Range* HChange::InferRange(Zone* zone) {
       !value()->CheckFlag(HInstruction::kUint32) &&
       input_range != NULL && input_range->IsInSmiRange()) {
     set_type(HType::Smi());
+    ClearGVNFlag(kChangesNewSpacePromotion);
   }
   Range* result = (input_range != NULL)
       ? input_range->Copy(zone)
@@ -3002,16 +3003,6 @@ HType HAllocate::CalculateInferredType() {
 void HAllocate::PrintDataTo(StringStream* stream) {
   size()->PrintNameTo(stream);
   if (!GuaranteedInNewSpace()) stream->Add(" (pretenure)");
-}
-
-
-HType HArrayLiteral::CalculateInferredType() {
-  return HType::JSArray();
-}
-
-
-HType HObjectLiteral::CalculateInferredType() {
-  return HType::JSObject();
 }
 
 
