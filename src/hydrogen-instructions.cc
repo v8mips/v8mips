@@ -2679,7 +2679,12 @@ bool HLoadKeyed::UsesMustHandleHole() const {
     return false;
   }
 
-  if (hole_mode() == ALLOW_RETURN_HOLE) return true;
+  if (hole_mode() == ALLOW_RETURN_HOLE) {
+    if (IsFastDoubleElementsKind(elements_kind())) {
+      return AllUsesCanTreatHoleAsNaN();
+    }
+    return true;
+  }
 
   if (IsFastDoubleElementsKind(elements_kind())) {
     return false;
@@ -2688,6 +2693,22 @@ bool HLoadKeyed::UsesMustHandleHole() const {
   for (HUseIterator it(uses()); !it.Done(); it.Advance()) {
     HValue* use = it.value();
     if (!use->IsChange()) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+
+bool HLoadKeyed::AllUsesCanTreatHoleAsNaN() const {
+  if (!IsFastDoubleElementsKind(elements_kind())) {
+    return false;
+  }
+
+  for (HUseIterator it(uses()); !it.Done(); it.Advance()) {
+    HValue* use = it.value();
+    if (use->CheckFlag(HValue::kDeoptimizeOnUndefined)) {
       return false;
     }
   }
@@ -3338,6 +3359,9 @@ HInstruction* HMod::New(
     if (c_left->HasInteger32Value() && c_right->HasInteger32Value()) {
       int32_t dividend = c_left->Integer32Value();
       int32_t divisor = c_right->Integer32Value();
+      if (dividend == kMinInt && divisor == -1) {
+        return H_CONSTANT_DOUBLE(-0.0);
+      }
       if (divisor != 0) {
         int32_t res = dividend % divisor;
         if ((res == 0) && (dividend < 0)) {
