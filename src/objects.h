@@ -5820,7 +5820,7 @@ class SharedFunctionInfo: public HeapObject {
   void InstallFromOptimizedCodeMap(JSFunction* function, int index);
 
   // Clear optimized code map.
-  inline void ClearOptimizedCodeMap();
+  void ClearOptimizedCodeMap(const char* reason);
 
   // Add a new entry to the optimized code map.
   static void AddToOptimizedCodeMap(Handle<SharedFunctionInfo> shared,
@@ -6125,6 +6125,9 @@ class SharedFunctionInfo: public HeapObject {
   // Indicates that code for this function cannot be cached.
   DECL_BOOLEAN_ACCESSORS(dont_cache)
 
+  // Indicates that code for this function cannot be flushed.
+  DECL_BOOLEAN_ACCESSORS(dont_flush)
+
   // Indicates that this function is a generator.
   DECL_BOOLEAN_ACCESSORS(is_generator)
 
@@ -6354,6 +6357,7 @@ class SharedFunctionInfo: public HeapObject {
     kDontOptimize,
     kDontInline,
     kDontCache,
+    kDontFlush,
     kIsGenerator,
     kCompilerHintsCount  // Pseudo entry
   };
@@ -6673,6 +6677,8 @@ class JSFunction: public JSObject {
     return true;
   }
 #endif
+
+  bool PassesHydrogenFilter();
 
   // Layout descriptors. The last property (from kNonWeakFieldsEndOffset to
   // kSize) is weak and has special handling during garbage collection.
@@ -7806,7 +7812,7 @@ class String: public Name {
 
   // String equality operations.
   inline bool Equals(String* other);
-  bool IsUtf8EqualTo(Vector<const char> str);
+  bool IsUtf8EqualTo(Vector<const char> str, bool allow_prefix_match = false);
   bool IsOneByteEqualTo(Vector<const uint8_t> str);
   bool IsTwoByteEqualTo(Vector<const uc16> str);
 

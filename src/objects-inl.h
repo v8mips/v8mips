@@ -4672,15 +4672,11 @@ BOOL_ACCESSORS(SharedFunctionInfo, compiler_hints, dont_optimize,
                kDontOptimize)
 BOOL_ACCESSORS(SharedFunctionInfo, compiler_hints, dont_inline, kDontInline)
 BOOL_ACCESSORS(SharedFunctionInfo, compiler_hints, dont_cache, kDontCache)
+BOOL_ACCESSORS(SharedFunctionInfo, compiler_hints, dont_flush, kDontFlush)
 BOOL_ACCESSORS(SharedFunctionInfo, compiler_hints, is_generator, kIsGenerator)
 
 void SharedFunctionInfo::BeforeVisitingPointers() {
   if (IsInobjectSlackTrackingInProgress()) DetachInitialMap();
-}
-
-
-void SharedFunctionInfo::ClearOptimizedCodeMap() {
-  set_optimized_code_map(Smi::FromInt(0));
 }
 
 
