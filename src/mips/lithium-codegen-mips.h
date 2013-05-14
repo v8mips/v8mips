@@ -283,8 +283,16 @@ class LCodeGen BASE_EMBEDDED {
                                             Safepoint::DeoptMode mode);
   void DeoptimizeIf(Condition cc,
                     LEnvironment* environment,
+                    Deoptimizer::BailoutType bailout_type,
                     Register src1 = zero_reg,
                     const Operand& src2 = Operand(zero_reg));
+  void DeoptimizeIf(Condition cc,
+                    LEnvironment* environment,
+                    Register src1 = zero_reg,
+                    const Operand& src2 = Operand(zero_reg));
+  void SoftDeoptimize(LEnvironment* environment,
+                      Register src1 = zero_reg,
+                      const Operand& src2 = Operand(zero_reg));
 
   void AddToTranslation(Translation* translation,
                         LOperand* op,
@@ -396,18 +404,6 @@ class LCodeGen BASE_EMBEDDED {
                                            Register scratch,
                                            LEnvironment* environment);
 
-  struct JumpTableEntry {
-    inline JumpTableEntry(Address entry, bool frame, bool is_lazy)
-        : label(),
-          address(entry),
-          needs_frame(frame),
-          is_lazy_deopt(is_lazy) { }
-    Label label;
-    Address address;
-    bool needs_frame;
-    bool is_lazy_deopt;
-  };
-
   void EnsureSpaceForLazyDeopt();
   void DoLoadKeyedExternalArray(LLoadKeyed* instr);
   void DoLoadKeyedFixedDoubleArray(LLoadKeyed* instr);
@@ -425,7 +421,7 @@ class LCodeGen BASE_EMBEDDED {
   int current_instruction_;
   const ZoneList<LInstruction*>* instructions_;
   ZoneList<LEnvironment*> deoptimizations_;
-  ZoneList<JumpTableEntry> deopt_jump_table_;
+  ZoneList<Deoptimizer::JumpTableEntry> deopt_jump_table_;
   ZoneList<Handle<Object> > deoptimization_literals_;
   ZoneList<Handle<Map> > prototype_maps_;
   ZoneList<Handle<Map> > transition_maps_;
