@@ -174,6 +174,7 @@ bool LCodeGen::GeneratePrologue() {
     } else {
       __ push(rdi);  // Callee's JS function.
     }
+    info()->AddNoFrameRange(0, masm_->pc_offset());
   }
 
   // Reserve space for the stack slots needed by the code.
@@ -1862,6 +1863,11 @@ void LCodeGen::EmitBranch(int left_block, int right_block, Condition cc) {
 }
 
 
+void LCodeGen::DoDebugBreak(LDebugBreak* instr) {
+  __ int3();
+}
+
+
 void LCodeGen::DoBranch(LBranch* instr) {
   int true_block = chunk_->LookupDestination(instr->true_block_id());
   int false_block = chunk_->LookupDestination(instr->false_block_id());
@@ -2521,9 +2527,11 @@ void LCodeGen::DoReturn(LReturn* instr) {
       count++;
     }
   }
+  int no_frame_start = -1;
   if (NeedsEagerFrame()) {
     __ movq(rsp, rbp);
     __ pop(rbp);
+    no_frame_start = masm_->pc_offset();
   }
   if (instr->has_constant_parameter_count()) {
     __ Ret((ToInteger32(instr->constant_parameter_count()) + 1) * kPointerSize,
@@ -2537,6 +2545,9 @@ void LCodeGen::DoReturn(LReturn* instr) {
     __ shl(reg, Immediate(kPointerSizeLog2));
     __ addq(rsp, reg);
     __ jmp(return_addr_reg);
+  }
+  if (no_frame_start != -1) {
+    info_->AddNoFrameRange(no_frame_start, masm_->pc_offset());
   }
 }
 

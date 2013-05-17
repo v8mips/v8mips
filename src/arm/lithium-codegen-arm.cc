@@ -2198,6 +2198,11 @@ void LCodeGen::EmitBranch(int left_block, int right_block, Condition cc) {
 }
 
 
+void LCodeGen::DoDebugBreak(LDebugBreak* instr) {
+  __ stop("LBreak");
+}
+
+
 void LCodeGen::DoBranch(LBranch* instr) {
   int true_block = chunk_->LookupDestination(instr->true_block_id());
   int false_block = chunk_->LookupDestination(instr->false_block_id());
@@ -2898,9 +2903,11 @@ void LCodeGen::DoReturn(LReturn* instr) {
       count++;
     }
   }
+  int no_frame_start = -1;
   if (NeedsEagerFrame()) {
     __ mov(sp, fp);
     __ ldm(ia_w, sp, fp.bit() | lr.bit());
+    no_frame_start = masm_->pc_offset();
   }
   if (instr->has_constant_parameter_count()) {
     int parameter_count = ToInteger32(instr->constant_parameter_count());
@@ -2916,6 +2923,10 @@ void LCodeGen::DoReturn(LReturn* instr) {
   }
 
   __ Jump(lr);
+
+  if (no_frame_start != -1) {
+    info_->AddNoFrameRange(no_frame_start, masm_->pc_offset());
+  }
 }
 
 

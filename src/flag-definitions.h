@@ -258,7 +258,7 @@ DEFINE_bool(unreachable_code_elimination, false,
             "eliminate unreachable code (hidden behind soft deopts)")
 DEFINE_bool(track_allocation_sites, true,
             "Use allocation site info to reduce transitions")
-DEFINE_bool(optimize_constructed_arrays, false,
+DEFINE_bool(optimize_constructed_arrays, true,
             "Use allocation site info on constructed arrays")
 DEFINE_bool(trace_osr, false, "trace on-stack replacement")
 DEFINE_int(stress_runs, 0, "number of stress runs")
@@ -268,6 +268,8 @@ DEFINE_bool(lookup_sample_by_shared, true,
             "info, not JSFunction itself")
 DEFINE_bool(cache_optimized_code, true,
             "cache optimized code for closures")
+DEFINE_bool(flush_optimized_code_cache, true,
+            "flushes the cache of optimized code for closures on every GC")
 DEFINE_bool(inline_construct, true, "inline constructor calls")
 DEFINE_bool(inline_arguments, true, "inline functions with arguments object")
 DEFINE_bool(inline_accessors, true, "inline JavaScript accessors")
@@ -464,6 +466,7 @@ DEFINE_bool(flush_code, true,
             "flush code that we expect not to use again (during full gc)")
 DEFINE_bool(flush_code_incrementally, true,
             "flush code that we expect not to use again (incrementally)")
+DEFINE_bool(trace_code_flushing, false, "trace code flushing progress")
 DEFINE_bool(age_code, true,
             "track un-executed functions to age code and flush only "
             "old code")

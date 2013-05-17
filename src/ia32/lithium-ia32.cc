@@ -1049,6 +1049,11 @@ LInstruction* LChunkBuilder::DoBranch(HBranch* instr) {
 }
 
 
+LInstruction* LChunkBuilder::DoDebugBreak(HDebugBreak* instr) {
+  return new(zone()) LDebugBreak();
+}
+
+
 LInstruction* LChunkBuilder::DoCompareMap(HCompareMap* instr) {
   ASSERT(instr->value()->representation().IsTagged());
   LOperand* value = UseRegisterAtStart(instr->value());
@@ -1840,6 +1845,7 @@ LInstruction* LChunkBuilder::DoSeqStringSetChar(HSeqStringSetChar* instr) {
   LOperand* string = UseRegister(instr->string());
   LOperand* index = UseRegister(instr->index());
   ASSERT(ecx.is_byte_register());
+  // TODO(titzer): the machine code for this instruction overwrites ecx! fix!
   LOperand* value = UseFixed(instr->value(), ecx);
   LSeqStringSetChar* result =
       new(zone()) LSeqStringSetChar(instr->encoding(), string, index, value);

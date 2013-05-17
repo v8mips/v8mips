@@ -210,6 +210,7 @@ bool LCodeGen::GeneratePrologue() {
     frame_is_built_ = true;
     __ push(ebp);  // Caller's frame pointer.
     __ mov(ebp, esp);
+    info()->AddNoFrameRange(0, masm_->pc_offset());
     __ push(esi);  // Callee's context.
     if (info()->IsStub()) {
       __ push(Immediate(Smi::FromInt(StackFrame::STUB)));
@@ -2806,9 +2807,11 @@ void LCodeGen::DoReturn(LReturn* instr) {
     __ mov(edx, Operand(ebp,
       JavaScriptFrameConstants::kDynamicAlignmentStateOffset));
   }
+  int no_frame_start = -1;
   if (NeedsEagerFrame()) {
     __ mov(esp, ebp);
     __ pop(ebp);
+    no_frame_start = masm_->pc_offset();
   }
   if (dynamic_frame_alignment_) {
     Label no_padding;
@@ -2820,6 +2823,9 @@ void LCodeGen::DoReturn(LReturn* instr) {
   }
 
   EmitReturn(instr, false);
+  if (no_frame_start != -1) {
+    info()->AddNoFrameRange(no_frame_start, masm_->pc_offset());
+  }
 }
 
 
@@ -3319,7 +3325,8 @@ Operand LCodeGen::BuildFastArrayOperand(
     uint32_t offset,
     uint32_t additional_index) {
   Register elements_pointer_reg = ToRegister(elements_pointer);
-  int shift_size = ElementsKindToShiftSize(elements_kind);
+  int element_shift_size = ElementsKindToShiftSize(elements_kind);
+  int shift_size = element_shift_size;
   if (key->IsConstantOperand()) {
     int constant_value = ToInteger32(LConstantOperand::cast(key));
     if (constant_value & 0xF0000000) {
@@ -3337,7 +3344,7 @@ Operand LCodeGen::BuildFastArrayOperand(
     return Operand(elements_pointer_reg,
                    ToRegister(key),
                    scale_factor,
-                   offset + (additional_index << shift_size));
+                   offset + (additional_index << element_shift_size));
   }
 }
 
@@ -3490,6 +3497,11 @@ void LCodeGen::DoApplyArguments(LApplyArguments* instr) {
   ParameterCount actual(eax);
   __ InvokeFunction(function, actual, CALL_FUNCTION,
                     safepoint_generator, CALL_AS_METHOD);
+}
+
+
+void LCodeGen::DoDebugBreak(LDebugBreak* instr) {
+  __ int3();
 }
 
 

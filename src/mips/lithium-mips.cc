@@ -208,6 +208,10 @@ void LBranch::PrintDataTo(StringStream* stream) {
 }
 
 
+LInstruction* LChunkBuilder::DoDebugBreak(HDebugBreak* instr) {
+  return new(zone()) LDebugBreak();
+}
+
 void LCmpIDAndBranch::PrintDataTo(StringStream* stream) {
   stream->Add("if ");
   left()->PrintTo(stream);
@@ -1755,7 +1759,7 @@ LInstruction* LChunkBuilder::DoDateField(HDateField* instr) {
 LInstruction* LChunkBuilder::DoSeqStringSetChar(HSeqStringSetChar* instr) {
   LOperand* string = UseRegister(instr->string());
   LOperand* index = UseRegister(instr->index());
-  LOperand* value = UseRegister(instr->value());
+  LOperand* value = UseTempRegister(instr->value());
   LSeqStringSetChar* result =
       new(zone()) LSeqStringSetChar(instr->encoding(), string, index, value);
   return DefineAsRegister(result);
