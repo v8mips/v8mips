@@ -404,7 +404,6 @@ class LCodeGen BASE_EMBEDDED {
                                            Register scratch,
                                            LEnvironment* environment);
 
-                                           
   void EnsureSpaceForLazyDeopt();
   void DoLoadKeyedExternalArray(LLoadKeyed* instr);
   void DoLoadKeyedFixedDoubleArray(LLoadKeyed* instr);
