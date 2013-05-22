@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2013 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -27,44 +27,31 @@
 
 // Flags: --allow-natives-syntax
 
-var a = new Array(10);
+// Copy a hole from HOLEY_DOUBLE to double field.
+var a = [1.5,,1.7];
+var o = {a:1.8};
 
-function test_load_set_smi(a) {
-  return a[0] = a[0] = 1;
+function f1(o,a,i) {
+  o.a = a[i];
 }
 
-test_load_set_smi(a);
-test_load_set_smi(a);
-test_load_set_smi(123);
+f1(o,a,0);
+f1(o,a,0);
+assertEquals(1.5, o.a);
+%OptimizeFunctionOnNextCall(f1);
+f1(o,a,1);
+assertEquals(undefined, o.a);
 
-function test_load_set_smi_2(a) {
-  return a[0] = a[0] = 1;
+// Copy a hole from HOLEY_SMI to smi field.
+var a = [1,,3];
+var o = {ab:5};
+
+function f2(o,a,i) {
+  o.ab = a[i];
 }
 
-test_load_set_smi_2(a);
-%OptimizeFunctionOnNextCall(test_load_set_smi_2);
-test_load_set_smi_2(a);
-test_load_set_smi_2(0);
-%DeoptimizeFunction(test_load_set_smi_2);
-%ClearFunctionTypeFeedback(test_load_set_smi_2);
-
-var b = new Object();
-
-function test_load_set_smi_3(b) {
-  return b[0] = b[0] = 1;
-}
-
-test_load_set_smi_3(b);
-test_load_set_smi_3(b);
-test_load_set_smi_3(123);
-
-function test_load_set_smi_4(b) {
-  return b[0] = b[0] = 1;
-}
-
-test_load_set_smi_4(b);
-%OptimizeFunctionOnNextCall(test_load_set_smi_4);
-test_load_set_smi_4(b);
-test_load_set_smi_4(0);
-%DeoptimizeFunction(test_load_set_smi_4);
-%ClearFunctionTypeFeedback(test_load_set_smi_4);
+f2(o,a,0);
+f2(o,a,0);
+%OptimizeFunctionOnNextCall(f2);
+f2(o,a,1);
+assertEquals(undefined, o.ab);

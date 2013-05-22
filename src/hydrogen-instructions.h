@@ -5411,7 +5411,7 @@ class HLoadKeyed
              IsFastDoubleElementsKind(elements_kind));
 
       if (IsFastSmiOrObjectElementsKind(elements_kind)) {
-        if (elements_kind == FAST_SMI_ELEMENTS) {
+        if (IsFastSmiElementsKind(elements_kind)) {
           set_type(HType::Smi());
         }
 
@@ -5593,6 +5593,7 @@ class HStoreNamedField: public HTemplateInstruction<2> {
       SetGVNFlag(kChangesBackingStoreFields);
       SetGVNFlag(kDependsOnNewSpacePromotion);
     }
+    SetFlag(kDeoptimizeOnUndefined);
   }
 
   DECLARE_CONCRETE_INSTRUCTION(StoreNamedField)

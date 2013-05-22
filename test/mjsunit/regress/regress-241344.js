@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2013 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -25,46 +25,16 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// Flags: --allow-natives-syntax
+// Create a JSON string for an object with indexed properties.
+// Parsing that string creates a sparse array that grows dense.
 
-var a = new Array(10);
-
-function test_load_set_smi(a) {
-  return a[0] = a[0] = 1;
+var jsonstring = '{"0":0.1, "10000":0.4, ';
+for (var i = 1; i < 9999; i++) {
+  jsonstring += '"' + i + '":0.2, ';
 }
+jsonstring += '"9999":0.3}';
 
-test_load_set_smi(a);
-test_load_set_smi(a);
-test_load_set_smi(123);
-
-function test_load_set_smi_2(a) {
-  return a[0] = a[0] = 1;
+var jsonobject = JSON.parse(jsonstring);
+for (var i = 1; i < 9999; i++) {
+  assertEquals(0.2, jsonobject[i]);
 }
-
-test_load_set_smi_2(a);
-%OptimizeFunctionOnNextCall(test_load_set_smi_2);
-test_load_set_smi_2(a);
-test_load_set_smi_2(0);
-%DeoptimizeFunction(test_load_set_smi_2);
-%ClearFunctionTypeFeedback(test_load_set_smi_2);
-
-var b = new Object();
-
-function test_load_set_smi_3(b) {
-  return b[0] = b[0] = 1;
-}
-
-test_load_set_smi_3(b);
-test_load_set_smi_3(b);
-test_load_set_smi_3(123);
-
-function test_load_set_smi_4(b) {
-  return b[0] = b[0] = 1;
-}
-
-test_load_set_smi_4(b);
-%OptimizeFunctionOnNextCall(test_load_set_smi_4);
-test_load_set_smi_4(b);
-test_load_set_smi_4(0);
-%DeoptimizeFunction(test_load_set_smi_4);
-%ClearFunctionTypeFeedback(test_load_set_smi_4);

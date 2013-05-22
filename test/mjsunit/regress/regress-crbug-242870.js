@@ -1,4 +1,4 @@
-// Copyright 2011 the V8 project authors. All rights reserved.
+// Copyright 2013 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -27,44 +27,17 @@
 
 // Flags: --allow-natives-syntax
 
-var a = new Array(10);
+var non_const_true = true;
 
-function test_load_set_smi(a) {
-  return a[0] = a[0] = 1;
+function f() {
+  return (non_const_true || true && g());
 }
 
-test_load_set_smi(a);
-test_load_set_smi(a);
-test_load_set_smi(123);
-
-function test_load_set_smi_2(a) {
-  return a[0] = a[0] = 1;
+function g() {
+  for (;;) {}
 }
 
-test_load_set_smi_2(a);
-%OptimizeFunctionOnNextCall(test_load_set_smi_2);
-test_load_set_smi_2(a);
-test_load_set_smi_2(0);
-%DeoptimizeFunction(test_load_set_smi_2);
-%ClearFunctionTypeFeedback(test_load_set_smi_2);
-
-var b = new Object();
-
-function test_load_set_smi_3(b) {
-  return b[0] = b[0] = 1;
-}
-
-test_load_set_smi_3(b);
-test_load_set_smi_3(b);
-test_load_set_smi_3(123);
-
-function test_load_set_smi_4(b) {
-  return b[0] = b[0] = 1;
-}
-
-test_load_set_smi_4(b);
-%OptimizeFunctionOnNextCall(test_load_set_smi_4);
-test_load_set_smi_4(b);
-test_load_set_smi_4(0);
-%DeoptimizeFunction(test_load_set_smi_4);
-%ClearFunctionTypeFeedback(test_load_set_smi_4);
+assertTrue(f());
+assertTrue(f());
+%OptimizeFunctionOnNextCall(f);
+assertTrue(f());
