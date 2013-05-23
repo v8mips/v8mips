@@ -2325,10 +2325,11 @@ void LCodeGen::DoCmpObjectEqAndBranch(LCmpObjectEqAndBranch* instr) {
   int true_block = chunk_->LookupDestination(instr->true_block_id());
 
   if (instr->right()->IsConstantOperand()) {
-    __ cmp(left, ToHandle(LConstantOperand::cast(instr->right())));
+    Handle<Object> right = ToHandle(LConstantOperand::cast(instr->right()));
+    __ CmpObject(left, right);
   } else {
     Operand right = ToOperand(instr->right());
-    __ cmp(left, Operand(right));
+    __ cmp(left, right);
   }
   EmitBranch(true_block, false_block, equal);
 }
@@ -5694,6 +5695,13 @@ void LCodeGen::DoDoubleToSmi(LDoubleToSmi* instr) {
   }
   __ SmiTag(result_reg);
   DeoptimizeIf(overflow, instr->environment());
+}
+
+
+void LCodeGen::DoCheckSmiAndReturn(LCheckSmiAndReturn* instr) {
+  LOperand* input = instr->value();
+  __ test(ToOperand(input), Immediate(kSmiTagMask));
+  DeoptimizeIf(not_zero, instr->environment());
 }
 
 
