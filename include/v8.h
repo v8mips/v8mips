@@ -4541,8 +4541,7 @@ class V8EXPORT V8 {
 
   static internal::Object** GlobalizeReference(internal::Isolate* isolate,
                                                internal::Object** handle);
-  static void DisposeGlobal(internal::Isolate* isolate,
-                            internal::Object** global_handle);
+  static void DisposeGlobal(internal::Object** global_handle);
   typedef WeakReferenceCallbacks<Value, void>::Revivable RevivableCallback;
   static void MakeWeak(internal::Isolate* isolate,
                        internal::Object** global_handle,
@@ -5231,7 +5230,7 @@ class Internals {
   static const int kNullValueRootIndex = 7;
   static const int kTrueValueRootIndex = 8;
   static const int kFalseValueRootIndex = 9;
-  static const int kEmptyStringRootIndex = 127;
+  static const int kEmptyStringRootIndex = 129;
 
   static const int kNodeClassIdOffset = 1 * kApiPointerSize;
   static const int kNodeFlagsOffset = 1 * kApiPointerSize + 3;
@@ -5486,18 +5485,17 @@ bool Persistent<T>::IsWeak(Isolate* isolate) const {
 
 template <class T>
 void Persistent<T>::Dispose() {
-  Dispose(Isolate::GetCurrent());
+  if (this->IsEmpty()) return;
+  V8::DisposeGlobal(reinterpret_cast<internal::Object**>(this->val_));
+#ifndef V8_USE_UNSAFE_HANDLES
+  val_ = 0;
+#endif
 }
 
 
 template <class T>
 void Persistent<T>::Dispose(Isolate* isolate) {
-  if (this->IsEmpty()) return;
-  V8::DisposeGlobal(reinterpret_cast<internal::Isolate*>(isolate),
-                    reinterpret_cast<internal::Object**>(this->val_));
-#ifndef V8_USE_UNSAFE_HANDLES
-  val_ = 0;
-#endif
+  Dispose();
 }
 
 

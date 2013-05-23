@@ -181,7 +181,10 @@ namespace internal {
   V(Smi, getter_stub_deopt_pc_offset, GetterStubDeoptPCOffset)                 \
   V(Smi, setter_stub_deopt_pc_offset, SetterStubDeoptPCOffset)                 \
   V(JSObject, observation_state, ObservationState)                             \
-  V(Map, external_map, ExternalMap)
+  V(Map, external_map, ExternalMap)                                            \
+  V(Symbol, frozen_symbol, FrozenSymbol)                                       \
+  V(SeededNumberDictionary, empty_slow_element_dictionary,                     \
+      EmptySlowElementDictionary)
 
 #define ROOT_LIST(V)                                  \
   STRONG_ROOT_LIST(V)                                 \
@@ -1546,7 +1549,12 @@ class Heap {
   // Predicate that governs global pre-tenuring decisions based on observed
   // promotion rates of previous collections.
   inline bool ShouldGloballyPretenure() {
-    return new_space_high_promotion_mode_active_;
+    return FLAG_pretenuring && new_space_high_promotion_mode_active_;
+  }
+
+  // This is only needed for testing high promotion mode.
+  void SetNewSpaceHighPromotionModeActive(bool mode) {
+    new_space_high_promotion_mode_active_ = mode;
   }
 
   inline PretenureFlag GetPretenureMode() {

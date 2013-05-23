@@ -1391,7 +1391,7 @@ HValue* HGraphBuilder::BuildAllocateElements(HValue* context,
   total_size->ClearFlag(HValue::kCanOverflow);
 
   HAllocate::Flags flags = HAllocate::DefaultFlags(kind);
-  if (FLAG_pretenure_literals) {
+  if (isolate()->heap()->ShouldGloballyPretenure()) {
     // TODO(hpayer): When pretenuring can be internalized, flags can become
     // private to HAllocate.
     if (IsFastDoubleElementsKind(kind)) {
@@ -4399,7 +4399,9 @@ void HGraph::ComputeMinusZeroChecks() {
         Representation from = change->value()->representation();
         ASSERT(from.Equals(change->from()));
         if (from.IsInteger32()) {
-          ASSERT(change->to().IsTagged() || change->to().IsDouble());
+          ASSERT(change->to().IsTagged() ||
+                 change->to().IsDouble() ||
+                 change->to().IsSmi());
           ASSERT(visited.IsEmpty());
           PropagateMinusZeroChecks(change->value(), &visited);
           visited.Clear();
@@ -10867,8 +10869,7 @@ HInstruction* HOptimizedGraphBuilder::BuildFastLiteral(
 
   HAllocate::Flags flags = HAllocate::CAN_ALLOCATE_IN_NEW_SPACE;
   // TODO(hpayer): add support for old data space
-  if (FLAG_pretenure_literals &&
-      isolate()->heap()->ShouldGloballyPretenure() &&
+  if (isolate()->heap()->ShouldGloballyPretenure() &&
       data_size == 0) {
     flags = static_cast<HAllocate::Flags>(
         flags | HAllocate::CAN_ALLOCATE_IN_OLD_POINTER_SPACE);
@@ -11012,9 +11013,11 @@ void HOptimizedGraphBuilder::BuildEmitDeepCopy(
             AddInstruction(new(zone) HConstant(i, Representation::Integer32()));
         HInstruction* value_instruction =
             AddInstruction(new(zone) HLoadKeyed(
-                boilerplate_elements, key_constant, NULL, kind));
-        AddInstruction(new(zone) HStoreKeyed(
+                boilerplate_elements, key_constant, NULL, kind,
+                ALLOW_RETURN_HOLE));
+        HInstruction* store = AddInstruction(new(zone) HStoreKeyed(
                 object_elements, key_constant, value_instruction, kind));
+        store->ClearFlag(HValue::kDeoptimizeOnUndefined);
       }
     } else if (elements->IsFixedArray()) {
       Handle<FixedArray> fast_elements = Handle<FixedArray>::cast(elements);
@@ -11037,7 +11040,8 @@ void HOptimizedGraphBuilder::BuildEmitDeepCopy(
         } else {
           HInstruction* value_instruction =
               AddInstruction(new(zone) HLoadKeyed(
-                  boilerplate_elements, key_constant, NULL, kind));
+                  boilerplate_elements, key_constant, NULL, kind,
+                  ALLOW_RETURN_HOLE));
           AddInstruction(new(zone) HStoreKeyed(
               object_elements, key_constant, value_instruction, kind));
         }
