@@ -1143,16 +1143,15 @@ void HBoundsCheck::InferRepresentation(HInferRepresentation* h_infer) {
   HValue* actual_length = length()->ActualValue();
   HValue* actual_index = index()->ActualValue();
   if (key_mode_ == DONT_ALLOW_SMI_KEY ||
-      !actual_length->representation().IsTagged()) {
+      !actual_length->representation().IsSmiOrTagged()) {
     r = Representation::Integer32();
-  } else if (actual_index->representation().IsTagged() ||
-      (actual_index->IsConstant() &&
-       HConstant::cast(actual_index)->HasSmiValue())) {
-    // If the index is tagged, or a constant that holds a Smi, allow the length
-    // to be tagged, since it is usually already tagged from loading it out of
-    // the length field of a JSArray. This allows for direct comparison without
-    // untagging.
-    r = Representation::Tagged();
+  } else if (actual_index->representation().IsSmiOrTagged() ||
+             (actual_index->IsConstant() &&
+              HConstant::cast(actual_index)->HasSmiValue())) {
+    // If the index is smi, or a constant that holds a Smi, allow the length to
+    // be smi, since it is usually already smi from loading it out of the length
+    // field of a JSArray. This allows for direct comparison without untagging.
+    r = Representation::Smi();
   } else {
     r = Representation::Integer32();
   }
@@ -2480,7 +2479,7 @@ void HParameter::PrintDataTo(StringStream* stream) {
 
 void HLoadNamedField::PrintDataTo(StringStream* stream) {
   object()->PrintNameTo(stream);
-  stream->Add(" @%d%s", offset(), is_in_object() ? "[in-object]" : "");
+  access_.PrintTo(stream);
   if (HasTypeCheck()) {
     stream->Add(" ");
     typecheck()->PrintNameTo(stream);
@@ -2802,11 +2801,9 @@ void HStoreNamedGeneric::PrintDataTo(StringStream* stream) {
 
 void HStoreNamedField::PrintDataTo(StringStream* stream) {
   object()->PrintNameTo(stream);
-  stream->Add(".");
-  stream->Add(*String::cast(*name())->ToCString());
+  access_.PrintTo(stream);
   stream->Add(" = ");
   value()->PrintNameTo(stream);
-  stream->Add(" @%d%s", offset(), is_in_object() ? "[in-object]" : "");
   if (NeedsWriteBarrier()) {
     stream->Add(" (write-barrier)");
   }
@@ -2941,15 +2938,6 @@ HType HCheckNonSmi::CalculateInferredType() {
 
 HType HCheckSmi::CalculateInferredType() {
   return HType::Smi();
-}
-
-
-void HCheckSmiOrInt32::InferRepresentation(HInferRepresentation* h_infer) {
-  ASSERT(CheckFlag(kFlexibleRepresentation));
-  ASSERT(UseCount() == 1);
-  HUseIterator use = uses();
-  Representation r = use.value()->RequiredInputRepresentation(use.index());
-  UpdateRepresentation(r, h_infer, "checksmiorint32");
 }
 
 
@@ -3665,5 +3653,142 @@ void HCheckFunction::Verify() {
 }
 
 #endif
+
+
+HObjectAccess HObjectAccess::ForFixedArrayHeader(int offset) {
+  ASSERT(offset >= 0);
+  ASSERT(offset < FixedArray::kHeaderSize);
+  if (offset == FixedArray::kLengthOffset) return ForFixedArrayLength();
+  return HObjectAccess(kInobject, offset);
+}
+
+
+HObjectAccess HObjectAccess::ForJSObjectOffset(int offset) {
+  ASSERT(offset >= 0);
+  Portion portion = kInobject;
+
+  if (offset == JSObject::kElementsOffset) {
+    portion = kElementsPointer;
+  } else if (offset == JSObject::kMapOffset) {
+    portion = kMaps;
+  }
+  return HObjectAccess(portion, offset, Handle<String>::null());
+}
+
+
+HObjectAccess HObjectAccess::ForJSArrayOffset(int offset) {
+  ASSERT(offset >= 0);
+  Portion portion = kInobject;
+
+  if (offset == JSObject::kElementsOffset) {
+    portion = kElementsPointer;
+  } else if (offset == JSArray::kLengthOffset) {
+    portion = kArrayLengths;
+  } else if (offset == JSObject::kMapOffset) {
+    portion = kMaps;
+  }
+  return HObjectAccess(portion, offset, Handle<String>::null());
+}
+
+
+HObjectAccess HObjectAccess::ForBackingStoreOffset(int offset) {
+  ASSERT(offset >= 0);
+  return HObjectAccess(kBackingStore, offset, Handle<String>::null());
+}
+
+
+HObjectAccess HObjectAccess::ForField(Handle<Map> map,
+    LookupResult *lookup, Handle<String> name) {
+  ASSERT(lookup->IsField() || lookup->IsTransitionToField(*map));
+  int index;
+  if (lookup->IsField()) {
+    index = lookup->GetLocalFieldIndexFromMap(*map);
+  } else {
+    Map* transition = lookup->GetTransitionMapFromMap(*map);
+    int descriptor = transition->LastAdded();
+    index = transition->instance_descriptors()->GetFieldIndex(descriptor) -
+        map->inobject_properties();
+  }
+  if (index < 0) {
+    // Negative property indices are in-object properties, indexed
+    // from the end of the fixed part of the object.
+    int offset = (index * kPointerSize) + map->instance_size();
+    return HObjectAccess(kInobject, offset);
+  } else {
+    // Non-negative property indices are in the properties array.
+    int offset = (index * kPointerSize) + FixedArray::kHeaderSize;
+    return HObjectAccess(kBackingStore, offset, name);
+  }
+}
+
+
+void HObjectAccess::SetGVNFlags(HValue *instr, bool is_store) {
+  // set the appropriate GVN flags for a given load or store instruction
+  if (is_store) {
+    // track dominating allocations in order to eliminate write barriers
+    instr->SetGVNFlag(kDependsOnNewSpacePromotion);
+    instr->SetFlag(HValue::kTrackSideEffectDominators);
+    instr->SetFlag(HValue::kDeoptimizeOnUndefined);
+  } else {
+    // try to GVN loads, but don't hoist above map changes
+    instr->SetFlag(HValue::kUseGVN);
+    instr->SetGVNFlag(kDependsOnMaps);
+  }
+
+  switch (portion()) {
+    case kArrayLengths:
+      instr->SetGVNFlag(is_store
+          ? kChangesArrayLengths : kDependsOnArrayLengths);
+      break;
+    case kInobject:
+      instr->SetGVNFlag(is_store
+          ? kChangesInobjectFields : kDependsOnInobjectFields);
+      break;
+    case kDouble:
+      instr->SetGVNFlag(is_store
+          ? kChangesDoubleFields : kDependsOnDoubleFields);
+      break;
+    case kBackingStore:
+      instr->SetGVNFlag(is_store
+          ? kChangesBackingStoreFields : kDependsOnBackingStoreFields);
+      break;
+    case kElementsPointer:
+      instr->SetGVNFlag(is_store
+          ? kChangesElementsPointer : kDependsOnElementsPointer);
+      break;
+    case kMaps:
+      instr->SetGVNFlag(is_store
+          ? kChangesMaps : kDependsOnMaps);
+      break;
+  }
+}
+
+
+void HObjectAccess::PrintTo(StringStream* stream) {
+  stream->Add(".");
+
+  switch (portion()) {
+    case kArrayLengths:
+      stream->Add("%length");
+      break;
+    case kElementsPointer:
+      stream->Add("%elements");
+      break;
+    case kMaps:
+      stream->Add("%map");
+      break;
+    case kDouble:  // fall through
+    case kInobject:
+      if (!name_.is_null()) stream->Add(*String::cast(*name_)->ToCString());
+      stream->Add("[in-object]");
+      break;
+    case kBackingStore:
+      if (!name_.is_null()) stream->Add(*String::cast(*name_)->ToCString());
+      stream->Add("[backing-store]");
+      break;
+  }
+
+  stream->Add("@%d", offset());
+}
 
 } }  // namespace v8::internal

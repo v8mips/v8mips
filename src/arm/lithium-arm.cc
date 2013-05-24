@@ -369,8 +369,7 @@ void LAccessArgumentsAt::PrintDataTo(StringStream* stream) {
 
 void LStoreNamedField::PrintDataTo(StringStream* stream) {
   object()->PrintTo(stream);
-  stream->Add(".");
-  stream->Add(*String::cast(*name())->ToCString());
+  hydrogen()->access().PrintTo(stream);
   stream->Add(" <- ");
   value()->PrintTo(stream);
 }
@@ -2030,12 +2029,6 @@ LInstruction* LChunkBuilder::DoCheckSmi(HCheckSmi* instr) {
 }
 
 
-LInstruction* LChunkBuilder::DoCheckSmiOrInt32(HCheckSmiOrInt32* instr) {
-  LOperand* value = UseRegisterAtStart(instr->value());
-  return AssignEnvironment(new(zone()) LCheckSmi(value));
-}
-
-
 LInstruction* LChunkBuilder::DoCheckFunction(HCheckFunction* instr) {
   LOperand* value = UseRegisterAtStart(instr->value());
   return AssignEnvironment(new(zone()) LCheckFunction(value));
@@ -2080,7 +2073,7 @@ LInstruction* LChunkBuilder::DoConstant(HConstant* instr) {
     return DefineAsRegister(new(zone()) LConstantI);
   } else if (r.IsDouble()) {
     return DefineAsRegister(new(zone()) LConstantD);
-  } else if (r.IsTagged() || r.IsSmi()) {
+  } else if (r.IsSmiOrTagged()) {
     return DefineAsRegister(new(zone()) LConstantT);
   } else {
     UNREACHABLE();
@@ -2192,7 +2185,7 @@ LInstruction* LChunkBuilder::DoLoadExternalArrayPointer(
 
 LInstruction* LChunkBuilder::DoLoadKeyed(HLoadKeyed* instr) {
   ASSERT(instr->key()->representation().IsInteger32() ||
-         instr->key()->representation().IsTagged());
+         instr->key()->representation().IsSmi());
   ElementsKind elements_kind = instr->elements_kind();
   LOperand* key = UseRegisterOrConstantAtStart(instr->key());
   LLoadKeyed* result = NULL;

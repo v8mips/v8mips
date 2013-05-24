@@ -2372,6 +2372,7 @@ class LCheckSmiAndReturn: public LTemplateInstruction<1, 1, 0> {
   DECLARE_CONCRETE_INSTRUCTION(CheckSmiAndReturn, "check-smi-and-return")
 };
 
+
 class LCheckNonSmi: public LTemplateInstruction<0, 1, 0> {
  public:
   explicit LCheckNonSmi(LOperand* value) {
