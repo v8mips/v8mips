@@ -2946,11 +2946,6 @@ HType HCheckNonSmi::CalculateInferredType() {
 }
 
 
-HType HCheckSmi::CalculateInferredType() {
-  return HType::Smi();
-}
-
-
 HType HPhi::CalculateInferredType() {
   HType result = HType::Uninitialized();
   for (int i = 0; i < OperandCount(); ++i) {
@@ -3645,12 +3640,6 @@ void HPhi::Verify() {
 void HSimulate::Verify() {
   HInstruction::Verify();
   ASSERT(HasAstId());
-}
-
-
-void HCheckSmi::Verify() {
-  HInstruction::Verify();
-  ASSERT(HasNoUses());
 }
 
 
