@@ -2076,6 +2076,7 @@ static bool IsInteger32(double value) {
 HConstant::HConstant(Handle<Object> handle, Representation r)
   : handle_(handle),
     unique_id_(),
+    has_smi_value_(false),
     has_int32_value_(false),
     has_double_value_(false),
     is_internalized_string_(false),
@@ -2089,20 +2090,12 @@ HConstant::HConstant(Handle<Object> handle, Representation r)
     double n = handle_->Number();
     has_int32_value_ = IsInteger32(n);
     int32_value_ = DoubleToInt32(n);
+    has_smi_value_ = has_int32_value_ && Smi::IsValid(int32_value_);
     double_value_ = n;
     has_double_value_ = true;
   } else {
     type_from_value_ = HType::TypeFromValue(handle_);
     is_internalized_string_ = handle_->IsInternalizedString();
-  }
-  if (r.IsNone()) {
-    if (has_int32_value_) {
-      r = Representation::Integer32();
-    } else if (has_double_value_) {
-      r = Representation::Double();
-    } else {
-      r = Representation::Tagged();
-    }
   }
   Initialize(r);
 }
@@ -2117,6 +2110,7 @@ HConstant::HConstant(Handle<Object> handle,
                      bool boolean_value)
     : handle_(handle),
       unique_id_(unique_id),
+      has_smi_value_(false),
       has_int32_value_(false),
       has_double_value_(false),
       is_internalized_string_(is_internalize_string),
@@ -2143,6 +2137,7 @@ HConstant::HConstant(int32_t integer_value,
       boolean_value_(integer_value != 0),
       int32_value_(integer_value),
       double_value_(FastI2D(integer_value)) {
+  has_smi_value_ = Smi::IsValid(int32_value_);
   Initialize(r);
 }
 
@@ -2160,11 +2155,21 @@ HConstant::HConstant(double double_value,
       boolean_value_(double_value != 0 && !std::isnan(double_value)),
       int32_value_(DoubleToInt32(double_value)),
       double_value_(double_value) {
+  has_smi_value_ = has_int32_value_ && Smi::IsValid(int32_value_);
   Initialize(r);
 }
 
 
 void HConstant::Initialize(Representation r) {
+  if (r.IsNone()) {
+    if (has_int32_value_) {
+      r = Representation::Integer32();
+    } else if (has_double_value_) {
+      r = Representation::Double();
+    } else {
+      r = Representation::Tagged();
+    }
+  }
   set_representation(r);
   SetFlag(kUseGVN);
   if (representation().IsInteger32()) {
@@ -2174,6 +2179,7 @@ void HConstant::Initialize(Representation r) {
 
 
 HConstant* HConstant::CopyToRepresentation(Representation r, Zone* zone) const {
+  if (r.IsSmi() && !has_smi_value_) return NULL;
   if (r.IsInteger32() && !has_int32_value_) return NULL;
   if (r.IsDouble() && !has_double_value_) return NULL;
   if (has_int32_value_) {
