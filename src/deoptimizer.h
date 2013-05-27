@@ -38,21 +38,23 @@
 namespace v8 {
 namespace internal {
 
-// Prevent gcc from using load-double (mips ldc1) on (possibly)
-// non-64-bit aligned address.
+
 static inline double read_double_value(Address p) {
-#ifndef V8_TARGET_ARCH_MIPS
-  return Memory::double_at(p)
-#else  // V8_TARGET_ARCH_MIPS
+#ifdef V8_HOST_CAN_READ_UNALIGNED
+  return Memory::double_at(p);
+#else  // V8_HOST_CAN_READ_UNALIGNED
+  // Prevent gcc from using load-double (mips ldc1) on (possibly)
+  // non-64-bit aligned address.
   union conversion {
     double d;
     uint32_t u[2];
   } c;
-  c.u[0] = (*reinterpret_cast<uint32_t*>(p));
-  c.u[1] = (*reinterpret_cast<uint32_t*>(p + 4));
+  c.u[0] = *reinterpret_cast<uint32_t*>(p);
+  c.u[1] = *reinterpret_cast<uint32_t*>(p + 4);
   return c.d;
-#endif  // V8_TARGET_ARCH_MIPS
+#endif  // V8_HOST_CAN_READ_UNALIGNED
 }
+
 
 class FrameDescription;
 class TranslationIterator;

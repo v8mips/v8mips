@@ -2717,11 +2717,14 @@ bool HLoadKeyed::UsesMustHandleHole() const {
     return false;
   }
 
+  // Holes are only returned as tagged values.
+  if (!representation().IsTagged()) {
+    return false;
+  }
+
   for (HUseIterator it(uses()); !it.Done(); it.Advance()) {
     HValue* use = it.value();
-    if (!use->IsChange() || !HChange::cast(use)->to().IsDouble()) {
-      return false;
-    }
+    if (!use->IsChange()) return false;
   }
 
   return true;
