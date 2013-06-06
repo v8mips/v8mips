@@ -3026,11 +3026,6 @@ HType HStringCharFromCode::CalculateInferredType() {
 }
 
 
-HType HAllocateObject::CalculateInferredType() {
-  return HType::JSObject();
-}
-
-
 HType HAllocate::CalculateInferredType() {
   return type_;
 }
@@ -3211,7 +3206,8 @@ HInstruction* HStringAdd::New(
     HConstant* c_right = HConstant::cast(right);
     HConstant* c_left = HConstant::cast(left);
     if (c_left->HasStringValue() && c_right->HasStringValue()) {
-      return new(zone) HConstant(FACTORY->NewConsString(c_left->StringValue(),
+      Factory* factory = Isolate::Current()->factory();
+      return new(zone) HConstant(factory->NewConsString(c_left->StringValue(),
                                                         c_right->StringValue()),
                                  Representation::Tagged());
     }
