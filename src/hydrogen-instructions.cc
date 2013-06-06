@@ -978,6 +978,11 @@ void HDummyUse::PrintDataTo(StringStream* stream) {
 }
 
 
+void HEnvironmentMarker::PrintDataTo(StringStream* stream) {
+  stream->Add("%s var[%d]", kind() == BIND ? "bind" : "lookup", index());
+}
+
+
 void HUnaryCall::PrintDataTo(StringStream* stream) {
   value()->PrintNameTo(stream);
   stream->Add(" ");
@@ -2058,6 +2063,13 @@ void HDeoptimize::PrintDataTo(StringStream* stream) {
 }
 
 
+void HEnterInlined::RegisterReturnTarget(HBasicBlock* return_target,
+                                         Zone* zone) {
+  ASSERT(return_target->IsInlineReturnTarget());
+  return_targets_.Add(return_target, zone);
+}
+
+
 void HEnterInlined::PrintDataTo(StringStream* stream) {
   SmartArrayPointer<char> name = function()->debug_name()->ToCString();
   stream->Add("%s, id=%d", *name, function()->id().ToInt());
@@ -2325,14 +2337,12 @@ Range* HBitwise::InferRange(Zone* zone) {
       if (right_upper < 0) right_upper = ~right_upper;
       if (right_lower < 0) right_lower = ~right_lower;
 
-      // Find the highest used bit.
-      int high = static_cast<int>(log2(left_upper));
-      high = Max(high, static_cast<int>(log2(left_lower)));
-      high = Max(high, static_cast<int>(log2(right_upper)));
-      high = Max(high, static_cast<int>(log2(right_lower)));
+      int high = MostSignificantBit(
+          static_cast<uint32_t>(
+              left_upper | left_lower | right_upper | right_lower));
 
       int64_t limit = 1;
-      limit <<= high + 1;
+      limit <<= high;
       int32_t min = (left()->range()->CanBeNegative() ||
                      right()->range()->CanBeNegative())
                     ? static_cast<int32_t>(-limit) : 0;

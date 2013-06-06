@@ -1576,6 +1576,11 @@ void Genesis::InstallExperimentalNativeFunctions() {
   }
   if (FLAG_harmony_observation) {
     INSTALL_NATIVE(JSFunction, "NotifyChange", observers_notify_change);
+    INSTALL_NATIVE(JSFunction, "EnqueueSpliceRecord", observers_enqueue_splice);
+    INSTALL_NATIVE(JSFunction, "BeginPerformSplice",
+                   observers_begin_perform_splice);
+    INSTALL_NATIVE(JSFunction, "EndPerformSplice",
+                   observers_end_perform_splice);
     INSTALL_NATIVE(JSFunction, "DeliverChangeRecords",
                    observers_deliver_changes);
   }
@@ -1606,8 +1611,14 @@ Handle<JSFunction> Genesis::InstallInternalArray(
       factory()->NewJSObject(isolate()->object_function(), TENURED);
   SetPrototype(array_function, prototype);
 
-  array_function->shared()->set_construct_stub(
-      isolate()->builtins()->builtin(Builtins::kCommonArrayConstructCode));
+  if (FLAG_optimize_constructed_arrays) {
+    InternalArrayConstructorStub internal_array_constructor_stub(isolate());
+    Handle<Code> code = internal_array_constructor_stub.GetCode(isolate());
+    array_function->shared()->set_construct_stub(*code);
+  } else {
+    array_function->shared()->set_construct_stub(
+        isolate()->builtins()->builtin(Builtins::kCommonArrayConstructCode));
+  }
 
   array_function->shared()->DontAdaptArguments();
 

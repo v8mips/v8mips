@@ -9647,114 +9647,6 @@ int SharedFunctionInfo::CalculateInObjectProperties() {
 }
 
 
-bool SharedFunctionInfo::CanGenerateInlineConstructor(Object* prototype) {
-  // Check the basic conditions for generating inline constructor code.
-  if (!FLAG_inline_new
-      || !has_only_simple_this_property_assignments()
-      || is_generator()
-      || this_property_assignments_count() == 0) {
-    return false;
-  }
-
-  Isolate* isolate = GetIsolate();
-  Heap* heap = isolate->heap();
-
-  // Traverse the proposed prototype chain looking for properties of the
-  // same names as are set by the inline constructor.
-  for (Object* obj = prototype;
-       obj != heap->null_value();
-       obj = obj->GetPrototype(isolate)) {
-    JSReceiver* receiver = JSReceiver::cast(obj);
-    for (int i = 0; i < this_property_assignments_count(); i++) {
-      LookupResult result(heap->isolate());
-      String* name = GetThisPropertyAssignmentName(i);
-      receiver->LocalLookup(name, &result);
-      if (result.IsFound()) {
-        switch (result.type()) {
-          case NORMAL:
-          case FIELD:
-          case CONSTANT_FUNCTION:
-            break;
-          case INTERCEPTOR:
-          case CALLBACKS:
-          case HANDLER:
-            return false;
-          case TRANSITION:
-          case NONEXISTENT:
-            UNREACHABLE();
-            break;
-        }
-      }
-    }
-  }
-
-  return true;
-}
-
-
-void SharedFunctionInfo::ForbidInlineConstructor() {
-  set_compiler_hints(BooleanBit::set(compiler_hints(),
-                                     kHasOnlySimpleThisPropertyAssignments,
-                                     false));
-}
-
-
-void SharedFunctionInfo::SetThisPropertyAssignmentsInfo(
-    bool only_simple_this_property_assignments,
-    FixedArray* assignments) {
-  set_compiler_hints(BooleanBit::set(compiler_hints(),
-                                     kHasOnlySimpleThisPropertyAssignments,
-                                     only_simple_this_property_assignments));
-  set_this_property_assignments(assignments);
-  set_this_property_assignments_count(assignments->length() / 3);
-}
-
-
-void SharedFunctionInfo::ClearThisPropertyAssignmentsInfo() {
-  Heap* heap = GetHeap();
-  set_compiler_hints(BooleanBit::set(compiler_hints(),
-                                     kHasOnlySimpleThisPropertyAssignments,
-                                     false));
-  set_this_property_assignments(heap->undefined_value());
-  set_this_property_assignments_count(0);
-}
-
-
-String* SharedFunctionInfo::GetThisPropertyAssignmentName(int index) {
-  Object* obj = this_property_assignments();
-  ASSERT(obj->IsFixedArray());
-  ASSERT(index < this_property_assignments_count());
-  obj = FixedArray::cast(obj)->get(index * 3);
-  ASSERT(obj->IsString());
-  return String::cast(obj);
-}
-
-
-bool SharedFunctionInfo::IsThisPropertyAssignmentArgument(int index) {
-  Object* obj = this_property_assignments();
-  ASSERT(obj->IsFixedArray());
-  ASSERT(index < this_property_assignments_count());
-  obj = FixedArray::cast(obj)->get(index * 3 + 1);
-  return Smi::cast(obj)->value() != -1;
-}
-
-
-int SharedFunctionInfo::GetThisPropertyAssignmentArgument(int index) {
-  ASSERT(IsThisPropertyAssignmentArgument(index));
-  Object* obj =
-      FixedArray::cast(this_property_assignments())->get(index * 3 + 1);
-  return Smi::cast(obj)->value();
-}
-
-
-Object* SharedFunctionInfo::GetThisPropertyAssignmentConstant(int index) {
-  ASSERT(!IsThisPropertyAssignmentArgument(index));
-  Object* obj =
-      FixedArray::cast(this_property_assignments())->get(index * 3 + 2);
-  return obj;
-}
-
-
 // Support function for printing the source code to a StringStream
 // without any allocation in the heap.
 void SharedFunctionInfo::SourceCodePrint(StringStream* accumulator,
@@ -10942,15 +10834,67 @@ static bool GetOldValue(Isolate* isolate,
                         Handle<JSObject> object,
                         uint32_t index,
                         List<Handle<Object> >* old_values,
-                        List<Handle<String> >* indices) {
+                        List<uint32_t>* indices) {
   PropertyAttributes attributes = object->GetLocalElementAttribute(index);
   ASSERT(attributes != ABSENT);
   if (attributes == DONT_DELETE) return false;
   old_values->Add(object->GetLocalElementAccessorPair(index) == NULL
       ? Object::GetElement(object, index)
       : Handle<Object>::cast(isolate->factory()->the_hole_value()));
-  indices->Add(isolate->factory()->Uint32ToString(index));
+  indices->Add(index);
   return true;
+}
+
+
+// TODO(rafaelw): Remove |delete_count| argument and rely on the length of
+// of |deleted|.
+static void EnqueueSpliceRecord(Handle<JSArray> object,
+                                uint32_t index,
+                                Handle<JSArray> deleted,
+                                uint32_t delete_count,
+                                uint32_t add_count) {
+  Isolate* isolate = object->GetIsolate();
+  HandleScope scope(isolate);
+  Handle<Object> index_object = isolate->factory()->NewNumberFromUint(index);
+  Handle<Object> delete_count_object =
+      isolate->factory()->NewNumberFromUint(delete_count);
+  Handle<Object> add_count_object =
+      isolate->factory()->NewNumberFromUint(add_count);
+
+  Handle<Object> args[] =
+      { object, index_object, deleted, delete_count_object, add_count_object };
+
+  bool threw;
+  Execution::Call(Handle<JSFunction>(isolate->observers_enqueue_splice()),
+                  isolate->factory()->undefined_value(), ARRAY_SIZE(args), args,
+                  &threw);
+  ASSERT(!threw);
+}
+
+
+static void BeginPerformSplice(Handle<JSArray> object) {
+  Isolate* isolate = object->GetIsolate();
+  HandleScope scope(isolate);
+  Handle<Object> args[] = { object };
+
+  bool threw;
+  Execution::Call(Handle<JSFunction>(isolate->observers_begin_perform_splice()),
+                  isolate->factory()->undefined_value(), ARRAY_SIZE(args), args,
+                  &threw);
+  ASSERT(!threw);
+}
+
+
+static void EndPerformSplice(Handle<JSArray> object) {
+  Isolate* isolate = object->GetIsolate();
+  HandleScope scope(isolate);
+  Handle<Object> args[] = { object };
+
+  bool threw;
+  Execution::Call(Handle<JSFunction>(isolate->observers_end_perform_splice()),
+                  isolate->factory()->undefined_value(), ARRAY_SIZE(args), args,
+                  &threw);
+  ASSERT(!threw);
 }
 
 
@@ -10963,7 +10907,7 @@ MaybeObject* JSArray::SetElementsLength(Object* len) {
   Isolate* isolate = GetIsolate();
   HandleScope scope(isolate);
   Handle<JSArray> self(this);
-  List<Handle<String> > indices;
+  List<uint32_t> indices;
   List<Handle<Object> > old_values;
   Handle<Object> old_length_handle(self->length(), isolate);
   Handle<Object> new_length_handle(len, isolate);
@@ -11003,15 +10947,34 @@ MaybeObject* JSArray::SetElementsLength(Object* len) {
   if (!result->ToHandle(&hresult, isolate)) return result;
 
   CHECK(self->length()->ToArrayIndex(&new_length));
-  if (old_length != new_length) {
-    for (int i = 0; i < indices.length(); ++i) {
-      JSObject::EnqueueChangeRecord(
-          self, "deleted", indices[i], old_values[i]);
-    }
+  if (old_length == new_length) return *hresult;
+
+  BeginPerformSplice(self);
+
+  for (int i = 0; i < indices.length(); ++i) {
     JSObject::EnqueueChangeRecord(
-        self, "updated", isolate->factory()->length_string(),
-        old_length_handle);
+        self, "deleted", isolate->factory()->Uint32ToString(indices[i]),
+        old_values[i]);
   }
+  JSObject::EnqueueChangeRecord(
+      self, "updated", isolate->factory()->length_string(),
+      old_length_handle);
+
+  EndPerformSplice(self);
+
+  uint32_t index = Min(old_length, new_length);
+  uint32_t add_count = new_length > old_length ? new_length - old_length : 0;
+  uint32_t delete_count = new_length < old_length ? old_length - new_length : 0;
+  Handle<JSArray> deleted = isolate->factory()->NewJSArray(0);
+  if (delete_count) {
+    for (int i = indices.length() - 1; i >= 0; i--) {
+      JSObject::SetElement(deleted, indices[i] - index, old_values[i], NONE,
+                           kNonStrictMode);
+    }
+  }
+
+  EnqueueSpliceRecord(self, index, deleted, delete_count, add_count);
+
   return *hresult;
 }
 
@@ -12037,14 +12000,15 @@ MaybeObject* JSObject::SetElement(uint32_t index,
   Handle<Object> value(value_raw, isolate);
   PropertyAttributes old_attributes = self->GetLocalElementAttribute(index);
   Handle<Object> old_value = isolate->factory()->the_hole_value();
-  Handle<Object> old_length;
+  Handle<Object> old_length_handle;
+  Handle<Object> new_length_handle;
 
   if (old_attributes != ABSENT) {
     if (self->GetLocalElementAccessorPair(index) == NULL)
       old_value = Object::GetElement(self, index);
   } else if (self->IsJSArray()) {
     // Store old array length in case adding an element grows the array.
-    old_length = handle(Handle<JSArray>::cast(self)->length(), isolate);
+    old_length_handle = handle(Handle<JSArray>::cast(self)->length(), isolate);
   }
 
   // Check for lookup interceptor
@@ -12060,11 +12024,25 @@ MaybeObject* JSObject::SetElement(uint32_t index,
   Handle<String> name = isolate->factory()->Uint32ToString(index);
   PropertyAttributes new_attributes = self->GetLocalElementAttribute(index);
   if (old_attributes == ABSENT) {
-    EnqueueChangeRecord(self, "new", name, old_value);
     if (self->IsJSArray() &&
-        !old_length->SameValue(Handle<JSArray>::cast(self)->length())) {
-      EnqueueChangeRecord(
-          self, "updated", isolate->factory()->length_string(), old_length);
+        !old_length_handle->SameValue(Handle<JSArray>::cast(self)->length())) {
+      new_length_handle = handle(Handle<JSArray>::cast(self)->length(),
+                                 isolate);
+      uint32_t old_length = 0;
+      uint32_t new_length = 0;
+      CHECK(old_length_handle->ToArrayIndex(&old_length));
+      CHECK(new_length_handle->ToArrayIndex(&new_length));
+
+      BeginPerformSplice(Handle<JSArray>::cast(self));
+      EnqueueChangeRecord(self, "new", name, old_value);
+      EnqueueChangeRecord(self, "updated", isolate->factory()->length_string(),
+                          old_length_handle);
+      EndPerformSplice(Handle<JSArray>::cast(self));
+      Handle<JSArray> deleted = isolate->factory()->NewJSArray(0);
+      EnqueueSpliceRecord(Handle<JSArray>::cast(self), old_length, deleted, 0,
+                          new_length - old_length);
+    } else {
+      EnqueueChangeRecord(self, "new", name, old_value);
     }
   } else if (old_value->IsTheHole()) {
     EnqueueChangeRecord(self, "reconfigured", name, old_value);
