@@ -124,20 +124,9 @@ void HValue::UpdateRepresentation(Representation new_rep,
                                   const char* reason) {
   Representation r = representation();
   if (new_rep.is_more_general_than(r)) {
-    // When an HConstant is marked "not convertible to integer", then
-    // never try to represent it as an integer.
-    if (new_rep.IsInteger32() && !IsConvertibleToInteger()) {
-      new_rep = Representation::Tagged();
-      if (FLAG_trace_representation) {
-        PrintF("Changing #%d %s representation %s -> %s because it's NCTI"
-               " (%s want i)\n",
-               id(), Mnemonic(), r.Mnemonic(), new_rep.Mnemonic(), reason);
-      }
-    } else {
-      if (FLAG_trace_representation) {
-        PrintF("Changing #%d %s representation %s -> %s based on %s\n",
-               id(), Mnemonic(), r.Mnemonic(), new_rep.Mnemonic(), reason);
-      }
+    if (FLAG_trace_representation) {
+      PrintF("Changing #%d %s representation %s -> %s based on %s\n",
+             id(), Mnemonic(), r.Mnemonic(), new_rep.Mnemonic(), reason);
     }
     ChangeRepresentation(new_rep);
     AddDependantsToWorklist(h_infer);
@@ -1923,7 +1912,6 @@ void HPhi::PrintTo(StringStream* stream) {
               int32_non_phi_uses() + int32_indirect_uses(),
               double_non_phi_uses() + double_indirect_uses(),
               tagged_non_phi_uses() + tagged_indirect_uses());
-  if (!IsConvertibleToInteger()) stream->Add("_ncti");
   PrintRangeTo(stream);
   PrintTypeTo(stream);
   stream->Add("]");
@@ -3378,8 +3366,12 @@ HInstruction* HMathMinMax::New(
 }
 
 
-HInstruction* HMod::New(
-    Zone* zone, HValue* context, HValue* left, HValue* right) {
+HInstruction* HMod::New(Zone* zone,
+                        HValue* context,
+                        HValue* left,
+                        HValue* right,
+                        bool has_fixed_right_arg,
+                        int fixed_right_arg_value) {
   if (FLAG_fold_constants && left->IsConstant() && right->IsConstant()) {
     HConstant* c_left = HConstant::cast(left);
     HConstant* c_right = HConstant::cast(right);
@@ -3398,7 +3390,11 @@ HInstruction* HMod::New(
       }
     }
   }
-  return new(zone) HMod(context, left, right);
+  return new(zone) HMod(context,
+                        left,
+                        right,
+                        has_fixed_right_arg,
+                        fixed_right_arg_value);
 }
 
 
@@ -3562,48 +3558,11 @@ void HPhi::InferRepresentation(HInferRepresentation* h_infer) {
 
 
 Representation HPhi::RepresentationFromInputs() {
-  bool double_occurred = false;
-  bool int32_occurred = false;
-  bool smi_occurred = false;
+  Representation r = Representation::None();
   for (int i = 0; i < OperandCount(); ++i) {
-    HValue* value = OperandAt(i);
-    if (value->IsUnknownOSRValue()) {
-      HPhi* hint_value = HUnknownOSRValue::cast(value)->incoming_value();
-      if (hint_value != NULL) {
-        Representation hint = hint_value->representation();
-        if (hint.IsTagged()) return hint;
-        if (hint.IsDouble()) double_occurred = true;
-        if (hint.IsInteger32()) int32_occurred = true;
-        if (hint.IsSmi()) smi_occurred = true;
-      }
-      continue;
-    }
-    if (value->representation().IsDouble()) double_occurred = true;
-    if (value->representation().IsInteger32()) int32_occurred = true;
-    if (value->representation().IsSmi()) smi_occurred = true;
-    if (value->representation().IsTagged()) {
-      if (value->IsConstant()) {
-        HConstant* constant = HConstant::cast(value);
-        if (constant->IsConvertibleToInteger()) {
-          int32_occurred = true;
-        } else if (constant->HasNumberValue()) {
-          double_occurred = true;
-        } else {
-          return Representation::Tagged();
-        }
-      } else {
-        if (value->IsPhi() && !IsConvertibleToInteger()) {
-          return Representation::Tagged();
-        }
-      }
-    }
+    r = r.generalize(OperandAt(i)->KnownOptimalRepresentation());
   }
-
-  if (double_occurred) return Representation::Double();
-  if (int32_occurred) return Representation::Integer32();
-  if (smi_occurred) return Representation::Smi();
-
-  return Representation::None();
+  return r;
 }
 
 

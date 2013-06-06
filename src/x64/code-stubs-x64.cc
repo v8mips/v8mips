@@ -46,7 +46,6 @@ void FastCloneShallowArrayStub::InitializeInterfaceDescriptor(
   static Register registers[] = { rax, rbx, rcx };
   descriptor->register_param_count_ = 3;
   descriptor->register_params_ = registers;
-  descriptor->stack_parameter_count_ = NULL;
   descriptor->deoptimization_handler_ =
       Runtime::FunctionForId(Runtime::kCreateArrayLiteralShallow)->entry;
 }
@@ -58,7 +57,6 @@ void FastCloneShallowObjectStub::InitializeInterfaceDescriptor(
   static Register registers[] = { rax, rbx, rcx, rdx };
   descriptor->register_param_count_ = 4;
   descriptor->register_params_ = registers;
-  descriptor->stack_parameter_count_ = NULL;
   descriptor->deoptimization_handler_ =
       Runtime::FunctionForId(Runtime::kCreateObjectLiteralShallow)->entry;
 }
@@ -81,7 +79,6 @@ void LoadFieldStub::InitializeInterfaceDescriptor(
   static Register registers[] = { rax };
   descriptor->register_param_count_ = 1;
   descriptor->register_params_ = registers;
-  descriptor->stack_parameter_count_ = NULL;
   descriptor->deoptimization_handler_ = NULL;
 }
 
@@ -92,7 +89,6 @@ void KeyedLoadFieldStub::InitializeInterfaceDescriptor(
   static Register registers[] = { rdx };
   descriptor->register_param_count_ = 1;
   descriptor->register_params_ = registers;
-  descriptor->stack_parameter_count_ = NULL;
   descriptor->deoptimization_handler_ = NULL;
 }
 
@@ -1192,7 +1188,15 @@ void BinaryOpStub::GenerateAddStrings(MacroAssembler* masm) {
 
 
 void BinaryOpStub::GenerateSmiStub(MacroAssembler* masm) {
-  Label call_runtime;
+  Label right_arg_changed, call_runtime;
+
+  if (op_ == Token::MOD && has_fixed_right_arg_) {
+    // It is guaranteed that the value will fit into a Smi, because if it
+    // didn't, we wouldn't be here, see BinaryOp_Patch.
+    __ Cmp(rax, Smi::FromInt(fixed_right_arg_value()));
+    __ j(not_equal, &right_arg_changed);
+  }
+
   if (result_type_ == BinaryOpIC::UNINITIALIZED ||
       result_type_ == BinaryOpIC::SMI) {
     // Only allow smi results.
@@ -1206,6 +1210,7 @@ void BinaryOpStub::GenerateSmiStub(MacroAssembler* masm) {
 
   // Code falls through if the result is not returned as either a smi or heap
   // number.
+  __ bind(&right_arg_changed);
   GenerateTypeTransition(masm);
 
   if (call_runtime.is_linked()) {
@@ -3676,7 +3681,6 @@ static void GenerateRecordCallTargetNoArray(MacroAssembler* masm) {
   // megamorphic.
   // rbx : cache cell for call target
   // rdi : the function to call
-  ASSERT(!FLAG_optimize_constructed_arrays);
   Isolate* isolate = masm->isolate();
   Label initialize, done;
 
@@ -3814,11 +3818,7 @@ void CallFunctionStub::Generate(MacroAssembler* masm) {
   __ j(not_equal, &slow);
 
   if (RecordCallTarget()) {
-    if (FLAG_optimize_constructed_arrays) {
-      GenerateRecordCallTarget(masm);
-    } else {
-      GenerateRecordCallTargetNoArray(masm);
-    }
+    GenerateRecordCallTargetNoArray(masm);
   }
 
   // Fast-case: Just invoke the function.

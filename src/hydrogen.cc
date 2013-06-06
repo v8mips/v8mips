@@ -513,7 +513,7 @@ class ReachabilityAnalyzer BASE_EMBEDDED {
 
 void HGraph::Verify(bool do_full_verify) const {
   Heap::RelocationLock(isolate()->heap());
-  ALLOW_HANDLE_DEREF(isolate(), "debug mode verification");
+  AllowDeferredHandleDereference allow_deferred_deref;
   for (int i = 0; i < blocks_.length(); i++) {
     HBasicBlock* block = blocks_.at(i);
 
@@ -2040,7 +2040,7 @@ HBasicBlock* HGraph::CreateBasicBlock() {
 
 
 void HGraph::FinalizeUniqueValueIds() {
-  AssertNoAllocation no_gc;
+  DisallowHeapAllocation no_gc;
   ASSERT(!isolate()->optimizing_compiler_thread()->IsOptimizerThread());
   for (int i = 0; i < blocks()->length(); ++i) {
     for (HInstruction* instr = blocks()->at(i)->first();
@@ -2877,23 +2877,6 @@ void HInferRepresentation::Analyze() {
   // This step uses kTruncatingToInt32 flags of phis.
   for (int i = 0; i < phi_count; ++i) {
     phi_list->at(i)->SimplifyConstantInputs();
-  }
-
-  // Use the phi reachability information from step 2 to
-  // push information about values which can't be converted to integer
-  // without deoptimization through the phi use-def chains, avoiding
-  // unnecessary deoptimizations later.
-  for (int i = 0; i < phi_count; ++i) {
-    HPhi* phi = phi_list->at(i);
-    bool cti = phi->AllOperandsConvertibleToInteger();
-    if (cti) continue;
-
-    for (BitVector::Iterator it(connected_phis.at(i));
-         !it.Done();
-         it.Advance()) {
-      HPhi* phi = phi_list->at(it.Current());
-      phi->set_is_convertible_to_integer(false);
-    }
   }
 
   // Use the phi reachability information from step 2 to
@@ -4537,7 +4520,7 @@ void HGraph::MarkLive(HValue* ref, HValue* instr, ZoneList<HValue*>* worklist) {
     if (FLAG_trace_dead_code_elimination) {
       HeapStringAllocator allocator;
       StringStream stream(&allocator);
-      ALLOW_HANDLE_DEREF(isolate(), "debug mode printing");
+      AllowDeferredHandleDereference debug_output;
       if (ref != NULL) {
         ref->PrintTo(&stream);
       } else {
@@ -9351,7 +9334,8 @@ HInstruction* HOptimizedGraphBuilder::BuildBinaryOperation(
   TypeInfo left_info = expr->left_type();
   TypeInfo right_info = expr->right_type();
   TypeInfo result_info = expr->result_type();
-  TypeInfo combined_info;
+  bool has_fixed_right_arg = expr->has_fixed_right_arg();
+  int fixed_right_arg_value = expr->fixed_right_arg_value();
   Representation left_rep = ToRepresentation(left_info);
   Representation right_rep = ToRepresentation(right_info);
   Representation result_rep = ToRepresentation(result_info);
@@ -9381,7 +9365,12 @@ HInstruction* HOptimizedGraphBuilder::BuildBinaryOperation(
       instr = HMul::New(zone(), context, left, right);
       break;
     case Token::MOD:
-      instr = HMod::New(zone(), context, left, right);
+      instr = HMod::New(zone(),
+                        context,
+                        left,
+                        right,
+                        has_fixed_right_arg,
+                        fixed_right_arg_value);
       break;
     case Token::DIV:
       instr = HDiv::New(zone(), context, left, right);
@@ -10059,7 +10048,9 @@ void HOptimizedGraphBuilder::BuildEmitInObjectProperties(
       HConstant(isolate()->factory()->one_pointer_filler_map(),
           Representation::Tagged()));
   for (int i = copied_fields; i < inobject_properties; i++) {
-    HObjectAccess access = HObjectAccess::ForJSObjectOffset(i);
+    ASSERT(boilerplate_object->IsJSObject());
+    int property_offset = boilerplate_object->GetInObjectPropertyOffset(i);
+    HObjectAccess access = HObjectAccess::ForJSObjectOffset(property_offset);
     AddStore(object_properties, access, value_instruction);
   }
 }
@@ -11145,14 +11136,14 @@ void HTracer::TraceCompilation(CompilationInfo* info) {
 
 void HTracer::TraceLithium(const char* name, LChunk* chunk) {
   ASSERT(!FLAG_parallel_recompilation);
-  ALLOW_HANDLE_DEREF(chunk->isolate(), "debug output");
+  AllowDeferredHandleDereference debug_output;
   Trace(name, chunk->graph(), chunk);
 }
 
 
 void HTracer::TraceHydrogen(const char* name, HGraph* graph) {
   ASSERT(!FLAG_parallel_recompilation);
-  ALLOW_HANDLE_DEREF(graph->isolate(), "debug output");
+  AllowDeferredHandleDereference debug_output;
   Trace(name, graph, NULL);
 }
 
