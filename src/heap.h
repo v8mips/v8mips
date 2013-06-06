@@ -59,6 +59,7 @@ namespace internal {
   V(Oddball, null_value, NullValue)                                            \
   V(Oddball, true_value, TrueValue)                                            \
   V(Oddball, false_value, FalseValue)                                          \
+  V(Oddball, uninitialized_value, UninitializedValue)                          \
   V(Map, global_property_cell_map, GlobalPropertyCellMap)                      \
   V(Map, shared_function_info_map, SharedFunctionInfoMap)                      \
   V(Map, meta_map, MetaMap)                                                    \
@@ -2261,6 +2262,7 @@ class Heap {
 
   void StartIdleRound() {
     mark_sweeps_since_idle_round_started_ = 0;
+    ms_count_at_last_idle_notification_ = ms_count_;
   }
 
   void FinishIdleRound() {
@@ -2337,6 +2339,7 @@ class Heap {
   bool last_idle_notification_gc_count_init_;
 
   int mark_sweeps_since_idle_round_started_;
+  int ms_count_at_last_idle_notification_;
   unsigned int gc_count_at_last_idle_gc_;
   int scavenges_since_last_idle_round_;
 

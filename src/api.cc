@@ -1214,7 +1214,7 @@ static void FunctionTemplateSetCallHandler(FunctionTemplate* function_template,
       isolate->factory()->NewStruct(i::CALL_HANDLER_INFO_TYPE);
   i::Handle<i::CallHandlerInfo> obj =
       i::Handle<i::CallHandlerInfo>::cast(struct_obj);
-  InvocationCallback callback =
+  FunctionCallback callback =
       i::CallbackTable::Register(isolate, callback_in);
   SET_FIELD_WRAPPED(obj, set_callback, callback);
   if (data.IsEmpty()) data = v8::Undefined();
@@ -1262,9 +1262,11 @@ static i::Handle<i::AccessorInfo> MakeAccessorInfo(
   i::Isolate* isolate = Utils::OpenHandle(*name)->GetIsolate();
   i::Handle<i::ExecutableAccessorInfo> obj =
       isolate->factory()->NewExecutableAccessorInfo();
-  AccessorGetter getter = i::CallbackTable::Register(isolate, getter_in);
+  AccessorGetterCallback getter =
+      i::CallbackTable::Register(isolate, getter_in);
   SET_FIELD_WRAPPED(obj, set_getter, getter);
-  AccessorSetter setter = i::CallbackTable::Register(isolate, setter_in);
+  AccessorSetterCallback setter =
+      i::CallbackTable::Register(isolate, setter_in);
   SET_FIELD_WRAPPED(obj, set_setter, setter);
   if (data.IsEmpty()) data = v8::Undefined();
   obj->set_data(*Utils::OpenHandle(*data));
@@ -1367,16 +1369,19 @@ static void SetNamedInstancePropertyHandler(
   i::Handle<i::InterceptorInfo> obj =
       i::Handle<i::InterceptorInfo>::cast(struct_obj);
 
-  NamedPropertyGetter getter = i::CallbackTable::Register(isolate, getter_in);
+  NamedPropertyGetterCallback getter =
+      i::CallbackTable::Register(isolate, getter_in);
   if (getter != 0) SET_FIELD_WRAPPED(obj, set_getter, getter);
-  NamedPropertySetter setter = i::CallbackTable::Register(isolate, setter_in);
+  NamedPropertySetterCallback setter =
+      i::CallbackTable::Register(isolate, setter_in);
   if (setter != 0) SET_FIELD_WRAPPED(obj, set_setter, setter);
-  NamedPropertyQuery query = i::CallbackTable::Register(isolate, query_in);
+  NamedPropertyQueryCallback query =
+      i::CallbackTable::Register(isolate, query_in);
   if (query != 0) SET_FIELD_WRAPPED(obj, set_query, query);
-  NamedPropertyDeleter remover =
+  NamedPropertyDeleterCallback remover =
       i::CallbackTable::Register(isolate, remover_in);
   if (remover != 0) SET_FIELD_WRAPPED(obj, set_deleter, remover);
-  NamedPropertyEnumerator enumerator =
+  NamedPropertyEnumeratorCallback enumerator =
       i::CallbackTable::Register(isolate, enumerator_in);
   if (enumerator != 0) SET_FIELD_WRAPPED(obj, set_enumerator, enumerator);
 
@@ -1412,18 +1417,19 @@ static void SetIndexedInstancePropertyHandler(
   i::Handle<i::InterceptorInfo> obj =
       i::Handle<i::InterceptorInfo>::cast(struct_obj);
 
-  IndexedPropertyGetter getter =
+  IndexedPropertyGetterCallback getter =
       i::CallbackTable::Register(isolate, getter_in);
   if (getter != 0) SET_FIELD_WRAPPED(obj, set_getter, getter);
-  IndexedPropertySetter setter =
+  IndexedPropertySetterCallback setter =
       i::CallbackTable::Register(isolate, setter_in);
   if (setter != 0) SET_FIELD_WRAPPED(obj, set_setter, setter);
-  IndexedPropertyQuery query = i::CallbackTable::Register(isolate, query_in);
+  IndexedPropertyQueryCallback query =
+      i::CallbackTable::Register(isolate, query_in);
   if (query != 0) SET_FIELD_WRAPPED(obj, set_query, query);
-  IndexedPropertyDeleter remover =
+  IndexedPropertyDeleterCallback remover =
       i::CallbackTable::Register(isolate, remover_in);
   if (remover != 0) SET_FIELD_WRAPPED(obj, set_deleter, remover);
-  IndexedPropertyEnumerator enumerator =
+  IndexedPropertyEnumeratorCallback enumerator =
       i::CallbackTable::Register(isolate, enumerator_in);
   if (enumerator != 0) SET_FIELD_WRAPPED(obj, set_enumerator, enumerator);
 
@@ -1449,7 +1455,7 @@ static void SetInstanceCallAsFunctionHandler(
       isolate->factory()->NewStruct(i::CALL_HANDLER_INFO_TYPE);
   i::Handle<i::CallHandlerInfo> obj =
       i::Handle<i::CallHandlerInfo>::cast(struct_obj);
-  InvocationCallback callback =
+  FunctionCallback callback =
       i::CallbackTable::Register(isolate, callback_in);
   SET_FIELD_WRAPPED(obj, set_callback, callback);
   if (data.IsEmpty()) data = v8::Undefined();
@@ -4295,6 +4301,85 @@ bool String::IsOneByte() const {
     return false;
   }
   return str->HasOnlyOneByteChars();
+}
+
+
+class ContainsOnlyOneByteHelper {
+ public:
+  ContainsOnlyOneByteHelper() : is_one_byte_(true) {}
+  bool Check(i::String* string) {
+    i::ConsString* cons_string = i::String::VisitFlat(this, string, 0);
+    if (cons_string == NULL) return is_one_byte_;
+    return CheckCons(cons_string);
+  }
+  void VisitOneByteString(const uint8_t* chars, int length) {
+    // Nothing to do.
+  }
+  // TODO(dcarney): do word aligned read.
+  void VisitTwoByteString(const uint16_t* chars, int length) {
+    // Check whole string without breaking.
+    uint16_t total = 0;
+    for (int i = 0; i < length; i++) {
+      total |= chars[i] >> 8;
+    }
+    if (total != 0) is_one_byte_ = false;
+  }
+
+ private:
+  bool CheckCons(i::ConsString* cons_string) {
+    while (true) {
+      // Check left side if flat.
+      i::String* left = cons_string->first();
+      i::ConsString* left_as_cons =
+          i::String::VisitFlat(this, left, 0);
+      if (!is_one_byte_) return false;
+      // Check right side if flat.
+      i::String* right = cons_string->second();
+      i::ConsString* right_as_cons =
+          i::String::VisitFlat(this, right, 0);
+      if (!is_one_byte_) return false;
+      // Standard recurse/iterate trick.
+      if (left_as_cons != NULL && right_as_cons != NULL) {
+        if (left->length() < right->length()) {
+          CheckCons(left_as_cons);
+          cons_string = right_as_cons;
+        } else {
+          CheckCons(right_as_cons);
+          cons_string = left_as_cons;
+        }
+        // Check fast return.
+        if (!is_one_byte_) return false;
+        continue;
+      }
+      // Descend left in place.
+      if (left_as_cons != NULL) {
+        cons_string = left_as_cons;
+        continue;
+      }
+      // Descend right in place.
+      if (right_as_cons != NULL) {
+        cons_string = right_as_cons;
+        continue;
+      }
+      // Terminate.
+      break;
+    }
+    return is_one_byte_;
+  }
+  bool is_one_byte_;
+  DISALLOW_COPY_AND_ASSIGN(ContainsOnlyOneByteHelper);
+};
+
+
+bool String::ContainsOnlyOneByte() const {
+  i::Handle<i::String> str = Utils::OpenHandle(this);
+  if (IsDeadCheck(str->GetIsolate(),
+                  "v8::String::ContainsOnlyOneByte()")) {
+    return false;
+  }
+  if (str->HasOnlyOneByteChars()) return true;
+  ContainsOnlyOneByteHelper helper;
+  return helper.Check(*str);
 }
 
 

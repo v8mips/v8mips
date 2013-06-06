@@ -30,7 +30,6 @@
 #if defined(V8_TARGET_ARCH_ARM)
 
 #include "bootstrapper.h"
-#include "builtins-decls.h"
 #include "code-stubs.h"
 #include "regexp-macro-assembler.h"
 #include "stub-cache.h"
@@ -146,7 +145,7 @@ static void InitializeArrayConstructorDescriptor(
   descriptor->register_params_ = registers;
   descriptor->function_mode_ = JS_FUNCTION_STUB_MODE;
   descriptor->deoptimization_handler_ =
-      FUNCTION_ADDR(ArrayConstructor_StubFailure);
+      Runtime::FunctionForId(Runtime::kArrayConstructor)->entry;
 }
 
 
@@ -168,7 +167,7 @@ static void InitializeInternalArrayConstructorDescriptor(
   descriptor->register_params_ = registers;
   descriptor->function_mode_ = JS_FUNCTION_STUB_MODE;
   descriptor->deoptimization_handler_ =
-      FUNCTION_ADDR(InternalArrayConstructor_StubFailure);
+      Runtime::FunctionForId(Runtime::kInternalArrayConstructor)->entry;
 }
 
 
@@ -7475,7 +7474,7 @@ void InternalArrayConstructorStub::Generate(MacroAssembler* masm) {
     // but the following bit field extraction takes care of that anyway.
     __ ldr(r3, FieldMemOperand(r3, Map::kBitField2Offset));
     // Retrieve elements_kind from bit field 2.
-    __ ubfx(r3, r3, Map::kElementsKindShift, Map::kElementsKindBitCount);
+    __ Ubfx(r3, r3, Map::kElementsKindShift, Map::kElementsKindBitCount);
 
     if (FLAG_debug_code) {
       Label done;

@@ -151,6 +151,7 @@ Heap::Heap()
       last_idle_notification_gc_count_(0),
       last_idle_notification_gc_count_init_(false),
       mark_sweeps_since_idle_round_started_(0),
+      ms_count_at_last_idle_notification_(0),
       gc_count_at_last_idle_gc_(0),
       scavenges_since_last_idle_round_(kIdleScavengeThreshold),
       gcs_since_last_deopt_(0),
@@ -2843,6 +2844,13 @@ bool Heap::CreateInitialObjects() {
     if (!maybe_obj->ToObject(&obj)) return false;
   }
   set_the_hole_value(Oddball::cast(obj));
+
+  { MaybeObject* maybe_obj = CreateOddball("uninitialized",
+                                           Smi::FromInt(-1),
+                                           Oddball::kUninitialized);
+    if (!maybe_obj->ToObject(&obj)) return false;
+  }
+  set_uninitialized_value(Oddball::cast(obj));
 
   { MaybeObject* maybe_obj = CreateOddball("arguments_marker",
                                            Smi::FromInt(-4),
@@ -5707,7 +5715,6 @@ void Heap::AdvanceIdleIncrementalMarking(intptr_t step_size) {
       uncommit = true;
     }
     CollectAllGarbage(kNoGCFlags, "idle notification: finalize incremental");
-    mark_sweeps_since_idle_round_started_++;
     gc_count_at_last_idle_gc_ = gc_count_;
     if (uncommit) {
       new_space_.Shrink();
@@ -5783,8 +5790,17 @@ bool Heap::IdleNotification(int hint) {
     }
   }
 
+  int new_mark_sweeps = ms_count_ - ms_count_at_last_idle_notification_;
+  mark_sweeps_since_idle_round_started_ += new_mark_sweeps;
+  ms_count_at_last_idle_notification_ = ms_count_;
+
   int remaining_mark_sweeps = kMaxMarkSweepsInIdleRound -
                               mark_sweeps_since_idle_round_started_;
+
+  if (remaining_mark_sweeps <= 0) {
+    FinishIdleRound();
+    return true;
+  }
 
   if (incremental_marking()->IsStopped()) {
     // If there are no more than two GCs left in this idle round and we are
@@ -5795,7 +5811,6 @@ bool Heap::IdleNotification(int hint) {
     if (remaining_mark_sweeps <= 2 && hint >= kMinHintForFullGC) {
       CollectAllGarbage(kReduceMemoryFootprintMask,
                         "idle notification: finalize idle round");
-      mark_sweeps_since_idle_round_started_++;
     } else {
       incremental_marking()->Start();
     }
@@ -5803,12 +5818,6 @@ bool Heap::IdleNotification(int hint) {
   if (!incremental_marking()->IsStopped()) {
     AdvanceIdleIncrementalMarking(step_size);
   }
-
-  if (mark_sweeps_since_idle_round_started_ >= kMaxMarkSweepsInIdleRound) {
-    FinishIdleRound();
-    return true;
-  }
-
   return false;
 }
 
