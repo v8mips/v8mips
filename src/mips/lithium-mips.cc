@@ -933,7 +933,7 @@ LEnvironment* LChunkBuilder::CreateEnvironment(
   BailoutId ast_id = hydrogen_env->ast_id();
   ASSERT(!ast_id.IsNone() ||
          hydrogen_env->frame_type() != JS_FUNCTION);
-  int value_count = hydrogen_env->length();
+  int value_count = hydrogen_env->length() - hydrogen_env->specials_count();
   LEnvironment* result = new(zone()) LEnvironment(
       hydrogen_env->closure(),
       hydrogen_env->frame_type(),
@@ -944,13 +944,15 @@ LEnvironment* LChunkBuilder::CreateEnvironment(
       outer,
       hydrogen_env->entry(),
       zone());
+  bool needs_arguments_object_materialization = false;
   int argument_index = *argument_index_accumulator;
-  for (int i = 0; i < value_count; ++i) {
+  for (int i = 0; i < hydrogen_env->length(); ++i) {
     if (hydrogen_env->is_special_index(i)) continue;
 
     HValue* value = hydrogen_env->values()->at(i);
     LOperand* op = NULL;
     if (value->IsArgumentsObject()) {
+      needs_arguments_object_materialization = true;
       op = NULL;
     } else if (value->IsPushArgument()) {
       op = new(zone()) LArgument(argument_index++);
@@ -960,6 +962,21 @@ LEnvironment* LChunkBuilder::CreateEnvironment(
     result->AddValue(op,
                      value->representation(),
                      value->CheckFlag(HInstruction::kUint32));
+  }
+
+  if (needs_arguments_object_materialization) {
+    HArgumentsObject* arguments = hydrogen_env->entry() == NULL
+        ? graph()->GetArgumentsObject()
+        : hydrogen_env->entry()->arguments_object();
+    ASSERT(arguments->IsLinked());
+    for (int i = 1; i < arguments->arguments_count(); ++i) {
+      HValue* value = arguments->arguments_values()->at(i);
+      ASSERT(!value->IsArgumentsObject() && !value->IsPushArgument());
+      LOperand* op = UseAny(value);
+      result->AddValue(op,
+                       value->representation(),
+                       value->CheckFlag(HInstruction::kUint32));
+    }
   }
 
   if (hydrogen_env->frame_type() == JS_FUNCTION) {
@@ -1342,15 +1359,10 @@ LInstruction* LChunkBuilder::DoDiv(HDiv* instr) {
   if (instr->representation().IsDouble()) {
     return DoArithmeticD(Token::DIV, instr);
   } else if (instr->representation().IsInteger32()) {
-    // TODO(1042) The fixed register allocation
-    // is needed because we call TypeRecordingBinaryOpStub from
-    // the generated code, which requires registers a0
-    // and a1 to be used. We should remove that
-    // when we provide a native implementation.
-    LOperand* dividend = UseFixed(instr->left(), a0);
-    LOperand* divisor = UseFixed(instr->right(), a1);
-    return AssignEnvironment(AssignPointerMap(
-             DefineFixed(new(zone()) LDivI(dividend, divisor), v0)));
+    LOperand* dividend = UseRegister(instr->left());
+    LOperand* divisor = UseRegister(instr->right());
+    LDivI* div = new(zone()) LDivI(dividend, divisor);
+    return AssignEnvironment(DefineAsRegister(div));
   } else {
     return DoArithmeticT(Token::DIV, instr);
   }
@@ -1424,43 +1436,45 @@ LInstruction* LChunkBuilder::DoMathFloorOfDiv(HMathFloorOfDiv* instr) {
 
 
 LInstruction* LChunkBuilder::DoMod(HMod* instr) {
+  HValue* left = instr->left();
+  HValue* right = instr->right();
   if (instr->representation().IsInteger32()) {
-    ASSERT(instr->left()->representation().IsInteger32());
-    ASSERT(instr->right()->representation().IsInteger32());
-
-    LModI* mod;
+    ASSERT(left->representation().IsInteger32());
+    ASSERT(right->representation().IsInteger32());
     if (instr->HasPowerOf2Divisor()) {
-      ASSERT(!instr->CheckFlag(HValue::kCanBeDivByZero));
-      LOperand* value = UseRegisterAtStart(instr->left());
-      mod = new(zone()) LModI(value, UseOrConstant(instr->right()));
+      ASSERT(!right->CanBeZero());
+      LModI* mod = new(zone()) LModI(UseRegisterAtStart(left),
+                                     UseOrConstant(right));
+      LInstruction* result = DefineAsRegister(mod);
+      return (left->CanBeNegative() &&
+              instr->CheckFlag(HValue::kBailoutOnMinusZero))
+          ? AssignEnvironment(result)
+          : result;
     } else {
-      LOperand* dividend = UseRegister(instr->left());
-      LOperand* divisor = UseRegister(instr->right());
-      mod = new(zone()) LModI(dividend,
-                              divisor,
-                              TempRegister(),
-                              FixedTemp(f20),
-                              FixedTemp(f22));
-    }
-
-    if (instr->CheckFlag(HValue::kBailoutOnMinusZero) ||
-        instr->CheckFlag(HValue::kCanBeDivByZero) ||
-        instr->CheckFlag(HValue::kCanOverflow)) {
-      return AssignEnvironment(DefineAsRegister(mod));
-    } else {
-      return DefineAsRegister(mod);
+      LModI* mod = new(zone()) LModI(UseRegister(left),
+                                     UseRegister(right),
+                                     TempRegister(),
+                                     FixedTemp(f20),
+                                     FixedTemp(f22));
+      LInstruction* result = DefineAsRegister(mod);
+      return (right->CanBeZero() ||
+              (left->RangeCanInclude(kMinInt) &&
+               right->RangeCanInclude(-1)) ||
+              instr->CheckFlag(HValue::kBailoutOnMinusZero))
+          ? AssignEnvironment(result)
+          : result;
     }
   } else if (instr->representation().IsSmiOrTagged()) {
     return DoArithmeticT(Token::MOD, instr);
   } else {
     ASSERT(instr->representation().IsDouble());
-    // We call a C function for double modulo. It can't trigger a GC.
-    // We need to use fixed result register for the call.
+    // We call a C function for double modulo. It can't trigger a GC. We need
+    // to use fixed result register for the call.
     // TODO(fschneider): Allow any register as input registers.
-    LOperand* left = UseFixedDouble(instr->left(), f2);
-    LOperand* right = UseFixedDouble(instr->right(), f4);
-    LArithmeticD* result = new(zone()) LArithmeticD(Token::MOD, left, right);
-    return MarkAsCall(DefineFixedDouble(result, f2), instr);
+    LArithmeticD* mod = new(zone()) LArithmeticD(Token::MOD,
+                                                 UseFixedDouble(left, f2),
+                                                 UseFixedDouble(right, f4));
+    return MarkAsCall(DefineFixedDouble(mod, f2), instr);
   }
 }
 

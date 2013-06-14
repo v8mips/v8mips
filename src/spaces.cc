@@ -72,6 +72,7 @@ HeapObjectIterator::HeapObjectIterator(Page* page,
          owner == page->heap()->old_data_space() ||
          owner == page->heap()->map_space() ||
          owner == page->heap()->cell_space() ||
+         owner == page->heap()->property_cell_space() ||
          owner == page->heap()->code_space());
   Initialize(reinterpret_cast<PagedSpace*>(owner),
              page->area_start(),
@@ -1041,6 +1042,9 @@ intptr_t PagedSpace::SizeOfFirstPage() {
       size = 16 * kPointerSize * KB;
       break;
     case CELL_SPACE:
+      size = 16 * kPointerSize * KB;
+      break;
+    case PROPERTY_CELL_SPACE:
       size = 16 * kPointerSize * KB;
       break;
     case CODE_SPACE:
@@ -2198,6 +2202,11 @@ int FreeList::Free(Address start, int size_in_bytes) {
   // Insert other blocks at the head of a free list of the appropriate
   // magnitude.
   if (size_in_bytes <= kSmallListMax) {
+    ASSERT(!owner_->ConstantAllocationSize() ||
+        (owner_->identity() == MAP_SPACE && size_in_bytes >= Map::kSize) ||
+        (owner_->identity() == CELL_SPACE && size_in_bytes >= Cell::kSize) ||
+        (owner_->identity() == PROPERTY_CELL_SPACE &&
+            size_in_bytes >= JSGlobalPropertyCell::kSize));
     small_list_.Free(node, size_in_bytes);
     page->add_available_in_small_free_list(size_in_bytes);
   } else if (size_in_bytes <= kMediumListMax) {
@@ -2220,9 +2229,11 @@ FreeListNode* FreeList::FindNodeFor(int size_in_bytes, int* node_size) {
   FreeListNode* node = NULL;
   Page* page = NULL;
 
-  if (size_in_bytes <= kSmallAllocationMax) {
+  if ((owner_->ConstantAllocationSize() && size_in_bytes <= kSmallListMax) ||
+      size_in_bytes <= kSmallAllocationMax) {
     node = small_list_.PickNodeFromList(node_size);
     if (node != NULL) {
+      ASSERT(size_in_bytes <= *node_size);
       page = Page::FromAddress(node->address());
       page->add_available_in_small_free_list(-(*node_size));
       return node;
@@ -2232,6 +2243,7 @@ FreeListNode* FreeList::FindNodeFor(int size_in_bytes, int* node_size) {
   if (size_in_bytes <= kMediumAllocationMax) {
     node = medium_list_.PickNodeFromList(node_size);
     if (node != NULL) {
+      ASSERT(size_in_bytes <= *node_size);
       page = Page::FromAddress(node->address());
       page->add_available_in_medium_free_list(-(*node_size));
       return node;
@@ -2241,6 +2253,7 @@ FreeListNode* FreeList::FindNodeFor(int size_in_bytes, int* node_size) {
   if (size_in_bytes <= kLargeAllocationMax) {
     node = large_list_.PickNodeFromList(node_size);
     if (node != NULL) {
+      ASSERT(size_in_bytes <= *node_size);
       page = Page::FromAddress(node->address());
       page->add_available_in_large_free_list(-(*node_size));
       return node;
@@ -2834,12 +2847,19 @@ void MapSpace::VerifyObject(HeapObject* object) {
 
 
 // -----------------------------------------------------------------------------
-// GlobalPropertyCellSpace implementation
+// CellSpace and PropertyCellSpace implementation
 // TODO(mvstanton): this is weird...the compiler can't make a vtable unless
 // there is at least one non-inlined virtual function. I would prefer to hide
 // the VerifyObject definition behind VERIFY_HEAP.
 
 void CellSpace::VerifyObject(HeapObject* object) {
+  // The object should be a global object property cell or a free-list node.
+  CHECK(object->IsCell() ||
+         object->map() == heap()->two_pointer_filler_map());
+}
+
+
+void PropertyCellSpace::VerifyObject(HeapObject* object) {
   // The object should be a global object property cell or a free-list node.
   CHECK(object->IsJSGlobalPropertyCell() ||
          object->map() == heap()->two_pointer_filler_map());

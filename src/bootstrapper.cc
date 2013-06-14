@@ -1324,8 +1324,7 @@ void Genesis::InitializeExperimentalGlobal() {
     Handle<JSFunction> array_buffer_fun =
         InstallFunction(
             global, "ArrayBuffer", JS_ARRAY_BUFFER_TYPE,
-            JSArrayBuffer::kSize +
-              v8::ArrayBuffer::kInternalFieldCount * kPointerSize,
+            JSArrayBuffer::kSizeWithInternalFields,
             isolate()->initial_object_prototype(),
             Builtins::kIllegal, true, true);
     native_context()->set_array_buffer_fun(*array_buffer_fun);
@@ -2500,6 +2499,7 @@ void Genesis::TransferNamedProperties(Handle<JSObject> from,
         Handle<Name> key = Handle<Name>(Name::cast(raw_key));
         Handle<Object> value = Handle<Object>(properties->ValueAt(i),
                                               isolate());
+        ASSERT(!value->IsCell());
         if (value->IsJSGlobalPropertyCell()) {
           value = Handle<Object>(JSGlobalPropertyCell::cast(*value)->value(),
                                  isolate());

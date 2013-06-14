@@ -260,6 +260,7 @@ class HLoopInformation: public ZoneObject {
   HStackCheck* stack_check_;
 };
 
+
 class BoundsCheckTable;
 class HGraph: public ZoneObject {
  public:
@@ -402,6 +403,12 @@ class HGraph: public ZoneObject {
   }
 
   void MarkDependsOnEmptyArrayProtoElements() {
+    // Add map dependency if not already added.
+    if (depends_on_empty_array_proto_elements_) return;
+    isolate()->initial_object_prototype()->map()->AddDependentCompilationInfo(
+        DependentCode::kElementsCantBeAddedGroup, info());
+    isolate()->initial_array_prototype()->map()->AddDependentCompilationInfo(
+        DependentCode::kElementsCantBeAddedGroup, info());
     depends_on_empty_array_proto_elements_ = true;
   }
 
@@ -874,6 +881,11 @@ class FunctionState {
   HEnterInlined* entry() { return entry_; }
   void set_entry(HEnterInlined* entry) { entry_ = entry; }
 
+  HArgumentsObject* arguments_object() { return arguments_object_; }
+  void set_arguments_object(HArgumentsObject* arguments_object) {
+    arguments_object_ = arguments_object;
+  }
+
   HArgumentsElements* arguments_elements() { return arguments_elements_; }
   void set_arguments_elements(HArgumentsElements* arguments_elements) {
     arguments_elements_ = arguments_elements;
@@ -907,6 +919,7 @@ class FunctionState {
   // entry.
   HEnterInlined* entry_;
 
+  HArgumentsObject* arguments_object_;
   HArgumentsElements* arguments_elements_;
 
   FunctionState* outer_;
@@ -968,6 +981,7 @@ class HGraphBuilder {
   Zone* zone() const { return info_->zone(); }
   HGraph* graph() const { return graph_; }
   Isolate* isolate() const { return graph_->isolate(); }
+  CompilationInfo* top_info() { return info_; }
 
   HGraph* CreateGraph();
 
@@ -1077,8 +1091,7 @@ class HGraphBuilder {
     HInstruction* IfCompare(
         HValue* left,
         HValue* right,
-        Token::Value token,
-        Representation input_representation = Representation::Integer32());
+        Token::Value token);
 
     HInstruction* IfCompareMap(HValue* left, Handle<Map> map);
 
@@ -1110,10 +1123,9 @@ class HGraphBuilder {
     HInstruction* OrIfCompare(
         HValue* p1,
         HValue* p2,
-        Token::Value token,
-        Representation input_representation = Representation::Integer32()) {
+        Token::Value token) {
       Or();
-      return IfCompare(p1, p2, token, input_representation);
+      return IfCompare(p1, p2, token);
     }
 
     HInstruction* OrIfCompareMap(HValue* left, Handle<Map> map) {
@@ -1136,10 +1148,9 @@ class HGraphBuilder {
     HInstruction* AndIfCompare(
         HValue* p1,
         HValue* p2,
-        Token::Value token,
-        Representation input_representation = Representation::Integer32()) {
+        Token::Value token) {
       And();
-      return IfCompare(p1, p2, token, input_representation);
+      return IfCompare(p1, p2, token);
     }
 
     HInstruction* AndIfCompareMap(HValue* left, Handle<Map> map) {
@@ -1350,9 +1361,7 @@ class HGraphBuilder {
 
   void BuildCompareNil(
       HValue* value,
-      EqualityKind kind,
-      CompareNilICStub::Types types,
-      Handle<Map> map,
+      Handle<Type> type,
       int position,
       HIfContinuation* continuation);
 
@@ -1489,7 +1498,7 @@ class HOptimizedGraphBuilder: public HGraphBuilder, public AstVisitor {
   void set_ast_context(AstContext* context) { ast_context_ = context; }
 
   // Accessors forwarded to the function state.
-  CompilationInfo* info() const {
+  CompilationInfo* current_info() const {
     return function_state()->compilation_info();
   }
   AstContext* call_context() const {
@@ -1623,6 +1632,7 @@ class HOptimizedGraphBuilder: public HGraphBuilder, public AstVisitor {
   template <class Instruction> HInstruction* PreProcessCall(Instruction* call);
 
   static Representation ToRepresentation(TypeInfo info);
+  static Representation ToRepresentation(Handle<Type> type);
 
   void SetUpScope(Scope* scope);
   virtual void VisitStatements(ZoneList<Statement*>* statements);
@@ -1688,10 +1698,10 @@ class HOptimizedGraphBuilder: public HGraphBuilder, public AstVisitor {
                                        HValue* object,
                                        SmallMapList* types,
                                        Handle<String> name);
-  bool HandlePolymorphicArrayLengthLoad(Property* expr,
-                                        HValue* object,
-                                        SmallMapList* types,
-                                        Handle<String> name);
+  HInstruction* TryLoadPolymorphicAsMonomorphic(Property* expr,
+                                                HValue* object,
+                                                SmallMapList* types,
+                                                Handle<String> name);
   void HandlePolymorphicStoreNamedField(Assignment* expr,
                                         HValue* object,
                                         HValue* value,

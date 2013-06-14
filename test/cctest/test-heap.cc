@@ -2498,15 +2498,15 @@ TEST(IncrementalMarkingClearsTypeFeedbackCells) {
       f->shared()->code()->type_feedback_info())->type_feedback_cells());
 
   CHECK_EQ(2, cells->CellCount());
-  CHECK(cells->Cell(0)->value()->IsJSFunction());
-  CHECK(cells->Cell(1)->value()->IsJSFunction());
+  CHECK(cells->GetCell(0)->value()->IsJSFunction());
+  CHECK(cells->GetCell(1)->value()->IsJSFunction());
 
   SimulateIncrementalMarking();
   HEAP->CollectAllGarbage(Heap::kNoGCFlags);
 
   CHECK_EQ(2, cells->CellCount());
-  CHECK(cells->Cell(0)->value()->IsTheHole());
-  CHECK(cells->Cell(1)->value()->IsTheHole());
+  CHECK(cells->GetCell(0)->value()->IsTheHole());
+  CHECK(cells->GetCell(1)->value()->IsTheHole());
 }
 
 
@@ -2689,6 +2689,7 @@ TEST(ReleaseStackTraceData) {
 
 
 TEST(Regression144230) {
+  i::FLAG_stress_compaction = false;
   CcTest::InitializeVM();
   Isolate* isolate = Isolate::Current();
   Heap* heap = isolate->heap();

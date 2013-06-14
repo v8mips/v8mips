@@ -655,7 +655,7 @@ static void ArrayBufferWeakCallback(v8::Isolate* external_isolate,
                                     void* data) {
   Isolate* isolate = reinterpret_cast<Isolate*>(external_isolate);
   HandleScope scope(isolate);
-  Handle<Object> internal_object = Utils::OpenHandle(**object);
+  Handle<Object> internal_object = Utils::OpenPersistent(object);
   Handle<JSArrayBuffer> array_buffer(JSArrayBuffer::cast(*internal_object));
 
   if (!array_buffer->is_external()) {
@@ -663,7 +663,8 @@ static void ArrayBufferWeakCallback(v8::Isolate* external_isolate,
         isolate, array_buffer->byte_length());
     isolate->heap()->AdjustAmountOfExternalAllocatedMemory(
         -static_cast<intptr_t>(allocated_length));
-    free(data);
+    CHECK(V8::ArrayBufferAllocator() != NULL);
+    V8::ArrayBufferAllocator()->Free(data);
   }
   object->Dispose(external_isolate);
 }
@@ -687,6 +688,10 @@ void Runtime::SetupArrayBuffer(Isolate* isolate,
       isolate->factory()->NewNumberFromSize(allocated_length);
   CHECK(byte_length->IsSmi() || byte_length->IsHeapNumber());
   array_buffer->set_byte_length(*byte_length);
+
+  array_buffer->set_weak_next(isolate->heap()->array_buffers_list());
+  isolate->heap()->set_array_buffers_list(*array_buffer);
+  array_buffer->set_weak_first_array(isolate->heap()->undefined_value());
 }
 
 
@@ -695,8 +700,9 @@ bool Runtime::SetupArrayBufferAllocatingData(
     Handle<JSArrayBuffer> array_buffer,
     size_t allocated_length) {
   void* data;
+  CHECK(V8::ArrayBufferAllocator() != NULL);
   if (allocated_length != 0) {
-    data = malloc(allocated_length);
+    data = V8::ArrayBufferAllocator()->Allocate(allocated_length);
     if (data == NULL) return false;
     memset(data, 0, allocated_length);
   } else {
@@ -705,11 +711,10 @@ bool Runtime::SetupArrayBufferAllocatingData(
 
   SetupArrayBuffer(isolate, array_buffer, false, data, allocated_length);
 
-  v8::Isolate* external_isolate = reinterpret_cast<v8::Isolate*>(isolate);
-  v8::Persistent<v8::Value> weak_handle(
-      external_isolate, v8::Utils::ToLocal(Handle<Object>::cast(array_buffer)));
-  weak_handle.MakeWeak(external_isolate, data, ArrayBufferWeakCallback);
-  weak_handle.MarkIndependent(external_isolate);
+  Handle<Object> persistent = isolate->global_handles()->Create(*array_buffer);
+  GlobalHandles::MakeWeak(persistent.location(), data, ArrayBufferWeakCallback);
+  GlobalHandles::MarkIndependent(persistent.location());
+
   isolate->heap()->AdjustAmountOfExternalAllocatedMemory(allocated_length);
 
   return true;
@@ -855,6 +860,8 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_TypedArrayInitialize) {
 
   Handle<Object> length_obj = isolate->factory()->NewNumberFromSize(length);
   holder->set_length(*length_obj);
+  holder->set_weak_next(buffer->weak_first_array());
+  buffer->set_weak_first_array(*holder);
 
   Handle<ExternalArray> elements =
       isolate->factory()->NewExternalArray(
@@ -2635,9 +2642,9 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_SuspendJSGeneratorObject) {
 // called if the suspended activation had operands on the stack, stack handlers
 // needing rewinding, or if the resume should throw an exception.  The fast path
 // is handled directly in FullCodeGenerator::EmitGeneratorResume(), which is
-// inlined into GeneratorNext, GeneratorSend, and GeneratorThrow.
-// EmitGeneratorResumeResume is called in any case, as it needs to reconstruct
-// the stack frame and make space for arguments and operands.
+// inlined into GeneratorNext and GeneratorThrow.  EmitGeneratorResumeResume is
+// called in any case, as it needs to reconstruct the stack frame and make space
+// for arguments and operands.
 RUNTIME_FUNCTION(MaybeObject*, Runtime_ResumeJSGeneratorObject) {
   SealHandleScope shs(isolate);
   ASSERT(args.length() == 3);
@@ -2670,7 +2677,7 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_ResumeJSGeneratorObject) {
   JSGeneratorObject::ResumeMode resume_mode =
       static_cast<JSGeneratorObject::ResumeMode>(resume_mode_int);
   switch (resume_mode) {
-    case JSGeneratorObject::SEND:
+    case JSGeneratorObject::NEXT:
       return value;
     case JSGeneratorObject::THROW:
       return isolate->Throw(value);
@@ -8089,13 +8096,15 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_OptimizeFunctionOnNextCall) {
 }
 
 
-RUNTIME_FUNCTION(MaybeObject*, Runtime_WaitUntilOptimized) {
+RUNTIME_FUNCTION(MaybeObject*, Runtime_CompleteOptimization) {
   HandleScope scope(isolate);
   ASSERT(args.length() == 1);
   CONVERT_ARG_HANDLE_CHECKED(JSFunction, function, 0);
-  if (FLAG_parallel_recompilation) {
-    if (V8::UseCrankshaft() && function->IsOptimizable()) {
-      while (!function->IsOptimized()) OS::Sleep(50);
+  if (FLAG_parallel_recompilation && V8::UseCrankshaft()) {
+    // While function is in optimization pipeline, it is marked with builtins.
+    while (function->code()->kind() == Code::BUILTIN) {
+      isolate->optimizing_compiler_thread()->InstallOptimizedFunctions();
+      OS::Sleep(50);
     }
   }
   return isolate->heap()->undefined_value();
@@ -11221,7 +11230,9 @@ class ScopeIterator {
     // Find the break point where execution has stopped.
     BreakLocationIterator break_location_iterator(debug_info,
                                                   ALL_BREAK_LOCATIONS);
-    break_location_iterator.FindBreakLocationFromAddress(frame->pc());
+    // pc points to the instruction after the current one, possibly a break
+    // location as well. So the "- 1" to exclude it from the search.
+    break_location_iterator.FindBreakLocationFromAddress(frame->pc() - 1);
     if (break_location_iterator.IsExit()) {
       // We are within the return sequence. At the momemt it is not possible to
       // get a source position which is consistent with the current scope chain.
@@ -13469,9 +13480,9 @@ static MaybeObject* ArrayConstructorCommon(Isolate* isolate,
   MaybeObject* maybe_array;
   if (!type_info.is_null() &&
       *type_info != isolate->heap()->undefined_value() &&
-      JSGlobalPropertyCell::cast(*type_info)->value()->IsSmi() &&
+      Cell::cast(*type_info)->value()->IsSmi() &&
       can_use_type_feedback) {
-    JSGlobalPropertyCell* cell = JSGlobalPropertyCell::cast(*type_info);
+    Cell* cell = Cell::cast(*type_info);
     Smi* smi = Smi::cast(cell->value());
     ElementsKind to_kind = static_cast<ElementsKind>(smi->value());
     if (holey && !IsFastHoleyElementsKind(to_kind)) {

@@ -118,7 +118,7 @@ void FullCodeGenerator::Generate() {
   CompilationInfo* info = info_;
   handler_table_ =
       isolate()->factory()->NewFixedArray(function()->handler_count(), TENURED);
-  profiling_counter_ = isolate()->factory()->NewJSGlobalPropertyCell(
+  profiling_counter_ = isolate()->factory()->NewCell(
       Handle<Smi>(Smi::FromInt(FLAG_interrupt_budget), isolate()));
   SetFunctionPosition(function());
   Comment cmnt(masm_, "[ function compiled by full code generator");
@@ -315,7 +315,7 @@ void FullCodeGenerator::ClearAccumulator() {
 
 void FullCodeGenerator::EmitProfilingCounterDecrement(int delta) {
   __ mov(ebx, Immediate(profiling_counter_));
-  __ sub(FieldOperand(ebx, JSGlobalPropertyCell::kValueOffset),
+  __ sub(FieldOperand(ebx, Cell::kValueOffset),
          Immediate(Smi::FromInt(delta)));
 }
 
@@ -327,7 +327,7 @@ void FullCodeGenerator::EmitProfilingCounterReset() {
     reset_value = Smi::kMaxValue;
   }
   __ mov(ebx, Immediate(profiling_counter_));
-  __ mov(FieldOperand(ebx, JSGlobalPropertyCell::kValueOffset),
+  __ mov(FieldOperand(ebx, Cell::kValueOffset),
          Immediate(Smi::FromInt(reset_value)));
 }
 
@@ -1033,9 +1033,8 @@ void FullCodeGenerator::VisitForInStatement(ForInStatement* stmt) {
   ForIn loop_statement(this, stmt);
   increment_loop_depth();
 
-  // Get the object to enumerate over. Both SpiderMonkey and JSC
-  // ignore null and undefined in contrast to the specification; see
-  // ECMA-262 section 12.6.4.
+  // Get the object to enumerate over. If the object is null or undefined, skip
+  // over the loop.  See ECMA-262 version 5, section 12.6.4.
   VisitForAccumulatorValue(stmt->enumerable());
   __ cmp(eax, isolate()->factory()->undefined_value());
   __ j(equal, &exit);
@@ -1106,14 +1105,12 @@ void FullCodeGenerator::VisitForInStatement(ForInStatement* stmt) {
   Label non_proxy;
   __ bind(&fixed_array);
 
-  Handle<JSGlobalPropertyCell> cell =
-      isolate()->factory()->NewJSGlobalPropertyCell(
-          Handle<Object>(
-              Smi::FromInt(TypeFeedbackCells::kForInFastCaseMarker),
-              isolate()));
+  Handle<Cell> cell = isolate()->factory()->NewCell(
+      Handle<Object>(Smi::FromInt(TypeFeedbackCells::kForInFastCaseMarker),
+                     isolate()));
   RecordTypeFeedbackCell(stmt->ForInFeedbackId(), cell);
   __ LoadHeapObject(ebx, cell);
-  __ mov(FieldOperand(ebx, JSGlobalPropertyCell::kValueOffset),
+  __ mov(FieldOperand(ebx, Cell::kValueOffset),
          Immediate(Smi::FromInt(TypeFeedbackCells::kForInSlowCaseMarker)));
 
   __ mov(ebx, Immediate(Smi::FromInt(1)));  // Smi indicates slow check
@@ -1194,6 +1191,64 @@ void FullCodeGenerator::VisitForInStatement(ForInStatement* stmt) {
   // Exit and decrement the loop depth.
   PrepareForBailoutForId(stmt->ExitId(), NO_REGISTERS);
   __ bind(&exit);
+  decrement_loop_depth();
+}
+
+
+void FullCodeGenerator::VisitForOfStatement(ForOfStatement* stmt) {
+  Comment cmnt(masm_, "[ ForOfStatement");
+  SetStatementPosition(stmt);
+
+  Iteration loop_statement(this, stmt);
+  increment_loop_depth();
+
+  // var iterator = iterable[@@iterator]()
+  VisitForAccumulatorValue(stmt->assign_iterator());
+
+  // As with for-in, skip the loop if the iterator is null or undefined.
+  __ CompareRoot(eax, Heap::kUndefinedValueRootIndex);
+  __ j(equal, loop_statement.break_label());
+  __ CompareRoot(eax, Heap::kNullValueRootIndex);
+  __ j(equal, loop_statement.break_label());
+
+  // Convert the iterator to a JS object.
+  Label convert, done_convert;
+  __ JumpIfSmi(eax, &convert);
+  __ CmpObjectType(eax, FIRST_SPEC_OBJECT_TYPE, ecx);
+  __ j(above_equal, &done_convert);
+  __ bind(&convert);
+  __ push(eax);
+  __ InvokeBuiltin(Builtins::TO_OBJECT, CALL_FUNCTION);
+  __ bind(&done_convert);
+
+  // Loop entry.
+  __ bind(loop_statement.continue_label());
+
+  // result = iterator.next()
+  VisitForEffect(stmt->next_result());
+
+  // if (result.done) break;
+  Label result_not_done;
+  VisitForControl(stmt->result_done(),
+                  loop_statement.break_label(),
+                  &result_not_done,
+                  &result_not_done);
+  __ bind(&result_not_done);
+
+  // each = result.value
+  VisitForEffect(stmt->assign_each());
+
+  // Generate code for the body of the loop.
+  Visit(stmt->body());
+
+  // Check stack before looping.
+  PrepareForBailoutForId(stmt->BackEdgeId(), NO_REGISTERS);
+  EmitBackEdgeBookkeeping(stmt, loop_statement.continue_label());
+  __ jmp(loop_statement.continue_label());
+
+  // Exit and decrement the loop depth.
+  PrepareForBailoutForId(stmt->ExitId(), NO_REGISTERS);
+  __ bind(loop_statement.break_label());
   decrement_loop_depth();
 }
 
@@ -1733,7 +1788,8 @@ void FullCodeGenerator::VisitArrayLiteral(ArrayLiteral* expr) {
     }
 
     if (!result_saved) {
-      __ push(eax);
+      __ push(eax);  // array literal.
+      __ push(Immediate(Smi::FromInt(expr->literal_index())));
       result_saved = true;
     }
     VisitForAccumulatorValue(subexpr);
@@ -1742,7 +1798,7 @@ void FullCodeGenerator::VisitArrayLiteral(ArrayLiteral* expr) {
       // Fast-case array literal with ElementsKind of FAST_*_ELEMENTS, they
       // cannot transition and don't need to call the runtime stub.
       int offset = FixedArray::kHeaderSize + (i * kPointerSize);
-      __ mov(ebx, Operand(esp, 0));  // Copy of array literal.
+      __ mov(ebx, Operand(esp, kPointerSize));  // Copy of array literal.
       __ mov(ebx, FieldOperand(ebx, JSObject::kElementsOffset));
       // Store the subexpression value in the array's elements.
       __ mov(FieldOperand(ebx, offset), result_register());
@@ -1753,10 +1809,7 @@ void FullCodeGenerator::VisitArrayLiteral(ArrayLiteral* expr) {
                           INLINE_SMI_CHECK);
     } else {
       // Store the subexpression value in the array's elements.
-      __ mov(ebx, Operand(esp, 0));  // Copy of array literal.
-      __ mov(edi, FieldOperand(ebx, JSObject::kMapOffset));
       __ mov(ecx, Immediate(Smi::FromInt(i)));
-      __ mov(edx, Immediate(Smi::FromInt(expr->literal_index())));
       StoreArrayLiteralElementStub stub;
       __ CallStub(&stub);
     }
@@ -1765,6 +1818,7 @@ void FullCodeGenerator::VisitArrayLiteral(ArrayLiteral* expr) {
   }
 
   if (result_saved) {
+    __ add(esp, Immediate(kPointerSize));  // literal index
     context()->PlugTOS();
   } else {
     context()->Plug(eax);
@@ -1893,8 +1947,12 @@ void FullCodeGenerator::VisitYield(Yield* expr) {
   VisitForStackValue(expr->expression());
 
   switch (expr->yield_kind()) {
-    case Yield::INITIAL:
-    case Yield::SUSPEND: {
+    case Yield::SUSPEND:
+      // Pop value from top-of-stack slot; box result into result register.
+      EmitCreateIteratorResult(false);
+      __ push(result_register());
+      // Fall through.
+    case Yield::INITIAL: {
       VisitForStackValue(expr->generator_object());
       __ CallRuntime(Runtime::kSuspendJSGeneratorObject, 1);
       __ mov(context_register(),
@@ -1903,12 +1961,8 @@ void FullCodeGenerator::VisitYield(Yield* expr) {
       Label resume;
       __ CompareRoot(result_register(), Heap::kTheHoleValueRootIndex);
       __ j(not_equal, &resume);
-      if (expr->yield_kind() == Yield::SUSPEND) {
-        EmitReturnIteratorResult(false);
-      } else {
-        __ pop(result_register());
-        EmitReturnSequence();
-      }
+      __ pop(result_register());
+      EmitReturnSequence();
 
       __ bind(&resume);
       context()->Plug(result_register());
@@ -1920,7 +1974,10 @@ void FullCodeGenerator::VisitYield(Yield* expr) {
       __ mov(FieldOperand(result_register(),
                           JSGeneratorObject::kContinuationOffset),
              Immediate(Smi::FromInt(JSGeneratorObject::kGeneratorClosed)));
-      EmitReturnIteratorResult(true);
+      // Pop value from top-of-stack slot, box result into result register.
+      EmitCreateIteratorResult(true);
+      EmitUnwindBeforeReturn();
+      EmitReturnSequence();
       break;
     }
 
@@ -1931,74 +1988,57 @@ void FullCodeGenerator::VisitYield(Yield* expr) {
       // [sp + 1 * kPointerSize] iter
       // [sp + 0 * kPointerSize] g
 
-      Label l_catch, l_try, l_resume, l_send, l_call, l_loop;
+      Label l_catch, l_try, l_resume, l_next, l_call, l_loop;
       // Initial send value is undefined.
       __ mov(eax, isolate()->factory()->undefined_value());
-      __ jmp(&l_send);
+      __ jmp(&l_next);
 
-      // catch (e) { receiver = iter; f = iter.throw; arg = e; goto l_call; }
+      // catch (e) { receiver = iter; f = 'throw'; arg = e; goto l_call; }
       __ bind(&l_catch);
       handler_table()->set(expr->index(), Smi::FromInt(l_catch.pos()));
-      __ mov(edx, Operand(esp, 1 * kPointerSize));       // iter
-      __ push(edx);                                      // iter
-      __ push(eax);                                      // exception
       __ mov(ecx, isolate()->factory()->throw_string());  // "throw"
-      Handle<Code> throw_ic = isolate()->builtins()->LoadIC_Initialize();
-      CallIC(throw_ic);                                  // iter.throw in eax
+      __ push(ecx);                                      // "throw"
+      __ push(Operand(esp, 2 * kPointerSize));           // iter
+      __ push(eax);                                      // exception
       __ jmp(&l_call);
 
-      // try { received = yield result.value }
+      // try { received = %yield result }
+      // Shuffle the received result above a try handler and yield it without
+      // re-boxing.
       __ bind(&l_try);
-      __ pop(eax);                                       // result.value
+      __ pop(eax);                                       // result
       __ PushTryHandler(StackHandler::CATCH, expr->index());
       const int handler_size = StackHandlerConstants::kSize;
-      __ push(eax);                                      // result.value
+      __ push(eax);                                      // result
       __ push(Operand(esp, (0 + 1) * kPointerSize + handler_size));  // g
       __ CallRuntime(Runtime::kSuspendJSGeneratorObject, 1);
       __ mov(context_register(),
              Operand(ebp, StandardFrameConstants::kContextOffset));
       __ CompareRoot(eax, Heap::kTheHoleValueRootIndex);
       __ j(not_equal, &l_resume);
-      EmitReturnIteratorResult(false);
+      __ pop(eax);                                       // result
+      EmitReturnSequence();
       __ bind(&l_resume);                                // received in eax
       __ PopTryHandler();
 
-      // receiver = iter; f = iter.send; arg = received;
-      __ bind(&l_send);
-      __ mov(edx, Operand(esp, 1 * kPointerSize));       // iter
-      __ push(edx);                                      // iter
+      // receiver = iter; f = iter.next; arg = received;
+      __ bind(&l_next);
+      __ mov(ecx, isolate()->factory()->next_string());  // "next"
+      __ push(ecx);
+      __ push(Operand(esp, 2 * kPointerSize));           // iter
       __ push(eax);                                      // received
-      __ mov(ecx, isolate()->factory()->send_string());  // "send"
-      Handle<Code> send_ic = isolate()->builtins()->LoadIC_Initialize();
-      CallIC(send_ic);                                   // iter.send in eax
 
-      // result = f.call(receiver, arg);
+      // result = receiver[f](arg);
       __ bind(&l_call);
-      Label l_call_runtime;
-      __ JumpIfSmi(eax, &l_call_runtime);
-      __ CmpObjectType(eax, JS_FUNCTION_TYPE, ebx);
-      __ j(not_equal, &l_call_runtime);
-      __ mov(edi, eax);
-      ParameterCount count(1);
-      __ InvokeFunction(edi, count, CALL_FUNCTION,
-                        NullCallWrapper(), CALL_AS_METHOD);
+      Handle<Code> ic = isolate()->stub_cache()->ComputeKeyedCallInitialize(1);
+      CallIC(ic);
       __ mov(esi, Operand(ebp, StandardFrameConstants::kContextOffset));
-      __ jmp(&l_loop);
-      __ bind(&l_call_runtime);
-      __ push(eax);
-      __ CallRuntime(Runtime::kCall, 3);
+      __ Drop(1);  // The key is still on the stack; drop it.
 
-      // val = result.value; if (!result.done) goto l_try;
+      // if (!result.done) goto l_try;
       __ bind(&l_loop);
-      // result.value
       __ push(eax);                                      // save result
       __ mov(edx, eax);                                  // result
-      __ mov(ecx, isolate()->factory()->value_string());  // "value"
-      Handle<Code> value_ic = isolate()->builtins()->LoadIC_Initialize();
-      CallIC(value_ic);                                  // result.value in eax
-      __ pop(ebx);                                       // result
-      __ push(eax);                                      // result.value
-      __ mov(edx, ebx);                                  // result
       __ mov(ecx, isolate()->factory()->done_string());  // "done"
       Handle<Code> done_ic = isolate()->builtins()->LoadIC_Initialize();
       CallIC(done_ic);                                   // result.done in eax
@@ -2008,7 +2048,10 @@ void FullCodeGenerator::VisitYield(Yield* expr) {
       __ j(zero, &l_try);
 
       // result.value
-      __ pop(eax);                                       // result.value
+      __ pop(edx);                                       // result
+      __ mov(ecx, isolate()->factory()->value_string());  // "value"
+      Handle<Code> value_ic = isolate()->builtins()->LoadIC_Initialize();
+      CallIC(value_ic);                                  // result.value in eax
       context()->DropAndPlug(2, eax);                    // drop iter and g
       break;
     }
@@ -2072,7 +2115,7 @@ void FullCodeGenerator::EmitGeneratorResume(Expression *generator,
 
   // If we are sending a value and there is no operand stack, we can jump back
   // in directly.
-  if (resume_mode == JSGeneratorObject::SEND) {
+  if (resume_mode == JSGeneratorObject::NEXT) {
     Label slow_resume;
     __ cmp(edx, Immediate(0));
     __ j(not_zero, &slow_resume);
@@ -2112,13 +2155,20 @@ void FullCodeGenerator::EmitGeneratorResume(Expression *generator,
 }
 
 
-void FullCodeGenerator::EmitReturnIteratorResult(bool done) {
+void FullCodeGenerator::EmitCreateIteratorResult(bool done) {
   Label gc_required;
   Label allocated;
 
   Handle<Map> map(isolate()->native_context()->generator_result_map());
 
   __ Allocate(map->instance_size(), eax, ecx, edx, &gc_required, TAG_OBJECT);
+  __ jmp(&allocated);
+
+  __ bind(&gc_required);
+  __ Push(Smi::FromInt(map->instance_size()));
+  __ CallRuntime(Runtime::kAllocateInNewSpace, 1);
+  __ mov(context_register(),
+         Operand(ebp, StandardFrameConstants::kContextOffset));
 
   __ bind(&allocated);
   __ mov(ebx, map);
@@ -2137,26 +2187,6 @@ void FullCodeGenerator::EmitReturnIteratorResult(bool done) {
   // root set.
   __ RecordWriteField(eax, JSGeneratorObject::kResultValuePropertyOffset,
                       ecx, edx, kDontSaveFPRegs);
-
-  if (done) {
-    // Exit all nested statements.
-    NestedStatement* current = nesting_stack_;
-    int stack_depth = 0;
-    int context_length = 0;
-    while (current != NULL) {
-      current = current->Exit(&stack_depth, &context_length);
-    }
-    __ Drop(stack_depth);
-  }
-
-  EmitReturnSequence();
-
-  __ bind(&gc_required);
-  __ Push(Smi::FromInt(map->instance_size()));
-  __ CallRuntime(Runtime::kAllocateInNewSpace, 1);
-  __ mov(context_register(),
-         Operand(ebp, StandardFrameConstants::kContextOffset));
-  __ jmp(&allocated);
 }
 
 
@@ -2580,8 +2610,7 @@ void FullCodeGenerator::EmitCallWithStub(Call* expr, CallFunctionFlags flags) {
   flags = static_cast<CallFunctionFlags>(flags | RECORD_CALL_TARGET);
   Handle<Object> uninitialized =
       TypeFeedbackCells::UninitializedSentinel(isolate());
-  Handle<JSGlobalPropertyCell> cell =
-      isolate()->factory()->NewJSGlobalPropertyCell(uninitialized);
+  Handle<Cell> cell = isolate()->factory()->NewCell(uninitialized);
   RecordTypeFeedbackCell(expr->CallFeedbackId(), cell);
   __ mov(ebx, cell);
 
@@ -2765,8 +2794,7 @@ void FullCodeGenerator::VisitCallNew(CallNew* expr) {
   // Record call targets in unoptimized code.
   Handle<Object> uninitialized =
       TypeFeedbackCells::UninitializedSentinel(isolate());
-  Handle<JSGlobalPropertyCell> cell =
-      isolate()->factory()->NewJSGlobalPropertyCell(uninitialized);
+  Handle<Cell> cell = isolate()->factory()->NewCell(uninitialized);
   RecordTypeFeedbackCell(expr->CallNewFeedbackId(), cell);
   __ mov(ebx, cell);
 
@@ -4711,18 +4739,14 @@ void FullCodeGenerator::EmitLiteralCompareNil(CompareOperation* expr,
   VisitForAccumulatorValue(sub_expr);
   PrepareForBailoutBeforeSplit(expr, true, if_true, if_false);
 
-  EqualityKind kind = expr->op() == Token::EQ_STRICT
-      ? kStrictEquality : kNonStrictEquality;
   Handle<Object> nil_value = nil == kNullValue
       ? isolate()->factory()->null_value()
       : isolate()->factory()->undefined_value();
-  if (kind == kStrictEquality) {
+  if (expr->op() == Token::EQ_STRICT) {
     __ cmp(eax, nil_value);
     Split(equal, if_true, if_false, fall_through);
   } else {
-    Handle<Code> ic = CompareNilICStub::GetUninitialized(isolate(),
-                                                         kNonStrictEquality,
-                                                         nil);
+    Handle<Code> ic = CompareNilICStub::GetUninitialized(isolate(), nil);
     CallIC(ic, RelocInfo::CODE_TARGET, expr->CompareOperationFeedbackId());
     __ test(eax, eax);
     Split(not_zero, if_true, if_false, fall_through);

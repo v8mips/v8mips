@@ -182,7 +182,10 @@ void HeapObject::HeapObjectPrint(FILE* out) {
     case JS_MESSAGE_OBJECT_TYPE:
       JSMessageObject::cast(this)->JSMessageObjectPrint(out);
       break;
-    case JS_GLOBAL_PROPERTY_CELL_TYPE:
+    case CELL_TYPE:
+      Cell::cast(this)->CellPrint(out);
+      break;
+    case PROPERTY_CELL_TYPE:
       JSGlobalPropertyCell::cast(this)->JSGlobalPropertyCellPrint(out);
       break;
     case JS_ARRAY_BUFFER_TYPE:
@@ -533,15 +536,14 @@ static const char* TypeToString(InstanceType type) {
     case JS_OBJECT_TYPE: return "JS_OBJECT";
     case JS_CONTEXT_EXTENSION_OBJECT_TYPE: return "JS_CONTEXT_EXTENSION_OBJECT";
     case ODDBALL_TYPE: return "ODDBALL";
-    case JS_GLOBAL_PROPERTY_CELL_TYPE: return "JS_GLOBAL_PROPERTY_CELL";
+    case CELL_TYPE: return "CELL";
+    case PROPERTY_CELL_TYPE: return "PROPERTY_CELL";
     case SHARED_FUNCTION_INFO_TYPE: return "SHARED_FUNCTION_INFO";
     case JS_GENERATOR_OBJECT_TYPE: return "JS_GENERATOR_OBJECT";
     case JS_MODULE_TYPE: return "JS_MODULE";
     case JS_FUNCTION_TYPE: return "JS_FUNCTION";
     case CODE_TYPE: return "CODE";
     case JS_ARRAY_TYPE: return "JS_ARRAY";
-    case JS_ARRAY_BUFFER_TYPE: return "JS_ARRAY_BUFFER";
-    case JS_TYPED_ARRAY_TYPE: return "JS_TYPED_ARRAY";
     case JS_PROXY_TYPE: return "JS_PROXY";
     case JS_WEAK_MAP_TYPE: return "JS_WEAK_MAP";
     case JS_REGEXP_TYPE: return "JS_REGEXP";
@@ -549,6 +551,8 @@ static const char* TypeToString(InstanceType type) {
     case JS_GLOBAL_OBJECT_TYPE: return "JS_GLOBAL_OBJECT";
     case JS_BUILTINS_OBJECT_TYPE: return "JS_BUILTINS_OBJECT";
     case JS_GLOBAL_PROXY_TYPE: return "JS_GLOBAL_PROXY";
+    case JS_TYPED_ARRAY_TYPE: return "JS_TYPED_ARRAY";
+    case JS_ARRAY_BUFFER_TYPE: return "JS_ARRAY_BUFFER";
     case FOREIGN_TYPE: return "FOREIGN";
     case JS_MESSAGE_OBJECT_TYPE: return "JS_MESSAGE_OBJECT_TYPE";
 #define MAKE_STRUCT_CASE(NAME, Name, name) case NAME##_TYPE: return #NAME;
@@ -917,6 +921,11 @@ void JSBuiltinsObject::JSBuiltinsObjectPrint(FILE* out) {
 }
 
 
+void Cell::CellPrint(FILE* out) {
+  HeapObject::PrintHeader(out, "Cell");
+}
+
+
 void JSGlobalPropertyCell::JSGlobalPropertyCellPrint(FILE* out) {
   HeapObject::PrintHeader(out, "JSGlobalPropertyCell");
 }
@@ -1093,8 +1102,8 @@ void TypeSwitchInfo::TypeSwitchInfoPrint(FILE* out) {
 void AllocationSiteInfo::AllocationSiteInfoPrint(FILE* out) {
   HeapObject::PrintHeader(out, "AllocationSiteInfo");
   PrintF(out, " - payload: ");
-  if (payload()->IsJSGlobalPropertyCell()) {
-    JSGlobalPropertyCell* cell = JSGlobalPropertyCell::cast(payload());
+  if (payload()->IsCell()) {
+    Cell* cell = Cell::cast(payload());
     Object* cell_contents = cell->value();
     if (cell_contents->IsSmi()) {
       ElementsKind kind = static_cast<ElementsKind>(

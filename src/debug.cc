@@ -211,14 +211,15 @@ void BreakLocationIterator::Next(int count) {
 }
 
 
-// Find the break point closest to the supplied address.
+// Find the break point at the supplied address, or the closest one before
+// the address.
 void BreakLocationIterator::FindBreakLocationFromAddress(Address pc) {
   // Run through all break points to locate the one closest to the address.
   int closest_break_point = 0;
   int distance = kMaxInt;
   while (!Done()) {
     // Check if this break point is closer that what was previously found.
-    if (this->pc() < pc && pc - this->pc() < distance) {
+    if (this->pc() <= pc && pc - this->pc() < distance) {
       closest_break_point = break_point();
       distance = static_cast<int>(pc - this->pc());
       // Check whether we can't get any closer.
@@ -669,7 +670,7 @@ void ScriptCache::HandleWeakScript(v8::Isolate* isolate,
   ScriptCache* script_cache = reinterpret_cast<ScriptCache*>(data);
   // Find the location of the global handle.
   Script** location =
-      reinterpret_cast<Script**>(Utils::OpenHandle(**obj).location());
+      reinterpret_cast<Script**>(Utils::OpenPersistent(*obj).location());
   ASSERT((*location)->IsScript());
 
   // Remove the entry from the cache.
@@ -943,7 +944,9 @@ Object* Debug::Break(Arguments args) {
   // Find the break point where execution has stopped.
   BreakLocationIterator break_location_iterator(debug_info,
                                                 ALL_BREAK_LOCATIONS);
-  break_location_iterator.FindBreakLocationFromAddress(frame->pc());
+  // pc points to the instruction after the current one, possibly a break
+  // location as well. So the "- 1" to exclude it from the search.
+  break_location_iterator.FindBreakLocationFromAddress(frame->pc() - 1);
 
   // Check whether step next reached a new statement.
   if (!StepNextContinue(&break_location_iterator, frame)) {
@@ -1238,15 +1241,11 @@ void Debug::ClearBreakPoint(Handle<Object> break_point_object) {
       // Get information in the break point.
       BreakPointInfo* break_point_info = BreakPointInfo::cast(result);
       Handle<DebugInfo> debug_info = node->debug_info();
-      Handle<SharedFunctionInfo> shared(debug_info->shared());
-      int source_position =  break_point_info->statement_position()->value();
-
-      // Source positions starts with zero.
-      ASSERT(source_position >= 0);
 
       // Find the break point and clear it.
       BreakLocationIterator it(debug_info, SOURCE_BREAK_LOCATIONS);
-      it.FindBreakLocationFromPosition(source_position);
+      it.FindBreakLocationFromAddress(debug_info->code()->entry() +
+          break_point_info->code_position()->value());
       it.ClearBreakPoint(break_point_object);
 
       // If there are no more break points left remove the debug info for this
@@ -1404,7 +1403,9 @@ void Debug::PrepareStep(StepAction step_action, int step_count) {
 
   // Find the break location where execution has stopped.
   BreakLocationIterator it(debug_info, ALL_BREAK_LOCATIONS);
-  it.FindBreakLocationFromAddress(frame->pc());
+  // pc points to the instruction after the current one, possibly a break
+  // location as well. So the "- 1" to exclude it from the search.
+  it.FindBreakLocationFromAddress(frame->pc() - 1);
 
   // Compute whether or not the target is a call target.
   bool is_load_or_store = false;
@@ -3065,13 +3066,14 @@ void Debugger::NotifyMessageHandler(v8::DebugEvent event,
     v8::Local<v8::String> fun_name =
         v8::String::New("debugCommandProcessor");
     v8::Local<v8::Function> fun =
-        v8::Function::Cast(*api_exec_state->Get(fun_name));
+        v8::Local<v8::Function>::Cast(api_exec_state->Get(fun_name));
 
     v8::Handle<v8::Boolean> running =
         auto_continue ? v8::True() : v8::False();
     static const int kArgc = 1;
     v8::Handle<Value> argv[kArgc] = { running };
-    cmd_processor = v8::Object::Cast(*fun->Call(api_exec_state, kArgc, argv));
+    cmd_processor = v8::Local<v8::Object>::Cast(
+        fun->Call(api_exec_state, kArgc, argv));
     if (try_catch.HasCaught()) {
       PrintLn(try_catch.Exception());
       return;
@@ -3111,7 +3113,7 @@ void Debugger::NotifyMessageHandler(v8::DebugEvent event,
     v8::Local<v8::Value> request;
     v8::TryCatch try_catch;
     fun_name = v8::String::New("processDebugRequest");
-    fun = v8::Function::Cast(*cmd_processor->Get(fun_name));
+    fun = v8::Local<v8::Function>::Cast(cmd_processor->Get(fun_name));
 
     request = v8::String::New(command.text().start(),
                               command.text().length());
@@ -3124,7 +3126,7 @@ void Debugger::NotifyMessageHandler(v8::DebugEvent event,
     if (!try_catch.HasCaught()) {
       // Get response string.
       if (!response_val->IsUndefined()) {
-        response = v8::String::Cast(*response_val);
+        response = v8::Local<v8::String>::Cast(response_val);
       } else {
         response = v8::String::New("");
       }
@@ -3137,7 +3139,7 @@ void Debugger::NotifyMessageHandler(v8::DebugEvent event,
 
       // Get the running state.
       fun_name = v8::String::New("isRunning");
-      fun = v8::Function::Cast(*cmd_processor->Get(fun_name));
+      fun = v8::Local<v8::Function>::Cast(cmd_processor->Get(fun_name));
       static const int kArgc = 1;
       v8::Handle<Value> argv[kArgc] = { response };
       v8::Local<v8::Value> running_val = fun->Call(cmd_processor, kArgc, argv);

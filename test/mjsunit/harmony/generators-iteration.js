@@ -64,9 +64,9 @@ function TestGenerator(g, expected_values_for_next,
     for (var i = 0; i < expected_values_for_send.length; i++) {
       assertIteratorResult(expected_values_for_send[i],
                            i == expected_values_for_send.length - 1,
-                           iter.send(send_val));
+                           iter.next(send_val));
     }
-    assertThrows(function() { iter.send(send_val); }, Error);
+    assertThrows(function() { iter.next(send_val); }, Error);
   }
   function testThrow(thunk) {
     for (var i = 0; i < expected_values_for_next.length; i++) {
@@ -324,6 +324,58 @@ TestGenerator(
     "foo",
     [2, "1foo3", 5, "4foo6", "foofoo"]);
 
+// Generator function instances.
+TestGenerator(GeneratorFunction(),
+              [undefined],
+              "foo",
+              [undefined]);
+
+TestGenerator(new GeneratorFunction(),
+              [undefined],
+              "foo",
+              [undefined]);
+
+TestGenerator(GeneratorFunction('yield 1;'),
+              [1, undefined],
+              "foo",
+              [1, undefined]);
+
+TestGenerator(
+    function() { return GeneratorFunction('x', 'y', 'yield x + y;')(1, 2) },
+    [3, undefined],
+    "foo",
+    [3, undefined]);
+
+// Test that yield* re-yields received results without re-boxing.
+function TestDelegatingYield() {
+  function results(results) {
+    var i = 0;
+    function next() {
+      return results[i++];
+    }
+    return { next: next }
+  }
+  function* yield_results(expected) {
+    return yield* results(expected);
+  }
+  function collect_results(iter) {
+    var ret = [];
+    var result;
+    do {
+      result = iter.next();
+      ret.push(result);
+    } while (!result.done);
+    return ret;
+  }
+  // We have to put a full result for the end, because the return will re-box.
+  var expected = [{value: 1}, 13, "foo", {value: 34, done: true}];
+
+  // Sanity check.
+  assertEquals(expected, collect_results(results(expected)));
+  assertEquals(expected, collect_results(yield_results(expected)));
+}
+TestDelegatingYield();
+
 function TestTryCatch(instantiate) {
   function* g() { yield 1; try { yield 2; } catch (e) { yield e; } yield 3; }
   function Sentinel() {}
@@ -572,7 +624,7 @@ function TestRecursion() {
     return iter.next();
   }
   function TestSendRecursion() {
-    function* g() { yield iter.send(42); }
+    function* g() { yield iter.next(42); }
     var iter = g();
     return iter.next();
   }

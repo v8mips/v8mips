@@ -804,51 +804,83 @@ THREADED_TEST(GlobalProperties) {
 
 
 template<typename T>
-static void CheckReturnValue(const T& t) {
+static void CheckReturnValue(const T& t, i::Address callback) {
   v8::ReturnValue<v8::Value> rv = t.GetReturnValue();
   i::Object** o = *reinterpret_cast<i::Object***>(&rv);
   CHECK_EQ(v8::Isolate::GetCurrent(), t.GetIsolate());
   CHECK_EQ(t.GetIsolate(), rv.GetIsolate());
   CHECK((*o)->IsTheHole() || (*o)->IsUndefined());
+  // Verify reset
+  bool is_runtime = (*o)->IsTheHole();
+  rv.Set(true);
+  CHECK(!(*o)->IsTheHole() && !(*o)->IsUndefined());
+  rv.Set(v8::Handle<v8::Object>());
+  CHECK((*o)->IsTheHole() || (*o)->IsUndefined());
+  CHECK_EQ(is_runtime, (*o)->IsTheHole());
+
+  i::Isolate* isolate = reinterpret_cast<i::Isolate*>(t.GetIsolate());
+  // If CPU profiler is active check that when API callback is invoked
+  // VMState is set to EXTERNAL.
+  if (isolate->cpu_profiler()->is_profiling()) {
+    CHECK_EQ(i::EXTERNAL, isolate->current_vm_state());
+    CHECK(isolate->external_callback());
+    CHECK_EQ(callback, isolate->external_callback());
+  }
 }
 
-static v8::Handle<Value> handle_call(const v8::Arguments& args) {
+static v8::Handle<Value> handle_call_impl(
+    const v8::Arguments& args,
+    i::Address callback) {
   ApiTestFuzzer::Fuzz();
-  CheckReturnValue(args);
+  CheckReturnValue(args, callback);
   args.GetReturnValue().Set(v8_str("bad value"));
   return v8_num(102);
 }
 
-static v8::Handle<Value> handle_call_2(const v8::Arguments& args) {
-  return handle_call(args);
+static v8::Handle<Value> handle_call(const v8::Arguments& args) {
+  return handle_call_impl(args, FUNCTION_ADDR(handle_call));
 }
 
-static v8::Handle<Value> handle_call_indirect(const v8::Arguments& args) {
+static v8::Handle<Value> handle_call_2(const v8::Arguments& args) {
+  return handle_call_impl(args, FUNCTION_ADDR(handle_call_2));
+}
+
+static v8::Handle<Value> handle_call_indirect_impl(const v8::Arguments& args,
+                                                   i::Address callback) {
   ApiTestFuzzer::Fuzz();
-  CheckReturnValue(args);
+  CheckReturnValue(args, callback);
   args.GetReturnValue().Set(v8_str("bad value"));
   args.GetReturnValue().Set(v8_num(102));
   return v8::Handle<Value>();
 }
 
-static v8::Handle<Value> handle_call_indirect_2(const v8::Arguments& args) {
-  return handle_call_indirect(args);
+static v8::Handle<Value> handle_call_indirect(const v8::Arguments& args) {
+  return handle_call_indirect_impl(args, FUNCTION_ADDR(handle_call_indirect));
 }
 
-static void handle_callback(const v8::FunctionCallbackInfo<Value>& info) {
+static v8::Handle<Value> handle_call_indirect_2(const v8::Arguments& args) {
+  return handle_call_indirect_impl(args, FUNCTION_ADDR(handle_call_indirect_2));
+}
+
+static void handle_callback_impl(const v8::FunctionCallbackInfo<Value>& info,
+                                 i::Address callback) {
   ApiTestFuzzer::Fuzz();
-  CheckReturnValue(info);
+  CheckReturnValue(info, callback);
   info.GetReturnValue().Set(v8_str("bad value"));
   info.GetReturnValue().Set(v8_num(102));
 }
 
+static void handle_callback(const v8::FunctionCallbackInfo<Value>& info) {
+  return handle_callback_impl(info, FUNCTION_ADDR(handle_callback));
+}
+
 static void handle_callback_2(const v8::FunctionCallbackInfo<Value>& info) {
-  return handle_callback(info);
+  return handle_callback_impl(info, FUNCTION_ADDR(handle_callback_2));
 }
 
 static v8::Handle<Value> construct_call(const v8::Arguments& args) {
   ApiTestFuzzer::Fuzz();
-  CheckReturnValue(args);
+  CheckReturnValue(args, FUNCTION_ADDR(construct_call));
   args.This()->Set(v8_str("x"), v8_num(1));
   args.This()->Set(v8_str("y"), v8_num(2));
   args.GetReturnValue().Set(v8_str("bad value"));
@@ -857,7 +889,7 @@ static v8::Handle<Value> construct_call(const v8::Arguments& args) {
 
 static v8::Handle<Value> construct_call_indirect(const v8::Arguments& args) {
   ApiTestFuzzer::Fuzz();
-  CheckReturnValue(args);
+  CheckReturnValue(args, FUNCTION_ADDR(construct_call_indirect));
   args.This()->Set(v8_str("x"), v8_num(1));
   args.This()->Set(v8_str("y"), v8_num(2));
   args.GetReturnValue().Set(v8_str("bad value"));
@@ -868,7 +900,7 @@ static v8::Handle<Value> construct_call_indirect(const v8::Arguments& args) {
 static void construct_callback(
     const v8::FunctionCallbackInfo<Value>& info) {
   ApiTestFuzzer::Fuzz();
-  CheckReturnValue(info);
+  CheckReturnValue(info, FUNCTION_ADDR(construct_callback));
   info.This()->Set(v8_str("x"), v8_num(1));
   info.This()->Set(v8_str("y"), v8_num(2));
   info.GetReturnValue().Set(v8_str("bad value"));
@@ -879,7 +911,7 @@ static void construct_callback(
 static v8::Handle<Value> Return239(
     Local<String> name, const AccessorInfo& info) {
   ApiTestFuzzer::Fuzz();
-  CheckReturnValue(info);
+  CheckReturnValue(info, FUNCTION_ADDR(Return239));
   info.GetReturnValue().Set(v8_str("bad value"));
   return v8_num(239);
 }
@@ -887,7 +919,7 @@ static v8::Handle<Value> Return239(
 static v8::Handle<Value> Return239Indirect(
     Local<String> name, const AccessorInfo& info) {
   ApiTestFuzzer::Fuzz();
-  CheckReturnValue(info);
+  CheckReturnValue(info, FUNCTION_ADDR(Return239Indirect));
   Handle<Value> value = v8_num(239);
   info.GetReturnValue().Set(v8_str("bad value"));
   info.GetReturnValue().Set(value);
@@ -897,7 +929,7 @@ static v8::Handle<Value> Return239Indirect(
 static void Return239Callback(
     Local<String> name, const v8::PropertyCallbackInfo<Value>& info) {
   ApiTestFuzzer::Fuzz();
-  CheckReturnValue(info);
+  CheckReturnValue(info, FUNCTION_ADDR(Return239Callback));
   info.GetReturnValue().Set(v8_str("bad value"));
   info.GetReturnValue().Set(v8_num(239));
 }
@@ -906,31 +938,56 @@ static void Return239Callback(
 template<typename Handler>
 static void TestFunctionTemplateInitializer(Handler handler,
                                             Handler handler_2) {
-  // Test constructor calls.
-  {
-    LocalContext env;
-    v8::HandleScope scope(env->GetIsolate());
-    Local<v8::FunctionTemplate> fun_templ =
-        v8::FunctionTemplate::New(handler);
-    Local<Function> fun = fun_templ->GetFunction();
-    env->Global()->Set(v8_str("obj"), fun);
-    Local<Script> script = v8_compile("obj()");
-    for (int i = 0; i < 30; i++) {
-      CHECK_EQ(102, script->Run()->Int32Value());
+  for (int i = 0; i < 2; i++) {
+    bool is_profiling = (i > 0);
+    // Test constructor calls.
+    {
+      LocalContext env;
+      v8::HandleScope scope(env->GetIsolate());
+
+      v8::Local<v8::String> profile_name = v8::String::New("my_profile1");
+      v8::CpuProfiler* cpu_profiler = env->GetIsolate()->GetCpuProfiler();
+      if (is_profiling) {
+        cpu_profiler->StartCpuProfiling(profile_name);
+      }
+
+      Local<v8::FunctionTemplate> fun_templ =
+          v8::FunctionTemplate::New(handler);
+      Local<Function> fun = fun_templ->GetFunction();
+      env->Global()->Set(v8_str("obj"), fun);
+      Local<Script> script = v8_compile("obj()");
+      for (int i = 0; i < 30; i++) {
+        CHECK_EQ(102, script->Run()->Int32Value());
+      }
+
+      if (is_profiling) {
+        cpu_profiler->StopCpuProfiling(profile_name);
+      }
     }
-  }
-  // Use SetCallHandler to initialize a function template, should work like the
-  // previous one.
-  {
-    LocalContext env;
-    v8::HandleScope scope(env->GetIsolate());
-    Local<v8::FunctionTemplate> fun_templ = v8::FunctionTemplate::New();
-    fun_templ->SetCallHandler(handler_2);
-    Local<Function> fun = fun_templ->GetFunction();
-    env->Global()->Set(v8_str("obj"), fun);
-    Local<Script> script = v8_compile("obj()");
-    for (int i = 0; i < 30; i++) {
-      CHECK_EQ(102, script->Run()->Int32Value());
+    // Use SetCallHandler to initialize a function template, should work like
+    // the previous one.
+    {
+      LocalContext env;
+      v8::HandleScope scope(env->GetIsolate());
+
+      v8::Local<v8::String> profile_name = v8::String::New("my_profile2");
+      v8::CpuProfiler* cpu_profiler = env->GetIsolate()->GetCpuProfiler();
+      if (is_profiling) {
+        cpu_profiler->StartCpuProfiling(profile_name);
+      }
+
+      Local<v8::FunctionTemplate> fun_templ = v8::FunctionTemplate::New();
+      fun_templ->SetCallHandler(handler_2);
+      Local<Function> fun = fun_templ->GetFunction();
+      env->Global()->Set(v8_str("obj"), fun);
+      Local<Script> script = v8_compile("obj()");
+      for (int i = 0; i < 30; i++) {
+        CHECK_EQ(102, script->Run()->Int32Value());
+      }
+
+      if (is_profiling) {
+        cpu_profiler->DeleteAllCpuProfiles();
+      }
     }
   }
 }
@@ -939,25 +996,39 @@ static void TestFunctionTemplateInitializer(Handler handler,
 template<typename Constructor, typename Accessor>
 static void TestFunctionTemplateAccessor(Constructor constructor,
                                          Accessor accessor) {
-  LocalContext env;
-  v8::HandleScope scope(env->GetIsolate());
-  Local<v8::FunctionTemplate> fun_templ =
-      v8::FunctionTemplate::New(constructor);
-  fun_templ->SetClassName(v8_str("funky"));
-  fun_templ->InstanceTemplate()->SetAccessor(v8_str("m"), accessor);
-  Local<Function> fun = fun_templ->GetFunction();
-  env->Global()->Set(v8_str("obj"), fun);
-  Local<Value> result = v8_compile("(new obj()).toString()")->Run();
-  CHECK_EQ(v8_str("[object funky]"), result);
-  CompileRun("var obj_instance = new obj();");
-  Local<Script> script;
-  script = v8_compile("obj_instance.x");
-  for (int i = 0; i < 30; i++) {
-    CHECK_EQ(1, script->Run()->Int32Value());
-  }
-  script = v8_compile("obj_instance.m");
-  for (int i = 0; i < 30; i++) {
-    CHECK_EQ(239, script->Run()->Int32Value());
+  for (int i = 0; i < 2; i++) {
+    bool is_profiling = (i > 0);
+    LocalContext env;
+    v8::HandleScope scope(env->GetIsolate());
+
+    v8::CpuProfiler* cpu_profiler = env->GetIsolate()->GetCpuProfiler();
+    if (is_profiling) {
+      v8::Local<v8::String> profile_name = v8::String::New("my_profile1");
+      cpu_profiler->StartCpuProfiling(profile_name);
+    }
+
+    Local<v8::FunctionTemplate> fun_templ =
+        v8::FunctionTemplate::New(constructor);
+    fun_templ->SetClassName(v8_str("funky"));
+    fun_templ->InstanceTemplate()->SetAccessor(v8_str("m"), accessor);
+    Local<Function> fun = fun_templ->GetFunction();
+    env->Global()->Set(v8_str("obj"), fun);
+    Local<Value> result = v8_compile("(new obj()).toString()")->Run();
+    CHECK_EQ(v8_str("[object funky]"), result);
+    CompileRun("var obj_instance = new obj();");
+    Local<Script> script;
+    script = v8_compile("obj_instance.x");
+    for (int i = 0; i < 30; i++) {
+      CHECK_EQ(1, script->Run()->Int32Value());
+    }
+    script = v8_compile("obj_instance.m");
+    for (int i = 0; i < 30; i++) {
+      CHECK_EQ(239, script->Run()->Int32Value());
+    }
+
+    if (is_profiling) {
+      cpu_profiler->DeleteAllCpuProfiles();
+    }
   }
 }
 
@@ -975,41 +1046,55 @@ THREADED_TEST(FunctionTemplate) {
 
 static v8::Handle<v8::Value> SimpleDirectCallback(const v8::Arguments& args) {
   ApiTestFuzzer::Fuzz();
-  CheckReturnValue(args);
+  CheckReturnValue(args, FUNCTION_ADDR(SimpleDirectCallback));
   args.GetReturnValue().Set(v8_str("bad value"));
   return v8_num(51423 + args.Length());
 }
 
 static v8::Handle<v8::Value> SimpleIndirectCallback(const v8::Arguments& args) {
   ApiTestFuzzer::Fuzz();
-  CheckReturnValue(args);
+  CheckReturnValue(args, FUNCTION_ADDR(SimpleIndirectCallback));
   args.GetReturnValue().Set(v8_num(51423 + args.Length()));
   return v8::Handle<v8::Value>();
 }
 
 static void SimpleCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
   ApiTestFuzzer::Fuzz();
-  CheckReturnValue(info);
+  CheckReturnValue(info, FUNCTION_ADDR(SimpleCallback));
   info.GetReturnValue().Set(v8_num(51423 + info.Length()));
 }
 
 
 template<typename Callback>
 static void TestSimpleCallback(Callback callback) {
-  LocalContext env;
-  v8::HandleScope scope(env->GetIsolate());
-  v8::Handle<v8::ObjectTemplate> object_template = v8::ObjectTemplate::New();
-  object_template->Set("callback", v8::FunctionTemplate::New(callback));
-  v8::Local<v8::Object> object = object_template->NewInstance();
-  (*env)->Global()->Set(v8_str("callback_object"), object);
-  v8::Handle<v8::Script> script;
-  script = v8_compile("callback_object.callback(17)");
-  for (int i = 0; i < 30; i++) {
-    CHECK_EQ(51424, script->Run()->Int32Value());
-  }
-  script = v8_compile("callback_object.callback(17, 24)");
-  for (int i = 0; i < 30; i++) {
-    CHECK_EQ(51425, script->Run()->Int32Value());
+  for (int i = 0; i < 2; i++) {
+    bool is_profiling = i;
+    LocalContext env;
+    v8::HandleScope scope(env->GetIsolate());
+
+    v8::CpuProfiler* cpu_profiler = env->GetIsolate()->GetCpuProfiler();
+    if (is_profiling) {
+      v8::Local<v8::String> profile_name = v8::String::New("my_profile1");
+      cpu_profiler->StartCpuProfiling(profile_name);
+    }
+
+    v8::Handle<v8::ObjectTemplate> object_template = v8::ObjectTemplate::New();
+    object_template->Set("callback", v8::FunctionTemplate::New(callback));
+    v8::Local<v8::Object> object = object_template->NewInstance();
+    (*env)->Global()->Set(v8_str("callback_object"), object);
+    v8::Handle<v8::Script> script;
+    script = v8_compile("callback_object.callback(17)");
+    for (int i = 0; i < 30; i++) {
+      CHECK_EQ(51424, script->Run()->Int32Value());
+    }
+    script = v8_compile("callback_object.callback(17, 24)");
+    for (int i = 0; i < 30; i++) {
+      CHECK_EQ(51425, script->Run()->Int32Value());
+    }
+
+    if (is_profiling) {
+      cpu_profiler->DeleteAllCpuProfiles();
+    }
   }
 }
 
@@ -1025,50 +1110,67 @@ template<typename T>
 void FastReturnValueCallback(const v8::FunctionCallbackInfo<v8::Value>& info);
 
 // constant return values
-static const int32_t kFastReturnValueInt32 = 471;
-static const uint32_t kFastReturnValueUint32 = 571;
+static int32_t fast_return_value_int32 = 471;
+static uint32_t fast_return_value_uint32 = 571;
 static const double kFastReturnValueDouble = 2.7;
 // variable return values
 static bool fast_return_value_bool = false;
-static bool fast_return_value_void_is_null = false;
+enum ReturnValueOddball {
+  kNullReturnValue,
+  kUndefinedReturnValue,
+  kEmptyStringReturnValue
+};
+static ReturnValueOddball fast_return_value_void;
 static bool fast_return_value_object_is_empty = false;
+
+// Helper function to avoid compiler error: insufficient contextual information
+// to determine type when applying FUNCTION_ADDR to a template function.
+static i::Address address_of(v8::FunctionCallback callback) {
+  return FUNCTION_ADDR(callback);
+}
 
 template<>
 void FastReturnValueCallback<int32_t>(
     const v8::FunctionCallbackInfo<v8::Value>& info) {
-  CheckReturnValue(info);
-  info.GetReturnValue().Set(kFastReturnValueInt32);
+  CheckReturnValue(info, address_of(FastReturnValueCallback<int32_t>));
+  info.GetReturnValue().Set(fast_return_value_int32);
 }
 
 template<>
 void FastReturnValueCallback<uint32_t>(
     const v8::FunctionCallbackInfo<v8::Value>& info) {
-  CheckReturnValue(info);
-  info.GetReturnValue().Set(kFastReturnValueUint32);
+  CheckReturnValue(info, address_of(FastReturnValueCallback<uint32_t>));
+  info.GetReturnValue().Set(fast_return_value_uint32);
 }
 
 template<>
 void FastReturnValueCallback<double>(
     const v8::FunctionCallbackInfo<v8::Value>& info) {
-  CheckReturnValue(info);
+  CheckReturnValue(info, address_of(FastReturnValueCallback<double>));
   info.GetReturnValue().Set(kFastReturnValueDouble);
 }
 
 template<>
 void FastReturnValueCallback<bool>(
     const v8::FunctionCallbackInfo<v8::Value>& info) {
-  CheckReturnValue(info);
+  CheckReturnValue(info, address_of(FastReturnValueCallback<bool>));
   info.GetReturnValue().Set(fast_return_value_bool);
 }
 
 template<>
 void FastReturnValueCallback<void>(
     const v8::FunctionCallbackInfo<v8::Value>& info) {
-  CheckReturnValue(info);
-  if (fast_return_value_void_is_null) {
-    info.GetReturnValue().SetNull();
-  } else {
-    info.GetReturnValue().SetUndefined();
+  CheckReturnValue(info, address_of(FastReturnValueCallback<void>));
+  switch (fast_return_value_void) {
+    case kNullReturnValue:
+      info.GetReturnValue().SetNull();
+      break;
+    case kUndefinedReturnValue:
+      info.GetReturnValue().SetUndefined();
+      break;
+    case kEmptyStringReturnValue:
+      info.GetReturnValue().SetEmptyString();
+      break;
   }
 }
 
@@ -1093,16 +1195,29 @@ Handle<Value> TestFastReturnValues() {
 }
 
 THREADED_TEST(FastReturnValues) {
+  LocalContext env;
   v8::HandleScope scope(v8::Isolate::GetCurrent());
   v8::Handle<v8::Value> value;
-  // check int_32
-  value = TestFastReturnValues<int32_t>();
-  CHECK(value->IsInt32());
-  CHECK_EQ(kFastReturnValueInt32, value->Int32Value());
-  // check uint32_t
-  value = TestFastReturnValues<uint32_t>();
-  CHECK(value->IsInt32());
-  CHECK_EQ(kFastReturnValueUint32, value->Int32Value());
+  // check int32_t and uint32_t
+  int32_t int_values[] = {
+      0, 234, -723,
+      i::Smi::kMinValue, i::Smi::kMaxValue
+  };
+  for (size_t i = 0; i < ARRAY_SIZE(int_values); i++) {
+    for (int modifier = -1; modifier <= 1; modifier++) {
+      int int_value = int_values[i] + modifier;
+      // check int32_t
+      fast_return_value_int32 = int_value;
+      value = TestFastReturnValues<int32_t>();
+      CHECK(value->IsInt32());
+      CHECK(fast_return_value_int32 == value->Int32Value());
+      // check uint32_t
+      fast_return_value_uint32 = static_cast<uint32_t>(int_value);
+      value = TestFastReturnValues<uint32_t>();
+      CHECK(value->IsUint32());
+      CHECK(fast_return_value_uint32 == value->Uint32Value());
+    }
+  }
   // check double
   value = TestFastReturnValues<double>();
   CHECK(value->IsNumber());
@@ -1115,13 +1230,25 @@ THREADED_TEST(FastReturnValues) {
     CHECK_EQ(fast_return_value_bool, value->ToBoolean()->Value());
   }
   // check oddballs
-  for (int i = 0; i < 2; i++) {
-    fast_return_value_void_is_null = i == 0;
+  ReturnValueOddball oddballs[] = {
+      kNullReturnValue,
+      kUndefinedReturnValue,
+      kEmptyStringReturnValue
+  };
+  for (size_t i = 0; i < ARRAY_SIZE(oddballs); i++) {
+    fast_return_value_void = oddballs[i];
     value = TestFastReturnValues<void>();
-    if (fast_return_value_void_is_null) {
-      CHECK(value->IsNull());
-    } else {
-      CHECK(value->IsUndefined());
+    switch (fast_return_value_void) {
+      case kNullReturnValue:
+        CHECK(value->IsNull());
+        break;
+      case kUndefinedReturnValue:
+        CHECK(value->IsUndefined());
+        break;
+      case kEmptyStringReturnValue:
+        CHECK(value->IsString());
+        CHECK_EQ(0, v8::String::Cast(*value)->Length());
+        break;
     }
   }
   // check handles
@@ -2010,7 +2137,7 @@ v8::Handle<v8::Object> bottom;
 static void CheckThisIndexedPropertyHandler(
     uint32_t index,
     const v8::PropertyCallbackInfo<v8::Value>& info) {
-  CheckReturnValue(info);
+  CheckReturnValue(info, FUNCTION_ADDR(CheckThisIndexedPropertyHandler));
   ApiTestFuzzer::Fuzz();
   CHECK(info.This()->Equals(bottom));
 }
@@ -2018,7 +2145,7 @@ static void CheckThisIndexedPropertyHandler(
 static void CheckThisNamedPropertyHandler(
     Local<String> name,
     const v8::PropertyCallbackInfo<v8::Value>& info) {
-  CheckReturnValue(info);
+  CheckReturnValue(info, FUNCTION_ADDR(CheckThisNamedPropertyHandler));
   ApiTestFuzzer::Fuzz();
   CHECK(info.This()->Equals(bottom));
 }
@@ -2027,7 +2154,7 @@ void CheckThisIndexedPropertySetter(
     uint32_t index,
     Local<Value> value,
     const v8::PropertyCallbackInfo<v8::Value>& info) {
-  CheckReturnValue(info);
+  CheckReturnValue(info, FUNCTION_ADDR(CheckThisIndexedPropertySetter));
   ApiTestFuzzer::Fuzz();
   CHECK(info.This()->Equals(bottom));
 }
@@ -2037,7 +2164,7 @@ void CheckThisNamedPropertySetter(
     Local<String> property,
     Local<Value> value,
     const v8::PropertyCallbackInfo<v8::Value>& info) {
-  CheckReturnValue(info);
+  CheckReturnValue(info, FUNCTION_ADDR(CheckThisNamedPropertySetter));
   ApiTestFuzzer::Fuzz();
   CHECK(info.This()->Equals(bottom));
 }
@@ -2045,7 +2172,7 @@ void CheckThisNamedPropertySetter(
 void CheckThisIndexedPropertyQuery(
     uint32_t index,
     const v8::PropertyCallbackInfo<v8::Integer>& info) {
-  CheckReturnValue(info);
+  CheckReturnValue(info, FUNCTION_ADDR(CheckThisIndexedPropertyQuery));
   ApiTestFuzzer::Fuzz();
   CHECK(info.This()->Equals(bottom));
 }
@@ -2054,7 +2181,7 @@ void CheckThisIndexedPropertyQuery(
 void CheckThisNamedPropertyQuery(
     Local<String> property,
     const v8::PropertyCallbackInfo<v8::Integer>& info) {
-  CheckReturnValue(info);
+  CheckReturnValue(info, FUNCTION_ADDR(CheckThisNamedPropertyQuery));
   ApiTestFuzzer::Fuzz();
   CHECK(info.This()->Equals(bottom));
 }
@@ -2063,7 +2190,7 @@ void CheckThisNamedPropertyQuery(
 void CheckThisIndexedPropertyDeleter(
     uint32_t index,
     const v8::PropertyCallbackInfo<v8::Boolean>& info) {
-  CheckReturnValue(info);
+  CheckReturnValue(info, FUNCTION_ADDR(CheckThisIndexedPropertyDeleter));
   ApiTestFuzzer::Fuzz();
   CHECK(info.This()->Equals(bottom));
 }
@@ -2072,7 +2199,7 @@ void CheckThisIndexedPropertyDeleter(
 void CheckThisNamedPropertyDeleter(
     Local<String> property,
     const v8::PropertyCallbackInfo<v8::Boolean>& info) {
-  CheckReturnValue(info);
+  CheckReturnValue(info, FUNCTION_ADDR(CheckThisNamedPropertyDeleter));
   ApiTestFuzzer::Fuzz();
   CHECK(info.This()->Equals(bottom));
 }
@@ -2080,7 +2207,7 @@ void CheckThisNamedPropertyDeleter(
 
 void CheckThisIndexedPropertyEnumerator(
     const v8::PropertyCallbackInfo<v8::Array>& info) {
-  CheckReturnValue(info);
+  CheckReturnValue(info, FUNCTION_ADDR(CheckThisIndexedPropertyEnumerator));
   ApiTestFuzzer::Fuzz();
   CHECK(info.This()->Equals(bottom));
 }
@@ -2088,7 +2215,7 @@ void CheckThisIndexedPropertyEnumerator(
 
 void CheckThisNamedPropertyEnumerator(
     const v8::PropertyCallbackInfo<v8::Array>& info) {
-  CheckReturnValue(info);
+  CheckReturnValue(info, FUNCTION_ADDR(CheckThisNamedPropertyEnumerator));
   ApiTestFuzzer::Fuzz();
   CHECK(info.This()->Equals(bottom));
 }
@@ -2527,6 +2654,19 @@ THREADED_TEST(SymbolProperties) {
 }
 
 
+class ScopedArrayBufferContents {
+ public:
+  explicit ScopedArrayBufferContents(
+      const v8::ArrayBuffer::Contents& contents)
+    : contents_(contents) {}
+  ~ScopedArrayBufferContents() { free(contents_.Data()); }
+  void* Data() const { return contents_.Data(); }
+  size_t ByteLength() const { return contents_.ByteLength(); }
+ private:
+  const v8::ArrayBuffer::Contents contents_;
+};
+
+
 THREADED_TEST(ArrayBuffer_ApiInternalToExternal) {
   i::FLAG_harmony_array_buffer = true;
   i::FLAG_harmony_typed_arrays = true;
@@ -2540,8 +2680,7 @@ THREADED_TEST(ArrayBuffer_ApiInternalToExternal) {
   CHECK(!ab->IsExternal());
   HEAP->CollectAllGarbage(i::Heap::kNoGCFlags);
 
-  v8::ArrayBufferContents ab_contents;
-  ab->Externalize(&ab_contents);
+  ScopedArrayBufferContents ab_contents(ab->Externalize());
   CHECK(ab->IsExternal());
 
   CHECK_EQ(1024, static_cast<int>(ab_contents.ByteLength()));
@@ -2575,16 +2714,15 @@ THREADED_TEST(ArrayBuffer_JSInternalToExternal) {
   v8::HandleScope handle_scope(isolate);
 
 
-  v8::Handle<v8::Value> result =
+  v8::Local<v8::Value> result =
       CompileRun("var ab1 = new ArrayBuffer(2);"
                  "var u8_a = new Uint8Array(ab1);"
                  "u8_a[0] = 0xAA;"
                  "u8_a[1] = 0xFF; u8_a.buffer");
-  Local<v8::ArrayBuffer> ab1 = v8::ArrayBuffer::Cast(*result);
+  Local<v8::ArrayBuffer> ab1 = Local<v8::ArrayBuffer>::Cast(result);
   CHECK_EQ(2, static_cast<int>(ab1->ByteLength()));
   CHECK(!ab1->IsExternal());
-  v8::ArrayBufferContents ab1_contents;
-  ab1->Externalize(&ab1_contents);
+  ScopedArrayBufferContents ab1_contents(ab1->Externalize());
   CHECK(ab1->IsExternal());
 
   result = CompileRun("ab1.byteLength");
@@ -2642,6 +2780,123 @@ THREADED_TEST(ArrayBuffer_External) {
   result = CompileRun("u8_b[0] + u8_b[1]");
   CHECK_EQ(0xDD, result->Int32Value());
 }
+
+
+static void CheckIsNeutered(v8::Handle<v8::TypedArray> ta) {
+  CHECK_EQ(0, static_cast<int>(ta->ByteLength()));
+  CHECK_EQ(0, static_cast<int>(ta->Length()));
+  CHECK_EQ(0, static_cast<int>(ta->ByteOffset()));
+}
+
+template <typename TypedArray, int kElementSize>
+static Handle<TypedArray> CreateAndCheck(Handle<v8::ArrayBuffer> ab,
+                                         int byteOffset,
+                                         int length) {
+  v8::Handle<TypedArray> ta = TypedArray::New(ab, byteOffset, length);
+  CHECK_EQ(byteOffset, static_cast<int>(ta->ByteOffset()));
+  CHECK_EQ(length, static_cast<int>(ta->Length()));
+  CHECK_EQ(length * kElementSize, static_cast<int>(ta->ByteLength()));
+  return ta;
+}
+
+
+THREADED_TEST(ArrayBuffer_NeuteringApi) {
+  LocalContext env;
+  v8::Isolate* isolate = env->GetIsolate();
+  v8::HandleScope handle_scope(isolate);
+
+  v8::Handle<v8::ArrayBuffer> buffer = v8::ArrayBuffer::New(1024);
+
+  v8::Handle<v8::Uint8Array> u8a =
+    CreateAndCheck<v8::Uint8Array, 1>(buffer, 1, 1023);
+  v8::Handle<v8::Uint8ClampedArray> u8c =
+    CreateAndCheck<v8::Uint8ClampedArray, 1>(buffer, 1, 1023);
+  v8::Handle<v8::Int8Array> i8a =
+    CreateAndCheck<v8::Int8Array, 1>(buffer, 1, 1023);
+
+  v8::Handle<v8::Uint16Array> u16a =
+    CreateAndCheck<v8::Uint16Array, 2>(buffer, 2, 511);
+  v8::Handle<v8::Int16Array> i16a =
+    CreateAndCheck<v8::Int16Array, 2>(buffer, 2, 511);
+
+  v8::Handle<v8::Uint32Array> u32a =
+    CreateAndCheck<v8::Uint32Array, 4>(buffer, 4, 255);
+  v8::Handle<v8::Int32Array> i32a =
+    CreateAndCheck<v8::Int32Array, 4>(buffer, 4, 255);
+
+  v8::Handle<v8::Float32Array> f32a =
+    CreateAndCheck<v8::Float32Array, 4>(buffer, 4, 255);
+  v8::Handle<v8::Float64Array> f64a =
+    CreateAndCheck<v8::Float64Array, 8>(buffer, 8, 127);
+
+  ScopedArrayBufferContents contents(buffer->Externalize());
+  buffer->Neuter();
+  CHECK_EQ(0, static_cast<int>(buffer->ByteLength()));
+  CheckIsNeutered(u8a);
+  CheckIsNeutered(u8c);
+  CheckIsNeutered(i8a);
+  CheckIsNeutered(u16a);
+  CheckIsNeutered(i16a);
+  CheckIsNeutered(u32a);
+  CheckIsNeutered(i32a);
+  CheckIsNeutered(f32a);
+  CheckIsNeutered(f64a);
+}
+
+THREADED_TEST(ArrayBuffer_NeuteringScript) {
+  LocalContext env;
+  v8::Isolate* isolate = env->GetIsolate();
+  v8::HandleScope handle_scope(isolate);
+
+  CompileRun(
+      "var ab = new ArrayBuffer(1024);"
+      "var u8a = new Uint8Array(ab, 1, 1023);"
+      "var u8c = new Uint8ClampedArray(ab, 1, 1023);"
+      "var i8a = new Int8Array(ab, 1, 1023);"
+      "var u16a = new Uint16Array(ab, 2, 511);"
+      "var i16a = new Int16Array(ab, 2, 511);"
+      "var u32a = new Uint32Array(ab, 4, 255);"
+      "var i32a = new Int32Array(ab, 4, 255);"
+      "var f32a = new Float32Array(ab, 4, 255);"
+      "var f64a = new Float64Array(ab, 8, 127);");
+
+  v8::Handle<v8::ArrayBuffer> ab =
+      Local<v8::ArrayBuffer>::Cast(CompileRun("ab"));
+
+  v8::Handle<v8::Uint8Array> u8a =
+      v8::Handle<v8::Uint8Array>::Cast(CompileRun("u8a"));
+  v8::Handle<v8::Uint8ClampedArray> u8c =
+      v8::Handle<v8::Uint8ClampedArray>::Cast(CompileRun("u8c"));
+  v8::Handle<v8::Int8Array> i8a =
+      v8::Handle<v8::Int8Array>::Cast(CompileRun("i8a"));
+
+  v8::Handle<v8::Uint16Array> u16a =
+      v8::Handle<v8::Uint16Array>::Cast(CompileRun("u16a"));
+  v8::Handle<v8::Int16Array> i16a =
+      v8::Handle<v8::Int16Array>::Cast(CompileRun("i16a"));
+  v8::Handle<v8::Uint32Array> u32a =
+      v8::Handle<v8::Uint32Array>::Cast(CompileRun("u32a"));
+  v8::Handle<v8::Int32Array> i32a =
+      v8::Handle<v8::Int32Array>::Cast(CompileRun("i32a"));
+  v8::Handle<v8::Float32Array> f32a =
+      v8::Handle<v8::Float32Array>::Cast(CompileRun("f32a"));
+  v8::Handle<v8::Float64Array> f64a =
+    v8::Handle<v8::Float64Array>::Cast(CompileRun("f64a"));
+
+  ScopedArrayBufferContents contents(ab->Externalize());
+  ab->Neuter();
+  CHECK_EQ(0, static_cast<int>(ab->ByteLength()));
+  CheckIsNeutered(u8a);
+  CheckIsNeutered(u8c);
+  CheckIsNeutered(i8a);
+  CheckIsNeutered(u16a);
+  CheckIsNeutered(i16a);
+  CheckIsNeutered(u32a);
+  CheckIsNeutered(i32a);
+  CheckIsNeutered(f32a);
+  CheckIsNeutered(f64a);
+}
+
 
 
 THREADED_TEST(HiddenProperties) {
@@ -2878,10 +3133,26 @@ THREADED_TEST(ClearAndLeakGlobal) {
   String* str = global.ClearAndLeak();
   CHECK(global.IsEmpty());
   CHECK_EQ(global_handles->NumberOfGlobalHandles(), initial_handle_count + 1);
-  v8::Persistent<String>* new_global =
-      reinterpret_cast<v8::Persistent<String>*>(&str);
-  new_global->Dispose();
+  global_handles->Destroy(reinterpret_cast<i::Object**>(str));
   CHECK_EQ(global_handles->NumberOfGlobalHandles(), initial_handle_count);
+}
+
+
+THREADED_TEST(GlobalHandleUpcast) {
+  v8::Isolate* isolate = v8::Isolate::GetCurrent();
+  v8::HandleScope scope(isolate);
+  v8::Local<String> local = v8::Local<String>::New(v8_str("str"));
+  v8::Persistent<String> global_string(isolate, local);
+#ifdef V8_USE_UNSAFE_HANDLES
+  v8::Persistent<Value> global_value =
+      v8::Persistent<Value>::Cast(global_string);
+#else
+  v8::Persistent<Value>& global_value =
+      v8::Persistent<Value>::Cast(global_string);
+#endif
+  CHECK(v8::Local<v8::Value>::New(isolate, global_value)->IsString());
+  CHECK(global_string == v8::Persistent<String>::Cast(global_value));
+  global_string.Dispose();
 }
 
 
@@ -2916,6 +3187,11 @@ static void WeakPointerCallback(v8::Isolate* isolate,
 }
 
 
+static UniqueId MakeUniqueId(const Persistent<Value>& p) {
+  return UniqueId(reinterpret_cast<uintptr_t>(*v8::Utils::OpenPersistent(p)));
+}
+
+
 THREADED_TEST(ApiObjectGroups) {
   LocalContext env;
   v8::Isolate* iso = env->GetIsolate();
@@ -2935,16 +3211,16 @@ THREADED_TEST(ApiObjectGroups) {
     g1s1.Reset(iso, Object::New());
     g1s2.Reset(iso, Object::New());
     g1c1.Reset(iso, Object::New());
-    g1s1.MakeWeak(iso, &counter, &WeakPointerCallback);
-    g1s2.MakeWeak(iso, &counter, &WeakPointerCallback);
-    g1c1.MakeWeak(iso, &counter, &WeakPointerCallback);
+    g1s1.MakeWeak(&counter, &WeakPointerCallback);
+    g1s2.MakeWeak(&counter, &WeakPointerCallback);
+    g1c1.MakeWeak(&counter, &WeakPointerCallback);
 
     g2s1.Reset(iso, Object::New());
     g2s2.Reset(iso, Object::New());
     g2c1.Reset(iso, Object::New());
-    g2s1.MakeWeak(iso, &counter, &WeakPointerCallback);
-    g2s2.MakeWeak(iso, &counter, &WeakPointerCallback);
-    g2c1.MakeWeak(iso, &counter, &WeakPointerCallback);
+    g2s1.MakeWeak(&counter, &WeakPointerCallback);
+    g2s2.MakeWeak(&counter, &WeakPointerCallback);
+    g2c1.MakeWeak(&counter, &WeakPointerCallback);
   }
 
   Persistent<Value> root(iso, g1s1);  // make a root.
@@ -2953,14 +3229,14 @@ THREADED_TEST(ApiObjectGroups) {
   {
     HandleScope scope(iso);
     CHECK(Local<Object>::New(iso, g1s2.As<Object>())->
-            Set(0, Local<Value>(*g2s2)));
+            Set(0, Local<Value>::New(iso, g2s2)));
     CHECK(Local<Object>::New(iso, g2s1.As<Object>())->
-            Set(0, Local<Value>(*g1s1)));
+            Set(0, Local<Value>::New(iso, g1s1)));
   }
 
   {
-    UniqueId id1(reinterpret_cast<intptr_t>(*g1s1));
-    UniqueId id2(reinterpret_cast<intptr_t>(*g2s2));
+    UniqueId id1 = MakeUniqueId(g1s1);
+    UniqueId id2 = MakeUniqueId(g2s2);
     iso->SetObjectGroupId(g1s1, id1);
     iso->SetObjectGroupId(g1s2, id1);
     iso->SetReferenceFromGroup(id1, g1c1);
@@ -2977,7 +3253,7 @@ THREADED_TEST(ApiObjectGroups) {
   CHECK_EQ(0, counter.NumberOfWeakCalls());
 
   // Weaken the root.
-  root.MakeWeak(iso, &counter, &WeakPointerCallback);
+  root.MakeWeak(&counter, &WeakPointerCallback);
   // But make children strong roots---all the objects (except for children)
   // should be collectable now.
   g1c1.ClearWeak(iso);
@@ -2985,8 +3261,8 @@ THREADED_TEST(ApiObjectGroups) {
 
   // Groups are deleted, rebuild groups.
   {
-    UniqueId id1(reinterpret_cast<intptr_t>(*g1s1));
-    UniqueId id2(reinterpret_cast<intptr_t>(*g2s2));
+    UniqueId id1 = MakeUniqueId(g1s1);
+    UniqueId id2 = MakeUniqueId(g2s2);
     iso->SetObjectGroupId(g1s1, id1);
     iso->SetObjectGroupId(g1s2, id1);
     iso->SetReferenceFromGroup(id1, g1c1);
@@ -3001,8 +3277,8 @@ THREADED_TEST(ApiObjectGroups) {
   CHECK_EQ(5, counter.NumberOfWeakCalls());
 
   // And now make children weak again and collect them.
-  g1c1.MakeWeak(iso, &counter, &WeakPointerCallback);
-  g2c1.MakeWeak(iso, &counter, &WeakPointerCallback);
+  g1c1.MakeWeak(&counter, &WeakPointerCallback);
+  g2c1.MakeWeak(&counter, &WeakPointerCallback);
 
   heap->CollectAllGarbage(i::Heap::kAbortIncrementalMarkingMask);
   CHECK_EQ(7, counter.NumberOfWeakCalls());
@@ -3029,29 +3305,29 @@ THREADED_TEST(ApiObjectGroupsCycle) {
     HandleScope scope(iso);
     g1s1.Reset(iso, Object::New());
     g1s2.Reset(iso, Object::New());
-    g1s1.MakeWeak(iso, &counter, &WeakPointerCallback);
-    g1s2.MakeWeak(iso, &counter, &WeakPointerCallback);
+    g1s1.MakeWeak(&counter, &WeakPointerCallback);
+    g1s2.MakeWeak(&counter, &WeakPointerCallback);
     CHECK(g1s1.IsWeak(iso));
     CHECK(g1s2.IsWeak(iso));
 
     g2s1.Reset(iso, Object::New());
     g2s2.Reset(iso, Object::New());
-    g2s1.MakeWeak(iso, &counter, &WeakPointerCallback);
-    g2s2.MakeWeak(iso, &counter, &WeakPointerCallback);
+    g2s1.MakeWeak(&counter, &WeakPointerCallback);
+    g2s2.MakeWeak(&counter, &WeakPointerCallback);
     CHECK(g2s1.IsWeak(iso));
     CHECK(g2s2.IsWeak(iso));
 
     g3s1.Reset(iso, Object::New());
     g3s2.Reset(iso, Object::New());
-    g3s1.MakeWeak(iso, &counter, &WeakPointerCallback);
-    g3s2.MakeWeak(iso, &counter, &WeakPointerCallback);
+    g3s1.MakeWeak(&counter, &WeakPointerCallback);
+    g3s2.MakeWeak(&counter, &WeakPointerCallback);
     CHECK(g3s1.IsWeak(iso));
     CHECK(g3s2.IsWeak(iso));
 
     g4s1.Reset(iso, Object::New());
     g4s2.Reset(iso, Object::New());
-    g4s1.MakeWeak(iso, &counter, &WeakPointerCallback);
-    g4s2.MakeWeak(iso, &counter, &WeakPointerCallback);
+    g4s1.MakeWeak(&counter, &WeakPointerCallback);
+    g4s2.MakeWeak(&counter, &WeakPointerCallback);
     CHECK(g4s1.IsWeak(iso));
     CHECK(g4s2.IsWeak(iso));
   }
@@ -3062,10 +3338,10 @@ THREADED_TEST(ApiObjectGroupsCycle) {
   // G1: { g1s1, g2s1 }, g1s1 implicitly references g2s1, ditto for other
   // groups.
   {
-    UniqueId id1(reinterpret_cast<intptr_t>(*g1s1));
-    UniqueId id2(reinterpret_cast<intptr_t>(*g2s1));
-    UniqueId id3(reinterpret_cast<intptr_t>(*g3s1));
-    UniqueId id4(reinterpret_cast<intptr_t>(*g4s1));
+    UniqueId id1 = MakeUniqueId(g1s1);
+    UniqueId id2 = MakeUniqueId(g2s1);
+    UniqueId id3 = MakeUniqueId(g3s1);
+    UniqueId id4 = MakeUniqueId(g4s1);
     iso->SetObjectGroupId(g1s1, id1);
     iso->SetObjectGroupId(g1s2, id1);
     iso->SetReferenceFromGroup(id1, g2s1);
@@ -3088,14 +3364,14 @@ THREADED_TEST(ApiObjectGroupsCycle) {
   CHECK_EQ(0, counter.NumberOfWeakCalls());
 
   // Weaken the root.
-  root.MakeWeak(iso, &counter, &WeakPointerCallback);
+  root.MakeWeak(&counter, &WeakPointerCallback);
 
   // Groups are deleted, rebuild groups.
   {
-    UniqueId id1(reinterpret_cast<intptr_t>(*g1s1));
-    UniqueId id2(reinterpret_cast<intptr_t>(*g2s1));
-    UniqueId id3(reinterpret_cast<intptr_t>(*g3s1));
-    UniqueId id4(reinterpret_cast<intptr_t>(*g4s1));
+    UniqueId id1 = MakeUniqueId(g1s1);
+    UniqueId id2 = MakeUniqueId(g2s1);
+    UniqueId id3 = MakeUniqueId(g3s1);
+    UniqueId id4 = MakeUniqueId(g4s1);
     iso->SetObjectGroupId(g1s1, id1);
     iso->SetObjectGroupId(g1s2, id1);
     iso->SetReferenceFromGroup(id1, g2s1);
@@ -3139,18 +3415,18 @@ TEST(ApiObjectGroupsCycleForScavenger) {
     HandleScope scope(iso);
     g1s1.Reset(iso, Object::New());
     g1s2.Reset(iso, Object::New());
-    g1s1.MakeWeak(iso, &counter, &WeakPointerCallback);
-    g1s2.MakeWeak(iso, &counter, &WeakPointerCallback);
+    g1s1.MakeWeak(&counter, &WeakPointerCallback);
+    g1s2.MakeWeak(&counter, &WeakPointerCallback);
 
     g2s1.Reset(iso, Object::New());
     g2s2.Reset(iso, Object::New());
-    g2s1.MakeWeak(iso, &counter, &WeakPointerCallback);
-    g2s2.MakeWeak(iso, &counter, &WeakPointerCallback);
+    g2s1.MakeWeak(&counter, &WeakPointerCallback);
+    g2s2.MakeWeak(&counter, &WeakPointerCallback);
 
     g3s1.Reset(iso, Object::New());
     g3s2.Reset(iso, Object::New());
-    g3s1.MakeWeak(iso, &counter, &WeakPointerCallback);
-    g3s2.MakeWeak(iso, &counter, &WeakPointerCallback);
+    g3s1.MakeWeak(&counter, &WeakPointerCallback);
+    g3s2.MakeWeak(&counter, &WeakPointerCallback);
   }
 
   // Make a root.
@@ -3170,16 +3446,16 @@ TEST(ApiObjectGroupsCycleForScavenger) {
     g3s2.MarkPartiallyDependent(iso);
     iso->SetObjectGroupId(g1s1, UniqueId(1));
     iso->SetObjectGroupId(g1s2, UniqueId(1));
-    Local<Object>::New(iso, g1s1.As<Object>())->Set(v8_str("x"),
-                                                    Local<Value>(*g2s1));
+    Local<Object>::New(iso, g1s1.As<Object>())->Set(
+        v8_str("x"), Local<Value>::New(iso, g2s1));
     iso->SetObjectGroupId(g2s1, UniqueId(2));
     iso->SetObjectGroupId(g2s2, UniqueId(2));
-    Local<Object>::New(iso, g2s1.As<Object>())->Set(v8_str("x"),
-                                                    Local<Value>(*g3s1));
+    Local<Object>::New(iso, g2s1.As<Object>())->Set(
+        v8_str("x"), Local<Value>::New(iso, g3s1));
     iso->SetObjectGroupId(g3s1, UniqueId(3));
     iso->SetObjectGroupId(g3s2, UniqueId(3));
-    Local<Object>::New(iso, g3s1.As<Object>())->Set(v8_str("x"),
-                                                    Local<Value>(*g1s1));
+    Local<Object>::New(iso, g3s1.As<Object>())->Set(
+        v8_str("x"), Local<Value>::New(iso, g1s1));
   }
 
   v8::internal::Heap* heap = reinterpret_cast<v8::internal::Isolate*>(
@@ -3190,7 +3466,7 @@ TEST(ApiObjectGroupsCycleForScavenger) {
   CHECK_EQ(0, counter.NumberOfWeakCalls());
 
   // Weaken the root.
-  root.MakeWeak(iso, &counter, &WeakPointerCallback);
+  root.MakeWeak(&counter, &WeakPointerCallback);
   root.MarkPartiallyDependent(iso);
 
   v8::Isolate* isolate = v8::Isolate::GetCurrent();
@@ -3205,16 +3481,16 @@ TEST(ApiObjectGroupsCycleForScavenger) {
     g3s2.MarkPartiallyDependent(isolate);
     iso->SetObjectGroupId(g1s1, UniqueId(1));
     iso->SetObjectGroupId(g1s2, UniqueId(1));
-    Local<Object>::New(iso, g1s1.As<Object>())->Set(v8_str("x"),
-                                                    Local<Value>(*g2s1));
+    Local<Object>::New(iso, g1s1.As<Object>())->Set(
+        v8_str("x"), Local<Value>::New(iso, g2s1));
     iso->SetObjectGroupId(g2s1, UniqueId(2));
     iso->SetObjectGroupId(g2s2, UniqueId(2));
-    Local<Object>::New(iso, g2s1.As<Object>())->Set(v8_str("x"),
-                                                    Local<Value>(*g3s1));
+    Local<Object>::New(iso, g2s1.As<Object>())->Set(
+        v8_str("x"), Local<Value>::New(iso, g3s1));
     iso->SetObjectGroupId(g3s1, UniqueId(3));
     iso->SetObjectGroupId(g3s2, UniqueId(3));
-    Local<Object>::New(iso, g3s1.As<Object>())->Set(v8_str("x"),
-                                                    Local<Value>(*g1s1));
+    Local<Object>::New(iso, g3s1.As<Object>())->Set(
+        v8_str("x"), Local<Value>::New(iso, g1s1));
   }
 
   heap->CollectGarbage(i::NEW_SPACE);
@@ -4667,7 +4943,7 @@ THREADED_TEST(SimplePropertyWrite) {
   for (int i = 0; i < 10; i++) {
     CHECK(xValue.IsEmpty());
     script->Run();
-    CHECK_EQ(v8_num(4), Handle<Value>(*xValue));
+    CHECK_EQ(v8_num(4), Local<Value>::New(v8::Isolate::GetCurrent(), xValue));
     xValue.Dispose(context->GetIsolate());
     xValue.Clear();
   }
@@ -4684,7 +4960,7 @@ THREADED_TEST(SetterOnly) {
   for (int i = 0; i < 10; i++) {
     CHECK(xValue.IsEmpty());
     script->Run();
-    CHECK_EQ(v8_num(4), Handle<Value>(*xValue));
+    CHECK_EQ(v8_num(4), Local<Value>::New(v8::Isolate::GetCurrent(), xValue));
     xValue.Dispose(context->GetIsolate());
     xValue.Clear();
   }
@@ -4909,7 +5185,7 @@ Handle<v8::Array> UnboxedDoubleIndexedPropertyEnumerator(
       "for(i = 0; i < 80000; i++) { keys[i] = i; };"
       "keys.length = 25; keys;"));
   Local<Value> result = indexed_property_names_script->Run();
-  return Local<v8::Array>(::v8::Array::Cast(*result));
+  return Local<v8::Array>::Cast(result);
 }
 
 
@@ -4949,8 +5225,13 @@ Handle<v8::Array> NonStrictArgsIndexedPropertyEnumerator(
       "}"
       "keys = f(0, 1, 2, 3);"
       "keys;"));
-  Local<Value> result = indexed_property_names_script->Run();
-  return Local<v8::Array>(static_cast<v8::Array*>(::v8::Object::Cast(*result)));
+  Local<Object> result =
+      Local<Object>::Cast(indexed_property_names_script->Run());
+  // Have to populate the handle manually, as it's not Cast-able.
+  i::Handle<i::JSObject> o =
+      v8::Utils::OpenHandle<Object, i::JSObject>(result);
+  i::Handle<i::JSArray> array(reinterpret_cast<i::JSArray*>(*o));
+  return v8::Utils::ToLocal(array);
 }
 
 
@@ -6061,7 +6342,7 @@ class Whammy {
   ~Whammy() { script_.Dispose(isolate_); }
   v8::Handle<Script> getScript() {
     if (script_.IsEmpty()) script_.Reset(isolate_, v8_compile("({}).blammo"));
-    return Local<Script>(*script_);
+    return Local<Script>::New(isolate_, script_);
   }
 
  public:
@@ -6090,9 +6371,7 @@ v8::Handle<Value> WhammyPropertyGetter(Local<String> name,
   if (!prev.IsEmpty()) {
     v8::Local<v8::Object>::New(info.GetIsolate(), prev)
         ->Set(v8_str("next"), obj);
-    prev.MakeWeak<Value, Snorkel>(info.GetIsolate(),
-                                  new Snorkel(),
-                                  &HandleWeakReference);
+    prev.MakeWeak<Value, Snorkel>(new Snorkel(), &HandleWeakReference);
     whammy->objects_[whammy->cursor_].Clear();
   }
   whammy->objects_[whammy->cursor_].Reset(info.GetIsolate(), obj);
@@ -6154,8 +6433,8 @@ THREADED_TEST(IndependentWeakHandle) {
 
   bool object_a_disposed = false;
   bool object_b_disposed = false;
-  object_a.MakeWeak(iso, &object_a_disposed, &DisposeAndSetFlag);
-  object_b.MakeWeak(iso, &object_b_disposed, &DisposeAndSetFlag);
+  object_a.MakeWeak(&object_a_disposed, &DisposeAndSetFlag);
+  object_b.MakeWeak(&object_b_disposed, &DisposeAndSetFlag);
   CHECK(!object_b.IsIndependent(iso));
   object_a.MarkIndependent(iso);
   object_b.MarkIndependent(iso);
@@ -6216,7 +6495,7 @@ THREADED_TEST(GCFromWeakCallbacks) {
         object.Reset(isolate, v8::Object::New());
       }
       bool disposed = false;
-      object.MakeWeak(isolate, &disposed, gc_forcing_callback[inner_gc]);
+      object.MakeWeak(&disposed, gc_forcing_callback[inner_gc]);
       object.MarkIndependent(isolate);
       invoke_gc[outer_gc]();
       CHECK(disposed);
@@ -6249,7 +6528,7 @@ THREADED_TEST(IndependentHandleRevival) {
     o->Set(y_str, y_str);
   }
   bool revived = false;
-  object.MakeWeak(isolate, &revived, &RevivingCallback);
+  object.MakeWeak(&revived, &RevivingCallback);
   object.MarkIndependent(isolate);
   HEAP->PerformScavenge();
   CHECK(revived);
@@ -7025,12 +7304,12 @@ THREADED_TEST(Utf16Symbol) {
   Local<Value> s2 = global->Get(v8_str("sym2"));
   Local<Value> s3 = global->Get(v8_str("sym3"));
   Local<Value> s4 = global->Get(v8_str("sym4"));
-  CHECK(SameSymbol(sym0, Handle<String>(String::Cast(*s0))));
-  CHECK(SameSymbol(sym0b, Handle<String>(String::Cast(*s0b))));
-  CHECK(SameSymbol(sym1, Handle<String>(String::Cast(*s1))));
-  CHECK(SameSymbol(sym2, Handle<String>(String::Cast(*s2))));
-  CHECK(SameSymbol(sym3, Handle<String>(String::Cast(*s3))));
-  CHECK(SameSymbol(sym4, Handle<String>(String::Cast(*s4))));
+  CHECK(SameSymbol(sym0, Handle<String>::Cast(s0)));
+  CHECK(SameSymbol(sym0b, Handle<String>::Cast(s0b)));
+  CHECK(SameSymbol(sym1, Handle<String>::Cast(s1)));
+  CHECK(SameSymbol(sym2, Handle<String>::Cast(s2)));
+  CHECK(SameSymbol(sym3, Handle<String>::Cast(s3)));
+  CHECK(SameSymbol(sym4, Handle<String>::Cast(s4)));
 }
 
 
@@ -10440,7 +10719,7 @@ THREADED_TEST(InterceptorCallICCachedFromGlobal) {
 static v8::Handle<Value> InterceptorCallICFastApi(Local<String> name,
                                                   const AccessorInfo& info) {
   ApiTestFuzzer::Fuzz();
-  CheckReturnValue(info);
+  CheckReturnValue(info, FUNCTION_ADDR(InterceptorCallICFastApi));
   int* call_count =
       reinterpret_cast<int*>(v8::External::Cast(*info.Data())->Value());
   ++(*call_count);
@@ -10453,7 +10732,7 @@ static v8::Handle<Value> InterceptorCallICFastApi(Local<String> name,
 static v8::Handle<Value> FastApiCallback_TrivialSignature(
     const v8::Arguments& args) {
   ApiTestFuzzer::Fuzz();
-  CheckReturnValue(args);
+  CheckReturnValue(args, FUNCTION_ADDR(FastApiCallback_TrivialSignature));
   v8::Isolate* isolate = v8::Isolate::GetCurrent();
   CHECK_EQ(isolate, args.GetIsolate());
   CHECK_EQ(args.This(), args.Holder());
@@ -10464,7 +10743,7 @@ static v8::Handle<Value> FastApiCallback_TrivialSignature(
 static v8::Handle<Value> FastApiCallback_SimpleSignature(
     const v8::Arguments& args) {
   ApiTestFuzzer::Fuzz();
-  CheckReturnValue(args);
+  CheckReturnValue(args, FUNCTION_ADDR(FastApiCallback_SimpleSignature));
   v8::Isolate* isolate = v8::Isolate::GetCurrent();
   CHECK_EQ(isolate, args.GetIsolate());
   CHECK_EQ(args.This()->GetPrototype(), args.Holder());
@@ -10552,7 +10831,7 @@ static Handle<Value> DoDirectGetter() {
 
 static v8::Handle<v8::Value> DirectGetter(Local<String> name,
                                   const v8::AccessorInfo& info) {
-  CheckReturnValue(info);
+  CheckReturnValue(info, FUNCTION_ADDR(DirectGetter));
   info.GetReturnValue().Set(v8_str("Garbage"));
   return DoDirectGetter();
 }
@@ -10560,7 +10839,7 @@ static v8::Handle<v8::Value> DirectGetter(Local<String> name,
 static v8::Handle<v8::Value> DirectGetterIndirect(
     Local<String> name,
     const v8::AccessorInfo& info) {
-  CheckReturnValue(info);
+  CheckReturnValue(info, FUNCTION_ADDR(DirectGetterIndirect));
   info.GetReturnValue().Set(DoDirectGetter());
   return v8::Handle<v8::Value>();
 }
@@ -10568,7 +10847,7 @@ static v8::Handle<v8::Value> DirectGetterIndirect(
 static void DirectGetterCallback(
     Local<String> name,
     const v8::PropertyCallbackInfo<v8::Value>& info) {
-  CheckReturnValue(info);
+  CheckReturnValue(info, FUNCTION_ADDR(DirectGetterCallback));
   info.GetReturnValue().Set(DoDirectGetter());
 }
 
@@ -11975,9 +12254,7 @@ THREADED_TEST(NewPersistentHandleFromWeakCallback) {
   // global handle nodes are processed by PostGarbageCollectionProcessing
   // in reverse allocation order, so if second allocated handle is deleted,
   // weak callback of the first handle would be able to 'reallocate' it.
-  handle1.MakeWeak<v8::Value, void>(isolate,
-                                    NULL,
-                                    NewPersistentHandleCallback);
+  handle1.MakeWeak<v8::Value, void>(NULL, NewPersistentHandleCallback);
   handle2.Dispose(isolate);
   HEAP->CollectAllGarbage(i::Heap::kNoGCFlags);
 }
@@ -12004,7 +12281,7 @@ THREADED_TEST(DoNotUseDeletedNodesInSecondLevelGc) {
     handle1.Reset(isolate, v8::Object::New());
     handle2.Reset(isolate, v8::Object::New());
   }
-  handle1.MakeWeak<v8::Value, void>(isolate, NULL, DisposeAndForceGcCallback);
+  handle1.MakeWeak<v8::Value, void>(NULL, DisposeAndForceGcCallback);
   to_be_disposed.Reset(isolate, handle2);
   HEAP->CollectAllGarbage(i::Heap::kNoGCFlags);
 }
@@ -12019,7 +12296,7 @@ void HandleCreatingCallback(v8::Isolate* isolate,
                             v8::Persistent<v8::Value>* handle,
                             void*) {
   v8::HandleScope scope(isolate);
-  v8::Persistent<v8::Object>::New(isolate, v8::Object::New());
+  v8::Persistent<v8::Object>(isolate, v8::Object::New());
   handle->Dispose(isolate);
 }
 
@@ -12035,8 +12312,8 @@ THREADED_TEST(NoGlobalHandlesOrphaningDueToWeakCallback) {
     handle2.Reset(isolate, v8::Object::New());
     handle1.Reset(isolate, v8::Object::New());
   }
-  handle2.MakeWeak<v8::Value, void>(isolate, NULL, DisposingCallback);
-  handle3.MakeWeak<v8::Value, void>(isolate, NULL, HandleCreatingCallback);
+  handle2.MakeWeak<v8::Value, void>(NULL, DisposingCallback);
+  handle3.MakeWeak<v8::Value, void>(NULL, HandleCreatingCallback);
   HEAP->CollectAllGarbage(i::Heap::kNoGCFlags);
 }
 
@@ -12486,7 +12763,8 @@ THREADED_TEST(DisposeEnteredContext) {
   {
     // Don't want a handle here, so do this unsafely
     v8::Handle<v8::Context> inner_local =
-        *reinterpret_cast<v8::Handle<v8::Context>*>(&inner);
+        v8::Utils::Convert<i::Object, v8::Context>(
+            v8::Utils::OpenPersistent(inner));
     inner_local->Enter();
     inner.Dispose();
     inner.Clear();
@@ -16886,8 +17164,12 @@ TEST(ContainsOnlyOneByte) {
   v8::Isolate* isolate = v8::Isolate::GetCurrent();
   v8::HandleScope scope(isolate);
   // Make a buffer long enough that it won't automatically be converted.
-  const int length = 200;
-  i::SmartArrayPointer<uint16_t> string_contents(new uint16_t[length]);
+  const int length = 512;
+  // Ensure word aligned assignment.
+  const int aligned_length = length*sizeof(uintptr_t)/sizeof(uint16_t);
+  i::SmartArrayPointer<uintptr_t>
+  aligned_contents(new uintptr_t[aligned_length]);
+  uint16_t* string_contents = reinterpret_cast<uint16_t*>(*aligned_contents);
   // Set to contain only one byte.
   for (int i = 0; i < length-1; i++) {
     string_contents[i] = 0x41;
@@ -16895,10 +17177,10 @@ TEST(ContainsOnlyOneByte) {
   string_contents[length-1] = 0;
   // Simple case.
   Handle<String> string;
-  string = String::NewExternal(new TestResource(*string_contents));
+  string = String::NewExternal(new TestResource(string_contents));
   CHECK(!string->IsOneByte() && string->ContainsOnlyOneByte());
   // Counter example.
-  string = String::NewFromTwoByte(isolate, *string_contents);
+  string = String::NewFromTwoByte(isolate, string_contents);
   CHECK(string->IsOneByte() && string->ContainsOnlyOneByte());
   // Test left right and balanced cons strings.
   Handle<String> base = String::NewFromUtf8(isolate, "a");
@@ -16912,7 +17194,7 @@ TEST(ContainsOnlyOneByte) {
   balanced = String::Concat(balanced, right);
   Handle<String> cons_strings[] = {left, balanced, right};
   Handle<String> two_byte =
-      String::NewExternal(new TestResource(*string_contents));
+      String::NewExternal(new TestResource(string_contents));
   for (size_t i = 0; i < ARRAY_SIZE(cons_strings); i++) {
     // Base assumptions.
     string = cons_strings[i];
@@ -16922,6 +17204,24 @@ TEST(ContainsOnlyOneByte) {
     CHECK(!string->IsOneByte() && string->ContainsOnlyOneByte());
     string = String::Concat(cons_strings[i], two_byte);
     CHECK(!string->IsOneByte() && string->ContainsOnlyOneByte());
+  }
+  // Set bits in different positions
+  // for strings of different lengths and alignments.
+  for (int alignment = 0; alignment < 7; alignment++) {
+    for (int size = 2; alignment + size < length; size *= 2) {
+      int zero_offset = size + alignment;
+      string_contents[zero_offset] = 0;
+      for (int i = 0; i < size; i++) {
+        int shift = 8 + (i % 7);
+        string_contents[alignment + i] = 1 << shift;
+        string =
+            String::NewExternal(new TestResource(string_contents + alignment));
+        CHECK_EQ(size, string->Length());
+        CHECK(!string->ContainsOnlyOneByte());
+        string_contents[alignment + i] = 0x41;
+      }
+      string_contents[zero_offset] = 0x41;
+    }
   }
 }
 
@@ -19089,10 +19389,10 @@ THREADED_TEST(Regress2535) {
   LocalContext context;
   v8::HandleScope scope(context->GetIsolate());
   Local<Value> set_value = CompileRun("new Set();");
-  Local<Object> set_object(Object::Cast(*set_value));
+  Local<Object> set_object(Local<Object>::Cast(set_value));
   CHECK_EQ(0, set_object->InternalFieldCount());
   Local<Value> map_value = CompileRun("new Map();");
-  Local<Object> map_object(Object::Cast(*map_value));
+  Local<Object> map_object(Local<Object>::Cast(map_value));
   CHECK_EQ(0, map_object->InternalFieldCount());
 }
 

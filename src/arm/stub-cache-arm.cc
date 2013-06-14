@@ -427,12 +427,10 @@ static void GenerateCheckPropertyCell(MacroAssembler* masm,
                                       Handle<Name> name,
                                       Register scratch,
                                       Label* miss) {
-  Handle<JSGlobalPropertyCell> cell =
-      GlobalObject::EnsurePropertyCell(global, name);
+  Handle<Cell> cell = GlobalObject::EnsurePropertyCell(global, name);
   ASSERT(cell->value()->IsTheHole());
   __ mov(scratch, Operand(cell));
-  __ ldr(scratch,
-         FieldMemOperand(scratch, JSGlobalPropertyCell::kValueOffset));
+  __ ldr(scratch, FieldMemOperand(scratch, Cell::kValueOffset));
   __ LoadRoot(ip, Heap::kTheHoleValueRootIndex);
   __ cmp(scratch, ip);
   __ b(ne, miss);
@@ -514,7 +512,13 @@ void StubCompiler::GenerateStoreTransition(MacroAssembler* masm,
 
   Register storage_reg = name_reg;
 
-  if (FLAG_track_fields && representation.IsSmi()) {
+  if (details.type() == CONSTANT_FUNCTION) {
+    Handle<HeapObject> constant(
+        HeapObject::cast(descriptors->GetValue(descriptor)));
+    __ LoadHeapObject(scratch1, constant);
+    __ cmp(value_reg, scratch1);
+    __ b(ne, miss_restore_name);
+  } else if (FLAG_track_fields && representation.IsSmi()) {
     __ JumpIfNotSmi(value_reg, miss_restore_name);
   } else if (FLAG_track_heap_object_fields && representation.IsHeapObject()) {
     __ JumpIfSmi(value_reg, miss_restore_name);
@@ -543,7 +547,8 @@ void StubCompiler::GenerateStoreTransition(MacroAssembler* masm,
   ASSERT(object->IsJSGlobalProxy() || !object->IsAccessCheckNeeded());
 
   // Perform map transition for the receiver if necessary.
-  if (object->map()->unused_property_fields() == 0) {
+  if (details.type() == FIELD &&
+      object->map()->unused_property_fields() == 0) {
     // The properties must be extended before we can store the value.
     // We jump to a runtime call that extends the properties array.
     __ push(receiver_reg);
@@ -571,6 +576,8 @@ void StubCompiler::GenerateStoreTransition(MacroAssembler* masm,
                       kDontSaveFPRegs,
                       OMIT_REMEMBERED_SET,
                       OMIT_SMI_CHECK);
+
+  if (details.type() == CONSTANT_FUNCTION) return;
 
   int index = transition->instance_descriptors()->GetFieldIndex(
       transition->LastAdded());
@@ -893,11 +900,12 @@ static void GenerateFastApiDirectCall(MacroAssembler* masm,
   //  -- sp[4]              : callee JS function
   //  -- sp[8]              : call data
   //  -- sp[12]             : isolate
-  //  -- sp[16]             : ReturnValue
-  //  -- sp[20]             : last JS argument
+  //  -- sp[16]             : ReturnValue default value
+  //  -- sp[20]             : ReturnValue
+  //  -- sp[24]             : last JS argument
   //  -- ...
-  //  -- sp[(argc + 4) * 4] : first JS argument
-  //  -- sp[(argc + 5) * 4] : receiver
+  //  -- sp[(argc + 5) * 4] : first JS argument
+  //  -- sp[(argc + 6) * 4] : receiver
   // -----------------------------------
   // Get the function and setup the context.
   Handle<JSFunction> function = optimization.constant_function();
@@ -914,13 +922,14 @@ static void GenerateFastApiDirectCall(MacroAssembler* masm,
     __ Move(r6, call_data);
   }
   __ mov(r7, Operand(ExternalReference::isolate_address(masm->isolate())));
-  // Store JS function, call data, isolate and ReturnValue.
+  // Store JS function, call data, isolate ReturnValue default and ReturnValue.
   __ stm(ib, sp, r5.bit() | r6.bit() | r7.bit());
   __ LoadRoot(r5, Heap::kUndefinedValueRootIndex);
   __ str(r5, MemOperand(sp, 4 * kPointerSize));
+  __ str(r5, MemOperand(sp, 5 * kPointerSize));
 
   // Prepare arguments.
-  __ add(r2, sp, Operand(4 * kPointerSize));
+  __ add(r2, sp, Operand(5 * kPointerSize));
 
   // Allocate the v8::Arguments structure in the arguments' space since
   // it's not controlled by GC.
@@ -956,8 +965,22 @@ static void GenerateFastApiDirectCall(MacroAssembler* masm,
   ExternalReference ref = ExternalReference(&fun,
                                             type,
                                             masm->isolate());
+  Address thunk_address = returns_handle
+      ? FUNCTION_ADDR(&InvokeInvocationCallback)
+      : FUNCTION_ADDR(&InvokeFunctionCallback);
+  ExternalReference::Type thunk_type =
+      returns_handle ?
+          ExternalReference::PROFILING_API_CALL :
+          ExternalReference::PROFILING_API_CALL_NEW;
+  ApiFunction thunk_fun(thunk_address);
+  ExternalReference thunk_ref = ExternalReference(&thunk_fun, thunk_type,
+      masm->isolate());
+
   AllowExternalCallThatCantCauseGC scope(masm);
   __ CallApiFunctionAndReturn(ref,
+                              function_address,
+                              thunk_ref,
+                              r1,
                               kStackUnwindSpace,
                               returns_handle,
                               kFastApiCallArguments + 1);
@@ -1434,9 +1457,11 @@ void BaseLoadStubCompiler::GenerateLoadCallback(
   }
   __ Push(reg, scratch3());
   __ LoadRoot(scratch3(), Heap::kUndefinedValueRootIndex);
+  __ mov(scratch4(), scratch3());
+  __ Push(scratch3(), scratch4());
   __ mov(scratch4(),
          Operand(ExternalReference::isolate_address(isolate())));
-  __ Push(scratch3(), scratch4(), name());
+  __ Push(scratch4(), name());
   __ mov(r0, sp);  // r0 = Handle<Name>
 
   const int kApiStackSpace = 1;
@@ -1452,17 +1477,31 @@ void BaseLoadStubCompiler::GenerateLoadCallback(
   Address getter_address = v8::ToCData<Address>(callback->getter());
   bool returns_handle =
       !CallbackTable::ReturnsVoid(isolate(), getter_address);
+
   ApiFunction fun(getter_address);
   ExternalReference::Type type =
       returns_handle ?
           ExternalReference::DIRECT_GETTER_CALL :
           ExternalReference::DIRECT_GETTER_CALL_NEW;
-
   ExternalReference ref = ExternalReference(&fun, type, isolate());
+
+  Address thunk_address = returns_handle
+      ? FUNCTION_ADDR(&InvokeAccessorGetter)
+      : FUNCTION_ADDR(&InvokeAccessorGetterCallback);
+  ExternalReference::Type thunk_type =
+      returns_handle ?
+          ExternalReference::PROFILING_GETTER_CALL :
+          ExternalReference::PROFILING_GETTER_CALL_NEW;
+  ApiFunction thunk_fun(thunk_address);
+  ExternalReference thunk_ref = ExternalReference(&thunk_fun, thunk_type,
+      isolate());
   __ CallApiFunctionAndReturn(ref,
+                              getter_address,
+                              thunk_ref,
+                              r2,
                               kStackUnwindSpace,
                               returns_handle,
-                              4);
+                              5);
 }
 
 
@@ -1582,12 +1621,12 @@ void CallStubCompiler::GenerateGlobalReceiverCheck(Handle<JSObject> object,
 
 
 void CallStubCompiler::GenerateLoadFunctionFromCell(
-    Handle<JSGlobalPropertyCell> cell,
+    Handle<Cell> cell,
     Handle<JSFunction> function,
     Label* miss) {
   // Get the value from the cell.
   __ mov(r3, Operand(cell));
-  __ ldr(r1, FieldMemOperand(r3, JSGlobalPropertyCell::kValueOffset));
+  __ ldr(r1, FieldMemOperand(r3, Cell::kValueOffset));
 
   // Check that the cell contains the same function.
   if (heap()->InNewSpace(*function)) {
@@ -1658,7 +1697,7 @@ Handle<Code> CallStubCompiler::CompileCallField(Handle<JSObject> object,
 Handle<Code> CallStubCompiler::CompileArrayPushCall(
     Handle<Object> object,
     Handle<JSObject> holder,
-    Handle<JSGlobalPropertyCell> cell,
+    Handle<Cell> cell,
     Handle<JSFunction> function,
     Handle<String> name) {
   // ----------- S t a t e -------------
@@ -1911,7 +1950,7 @@ Handle<Code> CallStubCompiler::CompileArrayPushCall(
 Handle<Code> CallStubCompiler::CompileArrayPopCall(
     Handle<Object> object,
     Handle<JSObject> holder,
-    Handle<JSGlobalPropertyCell> cell,
+    Handle<Cell> cell,
     Handle<JSFunction> function,
     Handle<String> name) {
   // ----------- S t a t e -------------
@@ -1993,7 +2032,7 @@ Handle<Code> CallStubCompiler::CompileArrayPopCall(
 Handle<Code> CallStubCompiler::CompileStringCharCodeAtCall(
     Handle<Object> object,
     Handle<JSObject> holder,
-    Handle<JSGlobalPropertyCell> cell,
+    Handle<Cell> cell,
     Handle<JSFunction> function,
     Handle<String> name) {
   // ----------- S t a t e -------------
@@ -2075,7 +2114,7 @@ Handle<Code> CallStubCompiler::CompileStringCharCodeAtCall(
 Handle<Code> CallStubCompiler::CompileStringCharAtCall(
     Handle<Object> object,
     Handle<JSObject> holder,
-    Handle<JSGlobalPropertyCell> cell,
+    Handle<Cell> cell,
     Handle<JSFunction> function,
     Handle<String> name) {
   // ----------- S t a t e -------------
@@ -2158,7 +2197,7 @@ Handle<Code> CallStubCompiler::CompileStringCharAtCall(
 Handle<Code> CallStubCompiler::CompileStringFromCharCodeCall(
     Handle<Object> object,
     Handle<JSObject> holder,
-    Handle<JSGlobalPropertyCell> cell,
+    Handle<Cell> cell,
     Handle<JSFunction> function,
     Handle<String> name) {
   // ----------- S t a t e -------------
@@ -2230,7 +2269,7 @@ Handle<Code> CallStubCompiler::CompileStringFromCharCodeCall(
 Handle<Code> CallStubCompiler::CompileMathFloorCall(
     Handle<Object> object,
     Handle<JSObject> holder,
-    Handle<JSGlobalPropertyCell> cell,
+    Handle<Cell> cell,
     Handle<JSFunction> function,
     Handle<String> name) {
   // ----------- S t a t e -------------
@@ -2338,7 +2377,7 @@ Handle<Code> CallStubCompiler::CompileMathFloorCall(
 Handle<Code> CallStubCompiler::CompileMathAbsCall(
     Handle<Object> object,
     Handle<JSObject> holder,
-    Handle<JSGlobalPropertyCell> cell,
+    Handle<Cell> cell,
     Handle<JSFunction> function,
     Handle<String> name) {
   // ----------- S t a t e -------------
@@ -2437,7 +2476,7 @@ Handle<Code> CallStubCompiler::CompileFastApiCall(
     const CallOptimization& optimization,
     Handle<Object> object,
     Handle<JSObject> holder,
-    Handle<JSGlobalPropertyCell> cell,
+    Handle<Cell> cell,
     Handle<JSFunction> function,
     Handle<String> name) {
   Counters* counters = isolate()->counters();
@@ -2609,7 +2648,7 @@ Handle<Code> CallStubCompiler::CompileCallConstant(
     Handle<JSFunction> function) {
   if (HasCustomCallGenerator(function)) {
     Handle<Code> code = CompileCustomCall(object, holder,
-                                          Handle<JSGlobalPropertyCell>::null(),
+                                          Handle<Cell>::null(),
                                           function, Handle<String>::cast(name));
     // A null handle means bail out to the regular compiler code below.
     if (!code.is_null()) return code;
@@ -2855,14 +2894,12 @@ Handle<Code> StoreStubCompiler::CompileStoreGlobal(
   // global object. We bail out to the runtime system to do that.
   __ mov(scratch1(), Operand(cell));
   __ LoadRoot(scratch2(), Heap::kTheHoleValueRootIndex);
-  __ ldr(scratch3(),
-         FieldMemOperand(scratch1(), JSGlobalPropertyCell::kValueOffset));
+  __ ldr(scratch3(), FieldMemOperand(scratch1(), Cell::kValueOffset));
   __ cmp(scratch3(), scratch2());
   __ b(eq, &miss);
 
   // Store the value in the cell.
-  __ str(value(),
-         FieldMemOperand(scratch1(), JSGlobalPropertyCell::kValueOffset));
+  __ str(value(), FieldMemOperand(scratch1(), Cell::kValueOffset));
   // Cells are always rescanned, so no write barrier here.
 
   Counters* counters = isolate()->counters();
@@ -2998,7 +3035,7 @@ Handle<Code> LoadStubCompiler::CompileLoadGlobal(
 
   // Get the value from the cell.
   __ mov(r3, Operand(cell));
-  __ ldr(r4, FieldMemOperand(r3, JSGlobalPropertyCell::kValueOffset));
+  __ ldr(r4, FieldMemOperand(r3, Cell::kValueOffset));
 
   // Check for deleted property if property can actually be deleted.
   if (!is_dont_delete) {

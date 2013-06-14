@@ -511,8 +511,8 @@ class StoreIC: public IC {
   static void GenerateMegamorphic(MacroAssembler* masm,
                                   StrictModeFlag strict_mode);
   static void GenerateNormal(MacroAssembler* masm);
-  static void GenerateGlobalProxy(MacroAssembler* masm,
-                                  StrictModeFlag strict_mode);
+  static void GenerateRuntimeSetProperty(MacroAssembler* masm,
+                                         StrictModeFlag strict_mode);
 
   MUST_USE_RESULT MaybeObject* Store(
       State state,
@@ -531,6 +531,12 @@ class StoreIC: public IC {
   // Stub accessors.
   virtual Handle<Code> megamorphic_stub_strict() {
     return isolate()->builtins()->StoreIC_Megamorphic_Strict();
+  }
+  virtual Handle<Code> generic_stub() const {
+    return isolate()->builtins()->StoreIC_Generic();
+  }
+  virtual Handle<Code> generic_stub_strict() const {
+    return isolate()->builtins()->StoreIC_Generic_Strict();
   }
   virtual Handle<Code> global_proxy_stub() {
     return isolate()->builtins()->StoreIC_GlobalProxy();
@@ -741,6 +747,9 @@ class CompareIC: public IC {
     GENERIC
   };
 
+  static Handle<Type> StateToType(
+      Isolate* isolate, State state, Handle<Map> map = Handle<Map>());
+
   CompareIC(Isolate* isolate, Token::Value op)
       : IC(EXTRA_CALL_FRAME, isolate), op_(op) { }
 
@@ -789,8 +798,7 @@ class CompareNilIC: public IC {
 
   static void Clear(Address address, Code* target);
 
-  static MUST_USE_RESULT MaybeObject* DoCompareNilSlow(EqualityKind kind,
-                                                       NilValue nil,
+  static MUST_USE_RESULT MaybeObject* DoCompareNilSlow(NilValue nil,
                                                        Handle<Object> object);
 };
 

@@ -60,6 +60,7 @@ namespace internal {
   V(Oddball, true_value, TrueValue)                                            \
   V(Oddball, false_value, FalseValue)                                          \
   V(Oddball, uninitialized_value, UninitializedValue)                          \
+  V(Map, cell_map, CellMap)                                                    \
   V(Map, global_property_cell_map, GlobalPropertyCellMap)                      \
   V(Map, shared_function_info_map, SharedFunctionInfoMap)                      \
   V(Map, meta_map, MetaMap)                                                    \
@@ -293,10 +294,10 @@ namespace internal {
   V(hidden_stack_trace_string, "v8::hidden_stack_trace")                 \
   V(query_colon_string, "(?:)")                                          \
   V(Generator_string, "Generator")                                       \
-  V(send_string, "send")                                                 \
   V(throw_string, "throw")                                               \
   V(done_string, "done")                                                 \
-  V(value_string, "value")
+  V(value_string, "value")                                               \
+  V(next_string, "next")
 
 // Forward declarations.
 class GCTracer;
@@ -588,6 +589,9 @@ class Heap {
   OldSpace* code_space() { return code_space_; }
   MapSpace* map_space() { return map_space_; }
   CellSpace* cell_space() { return cell_space_; }
+  PropertyCellSpace* property_cell_space() {
+    return property_cell_space_;
+  }
   LargeObjectSpace* lo_space() { return lo_space_; }
   PagedSpace* paged_space(int idx) {
     switch (idx) {
@@ -599,6 +603,8 @@ class Heap {
         return map_space();
       case CELL_SPACE:
         return cell_space();
+      case PROPERTY_CELL_SPACE:
+        return property_cell_space();
       case CODE_SPACE:
         return code_space();
       case NEW_SPACE:
@@ -932,6 +938,12 @@ class Heap {
   // failed.
   // Please note this does not perform a garbage collection.
   MUST_USE_RESULT MaybeObject* AllocateSymbol();
+
+  // Allocate a tenured simple cell.
+  // Returns Failure::RetryAfterGC(requested_bytes, space) if the allocation
+  // failed.
+  // Please note this does not perform a garbage collection.
+  MUST_USE_RESULT MaybeObject* AllocateCell(Object* value);
 
   // Allocate a tenured JS global property cell.
   // Returns Failure::RetryAfterGC(requested_bytes, space) if the allocation
@@ -1351,6 +1363,12 @@ class Heap {
     native_contexts_list_ = object;
   }
   Object* native_contexts_list() { return native_contexts_list_; }
+
+  void set_array_buffers_list(Object* object) {
+    array_buffers_list_ = object;
+  }
+  Object* array_buffers_list() { return array_buffers_list_; }
+
 
   // Number of mark-sweeps.
   unsigned int ms_count() { return ms_count_; }
@@ -1952,6 +1970,7 @@ class Heap {
   OldSpace* code_space_;
   MapSpace* map_space_;
   CellSpace* cell_space_;
+  PropertyCellSpace* property_cell_space_;
   LargeObjectSpace* lo_space_;
   HeapState gc_state_;
   int gc_post_processing_depth_;
@@ -2021,6 +2040,8 @@ class Heap {
   bool old_gen_exhausted_;
 
   Object* native_contexts_list_;
+
+  Object* array_buffers_list_;
 
   StoreBufferRebuilder store_buffer_rebuilder_;
 
@@ -2106,8 +2127,11 @@ class Heap {
   // (since both AllocateRaw and AllocateRawMap are inlined).
   MUST_USE_RESULT inline MaybeObject* AllocateRawMap();
 
-  // Allocate an uninitialized object in the global property cell space.
+  // Allocate an uninitialized object in the simple cell space.
   MUST_USE_RESULT inline MaybeObject* AllocateRawCell();
+
+  // Allocate an uninitialized object in the global property cell space.
+  MUST_USE_RESULT inline MaybeObject* AllocateRawJSGlobalPropertyCell();
 
   // Initializes a JSObject based on its map.
   void InitializeJSObjectFromMap(JSObject* obj,
@@ -2164,6 +2188,9 @@ class Heap {
 
   // Code to be run before and after mark-compact.
   void MarkCompactPrologue();
+
+  void ProcessNativeContexts(WeakObjectRetainer* retainer, bool record_slots);
+  void ProcessArrayBuffers(WeakObjectRetainer* retainer, bool record_slots);
 
   // Record statistics before and after garbage collection.
   void ReportStatisticsBeforeGC();
@@ -2426,6 +2453,8 @@ class HeapStats {
   int* size_per_type;                   // 22
   int* os_error;                        // 23
   int* end_marker;                      // 24
+  intptr_t* property_cell_space_size;   // 25
+  intptr_t* property_cell_space_capacity;    // 26
 };
 
 

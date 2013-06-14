@@ -34,26 +34,16 @@
 // ----------------------------------------------------------------------------
 
 
-// TODO(wingo): Give link to specification. For now, the following diagram is
-// the spec:
-// http://wiki.ecmascript.org/lib/exe/fetch.php?cache=cache&media=harmony:es6_generator_object_model_3-29-13.png
+// Generator functions and objects are specified by ES6, sections 15.19.3 and
+// 15.19.4.
 
-function GeneratorObjectNext() {
+function GeneratorObjectNext(value) {
   if (!IS_GENERATOR(this)) {
     throw MakeTypeError('incompatible_method_receiver',
                         ['[Generator].prototype.next', this]);
   }
 
-  return %_GeneratorSend(this, void 0);
-}
-
-function GeneratorObjectSend(value) {
-  if (!IS_GENERATOR(this)) {
-    throw MakeTypeError('incompatible_method_receiver',
-                        ['[Generator].prototype.send', this]);
-  }
-
-  return %_GeneratorSend(this, value);
+  return %_GeneratorNext(this, value);
 }
 
 function GeneratorObjectThrow(exn) {
@@ -65,20 +55,38 @@ function GeneratorObjectThrow(exn) {
   return %_GeneratorThrow(this, exn);
 }
 
+function GeneratorFunctionPrototypeConstructor(x) {
+  if (%_IsConstructCall()) {
+    throw MakeTypeError('not_constructor', ['GeneratorFunctionPrototype']);
+  }
+}
+
+function GeneratorFunctionConstructor(arg1) {  // length == 1
+  var source = NewFunctionString(arguments, 'function*');
+  var global_receiver = %GlobalReceiver(global);
+  // Compile the string in the constructor and not a helper so that errors
+  // appear to come from here.
+  var f = %_CallFunction(global_receiver, %CompileString(source, true));
+  %FunctionMarkNameShouldPrintAsAnonymous(f);
+  return f;
+}
+
+
 function SetUpGenerators() {
   %CheckIsBootstrapping();
   var GeneratorObjectPrototype = GeneratorFunctionPrototype.prototype;
   InstallFunctions(GeneratorObjectPrototype,
                    DONT_ENUM | DONT_DELETE | READ_ONLY,
                    ["next", GeneratorObjectNext,
-                    "send", GeneratorObjectSend,
                     "throw", GeneratorObjectThrow]);
   %SetProperty(GeneratorObjectPrototype, "constructor",
                GeneratorFunctionPrototype, DONT_ENUM | DONT_DELETE | READ_ONLY);
   %SetPrototype(GeneratorFunctionPrototype, $Function.prototype);
+  %SetCode(GeneratorFunctionPrototype, GeneratorFunctionPrototypeConstructor);
   %SetProperty(GeneratorFunctionPrototype, "constructor",
                GeneratorFunction, DONT_ENUM | DONT_DELETE | READ_ONLY);
   %SetPrototype(GeneratorFunction, $Function);
+  %SetCode(GeneratorFunction, GeneratorFunctionConstructor);
 }
 
 SetUpGenerators();
