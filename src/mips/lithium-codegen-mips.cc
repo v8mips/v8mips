@@ -4167,6 +4167,7 @@ void LCodeGen::DoStoreKeyedFixedDoubleArray(LStoreKeyed* instr) {
   }
 
   if (instr->NeedsCanonicalization()) {
+#if 0
     Label is_nan;
     // Check for NaN. All NaNs must be canonicalized.
     __ BranchF(NULL, &is_nan, eq, value, value);
@@ -4175,6 +4176,12 @@ void LCodeGen::DoStoreKeyedFixedDoubleArray(LStoreKeyed* instr) {
     // Only load canonical NaN if the comparison above set the overflow.
     __ bind(&is_nan);
     __ Move(value, FixedDoubleArray::canonical_not_the_hole_nan_as_double());
+#else
+    __ c(UN, D, value, value);
+    __ bc1f(&not_nan);
+    __ nop();
+    __ Move(value, FixedDoubleArray::canonical_not_the_hole_nan_as_double());
+#endif
   }
 
   __ bind(&not_nan);
