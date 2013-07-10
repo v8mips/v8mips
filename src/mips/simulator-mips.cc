@@ -2566,6 +2566,9 @@ void Simulator::DecodeTypeImmediate(Instruction* instr) {
     case SDC1:
       addr = rs + se_imm16;
       break;
+    case PREF:
+      // For simulator, a prefetch is just a NOP
+      break;
     default:
       UNREACHABLE();
   };

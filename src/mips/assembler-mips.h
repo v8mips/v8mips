@@ -717,6 +717,9 @@ class Assembler : public AssemblerBase {
   void ins_(Register rt, Register rs, uint16_t pos, uint16_t size);
   void ext_(Register rt, Register rs, uint16_t pos, uint16_t size);
 
+  // Prefetch.
+  void pref(uint16_t hint, const MemOperand& src);
+
   //--------Coprocessor-instructions----------------
 
   // Load, store, and move.
@@ -1110,6 +1113,10 @@ class Assembler : public AssemblerBase {
   void GenInstrImmediate(Opcode opcode,
                          Register r1,
                          FPURegister r2,
+                         int32_t  j);
+  void GenInstrImmediate(Opcode opcode,
+                         Register rs,
+                         uint16_t rt,
                          int32_t  j);
 
 

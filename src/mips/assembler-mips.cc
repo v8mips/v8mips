@@ -951,6 +951,17 @@ void Assembler::GenInstrImmediate(Opcode opcode,
 }
 
 
+void Assembler::GenInstrImmediate(Opcode opcode,
+                                  Register rs,
+                                  uint16_t rt,
+                                  int32_t j) {
+  ASSERT(rs.is_valid() && rt < 32 && (is_int16(j) || is_uint16(j)));
+  Instr instr = opcode | (rs.code() << kRsShift) | (rt << kRtShift)
+      | (j & kImm16Mask);
+  emit(instr);
+}
+
+
 void Assembler::GenInstrJump(Opcode opcode,
                              uint32_t address) {
   BlockTrampolinePoolScope block_trampoline_pool(this);
@@ -1614,6 +1625,12 @@ void Assembler::ext_(Register rt, Register rs, uint16_t pos, uint16_t size) {
   // Ext instr has 'rt' field as dest, and two uint5: msb, lsb.
   ASSERT(kArchVariant == kMips32r2);
   GenInstrRegister(SPECIAL3, rs, rt, size - 1, pos, EXT);
+}
+
+
+// Pref.
+void Assembler::pref(uint16_t hint, const MemOperand& src) {
+  GenInstrImmediate(PREF, src.rm(), hint, src.offset_);
 }
 
 

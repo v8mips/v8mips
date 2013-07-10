@@ -338,6 +338,7 @@ Instruction::Type Instruction::InstructionType() const {
     case LDC1:
     case SWC1:
     case SDC1:
+    case PREF:
       return kImmediateType;
     // 26 bits immediate type instructions. e.g.: j imm26.
     case J:

@@ -103,6 +103,7 @@ class Decoder {
   void PrintFd(Instruction* instr);
   void PrintSa(Instruction* instr);
   void PrintSd(Instruction* instr);
+  void PrintSt(Instruction* instr);
   void PrintSs1(Instruction* instr);
   void PrintSs2(Instruction* instr);
   void PrintBc(Instruction* instr);
@@ -218,6 +219,13 @@ void Decoder::PrintSa(Instruction* instr) {
 void Decoder::PrintSd(Instruction* instr) {
   int sd = instr->RdValue();
   out_buffer_pos_ += OS::SNPrintF(out_buffer_ + out_buffer_pos_, "%d", sd);
+}
+
+
+// Print the integer value of the rt field.
+void Decoder::PrintSt(Instruction* instr) {
+  int st = instr->RtValue();
+  out_buffer_pos_ += OS::SNPrintF(out_buffer_ + out_buffer_pos_, "%d", st);
 }
 
 
@@ -408,6 +416,11 @@ int Decoder::FormatOption(Instruction* instr, const char* format) {
         case 'd': {
           ASSERT(STRING_STARTS_WITH(format, "sd"));
           PrintSd(instr);
+          return 2;
+        }
+        case 't': {
+          ASSERT(STRING_STARTS_WITH(format, "st"));
+          PrintSt(instr);
           return 2;
         }
         case 's': {
@@ -928,6 +941,9 @@ void Decoder::DecodeTypeImmediate(Instruction* instr) {
       break;
     case SDC1:
       Format(instr, "sdc1    'ft, 'imm16s('rs)");
+      break;
+    case PREF:
+      Format(instr, "pref    'st, 'imm16s('rs)");
       break;
     default:
       UNREACHABLE();

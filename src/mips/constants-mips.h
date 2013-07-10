@@ -300,7 +300,8 @@ enum Opcode {
   SWC1      =   ((7 << 3) + 1) << kOpcodeShift,
   SDC1      =   ((7 << 3) + 5) << kOpcodeShift,
 
-  COP1X     =   ((1 << 4) + 3) << kOpcodeShift
+  COP1X     =   ((1 << 4) + 3) << kOpcodeShift,
+  PREF      =   ((3 << 4) + 3) << kOpcodeShift
 };
 
 enum SecondaryField {
