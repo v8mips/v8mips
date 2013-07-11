@@ -6522,8 +6522,7 @@ void ICCompareStub::GenerateNumbers(MacroAssembler* masm) {
   __ JumpIfSmi(a0, &right_smi);
   __ CheckMap(a0, a2, Heap::kHeapNumberMapRootIndex, &maybe_undefined1,
               DONT_DO_SMI_CHECK);
-  __ Subu(a2, a0, Operand(kHeapObjectTag));
-  __ ldc1(f2, MemOperand(a2, HeapNumber::kValueOffset));
+  __ ldc1(f2, FieldMemOperand(a0, HeapNumber::kValueOffset));
   __ Branch(&left);
   __ bind(&right_smi);
   __ SmiUntag(a2, a0);  // Can't clobber a0 yet.
@@ -6535,8 +6534,7 @@ void ICCompareStub::GenerateNumbers(MacroAssembler* masm) {
   __ JumpIfSmi(a1, &left_smi);
   __ CheckMap(a1, a2, Heap::kHeapNumberMapRootIndex, &maybe_undefined2,
               DONT_DO_SMI_CHECK);
-  __ Subu(a2, a1, Operand(kHeapObjectTag));
-  __ ldc1(f0, MemOperand(a2, HeapNumber::kValueOffset));
+  __ ldc1(f0, FieldMemOperand(a1, HeapNumber::kValueOffset));
   __ Branch(&done);
   __ bind(&left_smi);
   __ SmiUntag(a2, a1);  // Can't clobber a1 yet.
