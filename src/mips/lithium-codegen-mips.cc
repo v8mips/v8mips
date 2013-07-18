@@ -3027,8 +3027,16 @@ void LCodeGen::DoLoadKeyedFixedDoubleArray(LLoadKeyed* instr) {
   if (!key_is_constant) {
     __ sll(scratch, key, shift_size);
     __ Addu(elements, elements, scratch);
+
+    // For non-constant key arrays, we want to use LDC1 and PREF.
+    // This seems be drastically increase navier-stokes performance.
+    // Doing this for constant key arrays seems to have no effect
+    //     on navier-stokes, but might effect other tests by causing 
+    //     unaligned access ecceptions.
+    __ ldc1(result, MemOperand(elements, base_offset), true, true);
+  } else {
+    __ ldc1(result, MemOperand(elements, base_offset));
   }
-  __ ldc1(result, MemOperand(elements, base_offset));
   if (instr->hydrogen()->RequiresHoleCheck()) {
     __ lw(scratch, MemOperand(elements, sizeof(kHoleNanLower32) + base_offset));
     DeoptimizeIf(eq, instr->environment(), scratch, Operand(kHoleNanUpper32));

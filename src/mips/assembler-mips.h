@@ -724,10 +724,12 @@ class Assembler : public AssemblerBase {
 
   // Load, store, and move.
   void lwc1(FPURegister fd, const MemOperand& src);
-  void ldc1(FPURegister fd, const MemOperand& src);
+  void ldc1(FPURegister fd, const MemOperand& src,
+                            bool aligned = false, bool pref = false);
 
   void swc1(FPURegister fs, const MemOperand& dst);
-  void sdc1(FPURegister fs, const MemOperand& dst);
+  void sdc1(FPURegister fs, const MemOperand& dst,
+                            bool aligned = false, bool pref = false);
 
   void mtc1(Register rt, FPURegister fs);
   void mfc1(Register rt, FPURegister fs);

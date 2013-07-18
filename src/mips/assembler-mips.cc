@@ -1642,13 +1642,20 @@ void Assembler::lwc1(FPURegister fd, const MemOperand& src) {
 }
 
 
-void Assembler::ldc1(FPURegister fd, const MemOperand& src) {
-  // Workaround for non-8-byte alignment of HeapNumber, convert 64-bit
-  // load to two 32-bit loads.
-  GenInstrImmediate(LWC1, src.rm(), fd, src.offset_);
-  FPURegister nextfpreg;
-  nextfpreg.setcode(fd.code() + 1);
-  GenInstrImmediate(LWC1, src.rm(), nextfpreg, src.offset_ + 4);
+void Assembler::ldc1(FPURegister fd, const MemOperand& src,
+                                     bool aligned, bool pref) {
+  // If 8 byte aligned then emit one LDC1 instr, else emit two LWC1 instr.
+  if (aligned) {
+    GenInstrImmediate(LDC1, src.rm(), fd, src.offset_);
+  } else {
+    GenInstrImmediate(LWC1, src.rm(), fd, src.offset_);
+    FPURegister nextfpreg;
+    nextfpreg.setcode(fd.code() + 1);
+    GenInstrImmediate(LWC1, src.rm(), nextfpreg, src.offset_ + 4);
+  }
+  if (pref) {
+    GenInstrImmediate(PREF, src.rm(), 0, src.offset_ + 32);
+  }
 }
 
 
@@ -1657,13 +1664,20 @@ void Assembler::swc1(FPURegister fd, const MemOperand& src) {
 }
 
 
-void Assembler::sdc1(FPURegister fd, const MemOperand& src) {
-  // Workaround for non-8-byte alignment of HeapNumber, convert 64-bit
-  // store to two 32-bit stores.
-  GenInstrImmediate(SWC1, src.rm(), fd, src.offset_);
-  FPURegister nextfpreg;
-  nextfpreg.setcode(fd.code() + 1);
-  GenInstrImmediate(SWC1, src.rm(), nextfpreg, src.offset_ + 4);
+void Assembler::sdc1(FPURegister fd, const MemOperand& src,
+                                     bool aligned, bool pref) {
+  // If 8 byte aligned then emit one SDC1 instr, else emit two SWC1 instr.
+  if (aligned) {
+    GenInstrImmediate(SDC1, src.rm(), fd, src.offset_);
+  } else {
+    GenInstrImmediate(SWC1, src.rm(), fd, src.offset_);
+    FPURegister nextfpreg;
+    nextfpreg.setcode(fd.code() + 1);
+    GenInstrImmediate(SWC1, src.rm(), nextfpreg, src.offset_ + 4);
+  }
+  if (pref) {
+    GenInstrImmediate(PREF, src.rm(), 1, src.offset_ + 32);
+  }
 }
 
 
