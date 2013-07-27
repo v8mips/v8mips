@@ -1478,6 +1478,19 @@ void Assembler::break_(uint32_t code, bool break_as_stop) {
 }
 
 
+void Assembler::LithiumHitStop(char* msg) {
+#if V8_HOST_ARCH_MIPS
+  // Nothing
+#else  // V8_HOST_ARCH_MIPS
+  BlockTrampolinePoolFor(2);
+  // The Simulator will handle the stop instruction and get the message address.
+  // On MIPS stop() is just a special kind of break_().
+  break_(kLithiumHitStopCode, true);
+  emit(reinterpret_cast<Instr>(msg));
+#endif
+}
+
+
 void Assembler::stop(const char* msg, uint32_t code) {
   ASSERT(code > kMaxWatchpointCode);
   ASSERT(code <= kMaxStopCode);

@@ -774,6 +774,20 @@ void MipsDebugger::Debug() {
 }
 
 
+static bool LInstrStringMatch(void* one, void* two) {
+  return strcmp(reinterpret_cast<char*>(one),
+                reinterpret_cast<char*>(two)) == 0;
+}
+
+
+static uint32_t LInstrStringHash(char* msg) {
+  return StringHasher::HashSequentialString(
+      msg,
+      static_cast<int>(strlen(msg)),
+      HEAP->HashSeed());
+}
+
+
 static bool ICacheMatch(void* one, void* two) {
   ASSERT((reinterpret_cast<intptr_t>(one) & CachePage::kPageMask) == 0);
   ASSERT((reinterpret_cast<intptr_t>(two) & CachePage::kPageMask) == 0);
@@ -886,6 +900,11 @@ Simulator::Simulator(Isolate* isolate) : isolate_(isolate) {
   if (i_cache_ == NULL) {
     i_cache_ = new v8::internal::HashMap(&ICacheMatch);
     isolate_->set_simulator_i_cache(i_cache_);
+  }
+  linstr_hits_ = isolate_->simulator_linstr_hits();
+  if (linstr_hits_ == NULL) {
+    linstr_hits_ = new v8::internal::HashMap(&LInstrStringMatch);
+    isolate_->set_simulator_linstr_hits(linstr_hits_);
   }
   Initialize(isolate);
   // Set up simulator support first. Some of this information is needed to
@@ -1681,6 +1700,8 @@ void Simulator::SoftwareInterrupt(Instruction* instr) {
       IncreaseStopCounter(code);
       HandleStop(code, instr);
     }
+  } else if (func == BREAK && code == kLithiumHitStopCode){
+    HandleSpecialStop(code, instr);
   } else {
     // All remaining break_ codes, and all traps are handled here.
     MipsDebugger dbg(this);
@@ -1714,6 +1735,31 @@ void Simulator::HandleStop(uint32_t code, Instruction* instr) {
   } else {
     set_pc(get_pc() + 2 * Instruction::kInstrSize);
   }
+}
+
+
+void Simulator::HandleSpecialStop(uint32_t code, Instruction* instr) {
+  ASSERT(code == kLithiumHitStopCode);
+  // Retrieve the encoded address, which comes just after this stop.
+  char** msg_address =
+      reinterpret_cast<char**>(get_pc() + Instruction::kInstrSize);
+  char* msg = *msg_address;
+  ASSERT(msg != NULL);
+
+  v8::internal::HashMap::Entry* entry = linstr_hits_->Lookup(
+      msg,
+      LInstrStringHash(msg),
+      true);
+  if (entry->value == NULL) {
+    uint32_t* count = new uint32_t;
+    *count = 0;
+    entry->value = count;
+    PrintF("Inserted new entry: %d - %s\n", linstr_hits_->occupancy(), msg);
+  }
+  *reinterpret_cast<uint32_t*>(entry->value) += 1;
+//  LOG(v8::internal::Isolate::Current(), LInstructionLogEventRuntime(msg));
+
+  set_pc(get_pc() + 2 * Instruction::kInstrSize);
 }
 
 

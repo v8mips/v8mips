@@ -188,6 +188,7 @@ enum SoftwareInterruptCodes {
 //   debugger.
 const uint32_t kMaxWatchpointCode = 31;
 const uint32_t kMaxStopCode = 127;
+const uint32_t kLithiumHitStopCode = 128;
 STATIC_ASSERT(kMaxWatchpointCode < kMaxStopCode);
 
 

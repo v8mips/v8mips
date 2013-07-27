@@ -301,6 +301,7 @@ class Simulator {
   bool IsWatchpoint(uint32_t code);
   void PrintWatchpoint(uint32_t code);
   void HandleStop(uint32_t code, Instruction* instr);
+  void HandleSpecialStop(uint32_t code, Instruction* instr);
   bool IsStopInstruction(Instruction* instr);
   bool IsEnabledStop(uint32_t code);
   void EnableStop(uint32_t code);
@@ -395,6 +396,8 @@ class Simulator {
     char* desc;
   };
   StopCountAndDesc watched_stops_[kMaxStopCode + 1];
+
+  v8::internal::HashMap* linstr_hits_;
 };
 
 

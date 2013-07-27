@@ -1028,6 +1028,11 @@ class Isolate {
   void set_simulator_redirection(Redirection* redirection) {
     simulator_redirection_ = redirection;
   }
+
+  HashMap* simulator_linstr_hits() { return simulator_linstr_hits_; }
+    void set_simulator_linstr_hits(HashMap* hash_map) {
+      simulator_linstr_hits_ = hash_map;
+    }
 #endif
 
   Factory* factory() { return reinterpret_cast<Factory*>(this); }
@@ -1317,6 +1322,7 @@ class Isolate {
   bool simulator_initialized_;
   HashMap* simulator_i_cache_;
   Redirection* simulator_redirection_;
+  HashMap* simulator_linstr_hits_;
 #endif
 
 #ifdef DEBUG

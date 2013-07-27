@@ -375,6 +375,7 @@ class Logger {
 
   // Log the instruction name and the generated size
   void LInstructionLogEvent(const char* name, const char* full_name, int size);
+  void LInstructionLogEventRuntime(char* instr);
 
  private:
   explicit Logger(Isolate* isolate);

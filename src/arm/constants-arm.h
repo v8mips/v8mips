@@ -358,6 +358,7 @@ enum SoftwareInterruptCodes {
 };
 const uint32_t kStopCodeMask = kStopCode - 1;
 const uint32_t kMaxStopCode = kStopCode - 1;
+const uint32_t kLithiumHitStopCode = 128;
 const int32_t  kDefaultStopCode = -1;
 
 

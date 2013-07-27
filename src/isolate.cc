@@ -1806,6 +1806,7 @@ Isolate::Isolate()
   simulator_initialized_ = false;
   simulator_i_cache_ = NULL;
   simulator_redirection_ = NULL;
+  simulator_linstr_hits_ = NULL;
 #endif
 
 #ifdef DEBUG
@@ -1844,6 +1845,22 @@ void Isolate::TearDown() {
   PerIsolateThreadData* saved_data = CurrentPerIsolateThreadData();
   Isolate* saved_isolate = UncheckedCurrent();
   SetIsolateThreadLocals(this, NULL);
+
+  if (FLAG_trace_lithium_instruction_hits_runtime) {
+    PrintF("=== Collected Lithium Instruction hit statistics: ===\n");
+    int count = 0;
+    for (HashMap::Entry* entry = simulator_linstr_hits()->Start();
+         entry != NULL;
+         entry = simulator_linstr_hits()->Next(entry)) {
+      ASSERT(entry->value != NULL);
+      if (entry->value != NULL) {
+        PrintF("%s %u\n",
+               reinterpret_cast<char*>(entry->key),
+               *reinterpret_cast<uint32_t*>(entry->value));
+        count++;
+      }
+    }
+  }
 
   Deinit();
 

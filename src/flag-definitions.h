@@ -555,6 +555,8 @@ DEFINE_bool(check_icache, false,
 DEFINE_int(stop_sim_at, 0, "Simulator stop after x number of instructions")
 DEFINE_int(sim_stack_alignment, 8,
            "Stack alingment in bytes in simulator (4 or 8, 8 is default)")
+DEFINE_bool(trace_lithium_instruction_hits_runtime,
+            false, "Print lithium instruction hit counts to stdout.")
 
 // isolate.cc
 DEFINE_bool(abort_on_uncaught_exception, false,

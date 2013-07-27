@@ -347,6 +347,8 @@ class Simulator {
   void DecodeVCVTBetweenDoubleAndSingle(Instruction* instr);
   void DecodeVCVTBetweenFloatingPointAndInteger(Instruction* instr);
 
+  void HandleSpecialStop(uint32_t code, Instruction* instr);
+
   // Executes one instruction.
   void InstructionDecode(Instruction* instr);
 
@@ -435,6 +437,8 @@ class Simulator {
     char* desc;
   };
   StopCountAndDesc watched_stops_[kNumOfWatchedStops];
+
+  v8::internal::HashMap* linstr_hits_;
 };
 
 

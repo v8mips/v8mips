@@ -275,6 +275,14 @@ bool LCodeGen::GenerateBody() {
               instr->Mnemonic());
     }
 
+    char* LithiumHitStopMsg = NULL;
+    if (!Serializer::enabled() && FLAG_trace_lithium_instruction_hits_runtime) {
+      // Quick & Dirty solution, this pointer will never be deleted or moved,
+      // so the simulator can always read this string
+      LithiumHitStopMsg = new char[strlen(instr->Mnemonic()) + 30];
+      __ LithiumHitStop(LithiumHitStopMsg);
+    }
+
     instr->CompileToNative(this);
 
     if (FLAG_log_lithium_instruction_sizes) {
@@ -288,8 +296,12 @@ bool LCodeGen::GenerateBody() {
       LOG(isolate(), LInstructionLogEvent(instr->Mnemonic(),
                                           *str,
                                           masm()->pc_offset() - lastPC));
-      lastPC = masm()->pc_offset();
     }
+    if (LithiumHitStopMsg != NULL) {
+      sprintf(LithiumHitStopMsg,
+              "%s-%d", instr->Mnemonic(), masm()->pc_offset() - lastPC);
+    }
+    lastPC = masm()->pc_offset();
   }
   EnsureSpaceForLazyDeopt();
   last_lazy_deopt_pc_ = masm()->pc_offset();

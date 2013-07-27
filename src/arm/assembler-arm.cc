@@ -1899,6 +1899,21 @@ void Assembler::stop(const char* msg, Condition cond, int32_t code) {
 }
 
 
+void Assembler::LithiumHitStop(char* msg) {
+#ifndef __arm__
+  {
+    // The Simulator will handle the stop instruction and get the message
+    // address. It expects to find the address just after the svc instruction.
+    BlockConstPoolScope block_const_pool(this);
+    svc(kLithiumHitStopCode, al);
+    emit(reinterpret_cast<Instr>(msg));
+  }
+#else  // def __arm__
+  // Nothing
+#endif  // def __arm__
+}
+
+
 void Assembler::bkpt(uint32_t imm16) {  // v5 and above
   ASSERT(is_uint16(imm16));
   emit(al | B24 | B21 | (imm16 >> 4)*B8 | BKPT | (imm16 & 0xf));

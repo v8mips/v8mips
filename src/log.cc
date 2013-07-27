@@ -1665,6 +1665,15 @@ void Logger::LInstructionLogEvent(const char* name,
 }
 
 
+// Unused currenty, because logging to file is _very_ slow
+void Logger::LInstructionLogEventRuntime(char* instr) {
+  if (!log_->IsEnabled() || !FLAG_trace_lithium_instruction_hits_runtime) return;
+  Log::MessageBuilder msg(log_);
+  msg.Append("RLIS:%s\n", instr);
+  msg.WriteToLogFile();
+}
+
+
 bool Logger::IsProfilerPaused() {
   return profiler_ == NULL || profiler_->paused();
 }
