@@ -163,6 +163,8 @@ class Runner(object):
 
   def GetCommand(self, test):
     d8testflag = []
+    logfile = ["--logfile=logging/"] + [test.GetLabel().replace("/", "_")] + self.context.mode_flags + test.flags + [".log"]
+    logfile = "".join(logfile).replace(" ", "_")
     shell = test.suite.shell()
     if shell == "d8":
       d8testflag = ["--test"]
@@ -172,7 +174,8 @@ class Runner(object):
            [os.path.abspath(os.path.join(self.context.shell_dir, shell))] +
            d8testflag +
            test.suite.GetFlagsForTestCase(test, self.context) +
-           self.context.extra_flags)
+           self.context.extra_flags +
+           [logfile])
     return cmd
 
 

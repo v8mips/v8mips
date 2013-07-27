@@ -1655,6 +1655,16 @@ void Logger::TickEvent(TickSample* sample, bool overflow) {
 }
 
 
+void Logger::LInstructionLogEvent(const char* name,
+                                  const char* full_name,
+                                  int size) {
+  if (!log_->IsEnabled() || !FLAG_log_lithium_instruction_sizes) return;
+  Log::MessageBuilder msg(log_);
+  msg.Append("LIS:%s-%d\t%s\t%d\t%s\n", name, size, name, size, full_name);
+  msg.WriteToLogFile();
+}
+
+
 bool Logger::IsProfilerPaused() {
   return profiler_ == NULL || profiler_->paused();
 }

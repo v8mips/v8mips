@@ -250,6 +250,7 @@ bool LCodeGen::GeneratePrologue() {
 bool LCodeGen::GenerateBody() {
   ASSERT(is_generating());
   bool emit_instructions = true;
+  int lastPC = 0;
   for (current_instruction_ = 0;
        !is_aborted() && current_instruction_ < instructions_->length();
        current_instruction_++) {
@@ -269,6 +270,20 @@ bool LCodeGen::GenerateBody() {
     }
 
     instr->CompileToNative(this);
+
+    if (FLAG_log_lithium_instruction_sizes) {
+      char buffer[1000];
+      NoAllocationStringAllocator allocator(buffer,
+          static_cast<unsigned>(sizeof(buffer)));
+      StringStream stream(&allocator);
+      instr->PrintTo(&stream);
+      SmartArrayPointer<const char> str = stream.ToCString();
+
+      LOG(isolate(), LInstructionLogEvent(instr->Mnemonic(),
+                                          *str,
+                                          masm()->pc_offset() - lastPC));
+      lastPC = masm()->pc_offset();
+    }
   }
   EnsureSpaceForLazyDeopt();
   last_lazy_deopt_pc_ = masm()->pc_offset();

@@ -373,6 +373,9 @@ class Logger {
   // Callback from Log, stops profiling in case of insufficient resources.
   void LogFailure();
 
+  // Log the instruction name and the generated size
+  void LInstructionLogEvent(const char* name, const char* full_name, int size);
+
  private:
   explicit Logger(Isolate* isolate);
   ~Logger();
