@@ -4982,10 +4982,8 @@ void LCodeGen::DoCheckMapCommon(Register map_reg,
                                 Handle<Map> map,
                                 CompareMapMode mode,
                                 LEnvironment* env) {
-  Label success;
-  __ CompareMapAndBranch(map_reg, map, &success, eq, &success, mode);
-  DeoptimizeIf(al, env);
-  __ bind(&success);
+  // Inline CompareMapAndBranch() here, how-to comment this better??
+  DeoptimizeIf(ne, env, map_reg, Operand(map));
 }
 
 
