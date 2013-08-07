@@ -2581,6 +2581,11 @@ void MacroAssembler::Ret(Condition cond,
                          Register rs,
                          const Operand& rt,
                          BranchDelaySlot bd) {
+  if (cond != cc_always) {
+    break_(kTracepoint4);  // plind - only trace CONDITIONAL Ret.
+  }
+  break_(kTracepoint5);  // plind - trace ALL Ret.
+  if (bd == USE_DELAY_SLOT) { break_(kTracepoint6); } // plind - trace BDSLOT using Ret.
   Jump(ra, cond, rs, rt, bd);
 }
 
@@ -2654,7 +2659,9 @@ void MacroAssembler::DropAndRet(int drop,
                                 const Operand& r2) {
   // Both Drop and Ret need to be conditional.
   Label skip;
+  break_(kTracepoint3);  // plind - tracing - ALL Drop & Ret, regardless if conditional.
   if (cond != cc_always) {
+    break_(kTracepoint2);  // plind - tracing - only on CONDITIONAL, regarless if taken or not.
     Branch(&skip, NegateCondition(cond), r1, r2);
   }
 
