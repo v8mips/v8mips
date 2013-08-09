@@ -1702,6 +1702,12 @@ void Isolate::ThreadDataTable::Remove(PerIsolateThreadData* data) {
   if (list_ == data) list_ = data->next_;
   if (data->next_ != NULL) data->next_->prev_ = data->prev_;
   if (data->prev_ != NULL) data->prev_->next_ = data->next_;
+#if !defined(__arm__) && defined(V8_TARGET_ARCH_ARM) || \
+    !defined(__mips__) && defined(V8_TARGET_ARCH_MIPS)
+    Simulator* sim = data->simulator();
+    delete sim;
+    data->set_simulator(NULL);
+#endif
   delete data;
 }
 
