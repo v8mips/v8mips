@@ -894,6 +894,7 @@ Simulator::Simulator(Isolate* isolate) : isolate_(isolate) {
   pc_modified_ = false;
   icount_ = 0;
   break_count_ = 0;
+  trace_count_ = 0;
   break_pc_ = NULL;
   break_instr_ = 0;
 
@@ -921,6 +922,12 @@ Simulator::Simulator(Isolate* isolate) : isolate_(isolate) {
   }
 
   last_debugger_input_ = NULL;
+}
+
+
+Simulator::~Simulator() {
+  PrintF("Simulation finished ....\n");
+  Simulator::PrintTracepoints(32);
 }
 
 
@@ -1601,6 +1608,8 @@ void Simulator::SoftwareInterrupt(Instruction* instr) {
   } else if (func == BREAK && code <= kMaxStopCode) {
     if (IsWatchpoint(code)) {
       PrintWatchpoint(code);
+    } else if (IsTracepoint(code)) {
+      CountTracepoint(code);
     } else {
       IncreaseStopCounter(code);
       HandleStop(code, instr);
@@ -1626,6 +1635,22 @@ void Simulator::PrintWatchpoint(uint32_t code) {
          "----------------------------------",
          code, break_count_, icount_);
   dbg.PrintAllRegs();  // Print registers and continue running.
+}
+
+// TODO(plind): introduce and flesh out the instruction traccing.
+bool Simulator::IsTracepoint(uint32_t code) {
+  return (code > kMaxWatchpointCode && code <= kMaxTracepointCode);
+}
+
+
+void Simulator::CountTracepoint(uint32_t code) {
+  ++trace_count_;
+}
+
+
+void Simulator::PrintTracepoints(uint32_t code) {
+  PrintF("\n---- trace count: %d, instr count: %d ----------------------",
+         trace_count_, icount_);
 }
 
 

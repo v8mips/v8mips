@@ -182,13 +182,17 @@ enum SoftwareInterruptCodes {
 // On MIPS Simulator breakpoints can have different codes:
 // - Breaks between 0 and kMaxWatchpointCode are treated as simple watchpoints,
 //   the simulator will run through them and print the registers.
+// - Breaks between kMaxWatchpointCode+1 and kMaxTracepointCode just increment
+//   counters to indicate frequency of execution.
 // - Breaks between kMaxWatchpointCode and kMaxStopCode are treated as stop()
 //   instructions (see Assembler::stop()).
 // - Breaks larger than kMaxStopCode are simple breaks, dropping you into the
 //   debugger.
 const uint32_t kMaxWatchpointCode = 31;
+const uint32_t kMaxTracepointCode = 63;
 const uint32_t kMaxStopCode = 127;
-STATIC_ASSERT(kMaxWatchpointCode < kMaxStopCode);
+STATIC_ASSERT(kMaxWatchpointCode < kMaxTracepointCode);
+STATIC_ASSERT(kMaxTracepointCode < kMaxStopCode);
 
 
 // ----- Fields offset and length.
