@@ -1467,17 +1467,17 @@ void Assembler::break_(uint32_t code, bool break_as_stop) {
   // See constants-mips.h for explanation.
   ASSERT((break_as_stop &&
           code <= kMaxStopCode &&
-          code > kMaxWatchpointCode) ||
+          code > kMaxTracepointCode) ||
          (!break_as_stop &&
           (code > kMaxStopCode ||
-           code <= kMaxWatchpointCode)));
+           code <= kMaxTracepointCode)));
   Instr break_instr = SPECIAL | BREAK | (code << 6);
   emit(break_instr);
 }
 
 
 void Assembler::stop(const char* msg, uint32_t code) {
-  ASSERT(code > kMaxWatchpointCode);
+  ASSERT(code > kMaxTracepointCode);
   ASSERT(code <= kMaxStopCode);
 #if V8_HOST_ARCH_MIPS
   break_(0x54321);

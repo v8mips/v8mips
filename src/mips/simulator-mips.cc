@@ -894,7 +894,7 @@ Simulator::Simulator(Isolate* isolate) : isolate_(isolate) {
   pc_modified_ = false;
   icount_ = 0;
   break_count_ = 0;
-  trace_count_ = 0;
+  for (uint32_t i=0; i<kNumTracepoints; ++i) trace_count_[i] = 0;
   break_pc_ = NULL;
   break_instr_ = 0;
 
@@ -1631,7 +1631,7 @@ bool Simulator::IsWatchpoint(uint32_t code) {
 void Simulator::PrintWatchpoint(uint32_t code) {
   MipsDebugger dbg(this);
   ++break_count_;
-  PrintF("\n---- break %d marker: %3d  (instr count: %8d) ----------"
+  PrintF("\n---- break %d marker: %3d  (instr count: %8lld) ----------"
          "----------------------------------",
          code, break_count_, icount_);
   dbg.PrintAllRegs();  // Print registers and continue running.
@@ -1644,13 +1644,16 @@ bool Simulator::IsTracepoint(uint32_t code) {
 
 
 void Simulator::CountTracepoint(uint32_t code) {
-  ++trace_count_;
+  ++trace_count_[code - kMinTracepointCode];
 }
 
 
 void Simulator::PrintTracepoints(uint32_t code) {
-  PrintF("\n---- trace count: %d, instr count: %d ----------------------",
-         trace_count_, icount_);
+  PrintF("\n---- Tracepoints, total instr count: %lld ----------------------\n",
+         icount_);
+  PrintF("0: %d,  1:%d,  2:%d,  3: %d,  4: %d,  5:%d,  6:%d,  7: %d\n",
+         trace_count_[0], trace_count_[1], trace_count_[2], trace_count_[3],
+         trace_count_[4], trace_count_[5], trace_count_[6], trace_count_[7]);
 }
 
 
@@ -2822,7 +2825,7 @@ void Simulator::CallInternal(byte* entry) {
 
   // Set up the callee-saved registers with a known value. To be able to check
   // that they are preserved properly across JS execution.
-  int32_t callee_saved_value = icount_;
+  int32_t callee_saved_value = static_cast<int32_t>(icount_ & 0x0ffffffffLL);
   set_register(s0, callee_saved_value);
   set_register(s1, callee_saved_value);
   set_register(s2, callee_saved_value);
