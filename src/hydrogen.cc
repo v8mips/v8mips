@@ -10596,14 +10596,15 @@ HInstruction* HOptimizedGraphBuilder::BuildFastLiteral(
   int total_size = data_size + pointer_size;
 
   NoObservableSideEffectsScope no_effects(this);
-
-  HAllocate::Flags flags = HAllocate::CAN_ALLOCATE_IN_NEW_SPACE;
+  ElementsKind kind = boilerplate_object->map()->elements_kind();
+  HAllocate::Flags flags = static_cast<HAllocate::Flags>(
+      HAllocate::DefaultFlags(kind) | HAllocate::CAN_ALLOCATE_IN_NEW_SPACE);
   // TODO(hpayer): add support for old data space
   if (FLAG_pretenure_literals &&
       isolate()->heap()->ShouldGloballyPretenure() &&
       data_size == 0) {
-    flags = static_cast<HAllocate::Flags>(
-        flags | HAllocate::CAN_ALLOCATE_IN_OLD_POINTER_SPACE);
+    flags = static_cast<HAllocate::Flags>(HAllocate::DefaultFlags(kind)
+        | HAllocate::CAN_ALLOCATE_IN_OLD_POINTER_SPACE);
   }
 
   HValue* size_in_bytes =
