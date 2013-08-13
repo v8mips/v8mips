@@ -3029,7 +3029,7 @@ void LCodeGen::DoLoadKeyedFixedDoubleArray(LLoadKeyed* instr) {
     __ Addu(elements, elements, scratch);
   }
   __ Addu(elements, elements, Operand(base_offset));
-  __ ldc1(result, MemOperand(elements));
+  __ ldc1(result, MemOperand(elements), true);
   if (instr->hydrogen()->RequiresHoleCheck()) {
     __ lw(scratch, MemOperand(elements, sizeof(kHoleNanLower32)));
     DeoptimizeIf(eq, instr->environment(), scratch, Operand(kHoleNanUpper32));
@@ -4179,7 +4179,7 @@ void LCodeGen::DoStoreKeyedFixedDoubleArray(LStoreKeyed* instr) {
 
   __ bind(&not_nan);
   __ sdc1(value, MemOperand(scratch, instr->additional_index() <<
-      element_size_shift));
+      element_size_shift), true);
 }
 
 
