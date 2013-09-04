@@ -9114,6 +9114,51 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_AllocateInNewSpace) {
 }
 
 
+INLINE(static HeapObject* EnsureDoubleAligned(Heap* heap,
+                                              HeapObject* object,
+                                              int size));
+
+static HeapObject* EnsureDoubleAligned(Heap* heap,
+                                       HeapObject* object,
+                                       int size) {
+  if ((OffsetFrom(object->address()) & kDoubleAlignmentMask) != 0) {
+    heap->CreateFillerObjectAt(object->address(), kPointerSize);
+    return HeapObject::FromAddress(object->address() + kPointerSize);
+  } else {
+    heap->CreateFillerObjectAt(object->address() + size - kPointerSize,
+                               kPointerSize);
+    return object;
+  }
+}
+
+
+RUNTIME_FUNCTION(MaybeObject*, Runtime_AllocateInNewSpaceAligned) {
+  // Allocate a block of memory in NewSpace (filled with a filler).
+  // Use as fallback for allocation in generated code when NewSpace
+  // is full.
+  NoHandleAllocation ha(isolate);
+  ASSERT(args.length() == 1);
+  CONVERT_ARG_HANDLE_CHECKED(Smi, size_smi, 0);
+  int size = size_smi->value();
+  int allocation_size = size + kPointerSize;
+  RUNTIME_ASSERT(IsAligned(size, kPointerSize));
+  RUNTIME_ASSERT(size > 0);
+  Heap* heap = isolate->heap();
+  RUNTIME_ASSERT(size <= heap->MaxNewSpaceAllocationSize());
+  Object* allocation;
+  { MaybeObject* maybe_allocation =
+        heap->new_space()->AllocateRaw(allocation_size);
+    if (maybe_allocation->ToObject(&allocation)) {
+      HeapObject* object = HeapObject::cast(allocation);
+      object = EnsureDoubleAligned(heap, object, allocation_size);
+      heap->CreateFillerObjectAt(object->address(), size);
+      return object;
+    }
+    return maybe_allocation;
+  }
+}
+
+
 RUNTIME_FUNCTION(MaybeObject*, Runtime_AllocateInOldPointerSpace) {
   // Allocate a block of memory in old pointer space (filled with a filler).
   // Use as fallback for allocation in generated code when old pointer space

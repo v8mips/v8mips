@@ -150,7 +150,7 @@ class LCodeGen BASE_EMBEDDED {
   void DoDeferredStringCharCodeAt(LStringCharCodeAt* instr);
   void DoDeferredStringCharFromCode(LStringCharFromCode* instr);
   void DoDeferredAllocateObject(LAllocateObject* instr);
-  void DoDeferredAllocate(LAllocate* instr);
+  void DoDeferredAllocate(LAllocate* instr, AllocationFlags flags);
   void DoDeferredInstanceOfKnownGlobal(LInstanceOfKnownGlobal* instr,
                                        Label* map_check);
 
