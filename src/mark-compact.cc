@@ -2021,7 +2021,12 @@ int MarkCompactCollector::DiscoverAndPromoteBlackObjectsOnPage(
       }
 
       // Promotion failed. Just migrate object to another semispace.
-      MaybeObject* allocation = new_space->AllocateRaw(size);
+      int allocation_size = size;
+      if (Heap::MustBeDoubleAligned(object))  {
+        ASSERT(kObjectAlignment != kDoubleAlignment);
+        allocation_size += kPointerSize;
+      }
+      MaybeObject* allocation = new_space->AllocateRaw(allocation_size);
       if (allocation->IsFailure()) {
         if (!new_space->AddFreshPage()) {
           // Shouldn't happen. We are sweeping linearly, and to-space
@@ -2029,12 +2034,15 @@ int MarkCompactCollector::DiscoverAndPromoteBlackObjectsOnPage(
           // always room.
           UNREACHABLE();
         }
-        allocation = new_space->AllocateRaw(size);
+        allocation = new_space->AllocateRaw(allocation_size);
         ASSERT(!allocation->IsFailure());
       }
-      Object* target = allocation->ToObjectUnchecked();
-
-      MigrateObject(HeapObject::cast(target)->address(),
+      Object* result = allocation->ToObjectUnchecked();
+      HeapObject* target = HeapObject::cast(result);
+      if (Heap::MustBeDoubleAligned(object))  {
+        target = heap()->EnsureDoubleAligned(target, allocation_size);
+      }
+      MigrateObject(target->address(),
                     object->address(),
                     size,
                     NEW_SPACE);
@@ -2940,16 +2948,24 @@ bool MarkCompactCollector::TryPromoteObject(HeapObject* object,
   // TODO(hpayer): Replace that check with an assert.
   CHECK(object_size <= Page::kMaxNonCodeHeapObjectSize);
 
+  int allocation_size = object_size;
+  if (Heap::MustBeDoubleAligned(object))  {
+    ASSERT(kObjectAlignment != kDoubleAlignment);
+    allocation_size += kPointerSize;
+  }
   OldSpace* target_space = heap()->TargetSpace(object);
 
   ASSERT(target_space == heap()->old_pointer_space() ||
          target_space == heap()->old_data_space());
   Object* result;
   MaybeObject* maybe_result = target_space->AllocateRaw(
-      object_size,
+      allocation_size,
       PagedSpace::MOVE_OBJECT);
   if (maybe_result->ToObject(&result)) {
     HeapObject* target = HeapObject::cast(result);
+    if (Heap::MustBeDoubleAligned(object))  {
+      target = heap()->EnsureDoubleAligned(target, allocation_size);
+    }
     MigrateObject(target->address(),
                   object->address(),
                   object_size,
@@ -3020,16 +3036,25 @@ void MarkCompactCollector::EvacuateLiveObjectsFromPage(Page* p) {
 
       int size = object->Size();
 
-      MaybeObject* target = space->AllocateRaw(size, PagedSpace::MOVE_OBJECT);
+      int allocation_size = size;
+      if (Heap::MustBeDoubleAligned(object))  {
+        ASSERT(kObjectAlignment != kDoubleAlignment);
+        allocation_size += kPointerSize;
+      }
+      MaybeObject* target = space->AllocateRaw(allocation_size, PagedSpace::MOVE_OBJECT);
       if (target->IsFailure()) {
         // OS refused to give us memory.
         V8::FatalProcessOutOfMemory("Evacuation");
         return;
       }
 
-      Object* target_object = target->ToObjectUnchecked();
-
-      MigrateObject(HeapObject::cast(target_object)->address(),
+      Object* result = target->ToObjectUnchecked();
+      HeapObject* target_object = HeapObject::cast(result);
+      if (Heap::MustBeDoubleAligned(object)) {
+        target_object =
+            heap()->EnsureDoubleAligned(target_object, allocation_size);
+      }
+      MigrateObject(target_object->address(),
                     object_addr,
                     size,
                     space->identity());
