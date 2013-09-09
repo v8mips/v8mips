@@ -9782,11 +9782,50 @@ static MaybeObject* Allocate(Isolate* isolate,
 }
 
 
+static MaybeObject* AllocateDoubleAligned(Isolate* isolate,
+                                          int size,
+                                          AllocationSpace space) {
+  // Allocate a block of memory in the given space (filled with a filler).
+  // Use as fallback for allocation in generated code when the space
+  // is full.
+  SealHandleScope shs(isolate);
+  RUNTIME_ASSERT(IsAligned(size, kPointerSize));
+  RUNTIME_ASSERT(size > 0);
+  Heap* heap = isolate->heap();
+  RUNTIME_ASSERT(size <= heap->MaxRegularSpaceAllocationSize());
+  Object* allocation;
+  int allocation_size = size + kPointerSize;
+  { MaybeObject* maybe_allocation;
+    if (space == NEW_SPACE) {
+      maybe_allocation = heap->new_space()->AllocateRaw(allocation_size);
+    } else {
+      ASSERT(space == OLD_DATA_SPACE);
+      maybe_allocation = heap->paged_space(space)->AllocateRaw(allocation_size);
+    }
+    if (maybe_allocation->ToObject(&allocation)) {
+      HeapObject* object = HeapObject::cast(allocation);
+      object = heap->EnsureDoubleAligned(object, allocation_size);
+      heap->CreateFillerObjectAt(object->address(), size);
+      return object;
+    }
+    return maybe_allocation;
+  }
+}
+
+
 RUNTIME_FUNCTION(MaybeObject*, Runtime_AllocateInNewSpace) {
   SealHandleScope shs(isolate);
   ASSERT(args.length() == 1);
   CONVERT_ARG_HANDLE_CHECKED(Smi, size_smi, 0);
   return Allocate(isolate, size_smi->value(), NEW_SPACE);
+}
+
+
+RUNTIME_FUNCTION(MaybeObject*, Runtime_AllocateInNewSpaceAligned) {
+  SealHandleScope shs(isolate);
+  ASSERT(args.length() == 1);
+  CONVERT_ARG_HANDLE_CHECKED(Smi, size_smi, 0);
+  return AllocateDoubleAligned(isolate, size_smi->value(), NEW_SPACE);
 }
 
 
@@ -9803,6 +9842,14 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_AllocateInOldDataSpace) {
   ASSERT(args.length() == 1);
   CONVERT_ARG_HANDLE_CHECKED(Smi, size_smi, 0);
   return Allocate(isolate, size_smi->value(), OLD_DATA_SPACE);
+}
+
+
+RUNTIME_FUNCTION(MaybeObject*, Runtime_AllocateInOldDataSpaceAligned) {
+  SealHandleScope shs(isolate);
+  ASSERT(args.length() == 1);
+  CONVERT_ARG_HANDLE_CHECKED(Smi, size_smi, 0);
+  return AllocateDoubleAligned(isolate, size_smi->value(), OLD_DATA_SPACE);
 }
 
 

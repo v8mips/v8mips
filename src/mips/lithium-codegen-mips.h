@@ -133,7 +133,7 @@ class LCodeGen: public LCodeGenBase {
   void DoDeferredStackCheck(LStackCheck* instr);
   void DoDeferredStringCharCodeAt(LStringCharCodeAt* instr);
   void DoDeferredStringCharFromCode(LStringCharFromCode* instr);
-  void DoDeferredAllocate(LAllocate* instr);
+  void DoDeferredAllocate(LAllocate* instr, AllocationFlags flags);
   void DoDeferredInstanceOfKnownGlobal(LInstanceOfKnownGlobal* instr,
                                        Label* map_check);
 
