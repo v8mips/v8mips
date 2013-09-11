@@ -125,8 +125,8 @@ template <typename T> inline T ToCData(v8::internal::Object* obj) {
 
 
 template <typename T>
-inline v8::internal::Handle<v8::internal::Object> FromCData(T obj) {
-  v8::internal::Isolate* isolate = v8::internal::Isolate::Current();
+inline v8::internal::Handle<v8::internal::Object> FromCData(
+    v8::internal::Isolate* isolate, T obj) {
   STATIC_ASSERT(sizeof(T) == sizeof(v8::internal::Address));
   return isolate->factory()->NewForeign(
       reinterpret_cast<v8::internal::Address>(reinterpret_cast<intptr_t>(obj)));
@@ -170,6 +170,7 @@ class RegisteredExtension {
   V(Object, JSObject)                          \
   V(Array, JSArray)                            \
   V(ArrayBuffer, JSArrayBuffer)                \
+  V(ArrayBufferView, JSArrayBufferView)        \
   V(TypedArray, JSTypedArray)                  \
   V(Uint8Array, JSTypedArray)                  \
   V(Uint8ClampedArray, JSTypedArray)           \
@@ -180,6 +181,7 @@ class RegisteredExtension {
   V(Int32Array, JSTypedArray)                  \
   V(Float32Array, JSTypedArray)                \
   V(Float64Array, JSTypedArray)                \
+  V(DataView, JSDataView)                      \
   V(String, String)                            \
   V(Symbol, Symbol)                            \
   V(Script, Object)                            \
@@ -217,6 +219,10 @@ class Utils {
       v8::internal::Handle<v8::internal::JSArray> obj);
   static inline Local<ArrayBuffer> ToLocal(
       v8::internal::Handle<v8::internal::JSArrayBuffer> obj);
+  static inline Local<ArrayBufferView> ToLocal(
+      v8::internal::Handle<v8::internal::JSArrayBufferView> obj);
+  static inline Local<DataView> ToLocal(
+      v8::internal::Handle<v8::internal::JSDataView> obj);
 
   static inline Local<TypedArray> ToLocal(
       v8::internal::Handle<v8::internal::JSTypedArray> obj);
@@ -348,6 +354,8 @@ MAKE_TO_LOCAL(ToLocal, JSRegExp, RegExp)
 MAKE_TO_LOCAL(ToLocal, JSObject, Object)
 MAKE_TO_LOCAL(ToLocal, JSArray, Array)
 MAKE_TO_LOCAL(ToLocal, JSArrayBuffer, ArrayBuffer)
+MAKE_TO_LOCAL(ToLocal, JSArrayBufferView, ArrayBufferView)
+MAKE_TO_LOCAL(ToLocal, JSDataView, DataView)
 MAKE_TO_LOCAL(ToLocal, JSTypedArray, TypedArray)
 
 MAKE_TO_LOCAL_TYPED_ARRAY(Uint8Array, kExternalUnsignedByteArray)
@@ -682,19 +690,11 @@ void HandleScopeImplementer::DeleteExtensions(internal::Object** prev_limit) {
 
 // Interceptor functions called from generated inline caches to notify
 // CPU profiler that external callbacks are invoked.
-v8::Handle<v8::Value> InvokeAccessorGetter(
-    v8::Local<v8::String> property,
-    const v8::AccessorInfo& info,
-    v8::AccessorGetter getter);
-
-
 void InvokeAccessorGetterCallback(
     v8::Local<v8::String> property,
     const v8::PropertyCallbackInfo<v8::Value>& info,
     v8::AccessorGetterCallback getter);
 
-v8::Handle<v8::Value> InvokeInvocationCallback(const v8::Arguments& args,
-                                              v8::InvocationCallback callback);
 void InvokeFunctionCallback(const v8::FunctionCallbackInfo<v8::Value>& info,
                             v8::FunctionCallback callback);
 

@@ -26,14 +26,11 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 // Flags: --allow-natives-syntax --expose-gc
-// Flags: --parallel-recompilation --parallel-recompilation-delay=50
+// Flags: --concurrent-recompilation --concurrent-recompilation-delay=50
 
-function assertUnoptimized(fun) {
-  assertTrue(%GetOptimizationStatus(fun) != 1);
-}
-
-function assertOptimized(fun) {
-  assertTrue(%GetOptimizationStatus(fun) != 2);
+if (!%IsConcurrentRecompilationSupported()) {
+  print("Concurrent recompilation is disabled. Skipping this test.");
+  quit();
 }
 
 function f(x) {
@@ -56,15 +53,12 @@ f(g(1));
 assertUnoptimized(f);
 assertUnoptimized(g);
 
-%OptimizeFunctionOnNextCall(f, "parallel");
-%OptimizeFunctionOnNextCall(g, "parallel");
+%OptimizeFunctionOnNextCall(f, "concurrent");
+%OptimizeFunctionOnNextCall(g, "concurrent");
 f(g(2));  // Trigger optimization.
 
-assertUnoptimized(f);  // Not yet optimized.
-assertUnoptimized(g);
+assertUnoptimized(f, "no sync");  // Not yet optimized while background thread
+assertUnoptimized(g, "no sync");  // is running.
 
-%CompleteOptimization(f);  // Wait till optimized code is installed.
-%CompleteOptimization(g);
-
-assertOptimized(f);  // Optimized now.
-assertOptimized(g);
+assertOptimized(f, "sync");  // Optimized once we sync with the
+assertOptimized(g, "sync");  // background thread.

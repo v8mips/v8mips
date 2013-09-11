@@ -185,7 +185,8 @@ function StringMatch(regexp) {
   if (IS_REGEXP(regexp)) {
     // Emulate RegExp.prototype.exec's side effect in step 5, even though
     // value is discarded.
-    ToInteger(regexp.lastIndex);
+    var lastIndex = regexp.lastIndex;
+    TO_INTEGER_FOR_SIDE_EFFECT(lastIndex);
     if (!regexp.global) return RegExpExecNoTests(regexp, subject, 0);
     %_Log('regexp', 'regexp-match,%0S,%1r', [subject, regexp]);
     // lastMatchInfo is defined in regexp.js.
@@ -236,7 +237,8 @@ function StringReplace(search, replace) {
   if (IS_REGEXP(search)) {
     // Emulate RegExp.prototype.exec's side effect in step 5, even if
     // value is discarded.
-    ToInteger(search.lastIndex);
+    var lastIndex = search.lastIndex;
+    TO_INTEGER_FOR_SIDE_EFFECT(lastIndex);
     %_Log('regexp', 'regexp-replace,%0r,%1S', [search, subject]);
 
     if (!IS_SPEC_FUNCTION(replace)) {
@@ -495,8 +497,7 @@ function StringReplaceGlobalRegExpWithFunction(subject, regexp, replace) {
       }
     }
   }
-  var resultBuilder = new ReplaceResultBuilder(subject, res);
-  var result = resultBuilder.generate();
+  var result = %StringBuilderConcat(res, res.length, subject);
   resultArray.length = 0;
   reusableReplaceArray = resultArray;
   return result;
@@ -645,6 +646,8 @@ function StringSplit(separator, limit) {
 }
 
 
+var ArrayPushBuiltin = $Array.prototype.push;
+
 function StringSplitOnRegExp(subject, separator, limit, length) {
   %_Log('regexp', 'regexp-split,%0S,%1r', [subject, separator]);
 
@@ -664,13 +667,15 @@ function StringSplitOnRegExp(subject, separator, limit, length) {
   while (true) {
 
     if (startIndex === length) {
-      result.push(%_SubString(subject, currentIndex, length));
+      %_CallFunction(result, %_SubString(subject, currentIndex, length),
+                     ArrayPushBuiltin);
       break;
     }
 
     var matchInfo = DoRegExpExec(separator, subject, startIndex);
     if (matchInfo == null || length === (startMatch = matchInfo[CAPTURE0])) {
-      result.push(%_SubString(subject, currentIndex, length));
+      %_CallFunction(result, %_SubString(subject, currentIndex, length),
+                     ArrayPushBuiltin);
       break;
     }
     var endIndex = matchInfo[CAPTURE1];
@@ -681,7 +686,8 @@ function StringSplitOnRegExp(subject, separator, limit, length) {
       continue;
     }
 
-    result.push(%_SubString(subject, currentIndex, startMatch));
+    %_CallFunction(result, %_SubString(subject, currentIndex, startMatch),
+                   ArrayPushBuiltin);
 
     if (result.length === limit) break;
 
@@ -690,9 +696,10 @@ function StringSplitOnRegExp(subject, separator, limit, length) {
       var start = matchInfo[i++];
       var end = matchInfo[i++];
       if (end != -1) {
-        result.push(%_SubString(subject, start, end));
+        %_CallFunction(result, %_SubString(subject, start, end),
+                       ArrayPushBuiltin);
       } else {
-        result.push(void 0);
+        %_CallFunction(result, void 0, ArrayPushBuiltin);
       }
       if (result.length === limit) break outer_loop;
     }
@@ -949,43 +956,6 @@ function StringSub() {
 function StringSup() {
   return "<sup>" + this + "</sup>";
 }
-
-
-// ReplaceResultBuilder support.
-function ReplaceResultBuilder(str) {
-  if (%_ArgumentsLength() > 1) {
-    this.elements = %_Arguments(1);
-  } else {
-    this.elements = new InternalArray();
-  }
-  this.special_string = str;
-}
-
-SetUpLockedPrototype(ReplaceResultBuilder,
-  $Array("elements", "special_string"), $Array(
-  "add", function(str) {
-    str = TO_STRING_INLINE(str);
-    if (str.length > 0) this.elements.push(str);
-  },
-  "addSpecialSlice", function(start, end) {
-    var len = end - start;
-    if (start < 0 || len <= 0) return;
-    if (start < 0x80000 && len < 0x800) {
-      this.elements.push((start << 11) | len);
-    } else {
-      // 0 < len <= String::kMaxLength and Smi::kMaxValue >= String::kMaxLength,
-      // so -len is a smi.
-      var elements = this.elements;
-      elements.push(-len);
-      elements.push(start);
-    }
-  },
-  "generate", function() {
-    var elements = this.elements;
-    return %StringBuilderConcat(elements, elements.length, this.special_string);
-  }
-));
-
 
 // -------------------------------------------------------------------
 

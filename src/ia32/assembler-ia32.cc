@@ -36,7 +36,7 @@
 
 #include "v8.h"
 
-#if defined(V8_TARGET_ARCH_IA32)
+#if V8_TARGET_ARCH_IA32
 
 #include "disassembler.h"
 #include "macro-assembler.h"
@@ -65,7 +65,7 @@ int IntelDoubleRegister::NumAllocatableRegisters() {
   if (CpuFeatures::IsSupported(SSE2)) {
     return XMMRegister::kNumAllocatableRegisters;
   } else {
-    return X87TopOfStackRegister::kNumAllocatableRegisters;
+    return X87Register::kNumAllocatableRegisters;
   }
 }
 
@@ -74,7 +74,7 @@ int IntelDoubleRegister::NumRegisters() {
   if (CpuFeatures::IsSupported(SSE2)) {
     return XMMRegister::kNumRegisters;
   } else {
-    return X87TopOfStackRegister::kNumRegisters;
+    return X87Register::kNumRegisters;
   }
 }
 
@@ -83,7 +83,7 @@ const char* IntelDoubleRegister::AllocationIndexToString(int index) {
   if (CpuFeatures::IsSupported(SSE2)) {
     return XMMRegister::AllocationIndexToString(index);
   } else {
-    return X87TopOfStackRegister::AllocationIndexToString(index);
+    return X87Register::AllocationIndexToString(index);
   }
 }
 
@@ -101,80 +101,28 @@ void CpuFeatures::Probe() {
     return;  // No features if we might serialize.
   }
 
-  const int kBufferSize = 4 * KB;
-  VirtualMemory* memory = new VirtualMemory(kBufferSize);
-  if (!memory->IsReserved()) {
-    delete memory;
-    return;
+  uint64_t probed_features = 0;
+  CPU cpu;
+  if (cpu.has_sse41()) {
+    probed_features |= static_cast<uint64_t>(1) << SSE4_1;
   }
-  ASSERT(memory->size() >= static_cast<size_t>(kBufferSize));
-  if (!memory->Commit(memory->address(), kBufferSize, true/*executable*/)) {
-    delete memory;
-    return;
+  if (cpu.has_sse3()) {
+    probed_features |= static_cast<uint64_t>(1) << SSE3;
+  }
+  if (cpu.has_sse2()) {
+    probed_features |= static_cast<uint64_t>(1) << SSE2;
+  }
+  if (cpu.has_cmov()) {
+    probed_features |= static_cast<uint64_t>(1) << CMOV;
   }
 
-  Assembler assm(NULL, memory->address(), kBufferSize);
-  Label cpuid, done;
-#define __ assm.
-  // Save old esp, since we are going to modify the stack.
-  __ push(ebp);
-  __ pushfd();
-  __ push(ecx);
-  __ push(ebx);
-  __ mov(ebp, esp);
+  // SAHF must be available in compat/legacy mode.
+  ASSERT(cpu.has_sahf());
+  probed_features |= static_cast<uint64_t>(1) << SAHF;
 
-  // If we can modify bit 21 of the EFLAGS register, then CPUID is supported.
-  __ pushfd();
-  __ pop(eax);
-  __ mov(edx, eax);
-  __ xor_(eax, 0x200000);  // Flip bit 21.
-  __ push(eax);
-  __ popfd();
-  __ pushfd();
-  __ pop(eax);
-  __ xor_(eax, edx);  // Different if CPUID is supported.
-  __ j(not_zero, &cpuid);
-
-  // CPUID not supported. Clear the supported features in edx:eax.
-  __ xor_(eax, eax);
-  __ xor_(edx, edx);
-  __ jmp(&done);
-
-  // Invoke CPUID with 1 in eax to get feature information in
-  // ecx:edx. Temporarily enable CPUID support because we know it's
-  // safe here.
-  __ bind(&cpuid);
-  __ mov(eax, 1);
-  supported_ = (1 << CPUID);
-  { CpuFeatureScope fscope(&assm, CPUID);
-    __ cpuid();
-  }
-  supported_ = 0;
-
-  // Move the result from ecx:edx to edx:eax and make sure to mark the
-  // CPUID feature as supported.
-  __ mov(eax, edx);
-  __ or_(eax, 1 << CPUID);
-  __ mov(edx, ecx);
-
-  // Done.
-  __ bind(&done);
-  __ mov(esp, ebp);
-  __ pop(ebx);
-  __ pop(ecx);
-  __ popfd();
-  __ pop(ebp);
-  __ ret(0);
-#undef __
-
-  typedef uint64_t (*F0)();
-  F0 probe = FUNCTION_CAST<F0>(reinterpret_cast<Address>(memory->address()));
-  uint64_t probed_features = probe();
   uint64_t platform_features = OS::CpuFeaturesImpliedByPlatform();
   supported_ = probed_features | platform_features;
   found_by_runtime_probing_only_ = probed_features & ~platform_features;
-
-  delete memory;
 }
 
 
@@ -474,7 +422,6 @@ void Assembler::CodeTargetAlign() {
 
 
 void Assembler::cpuid() {
-  ASSERT(IsEnabled(CPUID));
   EnsureSpace ensure_space(this);
   EMIT(0x0F);
   EMIT(0xA2);
@@ -1055,6 +1002,7 @@ void Assembler::rcr(Register dst, uint8_t imm8) {
   }
 }
 
+
 void Assembler::ror(Register dst, uint8_t imm8) {
   EnsureSpace ensure_space(this);
   ASSERT(is_uint5(imm8));  // illegal shift count
@@ -1067,6 +1015,7 @@ void Assembler::ror(Register dst, uint8_t imm8) {
     EMIT(imm8);
   }
 }
+
 
 void Assembler::ror_cl(Register dst) {
   EnsureSpace ensure_space(this);
@@ -1225,6 +1174,10 @@ void Assembler::test_b(Register reg, const Operand& op) {
 
 
 void Assembler::test(const Operand& op, const Immediate& imm) {
+  if (op.is_reg_only()) {
+    test(op.reg(), imm);
+    return;
+  }
   EnsureSpace ensure_space(this);
   EMIT(0xF7);
   emit_operand(eax, op);
@@ -1301,14 +1254,6 @@ void Assembler::int3() {
 void Assembler::nop() {
   EnsureSpace ensure_space(this);
   EMIT(0x90);
-}
-
-
-void Assembler::rdtsc() {
-  ASSERT(IsEnabled(RDTSC));
-  EnsureSpace ensure_space(this);
-  EMIT(0x0F);
-  EMIT(0x31);
 }
 
 
@@ -1635,6 +1580,13 @@ void Assembler::fstp_s(const Operand& adr) {
 }
 
 
+void Assembler::fst_s(const Operand& adr) {
+  EnsureSpace ensure_space(this);
+  EMIT(0xD9);
+  emit_operand(edx, adr);
+}
+
+
 void Assembler::fstp_d(const Operand& adr) {
   EnsureSpace ensure_space(this);
   EMIT(0xDD);
@@ -1779,6 +1731,12 @@ void Assembler::fisub_s(const Operand& adr) {
   EnsureSpace ensure_space(this);
   EMIT(0xDA);
   emit_operand(esp, adr);
+}
+
+
+void Assembler::fmul_i(int i) {
+  EnsureSpace ensure_space(this);
+  emit_farith(0xD8, 0xC8, i);
 }
 
 
@@ -2136,6 +2094,7 @@ void Assembler::roundsd(XMMRegister dst, XMMRegister src, RoundingMode mode) {
   // Mask precision exeption.
   EMIT(static_cast<byte>(mode) | 0x8);
 }
+
 
 void Assembler::movmskpd(Register dst, XMMRegister src) {
   ASSERT(IsEnabled(SSE2));

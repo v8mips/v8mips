@@ -43,22 +43,8 @@ int Deoptimizer::patch_size() {
 }
 
 
-void Deoptimizer::DeoptimizeFunctionWithPreparedFunctionList(
-    JSFunction* function) {
-  Isolate* isolate = function->GetIsolate();
-  HandleScope scope(isolate);
-  DisallowHeapAllocation nha;
-
-  ASSERT(function->IsOptimized());
-  ASSERT(function->FunctionsInFunctionListShareSameCode());
-
-  // Get the optimized code.
-  Code* code = function->code();
+void Deoptimizer::PatchCodeForDeoptimization(Isolate* isolate, Code* code) {
   Address code_start_address = code->instruction_start();
-
-  // The optimized code is going to be patched, so we cannot use it any more.
-  function->shared()->EvictFromOptimizedCodeMap(code, "deoptimized function");
-
   // Invalidate the relocation information, as it will become invalid by the
   // code patching below, and is not needed any more.
   code->InvalidateRelocation();
@@ -89,30 +75,6 @@ void Deoptimizer::DeoptimizeFunctionWithPreparedFunctionList(
     prev_call_address = call_address;
 #endif
   }
-
-  // Add the deoptimizing code to the list.
-  DeoptimizingCodeListNode* node = new DeoptimizingCodeListNode(code);
-  DeoptimizerData* data = isolate->deoptimizer_data();
-  node->set_next(data->deoptimizing_code_list_);
-  data->deoptimizing_code_list_ = node;
-
-  // We might be in the middle of incremental marking with compaction.
-  // Tell collector to treat this code object in a special way and
-  // ignore all slots that might have been recorded on it.
-  isolate->heap()->mark_compact_collector()->InvalidateCode(code);
-
-  ReplaceCodeForRelatedFunctions(function, code);
-
-  if (FLAG_trace_deopt) {
-    PrintF("[forced deoptimization: ");
-    function->PrintName();
-    PrintF(" / %x]\n", reinterpret_cast<uint32_t>(function));
-#ifdef DEBUG
-    if (FLAG_print_code) {
-      code->PrintLn();
-    }
-#endif
-  }
 }
 
 
@@ -139,12 +101,7 @@ void Deoptimizer::DeoptimizeFunctionWithPreparedFunctionList(
 
 void Deoptimizer::PatchInterruptCodeAt(Code* unoptimized_code,
                                         Address pc_after,
-                                        Code* interrupt_code,
                                         Code* replacement_code) {
-  ASSERT(!InterruptCodeIsPatched(unoptimized_code,
-                                 pc_after,
-                                 interrupt_code,
-                                 replacement_code));
   static const int kInstrSize = Assembler::kInstrSize;
   // Replace the sltu instruction with load-imm 1 to at, so beq is not taken.
   CodePatcher patcher(pc_after - 6 * kInstrSize, 1);
@@ -161,12 +118,7 @@ void Deoptimizer::PatchInterruptCodeAt(Code* unoptimized_code,
 
 void Deoptimizer::RevertInterruptCodeAt(Code* unoptimized_code,
                                         Address pc_after,
-                                        Code* interrupt_code,
-                                        Code* replacement_code) {
-  ASSERT(InterruptCodeIsPatched(unoptimized_code,
-                                 pc_after,
-                                 interrupt_code,
-                                 replacement_code));
+                                        Code* interrupt_code) {
   static const int kInstrSize = Assembler::kInstrSize;
   // Restore the sltu instruction so beq can be taken again.
   CodePatcher patcher(pc_after - 6 * kInstrSize, 1);
@@ -181,23 +133,28 @@ void Deoptimizer::RevertInterruptCodeAt(Code* unoptimized_code,
 
 
 #ifdef DEBUG
-bool Deoptimizer::InterruptCodeIsPatched(Code* unoptimized_code,
-                                         Address pc_after,
-                                         Code* interrupt_code,
-                                         Code* replacement_code) {
+Deoptimizer::InterruptPatchState Deoptimizer::GetInterruptPatchState(
+    Isolate* isolate,
+    Code* unoptimized_code,
+    Address pc_after) {
   static const int kInstrSize = Assembler::kInstrSize;
   ASSERT(Assembler::IsBeq(Assembler::instr_at(pc_after - 5 * kInstrSize)));
   if (Assembler::IsAddImmediate(
       Assembler::instr_at(pc_after - 6 * kInstrSize))) {
+    Code* osr_builtin =
+        isolate->builtins()->builtin(Builtins::kOnStackReplacement);
     ASSERT(reinterpret_cast<uint32_t>(
         Assembler::target_address_at(pc_after - 4 * kInstrSize)) ==
-        reinterpret_cast<uint32_t>(replacement_code->entry()));
-    return true;
+        reinterpret_cast<uint32_t>(osr_builtin->entry()));
+    return PATCHED_FOR_OSR;
   } else {
+    // Get the interrupt stub code object to match against from cache.
+    Code* interrupt_builtin =
+        isolate->builtins()->builtin(Builtins::kInterruptCheck);
     ASSERT(reinterpret_cast<uint32_t>(
         Assembler::target_address_at(pc_after - 4 * kInstrSize)) ==
-        reinterpret_cast<uint32_t>(interrupt_code->entry()));
-    return false;
+        reinterpret_cast<uint32_t>(interrupt_builtin->entry()));
+    return NOT_PATCHED;
   }
 }
 #endif  // DEBUG
@@ -457,22 +414,12 @@ void Deoptimizer::EntryGenerator::Generate() {
   // Get the bailout id from the stack.
   __ lw(a2, MemOperand(sp, kSavedRegistersAreaSize));
 
-  // Get the address of the location in the code object if possible (a3) (return
+  // Get the address of the location in the code object (a3) (return
   // address for lazy deoptimization) and compute the fp-to-sp delta in
   // register t0.
-  if (type() == EAGER || type() == SOFT) {
-    __ mov(a3, zero_reg);
-    // Correct one word for bailout id.
-    __ Addu(t0, sp, Operand(kSavedRegistersAreaSize + (1 * kPointerSize)));
-  } else if (type() == OSR) {
-    __ mov(a3, ra);
-    // Correct one word for bailout id.
-    __ Addu(t0, sp, Operand(kSavedRegistersAreaSize + (1 * kPointerSize)));
-  } else {
-    __ mov(a3, ra);
-    // Correct two words for bailout id and return address.
-    __ Addu(t0, sp, Operand(kSavedRegistersAreaSize + (2 * kPointerSize)));
-  }
+  __ mov(a3, ra);
+  // Correct one word for bailout id.
+  __ Addu(t0, sp, Operand(kSavedRegistersAreaSize + (1 * kPointerSize)));
 
   __ Subu(t0, fp, t0);
 
@@ -521,13 +468,8 @@ void Deoptimizer::EntryGenerator::Generate() {
     __ sdc1(f0, MemOperand(a1, dst_offset));
   }
 
-  // Remove the bailout id, eventually return address, and the saved registers
-  // from the stack.
-  if (type() == EAGER || type() == SOFT || type() == OSR) {
-    __ Addu(sp, sp, Operand(kSavedRegistersAreaSize + (1 * kPointerSize)));
-  } else {
-    __ Addu(sp, sp, Operand(kSavedRegistersAreaSize + (2 * kPointerSize)));
-  }
+  // Remove the bailout id and the saved registers from the stack.
+  __ Addu(sp, sp, Operand(kSavedRegistersAreaSize + (1 * kPointerSize)));
 
   // Compute a pointer to the unwinding limit in register a2; that is
   // the first stack slot not part of the input frame.
@@ -628,25 +570,19 @@ void Deoptimizer::EntryGenerator::Generate() {
 
 
 // Maximum size of a table entry generated below.
-const int Deoptimizer::table_entry_size_ = 9 * Assembler::kInstrSize;
+const int Deoptimizer::table_entry_size_ = 7 * Assembler::kInstrSize;
 
 void Deoptimizer::TableEntryGenerator::GeneratePrologue() {
   Assembler::BlockTrampolinePoolScope block_trampoline_pool(masm());
 
-  // Create a sequence of deoptimization entries. Note that any
-  // registers may be still live.
+  // Create a sequence of deoptimization entries.
+  // Note that registers are still live when jumping to an entry.
   Label table_start;
   __ bind(&table_start);
   for (int i = 0; i < count(); i++) {
     Label start;
     __ bind(&start);
-    if (type() != EAGER && type() != SOFT) {
-      // Emulate ia32 like call by pushing return address to stack.
-      __ addiu(sp, sp, -2 * kPointerSize);
-      __ sw(ra, MemOperand(sp, 1 * kPointerSize));
-    } else {
-      __ addiu(sp, sp, -1 * kPointerSize);
-    }
+    __ addiu(sp, sp, -1 * kPointerSize);
     // Jump over the remaining deopt entries (including this one).
     // This code is always reached by calling Jump, which puts the target (label
     // start) into t9.
@@ -668,6 +604,17 @@ void Deoptimizer::TableEntryGenerator::GeneratePrologue() {
   ASSERT_EQ(masm()->SizeOfCodeGeneratedSince(&table_start),
       count() * table_entry_size_);
 }
+
+
+void FrameDescription::SetCallerPc(unsigned offset, intptr_t value) {
+  SetFrameSlot(offset, value);
+}
+
+
+void FrameDescription::SetCallerFp(unsigned offset, intptr_t value) {
+  SetFrameSlot(offset, value);
+}
+
 
 #undef __
 

@@ -313,13 +313,13 @@ MaybeObject* Heap::AllocateRawCell() {
 }
 
 
-MaybeObject* Heap::AllocateRawJSGlobalPropertyCell() {
+MaybeObject* Heap::AllocateRawPropertyCell() {
 #ifdef DEBUG
   isolate_->counters()->objs_since_last_full()->Increment();
   isolate_->counters()->objs_since_last_young()->Increment();
 #endif
   MaybeObject* result =
-      property_cell_space_->AllocateRaw(JSGlobalPropertyCell::kSize);
+      property_cell_space_->AllocateRaw(PropertyCell::kSize);
   if (result->IsFailure()) old_gen_exhausted_ = true;
   return result;
 }
@@ -439,6 +439,43 @@ AllocationSpace Heap::TargetSpaceId(InstanceType type) {
 }
 
 
+bool Heap::AllowedToBeMigrated(HeapObject* object, AllocationSpace dst) {
+  // Object migration is governed by the following rules:
+  //
+  // 1) Objects in new-space can be migrated to one of the old spaces
+  //    that matches their target space or they stay in new-space.
+  // 2) Objects in old-space stay in the same space when migrating.
+  // 3) Fillers (two or more words) can migrate due to left-trimming of
+  //    fixed arrays in new-space, old-data-space and old-pointer-space.
+  // 4) Fillers (one word) can never migrate, they are skipped by
+  //    incremental marking explicitly to prevent invalid pattern.
+  //
+  // Since this function is used for debugging only, we do not place
+  // asserts here, but check everything explicitly.
+  if (object->map() == one_pointer_filler_map()) return false;
+  InstanceType type = object->map()->instance_type();
+  MemoryChunk* chunk = MemoryChunk::FromAddress(object->address());
+  AllocationSpace src = chunk->owner()->identity();
+  switch (src) {
+    case NEW_SPACE:
+      return dst == src || dst == TargetSpaceId(type);
+    case OLD_POINTER_SPACE:
+      return dst == src && (dst == TargetSpaceId(type) || object->IsFiller());
+    case OLD_DATA_SPACE:
+      return dst == src && dst == TargetSpaceId(type);
+    case CODE_SPACE:
+      return dst == src && type == CODE_TYPE;
+    case MAP_SPACE:
+    case CELL_SPACE:
+    case PROPERTY_CELL_SPACE:
+    case LO_SPACE:
+      return false;
+  }
+  UNREACHABLE();
+  return false;
+}
+
+
 void Heap::CopyBlock(Address dst, Address src, int byte_size) {
   CopyWords(reinterpret_cast<Object**>(dst),
             reinterpret_cast<Object**>(src),
@@ -495,10 +532,9 @@ void Heap::ScavengeObject(HeapObject** p, HeapObject* object) {
 
 MaybeObject* Heap::AllocateEmptyJSArrayWithAllocationSite(
       ElementsKind elements_kind,
-      Handle<Object> allocation_site_payload) {
+      Handle<AllocationSite> allocation_site) {
   return AllocateJSArrayAndStorageWithAllocationSite(elements_kind, 0, 0,
-      allocation_site_payload,
-      DONT_INITIALIZE_ARRAY_ELEMENTS);
+      allocation_site, DONT_INITIALIZE_ARRAY_ELEMENTS);
 }
 
 
@@ -550,7 +586,7 @@ intptr_t Heap::AdjustAmountOfExternalAllocatedMemory(
     if (amount >= 0) {
       amount_of_external_allocated_memory_ = amount;
     } else {
-      // Give up and reset the counters in case of an overflow.
+      // Give up and reset the counters in case of an underflow.
       amount_of_external_allocated_memory_ = 0;
       amount_of_external_allocated_memory_at_last_global_gc_ = 0;
     }
@@ -558,17 +594,15 @@ intptr_t Heap::AdjustAmountOfExternalAllocatedMemory(
   if (FLAG_trace_external_memory) {
     PrintPID("%8.0f ms: ", isolate()->time_millis_since_init());
     PrintF("Adjust amount of external memory: delta=%6" V8_PTR_PREFIX "d KB, "
-           " amount=%6" V8_PTR_PREFIX "d KB, isolate=0x%08" V8PRIxPTR ".\n",
-           change_in_bytes / 1024, amount_of_external_allocated_memory_ / 1024,
+           "amount=%6" V8_PTR_PREFIX "d KB, since_gc=%6" V8_PTR_PREFIX "d KB, "
+           "isolate=0x%08" V8PRIxPTR ".\n",
+           change_in_bytes / KB,
+           amount_of_external_allocated_memory_ / KB,
+           PromotedExternalMemorySize() / KB,
            reinterpret_cast<intptr_t>(isolate()));
   }
   ASSERT(amount_of_external_allocated_memory_ >= 0);
   return amount_of_external_allocated_memory_;
-}
-
-
-void Heap::SetLastScriptId(Object* last_script_id) {
-  roots_[kLastScriptIdRootIndex] = last_script_id;
 }
 
 
@@ -684,13 +718,11 @@ void ExternalStringTable::Verify() {
 #ifdef DEBUG
   for (int i = 0; i < new_space_strings_.length(); ++i) {
     Object* obj = Object::cast(new_space_strings_[i]);
-    // TODO(yangguo): check that the object is indeed an external string.
     ASSERT(heap_->InNewSpace(obj));
     ASSERT(obj != HEAP->the_hole_value());
   }
   for (int i = 0; i < old_space_strings_.length(); ++i) {
     Object* obj = Object::cast(old_space_strings_[i]);
-    // TODO(yangguo): check that the object is indeed an external string.
     ASSERT(!heap_->InNewSpace(obj));
     ASSERT(obj != HEAP->the_hole_value());
   }
@@ -715,19 +747,6 @@ void ExternalStringTable::ShrinkNewStrings(int position) {
 }
 
 
-void ErrorObjectList::Add(JSObject* object) {
-  list_.Add(object);
-}
-
-
-void ErrorObjectList::Iterate(ObjectVisitor* v) {
-  if (!list_.is_empty()) {
-    Object** start = &list_[0];
-    v->VisitPointers(start, start + list_.length());
-  }
-}
-
-
 void Heap::ClearInstanceofCache() {
   set_instanceof_cache_function(the_hole_value());
 }
@@ -747,7 +766,7 @@ void Heap::CompletelyClearInstanceofCache() {
 MaybeObject* TranscendentalCache::Get(Type type, double input) {
   SubCache* cache = caches_[type];
   if (cache == NULL) {
-    caches_[type] = cache = new SubCache(type);
+    caches_[type] = cache = new SubCache(isolate_, type);
   }
   return cache->Get(input);
 }

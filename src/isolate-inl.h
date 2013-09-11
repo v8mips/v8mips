@@ -36,12 +36,11 @@ namespace v8 {
 namespace internal {
 
 
-SaveContext::SaveContext(Isolate* isolate) : prev_(isolate->save_context()) {
+SaveContext::SaveContext(Isolate* isolate)
+  : isolate_(isolate),
+    prev_(isolate->save_context()) {
   if (isolate->context() != NULL) {
     context_ = Handle<Context>(isolate->context());
-#if __GNUC_VERSION__ >= 40100 && __GNUC_VERSION__ < 40300
-    dummy_ = Handle<Context>(isolate->context());
-#endif
   }
   isolate->set_save_context(this);
 

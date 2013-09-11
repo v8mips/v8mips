@@ -358,6 +358,11 @@ class Operand BASE_EMBEDDED {
   // Return true if this is a register operand.
   INLINE(bool is_reg() const);
 
+  inline int32_t immediate() const {
+    ASSERT(!is_reg());
+    return imm32_;
+  }
+
   Register rm() const { return rm_; }
 
  private:
@@ -583,7 +588,8 @@ class Assembler : public AssemblerBase {
     LAST_CODE_MARKER,
     FIRST_IC_MARKER = PROPERTY_ACCESS_INLINED,
     // Code aging
-    CODE_AGE_MARKER_NOP = 6
+    CODE_AGE_MARKER_NOP = 6,
+    CODE_AGE_SEQUENCE_NOP
   };
 
   // Type == 0 is the default non-marking nop. For mips this is a

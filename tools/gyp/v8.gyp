@@ -26,7 +26,10 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 {
-  'includes': ['../../build/common.gypi'],
+  'variables': {
+    'v8_code': 1,
+  },
+  'includes': ['../../build/toolchain.gypi', '../../build/features.gypi'],
   'targets': [
     {
       'target_name': 'v8',
@@ -126,6 +129,11 @@
             ],
           },
         }],
+        ['v8_enable_i18n_support==1', {
+          'sources': [
+            '<(SHARED_INTERMEDIATE_DIR)/i18n-libraries.cc',
+          ],
+        }],
       ],
       'dependencies': [
         'v8_base.<(v8_target_arch)',
@@ -189,6 +197,11 @@
             'V8_SHARED',
           ],
         }],
+        ['v8_enable_i18n_support==1', {
+          'sources': [
+            '<(SHARED_INTERMEDIATE_DIR)/i18n-libraries.cc',
+          ],
+        }],
       ]
     },
     {
@@ -233,7 +246,6 @@
         '../../src/checks.cc',
         '../../src/checks.h',
         '../../src/circular-queue-inl.h',
-        '../../src/circular-queue.cc',
         '../../src/circular-queue.h',
         '../../src/code-stubs.cc',
         '../../src/code-stubs.h',
@@ -255,6 +267,7 @@
         '../../src/cpu-profiler-inl.h',
         '../../src/cpu-profiler.cc',
         '../../src/cpu-profiler.h',
+        '../../src/cpu.cc',
         '../../src/cpu.h',
         '../../src/data-flow.cc',
         '../../src/data-flow.h',
@@ -277,6 +290,7 @@
         '../../src/double.h',
         '../../src/dtoa.cc',
         '../../src/dtoa.h',
+        '../../src/effects.h',
         '../../src/elements-kind.cc',
         '../../src/elements-kind.h',
         '../../src/elements.cc',
@@ -322,14 +336,54 @@
         '../../src/heap-snapshot-generator.h',
         '../../src/heap.cc',
         '../../src/heap.h',
+        '../../src/hydrogen-bce.cc',
+        '../../src/hydrogen-bce.h',
+        '../../src/hydrogen-bch.cc',
+        '../../src/hydrogen-bch.h',
+        '../../src/hydrogen-canonicalize.cc',
+        '../../src/hydrogen-canonicalize.h',
+        '../../src/hydrogen-dce.cc',
+        '../../src/hydrogen-dce.h',
+        '../../src/hydrogen-dehoist.cc',
+        '../../src/hydrogen-dehoist.h',
+        '../../src/hydrogen-deoptimizing-mark.cc',
+        '../../src/hydrogen-deoptimizing-mark.h',
         '../../src/hydrogen-environment-liveness.cc',
         '../../src/hydrogen-environment-liveness.h',
+        '../../src/hydrogen-escape-analysis.cc',
+        '../../src/hydrogen-escape-analysis.h',
         '../../src/hydrogen-instructions.cc',
         '../../src/hydrogen-instructions.h',
         '../../src/hydrogen.cc',
         '../../src/hydrogen.h',
         '../../src/hydrogen-gvn.cc',
         '../../src/hydrogen-gvn.h',
+        '../../src/hydrogen-infer-representation.cc',
+        '../../src/hydrogen-infer-representation.h',
+        '../../src/hydrogen-infer-types.cc',
+        '../../src/hydrogen-infer-types.h',
+        '../../src/hydrogen-mark-deoptimize.cc',
+        '../../src/hydrogen-mark-deoptimize.h',
+        '../../src/hydrogen-minus-zero.cc',
+        '../../src/hydrogen-minus-zero.h',
+        '../../src/hydrogen-range-analysis.cc',
+        '../../src/hydrogen-range-analysis.h',
+        '../../src/hydrogen-redundant-phi.cc',
+        '../../src/hydrogen-redundant-phi.h',
+        '../../src/hydrogen-removable-simulates.cc',
+        '../../src/hydrogen-removable-simulates.h',
+        '../../src/hydrogen-representation-changes.cc',
+        '../../src/hydrogen-representation-changes.h',
+        '../../src/hydrogen-sce.cc',
+        '../../src/hydrogen-sce.h',
+        '../../src/hydrogen-uint32-analysis.cc',
+        '../../src/hydrogen-uint32-analysis.h',
+        '../../src/hydrogen-osr.cc',
+        '../../src/hydrogen-osr.h',
+        '../../src/i18n.cc',
+        '../../src/i18n.h',
+        '../../src/icu_util.cc',
+        '../../src/icu_util.h',
         '../../src/ic-inl.h',
         '../../src/ic.cc',
         '../../src/ic.h',
@@ -382,11 +436,19 @@
         '../../src/optimizing-compiler-thread.cc',
         '../../src/parser.cc',
         '../../src/parser.h',
+        '../../src/platform/elapsed-timer.h',
+        '../../src/platform/time.cc',
+        '../../src/platform/time.h',
         '../../src/platform-posix.h',
-        '../../src/platform-tls-mac.h',
-        '../../src/platform-tls-win32.h',
-        '../../src/platform-tls.h',
         '../../src/platform.h',
+        '../../src/platform/condition-variable.cc',
+        '../../src/platform/condition-variable.h',
+        '../../src/platform/mutex.cc',
+        '../../src/platform/mutex.h',
+        '../../src/platform/semaphore.cc',
+        '../../src/platform/semaphore.h',
+        '../../src/platform/socket.cc',
+        '../../src/platform/socket.h',
         '../../src/preparse-data-format.h',
         '../../src/preparse-data.cc',
         '../../src/preparse-data.h',
@@ -637,6 +699,9 @@
                   ]
                 }],
               ],
+              'libraries': [
+                '-lrt'
+              ]
             },
             'sources': [  ### gcmole(os:linux) ###
               '../../src/platform-linux.cc',
@@ -649,7 +714,7 @@
               'CAN_USE_VFP_INSTRUCTIONS',
             ],
             'sources': [
-              '../../src/platform-posix.cc',
+              '../../src/platform-posix.cc'
             ],
             'conditions': [
               ['host_os=="mac"', {
@@ -665,6 +730,28 @@
                   }],
                 ],
               }, {
+                # TODO(bmeurer): What we really want here, is this:
+                #
+                # 'link_settings': {
+                #   'target_conditions': [
+                #     ['_toolset=="host"', {
+                #       'libraries': [
+                #         '-lrt'
+                #       ]
+                #     }]
+                #   ]
+                # },
+                #
+                # but we can't do this right now, as the AOSP does not support
+                # linking against the host librt, so we need to work around this
+                # for now, using the following hack (see platform/time.cc):
+                'target_conditions': [
+                  ['_toolset=="host"', {
+                    'defines': [
+                      'V8_LIBRT_NOT_AVAILABLE=1',
+                    ],
+                  }],
+                ],
                 'sources': [
                   '../../src/platform-linux.cc'
                 ]
@@ -712,7 +799,7 @@
             ]},
             'sources': [
               '../../src/platform-solaris.cc',
-              '../../src/platform-posix.cc',
+              '../../src/platform-posix.cc'
             ],
           }
         ],
@@ -735,13 +822,13 @@
                 ['build_env=="Cygwin"', {
                   'sources': [
                     '../../src/platform-cygwin.cc',
-                    '../../src/platform-posix.cc',
+                    '../../src/platform-posix.cc'
                   ],
                 }, {
                   'sources': [
                     '../../src/platform-win32.cc',
-                    '../../src/win32-math.h',
                     '../../src/win32-math.cc',
+                    '../../src/win32-math.h'
                   ],
                 }],
               ],
@@ -751,8 +838,8 @@
             }, {
               'sources': [
                 '../../src/platform-win32.cc',
-                '../../src/win32-math.h',
                 '../../src/win32-math.cc',
+                '../../src/win32-math.h'
               ],
               'msvs_disabled_warnings': [4351, 4355, 4800],
               'link_settings':  {
@@ -772,6 +859,26 @@
             '<(SHARED_INTERMEDIATE_DIR)/debug-support.cc',
           ]
         }],
+        ['v8_enable_i18n_support==1', {
+          'sources': [
+            '../../src/extensions/i18n/i18n-extension.cc',
+            '../../src/extensions/i18n/i18n-extension.h',
+          ],
+          'dependencies': [
+            '<(DEPTH)/third_party/icu/icu.gyp:icui18n',
+            '<(DEPTH)/third_party/icu/icu.gyp:icuuc',
+          ]
+        }, {  # v8_enable_i18n_support==0
+          'sources!': [
+            '../../src/i18n.cc',
+            '../../src/i18n.h',
+          ],
+        }],
+        ['OS=="win" and v8_enable_i18n_support==1', {
+          'dependencies': [
+            '<(DEPTH)/third_party/icu/icu.gyp:icudata',
+          ],
+        }],
       ],
     },
     {
@@ -782,6 +889,26 @@
           'toolsets': ['host'],
         }, {
           'toolsets': ['target'],
+        }],
+        ['v8_enable_i18n_support==1', {
+          'actions': [{
+            'action_name': 'js2c_i18n',
+            'inputs': [
+              '../../tools/js2c.py',
+              '<@(i18n_library_files)',
+            ],
+            'outputs': [
+              '<(SHARED_INTERMEDIATE_DIR)/i18n-libraries.cc',
+            ],
+            'action': [
+              'python',
+              '../../tools/js2c.py',
+              '<@(_outputs)',
+              'I18N',
+              '<(v8_compress_startup_data)',
+              '<@(i18n_library_files)'
+            ],
+          }],
         }],
       ],
       'variables': {
@@ -800,6 +927,8 @@
           '../../src/date.js',
           '../../src/json.js',
           '../../src/regexp.js',
+          '../../src/arraybuffer.js',
+          '../../src/typedarray.js',
           '../../src/macros.py',
         ],
         'experimental_library_files': [
@@ -808,9 +937,22 @@
           '../../src/proxy.js',
           '../../src/collection.js',
           '../../src/object-observe.js',
-          '../../src/arraybuffer.js',
-          '../../src/typedarray.js',
-          '../../src/generator.js'
+          '../../src/generator.js',
+          '../../src/array-iterator.js',
+          '../../src/harmony-string.js',
+          '../../src/harmony-array.js',
+        ],
+        'i18n_library_files': [
+          '../../src/extensions/i18n/header.js',
+          '../../src/extensions/i18n/globals.js',
+          '../../src/extensions/i18n/locale.js',
+          '../../src/extensions/i18n/collator.js',
+          '../../src/extensions/i18n/number-format.js',
+          '../../src/extensions/i18n/date-format.js',
+          '../../src/extensions/i18n/break-iterator.js',
+          '../../src/extensions/i18n/i18n-utils.js',
+          '../../src/extensions/i18n/overrides.js',
+          '../../src/extensions/i18n/footer.js',
         ],
       },
       'actions': [

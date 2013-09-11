@@ -27,7 +27,7 @@
 
 #include "v8.h"
 
-#if defined(V8_TARGET_ARCH_X64)
+#if V8_TARGET_ARCH_X64
 
 #include "codegen.h"
 #include "macro-assembler.h"
@@ -253,7 +253,7 @@ ModuloFunction CreateModuloFunction() {
 
 void ElementsTransitionGenerator::GenerateMapChangeElementsTransition(
     MacroAssembler* masm, AllocationSiteMode mode,
-    Label* allocation_site_info_found) {
+    Label* allocation_memento_found) {
   // ----------- S t a t e -------------
   //  -- rax    : value
   //  -- rbx    : target map
@@ -262,9 +262,9 @@ void ElementsTransitionGenerator::GenerateMapChangeElementsTransition(
   //  -- rsp[0] : return address
   // -----------------------------------
   if (mode == TRACK_ALLOCATION_SITE) {
-    ASSERT(allocation_site_info_found != NULL);
-    __ TestJSArrayForAllocationSiteInfo(rdx, rdi);
-    __ j(equal, allocation_site_info_found);
+    ASSERT(allocation_memento_found != NULL);
+    __ TestJSArrayForAllocationMemento(rdx, rdi);
+    __ j(equal, allocation_memento_found);
   }
 
   // Set transitioned map.
@@ -292,7 +292,7 @@ void ElementsTransitionGenerator::GenerateSmiToDouble(
   Label allocated, new_backing_store, only_change_map, done;
 
   if (mode == TRACK_ALLOCATION_SITE) {
-    __ TestJSArrayForAllocationSiteInfo(rdx, rdi);
+    __ TestJSArrayForAllocationMemento(rdx, rdi);
     __ j(equal, fail);
   }
 
@@ -346,7 +346,7 @@ void ElementsTransitionGenerator::GenerateSmiToDouble(
 
   // Allocate new backing store.
   __ bind(&new_backing_store);
-  __ lea(rdi, Operand(r9, times_pointer_size, FixedArray::kHeaderSize));
+  __ lea(rdi, Operand(r9, times_8, FixedArray::kHeaderSize));
   __ Allocate(rdi, r14, r11, r15, fail, TAG_OBJECT);
   // Set backing store's map
   __ LoadRoot(rdi, Heap::kFixedDoubleArrayMapRootIndex);
@@ -381,7 +381,7 @@ void ElementsTransitionGenerator::GenerateSmiToDouble(
   // Conversion loop.
   __ bind(&loop);
   __ movq(rbx,
-          FieldOperand(r8, r9, times_8, FixedArray::kHeaderSize));
+          FieldOperand(r8, r9, times_pointer_size, FixedArray::kHeaderSize));
   // r9 : current element's index
   // rbx: current element (smi-tagged)
   __ JumpIfNotSmi(rbx, &convert_hole);
@@ -394,7 +394,7 @@ void ElementsTransitionGenerator::GenerateSmiToDouble(
 
   if (FLAG_debug_code) {
     __ CompareRoot(rbx, Heap::kTheHoleValueRootIndex);
-    __ Assert(equal, "object found in smi-only array");
+    __ Assert(equal, kObjectFoundInSmiOnlyArray);
   }
 
   __ movq(FieldOperand(r14, r9, times_8, FixedDoubleArray::kHeaderSize), r15);
@@ -418,7 +418,7 @@ void ElementsTransitionGenerator::GenerateDoubleToObject(
   Label loop, entry, convert_hole, gc_required, only_change_map;
 
   if (mode == TRACK_ALLOCATION_SITE) {
-    __ TestJSArrayForAllocationSiteInfo(rdx, rdi);
+    __ TestJSArrayForAllocationMemento(rdx, rdi);
     __ j(equal, fail);
   }
 
@@ -459,7 +459,7 @@ void ElementsTransitionGenerator::GenerateDoubleToObject(
   __ bind(&loop);
   __ movq(r14, FieldOperand(r8,
                             r9,
-                            times_pointer_size,
+                            times_8,
                             FixedDoubleArray::kHeaderSize));
   // r9 : current element's index
   // r14: current element
@@ -577,7 +577,7 @@ void StringCharLoadGenerator::Generate(MacroAssembler* masm,
     // Assert that we do not have a cons or slice (indirect strings) here.
     // Sequential strings have already been ruled out.
     __ testb(result, Immediate(kIsIndirectStringMask));
-    __ Assert(zero, "external string expected, but not found");
+    __ Assert(zero, kExternalStringExpectedButNotFound);
   }
   // Rule out short external strings.
   STATIC_CHECK(kShortExternalStringTag != 0);
@@ -735,7 +735,33 @@ void Code::PatchPlatformCodeAge(byte* sequence,
     Code* stub = GetCodeAgeStub(age, parity);
     CodePatcher patcher(sequence, young_length);
     patcher.masm()->call(stub->instruction_start());
-    patcher.masm()->nop();
+    for (int i = 0;
+         i < kNoCodeAgeSequenceLength - Assembler::kShortCallInstructionLength;
+         i++) {
+      patcher.masm()->nop();
+    }
+  }
+}
+
+
+Operand StackArgumentsAccessor::GetArgumentOperand(int index) {
+  ASSERT(index >= 0);
+  ASSERT(base_reg_.is(rsp) || base_reg_.is(rbp));
+  int receiver = (receiver_mode_ == ARGUMENTS_CONTAIN_RECEIVER) ? 1 : 0;
+  int displacement_to_last_argument = base_reg_.is(rsp) ?
+      kPCOnStackSize : kFPOnStackSize + kPCOnStackSize;
+  displacement_to_last_argument += extra_displacement_to_last_argument_;
+  if (argument_count_reg_.is(no_reg)) {
+    // argument[0] is at base_reg_ + displacement_to_last_argument +
+    // (argument_count_immediate_ + receiver - 1) * kPointerSize.
+    ASSERT(argument_count_immediate_ + receiver > 0);
+    return Operand(base_reg_, displacement_to_last_argument +
+        (argument_count_immediate_ + receiver - 1 - index) * kPointerSize);
+  } else {
+    // argument[0] is at base_reg_ + displacement_to_last_argument +
+    // argument_count_reg_ * times_pointer_size + (receiver - 1) * kPointerSize.
+    return Operand(base_reg_, argument_count_reg_, times_pointer_size,
+        displacement_to_last_argument + (receiver - 1 - index) * kPointerSize);
   }
 }
 

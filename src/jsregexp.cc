@@ -168,10 +168,9 @@ static bool HasFewDifferentCharacters(Handle<String> pattern) {
 
 Handle<Object> RegExpImpl::Compile(Handle<JSRegExp> re,
                                    Handle<String> pattern,
-                                   Handle<String> flag_str,
-                                   Zone* zone) {
-  ZoneScope zone_scope(zone, DELETE_ON_EXIT);
+                                   Handle<String> flag_str) {
   Isolate* isolate = re->GetIsolate();
+  Zone zone(isolate);
   JSRegExp::Flags flags = RegExpFlagsFromString(flag_str);
   CompilationCache* compilation_cache = isolate->compilation_cache();
   Handle<FixedArray> cached = compilation_cache->LookupRegExp(pattern, flags);
@@ -188,7 +187,7 @@ Handle<Object> RegExpImpl::Compile(Handle<JSRegExp> re,
   RegExpCompileData parse_result;
   FlatStringReader reader(isolate, pattern);
   if (!RegExpParser::ParseRegExp(&reader, flags.is_multiline(),
-                                 &parse_result, zone)) {
+                                 &parse_result, &zone)) {
     // Throw an exception if we fail to parse the pattern.
     ThrowRegExpException(re,
                          pattern,
@@ -410,7 +409,7 @@ bool RegExpImpl::CompileIrregexp(Handle<JSRegExp> re,
                                  bool is_ascii) {
   // Compile the RegExp.
   Isolate* isolate = re->GetIsolate();
-  ZoneScope zone_scope(isolate->runtime_zone(), DELETE_ON_EXIT);
+  Zone zone(isolate);
   PostponeInterruptsScope postpone(isolate);
   // If we had a compilation error the last time this is saved at the
   // saved code index.
@@ -441,10 +440,9 @@ bool RegExpImpl::CompileIrregexp(Handle<JSRegExp> re,
   if (!pattern->IsFlat()) FlattenString(pattern);
   RegExpCompileData compile_data;
   FlatStringReader reader(isolate, pattern);
-  Zone* zone = isolate->runtime_zone();
   if (!RegExpParser::ParseRegExp(&reader, flags.is_multiline(),
                                  &compile_data,
-                                 zone)) {
+                                 &zone)) {
     // Throw an exception if we fail to parse the pattern.
     // THIS SHOULD NOT HAPPEN. We already pre-parsed it successfully once.
     ThrowRegExpException(re,
@@ -461,7 +459,7 @@ bool RegExpImpl::CompileIrregexp(Handle<JSRegExp> re,
                             pattern,
                             sample_subject,
                             is_ascii,
-                            zone);
+                            &zone);
   if (result.error_message != NULL) {
     // Unable to compile regexp.
     Handle<String> error_message =
@@ -935,27 +933,25 @@ void RegExpText::AppendToText(RegExpText* text, Zone* zone) {
 
 
 TextElement TextElement::Atom(RegExpAtom* atom) {
-  TextElement result = TextElement(ATOM);
-  result.data.u_atom = atom;
-  return result;
+  return TextElement(ATOM, atom);
 }
 
 
-TextElement TextElement::CharClass(
-      RegExpCharacterClass* char_class) {
-  TextElement result = TextElement(CHAR_CLASS);
-  result.data.u_char_class = char_class;
-  return result;
+TextElement TextElement::CharClass(RegExpCharacterClass* char_class) {
+  return TextElement(CHAR_CLASS, char_class);
 }
 
 
-int TextElement::length() {
-  if (text_type == ATOM) {
-    return data.u_atom->length();
-  } else {
-    ASSERT(text_type == CHAR_CLASS);
-    return 1;
+int TextElement::length() const {
+  switch (text_type()) {
+    case ATOM:
+      return atom()->length();
+
+    case CHAR_CLASS:
+      return 1;
   }
+  UNREACHABLE();
+  return 0;
 }
 
 
@@ -1873,7 +1869,7 @@ static void EmitUseLookupTable(
   for (int i = j; i < kSize; i++) {
     templ[i] = bit;
   }
-  Factory* factory = Isolate::Current()->factory();
+  Factory* factory = masm->zone()->isolate()->factory();
   // TODO(erikcorry): Cache these.
   Handle<ByteArray> ba = factory->NewByteArray(kSize, TENURED);
   for (int i = 0; i < kSize; i++) {
@@ -2479,7 +2475,8 @@ bool RegExpNode::EmitQuickCheck(RegExpCompiler* compiler,
                                 QuickCheckDetails* details,
                                 bool fall_through_on_failure) {
   if (details->characters() == 0) return false;
-  GetQuickCheckDetails(details, compiler, 0, trace->at_start() == Trace::FALSE);
+  GetQuickCheckDetails(
+      details, compiler, 0, trace->at_start() == Trace::FALSE_VALUE);
   if (details->cannot_match()) return false;
   if (!details->Rationalize(compiler->ascii())) return false;
   ASSERT(details->characters() == 1 ||
@@ -2551,7 +2548,7 @@ void TextNode::GetQuickCheckDetails(QuickCheckDetails* details,
                                     RegExpCompiler* compiler,
                                     int characters_filled_in,
                                     bool not_at_start) {
-  Isolate* isolate = Isolate::Current();
+  Isolate* isolate = compiler->macro_assembler()->zone()->isolate();
   ASSERT(characters_filled_in < details->characters());
   int characters = details->characters();
   int char_mask;
@@ -2562,8 +2559,8 @@ void TextNode::GetQuickCheckDetails(QuickCheckDetails* details,
   }
   for (int k = 0; k < elms_->length(); k++) {
     TextElement elm = elms_->at(k);
-    if (elm.text_type == TextElement::ATOM) {
-      Vector<const uc16> quarks = elm.data.u_atom->data();
+    if (elm.text_type() == TextElement::ATOM) {
+      Vector<const uc16> quarks = elm.atom()->data();
       for (int i = 0; i < characters && i < quarks.length(); i++) {
         QuickCheckDetails::Position* pos =
             details->positions(characters_filled_in);
@@ -2625,7 +2622,7 @@ void TextNode::GetQuickCheckDetails(QuickCheckDetails* details,
     } else {
       QuickCheckDetails::Position* pos =
           details->positions(characters_filled_in);
-      RegExpCharacterClass* tree = elm.data.u_char_class;
+      RegExpCharacterClass* tree = elm.char_class();
       ZoneList<CharacterRange>* ranges = tree->ranges(zone());
       if (tree->is_negated()) {
         // A quick check uses multi-character mask and compare.  There is no
@@ -2815,8 +2812,8 @@ RegExpNode* TextNode::FilterASCII(int depth, bool ignore_case) {
   int element_count = elms_->length();
   for (int i = 0; i < element_count; i++) {
     TextElement elm = elms_->at(i);
-    if (elm.text_type == TextElement::ATOM) {
-      Vector<const uc16> quarks = elm.data.u_atom->data();
+    if (elm.text_type() == TextElement::ATOM) {
+      Vector<const uc16> quarks = elm.atom()->data();
       for (int j = 0; j < quarks.length(); j++) {
         uint16_t c = quarks[j];
         if (c <= String::kMaxOneByteCharCode) continue;
@@ -2831,8 +2828,8 @@ RegExpNode* TextNode::FilterASCII(int depth, bool ignore_case) {
         copy[j] = converted;
       }
     } else {
-      ASSERT(elm.text_type == TextElement::CHAR_CLASS);
-      RegExpCharacterClass* cc = elm.data.u_char_class;
+      ASSERT(elm.text_type() == TextElement::CHAR_CLASS);
+      RegExpCharacterClass* cc = elm.char_class();
       ZoneList<CharacterRange>* ranges = cc->ranges(zone());
       if (!CharacterRange::IsCanonical(ranges)) {
         CharacterRange::Canonicalize(ranges);
@@ -3068,7 +3065,7 @@ static void EmitHat(RegExpCompiler* compiler,
 void AssertionNode::EmitBoundaryCheck(RegExpCompiler* compiler, Trace* trace) {
   RegExpMacroAssembler* assembler = compiler->macro_assembler();
   Trace::TriBool next_is_word_character = Trace::UNKNOWN;
-  bool not_at_start = (trace->at_start() == Trace::FALSE);
+  bool not_at_start = (trace->at_start() == Trace::FALSE_VALUE);
   BoyerMooreLookahead* lookahead = bm_info(not_at_start);
   if (lookahead == NULL) {
     int eats_at_least =
@@ -3079,12 +3076,15 @@ void AssertionNode::EmitBoundaryCheck(RegExpCompiler* compiler, Trace* trace) {
       BoyerMooreLookahead* bm =
           new(zone()) BoyerMooreLookahead(eats_at_least, compiler, zone());
       FillInBMInfo(0, kRecursionBudget, bm, not_at_start);
-      if (bm->at(0)->is_non_word()) next_is_word_character = Trace::FALSE;
-      if (bm->at(0)->is_word()) next_is_word_character = Trace::TRUE;
+      if (bm->at(0)->is_non_word())
+        next_is_word_character = Trace::FALSE_VALUE;
+      if (bm->at(0)->is_word()) next_is_word_character = Trace::TRUE_VALUE;
     }
   } else {
-    if (lookahead->at(0)->is_non_word()) next_is_word_character = Trace::FALSE;
-    if (lookahead->at(0)->is_word()) next_is_word_character = Trace::TRUE;
+    if (lookahead->at(0)->is_non_word())
+      next_is_word_character = Trace::FALSE_VALUE;
+    if (lookahead->at(0)->is_word())
+      next_is_word_character = Trace::TRUE_VALUE;
   }
   bool at_boundary = (assertion_type_ == AssertionNode::AT_BOUNDARY);
   if (next_is_word_character == Trace::UNKNOWN) {
@@ -3104,10 +3104,10 @@ void AssertionNode::EmitBoundaryCheck(RegExpCompiler* compiler, Trace* trace) {
     assembler->Bind(&before_word);
     BacktrackIfPrevious(compiler, trace, at_boundary ? kIsWord : kIsNonWord);
     assembler->Bind(&ok);
-  } else if (next_is_word_character == Trace::TRUE) {
+  } else if (next_is_word_character == Trace::TRUE_VALUE) {
     BacktrackIfPrevious(compiler, trace, at_boundary ? kIsWord : kIsNonWord);
   } else {
-    ASSERT(next_is_word_character == Trace::FALSE);
+    ASSERT(next_is_word_character == Trace::FALSE_VALUE);
     BacktrackIfPrevious(compiler, trace, at_boundary ? kIsNonWord : kIsWord);
   }
 }
@@ -3171,7 +3171,7 @@ void AssertionNode::Emit(RegExpCompiler* compiler, Trace* trace) {
       break;
     }
     case AT_START: {
-      if (trace->at_start() == Trace::FALSE) {
+      if (trace->at_start() == Trace::FALSE_VALUE) {
         assembler->GoTo(trace->backtrack());
         return;
       }
@@ -3246,20 +3246,20 @@ void TextNode::TextEmitPass(RegExpCompiler* compiler,
                             Trace* trace,
                             bool first_element_checked,
                             int* checked_up_to) {
-  Isolate* isolate = Isolate::Current();
   RegExpMacroAssembler* assembler = compiler->macro_assembler();
+  Isolate* isolate = assembler->zone()->isolate();
   bool ascii = compiler->ascii();
   Label* backtrack = trace->backtrack();
   QuickCheckDetails* quick_check = trace->quick_check_performed();
   int element_count = elms_->length();
   for (int i = preloaded ? 0 : element_count - 1; i >= 0; i--) {
     TextElement elm = elms_->at(i);
-    int cp_offset = trace->cp_offset() + elm.cp_offset;
-    if (elm.text_type == TextElement::ATOM) {
-      Vector<const uc16> quarks = elm.data.u_atom->data();
+    int cp_offset = trace->cp_offset() + elm.cp_offset();
+    if (elm.text_type() == TextElement::ATOM) {
+      Vector<const uc16> quarks = elm.atom()->data();
       for (int j = preloaded ? 0 : quarks.length() - 1; j >= 0; j--) {
         if (first_element_checked && i == 0 && j == 0) continue;
-        if (DeterminedAlready(quick_check, elm.cp_offset + j)) continue;
+        if (DeterminedAlready(quick_check, elm.cp_offset() + j)) continue;
         EmitCharacterFunction* emit_function = NULL;
         switch (pass) {
           case NON_ASCII_MATCH:
@@ -3293,11 +3293,11 @@ void TextNode::TextEmitPass(RegExpCompiler* compiler,
         }
       }
     } else {
-      ASSERT_EQ(elm.text_type, TextElement::CHAR_CLASS);
+      ASSERT_EQ(TextElement::CHAR_CLASS, elm.text_type());
       if (pass == CHARACTER_CLASS_MATCH) {
         if (first_element_checked && i == 0) continue;
-        if (DeterminedAlready(quick_check, elm.cp_offset)) continue;
-        RegExpCharacterClass* cc = elm.data.u_char_class;
+        if (DeterminedAlready(quick_check, elm.cp_offset())) continue;
+        RegExpCharacterClass* cc = elm.char_class();
         EmitCharClass(assembler,
                       cc,
                       ascii,
@@ -3315,12 +3315,8 @@ void TextNode::TextEmitPass(RegExpCompiler* compiler,
 
 int TextNode::Length() {
   TextElement elm = elms_->last();
-  ASSERT(elm.cp_offset >= 0);
-  if (elm.text_type == TextElement::ATOM) {
-    return elm.cp_offset + elm.data.u_atom->data().length();
-  } else {
-    return elm.cp_offset + 1;
-  }
+  ASSERT(elm.cp_offset() >= 0);
+  return elm.cp_offset() + elm.length();
 }
 
 
@@ -3422,8 +3418,8 @@ void TextNode::MakeCaseIndependent(bool is_ascii) {
   int element_count = elms_->length();
   for (int i = 0; i < element_count; i++) {
     TextElement elm = elms_->at(i);
-    if (elm.text_type == TextElement::CHAR_CLASS) {
-      RegExpCharacterClass* cc = elm.data.u_char_class;
+    if (elm.text_type() == TextElement::CHAR_CLASS) {
+      RegExpCharacterClass* cc = elm.char_class();
       // None of the standard character classes is different in the case
       // independent case and it slows us down if we don't know that.
       if (cc->is_standard(zone())) continue;
@@ -3439,11 +3435,7 @@ void TextNode::MakeCaseIndependent(bool is_ascii) {
 
 int TextNode::GreedyLoopTextLength() {
   TextElement elm = elms_->at(elms_->length() - 1);
-  if (elm.text_type == TextElement::CHAR_CLASS) {
-    return elm.cp_offset + 1;
-  } else {
-    return elm.cp_offset + elm.data.u_atom->data().length();
-  }
+  return elm.cp_offset() + elm.length();
 }
 
 
@@ -3451,8 +3443,8 @@ RegExpNode* TextNode::GetSuccessorOfOmnivorousTextNode(
     RegExpCompiler* compiler) {
   if (elms_->length() != 1) return NULL;
   TextElement elm = elms_->at(0);
-  if (elm.text_type != TextElement::CHAR_CLASS) return NULL;
-  RegExpCharacterClass* node = elm.data.u_char_class;
+  if (elm.text_type() != TextElement::CHAR_CLASS) return NULL;
+  RegExpCharacterClass* node = elm.char_class();
   ZoneList<CharacterRange>* ranges = node->ranges(zone());
   if (!CharacterRange::IsCanonical(ranges)) {
     CharacterRange::Canonicalize(ranges);
@@ -3828,7 +3820,7 @@ bool BoyerMooreLookahead::EmitSkipInstructions(RegExpMacroAssembler* masm) {
     return true;
   }
 
-  Factory* factory = Isolate::Current()->factory();
+  Factory* factory = masm->zone()->isolate()->factory();
   Handle<ByteArray> boolean_skip_table = factory->NewByteArray(kSize, TENURED);
   int skip_distance = GetSkipTable(
       min_lookahead, max_lookahead, boolean_skip_table);
@@ -3988,7 +3980,7 @@ void ChoiceNode::Emit(RegExpCompiler* compiler, Trace* trace) {
 
   int first_normal_choice = greedy_loop ? 1 : 0;
 
-  bool not_at_start = current_trace->at_start() == Trace::FALSE;
+  bool not_at_start = current_trace->at_start() == Trace::FALSE_VALUE;
   const int kEatsAtLeastNotYetInitialized = -1;
   int eats_at_least = kEatsAtLeastNotYetInitialized;
 
@@ -4059,7 +4051,7 @@ void ChoiceNode::Emit(RegExpCompiler* compiler, Trace* trace) {
       new_trace.set_bound_checked_up_to(preload_characters);
     }
     new_trace.quick_check_performed()->Clear();
-    if (not_at_start_) new_trace.set_at_start(Trace::FALSE);
+    if (not_at_start_) new_trace.set_at_start(Trace::FALSE_VALUE);
     alt_gen->expects_preload = preload_is_current;
     bool generate_full_check_inline = false;
     if (FLAG_regexp_optimization &&
@@ -4159,7 +4151,7 @@ void ChoiceNode::EmitOutOfLineContinuation(RegExpCompiler* compiler,
   Trace out_of_line_trace(*trace);
   out_of_line_trace.set_characters_preloaded(preload_characters);
   out_of_line_trace.set_quick_check_performed(&alt_gen->quick_check_details);
-  if (not_at_start_) out_of_line_trace.set_at_start(Trace::FALSE);
+  if (not_at_start_) out_of_line_trace.set_at_start(Trace::FALSE_VALUE);
   ZoneList<Guard*>* guards = alternative.guards();
   int guard_count = (guards == NULL) ? 0 : guards->length();
   if (next_expects_preload) {
@@ -4526,13 +4518,13 @@ void DotPrinter::VisitText(TextNode* that) {
   for (int i = 0; i < that->elements()->length(); i++) {
     if (i > 0) stream()->Add(" ");
     TextElement elm = that->elements()->at(i);
-    switch (elm.text_type) {
+    switch (elm.text_type()) {
       case TextElement::ATOM: {
-        stream()->Add("'%w'", elm.data.u_atom->data());
+        stream()->Add("'%w'", elm.atom()->data());
         break;
       }
       case TextElement::CHAR_CLASS: {
-        RegExpCharacterClass* node = elm.data.u_char_class;
+        RegExpCharacterClass* node = elm.char_class();
         stream()->Add("[");
         if (node->is_negated())
           stream()->Add("^");
@@ -5300,7 +5292,7 @@ void CharacterRange::Split(ZoneList<CharacterRange>* base,
 void CharacterRange::AddCaseEquivalents(ZoneList<CharacterRange>* ranges,
                                         bool is_ascii,
                                         Zone* zone) {
-  Isolate* isolate = Isolate::Current();
+  Isolate* isolate = zone->isolate();
   uc16 bottom = from();
   uc16 top = to();
   if (is_ascii && !RangeContainsLatin1Equivalents(*this)) {
@@ -5688,7 +5680,7 @@ OutSet* DispatchTable::Get(uc16 value) {
 
 
 void Analysis::EnsureAnalyzed(RegExpNode* that) {
-  StackLimitCheck check(Isolate::Current());
+  StackLimitCheck check(that->zone()->isolate());
   if (check.HasOverflowed()) {
     fail("Stack overflow");
     return;
@@ -5714,12 +5706,8 @@ void TextNode::CalculateOffsets() {
   int cp_offset = 0;
   for (int i = 0; i < element_count; i++) {
     TextElement& elm = elements()->at(i);
-    elm.cp_offset = cp_offset;
-    if (elm.text_type == TextElement::ATOM) {
-      cp_offset += elm.data.u_atom->data().length();
-    } else {
-      cp_offset++;
-    }
+    elm.set_cp_offset(cp_offset);
+    cp_offset += elm.length();
   }
 }
 
@@ -5835,8 +5823,8 @@ void TextNode::FillInBMInfo(int initial_offset,
       return;
     }
     TextElement text = elements()->at(i);
-    if (text.text_type == TextElement::ATOM) {
-      RegExpAtom* atom = text.data.u_atom;
+    if (text.text_type() == TextElement::ATOM) {
+      RegExpAtom* atom = text.atom();
       for (int j = 0; j < atom->length(); j++, offset++) {
         if (offset >= bm->length()) {
           if (initial_offset == 0) set_bm_info(not_at_start, bm);
@@ -5858,8 +5846,8 @@ void TextNode::FillInBMInfo(int initial_offset,
         }
       }
     } else {
-      ASSERT(text.text_type == TextElement::CHAR_CLASS);
-      RegExpCharacterClass* char_class = text.data.u_char_class;
+      ASSERT_EQ(TextElement::CHAR_CLASS, text.text_type());
+      RegExpCharacterClass* char_class = text.char_class();
       ZoneList<CharacterRange>* ranges = char_class->ranges(zone());
       if (char_class->is_negated()) {
         bm->SetAll(offset);
@@ -5971,14 +5959,14 @@ void DispatchTableConstructor::AddInverse(ZoneList<CharacterRange>* ranges) {
 
 void DispatchTableConstructor::VisitText(TextNode* that) {
   TextElement elm = that->elements()->at(0);
-  switch (elm.text_type) {
+  switch (elm.text_type()) {
     case TextElement::ATOM: {
-      uc16 c = elm.data.u_atom->data()[0];
+      uc16 c = elm.atom()->data()[0];
       AddRange(CharacterRange(c, c));
       break;
     }
     case TextElement::CHAR_CLASS: {
-      RegExpCharacterClass* tree = elm.data.u_char_class;
+      RegExpCharacterClass* tree = elm.char_class();
       ZoneList<CharacterRange>* ranges = tree->ranges(that->zone());
       if (tree->is_negated()) {
         AddInverse(ranges);

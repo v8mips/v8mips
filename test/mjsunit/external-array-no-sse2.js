@@ -520,30 +520,15 @@ assertSame(a.buffer, aa.buffer);
 assertThrows(function(){ a.subarray.call({}, 0) });
 assertThrows(function(){ a.subarray.call([], 0) });
 
-// Call constructors directly as functions, and through .call and .apply
+// Try to call constructors directly as functions, and through .call
+// and .apply. Should fail.
 
-b = ArrayBuffer(100)
-a = Int8Array(b, 5, 77)
-assertInstance(b, ArrayBuffer)
-assertInstance(a, Int8Array)
-assertSame(b, a.buffer)
-assertEquals(5, a.byteOffset)
-assertEquals(77, a.byteLength)
-b = ArrayBuffer.call(null, 10)
-a = Uint16Array.call(null, b, 2, 4)
-assertInstance(b, ArrayBuffer)
-assertInstance(a, Uint16Array)
-assertSame(b, a.buffer)
-assertEquals(2, a.byteOffset)
-assertEquals(8, a.byteLength)
-b = ArrayBuffer.apply(null, [1000])
-a = Float32Array.apply(null, [b, 128, 1])
-assertInstance(b, ArrayBuffer)
-assertInstance(a, Float32Array)
-assertSame(b, a.buffer)
-assertEquals(128, a.byteOffset)
-assertEquals(4, a.byteLength)
-
+assertThrows(function() { ArrayBuffer(100); }, TypeError);
+assertThrows(function() { Int8Array(b, 5, 77); }, TypeError);
+assertThrows(function() { ArrayBuffer.call(null, 10); }, TypeError);
+assertThrows(function() { Uint16Array.call(null, b, 2, 4); }, TypeError);
+assertThrows(function() { ArrayBuffer.apply(null, [1000]); }, TypeError);
+assertThrows(function() { Float32Array.apply(null, [b, 128, 1]); }, TypeError);
 
 // Test array.set in different combinations.
 
@@ -621,8 +606,10 @@ a61.set(a62)
 assertArrayPrefix([1, 12], a61)
 
 // Invalid source
-assertThrows(function() { a.set(0) })
-assertThrows(function() { a.set({}) })
+assertThrows(function() { a.set(0); }, TypeError);
+assertArrayPrefix([1,2,3,4,5,6], a);
+a.set({}); // does not throw
+assertArrayPrefix([1,2,3,4,5,6], a);
 
 
 // Test arraybuffer.slice
@@ -632,15 +619,15 @@ var b0 = a0.buffer
 
 var b1 = b0.slice(0)
 assertEquals(b0.byteLength, b1.byteLength)
-assertArrayPrefix([1, 2, 3, 4, 5, 6], Int8Array(b1))
+assertArrayPrefix([1, 2, 3, 4, 5, 6], new Int8Array(b1))
 
 var b2 = b0.slice(3)
 assertEquals(b0.byteLength - 3, b2.byteLength)
-assertArrayPrefix([4, 5, 6], Int8Array(b2))
+assertArrayPrefix([4, 5, 6], new Int8Array(b2))
 
 var b3 = b0.slice(2, 4)
 assertEquals(2, b3.byteLength)
-assertArrayPrefix([3, 4], Int8Array(b3))
+assertArrayPrefix([3, 4], new Int8Array(b3))
 
 function goo(a, i) {
   return a[i];
@@ -692,3 +679,37 @@ boo(built_in_array, 0, 2.5);
 assertEquals(2.5, goo(built_in_array, 0));
 %ClearFunctionTypeFeedback(goo);
 %ClearFunctionTypeFeedback(boo);
+
+// Check all int range edge cases
+function checkRange() {
+  var e32 = Math.pow(2,32); var e31 = Math.pow(2,31);
+  var e16 = Math.pow(2,16); var e15 = Math.pow(2,15);
+  var e8 = Math.pow(2,8);   var e7 = Math.pow(2,7);
+  var a7 = new Uint32Array(2);  var a71 = new Int32Array(2);
+  var a72 = new Uint16Array(2); var a73 = new Int16Array(2);
+  var a74 = new Uint8Array(2);  var a75 = new Int8Array(2);
+  for (i = 1; i <= Math.pow(2,33); i *= 2) {
+    var j = i-1;
+    a7[0] = i; a71[0] = i; a72[0] = i; a73[0] = i; a74[0] = i; a75[0] = i;
+    a7[1] = j; a71[1] = j; a72[1] = j; a73[1] = j; a74[1] = j; a75[1] = j;
+
+    if (i < e32) { assertEquals(a7[0], i); } else { assertEquals(a7[0], 0); }
+    if (j < e32) { assertEquals(a7[1], j); } else { assertEquals(a7[1],e32-1); }
+    if (i < e31) { assertEquals(a71[0], i); } else {
+      assertEquals(a71[0], (i < e32) ? -e31 : 0 ); }
+    if (j < e31) { assertEquals(a71[1], j); } else { assertEquals(a71[1], -1); }
+
+    if (i < e16) { assertEquals(a72[0], i); } else { assertEquals(a72[0], 0); }
+    if (j < e16) { assertEquals(a72[1], j); } else { assertEquals(a72[1], e16-1); }
+    if (i < e15) { assertEquals(a73[0], i); } else {
+      assertEquals(a73[0], (i < e16) ? -e15 : 0 ); }
+    if (j < e15) { assertEquals(a73[1], j); } else { assertEquals(a73[1], -1); }
+
+    if (i < e8) { assertEquals(a74[0], i); } else { assertEquals(a74[0], 0); }
+    if (j < e8) { assertEquals(a74[1], j); } else { assertEquals(a74[1], e8-1); }
+    if (i < e7) { assertEquals(a75[0], i); } else {
+      assertEquals(a75[0], (i < e8) ? -e7 : 0); }
+    if (j < e7) { assertEquals(a75[1], j); } else { assertEquals(a75[1], -1); }
+  }
+}
+checkRange();

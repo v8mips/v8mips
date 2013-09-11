@@ -27,7 +27,7 @@
 
 #include "v8.h"
 
-#if defined(V8_TARGET_ARCH_IA32)
+#if V8_TARGET_ARCH_IA32
 
 #include "ia32/lithium-gap-resolver-ia32.h"
 #include "ia32/lithium-codegen-ia32.h"
@@ -306,20 +306,43 @@ void LGapResolver::EmitMove(int index) {
     LConstantOperand* constant_source = LConstantOperand::cast(source);
     if (destination->IsRegister()) {
       Register dst = cgen_->ToRegister(destination);
-      if (cgen_->IsSmi(constant_source)) {
-        __ Set(dst, cgen_->ToSmiImmediate(constant_source));
-      } else if (cgen_->IsInteger32(constant_source)) {
-        __ Set(dst, cgen_->ToInteger32Immediate(constant_source));
+      Representation r = cgen_->IsSmi(constant_source)
+          ? Representation::Smi() : Representation::Integer32();
+      if (cgen_->IsInteger32(constant_source)) {
+        __ Set(dst, cgen_->ToImmediate(constant_source, r));
       } else {
         __ LoadObject(dst, cgen_->ToHandle(constant_source));
+      }
+    } else if (destination->IsDoubleRegister()) {
+      double v = cgen_->ToDouble(constant_source);
+      uint64_t int_val = BitCast<uint64_t, double>(v);
+      int32_t lower = static_cast<int32_t>(int_val);
+      int32_t upper = static_cast<int32_t>(int_val >> kBitsPerInt);
+      if (CpuFeatures::IsSupported(SSE2)) {
+        CpuFeatureScope scope(cgen_->masm(), SSE2);
+        XMMRegister dst = cgen_->ToDoubleRegister(destination);
+        if (int_val == 0) {
+          __ xorps(dst, dst);
+        } else {
+          __ push(Immediate(upper));
+          __ push(Immediate(lower));
+          __ movdbl(dst, Operand(esp, 0));
+          __ add(esp, Immediate(kDoubleSize));
+        }
+      } else {
+        __ push(Immediate(upper));
+        __ push(Immediate(lower));
+        X87Register dst = cgen_->ToX87Register(destination);
+        cgen_->X87Mov(dst, MemOperand(esp, 0));
+        __ add(esp, Immediate(kDoubleSize));
       }
     } else {
       ASSERT(destination->IsStackSlot());
       Operand dst = cgen_->ToOperand(destination);
-      if (cgen_->IsSmi(constant_source)) {
-        __ Set(dst, cgen_->ToSmiImmediate(constant_source));
-      } else if (cgen_->IsInteger32(constant_source)) {
-        __ Set(dst, cgen_->ToInteger32Immediate(constant_source));
+      Representation r = cgen_->IsSmi(constant_source)
+          ? Representation::Smi() : Representation::Integer32();
+      if (cgen_->IsInteger32(constant_source)) {
+        __ Set(dst, cgen_->ToImmediate(constant_source, r));
       } else {
         Register tmp = EnsureTempRegister();
         __ LoadObject(tmp, cgen_->ToHandle(constant_source));
@@ -342,10 +365,10 @@ void LGapResolver::EmitMove(int index) {
     } else {
       // load from the register onto the stack, store in destination, which must
       // be a double stack slot in the non-SSE2 case.
-      ASSERT(source->index() == 0);  // source is on top of the stack
       ASSERT(destination->IsDoubleStackSlot());
       Operand dst = cgen_->ToOperand(destination);
-      cgen_->ReadX87Operand(dst);
+      X87Register src = cgen_->ToX87Register(source);
+      cgen_->X87Mov(dst, src);
     }
   } else if (source->IsDoubleStackSlot()) {
     if (CpuFeatures::IsSupported(SSE2)) {
@@ -378,10 +401,8 @@ void LGapResolver::EmitMove(int index) {
         __ mov(dst1, tmp);
       } else {
         Operand src = cgen_->ToOperand(source);
-        if (cgen_->X87StackNonEmpty()) {
-          cgen_->PopX87();
-        }
-        cgen_->PushX87DoubleOperand(src);
+        X87Register dst = cgen_->ToX87Register(destination);
+        cgen_->X87Mov(dst, src);
       }
     }
   } else {

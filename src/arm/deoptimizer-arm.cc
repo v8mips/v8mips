@@ -35,7 +35,7 @@
 namespace v8 {
 namespace internal {
 
-const int Deoptimizer::table_entry_size_ = 16;
+const int Deoptimizer::table_entry_size_ = 12;
 
 
 int Deoptimizer::patch_size() {
@@ -44,22 +44,8 @@ int Deoptimizer::patch_size() {
 }
 
 
-void Deoptimizer::DeoptimizeFunctionWithPreparedFunctionList(
-    JSFunction* function) {
-  Isolate* isolate = function->GetIsolate();
-  HandleScope scope(isolate);
-  DisallowHeapAllocation no_allocation;
-
-  ASSERT(function->IsOptimized());
-  ASSERT(function->FunctionsInFunctionListShareSameCode());
-
-  // Get the optimized code.
-  Code* code = function->code();
+void Deoptimizer::PatchCodeForDeoptimization(Isolate* isolate, Code* code) {
   Address code_start_address = code->instruction_start();
-
-  // The optimized code is going to be patched, so we cannot use it any more.
-  function->shared()->EvictFromOptimizedCodeMap(code, "deoptimized function");
-
   // Invalidate the relocation information, as it will become invalid by the
   // code patching below, and is not needed any more.
   code->InvalidateRelocation();
@@ -92,25 +78,6 @@ void Deoptimizer::DeoptimizeFunctionWithPreparedFunctionList(
     prev_call_address = call_address;
 #endif
   }
-
-  // Add the deoptimizing code to the list.
-  DeoptimizingCodeListNode* node = new DeoptimizingCodeListNode(code);
-  DeoptimizerData* data = isolate->deoptimizer_data();
-  node->set_next(data->deoptimizing_code_list_);
-  data->deoptimizing_code_list_ = node;
-
-  // We might be in the middle of incremental marking with compaction.
-  // Tell collector to treat this code object in a special way and
-  // ignore all slots that might have been recorded on it.
-  isolate->heap()->mark_compact_collector()->InvalidateCode(code);
-
-  ReplaceCodeForRelatedFunctions(function, code);
-
-  if (FLAG_trace_deopt) {
-    PrintF("[forced deoptimization: ");
-    function->PrintName();
-    PrintF(" / %x]\n", reinterpret_cast<uint32_t>(function));
-  }
 }
 
 
@@ -134,12 +101,7 @@ static const int32_t kBranchBeforeInterrupt =  0x5a000004;
 
 void Deoptimizer::PatchInterruptCodeAt(Code* unoptimized_code,
                                        Address pc_after,
-                                       Code* interrupt_code,
                                        Code* replacement_code) {
-  ASSERT(!InterruptCodeIsPatched(unoptimized_code,
-                                 pc_after,
-                                 interrupt_code,
-                                 replacement_code));
   static const int kInstrSize = Assembler::kInstrSize;
   // Turn the jump into nops.
   CodePatcher patcher(pc_after - 3 * kInstrSize, 1);
@@ -158,12 +120,7 @@ void Deoptimizer::PatchInterruptCodeAt(Code* unoptimized_code,
 
 void Deoptimizer::RevertInterruptCodeAt(Code* unoptimized_code,
                                         Address pc_after,
-                                        Code* interrupt_code,
-                                        Code* replacement_code) {
-  ASSERT(InterruptCodeIsPatched(unoptimized_code,
-                                pc_after,
-                                interrupt_code,
-                                replacement_code));
+                                        Code* interrupt_code) {
   static const int kInstrSize = Assembler::kInstrSize;
   // Restore the original jump.
   CodePatcher patcher(pc_after - 3 * kInstrSize, 1);
@@ -183,10 +140,10 @@ void Deoptimizer::RevertInterruptCodeAt(Code* unoptimized_code,
 
 
 #ifdef DEBUG
-bool Deoptimizer::InterruptCodeIsPatched(Code* unoptimized_code,
-                                         Address pc_after,
-                                         Code* interrupt_code,
-                                         Code* replacement_code) {
+Deoptimizer::InterruptPatchState Deoptimizer::GetInterruptPatchState(
+    Isolate* isolate,
+    Code* unoptimized_code,
+    Address pc_after) {
   static const int kInstrSize = Assembler::kInstrSize;
   ASSERT(Memory::int32_at(pc_after - kInstrSize) == kBlxIp);
 
@@ -197,17 +154,22 @@ bool Deoptimizer::InterruptCodeIsPatched(Code* unoptimized_code,
   if (Assembler::IsNop(Assembler::instr_at(pc_after - 3 * kInstrSize))) {
     ASSERT(Assembler::IsLdrPcImmediateOffset(
         Assembler::instr_at(pc_after - 2 * kInstrSize)));
-    ASSERT(reinterpret_cast<uint32_t>(replacement_code->entry()) ==
+    Code* osr_builtin =
+        isolate->builtins()->builtin(Builtins::kOnStackReplacement);
+    ASSERT(reinterpret_cast<uint32_t>(osr_builtin->entry()) ==
            Memory::uint32_at(interrupt_address_pointer));
-    return true;
+    return PATCHED_FOR_OSR;
   } else {
+    // Get the interrupt stub code object to match against from cache.
+    Code* interrupt_builtin =
+        isolate->builtins()->builtin(Builtins::kInterruptCheck);
     ASSERT(Assembler::IsLdrPcImmediateOffset(
         Assembler::instr_at(pc_after - 2 * kInstrSize)));
     ASSERT_EQ(kBranchBeforeInterrupt,
               Memory::int32_at(pc_after - 3 * kInstrSize));
-    ASSERT(reinterpret_cast<uint32_t>(interrupt_code->entry()) ==
+    ASSERT(reinterpret_cast<uint32_t>(interrupt_builtin->entry()) ==
            Memory::uint32_at(interrupt_address_pointer));
-    return false;
+    return NOT_PATCHED;
   }
 }
 #endif  // DEBUG
@@ -465,22 +427,12 @@ void Deoptimizer::EntryGenerator::Generate() {
   // Get the bailout id from the stack.
   __ ldr(r2, MemOperand(sp, kSavedRegistersAreaSize));
 
-  // Get the address of the location in the code object if possible (r3) (return
+  // Get the address of the location in the code object (r3) (return
   // address for lazy deoptimization) and compute the fp-to-sp delta in
   // register r4.
-  if (type() == EAGER || type() == SOFT) {
-    __ mov(r3, Operand::Zero());
-    // Correct one word for bailout id.
-    __ add(r4, sp, Operand(kSavedRegistersAreaSize + (1 * kPointerSize)));
-  } else if (type() == OSR) {
-    __ mov(r3, lr);
-    // Correct one word for bailout id.
-    __ add(r4, sp, Operand(kSavedRegistersAreaSize + (1 * kPointerSize)));
-  } else {
-    __ mov(r3, lr);
-    // Correct two words for bailout id and return address.
-    __ add(r4, sp, Operand(kSavedRegistersAreaSize + (2 * kPointerSize)));
-  }
+  __ mov(r3, lr);
+  // Correct one word for bailout id.
+  __ add(r4, sp, Operand(kSavedRegistersAreaSize + (1 * kPointerSize)));
   __ sub(r4, fp, r4);
 
   // Allocate a new deoptimizer object.
@@ -521,13 +473,8 @@ void Deoptimizer::EntryGenerator::Generate() {
     __ vstr(d0, r1, dst_offset);
   }
 
-  // Remove the bailout id, eventually return address, and the saved registers
-  // from the stack.
-  if (type() == EAGER || type() == SOFT || type() == OSR) {
-    __ add(sp, sp, Operand(kSavedRegistersAreaSize + (1 * kPointerSize)));
-  } else {
-    __ add(sp, sp, Operand(kSavedRegistersAreaSize + (2 * kPointerSize)));
-  }
+  // Remove the bailout id and the saved registers from the stack.
+  __ add(sp, sp, Operand(kSavedRegistersAreaSize + (1 * kPointerSize)));
 
   // Compute a pointer to the unwinding limit in register r2; that is
   // the first stack slot not part of the input frame.
@@ -636,18 +583,12 @@ void Deoptimizer::EntryGenerator::Generate() {
 
 
 void Deoptimizer::TableEntryGenerator::GeneratePrologue() {
-  // Create a sequence of deoptimization entries. Note that any
-  // registers may be still live.
+  // Create a sequence of deoptimization entries.
+  // Note that registers are still live when jumping to an entry.
   Label done;
   for (int i = 0; i < count(); i++) {
     int start = masm()->pc_offset();
     USE(start);
-    if (type() == EAGER || type() == SOFT) {
-      __ nop();
-    } else {
-      // Emulate ia32 like call by pushing return address to stack.
-      __ push(lr);
-    }
     __ mov(ip, Operand(i));
     __ push(ip);
     __ b(&done);
@@ -655,6 +596,17 @@ void Deoptimizer::TableEntryGenerator::GeneratePrologue() {
   }
   __ bind(&done);
 }
+
+
+void FrameDescription::SetCallerPc(unsigned offset, intptr_t value) {
+  SetFrameSlot(offset, value);
+}
+
+
+void FrameDescription::SetCallerFp(unsigned offset, intptr_t value) {
+  SetFrameSlot(offset, value);
+}
+
 
 #undef __
 

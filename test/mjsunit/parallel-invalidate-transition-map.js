@@ -26,10 +26,11 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 // Flags: --track-fields --track-double-fields --allow-natives-syntax
-// Flags: --parallel-recompilation --parallel-recompilation-delay=50
+// Flags: --concurrent-recompilation --concurrent-recompilation-delay=100
 
-function assertUnoptimized(fun) {
-  assertTrue(%GetOptimizationStatus(fun) != 1);
+if (!%IsConcurrentRecompilationSupported()) {
+  print("Concurrent recompilation is disabled. Skipping this test.");
+  quit();
 }
 
 function new_object() {
@@ -45,12 +46,12 @@ function add_field(obj) {
 
 add_field(new_object());
 add_field(new_object());
-%OptimizeFunctionOnNextCall(add_field, "parallel");
+%OptimizeFunctionOnNextCall(add_field, "concurrent");
 
 var o = new_object();
-add_field(o);                      // Trigger optimization.
-assertUnoptimized(add_field);      // Not yet optimized.
-o.c = 2.2;                         // Invalidate transition map.
-%CompleteOptimization(add_field);  // Conclude optimization with...
-assertUnoptimized(add_field);      // ... bailing out due to map dependency.
-
+// Trigger optimization in the background thread.
+add_field(o);
+// Invalidate transition map while optimization is underway.
+o.c = 2.2;
+// Sync with background thread to conclude optimization that bailed out.
+assertUnoptimized(add_field, "sync");

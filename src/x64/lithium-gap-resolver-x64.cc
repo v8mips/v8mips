@@ -27,7 +27,7 @@
 
 #include "v8.h"
 
-#if defined(V8_TARGET_ARCH_X64)
+#if V8_TARGET_ARCH_X64
 
 #include "x64/lithium-gap-resolver-x64.h"
 #include "x64/lithium-codegen-x64.h"
@@ -201,6 +201,16 @@ void LGapResolver::EmitMove(int index) {
         __ movl(dst, Immediate(cgen_->ToInteger32(constant_source)));
       } else {
         __ LoadObject(dst, cgen_->ToHandle(constant_source));
+      }
+    } else if (destination->IsDoubleRegister()) {
+      double v = cgen_->ToDouble(constant_source);
+      uint64_t int_val = BitCast<uint64_t, double>(v);
+      XMMRegister dst = cgen_->ToDoubleRegister(destination);
+      if (int_val == 0) {
+        __ xorps(dst, dst);
+      } else {
+        __ movq(kScratchRegister, int_val, RelocInfo::NONE64);
+        __ movq(dst, kScratchRegister);
       }
     } else {
       ASSERT(destination->IsStackSlot());

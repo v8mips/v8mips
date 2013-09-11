@@ -48,8 +48,8 @@ namespace internal {
 //   T <= Any
 //
 //   Oddball = Boolean \/ Null \/ Undefined
-//   Number = Integer32 \/ Double
-//   Integer31 < Integer32
+//   Number = Signed32 \/ Unsigned32 \/ Double
+//   Smi <= Signed32
 //   Name = String \/ Symbol
 //   UniqueName = InternalizedString \/ Symbol
 //   InternalizedString < String
@@ -60,6 +60,7 @@ namespace internal {
 //   Receiver = Object \/ Proxy
 //   Array < Object
 //   Function < Object
+//   RegExp < Object
 //
 //   Class(map) < T   iff instance_type(map) < T
 //   Constant(x) < T  iff instance_type(map(x)) < T
@@ -83,42 +84,64 @@ namespace internal {
 // lattice (e.g., splitting up number types further) without invalidating any
 // existing assumptions or tests.
 //
+// Consequently, do not use pointer equality for type tests, always use Is!
+//
 // Internally, all 'primitive' types, and their unions, are represented as
 // bitsets via smis. Class is a heap pointer to the respective map. Only
 // Constant's, or unions containing Class'es or Constant's, require allocation.
+// Note that the bitset representation is closed under both Union and Intersect.
 //
 // The type representation is heap-allocated, so cannot (currently) be used in
-// a parallel compilation context.
+// a concurrent compilation context.
+
+
+#define PRIMITIVE_TYPE_LIST(V)           \
+  V(None,                0)              \
+  V(Null,                1 << 0)         \
+  V(Undefined,           1 << 1)         \
+  V(Boolean,             1 << 2)         \
+  V(Smi,                 1 << 3)         \
+  V(OtherSigned32,       1 << 4)         \
+  V(Unsigned32,          1 << 5)         \
+  V(Double,              1 << 6)         \
+  V(Symbol,              1 << 7)         \
+  V(InternalizedString,  1 << 8)         \
+  V(OtherString,         1 << 9)         \
+  V(Undetectable,        1 << 10)        \
+  V(Array,               1 << 11)        \
+  V(Function,            1 << 12)        \
+  V(RegExp,              1 << 13)        \
+  V(OtherObject,         1 << 14)        \
+  V(Proxy,               1 << 15)        \
+  V(Internal,            1 << 16)
+
+#define COMPOSED_TYPE_LIST(V)                                       \
+  V(Oddball,         kBoolean | kNull | kUndefined)                 \
+  V(Signed32,        kSmi | kOtherSigned32)                         \
+  V(Number,          kSigned32 | kUnsigned32 | kDouble)             \
+  V(String,          kInternalizedString | kOtherString)            \
+  V(UniqueName,      kSymbol | kInternalizedString)                 \
+  V(Name,            kSymbol | kString)                             \
+  V(NumberOrString,  kNumber | kString)                             \
+  V(Object,          kUndetectable | kArray | kFunction |           \
+                     kRegExp | kOtherObject)                        \
+  V(Receiver,        kObject | kProxy)                              \
+  V(Allocated,       kDouble | kName | kReceiver)                   \
+  V(Any,             kOddball | kNumber | kAllocated | kInternal)   \
+  V(Detectable,      kAllocated - kUndetectable)
+
+#define TYPE_LIST(V)     \
+  PRIMITIVE_TYPE_LIST(V) \
+  COMPOSED_TYPE_LIST(V)
+
+
 
 class Type : public Object {
  public:
-  static Type* None() { return from_bitset(kNone); }
-  static Type* Any() { return from_bitset(kAny); }
-  static Type* Allocated() { return from_bitset(kAllocated); }
-  static Type* Detectable() { return from_bitset(kDetectable); }
-
-  static Type* Oddball() { return from_bitset(kOddball); }
-  static Type* Boolean() { return from_bitset(kBoolean); }
-  static Type* Null() { return from_bitset(kNull); }
-  static Type* Undefined() { return from_bitset(kUndefined); }
-
-  static Type* Number() { return from_bitset(kNumber); }
-  static Type* Integer31() { return from_bitset(kInteger31); }
-  static Type* Integer32() { return from_bitset(kInteger32); }
-  static Type* Double() { return from_bitset(kDouble); }
-
-  static Type* Name() { return from_bitset(kName); }
-  static Type* UniqueName() { return from_bitset(kUniqueName); }
-  static Type* String() { return from_bitset(kString); }
-  static Type* InternalizedString() { return from_bitset(kInternalizedString); }
-  static Type* Symbol() { return from_bitset(kSymbol); }
-
-  static Type* Receiver() { return from_bitset(kReceiver); }
-  static Type* Object() { return from_bitset(kObject); }
-  static Type* Undetectable() { return from_bitset(kUndetectable); }
-  static Type* Array() { return from_bitset(kArray); }
-  static Type* Function() { return from_bitset(kFunction); }
-  static Type* Proxy() { return from_bitset(kProxy); }
+  #define DEFINE_TYPE_CONSTRUCTOR(type, value)           \
+    static Type* type() { return from_bitset(k##type); }
+  TYPE_LIST(DEFINE_TYPE_CONSTRUCTOR)
+  #undef DEFINE_TYPE_CONSTRUCTOR
 
   static Type* Class(Handle<Map> map) { return from_handle(map); }
   static Type* Constant(Handle<HeapObject> value) {
@@ -129,9 +152,10 @@ class Type : public Object {
   }
 
   static Type* Union(Handle<Type> type1, Handle<Type> type2);
+  static Type* Intersect(Handle<Type> type1, Handle<Type> type2);
   static Type* Optional(Handle<Type> type);  // type \/ Undefined
 
-  bool Is(Type* that);
+  bool Is(Type* that) { return (this == that) ? true : IsSlowCase(that); }
   bool Is(Handle<Type> that) { return this->Is(*that); }
   bool Maybe(Type* that);
   bool Maybe(Handle<Type> that) { return this->Maybe(*that); }
@@ -175,6 +199,18 @@ class Type : public Object {
     return Iterator<v8::internal::Object>(this->handle());
   }
 
+  static Type* cast(v8::internal::Object* object) {
+    Type* t = static_cast<Type*>(object);
+    ASSERT(t->is_bitset() || t->is_class() ||
+           t->is_constant() || t->is_union());
+    return t;
+  }
+
+#ifdef OBJECT_PRINT
+  void TypePrint();
+  void TypePrint(FILE* out);
+#endif
+
  private:
   // A union is a fixed array containing types. Invariants:
   // - its length is at least 2
@@ -183,39 +219,18 @@ class Type : public Object {
   typedef FixedArray Unioned;
 
   enum {
-    kNull = 1 << 0,
-    kUndefined = 1 << 1,
-    kBoolean = 1 << 2,
-    kInteger31 = 1 << 3,
-    kOtherInteger = 1 << 4,
-    kDouble = 1 << 5,
-    kSymbol = 1 << 6,
-    kInternalizedString = 1 << 7,
-    kOtherString = 1 << 8,
-    kUndetectable = 1 << 9,
-    kArray = 1 << 10,
-    kFunction = 1 << 11,
-    kOtherObject = 1 << 12,
-    kProxy = 1 << 13,
-
-    kOddball = kBoolean | kNull | kUndefined,
-    kInteger32 = kInteger31 | kOtherInteger,
-    kNumber = kInteger32 | kDouble,
-    kString = kInternalizedString | kOtherString,
-    kUniqueName = kSymbol | kInternalizedString,
-    kName = kSymbol | kString,
-    kObject = kUndetectable | kArray | kFunction | kOtherObject,
-    kReceiver = kObject | kProxy,
-    kAllocated = kDouble | kName | kReceiver,
-    kAny = kOddball | kNumber | kAllocated,
-    kDetectable = kAllocated - kUndetectable,
-    kNone = 0
+    #define DECLARE_TYPE(type, value) k##type = (value),
+    TYPE_LIST(DECLARE_TYPE)
+    #undef DECLARE_TYPE
+    kUnusedEOL = 0
   };
 
   bool is_bitset() { return this->IsSmi(); }
   bool is_class() { return this->IsMap(); }
   bool is_constant() { return this->IsBox(); }
   bool is_union() { return this->IsFixedArray(); }
+
+  bool IsSlowCase(Type* that);
 
   int as_bitset() { return Smi::cast(this)->value(); }
   Handle<Map> as_class() { return Handle<Map>::cast(handle()); }
@@ -248,6 +263,71 @@ class Type : public Object {
   int GlbBitset();  // greatest lower bound that's a bitset
   bool InUnion(Handle<Unioned> unioned, int current_size);
   int ExtendUnion(Handle<Unioned> unioned, int current_size);
+  int ExtendIntersection(
+      Handle<Unioned> unioned, Handle<Type> type, int current_size);
+
+  static const char* GetComposedName(int type) {
+    switch (type) {
+      #define PRINT_COMPOSED_TYPE(type, value)  \
+      case k##type:                             \
+        return # type;
+      COMPOSED_TYPE_LIST(PRINT_COMPOSED_TYPE)
+      #undef PRINT_COMPOSED_TYPE
+    }
+    return NULL;
+  }
+
+  static const char* GetPrimitiveName(int type) {
+    switch (type) {
+      #define PRINT_PRIMITIVE_TYPE(type, value)  \
+      case k##type:                              \
+        return # type;
+      PRIMITIVE_TYPE_LIST(PRINT_PRIMITIVE_TYPE)
+      #undef PRINT_PRIMITIVE_TYPE
+      default:
+        UNREACHABLE();
+        return "InvalidType";
+    }
+  }
+};
+
+
+// A simple struct to represent a pair of lower/upper type bounds.
+struct Bounds {
+  Handle<Type> lower;
+  Handle<Type> upper;
+
+  Bounds() {}
+  Bounds(Handle<Type> l, Handle<Type> u) : lower(l), upper(u) {}
+  Bounds(Type* l, Type* u, Isolate* isl) : lower(l, isl), upper(u, isl) {}
+  explicit Bounds(Handle<Type> t) : lower(t), upper(t) {}
+  Bounds(Type* t, Isolate* isl) : lower(t, isl), upper(t, isl) {}
+
+  // Unrestricted bounds.
+  static Bounds Unbounded(Isolate* isl) {
+    return Bounds(Type::None(), Type::Any(), isl);
+  }
+
+  // Meet: both b1 and b2 are known to hold.
+  static Bounds Both(Bounds b1, Bounds b2, Isolate* isl) {
+    return Bounds(
+        handle(Type::Union(b1.lower, b2.lower), isl),
+        handle(Type::Intersect(b1.upper, b2.upper), isl));
+  }
+
+  // Join: either b1 or b2 is known to hold.
+  static Bounds Either(Bounds b1, Bounds b2, Isolate* isl) {
+    return Bounds(
+        handle(Type::Intersect(b1.lower, b2.lower), isl),
+        handle(Type::Union(b1.upper, b2.upper), isl));
+  }
+
+  static Bounds NarrowLower(Bounds b, Handle<Type> t, Isolate* isl) {
+    return Bounds(handle(Type::Union(b.lower, t), isl), b.upper);
+  }
+  static Bounds NarrowUpper(Bounds b, Handle<Type> t, Isolate* isl) {
+    return Bounds(b.lower, handle(Type::Intersect(b.upper, t), isl));
+  }
 };
 
 } }  // namespace v8::internal

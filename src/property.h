@@ -106,13 +106,13 @@ class FieldDescriptor: public Descriptor {
 };
 
 
-class ConstantFunctionDescriptor: public Descriptor {
+class ConstantDescriptor: public Descriptor {
  public:
-  ConstantFunctionDescriptor(Name* key,
-                             JSFunction* function,
-                             PropertyAttributes attributes)
-      : Descriptor(key, function, attributes, CONSTANT_FUNCTION,
-                   Representation::Tagged()) {}
+  ConstantDescriptor(Name* key,
+                     Object* value,
+                     PropertyAttributes attributes)
+      : Descriptor(key, value, attributes, CONSTANT,
+                   value->OptimalRepresentation()) {}
 };
 
 
@@ -225,14 +225,14 @@ class LookupResult BASE_EMBEDDED {
   void HandlerResult(JSProxy* proxy) {
     lookup_type_ = HANDLER_TYPE;
     holder_ = proxy;
-    details_ = PropertyDetails(NONE, HANDLER, Representation::None());
+    details_ = PropertyDetails(NONE, HANDLER, Representation::Tagged());
     cacheable_ = false;
   }
 
   void InterceptorResult(JSObject* holder) {
     lookup_type_ = INTERCEPTOR_TYPE;
     holder_ = holder;
-    details_ = PropertyDetails(NONE, INTERCEPTOR, Representation::None());
+    details_ = PropertyDetails(NONE, INTERCEPTOR, Representation::Tagged());
   }
 
   void NotFound() {
@@ -303,9 +303,13 @@ class LookupResult BASE_EMBEDDED {
     return details_.type() == NORMAL;
   }
 
+  bool IsConstant() {
+    ASSERT(!(details_.type() == CONSTANT && !IsFound()));
+    return details_.type() == CONSTANT;
+  }
+
   bool IsConstantFunction() {
-    ASSERT(!(details_.type() == CONSTANT_FUNCTION && !IsFound()));
-    return details_.type() == CONSTANT_FUNCTION;
+    return IsConstant() && GetValue()->IsJSFunction();
   }
 
   bool IsDontDelete() { return details_.IsDontDelete(); }
@@ -324,7 +328,7 @@ class LookupResult BASE_EMBEDDED {
     switch (type()) {
       case FIELD:
       case NORMAL:
-      case CONSTANT_FUNCTION:
+      case CONSTANT:
         return true;
       case CALLBACKS: {
         Object* callback = GetCallbackObject();
@@ -351,12 +355,12 @@ class LookupResult BASE_EMBEDDED {
         Object* value;
         value = holder()->property_dictionary()->ValueAt(GetDictionaryEntry());
         if (holder()->IsGlobalObject()) {
-          value = JSGlobalPropertyCell::cast(value)->value();
+          value = PropertyCell::cast(value)->value();
         }
         return value;
       }
-      case CONSTANT_FUNCTION:
-        return GetConstantFunction();
+      case CONSTANT:
+        return GetConstant();
       case CALLBACKS:
       case HANDLER:
       case INTERCEPTOR:
@@ -392,9 +396,8 @@ class LookupResult BASE_EMBEDDED {
     return IsTransition() && GetTransitionDetails(map).type() == FIELD;
   }
 
-  bool IsTransitionToConstantFunction(Map* map) {
-    return IsTransition() &&
-        GetTransitionDetails(map).type() == CONSTANT_FUNCTION;
+  bool IsTransitionToConstant(Map* map) {
+    return IsTransition() && GetTransitionDetails(map).type() == CONSTANT;
   }
 
   Map* GetTransitionMap() {
@@ -419,12 +422,10 @@ class LookupResult BASE_EMBEDDED {
 
   PropertyIndex GetFieldIndex() {
     ASSERT(lookup_type_ == DESCRIPTOR_TYPE);
-    ASSERT(IsField());
     return PropertyIndex::NewFieldIndex(GetFieldIndexFromMap(holder()->map()));
   }
 
   int GetLocalFieldIndexFromMap(Map* map) {
-    ASSERT(IsField());
     return GetFieldIndexFromMap(map) - map->inobject_properties();
   }
 
@@ -434,13 +435,22 @@ class LookupResult BASE_EMBEDDED {
   }
 
   JSFunction* GetConstantFunction() {
-    ASSERT(type() == CONSTANT_FUNCTION);
+    ASSERT(type() == CONSTANT);
     return JSFunction::cast(GetValue());
   }
 
+  Object* GetConstantFromMap(Map* map) {
+    ASSERT(type() == CONSTANT);
+    return GetValueFromMap(map);
+  }
+
   JSFunction* GetConstantFunctionFromMap(Map* map) {
-    ASSERT(type() == CONSTANT_FUNCTION);
-    return JSFunction::cast(GetValueFromMap(map));
+    return JSFunction::cast(GetConstantFromMap(map));
+  }
+
+  Object* GetConstant() {
+    ASSERT(type() == CONSTANT);
+    return GetValue();
   }
 
   Object* GetCallbackObject() {

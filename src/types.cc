@@ -26,6 +26,7 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "types.h"
+#include "string-stream.h"
 
 namespace v8 {
 namespace internal {
@@ -125,12 +126,13 @@ int Type::LubBitset() {
       map = *this->as_class();
     } else {
       Handle<v8::internal::Object> value = this->as_constant();
-      if (value->IsSmi()) return kInteger31;
+      if (value->IsSmi()) return kSmi;
       map = HeapObject::cast(*value)->map();
       if (map->instance_type() == ODDBALL_TYPE) {
         if (value->IsUndefined()) return kUndefined;
         if (value->IsNull()) return kNull;
         if (value->IsTrue() || value->IsFalse()) return kBoolean;
+        if (value->IsTheHole()) return kAny;
       }
     }
     switch (map->instance_type()) {
@@ -174,14 +176,19 @@ int Type::LubBitset() {
       case JS_GLOBAL_PROXY_TYPE:
       case JS_ARRAY_BUFFER_TYPE:
       case JS_TYPED_ARRAY_TYPE:
+      case JS_DATA_VIEW_TYPE:
+      case JS_SET_TYPE:
+      case JS_MAP_TYPE:
       case JS_WEAK_MAP_TYPE:
-      case JS_REGEXP_TYPE:
+      case JS_WEAK_SET_TYPE:
         if (map->is_undetectable()) return kUndetectable;
         return kOtherObject;
       case JS_ARRAY_TYPE:
         return kArray;
       case JS_FUNCTION_TYPE:
         return kFunction;
+      case JS_REGEXP_TYPE:
+        return kRegExp;
       case JS_PROXY_TYPE:
       case JS_FUNCTION_PROXY_TYPE:
         return kProxy;
@@ -196,6 +203,11 @@ int Type::LubBitset() {
         // We ought to find a cleaner solution for compiling stubs parameterised
         // over type or class variables, esp ones with bounds...
         return kDetectable;
+      case DECLARED_ACCESSOR_INFO_TYPE:
+      case EXECUTABLE_ACCESSOR_INFO_TYPE:
+      case ACCESSOR_PAIR_TYPE:
+      case FIXED_ARRAY_TYPE:
+        return kInternal;
       default:
         UNREACHABLE();
         return kNone;
@@ -218,7 +230,7 @@ int Type::GlbBitset() {
 
 
 // Check this <= that.
-bool Type::Is(Type* that) {
+bool Type::IsSlowCase(Type* that) {
   // Fast path for bitsets.
   if (that->is_bitset()) {
     return (this->LubBitset() | that->as_bitset()) == that->as_bitset();
@@ -243,6 +255,7 @@ bool Type::Is(Type* that) {
 
   // T <= (T1 \/ ... \/ Tn)  <=>  (T <= T1) \/ ... \/ (T <= Tn)
   // (iff T is not a union)
+  ASSERT(!this->is_union());
   if (that->is_union()) {
     Handle<Unioned> unioned = that->as_union();
     for (int i = 0; i < unioned->length(); ++i) {
@@ -267,13 +280,6 @@ bool Type::Maybe(Type* that) {
     return (this->LubBitset() & that->as_bitset()) != 0;
   }
 
-  if (this->is_class()) {
-    return that->is_class() && *this->as_class() == *that->as_class();
-  }
-  if (this->is_constant()) {
-    return that->is_constant() && *this->as_constant() == *that->as_constant();
-  }
-
   // (T1 \/ ... \/ Tn) overlaps T <=> (T1 overlaps T) \/ ... \/ (Tn overlaps T)
   if (this->is_union()) {
     Handle<Unioned> unioned = this->as_union();
@@ -294,6 +300,14 @@ bool Type::Maybe(Type* that) {
     return false;
   }
 
+  ASSERT(!that->is_union());
+  if (this->is_class()) {
+    return that->is_class() && *this->as_class() == *that->as_class();
+  }
+  if (this->is_constant()) {
+    return that->is_constant() && *this->as_constant() == *that->as_constant();
+  }
+
   return false;
 }
 
@@ -302,12 +316,13 @@ bool Type::InUnion(Handle<Unioned> unioned, int current_size) {
   ASSERT(!this->is_union());
   for (int i = 0; i < current_size; ++i) {
     Handle<Type> type = union_get(unioned, i);
-    if (type->is_bitset() ? this->Is(type) : this == *type) return true;
+    if (this->Is(type)) return true;
   }
   return false;
 }
 
-// Get non-bitsets from this which are not subsumed by that, store at unioned,
+
+// Get non-bitsets from this which are not subsumed by union, store at unioned,
 // starting at index. Returns updated index.
 int Type::ExtendUnion(Handle<Unioned> result, int current_size) {
   int old_size = current_size;
@@ -333,6 +348,12 @@ Type* Type::Union(Handle<Type> type1, Handle<Type> type2) {
   if (type1->is_bitset() && type2->is_bitset()) {
     return from_bitset(type1->as_bitset() | type2->as_bitset());
   }
+
+  // Fast case: top or bottom types.
+  if (type1->SameValue(Type::Any())) return *type1;
+  if (type2->SameValue(Type::Any())) return *type2;
+  if (type1->SameValue(Type::None())) return *type2;
+  if (type2->SameValue(Type::None())) return *type1;
 
   // Semi-fast case: Unioned objects are neither involved nor produced.
   if (!(type1->is_union() || type2->is_union())) {
@@ -374,10 +395,144 @@ Type* Type::Union(Handle<Type> type1, Handle<Type> type2) {
 }
 
 
+// Get non-bitsets from this which are also in that, store at unioned,
+// starting at index. Returns updated index.
+int Type::ExtendIntersection(
+    Handle<Unioned> result, Handle<Type> that, int current_size) {
+  int old_size = current_size;
+  if (this->is_class() || this->is_constant()) {
+    if (this->Is(that) && !this->InUnion(result, old_size))
+      result->set(current_size++, this);
+  } else if (this->is_union()) {
+    Handle<Unioned> unioned = this->as_union();
+    for (int i = 0; i < unioned->length(); ++i) {
+      Handle<Type> type = union_get(unioned, i);
+      ASSERT(i == 0 || !(type->is_bitset() || type->Is(union_get(unioned, 0))));
+      if (type->is_bitset()) continue;
+      if (type->Is(that) && !type->InUnion(result, old_size))
+        result->set(current_size++, *type);
+    }
+  }
+  return current_size;
+}
+
+
+// Intersection is O(1) on simple bit unions, but O(n*m) on structured unions.
+// TODO(rossberg): Should we use object sets somehow? Is it worth it?
+Type* Type::Intersect(Handle<Type> type1, Handle<Type> type2) {
+  // Fast case: bit sets.
+  if (type1->is_bitset() && type2->is_bitset()) {
+    return from_bitset(type1->as_bitset() & type2->as_bitset());
+  }
+
+  // Fast case: top or bottom types.
+  if (type1->SameValue(Type::None())) return *type1;
+  if (type2->SameValue(Type::None())) return *type2;
+  if (type1->SameValue(Type::Any())) return *type2;
+  if (type2->SameValue(Type::Any())) return *type1;
+
+  // Semi-fast case: Unioned objects are neither involved nor produced.
+  if (!(type1->is_union() || type2->is_union())) {
+    if (type1->Is(type2)) return *type1;
+    if (type2->Is(type1)) return *type2;
+  }
+
+  // Slow case: may need to produce a Unioned object.
+  Isolate* isolate = NULL;
+  int size = 0;
+  if (!type1->is_bitset()) {
+    isolate = HeapObject::cast(*type1)->GetIsolate();
+    size = (type1->is_union() ? type1->as_union()->length() : 2);
+  }
+  if (!type2->is_bitset()) {
+    isolate = HeapObject::cast(*type2)->GetIsolate();
+    int size2 = (type2->is_union() ? type2->as_union()->length() : 2);
+    size = (size == 0 ? size2 : Min(size, size2));
+  }
+  ASSERT(isolate != NULL);
+  ASSERT(size >= 2);
+  Handle<Unioned> unioned = isolate->factory()->NewFixedArray(size);
+  size = 0;
+
+  int bitset = type1->GlbBitset() & type2->GlbBitset();
+  if (bitset != kNone) unioned->set(size++, from_bitset(bitset));
+  size = type1->ExtendIntersection(unioned, type2, size);
+  size = type2->ExtendIntersection(unioned, type1, size);
+
+  if (size == 0) {
+    return None();
+  } else if (size == 1) {
+    return *union_get(unioned, 0);
+  } else if (size == unioned->length()) {
+    return from_handle(unioned);
+  }
+
+  // There were dropped cases. Copy to smaller union.
+  Handle<Unioned> result = isolate->factory()->NewFixedArray(size);
+  for (int i = 0; i < size; ++i) result->set(i, unioned->get(i));
+  return from_handle(result);
+}
+
+
 Type* Type::Optional(Handle<Type> type) {
   return type->is_bitset()
       ? from_bitset(type->as_bitset() | kUndefined)
       : Union(type, Undefined()->handle_via_isolate_of(*type));
 }
+
+
+Representation Representation::FromType(Handle<Type> type) {
+  if (type->Is(Type::None())) return Representation::None();
+  if (type->Is(Type::Smi())) return Representation::Smi();
+  if (type->Is(Type::Signed32())) return Representation::Integer32();
+  if (type->Is(Type::Number())) return Representation::Double();
+  return Representation::Tagged();
+}
+
+
+#ifdef OBJECT_PRINT
+void Type::TypePrint() {
+  TypePrint(stdout);
+  PrintF(stdout, "\n");
+  Flush(stdout);
+}
+
+
+void Type::TypePrint(FILE* out) {
+  if (is_bitset()) {
+    int val = as_bitset();
+    const char* composed_name = GetComposedName(val);
+    if (composed_name != NULL) {
+      PrintF(out, "%s", composed_name);
+      return;
+    }
+    bool first_entry = true;
+    PrintF(out, "{");
+    for (unsigned i = 0; i < sizeof(val)*8; ++i) {
+      int mask = (1 << i);
+      if ((val & mask) != 0) {
+        if (!first_entry) PrintF(out, ",");
+        first_entry = false;
+        PrintF(out, "%s", GetPrimitiveName(mask));
+      }
+    }
+    PrintF(out, "}");
+  } else if (is_constant()) {
+    PrintF(out, "Constant(%p)", static_cast<void*>(*as_constant()));
+  } else if (is_class()) {
+    PrintF(out, "Class(%p)", static_cast<void*>(*as_class()));
+  } else if (is_union()) {
+    PrintF(out, "{");
+    Handle<Unioned> unioned = as_union();
+    for (int i = 0; i < unioned->length(); ++i) {
+      Handle<Type> type_i = union_get(unioned, i);
+      if (i > 0) PrintF(out, ",");
+      type_i->TypePrint(out);
+    }
+    PrintF(out, "}");
+  }
+}
+#endif
+
 
 } }  // namespace v8::internal

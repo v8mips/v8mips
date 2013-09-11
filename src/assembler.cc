@@ -381,6 +381,7 @@ void RelocInfoWriter::WriteExtraTaggedIntData(int data_delta, int top_tag) {
   }
 }
 
+
 void RelocInfoWriter::WriteExtraTaggedConstPoolData(int data) {
   WriteExtraTag(kConstPoolExtraTag, kConstPoolTag);
   for (int i = 0; i < kIntSize; i++) {
@@ -389,6 +390,7 @@ void RelocInfoWriter::WriteExtraTaggedConstPoolData(int data) {
     data = data >> kBitsPerByte;
   }
 }
+
 
 void RelocInfoWriter::WriteExtraTaggedData(intptr_t data_delta, int top_tag) {
   WriteExtraTag(kDataJumpExtraTag, top_tag);
@@ -796,7 +798,7 @@ void RelocInfo::Print(Isolate* isolate, FILE* out) {
     target_object()->ShortPrint(out);
     PrintF(out, ")");
   } else if (rmode_ == EXTERNAL_REFERENCE) {
-    ExternalReferenceEncoder ref_encoder;
+    ExternalReferenceEncoder ref_encoder(isolate);
     PrintF(out, " (%s)  (%p)",
            ref_encoder.NameOfAddress(*target_reference_address()),
            *target_reference_address());
@@ -847,7 +849,7 @@ void RelocInfo::Verify() {
       CHECK(addr != NULL);
       // Check that we can find the right code object.
       Code* code = Code::GetCodeFromTargetAddress(addr);
-      Object* found = HEAP->FindCodeObject(addr);
+      Object* found = code->GetIsolate()->FindCodeObject(addr);
       CHECK(found->IsCode());
       CHECK(code->address() == HeapObject::cast(found)->address());
       break;
@@ -889,7 +891,7 @@ void ExternalReference::SetUp() {
   double_constants.the_hole_nan = BitCast<double>(kHoleNanInt64);
   double_constants.negative_infinity = -V8_INFINITY;
 
-  math_exp_data_mutex = OS::CreateMutex();
+  math_exp_data_mutex = new Mutex();
 }
 
 
@@ -897,7 +899,7 @@ void ExternalReference::InitializeMathExpData() {
   // Early return?
   if (math_exp_data_initialized) return;
 
-  math_exp_data_mutex->Lock();
+  LockGuard<Mutex> lock_guard(math_exp_data_mutex);
   if (!math_exp_data_initialized) {
     // If this is changed, generated code must be adapted too.
     const int kTableSizeBits = 11;
@@ -933,7 +935,6 @@ void ExternalReference::InitializeMathExpData() {
 
     math_exp_data_initialized = true;
   }
-  math_exp_data_mutex->Unlock();
 }
 
 
@@ -1071,6 +1072,11 @@ ExternalReference ExternalReference::date_cache_stamp(Isolate* isolate) {
 }
 
 
+ExternalReference ExternalReference::stress_deopt_count(Isolate* isolate) {
+  return ExternalReference(isolate->stress_deopt_count_address());
+}
+
+
 ExternalReference ExternalReference::transcendental_cache_array_address(
     Isolate* isolate) {
   return ExternalReference(
@@ -1120,6 +1126,12 @@ ExternalReference ExternalReference::keyed_lookup_cache_field_offsets(
 
 ExternalReference ExternalReference::roots_array_start(Isolate* isolate) {
   return ExternalReference(isolate->heap()->roots_array_start());
+}
+
+
+ExternalReference ExternalReference::allocation_sites_list_address(
+    Isolate* isolate) {
+  return ExternalReference(isolate->heap()->allocation_sites_list_address());
 }
 
 
@@ -1308,7 +1320,7 @@ ExternalReference ExternalReference::address_of_the_hole_nan() {
 ExternalReference ExternalReference::re_check_stack_guard_state(
     Isolate* isolate) {
   Address function;
-#ifdef V8_TARGET_ARCH_X64
+#if V8_TARGET_ARCH_X64
   function = FUNCTION_ADDR(RegExpMacroAssemblerX64::CheckStackGuardState);
 #elif V8_TARGET_ARCH_IA32
   function = FUNCTION_ADDR(RegExpMacroAssemblerIA32::CheckStackGuardState);
@@ -1322,6 +1334,7 @@ ExternalReference ExternalReference::re_check_stack_guard_state(
   return ExternalReference(Redirect(isolate, function));
 }
 
+
 ExternalReference ExternalReference::re_grow_stack(Isolate* isolate) {
   return ExternalReference(
       Redirect(isolate, FUNCTION_ADDR(NativeRegExpMacroAssembler::GrowStack)));
@@ -1333,6 +1346,7 @@ ExternalReference ExternalReference::re_case_insensitive_compare_uc16(
       isolate,
       FUNCTION_ADDR(NativeRegExpMacroAssembler::CaseInsensitiveCompareUC16)));
 }
+
 
 ExternalReference ExternalReference::re_word_character_map() {
   return ExternalReference(

@@ -51,6 +51,16 @@ void Assembler::emitl(uint32_t x) {
 }
 
 
+void Assembler::emitp(void* x, RelocInfo::Mode rmode) {
+  uintptr_t value = reinterpret_cast<uintptr_t>(x);
+  Memory::uintptr_at(pc_) = value;
+  if (!RelocInfo::IsNone(rmode)) {
+    RecordRelocInfo(rmode, value);
+  }
+  pc_ += sizeof(uintptr_t);
+}
+
+
 void Assembler::emitq(uint64_t x, RelocInfo::Mode rmode) {
   Memory::uint64_at(pc_) = x;
   if (!RelocInfo::IsNone(rmode)) {
@@ -308,6 +318,7 @@ Address* RelocInfo::target_reference_address() {
 
 void RelocInfo::set_target_object(Object* target, WriteBarrierMode mode) {
   ASSERT(IsCodeTarget(rmode_) || rmode_ == EMBEDDED_OBJECT);
+  ASSERT(!target->IsConsString());
   Memory::Object_at(pc_) = target;
   CPU::FlushICache(pc_, sizeof(Address));
   if (mode == UPDATE_WRITE_BARRIER &&
@@ -362,13 +373,14 @@ void RelocInfo::set_target_cell(Cell* cell, WriteBarrierMode mode) {
 
 bool RelocInfo::IsPatchedReturnSequence() {
   // The recognized call sequence is:
-  //  movq(kScratchRegister, immediate64); call(kScratchRegister);
+  //  movq(kScratchRegister, address); call(kScratchRegister);
   // It only needs to be distinguished from a return sequence
   //  movq(rsp, rbp); pop(rbp); ret(n); int3 *6
   // The 11th byte is int3 (0xCC) in the return sequence and
   // REX.WB (0x48+register bit) for the call sequence.
 #ifdef ENABLE_DEBUGGER_SUPPORT
-  return pc_[10] != 0xCC;
+  return pc_[Assembler::kMoveAddressIntoScratchRegisterInstructionLength] !=
+         0xCC;
 #else
   return false;
 #endif

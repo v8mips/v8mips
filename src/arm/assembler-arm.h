@@ -78,12 +78,15 @@ class CpuFeatures : public AllStatic {
             (!Serializer::enabled() || !IsFoundByRuntimeProbingOnly(f)));
   }
 
+  static unsigned cache_line_size() { return cache_line_size_; }
+
  private:
 #ifdef DEBUG
   static bool initialized_;
 #endif
   static unsigned supported_;
   static unsigned found_by_runtime_probing_only_;
+  static unsigned cache_line_size_;
 
   friend class ExternalReference;
   DISALLOW_COPY_AND_ASSIGN(CpuFeatures);
@@ -264,22 +267,6 @@ struct DwVfpRegister {
     return 0 <= code_ && code_ < kMaxNumRegisters;
   }
   bool is(DwVfpRegister reg) const { return code_ == reg.code_; }
-  SwVfpRegister low() const {
-    ASSERT(code_ < 16);
-    SwVfpRegister reg;
-    reg.code_ = code_ * 2;
-
-    ASSERT(reg.is_valid());
-    return reg;
-  }
-  SwVfpRegister high() const {
-    ASSERT(code_ < 16);
-    SwVfpRegister reg;
-    reg.code_ = (code_ * 2) + 1;
-
-    ASSERT(reg.is_valid());
-    return reg;
-  }
   int code() const {
     ASSERT(is_valid());
     return code_;
@@ -299,6 +286,77 @@ struct DwVfpRegister {
 
 
 typedef DwVfpRegister DoubleRegister;
+
+
+// Double word VFP register d0-15.
+struct LowDwVfpRegister {
+ public:
+  static const int kMaxNumLowRegisters = 16;
+  operator DwVfpRegister() const {
+    DwVfpRegister r = { code_ };
+    return r;
+  }
+  static LowDwVfpRegister from_code(int code) {
+    LowDwVfpRegister r = { code };
+    return r;
+  }
+
+  bool is_valid() const {
+    return 0 <= code_ && code_ < kMaxNumLowRegisters;
+  }
+  bool is(DwVfpRegister reg) const { return code_ == reg.code_; }
+  bool is(LowDwVfpRegister reg) const { return code_ == reg.code_; }
+  int code() const {
+    ASSERT(is_valid());
+    return code_;
+  }
+  SwVfpRegister low() const {
+    SwVfpRegister reg;
+    reg.code_ = code_ * 2;
+
+    ASSERT(reg.is_valid());
+    return reg;
+  }
+  SwVfpRegister high() const {
+    SwVfpRegister reg;
+    reg.code_ = (code_ * 2) + 1;
+
+    ASSERT(reg.is_valid());
+    return reg;
+  }
+
+  int code_;
+};
+
+
+// Quad word NEON register.
+struct QwNeonRegister {
+  static const int kMaxNumRegisters = 16;
+
+  static QwNeonRegister from_code(int code) {
+    QwNeonRegister r = { code };
+    return r;
+  }
+
+  bool is_valid() const {
+    return (0 <= code_) && (code_ < kMaxNumRegisters);
+  }
+  bool is(QwNeonRegister reg) const { return code_ == reg.code_; }
+  int code() const {
+    ASSERT(is_valid());
+    return code_;
+  }
+  void split_code(int* vm, int* m) const {
+    ASSERT(is_valid());
+    *m = (code_ & 0x10) >> 4;
+    *vm = code_ & 0x0F;
+  }
+
+  int code_;
+};
+
+
+typedef QwNeonRegister QuadRegister;
 
 
 // Support for the VFP registers s0 to s31 (d0 to d15).
@@ -337,22 +395,22 @@ const SwVfpRegister s30 = { 30 };
 const SwVfpRegister s31 = { 31 };
 
 const DwVfpRegister no_dreg = { -1 };
-const DwVfpRegister d0  = {  0 };
-const DwVfpRegister d1  = {  1 };
-const DwVfpRegister d2  = {  2 };
-const DwVfpRegister d3  = {  3 };
-const DwVfpRegister d4  = {  4 };
-const DwVfpRegister d5  = {  5 };
-const DwVfpRegister d6  = {  6 };
-const DwVfpRegister d7  = {  7 };
-const DwVfpRegister d8  = {  8 };
-const DwVfpRegister d9  = {  9 };
-const DwVfpRegister d10 = { 10 };
-const DwVfpRegister d11 = { 11 };
-const DwVfpRegister d12 = { 12 };
-const DwVfpRegister d13 = { 13 };
-const DwVfpRegister d14 = { 14 };
-const DwVfpRegister d15 = { 15 };
+const LowDwVfpRegister d0 = { 0 };
+const LowDwVfpRegister d1 = { 1 };
+const LowDwVfpRegister d2 = { 2 };
+const LowDwVfpRegister d3 = { 3 };
+const LowDwVfpRegister d4 = { 4 };
+const LowDwVfpRegister d5 = { 5 };
+const LowDwVfpRegister d6 = { 6 };
+const LowDwVfpRegister d7 = { 7 };
+const LowDwVfpRegister d8 = { 8 };
+const LowDwVfpRegister d9 = { 9 };
+const LowDwVfpRegister d10 = { 10 };
+const LowDwVfpRegister d11 = { 11 };
+const LowDwVfpRegister d12 = { 12 };
+const LowDwVfpRegister d13 = { 13 };
+const LowDwVfpRegister d14 = { 14 };
+const LowDwVfpRegister d15 = { 15 };
 const DwVfpRegister d16 = { 16 };
 const DwVfpRegister d17 = { 17 };
 const DwVfpRegister d18 = { 18 };
@@ -369,6 +427,24 @@ const DwVfpRegister d28 = { 28 };
 const DwVfpRegister d29 = { 29 };
 const DwVfpRegister d30 = { 30 };
 const DwVfpRegister d31 = { 31 };
+
+const QwNeonRegister q0  = {  0 };
+const QwNeonRegister q1  = {  1 };
+const QwNeonRegister q2  = {  2 };
+const QwNeonRegister q3  = {  3 };
+const QwNeonRegister q4  = {  4 };
+const QwNeonRegister q5  = {  5 };
+const QwNeonRegister q6  = {  6 };
+const QwNeonRegister q7  = {  7 };
+const QwNeonRegister q8  = {  8 };
+const QwNeonRegister q9  = {  9 };
+const QwNeonRegister q10 = { 10 };
+const QwNeonRegister q11 = { 11 };
+const QwNeonRegister q12 = { 12 };
+const QwNeonRegister q13 = { 13 };
+const QwNeonRegister q14 = { 14 };
+const QwNeonRegister q15 = { 15 };
+
 
 // Aliases for double registers.  Defined using #define instead of
 // "static const DwVfpRegister&" because Clang complains otherwise when a
@@ -560,6 +636,42 @@ class MemOperand BASE_EMBEDDED {
   AddrMode am_;  // bits P, U, and W
 
   friend class Assembler;
+};
+
+
+// Class NeonMemOperand represents a memory operand in load and
+// store NEON instructions
+class NeonMemOperand BASE_EMBEDDED {
+ public:
+  // [rn {:align}]       Offset
+  // [rn {:align}]!      PostIndex
+  explicit NeonMemOperand(Register rn, AddrMode am = Offset, int align = 0);
+
+  // [rn {:align}], rm   PostIndex
+  explicit NeonMemOperand(Register rn, Register rm, int align = 0);
+
+  Register rn() const { return rn_; }
+  Register rm() const { return rm_; }
+  int align() const { return align_; }
+
+ private:
+  void SetAlignment(int align);
+
+  Register rn_;  // base
+  Register rm_;  // register increment
+  int align_;
+};
+
+
+// Class NeonListOperand represents a list of NEON registers
+class NeonListOperand BASE_EMBEDDED {
+ public:
+  explicit NeonListOperand(DoubleRegister base, int registers_count = 1);
+  DoubleRegister base() const { return base_; }
+  NeonListType type() const { return type_; }
+ private:
+  DoubleRegister base_;
+  NeonListType type_;
 };
 
 extern const Instr kMovLrPc;
@@ -866,6 +978,19 @@ class Assembler : public AssemblerBase {
   void bfi(Register dst, Register src, int lsb, int width,
            Condition cond = al);
 
+  void pkhbt(Register dst, Register src1, const Operand& src2,
+             Condition cond = al);
+
+  void pkhtb(Register dst, Register src1, const Operand& src2,
+             Condition cond = al);
+
+  void uxtb(Register dst, const Operand& src, Condition cond = al);
+
+  void uxtab(Register dst, Register src1, const Operand& src2,
+             Condition cond = al);
+
+  void uxtb16(Register dst, const Operand& src, Condition cond = al);
+
   // Status register access instructions
 
   void mrs(Register dst, SRegister s, Condition cond = al);
@@ -886,6 +1011,9 @@ class Assembler : public AssemblerBase {
   void strd(Register src1,
             Register src2,
             const MemOperand& dst, Condition cond = al);
+
+  // Preload instructions
+  void pld(const MemOperand& address);
 
   // Load/Store multiple instructions
   void ldm(BlockAddrMode am, Register base, RegList dst, Condition cond = al);
@@ -1007,6 +1135,10 @@ class Assembler : public AssemblerBase {
             const VmovIndex index,
             const Register src,
             const Condition cond = al);
+  void vmov(const Register dst,
+            const VmovIndex index,
+            const DwVfpRegister src,
+            const Condition cond = al);
   void vmov(const DwVfpRegister dst,
             const Register src1,
             const Register src2,
@@ -1096,6 +1228,17 @@ class Assembler : public AssemblerBase {
   void vsqrt(const DwVfpRegister dst,
              const DwVfpRegister src,
              const Condition cond = al);
+
+  // Support for NEON.
+  // All these APIs support D0 to D31 and Q0 to Q15.
+
+  void vld1(NeonSize size,
+            const NeonListOperand& dst,
+            const NeonMemOperand& src);
+  void vst1(NeonSize size,
+            const NeonListOperand& src,
+            const NeonMemOperand& dst);
+  void vmovl(NeonDataType dt, QwNeonRegister dst, DwVfpRegister src);
 
   // Pseudo instructions
 
@@ -1405,7 +1548,6 @@ class Assembler : public AssemblerBase {
   // Labels
   void print(Label* L);
   void bind_to(Label* L, int pos);
-  void link_to(Label* L, Label* appendix);
   void next(Label* L);
 
   enum UseConstantPoolMode {

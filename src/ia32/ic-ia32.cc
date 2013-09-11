@@ -27,7 +27,7 @@
 
 #include "v8.h"
 
-#if defined(V8_TARGET_ARCH_IA32)
+#if V8_TARGET_ARCH_IA32
 
 #include "codegen.h"
 #include "ic-inl.h"
@@ -317,10 +317,12 @@ static void GenerateKeyNameCheck(MacroAssembler* masm,
   __ test(hash, Immediate(Name::kContainsCachedArrayIndexMask));
   __ j(zero, index_string);
 
-  // Is the string internalized?
-  STATIC_ASSERT(kInternalizedTag != 0);
-  __ test_b(FieldOperand(map, Map::kInstanceTypeOffset), kIsInternalizedMask);
-  __ j(zero, not_unique);
+  // Is the string internalized? We already know it's a string so a single
+  // bit test is enough.
+  STATIC_ASSERT(kNotInternalizedTag != 0);
+  __ test_b(FieldOperand(map, Map::kInstanceTypeOffset),
+            kIsNotInternalizedMask);
+  __ j(not_zero, not_unique);
 
   __ bind(&unique);
 }
@@ -481,7 +483,7 @@ void KeyedLoadIC::GenerateGeneric(MacroAssembler* masm) {
   // based on 32 bits of the map pointer and the string hash.
   if (FLAG_debug_code) {
     __ cmp(eax, FieldOperand(edx, HeapObject::kMapOffset));
-    __ Check(equal, "Map is no longer in eax.");
+    __ Check(equal, kMapIsNoLongerInEax);
   }
   __ mov(ebx, eax);  // Keep the map around for later.
   __ shr(eax, KeyedLookupCache::kMapHashShift);
@@ -797,8 +799,8 @@ static void KeyedStoreGenerateGenericHelper(
                                          ebx,
                                          edi,
                                          slow);
-  AllocationSiteMode mode = AllocationSiteInfo::GetMode(FAST_SMI_ELEMENTS,
-                                                        FAST_DOUBLE_ELEMENTS);
+  AllocationSiteMode mode = AllocationSite::GetMode(FAST_SMI_ELEMENTS,
+                                                    FAST_DOUBLE_ELEMENTS);
   ElementsTransitionGenerator::GenerateSmiToDouble(masm, mode, slow);
   __ mov(ebx, FieldOperand(edx, JSObject::kElementsOffset));
   __ jmp(&fast_double_without_map_check);
@@ -810,7 +812,7 @@ static void KeyedStoreGenerateGenericHelper(
                                          ebx,
                                          edi,
                                          slow);
-  mode = AllocationSiteInfo::GetMode(FAST_SMI_ELEMENTS, FAST_ELEMENTS);
+  mode = AllocationSite::GetMode(FAST_SMI_ELEMENTS, FAST_ELEMENTS);
   ElementsTransitionGenerator::GenerateMapChangeElementsTransition(masm, mode,
                                                                    slow);
   __ mov(ebx, FieldOperand(edx, JSObject::kElementsOffset));
@@ -826,7 +828,7 @@ static void KeyedStoreGenerateGenericHelper(
                                          ebx,
                                          edi,
                                          slow);
-  mode = AllocationSiteInfo::GetMode(FAST_DOUBLE_ELEMENTS, FAST_ELEMENTS);
+  mode = AllocationSite::GetMode(FAST_DOUBLE_ELEMENTS, FAST_ELEMENTS);
   ElementsTransitionGenerator::GenerateDoubleToObject(masm, mode, slow);
   __ mov(ebx, FieldOperand(edx, JSObject::kElementsOffset));
   __ jmp(&finish_object_store);
@@ -1420,8 +1422,9 @@ void StoreIC::GenerateMegamorphic(MacroAssembler* masm,
   //  -- esp[0] : return address
   // -----------------------------------
 
-  Code::Flags flags =
-      Code::ComputeFlags(Code::STORE_IC, MONOMORPHIC, strict_mode);
+  Code::Flags flags = Code::ComputeFlags(
+      Code::STUB, MONOMORPHIC, strict_mode,
+      Code::NORMAL, Code::STORE_IC);
   Isolate::Current()->stub_cache()->GenerateProbe(masm, flags, edx, ecx, ebx,
                                                   no_reg);
 
@@ -1585,61 +1588,6 @@ void KeyedStoreIC::GenerateSlow(MacroAssembler* masm) {
   // Do tail-call to runtime routine.
   ExternalReference ref(IC_Utility(kKeyedStoreIC_Slow), masm->isolate());
   __ TailCallExternalReference(ref, 3, 1);
-}
-
-
-void KeyedStoreIC::GenerateTransitionElementsSmiToDouble(MacroAssembler* masm) {
-  // ----------- S t a t e -------------
-  //  -- ebx    : target map
-  //  -- edx    : receiver
-  //  -- esp[0] : return address
-  // -----------------------------------
-  // Must return the modified receiver in eax.
-  if (!FLAG_trace_elements_transitions) {
-    Label fail;
-    AllocationSiteMode mode = AllocationSiteInfo::GetMode(FAST_SMI_ELEMENTS,
-                                                          FAST_DOUBLE_ELEMENTS);
-    ElementsTransitionGenerator::GenerateSmiToDouble(masm, mode, &fail);
-    __ mov(eax, edx);
-    __ Ret();
-    __ bind(&fail);
-  }
-
-  __ pop(ebx);
-  __ push(edx);
-  __ push(ebx);  // return address
-  // Leaving the code managed by the register allocator and return to the
-  // convention of using esi as context register.
-  __ mov(esi, Operand(ebp, StandardFrameConstants::kContextOffset));
-  __ TailCallRuntime(Runtime::kTransitionElementsSmiToDouble, 1, 1);
-}
-
-
-void KeyedStoreIC::GenerateTransitionElementsDoubleToObject(
-    MacroAssembler* masm) {
-  // ----------- S t a t e -------------
-  //  -- ebx    : target map
-  //  -- edx    : receiver
-  //  -- esp[0] : return address
-  // -----------------------------------
-  // Must return the modified receiver in eax.
-  if (!FLAG_trace_elements_transitions) {
-    Label fail;
-    AllocationSiteMode mode = AllocationSiteInfo::GetMode(FAST_DOUBLE_ELEMENTS,
-                                                          FAST_ELEMENTS);
-    ElementsTransitionGenerator::GenerateDoubleToObject(masm, mode, &fail);
-    __ mov(eax, edx);
-    __ Ret();
-    __ bind(&fail);
-  }
-
-  __ pop(ebx);
-  __ push(edx);
-  __ push(ebx);  // return address
-  // Leaving the code managed by the register allocator and return to the
-  // convention of using esi as context register.
-  __ mov(esi, Operand(ebp, StandardFrameConstants::kContextOffset));
-  __ TailCallRuntime(Runtime::kTransitionElementsDoubleToObject, 1, 1);
 }
 
 

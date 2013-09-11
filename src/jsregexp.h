@@ -71,8 +71,7 @@ class RegExpImpl {
   // Returns false if compilation fails.
   static Handle<Object> Compile(Handle<JSRegExp> re,
                                 Handle<String> pattern,
-                                Handle<String> flags,
-                                Zone* zone);
+                                Handle<String> flags);
 
   // See ECMA-262 section 15.10.6.2.
   // This function calls the garbage collector if necessary.
@@ -427,20 +426,41 @@ FOR_EACH_REG_EXP_TREE_TYPE(FORWARD_DECLARE)
 #undef FORWARD_DECLARE
 
 
-class TextElement {
+class TextElement V8_FINAL BASE_EMBEDDED {
  public:
-  enum TextType {UNINITIALIZED, ATOM, CHAR_CLASS};
-  TextElement() : text_type(UNINITIALIZED) { }
-  explicit TextElement(TextType t) : text_type(t), cp_offset(-1) { }
+  enum TextType {
+    ATOM,
+    CHAR_CLASS
+  };
+
   static TextElement Atom(RegExpAtom* atom);
   static TextElement CharClass(RegExpCharacterClass* char_class);
-  int length();
-  TextType text_type;
-  union {
-    RegExpAtom* u_atom;
-    RegExpCharacterClass* u_char_class;
-  } data;
-  int cp_offset;
+
+  int cp_offset() const { return cp_offset_; }
+  void set_cp_offset(int cp_offset) { cp_offset_ = cp_offset; }
+  int length() const;
+
+  TextType text_type() const { return text_type_; }
+
+  RegExpTree* tree() const { return tree_; }
+
+  RegExpAtom* atom() const {
+    ASSERT(text_type() == ATOM);
+    return reinterpret_cast<RegExpAtom*>(tree());
+  }
+
+  RegExpCharacterClass* char_class() const {
+    ASSERT(text_type() == CHAR_CLASS);
+    return reinterpret_cast<RegExpCharacterClass*>(tree());
+  }
+
+ private:
+  TextElement(TextType text_type, RegExpTree* tree)
+      : cp_offset_(-1), text_type_(text_type), tree_(tree) {}
+
+  int cp_offset_;
+  TextType text_type_;
+  RegExpTree* tree_;
 };
 
 
@@ -1331,7 +1351,7 @@ class Trace {
   // A value for a property that is either known to be true, know to be false,
   // or not known.
   enum TriBool {
-    UNKNOWN = -1, FALSE = 0, TRUE = 1
+    UNKNOWN = -1, FALSE_VALUE = 0, TRUE_VALUE = 1
   };
 
   class DeferredAction {
@@ -1427,7 +1447,9 @@ class Trace {
            at_start_ == UNKNOWN;
   }
   TriBool at_start() { return at_start_; }
-  void set_at_start(bool at_start) { at_start_ = at_start ? TRUE : FALSE; }
+  void set_at_start(bool at_start) {
+    at_start_ = at_start ? TRUE_VALUE : FALSE_VALUE;
+  }
   Label* backtrack() { return backtrack_; }
   Label* loop_label() { return loop_label_; }
   RegExpNode* stop_node() { return stop_node_; }

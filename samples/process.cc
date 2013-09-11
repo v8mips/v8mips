@@ -54,6 +54,7 @@ class HttpRequest {
   virtual const string& UserAgent() = 0;
 };
 
+
 /**
  * The abstract superclass of http request processors.
  */
@@ -71,6 +72,7 @@ class HttpRequestProcessor {
 
   static void Log(const char* event);
 };
+
 
 /**
  * An http request processor that is scriptable using JavaScript.
@@ -134,6 +136,7 @@ class JsHttpRequestProcessor : public HttpRequestProcessor {
   static Persistent<ObjectTemplate> request_template_;
   static Persistent<ObjectTemplate> map_template_;
 };
+
 
 // -------------------------
 // --- P r o c e s s o r ---
@@ -288,9 +291,8 @@ JsHttpRequestProcessor::~JsHttpRequestProcessor() {
   // Dispose the persistent handles.  When noone else has any
   // references to the objects stored in the handles they will be
   // automatically reclaimed.
-  Isolate* isolate = GetIsolate();
-  context_.Dispose(isolate);
-  process_.Dispose(isolate);
+  context_.Dispose();
+  process_.Dispose();
 }
 
 
@@ -624,6 +626,7 @@ void PrintMap(map<string, string>* m) {
 
 
 int main(int argc, char* argv[]) {
+  v8::V8::InitializeICU();
   map<string, string> options;
   string file;
   ParseOptions(argc, argv, options, &file);

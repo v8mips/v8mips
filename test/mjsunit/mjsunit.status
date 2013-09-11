@@ -43,9 +43,6 @@ regress/regress-524: SKIP
 # This test non-deterministically runs out of memory on Windows ia32.
 regress/regress-crbug-160010: SKIP
 
-# Deferred stack trace formatting is temporarily disabled.
-stack-traces-gc: PASS || FAIL
-
 ##############################################################################
 # Too slow in debug mode with --stress-opt mode.
 compiler/regress-stacktrace-methods: PASS, SKIP if $mode == debug
@@ -228,6 +225,10 @@ debug-liveedit-double-call: SKIP
 # As noted above none of them are run in the arm.debug case.
 fuzz-natives-part4: SKIP
 
+# NaCl builds have problems with this test since Pepper_28.
+# V8 Issue 2786
+math-exp-precision: SKIP
+
 # Requires bigger stack size in the Genesis and if stack size is increased,
 # the test requires too much time to run.  However, the problem test covers
 # should be platform-independent.
@@ -238,3 +239,17 @@ regress/regress-165637: SKIP
 
 # Skip long running test that times out in debug mode and goes OOM on NaCl.
 regress/regress-crbug-160010: SKIP
+
+##############################################################################
+[ $deopt_fuzzer == True ]
+
+# Skip tests that are not suitable for deoptimization fuzzing.
+assert-opt-and-deopt: SKIP
+never-optimize: SKIP
+regress/regress-2185-2: SKIP
+harmony/object-observe: SKIP
+readonly: SKIP
+array-feedback: SKIP
+
+# Deopt every n garbage collections collides with the deopt every n times flag.
+regress/regress-2653: SKIP

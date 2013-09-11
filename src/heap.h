@@ -78,9 +78,9 @@ namespace internal {
   V(DescriptorArray, empty_descriptor_array, EmptyDescriptorArray)             \
   V(Smi, stack_limit, StackLimit)                                              \
   V(Oddball, arguments_marker, ArgumentsMarker)                                \
-  /* The first 32 roots above this line should be boring from a GC point of */ \
-  /* view.  This means they are never in new space and never on a page that */ \
-  /* is being compacted.                                                    */ \
+  /* The roots above this line should be boring from a GC point of view.    */ \
+  /* This means they are never in new space and never on a page that is     */ \
+  /* being compacted.                                                       */ \
   V(FixedArray, number_string_cache, NumberStringCache)                        \
   V(Object, instanceof_cache_function, InstanceofCacheFunction)                \
   V(Object, instanceof_cache_map, InstanceofCacheMap)                          \
@@ -175,10 +175,10 @@ namespace internal {
   V(Code, js_entry_code, JsEntryCode)                                          \
   V(Code, js_construct_entry_code, JsConstructEntryCode)                       \
   V(FixedArray, natives_source_cache, NativesSourceCache)                      \
-  V(Object, last_script_id, LastScriptId)                                      \
+  V(Smi, last_script_id, LastScriptId)                                         \
   V(Script, empty_script, EmptyScript)                                         \
   V(Smi, real_stack_limit, RealStackLimit)                                     \
-  V(NameDictionary, intrinsic_function_names, IntrinsicFunctionNames)        \
+  V(NameDictionary, intrinsic_function_names, IntrinsicFunctionNames)          \
   V(Smi, arguments_adaptor_deopt_pc_offset, ArgumentsAdaptorDeoptPCOffset)     \
   V(Smi, construct_stub_deopt_pc_offset, ConstructStubDeoptPCOffset)           \
   V(Smi, getter_stub_deopt_pc_offset, GetterStubDeoptPCOffset)                 \
@@ -186,8 +186,10 @@ namespace internal {
   V(JSObject, observation_state, ObservationState)                             \
   V(Map, external_map, ExternalMap)                                            \
   V(Symbol, frozen_symbol, FrozenSymbol)                                       \
+  V(Symbol, elements_transition_symbol, ElementsTransitionSymbol)              \
   V(SeededNumberDictionary, empty_slow_element_dictionary,                     \
-      EmptySlowElementDictionary)
+      EmptySlowElementDictionary)                                              \
+  V(Symbol, observed_symbol, ObservedSymbol)
 
 #define ROOT_LIST(V)                                  \
   STRONG_ROOT_LIST(V)                                 \
@@ -232,6 +234,7 @@ namespace internal {
   V(last_index_string, "lastIndex")                                      \
   V(object_string, "object")                                             \
   V(payload_string, "payload")                                           \
+  V(literals_string, "literals")                                         \
   V(prototype_string, "prototype")                                       \
   V(string_string, "string")                                             \
   V(String_string, "String")                                             \
@@ -261,6 +264,7 @@ namespace internal {
   V(map_field_string, "%map")                                            \
   V(elements_field_string, "%elements")                                  \
   V(length_field_string, "%length")                                      \
+  V(cell_value_string, "%cell_value")                                    \
   V(function_class_string, "Function")                                   \
   V(properties_field_symbol, "%properties")                              \
   V(payload_field_symbol, "%payload")                                    \
@@ -472,45 +476,11 @@ class ExternalStringTable {
 };
 
 
-// The stack property of an error object is implemented as a getter that
-// formats the attached raw stack trace into a string.  This raw stack trace
-// keeps code and function objects alive until the getter is called the first
-// time.  To release those objects, we call the getter after each GC for
-// newly tenured error objects that are kept in a list.
-class ErrorObjectList {
- public:
-  inline void Add(JSObject* object);
-
-  inline void Iterate(ObjectVisitor* v);
-
-  void TearDown();
-
-  void RemoveUnmarked(Heap* heap);
-
-  void DeferredFormatStackTrace(Isolate* isolate);
-
-  void UpdateReferences();
-
-  void UpdateReferencesInNewSpace(Heap* heap);
-
- private:
-  static const int kBudgetPerGC = 16;
-
-  ErrorObjectList() : nested_(false) { }
-
-  friend class Heap;
-
-  List<Object*> list_;
-  bool nested_;
-
-  DISALLOW_COPY_AND_ASSIGN(ErrorObjectList);
-};
-
-
 enum ArrayStorageAllocationMode {
   DONT_INITIALIZE_ARRAY_ELEMENTS,
   INITIALIZE_ARRAY_ELEMENTS_WITH_HOLE
 };
+
 
 class Heap {
  public:
@@ -553,7 +523,7 @@ class Heap {
   int InitialSemiSpaceSize() { return initial_semispace_size_; }
   intptr_t MaxOldGenerationSize() { return max_old_generation_size_; }
   intptr_t MaxExecutableSize() { return max_executable_size_; }
-  int MaxRegularSpaceAllocationSize() { return InitialSemiSpaceSize() * 3/4; }
+  int MaxRegularSpaceAllocationSize() { return InitialSemiSpaceSize() * 4/5; }
 
   // Returns the capacity of the heap in bytes w/o growing. Heap grows when
   // more spaces are needed until it reaches the limit.
@@ -657,7 +627,7 @@ class Heap {
 
   MUST_USE_RESULT MaybeObject* AllocateJSObjectWithAllocationSite(
       JSFunction* constructor,
-      Handle<Object> allocation_site_info_payload);
+      Handle<AllocationSite> allocation_site);
 
   MUST_USE_RESULT MaybeObject* AllocateJSGeneratorObject(
       JSFunction* function);
@@ -676,7 +646,7 @@ class Heap {
 
   inline MUST_USE_RESULT MaybeObject* AllocateEmptyJSArrayWithAllocationSite(
       ElementsKind elements_kind,
-      Handle<Object> allocation_site_payload);
+      Handle<AllocationSite> allocation_site);
 
   // Allocate a JSArray with a specified length but elements that are left
   // uninitialized.
@@ -691,7 +661,7 @@ class Heap {
       ElementsKind elements_kind,
       int length,
       int capacity,
-      Handle<Object> allocation_site_payload,
+      Handle<AllocationSite> allocation_site,
       ArrayStorageAllocationMode mode = DONT_INITIALIZE_ARRAY_ELEMENTS);
 
   MUST_USE_RESULT MaybeObject* AllocateJSArrayStorage(
@@ -718,7 +688,8 @@ class Heap {
   // Returns failure if allocation failed.
   MUST_USE_RESULT MaybeObject* CopyJSObject(JSObject* source);
 
-  MUST_USE_RESULT MaybeObject* CopyJSObjectWithAllocationSite(JSObject* source);
+  MUST_USE_RESULT MaybeObject* CopyJSObjectWithAllocationSite(
+      JSObject* source, AllocationSite* site);
 
   // Allocates the function prototype.
   // Returns Failure::RetryAfterGC(requested_bytes, space) if the allocation
@@ -765,10 +736,10 @@ class Heap {
   // failed.
   // Please note this does not perform a garbage collection.
   MUST_USE_RESULT MaybeObject* AllocateJSObjectFromMap(
-      Map* map, PretenureFlag pretenure = NOT_TENURED);
+      Map* map, PretenureFlag pretenure = NOT_TENURED, bool alloc_props = true);
 
   MUST_USE_RESULT MaybeObject* AllocateJSObjectFromMapWithAllocationSite(
-      Map* map, Handle<Object> allocation_site_info_payload);
+      Map* map, Handle<AllocationSite> allocation_site);
 
   // Allocates a heap object based on the map.
   // Returns Failure::RetryAfterGC(requested_bytes, space) if the allocation
@@ -777,7 +748,7 @@ class Heap {
   MUST_USE_RESULT MaybeObject* Allocate(Map* map, AllocationSpace space);
 
   MUST_USE_RESULT MaybeObject* AllocateWithAllocationSite(Map* map,
-      AllocationSpace space, Handle<Object> allocation_site_info_payload);
+      AllocationSpace space, Handle<AllocationSite> allocation_site);
 
   // Allocates a JS Map in the heap.
   // Returns Failure::RetryAfterGC(requested_bytes, space) if the allocation
@@ -949,11 +920,14 @@ class Heap {
   // Returns Failure::RetryAfterGC(requested_bytes, space) if the allocation
   // failed.
   // Please note this does not perform a garbage collection.
-  MUST_USE_RESULT MaybeObject* AllocateJSGlobalPropertyCell(Object* value);
+  MUST_USE_RESULT MaybeObject* AllocatePropertyCell(Object* value);
 
   // Allocate Box.
   MUST_USE_RESULT MaybeObject* AllocateBox(Object* value,
                                            PretenureFlag pretenure);
+
+  // Allocate a tenured AllocationSite. It's payload is null
+  MUST_USE_RESULT MaybeObject* AllocateAllocationSite();
 
   // Allocates a fixed array initialized with undefined values
   // Returns Failure::RetryAfterGC(requested_bytes, space) if the allocation
@@ -1046,7 +1020,7 @@ class Heap {
   // Allocate a 'with' context.
   MUST_USE_RESULT MaybeObject* AllocateWithContext(JSFunction* function,
                                                    Context* previous,
-                                                   JSObject* extension);
+                                                   JSReceiver* extension);
 
   // Allocate a block context.
   MUST_USE_RESULT MaybeObject* AllocateBlockContext(JSFunction* function,
@@ -1280,10 +1254,7 @@ class Heap {
   void EnsureHeapIsIterable();
 
   // Notify the heap that a context has been disposed.
-  int NotifyContextDisposed() {
-    flush_monomorphic_ics_ = true;
-    return ++contexts_disposed_;
-  }
+  int NotifyContextDisposed();
 
   // Utility to invoke the scavenger. This is needed in test code to
   // ensure correct callback for weak global handles.
@@ -1369,6 +1340,11 @@ class Heap {
   }
   Object* array_buffers_list() { return array_buffers_list_; }
 
+  void set_allocation_sites_list(Object* object) {
+    allocation_sites_list_ = object;
+  }
+  Object* allocation_sites_list() { return allocation_sites_list_; }
+  Object** allocation_sites_list_address() { return &allocation_sites_list_; }
 
   // Number of mark-sweeps.
   unsigned int ms_count() { return ms_count_; }
@@ -1413,7 +1389,11 @@ class Heap {
 
   // Finds out which space an object should get promoted to based on its type.
   inline OldSpace* TargetSpace(HeapObject* object);
-  inline AllocationSpace TargetSpaceId(InstanceType type);
+  static inline AllocationSpace TargetSpaceId(InstanceType type);
+
+  // Checks whether the given object is allowed to be migrated from it's
+  // current space into the given destination space. Used for debugging.
+  inline bool AllowedToBeMigrated(HeapObject* object, AllocationSpace dest);
 
   // Sets the stub_cache_ (only used when expanding the dictionary).
   void public_set_code_stubs(UnseededNumberDictionary* value) {
@@ -1439,9 +1419,6 @@ class Heap {
   void public_set_store_buffer_top(Address* top) {
     roots_[kStoreBufferTopRootIndex] = reinterpret_cast<Smi*>(top);
   }
-
-  // Update the next script id.
-  inline void SetLastScriptId(Object* last_script_id);
 
   // Generated code can embed this address to get access to the roots.
   Object** roots_array_start() { return roots_; }
@@ -1511,15 +1488,16 @@ class Heap {
   // Write barrier support for address[start : start + len[ = o.
   INLINE(void RecordWrites(Address address, int start, int len));
 
-  // Given an address occupied by a live code object, return that object.
-  Object* FindCodeObject(Address a);
-
   enum HeapState { NOT_IN_GC, SCAVENGE, MARK_COMPACT };
   inline HeapState gc_state() { return gc_state_; }
 
   inline bool IsInGCPostProcessing() { return gc_post_processing_depth_ > 0; }
 
 #ifdef DEBUG
+  void set_allocation_timeout(int timeout) {
+    allocation_timeout_ = timeout;
+  }
+
   bool disallow_allocation_failure() {
     return disallow_allocation_failure_;
   }
@@ -1566,19 +1544,16 @@ class Heap {
   MUST_USE_RESULT MaybeObject* AllocateRawFixedArray(int length,
                                                      PretenureFlag pretenure);
 
-  // Predicate that governs global pre-tenuring decisions based on observed
-  // promotion rates of previous collections.
-  inline bool ShouldGloballyPretenure() {
-    return FLAG_pretenuring && new_space_high_promotion_mode_active_;
-  }
-
   // This is only needed for testing high promotion mode.
   void SetNewSpaceHighPromotionModeActive(bool mode) {
     new_space_high_promotion_mode_active_ = mode;
   }
 
+  // Returns the allocation mode (pre-tenuring) based on observed promotion
+  // rates of previous collections.
   inline PretenureFlag GetPretenureMode() {
-    return new_space_high_promotion_mode_active_ ? TENURED : NOT_TENURED;
+    return FLAG_pretenuring && new_space_high_promotion_mode_active_
+        ? TENURED : NOT_TENURED;
   }
 
   inline Address* NewSpaceHighPromotionModeActiveAddress() {
@@ -1648,6 +1623,8 @@ class Heap {
   // Generated code can embed direct references to non-writable roots if
   // they are in new space.
   static bool RootCanBeWrittenAfterInitialization(RootListIndex root_index);
+  // Generated code can treat direct references to this root as constant.
+  bool RootCanBeTreatedAsConstant(RootListIndex root_index);
 
   MUST_USE_RESULT MaybeObject* NumberToString(
       Object* number, bool check_number_string_cache = true,
@@ -1709,8 +1686,6 @@ class Heap {
   // mark or if we've already filled the bottom 1/16th of the to space,
   // we try to promote this object.
   inline bool ShouldBePromoted(Address old_address, int object_size);
-
-  int MaxObjectSizeInNewSpace() { return kMaxObjectSizeInNewSpace; }
 
   void ClearJSFunctionResultCaches();
 
@@ -1792,10 +1767,6 @@ class Heap {
     return &external_string_table_;
   }
 
-  ErrorObjectList* error_object_list() {
-    return &error_object_list_;
-  }
-
   // Returns the current sweep generation.
   int sweep_generation() {
     return sweep_generation_;
@@ -1814,6 +1785,8 @@ class Heap {
 
   void QueueMemoryChunkForFree(MemoryChunk* chunk);
   void FreeQueuedChunks();
+
+  int gc_count() const { return gc_count_; }
 
   // Completely clear the Instanceof cache (to stop it keeping objects alive
   // around a GC).
@@ -1873,7 +1846,7 @@ class Heap {
   enum {
     FIRST_CODE_KIND_SUB_TYPE = LAST_TYPE + 1,
     FIRST_FIXED_ARRAY_SUB_TYPE =
-        FIRST_CODE_KIND_SUB_TYPE + Code::LAST_CODE_KIND + 1,
+        FIRST_CODE_KIND_SUB_TYPE + Code::NUMBER_OF_KINDS,
     OBJECT_STATS_COUNT =
         FIRST_FIXED_ARRAY_SUB_TYPE + LAST_FIXED_ARRAY_SUB_TYPE + 1
   };
@@ -1885,7 +1858,7 @@ class Heap {
       object_sizes_[type] += size;
     } else {
       if (type == CODE_TYPE) {
-        ASSERT(sub_type <= Code::LAST_CODE_KIND);
+        ASSERT(sub_type < Code::NUMBER_OF_KINDS);
         object_counts_[FIRST_CODE_KIND_SUB_TYPE + sub_type]++;
         object_sizes_[FIRST_CODE_KIND_SUB_TYPE + sub_type] += size;
       } else if (type == FIXED_ARRAY_TYPE) {
@@ -1898,14 +1871,14 @@ class Heap {
 
   void CheckpointObjectStats();
 
-  // We don't use a ScopedLock here since we want to lock the heap
-  // only when FLAG_parallel_recompilation is true.
+  // We don't use a LockGuard here since we want to lock the heap
+  // only when FLAG_concurrent_recompilation is true.
   class RelocationLock {
    public:
     explicit RelocationLock(Heap* heap);
 
     ~RelocationLock() {
-      if (FLAG_parallel_recompilation) {
+      if (FLAG_concurrent_recompilation) {
 #ifdef DEBUG
         heap_->relocation_mutex_locked_by_optimizer_thread_ = false;
 #endif  // DEBUG
@@ -1957,12 +1930,6 @@ class Heap {
   bool flush_monomorphic_ics_;
 
   int scan_on_scavenge_pages_;
-
-#if defined(V8_TARGET_ARCH_X64)
-  static const int kMaxObjectSizeInNewSpace = 1024*KB;
-#else
-  static const int kMaxObjectSizeInNewSpace = 512*KB;
-#endif
 
   NewSpace new_space_;
   OldSpace* old_pointer_space_;
@@ -2039,9 +2006,10 @@ class Heap {
   // last GC.
   bool old_gen_exhausted_;
 
+  // Weak list heads, threaded through the objects.
   Object* native_contexts_list_;
-
   Object* array_buffers_list_;
+  Object* allocation_sites_list_;
 
   StoreBufferRebuilder store_buffer_rebuilder_;
 
@@ -2131,7 +2099,7 @@ class Heap {
   MUST_USE_RESULT inline MaybeObject* AllocateRawCell();
 
   // Allocate an uninitialized object in the global property cell space.
-  MUST_USE_RESULT inline MaybeObject* AllocateRawJSGlobalPropertyCell();
+  MUST_USE_RESULT inline MaybeObject* AllocateRawPropertyCell();
 
   // Initializes a JSObject based on its map.
   void InitializeJSObjectFromMap(JSObject* obj,
@@ -2159,7 +2127,7 @@ class Heap {
 
   MUST_USE_RESULT MaybeObject* AllocateJSArrayWithAllocationSite(
       ElementsKind elements_kind,
-      Handle<Object> allocation_site_info_payload);
+      Handle<AllocationSite> allocation_site);
 
   // Allocate empty fixed array.
   MUST_USE_RESULT MaybeObject* AllocateEmptyFixedArray();
@@ -2191,6 +2159,10 @@ class Heap {
 
   void ProcessNativeContexts(WeakObjectRetainer* retainer, bool record_slots);
   void ProcessArrayBuffers(WeakObjectRetainer* retainer, bool record_slots);
+  void ProcessAllocationSites(WeakObjectRetainer* retainer, bool record_slots);
+
+  // Called on heap tear-down.
+  void TearDownArrayBuffers();
 
   // Record statistics before and after garbage collection.
   void ReportStatisticsBeforeGC();
@@ -2293,7 +2265,6 @@ class Heap {
 
   void StartIdleRound() {
     mark_sweeps_since_idle_round_started_ = 0;
-    ms_count_at_last_idle_notification_ = ms_count_;
   }
 
   void FinishIdleRound() {
@@ -2370,7 +2341,6 @@ class Heap {
   bool last_idle_notification_gc_count_init_;
 
   int mark_sweeps_since_idle_round_started_;
-  int ms_count_at_last_idle_notification_;
   unsigned int gc_count_at_last_idle_gc_;
   int scavenges_since_last_idle_round_;
 
@@ -2394,8 +2364,6 @@ class Heap {
   bool configured_;
 
   ExternalStringTable external_string_table_;
-
-  ErrorObjectList error_object_list_;
 
   VisitorDispatchTable<ScavengingCallback> scavenging_visitors_table_;
 
@@ -2747,8 +2715,8 @@ class GCTracer BASE_EMBEDDED {
       MC_UPDATE_POINTERS_TO_EVACUATED,
       MC_UPDATE_POINTERS_BETWEEN_EVACUATED,
       MC_UPDATE_MISC_POINTERS,
-      MC_WEAKMAP_PROCESS,
-      MC_WEAKMAP_CLEAR,
+      MC_WEAKCOLLECTION_PROCESS,
+      MC_WEAKCOLLECTION_CLEAR,
       MC_FLUSH_CODE,
       kNumberOfScopes
     };
@@ -2913,7 +2881,7 @@ class TranscendentalCache {
   class SubCache {
     static const int kCacheSize = 512;
 
-    explicit SubCache(Type t);
+    explicit SubCache(Isolate* isolate, Type t);
 
     MUST_USE_RESULT inline MaybeObject* Get(double input);
 
@@ -2950,8 +2918,12 @@ class TranscendentalCache {
     DISALLOW_COPY_AND_ASSIGN(SubCache);
   };
 
-  TranscendentalCache() {
+  explicit TranscendentalCache(Isolate* isolate) : isolate_(isolate) {
     for (int i = 0; i < kNumberOfCaches; ++i) caches_[i] = NULL;
+  }
+
+  ~TranscendentalCache() {
+    for (int i = 0; i < kNumberOfCaches; ++i) delete caches_[i];
   }
 
   // Used to create an external reference.
@@ -2964,6 +2936,7 @@ class TranscendentalCache {
   // Allow access to the caches_ array as an ExternalReference.
   friend class ExternalReference;
 
+  Isolate* isolate_;
   SubCache* caches_[kNumberOfCaches];
   DISALLOW_COPY_AND_ASSIGN(TranscendentalCache);
 };

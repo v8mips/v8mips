@@ -375,6 +375,11 @@ class MacroAssembler: public Assembler {
   // ---------------------------------------------------------------------------
   // Smi tagging, untagging and operations on tagged smis.
 
+  // Support for constant splitting.
+  bool IsUnsafeInt(const int32_t x);
+  void SafeMove(Register dst, Smi* src);
+  void SafePush(Smi* src);
+
   void InitializeSmiConstantRegister() {
     movq(kSmiConstantRegister,
          reinterpret_cast<uint64_t>(Smi::FromInt(kSmiConstantRegisterValue)),
@@ -720,6 +725,14 @@ class MacroAssembler: public Assembler {
   }
 
   void Push(Smi* smi);
+
+  // Save away a 64-bit integer on the stack as two 32-bit integers
+  // masquerading as smis so that the garbage collector skips visiting them.
+  void PushInt64AsTwoSmis(Register src, Register scratch = kScratchRegister);
+  // Reconstruct a 64-bit integer from two 32-bit integers masquerading as
+  // smis on the top of stack.
+  void PopInt64AsTwoSmis(Register dst, Register scratch = kScratchRegister);
+
   void Test(const Operand& dst, Smi* source);
 
 
@@ -758,6 +771,12 @@ class MacroAssembler: public Assembler {
       Label* on_fail,
       Label::Distance near_jump = Label::kFar);
 
+  // Checks if the given register or operand is a unique name
+  void JumpIfNotUniqueName(Register reg, Label* not_unique_name,
+                           Label::Distance distance = Label::kFar);
+  void JumpIfNotUniqueName(Operand operand, Label* not_unique_name,
+                           Label::Distance distance = Label::kFar);
+
   // ---------------------------------------------------------------------------
   // Macro instructions.
 
@@ -767,11 +786,6 @@ class MacroAssembler: public Assembler {
 
   // Move if the registers are not identical.
   void Move(Register target, Register source);
-
-  // Support for constant splitting.
-  bool IsUnsafeInt(const int x);
-  void SafeMove(Register dst, Smi* src);
-  void SafePush(Smi* src);
 
   // Bit-field support.
   void TestBit(const Operand& dst, int bit_index);
@@ -817,6 +831,10 @@ class MacroAssembler: public Assembler {
   void Drop(int stack_elements);
 
   void Call(Label* target) { call(target); }
+  void Push(Register src) { push(src); }
+  void Pop(Register dst) { pop(dst); }
+  void PushReturnAddressFrom(Register src) { push(src); }
+  void PopReturnAddressTo(Register dst) { pop(dst); }
 
   // Control Flow
   void Jump(Address destination, RelocInfo::Mode rmode);
@@ -831,7 +849,7 @@ class MacroAssembler: public Assembler {
 
   // The size of the code generated for different call instructions.
   int CallSize(Address destination, RelocInfo::Mode rmode) {
-    return kCallInstructionLength;
+    return kCallSequenceLength;
   }
   int CallSize(ExternalReference ext);
   int CallSize(Handle<Code> code_object) {
@@ -996,7 +1014,7 @@ class MacroAssembler: public Assembler {
   // enabled via --debug-code.
   void AssertRootValue(Register src,
                        Heap::RootListIndex root_value_index,
-                       const char* message);
+                       BailoutReason reason);
 
   // ---------------------------------------------------------------------------
   // Exception handling
@@ -1232,7 +1250,7 @@ class MacroAssembler: public Assembler {
   // rcx (rcx must be preserverd until CallApiFunctionAndReturn).  Saves
   // context (rsi).  Clobbers rax.  Allocates arg_stack_space * kPointerSize
   // inside the exit frame (not GCed) accessible via StackSpaceOperand.
-  void PrepareCallApiFunction(int arg_stack_space, bool returns_handle);
+  void PrepareCallApiFunction(int arg_stack_space);
 
   // Calls an API function.  Allocates HandleScope, extracts returned value
   // from handle and propagates exceptions.  Clobbers r14, r15, rbx and
@@ -1242,11 +1260,10 @@ class MacroAssembler: public Assembler {
                                 Address thunk_address,
                                 Register thunk_last_arg,
                                 int stack_space,
-                                bool returns_handle,
                                 int return_value_offset_from_rbp);
 
   // Before calling a C-function from generated code, align arguments on stack.
-  // After aligning the frame, arguments must be stored in esp[0], esp[4],
+  // After aligning the frame, arguments must be stored in rsp[0], rsp[8],
   // etc., not pushed. The argument count assumes all arguments are word sized.
   // The number of slots reserved for arguments depends on platform. On Windows
   // stack slots are reserved for the arguments passed in registers. On other
@@ -1313,15 +1330,15 @@ class MacroAssembler: public Assembler {
 
   // Calls Abort(msg) if the condition cc is not satisfied.
   // Use --debug_code to enable.
-  void Assert(Condition cc, const char* msg);
+  void Assert(Condition cc, BailoutReason reason);
 
   void AssertFastElements(Register elements);
 
   // Like Assert(), but always enabled.
-  void Check(Condition cc, const char* msg);
+  void Check(Condition cc, BailoutReason reason);
 
   // Print a message to stdout and abort execution.
-  void Abort(const char* msg);
+  void Abort(BailoutReason msg);
 
   // Check that the stack is aligned.
   void CheckStackAlignment();
@@ -1348,14 +1365,14 @@ class MacroAssembler: public Assembler {
   void CheckEnumCache(Register null_value,
                       Label* call_runtime);
 
-  // AllocationSiteInfo support. Arrays may have an associated
-  // AllocationSiteInfo object that can be checked for in order to pretransition
+  // AllocationMemento support. Arrays may have an associated
+  // AllocationMemento object that can be checked for in order to pretransition
   // to another type.
   // On entry, receiver_reg should point to the array object.
   // scratch_reg gets clobbered.
   // If allocation info is present, condition flags are set to equal
-  void TestJSArrayForAllocationSiteInfo(Register receiver_reg,
-                                        Register scratch_reg);
+  void TestJSArrayForAllocationMemento(Register receiver_reg,
+                                       Register scratch_reg);
 
  private:
   // Order general registers are pushed by Pushad.
@@ -1511,6 +1528,10 @@ inline Operand StackSpaceOperand(int index) {
 #endif
 }
 
+
+inline Operand StackOperandForReturnAddress(int32_t disp) {
+  return Operand(rsp, disp);
+}
 
 
 #ifdef GENERATED_CODE_COVERAGE

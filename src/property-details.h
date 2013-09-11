@@ -55,6 +55,8 @@ namespace v8 {
 namespace internal {
 
 class Smi;
+class Type;
+class TypeInfo;
 
 // Type of properties.
 // Order of properties is significant.
@@ -65,7 +67,7 @@ enum PropertyType {
   NORMAL                    = 0,
   // Only in fast mode.
   FIELD                     = 1,
-  CONSTANT_FUNCTION         = 2,
+  CONSTANT                  = 2,
   CALLBACKS                 = 3,
   // Only in lookup results, not in descriptors.
   HANDLER                   = 4,
@@ -101,6 +103,10 @@ class Representation {
 
   static Representation FromKind(Kind kind) { return Representation(kind); }
 
+  // TODO(rossberg): this should die eventually.
+  static Representation FromType(TypeInfo info);
+  static Representation FromType(Handle<Type> type);
+
   bool Equals(const Representation& other) const {
     return kind_ == other.kind_;
   }
@@ -108,6 +114,10 @@ class Representation {
   bool IsCompatibleForLoad(const Representation& other) const {
     return (IsDouble() && other.IsDouble()) ||
         (!IsDouble() && !other.IsDouble());
+  }
+
+  bool IsCompatibleForStore(const Representation& other) const {
+    return Equals(other);
   }
 
   bool is_more_general_than(const Representation& other) const {
@@ -138,7 +148,7 @@ class Representation {
   bool IsHeapObject() const { return kind_ == kHeapObject; }
   bool IsExternal() const { return kind_ == kExternal; }
   bool IsSpecialization() const {
-    return kind_ == kInteger32 || kind_ == kDouble;
+    return kind_ == kInteger32 || kind_ == kDouble || kind_ == kSmi;
   }
   const char* Mnemonic() const;
 

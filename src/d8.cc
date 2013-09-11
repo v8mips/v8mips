@@ -157,7 +157,7 @@ CounterMap* Shell::counter_map_;
 i::OS::MemoryMappedFile* Shell::counters_file_ = NULL;
 CounterCollection Shell::local_counters_;
 CounterCollection* Shell::counters_ = &local_counters_;
-i::Mutex* Shell::context_mutex_(i::OS::CreateMutex());
+i::Mutex Shell::context_mutex_;
 Persistent<Context> Shell::utility_context_;
 #endif  // V8_SHARED
 
@@ -271,10 +271,10 @@ PerIsolateData::RealmScope::RealmScope(PerIsolateData* data) : data_(data) {
 PerIsolateData::RealmScope::~RealmScope() {
   // Drop realms to avoid keeping them alive.
   for (int i = 0; i < data_->realm_count_; ++i)
-    data_->realms_[i].Dispose(data_->isolate_);
+    data_->realms_[i].Dispose();
   delete[] data_->realms_;
   if (!data_->realm_shared_.IsEmpty())
-    data_->realm_shared_.Dispose(data_->isolate_);
+    data_->realm_shared_.Dispose();
 }
 
 
@@ -361,7 +361,7 @@ void Shell::RealmDispose(const v8::FunctionCallbackInfo<v8::Value>& args) {
     Throw("Invalid realm index");
     return;
   }
-  data->realms_[index].Dispose(isolate);
+  data->realms_[index].Dispose();
   data->realms_[index].Clear();
 }
 
@@ -420,7 +420,7 @@ void Shell::RealmSharedSet(Local<String> property,
                            const PropertyCallbackInfo<void>& info) {
   Isolate* isolate = info.GetIsolate();
   PerIsolateData* data = PerIsolateData::Get(isolate);
-  if (!data->realm_shared_.IsEmpty()) data->realm_shared_.Dispose(isolate);
+  if (!data->realm_shared_.IsEmpty()) data->realm_shared_.Dispose();
   data->realm_shared_.Reset(isolate, value);
 }
 
@@ -454,16 +454,6 @@ void Shell::Write(const v8::FunctionCallbackInfo<v8::Value>& args) {
       Exit(1);
     }
   }
-}
-
-
-void Shell::EnableProfiler(const v8::FunctionCallbackInfo<v8::Value>& args) {
-  V8::ResumeProfiler();
-}
-
-
-void Shell::DisableProfiler(const v8::FunctionCallbackInfo<v8::Value>& args) {
-  V8::PauseProfiler();
 }
 
 
@@ -776,7 +766,7 @@ void Shell::InstallUtilityScript(Isolate* isolate) {
 #ifdef ENABLE_DEBUGGER_SUPPORT
   if (i::FLAG_debugger) printf("JavaScript debugger enabled\n");
   // Install the debugger object in the utility scope
-  i::Debug* debug = i::Isolate::Current()->debug();
+  i::Debug* debug = reinterpret_cast<i::Isolate*>(isolate)->debug();
   debug->Load();
   i::Handle<i::JSObject> js_debug
       = i::Handle<i::JSObject>(debug->debug_context()->global_object());
@@ -810,7 +800,7 @@ void Shell::InstallUtilityScript(Isolate* isolate) {
 #ifdef ENABLE_DEBUGGER_SUPPORT
   // Start the in-process debugger if requested.
   if (i::FLAG_debugger && !i::FLAG_debugger_agent) {
-    v8::Debug::SetDebugEventListener(HandleDebugEvent);
+    v8::Debug::SetDebugEventListener2(HandleDebugEvent);
   }
 #endif  // ENABLE_DEBUGGER_SUPPORT
 }
@@ -857,10 +847,6 @@ Handle<ObjectTemplate> Shell::CreateGlobalTemplate(Isolate* isolate) {
   global_template->Set(String::New("load"), FunctionTemplate::New(Load));
   global_template->Set(String::New("quit"), FunctionTemplate::New(Quit));
   global_template->Set(String::New("version"), FunctionTemplate::New(Version));
-  global_template->Set(String::New("enableProfiler"),
-                       FunctionTemplate::New(EnableProfiler));
-  global_template->Set(String::New("disableProfiler"),
-                       FunctionTemplate::New(DisableProfiler));
 
   // Bind the Realm object.
   Handle<ObjectTemplate> realm_template = ObjectTemplate::New();
@@ -939,7 +925,7 @@ void Shell::InitializeDebugger(Isolate* isolate) {
 Local<Context> Shell::CreateEvaluationContext(Isolate* isolate) {
 #ifndef V8_SHARED
   // This needs to be a critical section since this is not thread-safe
-  i::ScopedLock lock(context_mutex_);
+  i::LockGuard<i::Mutex> lock_guard(&context_mutex_);
 #endif  // V8_SHARED
   // Initialize the global objects
   Handle<ObjectTemplate> global_template = CreateGlobalTemplate(isolate);
@@ -949,7 +935,7 @@ Local<Context> Shell::CreateEvaluationContext(Isolate* isolate) {
   Context::Scope scope(context);
 
 #ifndef V8_SHARED
-  i::Factory* factory = i::Isolate::Current()->factory();
+  i::Factory* factory = reinterpret_cast<i::Isolate*>(isolate)->factory();
   i::JSArguments js_args = i::FLAG_js_arguments;
   i::Handle<i::FixedArray> arguments_array =
       factory->NewFixedArray(js_args.argc());
@@ -1025,7 +1011,6 @@ void Shell::OnExit() {
            "-------------+\n");
     delete [] counters;
   }
-  delete context_mutex_;
   delete counters_file_;
   delete counter_map_;
 #endif  // V8_SHARED
@@ -1087,6 +1072,7 @@ static void ReadBufferWeakCallback(v8::Isolate* isolate,
   array_buffer->Dispose();
 }
 
+
 void Shell::ReadBuffer(const v8::FunctionCallbackInfo<v8::Value>& args) {
   ASSERT(sizeof(char) == sizeof(uint8_t));  // NOLINT
   String::Utf8Value filename(args[0]);
@@ -1105,7 +1091,7 @@ void Shell::ReadBuffer(const v8::FunctionCallbackInfo<v8::Value>& args) {
   }
   Handle<v8::ArrayBuffer> buffer = ArrayBuffer::New(data, length);
   v8::Persistent<v8::ArrayBuffer> weak_handle(isolate, buffer);
-  weak_handle.MakeWeak(isolate, data, ReadBufferWeakCallback);
+  weak_handle.MakeWeak(data, ReadBufferWeakCallback);
   weak_handle.MarkIndependent();
   isolate->AdjustAmountOfExternalAllocatedMemory(length);
 
@@ -1234,10 +1220,6 @@ void ShellThread::Run() {
 
 SourceGroup::~SourceGroup() {
 #ifndef V8_SHARED
-  delete next_semaphore_;
-  next_semaphore_ = NULL;
-  delete done_semaphore_;
-  done_semaphore_ = NULL;
   delete thread_;
   thread_ = NULL;
 #endif  // V8_SHARED
@@ -1298,7 +1280,7 @@ i::Thread::Options SourceGroup::GetThreadOptions() {
 void SourceGroup::ExecuteInThread() {
   Isolate* isolate = Isolate::New();
   do {
-    if (next_semaphore_ != NULL) next_semaphore_->Wait();
+    next_semaphore_.Wait();
     {
       Isolate::Scope iscope(isolate);
       Locker lock(isolate);
@@ -1318,7 +1300,7 @@ void SourceGroup::ExecuteInThread() {
         V8::IdleNotification(kLongIdlePauseInMs);
       }
     }
-    if (done_semaphore_ != NULL) done_semaphore_->Signal();
+    done_semaphore_.Signal();
   } while (!Shell::options.last_run);
   isolate->Dispose();
 }
@@ -1329,7 +1311,7 @@ void SourceGroup::StartExecuteInThread() {
     thread_ = new IsolateThread(this);
     thread_->Start();
   }
-  next_semaphore_->Signal();
+  next_semaphore_.Signal();
 }
 
 
@@ -1338,7 +1320,7 @@ void SourceGroup::WaitForThread() {
   if (Shell::options.last_run) {
     thread_->Join();
   } else {
-    done_semaphore_->Wait();
+    done_semaphore_.Wait();
   }
 }
 #endif  // V8_SHARED
@@ -1419,6 +1401,14 @@ bool Shell::SetOptions(int argc, char* argv[]) {
 #else
       options.num_parallel_files++;
 #endif  // V8_SHARED
+    } else if (strcmp(argv[i], "--dump-heap-constants") == 0) {
+#ifdef V8_SHARED
+      printf("D8 with shared library does not support constant dumping\n");
+      return false;
+#else
+      options.dump_heap_constants = true;
+      argv[i] = NULL;
+#endif
     }
 #ifdef V8_SHARED
     else if (strcmp(argv[i], "--dump-counters") == 0) {
@@ -1560,11 +1550,11 @@ int Shell::RunMain(Isolate* isolate, int argc, char* argv[]) {
 
 
 #ifdef V8_SHARED
-static void EnableHarmonyTypedArraysViaCommandLine() {
+static void SetStandaloneFlagsViaCommandLine() {
   int fake_argc = 2;
   char **fake_argv = new char*[2];
   fake_argv[0] = NULL;
-  fake_argv[1] = strdup("--harmony-typed-arrays");
+  fake_argv[1] = strdup("--trace-hydrogen-file=hydrogen.cfg");
   v8::V8::SetFlagsFromCommandLine(&fake_argc, fake_argv, false);
   free(fake_argv[1]);
   delete[] fake_argv;
@@ -1572,20 +1562,90 @@ static void EnableHarmonyTypedArraysViaCommandLine() {
 #endif
 
 
+#ifndef V8_SHARED
+static void DumpHeapConstants(i::Isolate* isolate) {
+  i::Heap* heap = isolate->heap();
+
+  // Dump the INSTANCE_TYPES table to the console.
+  printf("# List of known V8 instance types.\n");
+#define DUMP_TYPE(T) printf("  %d: \"%s\",\n", i::T, #T);
+  printf("INSTANCE_TYPES = {\n");
+  INSTANCE_TYPE_LIST(DUMP_TYPE)
+  printf("}\n");
+#undef DUMP_TYPE
+
+  // Dump the KNOWN_MAP table to the console.
+  printf("\n# List of known V8 maps.\n");
+#define ROOT_LIST_CASE(type, name, camel_name) \
+  if (n == NULL && o == heap->name()) n = #camel_name;
+#define STRUCT_LIST_CASE(upper_name, camel_name, name) \
+  if (n == NULL && o == heap->name##_map()) n = #camel_name "Map";
+  i::HeapObjectIterator it(heap->map_space());
+  printf("KNOWN_MAPS = {\n");
+  for (i::Object* o = it.Next(); o != NULL; o = it.Next()) {
+    i::Map* m = i::Map::cast(o);
+    const char* n = NULL;
+    intptr_t p = reinterpret_cast<intptr_t>(m) & 0xfffff;
+    int t = m->instance_type();
+    ROOT_LIST(ROOT_LIST_CASE)
+    STRUCT_LIST(STRUCT_LIST_CASE)
+    if (n == NULL) continue;
+    printf("  0x%05" V8PRIxPTR ": (%d, \"%s\"),\n", p, t, n);
+  }
+  printf("}\n");
+#undef STRUCT_LIST_CASE
+#undef ROOT_LIST_CASE
+
+  // Dump the KNOWN_OBJECTS table to the console.
+  printf("\n# List of known V8 objects.\n");
+#define ROOT_LIST_CASE(type, name, camel_name) \
+  if (n == NULL && o == heap->name()) n = #camel_name;
+  i::OldSpaces spit(heap);
+  printf("KNOWN_OBJECTS = {\n");
+  for (i::PagedSpace* s = spit.next(); s != NULL; s = spit.next()) {
+    i::HeapObjectIterator it(s);
+    const char* sname = AllocationSpaceName(s->identity());
+    for (i::Object* o = it.Next(); o != NULL; o = it.Next()) {
+      const char* n = NULL;
+      intptr_t p = reinterpret_cast<intptr_t>(o) & 0xfffff;
+      ROOT_LIST(ROOT_LIST_CASE)
+      if (n == NULL) continue;
+      printf("  (\"%s\", 0x%05" V8PRIxPTR "): \"%s\",\n", sname, p, n);
+    }
+  }
+  printf("}\n");
+#undef ROOT_LIST_CASE
+}
+#endif  // V8_SHARED
+
+
 class ShellArrayBufferAllocator : public v8::ArrayBuffer::Allocator {
  public:
-  virtual void* Allocate(size_t length) { return malloc(length); }
-  virtual void Free(void* data) { free(data); }
+  virtual void* Allocate(size_t length) {
+    void* result = malloc(length);
+    memset(result, 0, length);
+    return result;
+  }
+  virtual void* AllocateUninitialized(size_t length) {
+    return malloc(length);
+  }
+  virtual void Free(void* data, size_t) { free(data); }
+  // TODO(dslomov): Remove when v8:2823 is fixed.
+  virtual void Free(void* data) {
+#ifndef V8_SHARED
+    UNREACHABLE();
+#endif
+  }
 };
 
 
 int Shell::Main(int argc, char* argv[]) {
   if (!SetOptions(argc, argv)) return 1;
+  v8::V8::InitializeICU();
 #ifndef V8_SHARED
-  i::FLAG_harmony_array_buffer = true;
-  i::FLAG_harmony_typed_arrays = true;
+  i::FLAG_trace_hydrogen_file = "hydrogen.cfg";
 #else
-  EnableHarmonyTypedArraysViaCommandLine();
+  SetStandaloneFlagsViaCommandLine();
 #endif
   ShellArrayBufferAllocator array_buffer_allocator;
   v8::V8::SetArrayBufferAllocator(&array_buffer_allocator);
@@ -1599,6 +1659,13 @@ int Shell::Main(int argc, char* argv[]) {
 #endif
     PerIsolateData data(isolate);
     InitializeDebugger(isolate);
+
+#ifndef V8_SHARED
+    if (options.dump_heap_constants) {
+      DumpHeapConstants(reinterpret_cast<i::Isolate*>(isolate));
+      return 0;
+    }
+#endif
 
     if (options.stress_opt || options.stress_deopt) {
       Testing::SetStressRunType(options.stress_opt

@@ -27,7 +27,7 @@
 
 #include "v8.h"
 
-#if defined(V8_TARGET_ARCH_X64)
+#if V8_TARGET_ARCH_X64
 
 #include "codegen.h"
 #include "deoptimizer.h"
@@ -42,25 +42,11 @@ const int Deoptimizer::table_entry_size_ = 10;
 
 
 int Deoptimizer::patch_size() {
-  return Assembler::kCallInstructionLength;
+  return Assembler::kCallSequenceLength;
 }
 
 
-void Deoptimizer::DeoptimizeFunctionWithPreparedFunctionList(
-    JSFunction* function) {
-  Isolate* isolate = function->GetIsolate();
-  HandleScope scope(isolate);
-  DisallowHeapAllocation nha;
-
-  ASSERT(function->IsOptimized());
-  ASSERT(function->FunctionsInFunctionListShareSameCode());
-
-  // Get the optimized code.
-  Code* code = function->code();
-
-  // The optimized code is going to be patched, so we cannot use it any more.
-  function->shared()->EvictFromOptimizedCodeMap(code, "deoptimized function");
-
+void Deoptimizer::PatchCodeForDeoptimization(Isolate* isolate, Code* code) {
   // Invalidate the relocation information, as it will become invalid by the
   // code patching below, and is not needed any more.
   code->InvalidateRelocation();
@@ -71,7 +57,7 @@ void Deoptimizer::DeoptimizeFunctionWithPreparedFunctionList(
   // before the safepoint table (space was allocated there when the Code
   // object was created, if necessary).
 
-  Address instruction_start = function->code()->instruction_start();
+  Address instruction_start = code->instruction_start();
 #ifdef DEBUG
   Address prev_call_address = NULL;
 #endif
@@ -83,7 +69,7 @@ void Deoptimizer::DeoptimizeFunctionWithPreparedFunctionList(
     Address call_address = instruction_start + deopt_data->Pc(i)->value();
     // There is room enough to write a long call instruction because we pad
     // LLazyBailout instructions with nops if necessary.
-    CodePatcher patcher(call_address, Assembler::kCallInstructionLength);
+    CodePatcher patcher(call_address, Assembler::kCallSequenceLength);
     patcher.masm()->Call(GetDeoptimizationEntry(isolate, i, LAZY),
                          RelocInfo::NONE64);
     ASSERT(prev_call_address == NULL ||
@@ -92,25 +78,6 @@ void Deoptimizer::DeoptimizeFunctionWithPreparedFunctionList(
 #ifdef DEBUG
     prev_call_address = call_address;
 #endif
-  }
-
-  // Add the deoptimizing code to the list.
-  DeoptimizingCodeListNode* node = new DeoptimizingCodeListNode(code);
-  DeoptimizerData* data = isolate->deoptimizer_data();
-  node->set_next(data->deoptimizing_code_list_);
-  data->deoptimizing_code_list_ = node;
-
-  // We might be in the middle of incremental marking with compaction.
-  // Tell collector to treat this code object in a special way and
-  // ignore all slots that might have been recorded on it.
-  isolate->heap()->mark_compact_collector()->InvalidateCode(code);
-
-  ReplaceCodeForRelatedFunctions(function, code);
-
-  if (FLAG_trace_deopt) {
-    PrintF("[forced deoptimization: ");
-    function->PrintName();
-    PrintF(" / %" V8PRIxPTR "]\n", reinterpret_cast<intptr_t>(function));
   }
 }
 
@@ -138,12 +105,7 @@ static const byte kNopByteTwo = 0x90;
 
 void Deoptimizer::PatchInterruptCodeAt(Code* unoptimized_code,
                                        Address pc_after,
-                                       Code* interrupt_code,
                                        Code* replacement_code) {
-  ASSERT(!InterruptCodeIsPatched(unoptimized_code,
-                                 pc_after,
-                                 interrupt_code,
-                                 replacement_code));
   // Turn the jump into nops.
   Address call_target_address = pc_after - kIntSize;
   *(call_target_address - 3) = kNopByteOne;
@@ -159,12 +121,7 @@ void Deoptimizer::PatchInterruptCodeAt(Code* unoptimized_code,
 
 void Deoptimizer::RevertInterruptCodeAt(Code* unoptimized_code,
                                         Address pc_after,
-                                        Code* interrupt_code,
-                                        Code* replacement_code) {
-  ASSERT(InterruptCodeIsPatched(unoptimized_code,
-                                pc_after,
-                                interrupt_code,
-                                replacement_code));
+                                        Code* interrupt_code) {
   // Restore the original jump.
   Address call_target_address = pc_after - kIntSize;
   *(call_target_address - 3) = kJnsInstruction;
@@ -179,23 +136,28 @@ void Deoptimizer::RevertInterruptCodeAt(Code* unoptimized_code,
 
 
 #ifdef DEBUG
-bool Deoptimizer::InterruptCodeIsPatched(Code* unoptimized_code,
-                                         Address pc_after,
-                                         Code* interrupt_code,
-                                         Code* replacement_code) {
+Deoptimizer::InterruptPatchState Deoptimizer::GetInterruptPatchState(
+    Isolate* isolate,
+    Code* unoptimized_code,
+    Address pc_after) {
   Address call_target_address = pc_after - kIntSize;
   ASSERT_EQ(kCallInstruction, *(call_target_address - 1));
   if (*(call_target_address - 3) == kNopByteOne) {
-    ASSERT(replacement_code->entry() ==
-           Assembler::target_address_at(call_target_address));
     ASSERT_EQ(kNopByteTwo,      *(call_target_address - 2));
-    return true;
+    Code* osr_builtin =
+        isolate->builtins()->builtin(Builtins::kOnStackReplacement);
+    ASSERT_EQ(osr_builtin->entry(),
+              Assembler::target_address_at(call_target_address));
+    return PATCHED_FOR_OSR;
   } else {
-    ASSERT_EQ(interrupt_code->entry(),
+    // Get the interrupt stub code object to match against from cache.
+    Code* interrupt_builtin =
+        isolate->builtins()->builtin(Builtins::kInterruptCheck);
+    ASSERT_EQ(interrupt_builtin->entry(),
               Assembler::target_address_at(call_target_address));
     ASSERT_EQ(kJnsInstruction,  *(call_target_address - 3));
     ASSERT_EQ(kJnsOffset,       *(call_target_address - 2));
-    return false;
+    return NOT_PATCHED;
   }
 }
 #endif  // DEBUG
@@ -451,16 +413,11 @@ void Deoptimizer::EntryGenerator::Generate() {
   // Get the bailout id from the stack.
   __ movq(arg_reg_3, Operand(rsp, kSavedRegistersAreaSize));
 
-  // Get the address of the location in the code object if possible
+  // Get the address of the location in the code object
   // and compute the fp-to-sp delta in register arg5.
-  if (type() == EAGER || type() == SOFT) {
-    __ Set(arg_reg_4, 0);
-    __ lea(arg5, Operand(rsp, kSavedRegistersAreaSize + 1 * kPointerSize));
-  } else {
-    __ movq(arg_reg_4,
-            Operand(rsp, kSavedRegistersAreaSize + 1 * kPointerSize));
-    __ lea(arg5, Operand(rsp, kSavedRegistersAreaSize + 2 * kPointerSize));
-  }
+  __ movq(arg_reg_4,
+          Operand(rsp, kSavedRegistersAreaSize + 1 * kPointerSize));
+  __ lea(arg5, Operand(rsp, kSavedRegistersAreaSize + 2 * kPointerSize));
 
   __ subq(arg5, rbp);
   __ neg(arg5);
@@ -503,12 +460,8 @@ void Deoptimizer::EntryGenerator::Generate() {
     __ pop(Operand(rbx, dst_offset));
   }
 
-  // Remove the bailout id from the stack.
-  if (type() == EAGER || type() == SOFT) {
-    __ addq(rsp, Immediate(kPointerSize));
-  } else {
-    __ addq(rsp, Immediate(2 * kPointerSize));
-  }
+  // Remove the bailout id and return address from the stack.
+  __ addq(rsp, Immediate(2 * kPointerSize));
 
   // Compute a pointer to the unwinding limit in register rcx; that is
   // the first stack slot not part of the input frame.
@@ -548,7 +501,7 @@ void Deoptimizer::EntryGenerator::Generate() {
   // last FrameDescription**.
   __ movl(rdx, Operand(rax, Deoptimizer::output_count_offset()));
   __ movq(rax, Operand(rax, Deoptimizer::output_offset()));
-  __ lea(rdx, Operand(rax, rdx, times_8, 0));
+  __ lea(rdx, Operand(rax, rdx, times_pointer_size, 0));
   __ jmp(&outer_loop_header);
   __ bind(&outer_push_loop);
   // Inner loop state: rbx = current FrameDescription*, rcx = loop index.
@@ -618,6 +571,17 @@ void Deoptimizer::TableEntryGenerator::GeneratePrologue() {
   }
   __ bind(&done);
 }
+
+
+void FrameDescription::SetCallerPc(unsigned offset, intptr_t value) {
+  SetFrameSlot(offset, value);
+}
+
+
+void FrameDescription::SetCallerFp(unsigned offset, intptr_t value) {
+  SetFrameSlot(offset, value);
+}
+
 
 #undef __
 

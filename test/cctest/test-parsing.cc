@@ -313,9 +313,10 @@ TEST(StandAlonePreParserNoNatives) {
 
 TEST(RegressChromium62639) {
   v8::V8::Initialize();
+  i::Isolate* isolate = i::Isolate::Current();
 
   int marker;
-  i::Isolate::Current()->stack_guard()->SetStackLimit(
+  isolate->stack_guard()->SetStackLimit(
       reinterpret_cast<uintptr_t>(&marker) - 128 * 1024);
 
   const char* program = "var x = 'something';\n"
@@ -328,7 +329,7 @@ TEST(RegressChromium62639) {
   i::Utf8ToUtf16CharacterStream stream(
       reinterpret_cast<const i::byte*>(program),
       static_cast<unsigned>(strlen(program)));
-  i::ScriptDataImpl* data = i::PreParserApi::PreParse(&stream);
+  i::ScriptDataImpl* data = i::PreParserApi::PreParse(isolate, &stream);
   CHECK(data->HasError());
   delete data;
 }
@@ -355,7 +356,7 @@ TEST(Regress928) {
   i::Handle<i::String> source(
       factory->NewStringFromAscii(i::CStrVector(program)));
   i::GenericStringUtf16CharacterStream stream(source, 0, source->length());
-  i::ScriptDataImpl* data = i::PreParserApi::PreParse(&stream);
+  i::ScriptDataImpl* data = i::PreParserApi::PreParse(isolate, &stream);
   CHECK(!data->HasError());
 
   data->Initialize();
@@ -632,6 +633,7 @@ void TestStreamScanner(i::Utf16CharacterStream* stream,
     i++;
   } while (expected_tokens[i] != i::Token::ILLEGAL);
 }
+
 
 TEST(StreamScanner) {
   v8::V8::Initialize();
@@ -1048,8 +1050,9 @@ TEST(ScopePositions) {
 i::Handle<i::String> FormatMessage(i::ScriptDataImpl* data) {
   i::Isolate* isolate = i::Isolate::Current();
   i::Factory* factory = isolate->factory();
+  const char* message = data->BuildMessage();
   i::Handle<i::String> format = v8::Utils::OpenHandle(
-                                    *v8::String::New(data->BuildMessage()));
+                                    *v8::String::New(message));
   i::Vector<const char*> args = data->BuildArgs();
   i::Handle<i::JSArray> args_array = factory->NewJSArray(args.length());
   for (int i = 0; i < args.length(); i++) {
@@ -1064,10 +1067,15 @@ i::Handle<i::String> FormatMessage(i::ScriptDataImpl* data) {
       i::GetProperty(builtins, "FormatMessage");
   i::Handle<i::Object> arg_handles[] = { format, args_array };
   bool has_exception = false;
-  i::Handle<i::Object> result =
-      i::Execution::Call(format_fun, builtins, 2, arg_handles, &has_exception);
+  i::Handle<i::Object> result = i::Execution::Call(
+      isolate, format_fun, builtins, 2, arg_handles, &has_exception);
   CHECK(!has_exception);
   CHECK(result->IsString());
+  for (int i = 0; i < args.length(); i++) {
+    i::DeleteArray(args[i]);
+  }
+  i::DeleteArray(args.start());
+  i::DeleteArray(message);
   return i::Handle<i::String>::cast(result);
 }
 
@@ -1079,6 +1087,7 @@ enum ParserFlag {
   kAllowModules,
   kAllowGenerators,
   kAllowForOf,
+  kAllowHarmonyNumericLiterals,
   kParserFlagCount
 };
 
@@ -1096,7 +1105,9 @@ static bool checkParserFlag(unsigned flags, ParserFlag flag) {
                                                    kAllowHarmonyScoping)); \
   parser.set_allow_modules(checkParserFlag(flags, kAllowModules)); \
   parser.set_allow_generators(checkParserFlag(flags, kAllowGenerators)); \
-  parser.set_allow_for_of(checkParserFlag(flags, kAllowForOf));
+  parser.set_allow_for_of(checkParserFlag(flags, kAllowForOf)); \
+  parser.set_allow_harmony_numeric_literals( \
+      checkParserFlag(flags, kAllowHarmonyNumericLiterals));
 
 void TestParserSyncWithFlags(i::Handle<i::String> source, unsigned flags) {
   i::Isolate* isolate = i::Isolate::Current();
@@ -1253,10 +1264,6 @@ TEST(ParserSync) {
     NULL
   };
 
-  // TODO(mstarzinger): Disabled in GC stress mode for now, we should find the
-  // correct timeout for this and re-enable this test again.
-  if (i::FLAG_stress_compaction) return;
-
   i::Isolate* isolate = i::Isolate::Current();
   i::Factory* factory = isolate->factory();
 
@@ -1279,7 +1286,7 @@ TEST(ParserSync) {
             + kSuffixLen + i::StrLength("label: for (;;) {  }");
 
         // Plug the source code pieces together.
-        i::Vector<char> program = i::Vector<char>::New(kProgramSize + 1);
+        i::ScopedVector<char> program(kProgramSize + 1);
         int length = i::OS::SNPrintF(program,
             "label: for (;;) { %s%s%s%s }",
             context_data[i][0],

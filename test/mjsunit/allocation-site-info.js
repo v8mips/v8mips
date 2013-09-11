@@ -37,18 +37,11 @@
 
 // support_smi_only_arrays = %HasFastSmiElements(new Array(1,2,3,4,5,6,7,8));
 support_smi_only_arrays = true;
-optimize_constructed_arrays = true;
 
 if (support_smi_only_arrays) {
   print("Tests include smi-only arrays.");
 } else {
   print("Tests do NOT include smi-only arrays.");
-}
-
-if (optimize_constructed_arrays) {
-  print("Tests include constructed array optimizations.");
-} else {
-  print("Tests do NOT include constructed array optimizations.");
 }
 
 var elements_kind = {
@@ -96,7 +89,6 @@ function assertNotHoley(obj, name_opt) {
 }
 
 if (support_smi_only_arrays) {
-
   obj = [];
   assertNotHoley(obj);
   assertKind(elements_kind.fast_smi_only, obj);
@@ -141,9 +133,7 @@ if (support_smi_only_arrays) {
   obj = fastliteralcase(get_standard_literal(), 1.5);
   assertKind(elements_kind.fast_double, obj);
   obj = fastliteralcase(get_standard_literal(), 2);
-  // TODO(hpayer): bring the following assert back as soon as allocation
-  // sites work again for fast literals
-  //assertKind(elements_kind.fast_double, obj);
+  assertKind(elements_kind.fast_double, obj);
 
   // The test below is in a loop because arrays that live
   // at global scope without the chance of being recreated
@@ -183,140 +173,210 @@ if (support_smi_only_arrays) {
   obj = fastliteralcase_smifast("carter");
   assertKind(elements_kind.fast, obj);
   obj = fastliteralcase_smifast(2);
-  // TODO(hpayer): bring the following assert back as soon as allocation
-  // sites work again for fast literals
-  //assertKind(elements_kind.fast, obj);
+  assertKind(elements_kind.fast, obj);
 
-  if (optimize_constructed_arrays) {
-    function newarraycase_smidouble(value) {
-      var a = new Array();
-      a[0] = value;
-      return a;
-    }
-
-    // Case: new Array() as allocation site, smi->double
-    obj = newarraycase_smidouble(1);
-    assertKind(elements_kind.fast_smi_only, obj);
-    obj = newarraycase_smidouble(1.5);
-    assertKind(elements_kind.fast_double, obj);
-    obj = newarraycase_smidouble(2);
-    assertKind(elements_kind.fast_double, obj);
-
-    function newarraycase_smiobj(value) {
-      var a = new Array();
-      a[0] = value;
-      return a;
-    }
-
-    // Case: new Array() as allocation site, smi->fast
-    obj = newarraycase_smiobj(1);
-    assertKind(elements_kind.fast_smi_only, obj);
-    obj = newarraycase_smiobj("gloria");
-    assertKind(elements_kind.fast, obj);
-    obj = newarraycase_smiobj(2);
-    assertKind(elements_kind.fast, obj);
-
-    function newarraycase_length_smidouble(value) {
-      var a = new Array(3);
-      a[0] = value;
-      return a;
-    }
-
-    // Case: new Array(length) as allocation site
-    obj = newarraycase_length_smidouble(1);
-    assertKind(elements_kind.fast_smi_only, obj);
-    obj = newarraycase_length_smidouble(1.5);
-    assertKind(elements_kind.fast_double, obj);
-    obj = newarraycase_length_smidouble(2);
-    assertKind(elements_kind.fast_double, obj);
-
-    // Try to continue the transition to fast object, but
-    // we will not pretransition from double->fast, because
-    // it may hurt performance ("poisoning").
-    obj = newarraycase_length_smidouble("coates");
-    assertKind(elements_kind.fast, obj);
-    obj = newarraycase_length_smidouble(2.5);
-    // However, because of optimistic transitions, we will
-    // transition to the most general kind of elements kind found,
-    // therefore I can't count on this assert yet.
-    // assertKind(elements_kind.fast_double, obj);
-
-    function newarraycase_length_smiobj(value) {
-      var a = new Array(3);
-      a[0] = value;
-      return a;
-    }
-
-    // Case: new Array(<length>) as allocation site, smi->fast
-    obj = newarraycase_length_smiobj(1);
-    assertKind(elements_kind.fast_smi_only, obj);
-    obj = newarraycase_length_smiobj("gloria");
-    assertKind(elements_kind.fast, obj);
-    obj = newarraycase_length_smiobj(2);
-    assertKind(elements_kind.fast, obj);
-
-    function newarraycase_list_smidouble(value) {
-      var a = new Array(1, 2, 3);
-      a[0] = value;
-      return a;
-    }
-
-    obj = newarraycase_list_smidouble(1);
-    assertKind(elements_kind.fast_smi_only, obj);
-    obj = newarraycase_list_smidouble(1.5);
-    assertKind(elements_kind.fast_double, obj);
-    obj = newarraycase_list_smidouble(2);
-    assertKind(elements_kind.fast_double, obj);
-
-    function newarraycase_list_smiobj(value) {
-      var a = new Array(4, 5, 6);
-      a[0] = value;
-      return a;
-    }
-
-    obj = newarraycase_list_smiobj(1);
-    assertKind(elements_kind.fast_smi_only, obj);
-    obj = newarraycase_list_smiobj("coates");
-    assertKind(elements_kind.fast, obj);
-    obj = newarraycase_list_smiobj(2);
-    assertKind(elements_kind.fast, obj);
-
-    function newarraycase_onearg(len, value) {
-      var a = new Array(len);
-      a[0] = value;
-      return a;
-    }
-
-    obj = newarraycase_onearg(5, 3.5);
-    assertKind(elements_kind.fast_double, obj);
-    obj = newarraycase_onearg(10, 5);
-    assertKind(elements_kind.fast_double, obj);
-    obj = newarraycase_onearg(0, 5);
-    assertKind(elements_kind.fast_double, obj);
-    // Now pass a length that forces the dictionary path.
-    obj = newarraycase_onearg(100000, 5);
-    assertKind(elements_kind.dictionary, obj);
-    assertTrue(obj.length == 100000);
-
-    // Verify that cross context calls work
-    var realmA = Realm.current();
-    var realmB = Realm.create();
-    assertEquals(0, realmA);
-    assertEquals(1, realmB);
-
-    function instanceof_check(type) {
-      assertTrue(new type() instanceof type);
-      assertTrue(new type(5) instanceof type);
-      assertTrue(new type(1,2,3) instanceof type);
-    }
-
-    var realmBArray = Realm.eval(realmB, "Array");
-    instanceof_check(Array);
-    instanceof_check(realmBArray);
-    %OptimizeFunctionOnNextCall(instanceof_check);
-    instanceof_check(Array);
-    assertTrue(2 != %GetOptimizationStatus(instanceof_check));
-    instanceof_check(realmBArray);
-    assertTrue(1 != %GetOptimizationStatus(instanceof_check));
+  // Case: make sure transitions from packed to holey are tracked
+  function fastliteralcase_smiholey(index, value) {
+    var literal = [1, 2, 3, 4];
+    literal[index] = value;
+    return literal;
   }
+
+  obj = fastliteralcase_smiholey(5, 1);
+  assertKind(elements_kind.fast_smi_only, obj);
+  assertHoley(obj);
+  obj = fastliteralcase_smiholey(0, 1);
+  assertKind(elements_kind.fast_smi_only, obj);
+  assertHoley(obj);
+
+  function newarraycase_smidouble(value) {
+    var a = new Array();
+    a[0] = value;
+    return a;
+  }
+
+  // Case: new Array() as allocation site, smi->double
+  obj = newarraycase_smidouble(1);
+  assertKind(elements_kind.fast_smi_only, obj);
+  obj = newarraycase_smidouble(1.5);
+  assertKind(elements_kind.fast_double, obj);
+  obj = newarraycase_smidouble(2);
+  assertKind(elements_kind.fast_double, obj);
+
+  function newarraycase_smiobj(value) {
+    var a = new Array();
+    a[0] = value;
+    return a;
+  }
+
+  // Case: new Array() as allocation site, smi->fast
+  obj = newarraycase_smiobj(1);
+  assertKind(elements_kind.fast_smi_only, obj);
+  obj = newarraycase_smiobj("gloria");
+  assertKind(elements_kind.fast, obj);
+  obj = newarraycase_smiobj(2);
+  assertKind(elements_kind.fast, obj);
+
+  function newarraycase_length_smidouble(value) {
+    var a = new Array(3);
+    a[0] = value;
+    return a;
+  }
+
+  // Case: new Array(length) as allocation site
+  obj = newarraycase_length_smidouble(1);
+  assertKind(elements_kind.fast_smi_only, obj);
+  obj = newarraycase_length_smidouble(1.5);
+  assertKind(elements_kind.fast_double, obj);
+  obj = newarraycase_length_smidouble(2);
+  assertKind(elements_kind.fast_double, obj);
+
+  // Try to continue the transition to fast object, but
+  // we will not pretransition from double->fast, because
+  // it may hurt performance ("poisoning").
+  obj = newarraycase_length_smidouble("coates");
+  assertKind(elements_kind.fast, obj);
+  obj = newarraycase_length_smidouble(2.5);
+  // However, because of optimistic transitions, we will
+  // transition to the most general kind of elements kind found,
+  // therefore I can't count on this assert yet.
+  // assertKind(elements_kind.fast_double, obj);
+
+  function newarraycase_length_smiobj(value) {
+    var a = new Array(3);
+    a[0] = value;
+    return a;
+  }
+
+  // Case: new Array(<length>) as allocation site, smi->fast
+  obj = newarraycase_length_smiobj(1);
+  assertKind(elements_kind.fast_smi_only, obj);
+  obj = newarraycase_length_smiobj("gloria");
+  assertKind(elements_kind.fast, obj);
+  obj = newarraycase_length_smiobj(2);
+  assertKind(elements_kind.fast, obj);
+
+  function newarraycase_list_smidouble(value) {
+    var a = new Array(1, 2, 3);
+    a[0] = value;
+    return a;
+  }
+
+  obj = newarraycase_list_smidouble(1);
+  assertKind(elements_kind.fast_smi_only, obj);
+  obj = newarraycase_list_smidouble(1.5);
+  assertKind(elements_kind.fast_double, obj);
+  obj = newarraycase_list_smidouble(2);
+  assertKind(elements_kind.fast_double, obj);
+
+  function newarraycase_list_smiobj(value) {
+    var a = new Array(4, 5, 6);
+    a[0] = value;
+    return a;
+  }
+
+  obj = newarraycase_list_smiobj(1);
+  assertKind(elements_kind.fast_smi_only, obj);
+  obj = newarraycase_list_smiobj("coates");
+  assertKind(elements_kind.fast, obj);
+  obj = newarraycase_list_smiobj(2);
+  assertKind(elements_kind.fast, obj);
+
+  // Case: array constructor calls with out of date feedback.
+  // The boilerplate should incorporate all feedback, but the input array
+  // should be minimally transitioned based on immediate need.
+  (function() {
+    function foo(i) {
+      // We have two cases, one for literals one for constructed arrays.
+      var a = (i == 0)
+        ? [1, 2, 3]
+        : new Array(1, 2, 3);
+      return a;
+    }
+
+    for (i = 0; i < 2; i++) {
+      a = foo(i);
+      b = foo(i);
+      b[5] = 1;  // boilerplate goes holey
+      assertHoley(foo(i));
+      a[0] = 3.5;  // boilerplate goes holey double
+      assertKind(elements_kind.fast_double, a);
+      assertNotHoley(a);
+      c = foo(i);
+      assertKind(elements_kind.fast_double, c);
+      assertHoley(c);
+    }
+  })();
+
+  function newarraycase_onearg(len, value) {
+    var a = new Array(len);
+    a[0] = value;
+    return a;
+  }
+
+  obj = newarraycase_onearg(5, 3.5);
+  assertKind(elements_kind.fast_double, obj);
+  obj = newarraycase_onearg(10, 5);
+  assertKind(elements_kind.fast_double, obj);
+  obj = newarraycase_onearg(0, 5);
+  assertKind(elements_kind.fast_double, obj);
+  // Now pass a length that forces the dictionary path.
+  obj = newarraycase_onearg(100000, 5);
+  assertKind(elements_kind.dictionary, obj);
+  assertTrue(obj.length == 100000);
+
+  // Verify that cross context calls work
+  var realmA = Realm.current();
+  var realmB = Realm.create();
+  assertEquals(0, realmA);
+  assertEquals(1, realmB);
+
+  function instanceof_check(type) {
+    assertTrue(new type() instanceof type);
+    assertTrue(new type(5) instanceof type);
+    assertTrue(new type(1,2,3) instanceof type);
+  }
+
+  function instanceof_check2(type) {
+    assertTrue(new type() instanceof type);
+    assertTrue(new type(5) instanceof type);
+    assertTrue(new type(1,2,3) instanceof type);
+  }
+
+  var realmBArray = Realm.eval(realmB, "Array");
+  instanceof_check(Array);
+  instanceof_check(realmBArray);
+
+  // instanceof_check2 is here because the call site goes through a state.
+  // Since instanceof_check(Array) was first called with the current context
+  // Array function, it went from (uninit->Array) then (Array->megamorphic).
+  // We'll get a different state traversal if we start with realmBArray.
+  // It'll go (uninit->realmBArray) then (realmBArray->megamorphic). Recognize
+  // that state "Array" implies an AllocationSite is present, and code is
+  // configured to use it.
+  instanceof_check2(realmBArray);
+  instanceof_check2(Array);
+
+  %OptimizeFunctionOnNextCall(instanceof_check);
+
+  // No de-opt will occur because HCallNewArray wasn't selected, on account of
+  // the call site not being monomorphic to Array.
+  instanceof_check(Array);
+  assertOptimized(instanceof_check);
+  instanceof_check(realmBArray);
+  assertOptimized(instanceof_check);
+
+  // Try to optimize again, but first clear all type feedback, and allow it
+  // to be monomorphic on first call. Only after crankshafting do we introduce
+  // realmBArray. This should deopt the method.
+  %DeoptimizeFunction(instanceof_check);
+  %ClearFunctionTypeFeedback(instanceof_check);
+  instanceof_check(Array);
+  instanceof_check(Array);
+  %OptimizeFunctionOnNextCall(instanceof_check);
+  instanceof_check(Array);
+  assertOptimized(instanceof_check);
+
+  instanceof_check(realmBArray);
+  assertUnoptimized(instanceof_check);
 }

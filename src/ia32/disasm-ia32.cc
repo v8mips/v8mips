@@ -31,7 +31,7 @@
 
 #include "v8.h"
 
-#if defined(V8_TARGET_ARCH_IA32)
+#if V8_TARGET_ARCH_IA32
 
 #include "disasm.h"
 
@@ -575,6 +575,7 @@ int DisassemblerIA32::F7Instruction(byte* data) {
   }
 }
 
+
 int DisassemblerIA32::D1D3C1Instruction(byte* data) {
   byte op = *data;
   ASSERT(op == 0xD1 || op == 0xD3 || op == 0xC1);
@@ -605,7 +606,7 @@ int DisassemblerIA32::D1D3C1Instruction(byte* data) {
     }
     ASSERT_NE(NULL, mnem);
     AppendToBuffer("%s %s,", mnem, NameOfCPURegister(rm));
-    if (imm8 > 0) {
+    if (imm8 >= 0) {
       AppendToBuffer("%d", imm8);
     } else {
       AppendToBuffer("cl");
@@ -861,7 +862,6 @@ static const char* F0Mnem(byte f0byte) {
   switch (f0byte) {
     case 0x18: return "prefetch";
     case 0xA2: return "cpuid";
-    case 0x31: return "rdtsc";
     case 0xBE: return "movsx_b";
     case 0xBF: return "movsx_w";
     case 0xB6: return "movzx_b";

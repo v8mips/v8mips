@@ -170,7 +170,8 @@ class PreParserApi {
   // This interface is here instead of in preparser.h because it instantiates a
   // preparser recorder object that is suited to the parser's purposes.  Also,
   // the preparser doesn't know about ScriptDataImpl.
-  static ScriptDataImpl* PreParse(Utf16CharacterStream* source);
+  static ScriptDataImpl* PreParse(Isolate* isolate,
+                                  Utf16CharacterStream* source);
 };
 
 
@@ -438,6 +439,9 @@ class Parser BASE_EMBEDDED {
   bool allow_harmony_scoping() { return scanner().HarmonyScoping(); }
   bool allow_generators() const { return allow_generators_; }
   bool allow_for_of() const { return allow_for_of_; }
+  bool allow_harmony_numeric_literals() {
+    return scanner().HarmonyNumericLiterals();
+  }
 
   void set_allow_natives_syntax(bool allow) { allow_natives_syntax_ = allow; }
   void set_allow_lazy(bool allow) { allow_lazy_ = allow; }
@@ -447,6 +451,9 @@ class Parser BASE_EMBEDDED {
   }
   void set_allow_generators(bool allow) { allow_generators_ = allow; }
   void set_allow_for_of(bool allow) { allow_for_of_ = allow; }
+  void set_allow_harmony_numeric_literals(bool allow) {
+    scanner().SetHarmonyNumericLiterals(allow);
+  }
 
   // Parses the source code represented by the compilation info and sets its
   // function literal.  Returns false (and deallocates any allocated AST
@@ -562,8 +569,7 @@ class Parser BASE_EMBEDDED {
   };
 
   FunctionLiteral* ParseLazy();
-  FunctionLiteral* ParseLazy(Utf16CharacterStream* source,
-                             ZoneScope* zone_scope);
+  FunctionLiteral* ParseLazy(Utf16CharacterStream* source);
 
   Isolate* isolate() { return isolate_; }
   Zone* zone() const { return zone_; }
@@ -571,8 +577,7 @@ class Parser BASE_EMBEDDED {
 
   // Called by ParseProgram after setting up the scanner.
   FunctionLiteral* DoParseProgram(CompilationInfo* info,
-                                  Handle<String> source,
-                                  ZoneScope* zone_scope);
+                                  Handle<String> source);
 
   // Report syntax error
   void ReportUnexpectedToken(Token::Value token);
@@ -851,6 +856,7 @@ class Parser BASE_EMBEDDED {
   Scanner scanner_;
   preparser::PreParser* reusable_preparser_;
   Scope* top_scope_;
+  Scope* original_scope_;  // for ES5 function declarations in sloppy eval
   FunctionState* current_function_state_;
   Target* target_stack_;  // for break, continue statements
   v8::Extension* extension_;
@@ -888,10 +894,8 @@ class CompileTimeValue: public AllStatic {
 
   static bool IsCompileTimeValue(Expression* expression);
 
-  static bool ArrayLiteralElementNeedsInitialization(Expression* value);
-
   // Get the value as a compile time value.
-  static Handle<FixedArray> GetValue(Expression* expression);
+  static Handle<FixedArray> GetValue(Isolate* isolate, Expression* expression);
 
   // Get the type of a compile time value returned by GetValue().
   static LiteralType GetLiteralType(Handle<FixedArray> value);

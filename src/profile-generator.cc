@@ -30,68 +30,15 @@
 #include "profile-generator-inl.h"
 
 #include "compiler.h"
+#include "debug.h"
+#include "sampler.h"
 #include "global-handles.h"
 #include "scopeinfo.h"
 #include "unicode.h"
 #include "zone-inl.h"
-#include "debug.h"
 
 namespace v8 {
 namespace internal {
-
-
-TokenEnumerator::TokenEnumerator()
-    : token_locations_(4),
-      token_removed_(4) {
-}
-
-
-TokenEnumerator::~TokenEnumerator() {
-  Isolate* isolate = Isolate::Current();
-  for (int i = 0; i < token_locations_.length(); ++i) {
-    if (!token_removed_[i]) {
-      isolate->global_handles()->ClearWeakness(token_locations_[i]);
-      isolate->global_handles()->Destroy(token_locations_[i]);
-    }
-  }
-}
-
-
-int TokenEnumerator::GetTokenId(Object* token) {
-  Isolate* isolate = Isolate::Current();
-  if (token == NULL) return TokenEnumerator::kNoSecurityToken;
-  for (int i = 0; i < token_locations_.length(); ++i) {
-    if (*token_locations_[i] == token && !token_removed_[i]) return i;
-  }
-  Handle<Object> handle = isolate->global_handles()->Create(token);
-  // handle.location() points to a memory cell holding a pointer
-  // to a token object in the V8's heap.
-  isolate->global_handles()->MakeWeak(handle.location(),
-                                      this,
-                                      TokenRemovedCallback);
-  token_locations_.Add(handle.location());
-  token_removed_.Add(false);
-  return token_locations_.length() - 1;
-}
-
-
-void TokenEnumerator::TokenRemovedCallback(v8::Isolate* isolate,
-                                           v8::Persistent<v8::Value>* handle,
-                                           void* parameter) {
-  reinterpret_cast<TokenEnumerator*>(parameter)->TokenRemoved(
-      Utils::OpenPersistent(handle).location());
-  handle->Dispose(isolate);
-}
-
-
-void TokenEnumerator::TokenRemoved(Object** token_location) {
-  for (int i = 0; i < token_locations_.length(); ++i) {
-    if (token_locations_[i] == token_location && !token_removed_[i]) {
-      token_removed_[i] = true;
-      return;
-    }
-  }
-}
 
 
 StringsStorage::StringsStorage()
@@ -183,7 +130,10 @@ size_t StringsStorage::GetUsedMemorySize() const {
   return size;
 }
 
+
 const char* const CodeEntry::kEmptyNamePrefix = "";
+const char* const CodeEntry::kEmptyResourceName = "";
+const char* const CodeEntry::kEmptyBailoutReason = "";
 
 
 CodeEntry::~CodeEntry() {
@@ -233,6 +183,12 @@ bool CodeEntry::IsSameAs(CodeEntry* entry) const {
 }
 
 
+void CodeEntry::SetBuiltinId(Builtins::Name id) {
+  tag_ = Logger::BUILTIN_TAG;
+  builtin_id_ = id;
+}
+
+
 ProfileNode* ProfileNode::FindChild(CodeEntry* entry) {
   HashMap::Entry* map_entry =
       children_.Lookup(entry, CodeEntryHash(entry), false);
@@ -254,24 +210,15 @@ ProfileNode* ProfileNode::FindOrAddChild(CodeEntry* entry) {
 }
 
 
-double ProfileNode::GetSelfMillis() const {
-  return tree_->TicksToMillis(self_ticks_);
-}
-
-
-double ProfileNode::GetTotalMillis() const {
-  return tree_->TicksToMillis(total_ticks_);
-}
-
-
 void ProfileNode::Print(int indent) {
-  OS::Print("%5u %5u %*c %s%s [%d] #%d",
-            total_ticks_, self_ticks_,
+  OS::Print("%5u %*c %s%s %d #%d %s",
+            self_ticks_,
             indent, ' ',
             entry_->name_prefix(),
             entry_->name(),
-            entry_->security_token_id(),
-            id());
+            entry_->script_id(),
+            id(),
+            entry_->bailout_reason());
   if (entry_->resource_name()[0] != '\0')
     OS::Print(" %s:%d", entry_->resource_name(), entry_->line_number());
   OS::Print("\n");
@@ -296,12 +243,7 @@ class DeleteNodesCallback {
 
 
 ProfileTree::ProfileTree()
-    : root_entry_(Logger::FUNCTION_TAG,
-                  "",
-                  "(root)",
-                  "",
-                  0,
-                  TokenEnumerator::kNoSecurityToken),
+    : root_entry_(Logger::FUNCTION_TAG, "(root)"),
       next_node_id_(1),
       root_(new ProfileNode(this, &root_entry_)) {
 }
@@ -348,63 +290,6 @@ struct NodesPair {
 };
 
 
-class FilteredCloneCallback {
- public:
-  FilteredCloneCallback(ProfileNode* dst_root, int security_token_id)
-      : stack_(10),
-        security_token_id_(security_token_id) {
-    stack_.Add(NodesPair(NULL, dst_root));
-  }
-
-  void BeforeTraversingChild(ProfileNode* parent, ProfileNode* child) {
-    if (IsTokenAcceptable(child->entry()->security_token_id(),
-                          parent->entry()->security_token_id())) {
-      ProfileNode* clone = stack_.last().dst->FindOrAddChild(child->entry());
-      clone->IncreaseSelfTicks(child->self_ticks());
-      stack_.Add(NodesPair(child, clone));
-    } else {
-      // Attribute ticks to parent node.
-      stack_.last().dst->IncreaseSelfTicks(child->self_ticks());
-    }
-  }
-
-  void AfterAllChildrenTraversed(ProfileNode* parent) { }
-
-  void AfterChildTraversed(ProfileNode*, ProfileNode* child) {
-    if (stack_.last().src == child) {
-      stack_.RemoveLast();
-    }
-  }
-
- private:
-  bool IsTokenAcceptable(int token, int parent_token) {
-    if (token == TokenEnumerator::kNoSecurityToken
-        || token == security_token_id_) return true;
-    if (token == TokenEnumerator::kInheritsSecurityToken) {
-      ASSERT(parent_token != TokenEnumerator::kInheritsSecurityToken);
-      return parent_token == TokenEnumerator::kNoSecurityToken
-          || parent_token == security_token_id_;
-    }
-    return false;
-  }
-
-  List<NodesPair> stack_;
-  int security_token_id_;
-};
-
-void ProfileTree::FilteredClone(ProfileTree* src, int security_token_id) {
-  ms_to_ticks_scale_ = src->ms_to_ticks_scale_;
-  FilteredCloneCallback cb(root_, security_token_id);
-  src->TraverseDepthFirst(&cb);
-  CalculateTotalTicks();
-}
-
-
-void ProfileTree::SetTickRatePerMs(double ticks_per_ms) {
-  ms_to_ticks_scale_ = ticks_per_ms > 0 ? 1.0 / ticks_per_ms : 1.0;
-}
-
-
 class Position {
  public:
   explicit Position(ProfileNode* node)
@@ -447,30 +332,12 @@ void ProfileTree::TraverseDepthFirst(Callback* callback) {
 }
 
 
-class CalculateTotalTicksCallback {
- public:
-  void BeforeTraversingChild(ProfileNode*, ProfileNode*) { }
-
-  void AfterAllChildrenTraversed(ProfileNode* node) {
-    node->IncreaseTotalTicks(node->self_ticks());
-  }
-
-  void AfterChildTraversed(ProfileNode* parent, ProfileNode* child) {
-    parent->IncreaseTotalTicks(child->total_ticks());
-  }
-};
-
-
-void ProfileTree::CalculateTotalTicks() {
-  CalculateTotalTicksCallback cb;
-  TraverseDepthFirst(&cb);
-}
-
-
-void ProfileTree::ShortPrint() {
-  OS::Print("root: %u %u %.2fms %.2fms\n",
-            root_->total_ticks(), root_->self_ticks(),
-            root_->GetTotalMillis(), root_->GetSelfMillis());
+CpuProfile::CpuProfile(const char* title, unsigned uid, bool record_samples)
+    : title_(title),
+      uid_(uid),
+      record_samples_(record_samples),
+      start_time_(Time::NowFromSystemTime()) {
+  timer_.Start();
 }
 
 
@@ -480,27 +347,8 @@ void CpuProfile::AddPath(const Vector<CodeEntry*>& path) {
 }
 
 
-void CpuProfile::CalculateTotalTicks() {
-  top_down_.CalculateTotalTicks();
-}
-
-
-void CpuProfile::SetActualSamplingRate(double actual_sampling_rate) {
-  top_down_.SetTickRatePerMs(actual_sampling_rate);
-}
-
-
-CpuProfile* CpuProfile::FilteredClone(int security_token_id) {
-  ASSERT(security_token_id != TokenEnumerator::kNoSecurityToken);
-  CpuProfile* clone = new CpuProfile(title_, uid_, false);
-  clone->top_down_.FilteredClone(&top_down_, security_token_id);
-  return clone;
-}
-
-
-void CpuProfile::ShortPrint() {
-  OS::Print("top down ");
-  top_down_.ShortPrint();
+void CpuProfile::CalculateTotalTicksAndSamplingRate() {
+  end_time_ = start_time_ + timer_.Elapsed();
 }
 
 
@@ -596,10 +444,7 @@ void CodeMap::Print() {
 
 
 CpuProfilesCollection::CpuProfilesCollection()
-    : profiles_uids_(UidsMatch),
-      current_profiles_semaphore_(OS::CreateSemaphore(1)) {
-  // Create list of unabridged profiles.
-  profiles_by_token_.Add(new List<CpuProfile*>());
+    : current_profiles_semaphore_(1) {
 }
 
 
@@ -607,22 +452,15 @@ static void DeleteCodeEntry(CodeEntry** entry_ptr) {
   delete *entry_ptr;
 }
 
+
 static void DeleteCpuProfile(CpuProfile** profile_ptr) {
   delete *profile_ptr;
 }
 
-static void DeleteProfilesList(List<CpuProfile*>** list_ptr) {
-  if (*list_ptr != NULL) {
-    (*list_ptr)->Iterate(DeleteCpuProfile);
-    delete *list_ptr;
-  }
-}
 
 CpuProfilesCollection::~CpuProfilesCollection() {
-  delete current_profiles_semaphore_;
+  finished_profiles_.Iterate(DeleteCpuProfile);
   current_profiles_.Iterate(DeleteCpuProfile);
-  detached_profiles_.Iterate(DeleteCpuProfile);
-  profiles_by_token_.Iterate(DeleteProfilesList);
   code_entries_.Iterate(DeleteCodeEntry);
 }
 
@@ -630,80 +468,40 @@ CpuProfilesCollection::~CpuProfilesCollection() {
 bool CpuProfilesCollection::StartProfiling(const char* title, unsigned uid,
                                            bool record_samples) {
   ASSERT(uid > 0);
-  current_profiles_semaphore_->Wait();
+  current_profiles_semaphore_.Wait();
   if (current_profiles_.length() >= kMaxSimultaneousProfiles) {
-    current_profiles_semaphore_->Signal();
+    current_profiles_semaphore_.Signal();
     return false;
   }
   for (int i = 0; i < current_profiles_.length(); ++i) {
     if (strcmp(current_profiles_[i]->title(), title) == 0) {
       // Ignore attempts to start profile with the same title.
-      current_profiles_semaphore_->Signal();
+      current_profiles_semaphore_.Signal();
       return false;
     }
   }
   current_profiles_.Add(new CpuProfile(title, uid, record_samples));
-  current_profiles_semaphore_->Signal();
+  current_profiles_semaphore_.Signal();
   return true;
 }
 
 
-CpuProfile* CpuProfilesCollection::StopProfiling(int security_token_id,
-                                                 const char* title,
-                                                 double actual_sampling_rate) {
+CpuProfile* CpuProfilesCollection::StopProfiling(const char* title) {
   const int title_len = StrLength(title);
   CpuProfile* profile = NULL;
-  current_profiles_semaphore_->Wait();
+  current_profiles_semaphore_.Wait();
   for (int i = current_profiles_.length() - 1; i >= 0; --i) {
     if (title_len == 0 || strcmp(current_profiles_[i]->title(), title) == 0) {
       profile = current_profiles_.Remove(i);
       break;
     }
   }
-  current_profiles_semaphore_->Signal();
+  current_profiles_semaphore_.Signal();
 
-  if (profile != NULL) {
-    profile->CalculateTotalTicks();
-    profile->SetActualSamplingRate(actual_sampling_rate);
-    List<CpuProfile*>* unabridged_list =
-        profiles_by_token_[TokenToIndex(TokenEnumerator::kNoSecurityToken)];
-    unabridged_list->Add(profile);
-    HashMap::Entry* entry =
-        profiles_uids_.Lookup(reinterpret_cast<void*>(profile->uid()),
-                              static_cast<uint32_t>(profile->uid()),
-                              true);
-    ASSERT(entry->value == NULL);
-    entry->value = reinterpret_cast<void*>(unabridged_list->length() - 1);
-    return GetProfile(security_token_id, profile->uid());
-  }
-  return NULL;
-}
-
-
-CpuProfile* CpuProfilesCollection::GetProfile(int security_token_id,
-                                              unsigned uid) {
-  int index = GetProfileIndex(uid);
-  if (index < 0) return NULL;
-  List<CpuProfile*>* unabridged_list =
-      profiles_by_token_[TokenToIndex(TokenEnumerator::kNoSecurityToken)];
-  if (security_token_id == TokenEnumerator::kNoSecurityToken) {
-    return unabridged_list->at(index);
-  }
-  List<CpuProfile*>* list = GetProfilesList(security_token_id);
-  if (list->at(index) == NULL) {
-    (*list)[index] =
-        unabridged_list->at(index)->FilteredClone(security_token_id);
-  }
-  return list->at(index);
-}
-
-
-int CpuProfilesCollection::GetProfileIndex(unsigned uid) {
-  HashMap::Entry* entry = profiles_uids_.Lookup(reinterpret_cast<void*>(uid),
-                                                static_cast<uint32_t>(uid),
-                                                false);
-  return entry != NULL ?
-      static_cast<int>(reinterpret_cast<intptr_t>(entry->value)) : -1;
+  if (profile == NULL) return NULL;
+  profile->CalculateTotalTicksAndSamplingRate();
+  finished_profiles_.Add(profile);
+  return profile;
 }
 
 
@@ -719,129 +517,13 @@ bool CpuProfilesCollection::IsLastProfile(const char* title) {
 void CpuProfilesCollection::RemoveProfile(CpuProfile* profile) {
   // Called from VM thread for a completed profile.
   unsigned uid = profile->uid();
-  int index = GetProfileIndex(uid);
-  if (index < 0) {
-    detached_profiles_.RemoveElement(profile);
-    return;
-  }
-  profiles_uids_.Remove(reinterpret_cast<void*>(uid),
-                        static_cast<uint32_t>(uid));
-  // Decrement all indexes above the deleted one.
-  for (HashMap::Entry* p = profiles_uids_.Start();
-       p != NULL;
-       p = profiles_uids_.Next(p)) {
-    intptr_t p_index = reinterpret_cast<intptr_t>(p->value);
-    if (p_index > index) {
-      p->value = reinterpret_cast<void*>(p_index - 1);
+  for (int i = 0; i < finished_profiles_.length(); i++) {
+    if (uid == finished_profiles_[i]->uid()) {
+      finished_profiles_.Remove(i);
+      return;
     }
   }
-  for (int i = 0; i < profiles_by_token_.length(); ++i) {
-    List<CpuProfile*>* list = profiles_by_token_[i];
-    if (list != NULL && index < list->length()) {
-      // Move all filtered clones into detached_profiles_,
-      // so we can know that they are still in use.
-      CpuProfile* cloned_profile = list->Remove(index);
-      if (cloned_profile != NULL && cloned_profile != profile) {
-        detached_profiles_.Add(cloned_profile);
-      }
-    }
-  }
-}
-
-
-int CpuProfilesCollection::TokenToIndex(int security_token_id) {
-  ASSERT(TokenEnumerator::kNoSecurityToken == -1);
-  return security_token_id + 1;  // kNoSecurityToken -> 0, 0 -> 1, ...
-}
-
-
-List<CpuProfile*>* CpuProfilesCollection::GetProfilesList(
-    int security_token_id) {
-  const int index = TokenToIndex(security_token_id);
-  const int lists_to_add = index - profiles_by_token_.length() + 1;
-  if (lists_to_add > 0) profiles_by_token_.AddBlock(NULL, lists_to_add);
-  List<CpuProfile*>* unabridged_list =
-      profiles_by_token_[TokenToIndex(TokenEnumerator::kNoSecurityToken)];
-  const int current_count = unabridged_list->length();
-  if (profiles_by_token_[index] == NULL) {
-    profiles_by_token_[index] = new List<CpuProfile*>(current_count);
-  }
-  List<CpuProfile*>* list = profiles_by_token_[index];
-  const int profiles_to_add = current_count - list->length();
-  if (profiles_to_add > 0) list->AddBlock(NULL, profiles_to_add);
-  return list;
-}
-
-
-List<CpuProfile*>* CpuProfilesCollection::Profiles(int security_token_id) {
-  List<CpuProfile*>* unabridged_list =
-      profiles_by_token_[TokenToIndex(TokenEnumerator::kNoSecurityToken)];
-  if (security_token_id == TokenEnumerator::kNoSecurityToken) {
-    return unabridged_list;
-  }
-  List<CpuProfile*>* list = GetProfilesList(security_token_id);
-  const int current_count = unabridged_list->length();
-  for (int i = 0; i < current_count; ++i) {
-    if (list->at(i) == NULL) {
-      (*list)[i] = unabridged_list->at(i)->FilteredClone(security_token_id);
-    }
-  }
-  return list;
-}
-
-
-CodeEntry* CpuProfilesCollection::NewCodeEntry(Logger::LogEventsAndTags tag,
-                                               Name* name,
-                                               String* resource_name,
-                                               int line_number) {
-  CodeEntry* entry = new CodeEntry(tag,
-                                   CodeEntry::kEmptyNamePrefix,
-                                   GetFunctionName(name),
-                                   GetName(resource_name),
-                                   line_number,
-                                   TokenEnumerator::kNoSecurityToken);
-  code_entries_.Add(entry);
-  return entry;
-}
-
-
-CodeEntry* CpuProfilesCollection::NewCodeEntry(Logger::LogEventsAndTags tag,
-                                               const char* name) {
-  CodeEntry* entry = new CodeEntry(tag,
-                                   CodeEntry::kEmptyNamePrefix,
-                                   GetFunctionName(name),
-                                   "",
-                                   v8::CpuProfileNode::kNoLineNumberInfo,
-                                   TokenEnumerator::kNoSecurityToken);
-  code_entries_.Add(entry);
-  return entry;
-}
-
-
-CodeEntry* CpuProfilesCollection::NewCodeEntry(Logger::LogEventsAndTags tag,
-                                               const char* name_prefix,
-                                               Name* name) {
-  CodeEntry* entry = new CodeEntry(tag,
-                                   name_prefix,
-                                   GetName(name),
-                                   "",
-                                   v8::CpuProfileNode::kNoLineNumberInfo,
-                                   TokenEnumerator::kInheritsSecurityToken);
-  code_entries_.Add(entry);
-  return entry;
-}
-
-
-CodeEntry* CpuProfilesCollection::NewCodeEntry(Logger::LogEventsAndTags tag,
-                                               int args_count) {
-  CodeEntry* entry = new CodeEntry(tag,
-                                   "args_count: ",
-                                   GetName(args_count),
-                                   "",
-                                   v8::CpuProfileNode::kNoLineNumberInfo,
-                                   TokenEnumerator::kInheritsSecurityToken);
-  code_entries_.Add(entry);
-  return entry;
+  UNREACHABLE();
 }
 
 
@@ -850,34 +532,27 @@ void CpuProfilesCollection::AddPathToCurrentProfiles(
   // As starting / stopping profiles is rare relatively to this
   // method, we don't bother minimizing the duration of lock holding,
   // e.g. copying contents of the list to a local vector.
-  current_profiles_semaphore_->Wait();
+  current_profiles_semaphore_.Wait();
   for (int i = 0; i < current_profiles_.length(); ++i) {
     current_profiles_[i]->AddPath(path);
   }
-  current_profiles_semaphore_->Signal();
+  current_profiles_semaphore_.Signal();
 }
 
 
-void SampleRateCalculator::Tick() {
-  if (--wall_time_query_countdown_ == 0)
-    UpdateMeasurements(OS::TimeCurrentMillis());
-}
-
-
-void SampleRateCalculator::UpdateMeasurements(double current_time) {
-  if (measurements_count_++ != 0) {
-    const double measured_ticks_per_ms =
-        (kWallTimeQueryIntervalMs * ticks_per_ms_) /
-        (current_time - last_wall_time_);
-    // Update the average value.
-    ticks_per_ms_ +=
-        (measured_ticks_per_ms - ticks_per_ms_) / measurements_count_;
-    // Update the externally accessible result.
-    result_ = static_cast<AtomicWord>(ticks_per_ms_ * kResultScale);
-  }
-  last_wall_time_ = current_time;
-  wall_time_query_countdown_ =
-      static_cast<unsigned>(kWallTimeQueryIntervalMs * ticks_per_ms_);
+CodeEntry* CpuProfilesCollection::NewCodeEntry(
+      Logger::LogEventsAndTags tag,
+      const char* name,
+      const char* name_prefix,
+      const char* resource_name,
+      int line_number) {
+  CodeEntry* code_entry = new CodeEntry(tag,
+                                        name,
+                                        name_prefix,
+                                        resource_name,
+                                        line_number);
+  code_entries_.Add(code_entry);
+  return code_entry;
 }
 
 
@@ -885,17 +560,26 @@ const char* const ProfileGenerator::kAnonymousFunctionName =
     "(anonymous function)";
 const char* const ProfileGenerator::kProgramEntryName =
     "(program)";
+const char* const ProfileGenerator::kIdleEntryName =
+    "(idle)";
 const char* const ProfileGenerator::kGarbageCollectorEntryName =
     "(garbage collector)";
+const char* const ProfileGenerator::kUnresolvedFunctionName =
+    "(unresolved function)";
 
 
 ProfileGenerator::ProfileGenerator(CpuProfilesCollection* profiles)
     : profiles_(profiles),
       program_entry_(
           profiles->NewCodeEntry(Logger::FUNCTION_TAG, kProgramEntryName)),
+      idle_entry_(
+          profiles->NewCodeEntry(Logger::FUNCTION_TAG, kIdleEntryName)),
       gc_entry_(
           profiles->NewCodeEntry(Logger::BUILTIN_TAG,
-                                 kGarbageCollectorEntryName)) {
+                                 kGarbageCollectorEntryName)),
+      unresolved_entry_(
+          profiles->NewCodeEntry(Logger::FUNCTION_TAG,
+                                 kUnresolvedFunctionName)) {
 }
 
 
@@ -907,33 +591,46 @@ void ProfileGenerator::RecordTickSample(const TickSample& sample) {
   CodeEntry** entry = entries.start();
   memset(entry, 0, entries.length() * sizeof(*entry));
   if (sample.pc != NULL) {
-    Address start;
-    CodeEntry* pc_entry = code_map_.FindEntry(sample.pc, &start);
-    // If pc is in the function code before it set up stack frame or after the
-    // frame was destroyed SafeStackTraceFrameIterator incorrectly thinks that
-    // ebp contains return address of the current function and skips caller's
-    // frame. Check for this case and just skip such samples.
-    if (pc_entry) {
-      List<OffsetRange>* ranges = pc_entry->no_frame_ranges();
-      if (ranges) {
-        Code* code = Code::cast(HeapObject::FromAddress(start));
-        int pc_offset = static_cast<int>(sample.pc - code->instruction_start());
-        for (int i = 0; i < ranges->length(); i++) {
-          OffsetRange& range = ranges->at(i);
-          if (range.from <= pc_offset && pc_offset < range.to) {
-            return;
-          }
-        }
-      }
-    }
-    *entry++ = pc_entry;
-
-    if (sample.has_external_callback) {
+    if (sample.has_external_callback && sample.state == EXTERNAL &&
+        sample.top_frame_type == StackFrame::EXIT) {
       // Don't use PC when in external callback code, as it can point
       // inside callback's code, and we will erroneously report
       // that a callback calls itself.
-      *(entries.start()) = NULL;
       *entry++ = code_map_.FindEntry(sample.external_callback);
+    } else {
+      Address start;
+      CodeEntry* pc_entry = code_map_.FindEntry(sample.pc, &start);
+      // If pc is in the function code before it set up stack frame or after the
+      // frame was destroyed SafeStackFrameIterator incorrectly thinks that
+      // ebp contains return address of the current function and skips caller's
+      // frame. Check for this case and just skip such samples.
+      if (pc_entry) {
+        List<OffsetRange>* ranges = pc_entry->no_frame_ranges();
+        if (ranges) {
+          Code* code = Code::cast(HeapObject::FromAddress(start));
+          int pc_offset = static_cast<int>(
+              sample.pc - code->instruction_start());
+          for (int i = 0; i < ranges->length(); i++) {
+            OffsetRange& range = ranges->at(i);
+            if (range.from <= pc_offset && pc_offset < range.to) {
+              return;
+            }
+          }
+        }
+        *entry++ = pc_entry;
+
+        if (pc_entry->builtin_id() == Builtins::kFunctionCall ||
+            pc_entry->builtin_id() == Builtins::kFunctionApply) {
+          // When current function is FunctionCall or FunctionApply builtin the
+          // top frame is either frame of the calling JS function or internal
+          // frame. In the latter case we know the caller for sure but in the
+          // former case we don't so we simply replace the frame with
+          // 'unresolved' entry.
+          if (sample.top_frame_type == StackFrame::JAVA_SCRIPT) {
+            *entry++ = unresolved_entry_;
+          }
+        }
+      }
     }
 
     for (const Address* stack_pos = sample.stack,

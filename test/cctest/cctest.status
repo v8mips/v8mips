@@ -34,6 +34,10 @@ test-api/Bug*: FAIL
 # BUG(382): Weird test. Can't guarantee that it never times out.
 test-api/ApplyInterruption: PASS || TIMEOUT
 
+# TODO(mstarzinger): Fail gracefully on multiple V8::Dispose calls.
+test-api/InitializeAndDisposeOnce: SKIP
+test-api/InitializeAndDisposeMultiple: SKIP
+
 # These tests always fail.  They are here to test test.py.  If
 # they don't fail then test.py has failed.
 test-serialize/TestThatAlwaysFails: FAIL
@@ -47,12 +51,13 @@ test-log/EquivalenceOfLoggingAndTraversal: PASS || FAIL
 
 # We do not yet shrink weak maps after they have been emptied by the GC
 test-weakmaps/Shrinking: FAIL
-
-# Deferred stack trace formatting is temporarily disabled.
-test-heap/ReleaseStackTraceData: PASS || FAIL
+test-weaksets/WeakSet_Shrinking: FAIL
 
 # Boot up memory use is bloated in debug mode.
 test-mark-compact/BootUpMemoryUse: PASS, PASS || FAIL if $mode == debug
+
+# Some CPU profiler tests are flaky.
+test-cpu-profiler/*: PASS || FLAKY
 
 ##############################################################################
 [ $arch == arm ]
@@ -75,11 +80,14 @@ test-serialize/DeserializeFromSecondSerialization: SKIP
 ##############################################################################
 [ $arch == mipsel ]
 
-# BUG(2628): The test sometimes fails on MIPS simulator.
-test-cpu-profiler/SampleWhenFrameIsNotSetup: PASS || FAIL
-
 # BUG(2657): Test sometimes times out on MIPS simulator.
 test-thread-termination/TerminateMultipleV8ThreadsDefaultIsolate: PASS || TIMEOUT
+
+# BUG(1075): Unresolved crashes on MIPS also.
+test-serialize/Deserialize: SKIP
+test-serialize/DeserializeFromSecondSerializationAndRunScript2: SKIP
+test-serialize/DeserializeAndRunScript2: SKIP
+test-serialize/DeserializeFromSecondSerialization: SKIP
 
 ##############################################################################
 [ $arch == android_arm || $arch == android_ia32 ]
@@ -98,6 +106,12 @@ test-threads/ThreadJoinSelf: SKIP
 ##############################################################################
 [ $arch == nacl_ia32 || $arch == nacl_x64 ]
 
+# NaCl builds have problems with threaded tests since Pepper_28.
+# V8 Issue 2786
+test-api/Threading1: SKIP
+test-lockers/MultithreadedParallelIsolates: SKIP
+test-lockers/ExtensionsRegistration: SKIP
+
 # These tests fail as there is no /tmp directory in Native Client.
 test-log/LogAccessorCallbacks: SKIP
 test-log/LogCallbacks: SKIP
@@ -106,7 +120,10 @@ test-log/ProfLazyMode: SKIP
 # Native Client doesn't support sockets.
 test-debug/DebuggerAgent: SKIP
 test-debug/DebuggerAgentProtocolOverflowHeader: SKIP
-test-sockets/Socket: SKIP
+test-socket/Socket: SKIP
 
 # Profiling doesn't work on Native Client.
 test-cpu-profiler/*: SKIP
+
+# Fails since 16322 (new test).
+test-code-stubs-arm/ConvertDToI: SKIP

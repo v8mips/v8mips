@@ -73,7 +73,7 @@ var kMessages = {
   invalid_in_operator_use:       ["Cannot use 'in' operator to search for '", "%0", "' in ", "%1"],
   instanceof_function_expected:  ["Expecting a function in instanceof check, but got ", "%0"],
   instanceof_nonobject_proto:    ["Function has non-object prototype '", "%0", "' in instanceof check"],
-  null_to_object:                ["Cannot convert null to object"],
+  undefined_or_null_to_object:   ["Cannot convert undefined or null to object"],
   reduce_no_initial:             ["Reduce of empty array with no initial value"],
   getter_must_be_callable:       ["Getter must be a function: ", "%0"],
   setter_must_be_callable:       ["Setter must be a function: ", "%0"],
@@ -94,6 +94,7 @@ var kMessages = {
   proxy_non_object_prop_names:   ["Trap '", "%1", "' returned non-object ", "%0"],
   proxy_repeated_prop_name:      ["Trap '", "%1", "' returned repeated property name '", "%2", "'"],
   invalid_weakmap_key:           ["Invalid value used as weak map key"],
+  invalid_weakset_value:         ["Invalid value used in weak set"],
   not_date_object:               ["this is not a Date object."],
   observe_non_object:            ["Object.", "%0", " cannot ", "%0", " non-object"],
   observe_non_function:          ["Object.", "%0", " cannot deliver to non-function"],
@@ -104,20 +105,28 @@ var kMessages = {
   observe_perform_non_function:  ["Cannot perform non-function"],
   observe_notify_non_notifier:   ["notify called on non-notifier object"],
   proto_poison_pill:             ["Generic use of __proto__ accessor not allowed"],
-  parameterless_typed_array_constr:
-                                 ["%0"," constructor should have at least one argument."],
   not_typed_array:               ["this is not a typed array."],
   invalid_argument:              ["invalid_argument"],
+  data_view_not_array_buffer:    ["First argument to DataView constructor must be an ArrayBuffer"],
+  constructor_not_function:      ["Constructor ", "%0", " requires 'new'"],
   // RangeError
   invalid_array_length:          ["Invalid array length"],
   invalid_array_buffer_length:   ["Invalid array buffer length"],
-  invalid_typed_array_offset:    ["Start offset is too large"],
-  invalid_typed_array_length:    ["Length is too large"],
+  invalid_typed_array_offset:    ["Start offset is too large:"],
+  invalid_typed_array_length:    ["Invalid typed array length"],
   invalid_typed_array_alignment: ["%0", "of", "%1", "should be a multiple of", "%3"],
   typed_array_set_source_too_large:
                                  ["Source is too large"],
+  typed_array_set_negative_offset:
+                                 ["Start offset is negative"],
+  invalid_data_view_offset:      ["Start offset is outside the bounds of the buffer"],
+  invalid_data_view_length:      ["Invalid data view length"],
+  invalid_data_view_accessor_offset:
+                                 ["Offset is outside the bounds of the DataView"],
+
   stack_overflow:                ["Maximum call stack size exceeded"],
   invalid_time_value:            ["Invalid time value"],
+  invalid_count_value:           ["Invalid count value"],
   // SyntaxError
   paren_in_arg_string:           ["Function arg string contains parenthesis"],
   not_isvar:                     ["builtin %IS_VAR: not a variable"],
@@ -219,16 +228,18 @@ function NoSideEffectToString(obj) {
       }
     }
   }
-  if (IsNativeErrorObject(obj)) return %_CallFunction(obj, ErrorToString);
+  if (CanBeSafelyTreatedAsAnErrorObject(obj)) {
+    return %_CallFunction(obj, ErrorToString);
+  }
   return %_CallFunction(obj, ObjectToString);
 }
 
-
-// To check if something is a native error we need to check the
-// concrete native error types. It is not sufficient to use instanceof
-// since it possible to create an object that has Error.prototype on
-// its prototype chain. This is the case for DOMException for example.
-function IsNativeErrorObject(obj) {
+// To determine whether we can safely stringify an object using ErrorToString
+// without the risk of side-effects, we need to check whether the object is
+// either an instance of a native error type (via '%_ClassOf'), or has $Error
+// in its prototype chain and hasn't overwritten 'toString' with something
+// strange and unusual.
+function CanBeSafelyTreatedAsAnErrorObject(obj) {
   switch (%_ClassOf(obj)) {
     case 'Error':
     case 'EvalError':
@@ -239,7 +250,9 @@ function IsNativeErrorObject(obj) {
     case 'URIError':
       return true;
   }
-  return false;
+
+  var objToString = %GetDataProperty(obj, "toString");
+  return obj instanceof $Error && objToString === ErrorToString;
 }
 
 
@@ -248,7 +261,7 @@ function IsNativeErrorObject(obj) {
 // the error to string method. This is to avoid leaking error
 // objects between script tags in a browser setting.
 function ToStringCheckErrorObject(obj) {
-  if (IsNativeErrorObject(obj)) {
+  if (CanBeSafelyTreatedAsAnErrorObject(obj)) {
     return %_CallFunction(obj, ErrorToString);
   } else {
     return ToString(obj);
@@ -1070,7 +1083,26 @@ function GetStackFrames(raw_stack) {
 }
 
 
-function FormatStackTrace(error_string, frames) {
+// Flag to prevent recursive call of Error.prepareStackTrace.
+var formatting_custom_stack_trace = false;
+
+
+function FormatStackTrace(obj, error_string, frames) {
+  if (IS_FUNCTION($Error.prepareStackTrace) && !formatting_custom_stack_trace) {
+    var array = [];
+    %MoveArrayContents(frames, array);
+    formatting_custom_stack_trace = true;
+    var stack_trace = void 0;
+    try {
+      stack_trace = $Error.prepareStackTrace(obj, array);
+    } catch (e) {
+      throw e;  // The custom formatting function threw.  Rethrow.
+    } finally {
+      formatting_custom_stack_trace = false;
+    }
+    return stack_trace;
+  }
+
   var lines = new InternalArray();
   lines.push(error_string);
   for (var i = 0; i < frames.length; i++) {
@@ -1107,10 +1139,6 @@ function GetTypeName(receiver, requireConstructor) {
 }
 
 
-// Flag to prevent recursive call of Error.prepareStackTrace.
-var formatting_custom_stack_trace = false;
-
-
 function captureStackTrace(obj, cons_opt) {
   var stackTraceLimit = $Error.stackTraceLimit;
   if (!stackTraceLimit || !IS_NUMBER(stackTraceLimit)) return;
@@ -1121,40 +1149,30 @@ function captureStackTrace(obj, cons_opt) {
                                  cons_opt ? cons_opt : captureStackTrace,
                                  stackTraceLimit);
 
-  // Don't be lazy if the error stack formatting is custom (observable).
-  if (IS_FUNCTION($Error.prepareStackTrace) && !formatting_custom_stack_trace) {
-    var array = [];
-    %MoveArrayContents(GetStackFrames(stack), array);
-    formatting_custom_stack_trace = true;
-    try {
-      obj.stack = $Error.prepareStackTrace(obj, array);
-    } catch (e) {
-      throw e;  // The custom formatting function threw.  Rethrow.
-    } finally {
-      formatting_custom_stack_trace = false;
-    }
-    return;
-  }
-
   var error_string = FormatErrorString(obj);
-  // Note that 'obj' and 'this' maybe different when called on objects that
-  // have the error object on its prototype chain.  The getter replaces itself
-  // with a data property as soon as the stack trace has been formatted.
-  // The getter must not change the object layout as it may be called after GC.
+  // The holder of this getter ('obj') may not be the receiver ('this').
+  // When this getter is called the first time, we use the context values to
+  // format a stack trace string and turn this accessor pair into a data
+  // property (on the holder).
   var getter = function() {
-    if (IS_STRING(stack)) return stack;
     // Stack is still a raw array awaiting to be formatted.
-    stack = FormatStackTrace(error_string, GetStackFrames(stack));
-    // Release context value.
-    error_string = void 0;
-    return stack;
+    var result = FormatStackTrace(obj, error_string, GetStackFrames(stack));
+    // Turn this accessor into a data property.
+    %DefineOrRedefineDataProperty(obj, 'stack', result, NONE);
+    // Release context values.
+    stack = error_string = void 0;
+    return result;
   };
-  %MarkOneShotGetter(getter);
 
-  // The 'stack' property of the receiver is set as data property.  If
-  // the receiver is the same as holder, this accessor pair is replaced.
+  // Set the 'stack' property on the receiver.  If the receiver is the same as
+  // holder of this setter, the accessor pair is turned into a data property.
   var setter = function(v) {
+    // Set data property on the receiver (not necessarily holder).
     %DefineOrRedefineDataProperty(this, 'stack', v, NONE);
+    if (this === obj) {
+      // Release context values if holder is the same as the receiver.
+      stack = error_string = void 0;
+    }
   };
 
   %DefineOrRedefineAccessorProperty(obj, 'stack', getter, setter, DONT_ENUM);
@@ -1292,38 +1310,36 @@ InstallFunctions($Error.prototype, DONT_ENUM, ['toString', ErrorToString]);
 function SetUpStackOverflowBoilerplate() {
   var boilerplate = MakeRangeError('stack_overflow', []);
 
-  // The raw stack trace is stored as hidden property of the copy of this
-  // boilerplate error object.  Note that the receiver 'this' may not be that
-  // error object copy, but can be found on the prototype chain of 'this'.
-  // When the stack trace is formatted, this accessor property is replaced by
-  // a data property.
   var error_string = boilerplate.name + ": " + boilerplate.message;
 
-  // The getter must not change the object layout as it may be called after GC.
-  function getter() {
+  // The raw stack trace is stored as a hidden property on the holder of this
+  // getter, which may not be the same as the receiver.  Find the holder to
+  // retrieve the raw stack trace and then turn this accessor pair into a
+  // data property.
+  var getter = function() {
     var holder = this;
     while (!IS_ERROR(holder)) {
       holder = %GetPrototype(holder);
-      if (holder == null) return MakeSyntaxError('illegal_access', []);
+      if (IS_NULL(holder)) return MakeSyntaxError('illegal_access', []);
     }
-    var stack = %GetOverflowedStackTrace(holder);
-    if (IS_STRING(stack)) return stack;
-    if (IS_ARRAY(stack)) {
-      var result = FormatStackTrace(error_string, GetStackFrames(stack));
-      %SetOverflowedStackTrace(holder, result);
-      return result;
-    }
-    return void 0;
-  }
-  %MarkOneShotGetter(getter);
+    var stack = %GetAndClearOverflowedStackTrace(holder);
+    // We may not have captured any stack trace.
+    if (IS_UNDEFINED(stack)) return stack;
 
-  // The 'stack' property of the receiver is set as data property.  If
-  // the receiver is the same as holder, this accessor pair is replaced.
-  function setter(v) {
+    var result = FormatStackTrace(holder, error_string, GetStackFrames(stack));
+    // Replace this accessor with a data property.
+    %DefineOrRedefineDataProperty(holder, 'stack', result, NONE);
+    return result;
+  };
+
+  // Set the 'stack' property on the receiver.  If the receiver is the same as
+  // holder of this setter, the accessor pair is turned into a data property.
+  var setter = function(v) {
     %DefineOrRedefineDataProperty(this, 'stack', v, NONE);
-    // Release the stack trace that is stored as hidden property, if exists.
-    %SetOverflowedStackTrace(this, void 0);
-  }
+    // Tentatively clear the hidden property. If the receiver is the same as
+    // holder, we release the raw stack trace this way.
+    %GetAndClearOverflowedStackTrace(this);
+  };
 
   %DefineOrRedefineAccessorProperty(
       boilerplate, 'stack', getter, setter, DONT_ENUM);

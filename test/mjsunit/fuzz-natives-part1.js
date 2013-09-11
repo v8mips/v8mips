@@ -150,7 +150,7 @@ var knownProblems = {
   "PushModuleContext": true,
   "LazyCompile": true,
   "LazyRecompile": true,
-  "ParallelRecompile": true,
+  "ConcurrentRecompile": true,
   "InstallRecompiledCode": true,
   "NotifyDeoptimized": true,
   "NotifyStubFailure": true,
@@ -163,6 +163,8 @@ var knownProblems = {
   "ResolvePossiblyDirectEval": true,
   "Log": true,
   "DeclareGlobals": true,
+  "ArrayConstructor": true,
+  "InternalArrayConstructor": true,
 
   "PromoteScheduledException": true,
   "DeleteHandleScopeExtensions": true,
@@ -205,11 +207,18 @@ var knownProblems = {
   // Only applicable to generators.
   "_GeneratorNext": true,
   "_GeneratorThrow": true,
+
+  // Only applicable to DataViews.
+  "DataViewGetBuffer": true,
+  "DataViewGetByteLength": true,
+  "DataViewGetByteOffset": true
 };
 
 var currentlyUncallable = {
   // We need to find a way to test this without breaking the system.
-  "SystemBreak": true
+  "SystemBreak": true,
+  // Inserts an int3/stop instruction when run with --always-opt.
+  "_DebugBreakInOptimizedCode": true
 };
 
 function testNatives() {

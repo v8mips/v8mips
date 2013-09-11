@@ -228,10 +228,10 @@ Address CodeRange::AllocateRawMemory(const size_t requested_size,
   }
   ASSERT(*allocated <= current.size);
   ASSERT(IsAddressAligned(current.start, MemoryChunk::kAlignment));
-  if (!MemoryAllocator::CommitExecutableMemory(code_range_,
-                                               current.start,
-                                               commit_size,
-                                               *allocated)) {
+  if (!isolate_->memory_allocator()->CommitExecutableMemory(code_range_,
+                                                            current.start,
+                                                            commit_size,
+                                                            *allocated)) {
     *allocated = 0;
     return NULL;
   }
@@ -245,7 +245,7 @@ Address CodeRange::AllocateRawMemory(const size_t requested_size,
 
 
 bool CodeRange::CommitRawMemory(Address start, size_t length) {
-  return code_range_->Commit(start, length, true);
+  return isolate_->memory_allocator()->CommitMemory(start, length, EXECUTABLE);
 }
 
 
@@ -278,7 +278,9 @@ MemoryAllocator::MemoryAllocator(Isolate* isolate)
       capacity_(0),
       capacity_executable_(0),
       size_(0),
-      size_executable_(0) {
+      size_executable_(0),
+      lowest_ever_allocated_(reinterpret_cast<void*>(-1)),
+      highest_ever_allocated_(reinterpret_cast<void*>(0)) {
 }
 
 
@@ -301,6 +303,17 @@ void MemoryAllocator::TearDown() {
   // ASSERT(size_executable_ == 0);
   capacity_ = 0;
   capacity_executable_ = 0;
+}
+
+
+bool MemoryAllocator::CommitMemory(Address base,
+                                   size_t size,
+                                   Executability executable) {
+  if (!VirtualMemory::CommitRegion(base, size, executable == EXECUTABLE)) {
+    return false;
+  }
+  UpdateAllocatedSpaceLimits(base, base + size);
+  return true;
 }
 
 
@@ -383,7 +396,9 @@ Address MemoryAllocator::AllocateAlignedMemory(size_t reserve_size,
       base = NULL;
     }
   } else {
-    if (!reservation.Commit(base, commit_size, false)) {
+    if (reservation.Commit(base, commit_size, false)) {
+      UpdateAllocatedSpaceLimits(base, base + commit_size);
+    } else {
       base = NULL;
     }
   }
@@ -509,7 +524,10 @@ bool MemoryChunk::CommitArea(size_t requested) {
     Address start = address() + committed_size + guard_size;
     size_t length = commit_size - committed_size;
     if (reservation_.IsReserved()) {
-      if (!reservation_.Commit(start, length, IsFlagSet(IS_EXECUTABLE))) {
+      Executability executable = IsFlagSet(IS_EXECUTABLE)
+          ? EXECUTABLE : NOT_EXECUTABLE;
+      if (!heap()->isolate()->memory_allocator()->CommitMemory(
+              start, length, executable)) {
         return false;
       }
     } else {
@@ -763,7 +781,7 @@ void MemoryAllocator::Free(MemoryChunk* chunk) {
 bool MemoryAllocator::CommitBlock(Address start,
                                   size_t size,
                                   Executability executable) {
-  if (!VirtualMemory::CommitRegion(start, size, executable)) return false;
+  if (!CommitMemory(start, size, executable)) return false;
 
   if (Heap::ShouldZapGarbage()) {
     ZapBlock(start, size);
@@ -899,6 +917,9 @@ bool MemoryAllocator::CommitExecutableMemory(VirtualMemory* vm,
     return false;
   }
 
+  UpdateAllocatedSpaceLimits(start,
+                             start + CodePageAreaStartOffset() +
+                             commit_size - CodePageGuardStartOffset());
   return true;
 }
 
@@ -913,6 +934,7 @@ void MemoryChunk::IncrementLiveBytesFromMutator(Address address, int by) {
   }
   chunk->IncrementLiveBytes(by);
 }
+
 
 // -----------------------------------------------------------------------------
 // PagedSpace implementation
@@ -993,6 +1015,7 @@ MaybeObject* PagedSpace::FindObject(Address addr) {
   UNREACHABLE();
   return Failure::Exception();
 }
+
 
 bool PagedSpace::CanExpand() {
   ASSERT(max_capacity_ % AreaSize() == 0);
@@ -1775,8 +1798,7 @@ void SemiSpaceIterator::Initialize(Address start,
 
 #ifdef DEBUG
 // heap_histograms is shared, always clear it before using it.
-static void ClearHistograms() {
-  Isolate* isolate = Isolate::Current();
+static void ClearHistograms(Isolate* isolate) {
   // We reset the name each time, though it hasn't changed.
 #define DEF_TYPE_NAME(name) isolate->heap_histograms()[name].set_name(#name);
   INSTANCE_TYPE_LIST(DEF_TYPE_NAME)
@@ -1790,49 +1812,20 @@ static void ClearHistograms() {
 }
 
 
-static void ClearCodeKindStatistics() {
-  Isolate* isolate = Isolate::Current();
+static void ClearCodeKindStatistics(int* code_kind_statistics) {
   for (int i = 0; i < Code::NUMBER_OF_KINDS; i++) {
-    isolate->code_kind_statistics()[i] = 0;
+    code_kind_statistics[i] = 0;
   }
 }
 
 
-static void ReportCodeKindStatistics() {
-  Isolate* isolate = Isolate::Current();
-  const char* table[Code::NUMBER_OF_KINDS] = { NULL };
-
-#define CASE(name)                            \
-  case Code::name: table[Code::name] = #name; \
-  break
-
-  for (int i = 0; i < Code::NUMBER_OF_KINDS; i++) {
-    switch (static_cast<Code::Kind>(i)) {
-      CASE(FUNCTION);
-      CASE(OPTIMIZED_FUNCTION);
-      CASE(STUB);
-      CASE(BUILTIN);
-      CASE(LOAD_IC);
-      CASE(KEYED_LOAD_IC);
-      CASE(STORE_IC);
-      CASE(KEYED_STORE_IC);
-      CASE(CALL_IC);
-      CASE(KEYED_CALL_IC);
-      CASE(UNARY_OP_IC);
-      CASE(BINARY_OP_IC);
-      CASE(COMPARE_IC);
-      CASE(COMPARE_NIL_IC);
-      CASE(TO_BOOLEAN_IC);
-    }
-  }
-
-#undef CASE
-
+static void ReportCodeKindStatistics(int* code_kind_statistics) {
   PrintF("\n   Code kind histograms: \n");
   for (int i = 0; i < Code::NUMBER_OF_KINDS; i++) {
-    if (isolate->code_kind_statistics()[i] > 0) {
-      PrintF("     %-20s: %10d bytes\n", table[i],
-          isolate->code_kind_statistics()[i]);
+    if (code_kind_statistics[i] > 0) {
+      PrintF("     %-20s: %10d bytes\n",
+             Code::Kind2String(static_cast<Code::Kind>(i)),
+             code_kind_statistics[i]);
     }
   }
   PrintF("\n");
@@ -1840,7 +1833,7 @@ static void ReportCodeKindStatistics() {
 
 
 static int CollectHistogramInfo(HeapObject* obj) {
-  Isolate* isolate = Isolate::Current();
+  Isolate* isolate = obj->GetIsolate();
   InstanceType type = obj->map()->instance_type();
   ASSERT(0 <= type && type <= LAST_TYPE);
   ASSERT(isolate->heap_histograms()[type].name() != NULL);
@@ -1856,8 +1849,7 @@ static int CollectHistogramInfo(HeapObject* obj) {
 }
 
 
-static void ReportHistogram(bool print_spill) {
-  Isolate* isolate = Isolate::Current();
+static void ReportHistogram(Isolate* isolate, bool print_spill) {
   PrintF("\n  Object Histogram:\n");
   for (int i = 0; i <= LAST_TYPE; i++) {
     if (isolate->heap_histograms()[i].number() > 0) {
@@ -1896,6 +1888,7 @@ void NewSpace::ClearHistograms() {
     promoted_histogram_[i].clear();
   }
 }
+
 
 // Because the copying collector does not touch garbage objects, we iterate
 // the new space before a collection to get a histogram of allocated objects.
@@ -1990,6 +1983,7 @@ size_t NewSpace::CommittedPhysicalMemory() {
   return size;
 }
 
+
 // -----------------------------------------------------------------------------
 // Free lists for old object spaces implementation
 
@@ -2068,8 +2062,8 @@ intptr_t FreeListCategory::Concatenate(FreeListCategory* category) {
     // This is safe (not going to deadlock) since Concatenate operations
     // are never performed on the same free lists at the same time in
     // reverse order.
-    ScopedLock lock_target(mutex_);
-    ScopedLock lock_source(category->mutex());
+    LockGuard<Mutex> target_lock_guard(mutex());
+    LockGuard<Mutex> source_lock_guard(category->mutex());
     free_bytes = category->available();
     if (end_ == NULL) {
       end_ = category->end();
@@ -2710,11 +2704,10 @@ HeapObject* PagedSpace::SlowAllocateRaw(int size_in_bytes) {
 
 
 #ifdef DEBUG
-void PagedSpace::ReportCodeStatistics() {
-  Isolate* isolate = Isolate::Current();
+void PagedSpace::ReportCodeStatistics(Isolate* isolate) {
   CommentStatistic* comments_statistics =
       isolate->paged_space_comments_statistics();
-  ReportCodeKindStatistics();
+  ReportCodeKindStatistics(isolate->code_kind_statistics());
   PrintF("Code comment statistics (\"   [ comment-txt   :    size/   "
          "count  (average)\"):\n");
   for (int i = 0; i <= CommentStatistic::kMaxComments; i++) {
@@ -2728,11 +2721,10 @@ void PagedSpace::ReportCodeStatistics() {
 }
 
 
-void PagedSpace::ResetCodeStatistics() {
-  Isolate* isolate = Isolate::Current();
+void PagedSpace::ResetCodeStatistics(Isolate* isolate) {
   CommentStatistic* comments_statistics =
       isolate->paged_space_comments_statistics();
-  ClearCodeKindStatistics();
+  ClearCodeKindStatistics(isolate->code_kind_statistics());
   for (int i = 0; i < CommentStatistic::kMaxComments; i++) {
     comments_statistics[i].Clear();
   }
@@ -2844,11 +2836,11 @@ void PagedSpace::ReportStatistics() {
          Capacity(), Waste(), Available(), pct);
 
   if (was_swept_conservatively_) return;
-  ClearHistograms();
+  ClearHistograms(heap()->isolate());
   HeapObjectIterator obj_it(this);
   for (HeapObject* obj = obj_it.Next(); obj != NULL; obj = obj_it.Next())
     CollectHistogramInfo(obj);
-  ReportHistogram(true);
+  ReportHistogram(heap()->isolate(), true);
 }
 #endif
 
@@ -2877,8 +2869,7 @@ void FixedSpace::PrepareForMarkCompact() {
 // the VerifyObject definition behind VERIFY_HEAP.
 
 void MapSpace::VerifyObject(HeapObject* object) {
-  // The object should be a map or a free-list node.
-  CHECK(object->IsMap() || object->IsFreeSpace());
+  CHECK(object->IsMap());
 }
 
 
@@ -2889,16 +2880,12 @@ void MapSpace::VerifyObject(HeapObject* object) {
 // the VerifyObject definition behind VERIFY_HEAP.
 
 void CellSpace::VerifyObject(HeapObject* object) {
-  // The object should be a global object property cell or a free-list node.
-  CHECK(object->IsCell() ||
-         object->map() == heap()->two_pointer_filler_map());
+  CHECK(object->IsCell());
 }
 
 
 void PropertyCellSpace::VerifyObject(HeapObject* object) {
-  // The object should be a global object property cell or a free-list node.
-  CHECK(object->IsJSGlobalPropertyCell() ||
-         object->map() == heap()->two_pointer_filler_map());
+  CHECK(object->IsPropertyCell());
 }
 
 
@@ -3190,7 +3177,7 @@ void LargeObjectSpace::Print() {
 void LargeObjectSpace::ReportStatistics() {
   PrintF("  size: %" V8_PTR_PREFIX "d\n", size_);
   int num_objects = 0;
-  ClearHistograms();
+  ClearHistograms(heap()->isolate());
   LargeObjectIterator it(this);
   for (HeapObject* obj = it.Next(); obj != NULL; obj = it.Next()) {
     num_objects++;
@@ -3199,7 +3186,7 @@ void LargeObjectSpace::ReportStatistics() {
 
   PrintF("  number of objects %d, "
          "size of objects %" V8_PTR_PREFIX "d\n", num_objects, objects_size_);
-  if (num_objects > 0) ReportHistogram(false);
+  if (num_objects > 0) ReportHistogram(heap()->isolate(), false);
 }
 
 

@@ -41,15 +41,12 @@
   extern ctype FLAG_##nam;
 #define FLAG_READONLY(ftype, ctype, nam, def, cmt) \
   static ctype const FLAG_##nam = def;
-#define DEFINE_implication(whenflag, thenflag)
 
 // We want to supply the actual storage and value for the flag variable in the
 // .cc file.  We only do this for writable flags.
 #elif defined(FLAG_MODE_DEFINE)
 #define FLAG_FULL(ftype, ctype, nam, def, cmt) \
   ctype FLAG_##nam = def;
-#define FLAG_READONLY(ftype, ctype, nam, def, cmt)
-#define DEFINE_implication(whenflag, thenflag)
 
 // We need to define all of our default values so that the Flag structure can
 // access them by pointer.  These are just used internally inside of one .cc,
@@ -57,27 +54,42 @@
 #elif defined(FLAG_MODE_DEFINE_DEFAULTS)
 #define FLAG_FULL(ftype, ctype, nam, def, cmt) \
   static ctype const FLAGDEFAULT_##nam = def;
-#define FLAG_READONLY(ftype, ctype, nam, def, cmt)
-#define DEFINE_implication(whenflag, thenflag)
 
 // We want to write entries into our meta data table, for internal parsing and
 // printing / etc in the flag parser code.  We only do this for writable flags.
 #elif defined(FLAG_MODE_META)
 #define FLAG_FULL(ftype, ctype, nam, def, cmt) \
   { Flag::TYPE_##ftype, #nam, &FLAG_##nam, &FLAGDEFAULT_##nam, cmt, false },
-#define FLAG_READONLY(ftype, ctype, nam, def, cmt)
-#define DEFINE_implication(whenflag, thenflag)
+#define FLAG_ALIAS(ftype, ctype, alias, nam) \
+  { Flag::TYPE_##ftype, #alias, &FLAG_##nam, &FLAGDEFAULT_##nam, \
+    "alias for --"#nam, false },
 
 // We produce the code to set flags when it is implied by another flag.
 #elif defined(FLAG_MODE_DEFINE_IMPLICATIONS)
-#define FLAG_FULL(ftype, ctype, nam, def, cmt)
-#define FLAG_READONLY(ftype, ctype, nam, def, cmt)
 #define DEFINE_implication(whenflag, thenflag) \
   if (FLAG_##whenflag) FLAG_##thenflag = true;
 
 #else
 #error No mode supplied when including flags.defs
 #endif
+
+// Dummy defines for modes where it is not relevant.
+#ifndef FLAG_FULL
+#define FLAG_FULL(ftype, ctype, nam, def, cmt)
+#endif
+
+#ifndef FLAG_READONLY
+#define FLAG_READONLY(ftype, ctype, nam, def, cmt)
+#endif
+
+#ifndef FLAG_ALIAS
+#define FLAG_ALIAS(ftype, ctype, alias, nam)
+#endif
+
+#ifndef DEFINE_implication
+#define DEFINE_implication(whenflag, thenflag)
+#endif
+
 
 #ifdef FLAG_MODE_DECLARE
 // Structure used to hold a collection of arguments to the JavaScript code.
@@ -135,11 +147,18 @@ public:
 # define ENABLE_32DREGS_DEFAULT false
 #endif
 
-#define DEFINE_bool(nam, def, cmt) FLAG(BOOL, bool, nam, def, cmt)
-#define DEFINE_int(nam, def, cmt) FLAG(INT, int, nam, def, cmt)
-#define DEFINE_float(nam, def, cmt) FLAG(FLOAT, double, nam, def, cmt)
+#define DEFINE_bool(nam, def, cmt)   FLAG(BOOL, bool, nam, def, cmt)
+#define DEFINE_int(nam, def, cmt)    FLAG(INT, int, nam, def, cmt)
+#define DEFINE_float(nam, def, cmt)  FLAG(FLOAT, double, nam, def, cmt)
 #define DEFINE_string(nam, def, cmt) FLAG(STRING, const char*, nam, def, cmt)
-#define DEFINE_args(nam, def, cmt) FLAG(ARGS, JSArguments, nam, def, cmt)
+#define DEFINE_args(nam, def, cmt)   FLAG(ARGS, JSArguments, nam, def, cmt)
+
+#define DEFINE_ALIAS_bool(alias, nam)  FLAG_ALIAS(BOOL, bool, alias, nam)
+#define DEFINE_ALIAS_int(alias, nam)   FLAG_ALIAS(INT, int, alias, nam)
+#define DEFINE_ALIAS_float(alias, nam) FLAG_ALIAS(FLOAT, double, alias, nam)
+#define DEFINE_ALIAS_string(alias, nam) \
+  FLAG_ALIAS(STRING, const char*, alias, nam)
+#define DEFINE_ALIAS_args(alias, nam)  FLAG_ALIAS(ARGS, JSArguments, alias, nam)
 
 //
 // Flags in all modes.
@@ -164,13 +183,17 @@ DEFINE_bool(harmony_collections, false,
             "enable harmony collections (sets, maps, and weak maps)")
 DEFINE_bool(harmony_observation, false,
             "enable harmony object observation (implies harmony collections")
-DEFINE_bool(harmony_typed_arrays, false,
+DEFINE_bool(harmony_typed_arrays, true,
             "enable harmony typed arrays")
-DEFINE_bool(harmony_array_buffer, false,
+DEFINE_bool(harmony_array_buffer, true,
             "enable harmony array buffer")
 DEFINE_implication(harmony_typed_arrays, harmony_array_buffer)
 DEFINE_bool(harmony_generators, false, "enable harmony generators")
 DEFINE_bool(harmony_iteration, false, "enable harmony iteration (for-of)")
+DEFINE_bool(harmony_numeric_literals, false,
+            "enable harmony numeric literals (0o77, 0b11)")
+DEFINE_bool(harmony_strings, false, "enable harmony string")
+DEFINE_bool(harmony_arrays, false, "enable harmony arrays")
 DEFINE_bool(harmony, false, "enable all harmony features (except typeof)")
 DEFINE_implication(harmony, harmony_scoping)
 DEFINE_implication(harmony, harmony_modules)
@@ -180,6 +203,9 @@ DEFINE_implication(harmony, harmony_collections)
 DEFINE_implication(harmony, harmony_observation)
 DEFINE_implication(harmony, harmony_generators)
 DEFINE_implication(harmony, harmony_iteration)
+DEFINE_implication(harmony, harmony_numeric_literals)
+DEFINE_implication(harmony, harmony_strings)
+DEFINE_implication(harmony, harmony_arrays)
 DEFINE_implication(harmony_modules, harmony_scoping)
 DEFINE_implication(harmony_observation, harmony_collections)
 // TODO[dslomov] add harmony => harmony_typed_arrays
@@ -187,10 +213,6 @@ DEFINE_implication(harmony_observation, harmony_collections)
 // Flags for experimental implementation features.
 DEFINE_bool(packed_arrays, true, "optimizes arrays that have no holes")
 DEFINE_bool(smi_only_arrays, true, "tracks arrays with only smi values")
-DEFINE_bool(compiled_transitions, false, "use optimizing compiler to "
-            "generate array elements transition stubs")
-DEFINE_bool(compiled_keyed_stores, true, "use optimizing compiler to "
-            "generate keyed store stubs")
 DEFINE_bool(clever_optimizations,
             true,
             "Optimize object size, Array shift, DOM strings and string +")
@@ -205,6 +227,7 @@ DEFINE_bool(track_computed_fields, true, "track computed boilerplate fields")
 DEFINE_implication(track_double_fields, track_fields)
 DEFINE_implication(track_heap_object_fields, track_fields)
 DEFINE_implication(track_computed_fields, track_fields)
+DEFINE_bool(smi_binop, true, "support smi representation in binary operations")
 
 // Flags for data representation optimizations
 DEFINE_bool(unbox_double_arrays, true, "automatically unbox arrays of doubles")
@@ -212,16 +235,19 @@ DEFINE_bool(string_slices, true, "use string slices")
 
 // Flags for Crankshaft.
 DEFINE_bool(crankshaft, true, "use crankshaft")
-DEFINE_string(hydrogen_filter, "", "optimization filter")
+DEFINE_string(hydrogen_filter, "*", "optimization filter")
 DEFINE_bool(use_range, true, "use hydrogen range analysis")
 DEFINE_bool(use_gvn, true, "use hydrogen global value numbering")
 DEFINE_bool(use_canonicalizing, true, "use hydrogen instruction canonicalizing")
 DEFINE_bool(use_inlining, true, "use function inlining")
+DEFINE_bool(use_escape_analysis, false, "use hydrogen escape analysis")
+DEFINE_bool(use_allocation_folding, true, "use allocation folding")
+DEFINE_int(max_inlining_levels, 5, "maximum number of inlining levels")
 DEFINE_int(max_inlined_source_size, 600,
            "maximum source size in bytes considered for a single inlining")
 DEFINE_int(max_inlined_nodes, 196,
            "maximum number of AST nodes considered for a single inlining")
-DEFINE_int(max_inlined_nodes_cumulative, 196,
+DEFINE_int(max_inlined_nodes_cumulative, 400,
            "maximum cumulative number of AST nodes considered for inlining")
 DEFINE_bool(loop_invariant_code_motion, true, "loop invariant code motion")
 DEFINE_bool(fast_math, true, "faster (but maybe less accurate) math functions")
@@ -230,13 +256,18 @@ DEFINE_bool(collect_megamorphic_maps_from_stub_cache,
             "crankshaft harvests type feedback from stub cache")
 DEFINE_bool(hydrogen_stats, false, "print statistics for hydrogen")
 DEFINE_bool(trace_hydrogen, false, "trace generated hydrogen to file")
-DEFINE_string(trace_phase, "Z", "trace generated IR for specified phases")
+DEFINE_string(trace_hydrogen_filter, "*", "hydrogen tracing filter")
+DEFINE_bool(trace_hydrogen_stubs, false, "trace generated hydrogen for stubs")
+DEFINE_string(trace_hydrogen_file, NULL, "trace hydrogen to given file name")
+DEFINE_string(trace_phase, "HLZ", "trace generated IR for specified phases")
 DEFINE_bool(trace_inlining, false, "trace inlining decisions")
 DEFINE_bool(trace_alloc, false, "trace register allocator")
 DEFINE_bool(trace_all_uses, false, "trace all use positions")
 DEFINE_bool(trace_range, false, "trace range analysis")
 DEFINE_bool(trace_gvn, false, "trace global value numbering")
 DEFINE_bool(trace_representation, false, "trace representation types")
+DEFINE_bool(trace_escape_analysis, false, "trace hydrogen escape analysis")
+DEFINE_bool(trace_allocation_folding, false, "trace allocation folding")
 DEFINE_bool(trace_track_allocation_sites, false,
             "trace the tracking of allocation sites")
 DEFINE_bool(trace_migration, false, "trace object migration")
@@ -249,13 +280,17 @@ DEFINE_int(deopt_every_n_times,
 DEFINE_int(deopt_every_n_garbage_collections,
            0,
            "deoptimize every n garbage collections")
+DEFINE_bool(print_deopt_stress, false, "print number of possible deopt points")
 DEFINE_bool(trap_on_deopt, false, "put a break point before deoptimizing")
+DEFINE_bool(trap_on_stub_deopt, false,
+            "put a break point before deoptimizing a stub")
 DEFINE_bool(deoptimize_uncommon_cases, true, "deoptimize uncommon cases")
 DEFINE_bool(polymorphic_inlining, true, "polymorphic inlining")
 DEFINE_bool(use_osr, true, "use on-stack replacement")
-DEFINE_bool(idefs, false, "use informative definitions")
 DEFINE_bool(array_bounds_checks_elimination, true,
             "perform array bounds checks elimination")
+DEFINE_bool(array_bounds_checks_hoisting, false,
+            "perform array bounds checks hoisting")
 DEFINE_bool(array_index_dehoisting, true,
             "perform array index dehoisting")
 DEFINE_bool(analyze_environment_liveness, true,
@@ -267,8 +302,6 @@ DEFINE_bool(unreachable_code_elimination, false,
             "eliminate unreachable code (hidden behind soft deopts)")
 DEFINE_bool(track_allocation_sites, true,
             "Use allocation site info to reduce transitions")
-DEFINE_bool(optimize_constructed_arrays, true,
-            "Use allocation site info on constructed arrays")
 DEFINE_bool(trace_osr, false, "trace on-stack replacement")
 DEFINE_int(stress_runs, 0, "number of stress runs")
 DEFINE_bool(optimize_closures, true, "optimize closures")
@@ -290,15 +323,19 @@ DEFINE_bool(opt_safe_uint32_operations, true,
             "allow uint32 values on optimize frames if they are used only in "
             "safe operations")
 
-DEFINE_bool(parallel_recompilation, false,
+DEFINE_bool(concurrent_recompilation, true,
             "optimizing hot functions asynchronously on a separate thread")
-DEFINE_bool(trace_parallel_recompilation, false, "track parallel recompilation")
-DEFINE_int(parallel_recompilation_queue_length, 3,
-           "the length of the parallel compilation queue")
-DEFINE_int(parallel_recompilation_delay, 0,
+DEFINE_bool(trace_concurrent_recompilation, false,
+            "track concurrent recompilation")
+DEFINE_int(concurrent_recompilation_queue_length, 8,
+           "the length of the concurrent compilation queue")
+DEFINE_int(concurrent_recompilation_delay, 0,
            "artificial compilation delay in ms")
-DEFINE_bool(omit_prototype_checks_for_leaf_maps, true,
-            "do not emit prototype checks if all prototypes have leaf maps, "
+DEFINE_bool(concurrent_osr, false,
+            "concurrent on-stack replacement")
+
+DEFINE_bool(omit_map_checks_for_leaf_maps, true,
+            "do not emit check maps for constant values that have a leaf map, "
             "deoptimize the optimized code if the layout of the maps changes.")
 
 // Experimental profiler changes.
@@ -317,7 +354,7 @@ DEFINE_bool(weighted_back_edges, false,
            // 0x1700 fits in the immediate field of an ARM instruction.
 DEFINE_int(interrupt_budget, 0x1700,
            "execution budget before interrupt is triggered")
-DEFINE_int(type_info_threshold, 15,
+DEFINE_int(type_info_threshold, 25,
            "percentage of ICs that must have type info to allow optimization")
 DEFINE_int(self_opt_count, 130, "call count before self-optimization")
 
@@ -343,14 +380,14 @@ DEFINE_bool(enable_sse4_1, true,
             "enable use of SSE4.1 instructions if available")
 DEFINE_bool(enable_cmov, true,
             "enable use of CMOV instruction if available")
-DEFINE_bool(enable_rdtsc, true,
-            "enable use of RDTSC instruction if available")
 DEFINE_bool(enable_sahf, true,
             "enable use of SAHF instruction if available (X64 only)")
 DEFINE_bool(enable_vfp3, ENABLE_VFP3_DEFAULT,
             "enable use of VFP3 instructions if available")
 DEFINE_bool(enable_armv7, ENABLE_ARMV7_DEFAULT,
             "enable use of ARMv7 instructions if available (ARM only)")
+DEFINE_bool(enable_neon, true,
+            "enable use of NEON instructions if available (ARM only)")
 DEFINE_bool(enable_sudiv, true,
             "enable use of SDIV and UDIV instructions if available (ARM only)")
 DEFINE_bool(enable_movw_movt, false,
@@ -364,6 +401,7 @@ DEFINE_bool(enable_vldr_imm, false,
             "enable use of constant pools for double immediate (ARM only)")
 
 // bootstrapper.cc
+DEFINE_bool(enable_i18n, true, "enable i18n extension")
 DEFINE_string(expose_natives_as, NULL, "expose natives in global object")
 DEFINE_string(expose_debug_as, NULL, "expose debug in global object")
 DEFINE_bool(expose_gc, false, "expose gc extension")
@@ -399,6 +437,7 @@ DEFINE_bool(trace_opt, false, "trace lazy optimization")
 DEFINE_bool(trace_opt_stats, false, "trace lazy optimization statistics")
 DEFINE_bool(opt, true, "use adaptive optimizations")
 DEFINE_bool(always_opt, false, "always try to optimize functions")
+DEFINE_bool(always_osr, false, "always try to OSR functions")
 DEFINE_bool(prepare_always_opt, false, "prepare for turning on always opt")
 DEFINE_bool(trace_deopt, false, "trace optimize function deoptimization")
 DEFINE_bool(trace_stub_failures, false,
@@ -416,6 +455,10 @@ DEFINE_int(max_opt_count, 10,
 DEFINE_bool(compilation_cache, true, "enable compilation cache")
 
 DEFINE_bool(cache_prototype_transitions, true, "cache prototype transitions")
+
+// cpu-profiler.cc
+DEFINE_int(cpu_profiler_sampling_interval, 1000,
+           "CPU profiler sampling interval in microseconds")
 
 // debug.cc
 DEFINE_bool(trace_debug_json, false, "trace debugging JSON request/response")
@@ -471,7 +514,7 @@ DEFINE_bool(trace_external_memory, false,
             "it is adjusted.")
 DEFINE_bool(collect_maps, true,
             "garbage collect maps from which no objects can be reached")
-DEFINE_bool(weak_embedded_maps_in_optimized_code, false,
+DEFINE_bool(weak_embedded_maps_in_optimized_code, true,
             "make maps embedded in optimized code weak")
 DEFINE_bool(flush_code, true,
             "flush code that we expect not to use again (during full gc)")
@@ -480,7 +523,7 @@ DEFINE_bool(flush_code_incrementally, true,
 DEFINE_bool(trace_code_flushing, false, "trace code flushing progress")
 DEFINE_bool(age_code, true,
             "track un-executed functions to age code and flush only "
-            "old code")
+            "old code (required for code flushing)")
 DEFINE_bool(incremental_marking, true, "use incremental marking")
 DEFINE_bool(incremental_marking_steps, true, "do incremental marking steps")
 DEFINE_bool(trace_incremental_marking, false,
@@ -502,6 +545,7 @@ DEFINE_bool(use_idle_notification, true,
             "Use idle notification to reduce memory footprint.")
 // ic.cc
 DEFINE_bool(use_ic, true, "use inline caching")
+DEFINE_bool(js_accessor_ics, false, "create ics for js accessors")
 
 // macro-assembler-ia32.cc
 DEFINE_bool(native_code_counters, false,
@@ -571,7 +615,7 @@ DEFINE_int(testing_int_flag, 13, "testing_int_flag")
 DEFINE_float(testing_float_flag, 2.5, "float-flag")
 DEFINE_string(testing_string_flag, "Hello, world!", "string-flag")
 DEFINE_int(testing_prng_seed, 42, "Seed used for threading test randomness")
-#ifdef WIN32
+#ifdef _WIN32
 DEFINE_string(testing_serialization_file, "C:\\Windows\\Temp\\serdes",
               "file in which to testing_serialize heap")
 #else
@@ -646,13 +690,14 @@ DEFINE_bool(stress_compaction, false,
 DEFINE_bool(enable_slow_asserts, false,
             "enable asserts that are slow to execute")
 
-// codegen-ia32.cc / codegen-arm.cc
+// codegen-ia32.cc / codegen-arm.cc / macro-assembler-*.cc
 DEFINE_bool(print_source, false, "pretty print source code")
 DEFINE_bool(print_builtin_source, false,
             "pretty print source code for builtins")
 DEFINE_bool(print_ast, false, "print source AST")
 DEFINE_bool(print_builtin_ast, false, "print source AST for builtins")
 DEFINE_string(stop_at, "", "function name where to insert a breakpoint")
+DEFINE_bool(trap_on_abort, false, "replace aborts by breakpoints")
 
 // compiler.cc
 DEFINE_bool(print_builtin_scopes, false, "print scopes for builtins")
@@ -725,11 +770,6 @@ DEFINE_bool(log_snapshot_positions, false,
 DEFINE_bool(log_suspect, false, "Log suspect operations.")
 DEFINE_bool(prof, false,
             "Log statistical profiling information (implies --log-code).")
-DEFINE_bool(prof_auto, true,
-            "Used with --prof, starts profiling automatically")
-DEFINE_bool(prof_lazy, false,
-            "Used with --prof, only does sampling and logging"
-            " when profiler is active (implies --noprof_auto).")
 DEFINE_bool(prof_browser_mode, true,
             "Used with --prof, turns on browser-compatible mode for profiling.")
 DEFINE_bool(log_regexp, false, "Log regular expression execution.")
@@ -792,11 +832,19 @@ DEFINE_implication(print_all_code, trace_codegen)
 #undef FLAG_FULL
 #undef FLAG_READONLY
 #undef FLAG
+#undef FLAG_ALIAS
 
 #undef DEFINE_bool
 #undef DEFINE_int
 #undef DEFINE_string
+#undef DEFINE_float
+#undef DEFINE_args
 #undef DEFINE_implication
+#undef DEFINE_ALIAS_bool
+#undef DEFINE_ALIAS_int
+#undef DEFINE_ALIAS_string
+#undef DEFINE_ALIAS_float
+#undef DEFINE_ALIAS_args
 
 #undef FLAG_MODE_DECLARE
 #undef FLAG_MODE_DEFINE

@@ -57,7 +57,6 @@ namespace internal {
   ICU(LoadPropertyWithInterceptorForCall)             \
   ICU(KeyedLoadPropertyWithInterceptor)               \
   ICU(StoreInterceptorProperty)                       \
-  ICU(UnaryOp_Patch)                                  \
   ICU(BinaryOp_Patch)                                 \
   ICU(CompareIC_Miss)                                 \
   ICU(CompareNilIC_Miss)                              \
@@ -103,7 +102,7 @@ class IC {
   static State StateFrom(Code* target, Object* receiver, Object* name);
 
   // Clear the inline cache to initial state.
-  static void Clear(Address address);
+  static void Clear(Isolate* isolate, Address address);
 
   // Computes the reloc info for this IC. This is a fairly expensive
   // operation as it has to search through the heap to find the code
@@ -170,14 +169,25 @@ class IC {
 
   virtual void UpdateMonomorphicIC(Handle<JSObject> receiver,
                                    Handle<Code> handler,
-                                   Handle<String> name) {
+                                   Handle<String> name,
+                                   StrictModeFlag strict_mode) {
     set_target(*handler);
   }
   bool UpdatePolymorphicIC(State state,
-                           StrictModeFlag strict_mode,
                            Handle<JSObject> receiver,
                            Handle<String> name,
-                           Handle<Code> code);
+                           Handle<Code> code,
+                           StrictModeFlag strict_mode);
+
+  virtual Handle<Code> ComputePolymorphicIC(MapHandleList* receiver_maps,
+                                            CodeHandleList* handlers,
+                                            int number_of_valid_maps,
+                                            Handle<Name> name,
+                                            StrictModeFlag strict_mode) {
+    UNREACHABLE();
+    return Handle<Code>::null();
+  };
+
   void CopyICToMegamorphicCache(Handle<String> name);
   bool IsTransitionedMapOfMonomorphicTarget(Map* receiver_map);
   void PatchCache(State state,
@@ -392,23 +402,32 @@ class LoadIC: public IC {
                     State state,
                     Handle<Object> object,
                     Handle<String> name);
+
   virtual void UpdateMonomorphicIC(Handle<JSObject> receiver,
                                    Handle<Code> handler,
-                                   Handle<String> name);
+                                   Handle<String> name,
+                                   StrictModeFlag strict_mode);
+
+  virtual Handle<Code> ComputePolymorphicIC(MapHandleList* receiver_maps,
+                                            CodeHandleList* handlers,
+                                            int number_of_valid_maps,
+                                            Handle<Name> name,
+                                            StrictModeFlag strict_mode);
+
   virtual Handle<Code> ComputeLoadHandler(LookupResult* lookup,
                                           Handle<JSObject> receiver,
                                           Handle<String> name);
 
  private:
   // Stub accessors.
-  static Handle<Code> initialize_stub() {
-    return Isolate::Current()->builtins()->LoadIC_Initialize();
+  static Handle<Code> initialize_stub(Isolate* isolate) {
+    return isolate->builtins()->LoadIC_Initialize();
   }
   virtual Handle<Code> pre_monomorphic_stub() {
     return isolate()->builtins()->LoadIC_PreMonomorphic();
   }
 
-  static void Clear(Address address, Code* target);
+  static void Clear(Isolate* isolate, Address address, Code* target);
 
   friend class IC;
 };
@@ -468,7 +487,8 @@ class KeyedLoadIC: public LoadIC {
   // Update the inline cache.
   virtual void UpdateMonomorphicIC(Handle<JSObject> receiver,
                                    Handle<Code> handler,
-                                   Handle<String> name);
+                                   Handle<String> name,
+                                   StrictModeFlag strict_mode);
   virtual Handle<Code> ComputeLoadHandler(LookupResult* lookup,
                                           Handle<JSObject> receiver,
                                           Handle<String> name);
@@ -476,8 +496,8 @@ class KeyedLoadIC: public LoadIC {
 
  private:
   // Stub accessors.
-  static Handle<Code> initialize_stub() {
-    return Isolate::Current()->builtins()->KeyedLoadIC_Initialize();
+  static Handle<Code> initialize_stub(Isolate* isolate) {
+    return isolate->builtins()->KeyedLoadIC_Initialize();
   }
   virtual Handle<Code> pre_monomorphic_stub() {
     return isolate()->builtins()->KeyedLoadIC_PreMonomorphic();
@@ -492,7 +512,7 @@ class KeyedLoadIC: public LoadIC {
     return isolate()->builtins()->KeyedLoadIC_String();
   }
 
-  static void Clear(Address address, Code* target);
+  static void Clear(Isolate* isolate, Address address, Code* target);
 
   friend class IC;
 };
@@ -507,6 +527,9 @@ class StoreIC: public IC {
   // Code generators for stub routines. Only called once at startup.
   static void GenerateSlow(MacroAssembler* masm);
   static void GenerateInitialize(MacroAssembler* masm) { GenerateMiss(masm); }
+  static void GeneratePreMonomorphic(MacroAssembler* masm) {
+    GenerateMiss(masm);
+  }
   static void GenerateMiss(MacroAssembler* masm);
   static void GenerateMegamorphic(MacroAssembler* masm,
                                   StrictModeFlag strict_mode);
@@ -538,6 +561,12 @@ class StoreIC: public IC {
   virtual Handle<Code> generic_stub_strict() const {
     return isolate()->builtins()->StoreIC_Generic_Strict();
   }
+  virtual Handle<Code> pre_monomorphic_stub() const {
+    return isolate()->builtins()->StoreIC_PreMonomorphic();
+  }
+  virtual Handle<Code> pre_monomorphic_stub_strict() const {
+    return isolate()->builtins()->StoreIC_PreMonomorphic_Strict();
+  }
   virtual Handle<Code> global_proxy_stub() {
     return isolate()->builtins()->StoreIC_GlobalProxy();
   }
@@ -545,6 +574,16 @@ class StoreIC: public IC {
     return isolate()->builtins()->StoreIC_GlobalProxy_Strict();
   }
 
+  virtual void UpdateMonomorphicIC(Handle<JSObject> receiver,
+                                   Handle<Code> handler,
+                                   Handle<String> name,
+                                   StrictModeFlag strict_mode);
+
+  virtual Handle<Code> ComputePolymorphicIC(MapHandleList* receiver_maps,
+                                            CodeHandleList* handlers,
+                                            int number_of_valid_maps,
+                                            Handle<Name> name,
+                                            StrictModeFlag strict_mode);
 
   // Update the inline cache and the global stub cache based on the
   // lookup result.
@@ -560,7 +599,8 @@ class StoreIC: public IC {
   virtual Handle<Code> ComputeStoreMonomorphic(LookupResult* lookup,
                                                StrictModeFlag strict_mode,
                                                Handle<JSObject> receiver,
-                                               Handle<String> name);
+                                               Handle<String> name,
+                                               Handle<Object> value);
 
  private:
   void set_target(Code* code) {
@@ -570,13 +610,13 @@ class StoreIC: public IC {
     IC::set_target(code);
   }
 
-  static Handle<Code> initialize_stub() {
-    return Isolate::Current()->builtins()->StoreIC_Initialize();
+  static Handle<Code> initialize_stub(Isolate* isolate) {
+    return isolate->builtins()->StoreIC_Initialize();
   }
-  static Handle<Code> initialize_stub_strict() {
-    return Isolate::Current()->builtins()->StoreIC_Initialize_Strict();
+  static Handle<Code> initialize_stub_strict(Isolate* isolate) {
+    return isolate->builtins()->StoreIC_Initialize_Strict();
   }
-  static void Clear(Address address, Code* target);
+  static void Clear(Isolate* isolate, Address address, Code* target);
 
   friend class IC;
 };
@@ -612,14 +652,15 @@ class KeyedStoreIC: public StoreIC {
   static void GenerateInitialize(MacroAssembler* masm) {
     GenerateMiss(masm, MISS);
   }
+  static void GeneratePreMonomorphic(MacroAssembler* masm) {
+    GenerateMiss(masm, MISS);
+  }
   static void GenerateMiss(MacroAssembler* masm, ICMissMode force_generic);
   static void GenerateSlow(MacroAssembler* masm);
   static void GenerateRuntimeSetProperty(MacroAssembler* masm,
                                          StrictModeFlag strict_mode);
   static void GenerateGeneric(MacroAssembler* masm, StrictModeFlag strict_mode);
   static void GenerateNonStrictArguments(MacroAssembler* masm);
-  static void GenerateTransitionElementsSmiToDouble(MacroAssembler* masm);
-  static void GenerateTransitionElementsDoubleToObject(MacroAssembler* masm);
 
  protected:
   virtual Code::Kind kind() const { return Code::KEYED_STORE_IC; }
@@ -627,9 +668,16 @@ class KeyedStoreIC: public StoreIC {
   virtual Handle<Code> ComputeStoreMonomorphic(LookupResult* lookup,
                                                StrictModeFlag strict_mode,
                                                Handle<JSObject> receiver,
-                                               Handle<String> name);
+                                               Handle<String> name,
+                                               Handle<Object> value);
   virtual void UpdateMegamorphicCache(Map* map, Name* name, Code* code) { }
 
+  virtual Handle<Code> pre_monomorphic_stub() const {
+    return isolate()->builtins()->KeyedStoreIC_PreMonomorphic();
+  }
+  virtual Handle<Code> pre_monomorphic_stub_strict() const {
+    return isolate()->builtins()->KeyedStoreIC_PreMonomorphic_Strict();
+  }
   virtual Handle<Code> megamorphic_stub() {
     return isolate()->builtins()->KeyedStoreIC_Generic();
   }
@@ -641,6 +689,11 @@ class KeyedStoreIC: public StoreIC {
                                 KeyedAccessStoreMode store_mode,
                                 StrictModeFlag strict_mode);
 
+  virtual void UpdateMonomorphicIC(Handle<JSObject> receiver,
+                                   Handle<Code> handler,
+                                   Handle<String> name,
+                                   StrictModeFlag strict_mode);
+
  private:
   void set_target(Code* code) {
     // Strict mode must be preserved across IC patching.
@@ -650,11 +703,11 @@ class KeyedStoreIC: public StoreIC {
   }
 
   // Stub accessors.
-  static Handle<Code> initialize_stub() {
-    return Isolate::Current()->builtins()->KeyedStoreIC_Initialize();
+  static Handle<Code> initialize_stub(Isolate* isolate) {
+    return isolate->builtins()->KeyedStoreIC_Initialize();
   }
-  static Handle<Code> initialize_stub_strict() {
-    return Isolate::Current()->builtins()->KeyedStoreIC_Initialize_Strict();
+  static Handle<Code> initialize_stub_strict(Isolate* isolate) {
+    return isolate->builtins()->KeyedStoreIC_Initialize_Strict();
   }
   Handle<Code> generic_stub() const {
     return isolate()->builtins()->KeyedStoreIC_Generic();
@@ -666,7 +719,7 @@ class KeyedStoreIC: public StoreIC {
     return isolate()->builtins()->KeyedStoreIC_NonStrictArguments();
   }
 
-  static void Clear(Address address, Code* target);
+  static void Clear(Isolate* isolate, Address address, Code* target);
 
   KeyedAccessStoreMode GetStoreMode(Handle<JSObject> receiver,
                                     Handle<Object> key,
@@ -676,31 +729,6 @@ class KeyedStoreIC: public StoreIC {
                                      KeyedAccessStoreMode store_mode);
 
   friend class IC;
-};
-
-
-class UnaryOpIC: public IC {
- public:
-  // sorted: increasingly more unspecific (ignoring UNINITIALIZED)
-  // TODO(svenpanne) Using enums+switch is an antipattern, use a class instead.
-  enum TypeInfo {
-    UNINITIALIZED,
-    SMI,
-    NUMBER,
-    GENERIC
-  };
-
-  explicit UnaryOpIC(Isolate* isolate) : IC(NO_EXTRA_FRAME, isolate) { }
-
-  void patch(Code* code);
-
-  static const char* GetName(TypeInfo type_info);
-
-  static State ToState(TypeInfo type_info);
-
-  static TypeInfo GetTypeInfo(Handle<Object> operand);
-
-  static TypeInfo ComputeNewType(TypeInfo type, TypeInfo previous);
 };
 
 
@@ -717,6 +745,12 @@ class BinaryOpIC: public IC {
     GENERIC
   };
 
+  static void StubInfoToType(int minor_key,
+                             Handle<Type>* left,
+                             Handle<Type>* right,
+                             Handle<Type>* result,
+                             Isolate* isolate);
+
   explicit BinaryOpIC(Isolate* isolate) : IC(NO_EXTRA_FRAME, isolate) { }
 
   void patch(Code* code);
@@ -724,6 +758,9 @@ class BinaryOpIC: public IC {
   static const char* GetName(TypeInfo type_info);
 
   static State ToState(TypeInfo type_info);
+
+ private:
+  static Handle<Type> TypeInfoToType(TypeInfo binary_type, Isolate* isolate);
 };
 
 
@@ -747,8 +784,18 @@ class CompareIC: public IC {
     GENERIC
   };
 
-  static Handle<Type> StateToType(
-      Isolate* isolate, State state, Handle<Map> map = Handle<Map>());
+  static State NewInputState(State old_state, Handle<Object> value);
+
+  static Handle<Type> StateToType(Isolate* isolate,
+                                  State state,
+                                  Handle<Map> map = Handle<Map>());
+
+  static void StubInfoToType(int stub_minor_key,
+                             Handle<Type>* left_type,
+                             Handle<Type>* right_type,
+                             Handle<Type>* overall_type,
+                             Handle<Map> map,
+                             Isolate* isolate);
 
   CompareIC(Isolate* isolate, Token::Value op)
       : IC(EXTRA_CALL_FRAME, isolate), op_(op) { }
@@ -778,9 +825,9 @@ class CompareIC: public IC {
   bool strict() const { return op_ == Token::EQ_STRICT; }
   Condition GetCondition() const { return ComputeCondition(op_); }
 
-  static Code* GetRawUninitialized(Token::Value op);
+  static Code* GetRawUninitialized(Isolate* isolate, Token::Value op);
 
-  static void Clear(Address address, Code* target);
+  static void Clear(Isolate* isolate, Address address, Code* target);
 
   Token::Value op_;
 
@@ -817,6 +864,9 @@ void PatchInlinedSmiCode(Address address, InlinedSmiCheck check);
 
 DECLARE_RUNTIME_FUNCTION(MaybeObject*, KeyedLoadIC_MissFromStubFailure);
 DECLARE_RUNTIME_FUNCTION(MaybeObject*, KeyedStoreIC_MissFromStubFailure);
+DECLARE_RUNTIME_FUNCTION(MaybeObject*, UnaryOpIC_Miss);
+DECLARE_RUNTIME_FUNCTION(MaybeObject*, StoreIC_MissFromStubFailure);
+DECLARE_RUNTIME_FUNCTION(MaybeObject*, ElementsTransitionAndStoreIC_Miss);
 DECLARE_RUNTIME_FUNCTION(MaybeObject*, CompareNilIC_Miss);
 DECLARE_RUNTIME_FUNCTION(MaybeObject*, ToBooleanIC_Miss);
 
