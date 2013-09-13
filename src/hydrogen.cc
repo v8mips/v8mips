@@ -2126,9 +2126,11 @@ HValue* HGraphBuilder::JSArrayBuilder::AllocateArray(HValue* size_in_bytes,
                                                   Representation::Smi());
   length_field = builder()->Add<HForceRepresentation>(length_field,
                                                       Representation::Smi());
+  InstanceType instance_type = IsFastDoubleElementsKind(kind_)
+      ? FIXED_DOUBLE_ARRAY_TYPE : JS_ARRAY_TYPE;
   // Allocate (dealing with failure appropriately)
   HAllocate* new_object = builder()->Add<HAllocate>(size_in_bytes,
-      HType::JSArray(), NOT_TENURED, JS_ARRAY_TYPE);
+      HType::JSArray(), NOT_TENURED, instance_type);
 
   // Fill in the fields: map, properties, length
   HValue* map;
