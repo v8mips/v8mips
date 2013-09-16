@@ -189,7 +189,7 @@ enum SoftwareInterruptCodes {
 // - Breaks larger than kMaxStopCode are simple breaks, dropping you into the
 //   debugger.
 const uint32_t kMaxWatchpointCode = 31;
-const uint32_t kNumTracepoints = 8;
+const uint32_t kNumTracepoints = 32;
 const uint32_t kMinTracepointCode = kMaxWatchpointCode + 1;
 const uint32_t kMaxTracepointCode = kMinTracepointCode + kNumTracepoints;
 const uint32_t kMaxStopCode = 127;
@@ -204,6 +204,31 @@ const uint32_t kTracepoint4 = kMinTracepointCode + 4;
 const uint32_t kTracepoint5 = kMinTracepointCode + 5;
 const uint32_t kTracepoint6 = kMinTracepointCode + 6;
 const uint32_t kTracepoint7 = kMinTracepointCode + 7;
+const uint32_t kTracepoint8 = kMinTracepointCode + 8;
+const uint32_t kTracepoint9 = kMinTracepointCode + 9;
+const uint32_t kTracepoint10 = kMinTracepointCode + 10;
+const uint32_t kTracepoint11 = kMinTracepointCode + 11;
+const uint32_t kTracepoint12 = kMinTracepointCode + 12;
+const uint32_t kTracepoint13 = kMinTracepointCode + 13;
+const uint32_t kTracepoint14 = kMinTracepointCode + 14;
+const uint32_t kTracepoint15 = kMinTracepointCode + 15;
+
+const uint32_t kTracepoint16 = kMinTracepointCode + 16;
+const uint32_t kTracepoint17 = kMinTracepointCode + 17;
+const uint32_t kTracepoint18 = kMinTracepointCode + 18;
+const uint32_t kTracepoint19 = kMinTracepointCode + 19;
+const uint32_t kTracepoint20 = kMinTracepointCode + 20;
+const uint32_t kTracepoint21 = kMinTracepointCode + 21;
+const uint32_t kTracepoint22 = kMinTracepointCode + 22;
+const uint32_t kTracepoint23 = kMinTracepointCode + 23;
+const uint32_t kTracepoint24 = kMinTracepointCode + 24;
+const uint32_t kTracepoint25 = kMinTracepointCode + 25;
+const uint32_t kTracepoint26 = kMinTracepointCode + 26;
+const uint32_t kTracepoint27 = kMinTracepointCode + 27;
+const uint32_t kTracepoint28 = kMinTracepointCode + 28;
+const uint32_t kTracepoint29 = kMinTracepointCode + 29;
+const uint32_t kTracepoint30 = kMinTracepointCode + 30;
+const uint32_t kTracepoint31 = kMinTracepointCode + 31;
 
 
 // ----- Fields offset and length.

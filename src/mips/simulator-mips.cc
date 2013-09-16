@@ -1651,9 +1651,29 @@ void Simulator::CountTracepoint(uint32_t code) {
 void Simulator::PrintTracepoints(uint32_t code) {
   PrintF("\n---- Tracepoints, total instr count: %lld ----------------------\n",
          icount_);
-  PrintF("0: %d,  1:%d,  2:%d,  3: %d,  4: %d,  5:%d,  6:%d,  7: %d\n",
-         trace_count_[0], trace_count_[1], trace_count_[2], trace_count_[3],
-         trace_count_[4], trace_count_[5], trace_count_[6], trace_count_[7]);
+  // PrintF("0: %d,  1:%d,  2:%d,  3: %d,  4: %d,  5:%d,  6:%d,  7: %d\n",
+  PrintF("\
+ 0:              %d\n\
+ 1:              %d\n\
+ 2:              %d\n\
+ 3:              %d\n\
+ 4:              %d\n\
+ 5:              %d\n\
+ 6:              %d\n\
+ 7:              %d\n\n\
+ 8:              %d\n\
+ 9:              %d\n\
+10:              %d\n\
+11:              %d\n\
+12:              %d\n\
+13:              %d\n\
+14:              %d\n\
+15:              %d\n",
+    trace_count_[0], trace_count_[1], trace_count_[2],  // return & stack opts.
+    trace_count_[3],
+    trace_count_[4], trace_count_[5], trace_count_[6], trace_count_[7],  // cMoves.
+    trace_count_[8], trace_count_[9], trace_count_[10], trace_count_[11],
+    trace_count_[12], trace_count_[13], trace_count_[14], trace_count_[15]);
 }
 
 
