@@ -52,6 +52,9 @@ const intptr_t kPointerAlignmentMask = kPointerAlignment - 1;
 const intptr_t kDoubleAlignment = 8;
 const intptr_t kDoubleAlignmentMask = kDoubleAlignment - 1;
 
+// HeapNumber alignmnet marker.
+const intptr_t kHeapNumberAlignment = 5;
+
 // Desired alignment for generated code is 32 bytes (to improve cache line
 // utilization).
 const int kCodeAlignmentBits = 5;

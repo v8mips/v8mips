@@ -1960,6 +1960,7 @@ class ScavengingVisitor : public StaticVisitorBase {
     table_.Register(kVisitByteArray, &EvacuateByteArray);
     table_.Register(kVisitFixedArray, &EvacuateFixedArray);
     table_.Register(kVisitFixedDoubleArray, &EvacuateFixedDoubleArray);
+    table_.Register(kVisitHeapNumber, &EvacuateHeapNumber);
 
     table_.Register(kVisitNativeContext,
                     &ObjectEvacuationStrategy<POINTER_OBJECT>::
@@ -2093,7 +2094,7 @@ class ScavengingVisitor : public StaticVisitorBase {
 
     int allocation_size = object_size;
     if (alignment != kObjectAlignment) {
-      ASSERT(alignment == kDoubleAlignment);
+      ASSERT(alignment == kDoubleAlignment || alignment == kHeapNumberAlignment);
       allocation_size += kPointerSize;
     }
 
@@ -2115,8 +2116,10 @@ class ScavengingVisitor : public StaticVisitorBase {
       if (maybe_result->ToObject(&result)) {
         HeapObject* target = HeapObject::cast(result);
 
-        if (alignment != kObjectAlignment) {
+        if (alignment == kDoubleAlignment) {
           target = heap->EnsureDoubleAligned(target, allocation_size);
+        } else if (alignment == kHeapNumberAlignment) {
+          target = heap->EnsureHeapNumberAligned(target, allocation_size);
         }
 
         // Order is important: slot might be inside of the target if target
@@ -2145,8 +2148,10 @@ class ScavengingVisitor : public StaticVisitorBase {
     Object* result = allocation->ToObjectUnchecked();
     HeapObject* target = HeapObject::cast(result);
 
-    if (alignment != kObjectAlignment) {
+    if (alignment == kDoubleAlignment) {
       target = heap->EnsureDoubleAligned(target, allocation_size);
+    } else if (alignment == kHeapNumberAlignment) {
+      target = heap->EnsureHeapNumberAligned(target, allocation_size);
     }
 
     // Order is important: slot might be inside of the target if target
@@ -2198,6 +2203,14 @@ class ScavengingVisitor : public StaticVisitorBase {
         map, slot, object, object_size);
   }
 
+
+  static inline void EvacuateHeapNumber(Map* map,
+                                              HeapObject** slot,
+                                              HeapObject* object) {
+    int object_size = HeapNumber::kSize;
+    EvacuateObject<DATA_OBJECT, kHeapNumberAlignment>(
+        map, slot, object, object_size);
+  }
 
   static inline void EvacuateByteArray(Map* map,
                                        HeapObject** slot,
@@ -2857,6 +2870,7 @@ bool Heap::CreateInitialMaps() {
 }
 
 
+
 MaybeObject* Heap::AllocateHeapNumber(double value, PretenureFlag pretenure) {
   // Statically ensure that it is safe to allocate heap numbers in paged
   // spaces.
@@ -2865,10 +2879,11 @@ MaybeObject* Heap::AllocateHeapNumber(double value, PretenureFlag pretenure) {
 
   Object* result;
   { MaybeObject* maybe_result =
-        AllocateRaw(HeapNumber::kSize, space, OLD_DATA_SPACE);
+        AllocateRaw(HeapNumber::kSize + kPointerSize, space, OLD_DATA_SPACE);
     if (!maybe_result->ToObject(&result)) return maybe_result;
   }
-
+  result = EnsureHeapNumberAligned(
+      HeapObject::cast(result), HeapNumber::kSize + kPointerSize);
   HeapObject::cast(result)->set_map_no_write_barrier(heap_number_map());
   HeapNumber::cast(result)->set_value(value);
   return result;
@@ -2883,9 +2898,12 @@ MaybeObject* Heap::AllocateHeapNumber(double value) {
   // allocation in new space.
   STATIC_ASSERT(HeapNumber::kSize <= Page::kMaxNonCodeHeapObjectSize);
   Object* result;
-  { MaybeObject* maybe_result = new_space_.AllocateRaw(HeapNumber::kSize);
+  { MaybeObject* maybe_result =
+      new_space_.AllocateRaw(HeapNumber::kSize + kPointerSize);
     if (!maybe_result->ToObject(&result)) return maybe_result;
   }
+  result = EnsureHeapNumberAligned(
+      HeapObject::cast(result), HeapNumber::kSize + kPointerSize);
   HeapObject::cast(result)->set_map_no_write_barrier(heap_number_map());
   HeapNumber::cast(result)->set_value(value);
   return result;

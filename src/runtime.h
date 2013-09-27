@@ -104,9 +104,11 @@ namespace internal {
   F(SetAllocationTimeout, 2, 1) \
   F(AllocateInNewSpace, 1, 1) \
   F(AllocateInNewSpaceAligned, 1, 1) \
+  F(AllocateInNewSpaceHeapNumberAligned, 1, 1) \
   F(AllocateInOldPointerSpace, 1, 1) \
   F(AllocateInOldDataSpace, 1, 1) \
   F(AllocateInOldDataSpaceAligned, 1, 1) \
+  F(AllocateInOldDataSpaceHeapNumberAligned, 1, 1) \
   F(SetNativeFlag, 1, 1) \
   F(StoreArrayLiteralElement, 5, 1) \
   F(DebugCallbackSupportsStepping, 1, 1) \

@@ -2023,7 +2023,7 @@ int MarkCompactCollector::DiscoverAndPromoteBlackObjectsOnPage(
 
       // Promotion failed. Just migrate object to another semispace.
       int allocation_size = size;
-      if(object->IsFixedDoubleArray())  {
+      if(object->IsFixedDoubleArray() || object->IsHeapNumber())  {
         allocation_size += kPointerSize;
       }
       MaybeObject* allocation = new_space->AllocateRaw(allocation_size);
@@ -2041,6 +2041,8 @@ int MarkCompactCollector::DiscoverAndPromoteBlackObjectsOnPage(
       HeapObject* target = HeapObject::cast(result);
       if(object->IsFixedDoubleArray())  {
         target = heap()->EnsureDoubleAligned(target, allocation_size);
+      } else if (object->IsHeapNumber()) {
+        target = heap()->EnsureHeapNumberAligned(target, allocation_size);
       }
       MigrateObject(target->address(),
                     object->address(),
@@ -2909,7 +2911,7 @@ bool MarkCompactCollector::TryPromoteObject(HeapObject* object,
   // TODO(hpayer): Replace that check with an assert.
   CHECK(object_size <= Page::kMaxNonCodeHeapObjectSize);
   int allocation_size = object_size;
-  if(object->IsFixedDoubleArray())  {
+  if(object->IsFixedDoubleArray() || object->IsHeapNumber())  {
       allocation_size += kPointerSize;
   }
   OldSpace* target_space = heap()->TargetSpace(object);
@@ -2922,6 +2924,8 @@ bool MarkCompactCollector::TryPromoteObject(HeapObject* object,
     HeapObject* target = HeapObject::cast(result);
     if(object->IsFixedDoubleArray())  {
       target = heap()->EnsureDoubleAligned(target, allocation_size);
+    } else if (object->IsHeapNumber()) {
+      target = heap()->EnsureHeapNumberAligned(target, allocation_size);
     }
     MigrateObject(target->address(),
                   object->address(),
@@ -2993,7 +2997,7 @@ void MarkCompactCollector::EvacuateLiveObjectsFromPage(Page* p) {
 
       int size = object->Size();
       int allocation_size = size;
-      if(object->IsFixedDoubleArray())  {
+      if(object->IsFixedDoubleArray() || object->IsHeapNumber())  {
          allocation_size += kPointerSize;
       }
       MaybeObject* target = space->AllocateRaw(allocation_size);
@@ -3008,6 +3012,9 @@ void MarkCompactCollector::EvacuateLiveObjectsFromPage(Page* p) {
       if (object->IsFixedDoubleArray()) {
           target_object =
               heap()->EnsureDoubleAligned(target_object, allocation_size);
+      } else if (object->IsHeapNumber()) {
+        target_object =
+            heap()->EnsureHeapNumberAligned(target_object, allocation_size);
       }
       MigrateObject(target_object->address(),
                     object_addr,

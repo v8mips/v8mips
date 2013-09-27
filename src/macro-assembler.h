@@ -53,7 +53,9 @@ enum AllocationFlags {
   // Directly allocate in old pointer space
   PRETENURE_OLD_POINTER_SPACE = 1 << 4,
   // Directly allocate in old data space
-  PRETENURE_OLD_DATA_SPACE = 1 << 5
+  PRETENURE_OLD_DATA_SPACE = 1 << 5,
+  // Align the allocation at 4-byte boundary.
+  HEAP_NUMBER_ALIGNMENT = 1 << 6
 };
 
 

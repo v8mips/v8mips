@@ -417,6 +417,18 @@ HeapObject* Heap::EnsureDoubleAligned(HeapObject* object, int size) {
 }
 
 
+HeapObject* Heap::EnsureHeapNumberAligned(HeapObject* object, int size) {
+  if ((OffsetFrom(object->address()) & kDoubleAlignmentMask) == 0) {
+    CreateFillerObjectAt(object->address(), kPointerSize);
+    return HeapObject::FromAddress(object->address() + kPointerSize);
+  } else {
+    CreateFillerObjectAt(object->address() + size - kPointerSize,
+                         kPointerSize);
+    return object;
+  }
+}
+
+
 OldSpace* Heap::TargetSpace(HeapObject* object) {
   InstanceType type = object->map()->instance_type();
   AllocationSpace space = TargetSpaceId(type);
