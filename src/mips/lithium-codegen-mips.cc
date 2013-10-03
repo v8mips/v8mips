@@ -5221,18 +5221,16 @@ void LCodeGen::DoClampTToUint8(LClampTToUint8* instr) {
 void LCodeGen::DoAllocate(LAllocate* instr) {
   class DeferredAllocate V8_FINAL : public LDeferredCode {
    public:
-    DeferredAllocate(LCodeGen* codegen, LAllocate* instr)
-        : LDeferredCode(codegen), instr_(instr) { }
+    DeferredAllocate(LCodeGen* codegen, LAllocate* instr, AllocationFlags flags)
+        : LDeferredCode(codegen), instr_(instr), flags_(flags) { }
     virtual void Generate() V8_OVERRIDE {
-      codegen()->DoDeferredAllocate(instr_);
+      codegen()->DoDeferredAllocate(instr_, flags_);
     }
     virtual LInstruction* instr() V8_OVERRIDE { return instr_; }
    private:
     LAllocate* instr_;
+    AllocationFlags flags_;
   };
-
-  DeferredAllocate* deferred =
-      new(zone()) DeferredAllocate(this, instr);
 
   Register result = ToRegister(instr->result());
   Register scratch = ToRegister(instr->temp1());
@@ -5251,6 +5249,10 @@ void LCodeGen::DoAllocate(LAllocate* instr) {
     ASSERT(!instr->hydrogen()->IsNewSpaceAllocation());
     flags = static_cast<AllocationFlags>(flags | PRETENURE_OLD_DATA_SPACE);
   }
+
+  DeferredAllocate* deferred =
+      new(zone()) DeferredAllocate(this, instr, flags);
+
   if (instr->size()->IsConstantOperand()) {
     int32_t size = ToInteger32(LConstantOperand::cast(instr->size()));
     __ Allocate(size, result, scratch, scratch2, deferred->entry(), flags);
@@ -5287,7 +5289,7 @@ void LCodeGen::DoAllocate(LAllocate* instr) {
 }
 
 
-void LCodeGen::DoDeferredAllocate(LAllocate* instr) {
+void LCodeGen::DoDeferredAllocate(LAllocate* instr, AllocationFlags flags) {
   Register result = ToRegister(instr->result());
 
   // TODO(3095996): Get rid of this. For now, we need to make the
@@ -5312,9 +5314,18 @@ void LCodeGen::DoDeferredAllocate(LAllocate* instr) {
     CallRuntimeFromDeferred(Runtime::kAllocateInOldPointerSpace, 1, instr);
   } else if (instr->hydrogen()->IsOldDataSpaceAllocation()) {
     ASSERT(!instr->hydrogen()->IsNewSpaceAllocation());
-    CallRuntimeFromDeferred(Runtime::kAllocateInOldDataSpace, 1, instr);
+    if ((flags & DOUBLE_ALIGNMENT) == 0) {
+      CallRuntimeFromDeferred(Runtime::kAllocateInOldDataSpace, 1, instr);
+    } else {
+      CallRuntimeFromDeferred(
+          Runtime::kAllocateInOldDataSpaceAligned, 1, instr);
+    }
   } else {
-    CallRuntimeFromDeferred(Runtime::kAllocateInNewSpace, 1, instr);
+    if ((flags & DOUBLE_ALIGNMENT) == 0) {
+      CallRuntimeFromDeferred(Runtime::kAllocateInNewSpace, 1, instr);
+    } else {
+      CallRuntimeFromDeferred(Runtime::kAllocateInNewSpaceAligned, 1, instr);
+    }
   }
   __ StoreToSafepointRegisterSlot(v0, result);
 }
