@@ -2804,6 +2804,9 @@ void MacroAssembler::Allocate(int object_size,
   ASSERT(!scratch1.is(t9));
   ASSERT(!scratch2.is(t9));
   ASSERT(!result.is(t9));
+  ASSERT(!scratch1.is(t8));
+  ASSERT(!scratch2.is(t8));
+  ASSERT(!result.is(t8));
 
   // Make object size into bytes.
   if ((flags & SIZE_IN_WORDS) != 0) {
@@ -2846,33 +2849,41 @@ void MacroAssembler::Allocate(int object_size,
     lw(t9, MemOperand(topaddr, limit - top));
   }
 
-  if ((flags & DOUBLE_ALIGNMENT) != 0 || (flags & HEAP_NUMBER_ALIGNMENT) != 0) {
-    // Align the next allocation. Storing the filler map without checking top is
-    // safe in new-space because the limit of the heap is aligned there.
+  // Align the next allocation. Storing the filler map without checking top is
+  // safe in new-space because the limit of the heap is aligned there.
+  ASSERT(kPointerAlignment * 2 == kDoubleAlignment);
+  Register scratch3 = t8;
+  if ((flags & HEAP_NUMBER_ALIGNMENT) != 0) {
     ASSERT((flags & PRETENURE_OLD_POINTER_SPACE) == 0);
-    ASSERT(kPointerAlignment * 2 == kDoubleAlignment);
+    Nor(scratch2, result, Operand(~(1 << kPointerSizeLog2)));
+    Addu(scratch3, result, Operand(scratch2));
+    // Calculate new top and bail out if new space is exhausted. Use result
+    // to calculate the new top.
+    Addu(scratch2, scratch3, Operand(object_size));
+    Branch(gc_required, Ugreater, scratch2, Operand(t9));
+    li(t9, Operand(isolate()->factory()->one_pointer_filler_map()));
+    sw(t9, MemOperand(result));
+    mov(result, scratch3);
+    sw(scratch2, MemOperand(topaddr));
+  } else if((flags & DOUBLE_ALIGNMENT) != 0) {
+    ASSERT((flags & PRETENURE_OLD_POINTER_SPACE) == 0);
     And(scratch2, result, Operand(kDoubleAlignmentMask));
-    Label aligned;
-    if ((flags & HEAP_NUMBER_ALIGNMENT) != 0) {
-      Branch(&aligned, ne, scratch2, Operand(zero_reg));
-      Branch(gc_required, Ugreater_equal, result, Operand(t9));
-    } else {
-      Branch(&aligned, eq, scratch2, Operand(zero_reg));
-    }
-    if ((flags & PRETENURE_OLD_DATA_SPACE) != 0) {
-      Branch(gc_required, Ugreater_equal, result, Operand(t9));
-    }
-    li(scratch2, Operand(isolate()->factory()->one_pointer_filler_map()));
-    sw(scratch2, MemOperand(result));
-    Addu(result, result, Operand(kDoubleSize / 2));
-    bind(&aligned);
+    Addu(scratch3, result, Operand(scratch2));
+    // Calculate new top and bail out if new space is exhausted. Use result
+    // to calculate the new top.
+    Addu(scratch2, scratch3, Operand(object_size));
+    Branch(gc_required, Ugreater, scratch2, Operand(t9));
+    li(t9, Operand(isolate()->factory()->one_pointer_filler_map()));
+    sw(t9, MemOperand(result));
+    mov(result, scratch3);
+    sw(scratch2, MemOperand(topaddr));
+  } else {
+    // Calculate new top and bail out if new space is exhausted. Use result
+    // to calculate the new top.
+    Addu(scratch2, result, Operand(object_size));
+    Branch(gc_required, Ugreater, scratch2, Operand(t9));
+    sw(scratch2, MemOperand(topaddr));
   }
-
-  // Calculate new top and bail out if new space is exhausted. Use result
-  // to calculate the new top.
-  Addu(scratch2, result, Operand(object_size));
-  Branch(gc_required, Ugreater, scratch2, Operand(t9));
-  sw(scratch2, MemOperand(topaddr));
 
   // Tag object if requested.
   if ((flags & TAG_OBJECT) != 0) {
@@ -2903,6 +2914,8 @@ void MacroAssembler::Allocate(Register object_size,
   ASSERT(!scratch1.is(scratch2));
   ASSERT(!object_size.is(t9));
   ASSERT(!scratch1.is(t9) && !scratch2.is(t9) && !result.is(t9));
+  ASSERT(!object_size.is(t8));
+  ASSERT(!scratch1.is(t8) && !scratch2.is(t8) && !result.is(t8));
 
   // Check relative positions of allocation top and limit addresses.
   // ARM adds additional checks to make sure the ldm instruction can be
@@ -2938,45 +2951,68 @@ void MacroAssembler::Allocate(Register object_size,
     lw(t9, MemOperand(topaddr, limit - top));
   }
 
-  if ((flags & DOUBLE_ALIGNMENT) != 0 || (flags & HEAP_NUMBER_ALIGNMENT) != 0) {
-    // Align the next allocation. Storing the filler map without checking top is
-    // safe in new-space because the limit of the heap is aligned there.
+  // Align the next allocation. Storing the filler map without checking top is
+  // safe in new-space because the limit of the heap is aligned there.
+  ASSERT(kPointerAlignment * 2 == kDoubleAlignment);
+  Register scratch3 = t8;
+  if ((flags & HEAP_NUMBER_ALIGNMENT) != 0) {
     ASSERT((flags & PRETENURE_OLD_POINTER_SPACE) == 0);
-    ASSERT(kPointerAlignment * 2 == kDoubleAlignment);
-    And(scratch2, result, Operand(kDoubleAlignmentMask));
-    Label aligned;
-    if ((flags & HEAP_NUMBER_ALIGNMENT) != 0) {
-      Branch(&aligned, ne, scratch2, Operand(zero_reg));
-      Branch(gc_required, Ugreater_equal, result, Operand(t9));
+    Nor(scratch2, result, Operand(~(1 << kPointerSizeLog2)));
+    Addu(scratch3, result, Operand(scratch2));
+    // Calculate new top and bail out if new space is exhausted. Use result
+    // to calculate the new top.
+    if ((flags & SIZE_IN_WORDS) != 0) {
+      sll(scratch2, object_size, kPointerSizeLog2);
+      Addu(scratch2, scratch3, scratch2);
     } else {
-      Branch(&aligned, eq, scratch2, Operand(zero_reg));
+      Addu(scratch2, scratch3, Operand(object_size));
     }
-    if ((flags & PRETENURE_OLD_DATA_SPACE) != 0) {
-      Branch(gc_required, Ugreater_equal, result, Operand(t9));
+    Branch(gc_required, Ugreater, scratch2, Operand(t9));
+    if (emit_debug_code()) {
+      And(t9, scratch2, Operand(kObjectAlignmentMask));
+      Check(eq, kUnalignedAllocationInNewSpace, t9, Operand(zero_reg));
     }
-    li(scratch2, Operand(isolate()->factory()->one_pointer_filler_map()));
-    sw(scratch2, MemOperand(result));
-    Addu(result, result, Operand(kDoubleSize / 2));
-    bind(&aligned);
-  }
-
-  // Calculate new top and bail out if new space is exhausted. Use result
-  // to calculate the new top. Object size may be in words so a shift is
-  // required to get the number of bytes.
-  if ((flags & SIZE_IN_WORDS) != 0) {
-    sll(scratch2, object_size, kPointerSizeLog2);
-    Addu(scratch2, result, scratch2);
+    li(t9, Operand(isolate()->factory()->one_pointer_filler_map()));
+    sw(t9, MemOperand(result));
+    mov(result, scratch3);
+    sw(scratch2, MemOperand(topaddr));
+  } else if ((flags & DOUBLE_ALIGNMENT) != 0) {
+    ASSERT((flags & PRETENURE_OLD_POINTER_SPACE) == 0);
+    And(scratch2, result, Operand(kDoubleAlignmentMask));
+    Addu(scratch3, result, Operand(scratch2));
+    // Calculate new top and bail out if new space is exhausted. Use result
+    // to calculate the new top.
+    if ((flags & SIZE_IN_WORDS) != 0) {
+      sll(scratch2, object_size, kPointerSizeLog2);
+      Addu(scratch2, scratch3, scratch2);
+    } else {
+      Addu(scratch2, scratch3, Operand(object_size));
+    }
+    Branch(gc_required, Ugreater, scratch2, Operand(t9));
+    if (emit_debug_code()) {
+      And(t9, scratch2, Operand(kObjectAlignmentMask));
+      Check(eq, kUnalignedAllocationInNewSpace, t9, Operand(zero_reg));
+    }
+    li(t9, Operand(isolate()->factory()->one_pointer_filler_map()));
+    sw(t9, MemOperand(result));
+    mov(result, scratch3);
+    sw(scratch2, MemOperand(topaddr));
   } else {
-    Addu(scratch2, result, Operand(object_size));
+    // Calculate new top and bail out if new space is exhausted. Use result
+    // to calculate the new top.
+    if ((flags & SIZE_IN_WORDS) != 0) {
+      sll(scratch2, object_size, kPointerSizeLog2);
+      Addu(scratch2, result, scratch2);
+    } else {
+      Addu(scratch2, result, Operand(object_size));
+    }
+    Branch(gc_required, Ugreater, scratch2, Operand(t9));
+    if (emit_debug_code()) {
+      And(t9, scratch2, Operand(kObjectAlignmentMask));
+      Check(eq, kUnalignedAllocationInNewSpace, t9, Operand(zero_reg));
+    }
+    sw(scratch2, MemOperand(topaddr));
   }
-  Branch(gc_required, Ugreater, scratch2, Operand(t9));
-
-  // Update allocation top. result temporarily holds the new top.
-  if (emit_debug_code()) {
-    And(t9, scratch2, Operand(kObjectAlignmentMask));
-    Check(eq, kUnalignedAllocationInNewSpace, t9, Operand(zero_reg));
-  }
-  sw(scratch2, MemOperand(topaddr));
 
   // Tag object if requested.
   if ((flags & TAG_OBJECT) != 0) {
