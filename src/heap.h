@@ -1479,6 +1479,13 @@ class Heap {
   // Write barrier support for address[start : start + len[ = o.
   INLINE(void RecordWrites(Address address, int start, int len));
 
+  // Ensure object is 8-byte aligned after raw allocation.
+  // Return aligned address. One word in allocated space is prefilled to
+  // provide padding, so value of the size argument is amount of allocated
+  // memory for the object that must be one word larger than actual size of
+  // the object.
+  INLINE(HeapObject* EnsureDoubleAligned(HeapObject* object, int size));
+
   enum HeapState { NOT_IN_GC, SCAVENGE, MARK_COMPACT };
   inline HeapState gc_state() { return gc_state_; }
 

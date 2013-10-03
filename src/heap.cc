@@ -1946,27 +1946,6 @@ Address Heap::DoScavenge(ObjectVisitor* scavenge_visitor,
 }
 
 
-STATIC_ASSERT((FixedDoubleArray::kHeaderSize & kDoubleAlignmentMask) == 0);
-
-
-INLINE(static HeapObject* EnsureDoubleAligned(Heap* heap,
-                                              HeapObject* object,
-                                              int size));
-
-static HeapObject* EnsureDoubleAligned(Heap* heap,
-                                       HeapObject* object,
-                                       int size) {
-  if ((OffsetFrom(object->address()) & kDoubleAlignmentMask) != 0) {
-    heap->CreateFillerObjectAt(object->address(), kPointerSize);
-    return HeapObject::FromAddress(object->address() + kPointerSize);
-  } else {
-    heap->CreateFillerObjectAt(object->address() + size - kPointerSize,
-                               kPointerSize);
-    return object;
-  }
-}
-
-
 enum LoggingAndProfiling {
   LOGGING_AND_PROFILING_ENABLED,
   LOGGING_AND_PROFILING_DISABLED
@@ -2143,7 +2122,7 @@ class ScavengingVisitor : public StaticVisitorBase {
         HeapObject* target = HeapObject::cast(result);
 
         if (alignment != kObjectAlignment) {
-          target = EnsureDoubleAligned(heap, target, allocation_size);
+          target = heap->EnsureDoubleAligned(target, allocation_size);
         }
 
         // Order is important: slot might be inside of the target if target
@@ -2173,7 +2152,7 @@ class ScavengingVisitor : public StaticVisitorBase {
     HeapObject* target = HeapObject::cast(result);
 
     if (alignment != kObjectAlignment) {
-      target = EnsureDoubleAligned(heap, target, allocation_size);
+      target = heap->EnsureDoubleAligned(target, allocation_size);
     }
 
     // Order is important: slot might be inside of the target if target
@@ -5737,7 +5716,7 @@ MaybeObject* Heap::AllocateRawFixedDoubleArray(int length,
     if (!maybe_object->To<HeapObject>(&object)) return maybe_object;
   }
 
-  return EnsureDoubleAligned(this, object, size);
+  return EnsureDoubleAligned(object, size);
 }
 
 
