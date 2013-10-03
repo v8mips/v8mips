@@ -2104,7 +2104,7 @@ void LCodeGen::DoBranch(LBranch* instr) {
     } else if (type.IsHeapNumber()) {
       ASSERT(!info()->IsStub());
       DoubleRegister dbl_scratch = double_scratch0();
-      __ ldc1(dbl_scratch, FieldMemOperand(reg, HeapNumber::kValueOffset));
+      __ ldc1(dbl_scratch, FieldMemOperand(reg, HeapNumber::kValueOffset), true);
       // Test the double value. Zero and NaN are false.
       EmitBranchF(instr, nue, dbl_scratch, kDoubleRegZero);
     } else if (type.IsString()) {
@@ -2186,7 +2186,7 @@ void LCodeGen::DoBranch(LBranch* instr) {
         Label not_heap_number;
         __ LoadRoot(at, Heap::kHeapNumberMapRootIndex);
         __ Branch(&not_heap_number, ne, map, Operand(at));
-        __ ldc1(dbl_scratch, FieldMemOperand(reg, HeapNumber::kValueOffset));
+        __ ldc1(dbl_scratch, FieldMemOperand(reg, HeapNumber::kValueOffset), true);
         __ BranchF(instr->TrueLabel(chunk_), instr->FalseLabel(chunk_),
                    ne, dbl_scratch, kDoubleRegZero);
         // Falls through if dbl_scratch == 0.
@@ -2943,7 +2943,7 @@ void LCodeGen::DoLoadNamedField(LLoadNamedField* instr) {
 
   if (instr->hydrogen()->representation().IsDouble()) {
     DoubleRegister result = ToDoubleRegister(instr->result());
-    __ ldc1(result, FieldMemOperand(object, offset));
+    __ ldc1(result, FieldMemOperand(object, offset), true);
     return;
   }
 
@@ -4109,7 +4109,7 @@ void LCodeGen::DoStoreNamedField(LStoreNamedField* instr) {
     ASSERT(access.IsInobject());
     ASSERT(!instr->hydrogen()->NeedsWriteBarrier());
     DoubleRegister value = ToDoubleRegister(instr->value());
-    __ sdc1(value, FieldMemOperand(object, offset));
+    __ sdc1(value, FieldMemOperand(object, offset), true);
     return;
   }
 
@@ -4716,7 +4716,7 @@ void LCodeGen::DoDeferredNumberTagI(LInstruction* instr,
   // Done. Put the value in dbl_scratch into the value of the allocated heap
   // number.
   __ bind(&done);
-  __ sdc1(dbl_scratch, MemOperand(dst, HeapNumber::kValueOffset));
+  __ sdc1(dbl_scratch, MemOperand(dst, HeapNumber::kValueOffset), true);
   __ Addu(dst, dst, kHeapObjectTag);
   __ StoreToSafepointRegisterSlot(dst, dst);
 }
@@ -4751,7 +4751,7 @@ void LCodeGen::DoNumberTagD(LNumberTagD* instr) {
     __ Branch(deferred->entry());
   }
   __ bind(deferred->exit());
-  __ sdc1(input_reg, MemOperand(reg, HeapNumber::kValueOffset));
+  __ sdc1(input_reg, MemOperand(reg, HeapNumber::kValueOffset), true);
   // Now that we have finished with the object's real address tag it
   __ Addu(reg, reg, kHeapObjectTag);
 }
@@ -4822,13 +4822,14 @@ void LCodeGen::EmitNumberUntagD(Register input_reg,
 
       __ bind(&convert);
       __ LoadRoot(at, Heap::kNanValueRootIndex);
-      __ ldc1(result_reg, FieldMemOperand(at, HeapNumber::kValueOffset));
+      __ ldc1(result_reg, FieldMemOperand(at, HeapNumber::kValueOffset), true);
       __ Branch(&done);
 
       __ bind(&heap_number);
     }
     // Heap number to double register conversion.
-    __ ldc1(result_reg, FieldMemOperand(input_reg, HeapNumber::kValueOffset));
+    __ ldc1(result_reg,
+            FieldMemOperand(input_reg, HeapNumber::kValueOffset), true);
     if (deoptimize_on_minus_zero) {
       __ mfc1(at, result_reg.low());
       __ Branch(&done, ne, at, Operand(zero_reg));
@@ -4891,7 +4892,7 @@ void LCodeGen::DoDeferredTaggedToI(LTaggedToI* instr) {
 
     // Load the double value.
     __ ldc1(double_scratch,
-            FieldMemOperand(input_reg, HeapNumber::kValueOffset));
+            FieldMemOperand(input_reg, HeapNumber::kValueOffset), true);
 
     Register except_flag = scratch2;
     __ EmitFPUTruncate(kRoundToZero,
@@ -5209,7 +5210,7 @@ void LCodeGen::DoClampTToUint8(LClampTToUint8* instr) {
   // Heap number
   __ bind(&heap_number);
   __ ldc1(double_scratch0(), FieldMemOperand(input_reg,
-                                             HeapNumber::kValueOffset));
+                                             HeapNumber::kValueOffset), true);
   __ ClampDoubleToUint8(result_reg, double_scratch0(), temp_reg);
   __ jmp(&done);
 
@@ -5242,6 +5243,9 @@ void LCodeGen::DoAllocate(LAllocate* instr) {
   AllocationFlags flags = TAG_OBJECT;
   if (instr->hydrogen()->MustAllocateDoubleAligned()) {
     flags = static_cast<AllocationFlags>(flags | DOUBLE_ALIGNMENT);
+  }
+  if (instr->hydrogen()->MustAllocateHeapNumberAligned()) {
+    flags = static_cast<AllocationFlags>(flags | HEAP_NUMBER_ALIGNMENT);
   }
   if (instr->hydrogen()->IsOldPointerSpaceAllocation()) {
     ASSERT(!instr->hydrogen()->IsOldDataSpaceAllocation());
@@ -5316,17 +5320,23 @@ void LCodeGen::DoDeferredAllocate(LAllocate* instr, AllocationFlags flags) {
     CallRuntimeFromDeferred(Runtime::kAllocateInOldPointerSpace, 1, instr);
   } else if (instr->hydrogen()->IsOldDataSpaceAllocation()) {
     ASSERT(!instr->hydrogen()->IsNewSpaceAllocation());
-    if ((flags & DOUBLE_ALIGNMENT) == 0) {
-      CallRuntimeFromDeferred(Runtime::kAllocateInOldDataSpace, 1, instr);
-    } else {
+    if ((flags & DOUBLE_ALIGNMENT) != 0) {
       CallRuntimeFromDeferred(
           Runtime::kAllocateInOldDataSpaceAligned, 1, instr);
+    } else if ((flags & HEAP_NUMBER_ALIGNMENT) != 0) {
+       CallRuntimeFromDeferred(
+          Runtime::kAllocateInOldDataSpaceHeapNumberAligned, 1, instr);
+    } else {
+       CallRuntimeFromDeferred(Runtime::kAllocateInOldDataSpace, 1, instr);
     }
   } else {
-    if ((flags & DOUBLE_ALIGNMENT) == 0) {
-      CallRuntimeFromDeferred(Runtime::kAllocateInNewSpace, 1, instr);
-    } else {
+    if ((flags & DOUBLE_ALIGNMENT) != 0) {
       CallRuntimeFromDeferred(Runtime::kAllocateInNewSpaceAligned, 1, instr);
+    } else if ((flags & HEAP_NUMBER_ALIGNMENT) != 0) {
+      CallRuntimeFromDeferred(
+          Runtime::kAllocateInNewSpaceHeapNumberAligned, 1, instr);
+    } else {
+      CallRuntimeFromDeferred(Runtime::kAllocateInNewSpace, 1, instr);
     }
   }
   __ StoreToSafepointRegisterSlot(v0, result);

@@ -79,6 +79,9 @@ StaticVisitorBase::VisitorId StaticVisitorBase::GetVisitorId(
     case FIXED_ARRAY_TYPE:
       return kVisitFixedArray;
 
+    case HEAP_NUMBER_TYPE:
+       return kVisitHeapNumber;
+
     case FIXED_DOUBLE_ARRAY_TYPE:
       return kVisitFixedDoubleArray;
 
@@ -167,7 +170,6 @@ StaticVisitorBase::VisitorId StaticVisitorBase::GetVisitorId(
     case JS_FUNCTION_TYPE:
       return kVisitJSFunction;
 
-    case HEAP_NUMBER_TYPE:
     case EXTERNAL_PIXEL_ARRAY_TYPE:
     case EXTERNAL_BYTE_ARRAY_TYPE:
     case EXTERNAL_UNSIGNED_BYTE_ARRAY_TYPE:

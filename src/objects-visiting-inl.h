@@ -61,6 +61,8 @@ void StaticNewSpaceVisitor<StaticVisitor>::Initialize() {
 
   table_.Register(kVisitFixedDoubleArray, &VisitFixedDoubleArray);
 
+  table_.Register(kVisitHeapNumber, &VisitHeapNumber);
+
   table_.Register(kVisitNativeContext,
                   &FixedBodyVisitor<StaticVisitor,
                   Context::ScavengeBodyDescriptor,
@@ -184,6 +186,8 @@ void StaticMarkingVisitor<StaticVisitor>::Initialize() {
   table_.Register(kVisitFixedArray, &FixedArrayVisitor::Visit);
 
   table_.Register(kVisitFixedDoubleArray, &DataObjectVisitor::Visit);
+
+  table_.Register(kVisitHeapNumber, &DataObjectVisitor::Visit);
 
   table_.Register(kVisitNativeContext, &VisitNativeContext);
 

@@ -1486,6 +1486,13 @@ class Heap {
   // the object.
   INLINE(HeapObject* EnsureDoubleAligned(HeapObject* object, int size));
 
+  // Ensure heap numbers are aligned at 4-byte boundary, so its value storage
+  // is 8-byte aligned. One word in allocated space is prefilled to
+  // provide padding, so value of the size argument is amount of allocated
+  // memory for the object that must be one word larger than actual size of
+  // the object.
+  INLINE(HeapObject* EnsureHeapNumberAligned(HeapObject* object, int size));
+
   enum HeapState { NOT_IN_GC, SCAVENGE, MARK_COMPACT };
   inline HeapState gc_state() { return gc_state_; }
 

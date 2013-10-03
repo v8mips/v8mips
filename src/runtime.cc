@@ -9757,6 +9757,37 @@ static MaybeObject* AllocateAligned(Isolate* isolate,
 }
 
 
+static MaybeObject* AllocateHeapNumberAligned(Isolate* isolate,
+                                              int size,
+                                              AllocationSpace space) {
+  // Allocate a block of memory in the given space (filled with a filler).
+  // Use as fallback for allocation in generated code when the space
+  // is full.
+  SealHandleScope shs(isolate);
+  RUNTIME_ASSERT(IsAligned(size, kPointerSize));
+  RUNTIME_ASSERT(size > 0);
+  Heap* heap = isolate->heap();
+  RUNTIME_ASSERT(size <= heap->MaxRegularSpaceAllocationSize());
+  Object* allocation;
+  int allocation_size = size + kPointerSize;
+  { MaybeObject* maybe_allocation;
+    if (space == NEW_SPACE) {
+      maybe_allocation = heap->new_space()->AllocateRaw(allocation_size);
+    } else {
+      ASSERT(space == OLD_DATA_SPACE);
+      maybe_allocation = heap->paged_space(space)->AllocateRaw(allocation_size);
+    }
+    if (maybe_allocation->ToObject(&allocation)) {
+      HeapObject* object = HeapObject::cast(allocation);
+      object = heap->EnsureHeapNumberAligned(object, allocation_size);
+      heap->CreateFillerObjectAt(object->address(), size);
+      return object;
+    }
+    return maybe_allocation;
+  }
+}
+
+
 RUNTIME_FUNCTION(MaybeObject*, Runtime_AllocateInNewSpace) {
   SealHandleScope shs(isolate);
   ASSERT(args.length() == 1);
@@ -9772,6 +9803,12 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_AllocateInNewSpaceAligned) {
   return AllocateAligned(isolate, size_smi->value(), NEW_SPACE);
 }
 
+RUNTIME_FUNCTION(MaybeObject*, Runtime_AllocateInNewSpaceHeapNumberAligned) {
+  SealHandleScope shs(isolate);
+  ASSERT(args.length() == 1);
+  CONVERT_ARG_HANDLE_CHECKED(Smi, size_smi, 0);
+  return AllocateHeapNumberAligned(isolate, size_smi->value(), NEW_SPACE);
+}
 
 RUNTIME_FUNCTION(MaybeObject*, Runtime_AllocateInOldPointerSpace) {
   SealHandleScope shs(isolate);
@@ -9796,6 +9833,12 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_AllocateInOldDataSpaceAligned) {
   return AllocateAligned(isolate, size_smi->value(), OLD_DATA_SPACE);
 }
 
+RUNTIME_FUNCTION(MaybeObject*, Runtime_AllocateInOldDataSpaceHeapNumberAligned) {
+  SealHandleScope shs(isolate);
+  ASSERT(args.length() == 1);
+  CONVERT_ARG_HANDLE_CHECKED(Smi, size_smi, 0);
+  return AllocateHeapNumberAligned(isolate, size_smi->value(), OLD_DATA_SPACE);
+}
 
 // Push an object unto an array of objects if it is not already in the
 // array.  Returns true if the element was pushed on the stack and

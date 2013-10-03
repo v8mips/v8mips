@@ -2846,14 +2846,19 @@ void MacroAssembler::Allocate(int object_size,
     lw(t9, MemOperand(topaddr, limit - top));
   }
 
-  if ((flags & DOUBLE_ALIGNMENT) != 0) {
+  if ((flags & DOUBLE_ALIGNMENT) != 0 || (flags & HEAP_NUMBER_ALIGNMENT) != 0) {
     // Align the next allocation. Storing the filler map without checking top is
     // safe in new-space because the limit of the heap is aligned there.
     ASSERT((flags & PRETENURE_OLD_POINTER_SPACE) == 0);
     ASSERT(kPointerAlignment * 2 == kDoubleAlignment);
     And(scratch2, result, Operand(kDoubleAlignmentMask));
     Label aligned;
-    Branch(&aligned, eq, scratch2, Operand(zero_reg));
+    if ((flags & HEAP_NUMBER_ALIGNMENT) != 0) {
+      Branch(&aligned, ne, scratch2, Operand(zero_reg));
+      Branch(gc_required, Ugreater_equal, result, Operand(t9));
+    } else {
+      Branch(&aligned, eq, scratch2, Operand(zero_reg));
+    }
     if ((flags & PRETENURE_OLD_DATA_SPACE) != 0) {
       Branch(gc_required, Ugreater_equal, result, Operand(t9));
     }
@@ -2933,14 +2938,19 @@ void MacroAssembler::Allocate(Register object_size,
     lw(t9, MemOperand(topaddr, limit - top));
   }
 
-  if ((flags & DOUBLE_ALIGNMENT) != 0) {
+  if ((flags & DOUBLE_ALIGNMENT) != 0 || (flags & HEAP_NUMBER_ALIGNMENT) != 0) {
     // Align the next allocation. Storing the filler map without checking top is
     // safe in new-space because the limit of the heap is aligned there.
     ASSERT((flags & PRETENURE_OLD_POINTER_SPACE) == 0);
     ASSERT(kPointerAlignment * 2 == kDoubleAlignment);
     And(scratch2, result, Operand(kDoubleAlignmentMask));
     Label aligned;
-    Branch(&aligned, eq, scratch2, Operand(zero_reg));
+    if ((flags & HEAP_NUMBER_ALIGNMENT) != 0) {
+      Branch(&aligned, ne, scratch2, Operand(zero_reg));
+      Branch(gc_required, Ugreater_equal, result, Operand(t9));
+    } else {
+      Branch(&aligned, eq, scratch2, Operand(zero_reg));
+    }
     if ((flags & PRETENURE_OLD_DATA_SPACE) != 0) {
       Branch(gc_required, Ugreater_equal, result, Operand(t9));
     }
@@ -3166,8 +3176,10 @@ void MacroAssembler::AllocateHeapNumber(Register result,
                                         TaggingMode tagging_mode) {
   // Allocate an object in the heap for the heap number and tag it as a heap
   // object.
-  Allocate(HeapNumber::kSize, result, scratch1, scratch2, need_gc,
-           tagging_mode == TAG_RESULT ? TAG_OBJECT : NO_ALLOCATION_FLAGS);
+  AllocationFlags flags =
+      tagging_mode == TAG_RESULT ? TAG_OBJECT : NO_ALLOCATION_FLAGS;
+  flags = static_cast<AllocationFlags>(flags | HEAP_NUMBER_ALIGNMENT);
+  Allocate(HeapNumber::kSize, result, scratch1, scratch2, need_gc, flags);
 
   // Store heap number map in the allocated object.
   AssertIsRoot(heap_number_map, Heap::kHeapNumberMapRootIndex);

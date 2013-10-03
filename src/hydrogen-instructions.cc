@@ -3302,12 +3302,38 @@ void HAllocate::HandleSideEffectDominator(GVNFlag side_effect,
   int32_t new_dominator_size = dominator_size_constant + current_size_constant;
 
   if (MustAllocateDoubleAligned()) {
-    if (!dominator_allocate->MustAllocateDoubleAligned()) {
+    if (!dominator_allocate->MustAllocateDoubleAligned() &&
+        !dominator_allocate->MustAllocateHeapNumberAligned()) {
       dominator_allocate->MakeDoubleAligned();
     }
-    if ((dominator_size_constant & kDoubleAlignmentMask) != 0) {
-      dominator_size_constant += kDoubleSize / 2;
-      new_dominator_size += kDoubleSize / 2;
+    if (dominator_allocate->MustAllocateDoubleAligned()) {
+      if ((dominator_size_constant & kDoubleAlignmentMask) != 0) {
+        dominator_size_constant += kDoubleSize / 2;
+        new_dominator_size += kDoubleSize / 2;
+      }
+    } else if ( dominator_allocate->MustAllocateHeapNumberAligned()) {
+      if ((dominator_size_constant & kDoubleAlignmentMask) == 0) {
+        dominator_size_constant += kDoubleSize / 2;
+        new_dominator_size += kDoubleSize / 2;
+      }
+    }
+  }
+
+  if (MustAllocateHeapNumberAligned()) {
+    if (!dominator_allocate->MustAllocateDoubleAligned() &&
+        !dominator_allocate->MustAllocateHeapNumberAligned()) {
+      dominator_allocate->MakeHeapNumberAligned();
+    }
+    if (dominator_allocate->MustAllocateDoubleAligned()) {
+      if ((dominator_size_constant & kDoubleAlignmentMask) == 0) {
+        dominator_size_constant += kDoubleSize / 2;
+        new_dominator_size += kDoubleSize / 2;
+      }
+    } else if (dominator_allocate->MustAllocateHeapNumberAligned()){
+      if ((dominator_size_constant & kDoubleAlignmentMask) != 0) {
+        dominator_size_constant += kDoubleSize / 2;
+        new_dominator_size += kDoubleSize / 2;
+      }
     }
   }
 

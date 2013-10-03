@@ -5160,6 +5160,10 @@ class HAllocate V8_FINAL : public HTemplateInstruction<2> {
     return (flags_ & ALLOCATE_DOUBLE_ALIGNED) != 0;
   }
 
+  bool MustAllocateHeapNumberAligned() const {
+    return (flags_ & HEAP_NUMBER_ALIGNED) != 0;
+  }
+
   bool MustPrefillWithFiller() const {
     return (flags_ & PREFILL_WITH_FILLER) != 0;
   }
@@ -5170,6 +5174,10 @@ class HAllocate V8_FINAL : public HTemplateInstruction<2> {
 
   void MakeDoubleAligned() {
     flags_ = static_cast<HAllocate::Flags>(flags_ | ALLOCATE_DOUBLE_ALIGNED);
+  }
+
+  void MakeHeapNumberAligned() {
+    flags_ = static_cast<HAllocate::Flags>(flags_ | HEAP_NUMBER_ALIGNED);
   }
 
   virtual void HandleSideEffectDominator(GVNFlag side_effect,
@@ -5185,7 +5193,8 @@ class HAllocate V8_FINAL : public HTemplateInstruction<2> {
     ALLOCATE_IN_OLD_DATA_SPACE = 1 << 1,
     ALLOCATE_IN_OLD_POINTER_SPACE = 1 << 2,
     ALLOCATE_DOUBLE_ALIGNED = 1 << 3,
-    PREFILL_WITH_FILLER = 1 << 4
+    PREFILL_WITH_FILLER = 1 << 4,
+    HEAP_NUMBER_ALIGNED = 1 << 5
   };
 
   HAllocate(HValue* context,
@@ -5209,6 +5218,8 @@ class HAllocate V8_FINAL : public HTemplateInstruction<2> {
         : ALLOCATE_IN_NEW_SPACE;
     if (instance_type == FIXED_DOUBLE_ARRAY_TYPE) {
       flags_ = static_cast<HAllocate::Flags>(flags_ | ALLOCATE_DOUBLE_ALIGNED);
+    } else if (instance_type == HEAP_NUMBER_TYPE) {
+      flags_ = static_cast<HAllocate::Flags>(flags_ | HEAP_NUMBER_ALIGNED);
     }
     // We have to fill the allocated object with one word fillers if we do
     // not use allocation folding since some allocations may depend on each
