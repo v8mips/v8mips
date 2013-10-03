@@ -2798,6 +2798,8 @@ void MacroAssembler::Allocate(int object_size,
     return;
   }
 
+  break_(kTracepoint0);
+
   ASSERT(!result.is(scratch1));
   ASSERT(!result.is(scratch2));
   ASSERT(!scratch1.is(scratch2));
@@ -2854,6 +2856,7 @@ void MacroAssembler::Allocate(int object_size,
   ASSERT(kPointerAlignment * 2 == kDoubleAlignment);
   Register scratch3 = t8;
   if ((flags & HEAP_NUMBER_ALIGNMENT) != 0) {
+    break_(kTracepoint4);
     ASSERT((flags & PRETENURE_OLD_POINTER_SPACE) == 0);
     Nor(scratch2, result, Operand(~(1 << kPointerSizeLog2)));
     Addu(scratch3, result, Operand(scratch2));
@@ -2866,6 +2869,8 @@ void MacroAssembler::Allocate(int object_size,
     mov(result, scratch3);
     sw(scratch2, MemOperand(topaddr));
   } else if((flags & DOUBLE_ALIGNMENT) != 0) {
+    break_(kTracepoint5);
+
     ASSERT((flags & PRETENURE_OLD_POINTER_SPACE) == 0);
     And(scratch2, result, Operand(kDoubleAlignmentMask));
     Addu(scratch3, result, Operand(scratch2));
@@ -2917,6 +2922,8 @@ void MacroAssembler::Allocate(Register object_size,
   ASSERT(!object_size.is(t8));
   ASSERT(!scratch1.is(t8) && !scratch2.is(t8) && !result.is(t8));
 
+  break_(kTracepoint1);  // plind - tracing
+
   // Check relative positions of allocation top and limit addresses.
   // ARM adds additional checks to make sure the ldm instruction can be
   // used. On MIPS we don't have ldm so we don't need additional checks either.
@@ -2956,6 +2963,7 @@ void MacroAssembler::Allocate(Register object_size,
   ASSERT(kPointerAlignment * 2 == kDoubleAlignment);
   Register scratch3 = t8;
   if ((flags & HEAP_NUMBER_ALIGNMENT) != 0) {
+    break_(kTracepoint6);
     ASSERT((flags & PRETENURE_OLD_POINTER_SPACE) == 0);
     Nor(scratch2, result, Operand(~(1 << kPointerSizeLog2)));
     Addu(scratch3, result, Operand(scratch2));
@@ -2977,6 +2985,7 @@ void MacroAssembler::Allocate(Register object_size,
     mov(result, scratch3);
     sw(scratch2, MemOperand(topaddr));
   } else if ((flags & DOUBLE_ALIGNMENT) != 0) {
+    break_(kTracepoint7);
     ASSERT((flags & PRETENURE_OLD_POINTER_SPACE) == 0);
     And(scratch2, result, Operand(kDoubleAlignmentMask));
     Addu(scratch3, result, Operand(scratch2));
@@ -3210,6 +3219,8 @@ void MacroAssembler::AllocateHeapNumber(Register result,
                                         Register heap_number_map,
                                         Label* need_gc,
                                         TaggingMode tagging_mode) {
+  break_(kTracepoint2);  // plind - tracing
+
   // Allocate an object in the heap for the heap number and tag it as a heap
   // object.
   AllocationFlags flags =
@@ -3232,6 +3243,8 @@ void MacroAssembler::AllocateHeapNumberWithValue(Register result,
                                                  Register scratch1,
                                                  Register scratch2,
                                                  Label* gc_required) {
+  break_(kTracepoint3);  // plind - tracing
+
   LoadRoot(t8, Heap::kHeapNumberMapRootIndex);
   AllocateHeapNumber(result, scratch1, scratch2, t8, gc_required);
   sdc1(value, FieldMemOperand(result, HeapNumber::kValueOffset));

@@ -1653,27 +1653,29 @@ void Simulator::PrintTracepoints(uint32_t code) {
          icount_);
   // PrintF("0: %d,  1:%d,  2:%d,  3: %d,  4: %d,  5:%d,  6:%d,  7: %d\n",
   PrintF("\
- 0:              %d\n\
- 1:              %d\n\
- 2:              %d\n\
- 3:              %d\n\
- 4:              %d\n\
- 5:              %d\n\
- 6:              %d\n\
- 7:              %d\n\n\
- 8:              %d\n\
- 9:              %d\n\
-10:              %d\n\
-11:              %d\n\
-12:              %d\n\
-13:              %d\n\
-14:              %d\n\
-15:              %d\n",
-    trace_count_[0], trace_count_[1], trace_count_[2],  // return & stack opts.
-    trace_count_[3],
-    trace_count_[4], trace_count_[5], trace_count_[6], trace_count_[7],  // cMoves.
-    trace_count_[8], trace_count_[9], trace_count_[10], trace_count_[11],
-    trace_count_[12], trace_count_[13], trace_count_[14], trace_count_[15]);
+ 0: Allocate(int size)             %d\n\
+ 1: Allocate(Register size)        %d\n\
+ 2: AllocateHeapNumber()           %d\n\
+ 3: AllocateHeapNumberWithValue()  %d\n\
+ 4: A int Heap Num                 %d\n\
+ 5: A int DOUBLE_ALIGNMENT         %d\n\
+ 6: A reg Heap Num                 %d\n\
+ 7: A reg DOUBLE_ALIGNMENT         %d\n\n",
+ #if 0
+ 8:                                %d\n\
+ 9:                                %d\n\
+10:                                %d\n\
+11:                                %d\n\
+12:                                %d\n\
+13:                                %d\n\
+14:                                %d\n\
+15:                                %d\n",
+#endif
+    trace_count_[0], trace_count_[1], trace_count_[2], trace_count_[3],
+    trace_count_[4], trace_count_[5], trace_count_[6], trace_count_[7]
+    // trace_count_[8], trace_count_[9], trace_count_[10], trace_count_[11],
+    // trace_count_[12], trace_count_[13], trace_count_[14], trace_count_[15]
+    );
 }
 
 
