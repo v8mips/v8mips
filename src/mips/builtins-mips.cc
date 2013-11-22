@@ -823,12 +823,9 @@ static void GenerateMakeCodeYoungAgainCommon(MacroAssembler* masm) {
   // internal frame to make the code faster, since we shouldn't have to do stack
   // crawls in MakeCodeYoung. This seems a bit fragile.
 
-  __ mov(a0, ra);
-  // Adjust a0 to point to the head of the PlatformCodeAge sequence
+  // Set a0 to point to the head of the PlatformCodeAge sequence.
   __ Subu(a0, a0,
       Operand((kNoCodeAgeSequenceLength - 1) * Assembler::kInstrSize));
-  // Restore the original return address of the function
-  __ mov(ra, at);
 
   // The following registers must be saved and restored when calling through to
   // the runtime:
@@ -856,6 +853,7 @@ void Builtins::Generate_Make##C##CodeYoungAgainOddMarking(   \
 }
 CODE_AGE_LIST(DEFINE_CODE_AGE_BUILTIN_GENERATOR)
 #undef DEFINE_CODE_AGE_BUILTIN_GENERATOR
+
 
 
 static void Generate_NotifyStubFailureHelper(MacroAssembler* masm,
