@@ -9788,6 +9788,7 @@ static MaybeObject* Allocate(Isolate* isolate,
                              bool double_align,
                              AllocationSpace space) {
   Heap* heap = isolate->heap();
+  if (double_align) size += kPointerSize;
   RUNTIME_ASSERT(IsAligned(size, kPointerSize));
   RUNTIME_ASSERT(size > 0);
   RUNTIME_ASSERT(size <= heap->MaxRegularSpaceAllocationSize());
@@ -9799,6 +9800,9 @@ static MaybeObject* Allocate(Isolate* isolate,
   MemoryChunk* chunk = MemoryChunk::FromAddress(allocation->address());
   ASSERT(chunk->owner()->identity() == space);
 #endif
+  if (double_align) {
+    allocation = heap->EnsureDoubleAligned(allocation, size);
+  }
   heap->CreateFillerObjectAt(allocation->address(), size);
   return allocation;
 }
