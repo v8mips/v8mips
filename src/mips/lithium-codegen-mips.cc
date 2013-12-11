@@ -3187,6 +3187,7 @@ void LCodeGen::DoLoadKeyedFixedDoubleArray(LLoadKeyed* instr) {
   Register key = no_reg;
   DoubleRegister result = ToDoubleRegister(instr->result());
   Register scratch = scratch0();
+  bool aligned = FLAG_enable_aligned_doubles;
 
   int element_size_shift = ElementsKindToShiftSize(FAST_DOUBLE_ELEMENTS);
 
@@ -3210,7 +3211,7 @@ void LCodeGen::DoLoadKeyedFixedDoubleArray(LLoadKeyed* instr) {
     __ Addu(scratch, scratch, at);
   }
 
-  __ ldc1(result, MemOperand(scratch));
+  __ ldc1(result, MemOperand(scratch), aligned);
 
   if (instr->hydrogen()->RequiresHoleCheck()) {
     __ lw(scratch, MemOperand(scratch, sizeof(kHoleNanLower32)));
@@ -4339,6 +4340,7 @@ void LCodeGen::DoStoreKeyedFixedDoubleArray(LStoreKeyed* instr) {
   DoubleRegister double_scratch = double_scratch0();
   bool key_is_constant = instr->key()->IsConstantOperand();
   Label not_nan, done;
+  bool aligned = FLAG_enable_aligned_doubles;
 
   // Calculate the effective address of the slot in the array to store the
   // double value.
@@ -4377,7 +4379,7 @@ void LCodeGen::DoStoreKeyedFixedDoubleArray(LStoreKeyed* instr) {
 
   __ bind(&not_nan);
   __ sdc1(value, MemOperand(scratch, instr->additional_index() <<
-      element_size_shift));
+      element_size_shift), aligned);
   __ bind(&done);
 }
 
