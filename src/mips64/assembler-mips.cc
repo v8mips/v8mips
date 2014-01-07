@@ -2343,8 +2343,8 @@ Address Assembler::target_address_at(Address pc) {
 //	        (GetImmediate16(instr1) << 48) | GetImmediate16(instr2) << 32 |
 //	        (GetImmediate16(instr3) << 16) | GetImmediate16(instr4)));
     return reinterpret_cast<Address>(
-        (GetImmediate16(instr1) << 48) | GetImmediate16(instr2) << 32 |
-		(GetImmediate16(instr3) << 16) | GetImmediate16(instr4));
+        ((uint64_t)(GetImmediate16(instr1)) << 48) | (uint64_t)(GetImmediate16(instr2)) << 32 |
+		((uint64_t)(GetImmediate16(instr3)) << 16) | GetImmediate16(instr4));
   }
 //  printf("s 0\n");
   // We should never get here, force a bad address if we do.

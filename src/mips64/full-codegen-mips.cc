@@ -283,7 +283,7 @@ void FullCodeGenerator::Generate() {
 
   } else {
     PrepareForBailoutForId(BailoutId::FunctionEntry(), NO_REGISTERS);
-	__ break_(0x132);
+	// __ break_(0x132);
     { Comment cmnt(masm_, "[ Declarations");
       // For named function expressions, declare the function name as a
       // constant.
@@ -293,10 +293,10 @@ void FullCodeGenerator::Generate() {
                function->proxy()->var()->mode() == CONST_HARMONY);
         ASSERT(function->proxy()->var()->location() != Variable::UNALLOCATED);
         VisitVariableDeclaration(function);
-		__ break_(0x130);
+		// __ break_(0x130);
       }
       VisitDeclarations(scope()->declarations());
-	  __ break_(0x129);
+	  // __ break_(0x129);
     }
     { Comment cmnt(masm_, "[ Stack check");
       PrepareForBailoutForId(BailoutId::Declarations(), NO_REGISTERS);
@@ -304,16 +304,16 @@ void FullCodeGenerator::Generate() {
       __ LoadRoot(t0, Heap::kStackLimitRootIndex);
       __ Branch(&ok, hs, sp, Operand(t0));
       __ Call(isolate()->builtins()->StackCheck(), RelocInfo::CODE_TARGET);
-	  __ break_(0x126);
+	  // __ break_(0x126);
       __ bind(&ok);
     }
 
     { Comment cmnt(masm_, "[ Body");
       ASSERT(loop_depth() == 0);
-	  __ break_(0x131);
+	   __ break_(0x131);
 
       VisitStatements(function()->body());
-	  __ break_(0x127);
+	   __ break_(0x127);
 
       ASSERT(loop_depth() == 0);
     }
@@ -523,6 +523,7 @@ void FullCodeGenerator::AccumulatorValueContext::Plug(
 
 void FullCodeGenerator::StackValueContext::Plug(Handle<Object> lit) const {
   // Immediates cannot be pushed directly.
+  // __ break_(0x111);
   __ li(result_register(), Operand(lit));
   __ push(result_register());
 }
@@ -971,7 +972,7 @@ void FullCodeGenerator::VisitExportDeclaration(ExportDeclaration* declaration) {
 void FullCodeGenerator::DeclareGlobals(Handle<FixedArray> pairs) {
   // Call the runtime to declare the globals.
   // The context is the first argument.
-  __ break_(0x117);
+  // __ break_(0x117);
   __ li(a1, Operand(pairs));
   __ li(a0, Operand(Smi::FromInt(DeclareGlobalsFlags())));
   __ Push(cp, a1, a0);
@@ -1487,7 +1488,7 @@ void FullCodeGenerator::EmitVariableLoad(VariableProxy* proxy) {
       Comment cmnt(masm_, "Global variable");
       // Use inline caching. Variable name is passed in a2 and the global
       // object (receiver) in a0.
-      __ lw(a0, GlobalObjectOperand());
+      __ ld(a0, GlobalObjectOperand());
       __ li(a2, Operand(var->name()));
       Handle<Code> ic = isolate()->builtins()->LoadIC_Initialize();
       CallIC(ic, RelocInfo::CODE_TARGET_CONTEXT);

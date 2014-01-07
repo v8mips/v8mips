@@ -4719,7 +4719,7 @@ void MacroAssembler::EnterExitFrame(bool save_doubles,
   // (used by the DirectCEntryStub to hold the return value if a struct is
   // returned) and align the frame preparing for calling the runtime function.
   ASSERT(stack_space >= 0);
-  Subu(sp, sp, Operand((stack_space + 2) * kPointerSize));
+  Dsubu(sp, sp, Operand((stack_space + 2) * kPointerSize));
   if (frame_alignment > 0) {
     ASSERT(IsPowerOf2(frame_alignment));
     // And(sp, sp, Operand(-frame_alignment));  // Align stack.
