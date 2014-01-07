@@ -1003,7 +1003,7 @@ class PreservePositionScope BASE_EMBEDDED {
 // -----------------------------------------------------------------------------
 // Utility functions
 
-inline bool is_intn(int x, int n)  {
+inline bool is_intn(int32_t x, int n)  {
   return -(1 << (n-1)) <= x && x < (1 << (n-1));
 }
 
@@ -1012,7 +1012,7 @@ inline bool is_int16(int x)  { return is_intn(x, 16); }
 inline bool is_int18(int x)  { return is_intn(x, 18); }
 inline bool is_int24(int x)  { return is_intn(x, 24); }
 
-inline bool is_uintn(int x, int n) {
+inline bool is_uintn(int32_t x, int n) {
   return (x & -(1 << n)) == 0;
 }
 
@@ -1028,6 +1028,33 @@ inline bool is_uint16(int x)  { return is_uintn(x, 16); }
 inline bool is_uint24(int x)  { return is_uintn(x, 24); }
 inline bool is_uint26(int x)  { return is_uintn(x, 26); }
 inline bool is_uint28(int x)  { return is_uintn(x, 28); }
+
+inline bool is_int64_n(int64_t x, int n)  {
+  return -((int64_t)1 << (n-1)) <= x && x < ((int64_t)1 << (n-1));
+}
+
+inline bool is_int64_8(int64_t x)  { return is_int64_n(x, 8); }
+inline bool is_int64_16(int64_t x)  { return is_int64_n(x, 16); }
+inline bool is_int64_18(int64_t x)  { return is_int64_n(x, 18); }
+inline bool is_int64_24(int64_t x)  { return is_int64_n(x, 24); }
+inline bool is_int64_32(int64_t x)  { return is_int64_n(x, 32); }
+
+inline bool is_uint64_n(int64_t x, int n) {
+  return (x & -((int64_t)1 << n)) == 0;
+}
+
+inline bool is_uint64_2(int64_t x)  { return is_uint64_n(x, 2); }
+inline bool is_uint64_3(int64_t x)  { return is_uint64_n(x, 3); }
+inline bool is_uint64_4(int64_t x)  { return is_uint64_n(x, 4); }
+inline bool is_uint64_5(int64_t x)  { return is_uint64_n(x, 5); }
+inline bool is_uint64_6(int64_t x)  { return is_uint64_n(x, 6); }
+inline bool is_uint64_8(int64_t x)  { return is_uint64_n(x, 8); }
+inline bool is_uint64_10(int64_t x)  { return is_uint64_n(x, 10); }
+inline bool is_uint64_12(int64_t x)  { return is_uint64_n(x, 12); }
+inline bool is_uint64_16(int64_t x)  { return is_uint64_n(x, 16); }
+inline bool is_uint64_24(int64_t x)  { return is_uint64_n(x, 24); }
+inline bool is_uint64_26(int64_t x)  { return is_uint64_n(x, 26); }
+inline bool is_uint64_28(int64_t x)  { return is_uint64_n(x, 28); }
 
 inline int NumberOfBitsSet(uint32_t x) {
   unsigned int num_bits_set;

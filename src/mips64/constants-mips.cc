@@ -27,7 +27,7 @@
 
 #include "v8.h"
 
-#if V8_TARGET_ARCH_MIPS
+#if V8_TARGET_ARCH_MIPS64
 
 #include "constants-mips.h"
 
@@ -245,21 +245,36 @@ Instruction::Type Instruction::InstructionType() const {
         case JALR:
         case BREAK:
         case SLL:
+		case DSLL:
+		case DSLL32:
         case SRL:
+		case DSRL:
+		case DSRL32:
         case SRA:
+		case DSRA:
         case SLLV:
+		case DSLLV:
         case SRLV:
+		case DSRLV:
         case SRAV:
         case MFHI:
         case MFLO:
         case MULT:
+		case DMULT:
         case MULTU:
+		case DMULTU:
         case DIV:
+		case DDIV:
         case DIVU:
+		case DDIVU:
         case ADD:
+		case DADD:
         case ADDU:
+		case DADDU:
         case SUB:
+		case DSUB:
         case SUBU:
+		case DSUBU:
         case AND:
         case OR:
         case XOR:
@@ -315,7 +330,9 @@ Instruction::Type Instruction::InstructionType() const {
     case BLEZ:
     case BGTZ:
     case ADDI:
+	case DADDI:
     case ADDIU:
+	case DADDIU:
     case SLTI:
     case SLTIU:
     case ANDI:
@@ -330,6 +347,7 @@ Instruction::Type Instruction::InstructionType() const {
     case LH:
     case LWL:
     case LW:
+	case LD:
     case LBU:
     case LHU:
     case LWR:
@@ -337,6 +355,7 @@ Instruction::Type Instruction::InstructionType() const {
     case SH:
     case SWL:
     case SW:
+	case SD:
     case SWR:
     case LWC1:
     case LDC1:
@@ -356,4 +375,4 @@ Instruction::Type Instruction::InstructionType() const {
 
 } }   // namespace v8::internal
 
-#endif  // V8_TARGET_ARCH_MIPS
+#endif  // V8_TARGET_ARCH_MIPS64

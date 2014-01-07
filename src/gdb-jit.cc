@@ -1115,6 +1115,8 @@ class DebugInfoSection : public DebugSection {
       UNIMPLEMENTED();
 #elif V8_TARGET_ARCH_MIPS
       UNIMPLEMENTED();
+#elif V8_TARGET_ARCH_MIPS64
+      UNIMPLEMENTED();
 #else
 #error Unsupported target architecture.
 #endif

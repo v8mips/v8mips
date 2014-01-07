@@ -27,8 +27,8 @@
 
 #include "v8.h"
 
-#include "mips/lithium-codegen-mips.h"
-#include "mips/lithium-gap-resolver-mips.h"
+#include "mips64/lithium-codegen-mips.h"
+#include "mips64/lithium-gap-resolver-mips.h"
 #include "code-stubs.h"
 #include "stub-cache.h"
 #include "hydrogen-osr.h"
@@ -469,7 +469,7 @@ int32_t LCodeGen::ToRepresentation(LConstantOperand* op,
   int32_t value = constant->Integer32Value();
   if (r.IsInteger32()) return value;
   ASSERT(r.IsSmiOrTagged());
-  return reinterpret_cast<int32_t>(Smi::FromInt(value));
+  return reinterpret_cast<int64_t>(Smi::FromInt(value));
 }
 
 
@@ -506,11 +506,11 @@ Operand LCodeGen::ToOperand(LOperand* op) {
     return Operand(ToRegister(op));
   } else if (op->IsDoubleRegister()) {
     Abort(kToOperandIsDoubleRegisterUnimplemented);
-    return Operand(0);
+    return Operand((int64_t)0);
   }
   // Stack slots not implemented, use ToMemOperand instead.
   UNREACHABLE();
-  return Operand(0);
+  return Operand((int64_t)0);
 }
 
 
@@ -2241,34 +2241,41 @@ void LCodeGen::DoCompareNumericAndBranch(LCompareNumericAndBranch* instr) {
       EmitBranchF(instr, cond, left_reg, right_reg);
     } else {
       Register cmp_left;
-      Operand cmp_right = Operand(0);
-
+      // Operand cmp_right = Operand((int64_t)0);
+      Register cmp_right = scratch0();
       if (right->IsConstantOperand()) {
         int32_t value = ToInteger32(LConstantOperand::cast(right));
         if (instr->hydrogen_value()->representation().IsSmi()) {
           cmp_left = ToRegister(left);
-          cmp_right = Operand(Smi::FromInt(value));
+          // cmp_right = Operand(Smi::FromInt(value));
+		  __ li(cmp_right, Operand(Smi::FromInt(value)));
         } else {
           cmp_left = ToRegister(left);
-          cmp_right = Operand(value);
+          // cmp_right = Operand(value);
+		  __ li(cmp_right, Operand(value));
         }
       } else if (left->IsConstantOperand()) {
         int32_t value = ToInteger32(LConstantOperand::cast(left));
         if (instr->hydrogen_value()->representation().IsSmi()) {
            cmp_left = ToRegister(right);
-           cmp_right = Operand(Smi::FromInt(value));
+           // cmp_right = Operand(Smi::FromInt(value));
+		   __ li(cmp_right, Operand(Smi::FromInt(value)));
         } else {
           cmp_left = ToRegister(right);
-          cmp_right = Operand(value);
+          // cmp_right = Operand(value);
+		  __ li(cmp_right, Operand(value));
         }
         // We transposed the operands. Reverse the condition.
         cond = ReverseCondition(cond);
       } else {
         cmp_left = ToRegister(left);
-        cmp_right = Operand(ToRegister(right));
+        // cmp_right = Operand(ToRegister(right));
+		EmitBranch(instr, cond, cmp_left, Operand(ToRegister(right)));
+		return;
       }
 
-      EmitBranch(instr, cond, cmp_left, cmp_right);
+      // EmitBranch(instr, cond, cmp_left, cmp_right);
+	  EmitBranch(instr, cond, cmp_left, Operand(cmp_right));
     }
   }
 }
@@ -4071,7 +4078,7 @@ void LCodeGen::DoStoreNamedField(LStoreNamedField* instr) {
 
   if (!transition.is_null()) {
     __ li(scratch, Operand(transition));
-    __ sw(scratch, FieldMemOperand(object, HeapObject::kMapOffset));
+    __ sd(scratch, FieldMemOperand(object, HeapObject::kMapOffset));
     if (instr->hydrogen()->NeedsWriteBarrierForMap()) {
       Register temp = ToRegister(instr->temp());
       // Update the write barrier for the map field.
@@ -4107,7 +4114,7 @@ void LCodeGen::DoStoreNamedField(LStoreNamedField* instr) {
                           check_needed);
     }
   } else {
-    __ lw(scratch, FieldMemOperand(object, JSObject::kPropertiesOffset));
+    __ ld(scratch, FieldMemOperand(object, JSObject::kPropertiesOffset));
     MemOperand operand = FieldMemOperand(scratch, offset);
     __ Store(value, operand, representation);
     if (instr->hydrogen()->NeedsWriteBarrier()) {
@@ -4863,7 +4870,7 @@ void LCodeGen::DoDeferredTaggedToI(LTaggedToI* instr) {
 
   // The input is a tagged HeapObject.
   // Heap number map check.
-  __ lw(scratch1, FieldMemOperand(input_reg, HeapObject::kMapOffset));
+  __ ld(scratch1, FieldMemOperand(input_reg, HeapObject::kMapOffset));
   __ LoadRoot(at, Heap::kHeapNumberMapRootIndex);
   // This 'at' value and scratch1 map value are used for tests in both clauses
   // of the if.
@@ -4921,7 +4928,9 @@ void LCodeGen::DoDeferredTaggedToI(LTaggedToI* instr) {
       __ Branch(&done, ne, input_reg, Operand(zero_reg));
 
       __ mfc1(scratch1, double_scratch.high());
-      __ And(scratch1, scratch1, Operand(HeapNumber::kSignMask));
+      // __ And(scratch1, scratch1, Operand(HeapNumber::kSignMask));
+	  __ li(scratch2, Operand(HeapNumber::kSignMask));
+	  __ And(scratch1, scratch1, scratch2);
       DeoptimizeIf(ne, instr->environment(), scratch1, Operand(zero_reg));
     }
   }
@@ -5294,16 +5303,16 @@ void LCodeGen::DoAllocate(LAllocate* instr) {
     } else {
       scratch = ToRegister(instr->size());
     }
-    __ Subu(scratch, scratch, Operand(kPointerSize));
-    __ Subu(result, result, Operand(kHeapObjectTag));
+    __ Dsubu(scratch, scratch, Operand(kPointerSize));
+    __ Dsubu(result, result, Operand(kHeapObjectTag));
     Label loop;
     __ bind(&loop);
     __ li(scratch2, Operand(isolate()->factory()->one_pointer_filler_map()));
-    __ Addu(at, result, Operand(scratch));
-    __ sw(scratch2, MemOperand(at));
-    __ Subu(scratch, scratch, Operand(kPointerSize));
+    __ Daddu(at, result, Operand(scratch));
+    __ sd(scratch2, MemOperand(at));
+    __ Dsubu(scratch, scratch, Operand(kPointerSize));
     __ Branch(&loop, ge, scratch, Operand(zero_reg));
-    __ Addu(result, result, Operand(kHeapObjectTag));
+    __ Daddu(result, result, Operand(kHeapObjectTag));
   }
 }
 
@@ -5324,7 +5333,8 @@ void LCodeGen::DoDeferredAllocate(LAllocate* instr) {
     __ push(size);
   } else {
     int32_t size = ToInteger32(LConstantOperand::cast(instr->size()));
-    __ Push(Smi::FromInt(size));
+	__ li(v0, Operand(Smi::FromInt(size)));
+    __ Push(v0);
   }
 
   int flags = AllocateDoubleAlignFlag::encode(
@@ -5339,7 +5349,8 @@ void LCodeGen::DoDeferredAllocate(LAllocate* instr) {
   } else {
     flags = AllocateTargetSpace::update(flags, NEW_SPACE);
   }
-  __ Push(Smi::FromInt(flags));
+  __ li(v0, Operand(Smi::FromInt(flags)));
+  __ Push(v0);
 
   CallRuntimeFromDeferred(
       Runtime::kAllocateInTargetSpace, 2, instr, instr->context());

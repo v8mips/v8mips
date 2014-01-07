@@ -325,7 +325,7 @@ void Deoptimizer::EntryGenerator::Generate() {
 
 
 // Maximum size of a table entry generated below.
-const int Deoptimizer::table_entry_size_ = 7 * Assembler::kInstrSize;
+const int Deoptimizer::table_entry_size_ = 11 * Assembler::kInstrSize;
 
 void Deoptimizer::TableEntryGenerator::GeneratePrologue() {
   Assembler::BlockTrampolinePoolScope block_trampoline_pool(masm());
@@ -337,16 +337,19 @@ void Deoptimizer::TableEntryGenerator::GeneratePrologue() {
   for (int i = 0; i < count(); i++) {
     Label start;
     __ bind(&start);
-    __ addiu(sp, sp, -1 * kPointerSize);
+    __ daddiu(sp, sp, -1 * kPointerSize);
+	__ break_(0x125);
     // Jump over the remaining deopt entries (including this one).
     // This code is always reached by calling Jump, which puts the target (label
     // start) into t9.
     const int remaining_entries = (count() - i) * table_entry_size_;
-    __ Addu(t9, t9, remaining_entries);
+    __ Daddu(t9, t9, remaining_entries);
     // 'at' was clobbered so we can only load the current entry value here.
-    __ li(at, i);
+    // __ li(at, i);
+	__ li(t8, i);
     __ jr(t9);  // Expose delay slot.
-    __ sw(at, MemOperand(sp, 0 * kPointerSize));  // In the delay slot.
+    // __ sd(at, MemOperand(sp, 0 * kPointerSize));  // In the delay slot.
+	__ sd(t8, MemOperand(sp, 0 * kPointerSize));
 
     // Pad the rest of the code.
     while (table_entry_size_ > (masm()->SizeOfCodeGeneratedSince(&start))) {

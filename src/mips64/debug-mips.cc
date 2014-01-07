@@ -29,7 +29,7 @@
 
 #include "v8.h"
 
-#if V8_TARGET_ARCH_MIPS
+#if V8_TARGET_ARCH_MIPS64
 
 #include "codegen.h"
 #include "debug.h"
@@ -59,7 +59,7 @@ void BreakLocationIterator::SetDebugBreakAtReturn() {
   CodePatcher patcher(rinfo()->pc(), Assembler::kJSReturnSequenceInstructions);
   // li and Call pseudo-instructions emit two instructions each.
   patcher.masm()->li(v8::internal::t9,
-      Operand(reinterpret_cast<int32_t>(
+      Operand(reinterpret_cast<int64_t>(
         debug_info_->GetIsolate()->debug()->debug_break_return()->entry())));
   patcher.masm()->Call(v8::internal::t9);
   patcher.masm()->nop();
@@ -104,7 +104,7 @@ void BreakLocationIterator::SetDebugBreakAtSlot() {
   //   li t9, address   (lui t9 / ori t9 instruction pair)
   //   call t9          (jalr t9 / nop instruction pair)
   CodePatcher patcher(rinfo()->pc(), Assembler::kDebugBreakSlotInstructions);
-  patcher.masm()->li(v8::internal::t9, Operand(reinterpret_cast<int32_t>(
+  patcher.masm()->li(v8::internal::t9, Operand(reinterpret_cast<int64_t>(
       debug_info_->GetIsolate()->debug()->debug_break_slot()->entry())));
   patcher.masm()->Call(v8::internal::t9);
 }
@@ -342,4 +342,4 @@ const bool Debug::kFrameDropperSupported = false;
 
 } }  // namespace v8::internal
 
-#endif  // V8_TARGET_ARCH_MIPS
+#endif  // V8_TARGET_ARCH_MIPS64

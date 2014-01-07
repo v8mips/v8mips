@@ -35,9 +35,9 @@
 
 #include "v8.h"
 
-#if V8_TARGET_ARCH_MIPS
+#if V8_TARGET_ARCH_MIPS64
 
-#include "mips/assembler-mips-inl.h"
+#include "mips64/assembler-mips-inl.h"
 #include "serialize.h"
 
 namespace v8 {
@@ -245,22 +245,22 @@ Operand::Operand(Handle<Object> handle) {
   Object* obj = *handle;
   if (obj->IsHeapObject()) {
     ASSERT(!HeapObject::cast(obj)->GetHeap()->InNewSpace(obj));
-    imm32_ = reinterpret_cast<intptr_t>(handle.location());
+    imm64_ = reinterpret_cast<intptr_t>(handle.location());
     rmode_ = RelocInfo::EMBEDDED_OBJECT;
   } else {
     // No relocation needed.
-    imm32_ = reinterpret_cast<intptr_t>(obj);
-    rmode_ = RelocInfo::NONE32;
+    imm64_ = reinterpret_cast<intptr_t>(obj);
+    rmode_ = RelocInfo::NONE64;
   }
 }
 
 
-MemOperand::MemOperand(Register rm, int32_t offset) : Operand(rm) {
+MemOperand::MemOperand(Register rm, int64_t offset) : Operand(rm) {
   offset_ = offset;
 }
 
 
-MemOperand::MemOperand(Register rm, int32_t unit, int32_t multiplier,
+MemOperand::MemOperand(Register rm, int64_t unit, int64_t multiplier,
                        OffsetAddend offset_addend) : Operand(rm) {
   offset_ = unit * multiplier + offset_addend;
 }
@@ -270,18 +270,18 @@ MemOperand::MemOperand(Register rm, int32_t unit, int32_t multiplier,
 // Specific instructions, constants, and masks.
 
 static const int kNegOffset = 0x00008000;
-// addiu(sp, sp, 4) aka Pop() operation or part of Pop(r)
+// daddiu(sp, sp, 4) aka Pop() operation or part of Pop(r)
 // operations as post-increment of sp.
-const Instr kPopInstruction = ADDIU | (kRegister_sp_Code << kRsShift)
+const Instr kPopInstruction = DADDIU | (kRegister_sp_Code << kRsShift)
       | (kRegister_sp_Code << kRtShift) | (kPointerSize & kImm16Mask);
-// addiu(sp, sp, -4) part of Push(r) operation as pre-decrement of sp.
-const Instr kPushInstruction = ADDIU | (kRegister_sp_Code << kRsShift)
+// daddiu(sp, sp, -4) part of Push(r) operation as pre-decrement of sp.
+const Instr kPushInstruction = DADDIU | (kRegister_sp_Code << kRsShift)
       | (kRegister_sp_Code << kRtShift) | (-kPointerSize & kImm16Mask);
-// sw(r, MemOperand(sp, 0))
-const Instr kPushRegPattern = SW | (kRegister_sp_Code << kRsShift)
+// sd(r, MemOperand(sp, 0))
+const Instr kPushRegPattern = SD | (kRegister_sp_Code << kRsShift)
       |  (0 & kImm16Mask);
-//  lw(r, MemOperand(sp, 0))
-const Instr kPopRegPattern = LW | (kRegister_sp_Code << kRsShift)
+//  ld(r, MemOperand(sp, 0))
+const Instr kPopRegPattern = LD | (kRegister_sp_Code << kRsShift)
       |  (0 & kImm16Mask);
 
 const Instr kLwRegFpOffsetPattern = LW | (kRegister_fp_Code << kRsShift)
@@ -651,7 +651,7 @@ bool Assembler::IsAndImmediate(Instr instr) {
 }
 
 
-int Assembler::target_at(int32_t pos) {
+int64_t Assembler::target_at(int64_t pos) {
   Instr instr = instr_at(pos);
   if ((instr & ~kImm16Mask) == 0) {
     // Emitted label constant, not part of a branch.
@@ -676,18 +676,30 @@ int Assembler::target_at(int32_t pos) {
       return pos + kBranchPCOffset + imm18;
     }
   } else if (IsLui(instr)) {
+    // Instr instr_lui = instr_at(pos + 0 * Assembler::kInstrSize);
+    // Instr instr_ori = instr_at(pos + 1 * Assembler::kInstrSize);
+    // ASSERT(IsOri(instr_ori));
+    // int32_t imm = (instr_lui & static_cast<int32_t>(kImm16Mask)) << kLuiShift;
+    // imm |= (instr_ori & static_cast<int32_t>(kImm16Mask));
     Instr instr_lui = instr_at(pos + 0 * Assembler::kInstrSize);
     Instr instr_ori = instr_at(pos + 1 * Assembler::kInstrSize);
+    Instr instr_lui2 = instr_at(pos + 3 * Assembler::kInstrSize);
+    Instr instr_ori2 = instr_at(pos + 4 * Assembler::kInstrSize);
     ASSERT(IsOri(instr_ori));
-    int32_t imm = (instr_lui & static_cast<int32_t>(kImm16Mask)) << kLuiShift;
-    imm |= (instr_ori & static_cast<int32_t>(kImm16Mask));
+    ASSERT(IsLui(instr_lui2));
+    ASSERT(IsOri(instr_ori2));
+
+    int64_t imm = (instr_lui & static_cast<int32_t>(kImm16Mask)) << kLuiShift << 32;
+    imm |= (instr_ori & static_cast<int32_t>(kImm16Mask)) << 32;
+	imm |= (instr_lui2 & static_cast<int32_t>(kImm16Mask)) << kLuiShift;
+	imm |= (instr_ori2 & static_cast<int32_t>(kImm16Mask));
 
     if (imm == kEndOfJumpChain) {
       // EndOfChain sentinel is returned directly, not relative to pc or pos.
       return kEndOfChain;
     } else {
-      uint32_t instr_address = reinterpret_cast<int32_t>(buffer_ + pos);
-      int32_t delta = instr_address - imm;
+      uint64_t instr_address = reinterpret_cast<int64_t>(buffer_ + pos);
+      int64_t delta = instr_address - imm;
       ASSERT(pos > delta);
       return pos - delta;
     }
@@ -697,9 +709,9 @@ int Assembler::target_at(int32_t pos) {
       // EndOfChain sentinel is returned directly, not relative to pc or pos.
       return kEndOfChain;
     } else {
-      uint32_t instr_address = reinterpret_cast<int32_t>(buffer_ + pos);
+      uint64_t instr_address = reinterpret_cast<int64_t>(buffer_ + pos);
       instr_address &= kImm28Mask;
-      int32_t delta = instr_address - imm28;
+      int64_t delta = instr_address - imm28;
       ASSERT(pos > delta);
       return pos - delta;
     }
@@ -707,7 +719,7 @@ int Assembler::target_at(int32_t pos) {
 }
 
 
-void Assembler::target_at_put(int32_t pos, int32_t target_pos) {
+void Assembler::target_at_put(int64_t pos, int64_t target_pos) {
   Instr instr = instr_at(pos);
   if ((instr & ~kImm16Mask) == 0) {
     ASSERT(target_pos == kEndOfChain || target_pos >= 0);
@@ -730,19 +742,27 @@ void Assembler::target_at_put(int32_t pos, int32_t target_pos) {
   } else if (IsLui(instr)) {
     Instr instr_lui = instr_at(pos + 0 * Assembler::kInstrSize);
     Instr instr_ori = instr_at(pos + 1 * Assembler::kInstrSize);
+    Instr instr_lui2 = instr_at(pos + 3 * Assembler::kInstrSize);
+    Instr instr_ori2 = instr_at(pos + 4 * Assembler::kInstrSize);
     ASSERT(IsOri(instr_ori));
-    uint32_t imm = reinterpret_cast<uint32_t>(buffer_) + target_pos;
+    uint64_t imm = reinterpret_cast<uint64_t>(buffer_) + target_pos;
     ASSERT((imm & 3) == 0);
 
     instr_lui &= ~kImm16Mask;
     instr_ori &= ~kImm16Mask;
+    instr_lui2 &= ~kImm16Mask;
+    instr_ori2 &= ~kImm16Mask;
 
     instr_at_put(pos + 0 * Assembler::kInstrSize,
-                 instr_lui | ((imm & kHiMask) >> kLuiShift));
+                 instr_lui | ((imm & kHi16MaskOf64) >> kLuiShift >> 32));
     instr_at_put(pos + 1 * Assembler::kInstrSize,
+                 instr_ori | (imm & kSe16MaskOf64) >> 32);
+    instr_at_put(pos + 3 * Assembler::kInstrSize,
+                 instr_lui | ((imm & kTh16MaskOf64) >> kLuiShift));
+    instr_at_put(pos + 4 * Assembler::kInstrSize,
                  instr_ori | (imm & kImm16Mask));
   } else {
-    uint32_t imm28 = reinterpret_cast<uint32_t>(buffer_) + target_pos;
+    uint64_t imm28 = reinterpret_cast<uint64_t>(buffer_) + target_pos;
     imm28 &= kImm28Mask;
     ASSERT((imm28 & 3) == 0);
 
@@ -990,8 +1010,8 @@ int32_t Assembler::get_trampoline_entry(int32_t pos) {
 }
 
 
-uint32_t Assembler::jump_address(Label* L) {
-  int32_t target_pos;
+uint64_t Assembler::jump_address(Label* L) {
+  int64_t target_pos;
 
   if (L->is_bound()) {
     target_pos = L->pos();
@@ -1005,7 +1025,7 @@ uint32_t Assembler::jump_address(Label* L) {
     }
   }
 
-  uint32_t imm = reinterpret_cast<uint32_t>(buffer_) + target_pos;
+  uint64_t imm = reinterpret_cast<uint64_t>(buffer_) + target_pos;
   ASSERT((imm & 3) == 0);
 
   return imm;
@@ -1136,11 +1156,11 @@ void Assembler::bne(Register rs, Register rt, int16_t offset) {
 }
 
 
-void Assembler::j(int32_t target) {
+void Assembler::j(int64_t target) {
 #if DEBUG
   // Get pc of delay slot.
-  uint32_t ipc = reinterpret_cast<uint32_t>(pc_ + 1 * kInstrSize);
-  bool in_range = (ipc ^ static_cast<uint32_t>(target) >>
+  uint64_t ipc = reinterpret_cast<uint64_t>(pc_ + 1 * kInstrSize);
+  bool in_range = (ipc ^ static_cast<uint64_t>(target) >>
                   (kImm26Bits + kImmFieldShift)) == 0;
   ASSERT(in_range && ((target & 3) == 0));
 #endif
@@ -1158,11 +1178,11 @@ void Assembler::jr(Register rs) {
 }
 
 
-void Assembler::jal(int32_t target) {
+void Assembler::jal(int64_t target) {
 #ifdef DEBUG
   // Get pc of delay slot.
-  uint32_t ipc = reinterpret_cast<uint32_t>(pc_ + 1 * kInstrSize);
-  bool in_range = (ipc ^ static_cast<uint32_t>(target) >>
+  uint64_t ipc = reinterpret_cast<uint64_t>(pc_ + 1 * kInstrSize);
+  bool in_range = (ipc ^ static_cast<uint64_t>(target) >>
                   (kImm26Bits + kImmFieldShift)) == 0;
   ASSERT(in_range && ((target & 3) == 0));
 #endif
@@ -1179,10 +1199,10 @@ void Assembler::jalr(Register rs, Register rd) {
 }
 
 
-void Assembler::j_or_jr(int32_t target, Register rs) {
+void Assembler::j_or_jr(int64_t target, Register rs) {
   // Get pc of delay slot.
-  uint32_t ipc = reinterpret_cast<uint32_t>(pc_ + 1 * kInstrSize);
-  bool in_range = (ipc ^ static_cast<uint32_t>(target) >>
+  uint64_t ipc = reinterpret_cast<uint64_t>(pc_ + 1 * kInstrSize);
+  bool in_range = (ipc ^ static_cast<uint64_t>(target) >>
                   (kImm26Bits + kImmFieldShift)) == 0;
   if (in_range) {
       j(target);
@@ -1192,10 +1212,10 @@ void Assembler::j_or_jr(int32_t target, Register rs) {
 }
 
 
-void Assembler::jal_or_jalr(int32_t target, Register rs) {
+void Assembler::jal_or_jalr(int64_t target, Register rs) {
   // Get pc of delay slot.
-  uint32_t ipc = reinterpret_cast<uint32_t>(pc_ + 1 * kInstrSize);
-  bool in_range = (ipc ^ static_cast<uint32_t>(target) >>
+  uint64_t ipc = reinterpret_cast<uint64_t>(pc_ + 1 * kInstrSize);
+  bool in_range = (ipc ^ static_cast<uint64_t>(target) >>
                   (kImm26Bits+kImmFieldShift)) == 0;
   if (in_range) {
       jal(target);
@@ -1239,6 +1259,11 @@ void Assembler::multu(Register rs, Register rt) {
 }
 
 
+void Assembler::daddiu(Register rd, Register rs, int32_t j) {
+  GenInstrImmediate(DADDIU, rs, rd, j);
+}
+
+
 void Assembler::div(Register rs, Register rt) {
   GenInstrRegister(SPECIAL, rs, rt, zero_reg, 0, DIV);
 }
@@ -1246,6 +1271,36 @@ void Assembler::div(Register rs, Register rt) {
 
 void Assembler::divu(Register rs, Register rt) {
   GenInstrRegister(SPECIAL, rs, rt, zero_reg, 0, DIVU);
+}
+
+
+void Assembler::daddu(Register rd, Register rs, Register rt) {
+  GenInstrRegister(SPECIAL, rs, rt, rd, 0, DADDU);
+}
+
+
+void Assembler::dsubu(Register rd, Register rs, Register rt) {
+  GenInstrRegister(SPECIAL, rs, rt, rd, 0, DSUBU);
+}
+
+
+void Assembler::dmult(Register rs, Register rt) {
+  GenInstrRegister(SPECIAL, rs, rt, zero_reg, 0, DMULT);
+}
+
+
+void Assembler::dmultu(Register rs, Register rt) {
+  GenInstrRegister(SPECIAL, rs, rt, zero_reg, 0, DMULTU);
+}
+
+
+void Assembler::ddiv(Register rs, Register rt) {
+  GenInstrRegister(SPECIAL, rs, rt, zero_reg, 0, DDIV);
+}
+
+
+void Assembler::ddivu(Register rs, Register rt) {
+  GenInstrRegister(SPECIAL, rs, rt, zero_reg, 0, DDIVU);
 }
 
 
@@ -1348,11 +1403,73 @@ void Assembler::rotrv(Register rd, Register rt, Register rs) {
 }
 
 
+void Assembler::dsll(Register rd, Register rt, uint16_t sa) {
+  GenInstrRegister(SPECIAL, zero_reg, rt, rd, sa,DSLL);
+}
+
+
+void Assembler::dsllv(Register rd, Register rt, Register rs) {
+  GenInstrRegister(SPECIAL, rs, rt, rd, 0, DSLLV);
+}
+
+
+void Assembler::dsrl(Register rd, Register rt, uint16_t sa) {
+  GenInstrRegister(SPECIAL, zero_reg, rt, rd, sa, DSRL);
+}
+
+
+void Assembler::dsrlv(Register rd, Register rt, Register rs) {
+  GenInstrRegister(SPECIAL, rs, rt, rd, 0, DSRLV);
+}
+
+
+void Assembler::drotr(Register rd, Register rt, uint16_t sa) {
+  ASSERT(rd.is_valid() && rt.is_valid() && is_uint5(sa));
+  Instr instr = SPECIAL | (1 << kRsShift) | (rt.code() << kRtShift)
+      | (rd.code() << kRdShift) | (sa << kSaShift) | DSRL;
+  emit(instr);
+}
+
+
+void Assembler::drotrv(Register rd, Register rt, Register rs) {
+  ASSERT(rd.is_valid() && rt.is_valid() && rs.is_valid() );
+  Instr instr = SPECIAL | (rs.code() << kRsShift) | (rt.code() << kRtShift)
+      | (rd.code() << kRdShift) | (1 << kSaShift) | DSRLV;
+  emit(instr);
+}
+
+
+void Assembler::dsra(Register rd, Register rt, uint16_t sa) {
+  GenInstrRegister(SPECIAL, zero_reg, rt, rd, sa, DSRA);
+}
+
+
+void Assembler::dsrav(Register rd, Register rt, Register rs) {
+  GenInstrRegister(SPECIAL, rs, rt, rd, 0, DSRAV);
+}
+
+
+void Assembler::dsll32(Register rd, Register rt, uint16_t sa) {
+  GenInstrRegister(SPECIAL, zero_reg, rt, rd, sa,DSLL32);
+}
+
+
+void Assembler::dsrl32(Register rd, Register rt, uint16_t sa) {
+  GenInstrRegister(SPECIAL, zero_reg, rt, rd, sa, DSRL32);
+}
+
+
+void Assembler::dsra32(Register rd, Register rt, uint16_t sa) {
+  GenInstrRegister(SPECIAL, zero_reg, rt, rd, sa, DSRA32);
+}
+
+
 //------------Memory-instructions-------------
 
 // Helper for base-reg + offset, when offset is larger than int16.
 void Assembler::LoadRegPlusOffsetToAt(const MemOperand& src) {
   ASSERT(!src.rm().is(at));
+  ASSERT(is_int32(src.offset_));
   lui(at, (src.offset_ >> kLuiShift) & kImm16Mask);
   ori(at, at, src.offset_ & kImm16Mask);  // Load 32-bit offset.
   addu(at, at, src.rm());  // Add base register.
@@ -1465,6 +1582,46 @@ void Assembler::lui(Register rd, int32_t j) {
 }
 
 
+void Assembler::ldl(Register rd, const MemOperand& rs) {
+  GenInstrImmediate(LDL, rs.rm(), rd, rs.offset_);
+}
+
+
+void Assembler::ldr(Register rd, const MemOperand& rs) {
+  GenInstrImmediate(LDR, rs.rm(), rd, rs.offset_);
+}
+
+
+void Assembler::sdl(Register rd, const MemOperand& rs) {
+  GenInstrImmediate(SDL, rs.rm(), rd, rs.offset_);
+}
+
+
+void Assembler::sdr(Register rd, const MemOperand& rs) {
+  GenInstrImmediate(SDR, rs.rm(), rd, rs.offset_);
+}
+
+
+void Assembler::ld(Register rd, const MemOperand& rs) {
+  if (is_int16(rs.offset_)) {
+    GenInstrImmediate(LD, rs.rm(), rd, rs.offset_);
+  } else {  // Offset > 16 bits, use multiple instructions to load.
+    LoadRegPlusOffsetToAt(rs);
+    GenInstrImmediate(LD, at, rd, 0);  // Equiv to lw(rd, MemOperand(at, 0));
+  }
+}
+
+
+void Assembler::sd(Register rd, const MemOperand& rs) {
+  if (is_int16(rs.offset_)) {
+    GenInstrImmediate(SD, rs.rm(), rd, rs.offset_);
+  } else {  // Offset > 16 bits, use multiple instructions to store.
+    LoadRegPlusOffsetToAt(rs);
+    GenInstrImmediate(SD, at, rd, 0);  // Equiv to sw(rd, MemOperand(at, 0));
+  }
+}
+
+
 //-------------Misc-instructions--------------
 
 // Break / Trap instructions.
@@ -1494,7 +1651,7 @@ void Assembler::stop(const char* msg, uint32_t code) {
   // The Simulator will handle the stop instruction and get the message address.
   // On MIPS stop() is just a special kind of break_().
   break_(code, true);
-  emit(reinterpret_cast<Instr>(msg));
+  emit((uint64_t)msg);
 #endif
 }
 
@@ -1949,9 +2106,15 @@ int Assembler::RelocateInternalReference(byte* pc, intptr_t pc_delta) {
   if (IsLui(instr)) {
     Instr instr_lui = instr_at(pc + 0 * Assembler::kInstrSize);
     Instr instr_ori = instr_at(pc + 1 * Assembler::kInstrSize);
+    Instr instr_lui2 = instr_at(pc + 3 * Assembler::kInstrSize);
+    Instr instr_ori2 = instr_at(pc + 4 * Assembler::kInstrSize);
     ASSERT(IsOri(instr_ori));
-    int32_t imm = (instr_lui & static_cast<int32_t>(kImm16Mask)) << kLuiShift;
-    imm |= (instr_ori & static_cast<int32_t>(kImm16Mask));
+    ASSERT(IsLui(instr_lui2));
+    ASSERT(IsOri(instr_ori2));
+    int64_t imm = (instr_lui & static_cast<int64_t>(kImm16Mask)) << kLuiShift << 32;
+    imm |= (instr_ori & static_cast<int64_t>(kImm16Mask)) << 32;
+	imm |= (instr_lui2 & static_cast<int64_t>(kImm16Mask)) << kLuiShift;
+	imm |= (instr_ori2 & static_cast<int64_t>(kImm16Mask));
     if (imm == kEndOfJumpChain) {
       return 0;  // Number of instructions patched.
     }
@@ -1960,12 +2123,18 @@ int Assembler::RelocateInternalReference(byte* pc, intptr_t pc_delta) {
 
     instr_lui &= ~kImm16Mask;
     instr_ori &= ~kImm16Mask;
+    instr_lui2 &= ~kImm16Mask;
+    instr_ori2 &= ~kImm16Mask;
 
     instr_at_put(pc + 0 * Assembler::kInstrSize,
-                 instr_lui | ((imm >> kLuiShift) & kImm16Mask));
+                 instr_lui | ((imm >> kLuiShift >> 32) & kImm16Mask));
     instr_at_put(pc + 1 * Assembler::kInstrSize,
-                 instr_ori | (imm & kImm16Mask));
-    return 2;  // Number of instructions patched.
+                 instr_ori | (imm >> 32 & kImm16Mask));
+    instr_at_put(pc + 3 * Assembler::kInstrSize,
+                 instr_lui2 | ((imm >> kLuiShift) & kImm16Mask));
+    instr_at_put(pc + 4 * Assembler::kInstrSize,
+                 instr_ori2 | (imm & kImm16Mask));
+    return 5;  // Number of instructions patched.
   } else {
     uint32_t imm28 = (instr & static_cast<int32_t>(kImm26Mask)) << 2;
     if (static_cast<int32_t>(imm28) == kEndOfJumpChain) {
@@ -2049,9 +2218,9 @@ void Assembler::dd(uint32_t data) {
 
 void Assembler::emit_code_stub_address(Code* stub) {
   CheckBuffer();
-  *reinterpret_cast<uint32_t*>(pc_) =
-      reinterpret_cast<uint32_t>(stub->instruction_start());
-  pc_ += sizeof(uint32_t);
+  *reinterpret_cast<uint64_t*>(pc_) =
+      reinterpret_cast<uint64_t>(stub->instruction_start());
+  pc_ += sizeof(uint64_t);
 }
 
 
@@ -2161,13 +2330,23 @@ void Assembler::CheckTrampolinePool() {
 Address Assembler::target_address_at(Address pc) {
   Instr instr1 = instr_at(pc);
   Instr instr2 = instr_at(pc + kInstrSize);
+  Instr instr3 = instr_at(pc + kInstrSize * 3);
+  Instr instr4 = instr_at(pc + kInstrSize * 4);
+//  Instr instr5 = instr_at(pc + kInstrSize * 2);
+//  Instr instr6 = instr_at(pc + kInstrSize * 5);
+//  printf("1 : 0x%x 2 : 0x%x 3 : 0x%x 4 : 0x%x 5 : 0x%x 6 : 0x%x\n",GetOpcodeField(instr1), GetOpcodeField(instr2),GetOpcodeField(instr3),GetOpcodeField(instr4),GetOpcodeField(instr5),GetOpcodeField(instr6));
   // Interpret 2 instructions generated by li: lui/ori
-  if ((GetOpcodeField(instr1) == LUI) && (GetOpcodeField(instr2) == ORI)) {
+  if ((GetOpcodeField(instr1) == LUI) && (GetOpcodeField(instr2) == ORI) && 
+      (GetOpcodeField(instr3) == LUI) && (GetOpcodeField(instr4) == ORI)) {
     // Assemble the 32 bit value.
+//	printf("ss %llx\n", reinterpret_cast<Address>(
+//	        (GetImmediate16(instr1) << 48) | GetImmediate16(instr2) << 32 |
+//	        (GetImmediate16(instr3) << 16) | GetImmediate16(instr4)));
     return reinterpret_cast<Address>(
-        (GetImmediate16(instr1) << 16) | GetImmediate16(instr2));
+        (GetImmediate16(instr1) << 48) | GetImmediate16(instr2) << 32 |
+		(GetImmediate16(instr3) << 16) | GetImmediate16(instr4));
   }
-
+//  printf("s 0\n");
   // We should never get here, force a bad address if we do.
   UNREACHABLE();
   return (Address)0x0;
@@ -2193,20 +2372,27 @@ void Assembler::QuietNaN(HeapObject* object) {
 void Assembler::set_target_address_at(Address pc, Address target) {
   Instr instr2 = instr_at(pc + kInstrSize);
   uint32_t rt_code = GetRtField(instr2);
+  uint32_t rt_at = at.code() << kRtShift;
   uint32_t* p = reinterpret_cast<uint32_t*>(pc);
-  uint32_t itarget = reinterpret_cast<uint32_t>(target);
+  uint64_t itarget = reinterpret_cast<uint64_t>(target);
 
 #ifdef DEBUG
   // Check we have the result from a li macro-instruction, using instr pair.
   Instr instr1 = instr_at(pc);
-  CHECK((GetOpcodeField(instr1) == LUI && GetOpcodeField(instr2) == ORI));
+  Instr instr3 = instr_at(pc + kInstrSize * 3);
+  Instr instr4 = instr_at(pc + kInstrSize * 4);
+  CHECK((GetOpcodeField(instr1) == LUI && GetOpcodeField(instr2) == ORI &&
+         GetOpcodeField(instr3) == LUI && GetOpcodeField(instr4) == ORI));
 #endif
 
   // Must use 2 instructions to insure patchable code => just use lui and ori.
   // lui rt, upper-16.
   // ori rt rt, lower-16.
-  *p = LUI | rt_code | ((itarget & kHiMask) >> kLuiShift);
-  *(p+1) = ORI | rt_code | (rt_code << 5) | (itarget & kImm16Mask);
+  *p = LUI | rt_code | ((itarget & kHi16MaskOf64) >> kLuiShift >> 32);
+  *(p+1) = ORI | rt_code | (rt_code << 5) | ((itarget & kSe16MaskOf64) >> 32);
+  *(p+3) = LUI | rt_at | ((itarget & kTh16MaskOf64) >> kLuiShift);
+  *(p+4) = ORI | rt_at | (rt_at << 5) | (itarget & kImm16Mask);
+
 
   // The following code is an optimization for the common case of Call()
   // or Jump() which is load to register, and jump through register:
@@ -2224,13 +2410,13 @@ void Assembler::set_target_address_at(Address pc, Address target) {
   // register used for the jalr/jr. Finally, we have to skip 'jr ra', which is
   // mips return. Occasionally this lands after an li().
 
-  Instr instr3 = instr_at(pc + 2 * kInstrSize);
-  uint32_t ipc = reinterpret_cast<uint32_t>(pc + 3 * kInstrSize);
+  Instr instr5 = instr_at(pc + 6 * kInstrSize);
+  uint64_t ipc = reinterpret_cast<uint64_t>(pc + 7 * kInstrSize);
   bool in_range = ((ipc ^ itarget) >> (kImm26Bits + kImmFieldShift)) == 0;
-  uint32_t target_field =
-      static_cast<uint32_t>(itarget & kJumpAddrMask) >> kImmFieldShift;
+  uint64_t target_field =
+      static_cast<uint64_t>(itarget & kJumpAddrMask) >> kImmFieldShift;
   bool patched_jump = false;
-
+/* TODO
 #ifndef ALLOW_JAL_IN_BOUNDARY_REGION
   // This is a workaround to the 24k core E156 bug (affect some 34k cores also).
   // Since the excluded space is only 64KB out of 256MB (0.02 %), we will just
@@ -2246,45 +2432,45 @@ void Assembler::set_target_address_at(Address pc, Address target) {
   }
 #endif
 
-  if (IsJalr(instr3)) {
+  if (IsJalr(instr5)) {
     // Try to convert JALR to JAL.
-    if (in_range && GetRt(instr2) == GetRs(instr3)) {
-      *(p+2) = JAL | target_field;
+    if (in_range && GetRt(instr2) == GetRs(instr5)) {
+      *(p+6) = JAL | target_field;
       patched_jump = true;
     }
-  } else if (IsJr(instr3)) {
+  } else if (IsJr(instr5)) {
     // Try to convert JR to J, skip returns (jr ra).
-    bool is_ret = static_cast<int>(GetRs(instr3)) == ra.code();
-    if (in_range && !is_ret && GetRt(instr2) == GetRs(instr3)) {
-      *(p+2) = J | target_field;
+    bool is_ret = static_cast<int>(GetRs(instr5)) == ra.code();
+    if (in_range && !is_ret && GetRt(instr2) == GetRs(instr5)) {
+      *(p+6) = J | target_field;
       patched_jump = true;
     }
-  } else if (IsJal(instr3)) {
+  } else if (IsJal(instr5)) {
     if (in_range) {
       // We are patching an already converted JAL.
-      *(p+2) = JAL | target_field;
+      *(p+6) = JAL | target_field;
     } else {
       // Patch JAL, but out of range, revert to JALR.
       // JALR rs reg is the rt reg specified in the ORI instruction.
       uint32_t rs_field = GetRt(instr2) << kRsShift;
       uint32_t rd_field = ra.code() << kRdShift;  // Return-address (ra) reg.
-      *(p+2) = SPECIAL | rs_field | rd_field | JALR;
+      *(p+6) = SPECIAL | rs_field | rd_field | JALR;
     }
     patched_jump = true;
-  } else if (IsJ(instr3)) {
+  } else if (IsJ(instr5)) {
     if (in_range) {
       // We are patching an already converted J (jump).
-      *(p+2) = J | target_field;
+      *(p+6) = J | target_field;
     } else {
       // Trying patch J, but out of range, just go back to JR.
       // JR 'rs' reg is the 'rt' reg specified in the ORI instruction (instr2).
       uint32_t rs_field = GetRt(instr2) << kRsShift;
-      *(p+2) = SPECIAL | rs_field | JR;
+      *(p+6) = SPECIAL | rs_field | JR;
     }
     patched_jump = true;
   }
-
-  CPU::FlushICache(pc, (patched_jump ? 3 : 2) * sizeof(int32_t));
+*/
+  CPU::FlushICache(pc, (patched_jump ? 7 : 5) * sizeof(int32_t));
 }
 
 
@@ -2296,7 +2482,7 @@ void Assembler::JumpLabelToJumpRegister(Address pc) {
   Instr instr1 = instr_at(pc);
 #endif
   Instr instr2 = instr_at(pc + 1 * kInstrSize);
-  Instr instr3 = instr_at(pc + 2 * kInstrSize);
+  Instr instr3 = instr_at(pc + 6 * kInstrSize);
   bool patched = false;
 
   if (IsJal(instr3)) {
@@ -2305,22 +2491,22 @@ void Assembler::JumpLabelToJumpRegister(Address pc) {
 
     uint32_t rs_field = GetRt(instr2) << kRsShift;
     uint32_t rd_field = ra.code() << kRdShift;  // Return-address (ra) reg.
-    *(p+2) = SPECIAL | rs_field | rd_field | JALR;
+    *(p+6) = SPECIAL | rs_field | rd_field | JALR;
     patched = true;
   } else if (IsJ(instr3)) {
     ASSERT(GetOpcodeField(instr1) == LUI);
     ASSERT(GetOpcodeField(instr2) == ORI);
 
     uint32_t rs_field = GetRt(instr2) << kRsShift;
-    *(p+2) = SPECIAL | rs_field | JR;
+    *(p+6) = SPECIAL | rs_field | JR;
     patched = true;
   }
 
   if (patched) {
-      CPU::FlushICache(pc+2, sizeof(Address));
+      CPU::FlushICache(pc+6, sizeof(int32_t));
   }
 }
 
 } }  // namespace v8::internal
 
-#endif  // V8_TARGET_ARCH_MIPS
+#endif  // V8_TARGET_ARCH_MIPS64

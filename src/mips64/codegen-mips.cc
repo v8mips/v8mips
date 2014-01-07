@@ -27,7 +27,7 @@
 
 #include "v8.h"
 
-#if V8_TARGET_ARCH_MIPS
+#if V8_TARGET_ARCH_MIPS64
 
 #include "codegen.h"
 #include "macro-assembler.h"
@@ -1031,7 +1031,11 @@ static byte* GetNoCodeAgeSequence(uint32_t* length) {
     CodePatcher patcher(byte_sequence, kNoCodeAgeSequenceLength);
     patcher.masm()->Push(ra, fp, cp, a1);
     patcher.masm()->nop(Assembler::CODE_AGE_SEQUENCE_NOP);
-    patcher.masm()->Addu(fp, sp,
+	patcher.masm()->nop(Assembler::CODE_AGE_SEQUENCE_NOP);
+	patcher.masm()->nop(Assembler::CODE_AGE_SEQUENCE_NOP);
+	patcher.masm()->nop(Assembler::CODE_AGE_SEQUENCE_NOP);
+	patcher.masm()->nop(Assembler::CODE_AGE_SEQUENCE_NOP);
+    patcher.masm()->Daddu(fp, sp,
         Operand(StandardFrameConstants::kFixedFrameSizeFromFp));
     initialized = true;
   }
@@ -1081,7 +1085,7 @@ void Code::PatchPlatformCodeAge(Isolate* isolate,
     // GetCodeAgeAndParity() extracts the stub address from this instruction.
     patcher.masm()->li(
         t9,
-        Operand(reinterpret_cast<uint32_t>(stub->instruction_start())),
+        Operand(reinterpret_cast<uint64_t>(stub->instruction_start())),
         CONSTANT_SIZE);
     patcher.masm()->nop();  // Prevent jalr to jal optimization.
     patcher.masm()->jalr(t9, a0);
@@ -1095,4 +1099,4 @@ void Code::PatchPlatformCodeAge(Isolate* isolate,
 
 } }  // namespace v8::internal
 
-#endif  // V8_TARGET_ARCH_MIPS
+#endif  // V8_TARGET_ARCH_MIPS64

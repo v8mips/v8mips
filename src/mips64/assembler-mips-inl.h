@@ -37,7 +37,7 @@
 #ifndef V8_MIPS_ASSEMBLER_MIPS_INL_H_
 #define V8_MIPS_ASSEMBLER_MIPS_INL_H_
 
-#include "mips/assembler-mips.h"
+#include "mips64/assembler-mips.h"
 
 #include "cpu.h"
 #include "debug.h"
@@ -49,23 +49,23 @@ namespace internal {
 // -----------------------------------------------------------------------------
 // Operand and MemOperand.
 
-Operand::Operand(int32_t immediate, RelocInfo::Mode rmode)  {
+Operand::Operand(int64_t immediate, RelocInfo::Mode rmode)  {
   rm_ = no_reg;
-  imm32_ = immediate;
+  imm64_ = immediate;
   rmode_ = rmode;
 }
 
 
 Operand::Operand(const ExternalReference& f)  {
   rm_ = no_reg;
-  imm32_ = reinterpret_cast<int32_t>(f.address());
+  imm64_ = reinterpret_cast<int64_t>(f.address());
   rmode_ = RelocInfo::EXTERNAL_REFERENCE;
 }
 
 
 Operand::Operand(Smi* value) {
   rm_ = no_reg;
-  imm32_ =  reinterpret_cast<intptr_t>(value);
+  imm64_ =  reinterpret_cast<intptr_t>(value);
   rmode_ = RelocInfo::NONE32;
 }
 
@@ -110,8 +110,8 @@ int FPURegister::ToAllocationIndex(FPURegister reg) {
 
 void RelocInfo::apply(intptr_t delta) {
   if (IsCodeTarget(rmode_)) {
-    uint32_t scope1 = (uint32_t) target_address() & ~kImm28Mask;
-    uint32_t scope2 = reinterpret_cast<uint32_t>(pc_) & ~kImm28Mask;
+    uint32_t scope1 = (uint64_t) target_address() & ~kImm28Mask;
+    uint32_t scope2 = reinterpret_cast<uint64_t>(pc_) & ~kImm28Mask;
 
     if (scope1 != scope2) {
       Assembler::JumpLabelToJumpRegister(pc_);
@@ -151,8 +151,10 @@ Address RelocInfo::target_address_address() {
   // place, ready to be patched with the target. After jump optimization,
   // that is the address of the instruction that follows J/JAL/JR/JALR
   // instruction.
+  // return reinterpret_cast<Address>(
+  //  pc_ + Assembler::kInstructionsFor32BitConstant * Assembler::kInstrSize);
   return reinterpret_cast<Address>(
-    pc_ + Assembler::kInstructionsFor32BitConstant * Assembler::kInstrSize);
+    pc_ + Assembler::kInstructionsFor64BitConstant * Assembler::kInstrSize);
 }
 
 
@@ -248,7 +250,7 @@ void RelocInfo::set_target_cell(Cell* cell, WriteBarrierMode mode) {
 }
 
 
-static const int kNoCodeAgeSequenceLength = 7;
+static const int kNoCodeAgeSequenceLength = 11;
 
 
 Handle<Object> RelocInfo::code_age_stub_handle(Assembler* origin) {
@@ -304,7 +306,7 @@ Object* RelocInfo::call_object() {
 Object** RelocInfo::call_object_address() {
   ASSERT((IsJSReturn(rmode()) && IsPatchedReturnSequence()) ||
          (IsDebugBreakSlot(rmode()) && IsPatchedDebugBreakSlotSequence()));
-  return reinterpret_cast<Object**>(pc_ + 2 * Assembler::kInstrSize);
+  return reinterpret_cast<Object**>(pc_ + 6 * Assembler::kInstrSize);
 }
 
 
@@ -325,12 +327,17 @@ void RelocInfo::WipeOut() {
 bool RelocInfo::IsPatchedReturnSequence() {
   Instr instr0 = Assembler::instr_at(pc_);
   Instr instr1 = Assembler::instr_at(pc_ + 1 * Assembler::kInstrSize);
-  Instr instr2 = Assembler::instr_at(pc_ + 2 * Assembler::kInstrSize);
+  Instr instr2 = Assembler::instr_at(pc_ + 3 * Assembler::kInstrSize);
+  Instr instr3 = Assembler::instr_at(pc_ + 4 * Assembler::kInstrSize);
+  Instr instr4 = Assembler::instr_at(pc_ + 5 * Assembler::kInstrSize);
+
   bool patched_return = ((instr0 & kOpcodeMask) == LUI &&
                          (instr1 & kOpcodeMask) == ORI &&
-                         ((instr2 & kOpcodeMask) == JAL ||
-                          ((instr2 & kOpcodeMask) == SPECIAL &&
-                           (instr2 & kFunctionFieldMask) == JALR)));
+						 (instr2 & kOpcodeMask) == LUI &&
+						 (instr3 & kOpcodeMask) == ORI &&
+                         ((instr4 & kOpcodeMask) == JAL ||
+                          ((instr4 & kOpcodeMask) == SPECIAL &&
+                           (instr4 & kFunctionFieldMask) == JALR)));
   return patched_return;
 }
 
@@ -418,6 +425,16 @@ void Assembler::emit(Instr x) {
   }
   *reinterpret_cast<Instr*>(pc_) = x;
   pc_ += kInstrSize;
+  CheckTrampolinePoolQuick();
+}
+
+
+void Assembler::emit(uint64_t x) {
+  if (!is_buffer_growth_blocked()) {
+    CheckBuffer();
+  }
+  *(pc_) = x;
+  pc_ += kInstrSize * 2;
   CheckTrampolinePoolQuick();
 }
 

@@ -27,7 +27,7 @@
 
 #include "v8.h"
 
-#if V8_TARGET_ARCH_MIPS
+#if V8_TARGET_ARCH_MIPS64
 
 #include "ic-inl.h"
 #include "codegen.h"
@@ -54,9 +54,9 @@ static void ProbeTable(Isolate* isolate,
   ExternalReference value_offset(isolate->stub_cache()->value_reference(table));
   ExternalReference map_offset(isolate->stub_cache()->map_reference(table));
 
-  uint32_t key_off_addr = reinterpret_cast<uint32_t>(key_offset.address());
-  uint32_t value_off_addr = reinterpret_cast<uint32_t>(value_offset.address());
-  uint32_t map_off_addr = reinterpret_cast<uint32_t>(map_offset.address());
+  uint32_t key_off_addr = reinterpret_cast<uint64_t>(key_offset.address());
+  uint32_t value_off_addr = reinterpret_cast<uint64_t>(value_offset.address());
+  uint32_t map_off_addr = reinterpret_cast<uint64_t>(map_offset.address());
 
   // Check the relative positions of the address fields.
   ASSERT(value_off_addr > key_off_addr);
@@ -183,7 +183,8 @@ void StubCache::GenerateProbe(MacroAssembler* masm,
 
   // Make sure that code is valid. The multiplying code relies on the
   // entry size being 12.
-  ASSERT(sizeof(Entry) == 12);
+  // ASSERT(sizeof(Entry) == 12);
+  // ASSERT(sizeof(Entry) == 3 * kPointerSize);
 
   // Make sure the flags does not name a specific type.
   ASSERT(Code::ExtractTypeFromFlags(flags) == 0);
@@ -213,8 +214,8 @@ void StubCache::GenerateProbe(MacroAssembler* masm,
   __ JumpIfSmi(receiver, &miss);
 
   // Get the map of the receiver and compute the hash.
-  __ lw(scratch, FieldMemOperand(name, Name::kHashFieldOffset));
-  __ lw(at, FieldMemOperand(receiver, HeapObject::kMapOffset));
+  __ ld(scratch, FieldMemOperand(name, Name::kHashFieldOffset));
+  __ ld(at, FieldMemOperand(receiver, HeapObject::kMapOffset));
   __ Addu(scratch, scratch, at);
   uint32_t mask = kPrimaryTableSize - 1;
   // We shift out the last two bits because they are not part of the hash and
@@ -358,7 +359,7 @@ static void GenerateStringCheck(MacroAssembler* masm,
   __ Branch(non_string_object,
             ne,
             scratch2,
-            Operand(static_cast<int32_t>(kStringTag)));
+            Operand(static_cast<int64_t>(kStringTag)));
 }
 
 
@@ -2890,4 +2891,4 @@ void KeyedLoadStubCompiler::GenerateLoadDictionaryElement(
 
 } }  // namespace v8::internal
 
-#endif  // V8_TARGET_ARCH_MIPS
+#endif  // V8_TARGET_ARCH_MIPS64

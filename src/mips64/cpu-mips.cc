@@ -36,7 +36,7 @@
 
 #include "v8.h"
 
-#if V8_TARGET_ARCH_MIPS
+#if V8_TARGET_ARCH_MIPS64
 
 #include "cpu.h"
 #include "macro-assembler.h"
@@ -89,4 +89,4 @@ void CPU::FlushICache(void* start, size_t size) {
 
 } }  // namespace v8::internal
 
-#endif  // V8_TARGET_ARCH_MIPS
+#endif  // V8_TARGET_ARCH_MIPS64

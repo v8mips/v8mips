@@ -29,7 +29,7 @@
 #define V8_MIPS_MACRO_ASSEMBLER_MIPS_H_
 
 #include "assembler.h"
-#include "mips/assembler-mips.h"
+#include "mips64/assembler-mips.h"
 #include "v8globals.h"
 
 namespace v8 {
@@ -579,12 +579,19 @@ class MacroAssembler: public Assembler {
   }
 
   DEFINE_INSTRUCTION(Addu);
+  DEFINE_INSTRUCTION(Daddu);
   DEFINE_INSTRUCTION(Subu);
+  DEFINE_INSTRUCTION(Dsubu);
   DEFINE_INSTRUCTION(Mul);
+  DEFINE_INSTRUCTION(Dmul);
   DEFINE_INSTRUCTION2(Mult);
+  DEFINE_INSTRUCTION2(Dmult);
   DEFINE_INSTRUCTION2(Multu);
+  DEFINE_INSTRUCTION2(Dmultu);
   DEFINE_INSTRUCTION2(Div);
+  DEFINE_INSTRUCTION2(Ddiv);
   DEFINE_INSTRUCTION2(Divu);
+  DEFINE_INSTRUCTION2(Ddivu);
 
   DEFINE_INSTRUCTION(And);
   DEFINE_INSTRUCTION(Or);
@@ -597,6 +604,7 @@ class MacroAssembler: public Assembler {
 
   // MIPS32 R2 instruction macro.
   DEFINE_INSTRUCTION(Ror);
+  DEFINE_INSTRUCTION(Dror);
 
 #undef DEFINE_INSTRUCTION
 #undef DEFINE_INSTRUCTION2
@@ -629,8 +637,8 @@ class MacroAssembler: public Assembler {
   void MultiPushReversedFPU(RegList regs);
 
   void push(Register src) {
-    Addu(sp, sp, Operand(-kPointerSize));
-    sw(src, MemOperand(sp, 0));
+    Daddu(sp, sp, Operand(-kPointerSize));
+    sd(src, MemOperand(sp, 0));
   }
   void Push(Register src) { push(src); }
 
@@ -640,33 +648,33 @@ class MacroAssembler: public Assembler {
 
   // Push two registers. Pushes leftmost register first (to highest address).
   void Push(Register src1, Register src2) {
-    Subu(sp, sp, Operand(2 * kPointerSize));
-    sw(src1, MemOperand(sp, 1 * kPointerSize));
-    sw(src2, MemOperand(sp, 0 * kPointerSize));
+    Dsubu(sp, sp, Operand(2 * kPointerSize));
+    sd(src1, MemOperand(sp, 1 * kPointerSize));
+    sd(src2, MemOperand(sp, 0 * kPointerSize));
   }
 
   // Push three registers. Pushes leftmost register first (to highest address).
   void Push(Register src1, Register src2, Register src3) {
-    Subu(sp, sp, Operand(3 * kPointerSize));
-    sw(src1, MemOperand(sp, 2 * kPointerSize));
-    sw(src2, MemOperand(sp, 1 * kPointerSize));
-    sw(src3, MemOperand(sp, 0 * kPointerSize));
+    Dsubu(sp, sp, Operand(3 * kPointerSize));
+    sd(src1, MemOperand(sp, 2 * kPointerSize));
+    sd(src2, MemOperand(sp, 1 * kPointerSize));
+    sd(src3, MemOperand(sp, 0 * kPointerSize));
   }
 
   // Push four registers. Pushes leftmost register first (to highest address).
   void Push(Register src1, Register src2, Register src3, Register src4) {
-    Subu(sp, sp, Operand(4 * kPointerSize));
-    sw(src1, MemOperand(sp, 3 * kPointerSize));
-    sw(src2, MemOperand(sp, 2 * kPointerSize));
-    sw(src3, MemOperand(sp, 1 * kPointerSize));
-    sw(src4, MemOperand(sp, 0 * kPointerSize));
+    Dsubu(sp, sp, Operand(4 * kPointerSize));
+    sd(src1, MemOperand(sp, 3 * kPointerSize));
+    sd(src2, MemOperand(sp, 2 * kPointerSize));
+    sd(src3, MemOperand(sp, 1 * kPointerSize));
+    sd(src4, MemOperand(sp, 0 * kPointerSize));
   }
 
   void Push(Register src, Condition cond, Register tst1, Register tst2) {
     // Since we don't have conditional execution we use a Branch.
     Branch(3, cond, tst1, Operand(tst2));
-    Subu(sp, sp, Operand(kPointerSize));
-    sw(src, MemOperand(sp, 0));
+    Dsubu(sp, sp, Operand(kPointerSize));
+    sd(src, MemOperand(sp, 0));
   }
 
   // Pops multiple values from the stack and load them in the
@@ -678,29 +686,29 @@ class MacroAssembler: public Assembler {
   void MultiPopReversedFPU(RegList regs);
 
   void pop(Register dst) {
-    lw(dst, MemOperand(sp, 0));
-    Addu(sp, sp, Operand(kPointerSize));
+    ld(dst, MemOperand(sp, 0));
+    Daddu(sp, sp, Operand(kPointerSize));
   }
   void Pop(Register dst) { pop(dst); }
 
   // Pop two registers. Pops rightmost register first (from lower address).
   void Pop(Register src1, Register src2) {
     ASSERT(!src1.is(src2));
-    lw(src2, MemOperand(sp, 0 * kPointerSize));
-    lw(src1, MemOperand(sp, 1 * kPointerSize));
-    Addu(sp, sp, 2 * kPointerSize);
+    ld(src2, MemOperand(sp, 0 * kPointerSize));
+    ld(src1, MemOperand(sp, 1 * kPointerSize));
+    Daddu(sp, sp, 2 * kPointerSize);
   }
 
   // Pop three registers. Pops rightmost register first (from lower address).
   void Pop(Register src1, Register src2, Register src3) {
-    lw(src3, MemOperand(sp, 0 * kPointerSize));
-    lw(src2, MemOperand(sp, 1 * kPointerSize));
-    lw(src1, MemOperand(sp, 2 * kPointerSize));
-    Addu(sp, sp, 3 * kPointerSize);
+    ld(src3, MemOperand(sp, 0 * kPointerSize));
+    ld(src2, MemOperand(sp, 1 * kPointerSize));
+    ld(src1, MemOperand(sp, 2 * kPointerSize));
+    Daddu(sp, sp, 3 * kPointerSize);
   }
 
   void Pop(uint32_t count = 1) {
-    Addu(sp, sp, Operand(count * kPointerSize));
+    Daddu(sp, sp, Operand(count * kPointerSize));
   }
 
   // Push and pop the registers that can hold pointers, as defined by the
@@ -1107,7 +1115,7 @@ class MacroAssembler: public Assembler {
   Condition IsObjectStringType(Register obj,
                                Register type,
                                Register result) {
-    lw(type, FieldMemOperand(obj, HeapObject::kMapOffset));
+    ld(type, FieldMemOperand(obj, HeapObject::kMapOffset));
     lbu(type, FieldMemOperand(type, Map::kInstanceTypeOffset));
     And(type, type, Operand(kIsNotStringMask));
     ASSERT_EQ(0, kStringTag);
@@ -1372,7 +1380,8 @@ class MacroAssembler: public Assembler {
   // Smi utilities.
 
   void SmiTag(Register reg) {
-    Addu(reg, reg, reg);
+    // Addu(reg, reg, reg);
+	dsll32(reg, reg, 0);
   }
 
   // Test for overflow < 0: use BranchOnOverflow() or BranchOnNoOverflow().
@@ -1380,7 +1389,9 @@ class MacroAssembler: public Assembler {
   void SmiTagCheckOverflow(Register dst, Register src, Register overflow);
 
   void SmiTag(Register dst, Register src) {
-    Addu(dst, src, src);
+    // Addu(dst, src, src);
+	STATIC_ASSERT(kSmiTag == 0);
+	dsll32(dst, src, 0);
   }
 
   // Try to convert int32 to smi. If the value is to large, preserve
@@ -1399,11 +1410,13 @@ class MacroAssembler: public Assembler {
   }
 
   void SmiUntag(Register reg) {
-    sra(reg, reg, kSmiTagSize);
+    // sra(reg, reg, kSmiTagSize);
+	dsra32(reg, reg, 0);
   }
 
   void SmiUntag(Register dst, Register src) {
-    sra(dst, src, kSmiTagSize);
+    // sra(dst, src, kSmiTagSize);
+	dsra32(dst, src, 0);
   }
 
   // Test if the register contains a smi.
@@ -1530,7 +1543,7 @@ class MacroAssembler: public Assembler {
   void DecodeField(Register reg) {
     static const int shift = Field::kShift;
     static const int mask = (Field::kMask >> shift) << kSmiTagSize;
-    srl(reg, reg, shift);
+    dsrl(reg, reg, shift);
     And(reg, reg, Operand(mask));
   }
 

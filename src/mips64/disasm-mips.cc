@@ -53,9 +53,9 @@
 
 #include "v8.h"
 
-#if V8_TARGET_ARCH_MIPS
+#if V8_TARGET_ARCH_MIPS64
 
-#include "mips/constants-mips.h"
+#include "mips64/constants-mips.h"
 #include "disasm.h"
 #include "macro-assembler.h"
 #include "platform.h"
@@ -470,11 +470,17 @@ void Decoder::DecodeTypeRegister(Instruction* instr) {
         case MFC1:
           Format(instr, "mfc1    'rt, 'fs");
           break;
+        case DMFC1:
+          Format(instr, "dmfc1    'rt, 'fs");
+          break;
         case MFHC1:
           Format(instr, "mfhc1   'rt, 'fs");
           break;
         case MTC1:
           Format(instr, "mtc1    'rt, 'fs");
+          break;
+        case DMTC1:
+          Format(instr, "dmtc1    'rt, 'fs");
           break;
         // These are called "fs" too, although they are not FPU registers.
         case CTC1:
@@ -642,6 +648,12 @@ void Decoder::DecodeTypeRegister(Instruction* instr) {
           else
             Format(instr, "sll     'rd, 'rt, 'sa");
           break;
+		case DSLL:
+		  Format(instr, "dsll     'rd, 'rt, 'sa");
+		  break;
+		case DSLL32:
+		  Format(instr, "dsll32   'rd, 'rt, 'sa");
+		  break;
         case SRL:
           if (instr->RsValue() == 0) {
             Format(instr, "srl     'rd, 'rt, 'sa");
@@ -653,11 +665,34 @@ void Decoder::DecodeTypeRegister(Instruction* instr) {
             }
           }
           break;
+		case DSRL:
+          if (instr->RsValue() == 0) {
+            Format(instr, "dsrl     'rd, 'rt, 'sa");
+          } else {
+            if (kArchVariant == kMips32r2) {
+              Format(instr, "drotr    'rd, 'rt, 'sa");
+            } else {
+              Unknown(instr);
+            }
+          }
+		  break;
+		case DSRL32:
+		  Format(instr, "dsrl32     'rd, 'rt, 'sa");
+		  break;
         case SRA:
           Format(instr, "sra     'rd, 'rt, 'sa");
           break;
+        case DSRA:
+          Format(instr, "dsra     'rd, 'rt, 'sa");
+          break;
+        case DSRA32:
+          Format(instr, "dsra32   'rd, 'rt, 'sa");
+          break;
         case SLLV:
-          Format(instr, "sllv    'rd, 'rt, 'rs");
+          Format(instr, "sllv     'rd, 'rt, 'rs");
+          break;
+        case DSLLV:
+          Format(instr, "dsllv    'rd, 'rt, 'rs");
           break;
         case SRLV:
           if (instr->SaValue() == 0) {
@@ -670,8 +705,22 @@ void Decoder::DecodeTypeRegister(Instruction* instr) {
             }
           }
           break;
+		case DSRLV:
+          if (instr->SaValue() == 0) {
+		    Format(instr, "dsrlv    'rd, 'rt, 'rs");
+		  } else {
+		    if (kArchVariant == kMips32r2) {
+		      Format(instr, "drotrv   'rd, 'rt, 'rs");
+		    } else {
+		      Unknown(instr);
+		    }
+		  }
+ 	      break;
         case SRAV:
           Format(instr, "srav    'rd, 'rt, 'rs");
+          break;
+        case DSRAV:
+          Format(instr, "dsrav    'rd, 'rt, 'rs");
           break;
         case MFHI:
           Format(instr, "mfhi    'rd");
@@ -682,26 +731,50 @@ void Decoder::DecodeTypeRegister(Instruction* instr) {
         case MULT:
           Format(instr, "mult    'rs, 'rt");
           break;
+        case DMULT:
+          Format(instr, "dmult    'rs, 'rt");
+          break;
         case MULTU:
           Format(instr, "multu   'rs, 'rt");
+          break;
+        case DMULTU:
+          Format(instr, "dmultu   'rs, 'rt");
           break;
         case DIV:
           Format(instr, "div     'rs, 'rt");
           break;
+        case DDIV:
+          Format(instr, "ddiv     'rs, 'rt");
+          break;
         case DIVU:
           Format(instr, "divu    'rs, 'rt");
+          break;
+        case DDIVU:
+          Format(instr, "ddivu    'rs, 'rt");
           break;
         case ADD:
           Format(instr, "add     'rd, 'rs, 'rt");
           break;
+        case DADD:
+          Format(instr, "dadd     'rd, 'rs, 'rt");
+          break;
         case ADDU:
           Format(instr, "addu    'rd, 'rs, 'rt");
+          break;
+        case DADDU:
+          Format(instr, "daddu    'rd, 'rs, 'rt");
           break;
         case SUB:
           Format(instr, "sub     'rd, 'rs, 'rt");
           break;
+        case DSUB:
+          Format(instr, "dsub     'rd, 'rs, 'rt");
+          break;
         case SUBU:
           Format(instr, "subu    'rd, 'rs, 'rt");
+          break;
+        case DSUBU:
+          Format(instr, "dsubu    'rd, 'rs, 'rt");
           break;
         case AND:
           Format(instr, "and     'rd, 'rs, 'rt");
@@ -856,8 +929,14 @@ void Decoder::DecodeTypeImmediate(Instruction* instr) {
     case ADDI:
       Format(instr, "addi    'rt, 'rs, 'imm16s");
       break;
-    case ADDIU:
-      Format(instr, "addiu   'rt, 'rs, 'imm16s");
+    case DADDI:
+      Format(instr, "daddi    'rt, 'rs, 'imm16s");
+      break;
+	case ADDIU:
+	  Format(instr, "addiu    'rt, 'rs, 'imm16s");
+	  break;
+    case DADDIU:
+      Format(instr, "daddiu   'rt, 'rs, 'imm16s");
       break;
     case SLTI:
       Format(instr, "slti    'rt, 'rs, 'imm16s");
@@ -887,8 +966,14 @@ void Decoder::DecodeTypeImmediate(Instruction* instr) {
     case LWL:
       Format(instr, "lwl     'rt, 'imm16s('rs)");
       break;
+    case LDL:
+      Format(instr, "ldl     'rt, 'imm16s('rs)");
+      break;
     case LW:
       Format(instr, "lw      'rt, 'imm16s('rs)");
+      break;
+    case LD:
+      Format(instr, "ld      'rt, 'imm16s('rs)");
       break;
     case LBU:
       Format(instr, "lbu     'rt, 'imm16s('rs)");
@@ -898,6 +983,9 @@ void Decoder::DecodeTypeImmediate(Instruction* instr) {
       break;
     case LWR:
       Format(instr, "lwr     'rt, 'imm16s('rs)");
+      break;
+    case LDR:
+      Format(instr, "ldr     'rt, 'imm16s('rs)");
       break;
     case PREF:
       Format(instr, "pref    'rt, 'imm16s('rs)");
@@ -913,6 +1001,9 @@ void Decoder::DecodeTypeImmediate(Instruction* instr) {
       break;
     case SW:
       Format(instr, "sw      'rt, 'imm16s('rs)");
+      break;
+    case SD:
+      Format(instr, "sd      'rt, 'imm16s('rs)");
       break;
     case SWR:
       Format(instr, "swr     'rt, 'imm16s('rs)");
@@ -930,7 +1021,8 @@ void Decoder::DecodeTypeImmediate(Instruction* instr) {
       Format(instr, "sdc1    'ft, 'imm16s('rs)");
       break;
     default:
-      UNREACHABLE();
+      printf("a 0x%x \n",instr->OpcodeFieldRaw());
+	  UNREACHABLE();
       break;
   };
 }
@@ -1061,4 +1153,4 @@ void Disassembler::Disassemble(FILE* f, byte* begin, byte* end) {
 
 }  // namespace disasm
 
-#endif  // V8_TARGET_ARCH_MIPS
+#endif  // V8_TARGET_ARCH_MIPS64

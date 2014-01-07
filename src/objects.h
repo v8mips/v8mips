@@ -41,6 +41,8 @@
 #include "arm/constants-arm.h"
 #elif V8_TARGET_ARCH_MIPS
 #include "mips/constants-mips.h"
+#elif V8_TARGET_ARCH_MIPS64
+#include "mips64/constants-mips.h"
 #endif
 #include "v8checks.h"
 #include "zone.h"
