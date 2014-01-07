@@ -1864,6 +1864,9 @@ void Simulator::ConfigureTypeRegister(Instruction* instr,
             alu_out = (rt_u >> sa) | (rt_u << (32 - sa));
           }
           break;
+		case DSRL:
+		  alu_out = rt_u >> sa;
+		  break;
 		case DSRL32:
 		  alu_out = rt_u >> sa >> 32;
 		  break;
