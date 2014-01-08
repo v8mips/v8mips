@@ -289,7 +289,7 @@ static void GenerateFastArrayLoad(MacroAssembler* masm,
   __ Branch(out_of_range, hs, key, Operand(scratch1));
 
   // Fast case: Do the load.
-  __ Addu(scratch1, elements,
+  __ Daddu(scratch1, elements,
           Operand(FixedArray::kHeaderSize - kHeapObjectTag));
   // The key is a smi.
   STATIC_ASSERT(kSmiTag == 0 && kSmiTagSize < kPointerSizeLog2);
@@ -759,7 +759,7 @@ static MemOperand GenerateMappedArgumentsLookup(MacroAssembler* masm,
       FixedArray::kHeaderSize + 2 * kPointerSize - kHeapObjectTag;
 
   __ li(scratch3, Operand(kPointerSize >> 1));
-  __ Mul(scratch3, key, scratch3);
+  __ Dmul(scratch3, key, scratch3);
   __ Daddu(scratch3, scratch3, Operand(kOffset));
 
   __ Daddu(scratch2, scratch1, scratch3);
@@ -772,9 +772,9 @@ static MemOperand GenerateMappedArgumentsLookup(MacroAssembler* masm,
   // map in scratch1).
   __ ld(scratch1, FieldMemOperand(scratch1, FixedArray::kHeaderSize));
   __ li(scratch3, Operand(kPointerSize >> 1));
-  __ Mul(scratch3, scratch2, scratch3);
+  __ Dmul(scratch3, scratch2, scratch3);
   __ Daddu(scratch3, scratch3, Operand(Context::kHeaderSize - kHeapObjectTag));
-  __ Addu(scratch2, scratch1, scratch3);
+  __ Daddu(scratch2, scratch1, scratch3);
   return MemOperand(scratch2);
 }
 
@@ -1046,7 +1046,7 @@ void KeyedLoadIC::GenerateGeneric(MacroAssembler* masm) {
     __ daddu(at, t0, at);
     __ ld(t1, MemOperand(at, kPointerSize * i));
     __ lbu(t2, FieldMemOperand(a2, Map::kInObjectPropertiesOffset));
-    __ Subu(t1, t1, t2);
+    __ Dsubu(t1, t1, t2);
     __ Branch(&property_array_property, ge, t1, Operand(zero_reg));
     if (i != 0) {
       __ Branch(&load_in_object_property);

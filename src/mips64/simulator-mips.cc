@@ -1295,8 +1295,8 @@ void Simulator::Write2W(int64_t addr, int64_t value, Instruction* instr) {
   if ((addr & kPointerAlignmentMask) == 0) {
 	int64_t* ptr = reinterpret_cast<int64_t*>(addr);
     *ptr = value;
-	printf("sd value : 0x%lx \n", value);
-	printf("ptr : 0x%lx\n 0x%lx \n",ptr, *ptr);
+	// printf("sd value : 0x%lx \n", value);
+	// printf("ptr : 0x%lx\n 0x%lx \n",ptr, *ptr);
 	return;
   }
   PrintF("Unaligned write at 0x%08lx, pc=0x%08" V8PRIxPTR "\n",
@@ -2659,7 +2659,7 @@ void Simulator::DecodeTypeImmediate(Instruction* instr) {
     case SW:
 	case SD:
       addr = rs + se_imm16;
-	  printf("sd : rs : 0x%lx  se_imm16: %d, addr : 0x%lx \n",rs, se_imm16,addr);
+	  // printf("sd : rs : 0x%lx  se_imm16: %d, addr : 0x%lx \n",rs, se_imm16,addr);
       break;
     case SWR: {
       uint8_t al_offset = (rs + se_imm16) & kPointerAlignmentMask;

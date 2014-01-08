@@ -2857,8 +2857,9 @@ void KeyedLoadStubCompiler::GenerateLoadDictionaryElement(
   Register receiver = a1;
 
   __ JumpIfNotSmi(key, &miss);
-  __ lw(t0, FieldMemOperand(receiver, JSObject::kElementsOffset));
-  __ sra(a2, a0, kSmiTagSize);
+  __ ld(t0, FieldMemOperand(receiver, JSObject::kElementsOffset));
+  ASSERT(kSmiTagSize + kSmiShiftSize == 32);
+  __ dsra32(a2, a0, 0);
   __ LoadFromNumberDictionary(&slow, t0, a0, v0, a2, a3, t1);
   __ Ret();
 

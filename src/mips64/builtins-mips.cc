@@ -734,6 +734,7 @@ static void Generate_JSEntryTrampolineHelper(MacroAssembler* masm,
     // s0: argv, i.e. points to first arg
     Label loop, entry;
 	__ dsll32(a3, a3, 0); // int32_t -> int64_t.
+	__ dsrl32(a3, a3, 0);
     __ dsll(t0, a3, kPointerSizeLog2);
     __ daddu(t2, s0, t0);
     __ b(&entry);
@@ -760,7 +761,7 @@ static void Generate_JSEntryTrampolineHelper(MacroAssembler* masm,
 
     // Invoke the code and pass argc as a0.
     __ mov(a0, a3);
-__ break_(0x141);
+// __ break_(0x141);
     if (is_construct) {
       // No type feedback cell is available
       Handle<Object> undefined_sentinel(
@@ -776,7 +777,7 @@ __ break_(0x141);
 
     // Leave internal frame.
   }
-  __ break_(0x140);
+ // __ break_(0x140);
   __ Jump(ra);
 }
 

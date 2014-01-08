@@ -965,11 +965,17 @@ void MacroAssembler::li(Register rd, Operand j, LiFlags mode) {
 	    daddiu(rd, zero_reg, j.imm64_);
 	  } else if (!(j.imm64_ & kHiMask)) {
 	    ori(rd, zero_reg, j.imm64_);
+		dsll32(rd, rd, 0);
+		dsrl32(rd, rd, 0);
 	  } else if (!(j.imm64_ & kImm16Mask)) {
 	    lui(rd, (j.imm64_ >> kLuiShift) & kImm16Mask);
+		dsll32(rd, rd, 0);
+		dsrl32(rd, rd, 0);
 	  } else {
 	    lui(rd, (j.imm64_ >> kLuiShift) & kImm16Mask);
         ori(rd, rd, (j.imm64_ & kImm16Mask));
+		dsll32(rd, rd, 0);
+		dsrl32(rd, rd, 0);
 	  }
     } else {
 	  if (is_int64_32(j.imm64_)) {
@@ -2802,6 +2808,7 @@ void MacroAssembler::JumpToHandlerEntry() {
   dsll32(t9, t9, 0);
   Daddu(a3, a3, t9);
   Daddu(a3, a3, Operand(FixedArray::kHeaderSize - kHeapObjectTag));
+  break_(0x222);
   dsrl(a2, a2, StackHandler::kKindWidth);  // Handler index.
   dsll(a2, a2, kPointerSizeLog2);
   Daddu(a2, a3, a2);
@@ -3792,6 +3799,7 @@ void MacroAssembler::InvokeFunction(Register function,
   Register code_reg = a3;
   ld(code_reg, FieldMemOperand(a1, JSFunction::kSharedFunctionInfoOffset));
   ld(cp, FieldMemOperand(a1, JSFunction::kContextOffset));
+  break_(0x221);
   // 32-bit
   lw(expected_reg,
       FieldMemOperand(code_reg,
