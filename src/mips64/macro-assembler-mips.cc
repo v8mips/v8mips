@@ -4791,7 +4791,7 @@ void MacroAssembler::LeaveExitFrame(bool save_doubles,
     Ret(USE_DELAY_SLOT);
     // If returning, the instruction in the delay slot will be the addiu below.
   }
-  daddiu(sp, sp, 8);
+  daddiu(sp, sp, 2 * kPointerSizeLog2);
 }
 
 
