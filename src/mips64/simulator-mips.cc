@@ -1431,12 +1431,25 @@ void Simulator::Format(Instruction* instr, const char* format) {
 // 64-bit value. With the code below we assume that all runtime calls return
 // 64 bits of result. If they don't, the v1 result register contains a bogus
 // value, which is fine because it is caller-saved.
-typedef int64_t (*SimulatorRuntimeCall)(int64_t arg0,
+/* typedef int64_t (*SimulatorRuntimeCall)(int64_t arg0,
+                                        int64_t arg1,
+                                        int64_t arg2,
+                                        int64_t arg3,
+                                        int64_t arg4,
+                                        int64_t arg5);*/
+
+struct ObjectPair {
+  MaybeObject* x;
+  MaybeObject* y;
+};
+
+typedef ObjectPair (*SimulatorRuntimeCall)(int64_t arg0,
                                         int64_t arg1,
                                         int64_t arg2,
                                         int64_t arg3,
                                         int64_t arg4,
                                         int64_t arg5);
+
 
 // These prototypes handle the four types of FP calls.
 typedef int64_t (*SimulatorRuntimeCompareCall)(double darg0, double darg1);
@@ -1646,13 +1659,16 @@ printf("arg0 : 0x%llx  arg1 : 0x%llx  arg2 : 0x%llx  arg3 : 0x%llx  arg4 : 0x%ll
             arg4,
             arg5);
       }
-      int64_t result = target(arg0, arg1, arg2, arg3, arg4, arg5);
-      set_register(v0, static_cast<int32_t>(result));
-      set_register(v1, static_cast<int32_t>(result >> 32));
+      // int64_t result = target(arg0, arg1, arg2, arg3, arg4, arg5);
+      // set_register(v0, static_cast<int32_t>(result));
+      // set_register(v1, static_cast<int32_t>(result >> 32));
+      ObjectPair result = target(arg0, arg1, arg2, arg3, arg4, arg5);
+      set_register(v0, (int64_t)(result.x));
+      set_register(v1, (int64_t)(result.y));
     }
-    if (::v8::internal::FLAG_trace_sim) {
+    // if (::v8::internal::FLAG_trace_sim) {
       PrintF("Returned %08lx : %08lx\n", get_register(v1), get_register(v0));
-    }
+    //}
     set_register(ra, saved_ra);
     set_pc(get_register(ra));
 

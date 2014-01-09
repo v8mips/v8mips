@@ -2804,7 +2804,6 @@ void MacroAssembler::JumpToHandlerEntry() {
   lw(t9, FieldMemOperand(a1, Code::kHandlerTableOffset + 4));
   dsll32(a3, a3, 0);
   dsrl32(a3, a3, 0);
-  dsrl32(t9, t9, 0);
   dsll32(t9, t9, 0);
   Daddu(a3, a3, t9);
   Daddu(a3, a3, Operand(FixedArray::kHeaderSize - kHeapObjectTag));
