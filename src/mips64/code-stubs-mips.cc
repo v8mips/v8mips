@@ -1724,7 +1724,7 @@ void CEntryStub::Generate(MacroAssembler* masm) {
                &throw_out_of_memory_exception,
                false,
                false);
-__ break_(0x125);
+// __ break_(0x125);
   // Do space-specific GC and retry runtime call.
   GenerateCore(masm,
                &throw_normal_exception,
@@ -1732,7 +1732,7 @@ __ break_(0x125);
                &throw_out_of_memory_exception,
                true,
                false);
-__ break_(0x126);
+// __ break_(0x126);
   // Do full GC and retry runtime call one final time.
   Failure* failure = Failure::InternalError();
   __ li(v0, Operand(reinterpret_cast<int64_t>(failure)));
@@ -1742,13 +1742,13 @@ __ break_(0x126);
                &throw_out_of_memory_exception,
                true,
                true);
-__ break_(0x127);
+// __ break_(0x127);
   __ bind(&throw_out_of_memory_exception);
   // Set external caught exception to false.
   Isolate* isolate = masm->isolate();
   ExternalReference external_caught(Isolate::kExternalCaughtExceptionAddress,
                                     isolate);
-  __ li(a0, Operand(false, RelocInfo::NONE32));
+  __ li(a0, Operand(false, RelocInfo::NONE64));
   __ li(a2, Operand(external_caught));
   __ sd(a0, MemOperand(a2));
 
@@ -1795,7 +1795,7 @@ void JSEntryStub::GenerateBody(MacroAssembler* masm, bool is_construct) {
   // Set up the reserved register for 0.0.
   __ Move(kDoubleRegZero, 0.0);
 
-
+  __ break_(0x213);
   // Load argv in s0 register.
   int offset_to_argv = (kNumCalleeSaved + 1) * kPointerSize;
   offset_to_argv += kNumCalleeSavedFPU * kDoubleSize;
@@ -3205,9 +3205,9 @@ static void GenerateRecordCallTarget(MacroAssembler* masm) {
             masm->isolate()->heap()->undefined_value());
   ASSERT_EQ(*TypeFeedbackCells::UninitializedSentinel(masm->isolate()),
             masm->isolate()->heap()->the_hole_value());
-
+   __ break_(0x244);
   // Load the cache state into a3.
-  __ lw(a3, FieldMemOperand(a2, Cell::kValueOffset));
+  __ ld(a3, FieldMemOperand(a2, Cell::kValueOffset));
 
   // A monomorphic cache hit or an already megamorphic state: invoke the
   // function without changing the state.
@@ -3217,7 +3217,7 @@ static void GenerateRecordCallTarget(MacroAssembler* masm) {
   // If we didn't have a matching function, and we didn't find the megamorph
   // sentinel, then we have in the cell either some other function or an
   // AllocationSite. Do a map check on the object in a3.
-  __ lw(t1, FieldMemOperand(a3, 0));
+  __ ld(t1, FieldMemOperand(a3, 0));
   __ LoadRoot(at, Heap::kAllocationSiteMapRootIndex);
   __ Branch(&miss, ne, t1, Operand(at));
 
@@ -3236,7 +3236,7 @@ static void GenerateRecordCallTarget(MacroAssembler* masm) {
   // write-barrier is needed.
   __ bind(&megamorphic);
   __ LoadRoot(at, Heap::kUndefinedValueRootIndex);
-  __ sw(at, FieldMemOperand(a2, Cell::kValueOffset));
+  __ sd(at, FieldMemOperand(a2, Cell::kValueOffset));
   __ jmp(&done);
 
   // An uninitialized cache is patched with the function or sentinel to
@@ -3268,7 +3268,7 @@ static void GenerateRecordCallTarget(MacroAssembler* masm) {
   __ Branch(&done);
 
   __ bind(&not_array_function);
-  __ sw(a1, FieldMemOperand(a2, Cell::kValueOffset));
+  __ sd(a1, FieldMemOperand(a2, Cell::kValueOffset));
   // No need for a write barrier here - cells are rescanned.
 
   __ bind(&done);
@@ -3279,7 +3279,6 @@ void CallFunctionStub::Generate(MacroAssembler* masm) {
   // a1 : the function to call
   // a2 : cache cell for call target
   Label slow, non_function;
-
   // The receiver might implicitly be the global object. This is
   // indicated by passing the hole as the receiver to the call
   // function stub.
@@ -3287,15 +3286,15 @@ void CallFunctionStub::Generate(MacroAssembler* masm) {
     Label call;
     // Get the receiver from the stack.
     // function, receiver [, arguments]
-    __ lw(t0, MemOperand(sp, argc_ * kPointerSize));
+    __ ld(t0, MemOperand(sp, argc_ * kPointerSize));
     // Call as function is indicated with the hole.
     __ LoadRoot(at, Heap::kTheHoleValueRootIndex);
     __ Branch(&call, ne, t0, Operand(at));
     // Patch the receiver on the stack with the global receiver object.
-    __ lw(a3,
+    __ ld(a3,
           MemOperand(cp, Context::SlotOffset(Context::GLOBAL_OBJECT_INDEX)));
-    __ lw(a3, FieldMemOperand(a3, GlobalObject::kGlobalReceiverOffset));
-    __ sw(a3, MemOperand(sp, argc_ * kPointerSize));
+    __ ld(a3, FieldMemOperand(a3, GlobalObject::kGlobalReceiverOffset));
+    __ sd(a3, MemOperand(sp, argc_ * kPointerSize));
     __ bind(&call);
   }
 
@@ -3340,7 +3339,7 @@ void CallFunctionStub::Generate(MacroAssembler* masm) {
     ASSERT_EQ(*TypeFeedbackCells::MegamorphicSentinel(masm->isolate()),
               masm->isolate()->heap()->undefined_value());
     __ LoadRoot(at, Heap::kUndefinedValueRootIndex);
-    __ sw(at, FieldMemOperand(a2, Cell::kValueOffset));
+    __ sd(at, FieldMemOperand(a2, Cell::kValueOffset));
   }
   // Check for function proxy.
   __ Branch(&non_function, ne, a3, Operand(JS_FUNCTION_PROXY_TYPE));
@@ -3358,7 +3357,7 @@ void CallFunctionStub::Generate(MacroAssembler* masm) {
   // CALL_NON_FUNCTION expects the non-function callee as receiver (instead
   // of the original receiver from the call site).
   __ bind(&non_function);
-  __ sw(a1, MemOperand(sp, argc_ * kPointerSize));
+  __ sd(a1, MemOperand(sp, argc_ * kPointerSize));
   __ li(a0, Operand(argc_));  // Set up the number of arguments.
   __ mov(a2, zero_reg);
   __ GetBuiltinEntry(a3, Builtins::CALL_NON_FUNCTION);
@@ -3373,7 +3372,7 @@ void CallConstructStub::Generate(MacroAssembler* masm) {
   // a1 : the function to call
   // a2 : cache cell for call target
   Label slow, non_function_call;
-
+  __ break_(0x243);
   // Check that the function is not a smi.
   __ JumpIfSmi(a1, &non_function_call);
   // Check that the function is a JSFunction.
@@ -3386,10 +3385,10 @@ void CallConstructStub::Generate(MacroAssembler* masm) {
 
   // Jump to the function-specific construct stub.
   Register jmp_reg = a3;
-  __ lw(jmp_reg, FieldMemOperand(a1, JSFunction::kSharedFunctionInfoOffset));
-  __ lw(jmp_reg, FieldMemOperand(jmp_reg,
+  __ ld(jmp_reg, FieldMemOperand(a1, JSFunction::kSharedFunctionInfoOffset));
+  __ ld(jmp_reg, FieldMemOperand(jmp_reg,
                                  SharedFunctionInfo::kConstructStubOffset));
-  __ Addu(at, jmp_reg, Operand(Code::kHeaderSize - kHeapObjectTag));
+  __ Daddu(at, jmp_reg, Operand(Code::kHeaderSize - kHeapObjectTag));
   __ Jump(at);
 
   // a0: number of arguments

@@ -78,8 +78,10 @@ void MacroAssembler::Store(Register src,
     sb(src, dst);
   } else if (r.IsInteger16() || r.IsUInteger16()) {
     sh(src, dst);
-  } else {
+  } else if (r.IsInteger32()){
     sw(src, dst);
+  } else {
+    sd(src, dst);
   }
 }
 

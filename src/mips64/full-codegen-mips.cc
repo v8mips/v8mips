@@ -310,7 +310,7 @@ void FullCodeGenerator::Generate() {
 
     { Comment cmnt(masm_, "[ Body");
       ASSERT(loop_depth() == 0);
-	   __ break_(0x131);
+	   __ break_(0x132);
 
       VisitStatements(function()->body());
 	   __ break_(0x127);
@@ -1159,6 +1159,7 @@ void FullCodeGenerator::VisitForInStatement(ForInStatement* stmt) {
   __ li(a0, Operand(Smi::FromInt(0)));
   // Push enumeration cache, enumeration cache length (as smi) and zero.
   __ Push(a2, a1, a0);
+  __ break_(141);
   __ jmp(&loop);
 
   __ bind(&no_descriptors);
@@ -2886,14 +2887,13 @@ void FullCodeGenerator::VisitCallNew(CallNew* expr) {
   for (int i = 0; i < arg_count; i++) {
     VisitForStackValue(args->at(i));
   }
-
   // Call the construct call builtin that handles allocation and
   // constructor invocation.
   SetSourcePosition(expr->position());
 
   // Load function and argument count into a1 and a0.
   __ li(a0, Operand(arg_count));
-  __ lw(a1, MemOperand(sp, arg_count * kPointerSize));
+  __ ld(a1, MemOperand(sp, arg_count * kPointerSize));
 
   // Record call targets in unoptimized code.
   Handle<Object> uninitialized =
@@ -4257,6 +4257,7 @@ void FullCodeGenerator::VisitUnaryOperation(UnaryOperation* expr) {
           __ li(a1, Operand(var->name()));
           __ li(a0, Operand(Smi::FromInt(kNonStrictMode)));
           __ Push(a2, a1, a0);
+		  __ break_(0x142);
           __ InvokeBuiltin(Builtins::DELETE, CALL_FUNCTION);
           context()->Plug(v0);
         } else if (var->IsStackAllocated() || var->IsContextSlot()) {
