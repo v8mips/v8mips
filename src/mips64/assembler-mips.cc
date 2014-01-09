@@ -689,10 +689,11 @@ int64_t Assembler::target_at(int64_t pos) {
     ASSERT(IsLui(instr_lui2));
     ASSERT(IsOri(instr_ori2));
 
-    int64_t imm = (instr_lui & static_cast<int32_t>(kImm16Mask)) << kLuiShift << 32;
-    imm |= (instr_ori & static_cast<int32_t>(kImm16Mask)) << 32;
-	imm |= (instr_lui2 & static_cast<int32_t>(kImm16Mask)) << kLuiShift;
-	imm |= (instr_ori2 & static_cast<int32_t>(kImm16Mask));
+    // TODO(plind) create named constant for 32-bit shift, fix long lines.
+    int64_t imm = static_cast<int64_t>((instr_lui & static_cast<int32_t>(kImm16Mask)) << kLuiShift) << 32;
+    imm |= static_cast<int64_t>(instr_ori & static_cast<int32_t>(kImm16Mask)) << 32;
+    imm |= (instr_lui2 & static_cast<int32_t>(kImm16Mask)) << kLuiShift;
+    imm |= (instr_ori2 & static_cast<int32_t>(kImm16Mask));
 
     if (imm == kEndOfJumpChain) {
       // EndOfChain sentinel is returned directly, not relative to pc or pos.
@@ -2410,11 +2411,11 @@ void Assembler::set_target_address_at(Address pc, Address target) {
   // register used for the jalr/jr. Finally, we have to skip 'jr ra', which is
   // mips return. Occasionally this lands after an li().
 
-  Instr instr5 = instr_at(pc + 6 * kInstrSize);
-  uint64_t ipc = reinterpret_cast<uint64_t>(pc + 7 * kInstrSize);
-  bool in_range = ((ipc ^ itarget) >> (kImm26Bits + kImmFieldShift)) == 0;
-  uint64_t target_field =
-      static_cast<uint64_t>(itarget & kJumpAddrMask) >> kImmFieldShift;
+  // Instr instr5 = instr_at(pc + 6 * kInstrSize);
+  // uint64_t ipc = reinterpret_cast<uint64_t>(pc + 7 * kInstrSize);
+  // bool in_range = ((ipc ^ itarget) >> (kImm26Bits + kImmFieldShift)) == 0;
+  // uint64_t target_field =
+  //     static_cast<uint64_t>(itarget & kJumpAddrMask) >> kImmFieldShift;
   bool patched_jump = false;
 /* TODO
 #ifndef ALLOW_JAL_IN_BOUNDARY_REGION

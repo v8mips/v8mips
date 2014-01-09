@@ -329,6 +329,10 @@
         'defines': [
           'V8_TARGET_ARCH_MIPS64',
         ],
+		'xcode_settings': {
+		  'ARCHS': [ 'x86_64' ],
+		},
+
         'variables': {
           'mipscompiler': '<!($(echo <(CXX)) -v 2>&1 | grep -q "^Target: mips" && echo "yes" || echo "no")',
         },

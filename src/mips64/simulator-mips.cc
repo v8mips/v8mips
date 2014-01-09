@@ -228,9 +228,9 @@ bool MipsDebugger::GetValue(const char* desc, int64_t* value) {
     *value = GetRegisterValue(regnum);
     return true;
   } else if (strncmp(desc, "0x", 2) == 0) {
-    return SScanF(desc, "%lx", reinterpret_cast<uint64_t*>(value)) == 1;
+    return SScanF(desc, "%llx", reinterpret_cast<uint64_t*>(value)) == 1;
   } else {
-    return SScanF(desc, "%ld", value) == 1;
+    return SScanF(desc, "%lld", value) == 1;
   }
   return false;
 }
@@ -243,7 +243,7 @@ bool MipsDebugger::GetValue(const char* desc, int32_t* value) {
     *value = GetFPURegisterValueInt(fpuregnum);
     return true;
   } else if (strncmp(desc, "0x", 2) == 0) {
-    return SScanF(desc, "%lx", reinterpret_cast<uint64_t*>(value)) == 1;
+    return SScanF(desc, "%llx", reinterpret_cast<uint64_t*>(value)) == 1;
   } else {
     return SScanF(desc, "%d", value) == 1;
   }
@@ -1474,7 +1474,7 @@ void Simulator::SoftwareInterrupt(Instruction* instr) {
     // Args 4 and 5 are on the stack after the reserved space for args 0..3.
     int64_t arg4 = stack_pointer[4];
     int64_t arg5 = stack_pointer[5];
-printf("arg0 : 0x%lx  arg1 : 0x%lx  arg2 : 0x%lx  arg3 : 0x%lx  arg4 : 0x%lx  arg5 : 0x%lx\n", arg0, arg1, arg2, arg3, arg4, arg5);
+printf("arg0 : 0x%llx  arg1 : 0x%llx  arg2 : 0x%llx  arg3 : 0x%llx  arg4 : 0x%llx  arg5 : 0x%llx\n", arg0, arg1, arg2, arg3, arg4, arg5);
     bool fp_call =
          (redirection->type() == ExternalReference::BUILTIN_FP_FP_CALL) ||
          (redirection->type() == ExternalReference::BUILTIN_COMPARE_CALL) ||
