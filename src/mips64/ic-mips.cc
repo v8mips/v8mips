@@ -1179,8 +1179,10 @@ static void KeyedStoreGenerateGenericHelper(
   Register address = t1;
   if (check_map == kCheckMap) {
     __ ld(elements_map, FieldMemOperand(elements, HeapObject::kMapOffset));
-    __ Branch(fast_double, ne, elements_map,
-              Operand(masm->isolate()->factory()->fixed_array_map()));
+    __ li(scratch_value, Operand(masm->isolate()->factory()->fixed_array_map()));
+    __ Branch(fast_double, ne, elements_map, Operand(scratch_value));
+    // __ Branch(fast_double, ne, elements_map,
+    //          Operand(masm->isolate()->factory()->fixed_array_map()));
   }
 
   // HOLECHECK: guards "A[i] = V"
@@ -1191,8 +1193,12 @@ static void KeyedStoreGenerateGenericHelper(
   __ dsll(at, key, kPointerSizeLog2 - kSmiTagSize);
   __ daddu(address, address, at);
   __ ld(scratch_value, MemOperand(address));
-  __ Branch(&holecheck_passed1, ne, scratch_value,
-            Operand(masm->isolate()->factory()->the_hole_value()));
+
+  // TODO can I use t2?
+  __ li(t2, Operand(masm->isolate()->factory()->the_hole_value()));
+  __ Branch(&holecheck_passed1, ne, scratch_value, Operand(t2));
+  // __ Branch(&holecheck_passed1, ne, scratch_value,
+  //          Operand(masm->isolate()->factory()->the_hole_value()));
   __ JumpIfDictionaryInPrototypeChain(receiver, elements_map, scratch_value,
                                       slow);
 
@@ -1471,7 +1477,6 @@ void KeyedStoreIC::GenerateMiss(MacroAssembler* masm) {
 
   // Push receiver, key and value for runtime call.
   __ Push(a2, a1, a0);
-
   ExternalReference ref =
       ExternalReference(IC_Utility(kKeyedStoreIC_Miss), masm->isolate());
   __ TailCallExternalReference(ref, 3, 1);
@@ -1508,7 +1513,6 @@ void KeyedStoreIC::GenerateSlow(MacroAssembler* masm) {
   // Push receiver, key and value for runtime call.
   // We can't use MultiPush as the order of the registers is important.
   __ Push(a2, a1, a0);
-
   // The slow case calls into the runtime to complete the store without causing
   // an IC miss that would otherwise cause a transition to the generic stub.
   ExternalReference ref =

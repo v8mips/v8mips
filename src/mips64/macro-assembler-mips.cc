@@ -5818,7 +5818,10 @@ void MacroAssembler::JumpIfDictionaryInPrototypeChain(
   Ext(scratch1, scratch1, Map::kElementsKindShift, Map::kElementsKindBitCount);
   Branch(found, eq, scratch1, Operand(DICTIONARY_ELEMENTS));
   ld(current, FieldMemOperand(current, Map::kPrototypeOffset));
-  Branch(&loop_again, ne, current, Operand(factory->null_value()));
+  ASSERT(!scratch1.is(current));
+  li(scratch1, Operand(factory->null_value()));
+  Branch(&loop_again, ne, current, Operand(scratch1));
+  // Branch(&loop_again, ne, current, Operand(factory->null_value()));
 }
 
 
