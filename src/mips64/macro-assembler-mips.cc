@@ -64,8 +64,10 @@ void MacroAssembler::Load(Register dst,
     lh(dst, src);
   } else if (r.IsUInteger16()) {
     lhu(dst, src);
-  } else {
+  } else if (r.IsInteger32()) {
     lw(dst, src);
+  } else {
+    ld(dst, src);
   }
 }
 

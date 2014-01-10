@@ -2929,7 +2929,6 @@ void LCodeGen::DoLoadNamedField(LLoadNamedField* instr) {
   HObjectAccess access = instr->hydrogen()->access();
   int offset = access.offset();
   Register object = ToRegister(instr->object());
-
   if (access.IsExternalMemory()) {
     Register result = ToRegister(instr->result());
     MemOperand operand = MemOperand(object, offset);
@@ -2945,7 +2944,7 @@ void LCodeGen::DoLoadNamedField(LLoadNamedField* instr) {
 
   Register result = ToRegister(instr->result());
   if (!access.IsInobject()) {
-    __ lw(result, FieldMemOperand(object, JSObject::kPropertiesOffset));
+    __ ld(result, FieldMemOperand(object, JSObject::kPropertiesOffset));
     object = result;
   }
   MemOperand operand = FieldMemOperand(object, offset);
@@ -3300,12 +3299,12 @@ void LCodeGen::DoArgumentsElements(LArgumentsElements* instr) {
   Register result = ToRegister(instr->result());
 
   if (instr->hydrogen()->from_inlined()) {
-    __ Subu(result, sp, 2 * kPointerSize);
+    __ Dsubu(result, sp, 2 * kPointerSize);
   } else {
     // Check if the calling frame is an arguments adaptor frame.
     Label done, adapted;
-    __ lw(scratch, MemOperand(fp, StandardFrameConstants::kCallerFPOffset));
-    __ lw(result, MemOperand(scratch, StandardFrameConstants::kContextOffset));
+    __ ld(scratch, MemOperand(fp, StandardFrameConstants::kCallerFPOffset));
+    __ ld(result, MemOperand(scratch, StandardFrameConstants::kContextOffset));
     __ Xor(temp, result, Operand(Smi::FromInt(StackFrame::ARGUMENTS_ADAPTOR)));
 
     // Result is the frame pointer for the frame if not adapted and for the real
@@ -3323,12 +3322,12 @@ void LCodeGen::DoArgumentsLength(LArgumentsLength* instr) {
   Label done;
 
   // If no arguments adaptor frame the number of arguments is fixed.
-  __ Addu(result, zero_reg, Operand(scope()->num_parameters()));
+  __ Daddu(result, zero_reg, Operand(scope()->num_parameters()));
   __ Branch(&done, eq, fp, Operand(elem));
 
   // Arguments adaptor frame present. Get argument length from there.
-  __ lw(result, MemOperand(fp, StandardFrameConstants::kCallerFPOffset));
-  __ lw(result,
+  __ ld(result, MemOperand(fp, StandardFrameConstants::kCallerFPOffset));
+  __ ld(result,
         MemOperand(result, ArgumentsAdaptorFrameConstants::kLengthOffset));
   __ SmiUntag(result);
 
@@ -3497,7 +3496,7 @@ void LCodeGen::DoDeclareGlobals(LDeclareGlobals* instr) {
 void LCodeGen::DoGlobalObject(LGlobalObject* instr) {
   Register context = ToRegister(instr->context());
   Register result = ToRegister(instr->result());
-  __ lw(result, ContextOperand(context, Context::GLOBAL_OBJECT_INDEX));
+  __ ld(result, ContextOperand(context, Context::GLOBAL_OBJECT_INDEX));
 }
 
 
@@ -4051,7 +4050,7 @@ void LCodeGen::DoStoreNamedField(LStoreNamedField* instr) {
   Register scratch = scratch0();
   HObjectAccess access = instr->hydrogen()->access();
   int offset = access.offset();
-
+  __ break_(0x300);
   if (access.IsExternalMemory()) {
     Register value = ToRegister(instr->value());
     MemOperand operand = MemOperand(object, offset);
