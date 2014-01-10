@@ -1795,7 +1795,7 @@ void JSEntryStub::GenerateBody(MacroAssembler* masm, bool is_construct) {
   // Set up the reserved register for 0.0.
   __ Move(kDoubleRegZero, 0.0);
 
-  __ break_(0x213);
+  // __ break_(0x213);
   // Load argv in s0 register.
   int offset_to_argv = (kNumCalleeSaved + 1) * kPointerSize;
   offset_to_argv += kNumCalleeSavedFPU * kDoubleSize;
@@ -3205,7 +3205,7 @@ static void GenerateRecordCallTarget(MacroAssembler* masm) {
             masm->isolate()->heap()->undefined_value());
   ASSERT_EQ(*TypeFeedbackCells::UninitializedSentinel(masm->isolate()),
             masm->isolate()->heap()->the_hole_value());
-   __ break_(0x244);
+  // __ break_(0x244);
   // Load the cache state into a3.
   __ ld(a3, FieldMemOperand(a2, Cell::kValueOffset));
 
@@ -3372,7 +3372,7 @@ void CallConstructStub::Generate(MacroAssembler* masm) {
   // a1 : the function to call
   // a2 : cache cell for call target
   Label slow, non_function_call;
-  __ break_(0x243);
+  // __ break_(0x243);
   // Check that the function is not a smi.
   __ JumpIfSmi(a1, &non_function_call);
   // Check that the function is a JSFunction.
@@ -5317,7 +5317,7 @@ void RecordWriteStub::GenerateIncremental(MacroAssembler* masm, Mode mode) {
   if (remembered_set_action_ == EMIT_REMEMBERED_SET) {
     Label dont_need_remembered_set;
 
-    __ lw(regs_.scratch0(), MemOperand(regs_.address(), 0));
+    __ ld(regs_.scratch0(), MemOperand(regs_.address(), 0));
     __ JumpIfNotInNewSpace(regs_.scratch0(),  // Value.
                            regs_.scratch0(),
                            &dont_need_remembered_set);
@@ -5486,9 +5486,9 @@ void StoreArrayLiteralElementStub::Generate(MacroAssembler* masm) {
   Label fast_elements;
 
   // Get array literal index, array literal and its map.
-  __ lw(t0, MemOperand(sp, 0 * kPointerSize));
-  __ lw(a1, MemOperand(sp, 1 * kPointerSize));
-  __ lw(a2, FieldMemOperand(a1, JSObject::kMapOffset));
+  __ ld(t0, MemOperand(sp, 0 * kPointerSize));
+  __ ld(a1, MemOperand(sp, 1 * kPointerSize));
+  __ ld(a2, FieldMemOperand(a1, JSObject::kMapOffset));
 
   __ CheckFastElements(a2, t1, &double_elements);
   // Check for FAST_*_SMI_ELEMENTS or FAST_*_ELEMENTS elements
@@ -5500,18 +5500,19 @@ void StoreArrayLiteralElementStub::Generate(MacroAssembler* masm) {
   __ bind(&slow_elements);
   // call.
   __ Push(a1, a3, a0);
-  __ lw(t1, MemOperand(fp, JavaScriptFrameConstants::kFunctionOffset));
-  __ lw(t1, FieldMemOperand(t1, JSFunction::kLiteralsOffset));
+  __ ld(t1, MemOperand(fp, JavaScriptFrameConstants::kFunctionOffset));
+  __ ld(t1, FieldMemOperand(t1, JSFunction::kLiteralsOffset));
   __ Push(t1, t0);
   __ TailCallRuntime(Runtime::kStoreArrayLiteralElement, 5, 1);
 
   // Array literal has ElementsKind of FAST_*_ELEMENTS and value is an object.
   __ bind(&fast_elements);
-  __ lw(t1, FieldMemOperand(a1, JSObject::kElementsOffset));
-  __ sll(t2, a3, kPointerSizeLog2 - kSmiTagSize);
-  __ Addu(t2, t1, t2);
-  __ Addu(t2, t2, Operand(FixedArray::kHeaderSize - kHeapObjectTag));
-  __ sw(a0, MemOperand(t2, 0));
+  __ ld(t1, FieldMemOperand(a1, JSObject::kElementsOffset));
+  // __ sll(t2, a3, kPointerSizeLog2 - kSmiTagSize);
+  __ dsrl(t2, a3, 32 - kPointerSizeLog2);
+  __ Daddu(t2, t1, t2);
+  __ Daddu(t2, t2, Operand(FixedArray::kHeaderSize - kHeapObjectTag));
+  __ sd(a0, MemOperand(t2, 0));
   // Update the write barrier for the array store.
   __ RecordWrite(t1, t2, a0, kRAHasNotBeenSaved, kDontSaveFPRegs,
                  EMIT_REMEMBERED_SET, OMIT_SMI_CHECK);
@@ -5521,16 +5522,17 @@ void StoreArrayLiteralElementStub::Generate(MacroAssembler* masm) {
   // Array literal has ElementsKind of FAST_*_SMI_ELEMENTS or FAST_*_ELEMENTS,
   // and value is Smi.
   __ bind(&smi_element);
-  __ lw(t1, FieldMemOperand(a1, JSObject::kElementsOffset));
-  __ sll(t2, a3, kPointerSizeLog2 - kSmiTagSize);
-  __ Addu(t2, t1, t2);
-  __ sw(a0, FieldMemOperand(t2, FixedArray::kHeaderSize));
+  __ ld(t1, FieldMemOperand(a1, JSObject::kElementsOffset));
+  // __ sll(t2, a3, kPointerSizeLog2 - kSmiTagSize);
+  __ dsrl(t2, a3, 32 - kPointerSizeLog2);
+  __ Daddu(t2, t1, t2);
+  __ sd(a0, FieldMemOperand(t2, FixedArray::kHeaderSize));
   __ Ret(USE_DELAY_SLOT);
   __ mov(v0, a0);
 
   // Array literal has ElementsKind of FAST_*_DOUBLE_ELEMENTS.
   __ bind(&double_elements);
-  __ lw(t1, FieldMemOperand(a1, JSObject::kElementsOffset));
+  __ ld(t1, FieldMemOperand(a1, JSObject::kElementsOffset));
   __ StoreNumberToDoubleElements(a0, a3, t1, t3, t5, a2, &slow_elements);
   __ Ret(USE_DELAY_SLOT);
   __ mov(v0, a0);
@@ -5542,12 +5544,12 @@ void StubFailureTrampolineStub::Generate(MacroAssembler* masm) {
   __ Call(ces.GetCode(masm->isolate()), RelocInfo::CODE_TARGET);
   int parameter_count_offset =
       StubFailureTrampolineFrame::kCallerStackParameterCountFrameOffset;
-  __ lw(a1, MemOperand(fp, parameter_count_offset));
+  __ ld(a1, MemOperand(fp, parameter_count_offset));
   if (function_mode_ == JS_FUNCTION_STUB_MODE) {
-    __ Addu(a1, a1, Operand(1));
+    __ Daddu(a1, a1, Operand(1));
   }
   masm->LeaveFrame(StackFrame::STUB_FAILURE_TRAMPOLINE);
-  __ sll(a1, a1, kPointerSizeLog2);
+  __ dsll(a1, a1, kPointerSizeLog2);
   __ Ret(USE_DELAY_SLOT);
   __ Addu(sp, sp, a1);
 }
@@ -5559,11 +5561,11 @@ void StubFailureTailCallTrampolineStub::Generate(MacroAssembler* masm) {
   __ mov(a1, v0);
   int parameter_count_offset =
       StubFailureTrampolineFrame::kCallerStackParameterCountFrameOffset;
-  __ lw(a0, MemOperand(fp, parameter_count_offset));
+  __ ld(a0, MemOperand(fp, parameter_count_offset));
   // The parameter count above includes the receiver for the arguments passed to
   // the deoptimization handler. Subtract the receiver for the parameter count
   // for the call.
-  __ Subu(a0, a0, 1);
+  __ Dsubu(a0, a0, 1);
   masm->LeaveFrame(StackFrame::STUB_FAILURE_TRAMPOLINE);
   ParameterCount argument_count(a0);
   __ InvokeFunction(
@@ -5599,11 +5601,11 @@ void ProfileEntryHookStub::Generate(MacroAssembler* masm) {
   __ MultiPush(kSavedRegs | ra.bit());
 
   // Compute the function's address for the first argument.
-  __ Subu(a0, ra, Operand(kReturnAddressDistanceFromFunctionStart));
+  __ Dsubu(a0, ra, Operand(kReturnAddressDistanceFromFunctionStart));
 
   // The caller's return address is above the saved temporaries.
   // Grab that for the second argument to the hook.
-  __ Addu(a1, sp, Operand(kNumSavedRegs * kPointerSize));
+  __ Daddu(a1, sp, Operand(kNumSavedRegs * kPointerSize));
 
   // Align the stack if necessary.
   int frame_alignment = masm->ActivationFrameAlignment();
@@ -5856,7 +5858,7 @@ void ArrayConstructorStub::Generate(MacroAssembler* masm) {
   }
 
   Label no_info;
-  __ break_(0x248);
+  // __ break_(0x248);
   // Get the elements kind and case on that.
   __ LoadRoot(at, Heap::kUndefinedValueRootIndex);
   __ Branch(&no_info, eq, a2, Operand(at));
@@ -5894,7 +5896,7 @@ void InternalArrayConstructorStub::GenerateCase(
   if (IsFastPackedElementsKind(kind)) {
     // We might need to create a holey array
     // look at the first argument.
-    __ lw(at, MemOperand(sp, 0));
+    __ ld(at, MemOperand(sp, 0));
     __ Branch(&normal_sequence, eq, at, Operand(zero_reg));
 
     InternalArraySingleArgumentConstructorStub
@@ -5925,7 +5927,7 @@ void InternalArrayConstructorStub::Generate(MacroAssembler* masm) {
     // builtin Array functions which always have maps.
 
     // Initial map for the builtin Array function should be a map.
-    __ lw(a3, FieldMemOperand(a1, JSFunction::kPrototypeOrInitialMapOffset));
+    __ ld(a3, FieldMemOperand(a1, JSFunction::kPrototypeOrInitialMapOffset));
     // Will both indicate a NULL and a Smi.
     __ SmiTst(a3, at);
     __ Assert(ne, kUnexpectedInitialMapForArrayFunction,
@@ -5936,7 +5938,7 @@ void InternalArrayConstructorStub::Generate(MacroAssembler* masm) {
   }
 
   // Figure out the right elements kind.
-  __ lw(a3, FieldMemOperand(a1, JSFunction::kPrototypeOrInitialMapOffset));
+  __ ld(a3, FieldMemOperand(a1, JSFunction::kPrototypeOrInitialMapOffset));
 
   // Load the map's "bit field 2" into a3. We only need the first byte,
   // but the following bit field extraction takes care of that anyway.
