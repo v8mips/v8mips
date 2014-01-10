@@ -210,8 +210,11 @@ void MacroAssembler::InNewSpace(Register object,
   li(t8, Operand(ExternalReference::new_space_mask(isolate())));
   And(scratch, t8, object);
 
-  Branch(branch, cc, scratch,
-         Operand(ExternalReference::new_space_start(isolate())));
+  // Branch(branch, cc, scratch,
+  //       Operand(ExternalReference::new_space_start(isolate())));
+ ASSERT(!t8.is(scratch));
+ li(t8, Operand(ExternalReference::new_space_start(isolate())));
+ Branch(branch, cc, scratch, Operand(t8));
 }
 
 
