@@ -245,13 +245,14 @@ Instruction::Type Instruction::InstructionType() const {
         case JALR:
         case BREAK:
         case SLL:
-		case DSLL:
-		case DSLL32:
+        case DSLL:
+        case DSLL32:
         case SRL:
-		case DSRL:
-		case DSRL32:
+        case DSRL:
+        case DSRL32:
         case SRA:
-		case DSRA:
+        case DSRA:
+        case DSRA32:
         case SLLV:
 		case DSLLV:
         case SRLV:
