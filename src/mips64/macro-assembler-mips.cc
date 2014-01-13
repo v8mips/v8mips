@@ -5753,6 +5753,7 @@ void MacroAssembler::ClampDoubleToUint8(Register result_reg,
 void MacroAssembler::TestJSArrayForAllocationMemento(
     Register receiver_reg,
     Register scratch_reg,
+	Register scratch_reg2,
     Label* no_memento_found,
     Condition cond,
     Label* allocation_memento_present) {
@@ -5762,14 +5763,21 @@ void MacroAssembler::TestJSArrayForAllocationMemento(
       ExternalReference::new_space_allocation_top_address(isolate());
   Daddu(scratch_reg, receiver_reg,
        Operand(JSArray::kSize + AllocationMemento::kSize - kHeapObjectTag));
-  Branch(no_memento_found, lt, scratch_reg, Operand(new_space_start));
-  li(at, Operand(new_space_allocation_top));
-  ld(at, MemOperand(at));
+  // Branch(no_memento_found, lt, scratch_reg, Operand(new_space_start));
+  li(scratch_reg2, Operand(new_space_start));
+  Branch(no_memento_found, lt, scratch_reg, Operand(scratch_reg2));
+  // li(at, Operand(new_space_allocation_top));
+  // ld(at, MemOperand(at));
+  li(scratch_reg2, Operand(new_space_allocation_top));
+  ld(at, MemOperand(scratch_reg2));
   Branch(no_memento_found, gt, scratch_reg, Operand(at));
   ld(scratch_reg, MemOperand(scratch_reg, -AllocationMemento::kSize));
   if (allocation_memento_present) {
+    // Branch(allocation_memento_present, cond, scratch_reg,
+    //       Operand(isolate()->factory()->allocation_memento_map()));
+    li(scratch_reg2, Operand(isolate()->factory()->allocation_memento_map()));
     Branch(allocation_memento_present, cond, scratch_reg,
-           Operand(isolate()->factory()->allocation_memento_map()));
+	       Operand(scratch_reg2));
   }
 }
 
