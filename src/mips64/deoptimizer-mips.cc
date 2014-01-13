@@ -243,7 +243,8 @@ void Deoptimizer::EntryGenerator::Generate() {
   __ bind(&pop_loop);
   __ pop(t0);
   __ sd(t0, MemOperand(a3, 0));
-  __ daddiu(a3, a3, sizeof(uint32_t));
+  // __ daddiu(a3, a3, sizeof(uint32_t));
+  __ addiu(a3, a3, sizeof(uint64_t));
   __ bind(&pop_loop_header);
   __ Branch(&pop_loop, ne, a2, Operand(sp));
 
