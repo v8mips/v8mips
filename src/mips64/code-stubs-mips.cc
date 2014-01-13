@@ -2278,10 +2278,16 @@ void ArgumentsAccessStub::GenerateReadElement(MacroAssembler* masm) {
   Label adaptor;
   __ lw(a2, MemOperand(fp, StandardFrameConstants::kCallerFPOffset));
   __ lw(a3, MemOperand(a2, StandardFrameConstants::kContextOffset));
+  // __ Branch(&adaptor,
+  //          eq,
+  //          a3,
+  //          Operand(Smi::FromInt(StackFrame::ARGUMENTS_ADAPTOR)));
+  // TODO can use t0?
+  __ li(t0, Operand(Smi::FromInt(StackFrame::ARGUMENTS_ADAPTOR)));
   __ Branch(&adaptor,
             eq,
-            a3,
-            Operand(Smi::FromInt(StackFrame::ARGUMENTS_ADAPTOR)));
+			a3,
+			Operand(t0));
 
   // Check index (a1) against formal parameters count limit passed in
   // through register a0. Use unsigned comparison to get negative
@@ -2360,10 +2366,16 @@ void ArgumentsAccessStub::GenerateNewNonStrictFast(MacroAssembler* masm) {
   Label adaptor_frame, try_allocate;
   __ lw(a3, MemOperand(fp, StandardFrameConstants::kCallerFPOffset));
   __ lw(a2, MemOperand(a3, StandardFrameConstants::kContextOffset));
+  // __ Branch(&adaptor_frame,
+  //          eq,
+  //          a2,
+  //          Operand(Smi::FromInt(StackFrame::ARGUMENTS_ADAPTOR)));
+  // TODO can use t0?
+  __ li(t0, Operand(Smi::FromInt(StackFrame::ARGUMENTS_ADAPTOR)));
   __ Branch(&adaptor_frame,
             eq,
-            a2,
-            Operand(Smi::FromInt(StackFrame::ARGUMENTS_ADAPTOR)));
+			a2,
+			Operand(t0));
 
   // No adaptor, parameter count = argument count.
   __ mov(a2, a1);
