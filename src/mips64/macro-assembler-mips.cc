@@ -3813,9 +3813,10 @@ void MacroAssembler::InvokeFunction(Register function,
   lw(expected_reg,
       FieldMemOperand(code_reg,
                       SharedFunctionInfo::kFormalParameterCountOffset));
-  dsll32(expected_reg, expected_reg, 0);
-  dsrl32(expected_reg, expected_reg, 0);
-  dsra(expected_reg, expected_reg, kSmiTagSize);
+  //dsll32(expected_reg, expected_reg, 0);
+  //dsrl32(expected_reg, expected_reg, 0);
+  // dsra(expected_reg, expected_reg, kSmiTagSize);
+  dsra32(expected_reg, expected_reg, 0);
   ld(code_reg, FieldMemOperand(a1, JSFunction::kCodeEntryOffset));
   ParameterCount expected(expected_reg);
   InvokeCode(code_reg, expected, actual, flag, call_wrapper, call_kind);
