@@ -337,8 +337,8 @@ void FullCodeGenerator::ClearAccumulator() {
 void FullCodeGenerator::EmitProfilingCounterDecrement(int delta) {
   __ li(a2, Operand(profiling_counter_));
   __ ld(a3, FieldMemOperand(a2, Cell::kValueOffset));
-  __ Subu(a3, a3, Operand(Smi::FromInt(delta)));
-  __ sw(a3, FieldMemOperand(a2, Cell::kValueOffset));
+  __ Dsubu(a3, a3, Operand(Smi::FromInt(delta)));
+  __ sd(a3, FieldMemOperand(a2, Cell::kValueOffset));
 }
 
 
