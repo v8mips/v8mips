@@ -276,7 +276,7 @@ void Deoptimizer::EntryGenerator::Generate() {
   __ ld(a3, MemOperand(a2, FrameDescription::frame_size_offset()));
   __ jmp(&inner_loop_header);
   __ bind(&inner_push_loop);
-  __ Dsubu(a3, a3, Operand(sizeof(uint32_t)));
+  __ Dsubu(a3, a3, Operand(sizeof(uint64_t)));
   __ Daddu(t2, a2, Operand(a3));
   __ ld(t3, MemOperand(t2, FrameDescription::frame_content_offset()));
   __ push(t3);
