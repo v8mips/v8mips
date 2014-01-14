@@ -5392,7 +5392,7 @@ void MacroAssembler::CheckPageFlag(
     Label* condition_met) {
   // And(scratch, object, Operand(~Page::kPageAlignmentMask));
   ASSERT(!object.is(scratch));
-  li(scratch, Operand(~Page::kPageAlignmentMask));
+  li(scratch, Operand(~Page::kPageAlignmentMask), CONSTANT_SIZE);  // plind HACK
   And(scratch, scratch, object);
   ld(scratch, MemOperand(scratch, MemoryChunk::kFlagsOffset));
   And(scratch, scratch, Operand(mask));
