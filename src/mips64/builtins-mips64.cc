@@ -371,7 +371,8 @@ static void Generate_JSConstructStubHelper(MacroAssembler* masm,
     FrameScope scope(masm, StackFrame::CONSTRUCT);
 
     // Preserve the two incoming parameters on the stack.
-    __ dsll(a0, a0, kSmiTagSize);  // Tag arguments count.
+    // __ sll(a0, a0, kSmiTagSize);  // Tag arguments count.
+	__ dsll32(a0, a0, 0);
     __ MultiPushReversed(a0.bit() | a1.bit());
 
     // Use t7 to hold undefined, which is used in several places below.
@@ -412,7 +413,7 @@ static void Generate_JSConstructStubHelper(MacroAssembler* masm,
         MemOperand constructor_count =
            FieldMemOperand(a3, SharedFunctionInfo::kConstructionCountOffset);
         __ lbu(t0, constructor_count);
-        __ Subu(t0, t0, Operand(1));
+        __ Dsubu(t0, t0, Operand(1));
         __ sb(t0, constructor_count);
         __ Branch(&allocate, ne, t0, Operand(zero_reg));
 
@@ -524,7 +525,8 @@ static void Generate_JSConstructStubHelper(MacroAssembler* masm,
       __ LoadRoot(t6, Heap::kFixedArrayMapRootIndex);
       __ mov(a2, t5);
       __ sd(t6, MemOperand(a2, JSObject::kMapOffset));
-      __ dsll(a0, a3, kSmiTagSize);
+      // __ sll(a0, a3, kSmiTagSize);
+	  __ dsll32(a0, a3, 0);
       __ sd(a0, MemOperand(a2, FixedArray::kLengthOffset));
       __ Daddu(a2, a2, Operand(2 * kPointerSize));
 
@@ -601,7 +603,8 @@ static void Generate_JSConstructStubHelper(MacroAssembler* masm,
     __ Daddu(a2, fp, Operand(StandardFrameConstants::kCallerSPOffset));
 
     // Set up number of arguments for function call below.
-    __ dsrl(a0, a3, kSmiTagSize);
+    // __ srl(a0, a3, kSmiTagSize);
+	__ dsrl32(a0, a3, 0);
 
     // Copy arguments and receiver to the expression stack.
     // a0: number of arguments
@@ -615,7 +618,8 @@ static void Generate_JSConstructStubHelper(MacroAssembler* masm,
     Label loop, entry;
     __ jmp(&entry);
     __ bind(&loop);
-    __ dsll(t0, a3, kPointerSizeLog2 - kSmiTagSize);
+    // __ sll(t0, a3, kPointerSizeLog2 - kSmiTagSize);
+	__ dsrl(t0, a3, 32 - kPointerSizeLog2);
     __ Daddu(t0, a2, Operand(t0));
     __ ld(t1, MemOperand(t0));
     __ push(t1);
@@ -681,7 +685,8 @@ static void Generate_JSConstructStubHelper(MacroAssembler* masm,
     // Leave construct frame.
   }
 
-  __ dsll(t0, a1, kPointerSizeLog2 - 1);
+  // __ sll(t0, a1, kPointerSizeLog2 - 1);
+  __ dsrl(t0, a1, 32 - kPointerSizeLog2);
   __ Daddu(sp, sp, t0);
   __ Daddu(sp, sp, kPointerSize);
   __ IncrementCounter(isolate->counters()->constructed_objects(), 1, a1, a2);
@@ -1081,7 +1086,8 @@ void Builtins::Generate_FunctionCall(MacroAssembler* masm) {
     // Enter an internal frame in order to preserve argument count.
     {
       FrameScope scope(masm, StackFrame::INTERNAL);
-      __ dsll(a0, a0, kSmiTagSize);  // Smi tagged.
+      // __ dsll(a0, a0, kSmiTagSize);  // Smi tagged.
+	  __ dsll32(a0, a0, 0);
       __ push(a0);
 
       __ push(a2);
@@ -1310,7 +1316,7 @@ void Builtins::Generate_FunctionApply(MacroAssembler* masm) {
 
     // Copy all arguments from the array to the stack.
     Label entry, loop;
-    __ lw(a0, MemOperand(fp, kIndexOffset));
+    __ ld(a0, MemOperand(fp, kIndexOffset));
     __ Branch(&entry);
 
     // Load the current argument from the arguments array and push it to the
@@ -1338,7 +1344,8 @@ void Builtins::Generate_FunctionApply(MacroAssembler* masm) {
     // Invoke the function.
     Label call_proxy;
     ParameterCount actual(a0);
-    __ dsra(a0, a0, kSmiTagSize);
+    // __ sra(a0, a0, kSmiTagSize);
+	__ dsra32(a0, a0, 0);
     __ ld(a1, MemOperand(fp, kFunctionOffset));
     __ GetObjectType(a1, a2, a2);
     __ Branch(&call_proxy, ne, a2, Operand(JS_FUNCTION_TYPE));
@@ -1493,7 +1500,6 @@ void Builtins::Generate_ArgumentsAdaptorTrampoline(MacroAssembler* masm) {
     Label fill;
     __ bind(&fill);
     __ Dsubu(sp, sp, kPointerSize);
-	__ break_(0x222);
     __ Branch(USE_DELAY_SLOT, &fill, ne, sp, Operand(a2));
     __ sd(t0, MemOperand(sp));
   }
