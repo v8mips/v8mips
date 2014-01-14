@@ -38,7 +38,8 @@ namespace internal {
 
 
 int Deoptimizer::patch_size() {
-  const int kCallInstructionSizeInWords = 4;
+  // const int kCallInstructionSizeInWords = 4;
+  const int kCallInstructionSizeInWords = 8;
   return kCallInstructionSizeInWords * Assembler::kInstrSize;
 }
 
@@ -247,7 +248,7 @@ void Deoptimizer::EntryGenerator::Generate() {
   __ addiu(a3, a3, sizeof(uint64_t));
   __ bind(&pop_loop_header);
   __ Branch(&pop_loop, ne, a2, Operand(sp));
-
+  __ break_(0x223);
   // Compute the output frame in the deoptimizer.
   __ push(a0);  // Preserve deoptimizer object across call.
   // a0: deoptimizer object; a1: scratch.
