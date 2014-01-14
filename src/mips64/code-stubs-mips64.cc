@@ -5621,7 +5621,7 @@ void StubFailureTrampolineStub::Generate(MacroAssembler* masm) {
   masm->LeaveFrame(StackFrame::STUB_FAILURE_TRAMPOLINE);
   __ dsll(a1, a1, kPointerSizeLog2);
   __ Ret(USE_DELAY_SLOT);
-  __ Addu(sp, sp, a1);
+  __ Daddu(sp, sp, a1);
 }
 
 

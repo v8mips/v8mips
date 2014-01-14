@@ -245,10 +245,9 @@ void Deoptimizer::EntryGenerator::Generate() {
   __ pop(t0);
   __ sd(t0, MemOperand(a3, 0));
   // __ daddiu(a3, a3, sizeof(uint32_t));
-  __ addiu(a3, a3, sizeof(uint64_t));
+  __ daddiu(a3, a3, sizeof(uint64_t));
   __ bind(&pop_loop_header);
   __ Branch(&pop_loop, ne, a2, Operand(sp));
-  __ break_(0x223);
   // Compute the output frame in the deoptimizer.
   __ push(a0);  // Preserve deoptimizer object across call.
   // a0: deoptimizer object; a1: scratch.
