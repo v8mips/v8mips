@@ -966,38 +966,42 @@ void MacroAssembler::li(Register rd, Operand j, LiFlags mode) {
   ASSERT(!j.is_reg());
   BlockTrampolinePoolScope block_trampoline_pool(this);
   if (!MustUseReg(j.rmode_) && mode == OPTIMIZE_SIZE) {
+    // TODO(plind): there are bugs in these short-cut versions. In one case,
+    //  a 64-bit address operand, was incorrectly interpreted as a 32-bit
+    //  signed negative integer. This must be reviewed / fixed.
+
     // Normal load of an immediate value which does not need Relocation Info.
     if (is_int64_32(j.imm64_)) {
       if (is_int64_16(j.imm64_)) {
 	    daddiu(rd, zero_reg, j.imm64_);
 	  } else if (!(j.imm64_ & kHiMask)) {
 	    ori(rd, zero_reg, j.imm64_);
-		dsll32(rd, rd, 0);
-		dsrl32(rd, rd, 0);
+      dsll32(rd, rd, 0);  // TODO(plind), I understand that these 0-extend,
+                          // but we should find a better way.
+      dsrl32(rd, rd, 0);
 	  } else if (!(j.imm64_ & kImm16Mask)) {
 	    lui(rd, (j.imm64_ >> kLuiShift) & kImm16Mask);
-		dsll32(rd, rd, 0);
-		dsrl32(rd, rd, 0);
+      dsll32(rd, rd, 0);
+      dsrl32(rd, rd, 0);
 	  } else {
 	    lui(rd, (j.imm64_ >> kLuiShift) & kImm16Mask);
-        ori(rd, rd, (j.imm64_ & kImm16Mask));
-		dsll32(rd, rd, 0);
-		dsrl32(rd, rd, 0);
+      ori(rd, rd, (j.imm64_ & kImm16Mask));
+      dsll32(rd, rd, 0);
+      dsrl32(rd, rd, 0);
 	  }
     } else {
 	  if (is_int64_32(j.imm64_)) {
 	    lui(rd, (j.imm64_ >> kLuiShift) & kImm16Mask);
-		ori(rd, rd, (j.imm64_ & kImm16Mask));
-		dsll32(rd, rd, 0);
-		dsrl32(rd, rd, 0);
+      ori(rd, rd, (j.imm64_ & kImm16Mask));
+      dsll32(rd, rd, 0);
+      dsrl32(rd, rd, 0);
 	  } else {
-	    ASSERT(!rd.is(at));
-	    lui(rd, (j.imm64_ >> 32 >> kLuiShift) & kImm16Mask);
-	    ori(rd, rd, (j.imm64_ >> 32 & kImm16Mask));
-	    dsll32(rd, rd, 0);
-        lui(at, (j.imm64_ >> kLuiShift) & kImm16Mask);
-	    ori(at, at, (j.imm64_ & kImm16Mask));
-	    daddu(rd, rd, at);
+      lui(rd, (j.imm64_ >> 48) & kImm16Mask);
+      ori(rd, rd, (j.imm64_ >> 32) & kImm16Mask);
+      dsll(rd, rd, 16);
+      ori(rd, rd, (j.imm64_ >> 16) & kImm16Mask);
+      dsll(rd, rd, 16);
+      ori(rd, rd, j.imm64_ & kImm16Mask);
 	  }
 	}
   } else {
@@ -1005,14 +1009,13 @@ void MacroAssembler::li(Register rd, Operand j, LiFlags mode) {
       RecordRelocInfo(j.rmode_, j.imm64_);
     }
     // We always need the same number of instructions as we may need to patch
-    // this code to load another value which may need 2 instructions to load.
-    ASSERT(!rd.is(at));
-	lui(rd, (j.imm64_ >> 32 >> kLuiShift) & kImm16Mask);
-    ori(rd, rd, (j.imm64_>> 32 & kImm16Mask));
-	dsll32(rd, rd, 0);
-	lui(at, (j.imm64_ >> kLuiShift) & kImm16Mask);
-	ori(at, at, (j.imm64_ & kImm16Mask));
-	daddu(rd, rd, at);
+    // this code to load another value which may need all 6 instructions.
+    lui(rd, (j.imm64_ >> 48) & kImm16Mask);
+    ori(rd, rd, (j.imm64_ >> 32) & kImm16Mask);
+    dsll(rd, rd, 16);
+    ori(rd, rd, (j.imm64_ >> 16) & kImm16Mask);
+    dsll(rd, rd, 16);
+    ori(rd, rd, j.imm64_ & kImm16Mask);
   }
 }
 
