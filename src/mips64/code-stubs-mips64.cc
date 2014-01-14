@@ -2866,7 +2866,8 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
   __ JumpIfNotSmi(a1, &runtime);
   __ ld(a3, FieldMemOperand(a3, String::kLengthOffset));
   __ Branch(&runtime, ls, a3, Operand(a1));
-  __ sra(a1, a1, kSmiTagSize);  // Untag the Smi.
+  // __ sra(a1, a1, kSmiTagSize);  // Untag the Smi.
+  __ dsra32(a1, a1, 0);
 
   STATIC_ASSERT(kStringEncodingMask == 4);
   STATIC_ASSERT(kOneByteStringTag == 4);
@@ -3047,7 +3048,7 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
         FieldMemOperand(last_match_info_elements, FixedArray::kLengthOffset));
   __ Daddu(a2, a1, Operand(RegExpImpl::kLastMatchOverhead));
   // __ sra(at, a0, kSmiTagSize);
-  __ dsra(at, a0, 32 - kSmiTagSize);
+  __ dsra32(at, a0, 0);
   __ Branch(&runtime, gt, a2, Operand(at));
 
   // a1: number of capture registers
@@ -3582,13 +3583,12 @@ void StringCharFromCodeGenerator::GenerateFast(MacroAssembler* masm) {
   STATIC_ASSERT(kSmiTag == 0);
 /*  STATIC_ASSERT(kSmiShiftSize == 0);*/
   ASSERT(IsPowerOf2(String::kMaxOneByteCharCode + 1));
-/*  __ And(t0,
+  __ And(t0,
          code_,
          Operand(kSmiTagMask |
                  ((~String::kMaxOneByteCharCode) << kSmiTagSize)));
   __ Branch(&slow_case_, ne, t0, Operand(zero_reg));
-*/
-  __ JumpIfNotSmi(code_, &slow_case_);
+
 
   __ LoadRoot(result_, Heap::kSingleCharacterStringCacheRootIndex);
   // At this point code register contains smi tagged ASCII char code.
@@ -5102,9 +5102,10 @@ void NameDictionaryLookupStub::GenerateNegativeLookup(MacroAssembler* masm,
     // Having undefined at this place means the name is not contained.
     ASSERT_EQ(kSmiTagSize, 1);
     Register tmp = properties;
-    __ sll(scratch0, index, 1);
-    __ Addu(tmp, properties, scratch0);
-    __ lw(entity_name, FieldMemOperand(tmp, kElementsStartOffset));
+    // __ sll(scratch0, index, 1);
+	__ dsll32(scratch0, index, 0);
+    __ Daddu(tmp, properties, scratch0);
+    __ ld(entity_name, FieldMemOperand(tmp, kElementsStartOffset));
 
     ASSERT(!tmp.is(entity_name));
     __ LoadRoot(tmp, Heap::kUndefinedValueRootIndex);
@@ -5120,14 +5121,14 @@ void NameDictionaryLookupStub::GenerateNegativeLookup(MacroAssembler* masm,
     __ Branch(&good, eq, entity_name, Operand(tmp));
 
     // Check if the entry name is not a unique name.
-    __ lw(entity_name, FieldMemOperand(entity_name, HeapObject::kMapOffset));
+    __ ld(entity_name, FieldMemOperand(entity_name, HeapObject::kMapOffset));
     __ lbu(entity_name,
            FieldMemOperand(entity_name, Map::kInstanceTypeOffset));
     __ JumpIfNotUniqueName(entity_name, miss);
     __ bind(&good);
 
     // Restore the properties.
-    __ lw(properties,
+    __ ld(properties,
           FieldMemOperand(receiver, JSObject::kPropertiesOffset));
   }
 
@@ -5136,7 +5137,7 @@ void NameDictionaryLookupStub::GenerateNegativeLookup(MacroAssembler* masm,
        a2.bit() | a1.bit() | a0.bit() | v0.bit());
 
   __ MultiPush(spill_mask);
-  __ lw(a0, FieldMemOperand(receiver, JSObject::kPropertiesOffset));
+  __ ld(a0, FieldMemOperand(receiver, JSObject::kPropertiesOffset));
   __ li(a1, Operand(Handle<Name>(name)));
   NameDictionaryLookupStub stub(NEGATIVE_LOOKUP);
   __ CallStub(&stub);
@@ -5252,11 +5253,12 @@ void NameDictionaryLookupStub::Generate(MacroAssembler* masm) {
 
   Label in_dictionary, maybe_in_dictionary, not_in_dictionary;
 
-  __ lw(mask, FieldMemOperand(dictionary, kCapacityOffset));
-  __ sra(mask, mask, kSmiTagSize);
-  __ Subu(mask, mask, Operand(1));
+  __ ld(mask, FieldMemOperand(dictionary, kCapacityOffset));
+  // __ sra(mask, mask, kSmiTagSize);
+  __ dsra32(mask, mask, 0);
+  __ Dsubu(mask, mask, Operand(1));
 
-  __ lw(hash, FieldMemOperand(key, Name::kHashFieldOffset));
+  __ ld(hash, FieldMemOperand(key, Name::kHashFieldOffset));
 
   __ LoadRoot(undefined, Heap::kUndefinedValueRootIndex);
 
@@ -5269,12 +5271,12 @@ void NameDictionaryLookupStub::Generate(MacroAssembler* masm) {
       // shifted in the following and instruction.
       ASSERT(NameDictionary::GetProbeOffset(i) <
              1 << (32 - Name::kHashFieldOffset));
-      __ Addu(index, hash, Operand(
+      __ Daddu(index, hash, Operand(
           NameDictionary::GetProbeOffset(i) << Name::kHashShift));
     } else {
       __ mov(index, hash);
     }
-    __ srl(index, index, Name::kHashShift);
+    __ dsrl(index, index, Name::kHashShift);
     __ And(index, mask, index);
 
     // Scale the index by multiplying by the entry size.
@@ -5286,9 +5288,11 @@ void NameDictionaryLookupStub::Generate(MacroAssembler* masm) {
 
 
     ASSERT_EQ(kSmiTagSize, 1);
-    __ sll(index, index, 2);
-    __ Addu(index, index, dictionary);
-    __ lw(entry_key, FieldMemOperand(index, kElementsStartOffset));
+    __ break_(0x224);
+	// TODO what 2 mean?
+	__ dsll(index, index, 2);
+    __ Daddu(index, index, dictionary);
+    __ ld(entry_key, FieldMemOperand(index, kElementsStartOffset));
 
     // Having undefined at this place means the name is not contained.
     __ Branch(&not_in_dictionary, eq, entry_key, Operand(undefined));
@@ -5298,7 +5302,7 @@ void NameDictionaryLookupStub::Generate(MacroAssembler* masm) {
 
     if (i != kTotalProbes - 1 && mode_ == NEGATIVE_LOOKUP) {
       // Check if the entry name is not a unique name.
-      __ lw(entry_key, FieldMemOperand(entry_key, HeapObject::kMapOffset));
+      __ ld(entry_key, FieldMemOperand(entry_key, HeapObject::kMapOffset));
       __ lbu(entry_key,
              FieldMemOperand(entry_key, Map::kInstanceTypeOffset));
       __ JumpIfNotUniqueName(entry_key, &maybe_in_dictionary);
