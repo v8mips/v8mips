@@ -64,8 +64,10 @@ void MacroAssembler::Load(Register dst,
     lh(dst, src);
   } else if (r.IsUInteger16()) {
     lhu(dst, src);
-  } else {
+  } else if (r.IsInteger32()) {
     lw(dst, src);
+  } else {
+    ld(dst, src);
   }
 }
 
@@ -78,8 +80,10 @@ void MacroAssembler::Store(Register src,
     sb(src, dst);
   } else if (r.IsInteger16() || r.IsUInteger16()) {
     sh(src, dst);
-  } else {
+  } else if (r.IsInteger32()){
     sw(src, dst);
+  } else {
+    sd(src, dst);
   }
 }
 
@@ -206,8 +210,11 @@ void MacroAssembler::InNewSpace(Register object,
   li(t8, Operand(ExternalReference::new_space_mask(isolate())));
   And(scratch, t8, object);
 
-  Branch(branch, cc, scratch,
-         Operand(ExternalReference::new_space_start(isolate())));
+  // Branch(branch, cc, scratch,
+  //       Operand(ExternalReference::new_space_start(isolate())));
+ ASSERT(!t8.is(scratch));
+ li(t8, Operand(ExternalReference::new_space_start(isolate())));
+ Branch(branch, cc, scratch, Operand(t8));
 }
 
 
@@ -959,32 +966,42 @@ void MacroAssembler::li(Register rd, Operand j, LiFlags mode) {
   ASSERT(!j.is_reg());
   BlockTrampolinePoolScope block_trampoline_pool(this);
   if (!MustUseReg(j.rmode_) && mode == OPTIMIZE_SIZE) {
+    // TODO(plind): there are bugs in these short-cut versions. In one case,
+    //  a 64-bit address operand, was incorrectly interpreted as a 32-bit
+    //  signed negative integer. This must be reviewed / fixed.
+
     // Normal load of an immediate value which does not need Relocation Info.
     if (is_int64_32(j.imm64_)) {
       if (is_int64_16(j.imm64_)) {
 	    daddiu(rd, zero_reg, j.imm64_);
 	  } else if (!(j.imm64_ & kHiMask)) {
 	    ori(rd, zero_reg, j.imm64_);
+      dsll32(rd, rd, 0);  // TODO(plind), I understand that these 0-extend,
+                          // but we should find a better way.
+      dsrl32(rd, rd, 0);
 	  } else if (!(j.imm64_ & kImm16Mask)) {
 	    lui(rd, (j.imm64_ >> kLuiShift) & kImm16Mask);
+      dsll32(rd, rd, 0);
+      dsrl32(rd, rd, 0);
 	  } else {
 	    lui(rd, (j.imm64_ >> kLuiShift) & kImm16Mask);
-        ori(rd, rd, (j.imm64_ & kImm16Mask));
+      ori(rd, rd, (j.imm64_ & kImm16Mask));
+      dsll32(rd, rd, 0);
+      dsrl32(rd, rd, 0);
 	  }
     } else {
 	  if (is_int64_32(j.imm64_)) {
 	    lui(rd, (j.imm64_ >> kLuiShift) & kImm16Mask);
-		ori(rd, rd, (j.imm64_ & kImm16Mask));
-		dsll32(rd, rd, 0);
-		dsrl32(rd, rd, 0);
+      ori(rd, rd, (j.imm64_ & kImm16Mask));
+      dsll32(rd, rd, 0);
+      dsrl32(rd, rd, 0);
 	  } else {
-	    ASSERT(!rd.is(at));
-	    lui(rd, (j.imm64_ >> 32 >> kLuiShift) & kImm16Mask);
-	    ori(rd, rd, (j.imm64_ >> 32 & kImm16Mask));
-	    dsll32(rd, rd, 0);
-        lui(at, (j.imm64_ >> kLuiShift) & kImm16Mask);
-	    ori(at, at, (j.imm64_ & kImm16Mask));
-	    daddu(rd, rd, at);
+      lui(rd, (j.imm64_ >> 48) & kImm16Mask);
+      ori(rd, rd, (j.imm64_ >> 32) & kImm16Mask);
+      dsll(rd, rd, 16);
+      ori(rd, rd, (j.imm64_ >> 16) & kImm16Mask);
+      dsll(rd, rd, 16);
+      ori(rd, rd, j.imm64_ & kImm16Mask);
 	  }
 	}
   } else {
@@ -992,13 +1009,13 @@ void MacroAssembler::li(Register rd, Operand j, LiFlags mode) {
       RecordRelocInfo(j.rmode_, j.imm64_);
     }
     // We always need the same number of instructions as we may need to patch
-    // this code to load another value which may need 2 instructions to load.
-    lui(rd, (j.imm64_ >> 32 >> kLuiShift) & kImm16Mask);
-    ori(rd, rd, (j.imm64_>> 32 & kImm16Mask));
-	dsll32(rd, rd, 0);
-	lui(at, (j.imm64_ >> kLuiShift) & kImm16Mask);
-	ori(at, at, (j.imm64_ & kImm16Mask));
-	daddu(rd, rd, at);
+    // this code to load another value which may need all 6 instructions.
+    lui(rd, (j.imm64_ >> 48) & kImm16Mask);
+    ori(rd, rd, (j.imm64_ >> 32) & kImm16Mask);
+    dsll(rd, rd, 16);
+    ori(rd, rd, (j.imm64_ >> 16) & kImm16Mask);
+    dsll(rd, rd, 16);
+    ori(rd, rd, j.imm64_ & kImm16Mask);
   }
 }
 
@@ -2784,8 +2801,10 @@ void MacroAssembler::PopTryHandler() {
   STATIC_ASSERT(StackHandlerConstants::kNextOffset == 0);
   pop(a1);
   Daddu(sp, sp, Operand(StackHandlerConstants::kSize - kPointerSize));
-  li(at, Operand(ExternalReference(Isolate::kHandlerAddress, isolate())));
-  sd(a1, MemOperand(at));
+  // li(at, Operand(ExternalReference(Isolate::kHandlerAddress, isolate())));
+  // TODO can I use t1?
+  li(t1, Operand(ExternalReference(Isolate::kHandlerAddress, isolate())));
+  sd(a1, MemOperand(t1));
 }
 
 
@@ -2793,8 +2812,15 @@ void MacroAssembler::JumpToHandlerEntry() {
   // Compute the handler entry address and jump to it.  The handler table is
   // a fixed array of (smi-tagged) code offsets.
   // v0 = exception, a1 = code object, a2 = state.
-  ld(a3, FieldMemOperand(a1, Code::kHandlerTableOffset));  // Handler table.
+  // ld(a3, FieldMemOperand(a1, Code::kHandlerTableOffset));  // Handler table.
+  lw(a3, FieldMemOperand(a1, Code::kHandlerTableOffset));
+  lw(t9, FieldMemOperand(a1, Code::kHandlerTableOffset + 4));
+  dsll32(a3, a3, 0);
+  dsrl32(a3, a3, 0);
+  dsll32(t9, t9, 0);
+  Daddu(a3, a3, t9);
   Daddu(a3, a3, Operand(FixedArray::kHeaderSize - kHeapObjectTag));
+  // break_(0x222);
   dsrl(a2, a2, StackHandler::kKindWidth);  // Handler index.
   dsll(a2, a2, kPointerSizeLog2);
   Daddu(a2, a3, a2);
@@ -3785,13 +3811,15 @@ void MacroAssembler::InvokeFunction(Register function,
   Register code_reg = a3;
   ld(code_reg, FieldMemOperand(a1, JSFunction::kSharedFunctionInfoOffset));
   ld(cp, FieldMemOperand(a1, JSFunction::kContextOffset));
+  // break_(0x221);
   // 32-bit
   lw(expected_reg,
       FieldMemOperand(code_reg,
                       SharedFunctionInfo::kFormalParameterCountOffset));
-  dsll32(expected_reg, expected_reg, 0);
-  dsrl32(expected_reg, expected_reg, 0);
-  dsra(expected_reg, expected_reg, kSmiTagSize);
+  //dsll32(expected_reg, expected_reg, 0);
+  //dsrl32(expected_reg, expected_reg, 0);
+  // dsra(expected_reg, expected_reg, kSmiTagSize);
+  dsra32(expected_reg, expected_reg, 0);
   ld(code_reg, FieldMemOperand(a1, JSFunction::kCodeEntryOffset));
   ParameterCount expected(expected_reg);
   InvokeCode(code_reg, expected, actual, flag, call_wrapper, call_kind);
@@ -4719,7 +4747,7 @@ void MacroAssembler::EnterExitFrame(bool save_doubles,
   // (used by the DirectCEntryStub to hold the return value if a struct is
   // returned) and align the frame preparing for calling the runtime function.
   ASSERT(stack_space >= 0);
-  Subu(sp, sp, Operand((stack_space + 2) * kPointerSize));
+  Dsubu(sp, sp, Operand((stack_space + 2) * kPointerSize));
   if (frame_alignment > 0) {
     ASSERT(IsPowerOf2(frame_alignment));
     // And(sp, sp, Operand(-frame_alignment));  // Align stack.
@@ -4777,7 +4805,7 @@ void MacroAssembler::LeaveExitFrame(bool save_doubles,
     Ret(USE_DELAY_SLOT);
     // If returning, the instruction in the delay slot will be the addiu below.
   }
-  daddiu(sp, sp, 8);
+  daddiu(sp, sp, 2 * kPointerSize);
 }
 
 
@@ -4904,7 +4932,7 @@ void MacroAssembler::JumpIfNotBothSmi(Register reg1,
                                       Register reg2,
                                       Label* on_not_both_smi) {
   STATIC_ASSERT(kSmiTag == 0);
-  ASSERT_EQ((uint64_t)1, kSmiTagMask);
+  ASSERT_EQ(1, kSmiTagMask);
   or_(at, reg1, reg2);
   JumpIfNotSmi(at, on_not_both_smi);
 }
@@ -4914,7 +4942,7 @@ void MacroAssembler::JumpIfEitherSmi(Register reg1,
                                      Register reg2,
                                      Label* on_either_smi) {
   STATIC_ASSERT(kSmiTag == 0);
-  ASSERT_EQ((uint64_t)1, kSmiTagMask);
+  ASSERT_EQ(1, kSmiTagMask);
   // Both Smi tags must be 1 (not Smi).
   and_(at, reg1, reg2);
   JumpIfSmi(at, on_either_smi);
@@ -5289,7 +5317,7 @@ void MacroAssembler::CallCFunctionHelper(Register function,
   if (OS::ActivationFrameAlignment() > kPointerSize) {
     ld(sp, MemOperand(sp, stack_passed_arguments * kPointerSize));
   } else {
-    Daddu(sp, sp, Operand(stack_passed_arguments * sizeof(kPointerSize)));
+    Daddu(sp, sp, Operand(stack_passed_arguments * kPointerSize));
   }
 }
 
@@ -5364,7 +5392,7 @@ void MacroAssembler::CheckPageFlag(
     Label* condition_met) {
   // And(scratch, object, Operand(~Page::kPageAlignmentMask));
   ASSERT(!object.is(scratch));
-  li(scratch, Operand(~Page::kPageAlignmentMask));
+  li(scratch, Operand(~Page::kPageAlignmentMask), CONSTANT_SIZE);  // plind HACK
   And(scratch, scratch, object);
   ld(scratch, MemOperand(scratch, MemoryChunk::kFlagsOffset));
   And(scratch, scratch, Operand(mask));
@@ -5729,6 +5757,7 @@ void MacroAssembler::ClampDoubleToUint8(Register result_reg,
 void MacroAssembler::TestJSArrayForAllocationMemento(
     Register receiver_reg,
     Register scratch_reg,
+	Register scratch_reg2,
     Label* no_memento_found,
     Condition cond,
     Label* allocation_memento_present) {
@@ -5738,14 +5767,21 @@ void MacroAssembler::TestJSArrayForAllocationMemento(
       ExternalReference::new_space_allocation_top_address(isolate());
   Daddu(scratch_reg, receiver_reg,
        Operand(JSArray::kSize + AllocationMemento::kSize - kHeapObjectTag));
-  Branch(no_memento_found, lt, scratch_reg, Operand(new_space_start));
-  li(at, Operand(new_space_allocation_top));
-  ld(at, MemOperand(at));
+  // Branch(no_memento_found, lt, scratch_reg, Operand(new_space_start));
+  li(scratch_reg2, Operand(new_space_start));
+  Branch(no_memento_found, lt, scratch_reg, Operand(scratch_reg2));
+  // li(at, Operand(new_space_allocation_top));
+  // ld(at, MemOperand(at));
+  li(scratch_reg2, Operand(new_space_allocation_top));
+  ld(at, MemOperand(scratch_reg2));
   Branch(no_memento_found, gt, scratch_reg, Operand(at));
   ld(scratch_reg, MemOperand(scratch_reg, -AllocationMemento::kSize));
   if (allocation_memento_present) {
+    // Branch(allocation_memento_present, cond, scratch_reg,
+    //       Operand(isolate()->factory()->allocation_memento_map()));
+    li(scratch_reg2, Operand(isolate()->factory()->allocation_memento_map()));
     Branch(allocation_memento_present, cond, scratch_reg,
-           Operand(isolate()->factory()->allocation_memento_map()));
+	       Operand(scratch_reg2));
   }
 }
 
@@ -5794,7 +5830,10 @@ void MacroAssembler::JumpIfDictionaryInPrototypeChain(
   Ext(scratch1, scratch1, Map::kElementsKindShift, Map::kElementsKindBitCount);
   Branch(found, eq, scratch1, Operand(DICTIONARY_ELEMENTS));
   ld(current, FieldMemOperand(current, Map::kPrototypeOffset));
-  Branch(&loop_again, ne, current, Operand(factory->null_value()));
+  ASSERT(!scratch1.is(current));
+  li(scratch1, Operand(factory->null_value()));
+  Branch(&loop_again, ne, current, Operand(scratch1));
+  // Branch(&loop_again, ne, current, Operand(factory->null_value()));
 }
 
 

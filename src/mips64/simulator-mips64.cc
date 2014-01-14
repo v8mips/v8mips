@@ -228,9 +228,9 @@ bool MipsDebugger::GetValue(const char* desc, int64_t* value) {
     *value = GetRegisterValue(regnum);
     return true;
   } else if (strncmp(desc, "0x", 2) == 0) {
-    return SScanF(desc, "%lx", reinterpret_cast<uint64_t*>(value)) == 1;
+    return SScanF(desc, "%llx", reinterpret_cast<uint64_t*>(value)) == 1;
   } else {
-    return SScanF(desc, "%ld", value) == 1;
+    return SScanF(desc, "%lld", value) == 1;
   }
   return false;
 }
@@ -243,7 +243,7 @@ bool MipsDebugger::GetValue(const char* desc, int32_t* value) {
     *value = GetFPURegisterValueInt(fpuregnum);
     return true;
   } else if (strncmp(desc, "0x", 2) == 0) {
-    return SScanF(desc, "%lx", reinterpret_cast<uint64_t*>(value)) == 1;
+    return SScanF(desc, "%llx", reinterpret_cast<uint64_t*>(value)) == 1;
   } else {
     return SScanF(desc, "%d", value) == 1;
   }
@@ -1295,8 +1295,8 @@ void Simulator::Write2W(int64_t addr, int64_t value, Instruction* instr) {
   if ((addr & kPointerAlignmentMask) == 0) {
 	int64_t* ptr = reinterpret_cast<int64_t*>(addr);
     *ptr = value;
-	printf("sd value : 0x%lx \n", value);
-	printf("ptr : 0x%lx\n 0x%lx \n",ptr, *ptr);
+	// printf("sd value : 0x%lx \n", value);
+	// printf("ptr : 0x%lx\n 0x%lx \n",ptr, *ptr);
 	return;
   }
   PrintF("Unaligned write at 0x%08lx, pc=0x%08" V8PRIxPTR "\n",
@@ -1431,12 +1431,25 @@ void Simulator::Format(Instruction* instr, const char* format) {
 // 64-bit value. With the code below we assume that all runtime calls return
 // 64 bits of result. If they don't, the v1 result register contains a bogus
 // value, which is fine because it is caller-saved.
-typedef int64_t (*SimulatorRuntimeCall)(int64_t arg0,
+/* typedef int64_t (*SimulatorRuntimeCall)(int64_t arg0,
+                                        int64_t arg1,
+                                        int64_t arg2,
+                                        int64_t arg3,
+                                        int64_t arg4,
+                                        int64_t arg5);*/
+
+struct ObjectPair {
+  MaybeObject* x;
+  MaybeObject* y;
+};
+
+typedef ObjectPair (*SimulatorRuntimeCall)(int64_t arg0,
                                         int64_t arg1,
                                         int64_t arg2,
                                         int64_t arg3,
                                         int64_t arg4,
                                         int64_t arg5);
+
 
 // These prototypes handle the four types of FP calls.
 typedef int64_t (*SimulatorRuntimeCompareCall)(double darg0, double darg1);
@@ -1474,7 +1487,7 @@ void Simulator::SoftwareInterrupt(Instruction* instr) {
     // Args 4 and 5 are on the stack after the reserved space for args 0..3.
     int64_t arg4 = stack_pointer[4];
     int64_t arg5 = stack_pointer[5];
-printf("arg0 : 0x%lx  arg1 : 0x%lx  arg2 : 0x%lx  arg3 : 0x%lx  arg4 : 0x%lx  arg5 : 0x%lx\n", arg0, arg1, arg2, arg3, arg4, arg5);
+printf("arg0 : 0x%llx  arg1 : 0x%llx  arg2 : 0x%llx  arg3 : 0x%llx  arg4 : 0x%llx  arg5 : 0x%llx\n", arg0, arg1, arg2, arg3, arg4, arg5);
     bool fp_call =
          (redirection->type() == ExternalReference::BUILTIN_FP_FP_CALL) ||
          (redirection->type() == ExternalReference::BUILTIN_COMPARE_CALL) ||
@@ -1646,13 +1659,16 @@ printf("arg0 : 0x%lx  arg1 : 0x%lx  arg2 : 0x%lx  arg3 : 0x%lx  arg4 : 0x%lx  ar
             arg4,
             arg5);
       }
-      int64_t result = target(arg0, arg1, arg2, arg3, arg4, arg5);
-      set_register(v0, static_cast<int32_t>(result));
-      set_register(v1, static_cast<int32_t>(result >> 32));
+      // int64_t result = target(arg0, arg1, arg2, arg3, arg4, arg5);
+      // set_register(v0, static_cast<int32_t>(result));
+      // set_register(v1, static_cast<int32_t>(result >> 32));
+      ObjectPair result = target(arg0, arg1, arg2, arg3, arg4, arg5);
+      set_register(v0, (int64_t)(result.x));
+      set_register(v1, (int64_t)(result.y));
     }
-    if (::v8::internal::FLAG_trace_sim) {
+    // if (::v8::internal::FLAG_trace_sim) {
       PrintF("Returned %08lx : %08lx\n", get_register(v1), get_register(v0));
-    }
+    //}
     set_register(ra, saved_ra);
     set_pc(get_register(ra));
 
@@ -1864,6 +1880,9 @@ void Simulator::ConfigureTypeRegister(Instruction* instr,
             alu_out = (rt_u >> sa) | (rt_u << (32 - sa));
           }
           break;
+		case DSRL:
+		  alu_out = rt_u >> sa;
+		  break;
 		case DSRL32:
 		  alu_out = rt_u >> sa >> 32;
 		  break;
@@ -2656,7 +2675,7 @@ void Simulator::DecodeTypeImmediate(Instruction* instr) {
     case SW:
 	case SD:
       addr = rs + se_imm16;
-	  printf("sd : rs : 0x%lx  se_imm16: %d, addr : 0x%lx \n",rs, se_imm16,addr);
+	  // printf("sd : rs : 0x%lx  se_imm16: %d, addr : 0x%lx \n",rs, se_imm16,addr);
       break;
     case SWR: {
       uint8_t al_offset = (rs + se_imm16) & kPointerAlignmentMask;

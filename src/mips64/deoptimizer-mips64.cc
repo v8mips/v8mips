@@ -149,7 +149,7 @@ void Deoptimizer::EntryGenerator::Generate() {
       kDoubleSize * FPURegister::kMaxNumAllocatableRegisters;
 
   // Save all FPU registers before messing with them.
-  __ Subu(sp, sp, Operand(kDoubleRegsSize));
+  __ Dsubu(sp, sp, Operand(kDoubleRegsSize));
   for (int i = 0; i < FPURegister::kMaxNumAllocatableRegisters; ++i) {
     FPURegister fpu_reg = FPURegister::FromAllocationIndex(i);
     int offset = i * kDoubleSize;
@@ -158,10 +158,10 @@ void Deoptimizer::EntryGenerator::Generate() {
 
   // Push saved_regs (needed to populate FrameDescription::registers_).
   // Leave gaps for other registers.
-  __ Subu(sp, sp, kNumberOfRegisters * kPointerSize);
+  __ Dsubu(sp, sp, kNumberOfRegisters * kPointerSize);
   for (int16_t i = kNumberOfRegisters - 1; i >= 0; i--) {
     if ((saved_regs & (1 << i)) != 0) {
-      __ sw(ToRegister(i), MemOperand(sp, kPointerSize * i));
+      __ sd(ToRegister(i), MemOperand(sp, kPointerSize * i));
     }
   }
 
@@ -169,27 +169,27 @@ void Deoptimizer::EntryGenerator::Generate() {
       (kNumberOfRegisters * kPointerSize) + kDoubleRegsSize;
 
   // Get the bailout id from the stack.
-  __ lw(a2, MemOperand(sp, kSavedRegistersAreaSize));
+  __ ld(a2, MemOperand(sp, kSavedRegistersAreaSize));
 
   // Get the address of the location in the code object (a3) (return
   // address for lazy deoptimization) and compute the fp-to-sp delta in
   // register t0.
   __ mov(a3, ra);
   // Correct one word for bailout id.
-  __ Addu(t0, sp, Operand(kSavedRegistersAreaSize + (1 * kPointerSize)));
+  __ Daddu(t0, sp, Operand(kSavedRegistersAreaSize + (1 * kPointerSize)));
 
-  __ Subu(t0, fp, t0);
+  __ Dsubu(t0, fp, t0);
 
   // Allocate a new deoptimizer object.
   // Pass four arguments in a0 to a3 and fifth & sixth arguments on stack.
   __ PrepareCallCFunction(6, t1);
-  __ lw(a0, MemOperand(fp, JavaScriptFrameConstants::kFunctionOffset));
+  __ ld(a0, MemOperand(fp, JavaScriptFrameConstants::kFunctionOffset));
   __ li(a1, Operand(type()));  // bailout type,
   // a2: bailout id already loaded.
   // a3: code address or 0 already loaded.
-  __ sw(t0, CFunctionArgumentOperand(5));  // Fp-to-sp delta.
+  __ sd(t0, CFunctionArgumentOperand(5));  // Fp-to-sp delta.
   __ li(t1, Operand(ExternalReference::isolate_address(isolate())));
-  __ sw(t1, CFunctionArgumentOperand(6));  // Isolate.
+  __ sd(t1, CFunctionArgumentOperand(6));  // Isolate.
   // Call Deoptimizer::New().
   {
     AllowExternalCallThatCantCauseGC scope(masm());
@@ -200,18 +200,18 @@ void Deoptimizer::EntryGenerator::Generate() {
   // frame descriptor pointer to a1 (deoptimizer->input_);
   // Move deopt-obj to a0 for call to Deoptimizer::ComputeOutputFrames() below.
   __ mov(a0, v0);
-  __ lw(a1, MemOperand(v0, Deoptimizer::input_offset()));
+  __ ld(a1, MemOperand(v0, Deoptimizer::input_offset()));
 
   // Copy core registers into FrameDescription::registers_[kNumRegisters].
   ASSERT(Register::kNumRegisters == kNumberOfRegisters);
   for (int i = 0; i < kNumberOfRegisters; i++) {
     int offset = (i * kPointerSize) + FrameDescription::registers_offset();
     if ((saved_regs & (1 << i)) != 0) {
-      __ lw(a2, MemOperand(sp, i * kPointerSize));
-      __ sw(a2, MemOperand(a1, offset));
+      __ ld(a2, MemOperand(sp, i * kPointerSize));
+      __ sd(a2, MemOperand(a1, offset));
     } else if (FLAG_debug_code) {
       __ li(a2, kDebugZapValue);
-      __ sw(a2, MemOperand(a1, offset));
+      __ sd(a2, MemOperand(a1, offset));
     }
   }
 
@@ -226,24 +226,25 @@ void Deoptimizer::EntryGenerator::Generate() {
   }
 
   // Remove the bailout id and the saved registers from the stack.
-  __ Addu(sp, sp, Operand(kSavedRegistersAreaSize + (1 * kPointerSize)));
+  __ Daddu(sp, sp, Operand(kSavedRegistersAreaSize + (1 * kPointerSize)));
 
   // Compute a pointer to the unwinding limit in register a2; that is
   // the first stack slot not part of the input frame.
-  __ lw(a2, MemOperand(a1, FrameDescription::frame_size_offset()));
-  __ Addu(a2, a2, sp);
+  __ ld(a2, MemOperand(a1, FrameDescription::frame_size_offset()));
+  __ Daddu(a2, a2, sp);
 
   // Unwind the stack down to - but not including - the unwinding
   // limit and copy the contents of the activation frame to the input
   // frame description.
-  __ Addu(a3, a1, Operand(FrameDescription::frame_content_offset()));
+  __ Daddu(a3, a1, Operand(FrameDescription::frame_content_offset()));
   Label pop_loop;
   Label pop_loop_header;
   __ Branch(&pop_loop_header);
   __ bind(&pop_loop);
   __ pop(t0);
-  __ sw(t0, MemOperand(a3, 0));
-  __ addiu(a3, a3, sizeof(uint32_t));
+  __ sd(t0, MemOperand(a3, 0));
+  // __ daddiu(a3, a3, sizeof(uint32_t));
+  __ addiu(a3, a3, sizeof(uint64_t));
   __ bind(&pop_loop_header);
   __ Branch(&pop_loop, ne, a2, Operand(sp));
 
@@ -264,29 +265,29 @@ void Deoptimizer::EntryGenerator::Generate() {
       outer_loop_header, inner_loop_header;
   // Outer loop state: t0 = current "FrameDescription** output_",
   // a1 = one past the last FrameDescription**.
-  __ lw(a1, MemOperand(a0, Deoptimizer::output_count_offset()));
-  __ lw(t0, MemOperand(a0, Deoptimizer::output_offset()));  // t0 is output_.
-  __ sll(a1, a1, kPointerSizeLog2);  // Count to offset.
-  __ addu(a1, t0, a1);  // a1 = one past the last FrameDescription**.
+  __ ld(a1, MemOperand(a0, Deoptimizer::output_count_offset()));
+  __ ld(t0, MemOperand(a0, Deoptimizer::output_offset()));  // t0 is output_.
+  __ dsll(a1, a1, kPointerSizeLog2);  // Count to offset.
+  __ daddu(a1, t0, a1);  // a1 = one past the last FrameDescription**.
   __ jmp(&outer_loop_header);
   __ bind(&outer_push_loop);
   // Inner loop state: a2 = current FrameDescription*, a3 = loop index.
-  __ lw(a2, MemOperand(t0, 0));  // output_[ix]
-  __ lw(a3, MemOperand(a2, FrameDescription::frame_size_offset()));
+  __ ld(a2, MemOperand(t0, 0));  // output_[ix]
+  __ ld(a3, MemOperand(a2, FrameDescription::frame_size_offset()));
   __ jmp(&inner_loop_header);
   __ bind(&inner_push_loop);
-  __ Subu(a3, a3, Operand(sizeof(uint32_t)));
-  __ Addu(t2, a2, Operand(a3));
-  __ lw(t3, MemOperand(t2, FrameDescription::frame_content_offset()));
+  __ Dsubu(a3, a3, Operand(sizeof(uint64_t)));
+  __ Daddu(t2, a2, Operand(a3));
+  __ ld(t3, MemOperand(t2, FrameDescription::frame_content_offset()));
   __ push(t3);
   __ bind(&inner_loop_header);
   __ Branch(&inner_push_loop, ne, a3, Operand(zero_reg));
 
-  __ Addu(t0, t0, Operand(kPointerSize));
+  __ Daddu(t0, t0, Operand(kPointerSize));
   __ bind(&outer_loop_header);
   __ Branch(&outer_push_loop, lt, t0, Operand(a1));
 
-  __ lw(a1, MemOperand(a0, Deoptimizer::input_offset()));
+  __ ld(a1, MemOperand(a0, Deoptimizer::input_offset()));
   for (int i = 0; i < FPURegister::kMaxNumAllocatableRegisters; ++i) {
     const FPURegister fpu_reg = FPURegister::FromAllocationIndex(i);
     int src_offset = i * kDoubleSize + double_regs_offset;
@@ -294,12 +295,12 @@ void Deoptimizer::EntryGenerator::Generate() {
   }
 
   // Push state, pc, and continuation from the last output frame.
-  __ lw(t2, MemOperand(a2, FrameDescription::state_offset()));
+  __ ld(t2, MemOperand(a2, FrameDescription::state_offset()));
   __ push(t2);
 
-  __ lw(t2, MemOperand(a2, FrameDescription::pc_offset()));
+  __ ld(t2, MemOperand(a2, FrameDescription::pc_offset()));
   __ push(t2);
-  __ lw(t2, MemOperand(a2, FrameDescription::continuation_offset()));
+  __ ld(t2, MemOperand(a2, FrameDescription::continuation_offset()));
   __ push(t2);
 
 
@@ -311,7 +312,7 @@ void Deoptimizer::EntryGenerator::Generate() {
   for (int i = kNumberOfRegisters - 1; i >= 0; i--) {
     int offset = (i * kPointerSize) + FrameDescription::registers_offset();
     if ((restored_regs & (1 << i)) != 0) {
-      __ lw(ToRegister(i), MemOperand(at, offset));
+      __ ld(ToRegister(i), MemOperand(at, offset));
     }
   }
 
@@ -338,7 +339,7 @@ void Deoptimizer::TableEntryGenerator::GeneratePrologue() {
     Label start;
     __ bind(&start);
     __ daddiu(sp, sp, -1 * kPointerSize);
-	__ break_(0x125);
+	// __ break_(0x125);
     // Jump over the remaining deopt entries (including this one).
     // This code is always reached by calling Jump, which puts the target (label
     // start) into t9.

@@ -734,6 +734,7 @@ static void Generate_JSEntryTrampolineHelper(MacroAssembler* masm,
     // s0: argv, i.e. points to first arg
     Label loop, entry;
 	__ dsll32(a3, a3, 0); // int32_t -> int64_t.
+	__ dsrl32(a3, a3, 0);
     __ dsll(t0, a3, kPointerSizeLog2);
     __ daddu(t2, s0, t0);
     __ b(&entry);
@@ -760,7 +761,7 @@ static void Generate_JSEntryTrampolineHelper(MacroAssembler* masm,
 
     // Invoke the code and pass argc as a0.
     __ mov(a0, a3);
-__ break_(0x141);
+// __ break_(0x141);
     if (is_construct) {
       // No type feedback cell is available
       Handle<Object> undefined_sentinel(
@@ -776,7 +777,7 @@ __ break_(0x141);
 
     // Leave internal frame.
   }
-  __ break_(0x140);
+ // __ break_(0x140);
   __ Jump(ra);
 }
 
@@ -1367,7 +1368,8 @@ void Builtins::Generate_FunctionApply(MacroAssembler* masm) {
 
 
 static void EnterArgumentsAdaptorFrame(MacroAssembler* masm) {
-  __ dsll(a0, a0, kSmiTagSize);
+  // __ sll(a0, a0, kSmiTagSize);
+  __ dsll32(a0, a0, 0);
   __ li(t0, Operand(Smi::FromInt(StackFrame::ARGUMENTS_ADAPTOR)));
   __ MultiPush(a0.bit() | a1.bit() | t0.bit() | fp.bit() | ra.bit());
   __ Daddu(fp, sp,
@@ -1385,7 +1387,8 @@ static void LeaveArgumentsAdaptorFrame(MacroAssembler* masm) {
                              kPointerSize)));
   __ mov(sp, fp);
   __ MultiPop(fp.bit() | ra.bit());
-  __ dsll(t0, a1, kPointerSizeLog2 - kSmiTagSize);
+  // __ sll(t0, a1, kPointerSizeLog2 - kSmiTagSize);
+  __ dsrl(t0, a1, 32 - kPointerSizeLog2);
   __ Daddu(sp, sp, t0);
   // Adjust for the receiver.
   __ Daddu(sp, sp, Operand(kPointerSize));
@@ -1419,7 +1422,8 @@ void Builtins::Generate_ArgumentsAdaptorTrampoline(MacroAssembler* masm) {
     EnterArgumentsAdaptorFrame(masm);
 
     // Calculate copy start address into a0 and copy end address into a2.
-    __ dsll(a0, a0, kPointerSizeLog2 - kSmiTagSize);
+    // __ sll(a0, a0, kPointerSizeLog2 - kSmiTagSize);
+	__ dsrl(a0, a0, 32 - kPointerSizeLog2);
     __ Daddu(a0, fp, a0);
     // Adjust for return address and receiver.
     __ Daddu(a0, a0, Operand(2 * kPointerSize));
@@ -1445,6 +1449,7 @@ void Builtins::Generate_ArgumentsAdaptorTrampoline(MacroAssembler* masm) {
 
   {  // Too few parameters: Actual < expected.
     __ bind(&too_few);
+	 __ break_(0x222);
     EnterArgumentsAdaptorFrame(masm);
 
     // Calculate copy start address into a0 and copy end address is fp.
@@ -1452,7 +1457,8 @@ void Builtins::Generate_ArgumentsAdaptorTrampoline(MacroAssembler* masm) {
     // a1: function
     // a2: expected number of arguments
     // a3: code entry to call
-    __ dsll(a0, a0, kPointerSizeLog2 - kSmiTagSize);
+    // __ sll(a0, a0, kPointerSizeLog2 - kSmiTagSize);
+	__ dsrl(a0, a0, 32 - kPointerSizeLog2);
     __ Daddu(a0, fp, a0);
     // Adjust for return address and receiver.
     __ Daddu(a0, a0, Operand(2 * kPointerSize));
@@ -1487,6 +1493,7 @@ void Builtins::Generate_ArgumentsAdaptorTrampoline(MacroAssembler* masm) {
     Label fill;
     __ bind(&fill);
     __ Dsubu(sp, sp, kPointerSize);
+	__ break_(0x222);
     __ Branch(USE_DELAY_SLOT, &fill, ne, sp, Operand(a2));
     __ sd(t0, MemOperand(sp));
   }
