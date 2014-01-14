@@ -5317,7 +5317,7 @@ void MacroAssembler::CallCFunctionHelper(Register function,
   if (OS::ActivationFrameAlignment() > kPointerSize) {
     ld(sp, MemOperand(sp, stack_passed_arguments * kPointerSize));
   } else {
-    Daddu(sp, sp, Operand(stack_passed_arguments * sizeof(kPointerSize)));
+    Daddu(sp, sp, Operand(stack_passed_arguments * kPointerSize));
   }
 }
 
