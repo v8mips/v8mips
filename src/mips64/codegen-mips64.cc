@@ -31,7 +31,7 @@
 
 #include "codegen.h"
 #include "macro-assembler.h"
-#include "simulator-mips.h"
+#include "simulator-mips64.h"
 
 namespace v8 {
 namespace internal {

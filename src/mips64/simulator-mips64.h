@@ -37,7 +37,7 @@
 #define V8_MIPS_SIMULATOR_MIPS_H_
 
 #include "allocation.h"
-#include "constants-mips.h"
+#include "constants-mips64.h"
 
 #if !defined(USE_SIMULATOR)
 // Running without a simulator on a native mips platform.

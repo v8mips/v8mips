@@ -28,8 +28,8 @@
 #include "v8.h"
 
 #include "lithium-allocator-inl.h"
-#include "mips/lithium-mips.h"
-#include "mips/lithium-codegen-mips.h"
+#include "mips64/lithium-mips64.h"
+#include "mips64/lithium-codegen-mips64.h"
 #include "hydrogen-osr.h"
 
 namespace v8 {

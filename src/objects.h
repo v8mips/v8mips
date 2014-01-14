@@ -42,7 +42,7 @@
 #elif V8_TARGET_ARCH_MIPS
 #include "mips/constants-mips.h"
 #elif V8_TARGET_ARCH_MIPS64
-#include "mips64/constants-mips.h"
+#include "mips64/constants-mips64.h"
 #endif
 #include "v8checks.h"
 #include "zone.h"

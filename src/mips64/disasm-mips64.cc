@@ -55,7 +55,7 @@
 
 #if V8_TARGET_ARCH_MIPS64
 
-#include "mips64/constants-mips.h"
+#include "mips64/constants-mips64.h"
 #include "disasm.h"
 #include "macro-assembler.h"
 #include "platform.h"

@@ -38,7 +38,7 @@
 
 #include <stdio.h>
 #include "assembler.h"
-#include "constants-mips.h"
+#include "constants-mips64.h"
 #include "serialize.h"
 
 namespace v8 {

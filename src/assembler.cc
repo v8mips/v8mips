@@ -64,7 +64,7 @@
 #elif V8_TARGET_ARCH_MIPS
 #include "mips/assembler-mips-inl.h"
 #elif V8_TARGET_ARCH_MIPS64
-#include "mips64/assembler-mips-inl.h"
+#include "mips64/assembler-mips64-inl.h"
 #else
 #error "Unknown architecture."
 #endif
@@ -80,7 +80,7 @@
 #elif V8_TARGET_ARCH_MIPS
 #include "mips/regexp-macro-assembler-mips.h"
 #elif V8_TARGET_ARCH_MIPS64
-#include "mips64/regexp-macro-assembler-mips.h"
+#include "mips64/regexp-macro-assembler-mips64.h"
 #else  // Unknown architecture.
 #error "Unknown architecture."
 #endif  // Target architecture.

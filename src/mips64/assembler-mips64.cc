@@ -37,7 +37,7 @@
 
 #if V8_TARGET_ARCH_MIPS64
 
-#include "mips64/assembler-mips-inl.h"
+#include "mips64/assembler-mips64-inl.h"
 #include "serialize.h"
 
 namespace v8 {

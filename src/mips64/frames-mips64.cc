@@ -31,8 +31,8 @@
 #if V8_TARGET_ARCH_MIPS64
 
 #include "assembler.h"
-#include "assembler-mips.h"
-#include "assembler-mips-inl.h"
+#include "assembler-mips64.h"
+#include "assembler-mips64-inl.h"
 #include "frames.h"
 
 namespace v8 {

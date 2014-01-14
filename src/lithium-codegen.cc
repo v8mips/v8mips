@@ -42,8 +42,8 @@
 #include "mips/lithium-mips.h"
 #include "mips/lithium-codegen-mips.h"
 #elif V8_TARGET_ARCH_MIPS64
-#include "mips64/lithium-mips.h"
-#include "mips64/lithium-codegen-mips.h"
+#include "mips64/lithium-mips64.h"
+#include "mips64/lithium-codegen-mips64.h"
 #else
 #error Unsupported target architecture.
 #endif

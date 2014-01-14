@@ -29,8 +29,8 @@
 #define V8_MIPS_LITHIUM_CODEGEN_MIPS_H_
 
 #include "deoptimizer.h"
-#include "mips/lithium-gap-resolver-mips.h"
-#include "mips/lithium-mips.h"
+#include "mips64/lithium-gap-resolver-mips64.h"
+#include "mips64/lithium-mips64.h"
 #include "lithium-codegen.h"
 #include "safepoint-table.h"
 #include "scopes.h"

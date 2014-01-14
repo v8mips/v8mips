@@ -27,8 +27,8 @@
 
 #include "v8.h"
 
-#include "mips64/lithium-codegen-mips.h"
-#include "mips64/lithium-gap-resolver-mips.h"
+#include "mips64/lithium-codegen-mips64.h"
+#include "mips64/lithium-gap-resolver-mips64.h"
 #include "code-stubs.h"
 #include "stub-cache.h"
 #include "hydrogen-osr.h"

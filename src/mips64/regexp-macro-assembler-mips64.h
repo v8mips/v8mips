@@ -29,11 +29,11 @@
 #ifndef V8_MIPS_REGEXP_MACRO_ASSEMBLER_MIPS_H_
 #define V8_MIPS_REGEXP_MACRO_ASSEMBLER_MIPS_H_
 
-#include "mips64/assembler-mips.h"
-#include "mips64/assembler-mips-inl.h"
+#include "mips64/assembler-mips64.h"
+#include "mips64/assembler-mips64-inl.h"
 #include "macro-assembler.h"
 #include "code.h"
-#include "mips64/macro-assembler-mips.h"
+#include "mips64/macro-assembler-mips64.h"
 
 namespace v8 {
 namespace internal {

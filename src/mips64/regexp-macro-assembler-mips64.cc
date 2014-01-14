@@ -35,7 +35,7 @@
 #include "regexp-stack.h"
 #include "macro-assembler.h"
 #include "regexp-macro-assembler.h"
-#include "mips/regexp-macro-assembler-mips.h"
+#include "mips64/regexp-macro-assembler-mips64.h"
 
 namespace v8 {
 namespace internal {

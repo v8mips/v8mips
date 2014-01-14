@@ -29,7 +29,7 @@
 
 #if V8_TARGET_ARCH_MIPS64
 
-#include "constants-mips.h"
+#include "constants-mips64.h"
 
 namespace v8 {
 namespace internal {

@@ -37,7 +37,7 @@
 #ifndef V8_MIPS_ASSEMBLER_MIPS_INL_H_
 #define V8_MIPS_ASSEMBLER_MIPS_INL_H_
 
-#include "mips64/assembler-mips.h"
+#include "mips64/assembler-mips64.h"
 
 #include "cpu.h"
 #include "debug.h"

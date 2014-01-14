@@ -62,7 +62,7 @@
 #endif
 #if V8_TARGET_ARCH_MIPS64 && !V8_INTERPRETED_REGEXP
 #include "regexp-macro-assembler.h"
-#include "mips64/regexp-macro-assembler-mips.h"
+#include "mips64/regexp-macro-assembler-mips64.h"
 #endif
 
 namespace v8 {

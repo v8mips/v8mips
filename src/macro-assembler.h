@@ -87,12 +87,12 @@ const int kInvalidProtoDepth = -1;
 #include "code.h"  // must be after assembler_*.h
 #include "mips/macro-assembler-mips.h"
 #elif V8_TARGET_ARCH_MIPS64
-#include "mips64/constants-mips.h"
+#include "mips64/constants-mips64.h"
 #include "assembler.h"
-#include "mips64/assembler-mips.h"
-#include "mips64/assembler-mips-inl.h"
+#include "mips64/assembler-mips64.h"
+#include "mips64/assembler-mips64-inl.h"
 #include "code.h"  // must be after assembler_*.h
-#include "mips64/macro-assembler-mips.h"
+#include "mips64/macro-assembler-mips64.h"
 #else
 #error Unsupported target architecture.
 #endif

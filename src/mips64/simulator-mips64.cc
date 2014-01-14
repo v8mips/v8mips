@@ -37,8 +37,8 @@
 #include "disasm.h"
 #include "assembler.h"
 #include "globals.h"    // Need the BitCast.
-#include "mips64/constants-mips.h"
-#include "mips64/simulator-mips.h"
+#include "mips64/constants-mips64.h"
+#include "mips64/simulator-mips64.h"
 
 
 // Only build the simulator if not compiling for real MIPS hardware.

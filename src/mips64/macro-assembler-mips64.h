@@ -29,7 +29,7 @@
 #define V8_MIPS_MACRO_ASSEMBLER_MIPS_H_
 
 #include "assembler.h"
-#include "mips64/assembler-mips.h"
+#include "mips64/assembler-mips64.h"
 #include "v8globals.h"
 
 namespace v8 {
