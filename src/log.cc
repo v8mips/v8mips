@@ -382,6 +382,8 @@ class PerfJitLogger : public CodeEventLogger {
     return kElfMachARM;
 #elif V8_TARGET_ARCH_MIPS
     return kElfMachMIPS;
+#elif V8_TARGET_ARCH_MIPS64
+    return kElfMachMIPS;
 #else
     UNIMPLEMENTED();
     return 0;

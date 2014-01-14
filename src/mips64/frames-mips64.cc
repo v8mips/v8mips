@@ -28,7 +28,7 @@
 
 #include "v8.h"
 
-#if V8_TARGET_ARCH_MIPS
+#if V8_TARGET_ARCH_MIPS64
 
 #include "assembler.h"
 #include "assembler-mips.h"
@@ -49,4 +49,4 @@ Register StubFailureTrampolineFrame::context_register() { return cp; }
 
 } }  // namespace v8::internal
 
-#endif  // V8_TARGET_ARCH_MIPS
+#endif  // V8_TARGET_ARCH_MIPS64

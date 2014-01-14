@@ -1159,6 +1159,17 @@ void Deserializer::ReadChunk(Object** current,
       // object. Required only for MIPS.
       ALL_SPACES(kBackref, kFromCode, kStartOfObject)
       ALL_SPACES(kBackrefWithSkip, kFromCode, kStartOfObject)
+#elif V8_TARGET_ARCH_MIPS64
+      // Deserialize a new object from pointer found in code and write
+      // a pointer to it to the current object. Required only for MIPS, and
+      // omitted on the other architectures because it is fully unrolled and
+      // would cause bloat.
+      ALL_SPACES(kNewObject, kFromCode, kStartOfObject)
+      // Find a recently deserialized code object using its offset from the
+      // current allocation point and write a pointer to it to the current
+      // object. Required only for MIPS.
+      ALL_SPACES(kBackref, kFromCode, kStartOfObject)
+      ALL_SPACES(kBackrefWithSkip, kFromCode, kStartOfObject)
 #endif
       // Find a recently deserialized code object using its offset from the
       // current allocation point and write a pointer to its first instruction
@@ -1379,6 +1390,14 @@ int Serializer::RootIndex(HeapObject* heap_object, HowToCode from) {
     Object* root = heap->roots_array_start()[i];
     if (!root->IsSmi() && root == heap_object) {
 #if V8_TARGET_ARCH_MIPS
+      if (from == kFromCode) {
+        // In order to avoid code bloat in the deserializer we don't have
+        // support for the encoding that specifies a particular root should
+        // be written into the lui/ori instructions on MIPS.  Therefore we
+        // should not generate such serialization data for MIPS.
+        return kInvalidRootIndex;
+      }
+#elif V8_TARGET_ARCH_MIPS64
       if (from == kFromCode) {
         // In order to avoid code bloat in the deserializer we don't have
         // support for the encoding that specifies a particular root should

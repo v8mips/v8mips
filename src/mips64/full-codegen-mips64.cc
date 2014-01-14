@@ -27,7 +27,7 @@
 
 #include "v8.h"
 
-#if V8_TARGET_ARCH_MIPS
+#if V8_TARGET_ARCH_MIPS64
 
 // Note on Mips implementation:
 //
@@ -47,8 +47,8 @@
 #include "scopes.h"
 #include "stub-cache.h"
 
-#include "mips/code-stubs-mips.h"
-#include "mips/macro-assembler-mips.h"
+#include "mips64/code-stubs-mips.h"
+#include "mips64/macro-assembler-mips.h"
 
 namespace v8 {
 namespace internal {
@@ -164,12 +164,10 @@ void FullCodeGenerator::Generate() {
     __ sw(a2, MemOperand(sp, receiver_offset));
     __ bind(&ok);
   }
-
   // Open a frame scope to indicate that there is a frame on the stack.  The
   // MANUAL indicates that the scope shouldn't actually generate code to set up
   // the frame (that is done below).
   FrameScope frame_scope(masm_, StackFrame::MANUAL);
-
   info->set_prologue_offset(masm_->pc_offset());
   __ Prologue(BUILD_FUNCTION_FRAME);
   info->AddNoFrameRange(0, masm_->pc_offset());
@@ -238,7 +236,6 @@ void FullCodeGenerator::Generate() {
       }
     }
   }
-
   Variable* arguments = scope()->arguments();
   if (arguments != NULL) {
     // Function uses arguments object.
@@ -278,7 +275,6 @@ void FullCodeGenerator::Generate() {
   if (FLAG_trace) {
     __ CallRuntime(Runtime::kTraceEnter, 0);
   }
-
   // Visit the declarations and body unless there is an illegal
   // redeclaration.
   if (scope()->HasIllegalRedeclaration()) {
@@ -287,6 +283,7 @@ void FullCodeGenerator::Generate() {
 
   } else {
     PrepareForBailoutForId(BailoutId::FunctionEntry(), NO_REGISTERS);
+	__ break_(0x132);
     { Comment cmnt(masm_, "[ Declarations");
       // For named function expressions, declare the function name as a
       // constant.
@@ -296,22 +293,28 @@ void FullCodeGenerator::Generate() {
                function->proxy()->var()->mode() == CONST_HARMONY);
         ASSERT(function->proxy()->var()->location() != Variable::UNALLOCATED);
         VisitVariableDeclaration(function);
+		__ break_(0x130);
       }
       VisitDeclarations(scope()->declarations());
+	  __ break_(0x129);
     }
-
     { Comment cmnt(masm_, "[ Stack check");
       PrepareForBailoutForId(BailoutId::Declarations(), NO_REGISTERS);
       Label ok;
       __ LoadRoot(t0, Heap::kStackLimitRootIndex);
       __ Branch(&ok, hs, sp, Operand(t0));
       __ Call(isolate()->builtins()->StackCheck(), RelocInfo::CODE_TARGET);
+	  __ break_(0x126);
       __ bind(&ok);
     }
 
     { Comment cmnt(masm_, "[ Body");
       ASSERT(loop_depth() == 0);
+	  __ break_(0x131);
+
       VisitStatements(function()->body());
+	  __ break_(0x127);
+
       ASSERT(loop_depth() == 0);
     }
   }
@@ -911,7 +914,6 @@ void FullCodeGenerator::VisitModuleDeclaration(ModuleDeclaration* declaration) {
   Variable* variable = declaration->proxy()->var();
   ASSERT(variable->location() == Variable::CONTEXT);
   ASSERT(variable->interface()->IsFrozen());
-
   Comment cmnt(masm_, "[ ModuleDeclaration");
   EmitDebugCheckDeclarationContext(variable);
 
@@ -969,6 +971,7 @@ void FullCodeGenerator::VisitExportDeclaration(ExportDeclaration* declaration) {
 void FullCodeGenerator::DeclareGlobals(Handle<FixedArray> pairs) {
   // Call the runtime to declare the globals.
   // The context is the first argument.
+  __ break_(0x117);
   __ li(a1, Operand(pairs));
   __ li(a0, Operand(Smi::FromInt(DeclareGlobalsFlags())));
   __ Push(cp, a1, a0);
@@ -3066,7 +3069,8 @@ void FullCodeGenerator::EmitIsStringWrapperSafeForDefaultValueOf(
   // a3: valid entries in the descriptor array.
   STATIC_ASSERT(kSmiTag == 0);
   STATIC_ASSERT(kSmiTagSize == 1);
-  STATIC_ASSERT(kPointerSize == 4);
+// Does not need?
+// STATIC_ASSERT(kPointerSize == 4);
   __ li(at, Operand(DescriptorArray::kDescriptorSize));
   __ Mul(a3, a3, at);
   // Calculate location of the first key name.
@@ -4761,8 +4765,10 @@ Register FullCodeGenerator::context_register() {
 
 
 void FullCodeGenerator::StoreToFrameField(int frame_offset, Register value) {
-  ASSERT_EQ(POINTER_SIZE_ALIGN(frame_offset), frame_offset);
-  __ sw(value, MemOperand(fp, frame_offset));
+  // ASSERT_EQ(POINTER_SIZE_ALIGN(frame_offset), frame_offset);
+  ASSERT(IsAligned(frame_offset, kPointerSize));
+  //  __ sw(value, MemOperand(fp, frame_offset));
+  __ sd(value, MemOperand(fp, frame_offset));
 }
 
 
@@ -4948,25 +4954,25 @@ BackEdgeTable::BackEdgeState BackEdgeTable::GetBackEdgeState(
 
   ASSERT(Assembler::IsBeq(Assembler::instr_at(pc - 5 * kInstrSize)));
   if (!Assembler::IsAddImmediate(Assembler::instr_at(branch_address))) {
-    ASSERT(reinterpret_cast<uint32_t>(
+    ASSERT(reinterpret_cast<uint64_t>(
         Assembler::target_address_at(pc_immediate_load_address)) ==
-           reinterpret_cast<uint32_t>(
+           reinterpret_cast<uint64_t>(
                isolate->builtins()->InterruptCheck()->entry()));
     return INTERRUPT;
   }
 
   ASSERT(Assembler::IsAddImmediate(Assembler::instr_at(branch_address)));
 
-  if (reinterpret_cast<uint32_t>(
+  if (reinterpret_cast<uint64_t>(
       Assembler::target_address_at(pc_immediate_load_address)) ==
-          reinterpret_cast<uint32_t>(
+          reinterpret_cast<uint64_t>(
               isolate->builtins()->OnStackReplacement()->entry())) {
     return ON_STACK_REPLACEMENT;
   }
 
-  ASSERT(reinterpret_cast<uint32_t>(
+  ASSERT(reinterpret_cast<uint64_t>(
       Assembler::target_address_at(pc_immediate_load_address)) ==
-         reinterpret_cast<uint32_t>(
+         reinterpret_cast<uint64_t>(
              isolate->builtins()->OsrAfterStackCheck()->entry()));
   return OSR_AFTER_STACK_CHECK;
 }
@@ -4974,4 +4980,4 @@ BackEdgeTable::BackEdgeState BackEdgeTable::GetBackEdgeState(
 
 } }  // namespace v8::internal
 
-#endif  // V8_TARGET_ARCH_MIPS
+#endif  // V8_TARGET_ARCH_MIPS64

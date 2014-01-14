@@ -115,6 +115,10 @@ namespace internal {
 #define CODE_STUB_LIST_MIPS(V)  \
   V(RegExpCEntry)               \
   V(DirectCEntry)
+#elif V8_TARGET_ARCH_MIPS64
+#define CODE_STUB_LIST_MIPS(V)  \
+  V(RegExpCEntry)               \
+  V(DirectCEntry)
 #else
 #define CODE_STUB_LIST_MIPS(V)
 #endif
@@ -430,6 +434,8 @@ enum StringAddFlags {
 #include "arm/code-stubs-arm.h"
 #elif V8_TARGET_ARCH_MIPS
 #include "mips/code-stubs-mips.h"
+#elif V8_TARGET_ARCH_MIPS64
+#include "mips64/code-stubs-mips.h"
 #else
 #error Unsupported target architecture.
 #endif

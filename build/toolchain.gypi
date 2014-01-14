@@ -56,7 +56,7 @@
     'v8_use_mips_abi_hardfloat%': 'true',
 
     # Default arch variant for MIPS.
-    'mips_arch_variant%': 'mips32r2',
+    'mips_arch_variant%': 'mips64r2',
 
     'v8_enable_backtrace%': 0,
 
@@ -325,6 +325,60 @@
           }],
         ],
       }],  # v8_target_arch=="mipsel"
+      ['v8_target_arch=="mipsel64"', {
+        'defines': [
+          'V8_TARGET_ARCH_MIPS64',
+        ],
+        'variables': {
+          'mipscompiler': '<!($(echo <(CXX)) -v 2>&1 | grep -q "^Target: mips" && echo "yes" || echo "no")',
+        },
+        'conditions': [
+          ['mipscompiler=="yes"', {
+            'target_conditions': [
+              ['_toolset=="target"', {
+                'cflags': ['-EL'],
+                'ldflags': ['-EL'],
+                'conditions': [
+                  [ 'v8_use_mips_abi_hardfloat=="true"', {
+                    'cflags': ['-mhard-float'],
+                    'ldflags': ['-mhard-float'],
+                  }, {
+                    'cflags': ['-msoft-float'],
+                    'ldflags': ['-msoft-float'],
+                  }],
+                  ['mips_arch_variant=="mips64r2"', {
+                    'cflags': ['-mips64r2', '-Wa,-mips64r2'],
+                  }],
+                  ['mips_arch_variant=="loongson"', {
+                    'cflags': ['-mips3', '-Wa,-mips3'],
+                  }],
+                ],
+              }],
+            ],
+          }],
+          [ 'v8_can_use_fpu_instructions=="true"', {
+            'defines': [
+              'CAN_USE_FPU_INSTRUCTIONS',
+            ],
+          }],
+          [ 'v8_use_mips_abi_hardfloat=="true"', {
+            'defines': [
+              '__mips_hard_float=1',
+              'CAN_USE_FPU_INSTRUCTIONS',
+            ],
+          }, {
+            'defines': [
+              '__mips_soft_float=1'
+            ],
+          }],
+          ['mips_arch_variant=="mips64r2"', {
+            'defines': ['_MIPS_ARCH_MIPS32R2',],
+          }],
+          ['mips_arch_variant=="loongson"', {
+            'defines': ['_MIPS_ARCH_LOONGSON',],
+          }],
+        ],
+      }],  # v8_target_arch=="mipsel64"
       ['v8_target_arch=="x64"', {
         'defines': [
           'V8_TARGET_ARCH_X64',

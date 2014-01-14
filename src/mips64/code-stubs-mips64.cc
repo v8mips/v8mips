@@ -27,7 +27,7 @@
 
 #include "v8.h"
 
-#if V8_TARGET_ARCH_MIPS
+#if V8_TARGET_ARCH_MIPS64
 
 #include "bootstrapper.h"
 #include "code-stubs.h"
@@ -389,26 +389,26 @@ void FastNewContextStub::Generate(MacroAssembler* masm) {
   __ Allocate(FixedArray::SizeFor(length), v0, a1, a2, &gc, TAG_OBJECT);
 
   // Load the function from the stack.
-  __ lw(a3, MemOperand(sp, 0));
+  __ ld(a3, MemOperand(sp, 0));
 
   // Set up the object header.
   __ LoadRoot(a1, Heap::kFunctionContextMapRootIndex);
   __ li(a2, Operand(Smi::FromInt(length)));
-  __ sw(a2, FieldMemOperand(v0, FixedArray::kLengthOffset));
-  __ sw(a1, FieldMemOperand(v0, HeapObject::kMapOffset));
+  __ sd(a2, FieldMemOperand(v0, FixedArray::kLengthOffset));
+  __ sd(a1, FieldMemOperand(v0, HeapObject::kMapOffset));
 
   // Set up the fixed slots, copy the global object from the previous context.
-  __ lw(a2, MemOperand(cp, Context::SlotOffset(Context::GLOBAL_OBJECT_INDEX)));
+  __ ld(a2, MemOperand(cp, Context::SlotOffset(Context::GLOBAL_OBJECT_INDEX)));
   __ li(a1, Operand(Smi::FromInt(0)));
-  __ sw(a3, MemOperand(v0, Context::SlotOffset(Context::CLOSURE_INDEX)));
-  __ sw(cp, MemOperand(v0, Context::SlotOffset(Context::PREVIOUS_INDEX)));
-  __ sw(a1, MemOperand(v0, Context::SlotOffset(Context::EXTENSION_INDEX)));
-  __ sw(a2, MemOperand(v0, Context::SlotOffset(Context::GLOBAL_OBJECT_INDEX)));
+  __ sd(a3, MemOperand(v0, Context::SlotOffset(Context::CLOSURE_INDEX)));
+  __ sd(cp, MemOperand(v0, Context::SlotOffset(Context::PREVIOUS_INDEX)));
+  __ sd(a1, MemOperand(v0, Context::SlotOffset(Context::EXTENSION_INDEX)));
+  __ sd(a2, MemOperand(v0, Context::SlotOffset(Context::GLOBAL_OBJECT_INDEX)));
 
   // Initialize the rest of the slots to undefined.
   __ LoadRoot(a1, Heap::kUndefinedValueRootIndex);
   for (int i = Context::MIN_CONTEXT_SLOTS; i < length; i++) {
-    __ sw(a1, MemOperand(v0, Context::SlotOffset(i)));
+    __ sd(a1, MemOperand(v0, Context::SlotOffset(i)));
   }
 
   // Remove the on-stack argument and return.
@@ -433,16 +433,16 @@ void FastNewBlockContextStub::Generate(MacroAssembler* masm) {
   __ Allocate(FixedArray::SizeFor(length), v0, a1, a2, &gc, TAG_OBJECT);
 
   // Load the function from the stack.
-  __ lw(a3, MemOperand(sp, 0));
+  __ ld(a3, MemOperand(sp, 0));
 
   // Load the serialized scope info from the stack.
-  __ lw(a1, MemOperand(sp, 1 * kPointerSize));
+  __ ld(a1, MemOperand(sp, 1 * kPointerSize));
 
   // Set up the object header.
   __ LoadRoot(a2, Heap::kBlockContextMapRootIndex);
-  __ sw(a2, FieldMemOperand(v0, HeapObject::kMapOffset));
+  __ sd(a2, FieldMemOperand(v0, HeapObject::kMapOffset));
   __ li(a2, Operand(Smi::FromInt(length)));
-  __ sw(a2, FieldMemOperand(v0, FixedArray::kLengthOffset));
+  __ sd(a2, FieldMemOperand(v0, FixedArray::kLengthOffset));
 
   // If this block context is nested in the native context we get a smi
   // sentinel instead of a function. The block context should get the
@@ -453,22 +453,22 @@ void FastNewBlockContextStub::Generate(MacroAssembler* masm) {
   if (FLAG_debug_code) {
     __ Assert(eq, kExpected0AsASmiSentinel, a3, Operand(zero_reg));
   }
-  __ lw(a3, GlobalObjectOperand());
-  __ lw(a3, FieldMemOperand(a3, GlobalObject::kNativeContextOffset));
-  __ lw(a3, ContextOperand(a3, Context::CLOSURE_INDEX));
+  __ ld(a3, GlobalObjectOperand());
+  __ ld(a3, FieldMemOperand(a3, GlobalObject::kNativeContextOffset));
+  __ ld(a3, ContextOperand(a3, Context::CLOSURE_INDEX));
   __ bind(&after_sentinel);
 
   // Set up the fixed slots, copy the global object from the previous context.
-  __ lw(a2, ContextOperand(cp, Context::GLOBAL_OBJECT_INDEX));
-  __ sw(a3, ContextOperand(v0, Context::CLOSURE_INDEX));
-  __ sw(cp, ContextOperand(v0, Context::PREVIOUS_INDEX));
-  __ sw(a1, ContextOperand(v0, Context::EXTENSION_INDEX));
-  __ sw(a2, ContextOperand(v0, Context::GLOBAL_OBJECT_INDEX));
+  __ ld(a2, ContextOperand(cp, Context::GLOBAL_OBJECT_INDEX));
+  __ sd(a3, ContextOperand(v0, Context::CLOSURE_INDEX));
+  __ sd(cp, ContextOperand(v0, Context::PREVIOUS_INDEX));
+  __ sd(a1, ContextOperand(v0, Context::EXTENSION_INDEX));
+  __ sd(a2, ContextOperand(v0, Context::GLOBAL_OBJECT_INDEX));
 
   // Initialize the rest of the slots to the hole value.
   __ LoadRoot(a1, Heap::kTheHoleValueRootIndex);
   for (int i = 0; i < slots_; i++) {
-    __ sw(a1, ContextOperand(v0, i + Context::MIN_CONTEXT_SLOTS));
+    __ sd(a1, ContextOperand(v0, i + Context::MIN_CONTEXT_SLOTS));
   }
 
   // Remove the on-stack argument and return.
@@ -663,7 +663,10 @@ void DoubleToIStub::Generate(MacroAssembler* masm) {
   // Save the sign.
   Register sign = result_reg;
   result_reg = no_reg;
-  __ And(sign, input_high, Operand(HeapNumber::kSignMask));
+  // __ And(sign, input_high, Operand(HeapNumber::kSignMask));
+  ASSERT(!sign.is(input_high));
+  __ li(sign, Operand(HeapNumber::kSignMask));
+  __ And(sign, sign, input_high);
 
   // On ARM shifts > 31 bits are valid and will result in zero. On MIPS we need
   // to check for this specific case.
@@ -730,8 +733,11 @@ void WriteInt32ToHeapNumberStub::Generate(MacroAssembler* masm) {
   // We test for the special value that has a different exponent.
   STATIC_ASSERT(HeapNumber::kSignMask == 0x80000000u);
   // Test sign, and save for later conditionals.
-  __ And(sign_, the_int_, Operand(0x80000000u));
-  __ Branch(&max_negative_int, eq, the_int_, Operand(0x80000000u));
+  // __ And(sign_, the_int_, Operand(0x80000000u));
+  __ li(scratch_, 0x80000000u);
+  __ And(sign_, the_int_, scratch_);
+  // __ Branch(&max_negative_int, eq, the_int_, Operand(0x80000000u));
+  __ Branch(&max_negative_int, eq, the_int_, Operand(scratch_));
 
   // Set up the correct exponent in scratch_.  All non-Smi int32s have the same.
   // A non-Smi integer is 1.xxx * 2^30 so the exponent is 30 (biased).
@@ -1532,11 +1538,13 @@ void CEntryStub::GenerateAheadOfTime(Isolate* isolate) {
 static void JumpIfOOM(MacroAssembler* masm,
                       Register value,
                       Register scratch,
+					  Register scratch2,
                       Label* oom_label) {
   STATIC_ASSERT(Failure::OUT_OF_MEMORY_EXCEPTION == 3);
   STATIC_ASSERT(kFailureTag == 3);
   __ andi(scratch, value, 0xf);
-  __ Branch(oom_label, eq, scratch, Operand(0xf));
+  __ li(scratch2, 0xf);
+  __ Branch(oom_label, eq, scratch, Operand(scratch2));
 }
 
 
@@ -1565,9 +1573,9 @@ void CEntryStub::GenerateCore(MacroAssembler* masm,
       ExternalReference::heap_always_allocate_scope_depth(isolate);
   if (always_allocate) {
     __ li(a0, Operand(scope_depth));
-    __ lw(a1, MemOperand(a0));
-    __ Addu(a1, a1, Operand(1));
-    __ sw(a1, MemOperand(a0));
+    __ ld(a1, MemOperand(a0));
+    __ Daddu(a1, a1, Operand(1));
+    __ sd(a1, MemOperand(a0));
   }
 
   // Prepare arguments for C routine.
@@ -1600,8 +1608,8 @@ void CEntryStub::GenerateCore(MacroAssembler* masm,
     // instruction past the real call into C code (the jalr(t9)), and push it.
     // This is the return address of the exit frame.
     const int kNumInstructionsToJump = 5;
-    masm->Addu(ra, ra, kNumInstructionsToJump * kPointerSize);
-    masm->sw(ra, MemOperand(sp));  // This spot was reserved in EnterExitFrame.
+    masm->Daddu(ra, ra, kNumInstructionsToJump * kInt32Size);
+    masm->sd(ra, MemOperand(sp));  // This spot was reserved in EnterExitFrame.
     // Stack space reservation moved to the branch delay slot below.
     // Stack is still aligned.
 
@@ -1609,7 +1617,7 @@ void CEntryStub::GenerateCore(MacroAssembler* masm,
     masm->mov(t9, s2);  // Function pointer to t9 to conform to ABI for PIC.
     masm->jalr(t9);
     // Set up sp in the delay slot.
-    masm->addiu(sp, sp, -kCArgsSlotsSize);
+    masm->daddiu(sp, sp, -kCArgsSlotsSize);
     // Make sure the stored 'ra' points to this position.
     ASSERT_EQ(kNumInstructionsToJump,
               masm->InstructionsGeneratedSince(&find_ra));
@@ -1618,20 +1626,19 @@ void CEntryStub::GenerateCore(MacroAssembler* masm,
   if (always_allocate) {
     // It's okay to clobber a2 and a3 here. v0 & v1 contain result.
     __ li(a2, Operand(scope_depth));
-    __ lw(a3, MemOperand(a2));
-    __ Subu(a3, a3, Operand(1));
-    __ sw(a3, MemOperand(a2));
+    __ ld(a3, MemOperand(a2));
+    __ Dsubu(a3, a3, Operand(1));
+    __ sd(a3, MemOperand(a2));
   }
 
   // Check for failure result.
   Label failure_returned;
   STATIC_ASSERT(((kFailureTag + 1) & kFailureTagMask) == 0);
-  __ addiu(a2, v0, 1);
+  __ daddiu(a2, v0, 1);
   __ andi(t0, a2, kFailureTagMask);
   __ Branch(USE_DELAY_SLOT, &failure_returned, eq, t0, Operand(zero_reg));
   // Restore stack (remove arg slots) in branch delay slot.
-  __ addiu(sp, sp, kCArgsSlotsSize);
-
+  __ daddiu(sp, sp, kCArgsSlotsSize);
 
   // Exit C frame and return.
   // v0:v1: result
@@ -1647,22 +1654,21 @@ void CEntryStub::GenerateCore(MacroAssembler* masm,
   __ Branch(&retry, eq, t0, Operand(zero_reg));
 
   // Special handling of out of memory exceptions.
-  JumpIfOOM(masm, v0, t0, throw_out_of_memory_exception);
+  JumpIfOOM(masm, v0, t0, t1, throw_out_of_memory_exception);
 
   // Retrieve the pending exception.
   __ li(t0, Operand(ExternalReference(Isolate::kPendingExceptionAddress,
                                       isolate)));
-  __ lw(v0, MemOperand(t0));
+  __ ld(v0, MemOperand(t0));
 
   // See if we just retrieved an OOM exception.
-  JumpIfOOM(masm, v0, t0, throw_out_of_memory_exception);
+  JumpIfOOM(masm, v0, t0, t1, throw_out_of_memory_exception);
 
   // Clear the pending exception.
   __ li(a3, Operand(isolate->factory()->the_hole_value()));
   __ li(t0, Operand(ExternalReference(Isolate::kPendingExceptionAddress,
                                       isolate)));
-  __ sw(a3, MemOperand(t0));
-
+  __ sd(a3, MemOperand(t0));
   // Special handling of termination exceptions which are uncatchable
   // by javascript code.
   __ LoadRoot(t0, Heap::kTerminationExceptionRootIndex);
@@ -1698,12 +1704,11 @@ void CEntryStub::Generate(MacroAssembler* masm) {
   // See MacroAssembler::PrepareCEntryArgs and PrepareCEntryFunction.
 
   // Compute the argv pointer in a callee-saved register.
-  __ Addu(s1, sp, s1);
-
+  __ Daddu(s1, sp, s1);
   // Enter the exit frame that transitions from JavaScript to C++.
   FrameScope scope(masm, StackFrame::MANUAL);
   __ EnterExitFrame(save_doubles_);
-
+//__ break_(0x124);
   // s0: number of arguments (C callee-saved)
   // s1: pointer to first argument (C callee-saved)
   // s2: pointer to builtin function (C callee-saved)
@@ -1719,7 +1724,7 @@ void CEntryStub::Generate(MacroAssembler* masm) {
                &throw_out_of_memory_exception,
                false,
                false);
-
+__ break_(0x125);
   // Do space-specific GC and retry runtime call.
   GenerateCore(masm,
                &throw_normal_exception,
@@ -1727,17 +1732,17 @@ void CEntryStub::Generate(MacroAssembler* masm) {
                &throw_out_of_memory_exception,
                true,
                false);
-
+__ break_(0x126);
   // Do full GC and retry runtime call one final time.
   Failure* failure = Failure::InternalError();
-  __ li(v0, Operand(reinterpret_cast<int32_t>(failure)));
+  __ li(v0, Operand(reinterpret_cast<int64_t>(failure)));
   GenerateCore(masm,
                &throw_normal_exception,
                &throw_termination_exception,
                &throw_out_of_memory_exception,
                true,
                true);
-
+__ break_(0x127);
   __ bind(&throw_out_of_memory_exception);
   // Set external caught exception to false.
   Isolate* isolate = masm->isolate();
@@ -1745,17 +1750,17 @@ void CEntryStub::Generate(MacroAssembler* masm) {
                                     isolate);
   __ li(a0, Operand(false, RelocInfo::NONE32));
   __ li(a2, Operand(external_caught));
-  __ sw(a0, MemOperand(a2));
+  __ sd(a0, MemOperand(a2));
 
   // Set pending exception and v0 to out of memory exception.
   Label already_have_failure;
-  JumpIfOOM(masm, v0, t0, &already_have_failure);
+  JumpIfOOM(masm, v0, t0, t1, &already_have_failure);
   Failure* out_of_memory = Failure::OutOfMemoryException(0x1);
-  __ li(v0, Operand(reinterpret_cast<int32_t>(out_of_memory)));
+  __ li(v0, Operand(reinterpret_cast<int64_t>(out_of_memory)));
   __ bind(&already_have_failure);
   __ li(a2, Operand(ExternalReference(Isolate::kPendingExceptionAddress,
                                       isolate)));
-  __ sw(v0, MemOperand(a2));
+  __ sd(v0, MemOperand(a2));
   // Fall through to the next label.
 
   __ bind(&throw_termination_exception);
@@ -1796,19 +1801,19 @@ void JSEntryStub::GenerateBody(MacroAssembler* masm, bool is_construct) {
   offset_to_argv += kNumCalleeSavedFPU * kDoubleSize;
 
   __ InitializeRootRegister();
-  __ lw(s0, MemOperand(sp, offset_to_argv + kCArgsSlotsSize));
+  __ ld(s0, MemOperand(sp, offset_to_argv + kCArgsSlotsSize));
 
   // We build an EntryFrame.
   __ li(t3, Operand(-1));  // Push a bad frame pointer to fail if it is used.
   int marker = is_construct ? StackFrame::ENTRY_CONSTRUCT : StackFrame::ENTRY;
   __ li(t2, Operand(Smi::FromInt(marker)));
   __ li(t1, Operand(Smi::FromInt(marker)));
-  __ li(t0, Operand(ExternalReference(Isolate::kCEntryFPAddress,
-                                      isolate)));
-  __ lw(t0, MemOperand(t0));
+  ExternalReference c_entry_fp(Isolate::kCEntryFPAddress, isolate);
+  __ li(t0, Operand(c_entry_fp));
+  __ ld(t0, MemOperand(t0));
   __ Push(t3, t2, t1, t0);
   // Set up frame pointer for the frame to be pushed.
-  __ addiu(fp, sp, -EntryFrameConstants::kCallerFPOffset);
+  __ daddiu(fp, sp, -EntryFrameConstants::kCallerFPOffset);
 
   // Registers:
   // a0: entry_address
@@ -1830,9 +1835,9 @@ void JSEntryStub::GenerateBody(MacroAssembler* masm, bool is_construct) {
   Label non_outermost_js;
   ExternalReference js_entry_sp(Isolate::kJSEntrySPAddress, isolate);
   __ li(t1, Operand(ExternalReference(js_entry_sp)));
-  __ lw(t2, MemOperand(t1));
+  __ ld(t2, MemOperand(t1));
   __ Branch(&non_outermost_js, ne, t2, Operand(zero_reg));
-  __ sw(fp, MemOperand(t1));
+  __ sd(fp, MemOperand(t1));
   __ li(t0, Operand(Smi::FromInt(StackFrame::OUTERMOST_JSENTRY_FRAME)));
   Label cont;
   __ b(&cont);
@@ -1853,8 +1858,8 @@ void JSEntryStub::GenerateBody(MacroAssembler* masm, bool is_construct) {
   // signal the existence of the JSEntry frame.
   __ li(t0, Operand(ExternalReference(Isolate::kPendingExceptionAddress,
                                       isolate)));
-  __ sw(v0, MemOperand(t0));  // We come back from 'invoke'. result is in v0.
-  __ li(v0, Operand(reinterpret_cast<int32_t>(Failure::Exception())));
+  __ sd(v0, MemOperand(t0));  // We come back from 'invoke'. result is in v0.
+  __ li(v0, Operand(reinterpret_cast<int64_t>(Failure::Exception())));
   __ b(&exit);  // b exposes branch delay slot.
   __ nop();   // Branch delay slot nop.
 
@@ -1871,7 +1876,7 @@ void JSEntryStub::GenerateBody(MacroAssembler* masm, bool is_construct) {
   __ LoadRoot(t1, Heap::kTheHoleValueRootIndex);
   __ li(t0, Operand(ExternalReference(Isolate::kPendingExceptionAddress,
                                       isolate)));
-  __ sw(t1, MemOperand(t0));
+  __ sd(t1, MemOperand(t0));
 
   // Invoke the function by calling through JS entry trampoline builtin.
   // Notice that we cannot store a reference to the trampoline code directly in
@@ -1899,10 +1904,9 @@ void JSEntryStub::GenerateBody(MacroAssembler* masm, bool is_construct) {
     ExternalReference entry(Builtins::kJSEntryTrampoline, masm->isolate());
     __ li(t0, Operand(entry));
   }
-  __ lw(t9, MemOperand(t0));  // Deref address.
-
+  __ ld(t9, MemOperand(t0));  // Deref address.
   // Call JSEntryTrampoline.
-  __ addiu(t9, t9, Code::kHeaderSize - kHeapObjectTag);
+  __ daddiu(t9, t9, Code::kHeaderSize - kHeapObjectTag);
   __ Call(t9);
 
   // Unlink this frame from the handler chain.
@@ -1912,22 +1916,27 @@ void JSEntryStub::GenerateBody(MacroAssembler* masm, bool is_construct) {
   // Check if the current stack frame is marked as the outermost JS frame.
   Label non_outermost_js_2;
   __ pop(t1);
+/*  __ Branch(&non_outermost_js_2,
+            ne,
+            t1,
+            Operand(Smi::FromInt(StackFrame::OUTERMOST_JSENTRY_FRAME)));*/
+  __ li(t2,reinterpret_cast<intptr_t>(Smi::FromInt(StackFrame::OUTERMOST_JSENTRY_FRAME)));
   __ Branch(&non_outermost_js_2,
             ne,
             t1,
-            Operand(Smi::FromInt(StackFrame::OUTERMOST_JSENTRY_FRAME)));
+            Operand(t2));
   __ li(t1, Operand(ExternalReference(js_entry_sp)));
-  __ sw(zero_reg, MemOperand(t1));
+  __ sd(zero_reg, MemOperand(t1));
   __ bind(&non_outermost_js_2);
 
   // Restore the top frame descriptors from the stack.
   __ pop(t1);
   __ li(t0, Operand(ExternalReference(Isolate::kCEntryFPAddress,
                                       isolate)));
-  __ sw(t1, MemOperand(t0));
+  __ sd(t1, MemOperand(t0));
 
   // Reset the stack to the callee saved registers.
-  __ addiu(sp, sp, -EntryFrameConstants::kCallerFPOffset);
+  __ daddiu(sp, sp, -EntryFrameConstants::kCallerFPOffset);
 
   // Restore callee-saved fpu registers.
   __ MultiPopFPU(kCalleeSavedFPU);
@@ -2728,7 +2737,8 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
   // Or          number_of_captures * 2 <= offsets vector size - 2
   // Multiplying by 2 comes for free since a2 is smi-tagged.
   STATIC_ASSERT(kSmiTag == 0);
-  STATIC_ASSERT(kSmiTagSize + kSmiShiftSize == 1);
+  // TODO yuyin
+  // STATIC_ASSERT(kSmiTagSize + kSmiShiftSize == 1);
   STATIC_ASSERT(Isolate::kJSRegexpStaticOffsetsVectorSize >= 2);
   __ Branch(
       &runtime, hi, a2, Operand(Isolate::kJSRegexpStaticOffsetsVectorSize - 2));
@@ -2966,7 +2976,8 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
   // Calculate number of capture registers (number_of_captures + 1) * 2.
   // Multiplying by 2 comes for free since r1 is smi-tagged.
   STATIC_ASSERT(kSmiTag == 0);
-  STATIC_ASSERT(kSmiTagSize + kSmiShiftSize == 1);
+  // TODO yuyin
+  // STATIC_ASSERT(kSmiTagSize + kSmiShiftSize == 1);
   __ Addu(a1, a1, Operand(2));  // a1 was a smi.
 
   __ lw(a0, MemOperand(sp, kLastMatchInfoOffset));
@@ -3510,13 +3521,15 @@ void StringCharFromCodeGenerator::GenerateFast(MacroAssembler* masm) {
   ASSERT(!t0.is(code_));
 
   STATIC_ASSERT(kSmiTag == 0);
-  STATIC_ASSERT(kSmiShiftSize == 0);
+/*  STATIC_ASSERT(kSmiShiftSize == 0);*/
   ASSERT(IsPowerOf2(String::kMaxOneByteCharCode + 1));
-  __ And(t0,
+/*  __ And(t0,
          code_,
          Operand(kSmiTagMask |
                  ((~String::kMaxOneByteCharCode) << kSmiTagSize)));
   __ Branch(&slow_case_, ne, t0, Operand(zero_reg));
+*/
+  __ JumpIfNotSmi(code_, &slow_case_);
 
   __ LoadRoot(result_, Heap::kSingleCharacterStringCacheRootIndex);
   // At this point code register contains smi tagged ASCII char code.
@@ -3904,9 +3917,11 @@ void SubStringStub::Generate(MacroAssembler* masm) {
 
   __ lw(a2, MemOperand(sp, kToOffset));
   __ lw(a3, MemOperand(sp, kFromOffset));
-  STATIC_ASSERT(kFromOffset == kToOffset + 4);
+// Does not needed?
+//  STATIC_ASSERT(kFromOffset == kToOffset + 4);
   STATIC_ASSERT(kSmiTag == 0);
-  STATIC_ASSERT(kSmiTagSize + kSmiShiftSize == 1);
+// Does not needed?
+// STATIC_ASSERT(kSmiTagSize + kSmiShiftSize == 1);
 
   // Utilize delay slots. SmiUntag doesn't emit a jump, everything else is
   // safe in this case.
@@ -4971,7 +4986,7 @@ void DirectCEntryStub::Generate(MacroAssembler* masm) {
     // Dereference the address and check for this.
     __ lw(t0, MemOperand(t9));
     __ Assert(ne, kReceivedInvalidReturnAddress, t0,
-        Operand(reinterpret_cast<uint32_t>(kZapValue)));
+        Operand(reinterpret_cast<uint64_t>(kZapValue)));
   }
   __ Jump(t9);
 }
@@ -5375,12 +5390,15 @@ void RecordWriteStub::CheckNeedsToInformIncrementalMarker(
   Label need_incremental;
   Label need_incremental_pop_scratch;
 
-  __ And(regs_.scratch0(), regs_.object(), Operand(~Page::kPageAlignmentMask));
-  __ lw(regs_.scratch1(),
+  // __ And(regs_.scratch0(), regs_.object(), Operand(~Page::kPageAlignmentMask));
+  ASSERT(!regs_.scratch1().is(regs_.object()));
+  __ li(regs_.scratch1(), Operand(~Page::kPageAlignmentMask));
+  __ And(regs_.scratch0(), regs_.object(), regs_.scratch1());
+  __ ld(regs_.scratch1(),
         MemOperand(regs_.scratch0(),
                    MemoryChunk::kWriteBarrierCounterOffset));
-  __ Subu(regs_.scratch1(), regs_.scratch1(), Operand(1));
-  __ sw(regs_.scratch1(),
+  __ Dsubu(regs_.scratch1(), regs_.scratch1(), Operand(1));
+  __ sd(regs_.scratch1(),
          MemOperand(regs_.scratch0(),
                     MemoryChunk::kWriteBarrierCounterOffset));
   __ Branch(&need_incremental, lt, regs_.scratch1(), Operand(zero_reg));
@@ -5403,7 +5421,7 @@ void RecordWriteStub::CheckNeedsToInformIncrementalMarker(
   __ bind(&on_black);
 
   // Get the value from the slot.
-  __ lw(regs_.scratch0(), MemOperand(regs_.address(), 0));
+  __ ld(regs_.scratch0(), MemOperand(regs_.address(), 0));
 
   if (mode == INCREMENTAL_COMPACTION) {
     Label ensure_not_white;
@@ -5949,4 +5967,4 @@ void InternalArrayConstructorStub::Generate(MacroAssembler* masm) {
 
 } }  // namespace v8::internal
 
-#endif  // V8_TARGET_ARCH_MIPS
+#endif  // V8_TARGET_ARCH_MIPS64

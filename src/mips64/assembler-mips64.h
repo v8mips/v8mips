@@ -44,6 +44,29 @@
 namespace v8 {
 namespace internal {
 
+// Utility functions
+
+// Test whether a 64-bit value is in a specific range.
+inline bool is_uint32(int64_t x) {
+  static const uint64_t kMaxUInt32 = V8_UINT64_C(0xffffffff);
+  return static_cast<uint64_t>(x) <= kMaxUInt32;
+}
+
+inline bool is_int32(int64_t x) {
+  static const int64_t kMinInt32 = -V8_INT64_C(0x80000000);
+  return is_uint32(x - kMinInt32);
+}
+
+inline bool uint_is_int32(uint64_t x) {
+  static const uint64_t kMaxInt32 = V8_UINT64_C(0x7fffffff);
+  return x <= kMaxInt32;
+}
+
+inline bool is_uint32(uint64_t x) {
+  static const uint64_t kMaxUInt32 = V8_UINT64_C(0xffffffff);
+  return x <= kMaxUInt32;
+}
+
 // CPU Registers.
 //
 // 1) We would prefer to use an enum, but enum values are assignment-
@@ -73,7 +96,7 @@ namespace internal {
 struct Register {
   static const int kNumRegisters = v8::internal::kNumRegisters;
   static const int kMaxNumAllocatableRegisters = 14;  // v0 through t6 and cp.
-  static const int kSizeInBytes = 4;
+  static const int kSizeInBytes = 8;
   static const int kCpRegister = 23;  // cp (s7) is the 23rd register.
 
   inline static int NumAllocatableRegisters();
@@ -350,8 +373,8 @@ const FPUControlRegister FCSR = { kFCSRRegister };
 class Operand BASE_EMBEDDED {
  public:
   // Immediate.
-  INLINE(explicit Operand(int32_t immediate,
-         RelocInfo::Mode rmode = RelocInfo::NONE32));
+  INLINE(explicit Operand(int64_t immediate,
+         RelocInfo::Mode rmode = RelocInfo::NONE64));
   INLINE(explicit Operand(const ExternalReference& f));
   INLINE(explicit Operand(const char* s));
   INLINE(explicit Operand(Object** opp));
@@ -365,16 +388,16 @@ class Operand BASE_EMBEDDED {
   // Return true if this is a register operand.
   INLINE(bool is_reg() const);
 
-  inline int32_t immediate() const {
+  inline int64_t immediate() const {
     ASSERT(!is_reg());
-    return imm32_;
+    return imm64_;
   }
 
   Register rm() const { return rm_; }
 
  private:
   Register rm_;
-  int32_t imm32_;  // Valid if rm_ == no_reg.
+  int64_t imm64_;  // Valid if rm_ == no_reg.
   RelocInfo::Mode rmode_;
 
   friend class Assembler;
@@ -392,8 +415,8 @@ class MemOperand : public Operand {
     offset_zero = 0
   };
 
-  explicit MemOperand(Register rn, int32_t offset = 0);
-  explicit MemOperand(Register rn, int32_t unit, int32_t multiplier,
+  explicit MemOperand(Register rn, int64_t offset = 0);
+  explicit MemOperand(Register rn, int64_t unit, int64_t multiplier,
                       OffsetAddend offset_addend = offset_zero);
   int32_t offset() const { return offset_; }
 
@@ -517,7 +540,7 @@ class Assembler : public AssemblerBase {
     ASSERT((o & 3) == 0);   // Assert the offset is aligned.
     return o >> 2;
   }
-  uint32_t jump_address(Label* L);
+  uint64_t jump_address(Label* L);
 
   // Puts a labels target address at the given position.
   // The high 8 bits are set to zero.
@@ -567,10 +590,12 @@ class Assembler : public AssemblerBase {
   // follows LUI/ORI pair is substituted with J/JAL, this constant equals
   // to 3 instructions (LUI+ORI+J/JAL/JR/JALR).
   static const int kInstructionsFor32BitConstant = 3;
+  static const int kInstructionsFor64BitConstant = 7;
 
   // Distance between the instruction referring to the address of the call
   // target and the return address.
-  static const int kCallTargetAddressOffset = 4 * kInstrSize;
+  // static const int kCallTargetAddressOffset = 4 * kInstrSize;
+  static const int kCallTargetAddressOffset = 8 * kInstrSize;
 
   // Distance between start of patched return sequence and the emitted address
   // to jump to.
@@ -657,12 +682,12 @@ class Assembler : public AssemblerBase {
   // instead of using the Label* version.
 
   // Jump targets must be in the current 256 MB-aligned region. i.e. 28 bits.
-  void j(int32_t target);
-  void jal(int32_t target);
+  void j(int64_t target);
+  void jal(int64_t target);
   void jalr(Register rs, Register rd = ra);
   void jr(Register target);
-  void j_or_jr(int32_t target, Register rs);
-  void jal_or_jalr(int32_t target, Register rs);
+  void j_or_jr(int64_t target, Register rs);
+  void jal_or_jalr(int64_t target, Register rs);
 
 
   //-------Data-processing-instructions---------
@@ -675,8 +700,15 @@ class Assembler : public AssemblerBase {
   void div(Register rs, Register rt);
   void divu(Register rs, Register rt);
   void mul(Register rd, Register rs, Register rt);
+  void daddu(Register rd, Register rs, Register rt);
+  void dsubu(Register rd, Register rs, Register rt);
+  void dmult(Register rs, Register rt);
+  void dmultu(Register rs, Register rt);
+  void ddiv(Register rs, Register rt);
+  void ddivu(Register rs, Register rt);
 
   void addiu(Register rd, Register rs, int32_t j);
+  void daddiu(Register rd, Register rs, int32_t j);
 
   // Logical.
   void and_(Register rd, Register rs, Register rt);
@@ -701,6 +733,17 @@ class Assembler : public AssemblerBase {
   void srav(Register rt, Register rd, Register rs);
   void rotr(Register rd, Register rt, uint16_t sa);
   void rotrv(Register rd, Register rt, Register rs);
+  void dsll(Register rd, Register rt, uint16_t sa);
+  void dsllv(Register rd, Register rt, Register rs);
+  void dsrl(Register rd, Register rt, uint16_t sa);
+  void dsrlv(Register rd, Register rt, Register rs);
+  void drotr(Register rd, Register rt, uint16_t sa);
+  void drotrv(Register rd, Register rt, Register rs);
+  void dsra(Register rt, Register rd, uint16_t sa);
+  void dsrav(Register rd, Register rt, Register rs);
+  void dsll32(Register rt, Register rd, uint16_t sa);
+  void dsrl32(Register rt, Register rd, uint16_t sa);
+  void dsra32(Register rt, Register rd, uint16_t sa);
 
 
   //------------Memory-instructions-------------
@@ -717,6 +760,12 @@ class Assembler : public AssemblerBase {
   void sw(Register rd, const MemOperand& rs);
   void swl(Register rd, const MemOperand& rs);
   void swr(Register rd, const MemOperand& rs);
+  void ldl(Register rd, const MemOperand& rs);
+  void ldr(Register rd, const MemOperand& rs);
+  void sdl(Register rd, const MemOperand& rs);
+  void sdr(Register rd, const MemOperand& rs);
+  void ld(Register rd, const MemOperand& rs);
+  void sd(Register rd, const MemOperand& rs);
 
 
   //----------------Prefetch--------------------
@@ -990,13 +1039,13 @@ class Assembler : public AssemblerBase {
   // the relocation info.
   TypeFeedbackId recorded_ast_id_;
 
-  int32_t buffer_space() const { return reloc_info_writer.pos() - pc_; }
+  int64_t buffer_space() const { return reloc_info_writer.pos() - pc_; }
 
   // Decode branch instruction at pos and return branch target pos.
-  int target_at(int32_t pos);
+  int64_t target_at(int64_t pos);
 
   // Patch branch instruction at pos to branch to given branch target pos.
-  void target_at_put(int32_t pos, int32_t target_pos);
+  void target_at_put(int64_t pos, int64_t target_pos);
 
   // Say if we need to relocate with this mode.
   bool MustUseReg(RelocInfo::Mode rmode);
@@ -1090,6 +1139,7 @@ class Assembler : public AssemblerBase {
   inline void CheckBuffer();
   void GrowBuffer();
   inline void emit(Instr x);
+  inline void emit(uint64_t x);
   inline void CheckTrampolinePoolQuick();
 
   // Instruction generation.

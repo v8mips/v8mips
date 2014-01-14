@@ -306,6 +306,7 @@ Type Name(int args_length, Object** args_object, Isolate* isolate)
 static Type __RT_impl_##Name(Arguments args, Isolate* isolate);       \
 Type Name(int args_length, Object** args_object, Isolate* isolate) {  \
   CLOBBER_DOUBLE_REGISTERS();                                         \
+  printf("args_length : %d \n", args_length);                         \
   Arguments args(args_length, args_object);                           \
   return __RT_impl_##Name(args, isolate);                             \
 }                                                                     \

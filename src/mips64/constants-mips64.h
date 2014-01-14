@@ -222,6 +222,8 @@ const int kImm26Shift = 0;
 const int kImm26Bits  = 26;
 const int kImm28Shift = 0;
 const int kImm28Bits  = 28;
+const int kImm32Shift = 0;
+const int kImm32Bits  = 32;
 
 // In branches and jumps immediate fields point to words, not bytes,
 // and are therefore shifted by 2.
@@ -258,6 +260,9 @@ const int  kHiMask       =   0xffff << 16;
 const int  kLoMask       =   0xffff;
 const int  kSignMask     =   0x80000000;
 const int  kJumpAddrMask = (1 << (kImm26Bits + kImmFieldShift)) - 1;
+const int64_t  kHi16MaskOf64 =   (int64_t)0xffff << 48;
+const int64_t  kSe16MaskOf64 =   (int64_t)0xffff << 32;
+const int64_t  kTh16MaskOf64 =   (int64_t)0xffff << 16;
 
 // ----- MIPS Opcodes and Function Fields.
 // We use this presentation to stay close to the table representation in
@@ -288,6 +293,10 @@ enum Opcode {
   BLEZL     =   ((2 << 3) + 6) << kOpcodeShift,
   BGTZL     =   ((2 << 3) + 7) << kOpcodeShift,
 
+  DADDI     =   ((3 << 3) + 0) << kOpcodeShift,
+  DADDIU    =   ((3 << 3) + 1) << kOpcodeShift,
+  LDL       =   ((3 << 3) + 2) << kOpcodeShift,
+  LDR       =   ((3 << 3) + 3) << kOpcodeShift,
   SPECIAL2  =   ((3 << 3) + 4) << kOpcodeShift,
   SPECIAL3  =   ((3 << 3) + 7) << kOpcodeShift,
 
@@ -298,19 +307,27 @@ enum Opcode {
   LBU       =   ((4 << 3) + 4) << kOpcodeShift,
   LHU       =   ((4 << 3) + 5) << kOpcodeShift,
   LWR       =   ((4 << 3) + 6) << kOpcodeShift,
+  LWU       =   ((4 << 3) + 7) << kOpcodeShift,
+
   SB        =   ((5 << 3) + 0) << kOpcodeShift,
   SH        =   ((5 << 3) + 1) << kOpcodeShift,
   SWL       =   ((5 << 3) + 2) << kOpcodeShift,
   SW        =   ((5 << 3) + 3) << kOpcodeShift,
+  SDL       =   ((5 << 3) + 4) << kOpcodeShift,
+  SDR       =   ((5 << 3) + 5) << kOpcodeShift,
   SWR       =   ((5 << 3) + 6) << kOpcodeShift,
 
   LWC1      =   ((6 << 3) + 1) << kOpcodeShift,
+  LLD       =   ((6 << 3) + 4) << kOpcodeShift,
   LDC1      =   ((6 << 3) + 5) << kOpcodeShift,
+  LD        =   ((6 << 3) + 7) << kOpcodeShift,
 
   PREF      =   ((6 << 3) + 3) << kOpcodeShift,
 
   SWC1      =   ((7 << 3) + 1) << kOpcodeShift,
+  SCD       =   ((7 << 3) + 4) << kOpcodeShift,
   SDC1      =   ((7 << 3) + 5) << kOpcodeShift,
+  SD        =   ((7 << 3) + 7) << kOpcodeShift,
 
   COP1X     =   ((1 << 4) + 3) << kOpcodeShift
 };
@@ -333,11 +350,18 @@ enum SecondaryField {
 
   MFHI      =   ((2 << 3) + 0),
   MFLO      =   ((2 << 3) + 2),
+  DSLLV     =   ((2 << 3) + 4),
+  DSRLV     =   ((2 << 3) + 6),
+  DSRAV     =   ((2 << 3) + 7),
 
   MULT      =   ((3 << 3) + 0),
   MULTU     =   ((3 << 3) + 1),
   DIV       =   ((3 << 3) + 2),
   DIVU      =   ((3 << 3) + 3),
+  DMULT     =   ((3 << 3) + 4),
+  DMULTU    =   ((3 << 3) + 5),
+  DDIV      =   ((3 << 3) + 6),
+  DDIVU     =   ((3 << 3) + 7),
 
   ADD       =   ((4 << 3) + 0),
   ADDU      =   ((4 << 3) + 1),
@@ -350,6 +374,10 @@ enum SecondaryField {
 
   SLT       =   ((5 << 3) + 2),
   SLTU      =   ((5 << 3) + 3),
+  DADD      =   ((5 << 3) + 4),
+  DADDU     =   ((5 << 3) + 5),
+  DSUB      =   ((5 << 3) + 6),
+  DSUBU     =   ((5 << 3) + 7),
 
   TGE       =   ((6 << 3) + 0),
   TGEU      =   ((6 << 3) + 1),
@@ -358,6 +386,14 @@ enum SecondaryField {
   TEQ       =   ((6 << 3) + 4),
   TNE       =   ((6 << 3) + 6),
 
+  DSLL      =   ((7 << 3) + 0),
+  DSRL      =   ((7 << 3) + 2),
+  DSRA      =   ((7 << 3) + 3),
+  DSLL32    =   ((7 << 3) + 4),
+  DSRL32    =   ((7 << 3) + 6),
+  DSRA32    =   ((7 << 3) + 7),
+  // drotr in special4?
+
   // SPECIAL2 Encoding of Function Field.
   MUL       =   ((0 << 3) + 2),
   CLZ       =   ((4 << 3) + 0),
@@ -365,7 +401,15 @@ enum SecondaryField {
 
   // SPECIAL3 Encoding of Function Field.
   EXT       =   ((0 << 3) + 0),
+  DEXTM     =   ((0 << 3) + 1),
+  DEXTU     =   ((0 << 3) + 2),
+  DEXT      =   ((0 << 3) + 3),
   INS       =   ((0 << 3) + 4),
+  DINSM     =   ((0 << 3) + 5),
+  DINSU     =   ((0 << 3) + 6),
+  DINS      =   ((0 << 3) + 7),
+
+  DSBH      =   ((4 << 3) + 4),
 
   // REGIMM  encoding of rt Field.
   BLTZ      =   ((0 << 3) + 0) << 16,
@@ -375,9 +419,11 @@ enum SecondaryField {
 
   // COP1 Encoding of rs Field.
   MFC1      =   ((0 << 3) + 0) << 21,
+  DMFC1     =   ((0 << 3) + 1) << 21,
   CFC1      =   ((0 << 3) + 2) << 21,
   MFHC1     =   ((0 << 3) + 3) << 21,
   MTC1      =   ((0 << 3) + 4) << 21,
+  DMTC1     =   ((0 << 3) + 5) << 21,
   CTC1      =   ((0 << 3) + 6) << 21,
   MTHC1     =   ((0 << 3) + 7) << 21,
   BC1       =   ((1 << 3) + 0) << 21,
@@ -807,7 +853,7 @@ class Instruction {
 
 // C/C++ argument slots size.
 const int kCArgSlotCount = 4;
-const int kCArgsSlotsSize = kCArgSlotCount * Instruction::kInstrSize;
+const int kCArgsSlotsSize = kCArgSlotCount * Instruction::kInstrSize *2;
 // JS argument slots size.
 const int kJSArgsSlotsSize = 0 * Instruction::kInstrSize;
 // Assembly builtins argument slots size.

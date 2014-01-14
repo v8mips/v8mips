@@ -101,7 +101,8 @@ class DebuggerAgent;
 #endif
 
 #if !defined(__arm__) && V8_TARGET_ARCH_ARM || \
-    !defined(__mips__) && V8_TARGET_ARCH_MIPS
+    !defined(__mips__) && V8_TARGET_ARCH_MIPS || \
+    !defined(__mips__) && V8_TARGET_ARCH_MIPS64
 class Redirection;
 class Simulator;
 #endif
@@ -384,7 +385,8 @@ class Isolate {
           stack_limit_(0),
           thread_state_(NULL),
 #if !defined(__arm__) && V8_TARGET_ARCH_ARM || \
-    !defined(__mips__) && V8_TARGET_ARCH_MIPS
+    !defined(__mips__) && V8_TARGET_ARCH_MIPS || \
+    !defined(__mips__) && V8_TARGET_ARCH_MIPS64
           simulator_(NULL),
 #endif
           next_(NULL),
@@ -397,7 +399,8 @@ class Isolate {
     void set_thread_state(ThreadState* value) { thread_state_ = value; }
 
 #if !defined(__arm__) && V8_TARGET_ARCH_ARM || \
-    !defined(__mips__) && V8_TARGET_ARCH_MIPS
+    !defined(__mips__) && V8_TARGET_ARCH_MIPS || \
+    !defined(__mips__) && V8_TARGET_ARCH_MIPS64
     Simulator* simulator() const { return simulator_; }
     void set_simulator(Simulator* simulator) {
       simulator_ = simulator;
@@ -415,7 +418,8 @@ class Isolate {
     ThreadState* thread_state_;
 
 #if !defined(__arm__) && V8_TARGET_ARCH_ARM || \
-    !defined(__mips__) && V8_TARGET_ARCH_MIPS
+    !defined(__mips__) && V8_TARGET_ARCH_MIPS || \
+    !defined(__mips__) && V8_TARGET_ARCH_MIPS64
     Simulator* simulator_;
 #endif
 
@@ -991,7 +995,8 @@ class Isolate {
 #endif
 
 #if V8_TARGET_ARCH_ARM && !defined(__arm__) || \
-    V8_TARGET_ARCH_MIPS && !defined(__mips__)
+    V8_TARGET_ARCH_MIPS && !defined(__mips__) || \
+    V8_TARGET_ARCH_MIPS64 && !defined(__mips__)
   bool simulator_initialized() { return simulator_initialized_; }
   void set_simulator_initialized(bool initialized) {
     simulator_initialized_ = initialized;
@@ -1310,7 +1315,8 @@ class Isolate {
   double time_millis_at_init_;
 
 #if V8_TARGET_ARCH_ARM && !defined(__arm__) || \
-    V8_TARGET_ARCH_MIPS && !defined(__mips__)
+    V8_TARGET_ARCH_MIPS && !defined(__mips__) || \
+    V8_TARGET_ARCH_MIPS64 && !defined(__mips__)
   bool simulator_initialized_;
   HashMap* simulator_i_cache_;
   Redirection* simulator_redirection_;

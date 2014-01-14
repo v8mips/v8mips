@@ -183,9 +183,9 @@ class Simulator {
   // Accessors for register state. Reading the pc value adheres to the MIPS
   // architecture specification and is off by a 8 from the currently executing
   // instruction.
-  void set_register(int reg, int32_t value);
+  void set_register(int reg, int64_t value);
   void set_dw_register(int dreg, const int* dbl);
-  int32_t get_register(int reg) const;
+  int64_t get_register(int reg) const;
   double get_double_from_register_pair(int reg);
   // Same for FPURegisters.
   void set_fpu_register(int fpureg, int32_t value);
@@ -200,8 +200,8 @@ class Simulator {
   bool set_fcsr_round_error(double original, double rounded);
 
   // Special case of set_register and get_register to access the raw PC value.
-  void set_pc(int32_t value);
-  int32_t get_pc() const;
+  void set_pc(int64_t value);
+  int64_t get_pc() const;
 
   // Accessor to the internal simulator stack area.
   uintptr_t StackLimit() const;
@@ -215,7 +215,7 @@ class Simulator {
   // V8 generally calls into generated JS code with 5 parameters and into
   // generated RegExp code with 7 parameters. This is a convenience function,
   // which sets up the simulator state and grabs the result on return.
-  int32_t Call(byte* entry, int argument_count, ...);
+  int64_t Call(byte* entry, int argument_count, ...);
   // Alternative: call a 2-argument double function.
   double CallFP(byte* entry, double d0, double d1);
 
@@ -255,22 +255,24 @@ class Simulator {
   void Format(Instruction* instr, const char* format);
 
   // Read and write memory.
-  inline uint32_t ReadBU(int32_t addr);
-  inline int32_t ReadB(int32_t addr);
-  inline void WriteB(int32_t addr, uint8_t value);
-  inline void WriteB(int32_t addr, int8_t value);
+  inline uint32_t ReadBU(int64_t addr);
+  inline int32_t ReadB(int64_t addr);
+  inline void WriteB(int64_t addr, uint8_t value);
+  inline void WriteB(int64_t addr, int8_t value);
 
-  inline uint16_t ReadHU(int32_t addr, Instruction* instr);
-  inline int16_t ReadH(int32_t addr, Instruction* instr);
+  inline uint16_t ReadHU(int64_t addr, Instruction* instr);
+  inline int16_t ReadH(int64_t addr, Instruction* instr);
   // Note: Overloaded on the sign of the value.
-  inline void WriteH(int32_t addr, uint16_t value, Instruction* instr);
-  inline void WriteH(int32_t addr, int16_t value, Instruction* instr);
+  inline void WriteH(int64_t addr, uint16_t value, Instruction* instr);
+  inline void WriteH(int64_t addr, int16_t value, Instruction* instr);
 
-  inline int ReadW(int32_t addr, Instruction* instr);
-  inline void WriteW(int32_t addr, int value, Instruction* instr);
+  inline int ReadW(int64_t addr, Instruction* instr);
+  inline void WriteW(int64_t addr, int value, Instruction* instr);
+  inline int64_t Read2W(int64_t addr, Instruction* instr);
+  inline void Write2W(int64_t addr, int64_t value, Instruction* instr);
 
-  inline double ReadD(int32_t addr, Instruction* instr);
-  inline void WriteD(int32_t addr, double value, Instruction* instr);
+  inline double ReadD(int64_t addr, Instruction* instr);
+  inline void WriteD(int64_t addr, double value, Instruction* instr);
 
   // Operations depending on endianness.
   // Get Double Higher / Lower word.
@@ -285,11 +287,11 @@ class Simulator {
 
   // Helper function for DecodeTypeRegister.
   void ConfigureTypeRegister(Instruction* instr,
-                             int32_t& alu_out,
+                             int64_t& alu_out,
                              int64_t& i64hilo,
                              uint64_t& u64hilo,
-                             int32_t& next_pc,
-                             int32_t& return_addr_reg,
+                             int64_t& next_pc,
+                             int64_t& return_addr_reg,
                              bool& do_interrupt);
 
   void DecodeTypeImmediate(Instruction* instr);
@@ -299,15 +301,15 @@ class Simulator {
   void SoftwareInterrupt(Instruction* instr);
 
   // Stop helper functions.
-  bool IsWatchpoint(uint32_t code);
-  void PrintWatchpoint(uint32_t code);
-  void HandleStop(uint32_t code, Instruction* instr);
+  bool IsWatchpoint(uint64_t code);
+  void PrintWatchpoint(uint64_t code);
+  void HandleStop(uint64_t code, Instruction* instr);
   bool IsStopInstruction(Instruction* instr);
-  bool IsEnabledStop(uint32_t code);
-  void EnableStop(uint32_t code);
-  void DisableStop(uint32_t code);
-  void IncreaseStopCounter(uint32_t code);
-  void PrintStopInfo(uint32_t code);
+  bool IsEnabledStop(uint64_t code);
+  void EnableStop(uint64_t code);
+  void DisableStop(uint64_t code);
+  void IncreaseStopCounter(uint64_t code);
+  void PrintStopInfo(uint64_t code);
 
 
   // Executes one instruction.
@@ -358,7 +360,7 @@ class Simulator {
 
   // Architecture state.
   // Registers.
-  int32_t registers_[kNumSimuRegisters];
+  int64_t registers_[kNumSimuRegisters];
   // Coprocessor Registers.
   int32_t FPUregisters_[kNumFPURegisters];
   // FPU control register.

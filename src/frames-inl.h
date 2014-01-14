@@ -40,6 +40,8 @@
 #include "arm/frames-arm.h"
 #elif V8_TARGET_ARCH_MIPS
 #include "mips/frames-mips.h"
+#elif V8_TARGET_ARCH_MIPS64
+#include "mips64/frames-mips.h"
 #else
 #error Unsupported target architecture.
 #endif

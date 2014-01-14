@@ -112,7 +112,7 @@ endif
 ifdef soname_version
   GYPFLAGS += -Dsoname_version=$(soname_version)
 endif
-# werror=no
+werror=no
 ifeq ($(werror), no)
   GYPFLAGS += -Dwerror=''
 endif
@@ -223,7 +223,7 @@ endif
 
 # Architectures and modes to be compiled. Consider these to be internal
 # variables, don't override them (use the targets instead).
-ARCHES = ia32 x64 arm mipsel
+ARCHES = ia32 x64 arm mipsel mipsel64
 DEFAULT_ARCHES = ia32 x64 arm
 MODES = release debug optdebug
 DEFAULT_MODES = release debug

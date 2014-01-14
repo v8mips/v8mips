@@ -231,6 +231,9 @@ class SimulatorHelper {
 #elif V8_TARGET_ARCH_MIPS
     state->fp = reinterpret_cast<Address>(simulator_->get_register(
         Simulator::fp));
+#elif V8_TARGET_ARCH_MIPS64
+    state->fp = reinterpret_cast<Address>(simulator_->get_register(
+        Simulator::fp));
 #endif
   }
 
