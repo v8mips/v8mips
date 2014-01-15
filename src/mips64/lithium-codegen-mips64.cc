@@ -2597,11 +2597,7 @@ void LCodeGen::DoCmpMapAndBranch(LCmpMapAndBranch* instr) {
   Register temp = ToRegister(instr->temp());
 
   __ ld(temp, FieldMemOperand(reg, HeapObject::kMapOffset));
-  // EmitBranch(instr, eq, temp, Operand(instr->map()));
-  // TODO can use scratch0()?
-  Register scratch = scratch0();
-  __ li(scratch, Operand(instr->map()));
-  EmitBranch(instr, eq, temp, Operand(scratch));
+  EmitBranch(instr, eq, temp, Operand(instr->map()));
 }
 
 
