@@ -586,7 +586,7 @@ DEFINE_bool(allow_natives_syntax, false, "allow natives syntax")
 DEFINE_bool(trace_parse, false, "trace parsing and preparsing")
 
 // simulator-arm.cc and simulator-mips.cc
-DEFINE_bool(trace_sim, true, "Trace simulator execution")
+DEFINE_bool(trace_sim, false, "Trace simulator execution")
 DEFINE_bool(check_icache, false,
             "Check icache flushes in ARM and MIPS simulator")
 DEFINE_int(stop_sim_at, 0, "Simulator stop after x number of instructions")

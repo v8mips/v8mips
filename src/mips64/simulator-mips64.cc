@@ -1487,7 +1487,7 @@ void Simulator::SoftwareInterrupt(Instruction* instr) {
     // Args 4 and 5 are on the stack after the reserved space for args 0..3.
     int64_t arg4 = stack_pointer[4];
     int64_t arg5 = stack_pointer[5];
-printf("arg0 : 0x%llx  arg1 : 0x%llx  arg2 : 0x%llx  arg3 : 0x%llx  arg4 : 0x%llx  arg5 : 0x%llx\n", arg0, arg1, arg2, arg3, arg4, arg5);
+// printf("arg0 : 0x%llx  arg1 : 0x%llx  arg2 : 0x%llx  arg3 : 0x%llx  arg4 : 0x%llx  arg5 : 0x%llx\n", arg0, arg1, arg2, arg3, arg4, arg5);
     bool fp_call =
          (redirection->type() == ExternalReference::BUILTIN_FP_FP_CALL) ||
          (redirection->type() == ExternalReference::BUILTIN_COMPARE_CALL) ||
@@ -1666,9 +1666,9 @@ printf("arg0 : 0x%llx  arg1 : 0x%llx  arg2 : 0x%llx  arg3 : 0x%llx  arg4 : 0x%ll
       set_register(v0, (int64_t)(result.x));
       set_register(v1, (int64_t)(result.y));
     }
-    // if (::v8::internal::FLAG_trace_sim) {
+     if (::v8::internal::FLAG_trace_sim) {
       PrintF("Returned %08lx : %08lx\n", get_register(v1), get_register(v0));
-    //}
+    }
     set_register(ra, saved_ra);
     set_pc(get_register(ra));
 

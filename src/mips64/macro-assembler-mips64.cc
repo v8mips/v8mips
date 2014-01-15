@@ -4932,7 +4932,11 @@ void MacroAssembler::JumpIfNotBothSmi(Register reg1,
                                       Register reg2,
                                       Label* on_not_both_smi) {
   STATIC_ASSERT(kSmiTag == 0);
+#if defined(__APPLE__)  // TODO(plind): Find some better to fix this assert issue.
   ASSERT_EQ(1, kSmiTagMask);
+#else
+  ASSERT_EQ((uint64_t)1, kSmiTagMask);
+#endif
   or_(at, reg1, reg2);
   JumpIfNotSmi(at, on_not_both_smi);
 }
@@ -4942,7 +4946,11 @@ void MacroAssembler::JumpIfEitherSmi(Register reg1,
                                      Register reg2,
                                      Label* on_either_smi) {
   STATIC_ASSERT(kSmiTag == 0);
+#if defined(__APPLE__)  // TODO(plind): Find some better to fix this assert issue.
   ASSERT_EQ(1, kSmiTagMask);
+#else
+  ASSERT_EQ((uint64_t)1, kSmiTagMask);
+#endif
   // Both Smi tags must be 1 (not Smi).
   and_(at, reg1, reg2);
   JumpIfSmi(at, on_either_smi);

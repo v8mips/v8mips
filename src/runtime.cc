@@ -2052,10 +2052,8 @@ static Failure* ThrowRedeclarationError(Isolate* isolate,
 RUNTIME_FUNCTION(MaybeObject*, Runtime_DeclareGlobals) {
   HandleScope scope(isolate);
   ASSERT(args.length() == 3);
-  printf("length : %d \n", args.length());
   Handle<GlobalObject> global = Handle<GlobalObject>(
       isolate->context()->global_object());
-  printf("context : %p \n",isolate->context());
   Handle<Context> context = args.at<Context>(0);
   CONVERT_ARG_HANDLE_CHECKED(FixedArray, pairs, 1);
   CONVERT_SMI_ARG_CHECKED(flags, 2);

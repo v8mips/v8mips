@@ -313,7 +313,7 @@ void FullCodeGenerator::Generate() {
 	   // __ break_(0x132);
 
       VisitStatements(function()->body());
-	   __ break_(0x127);
+     // __ break_(0x127);
 
       ASSERT(loop_depth() == 0);
     }
