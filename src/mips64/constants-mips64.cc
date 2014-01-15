@@ -258,6 +258,7 @@ Instruction::Type Instruction::InstructionType() const {
         case SRLV:
 		case DSRLV:
         case SRAV:
+        case DSRAV:
         case MFHI:
         case MFLO:
         case MULT:

@@ -459,7 +459,7 @@ static void Generate_JSConstructStubHelper(MacroAssembler* masm,
       ASSERT_EQ(3 * kPointerSize, JSObject::kHeaderSize);
       __ LoadRoot(t7, Heap::kUndefinedValueRootIndex);
       if (count_constructions) {
-        __ ld(a0, FieldMemOperand(a2, Map::kInstanceSizesOffset));
+        __ lw(a0, FieldMemOperand(a2, Map::kInstanceSizesOffset));
         __ Ext(a0, a0, Map::kPreAllocatedPropertyFieldsByte * kBitsPerByte,
                 kBitsPerByte);
         __ dsll(t0, a0, kPointerSizeLog2);
@@ -489,7 +489,7 @@ static void Generate_JSConstructStubHelper(MacroAssembler* masm,
       __ lbu(a3, FieldMemOperand(a2, Map::kUnusedPropertyFieldsOffset));
       // The field instance sizes contains both pre-allocated property fields
       // and in-object properties.
-      __ ld(a0, FieldMemOperand(a2, Map::kInstanceSizesOffset));
+      __ lw(a0, FieldMemOperand(a2, Map::kInstanceSizesOffset));
       __ Ext(t6, a0, Map::kPreAllocatedPropertyFieldsByte * kBitsPerByte,
              kBitsPerByte);
       __ Daddu(a3, a3, Operand(t6));
@@ -616,15 +616,16 @@ static void Generate_JSConstructStubHelper(MacroAssembler* masm,
     // sp[2]: constructor function
     // sp[3]: number of arguments (smi-tagged)
     Label loop, entry;
+	__ dsrl32(a3, a3, 0);
     __ jmp(&entry);
     __ bind(&loop);
     // __ sll(t0, a3, kPointerSizeLog2 - kSmiTagSize);
-	__ dsrl(t0, a3, 32 - kPointerSizeLog2);
+	__ dsrl(t0, a3, kPointerSizeLog2);
     __ Daddu(t0, a2, Operand(t0));
     __ ld(t1, MemOperand(t0));
     __ push(t1);
     __ bind(&entry);
-    __ Daddu(a3, a3, Operand(-2));
+    __ Daddu(a3, a3, Operand(-1));
     __ Branch(&loop, greater_equal, a3, Operand(zero_reg));
 
     // Call the function.
