@@ -568,13 +568,11 @@ void ElementsTransitionGenerator::GenerateMapChangeElementsTransition(
   // -----------------------------------
   if (mode == TRACK_ALLOCATION_SITE) {
     ASSERT(allocation_memento_found != NULL);
-    // __ JumpIfJSArrayHasAllocationMemento(a2, t0, allocation_memento_found);
-	// TODO can use t1?
-	__ JumpIfJSArrayHasAllocationMemento(a2, t0, t1, allocation_memento_found);
+    __ JumpIfJSArrayHasAllocationMemento(a2, t0, allocation_memento_found);
   }
 
   // Set transitioned map.
-  __ sw(a3, FieldMemOperand(a2, HeapObject::kMapOffset));
+  __ sd(a3, FieldMemOperand(a2, HeapObject::kMapOffset));
   __ RecordWriteField(a2,
                       HeapObject::kMapOffset,
                       a3,
@@ -601,9 +599,7 @@ void ElementsTransitionGenerator::GenerateSmiToDouble(
   Register scratch = t6;
 
   if (mode == TRACK_ALLOCATION_SITE) {
-    // __ JumpIfJSArrayHasAllocationMemento(a2, t0, fail);
-	// TODO Can use t1?
-    __ JumpIfJSArrayHasAllocationMemento(a2, t0, t1, fail);
+    __ JumpIfJSArrayHasAllocationMemento(a2, t0, fail);
   }
 
   // Check for empty arrays, which only require a map transition and no changes
@@ -731,9 +727,7 @@ void ElementsTransitionGenerator::GenerateDoubleToObject(
   Label entry, loop, convert_hole, gc_required, only_change_map;
 
   if (mode == TRACK_ALLOCATION_SITE) {
-    // __ JumpIfJSArrayHasAllocationMemento(a2, t0, fail);
-	// TODO can use t1?
-	__ JumpIfJSArrayHasAllocationMemento(a2, t0, t1, fail);
+    __ JumpIfJSArrayHasAllocationMemento(a2, t0, fail);
   }
 
   // Check for empty arrays, which only require a map transition and no changes

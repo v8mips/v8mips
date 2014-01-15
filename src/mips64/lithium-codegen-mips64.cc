@@ -4438,11 +4438,8 @@ void LCodeGen::DoTrapAllocationMemento(LTrapAllocationMemento* instr) {
   Register object = ToRegister(instr->object());
   Register temp = ToRegister(instr->temp());
   Label no_memento_found;
-  // __ TestJSArrayForAllocationMemento(object, temp, &no_memento_found,
-  //                                   ne, &no_memento_found);
-  // TODO can usr scratch0()?
-  __ TestJSArrayForAllocationMemento(object, temp, scratch0(),
-                                     &no_memento_found, ne, &no_memento_found);
+  __ TestJSArrayForAllocationMemento(object, temp, &no_memento_found,
+                                     ne, &no_memento_found);
   DeoptimizeIf(al, instr->environment());
   __ bind(&no_memento_found);
 }
@@ -4941,9 +4938,7 @@ void LCodeGen::DoDeferredTaggedToI(LTaggedToI* instr) {
       __ Branch(&done, ne, input_reg, Operand(zero_reg));
 
       __ mfc1(scratch1, double_scratch.high());
-      // __ And(scratch1, scratch1, Operand(HeapNumber::kSignMask));
-	  __ li(scratch2, Operand(HeapNumber::kSignMask));
-	  __ And(scratch1, scratch1, scratch2);
+      __ And(scratch1, scratch1, Operand(HeapNumber::kSignMask));
       DeoptimizeIf(ne, instr->environment(), scratch1, Operand(zero_reg));
     }
   }

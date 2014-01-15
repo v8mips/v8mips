@@ -210,11 +210,8 @@ void MacroAssembler::InNewSpace(Register object,
   li(t8, Operand(ExternalReference::new_space_mask(isolate())));
   And(scratch, t8, object);
 
-  // Branch(branch, cc, scratch,
-  //       Operand(ExternalReference::new_space_start(isolate())));
- ASSERT(!t8.is(scratch));
- li(t8, Operand(ExternalReference::new_space_start(isolate())));
- Branch(branch, cc, scratch, Operand(t8));
+  Branch(branch, cc, scratch,
+         Operand(ExternalReference::new_space_start(isolate())));
 }
 
 
@@ -2801,10 +2798,8 @@ void MacroAssembler::PopTryHandler() {
   STATIC_ASSERT(StackHandlerConstants::kNextOffset == 0);
   pop(a1);
   Daddu(sp, sp, Operand(StackHandlerConstants::kSize - kPointerSize));
-  // li(at, Operand(ExternalReference(Isolate::kHandlerAddress, isolate())));
-  // TODO can I use t1?
-  li(t1, Operand(ExternalReference(Isolate::kHandlerAddress, isolate())));
-  sd(a1, MemOperand(t1));
+  li(at, Operand(ExternalReference(Isolate::kHandlerAddress, isolate())));
+  sd(a1, MemOperand(at));
 }
 
 
@@ -5765,7 +5760,6 @@ void MacroAssembler::ClampDoubleToUint8(Register result_reg,
 void MacroAssembler::TestJSArrayForAllocationMemento(
     Register receiver_reg,
     Register scratch_reg,
-	Register scratch_reg2,
     Label* no_memento_found,
     Condition cond,
     Label* allocation_memento_present) {
@@ -5775,21 +5769,14 @@ void MacroAssembler::TestJSArrayForAllocationMemento(
       ExternalReference::new_space_allocation_top_address(isolate());
   Daddu(scratch_reg, receiver_reg,
        Operand(JSArray::kSize + AllocationMemento::kSize - kHeapObjectTag));
-  // Branch(no_memento_found, lt, scratch_reg, Operand(new_space_start));
-  li(scratch_reg2, Operand(new_space_start));
-  Branch(no_memento_found, lt, scratch_reg, Operand(scratch_reg2));
-  // li(at, Operand(new_space_allocation_top));
-  // ld(at, MemOperand(at));
-  li(scratch_reg2, Operand(new_space_allocation_top));
-  ld(at, MemOperand(scratch_reg2));
+  Branch(no_memento_found, lt, scratch_reg, Operand(new_space_start));
+  li(at, Operand(new_space_allocation_top));
+  ld(at, MemOperand(at));
   Branch(no_memento_found, gt, scratch_reg, Operand(at));
   ld(scratch_reg, MemOperand(scratch_reg, -AllocationMemento::kSize));
   if (allocation_memento_present) {
-    // Branch(allocation_memento_present, cond, scratch_reg,
-    //       Operand(isolate()->factory()->allocation_memento_map()));
-    li(scratch_reg2, Operand(isolate()->factory()->allocation_memento_map()));
     Branch(allocation_memento_present, cond, scratch_reg,
-	       Operand(scratch_reg2));
+           Operand(isolate()->factory()->allocation_memento_map()));
   }
 }
 
@@ -5838,10 +5825,7 @@ void MacroAssembler::JumpIfDictionaryInPrototypeChain(
   Ext(scratch1, scratch1, Map::kElementsKindShift, Map::kElementsKindBitCount);
   Branch(found, eq, scratch1, Operand(DICTIONARY_ELEMENTS));
   ld(current, FieldMemOperand(current, Map::kPrototypeOffset));
-  ASSERT(!scratch1.is(current));
-  li(scratch1, Operand(factory->null_value()));
-  Branch(&loop_again, ne, current, Operand(scratch1));
-  // Branch(&loop_again, ne, current, Operand(factory->null_value()));
+  Branch(&loop_again, ne, current, Operand(factory->null_value()));
 }
 
 

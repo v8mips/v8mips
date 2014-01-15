@@ -665,10 +665,7 @@ void DoubleToIStub::Generate(MacroAssembler* masm) {
   // Save the sign.
   Register sign = result_reg;
   result_reg = no_reg;
-  // __ And(sign, input_high, Operand(HeapNumber::kSignMask));
-  ASSERT(!sign.is(input_high));
-  __ li(sign, Operand(HeapNumber::kSignMask));
-  __ And(sign, sign, input_high);
+  __ And(sign, input_high, Operand(HeapNumber::kSignMask));
 
   // On ARM shifts > 31 bits are valid and will result in zero. On MIPS we need
   // to check for this specific case.
@@ -735,11 +732,8 @@ void WriteInt32ToHeapNumberStub::Generate(MacroAssembler* masm) {
   // We test for the special value that has a different exponent.
   STATIC_ASSERT(HeapNumber::kSignMask == 0x80000000u);
   // Test sign, and save for later conditionals.
-  // __ And(sign_, the_int_, Operand(0x80000000u));
-  __ li(scratch_, 0x80000000u);
-  __ And(sign_, the_int_, scratch_);
-  // __ Branch(&max_negative_int, eq, the_int_, Operand(0x80000000u));
-  __ Branch(&max_negative_int, eq, the_int_, Operand(scratch_));
+  __ And(sign_, the_int_, Operand(0x80000000u));
+  __ Branch(&max_negative_int, eq, the_int_, Operand(0x80000000u));
 
   // Set up the correct exponent in scratch_.  All non-Smi int32s have the same.
   // A non-Smi integer is 1.xxx * 2^30 so the exponent is 30 (biased).
@@ -1544,13 +1538,11 @@ void CEntryStub::GenerateAheadOfTime(Isolate* isolate) {
 static void JumpIfOOM(MacroAssembler* masm,
                       Register value,
                       Register scratch,
-					  Register scratch2,
                       Label* oom_label) {
   STATIC_ASSERT(Failure::OUT_OF_MEMORY_EXCEPTION == 3);
   STATIC_ASSERT(kFailureTag == 3);
   __ andi(scratch, value, 0xf);
-  __ li(scratch2, 0xf);
-  __ Branch(oom_label, eq, scratch, Operand(scratch2));
+  __ Branch(oom_label, eq, scratch, Operand(0xf));
 }
 
 
@@ -1660,7 +1652,7 @@ void CEntryStub::GenerateCore(MacroAssembler* masm,
   __ Branch(&retry, eq, t0, Operand(zero_reg));
 
   // Special handling of out of memory exceptions.
-  JumpIfOOM(masm, v0, t0, t1, throw_out_of_memory_exception);
+  JumpIfOOM(masm, v0, t0, throw_out_of_memory_exception);
 
   // Retrieve the pending exception.
   __ li(t0, Operand(ExternalReference(Isolate::kPendingExceptionAddress,
@@ -1668,7 +1660,7 @@ void CEntryStub::GenerateCore(MacroAssembler* masm,
   __ ld(v0, MemOperand(t0));
 
   // See if we just retrieved an OOM exception.
-  JumpIfOOM(masm, v0, t0, t1, throw_out_of_memory_exception);
+  JumpIfOOM(masm, v0, t0, throw_out_of_memory_exception);
 
   // Clear the pending exception.
   __ li(a3, Operand(isolate->factory()->the_hole_value()));
@@ -1760,7 +1752,7 @@ void CEntryStub::Generate(MacroAssembler* masm) {
 
   // Set pending exception and v0 to out of memory exception.
   Label already_have_failure;
-  JumpIfOOM(masm, v0, t0, t1, &already_have_failure);
+  JumpIfOOM(masm, v0, t0, &already_have_failure);
   Failure* out_of_memory = Failure::OutOfMemoryException(0x1);
   __ li(v0, Operand(reinterpret_cast<int64_t>(out_of_memory)));
   __ bind(&already_have_failure);
@@ -2284,16 +2276,10 @@ void ArgumentsAccessStub::GenerateReadElement(MacroAssembler* masm) {
   Label adaptor;
   __ ld(a2, MemOperand(fp, StandardFrameConstants::kCallerFPOffset));
   __ ld(a3, MemOperand(a2, StandardFrameConstants::kContextOffset));
-  // __ Branch(&adaptor,
-  //          eq,
-  //          a3,
-  //          Operand(Smi::FromInt(StackFrame::ARGUMENTS_ADAPTOR)));
-  // TODO can use t0?
-  __ li(t0, Operand(Smi::FromInt(StackFrame::ARGUMENTS_ADAPTOR)));
   __ Branch(&adaptor,
             eq,
-			a3,
-			Operand(t0));
+            a3,
+            Operand(Smi::FromInt(StackFrame::ARGUMENTS_ADAPTOR)));
 
   // Check index (a1) against formal parameters count limit passed in
   // through register a0. Use unsigned comparison to get negative
@@ -2376,16 +2362,10 @@ void ArgumentsAccessStub::GenerateNewNonStrictFast(MacroAssembler* masm) {
   Label adaptor_frame, try_allocate;
   __ ld(a3, MemOperand(fp, StandardFrameConstants::kCallerFPOffset));
   __ ld(a2, MemOperand(a3, StandardFrameConstants::kContextOffset));
-  // __ Branch(&adaptor_frame,
-  //          eq,
-  //          a2,
-  //          Operand(Smi::FromInt(StackFrame::ARGUMENTS_ADAPTOR)));
-  // TODO can use t0?
-  __ li(t0, Operand(Smi::FromInt(StackFrame::ARGUMENTS_ADAPTOR)));
   __ Branch(&adaptor_frame,
             eq,
-			a2,
-			Operand(t0));
+            a2,
+            Operand(Smi::FromInt(StackFrame::ARGUMENTS_ADAPTOR)));
 
   // No adaptor, parameter count = argument count.
   __ mov(a2, a1);
@@ -5463,10 +5443,7 @@ void RecordWriteStub::CheckNeedsToInformIncrementalMarker(
   Label need_incremental;
   Label need_incremental_pop_scratch;
 
-  // __ And(regs_.scratch0(), regs_.object(), Operand(~Page::kPageAlignmentMask));
-  ASSERT(!regs_.scratch1().is(regs_.object()));
-  __ li(regs_.scratch1(), Operand(~Page::kPageAlignmentMask));
-  __ And(regs_.scratch0(), regs_.object(), regs_.scratch1());
+  __ And(regs_.scratch0(), regs_.object(), Operand(~Page::kPageAlignmentMask));
   __ ld(regs_.scratch1(),
         MemOperand(regs_.scratch0(),
                    MemoryChunk::kWriteBarrierCounterOffset));

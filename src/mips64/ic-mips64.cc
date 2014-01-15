@@ -735,10 +735,7 @@ static MemOperand GenerateMappedArgumentsLookup(MacroAssembler* masm,
   __ Branch(slow_case, lt, scratch2, Operand(FIRST_JS_RECEIVER_TYPE));
 
   // Check that the key is a positive smi.
-  // __ And(scratch1, key, Operand(0x80000001));
-  ASSERT(!key.is(scratch1));
-  __ li(scratch1, Operand(0x80000001));
-  __ And(scratch1, scratch1, key);
+  __ And(scratch1, key, Operand(0x80000001));
   __ Branch(slow_case, ne, scratch1, Operand(zero_reg));
 
   // Load the elements into scratch1 and check its map.
@@ -1179,10 +1176,8 @@ static void KeyedStoreGenerateGenericHelper(
   Register address = t1;
   if (check_map == kCheckMap) {
     __ ld(elements_map, FieldMemOperand(elements, HeapObject::kMapOffset));
-    __ li(scratch_value, Operand(masm->isolate()->factory()->fixed_array_map()));
-    __ Branch(fast_double, ne, elements_map, Operand(scratch_value));
-    // __ Branch(fast_double, ne, elements_map,
-    //          Operand(masm->isolate()->factory()->fixed_array_map()));
+    __ Branch(fast_double, ne, elements_map,
+              Operand(masm->isolate()->factory()->fixed_array_map()));
   }
 
   // HOLECHECK: guards "A[i] = V"
@@ -1194,11 +1189,8 @@ static void KeyedStoreGenerateGenericHelper(
   __ daddu(address, address, at);
   __ ld(scratch_value, MemOperand(address));
 
-  // TODO can I use t2?
-  __ li(t2, Operand(masm->isolate()->factory()->the_hole_value()));
-  __ Branch(&holecheck_passed1, ne, scratch_value, Operand(t2));
-  // __ Branch(&holecheck_passed1, ne, scratch_value,
-  //          Operand(masm->isolate()->factory()->the_hole_value()));
+  __ Branch(&holecheck_passed1, ne, scratch_value,
+            Operand(masm->isolate()->factory()->the_hole_value()));
   __ JumpIfDictionaryInPrototypeChain(receiver, elements_map, scratch_value,
                                       slow);
 
@@ -1442,9 +1434,7 @@ void KeyedLoadIC::GenerateIndexedInterceptor(MacroAssembler* masm) {
   __ JumpIfSmi(a1, &slow);
 
   // Check that the key is an array index, that is Uint32.
-  __ li(t0, Operand(kSmiTagMask | kSmiSignMask));
-  __ And(t0, a0, t0);
-  // __ And(t0, a0, Operand(kSmiTagMask | kSmiSignMask));
+  __ And(t0, a0, Operand(kSmiTagMask | kSmiSignMask));
   __ Branch(&slow, ne, t0, Operand(zero_reg));
 
   // Get the map of the receiver.
@@ -1477,6 +1467,7 @@ void KeyedStoreIC::GenerateMiss(MacroAssembler* masm) {
 
   // Push receiver, key and value for runtime call.
   __ Push(a2, a1, a0);
+
   ExternalReference ref =
       ExternalReference(IC_Utility(kKeyedStoreIC_Miss), masm->isolate());
   __ TailCallExternalReference(ref, 3, 1);

@@ -1851,10 +1851,7 @@ void FullCodeGenerator::VisitArrayLiteral(ArrayLiteral* expr) {
 
     if (!result_saved) {
       __ push(v0);  // array literal
-      // __ Push(Smi::FromInt(expr->literal_index()));
-	  // TODO can use t2?
-	  __ li(t2, Operand(Smi::FromInt(expr->literal_index())));
-	  __ push(t2);
+      __ Push(Smi::FromInt(expr->literal_index()));
       result_saved = true;
     }
 
@@ -2949,10 +2946,7 @@ void FullCodeGenerator::EmitIsNonNegativeSmi(CallRuntime* expr) {
                          &if_true, &if_false, &fall_through);
 
   PrepareForBailoutBeforeSplit(expr, true, if_true, if_false);
-  // __ NonNegativeSmiTst(v0, at);
-  // TODO can use t0?
-  __ li(t0, Operand(kSmiTagMask | kSmiSignMask));
-  __ And(at, v0, t0);
+  __ NonNegativeSmiTst(v0, at);
   Split(eq, at, Operand(zero_reg), if_true, if_false, fall_through);
 
   context()->Plug(if_true, if_false);
@@ -3302,11 +3296,8 @@ void FullCodeGenerator::EmitArgumentsLength(CallRuntime* expr) {
   // Check if the calling frame is an arguments adaptor frame.
   __ ld(a2, MemOperand(fp, StandardFrameConstants::kCallerFPOffset));
   __ ld(a3, MemOperand(a2, StandardFrameConstants::kContextOffset));
-  // __ Branch(&exit, ne, a3,
-  //          Operand(Smi::FromInt(StackFrame::ARGUMENTS_ADAPTOR)));
-  // TODO can use t5?
-  __ li(t5, Operand(Smi::FromInt(StackFrame::ARGUMENTS_ADAPTOR)));
-  __ Branch(&exit, ne, a3, Operand(t5));
+  __ Branch(&exit, ne, a3,
+            Operand(Smi::FromInt(StackFrame::ARGUMENTS_ADAPTOR)));
 
   // Arguments adaptor case: Read the arguments length from the
   // adaptor frame.

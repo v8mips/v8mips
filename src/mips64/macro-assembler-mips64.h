@@ -1576,17 +1576,15 @@ class MacroAssembler: public Assembler {
   void TestJSArrayForAllocationMemento(
       Register receiver_reg,
       Register scratch_reg,
-	  Register scratch_reg2,
       Label* no_memento_found,
       Condition cond = al,
       Label* allocation_memento_present = NULL);
 
   void JumpIfJSArrayHasAllocationMemento(Register receiver_reg,
                                          Register scratch_reg,
-										 Register scratch_reg2,
                                          Label* memento_found) {
     Label no_memento_found;
-    TestJSArrayForAllocationMemento(receiver_reg, scratch_reg, scratch_reg2,
+    TestJSArrayForAllocationMemento(receiver_reg, scratch_reg,
                                     &no_memento_found, eq, memento_found);
     bind(&no_memento_found);
   }
