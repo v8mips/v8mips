@@ -1541,10 +1541,18 @@ class MacroAssembler: public Assembler {
 
   template<typename Field>
   void DecodeField(Register reg) {
-    static const int shift = Field::kShift;
-    static const int mask = (Field::kMask >> shift) << kSmiTagSize;
-    dsrl(reg, reg, shift);
-    And(reg, reg, Operand(mask));
+    // static const int shift = Field::kShift;
+    // static const int mask = (Field::kMask >> shift) << kSmiTagSize;
+	static const int kSmiShift = kSmiTagSize + kSmiShiftSize;
+    static const int shift = Field::kShift + kSmiShift;
+    static const int mask = Field::kMask >> Field::kShift;
+	// TODO
+	break_(0x225);
+    // dsrl(reg, reg, shift);
+    // And(reg, reg, Operand(mask));
+	dsrl32(reg, reg, shift - 32);
+	And(reg, reg, Operand(mask));
+	dsll32(reg, reg, 0);
   }
 
   // Generates function and stub prologue code.

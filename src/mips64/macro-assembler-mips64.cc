@@ -202,14 +202,7 @@ void MacroAssembler::InNewSpace(Register object,
                                 Condition cc,
                                 Label* branch) {
   ASSERT(cc == eq || cc == ne);
-  // And(scratch, object, Operand(ExternalReference::new_space_mask(isolate())));
-  /* ASSERT(!scratch.is(object));
-  li(scratch, Operand(ExternalReference::new_space_mask(isolate())));
-  And(scratch, scratch, object);*/
-  ASSERT(!t8.is(object)); // Can I use t8?
-  li(t8, Operand(ExternalReference::new_space_mask(isolate())));
-  And(scratch, t8, object);
-
+  And(scratch, object, Operand(ExternalReference::new_space_mask(isolate())));
   Branch(branch, cc, scratch,
          Operand(ExternalReference::new_space_start(isolate())));
 }
@@ -525,7 +518,8 @@ void MacroAssembler::LoadFromNumberDictionary(Label* miss,
 
   // Compute the capacity mask.
   ld(reg1, FieldMemOperand(elements, SeededNumberDictionary::kCapacityOffset));
-  dsra(reg1, reg1, kSmiTagSize);
+  // sra(reg1, reg1, kSmiTagSize);
+  dsra32(reg1, reg1, 0);
   Dsubu(reg1, reg1, Operand(1));
 
   // Generate an unrolled loop that performs a few probes before giving up.
@@ -671,6 +665,7 @@ void MacroAssembler::Dmul(Register rd, Register rs, const Operand& rt) {
     } else {
       // TODO yuyin
 	  // dmul(rd, rs, rt.rm());
+	  break_(0x225);
     }
   } else {
     // li handles the relocation.
@@ -682,6 +677,7 @@ void MacroAssembler::Dmul(Register rd, Register rs, const Operand& rt) {
     } else {
       // TODO yuyin
 	  // dmul(rd, rs, at);
+	  break_(0x225);
     }
   }
 }
@@ -2627,15 +2623,15 @@ void MacroAssembler::J(Label* L, BranchDelaySlot bdslot) {
 void MacroAssembler::Jr(Label* L, BranchDelaySlot bdslot) {
   BlockTrampolinePoolScope block_trampoline_pool(this);
 
-  // TODO load 64 bit need a reg.
-  uint64_t imm32;
-  imm32 = jump_address(L);
+  uint64_t imm64;
+  imm64 = jump_address(L);
   { BlockGrowBufferScope block_buf_growth(this);
     // Buffer growth (and relocation) must be blocked for internal references
     // until associated instructions are emitted and available to be patched.
     RecordRelocInfo(RelocInfo::INTERNAL_REFERENCE);
-    lui(at, (imm32 & kHiMask) >> kLuiShift);
-    ori(at, at, (imm32 & kImm16Mask));
+    // lui(at, (imm32 & kHiMask) >> kLuiShift);
+    // ori(at, at, (imm32 & kImm16Mask));
+	li(at, Operand(imm64));
   }
   jr(at);
 
@@ -2648,14 +2644,15 @@ void MacroAssembler::Jr(Label* L, BranchDelaySlot bdslot) {
 void MacroAssembler::Jalr(Label* L, BranchDelaySlot bdslot) {
   BlockTrampolinePoolScope block_trampoline_pool(this);
 
-  uint32_t imm32;
-  imm32 = jump_address(L);
+  uint64_t imm64;
+  imm64 = jump_address(L);
   { BlockGrowBufferScope block_buf_growth(this);
     // Buffer growth (and relocation) must be blocked for internal references
     // until associated instructions are emitted and available to be patched.
     RecordRelocInfo(RelocInfo::INTERNAL_REFERENCE);
-    lui(at, (imm32 & kHiMask) >> kLuiShift);
-    ori(at, at, (imm32 & kImm16Mask));
+    // lui(at, (imm32 & kHiMask) >> kLuiShift);
+    // ori(at, at, (imm32 & kImm16Mask));
+	li(at, Operand(imm64));
   }
   jalr(at);
 
@@ -2821,7 +2818,8 @@ void MacroAssembler::JumpToHandlerEntry() {
   Daddu(a2, a3, a2);
   ld(a2, MemOperand(a2));  // Smi-tagged offset.
   Daddu(a1, a1, Operand(Code::kHeaderSize - kHeapObjectTag));  // Code start.
-  dsra(t9, a2, kSmiTagSize);
+  // dsra(t9, a2, kSmiTagSize);
+  dsra32(t9, a2, 0);
   Daddu(t9, t9, a1);
   Jump(t9);  // Jump.
 }
@@ -3478,26 +3476,27 @@ void MacroAssembler::StoreNumberToDoubleElements(Register value_reg,
   // Check for nan: all NaN values have a value greater (signed) than 0x7ff00000
   // in the exponent.
   li(scratch1, Operand(kNaNOrInfinityLowerBoundUpper32));
-  ld(exponent_reg, FieldMemOperand(value_reg, HeapNumber::kExponentOffset));
+  lw(exponent_reg, FieldMemOperand(value_reg, HeapNumber::kExponentOffset));
   Branch(&maybe_nan, ge, exponent_reg, Operand(scratch1));
 
-  ld(mantissa_reg, FieldMemOperand(value_reg, HeapNumber::kMantissaOffset));
+  lw(mantissa_reg, FieldMemOperand(value_reg, HeapNumber::kMantissaOffset));
 
   bind(&have_double_value);
-  dsll(scratch1, key_reg, kDoubleSizeLog2 - kSmiTagSize);
+  // dsll(scratch1, key_reg, kDoubleSizeLog2 - kSmiTagSize);
+  dsrl(scratch1, key_reg, 32 - kDoubleSizeLog2);
   Daddu(scratch1, scratch1, elements_reg);
-  sd(mantissa_reg, FieldMemOperand(
+  sw(mantissa_reg, FieldMemOperand(
      scratch1, FixedDoubleArray::kHeaderSize - elements_offset));
   uint32_t offset = FixedDoubleArray::kHeaderSize - elements_offset +
       sizeof(kHoleNanLower32);
-  sd(exponent_reg, FieldMemOperand(scratch1, offset));
+  sw(exponent_reg, FieldMemOperand(scratch1, offset));
   jmp(&done);
 
   bind(&maybe_nan);
   // Could be NaN or Infinity. If fraction is not zero, it's NaN, otherwise
   // it's an Infinity, and the non-NaN code path applies.
   Branch(&is_nan, gt, exponent_reg, Operand(scratch1));
-  ld(mantissa_reg, FieldMemOperand(value_reg, HeapNumber::kMantissaOffset));
+  lw(mantissa_reg, FieldMemOperand(value_reg, HeapNumber::kMantissaOffset));
   Branch(&have_double_value, eq, mantissa_reg, Operand(zero_reg));
   bind(&is_nan);
   // Load canonical NaN for storing into the double array.
@@ -3511,7 +3510,8 @@ void MacroAssembler::StoreNumberToDoubleElements(Register value_reg,
   Daddu(scratch1, elements_reg,
       Operand(FixedDoubleArray::kHeaderSize - kHeapObjectTag -
               elements_offset));
-  dsll(scratch2, key_reg, kDoubleSizeLog2 - kSmiTagSize);
+  // dsll(scratch2, key_reg, kDoubleSizeLog2 - kSmiTagSize);
+  dsrl(scratch2, key_reg, 32 - kDoubleSizeLog2);
   Daddu(scratch1, scratch1, scratch2);
   // scratch1 is now effective address of the double element
 
@@ -3811,10 +3811,8 @@ void MacroAssembler::InvokeFunction(Register function,
   lw(expected_reg,
       FieldMemOperand(code_reg,
                       SharedFunctionInfo::kFormalParameterCountOffset));
-  //dsll32(expected_reg, expected_reg, 0);
-  //dsrl32(expected_reg, expected_reg, 0);
-  // dsra(expected_reg, expected_reg, kSmiTagSize);
-  dsra32(expected_reg, expected_reg, 0);
+  // TODO 
+  // dsra32(expected_reg, expected_reg, 0);
   ld(code_reg, FieldMemOperand(a1, JSFunction::kCodeEntryOffset));
   ParameterCount expected(expected_reg);
   InvokeCode(code_reg, expected, actual, flag, call_wrapper, call_kind);
@@ -4071,10 +4069,10 @@ void MacroAssembler::CallApiFunctionAndReturn(
   // previous handle scope.
   sd(s0, MemOperand(s3, kNextOffset));
   if (emit_debug_code()) {
-    lw(a1, MemOperand(s3, kLevelOffset));
+    ld(a1, MemOperand(s3, kLevelOffset));
     Check(eq, kUnexpectedLevelAfterReturnFromApiCall, a1, Operand(s2));
   }
-  Subu(s2, s2, Operand(1));
+  Dsubu(s2, s2, Operand(1));
   sd(s2, MemOperand(s3, kLevelOffset));
   ld(at, MemOperand(s3, kLimitOffset));
   Branch(&delete_allocated_handles, ne, s1, Operand(at));
@@ -4142,7 +4140,8 @@ void MacroAssembler::IndexFromHash(Register hash,
   // the low kHashShift bits.
   STATIC_ASSERT(kSmiTag == 0);
   Ext(hash, hash, String::kHashShift, String::kArrayIndexValueBits);
-  dsll(index, hash, kSmiTagSize);
+  // dsll(index, hash, kSmiTagSize);
+  dsll32(index, hash, 0);
 }
 
 
@@ -4158,7 +4157,8 @@ void MacroAssembler::ObjectToDoubleFPURegister(Register object,
     Label not_smi;
     JumpIfNotSmi(object, &not_smi);
     // Remove smi tag and convert to double.
-    dsra(scratch1, object, kSmiTagSize);
+    // dsra(scratch1, object, kSmiTagSize);
+	dsra32(scratch1, object, 0);
     mtc1(scratch1, result);
     cvt_d_w(result, result);
     Branch(&done);
@@ -4172,7 +4172,7 @@ void MacroAssembler::ObjectToDoubleFPURegister(Register object,
     // If exponent is all ones the number is either a NaN or +/-Infinity.
     Register exponent = scratch1;
     Register mask_reg = scratch2;
-    ld(exponent, FieldMemOperand(object, HeapNumber::kExponentOffset));
+    lw(exponent, FieldMemOperand(object, HeapNumber::kExponentOffset));
     li(mask_reg, HeapNumber::kExponentMask);
 
     And(exponent, exponent, mask_reg);
@@ -4186,7 +4186,8 @@ void MacroAssembler::ObjectToDoubleFPURegister(Register object,
 void MacroAssembler::SmiToDoubleFPURegister(Register smi,
                                             FPURegister value,
                                             Register scratch1) {
-  dsra(scratch1, smi, kSmiTagSize);
+  // dsra(scratch1, smi, kSmiTagSize);
+  dsra32(scratch1, smi, 0);
   mtc1(scratch1, value);
   cvt_d_w(value, value);
 }
@@ -4433,7 +4434,7 @@ void MacroAssembler::AssertFastElements(Register elements) {
     ASSERT(!elements.is(at));
     Label ok;
     push(elements);
-    lw(elements, FieldMemOperand(elements, HeapObject::kMapOffset));
+    ld(elements, FieldMemOperand(elements, HeapObject::kMapOffset));
     LoadRoot(at, Heap::kFixedArrayMapRootIndex);
     Branch(&ok, eq, elements, Operand(at));
     LoadRoot(at, Heap::kFixedDoubleArrayMapRootIndex);
@@ -4623,10 +4624,7 @@ void MacroAssembler::LoadGlobalFunctionInitialMap(Register function,
 void MacroAssembler::Prologue(PrologueFrameMode frame_mode) {
   if (frame_mode == BUILD_STUB_FRAME) {
     Push(ra, fp, cp);
-	// Push(Smi::FromInt(StackFrame::STUB));
-	// Use fp as the scratch register.
-	li(fp, Operand(Smi::FromInt(StackFrame::STUB)));
-	Push(fp);
+	Push(Smi::FromInt(StackFrame::STUB));
     // Adjust FP to point to saved FP.
     Daddu(fp, sp, Operand(StandardFrameConstants::kFixedFrameSizeFromFp));
   } else {
@@ -4745,10 +4743,7 @@ void MacroAssembler::EnterExitFrame(bool save_doubles,
   Dsubu(sp, sp, Operand((stack_space + 2) * kPointerSize));
   if (frame_alignment > 0) {
     ASSERT(IsPowerOf2(frame_alignment));
-    // And(sp, sp, Operand(-frame_alignment));  // Align stack.
-	li(t8, Operand(-frame_alignment));
-	And(sp, sp, t8);
-
+    And(sp, sp, Operand(-frame_alignment));  // Align stack.
   }
 
   // Set the exit frame sp value to point just before the return address
@@ -4809,7 +4804,8 @@ void MacroAssembler::InitializeNewString(Register string,
                                          Heap::RootListIndex map_index,
                                          Register scratch1,
                                          Register scratch2) {
-  dsll(scratch1, length, kSmiTagSize);
+  // dsll(scratch1, length, kSmiTagSize);
+  dsll32(scratch1, length, 0);
   LoadRoot(scratch2, map_index);
   sd(scratch1, FieldMemOperand(string, String::kLengthOffset));
   li(scratch1, Operand(String::kEmptyHashField));
@@ -5034,7 +5030,8 @@ void MacroAssembler::LookupNumberStringCache(Register object,
   // contains two elements (number and string) for each cache entry.
   ld(mask, FieldMemOperand(number_string_cache, FixedArray::kLengthOffset));
   // Divide length by two (length is a smi).
-  dsra(mask, mask, kSmiTagSize + 1);
+  // dsra(mask, mask, kSmiTagSize + 1);
+  dsra32(mask, mask, 1);
   Daddu(mask, mask, -1);  // Make mask.
 
   // Calculate the entry in the number string cache. The hash value in the
@@ -5074,7 +5071,8 @@ void MacroAssembler::LookupNumberStringCache(Register object,
 
   bind(&is_smi);
   Register scratch = scratch1;
-  dsra(scratch, object, 1);   // Shift away the tag.
+  // dsra(scratch, object, 1);   // Shift away the tag.
+  dsra32(scratch, scratch, 0);
   And(scratch, mask, Operand(scratch));
 
   // Calculate address of entry in string cache: each entry consists
