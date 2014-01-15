@@ -1457,7 +1457,7 @@ void Builtins::Generate_ArgumentsAdaptorTrampoline(MacroAssembler* masm) {
 
   {  // Too few parameters: Actual < expected.
     __ bind(&too_few);
-	 __ break_(0x222);
+//	 __ break_(0x222);
     EnterArgumentsAdaptorFrame(masm);
 
     // Calculate copy start address into a0 and copy end address is fp.

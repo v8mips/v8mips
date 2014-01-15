@@ -2330,6 +2330,7 @@ void FullCodeGenerator::EmitInlineSmiBinaryOp(BinaryOperation* expr,
   // recording binary operation stub, see
   switch (op) {
     case Token::SAR:
+	  __ break_(0x221);
       __ Branch(&stub_call);
       __ GetLeastBitsFromSmi(scratch1, right, 5);
       __ dsrav(right, left, scratch1);
@@ -4813,9 +4814,10 @@ void FullCodeGenerator::EnterFinallyBlock() {
   __ push(result_register());
   // Cook return address in link register to stack (smi encoded Code* delta).
   __ Dsubu(a1, ra, Operand(masm_->CodeObject()));
-  ASSERT_EQ(1, kSmiTagSize + kSmiShiftSize);
+  // ASSERT_EQ(1, kSmiTagSize + kSmiShiftSize);
   STATIC_ASSERT(0 == kSmiTag);
-  __ Addu(a1, a1, Operand(a1));  // Convert to smi.
+  // __ Addu(a1, a1, Operand(a1));  // Convert to smi.
+  __ dsll32(a1, a1, 0);
 
   // Store result register while executing finally block.
   __ push(a1);
@@ -4869,7 +4871,7 @@ void FullCodeGenerator::ExitFinallyBlock() {
 
   // Uncook return address and return.
   __ pop(result_register());
-  ASSERT_EQ(1, kSmiTagSize + kSmiShiftSize);
+  // ASSERT_EQ(1, kSmiTagSize + kSmiShiftSize);
   // __ sra(a1, a1, 1);  // Un-smi-tag value.
   __ dsra32(a1, a1, 0);
   __ Daddu(at, a1, Operand(masm_->CodeObject()));
