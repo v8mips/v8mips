@@ -1185,7 +1185,8 @@ static void KeyedStoreGenerateGenericHelper(
   // there may be a callback on the element.
   Label holecheck_passed1;
   __ Daddu(address, elements, FixedArray::kHeaderSize - kHeapObjectTag);
-  __ dsll(at, key, kPointerSizeLog2 - kSmiTagSize);
+  // __ dsll(at, key, kPointerSizeLog2 - kSmiTagSize);
+  __ dsrl(at, key, 32 - kPointerSizeLog2);
   __ daddu(address, address, at);
   __ ld(scratch_value, MemOperand(address));
 
@@ -1207,7 +1208,8 @@ static void KeyedStoreGenerateGenericHelper(
   }
   // It's irrelevant whether array is smi-only or not when writing a smi.
   __ Daddu(address, elements, Operand(FixedArray::kHeaderSize - kHeapObjectTag));
-  __ dsll(scratch_value, key, kPointerSizeLog2 - kSmiTagSize);
+  // __ dsll(scratch_value, key, kPointerSizeLog2 - kSmiTagSize);
+  __ dsrl(scratch_value, key, 32 - kPointerSizeLog2);
   __ Daddu(address, address, scratch_value);
   __ sd(value, MemOperand(address));
   __ Ret();
@@ -1225,7 +1227,8 @@ static void KeyedStoreGenerateGenericHelper(
     __ sd(scratch_value, FieldMemOperand(receiver, JSArray::kLengthOffset));
   }
   __ Daddu(address, elements, Operand(FixedArray::kHeaderSize - kHeapObjectTag));
-  __ dsll(scratch_value, key, kPointerSizeLog2 - kSmiTagSize);
+  // __ dsll(scratch_value, key, kPointerSizeLog2 - kSmiTagSize);
+  __ dsrl(scratch_value, key, 32 - kPointerSizeLog2);
   __ Daddu(address, address, scratch_value);
   __ sd(value, MemOperand(address));
   // Update write barrier for the elements array address.
