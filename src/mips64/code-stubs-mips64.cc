@@ -533,6 +533,7 @@ void ConvertToDoubleStub::Generate(MacroAssembler* masm) {
   // __ sra(source_, source_, kSmiTagSize);
   ASSERT(kSmiShiftSize + kSmiTagSize == 32);
   __ dsra32(source_, source_, 0);
+  __ break_(0x220);
   // Move sign bit from source to destination.  This works because the sign bit
   // in the exponent word of the double has the same position and polarity as
   // the 2's complement sign bit in a Smi.
@@ -600,7 +601,7 @@ void DoubleToIStub::Generate(MacroAssembler* masm) {
   DoubleRegister double_scratch = kLithiumScratchDouble;
 
   __ Push(scratch, scratch2, scratch3);
-
+  __ break_(0x221);
   if (!skip_fastpath()) {
     // Load double input.
     __ ldc1(double_scratch, MemOperand(input_reg, double_offset));
@@ -731,6 +732,7 @@ void WriteInt32ToHeapNumberStub::Generate(MacroAssembler* masm) {
   // the_int_ has the answer which is a signed int32 but not a Smi.
   // We test for the special value that has a different exponent.
   STATIC_ASSERT(HeapNumber::kSignMask == 0x80000000u);
+  __ break_(0x222);
   // Test sign, and save for later conditionals.
   __ And(sign_, the_int_, Operand(0x80000000u));
   __ Branch(&max_negative_int, eq, the_int_, Operand(0x80000000u));
@@ -833,7 +835,7 @@ static void EmitIdenticalObjectComparison(MacroAssembler* masm,
   } else {
     __ mov(v0, zero_reg);         // Things are <=, >=, ==, === themselves.
   }
-
+  __ break_(0x223);
   // For less and greater we don't have to check for NaN since the result of
   // x < x is false regardless.  For the others here is some code to check
   // for NaN.
@@ -902,7 +904,7 @@ static void EmitSmiNonsmiComparison(MacroAssembler* masm,
     // the runtime.
     __ Branch(slow, ne, t4, Operand(HEAP_NUMBER_TYPE));
   }
-
+// __ break_(0x224);
   // Rhs is a smi, lhs is a number.
   // Convert smi rhs to double.
   // __ sra(at, rhs, kSmiTagSize);
@@ -2335,7 +2337,7 @@ void ArgumentsAccessStub::GenerateNewNonStrictSlow(MacroAssembler* masm) {
   __ sd(a2, MemOperand(sp, 0 * kPointerSize));
   // __ sll(t3, a2, 1);
   // TODO right?
-  __ dsrl(t3, a2, 32 - kSmiTagSize);
+  __ dsrl(t3, a2, 32 - kPointerSizeLog2);
   __ Daddu(a3, a3, Operand(t3));
   __ daddiu(a3, a3, StandardFrameConstants::kCallerSPOffset);
   __ sd(a3, MemOperand(sp, 1 * kPointerSize));
@@ -2377,7 +2379,7 @@ void ArgumentsAccessStub::GenerateNewNonStrictFast(MacroAssembler* masm) {
   __ ld(a2, MemOperand(a3, ArgumentsAdaptorFrameConstants::kLengthOffset));
   // __ sll(t6, a2, 1);
   // TODO right?
-  __ dsrl(t6, a2, 32 - kSmiTagSize);
+  __ dsrl(t6, a2, 32 - kPointerSizeLog2);
   __ Daddu(a3, a3, Operand(t6));
   __ Daddu(a3, a3, Operand(StandardFrameConstants::kCallerSPOffset));
   __ sd(a3, MemOperand(sp, 1 * kPointerSize));
@@ -2403,14 +2405,14 @@ void ArgumentsAccessStub::GenerateNewNonStrictFast(MacroAssembler* masm) {
   __ mov(t5, zero_reg);  // In delay slot: param map size = 0 when a1 == 0.
   // __ sll(t5, a1, 1);
   // TODO right?
-  __ dsrl(t5, a1, 32 - kSmiTagSize);
+  __ dsrl(t5, a1, 32 - kPointerSizeLog2);
   __ daddiu(t5, t5, kParameterMapHeaderSize);
   __ bind(&param_map_size);
 
   // 2. Backing store.
   // __ sll(t6, a2, 1);
   // TODO right?
-  __ dsrl(t6, a2, 32 - kSmiTagSize);
+  __ dsrl(t6, a2, 32 - kPointerSizeLog2);
   __ Daddu(t5, t5, Operand(t6));
   __ Daddu(t5, t5, Operand(FixedArray::kHeaderSize));
 
@@ -2490,7 +2492,7 @@ void ArgumentsAccessStub::GenerateNewNonStrictFast(MacroAssembler* masm) {
   __ sd(cp, FieldMemOperand(t0, FixedArray::kHeaderSize + 0 * kPointerSize));
   // __ sll(t6, a1, 1);
   // TODO right?
-  __ dsrl(t6, a1, 32 - kSmiTagSize);
+  __ dsrl(t6, a1, 32 - kPointerSizeLog2);
   __ Daddu(t2, t0, Operand(t6));
   __ Daddu(t2, t2, Operand(kParameterMapHeaderSize));
   __ sd(t2, FieldMemOperand(t0, FixedArray::kHeaderSize + 1 * kPointerSize));
@@ -2511,7 +2513,7 @@ void ArgumentsAccessStub::GenerateNewNonStrictFast(MacroAssembler* masm) {
   __ LoadRoot(t3, Heap::kTheHoleValueRootIndex);
   // __ sll(t6, t2, 1);
   // TODO right?
-  __ dsrl(t6, t2, 32 - kSmiTagSize);
+  __ dsrl(t6, t2, 32 - kPointerSizeLog2);
   __ Daddu(a3, t0, Operand(t6));
   __ Daddu(a3, a3, Operand(kParameterMapHeaderSize));
 
@@ -2529,7 +2531,7 @@ void ArgumentsAccessStub::GenerateNewNonStrictFast(MacroAssembler* masm) {
   __ Dsubu(t2, t2, Operand(t1));
   // __ sll(t1, t2, 1);
   // TODO right?
-  __ dsrl(t1, t2, 32 - kSmiTagSize);
+  __ dsrl(t1, t2, 32 - kPointerSizeLog2);
   __ Daddu(t1, t1, Operand(kParameterMapHeaderSize - kHeapObjectTag));
   __ Daddu(t6, t0, t1);
   __ sd(t5, MemOperand(t6));
@@ -2555,7 +2557,7 @@ void ArgumentsAccessStub::GenerateNewNonStrictFast(MacroAssembler* masm) {
   __ mov(t5, a1);
   __ ld(t0, MemOperand(sp, 1 * kPointerSize));
   // __ sll(t6, t5, 1);
-  __ dsrl(t6, t5, 32 - kSmiTagSize);
+  __ dsrl(t6, t5, 32 - kPointerSizeLog2);
   __ Dsubu(t0, t0, Operand(t6));
   __ jmp(&arguments_test);
 
@@ -2563,7 +2565,7 @@ void ArgumentsAccessStub::GenerateNewNonStrictFast(MacroAssembler* masm) {
   __ Dsubu(t0, t0, Operand(kPointerSize));
   __ ld(t2, MemOperand(t0, 0));
   // __ sll(t6, t5, 1);
-  __ dsrl(t6, t5, 32 - kSmiTagSize);
+  __ dsrl(t6, t5, 32 - kPointerSizeLog2);
   __ Daddu(t1, a3, Operand(t6));
   __ sd(t2, FieldMemOperand(t1, FixedArray::kHeaderSize));
   // __ Daddu(t5, t5, Operand(Smi::FromInt(1)));
@@ -2606,7 +2608,7 @@ void ArgumentsAccessStub::GenerateNewStrict(MacroAssembler* masm) {
   __ ld(a1, MemOperand(a2, ArgumentsAdaptorFrameConstants::kLengthOffset));
   __ sd(a1, MemOperand(sp, 0));
   // __ sll(at, a1, kPointerSizeLog2 - kSmiTagSize);
-  __ dsrl(at, a1, 32 - kSmiTagSize);
+  __ dsrl(at, a1, 32 - kPointerSizeLog2);
   __ Daddu(a3, a2, Operand(at));
 
   __ Daddu(a3, a3, Operand(StandardFrameConstants::kCallerSPOffset));
@@ -3687,7 +3689,7 @@ void StringHelper::GenerateCopyCharactersLong(MacroAssembler* masm,
     Label aligned_loop;
     __ bind(&aligned_loop);
     __ lbu(scratch1, MemOperand(src));
-    __ addiu(src, src, 1);
+    __ daddiu(src, src, 1);
     __ sb(scratch1, MemOperand(dest));
     __ daddiu(dest, dest, 1);
     __ daddiu(scratch4, scratch4, 1);
@@ -5175,13 +5177,13 @@ void NameDictionaryLookupStub::GeneratePositiveLookup(MacroAssembler* masm,
     ASSERT(NameDictionary::kEntrySize == 3);
     // scratch2 = scratch2 * 3.
 
-    __ sll(at, scratch2, 1);
-    __ Addu(scratch2, scratch2, at);
+    __ dsll(at, scratch2, 1);
+    __ Daddu(scratch2, scratch2, at);
 
     // Check if the key is identical to the name.
-    __ sll(at, scratch2, 2);
-    __ Addu(scratch2, elements, at);
-    __ lw(at, FieldMemOperand(scratch2, kElementsStartOffset));
+    __ dsll(at, scratch2, kPointerSizeLog2);
+    __ Daddu(scratch2, elements, at);
+    __ ld(at, FieldMemOperand(scratch2, kElementsStartOffset));
     __ Branch(done, eq, name, Operand(at));
   }
 
@@ -5263,14 +5265,14 @@ void NameDictionaryLookupStub::Generate(MacroAssembler* masm) {
     ASSERT(NameDictionary::kEntrySize == 3);
     // index *= 3.
     __ mov(at, index);
-    __ sll(index, index, 1);
-    __ Addu(index, index, at);
+    __ dsll(index, index, 1);
+    __ Daddu(index, index, at);
 
 
     ASSERT_EQ(kSmiTagSize, 1);
     __ break_(0x224);
 	// TODO what 2 mean?
-	__ dsll(index, index, 2);
+	__ dsll(index, index, kPointerSizeLog2);
     __ Daddu(index, index, dictionary);
     __ ld(entry_key, FieldMemOperand(index, kElementsStartOffset));
 

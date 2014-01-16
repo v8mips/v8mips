@@ -1055,13 +1055,17 @@ void Builtins::Generate_FunctionCall(MacroAssembler* masm) {
 
     // Do not transform the receiver for strict mode functions.
     __ ld(a2, FieldMemOperand(a1, JSFunction::kSharedFunctionInfoOffset));
-    __ ld(a3, FieldMemOperand(a2, SharedFunctionInfo::kCompilerHintsOffset));
-    __ And(t3, a3, Operand(1 << (SharedFunctionInfo::kStrictModeFunction +
-                                 kSmiTagSize)));
+    __ lw(a3, FieldMemOperand(a2, SharedFunctionInfo::kCompilerHintsOffset));
+    // __ And(t3, a3, Operand(1 << (SharedFunctionInfo::kStrictModeFunction +
+    //                             kSmiTagSize)));
+	// TODO right?
+	__ And(t3, a3, Operand(1 << SharedFunctionInfo::kStrictModeFunction));
     __ Branch(&shift_arguments, ne, t3, Operand(zero_reg));
 
     // Do not transform the receiver for native (Compilerhints already in a3).
-    __ And(t3, a3, Operand(1 << (SharedFunctionInfo::kNative + kSmiTagSize)));
+    // __ And(t3, a3, Operand(1 << (SharedFunctionInfo::kNative + kSmiTagSize)));
+	// TODO right?
+	__ And(t3, a3, Operand(1 << SharedFunctionInfo::kNative));
     __ Branch(&shift_arguments, ne, t3, Operand(zero_reg));
 
     // Compute the receiver in non-strict mode.
@@ -1096,7 +1100,8 @@ void Builtins::Generate_FunctionCall(MacroAssembler* masm) {
       __ mov(a2, v0);
 
       __ pop(a0);
-      __ dsra(a0, a0, kSmiTagSize);  // Un-tag.
+      // __ dsra(a0, a0, kSmiTagSize);  // Un-tag.
+	  __ dsra32(a0, a0, 0);
       // Leave internal frame.
     }
     // Restore the function to a1, and the flag to t0.
@@ -1199,7 +1204,8 @@ void Builtins::Generate_FunctionCall(MacroAssembler* masm) {
   __ ld(a3, FieldMemOperand(a1, JSFunction::kSharedFunctionInfoOffset));
   __ ld(a2,
          FieldMemOperand(a3, SharedFunctionInfo::kFormalParameterCountOffset));
-  __ dsra(a2, a2, kSmiTagSize);
+  // __ dsra(a2, a2, kSmiTagSize);
+  __ dsra32(a2, a2, 0);
   __ ld(a3, FieldMemOperand(a1, JSFunction::kCodeEntryOffset));
   __ SetCallKind(t1, CALL_AS_METHOD);
   // Check formal and actual parameter counts.
@@ -1239,7 +1245,8 @@ void Builtins::Generate_FunctionApply(MacroAssembler* masm) {
     // here which will cause a2 to become negative.
     __ dsubu(a2, sp, a2);
     // Check if the arguments will overflow the stack.
-    __ dsll(t3, v0, kPointerSizeLog2 - kSmiTagSize);
+    // __ dsll(t3, v0, kPointerSizeLog2 - kSmiTagSize);
+	__ dsrl(t3, v0, 32 - kPointerSizeLog2);
     __ Branch(&okay, gt, a2, Operand(t3));  // Signed comparison.
 
     // Out of stack space.
@@ -1271,13 +1278,16 @@ void Builtins::Generate_FunctionApply(MacroAssembler* masm) {
     // Compute the receiver.
     // Do not transform the receiver for strict mode functions.
     Label call_to_object, use_global_receiver;
-    __ ld(a2, FieldMemOperand(a2, SharedFunctionInfo::kCompilerHintsOffset));
-    __ And(t3, a2, Operand(1 << (SharedFunctionInfo::kStrictModeFunction +
-                                 kSmiTagSize)));
+    __ lw(a2, FieldMemOperand(a2, SharedFunctionInfo::kCompilerHintsOffset));
+    // __ And(t3, a2, Operand(1 << (SharedFunctionInfo::kStrictModeFunction +
+    //                             kSmiTagSize)));
+	// TODO right?
+	__ And(t3, a2, Operand(1 << SharedFunctionInfo::kStrictModeFunction));
     __ Branch(&push_receiver, ne, t3, Operand(zero_reg));
 
     // Do not transform the receiver for native (Compilerhints already in a2).
-    __ And(t3, a2, Operand(1 << (SharedFunctionInfo::kNative + kSmiTagSize)));
+    // __ And(t3, a2, Operand(1 << (SharedFunctionInfo::kNative + kSmiTagSize)));
+	__ And(t3, a2, Operand(1 << SharedFunctionInfo::kNative));
     __ Branch(&push_receiver, ne, t3, Operand(zero_reg));
 
     // Compute the receiver in non-strict mode.
@@ -1333,7 +1343,10 @@ void Builtins::Generate_FunctionApply(MacroAssembler* masm) {
 
     // Use inline caching to access the arguments.
     __ ld(a0, MemOperand(fp, kIndexOffset));
-    __ Daddu(a0, a0, Operand(1 << kSmiTagSize));
+    // __ Daddu(a0, a0, Operand(1 << kSmiTagSize));
+	__ dsrl32(a0, a0, 0);
+	__ Daddu(a0, a0, Operand(1));
+	__ dsll32(a0, a0, 0);
     __ sd(a0, MemOperand(fp, kIndexOffset));
 
     // Test if the copy loop has finished copying all the elements from the

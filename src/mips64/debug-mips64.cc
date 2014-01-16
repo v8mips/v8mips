@@ -141,10 +141,13 @@ static void Generate_DebugBreakCallHelper(MacroAssembler* masm,
         Register reg = { r };
         if ((non_object_regs & (1 << r)) != 0) {
           if (FLAG_debug_code) {
+           // TODO 0x80000000?
             __ And(at, reg, 0xc0000000);
             __ Assert(eq, kUnableToEncodeValueAsSmi, at, Operand(zero_reg));
           }
-          __ sll(reg, reg, kSmiTagSize);
+          // TODO
+          // __ sll(reg, reg, kSmiTagSize);
+          __ dsll32(reg, reg, 0);
         }
       }
       __ MultiPush(object_regs | non_object_regs);
@@ -166,7 +169,8 @@ static void Generate_DebugBreakCallHelper(MacroAssembler* masm,
         int r = JSCallerSavedCode(i);
         Register reg = { r };
         if ((non_object_regs & (1 << r)) != 0) {
-          __ srl(reg, reg, kSmiTagSize);
+          // __ srl(reg, reg, kSmiTagSize);
+          __ dsrl32(reg, reg, 0); 
         }
         if (FLAG_debug_code &&
             (((object_regs |non_object_regs) & (1 << r)) == 0)) {
@@ -183,7 +187,7 @@ static void Generate_DebugBreakCallHelper(MacroAssembler* masm,
   // overwritten by the address of DebugBreakXXX.
   __ li(t9, Operand(
       ExternalReference(Debug_Address::AfterBreakTarget(), masm->isolate())));
-  __ lw(t9, MemOperand(t9));
+  __ ld(t9, MemOperand(t9));
   __ Jump(t9);
 }
 

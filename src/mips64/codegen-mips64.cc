@@ -31,7 +31,7 @@
 
 #include "codegen.h"
 #include "macro-assembler.h"
-#include "simulator-mips64.h"
+#include "simulator-mips.h"
 
 namespace v8 {
 namespace internal {
@@ -147,7 +147,7 @@ OS::MemCopyUint8Function CreateMemCopyUint8Function(
     // using kPrefHintPrepareForStore.
     ASSERT(pref_hint_store != kPrefHintPrepareForStore ||
            pref_chunk * 4 >= max_pref_size);
-
+     __ break_(0x221);
     // If the size is less than 8, go to lastb. Regardless of size,
     // copy dst pointer to v0 for the retuen value.
     __ slti(t2, a2, 2 * loadstore_chunk);
@@ -597,7 +597,7 @@ void ElementsTransitionGenerator::GenerateSmiToDouble(
   Label loop, entry, convert_hole, gc_required, only_change_map, done;
 
   Register scratch = t6;
-
+ __ break_(0x222);
   if (mode == TRACK_ALLOCATION_SITE) {
     __ JumpIfJSArrayHasAllocationMemento(a2, t0, fail);
   }
@@ -725,7 +725,7 @@ void ElementsTransitionGenerator::GenerateDoubleToObject(
   //  -- t0    : scratch (elements)
   // -----------------------------------
   Label entry, loop, convert_hole, gc_required, only_change_map;
-
+__ break_(0x223);
   if (mode == TRACK_ALLOCATION_SITE) {
     __ JumpIfJSArrayHasAllocationMemento(a2, t0, fail);
   }
@@ -840,8 +840,9 @@ void StringCharLoadGenerator::Generate(MacroAssembler* masm,
                                        Register index,
                                        Register result,
                                        Label* call_runtime) {
-  // Fetch the instance type of the receiver into result register.
-  __ lw(result, FieldMemOperand(string, HeapObject::kMapOffset));
+ // __ break_(0x224);
+ // Fetch the instance type of the receiver into result register.
+  __ ld(result, FieldMemOperand(string, HeapObject::kMapOffset));
   __ lbu(result, FieldMemOperand(result, Map::kInstanceTypeOffset));
 
   // We need special handling for indirect strings.
@@ -856,10 +857,11 @@ void StringCharLoadGenerator::Generate(MacroAssembler* masm,
 
   // Handle slices.
   Label indirect_string_loaded;
-  __ lw(result, FieldMemOperand(string, SlicedString::kOffsetOffset));
-  __ lw(string, FieldMemOperand(string, SlicedString::kParentOffset));
-  __ sra(at, result, kSmiTagSize);
-  __ Addu(index, index, at);
+  __ ld(result, FieldMemOperand(string, SlicedString::kOffsetOffset));
+  __ ld(string, FieldMemOperand(string, SlicedString::kParentOffset));
+  // __ sra(at, result, kSmiTagSize);
+  __ dsra32(at, result, 0);
+  __ Daddu(index, index, at);
   __ jmp(&indirect_string_loaded);
 
   // Handle cons strings.
@@ -872,10 +874,10 @@ void StringCharLoadGenerator::Generate(MacroAssembler* masm,
   __ LoadRoot(at, Heap::kempty_stringRootIndex);
   __ Branch(call_runtime, ne, result, Operand(at));
   // Get the first of the two strings and load its instance type.
-  __ lw(string, FieldMemOperand(string, ConsString::kFirstOffset));
+  __ ld(string, FieldMemOperand(string, ConsString::kFirstOffset));
 
   __ bind(&indirect_string_loaded);
-  __ lw(result, FieldMemOperand(string, HeapObject::kMapOffset));
+  __ ld(result, FieldMemOperand(string, HeapObject::kMapOffset));
   __ lbu(result, FieldMemOperand(result, Map::kInstanceTypeOffset));
 
   // Distinguish sequential and external strings. Only these two string
@@ -889,7 +891,7 @@ void StringCharLoadGenerator::Generate(MacroAssembler* masm,
 
   // Prepare sequential strings
   STATIC_ASSERT(SeqTwoByteString::kHeaderSize == SeqOneByteString::kHeaderSize);
-  __ Addu(string,
+  __ Daddu(string,
           string,
           SeqTwoByteString::kHeaderSize - kHeapObjectTag);
   __ jmp(&check_encoding);
@@ -907,7 +909,7 @@ void StringCharLoadGenerator::Generate(MacroAssembler* masm,
   STATIC_CHECK(kShortExternalStringTag != 0);
   __ And(at, result, Operand(kShortExternalStringMask));
   __ Branch(call_runtime, ne, at, Operand(zero_reg));
-  __ lw(string, FieldMemOperand(string, ExternalString::kResourceDataOffset));
+  __ ld(string, FieldMemOperand(string, ExternalString::kResourceDataOffset));
 
   Label ascii, done;
   __ bind(&check_encoding);
@@ -915,13 +917,13 @@ void StringCharLoadGenerator::Generate(MacroAssembler* masm,
   __ And(at, result, Operand(kStringEncodingMask));
   __ Branch(&ascii, ne, at, Operand(zero_reg));
   // Two-byte string.
-  __ sll(at, index, 1);
-  __ Addu(at, string, at);
+  __ dsll(at, index, 1);
+  __ Daddu(at, string, at);
   __ lhu(result, MemOperand(at));
   __ jmp(&done);
   __ bind(&ascii);
   // Ascii string.
-  __ Addu(at, string, index);
+  __ Daddu(at, string, index);
   __ lbu(result, MemOperand(at));
   __ bind(&done);
 }
@@ -952,7 +954,7 @@ void MathExpGenerator::EmitMathExp(MacroAssembler* masm,
   ASSERT(ExternalReference::math_exp_constants(0).address() != NULL);
 
   Label zero, infinity, done;
-
+ __ break_(0x225);
   __ li(temp3, Operand(ExternalReference::math_exp_constants(0)));
 
   __ ldc1(double_scratch1, ExpConstant(0, temp3));
