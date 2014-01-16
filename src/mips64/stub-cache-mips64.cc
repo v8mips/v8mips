@@ -2364,7 +2364,7 @@ Register CallStubCompiler::HandlerFrontendHeader(Handle<Object> object,
   // Get the receiver from the stack.
   const int argc = arguments().immediate();
   const int receiver_offset = argc * kPointerSize;
-  __ lw(a0, MemOperand(sp, receiver_offset));
+  __ ld(a0, MemOperand(sp, receiver_offset));
 
   // Check that the receiver isn't a smi.
   if (check != NUMBER_CHECK) {
