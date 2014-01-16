@@ -459,11 +459,13 @@ bool LCodeGen::IsSmi(LConstantOperand* op) const {
 
 
 int32_t LCodeGen::ToInteger32(LConstantOperand* op) const {
-  return ToRepresentation(op, Representation::Integer32());
+  // return ToRepresentation(op, Representation::Integer32());
+  HConstant* constant = chunk_->LookupConstant(op);
+  return constant->Integer32Value();
 }
 
 
-int32_t LCodeGen::ToRepresentation(LConstantOperand* op,
+int32_t LCodeGen::ToRepresentation_donotuse(LConstantOperand* op,
                                    const Representation& r) const {
   HConstant* constant = chunk_->LookupConstant(op);
   int32_t value = constant->Integer32Value();
@@ -537,12 +539,15 @@ MemOperand LCodeGen::ToMemOperand(LOperand* op) const {
 MemOperand LCodeGen::ToHighMemOperand(LOperand* op) const {
   ASSERT(op->IsDoubleStackSlot());
   if (NeedsEagerFrame()) {
-    return MemOperand(fp, StackSlotOffset(op->index()) + kPointerSize);
+    // return MemOperand(fp, StackSlotOffset(op->index()) + kPointerSize);
+    return MemOperand(fp, StackSlotOffset(op->index()) + kIntSize);
   } else {
     // Retrieve parameter without eager stack-frame relative to the
     // stack-pointer.
+    // return MemOperand(
+    //    sp, ArgumentsOffsetWithoutFrame(op->index()) + kPointerSize);
     return MemOperand(
-        sp, ArgumentsOffsetWithoutFrame(op->index()) + kPointerSize);
+        sp, ArgumentsOffsetWithoutFrame(op->index()) + kIntSize);
   }
 }
 

@@ -170,7 +170,7 @@ void LGapResolver::BreakCycle(int index) {
   if (source->IsRegister()) {
     __ mov(kLithiumScratchReg, cgen_->ToRegister(source));
   } else if (source->IsStackSlot()) {
-    __ lw(kLithiumScratchReg, cgen_->ToMemOperand(source));
+    __ ld(kLithiumScratchReg, cgen_->ToMemOperand(source));
   } else if (source->IsDoubleRegister()) {
     __ mov_d(kLithiumScratchDouble, cgen_->ToDoubleRegister(source));
   } else if (source->IsDoubleStackSlot()) {
@@ -191,7 +191,7 @@ void LGapResolver::RestoreValue() {
   if (saved_destination_->IsRegister()) {
     __ mov(cgen_->ToRegister(saved_destination_), kLithiumScratchReg);
   } else if (saved_destination_->IsStackSlot()) {
-    __ sw(kLithiumScratchReg, cgen_->ToMemOperand(saved_destination_));
+    __ sd(kLithiumScratchReg, cgen_->ToMemOperand(saved_destination_));
   } else if (saved_destination_->IsDoubleRegister()) {
     __ mov_d(cgen_->ToDoubleRegister(saved_destination_),
             kLithiumScratchDouble);
@@ -220,12 +220,12 @@ void LGapResolver::EmitMove(int index) {
       __ mov(cgen_->ToRegister(destination), source_register);
     } else {
       ASSERT(destination->IsStackSlot());
-      __ sw(source_register, cgen_->ToMemOperand(destination));
+      __ sd(source_register, cgen_->ToMemOperand(destination));
     }
   } else if (source->IsStackSlot()) {
     MemOperand source_operand = cgen_->ToMemOperand(source);
     if (destination->IsRegister()) {
-      __ lw(cgen_->ToRegister(destination), source_operand);
+      __ ld(cgen_->ToRegister(destination), source_operand);
     } else {
       ASSERT(destination->IsStackSlot());
       MemOperand destination_operand = cgen_->ToMemOperand(destination);
@@ -235,15 +235,15 @@ void LGapResolver::EmitMove(int index) {
           // Therefore we can't use 'at'.  It is OK if the read from the source
           // destroys 'at', since that happens before the value is read.
           // This uses only a single reg of the double reg-pair.
-          __ lwc1(kLithiumScratchDouble, source_operand);
-          __ swc1(kLithiumScratchDouble, destination_operand);
+          __ ldc1(kLithiumScratchDouble, source_operand);
+          __ sdc1(kLithiumScratchDouble, destination_operand);
         } else {
-          __ lw(at, source_operand);
-          __ sw(at, destination_operand);
+          __ ld(at, source_operand);
+          __ sd(at, destination_operand);
         }
       } else {
-        __ lw(kLithiumScratchReg, source_operand);
-        __ sw(kLithiumScratchReg, destination_operand);
+        __ ld(kLithiumScratchReg, source_operand);
+        __ sd(kLithiumScratchReg, destination_operand);
       }
     }
 
@@ -251,10 +251,17 @@ void LGapResolver::EmitMove(int index) {
     LConstantOperand* constant_source = LConstantOperand::cast(source);
     if (destination->IsRegister()) {
       Register dst = cgen_->ToRegister(destination);
-      Representation r = cgen_->IsSmi(constant_source)
+      /* Representation r = cgen_->IsSmi(constant_source)
           ? Representation::Smi() : Representation::Integer32();
       if (cgen_->IsInteger32(constant_source)) {
         __ li(dst, Operand(cgen_->ToRepresentation(constant_source, r)));
+      } else {
+        __ li(dst, cgen_->ToHandle(constant_source));
+      }*/
+      if (cgen_->IsSmi(constant_source)) {
+         __ li(dst, Operand(cgen_->ToSmi(constant_source)));  
+      } else if(cgen_->IsInteger32(constant_source)) { // OK SMI is handled.
+         __ li(dst, Operand(cgen_->ToInteger32(constant_source)));
       } else {
         __ li(dst, cgen_->ToHandle(constant_source));
       }
@@ -265,15 +272,24 @@ void LGapResolver::EmitMove(int index) {
     } else {
       ASSERT(destination->IsStackSlot());
       ASSERT(!in_cycle_);  // Constant moves happen after all cycles are gone.
-      Representation r = cgen_->IsSmi(constant_source)
+     /* Representation r = cgen_->IsSmi(constant_source)
           ? Representation::Smi() : Representation::Integer32();
       if (cgen_->IsInteger32(constant_source)) {
         __ li(kLithiumScratchReg,
               Operand(cgen_->ToRepresentation(constant_source, r)));
       } else {
         __ li(kLithiumScratchReg, cgen_->ToHandle(constant_source));
+      }*/
+      if (cgen_->IsSmi(constant_source)) {
+         __ li(kLithiumScratchReg, Operand(cgen_->ToSmi(constant_source)));
+         __ sd(kLithiumScratchReg, cgen_->ToMemOperand(destination));
+      } else if(cgen_->IsInteger32(constant_source)) { // OK SMI is handled.
+        __ li(kLithiumScratchReg, Operand(cgen_->ToInteger32(constant_source)));
+        __ sw(kLithiumScratchReg, cgen_->ToMemOperand(destination));
+      } else {
+        __ li(kLithiumScratchReg, cgen_->ToHandle(constant_source));
+        __ sd(kLithiumScratchReg, cgen_->ToMemOperand(destination));
       }
-      __ sw(kLithiumScratchReg, cgen_->ToMemOperand(destination));
     }
 
   } else if (source->IsDoubleRegister()) {
