@@ -2176,8 +2176,8 @@ void Assembler::GrowBuffer() {
   desc.reloc_size = (buffer_ + buffer_size_) - reloc_info_writer.pos();
 
   // Copy the data.
-  int pc_delta = desc.buffer - buffer_;
-  int rc_delta = (desc.buffer + desc.buffer_size) - (buffer_ + buffer_size_);
+  intptr_t pc_delta = desc.buffer - buffer_;
+  intptr_t rc_delta = (desc.buffer + desc.buffer_size) - (buffer_ + buffer_size_);
   OS::MemMove(desc.buffer, buffer_, desc.instr_size);
   OS::MemMove(reloc_info_writer.pos() + rc_delta,
               reloc_info_writer.pos(), desc.reloc_size);
