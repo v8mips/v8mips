@@ -2072,7 +2072,6 @@ bool Isolate::Init(Deserializer* des) {
 
   state_ = INITIALIZED;
   time_millis_at_init_ = OS::TimeCurrentMillis();
-  printf("isolate : 1 \n");
   if (!create_heap_objects) {
     // Now that the heap is consistent, it's OK to generate the code for the
     // deopt entry table that might have been referred to by optimized code in
@@ -2083,17 +2082,15 @@ bool Isolate::Init(Deserializer* des) {
         Deoptimizer::LAZY,
         kDeoptTableSerializeEntryCount - 1);
   }
- printf("isolate : 2 \n");
 
   if (!Serializer::enabled()) {
     // Ensure that all stubs which need to be generated ahead of time, but
     // cannot be serialized into the snapshot have been generated.
     HandleScope scope(this);
-    CodeStub::GenerateFPStubs(this); printf("isolate : 3 \n");
+    CodeStub::GenerateFPStubs(this);
 
     StoreBufferOverflowStub::GenerateFixedRegStubsAheadOfTime(this);
     StubFailureTrampolineStub::GenerateAheadOfTime(this);
-	 printf("isolate : 4 \n");
 
     StubFailureTailCallTrampolineStub::GenerateAheadOfTime(this);
     // TODO(mstarzinger): The following is an ugly hack to make sure the
@@ -2104,14 +2101,12 @@ bool Isolate::Init(Deserializer* des) {
     stub.InitializeInterfaceDescriptor(
         this, code_stub_interface_descriptor(CodeStub::FastCloneShallowArray));
     BinaryOpICStub::InstallDescriptors(this);
-	 printf("isolate : 5 \n");
 
     CompareNilICStub::InitializeForIsolate(this);
     ToBooleanStub::InitializeForIsolate(this);
     ArrayConstructorStubBase::InstallDescriptors(this);
     InternalArrayConstructorStubBase::InstallDescriptors(this);
     FastNewClosureStub::InstallDescriptors(this);
-	 printf("isolate : 6 \n");
 
     NumberToStringStub::InstallDescriptors(this);
     NewStringAddStub::InstallDescriptors(this);
