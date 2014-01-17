@@ -2022,12 +2022,12 @@ void FullCodeGenerator::VisitYield(Yield* expr) {
       VisitForAccumulatorValue(expr->generator_object());
       ASSERT(continuation.pos() > 0 && Smi::IsValid(continuation.pos()));
       __ li(a1, Operand(Smi::FromInt(continuation.pos())));
-      __ sw(a1, FieldMemOperand(v0, JSGeneratorObject::kContinuationOffset));
-      __ sw(cp, FieldMemOperand(v0, JSGeneratorObject::kContextOffset));
+      __ sd(a1, FieldMemOperand(v0, JSGeneratorObject::kContinuationOffset));
+      __ sd(cp, FieldMemOperand(v0, JSGeneratorObject::kContextOffset));
       __ mov(a1, cp);
       __ RecordWriteField(v0, JSGeneratorObject::kContextOffset, a1, a2,
                           kRAHasBeenSaved, kDontSaveFPRegs);
-      __ Addu(a1, fp, Operand(StandardFrameConstants::kExpressionsOffset));
+      __ Daddu(a1, fp, Operand(StandardFrameConstants::kExpressionsOffset));
       __ Branch(&post_runtime, eq, sp, Operand(a1));
       __ push(v0);  // generator object
       __ CallRuntime(Runtime::kSuspendJSGeneratorObject, 1);
@@ -2044,7 +2044,7 @@ void FullCodeGenerator::VisitYield(Yield* expr) {
     case Yield::FINAL: {
       VisitForAccumulatorValue(expr->generator_object());
       __ li(a1, Operand(Smi::FromInt(JSGeneratorObject::kGeneratorClosed)));
-      __ sw(a1, FieldMemOperand(result_register(),
+      __ sd(a1, FieldMemOperand(result_register(),
                                 JSGeneratorObject::kContinuationOffset));
       // Pop value from top-of-stack slot, box result into result register.
       EmitCreateIteratorResult(true);
@@ -2093,8 +2093,8 @@ void FullCodeGenerator::VisitYield(Yield* expr) {
       __ push(a0);                                       // g
       ASSERT(l_continuation.pos() > 0 && Smi::IsValid(l_continuation.pos()));
       __ li(a1, Operand(Smi::FromInt(l_continuation.pos())));
-      __ sw(a1, FieldMemOperand(a0, JSGeneratorObject::kContinuationOffset));
-      __ sw(cp, FieldMemOperand(a0, JSGeneratorObject::kContextOffset));
+      __ sd(a1, FieldMemOperand(a0, JSGeneratorObject::kContinuationOffset));
+      __ sd(cp, FieldMemOperand(a0, JSGeneratorObject::kContextOffset));
       __ mov(a1, cp);
       __ RecordWriteField(a0, JSGeneratorObject::kContextOffset, a1, a2,
                           kRAHasBeenSaved, kDontSaveFPRegs);
@@ -3081,7 +3081,8 @@ void FullCodeGenerator::EmitIsStringWrapperSafeForDefaultValueOf(
   __ Addu(t0, t0, Operand(DescriptorArray::kFirstOffset - kHeapObjectTag));
   // Calculate the end of the descriptor array.
   __ mov(a2, t0);
-  __ dsll(t1, a3, kPointerSizeLog2 - kSmiTagSize);
+  // __ dsll(t1, a3, kPointerSizeLog2 - kSmiTagSize);
+  __ dsrl(t1, a2, 32 - kPointerSizeLog2);
   __ Daddu(a2, a2, t1);
 
   // Loop through all the keys in the descriptor array. If one of these is the

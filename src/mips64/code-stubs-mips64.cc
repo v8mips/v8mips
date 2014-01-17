@@ -4313,7 +4313,7 @@ void StringCompareStub::Generate(MacroAssembler* masm) {
 
   // Compare flat ASCII strings natively. Remove arguments from stack first.
   __ IncrementCounter(counters->string_compare_native(), 1, a2, a3);
-  __ Addu(sp, sp, Operand(2 * kPointerSize));
+  __ Daddu(sp, sp, Operand(2 * kPointerSize));
   GenerateCompareFlatAsciiStrings(masm, a1, a0, a2, a3, t0, t1);
 
   __ bind(&runtime);
