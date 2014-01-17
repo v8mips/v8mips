@@ -1462,7 +1462,7 @@ void FullCodeGenerator::EmitDynamicLookupFastCase(Variable* var,
         local->mode() == CONST ||
         local->mode() == CONST_HARMONY) {
       __ LoadRoot(at, Heap::kTheHoleValueRootIndex);
-      __ subu(at, v0, at);  // Sub as compare: at == 0 on eq.
+      __ dsubu(at, v0, at);  // Sub as compare: at == 0 on eq.
       if (local->mode() == CONST) {
         __ LoadRoot(a0, Heap::kUndefinedValueRootIndex);
         __ Movz(v0, a0, at);  // Conditional move: return Undefined if TheHole.
@@ -2341,9 +2341,8 @@ void FullCodeGenerator::EmitInlineSmiBinaryOp(BinaryOperation* expr,
       __ SmiUntag(scratch1, left);
       __ GetLeastBitsFromSmi(scratch2, right, 5);
       __ dsllv(scratch1, scratch1, scratch2);
-	  // TODO 0X80000000?
-      __ Daddu(scratch2, scratch1, Operand(0x40000000));
-      __ Branch(&stub_call, lt, scratch2, Operand(zero_reg));
+      // __ Daddu(scratch2, scratch1, Operand(0x40000000));
+      // __ Branch(&stub_call, lt, scratch2, Operand(zero_reg));
       __ SmiTag(v0, scratch1);
       break;
     }
@@ -2352,8 +2351,8 @@ void FullCodeGenerator::EmitInlineSmiBinaryOp(BinaryOperation* expr,
       __ SmiUntag(scratch1, left);
       __ GetLeastBitsFromSmi(scratch2, right, 5);
       __ dsrlv(scratch1, scratch1, scratch2);
-      __ And(scratch2, scratch1, 0xc0000000);
-      __ Branch(&stub_call, ne, scratch2, Operand(zero_reg));
+      // __ And(scratch2, scratch1, 0xc0000000);
+      // __ Branch(&stub_call, ne, scratch2, Operand(zero_reg));
       __ SmiTag(v0, scratch1);
       break;
     }
@@ -2370,7 +2369,7 @@ void FullCodeGenerator::EmitInlineSmiBinaryOp(BinaryOperation* expr,
       __ Dmult(left, scratch1);
       __ mflo(scratch1);
       __ mfhi(scratch2);
-      __ dsra(scratch1, scratch1, 31);
+      __ dsra32(scratch1, scratch1, 31);
       __ Branch(&stub_call, ne, scratch1, Operand(scratch2));
       __ mflo(v0);
       __ Branch(&done, ne, v0, Operand(zero_reg));
@@ -3078,7 +3077,7 @@ void FullCodeGenerator::EmitIsStringWrapperSafeForDefaultValueOf(
   __ li(at, Operand(DescriptorArray::kDescriptorSize));
   __ Dmul(a3, a3, at);
   // Calculate location of the first key name.
-  __ Addu(t0, t0, Operand(DescriptorArray::kFirstOffset - kHeapObjectTag));
+  __ Daddu(t0, t0, Operand(DescriptorArray::kFirstOffset - kHeapObjectTag));
   // Calculate the end of the descriptor array.
   __ mov(a2, t0);
   // __ dsll(t1, a3, kPointerSizeLog2 - kSmiTagSize);
@@ -4117,10 +4116,10 @@ void FullCodeGenerator::EmitFastAsciiArrayJoin(CallRuntime* expr) {
 
   // Copy next array element to the result.
   __ ld(string, MemOperand(element));
-  __ Addu(element, element, kPointerSize);
+  __ Daddu(element, element, kPointerSize);
   __ ld(string_length, FieldMemOperand(string, String::kLengthOffset));
   __ SmiUntag(string_length);
-  __ Addu(string, string, SeqOneByteString::kHeaderSize - kHeapObjectTag);
+  __ Daddu(string, string, SeqOneByteString::kHeaderSize - kHeapObjectTag);
   __ CopyBytes(string, result_pos, string_length, scratch1);
   // End while (element < elements_end).
   __ Branch(&empty_separator_loop, lt, element, Operand(elements_end));
@@ -4149,7 +4148,7 @@ void FullCodeGenerator::EmitFastAsciiArrayJoin(CallRuntime* expr) {
   // Copy next array element to the result.
   __ bind(&one_char_separator_loop_entry);
   __ ld(string, MemOperand(element));
-  __ Addu(element, element, kPointerSize);
+  __ Daddu(element, element, kPointerSize);
   __ ld(string_length, FieldMemOperand(string, String::kLengthOffset));
   __ SmiUntag(string_length);
   __ Daddu(string, string, SeqOneByteString::kHeaderSize - kHeapObjectTag);
