@@ -144,9 +144,12 @@ static void GenerateDictionaryLoad(MacroAssembler* masm,
       NameDictionary::kElementsStartIndex * kPointerSize;
   const int kDetailsOffset = kElementsStartOffset + 2 * kPointerSize;
   __ ld(scratch1, FieldMemOperand(scratch2, kDetailsOffset));
+  // __ And(at,
+  //       scratch1,
+  //       Operand(PropertyDetails::TypeField::kMask << kSmiTagSize));
   __ And(at,
          scratch1,
-         Operand(PropertyDetails::TypeField::kMask << kSmiTagSize));
+         Operand(Smi::FromInt(PropertyDetails::TypeField::kMask << kSmiTagSize)));
   __ Branch(miss, ne, at, Operand(zero_reg));
 
   // Get the value at the masked, scaled index and return.
@@ -200,7 +203,8 @@ static void GenerateDictionaryStore(MacroAssembler* masm,
       (PropertyDetails::TypeField::kMask |
        PropertyDetails::AttributesField::encode(READ_ONLY)) << kSmiTagSize;
   __ ld(scratch1, FieldMemOperand(scratch2, kDetailsOffset));
-  __ And(at, scratch1, Operand(kTypeAndReadOnlyMask));
+  // __ And(at, scratch1, Operand(kTypeAndReadOnlyMask));
+  __ And(at, scratch1, Operand(Smi::FromInt(kTypeAndReadOnlyMask)));
   __ Branch(miss, ne, at, Operand(zero_reg));
 
   // Store the value at the masked, scaled index and return.
@@ -293,7 +297,8 @@ static void GenerateFastArrayLoad(MacroAssembler* masm,
           Operand(FixedArray::kHeaderSize - kHeapObjectTag));
   // The key is a smi.
   STATIC_ASSERT(kSmiTag == 0 && kSmiTagSize < kPointerSizeLog2);
-  __ dsll(at, key, kPointerSizeLog2 - kSmiTagSize);
+  // __ dsll(at, key, kPointerSizeLog2 - kSmiTagSize);
+  __ dsrl(at, key, 32 - kPointerSizeLog2);
   __ daddu(at, at, scratch1);
   __ ld(scratch2, MemOperand(at));
 
@@ -735,7 +740,8 @@ static MemOperand GenerateMappedArgumentsLookup(MacroAssembler* masm,
   __ Branch(slow_case, lt, scratch2, Operand(FIRST_JS_RECEIVER_TYPE));
 
   // Check that the key is a positive smi.
-  __ And(scratch1, key, Operand(0x80000001));
+  // __ And(scratch1, key, Operand(0x80000001));
+  __ NonNegativeSmiTst(key, scratch1);
   __ Branch(slow_case, ne, scratch1, Operand(zero_reg));
 
   // Load the elements into scratch1 and check its map.
@@ -966,7 +972,8 @@ void KeyedLoadIC::GenerateGeneric(MacroAssembler* masm) {
   // t0: elements
   __ LoadRoot(at, Heap::kHashTableMapRootIndex);
   __ Branch(&slow, ne, a3, Operand(at));
-  __ dsra(a2, a0, kSmiTagSize);
+  // __ dsra(a2, a0, kSmiTagSize);
+  __ dsra32(a2, a0, 0);
   __ LoadFromNumberDictionary(&slow, t0, a0, v0, a2, a3, t1);
   __ Ret();
 
