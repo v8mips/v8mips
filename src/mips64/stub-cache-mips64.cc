@@ -2743,7 +2743,7 @@ Handle<Code> LoadStubCompiler::CompileLoadGlobal(
 
   // Get the value from the cell.
   __ li(a3, Operand(cell));
-  __ lw(t0, FieldMemOperand(a3, Cell::kValueOffset));
+  __ ld(t0, FieldMemOperand(a3, Cell::kValueOffset));
 
   // Check for deleted property if property can actually be deleted.
   if (!is_dont_delete) {
