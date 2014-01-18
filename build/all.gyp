@@ -10,7 +10,7 @@
       'dependencies': [
         '../samples/samples.gyp:*',
         '../src/d8.gyp:d8',
-#        '../test/cctest/cctest.gyp:*',
+        '../test/cctest/cctest.gyp:*',
       ],
       'conditions': [
         ['component!="shared_library"', {
