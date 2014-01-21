@@ -730,32 +730,34 @@ void ElementsTransitionGenerator::GenerateDoubleToObject(
 
   // Check for empty arrays, which only require a map transition and no changes
   // to the backing store.
-  __ lw(t0, FieldMemOperand(a2, JSObject::kElementsOffset));
+  __ ld(t0, FieldMemOperand(a2, JSObject::kElementsOffset));
   __ LoadRoot(at, Heap::kEmptyFixedArrayRootIndex);
   __ Branch(&only_change_map, eq, at, Operand(t0));
 
   __ MultiPush(a0.bit() | a1.bit() | a2.bit() | a3.bit() | ra.bit());
 
-  __ lw(t1, FieldMemOperand(t0, FixedArray::kLengthOffset));
+  __ ld(t1, FieldMemOperand(t0, FixedArray::kLengthOffset));
   // t0: source FixedArray
   // t1: number of elements (smi-tagged)
 
   // Allocate new FixedArray.
-  __ sll(a0, t1, 1);
-  __ Addu(a0, a0, FixedDoubleArray::kHeaderSize);
+  // __ sll(a0, t1, 1);
+  __ dsrl(a0, t1, 32 - kPointerSizeLog2);
+  __ Daddu(a0, a0, FixedDoubleArray::kHeaderSize);
   __ Allocate(a0, t2, t3, t5, &gc_required, NO_ALLOCATION_FLAGS);
   // t2: destination FixedArray, not tagged as heap object
   // Set destination FixedDoubleArray's length and map.
   __ LoadRoot(t5, Heap::kFixedArrayMapRootIndex);
-  __ sw(t1, MemOperand(t2, FixedDoubleArray::kLengthOffset));
-  __ sw(t5, MemOperand(t2, HeapObject::kMapOffset));
+  __ sd(t1, MemOperand(t2, FixedDoubleArray::kLengthOffset));
+  __ sd(t5, MemOperand(t2, HeapObject::kMapOffset));
 
   // Prepare for conversion loop.
-  __ Addu(t0, t0, Operand(FixedDoubleArray::kHeaderSize - kHeapObjectTag + 4));
-  __ Addu(a3, t2, Operand(FixedArray::kHeaderSize));
-  __ Addu(t2, t2, Operand(kHeapObjectTag));
-  __ sll(t1, t1, 1);
-  __ Addu(t1, a3, t1);
+  __ Daddu(t0, t0, Operand(FixedDoubleArray::kHeaderSize - kHeapObjectTag + 4));
+  __ Daddu(a3, t2, Operand(FixedArray::kHeaderSize));
+  __ Daddu(t2, t2, Operand(kHeapObjectTag));
+  // __ sll(t1, t1, 1);
+  __ dsrl(t1, t1, 32 - kPointerSizeLog2);
+  __ Daddu(t1, a3, t1);
   __ LoadRoot(t3, Heap::kTheHoleValueRootIndex);
   __ LoadRoot(t5, Heap::kHeapNumberMapRootIndex);
   // Using offsetted addresses.
@@ -775,7 +777,7 @@ void ElementsTransitionGenerator::GenerateDoubleToObject(
 
   __ bind(&loop);
   __ lw(a1, MemOperand(t0));
-  __ Addu(t0, t0, kDoubleSize);
+  __ Daddu(t0, t0, kDoubleSize);
   // a1: current element's upper 32 bit
   // t0: address of next element's upper 32 bit
   __ Branch(&convert_hole, eq, a1, Operand(kHoleNanUpper32));
@@ -787,8 +789,9 @@ void ElementsTransitionGenerator::GenerateDoubleToObject(
   __ sw(a0, FieldMemOperand(a2, HeapNumber::kMantissaOffset));
   __ sw(a1, FieldMemOperand(a2, HeapNumber::kExponentOffset));
   __ mov(a0, a3);
-  __ sw(a2, MemOperand(a3));
-  __ Addu(a3, a3, kIntSize);
+  __ sd(a2, MemOperand(a3));
+  // __ Addu(a3, a3, kIntSize);
+  __ Daddu(a3, a3, kPointerSize);
   __ RecordWrite(t2,
                  a0,
                  a2,
@@ -800,15 +803,16 @@ void ElementsTransitionGenerator::GenerateDoubleToObject(
 
   // Replace the-hole NaN with the-hole pointer.
   __ bind(&convert_hole);
-  __ sw(t3, MemOperand(a3));
-  __ Addu(a3, a3, kIntSize);
+  __ sd(t3, MemOperand(a3));
+  // __ Addu(a3, a3, kIntSize);
+  __ Daddu(a3, a3, kPointerSize);
 
   __ bind(&entry);
   __ Branch(&loop, lt, a3, Operand(t1));
 
   __ MultiPop(a2.bit() | a3.bit() | a0.bit() | a1.bit());
   // Replace receiver's backing store with newly created and filled FixedArray.
-  __ sw(t2, FieldMemOperand(a2, JSObject::kElementsOffset));
+  __ sd(t2, FieldMemOperand(a2, JSObject::kElementsOffset));
   __ RecordWriteField(a2,
                       JSObject::kElementsOffset,
                       t2,
@@ -821,7 +825,7 @@ void ElementsTransitionGenerator::GenerateDoubleToObject(
 
   __ bind(&only_change_map);
   // Update receiver's map.
-  __ sw(a3, FieldMemOperand(a2, HeapObject::kMapOffset));
+  __ sd(a3, FieldMemOperand(a2, HeapObject::kMapOffset));
   __ RecordWriteField(a2,
                       HeapObject::kMapOffset,
                       a3,
@@ -868,7 +872,7 @@ void StringCharLoadGenerator::Generate(MacroAssembler* masm,
   // the case we would rather go to the runtime system now to flatten
   // the string.
   __ bind(&cons_string);
-  __ lw(result, FieldMemOperand(string, ConsString::kSecondOffset));
+  __ ld(result, FieldMemOperand(string, ConsString::kSecondOffset));
   __ LoadRoot(at, Heap::kempty_stringRootIndex);
   __ Branch(call_runtime, ne, result, Operand(at));
   // Get the first of the two strings and load its instance type.
@@ -981,23 +985,23 @@ void MathExpGenerator::EmitMathExp(MacroAssembler* masm,
          (ExternalReference::math_exp_constants(8).address()) == 1);
   __ Move(double_scratch2, 1);
   __ add_d(result, result, double_scratch2);
-  __ srl(temp1, temp2, 11);
+  __ dsrl(temp1, temp2, 11);
   __ Ext(temp2, temp2, 0, 11);
-  __ Addu(temp1, temp1, Operand(0x3ff));
+  __ Daddu(temp1, temp1, Operand(0x3ff));
 
   // Must not call ExpConstant() after overwriting temp3!
   __ li(temp3, Operand(ExternalReference::math_exp_log_table()));
-  __ sll(at, temp2, 3);
-  __ Addu(temp3, temp3, Operand(at));
-  __ lw(temp2, MemOperand(temp3, 0));
-  __ lw(temp3, MemOperand(temp3, kPointerSize));
+  __ dsll(at, temp2, 3);
+  __ Daddu(temp3, temp3, Operand(at));
+  __ ld(temp2, MemOperand(temp3, 0));
+  __ ld(temp3, MemOperand(temp3, kPointerSize));
   // The first word is loaded is the lower number register.
   if (temp2.code() < temp3.code()) {
-    __ sll(at, temp1, 20);
+    __ dsll(at, temp1, 20);
     __ Or(temp1, temp3, at);
     __ Move(double_scratch1, temp2, temp1);
   } else {
-    __ sll(at, temp1, 20);
+    __ dsll(at, temp1, 20);
     __ Or(temp1, temp2, at);
     __ Move(double_scratch1, temp3, temp1);
   }

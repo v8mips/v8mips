@@ -2811,8 +2811,6 @@ void MacroAssembler::JumpToHandlerEntry() {
   // ld(a3, FieldMemOperand(a1, Code::kHandlerTableOffset));  // Handler table.
   lw(a3, FieldMemOperand(a1, Code::kHandlerTableOffset));
   lw(t9, FieldMemOperand(a1, Code::kHandlerTableOffset + 4));
-  dsll32(a3, a3, 0);
-  dsrl32(a3, a3, 0);
   dsll32(t9, t9, 0);
   Daddu(a3, a3, t9);
   Daddu(a3, a3, Operand(FixedArray::kHeaderSize - kHeapObjectTag));
@@ -4896,6 +4894,7 @@ void MacroAssembler::SmiTagCheckOverflow(Register dst,
 void MacroAssembler::UntagAndJumpIfSmi(Register dst,
                                        Register src,
                                        Label* smi_case) {
+  ASSERT(!dst.is(src));
   JumpIfSmi(src, smi_case, at, USE_DELAY_SLOT);
   SmiUntag(dst, src);
 }
@@ -4904,6 +4903,7 @@ void MacroAssembler::UntagAndJumpIfSmi(Register dst,
 void MacroAssembler::UntagAndJumpIfNotSmi(Register dst,
                                           Register src,
                                           Label* non_smi_case) {
+  ASSERT(!dst.is(src));
   JumpIfNotSmi(src, non_smi_case, at, USE_DELAY_SLOT);
   SmiUntag(dst, src);
 }
