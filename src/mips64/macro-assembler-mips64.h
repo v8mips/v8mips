@@ -1547,7 +1547,7 @@ class MacroAssembler: public Assembler {
     static const int shift = Field::kShift + kSmiShift;
     static const int mask = Field::kMask >> Field::kShift;
 	// TODO
-	break_(0x225);
+	// break_(0x225);
     // dsrl(reg, reg, shift);
     // And(reg, reg, Operand(mask));
 	dsrl32(reg, reg, shift - 32);

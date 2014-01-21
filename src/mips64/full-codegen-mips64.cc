@@ -2330,7 +2330,7 @@ void FullCodeGenerator::EmitInlineSmiBinaryOp(BinaryOperation* expr,
   // recording binary operation stub, see
   switch (op) {
     case Token::SAR:
-	  __ break_(0x221);
+	  // __ break_(0x221);
       __ Branch(&stub_call);
       __ GetLeastBitsFromSmi(scratch1, right, 5);
       __ dsrav(right, left, scratch1);

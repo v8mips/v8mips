@@ -533,7 +533,6 @@ void ConvertToDoubleStub::Generate(MacroAssembler* masm) {
   // __ sra(source_, source_, kSmiTagSize);
   ASSERT(kSmiShiftSize + kSmiTagSize == 32);
   __ dsra32(source_, source_, 0);
-  __ break_(0x220);
   // Move sign bit from source to destination.  This works because the sign bit
   // in the exponent word of the double has the same position and polarity as
   // the 2's complement sign bit in a Smi.
@@ -601,7 +600,6 @@ void DoubleToIStub::Generate(MacroAssembler* masm) {
   DoubleRegister double_scratch = kLithiumScratchDouble;
 
   __ Push(scratch, scratch2, scratch3);
-  __ break_(0x221);
   if (!skip_fastpath()) {
     // Load double input.
     __ ldc1(double_scratch, MemOperand(input_reg, double_offset));
@@ -732,7 +730,6 @@ void WriteInt32ToHeapNumberStub::Generate(MacroAssembler* masm) {
   // the_int_ has the answer which is a signed int32 but not a Smi.
   // We test for the special value that has a different exponent.
   STATIC_ASSERT(HeapNumber::kSignMask == 0x80000000u);
-  __ break_(0x222);
   // Test sign, and save for later conditionals.
   __ And(sign_, the_int_, Operand(0x80000000u));
   __ Branch(&max_negative_int, eq, the_int_, Operand(0x80000000u));
@@ -835,7 +832,6 @@ static void EmitIdenticalObjectComparison(MacroAssembler* masm,
   } else {
     __ mov(v0, zero_reg);         // Things are <=, >=, ==, === themselves.
   }
-  __ break_(0x223);
   // For less and greater we don't have to check for NaN since the result of
   // x < x is false regardless.  For the others here is some code to check
   // for NaN.
@@ -5270,7 +5266,6 @@ void NameDictionaryLookupStub::Generate(MacroAssembler* masm) {
 
 
     ASSERT_EQ(kSmiTagSize, 1);
-    __ break_(0x224);
 	// TODO what 2 mean?
 	__ dsll(index, index, kPointerSizeLog2);
     __ Daddu(index, index, dictionary);
