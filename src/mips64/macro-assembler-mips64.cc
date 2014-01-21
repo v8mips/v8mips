@@ -665,7 +665,9 @@ void MacroAssembler::Dmul(Register rd, Register rs, const Operand& rt) {
     } else {
       // TODO yuyin
 	  // dmul(rd, rs, rt.rm());
-	  break_(0x225);
+      dmult(rs, rt.rm());
+      mflo(rd);
+	  // break_(0x225);
     }
   } else {
     // li handles the relocation.
@@ -676,8 +678,10 @@ void MacroAssembler::Dmul(Register rd, Register rs, const Operand& rt) {
       mflo(rd);
     } else {
       // TODO yuyin
-	  // dmul(rd, rs, at);
-	  break_(0x225);
+      // dmul(rd, rs, at);
+      dmult(rs, at);
+      mflo(rd);
+	  // break_(0x225);
     }
   }
 }
@@ -3911,10 +3915,14 @@ void MacroAssembler::TryGetFunctionPrototype(Register function,
   if (miss_on_bound_function) {
     ld(scratch,
        FieldMemOperand(function, JSFunction::kSharedFunctionInfoOffset));
-    ld(scratch,
+    // ld(scratch,
+    //   FieldMemOperand(scratch, SharedFunctionInfo::kCompilerHintsOffset));
+    // And(scratch, scratch,
+    //    Operand(Smi::FromInt(1 << SharedFunctionInfo::kBoundFunction)));
+    lw(scratch,
        FieldMemOperand(scratch, SharedFunctionInfo::kCompilerHintsOffset));
     And(scratch, scratch,
-        Operand(Smi::FromInt(1 << SharedFunctionInfo::kBoundFunction)));
+        Operand(1 << SharedFunctionInfo::kBoundFunction));
     Branch(miss, ne, scratch, Operand(zero_reg));
   }
 
