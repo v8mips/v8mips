@@ -74,6 +74,13 @@ struct Register {
   static const int kNumRegisters = v8::internal::kNumRegisters;
   static const int kNumAllocatableRegisters = 14;  // v0 through t7.
   static const int kSizeInBytes = 4;
+#if __BYTE_ORDER == __LITTLE_ENDIAN
+  static const int kMantissaOffset = 0;
+  static const int kExponentOffset = 4;
+#else
+  static const int kMantissaOffset = 4;
+  static const int kExponentOffset = 0;
+#endif
 
   static int ToAllocationIndex(Register reg) {
     return reg.code() - 2;  // zero_reg and 'at' are skipped.

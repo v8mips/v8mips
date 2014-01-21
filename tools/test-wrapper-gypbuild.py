@@ -151,7 +151,7 @@ def ProcessOptions(options):
       print "Unknown mode %s" % mode
       return False
   for arch in options.arch:
-    if not arch in ['ia32', 'x64', 'arm', 'mipsel', 'android_arm',
+    if not arch in ['ia32', 'x64', 'arm', 'mipsel', 'mips', 'android_arm',
                     'android_ia32']:
       print "Unknown architecture %s" % arch
       return False

@@ -536,13 +536,8 @@ class ConvertToDoubleStub : public CodeStub {
 
 
 void ConvertToDoubleStub::Generate(MacroAssembler* masm) {
-#ifndef BIG_ENDIAN_FLOATING_POINT
   Register exponent = result1_;
   Register mantissa = result2_;
-#else
-  Register exponent = result2_;
-  Register mantissa = result1_;
-#endif
   Label not_special;
   // Convert from Smi to integer.
   __ sra(source_, source_, kSmiTagSize);
@@ -679,9 +674,8 @@ void FloatingPointHelper::LoadNumber(MacroAssembler* masm,
   } else {
     ASSERT(destination == kCoreRegisters);
     // Load the double from heap number to dst1 and dst2 in double format.
-    __ lw(dst1, FieldMemOperand(object, HeapNumber::kValueOffset));
-    __ lw(dst2, FieldMemOperand(object,
-        HeapNumber::kValueOffset + kPointerSize));
+    __ lw(dst1, FieldMemOperand(object, HeapNumber::kMantissaOffset));
+    __ lw(dst2, FieldMemOperand(object, HeapNumber::kExponentOffset));
   }
   __ Branch(&done);
 
@@ -1075,6 +1069,11 @@ void FloatingPointHelper::CallCCodeForDoubleOperation(
     // a0-a3 registers to f12/f14 register pairs.
     __ Move(f12, a0, a1);
     __ Move(f14, a2, a3);
+  } else {
+#ifdef BIG_ENDIAN_FLOATING_POINT
+    __ Swap(a0, a1);
+    __ Swap(a2, a3);
+#endif
   }
   {
     AllowExternalCallThatCantCauseGC scope(masm);
@@ -1088,8 +1087,13 @@ void FloatingPointHelper::CallCCodeForDoubleOperation(
     __ sdc1(f0, FieldMemOperand(heap_number_result, HeapNumber::kValueOffset));
   } else {
     // Double returned in registers v0 and v1.
+#ifndef BIG_ENDIAN_FLOATING_POINT
     __ sw(v1, FieldMemOperand(heap_number_result, HeapNumber::kExponentOffset));
     __ sw(v0, FieldMemOperand(heap_number_result, HeapNumber::kMantissaOffset));
+#else
+    __ sw(v0, FieldMemOperand(heap_number_result, HeapNumber::kExponentOffset));
+    __ sw(v1, FieldMemOperand(heap_number_result, HeapNumber::kMantissaOffset));
+#endif
   }
   // Place heap_number_result in v0 and return to the pushed return address.
   __ pop(ra);
@@ -1320,8 +1324,8 @@ static void EmitSmiNonsmiComparison(MacroAssembler* masm,
     __ ldc1(f12, FieldMemOperand(lhs, HeapNumber::kValueOffset));
   } else {
     // Load lhs to a double in a2, a3.
-    __ lw(a3, FieldMemOperand(lhs, HeapNumber::kValueOffset + 4));
-    __ lw(a2, FieldMemOperand(lhs, HeapNumber::kValueOffset));
+    __ lw(a3, FieldMemOperand(lhs, HeapNumber::kExponentOffset));
+    __ lw(a2, FieldMemOperand(lhs, HeapNumber::kMantissaOffset));
 
     // Write Smi from rhs to a1 and a0 in double format. t5 is scratch.
     __ mov(t6, rhs);
@@ -1366,11 +1370,11 @@ static void EmitSmiNonsmiComparison(MacroAssembler* masm,
     __ pop(ra);
     // Load rhs to a double in a1, a0.
     if (rhs.is(a0)) {
-      __ lw(a1, FieldMemOperand(rhs, HeapNumber::kValueOffset + 4));
-      __ lw(a0, FieldMemOperand(rhs, HeapNumber::kValueOffset));
+      __ lw(a1, FieldMemOperand(rhs, HeapNumber::kExponentOffset));
+      __ lw(a0, FieldMemOperand(rhs, HeapNumber::kMantissaOffset));
     } else {
-      __ lw(a0, FieldMemOperand(rhs, HeapNumber::kValueOffset));
-      __ lw(a1, FieldMemOperand(rhs, HeapNumber::kValueOffset + 4));
+      __ lw(a0, FieldMemOperand(rhs, HeapNumber::kMantissaOffset));
+      __ lw(a1, FieldMemOperand(rhs, HeapNumber::kExponentOffset));
     }
   }
   // Fall through to both_loaded_as_doubles.
@@ -1378,7 +1382,6 @@ static void EmitSmiNonsmiComparison(MacroAssembler* masm,
 
 
 void EmitNanCheck(MacroAssembler* masm, Condition cc) {
-  bool exp_first = (HeapNumber::kExponentOffset == HeapNumber::kValueOffset);
   if (CpuFeatures::IsSupported(FPU)) {
     CpuFeatures::Scope scope(FPU);
     // Lhs and rhs are already loaded to f12 and f14 register pairs.
@@ -1391,10 +1394,10 @@ void EmitNanCheck(MacroAssembler* masm, Condition cc) {
     __ mov(t2, a2);  // a2 has LS 32 bits of lhs.
     __ mov(t3, a3);  // a3 has MS 32 bits of lhs.
   }
-  Register rhs_exponent = exp_first ? t0 : t1;
-  Register lhs_exponent = exp_first ? t2 : t3;
-  Register rhs_mantissa = exp_first ? t1 : t0;
-  Register lhs_mantissa = exp_first ? t3 : t2;
+  Register rhs_exponent = t1;
+  Register lhs_exponent = t3;
+  Register rhs_mantissa = t0;
+  Register lhs_mantissa = t2;
   Label one_is_nan, neither_is_nan;
   Label lhs_not_nan_exp_mask_is_loaded;
 
@@ -1445,7 +1448,6 @@ static void EmitTwoNonNanDoubleComparison(MacroAssembler* masm, Condition cc) {
   if (cc == eq) {
     // Doubles are not equal unless they have the same bit pattern.
     // Exception: 0 and -0.
-    bool exp_first = (HeapNumber::kExponentOffset == HeapNumber::kValueOffset);
     if (CpuFeatures::IsSupported(FPU)) {
       CpuFeatures::Scope scope(FPU);
       // Lhs and rhs are already loaded to f12 and f14 register pairs.
@@ -1458,10 +1460,10 @@ static void EmitTwoNonNanDoubleComparison(MacroAssembler* masm, Condition cc) {
       __ mov(t2, a2);  // a2 has LS 32 bits of lhs.
       __ mov(t3, a3);  // a3 has MS 32 bits of lhs.
     }
-    Register rhs_exponent = exp_first ? t0 : t1;
-    Register lhs_exponent = exp_first ? t2 : t3;
-    Register rhs_mantissa = exp_first ? t1 : t0;
-    Register lhs_mantissa = exp_first ? t3 : t2;
+    Register rhs_exponent = t1;
+    Register lhs_exponent = t3;
+    Register rhs_mantissa = t0;
+    Register lhs_mantissa = t2;
 
     __ xor_(v0, rhs_mantissa, lhs_mantissa);
     __ Branch(&return_result_not_equal, ne, v0, Operand(zero_reg));
@@ -1495,6 +1497,11 @@ static void EmitTwoNonNanDoubleComparison(MacroAssembler* masm, Condition cc) {
       // a0-a3 registers to f12/f14 register pairs.
       __ Move(f12, a0, a1);
       __ Move(f14, a2, a3);
+    } else {
+#ifdef BIG_ENDIAN_FLOATING_POINT
+    __ Swap(a0, a1);
+    __ Swap(a2, a3);
+#endif
     }
 
     AllowExternalCallThatCantCauseGC scope(masm);
@@ -1582,14 +1589,14 @@ static void EmitCheckForTwoHeapNumbers(MacroAssembler* masm,
     __ ldc1(f12, FieldMemOperand(lhs, HeapNumber::kValueOffset));
     __ ldc1(f14, FieldMemOperand(rhs, HeapNumber::kValueOffset));
   } else {
-    __ lw(a2, FieldMemOperand(lhs, HeapNumber::kValueOffset));
-    __ lw(a3, FieldMemOperand(lhs, HeapNumber::kValueOffset + 4));
+    __ lw(a2, FieldMemOperand(lhs, HeapNumber::kMantissaOffset));
+    __ lw(a3, FieldMemOperand(lhs, HeapNumber::kExponentOffset));
     if (rhs.is(a0)) {
-      __ lw(a1, FieldMemOperand(rhs, HeapNumber::kValueOffset + 4));
-      __ lw(a0, FieldMemOperand(rhs, HeapNumber::kValueOffset));
+      __ lw(a1, FieldMemOperand(rhs, HeapNumber::kExponentOffset));
+      __ lw(a0, FieldMemOperand(rhs, HeapNumber::kMantissaOffset));
     } else {
-      __ lw(a0, FieldMemOperand(rhs, HeapNumber::kValueOffset));
-      __ lw(a1, FieldMemOperand(rhs, HeapNumber::kValueOffset + 4));
+      __ lw(a0, FieldMemOperand(rhs, HeapNumber::kMantissaOffset));
+      __ lw(a1, FieldMemOperand(rhs, HeapNumber::kExponentOffset));
     }
   }
   __ jmp(both_loaded_as_doubles);
@@ -5902,14 +5909,18 @@ void StringHelper::GenerateCopyCharactersLong(MacroAssembler* masm,
   __ Branch(&simple_loop, eq, scratch4, Operand(zero_reg));
 
   // Loop for src/dst that are not aligned the same way.
-  // This loop uses lwl and lwr instructions. These instructions
-  // depend on the endianness, and the implementation assumes little-endian.
   {
     Label loop;
     __ bind(&loop);
+#if __BYTE_ORDER == __BIG_ENDIAN
+    __ lwl(scratch1, MemOperand(src));
+    __ Addu(src, src, Operand(kReadAlignment));
+    __ lwr(scratch1, MemOperand(src, -1));
+#else
     __ lwr(scratch1, MemOperand(src));
     __ Addu(src, src, Operand(kReadAlignment));
     __ lwl(scratch1, MemOperand(src, -1));
+#endif
     __ sw(scratch1, MemOperand(dest));
     __ Addu(dest, dest, Operand(kReadAlignment));
     __ Subu(scratch2, limit, dest);
@@ -6616,6 +6627,11 @@ void StringAddStub::Generate(MacroAssembler* masm) {
   // in a little endian mode).
   __ li(t2, Operand(2));
   __ AllocateAsciiString(v0, t2, t0, t1, t5, &call_runtime);
+#if __BYTE_ORDER == __BIG_ENDIAN
+  __ sll(t0, a2, 8);
+  __ srl(t1, a2, 8);
+  __ or_(a2, t0, t1);
+#endif
   __ sh(a2, FieldMemOperand(v0, SeqAsciiString::kHeaderSize));
   __ IncrementCounter(counters->string_add_native(), 1, a2, a3);
   __ DropAndRet(2);

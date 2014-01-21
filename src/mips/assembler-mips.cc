@@ -1631,10 +1631,17 @@ void Assembler::lwc1(FPURegister fd, const MemOperand& src) {
 void Assembler::ldc1(FPURegister fd, const MemOperand& src) {
   // Workaround for non-8-byte alignment of HeapNumber, convert 64-bit
   // load to two 32-bit loads.
+#ifndef BIG_ENDIAN_FLOATING_POINT
   GenInstrImmediate(LWC1, src.rm(), fd, src.offset_);
   FPURegister nextfpreg;
   nextfpreg.setcode(fd.code() + 1);
   GenInstrImmediate(LWC1, src.rm(), nextfpreg, src.offset_ + 4);
+#else
+  GenInstrImmediate(LWC1, src.rm(), fd, src.offset_ + 4);
+  FPURegister nextfpreg;
+  nextfpreg.setcode(fd.code() + 1);
+  GenInstrImmediate(LWC1, src.rm(), nextfpreg, src.offset_);
+#endif
 }
 
 
@@ -1646,10 +1653,17 @@ void Assembler::swc1(FPURegister fd, const MemOperand& src) {
 void Assembler::sdc1(FPURegister fd, const MemOperand& src) {
   // Workaround for non-8-byte alignment of HeapNumber, convert 64-bit
   // store to two 32-bit stores.
+#ifndef BIG_ENDIAN_FLOATING_POINT
   GenInstrImmediate(SWC1, src.rm(), fd, src.offset_);
   FPURegister nextfpreg;
   nextfpreg.setcode(fd.code() + 1);
   GenInstrImmediate(SWC1, src.rm(), nextfpreg, src.offset_ + 4);
+#else
+  GenInstrImmediate(SWC1, src.rm(), fd, src.offset_ + 4);
+  FPURegister nextfpreg;
+  nextfpreg.setcode(fd.code() + 1);
+  GenInstrImmediate(SWC1, src.rm(), nextfpreg, src.offset_ );
+#endif
 }
 
 

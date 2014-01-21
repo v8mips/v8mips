@@ -65,6 +65,7 @@ SUPPORTED_ARCHS = ["android_arm",
                    "arm",
                    "ia32",
                    "mipsel",
+                   "mips",
                    "x64"]
 
 
@@ -268,7 +269,7 @@ def Execute(arch, mode, args, options, suites, workspace):
   timeout = options.timeout
   if timeout == -1:
     # Simulators are slow, therefore allow a longer default timeout.
-    if arch in ["android", "arm", "mipsel"]:
+    if arch in ["android", "arm", "mipsel", "mips"]:
       timeout = 2 * TIMEOUT_DEFAULT;
     else:
       timeout = TIMEOUT_DEFAULT;

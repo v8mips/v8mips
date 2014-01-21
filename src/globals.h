@@ -83,7 +83,8 @@ namespace internal {
 #if CAN_USE_UNALIGNED_ACCESSES
 #define V8_HOST_CAN_READ_UNALIGNED 1
 #endif
-#elif defined(__MIPSEL__)
+#elif defined(__MIPSEL__) || defined(__MIPSEB__)
+
 #define V8_HOST_ARCH_MIPS 1
 #define V8_HOST_ARCH_32_BIT 1
 #else
@@ -101,11 +102,15 @@ namespace internal {
 #define V8_TARGET_ARCH_IA32 1
 #elif defined(__ARMEL__)
 #define V8_TARGET_ARCH_ARM 1
-#elif defined(__MIPSEL__)
+#elif defined(__MIPSEL__) || defined(__MIPSEB__)
 #define V8_TARGET_ARCH_MIPS 1
 #else
 #error Target architecture was not detected as supported by v8
 #endif
+#endif
+
+#if defined(__MIPSEB__)
+#define BIG_ENDIAN_FLOATING_POINT 1
 #endif
 
 // Check for supported combinations of host and target architectures.
