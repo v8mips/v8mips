@@ -1381,7 +1381,7 @@ class MacroAssembler: public Assembler {
 
   void SmiTag(Register reg) {
     // Addu(reg, reg, reg);
-	dsll32(reg, reg, 0);
+    dsll32(reg, reg, 0);
   }
 
   // Test for overflow < 0: use BranchOnOverflow() or BranchOnNoOverflow().
@@ -1390,8 +1390,8 @@ class MacroAssembler: public Assembler {
 
   void SmiTag(Register dst, Register src) {
     // Addu(dst, src, src);
-	STATIC_ASSERT(kSmiTag == 0);
-	dsll32(dst, src, 0);
+    STATIC_ASSERT(kSmiTag == 0);
+    dsll32(dst, src, 0);
   }
 
   // Try to convert int32 to smi. If the value is to large, preserve
@@ -1411,12 +1411,12 @@ class MacroAssembler: public Assembler {
 
   void SmiUntag(Register reg) {
     // sra(reg, reg, kSmiTagSize);
-	dsra32(reg, reg, 0);
+    dsra32(reg, reg, 0);
   }
 
   void SmiUntag(Register dst, Register src) {
     // sra(dst, src, kSmiTagSize);
-	dsra32(dst, src, 0);
+    dsra32(dst, src, 0);
   }
 
   // Test if the register contains a smi.
@@ -1543,16 +1543,15 @@ class MacroAssembler: public Assembler {
   void DecodeField(Register reg) {
     // static const int shift = Field::kShift;
     // static const int mask = (Field::kMask >> shift) << kSmiTagSize;
-	static const int kSmiShift = kSmiTagSize + kSmiShiftSize;
+    static const int kSmiShift = kSmiTagSize + kSmiShiftSize;
     static const int shift = Field::kShift + kSmiShift;
     static const int mask = Field::kMask >> Field::kShift;
-	// TODO
-	// break_(0x225);
+    // TODO yuyin
     // dsrl(reg, reg, shift);
     // And(reg, reg, Operand(mask));
-	dsrl32(reg, reg, shift - 32);
-	And(reg, reg, Operand(mask));
-	dsll32(reg, reg, 0);
+    dsrl32(reg, reg, shift - 32);
+    And(reg, reg, Operand(mask));
+    dsll32(reg, reg, 0);
   }
 
   // Generates function and stub prologue code.

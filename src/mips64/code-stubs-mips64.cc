@@ -4065,7 +4065,7 @@ void SubStringStub::Generate(MacroAssembler* masm) {
     __ AllocateTwoByteSlicedString(v0, a2, t2, t3, &runtime);
     __ bind(&set_slice_header);
     // __ sll(a3, a3, 1);
-	__ dsll32(a3, a3, 0);
+    __ dsll32(a3, a3, 0);
     __ sd(t1, FieldMemOperand(v0, SlicedString::kParentOffset));
     __ sd(a3, FieldMemOperand(v0, SlicedString::kOffsetOffset));
     __ jmp(&return_v0);
@@ -5070,7 +5070,7 @@ void NameDictionaryLookupStub::GenerateNegativeLookup(MacroAssembler* masm,
     __ And(index, index, Operand(
         Smi::FromInt(name->Hash() + NameDictionary::GetProbeOffset(i))));
     
-	// TODO this function
+    // TODO this function
     // Scale the index by multiplying by the entry size.
     ASSERT(NameDictionary::kEntrySize == 3);
     __ dsll(at, index, 1);
@@ -5081,7 +5081,7 @@ void NameDictionaryLookupStub::GenerateNegativeLookup(MacroAssembler* masm,
     ASSERT_EQ(kSmiTagSize, 1);
     Register tmp = properties;
     // __ sll(scratch0, index, 1);
-	__ dsll32(scratch0, index, 0);
+    __ dsll32(scratch0, index, 0);
     __ Daddu(tmp, properties, scratch0);
     __ ld(entity_name, FieldMemOperand(tmp, kElementsStartOffset));
 
@@ -5266,8 +5266,8 @@ void NameDictionaryLookupStub::Generate(MacroAssembler* masm) {
 
 
     ASSERT_EQ(kSmiTagSize, 1);
-	// TODO what 2 mean?
-	__ dsll(index, index, kPointerSizeLog2);
+    // TODO what 2 mean?
+    __ dsll(index, index, kPointerSizeLog2);
     __ Daddu(index, index, dictionary);
     __ ld(entry_key, FieldMemOperand(index, kElementsStartOffset));
 

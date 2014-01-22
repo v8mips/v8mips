@@ -333,8 +333,8 @@ bool RelocInfo::IsPatchedReturnSequence() {
 
   bool patched_return = ((instr0 & kOpcodeMask) == LUI &&
                          (instr1 & kOpcodeMask) == ORI &&
-						 (instr2 & kOpcodeMask) == LUI &&
-						 (instr3 & kOpcodeMask) == ORI &&
+                         (instr2 & kOpcodeMask) == LUI &&
+                         (instr3 & kOpcodeMask) == ORI &&
                          ((instr4 & kOpcodeMask) == JAL ||
                           ((instr4 & kOpcodeMask) == SPECIAL &&
                            (instr4 & kFunctionFieldMask) == JALR)));

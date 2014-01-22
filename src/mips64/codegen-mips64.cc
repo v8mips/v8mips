@@ -1034,10 +1034,10 @@ static byte* GetNoCodeAgeSequence(uint32_t* length) {
     CodePatcher patcher(byte_sequence, kNoCodeAgeSequenceLength);
     patcher.masm()->Push(ra, fp, cp, a1);
     patcher.masm()->nop(Assembler::CODE_AGE_SEQUENCE_NOP);
-	patcher.masm()->nop(Assembler::CODE_AGE_SEQUENCE_NOP);
-	patcher.masm()->nop(Assembler::CODE_AGE_SEQUENCE_NOP);
-	patcher.masm()->nop(Assembler::CODE_AGE_SEQUENCE_NOP);
-	patcher.masm()->nop(Assembler::CODE_AGE_SEQUENCE_NOP);
+    patcher.masm()->nop(Assembler::CODE_AGE_SEQUENCE_NOP);
+    patcher.masm()->nop(Assembler::CODE_AGE_SEQUENCE_NOP);
+    patcher.masm()->nop(Assembler::CODE_AGE_SEQUENCE_NOP);
+    patcher.masm()->nop(Assembler::CODE_AGE_SEQUENCE_NOP);
     patcher.masm()->Daddu(fp, sp,
         Operand(StandardFrameConstants::kFixedFrameSizeFromFp));
     initialized = true;

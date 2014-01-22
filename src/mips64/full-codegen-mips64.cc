@@ -283,7 +283,6 @@ void FullCodeGenerator::Generate() {
 
   } else {
     PrepareForBailoutForId(BailoutId::FunctionEntry(), NO_REGISTERS);
-	// __ break_(0x132);
     { Comment cmnt(masm_, "[ Declarations");
       // For named function expressions, declare the function name as a
       // constant.
@@ -293,10 +292,8 @@ void FullCodeGenerator::Generate() {
                function->proxy()->var()->mode() == CONST_HARMONY);
         ASSERT(function->proxy()->var()->location() != Variable::UNALLOCATED);
         VisitVariableDeclaration(function);
-		// __ break_(0x130);
       }
       VisitDeclarations(scope()->declarations());
-	  // __ break_(0x129);
     }
     { Comment cmnt(masm_, "[ Stack check");
       PrepareForBailoutForId(BailoutId::Declarations(), NO_REGISTERS);
@@ -304,16 +301,13 @@ void FullCodeGenerator::Generate() {
       __ LoadRoot(t0, Heap::kStackLimitRootIndex);
       __ Branch(&ok, hs, sp, Operand(t0));
       __ Call(isolate()->builtins()->StackCheck(), RelocInfo::CODE_TARGET);
-	  // __ break_(0x126);
       __ bind(&ok);
     }
 
     { Comment cmnt(masm_, "[ Body");
       ASSERT(loop_depth() == 0);
-	   // __ break_(0x132);
 
       VisitStatements(function()->body());
-     // __ break_(0x127);
 
       ASSERT(loop_depth() == 0);
     }
@@ -2330,7 +2324,6 @@ void FullCodeGenerator::EmitInlineSmiBinaryOp(BinaryOperation* expr,
   // recording binary operation stub, see
   switch (op) {
     case Token::SAR:
-	  // __ break_(0x221);
       __ Branch(&stub_call);
       __ GetLeastBitsFromSmi(scratch1, right, 5);
       __ dsrav(right, left, scratch1);
@@ -4261,7 +4254,6 @@ void FullCodeGenerator::VisitUnaryOperation(UnaryOperation* expr) {
           __ li(a1, Operand(var->name()));
           __ li(a0, Operand(Smi::FromInt(kNonStrictMode)));
           __ Push(a2, a1, a0);
-		  // __ break_(0x142);
           __ InvokeBuiltin(Builtins::DELETE, CALL_FUNCTION);
           context()->Plug(v0);
         } else if (var->IsStackAllocated() || var->IsContextSlot()) {

@@ -254,29 +254,29 @@ Instruction::Type Instruction::InstructionType() const {
         case DSRA:
         case DSRA32:
         case SLLV:
-		case DSLLV:
+        case DSLLV:
         case SRLV:
-		case DSRLV:
+        case DSRLV:
         case SRAV:
         case DSRAV:
         case MFHI:
         case MFLO:
         case MULT:
-		case DMULT:
+        case DMULT:
         case MULTU:
-		case DMULTU:
+        case DMULTU:
         case DIV:
-		case DDIV:
+        case DDIV:
         case DIVU:
-		case DDIVU:
+        case DDIVU:
         case ADD:
-		case DADD:
+        case DADD:
         case ADDU:
-		case DADDU:
+        case DADDU:
         case SUB:
-		case DSUB:
+        case DSUB:
         case SUBU:
-		case DSUBU:
+        case DSUBU:
         case AND:
         case OR:
         case XOR:
@@ -332,9 +332,9 @@ Instruction::Type Instruction::InstructionType() const {
     case BLEZ:
     case BGTZ:
     case ADDI:
-	case DADDI:
+    case DADDI:
     case ADDIU:
-	case DADDIU:
+    case DADDIU:
     case SLTI:
     case SLTIU:
     case ANDI:
@@ -349,7 +349,7 @@ Instruction::Type Instruction::InstructionType() const {
     case LH:
     case LWL:
     case LW:
-	case LD:
+    case LD:
     case LBU:
     case LHU:
     case LWR:
@@ -357,7 +357,7 @@ Instruction::Type Instruction::InstructionType() const {
     case SH:
     case SWL:
     case SW:
-	case SD:
+    case SD:
     case SWR:
     case LWC1:
     case LDC1:

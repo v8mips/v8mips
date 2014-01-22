@@ -2253,34 +2253,34 @@ void LCodeGen::DoCompareNumericAndBranch(LCompareNumericAndBranch* instr) {
         if (instr->hydrogen_value()->representation().IsSmi()) {
           cmp_left = ToRegister(left);
           // cmp_right = Operand(Smi::FromInt(value));
-		  __ li(cmp_right, Operand(Smi::FromInt(value)));
+          __ li(cmp_right, Operand(Smi::FromInt(value)));
         } else {
           cmp_left = ToRegister(left);
           // cmp_right = Operand(value);
-		  __ li(cmp_right, Operand(value));
+          __ li(cmp_right, Operand(value));
         }
       } else if (left->IsConstantOperand()) {
         int32_t value = ToInteger32(LConstantOperand::cast(left));
         if (instr->hydrogen_value()->representation().IsSmi()) {
-           cmp_left = ToRegister(right);
-           // cmp_right = Operand(Smi::FromInt(value));
-		   __ li(cmp_right, Operand(Smi::FromInt(value)));
+          cmp_left = ToRegister(right);
+          // cmp_right = Operand(Smi::FromInt(value));
+          __ li(cmp_right, Operand(Smi::FromInt(value)));
         } else {
           cmp_left = ToRegister(right);
           // cmp_right = Operand(value);
-		  __ li(cmp_right, Operand(value));
+          __ li(cmp_right, Operand(value));
         }
         // We transposed the operands. Reverse the condition.
         cond = ReverseCondition(cond);
       } else {
         cmp_left = ToRegister(left);
         // cmp_right = Operand(ToRegister(right));
-		EmitBranch(instr, cond, cmp_left, Operand(ToRegister(right)));
-		return;
+        EmitBranch(instr, cond, cmp_left, Operand(ToRegister(right)));
+        return;
       }
 
       // EmitBranch(instr, cond, cmp_left, cmp_right);
-	  EmitBranch(instr, cond, cmp_left, Operand(cmp_right));
+      EmitBranch(instr, cond, cmp_left, Operand(cmp_right));
     }
   }
 }
@@ -3121,14 +3121,14 @@ void LCodeGen::DoLoadKeyedExternalArray(LLoadKeyed* instr) {
         __ lbu(result, mem_operand);
         break;
       case EXTERNAL_SHORT_ELEMENTS:
-	    // TODO lw?
+      // TODO lw?
         __ lh(result, mem_operand);
         break;
       case EXTERNAL_UNSIGNED_SHORT_ELEMENTS:
         __ lhu(result, mem_operand);
         break;
       case EXTERNAL_INT_ELEMENTS:
-	    // TODO ld?
+      // TODO ld?
         __ lw(result, mem_operand);
         break;
       case EXTERNAL_UNSIGNED_INT_ELEMENTS:
@@ -3213,9 +3213,9 @@ void LCodeGen::DoLoadKeyedFixedArray(LLoadKeyed* instr) {
     // check, which can be tagged, so that case must be handled here, too.
     if (instr->hydrogen()->key()->representation().IsSmi()) {
       // __ sll(scratch, key, kPointerSizeLog2 - kSmiTagSize);
-	  // TODO right?
-	  __ dsrl(scratch, key, 32 - kPointerSizeLog2);
-	  __ daddu(scratch, elements, scratch);
+    // TODO right?
+    __ dsrl(scratch, key, 32 - kPointerSizeLog2);
+    __ daddu(scratch, elements, scratch);
     } else {
       __ dsll(scratch, key, kPointerSizeLog2);
       __ daddu(scratch, elements, scratch);
@@ -4047,7 +4047,7 @@ void LCodeGen::DoInnerAllocatedObject(LInnerAllocatedObject* instr) {
   Register base = ToRegister(instr->base_object());
   if (instr->offset()->IsConstantOperand()) {
     LConstantOperand* offset = LConstantOperand::cast(instr->offset());
-	// TODO right?
+    // TODO right?
     __ Daddu(result, base, Operand(ToInteger32(offset)));
   } else {
     Register offset = ToRegister(instr->offset());
@@ -4254,12 +4254,12 @@ void LCodeGen::DoStoreKeyedExternalArray(LStoreKeyed* instr) {
         break;
       case EXTERNAL_SHORT_ELEMENTS:
       case EXTERNAL_UNSIGNED_SHORT_ELEMENTS:
-	    // TODO sw?
+        // TODO sw?
         __ sh(value, mem_operand);
         break;
       case EXTERNAL_INT_ELEMENTS:
       case EXTERNAL_UNSIGNED_INT_ELEMENTS:
-	    // TODO sd?
+        // TODO sd?
         __ sw(value, mem_operand);
         break;
       case EXTERNAL_FLOAT_ELEMENTS:
@@ -5345,7 +5345,7 @@ void LCodeGen::DoDeferredAllocate(LAllocate* instr) {
     __ push(size);
   } else {
     int32_t size = ToInteger32(LConstantOperand::cast(instr->size()));
-	__ li(v0, Operand(Smi::FromInt(size)));
+    __ li(v0, Operand(Smi::FromInt(size)));
     __ Push(v0);
   }
 

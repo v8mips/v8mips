@@ -664,10 +664,9 @@ void MacroAssembler::Dmul(Register rd, Register rs, const Operand& rt) {
       mflo(rd);
     } else {
       // TODO yuyin
-	  // dmul(rd, rs, rt.rm());
+      // dmul(rd, rs, rt.rm());
       dmult(rs, rt.rm());
       mflo(rd);
-	  // break_(0x225);
     }
   } else {
     // li handles the relocation.
@@ -681,7 +680,6 @@ void MacroAssembler::Dmul(Register rd, Register rs, const Operand& rt) {
       // dmul(rd, rs, at);
       dmult(rs, at);
       mflo(rd);
-	  // break_(0x225);
     }
   }
 }
@@ -970,37 +968,37 @@ void MacroAssembler::li(Register rd, Operand j, LiFlags mode) {
     // Normal load of an immediate value which does not need Relocation Info.
     if (is_int64_32(j.imm64_)) {
       if (is_int64_16(j.imm64_)) {
-	    daddiu(rd, zero_reg, j.imm64_);
-	  } else if (!(j.imm64_ & kHiMask)) {
-	    ori(rd, zero_reg, j.imm64_);
-      dsll32(rd, rd, 0);  // TODO(plind), I understand that these 0-extend,
-                          // but we should find a better way.
-      dsrl32(rd, rd, 0);
-	  } else if (!(j.imm64_ & kImm16Mask)) {
-	    lui(rd, (j.imm64_ >> kLuiShift) & kImm16Mask);
-      dsll32(rd, rd, 0);
-      dsrl32(rd, rd, 0);
-	  } else {
-	    lui(rd, (j.imm64_ >> kLuiShift) & kImm16Mask);
-      ori(rd, rd, (j.imm64_ & kImm16Mask));
-      dsll32(rd, rd, 0);
-      dsrl32(rd, rd, 0);
-	  }
+        daddiu(rd, zero_reg, j.imm64_);
+      } else if (!(j.imm64_ & kHiMask)) {
+        ori(rd, zero_reg, j.imm64_);
+        dsll32(rd, rd, 0);  // TODO(plind), I understand that these 0-extend,
+                            // but we should find a better way.
+        dsrl32(rd, rd, 0);
+      } else if (!(j.imm64_ & kImm16Mask)) {
+        lui(rd, (j.imm64_ >> kLuiShift) & kImm16Mask);
+        dsll32(rd, rd, 0);
+        dsrl32(rd, rd, 0);
+      } else {
+        lui(rd, (j.imm64_ >> kLuiShift) & kImm16Mask);
+        ori(rd, rd, (j.imm64_ & kImm16Mask));
+        dsll32(rd, rd, 0);
+        dsrl32(rd, rd, 0);
+      }
     } else {
-	  if (is_int64_32(j.imm64_)) {
-	    lui(rd, (j.imm64_ >> kLuiShift) & kImm16Mask);
-      ori(rd, rd, (j.imm64_ & kImm16Mask));
-      dsll32(rd, rd, 0);
-      dsrl32(rd, rd, 0);
-	  } else {
-      lui(rd, (j.imm64_ >> 48) & kImm16Mask);
-      ori(rd, rd, (j.imm64_ >> 32) & kImm16Mask);
-      dsll(rd, rd, 16);
-      ori(rd, rd, (j.imm64_ >> 16) & kImm16Mask);
-      dsll(rd, rd, 16);
-      ori(rd, rd, j.imm64_ & kImm16Mask);
-	  }
-	}
+      if (is_int64_32(j.imm64_)) {
+        lui(rd, (j.imm64_ >> kLuiShift) & kImm16Mask);
+        ori(rd, rd, (j.imm64_ & kImm16Mask));
+        dsll32(rd, rd, 0);
+        dsrl32(rd, rd, 0);
+      } else {
+        lui(rd, (j.imm64_ >> 48) & kImm16Mask);
+        ori(rd, rd, (j.imm64_ >> 32) & kImm16Mask);
+        dsll(rd, rd, 16);
+        ori(rd, rd, (j.imm64_ >> 16) & kImm16Mask);
+        dsll(rd, rd, 16);
+        ori(rd, rd, j.imm64_ & kImm16Mask);
+      }
+    }
   } else {
     if (MustUseReg(j.rmode_)) {
       RecordRelocInfo(j.rmode_, j.imm64_);
@@ -1353,18 +1351,18 @@ void MacroAssembler::Move(FPURegister dst, double imm) {
     // register of FPU register pair.
     if (lo != 0) {
       // li(at, Operand(lo));
-	  lui(at, (lo >> kLuiShift) & kImm16Mask);
-	  ori(at, at, lo & kImm16Mask);
+      lui(at, (lo >> kLuiShift) & kImm16Mask);
+      ori(at, at, lo & kImm16Mask);
       mtc1(at, dst);
     } else {
       mtc1(zero_reg, dst);
     }
-    // Move the high part of the double into the higher of the corresponding FPU
-    // register of FPU register pair.
+    // Move the high part of the double into the higher of the corresponding
+    // FPU register of FPU register pair.
     if (hi != 0) {
       // li(at, Operand(hi));
-	  lui(at, (hi >> kLuiShift) & kImm16Mask);
-	  ori(at, at, hi & kImm16Mask);
+      lui(at, (hi >> kLuiShift) & kImm16Mask);
+      ori(at, at, hi & kImm16Mask);
       mtc1(at, dst.high());
     } else {
       mtc1(zero_reg, dst.high());
@@ -2635,7 +2633,7 @@ void MacroAssembler::Jr(Label* L, BranchDelaySlot bdslot) {
     RecordRelocInfo(RelocInfo::INTERNAL_REFERENCE);
     // lui(at, (imm32 & kHiMask) >> kLuiShift);
     // ori(at, at, (imm32 & kImm16Mask));
-	li(at, Operand(imm64));
+    li(at, Operand(imm64));
   }
   jr(at);
 
@@ -2656,7 +2654,7 @@ void MacroAssembler::Jalr(Label* L, BranchDelaySlot bdslot) {
     RecordRelocInfo(RelocInfo::INTERNAL_REFERENCE);
     // lui(at, (imm32 & kHiMask) >> kLuiShift);
     // ori(at, at, (imm32 & kImm16Mask));
-	li(at, Operand(imm64));
+  li(at, Operand(imm64));
   }
   jalr(at);
 
@@ -2977,7 +2975,7 @@ void MacroAssembler::Allocate(int object_size,
     // safe in new-space because the limit of the heap is aligned there.
     ASSERT((flags & PRETENURE_OLD_POINTER_SPACE) == 0);
     // TODO yuyin
-	// ASSERT(kPointerAlignment * 2 == kDoubleAlignment);
+  // ASSERT(kPointerAlignment * 2 == kDoubleAlignment);
     And(scratch2, result, Operand(kDoubleAlignmentMask));
     Label aligned;
     Branch(&aligned, eq, scratch2, Operand(zero_reg));
@@ -3065,7 +3063,7 @@ void MacroAssembler::Allocate(Register object_size,
     // safe in new-space because the limit of the heap is aligned there.
     ASSERT((flags & PRETENURE_OLD_POINTER_SPACE) == 0);
     // TODO yuyin
-	// ASSERT(kPointerAlignment * 2 == kDoubleAlignment);
+    // ASSERT(kPointerAlignment * 2 == kDoubleAlignment);
     And(scratch2, result, Operand(kDoubleAlignmentMask));
     Label aligned;
     Branch(&aligned, eq, scratch2, Operand(zero_reg));
@@ -4164,7 +4162,7 @@ void MacroAssembler::ObjectToDoubleFPURegister(Register object,
     JumpIfNotSmi(object, &not_smi);
     // Remove smi tag and convert to double.
     // dsra(scratch1, object, kSmiTagSize);
-	dsra32(scratch1, object, 0);
+    dsra32(scratch1, object, 0);
     mtc1(scratch1, result);
     cvt_d_w(result, result);
     Branch(&done);
@@ -4630,7 +4628,7 @@ void MacroAssembler::LoadGlobalFunctionInitialMap(Register function,
 void MacroAssembler::Prologue(PrologueFrameMode frame_mode) {
   if (frame_mode == BUILD_STUB_FRAME) {
     Push(ra, fp, cp);
-	Push(Smi::FromInt(StackFrame::STUB));
+    Push(Smi::FromInt(StackFrame::STUB));
     // Adjust FP to point to saved FP.
     Daddu(fp, sp, Operand(StandardFrameConstants::kFixedFrameSizeFromFp));
   } else {
@@ -4654,10 +4652,10 @@ void MacroAssembler::Prologue(PrologueFrameMode frame_mode) {
     } else {
       Push(ra, fp, cp, a1);
       nop(Assembler::CODE_AGE_SEQUENCE_NOP);
-	  nop(Assembler::CODE_AGE_SEQUENCE_NOP);
-	  nop(Assembler::CODE_AGE_SEQUENCE_NOP);
-	  nop(Assembler::CODE_AGE_SEQUENCE_NOP);
-	  nop(Assembler::CODE_AGE_SEQUENCE_NOP);
+      nop(Assembler::CODE_AGE_SEQUENCE_NOP);
+      nop(Assembler::CODE_AGE_SEQUENCE_NOP);
+      nop(Assembler::CODE_AGE_SEQUENCE_NOP);
+      nop(Assembler::CODE_AGE_SEQUENCE_NOP);
       // Adjust fp to point to caller's fp.
       Daddu(fp, sp, Operand(StandardFrameConstants::kFixedFrameSizeFromFp));
     }
@@ -4730,7 +4728,7 @@ void MacroAssembler::EnterExitFrame(bool save_doubles,
     ASSERT(kDoubleSize == frame_alignment);
     if (frame_alignment > 0) {
       ASSERT(IsPowerOf2(frame_alignment));
-	  li(t8, Operand(-frame_alignment));
+      li(t8, Operand(-frame_alignment));
       And(sp, sp, Operand(t8));  // Align stack.
     }
     int space = FPURegister::kMaxNumRegisters * kDoubleSize;

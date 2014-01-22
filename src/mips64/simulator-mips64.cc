@@ -1296,11 +1296,11 @@ void Simulator::Write2W(int64_t addr, int64_t value, Instruction* instr) {
     DieOrDebug();
   }
   if ((addr & kPointerAlignmentMask) == 0) {
-	int64_t* ptr = reinterpret_cast<int64_t*>(addr);
+    int64_t* ptr = reinterpret_cast<int64_t*>(addr);
     *ptr = value;
-	// printf("sd value : 0x%lx \n", value);
-	// printf("ptr : 0x%lx\n 0x%lx \n",ptr, *ptr);
-	return;
+    // printf("sd value : 0x%lx \n", value);
+    // printf("ptr : 0x%lx\n 0x%lx \n",ptr, *ptr);
+    return;
   }
   PrintF("Unaligned write at 0x%08lx, pc=0x%08" V8PRIxPTR "\n",
          addr,
@@ -1864,12 +1864,12 @@ void Simulator::ConfigureTypeRegister(Instruction* instr,
         case SLL:
           alu_out = rt << sa;
           break;
-	    case DSLL:
-		  alu_out = rt << sa;
-		  break;
-		case DSLL32:
-		  alu_out = rt << sa << 32;
-		  break;
+        case DSLL:
+          alu_out = rt << sa;
+          break;
+        case DSLL32:
+          alu_out = rt << sa << 32;
+          break;
         case SRL:
           if (rs_reg == 0) {
             // Regular logical right shift of a word by a fixed number of
@@ -1882,25 +1882,25 @@ void Simulator::ConfigureTypeRegister(Instruction* instr,
             alu_out = (rt_u >> sa) | (rt_u << (32 - sa));
           }
           break;
-		case DSRL:
-		  alu_out = rt_u >> sa;
-		  break;
-		case DSRL32:
-		  alu_out = rt_u >> sa >> 32;
-		  break;
+        case DSRL:
+          alu_out = rt_u >> sa;
+          break;
+        case DSRL32:
+          alu_out = rt_u >> sa >> 32;
+          break;
         case SRA:
-		case DSRA:
+        case DSRA:
           alu_out = rt >> sa;
           break;
-		case DSRA32:
-		  alu_out = rt >> sa >> 32;
-		  break;
+        case DSRA32:
+          alu_out = rt >> sa >> 32;
+          break;
         case SLLV:
-		case DSLLV:
+        case DSLLV:
           alu_out = rt << rs;
           break;
         case SRLV:
-		case DSRLV:
+        case DSRLV:
           if (sa == 0) {
             // Regular logical right-shift of a word by a variable number of
             // bits instruction. SA field is always equal to 0.
@@ -1913,7 +1913,7 @@ void Simulator::ConfigureTypeRegister(Instruction* instr,
           }
           break;
         case SRAV:
-		case DSRAV:
+        case DSRAV:
           alu_out = rt >> rs;
           break;
         case MFHI:
@@ -1929,7 +1929,7 @@ void Simulator::ConfigureTypeRegister(Instruction* instr,
           u64hilo = static_cast<uint64_t>(rs_u) * static_cast<uint64_t>(rt_u);
           break;
         case ADD:
-		case DADD:
+        case DADD:
           if (HaveSameSign(rs, rt)) {
             if (rs > 0) {
               exceptions[kIntegerOverflow] = rs > (Registers::kMaxValue - rt);
@@ -1940,11 +1940,11 @@ void Simulator::ConfigureTypeRegister(Instruction* instr,
           alu_out = rs + rt;
           break;
         case ADDU:
-		case DADDU:
+        case DADDU:
           alu_out = rs + rt;
           break;
         case SUB:
-		case DSUB:
+        case DSUB:
           if (!HaveSameSign(rs, rt)) {
             if (rs > 0) {
               exceptions[kIntegerOverflow] = rs > (Registers::kMaxValue + rt);
@@ -1955,7 +1955,7 @@ void Simulator::ConfigureTypeRegister(Instruction* instr,
           alu_out = rs - rt;
           break;
         case SUBU:
-		case DSUBU:
+        case DSUBU:
           alu_out = rs - rt;
           break;
         case AND:
@@ -2006,8 +2006,8 @@ void Simulator::ConfigureTypeRegister(Instruction* instr,
           break;
         case DIV:
         case DIVU:
-		case DDIV:
-		case DDIVU:
+        case DDIV:
+        case DDIVU:
           // div and divu never raise exceptions.
           break;
         default:
@@ -2579,7 +2579,7 @@ void Simulator::DecodeTypeImmediate(Instruction* instr) {
       break;
     // ------------- Arithmetic instructions.
     case ADDI:
-	case DADDI:
+    case DADDI:
       if (HaveSameSign(rs, se_imm16)) {
         if (rs > 0) {
           exceptions[kIntegerOverflow] = rs > (Registers::kMaxValue - se_imm16);
@@ -2591,7 +2591,7 @@ void Simulator::DecodeTypeImmediate(Instruction* instr) {
       alu_out = rs + se_imm16;
       break;
     case ADDIU:
-	case DADDIU:
+    case DADDIU:
       alu_out = rs + se_imm16;
       break;
     case SLTI:
@@ -2636,10 +2636,10 @@ void Simulator::DecodeTypeImmediate(Instruction* instr) {
       addr = rs + se_imm16;
       alu_out = ReadW(addr, instr);
       break;
-	case LD:
-	  addr = rs + se_imm16;
-	  alu_out = Read2W(addr, instr);
-	  break;
+    case LD:
+      addr = rs + se_imm16;
+      alu_out = Read2W(addr, instr);
+      break;
     case LBU:
       addr = rs + se_imm16;
       alu_out = ReadBU(addr);
@@ -2675,9 +2675,9 @@ void Simulator::DecodeTypeImmediate(Instruction* instr) {
       break;
     }
     case SW:
-	case SD:
+    case SD:
       addr = rs + se_imm16;
-	  // printf("sd : rs : 0x%lx  se_imm16: %d, addr : 0x%lx \n",rs, se_imm16,addr);
+      // printf("sd : rs : 0x%lx  se_imm16: %d, addr : 0x%lx \n",rs, se_imm16,addr);
       break;
     case SWR: {
       uint8_t al_offset = (rs + se_imm16) & kPointerAlignmentMask;
@@ -2727,9 +2727,9 @@ void Simulator::DecodeTypeImmediate(Instruction* instr) {
       break;
     // ------------- Arithmetic instructions.
     case ADDI:
-	case DADDI:
+    case DADDI:
     case ADDIU:
-	case DADDIU:
+    case DADDIU:
     case SLTI:
     case SLTIU:
     case ANDI:
@@ -2743,7 +2743,7 @@ void Simulator::DecodeTypeImmediate(Instruction* instr) {
     case LH:
     case LWL:
     case LW:
-	case LD:
+    case LD:
     case LBU:
     case LHU:
     case LWR:
@@ -2761,9 +2761,9 @@ void Simulator::DecodeTypeImmediate(Instruction* instr) {
     case SW:
       WriteW(addr, rt, instr);
       break;
-	case SD:
-	  Write2W(addr, rt, instr);
-	  break;
+    case SD:
+      Write2W(addr, rt, instr);
+      break;
     case SWR:
       WriteW(addr, mem_value, instr);
       break;

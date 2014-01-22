@@ -339,7 +339,7 @@ void Deoptimizer::TableEntryGenerator::GeneratePrologue() {
     Label start;
     __ bind(&start);
     __ daddiu(sp, sp, -1 * kPointerSize);
-	// __ break_(0x125);
+  // __ break_(0x125);
     // Jump over the remaining deopt entries (including this one).
     // This code is always reached by calling Jump, which puts the target (label
     // start) into t9.
@@ -347,10 +347,10 @@ void Deoptimizer::TableEntryGenerator::GeneratePrologue() {
     __ Daddu(t9, t9, remaining_entries);
     // 'at' was clobbered so we can only load the current entry value here.
     // __ li(at, i);
-	__ li(t8, i);
+    __ li(t8, i);
     __ jr(t9);  // Expose delay slot.
     // __ sd(at, MemOperand(sp, 0 * kPointerSize));  // In the delay slot.
-	__ sd(t8, MemOperand(sp, 0 * kPointerSize));
+    __ sd(t8, MemOperand(sp, 0 * kPointerSize));
 
     // Pad the rest of the code.
     while (table_entry_size_ > (masm()->SizeOfCodeGeneratedSince(&start))) {

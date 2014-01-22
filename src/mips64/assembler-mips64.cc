@@ -2114,8 +2114,8 @@ int Assembler::RelocateInternalReference(byte* pc, intptr_t pc_delta) {
     ASSERT(IsOri(instr_ori2));
     int64_t imm = (instr_lui & static_cast<int64_t>(kImm16Mask)) << kLuiShift << 32;
     imm |= (instr_ori & static_cast<int64_t>(kImm16Mask)) << 32;
-	imm |= (instr_lui2 & static_cast<int64_t>(kImm16Mask)) << kLuiShift;
-	imm |= (instr_ori2 & static_cast<int64_t>(kImm16Mask));
+    imm |= (instr_lui2 & static_cast<int64_t>(kImm16Mask)) << kLuiShift;
+    imm |= (instr_ori2 & static_cast<int64_t>(kImm16Mask));
     if (imm == kEndOfJumpChain) {
       return 0;  // Number of instructions patched.
     }
@@ -2342,9 +2342,9 @@ Address Assembler::target_address_at(Address pc) {
   if ((GetOpcodeField(instr0) == LUI) && (GetOpcodeField(instr1) == ORI) &&
       (GetOpcodeField(instr3) == ORI) && (GetOpcodeField(instr5) == ORI)) {
     // Assemble the 64 bit value.
-    //	printf("ss %llx\n", reinterpret_cast<Address>(
-    //	        (GetImmediate16(instr1) << 48) | GetImmediate16(instr2) << 32 |
-    //	        (GetImmediate16(instr3) << 16) | GetImmediate16(instr4)));
+    //  printf("ss %llx\n", reinterpret_cast<Address>(
+    //          (GetImmediate16(instr1) << 48) | GetImmediate16(instr2) << 32 |
+    //          (GetImmediate16(instr3) << 16) | GetImmediate16(instr4)));
     return reinterpret_cast<Address>(
         ((uint64_t)(GetImmediate16(instr0)) << 48) |
         ((uint64_t)(GetImmediate16(instr1)) << 32) |

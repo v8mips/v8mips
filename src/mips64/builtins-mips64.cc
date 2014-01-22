@@ -372,7 +372,7 @@ static void Generate_JSConstructStubHelper(MacroAssembler* masm,
 
     // Preserve the two incoming parameters on the stack.
     // __ sll(a0, a0, kSmiTagSize);  // Tag arguments count.
-	__ dsll32(a0, a0, 0);
+    __ dsll32(a0, a0, 0);
     __ MultiPushReversed(a0.bit() | a1.bit());
 
     // Use t7 to hold undefined, which is used in several places below.
@@ -526,7 +526,7 @@ static void Generate_JSConstructStubHelper(MacroAssembler* masm,
       __ mov(a2, t5);
       __ sd(t6, MemOperand(a2, JSObject::kMapOffset));
       // __ sll(a0, a3, kSmiTagSize);
-	  __ dsll32(a0, a3, 0);
+      __ dsll32(a0, a3, 0);
       __ sd(a0, MemOperand(a2, FixedArray::kLengthOffset));
       __ Daddu(a2, a2, Operand(2 * kPointerSize));
 
@@ -604,7 +604,7 @@ static void Generate_JSConstructStubHelper(MacroAssembler* masm,
 
     // Set up number of arguments for function call below.
     // __ srl(a0, a3, kSmiTagSize);
-	__ dsrl32(a0, a3, 0);
+    __ dsrl32(a0, a3, 0);
 
     // Copy arguments and receiver to the expression stack.
     // a0: number of arguments
@@ -616,11 +616,11 @@ static void Generate_JSConstructStubHelper(MacroAssembler* masm,
     // sp[2]: constructor function
     // sp[3]: number of arguments (smi-tagged)
     Label loop, entry;
-	__ dsrl32(a3, a3, 0);
+    __ dsrl32(a3, a3, 0);
     __ jmp(&entry);
     __ bind(&loop);
     // __ sll(t0, a3, kPointerSizeLog2 - kSmiTagSize);
-	__ dsrl(t0, a3, kPointerSizeLog2);
+    __ dsrl(t0, a3, kPointerSizeLog2);
     __ Daddu(t0, a2, Operand(t0));
     __ ld(t1, MemOperand(t0));
     __ push(t1);
@@ -739,8 +739,8 @@ static void Generate_JSEntryTrampolineHelper(MacroAssembler* masm,
     // a3: argc
     // s0: argv, i.e. points to first arg
     Label loop, entry;
-	__ dsll32(a3, a3, 0); // int32_t -> int64_t.
-	__ dsrl32(a3, a3, 0);
+    __ dsll32(a3, a3, 0); // int32_t -> int64_t.
+    __ dsrl32(a3, a3, 0);
     __ dsll(t0, a3, kPointerSizeLog2);
     __ daddu(t2, s0, t0);
     __ b(&entry);
@@ -1058,14 +1058,14 @@ void Builtins::Generate_FunctionCall(MacroAssembler* masm) {
     __ lw(a3, FieldMemOperand(a2, SharedFunctionInfo::kCompilerHintsOffset));
     // __ And(t3, a3, Operand(1 << (SharedFunctionInfo::kStrictModeFunction +
     //                             kSmiTagSize)));
-	// TODO right?
-	__ And(t3, a3, Operand(1 << SharedFunctionInfo::kStrictModeFunction));
+    // TODO right?
+    __ And(t3, a3, Operand(1 << SharedFunctionInfo::kStrictModeFunction));
     __ Branch(&shift_arguments, ne, t3, Operand(zero_reg));
 
     // Do not transform the receiver for native (Compilerhints already in a3).
     // __ And(t3, a3, Operand(1 << (SharedFunctionInfo::kNative + kSmiTagSize)));
-	// TODO right?
-	__ And(t3, a3, Operand(1 << SharedFunctionInfo::kNative));
+    // TODO right?
+    __ And(t3, a3, Operand(1 << SharedFunctionInfo::kNative));
     __ Branch(&shift_arguments, ne, t3, Operand(zero_reg));
 
     // Compute the receiver in non-strict mode.
@@ -1092,7 +1092,7 @@ void Builtins::Generate_FunctionCall(MacroAssembler* masm) {
     {
       FrameScope scope(masm, StackFrame::INTERNAL);
       // __ dsll(a0, a0, kSmiTagSize);  // Smi tagged.
-	  __ dsll32(a0, a0, 0);
+      __ dsll32(a0, a0, 0);
       __ push(a0);
 
       __ push(a2);
@@ -1101,7 +1101,7 @@ void Builtins::Generate_FunctionCall(MacroAssembler* masm) {
 
       __ pop(a0);
       // __ dsra(a0, a0, kSmiTagSize);  // Un-tag.
-	  __ dsra32(a0, a0, 0);
+      __ dsra32(a0, a0, 0);
       // Leave internal frame.
     }
     // Restore the function to a1, and the flag to t0.
@@ -1246,7 +1246,7 @@ void Builtins::Generate_FunctionApply(MacroAssembler* masm) {
     __ dsubu(a2, sp, a2);
     // Check if the arguments will overflow the stack.
     // __ dsll(t3, v0, kPointerSizeLog2 - kSmiTagSize);
-	__ dsrl(t3, v0, 32 - kPointerSizeLog2);
+    __ dsrl(t3, v0, 32 - kPointerSizeLog2);
     __ Branch(&okay, gt, a2, Operand(t3));  // Signed comparison.
 
     // Out of stack space.
@@ -1281,13 +1281,13 @@ void Builtins::Generate_FunctionApply(MacroAssembler* masm) {
     __ lw(a2, FieldMemOperand(a2, SharedFunctionInfo::kCompilerHintsOffset));
     // __ And(t3, a2, Operand(1 << (SharedFunctionInfo::kStrictModeFunction +
     //                             kSmiTagSize)));
-	// TODO right?
-	__ And(t3, a2, Operand(1 << SharedFunctionInfo::kStrictModeFunction));
+    // TODO right?
+    __ And(t3, a2, Operand(1 << SharedFunctionInfo::kStrictModeFunction));
     __ Branch(&push_receiver, ne, t3, Operand(zero_reg));
 
     // Do not transform the receiver for native (Compilerhints already in a2).
     // __ And(t3, a2, Operand(1 << (SharedFunctionInfo::kNative + kSmiTagSize)));
-	__ And(t3, a2, Operand(1 << SharedFunctionInfo::kNative));
+    __ And(t3, a2, Operand(1 << SharedFunctionInfo::kNative));
     __ Branch(&push_receiver, ne, t3, Operand(zero_reg));
 
     // Compute the receiver in non-strict mode.
@@ -1344,9 +1344,9 @@ void Builtins::Generate_FunctionApply(MacroAssembler* masm) {
     // Use inline caching to access the arguments.
     __ ld(a0, MemOperand(fp, kIndexOffset));
     // __ Daddu(a0, a0, Operand(1 << kSmiTagSize));
-	__ dsrl32(a0, a0, 0);
-	__ Daddu(a0, a0, Operand(1));
-	__ dsll32(a0, a0, 0);
+    __ dsrl32(a0, a0, 0);
+    __ Daddu(a0, a0, Operand(1));
+    __ dsll32(a0, a0, 0);
     __ sd(a0, MemOperand(fp, kIndexOffset));
 
     // Test if the copy loop has finished copying all the elements from the
@@ -1359,7 +1359,7 @@ void Builtins::Generate_FunctionApply(MacroAssembler* masm) {
     Label call_proxy;
     ParameterCount actual(a0);
     // __ sra(a0, a0, kSmiTagSize);
-	__ dsra32(a0, a0, 0);
+    __ dsra32(a0, a0, 0);
     __ ld(a1, MemOperand(fp, kFunctionOffset));
     __ GetObjectType(a1, a2, a2);
     __ Branch(&call_proxy, ne, a2, Operand(JS_FUNCTION_TYPE));
@@ -1444,7 +1444,7 @@ void Builtins::Generate_ArgumentsAdaptorTrampoline(MacroAssembler* masm) {
 
     // Calculate copy start address into a0 and copy end address into a2.
     // __ sll(a0, a0, kPointerSizeLog2 - kSmiTagSize);
-	__ dsrl(a0, a0, 32 - kPointerSizeLog2);
+    __ dsrl(a0, a0, 32 - kPointerSizeLog2);
     __ Daddu(a0, fp, a0);
     // Adjust for return address and receiver.
     __ Daddu(a0, a0, Operand(2 * kPointerSize));
@@ -1470,7 +1470,7 @@ void Builtins::Generate_ArgumentsAdaptorTrampoline(MacroAssembler* masm) {
 
   {  // Too few parameters: Actual < expected.
     __ bind(&too_few);
-//	 __ break_(0x222);
+//  __ break_(0x222);
     EnterArgumentsAdaptorFrame(masm);
 
     // Calculate copy start address into a0 and copy end address is fp.
@@ -1479,7 +1479,7 @@ void Builtins::Generate_ArgumentsAdaptorTrampoline(MacroAssembler* masm) {
     // a2: expected number of arguments
     // a3: code entry to call
     // __ sll(a0, a0, kPointerSizeLog2 - kSmiTagSize);
-	__ dsrl(a0, a0, 32 - kPointerSizeLog2);
+    __ dsrl(a0, a0, 32 - kPointerSizeLog2);
     __ Daddu(a0, fp, a0);
     // Adjust for return address and receiver.
     __ Daddu(a0, a0, Operand(2 * kPointerSize));

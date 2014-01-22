@@ -1657,7 +1657,7 @@ Handle<Code> CallStubCompiler::CompileArrayPushCall(
       // We may need a register containing the address end_elements below,
       // so write back the value in end_elements.
       // __ sll(end_elements, scratch, kPointerSizeLog2 - kSmiTagSize);
-	  __ dsrl(end_elements, scratch, 32 - kPointerSizeLog2);
+      __ dsrl(end_elements, scratch, 32 - kPointerSizeLog2);
       __ Daddu(end_elements, elements, end_elements);
       const int kEndElementsOffset =
           FixedArray::kHeaderSize - kHeapObjectTag - argc * kPointerSize;
@@ -1753,7 +1753,7 @@ Handle<Code> CallStubCompiler::CompileArrayPushCall(
       // We may need a register containing the address end_elements below,
       // so write back the value in end_elements.
       // __ sll(end_elements, scratch, kPointerSizeLog2 - kSmiTagSize);
-	  __ dsrl(end_elements, scratch, 32 - kPointerSizeLog2);
+      __ dsrl(end_elements, scratch, 32 - kPointerSizeLog2);
       __ Daddu(end_elements, elements, end_elements);
       __ Daddu(end_elements, end_elements, kEndElementsOffset);
       __ sd(t0, MemOperand(end_elements));
@@ -1793,7 +1793,7 @@ Handle<Code> CallStubCompiler::CompileArrayPushCall(
       const int kAllocationDelta = 4;
       // Load top and check if it is the end of elements.
       // __ sll(end_elements, scratch, kPointerSizeLog2 - kSmiTagSize);
-	  __ dsrl(end_elements, scratch, 32 - kPointerSizeLog2);
+      __ dsrl(end_elements, scratch, 32 - kPointerSizeLog2);
       __ Daddu(end_elements, elements, end_elements);
       __ Daddu(end_elements, end_elements, Operand(kEndElementsOffset));
       __ li(t3, Operand(new_space_allocation_top));
