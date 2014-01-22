@@ -2534,9 +2534,7 @@ void ArgumentsAccessStub::GenerateNewNonStrictFast(MacroAssembler* masm) {
   __ Dsubu(t1, t1, Operand(kParameterMapHeaderSize - FixedArray::kHeaderSize));
   __ Daddu(t6, a3, t1);
   __ sd(t3, MemOperand(t6));
-  // __ Daddu(t5, t5, Operand(Smi::FromInt(1)));
-  __ li(t1, Operand(Smi::FromInt(1)));
-  __ Daddu(t5, t5, Operand(t1));
+  __ Daddu(t5, t5, Operand(Smi::FromInt(1)));
   __ bind(&parameters_test);
   __ Branch(&parameters_loop, ne, t2, Operand(Smi::FromInt(0)));
 
@@ -3007,7 +3005,7 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
   // TODO right?
   STATIC_ASSERT(kSmiTagSize + kSmiShiftSize == 32);
   __ dsrl32(a1, a1, 0);
-  __ addiu(a1, a1, 1);
+  __ daddiu(a1, a1, 1);
   __ dsll32(a1, a1, 0);
 
   __ ld(a0, MemOperand(sp, kLastMatchInfoOffset));

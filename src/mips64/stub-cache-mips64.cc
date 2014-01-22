@@ -217,7 +217,7 @@ void StubCache::GenerateProbe(MacroAssembler* masm,
   __ ld(scratch, FieldMemOperand(name, Name::kHashFieldOffset));
   __ ld(at, FieldMemOperand(receiver, HeapObject::kMapOffset));
   __ Daddu(scratch, scratch, at);
-  uint32_t mask = kPrimaryTableSize - 1;
+  uint64_t mask = kPrimaryTableSize - 1;
   // We shift out the last two bits because they are not part of the hash and
   // they are always 01 for maps.
   __ dsrl(scratch, scratch, kHeapObjectTagSize);
@@ -239,7 +239,7 @@ void StubCache::GenerateProbe(MacroAssembler* masm,
   // Primary miss: Compute hash for secondary probe.
   __ dsrl(at, name, kHeapObjectTagSize);
   __ Dsubu(scratch, scratch, at);
-  uint32_t mask2 = kSecondaryTableSize - 1;
+  uint64_t mask2 = kSecondaryTableSize - 1;
   __ Daddu(scratch, scratch, Operand((flags >> kHeapObjectTagSize) & mask2));
   __ And(scratch, scratch, Operand(mask2));
 
@@ -806,7 +806,7 @@ static void GenerateFastApiDirectCall(MacroAssembler* masm,
   Handle<JSFunction> function = optimization.constant_function();
   __ li(t1, function);
   __ ld(cp, FieldMemOperand(t1, JSFunction::kContextOffset));
-  __ sw(t1, MemOperand(sp, FCA::kCalleeIndex * kPointerSize));
+  __ sd(t1, MemOperand(sp, FCA::kCalleeIndex * kPointerSize));
 
   // Construct the FunctionCallbackInfo.
   Handle<CallHandlerInfo> api_call_info = optimization.api_call_info();
@@ -2135,7 +2135,7 @@ Handle<Code> CallStubCompiler::CompileMathFloorCall(
 
   // Start checking for special cases.
   // Get the argument exponent and clear the sign bit.
-  __ lw(t1, FieldMemOperand(v0, HeapNumber::kValueOffset + kPointerSize));
+  __ ld(t1, FieldMemOperand(v0, HeapNumber::kValueOffset + kPointerSize));
   __ And(t2, t1, Operand(~HeapNumber::kSignMask));
   __ dsrl(t2, t2, HeapNumber::kMantissaBitsInTopWord);
 

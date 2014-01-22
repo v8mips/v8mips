@@ -1202,10 +1202,10 @@ void Builtins::Generate_FunctionCall(MacroAssembler* masm) {
   // a0: actual number of arguments
   // a1: function
   __ ld(a3, FieldMemOperand(a1, JSFunction::kSharedFunctionInfoOffset));
-  __ ld(a2,
+  __ lw(a2,
          FieldMemOperand(a3, SharedFunctionInfo::kFormalParameterCountOffset));
   // __ dsra(a2, a2, kSmiTagSize);
-  __ dsra32(a2, a2, 0);
+  // __ dsra32(a2, a2, 0);
   __ ld(a3, FieldMemOperand(a1, JSFunction::kCodeEntryOffset));
   __ SetCallKind(t1, CALL_AS_METHOD);
   // Check formal and actual parameter counts.
@@ -1343,10 +1343,7 @@ void Builtins::Generate_FunctionApply(MacroAssembler* masm) {
 
     // Use inline caching to access the arguments.
     __ ld(a0, MemOperand(fp, kIndexOffset));
-    // __ Daddu(a0, a0, Operand(1 << kSmiTagSize));
-    __ dsrl32(a0, a0, 0);
-    __ Daddu(a0, a0, Operand(1));
-    __ dsll32(a0, a0, 0);
+    __ Daddu(a0, a0, Operand(Smi::FromInt(1)));
     __ sd(a0, MemOperand(fp, kIndexOffset));
 
     // Test if the copy loop has finished copying all the elements from the
