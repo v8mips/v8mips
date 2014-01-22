@@ -274,6 +274,9 @@ class Simulator {
   inline double ReadD(int64_t addr, Instruction* instr);
   inline void WriteD(int64_t addr, double value, Instruction* instr);
 
+  // Helper for debugging memory access.
+  inline void DieOrDebug();
+
   // Operations depending on endianness.
   // Get Double Higher / Lower word.
   inline int32_t GetDoubleHIW(double* addr);

@@ -810,6 +810,12 @@ DEFINE_string(redirect_code_traces_to, NULL,
             "output deopt information and disassembly into the given file")
 
 //
+// MIPS64 development flags
+//   TODO(plind)  --  DO NOT SUBMIT, without careful review.
+//
+DEFINE_bool(sim_dbg_addr, true, "Use Sim debugger for address errors")
+
+//
 // Disassembler only flags
 //
 #undef FLAG

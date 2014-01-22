@@ -1221,13 +1221,22 @@ int64_t Simulator::get_pc() const {
 // executed in the simulator.  Since the host is typically IA32 we will not
 // get the correct MIPS-like behaviour on unaligned accesses.
 
+void Simulator::DieOrDebug() {
+  if (::v8::internal::FLAG_sim_dbg_addr) {
+    MipsDebugger dbg(this);
+    dbg.Debug();
+  } else {
+    OS::Abort();
+  }
+}
+
+
 int Simulator::ReadW(int64_t addr, Instruction* instr) {
   if (addr >=0 && addr < 0x400) {
     // This has to be a NULL-dereference, drop into debugger.
     PrintF("Memory read from bad address: 0x%08lx, pc=0x%08lx\n",
            addr, reinterpret_cast<intptr_t>(instr));
-    MipsDebugger dbg(this);
-    dbg.Debug();
+    DieOrDebug();
   }
  if ((addr & 0x3) == 0) {
     int* ptr = reinterpret_cast<int*>(addr);
@@ -1236,8 +1245,7 @@ int Simulator::ReadW(int64_t addr, Instruction* instr) {
   PrintF("Unaligned read at 0x%08lx, pc=0x%08" V8PRIxPTR "\n",
          addr,
          reinterpret_cast<intptr_t>(instr));
-  MipsDebugger dbg(this);
-  dbg.Debug();
+  DieOrDebug();
   return 0;
 }
 
@@ -1247,8 +1255,7 @@ void Simulator::WriteW(int64_t addr, int value, Instruction* instr) {
     // This has to be a NULL-dereference, drop into debugger.
     PrintF("Memory write to bad address: 0x%08lx, pc=0x%08lx\n",
            addr, reinterpret_cast<intptr_t>(instr));
-    MipsDebugger dbg(this);
-    dbg.Debug();
+    DieOrDebug();
   }
   if ((addr & 0x3) == 0) {
     int* ptr = reinterpret_cast<int*>(addr);
@@ -1258,8 +1265,7 @@ void Simulator::WriteW(int64_t addr, int value, Instruction* instr) {
   PrintF("Unaligned write at 0x%08lx, pc=0x%08" V8PRIxPTR "\n",
          addr,
          reinterpret_cast<intptr_t>(instr));
-  MipsDebugger dbg(this);
-  dbg.Debug();
+  DieOrDebug();
 }
 
 
@@ -1268,8 +1274,7 @@ int64_t Simulator::Read2W(int64_t addr, Instruction* instr) {
     // This has to be a NULL-dereference, drop into debugger.
     PrintF("Memory read from bad address: 0x%08lx, pc=0x%08lx\n",
            addr, reinterpret_cast<intptr_t>(instr));
-    MipsDebugger dbg(this);
-    dbg.Debug();
+    DieOrDebug();
   }
   if ((addr & kPointerAlignmentMask) == 0) {
     int64_t* ptr = reinterpret_cast<int64_t*>(addr);
@@ -1278,8 +1283,7 @@ int64_t Simulator::Read2W(int64_t addr, Instruction* instr) {
   PrintF("Unaligned read at 0x%08lx, pc=0x%08" V8PRIxPTR "\n",
          addr,
          reinterpret_cast<intptr_t>(instr));
-  MipsDebugger dbg(this);
-  dbg.Debug();
+  DieOrDebug();
   return 0;
 }
 
@@ -1289,8 +1293,7 @@ void Simulator::Write2W(int64_t addr, int64_t value, Instruction* instr) {
     // This has to be a NULL-dereference, drop into debugger.
     PrintF("Memory write to bad address: 0x%08lx, pc=0x%08lx\n",
            addr, reinterpret_cast<intptr_t>(instr));
-    MipsDebugger dbg(this);
-    dbg.Debug();
+    DieOrDebug();
   }
   if ((addr & kPointerAlignmentMask) == 0) {
 	int64_t* ptr = reinterpret_cast<int64_t*>(addr);
@@ -1302,8 +1305,7 @@ void Simulator::Write2W(int64_t addr, int64_t value, Instruction* instr) {
   PrintF("Unaligned write at 0x%08lx, pc=0x%08" V8PRIxPTR "\n",
          addr,
          reinterpret_cast<intptr_t>(instr));
-  MipsDebugger dbg(this);
-  dbg.Debug();
+  DieOrDebug();
 }
 
 
@@ -1329,7 +1331,7 @@ void Simulator::WriteD(int64_t addr, double value, Instruction* instr) {
   PrintF("Unaligned (double) write at 0x%08lx, pc=0x%08" V8PRIxPTR "\n",
          addr,
          reinterpret_cast<intptr_t>(instr));
-  OS::Abort();
+  DieOrDebug();
 }
 
 
@@ -1341,7 +1343,7 @@ uint16_t Simulator::ReadHU(int64_t addr, Instruction* instr) {
   PrintF("Unaligned unsigned halfword read at 0x%08lx, pc=0x%08" V8PRIxPTR "\n",
          addr,
          reinterpret_cast<intptr_t>(instr));
-  OS::Abort();
+  DieOrDebug();
   return 0;
 }
 
@@ -1354,7 +1356,7 @@ int16_t Simulator::ReadH(int64_t addr, Instruction* instr) {
   PrintF("Unaligned signed halfword read at 0x%08lx, pc=0x%08" V8PRIxPTR "\n",
          addr,
          reinterpret_cast<intptr_t>(instr));
-  OS::Abort();
+  DieOrDebug();
   return 0;
 }
 
@@ -1368,7 +1370,7 @@ void Simulator::WriteH(int64_t addr, uint16_t value, Instruction* instr) {
   PrintF("Unaligned unsigned halfword write at 0x%08lx, pc=0x%08" V8PRIxPTR "\n",
          addr,
          reinterpret_cast<intptr_t>(instr));
-  OS::Abort();
+  DieOrDebug();
 }
 
 
@@ -1381,7 +1383,7 @@ void Simulator::WriteH(int64_t addr, int16_t value, Instruction* instr) {
   PrintF("Unaligned halfword write at 0x%08lx, pc=0x%08" V8PRIxPTR "\n",
          addr,
          reinterpret_cast<intptr_t>(instr));
-  OS::Abort();
+  DieOrDebug();
 }
 
 
