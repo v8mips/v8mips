@@ -3087,8 +3087,10 @@ void LCodeGen::DoLoadKeyedExternalArray(LLoadKeyed* instr) {
     key = ToRegister(instr->key());
   }
   int element_size_shift = ElementsKindToShiftSize(elements_kind);
+  // int shift_size = (instr->hydrogen()->key()->representation().IsSmi())
+  //    ? (element_size_shift - kSmiTagSize) : element_size_shift;
   int shift_size = (instr->hydrogen()->key()->representation().IsSmi())
-      ? (element_size_shift - kSmiTagSize) : element_size_shift;
+      ? (element_size_shift - (kSmiTagSize + kSmiShiftSize)) : element_size_shift;
   int additional_offset = instr->additional_index() << element_size_shift;
 
   if (elements_kind == EXTERNAL_FLOAT_ELEMENTS ||
@@ -3097,7 +3099,15 @@ void LCodeGen::DoLoadKeyedExternalArray(LLoadKeyed* instr) {
     if (key_is_constant) {
       __ Daddu(scratch0(), external_pointer, constant_key << element_size_shift);
     } else {
-      __ dsll(scratch0(), key, shift_size);
+      if (shift_size < 0) {
+         if (shift_size == -32) {
+           __ dsrl32(scratch0(), key, 0);
+         } else {
+           __ dsrl(scratch0(), key, -shift_size);
+         }
+      } else {
+        __ dsll(scratch0(), key, shift_size);
+      }
       __ Daddu(scratch0(), scratch0(), external_pointer);
     }
     if (elements_kind == EXTERNAL_FLOAT_ELEMENTS) {
@@ -3121,14 +3131,12 @@ void LCodeGen::DoLoadKeyedExternalArray(LLoadKeyed* instr) {
         __ lbu(result, mem_operand);
         break;
       case EXTERNAL_SHORT_ELEMENTS:
-      // TODO lw?
         __ lh(result, mem_operand);
         break;
       case EXTERNAL_UNSIGNED_SHORT_ELEMENTS:
         __ lhu(result, mem_operand);
         break;
       case EXTERNAL_INT_ELEMENTS:
-      // TODO ld?
         __ lw(result, mem_operand);
         break;
       case EXTERNAL_UNSIGNED_INT_ELEMENTS:
@@ -3272,8 +3280,12 @@ MemOperand LCodeGen::PrepareKeyedOperand(Register key,
       __ Daddu(scratch0(), base, scratch0());
       return MemOperand(scratch0());
     } else {
-      ASSERT_EQ(-1, shift_size);
-      __ dsrl(scratch0(), key, 1);
+      // ASSERT_EQ(-1, shift_size);
+      if (shift_size == -32) {
+        __ dsrl32(scratch0(), key, 0);
+      } else {
+        __ dsrl(scratch0(), key, -shift_size);
+      }
       __ Daddu(scratch0(), base, scratch0());
       return MemOperand(scratch0());
     }
@@ -3284,8 +3296,12 @@ MemOperand LCodeGen::PrepareKeyedOperand(Register key,
     __ Daddu(scratch0(), base, scratch0());
     return MemOperand(scratch0());
   } else {
-    ASSERT_EQ(-1, shift_size);
-    __ dsrl(scratch0(), scratch0(), 1);
+    // ASSERT_EQ(-1, shift_size);
+    if (shift_size == -32) {
+       __ dsrl32(scratch0(), scratch0(), 0);
+    } else {
+      __ dsrl(scratch0(), scratch0(), -shift_size);
+    }
     __ Daddu(scratch0(), base, scratch0());
     return MemOperand(scratch0());
   }
@@ -4214,8 +4230,10 @@ void LCodeGen::DoStoreKeyedExternalArray(LStoreKeyed* instr) {
     key = ToRegister(instr->key());
   }
   int element_size_shift = ElementsKindToShiftSize(elements_kind);
+  // int shift_size = (instr->hydrogen()->key()->representation().IsSmi())
+  //    ? (element_size_shift - kSmiTagSize) : element_size_shift;
   int shift_size = (instr->hydrogen()->key()->representation().IsSmi())
-      ? (element_size_shift - kSmiTagSize) : element_size_shift;
+      ? (element_size_shift - (kSmiTagSize + kSmiShiftSize)) : element_size_shift;
   int additional_offset = instr->additional_index() << element_size_shift;
 
   if (elements_kind == EXTERNAL_FLOAT_ELEMENTS ||
@@ -4230,7 +4248,15 @@ void LCodeGen::DoStoreKeyedExternalArray(LStoreKeyed* instr) {
         address = external_pointer;
       }
     } else {
-      __ dsll(address, key, shift_size);
+      if (shift_size < 0) {
+        if (shift_size == -32) {
+          __ dsrl32(address, key, 0);
+        } else {
+          __ dsrl(address, key, -shift_size);
+        }
+      } else {
+        __ dsll(address, key, shift_size);
+      }
       __ Daddu(address, external_pointer, address);
     }
 
@@ -4254,12 +4280,10 @@ void LCodeGen::DoStoreKeyedExternalArray(LStoreKeyed* instr) {
         break;
       case EXTERNAL_SHORT_ELEMENTS:
       case EXTERNAL_UNSIGNED_SHORT_ELEMENTS:
-        // TODO sw?
         __ sh(value, mem_operand);
         break;
       case EXTERNAL_INT_ELEMENTS:
       case EXTERNAL_UNSIGNED_INT_ELEMENTS:
-        // TODO sd?
         __ sw(value, mem_operand);
         break;
       case EXTERNAL_FLOAT_ELEMENTS:
