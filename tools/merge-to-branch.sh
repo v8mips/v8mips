@@ -139,10 +139,38 @@ fi
 
 let CURRENT_STEP+=1
 if [ $START_STEP -le $CURRENT_STEP ] ; then
+  echo ">>> Step $CURRENT_STEP: Finding MIPS ports."
+  confirm "Automatically find associated MIPS ports?"
+  if [ $? -eq 0 ] ; then
+    for REVISION in "$@" ; do
+      MIPS_GIT_HASH=$(git log svn/bleeding_edge -1 --format=%H --grep="Port r$REVISION")
+      if [ "$MIPS_GIT_HASH" != "" ] ; then
+        MIPS_SVN_REVISION=$(git svn find-rev $MIPS_GIT_HASH svn/bleeding_edge)
+        if [ $? -eq 0 ] ; then
+          MIPS_REVISION_TITLE=$(git log -1 --format=%s $MIPS_GIT_HASH)
+          echo "Found MIPS port of $REVISION -> $MIPS_SVN_REVISION: $MIPS_REVISION_TITLE"
+          MIPS_REVISION_LIST="$MIPS_REVISION_LIST $MIPS_SVN_REVISION"
+        fi
+      fi
+    done
+    confirm "Is this list correct (saying 'n' will ask you to manually \
+specify the correct MIPS revisions)?"
+    if [ $? -ne 0 ] ; then
+      echo -n "MIPS revision list (leave empty to skip MIPS ports): "
+      read MIPS_REVISION_LIST
+      MIPS_REVISION_LIST=" $MIPS_REVISION_LIST"
+    fi
+  fi
+fi
+
+let CURRENT_STEP+=1
+if [ $START_STEP -le $CURRENT_STEP ] ; then
   echo ">>> Step $CURRENT_STEP: Find the git \
 revisions associated with the patches."
   current=0
-  for REVISION in "$@" ; do
+  # TODO(palfia): remove debug output
+  echo "REVLIST: $@$MIPS_REVISION_LIST"
+  for REVISION in $@$MIPS_REVISION_LIST ; do
     NEXT_HASH=$(git svn find-rev "r$REVISION" svn/bleeding_edge)
     [[ -n "$NEXT_HASH" ]] \
       || die "Cannot determine git hash for r$REVISION"
