@@ -53,18 +53,16 @@ void BreakLocationIterator::SetDebugBreakAtReturn() {
   // addiu sp, sp, N
   // jr ra
   // nop (in branch delay slot)
+  // nop (added as padding to reach 8 instructions)
 
   // Make sure this constant matches the number if instrucntions we emit.
-  ASSERT(Assembler::kJSReturnSequenceInstructions == 7);
+  ASSERT(Assembler::kJSReturnSequenceInstructions == 8);
   CodePatcher patcher(rinfo()->pc(), Assembler::kJSReturnSequenceInstructions);
-  // li and Call pseudo-instructions emit two instructions each.
+  // li and Call pseudo-instructions emit 6 + 2 instructions.
   patcher.masm()->li(v8::internal::t9,
       Operand(reinterpret_cast<int64_t>(
         debug_info_->GetIsolate()->debug()->debug_break_return()->entry())));
   patcher.masm()->Call(v8::internal::t9);
-  patcher.masm()->nop();
-  patcher.masm()->nop();
-  patcher.masm()->nop();
 
   // TODO(mips): Open issue about using breakpoint instruction instead of nops.
   // patcher.masm()->bkpt(0);
@@ -100,8 +98,12 @@ void BreakLocationIterator::SetDebugBreakAtSlot() {
   //   nop(DEBUG_BREAK_NOP)
   //   nop(DEBUG_BREAK_NOP)
   //   nop(DEBUG_BREAK_NOP)
+  //   nop(DEBUG_BREAK_NOP)
+  //   nop(DEBUG_BREAK_NOP)
+  //   nop(DEBUG_BREAK_NOP)
+  //   nop(DEBUG_BREAK_NOP)
   // to a call to the debug break slot code.
-  //   li t9, address   (lui t9 / ori t9 instruction pair)
+  //   li t9, address   (6-instruction sequence on mips64)
   //   call t9          (jalr t9 / nop instruction pair)
   CodePatcher patcher(rinfo()->pc(), Assembler::kDebugBreakSlotInstructions);
   patcher.masm()->li(v8::internal::t9, Operand(reinterpret_cast<int64_t>(

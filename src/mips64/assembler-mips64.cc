@@ -2107,15 +2107,16 @@ int Assembler::RelocateInternalReference(byte* pc, intptr_t pc_delta) {
   if (IsLui(instr)) {
     Instr instr_lui = instr_at(pc + 0 * Assembler::kInstrSize);
     Instr instr_ori = instr_at(pc + 1 * Assembler::kInstrSize);
-    Instr instr_lui2 = instr_at(pc + 3 * Assembler::kInstrSize);
-    Instr instr_ori2 = instr_at(pc + 4 * Assembler::kInstrSize);
+    Instr instr_ori2 = instr_at(pc + 3 * Assembler::kInstrSize);
+    Instr instr_ori3 = instr_at(pc + 5 * Assembler::kInstrSize);
     ASSERT(IsOri(instr_ori));
-    ASSERT(IsLui(instr_lui2));
     ASSERT(IsOri(instr_ori2));
-    int64_t imm = (instr_lui & static_cast<int64_t>(kImm16Mask)) << kLuiShift << 32;
+    ASSERT(IsOri(instr_ori3));
+    // TODO(plind): symbolic names for the shifts.
+    int64_t imm = (instr_lui & static_cast<int64_t>(kImm16Mask)) << 48;
     imm |= (instr_ori & static_cast<int64_t>(kImm16Mask)) << 32;
-    imm |= (instr_lui2 & static_cast<int64_t>(kImm16Mask)) << kLuiShift;
-    imm |= (instr_ori2 & static_cast<int64_t>(kImm16Mask));
+    imm |= (instr_ori2 & static_cast<int64_t>(kImm16Mask)) << 16;
+    imm |= (instr_ori3 & static_cast<int64_t>(kImm16Mask));
     if (imm == kEndOfJumpChain) {
       return 0;  // Number of instructions patched.
     }
@@ -2124,32 +2125,33 @@ int Assembler::RelocateInternalReference(byte* pc, intptr_t pc_delta) {
 
     instr_lui &= ~kImm16Mask;
     instr_ori &= ~kImm16Mask;
-    instr_lui2 &= ~kImm16Mask;
     instr_ori2 &= ~kImm16Mask;
+    instr_ori3 &= ~kImm16Mask;
 
     instr_at_put(pc + 0 * Assembler::kInstrSize,
-                 instr_lui | ((imm >> kLuiShift >> 32) & kImm16Mask));
+                 instr_lui | ((imm >> 48) & kImm16Mask));
     instr_at_put(pc + 1 * Assembler::kInstrSize,
                  instr_ori | (imm >> 32 & kImm16Mask));
     instr_at_put(pc + 3 * Assembler::kInstrSize,
-                 instr_lui2 | ((imm >> kLuiShift) & kImm16Mask));
-    instr_at_put(pc + 4 * Assembler::kInstrSize,
-                 instr_ori2 | (imm & kImm16Mask));
-    return 5;  // Number of instructions patched.
+                 instr_ori2 | ((imm >> 16) & kImm16Mask));
+    instr_at_put(pc + 5 * Assembler::kInstrSize,
+                 instr_ori3 | (imm & kImm16Mask));
+    return 6;  // Number of instructions patched.
   } else {
-    uint32_t imm28 = (instr & static_cast<int32_t>(kImm26Mask)) << 2;
-    if (static_cast<int32_t>(imm28) == kEndOfJumpChain) {
-      return 0;  // Number of instructions patched.
-    }
-    imm28 += pc_delta;
-    imm28 &= kImm28Mask;
-    ASSERT((imm28 & 3) == 0);
+    CHECK(0);  // TODO(plind): validate & fix this code path.
+    // uint32_t imm28 = (instr & static_cast<int32_t>(kImm26Mask)) << 2;
+    // if (static_cast<int32_t>(imm28) == kEndOfJumpChain) {
+    //   return 0;  // Number of instructions patched.
+    // }
+    // imm28 += pc_delta;
+    // imm28 &= kImm28Mask;
+    // ASSERT((imm28 & 3) == 0);
 
-    instr &= ~kImm26Mask;
-    uint32_t imm26 = imm28 >> 2;
-    ASSERT(is_uint26(imm26));
+    // instr &= ~kImm26Mask;
+    // uint32_t imm26 = imm28 >> 2;
+    // ASSERT(is_uint26(imm26));
 
-    instr_at_put(pc, instr | (imm26 & kImm26Mask));
+    // instr_at_put(pc, instr | (imm26 & kImm26Mask));
     return 1;  // Number of instructions patched.
   }
 }
@@ -2297,15 +2299,20 @@ void Assembler::CheckTrampolinePool() {
 
       int pool_start = pc_offset();
       for (int i = 0; i < unbound_labels_count_; i++) {
-        uint32_t imm32;
-        imm32 = jump_address(&after_pool);
+        uint64_t imm64;
+        imm64 = jump_address(&after_pool);
         { BlockGrowBufferScope block_buf_growth(this);
           // Buffer growth (and relocation) must be blocked for internal
           // references until associated instructions are emitted and available
           // to be patched.
           RecordRelocInfo(RelocInfo::INTERNAL_REFERENCE);
-          lui(at, (imm32 & kHiMask) >> kLuiShift);
-          ori(at, at, (imm32 & kImm16Mask));
+          // TODO(plind): Verify this, presume I cannot use macro-assembler here.
+          lui(at, (imm64 >> 48) & kImm16Mask);
+          ori(at, at, (imm64 >> 32) & kImm16Mask);
+          dsll(at, at, 16);
+          ori(at, at, (imm64 >> 16) & kImm16Mask);
+          dsll(at, at, 16);
+          ori(at, at, imm64 & kImm16Mask);
         }
         jr(at);
         nop();

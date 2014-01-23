@@ -325,19 +325,22 @@ void RelocInfo::WipeOut() {
 
 
 bool RelocInfo::IsPatchedReturnSequence() {
-  Instr instr0 = Assembler::instr_at(pc_);
-  Instr instr1 = Assembler::instr_at(pc_ + 1 * Assembler::kInstrSize);
-  Instr instr2 = Assembler::instr_at(pc_ + 3 * Assembler::kInstrSize);
-  Instr instr3 = Assembler::instr_at(pc_ + 4 * Assembler::kInstrSize);
-  Instr instr4 = Assembler::instr_at(pc_ + 5 * Assembler::kInstrSize);
+  Instr instr0 = Assembler::instr_at(pc_);  // lui.
+  Instr instr1 = Assembler::instr_at(pc_ + 1 * Assembler::kInstrSize);  // ori.
+  Instr instr2 = Assembler::instr_at(pc_ + 2 * Assembler::kInstrSize);  // dsll.
+  Instr instr3 = Assembler::instr_at(pc_ + 3 * Assembler::kInstrSize);  // ori.
+  Instr instr4 = Assembler::instr_at(pc_ + 4 * Assembler::kInstrSize);  // dsll.
+  Instr instr5 = Assembler::instr_at(pc_ + 5 * Assembler::kInstrSize);  // ori.
+  Instr instr6 = Assembler::instr_at(pc_ + 6 * Assembler::kInstrSize);  // jalr.
+  // Instr instr7 = Assembler::instr_at(pc_ + 7 * Assembler::kInstrSize);  // nop.
 
   bool patched_return = ((instr0 & kOpcodeMask) == LUI &&
                          (instr1 & kOpcodeMask) == ORI &&
-                         (instr2 & kOpcodeMask) == LUI &&
+                         (instr2 & kFunctionFieldMask) == DSLL &&
                          (instr3 & kOpcodeMask) == ORI &&
-                         ((instr4 & kOpcodeMask) == JAL ||
-                          ((instr4 & kOpcodeMask) == SPECIAL &&
-                           (instr4 & kFunctionFieldMask) == JALR)));
+                         (instr4 & kFunctionFieldMask) == DSLL &&
+                         (instr5 & kOpcodeMask) == ORI &&
+                         (instr6 & kFunctionFieldMask) == JALR);
   return patched_return;
 }
 
