@@ -620,7 +620,7 @@ static void Generate_JSConstructStubHelper(MacroAssembler* masm,
     __ jmp(&entry);
     __ bind(&loop);
     // __ sll(t0, a3, kPointerSizeLog2 - kSmiTagSize);
-    __ dsrl(t0, a3, kPointerSizeLog2);
+    __ dsll(t0, a3, kPointerSizeLog2);
     __ Daddu(t0, a2, Operand(t0));
     __ ld(t1, MemOperand(t0));
     __ push(t1);
