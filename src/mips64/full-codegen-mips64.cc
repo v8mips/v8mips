@@ -431,6 +431,7 @@ void FullCodeGenerator::EmitReturnSequence() {
       masm_->MultiPop(static_cast<RegList>(fp.bit() | ra.bit()));
       masm_->Daddu(sp, sp, Operand(sp_delta));
       masm_->Jump(ra);
+      masm_->nop();  // Pad the sequence to 8 bytes to support debugger.
       info_->AddNoFrameRange(no_frame_start, masm_->pc_offset());
     }
 

@@ -609,11 +609,11 @@ class Assembler : public AssemblerBase {
   // register.
   static const int kPcLoadDelta = 4;
 
-  static const int kPatchDebugBreakSlotReturnOffset = 4 * kInstrSize;
+  static const int kPatchDebugBreakSlotReturnOffset = 8 * kInstrSize;
 
   // Number of instructions used for the JS return sequence. The constant is
   // used by the debugger to patch the JS return sequence.
-  static const int kJSReturnSequenceInstructions = 7;
+  static const int kJSReturnSequenceInstructions = 8;
   static const int kDebugBreakSlotInstructions = 4;
   static const int kDebugBreakSlotLength =
       kDebugBreakSlotInstructions * kInstrSize;
