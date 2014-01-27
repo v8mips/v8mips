@@ -1549,7 +1549,7 @@ class MacroAssembler: public Assembler {
     // TODO yuyin
     // dsrl(reg, reg, shift);
     // And(reg, reg, Operand(mask));
-    dsrl32(reg, reg, shift - 32);
+    dsra32(reg, reg, shift - 32);
     And(reg, reg, Operand(mask));
     dsll32(reg, reg, 0);
   }

@@ -519,7 +519,7 @@ void MacroAssembler::LoadFromNumberDictionary(Label* miss,
   // Compute the capacity mask.
   ld(reg1, FieldMemOperand(elements, SeededNumberDictionary::kCapacityOffset));
   // sra(reg1, reg1, kSmiTagSize);
-  dsra32(reg1, reg1, 0);
+  dsrl32(reg1, reg1, 0);
   Dsubu(reg1, reg1, Operand(1));
 
   // Generate an unrolled loop that performs a few probes before giving up.
@@ -555,10 +555,7 @@ void MacroAssembler::LoadFromNumberDictionary(Label* miss,
   const int kDetailsOffset =
       SeededNumberDictionary::kElementsStartOffset + 2 * kPointerSize;
   ld(reg1, FieldMemOperand(reg2, kDetailsOffset));
-  // And(at, reg1, Operand(Smi::FromInt(PropertyDetails::TypeField::kMask)));
-  ASSERT(!reg1.is(reg0));
-  li(reg0, Operand(Smi::FromInt(PropertyDetails::TypeField::kMask)));
-  And(at, reg0, reg1);
+  And(at, reg1, Operand(Smi::FromInt(PropertyDetails::TypeField::kMask)));
   Branch(miss, ne, at, Operand(zero_reg));
 
   // Get the value at the masked, scaled index and return.
@@ -2666,7 +2663,7 @@ void MacroAssembler::Jalr(Label* L, BranchDelaySlot bdslot) {
 
 void MacroAssembler::DropAndRet(int drop) {
   Ret(USE_DELAY_SLOT);
-  addiu(sp, sp, drop * kPointerSize);
+  daddiu(sp, sp, drop * kPointerSize);
 }
 
 void MacroAssembler::DropAndRet(int drop,
@@ -3483,7 +3480,7 @@ void MacroAssembler::StoreNumberToDoubleElements(Register value_reg,
 
   bind(&have_double_value);
   // dsll(scratch1, key_reg, kDoubleSizeLog2 - kSmiTagSize);
-  dsrl(scratch1, key_reg, 32 - kDoubleSizeLog2);
+  dsra(scratch1, key_reg, 32 - kDoubleSizeLog2);
   Daddu(scratch1, scratch1, elements_reg);
   sw(mantissa_reg, FieldMemOperand(
      scratch1, FixedDoubleArray::kHeaderSize - elements_offset));
@@ -3511,7 +3508,7 @@ void MacroAssembler::StoreNumberToDoubleElements(Register value_reg,
       Operand(FixedDoubleArray::kHeaderSize - kHeapObjectTag -
               elements_offset));
   // dsll(scratch2, key_reg, kDoubleSizeLog2 - kSmiTagSize);
-  dsrl(scratch2, key_reg, 32 - kDoubleSizeLog2);
+  dsra(scratch2, key_reg, 32 - kDoubleSizeLog2);
   Daddu(scratch1, scratch1, scratch2);
   // scratch1 is now effective address of the double element
 
@@ -4892,7 +4889,7 @@ void MacroAssembler::SmiTagCheckOverflow(Register dst,
 void MacroAssembler::UntagAndJumpIfSmi(Register dst,
                                        Register src,
                                        Label* smi_case) {
-  ASSERT(!dst.is(src));
+  // ASSERT(!dst.is(src));
   JumpIfSmi(src, smi_case, at, USE_DELAY_SLOT);
   SmiUntag(dst, src);
 }
@@ -4901,7 +4898,7 @@ void MacroAssembler::UntagAndJumpIfSmi(Register dst,
 void MacroAssembler::UntagAndJumpIfNotSmi(Register dst,
                                           Register src,
                                           Label* non_smi_case) {
-  ASSERT(!dst.is(src));
+  // ASSERT(!dst.is(src));
   JumpIfNotSmi(src, non_smi_case, at, USE_DELAY_SLOT);
   SmiUntag(dst, src);
 }
@@ -5585,7 +5582,8 @@ void MacroAssembler::EnsureNotWhite(
   {
     Label skip;
     Branch(&skip, eq, t8, Operand(zero_reg));
-    dsrl(t9, t9, 1);
+    // dsrl(t9, t9, 1);
+    dsra32(t9, t9, 0);
     bind(&skip);
   }
   Daddu(length, t9, Operand(SeqString::kHeaderSize + kObjectAlignmentMask));
