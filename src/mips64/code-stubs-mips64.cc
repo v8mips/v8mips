@@ -3004,9 +3004,10 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
   // __ Addu(a1, a1, Operand(2));  // a1 was a smi.
   // TODO right?
   STATIC_ASSERT(kSmiTagSize + kSmiShiftSize == 32);
-  __ dsrl32(a1, a1, 0);
-  __ daddiu(a1, a1, 1);
-  __ dsll32(a1, a1, 0);
+  // __ dsrl32(a1, a1, 0);
+  // __ daddiu(a1, a1, 1);
+  //  __ dsll32(a1, a1, 0);
+  __ Daddu(a1, a1, Operand(Smi::FromInt(1)));
 
   __ ld(a0, MemOperand(sp, kLastMatchInfoOffset));
   __ JumpIfSmi(a0, &runtime);
@@ -3934,7 +3935,7 @@ void StringHelper::GenerateHashGetHash(MacroAssembler* masm,
 
 
 void SubStringStub::Generate(MacroAssembler* masm) {
-  Label runtime;
+  Label runtime, runtime1, end;
   // Stack frame on entry.
   //  ra: return address
   //  sp[0]: to
@@ -3962,8 +3963,8 @@ void SubStringStub::Generate(MacroAssembler* masm) {
 
   // Utilize delay slots. SmiUntag doesn't emit a jump, everything else is
   // safe in this case.
-  __ UntagAndJumpIfNotSmi(a2, a2, &runtime);
-  __ UntagAndJumpIfNotSmi(a3, a3, &runtime);
+  __ UntagAndJumpIfNotSmi(a2, a2, &runtime1);
+  __ UntagAndJumpIfNotSmi(a3, a3, &runtime1);
   // Both a2 and a3 are untagged integers.
 
   __ Branch(&runtime, lt, a3, Operand(zero_reg));  // From < 0.
@@ -4159,6 +4160,17 @@ void SubStringStub::Generate(MacroAssembler* masm) {
   generator.GenerateFast(masm);
   __ DropAndRet(3);
   generator.SkipSlow(masm, &runtime);
+  __ jmp(&end);
+
+  __ bind(&runtime1); // TODO(yy) good way?
+  __ TailCallRuntime(Runtime::kSubString, 3, 1);
+  __ ld(a3, MemOperand(sp, kFromOffset));
+  StringCharAtGenerator generator1(
+         v0, a3, a2, v0, &runtime, &runtime, &runtime, STRING_INDEX_IS_NUMBER);
+  generator1.GenerateFast(masm);
+  __ DropAndRet(3);
+  generator1.SkipSlow(masm, &runtime);
+  __ bind(&end);
 }
 
 
