@@ -2345,6 +2345,7 @@ void ArgumentsAccessStub::GenerateNewNonStrictSlow(MacroAssembler* masm) {
 
 void ArgumentsAccessStub::GenerateNewNonStrictFast(MacroAssembler* masm) {
   // Stack layout:
+// TODO(plind): these offsets are wrong in comments..... fix up
   //  sp[0] : number of parameters (tagged)
   //  sp[4] : address of receiver argument
   //  sp[8] : function
@@ -2483,7 +2484,9 @@ void ArgumentsAccessStub::GenerateNewNonStrictFast(MacroAssembler* masm) {
 
   __ LoadRoot(t2, Heap::kNonStrictArgumentsElementsMapRootIndex);
   __ sd(t2, FieldMemOperand(t0, FixedArray::kMapOffset));
-  __ Daddu(t2, a1, Operand(Smi::FromInt(2)));
+  // __ Daddu(t2, a1, Operand(Smi::FromInt(2)));
+__ li(at, Operand(Smi::FromInt(2)));
+__ Daddu(t2, a1, Operand(at));
   __ sd(t2, FieldMemOperand(t0, FixedArray::kLengthOffset));
   __ sd(cp, FieldMemOperand(t0, FixedArray::kHeaderSize + 0 * kPointerSize));
   // __ sll(t6, a1, 1);
@@ -2504,7 +2507,9 @@ void ArgumentsAccessStub::GenerateNewNonStrictFast(MacroAssembler* masm) {
   Label parameters_loop, parameters_test;
   __ mov(t2, a1);
   __ ld(t5, MemOperand(sp, 0 * kPointerSize));
-  __ Daddu(t5, t5, Operand(Smi::FromInt(Context::MIN_CONTEXT_SLOTS)));
+  // __ Daddu(t5, t5, Operand(Smi::FromInt(Context::MIN_CONTEXT_SLOTS)));
+__ li(at, Operand(Smi::FromInt(Context::MIN_CONTEXT_SLOTS)));
+__ Daddu(t5, t5, Operand(at));
   __ Dsubu(t5, t5, Operand(a1));
   __ LoadRoot(t3, Heap::kTheHoleValueRootIndex);
   // __ sll(t6, t2, 1);
@@ -2534,7 +2539,9 @@ void ArgumentsAccessStub::GenerateNewNonStrictFast(MacroAssembler* masm) {
   __ Dsubu(t1, t1, Operand(kParameterMapHeaderSize - FixedArray::kHeaderSize));
   __ Daddu(t6, a3, t1);
   __ sd(t3, MemOperand(t6));
-  __ Daddu(t5, t5, Operand(Smi::FromInt(1)));
+  // __ Daddu(t5, t5, Operand(Smi::FromInt(1)));
+__ li(at, Operand(Smi::FromInt(1)));
+__ Daddu(t5, t5, Operand(at));
   __ bind(&parameters_test);
   __ Branch(&parameters_loop, ne, t2, Operand(Smi::FromInt(0)));
 
@@ -2563,8 +2570,8 @@ void ArgumentsAccessStub::GenerateNewNonStrictFast(MacroAssembler* masm) {
   __ Daddu(t1, a3, Operand(t6));
   __ sd(t2, FieldMemOperand(t1, FixedArray::kHeaderSize));
   // __ Daddu(t5, t5, Operand(Smi::FromInt(1)));
-  __ li(t2, Operand(Smi::FromInt(1)));
-  __ Daddu(t5, t5, Operand(t2));
+__ li(at, Operand(Smi::FromInt(1)));
+__ Daddu(t5, t5, Operand(at));
 
   __ bind(&arguments_test);
   __ Branch(&arguments_loop, lt, t5, Operand(a2));
