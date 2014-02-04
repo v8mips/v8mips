@@ -676,24 +676,19 @@ int64_t Assembler::target_at(int64_t pos) {
       return pos + kBranchPCOffset + imm18;
     }
   } else if (IsLui(instr)) {
-    // Instr instr_lui = instr_at(pos + 0 * Assembler::kInstrSize);
-    // Instr instr_ori = instr_at(pos + 1 * Assembler::kInstrSize);
-    // ASSERT(IsOri(instr_ori));
-    // int32_t imm = (instr_lui & static_cast<int32_t>(kImm16Mask)) << kLuiShift;
-    // imm |= (instr_ori & static_cast<int32_t>(kImm16Mask));
     Instr instr_lui = instr_at(pos + 0 * Assembler::kInstrSize);
     Instr instr_ori = instr_at(pos + 1 * Assembler::kInstrSize);
-    Instr instr_lui2 = instr_at(pos + 3 * Assembler::kInstrSize);
-    Instr instr_ori2 = instr_at(pos + 4 * Assembler::kInstrSize);
+    Instr instr_ori2 = instr_at(pos + 3 * Assembler::kInstrSize);
+    Instr instr_ori3 = instr_at(pos + 5 * Assembler::kInstrSize);
     ASSERT(IsOri(instr_ori));
-    ASSERT(IsLui(instr_lui2));
     ASSERT(IsOri(instr_ori2));
+    ASSERT(IsOri(instr_ori3));
 
-    // TODO(plind) create named constant for 32-bit shift, fix long lines.
-    int64_t imm = static_cast<int64_t>((instr_lui & static_cast<int32_t>(kImm16Mask)) << kLuiShift) << 32;
-    imm |= static_cast<int64_t>(instr_ori & static_cast<int32_t>(kImm16Mask)) << 32;
-    imm |= (instr_lui2 & static_cast<int32_t>(kImm16Mask)) << kLuiShift;
-    imm |= (instr_ori2 & static_cast<int32_t>(kImm16Mask));
+    // TODO(plind) create named constants for shift values.
+    int64_t imm = static_cast<int64_t>(instr_lui & kImm16Mask) << 48;
+    imm |= static_cast<int64_t>(instr_ori & kImm16Mask) << 32;
+    imm |= (instr_ori2 & kImm16Mask) << 16;
+    imm |= (instr_ori3 & kImm16Mask);
 
     if (imm == kEndOfJumpChain) {
       // EndOfChain sentinel is returned directly, not relative to pc or pos.
@@ -743,25 +738,27 @@ void Assembler::target_at_put(int64_t pos, int64_t target_pos) {
   } else if (IsLui(instr)) {
     Instr instr_lui = instr_at(pos + 0 * Assembler::kInstrSize);
     Instr instr_ori = instr_at(pos + 1 * Assembler::kInstrSize);
-    Instr instr_lui2 = instr_at(pos + 3 * Assembler::kInstrSize);
-    Instr instr_ori2 = instr_at(pos + 4 * Assembler::kInstrSize);
+    Instr instr_ori2 = instr_at(pos + 3 * Assembler::kInstrSize);
+    Instr instr_ori3 = instr_at(pos + 5 * Assembler::kInstrSize);
     ASSERT(IsOri(instr_ori));
+    ASSERT(IsOri(instr_ori2));
+    ASSERT(IsOri(instr_ori3));
     uint64_t imm = reinterpret_cast<uint64_t>(buffer_) + target_pos;
     ASSERT((imm & 3) == 0);
 
     instr_lui &= ~kImm16Mask;
     instr_ori &= ~kImm16Mask;
-    instr_lui2 &= ~kImm16Mask;
     instr_ori2 &= ~kImm16Mask;
+    instr_ori3 &= ~kImm16Mask;
 
     instr_at_put(pos + 0 * Assembler::kInstrSize,
-                 instr_lui | ((imm & kHi16MaskOf64) >> kLuiShift >> 32));
+                 instr_lui | ((imm >> 48) & kImm16Mask));
     instr_at_put(pos + 1 * Assembler::kInstrSize,
-                 instr_ori | (imm & kSe16MaskOf64) >> 32);
+                 instr_ori | ((imm >> 32) & kImm16Mask));
     instr_at_put(pos + 3 * Assembler::kInstrSize,
-                 instr_lui | ((imm & kTh16MaskOf64) >> kLuiShift));
-    instr_at_put(pos + 4 * Assembler::kInstrSize,
-                 instr_ori | (imm & kImm16Mask));
+                 instr_ori2 | ((imm >> 16) & kImm16Mask));
+    instr_at_put(pos + 5 * Assembler::kInstrSize,
+                 instr_ori3 | (imm & kImm16Mask));
   } else {
     uint64_t imm28 = reinterpret_cast<uint64_t>(buffer_) + target_pos;
     imm28 &= kImm28Mask;
