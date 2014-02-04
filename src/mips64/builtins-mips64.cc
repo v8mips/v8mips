@@ -987,6 +987,7 @@ void Builtins::Generate_OnStackReplacement(MacroAssembler* masm) {
 
   // Load deoptimization data from the code object.
   // <deopt_data> = <code>[#deoptimization_data_offset]
+// TODO(plind): this damn offset is unaligned -- make a Unaligned accessor? ..........
   __ ld(a1, MemOperand(v0, Code::kDeoptimizationDataOffset - kHeapObjectTag));
 
   // Load the OSR entrypoint offset from the deoptimization data.
