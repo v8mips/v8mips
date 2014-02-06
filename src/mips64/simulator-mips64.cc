@@ -1849,7 +1849,9 @@ void Simulator::ConfigureTypeRegister(Instruction* instr,
                                       uint64_t& u64hilo,
                                       int64_t& next_pc,
                                       int64_t& return_addr_reg,
-                                      bool& do_interrupt) {
+                                      bool& do_interrupt,
+                                      __int128& i128result,
+                                      unsigned __int128& u128result) {
   // Every local variable declared here needs to be const.
   // This is to make sure that changed values are sent back to
   // DecodeTypeRegister correctly.
@@ -1973,10 +1975,19 @@ void Simulator::ConfigureTypeRegister(Instruction* instr,
           alu_out = get_register(LO);
           break;
         case MULT:
+          // TODO(plind) - Unify MULT/DMULT with single set of 64-bit HI/Lo regs.
+          // TODO(plind) - make the 32-bit MULT ops conform to spec regarding
+          //   checking of 32-bit input values, and un-define operations of HW.
           i64hilo = static_cast<int64_t>(rs) * static_cast<int64_t>(rt);
           break;
         case MULTU:
           u64hilo = static_cast<uint64_t>(rs_u) * static_cast<uint64_t>(rt_u);
+          break;
+        case DMULT:
+          i128result = (__int128)(rs) * (__int128)(rt);
+          break;
+        case DMULTU:
+          u128result = (unsigned __int128)(rs) * (unsigned __int128)(rt);
           break;
         case ADD:
         case DADD:
@@ -2141,6 +2152,9 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
   int64_t next_pc = 0;
   int64_t return_addr_reg = 31;
 
+  __int128 i128result;
+  unsigned __int128 u128result;
+
   // Set up the variables if needed before executing the instruction.
   ConfigureTypeRegister(instr,
                         alu_out,
@@ -2148,7 +2162,9 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
                         u64hilo,
                         next_pc,
                         return_addr_reg,
-                        do_interrupt);
+                        do_interrupt,
+                        i128result,
+                        u128result);
 
   // ---------- Raise exceptions triggered.
   SignalExceptions();
@@ -2427,6 +2443,14 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
         case MULTU:
           set_register(LO, static_cast<int32_t>(u64hilo & 0xffffffff));
           set_register(HI, static_cast<int32_t>(u64hilo >> 32));
+          break;
+        case DMULT:
+          set_register(LO, static_cast<int64_t>(i128result & 0xffffffffffffffffLL));
+          set_register(HI, static_cast<int64_t>(i128result >> 64));
+          break;
+        case DMULTU:
+          set_register(LO, static_cast<uint64_t>(u128result & 0xffffffffffffffffLL));
+          set_register(HI, static_cast<uint64_t>(u128result >> 64));
           break;
         case DIV:
           // Divide by zero and overflow was not checked in the configuration

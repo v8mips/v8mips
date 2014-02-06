@@ -308,7 +308,9 @@ class Simulator {
                              uint64_t& u64hilo,
                              int64_t& next_pc,
                              int64_t& return_addr_reg,
-                             bool& do_interrupt);
+                             bool& do_interrupt,
+                             __int128& result128,
+                             unsigned __int128& u128result);
 
   void DecodeTypeImmediate(Instruction* instr);
   void DecodeTypeJump(Instruction* instr);
