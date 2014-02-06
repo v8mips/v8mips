@@ -167,11 +167,17 @@ OS::MemCopyUint8Function CreateMemCopyUint8Function(
     __ beq(a3, zero_reg, &aligned);  // Already aligned.
     __ subu(a2, a2, a3);  // In delay slot. a2 is the remining bytes count.
 
+#if __BYTE_ORDER == __LITTLE_ENDIAN
     __ lwr(t8, MemOperand(a1));
     __ addu(a1, a1, a3);
     __ swr(t8, MemOperand(a0));
     __ addu(a0, a0, a3);
-
+#elif __BYTE_ORDER == __BIG_ENDIAN
+    __ lwl(t8, MemOperand(a1));
+    __ addu(a1, a1, a3);
+    __ swl(t8, MemOperand(a0));
+    __ addu(a0, a0, a3);
+#endif
     // Now dst/src are both aligned to (word) aligned addresses. Set a2 to
     // count how many bytes we have to copy after all the 64 byte chunks are
     // copied and a3 to the dst pointer after all the 64 byte chunks have been
@@ -323,12 +329,21 @@ OS::MemCopyUint8Function CreateMemCopyUint8Function(
     __ beq(a3, zero_reg, &ua_chk16w);
     __ subu(a2, a2, a3);  // In delay slot.
 
+#if __BYTE_ORDER == __LITTLE_ENDIAN
     __ lwr(v1, MemOperand(a1));
     __ lwl(v1,
            MemOperand(a1, 1, loadstore_chunk, MemOperand::offset_minus_one));
     __ addu(a1, a1, a3);
     __ swr(v1, MemOperand(a0));
     __ addu(a0, a0, a3);
+#elif __BYTE_ORDER == __BIG_ENDIAN
+    __ lwl(v1, MemOperand(a1));
+    __ lwr(v1,
+           MemOperand(a1, 1, loadstore_chunk, MemOperand::offset_minus_one));
+    __ addu(a1, a1, a3);
+    __ swl(v1, MemOperand(a0));
+    __ addu(a0, a0, a3);
+#endif
 
     // Now the dst (but not the source) is aligned. Set a2 to count how many
     // bytes we have to copy after all the 64 byte chunks are copied and a3 to
@@ -357,6 +372,7 @@ OS::MemCopyUint8Function CreateMemCopyUint8Function(
 
     __ bind(&ua_loop16w);
     __ Pref(pref_hint_load, MemOperand(a1, 3 * pref_chunk));
+#if __BYTE_ORDER == __LITTLE_ENDIAN
     __ lwr(t0, MemOperand(a1));
     __ lwr(t1, MemOperand(a1, 1, loadstore_chunk));
     __ lwr(t2, MemOperand(a1, 2, loadstore_chunk));
@@ -391,6 +407,42 @@ OS::MemCopyUint8Function CreateMemCopyUint8Function(
            MemOperand(a1, 7, loadstore_chunk, MemOperand::offset_minus_one));
     __ lwl(t7,
            MemOperand(a1, 8, loadstore_chunk, MemOperand::offset_minus_one));
+#elif __BYTE_ORDER == __BIG_ENDIAN
+    __ lwl(t0, MemOperand(a1));
+    __ lwl(t1, MemOperand(a1, 1, loadstore_chunk));
+    __ lwl(t2, MemOperand(a1, 2, loadstore_chunk));
+
+    if (pref_hint_store == kPrefHintPrepareForStore) {
+      __ sltu(v1, t9, a0);
+      __ Branch(USE_DELAY_SLOT, &ua_skip_pref, gt, v1, Operand(zero_reg));
+    }
+    __ lwl(t3, MemOperand(a1, 3, loadstore_chunk));  // Maybe in delay slot.
+
+    __ Pref(pref_hint_store, MemOperand(a0, 4 * pref_chunk));
+    __ Pref(pref_hint_store, MemOperand(a0, 5 * pref_chunk));
+
+    __ bind(&ua_skip_pref);
+    __ lwl(t4, MemOperand(a1, 4, loadstore_chunk));
+    __ lwl(t5, MemOperand(a1, 5, loadstore_chunk));
+    __ lwl(t6, MemOperand(a1, 6, loadstore_chunk));
+    __ lwl(t7, MemOperand(a1, 7, loadstore_chunk));
+    __ lwr(t0,
+           MemOperand(a1, 1, loadstore_chunk, MemOperand::offset_minus_one));
+    __ lwr(t1,
+           MemOperand(a1, 2, loadstore_chunk, MemOperand::offset_minus_one));
+    __ lwr(t2,
+           MemOperand(a1, 3, loadstore_chunk, MemOperand::offset_minus_one));
+    __ lwr(t3,
+           MemOperand(a1, 4, loadstore_chunk, MemOperand::offset_minus_one));
+    __ lwr(t4,
+           MemOperand(a1, 5, loadstore_chunk, MemOperand::offset_minus_one));
+    __ lwr(t5,
+           MemOperand(a1, 6, loadstore_chunk, MemOperand::offset_minus_one));
+    __ lwr(t6,
+           MemOperand(a1, 7, loadstore_chunk, MemOperand::offset_minus_one));
+    __ lwr(t7,
+           MemOperand(a1, 8, loadstore_chunk, MemOperand::offset_minus_one));
+#endif
     __ Pref(pref_hint_load, MemOperand(a1, 4 * pref_chunk));
     __ sw(t0, MemOperand(a0));
     __ sw(t1, MemOperand(a0, 1, loadstore_chunk));
@@ -400,6 +452,7 @@ OS::MemCopyUint8Function CreateMemCopyUint8Function(
     __ sw(t5, MemOperand(a0, 5, loadstore_chunk));
     __ sw(t6, MemOperand(a0, 6, loadstore_chunk));
     __ sw(t7, MemOperand(a0, 7, loadstore_chunk));
+#if __BYTE_ORDER == __LITTLE_ENDIAN
     __ lwr(t0, MemOperand(a1, 8, loadstore_chunk));
     __ lwr(t1, MemOperand(a1, 9, loadstore_chunk));
     __ lwr(t2, MemOperand(a1, 10, loadstore_chunk));
@@ -424,6 +477,32 @@ OS::MemCopyUint8Function CreateMemCopyUint8Function(
            MemOperand(a1, 15, loadstore_chunk, MemOperand::offset_minus_one));
     __ lwl(t7,
            MemOperand(a1, 16, loadstore_chunk, MemOperand::offset_minus_one));
+#elif __BYTE_ORDER == __BIG_ENDIAN
+    __ lwl(t0, MemOperand(a1, 8, loadstore_chunk));
+    __ lwl(t1, MemOperand(a1, 9, loadstore_chunk));
+    __ lwl(t2, MemOperand(a1, 10, loadstore_chunk));
+    __ lwl(t3, MemOperand(a1, 11, loadstore_chunk));
+    __ lwl(t4, MemOperand(a1, 12, loadstore_chunk));
+    __ lwl(t5, MemOperand(a1, 13, loadstore_chunk));
+    __ lwl(t6, MemOperand(a1, 14, loadstore_chunk));
+    __ lwl(t7, MemOperand(a1, 15, loadstore_chunk));
+    __ lwr(t0,
+           MemOperand(a1, 9, loadstore_chunk, MemOperand::offset_minus_one));
+    __ lwr(t1,
+           MemOperand(a1, 10, loadstore_chunk, MemOperand::offset_minus_one));
+    __ lwr(t2,
+           MemOperand(a1, 11, loadstore_chunk, MemOperand::offset_minus_one));
+    __ lwr(t3,
+           MemOperand(a1, 12, loadstore_chunk, MemOperand::offset_minus_one));
+    __ lwr(t4,
+           MemOperand(a1, 13, loadstore_chunk, MemOperand::offset_minus_one));
+    __ lwr(t5,
+           MemOperand(a1, 14, loadstore_chunk, MemOperand::offset_minus_one));
+    __ lwr(t6,
+           MemOperand(a1, 15, loadstore_chunk, MemOperand::offset_minus_one));
+    __ lwr(t7,
+           MemOperand(a1, 16, loadstore_chunk, MemOperand::offset_minus_one));
+#endif
     __ Pref(pref_hint_load, MemOperand(a1, 5 * pref_chunk));
     __ sw(t0, MemOperand(a0, 8, loadstore_chunk));
     __ sw(t1, MemOperand(a0, 9, loadstore_chunk));
@@ -447,6 +526,7 @@ OS::MemCopyUint8Function CreateMemCopyUint8Function(
 
     __ beq(a2, t8, &ua_chk1w);
     __ nop();  // In delay slot.
+#if __BYTE_ORDER == __LITTLE_ENDIAN
     __ lwr(t0, MemOperand(a1));
     __ lwr(t1, MemOperand(a1, 1, loadstore_chunk));
     __ lwr(t2, MemOperand(a1, 2, loadstore_chunk));
@@ -471,6 +551,32 @@ OS::MemCopyUint8Function CreateMemCopyUint8Function(
            MemOperand(a1, 7, loadstore_chunk, MemOperand::offset_minus_one));
     __ lwl(t7,
            MemOperand(a1, 8, loadstore_chunk, MemOperand::offset_minus_one));
+#elif __BYTE_ORDER == __BIG_ENDIAN
+    __ lwl(t0, MemOperand(a1));
+    __ lwl(t1, MemOperand(a1, 1, loadstore_chunk));
+    __ lwl(t2, MemOperand(a1, 2, loadstore_chunk));
+    __ lwl(t3, MemOperand(a1, 3, loadstore_chunk));
+    __ lwl(t4, MemOperand(a1, 4, loadstore_chunk));
+    __ lwl(t5, MemOperand(a1, 5, loadstore_chunk));
+    __ lwl(t6, MemOperand(a1, 6, loadstore_chunk));
+    __ lwl(t7, MemOperand(a1, 7, loadstore_chunk));
+    __ lwr(t0,
+           MemOperand(a1, 1, loadstore_chunk, MemOperand::offset_minus_one));
+    __ lwr(t1,
+           MemOperand(a1, 2, loadstore_chunk, MemOperand::offset_minus_one));
+    __ lwr(t2,
+           MemOperand(a1, 3, loadstore_chunk, MemOperand::offset_minus_one));
+    __ lwr(t3,
+           MemOperand(a1, 4, loadstore_chunk, MemOperand::offset_minus_one));
+    __ lwr(t4,
+           MemOperand(a1, 5, loadstore_chunk, MemOperand::offset_minus_one));
+    __ lwr(t5,
+           MemOperand(a1, 6, loadstore_chunk, MemOperand::offset_minus_one));
+    __ lwr(t6,
+           MemOperand(a1, 7, loadstore_chunk, MemOperand::offset_minus_one));
+    __ lwr(t7,
+           MemOperand(a1, 8, loadstore_chunk, MemOperand::offset_minus_one));
+#endif
     __ addiu(a1, a1, 8 * loadstore_chunk);
     __ sw(t0, MemOperand(a0));
     __ sw(t1, MemOperand(a0, 1, loadstore_chunk));
@@ -491,9 +597,15 @@ OS::MemCopyUint8Function CreateMemCopyUint8Function(
     __ addu(a3, a0, a3);
 
     __ bind(&ua_wordCopy_loop);
+#if __BYTE_ORDER == __LITTLE_ENDIAN
     __ lwr(v1, MemOperand(a1));
     __ lwl(v1,
            MemOperand(a1, 1, loadstore_chunk, MemOperand::offset_minus_one));
+#elif __BYTE_ORDER == __BIG_ENDIAN
+    __ lwl(v1, MemOperand(a1));
+    __ lwr(v1,
+           MemOperand(a1, 1, loadstore_chunk, MemOperand::offset_minus_one));
+#endif
     __ addiu(a0, a0, loadstore_chunk);
     __ addiu(a1, a1, loadstore_chunk);
     __ bne(a0, a3, &ua_wordCopy_loop);
