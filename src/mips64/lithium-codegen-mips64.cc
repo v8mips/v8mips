@@ -2952,8 +2952,18 @@ void LCodeGen::DoLoadNamedField(LLoadNamedField* instr) {
     __ ld(result, FieldMemOperand(object, JSObject::kPropertiesOffset));
     object = result;
   }
-  MemOperand operand = FieldMemOperand(object, offset);
-  __ Load(result, operand, access.representation());
+
+  Representation representation = access.representation();
+  if (representation.IsSmi() &&
+      instr->hydrogen()->representation().IsInteger32()) {
+    // Read int value directly from upper half of the smi.
+    STATIC_ASSERT(kSmiTag == 0);
+    STATIC_ASSERT(kSmiTagSize + kSmiShiftSize == 32);
+    offset += kPointerSize / 2;
+    representation = Representation::Integer32();
+  }
+  __ Load(result, FieldMemOperand(object, offset), representation);
+
 }
 
 
