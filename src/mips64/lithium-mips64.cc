@@ -2144,7 +2144,8 @@ LInstruction* LChunkBuilder::DoLoadKeyed(HLoadKeyed* instr) {
     if (instr->representation().IsDouble()) {
       obj = UseRegister(instr->elements());
     } else {
-      ASSERT(instr->representation().IsSmiOrTagged());
+      ASSERT(instr->representation().IsSmiOrTagged() ||
+             instr->representation().IsInteger32());
       obj = UseRegisterAtStart(instr->elements());
     }
     result = new(zone()) LLoadKeyed(obj, key);
@@ -2193,7 +2194,8 @@ LInstruction* LChunkBuilder::DoStoreKeyed(HStoreKeyed* instr) {
       key = UseRegisterOrConstantAtStart(instr->key());
       val = UseRegister(instr->value());
     } else {
-      ASSERT(instr->value()->representation().IsSmiOrTagged());
+      ASSERT(instr->value()->representation().IsSmiOrTagged() ||
+             instr->value()->representation().IsInteger32());
       if (needs_write_barrier) {
         object = UseTempRegister(instr->elements());
         val = UseTempRegister(instr->value());
