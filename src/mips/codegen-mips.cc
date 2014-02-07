@@ -885,7 +885,7 @@ void ElementsTransitionGenerator::GenerateDoubleToObject(
   __ sw(t5, MemOperand(t2, HeapObject::kMapOffset));
 
   // Prepare for conversion loop.
-  __ Addu(t0, t0, Operand(FixedDoubleArray::kHeaderSize - kHeapObjectTag + 4));
+  __ Addu(t0, t0, Operand(FixedDoubleArray::kHeaderSize - kHeapObjectTag + Register::kExponentOffset));
   __ Addu(a3, t2, Operand(FixedArray::kHeaderSize));
   __ Addu(t2, t2, Operand(kHeapObjectTag));
   __ sll(t1, t1, 1);
@@ -894,7 +894,8 @@ void ElementsTransitionGenerator::GenerateDoubleToObject(
   __ LoadRoot(t5, Heap::kHeapNumberMapRootIndex);
   // Using offsetted addresses.
   // a3: begin of destination FixedArray element fields, not tagged
-  // t0: begin of source FixedDoubleArray element fields, not tagged, +4
+  // t0: begin of source FixedDoubleArray element fields, not tagged,
+  //     points to the exponent
   // t1: end of destination FixedArray, not tagged
   // t2: destination FixedArray
   // t3: the-hole pointer
@@ -908,7 +909,7 @@ void ElementsTransitionGenerator::GenerateDoubleToObject(
   __ Branch(fail);
 
   __ bind(&loop);
-  __ lw(a1, MemOperand(t0));
+  __ lw(a1, MemOperand(t0, 0)); // exponent
   __ Addu(t0, t0, kDoubleSize);
   // a1: current element's upper 32 bit
   // t0: address of next element's upper 32 bit
@@ -917,7 +918,8 @@ void ElementsTransitionGenerator::GenerateDoubleToObject(
   // Non-hole double, copy value into a heap number.
   __ AllocateHeapNumber(a2, a0, t6, t5, &gc_required);
   // a2: new heap number
-  __ lw(a0, MemOperand(t0, -12));
+  // Load mantissa of current element, t0 point to exponent of next element.
+  __ lw(a0, MemOperand(t0, (Register::kMantissaOffset - Register::kExponentOffset - kDoubleSize)));
   __ sw(a0, FieldMemOperand(a2, HeapNumber::kMantissaOffset));
   __ sw(a1, FieldMemOperand(a2, HeapNumber::kExponentOffset));
   __ mov(a0, a3);

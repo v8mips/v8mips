@@ -70,6 +70,15 @@ const bool IsMipsSoftFloatABI = true;
 #endif
 
 
+#if __BYTE_ORDER == __LITTLE_ENDIAN
+const uint32_t kHoleNanUpper32Offset = 4;
+const uint32_t kHoleNanLower32Offset = 0;
+#else
+const uint32_t kHoleNanUpper32Offset = 0;
+const uint32_t kHoleNanLower32Offset = 4;
+#endif
+
+
 // Defines constants and accessor classes to assemble, disassemble and
 // simulate MIPS32 instructions.
 //
