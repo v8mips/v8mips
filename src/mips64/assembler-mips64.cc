@@ -1645,11 +1645,11 @@ void Assembler::stop(const char* msg, uint32_t code) {
 #if V8_HOST_ARCH_MIPS
   break_(0x54321);
 #else  // V8_HOST_ARCH_MIPS
-  BlockTrampolinePoolFor(2);
+  BlockTrampolinePoolFor(3);
   // The Simulator will handle the stop instruction and get the message address.
   // On MIPS stop() is just a special kind of break_().
   break_(code, true);
-  emit((uint64_t)msg);
+  emit(reinterpret_cast<uint64_t>(msg));
 #endif
 }
 

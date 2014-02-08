@@ -436,7 +436,7 @@ void Assembler::emit(uint64_t x) {
   if (!is_buffer_growth_blocked()) {
     CheckBuffer();
   }
-  *(pc_) = x;
+  *reinterpret_cast<uint64_t*>(pc_) = x;
   pc_ += kInstrSize * 2;
   CheckTrampolinePoolQuick();
 }

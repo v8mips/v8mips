@@ -120,9 +120,10 @@ class Decoder {
   int FormatOption(Instruction* instr, const char* option);
   void Format(Instruction* instr, const char* format);
   void Unknown(Instruction* instr);
+  int DecodeBreakInstr(Instruction* instr);
 
   // Each of these functions decodes one particular instruction type.
-  void DecodeTypeRegister(Instruction* instr);
+  int DecodeTypeRegister(Instruction* instr);
   void DecodeTypeImmediate(Instruction* instr);
   void DecodeTypeJump(Instruction* instr);
 
@@ -460,7 +461,28 @@ void Decoder::Unknown(Instruction* instr) {
 }
 
 
-void Decoder::DecodeTypeRegister(Instruction* instr) {
+int Decoder::DecodeBreakInstr(Instruction* instr) {
+  // This is already known to be BREAK instr, just extract the code.
+  if (instr->Bits(25,6) == kMaxStopCode) {  // This is stop(msg)
+    Format(instr, "break, code: 'code");
+    out_buffer_pos_ += OS::SNPrintF(out_buffer_ + out_buffer_pos_,
+                                    "\n%p       %08lx       stop msg: %s",
+                                    reinterpret_cast<int32_t*>(instr
+                                                   + Instruction::kInstrSize),
+                                    *reinterpret_cast<char**>(instr
+                                                  + Instruction::kInstrSize),
+                                    *reinterpret_cast<char**>(instr
+                                                  + Instruction::kInstrSize));
+    // Size 3: the break_ instr, plus embedded 64-bit char pointer.
+    return 3 * Instruction::kInstrSize;
+  } else {
+    Format(instr, "break, code: 'code");
+    return Instruction::kInstrSize;
+  }
+}
+
+
+int Decoder::DecodeTypeRegister(Instruction* instr) {
   switch (instr->OpcodeFieldRaw()) {
     case COP1:    // Coprocessor instructions.
       switch (instr->RsFieldRaw()) {
@@ -801,8 +823,7 @@ void Decoder::DecodeTypeRegister(Instruction* instr) {
           Format(instr, "sltu    'rd, 'rs, 'rt");
           break;
         case BREAK:
-          Format(instr, "break, code: 'code");
-          break;
+          return DecodeBreakInstr(instr);
         case TGE:
           Format(instr, "tge     'rs, 'rt, code: 'code");
           break;
@@ -875,6 +896,7 @@ void Decoder::DecodeTypeRegister(Instruction* instr) {
     default:
       UNREACHABLE();
   }
+  return Instruction::kInstrSize;
 }
 
 
@@ -1043,6 +1065,9 @@ void Decoder::DecodeTypeJump(Instruction* instr) {
 
 
 // Disassemble the instruction at *instr_ptr into the output buffer.
+// All instructions are one word long, except for the simulator
+// psuedo-instruction stop(msg). For that one special case, we return
+// size larger than one kInstrSize.
 int Decoder::InstructionDecode(byte* instr_ptr) {
   Instruction* instr = Instruction::At(instr_ptr);
   // Print raw instruction bytes.
@@ -1051,8 +1076,7 @@ int Decoder::InstructionDecode(byte* instr_ptr) {
                                        instr->InstructionBits());
   switch (instr->InstructionType()) {
     case Instruction::kRegisterType: {
-      DecodeTypeRegister(instr);
-      break;
+      return DecodeTypeRegister(instr);
     }
     case Instruction::kImmediateType: {
       DecodeTypeImmediate(instr);
