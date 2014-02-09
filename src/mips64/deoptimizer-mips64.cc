@@ -265,7 +265,7 @@ void Deoptimizer::EntryGenerator::Generate() {
       outer_loop_header, inner_loop_header;
   // Outer loop state: t0 = current "FrameDescription** output_",
   // a1 = one past the last FrameDescription**.
-  __ ld(a1, MemOperand(a0, Deoptimizer::output_count_offset()));
+  __ lw(a1, MemOperand(a0, Deoptimizer::output_count_offset()));
   __ ld(t0, MemOperand(a0, Deoptimizer::output_offset()));  // t0 is output_.
   __ dsll(a1, a1, kPointerSizeLog2);  // Count to offset.
   __ daddu(a1, t0, a1);  // a1 = one past the last FrameDescription**.
