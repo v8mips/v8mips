@@ -153,6 +153,11 @@
             'test-macro-assembler-mips.cc'
           ],
         }],
+        ['v8_target_arch=="mipsel64"', {
+          'sources': [
+            'test-assembler-mips.cc'
+          ],
+        }],
         [ 'OS=="linux"', {
           'sources': [
             'test-platform-linux.cc',
