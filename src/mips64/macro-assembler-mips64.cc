@@ -2807,9 +2807,10 @@ void MacroAssembler::JumpToHandlerEntry() {
   lw(a3, FieldMemOperand(a1, Code::kHandlerTableOffset));
   lw(t9, FieldMemOperand(a1, Code::kHandlerTableOffset + 4));
   dsll32(t9, t9, 0);
+  dsll32(a3, a3, 0);  // TODO(yy) a3 sometimes get 0xffffffffb7b46e09? where is the problem? simulator?
+  dsrl32(a3, a3, 0);
   Daddu(a3, a3, t9);
   Daddu(a3, a3, Operand(FixedArray::kHeaderSize - kHeapObjectTag));
-  // break_(0x222);
   dsrl(a2, a2, StackHandler::kKindWidth);  // Handler index.
   dsll(a2, a2, kPointerSizeLog2);
   Daddu(a2, a3, a2);
