@@ -1271,7 +1271,7 @@ void Simulator::TraceMemWr(int64_t addr, int64_t value, TraceType t) {
 
 // TODO(plind): sign-extend and zero-extend not implmented properly
 // on all the ReadXX functions, I don't think re-interpret cast does it.
-int Simulator::ReadW(int64_t addr, Instruction* instr) {
+int32_t Simulator::ReadW(int64_t addr, Instruction* instr) {
   if (addr >=0 && addr < 0x400) {
     // This has to be a NULL-dereference, drop into debugger.
     PrintF("Memory read from bad address: 0x%08lx, pc=0x%08lx\n",
@@ -1279,7 +1279,27 @@ int Simulator::ReadW(int64_t addr, Instruction* instr) {
     DieOrDebug();
   }
  if ((addr & 0x3) == 0) {
-    int* ptr = reinterpret_cast<int*>(addr);
+    int32_t* ptr = reinterpret_cast<int32_t*>(addr);
+    TraceMemRd(addr, static_cast<int64_t>(*ptr));
+    return *ptr;
+  }
+  PrintF("Unaligned read at 0x%08lx, pc=0x%08" V8PRIxPTR "\n",
+         addr,
+         reinterpret_cast<intptr_t>(instr));
+  DieOrDebug();
+  return 0;
+}
+
+
+uint32_t Simulator::ReadWU(int64_t addr, Instruction* instr) {
+  if (addr >=0 && addr < 0x400) {
+    // This has to be a NULL-dereference, drop into debugger.
+    PrintF("Memory read from bad address: 0x%08lx, pc=0x%08lx\n",
+           addr, reinterpret_cast<intptr_t>(instr));
+    DieOrDebug();
+  }
+ if ((addr & 0x3) == 0) {
+    uint32_t* ptr = reinterpret_cast<uint32_t*>(addr);
     TraceMemRd(addr, static_cast<int64_t>(*ptr));
     return *ptr;
   }
@@ -2721,6 +2741,10 @@ void Simulator::DecodeTypeImmediate(Instruction* instr) {
       addr = rs + se_imm16;
       alu_out = ReadW(addr, instr);
       break;
+    case LWU:
+      addr = rs + se_imm16;
+      alu_out = ReadWU(addr, instr);
+      break;
     case LD:
       addr = rs + se_imm16;
       alu_out = Read2W(addr, instr);
@@ -2762,7 +2786,6 @@ void Simulator::DecodeTypeImmediate(Instruction* instr) {
     case SW:
     case SD:
       addr = rs + se_imm16;
-      // printf("sd : rs : 0x%lx  se_imm16: %d, addr : 0x%lx \n",rs, se_imm16,addr);
       break;
     case SWR: {
       uint8_t al_offset = (rs + se_imm16) & kPointerAlignmentMask;
@@ -2829,6 +2852,7 @@ void Simulator::DecodeTypeImmediate(Instruction* instr) {
     case LH:
     case LWL:
     case LW:
+    case LWU:
     case LD:
     case LBU:
     case LHU:

@@ -1277,4 +1277,115 @@ TEST(MIPS15) {
   __ nop();
 }
 
+
+// ----- mips64 tests -----------------------------------------------
+
+TEST(MIPS16) {
+  // Test 64-bit memory loads and stores.
+  CcTest::InitializeVM();
+  Isolate* isolate = CcTest::i_isolate();
+  HandleScope scope(isolate);
+
+  typedef struct {
+    int64_t r1;
+    int64_t r2;
+    int64_t r3;
+    int64_t r4;
+    int64_t r5;
+    int64_t r6;
+    uint32_t ui;
+    int32_t si;
+  } T;
+  T t;
+
+  Assembler assm(isolate, NULL, 0);
+  Label L, C;
+
+  // Basic 32-bit word load/store, with un-signed data.
+  __ lw(t0, MemOperand(a0, OFFSET_OF(T, ui)) );
+  __ sw(t0, MemOperand(a0, OFFSET_OF(T, r1)) );
+
+  // Check that the data got zero-extended into 64-bit t0.
+  __ sd(t0, MemOperand(a0, OFFSET_OF(T, r2)) );
+
+  // Basic 32-bit word load/store, with SIGNED data.
+  __ lw(t1, MemOperand(a0, OFFSET_OF(T, si)) );
+  __ sw(t1, MemOperand(a0, OFFSET_OF(T, r3)) );
+
+  // Check that the data got sign-extended into 64-bit t0.
+  __ sd(t1, MemOperand(a0, OFFSET_OF(T, r4)) );
+
+  // 32-bit UNSIGNED word load/store, with SIGNED data.
+  __ lwu(t2, MemOperand(a0, OFFSET_OF(T, si)) );
+  __ sw(t2, MemOperand(a0, OFFSET_OF(T, r5)) );
+
+  // Check that the data got zero-extended into 64-bit t0.
+  __ sd(t2, MemOperand(a0, OFFSET_OF(T, r6)) );
+
+
+  // TODO(plind) - get these tests working too.
+  // lh with positive data.
+  // __ lh(t1, MemOperand(a0, OFFSET_OF(T, ui)) );
+  // __ sw(t1, MemOperand(a0, OFFSET_OF(T, r2)) );
+
+  // // lh with negative data.
+  // __ lh(t2, MemOperand(a0, OFFSET_OF(T, si)) );
+  // __ sw(t2, MemOperand(a0, OFFSET_OF(T, r3)) );
+
+  // // lhu with negative data.
+  // __ lhu(t3, MemOperand(a0, OFFSET_OF(T, si)) );
+  // __ sw(t3, MemOperand(a0, OFFSET_OF(T, r4)) );
+
+  // // lb with negative data.
+  // __ lb(t4, MemOperand(a0, OFFSET_OF(T, si)) );
+  // __ sw(t4, MemOperand(a0, OFFSET_OF(T, r5)) );
+
+  // // sh writes only 1/2 of word.
+  // __ lui(t5, 0x3333);
+  // __ ori(t5, t5, 0x3333);
+  // __ sw(t5, MemOperand(a0, OFFSET_OF(T, r6)) );
+  // __ lhu(t5, MemOperand(a0, OFFSET_OF(T, si)) );
+  // __ sh(t5, MemOperand(a0, OFFSET_OF(T, r6)) );
+
+  __ jr(ra);
+  __ nop();
+
+  CodeDesc desc;
+  assm.GetCode(&desc);
+  Object* code = CcTest::heap()->CreateCode(
+      desc,
+      Code::ComputeFlags(Code::STUB),
+      Handle<Code>())->ToObjectChecked();
+  CHECK(code->IsCode());
+  F3 f = FUNCTION_CAST<F3>(Code::cast(code)->entry());
+  t.ui = 0x44332211;
+  t.si = 0x99aabbcc;
+  t.r1 = 0x1111111111111111LL;
+  t.r2 = 0x2222222222222222LL;
+  t.r3 = 0x3333333333333333LL;
+  t.r4 = 0x4444444444444444LL;
+  t.r5 = 0x5555555555555555LL;
+  t.r6 = 0x6666666666666666LL;
+  Object* dummy = CALL_GENERATED_CODE(f, &t, 0, 0, 0, 0);
+  USE(dummy);
+
+  // Unsigned data, 32 & 64.
+  CHECK_EQ(0x1111111144332211LL, t.r1);
+  CHECK_EQ(0x0000000044332211LL, t.r2);
+
+  // Signed data, 32 & 64.
+  CHECK_EQ(0x3333333399aabbccLL, t.r3);
+  CHECK_EQ(0xffffffff99aabbccLL, t.r4);
+
+  // Signed data, 32 & 64.
+  CHECK_EQ(0x5555555599aabbccLL, t.r5);
+  CHECK_EQ(0x0000000099aabbccLL, t.r6);
+
+
+  // CHECK_EQ(0xffffbbcc, t.r3);
+  // CHECK_EQ(0x0000bbcc, t.r4);
+  // CHECK_EQ(0xffffffcc, t.r5);
+  // CHECK_EQ(0x3333bbcc, t.r6);
+}
+
 #undef __

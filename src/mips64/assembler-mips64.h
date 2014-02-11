@@ -753,6 +753,7 @@ class Assembler : public AssemblerBase {
   void lh(Register rd, const MemOperand& rs);
   void lhu(Register rd, const MemOperand& rs);
   void lw(Register rd, const MemOperand& rs);
+  void lwu(Register rd, const MemOperand& rs);
   void lwl(Register rd, const MemOperand& rs);
   void lwr(Register rd, const MemOperand& rs);
   void sb(Register rd, const MemOperand& rs);

@@ -1524,6 +1524,16 @@ void Assembler::lw(Register rd, const MemOperand& rs) {
 }
 
 
+void Assembler::lwu(Register rd, const MemOperand& rs) {
+  if (is_int16(rs.offset_)) {
+    GenInstrImmediate(LWU, rs.rm(), rd, rs.offset_);
+  } else {  // Offset > 16 bits, use multiple instructions to load.
+    LoadRegPlusOffsetToAt(rs);
+    GenInstrImmediate(LWU, at, rd, 0);  // Equiv to lwu(rd, MemOperand(at, 0));
+  }
+}
+
+
 void Assembler::lwl(Register rd, const MemOperand& rs) {
   GenInstrImmediate(LWL, rs.rm(), rd, rs.offset_);
 }

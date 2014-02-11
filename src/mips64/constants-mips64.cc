@@ -349,6 +349,7 @@ Instruction::Type Instruction::InstructionType() const {
     case LH:
     case LWL:
     case LW:
+    case LWU:
     case LD:
     case LBU:
     case LHU:

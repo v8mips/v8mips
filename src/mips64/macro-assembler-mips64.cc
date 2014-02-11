@@ -3809,7 +3809,7 @@ void MacroAssembler::InvokeFunction(Register function,
   lw(expected_reg,
       FieldMemOperand(code_reg,
                       SharedFunctionInfo::kFormalParameterCountOffset));
-  // TODO 
+  // TODO
   // dsra32(expected_reg, expected_reg, 0);
   ld(code_reg, FieldMemOperand(a1, JSFunction::kCodeEntryOffset));
   ParameterCount expected(expected_reg);
