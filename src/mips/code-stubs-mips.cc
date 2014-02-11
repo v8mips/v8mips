@@ -772,12 +772,18 @@ void WriteInt32ToHeapNumberStub::Generate(MacroAssembler* masm) {
   const int shift_distance = HeapNumber::kNonMantissaBitsInTopWord - 2;
   __ srl(at, the_int_, shift_distance);
   __ or_(scratch_, scratch_, at);
-  __ sw(scratch_, FieldMemOperand(the_heap_number_,
-                                   HeapNumber::kExponentOffset));
+#ifndef BIG_ENDIAN_FLOATING_POINT
+  const int lo_offset = HeapNumber::kExponentOffset;
+  const int hi_offset = HeapNumber::kMantissaOffset;
+#else
+  const int lo_offset = HeapNumber::kMantissaOffset;
+  const int hi_offset = HeapNumber::kExponentOffset;
+#endif
+
+  __ sw(scratch_, FieldMemOperand(the_heap_number_, lo_offset));
   __ sll(scratch_, the_int_, 32 - shift_distance);
   __ Ret(USE_DELAY_SLOT);
-  __ sw(scratch_, FieldMemOperand(the_heap_number_,
-                                   HeapNumber::kMantissaOffset));
+  __ sw(scratch_, FieldMemOperand(the_heap_number_, hi_offset));
 
   __ bind(&max_negative_int);
   // The max negative int32 is stored as a positive number in the mantissa of
@@ -786,12 +792,10 @@ void WriteInt32ToHeapNumberStub::Generate(MacroAssembler* masm) {
   // significant 1 bit is not stored.
   non_smi_exponent += 1 << HeapNumber::kExponentShift;
   __ li(scratch_, Operand(HeapNumber::kSignMask | non_smi_exponent));
-  __ sw(scratch_,
-        FieldMemOperand(the_heap_number_, HeapNumber::kExponentOffset));
+  __ sw(scratch_, FieldMemOperand(the_heap_number_, lo_offset));
   __ mov(scratch_, zero_reg);
   __ Ret(USE_DELAY_SLOT);
-  __ sw(scratch_,
-        FieldMemOperand(the_heap_number_, HeapNumber::kMantissaOffset));
+  __ sw(scratch_, FieldMemOperand(the_heap_number_, hi_offset));
 }
 
 

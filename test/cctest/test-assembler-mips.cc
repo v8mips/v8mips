@@ -972,7 +972,7 @@ TEST(MIPS11) {
   CHECK_EQ(0xbbccdd44, t.swr_1);
   CHECK_EQ(0xccdd3344, t.swr_2);
   CHECK_EQ(0xdd223344, t.swr_3);
-+#elif __BYTE_ORDER == __BIG_ENDIAN
+#elif __BYTE_ORDER == __BIG_ENDIAN
   CHECK_EQ(0x11223344, t.lwl_0);
   CHECK_EQ(0x223344dd, t.lwl_1);
   CHECK_EQ(0x3344ccdd, t.lwl_2);

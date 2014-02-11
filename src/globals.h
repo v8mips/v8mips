@@ -109,6 +109,10 @@ namespace internal {
 #endif
 #endif
 
+#if defined(__MIPSEB__)
+#define BIG_ENDIAN_FLOATING_POINT 1
+#endif
+
 // Check for supported combinations of host and target architectures.
 #if V8_TARGET_ARCH_IA32 && !V8_HOST_ARCH_IA32
 #error Target architecture ia32 is only supported on ia32 host
