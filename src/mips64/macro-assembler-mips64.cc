@@ -937,6 +937,19 @@ void MacroAssembler::Usw(Register rd, const MemOperand& rs) {
 }
 
 
+// Do 64-bit load from unaligned address. Note this only handles
+// the specific case of 32-bit aligned, but not 64-bit aligned.
+void MacroAssembler::Uld(Register rd, const MemOperand& rs, Register scratch) {
+  // Assert fail if the offset from start of object IS actually aligned.
+  // ONLY use with known misalignment, since there is performance cost.
+  ASSERT((rs.offset() + kHeapObjectTag) & (kPointerSize - 1));
+  lwu(rd, rs);
+  lw(scratch, MemOperand(rs.rm(), rs.offset() + kPointerSize / 2));
+  dsll32(scratch, scratch, 0);
+  Daddu(rd, rd, scratch);
+}
+
+
 void MacroAssembler::li(Register dst, Handle<Object> value, LiFlags mode) {
   AllowDeferredHandleDereference smi_check;
   if (value->IsSmi()) {
@@ -2803,20 +2816,15 @@ void MacroAssembler::JumpToHandlerEntry() {
   // Compute the handler entry address and jump to it.  The handler table is
   // a fixed array of (smi-tagged) code offsets.
   // v0 = exception, a1 = code object, a2 = state.
-  // ld(a3, FieldMemOperand(a1, Code::kHandlerTableOffset));  // Handler table.
-  lw(a3, FieldMemOperand(a1, Code::kHandlerTableOffset));
-  lw(t9, FieldMemOperand(a1, Code::kHandlerTableOffset + 4));
-  dsll32(t9, t9, 0);
-  dsll32(a3, a3, 0);  // TODO(yy) a3 sometimes get 0xffffffffb7b46e09? where is the problem? simulator?
-  dsrl32(a3, a3, 0);
-  Daddu(a3, a3, t9);
+  Uld(a3, FieldMemOperand(a1, Code::kHandlerTableOffset));
   Daddu(a3, a3, Operand(FixedArray::kHeaderSize - kHeapObjectTag));
   dsrl(a2, a2, StackHandler::kKindWidth);  // Handler index.
-  dsll(a2, a2, kPointerSizeLog2);
+  dsll(a2, a2, kPointerSizeLog2);  // TODO(plind) - combine to 1 instruction?
   Daddu(a2, a3, a2);
   ld(a2, MemOperand(a2));  // Smi-tagged offset.
   Daddu(a1, a1, Operand(Code::kHeaderSize - kHeapObjectTag));  // Code start.
   // dsra(t9, a2, kSmiTagSize);
+  // TODO(plind) - better Smi handling here.
   dsra32(t9, a2, 0);
   Daddu(t9, t9, a1);
   Jump(t9);  // Jump.
