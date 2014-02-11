@@ -614,7 +614,8 @@ class Assembler : public AssemblerBase {
   // Number of instructions used for the JS return sequence. The constant is
   // used by the debugger to patch the JS return sequence.
   static const int kJSReturnSequenceInstructions = 8;
-  static const int kDebugBreakSlotInstructions = 4;
+  // static const int kDebugBreakSlotInstructions = 4;
+  static const int kDebugBreakSlotInstructions = 8;
   static const int kDebugBreakSlotLength =
       kDebugBreakSlotInstructions * kInstrSize;
 
