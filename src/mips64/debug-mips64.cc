@@ -59,16 +59,10 @@ void BreakLocationIterator::SetDebugBreakAtReturn() {
   ASSERT(Assembler::kJSReturnSequenceInstructions == 8);
   CodePatcher patcher(rinfo()->pc(), Assembler::kJSReturnSequenceInstructions);
   // li and Call pseudo-instructions emit 6 + 2 instructions.
-  //patcher.masm()->li(v8::internal::t9,
-  //    Operand(reinterpret_cast<int64_t>(
-  //      debug_info_->GetIsolate()->debug()->debug_break_return()->entry())));
-  uint64_t entry = reinterpret_cast<int64_t>(debug_info_->GetIsolate()->debug()->debug_break_return()->entry());
-  patcher.masm()->lui(v8::internal::t9, (entry >> 48) & kImm16Mask);
-  patcher.masm()->ori(v8::internal::t9, v8::internal::t9, (entry >> 32) & kImm16Mask);
-  patcher.masm()->dsll(v8::internal::t9, v8::internal::t9, 16);
-  patcher.masm()->ori(v8::internal::t9, v8::internal::t9, (entry >> 16) & kImm16Mask);
-  patcher.masm()->dsll(v8::internal::t9, v8::internal::t9, 16);
-  patcher.masm()->ori(v8::internal::t9, v8::internal::t9, entry & kImm16Mask);
+  patcher.masm()->li(v8::internal::t9,
+      Operand(reinterpret_cast<int64_t>(
+          debug_info_->GetIsolate()->debug()->debug_break_return()->entry())),
+      CONSTANT_SIZE);
   patcher.masm()->Call(v8::internal::t9);
 
   // TODO(mips): Open issue about using breakpoint instruction instead of nops.
@@ -113,15 +107,10 @@ void BreakLocationIterator::SetDebugBreakAtSlot() {
   //   li t9, address   (6-instruction sequence on mips64)
   //   call t9          (jalr t9 / nop instruction pair)
   CodePatcher patcher(rinfo()->pc(), Assembler::kDebugBreakSlotInstructions);
-  //patcher.masm()->li(v8::internal::t9, Operand(reinterpret_cast<int64_t>(
-  //    debug_info_->GetIsolate()->debug()->debug_break_slot()->entry())));
-  uint64_t entry = reinterpret_cast<int64_t>(debug_info_->GetIsolate()->debug()->debug_break_slot()->entry());
-  patcher.masm()->lui(v8::internal::t9, (entry >> 48) & kImm16Mask);
-  patcher.masm()->ori(v8::internal::t9, v8::internal::t9, (entry >> 32) & kImm16Mask);
-  patcher.masm()->dsll(v8::internal::t9, v8::internal::t9, 16);
-  patcher.masm()->ori(v8::internal::t9, v8::internal::t9, (entry >> 16) & kImm16Mask);
-  patcher.masm()->dsll(v8::internal::t9, v8::internal::t9, 16);
-  patcher.masm()->ori(v8::internal::t9, v8::internal::t9, entry & kImm16Mask);
+  patcher.masm()->li(v8::internal::t9,
+      Operand(reinterpret_cast<int64_t>(
+          debug_info_->GetIsolate()->debug()->debug_break_slot()->entry())),
+      CONSTANT_SIZE);
   patcher.masm()->Call(v8::internal::t9);
 }
 
