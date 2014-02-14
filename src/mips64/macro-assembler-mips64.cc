@@ -5376,24 +5376,49 @@ void MacroAssembler::GetRelocatedValue(Register li_location,
     And(value, value, kOpcodeMask);
     Check(eq, kTheInstructionShouldBeALui,
         value, Operand(LUI));
-    ld(value, MemOperand(li_location));
+    lwu(value, MemOperand(li_location));
   }
 
   // value now holds a lui instruction. Extract the immediate.
-  dsll(value, value, kImm16Bits);
+  dsll32(value, value, kImm16Bits);
 
-  ld(scratch, MemOperand(li_location, kInstrSize));
+  lwu(scratch, MemOperand(li_location, kInstrSize));
   if (emit_debug_code()) {
     And(scratch, scratch, kOpcodeMask);
     Check(eq, kTheInstructionShouldBeAnOri,
         scratch, Operand(ORI));
-    ld(scratch, MemOperand(li_location, kInstrSize));
+    lwu(scratch, MemOperand(li_location, kInstrSize));
+  }
+  // "scratch" now holds an ori instruction. Extract the immediate.
+  andi(scratch, scratch, kImm16Mask);
+  dsll32(scratch, scratch, 0);
+
+  daddu(value, value, scratch);
+
+  lwu(scratch, MemOperand(li_location, kInstrSize * 3));
+  if (emit_debug_code()) {
+    And(scratch, scratch, kOpcodeMask);
+    Check(eq, kTheInstructionShouldBeAnOri,
+        scratch, Operand(ORI));
+    lwu(scratch, MemOperand(li_location, kInstrSize * 3));
+  }
+  // "scratch" now holds an ori instruction. Extract the immediate.
+  andi(scratch, scratch, kImm16Mask);
+  dsll(scratch, scratch, kImm16Bits);
+
+  daddu(value, value, scratch);
+
+  lwu(scratch, MemOperand(li_location, kInstrSize * 5));
+  if (emit_debug_code()) {
+    And(scratch, scratch, kOpcodeMask);
+    Check(eq, kTheInstructionShouldBeAnOri,
+        scratch, Operand(ORI));
+    lwu(scratch, MemOperand(li_location, kInstrSize * 5));
   }
   // "scratch" now holds an ori instruction. Extract the immediate.
   andi(scratch, scratch, kImm16Mask);
 
-  // Merge the results.
-  or_(value, value, scratch);
+  daddu(value, value, scratch);
 }
 
 
