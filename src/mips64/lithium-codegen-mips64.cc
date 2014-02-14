@@ -2993,6 +2993,13 @@ void LCodeGen::DoLoadNamedField(LLoadNamedField* instr) {
   Representation representation = access.representation();
   if (representation.IsSmi() &&
       instr->hydrogen()->representation().IsInteger32()) {
+    if (FLAG_debug_code) {
+      // Verify this is really an Smi.
+      Register scratch = scratch0();
+      __ Load(scratch, FieldMemOperand(object, offset), representation);
+      __ AssertSmi(scratch);
+    }
+
     // Read int value directly from upper half of the smi.
     STATIC_ASSERT(kSmiTag == 0);
     STATIC_ASSERT(kSmiTagSize + kSmiShiftSize == 32);
@@ -3289,6 +3296,14 @@ void LCodeGen::DoLoadKeyedFixedArray(LLoadKeyed* instr) {
   if (representation.IsInteger32() &&
       hinstr->elements_kind() == FAST_SMI_ELEMENTS) {
     ASSERT(!hinstr->RequiresHoleCheck());
+    if (FLAG_debug_code) {
+      Register temp = scratch1();
+      __ Load(temp,
+              FieldMemOperand(store_base, offset),
+              Representation::Smi());
+      __ AssertSmi(temp);
+    }
+
     // Read int value directly from upper half of the smi.
     STATIC_ASSERT(kSmiTag == 0);
     STATIC_ASSERT(kSmiTagSize + kSmiShiftSize == 32);

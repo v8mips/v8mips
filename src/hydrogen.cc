@@ -1452,7 +1452,7 @@ HValue* HGraphBuilder::BuildUncheckedDictionaryElementLoadHelper(
 
   HValue* candidate_key = Add<HLoadKeyed>(elements, key_index,
                                           static_cast<HValue*>(NULL),
-                                          FAST_SMI_ELEMENTS);
+                                          FAST_ELEMENTS);
 
   IfBuilder key_compare(this);
   key_compare.IfNot<HCompareObjectEqAndBranch>(key, candidate_key);
@@ -1478,7 +1478,7 @@ HValue* HGraphBuilder::BuildUncheckedDictionaryElementLoadHelper(
 
     HValue* details = Add<HLoadKeyed>(elements, details_index,
                                       static_cast<HValue*>(NULL),
-                                      FAST_SMI_ELEMENTS);
+                                      FAST_ELEMENTS);
     IfBuilder details_compare(this);
     details_compare.If<HCompareNumericAndBranch>(details,
                                                  graph()->GetConstant0(),
@@ -1548,7 +1548,7 @@ HValue* HGraphBuilder::BuildUncheckedDictionaryElementLoad(HValue* receiver,
       elements,
       Add<HConstant>(NameDictionary::kCapacityIndex),
       static_cast<HValue*>(NULL),
-      FAST_SMI_ELEMENTS);
+      FAST_ELEMENTS);
 
   HValue* mask = AddUncasted<HSub>(capacity, graph()->GetConstant1());
   mask->ChangeRepresentation(Representation::Integer32());
