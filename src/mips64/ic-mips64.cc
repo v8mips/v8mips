@@ -1053,9 +1053,12 @@ void KeyedLoadIC::GenerateGeneric(MacroAssembler* masm) {
   for (int i = kEntriesPerBucket - 1; i >= 0; i--) {
     __ bind(&hit_on_nth_entry[i]);
     __ li(t0, Operand(cache_field_offsets));
-    __ dsll(at, a3, kPointerSizeLog2);
+
+    // TODO(yy) This data structure does NOT follow natural pointer size.
+    __ dsll(at, a3, kPointerSizeLog2 - 1);
     __ daddu(at, t0, at);
-    __ ld(t1, MemOperand(at, kPointerSize * i));
+    __ lwu(t1, MemOperand(at, kPointerSize / 2 * i));
+
     __ lbu(t2, FieldMemOperand(a2, Map::kInObjectPropertiesOffset));
     __ Dsubu(t1, t1, t2);
     __ Branch(&property_array_property, ge, t1, Operand(zero_reg));
