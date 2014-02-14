@@ -3921,8 +3921,8 @@ void MacroAssembler::TryGetFunctionPrototype(Register function,
     //   FieldMemOperand(scratch, SharedFunctionInfo::kCompilerHintsOffset));
     // And(scratch, scratch,
     //    Operand(Smi::FromInt(1 << SharedFunctionInfo::kBoundFunction)));
-    lw(scratch,
-       FieldMemOperand(scratch, SharedFunctionInfo::kCompilerHintsOffset));
+    lwu(scratch,
+        FieldMemOperand(scratch, SharedFunctionInfo::kCompilerHintsOffset));
     And(scratch, scratch,
         Operand(1 << SharedFunctionInfo::kBoundFunction));
     Branch(miss, ne, scratch, Operand(zero_reg));
@@ -5371,7 +5371,7 @@ void MacroAssembler::PatchRelocatedValue(Register li_location,
 void MacroAssembler::GetRelocatedValue(Register li_location,
                                        Register value,
                                        Register scratch) {
-  ld(value, MemOperand(li_location));
+  lwu(value, MemOperand(li_location));
   if (emit_debug_code()) {
     And(value, value, kOpcodeMask);
     Check(eq, kTheInstructionShouldBeALui,
