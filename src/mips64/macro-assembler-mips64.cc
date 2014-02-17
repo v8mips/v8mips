@@ -5341,31 +5341,55 @@ void MacroAssembler::CallCFunctionHelper(Register function,
 void MacroAssembler::PatchRelocatedValue(Register li_location,
                                          Register scratch,
                                          Register new_value) {
-  ld(scratch, MemOperand(li_location));
+  lwu(scratch, MemOperand(li_location));
   // At this point scratch is a lui(at, ...) instruction.
   if (emit_debug_code()) {
     And(scratch, scratch, kOpcodeMask);
     Check(eq, kTheInstructionToPatchShouldBeALui,
         scratch, Operand(LUI));
-    ld(scratch, MemOperand(li_location));
+    lwu(scratch, MemOperand(li_location));
   }
-  dsrl(t9, new_value, kImm16Bits);
+  dsrl32(t9, new_value, kImm16Bits);
   Ins(scratch, t9, 0, kImm16Bits);
-  sd(scratch, MemOperand(li_location));
+  sw(scratch, MemOperand(li_location));
 
-  ld(scratch, MemOperand(li_location, kInstrSize));
+  lwu(scratch, MemOperand(li_location, kInstrSize));
   // scratch is now ori(at, ...).
   if (emit_debug_code()) {
     And(scratch, scratch, kOpcodeMask);
     Check(eq, kTheInstructionToPatchShouldBeAnOri,
         scratch, Operand(ORI));
-    ld(scratch, MemOperand(li_location, kInstrSize));
+    lwu(scratch, MemOperand(li_location, kInstrSize));
+  }
+  dsrl32(t9, new_value, 0);
+  Ins(scratch, t9, 0, kImm16Bits);
+  sw(scratch, MemOperand(li_location, kInstrSize));
+
+  lwu(scratch, MemOperand(li_location, kInstrSize * 3));
+  // scratch is now ori(at, ...).
+  if (emit_debug_code()) {
+    And(scratch, scratch, kOpcodeMask);
+    Check(eq, kTheInstructionToPatchShouldBeAnOri,
+        scratch, Operand(ORI));
+    lwu(scratch, MemOperand(li_location, kInstrSize * 3));
+  }
+  dsrl(t9, new_value, kImm16Bits);
+  Ins(scratch, t9, 0, kImm16Bits);
+  sw(scratch, MemOperand(li_location, kInstrSize * 3));
+
+
+  lwu(scratch, MemOperand(li_location, kInstrSize * 5));
+  // scratch is now ori(at, ...).
+  if (emit_debug_code()) {
+    And(scratch, scratch, kOpcodeMask);
+    Check(eq, kTheInstructionToPatchShouldBeAnOri,
+        scratch, Operand(ORI));
+    lwu(scratch, MemOperand(li_location, kInstrSize * 5));
   }
   Ins(scratch, new_value, 0, kImm16Bits);
-  sd(scratch, MemOperand(li_location, kInstrSize));
-
+  sw(scratch, MemOperand(li_location, kInstrSize * 5));
   // Update the I-cache so the new lui and ori can be executed.
-  FlushICache(li_location, 2);
+  FlushICache(li_location, 6);
 }
 
 void MacroAssembler::GetRelocatedValue(Register li_location,
