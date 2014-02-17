@@ -3218,6 +3218,7 @@ void LCodeGen::DoLoadKeyedFixedDoubleArray(LLoadKeyed* instr) {
 
 
 void LCodeGen::DoLoadKeyedFixedArray(LLoadKeyed* instr) {
+  HLoadKeyed* hinstr = instr->hydrogen();
   Register elements = ToRegister(instr->elements());
   Register result = ToRegister(instr->result());
   Register scratch = scratch0();
@@ -3246,10 +3247,21 @@ void LCodeGen::DoLoadKeyedFixedArray(LLoadKeyed* instr) {
     }
     offset = FixedArray::OffsetOfElementAt(instr->additional_index());
   }
-  __ ld(result, FieldMemOperand(store_base, offset));
+
+  Representation representation = hinstr->representation();
+  if (representation.IsInteger32() &&
+      hinstr->elements_kind() == FAST_SMI_ELEMENTS) {
+    ASSERT(!hinstr->RequiresHoleCheck());
+    // Read int value directly from upper half of the smi.
+    STATIC_ASSERT(kSmiTag == 0);
+    STATIC_ASSERT(kSmiTagSize + kSmiShiftSize == 32);
+    offset += kPointerSize / 2;
+  }
+
+  __ Load(result, FieldMemOperand(store_base, offset), representation);
 
   // Check for the hole value.
-  if (instr->hydrogen()->RequiresHoleCheck()) {
+  if (hinstr->RequiresHoleCheck()) {
     if (IsFastSmiElementsKind(instr->hydrogen()->elements_kind())) {
       __ SmiTst(result, scratch);
       DeoptimizeIf(ne, instr->environment(), scratch, Operand(zero_reg));

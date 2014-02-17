@@ -296,33 +296,33 @@ void MipsDebugger::PrintAllRegs() {
 
   PrintF("\n");
   // at, v0, a0.
-  PrintF("%3s: 0x%08lx %10ld\t%3s: 0x%08lx %10ld\t%3s: 0x%08lx %10ld\n",
+  PrintF("%3s: 0x%016lx %14ld\t%3s: 0x%016lx %14ld\t%3s: 0x%016lx %14ld\n",
          REG_INFO(1), REG_INFO(2), REG_INFO(4));
   // v1, a1.
-  PrintF("%26s\t%3s: 0x%08lx %10ld\t%3s: 0x%08lx %10ld\n",
+  PrintF("%34s\t%3s: 0x%016lx %14ld\t%3s: 0x%016lx %14ld\n",
          "", REG_INFO(3), REG_INFO(5));
   // a2.
-  PrintF("%26s\t%26s\t%3s: 0x%08lx %10ld\n", "", "", REG_INFO(6));
+  PrintF("%34s\t%34s\t%3s: 0x%016lx %14ld\n", "", "", REG_INFO(6));
   // a3.
-  PrintF("%26s\t%26s\t%3s: 0x%08lx %10ld\n", "", "", REG_INFO(7));
+  PrintF("%34s\t%34s\t%3s: 0x%016lx %14ld\n", "", "", REG_INFO(7));
   PrintF("\n");
   // t0-t7, s0-s7
   for (int i = 0; i < 8; i++) {
-    PrintF("%3s: 0x%08lx %10ld\t%3s: 0x%08lx %10ld\n",
+    PrintF("%3s: 0x%016lx %14ld\t%3s: 0x%016lx %14ld\n",
            REG_INFO(8+i), REG_INFO(16+i));
   }
   PrintF("\n");
   // t8, k0, LO.
-  PrintF("%3s: 0x%08lx %10ld\t%3s: 0x%08lx %10ld\t%3s: 0x%08lx %10ld\n",
+  PrintF("%3s: 0x%016lx %14ld\t%3s: 0x%016lx %14ld\t%3s: 0x%016lx %14ld\n",
          REG_INFO(24), REG_INFO(26), REG_INFO(32));
   // t9, k1, HI.
-  PrintF("%3s: 0x%08lx %10ld\t%3s: 0x%08lx %10ld\t%3s: 0x%08lx %10ld\n",
+  PrintF("%3s: 0x%016lx %14ld\t%3s: 0x%016lx %14ld\t%3s: 0x%016lx %14ld\n",
          REG_INFO(25), REG_INFO(27), REG_INFO(33));
   // sp, fp, gp.
-  PrintF("%3s: 0x%08lx %10ld\t%3s: 0x%08lx %10ld\t%3s: 0x%08lx %10ld\n",
+  PrintF("%3s: 0x%016lx %14ld\t%3s: 0x%016lx %14ld\t%3s: 0x%016lx %14ld\n",
          REG_INFO(29), REG_INFO(30), REG_INFO(28));
   // pc.
-  PrintF("%3s: 0x%08lx %10ld\t%3s: 0x%08lx %10ld\n",
+  PrintF("%3s: 0x%016lx %14ld\t%3s: 0x%016lx %14ld\n",
          REG_INFO(31), REG_INFO(34));
 
 #undef REG_INFO
@@ -394,7 +394,7 @@ void MipsDebugger::Debug() {
       v8::internal::EmbeddedVector<char, 256> buffer;
       dasm.InstructionDecode(buffer,
                              reinterpret_cast<byte*>(sim_->get_pc()));
-      PrintF("  0x%08lx  %s\n", sim_->get_pc(), buffer.start());
+      PrintF("  0x%016lx  %s\n", sim_->get_pc(), buffer.start());
       last_pc = sim_->get_pc();
     }
     char* line = ReadLine("sim> ");
@@ -508,19 +508,19 @@ void MipsDebugger::Debug() {
           PrintF("printobject <value>\n");
         }
       } else if (strcmp(cmd, "stack") == 0 || strcmp(cmd, "mem") == 0) {
-        int32_t* cur = NULL;
-        int32_t* end = NULL;
+        int64_t* cur = NULL;
+        int64_t* end = NULL;
         int next_arg = 1;
 
         if (strcmp(cmd, "stack") == 0) {
-          cur = reinterpret_cast<int32_t*>(sim_->get_register(Simulator::sp));
+          cur = reinterpret_cast<int64_t*>(sim_->get_register(Simulator::sp));
         } else {  // Command "mem".
           int64_t value;
           if (!GetValue(arg1, &value)) {
             PrintF("%s unrecognized\n", arg1);
             continue;
           }
-          cur = reinterpret_cast<int32_t*>(value);
+          cur = reinterpret_cast<int64_t*>(value);
           next_arg++;
         }
 
@@ -535,15 +535,15 @@ void MipsDebugger::Debug() {
         end = cur + words;
 
         while (cur < end) {
-          PrintF("  0x%08lx:  0x%08x %10d",
+          PrintF("  0x%012lx:  0x%016lx %14ld",
                  reinterpret_cast<intptr_t>(cur), *cur, *cur);
           HeapObject* obj = reinterpret_cast<HeapObject*>(*cur);
-          int value = *cur;
+          int64_t value = *cur;
           Heap* current_heap = v8::internal::Isolate::Current()->heap();
           if (((value & 1) == 0) || current_heap->Contains(obj)) {
             PrintF(" (");
             if ((value & 1) == 0) {
-              PrintF("smi %d", value / 2);
+              PrintF("smi %d", value >> 32);
             } else {
               obj->ShortPrint();
             }
