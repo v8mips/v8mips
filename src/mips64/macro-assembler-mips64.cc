@@ -3812,7 +3812,6 @@ void MacroAssembler::InvokeFunction(Register function,
   Register code_reg = a3;
   ld(code_reg, FieldMemOperand(a1, JSFunction::kSharedFunctionInfoOffset));
   ld(cp, FieldMemOperand(a1, JSFunction::kContextOffset));
-  // break_(0x221);
   // 32-bit
   lw(expected_reg,
       FieldMemOperand(code_reg,

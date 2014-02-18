@@ -767,7 +767,6 @@ static void Generate_JSEntryTrampolineHelper(MacroAssembler* masm,
 
     // Invoke the code and pass argc as a0.
     __ mov(a0, a3);
-// __ break_(0x141);
     if (is_construct) {
       // No type feedback cell is available
       Handle<Object> undefined_sentinel(
@@ -783,7 +782,6 @@ static void Generate_JSEntryTrampolineHelper(MacroAssembler* masm,
 
     // Leave internal frame.
   }
- // __ break_(0x140);
   __ Jump(ra);
 }
 
@@ -1467,7 +1465,6 @@ void Builtins::Generate_ArgumentsAdaptorTrampoline(MacroAssembler* masm) {
 
   {  // Too few parameters: Actual < expected.
     __ bind(&too_few);
-//  __ break_(0x222);
     EnterArgumentsAdaptorFrame(masm);
 
     // Calculate copy start address into a0 and copy end address is fp.

@@ -900,7 +900,6 @@ static void EmitSmiNonsmiComparison(MacroAssembler* masm,
     // the runtime.
     __ Branch(slow, ne, t4, Operand(HEAP_NUMBER_TYPE));
   }
-// __ break_(0x224);
   // Rhs is a smi, lhs is a number.
   // Convert smi rhs to double.
   // __ sra(at, rhs, kSmiTagSize);
@@ -1704,7 +1703,6 @@ void CEntryStub::Generate(MacroAssembler* masm) {
   // Enter the exit frame that transitions from JavaScript to C++.
   FrameScope scope(masm, StackFrame::MANUAL);
   __ EnterExitFrame(save_doubles_);
-//__ break_(0x124);
   // s0: number of arguments (C callee-saved)
   // s1: pointer to first argument (C callee-saved)
   // s2: pointer to builtin function (C callee-saved)
@@ -1720,7 +1718,6 @@ void CEntryStub::Generate(MacroAssembler* masm) {
                &throw_out_of_memory_exception,
                false,
                false);
-// __ break_(0x125);
   // Do space-specific GC and retry runtime call.
   GenerateCore(masm,
                &throw_normal_exception,
@@ -1728,7 +1725,6 @@ void CEntryStub::Generate(MacroAssembler* masm) {
                &throw_out_of_memory_exception,
                true,
                false);
-// __ break_(0x126);
   // Do full GC and retry runtime call one final time.
   Failure* failure = Failure::InternalError();
   __ li(v0, Operand(reinterpret_cast<int64_t>(failure)));
@@ -1738,7 +1734,6 @@ void CEntryStub::Generate(MacroAssembler* masm) {
                &throw_out_of_memory_exception,
                true,
                true);
-// __ break_(0x127);
   __ bind(&throw_out_of_memory_exception);
   // Set external caught exception to false.
   Isolate* isolate = masm->isolate();
@@ -1791,7 +1786,6 @@ void JSEntryStub::GenerateBody(MacroAssembler* masm, bool is_construct) {
   // Set up the reserved register for 0.0.
   __ Move(kDoubleRegZero, 0.0);
 
-  // __ break_(0x213);
   // Load argv in s0 register.
   int offset_to_argv = (kNumCalleeSaved + 1) * kPointerSize;
   offset_to_argv += kNumCalleeSavedFPU * kDoubleSize;
@@ -1966,7 +1960,7 @@ void InstanceofStub::Generate(MacroAssembler* masm) {
   const Register inline_site = t5;
   const Register scratch = a2;
 
-  const int32_t kDeltaToLoadBoolResult = 5 * kPointerSize;
+  const int32_t kDeltaToLoadBoolResult = 5 * /*kPointerSize*/kIntSize;
 
   Label slow, loop, is_instance, is_not_instance, not_js_object;
 
@@ -3240,7 +3234,6 @@ static void GenerateRecordCallTarget(MacroAssembler* masm) {
             masm->isolate()->heap()->undefined_value());
   ASSERT_EQ(*TypeFeedbackCells::UninitializedSentinel(masm->isolate()),
             masm->isolate()->heap()->the_hole_value());
-  // __ break_(0x244);
   // Load the cache state into a3.
   __ ld(a3, FieldMemOperand(a2, Cell::kValueOffset));
 
@@ -3407,7 +3400,6 @@ void CallConstructStub::Generate(MacroAssembler* masm) {
   // a1 : the function to call
   // a2 : cache cell for call target
   Label slow, non_function_call;
-  // __ break_(0x243);
   // Check that the function is not a smi.
   __ JumpIfSmi(a1, &non_function_call);
   // Check that the function is a JSFunction.
@@ -5916,7 +5908,6 @@ void ArrayConstructorStub::Generate(MacroAssembler* masm) {
   }
 
   Label no_info;
-  // __ break_(0x248);
   // Get the elements kind and case on that.
   __ LoadRoot(at, Heap::kUndefinedValueRootIndex);
   __ Branch(&no_info, eq, a2, Operand(at));

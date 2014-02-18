@@ -518,7 +518,6 @@ void FullCodeGenerator::AccumulatorValueContext::Plug(
 
 void FullCodeGenerator::StackValueContext::Plug(Handle<Object> lit) const {
   // Immediates cannot be pushed directly.
-  // __ break_(0x111);
   __ li(result_register(), Operand(lit));
   __ push(result_register());
 }
@@ -967,7 +966,6 @@ void FullCodeGenerator::VisitExportDeclaration(ExportDeclaration* declaration) {
 void FullCodeGenerator::DeclareGlobals(Handle<FixedArray> pairs) {
   // Call the runtime to declare the globals.
   // The context is the first argument.
-  // __ break_(0x117);
   __ li(a1, Operand(pairs));
   __ li(a0, Operand(Smi::FromInt(DeclareGlobalsFlags())));
   __ Push(cp, a1, a0);
@@ -1154,7 +1152,6 @@ void FullCodeGenerator::VisitForInStatement(ForInStatement* stmt) {
   __ li(a0, Operand(Smi::FromInt(0)));
   // Push enumeration cache, enumeration cache length (as smi) and zero.
   __ Push(a2, a1, a0);
-  // __ break_(141);
   __ jmp(&loop);
 
   __ bind(&no_descriptors);

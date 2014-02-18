@@ -2726,13 +2726,13 @@ void LCodeGen::DoDeferredInstanceOfKnownGlobal(LInstanceOfKnownGlobal* instr,
   Register temp = ToRegister(instr->temp());
   ASSERT(temp.is(t0));
   __ li(InstanceofStub::right(), instr->function());
-  static const int kAdditionalDelta = 7;
+  static const int kAdditionalDelta = 15;
   int delta = masm_->InstructionsGeneratedSince(map_check) + kAdditionalDelta;
   Label before_push_delta;
   __ bind(&before_push_delta);
   {
     Assembler::BlockTrampolinePoolScope block_trampoline_pool(masm_);
-    __ li(temp, Operand(delta * kPointerSize), CONSTANT_SIZE);
+    __ li(temp, Operand(delta * /*kPointerSize*/ kIntSize), CONSTANT_SIZE);
     __ StoreToSafepointRegisterSlot(temp, temp);
   }
   CallCodeGeneric(stub.GetCode(isolate()),
@@ -3404,16 +3404,16 @@ void LCodeGen::DoWrapReceiver(LWrapReceiver* instr) {
   // functions.
   __ ld(scratch,
          FieldMemOperand(function, JSFunction::kSharedFunctionInfoOffset));
-  __ lw(scratch,
+  __ lwu(scratch,
          FieldMemOperand(scratch, SharedFunctionInfo::kCompilerHintsOffset));
 
   // Do not transform the receiver to object for builtins.
   // int32_t strict_mode_function_mask =
   //                1 <<  (SharedFunctionInfo::kStrictModeFunction + kSmiTagSize);
   // int32_t native_mask = 1 << (SharedFunctionInfo::kNative + kSmiTagSize);
-  int32_t strict_mode_function_mask =
+  uint32_t strict_mode_function_mask =
                   1 <<  (SharedFunctionInfo::kStrictModeFunction);
-  int32_t native_mask = 1 << (SharedFunctionInfo::kNative);
+  uint32_t native_mask = 1 << (SharedFunctionInfo::kNative);
   __ And(scratch, scratch, Operand(strict_mode_function_mask | native_mask));
   __ Branch(&result_in_receiver, ne, scratch, Operand(zero_reg));
 
@@ -4107,7 +4107,6 @@ void LCodeGen::DoStoreNamedField(LStoreNamedField* instr) {
   Register scratch = scratch0();
   HObjectAccess access = instr->hydrogen()->access();
   int offset = access.offset();
-  // __ break_(0x300);
   if (access.IsExternalMemory()) {
     Register value = ToRegister(instr->value());
     MemOperand operand = MemOperand(object, offset);
@@ -4352,10 +4351,15 @@ void LCodeGen::DoStoreKeyedFixedDoubleArray(LStoreKeyed* instr) {
                     FixedDoubleArray::kHeaderSize - kHeapObjectTag));
   } else {
     int shift_size = (instr->hydrogen()->key()->representation().IsSmi())
-        ? (element_size_shift - kSmiTagSize) : element_size_shift;
+        ? (element_size_shift - (kSmiTagSize + kSmiShiftSize)) : element_size_shift;
     __ Daddu(scratch, elements,
             Operand(FixedDoubleArray::kHeaderSize - kHeapObjectTag));
-    __ dsll(at, ToRegister(instr->key()), shift_size);
+    ASSERT((shift_size == 3) || (shift_size == -29));
+    if (shift_size == 3) {
+      __ dsll(at, ToRegister(instr->key()), 3);
+    } else if (shift_size == -29) {
+      __ dsra(at, ToRegister(instr->key()), 29);
+    }
     __ Daddu(scratch, scratch, at);
   }
 
@@ -4403,7 +4407,7 @@ void LCodeGen::DoStoreKeyedFixedArray(LStoreKeyed* instr) {
     // during bound check elimination with the index argument to the bounds
     // check, which can be tagged, so that case must be handled here, too.
     if (instr->hydrogen()->key()->representation().IsSmi()) {
-      __ dsll(scratch, key, kPointerSizeLog2 - kSmiTagSize);
+      __ dsra(scratch, key, 32 - kPointerSizeLog2);
       __ daddu(scratch, elements, scratch);
     } else {
       __ dsll(scratch, key, kPointerSizeLog2);
@@ -4411,7 +4415,17 @@ void LCodeGen::DoStoreKeyedFixedArray(LStoreKeyed* instr) {
     }
     offset = FixedArray::OffsetOfElementAt(instr->additional_index());
   }
-  __ sd(value, FieldMemOperand(store_base, offset));
+  // __ sd(value, FieldMemOperand(store_base, offset));
+
+  Representation representation = instr->hydrogen()->representation();
+  if (representation.IsInteger32() &&
+      instr->hydrogen()->elements_kind() == FAST_SMI_ELEMENTS) {
+    STATIC_ASSERT(kSmiTag == 0);
+    STATIC_ASSERT(kSmiTagSize + kSmiShiftSize == 32);
+    offset += kPointerSize / 2;
+  }
+
+  __ Store(value, FieldMemOperand(store_base, offset), representation);
 
   if (instr->hydrogen()->NeedsWriteBarrier()) {
     SmiCheck check_needed =

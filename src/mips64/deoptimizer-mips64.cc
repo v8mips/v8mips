@@ -339,7 +339,6 @@ void Deoptimizer::TableEntryGenerator::GeneratePrologue() {
     Label start;
     __ bind(&start);
     __ daddiu(sp, sp, -1 * kPointerSize);
-  // __ break_(0x125);
     // Jump over the remaining deopt entries (including this one).
     // This code is always reached by calling Jump, which puts the target (label
     // start) into t9.
