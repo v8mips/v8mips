@@ -2473,6 +2473,7 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
           set_register(HI, static_cast<uint64_t>(u128result >> 64));
           break;
         case DIV:
+        case DDIV:
           // Divide by zero and overflow was not checked in the configuration
           // step - div and divu do not raise exceptions. On division by 0
           // the result will be UNPREDICTABLE. On overflow (INT_MIN/-1),
