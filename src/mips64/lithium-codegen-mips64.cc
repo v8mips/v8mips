@@ -4417,7 +4417,7 @@ void LCodeGen::DoStoreKeyedFixedArray(LStoreKeyed* instr) {
   }
   // __ sd(value, FieldMemOperand(store_base, offset));
 
-  Representation representation = instr->hydrogen()->representation();
+  Representation representation = instr->hydrogen()->value()->representation();
   if (representation.IsInteger32() &&
       instr->hydrogen()->elements_kind() == FAST_SMI_ELEMENTS) {
     STATIC_ASSERT(kSmiTag == 0);
