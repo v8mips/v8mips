@@ -5642,6 +5642,7 @@ void MacroAssembler::EnsureNotWhite(
     // dsrl(t9, t9, 1);
     dsra32(t9, t9, 0);
     bind(&skip);
+    // TODO(plind): Fix these magic numbers to some descriptive constants.
     dsra(t9, t9, 32 - 1);
   }
   Daddu(length, t9, Operand(SeqString::kHeaderSize + kObjectAlignmentMask));
