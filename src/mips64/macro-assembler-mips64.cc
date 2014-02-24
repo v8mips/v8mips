@@ -1572,7 +1572,9 @@ void MacroAssembler::TruncateNumberToI(Register object,
 void MacroAssembler::GetLeastBitsFromSmi(Register dst,
                                          Register src,
                                          int num_least_bits) {
-  Ext(dst, src, kSmiTagSize, num_least_bits);
+  // Ext(dst, src, kSmiTagSize, num_least_bits);
+  SmiUntag(dst, src);
+  And(dst, dst, Operand((1 << num_least_bits) - 1));
 }
 
 
