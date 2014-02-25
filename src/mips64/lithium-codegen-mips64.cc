@@ -1559,11 +1559,11 @@ void LCodeGen::DoShiftI(LShiftI* instr) {
               instr->can_deopt()) {
             if (shift_count != 1) {
               __ dsll(result, left, shift_count - 1);
-              __ SmiTagCheckOverflow(result, result, scratch);
+              // __ SmiTagCheckOverflow(result, result, scratch);
             } else {
-              __ SmiTagCheckOverflow(result, left, scratch);
+              // __ SmiTagCheckOverflow(result, left, scratch);
             }
-            DeoptimizeIf(lt, instr->environment(), scratch, Operand(zero_reg));
+            // DeoptimizeIf(lt, instr->environment(), scratch, Operand(zero_reg));
           } else {
             __ dsll(result, left, shift_count);
           }
@@ -4663,8 +4663,8 @@ void LCodeGen::DoInteger32ToSmi(LInteger32ToSmi* instr) {
   ASSERT(output->IsRegister());
   if (!instr->hydrogen()->value()->HasRange() ||
       !instr->hydrogen()->value()->range()->IsInSmiRange()) {
-    __ SmiTagCheckOverflow(ToRegister(output), ToRegister(input), scratch);
-    DeoptimizeIf(lt, instr->environment(), scratch, Operand(zero_reg));
+    // __ SmiTagCheckOverflow(ToRegister(output), ToRegister(input), scratch);
+    // DeoptimizeIf(lt, instr->environment(), scratch, Operand(zero_reg));
   } else {
     __ SmiTag(ToRegister(output), ToRegister(input));
   }
@@ -4714,8 +4714,8 @@ void LCodeGen::DoNumberTagI(LNumberTagI* instr) {
   Register overflow = scratch0();
 
   DeferredNumberTagI* deferred = new(zone()) DeferredNumberTagI(this, instr);
-  __ SmiTagCheckOverflow(dst, src, overflow);
-  __ BranchOnOverflow(deferred->entry(), overflow);
+  // __ SmiTagCheckOverflow(dst, src, overflow);
+  // __ BranchOnOverflow(deferred->entry(), overflow);
   __ bind(deferred->exit());
 }
 
@@ -5134,8 +5134,8 @@ void LCodeGen::DoDoubleToSmi(LDoubleToSmi* instr) {
       __ bind(&done);
     }
   }
-  __ SmiTagCheckOverflow(result_reg, result_reg, scratch1);
-  DeoptimizeIf(lt, instr->environment(), scratch1, Operand(zero_reg));
+  // __ SmiTagCheckOverflow(result_reg, result_reg, scratch1);
+  // DeoptimizeIf(lt, instr->environment(), scratch1, Operand(zero_reg));
 }
 
 

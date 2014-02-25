@@ -130,7 +130,8 @@ class RegExpMacroAssemblerMIPS: public NativeRegExpMacroAssembler {
   // Stack frame header.
   static const int kStackFrameHeader = kReturnAddress + kPointerSize;
   // Stack parameters placed by caller.
-  static const int kRegisterOutput = kStackFrameHeader + 20;
+  // static const int kRegisterOutput = kStackFrameHeader + 20;
+  static const int kRegisterOutput = kStackFrameHeader + 4 * kPointerSize + kPointerSize;
   static const int kNumOutputRegisters = kRegisterOutput + kPointerSize;
   static const int kStackHighEnd = kNumOutputRegisters + kPointerSize;
   static const int kDirectCall = kStackHighEnd + kPointerSize;
