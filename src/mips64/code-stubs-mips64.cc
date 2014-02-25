@@ -2755,8 +2755,11 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
   // TODO yuyin
   // STATIC_ASSERT(kSmiTagSize + kSmiShiftSize == 1);
   STATIC_ASSERT(Isolate::kJSRegexpStaticOffsetsVectorSize >= 2);
-  __ Branch(
-      &runtime, hi, a2, Operand(Isolate::kJSRegexpStaticOffsetsVectorSize - 2));
+  // __ Branch(
+  //     &runtime, hi, a2, Operand(Isolate::kJSRegexpStaticOffsetsVectorSize - 2));
+  // __ dsra(t0, a2, 32 - 1);  // Untag and * 2.
+  int temp = Isolate::kJSRegexpStaticOffsetsVectorSize / 2 - 1;
+  __ Branch(&runtime, hi, a2, Operand(Smi::FromInt(temp)));
 
   // Reset offset for possibly sliced string.
   __ mov(t0, zero_reg);
