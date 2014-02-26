@@ -1108,7 +1108,8 @@ void LCodeGen::DoModI(LModI* instr) {
     // can't return that.
     if (left->RangeCanInclude(kMinInt) && right->RangeCanInclude(-1)) {
       Label left_not_min_int;
-      __ Branch(&left_not_min_int, ne, left_reg, Operand(kMinInt));
+      __ li(result_reg, Operand(kMinInt), CONSTANT_SIZE);  // TODO(yy)
+      __ Branch(&left_not_min_int, ne, left_reg, Operand(result_reg));
       // TODO(svenpanne) Don't deopt when we don't care about -0.
       DeoptimizeIf(eq, instr->environment(), right_reg, Operand(-1));
       __ bind(&left_not_min_int);
@@ -1150,7 +1151,8 @@ void LCodeGen::EmitSignedIntegerDivisionByConstant(
         __ Move(result, dividend);
       } else {
         __ SubuAndCheckForOverflow(result, zero_reg, dividend, scratch);
-        DeoptimizeIf(lt, environment, scratch, Operand(zero_reg));
+        // DeoptimizeIf(lt, environment, scratch, Operand(zero_reg));
+        DeoptimizeIf(gt, environment, scratch, Operand(kMaxInt));  // TODO(yy)
       }
       // Compute the remainder.
       __ Move(remainder, zero_reg);
@@ -1253,7 +1255,9 @@ void LCodeGen::DoDivI(LDivI* instr) {
   // Check for (kMinInt / -1).
   if (instr->hydrogen()->CheckFlag(HValue::kCanOverflow)) {
     Label left_not_min_int;
-    __ Branch(&left_not_min_int, ne, left, Operand(kMinInt));
+    const Register scratch = scratch0();
+    __ li(scratch, Operand(kMinInt), CONSTANT_SIZE);  // TODO(yy)
+    __ Branch(&left_not_min_int, ne, left, Operand(scratch));
     DeoptimizeIf(eq, instr->environment(), right, Operand(-1));
     __ bind(&left_not_min_int);
   }
@@ -1324,7 +1328,8 @@ void LCodeGen::DoMathFloorOfDiv(LMathFloorOfDiv* instr) {
     // Check for (kMinInt / -1).
     if (instr->hydrogen()->CheckFlag(HValue::kCanOverflow)) {
       Label left_not_min_int;
-      __ Branch(&left_not_min_int, ne, left, Operand(kMinInt));
+      __ li(scratch, Operand(kMinInt), CONSTANT_SIZE);  // TODO(yy)
+      __ Branch(&left_not_min_int, ne, left, Operand(scratch));
       DeoptimizeIf(eq, instr->environment(), right, Operand(-1));
       __ bind(&left_not_min_int);
     }
@@ -1366,7 +1371,10 @@ void LCodeGen::DoMulI(LMulI* instr) {
       case -1:
         if (overflow) {
           __ SubuAndCheckForOverflow(result, zero_reg, left, scratch);
-          DeoptimizeIf(lt, instr->environment(), scratch, Operand(zero_reg));
+          // DeoptimizeIf(lt, instr->environment(),
+          //              scratch, Operand(zero_reg));
+          // TODO(yy)
+          DeoptimizeIf(gt, instr->environment(), scratch, Operand(kMaxInt));
         } else {
           __ Dsubu(result, zero_reg, left);
         }
