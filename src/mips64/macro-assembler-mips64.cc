@@ -5208,23 +5208,12 @@ void MacroAssembler::EmitSeqStringSetCharCheck(Register string,
   li(scratch, Operand(encoding_mask));
   ThrowIf(ne, kUnexpectedStringType, at, Operand(scratch));
 
-  // The index is assumed to be untagged coming in, tag it to compare with the
-  // string length without using a temp register, it is restored at the end of
-  // this function.
-  Label index_tag_ok, index_tag_bad;
-  TrySmiTag(index, scratch, &index_tag_bad);
-  Branch(&index_tag_ok);
-  bind(&index_tag_bad);
-  Throw(kIndexIsTooLarge);
-  bind(&index_tag_ok);
-
   ld(at, FieldMemOperand(string, String::kLengthOffset));
   ThrowIf(ge, kIndexIsTooLarge, index, Operand(at));
 
   ASSERT(Smi::FromInt(0) == 0);
   ThrowIf(lt, kIndexIsNegative, index, Operand(zero_reg));
 
-  SmiUntag(index, index);
 }
 
 

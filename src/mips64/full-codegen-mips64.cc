@@ -3543,6 +3543,7 @@ void FullCodeGenerator::EmitTwoByteSeqStringSetChar(CallRuntime* expr) {
   __ Daddu(at,
           string,
           Operand(SeqTwoByteString::kHeaderSize - kHeapObjectTag));
+  __ dsra(index, index, 32 - 1);
   __ Daddu(at, at, index);
   STATIC_ASSERT(kSmiTagSize == 1 && kSmiTag == 0);
   __ sh(value, MemOperand(at));
