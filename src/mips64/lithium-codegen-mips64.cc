@@ -1291,7 +1291,10 @@ void LCodeGen::DoMathFloorOfDiv(LMathFloorOfDiv* instr) {
   if (instr->right()->IsConstantOperand()) {
     Label done;
     int32_t divisor = ToInteger32(LConstantOperand::cast(instr->right()));
-    if (divisor < 0) {
+
+    // TODO(yy): mips32 does not need to check the flag.
+    if (divisor < 0 &&
+        instr->hydrogen()->CheckFlag(HValue::kBailoutOnMinusZero)) {
       DeoptimizeIf(eq, instr->environment(), left, Operand(zero_reg));
     }
     EmitSignedIntegerDivisionByConstant(result,
