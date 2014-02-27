@@ -5034,7 +5034,7 @@ void DirectCEntryStub::Generate(MacroAssembler* masm) {
     // In case of an error the return address may point to a memory area
     // filled with kZapValue by the GC.
     // Dereference the address and check for this.
-    __ ld(t0, MemOperand(t9));
+    __ Uld(t0, MemOperand(t9));
     __ Assert(ne, kReceivedInvalidReturnAddress, t0,
         Operand(reinterpret_cast<uint64_t>(kZapValue)));
   }
