@@ -1524,7 +1524,9 @@ void LCodeGen::DoShiftI(LShiftI* instr) {
       case Token::SHR:
         __ srlv(result, left, ToRegister(right_op));
         if (instr->can_deopt()) {
+           // TODO(yy): (-1) >>> 0. anything else?
            DeoptimizeIf(lt, instr->environment(), result, Operand(zero_reg));
+           DeoptimizeIf(gt, instr->environment(), result, Operand(kMaxInt));
         }
         break;
       case Token::SHL:
