@@ -620,6 +620,7 @@ class MacroAssembler: public Assembler {
   void Ulw(Register rd, const MemOperand& rs);
   void Usw(Register rd, const MemOperand& rs);
   void Uld(Register rd, const MemOperand& rs, Register scratch = at);
+  void Usd(Register rd, const MemOperand& rs, Register scratch = at);
 
   // Load int32 in the rd register.
   void li(Register rd, Operand j, LiFlags mode = OPTIMIZE_SIZE);

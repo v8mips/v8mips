@@ -292,12 +292,12 @@ void MacroAssembler::RecordWrite(Register object,
   }
 
   CheckPageFlag(value,
-                address,  // Used as scratch.
+                value,  // Used as scratch.
                 MemoryChunk::kPointersToHereAreInterestingMask,
                 eq,
                 &done);
   CheckPageFlag(object,
-                address,  // Used as scratch.
+                value,  // Used as scratch.
                 MemoryChunk::kPointersFromHereAreInterestingMask,
                 eq,
                 &done);
@@ -943,10 +943,24 @@ void MacroAssembler::Uld(Register rd, const MemOperand& rs, Register scratch) {
   // Assert fail if the offset from start of object IS actually aligned.
   // ONLY use with known misalignment, since there is performance cost.
   ASSERT((rs.offset() + kHeapObjectTag) & (kPointerSize - 1));
+  // TODO(plind): endian dependency.
   lwu(rd, rs);
   lw(scratch, MemOperand(rs.rm(), rs.offset() + kPointerSize / 2));
   dsll32(scratch, scratch, 0);
   Daddu(rd, rd, scratch);
+}
+
+
+// Do 64-bit store to unaligned address. Note this only handles
+// the specific case of 32-bit aligned, but not 64-bit aligned.
+void MacroAssembler::Usd(Register rd, const MemOperand& rs, Register scratch) {
+  // Assert fail if the offset from start of object IS actually aligned.
+  // ONLY use with known misalignment, since there is performance cost.
+  ASSERT((rs.offset() + kHeapObjectTag) & (kPointerSize - 1));
+  // TODO(plind): endian dependency.
+  sw(rd, rs);
+  dsrl32(scratch, rd, 0);
+  sw(scratch, MemOperand(rs.rm(), rs.offset() + kPointerSize / 2));
 }
 
 
@@ -1152,6 +1166,7 @@ void MacroAssembler::Ext(Register rt,
                          Register rs,
                          uint16_t pos,
                          uint16_t size) {
+  // TODO(plind): Do we need pre-mips64r2 arch-variant support here?
   ASSERT(pos < 32);
   ASSERT(pos + size < 33);
   ext_(rt, rs, pos, size);
@@ -1162,6 +1177,7 @@ void MacroAssembler::Ins(Register rt,
                          Register rs,
                          uint16_t pos,
                          uint16_t size) {
+  // TODO(plind): Do we need pre-mips64r2 arch-variant support here?
   ASSERT(pos < 32);
   ASSERT(pos + size <= 32);
   ASSERT(size != 0);
@@ -5442,10 +5458,10 @@ void MacroAssembler::CheckPageFlag(
     int mask,
     Condition cc,
     Label* condition_met) {
+  // TODO(plind):  Fix li() so we can use constant embedded inside And().
   // And(scratch, object, Operand(~Page::kPageAlignmentMask));
-  ASSERT(!object.is(scratch));
-  li(scratch, Operand(~Page::kPageAlignmentMask), CONSTANT_SIZE);  // plind HACK
-  And(scratch, scratch, object);
+  li(at, Operand(~Page::kPageAlignmentMask), CONSTANT_SIZE);  // plind HACK
+  And(scratch, object, at);
   ld(scratch, MemOperand(scratch, MemoryChunk::kFlagsOffset));
   And(scratch, scratch, Operand(mask));
   Branch(condition_met, cc, scratch, Operand(zero_reg));
@@ -5529,10 +5545,10 @@ void MacroAssembler::GetMarkBits(Register addr_reg,
                                  Register bitmap_reg,
                                  Register mask_reg) {
   ASSERT(!AreAliased(addr_reg, bitmap_reg, mask_reg, no_reg));
-  ASSERT(!bitmap_reg.is(addr_reg));
-  li(bitmap_reg, Operand(~Page::kPageAlignmentMask));
-  And(bitmap_reg, bitmap_reg, addr_reg);
+  // TODO(plind): Fix li() so we can use constant embedded inside And().
   // And(bitmap_reg, addr_reg, Operand(~Page::kPageAlignmentMask));
+  li(at, Operand(~Page::kPageAlignmentMask), CONSTANT_SIZE);
+  And(bitmap_reg, addr_reg, at);
   Ext(mask_reg, addr_reg, kPointerSizeLog2, Bitmap::kBitsPerCellLog2);
   const int kLowBits = kPointerSizeLog2 + Bitmap::kBitsPerCellLog2;
   Ext(t8, addr_reg, kLowBits, kPageSizeBits - kLowBits);
@@ -5649,13 +5665,13 @@ void MacroAssembler::EnsureNotWhite(
   Or(t8, t8, Operand(mask_scratch));
   sd(t8, MemOperand(bitmap_scratch, MemoryChunk::kHeaderSize));
 
+  // TODO(plind): Fix li() so we can use constant embedded inside And().
   // And(bitmap_scratch, bitmap_scratch, Operand(~Page::kPageAlignmentMask));
-  ASSERT(!t8.is(bitmap_scratch));
-  li(t8, Operand(~Page::kPageAlignmentMask));
+  li(t8, Operand(~Page::kPageAlignmentMask), CONSTANT_SIZE);
   And(bitmap_scratch, bitmap_scratch, t8);
-  ld(t8, MemOperand(bitmap_scratch, MemoryChunk::kLiveBytesOffset));
+  Uld(t8, MemOperand(bitmap_scratch, MemoryChunk::kLiveBytesOffset));
   Daddu(t8, t8, Operand(length));
-  sd(t8, MemOperand(bitmap_scratch, MemoryChunk::kLiveBytesOffset));
+  Usd(t8, MemOperand(bitmap_scratch, MemoryChunk::kLiveBytesOffset));
 
   bind(&done);
 }

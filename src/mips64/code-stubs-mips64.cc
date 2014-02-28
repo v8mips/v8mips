@@ -5074,7 +5074,7 @@ void NameDictionaryLookupStub::GenerateNegativeLookup(MacroAssembler* masm,
     __ Dsubu(index, index, Operand(1));
     __ And(index, index, Operand(
         Smi::FromInt(name->Hash() + NameDictionary::GetProbeOffset(i))));
-    
+
     // TODO this function
     // Scale the index by multiplying by the entry size.
     ASSERT(NameDictionary::kEntrySize == 3);
@@ -5445,7 +5445,10 @@ void RecordWriteStub::CheckNeedsToInformIncrementalMarker(
   Label need_incremental;
   Label need_incremental_pop_scratch;
 
-  __ And(regs_.scratch0(), regs_.object(), Operand(~Page::kPageAlignmentMask));
+  // TODO(plind): Fix li() so we can use constant embedded inside And().
+  // __ And(regs_.scratch0(), regs_.object(), Operand(~Page::kPageAlignmentMask));
+  __ li(at, Operand(~Page::kPageAlignmentMask), CONSTANT_SIZE);
+  __ And(regs_.scratch0(), regs_.object(), Operand(at));
   __ ld(regs_.scratch1(),
         MemOperand(regs_.scratch0(),
                    MemoryChunk::kWriteBarrierCounterOffset));
