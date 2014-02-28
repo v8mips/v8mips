@@ -1417,7 +1417,7 @@ void LCodeGen::DoMulI(LMulI* instr) {
           __ dsll(scratch, left, shift);
           __ Dsubu(result, scratch, left);
           // Correct the sign of the result if the constant is negative.
-          if (constant < 0)  __ Subu(result, zero_reg, result);
+          if (constant < 0)  __ Dsubu(result, zero_reg, result);
         } else {
           // Generate standard code.
           __ li(at, constant);
@@ -1441,7 +1441,7 @@ void LCodeGen::DoMulI(LMulI* instr) {
         __ mfhi(scratch);
         __ mflo(result);
       }
-      __ dsra(at, result, 31);
+      __ dsra32(at, result, 31);
       DeoptimizeIf(ne, instr->environment(), scratch, Operand(at));
     } else {
       if (instr->hydrogen()->representation().IsSmi()) {
