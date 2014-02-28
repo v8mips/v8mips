@@ -1934,7 +1934,7 @@ void Simulator::ConfigureTypeRegister(Instruction* instr,
           return_addr_reg = instr->RdValue();
           break;
         case SLL:
-          alu_out = rt << sa;
+          alu_out = (int32_t)rt << sa;
           break;
         case DSLL:
           alu_out = rt << sa;
@@ -1946,12 +1946,12 @@ void Simulator::ConfigureTypeRegister(Instruction* instr,
           if (rs_reg == 0) {
             // Regular logical right shift of a word by a fixed number of
             // bits instruction. RS field is always equal to 0.
-            alu_out = rt_u >> sa;
+            alu_out = (uint32_t)rt_u >> sa;
           } else {
             // Logical right-rotate of a word by a fixed number of bits. This
             // is special case of SRL instruction, added in MIPS32 Release 2.
             // RS field is equal to 00001.
-            alu_out = (rt_u >> sa) | (rt_u << (32 - sa));
+            alu_out = ((uint32_t)rt_u >> sa) | ((uint32_t)rt_u << (32 - sa));
           }
           break;
         case DSRL:
@@ -1961,6 +1961,8 @@ void Simulator::ConfigureTypeRegister(Instruction* instr,
           alu_out = rt_u >> sa >> 32;
           break;
         case SRA:
+          alu_out = (int32_t)rt >> sa;
+          break;
         case DSRA:
           alu_out = rt >> sa;
           break;
@@ -1968,10 +1970,23 @@ void Simulator::ConfigureTypeRegister(Instruction* instr,
           alu_out = rt >> sa >> 32;
           break;
         case SLLV:
+          alu_out = (int32_t)rt << rs;
+          break;
         case DSLLV:
           alu_out = rt << rs;
           break;
         case SRLV:
+          if (sa == 0) {
+            // Regular logical right-shift of a word by a variable number of
+            // bits instruction. SA field is always equal to 0.
+            alu_out = (uint32_t)rt_u >> rs;
+          } else {
+            // Logical right-rotate of a word by a variable number of bits.
+            // This is special case od SRLV instruction, added in MIPS32
+            // Release 2. SA field is equal to 00001.
+            alu_out = ((uint32_t)rt_u >> rs_u) | ((uint32_t)rt_u << (32 - rs_u));
+          }
+          break;
         case DSRLV:
           if (sa == 0) {
             // Regular logical right-shift of a word by a variable number of
@@ -1985,6 +2000,8 @@ void Simulator::ConfigureTypeRegister(Instruction* instr,
           }
           break;
         case SRAV:
+          alu_out = (int32_t)rt >> rs;
+          break;
         case DSRAV:
           alu_out = rt >> rs;
           break;

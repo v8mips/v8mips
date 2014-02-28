@@ -1516,19 +1516,19 @@ void LCodeGen::DoShiftI(LShiftI* instr) {
     // shift instructions.
     switch (instr->op()) {
       case Token::ROR:
-        __ Dror(result, left, Operand(ToRegister(right_op)));
+        __ Ror(result, left, Operand(ToRegister(right_op)));
         break;
       case Token::SAR:
-        __ dsrav(result, left, ToRegister(right_op));
+        __ srav(result, left, ToRegister(right_op));
         break;
       case Token::SHR:
-        __ dsrlv(result, left, ToRegister(right_op));
+        __ srlv(result, left, ToRegister(right_op));
         if (instr->can_deopt()) {
-          DeoptimizeIf(lt, instr->environment(), result, Operand(zero_reg));
+           DeoptimizeIf(lt, instr->environment(), result, Operand(zero_reg));
         }
         break;
       case Token::SHL:
-        __ dsllv(result, left, ToRegister(right_op));
+        __ sllv(result, left, ToRegister(right_op));
         break;
       default:
         UNREACHABLE();
@@ -1541,24 +1541,25 @@ void LCodeGen::DoShiftI(LShiftI* instr) {
     switch (instr->op()) {
       case Token::ROR:
         if (shift_count != 0) {
-          __ Dror(result, left, Operand(shift_count));
+          __ Ror(result, left, Operand(shift_count));
         } else {
           __ Move(result, left);
         }
         break;
       case Token::SAR:
         if (shift_count != 0) {
-          __ dsra(result, left, shift_count);
+          __ sra(result, left, shift_count);
         } else {
           __ Move(result, left);
         }
         break;
       case Token::SHR:
         if (shift_count != 0) {
-          __ dsrl(result, left, shift_count);
+          __ srl(result, left, shift_count);
         } else {
           if (instr->can_deopt()) {
-            __ And(at, left, Operand(0x80000000));
+            __ li(scratch, Operand(0x80000000), CONSTANT_SIZE);
+            __ And(at, left, Operand(scratch));
             DeoptimizeIf(ne, instr->environment(), at, Operand(zero_reg));
           }
           __ Move(result, left);
@@ -1566,17 +1567,10 @@ void LCodeGen::DoShiftI(LShiftI* instr) {
         break;
       case Token::SHL:
         if (shift_count != 0) {
-          if (instr->hydrogen_value()->representation().IsSmi() &&
-              instr->can_deopt()) {
-            if (shift_count != 1) {
-              __ dsll(result, left, shift_count - 1);
-              // __ SmiTagCheckOverflow(result, result, scratch);
-            } else {
-              // __ SmiTagCheckOverflow(result, left, scratch);
-            }
-            // DeoptimizeIf(lt, instr->environment(), scratch, Operand(zero_reg));
+          if (instr->hydrogen_value()->representation().IsSmi()) {
+              __ dsll(result, left, shift_count);
           } else {
-            __ dsll(result, left, shift_count);
+            __ sll(result, left, shift_count);
           }
         } else {
           __ Move(result, left);
