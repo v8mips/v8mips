@@ -1108,7 +1108,8 @@ void LCodeGen::DoModI(LModI* instr) {
     // can't return that.
     if (left->RangeCanInclude(kMinInt) && right->RangeCanInclude(-1)) {
       Label left_not_min_int;
-      __ Branch(&left_not_min_int, ne, left_reg, Operand(kMinInt));
+      __ li(result_reg, Operand(kMinInt), CONSTANT_SIZE);  // TODO(yy)
+      __ Branch(&left_not_min_int, ne, left_reg, Operand(result_reg));
       // TODO(svenpanne) Don't deopt when we don't care about -0.
       DeoptimizeIf(eq, instr->environment(), right_reg, Operand(-1));
       __ bind(&left_not_min_int);
@@ -1150,7 +1151,8 @@ void LCodeGen::EmitSignedIntegerDivisionByConstant(
         __ Move(result, dividend);
       } else {
         __ SubuAndCheckForOverflow(result, zero_reg, dividend, scratch);
-        DeoptimizeIf(lt, environment, scratch, Operand(zero_reg));
+        // DeoptimizeIf(lt, environment, scratch, Operand(zero_reg));
+        DeoptimizeIf(gt, environment, scratch, Operand(kMaxInt));  // TODO(yy)
       }
       // Compute the remainder.
       __ Move(remainder, zero_reg);
@@ -1253,7 +1255,9 @@ void LCodeGen::DoDivI(LDivI* instr) {
   // Check for (kMinInt / -1).
   if (instr->hydrogen()->CheckFlag(HValue::kCanOverflow)) {
     Label left_not_min_int;
-    __ Branch(&left_not_min_int, ne, left, Operand(kMinInt));
+    const Register scratch = scratch0();
+    __ li(scratch, Operand(kMinInt), CONSTANT_SIZE);  // TODO(yy)
+    __ Branch(&left_not_min_int, ne, left, Operand(scratch));
     DeoptimizeIf(eq, instr->environment(), right, Operand(-1));
     __ bind(&left_not_min_int);
   }
@@ -1287,7 +1291,10 @@ void LCodeGen::DoMathFloorOfDiv(LMathFloorOfDiv* instr) {
   if (instr->right()->IsConstantOperand()) {
     Label done;
     int32_t divisor = ToInteger32(LConstantOperand::cast(instr->right()));
-    if (divisor < 0) {
+
+    // TODO(yy): mips32 does not need to check the flag.
+    if (divisor < 0 &&
+        instr->hydrogen()->CheckFlag(HValue::kBailoutOnMinusZero)) {
       DeoptimizeIf(eq, instr->environment(), left, Operand(zero_reg));
     }
     EmitSignedIntegerDivisionByConstant(result,
@@ -1324,7 +1331,8 @@ void LCodeGen::DoMathFloorOfDiv(LMathFloorOfDiv* instr) {
     // Check for (kMinInt / -1).
     if (instr->hydrogen()->CheckFlag(HValue::kCanOverflow)) {
       Label left_not_min_int;
-      __ Branch(&left_not_min_int, ne, left, Operand(kMinInt));
+      __ li(scratch, Operand(kMinInt), CONSTANT_SIZE);  // TODO(yy)
+      __ Branch(&left_not_min_int, ne, left, Operand(scratch));
       DeoptimizeIf(eq, instr->environment(), right, Operand(-1));
       __ bind(&left_not_min_int);
     }
@@ -1366,7 +1374,10 @@ void LCodeGen::DoMulI(LMulI* instr) {
       case -1:
         if (overflow) {
           __ SubuAndCheckForOverflow(result, zero_reg, left, scratch);
-          DeoptimizeIf(lt, instr->environment(), scratch, Operand(zero_reg));
+          // DeoptimizeIf(lt, instr->environment(),
+          //              scratch, Operand(zero_reg));
+          // TODO(yy)
+          DeoptimizeIf(gt, instr->environment(), scratch, Operand(kMaxInt));
         } else {
           __ Dsubu(result, zero_reg, left);
         }
@@ -1406,7 +1417,7 @@ void LCodeGen::DoMulI(LMulI* instr) {
           __ dsll(scratch, left, shift);
           __ Dsubu(result, scratch, left);
           // Correct the sign of the result if the constant is negative.
-          if (constant < 0)  __ Subu(result, zero_reg, result);
+          if (constant < 0)  __ Dsubu(result, zero_reg, result);
         } else {
           // Generate standard code.
           __ li(at, constant);
@@ -1430,7 +1441,7 @@ void LCodeGen::DoMulI(LMulI* instr) {
         __ mfhi(scratch);
         __ mflo(result);
       }
-      __ dsra(at, result, 31);
+      __ dsra32(at, result, 31);
       DeoptimizeIf(ne, instr->environment(), scratch, Operand(at));
     } else {
       if (instr->hydrogen()->representation().IsSmi()) {
@@ -1505,19 +1516,21 @@ void LCodeGen::DoShiftI(LShiftI* instr) {
     // shift instructions.
     switch (instr->op()) {
       case Token::ROR:
-        __ Dror(result, left, Operand(ToRegister(right_op)));
+        __ Ror(result, left, Operand(ToRegister(right_op)));
         break;
       case Token::SAR:
-        __ dsrav(result, left, ToRegister(right_op));
+        __ srav(result, left, ToRegister(right_op));
         break;
       case Token::SHR:
-        __ dsrlv(result, left, ToRegister(right_op));
+        __ srlv(result, left, ToRegister(right_op));
         if (instr->can_deopt()) {
-          DeoptimizeIf(lt, instr->environment(), result, Operand(zero_reg));
+           // TODO(yy): (-1) >>> 0. anything else?
+           DeoptimizeIf(lt, instr->environment(), result, Operand(zero_reg));
+           DeoptimizeIf(gt, instr->environment(), result, Operand(kMaxInt));
         }
         break;
       case Token::SHL:
-        __ dsllv(result, left, ToRegister(right_op));
+        __ sllv(result, left, ToRegister(right_op));
         break;
       default:
         UNREACHABLE();
@@ -1530,24 +1543,25 @@ void LCodeGen::DoShiftI(LShiftI* instr) {
     switch (instr->op()) {
       case Token::ROR:
         if (shift_count != 0) {
-          __ Dror(result, left, Operand(shift_count));
+          __ Ror(result, left, Operand(shift_count));
         } else {
           __ Move(result, left);
         }
         break;
       case Token::SAR:
         if (shift_count != 0) {
-          __ dsra(result, left, shift_count);
+          __ sra(result, left, shift_count);
         } else {
           __ Move(result, left);
         }
         break;
       case Token::SHR:
         if (shift_count != 0) {
-          __ dsrl(result, left, shift_count);
+          __ srl(result, left, shift_count);
         } else {
           if (instr->can_deopt()) {
-            __ And(at, left, Operand(0x80000000));
+            __ li(scratch, Operand(0x80000000), CONSTANT_SIZE);
+            __ And(at, left, Operand(scratch));
             DeoptimizeIf(ne, instr->environment(), at, Operand(zero_reg));
           }
           __ Move(result, left);
@@ -1555,17 +1569,10 @@ void LCodeGen::DoShiftI(LShiftI* instr) {
         break;
       case Token::SHL:
         if (shift_count != 0) {
-          if (instr->hydrogen_value()->representation().IsSmi() &&
-              instr->can_deopt()) {
-            if (shift_count != 1) {
-              __ dsll(result, left, shift_count - 1);
-              // __ SmiTagCheckOverflow(result, result, scratch);
-            } else {
-              // __ SmiTagCheckOverflow(result, left, scratch);
-            }
-            // DeoptimizeIf(lt, instr->environment(), scratch, Operand(zero_reg));
+          if (instr->hydrogen_value()->representation().IsSmi()) {
+              __ dsll(result, left, shift_count);
           } else {
-            __ dsll(result, left, shift_count);
+            __ sll(result, left, shift_count);
           }
         } else {
           __ Move(result, left);

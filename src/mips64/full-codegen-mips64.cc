@@ -2325,7 +2325,8 @@ void FullCodeGenerator::EmitInlineSmiBinaryOp(BinaryOperation* expr,
       __ Branch(&stub_call);
       __ GetLeastBitsFromSmi(scratch1, right, 5);
       __ dsrav(right, left, scratch1);
-      __ And(v0, right, Operand(~kSmiTagMask));
+      __ li(scratch1, Operand(~kSmiTagMask), CONSTANT_SIZE);
+      __ And(v0, right, Operand(scratch1));
       break;
     case Token::SHL: {
       __ Branch(&stub_call);
@@ -3543,6 +3544,7 @@ void FullCodeGenerator::EmitTwoByteSeqStringSetChar(CallRuntime* expr) {
   __ Daddu(at,
           string,
           Operand(SeqTwoByteString::kHeaderSize - kHeapObjectTag));
+  __ dsra(index, index, 32 - 1);
   __ Daddu(at, at, index);
   STATIC_ASSERT(kSmiTagSize == 1 && kSmiTag == 0);
   __ sh(value, MemOperand(at));

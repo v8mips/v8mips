@@ -242,9 +242,6 @@ void RegExpMacroAssemblerMIPS::CheckGreedyLoop(Label* on_equal) {
   __ Daddu(backtrack_stackpointer(),
           backtrack_stackpointer(),
           Operand(kPointerSize));
-  /*__ Daddu(backtrack_stackpointer(),
-          backtrack_stackpointer(),
-          Operand(kIntSize));*/
   __ bind(&backtrack_non_equal);
   BranchOrBacktrack(on_equal, eq, current_input_offset(), Operand(a0));
 }
