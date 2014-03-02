@@ -272,6 +272,19 @@ class Simulator {
   inline double ReadD(int32_t addr, Instruction* instr);
   inline void WriteD(int32_t addr, double value, Instruction* instr);
 
+  // Helpers for data value tracing.
+    enum TraceType {
+    BYTE,
+    HALF,
+    WORD,
+    // DWORD,
+    // DFLOAT - Floats may have printing issues due to paired lwc1's
+  };
+
+  void TraceRegWr(int32_t value);
+  void TraceMemWr(int32_t addr, int32_t value, TraceType t);
+  void TraceMemRd(int32_t addr, int32_t value);
+
   // Operations depending on endianness.
   // Get Double Higher / Lower word.
   inline int32_t GetDoubleHIW(double* addr);
@@ -371,6 +384,7 @@ class Simulator {
   bool pc_modified_;
   int icount_;
   int break_count_;
+  EmbeddedVector<char, 128> trace_buf_;
 
   // Debugger input.
   char* last_debugger_input_;
