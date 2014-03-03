@@ -843,7 +843,7 @@ static void EmitIdenticalObjectComparison(MacroAssembler* masm,
     // The representation of NaN values has all exponent bits (52..62) set,
     // and not all mantissa bits (0..51) clear.
     // Read top bits of double representation (second word of value).
-    __ lw(t2, FieldMemOperand(a0, HeapNumber::kExponentOffset));
+    __ lwu(t2, FieldMemOperand(a0, HeapNumber::kExponentOffset));
     // Test that exponent bits are all set.
     __ And(t3, t2, Operand(exp_mask_reg));
     // If all bits not set (ne cond), then not a NaN, objects are equal.
@@ -852,7 +852,7 @@ static void EmitIdenticalObjectComparison(MacroAssembler* masm,
     // Shift out flag and all exponent bits, retaining only mantissa.
     __ sll(t2, t2, HeapNumber::kNonMantissaBitsInTopWord);
     // Or with all low-bits of mantissa.
-    __ lw(t3, FieldMemOperand(a0, HeapNumber::kMantissaOffset));
+    __ lwu(t3, FieldMemOperand(a0, HeapNumber::kMantissaOffset));
     __ Or(v0, t3, Operand(t2));
     // For equal we already have the right value in v0:  Return zero (equal)
     // if all bits in mantissa are zero (it's an Infinity) and non-zero if
@@ -1421,7 +1421,7 @@ void MathPowStub::Generate(MacroAssembler* masm) {
   // Get absolute value of exponent.
   Label positive_exponent;
   __ Branch(&positive_exponent, ge, scratch, Operand(zero_reg));
-  __ Subu(scratch, zero_reg, scratch);
+  __ Dsubu(scratch, zero_reg, scratch);
   __ bind(&positive_exponent);
 
   Label while_true, no_carry, loop_end;
@@ -1433,7 +1433,7 @@ void MathPowStub::Generate(MacroAssembler* masm) {
   __ mul_d(double_result, double_result, double_scratch);
   __ bind(&no_carry);
 
-  __ sra(scratch, scratch, 1);
+  __ dsra(scratch, scratch, 1);
 
   __ Branch(&loop_end, eq, scratch, Operand(zero_reg));
   __ mul_d(double_scratch, double_scratch, double_scratch);

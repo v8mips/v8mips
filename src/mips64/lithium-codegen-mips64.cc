@@ -3641,7 +3641,7 @@ void LCodeGen::DoDeferredMathAbsTaggedHeapNumber(LMathAbs* instr) {
   Label done;
   Register exponent = scratch0();
   scratch = no_reg;
-  __ lw(exponent, FieldMemOperand(input, HeapNumber::kExponentOffset));
+  __ lwu(exponent, FieldMemOperand(input, HeapNumber::kExponentOffset));
   // Check the sign of the argument. If the argument is positive, just
   // return it.
   __ Move(result, input);
@@ -3677,14 +3677,14 @@ void LCodeGen::DoDeferredMathAbsTaggedHeapNumber(LMathAbs* instr) {
       __ mov(tmp1, v0);
     // Restore input_reg after call to runtime.
     __ LoadFromSafepointRegisterSlot(input, input);
-    __ lw(exponent, FieldMemOperand(input, HeapNumber::kExponentOffset));
+    __ lwu(exponent, FieldMemOperand(input, HeapNumber::kExponentOffset));
 
     __ bind(&allocated);
     // exponent: floating point exponent value.
     // tmp1: allocated heap number.
     __ And(exponent, exponent, Operand(~HeapNumber::kSignMask));
     __ sw(exponent, FieldMemOperand(tmp1, HeapNumber::kExponentOffset));
-    __ lw(tmp2, FieldMemOperand(input, HeapNumber::kMantissaOffset));
+    __ lwu(tmp2, FieldMemOperand(input, HeapNumber::kMantissaOffset));
     __ sw(tmp2, FieldMemOperand(tmp1, HeapNumber::kMantissaOffset));
 
     __ StoreToSafepointRegisterSlot(tmp1, result);

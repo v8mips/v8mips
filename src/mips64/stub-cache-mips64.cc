@@ -2248,7 +2248,7 @@ Handle<Code> CallStubCompiler::CompileMathAbsCall(
   // sign.
   __ bind(&not_smi);
   __ CheckMap(v0, a1, Heap::kHeapNumberMapRootIndex, &slow, DONT_DO_SMI_CHECK);
-  __ lw(a1, FieldMemOperand(v0, HeapNumber::kExponentOffset));
+  __ lwu(a1, FieldMemOperand(v0, HeapNumber::kExponentOffset));
 
   // Check the sign of the argument. If the argument is positive,
   // just return it.
@@ -2261,7 +2261,7 @@ Handle<Code> CallStubCompiler::CompileMathAbsCall(
   // number.
   __ bind(&negative_sign);
   __ Xor(a1, a1, Operand(HeapNumber::kSignMask));
-  __ lw(a3, FieldMemOperand(v0, HeapNumber::kMantissaOffset));
+  __ lwu(a3, FieldMemOperand(v0, HeapNumber::kMantissaOffset));
   __ LoadRoot(t2, Heap::kHeapNumberMapRootIndex);
   __ AllocateHeapNumber(v0, t0, t1, t2, &slow);
   __ sw(a1, FieldMemOperand(v0, HeapNumber::kExponentOffset));

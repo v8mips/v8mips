@@ -992,8 +992,8 @@ void MathExpGenerator::EmitMathExp(MacroAssembler* masm,
   __ li(temp3, Operand(ExternalReference::math_exp_log_table()));
   __ dsll(at, temp2, 3);
   __ Daddu(temp3, temp3, Operand(at));
-  __ ld(temp2, MemOperand(temp3, 0));
-  __ ld(temp3, MemOperand(temp3, kPointerSize));
+  __ lwu(temp2, MemOperand(temp3, 0));
+  __ lwu(temp3, MemOperand(temp3, kIntSize));
   // The first word is loaded is the lower number register.
   if (temp2.code() < temp3.code()) {
     __ dsll(at, temp1, 20);
