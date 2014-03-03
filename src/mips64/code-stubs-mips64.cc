@@ -3930,7 +3930,7 @@ void StringHelper::GenerateHashGetHash(MacroAssembler* masm,
 
 
 void SubStringStub::Generate(MacroAssembler* masm) {
-  Label runtime, runtime1, end;
+  Label runtime;
   // Stack frame on entry.
   //  ra: return address
   //  sp[0]: to
@@ -3958,10 +3958,12 @@ void SubStringStub::Generate(MacroAssembler* masm) {
 
   // Utilize delay slots. SmiUntag doesn't emit a jump, everything else is
   // safe in this case.
-  __ UntagAndJumpIfNotSmi(a2, a2, &runtime1);
-  __ UntagAndJumpIfNotSmi(a3, a3, &runtime1);
+  __ JumpIfNotSmi(a2, &runtime);
+  __ JumpIfNotSmi(a3, &runtime);
   // Both a2 and a3 are untagged integers.
 
+  __ SmiUntag(a2, a2);
+  __ SmiUntag(a3, a3);
   __ Branch(&runtime, lt, a3, Operand(zero_reg));  // From < 0.
 
   __ Branch(&runtime, gt, a3, Operand(a2));  // Fail if from > to.
@@ -4121,8 +4123,7 @@ void SubStringStub::Generate(MacroAssembler* masm) {
 
   // Locate first character of substring to copy.
   STATIC_ASSERT(kSmiTagSize == 1 && kSmiTag == 0);
-  // __ sll(t0, a3, 1);
-  __ dsll32(t0, a3, 0);
+  __ dsll(t0, a3, 1);
   __ Daddu(t1, t1, t0);
   // Locate first character of result.
   __ Daddu(a1, v0, Operand(SeqTwoByteString::kHeaderSize - kHeapObjectTag));
@@ -4149,23 +4150,11 @@ void SubStringStub::Generate(MacroAssembler* masm) {
   // a1: instance type
   // a2: length
   // a3: from index (untagged)
-  __ SmiTag(a3, a3);
   StringCharAtGenerator generator(
       v0, a3, a2, v0, &runtime, &runtime, &runtime, STRING_INDEX_IS_NUMBER);
   generator.GenerateFast(masm);
   __ DropAndRet(3);
   generator.SkipSlow(masm, &runtime);
-  __ jmp(&end);
-
-  __ bind(&runtime1); // TODO(yy) good way?
-  __ TailCallRuntime(Runtime::kSubString, 3, 1);
-  __ ld(a3, MemOperand(sp, kFromOffset));
-  StringCharAtGenerator generator1(
-         v0, a3, a2, v0, &runtime, &runtime, &runtime, STRING_INDEX_IS_NUMBER);
-  generator1.GenerateFast(masm);
-  __ DropAndRet(3);
-  generator1.SkipSlow(masm, &runtime);
-  __ bind(&end);
 }
 
 

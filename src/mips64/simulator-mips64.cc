@@ -2746,8 +2746,8 @@ void Simulator::DecodeTypeImmediate(Instruction* instr) {
       break;
     case LWL: {
       // al_offset is offset of the effective address within an aligned word.
-      uint8_t al_offset = (rs + se_imm16) & kPointerAlignmentMask;
-      uint8_t byte_shift = kPointerAlignmentMask - al_offset;
+      uint8_t al_offset = (rs + se_imm16) & kIntAlignmentMask;
+      uint8_t byte_shift = kIntAlignmentMask - al_offset;
       uint32_t mask = (1 << byte_shift * 8) - 1;
       addr = rs + se_imm16 - al_offset;
       alu_out = ReadW(addr, instr);
@@ -2777,8 +2777,8 @@ void Simulator::DecodeTypeImmediate(Instruction* instr) {
       break;
     case LWR: {
       // al_offset is offset of the effective address within an aligned word.
-      uint8_t al_offset = (rs + se_imm16) & kPointerAlignmentMask;
-      uint8_t byte_shift = kPointerAlignmentMask - al_offset;
+      uint8_t al_offset = (rs + se_imm16) & kIntAlignmentMask;
+      uint8_t byte_shift = kIntAlignmentMask - al_offset;
       uint32_t mask = al_offset ? (~0 << (byte_shift + 1) * 8) : 0;
       addr = rs + se_imm16 - al_offset;
       alu_out = ReadW(addr, instr);
@@ -2793,8 +2793,8 @@ void Simulator::DecodeTypeImmediate(Instruction* instr) {
       addr = rs + se_imm16;
       break;
     case SWL: {
-      uint8_t al_offset = (rs + se_imm16) & kPointerAlignmentMask;
-      uint8_t byte_shift = kPointerAlignmentMask - al_offset;
+      uint8_t al_offset = (rs + se_imm16) & kIntAlignmentMask;
+      uint8_t byte_shift = kIntAlignmentMask - al_offset;
       uint32_t mask = byte_shift ? (~0 << (al_offset + 1) * 8) : 0;
       addr = rs + se_imm16 - al_offset;
       mem_value = ReadW(addr, instr) & mask;
@@ -2806,7 +2806,7 @@ void Simulator::DecodeTypeImmediate(Instruction* instr) {
       addr = rs + se_imm16;
       break;
     case SWR: {
-      uint8_t al_offset = (rs + se_imm16) & kPointerAlignmentMask;
+      uint8_t al_offset = (rs + se_imm16) & kIntAlignmentMask;
       uint32_t mask = (1 << al_offset * 8) - 1;
       addr = rs + se_imm16 - al_offset;
       mem_value = ReadW(addr, instr);
