@@ -2335,9 +2335,9 @@ void LCodeGen::DoCompareMinusZeroAndBranch(LCompareMinusZeroAndBranch* instr) {
                 Heap::kHeapNumberMapRootIndex,
                 instr->FalseLabel(chunk()),
                 DO_SMI_CHECK);
-    __ lw(scratch, FieldMemOperand(value, HeapNumber::kExponentOffset));
+    __ lwu(scratch, FieldMemOperand(value, HeapNumber::kExponentOffset));
     EmitFalseBranch(instr, ne, scratch, Operand(0x80000000));
-    __ lw(scratch, FieldMemOperand(value, HeapNumber::kMantissaOffset));
+    __ lwu(scratch, FieldMemOperand(value, HeapNumber::kMantissaOffset));
     __ mov(at, zero_reg);
   }
   EmitBranch(instr, eq, scratch, Operand(at));

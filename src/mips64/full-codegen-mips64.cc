@@ -3150,8 +3150,8 @@ void FullCodeGenerator::EmitIsMinusZero(CallRuntime* expr) {
                          &if_true, &if_false, &fall_through);
 
   __ CheckMap(v0, a1, Heap::kHeapNumberMapRootIndex, if_false, DO_SMI_CHECK);
-  __ lw(a2, FieldMemOperand(v0, HeapNumber::kExponentOffset));
-  __ lw(a1, FieldMemOperand(v0, HeapNumber::kMantissaOffset));
+  __ lwu(a2, FieldMemOperand(v0, HeapNumber::kExponentOffset));
+  __ lwu(a1, FieldMemOperand(v0, HeapNumber::kMantissaOffset));
   __ li(t0, 0x80000000);
   Label not_nan;
   __ Branch(&not_nan, ne, a2, Operand(t0));
