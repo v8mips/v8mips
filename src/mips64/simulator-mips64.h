@@ -364,8 +364,6 @@ class Simulator {
   };
   int16_t exceptions[kNumExceptions];
 
-  int32_t kIntAlignmentMask = 0x3;
-
   // Exceptions.
   void SignalExceptions();
 
