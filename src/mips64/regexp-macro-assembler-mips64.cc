@@ -749,12 +749,10 @@ Handle<HeapObject> RegExpMacroAssemblerMIPS::GetCode(Handle<String> source) {
             __ Daddu(a2, a1, Operand(a2));
             __ Daddu(a3, a1, Operand(a3));
           }
-          __ sd(a2, MemOperand(a0));
-          __ Daddu(a0, a0, kPointerSize);
-          //__ Daddu(a0, a0, kIntSize);
-          __ sd(a3, MemOperand(a0));
-          __ Daddu(a0, a0, kPointerSize);
-          //__ Daddu(a0, a0, kIntSize);
+          __ sw(a2, MemOperand(a0));
+          __ Daddu(a0, a0, kIntSize);
+          __ sw(a3, MemOperand(a0));
+          __ Daddu(a0, a0, kIntSize);
         }
       }
 
@@ -1288,23 +1286,17 @@ void RegExpMacroAssemblerMIPS::SafeCallTarget(Label* name) {
 
 void RegExpMacroAssemblerMIPS::Push(Register source) {
   ASSERT(!source.is(backtrack_stackpointer()));
-  //__ break_(0x221);
   __ Daddu(backtrack_stackpointer(),
           backtrack_stackpointer(),
-          Operand(-kPointerSize));
-  /* Daddu(backtrack_stackpointer(),
-          backtrack_stackpointer(),
-          Operand(-kIntSize));*/
-  // __ sd(source, MemOperand(backtrack_stackpointer()));
-  __ sd(source, MemOperand(backtrack_stackpointer()));
+          Operand(-kIntSize));
+  __ sw(source, MemOperand(backtrack_stackpointer()));
 }
 
 
 void RegExpMacroAssemblerMIPS::Pop(Register target) {
   ASSERT(!target.is(backtrack_stackpointer()));
-  __ ld(target, MemOperand(backtrack_stackpointer()));
-  __ Daddu(backtrack_stackpointer(), backtrack_stackpointer(), kPointerSize);
-  //__ Daddu(backtrack_stackpointer(), backtrack_stackpointer(), kIntSize);
+  __ lw(target, MemOperand(backtrack_stackpointer()));
+  __ Daddu(backtrack_stackpointer(), backtrack_stackpointer(), kIntSize);
 }
 
 
