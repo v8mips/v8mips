@@ -2998,13 +2998,9 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
   STATIC_ASSERT(kSmiTag == 0);
   // TODO yuyin
   // STATIC_ASSERT(kSmiTagSize + kSmiShiftSize == 1);
-  // __ Addu(a1, a1, Operand(2));  // a1 was a smi.
-  // TODO right?
   STATIC_ASSERT(kSmiTagSize + kSmiShiftSize == 32);
-  // __ dsrl32(a1, a1, 0);
-  // __ daddiu(a1, a1, 1);
-  //  __ dsll32(a1, a1, 0);
   __ Daddu(a1, a1, Operand(Smi::FromInt(1)));
+  __ dsrl(a1, a1, 32-1);
 
   __ ld(a0, MemOperand(sp, kLastMatchInfoOffset));
   __ JumpIfSmi(a0, &runtime);
