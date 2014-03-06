@@ -3067,8 +3067,8 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
   __ Dsubu(a1, a1, Operand(1));
   __ Branch(&done, lt, a1, Operand(zero_reg));
   // Read the value from the static offsets vector buffer.
-  __ ld(a3, MemOperand(a2, 0));
-  __ daddiu(a2, a2, kPointerSize);
+  __ lw(a3, MemOperand(a2, 0));
+  __ daddiu(a2, a2, kIntSize);
   // Store the smi value in the last match info.
   // __ sll(a3, a3, kSmiTagSize);  // Convert to Smi.
   __ dsll32(a3, a3, 0);

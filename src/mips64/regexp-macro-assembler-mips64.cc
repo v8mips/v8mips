@@ -237,11 +237,11 @@ void RegExpMacroAssemblerMIPS::CheckCharacterLT(uc16 limit, Label* on_less) {
 
 void RegExpMacroAssemblerMIPS::CheckGreedyLoop(Label* on_equal) {
   Label backtrack_non_equal;
-  __ ld(a0, MemOperand(backtrack_stackpointer(), 0));
+  __ lw(a0, MemOperand(backtrack_stackpointer(), 0));
   __ Branch(&backtrack_non_equal, ne, current_input_offset(), Operand(a0));
   __ Daddu(backtrack_stackpointer(),
           backtrack_stackpointer(),
-          Operand(kPointerSize));
+          Operand(kIntSize));
   __ bind(&backtrack_non_equal);
   BranchOrBacktrack(on_equal, eq, current_input_offset(), Operand(a0));
 }
@@ -953,7 +953,6 @@ void RegExpMacroAssemblerMIPS::PopRegister(int register_index) {
 
 
 void RegExpMacroAssemblerMIPS::PushBacktrack(Label* label) {
-  //__ break_(0x222);
   if (label->is_bound()) {
     int target = label->pos();
     __ li(a0, Operand(target + Code::kHeaderSize - kHeapObjectTag));
