@@ -5501,7 +5501,8 @@ void MacroAssembler::HasColor(Register object,
   GetMarkBits(object, bitmap_scratch, mask_scratch);
 
   Label other_color, word_boundary;
-  ld(t9, MemOperand(bitmap_scratch, MemoryChunk::kHeaderSize));
+  // TODO(plind): add reasonable comments to this function.
+  lwu(t9, MemOperand(bitmap_scratch, MemoryChunk::kHeaderSize));
   And(t8, t9, Operand(mask_scratch));
   Branch(&other_color, first_bit == 1 ? eq : ne, t8, Operand(zero_reg));
   // Shift left 1 by adding.
@@ -5512,7 +5513,9 @@ void MacroAssembler::HasColor(Register object,
   jmp(&other_color);
 
   bind(&word_boundary);
-  ld(t9, MemOperand(bitmap_scratch, MemoryChunk::kHeaderSize + kPointerSize));
+  // TODO(plind): add reasonable comments to this function.
+    // from x64:  Note that we are using a 4-byte aligned 8-byte load.
+  lwu(t9, MemOperand(bitmap_scratch, MemoryChunk::kHeaderSize + kPointerSize));
   And(t9, t9, Operand(1));
   Branch(has_color, second_bit == 1 ? ne : eq, t9, Operand(zero_reg));
   bind(&other_color);
@@ -5552,7 +5555,9 @@ void MacroAssembler::GetMarkBits(Register addr_reg,
   Ext(mask_reg, addr_reg, kPointerSizeLog2, Bitmap::kBitsPerCellLog2);
   const int kLowBits = kPointerSizeLog2 + Bitmap::kBitsPerCellLog2;
   Ext(t8, addr_reg, kLowBits, kPageSizeBits - kLowBits);
-  dsll(t8, t8, kPointerSizeLog2);
+  // TODO(plind): Add reasonable comments to this entire function.
+  // dsll(t8, t8, kPointerSizeLog2);
+  dsll(t8, t8, Bitmap::kBytesPerCellLog2);
   Daddu(bitmap_reg, bitmap_reg, t8);
   li(t8, Operand(1));
   dsllv(mask_reg, t8, mask_reg);
@@ -5578,7 +5583,8 @@ void MacroAssembler::EnsureNotWhite(
 
   // Since both black and grey have a 1 in the first position and white does
   // not have a 1 there we only need to check one bit.
-  ld(load_scratch, MemOperand(bitmap_scratch, MemoryChunk::kHeaderSize));
+  // TODO(plind): add reasonable comments to this function.
+  lwu(load_scratch, MemOperand(bitmap_scratch, MemoryChunk::kHeaderSize));
   And(t8, mask_scratch, load_scratch);
   Branch(&done, ne, t8, Operand(zero_reg));
 
