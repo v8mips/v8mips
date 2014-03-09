@@ -749,7 +749,11 @@ Handle<HeapObject> RegExpMacroAssemblerMIPS::GetCode(Handle<String> source) {
             __ Daddu(a2, a1, Operand(a2));
             __ Daddu(a3, a1, Operand(a3));
           }
+          // TODO(plind): It is not clear why we use sw() & kIntSize here, when
+          // we used ld() above. Somewhere, we need some documentation of
+          // these data structures (thought this might not be optimal location).
           __ sw(a2, MemOperand(a0));
+          // TODO(plind): we should be explicit in these constants: kInt32Size.
           __ Daddu(a0, a0, kIntSize);
           __ sw(a3, MemOperand(a0));
           __ Daddu(a0, a0, kIntSize);

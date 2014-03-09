@@ -2996,11 +2996,11 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
   // Calculate number of capture registers (number_of_captures + 1) * 2.
   // Multiplying by 2 comes for free since r1 is smi-tagged.
   STATIC_ASSERT(kSmiTag == 0);
-  // TODO yuyin
+  // TODO(yuyin): define constants bwlow in dsrl.
   // STATIC_ASSERT(kSmiTagSize + kSmiShiftSize == 1);
   STATIC_ASSERT(kSmiTagSize + kSmiShiftSize == 32);
   __ Daddu(a1, a1, Operand(Smi::FromInt(1)));
-  __ dsrl(a1, a1, 32-1);
+  __ dsrl(a1, a1, 32 - 1);
 
   __ ld(a0, MemOperand(sp, kLastMatchInfoOffset));
   __ JumpIfSmi(a0, &runtime);
