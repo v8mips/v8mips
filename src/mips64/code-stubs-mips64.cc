@@ -4168,16 +4168,16 @@ void StringCompareStub::GenerateFlatAsciiStringEquals(MacroAssembler* masm,
   __ ld(scratch2, FieldMemOperand(right, String::kLengthOffset));
   __ Branch(&check_zero_length, eq, length, Operand(scratch2));
   __ bind(&strings_not_equal);
-  ASSERT(is_int16(NOT_EQUAL));
-  __ Ret(USE_DELAY_SLOT);
+  // Can not put li in delayslot, it has multi instructions.
   __ li(v0, Operand(Smi::FromInt(NOT_EQUAL)));
+  __ Ret();
 
   // Check if the length is zero.
   Label compare_chars;
   __ bind(&check_zero_length);
   STATIC_ASSERT(kSmiTag == 0);
   __ Branch(&compare_chars, ne, length, Operand(zero_reg));
-  ASSERT(is_int16(EQUAL));
+  ASSERT(is_int64_16((intptr_t)Smi::FromInt(EQUAL)));
   __ Ret(USE_DELAY_SLOT);
   __ li(v0, Operand(Smi::FromInt(EQUAL)));
 
