@@ -564,7 +564,7 @@ class Assembler : public AssemblerBase {
   inline static void deserialization_set_special_target_at(
       Address instruction_payload, Address target) {
     set_target_address_at(
-        instruction_payload - kInstructionsFor32BitConstant * kInstrSize,
+        instruction_payload - kInstructionsFor64BitConstant * kInstrSize,
         target);
   }
 
@@ -1278,7 +1278,7 @@ class Assembler : public AssemblerBase {
   // branch instruction generation, where we use jump instructions rather
   // than regular branch instructions.
   bool trampoline_emitted_;
-  static const int kTrampolineSlotsSize = 4 * kInstrSize;
+  static const int kTrampolineSlotsSize = 8 * kInstrSize;
   static const int kMaxBranchOffset = (1 << (18 - 1)) - 1;
   static const int kInvalidSlotPos = -1;
 

@@ -687,7 +687,7 @@ int64_t Assembler::target_at(int64_t pos) {
     // TODO(plind) create named constants for shift values.
     int64_t imm = static_cast<int64_t>(instr_lui & kImm16Mask) << 48;
     imm |= static_cast<int64_t>(instr_ori & kImm16Mask) << 32;
-    imm |= (instr_ori2 & kImm16Mask) << 16;
+    imm |= static_cast<int64_t>(instr_ori2 & kImm16Mask) << 16;
     imm |= (instr_ori3 & kImm16Mask);
 
     if (imm == kEndOfJumpChain) {
