@@ -2661,7 +2661,8 @@ void MacroAssembler::Jr(Label* L, BranchDelaySlot bdslot) {
     RecordRelocInfo(RelocInfo::INTERNAL_REFERENCE);
     // lui(at, (imm32 & kHiMask) >> kLuiShift);
     // ori(at, at, (imm32 & kImm16Mask));
-    li(at, Operand(imm64));
+    // TODO(plind): avoid li()?, due to internal_ref?
+    li(at, Operand(imm64), CONSTANT_SIZE);
   }
   jr(at);
 
@@ -2682,7 +2683,8 @@ void MacroAssembler::Jalr(Label* L, BranchDelaySlot bdslot) {
     RecordRelocInfo(RelocInfo::INTERNAL_REFERENCE);
     // lui(at, (imm32 & kHiMask) >> kLuiShift);
     // ori(at, at, (imm32 & kImm16Mask));
-  li(at, Operand(imm64));
+    // TODO(plind): avoid li()?, due to internal_ref?
+    li(at, Operand(imm64), CONSTANT_SIZE);
   }
   jalr(at);
 
