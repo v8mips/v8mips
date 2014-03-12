@@ -184,15 +184,19 @@ class Simulator {
   // architecture specification and is off by a 8 from the currently executing
   // instruction.
   void set_register(int reg, int64_t value);
+  void set_register_word(int reg, int32_t value);
   void set_dw_register(int dreg, const int* dbl);
   int64_t get_register(int reg) const;
   double get_double_from_register_pair(int reg);
   // Same for FPURegisters.
-  void set_fpu_register(int fpureg, int32_t value);
+  void set_fpu_register(int fpureg, int64_t value);
+  void set_fpu_register_word(int fpureg, int32_t value);
+  void set_fpu_register_hi_word(int fpureg, int32_t value);
   void set_fpu_register_float(int fpureg, float value);
   void set_fpu_register_double(int fpureg, double value);
-  int32_t get_fpu_register(int fpureg) const;
-  int64_t get_fpu_register_long(int fpureg) const;
+  int64_t get_fpu_register(int fpureg) const;
+  int32_t get_fpu_register_word(int fpureg) const;
+  int32_t get_fpu_register_hi_word(int fpureg) const;
   float get_fpu_register_float(int fpureg) const;
   double get_fpu_register_double(int fpureg) const;
   void set_fcsr_bit(uint32_t cc, bool value);
@@ -268,7 +272,7 @@ class Simulator {
 
   inline uint32_t ReadWU(int64_t addr, Instruction* instr);
   inline int32_t ReadW(int64_t addr, Instruction* instr);
-  inline void WriteW(int64_t addr, int value, Instruction* instr);
+  inline void WriteW(int64_t addr, int32_t value, Instruction* instr);
   inline int64_t Read2W(int64_t addr, Instruction* instr);
   inline void Write2W(int64_t addr, int64_t value, Instruction* instr);
 
@@ -381,7 +385,7 @@ class Simulator {
   // Registers.
   int64_t registers_[kNumSimuRegisters];
   // Coprocessor Registers.
-  int32_t FPUregisters_[kNumFPURegisters];
+  int64_t FPUregisters_[kNumFPURegisters];
   // FPU control register.
   uint32_t FCSR_;
 
