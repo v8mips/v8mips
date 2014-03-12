@@ -2338,6 +2338,9 @@ void LCodeGen::DoCompareMinusZeroAndBranch(LCompareMinusZeroAndBranch* instr) {
     DoubleRegister value = ToDoubleRegister(instr->value());
     EmitFalseBranchF(instr, ne, value, kDoubleRegZero);
     __ FmoveHigh(scratch, value);
+    // TODO(yy): only use low 32-bit value.
+    __ dsll32(scratch, scratch, 0);
+    __ dsrl32(scratch, scratch, 0);
     __ li(at, 0x80000000);
   } else {
     Register value = ToRegister(instr->value());
