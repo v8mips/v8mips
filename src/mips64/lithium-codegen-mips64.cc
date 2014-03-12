@@ -1621,6 +1621,11 @@ void LCodeGen::DoSubI(LSubI* instr) {
                                  overflow);  // Reg at also used as scratch.
     }
     DeoptimizeIf(lt, instr->environment(), overflow, Operand(zero_reg));
+    if (!instr->hydrogen()->representation().IsSmi()) {
+      DeoptimizeIf(gt, instr->environment(), ToRegister(result), Operand(kMaxInt));
+      __ li(scratch, Operand(kMinInt), CONSTANT_SIZE);
+      DeoptimizeIf(lt, instr->environment(), ToRegister(result), Operand(scratch));
+    }
   }
 }
 
@@ -1859,6 +1864,12 @@ void LCodeGen::DoAddI(LAddI* instr) {
                                  overflow);  // Reg at also used as scratch.
     }
     DeoptimizeIf(lt, instr->environment(), overflow, Operand(zero_reg));
+    // if not smi, it must int32.
+    if (!instr->hydrogen()->representation().IsSmi()) {
+      DeoptimizeIf(gt, instr->environment(), ToRegister(result), Operand(kMaxInt));
+      __ li(scratch, Operand(kMinInt), CONSTANT_SIZE);
+      DeoptimizeIf(lt, instr->environment(), ToRegister(result), Operand(scratch));
+    }
   }
 }
 
