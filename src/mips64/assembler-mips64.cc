@@ -636,7 +636,7 @@ Instr Assembler::SetSwOffset(Instr instr, int16_t offset) {
 
 
 bool Assembler::IsAddImmediate(Instr instr) {
-  return ((instr & kOpcodeMask) == ADDIU);
+  return ((instr & kOpcodeMask) == ADDIU || (instr & kOpcodeMask) == DADDIU);
 }
 
 

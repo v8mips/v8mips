@@ -4938,7 +4938,7 @@ void BackEdgeTable::PatchAt(Code* unoptimized_code,
       // jalr t9  ;; Not changed
       // nop  ;; Not changed
       // ok-label ----- pc_after points here
-      patcher.masm()->addiu(at, zero_reg, 1);
+      patcher.masm()->daddiu(at, zero_reg, 1);
       break;
   }
   Address pc_immediate_load_address = pc - 8 * kInstrSize;
