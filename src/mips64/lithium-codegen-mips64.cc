@@ -1454,6 +1454,10 @@ void LCodeGen::DoMulI(LMulI* instr) {
 
     if (bailout_on_minus_zero) {
       Label done;
+      if (!instr->hydrogen()->representation().IsSmi()) {
+        __ dsll32(left, left, 0);
+        __ dsll32(right, right, 0);
+      }
       __ Xor(at, left, right);
       __ Branch(&done, ge, at, Operand(zero_reg));
       // Bail out if the result is minus zero.
