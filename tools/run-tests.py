@@ -197,6 +197,8 @@ def BuildOptions():
                     default=False, action="store_true")
   result.add_option("--valgrind", help="Run tests through valgrind",
                     default=False, action="store_true")
+  result.add_option("--qemu", help="Run tests through qemu",
+                    default=False, action="store_true")
   result.add_option("--warn-unused", help="Report unused rules",
                     default=False, action="store_true")
   result.add_option("--junitout", help="File name of the JUnit output")
@@ -292,6 +294,11 @@ def ProcessOptions(options):
     run_valgrind = os.path.join("tools", "run-valgrind.py")
     # This is OK for distributed running, so we don't need to set no_network.
     options.command_prefix = (["python", "-u", run_valgrind] +
+                              options.command_prefix)
+  if options.qemu:
+    run_qemu = os.path.join("tools", "run-qemu.py")
+    # This is OK for distributed running, so we don't need to set no_network.
+    options.command_prefix = (["python", "-u", run_qemu, "%s" % options.arch[0]] +
                               options.command_prefix)
   def CheckTestMode(name, option):
     if not option in ["run", "skip", "dontcare"]:
@@ -414,6 +421,7 @@ def Execute(arch, mode, args, options, suites, workspace):
   variables = {
     "arch": arch,
     "asan": options.asan,
+    "qemu": options.qemu,
     "deopt_fuzzer": False,
     "gc_stress": options.gc_stress,
     "isolates": options.isolates,

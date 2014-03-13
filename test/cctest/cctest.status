@@ -198,6 +198,19 @@
   'test-serialize/DeserializeFromSecondSerialization': [SKIP],
 }],  # 'arch == mipsel or arch == mips'
 
+['qemu == True', {
+
+  # Qemu increases required boot up memory size.
+  'test-mark-compact/BootUpMemoryUse': [SKIP],
+  # Sockets do not work in qemu user mode.
+  'test-socket/Socket':  [SKIP],
+  'test-debug/DebuggerAgent': [SKIP],
+  'test-debug/DebuggerAgentProtocolOverflowHeader': [SKIP],
+  # Intermittent failures on qemu, possible bug in qemu.
+  'test-lockers/*': [SKIP],
+}],
+
+
 ##############################################################################
 ['arch == android_arm or arch == android_ia32', {
 

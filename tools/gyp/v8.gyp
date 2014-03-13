@@ -163,17 +163,29 @@
               '--log-snapshot-positions',
               '--logfile', '<(INTERMEDIATE_DIR)/snapshot.log',
             ],
+            'qemu_flags': ['qemu-mips'],
             'conditions': [
               ['v8_random_seed!=0', {
                 'mksnapshot_flags': ['--random-seed', '<(v8_random_seed)'],
               }],
             ],
           },
-          'action': [
-            '<@(_inputs)',
-            '<@(mksnapshot_flags)',
-            '<@(_outputs)'
-          ],
+         'conditions': [
+           ['v8_target_arch=="mips" and (host_arch=="ia32" or host_arch=="x64")', {
+             'action': [
+               '<@(qemu_flags)',
+               '<@(_inputs)',
+               '<@(mksnapshot_flags)',
+               '<@(_outputs)'
+             ],
+           }, {
+             'action': [
+               '<@(_inputs)',
+               '<@(mksnapshot_flags)',
+               '<@(_outputs)'
+             ],
+           }],
+         ],
         },
       ],
     },
