@@ -2015,7 +2015,7 @@ void Simulator::ConfigureTypeRegister(Instruction* instr,
           // TODO(plind) - Unify MULT/DMULT with single set of 64-bit HI/Lo regs.
           // TODO(plind) - make the 32-bit MULT ops conform to spec regarding
           //   checking of 32-bit input values, and un-define operations of HW.
-          i64hilo = static_cast<int64_t>(rs) * static_cast<int64_t>(rt);
+          i64hilo = static_cast<int64_t>((int32_t)rs) * static_cast<int64_t>((int32_t)rt);
           break;
         case MULTU:
           u64hilo = static_cast<uint64_t>(rs_u) * static_cast<uint64_t>(rt_u);
@@ -2115,7 +2115,7 @@ void Simulator::ConfigureTypeRegister(Instruction* instr,
     case SPECIAL2:
       switch (instr->FunctionFieldRaw()) {
         case MUL:
-          alu_out = rs_u * rt_u;  // Only the lower 32 bits are kept.
+          alu_out = (int32_t)rs_u * (int32_t)rt_u;  // Only the lower 32 bits are kept.
           break;
         case CLZ:
           alu_out = __builtin_clz(rs_u);
