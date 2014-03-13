@@ -1831,8 +1831,28 @@ void Assembler::mtc1(Register rt, FPURegister fs) {
 }
 
 
+void Assembler::mthc1(Register rt, FPURegister fs) {
+  GenInstrRegister(COP1, MTHC1, rt, fs, f0);
+}
+
+
+void Assembler::dmtc1(Register rt, FPURegister fs) {
+  GenInstrRegister(COP1, DMTC1, rt, fs, f0);
+}
+
+
 void Assembler::mfc1(Register rt, FPURegister fs) {
   GenInstrRegister(COP1, MFC1, rt, fs, f0);
+}
+
+
+void Assembler::mfhc1(Register rt, FPURegister fs) {
+  GenInstrRegister(COP1, MFHC1, rt, fs, f0);
+}
+
+
+void Assembler::dmfc1(Register rt, FPURegister fs) {
+  GenInstrRegister(COP1, DMFC1, rt, fs, f0);
 }
 
 

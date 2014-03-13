@@ -1036,7 +1036,7 @@ void Simulator::set_fpu_register_word(int fpureg, int32_t value) {
   // TODO(plind): big endian issue.
   ASSERT((fpureg >= 0) && (fpureg < kNumFPURegisters));
   int32_t *pword = reinterpret_cast<int32_t*>(&FPUregisters_[fpureg]);
-  *pword = value;
+  *pword = value & 0xffffffff;  // plind...................................................ACK - check this
 }
 
 
@@ -1045,7 +1045,7 @@ void Simulator::set_fpu_register_hi_word(int fpureg, int32_t value) {
   // TODO(plind): big endian issue.
   ASSERT((fpureg >= 0) && (fpureg < kNumFPURegisters));
   int32_t *phiword = (reinterpret_cast<int32_t*>(&FPUregisters_[fpureg])) + 1;
-  *phiword = value;
+  *phiword = value & 0xffffffff;
 }
 
 
@@ -1056,7 +1056,7 @@ void Simulator::set_fpu_register_float(int fpureg, float value) {
 
 
 void Simulator::set_fpu_register_double(int fpureg, double value) {
-  ASSERT((fpureg >= 0) && (fpureg < kNumFPURegisters) && ((fpureg % 2) == 0));
+  ASSERT((fpureg >= 0) && (fpureg < kNumFPURegisters));
   *BitCast<double*>(&FPUregisters_[fpureg]) = value;
 }
 
@@ -1092,15 +1092,21 @@ int64_t Simulator::get_fpu_register(int fpureg) const {
 }
 
 
-int32_t Simulator::get_fpu_register_word(int fpureg) const {
+uint32_t Simulator::get_fpu_register_word(int fpureg) const {
+  ASSERT((fpureg >= 0) && (fpureg < kNumFPURegisters));
+  return static_cast<uint32_t>(FPUregisters_[fpureg] & 0xffffffff);
+}
+
+
+int32_t Simulator::get_fpu_register_signed_word(int fpureg) const {
   ASSERT((fpureg >= 0) && (fpureg < kNumFPURegisters));
   return static_cast<int32_t>(FPUregisters_[fpureg] & 0xffffffff);
 }
 
 
-int32_t Simulator::get_fpu_register_hi_word(int fpureg) const {
+uint32_t Simulator::get_fpu_register_hi_word(int fpureg) const {
   ASSERT((fpureg >= 0) && (fpureg < kNumFPURegisters));
-  return static_cast<int32_t>((FPUregisters_[fpureg] >> 32) & 0xffffffff);
+  return static_cast<uint32_t>((FPUregisters_[fpureg] >> 32) & 0xffffffff);
 }
 
 
@@ -1915,13 +1921,17 @@ void Simulator::ConfigureTypeRegister(Instruction* instr,
           alu_out = FCSR_;
           break;
         case MFC1:
+          alu_out = get_fpu_register_word(fs_reg);
+          break;
+        case DMFC1:
           alu_out = get_fpu_register(fs_reg);
           break;
         case MFHC1:
-          UNIMPLEMENTED_MIPS();
+          alu_out = get_fpu_register_hi_word(fs_reg);
           break;
         case CTC1:
         case MTC1:
+        case DMTC1:
         case MTHC1:
           // Do the store in the execution step.
           break;
@@ -2227,11 +2237,11 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
           break;
         case CFC1:
           set_register(rt_reg, alu_out);
-        case MFC1:
-          set_register(rt_reg, alu_out);
           break;
+        case MFC1:
+        case DMFC1:
         case MFHC1:
-          UNIMPLEMENTED_MIPS();
+          set_register(rt_reg, alu_out);
           break;
         case CTC1:
           // At the moment only FCSR is supported.
@@ -2239,10 +2249,13 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
           FCSR_ = registers_[rt_reg];
           break;
         case MTC1:
-          FPUregisters_[fs_reg] = registers_[rt_reg];
+          set_fpu_register_word(fs_reg, registers_[rt_reg]);
+          break;
+        case DMTC1:
+          set_fpu_register(fs_reg, registers_[rt_reg]);
           break;
         case MTHC1:
-          UNIMPLEMENTED_MIPS();
+          set_fpu_register_hi_word(fs_reg, registers_[rt_reg]);
           break;
         case S:
           float f;
@@ -2413,11 +2426,11 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
         case W:
           switch (instr->FunctionFieldRaw()) {
             case CVT_S_W:   // Convert word to float (single).
-              alu_out = get_fpu_register(fs_reg);
+              alu_out = get_fpu_register_signed_word(fs_reg);
               set_fpu_register_float(fd_reg, static_cast<float>(alu_out));
               break;
             case CVT_D_W:   // Convert word to double.
-              alu_out = get_fpu_register(fs_reg);
+              alu_out = get_fpu_register_signed_word(fs_reg);
               set_fpu_register_double(fd_reg, static_cast<double>(alu_out));
               break;
             default:
