@@ -5669,9 +5669,9 @@ void MacroAssembler::EnsureNotWhite(
   bind(&is_data_object);
   // Value is a data object, and it is white.  Mark it black.  Since we know
   // that the object is white we can make it black by flipping one bit.
-  ld(t8, MemOperand(bitmap_scratch, MemoryChunk::kHeaderSize));
+  Uld(t8, MemOperand(bitmap_scratch, MemoryChunk::kHeaderSize));
   Or(t8, t8, Operand(mask_scratch));
-  sd(t8, MemOperand(bitmap_scratch, MemoryChunk::kHeaderSize));
+  Usd(t8, MemOperand(bitmap_scratch, MemoryChunk::kHeaderSize));
 
   // TODO(plind): Fix li() so we can use constant embedded inside And().
   // And(bitmap_scratch, bitmap_scratch, Operand(~Page::kPageAlignmentMask));

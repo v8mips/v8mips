@@ -777,8 +777,7 @@ Handle<HeapObject> RegExpMacroAssemblerMIPS::GetCode(Handle<String> source) {
 
         __ sd(a1, MemOperand(frame_pointer(), kNumOutputRegisters));
         // Advance the location for output.
-        __ Daddu(a2, a2, num_saved_registers_ * kPointerSize);
-        // __ Daddu(a2, a2, num_saved_registers_ * kIntSize);
+         __ Daddu(a2, a2, num_saved_registers_ * kIntSize);
         __ sd(a2, MemOperand(frame_pointer(), kRegisterOutput));
 
         // Prepare a0 to initialize registers with its value in the next run.
