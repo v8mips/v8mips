@@ -4179,6 +4179,12 @@ void LCodeGen::DoStoreNamedField(LStoreNamedField* instr) {
   SmiCheck check_needed =
       instr->hydrogen()->value()->IsHeapObject()
           ? OMIT_SMI_CHECK : INLINE_SMI_CHECK;
+  if (representation.IsSmi() &&
+      instr->hydrogen()->store_mode() == STORE_TO_INITIALIZED_ENTRY) {
+    offset += kPointerSize / 2;
+    representation = Representation::Integer32();
+  }
+
   if (access.IsInobject()) {
     MemOperand operand = FieldMemOperand(object, offset);
     __ Store(value, operand, representation);
