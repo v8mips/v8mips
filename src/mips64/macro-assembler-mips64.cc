@@ -1223,7 +1223,7 @@ void MacroAssembler::Cvt_d_uw(FPURegister fd,
 
   // Load 2^31 into f20 as its float representation.
   li(at, 0x41E00000);
-  mtc1(at, FPURegister::from_code(scratch.code() + 1));
+  mthc1(at, scratch);
   mtc1(zero_reg, scratch);
   // Add it to fd.
   add_d(fd, fd, scratch);
@@ -1268,7 +1268,7 @@ void MacroAssembler::Trunc_uw_d(FPURegister fd,
 
   // Load 2^31 into scratch as its float representation.
   li(at, 0x41E00000);
-  mtc1(at, FPURegister::from_code(scratch.code() + 1));
+  mthc1(at, scratch);
   mtc1(zero_reg, scratch);
   // Test if scratch > fd.
   // If fd < 2^31 we can convert it normally.

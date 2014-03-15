@@ -365,22 +365,22 @@ TEST(MIPS4) {
   Label L, C;
 
   __ ldc1(f4, MemOperand(a0, OFFSET_OF(T, a)) );
-  __ ldc1(f6, MemOperand(a0, OFFSET_OF(T, b)) );
+  __ ldc1(f5, MemOperand(a0, OFFSET_OF(T, b)) );
 
-  // Swap f4 and f6, by using four integer registers, t0-t3.
+  // Swap f4 and f5, by using 3 integer registers, t0-t2,
+  // both two 32-bit chunks, and one 64-bit chunk.
+  // TODO(plind): mxhc1 is mips32/64-r2 only, not r1.
   __ mfc1(t0, f4);
-  __ mfc1(t1, f5);
-  __ mfc1(t2, f6);
-  __ mfc1(t3, f7);
+  __ mfhc1(t1,f4);
+  __ dmfc1(t2, f5);
 
-  __ mtc1(t0, f6);
-  __ mtc1(t1, f7);
-  __ mtc1(t2, f4);
-  __ mtc1(t3, f5);
+  __ mtc1(t0, f5);
+  __ mthc1(t1, f5);
+  __ dmtc1(t2, f4);
 
   // Store the swapped f4 and f5 back to memory.
   __ sdc1(f4, MemOperand(a0, OFFSET_OF(T, a)) );
-  __ sdc1(f6, MemOperand(a0, OFFSET_OF(T, c)) );
+  __ sdc1(f5, MemOperand(a0, OFFSET_OF(T, c)) );
 
   __ jr(ra);
   __ nop();
@@ -767,13 +767,16 @@ TEST(MIPS10) {
 
   typedef struct {
     double a;
+    double a_converted;
     double b;
     int32_t dbl_mant;
     int32_t dbl_exp;
     int32_t long_hi;
     int32_t long_lo;
+    int64_t long_as_int64;
     int32_t b_long_hi;
     int32_t b_long_lo;
+    int64_t b_long_as_int64;
   } T;
   T t;
 
@@ -781,29 +784,47 @@ TEST(MIPS10) {
   Label L, C;
 
   if (kArchVariant == kMips32r2) {
+    // Rewritten for FR=1 FPU mode:
+    //  -  32 FP regs of 64-bits each, no odd/even pairs.
+    //  -  Note that cvt_l_d/cvt_d_l ARE legal in FR=1 mode.
     // Load all structure elements to registers.
     __ ldc1(f0, MemOperand(a0, OFFSET_OF(T, a)));
 
     // Save the raw bits of the double.
     __ mfc1(t0, f0);
-    __ mfc1(t1, f1);
+    __ mfhc1(t1, f0);
     __ sw(t0, MemOperand(a0, OFFSET_OF(T, dbl_mant)));
     __ sw(t1, MemOperand(a0, OFFSET_OF(T, dbl_exp)));
 
     // Convert double in f0 to long, save hi/lo parts.
     __ cvt_l_d(f0, f0);
-    __ mfc1(t0, f0);  // f0 has LS 32 bits of long.
-    __ mfc1(t1, f1);  // f1 has MS 32 bits of long.
+    __ mfc1(t0, f0);  // f0 LS 32 bits of long.
+    __ mfhc1(t1, f0);  // f0 MS 32 bits of long.
     __ sw(t0, MemOperand(a0, OFFSET_OF(T, long_lo)));
     __ sw(t1, MemOperand(a0, OFFSET_OF(T, long_hi)));
+
+    // Combine the high/low ints, convert back to double.
+    __ dsll32(t2, t1, 0);  // Move t1 to high bits of t2.
+    __ or_(t2, t2, t0);
+    __ dmtc1(t2, f1);
+    __ cvt_d_l(f1, f1);
+    __ sdc1(f1, MemOperand(a0, OFFSET_OF(T, a_converted)));
+
 
     // Convert the b long integers to double b.
     __ lw(t0, MemOperand(a0, OFFSET_OF(T, b_long_lo)));
     __ lw(t1, MemOperand(a0, OFFSET_OF(T, b_long_hi)));
-    __ mtc1(t0, f8);  // f8 has LS 32-bits.
-    __ mtc1(t1, f9);  // f9 has MS 32-bits.
+    __ mtc1(t0, f8);  // f8 LS 32-bits.
+    __ mthc1(t1, f8);  // f8 MS 32-bits.
     __ cvt_d_l(f10, f8);
     __ sdc1(f10, MemOperand(a0, OFFSET_OF(T, b)));
+
+    // Convert double b back to long-int.
+    __ ldc1(f31, MemOperand(a0, OFFSET_OF(T, b)));
+    __ cvt_l_d(f31, f31);
+    __ dmfc1(t3, f31);
+    __ sd(t3, MemOperand(a0, OFFSET_OF(T, b_long_as_int64)));
+
 
     __ jr(ra);
     __ nop();
@@ -826,8 +847,11 @@ TEST(MIPS10) {
     CHECK_EQ(0xFFC00000, t.dbl_mant);
     CHECK_EQ(0, t.long_hi);
     CHECK_EQ(0x7fffffff, t.long_lo);
+    CHECK_EQ(2.147483647e9, t.a_converted);
+
     // 0xFF00FF00FF -> 1.095233372415e12.
     CHECK_EQ(1.095233372415e12, t.b);
+    CHECK_EQ(0xFF00FF00FF, t.b_long_as_int64);
   }
 }
 
