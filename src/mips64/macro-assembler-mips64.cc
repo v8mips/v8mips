@@ -1373,9 +1373,10 @@ void MacroAssembler::Move(FPURegister dst, double imm) {
   } else {
     uint32_t lo, hi;
     DoubleAsTwoUInt32(imm, &lo, &hi);
-    // Move the low part of the double into the lower of the corresponding FPU
-    // register of FPU register pair.
+    // Move the low part of the double into the lower bits of the corresponding
+    // FPU register.
     if (lo != 0) {
+      // TODO(plind): Fix this broken li() usage.
       // li(at, Operand(lo));
       lui(at, (lo >> kLuiShift) & kImm16Mask);
       ori(at, at, lo & kImm16Mask);
@@ -1383,15 +1384,17 @@ void MacroAssembler::Move(FPURegister dst, double imm) {
     } else {
       mtc1(zero_reg, dst);
     }
-    // Move the high part of the double into the higher of the corresponding
-    // FPU register of FPU register pair.
+    // Move the high part of the double into the high bits of the corresponding
+    // FPU register.
+    // TODO(plind): Support FR=0 mode also, as an option.
     if (hi != 0) {
+      // TODO(plind): Fix this broken li() usage.
       // li(at, Operand(hi));
       lui(at, (hi >> kLuiShift) & kImm16Mask);
       ori(at, at, hi & kImm16Mask);
-      mtc1(at, dst.high());
+      mthc1(at, dst);
     } else {
-      mtc1(zero_reg, dst.high());
+      mthc1(zero_reg, dst);
     }
   }
 }

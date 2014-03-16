@@ -3781,7 +3781,7 @@ void LCodeGen::DoMathFloor(LMathFloor* instr) {
     // Test for -0.
     Label done;
     __ Branch(&done, ne, result, Operand(zero_reg));
-    __ mfc1(scratch1, input.high());
+    __ mfhc1(scratch1, input);  // Get exponent/sign bits.
     __ And(scratch1, scratch1, Operand(HeapNumber::kSignMask));
     DeoptimizeIf(ne, instr->environment(), scratch1, Operand(zero_reg));
     __ bind(&done);
@@ -3797,7 +3797,7 @@ void LCodeGen::DoMathRound(LMathRound* instr) {
   Label done, check_sign_on_zero;
 
   // Extract exponent bits.
-  __ mfc1(result, input.high());
+  __ mfhc1(result, input);
   __ Ext(scratch,
          result,
          HeapNumber::kExponentShift,
@@ -3827,8 +3827,8 @@ void LCodeGen::DoMathRound(LMathRound* instr) {
 
   // Check sign of the result: if the sign changed, the input
   // value was in ]0.5, 0[ and the result should be -0.
-  __ mfc1(result, double_scratch0().high());
-  // TODO(yy)
+  __ mfhc1(result, double_scratch0());
+  // TODO(yy): mfhc1 sign-extends, clear the upper bits.
   __ dsll32(result, result, 0);
   __ dsrl32(result, result, 0);
   __ Xor(result, result, Operand(scratch));
@@ -3860,7 +3860,7 @@ void LCodeGen::DoMathRound(LMathRound* instr) {
     // Test for -0.
     __ Branch(&done, ne, result, Operand(zero_reg));
     __ bind(&check_sign_on_zero);
-    __ mfc1(scratch, input.high());
+    __ mfhc1(scratch, input);  // Get exponent/sign bits.
     __ And(scratch, scratch, Operand(HeapNumber::kSignMask));
     DeoptimizeIf(ne, instr->environment(), scratch, Operand(zero_reg));
   }
@@ -4711,7 +4711,7 @@ void LCodeGen::DoUint32ToDouble(LUint32ToDouble* instr) {
 
   FPURegister dbl_scratch = double_scratch0();
   __ mtc1(ToRegister(input), dbl_scratch);
-  __ Cvt_d_uw(ToDoubleRegister(output), dbl_scratch, f22);
+  __ Cvt_d_uw(ToDoubleRegister(output), dbl_scratch, f22);  // TODO(plind): f22?
 }
 
 
@@ -4942,9 +4942,9 @@ void LCodeGen::EmitNumberUntagD(Register input_reg,
     // Load heap number.
     __ ldc1(result_reg, FieldMemOperand(input_reg, HeapNumber::kValueOffset));
     if (deoptimize_on_minus_zero) {
-      __ mfc1(at, result_reg.low());
+      __ mfc1(at, result_reg);
       __ Branch(&done, ne, at, Operand(zero_reg));
-      __ mfc1(scratch, result_reg.high());
+      __ mfhc1(scratch, result_reg);  // Get exponent/sign bits.
       DeoptimizeIf(eq, env, scratch, Operand(HeapNumber::kSignMask));
     }
     __ Branch(&done);
@@ -5041,7 +5041,7 @@ void LCodeGen::DoDeferredTaggedToI(LTaggedToI* instr) {
     if (instr->hydrogen()->CheckFlag(HValue::kBailoutOnMinusZero)) {
       __ Branch(&done, ne, input_reg, Operand(zero_reg));
 
-      __ mfc1(scratch1, double_scratch.high());
+      __ mfhc1(scratch1, double_scratch);  // Get exponent/sign bits.
       __ And(scratch1, scratch1, Operand(HeapNumber::kSignMask));
       DeoptimizeIf(ne, instr->environment(), scratch1, Operand(zero_reg));
     }
@@ -5129,7 +5129,7 @@ void LCodeGen::DoDoubleToI(LDoubleToI* instr) {
     if (instr->hydrogen()->CheckFlag(HValue::kBailoutOnMinusZero)) {
       Label done;
       __ Branch(&done, ne, result_reg, Operand(zero_reg));
-      __ mfc1(scratch1, double_input.high());
+      __ mfhc1(scratch1, double_input);  // Get exponent/sign bits.
       __ And(scratch1, scratch1, Operand(HeapNumber::kSignMask));
       DeoptimizeIf(ne, instr->environment(), scratch1, Operand(zero_reg));
       __ bind(&done);
@@ -5162,7 +5162,7 @@ void LCodeGen::DoDoubleToSmi(LDoubleToSmi* instr) {
     if (instr->hydrogen()->CheckFlag(HValue::kBailoutOnMinusZero)) {
       Label done;
       __ Branch(&done, ne, result_reg, Operand(zero_reg));
-      __ mfc1(scratch1, double_input.high());
+      __ mfhc1(scratch1, double_input);  // Get exponent/sign bits.
       __ And(scratch1, scratch1, Operand(HeapNumber::kSignMask));
       DeoptimizeIf(ne, instr->environment(), scratch1, Operand(zero_reg));
       __ bind(&done);

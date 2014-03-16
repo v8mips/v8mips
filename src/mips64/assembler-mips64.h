@@ -250,6 +250,7 @@ struct FPURegister {
   bool is_valid() const { return 0 <= code_ && code_ < kMaxNumRegisters ; }
   bool is(FPURegister creg) const { return code_ == creg.code_; }
   FPURegister low() const {
+    // TODO(plind): Create ASSERT for FR=0 mode. This usage suspect for FR=1.
     // Find low reg of a Double-reg pair, which is the reg itself.
     ASSERT(code_ % 2 == 0);  // Specified Double reg must be even.
     FPURegister reg;
@@ -258,6 +259,7 @@ struct FPURegister {
     return reg;
   }
   FPURegister high() const {
+    // TODO(plind): Create ASSERT for FR=0 mode. This usage illegal in FR=1.
     // Find high reg of a Doubel-reg pair, which is reg + 1.
     ASSERT(code_ % 2 == 0);  // Specified Double reg must be even.
     FPURegister reg;
