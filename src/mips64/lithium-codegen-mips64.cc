@@ -3828,6 +3828,9 @@ void LCodeGen::DoMathRound(LMathRound* instr) {
   // Check sign of the result: if the sign changed, the input
   // value was in ]0.5, 0[ and the result should be -0.
   __ mfc1(result, double_scratch0().high());
+  // TODO(yy)
+  __ dsll32(result, result, 0);
+  __ dsrl32(result, result, 0);
   __ Xor(result, result, Operand(scratch));
   if (instr->hydrogen()->CheckFlag(HValue::kBailoutOnMinusZero)) {
     // ARM uses 'mi' here, which is 'lt'
