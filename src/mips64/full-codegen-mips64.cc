@@ -4060,6 +4060,8 @@ void FullCodeGenerator::EmitFastAsciiArrayJoin(CallRuntime* expr) {
   __ mfhi(scratch2);
   __ Branch(&bailout, ne, scratch2, Operand(zero_reg));
   __ mflo(scratch2);
+  // TODO(yy) check the highest bit.
+  __ dsrl32(scratch3, scratch2, 0);
   __ And(scratch3, scratch2, Operand(0x80000000));
   __ Branch(&bailout, ne, scratch3, Operand(zero_reg));
   __ AdduAndCheckForOverflow(string_length, string_length, scratch2, scratch3);
