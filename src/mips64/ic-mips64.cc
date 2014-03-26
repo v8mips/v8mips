@@ -1273,7 +1273,9 @@ static void KeyedStoreGenerateGenericHelper(
   __ Daddu(address, elements,
           Operand(FixedDoubleArray::kHeaderSize + sizeof(kHoleNanLower32)
                   - kHeapObjectTag));
-  __ dsll(at, key, kPointerSizeLog2);
+  // TODO(yy) Key is Smi, why mips32 use it not as Smi? 
+  // __ dsll(at, key, kPointerSizeLog2);
+  __ dsrl(at, key, 32 - kPointerSizeLog2);
   __ daddu(address, address, at);
   __ lw(scratch_value, MemOperand(address));
   __ Branch(&fast_double_without_map_check, ne, scratch_value,
