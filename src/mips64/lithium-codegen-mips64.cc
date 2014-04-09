@@ -4719,9 +4719,10 @@ void LCodeGen::DoUint32ToSmi(LUint32ToSmi* instr) {
   LOperand* input = instr->value();
   LOperand* output = instr->result();
   if (!instr->hydrogen()->value()->HasRange() ||
-      !instr->hydrogen()->value()->range()->IsInSmiRange()) {
+      !instr->hydrogen()->value()->range()->IsInSmiRange() ||
+      instr->hydrogen()->value()->range()->upper() == kMaxInt) {
     Register scratch = scratch0();
-    __ And(scratch, ToRegister(input), Operand(0xc0000000));
+    __ And(scratch, ToRegister(input), Operand(0x80000000));
     DeoptimizeIf(ne, instr->environment(), scratch, Operand(zero_reg));
   }
   __ SmiTag(ToRegister(output), ToRegister(input));

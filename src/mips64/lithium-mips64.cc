@@ -1928,11 +1928,18 @@ LInstruction* LChunkBuilder::DoChange(HChange* instr) {
     } else if (to.IsSmi()) {
       HValue* val = instr->value();
       LOperand* value = UseRegister(val);
-      LInstruction* result = val->CheckFlag(HInstruction::kUint32)
-          ? DefineAsRegister(new(zone()) LUint32ToSmi(value))
-          : DefineAsRegister(new(zone()) LInteger32ToSmi(value));
-      if (val->HasRange() && val->range()->IsInSmiRange()) {
-        return result;
+      LInstruction* result;
+     if (val->CheckFlag(HInstruction::kUint32)) {
+        result = DefineAsRegister(new(zone()) LUint32ToSmi(value));
+        if (val->HasRange() && val->range()->IsInSmiRange() &&
+          val->range()->upper() != kMaxInt) {
+          return result;
+        }
+      } else {
+        result = DefineAsRegister(new(zone()) LInteger32ToSmi(value));
+        if (val->HasRange() && val->range()->IsInSmiRange()) {
+          return result;
+        }
       }
       return AssignEnvironment(result);
     } else {
