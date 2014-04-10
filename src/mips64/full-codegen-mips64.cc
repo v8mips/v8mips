@@ -3073,7 +3073,7 @@ void FullCodeGenerator::EmitIsStringWrapperSafeForDefaultValueOf(
   // Calculate the end of the descriptor array.
   __ mov(a2, t0);
   // __ dsll(t1, a3, kPointerSizeLog2 - kSmiTagSize);
-  __ dsrl(t1, a2, 32 - kPointerSizeLog2);
+  __ dsrl(t1, a3, 32 - kPointerSizeLog2);
   __ Daddu(a2, a2, t1);
 
   // Loop through all the keys in the descriptor array. If one of these is the
