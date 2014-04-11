@@ -119,6 +119,19 @@
 }],  # 'arch == mipsel'
 
 ##############################################################################
+['arch == mipsel64', {
+
+  # BUG(2657): Test sometimes times out on MIPS simulator.
+  'test-thread-termination/TerminateMultipleV8ThreadsDefaultIsolate': [PASS, TIMEOUT],
+
+  # BUG(1075): Unresolved crashes on MIPS also.
+  'test-serialize/Deserialize': [SKIP],
+  'test-serialize/DeserializeFromSecondSerializationAndRunScript2': [SKIP],
+  'test-serialize/DeserializeAndRunScript2': [SKIP],
+  'test-serialize/DeserializeFromSecondSerialization': [SKIP],
+}],  # 'arch == mipsel64'
+
+##############################################################################
 ['arch == android_arm or arch == android_ia32', {
 
   # Tests crash as there is no /tmp directory in Android.

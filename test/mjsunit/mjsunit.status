@@ -70,7 +70,7 @@
   ##############################################################################
   # These use a built-in that's only present in debug mode. They take
   # too long to run in debug mode on ARM and MIPS.
-  'fuzz-natives-part*': [PASS, ['mode == release or arch == arm or arch == android_arm or arch == mipsel', SKIP]],
+  'fuzz-natives-part*': [PASS, ['mode == release or arch == arm or arch == android_arm or arch == mipsel or arch == mipsel64', SKIP]],
 
   'big-object-literal': [PASS, ['arch == arm or arch == android_arm', SKIP]],
 
@@ -78,7 +78,7 @@
   'array-constructor': [PASS, TIMEOUT],
 
   # Very slow on ARM and MIPS, contains no architecture dependent code.
-  'unicode-case-overoptimization': [PASS, NO_VARIANTS, ['arch == arm or arch == android_arm or arch == mipsel', TIMEOUT]],
+  'unicode-case-overoptimization': [PASS, NO_VARIANTS, ['arch == arm or arch == android_arm or arch == mipsel or arch == mipsel64', TIMEOUT]],
 
   ##############################################################################
   # This test expects to reach a certain recursion depth, which may not work
@@ -235,6 +235,63 @@
   # Currently always deopt on minus zero
   'math-floor-of-div-minus-zero': [SKIP],
 }],  # 'arch == mipsel'
+
+##############################################################################
+['arch == mipsel64', {
+
+  # Slow tests which times out in debug mode.
+  'try': [PASS, ['mode == debug', SKIP]],
+  'debug-scripts-request': [PASS, ['mode == debug', SKIP]],
+  'array-constructor': [PASS, ['mode == debug', SKIP]],
+
+  # Times out often in release mode on MIPS.
+  'compiler/regress-stacktrace-methods': [PASS, PASS, ['mode == release', TIMEOUT]],
+  'array-splice': [PASS, TIMEOUT],
+
+  # Long running test.
+  'mirror-object': [PASS, TIMEOUT],
+  'string-indexof-2': [PASS, TIMEOUT],
+
+  # BUG(3251035): Timeouts in long looping crankshaft optimization
+  # tests. Skipping because having them timeout takes too long on the
+  # buildbot.
+  'compiler/alloc-number': [SKIP],
+  'compiler/array-length': [SKIP],
+  'compiler/assignment-deopt': [SKIP],
+  'compiler/deopt-args': [SKIP],
+  'compiler/inline-compare': [SKIP],
+  'compiler/inline-global-access': [SKIP],
+  'compiler/optimized-function-calls': [SKIP],
+  'compiler/pic': [SKIP],
+  'compiler/property-calls': [SKIP],
+  'compiler/recursive-deopt': [SKIP],
+  'compiler/regress-4': [SKIP],
+  'compiler/regress-funcaller': [SKIP],
+  'compiler/regress-rep-change': [SKIP],
+  'compiler/regress-arguments': [SKIP],
+  'compiler/regress-funarguments': [SKIP],
+  'compiler/regress-3249650': [SKIP],
+  'compiler/simple-deopt': [SKIP],
+  'regress/regress-490': [SKIP],
+  'regress/regress-634': [SKIP],
+  'regress/regress-create-exception': [SKIP],
+  'regress/regress-3218915': [SKIP],
+  'regress/regress-3247124': [SKIP],
+
+  # Requires bigger stack size in the Genesis and if stack size is increased,
+  # the test requires too much time to run.  However, the problem test covers
+  # should be platform-independent.
+  'regress/regress-1132': [SKIP],
+
+  # Stack manipulations in LiveEdit is not implemented for this arch.
+  'debug-liveedit-check-stack': [SKIP],
+  'debug-liveedit-stack-padding': [SKIP],
+  'debug-liveedit-restart-frame': [SKIP],
+  'debug-liveedit-double-call': [SKIP],
+
+  # Currently always deopt on minus zero
+  'math-floor-of-div-minus-zero': [SKIP],
+}],  # 'arch == mipsel64'
 
 ##############################################################################
 # Native Client uses the ARM simulator so will behave similarly to arm
