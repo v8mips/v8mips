@@ -5072,7 +5072,8 @@ void NameDictionaryLookupStub::GenerateNegativeLookup(MacroAssembler* masm,
     ASSERT_EQ(kSmiTagSize, 1);
     Register tmp = properties;
     // __ sll(scratch0, index, 1);
-    __ dsll32(scratch0, index, 0);
+    // TODO(yy) Use Macro.
+    __ dsrl(scratch0, index, 32 - kPointerSizeLog2);
     __ Daddu(tmp, properties, scratch0);
     __ ld(entity_name, FieldMemOperand(tmp, kElementsStartOffset));
 
