@@ -3530,9 +3530,8 @@ void MacroAssembler::StoreNumberToDoubleElements(Register value_reg,
   jmp(&done);
 
   bind(&maybe_nan);
-  // Could be NaN or Infinity. If fraction is not zero, it's NaN, otherwise
-  // it's an Infinity, and the non-NaN code path applies.
-  Branch(&is_nan, gt, exponent_reg, Operand(scratch1));
+  // Could be NaN, Infinity or -Infinity. If fraction is not zero, it's NaN, otherwise
+  // it's Infinity or -Infinity, and the non-NaN code path applies.
   lwu(mantissa_reg, FieldMemOperand(value_reg, HeapNumber::kMantissaOffset));
   Branch(&have_double_value, eq, mantissa_reg, Operand(zero_reg));
   bind(&is_nan);
