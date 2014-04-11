@@ -208,7 +208,7 @@ void RegExpMacroAssemblerMIPS::CheckCharacterGT(uc16 limit, Label* on_greater) {
 void RegExpMacroAssemblerMIPS::CheckAtStart(Label* on_at_start) {
   Label not_at_start;
   // Did we start the match at the start of the string at all?
-  __ ld(a0, MemOperand(frame_pointer(), kStartIndex));
+  __ lw(a0, MemOperand(frame_pointer(), kStartIndex));
   BranchOrBacktrack(&not_at_start, ne, a0, Operand(zero_reg));
 
   // If we did, are we still at the start of the input?
@@ -221,7 +221,7 @@ void RegExpMacroAssemblerMIPS::CheckAtStart(Label* on_at_start) {
 
 void RegExpMacroAssemblerMIPS::CheckNotAtStart(Label* on_not_at_start) {
   // Did we start the match at the start of the string at all?
-  __ ld(a0, MemOperand(frame_pointer(), kStartIndex));
+  __ lw(a0, MemOperand(frame_pointer(), kStartIndex));
   BranchOrBacktrack(on_not_at_start, ne, a0, Operand(zero_reg));
   // If we did, are we still at the start of the input?
   __ ld(a1, MemOperand(frame_pointer(), kInputStart));
@@ -763,7 +763,8 @@ Handle<HeapObject> RegExpMacroAssemblerMIPS::GetCode(Handle<String> source) {
       if (global()) {
         // Restart matching if the regular expression is flagged as global.
         __ ld(a0, MemOperand(frame_pointer(), kSuccessfulCaptures));
-        __ ld(a1, MemOperand(frame_pointer(), kNumOutputRegisters));
+        // TODO(yy): Do not know why, just copy from x64.
+        __ lw(a1, MemOperand(frame_pointer(), kNumOutputRegisters));
         __ ld(a2, MemOperand(frame_pointer(), kRegisterOutput));
         // Increment success counter.
         __ Daddu(a0, a0, 1);
