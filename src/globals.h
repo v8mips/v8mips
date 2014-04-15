@@ -74,6 +74,9 @@ namespace internal {
 #elif defined(__ARMEL__)
 #define V8_HOST_ARCH_ARM 1
 #define V8_HOST_ARCH_32_BIT 1
+#elif defined(__mips64)
+#define V8_HOST_ARCH_MIPS64 1
+#define V8_HOST_ARCH_64_BIT 1
 #elif defined(__MIPSEL__)
 #define V8_HOST_ARCH_MIPS 1
 #define V8_HOST_ARCH_32_BIT 1
@@ -102,12 +105,15 @@ namespace internal {
 #define V8_TARGET_ARCH_IA32 1
 #elif defined(__ARMEL__)
 #define V8_TARGET_ARCH_ARM 1
+#elif defined(__mips64)
+#define V8_TARGET_ARCH_MIPS64 1
 #elif defined(__MIPSEL__)
 #define V8_TARGET_ARCH_MIPS 1
 #else
 #error Target architecture was not detected as supported by v8
 #endif
 #endif
+
 
 // Check for supported combinations of host and target architectures.
 #if V8_TARGET_ARCH_IA32 && !V8_HOST_ARCH_IA32
@@ -122,6 +128,9 @@ namespace internal {
 #if (V8_TARGET_ARCH_MIPS && !(V8_HOST_ARCH_IA32 || V8_HOST_ARCH_MIPS))
 #error Target architecture mips is only supported on mips and ia32 host
 #endif
+#if (V8_TARGET_ARCH_MIPS64 && !(V8_HOST_ARCH_X64 || V8_HOST_ARCH_MIPS64))
+#error Target architecture mips64 is only supported on mips64 and x64 host
+#endif
 
 // Determine whether we are running in a simulated environment.
 // Setting USE_SIMULATOR explicitly from the build script will force
@@ -133,7 +142,7 @@ namespace internal {
 #if (V8_TARGET_ARCH_MIPS && !V8_HOST_ARCH_MIPS)
 #define USE_SIMULATOR 1
 #endif
-#if (V8_TARGET_ARCH_MIPS64 && !V8_HOST_ARCH_MIPS)
+#if (V8_TARGET_ARCH_MIPS64 && !V8_HOST_ARCH_MIPS64)
 #define USE_SIMULATOR 1
 #endif
 #endif

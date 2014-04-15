@@ -351,7 +351,12 @@
                     'ldflags': ['-msoft-float'],
                   }],
                   ['mips_arch_variant=="mips64r2"', {
-                    'cflags': ['-mips64r2', '-Wa,-mips64r2'],
+                    'cflags': ['-mips64r2', '-mabi=64', '-Wa,-mips64r2'],
+                    'ldflags': [
+                      '-mips64r2', '-mabi=64',
+                      '-Wl,--dynamic-linker=$(LDSO_PATH)',
+                      '-Wl,--rpath=$(LD_R_PATH)',
+                    ],
                   }],
                   ['mips_arch_variant=="loongson"', {
                     'cflags': ['-mips3', '-Wa,-mips3'],
