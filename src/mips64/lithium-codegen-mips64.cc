@@ -1313,6 +1313,17 @@ void LCodeGen::DoMathFloorOfDiv(LMathFloorOfDiv* instr) {
     Label done;
     const Register right = ToRegister(instr->right());
 
+    // TODO(yy): Register right use 32-bit to represent a negative number,
+    // so 0xfffffff represent -1, why? arm64 use ToRegister32() replace
+    // ToRegister(), should we change this like that or use macro method?
+     Label in_int_range;
+     __ Branch(&in_int_range, le, right, Operand(kMaxInt));
+     __ lui(at, 0xffff);
+     __ ori(at, at, 0xffff);
+     __ dsll32(at, at, 0);
+     __ daddu(right, right, at);
+     __ bind(&in_int_range);
+
     // On MIPS div is asynchronous - it will run in the background while we
     // check for special cases.
     __ ddiv(left, right);
