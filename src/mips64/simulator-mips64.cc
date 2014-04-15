@@ -1572,11 +1572,17 @@ void Simulator::SoftwareInterrupt(Instruction* instr) {
     int64_t arg1 = get_register(a1);
     int64_t arg2 = get_register(a2);
     int64_t arg3 = get_register(a3);
+    int64_t arg4, arg5;
 
-    int64_t* stack_pointer = reinterpret_cast<int64_t*>(get_register(sp));
-    // Args 4 and 5 are on the stack after the reserved space for args 0..3.
-    int64_t arg4 = stack_pointer[4];
-    int64_t arg5 = stack_pointer[5];
+    if (kMipsAbi == kN64) {
+      arg4 = get_register(t0);  // Abi n64 register a4.
+      arg5 = get_register(t1);  // Abi n64 register a5.
+    } else {  // Abi O32.
+      int64_t* stack_pointer = reinterpret_cast<int64_t*>(get_register(sp));
+      // Args 4 and 5 are on the stack after the reserved space for args 0..3.
+      arg4 = stack_pointer[4];
+      arg5 = stack_pointer[5];
+    }
 // printf("arg0 : 0x%llx  arg1 : 0x%llx  arg2 : 0x%llx  arg3 : 0x%llx  arg4 : 0x%llx  arg5 : 0x%llx\n", arg0, arg1, arg2, arg3, arg4, arg5);
     bool fp_call =
          (redirection->type() == ExternalReference::BUILTIN_FP_FP_CALL) ||
@@ -3125,29 +3131,43 @@ void Simulator::CallInternal(byte* entry) {
 
 
 int64_t Simulator::Call(byte* entry, int argument_count, ...) {
+  const int kRegisterPassedArguments = (kMipsAbi == kN64) ? 8 : 4;
   va_list parameters;
   va_start(parameters, argument_count);
   // Set up arguments.
 
-  // First four arguments passed in registers.
+  // First four arguments passed in registers in both ABI's.
   ASSERT(argument_count >= 4);
   set_register(a0, va_arg(parameters, int64_t));
   set_register(a1, va_arg(parameters, int64_t));
   set_register(a2, va_arg(parameters, int64_t));
   set_register(a3, va_arg(parameters, int64_t));
 
+  if (kMipsAbi == kN64) {
+    // Up to eight arguments passed in registers in N64 ABI.
+    // TODO(plind): N64 ABI calls these regs a4 - a7. Clarify this.
+    if (argument_count >= 5) set_register(t0, va_arg(parameters, int64_t));
+    if (argument_count >= 6) set_register(t1, va_arg(parameters, int64_t));
+    if (argument_count >= 7) set_register(t2, va_arg(parameters, int64_t));
+    if (argument_count >= 8) set_register(t3, va_arg(parameters, int64_t));
+  }
+
   // Remaining arguments passed on stack.
   int64_t original_stack = get_register(sp);
   // Compute position of stack on entry to generated code.
-  int64_t entry_stack = (original_stack - (argument_count - 4) * sizeof(int64_t)
-                                    - kCArgsSlotsSize);
+  int stack_args_count = (argument_count > kRegisterPassedArguments) ?
+                         (argument_count - kRegisterPassedArguments) : 0;
+  int stack_args_size = stack_args_count * sizeof(int64_t) + kCArgsSlotsSize;
+  int64_t entry_stack = original_stack - stack_args_size;
+
   if (OS::ActivationFrameAlignment() != 0) {
     entry_stack &= -OS::ActivationFrameAlignment();
   }
   // Store remaining arguments on stack, from low to high memory.
   intptr_t* stack_argument = reinterpret_cast<intptr_t*>(entry_stack);
-  for (int i = 4; i < argument_count; i++) {
-    stack_argument[i - 4 + kCArgSlotCount] = va_arg(parameters, int64_t);
+  for (int i = kRegisterPassedArguments; i < argument_count; i++) {
+    int stack_index = i - kRegisterPassedArguments + kCArgSlotCount;
+    stack_argument[stack_index] = va_arg(parameters, int64_t);
   }
   va_end(parameters);
   set_register(sp, entry_stack);

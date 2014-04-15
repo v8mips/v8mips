@@ -42,8 +42,10 @@
 enum ArchVariants {
   kMips32r2,
   kMips32r1,
-  kLoongson
+  kLoongson,
+  kMips64r2  // TODO(plind): currently using kMips32r2 for m64 :(
 };
+
 
 #ifdef _MIPS_ARCH_MIPS32R2
   static const ArchVariants kArchVariant = kMips32r2;
@@ -56,6 +58,29 @@ enum ArchVariants {
 #endif
 
 
+// TODO(plind): consider deriving ABI from compiler flags or build system.
+
+// ABI-dependent definitions are made with #define in simulator-mips64.h,
+// so the ABI choice must be available to the pre-processor. However, in all
+// other cases, we should use the enum AbiVariants with normal if statements.
+
+#define MIPS_ABI_N64 1
+// #define MIPS_ABI_O32 1
+
+// The only supported Abi's are O32, and n64.
+enum AbiVariants {
+  kO32,
+  kN64  // Use upper case N for 'n64' ABI to conform to style standard.
+};
+
+#ifdef MIPS_ABI_N64
+static const AbiVariants kMipsAbi = kN64;
+#else
+static const AbiVariants kMipsAbi = kO32;
+#endif
+
+
+// TODO(plind): consider renaming these ...
 #if(defined(__mips_hard_float) && __mips_hard_float != 0)
 // Use floating-point coprocessor instructions. This flag is raised when
 // -mhard-float is passed to the compiler.
@@ -68,6 +93,7 @@ const bool IsMipsSoftFloatABI = true;
 #else
 const bool IsMipsSoftFloatABI = true;
 #endif
+
 
 
 // Defines constants and accessor classes to assemble, disassemble and
@@ -853,12 +879,11 @@ class Instruction {
 // MIPS assembly various constants.
 
 // C/C++ argument slots size.
-const int kCArgSlotCount = 4;
-const int kCArgsSlotsSize = kCArgSlotCount * Instruction::kInstrSize *2;
-// JS argument slots size.
-const int kJSArgsSlotsSize = 0 * Instruction::kInstrSize;
-// Assembly builtins argument slots size.
-const int kBArgsSlotsSize = 0 * Instruction::kInstrSize;
+const int kCArgSlotCount = (kMipsAbi == kN64) ? 0 : 4;
+
+// TODO(plind): below should be based on kPointerSize
+// TODO(plind): find all usages and remove the needless instructions for n64.
+const int kCArgsSlotsSize = kCArgSlotCount * Instruction::kInstrSize * 2;
 
 const int kBranchReturnOffset = 2 * Instruction::kInstrSize;
 

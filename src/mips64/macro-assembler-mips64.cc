@@ -5206,14 +5206,15 @@ void MacroAssembler::JumpIfInstanceTypeIsNotSequentialAscii(Register type,
 }
 
 
-static const int kRegisterPassedArguments = 4;
+static const int kRegisterPassedArguments = (kMipsAbi == kN64) ? 8 : 4;
 
 int MacroAssembler::CalculateStackPassedWords(int num_reg_arguments,
                                               int num_double_arguments) {
   int stack_passed_words = 0;
   num_reg_arguments += 2 * num_double_arguments;
 
-  // Up to four simple arguments are passed in registers a0..a3.
+  // O32: Up to four simple arguments are passed in registers a0..a3.
+  // N64: Up to eight simple arguments are passed in registers a0..a7.
   if (num_reg_arguments > kRegisterPassedArguments) {
     stack_passed_words += num_reg_arguments - kRegisterPassedArguments;
   }

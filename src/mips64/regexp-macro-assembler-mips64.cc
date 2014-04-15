@@ -60,20 +60,24 @@ namespace internal {
  * The remaining registers are free for computations.
  * Each call to a public method should retain this convention.
  *
- * The stack will have the following structure:
+ * TODO(plind): O32 documented here with intent of having single 32/64 codebase
+ *              in the future.
  *
- *  - fp[64]  Isolate* isolate   (address of the current isolate)
- *  - fp[60]  direct_call  (if 1, direct call from JavaScript code,
+ * The O32 stack will have the following structure:
+ *
+ *  - fp[76]  Isolate* isolate   (address of the current isolate)
+ *  - fp[72]  direct_call  (if 1, direct call from JavaScript code,
  *                          if 0, call through the runtime system).
- *  - fp[56]  stack_area_base (High end of the memory area to use as
+ *  - fp[68]  stack_area_base (High end of the memory area to use as
  *                             backtracking stack).
- *  - fp[52]  capture array size (may fit multiple sets of matches)
- *  - fp[48]  int* capture_array (int[num_saved_registers_], for output).
- *  - fp[44]  secondary link/return address used by native call.
+ *  - fp[64]  capture array size (may fit multiple sets of matches)
+ *  - fp[60]  int* capture_array (int[num_saved_registers_], for output).
+ *  - fp[44..59]  MIPS O32 four argument slots
+ *  - fp[40]  secondary link/return address used by native call.
  *  --- sp when called ---
- *  - fp[40]  return address      (lr).
- *  - fp[36]  old frame pointer   (r11).
- *  - fp[0..32]  backup of registers s0..s7.
+ *  - fp[36]  return address      (lr).
+ *  - fp[32]  old frame pointer   (r11).
+ *  - fp[0..31]  backup of registers s0..s7.
  *  --- frame pointer ----
  *  - fp[-4]  end of input       (address of end of string).
  *  - fp[-8]  start of input     (address of first character in string).
@@ -86,6 +90,36 @@ namespace internal {
  *  - fp[-28] At start (if 1, we are starting at the start of the
  *    string, otherwise 0)
  *  - fp[-32] register 0         (Only positions must be stored in the first
+ *  -         register 1          num_saved_registers_ registers)
+ *  -         ...
+ *  -         register num_registers-1
+ *  --- sp ---
+ *
+ *
+ * The N64 stack will have the following structure:
+ *
+ *  - fp[88]  Isolate* isolate   (address of the current isolate)               kIsolate
+ *  - fp[80]  secondary link/return address used by exit frame on native call.  kSecondaryReturnAddress
+                                                                                kStackFrameHeader
+ *  --- sp when called ---
+ *  - fp[72]  ra                 Return from RegExp code (ra).                  kReturnAddress
+ *  - fp[64]  s9, old-fp         Old fp, callee saved(s9).
+ *  - fp[0..63]  s0..s7          Callee-saved registers s0..s7.
+ *  --- frame pointer ----
+ *  - fp[-8]  direct_call        (1 = direct call from JS, 0 = from runtime)    kDirectCall
+ *  - fp[-16] stack_base         (Top of backtracking stack).                   kStackHighEnd
+ *  - fp[-24] capture array size (may fit multiple sets of matches)             kNumOutputRegisters
+ *  - fp[-32] int* capture_array (int[num_saved_registers_], for output).       kRegisterOutput
+ *  - fp[-40] end of input       (address of end of string).                    kInputEnd
+ *  - fp[-48] start of input     (address of first character in string).        kInputStart
+ *  - fp[-56] start index        (character index of start).                    kStartIndex
+ *  - fp[-64] void* input_string (location of a handle containing the string).  kInputString
+ *  - fp[-72] success counter    (only for global regexps to count matches).    kSuccessfulCaptures
+ *  - fp[-80] Offset of location before start of input (effectively character   kInputStartMinusOne
+ *            position -1). Used to initialize capture registers to a
+ *            non-position.
+ *  --------- The following output registers are 32-bit values. ---------
+ *  - fp[-88] register 0         (Only positions must be stored in the first    kRegisterZero
  *  -         register 1          num_saved_registers_ registers)
  *  -         ...
  *  -         register num_registers-1
@@ -105,7 +139,9 @@ namespace internal {
  *              Address secondary_return_address,  // Only used by native call.
  *              int* capture_output_array,
  *              byte* stack_area_base,
- *              bool direct_call = false)
+ *              bool direct_call = false,
+ *              void* return_address,
+ *              Isolate* isolate);
  * The call is performed by NativeRegExpMacroAssembler::Execute()
  * (in regexp-macro-assembler.cc) via the CALL_GENERATED_REGEXP_CODE macro
  * in mips/simulator-mips.h.
@@ -615,13 +651,21 @@ Handle<HeapObject> RegExpMacroAssemblerMIPS::GetCode(Handle<String> source) {
     // Start new stack frame.
     // Store link register in existing stack-cell.
     // Order here should correspond to order of offset constants in header file.
+    // TODO(plind): we save s0..s7, but ONLY use s3 here - use the regs or dont save.
     RegList registers_to_retain = s0.bit() | s1.bit() | s2.bit() |
         s3.bit() | s4.bit() | s5.bit() | s6.bit() | s7.bit() | fp.bit();
     RegList argument_registers = a0.bit() | a1.bit() | a2.bit() | a3.bit();
+
+    if (kMipsAbi == kN64) {
+      // TODO(plind): Should probably alias a4-a7, for clarity.
+      argument_registers |= t0.bit() | t1.bit() | t2.bit() | t3.bit();
+    }
+
     __ MultiPush(argument_registers | registers_to_retain | ra.bit());
     // Set frame pointer in space for it if this is not a direct call
     // from generated code.
-    __ Daddu(frame_pointer(), sp, Operand(4 * kPointerSize));
+    // TODO(plind): this 8 is the # of argument regs, should have definition.
+    __ Daddu(frame_pointer(), sp, Operand(8 * kPointerSize));
     __ mov(a0, zero_reg);
     __ push(a0);  // Make room for success counter and initialize it to 0.
     __ push(a0);  // Make room for "position - 1" constant (value irrelevant).
@@ -1343,6 +1387,33 @@ void RegExpMacroAssemblerMIPS::LoadCurrentCharacterUnchecked(int cp_offset,
   }
 }
 
+
+// TODO(plind): remove this debug function.
+
+#define PR_FRAME_CONST(K) printf("Frame constant %s: %d\n", #K, K)
+
+void RegExpMacroAssemblerMIPS::print_regexp_frame_constants() {
+  PrintF("regexp frame constants for %d\n", (kMipsAbi == kN64) ? "n64" : "O32");
+  PR_FRAME_CONST(kFramePointer);
+  PR_FRAME_CONST(kStoredRegisters);
+  PR_FRAME_CONST(kReturnAddress);
+  PR_FRAME_CONST(kSecondaryReturnAddress);
+  PR_FRAME_CONST(kStackFrameHeader);
+  PR_FRAME_CONST(kRegisterOutput);
+  PR_FRAME_CONST(kNumOutputRegisters);
+  PR_FRAME_CONST(kStackHighEnd);
+  PR_FRAME_CONST(kDirectCall);
+  PR_FRAME_CONST(kIsolate);
+  PR_FRAME_CONST(kInputEnd);
+  PR_FRAME_CONST(kInputStart);
+  PR_FRAME_CONST(kStartIndex);
+  PR_FRAME_CONST(kInputString);
+  PR_FRAME_CONST(kSuccessfulCaptures);
+  PR_FRAME_CONST(kInputStartMinusOne);
+  PR_FRAME_CONST(kRegisterZero);
+}
+
+#undef PR_FRAME_CONST
 
 #undef __
 

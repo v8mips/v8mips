@@ -1766,15 +1766,17 @@ void JSEntryStub::GenerateBody(MacroAssembler* masm, bool is_construct) {
   Label invoke, handler_entry, exit;
   Isolate* isolate = masm->isolate();
 
+  // TODO(plind): unify the ABI description here.
   // Registers:
   // a0: entry address
   // a1: function
   // a2: receiver
   // a3: argc
-  //
+  // t0 (a4): on mips64
+
   // Stack:
-  // 4 args slots
-  // args
+  // 0 arg slots on mips64 (4 args slots on mips)
+  // args -- in a4/t0 on mips64, on stack on mips
 
   ProfileEntryHookStub::MaybeCallEntryHook(masm);
 
@@ -1787,11 +1789,17 @@ void JSEntryStub::GenerateBody(MacroAssembler* masm, bool is_construct) {
   __ Move(kDoubleRegZero, 0.0);
 
   // Load argv in s0 register.
-  int offset_to_argv = (kNumCalleeSaved + 1) * kPointerSize;
-  offset_to_argv += kNumCalleeSavedFPU * kDoubleSize;
+  if (kMipsAbi == kN64) {
+    Register a4 = t0;
+    __ mov(s0, a4);  // 5th parameter in mips64 a4 (t0) register.
+  } else {  // Abi O32.
+    // 5th parameter on stack for O32 abi.
+    int offset_to_argv = (kNumCalleeSaved + 1) * kPointerSize;
+    offset_to_argv += kNumCalleeSavedFPU * kDoubleSize;
+    __ ld(s0, MemOperand(sp, offset_to_argv + kCArgsSlotsSize));
+  }
 
   __ InitializeRootRegister();
-  __ ld(s0, MemOperand(sp, offset_to_argv + kCArgsSlotsSize));
 
   // We build an EntryFrame.
   __ li(t3, Operand(-1));  // Push a bad frame pointer to fail if it is used.
@@ -1818,7 +1826,7 @@ void JSEntryStub::GenerateBody(MacroAssembler* masm, bool is_construct) {
   // context slot       |
   // bad fp (0xff...f)  |
   // callee saved registers + ra
-  // 4 args slots
+  // [ O32: 4 args slots]
   // args
 
   // If this is the outermost JS call, set js_entry_sp value.
@@ -1883,7 +1891,7 @@ void JSEntryStub::GenerateBody(MacroAssembler* masm, bool is_construct) {
   // handler frame
   // entry frame
   // callee saved registers + ra
-  // 4 args slots
+  // [ O32: 4 args slots]
   // args
 
   if (is_construct) {
@@ -2763,7 +2771,7 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
   __ Branch(&runtime, hi, a2, Operand(Smi::FromInt(temp)));
 
   // Reset offset for possibly sliced string.
-  __ mov(t0, zero_reg);
+  __ mov(t4, zero_reg);
   __ ld(subject, MemOperand(sp, kSubjectOffset));
   __ JumpIfSmi(subject, &runtime);
   __ mov(a3, subject);  // Make a copy of the original subject string.
@@ -2870,7 +2878,7 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
 
   // Isolates: note we add an additional parameter here (isolate pointer).
   const int kRegExpExecuteArguments = 9;
-  const int kParameterRegisters = 4;
+  const int kParameterRegisters = (kMipsAbi == kN64) ? 8 : 4;
   __ EnterExitFrame(false, kRegExpExecuteArguments - kParameterRegisters);
 
   // Stack pointer now points to cell where return address is to be written.
@@ -2880,43 +2888,78 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
   // allocating space for the c argument slots, we don't need to calculate
   // that into the argument positions on the stack. This is how the stack will
   // look (sp meaning the value of sp at this moment):
-  // [sp + 5] - Argument 9
-  // [sp + 4] - Argument 8
-  // [sp + 3] - Argument 7
-  // [sp + 2] - Argument 6
-  // [sp + 1] - Argument 5
-  // [sp + 0] - saved ra
+  // Abi n64:
+  //   [sp + 1] - Argument 9
+  //   [sp + 0] - saved ra
+  // Abi O32:
+  //   [sp + 5] - Argument 9
+  //   [sp + 4] - Argument 8
+  //   [sp + 3] - Argument 7
+  //   [sp + 2] - Argument 6
+  //   [sp + 1] - Argument 5
+  //   [sp + 0] - saved ra
 
-  // Argument 9: Pass current isolate address.
-  // CFunctionArgumentOperand handles MIPS stack argument slots.
-  __ li(a0, Operand(ExternalReference::isolate_address(isolate)));
-  __ sd(a0, MemOperand(sp, 5 * kPointerSize));
+  if ( kMipsAbi == kN64) {
+    // Argument 9: Pass current isolate address.
+    __ li(a0, Operand(ExternalReference::isolate_address(isolate)));
+    __ sd(a0, MemOperand(sp, 1 * kPointerSize));
 
-  // Argument 8: Indicate that this is a direct call from JavaScript.
-  __ li(a0, Operand(1));
-  __ sd(a0, MemOperand(sp, 4 * kPointerSize));
+    Register a4 = t0;  // Use N64 Abi register names.
+    Register a5 = t1;
+    Register a6 = t2;
+    Register a7 = t3;
 
-  // Argument 7: Start (high end) of backtracking stack memory area.
-  __ li(a0, Operand(address_of_regexp_stack_memory_address));
-  __ ld(a0, MemOperand(a0, 0));
-  __ li(a2, Operand(address_of_regexp_stack_memory_size));
-  __ ld(a2, MemOperand(a2, 0));
-  __ daddu(a0, a0, a2);
-  __ sd(a0, MemOperand(sp, 3 * kPointerSize));
+    // Argument 8: Indicate that this is a direct call from JavaScript.
+    __ li(a7, Operand(1));
 
-  // Argument 6: Set the number of capture registers to zero to force global
-  // regexps to behave as non-global.  This does not affect non-global regexps.
-  __ mov(a0, zero_reg);
-  __ sd(a0, MemOperand(sp, 2 * kPointerSize));
+    // Argument 7: Start (high end) of backtracking stack memory area.
+    __ li(a0, Operand(address_of_regexp_stack_memory_address));
+    __ ld(a0, MemOperand(a0, 0));
+    __ li(a2, Operand(address_of_regexp_stack_memory_size));
+    __ ld(a2, MemOperand(a2, 0));
+    __ daddu(a6, a0, a2);
 
-  // Argument 5: static offsets vector buffer.
-  __ li(a0, Operand(
-        ExternalReference::address_of_static_offsets_vector(isolate)));
-  __ sd(a0, MemOperand(sp, 1 * kPointerSize));
+    // Argument 6: Set the number of capture registers to zero to force global
+    // regexps to behave as non-global.  This does not affect non-global regexps.
+    __ mov(a5, zero_reg);
+
+    // Argument 5: static offsets vector buffer.
+    __ li(a4, Operand(
+          ExternalReference::address_of_static_offsets_vector(isolate)));
+  } else {  // O32.
+    ASSERT(kMipsAbi == kO32);
+
+    // Argument 9: Pass current isolate address.
+    // CFunctionArgumentOperand handles MIPS stack argument slots.
+    __ li(a0, Operand(ExternalReference::isolate_address(isolate)));
+    __ sd(a0, MemOperand(sp, 5 * kPointerSize));
+
+    // Argument 8: Indicate that this is a direct call from JavaScript.
+    __ li(a0, Operand(1));
+    __ sd(a0, MemOperand(sp, 4 * kPointerSize));
+
+    // Argument 7: Start (high end) of backtracking stack memory area.
+    __ li(a0, Operand(address_of_regexp_stack_memory_address));
+    __ ld(a0, MemOperand(a0, 0));
+    __ li(a2, Operand(address_of_regexp_stack_memory_size));
+    __ ld(a2, MemOperand(a2, 0));
+    __ daddu(a0, a0, a2);
+    __ sd(a0, MemOperand(sp, 3 * kPointerSize));
+
+    // Argument 6: Set the number of capture registers to zero to force global
+    // regexps to behave as non-global.  This does not affect non-global regexps.
+    __ mov(a0, zero_reg);
+    __ sd(a0, MemOperand(sp, 2 * kPointerSize));
+
+    // Argument 5: static offsets vector buffer.
+    __ li(a0, Operand(
+          ExternalReference::address_of_static_offsets_vector(isolate)));
+    __ sd(a0, MemOperand(sp, 1 * kPointerSize));
+  }
 
   // For arguments 4 and 3 get string length, calculate start of string data
   // and calculate the shift of the index (0 for ASCII and 1 for two byte).
-  __ Daddu(t2, subject, Operand(SeqString::kHeaderSize - kHeapObjectTag));
+  __ Daddu(t6, subject, Operand(SeqString::kHeaderSize - kHeapObjectTag));
   __ Xor(a3, a3, Operand(1));  // 1 for 2-byte str, 0 for 1-byte.
   // Load the length from the original subject string from the previous stack
   // frame. Therefore we have to use fp, which points exactly to two pointer
@@ -2927,16 +2970,16 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
   // Argument 4, a3: End of string data
   // Argument 3, a2: Start of string data
   // Prepare start and end index of the input.
-  __ dsllv(t1, t0, a3);
-  __ daddu(t0, t2, t1);
-  __ dsllv(t1, a1, a3);
-  __ daddu(a2, t0, t1);
+  __ dsllv(t5, t4, a3);
+  __ daddu(t4, t6, t5);
+  __ dsllv(t5, a1, a3);
+  __ daddu(a2, t4, t5);
 
-  __ ld(t2, FieldMemOperand(subject, String::kLengthOffset));
-  // __ sra(t2, t2, kSmiTagSize);
-  __ dsra32(t2, t2, 0);
-  __ dsllv(t1, t2, a3);
-  __ daddu(a3, t0, t1);
+  __ ld(t6, FieldMemOperand(subject, String::kLengthOffset));
+  // __ sra(t2, t2, kSmiTagSize);  // using t6 for t2 below.
+  __ dsra32(t6, t6, 0);
+  __ dsllv(t5, t6, a3);
+  __ daddu(a3, t4, t5);
   // Argument 2 (a1): Previous index.
   // Already there
 
@@ -3122,10 +3165,10 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
   __ Branch(&runtime, ne, at, Operand(zero_reg));
 
   // (9) Sliced string.  Replace subject with parent.  Go to (4).
-  // Load offset into t0 and replace subject string with parent.
-  __ ld(t0, FieldMemOperand(subject, SlicedString::kOffsetOffset));
-  // __ sra(t0, t0, kSmiTagSize);
-  __ dsra32(t0, t0, 0);
+  // Load offset into t4 and replace subject string with parent.
+  __ ld(t4, FieldMemOperand(subject, SlicedString::kOffsetOffset));
+  // __ sra(t4, t4, kSmiTagSize);
+  __ dsra32(t4, t4, 0);
   __ ld(subject, FieldMemOperand(subject, SlicedString::kParentOffset));
   __ jmp(&check_underlying);  // Go to (4).
 #endif  // V8_INTERPRETED_REGEXP
@@ -5009,7 +5052,7 @@ void DirectCEntryStub::Generate(MacroAssembler* masm) {
   // so they handle stack restoring and we don't have to do that here.
   // Any caller of DirectCEntryStub::GenerateCall must take care of dropping
   // kCArgsSlotsSize stack space after the call.
-  __ Dsubu(sp, sp, Operand(kCArgsSlotsSize));
+  __ daddiu(sp, sp, -kCArgsSlotsSize);
   // Place the return address on the stack, making the call
   // GC safe. The RegExp backend also relies on this.
   __ sd(ra, MemOperand(sp, kCArgsSlotsSize));
