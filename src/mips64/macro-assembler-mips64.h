@@ -1469,6 +1469,23 @@ class MacroAssembler: public Assembler {
   void AssertIsRoot(Register reg, Heap::RootListIndex index);
 
   // ---------------------------------------------------------------------------
+  // Integer utilities
+
+  void SignExtensionInt32(Register result, Register value, Register scratch = at) {
+     // TODO(yy): assert high 32-bit of value is 0x00000000.
+     Label in_int_range;
+     if (!value.is(result)) {
+       mov(result, value);
+     }
+     Branch(&in_int_range, le, result, Operand(kMaxInt));
+     lui(scratch, 0xffff);
+     ori(scratch, scratch, 0xffff);
+     dsll32(scratch, scratch, 0);
+     daddu(result, result, scratch);
+     bind(&in_int_range);
+  }
+
+  // ---------------------------------------------------------------------------
   // HeapNumber utilities.
 
   void JumpIfNotHeapNumber(Register object,

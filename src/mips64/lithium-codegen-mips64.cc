@@ -1072,6 +1072,7 @@ void LCodeGen::DoModI(LModI* instr) {
     // Note: The code below even works when right contains kMinInt.
     int32_t divisor = Abs(right->GetInteger32Constant());
 
+    __ SignExtensionInt32(left_reg, left_reg);
     Label left_is_not_negative, done;
     if (left->CanBeNegative()) {
       __ Branch(left_reg.is(result_reg) ? PROTECT : USE_DELAY_SLOT,
@@ -1093,6 +1094,7 @@ void LCodeGen::DoModI(LModI* instr) {
     const Register left_reg = ToRegister(instr->left());
     const Register result_reg = ToRegister(instr->result());
 
+    __ SignExtensionInt32(left_reg, left_reg);
     // div runs in the background while we check for special cases.
     Register right_reg = EmitLoadRegister(instr->right(), scratch);
     __ ddiv(left_reg, right_reg);
@@ -1235,6 +1237,7 @@ void LCodeGen::DoDivI(LDivI* instr) {
   const Register right = ToRegister(instr->right());
   const Register result = ToRegister(instr->result());
 
+  __ SignExtensionInt32(left, left);
   // On MIPS div is asynchronous - it will run in the background while we
   // check for special cases.
   __ ddiv(left, right);
@@ -1315,14 +1318,8 @@ void LCodeGen::DoMathFloorOfDiv(LMathFloorOfDiv* instr) {
 
     // TODO(yy): Register right use 32-bit to represent a negative number,
     // so 0xfffffff represent -1, why? arm64 use ToRegister32() replace
-    // ToRegister(), should we change this like that or use macro method?
-     Label in_int_range;
-     __ Branch(&in_int_range, le, right, Operand(kMaxInt));
-     __ lui(at, 0xffff);
-     __ ori(at, at, 0xffff);
-     __ dsll32(at, at, 0);
-     __ daddu(right, right, at);
-     __ bind(&in_int_range);
+    // ToRegister(), should we change this like that?
+    __ SignExtensionInt32(right, right);
 
     // On MIPS div is asynchronous - it will run in the background while we
     // check for special cases.
