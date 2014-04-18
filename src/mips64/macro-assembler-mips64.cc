@@ -3513,7 +3513,7 @@ void MacroAssembler::StoreNumberToDoubleElements(Register value_reg,
   // Check for nan: all NaN values have a value greater (signed) than 0x7ff00000
   // in the exponent.
   li(scratch1, Operand(kNaNOrInfinityLowerBoundUpper32));
-  lwu(exponent_reg, FieldMemOperand(value_reg, HeapNumber::kExponentOffset));
+  lw(exponent_reg, FieldMemOperand(value_reg, HeapNumber::kExponentOffset));
   Branch(&maybe_nan, ge, exponent_reg, Operand(scratch1));
 
   lwu(mantissa_reg, FieldMemOperand(value_reg, HeapNumber::kMantissaOffset));
@@ -3532,7 +3532,7 @@ void MacroAssembler::StoreNumberToDoubleElements(Register value_reg,
   bind(&maybe_nan);
   // Could be NaN, Infinity or -Infinity. If fraction is not zero, it's NaN, otherwise
   // it's Infinity or -Infinity, and the non-NaN code path applies.
-  lwu(mantissa_reg, FieldMemOperand(value_reg, HeapNumber::kMantissaOffset));
+  lw(mantissa_reg, FieldMemOperand(value_reg, HeapNumber::kMantissaOffset));
   Branch(&have_double_value, eq, mantissa_reg, Operand(zero_reg));
   bind(&is_nan);
   // Load canonical NaN for storing into the double array.
@@ -4021,7 +4021,9 @@ void MacroAssembler::TailCallStub(CodeStub* stub) {
 
 
 static int AddressOffset(ExternalReference ref0, ExternalReference ref1) {
-  return ref0.address() - ref1.address();
+  int64_t offset = (ref0.address() - ref1.address());
+  ASSERT(static_cast<int>(offset) == offset);
+  return static_cast<int>(offset);
 }
 
 

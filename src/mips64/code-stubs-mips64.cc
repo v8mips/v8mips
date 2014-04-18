@@ -5659,8 +5659,8 @@ void ProfileEntryHookStub::Generate(MacroAssembler* masm) {
   }
 
 #if defined(V8_HOST_ARCH_MIPS)
-  int32_t entry_hook =
-      reinterpret_cast<int32_t>(masm->isolate()->function_entry_hook());
+  int64_t entry_hook =
+      reinterpret_cast<int64_t>(masm->isolate()->function_entry_hook());
   __ li(at, Operand(entry_hook));
 #else
   // Under the simulator we need to indirect the entry hook through a

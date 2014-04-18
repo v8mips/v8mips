@@ -2290,7 +2290,7 @@ void LCodeGen::DoCompareNumericAndBranch(LCompareNumericAndBranch* instr) {
         } else {
           cmp_left = ToRegister(left);
           // cmp_right = Operand(value);
-          __ li(cmp_right, Operand(value));
+          __ li(cmp_right, Operand(value), CONSTANT_SIZE);
         }
       } else if (left->IsConstantOperand()) {
         int32_t value = ToInteger32(LConstantOperand::cast(left));
@@ -2301,7 +2301,7 @@ void LCodeGen::DoCompareNumericAndBranch(LCompareNumericAndBranch* instr) {
         } else {
           cmp_left = ToRegister(right);
           // cmp_right = Operand(value);
-          __ li(cmp_right, Operand(value));
+          __ li(cmp_right, Operand(value), CONSTANT_SIZE);
         }
         // We transposed the operands. Reverse the condition.
         cond = ReverseCondition(cond);
