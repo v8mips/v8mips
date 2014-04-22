@@ -1370,6 +1370,7 @@ void LCodeGen::DoMulI(LMulI* instr) {
   bool overflow = instr->hydrogen()->CheckFlag(HValue::kCanOverflow);
 
   if (right_op->IsConstantOperand()) {
+     __ SignExtensionInt32(left, left);
     int32_t constant = ToInteger32(LConstantOperand::cast(right_op));
 
     if (bailout_on_minus_zero && (constant < 0)) {
