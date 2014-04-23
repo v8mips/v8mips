@@ -2535,7 +2535,7 @@ void LCodeGen::DoGetCachedArrayIndex(LGetCachedArrayIndex* instr) {
 
   __ AssertString(input);
 
-  __ ld(result, FieldMemOperand(input, String::kHashFieldOffset));
+  __ lwu(result, FieldMemOperand(input, String::kHashFieldOffset));
   __ IndexFromHash(result, result);
 }
 
@@ -2545,7 +2545,7 @@ void LCodeGen::DoHasCachedArrayIndexAndBranch(
   Register input = ToRegister(instr->value());
   Register scratch = scratch0();
 
-  __ ld(scratch,
+  __ lwu(scratch,
          FieldMemOperand(input, String::kHashFieldOffset));
   __ And(at, scratch, Operand(String::kContainsCachedArrayIndexMask));
   EmitBranch(instr, eq, at, Operand(zero_reg));

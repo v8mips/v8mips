@@ -3925,7 +3925,7 @@ void FullCodeGenerator::EmitHasCachedArrayIndex(CallRuntime* expr) {
   context()->PrepareTest(&materialize_true, &materialize_false,
                          &if_true, &if_false, &fall_through);
 
-  __ ld(a0, FieldMemOperand(v0, String::kHashFieldOffset));
+  __ lwu(a0, FieldMemOperand(v0, String::kHashFieldOffset));
   __ And(a0, a0, Operand(String::kContainsCachedArrayIndexMask));
 
   PrepareForBailoutBeforeSplit(expr, true, if_true, if_false);
@@ -3942,7 +3942,7 @@ void FullCodeGenerator::EmitGetCachedArrayIndex(CallRuntime* expr) {
 
   __ AssertString(v0);
 
-  __ ld(v0, FieldMemOperand(v0, String::kHashFieldOffset));
+  __ lwu(v0, FieldMemOperand(v0, String::kHashFieldOffset));
   __ IndexFromHash(v0, v0);
 
   context()->Plug(v0);
