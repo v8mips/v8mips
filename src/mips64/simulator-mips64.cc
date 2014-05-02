@@ -2255,6 +2255,8 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
           FCSR_ = registers_[rt_reg];
           break;
         case MTC1:
+          // Hardware writes upper 32-bits to zero on mtc1.
+          set_fpu_register_hi_word(fs_reg, 0);
           set_fpu_register_word(fs_reg, registers_[rt_reg]);
           break;
         case DMTC1:
