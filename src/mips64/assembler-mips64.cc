@@ -1470,7 +1470,7 @@ void Assembler::LoadRegPlusOffsetToAt(const MemOperand& src) {
   ASSERT(is_int32(src.offset_));
   lui(at, (src.offset_ >> kLuiShift) & kImm16Mask);
   ori(at, at, src.offset_ & kImm16Mask);  // Load 32-bit offset.
-  addu(at, at, src.rm());  // Add base register.
+  daddu(at, at, src.rm());  // Add base register.
 }
 
 
