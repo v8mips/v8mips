@@ -1259,7 +1259,8 @@ void Simulator::TraceRegWr(int64_t value) {
 // TODO(plind): consider making icount_ printing a flag option.
 void Simulator::TraceMemRd(int64_t addr, int64_t value) {
   if (::v8::internal::FLAG_trace_sim) {
-    OS::SNPrintF(trace_buf_, "%016lx <-- [%016lx]    (%d)", value, addr, icount_);
+    OS::SNPrintF(trace_buf_, "%016lx <-- [%016lx]    (%ld)",
+                 value, addr, icount_);
   }
 }
 
@@ -1280,7 +1281,8 @@ void Simulator::TraceMemWr(int64_t addr, int64_t value, TraceType t) {
                      static_cast<int32_t>(value), addr);
         break;
       case DWORD:
-        OS::SNPrintF(trace_buf_, "%016lx --> [%016lx]    (%d)", value, addr, icount_);
+        OS::SNPrintF(trace_buf_, "%016lx --> [%016lx]    (%ld)",
+                     value, addr, icount_);
         break;
     }
   }
@@ -1792,7 +1794,7 @@ bool Simulator::IsWatchpoint(uint64_t code) {
 void Simulator::PrintWatchpoint(uint64_t code) {
   MipsDebugger dbg(this);
   ++break_count_;
-  PrintF("\n---- break %ld marker: %3d  (instr count: %8d) ----------"
+  PrintF("\n---- break %ld marker: %3d  (instr count: %8ld) ----------"
          "----------------------------------",
          code, break_count_, icount_);
   dbg.PrintAllRegs();  // Print registers and continue running.
@@ -3038,7 +3040,7 @@ void Simulator::Execute() {
     while (program_counter != end_sim_pc) {
       Instruction* instr = reinterpret_cast<Instruction*>(program_counter);
       icount_++;
-      if (icount_ == ::v8::internal::FLAG_trace_sim_at) {
+      if (icount_ == static_cast<int64_t>(::v8::internal::FLAG_trace_sim_at)) {
         ::v8::internal::FLAG_trace_sim = true;
       }
       InstructionDecode(instr);
@@ -3053,7 +3055,7 @@ void Simulator::Execute() {
       if (icount_ == ::v8::internal::FLAG_trace_sim_at) {
         ::v8::internal::FLAG_trace_sim = true;
       }
-      if (icount_ == ::v8::internal::FLAG_stop_sim_at) {
+      if (icount_ == static_cast<int64_t>(::v8::internal::FLAG_stop_sim_at)) {
         MipsDebugger dbg(this);
         dbg.Debug();
       } else {
