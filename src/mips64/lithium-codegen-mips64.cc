@@ -1097,6 +1097,7 @@ void LCodeGen::DoModI(LModI* instr) {
     __ SignExtensionInt32(left_reg, left_reg);
     // div runs in the background while we check for special cases.
     Register right_reg = EmitLoadRegister(instr->right(), scratch);
+    __ SignExtensionInt32(right_reg, right_reg);
     __ ddiv(left_reg, right_reg);
 
     Label done;
@@ -1383,9 +1384,6 @@ void LCodeGen::DoMulI(LMulI* instr) {
       case -1:
         if (overflow) {
           __ SubuAndCheckForOverflow(result, zero_reg, left, scratch);
-          // DeoptimizeIf(lt, instr->environment(),
-          //              scratch, Operand(zero_reg));
-          // TODO(yy)
           DeoptimizeIf(gt, instr->environment(), scratch, Operand(kMaxInt));
         } else {
           __ Dsubu(result, zero_reg, left);
@@ -1420,7 +1418,7 @@ void LCodeGen::DoMulI(LMulI* instr) {
           __ dsll(scratch, left, shift);
           __ Daddu(result, scratch, left);
           // Correct the sign of the result if the constant is negative.
-          if (constant < 0)  __ Subu(result, zero_reg, result);
+          if (constant < 0)  __ Dsubu(result, zero_reg, result);
         } else if (IsPowerOf2(constant_abs + 1)) {
           int32_t shift = WhichPowerOf2(constant_abs + 1);
           __ dsll(scratch, left, shift);
@@ -1446,27 +1444,32 @@ void LCodeGen::DoMulI(LMulI* instr) {
         __ mfhi(scratch);
         __ mflo(result);
       } else {
-        __ mult(left, right);
+        __ SignExtensionInt32(left, left);
+        __ SignExtensionInt32(right, right);
+        __ dmult(left, right);
         __ mfhi(scratch);
         __ mflo(result);
       }
       __ dsra32(at, result, 31);
       DeoptimizeIf(ne, instr->environment(), scratch, Operand(at));
+      if (!instr->hydrogen()->representation().IsSmi()) {
+        DeoptimizeIf(gt, instr->environment(), result, Operand(kMaxInt));
+        __ li(at, Operand(kMinInt), CONSTANT_SIZE);
+        DeoptimizeIf(lt, instr->environment(), result, Operand(at));
+      }
     } else {
       if (instr->hydrogen()->representation().IsSmi()) {
         __ SmiUntag(result, left);
         __ Dmul(result, result, right);
       } else {
-        __ Mul(result, left, right);
+        __ SignExtensionInt32(left, left);
+        __ SignExtensionInt32(right, right);
+        __ Dmul(result, left, right);
       }
     }
 
     if (bailout_on_minus_zero) {
       Label done;
-      if (!instr->hydrogen()->representation().IsSmi()) {
-        __ dsll32(left, left, 0);
-        __ dsll32(right, right, 0);
-      }
       __ Xor(at, left, right);
       __ Branch(&done, ge, at, Operand(zero_reg));
       // Bail out if the result is minus zero.
