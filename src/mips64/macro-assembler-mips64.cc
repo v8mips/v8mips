@@ -3645,12 +3645,12 @@ void MacroAssembler::SetCallCDoubleArguments(DoubleRegister dreg1,
                                              DoubleRegister dreg2) {
   if (!IsMipsSoftFloatABI) {
     if (dreg2.is(f12)) {
-      ASSERT(!dreg1.is(f14));
-      Move(f14, dreg2);
+      ASSERT(!dreg1.is(f13));
+      Move(f13, dreg2);
       Move(f12, dreg1);
     } else {
       Move(f12, dreg1);
-      Move(f14, dreg2);
+      Move(f13, dreg2);
     }
   } else {
     Move(a0, a1, dreg1);
