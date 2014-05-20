@@ -3644,13 +3644,14 @@ void MacroAssembler::SetCallCDoubleArguments(DoubleRegister dreg) {
 void MacroAssembler::SetCallCDoubleArguments(DoubleRegister dreg1,
                                              DoubleRegister dreg2) {
   if (!IsMipsSoftFloatABI) {
+    const DoubleRegister fparg2 = (kMipsAbi == kN64) ? f13 : f14;
     if (dreg2.is(f12)) {
-      ASSERT(!dreg1.is(f13));
-      Move(f13, dreg2);
+      ASSERT(!dreg1.is(fparg2));
+      Move(fparg2, dreg2);
       Move(f12, dreg1);
     } else {
       Move(f12, dreg1);
-      Move(f13, dreg2);
+      Move(fparg2, dreg2);
     }
   } else {
     Move(a0, a1, dreg1);

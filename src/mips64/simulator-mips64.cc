@@ -1125,11 +1125,12 @@ double Simulator::get_fpu_register_double(int fpureg) const {
 
 // Runtime FP routines take up to two double arguments and zero
 // or one integer arguments. All are constructed here,
-// from a0-a3 or f12 and f13.
+// from a0-a3 or f12 and f13 (n64), or f14 (O32).
 void Simulator::GetFpArgs(double* x, double* y, int32_t* z) {
   if (!IsMipsSoftFloatABI) {
+    const int fparg2 = (kMipsAbi == kN64) ? 13 : 14;
     *x = get_fpu_register_double(12);
-    *y = get_fpu_register_double(13);
+    *y = get_fpu_register_double(fparg2);
     *z = get_register(a2);
   } else {
   // TODO(plind): bad ABI stuff, refactor or remove.
@@ -3189,8 +3190,9 @@ int64_t Simulator::Call(byte* entry, int argument_count, ...) {
 
 double Simulator::CallFP(byte* entry, double d0, double d1) {
   if (!IsMipsSoftFloatABI) {
+    const FPURegister fparg2 = (kMipsAbi == kN64) ? f13 : f14;
     set_fpu_register_double(f12, d0);
-    set_fpu_register_double(f13, d1);
+    set_fpu_register_double(fparg2, d1);
   } else {
     int buffer[2];
     ASSERT(sizeof(buffer[0]) * 2 == sizeof(d0));
