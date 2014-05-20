@@ -188,6 +188,7 @@ void Deoptimizer::EntryGenerator::Generate() {
   __ li(a1, Operand(type()));  // bailout type,
   // a2: bailout id already loaded.
   // a3: code address or 0 already loaded.
+  // TODO(yy): Do not need to save on the stack with n64?
   __ sd(t0, CFunctionArgumentOperand(5));  // Fp-to-sp delta.
   __ li(t1, Operand(ExternalReference::isolate_address(isolate())));
   __ sd(t1, CFunctionArgumentOperand(6));  // Isolate.

@@ -130,6 +130,7 @@ inline MemOperand FieldMemOperand(Register object, int offset) {
 inline MemOperand CFunctionArgumentOperand(int index) {
   ASSERT(index > kCArgSlotCount);
   // Argument 5 takes the slot just past the four Arg-slots.
+  // TODO(yy): Should fix with n64?
   int offset = (index - 5) * kPointerSize + kCArgsSlotsSize;
   return MemOperand(sp, offset);
 }
