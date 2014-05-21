@@ -2161,6 +2161,8 @@ void FullCodeGenerator::EmitGeneratorResume(Expression *generator,
 
   // Push holes for the rest of the arguments to the generator function.
   __ ld(a3, FieldMemOperand(t0, JSFunction::kSharedFunctionInfoOffset));
+  // The argument count is stored as int32_t on 64-bit platforms.
+  // TODO(plind): Smi on 32-bit platforms.
   __ lw(a3,
         FieldMemOperand(a3, SharedFunctionInfo::kFormalParameterCountOffset));
   __ LoadRoot(a2, Heap::kTheHoleValueRootIndex);

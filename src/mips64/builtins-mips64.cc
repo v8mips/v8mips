@@ -1200,10 +1200,10 @@ void Builtins::Generate_FunctionCall(MacroAssembler* masm) {
   // a0: actual number of arguments
   // a1: function
   __ ld(a3, FieldMemOperand(a1, JSFunction::kSharedFunctionInfoOffset));
+  // The argument count is stored as int32_t on 64-bit platforms.
+  // TODO(plind): Smi on 32-bit platforms.
   __ lw(a2,
          FieldMemOperand(a3, SharedFunctionInfo::kFormalParameterCountOffset));
-  // __ dsra(a2, a2, kSmiTagSize);
-  // __ dsra32(a2, a2, 0);
   __ ld(a3, FieldMemOperand(a1, JSFunction::kCodeEntryOffset));
   __ SetCallKind(t1, CALL_AS_METHOD);
   // Check formal and actual parameter counts.

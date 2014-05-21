@@ -3843,12 +3843,11 @@ void MacroAssembler::InvokeFunction(Register function,
   Register code_reg = a3;
   ld(code_reg, FieldMemOperand(a1, JSFunction::kSharedFunctionInfoOffset));
   ld(cp, FieldMemOperand(a1, JSFunction::kContextOffset));
-  // 32-bit
+  // The argument count is stored as int32_t on 64-bit platforms.
+  // TODO(plind): Smi on 32-bit platforms.
   lw(expected_reg,
       FieldMemOperand(code_reg,
                       SharedFunctionInfo::kFormalParameterCountOffset));
-  // TODO
-  // dsra32(expected_reg, expected_reg, 0);
   ld(code_reg, FieldMemOperand(a1, JSFunction::kCodeEntryOffset));
   ParameterCount expected(expected_reg);
   InvokeCode(code_reg, expected, actual, flag, call_wrapper, call_kind);
