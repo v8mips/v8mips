@@ -4210,7 +4210,14 @@ void LCodeGen::DoStoreNamedField(LStoreNamedField* instr) {
       instr->hydrogen()->value()->IsHeapObject()
           ? OMIT_SMI_CHECK : INLINE_SMI_CHECK;
   if (representation.IsSmi() &&
-      instr->hydrogen()->store_mode() == STORE_TO_INITIALIZED_ENTRY) {
+      instr->hydrogen()->value()->representation().IsInteger32()) {
+    ASSERT(instr->hydrogen()->store_mode() == STORE_TO_INITIALIZED_ENTRY);
+    if (FLAG_debug_code) {
+      __ Load(scratch, FieldMemOperand(object, offset), representation);
+      __ AssertSmi(scratch);
+    }
+
+    // Store int value directly to upper half of the smi.
     offset += kPointerSize / 2;
     representation = Representation::Integer32();
   }
@@ -4469,18 +4476,27 @@ void LCodeGen::DoStoreKeyedFixedArray(LStoreKeyed* instr) {
     // check, which can be tagged, so that case must be handled here, too.
     if (instr->hydrogen()->key()->representation().IsSmi()) {
       __ dsra(scratch, key, 32 - kPointerSizeLog2);
-      __ daddu(scratch, elements, scratch);
+      __ daddu(store_base, elements, scratch);
     } else {
       __ dsll(scratch, key, kPointerSizeLog2);
-      __ daddu(scratch, elements, scratch);
+      __ daddu(store_base, elements, scratch);
     }
     offset = FixedArray::OffsetOfElementAt(instr->additional_index());
   }
-  // __ sd(value, FieldMemOperand(store_base, offset));
 
   Representation representation = instr->hydrogen()->value()->representation();
-  if (representation.IsInteger32() &&
-      instr->hydrogen()->elements_kind() == FAST_SMI_ELEMENTS) {
+  if (representation.IsInteger32()) {
+    ASSERT(instr->hydrogen()->store_mode() == STORE_TO_INITIALIZED_ENTRY);
+    ASSERT(instr->hydrogen()->elements_kind() == FAST_SMI_ELEMENTS);
+    if (FLAG_debug_code) {
+      Register temp = scratch1();
+      __ Load(temp,
+              FieldMemOperand(store_base, offset),
+              Representation::Smi());
+      __ AssertSmi(temp);
+    }
+
+    // Store int value directly to upper half of the smi.
     STATIC_ASSERT(kSmiTag == 0);
     STATIC_ASSERT(kSmiTagSize + kSmiShiftSize == 32);
     offset += kPointerSize / 2;
