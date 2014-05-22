@@ -2991,7 +2991,7 @@ void LCodeGen::DoLoadNamedField(LLoadNamedField* instr) {
   }
 
   Representation representation = access.representation();
-  if (representation.IsSmi() &&
+  if (representation.IsSmi() && SmiValuesAre32Bits() &&
       instr->hydrogen()->representation().IsInteger32()) {
     if (FLAG_debug_code) {
       // Verify this is really an Smi.
@@ -3293,7 +3293,7 @@ void LCodeGen::DoLoadKeyedFixedArray(LLoadKeyed* instr) {
   }
 
   Representation representation = hinstr->representation();
-  if (representation.IsInteger32() &&
+  if (representation.IsInteger32() && SmiValuesAre32Bits() &&
       hinstr->elements_kind() == FAST_SMI_ELEMENTS) {
     ASSERT(!hinstr->RequiresHoleCheck());
     if (FLAG_debug_code) {
@@ -4209,7 +4209,7 @@ void LCodeGen::DoStoreNamedField(LStoreNamedField* instr) {
   SmiCheck check_needed =
       instr->hydrogen()->value()->IsHeapObject()
           ? OMIT_SMI_CHECK : INLINE_SMI_CHECK;
-  if (representation.IsSmi() &&
+  if (representation.IsSmi() && SmiValuesAre32Bits() &&
       instr->hydrogen()->value()->representation().IsInteger32()) {
     ASSERT(instr->hydrogen()->store_mode() == STORE_TO_INITIALIZED_ENTRY);
     if (FLAG_debug_code) {
@@ -4485,7 +4485,7 @@ void LCodeGen::DoStoreKeyedFixedArray(LStoreKeyed* instr) {
   }
 
   Representation representation = instr->hydrogen()->value()->representation();
-  if (representation.IsInteger32()) {
+  if (representation.IsInteger32() && SmiValuesAre32Bits()) {
     ASSERT(instr->hydrogen()->store_mode() == STORE_TO_INITIALIZED_ENTRY);
     ASSERT(instr->hydrogen()->elements_kind() == FAST_SMI_ELEMENTS);
     if (FLAG_debug_code) {
