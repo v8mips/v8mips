@@ -1236,6 +1236,29 @@ void ICCompareStub::GenerateGeneric(MacroAssembler* masm) {
   GenerateMiss(masm);
 }
 
+void StoreRegistersStateStub::Generate(MacroAssembler* masm) {
+  __ mov(t9, ra);
+  __ pop(ra);
+  if (save_doubles_ == kSaveFPRegs) {
+    __ PushSafepointRegistersAndDoubles();
+  } else {
+    __ PushSafepointRegisters();
+  }
+  __ Jump(t9);
+}
+
+
+void RestoreRegistersStateStub::Generate(MacroAssembler* masm) {
+  __ mov(t9, ra);
+  __ pop(ra);
+  __ StoreToSafepointRegisterSlot(t9, t9);
+  if (save_doubles_ == kSaveFPRegs) {
+    __ PopSafepointRegistersAndDoubles();
+  } else {
+    __ PopSafepointRegisters();
+  }
+  __ Jump(t9);
+}
 
 void StoreBufferOverflowStub::Generate(MacroAssembler* masm) {
   // We don't allow a GC during a store buffer overflow so there is no need to
