@@ -187,11 +187,11 @@ void FullCodeGenerator::Generate() {
         __ bind(&loop);
         __ Dsubu(sp, sp, Operand(kPointerSize));
         __ Branch(&loop, gt, sp, Operand(a2), USE_DELAY_SLOT);
-        __ sw(t5, MemOperand(sp, 0));  // Push in the delay slot.
+        __ sd(t5, MemOperand(sp, 0));  // Push in the delay slot.
       } else {
         __ Dsubu(sp, sp, Operand(locals_count * kPointerSize));
         for (int i = 0; i < locals_count; i++) {
-          __ sw(t5, MemOperand(sp, i * kPointerSize));
+          __ sd(t5, MemOperand(sp, i * kPointerSize));
         }
       }
     }
