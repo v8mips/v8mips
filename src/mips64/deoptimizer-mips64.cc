@@ -182,16 +182,21 @@ void Deoptimizer::EntryGenerator::Generate() {
   __ Dsubu(t0, fp, t0);
 
   // Allocate a new deoptimizer object.
-  // Pass four arguments in a0 to a3 and fifth & sixth arguments on stack.
   __ PrepareCallCFunction(6, t1);
-  __ ld(a0, MemOperand(fp, JavaScriptFrameConstants::kFunctionOffset));
+  // Pass six arguments, according to O32 or n64 ABI. a0..a3 are same for both.
   __ li(a1, Operand(type()));  // bailout type,
+  __ ld(a0, MemOperand(fp, JavaScriptFrameConstants::kFunctionOffset));
   // a2: bailout id already loaded.
   // a3: code address or 0 already loaded.
-  // TODO(yy): Do not need to save on the stack with n64?
-  __ sd(t0, CFunctionArgumentOperand(5));  // Fp-to-sp delta.
-  __ li(t1, Operand(ExternalReference::isolate_address(isolate())));
-  __ sd(t1, CFunctionArgumentOperand(6));  // Isolate.
+  if (kMipsAbi == kN64) {
+    // t0: already has fp-to-sp delta.
+    __ li(t1, Operand(ExternalReference::isolate_address(isolate())));
+  } else {  // O32 abi.
+    // Pass four arguments in a0 to a3 and fifth & sixth arguments on stack.
+    __ sd(t0, CFunctionArgumentOperand(5));  // Fp-to-sp delta.
+    __ li(t1, Operand(ExternalReference::isolate_address(isolate())));
+    __ sd(t1, CFunctionArgumentOperand(6));  // Isolate.
+  }
   // Call Deoptimizer::New().
   {
     AllowExternalCallThatCantCauseGC scope(masm());
