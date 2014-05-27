@@ -883,7 +883,10 @@ class FixedArrayBase;
 class GlobalObject;
 class ObjectVisitor;
 class StringStream;
-class Type;
+// We cannot just say "class Type;" if it is created from a template... =8-?
+template<class> class TypeImpl;
+struct HeapTypeConfig;
+typedef TypeImpl<HeapTypeConfig> Type;
 
 
 // A template-ized version of the IsXXX functions.
@@ -8124,11 +8127,12 @@ class AllocationSite: public Struct {
   static const int kPretenureMinimumCreated = 100;
 
   // Values for pretenure decision field.
-  enum {
+  enum PretenureDecision {
     kUndecided = 0,
     kDontTenure = 1,
     kTenure = 2,
-    kZombie = 3
+    kZombie = 3,
+    kLastPretenureDecisionValue = kZombie
   };
 
   DECL_ACCESSORS(transition_info, Object)
@@ -8136,11 +8140,8 @@ class AllocationSite: public Struct {
   // walked in a particular order. So [[1, 2], 1, 2] will have one
   // nested_site, but [[1, 2], 3, [4]] will have a list of two.
   DECL_ACCESSORS(nested_site, Object)
-  DECL_ACCESSORS(memento_found_count, Smi)
-  DECL_ACCESSORS(memento_create_count, Smi)
-  // TODO(mvstanton): we don't need a whole integer to record pretenure
-  // decision. Consider sharing space with memento_found_count.
-  DECL_ACCESSORS(pretenure_decision, Smi)
+  DECL_ACCESSORS(pretenure_data, Smi)
+  DECL_ACCESSORS(pretenure_create_count, Smi)
   DECL_ACCESSORS(dependent_code, DependentCode)
   DECL_ACCESSORS(weak_next, Object)
 
@@ -8149,9 +8150,15 @@ class AllocationSite: public Struct {
   // This method is expensive, it should only be called for reporting.
   bool IsNestedSite();
 
+  // transition_info bitfields, for constructed array transition info.
   class ElementsKindBits:       public BitField<ElementsKind, 0,  15> {};
   class UnusedBits:             public BitField<int,          15, 14> {};
   class DoNotInlineBit:         public BitField<bool,         29,  1> {};
+
+  // Bitfields for pretenure_data
+  class MementoFoundCountBits:  public BitField<int,          0, 28> {};
+  class PretenureDecisionBits:  public BitField<PretenureDecision, 28, 2> {};
+  STATIC_ASSERT(PretenureDecisionBits::kMax >= kLastPretenureDecisionValue);
 
   // Increments the mementos found counter and returns true when the first
   // memento was found for a given allocation site.
@@ -8159,10 +8166,35 @@ class AllocationSite: public Struct {
 
   inline void IncrementMementoCreateCount();
 
-  PretenureFlag GetPretenureMode() {
-    int mode = pretenure_decision()->value();
-    // Zombie objects "decide" to be untenured.
-    return (mode == kTenure) ? TENURED : NOT_TENURED;
+  PretenureFlag GetPretenureMode();
+
+  void ResetPretenureDecision();
+
+  PretenureDecision pretenure_decision() {
+    int value = pretenure_data()->value();
+    return PretenureDecisionBits::decode(value);
+  }
+
+  void set_pretenure_decision(PretenureDecision decision) {
+    int value = pretenure_data()->value();
+    set_pretenure_data(
+        Smi::FromInt(PretenureDecisionBits::update(value, decision)),
+        SKIP_WRITE_BARRIER);
+  }
+
+  int memento_found_count() {
+    int value = pretenure_data()->value();
+    return MementoFoundCountBits::decode(value);
+  }
+
+  inline void set_memento_found_count(int count);
+
+  int memento_create_count() {
+    return pretenure_create_count()->value();
+  }
+
+  void set_memento_create_count(int count) {
+    set_pretenure_create_count(Smi::FromInt(count), SKIP_WRITE_BARRIER);
   }
 
   // The pretenuring decision is made during gc, and the zombie state allows
@@ -8170,7 +8202,7 @@ class AllocationSite: public Struct {
   // a later traversal of new space may discover AllocationMementos that point
   // to this AllocationSite.
   bool IsZombie() {
-    return pretenure_decision()->value() == kZombie;
+    return pretenure_decision() == kZombie;
   }
 
   inline void MarkZombie();
@@ -8228,13 +8260,11 @@ class AllocationSite: public Struct {
 
   static const int kTransitionInfoOffset = HeapObject::kHeaderSize;
   static const int kNestedSiteOffset = kTransitionInfoOffset + kPointerSize;
-  static const int kMementoFoundCountOffset = kNestedSiteOffset + kPointerSize;
-  static const int kMementoCreateCountOffset =
-      kMementoFoundCountOffset + kPointerSize;
-  static const int kPretenureDecisionOffset =
-      kMementoCreateCountOffset + kPointerSize;
+  static const int kPretenureDataOffset = kNestedSiteOffset + kPointerSize;
+  static const int kPretenureCreateCountOffset =
+      kPretenureDataOffset + kPointerSize;
   static const int kDependentCodeOffset =
-      kPretenureDecisionOffset + kPointerSize;
+      kPretenureCreateCountOffset + kPointerSize;
   static const int kWeakNextOffset = kDependentCodeOffset + kPointerSize;
   static const int kSize = kWeakNextOffset + kPointerSize;
 
@@ -8251,7 +8281,7 @@ class AllocationSite: public Struct {
  private:
   inline DependentCode::DependencyGroup ToDependencyGroup(Reason reason);
   bool PretenuringDecisionMade() {
-    return pretenure_decision()->value() != kUndecided;
+    return pretenure_decision() != kUndecided;
   }
 
   DISALLOW_IMPLICIT_CONSTRUCTORS(AllocationSite);
@@ -8277,9 +8307,6 @@ class AllocationMemento: public Struct {
   DECLARE_PRINTER(AllocationMemento)
   DECLARE_VERIFIER(AllocationMemento)
 
-  // Returns NULL if no AllocationMemento is available for object.
-  static AllocationMemento* FindForHeapObject(HeapObject* object,
-                                              bool in_GC = false);
   static inline AllocationMemento* cast(Object* obj);
 
  private:

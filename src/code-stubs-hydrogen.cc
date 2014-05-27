@@ -323,7 +323,7 @@ template <>
 HValue* CodeStubGraphBuilder<NumberToStringStub>::BuildCodeStub() {
   info()->MarkAsSavesCallerDoubles();
   HValue* number = GetParameter(NumberToStringStub::kNumber);
-  return BuildNumberToString(number, handle(Type::Number(), isolate()));
+  return BuildNumberToString(number, Type::Number(isolate()));
 }
 
 
@@ -491,20 +491,16 @@ HValue* CodeStubGraphBuilder<CreateAllocationSiteStub>::BuildCodeStub() {
                             AllocationSite::kNestedSiteOffset),
                         graph()->GetConstant0());
 
-  // Pretenuring calculation fields.
+  // Pretenuring calculation field.
   Add<HStoreNamedField>(object,
                         HObjectAccess::ForAllocationSiteOffset(
-                            AllocationSite::kMementoFoundCountOffset),
+                            AllocationSite::kPretenureDataOffset),
                         graph()->GetConstant0());
 
+  // Pretenuring memento creation count field.
   Add<HStoreNamedField>(object,
                         HObjectAccess::ForAllocationSiteOffset(
-                            AllocationSite::kMementoCreateCountOffset),
-                        graph()->GetConstant0());
-
-  Add<HStoreNamedField>(object,
-                        HObjectAccess::ForAllocationSiteOffset(
-                            AllocationSite::kPretenureDecisionOffset),
+                            AllocationSite::kPretenureCreateCountOffset),
                         graph()->GetConstant0());
 
   // Store an empty fixed array for the code dependency.
@@ -896,7 +892,7 @@ HValue* CodeStubGraphBuilder<BinaryOpICStub>::BuildCodeInitializedStub() {
       {
         Push(BuildBinaryOperation(
                     state.op(), left, right,
-                    handle(Type::String(), isolate()), right_type,
+                    Type::String(isolate()), right_type,
                     result_type, state.fixed_right_arg(),
                     allocation_mode));
       }
@@ -916,7 +912,7 @@ HValue* CodeStubGraphBuilder<BinaryOpICStub>::BuildCodeInitializedStub() {
       {
         Push(BuildBinaryOperation(
                     state.op(), left, right,
-                    left_type, handle(Type::String(), isolate()),
+                    left_type, Type::String(isolate()),
                     result_type, state.fixed_right_arg(),
                     allocation_mode));
       }

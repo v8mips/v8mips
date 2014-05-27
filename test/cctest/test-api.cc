@@ -10195,7 +10195,8 @@ THREADED_TEST(Regress91517) {
   // Call the runtime version of GetLocalPropertyNames() on the natively
   // created object through JavaScript.
   context->Global()->Set(v8_str("obj"), o4);
-  CompileRun("var names = %GetLocalPropertyNames(obj, true);");
+  // PROPERTY_ATTRIBUTES_NONE = 0
+  CompileRun("var names = %GetLocalPropertyNames(obj, 0);");
 
   ExpectInt32("names.length", 1006);
   ExpectTrue("names.indexOf(\"baz\") >= 0");
@@ -10249,7 +10250,8 @@ THREADED_TEST(Regress269562) {
   // the natively created object through JavaScript.
   context->Global()->Set(v8_str("obj"), o2);
   context->Global()->Set(v8_str("sym"), sym);
-  CompileRun("var names = %GetLocalPropertyNames(obj, true);");
+  // PROPERTY_ATTRIBUTES_NONE = 0
+  CompileRun("var names = %GetLocalPropertyNames(obj, 0);");
 
   ExpectInt32("names.length", 7);
   ExpectTrue("names.indexOf(\"foo\") >= 0");
@@ -14783,9 +14785,10 @@ TEST(PreCompile) {
   // a workaround for now to make this test not fail.
   v8::V8::Initialize();
   v8::Isolate* isolate = CcTest::isolate();
+  HandleScope handle_scope(isolate);
   const char* script = "function foo(a) { return a+1; }";
-  v8::ScriptData* sd =
-      v8::ScriptData::PreCompile(isolate, script, i::StrLength(script));
+  v8::ScriptData* sd = v8::ScriptData::PreCompile(v8::String::NewFromUtf8(
+      isolate, script, v8::String::kNormalString, i::StrLength(script)));
   CHECK_NE(sd->Length(), 0);
   CHECK_NE(sd->Data(), NULL);
   CHECK(!sd->HasError());
@@ -14796,9 +14799,10 @@ TEST(PreCompile) {
 TEST(PreCompileWithError) {
   v8::V8::Initialize();
   v8::Isolate* isolate = CcTest::isolate();
+  HandleScope handle_scope(isolate);
   const char* script = "function foo(a) { return 1 * * 2; }";
-  v8::ScriptData* sd =
-      v8::ScriptData::PreCompile(isolate, script, i::StrLength(script));
+  v8::ScriptData* sd = v8::ScriptData::PreCompile(v8::String::NewFromUtf8(
+      isolate, script, v8::String::kNormalString, i::StrLength(script)));
   CHECK(sd->HasError());
   delete sd;
 }
@@ -14807,9 +14811,10 @@ TEST(PreCompileWithError) {
 TEST(Regress31661) {
   v8::V8::Initialize();
   v8::Isolate* isolate = CcTest::isolate();
+  HandleScope handle_scope(isolate);
   const char* script = " The Definintive Guide";
-  v8::ScriptData* sd =
-      v8::ScriptData::PreCompile(isolate, script, i::StrLength(script));
+  v8::ScriptData* sd = v8::ScriptData::PreCompile(v8::String::NewFromUtf8(
+      isolate, script, v8::String::kNormalString, i::StrLength(script)));
   CHECK(sd->HasError());
   delete sd;
 }
@@ -14819,9 +14824,10 @@ TEST(Regress31661) {
 TEST(PreCompileSerialization) {
   v8::V8::Initialize();
   v8::Isolate* isolate = CcTest::isolate();
+  HandleScope handle_scope(isolate);
   const char* script = "function foo(a) { return a+1; }";
-  v8::ScriptData* sd =
-      v8::ScriptData::PreCompile(isolate, script, i::StrLength(script));
+  v8::ScriptData* sd = v8::ScriptData::PreCompile(v8::String::NewFromUtf8(
+      isolate, script, v8::String::kNormalString, i::StrLength(script)));
 
   // Serialize.
   int serialized_data_length = sd->Length();
@@ -14864,8 +14870,8 @@ TEST(PreCompileInvalidPreparseDataError) {
 
   const char* script = "function foo(){ return 5;}\n"
       "function bar(){ return 6 + 7;}  foo();";
-  v8::ScriptData* sd =
-      v8::ScriptData::PreCompile(isolate, script, i::StrLength(script));
+  v8::ScriptData* sd = v8::ScriptData::PreCompile(v8::String::NewFromUtf8(
+      isolate, script, v8::String::kNormalString, i::StrLength(script)));
   CHECK(!sd->HasError());
   // ScriptDataImpl private implementation details
   const int kHeaderSize = i::PreparseDataConstants::kHeaderSize;
@@ -14891,7 +14897,8 @@ TEST(PreCompileInvalidPreparseDataError) {
   // Overwrite function bar's start position with 200.  The function entry
   // will not be found when searching for it by position and we should fall
   // back on eager compilation.
-  sd = v8::ScriptData::PreCompile(isolate, script, i::StrLength(script));
+  sd = v8::ScriptData::PreCompile(v8::String::NewFromUtf8(
+      isolate, script, v8::String::kNormalString, i::StrLength(script)));
   sd_data = reinterpret_cast<unsigned*>(const_cast<char*>(sd->Data()));
   sd_data[kHeaderSize + 1 * kFunctionEntrySize + kFunctionEntryStartOffset] =
       200;
@@ -14899,42 +14906,6 @@ TEST(PreCompileInvalidPreparseDataError) {
   CHECK(!try_catch.HasCaught());
 
   delete sd;
-}
-
-
-// Verifies that the Handle<String> and const char* versions of the API produce
-// the same results (at least for one trivial case).
-TEST(PreCompileAPIVariationsAreSame) {
-  v8::V8::Initialize();
-  v8::Isolate* isolate = CcTest::isolate();
-  v8::HandleScope scope(isolate);
-
-  const char* cstring = "function foo(a) { return a+1; }";
-
-  v8::ScriptData* sd_from_cstring =
-      v8::ScriptData::PreCompile(isolate, cstring, i::StrLength(cstring));
-
-  TestAsciiResource* resource = new TestAsciiResource(cstring);
-  v8::ScriptData* sd_from_external_string = v8::ScriptData::PreCompile(
-      v8::String::NewExternal(isolate, resource));
-
-  v8::ScriptData* sd_from_string = v8::ScriptData::PreCompile(
-      v8::String::NewFromUtf8(isolate, cstring));
-
-  CHECK_EQ(sd_from_cstring->Length(), sd_from_external_string->Length());
-  CHECK_EQ(0, memcmp(sd_from_cstring->Data(),
-                     sd_from_external_string->Data(),
-                     sd_from_cstring->Length()));
-
-  CHECK_EQ(sd_from_cstring->Length(), sd_from_string->Length());
-  CHECK_EQ(0, memcmp(sd_from_cstring->Data(),
-                     sd_from_string->Data(),
-                     sd_from_cstring->Length()));
-
-
-  delete sd_from_cstring;
-  delete sd_from_external_string;
-  delete sd_from_string;
 }
 
 
@@ -21230,7 +21201,8 @@ TEST(AccessCheckThrows) {
   CheckCorrectThrow("%HasElement(other, 1)");
   CheckCorrectThrow("%IsPropertyEnumerable(other, 'x')");
   CheckCorrectThrow("%GetPropertyNames(other)");
-  CheckCorrectThrow("%GetLocalPropertyNames(other, true)");
+  // PROPERTY_ATTRIBUTES_NONE = 0
+  CheckCorrectThrow("%GetLocalPropertyNames(other, 0)");
   CheckCorrectThrow("%DefineOrRedefineAccessorProperty("
                         "other, 'x', null, null, 1)");
 

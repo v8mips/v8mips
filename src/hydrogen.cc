@@ -2644,7 +2644,7 @@ void HGraphBuilder::BuildCreateAllocationMemento(
   if (FLAG_allocation_site_pretenuring) {
     HValue* memento_create_count = Add<HLoadNamedField>(
         allocation_site, HObjectAccess::ForAllocationSiteOffset(
-            AllocationSite::kMementoCreateCountOffset));
+            AllocationSite::kPretenureCreateCountOffset));
     memento_create_count = AddUncasted<HAdd>(
         memento_create_count, graph()->GetConstant1());
     // This smi value is reset to zero after every gc, overflow isn't a problem
@@ -2652,7 +2652,7 @@ void HGraphBuilder::BuildCreateAllocationMemento(
     memento_create_count->ClearFlag(HValue::kCanOverflow);
     HStoreNamedField* store = Add<HStoreNamedField>(
         allocation_site, HObjectAccess::ForAllocationSiteOffset(
-            AllocationSite::kMementoCreateCountOffset), memento_create_count);
+            AllocationSite::kPretenureCreateCountOffset), memento_create_count);
     // No write barrier needed to store a smi.
     store->SkipWriteBarrier();
   }
@@ -4338,12 +4338,17 @@ void HOptimizedGraphBuilder::VisitDoWhileStatement(DoWhileStatement* stmt) {
   HBasicBlock* loop_successor = NULL;
   if (body_exit != NULL && !stmt->cond()->ToBooleanIsTrue()) {
     set_current_block(body_exit);
-    // The block for a true condition, the actual predecessor block of the
-    // back edge.
-    body_exit = graph()->CreateBasicBlock();
     loop_successor = graph()->CreateBasicBlock();
-    CHECK_BAILOUT(VisitForControl(stmt->cond(), body_exit, loop_successor));
-    if (body_exit->HasPredecessor()) {
+    if (stmt->cond()->ToBooleanIsFalse()) {
+      Goto(loop_successor);
+      body_exit = NULL;
+    } else {
+      // The block for a true condition, the actual predecessor block of the
+      // back edge.
+      body_exit = graph()->CreateBasicBlock();
+      CHECK_BAILOUT(VisitForControl(stmt->cond(), body_exit, loop_successor));
+    }
+    if (body_exit != NULL && body_exit->HasPredecessor()) {
       body_exit->SetJoinId(stmt->BackEdgeId());
     } else {
       body_exit = NULL;
@@ -7610,10 +7615,11 @@ bool HOptimizedGraphBuilder::TryCallApply(Call* expr) {
   HValue* function = Top();
 
   AddCheckConstantFunction(expr->holder(), function, function_map);
-  Drop(1);
 
   CHECK_ALIVE_OR_RETURN(VisitForValue(args->at(0)), true);
   HValue* receiver = Pop();
+
+  Drop(1);  // Pop the function.
 
   if (function_state()->outer() == NULL) {
     HInstruction* elements = Add<HArgumentsElements>(false);
@@ -8769,7 +8775,7 @@ HValue* HGraphBuilder::TruncateToNumber(HValue* value, Handle<Type>* expected) {
     HConstant* constant = HConstant::cast(value);
     Maybe<HConstant*> number = constant->CopyToTruncatedNumber(zone());
     if (number.has_value) {
-      *expected = handle(Type::Number(), isolate());
+      *expected = Type::Number(isolate());
       return AddInstruction(number.value);
     }
   }
@@ -8782,10 +8788,10 @@ HValue* HGraphBuilder::TruncateToNumber(HValue* value, Handle<Type>* expected) {
   Handle<Type> expected_type = *expected;
 
   // Separate the number type from the rest.
-  Handle<Type> expected_obj = handle(Type::Intersect(
-      expected_type, handle(Type::NonNumber(), isolate())), isolate());
-  Handle<Type> expected_number = handle(Type::Intersect(
-      expected_type, handle(Type::Number(), isolate())), isolate());
+  Handle<Type> expected_obj = Type::Intersect(
+      expected_type, Type::NonNumber(isolate()), isolate());
+  Handle<Type> expected_number = Type::Intersect(
+      expected_type, Type::Number(isolate()), isolate());
 
   // We expect to get a number.
   // (We need to check first, since Type::None->Is(Type::Any()) == true.
@@ -8796,8 +8802,8 @@ HValue* HGraphBuilder::TruncateToNumber(HValue* value, Handle<Type>* expected) {
 
   if (expected_obj->Is(Type::Undefined())) {
     // This is already done by HChange.
-    *expected = handle(Type::Union(
-          expected_number, handle(Type::Double(), isolate())), isolate());
+    *expected = Type::Union(
+          expected_number, Type::Double(isolate()), isolate());
     return value;
   }
 
@@ -8859,7 +8865,7 @@ HValue* HGraphBuilder::BuildBinaryOperation(
                      Deoptimizer::SOFT);
     // TODO(rossberg): we should be able to get rid of non-continuous
     // defaults.
-    left_type = handle(Type::Any(), isolate());
+    left_type = Type::Any(isolate());
   } else {
     if (!maybe_string_add) left = TruncateToNumber(left, &left_type);
     left_rep = Representation::FromType(left_type);
@@ -8868,7 +8874,7 @@ HValue* HGraphBuilder::BuildBinaryOperation(
   if (right_type->Is(Type::None())) {
     Add<HDeoptimize>("Insufficient type feedback for RHS of binary operation",
                      Deoptimizer::SOFT);
-    right_type = handle(Type::Any(), isolate());
+    right_type = Type::Any(isolate());
   } else {
     if (!maybe_string_add) right = TruncateToNumber(right, &right_type);
     right_rep = Representation::FromType(right_type);
@@ -9366,7 +9372,7 @@ HControlInstruction* HOptimizedGraphBuilder::BuildCompareInstruction(
     Add<HDeoptimize>("Insufficient type feedback for combined type "
                      "of binary operation",
                      Deoptimizer::SOFT);
-    combined_type = left_type = right_type = handle(Type::Any(), isolate());
+    combined_type = left_type = right_type = Type::Any(isolate());
   }
 
   Representation left_rep = Representation::FromType(left_type);
@@ -9463,8 +9469,7 @@ void HOptimizedGraphBuilder::HandleLiteralCompareNil(CompareOperation* expr,
   } else {
     ASSERT_EQ(Token::EQ, expr->op());
     Handle<Type> type = expr->combined_type()->Is(Type::None())
-        ? handle(Type::Any(), isolate_)
-        : expr->combined_type();
+        ? Type::Any(isolate_) : expr->combined_type();
     HIfContinuation continuation;
     BuildCompareNil(value, type, &continuation);
     return ast_context()->ReturnContinuation(&continuation, expr->id());
@@ -9496,15 +9501,11 @@ HInstruction* HOptimizedGraphBuilder::BuildFastLiteral(
   HValue* object_size_constant = Add<HConstant>(
       boilerplate_object->map()->instance_size());
 
-  // We should pull pre-tenure mode from the allocation site.
-  // For now, just see what it says, and remark on it if it sez
-  // we should pretenure. That means the rudimentary counting in the garbage
-  // collector is having an effect.
   PretenureFlag pretenure_flag = isolate()->heap()->GetPretenureMode();
   if (FLAG_allocation_site_pretenuring) {
-    pretenure_flag = site_context->current()->GetPretenureMode()
-        ? TENURED
-        : NOT_TENURED;
+    pretenure_flag = site_context->current()->GetPretenureMode();
+    site_context->current()->AddDependentCompilationInfo(
+        AllocationSite::TENURING, top_info());
   }
 
   HInstruction* object = Add<HAllocate>(object_size_constant, type,
@@ -10237,8 +10238,7 @@ void HOptimizedGraphBuilder::GenerateNumberToString(CallRuntime* call) {
   ASSERT_EQ(1, call->arguments()->length());
   CHECK_ALIVE(VisitForValue(call->arguments()->at(0)));
   HValue* number = Pop();
-  HValue* result = BuildNumberToString(
-      number, handle(Type::Number(), isolate()));
+  HValue* result = BuildNumberToString(number, Type::Number(isolate()));
   return ast_context()->ReturnValue(result);
 }
 
@@ -10719,10 +10719,21 @@ void HTracer::Trace(const char* name, HGraph* graph, LChunk* chunk) {
     }
 
     PrintEmptyProperty("xhandlers");
-    const char* flags = current->IsLoopSuccessorDominator()
-        ? "dom-loop-succ"
-        : "";
-    PrintStringProperty("flags", flags);
+
+    {
+      PrintIndent();
+      trace_.Add("flags");
+      if (current->IsLoopSuccessorDominator()) {
+        trace_.Add(" \"dom-loop-succ\"");
+      }
+      if (current->IsUnreachable()) {
+        trace_.Add(" \"dead\"");
+      }
+      if (current->is_osr_entry()) {
+        trace_.Add(" \"osr\"");
+      }
+      trace_.Add("\n");
+    }
 
     if (current->dominator() != NULL) {
       PrintBlockProperty("dominator", current->dominator()->block_id());
