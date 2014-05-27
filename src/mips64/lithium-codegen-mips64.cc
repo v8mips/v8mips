@@ -3485,10 +3485,7 @@ void LCodeGen::DoWrapReceiver(LWrapReceiver* instr) {
   __ Branch(&result_in_receiver);
 
   __ bind(&global_object);
-  __ ld(result, MemOperand(fp, StandardFrameConstants::kContextOffset));
-  __ ld(result, ContextOperand(result, Context::GLOBAL_OBJECT_INDEX));
-  __ ld(result,
-         FieldMemOperand(result, JSGlobalObject::kGlobalReceiverOffset));
+  CallStubCompiler::FetchGlobalProxy(masm(), receiver, function);
   if (result.is(receiver)) {
     __ bind(&result_in_receiver);
   } else {
@@ -4035,7 +4032,10 @@ void LCodeGen::DoCallFunction(LCallFunction* instr) {
   ASSERT(ToRegister(instr->result()).is(v0));
 
   int arity = instr->arity();
-  CallFunctionStub stub(arity, NO_CALL_FUNCTION_FLAGS);
+  CallFunctionFlags flags =
+      instr->hydrogen()->IsContextualCall() ?
+          RECEIVER_IS_IMPLICIT : NO_CALL_FUNCTION_FLAGS;
+  CallFunctionStub stub(arity, flags);
   if (instr->hydrogen()->IsTailCall()) {
     if (NeedsEagerFrame()) __ mov(sp, fp);
     __ Jump(stub.GetCode(isolate()), RelocInfo::CODE_TARGET);
