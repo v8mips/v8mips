@@ -1079,15 +1079,7 @@ intptr_t PagedSpace::SizeOfFirstPage() {
         // upgraded to handle small pages.
         size = AreaSize();
       } else {
-#if V8_TARGET_ARCH_MIPS
-        // TODO(plind): Investigate larger code stubs size on MIPS.
         size = 480 * KB;
-#elif V8_TARGET_ARCH_MIPS64
-        // TODO(plind): Investigate larger code stubs size on MIPS.
-        size = 480 * KB;
-#else
-        size = 416 * KB;
-#endif
       }
       break;
     default:
