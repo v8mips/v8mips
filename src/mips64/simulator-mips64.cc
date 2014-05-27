@@ -25,10 +25,11 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#include <stdlib.h>
 #include <limits.h>
+#include <stdarg.h>
+#include <stdlib.h>
 #include <cmath>
-#include <cstdarg>
+
 #include "v8.h"
 
 #if V8_TARGET_ARCH_MIPS64
@@ -2355,7 +2356,7 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
               // In rounding mode 0 it should behave like ROUND.
             case ROUND_W_D:  // Round double to word (round half to even).
               {
-                double rounded = floor(fs + 0.5);
+                double rounded = std::floor(fs + 0.5);
                 int32_t result = static_cast<int32_t>(rounded);
                 if ((result & 1) != 0 && result - fs == 0.5) {
                   // If the number is halfway between two integers,
@@ -2380,7 +2381,7 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
               break;
             case FLOOR_W_D:  // Round double to word towards negative infinity.
               {
-                double rounded = floor(fs);
+                double rounded = std::floor(fs);
                 int32_t result = static_cast<int32_t>(rounded);
                 set_fpu_register_word(fd_reg, result);
                 if (set_fcsr_round_error(fs, rounded)) {
@@ -2390,7 +2391,7 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
               break;
             case CEIL_W_D:  // Round double to word towards positive infinity.
               {
-                double rounded = ceil(fs);
+                double rounded = std::ceil(fs);
                 int32_t result = static_cast<int32_t>(rounded);
                 set_fpu_register_word(fd_reg, result);
                 if (set_fcsr_round_error(fs, rounded)) {
@@ -2414,17 +2415,17 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
               break;
             }
             case ROUND_L_D: {  // Mips32r2 instruction.
-              double rounded = fs > 0 ? floor(fs + 0.5) : ceil(fs - 0.5);
+              double rounded = fs > 0 ? std::floor(fs + 0.5) : ceil(fs - 0.5);
               i64 = static_cast<int64_t>(rounded);
               set_fpu_register(fd_reg, i64);
               break;
             }
             case FLOOR_L_D:  // Mips32r2 instruction.
-              i64 = static_cast<int64_t>(floor(fs));
+              i64 = static_cast<int64_t>(std::floor(fs));
               set_fpu_register(fd_reg, i64);
               break;
             case CEIL_L_D:  // Mips32r2 instruction.
-              i64 = static_cast<int64_t>(ceil(fs));
+              i64 = static_cast<int64_t>(std::ceil(fs));
               set_fpu_register(fd_reg, i64);
               break;
             case C_F_D:
