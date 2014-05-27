@@ -160,7 +160,7 @@
             'test-assembler-mips64.cc'
           ],
         }],
-        [ 'OS=="linux"', {
+        [ 'OS=="linux" or OS=="qnx"', {
           'sources': [
             'test-platform-linux.cc',
           ],
