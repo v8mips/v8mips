@@ -313,8 +313,6 @@
         '../../src/debug-agent.h',
         '../../src/debug.cc',
         '../../src/debug.h',
-        '../../src/default-platform.cc',
-        '../../src/default-platform.h',
         '../../src/deoptimizer.cc',
         '../../src/deoptimizer.h',
         '../../src/disasm.h',
@@ -446,6 +444,13 @@
         '../../src/jsregexp.cc',
         '../../src/jsregexp.h',
         '../../src/lazy-instance.h',
+        # TODO(jochen): move libplatform/ files to their own target.
+        '../../src/libplatform/default-platform.cc',
+        '../../src/libplatform/default-platform.h',
+        '../../src/libplatform/task-queue.cc',
+        '../../src/libplatform/task-queue.h',
+        '../../src/libplatform/worker-thread.cc',
+        '../../src/libplatform/worker-thread.h',
         '../../src/list-inl.h',
         '../../src/list.h',
         '../../src/lithium-allocator-inl.h',
@@ -836,6 +841,43 @@
                 'sources': [
                   '../../src/platform-linux.cc'
                 ]
+              }],
+            ],
+          },
+        ],
+        ['OS=="qnx"', {
+            'link_settings': {
+              'target_conditions': [
+                ['_toolset=="host" and host_os=="linux"', {
+                  'libraries': [
+                    '-lrt'
+                  ],
+                }],
+                ['_toolset=="target"', {
+                  'libraries': [
+                    '-lbacktrace', '-lsocket'
+                  ],
+                }],
+              ],
+            },
+            'sources': [
+              '../../src/platform-posix.cc',
+            ],
+            'target_conditions': [
+              ['_toolset=="host" and host_os=="linux"', {
+                'sources': [
+                  '../../src/platform-linux.cc'
+                ],
+              }],
+              ['_toolset=="host" and host_os=="mac"', {
+                'sources': [
+                  '../../src/platform-macos.cc'
+                ],
+              }],
+              ['_toolset=="target"', {
+                'sources': [
+                  '../../src/platform-qnx.cc'
+                ],
               }],
             ],
           },

@@ -2539,6 +2539,12 @@ class V8_EXPORT Function : public Object {
    */
   int ScriptId() const;
 
+  /**
+   * Returns the original function if this function is bound, else returns
+   * v8::Undefined.
+   */
+  Local<Value> GetBoundFunction() const;
+
   ScriptOrigin GetScriptOrigin() const;
   V8_INLINE static Function* Cast(Value* obj);
   static const int kLineOffsetNotFound;
@@ -5414,7 +5420,7 @@ class Internals {
   static const int kNullValueRootIndex = 7;
   static const int kTrueValueRootIndex = 8;
   static const int kFalseValueRootIndex = 9;
-  static const int kEmptyStringRootIndex = 134;
+  static const int kEmptyStringRootIndex = 135;
 
   static const int kNodeClassIdOffset = 1 * kApiPointerSize;
   static const int kNodeFlagsOffset = 1 * kApiPointerSize + 3;

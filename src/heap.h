@@ -77,6 +77,7 @@ namespace internal {
   V(FixedArray, empty_fixed_array, EmptyFixedArray)                            \
   V(ByteArray, empty_byte_array, EmptyByteArray)                               \
   V(DescriptorArray, empty_descriptor_array, EmptyDescriptorArray)             \
+  V(ConstantPoolArray, empty_constant_pool_array, EmptyConstantPoolArray)      \
   V(Smi, stack_limit, StackLimit)                                              \
   V(Oddball, arguments_marker, ArgumentsMarker)                                \
   /* The roots above this line should be boring from a GC point of view.    */ \
@@ -1070,25 +1071,6 @@ class Heap {
       Object* script,
       Object* stack_trace,
       Object* stack_frames);
-
-  // Allocates a new cons string object.
-  // Returns Failure::RetryAfterGC(requested_bytes, space) if the allocation
-  // failed.
-  // Please note this does not perform a garbage collection.
-  MUST_USE_RESULT MaybeObject* AllocateConsString(String* first,
-                                                  String* second);
-
-  // Allocates a new sub string object which is a substring of an underlying
-  // string buffer stretching from the index start (inclusive) to the index
-  // end (exclusive).
-  // Returns Failure::RetryAfterGC(requested_bytes, space) if the allocation
-  // failed.
-  // Please note this does not perform a garbage collection.
-  MUST_USE_RESULT MaybeObject* AllocateSubString(
-      String* buffer,
-      int start,
-      int end,
-      PretenureFlag pretenure = NOT_TENURED);
 
   // Allocate a new external string object, which is backed by a string
   // resource that resides outside the V8 heap.
@@ -2141,6 +2123,9 @@ class Heap {
 
   // Allocate empty fixed double array.
   MUST_USE_RESULT MaybeObject* AllocateEmptyFixedDoubleArray();
+
+  // Allocate empty constant pool array.
+  MUST_USE_RESULT MaybeObject* AllocateEmptyConstantPoolArray();
 
   // Allocate a tenured simple cell.
   MUST_USE_RESULT MaybeObject* AllocateCell(Object* value);

@@ -81,6 +81,8 @@
         'test-hashmap.cc',
         'test-heap.cc',
         'test-heap-profiler.cc',
+        'test-libplatform-task-queue.cc',
+        'test-libplatform-worker-thread.cc',
         'test-list.cc',
         'test-liveedit.cc',
         'test-lockers.cc',
@@ -158,7 +160,7 @@
             'test-assembler-mips64.cc'
           ],
         }],
-        [ 'OS=="linux"', {
+        [ 'OS=="linux" or OS=="qnx"', {
           'sources': [
             'test-platform-linux.cc',
           ],

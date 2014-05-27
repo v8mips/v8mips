@@ -39,7 +39,6 @@
 #include "small-pointer-list.h"
 #include "smart-pointers.h"
 #include "token.h"
-#include "type-info.h"  // TODO(rossberg): this should eventually be removed
 #include "types.h"
 #include "utils.h"
 #include "variables.h"
@@ -1937,6 +1936,10 @@ class BinaryOperation V8_FINAL : public Expression {
   Token::Value op() const { return op_; }
   Expression* left() const { return left_; }
   Expression* right() const { return right_; }
+  Handle<AllocationSite> allocation_site() const { return allocation_site_; }
+  void set_allocation_site(Handle<AllocationSite> allocation_site) {
+    allocation_site_ = allocation_site;
+  }
 
   BailoutId RightId() const { return right_id_; }
 
@@ -1965,6 +1968,7 @@ class BinaryOperation V8_FINAL : public Expression {
   Token::Value op_;
   Expression* left_;
   Expression* right_;
+  Handle<AllocationSite> allocation_site_;
 
   // TODO(rossberg): the fixed arg should probably be represented as a Constant
   // type for the RHS.
