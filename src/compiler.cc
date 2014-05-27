@@ -726,6 +726,7 @@ Handle<Code> Compiler::GetCodeForDebugging(Handle<JSFunction> function) {
 void Compiler::CompileForLiveEdit(Handle<Script> script) {
   // TODO(635): support extensions.
   CompilationInfoWithZone info(script);
+  PostponeInterruptsScope postpone(info.isolate());
   VMState<COMPILER> state(info.isolate());
 
   info.MarkAsGlobal();
@@ -754,6 +755,7 @@ static bool DebuggerWantsEagerCompilation(CompilationInfo* info,
 
 static Handle<SharedFunctionInfo> CompileToplevel(CompilationInfo* info) {
   Isolate* isolate = info->isolate();
+  PostponeInterruptsScope postpone(isolate);
   ASSERT(!isolate->native_context().is_null());
   Handle<Script> script = info->script();
 
@@ -1028,16 +1030,20 @@ Handle<SharedFunctionInfo> Compiler::BuildFunctionInfo(FunctionLiteral* literal,
 }
 
 
-static Handle<Code> GetCodeFromOptimizedCodeMap(Handle<JSFunction> function) {
+static Handle<Code> GetCodeFromOptimizedCodeMap(Handle<JSFunction> function,
+                                                BailoutId osr_ast_id) {
   if (FLAG_cache_optimized_code) {
     Handle<SharedFunctionInfo> shared(function->shared());
     DisallowHeapAllocation no_gc;
     int index = shared->SearchOptimizedCodeMap(
-        function->context()->native_context());
+        function->context()->native_context(), osr_ast_id);
     if (index > 0) {
       if (FLAG_trace_opt) {
         PrintF("[found optimized code for ");
         function->ShortPrint();
+        if (!osr_ast_id.IsNone()) {
+          PrintF(" at OSR AST id %d", osr_ast_id.ToInt());
+        }
         PrintF("]\n");
       }
       FixedArray* literals = shared->GetLiteralsFromOptimizedCodeMap(index);
@@ -1053,14 +1059,14 @@ static void InsertCodeIntoOptimizedCodeMap(CompilationInfo* info) {
   Handle<Code> code = info->code();
   if (code->kind() != Code::OPTIMIZED_FUNCTION) return;  // Nothing to do.
 
-  // Cache non-OSR optimized code.
-  if (FLAG_cache_optimized_code && !info->is_osr()) {
+  // Cache optimized code.
+  if (FLAG_cache_optimized_code) {
     Handle<JSFunction> function = info->closure();
     Handle<SharedFunctionInfo> shared(function->shared());
     Handle<FixedArray> literals(function->literals());
     Handle<Context> native_context(function->context()->native_context());
     SharedFunctionInfo::AddToOptimizedCodeMap(
-        shared, native_context, code, literals);
+        shared, native_context, code, literals, info->osr_ast_id());
   }
 }
 
@@ -1137,10 +1143,8 @@ Handle<Code> Compiler::GetOptimizedCode(Handle<JSFunction> function,
                                         Handle<Code> current_code,
                                         ConcurrencyMode mode,
                                         BailoutId osr_ast_id) {
-  if (osr_ast_id.IsNone()) {  // No cache for OSR.
-    Handle<Code> cached_code = GetCodeFromOptimizedCodeMap(function);
-    if (!cached_code.is_null()) return cached_code;
-  }
+  Handle<Code> cached_code = GetCodeFromOptimizedCodeMap(function, osr_ast_id);
+  if (!cached_code.is_null()) return cached_code;
 
   SmartPointer<CompilationInfo> info(new CompilationInfoWithZone(function));
   Isolate* isolate = info->isolate();
@@ -1210,7 +1214,7 @@ Handle<Code> Compiler::GetConcurrentlyOptimizedCode(OptimizedCompileJob* job) {
   Compiler::RecordFunctionCompilation(
       Logger::LAZY_COMPILE_TAG, info.get(), shared);
   if (info->shared_info()->SearchOptimizedCodeMap(
-          info->context()->native_context()) == -1) {
+          info->context()->native_context(), info->osr_ast_id()) == -1) {
     InsertCodeIntoOptimizedCodeMap(info.get());
   }
 

@@ -1,4 +1,4 @@
-// Copyright 2006-2008 the V8 project authors. All rights reserved.
+// Copyright 2013 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -25,35 +25,22 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#include "v8.h"
+// Flags: --allow-natives-syntax
 
-#if V8_TARGET_ARCH_IA32
+function bar(a, b) { with(a) {return a + b;} }
 
-#include "assembler.h"
-#include "assembler-ia32.h"
-#include "assembler-ia32-inl.h"
-#include "frames.h"
-
-namespace v8 {
-namespace internal {
-
-
-Register JavaScriptFrame::fp_register() { return ebp; }
-Register JavaScriptFrame::context_register() { return esi; }
-Register JavaScriptFrame::constant_pool_pointer_register() {
-  UNREACHABLE();
-  return no_reg;
+var obj = {
+  functions: [bar, bar, bar, bar],
+  receivers: [bar, bar, undefined, null],
+  foo: function () {
+    for (var a = this.functions, e = this.receivers, c = a.length,
+         d = 0; d < c ; d++) {
+      a[d].apply(e[d], arguments)
+    }
+  }
 }
 
-
-Register StubFailureTrampolineFrame::fp_register() { return ebp; }
-Register StubFailureTrampolineFrame::context_register() { return esi; }
-Register StubFailureTrampolineFrame::constant_pool_pointer_register() {
-  UNREACHABLE();
-  return no_reg;
-}
-
-
-} }  // namespace v8::internal
-
-#endif  // V8_TARGET_ARCH_IA32
+obj.foo(1, 2, 3, 4);
+obj.foo(1, 2, 3, 4);
+%OptimizeFunctionOnNextCall(obj.foo);
+obj.foo(1, 2, 3, 4);

@@ -1,4 +1,4 @@
-// Copyright 2006-2008 the V8 project authors. All rights reserved.
+// Copyright 2013 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -25,35 +25,37 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#include "v8.h"
+// Flags: --use-osr --allow-natives-syntax --crankshaft
 
-#if V8_TARGET_ARCH_IA32
+var o1 = {a : 10};
+var o2 = { };
+o2.__proto__ = o1;
+var o3 = { };
+o3.__proto__ = o2;
 
-#include "assembler.h"
-#include "assembler-ia32.h"
-#include "assembler-ia32-inl.h"
-#include "frames.h"
-
-namespace v8 {
-namespace internal {
-
-
-Register JavaScriptFrame::fp_register() { return ebp; }
-Register JavaScriptFrame::context_register() { return esi; }
-Register JavaScriptFrame::constant_pool_pointer_register() {
-  UNREACHABLE();
-  return no_reg;
+function f(n, x, b) {
+  var sum = x.a;
+  for (var i = 0; i < n; i++) {
+    sum = 1.0 / i;
+  }
+  return sum;
 }
 
+f(10, o3);
+f(20, o3);
+f(30, o3);
+%OptimizeFunctionOnNextCall(f, "concurrent");
+f(100000, o3);
+// At this point OSR replaces already optimized code.
+// Check that it evicts old code from cache.
 
-Register StubFailureTrampolineFrame::fp_register() { return ebp; }
-Register StubFailureTrampolineFrame::context_register() { return esi; }
-Register StubFailureTrampolineFrame::constant_pool_pointer_register() {
-  UNREACHABLE();
-  return no_reg;
-}
+// This causes all code for f to be lazily deopted.
+o2.a = 5;
 
+// If OSR did not evict the old code, it will be installed in f here.
+%OptimizeFunctionOnNextCall(f);
+f(10, o3);
 
-} }  // namespace v8::internal
-
-#endif  // V8_TARGET_ARCH_IA32
+// The old code is already deoptimized, but f still points to it.
+// Disassembling it will crash.
+%DebugDisassembleFunction(f);
