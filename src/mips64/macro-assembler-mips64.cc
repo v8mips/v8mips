@@ -3623,7 +3623,7 @@ void MacroAssembler::CheckMap(Register obj,
 }
 
 
-void MacroAssembler::GetCFunctionDoubleResult(const DoubleRegister dst) {
+void MacroAssembler::MovFromFloatResult(const DoubleRegister dst) {
   if (IsMipsSoftFloatABI) {
     Move(dst, v0, v1);
   } else {
@@ -3632,7 +3632,7 @@ void MacroAssembler::GetCFunctionDoubleResult(const DoubleRegister dst) {
 }
 
 
-void MacroAssembler::GetFromCDoubleArguments(const DoubleRegister dst) {
+void MacroAssembler::MovFromFloatParameter(const DoubleRegister dst) {
   if (IsMipsSoftFloatABI) {
     Move(dst, a0, a1);
   } else {
@@ -3641,51 +3641,39 @@ void MacroAssembler::GetFromCDoubleArguments(const DoubleRegister dst) {
 }
 
 
-void MacroAssembler::SetCallCDoubleArguments(DoubleRegister dreg) {
+void MacroAssembler::MovToFloatParameter(DoubleRegister src) {
   if (!IsMipsSoftFloatABI) {
-    Move(f12, dreg);
+    Move(f12, src);
   } else {
-    Move(a0, a1, dreg);
+    Move(a0, a1, src);
   }
 }
 
 
-void MacroAssembler::SetForCDoubleResult(DoubleRegister dreg) {
+void MacroAssembler::MovToFloatResult(DoubleRegister src) {
   if (!IsMipsSoftFloatABI) {
-    Move(f0, dreg);
+    Move(f0, src);
   } else {
-    Move(v0, v1, dreg);
+    Move(v0, v1, src);
   }
 }
 
 
-void MacroAssembler::SetCallCDoubleArguments(DoubleRegister dreg1,
-                                             DoubleRegister dreg2) {
+void MacroAssembler::MovToFloatParameters(DoubleRegister src1,
+                                          DoubleRegister src2) {
   if (!IsMipsSoftFloatABI) {
     const DoubleRegister fparg2 = (kMipsAbi == kN64) ? f13 : f14;
-    if (dreg2.is(f12)) {
-      ASSERT(!dreg1.is(fparg2));
-      Move(fparg2, dreg2);
-      Move(f12, dreg1);
+    if (src2.is(f12)) {
+      ASSERT(!src1.is(fparg2));
+      Move(fparg2, src2);
+      Move(f12, src1);
     } else {
-      Move(f12, dreg1);
-      Move(fparg2, dreg2);
+      Move(f12, src1);
+      Move(fparg2, src2);
     }
   } else {
-    Move(a0, a1, dreg1);
-    Move(a2, a3, dreg2);
-  }
-}
-
-
-void MacroAssembler::SetCallCDoubleArguments(DoubleRegister dreg,
-                                             Register reg) {
-  if (!IsMipsSoftFloatABI) {
-    Move(f12, dreg);
-    Move(a2, reg);
-  } else {
-    Move(a2, reg);
-    Move(a0, a1, dreg);
+    Move(a0, a1, src1);
+    Move(a2, a3, src2);
   }
 }
 
