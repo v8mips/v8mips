@@ -152,15 +152,20 @@ void FullCodeGenerator::Generate() {
   }
 #endif
 
-  // Strict mode functions and builtins need to replace the receiver
-  // with undefined when called as functions (without an explicit
-  // receiver object). t1 is zero for method calls and non-zero for
-  // function calls.
-  if (!info->is_classic_mode() || info->is_native()) {
+  // Classic mode functions and builtins need to replace the receiver with the
+  // global proxy when called as functions (without an explicit receiver
+  // object).
+  if (info->is_classic_mode() && !info->is_native()) {
     Label ok;
     __ Branch(&ok, eq, t1, Operand(zero_reg));
     int receiver_offset = info->scope()->num_parameters() * kPointerSize;
+    __ ld(at, MemOperand(sp, receiver_offset));
     __ LoadRoot(a2, Heap::kUndefinedValueRootIndex);
+    __ Branch(&ok, ne, a2, Operand(at));
+
+    __ ld(a2, GlobalObjectOperand());
+    __ ld(a2, FieldMemOperand(a2, GlobalObject::kGlobalReceiverOffset));
+
     __ sd(a2, MemOperand(sp, receiver_offset));
     __ bind(&ok);
   }
@@ -2772,7 +2777,7 @@ void FullCodeGenerator::VisitCall(Call* expr) {
     }
     // Record source position for debugger.
     SetSourcePosition(expr->position());
-    CallFunctionStub stub(arg_count, RECEIVER_MIGHT_BE_IMPLICIT);
+    CallFunctionStub stub(arg_count, NO_CALL_FUNCTION_FLAGS);
     __ ld(a1, MemOperand(sp, (arg_count + 1) * kPointerSize));
     __ CallStub(&stub);
     RecordJSReturnSite(expr);
@@ -2814,15 +2819,14 @@ void FullCodeGenerator::VisitCall(Call* expr) {
       __ push(v0);
       // The receiver is implicitly the global receiver. Indicate this
       // by passing the hole to the call function stub.
-      __ LoadRoot(a1, Heap::kTheHoleValueRootIndex);
+      __ LoadRoot(a1, Heap::kUndefinedValueRootIndex);
       __ push(a1);
       __ bind(&call);
     }
 
     // The receiver is either the global receiver or an object found
-    // by LoadContextSlot. That object could be the hole if the
-    // receiver is implicitly the global object.
-    EmitCallWithStub(expr, RECEIVER_MIGHT_BE_IMPLICIT);
+    // by LoadContextSlot.
+    EmitCallWithStub(expr, NO_CALL_FUNCTION_FLAGS);
   } else if (property != NULL) {
     { PreservePositionScope scope(masm()->positions_recorder());
       VisitForStackValue(property->obj());
@@ -2839,12 +2843,10 @@ void FullCodeGenerator::VisitCall(Call* expr) {
     { PreservePositionScope scope(masm()->positions_recorder());
       VisitForStackValue(callee);
     }
-    // Push the hole as receiver.
-    // It will be correctly replaced in the call stub.
-    __ LoadRoot(a1, Heap::kTheHoleValueRootIndex);
+    __ LoadRoot(a1, Heap::kUndefinedValueRootIndex);
     __ push(a1);
     // Emit function call.
-    EmitCallWithStub(expr, RECEIVER_IS_IMPLICIT);
+    EmitCallWithStub(expr, NO_CALL_FUNCTION_FLAGS);
   }
 
 #ifdef DEBUG
@@ -3787,7 +3789,7 @@ void FullCodeGenerator::EmitCallFunction(CallRuntime* expr) {
   __ mov(a1, result_register());
   ParameterCount count(arg_count);
   __ InvokeFunction(a1, count, CALL_FUNCTION,
-                    NullCallWrapper(), CALL_AS_METHOD);
+                    NullCallWrapper(), CALL_AS_FUNCTION);
   __ ld(cp, MemOperand(fp, StandardFrameConstants::kContextOffset));
   __ jmp(&done);
 
