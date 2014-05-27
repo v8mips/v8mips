@@ -3370,11 +3370,8 @@ void LCodeGen::DoWrapReceiver(LWrapReceiver* instr) {
   __ Branch(&result_in_receiver);
 
   __ bind(&global_object);
+  CallStubCompiler::FetchGlobalProxy(masm(), receiver, function);
 
-  __ lw(result, MemOperand(fp, StandardFrameConstants::kContextOffset));
-  __ lw(result, ContextOperand(result, Context::GLOBAL_OBJECT_INDEX));
-  __ lw(result,
-         FieldMemOperand(result, JSGlobalObject::kGlobalReceiverOffset));
   if (result.is(receiver)) {
     __ bind(&result_in_receiver);
   } else {
@@ -3917,7 +3914,10 @@ void LCodeGen::DoCallFunction(LCallFunction* instr) {
   ASSERT(ToRegister(instr->result()).is(v0));
 
   int arity = instr->arity();
-  CallFunctionStub stub(arity, NO_CALL_FUNCTION_FLAGS);
+  CallFunctionFlags flags =
+      instr->hydrogen()->IsContextualCall() ?
+          RECEIVER_IS_IMPLICIT : NO_CALL_FUNCTION_FLAGS;
+  CallFunctionStub stub(arity, flags);
   if (instr->hydrogen()->IsTailCall()) {
     if (NeedsEagerFrame()) __ mov(sp, fp);
     __ Jump(stub.GetCode(isolate()), RelocInfo::CODE_TARGET);
@@ -3976,10 +3976,9 @@ void LCodeGen::DoCallNewArray(LCallNewArray* instr) {
       (AllocationSite::GetMode(kind) == TRACK_ALLOCATION_SITE)
           ? DISABLE_ALLOCATION_SITES
           : DONT_OVERRIDE;
-  ContextCheckMode context_mode = CONTEXT_CHECK_NOT_REQUIRED;
 
   if (instr->arity() == 0) {
-    ArrayNoArgumentConstructorStub stub(kind, context_mode, override_mode);
+    ArrayNoArgumentConstructorStub stub(kind, override_mode);
     CallCode(stub.GetCode(isolate()), RelocInfo::CONSTRUCT_CALL, instr);
   } else if (instr->arity() == 1) {
     Label done;
@@ -3991,18 +3990,17 @@ void LCodeGen::DoCallNewArray(LCallNewArray* instr) {
       __ Branch(&packed_case, eq, t1, Operand(zero_reg));
 
       ElementsKind holey_kind = GetHoleyElementsKind(kind);
-      ArraySingleArgumentConstructorStub stub(holey_kind, context_mode,
-                                              override_mode);
+      ArraySingleArgumentConstructorStub stub(holey_kind, override_mode);
       CallCode(stub.GetCode(isolate()), RelocInfo::CONSTRUCT_CALL, instr);
       __ jmp(&done);
       __ bind(&packed_case);
     }
 
-    ArraySingleArgumentConstructorStub stub(kind, context_mode, override_mode);
+    ArraySingleArgumentConstructorStub stub(kind, override_mode);
     CallCode(stub.GetCode(isolate()), RelocInfo::CONSTRUCT_CALL, instr);
     __ bind(&done);
   } else {
-    ArrayNArgumentsConstructorStub stub(kind, context_mode, override_mode);
+    ArrayNArgumentsConstructorStub stub(kind, override_mode);
     CallCode(stub.GetCode(isolate()), RelocInfo::CONSTRUCT_CALL, instr);
   }
 }

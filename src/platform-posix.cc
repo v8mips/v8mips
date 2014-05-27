@@ -185,10 +185,10 @@ void OS::Free(void* address, const size_t size) {
 
 // Get rid of writable permission on code allocations.
 void OS::ProtectCode(void* address, const size_t size) {
-#if defined(__CYGWIN__)
+#if V8_OS_CYGWIN
   DWORD old_protect;
   VirtualProtect(address, size, PAGE_EXECUTE_READ, &old_protect);
-#elif defined(__native_client__)
+#elif V8_OS_NACL
   // The Native Client port of V8 uses an interpreter, so
   // code pages don't need PROT_EXEC.
   mprotect(address, size, PROT_READ);
@@ -200,7 +200,7 @@ void OS::ProtectCode(void* address, const size_t size) {
 
 // Create guard pages.
 void OS::Guard(void* address, const size_t size) {
-#if defined(__CYGWIN__)
+#if V8_OS_CYGWIN
   DWORD oldprotect;
   VirtualProtect(address, size, PAGE_NOACCESS, &oldprotect);
 #else
@@ -210,7 +210,7 @@ void OS::Guard(void* address, const size_t size) {
 
 
 void* OS::GetRandomMmapAddr() {
-#if defined(__native_client__)
+#if V8_OS_NACL
   // TODO(bradchen): restore randomization once Native Client gets
   // smarter about using mmap address hints.
   // See http://code.google.com/p/nativeclient/issues/3341
@@ -496,8 +496,8 @@ void OS::MemMove(void* dest, const void* src, size_t size) {
 
 #elif defined(V8_HOST_ARCH_ARM)
 void OS::MemCopyUint16Uint8Wrapper(uint16_t* dest,
-                               const uint8_t* src,
-                               size_t chars) {
+                                   const uint8_t* src,
+                                   size_t chars) {
   uint16_t *limit = dest + chars;
   while (dest < limit) {
     *dest++ = static_cast<uint16_t>(*src++);
@@ -583,12 +583,12 @@ Thread::~Thread() {
 
 
 static void SetThreadName(const char* name) {
-#if defined(__DragonFly__) || defined(__FreeBSD__) || defined(__OpenBSD__)
+#if V8_OS_DRAGONFLYBSD || V8_OS_FREEBSD || V8_OS_OPENBSD
   pthread_set_name_np(pthread_self(), name);
-#elif defined(__NetBSD__)
+#elif V8_OS_NETBSD
   STATIC_ASSERT(Thread::kMaxThreadNameLength <= PTHREAD_MAX_NAMELEN_NP);
   pthread_setname_np(pthread_self(), "%s", name);
-#elif defined(__APPLE__)
+#elif V8_OS_MACOSX
   // pthread_setname_np is only available in 10.6 or later, so test
   // for it at runtime.
   int (*dynamic_pthread_setname_np)(const char*);
@@ -635,7 +635,7 @@ void Thread::Start() {
   result = pthread_attr_init(&attr);
   ASSERT_EQ(0, result);
   // Native client uses default stack size.
-#if !defined(__native_client__)
+#if !V8_OS_NACL
   if (stack_size_ > 0) {
     result = pthread_attr_setstacksize(&attr, static_cast<size_t>(stack_size_));
     ASSERT_EQ(0, result);
@@ -663,7 +663,7 @@ void Thread::YieldCPU() {
 
 
 static Thread::LocalStorageKey PthreadKeyToLocalKey(pthread_key_t pthread_key) {
-#if defined(__CYGWIN__)
+#if V8_OS_CYGWIN
   // We need to cast pthread_key_t to Thread::LocalStorageKey in two steps
   // because pthread_key_t is a pointer type on Cygwin. This will probably not
   // work on 64-bit platforms, but Cygwin doesn't support 64-bit anyway.
@@ -677,7 +677,7 @@ static Thread::LocalStorageKey PthreadKeyToLocalKey(pthread_key_t pthread_key) {
 
 
 static pthread_key_t LocalKeyToPthreadKey(Thread::LocalStorageKey local_key) {
-#if defined(__CYGWIN__)
+#if V8_OS_CYGWIN
   STATIC_ASSERT(sizeof(Thread::LocalStorageKey) == sizeof(pthread_key_t));
   intptr_t ptr_key = static_cast<intptr_t>(local_key);
   return reinterpret_cast<pthread_key_t>(ptr_key);

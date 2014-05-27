@@ -662,12 +662,9 @@ HandleScope::~HandleScope() {
 }
 
 
-int HandleScope::NumberOfHandles() {
-  i::Isolate* isolate = i::Isolate::Current();
-  if (!EnsureInitializedForIsolate(isolate, "HandleScope::NumberOfHandles")) {
-    return 0;
-  }
-  return i::HandleScope::NumberOfHandles(isolate);
+int HandleScope::NumberOfHandles(Isolate* isolate) {
+  return i::HandleScope::NumberOfHandles(
+      reinterpret_cast<i::Isolate*>(isolate));
 }
 
 
@@ -714,8 +711,7 @@ void Context::Enter() {
 
 
 void Context::Exit() {
-  // TODO(dcarney): fix this once chrome is fixed.
-  i::Isolate* isolate = i::Isolate::Current();
+  i::Isolate* isolate = Utils::OpenHandle(this)->GetIsolate();
   i::Handle<i::Context> context = i::Handle<i::Context>::null();
   ENTER_V8(isolate);
   if (!ApiCheck(isolate->handle_scope_implementer()->LeaveContext(context),
@@ -809,8 +805,7 @@ void Context::SetAlignedPointerInEmbedderData(int index, void* value) {
 // objects.  To remind you about this there is no HandleScope in the
 // NeanderObject constructor.  When you add one to the site calling the
 // constructor you should check that you ensured the VM was not dead first.
-NeanderObject::NeanderObject(int size) {
-  i::Isolate* isolate = i::Isolate::Current();
+NeanderObject::NeanderObject(v8::internal::Isolate* isolate, int size) {
   EnsureInitializedForIsolate(isolate, "v8::Nowhere");
   ENTER_V8(isolate);
   value_ = isolate->factory()->NewNeanderObject();
@@ -824,7 +819,7 @@ int NeanderObject::size() {
 }
 
 
-NeanderArray::NeanderArray() : obj_(2) {
+NeanderArray::NeanderArray(v8::internal::Isolate* isolate) : obj_(isolate, 2) {
   obj_.set(0, i::Smi::FromInt(0));
 }
 
@@ -881,7 +876,7 @@ static void TemplateSet(i::Isolate* isolate,
                         v8::Handle<v8::Data>* data) {
   i::Handle<i::Object> list(Utils::OpenHandle(templ)->property_list(), isolate);
   if (list->IsUndefined()) {
-    list = NeanderArray().value();
+    list = NeanderArray(isolate).value();
     Utils::OpenHandle(templ)->set_property_list(*list);
   }
   NeanderArray array(list);
@@ -943,12 +938,13 @@ static void InitializeFunctionTemplate(
 
 
 Local<ObjectTemplate> FunctionTemplate::PrototypeTemplate() {
-  i::Isolate* isolate = Utils::OpenHandle(this)->GetIsolate();
-  ENTER_V8(isolate);
+  i::Isolate* i_isolate = Utils::OpenHandle(this)->GetIsolate();
+  ENTER_V8(i_isolate);
   i::Handle<i::Object> result(Utils::OpenHandle(this)->prototype_template(),
-                              isolate);
+                              i_isolate);
   if (result->IsUndefined()) {
-    result = Utils::OpenHandle(*ObjectTemplate::New());
+    v8::Isolate* isolate = reinterpret_cast<v8::Isolate*>(i_isolate);
+    result = Utils::OpenHandle(*ObjectTemplate::New(isolate));
     Utils::OpenHandle(this)->set_prototype_template(*result);
   }
   return ToApiHandle<ObjectTemplate>(result);
@@ -1381,9 +1377,10 @@ static i::Handle<i::FunctionTemplateInfo> EnsureConstructor(
 static inline void AddPropertyToTemplate(
     i::Handle<i::TemplateInfo> info,
     i::Handle<i::AccessorInfo> obj) {
-  i::Handle<i::Object> list(info->property_accessors(), info->GetIsolate());
+  i::Isolate* isolate = info->GetIsolate();
+  i::Handle<i::Object> list(info->property_accessors(), isolate);
   if (list->IsUndefined()) {
-    list = NeanderArray().value();
+    list = NeanderArray(isolate).value();
     info->set_property_accessors(*list);
   }
   NeanderArray array(list);
@@ -5148,7 +5145,8 @@ static i::Handle<i::Context> CreateEnvironment(
       global_constructor = EnsureConstructor(isolate, *global_template);
 
       // Create a fresh template for the global proxy object.
-      proxy_template = ObjectTemplate::New();
+      proxy_template = ObjectTemplate::New(
+          reinterpret_cast<v8::Isolate*>(isolate));
       proxy_constructor = EnsureConstructor(isolate, *proxy_template);
 
       // Set the global template to be the prototype template of
@@ -6162,18 +6160,6 @@ Local<Integer> v8::Integer::NewFromUnsigned(Isolate* isolate, uint32_t value) {
 }
 
 
-#ifdef DEBUG
-v8::AssertNoGCScope::AssertNoGCScope(v8::Isolate* isolate) {
-  disallow_heap_allocation_ = new i::DisallowHeapAllocation();
-}
-
-
-v8::AssertNoGCScope::~AssertNoGCScope() {
-  delete static_cast<i::DisallowHeapAllocation*>(disallow_heap_allocation_);
-}
-#endif
-
-
 void V8::IgnoreOutOfMemoryException() {
   EnterIsolateIfNeeded()->set_ignore_out_of_memory(true);
 }
@@ -6186,7 +6172,7 @@ bool V8::AddMessageListener(MessageCallback that, Handle<Value> data) {
   ENTER_V8(isolate);
   i::HandleScope scope(isolate);
   NeanderArray listeners(isolate->factory()->message_listeners());
-  NeanderObject obj(2);
+  NeanderObject obj(isolate, 2);
   obj.set(0, *isolate->factory()->NewForeign(FUNCTION_ADDR(that)));
   obj.set(1, data.IsEmpty() ? isolate->heap()->undefined_value()
                             : *Utils::OpenHandle(*data));
