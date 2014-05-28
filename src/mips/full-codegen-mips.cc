@@ -157,7 +157,6 @@ void FullCodeGenerator::Generate() {
   // object).
   if (info->is_classic_mode() && !info->is_native()) {
     Label ok;
-    __ Branch(&ok, eq, t1, Operand(zero_reg));
     int receiver_offset = info->scope()->num_parameters() * kPointerSize;
     __ lw(at, MemOperand(sp, receiver_offset));
     __ LoadRoot(a2, Heap::kUndefinedValueRootIndex);
@@ -2649,8 +2648,7 @@ void FullCodeGenerator::EmitCallWithIC(Call* expr,
   // Record source position for debugger.
   SetSourcePosition(expr->position());
   // Call the IC initialization code.
-  Handle<Code> ic =
-      isolate()->stub_cache()->ComputeCallInitialize(arg_count, mode);
+  Handle<Code> ic = isolate()->stub_cache()->ComputeCallInitialize(arg_count);
   TypeFeedbackId ast_id = mode == CONTEXTUAL
       ? TypeFeedbackId::None()
       : expr->CallFeedbackId();
@@ -3801,8 +3799,7 @@ void FullCodeGenerator::EmitCallFunction(CallRuntime* expr) {
   // InvokeFunction requires the function in a1. Move it in there.
   __ mov(a1, result_register());
   ParameterCount count(arg_count);
-  __ InvokeFunction(a1, count, CALL_FUNCTION,
-                    NullCallWrapper(), CALL_AS_FUNCTION);
+  __ InvokeFunction(a1, count, CALL_FUNCTION, NullCallWrapper());
   __ lw(cp, MemOperand(fp, StandardFrameConstants::kContextOffset));
   __ jmp(&done);
 
@@ -4218,10 +4215,8 @@ void FullCodeGenerator::VisitCallRuntime(CallRuntime* expr) {
   if (expr->is_jsruntime()) {
     // Call the JS runtime function.
     __ li(a2, Operand(expr->name()));
-    ContextualMode mode = NOT_CONTEXTUAL;
-    Handle<Code> ic =
-        isolate()->stub_cache()->ComputeCallInitialize(arg_count, mode);
-    CallIC(ic, mode, expr->CallRuntimeFeedbackId());
+    Handle<Code> ic = isolate()->stub_cache()->ComputeCallInitialize(arg_count);
+    CallIC(ic, NOT_CONTEXTUAL, expr->CallRuntimeFeedbackId());
     // Restore context register.
     __ lw(cp, MemOperand(fp, StandardFrameConstants::kContextOffset));
   } else {

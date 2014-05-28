@@ -1,4 +1,4 @@
-// Copyright 2012 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.7
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -153,8 +153,6 @@ bool LCodeGen::GeneratePrologue() {
         info_->is_classic_mode() &&
         !info_->is_native()) {
       Label ok;
-      __ Branch(&ok, eq, t1, Operand(zero_reg));
-
       int receiver_offset = info_->scope()->num_parameters() * kPointerSize;
       __ LoadRoot(at, Heap::kUndefinedValueRootIndex);
       __ lw(a2, MemOperand(sp, receiver_offset));
@@ -3380,8 +3378,7 @@ void LCodeGen::DoWrapReceiver(LWrapReceiver* instr) {
   __ bind(&global_object);
   __ lw(receiver, FieldMemOperand(function, JSFunction::kContextOffset));
   __ lw(receiver,
-        ContextOperand(receiver,
-                       Context::SlotOffset(Context::GLOBAL_OBJECT_INDEX)));
+        ContextOperand(receiver, Context::GLOBAL_OBJECT_INDEX));
   __ lw(receiver,
         FieldMemOperand(receiver, GlobalObject::kGlobalReceiverOffset));
 
@@ -3441,8 +3438,7 @@ void LCodeGen::DoApplyArguments(LApplyArguments* instr) {
   // The number of arguments is stored in receiver which is a0, as expected
   // by InvokeFunction.
   ParameterCount actual(receiver);
-  __ InvokeFunction(function, actual, CALL_FUNCTION,
-                    safepoint_generator, CALL_AS_FUNCTION);
+  __ InvokeFunction(function, actual, CALL_FUNCTION, safepoint_generator);
 }
 
 
@@ -3516,7 +3512,6 @@ void LCodeGen::CallKnownFunction(Handle<JSFunction> function,
                                  int formal_parameter_count,
                                  int arity,
                                  LInstruction* instr,
-                                 CallKind call_kind,
                                  A1State a1_state) {
   bool dont_adapt_arguments =
       formal_parameter_count == SharedFunctionInfo::kDontAdaptArgumentsSentinel;
@@ -3540,7 +3535,6 @@ void LCodeGen::CallKnownFunction(Handle<JSFunction> function,
     }
 
     // Invoke function.
-    __ SetCallKind(t1, call_kind);
     __ lw(at, FieldMemOperand(a1, JSFunction::kCodeEntryOffset));
     __ Call(at);
 
@@ -3550,8 +3544,7 @@ void LCodeGen::CallKnownFunction(Handle<JSFunction> function,
     SafepointGenerator generator(this, pointers, Safepoint::kLazyDeopt);
     ParameterCount count(arity);
     ParameterCount expected(formal_parameter_count);
-    __ InvokeFunction(
-        function, expected, count, CALL_FUNCTION, generator, call_kind);
+    __ InvokeFunction(function, expected, count, CALL_FUNCTION, generator);
   }
 }
 
@@ -3563,7 +3556,6 @@ void LCodeGen::DoCallConstantFunction(LCallConstantFunction* instr) {
                     instr->hydrogen()->formal_parameter_count(),
                     instr->arity(),
                     instr,
-                    CALL_AS_FUNCTION,
                     A1_UNINITIALIZED);
 }
 
@@ -3886,13 +3878,12 @@ void LCodeGen::DoInvokeFunction(LInvokeFunction* instr) {
     LPointerMap* pointers = instr->pointer_map();
     SafepointGenerator generator(this, pointers, Safepoint::kLazyDeopt);
     ParameterCount count(instr->arity());
-    __ InvokeFunction(a1, count, CALL_FUNCTION, generator, CALL_AS_FUNCTION);
+    __ InvokeFunction(a1, count, CALL_FUNCTION, generator);
   } else {
     CallKnownFunction(known_function,
                       instr->hydrogen()->formal_parameter_count(),
                       instr->arity(),
                       instr,
-                      CALL_AS_FUNCTION,
                       A1_CONTAINS_TARGET);
   }
 }
@@ -3914,8 +3905,7 @@ void LCodeGen::DoCallNamed(LCallNamed* instr) {
   ASSERT(ToRegister(instr->result()).is(v0));
 
   int arity = instr->arity();
-  Handle<Code> ic =
-      isolate()->stub_cache()->ComputeCallInitialize(arity, NOT_CONTEXTUAL);
+  Handle<Code> ic = isolate()->stub_cache()->ComputeCallInitialize(arity);
   __ li(a2, Operand(instr->name()));
   CallCode(ic, RelocInfo::CODE_TARGET, instr);
 }
@@ -3937,25 +3927,12 @@ void LCodeGen::DoCallFunction(LCallFunction* instr) {
 }
 
 
-void LCodeGen::DoCallGlobal(LCallGlobal* instr) {
-  ASSERT(ToRegister(instr->context()).is(cp));
-  ASSERT(ToRegister(instr->result()).is(v0));
-
-  int arity = instr->arity();
-  Handle<Code> ic =
-      isolate()->stub_cache()->ComputeCallInitialize(arity, CONTEXTUAL);
-  __ li(a2, Operand(instr->name()));
-  CallCode(ic, RelocInfo::CODE_TARGET, instr);
-}
-
-
 void LCodeGen::DoCallKnownGlobal(LCallKnownGlobal* instr) {
   ASSERT(ToRegister(instr->result()).is(v0));
   CallKnownFunction(instr->hydrogen()->target(),
                     instr->hydrogen()->formal_parameter_count(),
                     instr->arity(),
                     instr,
-                    CALL_AS_FUNCTION,
                     A1_UNINITIALIZED);
 }
 
