@@ -1,4 +1,4 @@
-// Copyright 2013 the V8 project authors. All rights reserved.
+// Copyright 2014 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -27,31 +27,16 @@
 
 // Flags: --allow-natives-syntax
 
-// Test the performance.now() function of d8.  This test only makes sense with
-// d8.
+var a = { x: 1.1 };
+a.x = 0;
+var G = a.x;
+var o = { x: {} };
 
-if (this.performance && performance.now) {
-  (function run() {
-    var start_test = performance.now();
-    // Let the retry run for maximum 100ms to reduce flakiness.
-    for (var start = performance.now();
-        start - start_test < 100;
-        start = performance.now()) {
-      var end = performance.now();
-      assertTrue(start >= start_test);
-      assertTrue(end >= start);
-      while (end - start == 0) {
-        var next = performance.now();
-        assertTrue(next >= end);
-        end = next;
-      }
-      if (end - start <= 1) {
-        // Found (sub-)millisecond granularity.
-        return;
-      } else {
-        print("Timer difference too big: " + (end - start) + "ms");
-      }
-    }
-    assertTrue(false);
-  })()
+function func() {
+  return {x: G};
 }
+
+func();
+func();
+%OptimizeFunctionOnNextCall(func);
+assertEquals(0, func().x);
