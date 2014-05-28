@@ -1148,8 +1148,6 @@ class MaybeObject BASE_EMBEDDED {
   V(kExpected0AsASmiSentinel, "Expected 0 as a Smi sentinel")                 \
   V(kExpectedAlignmentMarker, "expected alignment marker")                    \
   V(kExpectedAllocationSite, "expected allocation site")                      \
-  V(kExpectedAllocationSiteInCell,                                            \
-    "Expected AllocationSite in property cell")                               \
   V(kExpectedPropertyCellInRegisterA2,                                        \
     "Expected property cell in register a2")                                  \
   V(kExpectedPropertyCellInRegisterEbx,                                       \
@@ -2981,6 +2979,9 @@ class FixedArray: public FixedArrayBase {
 
   // Gives access to raw memory which stores the array's data.
   inline Object** data_start();
+
+  // Shrink length and insert filler objects.
+  void Shrink(int length);
 
   // Copy operations.
   MUST_USE_RESULT inline MaybeObject* Copy();
