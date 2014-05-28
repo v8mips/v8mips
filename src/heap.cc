@@ -2286,7 +2286,7 @@ class ScavengingVisitor : public StaticVisitorBase {
                                     HeapObject** slot,
                                     HeapObject* object,
                                     int object_size) {
-    SLOW_ASSERT(object_size <= Page::kMaxNonCodeHeapObjectSize);
+    SLOW_ASSERT(object_size <= Page::kMaxRegularHeapObjectSize);
     SLOW_ASSERT(object->Size() == object_size);
 
     int allocation_size = object_size;
@@ -2940,7 +2940,8 @@ MaybeObject* Heap::AllocateHeapNumber(double value, PretenureFlag pretenure) {
   // Statically ensure that it is safe to allocate heap numbers in paged
   // spaces.
   int size = HeapNumber::kSize;
-  STATIC_ASSERT(HeapNumber::kSize <= Page::kNonCodeObjectAreaSize);
+  STATIC_ASSERT(HeapNumber::kSize <= Page::kMaxRegularHeapObjectSize);
+
   AllocationSpace space = SelectSpace(size, OLD_DATA_SPACE, pretenure);
 
   Object* result;
@@ -2956,7 +2957,7 @@ MaybeObject* Heap::AllocateHeapNumber(double value, PretenureFlag pretenure) {
 
 MaybeObject* Heap::AllocateCell(Object* value) {
   int size = Cell::kSize;
-  STATIC_ASSERT(Cell::kSize <= Page::kNonCodeObjectAreaSize);
+  STATIC_ASSERT(Cell::kSize <= Page::kMaxRegularHeapObjectSize);
 
   Object* result;
   { MaybeObject* maybe_result = AllocateRaw(size, CELL_SPACE, CELL_SPACE);
@@ -2970,7 +2971,7 @@ MaybeObject* Heap::AllocateCell(Object* value) {
 
 MaybeObject* Heap::AllocatePropertyCell() {
   int size = PropertyCell::kSize;
-  STATIC_ASSERT(PropertyCell::kSize <= Page::kNonCodeObjectAreaSize);
+  STATIC_ASSERT(PropertyCell::kSize <= Page::kMaxRegularHeapObjectSize);
 
   Object* result;
   MaybeObject* maybe_result =
@@ -3728,7 +3729,7 @@ MaybeObject* Heap::NumberFromDouble(double value, PretenureFlag pretenure) {
 
 MaybeObject* Heap::AllocateForeign(Address address, PretenureFlag pretenure) {
   // Statically ensure that it is safe to allocate foreigns in paged spaces.
-  STATIC_ASSERT(Foreign::kSize <= Page::kMaxNonCodeHeapObjectSize);
+  STATIC_ASSERT(Foreign::kSize <= Page::kMaxRegularHeapObjectSize);
   AllocationSpace space = (pretenure == TENURED) ? OLD_DATA_SPACE : NEW_SPACE;
   Foreign* result;
   MaybeObject* maybe_result = Allocate(foreign_map(), space);
@@ -5352,7 +5353,7 @@ MaybeObject* Heap::AllocateHashTable(int length, PretenureFlag pretenure) {
 
 MaybeObject* Heap::AllocateSymbol() {
   // Statically ensure that it is safe to allocate symbols in paged spaces.
-  STATIC_ASSERT(Symbol::kSize <= Page::kNonCodeObjectAreaSize);
+  STATIC_ASSERT(Symbol::kSize <= Page::kMaxRegularHeapObjectSize);
 
   Object* result;
   MaybeObject* maybe =
@@ -6316,7 +6317,7 @@ bool Heap::ConfigureHeap(int max_semispace_size,
                                          Page::kPageSize));
 
   // We rely on being able to allocate new arrays in paged spaces.
-  ASSERT(MaxRegularSpaceAllocationSize() >=
+  ASSERT(Page::kMaxRegularHeapObjectSize >=
          (JSArray::kSize +
           FixedArray::SizeFor(JSObject::kInitialMaxFastElementArray) +
           AllocationMemento::kSize));

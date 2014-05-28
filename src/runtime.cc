@@ -8868,7 +8868,6 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_NewGlobalContext) {
 
   ASSERT(function->context() == isolate->context());
   ASSERT(function->context()->global_object() == result->global_object());
-  isolate->set_context(result);
   result->global_object()->set_global_context(result);
 
   return result;  // non-failure
@@ -8881,14 +8880,7 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_NewFunctionContext) {
 
   CONVERT_ARG_CHECKED(JSFunction, function, 0);
   int length = function->shared()->scope_info()->ContextLength();
-  Context* result;
-  MaybeObject* maybe_result =
-      isolate->heap()->AllocateFunctionContext(length, function);
-  if (!maybe_result->To(&result)) return maybe_result;
-
-  isolate->set_context(result);
-
-  return result;  // non-failure
+  return isolate->heap()->AllocateFunctionContext(length, function);
 }
 
 
@@ -9764,7 +9756,7 @@ static MaybeObject* Allocate(Isolate* isolate,
   Heap* heap = isolate->heap();
   RUNTIME_ASSERT(IsAligned(size, kPointerSize));
   RUNTIME_ASSERT(size > 0);
-  RUNTIME_ASSERT(size <= heap->MaxRegularSpaceAllocationSize());
+  RUNTIME_ASSERT(size <= Page::kMaxRegularHeapObjectSize);
   HeapObject* allocation;
   { MaybeObject* maybe_allocation = heap->AllocateRaw(size, space, space);
     if (!maybe_allocation->To(&allocation)) return maybe_allocation;
