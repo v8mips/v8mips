@@ -1894,6 +1894,7 @@ void Assembler::mul_d(FPURegister fd, FPURegister fs, FPURegister ft) {
 
 void Assembler::madd_d(FPURegister fd, FPURegister fr, FPURegister fs,
     FPURegister ft) {
+  ASSERT(kArchVariant != kLoongson);
   GenInstrRegister(COP1X, fr, ft, fs, fd, MADD_D);
 }
 
