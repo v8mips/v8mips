@@ -315,30 +315,6 @@ int HBasicBlock::LoopNestingDepth() const {
 }
 
 
-void HBasicBlock::ReplaceControlWithGotoSuccessor(int succ) {
-  ASSERT(IsFinished());
-  ASSERT(end()->SuccessorCount() == 2);  // Only this case is supported yet.
-  ASSERT(succ < end()->SuccessorCount());
-
-  int unreachable_succ = 1 - succ;
-
-  // Replace control instruction with if (true) {succ} else {unreachable_succ}.
-  HBranch* new_branch = HBranch::New(
-      zone(),
-      NULL,
-      graph()->GetConstantTrue(),
-      ToBooleanStub::Types(ToBooleanStub::BOOLEAN),
-      end()->SuccessorAt(succ),
-      end()->SuccessorAt(unreachable_succ));
-
-  MarkSuccEdgeUnreachable(unreachable_succ);
-
-  end()->DeleteAndReplaceWith(end()->ActualValue());
-  new_branch->InsertAfter(last());
-  end_ = new_branch;
-}
-
-
 void HBasicBlock::PostProcessLoopHeader(IterationStatement* stmt) {
   ASSERT(IsLoopHeader());
 
@@ -354,15 +330,6 @@ void HBasicBlock::PostProcessLoopHeader(IterationStatement* stmt) {
   for (int i = 1; i < predecessors()->length(); ++i) {
     loop_information()->RegisterBackEdge(predecessors()->at(i));
   }
-}
-
-
-void HBasicBlock::MarkSuccEdgeUnreachable(int succ) {
-  ASSERT(IsFinished());
-  HBasicBlock* succ_block = end()->SuccessorAt(succ);
-
-  ASSERT(succ_block->predecessors()->length() == 1);
-  succ_block->MarkUnreachable();
 }
 
 
@@ -3952,9 +3919,7 @@ void HGraph::RestoreActualValues() {
 }
 
 
-template <class Instruction>
-HInstruction* HOptimizedGraphBuilder::PreProcessCall(Instruction* call) {
-  int count = call->argument_count();
+void HOptimizedGraphBuilder::PushArgumentsFromEnvironment(int count) {
   ZoneList<HValue*> arguments(count, zone());
   for (int i = 0; i < count; ++i) {
     arguments.Add(Pop(), zone());
@@ -3963,6 +3928,12 @@ HInstruction* HOptimizedGraphBuilder::PreProcessCall(Instruction* call) {
   while (!arguments.is_empty()) {
     Add<HPushArgument>(arguments.RemoveLast());
   }
+}
+
+
+template <class Instruction>
+HInstruction* HOptimizedGraphBuilder::PreProcessCall(Instruction* call) {
+  PushArgumentsFromEnvironment(call->argument_count());
   return call;
 }
 
@@ -5534,7 +5505,7 @@ HInstruction* HOptimizedGraphBuilder::BuildLoadMonomorphic(
       return NULL;
     }
     Add<HPushArgument>(Pop());
-    return New<HCallConstantFunction>(info->accessor(), 1);
+    return BuildCallConstantFunction(info->accessor(), 1);
   }
 
   ASSERT(info->lookup()->IsConstant());
@@ -5819,7 +5790,7 @@ void HOptimizedGraphBuilder::BuildStore(Expression* expr,
       Drop(2);
       Add<HPushArgument>(object);
       Add<HPushArgument>(value);
-      instr = New<HCallConstantFunction>(setter, 2);
+      instr = BuildCallConstantFunction(setter, 2);
     } else {
       Drop(2);
       CHECK_ALIVE(instr = BuildStoreNamedMonomorphic(object,
@@ -6781,6 +6752,86 @@ void HOptimizedGraphBuilder::AddCheckConstantFunction(
 }
 
 
+HInstruction* HOptimizedGraphBuilder::NewPlainFunctionCall(
+    HValue* fun, int argument_count, bool pass_argument_count) {
+  return New<HCallJSFunction>(
+      fun, argument_count, pass_argument_count);
+}
+
+
+HInstruction* HOptimizedGraphBuilder::NewArgumentAdaptorCall(
+    HValue* fun, HValue* context,
+    int argument_count, HValue* expected_param_count) {
+  CallInterfaceDescriptor* descriptor =
+      isolate()->call_descriptor(Isolate::ArgumentAdaptorCall);
+
+  HValue* arity = Add<HConstant>(argument_count - 1);
+
+  HValue* op_vals[] = { fun, context, arity, expected_param_count };
+
+  Handle<Code> adaptor =
+      isolate()->builtins()->ArgumentsAdaptorTrampoline();
+  HConstant* adaptor_value = Add<HConstant>(adaptor);
+
+  return New<HCallWithDescriptor>(
+      adaptor_value, argument_count, descriptor,
+      Vector<HValue*>(op_vals, descriptor->environment_length()));
+}
+
+
+HInstruction* HOptimizedGraphBuilder::BuildCallConstantFunction(
+    Handle<JSFunction> jsfun, int argument_count) {
+  HValue* target = Add<HConstant>(jsfun);
+  // For constant functions, we try to avoid calling the
+  // argument adaptor and instead call the function directly
+  int formal_parameter_count = jsfun->shared()->formal_parameter_count();
+  bool dont_adapt_arguments =
+      (formal_parameter_count ==
+       SharedFunctionInfo::kDontAdaptArgumentsSentinel);
+  int arity = argument_count - 1;
+  bool can_invoke_directly =
+      dont_adapt_arguments || formal_parameter_count == arity;
+  if (can_invoke_directly) {
+    return NewPlainFunctionCall(target, argument_count, dont_adapt_arguments);
+  } else {
+    HValue* param_count_value = Add<HConstant>(formal_parameter_count);
+    HValue* context = Add<HLoadNamedField>(target,
+        HObjectAccess::ForFunctionContextPointer());
+    return NewArgumentAdaptorCall(target, context,
+        argument_count, param_count_value);
+  }
+  UNREACHABLE();
+  return NULL;
+}
+
+
+HInstruction* HOptimizedGraphBuilder::NewCallNamed(
+    Handle<String> name, int argument_count) {
+  CallInterfaceDescriptor* descriptor =
+      isolate()->call_descriptor(Isolate::NamedCall);
+  HValue* op_vals[] = { context(), Add<HConstant>(name) };
+  int arity = argument_count - 1;
+  Handle<Code> ic = isolate()->stub_cache()->ComputeCallInitialize(arity);
+
+  return New<HCallWithDescriptor>(
+      Add<HConstant>(ic), argument_count, descriptor,
+      Vector<HValue*>(op_vals, descriptor->environment_length()));
+}
+
+
+HInstruction* HOptimizedGraphBuilder::NewCallKeyed(
+    HValue* key, int argument_count) {
+  CallInterfaceDescriptor* descriptor =
+      isolate()->call_descriptor(Isolate::KeyedCall);
+  HValue* op_vals[] = { context(), key };
+  int arity = argument_count - 1;
+  Handle<Code> ic = isolate()->stub_cache()->ComputeKeyedCallInitialize(arity);
+
+  return New<HCallWithDescriptor>(
+      Add<HConstant>(ic), argument_count, descriptor,
+      Vector<HValue*>(op_vals, descriptor->environment_length()));
+}
+
 class FunctionSorter {
  public:
   FunctionSorter() : index_(0), ticks_(0), ast_length_(0), src_length_(0) { }
@@ -6836,9 +6887,9 @@ bool HOptimizedGraphBuilder::TryCallPolymorphicAsMonomorphic(
 
   if (!TryInlineCall(expr)) {
     int argument_count = expr->arguments()->length() + 1;  // Includes receiver.
-    HCallConstantFunction* call =
-      New<HCallConstantFunction>(expr->target(), argument_count);
-    PreProcessCall(call);
+    HInstruction* call = BuildCallConstantFunction(
+        expr->target(), argument_count);
+    PushArgumentsFromEnvironment(argument_count);
     AddInstruction(call);
     if (!ast_context()->IsEffect()) Push(call);
     Add<HSimulate>(expr->id(), REMOVABLE_SIMULATE);
@@ -6952,9 +7003,9 @@ void HOptimizedGraphBuilder::HandlePolymorphicCallNamed(
       // entire compilation by setting stack overflow on the visitor.
       if (HasStackOverflow()) return;
     } else {
-      HCallConstantFunction* call =
-          New<HCallConstantFunction>(expr->target(), argument_count);
-      PreProcessCall(call);
+      HInstruction* call = BuildCallConstantFunction(
+          expr->target(), argument_count);
+      PushArgumentsFromEnvironment(argument_count);
       AddInstruction(call);
       if (!ast_context()->IsEffect()) Push(call);
     }
@@ -6974,8 +7025,8 @@ void HOptimizedGraphBuilder::HandlePolymorphicCallNamed(
     if (!ast_context()->IsEffect()) Push(graph()->GetConstant0());
     FinishExitWithHardDeoptimization("Unknown map in polymorphic call", join);
   } else {
-    HCallNamed* call = New<HCallNamed>(name, argument_count);
-    PreProcessCall(call);
+    HInstruction* call = NewCallNamed(name, argument_count);
+    PushArgumentsFromEnvironment(argument_count);
 
     if (join != NULL) {
       AddInstruction(call);
@@ -7699,7 +7750,7 @@ void HOptimizedGraphBuilder::VisitCall(Call* expr) {
 
         call = New<HCallFunction>(function, argument_count);
       } else {
-        call = New<HCallKeyed>(key, argument_count);
+        call = NewCallKeyed(key, argument_count);
       }
       Drop(argument_count + 1);  // 1 is the key.
       return ast_context()->ReturnInstruction(call, expr->id());
@@ -7738,13 +7789,14 @@ void HOptimizedGraphBuilder::VisitCall(Call* expr) {
         // When the target has a custom call IC generator, use the IC,
         // because it is likely to generate better code.  Also use the IC
         // when a primitive receiver check is required.
-        call = PreProcessCall(New<HCallNamed>(name, argument_count));
+        call = NewCallNamed(name, argument_count);
+        PushArgumentsFromEnvironment(argument_count);
       } else {
         AddCheckConstantFunction(expr->holder(), receiver, map);
 
         if (TryInlineCall(expr)) return;
-        call = PreProcessCall(
-            New<HCallConstantFunction>(expr->target(), argument_count));
+        call = BuildCallConstantFunction(expr->target(), argument_count);
+        PushArgumentsFromEnvironment(argument_count);
       }
     } else if (types != NULL && types->length() > 1) {
       ASSERT(expr->check_type() == RECEIVER_MAP_CHECK);
@@ -7752,7 +7804,8 @@ void HOptimizedGraphBuilder::VisitCall(Call* expr) {
       return;
 
     } else {
-      call = PreProcessCall(New<HCallNamed>(name, argument_count));
+      call = NewCallNamed(name, argument_count);
+      PushArgumentsFromEnvironment(argument_count);
     }
   } else {
     VariableProxy* proxy = expr->expression()->AsVariableProxy();
@@ -7813,17 +7866,18 @@ void HOptimizedGraphBuilder::VisitCall(Call* expr) {
           environment()->SetExpressionStackAt(receiver_index, global_object);
           // When the target has a custom call IC generator, use the IC,
           // because it is likely to generate better code.
-          call = PreProcessCall(New<HCallNamed>(var->name(), argument_count));
+          call = NewCallNamed(var->name(), argument_count);
+          PushArgumentsFromEnvironment(argument_count);
         } else {
-          call = PreProcessCall(New<HCallKnownGlobal>(
-              expr->target(), argument_count));
+          call = BuildCallConstantFunction(expr->target(), argument_count);
+          PushArgumentsFromEnvironment(argument_count);
         }
       } else {
         HGlobalObject* receiver = Add<HGlobalObject>();
         Push(Add<HPushArgument>(receiver));
         CHECK_ALIVE(VisitArgumentList(expr->arguments()));
 
-        call = New<HCallNamed>(var->name(), argument_count);
+        call = NewCallNamed(var->name(), argument_count);
         Drop(argument_count);
       }
 

@@ -114,8 +114,6 @@ class HBasicBlock V8_FINAL : public ZoneObject {
   bool Dominates(HBasicBlock* other) const;
   int LoopNestingDepth() const;
 
-  void ReplaceControlWithGotoSuccessor(int succ);
-
   void SetInitialEnvironment(HEnvironment* env);
   void ClearEnvironment() {
     ASSERT(IsFinished());
@@ -202,7 +200,6 @@ class HBasicBlock V8_FINAL : public ZoneObject {
                        int position);
 
  private:
-  void MarkSuccEdgeUnreachable(int succ);
   void RegisterPredecessor(HBasicBlock* pred);
   void AddDominatedBlock(HBasicBlock* block);
 
@@ -2173,6 +2170,7 @@ class HOptimizedGraphBuilder : public HGraphBuilder, public AstVisitor {
   // Remove the arguments from the bailout environment and emit instructions
   // to push them as outgoing parameters.
   template <class Instruction> HInstruction* PreProcessCall(Instruction* call);
+  void PushArgumentsFromEnvironment(int count);
 
   void SetUpScope(Scope* scope);
   virtual void VisitStatements(ZoneList<Statement*>* statements) V8_OVERRIDE;
@@ -2498,6 +2496,21 @@ class HOptimizedGraphBuilder : public HGraphBuilder, public AstVisitor {
   void AddCheckConstantFunction(Handle<JSObject> holder,
                                 HValue* receiver,
                                 Handle<Map> receiver_map);
+
+  HInstruction* NewPlainFunctionCall(HValue* fun,
+                                     int argument_count,
+                                     bool pass_argument_count);
+
+  HInstruction* NewArgumentAdaptorCall(HValue* fun, HValue* context,
+                                       int argument_count,
+                                       HValue* expected_param_count);
+
+  HInstruction* BuildCallConstantFunction(Handle<JSFunction> target,
+                                          int argument_count);
+
+  HInstruction* NewCallKeyed(HValue* key, int argument_count);
+
+  HInstruction* NewCallNamed(Handle<String> name, int argument_count);
 
   // The translation state of the currently-being-translated function.
   FunctionState* function_state_;
