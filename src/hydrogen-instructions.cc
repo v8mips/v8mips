@@ -983,12 +983,6 @@ void HCallNamed::PrintDataTo(StringStream* stream) {
 }
 
 
-void HCallGlobal::PrintDataTo(StringStream* stream) {
-  stream->Add("%o ", *name());
-  HUnaryCall::PrintDataTo(stream);
-}
-
-
 void HCallKnownGlobal::PrintDataTo(StringStream* stream) {
   stream->Add("%o ", target()->shared()->DebugName());
   stream->Add("#%d", argument_count());
