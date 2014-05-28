@@ -1293,6 +1293,19 @@ void MacroAssembler::Trunc_uw_d(FPURegister fd,
 }
 
 
+void MacroAssembler::Madd_d(FPURegister fd, FPURegister fr, FPURegister fs,
+    FPURegister ft, FPURegister scratch) {
+  if (0) {  // TODO(plind): find reasonable arch-variant symbol names.
+    madd_d(fd, fr, fs, ft);
+  } else {
+    // Can not change source regs's value.
+    ASSERT(!fr.is(scratch) && !fs.is(scratch) && !ft.is(scratch));
+    mul_d(scratch, fs, ft);
+    add_d(fd, fr, scratch);
+  }
+}
+
+
 void MacroAssembler::BranchF(Label* target,
                              Label* nan,
                              Condition cc,
