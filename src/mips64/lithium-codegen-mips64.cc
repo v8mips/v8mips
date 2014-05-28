@@ -3617,20 +3617,6 @@ void LCodeGen::DoDeclareGlobals(LDeclareGlobals* instr) {
 }
 
 
-void LCodeGen::DoGlobalObject(LGlobalObject* instr) {
-  Register context = ToRegister(instr->context());
-  Register result = ToRegister(instr->result());
-  __ ld(result, ContextOperand(context, Context::GLOBAL_OBJECT_INDEX));
-}
-
-
-void LCodeGen::DoGlobalReceiver(LGlobalReceiver* instr) {
-  Register global = ToRegister(instr->global_object());
-  Register result = ToRegister(instr->result());
-  __ ld(result, FieldMemOperand(global, GlobalObject::kGlobalReceiverOffset));
-}
-
-
 void LCodeGen::CallKnownFunction(Handle<JSFunction> function,
                                  int formal_parameter_count,
                                  int arity,
