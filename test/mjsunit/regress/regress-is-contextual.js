@@ -1,4 +1,4 @@
-// Copyright 2010 the V8 project authors. All rights reserved.
+// Copyright 2013 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -25,29 +25,17 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#include "gc-extension.h"
-#include "platform.h"
-
-namespace v8 {
-namespace internal {
-
-
-v8::Handle<v8::FunctionTemplate> GCExtension::GetNativeFunctionTemplate(
-    v8::Isolate* isolate,
-    v8::Handle<v8::String> str) {
-  return v8::FunctionTemplate::New(isolate, GCExtension::GC);
+// CallIC accumulates feedback that string index is out of bounds, then
+// misses
+function foo(index) {
+  return text.charAt(index);
 }
 
+var text = "hi there";
+foo(0);
+foo(0);
+foo(100);     // Accumulate feedback that index is out of bounds.
+text = false;
 
-void GCExtension::GC(const v8::FunctionCallbackInfo<v8::Value>& args) {
-  i::Isolate* isolate = reinterpret_cast<i::Isolate*>(args.GetIsolate());
-  if (args[0]->BooleanValue()) {
-    isolate->heap()->CollectGarbage(
-        NEW_SPACE, "gc extension", v8::kGCCallbackFlagForced);
-  } else {
-    isolate->heap()->CollectAllGarbage(
-        Heap::kNoGCFlags, "gc extension", v8::kGCCallbackFlagForced);
-  }
-}
-
-} }  // namespace v8::internal
+// This line ASSERTS in debug without fix.
+assertThrows(function () { foo(); }, TypeError);
