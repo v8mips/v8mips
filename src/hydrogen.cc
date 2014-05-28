@@ -1210,7 +1210,7 @@ void HGraphBuilder::AddSimulate(BailoutId id,
                                 RemovableSimulate removable) {
   ASSERT(current_block() != NULL);
   ASSERT(!graph()->IsInsideNoSideEffectsScope());
-  current_block()->AddNewSimulate(id, removable);
+  current_block()->AddNewSimulate(id, position_, removable);
 }
 
 
@@ -7657,8 +7657,10 @@ bool HOptimizedGraphBuilder::TryInlineBuiltinMethodCall(
       Add<HStoreNamedField>(
           checked_object, HObjectAccess::ForArrayLength(elements_kind),
           reduced_length);
-      ast_context()->ReturnValue(result);
+      if (!ast_context()->IsEffect()) Push(result);
       Add<HSimulate>(expr->id(), REMOVABLE_SIMULATE);
+      if (!ast_context()->IsEffect()) Drop(1);
+      ast_context()->ReturnValue(result);
       return true;
     }
     case kArrayPush: {
