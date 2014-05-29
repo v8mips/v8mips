@@ -3051,6 +3051,11 @@ void HParameter::PrintDataTo(StringStream* stream) {
 void HLoadNamedField::PrintDataTo(StringStream* stream) {
   object()->PrintNameTo(stream);
   access_.PrintTo(stream);
+
+  if (HasDependency()) {
+    stream->Add(" ");
+    dependency()->PrintNameTo(stream);
+  }
 }
 
 

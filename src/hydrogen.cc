@@ -1196,8 +1196,8 @@ void HGraphBuilder::FinishExitCurrentBlock(HControlInstruction* instruction) {
 void HGraphBuilder::AddIncrementCounter(StatsCounter* counter) {
   if (FLAG_native_code_counters && counter->Enabled()) {
     HValue* reference = Add<HConstant>(ExternalReference(counter));
-    HValue* old_value = Add<HLoadNamedField>(reference,
-                                             HObjectAccess::ForCounter());
+    HValue* old_value = Add<HLoadNamedField>(
+        reference, static_cast<HValue*>(NULL), HObjectAccess::ForCounter());
     HValue* new_value = AddUncasted<HAdd>(old_value, graph()->GetConstant1());
     new_value->ClearFlag(HValue::kCanOverflow);  // Ignore counter overflow
     Add<HStoreNamedField>(reference, HObjectAccess::ForCounter(),
@@ -1415,7 +1415,8 @@ void HGraphBuilder::BuildTransitionElementsKind(HValue* object,
     HInstruction* elements_length = AddLoadFixedArrayLength(elements);
 
     HInstruction* array_length = is_jsarray
-        ? Add<HLoadNamedField>(object, HObjectAccess::ForArrayLength(from_kind))
+        ? Add<HLoadNamedField>(object, static_cast<HValue*>(NULL),
+                               HObjectAccess::ForArrayLength(from_kind))
         : elements_length;
 
     BuildGrowElementsCapacity(object, elements, from_kind, to_kind,
@@ -1617,15 +1618,17 @@ HValue* HGraphBuilder::BuildNumberToString(HValue* object, Type* type) {
     } else {
       // Check if the object is a heap number.
       IfBuilder if_objectisnumber(this);
-      if_objectisnumber.If<HCompareMap>(
+      HValue* objectisnumber = if_objectisnumber.If<HCompareMap>(
           object, isolate()->factory()->heap_number_map());
       if_objectisnumber.Then();
       {
         // Compute hash for heap number similar to double_get_hash().
         HValue* low = Add<HLoadNamedField>(
-            object, HObjectAccess::ForHeapNumberValueLowestBits());
+            object, objectisnumber,
+            HObjectAccess::ForHeapNumberValueLowestBits());
         HValue* high = Add<HLoadNamedField>(
-            object, HObjectAccess::ForHeapNumberValueHighestBits());
+            object, objectisnumber,
+            HObjectAccess::ForHeapNumberValueHighestBits());
         HValue* hash = AddUncasted<HBitwise>(Token::BIT_XOR, low, high);
         hash = AddUncasted<HBitwise>(Token::BIT_AND, hash, mask);
 
@@ -1638,14 +1641,16 @@ HValue* HGraphBuilder::BuildNumberToString(HValue* object, Type* type) {
         // Check if key is a heap number (the number string cache contains only
         // SMIs and heap number, so it is sufficient to do a SMI check here).
         IfBuilder if_keyisnotsmi(this);
-        if_keyisnotsmi.IfNot<HIsSmiAndBranch>(key);
+        HValue* keyisnotsmi = if_keyisnotsmi.IfNot<HIsSmiAndBranch>(key);
         if_keyisnotsmi.Then();
         {
           // Check if values of key and object match.
           IfBuilder if_keyeqobject(this);
           if_keyeqobject.If<HCompareNumericAndBranch>(
-              Add<HLoadNamedField>(key, HObjectAccess::ForHeapNumberValue()),
-              Add<HLoadNamedField>(object, HObjectAccess::ForHeapNumberValue()),
+              Add<HLoadNamedField>(key, keyisnotsmi,
+                                   HObjectAccess::ForHeapNumberValue()),
+              Add<HLoadNamedField>(object, objectisnumber,
+                                   HObjectAccess::ForHeapNumberValue()),
               Token::EQ);
           if_keyeqobject.Then();
           {
@@ -2113,7 +2118,8 @@ HInstruction* HGraphBuilder::BuildUncheckedMonomorphicElementAccess(
   HInstruction* length = NULL;
   if (is_js_array) {
     length = Add<HLoadNamedField>(
-        checked_object, HObjectAccess::ForArrayLength(elements_kind));
+        checked_object, static_cast<HValue*>(NULL),
+        HObjectAccess::ForArrayLength(elements_kind));
   } else {
     length = AddLoadFixedArrayLength(elements);
   }
@@ -2124,7 +2130,8 @@ HInstruction* HGraphBuilder::BuildUncheckedMonomorphicElementAccess(
     HValue* backing_store;
     if (IsExternalArrayElementsKind(elements_kind)) {
       backing_store = Add<HLoadNamedField>(
-          elements, HObjectAccess::ForExternalArrayExternalPointer());
+          elements, static_cast<HValue*>(NULL),
+          HObjectAccess::ForExternalArrayExternalPointer());
     } else {
       backing_store = elements;
     }
@@ -2357,13 +2364,14 @@ HInstruction* HGraphBuilder::AddElementAccess(
 
 
 HLoadNamedField* HGraphBuilder::AddLoadElements(HValue* object) {
-  return Add<HLoadNamedField>(object, HObjectAccess::ForElementsPointer());
+  return Add<HLoadNamedField>(
+      object, static_cast<HValue*>(NULL), HObjectAccess::ForElementsPointer());
 }
 
 
 HLoadNamedField* HGraphBuilder::AddLoadFixedArrayLength(HValue* object) {
-  return Add<HLoadNamedField>(object,
-                              HObjectAccess::ForFixedArrayLength());
+  return Add<HLoadNamedField>(
+      object, static_cast<HValue*>(NULL), HObjectAccess::ForFixedArrayLength());
 }
 
 
@@ -2550,9 +2558,10 @@ HValue* HGraphBuilder::BuildCloneShallowArray(HValue* boilerplate,
   for (int i = 0; i < JSArray::kSize; i += kPointerSize) {
     if ((i != JSArray::kElementsOffset) || (length == 0)) {
       HObjectAccess access = HObjectAccess::ForJSArrayOffset(i);
-      Add<HStoreNamedField>(object, access,
-                            Add<HLoadNamedField>(boilerplate, access),
-                            INITIALIZING_STORE);
+      Add<HStoreNamedField>(
+          object, access, Add<HLoadNamedField>(
+              boilerplate, static_cast<HValue*>(NULL), access),
+          INITIALIZING_STORE);
     }
   }
 
@@ -2580,9 +2589,10 @@ HValue* HGraphBuilder::BuildCloneShallowArray(HValue* boilerplate,
     // Copy the elements array header.
     for (int i = 0; i < FixedArrayBase::kHeaderSize; i += kPointerSize) {
       HObjectAccess access = HObjectAccess::ForFixedArrayHeader(i);
-      Add<HStoreNamedField>(object_elements, access,
-                            Add<HLoadNamedField>(boilerplate_elements, access),
-                            INITIALIZING_STORE);
+      Add<HStoreNamedField>(
+          object_elements, access, Add<HLoadNamedField>(
+              boilerplate_elements, static_cast<HValue*>(NULL), access),
+          INITIALIZING_STORE);
     }
 
     // Copy the elements array contents.
@@ -2668,7 +2678,8 @@ void HGraphBuilder::BuildCreateAllocationMemento(
       allocation_site, INITIALIZING_STORE);
   if (FLAG_allocation_site_pretenuring) {
     HValue* memento_create_count = Add<HLoadNamedField>(
-        allocation_site, HObjectAccess::ForAllocationSiteOffset(
+        allocation_site, static_cast<HValue*>(NULL),
+        HObjectAccess::ForAllocationSiteOffset(
             AllocationSite::kPretenureCreateCountOffset));
     memento_create_count = AddUncasted<HAdd>(
         memento_create_count, graph()->GetConstant1());
@@ -2688,22 +2699,26 @@ void HGraphBuilder::BuildCreateAllocationMemento(
 HInstruction* HGraphBuilder::BuildGetNativeContext(HValue* closure) {
   // Get the global context, then the native context
   HInstruction* context =
-      Add<HLoadNamedField>(closure, HObjectAccess::ForFunctionContextPointer());
-  HInstruction* global_object = Add<HLoadNamedField>(context,
+      Add<HLoadNamedField>(closure, static_cast<HValue*>(NULL),
+                           HObjectAccess::ForFunctionContextPointer());
+  HInstruction* global_object = Add<HLoadNamedField>(
+      context, static_cast<HValue*>(NULL),
       HObjectAccess::ForContextSlot(Context::GLOBAL_OBJECT_INDEX));
   HObjectAccess access = HObjectAccess::ForJSObjectOffset(
       GlobalObject::kNativeContextOffset);
-  return Add<HLoadNamedField>(global_object, access);
+  return Add<HLoadNamedField>(
+      global_object, static_cast<HValue*>(NULL), access);
 }
 
 
 HInstruction* HGraphBuilder::BuildGetNativeContext() {
   // Get the global context, then the native context
   HValue* global_object = Add<HLoadNamedField>(
-      context(), HObjectAccess::ForContextSlot(Context::GLOBAL_OBJECT_INDEX));
+      context(), static_cast<HValue*>(NULL),
+      HObjectAccess::ForContextSlot(Context::GLOBAL_OBJECT_INDEX));
   return Add<HLoadNamedField>(
-      global_object, HObjectAccess::ForJSObjectOffset(
-          GlobalObject::kNativeContextOffset));
+      global_object, static_cast<HValue*>(NULL),
+      HObjectAccess::ForJSObjectOffset(GlobalObject::kNativeContextOffset));
 }
 
 
@@ -2900,13 +2915,16 @@ HStoreNamedField* HGraphBuilder::AddStoreMapConstant(HValue *object,
 
 HValue* HGraphBuilder::AddLoadJSBuiltin(Builtins::JavaScript builtin) {
   HValue* global_object = Add<HLoadNamedField>(
-      context(), HObjectAccess::ForContextSlot(Context::GLOBAL_OBJECT_INDEX));
+      context(), static_cast<HValue*>(NULL),
+      HObjectAccess::ForContextSlot(Context::GLOBAL_OBJECT_INDEX));
   HObjectAccess access = HObjectAccess::ForJSObjectOffset(
       GlobalObject::kBuiltinsOffset);
-  HValue* builtins = Add<HLoadNamedField>(global_object, access);
+  HValue* builtins = Add<HLoadNamedField>(
+      global_object, static_cast<HValue*>(NULL), access);
   HObjectAccess function_access = HObjectAccess::ForJSObjectOffset(
       JSBuiltinsObject::OffsetOfFunctionWithId(builtin));
-  return Add<HLoadNamedField>(builtins, function_access);
+  return Add<HLoadNamedField>(
+      builtins, static_cast<HValue*>(NULL), function_access);
 }
 
 
@@ -4782,8 +4800,8 @@ void HOptimizedGraphBuilder::VisitVariableProxy(VariableProxy* expr) {
         }
       } else {
         HValue* global_object = Add<HLoadNamedField>(
-            context(), HObjectAccess::ForContextSlot(
-                Context::GLOBAL_OBJECT_INDEX));
+            context(), static_cast<HValue*>(NULL),
+            HObjectAccess::ForContextSlot(Context::GLOBAL_OBJECT_INDEX));
         HLoadGlobalGeneric* instr =
             New<HLoadGlobalGeneric>(global_object,
                                     variable->name(),
@@ -5308,8 +5326,8 @@ HInstruction* HOptimizedGraphBuilder::BuildStoreNamedField(
                                     heap_number, INITIALIZING_STORE);
     } else {
       // Already holds a HeapNumber; load the box and write its value field.
-      HInstruction* heap_number = Add<HLoadNamedField>(checked_object,
-                                                       heap_number_access);
+      HInstruction* heap_number = Add<HLoadNamedField>(
+          checked_object, static_cast<HValue*>(NULL), heap_number_access);
       heap_number->set_type(HType::HeapNumber());
       instr = New<HStoreNamedField>(heap_number,
                                     HObjectAccess::ForHeapNumberValue(),
@@ -5528,7 +5546,8 @@ HInstruction* HOptimizedGraphBuilder::BuildLoadMonomorphic(
 
   HObjectAccess access = HObjectAccess::ForMap();  // bogus default
   if (info->GetJSObjectFieldAccess(&access)) {
-    return New<HLoadNamedField>(checked_object, access);
+    return New<HLoadNamedField>(
+        checked_object, static_cast<HValue*>(NULL), access);
   }
 
   HValue* checked_holder = checked_object;
@@ -5908,7 +5927,8 @@ void HOptimizedGraphBuilder::HandleGlobalVariableAssignment(
     }
   } else {
     HValue* global_object = Add<HLoadNamedField>(
-        context(), HObjectAccess::ForContextSlot(Context::GLOBAL_OBJECT_INDEX));
+        context(), static_cast<HValue*>(NULL),
+        HObjectAccess::ForContextSlot(Context::GLOBAL_OBJECT_INDEX));
     HStoreNamedGeneric* instr =
         Add<HStoreNamedGeneric>(global_object, var->name(),
                                  value, function_strict_mode_flag());
@@ -6183,13 +6203,15 @@ HLoadNamedField* HGraphBuilder::BuildLoadNamedField(HValue* object,
   if (FLAG_track_double_fields && access.representation().IsDouble()) {
     // load the heap number
     HLoadNamedField* heap_number = Add<HLoadNamedField>(
-        object, access.WithRepresentation(Representation::Tagged()));
+        object, static_cast<HValue*>(NULL),
+        access.WithRepresentation(Representation::Tagged()));
     heap_number->set_type(HType::HeapNumber());
     // load the double value from it
     return New<HLoadNamedField>(
-        heap_number, HObjectAccess::ForHeapNumberValue());
+        heap_number, static_cast<HValue*>(NULL),
+        HObjectAccess::ForHeapNumberValue());
   }
-  return New<HLoadNamedField>(object, access);
+  return New<HLoadNamedField>(object, static_cast<HValue*>(NULL), access);
 }
 
 
@@ -6842,7 +6864,8 @@ HInstruction* HOptimizedGraphBuilder::BuildCallConstantFunction(
     return NewPlainFunctionCall(target, argument_count, dont_adapt_arguments);
   } else {
     HValue* param_count_value = Add<HConstant>(formal_parameter_count);
-    HValue* context = Add<HLoadNamedField>(target,
+    HValue* context = Add<HLoadNamedField>(
+        target, static_cast<HValue*>(NULL),
         HObjectAccess::ForFunctionContextPointer());
     return NewArgumentAdaptorCall(target, context,
         argument_count, param_count_value);
@@ -7675,7 +7698,8 @@ bool HOptimizedGraphBuilder::TryInlineBuiltinMethodCall(
               elements, isolate()->factory()->fixed_array_map(), top_info());
         }
         HValue* length = Add<HLoadNamedField>(
-            checked_object, HObjectAccess::ForArrayLength(elements_kind));
+            checked_object, static_cast<HValue*>(NULL),
+            HObjectAccess::ForArrayLength(elements_kind));
         reduced_length = AddUncasted<HSub>(length, graph()->GetConstant1());
         HValue* bounds_check = Add<HBoundsCheck>(
             graph()->GetConstant0(), length);
@@ -7833,13 +7857,13 @@ HValue* HOptimizedGraphBuilder::ImplicitReceiverFor(HValue* function,
   SharedFunctionInfo* shared = target->shared();
   if (shared->is_classic_mode() && !shared->native()) {
     HValue* context = Add<HLoadNamedField>(
-        function,
+        function, static_cast<HValue*>(NULL),
         HObjectAccess::ForJSObjectOffset(JSFunction::kContextOffset));
     HValue* global_object = Add<HLoadNamedField>(
-        context,
+        context, static_cast<HValue*>(NULL),
         HObjectAccess::ForContextSlot(Context::GLOBAL_OBJECT_INDEX));
     return Add<HLoadNamedField>(
-        global_object,
+        global_object, static_cast<HValue*>(NULL),
         HObjectAccess::ForJSObjectOffset(
             GlobalObject::kGlobalReceiverOffset));
   }
@@ -7962,8 +7986,8 @@ void HOptimizedGraphBuilder::VisitCall(Call* expr) {
         // Push the global object instead of the global receiver because
         // code generated by the full code generator expects it.
         HValue* global_object = Add<HLoadNamedField>(
-            context(), HObjectAccess::ForContextSlot(
-                Context::GLOBAL_OBJECT_INDEX));
+            context(), static_cast<HValue*>(NULL),
+            HObjectAccess::ForContextSlot(Context::GLOBAL_OBJECT_INDEX));
         Push(global_object);
 
         CHECK_ALIVE(VisitExpressions(expr->arguments()));
@@ -7995,8 +8019,8 @@ void HOptimizedGraphBuilder::VisitCall(Call* expr) {
           // We're about to install a contextual IC, which expects the global
           // object as receiver rather than the global proxy.
           HValue* global_object = Add<HLoadNamedField>(
-              context(), HObjectAccess::ForContextSlot(
-                  Context::GLOBAL_OBJECT_INDEX));
+              context(), static_cast<HValue*>(NULL),
+              HObjectAccess::ForContextSlot(Context::GLOBAL_OBJECT_INDEX));
           const int receiver_index = argument_count - 1;
           environment()->SetExpressionStackAt(receiver_index, global_object);
           // When the target has a custom call IC generator, use the IC,
@@ -8009,8 +8033,8 @@ void HOptimizedGraphBuilder::VisitCall(Call* expr) {
         }
       } else {
         HValue* receiver = Add<HLoadNamedField>(
-            context(), HObjectAccess::ForContextSlot(
-                Context::GLOBAL_OBJECT_INDEX));
+            context(), static_cast<HValue*>(NULL),
+            HObjectAccess::ForContextSlot(Context::GLOBAL_OBJECT_INDEX));
         Push(Add<HPushArgument>(receiver));
         CHECK_ALIVE(VisitArgumentList(expr->arguments()));
 
@@ -8229,8 +8253,9 @@ void HOptimizedGraphBuilder::VisitCallNew(CallNew* expr) {
     // Load the initial map from the constructor.
     HValue* constructor_value = Add<HConstant>(constructor);
     HValue* initial_map_value =
-      Add<HLoadNamedField>(constructor_value, HObjectAccess::ForJSObjectOffset(
-            JSFunction::kPrototypeOrInitialMapOffset));
+      Add<HLoadNamedField>(constructor_value, static_cast<HValue*>(NULL),
+                           HObjectAccess::ForJSObjectOffset(
+                               JSFunction::kPrototypeOrInitialMapOffset));
 
     // Initialize map and fields of the newly allocated object.
     { NoObservableSideEffectsScope no_effects(this);
@@ -8355,7 +8380,8 @@ void HGraphBuilder::BuildArrayBufferViewInitialization(
       HObjectAccess::ForJSArrayBufferWeakFirstView();
   Add<HStoreNamedField>(obj,
       HObjectAccess::ForJSArrayBufferViewWeakNext(),
-      Add<HLoadNamedField>(buffer, weak_first_view_access),
+      Add<HLoadNamedField>(buffer, static_cast<HValue*>(NULL),
+                           weak_first_view_access),
       INITIALIZING_STORE);
   Add<HStoreNamedField>(
       buffer, weak_first_view_access, obj, INITIALIZING_STORE);
@@ -8462,7 +8488,8 @@ void HOptimizedGraphBuilder::VisitTypedArrayInitialize(
     AddStoreMapConstant(elements, external_array_map);
 
     HValue* backing_store = Add<HLoadNamedField>(
-        buffer, HObjectAccess::ForJSArrayBufferBackingStore());
+        buffer, static_cast<HValue*>(NULL),
+        HObjectAccess::ForJSArrayBufferBackingStore());
 
     HValue* typed_array_start;
     if (is_zero_byte_offset) {
@@ -10260,32 +10287,24 @@ void HOptimizedGraphBuilder::GenerateSetValueOf(CallRuntime* call) {
   CHECK_ALIVE(VisitForValue(call->arguments()->at(1)));
   HValue* value = Pop();
   HValue* object = Pop();
-  // Check if object is a not a smi.
-  HBasicBlock* if_smi = graph()->CreateBasicBlock();
-  HBasicBlock* if_heap_object = graph()->CreateBasicBlock();
-  HBasicBlock* join = graph()->CreateBasicBlock();
-  FinishCurrentBlock(New<HIsSmiAndBranch>(object, if_smi, if_heap_object));
-  Goto(if_smi, join);
 
   // Check if object is a JSValue.
-  set_current_block(if_heap_object);
-  HHasInstanceTypeAndBranch* typecheck =
-      New<HHasInstanceTypeAndBranch>(object, JS_VALUE_TYPE);
-  HBasicBlock* if_js_value = graph()->CreateBasicBlock();
-  HBasicBlock* not_js_value = graph()->CreateBasicBlock();
-  typecheck->SetSuccessorAt(0, if_js_value);
-  typecheck->SetSuccessorAt(1, not_js_value);
-  FinishCurrentBlock(typecheck);
-  Goto(not_js_value, join);
-
-  // Create in-object property store to kValueOffset.
-  set_current_block(if_js_value);
-  Add<HStoreNamedField>(object,
-      HObjectAccess::ForJSObjectOffset(JSValue::kValueOffset), value,
-      INITIALIZING_STORE);
-  Goto(if_js_value, join);
-  join->SetJoinId(call->id());
-  set_current_block(join);
+  IfBuilder if_objectisvalue(this);
+  if_objectisvalue.If<HHasInstanceTypeAndBranch>(object, JS_VALUE_TYPE);
+  if_objectisvalue.Then();
+  {
+    // Create in-object property store to kValueOffset.
+    Add<HStoreNamedField>(
+        object, HObjectAccess::ForJSObjectOffset(JSValue::kValueOffset),
+        value, INITIALIZING_STORE);
+    Add<HSimulate>(call->id(), FIXED_SIMULATE);
+  }
+  if_objectisvalue.Else();
+  {
+    // Nothing to do in this case.
+    Add<HSimulate>(call->id(), FIXED_SIMULATE);
+  }
+  if_objectisvalue.End();
   return ast_context()->ReturnValue(value);
 }
 
