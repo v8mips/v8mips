@@ -9524,11 +9524,14 @@ void HOptimizedGraphBuilder::VisitLogicalExpression(BinaryOperation* expr) {
     ASSERT(current_block() != NULL);
     HValue* left_value = Top();
 
-    if (left_value->IsConstant()) {
-      HConstant* left_constant = HConstant::cast(left_value);
-      if ((is_logical_and && left_constant->BooleanValue()) ||
-          (!is_logical_and && !left_constant->BooleanValue())) {
-        Drop(1);  // left_value.
+    // Short-circuit left values that always evaluate to the same boolean value.
+    if (expr->left()->ToBooleanIsTrue() || expr->left()->ToBooleanIsFalse()) {
+      // l (evals true)  && r -> r
+      // l (evals true)  || r -> l
+      // l (evals false) && r -> l
+      // l (evals false) || r -> r
+      if (is_logical_and == expr->left()->ToBooleanIsTrue()) {
+        Drop(1);
         CHECK_ALIVE(VisitForValue(expr->right()));
       }
       return ast_context()->ReturnValue(Pop());
@@ -9908,6 +9911,13 @@ HInstruction* HOptimizedGraphBuilder::BuildFastLiteral(
   if (elements_size > 0) {
     HValue* object_elements_size = Add<HConstant>(elements_size);
     if (boilerplate_object->HasFastDoubleElements()) {
+      // Allocation folding will not be able to fold |object| and
+      // |object_elements| together in some cases, so initialize
+      // elements with the undefined to make GC happy.
+      HConstant* empty_fixed_array = Add<HConstant>(
+          isolate()->factory()->empty_fixed_array());
+      Add<HStoreNamedField>(object, HObjectAccess::ForElementsPointer(),
+                            empty_fixed_array, INITIALIZING_STORE);
       object_elements = Add<HAllocate>(object_elements_size, HType::JSObject(),
           pretenure_flag, FIXED_DOUBLE_ARRAY_TYPE, site_context->current());
     } else {
