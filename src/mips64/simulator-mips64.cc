@@ -1260,8 +1260,9 @@ int64_t Simulator::get_pc() const {
 // executed in the simulator.  Since the host is typically IA32 we will not
 // get the correct MIPS-like behaviour on unaligned accesses.
 
+// TODO(plind): refactor this messy debug code when we do unaligned access.
 void Simulator::DieOrDebug() {
-  if (::v8::internal::FLAG_sim_dbg_addr) {
+  if (1) {  // Flag for this was removed.
     MipsDebugger dbg(this);
     dbg.Debug();
   } else {
@@ -2073,7 +2074,7 @@ void Simulator::ConfigureTypeRegister(Instruction* instr,
           break;
         case DMULT:
           i128resultH = MultiplyHighSigned(rs, rt);
-          i128resultL = rs * rt; 
+          i128resultL = rs * rt;
           break;
         case DMULTU:
           // TODO never called.
