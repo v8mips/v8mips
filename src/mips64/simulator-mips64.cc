@@ -66,6 +66,25 @@ uint32_t get_fcsr_condition_bit(uint32_t cc) {
 }
 
 
+static int64_t MultiplyHighSigned(int64_t u, int64_t v) {
+  uint64_t u0, v0, w0;
+  int64_t u1, v1, w1, w2, t;
+
+  u0 = u & 0xffffffffL;
+  u1 = u >> 32;
+  v0 = v & 0xffffffffL;
+  v1 = v >> 32;
+
+  w0 = u0 * v0;
+  t = u1 * v0 + (w0 >> 32);
+  w1 = t & 0xffffffffL;
+  w2 = t >> 32;
+  w1 = u0 * v1 + w1;
+
+  return u1 * v1 + w2 + (w1 >> 32);
+}
+
+
 // This macro provides a platform independent use of sscanf. The reason for
 // SScanF not being implemented in a platform independent was through
 // ::v8::internal::OS in the same way as SNPrintF is that the Windows C Run-Time
@@ -225,9 +244,10 @@ bool MipsDebugger::GetValue(const char* desc, int64_t* value) {
     *value = GetFPURegisterValue(fpuregnum);
     return true;
   } else if (strncmp(desc, "0x", 2) == 0) {
-    return SScanF(desc, "%llx", reinterpret_cast<uint64_t*>(value)) == 1;
+    return SScanF(desc + 2, "%" SCNx64,
+                  reinterpret_cast<uint64_t*>(value)) == 1;
   } else {
-    return SScanF(desc, "%lld", value) == 1;
+    return SScanF(desc, "%" SCNu64, reinterpret_cast<uint64_t*>(value)) == 1;
   }
   return false;
 }
@@ -462,7 +482,7 @@ void MipsDebugger::Debug() {
 
               if (fpuregnum != kInvalidFPURegister) {
                 value = GetFPURegisterValue(fpuregnum);
-                value &= 0xffffffffULL;
+                value &= 0xffffffffUL;
                 fvalue = GetFPURegisterValueFloat(fpuregnum);
                 PrintF("%s: 0x%08lx %11.4e\n", arg1, value, fvalue);
               } else {
@@ -530,7 +550,7 @@ void MipsDebugger::Debug() {
           if (((value & 1) == 0) || current_heap->Contains(obj)) {
             PrintF(" (");
             if ((value & 1) == 0) {
-              PrintF("smi %d", value >> 32);
+              PrintF("smi %d", (int)(value >> 32));
             } else {
               obj->ShortPrint();
             }
@@ -1897,8 +1917,8 @@ void Simulator::ConfigureTypeRegister(Instruction* instr,
                                       int64_t& next_pc,
                                       int64_t& return_addr_reg,
                                       bool& do_interrupt,
-                                      __int128& i128result,
-                                      unsigned __int128& u128result) {
+                                      int64_t& i128resultH,
+                                      int64_t& i128resultL) {
   // Every local variable declared here needs to be const.
   // This is to make sure that changed values are sent back to
   // DecodeTypeRegister correctly.
@@ -2052,10 +2072,11 @@ void Simulator::ConfigureTypeRegister(Instruction* instr,
           u64hilo = static_cast<uint64_t>(rs_u) * static_cast<uint64_t>(rt_u);
           break;
         case DMULT:
-          i128result = (__int128)(rs) * (__int128)(rt);
+          i128resultH = MultiplyHighSigned(rs, rt);
+          i128resultL = rs * rt; 
           break;
         case DMULTU:
-          u128result = (unsigned __int128)(rs) * (unsigned __int128)(rt);
+          // TODO never called.
           break;
         case ADD:
         case DADD:
@@ -2220,8 +2241,8 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
   int64_t next_pc = 0;
   int64_t return_addr_reg = 31;
 
-  __int128 i128result;
-  unsigned __int128 u128result;
+  int64_t i128resultH;
+  int64_t i128resultL;
 
   // Set up the variables if needed before executing the instruction.
   ConfigureTypeRegister(instr,
@@ -2231,8 +2252,8 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
                         next_pc,
                         return_addr_reg,
                         do_interrupt,
-                        i128result,
-                        u128result);
+                        i128resultH,
+                        i128resultL);
 
   // ---------- Raise exceptions triggered.
   SignalExceptions();
@@ -2510,12 +2531,11 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
           set_register(HI, static_cast<int32_t>(u64hilo >> 32));
           break;
         case DMULT:
-          set_register(LO, static_cast<int64_t>(i128result & 0xffffffffffffffffLL));
-          set_register(HI, static_cast<int64_t>(i128result >> 64));
+          set_register(LO, static_cast<int64_t>(i128resultL));
+          set_register(HI, static_cast<int64_t>(i128resultH));
           break;
         case DMULTU:
-          set_register(LO, static_cast<uint64_t>(u128result & 0xffffffffffffffffLL));
-          set_register(HI, static_cast<uint64_t>(u128result >> 64));
+          // TODO nerver called.
           break;
         case DIV:
         case DDIV:

@@ -95,6 +95,9 @@ const bool IsMipsSoftFloatABI = true;
 #endif
 
 
+#define __STDC_FORMAT_MACROS
+#include <inttypes.h>
+
 
 // Defines constants and accessor classes to assemble, disassemble and
 // simulate MIPS32 instructions.
