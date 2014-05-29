@@ -254,7 +254,9 @@ class Simulator : public DecoderVisitor {
     }
 
     explicit CallArgument(float argument) {
-      TODO_UNIMPLEMENTED("CallArgument(float) is untested.");
+      // TODO(all): CallArgument(float) is untested, remove this check once
+      //            tested.
+      UNIMPLEMENTED();
       // Make the D register a NaN to try to trap errors if the callee expects a
       // double. If it expects a float, the callee should ignore the top word.
       ASSERT(sizeof(kFP64SignallingNaN) == sizeof(bits_));
@@ -445,7 +447,7 @@ class Simulator : public DecoderVisitor {
   }
   Instruction* lr() { return reg<Instruction*>(kLinkRegCode); }
 
-  Address get_sp() { return reinterpret_cast<Address>(sp()); }
+  Address get_sp() { return reg<Address>(31, Reg31IsStackPointer); }
 
   // Return 'size' bits of the value of a floating-point register, as the
   // specified type. The value is zero-extended to fill the result.

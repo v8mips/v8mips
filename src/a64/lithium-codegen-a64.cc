@@ -5051,11 +5051,17 @@ void LCodeGen::DoStoreNamedField(LStoreNamedField* instr) {
   }
 
   Handle<Map> transition = instr->transition();
+  SmiCheck check_needed =
+      instr->hydrogen()->value()->IsHeapObject()
+          ? OMIT_SMI_CHECK : INLINE_SMI_CHECK;
 
   if (FLAG_track_heap_object_fields && representation.IsHeapObject()) {
     Register value = ToRegister(instr->value());
     if (!instr->hydrogen()->value()->type().IsHeapObject()) {
       DeoptimizeIfSmi(value, instr->environment());
+
+      // We know that value is a smi now, so we can omit the check below.
+      check_needed = OMIT_SMI_CHECK;
     }
   } else if (representation.IsDouble()) {
     ASSERT(transition.is_null());
@@ -5087,9 +5093,6 @@ void LCodeGen::DoStoreNamedField(LStoreNamedField* instr) {
   // Do the store.
   Register value = ToRegister(instr->value());
   Register destination;
-  SmiCheck check_needed =
-      instr->hydrogen()->value()->IsHeapObject()
-          ? OMIT_SMI_CHECK : INLINE_SMI_CHECK;
   if (access.IsInobject()) {
     destination = object;
   } else {
@@ -5100,6 +5103,10 @@ void LCodeGen::DoStoreNamedField(LStoreNamedField* instr) {
   if (representation.IsSmi() &&
       instr->hydrogen()->value()->representation().IsInteger32()) {
     ASSERT(instr->hydrogen()->store_mode() == STORE_TO_INITIALIZED_ENTRY);
+#ifdef DEBUG
+    __ Ldr(temp1, FieldMemOperand(destination, offset));
+    __ AssertSmi(temp1);
+#endif
     STATIC_ASSERT(kSmiValueSize == 32 && kSmiShift == 32 && kSmiTag == 0);
     __ Store(value, UntagSmiFieldMemOperand(destination, offset),
              Representation::Integer32());
