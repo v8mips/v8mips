@@ -4204,12 +4204,6 @@ Code::StubType Code::type() {
 }
 
 
-int Code::arguments_count() {
-  ASSERT(kind() == STUB || is_handler());
-  return ExtractArgumentsCountFromFlags(flags());
-}
-
-
 // For initialization.
 void Code::set_raw_kind_specific_flags1(int value) {
   WRITE_INT_FIELD(this, kKindSpecificFlags1Offset, value);
@@ -4484,7 +4478,6 @@ Code::Flags Code::ComputeFlags(Kind kind,
                                InlineCacheState ic_state,
                                ExtraICState extra_ic_state,
                                StubType type,
-                               Kind handler_kind,
                                InlineCacheHolderFlag holder) {
   // Compute the bit mask.
   unsigned int bits = KindField::encode(kind)
@@ -4492,9 +4485,6 @@ Code::Flags Code::ComputeFlags(Kind kind,
       | TypeField::encode(type)
       | ExtraICStateField::encode(extra_ic_state)
       | CacheHolderField::encode(holder);
-  if (handler_kind != STUB) {
-    bits |= (handler_kind << kArgumentsCountShift);
-  }
   return static_cast<Flags>(bits);
 }
 
@@ -4502,10 +4492,15 @@ Code::Flags Code::ComputeFlags(Kind kind,
 Code::Flags Code::ComputeMonomorphicFlags(Kind kind,
                                           ExtraICState extra_ic_state,
                                           InlineCacheHolderFlag holder,
-                                          StubType type,
-                                          Kind handler_kind) {
-  return ComputeFlags(kind, MONOMORPHIC, extra_ic_state, type,
-                      handler_kind, holder);
+                                          StubType type) {
+  return ComputeFlags(kind, MONOMORPHIC, extra_ic_state, type, holder);
+}
+
+
+Code::Flags Code::ComputeHandlerFlags(Kind handler_kind,
+                                      StubType type,
+                                      InlineCacheHolderFlag holder) {
+  return ComputeFlags(Code::HANDLER, MONOMORPHIC, handler_kind, type, holder);
 }
 
 
@@ -4526,11 +4521,6 @@ ExtraICState Code::ExtractExtraICStateFromFlags(Flags flags) {
 
 Code::StubType Code::ExtractTypeFromFlags(Flags flags) {
   return TypeField::decode(flags);
-}
-
-
-int Code::ExtractArgumentsCountFromFlags(Flags flags) {
-  return (flags & kArgumentsCountMask) >> kArgumentsCountShift;
 }
 
 

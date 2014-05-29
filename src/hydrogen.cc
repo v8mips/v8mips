@@ -5713,7 +5713,7 @@ void HOptimizedGraphBuilder::HandlePolymorphicNamedFieldAccess(
         smi_check = New<HIsSmiAndBranch>(
             object, empty_smi_block, not_smi_block);
         FinishCurrentBlock(smi_check);
-        Goto(empty_smi_block, number_block);
+        GotoNoSimulate(empty_smi_block, number_block);
         set_current_block(not_smi_block);
       } else {
         BuildCheckHeapObject(object);
@@ -5741,9 +5741,8 @@ void HOptimizedGraphBuilder::HandlePolymorphicNamedFieldAccess(
     FinishCurrentBlock(compare);
 
     if (info.type()->Is(Type::Number())) {
-      Goto(if_true, number_block);
+      GotoNoSimulate(if_true, number_block);
       if_true = number_block;
-      number_block->SetJoinId(ast_id);
     }
 
     set_current_block(if_true);
@@ -6923,7 +6922,7 @@ void HOptimizedGraphBuilder::HandlePolymorphicCallNamed(
         number_block = graph()->CreateBasicBlock();
         FinishCurrentBlock(New<HIsSmiAndBranch>(
                 receiver, empty_smi_block, not_smi_block));
-        Goto(empty_smi_block, number_block);
+        GotoNoSimulate(empty_smi_block, number_block);
         set_current_block(not_smi_block);
       } else {
         BuildCheckHeapObject(receiver);
@@ -6948,9 +6947,8 @@ void HOptimizedGraphBuilder::HandlePolymorphicCallNamed(
     FinishCurrentBlock(compare);
 
     if (info.type()->Is(Type::Number())) {
-      Goto(if_true, number_block);
+      GotoNoSimulate(if_true, number_block);
       if_true = number_block;
-      number_block->SetJoinId(expr->id());
     }
 
     set_current_block(if_true);
@@ -7787,6 +7785,7 @@ bool HOptimizedGraphBuilder::TryInlineApiCall(Handle<JSFunction> function,
   }
 
   bool drop_extra = false;
+  bool is_store = false;
   switch (call_type) {
     case kCallApiFunction:
     case kCallApiMethod:
@@ -7813,6 +7812,7 @@ bool HOptimizedGraphBuilder::TryInlineApiCall(Handle<JSFunction> function,
       break;
     case kCallApiSetter:
       {
+        is_store = true;
         // Receiver and prototype chain cannot have changed.
         ASSERT_EQ(1, argc);
         ASSERT_EQ(NULL, receiver);
@@ -7858,7 +7858,7 @@ bool HOptimizedGraphBuilder::TryInlineApiCall(Handle<JSFunction> function,
   CallInterfaceDescriptor* descriptor =
       isolate()->call_descriptor(Isolate::ApiFunctionCall);
 
-  CallApiFunctionStub stub(true, call_data_is_undefined, argc);
+  CallApiFunctionStub stub(is_store, call_data_is_undefined, argc);
   Handle<Code> code = stub.GetCode(isolate());
   HConstant* code_value = Add<HConstant>(code);
 

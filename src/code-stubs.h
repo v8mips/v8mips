@@ -194,9 +194,6 @@ class CodeStub BASE_EMBEDDED {
   virtual Code::StubType GetStubType() {
     return Code::NORMAL;
   }
-  virtual Code::Kind GetHandlerKind() {
-    return Code::STUB;
-  }
 
   virtual void PrintName(StringStream* stream);
 
@@ -893,7 +890,7 @@ class HICStub: public HydrogenCodeStub {
 class HandlerStub: public HICStub {
  public:
   virtual Code::Kind GetCodeKind() const { return Code::HANDLER; }
-  virtual Code::Kind GetHandlerKind() { return kind(); }
+  virtual ExtraICState GetExtraICState() { return kind(); }
 
  protected:
   HandlerStub() : HICStub() { }
@@ -989,8 +986,6 @@ class StoreGlobalStub : public HandlerStub {
       Isolate* isolate,
       CodeStubInterfaceDescriptor* descriptor);
 
-  virtual ExtraICState GetExtraICState() { return bit_field_; }
-
   bool is_constant() {
     return IsConstantBits::decode(bit_field_);
   }
@@ -1006,13 +1001,10 @@ class StoreGlobalStub : public HandlerStub {
   }
 
  private:
-  virtual int NotMissMinorKey() { return GetExtraICState(); }
   Major MajorKey() { return StoreGlobal; }
 
   class IsConstantBits: public BitField<bool, 0, 1> {};
   class RepresentationBits: public BitField<Representation::Kind, 1, 8> {};
-
-  int bit_field_;
 
   DISALLOW_COPY_AND_ASSIGN(StoreGlobalStub);
 };
@@ -1020,13 +1012,14 @@ class StoreGlobalStub : public HandlerStub {
 
 class CallApiFunctionStub : public PlatformCodeStub {
  public:
-  CallApiFunctionStub(bool restore_context,
+  CallApiFunctionStub(bool is_store,
                       bool call_data_undefined,
                       int argc) {
     bit_field_ =
-        RestoreContextBits::encode(restore_context) |
+        IsStoreBits::encode(is_store) |
         CallDataUndefinedBits::encode(call_data_undefined) |
         ArgumentBits::encode(argc);
+    ASSERT(!is_store || argc == 1);
   }
 
  private:
@@ -1034,7 +1027,7 @@ class CallApiFunctionStub : public PlatformCodeStub {
   virtual Major MajorKey() V8_OVERRIDE { return CallApiFunction; }
   virtual int MinorKey() V8_OVERRIDE { return bit_field_; }
 
-  class RestoreContextBits: public BitField<bool, 0, 1> {};
+  class IsStoreBits: public BitField<bool, 0, 1> {};
   class CallDataUndefinedBits: public BitField<bool, 1, 1> {};
   class ArgumentBits: public BitField<int, 2, Code::kArgumentsBits> {};
 
