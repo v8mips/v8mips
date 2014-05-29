@@ -927,7 +927,8 @@ bool Object::IsJSGlobalProxy() {
   bool result = IsHeapObject() &&
                 (HeapObject::cast(this)->map()->instance_type() ==
                  JS_GLOBAL_PROXY_TYPE);
-  ASSERT(!result || IsAccessCheckNeeded());
+  ASSERT(!result ||
+         HeapObject::cast(this)->map()->is_access_check_needed());
   return result;
 }
 
@@ -952,8 +953,14 @@ bool Object::IsUndetectableObject() {
 
 
 bool Object::IsAccessCheckNeeded() {
-  return IsHeapObject()
-    && HeapObject::cast(this)->map()->is_access_check_needed();
+  if (!IsHeapObject()) return false;
+  if (IsJSGlobalProxy()) {
+    JSGlobalProxy* proxy = JSGlobalProxy::cast(this);
+    GlobalObject* global =
+        proxy->GetIsolate()->context()->global_object();
+    return proxy->IsDetachedFrom(global);
+  }
+  return HeapObject::cast(this)->map()->is_access_check_needed();
 }
 
 
@@ -1554,9 +1561,7 @@ inline bool AllocationSite::DigestPretenuringFeedback() {
     set_pretenure_decision(result);
     if (current_mode != GetPretenureMode()) {
       decision_changed = true;
-      dependent_code()->MarkCodeForDeoptimization(
-          GetIsolate(),
-          DependentCode::kAllocationSiteTenuringChangedGroup);
+      set_deopt_dependent_code(true);
     }
   }
 

@@ -549,7 +549,9 @@ void Heap::ProcessPretenuringFeedback() {
       }
     }
 
-    if (trigger_deoptimization) isolate_->stack_guard()->DeoptMarkedCode();
+    if (trigger_deoptimization) {
+      isolate_->stack_guard()->DeoptMarkedAllocationSites();
+    }
 
     FlushAllocationSitesScratchpad();
 
@@ -568,6 +570,25 @@ void Heap::ProcessPretenuringFeedback() {
              dont_tenure_decisions);
     }
   }
+}
+
+
+void Heap::DeoptMarkedAllocationSites() {
+  // TODO(hpayer): If iterating over the allocation sites list becomes a
+  // performance issue, use a cache heap data structure instead (similar to the
+  // allocation sites scratchpad).
+  Object* list_element = allocation_sites_list();
+  while (list_element->IsAllocationSite()) {
+    AllocationSite* site = AllocationSite::cast(list_element);
+    if (site->deopt_dependent_code()) {
+      site->dependent_code()->MarkCodeForDeoptimization(
+          isolate_,
+          DependentCode::kAllocationSiteTenuringChangedGroup);
+      site->set_deopt_dependent_code(false);
+    }
+    list_element = site->weak_next();
+  }
+  Deoptimizer::DeoptimizeMarkedCode(isolate_);
 }
 
 
@@ -2004,14 +2025,12 @@ void Heap::ResetAllAllocationSitesDependentCode(PretenureFlag flag) {
     AllocationSite* casted = AllocationSite::cast(cur);
     if (casted->GetPretenureMode() == flag) {
       casted->ResetPretenureDecision();
-      bool got_marked = casted->dependent_code()->MarkCodeForDeoptimization(
-          isolate_,
-          DependentCode::kAllocationSiteTenuringChangedGroup);
-      if (got_marked) marked = true;
+      casted->set_deopt_dependent_code(true);
+      marked = true;
     }
     cur = casted->weak_next();
   }
-  if (marked) isolate_->stack_guard()->DeoptMarkedCode();
+  if (marked) isolate_->stack_guard()->DeoptMarkedAllocationSites();
 }
 
 
@@ -5845,6 +5864,9 @@ void Heap::Verify() {
   VerifyPointersVisitor visitor;
   IterateRoots(&visitor, VISIT_ONLY_STRONG);
 
+  VerifySmisVisitor smis_visitor;
+  IterateSmiRoots(&smis_visitor);
+
   new_space_.Verify();
 
   old_pointer_space_->Verify(&visitor);
@@ -6139,6 +6161,12 @@ void Heap::IterateWeakRoots(ObjectVisitor* v, VisitMode mode) {
     external_string_table_.Iterate(v);
   }
   v->Synchronize(VisitorSynchronization::kExternalStringsTable);
+}
+
+
+void Heap::IterateSmiRoots(ObjectVisitor* v) {
+  v->VisitPointers(&roots_[kSmiRootsStart], &roots_[kRootListLength]);
+  v->Synchronize(VisitorSynchronization::kSmiRootList);
 }
 
 

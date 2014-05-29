@@ -3390,13 +3390,8 @@ class DescriptorArray: public FixedArray {
                                        int new_size,
                                        int modify_index,
                                        StoreMode store_mode,
-                                       Handle<DescriptorArray> other);
-  MUST_USE_RESULT MaybeObject* Merge(int verbatim,
-                                     int valid,
-                                     int new_size,
-                                     int modify_index,
-                                     StoreMode store_mode,
-                                     DescriptorArray* other);
+                                       Handle<DescriptorArray> other)
+      V8_WARN_UNUSED_RESULT;
 
   bool IsMoreGeneralThan(int verbatim,
                          int valid,
@@ -8254,8 +8249,9 @@ class AllocationSite: public Struct {
   class DoNotInlineBit:         public BitField<bool,         29,  1> {};
 
   // Bitfields for pretenure_data
-  class MementoFoundCountBits:  public BitField<int,          0, 28> {};
-  class PretenureDecisionBits:  public BitField<PretenureDecision, 28, 2> {};
+  class MementoFoundCountBits:  public BitField<int,               0, 27> {};
+  class PretenureDecisionBits:  public BitField<PretenureDecision, 27, 2> {};
+  class DeoptDependentCodeBit:  public BitField<bool,              29, 1> {};
   STATIC_ASSERT(PretenureDecisionBits::kMax >= kLastPretenureDecisionValue);
 
   // Increments the mementos found counter and returns true when the first
@@ -8277,6 +8273,18 @@ class AllocationSite: public Struct {
     int value = pretenure_data()->value();
     set_pretenure_data(
         Smi::FromInt(PretenureDecisionBits::update(value, decision)),
+        SKIP_WRITE_BARRIER);
+  }
+
+  bool deopt_dependent_code() {
+    int value = pretenure_data()->value();
+    return DeoptDependentCodeBit::decode(value);
+  }
+
+  void set_deopt_dependent_code(bool deopt) {
+    int value = pretenure_data()->value();
+    set_pretenure_data(
+        Smi::FromInt(DeoptDependentCodeBit::update(value, deopt)),
         SKIP_WRITE_BARRIER);
   }
 
@@ -10638,6 +10646,7 @@ class BreakPointInfo: public Struct {
   V(kStringTable, "string_table", "(Internalized strings)")             \
   V(kExternalStringsTable, "external_strings_table", "(External strings)") \
   V(kStrongRootList, "strong_root_list", "(Strong roots)")              \
+  V(kSmiRootList, "smi_root_list", "(Smi roots)")                       \
   V(kInternalizedString, "internalized_string", "(Internal string)")    \
   V(kBootstrapper, "bootstrapper", "(Bootstrapper)")                    \
   V(kTop, "top", "(Isolate)")                                           \

@@ -4940,26 +4940,26 @@ static float MinMaxHelper(float n,
   uint32_t raw_n = float_to_rawbits(n);
   uint32_t raw_m = float_to_rawbits(m);
 
-  if (isnan(n) && ((raw_n & kFP32QuietNaNMask) == 0)) {
+  if (std::isnan(n) && ((raw_n & kFP32QuietNaNMask) == 0)) {
     // n is signalling NaN.
     return n;
-  } else if (isnan(m) && ((raw_m & kFP32QuietNaNMask) == 0)) {
+  } else if (std::isnan(m) && ((raw_m & kFP32QuietNaNMask) == 0)) {
     // m is signalling NaN.
     return m;
   } else if (quiet_nan_substitute == 0.0) {
-    if (isnan(n)) {
+    if (std::isnan(n)) {
       // n is quiet NaN.
       return n;
-    } else if (isnan(m)) {
+    } else if (std::isnan(m)) {
       // m is quiet NaN.
       return m;
     }
   } else {
     // Substitute n or m if one is quiet, but not both.
-    if (isnan(n) && !isnan(m)) {
+    if (std::isnan(n) && !std::isnan(m)) {
       // n is quiet NaN: replace with substitute.
       n = quiet_nan_substitute;
-    } else if (!isnan(n) && isnan(m)) {
+    } else if (!std::isnan(n) && std::isnan(m)) {
       // m is quiet NaN: replace with substitute.
       m = quiet_nan_substitute;
     }
@@ -4982,26 +4982,26 @@ static double MinMaxHelper(double n,
   uint64_t raw_n = double_to_rawbits(n);
   uint64_t raw_m = double_to_rawbits(m);
 
-  if (isnan(n) && ((raw_n & kFP64QuietNaNMask) == 0)) {
+  if (std::isnan(n) && ((raw_n & kFP64QuietNaNMask) == 0)) {
     // n is signalling NaN.
     return n;
-  } else if (isnan(m) && ((raw_m & kFP64QuietNaNMask) == 0)) {
+  } else if (std::isnan(m) && ((raw_m & kFP64QuietNaNMask) == 0)) {
     // m is signalling NaN.
     return m;
   } else if (quiet_nan_substitute == 0.0) {
-    if (isnan(n)) {
+    if (std::isnan(n)) {
       // n is quiet NaN.
       return n;
-    } else if (isnan(m)) {
+    } else if (std::isnan(m)) {
       // m is quiet NaN.
       return m;
     }
   } else {
     // Substitute n or m if one is quiet, but not both.
-    if (isnan(n) && !isnan(m)) {
+    if (std::isnan(n) && !std::isnan(m)) {
       // n is quiet NaN: replace with substitute.
       n = quiet_nan_substitute;
-    } else if (!isnan(n) && isnan(m)) {
+    } else if (!std::isnan(n) && std::isnan(m)) {
       // m is quiet NaN: replace with substitute.
       m = quiet_nan_substitute;
     }
@@ -9343,107 +9343,6 @@ TEST(call_no_relocation) {
         Assembler::return_address_from_call_start(call_start));
 
   TEARDOWN();
-}
-
-
-static void ECMA262ToInt32Helper(int32_t expected, double input) {
-  SETUP();
-  START();
-
-  __ Fmov(d0, input);
-
-  __ ECMA262ToInt32(x0, d0, x10, x11, MacroAssembler::INT32_IN_W);
-  __ ECMA262ToInt32(x1, d0, x10, x11, MacroAssembler::INT32_IN_X);
-  __ ECMA262ToInt32(x2, d0, x10, x11, MacroAssembler::SMI);
-
-  // The upper bits of INT32_IN_W are undefined, so make sure we don't try to
-  // test them.
-  __ Mov(w0, w0);
-
-  END();
-
-  RUN();
-
-  int64_t expected64 = expected;
-
-  ASSERT_EQUAL_32(expected, w0);
-  ASSERT_EQUAL_64(expected64, x1);
-  ASSERT_EQUAL_64(expected64 << kSmiShift | kSmiTag, x2);
-
-  TEARDOWN();
-}
-
-
-TEST(ecma_262_to_int32) {
-  INIT_V8();
-  // ==== exponent < 64 ====
-
-  ECMA262ToInt32Helper(0, 0.0);
-  ECMA262ToInt32Helper(0, -0.0);
-  ECMA262ToInt32Helper(1, 1.0);
-  ECMA262ToInt32Helper(-1, -1.0);
-
-  // The largest representable value that is less than 1.
-  ECMA262ToInt32Helper(0, 0x001fffffffffffff * pow(2.0, -53));
-  ECMA262ToInt32Helper(0, 0x001fffffffffffff * -pow(2.0, -53));
-  ECMA262ToInt32Helper(0, std::numeric_limits<double>::denorm_min());
-  ECMA262ToInt32Helper(0, -std::numeric_limits<double>::denorm_min());
-
-  // The largest conversion which doesn't require the integer modulo-2^32 step.
-  ECMA262ToInt32Helper(0x7fffffff, 0x7fffffff);
-  ECMA262ToInt32Helper(-0x80000000, -0x80000000);
-
-  // The largest simple conversion, requiring module-2^32, but where the fcvt
-  // does not saturate when converting to int64_t.
-  ECMA262ToInt32Helper(0xfffffc00, 0x7ffffffffffffc00);
-  ECMA262ToInt32Helper(-0xfffffc00, 0x7ffffffffffffc00 * -1.0);
-
-  // ==== 64 <= exponent < 84 ====
-
-  // The smallest conversion where the fcvt saturates.
-  ECMA262ToInt32Helper(0, 0x8000000000000000);
-  ECMA262ToInt32Helper(0, 0x8000000000000000 * -1.0);
-
-  // The smallest conversion where the fcvt saturates, and where all the
-  // mantissa bits are '1' (to check the shift logic).
-  ECMA262ToInt32Helper(0xfffff800, 0xfffffffffffff800);
-  ECMA262ToInt32Helper(-0xfffff800, 0xfffffffffffff800 * -1.0);
-
-  // The largest conversion which doesn't produce a zero result.
-  ECMA262ToInt32Helper(0x80000000, 0x001fffffffffffff * pow(2.0, 31));
-  ECMA262ToInt32Helper(-0x80000000, 0x001fffffffffffff * -pow(2.0, 31));
-
-  // Some large conversions to check the shifting function.
-  ECMA262ToInt32Helper(0x6789abcd, 0x001123456789abcd);
-  ECMA262ToInt32Helper(0x12345678, 0x001123456789abcd * pow(2.0, -20));
-  ECMA262ToInt32Helper(0x891a2b3c, 0x001123456789abcd * pow(2.0, -21));
-  ECMA262ToInt32Helper(0x11234567, 0x001123456789abcd * pow(2.0, -24));
-  ECMA262ToInt32Helper(-0x6789abcd, 0x001123456789abcd * -1.0);
-  ECMA262ToInt32Helper(-0x12345678, 0x001123456789abcd * -pow(2.0, -20));
-  ECMA262ToInt32Helper(-0x891a2b3c, 0x001123456789abcd * -pow(2.0, -21));
-  ECMA262ToInt32Helper(-0x11234567, 0x001123456789abcd * -pow(2.0, -24));
-
-  // ==== 84 <= exponent ====
-
-  // The smallest conversion which produces a zero result by shifting the
-  // mantissa out of the int32_t range.
-  ECMA262ToInt32Helper(0, pow(2.0, 32));
-  ECMA262ToInt32Helper(0, -pow(2.0, 32));
-
-  // Some very large conversions.
-  ECMA262ToInt32Helper(0, 0x001fffffffffffff * pow(2.0, 32));
-  ECMA262ToInt32Helper(0, 0x001fffffffffffff * -pow(2.0, 32));
-  ECMA262ToInt32Helper(0, DBL_MAX);
-  ECMA262ToInt32Helper(0, -DBL_MAX);
-
-  // ==== Special values. ====
-
-  ECMA262ToInt32Helper(0, std::numeric_limits<double>::infinity());
-  ECMA262ToInt32Helper(0, -std::numeric_limits<double>::infinity());
-  ECMA262ToInt32Helper(0, std::numeric_limits<double>::quiet_NaN());
-  ECMA262ToInt32Helper(0, -std::numeric_limits<double>::quiet_NaN());
-  ECMA262ToInt32Helper(0, std::numeric_limits<double>::signaling_NaN());
-  ECMA262ToInt32Helper(0, -std::numeric_limits<double>::signaling_NaN());
 }
 
 

@@ -2823,7 +2823,8 @@ HValue* HGraphBuilder::JSArrayBuilder::EmitMapCode() {
     // No need for a context lookup if the kind_ matches the initial
     // map, because we can just load the map in that case.
     HObjectAccess access = HObjectAccess::ForPrototypeOrInitialMap();
-    return builder()->AddLoadNamedField(constructor_function_, access);
+    return builder()->Add<HLoadNamedField>(
+        constructor_function_, static_cast<HValue*>(NULL), access);
   }
 
   // TODO(mvstanton): we should always have a constructor function if we
@@ -2848,7 +2849,8 @@ HValue* HGraphBuilder::JSArrayBuilder::EmitMapCode() {
 HValue* HGraphBuilder::JSArrayBuilder::EmitInternalMapCode() {
   // Find the map near the constructor function
   HObjectAccess access = HObjectAccess::ForPrototypeOrInitialMap();
-  return builder()->AddLoadNamedField(constructor_function_, access);
+  return builder()->Add<HLoadNamedField>(
+      constructor_function_, static_cast<HValue*>(NULL), access);
 }
 
 
@@ -4450,7 +4452,7 @@ void HOptimizedGraphBuilder::VisitSwitchStatement(SwitchStatement* stmt) {
         combined_type,
         ScriptPositionToSourcePosition(stmt->tag()->position()),
         ScriptPositionToSourcePosition(clause->label()->position()),
-        clause->id());
+        PUSH_BEFORE_SIMULATE, clause->id());
 
     HBasicBlock* next_test_block = graph()->CreateBasicBlock();
     HBasicBlock* body_block = graph()->CreateBasicBlock();
@@ -4891,8 +4893,9 @@ HValue* HOptimizedGraphBuilder::BuildContextChainWalk(Variable* var) {
   HValue* context = environment()->context();
   int length = current_info()->scope()->ContextChainLength(var->scope());
   while (length-- > 0) {
-    context = AddLoadNamedField(
-        context, HObjectAccess::ForContextSlot(Context::PREVIOUS_INDEX));
+    context = Add<HLoadNamedField>(
+        context, static_cast<HValue*>(NULL),
+        HObjectAccess::ForContextSlot(Context::PREVIOUS_INDEX));
   }
   return context;
 }
@@ -5346,6 +5349,24 @@ HCheckMaps* HOptimizedGraphBuilder::AddCheckMap(HValue* object,
 }
 
 
+HInstruction* HOptimizedGraphBuilder::BuildLoadNamedField(
+    PropertyAccessInfo* info,
+    HValue* checked_object) {
+  HObjectAccess access = info->access();
+  if (access.representation().IsDouble()) {
+    // Load the heap number.
+    checked_object = Add<HLoadNamedField>(
+        checked_object, static_cast<HValue*>(NULL),
+        access.WithRepresentation(Representation::Tagged()));
+    checked_object->set_type(HType::HeapNumber());
+    // Load the double value from it.
+    access = HObjectAccess::ForHeapNumberValue();
+  }
+  return New<HLoadNamedField>(
+      checked_object, static_cast<HValue*>(NULL), access);
+}
+
+
 HInstruction* HOptimizedGraphBuilder::BuildStoreNamedField(
     PropertyAccessInfo* info,
     HValue* checked_object,
@@ -5356,7 +5377,7 @@ HInstruction* HOptimizedGraphBuilder::BuildStoreNamedField(
       info->map(), info->lookup(), info->name());
 
   HStoreNamedField *instr;
-  if (FLAG_track_double_fields && field_access.representation().IsDouble()) {
+  if (field_access.representation().IsDouble()) {
     HObjectAccess heap_number_access =
         field_access.WithRepresentation(Representation::Tagged());
     if (transition_to_field) {
@@ -5617,7 +5638,7 @@ HInstruction* HOptimizedGraphBuilder::BuildMonomorphicAccess(
 
   if (info->lookup()->IsField()) {
     if (info->IsLoad()) {
-      return BuildLoadNamedField(checked_holder, info->access());
+      return BuildLoadNamedField(info, checked_holder);
     } else {
       return BuildStoreNamedField(info, checked_object, value);
     }
@@ -6188,29 +6209,6 @@ void HOptimizedGraphBuilder::VisitThrow(Throw* expr) {
 }
 
 
-HLoadNamedField* HGraphBuilder::BuildLoadNamedField(HValue* object,
-                                                    HObjectAccess access) {
-  if (FLAG_track_double_fields && access.representation().IsDouble()) {
-    // load the heap number
-    HLoadNamedField* heap_number = Add<HLoadNamedField>(
-        object, static_cast<HValue*>(NULL),
-        access.WithRepresentation(Representation::Tagged()));
-    heap_number->set_type(HType::HeapNumber());
-    // load the double value from it
-    return New<HLoadNamedField>(
-        heap_number, static_cast<HValue*>(NULL),
-        HObjectAccess::ForHeapNumberValue());
-  }
-  return New<HLoadNamedField>(object, static_cast<HValue*>(NULL), access);
-}
-
-
-HInstruction* HGraphBuilder::AddLoadNamedField(HValue* object,
-                                               HObjectAccess access) {
-  return AddInstruction(BuildLoadNamedField(object, access));
-}
-
-
 HInstruction* HGraphBuilder::AddLoadStringInstanceType(HValue* string) {
   if (string->IsConstant()) {
     HConstant* c_string = HConstant::cast(string);
@@ -6218,9 +6216,10 @@ HInstruction* HGraphBuilder::AddLoadStringInstanceType(HValue* string) {
       return Add<HConstant>(c_string->StringValue()->map()->instance_type());
     }
   }
-  return AddLoadNamedField(
-      AddLoadNamedField(string, HObjectAccess::ForMap()),
-      HObjectAccess::ForMapInstanceType());
+  return Add<HLoadNamedField>(
+      Add<HLoadNamedField>(string, static_cast<HValue*>(NULL),
+                           HObjectAccess::ForMap()),
+      static_cast<HValue*>(NULL), HObjectAccess::ForMapInstanceType());
 }
 
 
@@ -6231,7 +6230,8 @@ HInstruction* HGraphBuilder::AddLoadStringLength(HValue* string) {
       return Add<HConstant>(c_string->StringValue()->length());
     }
   }
-  return AddLoadNamedField(string, HObjectAccess::ForStringLength());
+  return Add<HLoadNamedField>(string, static_cast<HValue*>(NULL),
+                              HObjectAccess::ForStringLength());
 }
 
 
@@ -9089,13 +9089,12 @@ HValue* HOptimizedGraphBuilder::BuildBinaryOperation(
   // after phis, which are the result of BuildBinaryOperation when we
   // inlined some complex subgraph.
   if (result->HasObservableSideEffects() || result->IsPhi()) {
-    if (push_sim_result == NO_PUSH_BEFORE_SIMULATE) {
-      Add<HSimulate>(expr->id(), REMOVABLE_SIMULATE);
-    } else {
-      ASSERT(push_sim_result == PUSH_BEFORE_SIMULATE);
+    if (push_sim_result == PUSH_BEFORE_SIMULATE) {
       Push(result);
       Add<HSimulate>(expr->id(), REMOVABLE_SIMULATE);
       Drop(1);
+    } else {
+      Add<HSimulate>(expr->id(), REMOVABLE_SIMULATE);
     }
   }
   return result;
@@ -9613,11 +9612,14 @@ void HOptimizedGraphBuilder::VisitCompareOperation(CompareOperation* expr) {
     return ast_context()->ReturnInstruction(result, expr->id());
   }
 
+  PushBeforeSimulateBehavior push_behavior =
+    ast_context()->IsEffect() ? NO_PUSH_BEFORE_SIMULATE
+                              : PUSH_BEFORE_SIMULATE;
   HControlInstruction* compare = BuildCompareInstruction(
       op, left, right, left_type, right_type, combined_type,
       ScriptPositionToSourcePosition(expr->left()->position()),
       ScriptPositionToSourcePosition(expr->right()->position()),
-      expr->id());
+      push_behavior, expr->id());
   if (compare == NULL) return;  // Bailed out.
   return ast_context()->ReturnControl(compare, expr->id());
 }
@@ -9632,6 +9634,7 @@ HControlInstruction* HOptimizedGraphBuilder::BuildCompareInstruction(
     Type* combined_type,
     HSourcePosition left_position,
     HSourcePosition right_position,
+    PushBeforeSimulateBehavior push_sim_result,
     BailoutId bailout_id) {
   // Cases handled below depend on collected type feedback. They should
   // soft deoptimize when there is no type feedback.
@@ -9696,9 +9699,13 @@ HControlInstruction* HOptimizedGraphBuilder::BuildCompareInstruction(
       result->set_observed_input_representation(1, left_rep);
       result->set_observed_input_representation(2, right_rep);
       if (result->HasObservableSideEffects()) {
-        Push(result);
-        AddSimulate(bailout_id, REMOVABLE_SIMULATE);
-        Drop(1);
+        if (push_sim_result == PUSH_BEFORE_SIMULATE) {
+          Push(result);
+          AddSimulate(bailout_id, REMOVABLE_SIMULATE);
+          Drop(1);
+        } else {
+          AddSimulate(bailout_id, REMOVABLE_SIMULATE);
+        }
       }
       // TODO(jkummerow): Can we make this more efficient?
       HBranch* branch = New<HBranch>(result);

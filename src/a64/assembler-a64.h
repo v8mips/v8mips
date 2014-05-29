@@ -56,8 +56,8 @@ static const int kRegListSizeInBits = sizeof(RegList) * kBitsPerByte;
 
 // Some CPURegister methods can return Register and FPRegister types, so we
 // need to declare them in advance.
-class Register;
-class FPRegister;
+struct Register;
+struct FPRegister;
 
 
 struct CPURegister {
@@ -382,6 +382,13 @@ ALIAS_REGISTER(FPRegister, fp_zero, d30);
 ALIAS_REGISTER(FPRegister, fp_scratch, d31);
 
 #undef ALIAS_REGISTER
+
+
+Register GetAllocatableRegisterThatIsNotOneOf(Register reg1,
+                                              Register reg2 = NoReg,
+                                              Register reg3 = NoReg,
+                                              Register reg4 = NoReg);
+
 
 // AreAliased returns true if any of the named registers overlap. Arguments set
 // to NoReg are ignored. The system stack pointer may be specified.
