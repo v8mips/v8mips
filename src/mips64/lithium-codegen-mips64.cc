@@ -179,8 +179,7 @@ bool LCodeGen::GeneratePrologue() {
   if (slots > 0) {
     if (FLAG_debug_code) {
       __ Dsubu(sp,  sp, Operand(slots * kPointerSize));
-      __ push(a0);
-      __ push(a1);
+      __ Push(a0, a1);
       __ Daddu(a0, sp, Operand(slots *  kPointerSize));
       __ li(a1, Operand(kSlotsZapValue));
       Label loop;
@@ -188,8 +187,7 @@ bool LCodeGen::GeneratePrologue() {
       __ Dsubu(a0, a0, Operand(kPointerSize));
       __ sd(a1, MemOperand(a0, 2 * kPointerSize));
       __ Branch(&loop, ne, a0, Operand(sp));
-      __ pop(a1);
-      __ pop(a0);
+      __ Pop(a0, a1);
     } else {
       __ Dsubu(sp, sp, Operand(slots * kPointerSize));
     }
