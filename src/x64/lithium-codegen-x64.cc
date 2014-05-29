@@ -3329,7 +3329,7 @@ void LCodeGen::CallKnownFunction(Handle<JSFunction> function,
     if (function.is_identical_to(info()->closure())) {
       __ CallSelf();
     } else {
-      __ call(FieldOperand(rdi, JSFunction::kCodeEntryOffset));
+      __ Call(FieldOperand(rdi, JSFunction::kCodeEntryOffset));
     }
 
     // Set up deoptimization.
@@ -3394,7 +3394,7 @@ void LCodeGen::DoCallJSFunction(LCallJSFunction* instr) {
   } else {
     Operand target = FieldOperand(rdi, JSFunction::kCodeEntryOffset);
     generator.BeforeCall(__ CallSize(target));
-    __ call(target);
+    __ Call(target);
   }
   generator.AfterCall();
 }
