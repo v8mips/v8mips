@@ -4080,12 +4080,18 @@ void LCodeGen::DoStoreNamedField(LStoreNamedField* instr) {
   }
 
   Handle<Map> transition = instr->transition();
+  SmiCheck check_needed =
+      instr->hydrogen()->value()->IsHeapObject()
+          ? OMIT_SMI_CHECK : INLINE_SMI_CHECK;
 
   if (FLAG_track_heap_object_fields && representation.IsHeapObject()) {
     Register value = ToRegister(instr->value());
     if (!instr->hydrogen()->value()->type().IsHeapObject()) {
       __ SmiTst(value, scratch);
       DeoptimizeIf(eq, instr->environment(), scratch, Operand(zero_reg));
+
+      // We know that value is a smi now, so we can omit the check below.
+      check_needed = OMIT_SMI_CHECK;
     }
   } else if (representation.IsDouble()) {
     ASSERT(transition.is_null());
@@ -4115,9 +4121,6 @@ void LCodeGen::DoStoreNamedField(LStoreNamedField* instr) {
 
   // Do the store.
   Register value = ToRegister(instr->value());
-  SmiCheck check_needed =
-      instr->hydrogen()->value()->IsHeapObject()
-          ? OMIT_SMI_CHECK : INLINE_SMI_CHECK;
   if (representation.IsSmi() && SmiValuesAre32Bits() &&
       instr->hydrogen()->value()->representation().IsInteger32()) {
     ASSERT(instr->hydrogen()->store_mode() == STORE_TO_INITIALIZED_ENTRY);
