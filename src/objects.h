@@ -4897,8 +4897,12 @@ class FixedTypedArray: public FixedTypedArrayBase {
   // Casting:
   static inline FixedTypedArray<Traits>* cast(Object* obj);
 
+  static inline int ElementOffset(int index) {
+    return kDataOffset + index * sizeof(ElementType);
+  }
+
   static inline int SizeFor(int length) {
-    return kDataOffset + length * sizeof(ElementType);
+    return ElementOffset(length);
   }
 
   inline ElementType get_scalar(int index);
