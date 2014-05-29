@@ -283,26 +283,24 @@ class HCheckTable : public ZoneObject {
         if (intersection->size() != i->size()) {
           // Narrow set of maps in the second check maps instruction.
           HGraph* graph = instr->block()->graph();
-          HCheckMaps* new_check_maps =
-              HCheckMaps::New(graph->zone(), NULL, instr->value(),
-                              intersection, instr->typecheck(),
-                              instr->has_migration_target());
           if (entry->check_ != NULL &&
-              entry->check_->block() == instr->block()) {
+              entry->check_->block() == instr->block() &&
+              entry->check_->IsCheckMaps()) {
             // There is a check in the same block so replace it with a more
             // strict check and eliminate the second check entirely.
-            new_check_maps->InsertBefore(entry->check_);
-            entry->check_->DeleteAndReplaceWith(new_check_maps);
-            TRACE(("Check #%d narrowed to #%d\n",
-                entry->check_->id(), new_check_maps->id()));
-
+            HCheckMaps* check = HCheckMaps::cast(entry->check_);
+            TRACE(("CheckMaps #%d at B%d narrowed\n", check->id(),
+                check->block()->block_id()));
+            check->set_map_set(intersection, graph->zone());
+            TRACE(("Replacing redundant CheckMaps #%d at B%d with #%d\n",
+                instr->id(), instr->block()->block_id(), entry->check_->id()));
+            instr->DeleteAndReplaceWith(entry->check_);
           } else {
-            new_check_maps->InsertBefore(instr);
+            TRACE(("CheckMaps #%d at B%d narrowed\n", instr->id(),
+                instr->block()->block_id()));
+            instr->set_map_set(intersection, graph->zone());
+            entry->check_ = instr;
           }
-          TRACE(("CheckMaps #%d for #%d narrowed to #%d:\n",
-              instr->id(), instr->value()->id(), new_check_maps->id()));
-          instr->DeleteAndReplaceWith(new_check_maps);
-          entry->check_ = new_check_maps;
 
           if (FLAG_trace_check_elimination) {
             Print();

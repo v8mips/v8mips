@@ -224,6 +224,9 @@ class LChunkBuilder;
   }
 
 
+enum PropertyAccessType { LOAD, STORE };
+
+
 class Range V8_FINAL : public ZoneObject {
  public:
   Range()
@@ -482,8 +485,7 @@ enum GVNFlag {
   GVN_TRACKED_FLAG_LIST(DECLARE_FLAG)
   GVN_UNTRACKED_FLAG_LIST(DECLARE_FLAG)
 #undef DECLARE_FLAG
-  kAfterLastFlag,
-  kLastFlag = kAfterLastFlag - 1,
+  kNumberOfFlags,
 #define COUNT_FLAG(type) + 1
   kNumberOfTrackedSideEffects = 0 GVN_TRACKED_FLAG_LIST(COUNT_FLAG)
 #undef COUNT_FLAG
@@ -2659,22 +2661,6 @@ class HCheckMaps V8_FINAL : public HTemplateInstruction<2> {
     }
     return check_map;
   }
-  // HCheckMaps creation method safe for using during concurrent compilation
-  // (does not dereference maps handles).
-  static HCheckMaps* New(Zone* zone, HValue* context,
-                         HValue* value, UniqueSet<Map>* maps,
-                         HValue* typecheck,
-                         bool has_migration_target) {
-    HCheckMaps* check_map = new(zone) HCheckMaps(value, zone, typecheck);
-    for (int i = 0; i < maps->size(); i++) {
-      check_map->map_set_.Add(maps->at(i), zone);
-    }
-    if (has_migration_target) {
-      check_map->has_migration_target_ = true;
-      check_map->SetGVNFlag(kChangesNewSpacePromotion);
-    }
-    return check_map;
-  }
 
   bool CanOmitMapChecks() { return omit_; }
 
@@ -2691,6 +2677,13 @@ class HCheckMaps V8_FINAL : public HTemplateInstruction<2> {
 
   Unique<Map> first_map() const { return map_set_.at(0); }
   UniqueSet<Map> map_set() const { return map_set_; }
+
+  void set_map_set(UniqueSet<Map>* maps, Zone *zone) {
+    map_set_.Clear();
+    for (int i = 0; i < maps->size(); i++) {
+      map_set_.Add(maps->at(i), zone);
+    }
+  }
 
   bool has_migration_target() const {
     return has_migration_target_;
@@ -5990,7 +5983,7 @@ class HObjectAccess V8_FINAL {
   }
 
  protected:
-  void SetGVNFlags(HValue *instr, bool is_store);
+  void SetGVNFlags(HValue *instr, PropertyAccessType access_type);
 
  private:
   // internal use only; different parts of an object or array
@@ -6114,7 +6107,7 @@ class HLoadNamedField V8_FINAL : public HTemplateInstruction<2> {
     } else {
       set_representation(Representation::Tagged());
     }
-    access.SetGVNFlags(this, false);
+    access.SetGVNFlags(this, LOAD);
   }
 
   virtual bool IsDeletable() const V8_OVERRIDE { return true; }
@@ -6549,7 +6542,7 @@ class HStoreNamedField V8_FINAL : public HTemplateInstruction<3> {
     SetOperandAt(0, obj);
     SetOperandAt(1, val);
     SetOperandAt(2, obj);
-    access.SetGVNFlags(this, true);
+    access.SetGVNFlags(this, STORE);
   }
 
   HObjectAccess access_;
