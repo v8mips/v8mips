@@ -3414,22 +3414,21 @@ void LCodeGen::DoWrapReceiver(LWrapReceiver* instr) {
   // passed unchanged to builtins and strict-mode functions.
   Label global_object, result_in_receiver;
 
-  // Do not transform the receiver to object for strict mode
-  // functions.
-  __ ld(scratch,
-         FieldMemOperand(function, JSFunction::kSharedFunctionInfoOffset));
-  __ lwu(scratch,
-         FieldMemOperand(scratch, SharedFunctionInfo::kCompilerHintsOffset));
+  if (!instr->hydrogen()->known_function()) {
+    // Do not transform the receiver to object for strict mode
+    // functions.
+    __ ld(scratch,
+           FieldMemOperand(function, JSFunction::kSharedFunctionInfoOffset));
+    __ lwu(scratch,
+           FieldMemOperand(scratch, SharedFunctionInfo::kCompilerHintsOffset));
 
-  // Do not transform the receiver to object for builtins.
-  // int32_t strict_mode_function_mask =
-  //                1 <<  (SharedFunctionInfo::kStrictModeFunction + kSmiTagSize);
-  // int32_t native_mask = 1 << (SharedFunctionInfo::kNative + kSmiTagSize);
-  uint32_t strict_mode_function_mask =
-                  1 <<  (SharedFunctionInfo::kStrictModeFunction);
-  uint32_t native_mask = 1 << (SharedFunctionInfo::kNative);
-  __ And(scratch, scratch, Operand(strict_mode_function_mask | native_mask));
-  __ Branch(&result_in_receiver, ne, scratch, Operand(zero_reg));
+    // Do not transform the receiver to object for builtins.
+    int32_t strict_mode_function_mask =
+        1 <<  (SharedFunctionInfo::kStrictModeFunction + kSmiTagSize);
+    int32_t native_mask = 1 << (SharedFunctionInfo::kNative + kSmiTagSize);
+    __ And(scratch, scratch, Operand(strict_mode_function_mask | native_mask));
+    __ Branch(&result_in_receiver, ne, scratch, Operand(zero_reg));
+  }
 
   // Normal function. Replace undefined or null with global receiver.
   __ LoadRoot(scratch, Heap::kNullValueRootIndex);
