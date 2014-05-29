@@ -462,13 +462,13 @@ static uint16_t* AsciiToTwoByteString(const char* source) {
 
 class TestResource: public String::ExternalStringResource {
  public:
-  explicit TestResource(uint16_t* data, int* counter = NULL)
-    : data_(data), length_(0), counter_(counter) {
+  TestResource(uint16_t* data, int* counter = NULL, bool owning_data = true)
+      : data_(data), length_(0), counter_(counter), owning_data_(owning_data) {
     while (data[length_]) ++length_;
   }
 
   ~TestResource() {
-    i::DeleteArray(data_);
+    if (owning_data_) i::DeleteArray(data_);
     if (counter_ != NULL) ++*counter_;
   }
 
@@ -479,10 +479,12 @@ class TestResource: public String::ExternalStringResource {
   size_t length() const {
     return length_;
   }
+
  private:
   uint16_t* data_;
   size_t length_;
   int* counter_;
+  bool owning_data_;
 };
 
 
@@ -15218,13 +15220,10 @@ TEST(CompileExternalTwoByteSource) {
   // Compile the sources as external two byte strings.
   for (int i = 0; ascii_sources[i] != NULL; i++) {
     uint16_t* two_byte_string = AsciiToTwoByteString(ascii_sources[i]);
-    UC16VectorResource uc16_resource(
-        i::Vector<const uint16_t>(two_byte_string,
-                                  i::StrLength(ascii_sources[i])));
+    TestResource* uc16_resource = new TestResource(two_byte_string);
     v8::Local<v8::String> source =
-        v8::String::NewExternal(context->GetIsolate(), &uc16_resource);
+        v8::String::NewExternal(context->GetIsolate(), uc16_resource);
     v8::Script::Compile(source);
-    i::DeleteArray(two_byte_string);
   }
 }
 
@@ -17871,12 +17870,12 @@ TEST(VisitExternalStrings) {
   resource[0] = new TestResource(two_byte_string);
   v8::Local<v8::String> string0 =
       v8::String::NewExternal(env->GetIsolate(), resource[0]);
-  resource[1] = new TestResource(two_byte_string);
+  resource[1] = new TestResource(two_byte_string, NULL, false);
   v8::Local<v8::String> string1 =
       v8::String::NewExternal(env->GetIsolate(), resource[1]);
 
   // Externalized symbol.
-  resource[2] = new TestResource(two_byte_string);
+  resource[2] = new TestResource(two_byte_string, NULL, false);
   v8::Local<v8::String> string2 = v8::String::NewFromUtf8(
       env->GetIsolate(), string, v8::String::kInternalizedString);
   CHECK(string2->MakeExternal(resource[2]));
@@ -18954,8 +18953,9 @@ TEST(ContainsOnlyOneByte) {
   }
   string_contents[length-1] = 0;
   // Simple case.
-  Handle<String> string;
-  string = String::NewExternal(isolate, new TestResource(string_contents));
+  Handle<String> string =
+      String::NewExternal(isolate,
+                          new TestResource(string_contents, NULL, false));
   CHECK(!string->IsOneByte() && string->ContainsOnlyOneByte());
   // Counter example.
   string = String::NewFromTwoByte(isolate, string_contents);
@@ -18972,7 +18972,9 @@ TEST(ContainsOnlyOneByte) {
   balanced = String::Concat(balanced, right);
   Handle<String> cons_strings[] = {left, balanced, right};
   Handle<String> two_byte =
-      String::NewExternal(isolate, new TestResource(string_contents));
+      String::NewExternal(isolate,
+                          new TestResource(string_contents, NULL, false));
+  USE(two_byte); USE(cons_strings);
   for (size_t i = 0; i < ARRAY_SIZE(cons_strings); i++) {
     // Base assumptions.
     string = cons_strings[i];
@@ -18993,7 +18995,8 @@ TEST(ContainsOnlyOneByte) {
         int shift = 8 + (i % 7);
         string_contents[alignment + i] = 1 << shift;
         string = String::NewExternal(
-            isolate, new TestResource(string_contents + alignment));
+            isolate,
+            new TestResource(string_contents + alignment, NULL, false));
         CHECK_EQ(size, string->Length());
         CHECK(!string->ContainsOnlyOneByte());
         string_contents[alignment + i] = 0x41;

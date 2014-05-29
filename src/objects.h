@@ -491,7 +491,7 @@ const int kStubMinorKeyBits = kBitsPerInt - kSmiTagSize - kStubMajorKeyBits;
     ExternalAsciiString)                                                       \
   V(EXTERNAL_STRING_WITH_ONE_BYTE_DATA_TYPE,                                   \
     ExternalTwoByteString::kSize,                                              \
-    external_string_with_one_bytei_data,                                       \
+    external_string_with_one_byte_data,                                        \
     ExternalStringWithOneByteData)                                             \
   V(SHORT_EXTERNAL_STRING_TYPE,                                                \
     ExternalTwoByteString::kShortSize,                                         \
@@ -1194,8 +1194,6 @@ class MaybeObject BASE_EMBEDDED {
     "Inlined runtime function: GetFromCache")                                 \
   V(kInlinedRuntimeFunctionIsNonNegativeSmi,                                  \
     "Inlined runtime function: IsNonNegativeSmi")                             \
-  V(kInlinedRuntimeFunctionIsRegExpEquivalent,                                \
-    "Inlined runtime function: IsRegExpEquivalent")                           \
   V(kInlinedRuntimeFunctionIsStringWrapperSafeForDefaultValueOf,              \
     "Inlined runtime function: IsStringWrapperSafeForDefaultValueOf")         \
   V(kInliningBailedOut, "Inlining bailed out")                                \

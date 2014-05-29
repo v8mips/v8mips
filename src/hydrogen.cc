@@ -304,6 +304,12 @@ bool HBasicBlock::Dominates(HBasicBlock* other) const {
 }
 
 
+bool HBasicBlock::EqualToOrDominates(HBasicBlock* other) const {
+  if (this == other) return true;
+  return Dominates(other);
+}
+
+
 int HBasicBlock::LoopNestingDepth() const {
   const HBasicBlock* current = this;
   int result  = (current->IsLoopHeader()) ? 1 : 0;
@@ -10806,12 +10812,6 @@ void HOptimizedGraphBuilder::GenerateMathSqrt(CallRuntime* call) {
   HValue* value = Pop();
   HInstruction* result = NewUncasted<HUnaryMathOperation>(value, kMathSqrt);
   return ast_context()->ReturnInstruction(result, call->id());
-}
-
-
-// Check whether two RegExps are equivalent
-void HOptimizedGraphBuilder::GenerateIsRegExpEquivalent(CallRuntime* call) {
-  return Bailout(kInlinedRuntimeFunctionIsRegExpEquivalent);
 }
 
 

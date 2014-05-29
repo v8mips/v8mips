@@ -7262,7 +7262,7 @@ static void JoinSparseArrayWithSeparator(FixedArray* elements,
 
 
 RUNTIME_FUNCTION(MaybeObject*, Runtime_SparseJoinWithSeparator) {
-  SealHandleScope shs(isolate);
+  HandleScope scope(isolate);
   ASSERT(args.length() == 3);
   CONVERT_ARG_CHECKED(JSArray, elements_array, 0);
   RUNTIME_ASSERT(elements_array->HasFastSmiOrObjectElements());
@@ -7322,8 +7322,12 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_SparseJoinWithSeparator) {
     }
   }
   if (overflow) {
-    // Throw OutOfMemory exception for creating too large a string.
-    V8::FatalProcessOutOfMemory("Array join result too large.");
+    // Throw an exception if the resulting string is too large. See
+    // https://code.google.com/p/chromium/issues/detail?id=336820
+    // for details.
+    return isolate->Throw(*isolate->factory()->
+                          NewRangeError("invalid_string_length",
+                                        HandleVector<Object>(NULL, 0)));
   }
 
   if (is_ascii) {
@@ -13972,6 +13976,35 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_InternalCompare) {
   if (U_FAILURE(status)) return isolate->ThrowIllegalOperation();
 
   return *isolate->factory()->NewNumberFromInt(result);
+}
+
+
+RUNTIME_FUNCTION(MaybeObject*, Runtime_StringNormalize) {
+  HandleScope scope(isolate);
+  static const UNormalizationMode normalizationForms[] =
+      { UNORM_NFC, UNORM_NFD, UNORM_NFKC, UNORM_NFKD };
+
+  ASSERT(args.length() == 2);
+
+  CONVERT_ARG_HANDLE_CHECKED(String, stringValue, 0);
+  CONVERT_NUMBER_CHECKED(int, form_id, Int32, args[1]);
+
+  v8::String::Value string_value(v8::Utils::ToLocal(stringValue));
+  const UChar* u_value = reinterpret_cast<const UChar*>(*string_value);
+
+  // TODO(mnita): check Normalizer2 (not available in ICU 46)
+  UErrorCode status = U_ZERO_ERROR;
+  icu::UnicodeString result;
+  icu::Normalizer::normalize(u_value, normalizationForms[form_id], 0,
+      result, status);
+  if (U_FAILURE(status)) {
+    return isolate->heap()->undefined_value();
+  }
+
+  return *isolate->factory()->NewStringFromTwoByte(
+      Vector<const uint16_t>(
+          reinterpret_cast<const uint16_t*>(result.getBuffer()),
+          result.length()));
 }
 
 
