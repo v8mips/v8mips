@@ -1487,7 +1487,7 @@ void FullCodeGenerator::EmitVariableLoad(VariableProxy* proxy) {
   // variables.
   switch (var->location()) {
     case Variable::UNALLOCATED: {
-      Comment cmnt(masm_, "Global variable");
+      Comment cmnt(masm_, "[ Global variable");
       // Use inline caching. Variable name is passed in a2 and the global
       // object (receiver) in a0.
       __ ld(a0, GlobalObjectOperand());
@@ -1500,9 +1500,8 @@ void FullCodeGenerator::EmitVariableLoad(VariableProxy* proxy) {
     case Variable::PARAMETER:
     case Variable::LOCAL:
     case Variable::CONTEXT: {
-      Comment cmnt(masm_, var->IsContextSlot()
-                              ? "Context variable"
-                              : "Stack variable");
+      Comment cmnt(masm_, var->IsContextSlot() ? "[ Context variable"
+                                               : "[ Stack variable");
       if (var->binding_needs_init()) {
         // var->scope() may be NULL when the proxy is located in eval code and
         // refers to a potential outside binding. Currently those bindings are
@@ -1567,12 +1566,12 @@ void FullCodeGenerator::EmitVariableLoad(VariableProxy* proxy) {
     }
 
     case Variable::LOOKUP: {
+      Comment cmnt(masm_, "[ Lookup variable");
       Label done, slow;
       // Generate code for loading from variables potentially shadowed
       // by eval-introduced variables.
       EmitDynamicLookupFastCase(var, NOT_INSIDE_TYPEOF, &slow, &done);
       __ bind(&slow);
-      Comment cmnt(masm_, "Lookup variable");
       __ li(a1, Operand(var->name()));
       __ Push(cp, a1);  // Context and name.
       __ CallRuntime(Runtime::kLoadContextSlot, 2);
@@ -4545,7 +4544,7 @@ void FullCodeGenerator::VisitForTypeofValue(Expression* expr) {
   ASSERT(!context()->IsTest());
   VariableProxy* proxy = expr->AsVariableProxy();
   if (proxy != NULL && proxy->var()->IsUnallocated()) {
-    Comment cmnt(masm_, "Global variable");
+    Comment cmnt(masm_, "[ Global variable");
     __ ld(a0, GlobalObjectOperand());
     __ li(a2, Operand(proxy->name()));
     // Use a regular load, not a contextual load, to avoid a reference
@@ -4554,6 +4553,7 @@ void FullCodeGenerator::VisitForTypeofValue(Expression* expr) {
     PrepareForBailout(expr, TOS_REG);
     context()->Plug(v0);
   } else if (proxy != NULL && proxy->var()->IsLookupSlot()) {
+    Comment cmnt(masm_, "[ Lookup slot");
     Label done, slow;
 
     // Generate code for loading from variables potentially shadowed
