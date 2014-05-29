@@ -68,6 +68,8 @@
 #include "ia32/lithium-codegen-ia32.h"
 #elif V8_TARGET_ARCH_X64
 #include "x64/lithium-codegen-x64.h"
+#elif V8_TARGET_ARCH_A64
+#include "a64/lithium-codegen-a64.h"
 #elif V8_TARGET_ARCH_ARM
 #include "arm/lithium-codegen-arm.h"
 #elif V8_TARGET_ARCH_MIPS
@@ -336,6 +338,15 @@ void HBasicBlock::PostProcessLoopHeader(IterationStatement* stmt) {
   for (int i = 1; i < predecessors()->length(); ++i) {
     loop_information()->RegisterBackEdge(predecessors()->at(i));
   }
+}
+
+
+void HBasicBlock::MarkSuccEdgeUnreachable(int succ) {
+  ASSERT(IsFinished());
+  HBasicBlock* succ_block = end()->SuccessorAt(succ);
+
+  ASSERT(succ_block->predecessors()->length() == 1);
+  succ_block->MarkUnreachable();
 }
 
 
@@ -9818,6 +9829,8 @@ void HOptimizedGraphBuilder::BuildEmitInObjectProperties(
         value_instruction = double_box;
       } else if (representation.IsSmi() && value->IsUninitialized()) {
         value_instruction = graph()->GetConstant0();
+        // Ensure that Constant0 is stored as smi.
+        access = access.WithRepresentation(representation);
       } else {
         value_instruction = Add<HConstant>(value);
       }
@@ -10295,14 +10308,23 @@ void HOptimizedGraphBuilder::GenerateSetValueOf(CallRuntime* call) {
     Add<HStoreNamedField>(object,
         HObjectAccess::ForObservableJSObjectOffset(JSValue::kValueOffset),
         value);
+    if (!ast_context()->IsEffect()) {
+      Push(value);
+    }
     Add<HSimulate>(call->id(), FIXED_SIMULATE);
   }
   if_objectisvalue.Else();
   {
     // Nothing to do in this case.
+    if (!ast_context()->IsEffect()) {
+      Push(value);
+    }
     Add<HSimulate>(call->id(), FIXED_SIMULATE);
   }
   if_objectisvalue.End();
+  if (!ast_context()->IsEffect()) {
+    Drop(1);
+  }
   return ast_context()->ReturnValue(value);
 }
 

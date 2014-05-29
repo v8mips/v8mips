@@ -107,6 +107,12 @@ namespace internal {
   V(SetProperty)               \
   V(InvokeBuiltin)             \
   V(DirectCEntry)
+#elif V8_TARGET_ARCH_A64
+#define CODE_STUB_LIST_ARM(V)  \
+  V(GetProperty)               \
+  V(SetProperty)               \
+  V(InvokeBuiltin)             \
+  V(DirectCEntry)
 #else
 #define CODE_STUB_LIST_ARM(V)
 #endif
@@ -194,8 +200,8 @@ class CodeStub BASE_EMBEDDED {
   virtual Code::StubType GetStubType() {
     return Code::NORMAL;
   }
-  virtual int GetStubFlags() {
-    return -1;
+  virtual Code::Kind GetHandlerKind() {
+    return Code::STUB;
   }
 
   virtual void PrintName(StringStream* stream);
@@ -448,6 +454,8 @@ class RuntimeCallHelper {
 #include "ia32/code-stubs-ia32.h"
 #elif V8_TARGET_ARCH_X64
 #include "x64/code-stubs-x64.h"
+#elif V8_TARGET_ARCH_A64
+#include "a64/code-stubs-a64.h"
 #elif V8_TARGET_ARCH_ARM
 #include "arm/code-stubs-arm.h"
 #elif V8_TARGET_ARCH_MIPS
@@ -891,7 +899,7 @@ class HICStub: public HydrogenCodeStub {
 class HandlerStub: public HICStub {
  public:
   virtual Code::Kind GetCodeKind() const { return Code::HANDLER; }
-  virtual int GetStubFlags() { return kind(); }
+  virtual Code::Kind GetHandlerKind() { return kind(); }
 
  protected:
   HandlerStub() : HICStub() { }
@@ -1874,23 +1882,21 @@ class DoubleToIStub : public PlatformCodeStub {
                 int offset,
                 bool is_truncating,
                 bool skip_fastpath = false) : bit_field_(0) {
-    bit_field_ = SourceRegisterBits::encode(source.code_) |
-      DestinationRegisterBits::encode(destination.code_) |
+    bit_field_ = SourceRegisterBits::encode(source.code()) |
+      DestinationRegisterBits::encode(destination.code()) |
       OffsetBits::encode(offset) |
       IsTruncatingBits::encode(is_truncating) |
       SkipFastPathBits::encode(skip_fastpath) |
       SSEBits::encode(CpuFeatures::IsSafeForSnapshot(SSE2) ?
-                          CpuFeatures::IsSafeForSnapshot(SSE3) ? 2 : 1 : 0);
+                      CpuFeatures::IsSafeForSnapshot(SSE3) ? 2 : 1 : 0);
   }
 
   Register source() {
-    Register result = { SourceRegisterBits::decode(bit_field_) };
-    return result;
+    return Register::from_code(SourceRegisterBits::decode(bit_field_));
   }
 
   Register destination() {
-    Register result = { DestinationRegisterBits::decode(bit_field_) };
-    return result;
+    return Register::from_code(DestinationRegisterBits::decode(bit_field_));
   }
 
   bool is_truncating() {

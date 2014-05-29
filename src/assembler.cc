@@ -59,6 +59,8 @@
 #include "ia32/assembler-ia32-inl.h"
 #elif V8_TARGET_ARCH_X64
 #include "x64/assembler-x64-inl.h"
+#elif V8_TARGET_ARCH_A64
+#include "a64/assembler-a64-inl.h"
 #elif V8_TARGET_ARCH_ARM
 #include "arm/assembler-arm-inl.h"
 #elif V8_TARGET_ARCH_MIPS
@@ -75,6 +77,8 @@
 #include "ia32/regexp-macro-assembler-ia32.h"
 #elif V8_TARGET_ARCH_X64
 #include "x64/regexp-macro-assembler-x64.h"
+#elif V8_TARGET_ARCH_A64
+#include "a64/regexp-macro-assembler-a64.h"
 #elif V8_TARGET_ARCH_ARM
 #include "arm/regexp-macro-assembler-arm.h"
 #elif V8_TARGET_ARCH_MIPS
@@ -126,7 +130,6 @@ AssemblerBase::AssemblerBase(Isolate* isolate, void* buffer, int buffer_size)
   if (FLAG_mask_constants_with_cookie && isolate != NULL)  {
     jit_cookie_ = isolate->random_number_generator()->NextInt();
   }
-
   if (buffer == NULL) {
     // Do our own buffer management.
     if (buffer_size <= kMinimalBufferSize) {
@@ -1340,6 +1343,8 @@ ExternalReference ExternalReference::re_check_stack_guard_state(
   function = FUNCTION_ADDR(RegExpMacroAssemblerX64::CheckStackGuardState);
 #elif V8_TARGET_ARCH_IA32
   function = FUNCTION_ADDR(RegExpMacroAssemblerIA32::CheckStackGuardState);
+#elif V8_TARGET_ARCH_A64
+  function = FUNCTION_ADDR(RegExpMacroAssemblerA64::CheckStackGuardState);
 #elif V8_TARGET_ARCH_ARM
   function = FUNCTION_ADDR(RegExpMacroAssemblerARM::CheckStackGuardState);
 #elif V8_TARGET_ARCH_MIPS
