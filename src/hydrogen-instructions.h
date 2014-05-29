@@ -3410,6 +3410,7 @@ class HConstant V8_FINAL : public HTemplateInstruction<0> {
     ASSERT(!object_.IsKnownGlobal(heap->nan_value()));
     return
         object_.IsKnownGlobal(heap->undefined_value()) ||
+        object_.IsKnownGlobal(heap->uninitialized_value()) ||
         object_.IsKnownGlobal(heap->null_value()) ||
         object_.IsKnownGlobal(heap->true_value()) ||
         object_.IsKnownGlobal(heap->false_value()) ||
@@ -3691,6 +3692,8 @@ class HWrapReceiver V8_FINAL : public HTemplateInstruction<2> {
  public:
   DECLARE_INSTRUCTION_FACTORY_P2(HWrapReceiver, HValue*, HValue*);
 
+  virtual bool DataEquals(HValue* other) V8_OVERRIDE { return true; }
+
   virtual Representation RequiredInputRepresentation(int index) V8_OVERRIDE {
     return Representation::Tagged();
   }
@@ -3701,15 +3704,21 @@ class HWrapReceiver V8_FINAL : public HTemplateInstruction<2> {
   virtual HValue* Canonicalize() V8_OVERRIDE;
 
   virtual void PrintDataTo(StringStream* stream) V8_OVERRIDE;
+  bool known_function() const { return known_function_; }
 
   DECLARE_CONCRETE_INSTRUCTION(WrapReceiver)
 
  private:
   HWrapReceiver(HValue* receiver, HValue* function) {
+    known_function_ = function->IsConstant() &&
+        HConstant::cast(function)->handle(function->isolate())->IsJSFunction();
     set_representation(Representation::Tagged());
     SetOperandAt(0, receiver);
     SetOperandAt(1, function);
+    SetFlag(kUseGVN);
   }
+
+  bool known_function_;
 };
 
 
@@ -4269,6 +4278,9 @@ class HIsStringAndBranch V8_FINAL : public HUnaryControlInstruction {
 
   DECLARE_CONCRETE_INSTRUCTION(IsStringAndBranch)
 
+ protected:
+  virtual int RedefinedOperandIndex() { return 0; }
+
  private:
   HIsStringAndBranch(HValue* value,
                      HBasicBlock* true_target = NULL,
@@ -4291,6 +4303,7 @@ class HIsSmiAndBranch V8_FINAL : public HUnaryControlInstruction {
 
  protected:
   virtual bool DataEquals(HValue* other) V8_OVERRIDE { return true; }
+  virtual int RedefinedOperandIndex() { return 0; }
 
  private:
   HIsSmiAndBranch(HValue* value,
