@@ -875,9 +875,11 @@ class HValue : public ZoneObject {
   // This function must be overridden for instructions which have the
   // kTrackSideEffectDominators flag set, to track instructions that are
   // dominating side effects.
-  virtual void HandleSideEffectDominator(GVNFlag side_effect,
+  // It returns true if it removed an instruction which had side effects.
+  virtual bool HandleSideEffectDominator(GVNFlag side_effect,
                                          HValue* dominator) {
     UNREACHABLE();
+    return false;
   }
 
   // Check if this instruction has some reason that prevents elimination.
@@ -2647,13 +2649,29 @@ class HCheckMaps V8_FINAL : public HTemplateInstruction<2> {
  public:
   static HCheckMaps* New(Zone* zone, HValue* context, HValue* value,
                          Handle<Map> map, CompilationInfo* info,
-                         HValue *typecheck = NULL);
+                         HValue* typecheck = NULL);
   static HCheckMaps* New(Zone* zone, HValue* context,
                          HValue* value, SmallMapList* maps,
-                         HValue *typecheck = NULL) {
+                         HValue* typecheck = NULL) {
     HCheckMaps* check_map = new(zone) HCheckMaps(value, zone, typecheck);
     for (int i = 0; i < maps->length(); i++) {
       check_map->Add(maps->at(i), zone);
+    }
+    return check_map;
+  }
+  // HCheckMaps creation method safe for using during concurrent compilation
+  // (does not dereference maps handles).
+  static HCheckMaps* New(Zone* zone, HValue* context,
+                         HValue* value, UniqueSet<Map>* maps,
+                         HValue* typecheck,
+                         bool has_migration_target) {
+    HCheckMaps* check_map = new(zone) HCheckMaps(value, zone, typecheck);
+    for (int i = 0; i < maps->size(); i++) {
+      check_map->map_set_.Add(maps->at(i), zone);
+    }
+    if (has_migration_target) {
+      check_map->has_migration_target_ = true;
+      check_map->SetGVNFlag(kChangesNewSpacePromotion);
     }
     return check_map;
   }
@@ -2664,11 +2682,12 @@ class HCheckMaps V8_FINAL : public HTemplateInstruction<2> {
   virtual Representation RequiredInputRepresentation(int index) V8_OVERRIDE {
     return Representation::Tagged();
   }
-  virtual void HandleSideEffectDominator(GVNFlag side_effect,
+  virtual bool HandleSideEffectDominator(GVNFlag side_effect,
                                          HValue* dominator) V8_OVERRIDE;
   virtual void PrintDataTo(StringStream* stream) V8_OVERRIDE;
 
   HValue* value() { return OperandAt(0); }
+  HValue* typecheck() { return OperandAt(1); }
 
   Unique<Map> first_map() const { return map_set_.at(0); }
   UniqueSet<Map> map_set() const { return map_set_; }
@@ -5332,7 +5351,7 @@ class HAllocate V8_FINAL : public HTemplateInstruction<2> {
     flags_ = static_cast<HAllocate::Flags>(flags_ | ALLOCATE_DOUBLE_ALIGNED);
   }
 
-  virtual void HandleSideEffectDominator(GVNFlag side_effect,
+  virtual bool HandleSideEffectDominator(GVNFlag side_effect,
                                          HValue* dominator) V8_OVERRIDE;
 
   virtual void PrintDataTo(StringStream* stream) V8_OVERRIDE;
@@ -6444,10 +6463,11 @@ class HStoreNamedField V8_FINAL : public HTemplateInstruction<3> {
     }
     return Representation::Tagged();
   }
-  virtual void HandleSideEffectDominator(GVNFlag side_effect,
+  virtual bool HandleSideEffectDominator(GVNFlag side_effect,
                                          HValue* dominator) V8_OVERRIDE {
     ASSERT(side_effect == kChangesNewSpacePromotion);
     new_space_dominator_ = dominator;
+    return false;
   }
   virtual void PrintDataTo(StringStream* stream) V8_OVERRIDE;
 
@@ -6674,10 +6694,11 @@ class HStoreKeyed V8_FINAL
     return value()->IsConstant() && HConstant::cast(value())->IsTheHole();
   }
 
-  virtual void HandleSideEffectDominator(GVNFlag side_effect,
+  virtual bool HandleSideEffectDominator(GVNFlag side_effect,
                                          HValue* dominator) V8_OVERRIDE {
     ASSERT(side_effect == kChangesNewSpacePromotion);
     new_space_dominator_ = dominator;
+    return false;
   }
 
   HValue* new_space_dominator() const { return new_space_dominator_; }
