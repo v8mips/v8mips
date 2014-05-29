@@ -14591,6 +14591,14 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_SetMicrotaskPending) {
 }
 
 
+RUNTIME_FUNCTION(MaybeObject*, Runtime_RunMicrotasks) {
+  HandleScope scope(isolate);
+  ASSERT(args.length() == 0);
+  Execution::RunMicrotasks(isolate);
+  return isolate->heap()->undefined_value();
+}
+
+
 RUNTIME_FUNCTION(MaybeObject*, Runtime_GetObservationState) {
   SealHandleScope shs(isolate);
   ASSERT(args.length() == 0);

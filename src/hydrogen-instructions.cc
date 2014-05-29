@@ -1119,6 +1119,11 @@ void HCompareMap::PrintDataTo(StringStream* stream) {
   value()->PrintNameTo(stream);
   stream->Add(" (%p)", *map().handle());
   HControlInstruction::PrintDataTo(stream);
+  if (known_successor_index() == 0) {
+    stream->Add(" [true]");
+  } else if (known_successor_index() == 1) {
+    stream->Add(" [false]");
+  }
 }
 
 
@@ -4347,7 +4352,8 @@ HObjectAccess HObjectAccess::ForBackingStoreOffset(int offset,
 
 
 HObjectAccess HObjectAccess::ForField(Handle<Map> map,
-    LookupResult *lookup, Handle<String> name) {
+                                      LookupResult* lookup,
+                                      Handle<String> name) {
   ASSERT(lookup->IsField() || lookup->IsTransitionToField(*map));
   int index;
   Representation representation;
