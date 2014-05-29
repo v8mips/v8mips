@@ -444,6 +444,26 @@ void CallDescriptors::InitializeForIsolate(Isolate* isolate) {
     descriptor->register_params_ = registers;
     descriptor->param_representations_ = representations;
   }
+  {
+    CallInterfaceDescriptor* descriptor =
+        isolate->call_descriptor(Isolate::ApiFunctionCall);
+    static Register registers[] = { a0,  // callee
+                                    t0,  // call_data
+                                    a2,  // holder
+                                    a1,  // api_function_address
+                                    cp,  // context
+    };
+    static Representation representations[] = {
+        Representation::Tagged(),    // callee
+        Representation::Tagged(),    // call_data
+        Representation::Tagged(),    // holder
+        Representation::External(),  // api_function_address
+        Representation::Tagged(),    // context
+    };
+    descriptor->register_param_count_ = 5;
+    descriptor->register_params_ = registers;
+    descriptor->param_representations_ = representations;
+  }
 }
 
 
@@ -5662,8 +5682,7 @@ void CallApiFunctionStub::Generate(MacroAssembler* masm) {
   //  -- a0                  : callee
   //  -- t0                  : call_data
   //  -- a2                  : holder
-  //  -- a3                  : api_function_address
-  //  -- a1                  : thunk_arg
+  //  -- a1                  : api_function_address
   //  -- cp                  : context
   //  --
   //  -- sp[0]               : last argument
@@ -5675,8 +5694,7 @@ void CallApiFunctionStub::Generate(MacroAssembler* masm) {
   Register callee = a0;
   Register call_data = t0;
   Register holder = a2;
-  Register api_function_address = a3;
-  Register thunk_arg = a1;
+  Register api_function_address = a1;
   Register context = cp;
 
   int argc = ArgumentBits::decode(bit_field_);
@@ -5722,7 +5740,7 @@ void CallApiFunctionStub::Generate(MacroAssembler* masm) {
   FrameScope frame_scope(masm, StackFrame::MANUAL);
   __ EnterExitFrame(false, kApiStackSpace);
 
-  ASSERT(!thunk_arg.is(a0) && !api_function_address.is(a0) && !scratch.is(a0));
+  ASSERT(!api_function_address.is(a0) && !scratch.is(a0));
   // a0 = FunctionCallbackInfo&
   // Arguments is after the return address.
   __ Daddu(a0, sp, Operand(1 * kPointerSize));
@@ -5752,7 +5770,6 @@ void CallApiFunctionStub::Generate(MacroAssembler* masm) {
 
   __ CallApiFunctionAndReturn(api_function_address,
                               thunk_ref,
-                              thunk_arg,
                               kStackUnwindSpace,
                               return_value_operand,
                               restore_context ?
@@ -5765,12 +5782,10 @@ void CallApiGetterStub::Generate(MacroAssembler* masm) {
   //  -- sp[0]                  : name
   //  -- sp[4 - kArgsLength*4]  : PropertyCallbackArguments object
   //  -- ...
-  //  -- a3                    : api_function_address
-  //  -- a2                    : thunk_last_arg
+  //  -- a2                     : api_function_address
   // -----------------------------------
 
-  Register api_function_address = a3;
-  Register thunk_last_arg = a2;
+  Register api_function_address = a2;
 
   __ mov(a0, sp);  // a0 = Handle<Name>
   __ Daddu(a1, a0, Operand(1 * kPointerSize));  // a1 = PCA
@@ -5794,7 +5809,6 @@ void CallApiGetterStub::Generate(MacroAssembler* masm) {
       masm->isolate());
   __ CallApiFunctionAndReturn(api_function_address,
                               thunk_ref,
-                              thunk_last_arg,
                               kStackUnwindSpace,
                               MemOperand(fp, 6 * kPointerSize),
                               NULL);
