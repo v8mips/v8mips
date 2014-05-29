@@ -1345,3 +1345,298 @@ TEST(PreparserStrictOctal) {
   CHECK_EQ("SyntaxError: Octal literals are not allowed in strict mode.",
            *exception);
 }
+
+
+namespace {
+
+const char* use_strict_prefix = "\"use strict\";\n";
+
+const char* strict_catch_variable_preparse = "strict_catch_variable";
+const char* strict_catch_variable_parse =
+    "SyntaxError: Catch variable may not be eval or arguments in strict mode";
+
+const char* strict_function_name_preparse = "strict_function_name";
+const char* strict_function_name_parse =
+    "SyntaxError: Function name may not be eval or arguments in strict mode";
+
+const char* strict_lhs_assignment_preparse = "strict_lhs_assignment";
+const char* strict_lhs_assignment_parse =
+    "SyntaxError: Assignment to eval or arguments is not allowed in strict "
+    "mode";
+
+const char* strict_lhs_postfix_preparse = "strict_lhs_postfix";
+const char* strict_lhs_postfix_parse =
+    "SyntaxError: Postfix increment/decrement may not have eval or arguments "
+    "operand in strict mode";
+
+const char* strict_lhs_prefix_preparse = "strict_lhs_prefix";
+const char* strict_lhs_prefix_parse =
+    "SyntaxError: Prefix increment/decrement may not have eval or arguments "
+    "operand in strict mode";
+
+const char* strict_param_name_preparse = "strict_param_name";
+const char* strict_param_name_parse =
+    "SyntaxError: Parameter name eval or arguments is not allowed in strict "
+    "mode";
+
+const char* strict_var_name_preparse = "strict_var_name";
+const char* strict_var_name_parse =
+    "SyntaxError: Variable name may not be eval or arguments in strict mode";
+
+const char* unexpected_strict_reserved_preparse = "unexpected_strict_reserved";
+const char* unexpected_strict_reserved_parse =
+    "SyntaxError: Unexpected strict mode reserved word";
+
+const char* unexpected_token_identifier_preparse =
+    "unexpected_token_identifier";
+const char* unexpected_token_identifier_parse =
+    "SyntaxError: Unexpected identifier";
+
+struct ParseErrorTestCase {
+  const char* source;
+  int error_location_beg;
+  int error_location_end;
+  const char* preparse_error_message;
+  const char* parse_error_message;
+};
+
+
+void VerifyPreParseAndParseNoError(v8::Handle<v8::String> source) {
+  v8::ScriptData* preparse = v8::ScriptData::PreCompile(source);
+  CHECK(!preparse->HasError());
+
+  v8::TryCatch try_catch;
+  v8::Script::Compile(source);
+  CHECK(!try_catch.HasCaught());
+}
+
+
+void VerifyPreParseAndParseErrorMessages(v8::Handle<v8::String> source,
+                                       int error_location_beg,
+                                       int error_location_end,
+                                       const char* preparse_error_message,
+                                       const char* parse_error_message) {
+  v8::ScriptData* preparse = v8::ScriptData::PreCompile(source);
+  CHECK(preparse->HasError());
+  i::ScriptDataImpl* pre_impl =
+      reinterpret_cast<i::ScriptDataImpl*>(preparse);
+  i::Scanner::Location error_location = pre_impl->MessageLocation();
+  const char* message = pre_impl->BuildMessage();
+  CHECK_EQ(0, strcmp(preparse_error_message, message));
+  CHECK_EQ(error_location_beg, error_location.beg_pos);
+  CHECK_EQ(error_location_end, error_location.end_pos);
+
+  v8::TryCatch try_catch;
+  v8::Script::Compile(source);
+  CHECK(try_catch.HasCaught());
+  v8::String::Utf8Value exception(try_catch.Exception());
+  CHECK_EQ(parse_error_message, *exception);
+  CHECK_EQ(error_location_beg, try_catch.Message()->GetStartPosition());
+  CHECK_EQ(error_location_end, try_catch.Message()->GetEndPosition());
+}
+
+}  // namespace
+
+
+TEST(ErrorsEvalAndArguments) {
+  // Tests that both preparsing and parsing produce the right kind of errors for
+  // using "eval" and "arguments" as identifiers. Without the strict mode, it's
+  // ok to use "eval" or "arguments" as identifiers. With the strict mode, it
+  // isn't.
+  v8::Isolate* isolate = CcTest::isolate();
+  v8::HandleScope handles(isolate);
+  v8::Local<v8::Context> context = v8::Context::New(isolate);
+  v8::Context::Scope context_scope(context);
+
+  int prefix_length = i::StrLength(use_strict_prefix);
+
+  ParseErrorTestCase test_cases[] = {
+    {"var eval = 42;", 4, 8, strict_var_name_preparse, strict_var_name_parse},
+    {"var arguments = 42;", 4, 13, strict_var_name_preparse,
+     strict_var_name_parse},
+    {"var foo, eval;", 9, 13, strict_var_name_preparse, strict_var_name_parse},
+    {"var foo, arguments;", 9, 18, strict_var_name_preparse,
+     strict_var_name_parse},
+    {"try { } catch (eval) { }", 15, 19, strict_catch_variable_preparse,
+     strict_catch_variable_parse},
+    {"try { } catch (arguments) { }", 15, 24, strict_catch_variable_preparse,
+     strict_catch_variable_parse},
+    {"function eval() { }", 9, 13, strict_function_name_preparse,
+     strict_function_name_parse},
+    {"function arguments() { }", 9, 18, strict_function_name_preparse,
+     strict_function_name_parse},
+    {"function foo(eval) { }", 13, 17, strict_param_name_preparse,
+     strict_param_name_parse},
+    {"function foo(arguments) { }", 13, 22, strict_param_name_preparse,
+     strict_param_name_parse},
+    {"function foo(bar, eval) { }", 18, 22, strict_param_name_preparse,
+     strict_param_name_parse},
+    {"function foo(bar, arguments) { }", 18, 27, strict_param_name_preparse,
+     strict_param_name_parse},
+    {"eval = 1;", 0, 4, strict_lhs_assignment_preparse,
+     strict_lhs_assignment_parse},
+    {"arguments = 1;", 0, 9, strict_lhs_assignment_preparse,
+     strict_lhs_assignment_parse},
+    {"++eval;", 2, 6, strict_lhs_prefix_preparse, strict_lhs_prefix_parse},
+    {"++arguments;", 2, 11, strict_lhs_prefix_preparse,
+     strict_lhs_prefix_parse},
+    {"eval++;", 0, 4, strict_lhs_postfix_preparse, strict_lhs_postfix_parse},
+    {"arguments++;", 0, 9, strict_lhs_postfix_preparse,
+     strict_lhs_postfix_parse},
+    {NULL, 0, 0, NULL, NULL}
+  };
+
+  for (int i = 0; test_cases[i].source; ++i) {
+    v8::Handle<v8::String> source =
+        v8::String::NewFromUtf8(isolate, test_cases[i].source);
+    VerifyPreParseAndParseNoError(source);
+
+    v8::Handle<v8::String> strict_source = v8::String::Concat(
+        v8::String::NewFromUtf8(isolate, use_strict_prefix),
+        v8::String::NewFromUtf8(isolate, test_cases[i].source));
+    VerifyPreParseAndParseErrorMessages(
+        strict_source,
+        test_cases[i].error_location_beg + prefix_length,
+        test_cases[i].error_location_end + prefix_length,
+        test_cases[i].preparse_error_message,
+        test_cases[i].parse_error_message);
+  }
+
+  // Test cases which produce an error also in non-strict mode.
+  ParseErrorTestCase error_test_cases[] = {
+    // In this case we expect something completely different, "(", and get
+    // "eval". It's always "unexpected identifier, whether we are in strict mode
+    // or not.
+    {"function foo eval", 13, 17, unexpected_token_identifier_preparse,
+     unexpected_token_identifier_parse},
+    {"\"use strict\"; function foo eval", 27, 31,
+     unexpected_token_identifier_preparse, unexpected_token_identifier_parse},
+    {NULL, 0, 0, NULL, NULL}
+  };
+
+  for (int i = 0; error_test_cases[i].source; ++i) {
+    v8::Handle<v8::String> source =
+        v8::String::NewFromUtf8(isolate, error_test_cases[i].source);
+    VerifyPreParseAndParseErrorMessages(
+        source,
+        error_test_cases[i].error_location_beg,
+        error_test_cases[i].error_location_end,
+        error_test_cases[i].preparse_error_message,
+        error_test_cases[i].parse_error_message);
+  }
+
+  // Test cases where only a sub-scope is strict.
+  ParseErrorTestCase scoped_test_cases[] = {
+    {"var eval = 1; function foo() { \"use strict\"; var arguments = 2; }",
+     49, 58, strict_var_name_preparse, strict_var_name_parse},
+    {NULL, 0, 0, NULL, NULL}
+  };
+
+  for (int i = 0; scoped_test_cases[i].source; ++i) {
+    v8::Handle<v8::String> source =
+        v8::String::NewFromUtf8(isolate, scoped_test_cases[i].source);
+    VerifyPreParseAndParseErrorMessages(
+        source,
+        scoped_test_cases[i].error_location_beg,
+        scoped_test_cases[i].error_location_end,
+        scoped_test_cases[i].preparse_error_message,
+        scoped_test_cases[i].parse_error_message);
+  }
+}
+
+
+TEST(ErrorsFutureStrictReservedWords) {
+  // Tests that both preparsing and parsing produce the right kind of errors for
+  // using future strict reserved words as identifiers. Without the strict mode,
+  // it's ok to use future strict reserved words as identifiers. With the strict
+  // mode, it isn't.
+  v8::Isolate* isolate = CcTest::isolate();
+  v8::HandleScope handles(isolate);
+  v8::Local<v8::Context> context = v8::Context::New(isolate);
+  v8::Context::Scope context_scope(context);
+
+  const char* use_strict_prefix = "\"use strict\";\n";
+  int prefix_length = i::StrLength(use_strict_prefix);
+
+  ParseErrorTestCase test_cases[] = {
+    {"var interface = 42;", 4, 13, unexpected_strict_reserved_preparse,
+     unexpected_strict_reserved_parse},
+    {"var foo, interface;", 9, 18, unexpected_strict_reserved_preparse,
+     unexpected_strict_reserved_parse},
+    {"try { } catch (interface) { }", 15, 24,
+     unexpected_strict_reserved_preparse, unexpected_strict_reserved_parse},
+    {"function interface() { }", 9, 18, unexpected_strict_reserved_preparse,
+     unexpected_strict_reserved_parse},
+    {"function foo(interface) { }", 13, 22, unexpected_strict_reserved_preparse,
+     unexpected_strict_reserved_parse},
+    {"function foo(bar, interface) { }", 18, 27,
+     unexpected_strict_reserved_preparse, unexpected_strict_reserved_parse},
+    {"interface = 1;", 0, 9, unexpected_strict_reserved_preparse,
+     unexpected_strict_reserved_parse},
+    {"++interface;", 2, 11, unexpected_strict_reserved_preparse,
+     unexpected_strict_reserved_parse},
+    {"interface++;", 0, 9, unexpected_strict_reserved_preparse,
+     unexpected_strict_reserved_parse},
+    {NULL, 0, 0, NULL, NULL}
+  };
+
+  for (int i = 0; test_cases[i].source; ++i) {
+    v8::Handle<v8::String> source =
+        v8::String::NewFromUtf8(isolate, test_cases[i].source);
+    VerifyPreParseAndParseNoError(source);
+
+    v8::Handle<v8::String> strict_source = v8::String::Concat(
+        v8::String::NewFromUtf8(isolate, use_strict_prefix),
+        v8::String::NewFromUtf8(isolate, test_cases[i].source));
+    VerifyPreParseAndParseErrorMessages(
+        strict_source,
+        test_cases[i].error_location_beg + prefix_length,
+        test_cases[i].error_location_end + prefix_length,
+        test_cases[i].preparse_error_message,
+        test_cases[i].parse_error_message);
+  }
+
+  // Test cases which produce an error also in non-strict mode.
+  ParseErrorTestCase error_test_cases[] = {
+    // In this case we expect something completely different, "(", and get a
+    // strict reserved word. Note that this differs from the "eval or arguments"
+    // case; there we just report an unexpected identifier.
+    {"function foo interface", 13, 22,
+     unexpected_token_identifier_preparse,
+     unexpected_token_identifier_parse},
+    {"\"use strict\"; function foo interface", 27, 36,
+     unexpected_strict_reserved_preparse,
+     unexpected_strict_reserved_parse},
+    {NULL, 0, 0, NULL, NULL}
+  };
+
+  for (int i = 0; error_test_cases[i].source; ++i) {
+    v8::Handle<v8::String> source =
+        v8::String::NewFromUtf8(isolate, error_test_cases[i].source);
+    VerifyPreParseAndParseErrorMessages(
+        source,
+        error_test_cases[i].error_location_beg,
+        error_test_cases[i].error_location_end,
+        error_test_cases[i].preparse_error_message,
+        error_test_cases[i].parse_error_message);
+  }
+
+  // Test cases where only a sub-scope is strict.
+  ParseErrorTestCase scoped_test_cases[] = {
+    {"var interface = 1; function foo() { \"use strict\"; var interface = 2; }",
+     54, 63, unexpected_strict_reserved_preparse,
+     unexpected_strict_reserved_parse},
+    {NULL, 0, 0, NULL, NULL}
+  };
+
+  for (int i = 0; scoped_test_cases[i].source; ++i) {
+    v8::Handle<v8::String> source =
+        v8::String::NewFromUtf8(isolate, scoped_test_cases[i].source);
+    VerifyPreParseAndParseErrorMessages(
+        source,
+        scoped_test_cases[i].error_location_beg,
+        scoped_test_cases[i].error_location_end,
+        scoped_test_cases[i].preparse_error_message,
+        scoped_test_cases[i].parse_error_message);
+  }
+}
