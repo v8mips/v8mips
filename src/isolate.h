@@ -360,7 +360,8 @@ typedef List<HeapObject*> DebugObjectCache;
   /* AstNode state. */                                                         \
   V(int, ast_node_id, 0)                                                       \
   V(unsigned, ast_node_count, 0)                                               \
-  V(bool, microtask_pending, false)                                           \
+  V(bool, microtask_pending, false)                                            \
+  V(bool, autorun_microtasks, true)                                            \
   V(HStatistics*, hstatistics, NULL)                                           \
   V(HTracer*, htracer, NULL)                                                   \
   V(CodeTracer*, code_tracer, NULL)                                            \
@@ -1112,6 +1113,14 @@ class Isolate {
   // Given an address occupied by a live code object, return that object.
   Object* FindCodeObject(Address a);
 
+  int NextOptimizationId() {
+    int id = next_optimization_id_++;
+    if (!Smi::IsValid(next_optimization_id_)) {
+      next_optimization_id_ = 0;
+    }
+    return id;
+  }
+
  private:
   Isolate();
 
@@ -1344,6 +1353,8 @@ class Isolate {
 
   // Counts deopt points if deopt_every_n_times is enabled.
   unsigned int stress_deopt_count_;
+
+  int next_optimization_id_;
 
   friend class ExecutionAccess;
   friend class HandleScopeImplementer;
