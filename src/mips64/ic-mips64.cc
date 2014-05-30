@@ -422,6 +422,8 @@ static MemOperand GenerateMappedArgumentsLookup(MacroAssembler* masm,
                                                 Register scratch3,
                                                 Label* unmapped_case,
                                                 Label* slow_case) {
+  Heap* heap = masm->isolate()->heap();
+
   // Check that the receiver is a JSObject. Because of the map check
   // later, we do not need to check for interceptors or whether it
   // requires access checks.
@@ -436,10 +438,11 @@ static MemOperand GenerateMappedArgumentsLookup(MacroAssembler* masm,
   __ Branch(slow_case, ne, scratch1, Operand(zero_reg));
 
   // Load the elements into scratch1 and check its map.
+  Handle<Map> arguments_map(heap->sloppy_arguments_elements_map());
   __ ld(scratch1, FieldMemOperand(object, JSObject::kElementsOffset));
   __ CheckMap(scratch1,
               scratch2,
-              Heap::kNonStrictArgumentsElementsMapRootIndex,
+              arguments_map,
               slow_case,
               DONT_DO_SMI_CHECK);
   // Check if element is in the range of mapped arguments. If not, jump
@@ -508,7 +511,7 @@ static MemOperand GenerateUnmappedArgumentsLookup(MacroAssembler* masm,
 }
 
 
-void KeyedLoadIC::GenerateNonStrictArguments(MacroAssembler* masm) {
+void KeyedLoadIC::GenerateSloppyArguments(MacroAssembler* masm) {
   // ---------- S t a t e --------------
   //  -- lr     : return address
   //  -- a0     : key
@@ -533,7 +536,7 @@ void KeyedLoadIC::GenerateNonStrictArguments(MacroAssembler* masm) {
 }
 
 
-void KeyedStoreIC::GenerateNonStrictArguments(MacroAssembler* masm) {
+void KeyedStoreIC::GenerateSloppyArguments(MacroAssembler* masm) {
   // ---------- S t a t e --------------
   //  -- a0     : value
   //  -- a1     : key
