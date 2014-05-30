@@ -64,7 +64,7 @@ namespace internal {
   F(ToFastProperties, 1, 1) \
   F(FinishArrayPrototypeSetup, 1, 1) \
   F(SpecialArrayFunctions, 1, 1) \
-  F(IsClassicModeFunction, 1, 1) \
+  F(IsSloppyModeFunction, 1, 1) \
   F(GetDefaultReceiver, 1, 1) \
   \
   F(GetPrototype, 1, 1) \
@@ -257,6 +257,7 @@ namespace internal {
   F(DateToUTC, 1, 1) \
   F(DateMakeDay, 2, 1) \
   F(DateSetValue, 3, 1) \
+  F(DateCacheVersion, 0, 1) \
   \
   /* Numbers */ \
   \
@@ -455,7 +456,7 @@ namespace internal {
   F(HasFastDoubleElements, 1, 1) \
   F(HasFastHoleyElements, 1, 1) \
   F(HasDictionaryElements, 1, 1) \
-  F(HasNonStrictArgumentsElements, 1, 1) \
+  F(HasSloppyArgumentsElements, 1, 1) \
   F(HasExternalUint8ClampedElements, 1, 1) \
   F(HasExternalArrayElements, 1, 1) \
   F(HasExternalInt8Elements, 1, 1) \
