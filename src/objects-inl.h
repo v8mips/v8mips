@@ -59,7 +59,7 @@ PropertyDetails::PropertyDetails(Smi* smi) {
 }
 
 
-Smi* PropertyDetails::AsSmi() {
+Smi* PropertyDetails::AsSmi() const {
   // Ensure the upper 2 bits have the same value by sign extending it. This is
   // necessary to be able to use the 31st bit of the property details.
   int value = value_ << 1;
@@ -67,7 +67,7 @@ Smi* PropertyDetails::AsSmi() {
 }
 
 
-PropertyDetails PropertyDetails::AsDeleted() {
+PropertyDetails PropertyDetails::AsDeleted() const {
   Smi* smi = Smi::FromInt(value_ | DeletedField::encode(1));
   return PropertyDetails(smi);
 }
@@ -2497,6 +2497,11 @@ int DescriptorArray::SearchWithCache(Name* name, Map* map) {
 }
 
 
+PropertyDetails Map::GetLastDescriptorDetails() {
+  return instance_descriptors()->GetDetails(LastAdded());
+}
+
+
 void Map::LookupDescriptor(JSObject* holder,
                            Name* name,
                            LookupResult* result) {
@@ -2514,7 +2519,8 @@ void Map::LookupTransition(JSObject* holder,
     TransitionArray* transition_array = transitions();
     int number = transition_array->Search(name);
     if (number != TransitionArray::kNotFound) {
-      return result->TransitionResult(holder, number);
+      return result->TransitionResult(
+          holder, transition_array->GetTarget(number));
     }
   }
   result->NotFound();

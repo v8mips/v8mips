@@ -2286,12 +2286,12 @@ class JSObject: public JSReceiver {
 
   // Retrieve a value in a normalized object given a lookup result.
   // Handles the special representation of JS global objects.
-  Object* GetNormalizedProperty(LookupResult* result);
+  Object* GetNormalizedProperty(const LookupResult* result);
 
   // Sets the property value in a normalized object given a lookup result.
   // Handles the special representation of JS global objects.
   static void SetNormalizedProperty(Handle<JSObject> object,
-                                    LookupResult* result,
+                                    const LookupResult* result,
                                     Handle<Object> value);
 
   // Sets the property value in a normalized object given (key, value, details).
@@ -2361,10 +2361,6 @@ class JSObject: public JSReceiver {
   // Returns true if this is an instance of an api function and has
   // been modified since it was created.  May give false positives.
   bool IsDirty();
-
-  // If the receiver is a JSGlobalProxy this method will return its prototype,
-  // otherwise the result is the receiver itself.
-  inline Object* BypassGlobalProxy();
 
   // Accessors for hidden properties object.
   //
@@ -3390,8 +3386,13 @@ class DescriptorArray: public FixedArray {
                                        int new_size,
                                        int modify_index,
                                        StoreMode store_mode,
-                                       Handle<DescriptorArray> other)
-      V8_WARN_UNUSED_RESULT;
+                                       Handle<DescriptorArray> other);
+  MUST_USE_RESULT MaybeObject* Merge(int verbatim,
+                                     int valid,
+                                     int new_size,
+                                     int modify_index,
+                                     StoreMode store_mode,
+                                     DescriptorArray* other);
 
   bool IsMoreGeneralThan(int verbatim,
                          int valid,
@@ -6088,6 +6089,8 @@ class Map: public HeapObject {
   inline void LookupTransition(JSObject* holder,
                                Name* name,
                                LookupResult* result);
+
+  inline PropertyDetails GetLastDescriptorDetails();
 
   // The size of transition arrays are limited so they do not end up in large
   // object space. Otherwise ClearNonLiveTransitions would leak memory while
