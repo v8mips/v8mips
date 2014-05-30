@@ -127,10 +127,12 @@ inline MemOperand FieldMemOperand(Register object, int offset) {
 
 // Generate a MemOperand for storing arguments 5..N on the stack
 // when calling CallCFunction().
+// TODO(plind): Currently ONLY used for O32. Should be fixed for
+//              n64, and used in RegExp code, and other places
+//              with more than 8 arguments.
 inline MemOperand CFunctionArgumentOperand(int index) {
   ASSERT(index > kCArgSlotCount);
   // Argument 5 takes the slot just past the four Arg-slots.
-  // TODO(yy): Should fix with n64?
   int offset = (index - 5) * kPointerSize + kCArgsSlotsSize;
   return MemOperand(sp, offset);
 }

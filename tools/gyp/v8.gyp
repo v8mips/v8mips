@@ -706,8 +706,8 @@
             '../../src/mips/stub-cache-mips.cc',
           ],
         }],
-        ['v8_target_arch=="mipsel64"', {
-          'sources': [  ### gcmole(arch:mipsel64) ###
+        ['v8_target_arch=="mips64el"', {
+          'sources': [  ### gcmole(arch:mips64el) ###
             '../../src/mips64/assembler-mips64.cc',
             '../../src/mips64/assembler-mips64.h',
             '../../src/mips64/assembler-mips64-inl.h',

@@ -5266,11 +5266,13 @@ void MacroAssembler::PrepareCallCFunction(int num_reg_arguments,
                                           Register scratch) {
   int frame_alignment = ActivationFrameAlignment();
 
-  // Up to four simple arguments are passed in registers a0..a3.
+  // n64: Up to eight simple arguments in a0..a3, t0..t3, No argument slots.
+  // O32: Up to four simple arguments are passed in registers a0..a3.
   // Those four arguments must have reserved argument slots on the stack for
   // mips, even though those argument slots are not normally used.
-  // Remaining arguments are pushed on the stack, above (higher address than)
-  // the argument slots.
+  // Both ABIs: Remaining arguments are pushed on the stack, above (higher
+  // address than) the (O32) argument slots. (arg slot calculation handled by
+  // CalculateStackPassedWords()).
   int stack_passed_arguments = CalculateStackPassedWords(
       num_reg_arguments, num_double_arguments);
   if (frame_alignment > kPointerSize) {

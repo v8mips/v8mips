@@ -153,7 +153,7 @@
             'test-macro-assembler-mips.cc'
           ],
         }],
-        ['v8_target_arch=="mipsel64"', {
+        ['v8_target_arch=="mips64el"', {
           'sources': [
             'test-assembler-mips64.cc'
           ],
