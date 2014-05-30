@@ -470,7 +470,7 @@ DEFINE_bool(debugger_auto_break, true,
             "automatically set the debug break flag when debugger commands are "
             "in the queue")
 DEFINE_bool(enable_liveedit, true, "enable liveedit experimental feature")
-DEFINE_bool(break_on_abort, true, "always cause a debug break before aborting")
+DEFINE_bool(hard_abort, true, "abort by crashing")
 
 // execution.cc
 // Slightly less than 1MB on 64-bit, since Windows' default stack size for
@@ -572,6 +572,8 @@ DEFINE_bool(cleanup_code_caches_at_gc, true,
 DEFINE_bool(use_marking_progress_bar, true,
             "Use a progress bar to scan large objects in increments when "
             "incremental marking is active.")
+DEFINE_bool(zap_code_space, true,
+            "Zap free memory in code space with 0xCC while sweeping.")
 DEFINE_int(random_seed, 0,
            "Default seed for initializing random generator "
            "(0, the default, means to use system random).")
@@ -585,8 +587,7 @@ DEFINE_bool(trace_parse, false, "trace parsing and preparsing")
 
 // simulator-arm.cc, simulator-a64.cc and simulator-mips.cc
 DEFINE_bool(trace_sim, false, "Trace simulator execution")
-DEFINE_int(trace_sim_at, 0,
-           "Simulator start tracing after x number of instructions")
+DEFINE_bool(debug_sim, false, "Enable debugging the simulator")
 DEFINE_bool(check_icache, false,
             "Check icache flushes in ARM and MIPS simulator")
 DEFINE_int(stop_sim_at, 0, "Simulator stop after x number of instructions")

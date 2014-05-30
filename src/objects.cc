@@ -2579,6 +2579,7 @@ void Map::DeprecateTarget(Name* key, DescriptorArray* new_descriptors) {
 
   DescriptorArray* to_replace = instance_descriptors();
   Map* current = this;
+  GetHeap()->incremental_marking()->RecordWrites(to_replace);
   while (current->instance_descriptors() == to_replace) {
     current->SetEnumLength(kInvalidEnumCacheSentinel);
     current->set_instance_descriptors(new_descriptors);
@@ -5443,6 +5444,12 @@ bool JSObject::ReferencesObject(Object* obj) {
 
     // Check the context extension (if any) if it can have references.
     if (context->has_extension() && !context->IsCatchContext()) {
+      // With harmony scoping, a JSFunction may have a global context.
+      // TODO(mvstanton): walk into the ScopeInfo.
+      if (FLAG_harmony_scoping && context->IsGlobalContext()) {
+        return false;
+      }
+
       return JSObject::cast(context->extension())->ReferencesObject(obj);
     }
   }
@@ -6814,6 +6821,8 @@ MaybeObject* Map::ShareDescriptor(DescriptorArray* descriptors,
 
       Map* map;
       // Replace descriptors by new_descriptors in all maps that share it.
+
+      GetHeap()->incremental_marking()->RecordWrites(descriptors);
       for (Object* current = GetBackPointer();
            !current->IsUndefined();
            current = map->GetBackPointer()) {
@@ -11550,7 +11559,7 @@ Handle<Map> Map::PutPrototypeTransition(Handle<Map> map,
 
   cache->set(entry + kProtoTransitionPrototypeOffset, *prototype);
   cache->set(entry + kProtoTransitionMapOffset, *target_map);
-  map->SetNumberOfProtoTransitions(transitions);
+  map->SetNumberOfProtoTransitions(last + 1);
 
   return map;
 }
@@ -12462,7 +12471,8 @@ Handle<Object> JSObject::SetFastDoubleElement(
   // Otherwise default to slow case.
   ASSERT(object->HasFastDoubleElements());
   ASSERT(object->map()->has_fast_double_elements());
-  ASSERT(object->elements()->IsFixedDoubleArray());
+  ASSERT(object->elements()->IsFixedDoubleArray() ||
+         object->elements()->length() == 0);
 
   NormalizeElements(object);
   ASSERT(object->HasDictionaryElements());
@@ -13079,8 +13089,9 @@ void JSObject::GetElementsCapacityAndUsage(int* capacity, int* used) {
       }
       // Fall through if packing is not guaranteed.
     case FAST_HOLEY_DOUBLE_ELEMENTS: {
-      FixedDoubleArray* elms = FixedDoubleArray::cast(elements());
-      *capacity = elms->length();
+      *capacity = elements()->length();
+      if (*capacity == 0) break;
+      FixedDoubleArray * elms = FixedDoubleArray::cast(elements());
       for (int i = 0; i < *capacity; i++) {
         if (!elms->is_the_hole(i)) ++(*used);
       }
