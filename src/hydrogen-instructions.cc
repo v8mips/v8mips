@@ -1541,7 +1541,7 @@ bool HCheckMaps::HandleSideEffectDominator(GVNFlag side_effect,
     HStoreNamedField* store = HStoreNamedField::cast(dominator);
     if (!store->has_transition() || store->object() != value()) return false;
     HConstant* transition = HConstant::cast(store->transition());
-    if (map_set_.Contains(transition->GetUnique())) {
+    if (map_set_.Contains(Unique<Map>::cast(transition->GetUnique()))) {
       DeleteAndReplaceWith(NULL);
       return true;
     }
@@ -1569,9 +1569,7 @@ void HCheckValue::PrintDataTo(StringStream* stream) {
 
 HValue* HCheckValue::Canonicalize() {
   return (value()->IsConstant() &&
-          HConstant::cast(value())->GetUnique() == object_)
-      ? NULL
-      : this;
+          HConstant::cast(value())->EqualsUnique(object_)) ? NULL : this;
 }
 
 
@@ -3880,6 +3878,7 @@ void HStringAdd::PrintDataTo(StringStream* stream) {
   } else if ((flags() & STRING_ADD_CHECK_BOTH) == STRING_ADD_CHECK_RIGHT) {
     stream->Add("_CheckRight");
   }
+  HBinaryOperation::PrintDataTo(stream);
   stream->Add(" (");
   if (pretenure_flag() == NOT_TENURED) stream->Add("N");
   else if (pretenure_flag() == TENURED) stream->Add("D");

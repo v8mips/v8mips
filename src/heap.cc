@@ -3311,6 +3311,12 @@ bool Heap::CreateInitialObjects() {
     if (!maybe_obj->ToObject(&obj)) return false;
   }
   Symbol::cast(obj)->set_is_private(true);
+  set_nonexistent_symbol(Symbol::cast(obj));
+
+  { MaybeObject* maybe_obj = AllocateSymbol();
+    if (!maybe_obj->ToObject(&obj)) return false;
+  }
+  Symbol::cast(obj)->set_is_private(true);
   set_elements_transition_symbol(Symbol::cast(obj));
 
   { MaybeObject* maybe_obj = SeededNumberDictionary::Allocate(this, 0, TENURED);
@@ -4191,28 +4197,8 @@ void Heap::InitializeAllocationMemento(AllocationMemento* memento,
 }
 
 
-MaybeObject* Heap::AllocateWithAllocationSite(Map* map, AllocationSpace space,
-    Handle<AllocationSite> allocation_site) {
-  ASSERT(gc_state_ == NOT_IN_GC);
-  ASSERT(map->instance_type() != MAP_TYPE);
-  // If allocation failures are disallowed, we may allocate in a different
-  // space when new space is full and the object is not a large object.
-  AllocationSpace retry_space =
-      (space != NEW_SPACE) ? space : TargetSpaceId(map->instance_type());
-  int size = map->instance_size() + AllocationMemento::kSize;
-  Object* result;
-  MaybeObject* maybe_result = AllocateRaw(size, space, retry_space);
-  if (!maybe_result->ToObject(&result)) return maybe_result;
-  // No need for write barrier since object is white and map is in old space.
-  HeapObject::cast(result)->set_map_no_write_barrier(map);
-  AllocationMemento* alloc_memento = reinterpret_cast<AllocationMemento*>(
-      reinterpret_cast<Address>(result) + map->instance_size());
-  InitializeAllocationMemento(alloc_memento, *allocation_site);
-  return result;
-}
-
-
-MaybeObject* Heap::Allocate(Map* map, AllocationSpace space) {
+MaybeObject* Heap::Allocate(Map* map, AllocationSpace space,
+                            AllocationSite* allocation_site) {
   ASSERT(gc_state_ == NOT_IN_GC);
   ASSERT(map->instance_type() != MAP_TYPE);
   // If allocation failures are disallowed, we may allocate in a different
@@ -4220,11 +4206,19 @@ MaybeObject* Heap::Allocate(Map* map, AllocationSpace space) {
   AllocationSpace retry_space =
       (space != NEW_SPACE) ? space : TargetSpaceId(map->instance_type());
   int size = map->instance_size();
+  if (allocation_site != NULL) {
+    size += AllocationMemento::kSize;
+  }
   Object* result;
   MaybeObject* maybe_result = AllocateRaw(size, space, retry_space);
   if (!maybe_result->ToObject(&result)) return maybe_result;
   // No need for write barrier since object is white and map is in old space.
   HeapObject::cast(result)->set_map_no_write_barrier(map);
+  if (allocation_site != NULL) {
+    AllocationMemento* alloc_memento = reinterpret_cast<AllocationMemento*>(
+        reinterpret_cast<Address>(result) + map->instance_size());
+    InitializeAllocationMemento(alloc_memento, allocation_site);
+  }
   return result;
 }
 
@@ -4348,7 +4342,10 @@ void Heap::InitializeJSObjectFromMap(JSObject* obj,
 
 
 MaybeObject* Heap::AllocateJSObjectFromMap(
-    Map* map, PretenureFlag pretenure, bool allocate_properties) {
+    Map* map,
+    PretenureFlag pretenure,
+    bool allocate_properties,
+    AllocationSite* allocation_site) {
   // JSFunctions should be allocated using AllocateFunction to be
   // properly initialized.
   ASSERT(map->instance_type() != JS_FUNCTION_TYPE);
@@ -4374,7 +4371,7 @@ MaybeObject* Heap::AllocateJSObjectFromMap(
   int size = map->instance_size();
   AllocationSpace space = SelectSpace(size, OLD_POINTER_SPACE, pretenure);
   Object* obj;
-  MaybeObject* maybe_obj = Allocate(map, space);
+  MaybeObject* maybe_obj = Allocate(map, space, allocation_site);
   if (!maybe_obj->To(&obj)) return maybe_obj;
 
   // Initialize the JSObject.
@@ -4385,79 +4382,16 @@ MaybeObject* Heap::AllocateJSObjectFromMap(
 }
 
 
-MaybeObject* Heap::AllocateJSObjectFromMapWithAllocationSite(
-    Map* map, Handle<AllocationSite> allocation_site) {
-  // JSFunctions should be allocated using AllocateFunction to be
-  // properly initialized.
-  ASSERT(map->instance_type() != JS_FUNCTION_TYPE);
-
-  // Both types of global objects should be allocated using
-  // AllocateGlobalObject to be properly initialized.
-  ASSERT(map->instance_type() != JS_GLOBAL_OBJECT_TYPE);
-  ASSERT(map->instance_type() != JS_BUILTINS_OBJECT_TYPE);
-
-  // Allocate the backing storage for the properties.
-  int prop_size = map->InitialPropertiesLength();
-  ASSERT(prop_size >= 0);
-  FixedArray* properties;
-  { MaybeObject* maybe_properties = AllocateFixedArray(prop_size);
-    if (!maybe_properties->To(&properties)) return maybe_properties;
-  }
-
-  // Allocate the JSObject.
-  int size = map->instance_size();
-  AllocationSpace space = SelectSpace(size, OLD_POINTER_SPACE, NOT_TENURED);
-  Object* obj;
-  MaybeObject* maybe_obj =
-      AllocateWithAllocationSite(map, space, allocation_site);
-  if (!maybe_obj->To(&obj)) return maybe_obj;
-
-  // Initialize the JSObject.
-  InitializeJSObjectFromMap(JSObject::cast(obj), properties, map);
-  ASSERT(JSObject::cast(obj)->HasFastElements());
-  return obj;
-}
-
-
 MaybeObject* Heap::AllocateJSObject(JSFunction* constructor,
-                                    PretenureFlag pretenure) {
+                                    PretenureFlag pretenure,
+                                    AllocationSite* allocation_site) {
   ASSERT(constructor->has_initial_map());
+
   // Allocate the object based on the constructors initial map.
-  MaybeObject* result = AllocateJSObjectFromMap(
-      constructor->initial_map(), pretenure);
-#ifdef DEBUG
-  // Make sure result is NOT a global object if valid.
-  Object* non_failure;
-  ASSERT(!result->ToObject(&non_failure) || !non_failure->IsGlobalObject());
-#endif
-  return result;
-}
-
-
-MaybeObject* Heap::AllocateJSObjectWithAllocationSite(JSFunction* constructor,
-    Handle<AllocationSite> allocation_site) {
-  ASSERT(constructor->has_initial_map());
-  // Allocate the object based on the constructors initial map, or the payload
-  // advice
-  Map* initial_map = constructor->initial_map();
-
-  ElementsKind to_kind = allocation_site->GetElementsKind();
-  AllocationSiteMode mode = TRACK_ALLOCATION_SITE;
-  if (to_kind != initial_map->elements_kind()) {
-    MaybeObject* maybe_new_map = initial_map->AsElementsKind(to_kind);
-    if (!maybe_new_map->To(&initial_map)) return maybe_new_map;
-    // Possibly alter the mode, since we found an updated elements kind
-    // in the type info cell.
-    mode = AllocationSite::GetMode(to_kind);
-  }
-
-  MaybeObject* result;
-  if (mode == TRACK_ALLOCATION_SITE) {
-    result = AllocateJSObjectFromMapWithAllocationSite(initial_map,
-        allocation_site);
-  } else {
-    result = AllocateJSObjectFromMap(initial_map, NOT_TENURED);
-  }
+  MaybeObject* result = AllocateJSObjectFromMap(constructor->initial_map(),
+                                                pretenure,
+                                                true,
+                                                allocation_site);
 #ifdef DEBUG
   // Make sure result is NOT a global object if valid.
   Object* non_failure;

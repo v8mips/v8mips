@@ -1745,8 +1745,9 @@ LInstruction* LChunkBuilder::DoChange(HChange* instr) {
       HValue* val = instr->value();
       LOperand* value = UseRegister(val);
       if (val->CheckFlag(HInstruction::kUint32)) {
-        LOperand* temp = FixedTemp(xmm1);
-        LNumberTagU* result = new(zone()) LNumberTagU(value, temp);
+        LOperand* temp1 = TempRegister();
+        LOperand* temp2 = FixedTemp(xmm1);
+        LNumberTagU* result = new(zone()) LNumberTagU(value, temp1, temp2);
         return AssignEnvironment(AssignPointerMap(DefineSameAsFirst(result)));
       } else if (val->HasRange() && val->range()->IsInSmiRange()) {
         return DefineSameAsFirst(new(zone()) LSmiTag(value));
@@ -2128,7 +2129,7 @@ LInstruction* LChunkBuilder::DoStoreNamedField(HStoreNamedField* instr) {
 
   bool can_be_constant = instr->value()->IsConstant() &&
       HConstant::cast(instr->value())->NotInNewSpace() &&
-      !(FLAG_track_double_fields && instr->field_representation().IsDouble());
+      !instr->field_representation().IsDouble();
 
   LOperand* val;
   if (needs_write_barrier) {
@@ -2137,10 +2138,9 @@ LInstruction* LChunkBuilder::DoStoreNamedField(HStoreNamedField* instr) {
     val = UseFixed(instr->value(), rax);
   } else if (can_be_constant) {
     val = UseRegisterOrConstant(instr->value());
-  } else if (FLAG_track_fields && instr->field_representation().IsSmi()) {
+  } else if (instr->field_representation().IsSmi()) {
     val = UseRegister(instr->value());
-  } else if (FLAG_track_double_fields &&
-             instr->field_representation().IsDouble()) {
+  } else if (instr->field_representation().IsDouble()) {
     val = UseRegisterAtStart(instr->value());
   } else {
     val = UseRegister(instr->value());
@@ -2152,8 +2152,7 @@ LInstruction* LChunkBuilder::DoStoreNamedField(HStoreNamedField* instr) {
       needs_write_barrier_for_map) ? TempRegister() : NULL;
 
   LStoreNamedField* result = new(zone()) LStoreNamedField(obj, val, temp);
-  if (FLAG_track_heap_object_fields &&
-      instr->field_representation().IsHeapObject()) {
+  if (instr->field_representation().IsHeapObject()) {
     if (!instr->value()->type().IsHeapObject()) {
       return AssignEnvironment(result);
     }
