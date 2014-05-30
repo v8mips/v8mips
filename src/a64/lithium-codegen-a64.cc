@@ -2109,7 +2109,7 @@ void LCodeGen::DoCheckMaps(LCheckMaps* instr) {
   Label success;
   for (int i = 0; i < map_set.size(); i++) {
     Handle<Map> map = map_set.at(i).handle();
-    __ CompareMap(map_reg, map, &success);
+    __ CompareMap(map_reg, map);
     __ B(eq, &success);
   }
 
@@ -3849,6 +3849,13 @@ void LCodeGen::DoMathLog(LMathLog* instr) {
   __ CallCFunction(ExternalReference::math_log_double_function(isolate()),
                    0, 1);
   ASSERT(ToDoubleRegister(instr->result()).Is(d0));
+}
+
+
+void LCodeGen::DoMathClz32(LMathClz32* instr) {
+  Register input = ToRegister32(instr->value());
+  Register result = ToRegister32(instr->result());
+  __ Clz(result, input);
 }
 
 

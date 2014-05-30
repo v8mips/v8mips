@@ -1334,6 +1334,7 @@ class MaybeObject BASE_EMBEDDED {
     "The instruction to patch should be an ori")                              \
   V(kTheSourceAndDestinationAreTheSame,                                       \
     "The source and destination are the same")                                \
+  V(kTheStackPointerIsNotAligned, "The stack pointer is not aligned.")        \
   V(kTheStackWasCorruptedByMacroAssemblerCall,                                \
     "The stack was corrupted by MacroAssembler::Call()")                      \
   V(kTooManyParametersLocals, "Too many parameters/locals")                   \
@@ -6618,7 +6619,9 @@ enum BuiltinFunctionId {
 #undef DECLARE_FUNCTION_ID
   // Fake id for a special case of Math.pow. Note, it continues the
   // list of math functions.
-  kMathPowHalf
+  kMathPowHalf,
+  // Installed only on --harmony-maths.
+  kMathClz32
 };
 
 
@@ -8175,9 +8178,6 @@ class TypeFeedbackInfo: public Struct {
 
   // The object that indicates an uninitialized cache.
   static inline Handle<Object> UninitializedSentinel(Isolate* isolate);
-
-  // The object that indicates a cache in pre-monomorphic state.
-  static inline Handle<Object> PremonomorphicSentinel(Isolate* isolate);
 
   // The object that indicates a megamorphic state.
   static inline Handle<Object> MegamorphicSentinel(Isolate* isolate);
