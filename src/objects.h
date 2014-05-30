@@ -7386,9 +7386,6 @@ class JSFunction: public JSObject {
   void MarkForConcurrentOptimization();
   void MarkInOptimizationQueue();
 
-  static bool CompileOptimized(Handle<JSFunction> function,
-                               ClearExceptionFlag flag);
-
   // Tells whether or not the function is already marked for lazy
   // recompilation.
   inline bool IsMarkedForOptimization();

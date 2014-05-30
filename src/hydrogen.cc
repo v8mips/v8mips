@@ -5911,18 +5911,27 @@ void HOptimizedGraphBuilder::HandleGlobalVariableAssignment(
     Handle<GlobalObject> global(current_info()->global_object());
     Handle<PropertyCell> cell(global->GetPropertyCell(&lookup));
     if (cell->type()->IsConstant()) {
-      IfBuilder builder(this);
-      HValue* constant = Add<HConstant>(cell->type()->AsConstant());
-      if (cell->type()->AsConstant()->IsNumber()) {
-        builder.If<HCompareNumericAndBranch>(value, constant, Token::EQ);
+      Handle<Object> constant = cell->type()->AsConstant();
+      if (value->IsConstant()) {
+        HConstant* c_value = HConstant::cast(value);
+        if (!constant.is_identical_to(c_value->handle(isolate()))) {
+          Add<HDeoptimize>("Constant global variable assignment",
+                           Deoptimizer::EAGER);
+        }
       } else {
-        builder.If<HCompareObjectEqAndBranch>(value, constant);
+        HValue* c_constant = Add<HConstant>(constant);
+        IfBuilder builder(this);
+        if (constant->IsNumber()) {
+          builder.If<HCompareNumericAndBranch>(value, c_constant, Token::EQ);
+        } else {
+          builder.If<HCompareObjectEqAndBranch>(value, c_constant);
+        }
+        builder.Then();
+        builder.Else();
+        Add<HDeoptimize>("Constant global variable assignment",
+                         Deoptimizer::EAGER);
+        builder.End();
       }
-      builder.Then();
-      builder.Else();
-      Add<HDeoptimize>("Constant global variable assignment",
-                       Deoptimizer::EAGER);
-      builder.End();
     }
     HInstruction* instr =
         Add<HStoreGlobalCell>(value, cell, lookup.GetPropertyDetails());
@@ -8218,9 +8227,8 @@ static bool IsAllocationInlineable(Handle<JSFunction> constructor) {
 
 
 bool HOptimizedGraphBuilder::IsCallNewArrayInlineable(CallNew* expr) {
-  bool inline_ok = false;
   Handle<JSFunction> caller = current_info()->closure();
-  Handle<JSFunction> target(isolate()->global_context()->array_function(),
+  Handle<JSFunction> target(isolate()->native_context()->array_function(),
                             isolate());
   int argument_count = expr->arguments()->length();
   // We should have the function plus array arguments on the environment stack.
@@ -8228,6 +8236,7 @@ bool HOptimizedGraphBuilder::IsCallNewArrayInlineable(CallNew* expr) {
   Handle<AllocationSite> site = expr->allocation_site();
   ASSERT(!site.is_null());
 
+  bool inline_ok = false;
   if (site->CanInlineCall()) {
     // We also want to avoid inlining in certain 1 argument scenarios.
     if (argument_count == 1) {
@@ -8367,7 +8376,7 @@ void HOptimizedGraphBuilder::VisitCallNew(CallNew* expr) {
     // The constructor function is both an operand to the instruction and an
     // argument to the construct call.
     Handle<JSFunction> array_function(
-        isolate()->global_context()->array_function(), isolate());
+        isolate()->native_context()->array_function(), isolate());
     bool use_call_new_array = expr->target().is_identical_to(array_function);
     if (use_call_new_array && IsCallNewArrayInlineable(expr)) {
       // Verify we are still calling the array function for our native context.
