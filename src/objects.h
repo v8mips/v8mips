@@ -4999,7 +4999,8 @@ class DeoptimizationInputData: public FixedArray {
   static const int kOsrAstIdIndex = 3;
   static const int kOsrPcOffsetIndex = 4;
   static const int kOptimizationIdIndex = 5;
-  static const int kFirstDeoptEntryIndex = 6;
+  static const int kSharedFunctionInfoIndex = 6;
+  static const int kFirstDeoptEntryIndex = 7;
 
   // Offsets of deopt entry elements relative to the start of the entry.
   static const int kAstIdRawOffset = 0;
@@ -5023,6 +5024,7 @@ class DeoptimizationInputData: public FixedArray {
   DEFINE_ELEMENT_ACCESSORS(OsrAstId, Smi)
   DEFINE_ELEMENT_ACCESSORS(OsrPcOffset, Smi)
   DEFINE_ELEMENT_ACCESSORS(OptimizationId, Smi)
+  DEFINE_ELEMENT_ACCESSORS(SharedFunctionInfo, Object)
 
 #undef DEFINE_ELEMENT_ACCESSORS
 
@@ -6514,6 +6516,9 @@ class Script: public Struct {
   // extracted.
   DECL_ACCESSORS(column_offset, Smi)
 
+  // [data]: additional data associated with this script.
+  DECL_ACCESSORS(data, Object)
+
   // [context_data]: context data for the context this script was compiled in.
   DECL_ACCESSORS(context_data, Object)
 
@@ -6567,7 +6572,8 @@ class Script: public Struct {
   static const int kNameOffset = kSourceOffset + kPointerSize;
   static const int kLineOffsetOffset = kNameOffset + kPointerSize;
   static const int kColumnOffsetOffset = kLineOffsetOffset + kPointerSize;
-  static const int kContextOffset = kColumnOffsetOffset + kPointerSize;
+  static const int kDataOffset = kColumnOffsetOffset + kPointerSize;
+  static const int kContextOffset = kDataOffset + kPointerSize;
   static const int kWrapperOffset = kContextOffset + kPointerSize;
   static const int kTypeOffset = kWrapperOffset + kPointerSize;
   static const int kLineEndsOffset = kTypeOffset + kPointerSize;
@@ -6660,9 +6666,8 @@ class SharedFunctionInfo: public HeapObject {
   // Clear optimized code map.
   void ClearOptimizedCodeMap();
 
-  // Removed code objects associated to the given native context from
-  // the optimized code map.
-  void EvictFromOptimizedCodeMap(Context* context, const char* reason);
+  // Removed a specific optimized code object from the optimized code map.
+  void EvictFromOptimizedCodeMap(Code* optimized_code, const char* reason);
 
   // Trims the optimized code map after entries have been removed.
   void TrimOptimizedCodeMap(int shrink_by);

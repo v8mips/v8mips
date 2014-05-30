@@ -4916,6 +4916,7 @@ ACCESSORS(Script, name, Object, kNameOffset)
 ACCESSORS(Script, id, Smi, kIdOffset)
 ACCESSORS_TO_SMI(Script, line_offset, kLineOffsetOffset)
 ACCESSORS_TO_SMI(Script, column_offset, kColumnOffsetOffset)
+ACCESSORS(Script, data, Object, kDataOffset)
 ACCESSORS(Script, context_data, Object, kContextOffset)
 ACCESSORS(Script, wrapper, Foreign, kWrapperOffset)
 ACCESSORS_TO_SMI(Script, type, kTypeOffset)
@@ -5436,8 +5437,6 @@ void JSFunction::ReplaceCode(Code* code) {
   if (was_optimized && !is_optimized) {
     // TODO(titzer): linear in the number of optimized functions; fix!
     context()->native_context()->RemoveOptimizedFunction(this);
-    shared()->EvictFromOptimizedCodeMap(context()->native_context(),
-                                        "Removing optimized code");
   }
 }
 

@@ -927,6 +927,7 @@ Handle<SharedFunctionInfo> Compiler::CompileScript(Handle<String> source,
                                                    Handle<Context> context,
                                                    v8::Extension* extension,
                                                    ScriptDataImpl* pre_data,
+                                                   Handle<Object> script_data,
                                                    NativesFlag natives) {
   Isolate* isolate = source->GetIsolate();
   int source_length = source->length();
@@ -967,6 +968,9 @@ Handle<SharedFunctionInfo> Compiler::CompileScript(Handle<String> source,
       script->set_column_offset(Smi::FromInt(column_offset));
     }
     script->set_is_shared_cross_origin(is_shared_cross_origin);
+
+    script->set_data(script_data.is_null() ? isolate->heap()->undefined_value()
+                                           : *script_data);
 
     // Compile the function and add it to the cache.
     CompilationInfoWithZone info(script);
@@ -1066,10 +1070,7 @@ static Handle<Code> GetCodeFromOptimizedCodeMap(Handle<JSFunction> function,
       }
       FixedArray* literals = shared->GetLiteralsFromOptimizedCodeMap(index);
       if (literals != NULL) function->set_literals(literals);
-      Handle<Code> code(shared->GetCodeFromOptimizedCodeMap(index));
-      if (!code->marked_for_deoptimization()) return code;
-      shared->EvictFromOptimizedCodeMap(function->context()->native_context(),
-                                        "code was already marked for deopt");
+      return Handle<Code>(shared->GetCodeFromOptimizedCodeMap(index));
     }
   }
   return Handle<Code>::null();

@@ -8522,6 +8522,10 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_NotifyDeoptimized) {
         PrintF("]\n");
       }
       function->ReplaceCode(function->shared()->code());
+      // Evict optimized code for this function from the cache so that it
+      // doesn't get used for new closures.
+      function->shared()->EvictFromOptimizedCodeMap(*optimized_code,
+                                                    "notify deoptimized");
     }
   } else {
     // TODO(titzer): we should probably do DeoptimizeCodeList(code)
@@ -8529,10 +8533,6 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_NotifyDeoptimized) {
     // If there is an index by shared function info, all the better.
     Deoptimizer::DeoptimizeFunction(*function);
   }
-  // Evict optimized code for this function from the cache so that it doesn't
-  // get used for new closures.
-  function->shared()->EvictFromOptimizedCodeMap(
-      function->context()->native_context(), "notify deoptimized");
 
   return isolate->heap()->undefined_value();
 }

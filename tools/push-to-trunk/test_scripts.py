@@ -64,6 +64,7 @@ TEST_CONFIG = {
   TEMPORARY_PATCH_FILE: "/tmp/test-merge-to-branch-tempfile-temporary-patch",
 }
 
+
 AUTO_ROLL_ARGS = [
   "-a", "author@chromium.org",
   "-c", TEST_CONFIG[CHROMIUM],
@@ -77,14 +78,14 @@ def MakeOptions(s=0, l=None, f=False, m=True, r=None, c=None, a=None,
   class Options(object):
       pass
   options = Options()
-  options.s = s
-  options.l = l
-  options.f = f
-  options.m = m
+  options.step = s
+  options.last_push = l
+  options.force = f
+  options.manual = m
   options.reviewer = r
-  options.c = c
-  options.a = a
-  options.p = p
+  options.chromium = c
+  options.author = a
+  options.push = p
   options.status_password = status_password
   options.revert_bleeding_edge = revert_bleeding_edge
   return options
@@ -991,7 +992,7 @@ LOG=N
                                  self))
 
     # Test that state recovery after restarting the script works.
-    options.s = 3
+    options.step = 3
     RunMergeToBranch(TEST_CONFIG, MergeToBranchOptions(options), self)
 
 
