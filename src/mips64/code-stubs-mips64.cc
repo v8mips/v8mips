@@ -5701,7 +5701,7 @@ void ProfileEntryHookStub::Generate(MacroAssembler* masm) {
     __ And(sp, sp, Operand(-frame_alignment));
   }
 
-#if defined(V8_HOST_ARCH_MIPS)
+#if defined(V8_HOST_ARCH_MIPS) || defined(V8_HOST_ARCH_MIPS64)
   int64_t entry_hook =
       reinterpret_cast<int64_t>(masm->isolate()->function_entry_hook());
   __ li(at, Operand(entry_hook));

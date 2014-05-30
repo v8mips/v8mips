@@ -1652,7 +1652,7 @@ void Assembler::break_(uint32_t code, bool break_as_stop) {
 void Assembler::stop(const char* msg, uint32_t code) {
   ASSERT(code > kMaxWatchpointCode);
   ASSERT(code <= kMaxStopCode);
-#if V8_HOST_ARCH_MIPS
+#if defined(V8_HOST_ARCH_MIPS) || defined(V8_HOST_ARCH_MIPS64)
   break_(0x54321);
 #else  // V8_HOST_ARCH_MIPS
   BlockTrampolinePoolFor(3);
