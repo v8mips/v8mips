@@ -1072,7 +1072,7 @@ MaybeObject* KeyedLoadIC::Load(Handle<Object> object, Handle<Object> key) {
     maybe_object = LoadIC::Load(object, Handle<String>::cast(key));
     if (maybe_object->IsFailure()) return maybe_object;
   } else if (FLAG_use_ic && !object->IsAccessCheckNeeded()) {
-    ASSERT(!object->IsJSGlobalProxy());
+    ASSERT(!object->IsAccessCheckNeeded());
     if (object->IsString() && key->IsNumber()) {
       if (state() == UNINITIALIZED) stub = string_stub();
     } else if (object->IsJSObject()) {
@@ -1111,22 +1111,20 @@ static bool LookupForWrite(Handle<JSObject> receiver,
   Handle<JSObject> holder = receiver;
   receiver->Lookup(*name, lookup);
   if (lookup->IsFound()) {
-    if (lookup->IsReadOnly() || !lookup->IsCacheable()) return false;
-
-    if (lookup->holder() == *receiver) {
-      if (lookup->IsInterceptor() && !HasInterceptorSetter(*receiver)) {
-        receiver->LocalLookupRealNamedProperty(*name, lookup);
-        return lookup->IsFound() &&
-            !lookup->IsReadOnly() &&
-            lookup->CanHoldValue(value) &&
-            lookup->IsCacheable();
-      }
-      return lookup->CanHoldValue(value);
+    if (lookup->IsInterceptor() && !HasInterceptorSetter(lookup->holder())) {
+      receiver->LocalLookupRealNamedProperty(*name, lookup);
+      if (!lookup->IsFound()) return false;
     }
 
+    if (lookup->IsReadOnly() || !lookup->IsCacheable()) return false;
+    if (lookup->holder() == *receiver) return lookup->CanHoldValue(value);
     if (lookup->IsPropertyCallbacks()) return true;
-    // JSGlobalProxy always goes via the runtime, so it's safe to cache.
-    if (receiver->IsJSGlobalProxy()) return true;
+    // JSGlobalProxy either stores on the global object in the prototype, or
+    // goes into the runtime if access checks are needed, so this is always
+    // safe.
+    if (receiver->IsJSGlobalProxy()) {
+      return lookup->holder() == receiver->GetPrototype();
+    }
     // Currently normal holders in the prototype chain are not supported. They
     // would require a runtime positive lookup and verification that the details
     // have not changed.
@@ -1205,7 +1203,7 @@ MaybeObject* StoreIC::Store(Handle<Object> object,
   }
 
   // Observed objects are always modified through the runtime.
-  if (FLAG_harmony_observation && receiver->map()->is_observed()) {
+  if (receiver->map()->is_observed()) {
     Handle<Object> result = JSReceiver::SetProperty(
         receiver, name, value, NONE, strict_mode(), store_mode);
     RETURN_IF_EMPTY_HANDLE(isolate(), result);
@@ -1311,7 +1309,7 @@ Handle<Code> StoreIC::CompileHandler(LookupResult* lookup,
                                      Handle<String> name,
                                      Handle<Object> value,
                                      InlineCacheHolderFlag cache_holder) {
-  if (object->IsJSGlobalProxy()) return slow_stub();
+  if (object->IsAccessCheckNeeded()) return slow_stub();
   ASSERT(cache_holder == OWN_MAP);
   // This is currently guaranteed by checks in StoreIC::Store.
   Handle<JSObject> receiver = Handle<JSObject>::cast(object);
@@ -1335,17 +1333,19 @@ Handle<Code> StoreIC::CompileHandler(LookupResult* lookup,
     }
     case NORMAL:
       if (kind() == Code::KEYED_STORE_IC) break;
-      if (receiver->IsGlobalObject()) {
+      if (receiver->IsJSGlobalProxy() || receiver->IsGlobalObject()) {
         // The stub generated for the global object picks the value directly
         // from the property cell. So the property must be directly on the
         // global object.
-        Handle<GlobalObject> global = Handle<GlobalObject>::cast(receiver);
+        Handle<GlobalObject> global = receiver->IsJSGlobalProxy()
+            ? handle(GlobalObject::cast(receiver->GetPrototype()))
+            : Handle<GlobalObject>::cast(receiver);
         Handle<PropertyCell> cell(global->GetPropertyCell(lookup), isolate());
         Handle<HeapType> union_type = PropertyCell::UpdatedType(cell, value);
-        StoreGlobalStub stub(union_type->IsConstant());
-
+        StoreGlobalStub stub(
+            union_type->IsConstant(), receiver->IsJSGlobalProxy());
         Handle<Code> code = stub.GetCodeCopyFromTemplate(
-            isolate(), receiver->map(), *cell);
+            isolate(), *global, *cell);
         // TODO(verwaest): Move caching of these NORMAL stubs outside as well.
         HeapObject::UpdateMapCodeCache(receiver, name, code);
         return code;
@@ -1353,7 +1353,6 @@ Handle<Code> StoreIC::CompileHandler(LookupResult* lookup,
       ASSERT(holder.is_identical_to(receiver));
       return isolate()->builtins()->StoreIC_Normal();
     case CALLBACKS: {
-      if (kind() == Code::KEYED_STORE_IC) break;
       Handle<Object> callback(lookup->GetCallbackObject(), isolate());
       if (callback->IsExecutableAccessorInfo()) {
         Handle<ExecutableAccessorInfo> info =
@@ -1386,7 +1385,7 @@ Handle<Code> StoreIC::CompileHandler(LookupResult* lookup,
     }
     case INTERCEPTOR:
       if (kind() == Code::KEYED_STORE_IC) break;
-      ASSERT(HasInterceptorSetter(*receiver));
+      ASSERT(HasInterceptorSetter(*holder));
       return compiler.CompileStoreInterceptor(receiver, name);
     case CONSTANT:
       break;
@@ -1671,7 +1670,7 @@ MaybeObject* KeyedStoreIC::Store(Handle<Object> object,
     if (maybe_object->IsFailure()) return maybe_object;
   } else {
     bool use_ic = FLAG_use_ic && !object->IsAccessCheckNeeded() &&
-        !(FLAG_harmony_observation && object->IsJSObject() &&
+        !(object->IsJSObject() &&
           JSObject::cast(*object)->map()->is_observed());
     if (use_ic && !object->IsSmi()) {
       // Don't use ICs for maps of the objects in Array's prototype chain. We
@@ -1682,7 +1681,7 @@ MaybeObject* KeyedStoreIC::Store(Handle<Object> object,
     }
 
     if (use_ic) {
-      ASSERT(!object->IsJSGlobalProxy());
+      ASSERT(!object->IsAccessCheckNeeded());
 
       if (object->IsJSObject()) {
         Handle<JSObject> receiver = Handle<JSObject>::cast(object);

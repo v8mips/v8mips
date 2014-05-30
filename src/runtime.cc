@@ -1621,7 +1621,8 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_GetPrototype) {
         !isolate->MayNamedAccessWrapper(Handle<JSObject>::cast(obj),
                                         isolate->factory()->proto_string(),
                                         v8::ACCESS_GET)) {
-      isolate->ReportFailedAccessCheck(JSObject::cast(*obj), v8::ACCESS_GET);
+      isolate->ReportFailedAccessCheckWrapper(Handle<JSObject>::cast(obj),
+                                              v8::ACCESS_GET);
       RETURN_IF_SCHEDULED_EXCEPTION(isolate);
       return isolate->heap()->undefined_value();
     }
@@ -1648,7 +1649,7 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_SetPrototype) {
   ASSERT(args.length() == 2);
   CONVERT_ARG_HANDLE_CHECKED(JSObject, obj, 0);
   CONVERT_ARG_HANDLE_CHECKED(Object, prototype, 1);
-  if (FLAG_harmony_observation && obj->map()->is_observed()) {
+  if (obj->map()->is_observed()) {
     Handle<Object> old_value(
         GetPrototypeSkipHiddenPrototypes(isolate, *obj), isolate);
 
@@ -1747,7 +1748,7 @@ static AccessCheckResult CheckPropertyAccess(Handle<JSObject> obj,
       return ACCESS_ALLOWED;
     }
 
-    obj->GetIsolate()->ReportFailedAccessCheck(*obj, access_type);
+    obj->GetIsolate()->ReportFailedAccessCheckWrapper(obj, access_type);
     return ACCESS_FORBIDDEN;
   }
 
@@ -1786,7 +1787,7 @@ static AccessCheckResult CheckPropertyAccess(Handle<JSObject> obj,
       break;
   }
 
-  isolate->ReportFailedAccessCheck(*obj, access_type);
+  isolate->ReportFailedAccessCheckWrapper(obj, access_type);
   return ACCESS_FORBIDDEN;
 }
 
@@ -5742,10 +5743,10 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_GetLocalPropertyNames) {
   if (obj->IsJSGlobalProxy()) {
     // Only collect names if access is permitted.
     if (obj->IsAccessCheckNeeded() &&
-        !isolate->MayNamedAccess(*obj,
-                                 isolate->heap()->undefined_value(),
-                                 v8::ACCESS_KEYS)) {
-      isolate->ReportFailedAccessCheck(*obj, v8::ACCESS_KEYS);
+        !isolate->MayNamedAccessWrapper(obj,
+                                        isolate->factory()->undefined_value(),
+                                        v8::ACCESS_KEYS)) {
+      isolate->ReportFailedAccessCheckWrapper(obj, v8::ACCESS_KEYS);
       RETURN_IF_SCHEDULED_EXCEPTION(isolate);
       return *isolate->factory()->NewJSArray(0);
     }
@@ -5762,10 +5763,10 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_GetLocalPropertyNames) {
   for (int i = 0; i < length; i++) {
     // Only collect names if access is permitted.
     if (jsproto->IsAccessCheckNeeded() &&
-        !isolate->MayNamedAccess(*jsproto,
-                                 isolate->heap()->undefined_value(),
-                                 v8::ACCESS_KEYS)) {
-      isolate->ReportFailedAccessCheck(*jsproto, v8::ACCESS_KEYS);
+        !isolate->MayNamedAccessWrapper(jsproto,
+                                        isolate->factory()->undefined_value(),
+                                        v8::ACCESS_KEYS)) {
+      isolate->ReportFailedAccessCheckWrapper(jsproto, v8::ACCESS_KEYS);
       RETURN_IF_SCHEDULED_EXCEPTION(isolate);
       return *isolate->factory()->NewJSArray(0);
     }
@@ -5913,9 +5914,10 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_LocalKeys) {
   if (object->IsJSGlobalProxy()) {
     // Do access checks before going to the global object.
     if (object->IsAccessCheckNeeded() &&
-        !isolate->MayNamedAccess(*object, isolate->heap()->undefined_value(),
-                             v8::ACCESS_KEYS)) {
-      isolate->ReportFailedAccessCheck(*object, v8::ACCESS_KEYS);
+        !isolate->MayNamedAccessWrapper(object,
+                                        isolate->factory()->undefined_value(),
+                                        v8::ACCESS_KEYS)) {
+      isolate->ReportFailedAccessCheckWrapper(object, v8::ACCESS_KEYS);
       RETURN_IF_SCHEDULED_EXCEPTION(isolate);
       return *isolate->factory()->NewJSArray(0);
     }
@@ -7690,36 +7692,6 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_ConstructDouble) {
   CONVERT_NUMBER_CHECKED(uint32_t, lo, Uint32, args[1]);
   uint64_t result = (static_cast<uint64_t>(hi) << 32) | lo;
   return isolate->heap()->AllocateHeapNumber(uint64_to_double(result));
-}
-
-
-// Cube root approximation, refer to: http://metamerist.com/cbrt/cbrt.htm
-// Using initial approximation adapted from Kahan's cbrt and 4 iterations
-// of Newton's method.
-inline double CubeRootNewtonIteration(double approx, double x) {
-  return (1.0 / 3.0) * (x / (approx * approx) + 2 * approx);
-}
-
-
-inline double CubeRoot(double x) {
-  static const uint64_t magic = V8_2PART_UINT64_C(0x2A9F7893, 00000000);
-  uint64_t xhigh = double_to_uint64(x);
-  double approx = uint64_to_double(xhigh / 3 + magic);
-
-  approx = CubeRootNewtonIteration(approx, x);
-  approx = CubeRootNewtonIteration(approx, x);
-  approx = CubeRootNewtonIteration(approx, x);
-  return CubeRootNewtonIteration(approx, x);
-}
-
-
-RUNTIME_FUNCTION(MaybeObject*, Runtime_Math_cbrt) {
-  SealHandleScope shs(isolate);
-  ASSERT(args.length() == 1);
-  CONVERT_DOUBLE_ARG_CHECKED(x, 0);
-  if (x == 0 || std::isinf(x)) return args[0];
-  double result = (x > 0) ? CubeRoot(x) : -CubeRoot(-x);
-  return isolate->heap()->AllocateHeapNumber(result);
 }
 
 
@@ -14743,12 +14715,13 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_IsAccessAllowedForObserver) {
   ASSERT(args.length() == 3);
   CONVERT_ARG_HANDLE_CHECKED(JSFunction, observer, 0);
   CONVERT_ARG_HANDLE_CHECKED(JSObject, object, 1);
-  ASSERT(object->IsAccessCheckNeeded());
+  ASSERT(object->map()->is_access_check_needed());
   Handle<Object> key = args.at<Object>(2);
   SaveContext save(isolate);
   isolate->set_context(observer->context());
-  if (!isolate->MayNamedAccess(*object, isolate->heap()->undefined_value(),
-                               v8::ACCESS_KEYS)) {
+  if (!isolate->MayNamedAccessWrapper(object,
+                                      isolate->factory()->undefined_value(),
+                                      v8::ACCESS_KEYS)) {
     return isolate->heap()->false_value();
   }
   bool access_allowed = false;
@@ -14756,11 +14729,12 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_IsAccessAllowedForObserver) {
   if (key->ToArrayIndex(&index) ||
       (key->IsString() && String::cast(*key)->AsArrayIndex(&index))) {
     access_allowed =
-        isolate->MayIndexedAccess(*object, index, v8::ACCESS_GET) &&
-        isolate->MayIndexedAccess(*object, index, v8::ACCESS_HAS);
+        isolate->MayIndexedAccessWrapper(object, index, v8::ACCESS_GET) &&
+        isolate->MayIndexedAccessWrapper(object, index, v8::ACCESS_HAS);
   } else {
-    access_allowed = isolate->MayNamedAccess(*object, *key, v8::ACCESS_GET) &&
-        isolate->MayNamedAccess(*object, *key, v8::ACCESS_HAS);
+    access_allowed =
+        isolate->MayNamedAccessWrapper(object, key, v8::ACCESS_GET) &&
+        isolate->MayNamedAccessWrapper(object, key, v8::ACCESS_HAS);
   }
   return isolate->heap()->ToBoolean(access_allowed);
 }

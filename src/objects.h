@@ -2363,10 +2363,6 @@ class JSObject: public JSReceiver {
   // been modified since it was created.  May give false positives.
   bool IsDirty();
 
-  // If the receiver is a JSGlobalProxy this method will return its prototype,
-  // otherwise the result is the receiver itself.
-  inline Object* BypassGlobalProxy();
-
   // Accessors for hidden properties object.
   //
   // Hidden properties are not local properties of the object itself.
@@ -2925,7 +2921,7 @@ class JSObject: public JSReceiver {
   // Gets the current elements capacity and the number of used elements.
   void GetElementsCapacityAndUsage(int* capacity, int* used);
 
-  bool CanSetCallback(Name* name);
+  static bool CanSetCallback(Handle<JSObject> object, Handle<Name> name);
   static void SetElementCallback(Handle<JSObject> object,
                                  uint32_t index,
                                  Handle<Object> structure,

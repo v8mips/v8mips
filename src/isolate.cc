@@ -778,7 +778,7 @@ static MayAccessDecision MayAccessPreCheck(Isolate* isolate,
 
 bool Isolate::MayNamedAccess(JSObject* receiver, Object* key,
                              v8::AccessType type) {
-  ASSERT(receiver->IsAccessCheckNeeded());
+  ASSERT(receiver->IsJSGlobalProxy() || receiver->IsAccessCheckNeeded());
 
   // The callers of this method are not expecting a GC.
   DisallowHeapAllocation no_gc;
@@ -829,7 +829,7 @@ bool Isolate::MayNamedAccess(JSObject* receiver, Object* key,
 bool Isolate::MayIndexedAccess(JSObject* receiver,
                                uint32_t index,
                                v8::AccessType type) {
-  ASSERT(receiver->IsAccessCheckNeeded());
+  ASSERT(receiver->IsJSGlobalProxy() || receiver->IsAccessCheckNeeded());
   // Check for compatibility between the security tokens in the
   // current lexical context and the accessed object.
   ASSERT(context());
@@ -2017,6 +2017,12 @@ bool Isolate::Init(Deserializer* des) {
 
   bootstrapper_->Initialize(create_heap_objects);
   builtins_.SetUp(this, create_heap_objects);
+
+  if (FLAG_log_internal_timer_events) {
+    set_event_logger(Logger::LogInternalEvents);
+  } else {
+    set_event_logger(Logger::EmptyLogInternalEvents);
+  }
 
   // Set default value if not yet set.
   // TODO(yangguo): move this to ResourceConstraints::ConfigureDefaults
