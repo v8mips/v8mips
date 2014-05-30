@@ -700,7 +700,6 @@ Handle<Script> Factory::NewScript(Handle<String> source) {
   script->set_id(Smi::FromInt(id));
   script->set_line_offset(Smi::FromInt(0));
   script->set_column_offset(Smi::FromInt(0));
-  script->set_data(heap->undefined_value());
   script->set_context_data(heap->undefined_value());
   script->set_type(Smi::FromInt(Script::TYPE_NORMAL));
   script->set_wrapper(*wrapper);
@@ -968,7 +967,6 @@ Handle<JSFunction> Factory::NewFunctionFromSharedFunctionInfo(
         function_info->GetLiteralsFromOptimizedCodeMap(index);
     if (literals != NULL) result->set_literals(literals);
     Code* code = function_info->GetCodeFromOptimizedCodeMap(index);
-    ASSERT(!code->marked_for_deoptimization());
     result->ReplaceCode(code);
     return result;
   }
