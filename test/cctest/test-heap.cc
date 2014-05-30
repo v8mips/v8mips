@@ -434,7 +434,7 @@ TEST(WeakGlobalHandlesScavenge) {
                           &TestWeakGlobalHandleCallback);
 
   // Scavenge treats weak pointers as normal roots.
-  heap->PerformScavenge();
+  heap->CollectGarbage(NEW_SPACE);
 
   CHECK((*h1)->IsString());
   CHECK((*h2)->IsHeapNumber());
@@ -519,7 +519,7 @@ TEST(DeleteWeakGlobalHandle) {
                           &TestWeakGlobalHandleCallback);
 
   // Scanvenge does not recognize weak reference.
-  heap->PerformScavenge();
+  heap->CollectGarbage(NEW_SPACE);
 
   CHECK(!WeakPointerCleared);
 
@@ -1437,7 +1437,7 @@ TEST(TestInternalWeakLists) {
 
     // Scavenge treats these references as strong.
     for (int j = 0; j < 10; j++) {
-      CcTest::heap()->PerformScavenge();
+      CcTest::heap()->CollectGarbage(NEW_SPACE);
       CHECK_EQ(opt ? 5 : 0, CountOptimizedUserFunctions(ctx[i]));
     }
 
@@ -1449,14 +1449,14 @@ TEST(TestInternalWeakLists) {
     // Get rid of f3 and f5 in the same way.
     CompileRun("f3=null");
     for (int j = 0; j < 10; j++) {
-      CcTest::heap()->PerformScavenge();
+      CcTest::heap()->CollectGarbage(NEW_SPACE);
       CHECK_EQ(opt ? 4 : 0, CountOptimizedUserFunctions(ctx[i]));
     }
     CcTest::heap()->CollectAllGarbage(Heap::kNoGCFlags);
     CHECK_EQ(opt ? 3 : 0, CountOptimizedUserFunctions(ctx[i]));
     CompileRun("f5=null");
     for (int j = 0; j < 10; j++) {
-      CcTest::heap()->PerformScavenge();
+      CcTest::heap()->CollectGarbage(NEW_SPACE);
       CHECK_EQ(opt ? 3 : 0, CountOptimizedUserFunctions(ctx[i]));
     }
     CcTest::heap()->CollectAllGarbage(Heap::kNoGCFlags);
@@ -1478,7 +1478,7 @@ TEST(TestInternalWeakLists) {
 
     // Scavenge treats these references as strong.
     for (int j = 0; j < 10; j++) {
-      CcTest::heap()->PerformScavenge();
+      CcTest::heap()->CollectGarbage(i::NEW_SPACE);
       CHECK_EQ(kNumTestContexts - i, CountNativeContexts());
     }
 
