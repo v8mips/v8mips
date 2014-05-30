@@ -1033,14 +1033,6 @@ ExternalReference ExternalReference::
 
 
 ExternalReference ExternalReference::
-    incremental_evacuation_record_write_function(Isolate* isolate) {
-  return ExternalReference(Redirect(
-      isolate,
-      FUNCTION_ADDR(IncrementalMarking::RecordWriteForEvacuationFromCode)));
-}
-
-
-ExternalReference ExternalReference::
     store_buffer_overflow_function(Isolate* isolate) {
   return ExternalReference(Redirect(
       isolate,
