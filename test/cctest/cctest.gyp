@@ -155,7 +155,9 @@
         }],
         ['v8_target_arch=="mips64el"', {
           'sources': [
-            'test-assembler-mips64.cc'
+            'test-assembler-mips64.cc',
+            'test-disasm-mips64.cc',
+            'test-macro-assembler-mips64.cc'
           ],
         }],
         [ 'OS=="linux"', {
