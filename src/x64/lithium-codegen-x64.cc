@@ -3785,8 +3785,9 @@ void LCodeGen::DoCallNew(LCallNew* instr) {
 
   __ Set(rax, instr->arity());
   // No cell in ebx for construct type feedback in optimized code
-  Handle<Object> undefined_value(isolate()->factory()->undefined_value());
-  __ Move(rbx, undefined_value);
+  Handle<Object> megamorphic_symbol =
+      TypeFeedbackInfo::MegamorphicSentinel(isolate());
+  __ Move(rbx, megamorphic_symbol);
   CallConstructStub stub(NO_CALL_FUNCTION_FLAGS);
   CallCode(stub.GetCode(isolate()), RelocInfo::CONSTRUCT_CALL, instr);
 }
@@ -3798,7 +3799,7 @@ void LCodeGen::DoCallNewArray(LCallNewArray* instr) {
   ASSERT(ToRegister(instr->result()).is(rax));
 
   __ Set(rax, instr->arity());
-  __ Move(rbx, factory()->undefined_value());
+  __ Move(rbx, TypeFeedbackInfo::MegamorphicSentinel(isolate()));
   ElementsKind kind = instr->hydrogen()->elements_kind();
   AllocationSiteOverrideMode override_mode =
       (AllocationSite::GetMode(kind) == TRACK_ALLOCATION_SITE)
@@ -4025,44 +4026,51 @@ void LCodeGen::ApplyCheckIf(Condition cc, LBoundsCheck* check) {
 
 
 void LCodeGen::DoBoundsCheck(LBoundsCheck* instr) {
-  if (instr->hydrogen()->skip_check()) return;
+  HBoundsCheck* hinstr = instr->hydrogen();
+  if (hinstr->skip_check()) return;
+
+  Representation representation = hinstr->length()->representation();
+  ASSERT(representation.Equals(hinstr->index()->representation()));
+  ASSERT(representation.IsSmiOrInteger32());
 
   if (instr->length()->IsRegister()) {
     Register reg = ToRegister(instr->length());
-    if (!instr->hydrogen()->length()->representation().IsSmi()) {
-      __ AssertZeroExtended(reg);
-    }
+
     if (instr->index()->IsConstantOperand()) {
       int32_t constant_index =
           ToInteger32(LConstantOperand::cast(instr->index()));
-      if (instr->hydrogen()->length()->representation().IsSmi()) {
+      if (representation.IsSmi()) {
         __ Cmp(reg, Smi::FromInt(constant_index));
       } else {
-        __ cmpq(reg, Immediate(constant_index));
+        __ cmpl(reg, Immediate(constant_index));
       }
     } else {
       Register reg2 = ToRegister(instr->index());
-      if (!instr->hydrogen()->index()->representation().IsSmi()) {
-        __ AssertZeroExtended(reg2);
+      if (representation.IsSmi()) {
+        __ cmpq(reg, reg2);
+      } else {
+        __ cmpl(reg, reg2);
       }
-      __ cmpq(reg, reg2);
     }
   } else {
     Operand length = ToOperand(instr->length());
     if (instr->index()->IsConstantOperand()) {
       int32_t constant_index =
           ToInteger32(LConstantOperand::cast(instr->index()));
-      if (instr->hydrogen()->length()->representation().IsSmi()) {
+      if (representation.IsSmi()) {
         __ Cmp(length, Smi::FromInt(constant_index));
       } else {
-        __ cmpq(length, Immediate(constant_index));
+        __ cmpl(length, Immediate(constant_index));
       }
     } else {
-      __ cmpq(length, ToRegister(instr->index()));
+      if (representation.IsSmi()) {
+        __ cmpq(length, ToRegister(instr->index()));
+      } else {
+        __ cmpl(length, ToRegister(instr->index()));
+      }
     }
   }
-  Condition condition =
-      instr->hydrogen()->allow_equality() ? below : below_equal;
+  Condition condition = hinstr->allow_equality() ? below : below_equal;
   ApplyCheckIf(condition, instr);
 }
 

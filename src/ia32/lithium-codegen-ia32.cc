@@ -4192,8 +4192,9 @@ void LCodeGen::DoCallNew(LCallNew* instr) {
   ASSERT(ToRegister(instr->result()).is(eax));
 
   // No cell in ebx for construct type feedback in optimized code
-  Handle<Object> undefined_value(isolate()->factory()->undefined_value());
-  __ mov(ebx, Immediate(undefined_value));
+  Handle<Object> megamorphic_symbol =
+      TypeFeedbackInfo::MegamorphicSentinel(isolate());
+  __ mov(ebx, Immediate(megamorphic_symbol));
   CallConstructStub stub(NO_CALL_FUNCTION_FLAGS);
   __ Set(eax, Immediate(instr->arity()));
   CallCode(stub.GetCode(isolate()), RelocInfo::CONSTRUCT_CALL, instr);
@@ -4206,7 +4207,7 @@ void LCodeGen::DoCallNewArray(LCallNewArray* instr) {
   ASSERT(ToRegister(instr->result()).is(eax));
 
   __ Set(eax, Immediate(instr->arity()));
-  __ mov(ebx, factory()->undefined_value());
+  __ mov(ebx, TypeFeedbackInfo::MegamorphicSentinel(isolate()));
   ElementsKind kind = instr->hydrogen()->elements_kind();
   AllocationSiteOverrideMode override_mode =
       (AllocationSite::GetMode(kind) == TRACK_ALLOCATION_SITE)
@@ -5249,6 +5250,10 @@ void LCodeGen::EmitNumberUntagD(Register input_reg,
 void LCodeGen::DoDeferredTaggedToI(LTaggedToI* instr, Label* done) {
   Register input_reg = ToRegister(instr->value());
 
+  // The input was optimistically untagged; revert it.
+  STATIC_ASSERT(kSmiTagSize == 1);
+  __ lea(input_reg, Operand(input_reg, times_2, kHeapObjectTag));
+
   if (instr->truncating()) {
     Label no_heap_number, check_bools, check_false;
 
@@ -5278,7 +5283,6 @@ void LCodeGen::DoDeferredTaggedToI(LTaggedToI* instr, Label* done) {
     __ RecordComment("Deferred TaggedToI: cannot truncate");
     DeoptimizeIf(not_equal, instr->environment());
     __ Set(input_reg, Immediate(0));
-    __ jmp(done);
   } else {
     Label bailout;
     XMMRegister scratch = (instr->temp() != NULL)
@@ -5318,9 +5322,13 @@ void LCodeGen::DoTaggedToI(LTaggedToI* instr) {
   } else {
     DeferredTaggedToI* deferred =
         new(zone()) DeferredTaggedToI(this, instr, x87_stack_);
-
-    __ JumpIfNotSmi(input_reg, deferred->entry());
+    // Optimistically untag the input.
+    // If the input is a HeapObject, SmiUntag will set the carry flag.
+    STATIC_ASSERT(kSmiTagSize == 1 && kSmiTag == 0);
     __ SmiUntag(input_reg);
+    // Branch to deferred code if the input was tagged.
+    // The deferred code will take care of restoring the tag.
+    __ j(carry, deferred->entry());
     __ bind(deferred->exit());
   }
 }

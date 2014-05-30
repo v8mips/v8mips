@@ -2856,8 +2856,7 @@ TEST(IncrementalMarkingClearsTypeFeedbackInfo) {
           *v8::Handle<v8::Function>::Cast(
               CcTest::global()->Get(v8_str("f"))));
 
-  Handle<FixedArray> feedback_vector(TypeFeedbackInfo::cast(
-      f->shared()->code()->type_feedback_info())->feedback_vector());
+  Handle<FixedArray> feedback_vector(f->shared()->feedback_vector());
 
   CHECK_EQ(2, feedback_vector->length());
   CHECK(feedback_vector->get(0)->IsJSFunction());
@@ -2867,8 +2866,10 @@ TEST(IncrementalMarkingClearsTypeFeedbackInfo) {
   CcTest::heap()->CollectAllGarbage(Heap::kNoGCFlags);
 
   CHECK_EQ(2, feedback_vector->length());
-  CHECK(feedback_vector->get(0)->IsTheHole());
-  CHECK(feedback_vector->get(1)->IsTheHole());
+  CHECK_EQ(feedback_vector->get(0),
+           *TypeFeedbackInfo::UninitializedSentinel(CcTest::i_isolate()));
+  CHECK_EQ(feedback_vector->get(1),
+           *TypeFeedbackInfo::UninitializedSentinel(CcTest::i_isolate()));
 }
 
 
