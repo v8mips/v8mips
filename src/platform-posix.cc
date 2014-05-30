@@ -367,6 +367,9 @@ double OS::DaylightSavingsOffset(double time) {
 }
 
 
+void OS::TimeZoneChanged() {}
+
+
 int OS::GetLastError() {
   return errno;
 }

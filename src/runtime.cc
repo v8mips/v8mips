@@ -1637,7 +1637,7 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_SetPrototype) {
   ASSERT(args.length() == 2);
   CONVERT_ARG_HANDLE_CHECKED(JSObject, obj, 0);
   CONVERT_ARG_HANDLE_CHECKED(Object, prototype, 1);
-  if (obj->map()->is_observed()) {
+  if (FLAG_harmony_observation && obj->map()->is_observed()) {
     Handle<Object> old_value(
         GetPrototypeSkipHiddenPrototypes(isolate, *obj), isolate);
 
@@ -5793,7 +5793,9 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_GetLocalPropertyNames) {
       }
     }
     next_copy_index += local_property_count[i];
-    if (jsproto->HasHiddenProperties()) {
+
+    // Hidden properties only show up if the filter does not skip strings.
+    if ((filter & STRING) == 0 && jsproto->HasHiddenProperties()) {
       hidden_strings++;
     }
     if (i < length - 1) {
