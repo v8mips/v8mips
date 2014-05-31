@@ -2142,7 +2142,7 @@ class LStoreNamedGeneric V8_FINAL : public LTemplateInstruction<0, 3, 0> {
   virtual void PrintDataTo(StringStream* stream) V8_OVERRIDE;
 
   Handle<Object> name() const { return hydrogen()->name(); }
-  StrictMode strict_mode_flag() { return hydrogen()->strict_mode_flag(); }
+  StrictMode strict_mode() { return hydrogen()->strict_mode(); }
 };
 
 
@@ -2199,7 +2199,7 @@ class LStoreKeyedGeneric V8_FINAL : public LTemplateInstruction<0, 4, 0> {
 
   virtual void PrintDataTo(StringStream* stream) V8_OVERRIDE;
 
-  StrictMode strict_mode_flag() { return hydrogen()->strict_mode_flag(); }
+  StrictMode strict_mode() { return hydrogen()->strict_mode(); }
 };
 
 

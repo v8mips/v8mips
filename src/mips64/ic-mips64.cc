@@ -821,7 +821,7 @@ void KeyedLoadIC::GenerateString(MacroAssembler* masm) {
 
 
 void KeyedStoreIC::GenerateRuntimeSetProperty(MacroAssembler* masm,
-                                              StrictModeFlag strict_mode) {
+                                              StrictMode strict_mode) {
   // ---------- S t a t e --------------
   //  -- a0     : value
   //  -- a1     : key
@@ -1019,7 +1019,7 @@ static void KeyedStoreGenerateGenericHelper(
 
 
 void KeyedStoreIC::GenerateGeneric(MacroAssembler* masm,
-                                   StrictModeFlag strict_mode) {
+                                   StrictMode strict_mode) {
   // ---------- S t a t e --------------
   //  -- a0     : value
   //  -- a1     : key
@@ -1261,7 +1261,7 @@ void StoreIC::GenerateNormal(MacroAssembler* masm) {
 
 
 void StoreIC::GenerateRuntimeSetProperty(MacroAssembler* masm,
-                                         StrictModeFlag strict_mode) {
+                                         StrictMode strict_mode) {
   // ----------- S t a t e -------------
   //  -- a0    : value
   //  -- a1    : receiver

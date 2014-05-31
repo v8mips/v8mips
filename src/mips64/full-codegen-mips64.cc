@@ -156,7 +156,7 @@ void FullCodeGenerator::Generate() {
   // Sloppy mode functions and builtins need to replace the receiver with the
   // global proxy when called as functions (without an explicit receiver
   // object).
-  if (info->is_sloppy_mode() && !info->is_native()) {
+  if (info->strict_mode() == SLOPPY && !info->is_native()) {
     Label ok;
     int receiver_offset = info->scope()->num_parameters() * kPointerSize;
     __ ld(at, MemOperand(sp, receiver_offset));
@@ -267,7 +267,7 @@ void FullCodeGenerator::Generate() {
     // The stub will rewrite receiever and parameter count if the previous
     // stack frame was an arguments adapter frame.
     ArgumentsAccessStub::Type type;
-    if (!is_sloppy_mode()) {
+    if (strict_mode() == STRICT) {
       type = ArgumentsAccessStub::NEW_STRICT;
     } else if (function()->has_duplicate_parameters()) {
       type = ArgumentsAccessStub::NEW_SLOPPY_SLOW;
@@ -297,7 +297,7 @@ void FullCodeGenerator::Generate() {
       if (scope()->is_function_scope() && scope()->function() != NULL) {
         VariableDeclaration* function = scope()->function();
         ASSERT(function->proxy()->var()->mode() == CONST ||
-               function->proxy()->var()->mode() == CONST_HARMONY);
+               function->proxy()->var()->mode() == CONST_LEGACY);
         ASSERT(function->proxy()->var()->location() != Variable::UNALLOCATED);
         VisitVariableDeclaration(function);
       }
@@ -800,7 +800,7 @@ void FullCodeGenerator::VisitVariableDeclaration(
   VariableProxy* proxy = declaration->proxy();
   VariableMode mode = declaration->mode();
   Variable* variable = proxy->var();
-  bool hole_init = mode == CONST || mode == CONST_HARMONY || mode == LET;
+  bool hole_init = mode == LET || mode == CONST || mode == CONST_LEGACY;
   switch (variable->location()) {
     case Variable::UNALLOCATED:
       globals_->Add(variable->name(), zone());
@@ -1333,7 +1333,7 @@ void FullCodeGenerator::EmitNewClosure(Handle<SharedFunctionInfo> info,
       !pretenure &&
       scope()->is_function_scope() &&
       info->num_literals() == 0) {
-    FastNewClosureStub stub(info->language_mode(), info->is_generator());
+    FastNewClosureStub stub(info->strict_mode(), info->is_generator());
     __ li(a2, Operand(info));
     __ CallStub(&stub);
   } else {
@@ -1452,15 +1452,14 @@ void FullCodeGenerator::EmitDynamicLookupFastCase(Variable* var,
   } else if (var->mode() == DYNAMIC_LOCAL) {
     Variable* local = var->local_if_not_shadowed();
     __ ld(v0, ContextSlotOperandCheckExtensions(local, slow));
-    if (local->mode() == LET ||
-        local->mode() == CONST ||
-        local->mode() == CONST_HARMONY) {
+    if (local->mode() == LET || local->mode() == CONST ||
+        local->mode() == CONST_LEGACY) {
       __ LoadRoot(at, Heap::kTheHoleValueRootIndex);
       __ dsubu(at, v0, at);  // Sub as compare: at == 0 on eq.
-      if (local->mode() == CONST) {
+      if (local->mode() == CONST_LEGACY) {
         __ LoadRoot(a0, Heap::kUndefinedValueRootIndex);
         __ Movz(v0, a0, at);  // Conditional move: return Undefined if TheHole.
-      } else {  // LET || CONST_HARMONY
+      } else {  // LET || CONST
         __ Branch(done, ne, at, Operand(zero_reg));
         __ li(a0, Operand(var->name()));
         __ push(a0);
@@ -1527,7 +1526,7 @@ void FullCodeGenerator::EmitVariableLoad(VariableProxy* proxy) {
           // Check that we always have valid source position.
           ASSERT(var->initializer_position() != RelocInfo::kNoPosition);
           ASSERT(proxy->position() != RelocInfo::kNoPosition);
-          skip_init_check = var->mode() != CONST &&
+          skip_init_check = var->mode() != CONST_LEGACY &&
               var->initializer_position() < proxy->position();
         }
 
@@ -1536,7 +1535,7 @@ void FullCodeGenerator::EmitVariableLoad(VariableProxy* proxy) {
           GetVar(v0, var);
           __ LoadRoot(at, Heap::kTheHoleValueRootIndex);
           __ dsubu(at, v0, at);  // Sub as compare: at == 0 on eq.
-          if (var->mode() == LET || var->mode() == CONST_HARMONY) {
+          if (var->mode() == LET || var->mode() == CONST) {
             // Throw a reference error when using an uninitialized let/const
             // binding in harmony mode.
             Label done;
@@ -1547,7 +1546,7 @@ void FullCodeGenerator::EmitVariableLoad(VariableProxy* proxy) {
             __ bind(&done);
           } else {
             // Uninitalized const bindings outside of harmony mode are unholed.
-            ASSERT(var->mode() == CONST);
+            ASSERT(var->mode() == CONST_LEGACY);
             __ LoadRoot(a0, Heap::kUndefinedValueRootIndex);
             __ Movz(v0, a0, at);  // Conditional move: Undefined if TheHole.
           }
@@ -2461,7 +2460,7 @@ void FullCodeGenerator::EmitAssignment(Expression* expr) {
       VisitForAccumulatorValue(prop->key());
       __ mov(a1, result_register());
       __ Pop(a0, a2);  // a0 = restored value.
-      Handle<Code> ic = is_sloppy_mode()
+      Handle<Code> ic = strict_mode() == SLOPPY
         ? isolate()->builtins()->KeyedStoreIC_Initialize()
         : isolate()->builtins()->KeyedStoreIC_Initialize_Strict();
       CallIC(ic);
@@ -2486,23 +2485,22 @@ void FullCodeGenerator::EmitStoreToStackLocalOrContextSlot(
 
 
 void FullCodeGenerator::EmitCallStoreContextSlot(
-    Handle<String> name, LanguageMode mode) {
+    Handle<String> name, StrictMode strict_mode) {
   __ li(a1, Operand(name));
-  __ li(a0, Operand(Smi::FromInt(mode)));
+  __ li(a0, Operand(Smi::FromInt(strict_mode)));
   __ Push(v0, cp, a1, a0);  // Value, context, name, strict mode.
   __ CallRuntime(Runtime::kStoreContextSlot, 4);
 }
 
 
-void FullCodeGenerator::EmitVariableAssignment(Variable* var,
-                                               Token::Value op) {
+void FullCodeGenerator::EmitVariableAssignment(Variable* var, Token::Value op) {
   if (var->IsUnallocated()) {
     // Global var, const, or let.
     __ mov(a0, result_register());
     __ li(a2, Operand(var->name()));
     __ ld(a1, GlobalObjectOperand());
     CallStoreIC();
-  } else if (op == Token::INIT_CONST) {
+  } else if (op == Token::INIT_CONST_LEGACY) {
     // Const initializers need a write barrier.
     ASSERT(!var->IsParameter());  // No const parameters.
     if (var->IsLookupSlot()) {
@@ -2523,7 +2521,7 @@ void FullCodeGenerator::EmitVariableAssignment(Variable* var,
   } else if (var->mode() == LET && op != Token::INIT_LET) {
     // Non-initializing assignment to let variable needs a write barrier.
     if (var->IsLookupSlot()) {
-      EmitCallStoreContextSlot(var->name(), language_mode());
+      EmitCallStoreContextSlot(var->name(), strict_mode());
     } else {
       ASSERT(var->IsStackAllocated() || var->IsContextSlot());
       Label assign;
@@ -2539,11 +2537,11 @@ void FullCodeGenerator::EmitVariableAssignment(Variable* var,
       EmitStoreToStackLocalOrContextSlot(var, location);
     }
 
-  } else if (!var->is_const_mode() || op == Token::INIT_CONST_HARMONY) {
+  } else if (!var->is_const_mode() || op == Token::INIT_CONST) {
     // Assignment to var or initializing assignment to let/const
     // in harmony mode.
     if (var->IsLookupSlot()) {
-      EmitCallStoreContextSlot(var->name(), language_mode());
+      EmitCallStoreContextSlot(var->name(), strict_mode());
     } else {
       ASSERT((var->IsStackAllocated() || var->IsContextSlot()));
       MemOperand location = VarOperand(var, a1);
@@ -2592,7 +2590,7 @@ void FullCodeGenerator::EmitKeyedPropertyAssignment(Assignment* expr) {
   __ mov(a0, result_register());
   __ Pop(a2, a1);  // a1 = key.
 
-  Handle<Code> ic = is_sloppy_mode()
+  Handle<Code> ic = strict_mode() == SLOPPY
       ? isolate()->builtins()->KeyedStoreIC_Initialize()
       : isolate()->builtins()->KeyedStoreIC_Initialize_Strict();
   CallIC(ic, expr->AssignmentFeedbackId());
@@ -2758,8 +2756,8 @@ void FullCodeGenerator::EmitResolvePossiblyDirectEval(int arg_count) {
   int receiver_offset = 2 + info_->scope()->num_parameters();
   __ ld(t1, MemOperand(fp, receiver_offset * kPointerSize));
 
-  // t0: the language mode.
-  __ li(t0, Operand(Smi::FromInt(language_mode())));
+  // t0: the strict mode.
+  __ li(t0, Operand(Smi::FromInt(strict_mode())));
 
   // a1: the start position of the scope the calls resides in.
   __ li(a1, Operand(Smi::FromInt(scope()->start_position())));
@@ -4233,9 +4231,7 @@ void FullCodeGenerator::VisitUnaryOperation(UnaryOperation* expr) {
       if (property != NULL) {
         VisitForStackValue(property->obj());
         VisitForStackValue(property->key());
-        StrictModeFlag strict_mode_flag = (language_mode() == SLOPPY_MODE)
-            ? kSloppyMode : kStrictMode;
-        __ li(a1, Operand(Smi::FromInt(strict_mode_flag)));
+        __ li(a1, Operand(Smi::FromInt(strict_mode())));
         __ push(a1);
         __ InvokeBuiltin(Builtins::DELETE, CALL_FUNCTION);
         context()->Plug(v0);
@@ -4243,11 +4239,11 @@ void FullCodeGenerator::VisitUnaryOperation(UnaryOperation* expr) {
         Variable* var = proxy->var();
         // Delete of an unqualified identifier is disallowed in strict mode
         // but "delete this" is allowed.
-        ASSERT(language_mode() == SLOPPY_MODE || var->is_this());
+        ASSERT(strict_mode() == SLOPPY || var->is_this());
         if (var->IsUnallocated()) {
           __ ld(a2, GlobalObjectOperand());
           __ li(a1, Operand(var->name()));
-          __ li(a0, Operand(Smi::FromInt(kSloppyMode)));
+          __ li(a0, Operand(Smi::FromInt(SLOPPY)));
           __ Push(a2, a1, a0);
           __ InvokeBuiltin(Builtins::DELETE, CALL_FUNCTION);
           context()->Plug(v0);
@@ -4506,7 +4502,7 @@ void FullCodeGenerator::VisitCountOperation(CountOperation* expr) {
     case KEYED_PROPERTY: {
       __ mov(a0, result_register());  // Value.
       __ Pop(a2, a1);  // a1 = key, a2 = receiver.
-      Handle<Code> ic = is_sloppy_mode()
+      Handle<Code> ic = strict_mode() == SLOPPY
           ? isolate()->builtins()->KeyedStoreIC_Initialize()
           : isolate()->builtins()->KeyedStoreIC_Initialize_Strict();
       CallIC(ic, expr->CountStoreFeedbackId());

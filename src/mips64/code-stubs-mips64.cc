@@ -2471,7 +2471,7 @@ void ArgumentsAccessStub::GenerateNewSloppyFast(MacroAssembler* masm) {
   __ Daddu(t5, t5, Operand(FixedArray::kHeaderSize));
 
   // 3. Arguments object.
-  __ Daddu(t5, t5, Operand(Heap::kArgumentsObjectSize));
+  __ Daddu(t5, t5, Operand(Heap::kSloppyArgumentsObjectSize));
 
   // Do the allocation of all three objects in one go.
   __ Allocate(t5, v0, a3, t0, &runtime, TAG_OBJECT);
@@ -2480,7 +2480,7 @@ void ArgumentsAccessStub::GenerateNewSloppyFast(MacroAssembler* masm) {
   // a2 = argument count (tagged)
   // Get the arguments boilerplate from the current native context into t0.
   const int kNormalOffset =
-      Context::SlotOffset(Context::ARGUMENTS_BOILERPLATE_INDEX);
+      Context::SlotOffset(Context::SLOPPY_ARGUMENTS_BOILERPLATE_INDEX);
   const int kAliasedOffset =
       Context::SlotOffset(Context::ALIASED_ARGUMENTS_BOILERPLATE_INDEX);
 
@@ -2521,7 +2521,7 @@ void ArgumentsAccessStub::GenerateNewSloppyFast(MacroAssembler* masm) {
   // Set up the elements pointer in the allocated arguments object.
   // If we allocated a parameter map, t0 will point there, otherwise
   // it will point to the backing store.
-  __ Daddu(t0, v0, Operand(Heap::kArgumentsObjectSize));
+  __ Daddu(t0, v0, Operand(Heap::kSloppyArgumentsObjectSize));
   __ sd(t0, FieldMemOperand(v0, JSObject::kElementsOffset));
 
   // v0 = address of new object (tagged)
@@ -2676,7 +2676,7 @@ void ArgumentsAccessStub::GenerateNewStrict(MacroAssembler* masm) {
 
   __ Daddu(a1, a1, Operand(FixedArray::kHeaderSize / kPointerSize));
   __ bind(&add_arguments_object);
-  __ Daddu(a1, a1, Operand(Heap::kArgumentsObjectSizeStrict / kPointerSize));
+  __ Daddu(a1, a1, Operand(Heap::kStrictArgumentsObjectSize / kPointerSize));
 
   // Do the allocation of both objects in one go.
   __ Allocate(a1, v0, a2, a3, &runtime,
@@ -2686,7 +2686,7 @@ void ArgumentsAccessStub::GenerateNewStrict(MacroAssembler* masm) {
   __ ld(t0, MemOperand(cp, Context::SlotOffset(Context::GLOBAL_OBJECT_INDEX)));
   __ ld(t0, FieldMemOperand(t0, GlobalObject::kNativeContextOffset));
   __ ld(t0, MemOperand(t0, Context::SlotOffset(
-      Context::STRICT_MODE_ARGUMENTS_BOILERPLATE_INDEX)));
+      Context::STRICT_ARGUMENTS_BOILERPLATE_INDEX)));
 
   // Copy the JS object part.
   __ CopyFields(v0, t0, a3.bit(), JSObject::kHeaderSize / kPointerSize);
@@ -2705,7 +2705,7 @@ void ArgumentsAccessStub::GenerateNewStrict(MacroAssembler* masm) {
 
   // Set up the elements pointer in the allocated arguments object and
   // initialize the header in the elements fixed array.
-  __ Daddu(t0, v0, Operand(Heap::kArgumentsObjectSizeStrict));
+  __ Daddu(t0, v0, Operand(Heap::kStrictArgumentsObjectSize));
   __ sd(t0, FieldMemOperand(v0, JSObject::kElementsOffset));
   __ LoadRoot(a3, Heap::kFixedArrayMapRootIndex);
   __ sd(a3, FieldMemOperand(t0, FixedArray::kMapOffset));
