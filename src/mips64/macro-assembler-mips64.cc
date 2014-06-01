@@ -1293,6 +1293,19 @@ void MacroAssembler::Trunc_uw_d(FPURegister fd,
 }
 
 
+void MacroAssembler::Madd_d(FPURegister fd, FPURegister fr, FPURegister fs,
+    FPURegister ft, FPURegister scratch) {
+  if (0) {  // TODO(plind): find reasonable arch-variant symbol names.
+    madd_d(fd, fr, fs, ft);
+  } else {
+    // Can not change source regs's value.
+    ASSERT(!fr.is(scratch) && !fs.is(scratch) && !ft.is(scratch));
+    mul_d(scratch, fs, ft);
+    add_d(fd, fr, scratch);
+  }
+}
+
+
 void MacroAssembler::BranchF(Label* target,
                              Label* nan,
                              Condition cc,
@@ -4767,7 +4780,7 @@ void MacroAssembler::InitializeNewString(Register string,
 
 
 int MacroAssembler::ActivationFrameAlignment() {
-#if V8_HOST_ARCH_MIPS
+#if V8_HOST_ARCH_MIPS || V8_HOST_ARCH_MIPS64
   // Running on the real platform. Use the alignment as mandated by the local
   // environment.
   // Note: This will break if we ever start generating snapshots on one Mips
@@ -5229,7 +5242,7 @@ void MacroAssembler::CallCFunctionHelper(Register function,
   // The argument stots are presumed to have been set up by
   // PrepareCallCFunction. The C function must be called via t9, for mips ABI.
 
-#if V8_HOST_ARCH_MIPS
+#if V8_HOST_ARCH_MIPS || V8_HOST_ARCH_MIPS64
   if (emit_debug_code()) {
     int frame_alignment = OS::ActivationFrameAlignment();
     int frame_alignment_mask = frame_alignment - 1;

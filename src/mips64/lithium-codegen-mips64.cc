@@ -1192,7 +1192,7 @@ void LCodeGen::DoMultiplyAddD(LMultiplyAddD* instr) {
   // This is computed in-place.
   ASSERT(addend.is(ToDoubleRegister(instr->result())));
 
-  __ madd_d(addend, addend, multiplier, multiplicand);
+  __ Madd_d(addend, addend, multiplier, multiplicand, double_scratch0());
 }
 
 

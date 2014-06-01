@@ -95,6 +95,9 @@ const bool IsMipsSoftFloatABI = true;
 #endif
 
 
+#define __STDC_FORMAT_MACROS
+#include <inttypes.h>
+
 
 // Defines constants and accessor classes to assemble, disassemble and
 // simulate MIPS32 instructions.
@@ -126,8 +129,7 @@ const int kInvalidFPURegister = -1;
 // FPU (coprocessor 1) control registers. Currently only FCSR is implemented.
 const int kFCSRRegister = 31;
 const int kInvalidFPUControlRegister = -1;
-// FPU reg all 1's, or MS 32-bits all 1's both evaluate to NaN.
-const int64_t kFPUInvalidResult = -1;
+const uint32_t kFPUInvalidResult = static_cast<uint32_t>(1 << 31) - 1;
 
 // FCSR constants.
 const uint32_t kFCSRInexactFlagBit = 2;

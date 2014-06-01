@@ -5382,7 +5382,7 @@ void ProfileEntryHookStub::Generate(MacroAssembler* masm) {
   }
 
   __ Dsubu(sp, sp, kCArgsSlotsSize);
-#if defined(V8_HOST_ARCH_MIPS)
+#if defined(V8_HOST_ARCH_MIPS) || defined(V8_HOST_ARCH_MIPS64)
   int64_t entry_hook =
       reinterpret_cast<int64_t>(masm->isolate()->function_entry_hook());
   __ li(t9, Operand(entry_hook));

@@ -321,7 +321,7 @@ class Simulator {
     BYTE,
     HALF,
     WORD,
-    DWORD,
+    DWORD
     // DFLOAT - Floats may have printing issues due to paired lwc1's
   };
 
@@ -348,8 +348,8 @@ class Simulator {
                              int64_t& next_pc,
                              int64_t& return_addr_reg,
                              bool& do_interrupt,
-                             __int128& result128,
-                             unsigned __int128& u128result);
+                             int64_t& result128H,
+                             int64_t& result128L);
 
   void DecodeTypeImmediate(Instruction* instr);
   void DecodeTypeJump(Instruction* instr);
@@ -425,7 +425,7 @@ class Simulator {
 
   // Simulator support.
   // Allocate 1MB for stack.
-  static const size_t stack_size_ = 1 * 1024*1024;
+  static const size_t stack_size_ = 2 * 1024*1024;
   char* stack_;
   bool pc_modified_;
   int64_t icount_;

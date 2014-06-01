@@ -367,7 +367,7 @@ DEFINE_implication(trace_opt_verbose, trace_opt)
 // assembler-ia32.cc / assembler-arm.cc / assembler-x64.cc
 DEFINE_bool(debug_code, false,
             "generate extra code (assertions) for debugging")
-DEFINE_bool(code_comments, true, "emit comments in code disassembly")
+DEFINE_bool(code_comments, false, "emit comments in code disassembly")
 DEFINE_bool(enable_sse2, true,
             "enable use of SSE2 instructions if available")
 DEFINE_bool(enable_sse3, true,
@@ -831,12 +831,6 @@ DEFINE_string(redirect_code_traces_to, NULL,
 
 DEFINE_bool(hydrogen_track_positions, false,
             "track source code positions when building IR")
-
-//
-// MIPS64 development flags
-//   TODO(plind)  --  DO NOT SUBMIT, without careful review.
-//
-DEFINE_bool(sim_dbg_addr, true, "Use Sim debugger for address errors")
 
 //
 // Disassembler only flags

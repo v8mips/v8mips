@@ -335,7 +335,7 @@
           }],
         ],
       }],  # v8_target_arch=="mipsel"
-      ['v8_target_arch=="mipsel64"', {
+      ['v8_target_arch=="mips64el"', {
         'defines': [
           'V8_TARGET_ARCH_MIPS64',
         ],
@@ -397,7 +397,7 @@
             'defines': ['_MIPS_ARCH_LOONGSON',],
           }],
         ],
-      }],  # v8_target_arch=="mipsel64"
+      }],  # v8_target_arch=="mips64el"
       ['v8_target_arch=="x64"', {
         'defines': [
           'V8_TARGET_ARCH_X64',

@@ -180,7 +180,7 @@
 }],  # 'arch == mipsel'
 
 ##############################################################################
-['arch == mipsel64', {
+['arch == mips64el', {
 
   # BUG(2657): Test sometimes times out on MIPS simulator.
   'test-thread-termination/TerminateMultipleV8ThreadsDefaultIsolate': [PASS, TIMEOUT],
@@ -190,7 +190,7 @@
   'test-serialize/DeserializeFromSecondSerializationAndRunScript2': [SKIP],
   'test-serialize/DeserializeAndRunScript2': [SKIP],
   'test-serialize/DeserializeFromSecondSerialization': [SKIP],
-}],  # 'arch == mipsel64'
+}],  # 'arch == mips64el'
 
 ##############################################################################
 ['arch == android_arm or arch == android_ia32', {

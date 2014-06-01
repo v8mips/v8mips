@@ -754,6 +754,13 @@ class MacroAssembler: public Assembler {
   void Round_w_d(FPURegister fd, FPURegister fs);
   void Floor_w_d(FPURegister fd, FPURegister fs);
   void Ceil_w_d(FPURegister fd, FPURegister fs);
+
+  void Madd_d(FPURegister fd,
+              FPURegister fr,
+              FPURegister fs,
+              FPURegister ft,
+              FPURegister scratch);
+
   // Wrapper function for the different cmp/branch types.
   void BranchF(Label* target,
                Label* nan,

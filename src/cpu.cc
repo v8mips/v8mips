@@ -79,7 +79,7 @@ static V8_INLINE void __cpuid(int cpu_info[4], int info_type) {
 
 #endif  // !V8_LIBC_MSVCRT
 
-#elif V8_HOST_ARCH_ARM || V8_HOST_ARCH_MIPS
+#elif V8_HOST_ARCH_ARM || V8_HOST_ARCH_MIPS || V8_HOST_ARCH_MIPS64
 
 #if V8_OS_LINUX
 
@@ -475,8 +475,7 @@ CPU::CPU() : stepping_(0),
 
 #endif  // V8_OS_LINUX
 
-#elif V8_HOST_ARCH_MIPS
-
+#elif V8_HOST_ARCH_MIPS || V8_HOST_ARCH_MIPS64
   // Simple detection of FPU at runtime for Linux.
   // It is based on /proc/cpuinfo, which reveals hardware configuration
   // to user-space applications.  According to MIPS (early 2010), no similar
