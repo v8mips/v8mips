@@ -1040,6 +1040,12 @@ class Assembler : public AssemblerBase {
 
   void CheckTrampolinePool();
 
+  // Allocate a constant pool of the correct size for the generated code.
+  MaybeObject* AllocateConstantPool(Heap* heap);
+
+  // Generate the constant pool for the generated code.
+  void PopulateConstantPool(ConstantPoolArray* constant_pool);
+
  protected:
   // Relocation for a type-recording IC has the AST id added to it.  This
   // member variable is a way to pass the information from the call site to
