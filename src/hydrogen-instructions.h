@@ -1877,7 +1877,8 @@ class HSimulate V8_FINAL : public HInstruction {
         values_(2, zone),
         assigned_indexes_(2, zone),
         zone_(zone),
-        removable_(removable) {}
+        removable_(removable),
+        done_with_replay_(false) {}
   ~HSimulate() {}
 
   virtual void PrintDataTo(StringStream* stream) V8_OVERRIDE;
@@ -1960,7 +1961,8 @@ class HSimulate V8_FINAL : public HInstruction {
   ZoneList<HValue*> values_;
   ZoneList<int> assigned_indexes_;
   Zone* zone_;
-  RemovableSimulate removable_;
+  RemovableSimulate removable_ : 2;
+  bool done_with_replay_ : 1;
 
 #ifdef DEBUG
   Handle<JSFunction> closure_;
@@ -3762,6 +3764,9 @@ class HBinaryOperation : public HTemplateInstruction<3> {
 
   DECLARE_ABSTRACT_INSTRUCTION(BinaryOperation)
 
+ protected:
+  Range* InferRangeForDiv(Zone* zone);
+
  private:
   bool IgnoreObservedOutputRepresentation(Representation current_rep);
 
@@ -4102,11 +4107,11 @@ class HMathFloorOfDiv V8_FINAL : public HBinaryOperation {
     set_representation(Representation::Integer32());
     SetFlag(kUseGVN);
     SetFlag(kCanOverflow);
-    if (!right->IsConstant()) {
-      SetFlag(kCanBeDivByZero);
-    }
+    SetFlag(kCanBeDivByZero);
     SetFlag(kAllowUndefinedAsNaN);
   }
+
+  virtual Range* InferRange(Zone* zone) V8_OVERRIDE;
 
   virtual bool IsDeletable() const V8_OVERRIDE { return true; }
 };
