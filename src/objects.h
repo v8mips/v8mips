@@ -1895,6 +1895,8 @@ class HeapObject: public Object {
   inline void IteratePointers(ObjectVisitor* v, int start, int end);
   // as above, for the single element at "offset"
   inline void IteratePointer(ObjectVisitor* v, int offset);
+  // as above, for the next code link of a code object.
+  inline void IterateNextCodeLink(ObjectVisitor* v, int offset);
 
  private:
   DISALLOW_IMPLICIT_CONSTRUCTORS(HeapObject);
@@ -2078,13 +2080,23 @@ class JSReceiver: public HeapObject {
   // function that was used to instantiate the object).
   String* constructor_name();
 
-  inline PropertyAttributes GetPropertyAttribute(Name* name);
-  PropertyAttributes GetPropertyAttributeWithReceiver(JSReceiver* receiver,
-                                                      Name* name);
-  PropertyAttributes GetLocalPropertyAttribute(Name* name);
+  static inline PropertyAttributes GetPropertyAttribute(
+      Handle<JSReceiver> object,
+      Handle<Name> name);
+  static PropertyAttributes GetPropertyAttributeWithReceiver(
+      Handle<JSReceiver> object,
+      Handle<JSReceiver> receiver,
+      Handle<Name> name);
+  static PropertyAttributes GetLocalPropertyAttribute(
+      Handle<JSReceiver> object,
+      Handle<Name> name);
 
-  inline PropertyAttributes GetElementAttribute(uint32_t index);
-  inline PropertyAttributes GetLocalElementAttribute(uint32_t index);
+  static inline PropertyAttributes GetElementAttribute(
+      Handle<JSReceiver> object,
+      uint32_t index);
+  static inline PropertyAttributes GetLocalElementAttribute(
+      Handle<JSReceiver> object,
+      uint32_t index);
 
   // Return the object's prototype (might be Heap::null_value()).
   inline Object* GetPrototype();
@@ -2115,10 +2127,12 @@ class JSReceiver: public HeapObject {
                                                      Handle<Object> value);
 
  private:
-  PropertyAttributes GetPropertyAttributeForResult(JSReceiver* receiver,
-                                                   LookupResult* result,
-                                                   Name* name,
-                                                   bool continue_search);
+  static PropertyAttributes GetPropertyAttributeForResult(
+      Handle<JSReceiver> object,
+      Handle<JSReceiver> receiver,
+      LookupResult* result,
+      Handle<Name> name,
+      bool continue_search);
 
   static Handle<Object> SetProperty(Handle<JSReceiver> receiver,
                                     LookupResult* result,
@@ -2309,20 +2323,26 @@ class JSObject: public JSReceiver {
   InterceptorInfo* GetIndexedInterceptor();
 
   // Used from JSReceiver.
-  PropertyAttributes GetPropertyAttributePostInterceptor(JSObject* receiver,
-                                                         Name* name,
-                                                         bool continue_search);
-  PropertyAttributes GetPropertyAttributeWithInterceptor(JSObject* receiver,
-                                                         Name* name,
-                                                         bool continue_search);
-  PropertyAttributes GetPropertyAttributeWithFailedAccessCheck(
-      Object* receiver,
-      LookupResult* result,
-      Name* name,
+  static PropertyAttributes GetPropertyAttributePostInterceptor(
+      Handle<JSObject> object,
+      Handle<JSObject> receiver,
+      Handle<Name> name,
       bool continue_search);
-  PropertyAttributes GetElementAttributeWithReceiver(JSReceiver* receiver,
-                                                     uint32_t index,
-                                                     bool continue_search);
+  static PropertyAttributes GetPropertyAttributeWithInterceptor(
+      Handle<JSObject> object,
+      Handle<JSObject> receiver,
+      Handle<Name> name,
+      bool continue_search);
+  static PropertyAttributes GetPropertyAttributeWithFailedAccessCheck(
+      Handle<JSObject> object,
+      LookupResult* result,
+      Handle<Name> name,
+      bool continue_search);
+  static PropertyAttributes GetElementAttributeWithReceiver(
+      Handle<JSObject> object,
+      Handle<JSReceiver> receiver,
+      uint32_t index,
+      bool continue_search);
 
   // Retrieves an AccessorPair property from the given object. Might return
   // undefined if the property doesn't exist or is of a different kind.
@@ -2386,7 +2406,7 @@ class JSObject: public JSReceiver {
   static void DeleteHiddenProperty(Handle<JSObject> object,
                                    Handle<Name> key);
   // Returns true if the object has a property with the hidden string as name.
-  bool HasHiddenProperties();
+  static bool HasHiddenProperties(Handle<JSObject> object);
 
   static void SetIdentityHash(Handle<JSObject> object, Handle<Smi> hash);
 
@@ -2759,12 +2779,14 @@ class JSObject: public JSReceiver {
                                                       Object* structure,
                                                       uint32_t index,
                                                       Object* holder);
-  MUST_USE_RESULT PropertyAttributes GetElementAttributeWithInterceptor(
-      JSReceiver* receiver,
+  static PropertyAttributes GetElementAttributeWithInterceptor(
+      Handle<JSObject> object,
+      Handle<JSReceiver> receiver,
       uint32_t index,
       bool continue_search);
-  MUST_USE_RESULT PropertyAttributes GetElementAttributeWithoutInterceptor(
-      JSReceiver* receiver,
+  static PropertyAttributes GetElementAttributeWithoutInterceptor(
+      Handle<JSObject> object,
+      Handle<JSReceiver> receiver,
       uint32_t index,
       bool continue_search);
   static Handle<Object> SetElementWithCallback(
@@ -4018,7 +4040,7 @@ class NameDictionary: public Dictionary<NameDictionaryShape, Name*> {
   }
 
   // Copies enumerable keys to preallocated fixed array.
-  FixedArray* CopyEnumKeysTo(FixedArray* storage);
+  void CopyEnumKeysTo(FixedArray* storage);
   static void DoGenerateNewEnumerationIndices(
       Handle<NameDictionary> dictionary);
 
@@ -5211,7 +5233,6 @@ class Code: public HeapObject {
   // the kind of the code object.
   //   FUNCTION           => type feedback information.
   //   STUB               => various things, e.g. a SMI
-  //   OPTIMIZED_FUNCTION => the next_code_link for optimized code list.
   DECL_ACCESSORS(raw_type_feedback_info, Object)
   inline Object* type_feedback_info();
   inline void set_type_feedback_info(
@@ -5539,8 +5560,8 @@ class Code: public HeapObject {
       kHandlerTableOffset + kPointerSize;
   static const int kTypeFeedbackInfoOffset =
       kDeoptimizationDataOffset + kPointerSize;
-  static const int kNextCodeLinkOffset = kTypeFeedbackInfoOffset;  // Shared.
-  static const int kGCMetadataOffset = kTypeFeedbackInfoOffset + kPointerSize;
+  static const int kNextCodeLinkOffset = kTypeFeedbackInfoOffset + kPointerSize;
+  static const int kGCMetadataOffset = kNextCodeLinkOffset + kPointerSize;
   static const int kICAgeOffset =
       kGCMetadataOffset + kPointerSize;
   static const int kFlagsOffset = kICAgeOffset + kIntSize;
@@ -9600,11 +9621,13 @@ class JSProxy: public JSReceiver {
       StrictMode strict_mode,
       bool* done);
 
-  MUST_USE_RESULT PropertyAttributes GetPropertyAttributeWithHandler(
-      JSReceiver* receiver,
-      Name* name);
-  MUST_USE_RESULT PropertyAttributes GetElementAttributeWithHandler(
-      JSReceiver* receiver,
+  static PropertyAttributes GetPropertyAttributeWithHandler(
+      Handle<JSProxy> proxy,
+      Handle<JSReceiver> receiver,
+      Handle<Name> name);
+  static PropertyAttributes GetElementAttributeWithHandler(
+      Handle<JSProxy> proxy,
+      Handle<JSReceiver> receiver,
       uint32_t index);
 
   // Turn the proxy into an (empty) JSObject.
@@ -10682,6 +10705,9 @@ class ObjectVisitor BASE_EMBEDDED {
 
   // Handy shorthand for visiting a single pointer.
   virtual void VisitPointer(Object** p) { VisitPointers(p, p + 1); }
+
+  // Visit weak next_code_link in Code object.
+  virtual void VisitNextCodeLink(Object** p) { VisitPointers(p, p + 1); }
 
   // To allow lazy clearing of inline caches the visitor has
   // a rich interface for iterating over Code objects..

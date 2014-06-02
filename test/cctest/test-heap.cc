@@ -2004,8 +2004,14 @@ TEST(PrototypeTransitionClearing) {
   Factory* factory = isolate->factory();
   v8::HandleScope scope(CcTest::isolate());
 
+  CompileRun("var base = {};");
+  Handle<JSObject> baseObject =
+      v8::Utils::OpenHandle(
+          *v8::Handle<v8::Object>::Cast(
+              CcTest::global()->Get(v8_str("base"))));
+  int initialTransitions = baseObject->map()->NumberOfProtoTransitions();
+
   CompileRun(
-      "var base = {};"
       "var live = [];"
       "for (var i = 0; i < 10; i++) {"
       "  var object = {};"
@@ -2014,25 +2020,22 @@ TEST(PrototypeTransitionClearing) {
       "  if (i >= 3) live.push(object, prototype);"
       "}");
 
-  Handle<JSObject> baseObject =
-      v8::Utils::OpenHandle(
-          *v8::Handle<v8::Object>::Cast(
-              CcTest::global()->Get(v8_str("base"))));
-
   // Verify that only dead prototype transitions are cleared.
-  CHECK_EQ(10, baseObject->map()->NumberOfProtoTransitions());
+  CHECK_EQ(initialTransitions + 10,
+      baseObject->map()->NumberOfProtoTransitions());
   CcTest::heap()->CollectAllGarbage(Heap::kAbortIncrementalMarkingMask);
   const int transitions = 10 - 3;
-  CHECK_EQ(transitions, baseObject->map()->NumberOfProtoTransitions());
+  CHECK_EQ(initialTransitions + transitions,
+      baseObject->map()->NumberOfProtoTransitions());
 
   // Verify that prototype transitions array was compacted.
   FixedArray* trans = baseObject->map()->GetPrototypeTransitions();
-  for (int i = 0; i < transitions; i++) {
+  for (int i = initialTransitions; i < initialTransitions + transitions; i++) {
     int j = Map::kProtoTransitionHeaderSize +
         i * Map::kProtoTransitionElementsPerEntry;
     CHECK(trans->get(j + Map::kProtoTransitionMapOffset)->IsMap());
     Object* proto = trans->get(j + Map::kProtoTransitionPrototypeOffset);
-    CHECK(proto->IsTheHole() || proto->IsJSObject());
+    CHECK(proto->IsJSObject());
   }
 
   // Make sure next prototype is placed on an old-space evacuation candidate.
@@ -3693,6 +3696,102 @@ TEST(ObjectsInOptimizedCodeAreWeak) {
   }
 
   ASSERT(code->marked_for_deoptimization());
+}
+
+
+
+static Handle<JSFunction> OptimizeDummyFunction(const char* name) {
+  EmbeddedVector<char, 256> source;
+  OS::SNPrintF(source,
+              "function %s() { return 0; }"
+              "%s(); %s();"
+              "%%OptimizeFunctionOnNextCall(%s);"
+              "%s();", name, name, name, name, name);
+  CompileRun(source.start());
+  Handle<JSFunction> fun =
+      v8::Utils::OpenHandle(
+          *v8::Handle<v8::Function>::Cast(
+              CcTest::global()->Get(v8_str(name))));
+  return fun;
+}
+
+
+static int GetCodeChainLength(Code* code) {
+  int result = 0;
+  while (code->next_code_link()->IsCode()) {
+    result++;
+    code = Code::cast(code->next_code_link());
+  }
+  return result;
+}
+
+
+TEST(NextCodeLinkIsWeak) {
+  i::FLAG_allow_natives_syntax = true;
+  CcTest::InitializeVM();
+  Isolate* isolate = CcTest::i_isolate();
+  v8::internal::Heap* heap = CcTest::heap();
+
+  if (!isolate->use_crankshaft()) return;
+  HandleScope outer_scope(heap->isolate());
+  Handle<Code> code;
+  heap->CollectAllAvailableGarbage();
+  int code_chain_length_before, code_chain_length_after;
+  {
+    HandleScope scope(heap->isolate());
+    Handle<JSFunction> mortal = OptimizeDummyFunction("mortal");
+    Handle<JSFunction> immortal = OptimizeDummyFunction("immortal");
+    CHECK_EQ(immortal->code()->next_code_link(), mortal->code());
+    code_chain_length_before = GetCodeChainLength(immortal->code());
+    // Keep the immortal code and let the mortal code die.
+    code = scope.CloseAndEscape(Handle<Code>(immortal->code()));
+    CompileRun("mortal = null; immortal = null;");
+  }
+  heap->CollectAllAvailableGarbage();
+  // Now mortal code should be dead.
+  code_chain_length_after = GetCodeChainLength(*code);
+  CHECK_EQ(code_chain_length_before - 1, code_chain_length_after);
+}
+
+
+static Handle<Code> DummyOptimizedCode(Isolate* isolate) {
+  i::byte buffer[i::Assembler::kMinimalBufferSize];
+  MacroAssembler masm(isolate, buffer, sizeof(buffer));
+  CodeDesc desc;
+  masm.Prologue(BUILD_FUNCTION_FRAME);
+  masm.GetCode(&desc);
+  Handle<Object> undefined(isolate->heap()->undefined_value(), isolate);
+  Handle<Code> code = isolate->factory()->NewCode(
+      desc, Code::ComputeFlags(Code::OPTIMIZED_FUNCTION), undefined);
+  CHECK(code->IsCode());
+  return code;
+}
+
+
+TEST(NextCodeLinkIsWeak2) {
+  i::FLAG_allow_natives_syntax = true;
+  CcTest::InitializeVM();
+  Isolate* isolate = CcTest::i_isolate();
+  v8::internal::Heap* heap = CcTest::heap();
+
+  if (!isolate->use_crankshaft()) return;
+  HandleScope outer_scope(heap->isolate());
+  heap->CollectAllAvailableGarbage();
+  Handle<Context> context(Context::cast(heap->native_contexts_list()), isolate);
+  Handle<Code> new_head;
+  Handle<Object> old_head(context->get(Context::OPTIMIZED_CODE_LIST), isolate);
+  {
+    HandleScope scope(heap->isolate());
+    Handle<Code> immortal = DummyOptimizedCode(isolate);
+    Handle<Code> mortal = DummyOptimizedCode(isolate);
+    mortal->set_next_code_link(*old_head);
+    immortal->set_next_code_link(*mortal);
+    context->set(Context::OPTIMIZED_CODE_LIST, *immortal);
+    new_head = scope.CloseAndEscape(immortal);
+  }
+  heap->CollectAllAvailableGarbage();
+  // Now mortal code should be dead.
+  CHECK_EQ(*old_head, new_head->next_code_link());
 }
 
 
