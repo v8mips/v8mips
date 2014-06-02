@@ -749,7 +749,6 @@ Handle<HeapObject> RegExpMacroAssemblerMIPS::GetCode(Handle<String> source) {
     }
 
     // Initialize backtrack stack pointer.
-    // __ ld(backtrack_stackpointer(), MemOperand(frame_pointer(), kStackHighEnd));
     __ ld(backtrack_stackpointer(), MemOperand(frame_pointer(), kStackHighEnd));
 
     __ jmp(&start_label_);
@@ -793,11 +792,8 @@ Handle<HeapObject> RegExpMacroAssemblerMIPS::GetCode(Handle<String> source) {
             __ Daddu(a2, a1, Operand(a2));
             __ Daddu(a3, a1, Operand(a3));
           }
-          // TODO(plind): It is not clear why we use sw() & kIntSize here, when
-          // we used ld() above. Somewhere, we need some documentation of
-          // these data structures (thought this might not be optimal location).
+          // V8 expects the output to be an int32_t array.
           __ sw(a2, MemOperand(a0));
-          // TODO(plind): we should be explicit in these constants: kInt32Size.
           __ Daddu(a0, a0, kIntSize);
           __ sw(a3, MemOperand(a0));
           __ Daddu(a0, a0, kIntSize);
@@ -807,7 +803,6 @@ Handle<HeapObject> RegExpMacroAssemblerMIPS::GetCode(Handle<String> source) {
       if (global()) {
         // Restart matching if the regular expression is flagged as global.
         __ ld(a0, MemOperand(frame_pointer(), kSuccessfulCaptures));
-        // TODO(yy): Do not know why, just copy from x64.
         __ lw(a1, MemOperand(frame_pointer(), kNumOutputRegisters));
         __ ld(a2, MemOperand(frame_pointer(), kRegisterOutput));
         // Increment success counter.

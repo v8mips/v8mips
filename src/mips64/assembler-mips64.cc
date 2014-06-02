@@ -1468,7 +1468,8 @@ void Assembler::dsra32(Register rd, Register rt, uint16_t sa) {
 void Assembler::LoadRegPlusOffsetToAt(const MemOperand& src) {
   ASSERT(!src.rm().is(at));
   ASSERT(is_int32(src.offset_));
-  lui(at, (src.offset_ >> kLuiShift) & kImm16Mask);
+  daddiu(at, zero_reg, (src.offset_ >> kLuiShift) & kImm16Mask);
+  dsll(at, at, kLuiShift);
   ori(at, at, src.offset_ & kImm16Mask);  // Load 32-bit offset.
   daddu(at, at, src.rm());  // Add base register.
 }
