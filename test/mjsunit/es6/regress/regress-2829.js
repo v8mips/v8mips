@@ -1,4 +1,4 @@
-// Copyright 2012 the V8 project authors. All rights reserved.
+// Copyright 2013 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -25,22 +25,29 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// Flags: --harmony-collections
+// Flags: --harmony-weak-collections
 
-var key = {};
-var map = new WeakMap;
-Object.preventExtensions(key);
+(function test1() {
+  var wm1 = new WeakMap();
+  wm1.set(Object.prototype, 23);
+  assertTrue(wm1.has(Object.prototype));
+  Object.freeze(Object.prototype);
 
-// Try querying using frozen key.
-assertFalse(map.has(key));
-assertSame(undefined, map.get(key));
+  var wm2 = new WeakMap();
+  var o = {};
+  wm2.set(o, 42);
+  assertEquals(42, wm2.get(o));
+})();
 
-// Try adding using frozen key.
-map.set(key, 1);
-assertTrue(map.has(key));
-assertSame(1, map.get(key));
+(function test2() {
+  var wm1 = new WeakMap();
+  var o1 = {};
+  wm1.set(o1, 23);
+  assertTrue(wm1.has(o1));
+  Object.freeze(o1);
 
-// Try deleting using frozen key.
-map.delete(key, 1);
-assertFalse(map.has(key));
-assertSame(undefined, map.get(key));
+  var wm2 = new WeakMap();
+  var o2 = Object.create(o1);
+  wm2.set(o2, 42);
+  assertEquals(42, wm2.get(o2));
+})();

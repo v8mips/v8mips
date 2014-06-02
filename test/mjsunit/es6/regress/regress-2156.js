@@ -1,4 +1,4 @@
-// Copyright 2014 the V8 project authors. All rights reserved.
+// Copyright 2012 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -25,12 +25,15 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// Flags: --harmony_symbols --harmony-weak-collections
+// Flags: --allow-natives-syntax --harmony-weak-collections
 
-var v0 = new WeakMap;
-var v1 = {};
-v0.set(v1, 1);
-var sym = Symbol();
-v1[sym] = 1;
-var symbols = Object.getOwnPropertySymbols(v1);
-assertArrayEquals([sym], symbols);
+var key1 = {};
+var key2 = {};
+var map = new WeakMap;
+
+// Adding hidden properties preserves map sharing. Putting the key into
+// a WeakMap will cause the first hidden property to be added.
+assertTrue(%HaveSameMap(key1, key2));
+map.set(key1, 1);
+map.set(key2, 2);
+assertTrue(%HaveSameMap(key1, key2));

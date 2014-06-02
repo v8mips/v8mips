@@ -757,7 +757,7 @@ TEST(JSArray) {
   Handle<JSObject> object = factory->NewJSObject(function);
   Handle<JSArray> array = Handle<JSArray>::cast(object);
   // We just initialized the VM, no heap allocation failure yet.
-  array->Initialize(0)->ToObjectChecked();
+  JSArray::Initialize(array, 0);
 
   // Set array length to 0.
   array->SetElementsLength(Smi::FromInt(0))->ToObjectChecked();
@@ -768,7 +768,7 @@ TEST(JSArray) {
   // array[length] = name.
   JSReceiver::SetElement(array, 0, name, NONE, SLOPPY);
   CHECK_EQ(Smi::FromInt(1), array->length());
-  CHECK_EQ(array->GetElement(isolate, 0), *name);
+  CHECK_EQ(*i::Object::GetElement(isolate, array, 0), *name);
 
   // Set array length with larger than smi value.
   Handle<Object> length =
@@ -785,8 +785,8 @@ TEST(JSArray) {
   uint32_t new_int_length = 0;
   CHECK(array->length()->ToArrayIndex(&new_int_length));
   CHECK_EQ(static_cast<double>(int_length), new_int_length - 1);
-  CHECK_EQ(array->GetElement(isolate, int_length), *name);
-  CHECK_EQ(array->GetElement(isolate, 0), *name);
+  CHECK_EQ(*i::Object::GetElement(isolate, array, int_length), *name);
+  CHECK_EQ(*i::Object::GetElement(isolate, array, 0), *name);
 }
 
 
@@ -818,8 +818,10 @@ TEST(JSObjectCopy) {
   Handle<JSObject> clone = JSObject::Copy(obj);
   CHECK(!clone.is_identical_to(obj));
 
-  CHECK_EQ(obj->GetElement(isolate, 0), clone->GetElement(isolate, 0));
-  CHECK_EQ(obj->GetElement(isolate, 1), clone->GetElement(isolate, 1));
+  CHECK_EQ(*i::Object::GetElement(isolate, obj, 0),
+           *i::Object::GetElement(isolate, clone, 0));
+  CHECK_EQ(*i::Object::GetElement(isolate, obj, 1),
+           *i::Object::GetElement(isolate, clone, 1));
 
   CHECK_EQ(obj->GetProperty(*first), clone->GetProperty(*first));
   CHECK_EQ(obj->GetProperty(*second), clone->GetProperty(*second));
@@ -831,8 +833,10 @@ TEST(JSObjectCopy) {
   JSReceiver::SetElement(clone, 0, second, NONE, SLOPPY);
   JSReceiver::SetElement(clone, 1, first, NONE, SLOPPY);
 
-  CHECK_EQ(obj->GetElement(isolate, 1), clone->GetElement(isolate, 0));
-  CHECK_EQ(obj->GetElement(isolate, 0), clone->GetElement(isolate, 1));
+  CHECK_EQ(*i::Object::GetElement(isolate, obj, 1),
+           *i::Object::GetElement(isolate, clone, 0));
+  CHECK_EQ(*i::Object::GetElement(isolate, obj, 0),
+           *i::Object::GetElement(isolate, clone, 1));
 
   CHECK_EQ(obj->GetProperty(*second), clone->GetProperty(*first));
   CHECK_EQ(obj->GetProperty(*first), clone->GetProperty(*second));

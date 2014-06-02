@@ -1,4 +1,4 @@
-// Copyright 2013 the V8 project authors. All rights reserved.
+// Copyright 2014 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -25,29 +25,27 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// Flags: --harmony-collections
+// Flags: --allow-natives-syntax --expose-gc
 
-(function test1() {
-  var wm1 = new WeakMap();
-  wm1.set(Object.prototype, 23);
-  assertTrue(wm1.has(Object.prototype));
-  Object.freeze(Object.prototype);
-
-  var wm2 = new WeakMap();
-  var o = {};
-  wm2.set(o, 42);
-  assertEquals(42, wm2.get(o));
-})();
-
-(function test2() {
-  var wm1 = new WeakMap();
-  var o1 = {};
-  wm1.set(o1, 23);
-  assertTrue(wm1.has(o1));
-  Object.freeze(o1);
-
-  var wm2 = new WeakMap();
-  var o2 = Object.create(o1);
-  wm2.set(o2, 42);
-  assertEquals(42, wm2.get(o2));
-})();
+function __f_4(i1) {
+  return __v_3[i1] * __v_3[0];
+}
+function __f_3(i1) {
+  __f_4(i1);
+  __f_4(i1 + 16);
+  __f_4(i1 + 32);
+  %OptimizeFunctionOnNextCall(__f_4);
+  var x = __f_4(i1 + 993);
+  return x;
+}
+function __f_5() {
+  __v_3[0] = +__v_3[0];
+  gc();
+  __f_3(0) | 0;
+  __v_3 = /\u23a1|x/;
+  return 0;
+}
+var __v_3 = new Float32Array(1000);
+__f_5();
+__f_5();
+__f_5();
