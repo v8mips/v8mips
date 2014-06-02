@@ -4384,8 +4384,6 @@ class HIsSmiAndBranch V8_FINAL : public HUnaryControlInstruction {
     return Representation::Tagged();
   }
 
-  virtual bool KnownSuccessorBlock(HBasicBlock** block) V8_OVERRIDE;
-
  protected:
   virtual bool DataEquals(HValue* other) V8_OVERRIDE { return true; }
   virtual int RedefinedOperandIndex() { return 0; }
@@ -5924,18 +5922,6 @@ class HObjectAccess V8_FINAL {
 
   static HObjectAccess ForCodeOffset() {
     return HObjectAccess(kInobject, SharedFunctionInfo::kCodeOffset);
-  }
-
-  static HObjectAccess ForFirstCodeSlot() {
-    return HObjectAccess(kInobject, SharedFunctionInfo::kFirstCodeSlot);
-  }
-
-  static HObjectAccess ForFirstContextSlot() {
-    return HObjectAccess(kInobject, SharedFunctionInfo::kFirstContextSlot);
-  }
-
-  static HObjectAccess ForFirstOsrAstIdSlot() {
-    return HObjectAccess(kInobject, SharedFunctionInfo::kFirstOsrAstIdSlot);
   }
 
   static HObjectAccess ForOptimizedCodeMap() {
