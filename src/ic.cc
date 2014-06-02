@@ -2408,8 +2408,11 @@ MaybeObject* BinaryOpIC::Transition(Handle<AllocationSite> allocation_site,
       isolate(), function, left, 1, &right, &caught_exception);
   if (caught_exception) return Failure::Exception();
 
+  // Execution::Call can execute arbitrary JavaScript, hence potentially
+  // update the state of this very IC, so we must update the stored state.
+  UpdateTarget();
   // Compute the new state.
-  State old_state = state;
+  State old_state(target()->extra_ic_state());
   state.Update(left, right, result);
 
   // Check if we have a string operation here.
