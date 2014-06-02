@@ -4479,109 +4479,6 @@ THREADED_TEST(FunctionCall) {
 }
 
 
-static const char* js_code_causing_out_of_memory =
-    "var a = new Array(); while(true) a.push(a);";
-
-
-// These tests run for a long time and prevent us from running tests
-// that come after them so they cannot run in parallel.
-TEST(OutOfMemory) {
-  // It's not possible to read a snapshot into a heap with different dimensions.
-  if (i::Snapshot::IsEnabled()) return;
-  // Set heap limits.
-  static const int K = 1024;
-  v8::ResourceConstraints constraints;
-  constraints.set_max_young_space_size(256 * K);
-  constraints.set_max_old_space_size(5 * K * K);
-  v8::SetResourceConstraints(CcTest::isolate(), &constraints);
-
-  // Execute a script that causes out of memory.
-  LocalContext context;
-  v8::HandleScope scope(context->GetIsolate());
-  v8::V8::IgnoreOutOfMemoryException();
-  Local<Value> result = CompileRun(js_code_causing_out_of_memory);
-
-  // Check for out of memory state.
-  CHECK(result.IsEmpty());
-  CHECK(context->HasOutOfMemoryException());
-}
-
-
-void ProvokeOutOfMemory(const v8::FunctionCallbackInfo<v8::Value>& args) {
-  ApiTestFuzzer::Fuzz();
-
-  LocalContext context;
-  v8::HandleScope scope(context->GetIsolate());
-  Local<Value> result = CompileRun(js_code_causing_out_of_memory);
-
-  // Check for out of memory state.
-  CHECK(result.IsEmpty());
-  CHECK(context->HasOutOfMemoryException());
-
-  args.GetReturnValue().Set(result);
-}
-
-
-TEST(OutOfMemoryNested) {
-  // It's not possible to read a snapshot into a heap with different dimensions.
-  if (i::Snapshot::IsEnabled()) return;
-  // Set heap limits.
-  static const int K = 1024;
-  v8::ResourceConstraints constraints;
-  constraints.set_max_young_space_size(256 * K);
-  constraints.set_max_old_space_size(5 * K * K);
-  v8::Isolate* isolate = CcTest::isolate();
-  v8::SetResourceConstraints(isolate, &constraints);
-
-  v8::HandleScope scope(isolate);
-  Local<ObjectTemplate> templ = ObjectTemplate::New(isolate);
-  templ->Set(v8_str("ProvokeOutOfMemory"),
-             v8::FunctionTemplate::New(isolate, ProvokeOutOfMemory));
-  LocalContext context(0, templ);
-  v8::V8::IgnoreOutOfMemoryException();
-  Local<Value> result = CompileRun(
-    "var thrown = false;"
-    "try {"
-    "  ProvokeOutOfMemory();"
-    "} catch (e) {"
-    "  thrown = true;"
-    "}");
-  // Check for out of memory state.
-  CHECK(result.IsEmpty());
-  CHECK(context->HasOutOfMemoryException());
-}
-
-
-void OOMCallback(const char* location, const char* message) {
-  exit(0);
-}
-
-
-TEST(HugeConsStringOutOfMemory) {
-  // It's not possible to read a snapshot into a heap with different dimensions.
-  if (i::Snapshot::IsEnabled()) return;
-  // Set heap limits.
-  static const int K = 1024;
-  v8::ResourceConstraints constraints;
-  constraints.set_max_young_space_size(256 * K);
-  constraints.set_max_old_space_size(4 * K * K);
-  v8::SetResourceConstraints(CcTest::isolate(), &constraints);
-
-  // Execute a script that causes out of memory.
-  v8::V8::SetFatalErrorHandler(OOMCallback);
-
-  LocalContext context;
-  v8::HandleScope scope(context->GetIsolate());
-
-  // Build huge string. This should fail with out of memory exception.
-  CompileRun(
-    "var str = Array.prototype.join.call({length: 513}, \"A\").toUpperCase();"
-    "for (var i = 0; i < 22; i++) { str = str + str; }");
-
-  CHECK(false);  // Should not return.
-}
-
-
 THREADED_TEST(ConstructCall) {
   LocalContext context;
   v8::Isolate* isolate = context->GetIsolate();
@@ -21984,8 +21881,9 @@ THREADED_TEST(FunctionNew) {
       i::Smi::cast(v8::Utils::OpenHandle(*func)
           ->shared()->get_api_func_data()->serial_number())->value();
   i::Isolate* i_isolate = reinterpret_cast<i::Isolate*>(isolate);
-  i::Object* elm = i_isolate->native_context()->function_cache()
-      ->GetElementNoExceptionThrown(i_isolate, serial_number);
+  i::Handle<i::JSObject> cache(i_isolate->native_context()->function_cache());
+  i::Handle<i::Object> elm =
+      i::Object::GetElementNoExceptionThrown(i_isolate, cache, serial_number);
   CHECK(elm->IsUndefined());
   // Verify that each Function::New creates a new function instance
   Local<Object> data2 = v8::Object::New(isolate);
@@ -22401,4 +22299,49 @@ TEST(ThrowOnJavascriptExecution) {
       isolate, v8::Isolate::DisallowJavascriptExecutionScope::THROW_ON_FAILURE);
   CompileRun("1+1");
   CHECK(try_catch.HasCaught());
+}
+
+
+TEST(Regress354123) {
+  LocalContext current;
+  v8::Isolate* isolate = current->GetIsolate();
+  v8::HandleScope scope(isolate);
+
+  v8::Handle<v8::ObjectTemplate> templ = v8::ObjectTemplate::New(isolate);
+  templ->SetAccessCheckCallbacks(NamedAccessCounter, IndexedAccessCounter);
+  current->Global()->Set(v8_str("friend"), templ->NewInstance());
+
+  // Test access using __proto__ from the prototype chain.
+  named_access_count = 0;
+  CompileRun("friend.__proto__ = {};");
+  CHECK_EQ(2, named_access_count);
+  CompileRun("friend.__proto__;");
+  CHECK_EQ(4, named_access_count);
+
+  // Test access using __proto__ as a hijacked function (A).
+  named_access_count = 0;
+  CompileRun("var p = Object.prototype;"
+             "var f = Object.getOwnPropertyDescriptor(p, '__proto__').set;"
+             "f.call(friend, {});");
+  CHECK_EQ(1, named_access_count);
+  CompileRun("var p = Object.prototype;"
+             "var f = Object.getOwnPropertyDescriptor(p, '__proto__').get;"
+             "f.call(friend);");
+  CHECK_EQ(2, named_access_count);
+
+  // Test access using __proto__ as a hijacked function (B).
+  named_access_count = 0;
+  CompileRun("var f = Object.prototype.__lookupSetter__('__proto__');"
+             "f.call(friend, {});");
+  CHECK_EQ(1, named_access_count);
+  CompileRun("var f = Object.prototype.__lookupGetter__('__proto__');"
+             "f.call(friend);");
+  CHECK_EQ(2, named_access_count);
+
+  // Test access using Object.setPrototypeOf reflective method.
+  named_access_count = 0;
+  CompileRun("Object.setPrototypeOf(friend, {});");
+  CHECK_EQ(1, named_access_count);
+  CompileRun("Object.getPrototypeOf(friend);");
+  CHECK_EQ(2, named_access_count);
 }

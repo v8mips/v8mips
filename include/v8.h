@@ -4121,8 +4121,7 @@ class V8_EXPORT Isolate {
    public:
     enum OnFailure { CRASH_ON_FAILURE, THROW_ON_FAILURE };
 
-    explicit DisallowJavascriptExecutionScope(Isolate* isolate,
-                                              OnFailure on_failure);
+    DisallowJavascriptExecutionScope(Isolate* isolate, OnFailure on_failure);
     ~DisallowJavascriptExecutionScope();
 
    private:
@@ -5553,7 +5552,7 @@ class Internals {
   static const int kNullValueRootIndex = 7;
   static const int kTrueValueRootIndex = 8;
   static const int kFalseValueRootIndex = 9;
-  static const int kEmptyStringRootIndex = 144;
+  static const int kEmptyStringRootIndex = 145;
 
   static const int kNodeClassIdOffset = 1 * kApiPointerSize;
   static const int kNodeFlagsOffset = 1 * kApiPointerSize + 3;

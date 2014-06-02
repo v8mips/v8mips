@@ -311,6 +311,7 @@ class Simulator : public DecoderVisitor {
   // Runtime call support.
   static void* RedirectExternalReference(void* external_function,
                                          ExternalReference::Type type);
+  void DoRuntimeCall(Instruction* instr);
 
   // Run the simulator.
   static const Instruction* kEndOfSimAddress;
@@ -832,7 +833,6 @@ class Simulator : public DecoderVisitor {
   static const intptr_t stack_protection_size_ = KB;
   intptr_t stack_size_;
   byte* stack_limit_;
-  // TODO(aleram): protect the stack.
 
   Decoder<DispatchingDecoderVisitor>* decoder_;
   Decoder<DispatchingDecoderVisitor>* disassembler_decoder_;

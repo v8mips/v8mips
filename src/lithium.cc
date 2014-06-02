@@ -449,6 +449,7 @@ Handle<Code> LChunk::Codegen() {
     CodeGenerator::PrintCode(code, info());
     return code;
   }
+  assembler.AbortedCodeGeneration();
   return Handle<Code>::null();
 }
 
