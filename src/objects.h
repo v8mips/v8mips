@@ -1328,6 +1328,8 @@ class MaybeObject BASE_EMBEDDED {
   V(kTheInstructionShouldBeAnOri, "The instruction should be an ori")         \
   V(kTheInstructionToPatchShouldBeALoadFromPc,                                \
     "The instruction to patch should be a load from pc")                      \
+  V(kTheInstructionToPatchShouldBeALoadFromPp,                                \
+    "The instruction to patch should be a load from pp")                      \
   V(kTheInstructionToPatchShouldBeAnLdrLiteral,                               \
     "The instruction to patch should be a ldr literal")                       \
   V(kTheInstructionToPatchShouldBeALui,                                       \
@@ -5381,7 +5383,6 @@ class Code: public HeapObject {
 
   // Find an object in a stub with a specified map
   Object* FindNthObject(int n, Map* match_map);
-  void ReplaceNthObject(int n, Map* match_map, Object* replace_with);
 
   // Find the first allocation site in an IC stub.
   AllocationSite* FindFirstAllocationSite();
@@ -5390,7 +5391,6 @@ class Code: public HeapObject {
   Map* FindFirstMap();
   void FindAllMaps(MapHandleList* maps);
   void FindAllTypes(TypeHandleList* types);
-  void ReplaceFirstMap(Map* replace);
 
   // Find the first handler in an IC stub.
   Code* FindFirstHandler();
@@ -5402,7 +5402,12 @@ class Code: public HeapObject {
   // Find the first name in an IC stub.
   Name* FindFirstName();
 
-  void ReplaceNthCell(int n, Cell* replace_with);
+  class FindAndReplacePattern;
+  // For each (map-to-find, object-to-replace) pair in the pattern, this
+  // function replaces the corresponding placeholder in the code with the
+  // object-to-replace. The function assumes that pairs in the pattern come in
+  // the same order as the placeholders in the code.
+  void FindAndReplace(const FindAndReplacePattern& pattern);
 
   // The entire code object including its header is copied verbatim to the
   // snapshot so that it can be written in one, fast, memcpy during
@@ -10025,7 +10030,6 @@ class JSArray: public JSObject {
   // Can cause GC.
   static Handle<Object> SetElementsLength(Handle<JSArray> array,
                                           Handle<Object> length);
-  MUST_USE_RESULT MaybeObject* SetElementsLength(Object* length);
 
   // Set the content of the array to the content of storage.
   MUST_USE_RESULT inline MaybeObject* SetContent(FixedArrayBase* storage);

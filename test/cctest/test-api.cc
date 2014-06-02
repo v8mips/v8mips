@@ -14218,7 +14218,8 @@ UNINITIALIZED_TEST(SetJitCodeEventHandler) {
   // have remnants of state from other code.
   v8::Isolate* isolate = v8::Isolate::New();
   isolate->Enter();
-  i::Heap* heap = reinterpret_cast<i::Isolate*>(isolate)->heap();
+  i::Isolate* i_isolate = reinterpret_cast<i::Isolate*>(isolate);
+  i::Heap* heap = i_isolate->heap();
 
   {
     v8::HandleScope scope(isolate);
@@ -14238,7 +14239,7 @@ UNINITIALIZED_TEST(SetJitCodeEventHandler) {
     const int kIterations = 10;
     for (int i = 0; i < kIterations; ++i) {
       LocalContext env(isolate);
-      i::AlwaysAllocateScope always_allocate;
+      i::AlwaysAllocateScope always_allocate(i_isolate);
       SimulateFullSpace(heap->code_space());
       CompileRun(script);
 
@@ -14955,10 +14956,10 @@ TEST(PreCompileInvalidPreparseDataError) {
 
   v8::ScriptCompiler::Source script_source(
       String::NewFromUtf8(isolate, script),
-      v8::ScriptCompiler::CachedData(
+      new v8::ScriptCompiler::CachedData(
           reinterpret_cast<const uint8_t*>(sd->Data()), sd->Length()));
   Local<v8::UnboundScript> compiled_script =
-      v8::ScriptCompiler::CompileUnbound(isolate, script_source);
+      v8::ScriptCompiler::CompileUnbound(isolate, &script_source);
 
   CHECK(try_catch.HasCaught());
   String::Utf8Value exception_value(try_catch.Message()->Get());
@@ -14978,10 +14979,10 @@ TEST(PreCompileInvalidPreparseDataError) {
       200;
   v8::ScriptCompiler::Source script_source2(
       String::NewFromUtf8(isolate, script),
-      v8::ScriptCompiler::CachedData(
+      new v8::ScriptCompiler::CachedData(
           reinterpret_cast<const uint8_t*>(sd->Data()), sd->Length()));
   compiled_script =
-      v8::ScriptCompiler::CompileUnbound(isolate, script_source2);
+      v8::ScriptCompiler::CompileUnbound(isolate, &script_source2);
   CHECK(!try_catch.HasCaught());
 
   delete sd;
@@ -17090,12 +17091,11 @@ THREADED_TEST(ScriptContextDependence) {
   LocalContext c1;
   v8::HandleScope scope(c1->GetIsolate());
   const char *source = "foo";
-  v8::Handle<v8::Script> dep =
-      v8_compile(source);
+  v8::Handle<v8::Script> dep = v8_compile(source);
+  v8::ScriptCompiler::Source script_source(v8::String::NewFromUtf8(
+      c1->GetIsolate(), source));
   v8::Handle<v8::UnboundScript> indep =
-      v8::ScriptCompiler::CompileUnbound(
-          c1->GetIsolate(), v8::ScriptCompiler::Source(v8::String::NewFromUtf8(
-                                c1->GetIsolate(), source)));
+      v8::ScriptCompiler::CompileUnbound(c1->GetIsolate(), &script_source);
   c1->Global()->Set(v8::String::NewFromUtf8(c1->GetIsolate(), "foo"),
                     v8::Integer::New(c1->GetIsolate(), 100));
   CHECK_EQ(dep->Run()->Int32Value(), 100);
@@ -17117,9 +17117,8 @@ THREADED_TEST(StackTrace) {
       v8::String::NewFromUtf8(context->GetIsolate(), source);
   v8::Handle<v8::String> origin =
       v8::String::NewFromUtf8(context->GetIsolate(), "stack-trace-test");
-  v8::ScriptCompiler::CompileUnbound(
-      context->GetIsolate(),
-      v8::ScriptCompiler::Source(src, v8::ScriptOrigin(origin)))
+  v8::ScriptCompiler::Source script_source(src, v8::ScriptOrigin(origin));
+  v8::ScriptCompiler::CompileUnbound(context->GetIsolate(), &script_source)
       ->BindToCurrentContext()
       ->Run();
   CHECK(try_catch.HasCaught());
@@ -17227,10 +17226,10 @@ TEST(CaptureStackTrace) {
     "var x;eval('new foo();');";
   v8::Handle<v8::String> overview_src =
       v8::String::NewFromUtf8(isolate, overview_source);
+  v8::ScriptCompiler::Source script_source(overview_src,
+                                           v8::ScriptOrigin(origin));
   v8::Handle<Value> overview_result(
-      v8::ScriptCompiler::CompileUnbound(
-          isolate,
-          v8::ScriptCompiler::Source(overview_src, v8::ScriptOrigin(origin)))
+      v8::ScriptCompiler::CompileUnbound(isolate, &script_source)
           ->BindToCurrentContext()
           ->Run());
   CHECK(!overview_result.IsEmpty());
@@ -17251,9 +17250,9 @@ TEST(CaptureStackTrace) {
   v8::Handle<v8::Integer> line_offset = v8::Integer::New(isolate, 3);
   v8::Handle<v8::Integer> column_offset = v8::Integer::New(isolate, 5);
   v8::ScriptOrigin detailed_origin(origin, line_offset, column_offset);
+  v8::ScriptCompiler::Source script_source2(detailed_src, detailed_origin);
   v8::Handle<v8::UnboundScript> detailed_script(
-      v8::ScriptCompiler::CompileUnbound(
-          isolate, v8::ScriptCompiler::Source(detailed_src, detailed_origin)));
+      v8::ScriptCompiler::CompileUnbound(isolate, &script_source2));
   v8::Handle<Value> detailed_result(
       detailed_script->BindToCurrentContext()->Run());
   CHECK(!detailed_result.IsEmpty());
@@ -17649,7 +17648,7 @@ TEST(DynamicWithSourceURLInStackTraceString) {
 static void CreateGarbageInOldSpace() {
   i::Factory* factory = CcTest::i_isolate()->factory();
   v8::HandleScope scope(CcTest::isolate());
-  i::AlwaysAllocateScope always_allocate;
+  i::AlwaysAllocateScope always_allocate(CcTest::i_isolate());
   for (int i = 0; i < 1000; i++) {
     factory->NewFixedArray(1000, i::TENURED);
   }
@@ -22393,4 +22392,40 @@ TEST(Promises) {
   V8::RunMicrotasks(isolate);
   CHECK_EQ(3, global->Get(v8_str("x1"))->Int32Value());
   CHECK_EQ(4, global->Get(v8_str("x2"))->Int32Value());
+}
+
+
+TEST(DisallowJavascriptExecutionScope) {
+  LocalContext context;
+  v8::Isolate* isolate = context->GetIsolate();
+  v8::HandleScope scope(isolate);
+  v8::Isolate::DisallowJavascriptExecutionScope no_js(
+      isolate, v8::Isolate::DisallowJavascriptExecutionScope::CRASH_ON_FAILURE);
+  CompileRun("2+2");
+}
+
+
+TEST(AllowJavascriptExecutionScope) {
+  LocalContext context;
+  v8::Isolate* isolate = context->GetIsolate();
+  v8::HandleScope scope(isolate);
+  v8::Isolate::DisallowJavascriptExecutionScope no_js(
+      isolate, v8::Isolate::DisallowJavascriptExecutionScope::CRASH_ON_FAILURE);
+  v8::Isolate::DisallowJavascriptExecutionScope throw_js(
+      isolate, v8::Isolate::DisallowJavascriptExecutionScope::THROW_ON_FAILURE);
+  { v8::Isolate::AllowJavascriptExecutionScope yes_js(isolate);
+    CompileRun("1+1");
+  }
+}
+
+
+TEST(ThrowOnJavascriptExecution) {
+  LocalContext context;
+  v8::Isolate* isolate = context->GetIsolate();
+  v8::HandleScope scope(isolate);
+  v8::TryCatch try_catch;
+  v8::Isolate::DisallowJavascriptExecutionScope throw_js(
+      isolate, v8::Isolate::DisallowJavascriptExecutionScope::THROW_ON_FAILURE);
+  CompileRun("1+1");
+  CHECK(try_catch.HasCaught());
 }

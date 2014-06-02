@@ -441,9 +441,7 @@ void LCodeGen::DoCallNew(LCallNew* instr) {
 
   __ Mov(x0, instr->arity());
   // No cell in x2 for construct type feedback in optimized code.
-  Handle<Object> megamorphic_symbol =
-      TypeFeedbackInfo::MegamorphicSentinel(isolate());
-  __ Mov(x2, Operand(megamorphic_symbol));
+  __ LoadRoot(x2, Heap::kUndefinedValueRootIndex);
 
   CallConstructStub stub(NO_CALL_FUNCTION_FLAGS);
   CallCode(stub.GetCode(isolate()), RelocInfo::CONSTRUCT_CALL, instr);
@@ -458,7 +456,7 @@ void LCodeGen::DoCallNewArray(LCallNewArray* instr) {
   ASSERT(ToRegister(instr->constructor()).is(x1));
 
   __ Mov(x0, Operand(instr->arity()));
-  __ Mov(x2, Operand(TypeFeedbackInfo::MegamorphicSentinel(isolate())));
+  __ LoadRoot(x2, Heap::kUndefinedValueRootIndex);
 
   ElementsKind kind = instr->hydrogen()->elements_kind();
   AllocationSiteOverrideMode override_mode =
@@ -895,6 +893,9 @@ bool LCodeGen::GenerateDeoptJumpTable() {
 
 bool LCodeGen::GenerateSafepointTable() {
   ASSERT(is_done());
+  // We do not know how much data will be emitted for the safepoint table, so
+  // force emission of the veneer pool.
+  masm()->CheckVeneerPool(true, true);
   safepoints_.Emit(masm(), GetStackSlotCount());
   return !is_aborted();
 }
@@ -2535,7 +2536,8 @@ void LCodeGen::DoCheckValue(LCheckValue* instr) {
   Handle<HeapObject> object = instr->hydrogen()->object().handle();
   AllowDeferredHandleDereference smi_check;
   if (isolate()->heap()->InNewSpace(*object)) {
-    Register temp = ToRegister(instr->temp());
+    UseScratchRegisterScope temps(masm());
+    Register temp = temps.AcquireX();
     Handle<Cell> cell = isolate()->factory()->NewCell(object);
     __ Mov(temp, Operand(Handle<Object>(cell)));
     __ Ldr(temp, FieldMemOperand(temp, Cell::kValueOffset));
@@ -2675,8 +2677,7 @@ void LCodeGen::DoDivByConstI(LDivByConstI* instr) {
     DeoptimizeIfZero(dividend, instr->environment());
   }
 
-  __ FlooringDiv(result, dividend, Abs(divisor));
-  __ Add(result, result, Operand(dividend, LSR, 31));
+  __ TruncatingDiv(result, dividend, Abs(divisor));
   if (divisor < 0) __ Neg(result, result);
 
   if (!hdiv->CheckFlag(HInstruction::kAllUsesTruncatingToInt32)) {
@@ -3891,7 +3892,8 @@ void LCodeGen::DoFlooringDivByConstI(LFlooringDivByConstI* instr) {
     DeoptimizeIf(eq, instr->environment());
   }
 
-  __ FlooringDiv(result, dividend, divisor);
+  // TODO(svenpanne) Add correction terms.
+  __ TruncatingDiv(result, dividend, divisor);
 }
 
 
@@ -4164,8 +4166,7 @@ void LCodeGen::DoModByConstI(LModByConstI* instr) {
     return;
   }
 
-  __ FlooringDiv(result, dividend, Abs(divisor));
-  __ Add(result, result, Operand(dividend, LSR, 31));
+  __ TruncatingDiv(result, dividend, Abs(divisor));
   __ Sxtw(dividend.X(), dividend);
   __ Mov(temp, Abs(divisor));
   __ Smsubl(result.X(), result, temp, dividend.X());

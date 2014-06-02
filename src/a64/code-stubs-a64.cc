@@ -1824,10 +1824,7 @@ void JSEntryStub::GenerateBody(MacroAssembler* masm, bool is_construct) {
   __ Mov(x11, Operand(ExternalReference(Isolate::kCEntryFPAddress, isolate)));
   __ Ldr(x10, MemOperand(x11));
 
-  // TODO(all): Pushing the marker twice seems unnecessary.
-  // In this case perhaps we could push xzr in the slot for the context
-  // (see MAsm::EnterFrame).
-  __ Push(x13, x12, x12, x10);
+  __ Push(x13, xzr, x12, x10);
   // Set up fp.
   __ Sub(fp, jssp, EntryFrameConstants::kCallerFPOffset);
 
@@ -1873,7 +1870,6 @@ void JSEntryStub::GenerateBody(MacroAssembler* masm, bool is_construct) {
     // field in the JSEnv and return a failure sentinel. Coming in here the
     // fp will be invalid because the PushTryHandler below sets it to 0 to
     // signal the existence of the JSEntry frame.
-    // TODO(jbramley): Do this in the Assembler.
     __ Mov(x10, Operand(ExternalReference(Isolate::kPendingExceptionAddress,
            isolate)));
   }
@@ -3211,18 +3207,20 @@ static void GenerateRecordCallTarget(MacroAssembler* masm,
   __ Cmp(scratch1, function);
   __ B(eq, &done);
 
-  // If we came here, we need to see if we are the array function.
-  // If we didn't have a matching function, and we didn't find the megamorph
-  // sentinel, then we have in the slot either some other function or an
-  // AllocationSite. Do a map check on the object in scratch1 register.
-  __ Ldr(scratch2, FieldMemOperand(scratch1, AllocationSite::kMapOffset));
-  __ JumpIfNotRoot(scratch2, Heap::kAllocationSiteMapRootIndex, &miss);
+  if (!FLAG_pretenuring_call_new) {
+    // If we came here, we need to see if we are the array function.
+    // If we didn't have a matching function, and we didn't find the megamorph
+    // sentinel, then we have in the slot either some other function or an
+    // AllocationSite. Do a map check on the object in scratch1 register.
+    __ Ldr(scratch2, FieldMemOperand(scratch1, AllocationSite::kMapOffset));
+    __ JumpIfNotRoot(scratch2, Heap::kAllocationSiteMapRootIndex, &miss);
 
-  // Make sure the function is the Array() function
-  __ LoadGlobalFunction(Context::ARRAY_FUNCTION_INDEX, scratch1);
-  __ Cmp(function, scratch1);
-  __ B(ne, &megamorphic);
-  __ B(&done);
+    // Make sure the function is the Array() function
+    __ LoadGlobalFunction(Context::ARRAY_FUNCTION_INDEX, scratch1);
+    __ Cmp(function, scratch1);
+    __ B(ne, &megamorphic);
+    __ B(&done);
+  }
 
   __ Bind(&miss);
 
@@ -3241,32 +3239,37 @@ static void GenerateRecordCallTarget(MacroAssembler* masm,
   // An uninitialized cache is patched with the function or sentinel to
   // indicate the ElementsKind if function is the Array constructor.
   __ Bind(&initialize);
-  // Make sure the function is the Array() function
-  __ LoadGlobalFunction(Context::ARRAY_FUNCTION_INDEX, scratch1);
-  __ Cmp(function, scratch1);
-  __ B(ne, &not_array_function);
 
-  // The target function is the Array constructor,
-  // Create an AllocationSite if we don't already have it, store it in the slot.
-  {
-    FrameScope scope(masm, StackFrame::INTERNAL);
-    CreateAllocationSiteStub create_stub;
+  if (!FLAG_pretenuring_call_new) {
+    // Make sure the function is the Array() function
+    __ LoadGlobalFunction(Context::ARRAY_FUNCTION_INDEX, scratch1);
+    __ Cmp(function, scratch1);
+    __ B(ne, &not_array_function);
 
-    // Arguments register must be smi-tagged to call out.
-    __ SmiTag(argc);
-    __ Push(argc, function, feedback_vector, index);
+    // The target function is the Array constructor,
+    // Create an AllocationSite if we don't already have it, store it in the
+    // slot.
+    {
+      FrameScope scope(masm, StackFrame::INTERNAL);
+      CreateAllocationSiteStub create_stub;
 
-    // CreateAllocationSiteStub expect the feedback vector in x2 and the slot
-    // index in x3.
-    ASSERT(feedback_vector.Is(x2) && index.Is(x3));
-    __ CallStub(&create_stub);
+      // Arguments register must be smi-tagged to call out.
+      __ SmiTag(argc);
+      __ Push(argc, function, feedback_vector, index);
 
-    __ Pop(index, feedback_vector, function, argc);
-    __ SmiUntag(argc);
+      // CreateAllocationSiteStub expect the feedback vector in x2 and the slot
+      // index in x3.
+      ASSERT(feedback_vector.Is(x2) && index.Is(x3));
+      __ CallStub(&create_stub);
+
+      __ Pop(index, feedback_vector, function, argc);
+      __ SmiUntag(argc);
+    }
+    __ B(&done);
+
+    __ Bind(&not_array_function);
   }
-  __ B(&done);
 
-  __ Bind(&not_array_function);
   // An uninitialized cache is patched with the function.
 
   __ Add(scratch1, feedback_vector,
@@ -3306,6 +3309,10 @@ void CallFunctionStub::Generate(MacroAssembler* masm) {
 
     if (RecordCallTarget()) {
       GenerateRecordCallTarget(masm, x0, function, cache_cell, slot, x4, x5);
+      // Type information was updated. Because we may call Array, which
+      // expects either undefined or an AllocationSite in ebx we need
+      // to set ebx to undefined.
+      __ LoadRoot(cache_cell, Heap::kUndefinedValueRootIndex);
     }
   }
 
@@ -3411,6 +3418,25 @@ void CallConstructStub::Generate(MacroAssembler* masm) {
 
   if (RecordCallTarget()) {
     GenerateRecordCallTarget(masm, x0, function, x2, x3, x4, x5);
+
+    __ Add(x5, x2, Operand::UntagSmiAndScale(x3, kPointerSizeLog2));
+    if (FLAG_pretenuring_call_new) {
+      // Put the AllocationSite from the feedback vector into x2.
+      // By adding kPointerSize we encode that we know the AllocationSite
+      // entry is at the feedback vector slot given by x3 + 1.
+      __ Ldr(x2, FieldMemOperand(x5, FixedArray::kHeaderSize + kPointerSize));
+    } else {
+    Label feedback_register_initialized;
+      // Put the AllocationSite from the feedback vector into x2, or undefined.
+      __ Ldr(x2, FieldMemOperand(x5, FixedArray::kHeaderSize));
+      __ Ldr(x5, FieldMemOperand(x2, AllocationSite::kMapOffset));
+      __ JumpIfRoot(x5, Heap::kAllocationSiteMapRootIndex,
+                    &feedback_register_initialized);
+      __ LoadRoot(x2, Heap::kUndefinedValueRootIndex);
+      __ bind(&feedback_register_initialized);
+    }
+
+    __ AssertUndefinedOrAllocationSite(x2, x5);
   }
 
   // Jump to the function-specific construct stub.
@@ -4070,12 +4096,13 @@ void SubStringStub::Generate(MacroAssembler* masm) {
   __ Bind(&update_instance_type);
   __ Ldr(temp, FieldMemOperand(unpacked_string, HeapObject::kMapOffset));
   __ Ldrb(input_type, FieldMemOperand(temp, Map::kInstanceTypeOffset));
-  // TODO(all): This generates "b #+0x4". Can these be optimised out?
-  __ B(&underlying_unpacked);
+  // Now control must go to &underlying_unpacked. Since the no code is generated
+  // before then we fall through instead of generating a useless branch.
 
   __ Bind(&seq_or_external_string);
   // Sequential or external string. Registers unpacked_string and input_string
   // alias, so there's nothing to do here.
+  // Note that if code is added here, the above code must be updated.
 
   //   x0   result_string    pointer to result string object (uninit)
   //   x1   result_length    length of substring result
@@ -4202,7 +4229,6 @@ void SubStringStub::Generate(MacroAssembler* masm) {
       input_string, from, result_length, x0,
       &runtime, &runtime, &runtime, STRING_INDEX_IS_NUMBER);
   generator.GenerateFast(masm);
-  // TODO(jbramley): Why doesn't this jump to return_x0?
   __ Drop(3);
   __ Ret();
   generator.SkipSlow(masm, &runtime);
@@ -4439,7 +4465,6 @@ void ArrayPushStub::Generate(MacroAssembler* masm) {
            Operand::UntagSmiAndScale(length, kPointerSizeLog2));
     __ Str(value, MemOperand(end_elements, kEndElementsOffset, PreIndex));
   } else {
-    // TODO(all): ARM has a redundant cmp here.
     __ B(gt, &call_builtin);
 
     __ Peek(value, (argc - 1) * kPointerSize);
@@ -4796,12 +4821,6 @@ void RecordWriteStub::Generate(MacroAssembler* masm) {
 
 
 void StoreArrayLiteralElementStub::Generate(MacroAssembler* masm) {
-  // TODO(all): Possible optimisations in this function:
-  // 1. Merge CheckFastElements and CheckFastSmiElements, so that the map
-  //    bitfield is loaded only once.
-  // 2. Refactor the Ldr/Add sequence at the start of fast_elements and
-  //    smi_element.
-
   // x0     value            element value to store
   // x3     index_smi        element index as smi
   // sp[0]  array_index_smi  array literal index in function as smi
@@ -4817,9 +4836,23 @@ void StoreArrayLiteralElementStub::Generate(MacroAssembler* masm) {
   __ Ldr(array_map, FieldMemOperand(array, JSObject::kMapOffset));
 
   Label double_elements, smi_element, fast_elements, slow_elements;
-  __ CheckFastElements(array_map, x10, &double_elements);
+  Register bitfield2 = x10;
+  __ Ldrb(bitfield2, FieldMemOperand(array_map, Map::kBitField2Offset));
+
+  // Jump if array's ElementsKind is not FAST*_SMI_ELEMENTS, FAST_ELEMENTS or
+  // FAST_HOLEY_ELEMENTS.
+  STATIC_ASSERT(FAST_SMI_ELEMENTS == 0);
+  STATIC_ASSERT(FAST_HOLEY_SMI_ELEMENTS == 1);
+  STATIC_ASSERT(FAST_ELEMENTS == 2);
+  STATIC_ASSERT(FAST_HOLEY_ELEMENTS == 3);
+  __ Cmp(bitfield2, Map::kMaximumBitField2FastHoleyElementValue);
+  __ B(hi, &double_elements);
+
   __ JumpIfSmi(value, &smi_element);
-  __ CheckFastSmiElements(array_map, x10, &fast_elements);
+
+  // Jump if array's ElementsKind is not FAST_ELEMENTS or FAST_HOLEY_ELEMENTS.
+  __ Tbnz(bitfield2, MaskToBit(FAST_ELEMENTS << Map::kElementsKindShift),
+          &fast_elements);
 
   // Store into the array literal requires an elements transition. Call into
   // the runtime.
@@ -5405,17 +5438,12 @@ void ArrayConstructorStub::Generate(MacroAssembler* masm) {
   // ----------- S t a t e -------------
   //  -- x0 : argc (only if argument_count_ == ANY)
   //  -- x1 : constructor
-  //  -- x2 : feedback vector (fixed array or the megamorphic symbol)
-  //  -- x3 : slot index (if x2 is fixed array)
+  //  -- x2 : AllocationSite or undefined
   //  -- sp[0] : return address
   //  -- sp[4] : last argument
   // -----------------------------------
   Register constructor = x1;
-  Register feedback_vector = x2;
-  Register slot_index = x3;
-
-  ASSERT_EQ(*TypeFeedbackInfo::MegamorphicSentinel(masm->isolate()),
-            masm->isolate()->heap()->megamorphic_symbol());
+  Register allocation_site = x2;
 
   if (FLAG_debug_code) {
     // The array construct code is only set for the global and natives
@@ -5432,37 +5460,15 @@ void ArrayConstructorStub::Generate(MacroAssembler* masm) {
     __ Abort(kUnexpectedInitialMapForArrayFunction);
     __ Bind(&map_ok);
 
-    // In feedback_vector, we expect either the megamorphic symbol or a valid
-    // fixed array.
-    Label okay_here;
-    Handle<Map> fixed_array_map = masm->isolate()->factory()->fixed_array_map();
-    __ JumpIfRoot(feedback_vector, Heap::kMegamorphicSymbolRootIndex,
-                  &okay_here);
-    __ Ldr(x10, FieldMemOperand(feedback_vector, FixedArray::kMapOffset));
-    __ Cmp(x10, Operand(fixed_array_map));
-    __ Assert(eq, kExpectedFixedArrayInFeedbackVector);
-
-    // slot_index should be a smi if we don't have undefined in feedback_vector.
-    __ AssertSmi(slot_index);
-
-    __ Bind(&okay_here);
+    // We should either have undefined in the allocation_site register or a
+    // valid AllocationSite.
+    __ AssertUndefinedOrAllocationSite(allocation_site, x10);
   }
 
-  Register allocation_site = x2;  // Overwrites feedback_vector.
   Register kind = x3;
   Label no_info;
   // Get the elements kind and case on that.
-  __ JumpIfRoot(feedback_vector, Heap::kMegamorphicSymbolRootIndex, &no_info);
-  __ Add(feedback_vector, feedback_vector,
-         Operand::UntagSmiAndScale(slot_index, kPointerSizeLog2));
-  __ Ldr(allocation_site, FieldMemOperand(feedback_vector,
-                                          FixedArray::kHeaderSize));
-
-  // If the feedback vector is the megamorphic symbol, or contains anything
-  // other than an AllocationSite, call an array constructor that doesn't
-  // use AllocationSites.
-  __ Ldr(x10, FieldMemOperand(allocation_site, AllocationSite::kMapOffset));
-  __ JumpIfNotRoot(x10, Heap::kAllocationSiteMapRootIndex, &no_info);
+  __ JumpIfRoot(allocation_site, Heap::kUndefinedValueRootIndex, &no_info);
 
   __ Ldrsw(kind,
            UntagSmiFieldMemOperand(allocation_site,
@@ -5545,12 +5551,8 @@ void InternalArrayConstructorStub::Generate(MacroAssembler* masm) {
   __ Ldr(x10, FieldMemOperand(constructor,
                               JSFunction::kPrototypeOrInitialMapOffset));
 
-  // TODO(jbramley): Add a helper function to read elements kind from an
-  // existing map.
-  // Load the map's "bit field 2" into result.
-  __ Ldr(kind, FieldMemOperand(x10, Map::kBitField2Offset));
-  // Retrieve elements_kind from bit field 2.
-  __ Ubfx(kind, kind, Map::kElementsKindShift, Map::kElementsKindBitCount);
+  // Retrieve elements_kind from map.
+  __ LoadElementsKindFromMap(kind, x10);
 
   if (FLAG_debug_code) {
     Label done;
@@ -5636,7 +5638,6 @@ void CallApiFunctionStub::Generate(MacroAssembler* masm) {
   FrameScope frame_scope(masm, StackFrame::MANUAL);
   __ EnterExitFrame(false, x10, kApiStackSpace + kCallApiFunctionSpillSpace);
 
-  // TODO(all): Optimize this with stp and suchlike.
   ASSERT(!AreAliased(x0, api_function_address));
   // x0 = FunctionCallbackInfo&
   // Arguments is after the return address.

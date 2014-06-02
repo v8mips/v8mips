@@ -2903,6 +2903,13 @@ void FullCodeGenerator::VisitCallNew(CallNew* expr) {
   Handle<Object> uninitialized =
       TypeFeedbackInfo::UninitializedSentinel(isolate());
   StoreFeedbackVectorSlot(expr->CallNewFeedbackSlot(), uninitialized);
+  if (FLAG_pretenuring_call_new) {
+    StoreFeedbackVectorSlot(expr->AllocationSiteFeedbackSlot(),
+                            isolate()->factory()->NewAllocationSite());
+    ASSERT(expr->AllocationSiteFeedbackSlot() ==
+           expr->CallNewFeedbackSlot() + 1);
+  }
+
   __ Move(r2, FeedbackVector());
   __ mov(r3, Operand(Smi::FromInt(expr->CallNewFeedbackSlot())));
 
@@ -4835,8 +4842,7 @@ static Address GetInterruptImmediateLoadAddress(Address pc) {
     load_address -= Assembler::kInstrSize;
     ASSERT(Assembler::IsMovW(Memory::int32_at(load_address)));
   } else {
-    // TODO(rmcilroy): uncomment when IsLdrPpImmediateOffset lands.
-    // ASSERT(IsLdrPpImmediateOffset(Memory::int32_at(load_address)));
+    ASSERT(Assembler::IsLdrPpImmediateOffset(Memory::int32_at(load_address)));
   }
   return load_address;
 }

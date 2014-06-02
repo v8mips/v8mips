@@ -1474,7 +1474,8 @@ void AllocationSite::MarkZombie() {
 // elements kind is the initial elements kind.
 AllocationSiteMode AllocationSite::GetMode(
     ElementsKind boilerplate_elements_kind) {
-  if (IsFastSmiElementsKind(boilerplate_elements_kind)) {
+  if (FLAG_pretenuring_call_new ||
+      IsFastSmiElementsKind(boilerplate_elements_kind)) {
     return TRACK_ALLOCATION_SITE;
   }
 
@@ -1484,8 +1485,9 @@ AllocationSiteMode AllocationSite::GetMode(
 
 AllocationSiteMode AllocationSite::GetMode(ElementsKind from,
                                            ElementsKind to) {
-  if (IsFastSmiElementsKind(from) &&
-      IsMoreGeneralElementsKindTransition(from, to)) {
+  if (FLAG_pretenuring_call_new ||
+      (IsFastSmiElementsKind(from) &&
+       IsMoreGeneralElementsKindTransition(from, to))) {
     return TRACK_ALLOCATION_SITE;
   }
 
@@ -2744,7 +2746,8 @@ void DescriptorArray::SwapSortedKeys(int first, int second) {
 DescriptorArray::WhitenessWitness::WhitenessWitness(FixedArray* array)
     : marking_(array->GetHeap()->incremental_marking()) {
   marking_->EnterNoMarkingScope();
-  ASSERT(Marking::Color(array) == Marking::WHITE_OBJECT);
+  ASSERT(!marking_->IsMarking() ||
+         Marking::Color(array) == Marking::WHITE_OBJECT);
 }
 
 
@@ -4593,6 +4596,24 @@ bool Code::IsWeakObjectInOptimizedCode(Object* object) {
   }
   return false;
 }
+
+
+class Code::FindAndReplacePattern {
+ public:
+  FindAndReplacePattern() : count_(0) { }
+  void Add(Handle<Map> map_to_find, Handle<Object> obj_to_replace) {
+    ASSERT(count_ < kMaxCount);
+    find_[count_] = map_to_find;
+    replace_[count_] = obj_to_replace;
+    ++count_;
+  }
+ private:
+  static const int kMaxCount = 4;
+  int count_;
+  Handle<Map> find_[kMaxCount];
+  Handle<Object> replace_[kMaxCount];
+  friend class Code;
+};
 
 
 Object* Map::prototype() {

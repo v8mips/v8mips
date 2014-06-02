@@ -110,6 +110,43 @@ class DetectLastPush(Step):
     self["last_push_bleeding_edge"] = last_push_bleeding_edge
 
 
+class IncrementVersion(Step):
+  MESSAGE = "Increment version number."
+
+  def RunStep(self):
+    # Retrieve current version from last trunk push.
+    self.GitCheckoutFile(self.Config(VERSION_FILE), self["last_push_trunk"])
+    self.ReadAndPersistVersion()
+
+    if self.Confirm(("Automatically increment BUILD_NUMBER? (Saying 'n' will "
+                     "fire up your EDITOR on %s so you can make arbitrary "
+                     "changes. When you're done, save the file and exit your "
+                     "EDITOR.)" % self.Config(VERSION_FILE))):
+      text = FileToText(self.Config(VERSION_FILE))
+      text = MSub(r"(?<=#define BUILD_NUMBER)(?P<space>\s+)\d*$",
+                  r"\g<space>%s" % str(int(self["build"]) + 1),
+                  text)
+      TextToFile(text, self.Config(VERSION_FILE))
+    else:
+      self.Editor(self.Config(VERSION_FILE))
+
+    # Variables prefixed with 'new_' contain the new version numbers for the
+    # ongoing trunk push.
+    self.ReadAndPersistVersion("new_")
+    self["version"] = "%s.%s.%s" % (self["new_major"],
+                                    self["new_minor"],
+                                    self["new_build"])
+
+    # TODO(machenbach): The following will be deprecated. Increment version
+    # numbers for version.cc on bleeding_edge (new build level on trunk + 1).
+    text = FileToText(self.Config(VERSION_FILE))
+    text = MSub(r"(?<=#define BUILD_NUMBER)(?P<space>\s+)\d*$",
+                r"\g<space>%s" % str(int(self["new_build"]) + 1),
+                text)
+    TextToFile(text, self.Config(VERSION_FILE))
+    self.ReadAndPersistVersion("new_be_")
+
+
 class PrepareChangeLog(Step):
   MESSAGE = "Prepare raw ChangeLog entry."
 
@@ -132,14 +169,8 @@ class PrepareChangeLog(Step):
     return body
 
   def RunStep(self):
-    # These version numbers are used again later for the trunk commit.
-    self.ReadAndPersistVersion()
     self["date"] = self.GetDate()
-    self["version"] = "%s.%s.%s" % (self["major"],
-                                    self["minor"],
-                                    self["build"])
-    output = "%s: Version %s\n\n" % (self["date"],
-                                     self["version"])
+    output = "%s: Version %s\n\n" % (self["date"], self["version"])
     TextToFile(output, self.Config(CHANGELOG_ENTRY_FILE))
     commits = self.GitLog(format="%H",
         git_hash="%s..HEAD" % self["last_push_bleeding_edge"])
@@ -191,35 +222,14 @@ class EditChangeLog(Step):
     TextToFile(changelog_entry, self.Config(CHANGELOG_ENTRY_FILE))
 
 
-class IncrementVersion(Step):
-  MESSAGE = "Increment version number."
-
-  def RunStep(self):
-    new_build = str(int(self["build"]) + 1)
-
-    if self.Confirm(("Automatically increment BUILD_NUMBER? (Saying 'n' will "
-                     "fire up your EDITOR on %s so you can make arbitrary "
-                     "changes. When you're done, save the file and exit your "
-                     "EDITOR.)" % self.Config(VERSION_FILE))):
-      text = FileToText(self.Config(VERSION_FILE))
-      text = MSub(r"(?<=#define BUILD_NUMBER)(?P<space>\s+)\d*$",
-                  r"\g<space>%s" % new_build,
-                  text)
-      TextToFile(text, self.Config(VERSION_FILE))
-    else:
-      self.Editor(self.Config(VERSION_FILE))
-
-    self.ReadAndPersistVersion("new_")
-
-
 class CommitLocal(Step):
   MESSAGE = "Commit to local branch."
 
   def RunStep(self):
     self["prep_commit_msg"] = ("Prepare push to trunk.  "
-        "Now working on version %s.%s.%s." % (self["new_major"],
-                                              self["new_minor"],
-                                              self["new_build"]))
+        "Now working on version %s.%s.%s." % (self["new_be_major"],
+                                              self["new_be_minor"],
+                                              self["new_be_build"]))
 
     # Include optional TBR only in the git command. The persisted commit
     # message is used for finding the commit again later.
@@ -249,6 +259,11 @@ class StragglerCommits(Step):
     self.GitCheckout("svn/bleeding_edge")
     self["prepare_commit_hash"] = self.GitLog(n=1, format="%H",
                                               grep=self["prep_commit_msg"])
+    # TODO(machenbach): Retrieve the push hash from a command-line option or
+    # use ToT. The "prepare_commit_hash" will be deprecated along with the
+    # prepare push commit.
+    self["push_hash"] = self.GitLog(n=1, format="%H",
+                                    parent_hash=self["prepare_commit_hash"])
 
 
 class SquashCommits(Step):
@@ -257,7 +272,7 @@ class SquashCommits(Step):
   def RunStep(self):
     # Instead of relying on "git rebase -i", we'll just create a diff, because
     # that's easier to automate.
-    TextToFile(self.GitDiff("svn/trunk", self["prepare_commit_hash"]),
+    TextToFile(self.GitDiff("svn/trunk", self["push_hash"]),
                self.Config(PATCH_FILE))
 
     # Convert the ChangeLog entry to commit message format.
@@ -268,7 +283,7 @@ class SquashCommits(Step):
 
     # Retrieve svn revision for showing the used bleeding edge revision in the
     # commit message.
-    self["svn_revision"] = self.GitSVNFindSVNRev(self["prepare_commit_hash"])
+    self["svn_revision"] = self.GitSVNFindSVNRev(self["push_hash"])
     suffix = PUSH_MESSAGE_SUFFIX % int(self["svn_revision"])
     text = MSub(r"^(Version \d+\.\d+\.\d+)$", "\\1%s" % suffix, text)
 
@@ -318,14 +333,17 @@ class SetVersion(Step):
   MESSAGE = "Set correct version for trunk."
 
   def RunStep(self):
+    # The version file has been modified by the patch. Reset it to the version
+    # on trunk and apply the correct version.
+    self.GitCheckoutFile(self.Config(VERSION_FILE), "svn/trunk")
     output = ""
     for line in FileToText(self.Config(VERSION_FILE)).splitlines():
       if line.startswith("#define MAJOR_VERSION"):
-        line = re.sub("\d+$", self["major"], line)
+        line = re.sub("\d+$", self["new_major"], line)
       elif line.startswith("#define MINOR_VERSION"):
-        line = re.sub("\d+$", self["minor"], line)
+        line = re.sub("\d+$", self["new_minor"], line)
       elif line.startswith("#define BUILD_NUMBER"):
-        line = re.sub("\d+$", self["build"], line)
+        line = re.sub("\d+$", self["new_build"], line)
       elif line.startswith("#define PATCH_LEVEL"):
         line = re.sub("\d+$", "0", line)
       elif line.startswith("#define IS_CANDIDATE_VERSION"):
@@ -338,7 +356,6 @@ class CommitTrunk(Step):
   MESSAGE = "Commit to local trunk branch."
 
   def RunStep(self):
-    self.GitAdd(self.Config(VERSION_FILE))
     self.GitCommit(file_name = self.Config(COMMITMSG_FILE))
     Command("rm", "-f %s*" % self.Config(COMMITMSG_FILE))
 
@@ -522,9 +539,9 @@ class PushToTrunk(ScriptsBase):
       Preparation,
       FreshBranch,
       DetectLastPush,
+      IncrementVersion,
       PrepareChangeLog,
       EditChangeLog,
-      IncrementVersion,
       CommitLocal,
       UploadStep,
       CommitRepository,

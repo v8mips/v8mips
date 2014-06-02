@@ -1790,6 +1790,11 @@ class Assembler : public AssemblerBase {
   // Check if is time to emit a constant pool.
   void CheckConstPool(bool force_emit, bool require_jump);
 
+  // Allocate a constant pool of the correct size for the generated code.
+  MaybeObject* AllocateConstantPool(Heap* heap);
+
+  // Generate the constant pool for the generated code.
+  void PopulateConstantPool(ConstantPoolArray* constant_pool);
 
   // Returns true if we should emit a veneer as soon as possible for a branch
   // which can at most reach to specified pc.
@@ -1808,10 +1813,13 @@ class Assembler : public AssemblerBase {
   // Emits veneers for branches that are approaching their maximum range.
   // If need_protection is true, the veneers are protected by a branch jumping
   // over the code.
-  void EmitVeneers(bool need_protection, int margin = kVeneerDistanceMargin);
+  void EmitVeneers(bool force_emit, bool need_protection,
+                   int margin = kVeneerDistanceMargin);
   void EmitVeneersGuard() { EmitPoolGuard(); }
   // Checks whether veneers need to be emitted at this point.
-  void CheckVeneerPool(bool require_jump, int margin = kVeneerDistanceMargin);
+  // If force_emit is set, a veneer is generated for *all* unresolved branches.
+  void CheckVeneerPool(bool force_emit, bool require_jump,
+                       int margin = kVeneerDistanceMargin);
 
 
   class BlockPoolsScope {

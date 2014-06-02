@@ -314,8 +314,9 @@ void FullCodeGenerator::Generate() {
   }
   EmitReturnSequence();
 
-  // Force emit the constant pool, so it doesn't get emitted in the middle
+  // Force emission of the pools, so they don't get emitted in the middle
   // of the back edge table.
+  masm()->CheckVeneerPool(true, false);
   masm()->CheckConstPool(true, false);
 }
 
@@ -2607,6 +2608,13 @@ void FullCodeGenerator::VisitCallNew(CallNew* expr) {
   Handle<Object> uninitialized =
       TypeFeedbackInfo::UninitializedSentinel(isolate());
   StoreFeedbackVectorSlot(expr->CallNewFeedbackSlot(), uninitialized);
+  if (FLAG_pretenuring_call_new) {
+    StoreFeedbackVectorSlot(expr->AllocationSiteFeedbackSlot(),
+                            isolate()->factory()->NewAllocationSite());
+    ASSERT(expr->AllocationSiteFeedbackSlot() ==
+           expr->CallNewFeedbackSlot() + 1);
+  }
+
   __ LoadObject(x2, FeedbackVector());
   __ Mov(x3, Operand(Smi::FromInt(expr->CallNewFeedbackSlot())));
 
