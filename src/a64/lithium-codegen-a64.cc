@@ -841,16 +841,16 @@ bool LCodeGen::GenerateDeoptJumpTable() {
   __ bind(&table_start);
   Label needs_frame;
   for (int i = 0; i < deopt_jump_table_.length(); i++) {
-    __ Bind(&deopt_jump_table_[i].label);
-    Address entry = deopt_jump_table_[i].address;
-    Deoptimizer::BailoutType type = deopt_jump_table_[i].bailout_type;
+    __ Bind(&deopt_jump_table_[i]->label);
+    Address entry = deopt_jump_table_[i]->address;
+    Deoptimizer::BailoutType type = deopt_jump_table_[i]->bailout_type;
     int id = Deoptimizer::GetDeoptimizationId(isolate(), entry, type);
     if (id == Deoptimizer::kNotDeoptimizationEntry) {
       Comment(";;; jump table entry %d.", i);
     } else {
       Comment(";;; jump table entry %d: deoptimization bailout %d.", i, id);
     }
-    if (deopt_jump_table_[i].needs_frame) {
+    if (deopt_jump_table_[i]->needs_frame) {
       ASSERT(!info()->saves_caller_doubles());
 
       UseScratchRegisterScope temps(masm());
@@ -1010,7 +1010,7 @@ void LCodeGen::DeoptimizeBranch(
     __ B(gt, &not_zero);
     __ Mov(w1, FLAG_deopt_every_n_times);
     __ Str(w1, MemOperand(x0));
-    __ Pop(x0, x1, x2);
+    __ Pop(x2, x1, x0);
     ASSERT(frame_is_built_);
     __ Call(entry, RelocInfo::RUNTIME_ENTRY);
     __ Unreachable();
@@ -1018,7 +1018,7 @@ void LCodeGen::DeoptimizeBranch(
     __ Bind(&not_zero);
     __ Str(w1, MemOperand(x0));
     __ Msr(NZCV, x2);
-    __ Pop(x0, x1, x2);
+    __ Pop(x2, x1, x0);
   }
 
   if (info()->ShouldTrapOnDeopt()) {
@@ -1030,24 +1030,23 @@ void LCodeGen::DeoptimizeBranch(
 
   ASSERT(info()->IsStub() || frame_is_built_);
   // Go through jump table if we need to build frame, or restore caller doubles.
-  if (frame_is_built_ && !info()->saves_caller_doubles()) {
-    Label dont_deopt;
-    __ B(&dont_deopt, InvertBranchType(branch_type), reg, bit);
+  if (branch_type == always &&
+      frame_is_built_ && !info()->saves_caller_doubles()) {
     __ Call(entry, RelocInfo::RUNTIME_ENTRY);
-    __ Bind(&dont_deopt);
   } else {
     // We often have several deopts to the same entry, reuse the last
     // jump entry if this is the case.
     if (deopt_jump_table_.is_empty() ||
-        (deopt_jump_table_.last().address != entry) ||
-        (deopt_jump_table_.last().bailout_type != bailout_type) ||
-        (deopt_jump_table_.last().needs_frame != !frame_is_built_)) {
-      Deoptimizer::JumpTableEntry table_entry(entry,
-                                              bailout_type,
-                                              !frame_is_built_);
+        (deopt_jump_table_.last()->address != entry) ||
+        (deopt_jump_table_.last()->bailout_type != bailout_type) ||
+        (deopt_jump_table_.last()->needs_frame != !frame_is_built_)) {
+      Deoptimizer::JumpTableEntry* table_entry =
+        new(zone()) Deoptimizer::JumpTableEntry(entry,
+                                                bailout_type,
+                                                !frame_is_built_);
       deopt_jump_table_.Add(table_entry, zone());
     }
-    __ B(&deopt_jump_table_.last().label,
+    __ B(&deopt_jump_table_.last()->label,
          branch_type, reg, bit);
   }
 }

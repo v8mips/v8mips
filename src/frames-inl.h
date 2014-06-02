@@ -203,6 +203,11 @@ inline Address StandardFrame::ComputePCAddress(Address fp) {
 }
 
 
+inline Address StandardFrame::ComputeConstantPoolAddress(Address fp) {
+  return fp + StandardFrameConstants::kConstantPoolOffset;
+}
+
+
 inline bool StandardFrame::IsArgumentsAdaptorFrame(Address fp) {
   Object* marker =
       Memory::Object_at(fp + StandardFrameConstants::kContextOffset);
