@@ -3172,18 +3172,21 @@ static void GenerateRecordCallTarget(MacroAssembler* masm) {
   // function without changing the state.
   __ Branch(&done, eq, t0, Operand(a1));
 
-  // If we came here, we need to see if we are the array function.
-  // If we didn't have a matching function, and we didn't find the megamorph
-  // sentinel, then we have in the slot either some other function or an
-  // AllocationSite. Do a map check on the object in a3.
-  __ ld(t1, FieldMemOperand(t0, 0));
-  __ LoadRoot(at, Heap::kAllocationSiteMapRootIndex);
-  __ Branch(&miss, ne, t1, Operand(at));
+  if (!FLAG_pretenuring_call_new) {
+    // If we came here, we need to see if we are the array function.
+    // If we didn't have a matching function, and we didn't find the megamorph
+    // sentinel, then we have in the slot either some other function or an
+    // AllocationSite. Do a map check on the object in a3.
+    __ ld(t1, FieldMemOperand(t0, 0));
+    __ LoadRoot(at, Heap::kAllocationSiteMapRootIndex);
+    __ Branch(&miss, ne, t1, Operand(at));
 
-  // Make sure the function is the Array() function
-  __ LoadGlobalFunction(Context::ARRAY_FUNCTION_INDEX, t0);
-  __ Branch(&megamorphic, ne, a1, Operand(t0));
-  __ jmp(&done);
+    // Make sure the function is the Array() function
+    __ LoadGlobalFunction(Context::ARRAY_FUNCTION_INDEX, t0);
+    __ Branch(&megamorphic, ne, a1, Operand(t0));
+    __ jmp(&done);
+  }
+
   __ bind(&miss);
 
   // A monomorphic miss (i.e, here the cache is not uninitialized) goes
@@ -3199,36 +3202,38 @@ static void GenerateRecordCallTarget(MacroAssembler* masm) {
   __ sd(at, FieldMemOperand(t0, FixedArray::kHeaderSize));
   __ jmp(&done);
 
-  // An uninitialized cache is patched with the function or sentinel to
-  // indicate the ElementsKind if function is the Array constructor.
+  // An uninitialized cache is patched with the function.
   __ bind(&initialize);
-  // Make sure the function is the Array() function
-  __ LoadGlobalFunction(Context::ARRAY_FUNCTION_INDEX, t0);
-  __ Branch(&not_array_function, ne, a1, Operand(t0));
+  if (!FLAG_pretenuring_call_new) {
+    // Make sure the function is the Array() function.
+    __ LoadGlobalFunction(Context::ARRAY_FUNCTION_INDEX, t0);
+    __ Branch(&not_array_function, ne, a1, Operand(t0));
 
-  // The target function is the Array constructor.
-  // Create an AllocationSite if we don't already have it, store it in the slot.
-  {
-    FrameScope scope(masm, StackFrame::INTERNAL);
-    const RegList kSavedRegs =
-        1 << 4  |  // a0
-        1 << 5  |  // a1
-        1 << 6  |  // a2
-        1 << 7;    // a3
+    // The target function is the Array constructor,
+    // Create an AllocationSite if we don't already have it, store it in the
+    // slot.
+    {
+      FrameScope scope(masm, StackFrame::INTERNAL);
+      const RegList kSavedRegs =
+          1 << 4  |  // a0
+          1 << 5  |  // a1
+          1 << 6  |  // a2
+          1 << 7;    // a3
 
-    // Arguments register must be smi-tagged to call out.
-    __ SmiTag(a0);
-    __ MultiPush(kSavedRegs);
+      // Arguments register must be smi-tagged to call out.
+      __ SmiTag(a0);
+      __ MultiPush(kSavedRegs);
 
-    CreateAllocationSiteStub create_stub;
-    __ CallStub(&create_stub);
+      CreateAllocationSiteStub create_stub;
+      __ CallStub(&create_stub);
 
-    __ MultiPop(kSavedRegs);
-    __ SmiUntag(a0);
+      __ MultiPop(kSavedRegs);
+      __ SmiUntag(a0);
+    }
+    __ Branch(&done);
+
+    __ bind(&not_array_function);
   }
-  __ Branch(&done);
-
-  __ bind(&not_array_function);
 
   __ dsrl(t0, a3, 32 - kPointerSizeLog2);
   __ Daddu(t0, a2, Operand(t0));
@@ -3365,18 +3370,26 @@ void CallConstructStub::Generate(MacroAssembler* masm) {
   __ Branch(&slow, ne, t0, Operand(JS_FUNCTION_TYPE));
 
   if (RecordCallTarget()) {
-    Label feedback_register_initialized;
     GenerateRecordCallTarget(masm);
 
-    // Put the AllocationSite from the feedback vector into a2, or undefined.
     __ dsrl(at, a3, 32 - kPointerSizeLog2);
     __ Daddu(t1, a2, at);
-    __ ld(a2, FieldMemOperand(t1, FixedArray::kHeaderSize));
-    __ ld(t1, FieldMemOperand(a2, AllocationSite::kMapOffset));
-    __ LoadRoot(at, Heap::kAllocationSiteMapRootIndex);
-    __ Branch(&feedback_register_initialized, eq, t1, Operand(at));
-    __ LoadRoot(a2, Heap::kUndefinedValueRootIndex);
-    __ bind(&feedback_register_initialized);
+    if (FLAG_pretenuring_call_new) {
+      // Put the AllocationSite from the feedback vector into a2.
+      // By adding kPointerSize we encode that we know the AllocationSite
+      // entry is at the feedback vector slot given by a3 + 1.
+      __ ld(a2, FieldMemOperand(t1, FixedArray::kHeaderSize + kPointerSize));
+    } else {
+      Label feedback_register_initialized;
+      // Put the AllocationSite from the feedback vector into a2, or undefined.
+      __ ld(a2, FieldMemOperand(t1, FixedArray::kHeaderSize));
+      __ ld(t1, FieldMemOperand(a2, AllocationSite::kMapOffset));
+      __ LoadRoot(at, Heap::kAllocationSiteMapRootIndex);
+      __ Branch(&feedback_register_initialized, eq, t1, Operand(at));
+      __ LoadRoot(a2, Heap::kUndefinedValueRootIndex);
+      __ bind(&feedback_register_initialized);
+    }
+
     __ AssertUndefinedOrAllocationSite(a2, t1);
   }
 
