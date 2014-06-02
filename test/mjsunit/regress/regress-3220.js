@@ -1,4 +1,4 @@
-// Copyright 2013 the V8 project authors. All rights reserved.
+// Copyright 2014 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -25,40 +25,6 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// Flags: --track-fields --track-double-fields --allow-natives-syntax
-// Flags: --concurrent-recompilation --block-concurrent-recompilation
+// Flags: --use-strict
 
-if (!%IsConcurrentRecompilationSupported()) {
-  print("Concurrent recompilation is disabled. Skipping this test.");
-  quit();
-}
-
-function new_object() {
-  var o = {};
-  o.a = 1;
-  o.b = 2;
-  return o;
-}
-
-function add_field(obj) {
-  obj.c = 3;
-}
-var obj1 = new_object();
-var obj2 = new_object();
-add_field(obj1);
-add_field(obj2);
-%OptimizeFunctionOnNextCall(add_field, "concurrent");
-
-var o = new_object();
-// Kick off recompilation.
-add_field(o);
-// Invalidate transition map after compile graph has been created.
-o.c = 2.2;
-// In the mean time, concurrent recompiling is still blocked.
-assertUnoptimized(add_field, "no sync");
-// Let concurrent recompilation proceed.
-%UnblockConcurrentRecompilation();
-// Sync with background thread to conclude optimization that bailed out.
-assertUnoptimized(add_field, "sync");
-// Clear type info for stress runs.
-%ClearFunctionTypeFeedback(add_field);
+String(new Date());
