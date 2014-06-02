@@ -1507,7 +1507,11 @@ void LCodeGen::DoAllocate(LAllocate* instr) {
 
   if (instr->size()->IsConstantOperand()) {
     int32_t size = ToInteger32(LConstantOperand::cast(instr->size()));
-    __ Allocate(size, result, temp1, temp2, deferred->entry(), flags);
+    if (size <= Page::kMaxRegularHeapObjectSize) {
+      __ Allocate(size, result, temp1, temp2, deferred->entry(), flags);
+    } else {
+      __ B(deferred->entry());
+    }
   } else {
     Register size = ToRegister32(instr->size());
     __ Sxtw(size.X(), size);
@@ -4139,7 +4143,7 @@ void LCodeGen::DoModByPowerOf2I(LModByPowerOf2I* instr) {
     // Note that this is correct even for kMinInt operands.
     __ Neg(dividend, dividend);
     __ And(dividend, dividend, Operand(mask));
-    __ Neg(dividend, dividend);
+    __ Negs(dividend, dividend);
     if (hmod->CheckFlag(HValue::kBailoutOnMinusZero)) {
       DeoptimizeIf(eq, instr->environment());
     }
