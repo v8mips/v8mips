@@ -15174,4 +15174,9 @@ void Runtime::PerformGC(Object* result, Isolate* isolate) {
 }
 
 
+void Runtime::OutOfMemory() {
+  Heap::FatalProcessOutOfMemory("CALL_AND_RETRY_LAST", true);
+  UNREACHABLE();
+}
+
 } }  // namespace v8::internal
