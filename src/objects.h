@@ -3051,6 +3051,8 @@ class FixedArray: public FixedArrayBase {
   // Gives access to raw memory which stores the array's data.
   inline Object** data_start();
 
+  inline void FillWithHoles(int from, int to);
+
   // Shrink length and insert filler objects.
   void Shrink(int length);
 
@@ -3160,6 +3162,8 @@ class FixedDoubleArray: public FixedArrayBase {
 
   // Gives access to raw memory which stores the array's data.
   inline double* data_start();
+
+  inline void FillWithHoles(int from, int to);
 
   // Code Generation support.
   static int OffsetOfElementAt(int index) { return SizeFor(index); }
@@ -3437,19 +3441,14 @@ class DescriptorArray: public FixedArray {
                 DescriptorArray* src,
                 int src_index,
                 const WhitenessWitness&);
-  static Handle<DescriptorArray> Merge(Handle<DescriptorArray> desc,
+  static Handle<DescriptorArray> Merge(Handle<Map> left_map,
                                        int verbatim,
                                        int valid,
                                        int new_size,
                                        int modify_index,
                                        StoreMode store_mode,
-                                       Handle<DescriptorArray> other);
-  MUST_USE_RESULT MaybeObject* Merge(int verbatim,
-                                     int valid,
-                                     int new_size,
-                                     int modify_index,
-                                     StoreMode store_mode,
-                                     DescriptorArray* other);
+                                       Handle<Map> right_map)
+      V8_WARN_UNUSED_RESULT;
 
   bool IsMoreGeneralThan(int verbatim,
                          int valid,
