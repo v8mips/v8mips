@@ -19334,7 +19334,6 @@ TEST(IsolateDifferentContexts) {
 class InitDefaultIsolateThread : public v8::internal::Thread {
  public:
   enum TestCase {
-    IgnoreOOM,
     SetResourceConstraints,
     SetFatalHandler,
     SetCounterFunction,
@@ -19351,34 +19350,30 @@ class InitDefaultIsolateThread : public v8::internal::Thread {
     v8::Isolate* isolate = v8::Isolate::New();
     isolate->Enter();
     switch (testCase_) {
-    case IgnoreOOM:
-      v8::V8::IgnoreOutOfMemoryException();
-      break;
+      case SetResourceConstraints: {
+        static const int K = 1024;
+        v8::ResourceConstraints constraints;
+        constraints.set_max_young_space_size(256 * K);
+        constraints.set_max_old_space_size(4 * K * K);
+        v8::SetResourceConstraints(CcTest::isolate(), &constraints);
+        break;
+      }
 
-    case SetResourceConstraints: {
-      static const int K = 1024;
-      v8::ResourceConstraints constraints;
-      constraints.set_max_young_space_size(256 * K);
-      constraints.set_max_old_space_size(4 * K * K);
-      v8::SetResourceConstraints(CcTest::isolate(), &constraints);
-      break;
-    }
+      case SetFatalHandler:
+        v8::V8::SetFatalErrorHandler(NULL);
+        break;
 
-    case SetFatalHandler:
-      v8::V8::SetFatalErrorHandler(NULL);
-      break;
+      case SetCounterFunction:
+        v8::V8::SetCounterFunction(NULL);
+        break;
 
-    case SetCounterFunction:
-      v8::V8::SetCounterFunction(NULL);
-      break;
+      case SetCreateHistogramFunction:
+        v8::V8::SetCreateHistogramFunction(NULL);
+        break;
 
-    case SetCreateHistogramFunction:
-      v8::V8::SetCreateHistogramFunction(NULL);
-      break;
-
-    case SetAddHistogramSampleFunction:
-      v8::V8::SetAddHistogramSampleFunction(NULL);
-      break;
+      case SetAddHistogramSampleFunction:
+        v8::V8::SetAddHistogramSampleFunction(NULL);
+        break;
     }
     isolate->Exit();
     isolate->Dispose();
@@ -19402,31 +19397,26 @@ static void InitializeTestHelper(InitDefaultIsolateThread::TestCase testCase) {
 
 
 TEST(InitializeDefaultIsolateOnSecondaryThread1) {
-  InitializeTestHelper(InitDefaultIsolateThread::IgnoreOOM);
-}
-
-
-TEST(InitializeDefaultIsolateOnSecondaryThread2) {
   InitializeTestHelper(InitDefaultIsolateThread::SetResourceConstraints);
 }
 
 
-TEST(InitializeDefaultIsolateOnSecondaryThread3) {
+TEST(InitializeDefaultIsolateOnSecondaryThread2) {
   InitializeTestHelper(InitDefaultIsolateThread::SetFatalHandler);
 }
 
 
-TEST(InitializeDefaultIsolateOnSecondaryThread4) {
+TEST(InitializeDefaultIsolateOnSecondaryThread3) {
   InitializeTestHelper(InitDefaultIsolateThread::SetCounterFunction);
 }
 
 
-TEST(InitializeDefaultIsolateOnSecondaryThread5) {
+TEST(InitializeDefaultIsolateOnSecondaryThread4) {
   InitializeTestHelper(InitDefaultIsolateThread::SetCreateHistogramFunction);
 }
 
 
-TEST(InitializeDefaultIsolateOnSecondaryThread6) {
+TEST(InitializeDefaultIsolateOnSecondaryThread5) {
   InitializeTestHelper(InitDefaultIsolateThread::SetAddHistogramSampleFunction);
 }
 
@@ -21964,25 +21954,6 @@ class ApiCallOptimizationChecker {
     info.GetReturnValue().Set(v8_str("returned"));
   }
 
-  // TODO(dcarney): move this to v8.h
-  static void SetAccessorProperty(Local<Object> object,
-                                  Local<String> name,
-                                  Local<Function> getter,
-                                  Local<Function> setter = Local<Function>()) {
-    i::Isolate* isolate = CcTest::i_isolate();
-    v8::AccessControl settings = v8::DEFAULT;
-    v8::PropertyAttribute attribute = v8::None;
-    i::Handle<i::Object> getter_i = v8::Utils::OpenHandle(*getter);
-    i::Handle<i::Object> setter_i = v8::Utils::OpenHandle(*setter, true);
-    if (setter_i.is_null()) setter_i = isolate->factory()->null_value();
-    i::JSObject::DefineAccessor(v8::Utils::OpenHandle(*object),
-                                v8::Utils::OpenHandle(*name),
-                                getter_i,
-                                setter_i,
-                                static_cast<PropertyAttributes>(attribute),
-                                settings);
-  }
-
   public:
     enum SignatureType {
       kNoSignature,
@@ -22051,9 +22022,9 @@ class ApiCallOptimizationChecker {
         global_holder = Local<Object>::Cast(global_holder->GetPrototype());
       }
       global_holder->Set(v8_str("g_f"), function);
-      SetAccessorProperty(global_holder, v8_str("g_acc"), function, function);
+      global_holder->SetAccessorProperty(v8_str("g_acc"), function, function);
       function_holder->Set(v8_str("f"), function);
-      SetAccessorProperty(function_holder, v8_str("acc"), function, function);
+      function_holder->SetAccessorProperty(v8_str("acc"), function, function);
       // Initialize expected values.
       callee = function;
       count = 0;

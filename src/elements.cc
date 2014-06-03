@@ -318,7 +318,7 @@ MUST_USE_RESULT static MaybeObject* CopyDoubleToObjectElements(
       // that no GC is triggered, allocate HeapNumbers from old space if they
       // can't be taken from new space.
       if (!maybe_value->ToObject(&value)) {
-        ASSERT(maybe_value->IsRetryAfterGC() || maybe_value->IsOutOfMemory());
+        ASSERT(maybe_value->IsRetryAfterGC());
         Heap* heap = from->GetHeap();
         MaybeObject* maybe_value_object =
             heap->AllocateHeapNumber(from->get_scalar(i + from_start),
@@ -797,6 +797,23 @@ class ElementsAccessorBase : public ElementsAccessor {
     return NULL;
   }
 
+  // TODO(ishell): Temporary wrapper, remove when CopyElements handlified.
+  Handle<Object> CopyElementsHelper(
+      Handle<JSObject> from_holder,
+      uint32_t from_start,
+      ElementsKind from_kind,
+      Handle<FixedArrayBase> to,
+      uint32_t to_start,
+      int copy_size,
+      Handle<FixedArrayBase> from) {
+    CALL_HEAP_FUNCTION(to->GetIsolate(),
+                       CopyElements(
+                           from_holder.is_null() ? NULL : *from_holder,
+                           from_start, from_kind, *to, to_start, copy_size,
+                           from.is_null() ? NULL : *from),
+                       Object);
+  }
+
   virtual void CopyElements(
       Handle<JSObject> from_holder,
       uint32_t from_start,
@@ -805,11 +822,10 @@ class ElementsAccessorBase : public ElementsAccessor {
       uint32_t to_start,
       int copy_size,
       Handle<FixedArrayBase> from) {
-    CALL_HEAP_FUNCTION_VOID(from_holder->GetIsolate(),
-                            CopyElements(
-                                from_holder.is_null() ? NULL : *from_holder,
-                                from_start, from_kind, *to, to_start, copy_size,
-                                from.is_null() ? NULL : *from));
+    Handle<Object> result = CopyElementsHelper(
+        from_holder, from_start, from_kind, to, to_start, copy_size, from);
+    ASSERT(!result.is_null());
+    USE(result);
   }
 
   MUST_USE_RESULT virtual MaybeObject* CopyElements(JSObject* from_holder,

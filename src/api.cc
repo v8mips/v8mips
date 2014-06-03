@@ -95,11 +95,6 @@ namespace v8 {
         (isolate)->handle_scope_implementer();                                 \
     handle_scope_implementer->DecrementCallDepth();                            \
     if (has_pending_exception) {                                               \
-      if (handle_scope_implementer->CallDepthIsZero() &&                       \
-          (isolate)->is_out_of_memory()) {                                     \
-        if (!(isolate)->ignore_out_of_memory())                                \
-          i::V8::FatalProcessOutOfMemory(NULL);                                \
-      }                                                                        \
       bool call_depth_is_zero = handle_scope_implementer->CallDepthIsZero();   \
       (isolate)->OptionalRescheduleException(call_depth_is_zero);              \
       do_callback                                                              \
@@ -3488,6 +3483,27 @@ bool Object::SetDeclaredAccessor(Local<String> name,
 }
 
 
+void Object::SetAccessorProperty(Local<String> name,
+                                 Local<Function> getter,
+                                 Handle<Function> setter,
+                                 PropertyAttribute attribute,
+                                 AccessControl settings) {
+  i::Isolate* isolate = Utils::OpenHandle(this)->GetIsolate();
+  ON_BAILOUT(isolate, "v8::Object::SetAccessorProperty()", return);
+  ENTER_V8(isolate);
+  i::HandleScope scope(isolate);
+  i::Handle<i::Object> getter_i = v8::Utils::OpenHandle(*getter);
+  i::Handle<i::Object> setter_i = v8::Utils::OpenHandle(*setter, true);
+  if (setter_i.is_null()) setter_i = isolate->factory()->null_value();
+  i::JSObject::DefineAccessor(v8::Utils::OpenHandle(this),
+                              v8::Utils::OpenHandle(*name),
+                              getter_i,
+                              setter_i,
+                              static_cast<PropertyAttributes>(attribute),
+                              settings);
+}
+
+
 bool v8::Object::HasOwnProperty(Handle<String> key) {
   i::Isolate* isolate = Utils::OpenHandle(this)->GetIsolate();
   ON_BAILOUT(isolate, "v8::Object::HasOwnProperty()",
@@ -5240,12 +5256,6 @@ Handle<Value> v8::Context::GetSecurityToken() {
 }
 
 
-bool Context::HasOutOfMemoryException() {
-  i::Handle<i::Context> env = Utils::OpenHandle(this);
-  return env->has_out_of_memory();
-}
-
-
 v8::Isolate* Context::GetIsolate() {
   i::Handle<i::Context> env = Utils::OpenHandle(this);
   return reinterpret_cast<Isolate*>(env->GetIsolate());
@@ -6201,11 +6211,6 @@ Local<Integer> v8::Integer::NewFromUnsigned(Isolate* isolate, uint32_t value) {
   ENTER_V8(internal_isolate);
   i::Handle<i::Object> result = internal_isolate->factory()->NewNumber(value);
   return Utils::IntegerToLocal(result);
-}
-
-
-void V8::IgnoreOutOfMemoryException() {
-  EnterIsolateIfNeeded()->set_ignore_out_of_memory(true);
 }
 
 

@@ -4365,7 +4365,12 @@ void HOptimizedGraphBuilder::VisitReturnStatement(ReturnStatement* stmt) {
       TestContext* test = TestContext::cast(context);
       VisitForControl(stmt->expression(), test->if_true(), test->if_false());
     } else if (context->IsEffect()) {
-      CHECK_ALIVE(VisitForEffect(stmt->expression()));
+      // Visit in value context and ignore the result. This is needed to keep
+      // environment in sync with full-codegen since some visitors (e.g.
+      // VisitCountOperation) use the operand stack differently depending on
+      // context.
+      CHECK_ALIVE(VisitForValue(stmt->expression()));
+      Pop();
       Goto(function_return(), state);
     } else {
       ASSERT(context->IsValue());
@@ -8436,7 +8441,7 @@ void HGraphBuilder::BuildArrayBufferViewInitialization(
 }
 
 
-void HOptimizedGraphBuilder::VisitDataViewInitialize(
+void HOptimizedGraphBuilder::GenerateDataViewInitialize(
     CallRuntime* expr) {
   ZoneList<Expression*>* arguments = expr->arguments();
 
@@ -8459,7 +8464,7 @@ void HOptimizedGraphBuilder::VisitDataViewInitialize(
 }
 
 
-void HOptimizedGraphBuilder::VisitTypedArrayInitialize(
+void HOptimizedGraphBuilder::GenerateTypedArrayInitialize(
     CallRuntime* expr) {
   ZoneList<Expression*>* arguments = expr->arguments();
 
@@ -8578,6 +8583,13 @@ void HOptimizedGraphBuilder::VisitTypedArrayInitialize(
 }
 
 
+void HOptimizedGraphBuilder::GenerateMaxSmi(CallRuntime* expr) {
+  ASSERT(expr->arguments()->length() == 0);
+  HConstant* max_smi = New<HConstant>(static_cast<int32_t>(Smi::kMaxValue));
+  return ast_context()->ReturnInstruction(max_smi, expr->id());
+}
+
+
 void HOptimizedGraphBuilder::VisitCallRuntime(CallRuntime* expr) {
   ASSERT(!HasStackOverflow());
   ASSERT(current_block() != NULL);
@@ -8588,20 +8600,6 @@ void HOptimizedGraphBuilder::VisitCallRuntime(CallRuntime* expr) {
 
   const Runtime::Function* function = expr->function();
   ASSERT(function != NULL);
-
-  if (function->function_id == Runtime::kDataViewInitialize) {
-      return VisitDataViewInitialize(expr);
-  }
-
-  if (function->function_id == Runtime::kTypedArrayInitialize) {
-    return VisitTypedArrayInitialize(expr);
-  }
-
-  if (function->function_id == Runtime::kMaxSmi) {
-    ASSERT(expr->arguments()->length() == 0);
-    HConstant* max_smi = New<HConstant>(static_cast<int32_t>(Smi::kMaxValue));
-    return ast_context()->ReturnInstruction(max_smi, expr->id());
-  }
 
   if (function->intrinsic_type == Runtime::INLINE) {
     ASSERT(expr->name()->length() > 0);

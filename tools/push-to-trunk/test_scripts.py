@@ -33,7 +33,6 @@ import unittest
 
 import auto_roll
 from auto_roll import CheckLastPush
-from auto_roll import FetchLatestRevision
 from auto_roll import SETTINGS_LOCATION
 import common_includes
 from common_includes import *
@@ -41,6 +40,10 @@ import merge_to_branch
 from merge_to_branch import *
 import push_to_trunk
 from push_to_trunk import *
+import chromium_roll
+from chromium_roll import CHROMIUM
+from chromium_roll import DEPS_FILE
+from chromium_roll import ChromiumRoll
 
 
 TEST_CONFIG = {
@@ -638,12 +641,8 @@ Performance and stability improvements on all platforms."""
 
     TEST_CONFIG[CHANGELOG_ENTRY_FILE] = self.MakeEmptyTempFile()
     TEST_CONFIG[CHANGELOG_FILE] = self.MakeEmptyTempFile()
-    if not os.path.exists(TEST_CONFIG[CHROMIUM]):
-      os.makedirs(TEST_CONFIG[CHROMIUM])
     bleeding_edge_change_log = "2014-03-17: Sentinel\n"
     TextToFile(bleeding_edge_change_log, TEST_CONFIG[CHANGELOG_FILE])
-    TextToFile("Some line\n   \"v8_revision\": \"123444\",\n  some line",
-                 TEST_CONFIG[DEPS_FILE])
     os.environ["EDITOR"] = "vi"
 
     def ResetChangeLog():
@@ -689,7 +688,6 @@ Performance and stability improvements on all platforms.""", commit)
           change_log)
 
     force_flag = " -f" if not manual else ""
-    review_suffix = "\n\nTBR=reviewer@chromium.org" if not manual else ""
     self.ExpectGit([
       Git("status -s -uno", ""),
       Git("status -s -b -uno", "## some_branch\n"),
@@ -728,16 +726,6 @@ Performance and stability improvements on all platforms.""", commit)
           cb=CheckSVNCommit),
       Git("svn dcommit 2>&1", "Some output\nCommitted r123456\nSome output\n"),
       Git("svn tag 3.22.5 -m \"Tagging version 3.22.5\"", ""),
-      Git("status -s -uno", ""),
-      Git("checkout -f master", ""),
-      Git("pull", ""),
-      Git("checkout -b v8-roll-123456", ""),
-      Git(("commit -am \"Update V8 to version 3.22.5 "
-           "(based on bleeding_edge revision r123455).\n\n"
-           "TBR=reviewer@chromium.org\""),
-          ""),
-      Git(("cl upload --send-mail --email \"author@chromium.org\"%s"
-           % force_flag), ""),
       Git("checkout -f some_branch", ""),
       Git("branch -D %s" % TEST_CONFIG[TEMP_BRANCH], ""),
       Git("branch -D %s" % TEST_CONFIG[BRANCHNAME], ""),
@@ -751,22 +739,17 @@ Performance and stability improvements on all platforms.""", commit)
         RL(""),  # Open editor.
         RL("Y"),  # Increment build number.
         RL("Y"),  # Sanity check.
-        RL("reviewer@chromium.org"),  # Chromium reviewer.
       ])
 
     # Expected keyboard input in semi-automatic mode and forced mode:
     if not manual:
       self.ExpectReadline([])
 
-    args = ["-a", "author@chromium.org", "-c", TEST_CONFIG[CHROMIUM],
-            "--revision", "123455"]
+    args = ["-a", "author@chromium.org", "--revision", "123455"]
     if force: args.append("-f")
     if manual: args.append("-m")
     else: args += ["-r", "reviewer@chromium.org"]
     PushToTrunk(TEST_CONFIG, self).Run(args)
-
-    deps = FileToText(TEST_CONFIG[DEPS_FILE])
-    self.assertTrue(re.search("\"v8_revision\": \"123456\"", deps))
 
     cl = FileToText(TEST_CONFIG[CHANGELOG_FILE])
     self.assertTrue(re.search(r"^\d\d\d\d\-\d+\-\d+: Version 3\.22\.5", cl))
@@ -786,13 +769,77 @@ Performance and stability improvements on all platforms.""", commit)
   def testPushToTrunkForced(self):
     self._PushToTrunk(force=True)
 
-  def testCheckLastPushRecently(self):
+
+  def _ChromiumRoll(self, force=False, manual=False):
+    TEST_CONFIG[DOT_GIT_LOCATION] = self.MakeEmptyTempFile()
+    if not os.path.exists(TEST_CONFIG[CHROMIUM]):
+      os.makedirs(TEST_CONFIG[CHROMIUM])
+    TextToFile("Some line\n   \"v8_revision\": \"123444\",\n  some line",
+               TEST_CONFIG[DEPS_FILE])
+
+    os.environ["EDITOR"] = "vi"
+    force_flag = " -f" if not manual else ""
     self.ExpectGit([
-      Git("svn log -1 --oneline", "r101 | Text"),
-      Git("svn log -1 --oneline ChangeLog", "r99 | Prepare push to trunk..."),
+      Git("status -s -uno", ""),
+      Git("status -s -b -uno", "## some_branch\n"),
+      Git("svn fetch", ""),
+      Git(("log -1 --format=%H --grep="
+           "\"^Version [[:digit:]]*\.[[:digit:]]*\.[[:digit:]]* (based\" "
+           "svn/trunk"), "push_hash\n"),
+      Git("svn find-rev push_hash", "123455\n"),
+      Git("log -1 --format=%s push_hash",
+          "Version 3.22.5 (based on bleeding_edge revision r123454)\n"),
+      Git("status -s -uno", ""),
+      Git("checkout -f master", ""),
+      Git("pull", ""),
+      Git("checkout -b v8-roll-123455", ""),
+      Git(("commit -am \"Update V8 to version 3.22.5 "
+           "(based on bleeding_edge revision r123454).\n\n"
+           "TBR=reviewer@chromium.org\""),
+          ""),
+      Git(("cl upload --send-mail --email \"author@chromium.org\"%s"
+           % force_flag), ""),
     ])
 
-    self.RunStep(auto_roll.AutoRoll, FetchLatestRevision, AUTO_ROLL_ARGS)
+    # Expected keyboard input in manual mode:
+    if manual:
+      self.ExpectReadline([
+        RL("reviewer@chromium.org"),  # Chromium reviewer.
+      ])
+
+    # Expected keyboard input in semi-automatic mode and forced mode:
+    if not manual:
+      self.ExpectReadline([])
+
+    args = ["-a", "author@chromium.org", "-c", TEST_CONFIG[CHROMIUM]]
+    if force: args.append("-f")
+    if manual: args.append("-m")
+    else: args += ["-r", "reviewer@chromium.org"]
+    ChromiumRoll(TEST_CONFIG, self).Run(args)
+
+    deps = FileToText(TEST_CONFIG[DEPS_FILE])
+    self.assertTrue(re.search("\"v8_revision\": \"123455\"", deps))
+
+  def testChromiumRollManual(self):
+    self._ChromiumRoll(manual=True)
+
+  def testChromiumRollSemiAutomatic(self):
+    self._ChromiumRoll()
+
+  def testChromiumRollForced(self):
+    self._ChromiumRoll(force=True)
+
+  def testCheckLastPushRecently(self):
+    self.ExpectGit([
+      Git(("log -1 --format=%H --grep="
+           "\"^Version [[:digit:]]*\.[[:digit:]]*\.[[:digit:]]* (based\" "
+           "svn/trunk"), "hash2\n"),
+      Git("log -1 --format=%s hash2",
+          "Version 3.4.5 (based on bleeding_edge revision r99)\n"),
+    ])
+
+    self._state["lkgr"] = "101"
+
     self.assertRaises(Exception, lambda: self.RunStep(auto_roll.AutoRoll,
                                                       CheckLastPush,
                                                       AUTO_ROLL_ARGS))
@@ -820,11 +867,11 @@ Performance and stability improvements on all platforms.""", commit)
       Git("status -s -uno", ""),
       Git("status -s -b -uno", "## some_branch\n"),
       Git("svn fetch", ""),
-      Git("svn log -1 --oneline", "r100 | Text"),
       Git(("log -1 --format=%H --grep=\""
            "^Version [[:digit:]]*\.[[:digit:]]*\.[[:digit:]]* (based\""
            " svn/trunk"), "push_hash\n"),
-      Git("svn find-rev push_hash", "65"),
+      Git("log -1 --format=%s push_hash",
+          "Version 3.4.5 (based on bleeding_edge revision r79)\n"),
     ])
 
     auto_roll.AutoRoll(TEST_CONFIG, self).Run(
@@ -834,7 +881,6 @@ Performance and stability improvements on all platforms.""", commit)
                                   % TEST_CONFIG[PERSISTFILE_BASENAME]))
 
     self.assertEquals("100", state["lkgr"])
-    self.assertEquals("100", state["latest"])
 
   def testAutoRollStoppedBySettings(self):
     TEST_CONFIG[DOT_GIT_LOCATION] = self.MakeEmptyTempFile()
