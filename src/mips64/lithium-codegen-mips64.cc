@@ -1339,15 +1339,14 @@ void LCodeGen::DoFlooringDivByPowerOf2I(LFlooringDivByPowerOf2I* instr) {
     return;
   }
   // Dividing by -1 is basically negation, unless we overflow.
-  __ Xor(at, scratch, result);
   if (divisor == -1) {
-    DeoptimizeIf(ge, instr->environment(), at, Operand(zero_reg));
+    DeoptimizeIf(gt, instr->environment(), result, Operand(kMaxInt));
     return;
   }
 
   Label no_overflow, done;
-  __ Branch(&no_overflow, lt, at, Operand(zero_reg));
-  __ li(result, Operand(kMinInt / divisor));
+  __ Branch(&no_overflow, ge, result, Operand(kMaxInt));
+  __ li(result, Operand(kMinInt / divisor), CONSTANT_SIZE);
   __ Branch(&done);
   __ bind(&no_overflow);
   __ dsra(result, dividend, shift);
@@ -1361,6 +1360,7 @@ void LCodeGen::DoFlooringDivByConstI(LFlooringDivByConstI* instr) {
   Register result = ToRegister(instr->result());
   ASSERT(!dividend.is(result));
 
+  __ SignExtensionInt32(dividend, dividend);
   if (divisor == 0) {
     DeoptimizeIf(al, instr->environment());
     return;
@@ -1459,7 +1459,7 @@ void LCodeGen::DoMulI(LMulI* instr) {
   bool overflow = instr->hydrogen()->CheckFlag(HValue::kCanOverflow);
 
   if (right_op->IsConstantOperand()) {
-     __ SignExtensionInt32(left, left);
+    __ SignExtensionInt32(left, left);
     int32_t constant = ToInteger32(LConstantOperand::cast(right_op));
 
     if (bailout_on_minus_zero && (constant < 0)) {

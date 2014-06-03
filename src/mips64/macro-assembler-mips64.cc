@@ -5941,7 +5941,7 @@ void MacroAssembler::TruncatingDiv(Register result,
     Dsubu(result, result, Operand(dividend));
   }
   if (ms.shift() > 0) dsra(result, result, ms.shift());
-  dsrl(at, dividend, 31);
+  dsrl32(at, dividend, 31);
   Daddu(result, result, Operand(at));
 }
 
