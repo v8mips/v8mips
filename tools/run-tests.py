@@ -83,7 +83,7 @@ SUPPORTED_ARCHS = ["android_arm",
                    "nacl_ia32",
                    "nacl_x64",
                    "x64",
-                   "a64"]
+                   "arm64"]
 # Double the timeout for these:
 SLOW_ARCHS = ["android_arm",
               "android_ia32",
@@ -92,7 +92,7 @@ SLOW_ARCHS = ["android_arm",
               "mips64el",
               "nacl_ia32",
               "nacl_x64",
-              "a64"]
+              "arm64"]
 
 
 def BuildOptions():
@@ -397,7 +397,7 @@ def Execute(arch, mode, args, options, suites, workspace):
 
   # TODO(all): Combine "simulator" and "simulator_run".
   simulator_run = not options.dont_skip_simulator_slow_tests and \
-      arch in ['a64', 'arm', 'mips'] and ARCH_GUESS and arch != ARCH_GUESS
+      arch in ['arm64', 'arm', 'mips'] and ARCH_GUESS and arch != ARCH_GUESS
   # Find available test suites and read test cases from them.
   variables = {
     "arch": arch,

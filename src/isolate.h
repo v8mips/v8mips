@@ -102,7 +102,7 @@ class DebuggerAgent;
 #endif
 
 #if !defined(__arm__) && V8_TARGET_ARCH_ARM || \
-    !defined(__aarch64__) && V8_TARGET_ARCH_A64 || \
+    !defined(__aarch64__) && V8_TARGET_ARCH_ARM64 || \
     !defined(__mips__) && V8_TARGET_ARCH_MIPS || \
     !defined(__mips__) && V8_TARGET_ARCH_MIPS64
 class Redirection;
@@ -311,7 +311,7 @@ class ThreadLocalTop BASE_EMBEDDED {
 
 
 #if V8_TARGET_ARCH_ARM && !defined(__arm__) || \
-    V8_TARGET_ARCH_A64 && !defined(__aarch64__) || \
+    V8_TARGET_ARCH_ARM64 && !defined(__aarch64__) || \
     V8_TARGET_ARCH_MIPS && !defined(__mips__) || \
     V8_TARGET_ARCH_MIPS64 && !defined(__mips__)
 
@@ -410,7 +410,7 @@ class Isolate {
           stack_limit_(0),
           thread_state_(NULL),
 #if !defined(__arm__) && V8_TARGET_ARCH_ARM || \
-    !defined(__aarch64__) && V8_TARGET_ARCH_A64 || \
+    !defined(__aarch64__) && V8_TARGET_ARCH_ARM64 || \
     !defined(__mips__) && V8_TARGET_ARCH_MIPS || \
     !defined(__mips__) && V8_TARGET_ARCH_MIPS64
           simulator_(NULL),
@@ -425,7 +425,7 @@ class Isolate {
     FIELD_ACCESSOR(ThreadState*, thread_state)
 
 #if !defined(__arm__) && V8_TARGET_ARCH_ARM || \
-    !defined(__aarch64__) && V8_TARGET_ARCH_A64 || \
+    !defined(__aarch64__) && V8_TARGET_ARCH_ARM64 || \
     !defined(__mips__) && V8_TARGET_ARCH_MIPS || \
     !defined(__mips__) && V8_TARGET_ARCH_MIPS64
     FIELD_ACCESSOR(Simulator*, simulator)
@@ -442,7 +442,7 @@ class Isolate {
     ThreadState* thread_state_;
 
 #if !defined(__arm__) && V8_TARGET_ARCH_ARM || \
-    !defined(__aarch64__) && V8_TARGET_ARCH_A64 || \
+    !defined(__aarch64__) && V8_TARGET_ARCH_ARM64 || \
     !defined(__mips__) && V8_TARGET_ARCH_MIPS || \
     !defined(__mips__) && V8_TARGET_ARCH_MIPS64
     Simulator* simulator_;

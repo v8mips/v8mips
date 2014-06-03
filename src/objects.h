@@ -37,8 +37,8 @@
 #include "property-details.h"
 #include "smart-pointers.h"
 #include "unicode-inl.h"
-#if V8_TARGET_ARCH_A64
-#include "a64/constants-a64.h"
+#if V8_TARGET_ARCH_ARM64
+#include "arm64/constants-arm64.h"
 #elif V8_TARGET_ARCH_ARM
 #include "arm/constants-arm.h"
 #elif V8_TARGET_ARCH_MIPS
@@ -1248,8 +1248,8 @@ class MaybeObject BASE_EMBEDDED {
   V(kLetBindingReInitialization, "Let binding re-initialization")             \
   V(kLhsHasBeenClobbered, "lhs has been clobbered")                           \
   V(kLiveBytesCountOverflowChunkSize, "Live Bytes Count overflow chunk size") \
-  V(kLiveEditFrameDroppingIsNotSupportedOnA64,                                \
-    "LiveEdit frame dropping is not supported on a64")                        \
+  V(kLiveEditFrameDroppingIsNotSupportedOnARM64,                              \
+    "LiveEdit frame dropping is not supported on arm64")                      \
   V(kLiveEditFrameDroppingIsNotSupportedOnArm,                                \
     "LiveEdit frame dropping is not supported on arm")                        \
   V(kLiveEditFrameDroppingIsNotSupportedOnMips,                               \
@@ -2425,6 +2425,11 @@ class JSObject: public JSReceiver {
   MUST_USE_RESULT inline MaybeObject* EnsureCanContainElements(
       Object** elements,
       uint32_t count,
+      EnsureElementsMode mode);
+  static inline void EnsureCanContainElements(
+      Handle<JSObject> object,
+      Handle<FixedArrayBase> elements,
+      uint32_t length,
       EnsureElementsMode mode);
   MUST_USE_RESULT inline MaybeObject* EnsureCanContainElements(
       FixedArrayBase* elements,
@@ -10034,7 +10039,8 @@ class JSArray: public JSObject {
                                           Handle<Object> length);
 
   // Set the content of the array to the content of storage.
-  MUST_USE_RESULT inline MaybeObject* SetContent(FixedArrayBase* storage);
+  static inline void SetContent(Handle<JSArray> array,
+                                Handle<FixedArrayBase> storage);
 
   // Casting.
   static inline JSArray* cast(Object* obj);

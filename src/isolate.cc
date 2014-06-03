@@ -1972,7 +1972,7 @@ bool Isolate::Init(Deserializer* des) {
 
   // Initialize other runtime facilities
 #if defined(USE_SIMULATOR)
-#if V8_TARGET_ARCH_ARM || V8_TARGET_ARCH_A64 || \
+#if V8_TARGET_ARCH_ARM || V8_TARGET_ARCH_ARM64 || \
     V8_TARGET_ARCH_MIPS || V8_TARGET_ARCH_MIPS64
   Simulator::Initialize(this);
 #endif

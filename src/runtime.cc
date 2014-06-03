@@ -3303,8 +3303,7 @@ class FixedArrayBuilder {
   }
 
   Handle<JSArray> ToJSArray(Handle<JSArray> target_array) {
-    Factory* factory = target_array->GetIsolate()->factory();
-    factory->SetContent(target_array, array_);
+    JSArray::SetContent(target_array, array_);
     target_array->set_length(Smi::FromInt(length_));
     return target_array;
   }
@@ -4580,7 +4579,7 @@ static MaybeObject* SearchRegExpMultiple(
       Handle<FixedArray> cached_fixed_array =
           Handle<FixedArray>(FixedArray::cast(*cached_answer));
       // The cache FixedArray is a COW-array and can therefore be reused.
-      isolate->factory()->SetContent(result_array, cached_fixed_array);
+      JSArray::SetContent(result_array, cached_fixed_array);
       // The actual length of the result array is stored in the last element of
       // the backing store (the backing FixedArray may have a larger capacity).
       Object* cached_fixed_array_last_element =
@@ -9698,8 +9697,7 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_DateCacheVersion) {
   // Return result as a JS array.
   Handle<JSObject> result =
       isolate->factory()->NewJSObject(isolate->array_function());
-  isolate->factory()->SetContent(Handle<JSArray>::cast(result),
-                                 date_cache_version);
+  JSArray::SetContent(Handle<JSArray>::cast(result), date_cache_version);
   return *result;
 }
 
@@ -12975,7 +12973,7 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_DebugGetLoadedScripts) {
   // Return result as a JS array.
   Handle<JSObject> result =
       isolate->factory()->NewJSObject(isolate->array_function());
-  isolate->factory()->SetContent(Handle<JSArray>::cast(result), instances);
+  JSArray::SetContent(Handle<JSArray>::cast(result), instances);
   return *result;
 }
 
@@ -13105,7 +13103,7 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_DebugReferencedBy) {
       isolate->context()->native_context()->array_function());
 
   Handle<JSObject> result = isolate->factory()->NewJSObject(constructor);
-  isolate->factory()->SetContent(Handle<JSArray>::cast(result), instances);
+  JSArray::SetContent(Handle<JSArray>::cast(result), instances);
   return *result;
 }
 
@@ -13183,7 +13181,7 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_DebugConstructedBy) {
   Handle<JSFunction> array_function(
       isolate->context()->native_context()->array_function());
   Handle<JSObject> result = isolate->factory()->NewJSObject(array_function);
-  isolate->factory()->SetContent(Handle<JSArray>::cast(result), instances);
+  JSArray::SetContent(Handle<JSArray>::cast(result), instances);
   return *result;
 }
 
