@@ -511,10 +511,25 @@ class CpuFeatures : public AllStatic {
 
 #define ASSEMBLER_INSTRUCTION_LIST(V)   \
   V(add)                                \
+  V(and)                                \
+  V(cmp)                                \
+  V(dec)                                \
   V(idiv)                               \
   V(imul)                               \
+  V(inc)                                \
+  V(lea)                                \
   V(mov)                                \
-  V(sub)
+  V(movzxb)                             \
+  V(movzxw)                             \
+  V(neg)                                \
+  V(not)                                \
+  V(or)                                 \
+  V(repmovs)                            \
+  V(sbb)                                \
+  V(sub)                                \
+  V(test)                               \
+  V(xchg)                               \
+  V(xor)
 
 
 class Assembler : public AssemblerBase {
@@ -663,9 +678,7 @@ class Assembler : public AssemblerBase {
   // - Instructions on 16-bit (word) operands/registers have a trailing 'w'.
   // - Instructions on 32-bit (doubleword) operands/registers use 'l'.
   // - Instructions on 64-bit (quadword) operands/registers use 'q'.
-  //
-  // Some mnemonics, such as "and", are the same as C++ keywords.
-  // Naming conflicts with C++ keywords are resolved by adding a trailing '_'.
+  // - Instructions on operands/registers with pointer size use 'p'.
 
 #define DECLARE_INSTRUCTION(instruction)                \
   template<class P1>                                    \
@@ -767,18 +780,14 @@ class Assembler : public AssemblerBase {
   void movsxwq(Register dst, const Operand& src);
   void movsxlq(Register dst, Register src);
   void movsxlq(Register dst, const Operand& src);
-  void movzxbq(Register dst, const Operand& src);
-  void movzxbl(Register dst, const Operand& src);
-  void movzxwq(Register dst, const Operand& src);
-  void movzxwl(Register dst, const Operand& src);
-  void movzxwl(Register dst, Register src);
 
   // Repeated moves.
 
   void repmovsb();
   void repmovsw();
-  void repmovsl();
-  void repmovsq();
+  void repmovsp() { emit_repmovs(kPointerSize); }
+  void repmovsl() { emit_repmovs(kInt32Size); }
+  void repmovsq() { emit_repmovs(kInt64Size); }
 
   // Instruction to load from an immediate 64-bit pointer into RAX.
   void load_rax(void* ptr, RelocInfo::Mode rmode);
@@ -789,18 +798,6 @@ class Assembler : public AssemblerBase {
   void cmovq(Condition cc, Register dst, const Operand& src);
   void cmovl(Condition cc, Register dst, Register src);
   void cmovl(Condition cc, Register dst, const Operand& src);
-
-  // Exchange two registers
-  void xchgq(Register dst, Register src);
-  void xchgl(Register dst, Register src);
-
-  void sbbl(Register dst, Register src) {
-    arithmetic_op_32(0x1b, dst, src);
-  }
-
-  void sbbq(Register dst, Register src) {
-    arithmetic_op(0x1b, dst, src);
-  }
 
   void cmpb(Register dst, Immediate src) {
     immediate_arithmetic_op_8(0x7, dst, src);
@@ -844,86 +841,10 @@ class Assembler : public AssemblerBase {
     arithmetic_op_16(0x39, src, dst);
   }
 
-  void cmpl(Register dst, Register src) {
-    arithmetic_op_32(0x3B, dst, src);
-  }
-
-  void cmpl(Register dst, const Operand& src) {
-    arithmetic_op_32(0x3B, dst, src);
-  }
-
-  void cmpl(const Operand& dst, Register src) {
-    arithmetic_op_32(0x39, src, dst);
-  }
-
-  void cmpl(Register dst, Immediate src) {
-    immediate_arithmetic_op_32(0x7, dst, src);
-  }
-
-  void cmpl(const Operand& dst, Immediate src) {
-    immediate_arithmetic_op_32(0x7, dst, src);
-  }
-
-  void cmpq(Register dst, Register src) {
-    arithmetic_op(0x3B, dst, src);
-  }
-
-  void cmpq(Register dst, const Operand& src) {
-    arithmetic_op(0x3B, dst, src);
-  }
-
-  void cmpq(const Operand& dst, Register src) {
-    arithmetic_op(0x39, src, dst);
-  }
-
-  void cmpq(Register dst, Immediate src) {
-    immediate_arithmetic_op(0x7, dst, src);
-  }
-
-  void cmpq(const Operand& dst, Immediate src) {
-    immediate_arithmetic_op(0x7, dst, src);
-  }
-
-  void and_(Register dst, Register src) {
-    arithmetic_op(0x23, dst, src);
-  }
-
-  void and_(Register dst, const Operand& src) {
-    arithmetic_op(0x23, dst, src);
-  }
-
-  void and_(const Operand& dst, Register src) {
-    arithmetic_op(0x21, src, dst);
-  }
-
-  void and_(Register dst, Immediate src) {
-    immediate_arithmetic_op(0x4, dst, src);
-  }
-
-  void and_(const Operand& dst, Immediate src) {
-    immediate_arithmetic_op(0x4, dst, src);
-  }
-
-  void andl(Register dst, Immediate src) {
-    immediate_arithmetic_op_32(0x4, dst, src);
-  }
-
-  void andl(Register dst, Register src) {
-    arithmetic_op_32(0x23, dst, src);
-  }
-
-  void andl(Register dst, const Operand& src) {
-    arithmetic_op_32(0x23, dst, src);
-  }
-
   void andb(Register dst, Immediate src) {
     immediate_arithmetic_op_8(0x4, dst, src);
   }
 
-  void decq(Register dst);
-  void decq(const Operand& dst);
-  void decl(Register dst);
-  void decl(const Operand& dst);
   void decb(Register dst);
   void decb(const Operand& dst);
 
@@ -932,64 +853,8 @@ class Assembler : public AssemblerBase {
   // Sign-extends eax into edx:eax.
   void cdq();
 
-  void incq(Register dst);
-  void incq(const Operand& dst);
-  void incl(Register dst);
-  void incl(const Operand& dst);
-
-  void lea(Register dst, const Operand& src);
-  void leal(Register dst, const Operand& src);
-
   // Multiply rax by src, put the result in rdx:rax.
   void mul(Register src);
-
-  void neg(Register dst);
-  void neg(const Operand& dst);
-  void negl(Register dst);
-
-  void not_(Register dst);
-  void not_(const Operand& dst);
-  void notl(Register dst);
-
-  void or_(Register dst, Register src) {
-    arithmetic_op(0x0B, dst, src);
-  }
-
-  void orl(Register dst, Register src) {
-    arithmetic_op_32(0x0B, dst, src);
-  }
-
-  void or_(Register dst, const Operand& src) {
-    arithmetic_op(0x0B, dst, src);
-  }
-
-  void orl(Register dst, const Operand& src) {
-    arithmetic_op_32(0x0B, dst, src);
-  }
-
-  void or_(const Operand& dst, Register src) {
-    arithmetic_op(0x09, src, dst);
-  }
-
-  void orl(const Operand& dst, Register src) {
-    arithmetic_op_32(0x09, src, dst);
-  }
-
-  void or_(Register dst, Immediate src) {
-    immediate_arithmetic_op(0x1, dst, src);
-  }
-
-  void orl(Register dst, Immediate src) {
-    immediate_arithmetic_op_32(0x1, dst, src);
-  }
-
-  void or_(const Operand& dst, Immediate src) {
-    immediate_arithmetic_op(0x1, dst, src);
-  }
-
-  void orl(const Operand& dst, Immediate src) {
-    immediate_arithmetic_op_32(0x1, dst, src);
-  }
 
   void rcl(Register dst, Immediate imm8) {
     shift(dst, imm8, 0x2);
@@ -1090,57 +955,6 @@ class Assembler : public AssemblerBase {
   void testb(Register reg, Immediate mask);
   void testb(const Operand& op, Immediate mask);
   void testb(const Operand& op, Register reg);
-  void testl(Register dst, Register src);
-  void testl(Register reg, Immediate mask);
-  void testl(const Operand& op, Register reg);
-  void testl(const Operand& op, Immediate mask);
-  void testq(const Operand& op, Register reg);
-  void testq(Register dst, Register src);
-  void testq(Register dst, Immediate mask);
-
-  void xor_(Register dst, Register src) {
-    if (dst.code() == src.code()) {
-      arithmetic_op_32(0x33, dst, src);
-    } else {
-      arithmetic_op(0x33, dst, src);
-    }
-  }
-
-  void xorl(Register dst, Register src) {
-    arithmetic_op_32(0x33, dst, src);
-  }
-
-  void xorl(Register dst, const Operand& src) {
-    arithmetic_op_32(0x33, dst, src);
-  }
-
-  void xorl(Register dst, Immediate src) {
-    immediate_arithmetic_op_32(0x6, dst, src);
-  }
-
-  void xorl(const Operand& dst, Register src) {
-    arithmetic_op_32(0x31, src, dst);
-  }
-
-  void xorl(const Operand& dst, Immediate src) {
-    immediate_arithmetic_op_32(0x6, dst, src);
-  }
-
-  void xor_(Register dst, const Operand& src) {
-    arithmetic_op(0x33, dst, src);
-  }
-
-  void xor_(const Operand& dst, Register src) {
-    arithmetic_op(0x31, src, dst);
-  }
-
-  void xor_(Register dst, Immediate src) {
-    immediate_arithmetic_op(0x6, dst, src);
-  }
-
-  void xor_(const Operand& dst, Immediate src) {
-    immediate_arithmetic_op(0x6, dst, src);
-  }
 
   // Bit operations.
   void bt(const Operand& dst, Register src);
@@ -1545,6 +1359,14 @@ class Assembler : public AssemblerBase {
   // numbers have a high bit set.
   inline void emit_optional_rex_32(const Operand& op);
 
+  void emit_rex(int size) {
+    if (size == kInt64Size) {
+      emit_rex_64();
+    } else {
+      ASSERT(size == kInt32Size);
+    }
+  }
+
   template<class P1>
   void emit_rex(P1 p1, int size) {
     if (size == kInt64Size) {
@@ -1695,6 +1517,99 @@ class Assembler : public AssemblerBase {
     }
   }
 
+  void emit_and(Register dst, Register src, int size) {
+    if (size == kInt64Size) {
+      arithmetic_op(0x23, dst, src);
+    } else {
+      ASSERT(size == kInt32Size);
+      arithmetic_op_32(0x23, dst, src);
+    }
+  }
+
+  void emit_and(Register dst, const Operand& src, int size) {
+    if (size == kInt64Size) {
+      arithmetic_op(0x23, dst, src);
+    } else {
+      ASSERT(size == kInt32Size);
+      arithmetic_op_32(0x23, dst, src);
+    }
+  }
+
+  void emit_and(const Operand& dst, Register src, int size) {
+    if (size == kInt64Size) {
+      arithmetic_op(0x21, src, dst);
+    } else {
+      ASSERT(size == kInt32Size);
+      arithmetic_op_32(0x21, src, dst);
+    }
+  }
+
+  void emit_and(Register dst, Immediate src, int size) {
+    if (size == kInt64Size) {
+      immediate_arithmetic_op(0x4, dst, src);
+    } else {
+      ASSERT(size == kInt32Size);
+      immediate_arithmetic_op_32(0x4, dst, src);
+    }
+  }
+
+  void emit_and(const Operand& dst, Immediate src, int size) {
+    if (size == kInt64Size) {
+      immediate_arithmetic_op(0x4, dst, src);
+    } else {
+      ASSERT(size == kInt32Size);
+      immediate_arithmetic_op_32(0x4, dst, src);
+    }
+  }
+
+  void emit_cmp(Register dst, Register src, int size) {
+    if (size == kInt64Size) {
+      arithmetic_op(0x3B, dst, src);
+    } else {
+      ASSERT(size == kInt32Size);
+      arithmetic_op_32(0x3B, dst, src);
+    }
+  }
+
+  void emit_cmp(Register dst, const Operand& src, int size) {
+    if (size == kInt64Size) {
+      arithmetic_op(0x3B, dst, src);
+    } else {
+      ASSERT(size == kInt32Size);
+      arithmetic_op_32(0x3B, dst, src);
+    }
+  }
+
+  void emit_cmp(const Operand& dst, Register src, int size) {
+    if (size == kInt64Size) {
+      arithmetic_op(0x39, src, dst);
+    } else {
+      ASSERT(size == kInt32Size);
+      arithmetic_op_32(0x39, src, dst);
+    }
+  }
+
+  void emit_cmp(Register dst, Immediate src, int size) {
+    if (size == kInt64Size) {
+      immediate_arithmetic_op(0x7, dst, src);
+    } else {
+      ASSERT(size == kInt32Size);
+      immediate_arithmetic_op_32(0x7, dst, src);
+    }
+  }
+
+  void emit_cmp(const Operand& dst, Immediate src, int size) {
+    if (size == kInt64Size) {
+      immediate_arithmetic_op(0x7, dst, src);
+    } else {
+      ASSERT(size == kInt32Size);
+      immediate_arithmetic_op_32(0x7, dst, src);
+    }
+  }
+
+  void emit_dec(Register dst, int size);
+  void emit_dec(const Operand& dst, int size);
+
   // Divide rdx:rax by src.  Quotient in rax, remainder in rdx when size is 64.
   // Divide edx:eax by lower 32 bits of src.  Quotient in eax, remainder in edx
   // when size is 32.
@@ -1706,6 +1621,78 @@ class Assembler : public AssemblerBase {
   void emit_imul(Register dst, Register src, int size);
   void emit_imul(Register dst, const Operand& src, int size);
   void emit_imul(Register dst, Register src, Immediate imm, int size);
+
+  void emit_inc(Register dst, int size);
+  void emit_inc(const Operand& dst, int size);
+
+  void emit_lea(Register dst, const Operand& src, int size);
+
+  void emit_mov(Register dst, const Operand& src, int size);
+  void emit_mov(Register dst, Register src, int size);
+  void emit_mov(const Operand& dst, Register src, int size);
+  void emit_mov(Register dst, Immediate value, int size);
+  void emit_mov(const Operand& dst, Immediate value, int size);
+
+  void emit_movzxb(Register dst, const Operand& src, int size);
+  void emit_movzxw(Register dst, const Operand& src, int size);
+  void emit_movzxw(Register dst, Register src, int size);
+
+  void emit_neg(Register dst, int size);
+  void emit_neg(const Operand& dst, int size);
+
+  void emit_not(Register dst, int size);
+  void emit_not(const Operand& dst, int size);
+
+  void emit_or(Register dst, Register src, int size) {
+    if (size == kInt64Size) {
+      arithmetic_op(0x0B, dst, src);
+    } else {
+      arithmetic_op_32(0x0B, dst, src);
+    }
+  }
+
+  void emit_or(Register dst, const Operand& src, int size) {
+    if (size == kInt64Size) {
+      arithmetic_op(0x0B, dst, src);
+    } else {
+      arithmetic_op_32(0x0B, dst, src);
+    }
+  }
+
+  void emit_or(const Operand& dst, Register src, int size) {
+    if (size == kInt64Size) {
+      arithmetic_op(0x9, src, dst);
+    } else {
+      arithmetic_op_32(0x9, src, dst);
+    }
+  }
+
+  void emit_or(Register dst, Immediate src, int size) {
+    if (size == kInt64Size) {
+      immediate_arithmetic_op(0x1, dst, src);
+    } else {
+      immediate_arithmetic_op_32(0x1, dst, src);
+    }
+  }
+
+  void emit_or(const Operand& dst, Immediate src, int size) {
+    if (size == kInt64Size) {
+      immediate_arithmetic_op(0x1, dst, src);
+    } else {
+      immediate_arithmetic_op_32(0x1, dst, src);
+    }
+  }
+
+  void emit_repmovs(int size);
+
+  void emit_sbb(Register dst, Register src, int size) {
+    if (size == kInt64Size) {
+      arithmetic_op(0x1b, dst, src);
+    } else {
+      ASSERT(size == kInt32Size);
+      arithmetic_op_32(0x1b, dst, src);
+    }
+  }
 
   void emit_sub(Register dst, Register src, int size) {
     if (size == kInt64Size) {
@@ -1752,11 +1739,62 @@ class Assembler : public AssemblerBase {
     }
   }
 
-  void emit_mov(Register dst, const Operand& src, int size);
-  void emit_mov(Register dst, Register src, int size);
-  void emit_mov(const Operand& dst, Register src, int size);
-  void emit_mov(Register dst, Immediate value, int size);
-  void emit_mov(const Operand& dst, Immediate value, int size);
+  void emit_test(Register dst, Register src, int size);
+  void emit_test(Register reg, Immediate mask, int size);
+  void emit_test(const Operand& op, Register reg, int size);
+  void emit_test(const Operand& op, Immediate mask, int size);
+
+  // Exchange two registers
+  void emit_xchg(Register dst, Register src, int size);
+
+  void emit_xor(Register dst, Register src, int size) {
+    if (size == kInt64Size) {
+      if (dst.code() == src.code()) {
+        arithmetic_op_32(0x33, dst, src);
+      } else {
+        arithmetic_op(0x33, dst, src);
+      }
+    } else {
+      ASSERT(size == kInt32Size);
+      arithmetic_op_32(0x33, dst, src);
+    }
+  }
+
+  void emit_xor(Register dst, const Operand& src, int size) {
+    if (size == kInt64Size) {
+      arithmetic_op(0x33, dst, src);
+    } else {
+      ASSERT(size == kInt32Size);
+      arithmetic_op_32(0x33, dst, src);
+    }
+  }
+
+  void emit_xor(Register dst, Immediate src, int size) {
+    if (size == kInt64Size) {
+      immediate_arithmetic_op(0x6, dst, src);
+    } else {
+      ASSERT(size == kInt32Size);
+      immediate_arithmetic_op_32(0x6, dst, src);
+    }
+  }
+
+  void emit_xor(const Operand& dst, Immediate src, int size) {
+    if (size == kInt64Size) {
+      immediate_arithmetic_op(0x6, dst, src);
+    } else {
+      ASSERT(size == kInt32Size);
+      immediate_arithmetic_op_32(0x6, dst, src);
+    }
+  }
+
+  void emit_xor(const Operand& dst, Register src, int size) {
+    if (size == kInt64Size) {
+      arithmetic_op(0x31, src, dst);
+    } else {
+      ASSERT(size == kInt32Size);
+      arithmetic_op_32(0x31, src, dst);
+    }
+  }
 
   friend class CodePatcher;
   friend class EnsureSpace;

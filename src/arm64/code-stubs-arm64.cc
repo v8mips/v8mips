@@ -46,7 +46,7 @@ void FastNewClosureStub::InitializeInterfaceDescriptor(
   descriptor->register_param_count_ = sizeof(registers) / sizeof(registers[0]);
   descriptor->register_params_ = registers;
   descriptor->deoptimization_handler_ =
-      Runtime::FunctionForId(Runtime::kNewClosureFromStubFailure)->entry;
+      Runtime::FunctionForId(Runtime::kHiddenNewClosureFromStubFailure)->entry;
 }
 
 
@@ -94,7 +94,8 @@ void FastCloneShallowArrayStub::InitializeInterfaceDescriptor(
   descriptor->register_param_count_ = sizeof(registers) / sizeof(registers[0]);
   descriptor->register_params_ = registers;
   descriptor->deoptimization_handler_ =
-      Runtime::FunctionForId(Runtime::kCreateArrayLiteralStubBailout)->entry;
+      Runtime::FunctionForId(
+          Runtime::kHiddenCreateArrayLiteralStubBailout)->entry;
 }
 
 
@@ -109,7 +110,7 @@ void FastCloneShallowObjectStub::InitializeInterfaceDescriptor(
   descriptor->register_param_count_ = sizeof(registers) / sizeof(registers[0]);
   descriptor->register_params_ = registers;
   descriptor->deoptimization_handler_ =
-      Runtime::FunctionForId(Runtime::kCreateObjectLiteral)->entry;
+      Runtime::FunctionForId(Runtime::kHiddenCreateObjectLiteral)->entry;
 }
 
 
@@ -275,7 +276,7 @@ static void InitializeArrayConstructorDescriptor(
   descriptor->hint_stack_parameter_count_ = constant_stack_parameter_count;
   descriptor->function_mode_ = JS_FUNCTION_STUB_MODE;
   descriptor->deoptimization_handler_ =
-      Runtime::FunctionForId(Runtime::kArrayConstructor)->entry;
+      Runtime::FunctionForId(Runtime::kHiddenArrayConstructor)->entry;
 }
 
 
@@ -325,7 +326,7 @@ static void InitializeInternalArrayConstructorDescriptor(
   descriptor->hint_stack_parameter_count_ = constant_stack_parameter_count;
   descriptor->function_mode_ = JS_FUNCTION_STUB_MODE;
   descriptor->deoptimization_handler_ =
-      Runtime::FunctionForId(Runtime::kInternalArrayConstructor)->entry;
+      Runtime::FunctionForId(Runtime::kHiddenInternalArrayConstructor)->entry;
 }
 
 
@@ -2248,7 +2249,7 @@ void ArgumentsAccessStub::GenerateNewSloppySlow(MacroAssembler* masm) {
   __ Poke(x10, 1 * kXRegSize);
 
   __ Bind(&runtime);
-  __ TailCallRuntime(Runtime::kNewArgumentsFast, 3, 1);
+  __ TailCallRuntime(Runtime::kHiddenNewArgumentsFast, 3, 1);
 }
 
 
@@ -2520,7 +2521,7 @@ void ArgumentsAccessStub::GenerateNewSloppyFast(MacroAssembler* masm) {
   // Do the runtime call to allocate the arguments object.
   __ Bind(&runtime);
   __ Push(function, recv_arg, arg_count_smi);
-  __ TailCallRuntime(Runtime::kNewArgumentsFast, 3, 1);
+  __ TailCallRuntime(Runtime::kHiddenNewArgumentsFast, 3, 1);
 }
 
 
@@ -2653,13 +2654,13 @@ void ArgumentsAccessStub::GenerateNewStrict(MacroAssembler* masm) {
   // Do the runtime call to allocate the arguments object.
   __ Bind(&runtime);
   __ Push(function, params, param_count_smi);
-  __ TailCallRuntime(Runtime::kNewStrictArgumentsFast, 3, 1);
+  __ TailCallRuntime(Runtime::kHiddenNewStrictArgumentsFast, 3, 1);
 }
 
 
 void RegExpExecStub::Generate(MacroAssembler* masm) {
 #ifdef V8_INTERPRETED_REGEXP
-  __ TailCallRuntime(Runtime::kRegExpExec, 4, 1);
+  __ TailCallRuntime(Runtime::kHiddenRegExpExec, 4, 1);
 #else  // V8_INTERPRETED_REGEXP
 
   // Stack frame on entry.
@@ -3527,7 +3528,7 @@ void StringCharCodeAtGenerator::GenerateSlow(
   } else {
     ASSERT(index_flags_ == STRING_INDEX_IS_ARRAY_INDEX);
     // NumberToSmi discards numbers that are not exact integers.
-    __ CallRuntime(Runtime::kNumberToSmi, 1);
+    __ CallRuntime(Runtime::kHiddenNumberToSmi, 1);
   }
   // Save the conversion result before the pop instructions below
   // have a chance to overwrite it.
@@ -4909,14 +4910,23 @@ void StubFailureTrampolineStub::Generate(MacroAssembler* masm) {
 }
 
 
+// The entry hook is a "BumpSystemStackPointer" instruction (sub), followed by
+// a "Push lr" instruction, followed by a call.
+static const unsigned int kProfileEntryHookCallSize =
+    Assembler::kCallSizeWithRelocation + (2 * kInstructionSize);
+
+
 void ProfileEntryHookStub::MaybeCallEntryHook(MacroAssembler* masm) {
   if (masm->isolate()->function_entry_hook() != NULL) {
-    // TODO(all): This needs to be reliably consistent with
-    // kReturnAddressDistanceFromFunctionStart in ::Generate.
-    Assembler::BlockPoolsScope no_pools(masm);
     ProfileEntryHookStub stub;
+    Assembler::BlockConstPoolScope no_const_pools(masm);
+    Label entry_hook_call_start;
+    __ Bind(&entry_hook_call_start);
     __ Push(lr);
     __ CallStub(&stub);
+    ASSERT(masm->SizeOfCodeGeneratedSince(&entry_hook_call_start) ==
+           kProfileEntryHookCallSize);
+
     __ Pop(lr);
   }
 }
@@ -4924,10 +4934,6 @@ void ProfileEntryHookStub::MaybeCallEntryHook(MacroAssembler* masm) {
 
 void ProfileEntryHookStub::Generate(MacroAssembler* masm) {
   MacroAssembler::NoUseRealAbortsScope no_use_real_aborts(masm);
-  // The entry hook is a "BumpSystemStackPointer" instruction (sub), followed by
-  // a "Push lr" instruction, followed by a call.
-  static const int kReturnAddressDistanceFromFunctionStart =
-      Assembler::kCallSizeWithRelocation + (2 * kInstructionSize);
 
   // Save all kCallerSaved registers (including lr), since this can be called
   // from anywhere.
@@ -4937,7 +4943,7 @@ void ProfileEntryHookStub::Generate(MacroAssembler* masm) {
   const int kNumSavedRegs = kCallerSaved.Count();
 
   // Compute the function's address as the first argument.
-  __ Sub(x0, lr, kReturnAddressDistanceFromFunctionStart);
+  __ Sub(x0, lr, kProfileEntryHookCallSize);
 
 #if V8_HOST_ARCH_ARM64
   uintptr_t entry_hook =

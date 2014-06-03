@@ -713,7 +713,7 @@ bool LCodeGen::GeneratePrologue() {
       __ CallStub(&stub);
     } else {
       __ Push(x1);
-      __ CallRuntime(Runtime::kNewFunctionContext, 1);
+      __ CallRuntime(Runtime::kHiddenNewFunctionContext, 1);
     }
     RecordSafepoint(Safepoint::kNoLazyDeopt);
     // Context is returned in x0. It replaces the context passed to us. It's
@@ -1593,7 +1593,7 @@ void LCodeGen::DoDeferredAllocate(LAllocate* instr) {
   __ Push(size, x10);
 
   CallRuntimeFromDeferred(
-      Runtime::kAllocateInTargetSpace, 2, instr, instr->context());
+      Runtime::kHiddenAllocateInTargetSpace, 2, instr, instr->context());
   __ StoreToSafepointRegisterSlot(x0, ToRegister(instr->result()));
 }
 
@@ -2815,7 +2815,7 @@ void LCodeGen::DoFunctionLiteral(LFunctionLiteral* instr) {
     __ Mov(x1, Operand(pretenure ? factory()->true_value()
                                  : factory()->false_value()));
     __ Push(cp, x2, x1);
-    CallRuntime(Runtime::kNewClosure, 3, instr);
+    CallRuntime(Runtime::kHiddenNewClosure, 3, instr);
   }
 }
 
@@ -3756,7 +3756,7 @@ void LCodeGen::DoDeferredMathAbsTagged(LMathAbsTagged* instr,
   }
 
   { PushSafepointRegistersScope scope(this, Safepoint::kWithRegisters);
-    CallRuntimeFromDeferred(Runtime::kAllocateHeapNumber, 0, instr,
+    CallRuntimeFromDeferred(Runtime::kHiddenAllocateHeapNumber, 0, instr,
                             instr->context());
     __ StoreToSafepointRegisterSlot(x0, result);
   }
@@ -4253,6 +4253,7 @@ void LCodeGen::DoMulConstIS(LMulConstIS* instr) {
   Register left =
       is_smi ? ToRegister(instr->left()) : ToRegister32(instr->left()) ;
   int32_t right = ToInteger32(instr->right());
+  ASSERT((right > -kMaxInt) || (right < kMaxInt));
 
   bool can_overflow = instr->hydrogen()->CheckFlag(HValue::kCanOverflow);
   bool bailout_on_minus_zero =
@@ -4296,20 +4297,45 @@ void LCodeGen::DoMulConstIS(LMulConstIS* instr) {
       }
       break;
 
-    // All other cases cannot detect overflow, because it would probably be no
-    // faster than using the smull method in LMulI.
-    // TODO(jbramley): Investigate this, and add overflow support if it would
-    // be useful.
     default:
-      ASSERT(!can_overflow);
-
       // Multiplication by constant powers of two (and some related values)
       // can be done efficiently with shifted operands.
-      if (right >= 0) {
-        if (IsPowerOf2(right)) {
+      int32_t right_abs = Abs(right);
+
+      if (IsPowerOf2(right_abs)) {
+        int right_log2 = WhichPowerOf2(right_abs);
+
+        if (can_overflow) {
+          Register scratch = result;
+          ASSERT(!AreAliased(scratch, left));
+          __ Cls(scratch, left);
+          __ Cmp(scratch, right_log2);
+          DeoptimizeIf(lt, instr->environment());
+        }
+
+        if (right >= 0) {
           // result = left << log2(right)
-          __ Lsl(result, left, WhichPowerOf2(right));
-        } else if (IsPowerOf2(right - 1)) {
+          __ Lsl(result, left, right_log2);
+        } else {
+          // result = -left << log2(-right)
+          if (can_overflow) {
+            __ Negs(result, Operand(left, LSL, right_log2));
+            DeoptimizeIf(vs, instr->environment());
+          } else {
+            __ Neg(result, Operand(left, LSL, right_log2));
+          }
+        }
+        return;
+      }
+
+
+      // For the following cases, we could perform a conservative overflow check
+      // with CLS as above. However the few cycles saved are likely not worth
+      // the risk of deoptimizing more often than required.
+      ASSERT(!can_overflow);
+
+      if (right >= 0) {
+        if (IsPowerOf2(right - 1)) {
           // result = left + left << log2(right - 1)
           __ Add(result, left, Operand(left, LSL, WhichPowerOf2(right - 1)));
         } else if (IsPowerOf2(right + 1)) {
@@ -4320,10 +4346,7 @@ void LCodeGen::DoMulConstIS(LMulConstIS* instr) {
           UNREACHABLE();
         }
       } else {
-        if (IsPowerOf2(-right)) {
-          // result = -left << log2(-right)
-          __ Neg(result, Operand(left, LSL, WhichPowerOf2(-right)));
-        } else if (IsPowerOf2(-right + 1)) {
+        if (IsPowerOf2(-right + 1)) {
           // result = left - left << log2(-right + 1)
           __ Sub(result, left, Operand(left, LSL, WhichPowerOf2(-right + 1)));
         } else if (IsPowerOf2(-right - 1)) {
@@ -4334,7 +4357,6 @@ void LCodeGen::DoMulConstIS(LMulConstIS* instr) {
           UNREACHABLE();
         }
       }
-      break;
   }
 }
 
@@ -4429,11 +4451,11 @@ void LCodeGen::DoDeferredNumberTagD(LNumberTagD* instr) {
   PushSafepointRegistersScope scope(this, Safepoint::kWithRegisters);
   // NumberTagU and NumberTagD use the context from the frame, rather than
   // the environment's HContext or HInlinedContext value.
-  // They only call Runtime::kAllocateHeapNumber.
+  // They only call Runtime::kHiddenAllocateHeapNumber.
   // The corresponding HChange instructions are added in a phase that does
   // not have easy access to the local context.
   __ Ldr(cp, MemOperand(fp, StandardFrameConstants::kContextOffset));
-  __ CallRuntimeSaveDoubles(Runtime::kAllocateHeapNumber);
+  __ CallRuntimeSaveDoubles(Runtime::kHiddenAllocateHeapNumber);
   RecordSafepointWithRegisters(
       instr->pointer_map(), 0, Safepoint::kNoLazyDeopt);
   __ StoreToSafepointRegisterSlot(x0, result);
@@ -4495,11 +4517,11 @@ void LCodeGen::DoDeferredNumberTagU(LInstruction* instr,
 
     // NumberTagU and NumberTagD use the context from the frame, rather than
     // the environment's HContext or HInlinedContext value.
-    // They only call Runtime::kAllocateHeapNumber.
+    // They only call Runtime::kHiddenAllocateHeapNumber.
     // The corresponding HChange instructions are added in a phase that does
     // not have easy access to the local context.
     __ Ldr(cp, MemOperand(fp, StandardFrameConstants::kContextOffset));
-    __ CallRuntimeSaveDoubles(Runtime::kAllocateHeapNumber);
+    __ CallRuntimeSaveDoubles(Runtime::kHiddenAllocateHeapNumber);
     RecordSafepointWithRegisters(
       instr->pointer_map(), 0, Safepoint::kNoLazyDeopt);
     __ StoreToSafepointRegisterSlot(x0, dst);
@@ -4915,14 +4937,14 @@ void LCodeGen::DoDeclareGlobals(LDeclareGlobals* instr) {
   __ LoadHeapObject(scratch1, instr->hydrogen()->pairs());
   __ Mov(scratch2, Smi::FromInt(instr->hydrogen()->flags()));
   __ Push(cp, scratch1, scratch2);  // The context is the first argument.
-  CallRuntime(Runtime::kDeclareGlobals, 3, instr);
+  CallRuntime(Runtime::kHiddenDeclareGlobals, 3, instr);
 }
 
 
 void LCodeGen::DoDeferredStackCheck(LStackCheck* instr) {
   PushSafepointRegistersScope scope(this, Safepoint::kWithRegisters);
   LoadContextFromDeferred(instr->context());
-  __ CallRuntimeSaveDoubles(Runtime::kStackGuard);
+  __ CallRuntimeSaveDoubles(Runtime::kHiddenStackGuard);
   RecordSafepointWithLazyDeopt(
       instr, RECORD_SAFEPOINT_WITH_REGISTERS_AND_NO_ARGUMENTS);
   ASSERT(instr->HasEnvironment());
@@ -5500,7 +5522,6 @@ void LCodeGen::DoDeferredTaggedToI(LTaggedToI* instr,
 
   if (instr->truncating()) {
     Register output = ToRegister(instr->result());
-    Register scratch2 = ToRegister(temp2);
     Label check_bools;
 
     // If it's not a heap number, jump to undefined check.
@@ -5513,11 +5534,11 @@ void LCodeGen::DoDeferredTaggedToI(LTaggedToI* instr,
     __ Bind(&check_bools);
 
     Register true_root = output;
-    Register false_root = scratch2;
+    Register false_root = scratch1;
     __ LoadTrueFalseRoots(true_root, false_root);
-    __ Cmp(scratch1, true_root);
+    __ Cmp(input, true_root);
     __ Cset(output, eq);
-    __ Ccmp(scratch1, false_root, ZFlag, ne);
+    __ Ccmp(input, false_root, ZFlag, ne);
     __ B(eq, &done);
 
     // Output contains zero, undefined is converted to zero for truncating
@@ -5614,7 +5635,7 @@ void LCodeGen::DoRegExpLiteral(LRegExpLiteral* instr) {
   __ Mov(x11, Operand(instr->hydrogen()->pattern()));
   __ Mov(x10, Operand(instr->hydrogen()->flags()));
   __ Push(x7, x12, x11, x10);
-  CallRuntime(Runtime::kMaterializeRegExpLiteral, 4, instr);
+  CallRuntime(Runtime::kHiddenMaterializeRegExpLiteral, 4, instr);
   __ Mov(x1, x0);
 
   __ Bind(&materialized);
@@ -5627,7 +5648,7 @@ void LCodeGen::DoRegExpLiteral(LRegExpLiteral* instr) {
   __ Bind(&runtime_allocate);
   __ Mov(x0, Smi::FromInt(size));
   __ Push(x1, x0);
-  CallRuntime(Runtime::kAllocateInNewSpace, 1, instr);
+  CallRuntime(Runtime::kHiddenAllocateInNewSpace, 1, instr);
   __ Pop(x1);
 
   __ Bind(&allocated);
