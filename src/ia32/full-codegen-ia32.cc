@@ -342,7 +342,7 @@ void FullCodeGenerator::Generate() {
 
 
 void FullCodeGenerator::ClearAccumulator() {
-  __ Set(eax, Immediate(Smi::FromInt(0)));
+  __ Move(eax, Immediate(Smi::FromInt(0)));
 }
 
 
@@ -501,9 +501,9 @@ void FullCodeGenerator::EffectContext::Plug(Handle<Object> lit) const {
 void FullCodeGenerator::AccumulatorValueContext::Plug(
     Handle<Object> lit) const {
   if (lit->IsSmi()) {
-    __ SafeSet(result_register(), Immediate(lit));
+    __ SafeMove(result_register(), Immediate(lit));
   } else {
-    __ Set(result_register(), Immediate(lit));
+    __ Move(result_register(), Immediate(lit));
   }
 }
 
@@ -1150,7 +1150,7 @@ void FullCodeGenerator::VisitForInStatement(ForInStatement* stmt) {
   STATIC_ASSERT(FIRST_JS_PROXY_TYPE == FIRST_SPEC_OBJECT_TYPE);
   __ CmpObjectType(ecx, LAST_JS_PROXY_TYPE, ecx);
   __ j(above, &non_proxy);
-  __ Set(ebx, Immediate(Smi::FromInt(0)));  // Zero indicates proxy
+  __ Move(ebx, Immediate(Smi::FromInt(0)));  // Zero indicates proxy
   __ bind(&non_proxy);
   __ push(ebx);  // Smi
   __ push(eax);  // Array
@@ -2863,7 +2863,7 @@ void FullCodeGenerator::VisitCallNew(CallNew* expr) {
   SetSourcePosition(expr->position());
 
   // Load function and argument count into edi and eax.
-  __ Set(eax, Immediate(arg_count));
+  __ Move(eax, Immediate(arg_count));
   __ mov(edi, Operand(esp, arg_count * kPointerSize));
 
   // Record call targets in unoptimized code.
@@ -3135,9 +3135,11 @@ void FullCodeGenerator::EmitIsMinusZero(CallRuntime* expr) {
 
   Handle<Map> map = masm()->isolate()->factory()->heap_number_map();
   __ CheckMap(eax, map, if_false, DO_SMI_CHECK);
-  __ cmp(FieldOperand(eax, HeapNumber::kExponentOffset), Immediate(0x80000000));
-  __ j(not_equal, if_false);
-  __ cmp(FieldOperand(eax, HeapNumber::kMantissaOffset), Immediate(0x00000000));
+  // Check if the exponent half is 0x80000000. Comparing against 1 and
+  // checking for overflow is the shortest possible encoding.
+  __ cmp(FieldOperand(eax, HeapNumber::kExponentOffset), Immediate(0x1));
+  __ j(no_overflow, if_false);
+  __ cmp(FieldOperand(eax, HeapNumber::kMantissaOffset), Immediate(0x0));
   PrepareForBailoutBeforeSplit(expr, true, if_true, if_false);
   Split(equal, if_true, if_false, fall_through);
 
@@ -3254,7 +3256,7 @@ void FullCodeGenerator::EmitArguments(CallRuntime* expr) {
   // parameter count in eax.
   VisitForAccumulatorValue(args->at(0));
   __ mov(edx, eax);
-  __ Set(eax, Immediate(Smi::FromInt(info_->scope()->num_parameters())));
+  __ Move(eax, Immediate(Smi::FromInt(info_->scope()->num_parameters())));
   ArgumentsAccessStub stub(ArgumentsAccessStub::READ_ELEMENT);
   __ CallStub(&stub);
   context()->Plug(eax);
@@ -3266,7 +3268,7 @@ void FullCodeGenerator::EmitArgumentsLength(CallRuntime* expr) {
 
   Label exit;
   // Get the number of formal parameters.
-  __ Set(eax, Immediate(Smi::FromInt(info_->scope()->num_parameters())));
+  __ Move(eax, Immediate(Smi::FromInt(info_->scope()->num_parameters())));
 
   // Check if the calling frame is an arguments adaptor frame.
   __ mov(ebx, Operand(ebp, StandardFrameConstants::kCallerFPOffset));
@@ -3633,13 +3635,13 @@ void FullCodeGenerator::EmitStringCharCodeAt(CallRuntime* expr) {
   __ bind(&index_out_of_range);
   // When the index is out of range, the spec requires us to return
   // NaN.
-  __ Set(result, Immediate(isolate()->factory()->nan_value()));
+  __ Move(result, Immediate(isolate()->factory()->nan_value()));
   __ jmp(&done);
 
   __ bind(&need_conversion);
   // Move the undefined value into the result register, which will
   // trigger conversion.
-  __ Set(result, Immediate(isolate()->factory()->undefined_value()));
+  __ Move(result, Immediate(isolate()->factory()->undefined_value()));
   __ jmp(&done);
 
   NopRuntimeCallHelper call_helper;
@@ -3681,13 +3683,13 @@ void FullCodeGenerator::EmitStringCharAt(CallRuntime* expr) {
   __ bind(&index_out_of_range);
   // When the index is out of range, the spec requires us to return
   // the empty string.
-  __ Set(result, Immediate(isolate()->factory()->empty_string()));
+  __ Move(result, Immediate(isolate()->factory()->empty_string()));
   __ jmp(&done);
 
   __ bind(&need_conversion);
   // Move smi zero into the result register, which will trigger
   // conversion.
-  __ Set(result, Immediate(Smi::FromInt(0)));
+  __ Move(result, Immediate(Smi::FromInt(0)));
   __ jmp(&done);
 
   NopRuntimeCallHelper call_helper;
@@ -3938,8 +3940,8 @@ void FullCodeGenerator::EmitFastAsciiArrayJoin(CallRuntime* expr) {
 
   // Check that all array elements are sequential ASCII strings, and
   // accumulate the sum of their lengths, as a smi-encoded value.
-  __ Set(index, Immediate(0));
-  __ Set(string_length, Immediate(0));
+  __ Move(index, Immediate(0));
+  __ Move(string_length, Immediate(0));
   // Loop condition: while (index < length).
   // Live loop registers: index, array_length, string,
   //                      scratch, string_length, elements.
@@ -4055,7 +4057,7 @@ void FullCodeGenerator::EmitFastAsciiArrayJoin(CallRuntime* expr) {
   __ mov_b(scratch, FieldOperand(string, SeqOneByteString::kHeaderSize));
   __ mov_b(separator_operand, scratch);
 
-  __ Set(index, Immediate(0));
+  __ Move(index, Immediate(0));
   // Jump into the loop after the code that copies the separator, so the first
   // element is not preceded by a separator
   __ jmp(&loop_2_entry);
@@ -4092,7 +4094,7 @@ void FullCodeGenerator::EmitFastAsciiArrayJoin(CallRuntime* expr) {
   // Long separator case (separator is more than one character).
   __ bind(&long_separator);
 
-  __ Set(index, Immediate(0));
+  __ Move(index, Immediate(0));
   // Jump into the loop after the code that copies the separator, so the first
   // element is not preceded by a separator
   __ jmp(&loop_3_entry);
