@@ -1,4 +1,4 @@
-// Copyright 2014 the V8 project authors. All rights reserved.
+// Copyright 2013 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -25,12 +25,13 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// Flags: --harmony_symbols --harmony-weak-collections
+// Flags: --allow-natives-syntax
+// This test requires ASAN.
 
-var v0 = new WeakMap;
-var v1 = {};
-v0.set(v1, 1);
-var sym = Symbol();
-v1[sym] = 1;
-var symbols = Object.getOwnPropertySymbols(v1);
-assertArrayEquals([sym], symbols);
+function __f_4(a, b) { }
+function __f_8(n) { return __f_4(arguments[13], arguments[-10]); }
+function __f_6(a) { return __f_8(0, a); }
+__f_8(0);
+__f_8(0);
+%OptimizeFunctionOnNextCall(__f_8);
+__f_8(0);

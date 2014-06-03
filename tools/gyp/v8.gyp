@@ -27,6 +27,7 @@
 
 {
   'variables': {
+    'icu_use_data_file_flag%': 0,
     'v8_code': 1,
     'v8_random_seed%': 314159265,
   },
@@ -420,6 +421,8 @@
         '../../src/hydrogen-representation-changes.h',
         '../../src/hydrogen-sce.cc',
         '../../src/hydrogen-sce.h',
+        '../../src/hydrogen-store-elimination.cc',
+        '../../src/hydrogen-store-elimination.h',
         '../../src/hydrogen-uint32-analysis.cc',
         '../../src/hydrogen-uint32-analysis.h',
         '../../src/i18n.cc',
@@ -1052,6 +1055,17 @@
             '../../src/default-platform.h',
           ],
         }],
+        ['icu_use_data_file_flag==1', {
+          'defines': ['ICU_UTIL_DATA_IMPL=ICU_UTIL_DATA_FILE'],
+        }, { # else icu_use_data_file_flag !=1
+          'conditions': [
+            ['OS=="win"', {
+              'defines': ['ICU_UTIL_DATA_IMPL=ICU_UTIL_DATA_SHARED'],
+            }, {
+              'defines': ['ICU_UTIL_DATA_IMPL=ICU_UTIL_DATA_STATIC'],
+            }],
+          ],
+        }],
       ],
     },
     {
@@ -1093,8 +1107,6 @@
           '../../src/regexp.js',
           '../../src/arraybuffer.js',
           '../../src/typedarray.js',
-          '../../src/weak_collection.js',
-          '../../src/promise.js',
           '../../src/object-observe.js',
           '../../src/macros.py',
         ],
@@ -1103,6 +1115,8 @@
           '../../src/symbol.js',
           '../../src/proxy.js',
           '../../src/collection.js',
+          '../../src/weak_collection.js',
+          '../../src/promise.js',
           '../../src/generator.js',
           '../../src/array-iterator.js',
           '../../src/harmony-string.js',

@@ -158,7 +158,6 @@ Heap::Heap()
       configured_(false),
       external_string_table_(this),
       chunks_queued_for_free_(NULL),
-      relocation_mutex_(NULL),
       gc_callbacks_depth_(0) {
   // Allow build-time customization of the max semispace size. Building
   // V8 with snapshots and a non-default max semispace size is much
@@ -3870,7 +3869,7 @@ MaybeObject* Heap::AllocateExternalStringFromAscii(
     const ExternalAsciiString::Resource* resource) {
   size_t length = resource->length();
   if (length > static_cast<size_t>(String::kMaxLength)) {
-    v8::internal::Heap::FatalProcessOutOfMemory("invalid string length", true);
+    return isolate()->ThrowInvalidStringLength();
   }
 
   Map* map = external_ascii_string_map();
@@ -3892,7 +3891,7 @@ MaybeObject* Heap::AllocateExternalStringFromTwoByte(
     const ExternalTwoByteString::Resource* resource) {
   size_t length = resource->length();
   if (length > static_cast<size_t>(String::kMaxLength)) {
-    v8::internal::Heap::FatalProcessOutOfMemory("invalid string length", true);
+    return isolate()->ThrowInvalidStringLength();
   }
 
   // For small strings we check whether the resource contains only
@@ -3970,6 +3969,21 @@ void Heap::CreateFillerObjectAt(Address addr, int size) {
     filler->set_map_no_write_barrier(free_space_map());
     FreeSpace::cast(filler)->set_size(size);
   }
+}
+
+
+bool Heap::CanMoveObjectStart(HeapObject* object) {
+  Address address = object->address();
+  bool is_in_old_pointer_space = InOldPointerSpace(address);
+  bool is_in_old_data_space = InOldDataSpace(address);
+
+  if (lo_space()->Contains(object)) return false;
+
+  // We cannot move the object start if the given old space page is
+  // concurrently swept.
+  return (!is_in_old_pointer_space && !is_in_old_data_space) ||
+      Page::FromAddress(address)->parallel_sweeping() <=
+          MemoryChunk::PARALLEL_SWEEPING_FINALIZE;
 }
 
 
@@ -4977,8 +4991,8 @@ MaybeObject* Heap::AllocateInternalizedStringImpl(
   int size;
   Map* map;
 
-  if (chars > String::kMaxLength) {
-    v8::internal::Heap::FatalProcessOutOfMemory("invalid string length", true);
+  if (chars < 0 || chars > String::kMaxLength) {
+    return isolate()->ThrowInvalidStringLength();
   }
   if (is_one_byte) {
     map = ascii_internalized_string_map();
@@ -5026,7 +5040,7 @@ MaybeObject* Heap::AllocateInternalizedStringImpl<false>(
 MaybeObject* Heap::AllocateRawOneByteString(int length,
                                             PretenureFlag pretenure) {
   if (length < 0 || length > String::kMaxLength) {
-    v8::internal::Heap::FatalProcessOutOfMemory("invalid string length", true);
+    return isolate()->ThrowInvalidStringLength();
   }
   int size = SeqOneByteString::SizeFor(length);
   ASSERT(size <= SeqOneByteString::kMaxSize);
@@ -5050,7 +5064,7 @@ MaybeObject* Heap::AllocateRawOneByteString(int length,
 MaybeObject* Heap::AllocateRawTwoByteString(int length,
                                             PretenureFlag pretenure) {
   if (length < 0 || length > String::kMaxLength) {
-    v8::internal::Heap::FatalProcessOutOfMemory("invalid string length", true);
+    return isolate()->ThrowInvalidStringLength();
   }
   int size = SeqTwoByteString::SizeFor(length);
   ASSERT(size <= SeqTwoByteString::kMaxSize);
@@ -6599,8 +6613,6 @@ bool Heap::SetUp() {
 
   mark_compact_collector()->SetUp();
 
-  if (FLAG_concurrent_recompilation) relocation_mutex_ = new Mutex;
-
   return true;
 }
 
@@ -6742,9 +6754,6 @@ void Heap::TearDown() {
   incremental_marking()->TearDown();
 
   isolate_->memory_allocator()->TearDown();
-
-  delete relocation_mutex_;
-  relocation_mutex_ = NULL;
 }
 
 

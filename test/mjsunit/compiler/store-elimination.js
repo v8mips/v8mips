@@ -1,4 +1,4 @@
-// Copyright 2014 the V8 project authors. All rights reserved.
+// Copyright 2013 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -25,12 +25,70 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// Flags: --harmony_symbols --harmony-weak-collections
+// Flags: --allow-natives-syntax --store-elimination
 
-var v0 = new WeakMap;
-var v1 = {};
-v0.set(v1, 1);
-var sym = Symbol();
-v1[sym] = 1;
-var symbols = Object.getOwnPropertySymbols(v1);
-assertArrayEquals([sym], symbols);
+// Test local elimination of unobservable stores.
+
+function B(x, y) {
+  this.x = x;
+  this.y = y;
+  return this;
+}
+
+function test_store_store() {
+  var a = new B(1, 2);
+  a.x = 3;  // eliminatable.
+  a.x = 4;
+  return a.x;
+}
+
+function test_store_load_store1() {
+  var a = new B(6, 7);
+  a.x = 3;  // eliminatable.
+  var r = a.y;
+  a.x = 4;
+  return r;
+}
+
+function test_store_load_store2() {
+  var a = new B(6, 8);
+  a.x = 3;  // not eliminatable, unless next load is eliminated.
+  var r = a.x;
+  a.x = 4;
+  return r;
+}
+
+function test_store_call_store() {
+  var a = new B(2, 9);
+  a.x = 3;  // not eliminatable.
+  killall();
+  a.x = 4;
+  return a.y;
+}
+
+function test_store_deopt_store() {
+  var a = new B(2, 1);
+  a.x = 3;  // not eliminatable (implicit ValueOf following)
+  var c = a + 2;
+  a.x = 4;
+  return a.y;
+}
+
+function killall() {
+  try { } catch(e) { }
+}
+
+%NeverOptimizeFunction(killall);
+
+function test(x, f) {
+  assertEquals(x, f());
+  assertEquals(x, f());
+  %OptimizeFunctionOnNextCall(f);
+  assertEquals(x, f());
+}
+
+test(4, test_store_store);
+test(7, test_store_load_store1);
+test(3, test_store_load_store2);
+test(9, test_store_call_store);
+test(1, test_store_deopt_store);

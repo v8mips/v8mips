@@ -289,7 +289,7 @@ Handle<String> Factory::NewStringFromTwoByte(Vector<const uc16> string,
 
 
 Handle<SeqOneByteString> Factory::NewRawOneByteString(int length,
-                                                  PretenureFlag pretenure) {
+                                                      PretenureFlag pretenure) {
   CALL_HEAP_FUNCTION(
       isolate(),
       isolate()->heap()->AllocateRawOneByteString(length, pretenure),
@@ -411,6 +411,7 @@ Handle<String> Factory::NewConsString(Handle<String> left,
     ASSERT(left->IsFlat());
     ASSERT(right->IsFlat());
 
+    STATIC_ASSERT(ConsString::kMinLength <= String::kMaxLength);
     if (is_one_byte) {
       Handle<SeqOneByteString> result = NewRawOneByteString(length);
       DisallowHeapAllocation no_gc;
@@ -496,12 +497,14 @@ Handle<String> Factory::NewProperSubString(Handle<String> str,
   if (!FLAG_string_slices || length < SlicedString::kMinLength) {
     if (str->IsOneByteRepresentation()) {
       Handle<SeqOneByteString> result = NewRawOneByteString(length);
+      ASSERT(!result.is_null());
       uint8_t* dest = result->GetChars();
       DisallowHeapAllocation no_gc;
       String::WriteToFlat(*str, dest, begin, end);
       return result;
     } else {
       Handle<SeqTwoByteString> result = NewRawTwoByteString(length);
+      ASSERT(!result.is_null());
       uc16* dest = result->GetChars();
       DisallowHeapAllocation no_gc;
       String::WriteToFlat(*str, dest, begin, end);
@@ -877,16 +880,6 @@ Handle<Map> Factory::CopyMap(Handle<Map> src,
 
 Handle<Map> Factory::CopyMap(Handle<Map> src) {
   CALL_HEAP_FUNCTION(isolate(), src->Copy(), Map);
-}
-
-
-Handle<Map> Factory::GetElementsTransitionMap(
-    Handle<JSObject> src,
-    ElementsKind elements_kind) {
-  Isolate* i = isolate();
-  CALL_HEAP_FUNCTION(i,
-                     src->GetElementsTransitionMap(i, elements_kind),
-                     Map);
 }
 
 
@@ -1483,16 +1476,6 @@ void Factory::NewJSArrayStorage(Handle<JSArray> array,
                                                                     length,
                                                                     capacity,
                                                                     mode));
-}
-
-
-void Factory::SetElementsCapacityAndLength(Handle<JSArray> array,
-                                           int capacity,
-                                           int length) {
-  ElementsAccessor* accessor = array->GetElementsAccessor();
-  CALL_HEAP_FUNCTION_VOID(
-      isolate(),
-      accessor->SetCapacityAndLength(*array, capacity, length));
 }
 
 

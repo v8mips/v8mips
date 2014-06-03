@@ -175,9 +175,12 @@ DEFINE_bool(harmony_modules, false,
             "enable harmony modules (implies block scoping)")
 DEFINE_bool(harmony_symbols, false,
             "enable harmony symbols (a.k.a. private names)")
+DEFINE_bool(harmony_promises, false, "enable harmony promises")
 DEFINE_bool(harmony_proxies, false, "enable harmony proxies")
 DEFINE_bool(harmony_collections, false,
-            "enable harmony collections (sets, maps)")
+            "enable harmony collections (sets, maps, weak sets, weak maps)")
+DEFINE_bool(harmony_weak_collections, false,
+            "enable only harmony weak collections (weak sets and maps)")
 DEFINE_bool(harmony_generators, false, "enable harmony generators")
 DEFINE_bool(harmony_iteration, false, "enable harmony iteration (for-of)")
 DEFINE_bool(harmony_numeric_literals, false,
@@ -197,10 +200,14 @@ DEFINE_implication(harmony, harmony_iteration)
 DEFINE_implication(harmony, harmony_numeric_literals)
 DEFINE_implication(harmony, harmony_strings)
 DEFINE_implication(harmony, harmony_arrays)
+DEFINE_implication(harmony_collections, harmony_weak_collections)
+DEFINE_implication(harmony_promises, harmony_weak_collections)
 DEFINE_implication(harmony_modules, harmony_scoping)
 
 DEFINE_implication(harmony, es_staging)
 DEFINE_implication(es_staging, harmony_maths)
+DEFINE_implication(es_staging, harmony_promises)
+DEFINE_implication(es_staging, harmony_weak_collections)
 
 // Flags for experimental implementation features.
 DEFINE_bool(packed_arrays, true, "optimizes arrays that have no holes")
@@ -269,6 +276,7 @@ DEFINE_string(trace_hydrogen_file, NULL, "trace hydrogen to given file name")
 DEFINE_string(trace_phase, "HLZ", "trace generated IR for specified phases")
 DEFINE_bool(trace_inlining, false, "trace inlining decisions")
 DEFINE_bool(trace_load_elimination, false, "trace load elimination")
+DEFINE_bool(trace_store_elimination, false, "trace store elimination")
 DEFINE_bool(trace_alloc, false, "trace register allocator")
 DEFINE_bool(trace_all_uses, false, "trace all use positions")
 DEFINE_bool(trace_range, false, "trace range analysis")
@@ -304,6 +312,7 @@ DEFINE_bool(analyze_environment_liveness, true,
             "analyze liveness of environment slots and zap dead values")
 DEFINE_bool(load_elimination, true, "use load elimination")
 DEFINE_bool(check_elimination, true, "use check elimination")
+DEFINE_bool(store_elimination, false, "use store elimination")
 DEFINE_bool(dead_code_elimination, true, "use dead code elimination")
 DEFINE_bool(fold_constants, true, "use constant folding")
 DEFINE_bool(trace_dead_code_elimination, false, "trace dead code elimination")

@@ -16424,7 +16424,7 @@ static void FixedTypedArrayTestHelper(
   v8::Handle<v8::Object> obj = v8::Object::New(CcTest::isolate());
   i::Handle<i::JSObject> jsobj = v8::Utils::OpenHandle(*obj);
   i::Handle<i::Map> fixed_array_map =
-      isolate->factory()->GetElementsTransitionMap(jsobj, elements_kind);
+      i::JSObject::GetElementsTransitionMap(jsobj, elements_kind);
   jsobj->set_map(*fixed_array_map);
   jsobj->set_elements(*fixed_array);
 
@@ -22193,6 +22193,8 @@ TEST(EventLogging) {
 
 
 TEST(Promises) {
+  i::FLAG_harmony_promises = true;
+
   LocalContext context;
   v8::Isolate* isolate = context->GetIsolate();
   v8::HandleScope scope(isolate);

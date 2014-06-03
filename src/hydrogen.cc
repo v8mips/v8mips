@@ -54,6 +54,7 @@
 #include "hydrogen-removable-simulates.h"
 #include "hydrogen-representation-changes.h"
 #include "hydrogen-sce.h"
+#include "hydrogen-store-elimination.h"
 #include "hydrogen-uint32-analysis.h"
 #include "lithium-allocator.h"
 #include "parser.h"
@@ -2070,9 +2071,10 @@ HValue* HGraphBuilder::BuildUncheckedStringAdd(
       // Fallback to the runtime to add the two strings.
       Add<HPushArgument>(left);
       Add<HPushArgument>(right);
-      Push(Add<HCallRuntime>(isolate()->factory()->empty_string(),
-                             Runtime::FunctionForId(Runtime::kStringAdd),
-                             2));
+      Push(Add<HCallRuntime>(
+            isolate()->factory()->empty_string(),
+            Runtime::FunctionForId(Runtime::kHiddenStringAdd),
+            2));
     }
     if_sameencodingandsequential.End();
   }
@@ -4040,6 +4042,8 @@ bool HGraph::Optimize(BailoutReason* bailout_reason) {
   if (FLAG_use_gvn) Run<HGlobalValueNumberingPhase>();
 
   if (FLAG_check_elimination) Run<HCheckEliminationPhase>();
+
+  if (FLAG_store_elimination) Run<HStoreEliminationPhase>();
 
   Run<HRangeAnalysisPhase>();
 
@@ -8399,6 +8403,7 @@ void HOptimizedGraphBuilder::VisitCallNew(CallNew* expr) {
 const HOptimizedGraphBuilder::InlineFunctionGenerator
     HOptimizedGraphBuilder::kInlineFunctionGenerators[] = {
         INLINE_FUNCTION_LIST(INLINE_FUNCTION_GENERATOR_ADDRESS)
+        INLINE_OPTIMIZED_FUNCTION_LIST(INLINE_FUNCTION_GENERATOR_ADDRESS)
 };
 #undef INLINE_FUNCTION_GENERATOR_ADDRESS
 
@@ -8601,7 +8606,8 @@ void HOptimizedGraphBuilder::VisitCallRuntime(CallRuntime* expr) {
   const Runtime::Function* function = expr->function();
   ASSERT(function != NULL);
 
-  if (function->intrinsic_type == Runtime::INLINE) {
+  if (function->intrinsic_type == Runtime::INLINE ||
+      function->intrinsic_type == Runtime::INLINE_OPTIMIZED) {
     ASSERT(expr->name()->length() > 0);
     ASSERT(expr->name()->Get(0) == '_');
     // Call to an inline function.

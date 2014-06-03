@@ -133,6 +133,7 @@ template<class T, class P> class WeakCallbackObject;
 class FunctionTemplate;
 class ObjectTemplate;
 class Data;
+template<typename T> class FunctionCallbackInfo;
 template<typename T> class PropertyCallbackInfo;
 class StackTrace;
 class StackFrame;
@@ -4974,8 +4975,11 @@ class V8_EXPORT V8 {
   /**
    * Initialize the ICU library bundled with V8. The embedder should only
    * invoke this method when using the bundled ICU. Returns true on success.
+   *
+   * If V8 was compiled with the ICU data in an external file, the location
+   * of the data file has to be provided.
    */
-  static bool InitializeICU();
+  static bool InitializeICU(const char* icu_data_file = NULL);
 
   /**
    * Sets the v8::Platform to use. This should be invoked before V8 is

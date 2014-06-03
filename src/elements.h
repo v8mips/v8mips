@@ -126,9 +126,10 @@ class ElementsAccessor {
   // elements. This method should only be called for array expansion OR by
   // runtime JavaScript code that use InternalArrays and don't care about
   // EcmaScript 5.1 semantics.
-  MUST_USE_RESULT virtual MaybeObject* SetCapacityAndLength(JSArray* array,
-                                                            int capacity,
-                                                            int length) = 0;
+  virtual void SetCapacityAndLength(
+      Handle<JSArray> array,
+      int capacity,
+      int length) = 0;
 
   // Deletes an element in an object, returning a new elements backing store.
   MUST_USE_RESULT virtual Handle<Object> Delete(
@@ -165,6 +166,15 @@ class ElementsAccessor {
       uint32_t destination_start,
       int copy_size,
       FixedArrayBase* source = NULL) = 0;
+
+  void CopyElements(
+      Handle<JSObject> from_holder,
+      Handle<FixedArrayBase> to,
+      ElementsKind from_kind,
+      Handle<FixedArrayBase> from = Handle<FixedArrayBase>::null()) {
+    CopyElements(from_holder, 0, from_kind, to, 0,
+                 kCopyToEndAndInitializeToHole, from);
+  }
 
   MUST_USE_RESULT MaybeObject* CopyElements(JSObject* from_holder,
                                             FixedArrayBase* to,
