@@ -72,7 +72,7 @@ namespace internal {
 
 Heap::Heap()
     : isolate_(NULL),
-      code_range_size_(kIs64BitArch ? 512 * MB : 0),
+      code_range_size_(0),
 // semispace_size_ should be a power of 2 and old_generation_size_ should be
 // a multiple of Page::kPageSize.
       reserved_semispace_size_(8 * (kPointerSize / 4) * MB),
@@ -168,15 +168,6 @@ Heap::Heap()
 
   // Ensure old_generation_size_ is a multiple of kPageSize.
   ASSERT(MB >= Page::kPageSize);
-
-  intptr_t max_virtual = OS::MaxVirtualMemory();
-
-  if (max_virtual > 0) {
-    if (code_range_size_ > 0) {
-      // Reserve no more than 1/8 of the memory for the code range.
-      code_range_size_ = Min(code_range_size_, max_virtual >> 3);
-    }
-  }
 
   memset(roots_, 0, sizeof(roots_[0]) * kRootListLength);
   native_contexts_list_ = NULL;
@@ -2689,6 +2680,21 @@ MaybeObject* Heap::AllocateCodeCache() {
 }
 
 
+MaybeObject* Heap::AllocatePolymorphicCodeCache() {
+  return AllocateStruct(POLYMORPHIC_CODE_CACHE_TYPE);
+}
+
+
+MaybeObject* Heap::AllocateAliasedArgumentsEntry(int aliased_context_slot) {
+  AliasedArgumentsEntry* entry;
+  { MaybeObject* maybe_entry = AllocateStruct(ALIASED_ARGUMENTS_ENTRY_TYPE);
+    if (!maybe_entry->To(&entry)) return maybe_entry;
+  }
+  entry->set_aliased_context_slot(aliased_context_slot);
+  return entry;
+}
+
+
 const Heap::StringTypeTable Heap::string_type_table[] = {
 #define STRING_TYPE_ELEMENT(type, size, name, camel_name)                      \
   {type, size, k##camel_name##MapRootIndex},
@@ -2890,6 +2896,7 @@ bool Heap::CreateInitialMaps() {
     }
 
     ALLOCATE_VARSIZE_MAP(FIXED_ARRAY_TYPE, hash_table)
+    ALLOCATE_VARSIZE_MAP(FIXED_ARRAY_TYPE, ordered_hash_table)
 
     ALLOCATE_VARSIZE_MAP(FIXED_ARRAY_TYPE, function_context)
     ALLOCATE_VARSIZE_MAP(FIXED_ARRAY_TYPE, catch_context)
@@ -3234,7 +3241,7 @@ bool Heap::CreateInitialObjects() {
   }
   set_non_monomorphic_cache(UnseededNumberDictionary::cast(obj));
 
-  { MaybeObject* maybe_obj = AllocateStruct(POLYMORPHIC_CODE_CACHE_TYPE);
+  { MaybeObject* maybe_obj = AllocatePolymorphicCodeCache();
     if (!maybe_obj->ToObject(&obj)) return false;
   }
   set_polymorphic_code_cache(PolymorphicCodeCache::cast(obj));
@@ -5285,8 +5292,14 @@ MaybeObject* Heap::AllocateConstantPoolArray(int number_of_int64_entries,
                                              int number_of_code_ptr_entries,
                                              int number_of_heap_ptr_entries,
                                              int number_of_int32_entries) {
-  ASSERT(number_of_int64_entries > 0 || number_of_code_ptr_entries > 0 ||
-         number_of_heap_ptr_entries > 0 || number_of_int32_entries > 0);
+  CHECK(number_of_int64_entries >= 0 &&
+        number_of_int64_entries <= ConstantPoolArray::kMaxEntriesPerType &&
+        number_of_code_ptr_entries >= 0 &&
+        number_of_code_ptr_entries <= ConstantPoolArray::kMaxEntriesPerType &&
+        number_of_heap_ptr_entries >= 0 &&
+        number_of_heap_ptr_entries <= ConstantPoolArray::kMaxEntriesPerType &&
+        number_of_int32_entries >= 0 &&
+        number_of_int32_entries <= ConstantPoolArray::kMaxEntriesPerType);
   int size = ConstantPoolArray::SizeFor(number_of_int64_entries,
                                         number_of_code_ptr_entries,
                                         number_of_heap_ptr_entries,
@@ -5305,10 +5318,10 @@ MaybeObject* Heap::AllocateConstantPoolArray(int number_of_int64_entries,
 
   ConstantPoolArray* constant_pool =
       reinterpret_cast<ConstantPoolArray*>(object);
-  constant_pool->SetEntryCounts(number_of_int64_entries,
-                                number_of_code_ptr_entries,
-                                number_of_heap_ptr_entries,
-                                number_of_int32_entries);
+  constant_pool->Init(number_of_int64_entries,
+                      number_of_code_ptr_entries,
+                      number_of_heap_ptr_entries,
+                      number_of_int32_entries);
   if (number_of_code_ptr_entries > 0) {
     int offset =
         constant_pool->OffsetOfElementAt(constant_pool->first_code_ptr_index());
@@ -5337,7 +5350,7 @@ MaybeObject* Heap::AllocateEmptyConstantPoolArray() {
     if (!maybe_result->ToObject(&result)) return maybe_result;
   }
   HeapObject::cast(result)->set_map_no_write_barrier(constant_pool_array_map());
-  ConstantPoolArray::cast(result)->SetEntryCounts(0, 0, 0, 0);
+  ConstantPoolArray::cast(result)->Init(0, 0, 0, 0);
   return result;
 }
 
@@ -5390,97 +5403,6 @@ MaybeObject* Heap::AllocatePrivateSymbol() {
   if (!maybe->To(&symbol)) return maybe;
   symbol->set_is_private(true);
   return symbol;
-}
-
-
-MaybeObject* Heap::AllocateGlobalContext(JSFunction* function,
-                                         ScopeInfo* scope_info) {
-  Object* result;
-  { MaybeObject* maybe_result =
-        AllocateFixedArray(scope_info->ContextLength(), TENURED);
-    if (!maybe_result->ToObject(&result)) return maybe_result;
-  }
-  Context* context = reinterpret_cast<Context*>(result);
-  context->set_map_no_write_barrier(global_context_map());
-  context->set_closure(function);
-  context->set_previous(function->context());
-  context->set_extension(scope_info);
-  context->set_global_object(function->context()->global_object());
-  ASSERT(context->IsGlobalContext());
-  ASSERT(result->IsContext());
-  return context;
-}
-
-
-MaybeObject* Heap::AllocateFunctionContext(int length, JSFunction* function) {
-  ASSERT(length >= Context::MIN_CONTEXT_SLOTS);
-  Object* result;
-  { MaybeObject* maybe_result = AllocateFixedArray(length);
-    if (!maybe_result->ToObject(&result)) return maybe_result;
-  }
-  Context* context = reinterpret_cast<Context*>(result);
-  context->set_map_no_write_barrier(function_context_map());
-  context->set_closure(function);
-  context->set_previous(function->context());
-  context->set_extension(Smi::FromInt(0));
-  context->set_global_object(function->context()->global_object());
-  return context;
-}
-
-
-MaybeObject* Heap::AllocateCatchContext(JSFunction* function,
-                                        Context* previous,
-                                        String* name,
-                                        Object* thrown_object) {
-  STATIC_ASSERT(Context::MIN_CONTEXT_SLOTS == Context::THROWN_OBJECT_INDEX);
-  Object* result;
-  { MaybeObject* maybe_result =
-        AllocateFixedArray(Context::MIN_CONTEXT_SLOTS + 1);
-    if (!maybe_result->ToObject(&result)) return maybe_result;
-  }
-  Context* context = reinterpret_cast<Context*>(result);
-  context->set_map_no_write_barrier(catch_context_map());
-  context->set_closure(function);
-  context->set_previous(previous);
-  context->set_extension(name);
-  context->set_global_object(previous->global_object());
-  context->set(Context::THROWN_OBJECT_INDEX, thrown_object);
-  return context;
-}
-
-
-MaybeObject* Heap::AllocateWithContext(JSFunction* function,
-                                       Context* previous,
-                                       JSReceiver* extension) {
-  Object* result;
-  { MaybeObject* maybe_result = AllocateFixedArray(Context::MIN_CONTEXT_SLOTS);
-    if (!maybe_result->ToObject(&result)) return maybe_result;
-  }
-  Context* context = reinterpret_cast<Context*>(result);
-  context->set_map_no_write_barrier(with_context_map());
-  context->set_closure(function);
-  context->set_previous(previous);
-  context->set_extension(extension);
-  context->set_global_object(previous->global_object());
-  return context;
-}
-
-
-MaybeObject* Heap::AllocateBlockContext(JSFunction* function,
-                                        Context* previous,
-                                        ScopeInfo* scope_info) {
-  Object* result;
-  { MaybeObject* maybe_result =
-        AllocateFixedArrayWithHoles(scope_info->ContextLength());
-    if (!maybe_result->ToObject(&result)) return maybe_result;
-  }
-  Context* context = reinterpret_cast<Context*>(result);
-  context->set_map_no_write_barrier(block_context_map());
-  context->set_closure(function);
-  context->set_previous(previous);
-  context->set_extension(scope_info);
-  context->set_global_object(previous->global_object());
-  return context;
 }
 
 
@@ -6210,7 +6132,8 @@ void Heap::IterateStrongRoots(ObjectVisitor* v, VisitMode mode) {
 // size is not big enough to fit all the initial objects.
 bool Heap::ConfigureHeap(int max_semispace_size,
                          intptr_t max_old_gen_size,
-                         intptr_t max_executable_size) {
+                         intptr_t max_executable_size,
+                         intptr_t code_range_size) {
   if (HasBeenSetUp()) return false;
 
   if (FLAG_stress_compaction) {
@@ -6284,6 +6207,8 @@ bool Heap::ConfigureHeap(int max_semispace_size,
           FixedArray::SizeFor(JSObject::kInitialMaxFastElementArray) +
           AllocationMemento::kSize));
 
+  code_range_size_ = code_range_size;
+
   configured_ = true;
   return true;
 }
@@ -6292,7 +6217,8 @@ bool Heap::ConfigureHeap(int max_semispace_size,
 bool Heap::ConfigureHeapDefault() {
   return ConfigureHeap(static_cast<intptr_t>(FLAG_max_new_space_size / 2) * KB,
                        static_cast<intptr_t>(FLAG_max_old_space_size) * MB,
-                       static_cast<intptr_t>(FLAG_max_executable_size) * MB);
+                       static_cast<intptr_t>(FLAG_max_executable_size) * MB,
+                       static_cast<intptr_t>(0));
 }
 
 
@@ -6445,16 +6371,10 @@ bool Heap::SetUp() {
   if (old_data_space_ == NULL) return false;
   if (!old_data_space_->SetUp()) return false;
 
+  if (!isolate_->code_range()->SetUp(code_range_size_)) return false;
+
   // Initialize the code space, set its maximum capacity to the old
   // generation size. It needs executable memory.
-  // On 64-bit platform(s), we put all code objects in a 2 GB range of
-  // virtual address space, so that they can call each other with near calls.
-  if (code_range_size_ > 0) {
-    if (!isolate_->code_range()->SetUp(code_range_size_)) {
-      return false;
-    }
-  }
-
   code_space_ =
       new OldSpace(this, max_old_generation_size_, CODE_SPACE, EXECUTABLE);
   if (code_space_ == NULL) return false;

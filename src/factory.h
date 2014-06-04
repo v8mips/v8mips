@@ -46,8 +46,6 @@ class Factory V8_FINAL {
 
   Handle<NameDictionary> NewNameDictionary(int at_least_space_for);
 
-  Handle<ObjectHashSet> NewObjectHashSet(int at_least_space_for);
-
   Handle<ObjectHashTable> NewObjectHashTable(
       int at_least_space_for,
       MinimumCapacity capacity_option = USE_DEFAULT_MINIMUM_CAPACITY);
@@ -59,13 +57,11 @@ class Factory V8_FINAL {
 
   Handle<DescriptorArray> NewDescriptorArray(int number_of_descriptors,
                                              int slack = 0);
-
-  // Create a DeoptimizationInputData.
+  Handle<TransitionArray> NewTransitionArray(int number_of_transitions);
+  Handle<TransitionArray> NewSimpleTransitionArray(Handle<Map> target);
   Handle<DeoptimizationInputData> NewDeoptimizationInputData(
       int deopt_entry_count,
       PretenureFlag pretenure);
-
-  // Create a DeoptimizationOutputData.
   Handle<DeoptimizationOutputData> NewDeoptimizationOutputData(
       int deopt_entry_count,
       PretenureFlag pretenure);
@@ -146,6 +142,8 @@ class Factory V8_FINAL {
       int length,
       PretenureFlag pretenure = NOT_TENURED);
 
+  Handle<String> LookupSingleCharacterStringFromCode(uint32_t index);
+
   // Create a new cons string object which consists of a pair of strings.
   MUST_USE_RESULT MaybeHandle<String> NewConsString(Handle<String> left,
                                                     Handle<String> right);
@@ -204,7 +202,7 @@ class Factory V8_FINAL {
   // Create a 'with' context.
   Handle<Context> NewWithContext(Handle<JSFunction> function,
                                  Handle<Context> previous,
-                                 Handle<JSObject> extension);
+                                 Handle<JSReceiver> extension);
 
   // Create a block context.
   Handle<Context> NewBlockContext(Handle<JSFunction> function,
@@ -215,7 +213,6 @@ class Factory V8_FINAL {
   // the old generation).
   Handle<Struct> NewStruct(InstanceType type);
 
-  // Create an AliasedArgumentsEntry.
   Handle<AliasedArgumentsEntry> NewAliasedArgumentsEntry(
       int aliased_context_slot);
 
@@ -324,6 +321,9 @@ class Factory V8_FINAL {
       PretenureFlag pretenure = NOT_TENURED,
       bool allocate_properties = true,
       Handle<AllocationSite> allocation_site = Handle<AllocationSite>::null());
+
+  Handle<JSObject> NewJSObjectFromMapForDeoptimizer(
+      Handle<Map> map, PretenureFlag pretenure = NOT_TENURED);
 
   // JS modules are pretenured.
   Handle<JSModule> NewJSModule(Handle<Context> context,

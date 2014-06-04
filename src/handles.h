@@ -287,23 +287,8 @@ class DeferredHandleScope {
 // an object of expected type, or the handle is an error if running out
 // of space or encountering an internal error.
 
-// Flattens a string.
-void FlattenString(Handle<String> str);
-
-// Flattens a string and returns the underlying external or sequential
-// string.
-Handle<String> FlattenGetString(Handle<String> str);
-
-Handle<Object> DeleteProperty(Handle<JSObject> object, Handle<Object> key);
-
-Handle<Object> ForceDeleteProperty(Handle<JSObject> object, Handle<Object> key);
-
-Handle<Object> HasProperty(Handle<JSReceiver> obj, Handle<Object> key);
-
-Handle<Object> GetProperty(Handle<JSReceiver> obj, const char* name);
-
-Handle<String> LookupSingleCharacterStringFromCode(Isolate* isolate,
-                                                   uint32_t index);
+MUST_USE_RESULT MaybeHandle<Object> GetProperty(Handle<JSReceiver> obj,
+                                                const char* name);
 
 // Get the JS object corresponding to the given script; create it
 // if none exists.
@@ -333,10 +318,10 @@ enum KeyCollectionType { LOCAL_ONLY, INCLUDE_PROTOS };
 
 // Computes the enumerable keys for a JSObject. Used for implementing
 // "for (n in object) { }".
-Handle<FixedArray> GetKeysInFixedArrayFor(Handle<JSReceiver> object,
-                                          KeyCollectionType type,
-                                          bool* threw);
-Handle<JSArray> GetKeysFor(Handle<JSReceiver> object, bool* threw);
+MUST_USE_RESULT MaybeHandle<FixedArray> GetKeysInFixedArrayFor(
+    Handle<JSReceiver> object,
+    KeyCollectionType type);
+MUST_USE_RESULT MaybeHandle<JSArray> GetKeysFor(Handle<JSReceiver> object);
 Handle<FixedArray> ReduceFixedArrayTo(Handle<FixedArray> array, int length);
 Handle<FixedArray> GetEnumPropertyKeys(Handle<JSObject> object,
                                        bool cache_result);

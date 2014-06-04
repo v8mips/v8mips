@@ -73,13 +73,13 @@ class ElementsAccessor {
   // can optionally pass in the backing store to use for the check, which must
   // be compatible with the ElementsKind of the ElementsAccessor. If
   // backing_store is NULL, the holder->elements() is used as the backing store.
-  MUST_USE_RESULT virtual Handle<Object> Get(
+  MUST_USE_RESULT virtual MaybeHandle<Object> Get(
       Handle<Object> receiver,
       Handle<JSObject> holder,
       uint32_t key,
       Handle<FixedArrayBase> backing_store) = 0;
 
-  MUST_USE_RESULT inline Handle<Object> Get(
+  MUST_USE_RESULT inline MaybeHandle<Object> Get(
       Handle<Object> receiver,
       Handle<JSObject> holder,
       uint32_t key) {
@@ -145,7 +145,7 @@ class ElementsAccessor {
   // changing array sizes as defined in EcmaScript 5.1 15.4.5.2, i.e. array that
   // have non-deletable elements can only be shrunk to the size of highest
   // element that is non-deletable.
-  MUST_USE_RESULT virtual Handle<Object> SetLength(
+  MUST_USE_RESULT virtual MaybeHandle<Object> SetLength(
       Handle<JSArray> holder,
       Handle<Object> new_length) = 0;
 
@@ -161,7 +161,7 @@ class ElementsAccessor {
       int length) = 0;
 
   // Deletes an element in an object, returning a new elements backing store.
-  MUST_USE_RESULT virtual Handle<Object> Delete(
+  MUST_USE_RESULT virtual MaybeHandle<Object> Delete(
       Handle<JSObject> holder,
       uint32_t key,
       JSReceiver::DeleteMode mode) = 0;
@@ -206,13 +206,13 @@ class ElementsAccessor {
       *from_holder, 0, from_kind, to, 0, kCopyToEndAndInitializeToHole);
   }
 
-  virtual Handle<FixedArray> AddElementsToFixedArray(
+  MUST_USE_RESULT virtual MaybeHandle<FixedArray> AddElementsToFixedArray(
       Handle<Object> receiver,
       Handle<JSObject> holder,
       Handle<FixedArray> to,
       Handle<FixedArrayBase> from) = 0;
 
-  inline Handle<FixedArray> AddElementsToFixedArray(
+  MUST_USE_RESULT inline MaybeHandle<FixedArray> AddElementsToFixedArray(
       Handle<Object> receiver,
       Handle<JSObject> holder,
       Handle<FixedArray> to) {
@@ -226,11 +226,7 @@ class ElementsAccessor {
     return elements_accessors_[elements_kind];
   }
 
-  // TODO(ishell): Temporary wrapper until handlified.
-  inline static ElementsAccessor* ForArray(Handle<FixedArrayBase> array) {
-    return ForArray(*array);
-  }
-  static ElementsAccessor* ForArray(FixedArrayBase* array);
+  static ElementsAccessor* ForArray(Handle<FixedArrayBase> array);
 
   static void InitializeOncePerProcess();
   static void TearDown();
@@ -238,7 +234,7 @@ class ElementsAccessor {
  protected:
   friend class SloppyArgumentsElementsAccessor;
 
-  virtual uint32_t GetCapacity(FixedArrayBase* backing_store) = 0;
+  virtual uint32_t GetCapacity(Handle<FixedArrayBase> backing_store) = 0;
 
   // Element handlers distinguish between indexes and keys when they manipulate
   // elements.  Indexes refer to elements in terms of their location in the
@@ -251,26 +247,6 @@ class ElementsAccessor {
   virtual uint32_t GetKeyForIndex(Handle<FixedArrayBase> backing_store,
                                   uint32_t index) = 0;
 
-  // TODO(ishell): Non-handlified versions, used only by accessors'
-  // implementations. To be removed once elements.cc is handlified.
-  MUST_USE_RESULT virtual MaybeObject* Get(
-      Object* receiver,
-      JSObject* holder,
-      uint32_t key,
-      FixedArrayBase* backing_store) = 0;
-
-  MUST_USE_RESULT virtual PropertyAttributes GetAttributes(
-      Object* receiver,
-      JSObject* holder,
-      uint32_t key,
-      FixedArrayBase* backing_store) = 0;
-
-  MUST_USE_RESULT virtual PropertyType GetType(
-      Object* receiver,
-      JSObject* holder,
-      uint32_t key,
-      FixedArrayBase* backing_store) = 0;
-
  private:
   static ElementsAccessor** elements_accessors_;
   const char* name_;
@@ -278,11 +254,12 @@ class ElementsAccessor {
   DISALLOW_COPY_AND_ASSIGN(ElementsAccessor);
 };
 
-void CheckArrayAbuse(JSObject* obj, const char* op, uint32_t key,
+void CheckArrayAbuse(Handle<JSObject> obj, const char* op, uint32_t key,
                      bool allow_appending = false);
 
-Handle<Object> ArrayConstructInitializeElements(Handle<JSArray> array,
-                                                Arguments* args);
+MUST_USE_RESULT MaybeHandle<Object> ArrayConstructInitializeElements(
+    Handle<JSArray> array,
+    Arguments* args);
 
 } }  // namespace v8::internal
 

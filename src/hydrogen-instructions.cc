@@ -511,6 +511,7 @@ bool HValue::CanReplaceWithDummyUses() {
       !(block()->IsReachable() ||
         IsBlockEntry() ||
         IsControlInstruction() ||
+        IsArgumentsObject() ||
         IsCapturedObject() ||
         IsSimulate() ||
         IsEnterInlined() ||
@@ -4099,7 +4100,7 @@ HInstruction* HStringCharFromCode::New(
       if (std::isfinite(c_code->DoubleValue())) {
         uint32_t code = c_code->NumberValueAsInteger32() & 0xffff;
         return HConstant::New(zone, context,
-            LookupSingleCharacterStringFromCode(isolate, code));
+            isolate->factory()->LookupSingleCharacterStringFromCode(code));
       }
       return HConstant::New(zone, context, isolate->factory()->empty_string());
     }

@@ -134,6 +134,14 @@ PropertyDetails PropertyDetails::AsDeleted() const {
     RELEASE_WRITE_FIELD(this, offset, Smi::FromInt(value)); \
   }
 
+#define NOBARRIER_SMI_ACCESSORS(holder, name, offset)          \
+  int holder::nobarrier_##name() {                             \
+    Object* value = NOBARRIER_READ_FIELD(this, offset);        \
+    return Smi::cast(value)->value();                          \
+  }                                                            \
+  void holder::nobarrier_set_##name(int value) {               \
+    NOBARRIER_WRITE_FIELD(this, offset, Smi::FromInt(value));  \
+  }
 
 #define BOOL_GETTER(holder, field, name, offset)           \
   bool holder::name() {                                    \
@@ -920,6 +928,13 @@ bool Object::IsObjectHashTable() {
 }
 
 
+bool Object::IsOrderedHashTable() {
+  return IsHeapObject() &&
+      HeapObject::cast(this)->map() ==
+      HeapObject::cast(this)->GetHeap()->ordered_hash_table_map();
+}
+
+
 bool Object::IsPrimitive() {
   return IsOddball() || IsNumber() || IsString();
 }
@@ -1066,9 +1081,9 @@ bool Object::HasSpecificClassOf(String* name) {
 }
 
 
-Handle<Object> Object::GetElement(Isolate* isolate,
-                                  Handle<Object> object,
-                                  uint32_t index) {
+MaybeHandle<Object> Object::GetElement(Isolate* isolate,
+                                       Handle<Object> object,
+                                       uint32_t index) {
   // GetElement can trigger a getter which can cause allocation.
   // This was not always the case. This ASSERT is here to catch
   // leftover incorrect uses.
@@ -1081,8 +1096,8 @@ Handle<Object> Object::GetElementNoExceptionThrown(Isolate* isolate,
                                                    Handle<Object> object,
                                                    uint32_t index) {
   Handle<Object> result =
-      Object::GetElementWithReceiver(isolate, object, object, index);
-  CHECK_NOT_EMPTY_HANDLE(isolate, result);
+      Object::GetElementWithReceiver(
+          isolate, object, object, index).ToHandleChecked();
   return result;
 }
 
@@ -1090,11 +1105,6 @@ Handle<Object> Object::GetElementNoExceptionThrown(Isolate* isolate,
 MaybeObject* Object::GetProperty(Name* key) {
   PropertyAttributes attributes;
   return GetPropertyWithReceiver(this, key, &attributes);
-}
-
-
-MaybeObject* Object::GetProperty(Name* key, PropertyAttributes* attributes) {
-  return GetPropertyWithReceiver(this, key, attributes);
 }
 
 
@@ -1108,7 +1118,7 @@ MaybeObject* Object::GetProperty(Name* key, PropertyAttributes* attributes) {
   reinterpret_cast<Object*>(                                             \
       Acquire_Load(reinterpret_cast<AtomicWord*>(FIELD_ADDR(p, offset))))
 
-#define NO_BARRIER_READ_FIELD(p, offset)                                    \
+#define NOBARRIER_READ_FIELD(p, offset)                                     \
   reinterpret_cast<Object*>(                                                \
       NoBarrier_Load(reinterpret_cast<AtomicWord*>(FIELD_ADDR(p, offset))))
 
@@ -1119,7 +1129,7 @@ MaybeObject* Object::GetProperty(Name* key, PropertyAttributes* attributes) {
   Release_Store(reinterpret_cast<AtomicWord*>(FIELD_ADDR(p, offset)),   \
                 reinterpret_cast<AtomicWord>(value));
 
-#define NO_BARRIER_WRITE_FIELD(p, offset, value)                           \
+#define NOBARRIER_WRITE_FIELD(p, offset, value)                            \
   NoBarrier_Store(reinterpret_cast<AtomicWord*>(FIELD_ADDR(p, offset)),    \
                   reinterpret_cast<AtomicWord>(value));
 
@@ -1217,9 +1227,16 @@ MaybeObject* Object::GetProperty(Name* key, PropertyAttributes* attributes) {
 #define READ_BYTE_FIELD(p, offset) \
   (*reinterpret_cast<byte*>(FIELD_ADDR(p, offset)))
 
+#define NOBARRIER_READ_BYTE_FIELD(p, offset)               \
+  static_cast<byte>(NoBarrier_Load(                        \
+      reinterpret_cast<Atomic8*>(FIELD_ADDR(p, offset))) )
+
 #define WRITE_BYTE_FIELD(p, offset, value) \
   (*reinterpret_cast<byte*>(FIELD_ADDR(p, offset)) = value)
 
+#define NOBARRIER_WRITE_BYTE_FIELD(p, offset, value)                 \
+  NoBarrier_Store(reinterpret_cast<Atomic8*>(FIELD_ADDR(p, offset)), \
+                  static_cast<Atomic8>(value));
 
 Object** HeapObject::RawField(HeapObject* obj, int byte_offset) {
   return &READ_FIELD(obj, byte_offset);
@@ -1388,6 +1405,11 @@ void HeapObject::synchronized_set_map(Map* value) {
 }
 
 
+void HeapObject::synchronized_set_map_no_write_barrier(Map* value) {
+  synchronized_set_map_word(MapWord::FromMap(value));
+}
+
+
 // Unsafe accessor omitting write barrier.
 void HeapObject::set_map_no_write_barrier(Map* value) {
   set_map_word(MapWord::FromMap(value));
@@ -1396,12 +1418,12 @@ void HeapObject::set_map_no_write_barrier(Map* value) {
 
 MapWord HeapObject::map_word() {
   return MapWord(
-      reinterpret_cast<uintptr_t>(NO_BARRIER_READ_FIELD(this, kMapOffset)));
+      reinterpret_cast<uintptr_t>(NOBARRIER_READ_FIELD(this, kMapOffset)));
 }
 
 
 void HeapObject::set_map_word(MapWord map_word) {
-  NO_BARRIER_WRITE_FIELD(
+  NOBARRIER_WRITE_FIELD(
       this, kMapOffset, reinterpret_cast<Object*>(map_word.value_));
 }
 
@@ -1728,28 +1750,6 @@ void JSObject::EnsureCanContainElements(Handle<JSObject> object,
 }
 
 
-MaybeObject* JSObject::GetElementsTransitionMap(Isolate* isolate,
-                                                ElementsKind to_kind) {
-  Map* current_map = map();
-  ElementsKind from_kind = current_map->elements_kind();
-  if (from_kind == to_kind) return current_map;
-
-  Context* native_context = isolate->context()->native_context();
-  Object* maybe_array_maps = native_context->js_array_maps();
-  if (maybe_array_maps->IsFixedArray()) {
-    FixedArray* array_maps = FixedArray::cast(maybe_array_maps);
-    if (array_maps->get(from_kind) == current_map) {
-      Object* maybe_transitioned_map = array_maps->get(to_kind);
-      if (maybe_transitioned_map->IsMap()) {
-        return Map::cast(maybe_transitioned_map);
-      }
-    }
-  }
-
-  return GetElementsTransitionMapSlow(to_kind);
-}
-
-
 void JSObject::SetMapAndElements(Handle<JSObject> object,
                                  Handle<Map> new_map,
                                  Handle<FixedArrayBase> value) {
@@ -1778,50 +1778,8 @@ void JSObject::initialize_properties() {
 
 
 void JSObject::initialize_elements() {
-  if (map()->has_fast_smi_or_object_elements() ||
-      map()->has_fast_double_elements()) {
-    ASSERT(!GetHeap()->InNewSpace(GetHeap()->empty_fixed_array()));
-    WRITE_FIELD(this, kElementsOffset, GetHeap()->empty_fixed_array());
-  } else if (map()->has_external_array_elements()) {
-    ExternalArray* empty_array = GetHeap()->EmptyExternalArrayForMap(map());
-    ASSERT(!GetHeap()->InNewSpace(empty_array));
-    WRITE_FIELD(this, kElementsOffset, empty_array);
-  } else if (map()->has_fixed_typed_array_elements()) {
-    FixedTypedArrayBase* empty_array =
-      GetHeap()->EmptyFixedTypedArrayForMap(map());
-    ASSERT(!GetHeap()->InNewSpace(empty_array));
-    WRITE_FIELD(this, kElementsOffset, empty_array);
-  } else {
-    UNREACHABLE();
-  }
-}
-
-
-MaybeObject* JSObject::ResetElements() {
-  if (map()->is_observed()) {
-    // Maintain invariant that observed elements are always in dictionary mode.
-    SeededNumberDictionary* dictionary;
-    MaybeObject* maybe = SeededNumberDictionary::Allocate(GetHeap(), 0);
-    if (!maybe->To(&dictionary)) return maybe;
-    if (map() == GetHeap()->sloppy_arguments_elements_map()) {
-      FixedArray::cast(elements())->set(1, dictionary);
-    } else {
-      set_elements(dictionary);
-    }
-    return this;
-  }
-
-  ElementsKind elements_kind = GetInitialFastElementsKind();
-  if (!FLAG_smi_only_arrays) {
-    elements_kind = FastSmiToObjectElementsKind(elements_kind);
-  }
-  MaybeObject* maybe = GetElementsTransitionMap(GetIsolate(), elements_kind);
-  Map* map;
-  if (!maybe->To(&map)) return maybe;
-  set_map(map);
-  initialize_elements();
-
-  return this;
+  FixedArrayBase* elements = map()->GetInitialElements();
+  WRITE_FIELD(this, kElementsOffset, elements);
 }
 
 
@@ -2175,6 +2133,11 @@ Object* FixedArray::get(int index) {
 }
 
 
+Handle<Object> FixedArray::get(Handle<FixedArray> array, int index) {
+  return handle(array->get(index), array->GetIsolate());
+}
+
+
 bool FixedArray::is_the_hole(int index) {
   return get(index) == GetHeap()->the_hole_value();
 }
@@ -2240,11 +2203,12 @@ MaybeObject* FixedDoubleArray::get(int index) {
 }
 
 
-Handle<Object> FixedDoubleArray::get_as_handle(int index) {
-  if (is_the_hole(index)) {
-    return GetIsolate()->factory()->the_hole_value();
+Handle<Object> FixedDoubleArray::get(Handle<FixedDoubleArray> array,
+                                     int index) {
+  if (array->is_the_hole(index)) {
+    return array->GetIsolate()->factory()->the_hole_value();
   } else {
-    return GetIsolate()->factory()->NewNumber(get_scalar(index));
+    return array->GetIsolate()->factory()->NewNumber(array->get_scalar(index));
   }
 }
 
@@ -2284,16 +2248,43 @@ void FixedDoubleArray::FillWithHoles(int from, int to) {
 }
 
 
-SMI_ACCESSORS(
-    ConstantPoolArray, first_code_ptr_index, kFirstCodePointerIndexOffset)
-SMI_ACCESSORS(
-    ConstantPoolArray, first_heap_ptr_index, kFirstHeapPointerIndexOffset)
-SMI_ACCESSORS(
-    ConstantPoolArray, first_int32_index, kFirstInt32IndexOffset)
+void ConstantPoolArray::set_weak_object_state(
+      ConstantPoolArray::WeakObjectState state) {
+  int old_layout_field = READ_INT_FIELD(this, kArrayLayoutOffset);
+  int new_layout_field = WeakObjectStateField::update(old_layout_field, state);
+  WRITE_INT_FIELD(this, kArrayLayoutOffset, new_layout_field);
+}
+
+
+ConstantPoolArray::WeakObjectState ConstantPoolArray::get_weak_object_state() {
+  int layout_field = READ_INT_FIELD(this, kArrayLayoutOffset);
+  return WeakObjectStateField::decode(layout_field);
+}
 
 
 int ConstantPoolArray::first_int64_index() {
   return 0;
+}
+
+
+int ConstantPoolArray::first_code_ptr_index() {
+  int layout_field = READ_INT_FIELD(this, kArrayLayoutOffset);
+  return first_int64_index() +
+      NumberOfInt64EntriesField::decode(layout_field);
+}
+
+
+int ConstantPoolArray::first_heap_ptr_index() {
+  int layout_field = READ_INT_FIELD(this, kArrayLayoutOffset);
+  return first_code_ptr_index() +
+      NumberOfCodePtrEntriesField::decode(layout_field);
+}
+
+
+int ConstantPoolArray::first_int32_index() {
+  int layout_field = READ_INT_FIELD(this, kArrayLayoutOffset);
+  return first_heap_ptr_index() +
+      NumberOfHeapPtrEntriesField::decode(layout_field);
 }
 
 
@@ -2317,18 +2308,20 @@ int ConstantPoolArray::count_of_int32_entries() {
 }
 
 
-void ConstantPoolArray::SetEntryCounts(int number_of_int64_entries,
-                                       int number_of_code_ptr_entries,
-                                       int number_of_heap_ptr_entries,
-                                       int number_of_int32_entries) {
-  int current_index = number_of_int64_entries;
-  set_first_code_ptr_index(current_index);
-  current_index += number_of_code_ptr_entries;
-  set_first_heap_ptr_index(current_index);
-  current_index += number_of_heap_ptr_entries;
-  set_first_int32_index(current_index);
-  current_index += number_of_int32_entries;
-  set_length(current_index);
+void ConstantPoolArray::Init(int number_of_int64_entries,
+                             int number_of_code_ptr_entries,
+                             int number_of_heap_ptr_entries,
+                             int number_of_int32_entries) {
+  set_length(number_of_int64_entries +
+             number_of_code_ptr_entries +
+             number_of_heap_ptr_entries +
+             number_of_int32_entries);
+  int layout_field =
+      NumberOfInt64EntriesField::encode(number_of_int64_entries) |
+      NumberOfCodePtrEntriesField::encode(number_of_code_ptr_entries) |
+      NumberOfHeapPtrEntriesField::encode(number_of_heap_ptr_entries) |
+      WeakObjectStateField::encode(NO_WEAK_OBJECTS);
+  WRITE_INT_FIELD(this, kArrayLayoutOffset, layout_field);
 }
 
 
@@ -2635,6 +2628,27 @@ void Map::LookupTransition(JSObject* holder,
 }
 
 
+FixedArrayBase* Map::GetInitialElements() {
+  if (has_fast_smi_or_object_elements() ||
+      has_fast_double_elements()) {
+    ASSERT(!GetHeap()->InNewSpace(GetHeap()->empty_fixed_array()));
+    return GetHeap()->empty_fixed_array();
+  } else if (has_external_array_elements()) {
+    ExternalArray* empty_array = GetHeap()->EmptyExternalArrayForMap(this);
+    ASSERT(!GetHeap()->InNewSpace(empty_array));
+    return empty_array;
+  } else if (has_fixed_typed_array_elements()) {
+    FixedTypedArrayBase* empty_array =
+      GetHeap()->EmptyFixedTypedArrayForMap(this);
+    ASSERT(!GetHeap()->InNewSpace(empty_array));
+    return empty_array;
+  } else {
+    UNREACHABLE();
+  }
+  return NULL;
+}
+
+
 Object** DescriptorArray::GetKeySlot(int descriptor_number) {
   ASSERT(descriptor_number < number_of_descriptors());
   return RawFieldOfElementAt(ToKeyIndex(descriptor_number));
@@ -2739,8 +2753,8 @@ AccessorDescriptor* DescriptorArray::GetCallbacks(int descriptor_number) {
 
 
 void DescriptorArray::Get(int descriptor_number, Descriptor* desc) {
-  desc->Init(GetKey(descriptor_number),
-             GetValue(descriptor_number),
+  desc->Init(handle(GetKey(descriptor_number), GetIsolate()),
+             handle(GetValue(descriptor_number), GetIsolate()),
              GetDetails(descriptor_number));
 }
 
@@ -2753,10 +2767,10 @@ void DescriptorArray::Set(int descriptor_number,
 
   NoIncrementalWriteBarrierSet(this,
                                ToKeyIndex(descriptor_number),
-                               desc->GetKey());
+                               *desc->GetKey());
   NoIncrementalWriteBarrierSet(this,
                                ToValueIndex(descriptor_number),
-                               desc->GetValue());
+                               *desc->GetValue());
   NoIncrementalWriteBarrierSet(this,
                                ToDetailsIndex(descriptor_number),
                                desc->GetDetails().AsSmi());
@@ -2767,14 +2781,15 @@ void DescriptorArray::Set(int descriptor_number, Descriptor* desc) {
   // Range check.
   ASSERT(descriptor_number < number_of_descriptors());
 
-  set(ToKeyIndex(descriptor_number), desc->GetKey());
-  set(ToValueIndex(descriptor_number), desc->GetValue());
+  set(ToKeyIndex(descriptor_number), *desc->GetKey());
+  set(ToValueIndex(descriptor_number), *desc->GetValue());
   set(ToDetailsIndex(descriptor_number), desc->GetDetails().AsSmi());
 }
 
 
 void DescriptorArray::Append(Descriptor* desc,
                              const WhitenessWitness& witness) {
+  DisallowHeapAllocation no_gc;
   int descriptor_number = number_of_descriptors();
   SetNumberOfDescriptors(descriptor_number + 1);
   Set(descriptor_number, desc, witness);
@@ -2794,6 +2809,7 @@ void DescriptorArray::Append(Descriptor* desc,
 
 
 void DescriptorArray::Append(Descriptor* desc) {
+  DisallowHeapAllocation no_gc;
   int descriptor_number = number_of_descriptors();
   SetNumberOfDescriptors(descriptor_number + 1);
   Set(descriptor_number, desc);
@@ -2989,6 +3005,7 @@ SMI_ACCESSORS(FixedArrayBase, length, kLengthOffset)
 SYNCHRONIZED_SMI_ACCESSORS(FixedArrayBase, length, kLengthOffset)
 
 SMI_ACCESSORS(FreeSpace, size, kSizeOffset)
+NOBARRIER_SMI_ACCESSORS(FreeSpace, size, kSizeOffset)
 
 SMI_ACCESSORS(String, length, kLengthOffset)
 SYNCHRONIZED_SMI_ACCESSORS(String, length, kLengthOffset)
@@ -3007,6 +3024,15 @@ void Name::set_hash_field(uint32_t value) {
 }
 
 
+Handle<Object> GlobalObject::GetPropertyNoExceptionThrown(
+    Handle<GlobalObject> global,
+    Handle<Name> name) {
+  Handle<Object> result = Object::GetProperty(global, name);
+  CHECK_NOT_EMPTY_HANDLE(name->GetIsolate(), result);
+  return result;
+}
+
+
 bool Name::Equals(Name* other) {
   if (other == this) return true;
   if ((this->IsInternalizedString() && other->IsInternalizedString()) ||
@@ -3014,6 +3040,17 @@ bool Name::Equals(Name* other) {
     return false;
   }
   return String::cast(this)->SlowEquals(String::cast(other));
+}
+
+
+bool Name::Equals(Handle<Name> one, Handle<Name> two) {
+  if (one.is_identical_to(two)) return true;
+  if ((one->IsInternalizedString() && two->IsInternalizedString()) ||
+      one->IsSymbol() || two->IsSymbol()) {
+    return false;
+  }
+  return String::SlowEquals(Handle<String>::cast(one),
+                            Handle<String>::cast(two));
 }
 
 
@@ -3031,19 +3068,20 @@ bool String::Equals(String* other) {
 }
 
 
-MaybeObject* String::TryFlatten(PretenureFlag pretenure) {
-  if (!StringShape(this).IsCons()) return this;
-  ConsString* cons = ConsString::cast(this);
-  if (cons->IsFlat()) return cons->first();
-  return SlowTryFlatten(pretenure);
+bool String::Equals(Handle<String> one, Handle<String> two) {
+  if (one.is_identical_to(two)) return true;
+  if (one->IsInternalizedString() && two->IsInternalizedString()) {
+    return false;
+  }
+  return SlowEquals(one, two);
 }
 
 
-String* String::TryFlattenGetString(PretenureFlag pretenure) {
-  MaybeObject* flat = TryFlatten(pretenure);
-  Object* successfully_flattened;
-  if (!flat->ToObject(&successfully_flattened)) return this;
-  return String::cast(successfully_flattened);
+Handle<String> String::Flatten(Handle<String> string, PretenureFlag pretenure) {
+  if (!string->IsConsString()) return string;
+  Handle<ConsString> cons = Handle<ConsString>::cast(string);
+  if (cons->IsFlat()) return handle(cons->first());
+  return SlowFlatten(cons, pretenure);
 }
 
 
@@ -3575,8 +3613,15 @@ uint8_t ExternalUint8ClampedArray::get_scalar(int index) {
 }
 
 
-MaybeObject* ExternalUint8ClampedArray::get(int index) {
+Object* ExternalUint8ClampedArray::get(int index) {
   return Smi::FromInt(static_cast<int>(get_scalar(index)));
+}
+
+
+Handle<Object> ExternalUint8ClampedArray::get(
+    Handle<ExternalUint8ClampedArray> array,
+    int index) {
+  return handle(array->get(index), array->GetIsolate());
 }
 
 
@@ -3606,8 +3651,14 @@ int8_t ExternalInt8Array::get_scalar(int index) {
 }
 
 
-MaybeObject* ExternalInt8Array::get(int index) {
+Object* ExternalInt8Array::get(int index) {
   return Smi::FromInt(static_cast<int>(get_scalar(index)));
+}
+
+
+Handle<Object> ExternalInt8Array::get(Handle<ExternalInt8Array> array,
+                                      int index) {
+  return handle(array->get(index), array->GetIsolate());
 }
 
 
@@ -3625,8 +3676,14 @@ uint8_t ExternalUint8Array::get_scalar(int index) {
 }
 
 
-MaybeObject* ExternalUint8Array::get(int index) {
+Object* ExternalUint8Array::get(int index) {
   return Smi::FromInt(static_cast<int>(get_scalar(index)));
+}
+
+
+Handle<Object> ExternalUint8Array::get(Handle<ExternalUint8Array> array,
+                                       int index) {
+  return handle(array->get(index), array->GetIsolate());
 }
 
 
@@ -3644,8 +3701,14 @@ int16_t ExternalInt16Array::get_scalar(int index) {
 }
 
 
-MaybeObject* ExternalInt16Array::get(int index) {
+Object* ExternalInt16Array::get(int index) {
   return Smi::FromInt(static_cast<int>(get_scalar(index)));
+}
+
+
+Handle<Object> ExternalInt16Array::get(Handle<ExternalInt16Array> array,
+                                       int index) {
+  return handle(array->get(index), array->GetIsolate());
 }
 
 
@@ -3663,8 +3726,14 @@ uint16_t ExternalUint16Array::get_scalar(int index) {
 }
 
 
-MaybeObject* ExternalUint16Array::get(int index) {
+Object* ExternalUint16Array::get(int index) {
   return Smi::FromInt(static_cast<int>(get_scalar(index)));
+}
+
+
+Handle<Object> ExternalUint16Array::get(Handle<ExternalUint16Array> array,
+                                        int index) {
+  return handle(array->get(index), array->GetIsolate());
 }
 
 
@@ -3683,7 +3752,14 @@ int32_t ExternalInt32Array::get_scalar(int index) {
 
 
 MaybeObject* ExternalInt32Array::get(int index) {
-    return GetHeap()->NumberFromInt32(get_scalar(index));
+  return GetHeap()->NumberFromInt32(get_scalar(index));
+}
+
+
+Handle<Object> ExternalInt32Array::get(Handle<ExternalInt32Array> array,
+                                       int index) {
+  return array->GetIsolate()->factory()->
+      NewNumberFromInt(array->get_scalar(index));
 }
 
 
@@ -3702,7 +3778,14 @@ uint32_t ExternalUint32Array::get_scalar(int index) {
 
 
 MaybeObject* ExternalUint32Array::get(int index) {
-    return GetHeap()->NumberFromUint32(get_scalar(index));
+  return GetHeap()->NumberFromUint32(get_scalar(index));
+}
+
+
+Handle<Object> ExternalUint32Array::get(Handle<ExternalUint32Array> array,
+                                        int index) {
+  return array->GetIsolate()->factory()->
+      NewNumberFromUint(array->get_scalar(index));
 }
 
 
@@ -3721,7 +3804,13 @@ float ExternalFloat32Array::get_scalar(int index) {
 
 
 MaybeObject* ExternalFloat32Array::get(int index) {
-    return GetHeap()->NumberFromDouble(get_scalar(index));
+  return GetHeap()->NumberFromDouble(get_scalar(index));
+}
+
+
+Handle<Object> ExternalFloat32Array::get(Handle<ExternalFloat32Array> array,
+                                         int index) {
+  return array->GetIsolate()->factory()->NewNumber(array->get_scalar(index));
 }
 
 
@@ -3741,6 +3830,12 @@ double ExternalFloat64Array::get_scalar(int index) {
 
 MaybeObject* ExternalFloat64Array::get(int index) {
     return GetHeap()->NumberFromDouble(get_scalar(index));
+}
+
+
+Handle<Object> ExternalFloat64Array::get(Handle<ExternalFloat64Array> array,
+                                         int index) {
+  return array->GetIsolate()->factory()->NewNumber(array->get_scalar(index));
 }
 
 
@@ -3890,6 +3985,13 @@ MaybeObject* FixedTypedArray<Traits>::get(int index) {
 }
 
 template <class Traits>
+Handle<Object> FixedTypedArray<Traits>::get(
+    Handle<FixedTypedArray<Traits> > array,
+    int index) {
+  return Traits::ToHandle(array->GetIsolate(), array->get_scalar(index));
+}
+
+template <class Traits>
 MaybeObject* FixedTypedArray<Traits>::SetValue(uint32_t index, Object* value) {
   ElementType cast_value = Traits::defaultValue();
   if (index < static_cast<uint32_t>(length())) {
@@ -3925,8 +4027,19 @@ MaybeObject* Uint8ArrayTraits::ToObject(Heap*, uint8_t scalar) {
 }
 
 
+Handle<Object> Uint8ArrayTraits::ToHandle(Isolate* isolate, uint8_t scalar) {
+  return handle(Smi::FromInt(scalar), isolate);
+}
+
+
 MaybeObject* Uint8ClampedArrayTraits::ToObject(Heap*, uint8_t scalar) {
   return Smi::FromInt(scalar);
+}
+
+
+Handle<Object> Uint8ClampedArrayTraits::ToHandle(Isolate* isolate,
+                                                 uint8_t scalar) {
+  return handle(Smi::FromInt(scalar), isolate);
 }
 
 
@@ -3935,8 +4048,18 @@ MaybeObject* Int8ArrayTraits::ToObject(Heap*, int8_t scalar) {
 }
 
 
+Handle<Object> Int8ArrayTraits::ToHandle(Isolate* isolate, int8_t scalar) {
+  return handle(Smi::FromInt(scalar), isolate);
+}
+
+
 MaybeObject* Uint16ArrayTraits::ToObject(Heap*, uint16_t scalar) {
   return Smi::FromInt(scalar);
+}
+
+
+Handle<Object> Uint16ArrayTraits::ToHandle(Isolate* isolate, uint16_t scalar) {
+  return handle(Smi::FromInt(scalar), isolate);
 }
 
 
@@ -3945,8 +4068,18 @@ MaybeObject* Int16ArrayTraits::ToObject(Heap*, int16_t scalar) {
 }
 
 
+Handle<Object> Int16ArrayTraits::ToHandle(Isolate* isolate, int16_t scalar) {
+  return handle(Smi::FromInt(scalar), isolate);
+}
+
+
 MaybeObject* Uint32ArrayTraits::ToObject(Heap* heap, uint32_t scalar) {
   return heap->NumberFromUint32(scalar);
+}
+
+
+Handle<Object> Uint32ArrayTraits::ToHandle(Isolate* isolate, uint32_t scalar) {
+  return isolate->factory()->NewNumberFromUint(scalar);
 }
 
 
@@ -3955,13 +4088,28 @@ MaybeObject* Int32ArrayTraits::ToObject(Heap* heap, int32_t scalar) {
 }
 
 
+Handle<Object> Int32ArrayTraits::ToHandle(Isolate* isolate, int32_t scalar) {
+  return isolate->factory()->NewNumberFromInt(scalar);
+}
+
+
 MaybeObject* Float32ArrayTraits::ToObject(Heap* heap, float scalar) {
   return heap->NumberFromDouble(scalar);
 }
 
 
+Handle<Object> Float32ArrayTraits::ToHandle(Isolate* isolate, float scalar) {
+  return isolate->factory()->NewNumber(scalar);
+}
+
+
 MaybeObject* Float64ArrayTraits::ToObject(Heap* heap, double scalar) {
   return heap->NumberFromDouble(scalar);
+}
+
+
+Handle<Object> Float64ArrayTraits::ToHandle(Isolate* isolate, double scalar) {
+  return isolate->factory()->NewNumber(scalar);
 }
 
 
@@ -3977,7 +4125,8 @@ void Map::set_visitor_id(int id) {
 
 
 int Map::instance_size() {
-  return READ_BYTE_FIELD(this, kInstanceSizeOffset) << kPointerSizeLog2;
+  return NOBARRIER_READ_BYTE_FIELD(
+      this, kInstanceSizeOffset) << kPointerSizeLog2;
 }
 
 
@@ -4016,7 +4165,7 @@ int HeapObject::SizeFromMap(Map* map) {
     return reinterpret_cast<ByteArray*>(this)->ByteArraySize();
   }
   if (instance_type == FREE_SPACE_TYPE) {
-    return reinterpret_cast<FreeSpace*>(this)->size();
+    return reinterpret_cast<FreeSpace*>(this)->nobarrier_size();
   }
   if (instance_type == STRING_TYPE ||
       instance_type == INTERNALIZED_STRING_TYPE) {
@@ -4047,7 +4196,8 @@ void Map::set_instance_size(int value) {
   ASSERT_EQ(0, value & (kPointerSize - 1));
   value >>= kPointerSizeLog2;
   ASSERT(0 <= value && value < 256);
-  WRITE_BYTE_FIELD(this, kInstanceSizeOffset, static_cast<byte>(value));
+  NOBARRIER_WRITE_BYTE_FIELD(
+      this, kInstanceSizeOffset, static_cast<byte>(value));
 }
 
 
@@ -4733,7 +4883,6 @@ Object* Code::GetObjectFromEntryAddress(Address location_of_address) {
 
 
 bool Code::IsWeakObjectInOptimizedCode(Object* object) {
-  ASSERT(is_optimized_code());
   if (object->IsMap()) {
     return Map::cast(object)->CanTransition() &&
            FLAG_collect_maps &&
@@ -4880,14 +5029,6 @@ bool Map::CanHaveMoreTransitions() {
 }
 
 
-MaybeObject* Map::AddTransition(Name* key,
-                                Map* target,
-                                SimpleTransitionFlag flag) {
-  if (HasTransitionArray()) return transitions()->CopyInsert(key, target);
-  return TransitionArray::NewWith(flag, key, target, GetBackPointer());
-}
-
-
 void Map::SetTransition(int transition_index, Map* target) {
   transitions()->SetTarget(transition_index, target);
 }
@@ -4901,18 +5042,6 @@ Map* Map::GetTransition(int transition_index) {
 int Map::SearchTransition(Name* name) {
   if (HasTransitionArray()) return transitions()->Search(name);
   return TransitionArray::kNotFound;
-}
-
-
-MaybeObject* Map::set_elements_transition_map(Map* transitioned_map) {
-  TransitionArray* transitions;
-  MaybeObject* maybe_transitions = AddTransition(
-      GetHeap()->elements_transition_symbol(),
-      transitioned_map,
-      FULL_TRANSITION);
-  if (!maybe_transitions->To(&transitions)) return maybe_transitions;
-  set_transitions(transitions);
-  return transitions;
 }
 
 
@@ -6588,28 +6717,22 @@ MaybeObject* NameDictionaryShape::AsObject(Heap* heap, Name* key) {
 }
 
 
-template <int entrysize>
-bool ObjectHashTableShape<entrysize>::IsMatch(Object* key, Object* other) {
+bool ObjectHashTableShape::IsMatch(Object* key, Object* other) {
   return key->SameValue(other);
 }
 
 
-template <int entrysize>
-uint32_t ObjectHashTableShape<entrysize>::Hash(Object* key) {
+uint32_t ObjectHashTableShape::Hash(Object* key) {
   return Smi::cast(key->GetHash())->value();
 }
 
 
-template <int entrysize>
-uint32_t ObjectHashTableShape<entrysize>::HashForObject(Object* key,
-                                                        Object* other) {
+uint32_t ObjectHashTableShape::HashForObject(Object* key, Object* other) {
   return Smi::cast(other->GetHash())->value();
 }
 
 
-template <int entrysize>
-MaybeObject* ObjectHashTableShape<entrysize>::AsObject(Heap* heap,
-                                                       Object* key) {
+MaybeObject* ObjectHashTableShape::AsObject(Heap* heap, Object* key) {
   return key;
 }
 
@@ -6908,11 +7031,15 @@ void FlexibleBodyDescriptor<start_offset>::IterateBody(HeapObject* obj,
 #undef ACCESSORS
 #undef ACCESSORS_TO_SMI
 #undef SMI_ACCESSORS
+#undef SYNCHRONIZED_SMI_ACCESSORS
+#undef NOBARRIER_SMI_ACCESSORS
 #undef BOOL_GETTER
 #undef BOOL_ACCESSORS
 #undef FIELD_ADDR
 #undef READ_FIELD
+#undef NOBARRIER_READ_FIELD
 #undef WRITE_FIELD
+#undef NOBARRIER_WRITE_FIELD
 #undef WRITE_BARRIER
 #undef CONDITIONAL_WRITE_BARRIER
 #undef READ_DOUBLE_FIELD
@@ -6927,6 +7054,8 @@ void FlexibleBodyDescriptor<start_offset>::IterateBody(HeapObject* obj,
 #undef WRITE_SHORT_FIELD
 #undef READ_BYTE_FIELD
 #undef WRITE_BYTE_FIELD
+#undef NOBARRIER_READ_BYTE_FIELD
+#undef NOBARRIER_WRITE_BYTE_FIELD
 
 } }  // namespace v8::internal
 

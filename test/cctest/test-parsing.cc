@@ -1251,11 +1251,11 @@ i::Handle<i::String> FormatMessage(i::ScriptDataImpl* data) {
     i::JSArray::SetElement(
         args_array, i, v8::Utils::OpenHandle(*v8::String::NewFromUtf8(
                                                   CcTest::isolate(), args[i])),
-        NONE, i::SLOPPY);
+        NONE, i::SLOPPY).Check();
   }
   i::Handle<i::JSObject> builtins(isolate->js_builtins_object());
   i::Handle<i::Object> format_fun =
-      i::GetProperty(builtins, "FormatMessage");
+      i::GetProperty(builtins, "FormatMessage").ToHandleChecked();
   i::Handle<i::Object> arg_handles[] = { format, args_array };
   bool has_exception = false;
   i::Handle<i::Object> result = i::Execution::Call(
@@ -1339,12 +1339,11 @@ void TestParserSyncWithFlags(i::Handle<i::String> source,
   if (function == NULL) {
     // Extract exception from the parser.
     CHECK(isolate->has_pending_exception());
-    i::MaybeObject* maybe_object = isolate->pending_exception();
-    i::JSObject* exception = NULL;
-    CHECK(maybe_object->To(&exception));
-    i::Handle<i::JSObject> exception_handle(exception);
+    i::Handle<i::JSObject> exception_handle(
+        i::JSObject::cast(isolate->pending_exception()));
     i::Handle<i::String> message_string =
-        i::Handle<i::String>::cast(i::GetProperty(exception_handle, "message"));
+        i::Handle<i::String>::cast(
+            i::GetProperty(exception_handle, "message").ToHandleChecked());
 
     if (result == kSuccess) {
       i::OS::Print(
@@ -1369,7 +1368,7 @@ void TestParserSyncWithFlags(i::Handle<i::String> source,
     }
     // Check that preparser and parser produce the same error.
     i::Handle<i::String> preparser_message = FormatMessage(&data);
-    if (!message_string->Equals(*preparser_message)) {
+    if (!i::String::Equals(message_string, preparser_message)) {
       i::OS::Print(
           "Expected parser and preparser to produce the same error on:\n"
           "\t%s\n"

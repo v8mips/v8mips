@@ -65,6 +65,10 @@
   # are actually 13 * 38 * 5 * 128 = 316160 individual tests hidden here.
   'test-parsing/ParserSync': [PASS, NO_VARIANTS],
 
+  # This tests only the type system, so there is no point in running several
+  # variants.
+  'test-types/*': [PASS, NO_VARIANTS],
+
   # BUG(2999).
   'test-cpu-profiler/CollectCpuProfile': [PASS, FLAKY],
 
@@ -122,11 +126,18 @@
 }],  # 'asan == True'
 
 ##############################################################################
-# This should be 'nosnap == True': issue 3216 to add 'nosnap'.
-[ALWAYS, {
+['no_snap == True', {
   # BUG(3215)
   'test-lockers/MultithreadedParallelIsolates': [PASS, FAIL],
-}],  # 'nosnap == True'
+}],  # 'no_snap == True'
+
+##############################################################################
+# TODO(machenbach): Fix application of '*'. Nosnap windows needs a separate
+# section to not overwrite the expectations for TestThatAlwaysFails.
+['no_snap == True and system == windows', {
+  # Windows doesn't support nosnap mode.
+  'test-serialize/*': [SKIP],
+}],  # 'no_snap == True and system == windows'
 
 ##############################################################################
 ['system == windows', {

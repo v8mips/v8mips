@@ -60,7 +60,7 @@ ZoneTypeConfig::Struct* ZoneTypeConfig::as_struct(Type* type) {
 // static
 i::Handle<i::Map> ZoneTypeConfig::as_class(Type* type) {
   ASSERT(is_class(type));
-  return i::Handle<i::Map>(static_cast<i::Map**>(as_struct(type)->args[1]));
+  return i::Handle<i::Map>(static_cast<i::Map**>(as_struct(type)[3]));
 }
 
 
@@ -68,7 +68,7 @@ i::Handle<i::Map> ZoneTypeConfig::as_class(Type* type) {
 i::Handle<i::Object> ZoneTypeConfig::as_constant(Type* type) {
   ASSERT(is_constant(type));
   return i::Handle<i::Object>(
-      static_cast<i::Object**>(as_struct(type)->args[1]));
+      static_cast<i::Object**>(as_struct(type)[3]));
 }
 
 
@@ -94,8 +94,8 @@ ZoneTypeConfig::Type* ZoneTypeConfig::from_struct(Struct* structured) {
 ZoneTypeConfig::Type* ZoneTypeConfig::from_class(
     i::Handle<i::Map> map, int lub, Zone* zone) {
   Struct* structured = struct_create(Type::kClassTag, 2, zone);
-  structured->args[0] = from_bitset(lub);
-  structured->args[1] = map.location();
+  structured[2] = from_bitset(lub);
+  structured[3] = map.location();
   return from_struct(structured);
 }
 
@@ -104,8 +104,8 @@ ZoneTypeConfig::Type* ZoneTypeConfig::from_class(
 ZoneTypeConfig::Type* ZoneTypeConfig::from_constant(
     i::Handle<i::Object> value, int lub, Zone* zone) {
   Struct* structured = struct_create(Type::kConstantTag, 2, zone);
-  structured->args[0] = from_bitset(lub);
-  structured->args[1] = value.location();
+  structured[2] = from_bitset(lub);
+  structured[3] = value.location();
   return from_struct(structured);
 }
 
@@ -114,43 +114,43 @@ ZoneTypeConfig::Type* ZoneTypeConfig::from_constant(
 ZoneTypeConfig::Struct* ZoneTypeConfig::struct_create(
     int tag, int length, Zone* zone) {
   Struct* structured = reinterpret_cast<Struct*>(
-      zone->New(sizeof(Struct) + sizeof(void*) * (length - 1)));  // NOLINT
-  structured->tag = tag;
-  structured->length = length;
+      zone->New(sizeof(void*) * (length + 2)));  // NOLINT
+  structured[0] = reinterpret_cast<void*>(tag);
+  structured[1] = reinterpret_cast<void*>(length);
   return structured;
 }
 
 
 // static
 void ZoneTypeConfig::struct_shrink(Struct* structured, int length) {
-  ASSERT(0 <= length && length <= structured->length);
-  structured->length = length;
+  ASSERT(0 <= length && length <= struct_length(structured));
+  structured[1] = reinterpret_cast<void*>(length);
 }
 
 
 // static
 int ZoneTypeConfig::struct_tag(Struct* structured) {
-  return structured->tag;
-}
-
-
-// static
-Type* ZoneTypeConfig::struct_get(Struct* structured, int i) {
-  ASSERT(0 <= i && i < structured->length);
-  return static_cast<Type*>(structured->args[i]);
-}
-
-
-// static
-void ZoneTypeConfig::struct_set(Struct* structured, int i, Type* type) {
-  ASSERT(0 <= i && i < structured->length);
-  structured->args[i] = type;
+  return static_cast<int>(reinterpret_cast<intptr_t>(structured[0]));
 }
 
 
 // static
 int ZoneTypeConfig::struct_length(Struct* structured) {
-  return structured->length;
+  return static_cast<int>(reinterpret_cast<intptr_t>(structured[1]));
+}
+
+
+// static
+Type* ZoneTypeConfig::struct_get(Struct* structured, int i) {
+  ASSERT(0 <= i && i <= struct_length(structured));
+  return static_cast<Type*>(structured[2 + i]);
+}
+
+
+// static
+void ZoneTypeConfig::struct_set(Struct* structured, int i, Type* type) {
+  ASSERT(0 <= i && i <= struct_length(structured));
+  structured[2 + i] = type;
 }
 
 
@@ -274,6 +274,12 @@ int HeapTypeConfig::struct_tag(i::Handle<Struct> structured) {
 
 
 // static
+int HeapTypeConfig::struct_length(i::Handle<Struct> structured) {
+  return structured->length() - 1;
+}
+
+
+// static
 i::Handle<HeapTypeConfig::Type> HeapTypeConfig::struct_get(
     i::Handle<Struct> structured, int i) {
   Type* type = static_cast<Type*>(structured->get(i + 1));
@@ -285,12 +291,6 @@ i::Handle<HeapTypeConfig::Type> HeapTypeConfig::struct_get(
 void HeapTypeConfig::struct_set(
     i::Handle<Struct> structured, int i, i::Handle<Type> type) {
   structured->set(i + 1, *type);
-}
-
-
-// static
-int HeapTypeConfig::struct_length(i::Handle<Struct> structured) {
-  return structured->length() - 1;
 }
 
 

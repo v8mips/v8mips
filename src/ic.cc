@@ -547,7 +547,7 @@ MaybeObject* LoadIC::Load(Handle<Object> object,
   if (FLAG_use_ic) {
     // Use specialized code for getting prototype of functions.
     if (object->IsJSFunction() &&
-        name->Equals(isolate()->heap()->prototype_string()) &&
+        String::Equals(isolate()->factory()->prototype_string(), name) &&
         Handle<JSFunction>::cast(object)->should_have_prototype()) {
       Handle<Code> stub;
       if (state() == UNINITIALIZED) {
@@ -573,9 +573,10 @@ MaybeObject* LoadIC::Load(Handle<Object> object,
   if (kind() == Code::KEYED_LOAD_IC && name->AsArrayIndex(&index)) {
     // Rewrite to the generic keyed load stub.
     if (FLAG_use_ic) set_target(*generic_stub());
-    Handle<Object> result =
-        Runtime::GetElementOrCharAt(isolate(), object, index);
-    RETURN_IF_EMPTY_HANDLE(isolate(), result);
+    Handle<Object> result;
+    ASSIGN_RETURN_FAILURE_ON_EXCEPTION(
+        isolate(), result,
+        Runtime::GetElementOrCharAt(isolate(), object, index));
     return *result;
   }
 
@@ -889,13 +890,14 @@ Handle<Code> LoadIC::CompileHandler(LookupResult* lookup,
                                     Handle<String> name,
                                     Handle<Object> unused,
                                     InlineCacheHolderFlag cache_holder) {
-  if (object->IsString() && name->Equals(isolate()->heap()->length_string())) {
+  if (object->IsString() &&
+      String::Equals(isolate()->factory()->length_string(), name)) {
     int length_index = String::kLengthOffset / kPointerSize;
     return SimpleFieldLoad(length_index);
   }
 
   if (object->IsStringWrapper() &&
-      name->Equals(isolate()->heap()->length_string())) {
+      String::Equals(isolate()->factory()->length_string(), name)) {
     if (kind() == Code::LOAD_IC) {
       StringLengthStub string_length_stub;
       return string_length_stub.GetCode(isolate());
@@ -1085,8 +1087,9 @@ Handle<Code> KeyedLoadIC::LoadElementStub(Handle<JSObject> receiver) {
 
 MaybeObject* KeyedLoadIC::Load(Handle<Object> object, Handle<Object> key) {
   if (MigrateDeprecated(object)) {
-    Handle<Object> result = Runtime::GetObjectProperty(isolate(), object, key);
-    RETURN_IF_EMPTY_HANDLE(isolate(), result);
+    Handle<Object> result;
+    ASSIGN_RETURN_FAILURE_ON_EXCEPTION(
+        isolate(), result, Runtime::GetObjectProperty(isolate(), object, key));
     return *result;
   }
 
@@ -1126,8 +1129,9 @@ MaybeObject* KeyedLoadIC::Load(Handle<Object> object, Handle<Object> key) {
   }
 
   if (maybe_object != NULL) return maybe_object;
-  Handle<Object> result = Runtime::GetObjectProperty(isolate(), object, key);
-  RETURN_IF_EMPTY_HANDLE(isolate(), result);
+  Handle<Object> result;
+  ASSIGN_RETURN_FAILURE_ON_EXCEPTION(
+      isolate(), result, Runtime::GetObjectProperty(isolate(), object, key));
   return *result;
 }
 
@@ -1213,7 +1217,7 @@ MaybeObject* StoreIC::Store(Handle<Object> object,
 
   // The length property of string values is read-only. Throw in strict mode.
   if (strict_mode() == STRICT && object->IsString() &&
-      name->Equals(isolate()->heap()->length_string())) {
+      String::Equals(isolate()->factory()->length_string(), name)) {
     return TypeError("strict_read_only_property", object, name);
   }
 
@@ -1226,9 +1230,10 @@ MaybeObject* StoreIC::Store(Handle<Object> object,
   // Check if the given name is an array index.
   uint32_t index;
   if (name->AsArrayIndex(&index)) {
-    Handle<Object> result =
-        JSObject::SetElement(receiver, index, value, NONE, strict_mode());
-    RETURN_IF_EMPTY_HANDLE(isolate(), result);
+    Handle<Object> result;
+    ASSIGN_RETURN_FAILURE_ON_EXCEPTION(
+        isolate(), result,
+        JSObject::SetElement(receiver, index, value, NONE, strict_mode()));
     return *value;
   }
 
@@ -1399,7 +1404,7 @@ Handle<Code> StoreIC::CompileHandler(LookupResult* lookup,
         // properties. Slow properties might indicate redefinition of the length
         // property.
         if (receiver->IsJSArray() &&
-            name->Equals(isolate()->heap()->length_string()) &&
+            String::Equals(isolate()->factory()->length_string(), name) &&
             Handle<JSArray>::cast(receiver)->AllowsSetElementsLength() &&
             receiver->HasFastProperties()) {
           return compiler.CompileStoreArrayLength(receiver, lookup, name);
@@ -1832,8 +1837,8 @@ RUNTIME_FUNCTION(MaybeObject*, StoreIC_ArrayLength) {
   ASSERT(debug_lookup.IsPropertyCallbacks() && !debug_lookup.IsReadOnly());
 #endif
 
-  RETURN_IF_EMPTY_HANDLE(isolate,
-                         JSArray::SetElementsLength(receiver, len));
+  RETURN_FAILURE_ON_EXCEPTION(
+      isolate, JSArray::SetElementsLength(receiver, len));
   return *len;
 }
 

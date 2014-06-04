@@ -55,10 +55,7 @@ void SetElementSloppy(Handle<JSObject> object,
   // Ignore return value from SetElement. It can only be a failure if there
   // are element setters causing exceptions and the debugger context has none
   // of these.
-  Handle<Object> no_failure =
-      JSObject::SetElement(object, index, value, NONE, SLOPPY);
-  ASSERT(!no_failure.is_null());
-  USE(no_failure);
+  JSObject::SetElement(object, index, value, NONE, SLOPPY).Assert();
 }
 
 
@@ -585,8 +582,8 @@ class TokenizingLineArrayCompareOutput : public SubrangableOutput {
 
 Handle<JSArray> LiveEdit::CompareStrings(Handle<String> s1,
                                          Handle<String> s2) {
-  s1 = FlattenGetString(s1);
-  s2 = FlattenGetString(s2);
+  s1 = String::Flatten(s1);
+  s2 = String::Flatten(s2);
 
   LineEndsWrapper line_ends1(s1);
   LineEndsWrapper line_ends2(s2);
@@ -835,8 +832,7 @@ MaybeHandle<JSArray> LiveEdit::GatherCompileInfo(Handle<Script> script,
   // A logical 'catch' section.
   Handle<JSObject> rethrow_exception;
   if (isolate->has_pending_exception()) {
-    Handle<Object> exception(isolate->pending_exception()->ToObjectChecked(),
-                             isolate);
+    Handle<Object> exception(isolate->pending_exception(), isolate);
     MessageLocation message_location = isolate->GetMessageLocation();
 
     isolate->clear_pending_message();

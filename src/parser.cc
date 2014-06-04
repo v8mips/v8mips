@@ -859,7 +859,7 @@ FunctionLiteral* Parser::ParseProgram() {
     (*cached_data_)->Initialize();
   }
 
-  source->TryFlatten();
+  source = String::Flatten(source);
   FunctionLiteral* result;
   if (source->IsExternalTwoByteString()) {
     // Notice that the stream is destroyed at the end of the branch block.
@@ -998,7 +998,7 @@ FunctionLiteral* Parser::ParseLazy() {
   Handle<SharedFunctionInfo> shared_info = info()->shared_info();
 
   // Initialize parser state.
-  source->TryFlatten();
+  source = String::Flatten(source);
   FunctionLiteral* result;
   if (source->IsExternalTwoByteString()) {
     ExternalTwoByteStringUtf16CharacterStream stream(
@@ -1126,7 +1126,8 @@ void* Parser::ParseSourceElements(ZoneList<Statement*>* processor,
 
         // Check "use strict" directive (ES5 14.1).
         if (strict_mode() == SLOPPY &&
-            directive->Equals(isolate()->heap()->use_strict_string()) &&
+            String::Equals(isolate()->factory()->use_strict_string(),
+                           directive) &&
             token_loc.end_pos - token_loc.beg_pos ==
               isolate()->heap()->use_strict_string()->length() + 2) {
           // TODO(mstarzinger): Global strict eval calls, need their own scope
@@ -1195,8 +1196,8 @@ Statement* Parser::ParseModuleElement(ZoneStringList* labels,
         ExpressionStatement* estmt = stmt->AsExpressionStatement();
         if (estmt != NULL &&
             estmt->expression()->AsVariableProxy() != NULL &&
-            estmt->expression()->AsVariableProxy()->name()->Equals(
-                isolate()->heap()->module_string()) &&
+            String::Equals(isolate()->factory()->module_string(),
+                           estmt->expression()->AsVariableProxy()->name()) &&
             !scanner()->literal_contains_escapes()) {
           return ParseModuleDeclaration(NULL, ok);
         }
@@ -2393,8 +2394,8 @@ Statement* Parser::ParseExpressionOrLabelledStatement(ZoneStringList* labels,
       !scanner()->HasAnyLineTerminatorBeforeNext() &&
       expr != NULL &&
       expr->AsVariableProxy() != NULL &&
-      expr->AsVariableProxy()->name()->Equals(
-          isolate()->heap()->native_string()) &&
+      String::Equals(isolate()->factory()->native_string(),
+                     expr->AsVariableProxy()->name()) &&
       !scanner()->literal_contains_escapes()) {
     return ParseNativeDeclaration(ok);
   }
@@ -2405,8 +2406,8 @@ Statement* Parser::ParseExpressionOrLabelledStatement(ZoneStringList* labels,
       peek() != Token::IDENTIFIER ||
       scanner()->HasAnyLineTerminatorBeforeNext() ||
       expr->AsVariableProxy() == NULL ||
-      !expr->AsVariableProxy()->name()->Equals(
-          isolate()->heap()->module_string()) ||
+      !String::Equals(isolate()->factory()->module_string(),
+                      expr->AsVariableProxy()->name()) ||
       scanner()->literal_contains_escapes()) {
     ExpectSemicolon(CHECK_OK);
   }

@@ -107,7 +107,7 @@ void MessageHandler::ReportMessage(Isolate* isolate,
   // We pass the exception object into the message handler callback though.
   Object* exception_object = isolate->heap()->undefined_value();
   if (isolate->has_pending_exception()) {
-    isolate->pending_exception()->ToObject(&exception_object);
+    exception_object = isolate->pending_exception();
   }
   Handle<Object> exception_handle(exception_object, isolate);
 
@@ -154,11 +154,9 @@ Handle<String> MessageHandler::GetMessage(Isolate* isolate,
   Factory* factory = isolate->factory();
   Handle<String> fmt_str =
       factory->InternalizeOneByteString(STATIC_ASCII_VECTOR("FormatMessage"));
-  Handle<JSFunction> fun =
-      Handle<JSFunction>(
-          JSFunction::cast(
-              isolate->js_builtins_object()->
-              GetPropertyNoExceptionThrown(*fmt_str)));
+  Handle<JSFunction> fun = Handle<JSFunction>::cast(
+      GlobalObject::GetPropertyNoExceptionThrown(
+          isolate->js_builtins_object(), fmt_str));
   Handle<JSMessageObject> message = Handle<JSMessageObject>::cast(data);
   Handle<Object> argv[] = { Handle<Object>(message->type(), isolate),
                             Handle<Object>(message->arguments(), isolate) };
@@ -180,7 +178,7 @@ Handle<String> MessageHandler::GetMessage(Isolate* isolate,
   // here to improve the efficiency of converting it to a C string and
   // other operations that are likely to take place (see GetLocalizedMessage
   // for example).
-  FlattenString(result_string);
+  result_string = String::Flatten(result_string);
   return result_string;
 }
 

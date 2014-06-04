@@ -7589,7 +7589,7 @@ int GetUtf8Length(Handle<String> str) {
   int len = str->Utf8Length();
   if (len < 0) {
     i::Handle<i::String> istr(v8::Utils::OpenHandle(*str));
-    i::FlattenString(istr);
+    i::String::Flatten(istr);
     len = str->Utf8Length();
   }
   return len;
@@ -15641,7 +15641,8 @@ static void CheckElementValue(i::Isolate* isolate,
                               int expected,
                               i::Handle<i::Object> obj,
                               int offset) {
-  i::Object* element = *i::Object::GetElement(isolate, obj, offset);
+  i::Object* element =
+      *i::Object::GetElement(isolate, obj, offset).ToHandleChecked();
   CHECK_EQ(expected, i::Smi::cast(element)->value());
 }
 
@@ -15728,17 +15729,20 @@ THREADED_TEST(PixelArray) {
   i::Handle<i::Smi> value(i::Smi::FromInt(2),
                           reinterpret_cast<i::Isolate*>(context->GetIsolate()));
   i::Handle<i::Object> no_failure;
-  no_failure = i::JSObject::SetElement(jsobj, 1, value, NONE, i::SLOPPY);
+  no_failure = i::JSObject::SetElement(
+      jsobj, 1, value, NONE, i::SLOPPY).ToHandleChecked();
   ASSERT(!no_failure.is_null());
   i::USE(no_failure);
   CheckElementValue(isolate, 2, jsobj, 1);
   *value.location() = i::Smi::FromInt(256);
-  no_failure = i::JSObject::SetElement(jsobj, 1, value, NONE, i::SLOPPY);
+  no_failure = i::JSObject::SetElement(
+      jsobj, 1, value, NONE, i::SLOPPY).ToHandleChecked();
   ASSERT(!no_failure.is_null());
   i::USE(no_failure);
   CheckElementValue(isolate, 255, jsobj, 1);
   *value.location() = i::Smi::FromInt(-1);
-  no_failure = i::JSObject::SetElement(jsobj, 1, value, NONE, i::SLOPPY);
+  no_failure = i::JSObject::SetElement(
+      jsobj, 1, value, NONE, i::SLOPPY).ToHandleChecked();
   ASSERT(!no_failure.is_null());
   i::USE(no_failure);
   CheckElementValue(isolate, 0, jsobj, 1);
@@ -16275,7 +16279,8 @@ static void ObjectWithExternalArrayTestHelper(
       array_type == v8::kExternalFloat32Array) {
     CHECK_EQ(static_cast<int>(i::OS::nan_value()),
              static_cast<int>(
-                 i::Object::GetElement(isolate, jsobj, 7)->Number()));
+                 i::Object::GetElement(
+                     isolate, jsobj, 7).ToHandleChecked()->Number()));
   } else {
     CheckElementValue(isolate, 0, jsobj, 7);
   }
@@ -16287,7 +16292,8 @@ static void ObjectWithExternalArrayTestHelper(
   CHECK_EQ(2, result->Int32Value());
   CHECK_EQ(2,
            static_cast<int>(
-               i::Object::GetElement(isolate, jsobj, 6)->Number()));
+               i::Object::GetElement(
+                   isolate, jsobj, 6).ToHandleChecked()->Number()));
 
   if (array_type != v8::kExternalFloat32Array &&
       array_type != v8::kExternalFloat64Array) {
@@ -16567,7 +16573,8 @@ static void ExternalArrayTestHelper(v8::ExternalArrayType array_type,
                                                kElementCount);
   CHECK_EQ(1,
            static_cast<int>(
-               i::Object::GetElement(isolate, jsobj, 1)->Number()));
+               i::Object::GetElement(
+                   isolate, jsobj, 1).ToHandleChecked()->Number()));
 
   ObjectWithExternalArrayTestHelper<ExternalArrayClass, ElementType>(
       context.local(), obj, kElementCount, array_type, low, high);
@@ -18934,8 +18941,7 @@ THREADED_TEST(TwoByteStringInAsciiCons) {
   int length = string->length();
   CHECK(string->IsOneByteRepresentation());
 
-  FlattenString(string);
-  i::Handle<i::String> flat_string = FlattenGetString(string);
+  i::Handle<i::String> flat_string = i::String::Flatten(string);
 
   CHECK(string->IsOneByteRepresentation());
   CHECK(flat_string->IsOneByteRepresentation());

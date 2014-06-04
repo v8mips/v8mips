@@ -10,6 +10,8 @@
 namespace v8 {
 namespace internal {
 
+// SUMMARY
+//
 // A simple type system for compiler-internal use. It is based entirely on
 // union types, and all subtyping hence amounts to set inclusion. Besides the
 // obvious primitive types and some predefined unions, the type language also
@@ -18,6 +20,8 @@ namespace internal {
 //
 // Types consist of two dimensions: semantic (value range) and representation.
 // Both are related through subtyping.
+//
+// SEMANTIC DIMENSION
 //
 // The following equations and inequations hold for the semantic axis:
 //
@@ -44,6 +48,10 @@ namespace internal {
 // change! (Its instance type cannot, however.)
 // TODO(rossberg): the latter is not currently true for proxies, because of fix,
 // but will hold once we implement direct proxies.
+// However, we also define a 'temporal' variant of the subtyping relation that
+// considers the _current_ state only, i.e., Constant(x) <_now Class(map(x)).
+//
+// REPRESENTATIONAL DIMENSION
 //
 // For the representation axis, the following holds:
 //
@@ -69,6 +77,8 @@ namespace internal {
 //   SignedSmall /\ TaggedInt       (a 'smi')
 //   Number /\ TaggedPtr            (a heap number)
 //
+// PREDICATES
+//
 // There are two main functions for testing types:
 //
 //   T1->Is(T2)     -- tests whether T1 is included in T2 (i.e., T1 <= T2)
@@ -83,6 +93,22 @@ namespace internal {
 // lattice (e.g., splitting up number types further) without invalidating any
 // existing assumptions or tests.
 // Consequently, do not use pointer equality for type tests, always use Is!
+//
+// The NowIs operator implements state-sensitive subtying, as described above.
+// Any compilation decision based on such temporary properties requires runtime
+// guarding!
+//
+// PROPERTIES
+//
+// Various formal properties hold for constructors, operators, and predicates
+// over types. For example, constructors are injective, subtyping is a partial
+// order, and union and intersection satisfy the usual algebraic properties.
+//
+// See test/cctest/test-types.cc for a comprehensive executable specification,
+// especially with respect to the proeprties of the more exotic 'temporal'
+// constructors and predicates (those prefixed 'Now').
+//
+// IMPLEMENTATION
 //
 // Internally, all 'primitive' types, and their unions, are represented as
 // bitsets. Class is a heap pointer to the respective map. Only Constant's, or
@@ -154,7 +180,7 @@ namespace internal {
   V(Receiver,            kObject | kProxy)                              \
   V(NonNumber,           kBoolean | kName | kNull | kReceiver |         \
                          kUndefined | kInternal)                        \
-  V(Any,                 kNumber | kNonNumber)
+  V(Any,                 -1)
 
 #define BITSET_TYPE_LIST(V) \
   MASK_BITSET_TYPE_LIST(V) \
@@ -184,9 +210,9 @@ namespace internal {
 //   static Handle<Struct>::type struct_create(int tag, int length, Region*);
 //   static void struct_shrink(Handle<Struct>::type, int length);
 //   static int struct_tag(Handle<Struct>::type);
+//   static int struct_length(Handle<Struct>::type);
 //   static Handle<Type>::type struct_get(Handle<Struct>::type, int);
 //   static void struct_set(Handle<Struct>::type, int, Handle<Type>::type);
-//   static int struct_length(Handle<Struct>::type);
 //   static int lub_bitset(Type*);
 // }
 template<class Config>
@@ -218,6 +244,10 @@ class TypeImpl : public Config::Base {
   }
   static TypeHandle Of(i::Handle<i::Object> value, Region* region) {
     return Of(*value, region);
+  }
+
+  bool IsInhabited() {
+    return !this->IsBitset() || IsInhabited(this->AsBitset());
   }
 
   bool Is(TypeImpl* that) { return this == that || this->SlowIs(that); }
@@ -375,7 +405,7 @@ class TypeImpl : public Config::Base {
 struct ZoneTypeConfig {
   typedef TypeImpl<ZoneTypeConfig> Type;
   class Base {};
-  struct Struct { int tag; int length; void* args[1]; };
+  typedef void* Struct;
   typedef i::Zone Region;
   template<class T> struct Handle { typedef T* type; };
 
@@ -397,9 +427,9 @@ struct ZoneTypeConfig {
   static inline Struct* struct_create(int tag, int length, Zone* zone);
   static inline void struct_shrink(Struct* structured, int length);
   static inline int struct_tag(Struct* structured);
+  static inline int struct_length(Struct* structured);
   static inline Type* struct_get(Struct* structured, int i);
   static inline void struct_set(Struct* structured, int i, Type* type);
-  static inline int struct_length(Struct* structured);
   static inline int lub_bitset(Type* type);
 };
 
@@ -435,10 +465,10 @@ struct HeapTypeConfig {
       int tag, int length, Isolate* isolate);
   static inline void struct_shrink(i::Handle<Struct> structured, int length);
   static inline int struct_tag(i::Handle<Struct> structured);
+  static inline int struct_length(i::Handle<Struct> structured);
   static inline i::Handle<Type> struct_get(i::Handle<Struct> structured, int i);
   static inline void struct_set(
       i::Handle<Struct> structured, int i, i::Handle<Type> type);
-  static inline int struct_length(i::Handle<Struct> structured);
   static inline int lub_bitset(Type* type);
 };
 
