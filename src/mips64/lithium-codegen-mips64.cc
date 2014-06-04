@@ -5520,8 +5520,14 @@ void LCodeGen::DoDeferredAllocate(LAllocate* instr) {
     __ push(size);
   } else {
     int32_t size = ToInteger32(LConstantOperand::cast(instr->size()));
-    __ li(v0, Operand(Smi::FromInt(size)));
-    __ Push(v0);
+    if (size >= 0 && size <= Smi::kMaxValue) {
+      __ li(v0, Operand(Smi::FromInt(size)));
+      __ Push(v0);
+    } else {
+      // We should never get here at runtime => abort
+      __ stop("invalid allocation size");
+      return;
+    }
   }
 
   int flags = AllocateDoubleAlignFlag::encode(
