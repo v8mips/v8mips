@@ -1558,13 +1558,6 @@ class Object : public MaybeObject {
                                     Handle<Name> key,
                                     PropertyAttributes* attributes);
 
-  MUST_USE_RESULT static MaybeObject* GetPropertyOrFail(
-      Handle<Object> object,
-      Handle<Object> receiver,
-      LookupResult* result,
-      Handle<Name> key,
-      PropertyAttributes* attributes);
-
   MUST_USE_RESULT MaybeObject* GetProperty(Object* receiver,
                                            LookupResult* result,
                                            Name* key,
@@ -5409,7 +5402,6 @@ class Code: public HeapObject {
   // Find the first map in an IC stub.
   Map* FindFirstMap();
   void FindAllMaps(MapHandleList* maps);
-  void FindAllTypes(TypeHandleList* types);
 
   // Find the first handler in an IC stub.
   Code* FindFirstHandler();
@@ -6226,7 +6218,6 @@ class Map: public HeapObject {
 
   static Handle<Map> RawCopy(Handle<Map> map, int instance_size);
   MUST_USE_RESULT MaybeObject* RawCopy(int instance_size);
-  MUST_USE_RESULT MaybeObject* CopyWithPreallocatedFieldDescriptors();
   static Handle<Map> CopyDropDescriptors(Handle<Map> map);
   MUST_USE_RESULT MaybeObject* CopyDropDescriptors();
   static Handle<Map> CopyReplaceDescriptors(Handle<Map> map,
@@ -6273,6 +6264,8 @@ class Map: public HeapObject {
   // Returns a copy of the map, with all transitions dropped from the
   // instance descriptors.
   static Handle<Map> Copy(Handle<Map> map);
+  static Handle<Map> Create(Handle<JSFunction> constructor,
+                            int extra_inobject_properties);
   MUST_USE_RESULT MaybeObject* Copy();
 
   // Returns the next free property index (only valid for FAST MODE).
