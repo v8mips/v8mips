@@ -1111,8 +1111,7 @@ void LCodeGen::DoModI(LModI* instr) {
     // can't return that.
     if (left->RangeCanInclude(kMinInt) && right->RangeCanInclude(-1)) {
       Label left_not_min_int;
-      __ li(result_reg, Operand(kMinInt), CONSTANT_SIZE);  // TODO(yy)
-      __ Branch(&left_not_min_int, ne, left_reg, Operand(result_reg));
+      __ Branch(&left_not_min_int, ne, left_reg, Operand(kMinInt));
       // TODO(svenpanne) Don't deopt when we don't care about -0.
       DeoptimizeIf(eq, instr->environment(), right_reg, Operand(-1));
       __ bind(&left_not_min_int);
@@ -1259,9 +1258,7 @@ void LCodeGen::DoDivI(LDivI* instr) {
   // Check for (kMinInt / -1).
   if (instr->hydrogen()->CheckFlag(HValue::kCanOverflow)) {
     Label left_not_min_int;
-    const Register scratch = scratch0();
-    __ li(scratch, Operand(kMinInt), CONSTANT_SIZE);  // TODO(yy)
-    __ Branch(&left_not_min_int, ne, left, Operand(scratch));
+    __ Branch(&left_not_min_int, ne, left, Operand(kMinInt));
     DeoptimizeIf(eq, instr->environment(), right, Operand(-1));
     __ bind(&left_not_min_int);
   }
@@ -1340,8 +1337,7 @@ void LCodeGen::DoMathFloorOfDiv(LMathFloorOfDiv* instr) {
     // Check for (kMinInt / -1).
     if (instr->hydrogen()->CheckFlag(HValue::kCanOverflow)) {
       Label left_not_min_int;
-      __ li(scratch, Operand(kMinInt), CONSTANT_SIZE);  // TODO(yy)
-      __ Branch(&left_not_min_int, ne, left, Operand(scratch));
+      __ Branch(&left_not_min_int, ne, left, Operand(kMinInt));
       DeoptimizeIf(eq, instr->environment(), right, Operand(-1));
       __ bind(&left_not_min_int);
     }
@@ -1454,8 +1450,7 @@ void LCodeGen::DoMulI(LMulI* instr) {
       DeoptimizeIf(ne, instr->environment(), scratch, Operand(at));
       if (!instr->hydrogen()->representation().IsSmi()) {
         DeoptimizeIf(gt, instr->environment(), result, Operand(kMaxInt));
-        __ li(at, Operand(kMinInt), CONSTANT_SIZE);
-        DeoptimizeIf(lt, instr->environment(), result, Operand(at));
+        DeoptimizeIf(lt, instr->environment(), result, Operand(kMinInt));
       }
     } else {
       if (instr->hydrogen()->representation().IsSmi()) {
@@ -1525,7 +1520,6 @@ void LCodeGen::DoShiftI(LShiftI* instr) {
   LOperand* right_op = instr->right();
   Register left = ToRegister(instr->left());
   Register result = ToRegister(instr->result());
-  Register scratch = scratch0();
 
   if (right_op->IsRegister()) {
     // No need to mask the right operand on MIPS, it is built into the variable
@@ -1576,8 +1570,7 @@ void LCodeGen::DoShiftI(LShiftI* instr) {
           __ srl(result, left, shift_count);
         } else {
           if (instr->can_deopt()) {
-            __ li(scratch, Operand(0x80000000), CONSTANT_SIZE);
-            __ And(at, left, Operand(scratch));
+            __ And(at, left, Operand(0x80000000));
             DeoptimizeIf(ne, instr->environment(), at, Operand(zero_reg));
           }
           __ Move(result, left);
@@ -1586,7 +1579,7 @@ void LCodeGen::DoShiftI(LShiftI* instr) {
       case Token::SHL:
         if (shift_count != 0) {
           if (instr->hydrogen_value()->representation().IsSmi()) {
-              __ dsll(result, left, shift_count);
+            __ dsll(result, left, shift_count);
           } else {
             __ sll(result, left, shift_count);
           }
@@ -1639,8 +1632,7 @@ void LCodeGen::DoSubI(LSubI* instr) {
     DeoptimizeIf(lt, instr->environment(), overflow, Operand(zero_reg));
     if (!instr->hydrogen()->representation().IsSmi()) {
       DeoptimizeIf(gt, instr->environment(), ToRegister(result), Operand(kMaxInt));
-      __ li(scratch, Operand(kMinInt), CONSTANT_SIZE);
-      DeoptimizeIf(lt, instr->environment(), ToRegister(result), Operand(scratch));
+      DeoptimizeIf(lt, instr->environment(), ToRegister(result), Operand(kMinInt));
     }
   }
 }
@@ -1883,8 +1875,7 @@ void LCodeGen::DoAddI(LAddI* instr) {
     // if not smi, it must int32.
     if (!instr->hydrogen()->representation().IsSmi()) {
       DeoptimizeIf(gt, instr->environment(), ToRegister(result), Operand(kMaxInt));
-      __ li(scratch, Operand(kMinInt), CONSTANT_SIZE);
-      DeoptimizeIf(lt, instr->environment(), ToRegister(result), Operand(scratch));
+      DeoptimizeIf(lt, instr->environment(), ToRegister(result), Operand(kMinInt));
     }
   }
 }
@@ -2280,41 +2271,33 @@ void LCodeGen::DoCompareNumericAndBranch(LCompareNumericAndBranch* instr) {
       EmitBranchF(instr, cond, left_reg, right_reg);
     } else {
       Register cmp_left;
-      // Operand cmp_right = Operand((int64_t)0);
-      Register cmp_right = scratch0();
+      Operand cmp_right = Operand((int64_t)0);
       if (right->IsConstantOperand()) {
         int32_t value = ToInteger32(LConstantOperand::cast(right));
         if (instr->hydrogen_value()->representation().IsSmi()) {
           cmp_left = ToRegister(left);
-          // cmp_right = Operand(Smi::FromInt(value));
-          __ li(cmp_right, Operand(Smi::FromInt(value)));
+          cmp_right = Operand(Smi::FromInt(value));
         } else {
           cmp_left = ToRegister(left);
-          // cmp_right = Operand(value);
-          __ li(cmp_right, Operand(value), CONSTANT_SIZE);
+          cmp_right = Operand(value);
         }
       } else if (left->IsConstantOperand()) {
         int32_t value = ToInteger32(LConstantOperand::cast(left));
         if (instr->hydrogen_value()->representation().IsSmi()) {
           cmp_left = ToRegister(right);
-          // cmp_right = Operand(Smi::FromInt(value));
-          __ li(cmp_right, Operand(Smi::FromInt(value)));
+          cmp_right = Operand(Smi::FromInt(value));
         } else {
           cmp_left = ToRegister(right);
-          // cmp_right = Operand(value);
-          __ li(cmp_right, Operand(value), CONSTANT_SIZE);
+          cmp_right = Operand(value);
         }
         // We transposed the operands. Reverse the condition.
         cond = ReverseCondition(cond);
       } else {
         cmp_left = ToRegister(left);
-        // cmp_right = Operand(ToRegister(right));
-        EmitBranch(instr, cond, cmp_left, Operand(ToRegister(right)));
-        return;
+        cmp_right = Operand(ToRegister(right));
       }
 
-      // EmitBranch(instr, cond, cmp_left, cmp_right);
-      EmitBranch(instr, cond, cmp_left, Operand(cmp_right));
+      EmitBranch(instr, cond, cmp_left, cmp_right);
     }
   }
 }

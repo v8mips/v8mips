@@ -2327,18 +2327,13 @@ void FullCodeGenerator::EmitInlineSmiBinaryOp(BinaryOperation* expr,
       __ Branch(&stub_call);
       __ GetLeastBitsFromSmi(scratch1, right, 5);
       __ dsrav(right, left, scratch1);
-      // TODO(plind): Fix li() to allow ~kSmiTagMask in And().
-      __ li(scratch1, Operand(~kSmiTagMask), CONSTANT_SIZE);
-      // __ And(v0, right, Operand(~kSmiTagMask));
-      __ And(v0, right, Operand(scratch1));
+      __ And(v0, right, Operand(~kSmiTagMask));
       break;
     case Token::SHL: {
       __ Branch(&stub_call);
       __ SmiUntag(scratch1, left);
       __ GetLeastBitsFromSmi(scratch2, right, 5);
       __ dsllv(scratch1, scratch1, scratch2);
-      // __ Daddu(scratch2, scratch1, Operand(0x40000000));
-      // __ Branch(&stub_call, lt, scratch2, Operand(zero_reg));
       __ SmiTag(v0, scratch1);
       break;
     }
@@ -2347,8 +2342,6 @@ void FullCodeGenerator::EmitInlineSmiBinaryOp(BinaryOperation* expr,
       __ SmiUntag(scratch1, left);
       __ GetLeastBitsFromSmi(scratch2, right, 5);
       __ dsrlv(scratch1, scratch1, scratch2);
-      // __ And(scratch2, scratch1, 0xc0000000);
-      // __ Branch(&stub_call, ne, scratch2, Operand(zero_reg));
       __ SmiTag(v0, scratch1);
       break;
     }

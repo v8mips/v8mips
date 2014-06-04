@@ -5475,10 +5475,7 @@ void RecordWriteStub::CheckNeedsToInformIncrementalMarker(
   Label need_incremental;
   Label need_incremental_pop_scratch;
 
-  // TODO(plind): Fix li() so we can use constant embedded inside And().
-  // __ And(regs_.scratch0(), regs_.object(), Operand(~Page::kPageAlignmentMask));
-  __ li(at, Operand(~Page::kPageAlignmentMask), CONSTANT_SIZE);
-  __ And(regs_.scratch0(), regs_.object(), Operand(at));
+  __ And(regs_.scratch0(), regs_.object(), Operand(~Page::kPageAlignmentMask));
   __ ld(regs_.scratch1(),
         MemOperand(regs_.scratch0(),
                    MemoryChunk::kWriteBarrierCounterOffset));

@@ -992,36 +992,24 @@ void MacroAssembler::li(Register rd, Operand j, LiFlags mode) {
     // Normal load of an immediate value which does not need Relocation Info.
     if (is_int64_32(j.imm64_)) {
       if (is_int64_16(j.imm64_)) {
-        daddiu(rd, zero_reg, j.imm64_);
+        daddiu(rd, zero_reg, (j.imm64_ & kImm16Mask));
       } else if (!(j.imm64_ & kHiMask)) {
-        ori(rd, zero_reg, j.imm64_);
-        dsll32(rd, rd, 0);  // TODO(plind), I understand that these 0-extend,
-                            // but we should find a better way.
-        dsrl32(rd, rd, 0);
+        ori(rd, zero_reg, (j.imm64_ & kImm16Mask));
       } else if (!(j.imm64_ & kImm16Mask)) {
-        lui(rd, (j.imm64_ >> kLuiShift) & kImm16Mask);
-        dsll32(rd, rd, 0);
-        dsrl32(rd, rd, 0);
+        daddiu(rd, zero_reg, (j.imm64_ >> kLuiShift) & kImm16Mask);
+        dsll(rd, rd, 16);
       } else {
-        lui(rd, (j.imm64_ >> kLuiShift) & kImm16Mask);
+        daddiu(rd, zero_reg, (j.imm64_ >> kLuiShift) & kImm16Mask);
+        dsll(rd, rd, 16);
         ori(rd, rd, (j.imm64_ & kImm16Mask));
-        dsll32(rd, rd, 0);
-        dsrl32(rd, rd, 0);
       }
     } else {
-      if (is_int64_32(j.imm64_)) {
-        lui(rd, (j.imm64_ >> kLuiShift) & kImm16Mask);
-        ori(rd, rd, (j.imm64_ & kImm16Mask));
-        dsll32(rd, rd, 0);
-        dsrl32(rd, rd, 0);
-      } else {
-        lui(rd, (j.imm64_ >> 48) & kImm16Mask);
-        ori(rd, rd, (j.imm64_ >> 32) & kImm16Mask);
-        dsll(rd, rd, 16);
-        ori(rd, rd, (j.imm64_ >> 16) & kImm16Mask);
-        dsll(rd, rd, 16);
-        ori(rd, rd, j.imm64_ & kImm16Mask);
-      }
+      lui(rd, (j.imm64_ >> 48) & kImm16Mask);
+      ori(rd, rd, (j.imm64_ >> 32) & kImm16Mask);
+      dsll(rd, rd, 16);
+      ori(rd, rd, (j.imm64_ >> 16) & kImm16Mask);
+      dsll(rd, rd, 16);
+      ori(rd, rd, j.imm64_ & kImm16Mask);
     }
   } else {
     if (MustUseReg(j.rmode_)) {

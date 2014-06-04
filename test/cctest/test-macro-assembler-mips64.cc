@@ -131,6 +131,48 @@ TEST(CopyBytes) {
   }
 }
 
+TEST(LoadConstants) {
+  CcTest::InitializeVM();
+  Isolate* isolate = Isolate::Current();
+  HandleScope handles(isolate);
 
+  long refConstants[64];
+  long result[64];
+
+  long mask = 1;
+  for (int i = 0; i < 64; i++) {
+    refConstants[i] = ~(mask << i);
+  }
+
+  MacroAssembler assembler(isolate, NULL, 0);
+  MacroAssembler* masm = &assembler;
+
+  __ mov(t0, a0);
+  for (int i = 0; i < 64; i++) {
+    // Load constant.
+    __ li(t1, Operand(refConstants[i]));
+    __ sd(t1, MemOperand(t0));
+    __ Daddu(t0, t0, Operand(kPointerSize));
+  }
+
+  __ jr(ra);
+  __ nop();
+
+  CodeDesc desc;
+  masm->GetCode(&desc);
+  Object* code = isolate->heap()->CreateCode(
+      desc,
+      Code::ComputeFlags(Code::STUB),
+      Handle<Code>())->ToObjectChecked();
+  CHECK(code->IsCode());
+
+  ::F f = FUNCTION_CAST< ::F>(Code::cast(code)->entry());
+     (void) CALL_GENERATED_CODE(f, result, 0, 0, 0, 0);
+  // Check results.
+  for (int i = 0; i < 64; i++) {
+    CHECK(refConstants[i] == result[i]);
+  }
+
+}
 
 #undef __
