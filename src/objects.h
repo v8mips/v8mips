@@ -1537,7 +1537,10 @@ class Object : public MaybeObject {
   MUST_USE_RESULT static inline MaybeHandle<Object> GetPropertyOrElement(
       Handle<Object> object,
       Handle<Name> key);
-
+  MUST_USE_RESULT static inline MaybeHandle<Object> GetProperty(
+      Isolate* isolate,
+      Handle<Object> object,
+      const char* key);
   MUST_USE_RESULT static inline MaybeHandle<Object> GetProperty(
       Handle<Object> object,
       Handle<Name> key);
@@ -2110,6 +2113,14 @@ class JSReceiver: public HeapObject {
                    bool search_hidden_prototypes = false);
   void Lookup(Name* name, LookupResult* result);
 
+  enum KeyCollectionType { LOCAL_ONLY, INCLUDE_PROTOS };
+
+  // Computes the enumerable keys for a JSObject. Used for implementing
+  // "for (n in object) { }".
+  MUST_USE_RESULT static MaybeHandle<FixedArray> GetKeys(
+      Handle<JSReceiver> object,
+      KeyCollectionType type);
+
  protected:
   Smi* GenerateIdentityHash();
 
@@ -2524,6 +2535,15 @@ class JSObject: public JSReceiver {
   // objects.
   inline bool HasNamedInterceptor();
   inline bool HasIndexedInterceptor();
+
+  // Computes the enumerable keys from interceptors. Used for debug mirrors and
+  // by JSReceiver::GetKeys.
+  MUST_USE_RESULT static MaybeHandle<JSArray> GetKeysForNamedInterceptor(
+      Handle<JSObject> object,
+      Handle<JSReceiver> receiver);
+  MUST_USE_RESULT static MaybeHandle<JSArray> GetKeysForIndexedInterceptor(
+      Handle<JSObject> object,
+      Handle<JSReceiver> receiver);
 
   // Support functions for v8 api (needed for correct interceptor behavior).
   static bool HasRealNamedProperty(Handle<JSObject> object,
@@ -3062,6 +3082,9 @@ class FixedArray: public FixedArrayBase {
   MUST_USE_RESULT inline MaybeObject* Copy();
   MUST_USE_RESULT MaybeObject* CopySize(int new_length,
                                         PretenureFlag pretenure = NOT_TENURED);
+  static Handle<FixedArray> CopySize(Handle<FixedArray> array,
+                                     int new_length,
+                                     PretenureFlag pretenure = NOT_TENURED);
 
   // Add the elements of a JSArray to this FixedArray.
   MUST_USE_RESULT static MaybeHandle<FixedArray> AddKeysFromJSArray(
@@ -3837,6 +3860,11 @@ class HashTable: public FixedArray {
       int n,
       Key key,
       PretenureFlag pretenure = NOT_TENURED);
+  static Handle<Derived> EnsureCapacity(
+      Handle<Derived> table,
+      int n,
+      Key key,
+      PretenureFlag pretenure = NOT_TENURED);
 };
 
 
@@ -3943,7 +3971,8 @@ class MapCache: public HashTable<MapCache, MapCacheShape, HashTableKey*> {
  public:
   // Find cached value for a name key, otherwise return null.
   Object* Lookup(FixedArray* key);
-  MUST_USE_RESULT MaybeObject* Put(FixedArray* key, Map* value);
+  static Handle<MapCache> Put(
+      Handle<MapCache> map_cache, Handle<FixedArray> key, Handle<Map> value);
   static inline MapCache* cast(Object* obj);
 
  private:
@@ -4033,8 +4062,16 @@ class Dictionary: public HashTable<Derived, Shape, Key> {
       int at_least_space_for,
       PretenureFlag pretenure = NOT_TENURED);
 
+  // Creates a new dictionary.
+  static Handle<Derived> New(
+      Isolate* isolate,
+      int at_least_space_for,
+      PretenureFlag pretenure = NOT_TENURED);
+
   // Ensure enough space for n additional elements.
   MUST_USE_RESULT MaybeObject* EnsureCapacity(int n, Key key);
+
+  static Handle<Derived> EnsureCapacity(Handle<Derived> obj, int n, Key key);
 
 #ifdef OBJECT_PRINT
   void Print(FILE* out = stdout);
@@ -4245,12 +4282,6 @@ class ObjectHashTable: public HashTable<ObjectHashTable,
     ASSERT(obj->IsHashTable());
     return reinterpret_cast<ObjectHashTable*>(obj);
   }
-
-  static Handle<ObjectHashTable> EnsureCapacity(
-      Handle<ObjectHashTable> table,
-      int n,
-      Handle<Object> key,
-      PretenureFlag pretenure = NOT_TENURED);
 
   // Attempt to shrink hash table after removal of key.
   static inline Handle<ObjectHashTable> Shrink(Handle<ObjectHashTable> table,
@@ -6473,7 +6504,6 @@ class Map: public HeapObject {
   static void UpdateCodeCache(Handle<Map> map,
                               Handle<Name> name,
                               Handle<Code> code);
-  MUST_USE_RESULT MaybeObject* UpdateCodeCache(Name* name, Code* code);
 
   // Extend the descriptor array of the map with the list of descriptors.
   // In case of duplicates, the latest descriptor is used.
@@ -6841,6 +6871,22 @@ class Script: public Struct {
   // resource is accessible. Otherwise, always return true.
   inline bool HasValidSource();
 
+  // Convert code position into column number.
+  static int GetColumnNumber(Handle<Script> script, int code_pos);
+
+  // Convert code position into (zero-based) line number.
+  // The non-handlified version does not allocate, but may be much slower.
+  static int GetLineNumber(Handle<Script> script, int code_pos);
+  int GetLineNumber(int code_pos);
+
+  static Handle<Object> GetNameOrSourceURL(Handle<Script> script);
+
+  // Init line_ends array with code positions of line ends inside script source.
+  static void InitLineEnds(Handle<Script> script);
+
+  // Get the JS object wrapping the given script; create it if none exists.
+  static Handle<JSObject> GetWrapper(Handle<Script> script);
+
   // Dispatched behavior.
   DECLARE_PRINTER(Script)
   DECLARE_VERIFIER(Script)
@@ -6862,6 +6908,8 @@ class Script: public Struct {
   static const int kSize = kFlagsOffset + kPointerSize;
 
  private:
+  int GetLineNumberWithArray(int code_pos);
+
   // Bit positions in the flags field.
   static const int kCompilationTypeBit = 0;
   static const int kCompilationStateBit = 1;
@@ -8241,8 +8289,6 @@ class CompilationCacheTable: public HashTable<CompilationCacheTable,
   static Handle<CompilationCacheTable> PutRegExp(
       Handle<CompilationCacheTable> cache, Handle<String> src,
       JSRegExp::Flags flags, Handle<FixedArray> value);
-  static Handle<CompilationCacheTable> EnsureCapacityFor(
-      Handle<CompilationCacheTable> cache, int n, HashTableKey* key);
   void Remove(Object* value);
 
   static inline CompilationCacheTable* cast(Object* obj);
@@ -8258,7 +8304,8 @@ class CodeCache: public Struct {
   DECL_ACCESSORS(normal_type_cache, Object)
 
   // Add the code object to the cache.
-  MUST_USE_RESULT MaybeObject* Update(Name* name, Code* code);
+  static void Update(
+      Handle<CodeCache> cache, Handle<Name> name, Handle<Code> code);
 
   // Lookup code object in the cache. Returns code object if found and undefined
   // if not.
@@ -8285,8 +8332,10 @@ class CodeCache: public Struct {
   static const int kSize = kNormalTypeCacheOffset + kPointerSize;
 
  private:
-  MUST_USE_RESULT MaybeObject* UpdateDefaultCache(Name* name, Code* code);
-  MUST_USE_RESULT MaybeObject* UpdateNormalTypeCache(Name* name, Code* code);
+  static void UpdateDefaultCache(
+      Handle<CodeCache> code_cache, Handle<Name> name, Handle<Code> code);
+  static void UpdateNormalTypeCache(
+      Handle<CodeCache> code_cache, Handle<Name> name, Handle<Code> code);
   Object* LookupDefaultCache(Name* name, Code::Flags flags);
   Object* LookupNormalTypeCache(Name* name, Code::Flags flags);
 
@@ -8329,7 +8378,10 @@ class CodeCacheHashTable: public HashTable<CodeCacheHashTable,
                                            HashTableKey*> {
  public:
   Object* Lookup(Name* name, Code::Flags flags);
-  MUST_USE_RESULT MaybeObject* Put(Name* name, Code* code);
+  static Handle<CodeCacheHashTable> Put(
+      Handle<CodeCacheHashTable> table,
+      Handle<Name> name,
+      Handle<Code> code);
 
   int GetIndex(Name* name, Code::Flags flags);
   void RemoveByIndex(int index);
@@ -9231,6 +9283,9 @@ class String: public Name {
     return VisitFlat(visitor, string, offset, string->length(), type);
   }
 
+  static Handle<FixedArray> CalculateLineEnds(Handle<String> string,
+                                              bool include_ending_line);
+
  private:
   friend class Name;
 
@@ -9708,10 +9763,11 @@ class Oddball: public HeapObject {
   DECLARE_VERIFIER(Oddball)
 
   // Initialize the fields.
-  MUST_USE_RESULT MaybeObject* Initialize(Heap* heap,
-                                          const char* to_string,
-                                          Object* to_number,
-                                          byte kind);
+  static void Initialize(Isolate* isolate,
+                         Handle<Oddball> oddball,
+                         const char* to_string,
+                         Handle<Object> to_number,
+                         byte kind);
 
   // Layout description.
   static const int kToStringOffset = HeapObject::kHeaderSize;

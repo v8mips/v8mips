@@ -1152,7 +1152,8 @@ void Logger::LogRegExpSource(Handle<JSRegExp> regexp) {
   //      (re.global?"g":"") + (re.ignorecase?"i":"") + (re.multiline?"m":"")
   Log::MessageBuilder msg(log_);
 
-  Handle<Object> source = GetProperty(regexp, "source").ToHandleChecked();
+  Handle<Object> source = Object::GetProperty(
+      isolate_, regexp, "source").ToHandleChecked();
   if (!source->IsString()) {
     msg.Append("no source");
     return;
@@ -1170,18 +1171,20 @@ void Logger::LogRegExpSource(Handle<JSRegExp> regexp) {
   msg.Append('/');
 
   // global flag
-  Handle<Object> global = GetProperty(regexp, "global").ToHandleChecked();
+  Handle<Object> global = Object::GetProperty(
+      isolate_, regexp, "global").ToHandleChecked();
   if (global->IsTrue()) {
     msg.Append('g');
   }
   // ignorecase flag
-  Handle<Object> ignorecase =
-      GetProperty(regexp, "ignoreCase").ToHandleChecked();
+  Handle<Object> ignorecase = Object::GetProperty(
+      isolate_, regexp, "ignoreCase").ToHandleChecked();
   if (ignorecase->IsTrue()) {
     msg.Append('i');
   }
   // multiline flag
-  Handle<Object> multiline = GetProperty(regexp, "multiline").ToHandleChecked();
+  Handle<Object> multiline = Object::GetProperty(
+      isolate_, regexp, "multiline").ToHandleChecked();
   if (multiline->IsTrue()) {
     msg.Append('m');
   }
@@ -1907,9 +1910,9 @@ void Logger::LogExistingFunction(Handle<SharedFunctionInfo> shared,
   Handle<String> func_name(shared->DebugName());
   if (shared->script()->IsScript()) {
     Handle<Script> script(Script::cast(shared->script()));
-    int line_num = GetScriptLineNumber(script, shared->start_position()) + 1;
+    int line_num = Script::GetLineNumber(script, shared->start_position()) + 1;
     int column_num =
-        GetScriptColumnNumber(script, shared->start_position()) + 1;
+        Script::GetColumnNumber(script, shared->start_position()) + 1;
     if (script->name()->IsString()) {
       Handle<String> script_name(String::cast(script->name()));
       if (line_num > 0) {
