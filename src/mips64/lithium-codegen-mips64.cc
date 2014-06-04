@@ -3350,7 +3350,8 @@ MemOperand LCodeGen::PrepareKeyedOperand(Register key,
       __ Daddu(scratch0(), scratch0(), Operand(base_offset));
     } else {
       ASSERT_EQ(-1, shift_size);
-      __ dsrl(scratch0(), key, 1);
+      // Key can be negative, so using sra here.
+      __ dsra(scratch0(), key, 1);
       __ Daddu(scratch0(), scratch0(), Operand(base_offset));
     }
     __ Daddu(scratch0(), base, scratch0());
