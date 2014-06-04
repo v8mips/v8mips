@@ -1538,10 +1538,11 @@ class Object : public MaybeObject {
       PropertyAttributes* attributes);
 
   // TODO(yangguo): this should eventually replace the non-handlified version.
-  static Handle<Object> GetPropertyWithReceiver(Handle<Object> object,
-                                                Handle<Object> receiver,
-                                                Handle<Name> name,
-                                                PropertyAttributes* attributes);
+  MUST_USE_RESULT static MaybeHandle<Object> GetPropertyWithReceiver(
+      Handle<Object> object,
+      Handle<Object> receiver,
+      Handle<Name> name,
+      PropertyAttributes* attributes);
   MUST_USE_RESULT MaybeObject* GetPropertyWithReceiver(
       Object* receiver,
       Name* key,
@@ -1552,11 +1553,12 @@ class Object : public MaybeObject {
 
   static Handle<Object> GetProperty(Handle<Object> object,
                                     Handle<Name> key);
-  static Handle<Object> GetProperty(Handle<Object> object,
-                                    Handle<Object> receiver,
-                                    LookupResult* result,
-                                    Handle<Name> key,
-                                    PropertyAttributes* attributes);
+  MUST_USE_RESULT static MaybeHandle<Object> GetProperty(
+      Handle<Object> object,
+      Handle<Object> receiver,
+      LookupResult* result,
+      Handle<Name> key,
+      PropertyAttributes* attributes);
 
   MUST_USE_RESULT MaybeObject* GetProperty(Object* receiver,
                                            LookupResult* result,
@@ -2041,13 +2043,13 @@ class JSReceiver: public HeapObject {
   static inline JSReceiver* cast(Object* obj);
 
   // Implementation of [[Put]], ECMA-262 5th edition, section 8.12.5.
-  static Handle<Object> SetProperty(Handle<JSReceiver> object,
-                                    Handle<Name> key,
-                                    Handle<Object> value,
-                                    PropertyAttributes attributes,
-                                    StrictMode strict_mode,
-                                    StoreFromKeyed store_mode =
-                                        MAY_BE_STORE_FROM_KEYED);
+  MUST_USE_RESULT static MaybeHandle<Object> SetProperty(
+      Handle<JSReceiver> object,
+      Handle<Name> key,
+      Handle<Object> value,
+      PropertyAttributes attributes,
+      StrictMode strict_mode,
+      StoreFromKeyed store_mode = MAY_BE_STORE_FROM_KEYED);
   static Handle<Object> SetElement(Handle<JSReceiver> object,
                                    uint32_t index,
                                    Handle<Object> value,
@@ -2132,13 +2134,14 @@ class JSReceiver: public HeapObject {
       Handle<Name> name,
       bool continue_search);
 
-  static Handle<Object> SetProperty(Handle<JSReceiver> receiver,
-                                    LookupResult* result,
-                                    Handle<Name> key,
-                                    Handle<Object> value,
-                                    PropertyAttributes attributes,
-                                    StrictMode strict_mode,
-                                    StoreFromKeyed store_from_keyed);
+  MUST_USE_RESULT static MaybeHandle<Object> SetProperty(
+      Handle<JSReceiver> receiver,
+      LookupResult* result,
+      Handle<Name> key,
+      Handle<Object> value,
+      PropertyAttributes attributes,
+      StrictMode strict_mode,
+      StoreFromKeyed store_from_keyed);
 
   DISALLOW_IMPLICIT_CONSTRUCTORS(JSReceiver);
 };
@@ -2249,12 +2252,13 @@ class JSObject: public JSReceiver {
                                                    uint32_t limit);
   MUST_USE_RESULT MaybeObject* PrepareSlowElementsForSort(uint32_t limit);
 
-  static Handle<Object> GetPropertyWithCallback(Handle<JSObject> object,
-                                                Handle<Object> receiver,
-                                                Handle<Object> structure,
-                                                Handle<Name> name);
+  MUST_USE_RESULT static MaybeHandle<Object> GetPropertyWithCallback(
+      Handle<JSObject> object,
+      Handle<Object> receiver,
+      Handle<Object> structure,
+      Handle<Name> name);
 
-  static Handle<Object> SetPropertyWithCallback(
+  MUST_USE_RESULT static MaybeHandle<Object> SetPropertyWithCallback(
       Handle<JSObject> object,
       Handle<Object> structure,
       Handle<Name> name,
@@ -2262,14 +2266,14 @@ class JSObject: public JSReceiver {
       Handle<JSObject> holder,
       StrictMode strict_mode);
 
-  static Handle<Object> SetPropertyWithInterceptor(
+  MUST_USE_RESULT static MaybeHandle<Object> SetPropertyWithInterceptor(
       Handle<JSObject> object,
       Handle<Name> name,
       Handle<Object> value,
       PropertyAttributes attributes,
       StrictMode strict_mode);
 
-  static Handle<Object> SetPropertyForResult(
+  MUST_USE_RESULT static MaybeHandle<Object> SetPropertyForResult(
       Handle<JSObject> object,
       LookupResult* result,
       Handle<Name> name,
@@ -2278,7 +2282,7 @@ class JSObject: public JSReceiver {
       StrictMode strict_mode,
       StoreFromKeyed store_mode = MAY_BE_STORE_FROM_KEYED);
 
-  static Handle<Object> SetLocalPropertyIgnoreAttributes(
+  MUST_USE_RESULT static MaybeHandle<Object> SetLocalPropertyIgnoreAttributes(
       Handle<JSObject> object,
       Handle<Name> key,
       Handle<Object> value,
@@ -2372,12 +2376,12 @@ class JSObject: public JSReceiver {
   static Handle<Object> SetAccessor(Handle<JSObject> object,
                                     Handle<AccessorInfo> info);
 
-  static Handle<Object> GetPropertyWithInterceptor(
+  MUST_USE_RESULT static MaybeHandle<Object> GetPropertyWithInterceptor(
       Handle<JSObject> object,
       Handle<Object> receiver,
       Handle<Name> name,
       PropertyAttributes* attributes);
-  static Handle<Object> GetPropertyPostInterceptor(
+  MUST_USE_RESULT static MaybeHandle<Object> GetPropertyPostInterceptor(
       Handle<JSObject> object,
       Handle<Object> receiver,
       Handle<Name> name,
@@ -2642,7 +2646,7 @@ class JSObject: public JSReceiver {
   static Handle<Object> PreventExtensions(Handle<JSObject> object);
 
   // ES5 Object.freeze
-  static MaybeHandle<Object> Freeze(Handle<JSObject> object);
+  MUST_USE_RESULT static MaybeHandle<Object> Freeze(Handle<JSObject> object);
 
   // Called the first time an object is observed with ES7 Object.observe.
   static void SetObserved(Handle<JSObject> object);
@@ -2775,7 +2779,7 @@ class JSObject: public JSReceiver {
                                    ElementsKind to_kind);
 
   // Used from Object::GetProperty().
-  static Handle<Object> GetPropertyWithFailedAccessCheck(
+  MUST_USE_RESULT static MaybeHandle<Object> GetPropertyWithFailedAccessCheck(
       Handle<JSObject> object,
       Handle<Object> receiver,
       LookupResult* result,
@@ -2844,26 +2848,26 @@ class JSObject: public JSReceiver {
   // has a setter, invoke it and set '*done' to true. If it is found and is
   // read-only, reject and set '*done' to true. Otherwise, set '*done' to
   // false. Can throw and return an empty handle with '*done==true'.
-  static Handle<Object> SetPropertyViaPrototypes(
+  MUST_USE_RESULT static MaybeHandle<Object> SetPropertyViaPrototypes(
       Handle<JSObject> object,
       Handle<Name> name,
       Handle<Object> value,
       PropertyAttributes attributes,
       StrictMode strict_mode,
       bool* done);
-  static Handle<Object> SetPropertyPostInterceptor(
+  MUST_USE_RESULT static MaybeHandle<Object> SetPropertyPostInterceptor(
       Handle<JSObject> object,
       Handle<Name> name,
       Handle<Object> value,
       PropertyAttributes attributes,
       StrictMode strict_mode);
-  static Handle<Object> SetPropertyUsingTransition(
+  MUST_USE_RESULT static MaybeHandle<Object> SetPropertyUsingTransition(
       Handle<JSObject> object,
       LookupResult* lookup,
       Handle<Name> name,
       Handle<Object> value,
       PropertyAttributes attributes);
-  static Handle<Object> SetPropertyWithFailedAccessCheck(
+  MUST_USE_RESULT static MaybeHandle<Object> SetPropertyWithFailedAccessCheck(
       Handle<JSObject> object,
       LookupResult* result,
       Handle<Name> name,
@@ -2872,7 +2876,7 @@ class JSObject: public JSReceiver {
       StrictMode strict_mode);
 
   // Add a property to an object.
-  static Handle<Object> AddProperty(
+  MUST_USE_RESULT static MaybeHandle<Object> AddProperty(
       Handle<JSObject> object,
       Handle<Name> name,
       Handle<Object> value,
@@ -3058,10 +3062,13 @@ class FixedArray: public FixedArrayBase {
                                         PretenureFlag pretenure = NOT_TENURED);
 
   // Add the elements of a JSArray to this FixedArray.
-  MUST_USE_RESULT MaybeObject* AddKeysFromJSArray(JSArray* array);
+  static Handle<FixedArray> AddKeysFromJSArray(Handle<FixedArray> content,
+                                               Handle<JSArray> array);
 
-  // Compute the union of this and other.
-  MUST_USE_RESULT MaybeObject* UnionOfKeys(FixedArray* other);
+  // Computes the union of keys and return the result.
+  // Used for implementing "for (n in object) { }"
+  static Handle<FixedArray> UnionOfKeys(Handle<FixedArray> first,
+                                        Handle<FixedArray> second);
 
   // Copy a sub array from the receiver to dest.
   void CopyTo(int pos, FixedArray* dest, int dest_pos, int len);
@@ -5194,6 +5201,7 @@ class Code: public HeapObject {
 #define IC_KIND_LIST(V) \
   V(LOAD_IC)            \
   V(KEYED_LOAD_IC)      \
+  V(CALL_IC)            \
   V(STORE_IC)           \
   V(KEYED_STORE_IC)     \
   V(BINARY_OP_IC)       \
@@ -5303,6 +5311,7 @@ class Code: public HeapObject {
   inline bool is_keyed_load_stub() { return kind() == KEYED_LOAD_IC; }
   inline bool is_store_stub() { return kind() == STORE_IC; }
   inline bool is_keyed_store_stub() { return kind() == KEYED_STORE_IC; }
+  inline bool is_call_stub() { return kind() == CALL_IC; }
   inline bool is_binary_op_stub() { return kind() == BINARY_OP_IC; }
   inline bool is_compare_ic_stub() { return kind() == COMPARE_IC; }
   inline bool is_compare_nil_ic_stub() { return kind() == COMPARE_NIL_IC; }
@@ -6003,6 +6012,7 @@ class Map: public HeapObject {
       Map* transitioned_map);
   inline void SetTransition(int transition_index, Map* target);
   inline Map* GetTransition(int transition_index);
+  inline int SearchTransition(Name* name);
 
   static Handle<TransitionArray> AddTransition(Handle<Map> map,
                                                Handle<Name> key,
@@ -6123,9 +6133,6 @@ class Map: public HeapObject {
   MUST_USE_RESULT inline MaybeObject* SetPrototypeTransitions(
       FixedArray* prototype_transitions);
   inline bool HasPrototypeTransitions();
-
-  inline HeapObject* UncheckedPrototypeTransitions();
-  inline TransitionArray* unchecked_transition_array();
 
   static const int kProtoTransitionHeaderSize = 1;
   static const int kProtoTransitionNumberOfEntriesOffset = 0;

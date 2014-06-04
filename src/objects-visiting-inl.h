@@ -309,9 +309,16 @@ void StaticMarkingVisitor<StaticVisitor>::VisitCodeTarget(
   // Monomorphic ICs are preserved when possible, but need to be flushed
   // when they might be keeping a Context alive, or when the heap is about
   // to be serialized.
+
+  // TODO(mvstanton): CALL_IC in monomorphic state needs to be cleared because
+  // it's state is synced with a type feedback slot, which is always cleared on
+  // gc. If we leave it alone, we'll end up in a hybrid of (cleared feedback
+  // slot but monomorphic IC), which is complex.
   if (FLAG_cleanup_code_caches_at_gc && target->is_inline_cache_stub()
       && (target->ic_state() == MEGAMORPHIC || target->ic_state() == GENERIC ||
           target->ic_state() == POLYMORPHIC || heap->flush_monomorphic_ics() ||
+          (target->ic_state() == MONOMORPHIC &&
+           target->kind() == Code::CALL_IC) ||
           Serializer::enabled() || target->ic_age() != heap->global_ic_age())) {
     IC::Clear(target->GetIsolate(), rinfo->pc(),
               rinfo->host()->constant_pool());
@@ -615,12 +622,9 @@ void StaticMarkingVisitor<StaticVisitor>::MarkMapContents(
   // array to prevent visiting it later. Skip recording the transition
   // array slot, since it will be implicitly recorded when the pointer
   // fields of this map are visited.
-  TransitionArray* transitions = map->unchecked_transition_array();
-  if (transitions->IsTransitionArray()) {
+  if (map->HasTransitionArray()) {
+    TransitionArray* transitions = map->transitions();
     MarkTransitionArray(heap, transitions);
-  } else {
-    // Already marked by marking map->GetBackPointer() above.
-    ASSERT(transitions->IsMap() || transitions->IsUndefined());
   }
 
   // Since descriptor arrays are potentially shared, ensure that only the

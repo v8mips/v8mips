@@ -91,9 +91,11 @@ void IC::TraceIC(const char* type,
     }
     JavaScriptFrame::PrintTop(isolate(), stdout, false, true);
     ExtraICState extra_state = new_target->extra_ic_state();
-    const char* modifier =
-        GetTransitionMarkModifier(
-            KeyedStoreIC::GetKeyedAccessStoreMode(extra_state));
+    const char* modifier = "";
+    if (new_target->kind() == Code::KEYED_STORE_IC) {
+      modifier = GetTransitionMarkModifier(
+          KeyedStoreIC::GetKeyedAccessStoreMode(extra_state));
+    }
     PrintF(" (%c->%c%s)",
            TransitionMarkFromState(state()),
            TransitionMarkFromState(new_state),
@@ -415,6 +417,10 @@ void IC::PostPatching(Address address, Code* target, Code* old_target) {
       target->is_inline_cache_stub()) {
     int delta = ComputeTypeInfoCountDelta(old_target->ic_state(),
                                           target->ic_state());
+    // Call ICs don't have interesting state changes from this point
+    // of view.
+    ASSERT(target->kind() != Code::CALL_IC || delta == 0);
+
     // Not all Code objects have TypeFeedbackInfo.
     if (host->type_feedback_info()->IsTypeFeedbackInfo() && delta != 0) {
       TypeFeedbackInfo* info =
@@ -451,6 +457,8 @@ void IC::Clear(Isolate* isolate, Address address,
       return StoreIC::Clear(isolate, address, target, constant_pool);
     case Code::KEYED_STORE_IC:
       return KeyedStoreIC::Clear(isolate, address, target, constant_pool);
+    case Code::CALL_IC:
+      return CallIC::Clear(isolate, address, target, constant_pool);
     case Code::COMPARE_IC:
       return CompareIC::Clear(isolate, address, target, constant_pool);
     case Code::COMPARE_NIL_IC:
@@ -474,6 +482,25 @@ void KeyedLoadIC::Clear(Isolate* isolate,
   // do not clear these maps, cached code can keep objects alive
   // through the embedded maps.
   SetTargetAtAddress(address, *pre_monomorphic_stub(isolate), constant_pool);
+}
+
+
+void CallIC::Clear(Isolate* isolate,
+                   Address address,
+                   Code* target,
+                   ConstantPoolArray* constant_pool) {
+  // CallIC just has a generic stub and a monomorphic stub. Only clear if we
+  // are monomorphic
+  if (target->ic_state() != ::v8::internal::MONOMORPHIC) return;
+
+  CallIC::State existing_state(target->extra_ic_state());
+
+  // Install default stub with the immutable parts of existing state.
+  HandleScope scope(isolate);
+  CallICStub stub(State::DefaultCallState(existing_state.arg_count(),
+                                          existing_state.call_type()));
+  Code* code = *stub.GetCode(isolate);
+  SetTargetAtAddress(address, code, constant_pool);
 }
 
 
@@ -598,11 +625,11 @@ MaybeObject* LoadIC::Load(Handle<Object> object,
 
   PropertyAttributes attr;
   // Get the property.
-  Handle<Object> result =
-      Object::GetProperty(object, object, &lookup, name, &attr);
-  RETURN_IF_EMPTY_HANDLE(isolate(), result);
-  // If the property is not present, check if we need to throw an
-  // exception.
+  Handle<Object> result;
+  ASSIGN_RETURN_FAILURE_ON_EXCEPTION(
+      isolate(), result,
+      Object::GetProperty(object, object, &lookup, name, &attr));
+  // If the property is not present, check if we need to throw an exception.
   if ((lookup.IsInterceptor() || lookup.IsHandler()) &&
       attr == ABSENT && IsUndeclaredGlobal(object)) {
     return ReferenceError("not_defined", name);
@@ -1167,9 +1194,7 @@ static bool LookupForWrite(Handle<JSObject> receiver,
   // chain check. This avoids a double lookup, but requires us to pass in the
   // receiver when trying to fetch extra information from the transition.
   receiver->map()->LookupTransition(*holder, *name, lookup);
-  if (!lookup->IsTransition()) return false;
-  PropertyDetails target_details = lookup->GetTransitionDetails();
-  if (target_details.IsReadOnly()) return false;
+  if (!lookup->IsTransition() || lookup->IsReadOnly()) return false;
 
   // If the value that's being stored does not fit in the field that the
   // instance would transition to, create a new transition that fits the value.
@@ -1178,7 +1203,7 @@ static bool LookupForWrite(Handle<JSObject> receiver,
   // Ensure the instance and its map were migrated before trying to update the
   // transition target.
   ASSERT(!receiver->map()->is_deprecated());
-  if (!value->FitsRepresentation(target_details.representation())) {
+  if (!lookup->CanHoldValue(value)) {
     Handle<Map> target(lookup->GetTransitionTarget());
     Map::GeneralizeRepresentation(
         target, target->LastAdded(),
@@ -1199,9 +1224,11 @@ MaybeObject* StoreIC::Store(Handle<Object> object,
                             Handle<Object> value,
                             JSReceiver::StoreFromKeyed store_mode) {
   if (MigrateDeprecated(object) || object->IsJSProxy()) {
-    Handle<Object> result = JSReceiver::SetProperty(
-        Handle<JSReceiver>::cast(object), name, value, NONE, strict_mode());
-    RETURN_IF_EMPTY_HANDLE(isolate(), result);
+    Handle<JSReceiver> receiver = Handle<JSReceiver>::cast(object);
+    Handle<Object> result;
+    ASSIGN_RETURN_FAILURE_ON_EXCEPTION(
+        isolate(), result,
+        JSReceiver::SetProperty(receiver, name, value, NONE, strict_mode()));
     return *result;
   }
 
@@ -1234,9 +1261,11 @@ MaybeObject* StoreIC::Store(Handle<Object> object,
 
   // Observed objects are always modified through the runtime.
   if (receiver->map()->is_observed()) {
-    Handle<Object> result = JSReceiver::SetProperty(
-        receiver, name, value, NONE, strict_mode(), store_mode);
-    RETURN_IF_EMPTY_HANDLE(isolate(), result);
+    Handle<Object> result;
+    ASSIGN_RETURN_FAILURE_ON_EXCEPTION(
+        isolate(), result,
+        JSReceiver::SetProperty(
+            receiver, name, value, NONE, strict_mode(), store_mode));
     return *result;
   }
 
@@ -1265,10 +1294,38 @@ MaybeObject* StoreIC::Store(Handle<Object> object,
   }
 
   // Set the property.
-  Handle<Object> result = JSReceiver::SetProperty(
-      receiver, name, value, NONE, strict_mode(), store_mode);
-  RETURN_IF_EMPTY_HANDLE(isolate(), result);
+  Handle<Object> result;
+  ASSIGN_RETURN_FAILURE_ON_EXCEPTION(
+      isolate(), result,
+      JSReceiver::SetProperty(
+          receiver, name, value, NONE, strict_mode(), store_mode));
   return *result;
+}
+
+
+void CallIC::State::Print(StringStream* stream) const {
+  stream->Add("(args(%d), ",
+              argc_);
+  stream->Add("%s, ",
+              call_type_ == CallIC::METHOD ? "METHOD" : "FUNCTION");
+  stream->Add("%s, ",
+              stub_type_ == CallIC::MONOMORPHIC ?
+              "MONOMORPHIC" : "NOT_MONOMORPHIC");
+  stream->Add("%s, ",
+              argument_check_ == CallIC::ARGUMENTS_MUST_MATCH ?
+              "args_must_match" : "args_might_match");
+  stream->Add("%s)",
+              strict_mode_ == STRICT ?
+              "strict" : "sloppy");
+}
+
+
+Handle<Code> CallIC::initialize_stub(Isolate* isolate,
+                                     int argc,
+                                     CallType call_type) {
+  CallICStub stub(State::DefaultCallState(argc, call_type));
+  Handle<Code> code = stub.GetCode(isolate);
+  return code;
 }
 
 
@@ -1327,93 +1384,94 @@ Handle<Code> StoreIC::CompileHandler(LookupResult* lookup,
   Handle<JSObject> holder(lookup->holder());
   // Handlers do not use strict mode.
   StoreStubCompiler compiler(isolate(), SLOPPY, kind());
-  switch (lookup->type()) {
-    case FIELD:
-      return compiler.CompileStoreField(receiver, lookup, name);
-    case TRANSITION: {
-      // Explicitly pass in the receiver map since LookupForWrite may have
-      // stored something else than the receiver in the holder.
-      Handle<Map> transition(lookup->GetTransitionTarget());
-      PropertyDetails details = transition->GetLastDescriptorDetails();
+  if (lookup->IsTransition()) {
+    // Explicitly pass in the receiver map since LookupForWrite may have
+    // stored something else than the receiver in the holder.
+    Handle<Map> transition(lookup->GetTransitionTarget());
+    PropertyDetails details = lookup->GetPropertyDetails();
 
-      if (details.type() == CALLBACKS || details.attributes() != NONE) break;
-
+    if (details.type() != CALLBACKS && details.attributes() == NONE) {
       return compiler.CompileStoreTransition(
           receiver, lookup, transition, name);
     }
-    case NORMAL:
-      if (kind() == Code::KEYED_STORE_IC) break;
-      if (receiver->IsJSGlobalProxy() || receiver->IsGlobalObject()) {
-        // The stub generated for the global object picks the value directly
-        // from the property cell. So the property must be directly on the
-        // global object.
-        Handle<GlobalObject> global = receiver->IsJSGlobalProxy()
-            ? handle(GlobalObject::cast(receiver->GetPrototype()))
-            : Handle<GlobalObject>::cast(receiver);
-        Handle<PropertyCell> cell(global->GetPropertyCell(lookup), isolate());
-        Handle<HeapType> union_type = PropertyCell::UpdatedType(cell, value);
-        StoreGlobalStub stub(
-            union_type->IsConstant(), receiver->IsJSGlobalProxy());
-        Handle<Code> code = stub.GetCodeCopyFromTemplate(
-            isolate(), global, cell);
-        // TODO(verwaest): Move caching of these NORMAL stubs outside as well.
-        HeapObject::UpdateMapCodeCache(receiver, name, code);
-        return code;
-      }
-      ASSERT(holder.is_identical_to(receiver));
-      return isolate()->builtins()->StoreIC_Normal();
-    case CALLBACKS: {
-      Handle<Object> callback(lookup->GetCallbackObject(), isolate());
-      if (callback->IsExecutableAccessorInfo()) {
-        Handle<ExecutableAccessorInfo> info =
-            Handle<ExecutableAccessorInfo>::cast(callback);
-        if (v8::ToCData<Address>(info->setter()) == 0) break;
-        if (!holder->HasFastProperties()) break;
-        if (!info->IsCompatibleReceiver(*receiver)) break;
-        return compiler.CompileStoreCallback(receiver, holder, name, info);
-      } else if (callback->IsAccessorPair()) {
-        Handle<Object> setter(
-            Handle<AccessorPair>::cast(callback)->setter(), isolate());
-        if (!setter->IsJSFunction()) break;
-        if (holder->IsGlobalObject()) break;
-        if (!holder->HasFastProperties()) break;
-        Handle<JSFunction> function = Handle<JSFunction>::cast(setter);
-        CallOptimization call_optimization(function);
-        if (call_optimization.is_simple_api_call() &&
-            call_optimization.IsCompatibleReceiver(receiver, holder)) {
-          return compiler.CompileStoreCallback(
-              receiver, holder, name, call_optimization);
+  } else {
+    switch (lookup->type()) {
+      case FIELD:
+        return compiler.CompileStoreField(receiver, lookup, name);
+      case NORMAL:
+        if (kind() == Code::KEYED_STORE_IC) break;
+        if (receiver->IsJSGlobalProxy() || receiver->IsGlobalObject()) {
+          // The stub generated for the global object picks the value directly
+          // from the property cell. So the property must be directly on the
+          // global object.
+          Handle<GlobalObject> global = receiver->IsJSGlobalProxy()
+              ? handle(GlobalObject::cast(receiver->GetPrototype()))
+              : Handle<GlobalObject>::cast(receiver);
+          Handle<PropertyCell> cell(global->GetPropertyCell(lookup), isolate());
+          Handle<HeapType> union_type = PropertyCell::UpdatedType(cell, value);
+          StoreGlobalStub stub(
+              union_type->IsConstant(), receiver->IsJSGlobalProxy());
+          Handle<Code> code = stub.GetCodeCopyFromTemplate(
+              isolate(), global, cell);
+          // TODO(verwaest): Move caching of these NORMAL stubs outside as well.
+          HeapObject::UpdateMapCodeCache(receiver, name, code);
+          return code;
         }
-        return compiler.CompileStoreViaSetter(
-            receiver, holder, name, Handle<JSFunction>::cast(setter));
-      }
-      // TODO(dcarney): Handle correctly.
-      if (callback->IsDeclaredAccessorInfo()) break;
-      ASSERT(callback->IsForeign());
+        ASSERT(holder.is_identical_to(receiver));
+        return isolate()->builtins()->StoreIC_Normal();
+      case CALLBACKS: {
+        Handle<Object> callback(lookup->GetCallbackObject(), isolate());
+        if (callback->IsExecutableAccessorInfo()) {
+          Handle<ExecutableAccessorInfo> info =
+              Handle<ExecutableAccessorInfo>::cast(callback);
+          if (v8::ToCData<Address>(info->setter()) == 0) break;
+          if (!holder->HasFastProperties()) break;
+          if (!info->IsCompatibleReceiver(*receiver)) break;
+          return compiler.CompileStoreCallback(receiver, holder, name, info);
+        } else if (callback->IsAccessorPair()) {
+          Handle<Object> setter(
+              Handle<AccessorPair>::cast(callback)->setter(), isolate());
+          if (!setter->IsJSFunction()) break;
+          if (holder->IsGlobalObject()) break;
+          if (!holder->HasFastProperties()) break;
+          Handle<JSFunction> function = Handle<JSFunction>::cast(setter);
+          CallOptimization call_optimization(function);
+          if (call_optimization.is_simple_api_call() &&
+              call_optimization.IsCompatibleReceiver(receiver, holder)) {
+            return compiler.CompileStoreCallback(
+                receiver, holder, name, call_optimization);
+          }
+          return compiler.CompileStoreViaSetter(
+              receiver, holder, name, Handle<JSFunction>::cast(setter));
+        }
+        // TODO(dcarney): Handle correctly.
+        if (callback->IsDeclaredAccessorInfo()) break;
+        ASSERT(callback->IsForeign());
 
-      // Use specialized code for setting the length of arrays with fast
-      // properties. Slow properties might indicate redefinition of the length
-      // property.
-      if (receiver->IsJSArray() &&
-          name->Equals(isolate()->heap()->length_string()) &&
-          Handle<JSArray>::cast(receiver)->AllowsSetElementsLength() &&
-          receiver->HasFastProperties()) {
-        return compiler.CompileStoreArrayLength(receiver, lookup, name);
-      }
+        // Use specialized code for setting the length of arrays with fast
+        // properties. Slow properties might indicate redefinition of the length
+        // property.
+        if (receiver->IsJSArray() &&
+            name->Equals(isolate()->heap()->length_string()) &&
+            Handle<JSArray>::cast(receiver)->AllowsSetElementsLength() &&
+            receiver->HasFastProperties()) {
+          return compiler.CompileStoreArrayLength(receiver, lookup, name);
+        }
 
-      // No IC support for old-style native accessors.
-      break;
+        // No IC support for old-style native accessors.
+        break;
+      }
+      case INTERCEPTOR:
+        if (kind() == Code::KEYED_STORE_IC) break;
+        ASSERT(HasInterceptorSetter(*holder));
+        return compiler.CompileStoreInterceptor(receiver, name);
+      case CONSTANT:
+        break;
+      case NONEXISTENT:
+      case HANDLER:
+        UNREACHABLE();
+        break;
     }
-    case INTERCEPTOR:
-      if (kind() == Code::KEYED_STORE_IC) break;
-      ASSERT(HasInterceptorSetter(*holder));
-      return compiler.CompileStoreInterceptor(receiver, name);
-    case CONSTANT:
-      break;
-    case NONEXISTENT:
-    case HANDLER:
-      UNREACHABLE();
-      break;
   }
   return slow_stub();
 }
@@ -1662,12 +1720,11 @@ MaybeObject* KeyedStoreIC::Store(Handle<Object> object,
                                  Handle<Object> key,
                                  Handle<Object> value) {
   if (MigrateDeprecated(object)) {
-    Handle<Object> result = Runtime::SetObjectProperty(isolate(), object,
-                                                       key,
-                                                       value,
-                                                       NONE,
-                                                       strict_mode());
-    RETURN_IF_EMPTY_HANDLE(isolate(), result);
+    Handle<Object> result;
+    ASSIGN_RETURN_FAILURE_ON_EXCEPTION(
+        isolate(), result,
+        Runtime::SetObjectProperty(
+            isolate(), object, key, value, NONE, strict_mode()));
     return *result;
   }
 
@@ -1735,12 +1792,108 @@ MaybeObject* KeyedStoreIC::Store(Handle<Object> object,
   }
 
   if (maybe_object) return maybe_object;
-  Handle<Object> result = Runtime::SetObjectProperty(isolate(), object, key,
-                                                     value,
-                                                     NONE,
-                                                     strict_mode());
-  RETURN_IF_EMPTY_HANDLE(isolate(), result);
+  Handle<Object> result;
+  ASSIGN_RETURN_FAILURE_ON_EXCEPTION(
+      isolate(), result,
+      Runtime::SetObjectProperty(
+          isolate(), object, key, value,  NONE, strict_mode()));
   return *result;
+}
+
+
+CallIC::State::State(ExtraICState extra_ic_state)
+    : argc_(ArgcBits::decode(extra_ic_state)),
+      call_type_(CallTypeBits::decode(extra_ic_state)),
+      stub_type_(StubTypeBits::decode(extra_ic_state)),
+      argument_check_(ArgumentCheckBits::decode(extra_ic_state)),
+      strict_mode_(StrictModeBits::decode(extra_ic_state)) {
+}
+
+
+ExtraICState CallIC::State::GetExtraICState() const {
+  ExtraICState extra_ic_state =
+      ArgcBits::encode(argc_) |
+      CallTypeBits::encode(call_type_) |
+      StubTypeBits::encode(stub_type_) |
+      ArgumentCheckBits::encode(argument_check_) |
+      StrictModeBits::encode(strict_mode_);
+  return extra_ic_state;
+}
+
+
+CallIC::State CallIC::State::ToGenericState() {
+  if (stub_type() == CallIC::MONOMORPHIC) {
+    return DefaultCallState(arg_count(), call_type());
+  }
+  return *this;
+}
+
+
+CallIC::State CallIC::State::ToMonomorphicState(
+    Handle<JSFunction> function) {
+  // Choose the right monomorphic handler
+  SharedFunctionInfo* shared = function->shared();
+  ArgumentCheck new_argument_check =
+      shared->formal_parameter_count() == arg_count()
+      ? CallIC::ARGUMENTS_MUST_MATCH
+      : CallIC::ARGUMENTS_COUNT_UNKNOWN;
+  StrictMode new_strict_mode = shared->strict_mode();
+  if (new_argument_check != argument_check() ||
+      new_strict_mode != strict_mode()) {
+    return MonomorphicCallState(arg_count(), call_type(), new_argument_check,
+                                new_strict_mode);
+  }
+
+  return *this;
+}
+
+
+void CallIC::HandleMiss(Handle<Object> receiver,
+                        Handle<Object> function,
+                        Handle<FixedArray> vector,
+                        Handle<Smi> slot) {
+  State state(target()->extra_ic_state());
+  Object* feedback = vector->get(slot->value());
+
+  if (feedback->IsJSFunction() || !function->IsJSFunction()) {
+    // We are going generic.
+    ASSERT(!function->IsJSFunction() || *function != feedback);
+
+    vector->set(slot->value(),
+                *TypeFeedbackInfo::MegamorphicSentinel(isolate()));
+
+    // We only need to patch if we currently don't have the default stub in
+    // place.
+    State new_state = state.ToGenericState();
+    if (new_state != state) {
+      CallICStub stub(new_state);
+      set_target(*stub.GetCode(isolate()));
+      TRACE_GENERIC_IC(isolate(), "CallIC", "generic");
+    }
+  } else {
+    // If we came here feedback must be the uninitialized sentinel,
+    // and we are going monomorphic.
+    ASSERT(feedback == *TypeFeedbackInfo::UninitializedSentinel(isolate()));
+    ASSERT(state.stub_type() != CallIC::MONOMORPHIC);
+
+    vector->set(slot->value(), *function);
+
+    // Choose the right monomorphic handler
+    Handle<JSFunction> js_function = Handle<JSFunction>::cast(function);
+    State new_state = state.ToMonomorphicState(js_function);
+    if (new_state != state) {
+      CallICStub stub(new_state);
+      Handle<Code> code = stub.GetCode(isolate());
+      // Creating the code above could result in a gc, which clears the type
+      // vector. If that happens, our plan to go monomorphic has been
+      // pre-empted.
+      feedback = vector->get(slot->value());
+      if (feedback == *function) {
+        set_target(*code);
+        TRACE_IC("CallIC", handle(js_function->shared()->name(), isolate()));
+      }
+    }
+  }
 }
 
 
@@ -1752,6 +1905,19 @@ MaybeObject* KeyedStoreIC::Store(Handle<Object> object,
 //
 
 // Used from ic-<arch>.cc.
+RUNTIME_FUNCTION(MaybeObject*, CallIC_Miss) {
+  HandleScope scope(isolate);
+  ASSERT(args.length() == 4);
+  CallIC ic(isolate);
+  Handle<Object> receiver = args.at<Object>(0);
+  Handle<Object> function = args.at<Object>(1);
+  Handle<FixedArray> vector = args.at<FixedArray>(2);
+  Handle<Smi> slot = args.at<Smi>(3);
+  ic.HandleMiss(receiver, function, vector, slot);
+  return *function;
+}
+
+
 // Used from ic-<arch>.cc.
 RUNTIME_FUNCTION(MaybeObject*, LoadIC_Miss) {
   HandleScope scope(isolate);
@@ -1911,11 +2077,11 @@ RUNTIME_FUNCTION(MaybeObject*, StoreIC_Slow) {
   Handle<Object> key = args.at<Object>(1);
   Handle<Object> value = args.at<Object>(2);
   StrictMode strict_mode = ic.strict_mode();
-  Handle<Object> result = Runtime::SetObjectProperty(isolate, object, key,
-                                                     value,
-                                                     NONE,
-                                                     strict_mode);
-  RETURN_IF_EMPTY_HANDLE(isolate, result);
+  Handle<Object> result;
+  ASSIGN_RETURN_FAILURE_ON_EXCEPTION(
+      isolate, result,
+      Runtime::SetObjectProperty(
+          isolate, object, key, value, NONE, strict_mode));
   return *result;
 }
 
@@ -1928,11 +2094,11 @@ RUNTIME_FUNCTION(MaybeObject*, KeyedStoreIC_Slow) {
   Handle<Object> key = args.at<Object>(1);
   Handle<Object> value = args.at<Object>(2);
   StrictMode strict_mode = ic.strict_mode();
-  Handle<Object> result = Runtime::SetObjectProperty(isolate, object, key,
-                                                     value,
-                                                     NONE,
-                                                     strict_mode);
-  RETURN_IF_EMPTY_HANDLE(isolate, result);
+  Handle<Object> result;
+  ASSIGN_RETURN_FAILURE_ON_EXCEPTION(
+      isolate, result,
+      Runtime::SetObjectProperty(
+          isolate, object, key, value, NONE, strict_mode));
   return *result;
 }
 
@@ -1950,11 +2116,11 @@ RUNTIME_FUNCTION(MaybeObject*, ElementsTransitionAndStoreIC_Miss) {
     JSObject::TransitionElementsKind(Handle<JSObject>::cast(object),
                                      map->elements_kind());
   }
-  Handle<Object> result = Runtime::SetObjectProperty(isolate, object, key,
-                                                     value,
-                                                     NONE,
-                                                     strict_mode);
-  RETURN_IF_EMPTY_HANDLE(isolate, result);
+  Handle<Object> result;
+  ASSIGN_RETURN_FAILURE_ON_EXCEPTION(
+      isolate, result,
+      Runtime::SetObjectProperty(
+          isolate, object, key, value, NONE, strict_mode));
   return *result;
 }
 
