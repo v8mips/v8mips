@@ -2018,6 +2018,7 @@ TEST(InstanceOfStubWriteBarrier) {
 
 
 TEST(PrototypeTransitionClearing) {
+  if (FLAG_never_compact) return;
   CcTest::InitializeVM();
   Isolate* isolate = CcTest::i_isolate();
   Factory* factory = isolate->factory();
@@ -2073,10 +2074,6 @@ TEST(PrototypeTransitionClearing) {
   CHECK(!space->LastPage()->Contains(
       map->GetPrototypeTransitions()->address()));
   CHECK(space->LastPage()->Contains(prototype->address()));
-  JSObject::SetPrototype(baseObject, prototype, false);
-  CHECK(Map::GetPrototypeTransition(map, prototype)->IsMap());
-  CcTest::heap()->CollectAllGarbage(Heap::kNoGCFlags);
-  CHECK(Map::GetPrototypeTransition(map, prototype)->IsMap());
 }
 
 
@@ -2672,6 +2669,145 @@ TEST(Regress1465) {
 }
 
 
+#ifdef DEBUG
+static void AddTransitions(int transitions_count) {
+  AlwaysAllocateScope always_allocate(CcTest::i_isolate());
+  for (int i = 0; i < transitions_count; i++) {
+    EmbeddedVector<char, 64> buffer;
+    OS::SNPrintF(buffer, "var o = new Object; o.prop%d = %d;", i, i);
+    CompileRun(buffer.start());
+  }
+}
+
+
+static Handle<JSObject> GetByName(const char* name) {
+  return v8::Utils::OpenHandle(
+      *v8::Handle<v8::Object>::Cast(
+          CcTest::global()->Get(v8_str(name))));
+}
+
+
+static void AddPropertyTo(
+    int gc_count, Handle<JSObject> object, const char* property_name) {
+  Isolate* isolate = CcTest::i_isolate();
+  Factory* factory = isolate->factory();
+  Handle<String> prop_name = factory->InternalizeUtf8String(property_name);
+  Handle<Smi> twenty_three(Smi::FromInt(23), isolate);
+  i::FLAG_gc_interval = gc_count;
+  i::FLAG_gc_global = true;
+  CcTest::heap()->set_allocation_timeout(gc_count);
+  JSReceiver::SetProperty(
+      object, prop_name, twenty_three, NONE, SLOPPY).Check();
+}
+
+
+TEST(TransitionArrayShrinksDuringAllocToZero) {
+  i::FLAG_stress_compaction = false;
+  i::FLAG_allow_natives_syntax = true;
+  CcTest::InitializeVM();
+  v8::HandleScope scope(CcTest::isolate());
+  static const int transitions_count = 10;
+  AddTransitions(transitions_count);
+  CompileRun("var root = new Object;");
+  Handle<JSObject> root = GetByName("root");
+
+  // Count number of live transitions before marking.
+  int transitions_before = CountMapTransitions(root->map());
+  CHECK_EQ(transitions_count, transitions_before);
+
+  // Get rid of o
+  CompileRun("o = new Object;"
+             "root = new Object");
+  root = GetByName("root");
+  AddPropertyTo(2, root, "funny");
+
+  // Count number of live transitions after marking.  Note that one transition
+  // is left, because 'o' still holds an instance of one transition target.
+  int transitions_after = CountMapTransitions(
+      Map::cast(root->map()->GetBackPointer()));
+  CHECK_EQ(1, transitions_after);
+}
+
+
+TEST(TransitionArrayShrinksDuringAllocToOne) {
+  i::FLAG_stress_compaction = false;
+  i::FLAG_allow_natives_syntax = true;
+  CcTest::InitializeVM();
+  v8::HandleScope scope(CcTest::isolate());
+  static const int transitions_count = 10;
+  AddTransitions(transitions_count);
+  CompileRun("var root = new Object;");
+  Handle<JSObject> root = GetByName("root");
+
+  // Count number of live transitions before marking.
+  int transitions_before = CountMapTransitions(root->map());
+  CHECK_EQ(transitions_count, transitions_before);
+
+  root = GetByName("root");
+  AddPropertyTo(2, root, "funny");
+
+  // Count number of live transitions after marking.  Note that one transition
+  // is left, because 'o' still holds an instance of one transition target.
+  int transitions_after = CountMapTransitions(
+      Map::cast(root->map()->GetBackPointer()));
+  CHECK_EQ(2, transitions_after);
+}
+
+
+TEST(TransitionArrayShrinksDuringAllocToOnePropertyFound) {
+  i::FLAG_stress_compaction = false;
+  i::FLAG_allow_natives_syntax = true;
+  CcTest::InitializeVM();
+  v8::HandleScope scope(CcTest::isolate());
+  static const int transitions_count = 10;
+  AddTransitions(transitions_count);
+  CompileRun("var root = new Object;");
+  Handle<JSObject> root = GetByName("root");
+
+  // Count number of live transitions before marking.
+  int transitions_before = CountMapTransitions(root->map());
+  CHECK_EQ(transitions_count, transitions_before);
+
+  root = GetByName("root");
+  AddPropertyTo(0, root, "prop9");
+
+  // Count number of live transitions after marking.  Note that one transition
+  // is left, because 'o' still holds an instance of one transition target.
+  int transitions_after = CountMapTransitions(
+      Map::cast(root->map()->GetBackPointer()));
+  CHECK_EQ(1, transitions_after);
+}
+
+
+TEST(TransitionArraySimpleToFull) {
+  i::FLAG_stress_compaction = false;
+  i::FLAG_allow_natives_syntax = true;
+  CcTest::InitializeVM();
+  v8::HandleScope scope(CcTest::isolate());
+  static const int transitions_count = 1;
+  AddTransitions(transitions_count);
+  CompileRun("var root = new Object;");
+  Handle<JSObject> root = GetByName("root");
+
+  // Count number of live transitions before marking.
+  int transitions_before = CountMapTransitions(root->map());
+  CHECK_EQ(transitions_count, transitions_before);
+
+  CompileRun("o = new Object;"
+             "root = new Object");
+  root = GetByName("root");
+  ASSERT(root->map()->transitions()->IsSimpleTransition());
+  AddPropertyTo(2, root, "happy");
+
+  // Count number of live transitions after marking.  Note that one transition
+  // is left, because 'o' still holds an instance of one transition target.
+  int transitions_after = CountMapTransitions(
+      Map::cast(root->map()->GetBackPointer()));
+  CHECK_EQ(1, transitions_after);
+}
+#endif  // DEBUG
+
+
 TEST(Regress2143a) {
   i::FLAG_collect_maps = true;
   i::FLAG_incremental_marking = true;
@@ -2757,6 +2893,7 @@ TEST(Regress2143b) {
 
 
 TEST(ReleaseOverReservedPages) {
+  if (FLAG_never_compact) return;
   i::FLAG_trace_gc = true;
   // The optimizer can allocate stuff, messing up the test.
   i::FLAG_crankshaft = false;
@@ -3420,6 +3557,7 @@ TEST(Regress169928) {
 
 
 TEST(Regress168801) {
+  if (i::FLAG_never_compact) return;
   i::FLAG_always_compact = true;
   i::FLAG_cache_optimized_code = false;
   i::FLAG_allow_natives_syntax = true;
@@ -3476,6 +3614,7 @@ TEST(Regress168801) {
 
 
 TEST(Regress173458) {
+  if (i::FLAG_never_compact) return;
   i::FLAG_always_compact = true;
   i::FLAG_cache_optimized_code = false;
   i::FLAG_allow_natives_syntax = true;

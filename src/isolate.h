@@ -561,16 +561,6 @@ class Isolate {
   // If one does not yet exist, return null.
   PerIsolateThreadData* FindPerThreadDataForThread(ThreadId thread_id);
 
-#ifdef ENABLE_DEBUGGER_SUPPORT
-  // Get the debugger from the default isolate. Preinitializes the
-  // default isolate if needed.
-  static Debugger* GetDefaultIsolateDebugger();
-#endif
-
-  // Get the stack guard from the default isolate. Preinitializes the
-  // default isolate if needed.
-  static StackGuard* GetDefaultIsolateStackGuard();
-
   // Returns the key used to store the pointer to the current isolate.
   // Used internally for V8 threads that do not execute JavaScript but still
   // are part of the domain of an isolate (like the context switcher).
@@ -790,31 +780,15 @@ class Isolate {
   // the result is false, the pending exception is guaranteed to be
   // set.
 
-  // TODO(yangguo): temporary wrappers
-  bool MayNamedAccessWrapper(Handle<JSObject> receiver,
-                             Handle<Object> key,
-                             v8::AccessType type) {
-    return MayNamedAccess(*receiver, *key, type);
-  }
-  bool MayIndexedAccessWrapper(Handle<JSObject> receiver,
-                               uint32_t index,
-                               v8::AccessType type) {
-    return MayIndexedAccess(*receiver, index, type);
-  }
-  void ReportFailedAccessCheckWrapper(Handle<JSObject> receiver,
-                                      v8::AccessType type) {
-    ReportFailedAccessCheck(*receiver, type);
-  }
-
-  bool MayNamedAccess(JSObject* receiver,
-                      Object* key,
+  bool MayNamedAccess(Handle<JSObject> receiver,
+                      Handle<Object> key,
                       v8::AccessType type);
-  bool MayIndexedAccess(JSObject* receiver,
+  bool MayIndexedAccess(Handle<JSObject> receiver,
                         uint32_t index,
                         v8::AccessType type);
 
   void SetFailedAccessCheckCallback(v8::FailedAccessCheckCallback callback);
-  void ReportFailedAccessCheck(JSObject* receiver, v8::AccessType type);
+  void ReportFailedAccessCheck(Handle<JSObject> receiver, v8::AccessType type);
 
   // Exception throwing support. The caller should use the result
   // of Throw() as its return value.
@@ -1144,11 +1118,6 @@ class Isolate {
   SweeperThread** sweeper_threads() {
     return sweeper_thread_;
   }
-
-  // PreInits and returns a default isolate. Needed when a new thread tries
-  // to create a Locker for the first time (the lock itself is in the isolate).
-  // TODO(svenpanne) This method is on death row...
-  static v8::Isolate* GetDefaultIsolateForLocking();
 
   int id() const { return static_cast<int>(id_); }
 

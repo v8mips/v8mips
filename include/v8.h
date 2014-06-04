@@ -3893,11 +3893,6 @@ class V8_EXPORT ResourceConstraints {
   void ConfigureDefaults(uint64_t physical_memory,
                          uint64_t virtual_memory_limit,
                          uint32_t number_of_processors);
-  // Deprecated.
-  void ConfigureDefaults(uint64_t physical_memory,
-                         uint32_t number_of_processors) {
-    ConfigureDefaults(physical_memory, 0, number_of_processors);
-  }
 
   int max_young_space_size() const { return max_young_space_size_; }
   void set_max_young_space_size(int value) { max_young_space_size_ = value; }
@@ -4104,7 +4099,7 @@ class V8_EXPORT Isolate {
   /**
    * Assert that no Javascript code is invoked.
    */
-  class DisallowJavascriptExecutionScope {
+  class V8_EXPORT DisallowJavascriptExecutionScope {
    public:
     enum OnFailure { CRASH_ON_FAILURE, THROW_ON_FAILURE };
 
@@ -4125,7 +4120,7 @@ class V8_EXPORT Isolate {
   /**
    * Introduce exception to DisallowJavascriptExecutionScope.
    */
-  class AllowJavascriptExecutionScope {
+  class V8_EXPORT AllowJavascriptExecutionScope {
    public:
     explicit AllowJavascriptExecutionScope(Isolate* isolate);
     ~AllowJavascriptExecutionScope();
@@ -4845,15 +4840,14 @@ class V8_EXPORT V8 {
 
   /**
    * Forcefully terminate the current thread of JavaScript execution
-   * in the given isolate. If no isolate is provided, the default
-   * isolate is used.
+   * in the given isolate.
    *
    * This method can be used by any thread even if that thread has not
    * acquired the V8 lock with a Locker object.
    *
    * \param isolate The isolate in which to terminate the current JS execution.
    */
-  static void TerminateExecution(Isolate* isolate = NULL);
+  static void TerminateExecution(Isolate* isolate);
 
   /**
    * Is V8 terminating JavaScript execution.

@@ -1694,40 +1694,44 @@ Local<UnboundScript> ScriptCompiler::CompileUnbound(
     CompileOptions options) {
   i::ScriptData* script_data_impl = NULL;
   i::CachedDataMode cached_data_mode = i::NO_CACHED_DATA;
+  i::Isolate* isolate = reinterpret_cast<i::Isolate*>(v8_isolate);
+  ON_BAILOUT(isolate, "v8::ScriptCompiler::CompileUnbound()",
+             return Local<UnboundScript>());
   if (options & kProduceDataToCache) {
     cached_data_mode = i::PRODUCE_CACHED_DATA;
     ASSERT(source->cached_data == NULL);
     if (source->cached_data) {
       // Asked to produce cached data even though there is some already -> not
-      // good. In release mode, try to do the right thing: Just regenerate the
-      // data.
-      delete source->cached_data;
-      source->cached_data = NULL;
+      // good. Fail the compilation.
+      EXCEPTION_PREAMBLE(isolate);
+      i::Handle<i::Object> result = isolate->factory()->NewSyntaxError(
+          "invalid_cached_data", isolate->factory()->NewJSArray(0));
+      isolate->Throw(*result);
+      isolate->ReportPendingMessages();
+      has_pending_exception = true;
+      EXCEPTION_BAILOUT_CHECK(isolate, Local<UnboundScript>());
     }
   } else if (source->cached_data) {
+    cached_data_mode = i::CONSUME_CACHED_DATA;
     // ScriptData takes care of aligning, in case the data is not aligned
     // correctly.
     script_data_impl = i::ScriptData::New(
         reinterpret_cast<const char*>(source->cached_data->data),
         source->cached_data->length);
-    // We assert that the pre-data is sane, even though we can actually
-    // handle it if it turns out not to be in release mode.
-    ASSERT(script_data_impl->SanityCheck());
-    if (script_data_impl->SanityCheck()) {
-      cached_data_mode = i::CONSUME_CACHED_DATA;
-    } else {
-      // If the pre-data isn't sane we simply ignore it.
+    // If the cached data is not valid, fail the compilation.
+    if (script_data_impl == NULL || !script_data_impl->SanityCheck()) {
+      EXCEPTION_PREAMBLE(isolate);
+      i::Handle<i::Object> result = isolate->factory()->NewSyntaxError(
+          "invalid_cached_data", isolate->factory()->NewJSArray(0));
+      isolate->Throw(*result);
+      isolate->ReportPendingMessages();
       delete script_data_impl;
-      script_data_impl = NULL;
-      delete source->cached_data;
-      source->cached_data = NULL;
+      has_pending_exception = true;
+      EXCEPTION_BAILOUT_CHECK(isolate, Local<UnboundScript>());
     }
   }
 
   i::Handle<i::String> str = Utils::OpenHandle(*(source->source_string));
-  i::Isolate* isolate = reinterpret_cast<i::Isolate*>(v8_isolate);
-  ON_BAILOUT(isolate, "v8::ScriptCompiler::CompileUnbound()",
-             return Local<UnboundScript>());
   LOG_API(isolate, "ScriptCompiler::CompileUnbound");
   ENTER_V8(isolate);
   i::SharedFunctionInfo* raw_result = NULL;
@@ -5575,7 +5579,8 @@ Local<v8::Value> v8::NumberObject::New(Isolate* isolate, double value) {
   LOG_API(i_isolate, "NumberObject::New");
   ENTER_V8(i_isolate);
   i::Handle<i::Object> number = i_isolate->factory()->NewNumber(value);
-  i::Handle<i::Object> obj = i_isolate->factory()->ToObject(number);
+  i::Handle<i::Object> obj =
+      i::Object::ToObject(i_isolate, number).ToHandleChecked();
   return Utils::ToLocal(obj);
 }
 
@@ -5598,7 +5603,8 @@ Local<v8::Value> v8::BooleanObject::New(bool value) {
                                ? isolate->heap()->true_value()
                                : isolate->heap()->false_value(),
                                isolate);
-  i::Handle<i::Object> obj = isolate->factory()->ToObject(boolean);
+  i::Handle<i::Object> obj =
+      i::Object::ToObject(isolate, boolean).ToHandleChecked();
   return Utils::ToLocal(obj);
 }
 
@@ -5617,8 +5623,8 @@ Local<v8::Value> v8::StringObject::New(Handle<String> value) {
   EnsureInitializedForIsolate(isolate, "v8::StringObject::New()");
   LOG_API(isolate, "StringObject::New");
   ENTER_V8(isolate);
-  i::Handle<i::Object> obj =
-      isolate->factory()->ToObject(Utils::OpenHandle(*value));
+  i::Handle<i::Object> obj = i::Object::ToObject(
+      isolate, Utils::OpenHandle(*value)).ToHandleChecked();
   return Utils::ToLocal(obj);
 }
 
@@ -5638,8 +5644,8 @@ Local<v8::Value> v8::SymbolObject::New(Isolate* isolate, Handle<Symbol> value) {
   EnsureInitializedForIsolate(i_isolate, "v8::SymbolObject::New()");
   LOG_API(i_isolate, "SymbolObject::New");
   ENTER_V8(i_isolate);
-  i::Handle<i::Object> obj =
-      i_isolate->factory()->ToObject(Utils::OpenHandle(*value));
+  i::Handle<i::Object> obj = i::Object::ToObject(
+      i_isolate, Utils::OpenHandle(*value)).ToHandleChecked();
   return Utils::ToLocal(obj);
 }
 
@@ -6516,12 +6522,7 @@ void V8::RemoveCallCompletedCallback(CallCompletedCallback callback) {
 
 
 void V8::TerminateExecution(Isolate* isolate) {
-  // If no isolate is supplied, use the default isolate.
-  if (isolate != NULL) {
-    reinterpret_cast<i::Isolate*>(isolate)->stack_guard()->TerminateExecution();
-  } else {
-    i::Isolate::GetDefaultIsolateStackGuard()->TerminateExecution();
-  }
+  reinterpret_cast<i::Isolate*>(isolate)->stack_guard()->TerminateExecution();
 }
 
 
@@ -6838,34 +6839,19 @@ bool Debug::SetDebugEventListener(v8::Handle<v8::Object> that,
 
 
 void Debug::DebugBreak(Isolate* isolate) {
-  // If no isolate is supplied, use the default isolate.
-  if (isolate != NULL) {
-    reinterpret_cast<i::Isolate*>(isolate)->stack_guard()->DebugBreak();
-  } else {
-    i::Isolate::GetDefaultIsolateStackGuard()->DebugBreak();
-  }
+  reinterpret_cast<i::Isolate*>(isolate)->stack_guard()->DebugBreak();
 }
 
 
 void Debug::CancelDebugBreak(Isolate* isolate) {
-  // If no isolate is supplied, use the default isolate.
-  if (isolate != NULL) {
-    i::Isolate* internal_isolate = reinterpret_cast<i::Isolate*>(isolate);
-    internal_isolate->stack_guard()->Continue(i::DEBUGBREAK);
-  } else {
-    i::Isolate::GetDefaultIsolateStackGuard()->Continue(i::DEBUGBREAK);
-  }
+  i::Isolate* internal_isolate = reinterpret_cast<i::Isolate*>(isolate);
+  internal_isolate->stack_guard()->Continue(i::DEBUGBREAK);
 }
 
 
-void Debug::DebugBreakForCommand(ClientData* data, Isolate* isolate) {
-  // If no isolate is supplied, use the default isolate.
-  if (isolate != NULL) {
-    i::Isolate* internal_isolate = reinterpret_cast<i::Isolate*>(isolate);
-    internal_isolate->debugger()->EnqueueDebugCommand(data);
-  } else {
-    i::Isolate::GetDefaultIsolateDebugger()->EnqueueDebugCommand(data);
-  }
+void Debug::DebugBreakForCommand(Isolate* isolate, ClientData* data) {
+  i::Isolate* internal_isolate = reinterpret_cast<i::Isolate*>(isolate);
+  internal_isolate->debugger()->EnqueueDebugCommand(data);
 }
 
 
@@ -6884,21 +6870,6 @@ void Debug::SendCommand(Isolate* isolate,
   i::Isolate* internal_isolate = reinterpret_cast<i::Isolate*>(isolate);
   internal_isolate->debugger()->ProcessCommand(
       i::Vector<const uint16_t>(command, length), client_data);
-}
-
-
-void Debug::SendCommand(const uint16_t* command, int length,
-                        ClientData* client_data,
-                        Isolate* isolate) {
-  // If no isolate is supplied, use the default isolate.
-  if (isolate != NULL) {
-    i::Isolate* internal_isolate = reinterpret_cast<i::Isolate*>(isolate);
-    internal_isolate->debugger()->ProcessCommand(
-        i::Vector<const uint16_t>(command, length), client_data);
-  } else {
-    i::Isolate::GetDefaultIsolateDebugger()->ProcessCommand(
-        i::Vector<const uint16_t>(command, length), client_data);
-  }
 }
 
 
@@ -6998,16 +6969,9 @@ Local<Context> Debug::GetDebugContext() {
 }
 
 
-void Debug::SetLiveEditEnabled(bool enable, Isolate* isolate) {
-  // If no isolate is supplied, use the default isolate.
-  i::Debugger* debugger;
-  if (isolate != NULL) {
-    i::Isolate* internal_isolate = reinterpret_cast<i::Isolate*>(isolate);
-    debugger = internal_isolate->debugger();
-  } else {
-    debugger = i::Isolate::GetDefaultIsolateDebugger();
-  }
-  debugger->set_live_edit_enabled(enable);
+void Debug::SetLiveEditEnabled(Isolate* isolate, bool enable) {
+  i::Isolate* internal_isolate = reinterpret_cast<i::Isolate*>(isolate);
+  internal_isolate->debugger()->set_live_edit_enabled(enable);
 }
 
 

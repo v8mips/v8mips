@@ -25,6 +25,8 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+"use strict";
+
 // This file relies on the fact that the following declarations have been made
 // in runtime.js:
 // var $Array = global.Array;
@@ -461,10 +463,6 @@ function ArrayPush() {
 
   var n = TO_UINT32(this.length);
   var m = %_ArgumentsLength();
-  if (m > 0 && ObjectIsSealed(this)) {
-    throw MakeTypeError("array_functions_change_sealed",
-                        ["Array.prototype.push"]);
-  }
 
   if (%IsObserved(this))
     return ObservedArrayPush.apply(this, arguments);
@@ -646,11 +644,6 @@ function ArrayUnshift(arg1) {  // length == 1
   var len = TO_UINT32(this.length);
   var num_arguments = %_ArgumentsLength();
   var is_sealed = ObjectIsSealed(this);
-
-  if (num_arguments > 0 && is_sealed) {
-    throw MakeTypeError("array_functions_change_sealed",
-                        ["Array.prototype.unshift"]);
-  }
 
   if (%IsObserved(this))
     return ObservedArrayUnshift.apply(this, arguments);
