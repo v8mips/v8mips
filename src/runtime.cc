@@ -331,18 +331,23 @@ MUST_USE_RESULT static MaybeHandle<Object> CreateObjectLiteralBoilerplate(
 }
 
 
-MaybeObject* TransitionElements(Handle<Object> object,
-                                ElementsKind to_kind,
-                                Isolate* isolate) {
+MUST_USE_RESULT static MaybeHandle<Object> TransitionElements(
+    Handle<Object> object,
+    ElementsKind to_kind,
+    Isolate* isolate) {
   HandleScope scope(isolate);
-  if (!object->IsJSObject()) return isolate->ThrowIllegalOperation();
+  if (!object->IsJSObject()) {
+    isolate->ThrowIllegalOperation();
+    return MaybeHandle<Object>();
+  }
   ElementsKind from_kind =
       Handle<JSObject>::cast(object)->map()->elements_kind();
   if (Map::IsValidElementsTransition(from_kind, to_kind)) {
     JSObject::TransitionElementsKind(Handle<JSObject>::cast(object), to_kind);
-    return *object;
+    return object;
   }
-  return isolate->ThrowIllegalOperation();
+  isolate->ThrowIllegalOperation();
+  return MaybeHandle<Object>();
 }
 
 
@@ -368,14 +373,14 @@ MaybeHandle<Object> Runtime::CreateArrayLiteralBoilerplate(
   Handle<FixedArrayBase> constant_elements_values(
       FixedArrayBase::cast(elements->get(1)));
 
-  ASSERT(IsFastElementsKind(constant_elements_kind));
-  Context* native_context = isolate->context()->native_context();
-  Object* maybe_maps_array = native_context->js_array_maps();
-  ASSERT(!maybe_maps_array->IsUndefined());
-  Object* maybe_map = FixedArray::cast(maybe_maps_array)->get(
-      constant_elements_kind);
-  ASSERT(maybe_map->IsMap());
-  object->set_map(Map::cast(maybe_map));
+  { DisallowHeapAllocation no_gc;
+    ASSERT(IsFastElementsKind(constant_elements_kind));
+    Context* native_context = isolate->context()->native_context();
+    Object* maps_array = native_context->js_array_maps();
+    ASSERT(!maps_array->IsUndefined());
+    Object* map = FixedArray::cast(maps_array)->get(constant_elements_kind);
+    object->set_map(Map::cast(map));
+  }
 
   Handle<FixedArrayBase> copied_elements_values;
   if (IsFastDoubleElementsKind(constant_elements_kind)) {
@@ -403,8 +408,7 @@ MaybeHandle<Object> Runtime::CreateArrayLiteralBoilerplate(
           isolate->factory()->CopyFixedArray(fixed_array_values);
       copied_elements_values = fixed_array_values_copy;
       for (int i = 0; i < fixed_array_values->length(); i++) {
-        Object* current = fixed_array_values->get(i);
-        if (current->IsFixedArray()) {
+        if (fixed_array_values->get(i)->IsFixedArray()) {
           // The value contains the constant_properties of a
           // simple object or array literal.
           Handle<FixedArray> fa(FixedArray::cast(fixed_array_values->get(i)));
@@ -428,15 +432,14 @@ MaybeHandle<Object> Runtime::CreateArrayLiteralBoilerplate(
     ElementsKind elements_kind = object->GetElementsKind();
     if (!IsFastObjectElementsKind(elements_kind)) {
       if (IsFastHoleyElementsKind(elements_kind)) {
-        CHECK(!TransitionElements(object, FAST_HOLEY_ELEMENTS,
-                                  isolate)->IsFailure());
+        TransitionElements(object, FAST_HOLEY_ELEMENTS, isolate).Check();
       } else {
-        CHECK(!TransitionElements(object, FAST_ELEMENTS, isolate)->IsFailure());
+        TransitionElements(object, FAST_ELEMENTS, isolate).Check();
       }
     }
   }
 
-  object->ValidateElements();
+  JSObject::ValidateElements(object);
   return object;
 }
 
@@ -1926,14 +1929,15 @@ static Handle<Object> GetOwnProperty(Isolate* isolate,
     return factory->undefined_value();
   }
   ASSERT(!isolate->has_scheduled_exception());
-  AccessorPair* raw_accessors = obj->GetLocalPropertyAccessorPair(*name);
-  Handle<AccessorPair> accessors(raw_accessors, isolate);
+  Handle<AccessorPair> accessors;
+  bool has_accessors =
+      JSObject::GetLocalPropertyAccessorPair(obj, name).ToHandle(&accessors);
   Handle<FixedArray> elms = isolate->factory()->NewFixedArray(DESCRIPTOR_SIZE);
   elms->set(ENUMERABLE_INDEX, heap->ToBoolean((attrs & DONT_ENUM) == 0));
   elms->set(CONFIGURABLE_INDEX, heap->ToBoolean((attrs & DONT_DELETE) == 0));
-  elms->set(IS_ACCESSOR_INDEX, heap->ToBoolean(raw_accessors != NULL));
+  elms->set(IS_ACCESSOR_INDEX, heap->ToBoolean(has_accessors));
 
-  if (raw_accessors == NULL) {
+  if (!has_accessors) {
     elms->set(WRITABLE_INDEX, heap->ToBoolean((attrs & READ_ONLY) == 0));
     // Runtime::GetObjectProperty does access check.
     Handle<Object> value = Runtime::GetObjectProperty(isolate, obj, name);
@@ -5074,17 +5078,14 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_KeyedGetProperty) {
       Handle<JSObject> js_object(args.at<JSObject>(0));
       ElementsKind elements_kind = js_object->GetElementsKind();
       if (IsFastDoubleElementsKind(elements_kind)) {
-        FixedArrayBase* elements = js_object->elements();
-        if (args.at<Smi>(1)->value() >= elements->length()) {
+        if (args.at<Smi>(1)->value() >= js_object->elements()->length()) {
           if (IsFastHoleyElementsKind(elements_kind)) {
             elements_kind = FAST_HOLEY_ELEMENTS;
           } else {
             elements_kind = FAST_ELEMENTS;
           }
-          MaybeObject* maybe_object = TransitionElements(js_object,
-                                                         elements_kind,
-                                                         isolate);
-          if (maybe_object->IsFailure()) return maybe_object;
+          RETURN_FAILURE_ON_EXCEPTION(
+              isolate, TransitionElements(js_object, elements_kind, isolate));
         }
       } else {
         ASSERT(IsFastSmiOrObjectElementsKind(elements_kind) ||
@@ -5300,7 +5301,7 @@ MaybeHandle<Object> Runtime::SetObjectProperty(Isolate* isolate,
       return value;
     }
 
-    js_object->ValidateElements();
+    JSObject::ValidateElements(js_object);
     if (js_object->HasExternalArrayElements() ||
         js_object->HasFixedTypedArrayElements()) {
       if (!value->IsNumber() && !value->IsUndefined()) {
@@ -5315,7 +5316,7 @@ MaybeHandle<Object> Runtime::SetObjectProperty(Isolate* isolate,
                                                  strict_mode,
                                                  true,
                                                  set_mode);
-    js_object->ValidateElements();
+    JSObject::ValidateElements(js_object);
     return result.is_null() ? result : value;
   }
 
@@ -10656,8 +10657,8 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_MoveArrayContents) {
   ASSERT(args.length() == 2);
   CONVERT_ARG_HANDLE_CHECKED(JSArray, from, 0);
   CONVERT_ARG_HANDLE_CHECKED(JSArray, to, 1);
-  from->ValidateElements();
-  to->ValidateElements();
+  JSObject::ValidateElements(from);
+  JSObject::ValidateElements(to);
 
   Handle<FixedArrayBase> new_elements(from->elements());
   ElementsKind from_kind = from->GetElementsKind();
@@ -10668,7 +10669,7 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_MoveArrayContents) {
   JSObject::ResetElements(from);
   from->set_length(Smi::FromInt(0));
 
-  to->ValidateElements();
+  JSObject::ValidateElements(to);
   return *to;
 }
 
@@ -13441,13 +13442,10 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_LiveEditGatherCompileInfo) {
   RUNTIME_ASSERT(script->value()->IsScript());
   Handle<Script> script_handle = Handle<Script>(Script::cast(script->value()));
 
-  JSArray* result =  LiveEdit::GatherCompileInfo(script_handle, source);
-
-  if (isolate->has_pending_exception()) {
-    return Failure::Exception();
-  }
-
-  return result;
+  Handle<JSArray> result;
+  ASSIGN_RETURN_FAILURE_ON_EXCEPTION(
+      isolate, result, LiveEdit::GatherCompileInfo(script_handle, source));
+  return *result;
 }
 
 
@@ -13465,12 +13463,11 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_LiveEditReplaceScript) {
   RUNTIME_ASSERT(original_script_value->value()->IsScript());
   Handle<Script> original_script(Script::cast(original_script_value->value()));
 
-  Object* old_script = LiveEdit::ChangeScriptSource(original_script,
-                                                    new_source,
-                                                    old_script_name);
+  Handle<Object> old_script = LiveEdit::ChangeScriptSource(
+      original_script,  new_source,  old_script_name);
 
   if (old_script->IsScript()) {
-    Handle<Script> script_handle(Script::cast(old_script));
+    Handle<Script> script_handle = Handle<Script>::cast(old_script);
     return *(GetScriptWrapper(script_handle));
   } else {
     return isolate->heap()->null_value();
@@ -13483,7 +13480,10 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_LiveEditFunctionSourceUpdated) {
   CHECK(isolate->debugger()->live_edit_enabled());
   ASSERT(args.length() == 1);
   CONVERT_ARG_HANDLE_CHECKED(JSArray, shared_info, 0);
-  return LiveEdit::FunctionSourceUpdated(shared_info);
+  RUNTIME_ASSERT(SharedInfoWrapper::IsInstance(shared_info));
+
+  LiveEdit::FunctionSourceUpdated(shared_info);
+  return isolate->heap()->undefined_value();
 }
 
 
@@ -13494,8 +13494,10 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_LiveEditReplaceFunctionCode) {
   ASSERT(args.length() == 2);
   CONVERT_ARG_HANDLE_CHECKED(JSArray, new_compile_info, 0);
   CONVERT_ARG_HANDLE_CHECKED(JSArray, shared_info, 1);
+  RUNTIME_ASSERT(SharedInfoWrapper::IsInstance(shared_info));
 
-  return LiveEdit::ReplaceFunctionCode(new_compile_info, shared_info);
+  LiveEdit::ReplaceFunctionCode(new_compile_info, shared_info);
+  return isolate->heap()->undefined_value();
 }
 
 
@@ -13536,9 +13538,8 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_LiveEditReplaceRefToNestedFunction) {
   CONVERT_ARG_HANDLE_CHECKED(JSValue, orig_wrapper, 1);
   CONVERT_ARG_HANDLE_CHECKED(JSValue, subst_wrapper, 2);
 
-  LiveEdit::ReplaceRefToNestedFunction(parent_wrapper, orig_wrapper,
-                                       subst_wrapper);
-
+  LiveEdit::ReplaceRefToNestedFunction(
+      parent_wrapper, orig_wrapper, subst_wrapper);
   return isolate->heap()->undefined_value();
 }
 
@@ -13554,8 +13555,10 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_LiveEditPatchFunctionPositions) {
   ASSERT(args.length() == 2);
   CONVERT_ARG_HANDLE_CHECKED(JSArray, shared_array, 0);
   CONVERT_ARG_HANDLE_CHECKED(JSArray, position_change_array, 1);
+  RUNTIME_ASSERT(SharedInfoWrapper::IsInstance(shared_array))
 
-  return LiveEdit::PatchFunctionPositions(shared_array, position_change_array);
+  LiveEdit::PatchFunctionPositions(shared_array, position_change_array);
+  return isolate->heap()->undefined_value();
 }
 
 

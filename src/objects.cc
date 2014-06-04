@@ -5192,7 +5192,7 @@ Handle<Object> JSObject::DeleteElement(Handle<JSObject> object,
   if (object->map()->is_observed()) {
     should_enqueue_change_record = HasLocalElement(object, index);
     if (should_enqueue_change_record) {
-      if (object->GetLocalElementAccessorPair(index) != NULL) {
+      if (!GetLocalElementAccessorPair(object, index).is_null()) {
         old_value = Handle<Object>::cast(factory->the_hole_value());
       } else {
         old_value = Object::GetElementNoExceptionThrown(isolate, object, index);
@@ -6371,7 +6371,7 @@ void JSObject::DefineAccessor(Handle<JSObject> object,
   if (is_observed) {
     if (is_element) {
       preexists = HasLocalElement(object, index);
-      if (preexists && object->GetLocalElementAccessorPair(index) == NULL) {
+      if (preexists && GetLocalElementAccessorPair(object, index).is_null()) {
         old_value = Object::GetElementNoExceptionThrown(isolate, object, index);
       }
     } else {
@@ -8226,24 +8226,6 @@ Handle<AccessorPair> AccessorPair::Copy(Handle<AccessorPair> pair) {
 Object* AccessorPair::GetComponent(AccessorComponent component) {
   Object* accessor = get(component);
   return accessor->IsTheHole() ? GetHeap()->undefined_value() : accessor;
-}
-
-
-MaybeObject* DeoptimizationInputData::Allocate(Isolate* isolate,
-                                               int deopt_entry_count,
-                                               PretenureFlag pretenure) {
-  ASSERT(deopt_entry_count > 0);
-  return isolate->heap()->AllocateFixedArray(LengthFor(deopt_entry_count),
-                                             pretenure);
-}
-
-
-MaybeObject* DeoptimizationOutputData::Allocate(Isolate* isolate,
-                                                int number_of_deopt_points,
-                                                PretenureFlag pretenure) {
-  if (number_of_deopt_points == 0) return isolate->heap()->empty_fixed_array();
-  return isolate->heap()->AllocateFixedArray(
-      LengthOfFixedArray(number_of_deopt_points), pretenure);
 }
 
 
@@ -10199,9 +10181,6 @@ void SharedFunctionInfo::AttachInitialMap(Map* map) {
 
 void SharedFunctionInfo::ResetForNewContext(int new_ic_age) {
   code()->ClearInlineCaches();
-  // If we clear ICs, we need to clear the type feedback vector too, since
-  // CallICs are synced with a feedback vector slot.
-  code()->ClearTypeFeedbackInfo(map()->GetHeap());
   set_ic_age(new_ic_age);
   if (code()->kind() == Code::FUNCTION) {
     code()->set_profiler_ticks(0);
@@ -11235,7 +11214,7 @@ Handle<FixedArray> JSObject::SetFastElementsCapacityAndLength(
     Handle<Map> new_map = (new_elements_kind != elements_kind)
         ? GetElementsTransitionMap(object, new_elements_kind)
         : handle(object->map());
-    object->ValidateElements();
+    JSObject::ValidateElements(object);
     JSObject::SetMapAndElements(object, new_map, new_elements);
 
     // Transition through the allocation site as well if present.
@@ -11281,7 +11260,7 @@ void JSObject::SetFastDoubleElementsCapacityAndLength(Handle<JSObject> object,
   ElementsAccessor* accessor = ElementsAccessor::ForKind(FAST_DOUBLE_ELEMENTS);
   accessor->CopyElements(object, elems, elements_kind);
 
-  object->ValidateElements();
+  JSObject::ValidateElements(object);
   JSObject::SetMapAndElements(object, new_map, elems);
 
   if (FLAG_trace_elements_transitions) {
@@ -11322,7 +11301,7 @@ static bool GetOldValue(Isolate* isolate,
   ASSERT(attributes != ABSENT);
   if (attributes == DONT_DELETE) return false;
   Handle<Object> value;
-  if (object->GetLocalElementAccessorPair(index) != NULL) {
+  if (!JSObject::GetLocalElementAccessorPair(object, index).is_null()) {
     value = Handle<Object>::cast(isolate->factory()->the_hole_value());
   } else {
     value = Object::GetElementNoExceptionThrown(isolate, object, index);
@@ -11861,35 +11840,40 @@ void JSObject::EnsureCanContainElements(Handle<JSObject> object,
 }
 
 
-AccessorPair* JSObject::GetLocalPropertyAccessorPair(Name* name) {
+MaybeHandle<AccessorPair> JSObject::GetLocalPropertyAccessorPair(
+    Handle<JSObject> object,
+    Handle<Name> name) {
   uint32_t index = 0;
   if (name->AsArrayIndex(&index)) {
-    return GetLocalElementAccessorPair(index);
+    return GetLocalElementAccessorPair(object, index);
   }
 
-  LookupResult lookup(GetIsolate());
-  LocalLookupRealNamedProperty(name, &lookup);
+  Isolate* isolate = object->GetIsolate();
+  LookupResult lookup(isolate);
+  object->LocalLookupRealNamedProperty(*name, &lookup);
 
   if (lookup.IsPropertyCallbacks() &&
       lookup.GetCallbackObject()->IsAccessorPair()) {
-    return AccessorPair::cast(lookup.GetCallbackObject());
+    return handle(AccessorPair::cast(lookup.GetCallbackObject()), isolate);
   }
-  return NULL;
+  return MaybeHandle<AccessorPair>();
 }
 
 
-AccessorPair* JSObject::GetLocalElementAccessorPair(uint32_t index) {
-  if (IsJSGlobalProxy()) {
-    Object* proto = GetPrototype();
-    if (proto->IsNull()) return NULL;
+MaybeHandle<AccessorPair> JSObject::GetLocalElementAccessorPair(
+    Handle<JSObject> object,
+    uint32_t index) {
+  if (object->IsJSGlobalProxy()) {
+    Handle<Object> proto(object->GetPrototype(), object->GetIsolate());
+    if (proto->IsNull()) return MaybeHandle<AccessorPair>();
     ASSERT(proto->IsJSGlobalObject());
-    return JSObject::cast(proto)->GetLocalElementAccessorPair(index);
+    return GetLocalElementAccessorPair(Handle<JSObject>::cast(proto), index);
   }
 
   // Check for lookup interceptor.
-  if (HasIndexedInterceptor()) return NULL;
+  if (object->HasIndexedInterceptor()) return MaybeHandle<AccessorPair>();
 
-  return GetElementsAccessor()->GetAccessorPair(this, this, index);
+  return object->GetElementsAccessor()->GetAccessorPair(object, object, index);
 }
 
 
@@ -12160,7 +12144,7 @@ Handle<Object> JSObject::SetFastElement(Handle<JSObject> object,
 
     SetFastDoubleElementsCapacityAndLength(object, new_capacity, array_length);
     FixedDoubleArray::cast(object->elements())->set(index, value->Number());
-    object->ValidateElements();
+    JSObject::ValidateElements(object);
     return value;
   }
   // Change elements kind from Smi-only to generic FAST if necessary.
@@ -12184,7 +12168,7 @@ Handle<Object> JSObject::SetFastElement(Handle<JSObject> object,
         SetFastElementsCapacityAndLength(object, new_capacity, array_length,
                                          smi_mode);
     new_elements->set(index, *value);
-    object->ValidateElements();
+    JSObject::ValidateElements(object);
     return value;
   }
 
@@ -12330,7 +12314,7 @@ Handle<Object> JSObject::SetDictionaryElement(Handle<JSObject> object,
       SetFastElementsCapacityAndLength(object, new_length, new_length,
                                        smi_mode);
     }
-    object->ValidateElements();
+    JSObject::ValidateElements(object);
 #ifdef DEBUG
     if (FLAG_trace_normalization) {
       PrintF("Object elements are fast case again:\n");
@@ -12382,7 +12366,7 @@ Handle<Object> JSObject::SetFastDoubleElement(
                                            check_prototype);
     RETURN_IF_EMPTY_HANDLE_VALUE(object->GetIsolate(), result,
                                  Handle<Object>());
-    object->ValidateElements();
+    JSObject::ValidateElements(object);
     return result;
   }
 
@@ -12422,7 +12406,7 @@ Handle<Object> JSObject::SetFastDoubleElement(
       ASSERT(static_cast<uint32_t>(new_capacity) > index);
       SetFastDoubleElementsCapacityAndLength(object, new_capacity, index + 1);
       FixedDoubleArray::cast(object->elements())->set(index, double_value);
-      object->ValidateElements();
+      JSObject::ValidateElements(object);
       return value;
     }
   }
@@ -12538,7 +12522,7 @@ Handle<Object> JSObject::SetElement(Handle<JSObject> object,
   Handle<Object> new_length_handle;
 
   if (old_attributes != ABSENT) {
-    if (object->GetLocalElementAccessorPair(index) == NULL) {
+    if (GetLocalElementAccessorPair(object, index).is_null()) {
       old_value = Object::GetElementNoExceptionThrown(isolate, object, index);
     }
   } else if (object->IsJSArray()) {
@@ -12881,7 +12865,7 @@ void JSObject::TransitionElementsKind(Handle<JSObject> object,
   if (IsFastSmiElementsKind(from_kind) &&
       IsFastDoubleElementsKind(to_kind)) {
     SetFastDoubleElementsCapacityAndLength(object, capacity, length);
-    object->ValidateElements();
+    JSObject::ValidateElements(object);
     return;
   }
 
@@ -12889,7 +12873,7 @@ void JSObject::TransitionElementsKind(Handle<JSObject> object,
       IsFastObjectElementsKind(to_kind)) {
     SetFastElementsCapacityAndLength(object, capacity, length,
                                      kDontAllowSmiElements);
-    object->ValidateElements();
+    JSObject::ValidateElements(object);
     return;
   }
 
@@ -14415,7 +14399,7 @@ Handle<Object> JSObject::PrepareElementsForSort(Handle<JSObject> object,
     Handle<FixedArray> fast_elements =
         isolate->factory()->NewFixedArray(dict->NumberOfElements(), tenure);
     dict->CopyValuesTo(*fast_elements);
-    object->ValidateElements();
+    JSObject::ValidateElements(object);
 
     JSObject::SetMapAndElements(object, new_map, fast_elements);
   } else if (object->HasExternalArrayElements() ||
@@ -15902,6 +15886,197 @@ void WeakHashTable::AddEntry(int entry, Object* key, Object* value) {
   set(EntryToIndex(entry), key);
   set(EntryToValueIndex(entry), value);
   ElementAdded();
+}
+
+
+template<class Derived, int entrysize>
+Handle<Derived> OrderedHashTable<Derived, entrysize>::Allocate(
+    Isolate* isolate, int capacity, PretenureFlag pretenure) {
+  // Capacity must be a power of two, since we depend on being able
+  // to divide and multiple by 2 (kLoadFactor) to derive capacity
+  // from number of buckets. If we decide to change kLoadFactor
+  // to something other than 2, capacity should be stored as another
+  // field of this object.
+  const int kMinCapacity = 4;
+  capacity = RoundUpToPowerOf2(Max(kMinCapacity, capacity));
+  if (capacity > kMaxCapacity) {
+    v8::internal::Heap::FatalProcessOutOfMemory("invalid table size", true);
+  }
+  int num_buckets = capacity / kLoadFactor;
+  Handle<Derived> table =
+      Handle<Derived>::cast(
+          isolate->factory()->NewFixedArray(
+              kHashTableStartIndex + num_buckets + (capacity * kEntrySize),
+              pretenure));
+  for (int i = 0; i < num_buckets; ++i) {
+    table->set(kHashTableStartIndex + i, Smi::FromInt(kNotFound));
+  }
+  table->SetNumberOfBuckets(num_buckets);
+  table->SetNumberOfElements(0);
+  table->SetNumberOfDeletedElements(0);
+  return table;
+}
+
+
+template<class Derived, int entrysize>
+Handle<Derived> OrderedHashTable<Derived, entrysize>::EnsureGrowable(
+    Handle<Derived> table) {
+  int nof = table->NumberOfElements();
+  int nod = table->NumberOfDeletedElements();
+  int capacity = table->Capacity();
+  if ((nof + nod) < capacity) return table;
+  // Don't need to grow if we can simply clear out deleted entries instead.
+  // Note that we can't compact in place, though, so we always allocate
+  // a new table.
+  return Rehash(table, (nod < (capacity >> 1)) ? capacity << 1 : capacity);
+}
+
+
+template<class Derived, int entrysize>
+Handle<Derived> OrderedHashTable<Derived, entrysize>::Shrink(
+    Handle<Derived> table) {
+  int nof = table->NumberOfElements();
+  int capacity = table->Capacity();
+  if (nof > (capacity >> 2)) return table;
+  return Rehash(table, capacity / 2);
+}
+
+
+template<class Derived, int entrysize>
+Handle<Derived> OrderedHashTable<Derived, entrysize>::Rehash(
+    Handle<Derived> table, int new_capacity) {
+  Handle<Derived> new_table =
+      Allocate(table->GetIsolate(),
+               new_capacity,
+               table->GetHeap()->InNewSpace(*table) ? NOT_TENURED : TENURED);
+  int nof = table->NumberOfElements();
+  int nod = table->NumberOfDeletedElements();
+  int new_buckets = new_table->NumberOfBuckets();
+  int new_entry = 0;
+  for (int old_entry = 0; old_entry < (nof + nod); ++old_entry) {
+    Object* key = table->KeyAt(old_entry);
+    if (key->IsTheHole()) continue;
+    Object* hash = key->GetHash();
+    int bucket = Smi::cast(hash)->value() & (new_buckets - 1);
+    Object* chain_entry = new_table->get(kHashTableStartIndex + bucket);
+    new_table->set(kHashTableStartIndex + bucket, Smi::FromInt(new_entry));
+    int new_index = new_table->EntryToIndex(new_entry);
+    int old_index = table->EntryToIndex(old_entry);
+    for (int i = 0; i < entrysize; ++i) {
+      Object* value = table->get(old_index + i);
+      new_table->set(new_index + i, value);
+    }
+    new_table->set(new_index + kChainOffset, chain_entry);
+    ++new_entry;
+  }
+  new_table->SetNumberOfElements(nof);
+  return new_table;
+}
+
+
+template<class Derived, int entrysize>
+int OrderedHashTable<Derived, entrysize>::FindEntry(Object* key) {
+  ASSERT(!key->IsTheHole());
+  Object* hash = key->GetHash();
+  if (hash->IsUndefined()) return kNotFound;
+  for (int entry = HashToEntry(Smi::cast(hash)->value());
+       entry != kNotFound;
+       entry = ChainAt(entry)) {
+    Object* candidate = KeyAt(entry);
+    if (candidate->SameValue(key))
+      return entry;
+  }
+  return kNotFound;
+}
+
+
+template<class Derived, int entrysize>
+int OrderedHashTable<Derived, entrysize>::AddEntry(int hash) {
+  int entry = NumberOfElements() + NumberOfDeletedElements();
+  int bucket = HashToBucket(hash);
+  int index = EntryToIndex(entry);
+  Object* chain_entry = get(kHashTableStartIndex + bucket);
+  set(kHashTableStartIndex + bucket, Smi::FromInt(entry));
+  set(index + kChainOffset, chain_entry);
+  SetNumberOfElements(NumberOfElements() + 1);
+  return index;
+}
+
+
+template<class Derived, int entrysize>
+void OrderedHashTable<Derived, entrysize>::RemoveEntry(int entry) {
+  int index = EntryToIndex(entry);
+  for (int i = 0; i < entrysize; ++i) {
+    set_the_hole(index + i);
+  }
+  SetNumberOfElements(NumberOfElements() - 1);
+  SetNumberOfDeletedElements(NumberOfDeletedElements() + 1);
+}
+
+
+template class OrderedHashTable<OrderedHashSet, 1>;
+template class OrderedHashTable<OrderedHashMap, 2>;
+
+
+bool OrderedHashSet::Contains(Object* key) {
+  return FindEntry(key) != kNotFound;
+}
+
+
+Handle<OrderedHashSet> OrderedHashSet::Add(Handle<OrderedHashSet> table,
+                                           Handle<Object> key) {
+  if (table->FindEntry(*key) != kNotFound) return table;
+
+  table = EnsureGrowable(table);
+
+  Handle<Object> hash = GetOrCreateHash(key, table->GetIsolate());
+  int index = table->AddEntry(Smi::cast(*hash)->value());
+  table->set(index, *key);
+  return table;
+}
+
+
+Handle<OrderedHashSet> OrderedHashSet::Remove(Handle<OrderedHashSet> table,
+                                              Handle<Object> key) {
+  int entry = table->FindEntry(*key);
+  if (entry == kNotFound) return table;
+  table->RemoveEntry(entry);
+  // TODO(adamk): Don't shrink if we're being iterated over
+  return Shrink(table);
+}
+
+
+Object* OrderedHashMap::Lookup(Object* key) {
+  int entry = FindEntry(key);
+  if (entry == kNotFound) return GetHeap()->the_hole_value();
+  return ValueAt(entry);
+}
+
+
+Handle<OrderedHashMap> OrderedHashMap::Put(Handle<OrderedHashMap> table,
+                                           Handle<Object> key,
+                                           Handle<Object> value) {
+  int entry = table->FindEntry(*key);
+
+  if (value->IsTheHole()) {
+    if (entry == kNotFound) return table;
+    table->RemoveEntry(entry);
+    // TODO(adamk): Only shrink if not iterating
+    return Shrink(table);
+  }
+
+  if (entry != kNotFound) {
+    table->set(table->EntryToIndex(entry) + kValueOffset, *value);
+    return table;
+  }
+
+  table = EnsureGrowable(table);
+
+  Handle<Object> hash = GetOrCreateHash(key, table->GetIsolate());
+  int index = table->AddEntry(Smi::cast(*hash)->value());
+  table->set(index, *key);
+  table->set(index + kValueOffset, *value);
+  return table;
 }
 
 

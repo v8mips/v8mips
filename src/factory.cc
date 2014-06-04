@@ -9,11 +9,10 @@
 namespace v8 {
 namespace internal {
 
-Handle<Box> Factory::NewBox(Handle<Object> value, PretenureFlag pretenure) {
-  CALL_HEAP_FUNCTION(
-      isolate(),
-      isolate()->heap()->AllocateBox(*value, pretenure),
-      Box);
+Handle<Box> Factory::NewBox(Handle<Object> value) {
+  Handle<Box> result = Handle<Box>::cast(NewStruct(BOX_TYPE));
+  result->set_value(*value);
+  return result;
 }
 
 
@@ -109,6 +108,16 @@ Handle<ObjectHashSet> Factory::NewObjectHashSet(int at_least_space_for) {
 }
 
 
+Handle<OrderedHashSet> Factory::NewOrderedHashSet() {
+  return OrderedHashSet::Allocate(isolate(), 4);
+}
+
+
+Handle<OrderedHashMap> Factory::NewOrderedHashMap() {
+  return OrderedHashMap::Allocate(isolate(), 4);
+}
+
+
 Handle<ObjectHashTable> Factory::NewObjectHashTable(
     int at_least_space_for,
     MinimumCapacity capacity_option) {
@@ -147,11 +156,8 @@ Handle<DeoptimizationInputData> Factory::NewDeoptimizationInputData(
     int deopt_entry_count,
     PretenureFlag pretenure) {
   ASSERT(deopt_entry_count > 0);
-  CALL_HEAP_FUNCTION(isolate(),
-                     DeoptimizationInputData::Allocate(isolate(),
-                                                       deopt_entry_count,
-                                                       pretenure),
-                     DeoptimizationInputData);
+  int len = DeoptimizationInputData::LengthFor(deopt_entry_count);
+  return Handle<DeoptimizationInputData>::cast(NewFixedArray(len, pretenure));
 }
 
 
@@ -159,25 +165,27 @@ Handle<DeoptimizationOutputData> Factory::NewDeoptimizationOutputData(
     int deopt_entry_count,
     PretenureFlag pretenure) {
   ASSERT(deopt_entry_count > 0);
-  CALL_HEAP_FUNCTION(isolate(),
-                     DeoptimizationOutputData::Allocate(isolate(),
-                                                        deopt_entry_count,
-                                                        pretenure),
-                     DeoptimizationOutputData);
+  int len = DeoptimizationOutputData::LengthOfFixedArray(deopt_entry_count);
+  return Handle<DeoptimizationOutputData>::cast(NewFixedArray(len, pretenure));
 }
 
 
 Handle<AccessorPair> Factory::NewAccessorPair() {
-  CALL_HEAP_FUNCTION(isolate(),
-                     isolate()->heap()->AllocateAccessorPair(),
-                     AccessorPair);
+  Handle<AccessorPair> accessors =
+      Handle<AccessorPair>::cast(NewStruct(ACCESSOR_PAIR_TYPE));
+  accessors->set_getter(*the_hole_value(), SKIP_WRITE_BARRIER);
+  accessors->set_setter(*the_hole_value(), SKIP_WRITE_BARRIER);
+  accessors->set_access_flags(Smi::FromInt(0), SKIP_WRITE_BARRIER);
+  return accessors;
 }
 
 
 Handle<TypeFeedbackInfo> Factory::NewTypeFeedbackInfo() {
-  CALL_HEAP_FUNCTION(isolate(),
-                     isolate()->heap()->AllocateTypeFeedbackInfo(),
-                     TypeFeedbackInfo);
+  Handle<TypeFeedbackInfo> info =
+      Handle<TypeFeedbackInfo>::cast(NewStruct(TYPE_FEEDBACK_INFO_TYPE));
+  info->initialize_storage();
+  info->set_feedback_vector(*empty_fixed_array(), SKIP_WRITE_BARRIER);
+  return info;
 }
 
 
@@ -558,10 +566,12 @@ Handle<Symbol> Factory::NewPrivateSymbol() {
 
 
 Handle<Context> Factory::NewNativeContext() {
-  CALL_HEAP_FUNCTION(
-      isolate(),
-      isolate()->heap()->AllocateNativeContext(),
-      Context);
+  Handle<FixedArray> array = NewFixedArray(Context::NATIVE_CONTEXT_SLOTS);
+  array->set_map_no_write_barrier(*native_context_map());
+  Handle<Context> context = Handle<Context>::cast(array);
+  context->set_js_array_maps(*undefined_value());
+  ASSERT(context->IsNativeContext());
+  return context;
 }
 
 
@@ -575,10 +585,13 @@ Handle<Context> Factory::NewGlobalContext(Handle<JSFunction> function,
 
 
 Handle<Context> Factory::NewModuleContext(Handle<ScopeInfo> scope_info) {
-  CALL_HEAP_FUNCTION(
-      isolate(),
-      isolate()->heap()->AllocateModuleContext(*scope_info),
-      Context);
+  Handle<FixedArray> array =
+      NewFixedArray(scope_info->ContextLength(), TENURED);
+  array->set_map_no_write_barrier(*module_context_map());
+  // Instance link will be set later.
+  Handle<Context> context = Handle<Context>::cast(array);
+  context->set_extension(Smi::FromInt(0));
+  return context;
 }
 
 
@@ -963,11 +976,7 @@ Handle<HeapNumber> Factory::NewHeapNumber(double value,
 
 
 Handle<JSObject> Factory::NewNeanderObject() {
-  CALL_HEAP_FUNCTION(
-      isolate(),
-      isolate()->heap()->AllocateJSObjectFromMap(
-          isolate()->heap()->neander_map()),
-      JSObject);
+  return NewJSObjectFromMap(neander_map());
 }
 
 
@@ -1209,17 +1218,18 @@ Handle<JSFunction> Factory::NewFunctionWithoutPrototype(Handle<String> name,
 
 
 Handle<ScopeInfo> Factory::NewScopeInfo(int length) {
-  CALL_HEAP_FUNCTION(
-      isolate(),
-      isolate()->heap()->AllocateScopeInfo(length),
-      ScopeInfo);
+  Handle<FixedArray> array = NewFixedArray(length, TENURED);
+  array->set_map_no_write_barrier(*scope_info_map());
+  Handle<ScopeInfo> scope_info = Handle<ScopeInfo>::cast(array);
+  return scope_info;
 }
 
 
 Handle<JSObject> Factory::NewExternal(void* value) {
-  CALL_HEAP_FUNCTION(isolate(),
-                     isolate()->heap()->AllocateExternal(value),
-                     JSObject);
+  Handle<Foreign> foreign = NewForeign(static_cast<Address>(value));
+  Handle<JSObject> external = NewJSObjectFromMap(external_map());
+  external->SetInternalField(0, *foreign);
+  return external;
 }
 
 
@@ -1273,9 +1283,14 @@ Handle<JSObject> Factory::NewJSObjectWithMemento(
 
 Handle<JSModule> Factory::NewJSModule(Handle<Context> context,
                                       Handle<ScopeInfo> scope_info) {
-  CALL_HEAP_FUNCTION(
-      isolate(),
-      isolate()->heap()->AllocateJSModule(*context, *scope_info), JSModule);
+  // Allocate a fresh map. Modules do not have a prototype.
+  Handle<Map> map = NewMap(JS_MODULE_TYPE, JSModule::kSize);
+  // Allocate the object based on the map.
+  Handle<JSModule> module =
+      Handle<JSModule>::cast(NewJSObjectFromMap(map, TENURED));
+  module->set_context(*context);
+  module->set_scope_info(*scope_info);
+  return module;
 }
 
 
@@ -1370,18 +1385,24 @@ Handle<JSObject> Factory::NewJSObjectFromMap(
 
 
 Handle<JSArray> Factory::NewJSArray(ElementsKind elements_kind,
+                                    PretenureFlag pretenure) {
+  Context* native_context = isolate()->context()->native_context();
+  JSFunction* array_function = native_context->array_function();
+  Map* map = array_function->initial_map();
+  Map* transition_map = isolate()->get_initial_js_array_map(elements_kind);
+  if (transition_map != NULL) map = transition_map;
+  return Handle<JSArray>::cast(NewJSObjectFromMap(handle(map), pretenure));
+}
+
+
+Handle<JSArray> Factory::NewJSArray(ElementsKind elements_kind,
                                     int length,
                                     int capacity,
                                     ArrayStorageAllocationMode mode,
                                     PretenureFlag pretenure) {
-  CALL_HEAP_FUNCTION(isolate(),
-                     isolate()->heap()->AllocateJSArrayAndStorage(
-                         elements_kind,
-                         length,
-                         capacity,
-                         mode,
-                         pretenure),
-                     JSArray);
+  Handle<JSArray> array = NewJSArray(elements_kind, pretenure);
+  NewJSArrayStorage(array, length, capacity, mode);
+  return array;
 }
 
 
@@ -1390,13 +1411,13 @@ Handle<JSArray> Factory::NewJSArrayWithElements(Handle<FixedArrayBase> elements,
                                                 int length,
                                                 PretenureFlag pretenure) {
   ASSERT(length <= elements->length());
-  CALL_HEAP_FUNCTION(
-      isolate(),
-      isolate()->heap()->AllocateJSArrayWithElements(*elements,
-                                                     elements_kind,
-                                                     length,
-                                                     pretenure),
-      JSArray);
+  Handle<JSArray> array =
+      isolate()->factory()->NewJSArray(elements_kind, pretenure);
+
+  array->set_elements(*elements);
+  array->set_length(Smi::FromInt(length));
+  JSObject::ValidateElements(array);
+  return array;
 }
 
 
@@ -1418,30 +1439,21 @@ Handle<JSGeneratorObject> Factory::NewJSGeneratorObject(
   JSFunction::EnsureHasInitialMap(function);
   Handle<Map> map(function->initial_map());
   ASSERT(map->instance_type() == JS_GENERATOR_OBJECT_TYPE);
-  CALL_HEAP_FUNCTION(
-      isolate(),
-      isolate()->heap()->AllocateJSObjectFromMap(*map),
-      JSGeneratorObject);
+  return Handle<JSGeneratorObject>::cast(NewJSObjectFromMap(map));
 }
 
 
 Handle<JSArrayBuffer> Factory::NewJSArrayBuffer() {
   Handle<JSFunction> array_buffer_fun(
       isolate()->context()->native_context()->array_buffer_fun());
-  CALL_HEAP_FUNCTION(
-      isolate(),
-      isolate()->heap()->AllocateJSObject(*array_buffer_fun),
-      JSArrayBuffer);
+  return Handle<JSArrayBuffer>::cast(NewJSObject(array_buffer_fun));
 }
 
 
 Handle<JSDataView> Factory::NewJSDataView() {
   Handle<JSFunction> data_view_fun(
       isolate()->context()->native_context()->data_view_fun());
-  CALL_HEAP_FUNCTION(
-      isolate(),
-      isolate()->heap()->AllocateJSObject(*data_view_fun),
-      JSDataView);
+  return Handle<JSDataView>::cast(NewJSObject(data_view_fun));
 }
 
 
@@ -1465,11 +1477,7 @@ static JSFunction* GetTypedArrayFun(ExternalArrayType type,
 
 Handle<JSTypedArray> Factory::NewJSTypedArray(ExternalArrayType type) {
   Handle<JSFunction> typed_array_fun_handle(GetTypedArrayFun(type, isolate()));
-
-  CALL_HEAP_FUNCTION(
-      isolate(),
-      isolate()->heap()->AllocateJSObject(*typed_array_fun_handle),
-      JSTypedArray);
+  return Handle<JSTypedArray>::cast(NewJSObject(typed_array_fun_handle));
 }
 
 

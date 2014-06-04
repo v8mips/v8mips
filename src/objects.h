@@ -94,6 +94,9 @@
 //             - CompilationCacheTable
 //             - CodeCacheHashTable
 //             - MapCache
+//           - OrderedHashTable
+//             - OrderedHashSet
+//             - OrderedHashMap
 //           - Context
 //           - JSFunctionResultCache
 //           - ScopeInfo
@@ -2422,7 +2425,7 @@ class JSObject: public JSReceiver {
 
   static void SetIdentityHash(Handle<JSObject> object, Handle<Smi> hash);
 
-  inline void ValidateElements();
+  static inline void ValidateElements(Handle<JSObject> object);
 
   // Makes sure that this object can contain HeapObject as elements.
   static inline void EnsureCanContainHeapObjectElements(Handle<JSObject> obj);
@@ -2468,8 +2471,12 @@ class JSObject: public JSReceiver {
   }
 
   // These methods do not perform access checks!
-  AccessorPair* GetLocalPropertyAccessorPair(Name* name);
-  AccessorPair* GetLocalElementAccessorPair(uint32_t index);
+  MUST_USE_RESULT static MaybeHandle<AccessorPair> GetLocalPropertyAccessorPair(
+      Handle<JSObject> object,
+      Handle<Name> name);
+  MUST_USE_RESULT static MaybeHandle<AccessorPair> GetLocalElementAccessorPair(
+      Handle<JSObject> object,
+      uint32_t index);
 
   static Handle<Object> SetFastElement(Handle<JSObject> object, uint32_t index,
                                        Handle<Object> value,
@@ -4268,6 +4275,163 @@ class ObjectHashTable: public HashTable<ObjectHashTableShape<2>, Object*> {
 };
 
 
+// OrderedHashTable is a HashTable with Object keys that preserves
+// insertion order. There are Map and Set interfaces (OrderedHashMap
+// and OrderedHashTable, below). It is meant to be used by JSMap/JSSet.
+//
+// Only Object* keys are supported, with Object::SameValue() used as the
+// equality operator and Object::GetHash() for the hash function.
+//
+// Based on the "Deterministic Hash Table" as described by Jason Orendorff at
+// https://wiki.mozilla.org/User:Jorend/Deterministic_hash_tables
+// Originally attributed to Tyler Close.
+//
+// Memory layout:
+//   [0]: bucket count
+//   [1]: element count
+//   [2]: deleted element count
+//   [3..(NumberOfBuckets() - 1)]: "hash table", where each item is an offset
+//                                 into the data table (see below) where the
+//                                 first item in this bucket is stored.
+//   [3 + NumberOfBuckets()..length]: "data table", an array of length
+//                            Capacity() * kEntrySize, where the first entrysize
+//                            items are handled by the derived class and the
+//                            item at kChainOffset is another entry into the
+//                            data table indicating the next entry in this hash
+//                            bucket.
+template<class Derived, int entrysize>
+class OrderedHashTable: public FixedArray {
+ public:
+  // Returns an OrderedHashTable with a capacity of at least |capacity|.
+  static Handle<Derived> Allocate(
+      Isolate* isolate, int capacity, PretenureFlag pretenure = NOT_TENURED);
+
+  // Returns an OrderedHashTable (possibly |table|) with enough space
+  // to add at least one new element, or returns a Failure if a GC occurs.
+  static Handle<Derived> EnsureGrowable(Handle<Derived> table);
+
+  // Returns an OrderedHashTable (possibly |table|) that's shrunken
+  // if possible.
+  static Handle<Derived> Shrink(Handle<Derived> table);
+
+  // Returns kNotFound if the key isn't present.
+  int FindEntry(Object* key);
+
+  int NumberOfElements() {
+    return Smi::cast(get(kNumberOfElementsIndex))->value();
+  }
+
+  int NumberOfDeletedElements() {
+    return Smi::cast(get(kNumberOfDeletedElementsIndex))->value();
+  }
+
+  int NumberOfBuckets() {
+    return Smi::cast(get(kNumberOfBucketsIndex))->value();
+  }
+
+  // Returns the index into the data table where the new entry
+  // should be placed. The table is assumed to have enough space
+  // for a new entry.
+  int AddEntry(int hash);
+
+  // Removes the entry, and puts the_hole in entrysize pointers
+  // (leaving the hash table chain intact).
+  void RemoveEntry(int entry);
+
+  // Returns an index into |this| for the given entry.
+  int EntryToIndex(int entry) {
+    return kHashTableStartIndex + NumberOfBuckets() + (entry * kEntrySize);
+  }
+
+  static const int kNotFound = -1;
+
+ private:
+  static Handle<Derived> Rehash(Handle<Derived> table, int new_capacity);
+
+  void SetNumberOfBuckets(int num) {
+    set(kNumberOfBucketsIndex, Smi::FromInt(num));
+  }
+
+  void SetNumberOfElements(int num) {
+    set(kNumberOfElementsIndex, Smi::FromInt(num));
+  }
+
+  void SetNumberOfDeletedElements(int num) {
+    set(kNumberOfDeletedElementsIndex, Smi::FromInt(num));
+  }
+
+  int Capacity() {
+    return NumberOfBuckets() * kLoadFactor;
+  }
+
+  Object* KeyAt(int entry) { return get(EntryToIndex(entry)); }
+
+  // Returns the next entry for the given entry.
+  int ChainAt(int entry) {
+    return Smi::cast(get(EntryToIndex(entry) + kChainOffset))->value();
+  }
+
+  int HashToBucket(int hash) {
+    return hash & (NumberOfBuckets() - 1);
+  }
+
+  int HashToEntry(int hash) {
+    int bucket = HashToBucket(hash);
+    return Smi::cast(get(kHashTableStartIndex + bucket))->value();
+  }
+
+  static const int kNumberOfBucketsIndex = 0;
+  static const int kNumberOfElementsIndex = kNumberOfBucketsIndex + 1;
+  static const int kNumberOfDeletedElementsIndex = kNumberOfElementsIndex + 1;
+  static const int kHashTableStartIndex = kNumberOfDeletedElementsIndex + 1;
+
+  static const int kEntrySize = entrysize + 1;
+  static const int kChainOffset = entrysize;
+
+  static const int kLoadFactor = 2;
+  static const int kMaxCapacity =
+      (FixedArray::kMaxLength - kHashTableStartIndex)
+      / (1 + (kEntrySize * kLoadFactor));
+};
+
+
+class OrderedHashSet: public OrderedHashTable<OrderedHashSet, 1> {
+ public:
+  static OrderedHashSet* cast(Object* obj) {
+    ASSERT(obj->IsFixedArray());  // TODO(adamk): Make a map for this
+    return reinterpret_cast<OrderedHashSet*>(obj);
+  }
+
+  bool Contains(Object* key);
+  static Handle<OrderedHashSet> Add(
+      Handle<OrderedHashSet> table, Handle<Object> key);
+  static Handle<OrderedHashSet> Remove(
+      Handle<OrderedHashSet> table, Handle<Object> key);
+};
+
+
+class OrderedHashMap: public OrderedHashTable<OrderedHashMap, 2> {
+ public:
+  static OrderedHashMap* cast(Object* obj) {
+    ASSERT(obj->IsFixedArray());  // TODO(adamk): Make a map for this
+    return reinterpret_cast<OrderedHashMap*>(obj);
+  }
+
+  Object* Lookup(Object* key);
+  static Handle<OrderedHashMap> Put(
+      Handle<OrderedHashMap> table,
+      Handle<Object> key,
+      Handle<Object> value);
+
+ private:
+  Object* ValueAt(int entry) {
+    return get(EntryToIndex(entry) + kValueOffset);
+  }
+
+  static const int kValueOffset = 1;
+};
+
+
 template <int entrysize>
 class WeakHashTableShape : public BaseShape<Object*> {
  public:
@@ -5116,10 +5280,9 @@ class DeoptimizationInputData: public FixedArray {
     return (length() - kFirstDeoptEntryIndex) / kDeoptEntrySize;
   }
 
-  // Allocates a DeoptimizationInputData.
-  MUST_USE_RESULT static MaybeObject* Allocate(Isolate* isolate,
-                                               int deopt_entry_count,
-                                               PretenureFlag pretenure);
+  static int LengthFor(int entry_count) {
+    return IndexForEntry(entry_count);
+  }
 
   // Casting.
   static inline DeoptimizationInputData* cast(Object* obj);
@@ -5131,10 +5294,6 @@ class DeoptimizationInputData: public FixedArray {
  private:
   static int IndexForEntry(int i) {
     return kFirstDeoptEntryIndex + (i * kDeoptEntrySize);
-  }
-
-  static int LengthFor(int entry_count) {
-    return IndexForEntry(entry_count);
   }
 };
 
@@ -5162,11 +5321,6 @@ class DeoptimizationOutputData: public FixedArray {
   static int LengthOfFixedArray(int deopt_points) {
     return deopt_points * 2;
   }
-
-  // Allocates a DeoptimizationOutputData.
-  MUST_USE_RESULT static MaybeObject* Allocate(Isolate* isolate,
-                                               int number_of_deopt_points,
-                                               PretenureFlag pretenure);
 
   // Casting.
   static inline DeoptimizationOutputData* cast(Object* obj);
@@ -5201,7 +5355,6 @@ class Code: public HeapObject {
 #define IC_KIND_LIST(V) \
   V(LOAD_IC)            \
   V(KEYED_LOAD_IC)      \
-  V(CALL_IC)            \
   V(STORE_IC)           \
   V(KEYED_STORE_IC)     \
   V(BINARY_OP_IC)       \
@@ -5311,7 +5464,6 @@ class Code: public HeapObject {
   inline bool is_keyed_load_stub() { return kind() == KEYED_LOAD_IC; }
   inline bool is_store_stub() { return kind() == STORE_IC; }
   inline bool is_keyed_store_stub() { return kind() == KEYED_STORE_IC; }
-  inline bool is_call_stub() { return kind() == CALL_IC; }
   inline bool is_binary_op_stub() { return kind() == BINARY_OP_IC; }
   inline bool is_compare_ic_stub() { return kind() == COMPARE_IC; }
   inline bool is_compare_nil_ic_stub() { return kind() == COMPARE_NIL_IC; }

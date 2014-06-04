@@ -1496,11 +1496,11 @@ FixedArrayBase* JSObject::elements() {
 }
 
 
-void JSObject::ValidateElements() {
+void JSObject::ValidateElements(Handle<JSObject> object) {
 #ifdef ENABLE_SLOW_ASSERTS
   if (FLAG_enable_slow_asserts) {
-    ElementsAccessor* accessor = GetElementsAccessor();
-    accessor->Validate(this);
+    ElementsAccessor* accessor = object->GetElementsAccessor();
+    accessor->Validate(object);
   }
 #endif
 }
@@ -1640,7 +1640,7 @@ inline bool AllocationSite::DigestPretenuringFeedback() {
 
 
 void JSObject::EnsureCanContainHeapObjectElements(Handle<JSObject> object) {
-  object->ValidateElements();
+  JSObject::ValidateElements(object);
   ElementsKind elements_kind = object->map()->elements_kind();
   if (!IsFastObjectElementsKind(elements_kind)) {
     if (IsFastHoleyElementsKind(elements_kind)) {
@@ -4433,7 +4433,6 @@ bool Code::has_major_key() {
       kind() == LOAD_IC ||
       kind() == KEYED_LOAD_IC ||
       kind() == STORE_IC ||
-      kind() == CALL_IC ||
       kind() == KEYED_STORE_IC ||
       kind() == TO_BOOLEAN_IC;
 }
@@ -5878,7 +5877,7 @@ void Code::set_type_feedback_info(Object* value, WriteBarrierMode mode) {
 
 int Code::stub_info() {
   ASSERT(kind() == COMPARE_IC || kind() == COMPARE_NIL_IC ||
-         kind() == BINARY_OP_IC || kind() == LOAD_IC || kind() == CALL_IC);
+         kind() == BINARY_OP_IC || kind() == LOAD_IC);
   return Smi::cast(raw_type_feedback_info())->value();
 }
 
@@ -5889,7 +5888,6 @@ void Code::set_stub_info(int value) {
          kind() == BINARY_OP_IC ||
          kind() == STUB ||
          kind() == LOAD_IC ||
-         kind() == CALL_IC ||
          kind() == KEYED_LOAD_IC ||
          kind() == STORE_IC ||
          kind() == KEYED_STORE_IC);
