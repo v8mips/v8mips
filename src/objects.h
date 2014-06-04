@@ -1294,6 +1294,8 @@ class MaybeObject BASE_EMBEDDED {
   V(kOperandIsNotAString, "Operand is not a string")                          \
   V(kOperandIsNotSmi, "Operand is not smi")                                   \
   V(kOperandNotANumber, "Operand not a number")                               \
+  V(kObjectTagged, "The object is tagged")                                    \
+  V(kObjectNotTagged, "The object is not tagged")                             \
   V(kOptimizationDisabled, "Optimization is disabled")                        \
   V(kOptimizedTooManyTimes, "Optimized too many times")                       \
   V(kOutOfVirtualRegistersWhileTryingToAllocateTempRegister,                  \
