@@ -2763,18 +2763,6 @@ MaybeObject* Heap::AllocateAllocationSite() {
 }
 
 
-MaybeObject* Heap::CreateOddball(Map* map,
-                                 const char* to_string,
-                                 Object* to_number,
-                                 byte kind) {
-  Object* result;
-  { MaybeObject* maybe_result = Allocate(map, OLD_POINTER_SPACE);
-    if (!maybe_result->ToObject(&result)) return maybe_result;
-  }
-  return Oddball::cast(result)->Initialize(this, to_string, to_number, kind);
-}
-
-
 bool Heap::CreateApiObjects() {
   Object* obj;
 
@@ -2847,115 +2835,82 @@ void Heap::CreateFixedStubs() {
 
 
 bool Heap::CreateInitialObjects() {
-  Object* obj;
+  HandleScope scope(isolate());
+  Factory* factory = isolate()->factory();
 
   // The -0 value must be set before NumberFromDouble works.
-  { MaybeObject* maybe_obj = AllocateHeapNumber(-0.0, TENURED);
-    if (!maybe_obj->ToObject(&obj)) return false;
-  }
-  set_minus_zero_value(HeapNumber::cast(obj));
+  set_minus_zero_value(*factory->NewHeapNumber(-0.0, TENURED));
   ASSERT(std::signbit(minus_zero_value()->Number()) != 0);
 
-  { MaybeObject* maybe_obj = AllocateHeapNumber(OS::nan_value(), TENURED);
-    if (!maybe_obj->ToObject(&obj)) return false;
-  }
-  set_nan_value(HeapNumber::cast(obj));
-
-  { MaybeObject* maybe_obj = AllocateHeapNumber(V8_INFINITY, TENURED);
-    if (!maybe_obj->ToObject(&obj)) return false;
-  }
-  set_infinity_value(HeapNumber::cast(obj));
+  set_nan_value(*factory->NewHeapNumber(OS::nan_value(), TENURED));
+  set_infinity_value(*factory->NewHeapNumber(V8_INFINITY, TENURED));
 
   // The hole has not been created yet, but we want to put something
   // predictable in the gaps in the string table, so lets make that Smi zero.
   set_the_hole_value(reinterpret_cast<Oddball*>(Smi::FromInt(0)));
 
   // Allocate initial string table.
-  { MaybeObject* maybe_obj =
-        StringTable::Allocate(this, kInitialStringTableSize);
-    if (!maybe_obj->ToObject(&obj)) return false;
-  }
-  // Don't use set_string_table() due to asserts.
-  roots_[kStringTableRootIndex] = obj;
+  set_string_table(*StringTable::New(isolate(), kInitialStringTableSize));
 
   // Finish initializing oddballs after creating the string table.
-  { MaybeObject* maybe_obj =
-        undefined_value()->Initialize(this,
-                                      "undefined",
-                                      nan_value(),
-                                      Oddball::kUndefined);
-    if (!maybe_obj->ToObject(&obj)) return false;
-  }
+  Oddball::Initialize(isolate(),
+                      factory->undefined_value(),
+                      "undefined",
+                      factory->nan_value(),
+                      Oddball::kUndefined);
 
   // Initialize the null_value.
-  { MaybeObject* maybe_obj = null_value()->Initialize(
-      this, "null", Smi::FromInt(0), Oddball::kNull);
-    if (!maybe_obj->ToObject(&obj)) return false;
-  }
+  Oddball::Initialize(isolate(),
+                      factory->null_value(),
+                      "null",
+                      handle(Smi::FromInt(0), isolate()),
+                      Oddball::kNull);
 
-  { MaybeObject* maybe_obj = CreateOddball(boolean_map(),
-                                           "true",
-                                           Smi::FromInt(1),
-                                           Oddball::kTrue);
-    if (!maybe_obj->ToObject(&obj)) return false;
-  }
-  set_true_value(Oddball::cast(obj));
+  set_true_value(*factory->NewOddball(factory->boolean_map(),
+                                      "true",
+                                      handle(Smi::FromInt(1), isolate()),
+                                      Oddball::kTrue));
 
-  { MaybeObject* maybe_obj = CreateOddball(boolean_map(),
-                                           "false",
-                                           Smi::FromInt(0),
-                                           Oddball::kFalse);
-    if (!maybe_obj->ToObject(&obj)) return false;
-  }
-  set_false_value(Oddball::cast(obj));
+  set_false_value(*factory->NewOddball(factory->boolean_map(),
+                                       "false",
+                                       handle(Smi::FromInt(0), isolate()),
+                                       Oddball::kFalse));
 
-  { MaybeObject* maybe_obj = CreateOddball(the_hole_map(),
-                                           "hole",
-                                           Smi::FromInt(-1),
-                                           Oddball::kTheHole);
-    if (!maybe_obj->ToObject(&obj)) return false;
-  }
-  set_the_hole_value(Oddball::cast(obj));
+  set_the_hole_value(*factory->NewOddball(factory->the_hole_map(),
+                                          "hole",
+                                          handle(Smi::FromInt(-1), isolate()),
+                                          Oddball::kTheHole));
 
-  { MaybeObject* maybe_obj = CreateOddball(uninitialized_map(),
-                                           "uninitialized",
-                                           Smi::FromInt(-1),
-                                           Oddball::kUninitialized);
-    if (!maybe_obj->ToObject(&obj)) return false;
-  }
-  set_uninitialized_value(Oddball::cast(obj));
+  set_uninitialized_value(
+      *factory->NewOddball(factory->uninitialized_map(),
+                           "uninitialized",
+                           handle(Smi::FromInt(-1), isolate()),
+                           Oddball::kUninitialized));
 
-  { MaybeObject* maybe_obj = CreateOddball(arguments_marker_map(),
-                                           "arguments_marker",
-                                           Smi::FromInt(-4),
-                                           Oddball::kArgumentMarker);
-    if (!maybe_obj->ToObject(&obj)) return false;
-  }
-  set_arguments_marker(Oddball::cast(obj));
+  set_arguments_marker(*factory->NewOddball(factory->arguments_marker_map(),
+                                            "arguments_marker",
+                                            handle(Smi::FromInt(-4), isolate()),
+                                            Oddball::kArgumentMarker));
 
-  { MaybeObject* maybe_obj = CreateOddball(no_interceptor_result_sentinel_map(),
-                                           "no_interceptor_result_sentinel",
-                                           Smi::FromInt(-2),
-                                           Oddball::kOther);
-    if (!maybe_obj->ToObject(&obj)) return false;
-  }
-  set_no_interceptor_result_sentinel(Oddball::cast(obj));
+  set_no_interceptor_result_sentinel(
+      *factory->NewOddball(factory->no_interceptor_result_sentinel_map(),
+                           "no_interceptor_result_sentinel",
+                           handle(Smi::FromInt(-2), isolate()),
+                           Oddball::kOther));
 
-  { MaybeObject* maybe_obj = CreateOddball(termination_exception_map(),
-                                           "termination_exception",
-                                           Smi::FromInt(-3),
-                                           Oddball::kOther);
-    if (!maybe_obj->ToObject(&obj)) return false;
-  }
-  set_termination_exception(Oddball::cast(obj));
+  set_termination_exception(
+      *factory->NewOddball(factory->termination_exception_map(),
+                           "termination_exception",
+                           handle(Smi::FromInt(-3), isolate()),
+                           Oddball::kOther));
 
   for (unsigned i = 0; i < ARRAY_SIZE(constant_string_table); i++) {
-    { MaybeObject* maybe_obj =
-          InternalizeUtf8String(constant_string_table[i].contents);
-      if (!maybe_obj->ToObject(&obj)) return false;
-    }
-    roots_[constant_string_table[i].index] = String::cast(obj);
+    Handle<String> str =
+        factory->InternalizeUtf8String(constant_string_table[i].contents);
+    roots_[constant_string_table[i].index] = *str;
   }
+
+  Object* obj;
 
   // Allocate the hidden string which is used to identify the hidden properties
   // in JSObjects. The hash code has a special value so that it will not match
@@ -2996,11 +2951,12 @@ bool Heap::CreateInitialObjects() {
   CreateFixedStubs();
 
   // Allocate the dictionary of intrinsic function names.
-  { MaybeObject* maybe_obj =
-        NameDictionary::Allocate(this, Runtime::kNumFunctions);
-    if (!maybe_obj->ToObject(&obj)) return false;
+  {
+    Handle<NameDictionary> function_names =
+        NameDictionary::New(isolate(), Runtime::kNumFunctions);
+    Runtime::InitializeIntrinsicFunctionNames(isolate(), function_names);
+    set_intrinsic_function_names(*function_names);
   }
-  set_intrinsic_function_names(NameDictionary::cast(obj));
 
   { MaybeObject* maybe_obj = AllocateInitialNumberStringCache();
     if (!maybe_obj->ToObject(&obj)) return false;
@@ -3199,60 +3155,58 @@ Object* RegExpResultsCache::Lookup(Heap* heap,
 }
 
 
-void RegExpResultsCache::Enter(Heap* heap,
-                               String* key_string,
-                               Object* key_pattern,
-                               FixedArray* value_array,
+void RegExpResultsCache::Enter(Isolate* isolate,
+                               Handle<String> key_string,
+                               Handle<Object> key_pattern,
+                               Handle<FixedArray> value_array,
                                ResultsCacheType type) {
-  FixedArray* cache;
+  Factory* factory = isolate->factory();
+  Handle<FixedArray> cache;
   if (!key_string->IsInternalizedString()) return;
   if (type == STRING_SPLIT_SUBSTRINGS) {
     ASSERT(key_pattern->IsString());
     if (!key_pattern->IsInternalizedString()) return;
-    cache = heap->string_split_cache();
+    cache = factory->string_split_cache();
   } else {
     ASSERT(type == REGEXP_MULTIPLE_INDICES);
     ASSERT(key_pattern->IsFixedArray());
-    cache = heap->regexp_multiple_cache();
+    cache = factory->regexp_multiple_cache();
   }
 
   uint32_t hash = key_string->Hash();
   uint32_t index = ((hash & (kRegExpResultsCacheSize - 1)) &
       ~(kArrayEntriesPerCacheEntry - 1));
   if (cache->get(index + kStringOffset) == Smi::FromInt(0)) {
-    cache->set(index + kStringOffset, key_string);
-    cache->set(index + kPatternOffset, key_pattern);
-    cache->set(index + kArrayOffset, value_array);
+    cache->set(index + kStringOffset, *key_string);
+    cache->set(index + kPatternOffset, *key_pattern);
+    cache->set(index + kArrayOffset, *value_array);
   } else {
     uint32_t index2 =
         ((index + kArrayEntriesPerCacheEntry) & (kRegExpResultsCacheSize - 1));
     if (cache->get(index2 + kStringOffset) == Smi::FromInt(0)) {
-      cache->set(index2 + kStringOffset, key_string);
-      cache->set(index2 + kPatternOffset, key_pattern);
-      cache->set(index2 + kArrayOffset, value_array);
+      cache->set(index2 + kStringOffset, *key_string);
+      cache->set(index2 + kPatternOffset, *key_pattern);
+      cache->set(index2 + kArrayOffset, *value_array);
     } else {
       cache->set(index2 + kStringOffset, Smi::FromInt(0));
       cache->set(index2 + kPatternOffset, Smi::FromInt(0));
       cache->set(index2 + kArrayOffset, Smi::FromInt(0));
-      cache->set(index + kStringOffset, key_string);
-      cache->set(index + kPatternOffset, key_pattern);
-      cache->set(index + kArrayOffset, value_array);
+      cache->set(index + kStringOffset, *key_string);
+      cache->set(index + kPatternOffset, *key_pattern);
+      cache->set(index + kArrayOffset, *value_array);
     }
   }
   // If the array is a reasonably short list of substrings, convert it into a
   // list of internalized strings.
   if (type == STRING_SPLIT_SUBSTRINGS && value_array->length() < 100) {
     for (int i = 0; i < value_array->length(); i++) {
-      String* str = String::cast(value_array->get(i));
-      Object* internalized_str;
-      MaybeObject* maybe_string = heap->InternalizeString(str);
-      if (maybe_string->ToObject(&internalized_str)) {
-        value_array->set(i, internalized_str);
-      }
+      Handle<String> str(String::cast(value_array->get(i)), isolate);
+      Handle<String> internalized_str = factory->InternalizeString(str);
+      value_array->set(i, *internalized_str);
     }
   }
   // Convert backing store to a copy-on-write array.
-  value_array->set_map_no_write_barrier(heap->fixed_cow_array_map());
+  value_array->set_map_no_write_barrier(*factory->fixed_cow_array_map());
 }
 
 
@@ -4097,36 +4051,6 @@ MaybeObject* Heap::Allocate(Map* map, AllocationSpace space,
 }
 
 
-void Heap::InitializeFunction(JSFunction* function,
-                              SharedFunctionInfo* shared,
-                              Object* prototype) {
-  ASSERT(!prototype->IsMap());
-  function->initialize_properties();
-  function->initialize_elements();
-  function->set_shared(shared);
-  function->set_code(shared->code());
-  function->set_prototype_or_initial_map(prototype);
-  function->set_context(undefined_value());
-  function->set_literals_or_bindings(empty_fixed_array());
-  function->set_next_function_link(undefined_value());
-}
-
-
-MaybeObject* Heap::AllocateFunction(Map* function_map,
-                                    SharedFunctionInfo* shared,
-                                    Object* prototype,
-                                    PretenureFlag pretenure) {
-  AllocationSpace space =
-      (pretenure == TENURED) ? OLD_POINTER_SPACE : NEW_SPACE;
-  Object* result;
-  { MaybeObject* maybe_result = Allocate(function_map, space);
-    if (!maybe_result->ToObject(&result)) return maybe_result;
-  }
-  InitializeFunction(JSFunction::cast(result), shared, prototype);
-  return result;
-}
-
-
 MaybeObject* Heap::AllocateArgumentsObject(Object* callee, int length) {
   // To get fast allocation and map sharing for arguments objects we
   // allocate them based on an arguments boilerplate.
@@ -4403,94 +4327,6 @@ MaybeObject* Heap::CopyJSObject(JSObject* source, AllocationSite* site) {
   }
   // Return the new clone.
   return clone;
-}
-
-
-MaybeObject* Heap::ReinitializeJSReceiver(
-    JSReceiver* object, InstanceType type, int size) {
-  ASSERT(type >= FIRST_JS_OBJECT_TYPE);
-
-  // Allocate fresh map.
-  // TODO(rossberg): Once we optimize proxies, cache these maps.
-  Map* map;
-  MaybeObject* maybe = AllocateMap(type, size);
-  if (!maybe->To<Map>(&map)) return maybe;
-
-  // Check that the receiver has at least the size of the fresh object.
-  int size_difference = object->map()->instance_size() - map->instance_size();
-  ASSERT(size_difference >= 0);
-
-  map->set_prototype(object->map()->prototype());
-
-  // Allocate the backing storage for the properties.
-  int prop_size = map->unused_property_fields() - map->inobject_properties();
-  Object* properties;
-  maybe = AllocateFixedArray(prop_size, TENURED);
-  if (!maybe->ToObject(&properties)) return maybe;
-
-  // Functions require some allocation, which might fail here.
-  SharedFunctionInfo* shared = NULL;
-  if (type == JS_FUNCTION_TYPE) {
-    String* name;
-    OneByteStringKey key(STATIC_ASCII_VECTOR("<freezing call trap>"),
-                         HashSeed());
-    maybe = InternalizeStringWithKey(&key);
-    if (!maybe->To<String>(&name)) return maybe;
-    maybe = AllocateSharedFunctionInfo(name);
-    if (!maybe->To<SharedFunctionInfo>(&shared)) return maybe;
-  }
-
-  // Because of possible retries of this function after failure,
-  // we must NOT fail after this point, where we have changed the type!
-
-  // Reset the map for the object.
-  object->set_map(map);
-  JSObject* jsobj = JSObject::cast(object);
-
-  // Reinitialize the object from the constructor map.
-  InitializeJSObjectFromMap(jsobj, FixedArray::cast(properties), map);
-
-  // Functions require some minimal initialization.
-  if (type == JS_FUNCTION_TYPE) {
-    map->set_function_with_prototype(true);
-    InitializeFunction(JSFunction::cast(object), shared, the_hole_value());
-    JSFunction::cast(object)->set_context(
-        isolate()->context()->native_context());
-  }
-
-  // Put in filler if the new object is smaller than the old.
-  if (size_difference > 0) {
-    CreateFillerObjectAt(
-        object->address() + map->instance_size(), size_difference);
-  }
-
-  return object;
-}
-
-
-MaybeObject* Heap::ReinitializeJSGlobalProxy(JSFunction* constructor,
-                                             JSGlobalProxy* object) {
-  ASSERT(constructor->has_initial_map());
-  Map* map = constructor->initial_map();
-
-  // Check that the already allocated object has the same size and type as
-  // objects allocated using the constructor.
-  ASSERT(map->instance_size() == object->map()->instance_size());
-  ASSERT(map->instance_type() == object->map()->instance_type());
-
-  // Allocate the backing storage for the properties.
-  int prop_size = map->unused_property_fields() - map->inobject_properties();
-  Object* properties;
-  { MaybeObject* maybe_properties = AllocateFixedArray(prop_size, TENURED);
-    if (!maybe_properties->ToObject(&properties)) return maybe_properties;
-  }
-
-  // Reset the map for the object.
-  object->set_map(constructor->initial_map());
-
-  // Reinitialize the object from the constructor map.
-  InitializeJSObjectFromMap(object, FixedArray::cast(properties), map);
-  return object;
 }
 
 
@@ -4909,21 +4745,6 @@ MaybeObject* Heap::AllocateUninitializedFixedArray(int length) {
       fixed_array_map());
   FixedArray::cast(obj)->set_length(length);
   return obj;
-}
-
-
-MaybeObject* Heap::AllocateEmptyFixedDoubleArray() {
-  int size = FixedDoubleArray::SizeFor(0);
-  Object* result;
-  { MaybeObject* maybe_result =
-        AllocateRaw(size, OLD_DATA_SPACE, OLD_DATA_SPACE);
-    if (!maybe_result->ToObject(&result)) return maybe_result;
-  }
-  // Initialize the object.
-  reinterpret_cast<FixedDoubleArray*>(result)->set_map_no_write_barrier(
-      fixed_double_array_map());
-  reinterpret_cast<FixedDoubleArray*>(result)->set_length(0);
-  return result;
 }
 
 
@@ -6109,16 +5930,12 @@ bool Heap::CreateHeapObjects() {
 
   // Create initial objects
   if (!CreateInitialObjects()) return false;
+  CHECK_EQ(0, gc_count_);
 
   native_contexts_list_ = undefined_value();
   array_buffers_list_ = undefined_value();
   allocation_sites_list_ = undefined_value();
   weak_object_to_code_table_ = undefined_value();
-
-  HandleScope scope(isolate());
-  Runtime::InitializeIntrinsicFunctionNames(
-      isolate(), handle(intrinsic_function_names(), isolate()));
-
   return true;
 }
 

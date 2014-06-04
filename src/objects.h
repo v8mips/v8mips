@@ -1513,8 +1513,9 @@ class Object : public MaybeObject {
 
   Handle<HeapType> OptimalType(Isolate* isolate, Representation representation);
 
-  inline MaybeObject* AllocateNewStorageFor(Heap* heap,
-                                            Representation representation);
+  inline static Handle<Object> NewStorageFor(Isolate* isolate,
+                                             Handle<Object> object,
+                                             Representation representation);
 
   // Returns true if the object is of the correct type to be used as a
   // implementation of a JSObject's elements.
@@ -1578,6 +1579,7 @@ class Object : public MaybeObject {
 
   // Return the object's prototype (might be Heap::null_value()).
   Object* GetPrototype(Isolate* isolate);
+  static Handle<Object> GetPrototype(Isolate* isolate, Handle<Object> object);
   Map* GetMarkerMap(Isolate* isolate);
 
   // Returns the permanent hash code associated with this object. May return
@@ -2147,6 +2149,10 @@ class JSReceiver: public HeapObject {
 // Forward declaration for JSObject::GetOrCreateHiddenPropertiesHashTable.
 class ObjectHashTable;
 
+// Forward declaration for JSObject::Copy.
+class AllocationSite;
+
+
 // The JSObject describes real heap allocated JavaScript objects with
 // properties.
 // Note that the map of JSObject changes during execution to enable inline
@@ -2244,10 +2250,10 @@ class JSObject: public JSReceiver {
   static Handle<Object> PrepareElementsForSort(Handle<JSObject> object,
                                                uint32_t limit);
   // As PrepareElementsForSort, but only on objects where elements is
-  // a dictionary, and it will stay a dictionary.
+  // a dictionary, and it will stay a dictionary.  Collates undefined and
+  // unexisting elements below limit from position zero of the elements.
   static Handle<Object> PrepareSlowElementsForSort(Handle<JSObject> object,
                                                    uint32_t limit);
-  MUST_USE_RESULT MaybeObject* PrepareSlowElementsForSort(uint32_t limit);
 
   MUST_USE_RESULT static MaybeHandle<Object> GetPropertyWithCallback(
       Handle<JSObject> object,
@@ -2609,9 +2615,6 @@ class JSObject: public JSReceiver {
                                         int unused_property_fields);
 
   // Access fast-case object properties at index.
-  MUST_USE_RESULT inline MaybeObject* FastPropertyAt(
-      Representation representation,
-      int index);
   static Handle<Object> FastPropertyAt(Handle<JSObject> object,
                                        Representation representation,
                                        int index);
@@ -2658,6 +2661,8 @@ class JSObject: public JSReceiver {
     kObjectIsShallowArray = 1
   };
 
+  static Handle<JSObject> Copy(Handle<JSObject> object,
+                               Handle<AllocationSite> site);
   static Handle<JSObject> Copy(Handle<JSObject> object);
   static Handle<JSObject> DeepCopy(Handle<JSObject> object,
                                    AllocationSiteUsageContext* site_context,
@@ -2749,7 +2754,7 @@ class JSObject: public JSReceiver {
   static const int kInitialMaxFastElementArray = 100000;
 
   static const int kFastPropertiesSoftLimit = 12;
-  static const int kMaxFastProperties = 64;
+  static const int kMaxFastProperties = 128;
   static const int kMaxInstanceSize = 255 * kPointerSize;
   // When extending the backing storage for property values, we increase
   // its size by more than the 1 entry necessary, so sequentially adding fields
@@ -6560,12 +6565,15 @@ class Map: public HeapObject {
 
   inline bool CanOmitMapChecks();
 
-  void AddDependentCompilationInfo(DependentCode::DependencyGroup group,
-                                   CompilationInfo* info);
+  static void AddDependentCompilationInfo(Handle<Map> map,
+                                          DependentCode::DependencyGroup group,
+                                          CompilationInfo* info);
 
-  void AddDependentCode(DependentCode::DependencyGroup group,
-                        Handle<Code> code);
-  void AddDependentIC(Handle<Code> stub);
+  static void AddDependentCode(Handle<Map> map,
+                               DependentCode::DependencyGroup group,
+                               Handle<Code> code);
+  static void AddDependentIC(Handle<Map> map,
+                             Handle<Code> stub);
 
   bool IsMapInArrayPrototypeChain();
 
@@ -9717,10 +9725,11 @@ class Oddball: public HeapObject {
   DECLARE_VERIFIER(Oddball)
 
   // Initialize the fields.
-  MUST_USE_RESULT MaybeObject* Initialize(Heap* heap,
-                                          const char* to_string,
-                                          Object* to_number,
-                                          byte kind);
+  static void Initialize(Isolate* isolate,
+                         Handle<Oddball> oddball,
+                         const char* to_string,
+                         Handle<Object> to_number,
+                         byte kind);
 
   // Layout description.
   static const int kToStringOffset = HeapObject::kHeaderSize;
@@ -9808,9 +9817,8 @@ class PropertyCell: public Cell {
   static Handle<HeapType> UpdatedType(Handle<PropertyCell> cell,
                                       Handle<Object> value);
 
-  void AddDependentCompilationInfo(CompilationInfo* info);
-
-  void AddDependentCode(Handle<Code> code);
+  static void AddDependentCompilationInfo(Handle<PropertyCell> cell,
+                                          CompilationInfo* info);
 
   // Casting.
   static inline PropertyCell* cast(Object* obj);
@@ -10273,9 +10281,6 @@ class JSArray: public JSObject {
   static void JSArrayUpdateLengthFromIndex(Handle<JSArray> array,
                                            uint32_t index,
                                            Handle<Object> value);
-
-  MUST_USE_RESULT MaybeObject* JSArrayUpdateLengthFromIndex(uint32_t index,
-                                                            Object* value);
 
   // Initialize the array with the given capacity. The function may
   // fail due to out-of-memory situations, but only if the requested
