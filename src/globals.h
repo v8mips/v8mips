@@ -81,7 +81,7 @@ namespace internal {
 #elif defined(__mips64)
 #define V8_HOST_ARCH_MIPS64 1
 #define V8_HOST_ARCH_64_BIT 1
-#elif defined(__MIPSEL__)
+#elif defined(__MIPSEB__) || defined(__MIPSEL__)
 #define V8_HOST_ARCH_MIPS 1
 #define V8_HOST_ARCH_32_BIT 1
 #else
@@ -114,7 +114,7 @@ namespace internal {
 #define V8_TARGET_ARCH_ARM 1
 #elif defined(__mips64)
 #define V8_TARGET_ARCH_MIPS64 1
-#elif defined(__MIPSEL__)
+#elif defined(__MIPSEB__) || defined(__MIPSEL__)
 #define V8_TARGET_ARCH_MIPS 1
 #else
 #error Target architecture was not detected as supported by v8
@@ -160,7 +160,7 @@ namespace internal {
 #endif
 #endif
 
-// Determine architecture endiannes (we only support little-endian).
+// Determine architecture endianness.
 #if V8_TARGET_ARCH_IA32
 #define V8_TARGET_LITTLE_ENDIAN 1
 #elif V8_TARGET_ARCH_X64
@@ -170,11 +170,15 @@ namespace internal {
 #elif V8_TARGET_ARCH_ARM64
 #define V8_TARGET_LITTLE_ENDIAN 1
 #elif V8_TARGET_ARCH_MIPS
+#if defined(__MIPSEB__)
+#define V8_TARGET_BIG_ENDIAN 1
+#else
 #define V8_TARGET_LITTLE_ENDIAN 1
+#endif
 #elif V8_TARGET_ARCH_MIPS64
 #define V8_TARGET_LITTLE_ENDIAN 1
 #else
-#error Unknown target architecture endiannes
+#error Unknown target architecture endianness
 #endif
 
 // Determine whether the architecture uses an out-of-line constant pool.

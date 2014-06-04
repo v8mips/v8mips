@@ -4729,10 +4729,10 @@ static MaybeObject* SearchRegExpMultiple(
       fixed_array->set(fixed_array->length() - 1,
                        Smi::FromInt(builder.length()));
       // Cache the result and turn the FixedArray into a COW array.
-      RegExpResultsCache::Enter(isolate,
-                                subject,
-                                handle(regexp->data(), isolate),
-                                fixed_array,
+      RegExpResultsCache::Enter(isolate->heap(),
+                                *subject,
+                                regexp->data(),
+                                *fixed_array,
                                 RegExpResultsCache::REGEXP_MULTIPLE_INDICES);
     }
     return *builder.ToJSArray(result_array);
@@ -6749,10 +6749,10 @@ RUNTIME_FUNCTION(MaybeObject*, Runtime_StringSplit) {
 
   if (limit == 0xffffffffu) {
     if (result->HasFastObjectElements()) {
-      RegExpResultsCache::Enter(isolate,
-                                subject,
-                                pattern,
-                                elements,
+      RegExpResultsCache::Enter(isolate->heap(),
+                                *subject,
+                                *pattern,
+                                *elements,
                                 RegExpResultsCache::STRING_SPLIT_SUBSTRINGS);
     }
   }
@@ -9157,8 +9157,15 @@ static inline ObjectPair MakePair(MaybeObject* x, MaybeObject* y) {
 #else
 typedef uint64_t ObjectPair;
 static inline ObjectPair MakePair(MaybeObject* x, MaybeObject* y) {
+#if defined(V8_TARGET_LITTLE_ENDIAN)
   return reinterpret_cast<uint32_t>(x) |
       (reinterpret_cast<ObjectPair>(y) << 32);
+#elif defined(V8_TARGET_BIG_ENDIAN)
+    return reinterpret_cast<uint32_t>(y) |
+        (reinterpret_cast<ObjectPair>(x) << 32);
+#else
+#error Unknown endianness
+#endif
 }
 #endif
 
