@@ -926,16 +926,10 @@ class MaybeObject BASE_EMBEDDED {
   inline bool IsFailure();
   inline bool IsRetryAfterGC();
   inline bool IsException();
-  INLINE(bool IsTheHole());
-  INLINE(bool IsUninitialized());
   inline bool ToObject(Object** obj) {
     if (IsFailure()) return false;
     *obj = reinterpret_cast<Object*>(this);
     return true;
-  }
-  inline Failure* ToFailureUnchecked() {
-    ASSERT(IsFailure());
-    return reinterpret_cast<Failure*>(this);
   }
   inline Object* ToObjectUnchecked() {
     // TODO(jkummerow): Turn this back into an ASSERT when we can be certain
@@ -952,13 +946,6 @@ class MaybeObject BASE_EMBEDDED {
   inline bool To(T** obj) {
     if (IsFailure()) return false;
     *obj = T::cast(reinterpret_cast<Object*>(this));
-    return true;
-  }
-
-  template<typename T>
-    inline bool ToHandle(Handle<T>* obj, Isolate* isolate) {
-    if (IsFailure()) return false;
-    *obj = handle(T::cast(reinterpret_cast<Object*>(this)), isolate);
     return true;
   }
 
@@ -1711,8 +1698,6 @@ class Failure: public MaybeObject {
 
   // Returns the space that needs to be collected for RetryAfterGC failures.
   inline AllocationSpace allocation_space() const;
-
-  inline bool IsInternalError() const;
 
   static inline Failure* RetryAfterGC(AllocationSpace space);
   static inline Failure* RetryAfterGC();  // NEW_SPACE
@@ -2627,6 +2612,7 @@ class JSObject: public JSReceiver {
                                        int index);
   inline Object* RawFastPropertyAt(int index);
   inline void FastPropertyAtPut(int index, Object* value);
+  void WriteToField(int descriptor, Object* value);
 
   // Access to in object properties.
   inline int GetInObjectPropertyOffset(int index);
@@ -2908,18 +2894,6 @@ class JSObject: public JSReceiver {
       StoreMode mode = ALLOW_AS_CONSTANT,
       TransitionFlag flag = INSERT_TRANSITION);
 
-  // Add a constant function property to a fast-case object.
-  // This leaves a CONSTANT_TRANSITION in the old map, and
-  // if it is called on a second object with this map, a
-  // normal property is added instead, with a map transition.
-  // This avoids the creation of many maps with the same constant
-  // function, all orphaned.
-  static void AddConstantProperty(Handle<JSObject> object,
-                                  Handle<Name> name,
-                                  Handle<Object> constant,
-                                  PropertyAttributes attributes,
-                                  TransitionFlag flag);
-
   // Add a property to a fast-case object.
   static void AddFastProperty(Handle<JSObject> object,
                               Handle<Name> name,
@@ -2928,6 +2902,10 @@ class JSObject: public JSReceiver {
                               StoreFromKeyed store_mode,
                               ValueType value_type,
                               TransitionFlag flag);
+
+  static void MigrateToNewProperty(Handle<JSObject> object,
+                                   Handle<Map> transition,
+                                   Handle<Object> value);
 
   // Add a property to a slow-case object.
   static void AddSlowProperty(Handle<JSObject> object,
@@ -3172,7 +3150,6 @@ class FixedDoubleArray: public FixedArrayBase {
   // Setter and getter for elements.
   inline double get_scalar(int index);
   inline int64_t get_representation(int index);
-  MUST_USE_RESULT inline MaybeObject* get(int index);
   static inline Handle<Object> get(Handle<FixedDoubleArray> array, int index);
   inline void set(int index, double value);
   inline void set_the_hole(int index);
@@ -4926,7 +4903,6 @@ class ExternalUint8ClampedArray: public ExternalArray {
 
   // Setter and getter.
   inline uint8_t get_scalar(int index);
-  MUST_USE_RESULT inline Object* get(int index);
   static inline Handle<Object> get(Handle<ExternalUint8ClampedArray> array,
                                    int index);
   inline void set(int index, uint8_t value);
@@ -4953,7 +4929,6 @@ class ExternalInt8Array: public ExternalArray {
  public:
   // Setter and getter.
   inline int8_t get_scalar(int index);
-  MUST_USE_RESULT inline Object* get(int index);
   static inline Handle<Object> get(Handle<ExternalInt8Array> array, int index);
   inline void set(int index, int8_t value);
 
@@ -4979,7 +4954,6 @@ class ExternalUint8Array: public ExternalArray {
  public:
   // Setter and getter.
   inline uint8_t get_scalar(int index);
-  MUST_USE_RESULT inline Object* get(int index);
   static inline Handle<Object> get(Handle<ExternalUint8Array> array, int index);
   inline void set(int index, uint8_t value);
 
@@ -5005,7 +4979,6 @@ class ExternalInt16Array: public ExternalArray {
  public:
   // Setter and getter.
   inline int16_t get_scalar(int index);
-  MUST_USE_RESULT inline Object* get(int index);
   static inline Handle<Object> get(Handle<ExternalInt16Array> array, int index);
   inline void set(int index, int16_t value);
 
@@ -5031,7 +5004,6 @@ class ExternalUint16Array: public ExternalArray {
  public:
   // Setter and getter.
   inline uint16_t get_scalar(int index);
-  MUST_USE_RESULT inline Object* get(int index);
   static inline Handle<Object> get(Handle<ExternalUint16Array> array,
                                    int index);
   inline void set(int index, uint16_t value);
@@ -5058,7 +5030,6 @@ class ExternalInt32Array: public ExternalArray {
  public:
   // Setter and getter.
   inline int32_t get_scalar(int index);
-  MUST_USE_RESULT inline MaybeObject* get(int index);
   static inline Handle<Object> get(Handle<ExternalInt32Array> array, int index);
   inline void set(int index, int32_t value);
 
@@ -5084,7 +5055,6 @@ class ExternalUint32Array: public ExternalArray {
  public:
   // Setter and getter.
   inline uint32_t get_scalar(int index);
-  MUST_USE_RESULT inline MaybeObject* get(int index);
   static inline Handle<Object> get(Handle<ExternalUint32Array> array,
                                    int index);
   inline void set(int index, uint32_t value);
@@ -5111,7 +5081,6 @@ class ExternalFloat32Array: public ExternalArray {
  public:
   // Setter and getter.
   inline float get_scalar(int index);
-  MUST_USE_RESULT inline MaybeObject* get(int index);
   static inline Handle<Object> get(Handle<ExternalFloat32Array> array,
                                    int index);
   inline void set(int index, float value);
@@ -5138,7 +5107,6 @@ class ExternalFloat64Array: public ExternalArray {
  public:
   // Setter and getter.
   inline double get_scalar(int index);
-  MUST_USE_RESULT inline MaybeObject* get(int index);
   static inline Handle<Object> get(Handle<ExternalFloat64Array> array,
                                    int index);
   inline void set(int index, double value);
@@ -5198,7 +5166,6 @@ class FixedTypedArray: public FixedTypedArrayBase {
   }
 
   inline ElementType get_scalar(int index);
-  MUST_USE_RESULT inline MaybeObject* get(int index);
   static inline Handle<Object> get(Handle<FixedTypedArray> array, int index);
   inline void set(int index, ElementType value);
 
@@ -5207,8 +5174,6 @@ class FixedTypedArray: public FixedTypedArrayBase {
 
   // This accessor applies the correct conversion from Smi, HeapNumber
   // and undefined.
-  MUST_USE_RESULT MaybeObject* SetValue(uint32_t index, Object* value);
-
   static Handle<Object> SetValue(Handle<FixedTypedArray<Traits> > array,
                                  uint32_t index,
                                  Handle<Object> value);
@@ -5226,7 +5191,6 @@ class FixedTypedArray: public FixedTypedArrayBase {
       typedef elementType ElementType;                                        \
       static const InstanceType kInstanceType = FIXED_##TYPE##_ARRAY_TYPE;    \
       static const char* Designator() { return #type " array"; }              \
-      static inline MaybeObject* ToObject(Heap* heap, elementType scalar);    \
       static inline Handle<Object> ToHandle(Isolate* isolate,                 \
                                             elementType scalar);              \
       static inline elementType defaultValue();                               \
@@ -6436,20 +6400,6 @@ class Map: public HeapObject {
   static Handle<Map> CurrentMapForDeprecatedInternal(Handle<Map> map);
 
   static Handle<Map> CopyDropDescriptors(Handle<Map> map);
-  static Handle<Map> CopyReplaceDescriptors(
-      Handle<Map> map,
-      Handle<DescriptorArray> descriptors,
-      TransitionFlag flag,
-      Handle<Name> name,
-      SimpleTransitionFlag simple_flag = FULL_TRANSITION);
-  static Handle<Map> CopyReplaceDescriptors(
-      Handle<Map> map,
-      Handle<DescriptorArray> descriptors,
-      TransitionFlag flag,
-      SimpleTransitionFlag simple_flag = FULL_TRANSITION);
-  static Handle<Map> CopyAddDescriptor(Handle<Map> map,
-                                       Descriptor* descriptor,
-                                       TransitionFlag flag);
   static Handle<Map> CopyInsertDescriptor(Handle<Map> map,
                                           Descriptor* descriptor,
                                           TransitionFlag flag);
@@ -6459,6 +6409,21 @@ class Map: public HeapObject {
                                            int index,
                                            TransitionFlag flag);
 
+  MUST_USE_RESULT static MaybeHandle<Map> CopyWithField(
+      Handle<Map> map,
+      Handle<Name> name,
+      Handle<HeapType> type,
+      PropertyAttributes attributes,
+      Representation representation,
+      TransitionFlag flag);
+
+  MUST_USE_RESULT static MaybeHandle<Map> CopyWithConstant(
+      Handle<Map> map,
+      Handle<Name> name,
+      Handle<Object> constant,
+      PropertyAttributes attributes,
+      TransitionFlag flag);
+
   static Handle<Map> AsElementsKind(Handle<Map> map, ElementsKind kind);
 
   static Handle<Map> CopyAsElementsKind(Handle<Map> map,
@@ -6466,6 +6431,8 @@ class Map: public HeapObject {
                                         TransitionFlag flag);
 
   static Handle<Map> CopyForObserved(Handle<Map> map);
+
+  static Handle<Map> CopyForFreeze(Handle<Map> map);
 
   static Handle<Map> CopyNormalized(Handle<Map> map,
                                     PropertyNormalizationMode mode,
@@ -6709,6 +6676,15 @@ class Map: public HeapObject {
       Handle<Map> map,
       int new_descriptor,
       Handle<DescriptorArray> descriptors);
+  static Handle<Map> CopyAddDescriptor(Handle<Map> map,
+                                       Descriptor* descriptor,
+                                       TransitionFlag flag);
+  static Handle<Map> CopyReplaceDescriptors(
+      Handle<Map> map,
+      Handle<DescriptorArray> descriptors,
+      TransitionFlag flag,
+      MaybeHandle<Name> maybe_name,
+      SimpleTransitionFlag simple_flag = FULL_TRANSITION);
 
   // Zaps the contents of backing data structures. Note that the
   // heap verifier (i.e. VerifyMarkingVisitor) relies on zapping of objects

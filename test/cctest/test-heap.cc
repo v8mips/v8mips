@@ -99,12 +99,11 @@ static void CheckSmi(Isolate* isolate, int value, const char* string) {
 
 
 static void CheckNumber(Isolate* isolate, double value, const char* string) {
-  Object* obj = CcTest::heap()->NumberFromDouble(value)->ToObjectChecked();
-  CHECK(obj->IsNumber());
-  Handle<Object> handle(obj, isolate);
-  Object* print_string =
-      *Execution::ToString(isolate, handle).ToHandleChecked();
-  CHECK(String::cast(print_string)->IsUtf8EqualTo(CStrVector(string)));
+  Handle<Object> number = isolate->factory()->NewNumber(value);
+  CHECK(number->IsNumber());
+  Handle<Object> print_string =
+      Execution::ToString(isolate, number).ToHandleChecked();
+  CHECK(String::cast(*print_string)->IsUtf8EqualTo(CStrVector(string)));
 }
 
 
@@ -118,30 +117,24 @@ static void CheckFindCodeObject(Isolate* isolate) {
 
   CodeDesc desc;
   assm.GetCode(&desc);
-  Heap* heap = isolate->heap();
-  Object* code = heap->CreateCode(
-      desc,
-      Code::ComputeFlags(Code::STUB),
-      Handle<Code>())->ToObjectChecked();
+  Handle<Code> code = isolate->factory()->NewCode(
+      desc, Code::ComputeFlags(Code::STUB), Handle<Code>());
   CHECK(code->IsCode());
 
-  HeapObject* obj = HeapObject::cast(code);
+  HeapObject* obj = HeapObject::cast(*code);
   Address obj_addr = obj->address();
 
   for (int i = 0; i < obj->Size(); i += kPointerSize) {
     Object* found = isolate->FindCodeObject(obj_addr + i);
-    CHECK_EQ(code, found);
+    CHECK_EQ(*code, found);
   }
 
-  Object* copy = heap->CreateCode(
-      desc,
-      Code::ComputeFlags(Code::STUB),
-      Handle<Code>())->ToObjectChecked();
-  CHECK(copy->IsCode());
-  HeapObject* obj_copy = HeapObject::cast(copy);
+  Handle<Code> copy = isolate->factory()->NewCode(
+      desc, Code::ComputeFlags(Code::STUB), Handle<Code>());
+  HeapObject* obj_copy = HeapObject::cast(*copy);
   Object* not_right = isolate->FindCodeObject(obj_copy->address() +
                                               obj_copy->Size() / 2);
-  CHECK(not_right != code);
+  CHECK(not_right != *code);
 }
 
 
@@ -162,58 +155,55 @@ TEST(HeapObjects) {
   Heap* heap = isolate->heap();
 
   HandleScope sc(isolate);
-  Object* value = heap->NumberFromDouble(1.000123)->ToObjectChecked();
+  Handle<Object> value = factory->NewNumber(1.000123);
   CHECK(value->IsHeapNumber());
   CHECK(value->IsNumber());
   CHECK_EQ(1.000123, value->Number());
 
-  value = heap->NumberFromDouble(1.0)->ToObjectChecked();
+  value = factory->NewNumber(1.0);
   CHECK(value->IsSmi());
   CHECK(value->IsNumber());
   CHECK_EQ(1.0, value->Number());
 
-  value = heap->NumberFromInt32(1024)->ToObjectChecked();
+  value = factory->NewNumberFromInt(1024);
   CHECK(value->IsSmi());
   CHECK(value->IsNumber());
   CHECK_EQ(1024.0, value->Number());
 
-  value = heap->NumberFromInt32(Smi::kMinValue)->ToObjectChecked();
+  value = factory->NewNumberFromInt(Smi::kMinValue);
   CHECK(value->IsSmi());
   CHECK(value->IsNumber());
-  CHECK_EQ(Smi::kMinValue, Smi::cast(value)->value());
+  CHECK_EQ(Smi::kMinValue, Handle<Smi>::cast(value)->value());
 
-  value = heap->NumberFromInt32(Smi::kMaxValue)->ToObjectChecked();
+  value = factory->NewNumberFromInt(Smi::kMaxValue);
   CHECK(value->IsSmi());
   CHECK(value->IsNumber());
-  CHECK_EQ(Smi::kMaxValue, Smi::cast(value)->value());
+  CHECK_EQ(Smi::kMaxValue, Handle<Smi>::cast(value)->value());
 
 #if !defined(V8_TARGET_ARCH_X64) && !defined(V8_TARGET_ARCH_ARM64) && \
     !defined (V8_TARGET_ARCH_MIPS64)
   // TODO(lrn): We need a NumberFromIntptr function in order to test this.
-  value = heap->NumberFromInt32(Smi::kMinValue - 1)->ToObjectChecked();
+  value = factory->NewNumberFromInt(Smi::kMinValue - 1);
   CHECK(value->IsHeapNumber());
   CHECK(value->IsNumber());
   CHECK_EQ(static_cast<double>(Smi::kMinValue - 1), value->Number());
 #endif
 
-  MaybeObject* maybe_value =
-      heap->NumberFromUint32(static_cast<uint32_t>(Smi::kMaxValue) + 1);
-  value = maybe_value->ToObjectChecked();
+  value = factory->NewNumberFromUint(static_cast<uint32_t>(Smi::kMaxValue) + 1);
   CHECK(value->IsHeapNumber());
   CHECK(value->IsNumber());
   CHECK_EQ(static_cast<double>(static_cast<uint32_t>(Smi::kMaxValue) + 1),
            value->Number());
 
-  maybe_value = heap->NumberFromUint32(static_cast<uint32_t>(1) << 31);
-  value = maybe_value->ToObjectChecked();
+  value = factory->NewNumberFromUint(static_cast<uint32_t>(1) << 31);
   CHECK(value->IsHeapNumber());
   CHECK(value->IsNumber());
   CHECK_EQ(static_cast<double>(static_cast<uint32_t>(1) << 31),
            value->Number());
 
   // nan oddball checks
-  CHECK(heap->nan_value()->IsNumber());
-  CHECK(std::isnan(heap->nan_value()->Number()));
+  CHECK(factory->nan_value()->IsNumber());
+  CHECK(std::isnan(factory->nan_value()->Number()));
 
   Handle<String> s = factory->NewStringFromAscii(CStrVector("fisk hest "));
   CHECK(s->IsString());
@@ -2638,14 +2628,15 @@ TEST(Regress1465) {
   v8::HandleScope scope(CcTest::isolate());
   static const int transitions_count = 256;
 
+  CompileRun("function F() {}");
   {
     AlwaysAllocateScope always_allocate(CcTest::i_isolate());
     for (int i = 0; i < transitions_count; i++) {
       EmbeddedVector<char, 64> buffer;
-      OS::SNPrintF(buffer, "var o = new Object; o.prop%d = %d;", i, i);
+      OS::SNPrintF(buffer, "var o = new F; o.prop%d = %d;", i, i);
       CompileRun(buffer.start());
     }
-    CompileRun("var root = new Object;");
+    CompileRun("var root = new F;");
   }
 
   Handle<JSObject> root =
@@ -2674,7 +2665,7 @@ static void AddTransitions(int transitions_count) {
   AlwaysAllocateScope always_allocate(CcTest::i_isolate());
   for (int i = 0; i < transitions_count; i++) {
     EmbeddedVector<char, 64> buffer;
-    OS::SNPrintF(buffer, "var o = new Object; o.prop%d = %d;", i, i);
+    OS::SNPrintF(buffer, "var o = new F; o.prop%d = %d;", i, i);
     CompileRun(buffer.start());
   }
 }
@@ -2707,8 +2698,9 @@ TEST(TransitionArrayShrinksDuringAllocToZero) {
   CcTest::InitializeVM();
   v8::HandleScope scope(CcTest::isolate());
   static const int transitions_count = 10;
+  CompileRun("function F() { }");
   AddTransitions(transitions_count);
-  CompileRun("var root = new Object;");
+  CompileRun("var root = new F;");
   Handle<JSObject> root = GetByName("root");
 
   // Count number of live transitions before marking.
@@ -2716,8 +2708,8 @@ TEST(TransitionArrayShrinksDuringAllocToZero) {
   CHECK_EQ(transitions_count, transitions_before);
 
   // Get rid of o
-  CompileRun("o = new Object;"
-             "root = new Object");
+  CompileRun("o = new F;"
+             "root = new F");
   root = GetByName("root");
   AddPropertyTo(2, root, "funny");
 
@@ -2735,8 +2727,9 @@ TEST(TransitionArrayShrinksDuringAllocToOne) {
   CcTest::InitializeVM();
   v8::HandleScope scope(CcTest::isolate());
   static const int transitions_count = 10;
+  CompileRun("function F() {}");
   AddTransitions(transitions_count);
-  CompileRun("var root = new Object;");
+  CompileRun("var root = new F;");
   Handle<JSObject> root = GetByName("root");
 
   // Count number of live transitions before marking.
@@ -2760,8 +2753,9 @@ TEST(TransitionArrayShrinksDuringAllocToOnePropertyFound) {
   CcTest::InitializeVM();
   v8::HandleScope scope(CcTest::isolate());
   static const int transitions_count = 10;
+  CompileRun("function F() {}");
   AddTransitions(transitions_count);
-  CompileRun("var root = new Object;");
+  CompileRun("var root = new F;");
   Handle<JSObject> root = GetByName("root");
 
   // Count number of live transitions before marking.
@@ -2785,16 +2779,17 @@ TEST(TransitionArraySimpleToFull) {
   CcTest::InitializeVM();
   v8::HandleScope scope(CcTest::isolate());
   static const int transitions_count = 1;
+  CompileRun("function F() {}");
   AddTransitions(transitions_count);
-  CompileRun("var root = new Object;");
+  CompileRun("var root = new F;");
   Handle<JSObject> root = GetByName("root");
 
   // Count number of live transitions before marking.
   int transitions_before = CountMapTransitions(root->map());
   CHECK_EQ(transitions_count, transitions_before);
 
-  CompileRun("o = new Object;"
-             "root = new Object");
+  CompileRun("o = new F;"
+             "root = new F");
   root = GetByName("root");
   ASSERT(root->map()->transitions()->IsSimpleTransition());
   AddPropertyTo(2, root, "happy");
