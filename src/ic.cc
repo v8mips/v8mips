@@ -435,6 +435,42 @@ void IC::PostPatching(Address address, Code* target, Code* old_target) {
 }
 
 
+void IC::RegisterWeakMapDependency(Handle<Code> stub) {
+  if (FLAG_collect_maps && FLAG_weak_embedded_maps_in_ic &&
+      stub->CanBeWeakStub()) {
+    ASSERT(!stub->is_weak_stub());
+    MapHandleList maps;
+    stub->FindAllMaps(&maps);
+    if (maps.length() == 1 && stub->IsWeakObjectInIC(*maps.at(0))) {
+      maps.at(0)->AddDependentIC(stub);
+      stub->mark_as_weak_stub();
+      if (FLAG_enable_ool_constant_pool) {
+        stub->constant_pool()->set_weak_object_state(
+            ConstantPoolArray::WEAK_OBJECTS_IN_IC);
+      }
+    }
+  }
+}
+
+
+void IC::InvalidateMaps(Code* stub) {
+  ASSERT(stub->is_weak_stub());
+  stub->mark_as_invalidated_weak_stub();
+  Isolate* isolate = stub->GetIsolate();
+  Heap* heap = isolate->heap();
+  Object* undefined = heap->undefined_value();
+  int mode_mask = RelocInfo::ModeMask(RelocInfo::EMBEDDED_OBJECT);
+  for (RelocIterator it(stub, mode_mask); !it.done(); it.next()) {
+    RelocInfo::Mode mode = it.rinfo()->rmode();
+    if (mode == RelocInfo::EMBEDDED_OBJECT &&
+        it.rinfo()->target_object()->IsMap()) {
+      it.rinfo()->set_target_object(undefined, SKIP_WRITE_BARRIER);
+    }
+  }
+  CPU::FlushICache(stub->instruction_start(), stub->instruction_size());
+}
+
+
 void IC::Clear(Isolate* isolate, Address address,
     ConstantPoolArray* constant_pool) {
   Code* target = GetTargetAtAddress(address, constant_pool);
@@ -2402,10 +2438,10 @@ MaybeObject* BinaryOpIC::Transition(Handle<AllocationSite> allocation_site,
   Object* builtin = isolate()->js_builtins_object()->javascript_builtin(
       TokenToJSBuiltin(state.op()));
   Handle<JSFunction> function = handle(JSFunction::cast(builtin), isolate());
-  bool caught_exception;
-  Handle<Object> result = Execution::Call(
-      isolate(), function, left, 1, &right, &caught_exception);
-  if (caught_exception) return Failure::Exception();
+  Handle<Object> result;
+  ASSIGN_RETURN_FAILURE_ON_EXCEPTION(
+      isolate(), result,
+      Execution::Call(isolate(), function, left, 1, &right));
 
   // Execution::Call can execute arbitrary JavaScript, hence potentially
   // update the state of this very IC, so we must update the stored state.

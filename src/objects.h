@@ -1535,26 +1535,18 @@ class Object : public MaybeObject {
 
   void Lookup(Name* name, LookupResult* result);
 
-  // Property access.
-  MUST_USE_RESULT inline MaybeObject* GetProperty(Name* key);
-
-  // TODO(yangguo): this should eventually replace the non-handlified version.
   MUST_USE_RESULT static MaybeHandle<Object> GetPropertyWithReceiver(
       Handle<Object> object,
       Handle<Object> receiver,
       Handle<Name> name,
       PropertyAttributes* attributes);
-  MUST_USE_RESULT MaybeObject* GetPropertyWithReceiver(
-      Object* receiver,
-      Name* key,
-      PropertyAttributes* attributes);
-
-  MUST_USE_RESULT static MaybeHandle<Object> GetPropertyOrElement(
+  MUST_USE_RESULT static inline MaybeHandle<Object> GetPropertyOrElement(
       Handle<Object> object,
       Handle<Name> key);
 
-  static Handle<Object> GetProperty(Handle<Object> object,
-                                    Handle<Name> key);
+  MUST_USE_RESULT static inline MaybeHandle<Object> GetProperty(
+      Handle<Object> object,
+      Handle<Name> key);
   MUST_USE_RESULT static MaybeHandle<Object> GetProperty(
       Handle<Object> object,
       Handle<Object> receiver,
@@ -1562,23 +1554,12 @@ class Object : public MaybeObject {
       Handle<Name> key,
       PropertyAttributes* attributes);
 
-  MUST_USE_RESULT MaybeObject* GetProperty(Object* receiver,
-                                           LookupResult* result,
-                                           Name* key,
-                                           PropertyAttributes* attributes);
-
   MUST_USE_RESULT static MaybeHandle<Object> GetPropertyWithDefinedGetter(
       Handle<Object> object,
       Handle<Object> receiver,
       Handle<JSReceiver> getter);
 
   MUST_USE_RESULT static inline MaybeHandle<Object> GetElement(
-      Isolate* isolate,
-      Handle<Object> object,
-      uint32_t index);
-
-  // For use when we know that no exception can be thrown.
-  static inline Handle<Object> GetElementNoExceptionThrown(
       Isolate* isolate,
       Handle<Object> object,
       uint32_t index);
@@ -2132,9 +2113,10 @@ class JSReceiver: public HeapObject {
  protected:
   Smi* GenerateIdentityHash();
 
-  static Handle<Object> SetPropertyWithDefinedSetter(Handle<JSReceiver> object,
-                                                     Handle<JSReceiver> setter,
-                                                     Handle<Object> value);
+  MUST_USE_RESULT static MaybeHandle<Object> SetPropertyWithDefinedSetter(
+      Handle<JSReceiver> object,
+      Handle<JSReceiver> setter,
+      Handle<Object> value);
 
  private:
   static PropertyAttributes GetPropertyAttributeForResult(
@@ -2323,6 +2305,8 @@ class JSObject: public JSReceiver {
   // Retrieve a value in a normalized object given a lookup result.
   // Handles the special representation of JS global objects.
   Object* GetNormalizedProperty(const LookupResult* result);
+  static Handle<Object> GetNormalizedProperty(Handle<JSObject> object,
+                                              const LookupResult* result);
 
   // Sets the property value in a normalized object given a lookup result.
   // Handles the special representation of JS global objects.
@@ -2674,6 +2658,9 @@ class JSObject: public JSReceiver {
   static Handle<JSObject> DeepWalk(Handle<JSObject> object,
                                    AllocationSiteCreationContext* site_context);
 
+  static Handle<Object> GetDataProperty(Handle<JSObject> object,
+                                        Handle<Name> key);
+
   // Casting.
   static inline JSObject* cast(Object* obj);
 
@@ -2813,7 +2800,7 @@ class JSObject: public JSReceiver {
       Handle<JSReceiver> receiver,
       uint32_t index,
       bool continue_search);
-  static Handle<Object> SetElementWithCallback(
+  MUST_USE_RESULT static MaybeHandle<Object> SetElementWithCallback(
       Handle<JSObject> object,
       Handle<Object> structure,
       uint32_t index,
@@ -3227,7 +3214,8 @@ class ConstantPoolArray: public FixedArrayBase {
  public:
   enum WeakObjectState {
     NO_WEAK_OBJECTS,
-    WEAK_OBJECTS_IN_OPTIMIZED_CODE
+    WEAK_OBJECTS_IN_OPTIMIZED_CODE,
+    WEAK_OBJECTS_IN_IC
   };
 
   // Getters for the field storing the first index for different type entries.
@@ -3349,23 +3337,6 @@ class ConstantPoolArray: public FixedArrayBase {
 //   [2 + number of descriptors * kDescriptorSize]: start of slack
 class DescriptorArray: public FixedArray {
  public:
-  // WhitenessWitness is used to prove that a descriptor array is white
-  // (unmarked), so incremental write barriers can be skipped because the
-  // marking invariant cannot be broken and slots pointing into evacuation
-  // candidates will be discovered when the object is scanned. A witness is
-  // always stack-allocated right after creating an array. By allocating a
-  // witness, incremental marking is globally disabled. The witness is then
-  // passed along wherever needed to statically prove that the array is known to
-  // be white.
-  class WhitenessWitness {
-   public:
-    inline explicit WhitenessWitness(FixedArray* array);
-    inline ~WhitenessWitness();
-
-   private:
-    IncrementalMarking* marking_;
-  };
-
   // Returns true for both shared empty_descriptor_array and for smis, which the
   // map uses to encode additional bit fields when the descriptor array is not
   // yet used.
@@ -3455,15 +3426,12 @@ class DescriptorArray: public FixedArray {
 
   // Accessor for complete descriptor.
   inline void Get(int descriptor_number, Descriptor* desc);
-  inline void Set(int descriptor_number,
-                  Descriptor* desc,
-                  const WhitenessWitness&);
+  inline void Set(int descriptor_number, Descriptor* desc);
   void Replace(int descriptor_number, Descriptor* descriptor);
 
   // Append automatically sets the enumeration index. This should only be used
   // to add descriptors in bulk at the end, followed by sorting the descriptor
   // array.
-  inline void Append(Descriptor* desc, const WhitenessWitness&);
   inline void Append(Descriptor* desc);
 
   static Handle<DescriptorArray> Merge(Handle<Map> left_map,
@@ -3502,9 +3470,9 @@ class DescriptorArray: public FixedArray {
 
   // Allocates a DescriptorArray, but returns the singleton
   // empty descriptor array object if number_of_descriptors is 0.
-  MUST_USE_RESULT static MaybeObject* Allocate(Isolate* isolate,
-                                               int number_of_descriptors,
-                                               int slack = 0);
+  static Handle<DescriptorArray> Allocate(Isolate* isolate,
+                                          int number_of_descriptors,
+                                          int slack = 0);
 
   // Casting.
   static inline DescriptorArray* cast(Object* obj);
@@ -3558,6 +3526,23 @@ class DescriptorArray: public FixedArray {
   }
 
  private:
+  // WhitenessWitness is used to prove that a descriptor array is white
+  // (unmarked), so incremental write barriers can be skipped because the
+  // marking invariant cannot be broken and slots pointing into evacuation
+  // candidates will be discovered when the object is scanned. A witness is
+  // always stack-allocated right after creating an array. By allocating a
+  // witness, incremental marking is globally disabled. The witness is then
+  // passed along wherever needed to statically prove that the array is known to
+  // be white.
+  class WhitenessWitness {
+   public:
+    inline explicit WhitenessWitness(DescriptorArray* array);
+    inline ~WhitenessWitness();
+
+   private:
+    IncrementalMarking* marking_;
+  };
+
   // An entry in a DescriptorArray, represented as an (array, index) pair.
   class Entry {
    public:
@@ -3597,7 +3582,11 @@ class DescriptorArray: public FixedArray {
                 DescriptorArray* src,
                 const WhitenessWitness&);
 
-  inline void Set(int descriptor_number, Descriptor* desc);
+  inline void Set(int descriptor_number,
+                  Descriptor* desc,
+                  const WhitenessWitness&);
+
+  inline void Append(Descriptor* desc, const WhitenessWitness&);
 
   // Swap first and second descriptor.
   inline void SwapSortedKeys(int first, int second);
@@ -4098,11 +4087,6 @@ class NameDictionary: public Dictionary<NameDictionaryShape, Name*> {
   void CopyEnumKeysTo(FixedArray* storage);
   static void DoGenerateNewEnumerationIndices(
       Handle<NameDictionary> dictionary);
-
-  // For transforming properties of a JSObject.
-  MUST_USE_RESULT MaybeObject* TransformPropertiesToFastFor(
-      JSObject* obj,
-      int unused_property_fields);
 
   // Find entry for key, otherwise return kNotFound. Optimized version of
   // HashTable::FindEntry.
@@ -5496,6 +5480,17 @@ class Code: public HeapObject {
   inline bool is_to_boolean_ic_stub() { return kind() == TO_BOOLEAN_IC; }
   inline bool is_keyed_stub();
   inline bool is_optimized_code() { return kind() == OPTIMIZED_FUNCTION; }
+  inline bool is_weak_stub();
+  inline void mark_as_weak_stub();
+  inline bool is_invalidated_weak_stub();
+  inline void mark_as_invalidated_weak_stub();
+
+  inline bool CanBeWeakStub() {
+    Kind k = kind();
+    return (k == LOAD_IC || k == STORE_IC || k == KEYED_LOAD_IC ||
+            k == KEYED_STORE_IC || k == COMPARE_NIL_IC) &&
+           ic_state() == MONOMORPHIC;
+  }
 
   inline void set_raw_kind_specific_flags1(int value);
   inline void set_raw_kind_specific_flags2(int value);
@@ -5753,11 +5748,17 @@ class Code: public HeapObject {
   void VerifyEmbeddedObjectsDependency();
 #endif
 
+  inline bool CanContainWeakObjects() {
+    return is_optimized_code() || is_weak_stub();
+  }
+
   inline bool IsWeakObject(Object* object) {
-    return is_optimized_code() && IsWeakObjectInOptimizedCode(object);
+    return (is_optimized_code() && IsWeakObjectInOptimizedCode(object)) ||
+           (is_weak_stub() && IsWeakObjectInIC(object));
   }
 
   static inline bool IsWeakObjectInOptimizedCode(Object* object);
+  static inline bool IsWeakObjectInIC(Object* object);
 
   // Max loop nesting marker used to postpose OSR. We don't take loop
   // nesting that is deeper than 5 levels into account.
@@ -5820,11 +5821,17 @@ class Code: public HeapObject {
   static const int kMarkedForDeoptimizationFirstBit =
       kStackSlotsFirstBit + kStackSlotsBitCount + 1;
   static const int kMarkedForDeoptimizationBitCount = 1;
+  static const int kWeakStubFirstBit =
+      kMarkedForDeoptimizationFirstBit + kMarkedForDeoptimizationBitCount;
+  static const int kWeakStubBitCount = 1;
+  static const int kInvalidatedWeakStubFirstBit =
+      kWeakStubFirstBit + kWeakStubBitCount;
+  static const int kInvalidatedWeakStubBitCount = 1;
 
   STATIC_ASSERT(kStackSlotsFirstBit + kStackSlotsBitCount <= 32);
   STATIC_ASSERT(kHasFunctionCacheFirstBit + kHasFunctionCacheBitCount <= 32);
-  STATIC_ASSERT(kMarkedForDeoptimizationFirstBit +
-                kMarkedForDeoptimizationBitCount <= 32);
+  STATIC_ASSERT(kInvalidatedWeakStubFirstBit +
+                kInvalidatedWeakStubBitCount <= 32);
 
   class StackSlotsField: public BitField<int,
       kStackSlotsFirstBit, kStackSlotsBitCount> {};  // NOLINT
@@ -5833,6 +5840,12 @@ class Code: public HeapObject {
   class MarkedForDeoptimizationField: public BitField<bool,
       kMarkedForDeoptimizationFirstBit,
       kMarkedForDeoptimizationBitCount> {};  // NOLINT
+  class WeakStubField: public BitField<bool,
+      kWeakStubFirstBit,
+      kWeakStubBitCount> {};  // NOLINT
+  class InvalidatedWeakStubField: public BitField<bool,
+      kInvalidatedWeakStubFirstBit,
+      kInvalidatedWeakStubBitCount> {};  // NOLINT
 
   // KindSpecificFlags2 layout (ALL)
   static const int kIsCrankshaftedBit = 0;
@@ -5917,9 +5930,14 @@ class CompilationInfo;
 class DependentCode: public FixedArray {
  public:
   enum DependencyGroup {
+    // Group of IC stubs that weakly embed this map and depend on being
+    // invalidated when the map is garbage collected. Dependent IC stubs form
+    // a linked list. This group stores only the head of the list. This means
+    // that the number_of_entries(kWeakICGroup) is 0 or 1.
+    kWeakICGroup,
     // Group of code that weakly embed this map and depend on being
     // deoptimized when the map is garbage collected.
-    kWeaklyEmbeddedGroup,
+    kWeakCodeGroup,
     // Group of code that embed a transition to this map, and depend on being
     // deoptimized when the transition is replaced by a new version.
     kTransitionGroup,
@@ -5970,6 +5988,7 @@ class DependentCode: public FixedArray {
 
   bool MarkCodeForDeoptimization(Isolate* isolate,
                                  DependentCode::DependencyGroup group);
+  void AddToDependentICList(Handle<Code> stub);
 
   // The following low-level accessors should only be used by this class
   // and the mark compact collector.
@@ -6280,7 +6299,7 @@ class Map: public HeapObject {
   // [stub cache]: contains stubs compiled for this map.
   DECL_ACCESSORS(code_cache, Object)
 
-  // [dependent code]: list of optimized codes that have this map embedded.
+  // [dependent code]: list of optimized codes that weakly embed this map.
   DECL_ACCESSORS(dependent_code, DependentCode)
 
   // [back pointer]: points back to the parent map from which a transition
@@ -6301,8 +6320,8 @@ class Map: public HeapObject {
   //    2 + 2 * i: prototype
   //    3 + 2 * i: target map
   inline FixedArray* GetPrototypeTransitions();
-  MUST_USE_RESULT inline MaybeObject* SetPrototypeTransitions(
-      FixedArray* prototype_transitions);
+  static inline void SetPrototypeTransitions(
+      Handle<Map> map, Handle<FixedArray> prototype_transitions);
   inline bool HasPrototypeTransitions();
 
   static const int kProtoTransitionHeaderSize = 1;
@@ -6397,7 +6416,6 @@ class Map: public HeapObject {
   static Handle<Map> RawCopy(Handle<Map> map, int instance_size);
   MUST_USE_RESULT MaybeObject* RawCopy(int instance_size);
   static Handle<Map> CopyDropDescriptors(Handle<Map> map);
-  MUST_USE_RESULT MaybeObject* CopyDropDescriptors();
   static Handle<Map> CopyReplaceDescriptors(
       Handle<Map> map,
       Handle<DescriptorArray> descriptors,
@@ -6441,8 +6459,7 @@ class Map: public HeapObject {
                                     PropertyNormalizationMode mode,
                                     NormalizedMapSharingMode sharing);
 
-  inline void AppendDescriptor(Descriptor* desc,
-                               const DescriptorArray::WhitenessWitness&);
+  inline void AppendDescriptor(Descriptor* desc);
 
   // Returns a copy of the map, with all transitions dropped from the
   // instance descriptors.
@@ -6565,6 +6582,7 @@ class Map: public HeapObject {
 
   void AddDependentCode(DependentCode::DependencyGroup group,
                         Handle<Code> code);
+  void AddDependentIC(Handle<Code> stub);
 
   bool IsMapInArrayPrototypeChain();
 
@@ -7772,14 +7790,6 @@ class GlobalObject: public JSObject {
 
   // Retrieve the property cell used to store a property.
   PropertyCell* GetPropertyCell(LookupResult* result);
-
-  // This is like GetProperty, but is used when you know the lookup won't fail
-  // by throwing an exception.  This is for the debug and builtins global
-  // objects, where it is known which properties can be expected to be present
-  // on the object.
-  static inline Handle<Object> GetPropertyNoExceptionThrown(
-      Handle<GlobalObject> global,
-      Handle<Name> name);
 
   // Casting.
   static inline GlobalObject* cast(Object* obj);
@@ -9809,11 +9819,13 @@ class JSProxy: public JSReceiver {
   // Casting.
   static inline JSProxy* cast(Object* obj);
 
-  MUST_USE_RESULT MaybeObject* GetPropertyWithHandler(
-      Object* receiver,
-      Name* name);
-  MUST_USE_RESULT MaybeObject* GetElementWithHandler(
-      Object* receiver,
+  MUST_USE_RESULT static MaybeHandle<Object> GetPropertyWithHandler(
+      Handle<JSProxy> proxy,
+      Handle<Object> receiver,
+      Handle<Name> name);
+  MUST_USE_RESULT static inline MaybeHandle<Object> GetElementWithHandler(
+      Handle<JSProxy> proxy,
+      Handle<Object> receiver,
       uint32_t index);
 
   // If the handler defines an accessor property with a setter, invoke it.
@@ -9884,7 +9896,7 @@ class JSProxy: public JSReceiver {
       Handle<Object> value,
       PropertyAttributes attributes,
       StrictMode strict_mode);
-  MUST_USE_RESULT static MaybeHandle<Object> SetElementWithHandler(
+  MUST_USE_RESULT static inline MaybeHandle<Object> SetElementWithHandler(
       Handle<JSProxy> proxy,
       Handle<JSReceiver> receiver,
       uint32_t index,
@@ -9892,7 +9904,8 @@ class JSProxy: public JSReceiver {
       StrictMode strict_mode);
 
   static bool HasPropertyWithHandler(Handle<JSProxy> proxy, Handle<Name> name);
-  static bool HasElementWithHandler(Handle<JSProxy> proxy, uint32_t index);
+  static inline bool HasElementWithHandler(Handle<JSProxy> proxy,
+                                           uint32_t index);
 
   MUST_USE_RESULT static MaybeHandle<Object> DeletePropertyWithHandler(
       Handle<JSProxy> proxy,
