@@ -4660,15 +4660,6 @@ void Heap::Verify() {
 #endif
 
 
-bool Heap::InternalizeStringIfExists(String* string, String** result) {
-  if (string->IsInternalizedString()) {
-    *result = string;
-    return true;
-  }
-  return string_table()->LookupStringIfExists(string, result);
-}
-
-
 void Heap::ZapFromSpace() {
   NewSpacePageIterator it(new_space_.FromSpaceStart(),
                           new_space_.FromSpaceEnd());
@@ -4998,6 +4989,17 @@ bool Heap::ConfigureHeap(int max_semispace_size,
                          intptr_t max_executable_size,
                          intptr_t code_range_size) {
   if (HasBeenSetUp()) return false;
+
+  // If max space size flags are specified overwrite the configuration.
+  if (FLAG_max_new_space_size > 0) {
+    max_semispace_size = FLAG_max_new_space_size * kLumpOfMemory;
+  }
+  if (FLAG_max_old_space_size > 0) {
+    max_old_gen_size = FLAG_max_old_space_size * kLumpOfMemory;
+  }
+  if (FLAG_max_executable_size > 0) {
+    max_executable_size = FLAG_max_executable_size * kLumpOfMemory;
+  }
 
   if (FLAG_stress_compaction) {
     // This will cause more frequent GCs when stressing.
@@ -6250,12 +6252,11 @@ void KeyedLookupCache::Update(Handle<Map> map,
                               int field_offset) {
   DisallowHeapAllocation no_gc;
   if (!name->IsUniqueName()) {
-    String* internalized_string;
-    if (!map->GetIsolate()->heap()->InternalizeStringIfExists(
-            String::cast(*name), &internalized_string)) {
+    if (!StringTable::InternalizeStringIfExists(name->GetIsolate(),
+                                                Handle<String>::cast(name)).
+        ToHandle(&name)) {
       return;
     }
-    name = handle(internalized_string);
   }
   // This cache is cleared only between mark compact passes, so we expect the
   // cache to only contain old space names.
