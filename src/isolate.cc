@@ -792,7 +792,7 @@ Object* Isolate::StackOverflow() {
   Handle<String> key = factory()->stack_overflow_string();
   Handle<JSObject> boilerplate = Handle<JSObject>::cast(
       Object::GetProperty(js_builtins_object(), key).ToHandleChecked());
-  Handle<JSObject> exception = JSObject::Copy(boilerplate);
+  Handle<JSObject> exception = factory()->CopyJSObject(boilerplate);
   DoThrow(*exception, NULL);
 
   // Get stack trace limit.
@@ -1051,7 +1051,7 @@ void Isolate::DoThrow(Object* exception, MessageLocation* location) {
       if (capture_stack_trace_for_uncaught_exceptions_) {
         if (IsErrorObject(exception_handle)) {
           // We fetch the stack trace that corresponds to this error object.
-          String* key = heap()->hidden_stack_trace_string();
+          Handle<String> key = factory()->hidden_stack_trace_string();
           Object* stack_property =
               JSObject::cast(*exception_handle)->GetHiddenProperty(key);
           // Property lookup may have failed.  In this case it's probably not
@@ -1784,7 +1784,7 @@ bool Isolate::Init(Deserializer* des) {
   has_fatal_error_ = false;
 
   use_crankshaft_ = FLAG_crankshaft
-      && !Serializer::enabled()
+      && !Serializer::enabled(this)
       && CpuFeatures::SupportsCrankshaft();
 
   if (function_entry_hook() != NULL) {
@@ -1976,7 +1976,7 @@ bool Isolate::Init(Deserializer* des) {
         kDeoptTableSerializeEntryCount - 1);
   }
 
-  if (!Serializer::enabled()) {
+  if (!Serializer::enabled(this)) {
     // Ensure that all stubs which need to be generated ahead of time, but
     // cannot be serialized into the snapshot have been generated.
     HandleScope scope(this);

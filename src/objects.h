@@ -1492,11 +1492,10 @@ class Object : public MaybeObject {
                                           Handle<Context> context);
 
   // Converts this to a Smi if possible.
-  // Failure is returned otherwise.
-  static MUST_USE_RESULT inline Handle<Object> ToSmi(Isolate* isolate,
-                                                     Handle<Object> object);
+  static MUST_USE_RESULT inline MaybeHandle<Smi> ToSmi(Isolate* isolate,
+                                                       Handle<Object> object);
 
-  void Lookup(Name* name, LookupResult* result);
+  void Lookup(Handle<Name> name, LookupResult* result);
 
   MUST_USE_RESULT static MaybeHandle<Object> GetPropertyWithReceiver(
       Handle<Object> object,
@@ -2067,9 +2066,9 @@ class JSReceiver: public HeapObject {
 
   // Lookup a property.  If found, the result is valid and has
   // detailed information.
-  void LocalLookup(Name* name, LookupResult* result,
+  void LocalLookup(Handle<Name> name, LookupResult* result,
                    bool search_hidden_prototypes = false);
-  void Lookup(Name* name, LookupResult* result);
+  void Lookup(Handle<Name> name, LookupResult* result);
 
   enum KeyCollectionType { LOCAL_ONLY, INCLUDE_PROTOS };
 
@@ -2375,7 +2374,7 @@ class JSObject: public JSReceiver {
   // Gets the value of a hidden property with the given key. Returns the hole
   // if the property doesn't exist (or if called on a detached proxy),
   // otherwise returns the value set for the key.
-  Object* GetHiddenProperty(Name* key);
+  Object* GetHiddenProperty(Handle<Name> key);
   // Deletes a hidden property. Deleting a non-existing property is
   // considered successful.
   static void DeleteHiddenProperty(Handle<JSObject> object,
@@ -2519,10 +2518,11 @@ class JSObject: public JSReceiver {
   inline void SetInternalField(int index, Smi* value);
 
   // The following lookup functions skip interceptors.
-  void LocalLookupRealNamedProperty(Name* name, LookupResult* result);
-  void LookupRealNamedProperty(Name* name, LookupResult* result);
-  void LookupRealNamedPropertyInPrototypes(Name* name, LookupResult* result);
-  void LookupCallbackProperty(Name* name, LookupResult* result);
+  void LocalLookupRealNamedProperty(Handle<Name> name, LookupResult* result);
+  void LookupRealNamedProperty(Handle<Name> name, LookupResult* result);
+  void LookupRealNamedPropertyInPrototypes(Handle<Name> name,
+                                           LookupResult* result);
+  void LookupCallbackProperty(Handle<Name> name, LookupResult* result);
 
   // Returns the number of properties on this object filtering out properties
   // with the specified attributes (ignoring interceptors).
@@ -2632,8 +2632,6 @@ class JSObject: public JSReceiver {
     kObjectIsShallowArray = 1
   };
 
-  static Handle<JSObject> Copy(Handle<JSObject> object,
-                               Handle<AllocationSite> site);
   static Handle<JSObject> Copy(Handle<JSObject> object);
   MUST_USE_RESULT static MaybeHandle<JSObject> DeepCopy(
       Handle<JSObject> object,
@@ -4060,9 +4058,6 @@ class NameDictionary: public Dictionary<NameDictionary,
   // Find entry for key, otherwise return kNotFound. Optimized version of
   // HashTable::FindEntry.
   int FindEntry(Handle<Name> key);
-
-  // TODO(ishell): Remove this when all the callers are handlified.
-  int FindEntry(Name* key);
 };
 
 
@@ -4207,11 +4202,7 @@ class ObjectHashTable: public HashTable<ObjectHashTable,
 
   // Looks up the value associated with the given key. The hole value is
   // returned in case the key is not present.
-  Object* Lookup(Object* key);
-
-  int FindEntry(Handle<Object> key);
-  // TODO(ishell): Remove this when all the callers are handlified.
-  int FindEntry(Object* key);
+  Object* Lookup(Handle<Object> key);
 
   // Adds (or overwrites) the value associated with the given key. Mapping a
   // key to the hole value causes removal of the whole entry.
@@ -4277,7 +4268,7 @@ class OrderedHashTable: public FixedArray {
   static Handle<Derived> Clear(Handle<Derived> table);
 
   // Returns kNotFound if the key isn't present.
-  int FindEntry(Object* key);
+  int FindEntry(Handle<Object> key);
 
   int NumberOfElements() {
     return Smi::cast(get(kNumberOfElementsIndex))->value();
@@ -4376,7 +4367,7 @@ class OrderedHashSet: public OrderedHashTable<
     return reinterpret_cast<OrderedHashSet*>(obj);
   }
 
-  bool Contains(Object* key);
+  bool Contains(Handle<Object> key);
   static Handle<OrderedHashSet> Add(
       Handle<OrderedHashSet> table, Handle<Object> key);
   static Handle<OrderedHashSet> Remove(
@@ -4395,7 +4386,7 @@ class OrderedHashMap:public OrderedHashTable<
     return reinterpret_cast<OrderedHashMap*>(obj);
   }
 
-  Object* Lookup(Object* key);
+  Object* Lookup(Handle<Object> key);
   static Handle<OrderedHashMap> Put(
       Handle<OrderedHashMap> table,
       Handle<Object> key,
@@ -4438,11 +4429,7 @@ class WeakHashTable: public HashTable<WeakHashTable,
 
   // Looks up the value associated with the given key. The hole value is
   // returned in case the key is not present.
-  Object* Lookup(Object* key);
-
-  int FindEntry(Handle<Object> key);
-  // TODO(ishell): Remove this when all the callers are handlified.
-  int FindEntry(Object* key);
+  Object* Lookup(Handle<Object> key);
 
   // Adds (or overwrites) the value associated with the given key. Mapping a
   // key to the hole value causes removal of the whole entry.
@@ -9213,29 +9200,10 @@ class String: public Name {
     return NonOneByteStart(chars, length) >= length;
   }
 
-  // TODO(dcarney): Replace all instances of this with VisitFlat.
-  template<class Visitor, class ConsOp>
-  static inline void Visit(String* string,
-                           unsigned offset,
-                           Visitor& visitor,
-                           ConsOp& cons_op,
-                           int32_t type,
-                           unsigned length);
-
   template<class Visitor>
   static inline ConsString* VisitFlat(Visitor* visitor,
                                       String* string,
-                                      int offset,
-                                      int length,
-                                      int32_t type);
-
-  template<class Visitor>
-  static inline ConsString* VisitFlat(Visitor* visitor,
-                                      String* string,
-                                      int offset = 0) {
-    int32_t type = string->map()->instance_type();
-    return VisitFlat(visitor, string, offset, string->length(), type);
-  }
+                                      int offset = 0);
 
   static Handle<FixedArray> CalculateLineEnds(Handle<String> string,
                                               bool include_ending_line);
@@ -9621,57 +9589,63 @@ class ConsStringNullOp {
 // This maintains an off-stack representation of the stack frames required
 // to traverse a ConsString, allowing an entirely iterative and restartable
 // traversal of the entire string
-// Note: this class is not GC-safe.
 class ConsStringIteratorOp {
  public:
   inline ConsStringIteratorOp() {}
-  String* Operate(String* string,
-                  unsigned* offset_out,
-                  int32_t* type_out,
-                  unsigned* length_out);
-  inline String* ContinueOperation(int32_t* type_out, unsigned* length_out);
-  inline void Reset();
-  inline bool HasMore();
+  inline ConsStringIteratorOp(ConsString* cons_string, int offset = 0) {
+    Reset(cons_string, offset);
+  }
+  inline void Reset(ConsString* cons_string, int offset = 0) {
+    depth_ = 0;
+    // Next will always return NULL.
+    if (cons_string == NULL) return;
+    Initialize(cons_string, offset);
+  }
+  // Returns NULL when complete.
+  inline String* Next(int* offset_out) {
+    *offset_out = 0;
+    if (depth_ == 0) return NULL;
+    return Continue(offset_out);
+  }
 
  private:
-  // TODO(dcarney): Templatize this out for different stack sizes.
-  static const unsigned kStackSize = 32;
+  static const int kStackSize = 32;
   // Use a mask instead of doing modulo operations for stack wrapping.
-  static const unsigned kDepthMask = kStackSize-1;
+  static const int kDepthMask = kStackSize-1;
   STATIC_ASSERT(IS_POWER_OF_TWO(kStackSize));
-  static inline unsigned OffsetForDepth(unsigned depth);
+  static inline int OffsetForDepth(int depth);
 
   inline void PushLeft(ConsString* string);
   inline void PushRight(ConsString* string);
   inline void AdjustMaximumDepth();
   inline void Pop();
-  String* NextLeaf(bool* blew_stack, int32_t* type_out, unsigned* length_out);
-  String* Search(unsigned* offset_out,
-                 int32_t* type_out,
-                 unsigned* length_out);
+  inline bool StackBlown() { return maximum_depth_ - depth_ == kStackSize; }
+  void Initialize(ConsString* cons_string, int offset);
+  String* Continue(int* offset_out);
+  String* NextLeaf(bool* blew_stack);
+  String* Search(int* offset_out);
 
-  unsigned depth_;
-  unsigned maximum_depth_;
   // Stack must always contain only frames for which right traversal
   // has not yet been performed.
   ConsString* frames_[kStackSize];
-  unsigned consumed_;
   ConsString* root_;
+  int depth_;
+  int maximum_depth_;
+  int consumed_;
   DISALLOW_COPY_AND_ASSIGN(ConsStringIteratorOp);
 };
 
 
-// Note: this class is not GC-safe.
 class StringCharacterStream {
  public:
   inline StringCharacterStream(String* string,
                                ConsStringIteratorOp* op,
-                               unsigned offset = 0);
+                               int offset = 0);
   inline uint16_t GetNext();
   inline bool HasMore();
-  inline void Reset(String* string, unsigned offset = 0);
-  inline void VisitOneByteString(const uint8_t* chars, unsigned length);
-  inline void VisitTwoByteString(const uint16_t* chars, unsigned length);
+  inline void Reset(String* string, int offset = 0);
+  inline void VisitOneByteString(const uint8_t* chars, int length);
+  inline void VisitTwoByteString(const uint16_t* chars, int length);
 
  private:
   bool is_one_byte_;

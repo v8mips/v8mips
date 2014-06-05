@@ -3511,7 +3511,7 @@ Local<Value> v8::Object::GetRealNamedPropertyInPrototypeChain(
   i::Handle<i::JSObject> self_obj = Utils::OpenHandle(this);
   i::Handle<i::String> key_obj = Utils::OpenHandle(*key);
   i::LookupResult lookup(isolate);
-  self_obj->LookupRealNamedPropertyInPrototypes(*key_obj, &lookup);
+  self_obj->LookupRealNamedPropertyInPrototypes(key_obj, &lookup);
   return GetPropertyByLookup(isolate, self_obj, key_obj, &lookup);
 }
 
@@ -3524,7 +3524,7 @@ Local<Value> v8::Object::GetRealNamedProperty(Handle<String> key) {
   i::Handle<i::JSObject> self_obj = Utils::OpenHandle(this);
   i::Handle<i::String> key_obj = Utils::OpenHandle(*key);
   i::LookupResult lookup(isolate);
-  self_obj->LookupRealNamedProperty(*key_obj, &lookup);
+  self_obj->LookupRealNamedProperty(key_obj, &lookup);
   return GetPropertyByLookup(isolate, self_obj, key_obj, &lookup);
 }
 
@@ -3560,7 +3560,7 @@ Local<v8::Object> v8::Object::Clone() {
   ENTER_V8(isolate);
   i::Handle<i::JSObject> self = Utils::OpenHandle(this);
   EXCEPTION_PREAMBLE(isolate);
-  i::Handle<i::JSObject> result = i::JSObject::Copy(self);
+  i::Handle<i::JSObject> result = isolate->factory()->CopyJSObject(self);
   has_pending_exception = result.is_null();
   EXCEPTION_BAILOUT_CHECK(isolate, Local<Object>());
   return Utils::ToLocal(result);
@@ -3631,7 +3631,7 @@ v8::Local<v8::Value> v8::Object::GetHiddenValue(v8::Handle<v8::String> key) {
   i::Handle<i::String> key_obj = Utils::OpenHandle(*key);
   i::Handle<i::String> key_string =
       isolate->factory()->InternalizeString(key_obj);
-  i::Handle<i::Object> result(self->GetHiddenProperty(*key_string), isolate);
+  i::Handle<i::Object> result(self->GetHiddenProperty(key_string), isolate);
   if (result->IsTheHole()) return v8::Local<v8::Value>();
   return Utils::ToLocal(result);
 }
@@ -4000,7 +4000,7 @@ Handle<Value> Function::GetDisplayName() const {
       isolate->factory()->InternalizeOneByteString(
           STATIC_ASCII_VECTOR("displayName"));
   i::LookupResult lookup(isolate);
-  func->LookupRealNamedProperty(*property_name, &lookup);
+  func->LookupRealNamedProperty(property_name, &lookup);
   if (lookup.IsFound()) {
     i::Object* value = lookup.GetLazyValue();
     if (value && value->IsString()) {
@@ -5774,7 +5774,8 @@ Local<Object> Array::CloneElementAt(uint32_t index) {
   i::Handle<i::JSObject> paragon_handle(i::JSObject::cast(paragon));
   EXCEPTION_PREAMBLE(isolate);
   ENTER_V8(isolate);
-  i::Handle<i::JSObject> result = i::JSObject::Copy(paragon_handle);
+  i::Handle<i::JSObject> result =
+      isolate->factory()->CopyJSObject(paragon_handle);
   has_pending_exception = result.is_null();
   EXCEPTION_BAILOUT_CHECK(isolate, Local<Object>());
   return Utils::ToLocal(result);

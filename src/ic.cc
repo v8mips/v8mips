@@ -192,7 +192,7 @@ static void LookupForRead(Handle<Object> object,
   // Skip all the objects with named interceptors, but
   // without actual getter.
   while (true) {
-    object->Lookup(*name, lookup);
+    object->Lookup(name, lookup);
     // Besides normal conditions (property not found or it's not
     // an interceptor), bail out if lookup is not cacheable: we won't
     // be able to IC it anyway and regular lookup should work fine.
@@ -205,7 +205,7 @@ static void LookupForRead(Handle<Object> object,
       return;
     }
 
-    holder->LocalLookupRealNamedProperty(*name, lookup);
+    holder->LocalLookupRealNamedProperty(name, lookup);
     if (lookup->IsFound()) {
       ASSERT(!lookup->IsInterceptor());
       return;
@@ -283,7 +283,7 @@ bool IC::TryRemoveInvalidPrototypeDependentStub(Handle<Object> receiver,
   if (receiver->IsGlobalObject()) {
     LookupResult lookup(isolate());
     GlobalObject* global = GlobalObject::cast(*receiver);
-    global->LocalLookupRealNamedProperty(*name, &lookup);
+    global->LocalLookupRealNamedProperty(name, &lookup);
     if (!lookup.IsFound()) return false;
     PropertyCell* cell = global->GetPropertyCell(&lookup);
     return cell->type()->IsConstant();
@@ -1008,9 +1008,7 @@ Handle<Code> LoadIC::CompileHandler(LookupResult* lookup,
         return compiler.CompileLoadViaGetter(type, holder, name, function);
       }
       // TODO(dcarney): Handle correctly.
-      if (callback->IsDeclaredAccessorInfo()) break;
-      ASSERT(callback->IsForeign());
-      // No IC support for old-style native accessors.
+      ASSERT(callback->IsDeclaredAccessorInfo());
       break;
     }
     case INTERCEPTOR:
@@ -1168,10 +1166,10 @@ static bool LookupForWrite(Handle<JSObject> receiver,
                            LookupResult* lookup,
                            IC* ic) {
   Handle<JSObject> holder = receiver;
-  receiver->Lookup(*name, lookup);
+  receiver->Lookup(name, lookup);
   if (lookup->IsFound()) {
     if (lookup->IsInterceptor() && !HasInterceptorSetter(lookup->holder())) {
-      receiver->LocalLookupRealNamedProperty(*name, lookup);
+      receiver->LocalLookupRealNamedProperty(name, lookup);
       if (!lookup->IsFound()) return false;
     }
 
@@ -1433,20 +1431,7 @@ Handle<Code> StoreIC::CompileHandler(LookupResult* lookup,
               receiver, holder, name, Handle<JSFunction>::cast(setter));
         }
         // TODO(dcarney): Handle correctly.
-        if (callback->IsDeclaredAccessorInfo()) break;
-        ASSERT(callback->IsForeign());
-
-        // Use specialized code for setting the length of arrays with fast
-        // properties. Slow properties might indicate redefinition of the length
-        // property.
-        if (receiver->IsJSArray() &&
-            String::Equals(isolate()->factory()->length_string(), name) &&
-            Handle<JSArray>::cast(receiver)->AllowsSetElementsLength() &&
-            receiver->HasFastProperties()) {
-          return compiler.CompileStoreArrayLength(receiver, lookup, name);
-        }
-
-        // No IC support for old-style native accessors.
+        ASSERT(callback->IsDeclaredAccessorInfo());
         break;
       }
       case INTERCEPTOR:
@@ -1629,9 +1614,8 @@ bool IsOutOfBoundsAccess(Handle<JSObject> receiver,
 KeyedAccessStoreMode KeyedStoreIC::GetStoreMode(Handle<JSObject> receiver,
                                                 Handle<Object> key,
                                                 Handle<Object> value) {
-  Handle<Object> smi_key = Object::ToSmi(isolate(), key);
-  ASSERT(!smi_key.is_null() && smi_key->IsSmi());
-  int index = Handle<Smi>::cast(smi_key)->value();
+  Handle<Smi> smi_key = Object::ToSmi(isolate(), key).ToHandleChecked();
+  int index = smi_key->value();
   bool oob_access = IsOutOfBoundsAccess(receiver, index);
   // Don't consider this a growing store if the store would send the receiver to
   // dictionary mode.
@@ -1891,7 +1875,7 @@ RUNTIME_FUNCTION(StoreIC_ArrayLength) {
 #ifdef DEBUG
   // The length property has to be a writable callback property.
   LookupResult debug_lookup(isolate);
-  receiver->LocalLookup(isolate->heap()->length_string(), &debug_lookup);
+  receiver->LocalLookup(isolate->factory()->length_string(), &debug_lookup);
   ASSERT(debug_lookup.IsPropertyCallbacks() && !debug_lookup.IsReadOnly());
 #endif
 
@@ -2057,7 +2041,7 @@ BinaryOpIC::State::State(Isolate* isolate, ExtraICState extra_ic_state)
 
 ExtraICState BinaryOpIC::State::GetExtraICState() const {
   bool sse2 = (Max(result_kind_, Max(left_kind_, right_kind_)) > SMI &&
-               CpuFeatures::IsSafeForSnapshot(SSE2));
+               CpuFeatures::IsSafeForSnapshot(isolate(), SSE2));
   ExtraICState extra_ic_state =
       SSE2Field::encode(sse2) |
       OpField::encode(op_ - FIRST_TOKEN) |

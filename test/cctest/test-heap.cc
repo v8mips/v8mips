@@ -596,13 +596,20 @@ static const char* not_so_random_string_table[] = {
 
 
 static void CheckInternalizedStrings(const char** strings) {
-  Factory* factory = CcTest::i_isolate()->factory();
+  Isolate* isolate = CcTest::i_isolate();
+  Factory* factory = isolate->factory();
   for (const char* string = *strings; *strings != 0; string = *strings++) {
-    Handle<String> a = factory->InternalizeUtf8String(string);
+    HandleScope scope(isolate);
+    Handle<String> a =
+        isolate->factory()->InternalizeUtf8String(CStrVector(string));
+    // InternalizeUtf8String may return a failure if a GC is needed.
     CHECK(a->IsInternalizedString());
     Handle<String> b = factory->InternalizeUtf8String(string);
     CHECK_EQ(*b, *a);
-    CHECK(String::cast(*b)->IsUtf8EqualTo(CStrVector(string)));
+    CHECK(b->IsUtf8EqualTo(CStrVector(string)));
+    b = isolate->factory()->InternalizeUtf8String(CStrVector(string));
+    CHECK_EQ(*b, *a);
+    CHECK(b->IsUtf8EqualTo(CStrVector(string)));
   }
 }
 
@@ -819,7 +826,7 @@ TEST(JSObjectCopy) {
 
   // Make the clone.
   Handle<Object> value1, value2;
-  Handle<JSObject> clone = JSObject::Copy(obj);
+  Handle<JSObject> clone = factory->CopyJSObject(obj);
   CHECK(!clone.is_identical_to(obj));
 
   value1 = Object::GetElement(isolate, obj, 0).ToHandleChecked();
@@ -978,7 +985,7 @@ TEST(Regression39128) {
   // Test case for crbug.com/39128.
   CcTest::InitializeVM();
   Isolate* isolate = CcTest::i_isolate();
-  Heap* heap = isolate->heap();
+  TestHeap* heap = CcTest::test_heap();
 
   // Increase the chance of 'bump-the-pointer' allocation in old space.
   heap->CollectAllGarbage(Heap::kAbortIncrementalMarkingMask);
@@ -1618,7 +1625,7 @@ TEST(TestSizeOfObjects) {
     AlwaysAllocateScope always_allocate(CcTest::i_isolate());
     int filler_size = static_cast<int>(FixedArray::SizeFor(8192));
     for (int i = 1; i <= 100; i++) {
-      CcTest::heap()->AllocateFixedArray(8192, TENURED)->ToObjectChecked();
+      CcTest::test_heap()->AllocateFixedArray(8192, TENURED)->ToObjectChecked();
       CHECK_EQ(initial_size + i * filler_size,
                static_cast<int>(CcTest::heap()->SizeOfObjects()));
     }
@@ -3000,7 +3007,7 @@ TEST(Regress2211) {
 
   v8::Handle<v8::String> value = v8_str("val string");
   Smi* hash = Smi::FromInt(321);
-  Heap* heap = CcTest::heap();
+  Factory* factory = CcTest::i_isolate()->factory();
 
   for (int i = 0; i < 2; i++) {
     // Store identity hash first and common hidden property second.
@@ -3016,7 +3023,7 @@ TEST(Regress2211) {
 
     // Check values.
     CHECK_EQ(hash,
-             internal_obj->GetHiddenProperty(heap->identity_hash_string()));
+             internal_obj->GetHiddenProperty(factory->identity_hash_string()));
     CHECK(value->Equals(obj->GetHiddenValue(v8_str("key string"))));
 
     // Check size.
@@ -4210,6 +4217,7 @@ TEST(ArrayShiftSweeping) {
   v8::Local<v8::Value> result = CompileRun(
       "var array = new Array(40000);"
       "var tmp = new Array(100000);"
+      "array[0] = 10;"
       "gc();"
       "array.shift();"
       "array;");

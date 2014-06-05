@@ -246,14 +246,6 @@ void ExternalReferenceTable::PopulateTable(Isolate* isolate) {
   }
 
   // Accessors
-#define ACCESSOR_DESCRIPTOR_DECLARATION(name) \
-  Add((Address)&Accessors::name, \
-      ACCESSOR, \
-      Accessors::k##name, \
-      "Accessors::" #name);
-  ACCESSOR_DESCRIPTOR_LIST(ACCESSOR_DESCRIPTOR_DECLARATION)
-#undef ACCESSOR_DESCRIPTOR_DECLARATION
-
 #define ACCESSOR_INFO_DECLARATION(name) \
   Add(FUNCTION_ADDR(&Accessors::name##Getter), \
       ACCESSOR, \
@@ -1365,7 +1357,7 @@ void Serializer::VisitPointers(Object** start, Object** end) {
 // deserialized objects.
 void SerializerDeserializer::Iterate(Isolate* isolate,
                                      ObjectVisitor* visitor) {
-  if (Serializer::enabled()) return;
+  if (Serializer::enabled(isolate)) return;
   for (int i = 0; ; i++) {
     if (isolate->serialize_partial_snapshot_cache_length() <= i) {
       // Extend the array ready to get a value from the visitor when

@@ -729,6 +729,7 @@ Handle<JSGlobalProxy> Genesis::CreateNewGlobals(
         FunctionTemplateInfo::cast(js_global_template->constructor()));
     js_global_function =
         factory()->CreateApiFunction(js_global_constructor,
+                                     factory()->the_hole_value(),
                                      factory()->InnerGlobalObject);
   }
 
@@ -756,6 +757,7 @@ Handle<JSGlobalProxy> Genesis::CreateNewGlobals(
             FunctionTemplateInfo::cast(data->constructor()));
     global_proxy_function =
         factory()->CreateApiFunction(global_constructor,
+                                     factory()->the_hole_value(),
                                      factory()->OuterGlobalObject);
   }
 
@@ -1111,11 +1113,11 @@ void Genesis::InitializeGlobal(Handle<GlobalObject> inner_global,
 
 #ifdef DEBUG
     LookupResult lookup(isolate);
-    result->LocalLookup(heap->callee_string(), &lookup);
+    result->LocalLookup(factory->callee_string(), &lookup);
     ASSERT(lookup.IsField());
     ASSERT(lookup.GetFieldIndex().field_index() == Heap::kArgumentsCalleeIndex);
 
-    result->LocalLookup(heap->length_string(), &lookup);
+    result->LocalLookup(factory->length_string(), &lookup);
     ASSERT(lookup.IsField());
     ASSERT(lookup.GetFieldIndex().field_index() == Heap::kArgumentsLengthIndex);
 
@@ -1212,7 +1214,7 @@ void Genesis::InitializeGlobal(Handle<GlobalObject> inner_global,
 
 #ifdef DEBUG
     LookupResult lookup(isolate);
-    result->LocalLookup(heap->length_string(), &lookup);
+    result->LocalLookup(factory->length_string(), &lookup);
     ASSERT(lookup.IsField());
     ASSERT(lookup.GetFieldIndex().field_index() == Heap::kArgumentsLengthIndex);
 
@@ -2413,13 +2415,13 @@ void Genesis::TransferNamedProperties(Handle<JSObject> from,
         }
         case CALLBACKS: {
           LookupResult result(isolate());
-          to->LocalLookup(descs->GetKey(i), &result);
+          Handle<Name> key(Name::cast(descs->GetKey(i)), isolate());
+          to->LocalLookup(key, &result);
           // If the property is already there we skip it
           if (result.IsFound()) continue;
           HandleScope inner(isolate());
           ASSERT(!to->HasFastProperties());
           // Add to dictionary.
-          Handle<Name> key = Handle<Name>(descs->GetKey(i));
           Handle<Object> callbacks(descs->GetCallbacksObject(i), isolate());
           PropertyDetails d = PropertyDetails(
               details.attributes(), CALLBACKS, i + 1);
@@ -2446,10 +2448,10 @@ void Genesis::TransferNamedProperties(Handle<JSObject> from,
         ASSERT(raw_key->IsName());
         // If the property is already there we skip it.
         LookupResult result(isolate());
-        to->LocalLookup(Name::cast(raw_key), &result);
+        Handle<Name> key(Name::cast(raw_key));
+        to->LocalLookup(key, &result);
         if (result.IsFound()) continue;
         // Set the property.
-        Handle<Name> key = Handle<Name>(Name::cast(raw_key));
         Handle<Object> value = Handle<Object>(properties->ValueAt(i),
                                               isolate());
         ASSERT(!value->IsCell());
@@ -2512,15 +2514,15 @@ class NoTrackDoubleFieldsForSerializerScope {
  public:
   explicit NoTrackDoubleFieldsForSerializerScope(Isolate* isolate)
       : isolate_(isolate), flag_(FLAG_track_double_fields) {
-    if (Serializer::enabled()) {
+    if (Serializer::enabled(isolate)) {
       // Disable tracking double fields because heap numbers treated as
       // immutable by the serializer.
       FLAG_track_double_fields = false;
     }
-    USE(isolate_);
   }
+
   ~NoTrackDoubleFieldsForSerializerScope() {
-    if (Serializer::enabled()) {
+    if (Serializer::enabled(isolate_)) {
       FLAG_track_double_fields = flag_;
     }
   }
@@ -2603,7 +2605,7 @@ Genesis::Genesis(Isolate* isolate,
   // We can't (de-)serialize typed arrays currently, but we are lucky: The state
   // of the random number generator needs no initialization during snapshot
   // creation time and we don't need trigonometric functions then.
-  if (!Serializer::enabled()) {
+  if (!Serializer::enabled(isolate)) {
     // Initially seed the per-context random number generator using the
     // per-isolate random number generator.
     const int num_elems = 2;

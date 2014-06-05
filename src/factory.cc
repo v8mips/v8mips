@@ -418,13 +418,6 @@ Handle<String> ConcatStringContent(Handle<StringType> result,
 }
 
 
-Handle<ConsString> Factory::NewRawConsString(String::Encoding encoding) {
-  Handle<Map> map = (encoding == String::ONE_BYTE_ENCODING)
-      ? cons_ascii_string_map() : cons_string_map();
-  return New<ConsString>(map, NEW_SPACE);
-}
-
-
 MaybeHandle<String> Factory::NewConsString(Handle<String> left,
                                            Handle<String> right) {
   int left_length = left->length();
@@ -494,10 +487,9 @@ MaybeHandle<String> Factory::NewConsString(Handle<String> left,
             NewRawTwoByteString(length).ToHandleChecked(), left, right);
   }
 
-  Handle<ConsString> result = NewRawConsString(
-      (is_one_byte || is_one_byte_data_in_two_byte_string)
-          ? String::ONE_BYTE_ENCODING
-          : String::TWO_BYTE_ENCODING);
+  Handle<Map> map = (is_one_byte || is_one_byte_data_in_two_byte_string)
+      ? cons_ascii_string_map()  : cons_string_map();
+  Handle<ConsString> result =  New<ConsString>(map, NEW_SPACE);
 
   DisallowHeapAllocation no_gc;
   WriteBarrierMode mode = result->GetWriteBarrierMode(no_gc);
@@ -520,13 +512,6 @@ Handle<String> Factory::NewFlatConcatString(Handle<String> first,
     return ConcatStringContent<uc16>(
         NewRawTwoByteString(total_length).ToHandleChecked(), first, second);
   }
-}
-
-
-Handle<SlicedString> Factory::NewRawSlicedString(String::Encoding encoding) {
-  Handle<Map> map = (encoding == String::ONE_BYTE_ENCODING)
-      ? sliced_ascii_string_map() : sliced_string_map();
-  return New<SlicedString>(map, NEW_SPACE);
 }
 
 
@@ -581,9 +566,9 @@ Handle<String> Factory::NewProperSubString(Handle<String> str,
   }
 
   ASSERT(str->IsSeqString() || str->IsExternalString());
-  Handle<SlicedString> slice = NewRawSlicedString(
-      str->IsOneByteRepresentation() ? String::ONE_BYTE_ENCODING
-                                     : String::TWO_BYTE_ENCODING);
+  Handle<Map> map = str->IsOneByteRepresentation() ? sliced_ascii_string_map()
+                                                   : sliced_string_map();
+  Handle<SlicedString> slice = New<SlicedString>(map, NEW_SPACE);
 
   slice->set_hash_field(String::kEmptyHashField);
   slice->set_length(length);
@@ -646,10 +631,9 @@ Handle<Symbol> Factory::NewSymbol() {
 
 
 Handle<Symbol> Factory::NewPrivateSymbol() {
-  CALL_HEAP_FUNCTION(
-      isolate(),
-      isolate()->heap()->AllocatePrivateSymbol(),
-      Symbol);
+  Handle<Symbol> symbol = NewSymbol();
+  symbol->set_is_private(true);
+  return symbol;
 }
 
 
@@ -953,6 +937,24 @@ Handle<JSObject> Factory::NewFunctionPrototype(Handle<JSFunction> function) {
 }
 
 
+Handle<JSObject> Factory::CopyJSObject(Handle<JSObject> object) {
+  CALL_HEAP_FUNCTION(isolate(),
+                     isolate()->heap()->CopyJSObject(*object, NULL),
+                     JSObject);
+}
+
+
+Handle<JSObject> Factory::CopyJSObjectWithAllocationSite(
+    Handle<JSObject> object,
+    Handle<AllocationSite> site) {
+  CALL_HEAP_FUNCTION(isolate(),
+                     isolate()->heap()->CopyJSObject(
+                         *object,
+                         site.is_null() ? NULL : *site),
+                     JSObject);
+}
+
+
 Handle<FixedArray> Factory::CopyFixedArrayWithMap(Handle<FixedArray> array,
                                                   Handle<Map> map) {
   CALL_HEAP_FUNCTION(isolate(),
@@ -1080,15 +1082,6 @@ Handle<HeapNumber> Factory::NewHeapNumber(double value,
   CALL_HEAP_FUNCTION(
       isolate(),
       isolate()->heap()->AllocateHeapNumber(value, pretenure), HeapNumber);
-}
-
-
-Handle<JSObject> Factory::NewNeanderObject() {
-  CALL_HEAP_FUNCTION(
-      isolate(),
-      isolate()->heap()->AllocateJSObjectFromMap(
-          isolate()->heap()->neander_map()),
-      JSObject);
 }
 
 
@@ -1262,19 +1255,30 @@ Handle<Object> Factory::NewError(const char* constructor,
 }
 
 
-Handle<JSFunction> Factory::NewFunction(Handle<String> name,
+Handle<JSFunction> Factory::NewFunction(MaybeHandle<Object> maybe_prototype,
+                                        Handle<String> name,
                                         InstanceType type,
                                         int instance_size,
                                         Handle<Code> code,
                                         bool force_initial_map) {
   // Allocate the function
-  Handle<JSFunction> function = NewFunction(name, code, the_hole_value());
+  Handle<JSFunction> function = NewFunction(name, code, maybe_prototype);
 
-  if (force_initial_map ||
-      type != JS_OBJECT_TYPE ||
-      instance_size != JSObject::kHeaderSize) {
+  Handle<Object> prototype;
+  if (maybe_prototype.ToHandle(&prototype) &&
+      (force_initial_map ||
+       type != JS_OBJECT_TYPE ||
+       instance_size != JSObject::kHeaderSize)) {
     Handle<Map> initial_map = NewMap(type, instance_size);
-    Handle<JSObject> prototype = NewFunctionPrototype(function);
+    if (prototype->IsJSObject()) {
+      JSObject::SetLocalPropertyIgnoreAttributes(
+          Handle<JSObject>::cast(prototype),
+          constructor_string(),
+          function,
+          DONT_ENUM).Assert();
+    } else if (!function->shared()->is_generator()) {
+      prototype = NewFunctionPrototype(function);
+    }
     initial_map->set_prototype(*prototype);
     function->set_initial_map(*initial_map);
     initial_map->set_constructor(*function);
@@ -1284,6 +1288,16 @@ Handle<JSFunction> Factory::NewFunction(Handle<String> name,
   }
 
   return function;
+}
+
+
+Handle<JSFunction> Factory::NewFunction(Handle<String> name,
+                                        InstanceType type,
+                                        int instance_size,
+                                        Handle<Code> code,
+                                        bool force_initial_map) {
+  return NewFunction(
+      the_hole_value(), name, type, instance_size, code, force_initial_map);
 }
 
 
@@ -1339,9 +1353,9 @@ Handle<JSObject> Factory::NewExternal(void* value) {
 }
 
 
-Handle<Code> NewCodeHelper(Isolate* isolate, int object_size, bool immovable) {
-  CALL_HEAP_FUNCTION(isolate,
-                     isolate->heap()->AllocateCode(object_size, immovable),
+Handle<Code> Factory::NewCodeRaw(int object_size, bool immovable) {
+  CALL_HEAP_FUNCTION(isolate(),
+                     isolate()->heap()->AllocateCode(object_size, immovable),
                      Code);
 }
 
@@ -1360,7 +1374,7 @@ Handle<Code> Factory::NewCode(const CodeDesc& desc,
   int body_size = RoundUp(desc.instr_size, kObjectAlignment);
   int obj_size = Code::SizeFor(body_size);
 
-  Handle<Code> code = NewCodeHelper(isolate(), obj_size, immovable);
+  Handle<Code> code = NewCodeRaw(obj_size, immovable);
   ASSERT(!isolate()->code_range()->exists() ||
          isolate()->code_range()->contains(code->address()));
 
@@ -1919,7 +1933,7 @@ void Factory::SetNumberStringCache(Handle<Object> number,
       // cache in the snapshot to keep  boot-time memory usage down.
       // If we expand the number string cache already while creating
       // the snapshot then that didn't work out.
-      ASSERT(!Serializer::enabled() || FLAG_extra_code != NULL);
+      ASSERT(!Serializer::enabled(isolate()) || FLAG_extra_code != NULL);
       Handle<FixedArray> new_cache = NewFixedArray(full_size, TENURED);
       isolate()->heap()->set_number_string_cache(*new_cache);
       return;
@@ -2064,7 +2078,9 @@ Handle<JSObject> Factory::NewArgumentsObject(Handle<Object> callee,
 
 
 Handle<JSFunction> Factory::CreateApiFunction(
-    Handle<FunctionTemplateInfo> obj, ApiInstanceType instance_type) {
+    Handle<FunctionTemplateInfo> obj,
+    Handle<Object> prototype,
+    ApiInstanceType instance_type) {
   Handle<Code> code = isolate()->builtins()->HandleApiCall();
   Handle<Code> construct_stub = isolate()->builtins()->JSConstructStubApi();
 
@@ -2100,20 +2116,31 @@ Handle<JSFunction> Factory::CreateApiFunction(
       break;
   }
 
+  MaybeHandle<Object> maybe_prototype = prototype;
+  if (obj->remove_prototype()) maybe_prototype = MaybeHandle<Object>();
+
   Handle<JSFunction> result = NewFunction(
-      Factory::empty_string(), type, instance_size, code, true);
+      maybe_prototype, Factory::empty_string(), type,
+      instance_size, code, true);
 
-  // Set length.
   result->shared()->set_length(obj->length());
-
-  // Set class name.
-  Handle<Object> class_name = Handle<Object>(obj->class_name(), isolate());
+  Handle<Object> class_name(obj->class_name(), isolate());
   if (class_name->IsString()) {
     result->shared()->set_instance_class_name(*class_name);
     result->shared()->set_name(*class_name);
   }
+  result->shared()->set_function_data(*obj);
+  result->shared()->set_construct_stub(*construct_stub);
+  result->shared()->DontAdaptArguments();
 
-  Handle<Map> map = Handle<Map>(result->initial_map());
+  if (obj->remove_prototype()) {
+    ASSERT(result->shared()->IsApiFunction());
+    return result;
+  }
+  // Down from here is only valid for API functions that can be used as a
+  // constructor (don't set the "remove prototype" flag).
+
+  Handle<Map> map(result->initial_map());
 
   // Mark as undetectable if needed.
   if (obj->undetectable()) {
@@ -2142,10 +2169,6 @@ Handle<JSFunction> Factory::CreateApiFunction(
   if (!obj->instance_call_handler()->IsUndefined()) {
     map->set_has_instance_call_handler();
   }
-
-  result->shared()->set_function_data(*obj);
-  result->shared()->set_construct_stub(*construct_stub);
-  result->shared()->DontAdaptArguments();
 
   // Recursively copy parent instance templates' accessors,
   // 'data' may be modified.

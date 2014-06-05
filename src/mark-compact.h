@@ -671,6 +671,8 @@ class MarkCompactCollector {
 
   void WaitUntilSweepingCompleted();
 
+  bool IsSweepingCompleted();
+
   void RefillFreeList(PagedSpace* space);
 
   bool AreSweeperThreadsActivated();
@@ -703,9 +705,6 @@ class MarkCompactCollector {
   bool WillBeDeoptimized(Code* code);
   void RemoveDeadInvalidatedCode();
   void ProcessInvalidatedCode(ObjectVisitor* visitor);
-
-  void UnlinkEvacuationCandidates();
-  void ReleaseEvacuationCandidates();
 
   void StartSweeperThreads();
 
@@ -894,6 +893,12 @@ class MarkCompactCollector {
   void EvacuatePages();
 
   void EvacuateNewSpaceAndCandidates();
+
+  void ReleaseEvacuationCandidates();
+
+  // Moves the pages of the evacuation_candidates_ list to the end of their
+  // corresponding space pages list.
+  void MoveEvacuationCandidatesToEndOfPagesList();
 
   void SweepSpace(PagedSpace* space, SweeperType sweeper);
 

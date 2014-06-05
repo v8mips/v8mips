@@ -4849,7 +4849,7 @@ HOptimizedGraphBuilder::GlobalPropertyAccess
     return kUseGeneric;
   }
   Handle<GlobalObject> global(current_info()->global_object());
-  global->Lookup(*var->name(), lookup);
+  global->Lookup(var->name(), lookup);
   if (!lookup->IsNormal() ||
       (access_type == STORE && lookup->IsReadOnly()) ||
       lookup->holder() != *global) {
@@ -5334,7 +5334,7 @@ HInstruction* HOptimizedGraphBuilder::BuildLoadNamedField(
 
     if (object->IsJSObject()) {
       LookupResult lookup(isolate());
-      Handle<JSObject>::cast(object)->Lookup(*info->name(), &lookup);
+      Handle<JSObject>::cast(object)->Lookup(info->name(), &lookup);
       Handle<Object> value(lookup.GetLazyValue(), isolate());
 
       if (!value->IsTheHole()) {
@@ -7901,7 +7901,7 @@ bool HOptimizedGraphBuilder::TryInlineApiCall(Handle<JSFunction> function,
   if (call_type == kCallApiFunction) {
     // Cannot embed a direct reference to the global proxy map
     // as it maybe dropped on deserialization.
-    CHECK(!Serializer::enabled());
+    CHECK(!Serializer::enabled(isolate()));
     ASSERT_EQ(0, receiver_maps->length());
     receiver_maps->Add(handle(
         function->context()->global_object()->global_receiver()->map()),
@@ -8088,7 +8088,7 @@ HValue* HOptimizedGraphBuilder::ImplicitReceiverFor(HValue* function,
   if (shared->strict_mode() == SLOPPY && !shared->native()) {
     // Cannot embed a direct reference to the global proxy
     // as is it dropped on deserialization.
-    CHECK(!Serializer::enabled());
+    CHECK(!Serializer::enabled(isolate()));
     Handle<JSObject> global_receiver(
         target->context()->global_object()->global_receiver());
     return Add<HConstant>(global_receiver);
@@ -9881,7 +9881,7 @@ void HOptimizedGraphBuilder::VisitCompareOperation(CompareOperation* expr) {
       Handle<String> name = proxy->name();
       Handle<GlobalObject> global(current_info()->global_object());
       LookupResult lookup(isolate());
-      global->Lookup(*name, &lookup);
+      global->Lookup(name, &lookup);
       if (lookup.IsNormal() && lookup.GetValue()->IsJSFunction()) {
         Handle<JSFunction> candidate(JSFunction::cast(lookup.GetValue()));
         // If the function is in new space we assume it's more likely to

@@ -76,7 +76,7 @@ TEST(MarkingDeque) {
 
 TEST(Promotion) {
   CcTest::InitializeVM();
-  Heap* heap = CcTest::heap();
+  TestHeap* heap = CcTest::test_heap();
   heap->ConfigureHeap(2*256*KB, 1*MB, 1*MB, 0);
 
   v8::HandleScope sc(CcTest::isolate());
@@ -101,7 +101,7 @@ TEST(Promotion) {
 
 TEST(NoPromotion) {
   CcTest::InitializeVM();
-  Heap* heap = CcTest::heap();
+  TestHeap* heap = CcTest::test_heap();
   heap->ConfigureHeap(2*256*KB, 1*MB, 1*MB, 0);
 
   v8::HandleScope sc(CcTest::isolate());
@@ -128,7 +128,7 @@ TEST(MarkCompactCollector) {
   FLAG_incremental_marking = false;
   CcTest::InitializeVM();
   Isolate* isolate = CcTest::i_isolate();
-  Heap* heap = isolate->heap();
+  TestHeap* heap = CcTest::test_heap();
   Factory* factory = isolate->factory();
 
   v8::HandleScope sc(CcTest::isolate());
@@ -253,7 +253,7 @@ TEST(ObjectGroups) {
   FLAG_incremental_marking = false;
   CcTest::InitializeVM();
   GlobalHandles* global_handles = CcTest::i_isolate()->global_handles();
-  Heap* heap = CcTest::heap();
+  TestHeap* heap = CcTest::test_heap();
   NumberOfWeakCalls = 0;
   v8::HandleScope handle_scope(CcTest::isolate());
 
@@ -392,7 +392,7 @@ TEST(EmptyObjectGroups) {
   v8::HandleScope handle_scope(CcTest::isolate());
 
   Handle<Object> object = global_handles->Create(
-      CcTest::heap()->AllocateFixedArray(1)->ToObjectChecked());
+      CcTest::test_heap()->AllocateFixedArray(1)->ToObjectChecked());
 
   TestRetainedObjectInfo info;
   global_handles->AddObjectGroup(NULL, 0, &info);
@@ -481,30 +481,6 @@ static intptr_t MemoryInUse() {
   }
   close(fd);
   return memory_use;
-}
-
-
-TEST(BootUpMemoryUse) {
-  intptr_t initial_memory = MemoryInUse();
-  // Avoid flakiness.
-  FLAG_crankshaft = false;
-  FLAG_concurrent_osr = false;
-  FLAG_concurrent_recompilation = false;
-
-  // Only Linux has the proc filesystem and only if it is mapped.  If it's not
-  // there we just skip the test.
-  if (initial_memory >= 0) {
-    CcTest::InitializeVM();
-    intptr_t delta = MemoryInUse() - initial_memory;
-    printf("delta: %" V8_PTR_PREFIX "d kB\n", delta / 1024);
-    if (v8::internal::Snapshot::IsEnabled()) {
-      CHECK_LE(delta,
-          3200 * 1024 * FullCodeGenerator::kBootCodeSizeMultiplier / 100);
-    } else {
-      CHECK_LE(delta,
-          3350 * 1024 * FullCodeGenerator::kBootCodeSizeMultiplier / 100);
-    }
-  }
 }
 
 

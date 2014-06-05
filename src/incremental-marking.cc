@@ -459,7 +459,7 @@ bool IncrementalMarking::WorthActivating() {
   return FLAG_incremental_marking &&
       FLAG_incremental_marking_steps &&
       heap_->gc_state() == Heap::NOT_IN_GC &&
-      !Serializer::enabled() &&
+      !Serializer::enabled(heap_->isolate()) &&
       heap_->isolate()->IsInitialized() &&
       heap_->PromotedSpaceSizeOfObjects() > kActivationThreshold;
 }
@@ -537,7 +537,7 @@ void IncrementalMarking::Start(CompactionFlag flag) {
   ASSERT(FLAG_incremental_marking_steps);
   ASSERT(state_ == STOPPED);
   ASSERT(heap_->gc_state() == Heap::NOT_IN_GC);
-  ASSERT(!Serializer::enabled());
+  ASSERT(!Serializer::enabled(heap_->isolate()));
   ASSERT(heap_->isolate()->IsInitialized());
 
   ResetStepCounters();
@@ -886,6 +886,10 @@ void IncrementalMarking::Step(intptr_t allocated_bytes,
   }
 
   if (state_ == SWEEPING) {
+    if (heap_->mark_compact_collector()->IsConcurrentSweepingInProgress() &&
+        heap_->mark_compact_collector()->IsSweepingCompleted()) {
+      heap_->mark_compact_collector()->WaitUntilSweepingCompleted();
+    }
     if (!heap_->mark_compact_collector()->IsConcurrentSweepingInProgress()) {
       bytes_scanned_ = 0;
       StartMarking(PREVENT_COMPACTION);
