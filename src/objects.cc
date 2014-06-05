@@ -667,7 +667,7 @@ void JSObject::SetNormalizedProperty(Handle<JSObject> object,
       store_value = object->GetIsolate()->factory()->NewPropertyCell(value);
     }
 
-    property_dictionary = NameDictionary::AddNameEntry(
+    property_dictionary = NameDictionary::Add(
         property_dictionary, name, store_value, details);
     object->set_properties(*property_dictionary);
     return;
@@ -725,7 +725,8 @@ Handle<Object> JSObject::DeleteNormalizedProperty(Handle<JSObject> object,
       PropertyCell::SetValueInferType(cell, value);
       dictionary->DetailsAtPut(entry, details.AsDeleted());
     } else {
-      Handle<Object> deleted(dictionary->DeleteProperty(entry, mode), isolate);
+      Handle<Object> deleted(
+          NameDictionary::DeleteProperty(dictionary, entry, mode));
       if (*deleted == isolate->heap()->true_value()) {
         Handle<NameDictionary> new_properties =
             NameDictionary::Shrink(dictionary, name);
@@ -1942,7 +1943,7 @@ void JSObject::AddSlowProperty(Handle<JSObject> object,
   }
   PropertyDetails details = PropertyDetails(attributes, NORMAL, 0);
   Handle<NameDictionary> result =
-      NameDictionary::AddNameEntry(dict, name, value, details);
+      NameDictionary::Add(dict, name, value, details);
   if (*dict != *result) object->set_properties(*result);
 }
 
@@ -4630,7 +4631,7 @@ void JSObject::NormalizeProperties(Handle<JSObject> object,
     property_count += 2;  // Make space for two more properties.
   }
   Handle<NameDictionary> dictionary =
-      isolate->factory()->NewNameDictionary(property_count);
+      NameDictionary::New(isolate, property_count);
 
   Handle<DescriptorArray> descs(map->instance_descriptors());
   for (int i = 0; i < real_size; i++) {
@@ -4641,7 +4642,7 @@ void JSObject::NormalizeProperties(Handle<JSObject> object,
         Handle<Object> value(descs->GetConstant(i), isolate);
         PropertyDetails d = PropertyDetails(
             details.attributes(), NORMAL, i + 1);
-        dictionary = NameDictionary::AddNameEntry(dictionary, key, value, d);
+        dictionary = NameDictionary::Add(dictionary, key, value, d);
         break;
       }
       case FIELD: {
@@ -4650,7 +4651,7 @@ void JSObject::NormalizeProperties(Handle<JSObject> object,
             object->RawFastPropertyAt(descs->GetFieldIndex(i)), isolate);
         PropertyDetails d =
             PropertyDetails(details.attributes(), NORMAL, i + 1);
-        dictionary = NameDictionary::AddNameEntry(dictionary, key, value, d);
+        dictionary = NameDictionary::Add(dictionary, key, value, d);
         break;
       }
       case CALLBACKS: {
@@ -4658,7 +4659,7 @@ void JSObject::NormalizeProperties(Handle<JSObject> object,
         Handle<Object> value(descs->GetCallbacksObject(i), isolate);
         PropertyDetails d = PropertyDetails(
             details.attributes(), CALLBACKS, i + 1);
-        dictionary = NameDictionary::AddNameEntry(dictionary, key, value, d);
+        dictionary = NameDictionary::Add(dictionary, key, value, d);
         break;
       }
       case INTERCEPTOR:
@@ -4853,9 +4854,10 @@ void JSObject::TransformToFastProperties(Handle<JSObject> object,
 void JSObject::ResetElements(Handle<JSObject> object) {
   if (object->map()->is_observed()) {
     // Maintain invariant that observed elements are always in dictionary mode.
-    Factory* factory = object->GetIsolate()->factory();
+    Isolate* isolate = object->GetIsolate();
+    Factory* factory = isolate->factory();
     Handle<SeededNumberDictionary> dictionary =
-        factory->NewSeededNumberDictionary(0);
+        SeededNumberDictionary::New(isolate, 0);
     if (object->map() == *factory->sloppy_arguments_elements_map()) {
       FixedArray::cast(object->elements())->set(1, *dictionary);
     } else {
@@ -4910,7 +4912,6 @@ Handle<SeededNumberDictionary> JSObject::NormalizeElements(
   ASSERT(!object->HasExternalArrayElements() &&
          !object->HasFixedTypedArrayElements());
   Isolate* isolate = object->GetIsolate();
-  Factory* factory = isolate->factory();
 
   // Find the backing store.
   Handle<FixedArrayBase> array(FixedArrayBase::cast(object->elements()));
@@ -4933,7 +4934,7 @@ Handle<SeededNumberDictionary> JSObject::NormalizeElements(
   int used_elements = 0;
   object->GetElementsCapacityAndUsage(&old_capacity, &used_elements);
   Handle<SeededNumberDictionary> dictionary =
-      factory->NewSeededNumberDictionary(used_elements);
+      SeededNumberDictionary::New(isolate, used_elements);
 
   dictionary = CopyFastElementsToDictionary(array, length, dictionary);
 
@@ -5746,8 +5747,7 @@ MaybeHandle<Object> JSObject::Freeze(Handle<JSObject> object) {
       int capacity = 0;
       int used = 0;
       object->GetElementsCapacityAndUsage(&capacity, &used);
-      new_element_dictionary =
-          isolate->factory()->NewSeededNumberDictionary(used);
+      new_element_dictionary = SeededNumberDictionary::New(isolate, used);
 
       // Move elements to a dictionary; avoid calling NormalizeElements to avoid
       // unnecessary transitions.
@@ -14818,9 +14818,10 @@ Handle<Derived> HashTable<Derived, Shape, Key>::EnsureCapacity(
     Key key,
     PretenureFlag pretenure) {
   Isolate* isolate = table->GetIsolate();
-  CALL_HEAP_FUNCTION(isolate,
-                     table->EnsureCapacity(n, key, pretenure),
-                     Derived);
+  CALL_HEAP_FUNCTION(
+      isolate,
+      static_cast<HashTable*>(*table)->EnsureCapacity(n, key, pretenure),
+      Derived);
 }
 
 
@@ -14896,21 +14897,17 @@ template class Dictionary<UnseededNumberDictionary,
                           UnseededNumberDictionaryShape,
                           uint32_t>;
 
-template MaybeObject*
+template Handle<SeededNumberDictionary>
 Dictionary<SeededNumberDictionary, SeededNumberDictionaryShape, uint32_t>::
-    Allocate(Heap* heap, int at_least_space_for, PretenureFlag pretenure);
+    New(Isolate*, int at_least_space_for, PretenureFlag pretenure);
 
-template MaybeObject*
+template Handle<UnseededNumberDictionary>
 Dictionary<UnseededNumberDictionary, UnseededNumberDictionaryShape, uint32_t>::
-    Allocate(Heap* heap, int at_least_space_for, PretenureFlag pretenure);
-
-template MaybeObject*
-Dictionary<NameDictionary, NameDictionaryShape, Handle<Name> >::
-    Allocate(Heap* heap, int n, PretenureFlag pretenure);
+    New(Isolate*, int at_least_space_for, PretenureFlag pretenure);
 
 template Handle<NameDictionary>
 Dictionary<NameDictionary, NameDictionaryShape, Handle<Name> >::
-    New(Isolate* isolate, int n, PretenureFlag pretenure);
+    New(Isolate*, int n, PretenureFlag pretenure);
 
 template Handle<SeededNumberDictionary>
 Dictionary<SeededNumberDictionary, SeededNumberDictionaryShape, uint32_t>::
@@ -14941,28 +14938,13 @@ Dictionary<SeededNumberDictionary, SeededNumberDictionaryShape, uint32_t>::
                    SeededNumberDictionaryShape,
                    uint32_t>::SortMode);
 
-template Object*
-Dictionary<NameDictionary, NameDictionaryShape, Handle<Name> >::DeleteProperty(
-    int, JSObject::DeleteMode);
-
 template Handle<Object>
 Dictionary<NameDictionary, NameDictionaryShape, Handle<Name> >::DeleteProperty(
-    Handle<Dictionary<NameDictionary, NameDictionaryShape, Handle<Name> > >,
-    int,
-    JSObject::DeleteMode);
-
-template Object*
-Dictionary<SeededNumberDictionary, SeededNumberDictionaryShape, uint32_t>::
-    DeleteProperty(int, JSObject::DeleteMode);
+    Handle<NameDictionary>, int, JSObject::DeleteMode);
 
 template Handle<Object>
 Dictionary<SeededNumberDictionary, SeededNumberDictionaryShape, uint32_t>::
-    DeleteProperty(
-        Handle<Dictionary<SeededNumberDictionary,
-                          SeededNumberDictionaryShape,
-                          uint32_t> >,
-        int,
-        JSObject::DeleteMode);
+    DeleteProperty(Handle<SeededNumberDictionary>, int, JSObject::DeleteMode);
 
 template Handle<NameDictionary>
 HashTable<NameDictionary, NameDictionaryShape, Handle<Name> >::
@@ -14988,37 +14970,43 @@ template int
 Dictionary<NameDictionary, NameDictionaryShape, Handle<Name> >::
     NumberOfElementsFilterAttributes(PropertyAttributes);
 
-template MaybeObject*
+template Handle<NameDictionary>
 Dictionary<NameDictionary, NameDictionaryShape, Handle<Name> >::Add(
-    Handle<Name>, Object*, PropertyDetails);
+    Handle<NameDictionary>, Handle<Name>, Handle<Object>, PropertyDetails);
 
-template MaybeObject*
+template void
 Dictionary<NameDictionary, NameDictionaryShape, Handle<Name> >::
-    GenerateNewEnumerationIndices();
+    GenerateNewEnumerationIndices(Handle<NameDictionary>);
 
 template int
 Dictionary<SeededNumberDictionary, SeededNumberDictionaryShape, uint32_t>::
     NumberOfElementsFilterAttributes(PropertyAttributes);
 
-template MaybeObject*
-Dictionary<SeededNumberDictionary, SeededNumberDictionaryShape, uint32_t>::Add(
-    uint32_t, Object*, PropertyDetails);
-
-template MaybeObject*
-Dictionary<UnseededNumberDictionary, UnseededNumberDictionaryShape, uint32_t>::
-    Add(uint32_t, Object*, PropertyDetails);
-
-template MaybeObject*
+template Handle<SeededNumberDictionary>
 Dictionary<SeededNumberDictionary, SeededNumberDictionaryShape, uint32_t>::
-    EnsureCapacity(int, uint32_t);
+    Add(Handle<SeededNumberDictionary>,
+        uint32_t,
+        Handle<Object>,
+        PropertyDetails);
 
-template MaybeObject*
+template Handle<UnseededNumberDictionary>
 Dictionary<UnseededNumberDictionary, UnseededNumberDictionaryShape, uint32_t>::
-    EnsureCapacity(int, uint32_t);
+    Add(Handle<UnseededNumberDictionary>,
+        uint32_t,
+        Handle<Object>,
+        PropertyDetails);
 
-template MaybeObject*
+template Handle<SeededNumberDictionary>
+Dictionary<SeededNumberDictionary, SeededNumberDictionaryShape, uint32_t>::
+    EnsureCapacity(Handle<SeededNumberDictionary>, int, uint32_t);
+
+template Handle<UnseededNumberDictionary>
+Dictionary<UnseededNumberDictionary, UnseededNumberDictionaryShape, uint32_t>::
+    EnsureCapacity(Handle<UnseededNumberDictionary>, int, uint32_t);
+
+template Handle<NameDictionary>
 Dictionary<NameDictionary, NameDictionaryShape, Handle<Name> >::
-    EnsureCapacity(int, Handle<Name>);
+    EnsureCapacity(Handle<NameDictionary>, int, Handle<Name>);
 
 template MaybeObject*
 Dictionary<SeededNumberDictionary, SeededNumberDictionaryShape, uint32_t>::
@@ -15045,16 +15033,6 @@ int HashTable<SeededNumberDictionary, SeededNumberDictionaryShape, uint32_t>::
     FindEntry(uint32_t);
 
 
-Handle<NameDictionary> NameDictionary::AddNameEntry(Handle<NameDictionary> dict,
-                                                    Handle<Name> name,
-                                                    Handle<Object> value,
-                                                    PropertyDetails details) {
-  CALL_HEAP_FUNCTION(dict->GetIsolate(),
-                     dict->Add(name, *value, details),
-                     NameDictionary);
-}
-
-
 Handle<Object> JSObject::PrepareSlowElementsForSort(
     Handle<JSObject> object, uint32_t limit) {
   ASSERT(object->HasDictionaryElements());
@@ -15064,7 +15042,7 @@ Handle<Object> JSObject::PrepareSlowElementsForSort(
   // elements.
   Handle<SeededNumberDictionary> dict(object->element_dictionary(), isolate);
   Handle<SeededNumberDictionary> new_dict =
-      isolate->factory()->NewSeededNumberDictionary(dict->NumberOfElements());
+      SeededNumberDictionary::New(isolate, dict->NumberOfElements());
 
   uint32_t pos = 0;
   uint32_t undefs = 0;
@@ -15495,7 +15473,7 @@ Handle<PropertyCell> JSGlobalObject::EnsurePropertyCell(
         isolate->factory()->the_hole_value());
     PropertyDetails details(NONE, NORMAL, 0);
     details = details.AsDeleted();
-    Handle<NameDictionary> dictionary = NameDictionary::AddNameEntry(
+    Handle<NameDictionary> dictionary = NameDictionary::Add(
         handle(global->property_dictionary()), name, cell, details);
     global->set_properties(*dictionary);
     return cell;
@@ -15797,31 +15775,11 @@ Handle<MapCache> MapCache::Put(
 
 
 template<typename Derived, typename Shape, typename Key>
-MaybeObject* Dictionary<Derived, Shape, Key>::Allocate(
-    Heap* heap,
-    int at_least_space_for,
-    PretenureFlag pretenure) {
-  Object* obj;
-  { MaybeObject* maybe_obj =
-      DerivedHashTable::Allocate(
-          heap,
-          at_least_space_for,
-          USE_DEFAULT_MINIMUM_CAPACITY,
-          pretenure);
-    if (!maybe_obj->ToObject(&obj)) return maybe_obj;
-  }
-  // Initialize the next enumeration index.
-  Dictionary::cast(obj)->
-      SetNextEnumerationIndex(PropertyDetails::kInitialIndex);
-  return obj;
-}
-
-
-template<typename Derived, typename Shape, typename Key>
 Handle<Derived> Dictionary<Derived, Shape, Key>::New(
     Isolate* isolate,
     int at_least_space_for,
     PretenureFlag pretenure) {
+  ASSERT(0 <= at_least_space_for);
   Handle<Derived> dict = DerivedHashTable::New(isolate,
                                                at_least_space_for,
                                                USE_DEFAULT_MINIMUM_CAPACITY,
@@ -15833,46 +15791,33 @@ Handle<Derived> Dictionary<Derived, Shape, Key>::New(
 }
 
 
-
-void NameDictionary::DoGenerateNewEnumerationIndices(
-    Handle<NameDictionary> dictionary) {
-  CALL_HEAP_FUNCTION_VOID(dictionary->GetIsolate(),
-                          dictionary->GenerateNewEnumerationIndices());
-}
-
 template<typename Derived, typename Shape, typename Key>
-MaybeObject* Dictionary<Derived, Shape, Key>::GenerateNewEnumerationIndices() {
-  Heap* heap = Dictionary::GetHeap();
-  int length = DerivedHashTable::NumberOfElements();
+void Dictionary<Derived, Shape, Key>::GenerateNewEnumerationIndices(
+    Handle<Derived> dictionary) {
+  Factory* factory = dictionary->GetIsolate()->factory();
+  int length = dictionary->NumberOfElements();
 
   // Allocate and initialize iteration order array.
-  Object* obj;
-  { MaybeObject* maybe_obj = heap->AllocateFixedArray(length);
-    if (!maybe_obj->ToObject(&obj)) return maybe_obj;
-  }
-  FixedArray* iteration_order = FixedArray::cast(obj);
+  Handle<FixedArray> iteration_order = factory->NewFixedArray(length);
   for (int i = 0; i < length; i++) {
     iteration_order->set(i, Smi::FromInt(i));
   }
 
   // Allocate array with enumeration order.
-  { MaybeObject* maybe_obj = heap->AllocateFixedArray(length);
-    if (!maybe_obj->ToObject(&obj)) return maybe_obj;
-  }
-  FixedArray* enumeration_order = FixedArray::cast(obj);
+  Handle<FixedArray> enumeration_order = factory->NewFixedArray(length);
 
   // Fill the enumeration order array with property details.
-  int capacity = DerivedHashTable::Capacity();
+  int capacity = dictionary->Capacity();
   int pos = 0;
   for (int i = 0; i < capacity; i++) {
-    if (Dictionary::IsKey(Dictionary::KeyAt(i))) {
-      int index = DetailsAt(i).dictionary_index();
+    if (dictionary->IsKey(dictionary->KeyAt(i))) {
+      int index = dictionary->DetailsAt(i).dictionary_index();
       enumeration_order->set(pos++, Smi::FromInt(index));
     }
   }
 
   // Sort the arrays wrt. enumeration order.
-  iteration_order->SortPairs(enumeration_order, enumeration_order->length());
+  iteration_order->SortPairs(*enumeration_order, enumeration_order->length());
 
   // Overwrite the enumeration_order with the enumeration indices.
   for (int i = 0; i < length; i++) {
@@ -15882,74 +15827,51 @@ MaybeObject* Dictionary<Derived, Shape, Key>::GenerateNewEnumerationIndices() {
   }
 
   // Update the dictionary with new indices.
-  capacity = DerivedHashTable::Capacity();
+  capacity = dictionary->Capacity();
   pos = 0;
   for (int i = 0; i < capacity; i++) {
-    if (Dictionary::IsKey(Dictionary::KeyAt(i))) {
+    if (dictionary->IsKey(dictionary->KeyAt(i))) {
       int enum_index = Smi::cast(enumeration_order->get(pos++))->value();
-      PropertyDetails details = DetailsAt(i);
+      PropertyDetails details = dictionary->DetailsAt(i);
       PropertyDetails new_details = PropertyDetails(
           details.attributes(), details.type(), enum_index);
-      DetailsAtPut(i, new_details);
+      dictionary->DetailsAtPut(i, new_details);
     }
   }
 
   // Set the next enumeration index.
-  SetNextEnumerationIndex(PropertyDetails::kInitialIndex+length);
-  return this;
+  dictionary->SetNextEnumerationIndex(PropertyDetails::kInitialIndex+length);
 }
-
-template<typename Derived, typename Shape, typename Key>
-MaybeObject* Dictionary<Derived, Shape, Key>::EnsureCapacity(int n, Key key) {
-  // Check whether there are enough enumeration indices to add n elements.
-  if (Shape::kIsEnumerable &&
-      !PropertyDetails::IsValidIndex(NextEnumerationIndex() + n)) {
-    // If not, we generate new indices for the properties.
-    Object* result;
-    { MaybeObject* maybe_result = GenerateNewEnumerationIndices();
-      if (!maybe_result->ToObject(&result)) return maybe_result;
-    }
-  }
-  return DerivedHashTable::EnsureCapacity(n, key);
-}
-
 
 
 template<typename Derived, typename Shape, typename Key>
 Handle<Derived> Dictionary<Derived, Shape, Key>::EnsureCapacity(
-    Handle<Derived> obj, int n, Key key) {
-  Isolate* isolate = obj->GetIsolate();
-  CALL_HEAP_FUNCTION(isolate,
-                     obj->EnsureCapacity(n, key),
-                     Derived);
+    Handle<Derived> dictionary, int n, Key key) {
+  // Check whether there are enough enumeration indices to add n elements.
+  if (Shape::kIsEnumerable &&
+      !PropertyDetails::IsValidIndex(dictionary->NextEnumerationIndex() + n)) {
+    // If not, we generate new indices for the properties.
+    GenerateNewEnumerationIndices(dictionary);
+  }
+  return DerivedHashTable::EnsureCapacity(dictionary, n, key);
 }
 
 
-// TODO(ishell): Temporary wrapper until handlified.
 template<typename Derived, typename Shape, typename Key>
 Handle<Object> Dictionary<Derived, Shape, Key>::DeleteProperty(
-    Handle<Dictionary<Derived, Shape, Key> > dictionary,
+    Handle<Derived> dictionary,
     int entry,
     JSObject::DeleteMode mode) {
-  CALL_HEAP_FUNCTION(dictionary->GetIsolate(),
-                     dictionary->DeleteProperty(entry, mode),
-                     Object);
-}
-
-
-template<typename Derived, typename Shape, typename Key>
-Object* Dictionary<Derived, Shape, Key>::DeleteProperty(
-    int entry,
-    JSReceiver::DeleteMode mode) {
-  Heap* heap = Dictionary::GetHeap();
-  PropertyDetails details = DetailsAt(entry);
+  Factory* factory = dictionary->GetIsolate()->factory();
+  PropertyDetails details = dictionary->DetailsAt(entry);
   // Ignore attributes if forcing a deletion.
   if (details.IsDontDelete() && mode != JSReceiver::FORCE_DELETION) {
-    return heap->false_value();
+    return factory->false_value();
   }
-  SetEntry(entry, heap->the_hole_value(), heap->the_hole_value());
-  DerivedHashTable::ElementRemoved();
-  return heap->true_value();
+  dictionary->SetEntry(
+      entry, *factory->the_hole_value(), *factory->the_hole_value());
+  dictionary->ElementRemoved();
+  return factory->true_value();
 }
 
 
@@ -15977,20 +15899,17 @@ Handle<Derived> Dictionary<Derived, Shape, Key>::AtPut(
 
 
 template<typename Derived, typename Shape, typename Key>
-MaybeObject* Dictionary<Derived, Shape, Key>::Add(
+Handle<Derived> Dictionary<Derived, Shape, Key>::Add(
+    Handle<Derived> dictionary,
     Key key,
-    Object* value,
+    Handle<Object> value,
     PropertyDetails details) {
   // Valdate key is absent.
-  SLOW_ASSERT((this->FindEntry(key) == Dictionary::kNotFound));
+  SLOW_ASSERT((dictionary->FindEntry(key) == Dictionary::kNotFound));
   // Check whether the dictionary should be extended.
-  Object* obj;
-  { MaybeObject* maybe_obj = EnsureCapacity(1, key);
-    if (!maybe_obj->ToObject(&obj)) return maybe_obj;
-  }
+  dictionary = EnsureCapacity(dictionary, 1, key);
 
-  return Dictionary::cast(obj)->AddEntry(
-      key, value, details, Dictionary::Hash(key));
+  return AddEntry(dictionary, key, value, details, dictionary->Hash(key));
 }
 
 
@@ -16066,9 +15985,7 @@ Handle<SeededNumberDictionary> SeededNumberDictionary::AddNumberEntry(
     PropertyDetails details) {
   dictionary->UpdateMaxNumberKey(key);
   SLOW_ASSERT(dictionary->FindEntry(key) == kNotFound);
-  CALL_HEAP_FUNCTION(dictionary->GetIsolate(),
-                     dictionary->Add(key, *value, details),
-                     SeededNumberDictionary);
+  return Add(dictionary, key, value, details);
 }
 
 
@@ -16077,10 +15994,7 @@ Handle<UnseededNumberDictionary> UnseededNumberDictionary::AddNumberEntry(
     uint32_t key,
     Handle<Object> value) {
   SLOW_ASSERT(dictionary->FindEntry(key) == kNotFound);
-  CALL_HEAP_FUNCTION(dictionary->GetIsolate(),
-                     dictionary->Add(
-                         key, *value, PropertyDetails(NONE, NORMAL, 0)),
-                     UnseededNumberDictionary);
+  return Add(dictionary, key, value, PropertyDetails(NONE, NORMAL, 0));
 }
 
 
@@ -16332,29 +16246,31 @@ Object* WeakHashTable::Lookup(Object* key) {
 }
 
 
-MaybeObject* WeakHashTable::Put(Object* key, Object* value) {
-  ASSERT(IsKey(key));
-  int entry = FindEntry(key);
+Handle<WeakHashTable> WeakHashTable::Put(Handle<WeakHashTable> table,
+                                         Handle<Object> key,
+                                         Handle<Object> value) {
+  ASSERT(table->IsKey(*key));
+  int entry = table->FindEntry(*key);
   // Key is already in table, just overwrite value.
   if (entry != kNotFound) {
-    set(EntryToValueIndex(entry), value);
-    return this;
+    table->set(EntryToValueIndex(entry), *value);
+    return table;
   }
 
   // Check whether the hash table should be extended.
-  Object* obj;
-  { MaybeObject* maybe_obj = EnsureCapacity(1, key, TENURED);
-    if (!maybe_obj->ToObject(&obj)) return maybe_obj;
-  }
-  WeakHashTable* table = WeakHashTable::cast(obj);
-  table->AddEntry(table->FindInsertionEntry(Hash(key)), key, value);
+  table = EnsureCapacity(table, 1, *key, TENURED);
+
+  table->AddEntry(table->FindInsertionEntry(table->Hash(*key)), key, value);
   return table;
 }
 
 
-void WeakHashTable::AddEntry(int entry, Object* key, Object* value) {
-  set(EntryToIndex(entry), key);
-  set(EntryToValueIndex(entry), value);
+void WeakHashTable::AddEntry(int entry,
+                             Handle<Object> key,
+                             Handle<Object> value) {
+  DisallowHeapAllocation no_allocation;
+  set(EntryToIndex(entry), *key);
+  set(EntryToValueIndex(entry), *value);
   ElementAdded();
 }
 

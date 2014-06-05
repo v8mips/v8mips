@@ -4506,7 +4506,7 @@ void HPhi::Verify() {
 
 void HSimulate::Verify() {
   HInstruction::Verify();
-  ASSERT(HasAstId());
+  ASSERT(HasAstId() || next()->IsEnterInlined());
 }
 
 
