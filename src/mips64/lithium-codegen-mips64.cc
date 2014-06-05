@@ -1210,15 +1210,15 @@ void LCodeGen::DoDivByPowerOf2I(LDivByPowerOf2I* instr) {
   if (shift == 0) {
     __ Move(result, dividend);
   } else if (shift == 1) {
-    __ dsrl(result, dividend, 31);
+    __ dsrl32(result, dividend, 31);
     __ Daddu(result, dividend, Operand(result));
   } else {
-    __ dsra(result, dividend, 31);
-    __ dsrl(result, result, 32 - shift);
+    __ dsra32(result, dividend, 31);
+    __ dsrl32(result, result, 32 - shift);
     __ Daddu(result, dividend, Operand(result));
   }
-  if (shift > 0) __ sra(result, result, shift);
-  if (divisor < 0) __ Subu(result, zero_reg, result);
+  if (shift > 0) __ dsra(result, result, shift);
+  if (divisor < 0) __ Dsubu(result, zero_reg, result);
 }
 
 
