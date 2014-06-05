@@ -1158,6 +1158,7 @@ template <class C> inline bool Is(Object* obj);
   V(kLiveEdit, "LiveEdit")                                                    \
   V(kLookupVariableInCountOperation,                                          \
     "Lookup variable in count operation")                                     \
+  V(kMapBecameDeprecated, "Map became deprecated")                            \
   V(kMapIsNoLongerInEax, "Map is no longer in eax")                           \
   V(kModuleDeclaration, "Module declaration")                                 \
   V(kModuleLiteral, "Module literal")                                         \
@@ -2161,7 +2162,8 @@ class JSObject: public JSReceiver {
       PropertyAttributes attributes,
       ValueType value_type = OPTIMAL_REPRESENTATION,
       StoreMode mode = ALLOW_AS_CONSTANT,
-      ExtensibilityCheck extensibility_check = PERFORM_EXTENSIBILITY_CHECK);
+      ExtensibilityCheck extensibility_check = PERFORM_EXTENSIBILITY_CHECK,
+      StoreFromKeyed store_mode = MAY_BE_STORE_FROM_KEYED);
 
   static inline Handle<String> ExpectedTransitionKey(Handle<Map> map);
   static inline Handle<Map> ExpectedTransitionTarget(Handle<Map> map);
