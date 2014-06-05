@@ -2374,9 +2374,8 @@ void FullCodeGenerator::EmitInlineSmiBinaryOp(BinaryOperation* expr,
     case Token::SAR:
       __ GetLeastBitsFromSmi(scratch1, right, 5);
       __ dsrav(right, left, scratch1);
-      // TODO(plind): Fix li() to allow ~kSmiTagMask in And().
-      __ li(scratch1, Operand(~kSmiTagMask), CONSTANT_SIZE);
-      // __ And(v0, right, Operand(~kSmiTagMask));
+      // TODO(yy), should add kSmiTagMask support for both mips and mips64.
+      __ li(scratch1, Operand(0xffffffff00000000L));
       __ And(v0, right, Operand(scratch1));
       break;
     case Token::SHL: {
