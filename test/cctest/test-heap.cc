@@ -1348,7 +1348,6 @@ TEST(TestCodeFlushingIncrementalAbort) {
   // code flushing candidate.
   SimulateIncrementalMarking();
 
-#ifdef ENABLE_DEBUGGER_SUPPORT
   // Enable the debugger and add a breakpoint while incremental marking
   // is running so that incremental marking aborts and code flushing is
   // disabled.
@@ -1356,7 +1355,6 @@ TEST(TestCodeFlushingIncrementalAbort) {
   Handle<Object> breakpoint_object(Smi::FromInt(0), isolate);
   isolate->debug()->SetBreakPoint(function, breakpoint_object, &position);
   isolate->debug()->ClearAllBreakPoints();
-#endif  // ENABLE_DEBUGGER_SUPPORT
 
   // Force optimization now that code flushing is disabled.
   { v8::HandleScope scope(CcTest::isolate());
@@ -3665,10 +3663,8 @@ TEST(Regress173458) {
   // explicitly enqueued.
   SimulateIncrementalMarking();
 
-#ifdef ENABLE_DEBUGGER_SUPPORT
   // Now enable the debugger which in turn will disable code flushing.
   CHECK(isolate->debug()->Load());
-#endif  // ENABLE_DEBUGGER_SUPPORT
 
   // This cycle will bust the heap and subsequent cycles will go ballistic.
   heap->CollectAllGarbage(Heap::kNoGCFlags);
