@@ -66,8 +66,8 @@ TEST(MIPS0) {
   F2 f = FUNCTION_CAST<F2>(code->entry());
   int64_t res =
       reinterpret_cast<int64_t>(CALL_GENERATED_CODE(f, 0xab0, 0xc, 0, 0, 0));
-  ::printf("f() = %lld\n", res);
-  CHECK_EQ(0xabcLL, res);
+  ::printf("f() = %ld\n", res);
+  CHECK_EQ(0xabcL, res);
 }
 
 
@@ -103,8 +103,8 @@ TEST(MIPS1) {
   F1 f = FUNCTION_CAST<F1>(code->entry());
   int64_t res =
      reinterpret_cast<int64_t>(CALL_GENERATED_CODE(f, 50, 0, 0, 0, 0));
-  ::printf("f() = %lld\n", res);
-  CHECK_EQ(1275LL, res);
+  ::printf("f() = %ld\n", res);
+  CHECK_EQ(1275L, res);
 }
 
 
@@ -150,23 +150,27 @@ TEST(MIPS2) {
   __ Branch(&error, ne, v0, Operand(0x0f234560));
   __ nop();
 
-  __ addu(v0, t0, t1);   // 0x00001238
+  __ addu(v0, t0, t1);  // 0x00001238
   __ subu(v0, v0, t0);  // 0x00001234
   __ Branch(&error, ne, v0, Operand(0x00001234));
   __ nop();
-  __ addu(v1, t3, t0);
-  __ Branch(&error, ne, v1, Operand(0x80000003));
+  __ addu(v1, t3, t0);  // 32bit addu result is sign-extended into 64bit reg.
+  __ Branch(&error, ne, v1, Operand(0xffffffff80000003));
   __ nop();
   __ subu(v1, t7, t0);  // 0x7ffffffc
   __ Branch(&error, ne, v1, Operand(0x7ffffffc));
   __ nop();
 
-  __ and_(v0, t1, t2);  // 0x00001230
-  __ or_(v0, v0, t1);   // 0x00001234
-  __ xor_(v0, v0, t2);  // 0x1234444c
-  __ nor(v0, v0, t2);   // 0xedcba987
-  __ Branch(&error, ne, v0, Operand(0xedcba983));
+  __ and_(v0, t1, t2);  // 0x0000000000001230
+  __ or_(v0, v0, t1);   // 0x0000000000001234
+  __ xor_(v0, v0, t2);  // 0x000000001234444c
+  __ nor(v0, v0, t2);   // 0xffffffffedcba987
+  __ Branch(&error, ne, v0, Operand(0xffffffffedcba983));
   __ nop();
+
+  // Shift both 32bit number to left, to preserve meaning of next comparison.
+  __ dsll32(t3, t3, 0);
+  __ dsll32(t7, t7, 0);
 
   __ slt(v0, t7, t3);
   __ Branch(&error, ne, v0, Operand(0x1));
@@ -174,15 +178,19 @@ TEST(MIPS2) {
   __ sltu(v0, t7, t3);
   __ Branch(&error, ne, v0, Operand(zero_reg));
   __ nop();
+
+  // Restore original values in registers.
+  __ dsrl32(t3, t3, 0);
+  __ dsrl32(t7, t7, 0);
   // End of SPECIAL class.
 
   __ addiu(v0, zero_reg, 0x7421);  // 0x00007421
-  __ addiu(v0, v0, -0x1);  // 0x00007420
-  __ addiu(v0, v0, -0x20);  // 0x00007400
+  __ addiu(v0, v0, -0x1);          // 0x00007420
+  __ addiu(v0, v0, -0x20);         // 0x00007400
   __ Branch(&error, ne, v0, Operand(0x00007400));
   __ nop();
-  __ addiu(v1, t3, 0x1);  // 0x80000000
-  __ Branch(&error, ne, v1, Operand(0x80000000));
+  __ addiu(v1, t3, 0x1);  // 0x80000000 - result is sign-extended.
+  __ Branch(&error, ne, v1, Operand(0xffffffff80000000));
   __ nop();
 
   __ slti(v0, t1, 0x00002000);  // 0x1
@@ -195,12 +203,12 @@ TEST(MIPS2) {
   __ nop();
 
   __ andi(v0, t1, 0xf0f0);  // 0x00001030
-  __ ori(v0, v0, 0x8a00);  // 0x00009a30
+  __ ori(v0, v0, 0x8a00);   // 0x00009a30
   __ xori(v0, v0, 0x83cc);  // 0x000019fc
   __ Branch(&error, ne, v0, Operand(0x000019fc));
   __ nop();
-  __ lui(v1, 0x8123);  // 0x81230000
-  __ Branch(&error, ne, v1, Operand(0x81230000));
+  __ lui(v1, 0x8123);  // Result is sign-extended into 64bit register.
+  __ Branch(&error, ne, v1, Operand(0xffffffff81230000));
   __ nop();
 
   // Bit twiddling instructions & conditional moves.
@@ -242,10 +250,9 @@ TEST(MIPS2) {
   F2 f = FUNCTION_CAST<F2>(code->entry());
   int64_t res =
       reinterpret_cast<int64_t>(CALL_GENERATED_CODE(f, 0xab0, 0xc, 0, 0, 0));
-  ::printf("f() = %lld\n", res);
+  ::printf("f() = %ld\n", res);
 
-  // TODO(plind) - this test fails on mips64. Fix it!
-  // CHECK_EQ(0x31415926LL, res);
+  CHECK_EQ(0x31415926L, res);
 }
 
 
@@ -357,7 +364,8 @@ TEST(MIPS4) {
 
   // Swap f4 and f5, by using 3 integer registers, t0-t2,
   // both two 32-bit chunks, and one 64-bit chunk.
-  // TODO(plind): mxhc1 is mips32/64-r2 only, not r1.
+  // mXhc1 is mips32/64-r2 only, not r1,
+  // but we will not support r1 in practice.
   __ mfc1(t0, f4);
   __ mfhc1(t1,f4);
   __ dmfc1(t2, f5);
@@ -943,26 +951,25 @@ TEST(MIPS11) {
   Object* dummy = CALL_GENERATED_CODE(f, &t, 0, 0, 0, 0);
   USE(dummy);
 
-  // TODO(plind) - these tests fail on mips64. Fix em.
-  // CHECK_EQ(0x44bbccdd, t.lwl_0);
-  // CHECK_EQ(0x3344ccdd, t.lwl_1);
-  // CHECK_EQ(0x223344dd, t.lwl_2);
-  // CHECK_EQ(0x11223344, t.lwl_3);
+  CHECK_EQ(0x44bbccdd, t.lwl_0);
+  CHECK_EQ(0x3344ccdd, t.lwl_1);
+  CHECK_EQ(0x223344dd, t.lwl_2);
+  CHECK_EQ(0x11223344, t.lwl_3);
 
-  // CHECK_EQ(0x11223344, t.lwr_0);
-  // CHECK_EQ(0xaa112233, t.lwr_1);
-  // CHECK_EQ(0xaabb1122, t.lwr_2);
-  // CHECK_EQ(0xaabbcc11, t.lwr_3);
+  CHECK_EQ(0x11223344, t.lwr_0);
+  CHECK_EQ(0xaa112233, t.lwr_1);
+  CHECK_EQ(0xaabb1122, t.lwr_2);
+  CHECK_EQ(0xaabbcc11, t.lwr_3);
 
-  // CHECK_EQ(0x112233aa, t.swl_0);
-  // CHECK_EQ(0x1122aabb, t.swl_1);
-  // CHECK_EQ(0x11aabbcc, t.swl_2);
-  // CHECK_EQ(0xaabbccdd, t.swl_3);
+  CHECK_EQ(0x112233aa, t.swl_0);
+  CHECK_EQ(0x1122aabb, t.swl_1);
+  CHECK_EQ(0x11aabbcc, t.swl_2);
+  CHECK_EQ(0xaabbccdd, t.swl_3);
 
-  // CHECK_EQ(0xaabbccdd, t.swr_0);
-  // CHECK_EQ(0xbbccdd44, t.swr_1);
-  // CHECK_EQ(0xccdd3344, t.swr_2);
-  // CHECK_EQ(0xdd223344, t.swr_3);
+  CHECK_EQ(0xaabbccdd, t.swr_0);
+  CHECK_EQ(0xbbccdd44, t.swr_1);
+  CHECK_EQ(0xccdd3344, t.swr_2);
+  CHECK_EQ(0xdd223344, t.swr_3);
 }
 
 
@@ -1301,30 +1308,28 @@ TEST(MIPS16) {
   // Check that the data got zero-extended into 64-bit t0.
   __ sd(t2, MemOperand(a0, OFFSET_OF(T, r6)) );
 
-
-  // TODO(plind) - get these tests working too.
   // lh with positive data.
-  // __ lh(t1, MemOperand(a0, OFFSET_OF(T, ui)) );
-  // __ sw(t1, MemOperand(a0, OFFSET_OF(T, r2)) );
+  __ lh(t1, MemOperand(a0, OFFSET_OF(T, ui)) );
+  __ sw(t1, MemOperand(a0, OFFSET_OF(T, r2)) );
 
-  // // lh with negative data.
-  // __ lh(t2, MemOperand(a0, OFFSET_OF(T, si)) );
-  // __ sw(t2, MemOperand(a0, OFFSET_OF(T, r3)) );
+  // lh with negative data.
+  __ lh(t2, MemOperand(a0, OFFSET_OF(T, si)) );
+  __ sw(t2, MemOperand(a0, OFFSET_OF(T, r3)) );
 
-  // // lhu with negative data.
-  // __ lhu(t3, MemOperand(a0, OFFSET_OF(T, si)) );
-  // __ sw(t3, MemOperand(a0, OFFSET_OF(T, r4)) );
+  // lhu with negative data.
+  __ lhu(t3, MemOperand(a0, OFFSET_OF(T, si)) );
+  __ sw(t3, MemOperand(a0, OFFSET_OF(T, r4)) );
 
-  // // lb with negative data.
-  // __ lb(t4, MemOperand(a0, OFFSET_OF(T, si)) );
-  // __ sw(t4, MemOperand(a0, OFFSET_OF(T, r5)) );
+  // lb with negative data.
+  __ lb(t4, MemOperand(a0, OFFSET_OF(T, si)) );
+  __ sw(t4, MemOperand(a0, OFFSET_OF(T, r5)) );
 
   // // sh writes only 1/2 of word.
-  // __ lui(t5, 0x3333);
-  // __ ori(t5, t5, 0x3333);
-  // __ sw(t5, MemOperand(a0, OFFSET_OF(T, r6)) );
-  // __ lhu(t5, MemOperand(a0, OFFSET_OF(T, si)) );
-  // __ sh(t5, MemOperand(a0, OFFSET_OF(T, r6)) );
+  __ lui(t5, 0x3333);
+  __ ori(t5, t5, 0x3333);
+  __ sw(t5, MemOperand(a0, OFFSET_OF(T, r6)) );
+  __ lhu(t5, MemOperand(a0, OFFSET_OF(T, si)) );
+  __ sh(t5, MemOperand(a0, OFFSET_OF(T, r6)) );
 
   __ jr(ra);
   __ nop();
@@ -1336,32 +1341,26 @@ TEST(MIPS16) {
   F3 f = FUNCTION_CAST<F3>(code->entry());
   t.ui = 0x44332211;
   t.si = 0x99aabbcc;
-  t.r1 = 0x1111111111111111LL;
-  t.r2 = 0x2222222222222222LL;
-  t.r3 = 0x3333333333333333LL;
-  t.r4 = 0x4444444444444444LL;
-  t.r5 = 0x5555555555555555LL;
-  t.r6 = 0x6666666666666666LL;
+  t.r1 = 0x1111111111111111;
+  t.r2 = 0x2222222222222222;
+  t.r3 = 0x3333333333333333;
+  t.r4 = 0x4444444444444444;
+  t.r5 = 0x5555555555555555;
+  t.r6 = 0x6666666666666666;
   Object* dummy = CALL_GENERATED_CODE(f, &t, 0, 0, 0, 0);
   USE(dummy);
 
   // Unsigned data, 32 & 64.
-  CHECK_EQ(0x1111111144332211LL, t.r1);
-  CHECK_EQ(0x0000000044332211LL, t.r2);
+  CHECK_EQ(0x1111111144332211L, t.r1);
+  CHECK_EQ(0x0000000000002211L, t.r2);
 
   // Signed data, 32 & 64.
-  CHECK_EQ(0x3333333399aabbccLL, t.r3);
-  CHECK_EQ(0xffffffff99aabbccLL, t.r4);
+  CHECK_EQ(0x33333333ffffbbccL, t.r3);
+  CHECK_EQ(0xffffffff0000bbccL, t.r4);
 
   // Signed data, 32 & 64.
-  CHECK_EQ(0x5555555599aabbccLL, t.r5);
-  CHECK_EQ(0x0000000099aabbccLL, t.r6);
-
-
-  // CHECK_EQ(0xffffbbcc, t.r3);
-  // CHECK_EQ(0x0000bbcc, t.r4);
-  // CHECK_EQ(0xffffffcc, t.r5);
-  // CHECK_EQ(0x3333bbcc, t.r6);
+  CHECK_EQ(0x55555555ffffffccL, t.r5);
+  CHECK_EQ(0x000000003333bbccL, t.r6);
 }
 
 #undef __

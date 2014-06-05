@@ -759,6 +759,14 @@ class MacroAssembler: public Assembler {
   void Cvt_d_uw(FPURegister fd, FPURegister fs, FPURegister scratch);
   void Cvt_d_uw(FPURegister fd, Register rs, FPURegister scratch);
 
+  // Convert double to unsigned long.
+  void Trunc_l_ud(FPURegister fd, FPURegister fs, FPURegister scratch);
+
+  void Trunc_l_d(FPURegister fd, FPURegister fs);
+  void Round_l_d(FPURegister fd, FPURegister fs);
+  void Floor_l_d(FPURegister fd, FPURegister fs);
+  void Ceil_l_d(FPURegister fd, FPURegister fs);
+
   // Convert double to unsigned word.
   void Trunc_uw_d(FPURegister fd, FPURegister fs, FPURegister scratch);
   void Trunc_uw_d(FPURegister fd, Register rs, FPURegister scratch);

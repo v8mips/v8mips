@@ -520,33 +520,32 @@ int Decoder::DecodeTypeRegister(Instruction* instr) {
             case CVT_W_D:
               Format(instr, "cvt.w.d 'fd, 'fs");
               break;
-            case CVT_L_D: {
-              if (kArchVariant == kMips32r2) {
-                Format(instr, "cvt.l.d 'fd, 'fs");
-              } else {
-                Unknown(instr);
-              }
+            case CVT_L_D:
+              Format(instr, "cvt.l.d 'fd, 'fs");
               break;
-            }
             case TRUNC_W_D:
               Format(instr, "trunc.w.d 'fd, 'fs");
               break;
-            case TRUNC_L_D: {
-              if (kArchVariant == kMips32r2) {
-                Format(instr, "trunc.l.d 'fd, 'fs");
-              } else {
-                Unknown(instr);
-              }
+            case TRUNC_L_D:
+              Format(instr, "trunc.l.d 'fd, 'fs");
               break;
-            }
             case ROUND_W_D:
               Format(instr, "round.w.d 'fd, 'fs");
+              break;
+            case ROUND_L_D:
+              Format(instr, "round.l.d 'fd, 'fs");
               break;
             case FLOOR_W_D:
               Format(instr, "floor.w.d 'fd, 'fs");
               break;
+            case FLOOR_L_D:
+              Format(instr, "floor.l.d 'fd, 'fs");
+              break;
             case CEIL_W_D:
               Format(instr, "ceil.w.d 'fd, 'fs");
+              break;
+            case CEIL_L_D:
+              Format(instr, "ceil.l.d 'fd, 'fs");
               break;
             case CVT_S_D:
               Format(instr, "cvt.s.d 'fd, 'fs");
@@ -597,22 +596,12 @@ int Decoder::DecodeTypeRegister(Instruction* instr) {
           break;
         case L:
           switch (instr->FunctionFieldRaw()) {
-            case CVT_D_L: {
-              if (kArchVariant == kMips32r2) {
-                Format(instr, "cvt.d.l 'fd, 'fs");
-              } else {
-                Unknown(instr);
-              }
+            case CVT_D_L:
+              Format(instr, "cvt.d.l 'fd, 'fs");
               break;
-            }
-            case CVT_S_L: {
-              if (kArchVariant == kMips32r2) {
-                Format(instr, "cvt.s.l 'fd, 'fs");
-              } else {
-                Unknown(instr);
-              }
+            case CVT_S_L:
+              Format(instr, "cvt.s.l 'fd, 'fs");
               break;
-            }
             default:
               UNREACHABLE();
           }

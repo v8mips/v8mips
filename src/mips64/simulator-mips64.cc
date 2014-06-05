@@ -1222,6 +1222,36 @@ bool Simulator::set_fcsr_round_error(double original, double rounded) {
 }
 
 
+// Sets the rounding error codes in FCSR based on the result of the rounding.
+// Returns true if the operation was invalid.
+bool Simulator::set_fcsr_round64_error(double original, double rounded) {
+  bool ret = false;
+
+  if (!std::isfinite(original) || !std::isfinite(rounded)) {
+    set_fcsr_bit(kFCSRInvalidOpFlagBit, true);
+    ret = true;
+  }
+
+  if (original != rounded) {
+    set_fcsr_bit(kFCSRInexactFlagBit, true);
+  }
+
+  if (rounded < DBL_MIN && rounded > -DBL_MIN && rounded != 0) {
+    set_fcsr_bit(kFCSRUnderflowFlagBit, true);
+    ret = true;
+  }
+
+  if (rounded > INT64_MAX || rounded < INT64_MIN) {
+    set_fcsr_bit(kFCSROverflowFlagBit, true);
+    // The reference is not really clear but it seems this is required:
+    set_fcsr_bit(kFCSRInvalidOpFlagBit, true);
+    ret = true;
+  }
+
+  return ret;
+}
+
+
 // Raw access to the PC register.
 void Simulator::set_pc(int64_t value) {
   pc_modified_ = true;
@@ -2078,7 +2108,12 @@ void Simulator::ConfigureTypeRegister(Instruction* instr,
           }
           *alu_out = rs + rt;
           break;
-        case ADDU:
+        case ADDU: {
+            int32_t alu32_out = rs + rt;
+            // Sign-extend result of 32bit operation into 64bit register.
+            *alu_out = static_cast<int64_t>(alu32_out);
+          }
+          break;
         case DADDU:
           *alu_out = rs + rt;
           break;
@@ -2093,7 +2128,12 @@ void Simulator::ConfigureTypeRegister(Instruction* instr,
           }
           *alu_out = rs - rt;
           break;
-        case SUBU:
+        case SUBU: {
+            int32_t alu32_out = rs - rt;
+            // Sign-extend result of 32bit operation into 64bit register.
+            *alu_out = static_cast<int64_t>(alu32_out);
+          }
+          break;
         case DSUBU:
           *alu_out = rs - rt;
           break;
@@ -2215,7 +2255,7 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
   const int32_t  fr_reg = instr->FrValue();
   const int32_t  fs_reg = instr->FsValue();
   const int32_t  ft_reg = instr->FtValue();
-  const int32_t  fd_reg = instr->FdValue();
+  const int64_t  fd_reg = instr->FdValue();
   int64_t  i64hilo = 0;
   uint64_t u64hilo = 0;
 
@@ -2367,6 +2407,7 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
               // Rounding modes are not yet supported.
               ASSERT((FCSR_ & 3) == 0);
               // In rounding mode 0 it should behave like ROUND.
+              // No break.
             case ROUND_W_D:  // Round double to word (round half to even).
               {
                 double rounded = std::floor(fs + 0.5);
@@ -2415,32 +2456,49 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
             case CVT_S_D:  // Convert double to float (single).
               set_fpu_register_float(fd_reg, static_cast<float>(fs));
               break;
-            case CVT_L_D: {  // Mips32r2: Truncate double to 64-bit long-word.
+            case CVT_L_D:   // Mips64r2: Truncate double to 64-bit long-word.
+              // Rounding modes are not yet supported.
+              ASSERT((FCSR_ & 3) == 0);
+              // In rounding mode 0 it should behave like ROUND.
+              // No break.
+            case ROUND_L_D: {  // Mips64r2 instruction.
+              // check error cases
+              // TODO: exception handling?
+              double rounded = fs > 0 ? floor(fs + 0.5) : ceil(fs - 0.5);
+              int64_t result = static_cast<int64_t>(rounded);
+              set_fpu_register(fd_reg, result);
+              if (set_fcsr_round64_error(fs, rounded)) {
+                set_fpu_register(fd_reg, kFPU64InvalidResult);
+              }
+              break;
+            }
+            case TRUNC_L_D: {  // Mips64r2 instruction.
               double rounded = trunc(fs);
-              i64 = static_cast<int64_t>(rounded);
-              set_fpu_register(fd_reg, i64);
+              int64_t result = static_cast<int64_t>(rounded);
+              set_fpu_register(fd_reg, result);
+              if (set_fcsr_round64_error(fs, rounded)) {
+                set_fpu_register(fd_reg, kFPU64InvalidResult);
+              }
               break;
             }
-            case TRUNC_L_D: {  // Mips32r2 instruction.
-              double rounded = trunc(fs);
-              i64 = static_cast<int64_t>(rounded);
-              set_fpu_register(fd_reg, i64);
+            case FLOOR_L_D: { // Mips64r2 instruction.
+              double rounded = floor(fs);
+              int64_t result = static_cast<int64_t>(rounded);
+              set_fpu_register(fd_reg, result);
+              if (set_fcsr_round64_error(fs, rounded)) {
+                set_fpu_register(fd_reg, kFPU64InvalidResult);
+              }
               break;
             }
-            case ROUND_L_D: {  // Mips32r2 instruction.
-              double rounded = fs > 0 ? std::floor(fs + 0.5) : ceil(fs - 0.5);
-              i64 = static_cast<int64_t>(rounded);
-              set_fpu_register(fd_reg, i64);
+            case CEIL_L_D: { // Mips64r2 instruction.
+              double rounded = ceil(fs);
+              int64_t result = static_cast<int64_t>(rounded);
+              set_fpu_register(fd_reg, result);
+              if (set_fcsr_round64_error(fs, rounded)) {
+                set_fpu_register(fd_reg, kFPU64InvalidResult);
+              }
               break;
             }
-            case FLOOR_L_D:  // Mips32r2 instruction.
-              i64 = static_cast<int64_t>(std::floor(fs));
-              set_fpu_register(fd_reg, i64);
-              break;
-            case CEIL_L_D:  // Mips32r2 instruction.
-              i64 = static_cast<int64_t>(std::ceil(fs));
-              set_fpu_register(fd_reg, i64);
-              break;
             case C_F_D:
               UNIMPLEMENTED_MIPS();
               break;
@@ -2756,7 +2814,12 @@ void Simulator::DecodeTypeImmediate(Instruction* instr) {
       }
       alu_out = rs + se_imm16;
       break;
-    case ADDIU:
+    case ADDIU: {
+        int32_t alu32_out = rs + se_imm16;
+        // Sign-extend result of 32bit operation into 64bit register.
+        alu_out = static_cast<int64_t>(alu32_out);
+      }
+      break;
     case DADDIU:
       alu_out = rs + se_imm16;
       break;
@@ -2775,8 +2838,11 @@ void Simulator::DecodeTypeImmediate(Instruction* instr) {
     case XORI:
         alu_out = rs ^ oe_imm16;
       break;
-    case LUI:
-        alu_out = (oe_imm16 << 16);
+    case LUI: {
+        int32_t alu32_out = (oe_imm16 << 16);
+        // Sign-extend result of 32bit operation into 64bit register.
+        alu_out = static_cast<int64_t>(alu32_out);
+      }
       break;
     // ------------- Memory instructions.
     case LB:

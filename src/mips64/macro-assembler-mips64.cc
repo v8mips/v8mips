@@ -1292,6 +1292,39 @@ void MacroAssembler::Cvt_d_uw(FPURegister fd,
 }
 
 
+void MacroAssembler::Round_l_d(FPURegister fd, FPURegister fs) {
+  round_l_d(fd, fs);
+}
+
+
+void MacroAssembler::Floor_l_d(FPURegister fd, FPURegister fs) {
+  floor_l_d(fd, fs);
+}
+
+
+void MacroAssembler::Ceil_l_d(FPURegister fd, FPURegister fs) {
+  ceil_l_d(fd, fs);
+}
+
+
+void MacroAssembler::Trunc_l_d(FPURegister fd, FPURegister fs) {
+  trunc_l_d(fd, fs);
+}
+
+
+void MacroAssembler::Trunc_l_ud(FPURegister fd,
+                                FPURegister fs,
+                                FPURegister scratch) {
+  // Load to GPR.
+  dmfc1(t8, fs);
+  // Reset sign bit.
+  li(at, 0x7fffffffffffffff);
+  and_(t8, t8, at );
+  dmtc1(t8, fs);
+  trunc_l_d(fd, fs);
+}
+
+
 void MacroAssembler::Trunc_uw_d(FPURegister fd,
                                 FPURegister fs,
                                 FPURegister scratch) {

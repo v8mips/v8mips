@@ -206,6 +206,7 @@ class Simulator {
   void set_fcsr_bit(uint32_t cc, bool value);
   bool test_fcsr_bit(uint32_t cc);
   bool set_fcsr_round_error(double original, double rounded);
+  bool set_fcsr_round64_error(double original, double rounded);
 
   // Special case of set_register and get_register to access the raw PC value.
   void set_pc(int64_t value);
