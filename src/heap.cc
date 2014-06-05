@@ -49,9 +49,9 @@
 #include "snapshot.h"
 #include "store-buffer.h"
 #include "utils/random-number-generator.h"
+#include "utils.h"
 #include "v8conversions.h"
 #include "v8threads.h"
-#include "v8utils.h"
 #include "vm-state-inl.h"
 #if V8_TARGET_ARCH_ARM && !V8_INTERPRETED_REGEXP
 #include "regexp-macro-assembler.h"
@@ -5682,7 +5682,8 @@ DependentCode* Heap::LookupWeakObjectToCodeDependency(Object* obj) {
 
 void Heap::EnsureWeakObjectToCodeTable() {
   if (!weak_object_to_code_table()->IsHashTable()) {
-    set_weak_object_to_code_table(*isolate()->factory()->NewWeakHashTable(16));
+    set_weak_object_to_code_table(*WeakHashTable::New(
+        isolate(), 16, USE_DEFAULT_MINIMUM_CAPACITY, TENURED));
   }
 }
 

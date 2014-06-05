@@ -3669,8 +3669,7 @@ class HashTable: public FixedArray {
   // Wrapper methods
   inline uint32_t Hash(Key key) {
     if (Shape::UsesSeed) {
-      return Shape::SeededHash(key,
-          GetHeap()->HashSeed());
+      return Shape::SeededHash(key, GetHeap()->HashSeed());
     } else {
       return Shape::Hash(key);
     }
@@ -3678,8 +3677,7 @@ class HashTable: public FixedArray {
 
   inline uint32_t HashForObject(Key key, Object* object) {
     if (Shape::UsesSeed) {
-      return Shape::SeededHashForObject(key,
-          GetHeap()->HashSeed(), object);
+      return Shape::SeededHashForObject(key, GetHeap()->HashSeed(), object);
     } else {
       return Shape::HashForObject(key, object);
     }
@@ -3715,16 +3713,8 @@ class HashTable: public FixedArray {
     SetNumberOfDeletedElements(NumberOfDeletedElements() + n);
   }
 
-  // Returns a new HashTable object. Might return Failure.
-  // TODO(ishell): this will be eventually replaced by New().
-  MUST_USE_RESULT static MaybeObject* Allocate(
-      Heap* heap,
-      int at_least_space_for,
-      MinimumCapacity capacity_option = USE_DEFAULT_MINIMUM_CAPACITY,
-      PretenureFlag pretenure = NOT_TENURED);
-
   // Returns a new HashTable object.
-  static Handle<Derived> New(
+  MUST_USE_RESULT static Handle<Derived> New(
       Isolate* isolate,
       int at_least_space_for,
       MinimumCapacity capacity_option = USE_DEFAULT_MINIMUM_CAPACITY,
@@ -3831,6 +3821,17 @@ class HashTable: public FixedArray {
     return (last + number) & (size - 1);
   }
 
+  // Attempt to shrink hash table after removal of key.
+  MUST_USE_RESULT static Handle<Derived> Shrink(Handle<Derived> table, Key key);
+
+  // Ensure enough space for n additional elements.
+  MUST_USE_RESULT static Handle<Derived> EnsureCapacity(
+      Handle<Derived> table,
+      int n,
+      Key key,
+      PretenureFlag pretenure = NOT_TENURED);
+
+ private:
   // Returns _expected_ if one of entries given by the first _probe_ probes is
   // equal to  _expected_. Otherwise, returns the entry given by the probe
   // number _probe_.
@@ -3839,21 +3840,7 @@ class HashTable: public FixedArray {
   void Swap(uint32_t entry1, uint32_t entry2, WriteBarrierMode mode);
 
   // Rehashes this hash-table into the new table.
-  void Rehash(Derived* new_table, Key key);
-
-  // Attempt to shrink hash table after removal of key.
-  static Handle<Derived> Shrink(Handle<Derived> table, Key key);
-
-  // Ensure enough space for n additional elements.
-  MUST_USE_RESULT MaybeObject* EnsureCapacity(
-      int n,
-      Key key,
-      PretenureFlag pretenure = NOT_TENURED);
-  static Handle<Derived> EnsureCapacity(
-      Handle<Derived> table,
-      int n,
-      Key key,
-      PretenureFlag pretenure = NOT_TENURED);
+  void Rehash(Handle<Derived> new_table, Key key);
 };
 
 
@@ -4011,7 +3998,9 @@ class Dictionary: public HashTable<Derived, Shape, Key> {
       JSObject::DeleteMode mode);
 
   // Attempt to shrink the dictionary after deletion of key.
-  static inline Handle<Derived> Shrink(Handle<Derived> dictionary, Key key) {
+  MUST_USE_RESULT static inline Handle<Derived> Shrink(
+      Handle<Derived> dictionary,
+      Key key) {
     return DerivedHashTable::Shrink(dictionary, key);
   }
 
@@ -4060,11 +4049,11 @@ class Dictionary: public HashTable<Derived, Shape, Key> {
 
   // Sets the entry to (key, value) pair.
   inline void SetEntry(int entry,
-                       Object* key,
-                       Object* value);
+                       Handle<Object> key,
+                       Handle<Object> value);
   inline void SetEntry(int entry,
-                       Object* key,
-                       Object* value,
+                       Handle<Object> key,
+                       Handle<Object> value,
                        PropertyDetails details);
 
   MUST_USE_RESULT static Handle<Derived> Add(
@@ -4081,11 +4070,7 @@ class Dictionary: public HashTable<Derived, Shape, Key> {
       Handle<Object> value);
 
   // Add entry to dictionary.
-  MUST_USE_RESULT MaybeObject* AddEntry(Key key,
-                                        Object* value,
-                                        PropertyDetails details,
-                                        uint32_t hash);
-  MUST_USE_RESULT static Handle<Derived> AddEntry(
+  static void AddEntry(
       Handle<Derived> dictionary,
       Key key,
       Handle<Object> value,
@@ -4252,13 +4237,14 @@ class UnseededNumberDictionary
 };
 
 
-class ObjectHashTableShape : public BaseShape<Object*> {
+class ObjectHashTableShape : public BaseShape<Handle<Object> > {
  public:
-  static inline bool IsMatch(Object* key, Object* other);
-  static inline uint32_t Hash(Object* key);
-  static inline uint32_t HashForObject(Object* key, Object* object);
+  static inline bool IsMatch(Handle<Object> key, Object* other);
+  static inline uint32_t Hash(Handle<Object> key);
+  static inline uint32_t HashForObject(Handle<Object> key, Object* object);
   MUST_USE_RESULT static inline MaybeObject* AsObject(Heap* heap,
-                                                      Object* key);
+                                                      Handle<Object> key);
+  static inline Handle<Object> AsHandle(Isolate* isolate, Handle<Object> key);
   static const int kPrefixSize = 0;
   static const int kEntrySize = 2;
 };
@@ -4268,8 +4254,9 @@ class ObjectHashTableShape : public BaseShape<Object*> {
 // using the identity hash of the key for hashing purposes.
 class ObjectHashTable: public HashTable<ObjectHashTable,
                                         ObjectHashTableShape,
-                                        Object*> {
-  typedef HashTable<ObjectHashTable, ObjectHashTableShape, Object*> HashTable_;
+                                        Handle<Object> > {
+  typedef HashTable<
+      ObjectHashTable, ObjectHashTableShape, Handle<Object> > DerivedHashTable;
  public:
   static inline ObjectHashTable* cast(Object* obj) {
     ASSERT(obj->IsHashTable());
@@ -4277,12 +4264,17 @@ class ObjectHashTable: public HashTable<ObjectHashTable,
   }
 
   // Attempt to shrink hash table after removal of key.
-  static inline Handle<ObjectHashTable> Shrink(Handle<ObjectHashTable> table,
-                                               Handle<Object> key);
+  MUST_USE_RESULT static inline Handle<ObjectHashTable> Shrink(
+      Handle<ObjectHashTable> table,
+      Handle<Object> key);
 
   // Looks up the value associated with the given key. The hole value is
   // returned in case the key is not present.
   Object* Lookup(Object* key);
+
+  int FindEntry(Handle<Object> key);
+  // TODO(ishell): Remove this when all the callers are handlified.
+  int FindEntry(Object* key);
 
   // Adds (or overwrites) the value associated with the given key. Mapping a
   // key to the hole value causes removal of the whole entry.
@@ -4482,13 +4474,12 @@ class OrderedHashMap:public OrderedHashTable<
 
 
 template <int entrysize>
-class WeakHashTableShape : public BaseShape<Object*> {
+class WeakHashTableShape : public BaseShape<Handle<Object> > {
  public:
-  static inline bool IsMatch(Object* key, Object* other);
-  static inline uint32_t Hash(Object* key);
-  static inline uint32_t HashForObject(Object* key, Object* object);
-  MUST_USE_RESULT static inline MaybeObject* AsObject(Heap* heap,
-                                                      Object* key);
+  static inline bool IsMatch(Handle<Object> key, Object* other);
+  static inline uint32_t Hash(Handle<Object> key);
+  static inline uint32_t HashForObject(Handle<Object> key, Object* object);
+  static inline Handle<Object> AsHandle(Isolate* isolate, Handle<Object> key);
   static const int kPrefixSize = 0;
   static const int kEntrySize = entrysize;
 };
@@ -4499,7 +4490,9 @@ class WeakHashTableShape : public BaseShape<Object*> {
 // embedded in optimized code to dependent code lists.
 class WeakHashTable: public HashTable<WeakHashTable,
                                       WeakHashTableShape<2>,
-                                      Object*> {
+                                      Handle<Object> > {
+  typedef HashTable<
+      WeakHashTable, WeakHashTableShape<2>, Handle<Object> > DerivedHashTable;
  public:
   static inline WeakHashTable* cast(Object* obj) {
     ASSERT(obj->IsHashTable());
@@ -4509,6 +4502,10 @@ class WeakHashTable: public HashTable<WeakHashTable,
   // Looks up the value associated with the given key. The hole value is
   // returned in case the key is not present.
   Object* Lookup(Object* key);
+
+  int FindEntry(Handle<Object> key);
+  // TODO(ishell): Remove this when all the callers are handlified.
+  int FindEntry(Object* key);
 
   // Adds (or overwrites) the value associated with the given key. Mapping a
   // key to the hole value causes removal of the whole entry.

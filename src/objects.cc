@@ -692,7 +692,7 @@ void JSObject::SetNormalizedProperty(Handle<JSObject> object,
     // Please note we have to update the property details.
     property_dictionary->DetailsAtPut(entry, details);
   } else {
-    property_dictionary->SetEntry(entry, *name, *value, details);
+    property_dictionary->SetEntry(entry, name, value, details);
   }
 }
 
@@ -1932,7 +1932,7 @@ void JSObject::AddSlowProperty(Handle<JSObject> object,
       int index = dict->NextEnumerationIndex();
       PropertyDetails details = PropertyDetails(attributes, NORMAL, index);
       dict->SetNextEnumerationIndex(index + 1);
-      dict->SetEntry(entry, *name, *cell, details);
+      dict->SetEntry(entry, name, cell, details);
       return;
     }
     Handle<PropertyCell> cell = isolate->factory()->NewPropertyCell(value);
@@ -5176,9 +5176,8 @@ Handle<ObjectHashTable> JSObject::GetOrCreateHiddenPropertiesHashtable(
     return Handle<ObjectHashTable>::cast(inline_value);
   }
 
-  Handle<ObjectHashTable> hashtable = isolate->factory()->NewObjectHashTable(
-      kInitialCapacity,
-      USE_CUSTOM_MINIMUM_CAPACITY);
+  Handle<ObjectHashTable> hashtable = ObjectHashTable::New(
+      isolate, kInitialCapacity, USE_CUSTOM_MINIMUM_CAPACITY);
 
   if (inline_value->IsSmi()) {
     // We were storing the identity hash inline and now allocated an actual
@@ -14585,11 +14584,12 @@ void HashTable<Derived, Shape, Key>::IterateElements(ObjectVisitor* v) {
 
 
 template<typename Derived, typename Shape, typename Key>
-MaybeObject* HashTable<Derived, Shape, Key>::Allocate(
-    Heap* heap,
+Handle<Derived> HashTable<Derived, Shape, Key>::New(
+    Isolate* isolate,
     int at_least_space_for,
     MinimumCapacity capacity_option,
     PretenureFlag pretenure) {
+  ASSERT(0 <= at_least_space_for);
   ASSERT(!capacity_option || IsPowerOf2(at_least_space_for));
   int capacity = (capacity_option == USE_CUSTOM_MINIMUM_CAPACITY)
                      ? at_least_space_for
@@ -14598,28 +14598,16 @@ MaybeObject* HashTable<Derived, Shape, Key>::Allocate(
     v8::internal::Heap::FatalProcessOutOfMemory("invalid table size", true);
   }
 
-  Object* obj;
-  { MaybeObject* maybe_obj =
-        heap-> AllocateHashTable(EntryToIndex(capacity), pretenure);
-    if (!maybe_obj->ToObject(&obj)) return maybe_obj;
-  }
-  HashTable::cast(obj)->SetNumberOfElements(0);
-  HashTable::cast(obj)->SetNumberOfDeletedElements(0);
-  HashTable::cast(obj)->SetCapacity(capacity);
-  return obj;
-}
+  Factory* factory = isolate->factory();
+  int length = EntryToIndex(capacity);
+  Handle<FixedArray> array = factory->NewFixedArray(length, pretenure);
+  array->set_map_no_write_barrier(*factory->hash_table_map());
+  Handle<Derived> table = Handle<Derived>::cast(array);
 
-
-template<typename Derived, typename Shape, typename Key>
-Handle<Derived> HashTable<Derived, Shape, Key>::New(
-    Isolate* isolate,
-    int at_least_space_for,
-    MinimumCapacity capacity_option,
-    PretenureFlag pretenure) {
-  CALL_HEAP_FUNCTION(
-      isolate,
-      Allocate(isolate->heap(), at_least_space_for, capacity_option, pretenure),
-      Derived);
+  table->SetNumberOfElements(0);
+  table->SetNumberOfDeletedElements(0);
+  table->SetCapacity(capacity);
+  return table;
 }
 
 
@@ -14673,7 +14661,9 @@ int NameDictionary::FindEntry(Handle<Name> key) {
 
 
 template<typename Derived, typename Shape, typename Key>
-void HashTable<Derived, Shape, Key>::Rehash(Derived* new_table, Key key) {
+void HashTable<Derived, Shape, Key>::Rehash(
+    Handle<Derived> new_table,
+    Key key) {
   ASSERT(NumberOfElements() < new_table->Capacity());
 
   DisallowHeapAllocation no_gc;
@@ -14775,49 +14765,35 @@ void HashTable<Derived, Shape, Key>::Rehash(Key key) {
 
 
 template<typename Derived, typename Shape, typename Key>
-MaybeObject* HashTable<Derived, Shape, Key>::EnsureCapacity(
-    int n,
-    Key key,
-    PretenureFlag pretenure) {
-  int capacity = Capacity();
-  int nof = NumberOfElements() + n;
-  int nod = NumberOfDeletedElements();
-  // Return if:
-  //   50% is still free after adding n elements and
-  //   at most 50% of the free elements are deleted elements.
-  if (nod <= (capacity - nof) >> 1) {
-    int needed_free = nof >> 1;
-    if (nof + needed_free <= capacity) return this;
-  }
-
-  const int kMinCapacityForPretenure = 256;
-  bool should_pretenure = pretenure == TENURED ||
-      ((capacity > kMinCapacityForPretenure) && !GetHeap()->InNewSpace(this));
-  Object* obj;
-  { MaybeObject* maybe_obj =
-        Allocate(GetHeap(),
-                 nof * 2,
-                 USE_DEFAULT_MINIMUM_CAPACITY,
-                 should_pretenure ? TENURED : NOT_TENURED);
-    if (!maybe_obj->ToObject(&obj)) return maybe_obj;
-  }
-
-  Rehash(Derived::cast(obj), key);
-  return Derived::cast(obj);
-}
-
-
-template<typename Derived, typename Shape, typename Key>
 Handle<Derived> HashTable<Derived, Shape, Key>::EnsureCapacity(
     Handle<Derived> table,
     int n,
     Key key,
     PretenureFlag pretenure) {
   Isolate* isolate = table->GetIsolate();
-  CALL_HEAP_FUNCTION(
+  int capacity = table->Capacity();
+  int nof = table->NumberOfElements() + n;
+  int nod = table->NumberOfDeletedElements();
+  // Return if:
+  //   50% is still free after adding n elements and
+  //   at most 50% of the free elements are deleted elements.
+  if (nod <= (capacity - nof) >> 1) {
+    int needed_free = nof >> 1;
+    if (nof + needed_free <= capacity) return table;
+  }
+
+  const int kMinCapacityForPretenure = 256;
+  bool should_pretenure = pretenure == TENURED ||
+      ((capacity > kMinCapacityForPretenure) &&
+          !isolate->heap()->InNewSpace(*table));
+  Handle<Derived> new_table = HashTable::New(
       isolate,
-      static_cast<HashTable*>(*table)->EnsureCapacity(n, key, pretenure),
-      Derived);
+      nof * 2,
+      USE_DEFAULT_MINIMUM_CAPACITY,
+      should_pretenure ? TENURED : NOT_TENURED);
+
+  table->Rehash(new_table, key);
+  return new_table;
 }
 
 
@@ -14842,13 +14818,13 @@ Handle<Derived> HashTable<Derived, Shape, Key>::Shrink(Handle<Derived> table,
   bool pretenure =
       (at_least_room_for > kMinCapacityForPretenure) &&
       !isolate->heap()->InNewSpace(*table);
-  Handle<Derived> new_table = New(
+  Handle<Derived> new_table = HashTable::New(
       isolate,
       at_least_room_for,
       USE_DEFAULT_MINIMUM_CAPACITY,
       pretenure ? TENURED : NOT_TENURED);
 
-  table->Rehash(*new_table, key);
+  table->Rehash(new_table, key);
   return new_table;
 }
 
@@ -14879,9 +14855,11 @@ template class HashTable<CompilationCacheTable,
 
 template class HashTable<MapCache, MapCacheShape, HashTableKey*>;
 
-template class HashTable<ObjectHashTable, ObjectHashTableShape, Object*>;
+template class HashTable<ObjectHashTable,
+                         ObjectHashTableShape,
+                         Handle<Object> >;
 
-template class HashTable<WeakHashTable, WeakHashTableShape<2>, Object*>;
+template class HashTable<WeakHashTable, WeakHashTableShape<2>, Handle<Object> >;
 
 template class Dictionary<NameDictionary, NameDictionaryShape, Handle<Name> >;
 
@@ -15003,18 +14981,6 @@ Dictionary<UnseededNumberDictionary, UnseededNumberDictionaryShape, uint32_t>::
 template Handle<NameDictionary>
 Dictionary<NameDictionary, NameDictionaryShape, Handle<Name> >::
     EnsureCapacity(Handle<NameDictionary>, int, Handle<Name>);
-
-template MaybeObject*
-Dictionary<SeededNumberDictionary, SeededNumberDictionaryShape, uint32_t>::
-    AddEntry(uint32_t, Object*, PropertyDetails, uint32_t);
-
-template MaybeObject*
-Dictionary<UnseededNumberDictionary, UnseededNumberDictionaryShape, uint32_t>::
-    AddEntry(uint32_t, Object*, PropertyDetails, uint32_t);
-
-template MaybeObject*
-Dictionary<NameDictionary, NameDictionaryShape, Handle<Name> >::AddEntry(
-    Handle<Name>, Object*, PropertyDetails, uint32_t);
 
 template
 int Dictionary<SeededNumberDictionary, SeededNumberDictionaryShape, uint32_t>::
@@ -15864,8 +15830,9 @@ Handle<Object> Dictionary<Derived, Shape, Key>::DeleteProperty(
   if (details.IsDontDelete() && mode != JSReceiver::FORCE_DELETION) {
     return factory->false_value();
   }
+
   dictionary->SetEntry(
-      entry, *factory->the_hole_value(), *factory->the_hole_value());
+      entry, factory->the_hole_value(), factory->the_hole_value());
   dictionary->ElementRemoved();
   return factory->true_value();
 }
@@ -15890,7 +15857,8 @@ Handle<Derived> Dictionary<Derived, Shape, Key>::AtPut(
   USE(k);
   PropertyDetails details = PropertyDetails(NONE, NORMAL, 0);
 
-  return AddEntry(dictionary, key, value, details, dictionary->Hash(key));
+  AddEntry(dictionary, key, value, details, dictionary->Hash(key));
+  return dictionary;
 }
 
 
@@ -15905,52 +15873,37 @@ Handle<Derived> Dictionary<Derived, Shape, Key>::Add(
   // Check whether the dictionary should be extended.
   dictionary = EnsureCapacity(dictionary, 1, key);
 
-  return AddEntry(dictionary, key, value, details, dictionary->Hash(key));
+  AddEntry(dictionary, key, value, details, dictionary->Hash(key));
+  return dictionary;
 }
 
 
 // Add a key, value pair to the dictionary.
 template<typename Derived, typename Shape, typename Key>
-Handle<Derived> Dictionary<Derived, Shape, Key>::AddEntry(
+void Dictionary<Derived, Shape, Key>::AddEntry(
     Handle<Derived> dictionary,
     Key key,
     Handle<Object> value,
     PropertyDetails details,
     uint32_t hash) {
-  CALL_HEAP_FUNCTION(
-      dictionary->GetIsolate(),
-      dictionary->AddEntry(key, *value, details, hash),
-      Derived);
-}
-
-template<typename Derived, typename Shape, typename Key>
-MaybeObject* Dictionary<Derived, Shape, Key>::AddEntry(
-    Key key,
-    Object* value,
-    PropertyDetails details,
-    uint32_t hash) {
   // Compute the key object.
-  Object* k;
-  { MaybeObject* maybe_k = Shape::AsObject(this->GetHeap(), key);
-    if (!maybe_k->ToObject(&k)) return maybe_k;
-  }
+  Handle<Object> k = Shape::AsHandle(dictionary->GetIsolate(), key);
 
-  uint32_t entry = Dictionary::FindInsertionEntry(hash);
+  uint32_t entry = dictionary->FindInsertionEntry(hash);
   // Insert element at empty or deleted entry
   if (!details.IsDeleted() &&
       details.dictionary_index() == 0 &&
       Shape::kIsEnumerable) {
     // Assign an enumeration index to the property and update
     // SetNextEnumerationIndex.
-    int index = NextEnumerationIndex();
+    int index = dictionary->NextEnumerationIndex();
     details = PropertyDetails(details.attributes(), details.type(), index);
-    SetNextEnumerationIndex(index + 1);
+    dictionary->SetNextEnumerationIndex(index + 1);
   }
-  SetEntry(entry, k, value, details);
-  ASSERT((Dictionary::KeyAt(entry)->IsNumber() ||
-          Dictionary::KeyAt(entry)->IsName()));
-  DerivedHashTable::ElementAdded();
-  return this;
+  dictionary->SetEntry(entry, k, value, details);
+  ASSERT((dictionary->KeyAt(entry)->IsNumber() ||
+          dictionary->KeyAt(entry)->IsName()));
+  dictionary->ElementAdded();
 }
 
 
@@ -16026,7 +15979,7 @@ Handle<SeededNumberDictionary> SeededNumberDictionary::Set(
                             dictionary->DetailsAt(entry).dictionary_index());
   Handle<Object> object_key =
       SeededNumberDictionaryShape::AsHandle(dictionary->GetIsolate(), key);
-  dictionary->SetEntry(entry, *object_key, *value, details);
+  dictionary->SetEntry(entry, object_key, value, details);
   return dictionary;
 }
 
@@ -16039,7 +15992,7 @@ Handle<UnseededNumberDictionary> UnseededNumberDictionary::Set(
   if (entry == kNotFound) return AddNumberEntry(dictionary, key, value);
   Handle<Object> object_key =
       UnseededNumberDictionaryShape::AsHandle(dictionary->GetIsolate(), key);
-  dictionary->SetEntry(entry, *object_key, *value);
+  dictionary->SetEntry(entry, object_key, value);
   return dictionary;
 }
 
@@ -16186,6 +16139,21 @@ Object* ObjectHashTable::Lookup(Object* key) {
 }
 
 
+// TODO(ishell): Try to remove this when FindEntry(Object* key) is removed
+int ObjectHashTable::FindEntry(Handle<Object> key) {
+  return DerivedHashTable::FindEntry(key);
+}
+
+
+// TODO(ishell): Remove this when all the callers are handlified.
+int ObjectHashTable::FindEntry(Object* key) {
+  DisallowHeapAllocation no_allocation;
+  Isolate* isolate = GetIsolate();
+  HandleScope scope(isolate);
+  return FindEntry(handle(key, isolate));
+}
+
+
 Handle<ObjectHashTable> ObjectHashTable::Put(Handle<ObjectHashTable> table,
                                              Handle<Object> key,
                                              Handle<Object> value) {
@@ -16196,7 +16164,7 @@ Handle<ObjectHashTable> ObjectHashTable::Put(Handle<ObjectHashTable> table,
   // Make sure the key object has an identity hash code.
   Handle<Object> hash = Object::GetOrCreateHash(key, isolate);
 
-  int entry = table->FindEntry(*key);
+  int entry = table->FindEntry(key);
 
   // Check whether to perform removal operation.
   if (value->IsTheHole()) {
@@ -16212,7 +16180,7 @@ Handle<ObjectHashTable> ObjectHashTable::Put(Handle<ObjectHashTable> table,
   }
 
   // Check whether the hash table should be extended.
-  table = EnsureCapacity(table, 1, *key);
+  table = EnsureCapacity(table, 1, key);
   table->AddEntry(table->FindInsertionEntry(Handle<Smi>::cast(hash)->value()),
                   *key,
                   *value);
@@ -16242,11 +16210,26 @@ Object* WeakHashTable::Lookup(Object* key) {
 }
 
 
+// TODO(ishell): Try to remove this when FindEntry(Object* key) is removed
+int WeakHashTable::FindEntry(Handle<Object> key) {
+  return DerivedHashTable::FindEntry(key);
+}
+
+
+// TODO(ishell): Remove this when all the callers are handlified.
+int WeakHashTable::FindEntry(Object* key) {
+  DisallowHeapAllocation no_allocation;
+  Isolate* isolate = GetIsolate();
+  HandleScope scope(isolate);
+  return FindEntry(handle(key, isolate));
+}
+
+
 Handle<WeakHashTable> WeakHashTable::Put(Handle<WeakHashTable> table,
                                          Handle<Object> key,
                                          Handle<Object> value) {
   ASSERT(table->IsKey(*key));
-  int entry = table->FindEntry(*key);
+  int entry = table->FindEntry(key);
   // Key is already in table, just overwrite value.
   if (entry != kNotFound) {
     table->set(EntryToValueIndex(entry), *value);
@@ -16254,9 +16237,9 @@ Handle<WeakHashTable> WeakHashTable::Put(Handle<WeakHashTable> table,
   }
 
   // Check whether the hash table should be extended.
-  table = EnsureCapacity(table, 1, *key, TENURED);
+  table = EnsureCapacity(table, 1, key, TENURED);
 
-  table->AddEntry(table->FindInsertionEntry(table->Hash(*key)), key, value);
+  table->AddEntry(table->FindInsertionEntry(table->Hash(key)), key, value);
   return table;
 }
 
