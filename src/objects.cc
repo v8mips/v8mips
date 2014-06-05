@@ -2764,44 +2764,80 @@ Handle<Map> Map::GeneralizeAllFieldRepresentations(
 }
 
 
-Handle<Map> Map::CurrentMapForDeprecated(Handle<Map> map) {
+// static
+MaybeHandle<Map> Map::CurrentMapForDeprecated(Handle<Map> map) {
   Handle<Map> proto_map(map);
   while (proto_map->prototype()->IsJSObject()) {
     Handle<JSObject> holder(JSObject::cast(proto_map->prototype()));
-    if (holder->map()->is_deprecated()) {
-      JSObject::TryMigrateInstance(holder);
-    }
     proto_map = Handle<Map>(holder->map());
+    if (proto_map->is_deprecated() && JSObject::TryMigrateInstance(holder)) {
+      proto_map = Handle<Map>(holder->map());
+    }
   }
   return CurrentMapForDeprecatedInternal(map);
 }
 
 
-Handle<Map> Map::CurrentMapForDeprecatedInternal(Handle<Map> map) {
-  if (!map->is_deprecated()) return map;
-
+// static
+MaybeHandle<Map> Map::CurrentMapForDeprecatedInternal(Handle<Map> old_map) {
   DisallowHeapAllocation no_allocation;
-  DescriptorArray* old_descriptors = map->instance_descriptors();
+  DisallowDeoptimization no_deoptimization(old_map->GetIsolate());
 
-  int descriptors = map->NumberOfOwnDescriptors();
-  Map* root_map = map->FindRootMap();
+  if (!old_map->is_deprecated()) return old_map;
 
   // Check the state of the root map.
-  if (!map->EquivalentToForTransition(root_map)) return Handle<Map>();
-  int verbatim = root_map->NumberOfOwnDescriptors();
+  Map* root_map = old_map->FindRootMap();
+  if (!old_map->EquivalentToForTransition(root_map)) return MaybeHandle<Map>();
+  int root_nof = root_map->NumberOfOwnDescriptors();
 
-  Map* updated = root_map->FindUpdatedMap(
-      verbatim, descriptors, old_descriptors);
-  if (updated == NULL) return Handle<Map>();
+  int old_nof = old_map->NumberOfOwnDescriptors();
+  DescriptorArray* old_descriptors = old_map->instance_descriptors();
 
-  DescriptorArray* updated_descriptors = updated->instance_descriptors();
-  int valid = updated->NumberOfOwnDescriptors();
-  if (!updated_descriptors->IsMoreGeneralThan(
-          verbatim, valid, descriptors, old_descriptors)) {
-    return Handle<Map>();
+  Map* new_map = root_map;
+  for (int i = root_nof; i < old_nof; ++i) {
+    int j = new_map->SearchTransition(old_descriptors->GetKey(i));
+    if (j == TransitionArray::kNotFound) return MaybeHandle<Map>();
+    new_map = new_map->GetTransition(j);
+    DescriptorArray* new_descriptors = new_map->instance_descriptors();
+
+    PropertyDetails new_details = new_descriptors->GetDetails(i);
+    PropertyDetails old_details = old_descriptors->GetDetails(i);
+    if (old_details.attributes() != new_details.attributes() ||
+        !old_details.representation().fits_into(new_details.representation())) {
+      return MaybeHandle<Map>();
+    }
+    PropertyType new_type = new_details.type();
+    PropertyType old_type = old_details.type();
+    Object* new_value = new_descriptors->GetValue(i);
+    Object* old_value = old_descriptors->GetValue(i);
+    switch (new_type) {
+      case FIELD:
+        if ((old_type == FIELD &&
+             !HeapType::cast(old_value)->NowIs(HeapType::cast(new_value))) ||
+            (old_type == CONSTANT &&
+             !HeapType::cast(new_value)->NowContains(old_value)) ||
+            (old_type == CALLBACKS &&
+             !HeapType::Any()->Is(HeapType::cast(new_value)))) {
+          return MaybeHandle<Map>();
+        }
+        break;
+
+      case CONSTANT:
+      case CALLBACKS:
+        if (old_type != new_type || old_value != new_value) {
+          return MaybeHandle<Map>();
+        }
+        break;
+
+      case NORMAL:
+      case HANDLER:
+      case INTERCEPTOR:
+      case NONEXISTENT:
+        UNREACHABLE();
+    }
   }
-
-  return handle(updated);
+  if (new_map->NumberOfOwnDescriptors() != old_nof) return MaybeHandle<Map>();
+  return handle(new_map);
 }
 
 
@@ -3903,15 +3939,20 @@ void JSObject::MigrateInstance(Handle<JSObject> object) {
 }
 
 
-Handle<Object> JSObject::TryMigrateInstance(Handle<JSObject> object) {
-  Handle<Map> original_map(object->map());
-  Handle<Map> new_map = Map::CurrentMapForDeprecatedInternal(original_map);
-  if (new_map.is_null()) return Handle<Object>();
+// static
+bool JSObject::TryMigrateInstance(Handle<JSObject> object) {
+  Isolate* isolate = object->GetIsolate();
+  DisallowDeoptimization no_deoptimization(isolate);
+  Handle<Map> original_map(object->map(), isolate);
+  Handle<Map> new_map;
+  if (!Map::CurrentMapForDeprecatedInternal(original_map).ToHandle(&new_map)) {
+    return false;
+  }
   JSObject::MigrateToMap(object, new_map);
   if (FLAG_trace_migration) {
     object->PrintInstanceMigration(stdout, *original_map, object->map());
   }
-  return object;
+  return true;
 }
 
 
@@ -14527,7 +14568,7 @@ class InternalizedStringKey : public HashTableKey {
     }
     // Otherwise allocate a new internalized string.
     return isolate->factory()->NewInternalizedStringImpl(
-        *string_, string_->length(), string_->hash_field());
+        string_, string_->length(), string_->hash_field());
   }
 
   static uint32_t StringHash(Object* obj) {
