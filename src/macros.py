@@ -101,7 +101,7 @@ const STRING_TO_REGEXP_CACHE_ID = 0;
 #       values of 'bar'.
 macro IS_NULL(arg)              = (arg === null);
 macro IS_NULL_OR_UNDEFINED(arg) = (arg == null);
-macro IS_UNDEFINED(arg)         = (typeof(arg) === 'undefined');
+macro IS_UNDEFINED(arg)         = (arg === (void 0));
 macro IS_NUMBER(arg)            = (typeof(arg) === 'number');
 macro IS_STRING(arg)            = (typeof(arg) === 'string');
 macro IS_BOOLEAN(arg)           = (typeof(arg) === 'boolean');
@@ -276,3 +276,8 @@ const PROPERTY_ATTRIBUTES_NONE = 0;
 const PROPERTY_ATTRIBUTES_STRING = 8;
 const PROPERTY_ATTRIBUTES_SYMBOLIC = 16;
 const PROPERTY_ATTRIBUTES_PRIVATE_SYMBOL = 32;
+
+# Use for keys, values and entries iterators.
+const ITERATOR_KIND_KEYS = 1;
+const ITERATOR_KIND_VALUES = 2;
+const ITERATOR_KIND_ENTRIES = 3;

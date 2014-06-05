@@ -826,20 +826,6 @@ class Heap {
   MUST_USE_RESULT MaybeObject* AllocateInternalizedStringImpl(
       T t, int chars, uint32_t hash_field);
 
-  // Allocates and partially initializes a String.  There are two String
-  // encodings: ASCII and two byte.  These functions allocate a string of the
-  // given length and set its map and length fields.  The characters of the
-  // string are uninitialized.
-  // Returns Failure::RetryAfterGC(requested_bytes, space) if the allocation
-  // failed.
-  // Please note this does not perform a garbage collection.
-  MUST_USE_RESULT MaybeObject* AllocateRawOneByteString(
-      int length,
-      PretenureFlag pretenure = NOT_TENURED);
-  MUST_USE_RESULT MaybeObject* AllocateRawTwoByteString(
-      int length,
-      PretenureFlag pretenure = NOT_TENURED);
-
   // Computes a single character string where the character has code.
   // A cache is used for ASCII codes.
   // Returns Failure::RetryAfterGC(requested_bytes, space) if the allocation
@@ -992,15 +978,6 @@ class Heap {
   // Finalizes an external string by deleting the associated external
   // data and clearing the resource pointer.
   inline void FinalizeExternalString(String* string);
-
-  // Allocates an uninitialized object.  The memory is non-executable if the
-  // hardware and OS allow.
-  // Returns Failure::RetryAfterGC(requested_bytes, space) if the allocation
-  // failed.
-  // Please note this function does not perform a garbage collection.
-  MUST_USE_RESULT inline MaybeObject* AllocateRaw(int size_in_bytes,
-                                                  AllocationSpace space,
-                                                  AllocationSpace retry_space);
 
   // Initialize a filler object to keep the ability to iterate over the heap
   // when shortening objects.
@@ -1998,6 +1975,14 @@ class Heap {
     return (pretenure == TENURED) ? preferred_old_space : NEW_SPACE;
   }
 
+  // Allocate an uninitialized object.  The memory is non-executable if the
+  // hardware and OS allow.  This is the single choke-point for allocations
+  // performed by the runtime and should not be bypassed (to extend this to
+  // inlined allocations, use the Heap::DisableInlineAllocation() support).
+  MUST_USE_RESULT inline MaybeObject* AllocateRaw(int size_in_bytes,
+                                                  AllocationSpace space,
+                                                  AllocationSpace retry_space);
+
   // Allocate an uninitialized fixed array.
   MUST_USE_RESULT MaybeObject* AllocateRawFixedArray(
       int length, PretenureFlag pretenure);
@@ -2009,6 +1994,15 @@ class Heap {
   // Allocate an initialized fixed array with the given filler value.
   MUST_USE_RESULT MaybeObject* AllocateFixedArrayWithFiller(
       int length, PretenureFlag pretenure, Object* filler);
+
+  // Allocate and partially initializes a String.  There are two String
+  // encodings: ASCII and two byte.  These functions allocate a string of the
+  // given length and set its map and length fields.  The characters of the
+  // string are uninitialized.
+  MUST_USE_RESULT MaybeObject* AllocateRawOneByteString(
+      int length, PretenureFlag pretenure);
+  MUST_USE_RESULT MaybeObject* AllocateRawTwoByteString(
+      int length, PretenureFlag pretenure);
 
   // Initializes a JSObject based on its map.
   void InitializeJSObjectFromMap(JSObject* obj,
