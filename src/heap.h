@@ -348,7 +348,6 @@ namespace internal {
     "KeyedStoreElementMonomorphic")                                      \
   V(stack_overflow_string, "kStackOverflowBoilerplate")                  \
   V(illegal_access_string, "illegal access")                             \
-  V(illegal_execution_state_string, "illegal execution state")           \
   V(get_string, "get")                                                   \
   V(set_string, "set")                                                   \
   V(map_field_string, "%map")                                            \
@@ -755,6 +754,12 @@ class Heap {
   MUST_USE_RESULT MaybeObject* AllocatePartialMap(InstanceType instance_type,
                                                   int instance_size);
 
+  // Allocate a block of memory in the given space (filled with a filler).
+  // Used as a fall-back for generated code when the space is full.
+  MUST_USE_RESULT MaybeObject* AllocateFillerObject(int size,
+                                                    bool double_align,
+                                                    AllocationSpace space);
+
   // Allocates an empty PolymorphicCodeCache.
   MUST_USE_RESULT MaybeObject* AllocatePolymorphicCodeCache();
 
@@ -785,9 +790,6 @@ class Heap {
   // Returns Failure::RetryAfterGC(requested_bytes, space) if the allocation
   // failed.
   // Please note this does not perform a garbage collection.
-  MUST_USE_RESULT MaybeObject* AllocateStringFromOneByte(
-      Vector<const uint8_t> str,
-      PretenureFlag pretenure = NOT_TENURED);
   MUST_USE_RESULT MaybeObject* AllocateStringFromUtf8Slow(
       Vector<const char> str,
       int non_ascii_start,

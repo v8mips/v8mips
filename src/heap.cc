@@ -2413,6 +2413,22 @@ MaybeObject* Heap::AllocateMap(InstanceType instance_type,
 }
 
 
+MaybeObject* Heap::AllocateFillerObject(int size,
+                                        bool double_align,
+                                        AllocationSpace space) {
+  HeapObject* allocation;
+  { MaybeObject* maybe_allocation = AllocateRaw(size, space, space);
+    if (!maybe_allocation->To(&allocation)) return maybe_allocation;
+  }
+#ifdef DEBUG
+  MemoryChunk* chunk = MemoryChunk::FromAddress(allocation->address());
+  ASSERT(chunk->owner()->identity() == space);
+#endif
+  CreateFillerObjectAt(allocation->address(), size);
+  return allocation;
+}
+
+
 MaybeObject* Heap::AllocatePolymorphicCodeCache() {
   return AllocateStruct(POLYMORPHIC_CODE_CACHE_TYPE);
 }
@@ -3934,26 +3950,6 @@ MaybeObject* Heap::CopyJSObject(JSObject* source, AllocationSite* site) {
   }
   // Return the new clone.
   return clone;
-}
-
-
-MaybeObject* Heap::AllocateStringFromOneByte(Vector<const uint8_t> string,
-                                             PretenureFlag pretenure) {
-  int length = string.length();
-  if (length == 1) {
-    return Heap::LookupSingleCharacterStringFromCode(string[0]);
-  }
-  Object* result;
-  { MaybeObject* maybe_result =
-        AllocateRawOneByteString(string.length(), pretenure);
-    if (!maybe_result->ToObject(&result)) return maybe_result;
-  }
-
-  // Copy the characters into the new object.
-  CopyChars(SeqOneByteString::cast(result)->GetChars(),
-            string.start(),
-            length);
-  return result;
 }
 
 
