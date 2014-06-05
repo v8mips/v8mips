@@ -268,8 +268,8 @@ TEST(GarbageCollection) {
   {
     HandleScope inner_scope(isolate);
     // Allocate a function and keep it in global object's property.
-    Handle<JSFunction> function =
-        factory->NewFunction(name, factory->undefined_value());
+    Handle<JSFunction> function = factory->NewFunctionWithPrototype(
+        name, factory->undefined_value());
     Handle<Map> initial_map =
         factory->NewMap(JS_OBJECT_TYPE, JSObject::kHeaderSize);
     function->set_initial_map(*initial_map);
@@ -627,8 +627,8 @@ TEST(FunctionAllocation) {
 
   v8::HandleScope sc(CcTest::isolate());
   Handle<String> name = factory->InternalizeUtf8String("theFunction");
-  Handle<JSFunction> function =
-      factory->NewFunction(name, factory->undefined_value());
+  Handle<JSFunction> function = factory->NewFunctionWithPrototype(
+      name, factory->undefined_value());
   Handle<Map> initial_map =
       factory->NewMap(JS_OBJECT_TYPE, JSObject::kHeaderSize);
   function->set_initial_map(*initial_map);
@@ -726,8 +726,8 @@ TEST(JSObjectMaps) {
 
   v8::HandleScope sc(CcTest::isolate());
   Handle<String> name = factory->InternalizeUtf8String("theFunction");
-  Handle<JSFunction> function =
-      factory->NewFunction(name, factory->undefined_value());
+  Handle<JSFunction> function = factory->NewFunctionWithPrototype(
+      name, factory->undefined_value());
   Handle<Map> initial_map =
       factory->NewMap(JS_OBJECT_TYPE, JSObject::kHeaderSize);
   function->set_initial_map(*initial_map);

@@ -1452,7 +1452,8 @@ class Object : public MaybeObject {
   // Oddball testing.
   INLINE(bool IsUndefined());
   INLINE(bool IsNull());
-  INLINE(bool IsTheHole());  // Shadows MaybeObject's implementation.
+  INLINE(bool IsTheHole());
+  INLINE(bool IsException());
   INLINE(bool IsUninitialized());
   INLINE(bool IsTrue());
   INLINE(bool IsFalse());
@@ -1533,7 +1534,6 @@ class Object : public MaybeObject {
   // Failure is returned otherwise.
   static MUST_USE_RESULT inline Handle<Object> ToSmi(Isolate* isolate,
                                                      Handle<Object> object);
-  MUST_USE_RESULT inline MaybeObject* ToSmi();
 
   void Lookup(Name* name, LookupResult* result);
 
@@ -2653,9 +2653,10 @@ class JSObject: public JSReceiver {
                                        = UPDATE_WRITE_BARRIER);
 
   // Set the object's prototype (only JSReceiver and null are allowed values).
-  static Handle<Object> SetPrototype(Handle<JSObject> object,
-                                     Handle<Object> value,
-                                     bool skip_hidden_prototypes = false);
+  MUST_USE_RESULT static MaybeHandle<Object> SetPrototype(
+      Handle<JSObject> object,
+      Handle<Object> value,
+      bool skip_hidden_prototypes = false);
 
   // Initializes the body after properties slot, properties slot is
   // initialized by set_properties.  Fill the pre-allocated fields with
@@ -2688,11 +2689,13 @@ class JSObject: public JSReceiver {
   static Handle<JSObject> Copy(Handle<JSObject> object,
                                Handle<AllocationSite> site);
   static Handle<JSObject> Copy(Handle<JSObject> object);
-  static Handle<JSObject> DeepCopy(Handle<JSObject> object,
-                                   AllocationSiteUsageContext* site_context,
-                                   DeepCopyHints hints = kNoHints);
-  static Handle<JSObject> DeepWalk(Handle<JSObject> object,
-                                   AllocationSiteCreationContext* site_context);
+  MUST_USE_RESULT static MaybeHandle<JSObject> DeepCopy(
+      Handle<JSObject> object,
+      AllocationSiteUsageContext* site_context,
+      DeepCopyHints hints = kNoHints);
+  MUST_USE_RESULT static MaybeHandle<JSObject> DeepWalk(
+      Handle<JSObject> object,
+      AllocationSiteCreationContext* site_context);
 
   static Handle<Object> GetDataProperty(Handle<JSObject> object,
                                         Handle<Name> key);
@@ -9816,6 +9819,7 @@ class Oddball: public HeapObject {
   static const byte kUndefined = 5;
   static const byte kUninitialized = 6;
   static const byte kOther = 7;
+  static const byte kException = 8;
 
   typedef FixedBodyDescriptor<kToStringOffset,
                               kToNumberOffset + kPointerSize,
