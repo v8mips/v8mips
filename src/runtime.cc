@@ -6027,7 +6027,7 @@ RUNTIME_FUNCTION(Runtime_GetNamedInterceptorPropertyNames) {
   CONVERT_ARG_HANDLE_CHECKED(JSObject, obj, 0);
 
   if (obj->HasNamedInterceptor()) {
-    Handle<JSArray> result;
+    Handle<JSObject> result;
     if (JSObject::GetKeysForNamedInterceptor(obj, obj).ToHandle(&result)) {
       return *result;
     }
@@ -6044,7 +6044,7 @@ RUNTIME_FUNCTION(Runtime_GetIndexedInterceptorElementNames) {
   CONVERT_ARG_HANDLE_CHECKED(JSObject, obj, 0);
 
   if (obj->HasIndexedInterceptor()) {
-    Handle<JSArray> result;
+    Handle<JSObject> result;
     if (JSObject::GetKeysForIndexedInterceptor(obj, obj).ToHandle(&result)) {
       return *result;
     }
