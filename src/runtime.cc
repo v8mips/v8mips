@@ -957,6 +957,10 @@ RUNTIME_FUNCTION(Runtime_TypedArrayInitialize) {
   CONVERT_NUMBER_ARG_HANDLE_CHECKED(byte_offset_object, 3);
   CONVERT_NUMBER_ARG_HANDLE_CHECKED(byte_length_object, 4);
 
+  RUNTIME_ASSERT(arrayId >= Runtime::ARRAY_ID_FIRST &&
+                 arrayId <= Runtime::ARRAY_ID_LAST);
+  RUNTIME_ASSERT(maybe_buffer->IsNull() || maybe_buffer->IsJSArrayBuffer());
+
   ASSERT(holder->GetInternalFieldCount() ==
       v8::ArrayBufferView::kInternalFieldCount);
   for (int i = 0; i < v8::ArrayBufferView::kInternalFieldCount; i++) {
@@ -998,8 +1002,8 @@ RUNTIME_FUNCTION(Runtime_TypedArrayInitialize) {
 
     size_t array_buffer_byte_length =
         NumberToSize(isolate, buffer->byte_length());
-    CHECK(byte_offset <= array_buffer_byte_length);
-    CHECK(array_buffer_byte_length - byte_offset >= byte_length);
+    RUNTIME_ASSERT(byte_offset <= array_buffer_byte_length);
+    RUNTIME_ASSERT(array_buffer_byte_length - byte_offset >= byte_length);
 
     holder->set_buffer(*buffer);
     holder->set_weak_next(buffer->weak_first_view());
@@ -1037,6 +1041,9 @@ RUNTIME_FUNCTION(Runtime_TypedArrayInitializeFromArrayLike) {
   CONVERT_SMI_ARG_CHECKED(arrayId, 1);
   CONVERT_ARG_HANDLE_CHECKED(Object, source, 2);
   CONVERT_NUMBER_ARG_HANDLE_CHECKED(length_obj, 3);
+
+  RUNTIME_ASSERT(arrayId >= Runtime::ARRAY_ID_FIRST &&
+                 arrayId <= Runtime::ARRAY_ID_LAST);
 
   ASSERT(holder->GetInternalFieldCount() ==
       v8::ArrayBufferView::kInternalFieldCount);
@@ -1186,7 +1193,8 @@ RUNTIME_FUNCTION(Runtime_TypedArraySetFastCases) {
 
   Handle<JSTypedArray> target(JSTypedArray::cast(*target_obj));
   Handle<JSTypedArray> source(JSTypedArray::cast(*source_obj));
-  size_t offset = NumberToSize(isolate, *offset_obj);
+  size_t offset = 0;
+  RUNTIME_ASSERT(TryNumberToSize(isolate, *offset_obj, &offset));
   size_t target_length = NumberToSize(isolate, target->length());
   size_t source_length = NumberToSize(isolate, source->length());
   size_t target_byte_length = NumberToSize(isolate, target->byte_length());
@@ -1680,7 +1688,7 @@ RUNTIME_FUNCTION(Runtime_MapCreateIterator) {
   ASSERT(args.length() == 2);
   CONVERT_ARG_HANDLE_CHECKED(JSMap, holder, 0);
   CONVERT_SMI_ARG_CHECKED(kind, 1)
-  ASSERT(kind == JSMapIterator::kKindKeys
+  RUNTIME_ASSERT(kind == JSMapIterator::kKindKeys
       || kind == JSMapIterator::kKindValues
       || kind == JSMapIterator::kKindEntries);
   Handle<OrderedHashMap> table(OrderedHashMap::cast(holder->table()));
@@ -2207,6 +2215,8 @@ RUNTIME_FUNCTION(Runtime_SetAccessorProperty) {
   CONVERT_SMI_ARG_CHECKED(access_control, 5);
   RUNTIME_ASSERT(getter->IsUndefined() || getter->IsFunctionTemplateInfo());
   RUNTIME_ASSERT(setter->IsUndefined() || setter->IsFunctionTemplateInfo());
+  RUNTIME_ASSERT(PropertyDetails::AttributesField::is_valid(
+      static_cast<PropertyAttributes>(attribute)));
   JSObject::DefineAccessor(object,
                            name,
                            InstantiateAccessorComponent(isolate, getter),
@@ -2659,6 +2669,8 @@ RUNTIME_FUNCTION(Runtime_OptimizeObjectForAddingMultipleProperties) {
   ASSERT(args.length() == 2);
   CONVERT_ARG_HANDLE_CHECKED(JSObject, object, 0);
   CONVERT_SMI_ARG_CHECKED(properties, 1);
+  // Conservative upper limit to prevent fuzz tests from going OOM.
+  RUNTIME_ASSERT(properties <= 100000);
   if (object->HasFastProperties() && !object->IsJSGlobalProxy()) {
     JSObject::NormalizeProperties(object, KEEP_INOBJECT_PROPERTIES, properties);
   }
@@ -2940,7 +2952,7 @@ RUNTIME_FUNCTION(Runtime_FunctionRemovePrototype) {
   ASSERT(args.length() == 1);
 
   CONVERT_ARG_CHECKED(JSFunction, f, 0);
-  f->RemovePrototype();
+  RUNTIME_ASSERT(f->RemovePrototype());
 
   return isolate->heap()->undefined_value();
 }
@@ -4631,6 +4643,8 @@ RUNTIME_FUNCTION(Runtime_StringMatch) {
   CONVERT_ARG_HANDLE_CHECKED(JSRegExp, regexp, 1);
   CONVERT_ARG_HANDLE_CHECKED(JSArray, regexp_info, 2);
 
+  RUNTIME_ASSERT(regexp_info->HasFastObjectElements());
+
   RegExpImpl::GlobalCache global_cache(regexp, subject, true, isolate);
   if (global_cache.HasException()) return isolate->heap()->exception();
 
@@ -4895,7 +4909,8 @@ RUNTIME_FUNCTION(Runtime_NumberToFixed) {
   CONVERT_DOUBLE_ARG_CHECKED(value, 0);
   CONVERT_DOUBLE_ARG_CHECKED(f_number, 1);
   int f = FastD2IChecked(f_number);
-  RUNTIME_ASSERT(f >= 0);
+  // See DoubleToFixedCString for these constants:
+  RUNTIME_ASSERT(f >= 0 && f <= 20);
   char* str = DoubleToFixedCString(value, f);
   Handle<String> result = isolate->factory()->NewStringFromAsciiChecked(str);
   DeleteArray(str);
@@ -5083,9 +5098,9 @@ RUNTIME_FUNCTION(Runtime_KeyedGetProperty) {
       Handle<Name> key = Handle<Name>::cast(key_obj);
       if (receiver->HasFastProperties()) {
         // Attempt to use lookup cache.
-        Map* receiver_map = receiver->map();
+        Handle<Map> receiver_map(receiver->map(), isolate);
         KeyedLookupCache* keyed_lookup_cache = isolate->keyed_lookup_cache();
-        int offset = keyed_lookup_cache->Lookup(receiver_map, *key);
+        int offset = keyed_lookup_cache->Lookup(receiver_map, key);
         if (offset != -1) {
           // Doubles are not cached, so raw read the value.
           Object* value = receiver->RawFastPropertyAt(offset);
@@ -5102,7 +5117,7 @@ RUNTIME_FUNCTION(Runtime_KeyedGetProperty) {
           // Do not track double fields in the keyed lookup cache. Reading
           // double values requires boxing.
           if (!result.representation().IsDouble()) {
-            keyed_lookup_cache->Update(receiver_map, *key, offset);
+            keyed_lookup_cache->Update(receiver_map, key, offset);
           }
           AllowHeapAllocation allow_allocation;
           return *JSObject::FastPropertyAt(
@@ -5641,13 +5656,22 @@ RUNTIME_FUNCTION(Runtime_DebugPrepareStepInIfStepping) {
 }
 
 
-// Notify the debugger if an expcetion in a promise is not caught (yet).
-RUNTIME_FUNCTION(Runtime_DebugPendingExceptionInPromise) {
-  ASSERT(args.length() == 2);
+// The argument is a closure that is kept until the epilogue is called.
+// On exception, the closure is called, which returns the promise if the
+// exception is considered uncaught, or undefined otherwise.
+RUNTIME_FUNCTION(Runtime_DebugPromiseHandlePrologue) {
+  ASSERT(args.length() == 1);
   HandleScope scope(isolate);
-  CONVERT_ARG_HANDLE_CHECKED(Object, exception, 0);
-  CONVERT_ARG_HANDLE_CHECKED(JSObject, promise, 1);
-  isolate->debugger()->OnException(exception, true, promise);
+  CONVERT_ARG_HANDLE_CHECKED(JSFunction, promise_getter, 0);
+  isolate->debug()->PromiseHandlePrologue(promise_getter);
+  return isolate->heap()->undefined_value();
+}
+
+
+RUNTIME_FUNCTION(Runtime_DebugPromiseHandleEpilogue) {
+  ASSERT(args.length() == 0);
+  SealHandleScope shs(isolate);
+  isolate->debug()->PromiseHandleEpilogue();
   return isolate->heap()->undefined_value();
 }
 
@@ -7320,6 +7344,7 @@ RUNTIME_FUNCTION(Runtime_StringBuilderJoin) {
   }
 
   int separator_length = separator->length();
+  RUNTIME_ASSERT(separator_length > 0);
   int max_nof_separators =
       (String::kMaxLength + separator_length - 1) / separator_length;
   if (max_nof_separators < (array_length - 1)) {
@@ -7421,26 +7446,30 @@ RUNTIME_FUNCTION(Runtime_SparseJoinWithSeparator) {
   HandleScope scope(isolate);
   ASSERT(args.length() == 3);
   CONVERT_ARG_HANDLE_CHECKED(JSArray, elements_array, 0);
-  RUNTIME_ASSERT(elements_array->HasFastSmiOrObjectElements());
   CONVERT_NUMBER_CHECKED(uint32_t, array_length, Uint32, args[1]);
   CONVERT_ARG_HANDLE_CHECKED(String, separator, 2);
   // elements_array is fast-mode JSarray of alternating positions
   // (increasing order) and strings.
+  RUNTIME_ASSERT(elements_array->HasFastSmiOrObjectElements());
   // array_length is length of original array (used to add separators);
   // separator is string to put between elements. Assumed to be non-empty.
+  RUNTIME_ASSERT(array_length > 0);
 
   // Find total length of join result.
   int string_length = 0;
   bool is_ascii = separator->IsOneByteRepresentation();
   bool overflow = false;
   CONVERT_NUMBER_CHECKED(int, elements_length, Int32, elements_array->length());
+  RUNTIME_ASSERT(elements_length <= elements_array->elements()->length());
   RUNTIME_ASSERT((elements_length & 1) == 0);  // Even length.
+  FixedArray* elements = FixedArray::cast(elements_array->elements());
+  for (int i = 0; i < elements_length; i += 2) {
+    RUNTIME_ASSERT(elements->get(i)->IsNumber());
+    RUNTIME_ASSERT(elements->get(i + 1)->IsString());
+  }
 
   { DisallowHeapAllocation no_gc;
-    FixedArray* elements = FixedArray::cast(elements_array->elements());
     for (int i = 0; i < elements_length; i += 2) {
-      RUNTIME_ASSERT(elements->get(i)->IsNumber());
-      RUNTIME_ASSERT(elements->get(i + 1)->IsString());
       String* string = String::cast(elements->get(i + 1));
       int length = string->length();
       if (is_ascii && !string->IsOneByteRepresentation()) {
@@ -7964,7 +7993,9 @@ RUNTIME_FUNCTION(Runtime_DateMakeDay) {
   CONVERT_SMI_ARG_CHECKED(year, 0);
   CONVERT_SMI_ARG_CHECKED(month, 1);
 
-  return Smi::FromInt(isolate->date_cache()->DaysFromYearMonth(year, month));
+  int days = isolate->date_cache()->DaysFromYearMonth(year, month);
+  RUNTIME_ASSERT(Smi::IsValid(days));
+  return Smi::FromInt(days);
 }
 
 
@@ -8942,7 +8973,10 @@ RUNTIME_FUNCTION(Runtime_Apply) {
   CONVERT_SMI_ARG_CHECKED(offset, 3);
   CONVERT_SMI_ARG_CHECKED(argc, 4);
   RUNTIME_ASSERT(offset >= 0);
-  RUNTIME_ASSERT(argc >= 0);
+  // Loose upper bound to allow fuzzing. We'll most likely run out of
+  // stack space before hitting this limit.
+  static int kMaxArgc = 1000000;
+  RUNTIME_ASSERT(argc >= 0 && argc <= kMaxArgc);
 
   // If there are too many arguments, allocate argv via malloc.
   const int argv_small_size = 10;
@@ -11251,7 +11285,7 @@ RUNTIME_FUNCTION(Runtime_GetFrameDetails) {
       InitializationFlag init_flag;
       locals->set(local * 2, *name);
       int context_slot_index =
-          scope_info->ContextSlotIndex(*name, &mode, &init_flag);
+          ScopeInfo::ContextSlotIndex(scope_info, name, &mode, &init_flag);
       Object* value = context->get(context_slot_index);
       locals->set(local * 2 + 1, value);
       local++;
@@ -11423,10 +11457,10 @@ RUNTIME_FUNCTION(Runtime_GetFrameDetails) {
 
 
 static bool ParameterIsShadowedByContextLocal(Handle<ScopeInfo> info,
-                                              int index) {
+                                              Handle<String> parameter_name) {
   VariableMode mode;
   InitializationFlag flag;
-  return info->ContextSlotIndex(info->ParameterName(index), &mode, &flag) != -1;
+  return ScopeInfo::ContextSlotIndex(info, parameter_name, &mode, &flag) != -1;
 }
 
 
@@ -11444,7 +11478,8 @@ static MaybeHandle<JSObject> MaterializeStackLocalsWithFrameInspector(
   // First fill all parameters.
   for (int i = 0; i < scope_info->ParameterCount(); ++i) {
     // Do not materialize the parameter if it is shadowed by a context local.
-    if (ParameterIsShadowedByContextLocal(scope_info, i)) continue;
+    Handle<String> name(scope_info->ParameterName(i));
+    if (ParameterIsShadowedByContextLocal(scope_info, name)) continue;
 
     HandleScope scope(isolate);
     Handle<Object> value(i < frame_inspector->GetParametersCount()
@@ -11452,7 +11487,6 @@ static MaybeHandle<JSObject> MaterializeStackLocalsWithFrameInspector(
                              : isolate->heap()->undefined_value(),
                          isolate);
     ASSERT(!value->IsTheHole());
-    Handle<String> name(scope_info->ParameterName(i));
 
     RETURN_ON_EXCEPTION(
         isolate,
@@ -11495,11 +11529,11 @@ static void UpdateStackLocalsFromMaterializedObject(Isolate* isolate,
   // Parameters.
   for (int i = 0; i < scope_info->ParameterCount(); ++i) {
     // Shadowed parameters were not materialized.
-    if (ParameterIsShadowedByContextLocal(scope_info, i)) continue;
+    Handle<String> name(scope_info->ParameterName(i));
+    if (ParameterIsShadowedByContextLocal(scope_info, name)) continue;
 
     ASSERT(!frame->GetParameter(i)->IsTheHole());
     HandleScope scope(isolate);
-    Handle<String> name(scope_info->ParameterName(i));
     Handle<Object> value =
         Object::GetPropertyOrElement(target, name).ToHandleChecked();
     frame->SetParameterValue(i, *value);
@@ -11600,7 +11634,7 @@ static bool SetContextLocalValue(Isolate* isolate,
       VariableMode mode;
       InitializationFlag init_flag;
       int context_index =
-          scope_info->ContextSlotIndex(*next_name, &mode, &init_flag);
+          ScopeInfo::ContextSlotIndex(scope_info, next_name, &mode, &init_flag);
       context->set(context_index, *new_value);
       return true;
     }
@@ -13521,6 +13555,15 @@ RUNTIME_FUNCTION(Runtime_LiveEditCheckAndDropActivations) {
   ASSERT(args.length() == 2);
   CONVERT_ARG_HANDLE_CHECKED(JSArray, shared_array, 0);
   CONVERT_BOOLEAN_ARG_CHECKED(do_drop, 1);
+  RUNTIME_ASSERT(shared_array->length()->IsSmi());
+  int array_length = Smi::cast(shared_array->length())->value();
+  for (int i = 0; i < array_length; i++) {
+    Handle<Object> element =
+        Object::GetElement(isolate, shared_array, i).ToHandleChecked();
+    RUNTIME_ASSERT(
+        element->IsJSValue() &&
+        Handle<JSValue>::cast(element)->value()->IsSharedFunctionInfo());
+  }
 
   return *LiveEdit::CheckAndDropActivations(shared_array, do_drop);
 }
@@ -13790,6 +13833,9 @@ RUNTIME_FUNCTION(Runtime_GetLanguageTagVariants) {
   CONVERT_ARG_HANDLE_CHECKED(JSArray, input, 0);
 
   uint32_t length = static_cast<uint32_t>(input->length()->Number());
+  // Set some limit to prevent fuzz tests from going OOM.
+  // Can be bumped when callers' requirements change.
+  RUNTIME_ASSERT(length < 100);
   Handle<FixedArray> output = factory->NewFixedArray(length);
   Handle<Name> maximized = factory->NewStringFromStaticAscii("maximized");
   Handle<Name> base = factory->NewStringFromStaticAscii("base");
@@ -14237,6 +14283,8 @@ RUNTIME_FUNCTION(Runtime_StringNormalize) {
 
   CONVERT_ARG_HANDLE_CHECKED(String, stringValue, 0);
   CONVERT_NUMBER_CHECKED(int, form_id, Int32, args[1]);
+  RUNTIME_ASSERT(form_id >= 0 &&
+                 static_cast<size_t>(form_id) < ARRAY_SIZE(normalizationForms));
 
   v8::String::Value string_value(v8::Utils::ToLocal(stringValue));
   const UChar* u_value = reinterpret_cast<const UChar*>(*string_value);
