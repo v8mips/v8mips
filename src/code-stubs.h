@@ -1490,12 +1490,6 @@ class CEntryStub : public PlatformCodeStub {
   };
 
  private:
-  void GenerateCore(MacroAssembler* masm,
-                    Label* throw_normal_exception,
-                    Label* throw_termination_exception,
-                    bool do_gc,
-                    bool always_allocate_scope);
-
   // Number of pointers/values returned.
   Isolate* isolate_;
   const int result_size_;
