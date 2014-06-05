@@ -198,7 +198,7 @@ class Simulator {
   void set_fpu_register_float(int fpureg, float value);
   void set_fpu_register_double(int fpureg, double value);
   int64_t get_fpu_register(int fpureg) const;
-  uint32_t get_fpu_register_word(int fpureg) const;
+  int32_t get_fpu_register_word(int fpureg) const;
   int32_t get_fpu_register_signed_word(int fpureg) const;
   uint32_t get_fpu_register_hi_word(int fpureg) const;
   float get_fpu_register_float(int fpureg) const;

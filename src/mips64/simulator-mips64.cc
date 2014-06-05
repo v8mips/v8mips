@@ -1100,9 +1100,9 @@ int64_t Simulator::get_fpu_register(int fpureg) const {
 }
 
 
-uint32_t Simulator::get_fpu_register_word(int fpureg) const {
+int32_t Simulator::get_fpu_register_word(int fpureg) const {
   ASSERT((fpureg >= 0) && (fpureg < kNumFPURegisters));
-  return static_cast<uint32_t>(FPUregisters_[fpureg] & 0xffffffff);
+  return static_cast<int32_t>(FPUregisters_[fpureg] & 0xffffffff);
 }
 
 
@@ -1939,7 +1939,7 @@ void Simulator::ConfigureTypeRegister(Instruction* instr,
           alu_out = FCSR_;
           break;
         case MFC1:
-          alu_out = get_fpu_register_word(fs_reg);
+          alu_out = static_cast<int64_t>( get_fpu_register_word(fs_reg) );
           break;
         case DMFC1:
           alu_out = get_fpu_register(fs_reg);
