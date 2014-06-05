@@ -952,13 +952,10 @@ class MacroAssembler: public Assembler {
                         Register scratch,
                         Label* fail);
 
-#ifdef ENABLE_DEBUGGER_SUPPORT
   // -------------------------------------------------------------------------
   // Debugger Support.
 
   void DebugBreak();
-#endif
-
 
   // -------------------------------------------------------------------------
   // Exception handling.

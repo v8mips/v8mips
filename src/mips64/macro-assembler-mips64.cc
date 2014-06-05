@@ -2793,8 +2793,6 @@ void MacroAssembler::Push(Handle<Object> handle) {
 }
 
 
-#ifdef ENABLE_DEBUGGER_SUPPORT
-
 void MacroAssembler::DebugBreak() {
   PrepareCEntryArgs(0);
   PrepareCEntryFunction(ExternalReference(Runtime::kDebugBreak, isolate()));
@@ -2802,8 +2800,6 @@ void MacroAssembler::DebugBreak() {
   ASSERT(AllowThisStubCall(&ces));
   Call(ces.GetCode(), RelocInfo::DEBUG_BREAK);
 }
-
-#endif  // ENABLE_DEBUGGER_SUPPORT
 
 
 // ---------------------------------------------------------------------------
