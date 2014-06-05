@@ -112,7 +112,8 @@ TEST(CopyBytes) {
         memset(dest_buffer, 0, data_size);
         CHECK(dest + size < dest_buffer + data_size);
         (void) CALL_GENERATED_CODE(f, reinterpret_cast<int64_t>(src),
-                                      reinterpret_cast<int64_t>(dest), size, 0, 0);
+                                      reinterpret_cast<int64_t>(dest),
+                                      size, 0, 0);
         // a0 and a1 should point at the first byte after the copied data.
         CHECK_EQ(src + size, a0_);
         CHECK_EQ(dest + size, a1_);
@@ -167,7 +168,8 @@ TEST(LoadConstants) {
   CHECK(code->IsCode());
 
   ::F f = FUNCTION_CAST< ::F>(Code::cast(code)->entry());
-     (void) CALL_GENERATED_CODE(f, result, 0, 0, 0, 0);
+     (void) CALL_GENERATED_CODE(f, reinterpret_cast<int64_t>(result),
+                                0, 0, 0, 0);
   // Check results.
   for (int i = 0; i < 64; i++) {
     CHECK(refConstants[i] == result[i]);
