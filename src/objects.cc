@@ -63,8 +63,8 @@ namespace internal {
 
 Handle<HeapType> Object::OptimalType(Isolate* isolate,
                                      Representation representation) {
+  if (representation.IsNone()) return HeapType::None(isolate);
   if (FLAG_track_field_types) {
-    if (representation.IsNone()) return HeapType::None(isolate);
     if (representation.IsHeapObject() && IsHeapObject()) {
       // We can track only JavaScript objects with stable maps.
       Handle<Map> map(HeapObject::cast(this)->map(), isolate);
@@ -5816,7 +5816,7 @@ void JSObject::SetObserved(Handle<JSObject> object) {
   if (transition_index != TransitionArray::kNotFound) {
     new_map = handle(old_map->GetTransition(transition_index), isolate);
     ASSERT(new_map->is_observed());
-  } else if (old_map->CanHaveMoreTransitions()) {
+  } else if (object->HasFastProperties() && old_map->CanHaveMoreTransitions()) {
     new_map = Map::CopyForObserved(old_map);
   } else {
     new_map = Map::Copy(old_map);
@@ -8520,6 +8520,10 @@ bool DescriptorArray::IsMoreGeneralThan(int verbatim,
     if (details.type() == CONSTANT) {
       if (other_details.type() != CONSTANT) return false;
       if (GetValue(descriptor) != other->GetValue(descriptor)) return false;
+    } else if (details.type() == FIELD && other_details.type() == FIELD) {
+      if (!other->GetFieldType(descriptor)->NowIs(GetFieldType(descriptor))) {
+        return false;
+      }
     }
   }
 
@@ -10412,7 +10416,7 @@ void Oddball::Initialize(Isolate* isolate,
                          Handle<Object> to_number,
                          byte kind) {
   Handle<String> internalized_to_string =
-      isolate->factory()->InternalizeUtf8String(CStrVector(to_string));
+      isolate->factory()->InternalizeUtf8String(to_string);
   oddball->set_to_string(*internalized_to_string);
   oddball->set_to_number(*to_number);
   oddball->set_kind(kind);
@@ -14536,37 +14540,37 @@ template class SubStringKey<uint16_t>;
 // InternalizedStringKey carries a string/internalized-string object as key.
 class InternalizedStringKey : public HashTableKey {
  public:
-  explicit InternalizedStringKey(String* string)
+  explicit InternalizedStringKey(Handle<String> string)
       : string_(string) { }
 
-  bool IsMatch(Object* string) {
-    return String::cast(string)->Equals(string_);
+  virtual bool IsMatch(Object* string) V8_OVERRIDE {
+    return String::cast(string)->Equals(*string_);
   }
 
-  uint32_t Hash() { return string_->Hash(); }
+  virtual uint32_t Hash() V8_OVERRIDE { return string_->Hash(); }
 
-  uint32_t HashForObject(Object* other) {
+  virtual uint32_t HashForObject(Object* other) V8_OVERRIDE {
     return String::cast(other)->Hash();
   }
 
-  MaybeObject* AsObject(Heap* heap) {
+  virtual MaybeObject* AsObject(Heap* heap) V8_OVERRIDE {
     // Internalize the string if possible.
-    Map* map = heap->InternalizedStringMapForString(string_);
+    Map* map = heap->InternalizedStringMapForString(*string_);
     if (map != NULL) {
       string_->set_map_no_write_barrier(map);
       ASSERT(string_->IsInternalizedString());
-      return string_;
+      return *string_;
     }
     // Otherwise allocate a new internalized string.
     return heap->AllocateInternalizedStringImpl(
-        string_, string_->length(), string_->hash_field());
+        *string_, string_->length(), string_->hash_field());
   }
 
   static uint32_t StringHash(Object* obj) {
     return String::cast(obj)->Hash();
   }
 
-  String* string_;
+  Handle<String> string_;
 };
 
 
@@ -14898,13 +14902,13 @@ template Handle<NameDictionary>
 Dictionary<NameDictionary, NameDictionaryShape, Name*>::
     New(Isolate* isolate, int n, PretenureFlag pretenure);
 
-template MaybeObject*
+template Handle<SeededNumberDictionary>
 Dictionary<SeededNumberDictionary, SeededNumberDictionaryShape, uint32_t>::
-    AtPut(uint32_t, Object*);
+    AtPut(Handle<SeededNumberDictionary>, uint32_t, Handle<Object>);
 
-template MaybeObject*
+template Handle<UnseededNumberDictionary>
 Dictionary<UnseededNumberDictionary, UnseededNumberDictionaryShape, uint32_t>::
-    AtPut(uint32_t, Object*);
+    AtPut(Handle<UnseededNumberDictionary>, uint32_t, Handle<Object>);
 
 template Object*
 Dictionary<SeededNumberDictionary, SeededNumberDictionaryShape, uint32_t>::
@@ -15492,12 +15496,6 @@ Handle<PropertyCell> JSGlobalObject::EnsurePropertyCell(
 }
 
 
-MaybeObject* StringTable::LookupString(String* string, Object** s) {
-  InternalizedStringKey key(string);
-  return LookupKey(&key, s);
-}
-
-
 // This class is used for looking up two character strings in the string table.
 // If we don't have a hit we don't want to waste much time so we unroll the
 // string hash calculation loop here for speed.  Doesn't work if the two
@@ -15564,7 +15562,10 @@ class TwoCharHashTableKey : public HashTableKey {
 
 bool StringTable::LookupStringIfExists(String* string, String** result) {
   SLOW_ASSERT(this == HeapObject::cast(this)->GetHeap()->string_table());
-  InternalizedStringKey key(string);
+  DisallowHeapAllocation no_alloc;
+  // TODO(ishell): Handlify all the callers and remove this scope.
+  HandleScope scope(GetIsolate());
+  InternalizedStringKey key(handle(string));
   int entry = FindEntry(&key);
   if (entry == kNotFound) {
     return false;
@@ -15592,39 +15593,38 @@ bool StringTable::LookupTwoCharsStringIfExists(uint16_t c1,
 }
 
 
-MaybeObject* StringTable::LookupKey(HashTableKey* key, Object** s) {
-  SLOW_ASSERT(this == HeapObject::cast(this)->GetHeap()->string_table());
-  int entry = FindEntry(key);
+Handle<String> StringTable::LookupString(Isolate* isolate,
+                                         Handle<String> string) {
+  InternalizedStringKey key(string);
+  return LookupKey(isolate, &key);
+}
+
+
+Handle<String> StringTable::LookupKey(Isolate* isolate, HashTableKey* key) {
+  Handle<StringTable> table = isolate->factory()->string_table();
+  int entry = table->FindEntry(key);
 
   // String already in table.
   if (entry != kNotFound) {
-    *s = KeyAt(entry);
-    return this;
+    return handle(String::cast(table->KeyAt(entry)), isolate);
   }
 
   // Adding new string. Grow table if needed.
-  Object* obj;
-  { MaybeObject* maybe_obj = EnsureCapacity(1, key);
-    if (!maybe_obj->ToObject(&obj)) return maybe_obj;
-  }
+  table = StringTable::EnsureCapacity(table, 1, key);
 
   // Create string object.
-  Object* string;
-  { MaybeObject* maybe_string = key->AsObject(GetHeap());
-    if (!maybe_string->ToObject(&string)) return maybe_string;
-  }
-
-  // If the string table grew as part of EnsureCapacity, obj is not
-  // the current string table and therefore we cannot use
-  // StringTable::cast here.
-  StringTable* table = reinterpret_cast<StringTable*>(obj);
+  Handle<Object> string = key->AsHandle(isolate);
+  // There must be no attempts to internalize strings that could throw
+  // InvalidStringLength error.
+  CHECK(!string.is_null());
 
   // Add the new string and return it along with the string table.
   entry = table->FindInsertionEntry(key->Hash());
-  table->set(EntryToIndex(entry), string);
+  table->set(EntryToIndex(entry), *string);
   table->ElementAdded();
-  *s = string;
-  return table;
+
+  isolate->factory()->set_string_table(table);
+  return Handle<String>::cast(string);
 }
 
 
@@ -15943,29 +15943,25 @@ Object* Dictionary<Derived, Shape, Key>::DeleteProperty(
 
 
 template<typename Derived, typename Shape, typename Key>
-MaybeObject* Dictionary<Derived, Shape, Key>::AtPut(Key key, Object* value) {
-  int entry = this->FindEntry(key);
+Handle<Derived> Dictionary<Derived, Shape, Key>::AtPut(
+    Handle<Derived> dictionary, Key key, Handle<Object> value) {
+  int entry = dictionary->FindEntry(key);
 
   // If the entry is present set the value;
   if (entry != Dictionary::kNotFound) {
-    ValueAtPut(entry, value);
-    return this;
+    dictionary->ValueAtPut(entry, *value);
+    return dictionary;
   }
 
   // Check whether the dictionary should be extended.
-  Object* obj;
-  { MaybeObject* maybe_obj = EnsureCapacity(1, key);
-    if (!maybe_obj->ToObject(&obj)) return maybe_obj;
-  }
+  dictionary = EnsureCapacity(dictionary, 1, key);
 
-  Object* k;
-  { MaybeObject* maybe_k = Shape::AsObject(this->GetHeap(), key);
-    if (!maybe_k->ToObject(&k)) return maybe_k;
-  }
+  Handle<Object> k = Shape::AsHandle(dictionary->GetIsolate(), key);
+  // TODO(ishell): Figure out if it is necessary to call AsHandle() here.
+  USE(k);
   PropertyDetails details = PropertyDetails(NONE, NORMAL, 0);
 
-  return Dictionary::cast(obj)->AddEntry(
-      key, value, details, Dictionary::Hash(key));
+  return AddEntry(dictionary, key, value, details, dictionary->Hash(key));
 }
 
 
@@ -15988,6 +15984,19 @@ MaybeObject* Dictionary<Derived, Shape, Key>::Add(
 
 
 // Add a key, value pair to the dictionary.
+template<typename Derived, typename Shape, typename Key>
+Handle<Derived> Dictionary<Derived, Shape, Key>::AddEntry(
+    Handle<Derived> dictionary,
+    Key key,
+    Handle<Object> value,
+    PropertyDetails details,
+    uint32_t hash) {
+  CALL_HEAP_FUNCTION(
+      dictionary->GetIsolate(),
+      dictionary->AddEntry(key, *value, details, hash),
+      Derived);
+}
+
 template<typename Derived, typename Shape, typename Key>
 MaybeObject* Dictionary<Derived, Shape, Key>::AddEntry(
     Key key,
@@ -16020,6 +16029,7 @@ MaybeObject* Dictionary<Derived, Shape, Key>::AddEntry(
 
 
 void SeededNumberDictionary::UpdateMaxNumberKey(uint32_t key) {
+  DisallowHeapAllocation no_allocation;
   // If the dictionary requires slow elements an element has already
   // been added at a high index.
   if (requires_slow_elements()) return;
@@ -16037,93 +16047,79 @@ void SeededNumberDictionary::UpdateMaxNumberKey(uint32_t key) {
   }
 }
 
+
 Handle<SeededNumberDictionary> SeededNumberDictionary::AddNumberEntry(
     Handle<SeededNumberDictionary> dictionary,
     uint32_t key,
     Handle<Object> value,
     PropertyDetails details) {
+  dictionary->UpdateMaxNumberKey(key);
+  SLOW_ASSERT(dictionary->FindEntry(key) == kNotFound);
   CALL_HEAP_FUNCTION(dictionary->GetIsolate(),
-                     dictionary->AddNumberEntry(key, *value, details),
+                     dictionary->Add(key, *value, details),
                      SeededNumberDictionary);
 }
 
-MaybeObject* SeededNumberDictionary::AddNumberEntry(uint32_t key,
-                                                    Object* value,
-                                                    PropertyDetails details) {
-  UpdateMaxNumberKey(key);
-  SLOW_ASSERT(this->FindEntry(key) == kNotFound);
-  return Add(key, value, details);
+
+Handle<UnseededNumberDictionary> UnseededNumberDictionary::AddNumberEntry(
+    Handle<UnseededNumberDictionary> dictionary,
+    uint32_t key,
+    Handle<Object> value) {
+  SLOW_ASSERT(dictionary->FindEntry(key) == kNotFound);
+  CALL_HEAP_FUNCTION(dictionary->GetIsolate(),
+                     dictionary->Add(
+                         key, *value, PropertyDetails(NONE, NORMAL, 0)),
+                     UnseededNumberDictionary);
 }
 
 
-MaybeObject* UnseededNumberDictionary::AddNumberEntry(uint32_t key,
-                                                      Object* value) {
-  SLOW_ASSERT(this->FindEntry(key) == kNotFound);
-  return Add(key, value, PropertyDetails(NONE, NORMAL, 0));
+Handle<SeededNumberDictionary> SeededNumberDictionary::AtNumberPut(
+    Handle<SeededNumberDictionary> dictionary,
+    uint32_t key,
+    Handle<Object> value) {
+  dictionary->UpdateMaxNumberKey(key);
+  return AtPut(dictionary, key, value);
 }
 
 
-MaybeObject* SeededNumberDictionary::AtNumberPut(uint32_t key, Object* value) {
-  UpdateMaxNumberKey(key);
-  return AtPut(key, value);
-}
-
-
-MaybeObject* UnseededNumberDictionary::AtNumberPut(uint32_t key,
-                                                   Object* value) {
-  return AtPut(key, value);
+Handle<UnseededNumberDictionary> UnseededNumberDictionary::AtNumberPut(
+    Handle<UnseededNumberDictionary> dictionary,
+    uint32_t key,
+    Handle<Object> value) {
+  return AtPut(dictionary, key, value);
 }
 
 
 Handle<SeededNumberDictionary> SeededNumberDictionary::Set(
     Handle<SeededNumberDictionary> dictionary,
-    uint32_t index,
+    uint32_t key,
     Handle<Object> value,
     PropertyDetails details) {
-  CALL_HEAP_FUNCTION(dictionary->GetIsolate(),
-                     dictionary->Set(index, *value, details),
-                     SeededNumberDictionary);
+  int entry = dictionary->FindEntry(key);
+  if (entry == kNotFound) {
+    return AddNumberEntry(dictionary, key, value, details);
+  }
+  // Preserve enumeration index.
+  details = PropertyDetails(details.attributes(),
+                            details.type(),
+                            dictionary->DetailsAt(entry).dictionary_index());
+  Handle<Object> object_key =
+      SeededNumberDictionaryShape::AsHandle(dictionary->GetIsolate(), key);
+  dictionary->SetEntry(entry, *object_key, *value, details);
+  return dictionary;
 }
 
 
 Handle<UnseededNumberDictionary> UnseededNumberDictionary::Set(
     Handle<UnseededNumberDictionary> dictionary,
-    uint32_t index,
+    uint32_t key,
     Handle<Object> value) {
-  CALL_HEAP_FUNCTION(dictionary->GetIsolate(),
-                     dictionary->Set(index, *value),
-                     UnseededNumberDictionary);
-}
-
-
-MaybeObject* SeededNumberDictionary::Set(uint32_t key,
-                                         Object* value,
-                                         PropertyDetails details) {
-  int entry = FindEntry(key);
-  if (entry == kNotFound) return AddNumberEntry(key, value, details);
-  // Preserve enumeration index.
-  details = PropertyDetails(details.attributes(),
-                            details.type(),
-                            DetailsAt(entry).dictionary_index());
-  MaybeObject* maybe_object_key =
-      SeededNumberDictionaryShape::AsObject(GetHeap(), key);
-  Object* object_key;
-  if (!maybe_object_key->ToObject(&object_key)) return maybe_object_key;
-  SetEntry(entry, object_key, value, details);
-  return this;
-}
-
-
-MaybeObject* UnseededNumberDictionary::Set(uint32_t key,
-                                           Object* value) {
-  int entry = FindEntry(key);
-  if (entry == kNotFound) return AddNumberEntry(key, value);
-  MaybeObject* maybe_object_key =
-      UnseededNumberDictionaryShape::AsObject(GetHeap(), key);
-  Object* object_key;
-  if (!maybe_object_key->ToObject(&object_key)) return maybe_object_key;
-  SetEntry(entry, object_key, value);
-  return this;
+  int entry = dictionary->FindEntry(key);
+  if (entry == kNotFound) return AddNumberEntry(dictionary, key, value);
+  Handle<Object> object_key =
+      UnseededNumberDictionaryShape::AsHandle(dictionary->GetIsolate(), key);
+  dictionary->SetEntry(entry, *object_key, *value);
+  return dictionary;
 }
 
 

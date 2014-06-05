@@ -2783,14 +2783,14 @@ bool Heap::CreateApiObjects() {
 
 
 void Heap::CreateJSEntryStub() {
-  JSEntryStub stub;
-  set_js_entry_code(*stub.GetCode(isolate()));
+  JSEntryStub stub(isolate());
+  set_js_entry_code(*stub.GetCode());
 }
 
 
 void Heap::CreateJSConstructEntryStub() {
-  JSConstructEntryStub stub;
-  set_js_construct_entry_code(*stub.GetCode(isolate()));
+  JSConstructEntryStub stub(isolate());
+  set_js_construct_entry_code(*stub.GetCode());
 }
 
 
@@ -3391,31 +3391,6 @@ MaybeObject* Heap::AllocateForeign(Address address, PretenureFlag pretenure) {
 }
 
 
-MaybeObject* Heap::LookupSingleCharacterStringFromCode(uint16_t code) {
-  if (code <= String::kMaxOneByteCharCode) {
-    Object* value = single_character_string_cache()->get(code);
-    if (value != undefined_value()) return value;
-
-    uint8_t buffer[1];
-    buffer[0] = static_cast<uint8_t>(code);
-    Object* result;
-    OneByteStringKey key(Vector<const uint8_t>(buffer, 1), HashSeed());
-    MaybeObject* maybe_result = InternalizeStringWithKey(&key);
-
-    if (!maybe_result->ToObject(&result)) return maybe_result;
-    single_character_string_cache()->set(code, result);
-    return result;
-  }
-
-  SeqTwoByteString* result;
-  { MaybeObject* maybe_result = AllocateRawTwoByteString(1, NOT_TENURED);
-    if (!maybe_result->To<SeqTwoByteString>(&result)) return maybe_result;
-  }
-  result->SeqTwoByteStringSet(0, code);
-  return result;
-}
-
-
 MaybeObject* Heap::AllocateByteArray(int length, PretenureFlag pretenure) {
   if (length < 0 || length > ByteArray::kMaxLength) {
     v8::internal::Heap::FatalProcessOutOfMemory("invalid array length", true);
@@ -3455,11 +3430,18 @@ bool Heap::CanMoveObjectStart(HeapObject* object) {
 
   if (lo_space()->Contains(object)) return false;
 
-  // We cannot move the object start if the given old space page is
-  // concurrently swept.
+  Page* page = Page::FromAddress(address);
+  // We can move the object start if:
+  // (1) the object is not in old pointer or old data space,
+  // (2) the page of the object was already swept,
+  // (3) the page was already concurrently swept. This case is an optimization
+  // for concurrent sweeping. The WasSwept predicate for concurrently swept
+  // pages is set after sweeping all pages.
   return (!is_in_old_pointer_space && !is_in_old_data_space) ||
-      Page::FromAddress(address)->parallel_sweeping() <=
-          MemoryChunk::PARALLEL_SWEEPING_FINALIZE;
+         page->WasSwept() ||
+         (mark_compact_collector()->AreSweeperThreadsActivated() &&
+              page->parallel_sweeping() <=
+                  MemoryChunk::PARALLEL_SWEEPING_FINALIZE);
 }
 
 
@@ -4535,7 +4517,7 @@ STRUCT_LIST(MAKE_CASE)
 #undef MAKE_CASE
     default:
       UNREACHABLE();
-      return Failure::InternalError();
+      return exception();
   }
   int size = map->instance_size();
   AllocationSpace space = SelectSpace(size, OLD_POINTER_SPACE, TENURED);
@@ -4879,49 +4861,12 @@ void Heap::Verify() {
 #endif
 
 
-MaybeObject* Heap::InternalizeUtf8String(Vector<const char> string) {
-  Utf8StringKey key(string, HashSeed());
-  return InternalizeStringWithKey(&key);
-}
-
-
-MaybeObject* Heap::InternalizeString(String* string) {
-  if (string->IsInternalizedString()) return string;
-  Object* result = NULL;
-  Object* new_table;
-  { MaybeObject* maybe_new_table =
-        string_table()->LookupString(string, &result);
-    if (!maybe_new_table->ToObject(&new_table)) return maybe_new_table;
-  }
-  // Can't use set_string_table because StringTable::cast knows that
-  // StringTable is a singleton and checks for identity.
-  roots_[kStringTableRootIndex] = new_table;
-  ASSERT(result != NULL);
-  return result;
-}
-
-
 bool Heap::InternalizeStringIfExists(String* string, String** result) {
   if (string->IsInternalizedString()) {
     *result = string;
     return true;
   }
   return string_table()->LookupStringIfExists(string, result);
-}
-
-
-MaybeObject* Heap::InternalizeStringWithKey(HashTableKey* key) {
-  Object* result = NULL;
-  Object* new_table;
-  { MaybeObject* maybe_new_table =
-        string_table()->LookupKey(key, &result);
-    if (!maybe_new_table->ToObject(&new_table)) return maybe_new_table;
-  }
-  // Can't use set_string_table because StringTable::cast knows that
-  // StringTable is a singleton and checks for identity.
-  roots_[kStringTableRootIndex] = new_table;
-  ASSERT(result != NULL);
-  return result;
 }
 
 

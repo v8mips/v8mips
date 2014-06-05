@@ -88,23 +88,27 @@ Handle<FixedArray> Factory::NewUninitializedFixedArray(int size) {
 }
 
 
-Handle<FixedDoubleArray> Factory::NewFixedDoubleArray(int size,
+Handle<FixedArrayBase> Factory::NewFixedDoubleArray(int size,
                                                       PretenureFlag pretenure) {
   ASSERT(0 <= size);
   CALL_HEAP_FUNCTION(
       isolate(),
       isolate()->heap()->AllocateUninitializedFixedDoubleArray(size, pretenure),
-      FixedDoubleArray);
+      FixedArrayBase);
 }
 
 
-Handle<FixedDoubleArray> Factory::NewFixedDoubleArrayWithHoles(
+Handle<FixedArrayBase> Factory::NewFixedDoubleArrayWithHoles(
     int size,
     PretenureFlag pretenure) {
   ASSERT(0 <= size);
-  Handle<FixedDoubleArray> array = NewFixedDoubleArray(size, pretenure);
-  for (int i = 0; i < size; ++i) {
-    array->set_the_hole(i);
+  Handle<FixedArrayBase> array = NewFixedDoubleArray(size, pretenure);
+  if (size > 0) {
+    Handle<FixedDoubleArray> double_array =
+        Handle<FixedDoubleArray>::cast(array);
+    for (int i = 0; i < size; ++i) {
+      double_array->set_the_hole(i);
+    }
   }
   return array;
 }
@@ -242,9 +246,8 @@ Handle<String> Factory::InternalizeUtf8String(Vector<const char> string) {
 
 // Internalized strings are created in the old generation (data space).
 Handle<String> Factory::InternalizeString(Handle<String> string) {
-  CALL_HEAP_FUNCTION(isolate(),
-                     isolate()->heap()->InternalizeString(*string),
-                     String);
+  if (string->IsInternalizedString()) return string;
+  return StringTable::LookupString(isolate(), string);
 }
 
 
@@ -269,9 +272,7 @@ Handle<String> Factory::InternalizeTwoByteString(Vector<const uc16> string) {
 
 template<class StringTableKey>
 Handle<String> Factory::InternalizeStringWithKey(StringTableKey* key) {
-  CALL_HEAP_FUNCTION(isolate(),
-                     isolate()->heap()->InternalizeStringWithKey(key),
-                     String);
+  return StringTable::LookupKey(isolate(), key);
 }
 
 
@@ -350,11 +351,27 @@ MaybeHandle<SeqTwoByteString> Factory::NewRawTwoByteString(
 }
 
 
-Handle<String> Factory::LookupSingleCharacterStringFromCode(uint32_t index) {
-  CALL_HEAP_FUNCTION(
-      isolate(),
-      isolate()->heap()->LookupSingleCharacterStringFromCode(index),
-      String);
+Handle<String> Factory::LookupSingleCharacterStringFromCode(uint32_t code) {
+  if (code <= String::kMaxOneByteCharCodeU) {
+    {
+      DisallowHeapAllocation no_allocation;
+      Object* value = single_character_string_cache()->get(code);
+      if (value != *undefined_value()) {
+        return handle(String::cast(value), isolate());
+      }
+    }
+    uint8_t buffer[1];
+    buffer[0] = static_cast<uint8_t>(code);
+    Handle<String> result =
+        InternalizeOneByteString(Vector<const uint8_t>(buffer, 1));
+    single_character_string_cache()->set(code, *result);
+    return result;
+  }
+  ASSERT(code <= String::kMaxUtf16CodeUnitU);
+
+  Handle<SeqTwoByteString> result = NewRawTwoByteString(1).ToHandleChecked();
+  result->SeqTwoByteStringSet(0, static_cast<uint16_t>(code));
+  return result;
 }
 
 
@@ -1851,6 +1868,7 @@ Handle<SharedFunctionInfo> Factory::NewSharedFunctionInfo(Handle<String> name) {
   share->set_debug_info(*undefined_value(), SKIP_WRITE_BARRIER);
   share->set_inferred_name(*empty_string(), SKIP_WRITE_BARRIER);
   share->set_initial_map(*undefined_value(), SKIP_WRITE_BARRIER);
+  share->set_profiler_ticks(0);
   share->set_ast_node_count(0);
   share->set_counters(0);
 
@@ -1942,26 +1960,6 @@ Handle<String> Factory::NumberToString(Handle<Object> number,
   Handle<String> js_string = NewStringFromAsciiChecked(str, TENURED);
   SetNumberStringCache(number, js_string);
   return js_string;
-}
-
-
-Handle<SeededNumberDictionary> Factory::DictionaryAtNumberPut(
-    Handle<SeededNumberDictionary> dictionary,
-    uint32_t key,
-    Handle<Object> value) {
-  CALL_HEAP_FUNCTION(isolate(),
-                     dictionary->AtNumberPut(key, *value),
-                     SeededNumberDictionary);
-}
-
-
-Handle<UnseededNumberDictionary> Factory::DictionaryAtNumberPut(
-    Handle<UnseededNumberDictionary> dictionary,
-    uint32_t key,
-    Handle<Object> value) {
-  CALL_HEAP_FUNCTION(isolate(),
-                     dictionary->AtNumberPut(key, *value),
-                     UnseededNumberDictionary);
 }
 
 

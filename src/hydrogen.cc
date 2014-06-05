@@ -3099,8 +3099,7 @@ HGraph::HGraph(CompilationInfo* info)
       inlined_functions_(5, info->zone()) {
   if (info->IsStub()) {
     HydrogenCodeStub* stub = info->code_stub();
-    CodeStubInterfaceDescriptor* descriptor =
-        stub->GetInterfaceDescriptor(isolate_);
+    CodeStubInterfaceDescriptor* descriptor = stub->GetInterfaceDescriptor();
     start_environment_ =
         new(zone_) HEnvironment(zone_, descriptor->environment_length());
   } else {
@@ -6964,13 +6963,36 @@ HInstruction* HOptimizedGraphBuilder::BuildCallConstantFunction(
 }
 
 
+class FunctionSorter {
+ public:
+  FunctionSorter(int index = 0, int ticks = 0, int size = 0)
+      : index_(index), ticks_(ticks), size_(size) { }
+
+  int index() const { return index_; }
+  int ticks() const { return ticks_; }
+  int size() const { return size_; }
+
+ private:
+  int index_;
+  int ticks_;
+  int size_;
+};
+
+
+inline bool operator<(const FunctionSorter& lhs, const FunctionSorter& rhs) {
+  int diff = lhs.ticks() - rhs.ticks();
+  if (diff != 0) return diff > 0;
+  return lhs.size() < rhs.size();
+}
+
+
 void HOptimizedGraphBuilder::HandlePolymorphicCallNamed(
     Call* expr,
     HValue* receiver,
     SmallMapList* types,
     Handle<String> name) {
   int argument_count = expr->arguments()->length() + 1;  // Includes receiver.
-  int order[kMaxCallPolymorphism];
+  FunctionSorter order[kMaxCallPolymorphism];
 
   bool handle_smi = false;
   bool handled_string = false;
@@ -6992,9 +7014,12 @@ void HOptimizedGraphBuilder::HandlePolymorphicCallNamed(
         handle_smi = true;
       }
       expr->set_target(target);
-      order[ordered_functions++] = i;
+      order[ordered_functions++] = FunctionSorter(
+          i, target->shared()->profiler_ticks(), InliningAstSize(target));
     }
   }
+
+  std::sort(order, order + ordered_functions);
 
   HBasicBlock* number_block = NULL;
   HBasicBlock* join = NULL;
@@ -7002,7 +7027,7 @@ void HOptimizedGraphBuilder::HandlePolymorphicCallNamed(
   int count = 0;
 
   for (int fn = 0; fn < ordered_functions; ++fn) {
-    int i = order[fn];
+    int i = order[fn].index();
     PropertyAccessInfo info(this, LOAD, ToType(types->at(i)), name);
     if (info.type()->Is(Type::String())) {
       if (handled_string) continue;
@@ -7787,6 +7812,7 @@ bool HOptimizedGraphBuilder::TryInlineBuiltinMethodCall(
 
       HValue* value_to_push = Pop();
       HValue* array = Pop();
+      Drop(1);  // Drop function.
 
       HInstruction* new_size = NULL;
       HValue* length = NULL;
@@ -7805,10 +7831,12 @@ bool HOptimizedGraphBuilder::TryInlineBuiltinMethodCall(
                                                elements_kind, STORE,
                                                NEVER_RETURN_HOLE,
                                                STORE_AND_GROW_NO_TRANSITION);
+
+        if (!ast_context()->IsEffect()) Push(new_size);
         Add<HSimulate>(expr->id(), REMOVABLE_SIMULATE);
+        if (!ast_context()->IsEffect()) Drop(1);
       }
 
-      Drop(1);  // Drop function.
       ast_context()->ReturnValue(new_size);
       return true;
     }
@@ -7981,8 +8009,8 @@ bool HOptimizedGraphBuilder::TryInlineApiCall(Handle<JSFunction> function,
   CallInterfaceDescriptor* descriptor =
       isolate()->call_descriptor(Isolate::ApiFunctionCall);
 
-  CallApiFunctionStub stub(is_store, call_data_is_undefined, argc);
-  Handle<Code> code = stub.GetCode(isolate());
+  CallApiFunctionStub stub(isolate(), is_store, call_data_is_undefined, argc);
+  Handle<Code> code = stub.GetCode();
   HConstant* code_value = Add<HConstant>(code);
 
   ASSERT((sizeof(op_vals) / kPointerSize) ==
