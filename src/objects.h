@@ -1505,10 +1505,7 @@ class Object {
   // Returns the permanent hash code associated with this object depending on
   // the actual object type. May create and store a hash code if needed and none
   // exists.
-  // TODO(rafaelw): Remove isolate parameter when objects.cc is fully
-  // handlified.
-  static Handle<Object> GetOrCreateHash(Handle<Object> object,
-                                        Isolate* isolate);
+  static Handle<Smi> GetOrCreateHash(Isolate* isolate, Handle<Object> object);
 
   // Checks whether this object has the same value as the given one.  This
   // function is implemented according to ES5, section 9.12 and can be used
@@ -1974,7 +1971,7 @@ class JSReceiver: public HeapObject {
 
   // Retrieves a permanent object identity hash code. May create and store a
   // hash code if needed and none exists.
-  inline static Handle<Object> GetOrCreateIdentityHash(
+  inline static Handle<Smi> GetOrCreateIdentityHash(
       Handle<JSReceiver> object);
 
   // Lookup a property.  If found, the result is valid and has
@@ -2886,7 +2883,7 @@ class JSObject: public JSReceiver {
 
   MUST_USE_RESULT Object* GetIdentityHash();
 
-  static Handle<Object> GetOrCreateIdentityHash(Handle<JSObject> object);
+  static Handle<Smi> GetOrCreateIdentityHash(Handle<JSObject> object);
 
   DISALLOW_IMPLICIT_CONSTRUCTORS(JSObject);
 };
@@ -6307,11 +6304,6 @@ class Map: public HeapObject {
   static Handle<Map> CopyInsertDescriptor(Handle<Map> map,
                                           Descriptor* descriptor,
                                           TransitionFlag flag);
-  static Handle<Map> CopyReplaceDescriptor(Handle<Map> map,
-                                           Handle<DescriptorArray> descriptors,
-                                           Descriptor* descriptor,
-                                           int index,
-                                           TransitionFlag flag);
 
   MUST_USE_RESULT static MaybeHandle<Map> CopyWithField(
       Handle<Map> map,
@@ -6584,6 +6576,11 @@ class Map: public HeapObject {
       TransitionFlag flag,
       MaybeHandle<Name> maybe_name,
       SimpleTransitionFlag simple_flag = FULL_TRANSITION);
+  static Handle<Map> CopyReplaceDescriptor(Handle<Map> map,
+                                           Handle<DescriptorArray> descriptors,
+                                           Descriptor* descriptor,
+                                           int index,
+                                           TransitionFlag flag);
 
   static Handle<Map> CopyNormalized(Handle<Map> map,
                                     PropertyNormalizationMode mode,
@@ -9876,7 +9873,7 @@ class JSProxy: public JSReceiver {
 
   MUST_USE_RESULT Object* GetIdentityHash();
 
-  static Handle<Object> GetOrCreateIdentityHash(Handle<JSProxy> proxy);
+  static Handle<Smi> GetOrCreateIdentityHash(Handle<JSProxy> proxy);
 
   DISALLOW_IMPLICIT_CONSTRUCTORS(JSProxy);
 };
