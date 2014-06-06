@@ -1382,6 +1382,17 @@ void HCheckMapValue::PrintDataTo(StringStream* stream) {
 }
 
 
+HValue* HCheckMapValue::Canonicalize() {
+  if (map()->IsConstant()) {
+    HConstant* c_map = HConstant::cast(map());
+    return HCheckMaps::CreateAndInsertAfter(
+        block()->graph()->zone(), value(), c_map->MapValue(),
+        c_map->HasStableMapValue(), this);
+  }
+  return this;
+}
+
+
 void HForInPrepareMap::PrintDataTo(StringStream* stream) {
   enumerable()->PrintNameTo(stream);
 }
@@ -1684,7 +1695,7 @@ void HCheckMaps::PrintDataTo(StringStream* stream) {
 HValue* HCheckMaps::Canonicalize() {
   if (!IsStabilityCheck() && maps_are_stable() && value()->IsConstant()) {
     HConstant* c_value = HConstant::cast(value());
-    if (c_value->HasObjectMap() && c_value->ObjectMapIsStable()) {
+    if (c_value->HasObjectMap()) {
       for (int i = 0; i < maps()->size(); ++i) {
         if (c_value->ObjectMap() == maps()->at(i)) {
           if (maps()->size() > 1) {
@@ -2687,7 +2698,7 @@ HConstant::HConstant(Handle<Object> object, Representation r)
   : HTemplateInstruction<0>(HType::TypeFromValue(object)),
     object_(Unique<Object>::CreateUninitialized(object)),
     object_map_(Handle<Map>::null()),
-    object_map_is_stable_(false),
+    has_stable_map_value_(false),
     has_smi_value_(false),
     has_int32_value_(false),
     has_double_value_(false),
@@ -2697,13 +2708,15 @@ HConstant::HConstant(Handle<Object> object, Representation r)
     is_undetectable_(false),
     instance_type_(kUnknownInstanceType) {
   if (object->IsHeapObject()) {
-    Isolate* isolate = Handle<HeapObject>::cast(object)->GetIsolate();
-    Handle<Map> map(Handle<HeapObject>::cast(object)->map(), isolate);
+    Handle<HeapObject> heap_object = Handle<HeapObject>::cast(object);
+    Isolate* isolate = heap_object->GetIsolate();
+    Handle<Map> map(heap_object->map(), isolate);
     is_not_in_new_space_ = !isolate->heap()->InNewSpace(*object);
     instance_type_ = map->instance_type();
     is_undetectable_ = map->is_undetectable();
-    object_map_ = Unique<Map>::CreateImmovable(map);
-    object_map_is_stable_ = map->is_stable();
+    if (map->is_stable()) object_map_ = Unique<Map>::CreateImmovable(map);
+    has_stable_map_value_ = (instance_type_ == MAP_TYPE &&
+                             Handle<Map>::cast(heap_object)->is_stable());
   }
   if (object->IsNumber()) {
     double n = object->Number();
@@ -2719,7 +2732,9 @@ HConstant::HConstant(Handle<Object> object, Representation r)
 }
 
 
-HConstant::HConstant(Unique<Object> unique,
+HConstant::HConstant(Unique<Object> object,
+                     Unique<Map> object_map,
+                     bool has_stable_map_value,
                      Representation r,
                      HType type,
                      bool is_not_in_new_space,
@@ -2727,9 +2742,9 @@ HConstant::HConstant(Unique<Object> unique,
                      bool is_undetectable,
                      InstanceType instance_type)
   : HTemplateInstruction<0>(type),
-    object_(unique),
-    object_map_(Handle<Map>::null()),
-    object_map_is_stable_(false),
+    object_(object),
+    object_map_(object_map),
+    has_stable_map_value_(has_stable_map_value),
     has_smi_value_(false),
     has_int32_value_(false),
     has_double_value_(false),
@@ -2738,7 +2753,7 @@ HConstant::HConstant(Unique<Object> unique,
     boolean_value_(boolean_value),
     is_undetectable_(is_undetectable),
     instance_type_(instance_type) {
-  ASSERT(!unique.handle().is_null());
+  ASSERT(!object.handle().is_null());
   ASSERT(!type.IsTaggedNumber());
   Initialize(r);
 }
@@ -2750,7 +2765,7 @@ HConstant::HConstant(int32_t integer_value,
                      Unique<Object> object)
   : object_(object),
     object_map_(Handle<Map>::null()),
-    object_map_is_stable_(false),
+    has_stable_map_value_(false),
     has_smi_value_(Smi::IsValid(integer_value)),
     has_int32_value_(true),
     has_double_value_(true),
@@ -2776,7 +2791,7 @@ HConstant::HConstant(double double_value,
                      Unique<Object> object)
   : object_(object),
     object_map_(Handle<Map>::null()),
-    object_map_is_stable_(false),
+    has_stable_map_value_(false),
     has_int32_value_(IsInteger32(double_value)),
     has_double_value_(true),
     has_external_reference_value_(false),
@@ -2800,7 +2815,7 @@ HConstant::HConstant(ExternalReference reference)
   : HTemplateInstruction<0>(HType::None()),
     object_(Unique<Object>(Handle<Object>::null())),
     object_map_(Handle<Map>::null()),
-    object_map_is_stable_(false),
+    has_stable_map_value_(false),
     has_smi_value_(false),
     has_int32_value_(false),
     has_double_value_(false),
@@ -2906,6 +2921,8 @@ HConstant* HConstant::CopyToRepresentation(Representation r, Zone* zone) const {
   }
   ASSERT(!object_.handle().is_null());
   return new(zone) HConstant(object_,
+                             object_map_,
+                             has_stable_map_value_,
                              r,
                              type_,
                              is_not_in_new_space_,
@@ -2957,6 +2974,13 @@ void HConstant::PrintDataTo(StringStream* stream) {
             external_reference_value_.address()));
   } else {
     handle(Isolate::Current())->ShortPrint(stream);
+    stream->Add(" ");
+    if (HasStableMapValue()) {
+      stream->Add("[stable-map] ");
+    }
+    if (HasObjectMap()) {
+      stream->Add("[map %p] ", *ObjectMap().handle());
+    }
   }
   if (!is_not_in_new_space_) {
     stream->Add("[new space] ");

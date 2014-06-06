@@ -14882,12 +14882,7 @@ RUNTIME_FUNCTION(Runtime_IsObserved) {
 
   if (!args[0]->IsJSReceiver()) return isolate->heap()->false_value();
   CONVERT_ARG_CHECKED(JSReceiver, obj, 0);
-  if (obj->IsJSGlobalProxy()) {
-    Object* proto = obj->GetPrototype();
-    if (proto->IsNull()) return isolate->heap()->false_value();
-    ASSERT(proto->IsJSGlobalObject());
-    obj = JSReceiver::cast(proto);
-  }
+  ASSERT(!obj->IsJSGlobalProxy() || !obj->map()->is_observed());
   return isolate->heap()->ToBoolean(obj->map()->is_observed());
 }
 
@@ -14896,12 +14891,7 @@ RUNTIME_FUNCTION(Runtime_SetIsObserved) {
   HandleScope scope(isolate);
   ASSERT(args.length() == 1);
   CONVERT_ARG_HANDLE_CHECKED(JSReceiver, obj, 0);
-  if (obj->IsJSGlobalProxy()) {
-    Object* proto = obj->GetPrototype();
-    if (proto->IsNull()) return isolate->heap()->undefined_value();
-    ASSERT(proto->IsJSGlobalObject());
-    obj = handle(JSReceiver::cast(proto));
-  }
+  ASSERT(!obj->IsJSGlobalProxy());
   if (obj->IsJSProxy())
     return isolate->heap()->undefined_value();
 
