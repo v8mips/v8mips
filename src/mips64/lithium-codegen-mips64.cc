@@ -776,16 +776,16 @@ void LCodeGen::DeoptimizeIf(Condition condition,
     Label no_deopt;
     __ Push(a1, scratch);
     __ li(scratch, Operand(count));
-    __ ld(a1, MemOperand(scratch));
-    __ Dsubu(a1, a1, Operand(1));
+    __ lw(a1, MemOperand(scratch));
+    __ Subu(a1, a1, Operand(1));
     __ Branch(&no_deopt, ne, a1, Operand(zero_reg));
     __ li(a1, Operand(FLAG_deopt_every_n_times));
-    __ sd(a1, MemOperand(scratch));
+    __ sw(a1, MemOperand(scratch));
     __ Pop(a1, scratch);
 
     __ Call(entry, RelocInfo::RUNTIME_ENTRY);
     __ bind(&no_deopt);
-    __ sd(a1, MemOperand(scratch));
+    __ sw(a1, MemOperand(scratch));
     __ Pop(a1, scratch);
   }
 
