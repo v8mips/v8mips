@@ -380,6 +380,11 @@ DEFINE_bool(enable_vldr_imm, false,
 DEFINE_bool(force_long_branches, false,
             "force all emitted branches to be in long mode (MIPS only)")
 
+// cpu-arm64.cc
+DEFINE_bool(enable_always_align_csp, true,
+            "enable alignment of csp to 16 bytes on platforms which prefer "
+            "the register to always be aligned (ARM64 only)")
+
 // bootstrapper.cc
 DEFINE_string(expose_natives_as, NULL, "expose natives in global object")
 DEFINE_string(expose_debug_as, NULL, "expose debug in global object")
@@ -463,6 +468,9 @@ DEFINE_bool(always_inline_smi_code, false,
             "always inline smi code in non-opt code")
 
 // heap.cc
+DEFINE_int(min_semi_space_size, 0,
+    "min size of a semi-space (in MBytes), the new space consists of two"
+    "semi-spaces")
 DEFINE_int(max_semi_space_size, 0,
     "max size of a semi-space (in MBytes), the new space consists of two"
     "semi-spaces")
