@@ -155,7 +155,6 @@ Handle<TypeFeedbackInfo> Factory::NewTypeFeedbackInfo() {
   Handle<TypeFeedbackInfo> info =
       Handle<TypeFeedbackInfo>::cast(NewStruct(TYPE_FEEDBACK_INFO_TYPE));
   info->initialize_storage();
-  info->set_feedback_vector(*empty_fixed_array(), SKIP_WRITE_BARRIER);
   return info;
 }
 
@@ -1070,10 +1069,12 @@ Handle<Object> Factory::NewNumberFromInt(int32_t value,
 
 
 Handle<Object> Factory::NewNumberFromUint(uint32_t value,
-                                         PretenureFlag pretenure) {
-  CALL_HEAP_FUNCTION(
-      isolate(),
-      isolate()->heap()->NumberFromUint32(value, pretenure), Object);
+                                          PretenureFlag pretenure) {
+  int32_t int32v = static_cast<int32_t>(value);
+  if (int32v >= 0 && Smi::IsValid(int32v)) {
+    return handle(Smi::FromInt(int32v), isolate());
+  }
+  return NewHeapNumber(FastUI2D(value), pretenure);
 }
 
 
@@ -1417,9 +1418,7 @@ Handle<Code> Factory::NewCode(const CodeDesc& desc,
   code->CopyFrom(desc);
 
 #ifdef VERIFY_HEAP
-  if (FLAG_verify_heap) {
-    code->Verify();
-  }
+  if (FLAG_verify_heap) code->ObjectVerify();
 #endif
   return code;
 }
@@ -1809,15 +1808,32 @@ void Factory::BecomeJSFunction(Handle<JSReceiver> object) {
 }
 
 
+Handle<FixedArray> Factory::NewTypeFeedbackVector(int slot_count) {
+  // Ensure we can skip the write barrier
+  ASSERT_EQ(isolate()->heap()->uninitialized_symbol(),
+            *TypeFeedbackInfo::UninitializedSentinel(isolate()));
+
+  CALL_HEAP_FUNCTION(
+      isolate(),
+      isolate()->heap()->AllocateFixedArrayWithFiller(
+          slot_count,
+          TENURED,
+          *TypeFeedbackInfo::UninitializedSentinel(isolate())),
+      FixedArray);
+}
+
+
 Handle<SharedFunctionInfo> Factory::NewSharedFunctionInfo(
     Handle<String> name,
     int number_of_literals,
     bool is_generator,
     Handle<Code> code,
-    Handle<ScopeInfo> scope_info) {
+    Handle<ScopeInfo> scope_info,
+    Handle<FixedArray> feedback_vector) {
   Handle<SharedFunctionInfo> shared = NewSharedFunctionInfo(name);
   shared->set_code(*code);
   shared->set_scope_info(*scope_info);
+  shared->set_feedback_vector(*feedback_vector);
   int literals_array_size = number_of_literals;
   // If the function contains object, regexp or array literals,
   // allocate extra space for a literals array prefix containing the
@@ -1875,6 +1891,7 @@ Handle<SharedFunctionInfo> Factory::NewSharedFunctionInfo(Handle<String> name) {
   share->set_script(*undefined_value(), SKIP_WRITE_BARRIER);
   share->set_debug_info(*undefined_value(), SKIP_WRITE_BARRIER);
   share->set_inferred_name(*empty_string(), SKIP_WRITE_BARRIER);
+  share->set_feedback_vector(*empty_fixed_array(), SKIP_WRITE_BARRIER);
   share->set_initial_map(*undefined_value(), SKIP_WRITE_BARRIER);
   share->set_profiler_ticks(0);
   share->set_ast_node_count(0);

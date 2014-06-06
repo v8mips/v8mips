@@ -988,8 +988,6 @@ void Object::ShortPrint(FILE* out) {
 void Object::ShortPrint(StringStream* accumulator) {
   if (IsSmi()) {
     Smi::cast(this)->SmiPrint(accumulator);
-  } else if (IsFailure()) {
-    Failure::cast(this)->FailurePrint(accumulator);
   } else {
     HeapObject::cast(this)->HeapObjectShortPrint(accumulator);
   }
@@ -1003,16 +1001,6 @@ void Smi::SmiPrint(FILE* out) {
 
 void Smi::SmiPrint(StringStream* accumulator) {
   accumulator->Add("%d", value());
-}
-
-
-void Failure::FailurePrint(StringStream* accumulator) {
-  accumulator->Add("Failure(%p)", reinterpret_cast<void*>(value()));
-}
-
-
-void Failure::FailurePrint(FILE* out) {
-  PrintF(out, "Failure(%p)", reinterpret_cast<void*>(value()));
 }
 
 
@@ -11178,19 +11166,16 @@ void Code::ClearInlineCaches(Code::Kind* kind) {
 }
 
 
-void Code::ClearTypeFeedbackInfo(Heap* heap) {
-  if (kind() != FUNCTION) return;
-  Object* raw_info = type_feedback_info();
-  if (raw_info->IsTypeFeedbackInfo()) {
-    FixedArray* feedback_vector =
-        TypeFeedbackInfo::cast(raw_info)->feedback_vector();
-    for (int i = 0; i < feedback_vector->length(); i++) {
-      Object* obj = feedback_vector->get(i);
-      if (!obj->IsAllocationSite()) {
-        // TODO(mvstanton): Can't I avoid a write barrier for this sentinel?
-        feedback_vector->set(i,
-                             TypeFeedbackInfo::RawUninitializedSentinel(heap));
-      }
+void SharedFunctionInfo::ClearTypeFeedbackInfo() {
+  FixedArray* vector = feedback_vector();
+  Heap* heap = GetHeap();
+  for (int i = 0; i < vector->length(); i++) {
+    Object* obj = vector->get(i);
+    if (!obj->IsAllocationSite()) {
+      vector->set(
+          i,
+          TypeFeedbackInfo::RawUninitializedSentinel(heap),
+          SKIP_WRITE_BARRIER);
     }
   }
 }

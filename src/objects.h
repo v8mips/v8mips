@@ -31,116 +31,113 @@
 // Most object types in the V8 JavaScript are described in this file.
 //
 // Inheritance hierarchy:
-// - MaybeObject    (an object or a failure)
-//   - Failure      (immediate for marking failed operation)
-//   - Object
-//     - Smi          (immediate small integer)
-//     - HeapObject   (superclass for everything allocated in the heap)
-//       - JSReceiver  (suitable for property access)
-//         - JSObject
-//           - JSArray
-//           - JSArrayBuffer
-//           - JSArrayBufferView
-//             - JSTypedArray
-//             - JSDataView
-//           - JSSet
-//           - JSMap
-//           - JSSetIterator
-//           - JSMapIterator
-//           - JSWeakCollection
-//             - JSWeakMap
-//             - JSWeakSet
-//           - JSRegExp
-//           - JSFunction
-//           - JSGeneratorObject
-//           - JSModule
-//           - GlobalObject
-//             - JSGlobalObject
-//             - JSBuiltinsObject
-//           - JSGlobalProxy
-//           - JSValue
-//             - JSDate
-//           - JSMessageObject
-//         - JSProxy
-//           - JSFunctionProxy
-//       - FixedArrayBase
-//         - ByteArray
-//         - FixedArray
-//           - DescriptorArray
-//           - HashTable
-//             - Dictionary
-//             - StringTable
-//             - CompilationCacheTable
-//             - CodeCacheHashTable
-//             - MapCache
-//           - OrderedHashTable
-//             - OrderedHashSet
-//             - OrderedHashMap
-//           - Context
-//           - JSFunctionResultCache
-//           - ScopeInfo
-//           - TransitionArray
-//         - FixedDoubleArray
-//         - ExternalArray
-//           - ExternalUint8ClampedArray
-//           - ExternalInt8Array
-//           - ExternalUint8Array
-//           - ExternalInt16Array
-//           - ExternalUint16Array
-//           - ExternalInt32Array
-//           - ExternalUint32Array
-//           - ExternalFloat32Array
-//       - Name
-//         - String
-//           - SeqString
-//             - SeqOneByteString
-//             - SeqTwoByteString
-//           - SlicedString
-//           - ConsString
-//           - ExternalString
-//             - ExternalAsciiString
-//             - ExternalTwoByteString
-//           - InternalizedString
-//             - SeqInternalizedString
-//               - SeqOneByteInternalizedString
-//               - SeqTwoByteInternalizedString
-//             - ConsInternalizedString
-//             - ExternalInternalizedString
-//               - ExternalAsciiInternalizedString
-//               - ExternalTwoByteInternalizedString
-//         - Symbol
-//       - HeapNumber
-//       - Cell
-//         - PropertyCell
-//       - Code
-//       - Map
-//       - Oddball
-//       - Foreign
-//       - SharedFunctionInfo
-//       - Struct
-//         - Box
-//         - DeclaredAccessorDescriptor
-//         - AccessorInfo
-//           - DeclaredAccessorInfo
-//           - ExecutableAccessorInfo
-//         - AccessorPair
-//         - AccessCheckInfo
-//         - InterceptorInfo
-//         - CallHandlerInfo
-//         - TemplateInfo
-//           - FunctionTemplateInfo
-//           - ObjectTemplateInfo
-//         - Script
-//         - SignatureInfo
-//         - TypeSwitchInfo
-//         - DebugInfo
-//         - BreakPointInfo
-//         - CodeCache
+// - Object
+//   - Smi          (immediate small integer)
+//   - HeapObject   (superclass for everything allocated in the heap)
+//     - JSReceiver  (suitable for property access)
+//       - JSObject
+//         - JSArray
+//         - JSArrayBuffer
+//         - JSArrayBufferView
+//           - JSTypedArray
+//           - JSDataView
+//         - JSSet
+//         - JSMap
+//         - JSSetIterator
+//         - JSMapIterator
+//         - JSWeakCollection
+//           - JSWeakMap
+//           - JSWeakSet
+//         - JSRegExp
+//         - JSFunction
+//         - JSGeneratorObject
+//         - JSModule
+//         - GlobalObject
+//           - JSGlobalObject
+//           - JSBuiltinsObject
+//         - JSGlobalProxy
+//         - JSValue
+//           - JSDate
+//         - JSMessageObject
+//       - JSProxy
+//         - JSFunctionProxy
+//     - FixedArrayBase
+//       - ByteArray
+//       - FixedArray
+//         - DescriptorArray
+//         - HashTable
+//           - Dictionary
+//           - StringTable
+//           - CompilationCacheTable
+//           - CodeCacheHashTable
+//           - MapCache
+//         - OrderedHashTable
+//           - OrderedHashSet
+//           - OrderedHashMap
+//         - Context
+//         - JSFunctionResultCache
+//         - ScopeInfo
+//         - TransitionArray
+//       - FixedDoubleArray
+//       - ExternalArray
+//         - ExternalUint8ClampedArray
+//         - ExternalInt8Array
+//         - ExternalUint8Array
+//         - ExternalInt16Array
+//         - ExternalUint16Array
+//         - ExternalInt32Array
+//         - ExternalUint32Array
+//         - ExternalFloat32Array
+//     - Name
+//       - String
+//         - SeqString
+//           - SeqOneByteString
+//           - SeqTwoByteString
+//         - SlicedString
+//         - ConsString
+//         - ExternalString
+//           - ExternalAsciiString
+//           - ExternalTwoByteString
+//         - InternalizedString
+//           - SeqInternalizedString
+//             - SeqOneByteInternalizedString
+//             - SeqTwoByteInternalizedString
+//           - ConsInternalizedString
+//           - ExternalInternalizedString
+//             - ExternalAsciiInternalizedString
+//             - ExternalTwoByteInternalizedString
+//       - Symbol
+//     - HeapNumber
+//     - Cell
+//       - PropertyCell
+//     - Code
+//     - Map
+//     - Oddball
+//     - Foreign
+//     - SharedFunctionInfo
+//     - Struct
+//       - Box
+//       - DeclaredAccessorDescriptor
+//       - AccessorInfo
+//         - DeclaredAccessorInfo
+//         - ExecutableAccessorInfo
+//       - AccessorPair
+//       - AccessCheckInfo
+//       - InterceptorInfo
+//       - CallHandlerInfo
+//       - TemplateInfo
+//         - FunctionTemplateInfo
+//         - ObjectTemplateInfo
+//       - Script
+//       - SignatureInfo
+//       - TypeSwitchInfo
+//       - DebugInfo
+//       - BreakPointInfo
+//       - CodeCache
 //
 // Formats of Object*:
 //  Smi:        [31 bit signed int] 0
 //  HeapObject: [32 bit direct pointer] (4 byte aligned) | 01
-//  Failure:    [30 bit signed int] 11
 
 namespace v8 {
 namespace internal {
@@ -863,7 +860,6 @@ class AllocationSiteCreationContext;
 class AllocationSiteUsageContext;
 class DictionaryElementsAccessor;
 class ElementsAccessor;
-class Failure;
 class FixedArrayBase;
 class GlobalObject;
 class ObjectVisitor;
@@ -888,46 +884,6 @@ template <class C> inline bool Is(Object* obj);
 #else
 #define DECLARE_PRINTER(Name)
 #endif
-
-class MaybeObject BASE_EMBEDDED {
- public:
-  inline bool IsFailure();
-  inline bool IsRetryAfterGC();
-  inline bool ToObject(Object** obj) {
-    if (IsFailure()) return false;
-    *obj = reinterpret_cast<Object*>(this);
-    return true;
-  }
-  inline Object* ToObjectUnchecked() {
-    // TODO(jkummerow): Turn this back into an ASSERT when we can be certain
-    // that it never fires in Release mode in the wild.
-    CHECK(!IsFailure());
-    return reinterpret_cast<Object*>(this);
-  }
-  inline Object* ToObjectChecked() {
-    CHECK(!IsFailure());
-    return reinterpret_cast<Object*>(this);
-  }
-
-  template<typename T>
-  inline bool To(T** obj) {
-    if (IsFailure()) return false;
-    *obj = T::cast(reinterpret_cast<Object*>(this));
-    return true;
-  }
-
-#ifdef OBJECT_PRINT
-  // Prints this object with details.
-  void Print();
-  void Print(FILE* out);
-  void PrintLn();
-  void PrintLn(FILE* out);
-#endif
-#ifdef VERIFY_HEAP
-  // Verifies the object.
-  void Verify();
-#endif
-};
 
 
 #define OBJECT_TYPE_LIST(V)                    \
@@ -1385,9 +1341,9 @@ const char* GetBailoutReason(BailoutReason reason);
 // object hierarchy.
 // Object does not use any virtual functions to avoid the
 // allocation of the C++ vtable.
-// Since Smi and Failure are subclasses of Object no
+// Since both Smi and HeapObject are subclasses of Object no
 // data members can be present in Object.
-class Object : public MaybeObject {
+class Object {
  public:
   // Type testing.
   bool IsObject() { return true; }
@@ -1420,7 +1376,6 @@ class Object : public MaybeObject {
   INLINE(bool IsTrue());
   INLINE(bool IsFalse());
   inline bool IsArgumentsMarker();
-  inline bool NonFailureIsHeapObject();
 
   // Filler objects (fillers and free space objects).
   inline bool IsFiller();
@@ -1585,6 +1540,14 @@ class Object : public MaybeObject {
   // Layout description.
   static const int kHeaderSize = 0;  // Object does not take up any space.
 
+#ifdef OBJECT_PRINT
+  // Prints this object with details.
+  void Print();
+  void Print(FILE* out);
+  void PrintLn();
+  void PrintLn(FILE* out);
+#endif
+
  private:
   DISALLOW_IMPLICIT_CONSTRUCTORS(Object);
 };
@@ -1624,59 +1587,6 @@ class Smi: public Object {
 
  private:
   DISALLOW_IMPLICIT_CONSTRUCTORS(Smi);
-};
-
-
-// Failure is mainly used for reporting a situation requiring a GC.
-// Failure objects are transient and cannot occur as part of the object graph.
-//
-// Failures are a single word, encoded as follows:
-// +-------------------------+---+--+--+
-// |.........unused..........|sss|tt|11|
-// +-------------------------+---+--+--+
-//                          7 6 4 32 10
-//
-//
-// The low two bits, 0-1, are the failure tag, 11.  The next two bits,
-// 2-3, are a failure type tag 'tt' with possible values:
-//   00 RETRY_AFTER_GC
-//
-// The next three bits, 4-6, are an allocation space tag 'sss'.  The
-// allocation space tag is 000 for all failure types except
-// RETRY_AFTER_GC.  For RETRY_AFTER_GC, the possible values are the
-// allocation spaces (the encoding is found in globals.h).
-
-// Failure type tag info.
-const int kFailureTypeTagSize = 2;
-const int kFailureTypeTagMask = (1 << kFailureTypeTagSize) - 1;
-
-class Failure: public MaybeObject {
- public:
-  enum Type {
-    RETRY_AFTER_GC = 0
-  };
-
-  inline Type type() const;
-
-  // Returns the space that needs to be collected for RetryAfterGC failures.
-  inline AllocationSpace allocation_space() const;
-
-  static inline Failure* RetryAfterGC(AllocationSpace space);
-  static inline Failure* RetryAfterGC();  // NEW_SPACE
-  // Casting.
-  static inline Failure* cast(MaybeObject* object);
-
-  // Dispatched behavior.
-  void FailurePrint(FILE* out = stdout);
-  void FailurePrint(StringStream* accumulator);
-
-  DECLARE_VERIFIER(Failure)
-
- private:
-  inline intptr_t value() const;
-  static inline Failure* Construct(Type type, intptr_t value = 0);
-
-  DISALLOW_IMPLICIT_CONSTRUCTORS(Failure);
 };
 
 
@@ -5671,8 +5581,6 @@ class Code: public HeapObject {
   void ClearInlineCaches();
   void ClearInlineCaches(Kind kind);
 
-  void ClearTypeFeedbackInfo(Heap* heap);
-
   BailoutId TranslatePcOffsetToAstId(uint32_t pc_offset);
   uint32_t TranslateAstIdToPcOffset(BailoutId ast_id);
 
@@ -6935,6 +6843,8 @@ class SharedFunctionInfo: public HeapObject {
   // Removed a specific optimized code object from the optimized code map.
   void EvictFromOptimizedCodeMap(Code* optimized_code, const char* reason);
 
+  void ClearTypeFeedbackInfo();
+
   // Trims the optimized code map after entries have been removed.
   void TrimOptimizedCodeMap(int shrink_by);
 
@@ -7038,6 +6948,12 @@ class SharedFunctionInfo: public HeapObject {
   // the tracking phase.
   inline int construction_count();
   inline void set_construction_count(int value);
+
+  // [feedback_vector] - accumulates ast node feedback from full-codegen and
+  // (increasingly) from crankshafted code where sufficient feedback isn't
+  // available. Currently the field is duplicated in
+  // TypeFeedbackInfo::feedback_vector, but the allocation is done here.
+  DECL_ACCESSORS(feedback_vector, FixedArray)
 
   // [initial_map]: initial map of the first function called as a constructor.
   // Saved for the duration of the tracking phase.
@@ -7320,8 +7236,10 @@ class SharedFunctionInfo: public HeapObject {
   static const int kScriptOffset = kFunctionDataOffset + kPointerSize;
   static const int kDebugInfoOffset = kScriptOffset + kPointerSize;
   static const int kInferredNameOffset = kDebugInfoOffset + kPointerSize;
-  static const int kInitialMapOffset =
+  static const int kFeedbackVectorOffset =
       kInferredNameOffset + kPointerSize;
+  static const int kInitialMapOffset =
+      kFeedbackVectorOffset + kPointerSize;
 #if V8_HOST_ARCH_32_BIT
   // Smi fields.
   static const int kLengthOffset =
@@ -8401,7 +8319,6 @@ class TypeFeedbackInfo: public Struct {
   inline void set_inlined_type_change_checksum(int checksum);
   inline bool matches_inlined_type_change_checksum(int checksum);
 
-  DECL_ACCESSORS(feedback_vector, FixedArray)
 
   static inline TypeFeedbackInfo* cast(Object* obj);
 
@@ -8411,10 +8328,9 @@ class TypeFeedbackInfo: public Struct {
 
   static const int kStorage1Offset = HeapObject::kHeaderSize;
   static const int kStorage2Offset = kStorage1Offset + kPointerSize;
-  static const int kFeedbackVectorOffset =
-      kStorage2Offset + kPointerSize;
-  static const int kSize = kFeedbackVectorOffset + kPointerSize;
+  static const int kSize = kStorage2Offset + kPointerSize;
 
+  // TODO(mvstanton): move these sentinel declarations to shared function info.
   // The object that indicates an uninitialized cache.
   static inline Handle<Object> UninitializedSentinel(Isolate* isolate);
 
@@ -8429,9 +8345,6 @@ class TypeFeedbackInfo: public Struct {
   // A raw version of the uninitialized sentinel that's safe to read during
   // garbage collection (e.g., for patching the cache).
   static inline Object* RawUninitializedSentinel(Heap* heap);
-
-  static const int kForInFastCaseMarker = 0;
-  static const int kForInSlowCaseMarker = 1;
 
  private:
   static const int kTypeChangeChecksumBits = 7;
