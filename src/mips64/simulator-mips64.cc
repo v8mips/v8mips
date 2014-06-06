@@ -861,9 +861,9 @@ void Simulator::CheckICache(v8::internal::HashMap* i_cache,
   char* cached_line = cache_page->CachedData(offset & ~CachePage::kLineMask);
   if (cache_hit) {
     // Check that the data in memory matches the contents of the I-cache.
-    CHECK(memcmp(reinterpret_cast<void*>(instr),
-                 cache_page->CachedData(offset),
-                 Instruction::kInstrSize) == 0);
+    CHECK_EQ(0, memcmp(reinterpret_cast<void*>(instr),
+                       cache_page->CachedData(offset),
+                       Instruction::kInstrSize));
   } else {
     // Cache miss.  Load memory into the cache.
     OS::MemCopy(cached_line, line, CachePage::kLineLength);
@@ -1962,7 +1962,7 @@ void Simulator::ConfigureTypeRegister(Instruction* instr,
           break;
         default:
           UNIMPLEMENTED_MIPS();
-      };
+      }
       break;
     case COP1X:
       break;
@@ -2151,7 +2151,7 @@ void Simulator::ConfigureTypeRegister(Instruction* instr,
           break;
         default:
           UNREACHABLE();
-      };
+      }
       break;
     case SPECIAL2:
       switch (instr->FunctionFieldRaw()) {
@@ -2167,7 +2167,7 @@ void Simulator::ConfigureTypeRegister(Instruction* instr,
           break;
         default:
           UNREACHABLE();
-      };
+      }
       break;
     case SPECIAL3:
       switch (instr->FunctionFieldRaw()) {
@@ -2193,11 +2193,11 @@ void Simulator::ConfigureTypeRegister(Instruction* instr,
         }
         default:
           UNREACHABLE();
-      };
+      }
       break;
     default:
       UNREACHABLE();
-  };
+  }
 }
 
 
@@ -2460,7 +2460,7 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
               break;
             default:
               UNREACHABLE();
-          };
+          }
           break;
         case L:
           switch (instr->FunctionFieldRaw()) {
@@ -2479,7 +2479,7 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
           break;
         default:
           UNREACHABLE();
-      };
+      }
       break;
     case COP1X:
       switch (instr->FunctionFieldRaw()) {
@@ -2492,7 +2492,7 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
           break;
         default:
           UNREACHABLE();
-      };
+      }
       break;
     case SPECIAL:
       switch (instr->FunctionFieldRaw()) {
@@ -2588,7 +2588,7 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
         default:  // For other special opcodes we do the default operation.
           set_register(rd_reg, alu_out);
           TraceRegWr(alu_out);
-      };
+      }
       break;
     case SPECIAL2:
       switch (instr->FunctionFieldRaw()) {
@@ -2617,7 +2617,7 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
           break;
         default:
           UNREACHABLE();
-      };
+      }
       break;
     // Unimplemented opcodes raised an error in the configuration step before,
     // so we can use the default here to set the destination register in common
@@ -2625,7 +2625,7 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
     default:
       set_register(rd_reg, alu_out);
       TraceRegWr(alu_out);
-  };
+  }
 }
 
 
@@ -2688,7 +2688,7 @@ void Simulator::DecodeTypeImmediate(Instruction* instr) {
           break;
         default:
           UNREACHABLE();
-      };
+      }
       break;
     // ------------- REGIMM class.
     case REGIMM:
@@ -2726,7 +2726,7 @@ void Simulator::DecodeTypeImmediate(Instruction* instr) {
           }
         default:
           break;
-        };
+        }
     break;  // case REGIMM.
     // ------------- Branch instructions.
     // When comparing to zero, the encoding of rt field is always 0, so we don't
@@ -2870,7 +2870,7 @@ void Simulator::DecodeTypeImmediate(Instruction* instr) {
       break;
     default:
       UNREACHABLE();
-  };
+  }
 
   // ---------- Raise exceptions triggered.
   SignalExceptions();
@@ -2955,7 +2955,7 @@ void Simulator::DecodeTypeImmediate(Instruction* instr) {
       break;
     default:
       break;
-  };
+  }
 
 
   if (execute_branch_delay_instruction) {
