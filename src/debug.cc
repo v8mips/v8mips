@@ -526,7 +526,7 @@ void Debug::ThreadInit() {
   thread_local_.after_break_target_ = 0;
   // TODO(isolates): frames_are_dropped_?
   thread_local_.debugger_entry_ = NULL;
-  thread_local_.pending_interrupts_ = 0;
+  thread_local_.has_pending_interrupt_ = false;
   thread_local_.restarter_frame_function_pointer_ = NULL;
 }
 
@@ -860,13 +860,6 @@ void Debug::Unload() {
 }
 
 
-// Set the flag indicating that preemption happened during debugging.
-void Debug::PreemptionWhileInDebugger() {
-  ASSERT(InDebugger());
-  Debug::set_interrupts_pending(PREEMPT);
-}
-
-
 Object* Debug::Break(Arguments args) {
   Heap* heap = isolate_->heap();
   HandleScope scope(isolate_);
@@ -1108,7 +1101,7 @@ Handle<DebugInfo> Debug::GetDebugInfo(Handle<SharedFunctionInfo> shared) {
 }
 
 
-void Debug::SetBreakPoint(Handle<JSFunction> function,
+bool Debug::SetBreakPoint(Handle<JSFunction> function,
                           Handle<Object> break_point_object,
                           int* source_position) {
   HandleScope scope(isolate_);
@@ -1119,7 +1112,7 @@ void Debug::SetBreakPoint(Handle<JSFunction> function,
   Handle<SharedFunctionInfo> shared(function->shared());
   if (!EnsureDebugInfo(shared, function)) {
     // Return if retrieving debug info failed.
-    return;
+    return true;
   }
 
   Handle<DebugInfo> debug_info = GetDebugInfo(shared);
@@ -1134,7 +1127,7 @@ void Debug::SetBreakPoint(Handle<JSFunction> function,
   *source_position = it.position();
 
   // At least one active break point now.
-  ASSERT(debug_info->GetBreakPointCount() > 0);
+  return debug_info->GetBreakPointCount() > 0;
 }
 
 
@@ -2037,18 +2030,24 @@ class ForceDebuggerActive {
 };
 
 
-void Debug::MaybeRecompileFunctionForDebugging(Handle<JSFunction> function) {
-  ASSERT_EQ(Code::FUNCTION, function->code()->kind());
-  ASSERT_EQ(function->code(), function->shared()->code());
+void Debug::EnsureFunctionHasDebugBreakSlots(Handle<JSFunction> function) {
+  if (function->code()->kind() == Code::FUNCTION &&
+      function->code()->has_debug_break_slots()) {
+    // Nothing to do. Function code already had debug break slots.
+    return;
+  }
 
-  if (function->code()->has_debug_break_slots()) return;
-
-  ForceDebuggerActive force_debugger_active(isolate_);
-  MaybeHandle<Code> code = Compiler::GetCodeForDebugging(function);
-  // Recompilation can fail.  In that case leave the code as it was.
-  if (!code.is_null())
-    function->ReplaceCode(*code.ToHandleChecked());
-  ASSERT_EQ(function->code(), function->shared()->code());
+  // Make sure that the shared full code is compiled with debug
+  // break slots.
+  if (!function->shared()->code()->has_debug_break_slots()) {
+    ForceDebuggerActive force_debugger_active(isolate_);
+    MaybeHandle<Code> code = Compiler::GetCodeForDebugging(function);
+    // Recompilation can fail.  In that case leave the code as it was.
+    if (!code.is_null()) function->ReplaceCode(*code.ToHandleChecked());
+  } else {
+    // Simply use shared code if it has debug break slots.
+    function->ReplaceCode(function->shared()->code());
+  }
 }
 
 
@@ -2057,7 +2056,7 @@ void Debug::RecompileAndRelocateSuspendedGenerators(
   for (int i = 0; i < generators.length(); i++) {
     Handle<JSFunction> fun(generators[i]->function());
 
-    MaybeRecompileFunctionForDebugging(fun);
+    EnsureFunctionHasDebugBreakSlots(fun);
 
     int code_offset = generators[i]->continuation();
     int pc_offset = ComputePcOffsetFromCodeOffset(fun->code(), code_offset);
@@ -2145,8 +2144,8 @@ void Debug::PrepareForBreakPoints() {
           Code::Kind kind = function->code()->kind();
           if (kind == Code::FUNCTION &&
               !function->code()->has_debug_break_slots()) {
-            function->set_code(*lazy_compile);
-            function->shared()->set_code(*lazy_compile);
+            function->ReplaceCode(*lazy_compile);
+            function->shared()->ReplaceCode(*lazy_compile);
           } else if (kind == Code::BUILTIN &&
               (function->IsInOptimizationQueue() ||
                function->IsMarkedForOptimization() ||
@@ -2155,10 +2154,10 @@ void Debug::PrepareForBreakPoints() {
             Code* shared_code = function->shared()->code();
             if (shared_code->kind() == Code::FUNCTION &&
                 shared_code->has_debug_break_slots()) {
-              function->set_code(shared_code);
+              function->ReplaceCode(shared_code);
             } else {
-              function->set_code(*lazy_compile);
-              function->shared()->set_code(*lazy_compile);
+              function->ReplaceCode(*lazy_compile);
+              function->shared()->ReplaceCode(*lazy_compile);
             }
           }
         } else if (obj->IsJSGeneratorObject()) {
@@ -2199,8 +2198,8 @@ void Debug::PrepareForBreakPoints() {
       Handle<JSFunction> &function = generator_functions[i];
       if (function->code()->kind() != Code::FUNCTION) continue;
       if (function->code()->has_debug_break_slots()) continue;
-      function->set_code(*lazy_compile);
-      function->shared()->set_code(*lazy_compile);
+      function->ReplaceCode(*lazy_compile);
+      function->shared()->ReplaceCode(*lazy_compile);
     }
 
     // Now recompile all functions with activation frames and and
@@ -2217,7 +2216,7 @@ void Debug::PrepareForBreakPoints() {
       if (!shared->allows_lazy_compilation()) continue;
       if (shared->code()->kind() == Code::BUILTIN) continue;
 
-      MaybeRecompileFunctionForDebugging(function);
+      EnsureFunctionHasDebugBreakSlots(function);
     }
 
     RedirectActivationsToRecompiledCodeOnThread(isolate_,
@@ -2955,7 +2954,7 @@ void Debugger::ProcessDebugEvent(v8::DebugEvent event,
 
   // Clear any pending debug break if this is a real break.
   if (!auto_continue) {
-    isolate_->debug()->clear_interrupt_pending(DEBUGBREAK);
+    isolate_->debug()->set_has_pending_interrupt(false);
   }
 
   // Create the execution state.
@@ -3101,7 +3100,7 @@ void Debugger::NotifyMessageHandler(v8::DebugEvent event,
   // added. It should be enough to clear the flag only once while we are in the
   // debugger.
   ASSERT(isolate_->debug()->InDebugger());
-  isolate_->stack_guard()->Continue(DEBUGCOMMAND);
+  isolate_->stack_guard()->ClearDebugCommand();
 
   // Notify the debugger that a debug event has occurred unless auto continue is
   // active in which case no event is send.
@@ -3349,7 +3348,7 @@ void Debugger::ProcessCommand(Vector<const uint16_t> command,
 
   // Set the debug command break flag to have the command processed.
   if (!isolate_->debug()->InDebugger()) {
-    isolate_->stack_guard()->DebugCommand();
+    isolate_->stack_guard()->RequestDebugCommand();
   }
 
   MessageDispatchHelperThread* dispatch_thread;
@@ -3377,7 +3376,7 @@ void Debugger::EnqueueDebugCommand(v8::Debug::ClientData* client_data) {
 
   // Set the debug command break flag to have the command processed.
   if (!isolate_->debug()->InDebugger()) {
-    isolate_->stack_guard()->DebugCommand();
+    isolate_->stack_guard()->RequestDebugCommand();
   }
 }
 
@@ -3480,9 +3479,6 @@ EnterDebugger::EnterDebugger(Isolate* isolate)
       has_js_frames_(!it_.done()),
       save_(isolate_) {
   Debug* debug = isolate_->debug();
-  ASSERT(prev_ != NULL || !debug->is_interrupt_pending(PREEMPT));
-  ASSERT(prev_ != NULL || !debug->is_interrupt_pending(DEBUGBREAK));
-
   // Link recursive debugger entry.
   debug->set_debugger_entry(this);
 
@@ -3523,30 +3519,24 @@ EnterDebugger::~EnterDebugger() {
     if (!isolate_->has_pending_exception()) {
       // Try to avoid any pending debug break breaking in the clear mirror
       // cache JavaScript code.
-      if (isolate_->stack_guard()->IsDebugBreak()) {
-        debug->set_interrupts_pending(DEBUGBREAK);
-        isolate_->stack_guard()->Continue(DEBUGBREAK);
+      if (isolate_->stack_guard()->CheckDebugBreak()) {
+        debug->set_has_pending_interrupt(true);
+        isolate_->stack_guard()->ClearDebugBreak();
       }
       debug->ClearMirrorCache();
     }
 
-    // Request preemption and debug break when leaving the last debugger entry
-    // if any of these where recorded while debugging.
-    if (debug->is_interrupt_pending(PREEMPT)) {
-      // This re-scheduling of preemption is to avoid starvation in some
-      // debugging scenarios.
-      debug->clear_interrupt_pending(PREEMPT);
-      isolate_->stack_guard()->Preempt();
-    }
-    if (debug->is_interrupt_pending(DEBUGBREAK)) {
-      debug->clear_interrupt_pending(DEBUGBREAK);
-      isolate_->stack_guard()->DebugBreak();
+    // Request debug break when leaving the last debugger entry
+    // if one was recorded while debugging.
+    if (debug->has_pending_interrupt()) {
+      debug->set_has_pending_interrupt(false);
+      isolate_->stack_guard()->RequestDebugBreak();
     }
 
     // If there are commands in the queue when leaving the debugger request
     // that these commands are processed.
     if (isolate_->debugger()->HasCommands()) {
-      isolate_->stack_guard()->DebugCommand();
+      isolate_->stack_guard()->RequestDebugCommand();
     }
 
     // If leaving the debugger with the debugger no longer active unload it.

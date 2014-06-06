@@ -216,10 +216,9 @@ class Debug {
   void Unload();
   bool IsLoaded() { return !debug_context_.is_null(); }
   bool InDebugger() { return thread_local_.debugger_entry_ != NULL; }
-  void PreemptionWhileInDebugger();
 
   Object* Break(Arguments args);
-  void SetBreakPoint(Handle<JSFunction> function,
+  bool SetBreakPoint(Handle<JSFunction> function,
                      Handle<Object> break_point_object,
                      int* source_position);
   bool SetBreakPointForScript(Handle<Script> script,
@@ -317,18 +316,13 @@ class Debug {
   }
 
   // Check whether any of the specified interrupts are pending.
-  bool is_interrupt_pending(InterruptFlag what) {
-    return (thread_local_.pending_interrupts_ & what) != 0;
+  bool has_pending_interrupt() {
+    return thread_local_.has_pending_interrupt_;
   }
 
   // Set specified interrupts as pending.
-  void set_interrupts_pending(InterruptFlag what) {
-    thread_local_.pending_interrupts_ |= what;
-  }
-
-  // Clear specified interrupts from pending.
-  void clear_interrupt_pending(InterruptFlag what) {
-    thread_local_.pending_interrupts_ &= ~static_cast<int>(what);
+  void set_has_pending_interrupt(bool value) {
+    thread_local_.has_pending_interrupt_ = value;
   }
 
   // Getter and setter for the disable break state.
@@ -511,7 +505,7 @@ class Debug {
   Handle<Object> CheckBreakPoints(Handle<Object> break_point);
   bool CheckBreakPoint(Handle<Object> break_point_object);
 
-  void MaybeRecompileFunctionForDebugging(Handle<JSFunction> function);
+  void EnsureFunctionHasDebugBreakSlots(Handle<JSFunction> function);
   void RecompileAndRelocateSuspendedGenerators(
       const List<Handle<JSGeneratorObject> > &suspended_generators);
 
@@ -585,7 +579,7 @@ class Debug {
     EnterDebugger* debugger_entry_;
 
     // Pending interrupts scheduled while debugging.
-    int pending_interrupts_;
+    bool has_pending_interrupt_;
 
     // When restarter frame is on stack, stores the address
     // of the pointer to function being restarted. Otherwise (most of the time)

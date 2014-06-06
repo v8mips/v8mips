@@ -19271,7 +19271,6 @@ TEST(IsolateNewDispose) {
   v8::Isolate* current_isolate = CcTest::isolate();
   v8::Isolate* isolate = v8::Isolate::New();
   CHECK(isolate != NULL);
-  CHECK(!reinterpret_cast<i::Isolate*>(isolate)->IsDefaultIsolate());
   CHECK(current_isolate != isolate);
   CHECK(current_isolate == CcTest::isolate());
 
@@ -19536,10 +19535,9 @@ class InitDefaultIsolateThread : public v8::internal::Thread {
     isolate->Enter();
     switch (testCase_) {
       case SetResourceConstraints: {
-        static const int K = 1024;
         v8::ResourceConstraints constraints;
-        constraints.set_max_new_space_size(2 * K * K);
-        constraints.set_max_old_space_size(4 * K * K);
+        constraints.set_max_semi_space_size(1);
+        constraints.set_max_old_space_size(4);
         v8::SetResourceConstraints(CcTest::isolate(), &constraints);
         break;
       }
