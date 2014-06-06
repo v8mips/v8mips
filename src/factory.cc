@@ -1203,11 +1203,14 @@ Handle<JSFunction> Factory::NewFunction(Handle<Map> map,
 
 
 Handle<JSFunction> Factory::NewFunction(Handle<String> name,
-                                        Handle<Code> code,
+                                        MaybeHandle<Code> maybe_code,
                                         MaybeHandle<Object> maybe_prototype) {
   Handle<SharedFunctionInfo> info = NewSharedFunctionInfo(name);
   ASSERT(info->strict_mode() == SLOPPY);
-  info->set_code(*code);
+  Handle<Code> code;
+  if (maybe_code.ToHandle(&code)) {
+    info->set_code(*code);
+  }
   Handle<Context> context(isolate()->context()->native_context());
   Handle<Map> map = maybe_prototype.is_null()
       ? isolate()->sloppy_function_without_prototype_map()
@@ -1221,48 +1224,27 @@ Handle<JSFunction> Factory::NewFunction(Handle<String> name,
 }
 
 
-Handle<JSFunction> Factory::NewFunctionWithPrototype(Handle<String> name,
-                                                     Handle<Object> prototype) {
-  Handle<SharedFunctionInfo> info = NewSharedFunctionInfo(name);
-  ASSERT(info->strict_mode() == SLOPPY);
-  Handle<Context> context(isolate()->context()->native_context());
-  Handle<Map> map = isolate()->sloppy_function_map();
-  Handle<JSFunction> result = NewFunction(map, info, context);
-  result->set_prototype_or_initial_map(*prototype);
-  return result;
+Handle<JSFunction> Factory::NewFunction(Handle<String> name) {
+  return NewFunction(name, MaybeHandle<Code>(), the_hole_value());
 }
 
 
-Handle<JSFunction> Factory::NewFunction(MaybeHandle<Object> maybe_prototype,
+Handle<JSFunction> Factory::NewFunction(Handle<Object> prototype,
                                         Handle<String> name,
                                         InstanceType type,
                                         int instance_size,
-                                        Handle<Code> code,
-                                        bool force_initial_map) {
+                                        Handle<Code> code) {
   // Allocate the function
-  Handle<JSFunction> function = NewFunction(name, code, maybe_prototype);
+  Handle<JSFunction> function = NewFunction(name, code, prototype);
 
-  if (force_initial_map ||
-      type != JS_OBJECT_TYPE ||
-      instance_size != JSObject::kHeaderSize) {
-    Handle<Object> prototype = maybe_prototype.ToHandleChecked();
-    Handle<Map> initial_map = NewMap(type, instance_size);
-    if (prototype->IsJSObject()) {
-      JSObject::SetLocalPropertyIgnoreAttributes(
-          Handle<JSObject>::cast(prototype),
-          constructor_string(),
-          function,
-          DONT_ENUM).Assert();
-    } else if (!function->shared()->is_generator()) {
-      prototype = NewFunctionPrototype(function);
-    }
-    initial_map->set_prototype(*prototype);
-    function->set_initial_map(*initial_map);
-    initial_map->set_constructor(*function);
-  } else {
-    ASSERT(!function->has_initial_map());
-    ASSERT(!function->has_prototype());
+  Handle<Map> initial_map = NewMap(
+      type, instance_size, GetInitialFastElementsKind());
+  if (prototype->IsTheHole() && !function->shared()->is_generator()) {
+    prototype = NewFunctionPrototype(function);
   }
+  initial_map->set_prototype(*prototype);
+  function->set_initial_map(*initial_map);
+  initial_map->set_constructor(*function);
 
   return function;
 }
@@ -1271,34 +1253,8 @@ Handle<JSFunction> Factory::NewFunction(MaybeHandle<Object> maybe_prototype,
 Handle<JSFunction> Factory::NewFunction(Handle<String> name,
                                         InstanceType type,
                                         int instance_size,
-                                        Handle<Code> code,
-                                        bool force_initial_map) {
-  return NewFunction(
-      the_hole_value(), name, type, instance_size, code, force_initial_map);
-}
-
-
-Handle<JSFunction> Factory::NewFunctionWithPrototype(Handle<String> name,
-                                                     InstanceType type,
-                                                     int instance_size,
-                                                     Handle<JSObject> prototype,
-                                                     Handle<Code> code,
-                                                     bool force_initial_map) {
-  // Allocate the function.
-  Handle<JSFunction> function = NewFunction(name, code, prototype);
-
-  if (force_initial_map ||
-      type != JS_OBJECT_TYPE ||
-      instance_size != JSObject::kHeaderSize) {
-    Handle<Map> initial_map = NewMap(type,
-                                     instance_size,
-                                     GetInitialFastElementsKind());
-    function->set_initial_map(*initial_map);
-    initial_map->set_constructor(*function);
-  }
-
-  JSFunction::SetPrototype(function, prototype);
-  return function;
+                                        Handle<Code> code) {
+  return NewFunction(the_hole_value(), name, type, instance_size, code);
 }
 
 
@@ -2096,44 +2052,44 @@ Handle<JSFunction> Factory::CreateApiFunction(
   Handle<Code> code = isolate()->builtins()->HandleApiCall();
   Handle<Code> construct_stub = isolate()->builtins()->JSConstructStubApi();
 
-  int internal_field_count = 0;
-  if (!obj->instance_template()->IsUndefined()) {
-    Handle<ObjectTemplateInfo> instance_template =
-        Handle<ObjectTemplateInfo>(
-            ObjectTemplateInfo::cast(obj->instance_template()));
-    internal_field_count =
-        Smi::cast(instance_template->internal_field_count())->value();
+  Handle<JSFunction> result;
+  if (obj->remove_prototype()) {
+    result = NewFunction(empty_string(), code);
+  } else {
+    int internal_field_count = 0;
+    if (!obj->instance_template()->IsUndefined()) {
+      Handle<ObjectTemplateInfo> instance_template =
+          Handle<ObjectTemplateInfo>(
+              ObjectTemplateInfo::cast(obj->instance_template()));
+      internal_field_count =
+          Smi::cast(instance_template->internal_field_count())->value();
+    }
+
+    // TODO(svenpanne) Kill ApiInstanceType and refactor things by generalizing
+    // JSObject::GetHeaderSize.
+    int instance_size = kPointerSize * internal_field_count;
+    InstanceType type;
+    switch (instance_type) {
+      case JavaScriptObject:
+        type = JS_OBJECT_TYPE;
+        instance_size += JSObject::kHeaderSize;
+        break;
+      case InnerGlobalObject:
+        type = JS_GLOBAL_OBJECT_TYPE;
+        instance_size += JSGlobalObject::kSize;
+        break;
+      case OuterGlobalObject:
+        type = JS_GLOBAL_PROXY_TYPE;
+        instance_size += JSGlobalProxy::kSize;
+        break;
+      default:
+        UNREACHABLE();
+        type = JS_OBJECT_TYPE;  // Keep the compiler happy.
+        break;
+    }
+
+    result = NewFunction(prototype, empty_string(), type, instance_size, code);
   }
-
-  // TODO(svenpanne) Kill ApiInstanceType and refactor things by generalizing
-  // JSObject::GetHeaderSize.
-  int instance_size = kPointerSize * internal_field_count;
-  InstanceType type;
-  switch (instance_type) {
-    case JavaScriptObject:
-      type = JS_OBJECT_TYPE;
-      instance_size += JSObject::kHeaderSize;
-      break;
-    case InnerGlobalObject:
-      type = JS_GLOBAL_OBJECT_TYPE;
-      instance_size += JSGlobalObject::kSize;
-      break;
-    case OuterGlobalObject:
-      type = JS_GLOBAL_PROXY_TYPE;
-      instance_size += JSGlobalProxy::kSize;
-      break;
-    default:
-      UNREACHABLE();
-      type = JS_OBJECT_TYPE;  // Keep the compiler happy.
-      break;
-  }
-
-  MaybeHandle<Object> maybe_prototype = prototype;
-  if (obj->remove_prototype()) maybe_prototype = MaybeHandle<Object>();
-
-  Handle<JSFunction> result = NewFunction(
-      maybe_prototype, Factory::empty_string(), type,
-      instance_size, code, !obj->remove_prototype());
 
   result->shared()->set_length(obj->length());
   Handle<Object> class_name(obj->class_name(), isolate());
@@ -2151,6 +2107,13 @@ Handle<JSFunction> Factory::CreateApiFunction(
     ASSERT(!result->has_prototype());
     return result;
   }
+
+  JSObject::SetLocalPropertyIgnoreAttributes(
+      handle(JSObject::cast(result->prototype())),
+      constructor_string(),
+      result,
+      DONT_ENUM).Assert();
+
   // Down from here is only valid for API functions that can be used as a
   // constructor (don't set the "remove prototype" flag).
 

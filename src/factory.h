@@ -452,36 +452,25 @@ class Factory V8_FINAL {
   void BecomeJSFunction(Handle<JSReceiver> object);
 
   Handle<JSFunction> NewFunction(Handle<String> name,
-                                 Handle<Code> code,
+                                 MaybeHandle<Code> maybe_code,
                                  MaybeHandle<Object> maybe_prototype =
                                      MaybeHandle<Object>());
-
-  Handle<JSFunction> NewFunctionWithPrototype(Handle<String> name,
-                                              Handle<Object> prototype);
+  Handle<JSFunction> NewFunction(Handle<String> name);
 
   Handle<JSFunction> NewFunctionFromSharedFunctionInfo(
       Handle<SharedFunctionInfo> function_info,
       Handle<Context> context,
       PretenureFlag pretenure = TENURED);
 
-  Handle<JSFunction> NewFunction(MaybeHandle<Object> maybe_prototype,
+  Handle<JSFunction> NewFunction(Handle<Object> maybe_prototype,
                                  Handle<String> name,
                                  InstanceType type,
                                  int instance_size,
-                                 Handle<Code> code,
-                                 bool force_initial_map);
+                                 Handle<Code> code);
   Handle<JSFunction> NewFunction(Handle<String> name,
                                  InstanceType type,
                                  int instance_size,
-                                 Handle<Code> code,
-                                 bool force_initial_map);
-
-  Handle<JSFunction> NewFunctionWithPrototype(Handle<String> name,
-                                              InstanceType type,
-                                              int instance_size,
-                                              Handle<JSObject> prototype,
-                                              Handle<Code> code,
-                                              bool force_initial_map);
+                                 Handle<Code> code);
 
   // Create a serialized scope info.
   Handle<ScopeInfo> NewScopeInfo(int length);
