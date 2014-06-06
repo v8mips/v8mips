@@ -1541,8 +1541,8 @@ void Simulator::Format(Instruction* instr, const char* format) {
                                         int64_t arg5);*/
 
 struct ObjectPair {
-  MaybeObject* x;
-  MaybeObject* y;
+  Object* x;
+  Object* y;
 };
 
 typedef ObjectPair (*SimulatorRuntimeCall)(int64_t arg0,
