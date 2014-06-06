@@ -34,9 +34,8 @@ void BreakLocationIterator::SetDebugBreakAtReturn() {
   ASSERT(Assembler::kJSReturnSequenceInstructions == 8);
   CodePatcher patcher(rinfo()->pc(), Assembler::kJSReturnSequenceInstructions);
   // li and Call pseudo-instructions emit 6 + 2 instructions.
-  patcher.masm()->li(v8::internal::t9,
-      Operand(reinterpret_cast<int64_t>(
-          debug_info_->GetIsolate()->debug()->debug_break_return()->entry())),
+  patcher.masm()->li(v8::internal::t9, Operand(reinterpret_cast<int64_t>(
+      debug_info_->GetIsolate()->builtins()->Return_DebugBreak()->entry())),
       CONSTANT_SIZE);
   patcher.masm()->Call(v8::internal::t9);
 
@@ -84,7 +83,7 @@ void BreakLocationIterator::SetDebugBreakAtSlot() {
   CodePatcher patcher(rinfo()->pc(), Assembler::kDebugBreakSlotInstructions);
   patcher.masm()->li(v8::internal::t9,
       Operand(reinterpret_cast<int64_t>(
-          debug_info_->GetIsolate()->debug()->debug_break_slot()->entry())),
+          debug_info_->GetIsolate()->builtins()->Slot_DebugBreak()->entry())),
       CONSTANT_SIZE);
   patcher.masm()->Call(v8::internal::t9);
 }
