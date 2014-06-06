@@ -104,7 +104,7 @@ MUST_USE_RESULT static MaybeHandle<Object> Invoke(
   if (has_exception) {
     isolate->ReportPendingMessages();
     // Reset stepping state when script exits with uncaught exception.
-    if (isolate->debugger()->IsDebuggerActive()) {
+    if (isolate->debugger()->is_active()) {
       isolate->debug()->ClearStepping();
     }
     return MaybeHandle<Object>();
@@ -385,6 +385,18 @@ void StackGuard::ClearInterrupt(int flagbit) {
   if (!should_postpone_interrupts(access) && !has_pending_interrupts(access)) {
     reset_limits(access);
   }
+}
+
+
+bool StackGuard::CheckAndClearInterrupt(InterruptFlag flag,
+                                        const ExecutionAccess& lock) {
+  int flagbit = 1 << flag;
+  bool result = (thread_local_.interrupt_flags_ & flagbit);
+  thread_local_.interrupt_flags_ &= ~flagbit;
+  if (!should_postpone_interrupts(lock) && !has_pending_interrupts(lock)) {
+    reset_limits(lock);
+  }
+  return result;
 }
 
 
@@ -673,7 +685,7 @@ void Execution::DebugBreakHelper(Isolate* isolate) {
   if (isolate->bootstrapper()->IsActive()) return;
 
   // Ignore debug break if debugger is not active.
-  if (!isolate->debugger()->IsDebuggerActive()) return;
+  if (!isolate->debugger()->is_active()) return;
 
   StackLimitCheck check(isolate);
   if (check.HasOverflowed()) return;
@@ -720,44 +732,37 @@ void Execution::ProcessDebugMessages(Isolate* isolate,
 
 
 Object* StackGuard::HandleInterrupts() {
-  { ExecutionAccess access(isolate_);
-    if (should_postpone_interrupts(access)) {
-      return isolate_->heap()->undefined_value();
-    }
+  ExecutionAccess access(isolate_);
+  if (should_postpone_interrupts(access)) {
+    return isolate_->heap()->undefined_value();
   }
 
-  if (CheckApiInterrupt()) {
-    ClearApiInterrupt();
+  if (CheckAndClearInterrupt(API_INTERRUPT, access)) {
     isolate_->InvokeApiInterruptCallback();
   }
 
-  if (CheckGC()) {
+  if (CheckAndClearInterrupt(GC_REQUEST, access)) {
     isolate_->heap()->CollectAllGarbage(Heap::kNoGCFlags, "GC interrupt");
-    ClearGC();
   }
 
   if (CheckDebugBreak() || CheckDebugCommand()) {
     Execution::DebugBreakHelper(isolate_);
   }
 
-  if (CheckTerminateExecution()) {
-    ClearTerminateExecution();
+  if (CheckAndClearInterrupt(TERMINATE_EXECUTION, access)) {
     return isolate_->TerminateExecution();
   }
 
-  if (CheckFullDeopt()) {
-    ClearFullDeopt();
+  if (CheckAndClearInterrupt(FULL_DEOPT, access)) {
     Deoptimizer::DeoptimizeAll(isolate_);
   }
 
-  if (CheckDeoptMarkedAllocationSites()) {
-    ClearDeoptMarkedAllocationSites();
+  if (CheckAndClearInterrupt(DEOPT_MARKED_ALLOCATION_SITES, access)) {
     isolate_->heap()->DeoptMarkedAllocationSites();
   }
 
-  if (CheckInstallCode()) {
+  if (CheckAndClearInterrupt(INSTALL_CODE, access)) {
     ASSERT(isolate_->concurrent_recompilation_enabled());
-    ClearInstallCode();
     isolate_->optimizing_compiler_thread()->InstallOptimizedFunctions();
   }
 
