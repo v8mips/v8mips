@@ -1082,6 +1082,8 @@ class Isolate {
   void RemoveCallCompletedCallback(CallCompletedCallback callback);
   void FireCallCompletedCallback();
 
+  void RunMicrotasks();
+
  private:
   Isolate();
 

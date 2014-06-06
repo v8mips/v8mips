@@ -2656,6 +2656,8 @@ class JSObject: public JSReceiver {
     static inline int SizeOf(Map* map, HeapObject* object);
   };
 
+  Context* GetCreationContext();
+
   // Enqueue change record for Object.observe. May cause GC.
   static void EnqueueChangeRecord(Handle<JSObject> object,
                                   const char* type,
@@ -4630,18 +4632,27 @@ class ScopeInfo : public FixedArray {
 // needs very limited number of distinct normalized maps.
 class NormalizedMapCache: public FixedArray {
  public:
-  static const int kEntries = 64;
+  static Handle<NormalizedMapCache> New(Isolate* isolate);
 
-  static Handle<Map> Get(Handle<NormalizedMapCache> cache,
-                         Handle<Map> fast_map,
-                         PropertyNormalizationMode mode);
+  MUST_USE_RESULT MaybeHandle<Map> Get(Handle<Map> fast_map,
+                                       PropertyNormalizationMode mode);
+  void Set(Handle<Map> fast_map, Handle<Map> normalized_map);
 
   void Clear();
 
   // Casting
   static inline NormalizedMapCache* cast(Object* obj);
+  static inline bool IsNormalizedMapCache(Object* obj);
 
   DECLARE_VERIFIER(NormalizedMapCache)
+ private:
+  static const int kEntries = 64;
+
+  static inline int GetIndex(Handle<Map> map);
+
+  // The following declarations hide base class methods.
+  Object* get(int index);
+  void set(int index, Object* value);
 };
 
 
@@ -6136,6 +6147,8 @@ class Map: public HeapObject {
       PropertyAttributes attributes,
       const char* reason);
 
+  static Handle<Map> Normalize(Handle<Map> map, PropertyNormalizationMode mode);
+
   // Returns the constructor name (the name (possibly, inferred name) of the
   // function that was used to instantiate the object).
   String* constructor_name();
@@ -6329,10 +6342,6 @@ class Map: public HeapObject {
 
   static Handle<Map> CopyForFreeze(Handle<Map> map);
 
-  static Handle<Map> CopyNormalized(Handle<Map> map,
-                                    PropertyNormalizationMode mode,
-                                    NormalizedMapSharingMode sharing);
-
   inline void AppendDescriptor(Descriptor* desc);
 
   // Returns a copy of the map, with all transitions dropped from the
@@ -6425,11 +6434,6 @@ class Map: public HeapObject {
     const InstanceType type = instance_type();
     return type == JS_GLOBAL_OBJECT_TYPE || type == JS_BUILTINS_OBJECT_TYPE;
   }
-
-  // Fires when the layout of an object with a leaf map changes.
-  // This includes adding transitions to the leaf map or changing
-  // the descriptor array.
-  inline void NotifyLeafMapLayoutChange();
 
   inline bool CanOmitMapChecks();
 
@@ -6579,6 +6583,15 @@ class Map: public HeapObject {
       TransitionFlag flag,
       MaybeHandle<Name> maybe_name,
       SimpleTransitionFlag simple_flag = FULL_TRANSITION);
+
+  static Handle<Map> CopyNormalized(Handle<Map> map,
+                                    PropertyNormalizationMode mode,
+                                    NormalizedMapSharingMode sharing);
+
+  // Fires when the layout of an object with a leaf map changes.
+  // This includes adding transitions to the leaf map or changing
+  // the descriptor array.
+  inline void NotifyLeafMapLayoutChange();
 
   // Zaps the contents of backing data structures. Note that the
   // heap verifier (i.e. VerifyMarkingVisitor) relies on zapping of objects
