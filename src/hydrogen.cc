@@ -4614,6 +4614,7 @@ void HOptimizedGraphBuilder::VisitDoWhileStatement(DoWhileStatement* stmt) {
     set_current_block(body_exit);
     loop_successor = graph()->CreateBasicBlock();
     if (stmt->cond()->ToBooleanIsFalse()) {
+      loop_entry->loop_information()->stack_check()->Eliminate();
       Goto(loop_successor);
       body_exit = NULL;
     } else {
@@ -5452,13 +5453,7 @@ HInstruction* HOptimizedGraphBuilder::BuildLoadNamedField(
 
   UniqueSet<Map>* maps = new(zone()) UniqueSet<Map>(map_list->length(), zone());
   for (int i = 0; i < map_list->length(); ++i) {
-    Handle<Map> map = map_list->at(i);
-    maps->Add(Unique<Map>::CreateImmovable(map), zone());
-    // TODO(bmeurer): Get rid of this shit!
-    if (map->CanTransition()) {
-      Map::AddDependentCompilationInfo(
-          map, DependentCode::kPrototypeCheckGroup, top_info());
-    }
+    maps->Add(Unique<Map>::CreateImmovable(map_list->at(i)), zone());
   }
   return New<HLoadNamedField>(
       checked_object, checked_object, access, maps, info->field_type());
@@ -8891,10 +8886,20 @@ void HOptimizedGraphBuilder::GenerateTypedArrayInitialize(
   CHECK_ALIVE(VisitForValue(arguments->at(kObjectArg)));
   HValue* obj = Pop();
 
-  ASSERT(arguments->at(kArrayIdArg)->node_type() == AstNode::kLiteral);
+  if (arguments->at(kArrayIdArg)->node_type() != AstNode::kLiteral) {
+    // This should never happen in real use, but can happen when fuzzing.
+    // Just bail out.
+    Bailout(kNeedSmiLiteral);
+    return;
+  }
   Handle<Object> value =
       static_cast<Literal*>(arguments->at(kArrayIdArg))->value();
-  ASSERT(value->IsSmi());
+  if (!value->IsSmi()) {
+    // This should never happen in real use, but can happen when fuzzing.
+    // Just bail out.
+    Bailout(kNeedSmiLiteral);
+    return;
+  }
   int array_id = Smi::cast(*value)->value();
 
   HValue* buffer;
@@ -11124,7 +11129,7 @@ void HOptimizedGraphBuilder::GenerateMathLog(CallRuntime* call) {
 }
 
 
-void HOptimizedGraphBuilder::GenerateMathSqrt(CallRuntime* call) {
+void HOptimizedGraphBuilder::GenerateMathSqrtRT(CallRuntime* call) {
   ASSERT(call->arguments()->length() == 1);
   CHECK_ALIVE(VisitForValue(call->arguments()->at(0)));
   HValue* value = Pop();

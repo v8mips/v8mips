@@ -1974,9 +1974,9 @@ class Heap {
   // Code to be run before and after mark-compact.
   void MarkCompactPrologue();
 
-  void ProcessNativeContexts(WeakObjectRetainer* retainer, bool record_slots);
-  void ProcessArrayBuffers(WeakObjectRetainer* retainer, bool record_slots);
-  void ProcessAllocationSites(WeakObjectRetainer* retainer, bool record_slots);
+  void ProcessNativeContexts(WeakObjectRetainer* retainer);
+  void ProcessArrayBuffers(WeakObjectRetainer* retainer);
+  void ProcessAllocationSites(WeakObjectRetainer* retainer);
 
   // Deopts all code that contains allocation instruction which are tenured or
   // not tenured. Moreover it clears the pretenuring allocation site statistics.
@@ -2025,7 +2025,7 @@ class Heap {
   static const int kYoungSurvivalRateLowThreshold = 10;
   static const int kYoungSurvivalRateAllowedDeviation = 15;
 
-  static const int kOldSurvivalRateLowThreshold = 20;
+  static const int kOldSurvivalRateLowThreshold = 10;
 
   int young_survivors_after_last_gc_;
   int high_survival_rate_period_length_;

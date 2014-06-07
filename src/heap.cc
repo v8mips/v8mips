@@ -1083,8 +1083,6 @@ bool Heap::PerformGarbageCollection(
     MarkCompact(tracer);
     sweep_generation_++;
 
-    UpdateSurvivalRateTrend(start_new_space_size);
-
     size_of_old_gen_at_last_old_space_gc_ = PromotedSpaceSizeOfObjects();
 
     old_generation_allocation_limit_ =
@@ -1095,9 +1093,9 @@ bool Heap::PerformGarbageCollection(
     tracer_ = tracer;
     Scavenge();
     tracer_ = NULL;
-
-    UpdateSurvivalRateTrend(start_new_space_size);
   }
+
+  UpdateSurvivalRateTrend(start_new_space_size);
 
   if (!new_space_high_promotion_mode_active_ &&
       new_space_.Capacity() == new_space_.MaximumCapacity() &&
@@ -1685,36 +1683,24 @@ void Heap::UpdateReferencesInExternalStringTable(
 
 
 void Heap::ProcessWeakReferences(WeakObjectRetainer* retainer) {
-  // We don't record weak slots during marking or scavenges.
-  // Instead we do it once when we complete mark-compact cycle.
-  // Note that write barrier has no effect if we are already in the middle of
-  // compacting mark-sweep cycle and we have to record slots manually.
-  bool record_slots =
-      gc_state() == MARK_COMPACT &&
-      mark_compact_collector()->is_compacting();
-  ProcessArrayBuffers(retainer, record_slots);
-  ProcessNativeContexts(retainer, record_slots);
+  ProcessArrayBuffers(retainer);
+  ProcessNativeContexts(retainer);
   // TODO(mvstanton): AllocationSites only need to be processed during
   // MARK_COMPACT, as they live in old space. Verify and address.
-  ProcessAllocationSites(retainer, record_slots);
+  ProcessAllocationSites(retainer);
 }
 
-void Heap::ProcessNativeContexts(WeakObjectRetainer* retainer,
-                                 bool record_slots) {
-  Object* head =
-      VisitWeakList<Context>(
-          this, native_contexts_list(), retainer, record_slots);
+
+void Heap::ProcessNativeContexts(WeakObjectRetainer* retainer) {
+  Object* head = VisitWeakList<Context>(this, native_contexts_list(), retainer);
   // Update the head of the list of contexts.
   set_native_contexts_list(head);
 }
 
 
-void Heap::ProcessArrayBuffers(WeakObjectRetainer* retainer,
-                               bool record_slots) {
+void Heap::ProcessArrayBuffers(WeakObjectRetainer* retainer) {
   Object* array_buffer_obj =
-      VisitWeakList<JSArrayBuffer>(this,
-                                   array_buffers_list(),
-                                   retainer, record_slots);
+      VisitWeakList<JSArrayBuffer>(this, array_buffers_list(), retainer);
   set_array_buffers_list(array_buffer_obj);
 }
 
@@ -1730,12 +1716,9 @@ void Heap::TearDownArrayBuffers() {
 }
 
 
-void Heap::ProcessAllocationSites(WeakObjectRetainer* retainer,
-                                  bool record_slots) {
+void Heap::ProcessAllocationSites(WeakObjectRetainer* retainer) {
   Object* allocation_site_obj =
-      VisitWeakList<AllocationSite>(this,
-                                    allocation_sites_list(),
-                                    retainer, record_slots);
+      VisitWeakList<AllocationSite>(this, allocation_sites_list(), retainer);
   set_allocation_sites_list(allocation_site_obj);
 }
 
@@ -5479,6 +5462,8 @@ void Heap::AddWeakObjectToCodeDependency(Handle<Object> obj,
                                          Handle<DependentCode> dep) {
   ASSERT(!InNewSpace(*obj));
   ASSERT(!InNewSpace(*dep));
+  // This handle scope keeps the table handle local to this function, which
+  // allows us to safely skip write barriers in table update operations.
   HandleScope scope(isolate());
   Handle<WeakHashTable> table(WeakHashTable::cast(weak_object_to_code_table_),
                               isolate());
@@ -6198,6 +6183,7 @@ GCTracer::~GCTracer() {
     PrintF("nodes_died_in_new=%d ", nodes_died_in_new_space_);
     PrintF("nodes_copied_in_new=%d ", nodes_copied_in_new_space_);
     PrintF("nodes_promoted=%d ", nodes_promoted_);
+    PrintF("survived=%.1f%% ", heap_->survival_rate_);
 
     if (collector_ == SCAVENGER) {
       PrintF("stepscount=%d ", steps_count_since_last_gc_);

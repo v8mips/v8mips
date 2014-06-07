@@ -827,16 +827,8 @@ void MacroAssembler::IsInstanceJSObjectType(Register map,
 
 
 void MacroAssembler::FCmp() {
-  if (CpuFeatures::IsSupported(CMOV)) {
-    fucomip();
-    fstp(0);
-  } else {
-    fucompp();
-    push(eax);
-    fnstsw_ax();
-    sahf();
-    pop(eax);
-  }
+  fucomip();
+  fstp(0);
 }
 
 
@@ -908,26 +900,27 @@ void MacroAssembler::AssertNotSmi(Register object) {
 }
 
 
-void MacroAssembler::Prologue(CompilationInfo* info) {
-  if (info->IsStub()) {
+void MacroAssembler::StubPrologue() {
+  push(ebp);  // Caller's frame pointer.
+  mov(ebp, esp);
+  push(esi);  // Callee's context.
+  push(Immediate(Smi::FromInt(StackFrame::STUB)));
+}
+
+
+void MacroAssembler::Prologue(bool code_pre_aging) {
+  PredictableCodeSizeScope predictible_code_size_scope(this,
+      kNoCodeAgeSequenceLength);
+  if (code_pre_aging) {
+      // Pre-age the code.
+    call(isolate()->builtins()->MarkCodeAsExecutedOnce(),
+        RelocInfo::CODE_AGE_SEQUENCE);
+    Nop(kNoCodeAgeSequenceLength - Assembler::kCallInstructionLength);
+  } else {
     push(ebp);  // Caller's frame pointer.
     mov(ebp, esp);
     push(esi);  // Callee's context.
-    push(Immediate(Smi::FromInt(StackFrame::STUB)));
-  } else {
-    PredictableCodeSizeScope predictible_code_size_scope(this,
-        kNoCodeAgeSequenceLength);
-    if (info->IsCodePreAgingActive()) {
-        // Pre-age the code.
-      call(isolate()->builtins()->MarkCodeAsExecutedOnce(),
-          RelocInfo::CODE_AGE_SEQUENCE);
-      Nop(kNoCodeAgeSequenceLength - Assembler::kCallInstructionLength);
-    } else {
-      push(ebp);  // Caller's frame pointer.
-      mov(ebp, esp);
-      push(esi);  // Callee's context.
-      push(edi);  // Callee's JS function.
-    }
+    push(edi);  // Callee's JS function.
   }
 }
 
@@ -979,10 +972,11 @@ void MacroAssembler::EnterExitFramePrologue() {
 void MacroAssembler::EnterExitFrameEpilogue(int argc, bool save_doubles) {
   // Optionally save all XMM registers.
   if (save_doubles) {
-    int space = XMMRegister::kNumRegisters * kDoubleSize + argc * kPointerSize;
+    int space = XMMRegister::kMaxNumRegisters * kDoubleSize +
+                argc * kPointerSize;
     sub(esp, Immediate(space));
     const int offset = -2 * kPointerSize;
-    for (int i = 0; i < XMMRegister::kNumRegisters; i++) {
+    for (int i = 0; i < XMMRegister::kMaxNumRegisters; i++) {
       XMMRegister reg = XMMRegister::from_code(i);
       movsd(Operand(ebp, offset - ((i + 1) * kDoubleSize)), reg);
     }
@@ -1025,7 +1019,7 @@ void MacroAssembler::LeaveExitFrame(bool save_doubles) {
   // Optionally restore all XMM registers.
   if (save_doubles) {
     const int offset = -2 * kPointerSize;
-    for (int i = 0; i < XMMRegister::kNumRegisters; i++) {
+    for (int i = 0; i < XMMRegister::kMaxNumRegisters; i++) {
       XMMRegister reg = XMMRegister::from_code(i);
       movsd(reg, Operand(ebp, offset - ((i + 1) * kDoubleSize)));
     }

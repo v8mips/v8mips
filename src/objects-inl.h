@@ -1587,7 +1587,10 @@ inline bool AllocationSite::DigestPretenuringFeedback() {
           static_cast<double>(found_count) / create_count : 0.0;
   PretenureFlag current_mode = GetPretenureMode();
 
-  if (minimum_mementos_created) {
+  // TODO(hpayer): Add an intermediate state MAYBE_TENURE which collects
+  // more lifetime feedback for tenuring candidates. In the meantime, we
+  // just allow transitions from undecided to tenured or not tenured.
+  if (minimum_mementos_created && pretenure_decision() == kUndecided) {
     PretenureDecision result = ratio >= kPretenureRatio
         ? kTenure
         : kDontTenure;
@@ -5125,7 +5128,7 @@ SMI_ACCESSORS(SharedFunctionInfo, profiler_ticks, kProfilerTicksOffset)
   void holder::set_##name(int value) {                            \
     ASSERT(kHeapObjectTag == 1);                                  \
     ASSERT((value & 0xC0000000) == 0xC0000000 ||                  \
-           (value & 0xC0000000) == 0x000000000);                  \
+           (value & 0xC0000000) == 0x0);                          \
     WRITE_INT_FIELD(this,                                         \
                     offset,                                       \
                     (value << 1) & ~kHeapObjectTag);              \
