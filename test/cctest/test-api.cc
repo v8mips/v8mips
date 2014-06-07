@@ -21821,11 +21821,12 @@ class RequestInterruptTestBase {
 
   virtual ~RequestInterruptTestBase() { }
 
+  virtual void StartInterruptThread() = 0;
+
   virtual void TestBody() = 0;
 
   void RunTest() {
-    InterruptThread i_thread(this);
-    i_thread.Start();
+    StartInterruptThread();
 
     v8::HandleScope handle_scope(isolate_);
 
@@ -21854,7 +21855,6 @@ class RequestInterruptTestBase {
     return should_continue_;
   }
 
- protected:
   static void ShouldContinueCallback(
       const v8::FunctionCallbackInfo<Value>& info) {
     RequestInterruptTestBase* test =
@@ -21863,6 +21863,24 @@ class RequestInterruptTestBase {
     info.GetReturnValue().Set(test->ShouldContinue());
   }
 
+  LocalContext env_;
+  v8::Isolate* isolate_;
+  i::Semaphore sem_;
+  int warmup_;
+  bool should_continue_;
+};
+
+
+class RequestInterruptTestBaseWithSimpleInterrupt
+    : public RequestInterruptTestBase {
+ public:
+  RequestInterruptTestBaseWithSimpleInterrupt() : i_thread(this) { }
+
+  virtual void StartInterruptThread() {
+    i_thread.Start();
+  }
+
+ private:
   class InterruptThread : public i::Thread {
    public:
     explicit InterruptThread(RequestInterruptTestBase* test)
@@ -21882,15 +21900,12 @@ class RequestInterruptTestBase {
      RequestInterruptTestBase* test_;
   };
 
-  LocalContext env_;
-  v8::Isolate* isolate_;
-  i::Semaphore sem_;
-  int warmup_;
-  bool should_continue_;
+  InterruptThread i_thread;
 };
 
 
-class RequestInterruptTestWithFunctionCall : public RequestInterruptTestBase {
+class RequestInterruptTestWithFunctionCall
+    : public RequestInterruptTestBaseWithSimpleInterrupt {
  public:
   virtual void TestBody() {
     Local<Function> func = Function::New(
@@ -21902,7 +21917,8 @@ class RequestInterruptTestWithFunctionCall : public RequestInterruptTestBase {
 };
 
 
-class RequestInterruptTestWithMethodCall : public RequestInterruptTestBase {
+class RequestInterruptTestWithMethodCall
+    : public RequestInterruptTestBaseWithSimpleInterrupt {
  public:
   virtual void TestBody() {
     v8::Local<v8::FunctionTemplate> t = v8::FunctionTemplate::New(isolate_);
@@ -21916,7 +21932,8 @@ class RequestInterruptTestWithMethodCall : public RequestInterruptTestBase {
 };
 
 
-class RequestInterruptTestWithAccessor : public RequestInterruptTestBase {
+class RequestInterruptTestWithAccessor
+    : public RequestInterruptTestBaseWithSimpleInterrupt {
  public:
   virtual void TestBody() {
     v8::Local<v8::FunctionTemplate> t = v8::FunctionTemplate::New(isolate_);
@@ -21930,7 +21947,8 @@ class RequestInterruptTestWithAccessor : public RequestInterruptTestBase {
 };
 
 
-class RequestInterruptTestWithNativeAccessor : public RequestInterruptTestBase {
+class RequestInterruptTestWithNativeAccessor
+    : public RequestInterruptTestBaseWithSimpleInterrupt {
  public:
   virtual void TestBody() {
     v8::Local<v8::FunctionTemplate> t = v8::FunctionTemplate::New(isolate_);
@@ -21957,7 +21975,7 @@ class RequestInterruptTestWithNativeAccessor : public RequestInterruptTestBase {
 
 
 class RequestInterruptTestWithMethodCallAndInterceptor
-    : public RequestInterruptTestBase {
+    : public RequestInterruptTestBaseWithSimpleInterrupt {
  public:
   virtual void TestBody() {
     v8::Local<v8::FunctionTemplate> t = v8::FunctionTemplate::New(isolate_);
@@ -21980,7 +21998,8 @@ class RequestInterruptTestWithMethodCallAndInterceptor
 };
 
 
-class RequestInterruptTestWithMathAbs : public RequestInterruptTestBase {
+class RequestInterruptTestWithMathAbs
+    : public RequestInterruptTestBaseWithSimpleInterrupt {
  public:
   virtual void TestBody() {
     env_->Global()->Set(v8_str("WakeUpInterruptor"), Function::New(
@@ -22061,6 +22080,61 @@ TEST(RequestInterruptTestWithMethodCallAndInterceptor) {
 
 TEST(RequestInterruptTestWithMathAbs) {
   RequestInterruptTestWithMathAbs().RunTest();
+}
+
+
+class ClearInterruptFromAnotherThread
+    : public RequestInterruptTestBase {
+ public:
+  ClearInterruptFromAnotherThread() : i_thread(this), sem2_(0) { }
+
+  virtual void StartInterruptThread() {
+    i_thread.Start();
+  }
+
+  virtual void TestBody() {
+    Local<Function> func = Function::New(
+        isolate_, ShouldContinueCallback, v8::External::New(isolate_, this));
+    env_->Global()->Set(v8_str("ShouldContinue"), func);
+
+    CompileRun("while (ShouldContinue()) { }");
+  }
+
+ private:
+  class InterruptThread : public i::Thread {
+   public:
+    explicit InterruptThread(ClearInterruptFromAnotherThread* test)
+        : Thread("RequestInterruptTest"), test_(test) {}
+
+    virtual void Run() {
+      test_->sem_.Wait();
+      test_->isolate_->RequestInterrupt(&OnInterrupt, test_);
+      test_->sem_.Wait();
+      test_->isolate_->ClearInterrupt();
+      test_->sem2_.Signal();
+    }
+
+    static void OnInterrupt(v8::Isolate* isolate, void* data) {
+      ClearInterruptFromAnotherThread* test =
+          reinterpret_cast<ClearInterruptFromAnotherThread*>(data);
+      test->sem_.Signal();
+      bool success = test->sem2_.WaitFor(i::TimeDelta::FromSeconds(2));
+      // Crash instead of timeout to make this failure more prominent.
+      CHECK(success);
+      test->should_continue_ = false;
+    }
+
+   private:
+     ClearInterruptFromAnotherThread* test_;
+  };
+
+  InterruptThread i_thread;
+  i::Semaphore sem2_;
+};
+
+
+TEST(ClearInterruptFromAnotherThread) {
+  ClearInterruptFromAnotherThread().RunTest();
 }
 
 
