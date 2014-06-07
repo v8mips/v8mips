@@ -1562,7 +1562,9 @@ HValue* HGraphBuilder::BuildRegExpConstructResult(HValue* length,
   HValue* native_context = Add<HLoadNamedField>(
       global_object, static_cast<HValue*>(NULL),
       HObjectAccess::ForGlobalObjectNativeContext());
-  AddStoreMapNoWriteBarrier(result, Add<HLoadNamedField>(
+  Add<HStoreNamedField>(
+      result, HObjectAccess::ForMap(),
+      Add<HLoadNamedField>(
           native_context, static_cast<HValue*>(NULL),
           HObjectAccess::ForContextSlot(Context::REGEXP_RESULT_MAP_INDEX)));
   Add<HStoreNamedField>(
@@ -1583,8 +1585,7 @@ HValue* HGraphBuilder::BuildRegExpConstructResult(HValue* length,
       input);
 
   // Initialize the elements header.
-  AddStoreMapConstantNoWriteBarrier(elements,
-                                    isolate()->factory()->fixed_array_map());
+  AddStoreMapConstant(elements, isolate()->factory()->fixed_array_map());
   Add<HStoreNamedField>(elements, HObjectAccess::ForFixedArrayLength(), length);
 
   // Initialize the elements contents with undefined.
@@ -1834,14 +1835,16 @@ HValue* HGraphBuilder::BuildCreateConsString(
   if_onebyte.Then();
   {
     // We can safely skip the write barrier for storing the map here.
-    Handle<Map> map = isolate()->factory()->cons_ascii_string_map();
-    AddStoreMapConstantNoWriteBarrier(result, map);
+    Add<HStoreNamedField>(
+        result, HObjectAccess::ForMap(),
+        Add<HConstant>(isolate()->factory()->cons_ascii_string_map()));
   }
   if_onebyte.Else();
   {
     // We can safely skip the write barrier for storing the map here.
-    Handle<Map> map = isolate()->factory()->cons_string_map();
-    AddStoreMapConstantNoWriteBarrier(result, map);
+    Add<HStoreNamedField>(
+        result, HObjectAccess::ForMap(),
+        Add<HConstant>(isolate()->factory()->cons_string_map()));
   }
   if_onebyte.End();
 
@@ -2000,9 +2003,7 @@ HValue* HGraphBuilder::BuildUncheckedStringAdd(
       // STRING_TYPE or ASCII_STRING_TYPE here, so we just use STRING_TYPE here.
       HAllocate* result = BuildAllocate(
           size, HType::String(), STRING_TYPE, allocation_mode);
-
-      // We can safely skip the write barrier for storing map here.
-      AddStoreMapNoWriteBarrier(result, map);
+      Add<HStoreNamedField>(result, HObjectAccess::ForMap(), map);
 
       // Initialize the string fields.
       Add<HStoreNamedField>(result, HObjectAccess::ForStringHashField(),
@@ -2309,7 +2310,7 @@ void HGraphBuilder::BuildInitializeElementsHeader(HValue* elements,
       ? factory->fixed_double_array_map()
       : factory->fixed_array_map();
 
-  AddStoreMapConstant(elements, map);
+  Add<HStoreNamedField>(elements, HObjectAccess::ForMap(), Add<HConstant>(map));
   Add<HStoreNamedField>(elements, HObjectAccess::ForFixedArrayLength(),
                         capacity);
 }
@@ -2814,11 +2815,9 @@ void HGraphBuilder::BuildCreateAllocationMemento(
     // This smi value is reset to zero after every gc, overflow isn't a problem
     // since the counter is bounded by the new space size.
     memento_create_count->ClearFlag(HValue::kCanOverflow);
-    HStoreNamedField* store = Add<HStoreNamedField>(
+    Add<HStoreNamedField>(
         allocation_site, HObjectAccess::ForAllocationSiteOffset(
             AllocationSite::kPretenureCreateCountOffset), memento_create_count);
-    // No write barrier needed to store a smi.
-    store->SkipWriteBarrier();
   }
 }
 
@@ -3033,13 +3032,6 @@ HValue* HGraphBuilder::JSArrayBuilder::AllocateArray(HValue* size_in_bytes,
   }
 
   return new_object;
-}
-
-
-HStoreNamedField* HGraphBuilder::AddStoreMapConstant(HValue *object,
-                                                     Handle<Map> map) {
-  return Add<HStoreNamedField>(object, HObjectAccess::ForMap(),
-                               Add<HConstant>(map));
 }
 
 
