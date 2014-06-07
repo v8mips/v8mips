@@ -6726,6 +6726,7 @@ class HStoreNamedField V8_FINAL : public HTemplateInstruction<3> {
     ASSERT(!has_transition());  // Only set once.
     SetOperandAt(2, transition);
     has_transition_ = true;
+    SetChangesFlag(kMaps);
   }
 
   bool NeedsWriteBarrier() {
@@ -6750,6 +6751,19 @@ class HStoreNamedField V8_FINAL : public HTemplateInstruction<3> {
 
   void UpdateValue(HValue* value) {
     SetOperandAt(1, value);
+  }
+
+  bool CanBeReplacedWith(HStoreNamedField* that) const {
+    if (!this->access().Equals(that->access())) return false;
+    if (SmiValuesAre32Bits() &&
+        this->field_representation().IsSmi() &&
+        this->store_mode() == INITIALIZING_STORE &&
+        that->store_mode() == STORE_TO_INITIALIZED_ENTRY) {
+      // We cannot replace an initializing store to a smi field with a store to
+      // an initialized entry on 64-bit architectures (with 32-bit smis).
+      return false;
+    }
+    return true;
   }
 
  private:
@@ -7123,6 +7137,7 @@ class HArrayShift V8_FINAL : public HTemplateInstruction<2> {
       : kind_(kind) {
     SetOperandAt(0, context);
     SetOperandAt(1, object);
+    SetChangesFlag(kArrayLengths);
     SetChangesFlag(kNewSpacePromotion);
     set_representation(Representation::Tagged());
     if (IsFastSmiOrObjectElementsKind(kind)) {

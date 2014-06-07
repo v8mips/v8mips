@@ -1513,6 +1513,12 @@ class Object {
   // to implement the Harmony "egal" function.
   bool SameValue(Object* other);
 
+  // Checks whether this object has the same value as the given one.
+  // +0 and -0 are treated equal. Everything else is the same as SameValue.
+  // This function is implemented according to ES6, section 7.2.4 and is used
+  // by ES6 Map and Set.
+  bool SameValueZero(Object* other);
+
   // Tries to convert an object to an array index.  Returns true and sets
   // the output parameter if it succeeds.
   inline bool ToArrayIndex(uint32_t* index);
@@ -4144,7 +4150,7 @@ class ObjectHashTable: public HashTable<ObjectHashTable,
 // insertion order. There are Map and Set interfaces (OrderedHashMap
 // and OrderedHashTable, below). It is meant to be used by JSMap/JSSet.
 //
-// Only Object* keys are supported, with Object::SameValue() used as the
+// Only Object* keys are supported, with Object::SameValueZero() used as the
 // equality operator and Object::GetHash() for the hash function.
 //
 // Based on the "Deterministic Hash Table" as described by Jason Orendorff at
@@ -4319,7 +4325,7 @@ class OrderedHashSet: public OrderedHashTable<
   static Handle<OrderedHashSet> Add(
       Handle<OrderedHashSet> table, Handle<Object> key);
   static Handle<OrderedHashSet> Remove(
-      Handle<OrderedHashSet> table, Handle<Object> key);
+      Handle<OrderedHashSet> table, Handle<Object> key, bool* was_present);
 };
 
 
@@ -7491,6 +7497,8 @@ class JSGeneratorObject: public JSObject {
   // cannot be resumed.
   inline int continuation();
   inline void set_continuation(int continuation);
+  inline bool is_closed();
+  inline bool is_executing();
   inline bool is_suspended();
 
   // [operand_stack]: Saved operand stack.
