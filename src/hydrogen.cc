@@ -1537,12 +1537,14 @@ HValue* HGraphBuilder::BuildRegExpConstructResult(HValue* length,
 
   // Compute the size of the RegExpResult followed by FixedArray with length.
   HValue* size = length;
-  size = AddUncasted<HShl>(size, Add<HConstant>(kPointerSizeLog2));
-  size = AddUncasted<HAdd>(size, Add<HConstant>(static_cast<int32_t>(
-              JSRegExpResult::kSize + FixedArray::kHeaderSize)));
+  // Make sure size does not exceed max regular heap object size.
+  const int kHeaderSize = JSRegExpResult::kSize + FixedArray::kHeaderSize;
+  const int kMaxLength =
+      (Page::kMaxRegularHeapObjectSize - kHeaderSize) >> kPointerSizeLog2;
+  Add<HBoundsCheck>(size, Add<HConstant>(kMaxLength));
 
-  // Make sure size does not exceeds max regular heap object size.
-  Add<HBoundsCheck>(size, Add<HConstant>(Page::kMaxRegularHeapObjectSize));
+  size = AddUncasted<HShl>(size, Add<HConstant>(kPointerSizeLog2));
+  size = AddUncasted<HAdd>(size, Add<HConstant>(kHeaderSize));
 
   // Allocate the JSRegExpResult and the FixedArray in one step.
   HValue* result = Add<HAllocate>(
@@ -11120,7 +11122,7 @@ void HOptimizedGraphBuilder::GenerateMathPow(CallRuntime* call) {
 }
 
 
-void HOptimizedGraphBuilder::GenerateMathLog(CallRuntime* call) {
+void HOptimizedGraphBuilder::GenerateMathLogRT(CallRuntime* call) {
   ASSERT(call->arguments()->length() == 1);
   CHECK_ALIVE(VisitForValue(call->arguments()->at(0)));
   HValue* value = Pop();
