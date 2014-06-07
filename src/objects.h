@@ -1924,9 +1924,9 @@ class JSReceiver: public HeapObject {
 
   // Implementation of [[HasProperty]], ECMA-262 5th edition, section 8.12.6.
   static inline bool HasProperty(Handle<JSReceiver> object, Handle<Name> name);
-  static inline bool HasLocalProperty(Handle<JSReceiver>, Handle<Name> name);
+  static inline bool HasOwnProperty(Handle<JSReceiver>, Handle<Name> name);
   static inline bool HasElement(Handle<JSReceiver> object, uint32_t index);
-  static inline bool HasLocalElement(Handle<JSReceiver> object, uint32_t index);
+  static inline bool HasOwnElement(Handle<JSReceiver> object, uint32_t index);
 
   // Implementation of [[Delete]], ECMA-262 5th edition, section 8.12.7.
   MUST_USE_RESULT static MaybeHandle<Object> DeleteProperty(
@@ -1955,14 +1955,14 @@ class JSReceiver: public HeapObject {
       Handle<JSReceiver> object,
       Handle<JSReceiver> receiver,
       Handle<Name> name);
-  static PropertyAttributes GetLocalPropertyAttribute(
+  static PropertyAttributes GetOwnPropertyAttribute(
       Handle<JSReceiver> object,
       Handle<Name> name);
 
   static inline PropertyAttributes GetElementAttribute(
       Handle<JSReceiver> object,
       uint32_t index);
-  static inline PropertyAttributes GetLocalElementAttribute(
+  static inline PropertyAttributes GetOwnElementAttribute(
       Handle<JSReceiver> object,
       uint32_t index);
 
@@ -1983,11 +1983,11 @@ class JSReceiver: public HeapObject {
 
   // Lookup a property.  If found, the result is valid and has
   // detailed information.
-  void LocalLookup(Handle<Name> name, LookupResult* result,
-                   bool search_hidden_prototypes = false);
+  void LookupOwn(Handle<Name> name, LookupResult* result,
+                 bool search_hidden_prototypes = false);
   void Lookup(Handle<Name> name, LookupResult* result);
 
-  enum KeyCollectionType { LOCAL_ONLY, INCLUDE_PROTOS };
+  enum KeyCollectionType { OWN_ONLY, INCLUDE_PROTOS };
 
   // Computes the enumerable keys for a JSObject. Used for implementing
   // "for (n in object) { }".
@@ -2159,7 +2159,7 @@ class JSObject: public JSReceiver {
       StrictMode strict_mode,
       StoreFromKeyed store_mode = MAY_BE_STORE_FROM_KEYED);
 
-  MUST_USE_RESULT static MaybeHandle<Object> SetLocalPropertyIgnoreAttributes(
+  MUST_USE_RESULT static MaybeHandle<Object> SetOwnPropertyIgnoreAttributes(
       Handle<JSObject> object,
       Handle<Name> key,
       Handle<Object> value,
@@ -2275,8 +2275,8 @@ class JSObject: public JSReceiver {
 
   // Accessors for hidden properties object.
   //
-  // Hidden properties are not local properties of the object itself.
-  // Instead they are stored in an auxiliary structure kept as a local
+  // Hidden properties are not own properties of the object itself.
+  // Instead they are stored in an auxiliary structure kept as an own
   // property with a special name Heap::hidden_string(). But if the
   // receiver is a JSGlobalProxy then the auxiliary object is a property
   // of its prototype, and if it's a detached proxy, then you can't have
@@ -2346,10 +2346,10 @@ class JSObject: public JSReceiver {
   }
 
   // These methods do not perform access checks!
-  MUST_USE_RESULT static MaybeHandle<AccessorPair> GetLocalPropertyAccessorPair(
+  MUST_USE_RESULT static MaybeHandle<AccessorPair> GetOwnPropertyAccessorPair(
       Handle<JSObject> object,
       Handle<Name> name);
-  MUST_USE_RESULT static MaybeHandle<AccessorPair> GetLocalElementAccessorPair(
+  MUST_USE_RESULT static MaybeHandle<AccessorPair> GetOwnElementAccessorPair(
       Handle<JSObject> object,
       uint32_t index);
 
@@ -2434,7 +2434,7 @@ class JSObject: public JSReceiver {
   inline void SetInternalField(int index, Smi* value);
 
   // The following lookup functions skip interceptors.
-  void LocalLookupRealNamedProperty(Handle<Name> name, LookupResult* result);
+  void LookupOwnRealNamedProperty(Handle<Name> name, LookupResult* result);
   void LookupRealNamedProperty(Handle<Name> name, LookupResult* result);
   void LookupRealNamedPropertyInPrototypes(Handle<Name> name,
                                            LookupResult* result);
@@ -2442,20 +2442,20 @@ class JSObject: public JSReceiver {
 
   // Returns the number of properties on this object filtering out properties
   // with the specified attributes (ignoring interceptors).
-  int NumberOfLocalProperties(PropertyAttributes filter = NONE);
+  int NumberOfOwnProperties(PropertyAttributes filter = NONE);
   // Fill in details for properties into storage starting at the specified
   // index.
-  void GetLocalPropertyNames(
+  void GetOwnPropertyNames(
       FixedArray* storage, int index, PropertyAttributes filter = NONE);
 
   // Returns the number of properties on this object filtering out properties
   // with the specified attributes (ignoring interceptors).
-  int NumberOfLocalElements(PropertyAttributes filter);
+  int NumberOfOwnElements(PropertyAttributes filter);
   // Returns the number of enumerable elements (ignoring interceptors).
   int NumberOfEnumElements();
   // Returns the number of elements on this object filtering out elements
   // with the specified attributes (ignoring interceptors).
-  int GetLocalElementKeys(FixedArray* storage, PropertyAttributes filter);
+  int GetOwnElementKeys(FixedArray* storage, PropertyAttributes filter);
   // Count and fill in the enumerable elements into storage.
   // (storage->length() == NumberOfEnumElements()).
   // If storage is NULL, will count the elements without adding
@@ -2470,7 +2470,7 @@ class JSObject: public JSReceiver {
   static void TransitionElementsKind(Handle<JSObject> object,
                                      ElementsKind to_kind);
 
-  // TODO(mstarzinger): Both public because of ConvertAnsSetLocalProperty().
+  // TODO(mstarzinger): Both public because of ConvertAndSetOwnProperty().
   static void MigrateToMap(Handle<JSObject> object, Handle<Map> new_map);
   static void GeneralizeFieldRepresentation(Handle<JSObject> object,
                                             int modify_index,
@@ -6003,6 +6003,10 @@ class Map: public HeapObject {
   class IsFrozen:                   public BitField<bool, 25,  1> {};
   class IsUnstable:                 public BitField<bool, 26,  1> {};
   class IsMigrationTarget:          public BitField<bool, 27,  1> {};
+  class DoneInobjectSlackTracking:  public BitField<bool, 28,  1> {};
+  // Keep this bit field at the very end for better code in
+  // Builtins::kJSConstructStubGeneric stub.
+  class ConstructionCount:          public BitField<int, 29, 3> {};
 
   // Tells whether the object in the prototype property will be used
   // for instances created from this function.  If the prototype
@@ -6184,12 +6188,6 @@ class Map: public HeapObject {
   // function that was used to instantiate the object).
   String* constructor_name();
 
-  // Tells whether the map is attached to SharedFunctionInfo
-  // (for inobject slack tracking).
-  inline void set_attached_to_shared_function_info(bool value);
-
-  inline bool attached_to_shared_function_info();
-
   // Tells whether the map is shared between objects that may have different
   // behavior. If true, the map should never be modified, instead a clone
   // should be created and modified.
@@ -6324,6 +6322,10 @@ class Map: public HeapObject {
   inline bool is_stable();
   inline void set_migration_target(bool value);
   inline bool is_migration_target();
+  inline void set_done_inobject_slack_tracking(bool value);
+  inline bool done_inobject_slack_tracking();
+  inline void set_construction_count(int value);
+  inline int construction_count();
   inline void deprecate();
   inline bool is_deprecated();
   inline bool CanBeDeprecated();
@@ -6564,7 +6566,7 @@ class Map: public HeapObject {
   // Bit positions for bit field 2
   static const int kIsExtensible = 0;
   static const int kStringWrapperSafeForDefaultValueOf = 1;
-  static const int kAttachedToSharedFunctionInfo = 2;
+  // Currently bit 2 is not used.
   // No bits can be used after kElementsKindFirstBit, they are all reserved for
   // storing ElementKind.
   static const int kElementsKindShift = 3;
@@ -6957,107 +6959,15 @@ class SharedFunctionInfo: public HeapObject {
   inline int expected_nof_properties();
   inline void set_expected_nof_properties(int value);
 
-  // Inobject slack tracking is the way to reclaim unused inobject space.
-  //
-  // The instance size is initially determined by adding some slack to
-  // expected_nof_properties (to allow for a few extra properties added
-  // after the constructor). There is no guarantee that the extra space
-  // will not be wasted.
-  //
-  // Here is the algorithm to reclaim the unused inobject space:
-  // - Detect the first constructor call for this SharedFunctionInfo.
-  //   When it happens enter the "in progress" state: remember the
-  //   constructor's initial_map and install a special construct stub that
-  //   counts constructor calls.
-  // - While the tracking is in progress create objects filled with
-  //   one_pointer_filler_map instead of undefined_value. This way they can be
-  //   resized quickly and safely.
-  // - Once enough (kGenerousAllocationCount) objects have been created
-  //   compute the 'slack' (traverse the map transition tree starting from the
-  //   initial_map and find the lowest value of unused_property_fields).
-  // - Traverse the transition tree again and decrease the instance size
-  //   of every map. Existing objects will resize automatically (they are
-  //   filled with one_pointer_filler_map). All further allocations will
-  //   use the adjusted instance size.
-  // - Decrease expected_nof_properties so that an allocations made from
-  //   another context will use the adjusted instance size too.
-  // - Exit "in progress" state by clearing the reference to the initial_map
-  //   and setting the regular construct stub (generic or inline).
-  //
-  //  The above is the main event sequence. Some special cases are possible
-  //  while the tracking is in progress:
-  //
-  // - GC occurs.
-  //   Check if the initial_map is referenced by any live objects (except this
-  //   SharedFunctionInfo). If it is, continue tracking as usual.
-  //   If it is not, clear the reference and reset the tracking state. The
-  //   tracking will be initiated again on the next constructor call.
-  //
-  // - The constructor is called from another context.
-  //   Immediately complete the tracking, perform all the necessary changes
-  //   to maps. This is  necessary because there is no efficient way to track
-  //   multiple initial_maps.
-  //   Proceed to create an object in the current context (with the adjusted
-  //   size).
-  //
-  // - A different constructor function sharing the same SharedFunctionInfo is
-  //   called in the same context. This could be another closure in the same
-  //   context, or the first function could have been disposed.
-  //   This is handled the same way as the previous case.
-  //
-  //  Important: inobject slack tracking is not attempted during the snapshot
-  //  creation.
-
-  static const int kGenerousAllocationCount = 8;
-
-  // [construction_count]: Counter for constructor calls made during
-  // the tracking phase.
-  inline int construction_count();
-  inline void set_construction_count(int value);
-
   // [feedback_vector] - accumulates ast node feedback from full-codegen and
   // (increasingly) from crankshafted code where sufficient feedback isn't
   // available. Currently the field is duplicated in
   // TypeFeedbackInfo::feedback_vector, but the allocation is done here.
   DECL_ACCESSORS(feedback_vector, FixedArray)
 
-  // [initial_map]: initial map of the first function called as a constructor.
-  // Saved for the duration of the tracking phase.
-  // This is a weak link (GC resets it to undefined_value if no other live
-  // object reference this map).
-  DECL_ACCESSORS(initial_map, Object)
-
-  // True if the initial_map is not undefined and the countdown stub is
-  // installed.
-  inline bool IsInobjectSlackTrackingInProgress();
-
-  // Starts the tracking.
-  // Stores the initial map and installs the countdown stub.
-  // IsInobjectSlackTrackingInProgress is normally true after this call,
-  // except when tracking have not been started (e.g. the map has no unused
-  // properties or the snapshot is being built).
-  void StartInobjectSlackTracking(Map* map);
-
-  // Completes the tracking.
-  // IsInobjectSlackTrackingInProgress is false after this call.
-  void CompleteInobjectSlackTracking();
-
   // Invoked before pointers in SharedFunctionInfo are being marked.
   // Also clears the optimized code map.
   inline void BeforeVisitingPointers();
-
-  // Clears the initial_map before the GC marking phase to ensure the reference
-  // is weak. IsInobjectSlackTrackingInProgress is false after this call.
-  void DetachInitialMap();
-
-  // Restores the link to the initial map after the GC marking phase.
-  // IsInobjectSlackTrackingInProgress is true after this call.
-  void AttachInitialMap(Map* map);
-
-  // False if there are definitely no live objects created from this function.
-  // True if live objects _may_ exist (existence not guaranteed).
-  // May go back from true to false after GC.
-  DECL_BOOLEAN_ACCESSORS(live_objects_may_exist)
 
   // [instance class name]: class name for instances.
   DECL_ACCESSORS(instance_class_name, Object)
@@ -7304,12 +7214,10 @@ class SharedFunctionInfo: public HeapObject {
   static const int kInferredNameOffset = kDebugInfoOffset + kPointerSize;
   static const int kFeedbackVectorOffset =
       kInferredNameOffset + kPointerSize;
-  static const int kInitialMapOffset =
-      kFeedbackVectorOffset + kPointerSize;
 #if V8_HOST_ARCH_32_BIT
   // Smi fields.
   static const int kLengthOffset =
-      kInitialMapOffset + kPointerSize;
+      kFeedbackVectorOffset + kPointerSize;
   static const int kFormalParameterCountOffset = kLengthOffset + kPointerSize;
   static const int kExpectedNofPropertiesOffset =
       kFormalParameterCountOffset + kPointerSize;
@@ -7345,7 +7253,7 @@ class SharedFunctionInfo: public HeapObject {
   // word is not set and thus this word cannot be treated as pointer
   // to HeapObject during old space traversal.
   static const int kLengthOffset =
-      kInitialMapOffset + kPointerSize;
+      kFeedbackVectorOffset + kPointerSize;
   static const int kFormalParameterCountOffset =
       kLengthOffset + kIntSize;
 
@@ -7379,21 +7287,10 @@ class SharedFunctionInfo: public HeapObject {
 
 #endif
 
-  // The construction counter for inobject slack tracking is stored in the
-  // most significant byte of compiler_hints which is otherwise unused.
-  // Its offset depends on the endian-ness of the architecture.
-#if defined(V8_TARGET_LITTLE_ENDIAN)
-  static const int kConstructionCountOffset = kCompilerHintsOffset + 3;
-#elif defined(V8_TARGET_BIG_ENDIAN)
-  static const int kConstructionCountOffset = kCompilerHintsOffset + 0;
-#else
-#error Unknown byte ordering
-#endif
-
   static const int kAlignedSize = POINTER_SIZE_ALIGN(kSize);
 
   typedef FixedBodyDescriptor<kNameOffset,
-                              kInitialMapOffset + kPointerSize,
+                              kFeedbackVectorOffset + kPointerSize,
                               kSize> BodyDescriptor;
 
   // Bit positions in start_position_and_type.
@@ -7408,7 +7305,6 @@ class SharedFunctionInfo: public HeapObject {
   enum CompilerHints {
     kAllowLazyCompilation,
     kAllowLazyCompilationWithoutContext,
-    kLiveObjectsMayExist,
     kOptimizationDisabled,
     kStrictModeFunction,
     kUsesArguments,
@@ -7623,6 +7519,54 @@ class JSFunction: public JSObject {
 
   // Tells whether or not the function is on the concurrent recompilation queue.
   inline bool IsInOptimizationQueue();
+
+  // Inobject slack tracking is the way to reclaim unused inobject space.
+  //
+  // The instance size is initially determined by adding some slack to
+  // expected_nof_properties (to allow for a few extra properties added
+  // after the constructor). There is no guarantee that the extra space
+  // will not be wasted.
+  //
+  // Here is the algorithm to reclaim the unused inobject space:
+  // - Detect the first constructor call for this JSFunction.
+  //   When it happens enter the "in progress" state: initialize construction
+  //   counter in the initial_map and set the |done_inobject_slack_tracking|
+  //   flag.
+  // - While the tracking is in progress create objects filled with
+  //   one_pointer_filler_map instead of undefined_value. This way they can be
+  //   resized quickly and safely.
+  // - Once enough (kGenerousAllocationCount) objects have been created
+  //   compute the 'slack' (traverse the map transition tree starting from the
+  //   initial_map and find the lowest value of unused_property_fields).
+  // - Traverse the transition tree again and decrease the instance size
+  //   of every map. Existing objects will resize automatically (they are
+  //   filled with one_pointer_filler_map). All further allocations will
+  //   use the adjusted instance size.
+  // - SharedFunctionInfo's expected_nof_properties left unmodified since
+  //   allocations made using different closures could actually create different
+  //   kind of objects (see prototype inheritance pattern).
+  //
+  //  Important: inobject slack tracking is not attempted during the snapshot
+  //  creation.
+
+  static const int kGenerousAllocationCount = Map::ConstructionCount::kMax;
+  static const int kFinishSlackTracking     = 1;
+  static const int kNoSlackTracking         = 0;
+
+  // True if the initial_map is set and the object constructions countdown
+  // counter is not zero.
+  inline bool IsInobjectSlackTrackingInProgress();
+
+  // Starts the tracking.
+  // Initializes object constructions countdown counter in the initial map.
+  // IsInobjectSlackTrackingInProgress is normally true after this call,
+  // except when tracking have not been started (e.g. the map has no unused
+  // properties or the snapshot is being built).
+  void StartInobjectSlackTracking();
+
+  // Completes the tracking.
+  // IsInobjectSlackTrackingInProgress is false after this call.
+  void CompleteInobjectSlackTracking();
 
   // [literals_or_bindings]: Fixed array holding either
   // the materialized literals or the bindings of a bound function.
@@ -7924,7 +7868,7 @@ class JSDate: public JSObject {
   // [sec]: caches seconds. Either undefined, smi, or NaN.
   DECL_ACCESSORS(sec, Object)
   // [cache stamp]: sample of the date cache stamp at the
-  // moment when local fields were cached.
+  // moment when chached fields were cached.
   DECL_ACCESSORS(cache_stamp, Object)
 
   // Casting.
@@ -7988,7 +7932,7 @@ class JSDate: public JSObject {
   Object* GetUTCField(FieldIndex index, double value, DateCache* date_cache);
 
   // Computes and caches the cacheable fields of the date.
-  inline void SetLocalFields(int64_t local_time_ms, DateCache* date_cache);
+  inline void SetCachedFields(int64_t local_time_ms, DateCache* date_cache);
 
 
   DISALLOW_IMPLICIT_CONSTRUCTORS(JSDate);
@@ -10340,6 +10284,10 @@ class JSArray: public JSObject {
                                            uint32_t index,
                                            Handle<Object> value);
 
+  static bool IsReadOnlyLengthDescriptor(Handle<Map> jsarray_map);
+  static bool WouldChangeReadOnlyLength(Handle<JSArray> array, uint32_t index);
+  static MaybeHandle<Object> ReadOnlyLengthError(Handle<JSArray> array);
+
   // Initialize the array with the given capacity. The function may
   // fail due to out-of-memory situations, but only if the requested
   // capacity is non-zero.
@@ -10573,7 +10521,7 @@ class DeclaredAccessorInfo: public AccessorInfo {
 // the request is ignored.
 //
 // If the accessor in the prototype has the READ_ONLY property attribute, then
-// a new value is added to the local object when the property is set.
+// a new value is added to the derived object when the property is set.
 // This shadows the accessor in the prototype.
 class ExecutableAccessorInfo: public AccessorInfo {
  public:

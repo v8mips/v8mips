@@ -277,7 +277,7 @@ MUST_USE_RESULT static MaybeHandle<Object> CreateObjectLiteralBoilerplate(
       } else {
         Handle<String> name(String::cast(*key));
         ASSERT(!name->AsArrayIndex(&element_index));
-        maybe_result = JSObject::SetLocalPropertyIgnoreAttributes(
+        maybe_result = JSObject::SetOwnPropertyIgnoreAttributes(
             boilerplate, name, value, NONE,
             Object::OPTIMAL_REPRESENTATION, mode);
       }
@@ -293,7 +293,7 @@ MUST_USE_RESULT static MaybeHandle<Object> CreateObjectLiteralBoilerplate(
       Vector<char> buffer(arr, ARRAY_SIZE(arr));
       const char* str = DoubleToCString(num, buffer);
       Handle<String> name = isolate->factory()->NewStringFromAsciiChecked(str);
-      maybe_result = JSObject::SetLocalPropertyIgnoreAttributes(
+      maybe_result = JSObject::SetOwnPropertyIgnoreAttributes(
           boilerplate, name, value, NONE,
           Object::OPTIMAL_REPRESENTATION, mode);
     }
@@ -1946,7 +1946,7 @@ static AccessCheckResult CheckPropertyAccess(Handle<JSObject> obj,
 
   Isolate* isolate = obj->GetIsolate();
   LookupResult lookup(isolate);
-  obj->LocalLookup(name, &lookup, true);
+  obj->LookupOwn(name, &lookup, true);
 
   if (!lookup.IsProperty()) return ACCESS_ABSENT;
   Handle<JSObject> holder(lookup.holder(), isolate);
@@ -2013,7 +2013,7 @@ MUST_USE_RESULT static MaybeHandle<Object> GetOwnProperty(Isolate* isolate,
     case ACCESS_ABSENT: return factory->undefined_value();
   }
 
-  PropertyAttributes attrs = JSReceiver::GetLocalPropertyAttribute(obj, name);
+  PropertyAttributes attrs = JSReceiver::GetOwnPropertyAttribute(obj, name);
   if (attrs == ABSENT) {
     RETURN_EXCEPTION_IF_SCHEDULED_EXCEPTION(isolate, Object);
     return factory->undefined_value();
@@ -2021,7 +2021,7 @@ MUST_USE_RESULT static MaybeHandle<Object> GetOwnProperty(Isolate* isolate,
   ASSERT(!isolate->has_scheduled_exception());
   Handle<AccessorPair> accessors;
   bool has_accessors =
-      JSObject::GetLocalPropertyAccessorPair(obj, name).ToHandle(&accessors);
+      JSObject::GetOwnPropertyAccessorPair(obj, name).ToHandle(&accessors);
   Handle<FixedArray> elms = isolate->factory()->NewFixedArray(DESCRIPTOR_SIZE);
   elms->set(ENUMERABLE_INDEX, heap->ToBoolean((attrs & DONT_ENUM) == 0));
   elms->set(CONFIGURABLE_INDEX, heap->ToBoolean((attrs & DONT_DELETE) == 0));
@@ -2262,9 +2262,9 @@ RUNTIME_FUNCTION(RuntimeHidden_DeclareGlobals) {
     if (is_var || is_const) {
       // Lookup the property in the global object, and don't set the
       // value of the variable if the property is already there.
-      // Do the lookup locally only, see ES5 erratum.
+      // Do the lookup own properties only, see ES5 erratum.
       LookupResult lookup(isolate);
-      global->LocalLookup(name, &lookup, true);
+      global->LookupOwn(name, &lookup, true);
       if (lookup.IsFound()) {
         // We found an existing property. Unless it was an interceptor
         // that claims the property is absent, skip this declaration.
@@ -2284,7 +2284,7 @@ RUNTIME_FUNCTION(RuntimeHidden_DeclareGlobals) {
     }
 
     LookupResult lookup(isolate);
-    global->LocalLookup(name, &lookup, true);
+    global->LookupOwn(name, &lookup, true);
 
     // Compute the property attributes. According to ECMA-262,
     // the property must be non-configurable except in eval.
@@ -2301,7 +2301,7 @@ RUNTIME_FUNCTION(RuntimeHidden_DeclareGlobals) {
     StrictMode strict_mode = DeclareGlobalsStrictMode::decode(flags);
 
     if (!lookup.IsFound() || is_function) {
-      // If the local property exists, check that we can reconfigure it
+      // If the own property exists, check that we can reconfigure it
       // as required for function declarations.
       if (lookup.IsFound() && lookup.IsDontDelete()) {
         if (lookup.IsReadOnly() || lookup.IsDontEnum() ||
@@ -2313,7 +2313,7 @@ RUNTIME_FUNCTION(RuntimeHidden_DeclareGlobals) {
       }
       // Define or redefine own property.
       RETURN_FAILURE_ON_EXCEPTION(isolate,
-          JSObject::SetLocalPropertyIgnoreAttributes(
+          JSObject::SetOwnPropertyIgnoreAttributes(
               global, name, value, static_cast<PropertyAttributes>(attr)));
     } else {
       // Do a [[Put]] on the existing (own) property.
@@ -2399,7 +2399,7 @@ RUNTIME_FUNCTION(RuntimeHidden_DeclareContextSlot) {
     // Declare the property by setting it to the initial value if provided,
     // or undefined, and use the correct mode (e.g. READ_ONLY attribute for
     // constant declarations).
-    ASSERT(!JSReceiver::HasLocalProperty(object, name));
+    ASSERT(!JSReceiver::HasOwnProperty(object, name));
     Handle<Object> value(isolate->heap()->undefined_value(), isolate);
     if (*initial_value != NULL) value = initial_value;
     // Declaring a const context slot is a conflicting declaration if
@@ -2419,7 +2419,7 @@ RUNTIME_FUNCTION(RuntimeHidden_DeclareContextSlot) {
     if (object->IsJSGlobalObject()) {
       // Define own property on the global object.
       RETURN_FAILURE_ON_EXCEPTION(isolate,
-         JSObject::SetLocalPropertyIgnoreAttributes(object, name, value, mode));
+         JSObject::SetOwnPropertyIgnoreAttributes(object, name, value, mode));
     } else {
       RETURN_FAILURE_ON_EXCEPTION(isolate,
          JSReceiver::SetProperty(object, name, value, mode, SLOPPY));
@@ -2448,15 +2448,15 @@ RUNTIME_FUNCTION(Runtime_InitializeVarGlobal) {
   // not be deletable.
   PropertyAttributes attributes = DONT_DELETE;
 
-  // Lookup the property locally in the global object. If it isn't
+  // Lookup the property as own on the global object. If it isn't
   // there, there is a property with this name in the prototype chain.
   // We follow Safari and Firefox behavior and only set the property
-  // locally if there is an explicit initialization value that we have
+  // if there is an explicit initialization value that we have
   // to assign to the property.
   // Note that objects can have hidden prototypes, so we need to traverse
-  // the whole chain of hidden prototypes to do a 'local' lookup.
+  // the whole chain of hidden prototypes to do an 'own' lookup.
   LookupResult lookup(isolate);
-  isolate->context()->global_object()->LocalLookup(name, &lookup, true);
+  isolate->context()->global_object()->LookupOwn(name, &lookup, true);
   if (lookup.IsInterceptor()) {
     Handle<JSObject> holder(lookup.holder());
     PropertyAttributes intercepted =
@@ -2507,20 +2507,19 @@ RUNTIME_FUNCTION(RuntimeHidden_InitializeConstGlobal) {
   PropertyAttributes attributes =
       static_cast<PropertyAttributes>(DONT_DELETE | READ_ONLY);
 
-  // Lookup the property locally in the global object. If it isn't
+  // Lookup the property as own on the global object. If it isn't
   // there, we add the property and take special precautions to always
-  // add it as a local property even in case of callbacks in the
-  // prototype chain (this rules out using SetProperty).
-  // We use SetLocalPropertyIgnoreAttributes instead
+  // add it even in case of callbacks in the prototype chain (this rules
+  // out using SetProperty). We use SetOwnPropertyIgnoreAttributes instead
   LookupResult lookup(isolate);
-  global->LocalLookup(name, &lookup);
+  global->LookupOwn(name, &lookup);
   if (!lookup.IsFound()) {
     HandleScope handle_scope(isolate);
     Handle<GlobalObject> global(isolate->context()->global_object());
     RETURN_FAILURE_ON_EXCEPTION(
         isolate,
-        JSObject::SetLocalPropertyIgnoreAttributes(global, name, value,
-                                                   attributes));
+        JSObject::SetOwnPropertyIgnoreAttributes(global, name, value,
+                                                 attributes));
     return *value;
   }
 
@@ -2629,7 +2628,7 @@ RUNTIME_FUNCTION(RuntimeHidden_InitializeConstContextSlot) {
     // Set it if it hasn't been set before.  NOTE: We cannot use
     // GetProperty() to get the current value as it 'unholes' the value.
     LookupResult lookup(isolate);
-    object->LocalLookupRealNamedProperty(name, &lookup);
+    object->LookupOwnRealNamedProperty(name, &lookup);
     ASSERT(lookup.IsFound());  // the property was declared
     ASSERT(lookup.IsReadOnly());  // and it was declared as read-only
 
@@ -2762,15 +2761,15 @@ RUNTIME_FUNCTION(Runtime_RegExpInitializeObject) {
       static_cast<PropertyAttributes>(DONT_ENUM | DONT_DELETE);
   Handle<Object> zero(Smi::FromInt(0), isolate);
   Factory* factory = isolate->factory();
-  JSObject::SetLocalPropertyIgnoreAttributes(
+  JSObject::SetOwnPropertyIgnoreAttributes(
       regexp, factory->source_string(), source, final).Check();
-  JSObject::SetLocalPropertyIgnoreAttributes(
+  JSObject::SetOwnPropertyIgnoreAttributes(
       regexp, factory->global_string(), global, final).Check();
-  JSObject::SetLocalPropertyIgnoreAttributes(
+  JSObject::SetOwnPropertyIgnoreAttributes(
       regexp, factory->ignore_case_string(), ignoreCase, final).Check();
-  JSObject::SetLocalPropertyIgnoreAttributes(
+  JSObject::SetOwnPropertyIgnoreAttributes(
       regexp, factory->multiline_string(), multiline, final).Check();
-  JSObject::SetLocalPropertyIgnoreAttributes(
+  JSObject::SetOwnPropertyIgnoreAttributes(
       regexp, factory->last_index_string(), zero, writable).Check();
   return *regexp;
 }
@@ -3124,18 +3123,12 @@ RUNTIME_FUNCTION(Runtime_SetExpectedNumberOfProperties) {
   CONVERT_ARG_HANDLE_CHECKED(JSFunction, func, 0);
   CONVERT_SMI_ARG_CHECKED(num, 1);
   RUNTIME_ASSERT(num >= 0);
-  // If objects constructed from this function exist then changing
-  // 'estimated_nof_properties' is dangerous since the previous value might
-  // have been compiled into the fast construct stub. Moreover, the inobject
-  // slack tracking logic might have adjusted the previous value, so even
-  // passing the same value is risky.
-  if (!func->shared()->live_objects_may_exist()) {
-    func->shared()->set_expected_nof_properties(num);
-    if (func->has_initial_map()) {
-      Handle<Map> new_initial_map = Map::Copy(handle(func->initial_map()));
-      new_initial_map->set_unused_property_fields(num);
-      func->set_initial_map(*new_initial_map);
-    }
+
+  func->shared()->set_expected_nof_properties(num);
+  if (func->has_initial_map()) {
+    Handle<Map> new_initial_map = Map::Copy(handle(func->initial_map()));
+    new_initial_map->set_unused_property_fields(num);
+    func->set_initial_map(*new_initial_map);
   }
   return isolate->heap()->undefined_value();
 }
@@ -5042,11 +5035,11 @@ RUNTIME_FUNCTION(Runtime_KeyedGetProperty) {
   // Fast cases for getting named properties of the receiver JSObject
   // itself.
   //
-  // The global proxy objects has to be excluded since LocalLookup on
+  // The global proxy objects has to be excluded since LookupOwn on
   // the global proxy object can return a valid result even though the
   // global proxy object never has properties.  This is the case
   // because the global proxy object forwards everything to its hidden
-  // prototype including local lookups.
+  // prototype including own lookups.
   //
   // Additionally, we need to make sure that we do not cache results
   // for objects that require access checks.
@@ -5072,7 +5065,7 @@ RUNTIME_FUNCTION(Runtime_KeyedGetProperty) {
         // Lookup cache miss.  Perform lookup and update the cache if
         // appropriate.
         LookupResult result(isolate);
-        receiver->LocalLookup(key, &result);
+        receiver->LookupOwn(key, &result);
         if (result.IsField()) {
           int offset = result.GetFieldIndex().field_index();
           // Do not track double fields in the keyed lookup cache. Reading
@@ -5197,7 +5190,7 @@ RUNTIME_FUNCTION(Runtime_DefineOrRedefineDataProperty) {
   }
 
   LookupResult lookup(isolate);
-  js_object->LocalLookupRealNamedProperty(name, &lookup);
+  js_object->LookupOwnRealNamedProperty(name, &lookup);
 
   // Special case for callback properties.
   if (lookup.IsPropertyCallbacks()) {
@@ -5242,7 +5235,7 @@ RUNTIME_FUNCTION(Runtime_DefineOrRedefineDataProperty) {
     Handle<Object> result;
     ASSIGN_RETURN_FAILURE_ON_EXCEPTION(
         isolate, result,
-        JSObject::SetLocalPropertyIgnoreAttributes(
+        JSObject::SetOwnPropertyIgnoreAttributes(
             js_object, name, obj_value, attr));
     return *result;
   }
@@ -5396,7 +5389,7 @@ MaybeHandle<Object> Runtime::ForceSetObjectProperty(
                                   SLOPPY, false, DEFINE_PROPERTY);
     } else {
       if (name->IsString()) name = String::Flatten(Handle<String>::cast(name));
-      return JSObject::SetLocalPropertyIgnoreAttributes(
+      return JSObject::SetOwnPropertyIgnoreAttributes(
           js_object, name, value, attr, Object::OPTIMAL_REPRESENTATION,
           ALLOW_AS_CONSTANT, JSReceiver::PERFORM_EXTENSIBILITY_CHECK,
           store_from_keyed);
@@ -5413,7 +5406,7 @@ MaybeHandle<Object> Runtime::ForceSetObjectProperty(
     return JSObject::SetElement(js_object, index, value, attr,
                                 SLOPPY, false, DEFINE_PROPERTY);
   } else {
-    return JSObject::SetLocalPropertyIgnoreAttributes(
+    return JSObject::SetOwnPropertyIgnoreAttributes(
         js_object, name, value, attr, Object::OPTIMAL_REPRESENTATION,
         ALLOW_AS_CONSTANT, JSReceiver::PERFORM_EXTENSIBILITY_CHECK,
         store_from_keyed);
@@ -5646,7 +5639,7 @@ RUNTIME_FUNCTION(Runtime_DebugPromiseHandleEpilogue) {
 }
 
 
-// Set a local property, even if it is READ_ONLY.  If the property does not
+// Set an own property, even if it is READ_ONLY.  If the property does not
 // exist, it will be added with attributes NONE.
 RUNTIME_FUNCTION(Runtime_IgnoreAttributesAndSetProperty) {
   HandleScope scope(isolate);
@@ -5666,7 +5659,7 @@ RUNTIME_FUNCTION(Runtime_IgnoreAttributesAndSetProperty) {
   Handle<Object> result;
   ASSIGN_RETURN_FAILURE_ON_EXCEPTION(
       isolate, result,
-      JSObject::SetLocalPropertyIgnoreAttributes(
+      JSObject::SetOwnPropertyIgnoreAttributes(
           object, name, value, attributes));
   return *result;
 }
@@ -5688,10 +5681,10 @@ RUNTIME_FUNCTION(Runtime_DeleteProperty) {
 }
 
 
-static Object* HasLocalPropertyImplementation(Isolate* isolate,
-                                              Handle<JSObject> object,
-                                              Handle<Name> key) {
-  if (JSReceiver::HasLocalProperty(object, key)) {
+static Object* HasOwnPropertyImplementation(Isolate* isolate,
+                                            Handle<JSObject> object,
+                                            Handle<Name> key) {
+  if (JSReceiver::HasOwnProperty(object, key)) {
     return isolate->heap()->true_value();
   }
   // Handle hidden prototypes.  If there's a hidden prototype above this thing
@@ -5700,16 +5693,16 @@ static Object* HasLocalPropertyImplementation(Isolate* isolate,
   Handle<Object> proto(object->GetPrototype(), isolate);
   if (proto->IsJSObject() &&
       Handle<JSObject>::cast(proto)->map()->is_hidden_prototype()) {
-    return HasLocalPropertyImplementation(isolate,
-                                          Handle<JSObject>::cast(proto),
-                                          key);
+    return HasOwnPropertyImplementation(isolate,
+                                        Handle<JSObject>::cast(proto),
+                                        key);
   }
   RETURN_FAILURE_IF_SCHEDULED_EXCEPTION(isolate);
   return isolate->heap()->false_value();
 }
 
 
-RUNTIME_FUNCTION(Runtime_HasLocalProperty) {
+RUNTIME_FUNCTION(Runtime_HasOwnProperty) {
   HandleScope scope(isolate);
   ASSERT(args.length() == 2);
   CONVERT_ARG_HANDLE_CHECKED(Object, object, 0)
@@ -5737,9 +5730,9 @@ RUNTIME_FUNCTION(Runtime_HasLocalProperty) {
       return isolate->heap()->false_value();
     }
     // Slow case.
-    return HasLocalPropertyImplementation(isolate,
-                                          Handle<JSObject>(js_obj),
-                                          Handle<Name>(key));
+    return HasOwnPropertyImplementation(isolate,
+                                        Handle<JSObject>(js_obj),
+                                        Handle<Name>(key));
   } else if (object->IsString() && key_is_array_index) {
     // Well, there is one exception:  Handle [] on strings.
     Handle<String> string = Handle<String>::cast(object);
@@ -5783,7 +5776,7 @@ RUNTIME_FUNCTION(Runtime_IsPropertyEnumerable) {
   CONVERT_ARG_HANDLE_CHECKED(JSObject, object, 0);
   CONVERT_ARG_HANDLE_CHECKED(Name, key, 1);
 
-  PropertyAttributes att = JSReceiver::GetLocalPropertyAttribute(object, key);
+  PropertyAttributes att = JSReceiver::GetOwnPropertyAttribute(object, key);
   if (att == ABSENT || (att & DONT_ENUM) != 0) {
     RETURN_FAILURE_IF_SCHEDULED_EXCEPTION(isolate);
     return isolate->heap()->false_value();
@@ -5835,10 +5828,10 @@ RUNTIME_FUNCTION(Runtime_GetPropertyNamesFast) {
 }
 
 
-// Find the length of the prototype chain that is to to handled as one. If a
+// Find the length of the prototype chain that is to be handled as one. If a
 // prototype object is hidden it is to be viewed as part of the the object it
 // is prototype for.
-static int LocalPrototypeChainLength(JSObject* obj) {
+static int OwnPrototypeChainLength(JSObject* obj) {
   int count = 1;
   Object* proto = obj->GetPrototype();
   while (proto->IsJSObject() &&
@@ -5850,10 +5843,10 @@ static int LocalPrototypeChainLength(JSObject* obj) {
 }
 
 
-// Return the names of the local named properties.
+// Return the names of the own named properties.
 // args[0]: object
 // args[1]: PropertyAttributes as int
-RUNTIME_FUNCTION(Runtime_GetLocalPropertyNames) {
+RUNTIME_FUNCTION(Runtime_GetOwnPropertyNames) {
   HandleScope scope(isolate);
   ASSERT(args.length() == 2);
   if (!args[0]->IsJSObject()) {
@@ -5878,10 +5871,10 @@ RUNTIME_FUNCTION(Runtime_GetLocalPropertyNames) {
   }
 
   // Find the number of objects making up this.
-  int length = LocalPrototypeChainLength(*obj);
+  int length = OwnPrototypeChainLength(*obj);
 
-  // Find the number of local properties for each of the objects.
-  ScopedVector<int> local_property_count(length);
+  // Find the number of own properties for each of the objects.
+  ScopedVector<int> own_property_count(length);
   int total_property_count = 0;
   Handle<JSObject> jsproto = obj;
   for (int i = 0; i < length; i++) {
@@ -5894,8 +5887,8 @@ RUNTIME_FUNCTION(Runtime_GetLocalPropertyNames) {
       return *isolate->factory()->NewJSArray(0);
     }
     int n;
-    n = jsproto->NumberOfLocalProperties(filter);
-    local_property_count[i] = n;
+    n = jsproto->NumberOfOwnProperties(filter);
+    own_property_count[i] = n;
     total_property_count += n;
     if (i < length - 1) {
       jsproto = Handle<JSObject>(JSObject::cast(jsproto->GetPrototype()));
@@ -5911,13 +5904,13 @@ RUNTIME_FUNCTION(Runtime_GetLocalPropertyNames) {
   int next_copy_index = 0;
   int hidden_strings = 0;
   for (int i = 0; i < length; i++) {
-    jsproto->GetLocalPropertyNames(*names, next_copy_index, filter);
+    jsproto->GetOwnPropertyNames(*names, next_copy_index, filter);
     if (i > 0) {
       // Names from hidden prototypes may already have been added
       // for inherited function template instances. Count the duplicates
       // and stub them out; the final copy pass at the end ignores holes.
       for (int j = next_copy_index;
-           j < next_copy_index + local_property_count[i];
+           j < next_copy_index + own_property_count[i];
            j++) {
         Object* name_from_hidden_proto = names->get(j);
         for (int k = 0; k < next_copy_index; k++) {
@@ -5932,7 +5925,7 @@ RUNTIME_FUNCTION(Runtime_GetLocalPropertyNames) {
         }
       }
     }
-    next_copy_index += local_property_count[i];
+    next_copy_index += own_property_count[i];
 
     // Hidden properties only show up if the filter does not skip strings.
     if ((filter & STRING) == 0 && JSObject::HasHiddenProperties(jsproto)) {
@@ -5965,9 +5958,9 @@ RUNTIME_FUNCTION(Runtime_GetLocalPropertyNames) {
 }
 
 
-// Return the names of the local indexed properties.
+// Return the names of the own indexed properties.
 // args[0]: object
-RUNTIME_FUNCTION(Runtime_GetLocalElementNames) {
+RUNTIME_FUNCTION(Runtime_GetOwnElementNames) {
   HandleScope scope(isolate);
   ASSERT(args.length() == 1);
   if (!args[0]->IsJSObject()) {
@@ -5975,9 +5968,9 @@ RUNTIME_FUNCTION(Runtime_GetLocalElementNames) {
   }
   CONVERT_ARG_HANDLE_CHECKED(JSObject, obj, 0);
 
-  int n = obj->NumberOfLocalElements(static_cast<PropertyAttributes>(NONE));
+  int n = obj->NumberOfOwnElements(static_cast<PropertyAttributes>(NONE));
   Handle<FixedArray> names = isolate->factory()->NewFixedArray(n);
-  obj->GetLocalElementKeys(*names, static_cast<PropertyAttributes>(NONE));
+  obj->GetOwnElementKeys(*names, static_cast<PropertyAttributes>(NONE));
   return *isolate->factory()->NewJSArrayWithElements(names);
 }
 
@@ -6034,7 +6027,7 @@ RUNTIME_FUNCTION(Runtime_GetIndexedInterceptorElementNames) {
 }
 
 
-RUNTIME_FUNCTION(Runtime_LocalKeys) {
+RUNTIME_FUNCTION(Runtime_OwnKeys) {
   HandleScope scope(isolate);
   ASSERT(args.length() == 1);
   CONVERT_ARG_CHECKED(JSObject, raw_object, 0);
@@ -6059,7 +6052,7 @@ RUNTIME_FUNCTION(Runtime_LocalKeys) {
   Handle<FixedArray> contents;
   ASSIGN_RETURN_FAILURE_ON_EXCEPTION(
       isolate, contents,
-      JSReceiver::GetKeys(object, JSReceiver::LOCAL_ONLY));
+      JSReceiver::GetKeys(object, JSReceiver::OWN_ONLY));
 
   // Some fast paths through GetKeysInFixedArrayFor reuse a cached
   // property array and since the result is mutable we have to create
@@ -8372,15 +8365,6 @@ static Object* Runtime_NewObjectHelper(Isolate* isolate,
   // available.
   Compiler::EnsureCompiled(function, CLEAR_EXCEPTION);
 
-  Handle<SharedFunctionInfo> shared(function->shared(), isolate);
-  if (!function->has_initial_map() &&
-      shared->IsInobjectSlackTrackingInProgress()) {
-    // The tracking is already in progress for another function. We can only
-    // track one initial_map at a time, so we force the completion before the
-    // function is called as a constructor for the first time.
-    shared->CompleteInobjectSlackTracking();
-  }
-
   Handle<JSObject> result;
   if (site.is_null()) {
     result = isolate->factory()->NewJSObject(function);
@@ -8424,7 +8408,7 @@ RUNTIME_FUNCTION(RuntimeHidden_FinalizeInstanceSize) {
   ASSERT(args.length() == 1);
 
   CONVERT_ARG_HANDLE_CHECKED(JSFunction, function, 0);
-  function->shared()->CompleteInobjectSlackTracking();
+  function->CompleteInobjectSlackTracking();
 
   return isolate->heap()->undefined_value();
 }
@@ -9475,7 +9459,7 @@ RUNTIME_FUNCTION(RuntimeHidden_StoreContextSlot) {
 
   // Set the property if it's not read only or doesn't yet exist.
   if ((attributes & READ_ONLY) == 0 ||
-      (JSReceiver::GetLocalPropertyAttribute(object, name) == ABSENT)) {
+      (JSReceiver::GetOwnPropertyAttribute(object, name) == ABSENT)) {
     RETURN_FAILURE_ON_EXCEPTION(
         isolate,
         JSReceiver::SetProperty(object, name, value, NONE, strict_mode));
@@ -10715,9 +10699,8 @@ RUNTIME_FUNCTION(Runtime_GetArrayKeys) {
       }
       Handle<JSObject> current = Handle<JSObject>::cast(p);
       Handle<FixedArray> current_keys =
-          isolate->factory()->NewFixedArray(
-              current->NumberOfLocalElements(NONE));
-      current->GetLocalElementKeys(*current_keys, NONE);
+          isolate->factory()->NewFixedArray(current->NumberOfOwnElements(NONE));
+      current->GetOwnElementKeys(*current_keys, NONE);
       ASSIGN_RETURN_FAILURE_ON_EXCEPTION(
           isolate, keys, FixedArray::UnionOfKeys(keys, current_keys));
     }
@@ -10900,13 +10883,13 @@ RUNTIME_FUNCTION(Runtime_DebugGetPropertyDetails) {
   }
 
   // Find the number of objects making up this.
-  int length = LocalPrototypeChainLength(*obj);
+  int length = OwnPrototypeChainLength(*obj);
 
-  // Try local lookup on each of the objects.
+  // Try own lookup on each of the objects.
   Handle<JSObject> jsproto = obj;
   for (int i = 0; i < length; i++) {
     LookupResult result(isolate);
-    jsproto->LocalLookup(name, &result);
+    jsproto->LookupOwn(name, &result);
     if (result.IsFound()) {
       // LookupResult is not GC safe as it holds raw object pointers.
       // GC can happen later in this code so put the required fields into
@@ -12841,8 +12824,8 @@ MUST_USE_RESULT static MaybeHandle<JSObject> MaterializeArgumentsObject(
   // Do not materialize the arguments object for eval or top-level code.
   // Skip if "arguments" is already taken.
   if (!function->shared()->is_function() ||
-      JSReceiver::HasLocalProperty(target,
-                                   isolate->factory()->arguments_string())) {
+      JSReceiver::HasOwnProperty(
+          target, isolate->factory()->arguments_string())) {
     return target;
   }
 
@@ -13114,14 +13097,6 @@ RUNTIME_FUNCTION(Runtime_DebugReferencedBy) {
   HandleScope scope(isolate);
   ASSERT(args.length() == 3);
 
-  // First perform a full GC in order to avoid references from dead objects.
-  Heap* heap = isolate->heap();
-  heap->CollectAllGarbage(Heap::kMakeHeapIterableMask, "%DebugReferencedBy");
-  // The heap iterator reserves the right to do a GC to make the heap iterable.
-  // Due to the GC above we know it won't need to do that, but it seems cleaner
-  // to get the heap iterator constructed before we start having unprotected
-  // Object* locals that are not protected by handles.
-
   // Check parameters.
   CONVERT_ARG_HANDLE_CHECKED(JSObject, target, 0);
   CONVERT_ARG_HANDLE_CHECKED(Object, instance_filter, 1);
@@ -13139,21 +13114,27 @@ RUNTIME_FUNCTION(Runtime_DebugReferencedBy) {
 
   // Get the number of referencing objects.
   int count;
-  HeapIterator heap_iterator(heap);
-  count = DebugReferencedBy(&heap_iterator,
-                            *target, *instance_filter, max_references,
-                            NULL, 0, *arguments_function);
+  // First perform a full GC in order to avoid dead objects and to make the heap
+  // iterable.
+  Heap* heap = isolate->heap();
+  heap->CollectAllGarbage(Heap::kMakeHeapIterableMask, "%DebugConstructedBy");
+  {
+    HeapIterator heap_iterator(heap);
+    count = DebugReferencedBy(&heap_iterator,
+                              *target, *instance_filter, max_references,
+                              NULL, 0, *arguments_function);
+  }
 
   // Allocate an array to hold the result.
   Handle<FixedArray> instances = isolate->factory()->NewFixedArray(count);
 
   // Fill the referencing objects.
-  // AllocateFixedArray above does not make the heap non-iterable.
-  ASSERT(heap->IsHeapIterable());
-  HeapIterator heap_iterator2(heap);
-  count = DebugReferencedBy(&heap_iterator2,
-                            *target, *instance_filter, max_references,
-                            *instances, count, *arguments_function);
+  {
+    HeapIterator heap_iterator(heap);
+    count = DebugReferencedBy(&heap_iterator,
+                              *target, *instance_filter, max_references,
+                              *instances, count, *arguments_function);
+  }
 
   // Return result as JS array.
   Handle<JSFunction> constructor(
@@ -13204,9 +13185,6 @@ RUNTIME_FUNCTION(Runtime_DebugConstructedBy) {
   HandleScope scope(isolate);
   ASSERT(args.length() == 2);
 
-  // First perform a full GC in order to avoid dead objects.
-  Heap* heap = isolate->heap();
-  heap->CollectAllGarbage(Heap::kMakeHeapIterableMask, "%DebugConstructedBy");
 
   // Check parameters.
   CONVERT_ARG_HANDLE_CHECKED(JSFunction, constructor, 0);
@@ -13215,24 +13193,31 @@ RUNTIME_FUNCTION(Runtime_DebugConstructedBy) {
 
   // Get the number of referencing objects.
   int count;
-  HeapIterator heap_iterator(heap);
-  count = DebugConstructedBy(&heap_iterator,
-                             *constructor,
-                             max_references,
-                             NULL,
-                             0);
+  // First perform a full GC in order to avoid dead objects and to make the heap
+  // iterable.
+  Heap* heap = isolate->heap();
+  heap->CollectAllGarbage(Heap::kMakeHeapIterableMask, "%DebugConstructedBy");
+  {
+    HeapIterator heap_iterator(heap);
+    count = DebugConstructedBy(&heap_iterator,
+                               *constructor,
+                               max_references,
+                               NULL,
+                               0);
+  }
 
   // Allocate an array to hold the result.
   Handle<FixedArray> instances = isolate->factory()->NewFixedArray(count);
 
-  ASSERT(heap->IsHeapIterable());
   // Fill the referencing objects.
-  HeapIterator heap_iterator2(heap);
-  count = DebugConstructedBy(&heap_iterator2,
-                             *constructor,
-                             max_references,
-                             *instances,
-                             count);
+  {
+    HeapIterator heap_iterator2(heap);
+    count = DebugConstructedBy(&heap_iterator2,
+                               *constructor,
+                               max_references,
+                               *instances,
+                               count);
+  }
 
   // Return result as JS array.
   Handle<JSFunction> array_function(
@@ -13364,8 +13349,6 @@ RUNTIME_FUNCTION(Runtime_LiveEditFindSharedFunctionInfosForScript) {
   int number;
   Heap* heap = isolate->heap();
   {
-    heap->EnsureHeapIsIterable();
-    DisallowHeapAllocation no_allocation;
     HeapIterator heap_iterator(heap);
     Script* scr = *script;
     FixedArray* arr = *array;
@@ -13373,8 +13356,6 @@ RUNTIME_FUNCTION(Runtime_LiveEditFindSharedFunctionInfosForScript) {
   }
   if (number > kBufferSize) {
     array = isolate->factory()->NewFixedArray(number);
-    heap->EnsureHeapIsIterable();
-    DisallowHeapAllocation no_allocation;
     HeapIterator heap_iterator(heap);
     Script* scr = *script;
     FixedArray* arr = *array;
@@ -13777,7 +13758,7 @@ RUNTIME_FUNCTION(Runtime_AvailableLocalesOf) {
     }
 
     RETURN_FAILURE_ON_EXCEPTION(isolate,
-        JSObject::SetLocalPropertyIgnoreAttributes(
+        JSObject::SetOwnPropertyIgnoreAttributes(
             locales,
             factory->NewStringFromAsciiChecked(result),
             factory->NewNumber(i),
@@ -13882,13 +13863,13 @@ RUNTIME_FUNCTION(Runtime_GetLanguageTagVariants) {
 
     Handle<JSObject> result = factory->NewJSObject(isolate->object_function());
     RETURN_FAILURE_ON_EXCEPTION(isolate,
-        JSObject::SetLocalPropertyIgnoreAttributes(
+        JSObject::SetOwnPropertyIgnoreAttributes(
             result,
             maximized,
             factory->NewStringFromAsciiChecked(base_max_locale),
             NONE));
     RETURN_FAILURE_ON_EXCEPTION(isolate,
-        JSObject::SetLocalPropertyIgnoreAttributes(
+        JSObject::SetOwnPropertyIgnoreAttributes(
             result,
             base,
             factory->NewStringFromAsciiChecked(base_locale),
@@ -14010,7 +13991,7 @@ RUNTIME_FUNCTION(Runtime_CreateDateTimeFormat) {
   local_object->SetInternalField(0, reinterpret_cast<Smi*>(date_format));
 
   RETURN_FAILURE_ON_EXCEPTION(isolate,
-      JSObject::SetLocalPropertyIgnoreAttributes(
+      JSObject::SetOwnPropertyIgnoreAttributes(
           local_object,
           isolate->factory()->NewStringFromStaticAscii("dateFormat"),
           isolate->factory()->NewStringFromStaticAscii("valid"),
@@ -14109,7 +14090,7 @@ RUNTIME_FUNCTION(Runtime_CreateNumberFormat) {
   local_object->SetInternalField(0, reinterpret_cast<Smi*>(number_format));
 
   RETURN_FAILURE_ON_EXCEPTION(isolate,
-      JSObject::SetLocalPropertyIgnoreAttributes(
+      JSObject::SetOwnPropertyIgnoreAttributes(
           local_object,
           isolate->factory()->NewStringFromStaticAscii("numberFormat"),
           isolate->factory()->NewStringFromStaticAscii("valid"),
@@ -14217,7 +14198,7 @@ RUNTIME_FUNCTION(Runtime_CreateCollator) {
   local_object->SetInternalField(0, reinterpret_cast<Smi*>(collator));
 
   RETURN_FAILURE_ON_EXCEPTION(isolate,
-      JSObject::SetLocalPropertyIgnoreAttributes(
+      JSObject::SetOwnPropertyIgnoreAttributes(
           local_object,
           isolate->factory()->NewStringFromStaticAscii("collator"),
           isolate->factory()->NewStringFromStaticAscii("valid"),
@@ -14323,7 +14304,7 @@ RUNTIME_FUNCTION(Runtime_CreateBreakIterator) {
   local_object->SetInternalField(1, reinterpret_cast<Smi*>(NULL));
 
   RETURN_FAILURE_ON_EXCEPTION(isolate,
-      JSObject::SetLocalPropertyIgnoreAttributes(
+      JSObject::SetOwnPropertyIgnoreAttributes(
           local_object,
           isolate->factory()->NewStringFromStaticAscii("breakIterator"),
           isolate->factory()->NewStringFromStaticAscii("valid"),
@@ -14457,8 +14438,6 @@ static Handle<Object> Runtime_GetScriptFromScriptName(
   Handle<Script> script;
   Factory* factory = script_name->GetIsolate()->factory();
   Heap* heap = script_name->GetHeap();
-  heap->EnsureHeapIsIterable();
-  DisallowHeapAllocation no_allocation_during_heap_iteration;
   HeapIterator iterator(heap);
   HeapObject* obj = NULL;
   while (script.is_null() && ((obj = iterator.next()) != NULL)) {

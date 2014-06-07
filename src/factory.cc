@@ -1294,10 +1294,10 @@ Handle<JSObject> Factory::NewFunctionPrototype(Handle<JSFunction> function) {
   Handle<JSObject> prototype = NewJSObjectFromMap(new_map);
 
   if (!function->shared()->is_generator()) {
-    JSObject::SetLocalPropertyIgnoreAttributes(prototype,
-                                               constructor_string(),
-                                               function,
-                                               DONT_ENUM).Assert();
+    JSObject::SetOwnPropertyIgnoreAttributes(prototype,
+                                             constructor_string(),
+                                             function,
+                                             DONT_ENUM).Assert();
   }
 
   return prototype;
@@ -1932,7 +1932,6 @@ Handle<SharedFunctionInfo> Factory::NewSharedFunctionInfo(
   share->set_debug_info(*undefined_value(), SKIP_WRITE_BARRIER);
   share->set_inferred_name(*empty_string(), SKIP_WRITE_BARRIER);
   share->set_feedback_vector(*empty_fixed_array(), SKIP_WRITE_BARRIER);
-  share->set_initial_map(*undefined_value(), SKIP_WRITE_BARRIER);
   share->set_profiler_ticks(0);
   share->set_ast_node_count(0);
   share->set_counters(0);
@@ -1990,7 +1989,7 @@ void Factory::SetNumberStringCache(Handle<Object> number,
       // cache in the snapshot to keep  boot-time memory usage down.
       // If we expand the number string cache already while creating
       // the snapshot then that didn't work out.
-      ASSERT(!Serializer::enabled(isolate()) || FLAG_extra_code != NULL);
+      ASSERT(!isolate()->serializer_enabled() || FLAG_extra_code != NULL);
       Handle<FixedArray> new_cache = NewFixedArray(full_size, TENURED);
       isolate()->heap()->set_number_string_cache(*new_cache);
       return;
@@ -2131,7 +2130,7 @@ Handle<JSFunction> Factory::CreateApiFunction(
     return result;
   }
 
-  JSObject::SetLocalPropertyIgnoreAttributes(
+  JSObject::SetOwnPropertyIgnoreAttributes(
       handle(JSObject::cast(result->prototype())),
       constructor_string(),
       result,
