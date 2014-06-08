@@ -56,7 +56,8 @@ static V8_INLINE void __cpuid(int cpu_info[4], int info_type) {
 
 #endif  // !V8_LIBC_MSVCRT
 
-#elif V8_HOST_ARCH_ARM || V8_HOST_ARCH_ARM64 || V8_HOST_ARCH_MIPS || V8_HOST_ARCH_MIPS64
+#elif V8_HOST_ARCH_ARM || V8_HOST_ARCH_ARM64 \
+    || V8_HOST_ARCH_MIPS || V8_HOST_ARCH_MIPS64
 
 #if V8_OS_LINUX
 
@@ -206,7 +207,7 @@ class CPUInfo V8_FINAL BASE_EMBEDDED {
   size_t datalen_;
 };
 
-#if V8_HOST_ARCH_ARM || V8_HOST_ARCH_MIPS
+#if V8_HOST_ARCH_ARM || V8_HOST_ARCH_MIPS || V8_HOST_ARCH_MIPS64
 
 // Checks that a space-separated list of items contains one given 'item'.
 static bool HasListItem(const char* list, const char* item) {
@@ -232,7 +233,7 @@ static bool HasListItem(const char* list, const char* item) {
   return false;
 }
 
-#endif  // V8_HOST_ARCH_ARM || V8_HOST_ARCH_MIPS
+#endif  // V8_HOST_ARCH_ARM || V8_HOST_ARCH_MIPS || V8_HOST_ARCH_MIPS64
 
 #endif  // V8_OS_LINUX
 
