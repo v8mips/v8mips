@@ -3289,9 +3289,7 @@ void LCodeGen::DoLoadKeyedFixedArray(LLoadKeyed* instr) {
     ASSERT(!hinstr->RequiresHoleCheck());
     if (FLAG_debug_code) {
       Register temp = scratch1();
-      __ Load(temp,
-              FieldMemOperand(store_base, offset),
-              Representation::Smi());
+      __ Load(temp, MemOperand(store_base, offset), Representation::Smi());
       __ AssertSmi(temp);
     }
 
@@ -4426,9 +4424,7 @@ void LCodeGen::DoStoreKeyedFixedArray(LStoreKeyed* instr) {
     ASSERT(instr->hydrogen()->elements_kind() == FAST_SMI_ELEMENTS);
     if (FLAG_debug_code) {
       Register temp = scratch1();
-      __ Load(temp,
-              FieldMemOperand(store_base, offset),
-              Representation::Smi());
+      __ Load(temp, MemOperand(store_base, offset), Representation::Smi());
       __ AssertSmi(temp);
     }
 
