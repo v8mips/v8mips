@@ -2405,12 +2405,8 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
     // cases.
     default:
       set_register(rd_reg, alu_out);
-<<<<<<< HEAD
       TraceRegWr(alu_out);
-  };
-=======
   }
->>>>>>> 2c651e878ea58544c17316f1c0b2dfa2cf308290
 }
 
 
