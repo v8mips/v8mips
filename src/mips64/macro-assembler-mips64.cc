@@ -5893,17 +5893,17 @@ void MacroAssembler::TruncatingDiv(Register result,
   ASSERT(!result.is(at));
   MultiplierAndShift ms(divisor);
   li(at, Operand(ms.multiplier()));
-  Dmult(dividend, Operand(at));
+  Mult(dividend, Operand(at));
   mfhi(result);
   if (divisor > 0 && ms.multiplier() < 0) {
-    Daddu(result, result, Operand(dividend));
+    Addu(result, result, Operand(dividend));
   }
   if (divisor < 0 && ms.multiplier() > 0) {
-    Dsubu(result, result, Operand(dividend));
+    Subu(result, result, Operand(dividend));
   }
-  if (ms.shift() > 0) dsra(result, result, ms.shift());
-  dsrl32(at, dividend, 31);
-  Daddu(result, result, Operand(at));
+  if (ms.shift() > 0) sra(result, result, ms.shift());
+  srl(at, dividend, 31);
+  Addu(result, result, Operand(at));
 }
 
 

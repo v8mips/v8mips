@@ -1315,6 +1315,8 @@ void LCodeGen::DoFlooringDivByPowerOf2I(LFlooringDivByPowerOf2I* instr) {
     __ dsra(result, dividend, shift);
     return;
   }
+
+  __ Xor(at, scratch, result);
   // Dividing by -1 is basically negation, unless we overflow.
   if (divisor == -1) {
     DeoptimizeIf(gt, instr->environment(), result, Operand(kMaxInt));
@@ -1322,7 +1324,7 @@ void LCodeGen::DoFlooringDivByPowerOf2I(LFlooringDivByPowerOf2I* instr) {
   }
 
   Label no_overflow, done;
-  __ Branch(&no_overflow, ge, result, Operand(kMaxInt));
+  __ Branch(&no_overflow, lt, at, Operand(zero_reg));
   __ li(result, Operand(kMinInt / divisor), CONSTANT_SIZE);
   __ Branch(&done);
   __ bind(&no_overflow);
