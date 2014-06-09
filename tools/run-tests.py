@@ -80,6 +80,7 @@ SUPPORTED_ARCHS = ["android_arm",
                    "android_ia32",
                    "arm",
                    "ia32",
+                   "x87",
                    "mips",
                    "mipsel",
                    "mips64el",
@@ -97,6 +98,7 @@ SLOW_ARCHS = ["android_arm",
               "mips64el",
               "nacl_ia32",
               "nacl_x64",
+              "x87",
               "arm64"]
 
 

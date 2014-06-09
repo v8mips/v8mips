@@ -454,6 +454,8 @@ class RuntimeCallHelper {
 #include "mips/code-stubs-mips.h"
 #elif V8_TARGET_ARCH_MIPS64
 #include "mips64/code-stubs-mips64.h"
+#elif V8_TARGET_ARCH_X87
+#include "x87/code-stubs-x87.h"
 #else
 #error Unsupported target architecture.
 #endif

@@ -17,6 +17,8 @@
 #include "mips/simulator-mips.h"
 #elif V8_TARGET_ARCH_MIPS64
 #include "mips64/simulator-mips64.h"
+#elif V8_TARGET_ARCH_X87
+#include "x87/simulator-x87.h"
 #else
 #error Unsupported target architecture.
 #endif
