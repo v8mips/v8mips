@@ -7,7 +7,7 @@
 
 #include "assembler.h"
 #include "mips64/assembler-mips64.h"
-#include "globals.h"
+#include "v8globals.h"
 
 namespace v8 {
 namespace internal {
