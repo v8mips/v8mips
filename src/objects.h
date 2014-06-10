@@ -810,10 +810,10 @@ enum InstanceType {
 const int kExternalArrayTypeCount =
     LAST_EXTERNAL_ARRAY_TYPE - FIRST_EXTERNAL_ARRAY_TYPE + 1;
 
-STATIC_CHECK(JS_OBJECT_TYPE == Internals::kJSObjectType);
-STATIC_CHECK(FIRST_NONSTRING_TYPE == Internals::kFirstNonstringType);
-STATIC_CHECK(ODDBALL_TYPE == Internals::kOddballType);
-STATIC_CHECK(FOREIGN_TYPE == Internals::kForeignType);
+STATIC_ASSERT(JS_OBJECT_TYPE == Internals::kJSObjectType);
+STATIC_ASSERT(FIRST_NONSTRING_TYPE == Internals::kFirstNonstringType);
+STATIC_ASSERT(ODDBALL_TYPE == Internals::kOddballType);
+STATIC_ASSERT(FOREIGN_TYPE == Internals::kForeignType);
 
 
 #define FIXED_ARRAY_SUB_INSTANCE_TYPE_LIST(V) \
@@ -1746,7 +1746,7 @@ class HeapObject: public Object {
   static const int kMapOffset = Object::kHeaderSize;
   static const int kHeaderSize = kMapOffset + kPointerSize;
 
-  STATIC_CHECK(kMapOffset == Internals::kHeapObjectMapOffset);
+  STATIC_ASSERT(kMapOffset == Internals::kHeapObjectMapOffset);
 
  protected:
   // helpers for calling an ObjectVisitor to iterate over pointers in the
@@ -2655,7 +2655,7 @@ class JSObject: public JSReceiver {
   static const int kElementsOffset = kPropertiesOffset + kPointerSize;
   static const int kHeaderSize = kElementsOffset + kPointerSize;
 
-  STATIC_CHECK(kHeaderSize == Internals::kJSObjectHeaderSize);
+  STATIC_ASSERT(kHeaderSize == Internals::kJSObjectHeaderSize);
 
   class BodyDescriptor : public FlexibleBodyDescriptor<kPropertiesOffset> {
    public:
@@ -3037,7 +3037,7 @@ class FixedArray: public FixedArrayBase {
                                                   Object* value);
 
  private:
-  STATIC_CHECK(kHeaderSize == Internals::kFixedArrayHeaderSize);
+  STATIC_ASSERT(kHeaderSize == Internals::kFixedArrayHeaderSize);
 
   DISALLOW_IMPLICIT_CONSTRUCTORS(FixedArray);
 };
@@ -6561,7 +6561,7 @@ class Map: public HeapObject {
   static const int kBitFieldOffset = kInstanceAttributesOffset + 2;
   static const int kBitField2Offset = kInstanceAttributesOffset + 3;
 
-  STATIC_CHECK(kInstanceTypeOffset == Internals::kMapInstanceTypeOffset);
+  STATIC_ASSERT(kInstanceTypeOffset == Internals::kMapInstanceTypeOffset);
 
   // Bit positions for bit field.
   static const int kHasNonInstancePrototype = 0;
@@ -8793,7 +8793,7 @@ class Name: public HeapObject {
   static const int kArrayIndexLengthBits =
       kBitsPerInt - kArrayIndexValueBits - kNofHashBitFields;
 
-  STATIC_CHECK((kArrayIndexLengthBits > 0));
+  STATIC_ASSERT((kArrayIndexLengthBits > 0));
 
   static const int kArrayIndexHashLengthShift =
       kArrayIndexValueBits + kNofHashBitFields;
@@ -8806,7 +8806,7 @@ class Name: public HeapObject {
   // Check that kMaxCachedArrayIndexLength + 1 is a power of two so we
   // could use a mask to test if the length of string is less than or equal to
   // kMaxCachedArrayIndexLength.
-  STATIC_CHECK(IS_POWER_OF_TWO(kMaxCachedArrayIndexLength + 1));
+  STATIC_ASSERT(IS_POWER_OF_TWO(kMaxCachedArrayIndexLength + 1));
 
   static const unsigned int kContainsCachedArrayIndexMask =
       (~kMaxCachedArrayIndexLength << kArrayIndexHashLengthShift) |
@@ -9055,7 +9055,7 @@ class String: public Name {
   // Maximum number of characters to consider when trying to convert a string
   // value into an array index.
   static const int kMaxArrayIndexSize = 10;
-  STATIC_CHECK(kMaxArrayIndexSize < (1 << kArrayIndexLengthBits));
+  STATIC_ASSERT(kMaxArrayIndexSize < (1 << kArrayIndexLengthBits));
 
   // Max char codes.
   static const int32_t kMaxOneByteCharCode = unibrow::Latin1::kMaxChar;
@@ -9213,7 +9213,7 @@ class SeqOneByteString: public SeqString {
 
   // Maximal memory usage for a single sequential ASCII string.
   static const int kMaxSize = 512 * MB - 1;
-  STATIC_CHECK((kMaxSize - kHeaderSize) >= String::kMaxLength);
+  STATIC_ASSERT((kMaxSize - kHeaderSize) >= String::kMaxLength);
 
  private:
   DISALLOW_IMPLICIT_CONSTRUCTORS(SeqOneByteString);
@@ -9253,7 +9253,7 @@ class SeqTwoByteString: public SeqString {
 
   // Maximal memory usage for a single sequential two-byte string.
   static const int kMaxSize = 512 * MB - 1;
-  STATIC_CHECK(static_cast<int>((kMaxSize - kHeaderSize)/sizeof(uint16_t)) >=
+  STATIC_ASSERT(static_cast<int>((kMaxSize - kHeaderSize)/sizeof(uint16_t)) >=
                String::kMaxLength);
 
  private:
@@ -9382,7 +9382,7 @@ class ExternalString: public String {
   // Return whether external string is short (data pointer is not cached).
   inline bool is_short();
 
-  STATIC_CHECK(kResourceOffset == Internals::kStringResourceOffset);
+  STATIC_ASSERT(kResourceOffset == Internals::kStringResourceOffset);
 
  private:
   DISALLOW_IMPLICIT_CONSTRUCTORS(ExternalString);
@@ -9652,9 +9652,9 @@ class Oddball: public HeapObject {
                               kToNumberOffset + kPointerSize,
                               kSize> BodyDescriptor;
 
-  STATIC_CHECK(kKindOffset == Internals::kOddballKindOffset);
-  STATIC_CHECK(kNull == Internals::kNullOddballKind);
-  STATIC_CHECK(kUndefined == Internals::kUndefinedOddballKind);
+  STATIC_ASSERT(kKindOffset == Internals::kOddballKindOffset);
+  STATIC_ASSERT(kNull == Internals::kNullOddballKind);
+  STATIC_ASSERT(kUndefined == Internals::kUndefinedOddballKind);
 
  private:
   DISALLOW_IMPLICIT_CONSTRUCTORS(Oddball);
@@ -9823,7 +9823,7 @@ class JSProxy: public JSReceiver {
   static const int kHeaderSize = kPaddingOffset;
   static const int kPaddingSize = kSize - kPaddingOffset;
 
-  STATIC_CHECK(kPaddingSize >= 0);
+  STATIC_ASSERT(kPaddingSize >= 0);
 
   typedef FixedBodyDescriptor<kHandlerOffset,
                               kPaddingOffset,
@@ -9889,7 +9889,7 @@ class JSFunctionProxy: public JSProxy {
   static const int kSize = JSFunction::kSize;
   static const int kPaddingSize = kSize - kPaddingOffset;
 
-  STATIC_CHECK(kPaddingSize >= 0);
+  STATIC_ASSERT(kPaddingSize >= 0);
 
   typedef FixedBodyDescriptor<kHandlerOffset,
                               kConstructTrapOffset + kPointerSize,
@@ -10263,7 +10263,7 @@ class Foreign: public HeapObject {
   static const int kForeignAddressOffset = HeapObject::kHeaderSize;
   static const int kSize = kForeignAddressOffset + kPointerSize;
 
-  STATIC_CHECK(kForeignAddressOffset == Internals::kForeignAddressOffset);
+  STATIC_ASSERT(kForeignAddressOffset == Internals::kForeignAddressOffset);
 
  private:
   DISALLOW_IMPLICIT_CONSTRUCTORS(Foreign);
