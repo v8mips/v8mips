@@ -125,6 +125,18 @@ inline MemOperand FieldMemOperand(Register object, int offset) {
 }
 
 
+inline MemOperand UntagSmiMemOperand(Register rm, int offset) {
+  // Assumes that Smis are shifted by 32 bits and little endianness.
+  STATIC_ASSERT(kSmiShift == 32);
+  return MemOperand(rm, offset + (kSmiShift / kBitsPerByte));
+}
+
+
+inline MemOperand UntagSmiFieldMemOperand(Register rm, int offset) {
+  return UntagSmiMemOperand(rm, offset - kHeapObjectTag);
+}
+
+
 // Generate a MemOperand for storing arguments 5..N on the stack
 // when calling CallCFunction().
 // TODO(plind): Currently ONLY used for O32. Should be fixed for

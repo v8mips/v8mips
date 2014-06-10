@@ -370,7 +370,8 @@ const FPUControlRegister FCSR = { kFCSRRegister };
 
 // -----------------------------------------------------------------------------
 // Machine instruction Operands.
-
+const int kSmiShift = kSmiTagSize + kSmiShiftSize;
+const uint64_t kSmiShiftMask = (1UL << kSmiShift) - 1;
 // Class Operand represents a shifter operand in data processing instructions.
 class Operand BASE_EMBEDDED {
  public:

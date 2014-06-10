@@ -5099,7 +5099,7 @@ void NameDictionaryLookupStub::GenerateNegativeLookup(MacroAssembler* masm,
     // Compute the masked index: (hash + i + i * i) & mask.
     Register index = scratch0;
     // Capacity is smi 2^n.
-    __ ld(index, FieldMemOperand(properties, kCapacityOffset));
+    __ lw(index, UntagSmiFieldMemOperand(properties, kCapacityOffset));
     __ Dsubu(index, index, Operand(1));
     __ And(index, index, Operand(
         Smi::FromInt(name->Hash() + NameDictionary::GetProbeOffset(i))));
@@ -5114,9 +5114,8 @@ void NameDictionaryLookupStub::GenerateNegativeLookup(MacroAssembler* masm,
     // Having undefined at this place means the name is not contained.
     ASSERT_EQ(kSmiTagSize, 1);
     Register tmp = properties;
-    // __ sll(scratch0, index, 1);
-    // TODO(yy) Use Macro.
-    __ dsrl(scratch0, index, 32 - kPointerSizeLog2);
+
+    __ dsll(scratch0, index, kPointerSizeLog2);
     __ Daddu(tmp, properties, scratch0);
     __ ld(entity_name, FieldMemOperand(tmp, kElementsStartOffset));
 
