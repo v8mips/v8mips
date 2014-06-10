@@ -933,7 +933,6 @@ class Isolate {
     return &interp_canonicalize_mapping_;
   }
 
-  Debugger* debugger() {  return debugger_; }
   Debug* debug() { return debug_; }
 
   inline bool DebuggerHasBreakPoints();
@@ -1263,7 +1262,6 @@ class Isolate {
   JSObject::SpillInformation js_spill_information_;
 #endif
 
-  Debugger* debugger_;
   Debug* debug_;
   CpuProfiler* cpu_profiler_;
   HeapProfiler* heap_profiler_;

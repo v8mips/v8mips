@@ -5079,12 +5079,16 @@ class FixedTypedArrayBase: public FixedArrayBase {
 
   inline int size();
 
+  inline int TypedArraySize(InstanceType type);
+
   // Use with care: returns raw pointer into heap.
   inline void* DataPtr();
 
   inline int DataSize();
 
  private:
+  inline int DataSize(InstanceType type);
+
   DISALLOW_IMPLICIT_CONSTRUCTORS(FixedTypedArrayBase);
 };
 
@@ -7493,6 +7497,9 @@ class JSFunction: public JSObject {
 
   // Tells whether this function is builtin.
   inline bool IsBuiltin();
+
+  // Tells whether this function is defined in a native script.
+  inline bool IsNative();
 
   // Tells whether or not the function needs arguments adaption.
   inline bool NeedsArgumentsAdaption();

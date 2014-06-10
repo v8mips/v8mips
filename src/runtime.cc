@@ -5575,7 +5575,7 @@ RUNTIME_FUNCTION(Runtime_StoreArrayLiteralElement) {
 // to a built-in function such as Array.forEach.
 RUNTIME_FUNCTION(Runtime_DebugCallbackSupportsStepping) {
   ASSERT(args.length() == 1);
-  if (!isolate->debugger()->is_active() || !isolate->debug()->StepInActive()) {
+  if (!isolate->debug()->is_active() || !isolate->debug()->StepInActive()) {
     return isolate->heap()->false_value();
   }
   CONVERT_ARG_CHECKED(Object, callback, 0);
@@ -10751,7 +10751,7 @@ RUNTIME_FUNCTION(Runtime_SetDebugEventListener) {
                  args[0]->IsNull());
   CONVERT_ARG_HANDLE_CHECKED(Object, callback, 0);
   CONVERT_ARG_HANDLE_CHECKED(Object, data, 1);
-  isolate->debugger()->SetEventListener(callback, data);
+  isolate->debug()->SetEventListener(callback, data);
 
   return isolate->heap()->undefined_value();
 }
@@ -13318,7 +13318,7 @@ static int FindSharedFunctionInfosForScript(HeapIterator* iterator,
 // in OpaqueReferences.
 RUNTIME_FUNCTION(Runtime_LiveEditFindSharedFunctionInfosForScript) {
   HandleScope scope(isolate);
-  CHECK(isolate->debugger()->live_edit_enabled());
+  CHECK(isolate->debug()->live_edit_enabled());
   ASSERT(args.length() == 1);
   CONVERT_ARG_CHECKED(JSValue, script_value, 0);
 
@@ -13363,7 +13363,7 @@ RUNTIME_FUNCTION(Runtime_LiveEditFindSharedFunctionInfosForScript) {
 // with the function itself going first. The root function is a script function.
 RUNTIME_FUNCTION(Runtime_LiveEditGatherCompileInfo) {
   HandleScope scope(isolate);
-  CHECK(isolate->debugger()->live_edit_enabled());
+  CHECK(isolate->debug()->live_edit_enabled());
   ASSERT(args.length() == 2);
   CONVERT_ARG_CHECKED(JSValue, script, 0);
   CONVERT_ARG_HANDLE_CHECKED(String, source, 1);
@@ -13383,7 +13383,7 @@ RUNTIME_FUNCTION(Runtime_LiveEditGatherCompileInfo) {
 // the script with its original source and sends notification to debugger.
 RUNTIME_FUNCTION(Runtime_LiveEditReplaceScript) {
   HandleScope scope(isolate);
-  CHECK(isolate->debugger()->live_edit_enabled());
+  CHECK(isolate->debug()->live_edit_enabled());
   ASSERT(args.length() == 3);
   CONVERT_ARG_CHECKED(JSValue, original_script_value, 0);
   CONVERT_ARG_HANDLE_CHECKED(String, new_source, 1);
@@ -13406,7 +13406,7 @@ RUNTIME_FUNCTION(Runtime_LiveEditReplaceScript) {
 
 RUNTIME_FUNCTION(Runtime_LiveEditFunctionSourceUpdated) {
   HandleScope scope(isolate);
-  CHECK(isolate->debugger()->live_edit_enabled());
+  CHECK(isolate->debug()->live_edit_enabled());
   ASSERT(args.length() == 1);
   CONVERT_ARG_HANDLE_CHECKED(JSArray, shared_info, 0);
   RUNTIME_ASSERT(SharedInfoWrapper::IsInstance(shared_info));
@@ -13419,7 +13419,7 @@ RUNTIME_FUNCTION(Runtime_LiveEditFunctionSourceUpdated) {
 // Replaces code of SharedFunctionInfo with a new one.
 RUNTIME_FUNCTION(Runtime_LiveEditReplaceFunctionCode) {
   HandleScope scope(isolate);
-  CHECK(isolate->debugger()->live_edit_enabled());
+  CHECK(isolate->debug()->live_edit_enabled());
   ASSERT(args.length() == 2);
   CONVERT_ARG_HANDLE_CHECKED(JSArray, new_compile_info, 0);
   CONVERT_ARG_HANDLE_CHECKED(JSArray, shared_info, 1);
@@ -13433,7 +13433,7 @@ RUNTIME_FUNCTION(Runtime_LiveEditReplaceFunctionCode) {
 // Connects SharedFunctionInfo to another script.
 RUNTIME_FUNCTION(Runtime_LiveEditFunctionSetScript) {
   HandleScope scope(isolate);
-  CHECK(isolate->debugger()->live_edit_enabled());
+  CHECK(isolate->debug()->live_edit_enabled());
   ASSERT(args.length() == 2);
   CONVERT_ARG_HANDLE_CHECKED(Object, function_object, 0);
   CONVERT_ARG_HANDLE_CHECKED(Object, script_object, 1);
@@ -13460,7 +13460,7 @@ RUNTIME_FUNCTION(Runtime_LiveEditFunctionSetScript) {
 // with a substitution one.
 RUNTIME_FUNCTION(Runtime_LiveEditReplaceRefToNestedFunction) {
   HandleScope scope(isolate);
-  CHECK(isolate->debugger()->live_edit_enabled());
+  CHECK(isolate->debug()->live_edit_enabled());
   ASSERT(args.length() == 3);
 
   CONVERT_ARG_HANDLE_CHECKED(JSValue, parent_wrapper, 0);
@@ -13483,7 +13483,7 @@ RUNTIME_FUNCTION(Runtime_LiveEditReplaceRefToNestedFunction) {
 // Each group describes a change in text; groups are sorted by change_begin.
 RUNTIME_FUNCTION(Runtime_LiveEditPatchFunctionPositions) {
   HandleScope scope(isolate);
-  CHECK(isolate->debugger()->live_edit_enabled());
+  CHECK(isolate->debug()->live_edit_enabled());
   ASSERT(args.length() == 2);
   CONVERT_ARG_HANDLE_CHECKED(JSArray, shared_array, 0);
   CONVERT_ARG_HANDLE_CHECKED(JSArray, position_change_array, 1);
@@ -13500,7 +13500,7 @@ RUNTIME_FUNCTION(Runtime_LiveEditPatchFunctionPositions) {
 // LiveEdit::FunctionPatchabilityStatus type.
 RUNTIME_FUNCTION(Runtime_LiveEditCheckAndDropActivations) {
   HandleScope scope(isolate);
-  CHECK(isolate->debugger()->live_edit_enabled());
+  CHECK(isolate->debug()->live_edit_enabled());
   ASSERT(args.length() == 2);
   CONVERT_ARG_HANDLE_CHECKED(JSArray, shared_array, 0);
   CONVERT_BOOLEAN_ARG_CHECKED(do_drop, 1);
@@ -13523,7 +13523,7 @@ RUNTIME_FUNCTION(Runtime_LiveEditCheckAndDropActivations) {
 // of diff chunks.
 RUNTIME_FUNCTION(Runtime_LiveEditCompareStrings) {
   HandleScope scope(isolate);
-  CHECK(isolate->debugger()->live_edit_enabled());
+  CHECK(isolate->debug()->live_edit_enabled());
   ASSERT(args.length() == 2);
   CONVERT_ARG_HANDLE_CHECKED(String, s1, 0);
   CONVERT_ARG_HANDLE_CHECKED(String, s2, 1);
@@ -13536,7 +13536,7 @@ RUNTIME_FUNCTION(Runtime_LiveEditCompareStrings) {
 // Returns true if successful. Otherwise returns undefined or an error message.
 RUNTIME_FUNCTION(Runtime_LiveEditRestartFrame) {
   HandleScope scope(isolate);
-  CHECK(isolate->debugger()->live_edit_enabled());
+  CHECK(isolate->debug()->live_edit_enabled());
   ASSERT(args.length() == 2);
   CONVERT_NUMBER_CHECKED(int, break_id, Int32, args[0]);
   RUNTIME_ASSERT(CheckExecutionState(isolate, break_id));
@@ -13571,7 +13571,7 @@ RUNTIME_FUNCTION(Runtime_LiveEditRestartFrame) {
 // source_position.
 RUNTIME_FUNCTION(Runtime_GetFunctionCodePositionFromSource) {
   HandleScope scope(isolate);
-  CHECK(isolate->debugger()->live_edit_enabled());
+  CHECK(isolate->debug()->live_edit_enabled());
   ASSERT(args.length() == 2);
   CONVERT_ARG_HANDLE_CHECKED(JSFunction, function, 0);
   CONVERT_NUMBER_CHECKED(int32_t, source_position, Int32, args[1]);
