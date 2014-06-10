@@ -1108,17 +1108,13 @@ void Builtins::Generate_FunctionCall(MacroAssembler* masm) {
 
     // Do not transform the receiver for strict mode functions.
     __ ld(a2, FieldMemOperand(a1, JSFunction::kSharedFunctionInfoOffset));
-    __ lw(a3, FieldMemOperand(a2, SharedFunctionInfo::kCompilerHintsOffset));
-    // __ And(t3, a3, Operand(1 << (SharedFunctionInfo::kStrictModeFunction +
-    //                             kSmiTagSize)));
-    // TODO right?
-    __ And(t3, a3, Operand(1 << SharedFunctionInfo::kStrictModeFunction));
+    __ lbu(a3, FieldMemOperand(a2, SharedFunctionInfo::kStrictModeByteOffset));
+    __ And(t3, a3, Operand(1 << SharedFunctionInfo::kStrictModeBitWithinByte));
     __ Branch(&shift_arguments, ne, t3, Operand(zero_reg));
 
     // Do not transform the receiver for native (Compilerhints already in a3).
-    // __ And(t3, a3, Operand(1 << (SharedFunctionInfo::kNative + kSmiTagSize)));
-    // TODO right?
-    __ And(t3, a3, Operand(1 << SharedFunctionInfo::kNative));
+    __ lbu(a3, FieldMemOperand(a2, SharedFunctionInfo::kNativeByteOffset));
+    __ And(t3, a3, Operand(1 << SharedFunctionInfo::kNativeBitWithinByte));
     __ Branch(&shift_arguments, ne, t3, Operand(zero_reg));
 
     // Compute the receiver in sloppy mode.
@@ -1319,16 +1315,13 @@ void Builtins::Generate_FunctionApply(MacroAssembler* masm) {
     // Compute the receiver.
     // Do not transform the receiver for strict mode functions.
     Label call_to_object, use_global_receiver;
-    __ lw(a2, FieldMemOperand(a2, SharedFunctionInfo::kCompilerHintsOffset));
-    // __ And(t3, a2, Operand(1 << (SharedFunctionInfo::kStrictModeFunction +
-    //                             kSmiTagSize)));
-    // TODO right?
-    __ And(t3, a2, Operand(1 << SharedFunctionInfo::kStrictModeFunction));
+    __ lbu(t3, FieldMemOperand(a2, SharedFunctionInfo::kStrictModeByteOffset));
+    __ And(t3, t3, Operand(1 << SharedFunctionInfo::kStrictModeBitWithinByte));
     __ Branch(&push_receiver, ne, t3, Operand(zero_reg));
 
     // Do not transform the receiver for native (Compilerhints already in a2).
-    // __ And(t3, a2, Operand(1 << (SharedFunctionInfo::kNative + kSmiTagSize)));
-    __ And(t3, a2, Operand(1 << SharedFunctionInfo::kNative));
+    __ lbu(t3, FieldMemOperand(a2, SharedFunctionInfo::kNativeByteOffset));
+    __ And(t3, t3, Operand(1 << SharedFunctionInfo::kNativeBitWithinByte));
     __ Branch(&push_receiver, ne, t3, Operand(zero_reg));
 
     // Compute the receiver in sloppy mode.

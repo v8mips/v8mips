@@ -3126,14 +3126,18 @@ static void GenerateRecordCallTarget(MacroAssembler* masm) {
 
 static void EmitContinueIfStrictOrNative(MacroAssembler* masm, Label* cont) {
   __ ld(a3, FieldMemOperand(a1, JSFunction::kSharedFunctionInfoOffset));
-  __ lw(t0, FieldMemOperand(a3, SharedFunctionInfo::kCompilerHintsOffset));
 
   // Do not transform the receiver for strict mode functions.
   int32_t strict_mode_function_mask =
-      1 <<  (SharedFunctionInfo::kStrictModeFunction + kSmiTagSize);
+      1 <<  SharedFunctionInfo::kStrictModeBitWithinByte ;
   // Do not transform the receiver for native (Compilerhints already in a3).
-  int32_t native_mask = 1 << (SharedFunctionInfo::kNative + kSmiTagSize);
-  __ And(at, t0, Operand(strict_mode_function_mask | native_mask));
+  int32_t native_mask = 1 << SharedFunctionInfo::kNativeBitWithinByte;
+
+  __ lbu(t0, FieldMemOperand(a3, SharedFunctionInfo::kStrictModeByteOffset));
+  __ And(at, t0, Operand(strict_mode_function_mask));
+  __ Branch(cont, ne, at, Operand(zero_reg));
+  __ lbu(t0, FieldMemOperand(a3, SharedFunctionInfo::kNativeByteOffset));
+  __ And(at, t0, Operand(native_mask));
   __ Branch(cont, ne, at, Operand(zero_reg));
 }
 
