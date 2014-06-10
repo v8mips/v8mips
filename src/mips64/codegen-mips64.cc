@@ -741,8 +741,7 @@ void ElementsTransitionGenerator::GenerateDoubleToObject(
   // t1: number of elements (smi-tagged)
 
   // Allocate new FixedArray.
-  // __ sll(a0, t1, 1);
-  __ dsrl(a0, t1, 32 - kPointerSizeLog2);
+  __ SmiScale(a0, t1, kPointerSizeLog2);
   __ Daddu(a0, a0, FixedDoubleArray::kHeaderSize);
   __ Allocate(a0, t2, t3, t5, &gc_required, NO_ALLOCATION_FLAGS);
   // t2: destination FixedArray, not tagged as heap object
@@ -755,8 +754,7 @@ void ElementsTransitionGenerator::GenerateDoubleToObject(
   __ Daddu(t0, t0, Operand(FixedDoubleArray::kHeaderSize - kHeapObjectTag + 4));
   __ Daddu(a3, t2, Operand(FixedArray::kHeaderSize));
   __ Daddu(t2, t2, Operand(kHeapObjectTag));
-  // __ sll(t1, t1, 1);
-  __ dsrl(t1, t1, 32 - kPointerSizeLog2);
+  __ SmiScale(t1, t1, kPointerSizeLog2);
   __ Daddu(t1, a3, t1);
   __ LoadRoot(t3, Heap::kTheHoleValueRootIndex);
   __ LoadRoot(t5, Heap::kHeapNumberMapRootIndex);

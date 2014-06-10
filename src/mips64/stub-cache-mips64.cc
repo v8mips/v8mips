@@ -1656,8 +1656,7 @@ Handle<Code> CallStubCompiler::CompileArrayPushCall(
       // Store the value.
       // We may need a register containing the address end_elements below,
       // so write back the value in end_elements.
-      // __ sll(end_elements, scratch, kPointerSizeLog2 - kSmiTagSize);
-      __ dsrl(end_elements, scratch, 32 - kPointerSizeLog2);
+      __ SmiScale(end_elements, scratch, kPointerSizeLog2);
       __ Daddu(end_elements, elements, end_elements);
       const int kEndElementsOffset =
           FixedArray::kHeaderSize - kHeapObjectTag - argc * kPointerSize;
@@ -1752,8 +1751,7 @@ Handle<Code> CallStubCompiler::CompileArrayPushCall(
       // Store the value.
       // We may need a register containing the address end_elements below,
       // so write back the value in end_elements.
-      // __ sll(end_elements, scratch, kPointerSizeLog2 - kSmiTagSize);
-      __ dsrl(end_elements, scratch, 32 - kPointerSizeLog2);
+      __ SmiScale(end_elements, scratch, kPointerSizeLog2);
       __ Daddu(end_elements, elements, end_elements);
       __ Daddu(end_elements, end_elements, kEndElementsOffset);
       __ sd(t0, MemOperand(end_elements));
@@ -1792,8 +1790,7 @@ Handle<Code> CallStubCompiler::CompileArrayPushCall(
 
       const int kAllocationDelta = 4;
       // Load top and check if it is the end of elements.
-      // __ sll(end_elements, scratch, kPointerSizeLog2 - kSmiTagSize);
-      __ dsrl(end_elements, scratch, 32 - kPointerSizeLog2);
+      __ SmiScale(end_elements, scratch, kPointerSizeLog2);
       __ Daddu(end_elements, elements, end_elements);
       __ Daddu(end_elements, end_elements, Operand(kEndElementsOffset));
       __ li(t3, Operand(new_space_allocation_top));
@@ -1880,8 +1877,7 @@ Handle<Code> CallStubCompiler::CompileArrayPopCall(
   STATIC_ASSERT(kSmiTag == 0);
   // We can't address the last element in one operation. Compute the more
   // expensive shift first, and use an offset later on.
-  // __ sll(t1, t0, kPointerSizeLog2 - kSmiTagSize);
-  __ dsrl(t1, t0, 32 - kPointerSizeLog2);
+  __ SmiScale(t1, t0, kPointerSizeLog2);
   __ Daddu(elements, elements, t1);
   __ ld(scratch, FieldMemOperand(elements, FixedArray::kHeaderSize));
   __ Branch(&call_builtin, eq, scratch, Operand(t2));

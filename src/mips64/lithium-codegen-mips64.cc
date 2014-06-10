@@ -2337,7 +2337,7 @@ void LCodeGen::DoCompareMinusZeroAndBranch(LCompareMinusZeroAndBranch* instr) {
     DoubleRegister value = ToDoubleRegister(instr->value());
     EmitFalseBranchF(instr, ne, value, kDoubleRegZero);
     __ FmoveHigh(scratch, value);
-    // TODO(yy): only use low 32-bit value.
+    // Only use low 32-bits of value.
     __ dsll32(scratch, scratch, 0);
     __ dsrl32(scratch, scratch, 0);
     __ li(at, 0x80000000);
@@ -3838,7 +3838,7 @@ void LCodeGen::DoMathRound(LMathRound* instr) {
   // Check sign of the result: if the sign changed, the input
   // value was in ]0.5, 0[ and the result should be -0.
   __ mfhc1(result, double_scratch0());
-  // TODO(yy): mfhc1 sign-extends, clear the upper bits.
+  // mfhc1 sign-extends, clear the upper bits.
   __ dsll32(result, result, 0);
   __ dsrl32(result, result, 0);
   __ Xor(result, result, Operand(scratch));

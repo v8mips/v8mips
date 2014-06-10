@@ -518,8 +518,7 @@ void MacroAssembler::LoadFromNumberDictionary(Label* miss,
 
   // Compute the capacity mask.
   ld(reg1, FieldMemOperand(elements, SeededNumberDictionary::kCapacityOffset));
-  // sra(reg1, reg1, kSmiTagSize);
-  dsrl32(reg1, reg1, 0);
+  SmiUntag(reg1, reg1);
   Dsubu(reg1, reg1, Operand(1));
 
   // Generate an unrolled loop that performs a few probes before giving up.

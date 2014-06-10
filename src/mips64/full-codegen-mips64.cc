@@ -1193,8 +1193,7 @@ void FullCodeGenerator::VisitForInStatement(ForInStatement* stmt) {
   // Get the current entry of the array into register a3.
   __ ld(a2, MemOperand(sp, 2 * kPointerSize));
   __ Daddu(a2, a2, Operand(FixedArray::kHeaderSize - kHeapObjectTag));
-  // __ sll(t0, a0, kPointerSizeLog2 - kSmiTagSize);
-  __ dsrl(t0, a0, 32 - kPointerSizeLog2);
+  __ SmiScale(t0, a0, kPointerSizeLog2);
   __ daddu(t0, a2, t0);  // Array base + scaled (smi) index.
   __ ld(a3, MemOperand(t0));  // Current entry.
 
@@ -3069,8 +3068,7 @@ void FullCodeGenerator::EmitIsStringWrapperSafeForDefaultValueOf(
   __ Daddu(t0, t0, Operand(DescriptorArray::kFirstOffset - kHeapObjectTag));
   // Calculate the end of the descriptor array.
   __ mov(a2, t0);
-  // __ dsll(t1, a3, kPointerSizeLog2 - kSmiTagSize);
-  __ dsrl(t1, a3, 32 - kPointerSizeLog2);
+  __ SmiScale(t1, a3, kPointerSizeLog2);
   __ Daddu(a2, a2, t1);
 
   // Loop through all the keys in the descriptor array. If one of these is the
@@ -3854,8 +3852,7 @@ void FullCodeGenerator::EmitGetFromCache(CallRuntime* expr) {
   // a2 now holds finger offset as a smi.
   __ Daddu(a3, cache, Operand(FixedArray::kHeaderSize - kHeapObjectTag));
   // a3 now points to the start of fixed array elements.
-  // __ sll(at, a2, kPointerSizeLog2 - kSmiTagSize);
-  __ dsrl(at, a2, 32 - kPointerSizeLog2);
+  __ SmiScale(at, a2, kPointerSizeLog2);
   __ daddu(a3, a3, at);
   // a3 now points to key of indexed element of cache.
   __ ld(a2, MemOperand(a3));
@@ -4054,11 +4051,12 @@ void FullCodeGenerator::EmitFastAsciiArrayJoin(CallRuntime* expr) {
   __ Dmult(array_length, scratch1);
   // Check for smi overflow. No overflow if higher 33 bits of 64-bit result are
   // zero.
+  // TODO(plind): Can be simplified by untagging the Smi here.
   __ mfhi(scratch2);
   __ Branch(&bailout, ne, scratch2, Operand(zero_reg));
   __ mflo(scratch2);
   // TODO(yy) check the highest bit.
-  __ dsrl32(scratch3, scratch2, 0);
+  // __ dsrl32(scratch3, scratch2, 0);
   __ And(scratch3, scratch2, Operand(0x80000000));
   __ Branch(&bailout, ne, scratch3, Operand(zero_reg));
   __ AdduAndCheckForOverflow(string_length, string_length, scratch2, scratch3);
