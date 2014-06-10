@@ -1726,7 +1726,7 @@ void Serializer::ObjectSerializer::VisitExternalAsciiString(
 
 static Code* CloneCodeObject(HeapObject* code) {
   Address copy = new byte[code->Size()];
-  OS::MemCopy(copy, code->address(), code->Size());
+  MemCopy(copy, code->address(), code->Size());
   return Code::cast(HeapObject::FromAddress(copy));
 }
 
