@@ -60,6 +60,11 @@ void MacroAssembler::Store(Register src,
   } else if (r.IsInteger32()){
     sw(src, dst);
   } else {
+    if (r.IsHeapObject()) {
+      AssertNotSmi(src);
+    } else if (r.IsSmi()) {
+      AssertSmi(src);
+    }
     sd(src, dst);
   }
 }

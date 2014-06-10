@@ -4119,23 +4119,12 @@ void LCodeGen::DoStoreNamedField(LStoreNamedField* instr) {
     return;
   }
 
-  SmiCheck check_needed =
-      instr->hydrogen()->value()->IsHeapObject()
-          ? OMIT_SMI_CHECK : INLINE_SMI_CHECK;
+  __ AssertNotSmi(object);
 
-  ASSERT(!(representation.IsSmi() &&
-           instr->value()->IsConstantOperand() &&
-           !IsSmi(LConstantOperand::cast(instr->value()))));
-  if (representation.IsHeapObject()) {
-    Register value = ToRegister(instr->value());
-    if (!instr->hydrogen()->value()->type().IsHeapObject()) {
-      __ SmiTst(value, scratch);
-      DeoptimizeIf(eq, instr->environment(), scratch, Operand(zero_reg));
-
-      // We know now that value is not a smi, so we can omit the check below.
-      check_needed = OMIT_SMI_CHECK;
-    }
-  } else if (representation.IsDouble()) {
+  ASSERT(!representation.IsSmi() ||
+         !instr->value()->IsConstantOperand() ||
+         IsSmi(LConstantOperand::cast(instr->value())));
+  if (representation.IsDouble()) {
     ASSERT(access.IsInobject());
     ASSERT(!instr->hydrogen()->has_transition());
     ASSERT(!instr->hydrogen()->NeedsWriteBarrier());
@@ -4190,7 +4179,7 @@ void LCodeGen::DoStoreNamedField(LStoreNamedField* instr) {
                           GetRAState(),
                           kSaveFPRegs,
                           EMIT_REMEMBERED_SET,
-                          check_needed);
+                          instr->hydrogen()->SmiCheckForWriteBarrier());
     }
   } else {
     __ ld(scratch, FieldMemOperand(object, JSObject::kPropertiesOffset));
@@ -4206,7 +4195,7 @@ void LCodeGen::DoStoreNamedField(LStoreNamedField* instr) {
                           GetRAState(),
                           kSaveFPRegs,
                           EMIT_REMEMBERED_SET,
-                          check_needed);
+                          instr->hydrogen()->SmiCheckForWriteBarrier());
     }
   }
 }
