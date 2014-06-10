@@ -5445,7 +5445,6 @@ HInstruction* HOptimizedGraphBuilder::BuildLoadNamedField(
     checked_object = Add<HLoadNamedField>(
         checked_object, static_cast<HValue*>(NULL),
         access.WithRepresentation(Representation::Tagged()));
-    checked_object->set_type(HType::HeapNumber());
     // Load the double value from it.
     access = HObjectAccess::ForHeapNumberValue();
   }
@@ -5483,7 +5482,7 @@ HInstruction* HOptimizedGraphBuilder::BuildStoreNamedField(
 
       // TODO(hpayer): Allocation site pretenuring support.
       HInstruction* heap_number = Add<HAllocate>(heap_number_size,
-          HType::HeapNumber(),
+          HType::Tagged(),
           NOT_TENURED,
           HEAP_NUMBER_TYPE);
       AddStoreMapConstant(heap_number, isolate()->factory()->heap_number_map());
@@ -5496,7 +5495,6 @@ HInstruction* HOptimizedGraphBuilder::BuildStoreNamedField(
       // Already holds a HeapNumber; load the box and write its value field.
       HInstruction* heap_number = Add<HLoadNamedField>(
           checked_object, static_cast<HValue*>(NULL), heap_number_access);
-      heap_number->set_type(HType::HeapNumber());
       instr = New<HStoreNamedField>(heap_number,
                                     HObjectAccess::ForHeapNumberValue(),
                                     value, STORE_TO_INITIALIZED_ENTRY);
