@@ -21,6 +21,8 @@
 #include "mips/frames-mips.h"
 #elif V8_TARGET_ARCH_MIPS64
 #include "mips64/frames-mips64.h"
+#elif V8_TARGET_ARCH_X87
+#include "x87/frames-x87.h"
 #else
 #error Unsupported target architecture.
 #endif
