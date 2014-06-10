@@ -1403,19 +1403,22 @@ class MacroAssembler: public Assembler {
   // -------------------------------------------------------------------------
   // Smi utilities.
 
-  void SmiTag(Register reg) {
-    // Addu(reg, reg, reg);
-    dsll32(reg, reg, 0);
-  }
-
   // Test for overflow < 0: use BranchOnOverflow() or BranchOnNoOverflow().
   void SmiTagCheckOverflow(Register reg, Register overflow);
   void SmiTagCheckOverflow(Register dst, Register src, Register overflow);
 
   void SmiTag(Register dst, Register src) {
-    // Addu(dst, src, src);
     STATIC_ASSERT(kSmiTag == 0);
-    dsll32(dst, src, 0);
+    if (SmiValuesAre32Bits()) {
+      STATIC_ASSERT(kSmiShift == 32);
+      dsll32(dst, src, 0);
+    } else {
+      Addu(dst, src, src);
+    }
+  }
+
+  void SmiTag(Register reg) {
+    SmiTag(reg, reg);
   }
 
   // Try to convert int32 to smi. If the value is to large, preserve
@@ -1424,24 +1427,61 @@ class MacroAssembler: public Assembler {
   void TrySmiTag(Register reg, Register scratch, Label* not_a_smi) {
     TrySmiTag(reg, reg, scratch, not_a_smi);
   }
+
   void TrySmiTag(Register dst,
                  Register src,
                  Register scratch,
                  Label* not_a_smi) {
-    SmiTagCheckOverflow(at, src, scratch);
-    BranchOnOverflow(not_a_smi, scratch);
-    mov(dst, at);
-  }
-
-  void SmiUntag(Register reg) {
-    // sra(reg, reg, kSmiTagSize);
-    dsra32(reg, reg, 0);
+    if (SmiValuesAre32Bits()) {
+      SmiTag(dst, src);
+    } else {
+      SmiTagCheckOverflow(at, src, scratch);
+      BranchOnOverflow(not_a_smi, scratch);
+      mov(dst, at);
+    }
   }
 
   void SmiUntag(Register dst, Register src) {
-    // sra(dst, src, kSmiTagSize);
-    dsra32(dst, src, 0);
+    if (SmiValuesAre32Bits()) {
+      STATIC_ASSERT(kSmiShift == 32);
+      dsra32(dst, src, 0);
+    } else {
+      sra(dst, src, kSmiTagSize);
+    }
   }
+
+  void SmiUntag(Register reg) {
+    SmiUntag(reg, reg);
+  }
+
+  // Left-shifted from int32 equivalent of Smi.
+  void SmiScale(Register dst, Register src, int scale) {
+    if (SmiValuesAre32Bits()) {
+      // The int portion is upper 32-bits of 64-bit word.
+      dsra(dst, src, kSmiShift - scale);
+    } else {
+      ASSERT(scale >= kSmiTagSize);
+      sll(dst, src, scale - kSmiTagSize);
+    }
+  }
+
+  // Combine load with untagging or scaling.
+  void SmiLoadUntag(Register dst, MemOperand src);
+
+  void SmiLoadScale(Register dst, MemOperand src, int scale);
+
+  // Returns 2 values: the Smi and a scaled version of the int within the Smi.
+  void SmiLoadWithScale(Register d_smi,
+                        Register d_scaled,
+                        MemOperand src,
+                        int scale);
+
+  // Returns 2 values: the untagged Smi (int32) and scaled version of that int.
+  void SmiLoadUntagWithScale(Register d_int,
+                             Register d_scaled,
+                             MemOperand src,
+                             int scale);
+
 
   // Test if the register contains a smi.
   inline void SmiTst(Register value, Register scratch) {

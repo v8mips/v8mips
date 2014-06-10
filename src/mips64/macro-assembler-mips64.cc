@@ -4927,6 +4927,62 @@ void MacroAssembler::SmiTagCheckOverflow(Register dst,
 }
 
 
+void MacroAssembler::SmiLoadUntag(Register dst, MemOperand src) {
+  if (SmiValuesAre32Bits()) {
+    lw(dst, UntagSmiMemOperand(src.rm(), src.offset()));
+  } else {
+    lw(dst, src);
+    SmiUntag(dst);
+  }
+}
+
+
+void MacroAssembler::SmiLoadScale(Register dst, MemOperand src, int scale) {
+  if (SmiValuesAre32Bits()) {
+    // TODO(plind): not clear if lw or ld faster here, need micro-benchmark.
+    lw(dst, UntagSmiMemOperand(src.rm(), src.offset()));
+    dsll(dst, dst, scale);
+  } else {
+    lw(dst, src);
+    ASSERT(scale >= kSmiTagSize);
+    sll(dst, dst, scale - kSmiTagSize);
+  }
+}
+
+
+// Returns 2 values: the Smi and a scaled version of the int within the Smi.
+void MacroAssembler::SmiLoadWithScale(Register d_smi,
+                                      Register d_scaled,
+                                      MemOperand src,
+                                      int scale) {
+  if (SmiValuesAre32Bits()) {
+    ld(d_smi, src);
+    dsra(d_scaled, d_smi, kSmiShift - scale);
+  } else {
+    lw(d_smi, src);
+    ASSERT(scale >= kSmiTagSize);
+    sll(d_scaled, d_smi, scale - kSmiTagSize);
+  }
+}
+
+
+// Returns 2 values: the untagged Smi (int32) and scaled version of that int.
+void MacroAssembler::SmiLoadUntagWithScale(Register d_int,
+                                           Register d_scaled,
+                                           MemOperand src,
+                                           int scale) {
+  if (SmiValuesAre32Bits()) {
+    lw(d_int, UntagSmiMemOperand(src.rm(), src.offset()));
+    dsll(d_scaled, d_int, scale);
+  } else {
+    lw(d_int, src);
+    // Need both the int and the scaled in, so use two instructions.
+    SmiUntag(d_int);
+    sll(d_scaled, d_int, scale);
+  }
+}
+
+
 void MacroAssembler::UntagAndJumpIfSmi(Register dst,
                                        Register src,
                                        Label* smi_case) {
@@ -5239,6 +5295,8 @@ void MacroAssembler::EmitSeqStringSetCharCheck(Register string,
   andi(at, at, kStringRepresentationMask | kStringEncodingMask);
   li(scratch, Operand(encoding_mask));
   ThrowIf(ne, kUnexpectedStringType, at, Operand(scratch));
+
+  // TODO(plind): requires Smi size check code for mips32.
 
   ld(at, FieldMemOperand(string, String::kLengthOffset));
   ThrowIf(ge, kIndexIsTooLarge, index, Operand(at));
