@@ -345,8 +345,9 @@ V8_INLINE void MemCopy(void* dest, const void* src, size_t size) {
 #elif defined(V8_HOST_ARCH_ARM)
 typedef void (*MemCopyUint8Function)(uint8_t* dest, const uint8_t* src,
                                      size_t size);
-MemCopyUint8Function memcopy_uint8_function;
-void MemCopyUint8Wrapper(uint8_t* dest, const uint8_t* src, size_t chars) {
+extern MemCopyUint8Function memcopy_uint8_function;
+V8_INLINE void MemCopyUint8Wrapper(uint8_t* dest, const uint8_t* src,
+                                   size_t chars) {
   memcpy(dest, src, chars);
 }
 // For values < 16, the assembler function is slower than the inlined C code.
@@ -361,7 +362,7 @@ V8_INLINE void MemMove(void* dest, const void* src, size_t size) {
 
 typedef void (*MemCopyUint16Uint8Function)(uint16_t* dest, const uint8_t* src,
                                            size_t size);
-MemCopyUint16Uint8Function memcopy_uint16_uint8_function;
+extern MemCopyUint16Uint8Function memcopy_uint16_uint8_function;
 void MemCopyUint16Uint8Wrapper(uint16_t* dest, const uint8_t* src,
                                size_t chars);
 // For values < 12, the assembler function is slower than the inlined C code.
@@ -373,7 +374,7 @@ V8_INLINE void MemCopyUint16Uint8(uint16_t* dest, const uint8_t* src,
 #elif defined(V8_HOST_ARCH_MIPS)
 typedef void (*MemCopyUint8Function)(uint8_t* dest, const uint8_t* src,
                                      size_t size);
-MemCopyUint8Function memcopy_uint8_function;
+extern MemCopyUint8Function memcopy_uint8_function;
 V8_INLINE void MemCopyUint8Wrapper(uint8_t* dest, const uint8_t* src,
                                    size_t chars) {
   memcpy(dest, src, chars);
