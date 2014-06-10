@@ -1728,7 +1728,7 @@ HValue* HGraphBuilder::BuildNumberToString(HValue* object, Type* type) {
   if_found.Else();
   {
     // Cache miss, fallback to runtime.
-    Add<HPushArgument>(object);
+    Add<HPushArguments>(zone(), object);
     Push(Add<HCallRuntime>(
             isolate()->factory()->empty_string(),
             Runtime::FunctionForId(Runtime::kHiddenNumberToStringSkipCache),
@@ -2052,8 +2052,7 @@ HValue* HGraphBuilder::BuildUncheckedStringAdd(
     if_sameencodingandsequential.Else();
     {
       // Fallback to the runtime to add the two strings.
-      Add<HPushArgument>(left);
-      Add<HPushArgument>(right);
+      Add<HPushArguments>(zone(), left, right);
       Push(Add<HCallRuntime>(
             isolate()->factory()->empty_string(),
             Runtime::FunctionForId(Runtime::kHiddenStringAdd),
@@ -4190,9 +4189,11 @@ void HOptimizedGraphBuilder::PushArgumentsFromEnvironment(int count) {
     arguments.Add(Pop(), zone());
   }
 
+  HPushArguments* push_args = New<HPushArguments>(zone());
   while (!arguments.is_empty()) {
-    Add<HPushArgument>(arguments.RemoveLast());
+    push_args->AddArgument(arguments.RemoveLast());
   }
+  AddInstruction(push_args);
 }
 
 
@@ -5186,10 +5187,11 @@ void HOptimizedGraphBuilder::VisitObjectLiteral(ObjectLiteral* expr) {
     flags |= expr->has_function()
         ? ObjectLiteral::kHasFunction : ObjectLiteral::kNoFlags;
 
-    Add<HPushArgument>(Add<HConstant>(closure_literals));
-    Add<HPushArgument>(Add<HConstant>(literal_index));
-    Add<HPushArgument>(Add<HConstant>(constant_properties));
-    Add<HPushArgument>(Add<HConstant>(flags));
+    Add<HPushArguments>(zone(),
+                        Add<HConstant>(closure_literals),
+                        Add<HConstant>(literal_index),
+                        Add<HConstant>(constant_properties),
+                        Add<HConstant>(flags));
 
     // TODO(mvstanton): Add a flag to turn off creation of any
     // AllocationMementos for this call: we are in crankshaft and should have
@@ -5344,10 +5346,11 @@ void HOptimizedGraphBuilder::VisitArrayLiteral(ArrayLiteral* expr) {
         : ArrayLiteral::kNoFlags;
     flags |= ArrayLiteral::kDisableMementos;
 
-    Add<HPushArgument>(Add<HConstant>(literals));
-    Add<HPushArgument>(Add<HConstant>(literal_index));
-    Add<HPushArgument>(Add<HConstant>(constants));
-    Add<HPushArgument>(Add<HConstant>(flags));
+    Add<HPushArguments>(zone(),
+                        Add<HConstant>(literals),
+                        Add<HConstant>(literal_index),
+                        Add<HConstant>(constants),
+                        Add<HConstant>(flags));
 
     // TODO(mvstanton): Consider a flag to turn off creation of any
     // AllocationMementos for this call: we are in crankshaft and should have
@@ -6381,7 +6384,7 @@ void HOptimizedGraphBuilder::VisitThrow(Throw* expr) {
 
   HValue* value = environment()->Pop();
   if (!FLAG_hydrogen_track_positions) SetSourcePosition(expr->position());
-  Add<HPushArgument>(value);
+  Add<HPushArguments>(zone(), value);
   Add<HCallRuntime>(isolate()->factory()->empty_string(),
                     Runtime::FunctionForId(Runtime::kHiddenThrow), 1);
   Add<HSimulate>(expr->id());
@@ -6783,7 +6786,7 @@ void HOptimizedGraphBuilder::EnsureArgumentsArePushedForAccess() {
   HInstruction* insert_after = entry;
   for (int i = 0; i < arguments_values->length(); i++) {
     HValue* argument = arguments_values->at(i);
-    HInstruction* push_argument = New<HPushArgument>(argument);
+    HInstruction* push_argument = New<HPushArguments>(zone(), argument);
     push_argument->InsertAfter(insert_after);
     insert_after = push_argument;
   }
@@ -8078,7 +8081,7 @@ bool HOptimizedGraphBuilder::TryInlineApiCall(Handle<JSFunction> function,
       ASSERT_EQ(NULL, receiver);
       // Receiver is on expression stack.
       receiver = Pop();
-      Add<HPushArgument>(receiver);
+      Add<HPushArguments>(zone(), receiver);
       break;
     case kCallApiSetter:
       {
@@ -8089,8 +8092,7 @@ bool HOptimizedGraphBuilder::TryInlineApiCall(Handle<JSFunction> function,
         // Receiver and value are on expression stack.
         HValue* value = Pop();
         receiver = Pop();
-        Add<HPushArgument>(receiver);
-        Add<HPushArgument>(value);
+        Add<HPushArguments>(zone(), receiver, value);
         break;
      }
   }
@@ -8658,7 +8660,7 @@ void HOptimizedGraphBuilder::VisitCallNew(CallNew* expr) {
     }
 
     // TODO(mstarzinger): For now we remove the previous HAllocate and all
-    // corresponding instructions and instead add HPushArgument for the
+    // corresponding instructions and instead add HPushArguments for the
     // arguments in case inlining failed.  What we actually should do is for
     // inlining to try to build a subgraph without mutating the parent graph.
     HInstruction* instr = current_block()->last();
@@ -9137,9 +9139,8 @@ void HOptimizedGraphBuilder::VisitDelete(UnaryOperation* expr) {
     HValue* key = Pop();
     HValue* obj = Pop();
     HValue* function = AddLoadJSBuiltin(Builtins::DELETE);
-    Add<HPushArgument>(obj);
-    Add<HPushArgument>(key);
-    Add<HPushArgument>(Add<HConstant>(function_strict_mode()));
+    Add<HPushArguments>(zone(),
+                        obj, key, Add<HConstant>(function_strict_mode()));
     // TODO(olivf) InvokeFunction produces a check for the parameter count,
     // even though we are certain to pass the correct number of arguments here.
     HInstruction* instr = New<HInvokeFunction>(function, 3);
@@ -9624,8 +9625,7 @@ HValue* HGraphBuilder::BuildBinaryOperation(
     } else if (!left_type->Is(Type::String())) {
       ASSERT(right_type->Is(Type::String()));
       HValue* function = AddLoadJSBuiltin(Builtins::STRING_ADD_RIGHT);
-      Add<HPushArgument>(left);
-      Add<HPushArgument>(right);
+      Add<HPushArguments>(zone(), left, right);
       return AddUncasted<HInvokeFunction>(function, 2);
     }
 
@@ -9636,8 +9636,7 @@ HValue* HGraphBuilder::BuildBinaryOperation(
     } else if (!right_type->Is(Type::String())) {
       ASSERT(left_type->Is(Type::String()));
       HValue* function = AddLoadJSBuiltin(Builtins::STRING_ADD_LEFT);
-      Add<HPushArgument>(left);
-      Add<HPushArgument>(right);
+      Add<HPushArguments>(zone(), left, right);
       return AddUncasted<HInvokeFunction>(function, 2);
     }
 
@@ -9699,8 +9698,7 @@ HValue* HGraphBuilder::BuildBinaryOperation(
   // operation in optimized code, which is more expensive, than a stub call.
   if (graph()->info()->IsStub() && is_non_primitive) {
     HValue* function = AddLoadJSBuiltin(BinaryOpIC::TokenToJSBuiltin(op));
-    Add<HPushArgument>(left);
-    Add<HPushArgument>(right);
+    Add<HPushArguments>(zone(), left, right);
     instr = AddUncasted<HInvokeFunction>(function, 2);
   } else {
     switch (op) {
@@ -10064,8 +10062,7 @@ void HOptimizedGraphBuilder::VisitCompareOperation(CompareOperation* expr) {
     UNREACHABLE();
   } else if (op == Token::IN) {
     HValue* function = AddLoadJSBuiltin(Builtins::IN);
-    Add<HPushArgument>(left);
-    Add<HPushArgument>(right);
+    Add<HPushArguments>(zone(), left, right);
     // TODO(olivf) InvokeFunction produces a check for the parameter count,
     // even though we are certain to pass the correct number of arguments here.
     HInstruction* result = New<HInvokeFunction>(function, 2);
