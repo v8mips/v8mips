@@ -5,26 +5,26 @@
 #ifndef V8_OBJECTS_H_
 #define V8_OBJECTS_H_
 
-#include "allocation.h"
-#include "assert-scope.h"
-#include "builtins.h"
-#include "elements-kind.h"
-#include "flags.h"
-#include "list.h"
-#include "property-details.h"
-#include "smart-pointers.h"
-#include "unicode-inl.h"
+#include "src/allocation.h"
+#include "src/assert-scope.h"
+#include "src/builtins.h"
+#include "src/elements-kind.h"
+#include "src/flags.h"
+#include "src/list.h"
+#include "src/property-details.h"
+#include "src/smart-pointers.h"
+#include "src/unicode-inl.h"
 #if V8_TARGET_ARCH_ARM64
-#include "arm64/constants-arm64.h"
+#include "src/arm64/constants-arm64.h"
 #elif V8_TARGET_ARCH_ARM
-#include "arm/constants-arm.h"
+#include "src/arm/constants-arm.h"
 #elif V8_TARGET_ARCH_MIPS
-#include "mips/constants-mips.h"
+#include "src/mips/constants-mips.h"
 #elif V8_TARGET_ARCH_MIPS64
 #include "mips64/constants-mips64.h"
 #endif
-#include "v8checks.h"
-#include "zone.h"
+#include "src/v8checks.h"
+#include "src/zone.h"
 
 
 //
@@ -8414,10 +8414,13 @@ class AllocationSite: public Struct {
   enum PretenureDecision {
     kUndecided = 0,
     kDontTenure = 1,
-    kTenure = 2,
-    kZombie = 3,
+    kMaybeTenure = 2,
+    kTenure = 3,
+    kZombie = 4,
     kLastPretenureDecisionValue = kZombie
   };
+
+  const char* PretenureDecisionName(PretenureDecision decision);
 
   DECL_ACCESSORS(transition_info, Object)
   // nested_site threads a list of sites that represent nested literals
@@ -8440,8 +8443,8 @@ class AllocationSite: public Struct {
   class DoNotInlineBit:         public BitField<bool,         29,  1> {};
 
   // Bitfields for pretenure_data
-  class MementoFoundCountBits:  public BitField<int,               0, 27> {};
-  class PretenureDecisionBits:  public BitField<PretenureDecision, 27, 2> {};
+  class MementoFoundCountBits:  public BitField<int,               0, 26> {};
+  class PretenureDecisionBits:  public BitField<PretenureDecision, 26, 3> {};
   class DeoptDependentCodeBit:  public BitField<bool,              29, 1> {};
   STATIC_ASSERT(PretenureDecisionBits::kMax >= kLastPretenureDecisionValue);
 
@@ -8504,7 +8507,11 @@ class AllocationSite: public Struct {
 
   inline void MarkZombie();
 
-  inline bool DigestPretenuringFeedback();
+  inline bool MakePretenureDecision(PretenureDecision current_decision,
+                                    double ratio,
+                                    bool maximum_size_scavenge);
+
+  inline bool DigestPretenuringFeedback(bool maximum_size_scavenge);
 
   ElementsKind GetElementsKind() {
     ASSERT(!SitePointsToLiteral());

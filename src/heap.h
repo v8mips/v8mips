@@ -7,17 +7,17 @@
 
 #include <cmath>
 
-#include "allocation.h"
-#include "assert-scope.h"
-#include "counters.h"
-#include "globals.h"
-#include "incremental-marking.h"
-#include "list.h"
-#include "mark-compact.h"
-#include "objects-visiting.h"
-#include "spaces.h"
-#include "splay-tree-inl.h"
-#include "store-buffer.h"
+#include "src/allocation.h"
+#include "src/assert-scope.h"
+#include "src/counters.h"
+#include "src/globals.h"
+#include "src/incremental-marking.h"
+#include "src/list.h"
+#include "src/mark-compact.h"
+#include "src/objects-visiting.h"
+#include "src/spaces.h"
+#include "src/splay-tree-inl.h"
+#include "src/store-buffer.h"
 
 namespace v8 {
 namespace internal {
@@ -1359,6 +1359,10 @@ class Heap {
 
   void DeoptMarkedAllocationSites();
 
+  bool MaximumSizeScavenge() {
+    return maximum_size_scavenges_ > 0;
+  }
+
   // ObjectStats are kept in two arrays, counts and sizes. Related stats are
   // stored in a contiguous linear buffer. Stats groups are stored one after
   // another.
@@ -2018,6 +2022,12 @@ class Heap {
   double promotion_rate_;
   intptr_t semi_space_copied_object_size_;
   double semi_space_copied_rate_;
+
+  // This is the pretenuring trigger for allocation sites that are in maybe
+  // tenure state. When we switched to the maximum new space size we deoptimize
+  // the code that belongs to the allocation site and derive the lifetime
+  // of the allocation site.
+  unsigned int maximum_size_scavenges_;
 
   // TODO(hpayer): Allocation site pretenuring may make this method obsolete.
   // Re-visit incremental marking heuristics.

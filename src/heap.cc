@@ -2,41 +2,41 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "v8.h"
+#include "src/v8.h"
 
-#include "accessors.h"
-#include "api.h"
-#include "bootstrapper.h"
-#include "codegen.h"
-#include "compilation-cache.h"
-#include "conversions.h"
-#include "cpu-profiler.h"
-#include "debug.h"
-#include "deoptimizer.h"
-#include "global-handles.h"
-#include "heap-profiler.h"
-#include "incremental-marking.h"
-#include "isolate-inl.h"
-#include "mark-compact.h"
-#include "natives.h"
-#include "objects-visiting.h"
-#include "objects-visiting-inl.h"
-#include "once.h"
-#include "runtime-profiler.h"
-#include "scopeinfo.h"
-#include "snapshot.h"
-#include "store-buffer.h"
-#include "utils/random-number-generator.h"
-#include "utils.h"
-#include "v8threads.h"
-#include "vm-state-inl.h"
+#include "src/accessors.h"
+#include "src/api.h"
+#include "src/bootstrapper.h"
+#include "src/codegen.h"
+#include "src/compilation-cache.h"
+#include "src/conversions.h"
+#include "src/cpu-profiler.h"
+#include "src/debug.h"
+#include "src/deoptimizer.h"
+#include "src/global-handles.h"
+#include "src/heap-profiler.h"
+#include "src/incremental-marking.h"
+#include "src/isolate-inl.h"
+#include "src/mark-compact.h"
+#include "src/natives.h"
+#include "src/objects-visiting.h"
+#include "src/objects-visiting-inl.h"
+#include "src/once.h"
+#include "src/runtime-profiler.h"
+#include "src/scopeinfo.h"
+#include "src/snapshot.h"
+#include "src/store-buffer.h"
+#include "src/utils/random-number-generator.h"
+#include "src/utils.h"
+#include "src/v8threads.h"
+#include "src/vm-state-inl.h"
 #if V8_TARGET_ARCH_ARM && !V8_INTERPRETED_REGEXP
-#include "regexp-macro-assembler.h"
-#include "arm/regexp-macro-assembler-arm.h"
+#include "src/regexp-macro-assembler.h"
+#include "src/arm/regexp-macro-assembler-arm.h"
 #endif
 #if V8_TARGET_ARCH_MIPS && !V8_INTERPRETED_REGEXP
-#include "regexp-macro-assembler.h"
-#include "mips/regexp-macro-assembler-mips.h"
+#include "src/regexp-macro-assembler.h"
+#include "src/mips/regexp-macro-assembler-mips.h"
 #endif
 #if V8_TARGET_ARCH_MIPS64 && !V8_INTERPRETED_REGEXP
 #include "regexp-macro-assembler.h"
@@ -105,6 +105,7 @@ Heap::Heap()
       promotion_rate_(0),
       semi_space_copied_object_size_(0),
       semi_space_copied_rate_(0),
+      maximum_size_scavenges_(0),
       max_gc_pause_(0.0),
       total_gc_time_ms_(0.0),
       max_alive_after_gc_(0),
@@ -442,6 +443,13 @@ void Heap::GarbageCollectionPrologue() {
   if (isolate()->concurrent_osr_enabled()) {
     isolate()->optimizing_compiler_thread()->AgeBufferedOsrJobs();
   }
+
+  if (new_space_.IsAtMaximumCapacity()) {
+    maximum_size_scavenges_++;
+  } else {
+    maximum_size_scavenges_ = 0;
+  }
+  CheckNewSpaceExpansionCriteria();
 }
 
 
@@ -489,12 +497,19 @@ void Heap::ProcessPretenuringFeedback() {
 
     // If the scratchpad overflowed, we have to iterate over the allocation
     // sites list.
+    // TODO(hpayer): We iterate over the whole list of allocation sites when
+    // we grew to the maximum semi-space size to deopt maybe tenured
+    // allocation sites. We could hold the maybe tenured allocation sites
+    // in a seperate data structure if this is a performance problem.
     bool use_scratchpad =
-        allocation_sites_scratchpad_length_ < kAllocationSiteScratchpadSize;
+        allocation_sites_scratchpad_length_ < kAllocationSiteScratchpadSize &&
+        new_space_.IsAtMaximumCapacity() &&
+        maximum_size_scavenges_ == 0;
 
     int i = 0;
     Object* list_element = allocation_sites_list();
     bool trigger_deoptimization = false;
+    bool maximum_size_scavenge = MaximumSizeScavenge();
     while (use_scratchpad ?
               i < allocation_sites_scratchpad_length_ :
               list_element->IsAllocationSite()) {
@@ -504,14 +519,17 @@ void Heap::ProcessPretenuringFeedback() {
       allocation_mementos_found += site->memento_found_count();
       if (site->memento_found_count() > 0) {
         active_allocation_sites++;
+        if (site->DigestPretenuringFeedback(maximum_size_scavenge)) {
+          trigger_deoptimization = true;
+        }
+        if (site->GetPretenureMode() == TENURED) {
+          tenure_decisions++;
+        } else {
+          dont_tenure_decisions++;
+        }
+        allocation_sites++;
       }
-      if (site->DigestPretenuringFeedback()) trigger_deoptimization = true;
-      if (site->GetPretenureMode() == TENURED) {
-        tenure_decisions++;
-      } else {
-        dont_tenure_decisions++;
-      }
-      allocation_sites++;
+
       if (use_scratchpad) {
         i++;
       } else {
@@ -1436,8 +1454,6 @@ void Heap::Scavenge() {
 
   // Used for updating survived_since_last_expansion_ at function end.
   intptr_t survived_watermark = PromotedSpaceSizeOfObjects();
-
-  CheckNewSpaceExpansionCriteria();
 
   SelectScavengingVisitorsTable();
 

@@ -12,21 +12,21 @@
 #ifndef V8_OBJECTS_INL_H_
 #define V8_OBJECTS_INL_H_
 
-#include "elements.h"
-#include "objects.h"
-#include "contexts.h"
-#include "conversions-inl.h"
-#include "heap.h"
-#include "isolate.h"
-#include "heap-inl.h"
-#include "property.h"
-#include "spaces.h"
-#include "store-buffer.h"
-#include "v8memory.h"
-#include "factory.h"
-#include "incremental-marking.h"
-#include "transitions-inl.h"
-#include "objects-visiting.h"
+#include "src/elements.h"
+#include "src/objects.h"
+#include "src/contexts.h"
+#include "src/conversions-inl.h"
+#include "src/heap.h"
+#include "src/isolate.h"
+#include "src/heap-inl.h"
+#include "src/property.h"
+#include "src/spaces.h"
+#include "src/store-buffer.h"
+#include "src/v8memory.h"
+#include "src/factory.h"
+#include "src/incremental-marking.h"
+#include "src/transitions-inl.h"
+#include "src/objects-visiting.h"
 
 namespace v8 {
 namespace internal {
@@ -1577,42 +1577,60 @@ inline void AllocationSite::IncrementMementoCreateCount() {
 }
 
 
-inline bool AllocationSite::DigestPretenuringFeedback() {
-  bool decision_changed = false;
+inline bool AllocationSite::MakePretenureDecision(
+    PretenureDecision current_decision,
+    double ratio,
+    bool maximum_size_scavenge) {
+  // Here we just allow state transitions from undecided or maybe tenure
+  // to don't tenure, maybe tenure, or tenure.
+  if ((current_decision == kUndecided || current_decision == kMaybeTenure)) {
+    if (ratio >= kPretenureRatio) {
+      // We just transition into tenure state when the semi-space was at
+      // maximum capacity.
+      if (maximum_size_scavenge) {
+        set_deopt_dependent_code(true);
+        set_pretenure_decision(kTenure);
+        // Currently we just need to deopt when we make a state transition to
+        // tenure.
+        return true;
+      }
+      set_pretenure_decision(kMaybeTenure);
+    } else {
+      set_pretenure_decision(kDontTenure);
+    }
+  }
+  return false;
+}
+
+
+inline bool AllocationSite::DigestPretenuringFeedback(
+    bool maximum_size_scavenge) {
+  bool deopt = false;
   int create_count = memento_create_count();
   int found_count = memento_found_count();
   bool minimum_mementos_created = create_count >= kPretenureMinimumCreated;
   double ratio =
       minimum_mementos_created || FLAG_trace_pretenuring_statistics ?
           static_cast<double>(found_count) / create_count : 0.0;
-  PretenureFlag current_mode = GetPretenureMode();
+  PretenureDecision current_decision = pretenure_decision();
 
-  // TODO(hpayer): Add an intermediate state MAYBE_TENURE which collects
-  // more lifetime feedback for tenuring candidates. In the meantime, we
-  // just allow transitions from undecided to tenured or not tenured.
-  if (minimum_mementos_created && pretenure_decision() == kUndecided) {
-    PretenureDecision result = ratio >= kPretenureRatio
-        ? kTenure
-        : kDontTenure;
-    set_pretenure_decision(result);
-    if (current_mode != GetPretenureMode()) {
-      decision_changed = true;
-      set_deopt_dependent_code(true);
-    }
+  if (minimum_mementos_created) {
+    deopt = MakePretenureDecision(
+        current_decision, ratio, maximum_size_scavenge);
   }
 
   if (FLAG_trace_pretenuring_statistics) {
     PrintF(
         "AllocationSite(%p): (created, found, ratio) (%d, %d, %f) %s => %s\n",
          static_cast<void*>(this), create_count, found_count, ratio,
-         current_mode == TENURED ? "tenured" : "not tenured",
-         GetPretenureMode() == TENURED ? "tenured" : "not tenured");
+         PretenureDecisionName(current_decision),
+         PretenureDecisionName(pretenure_decision()));
   }
 
   // Clear feedback calculation fields until the next gc.
   set_memento_found_count(0);
   set_memento_create_count(0);
-  return decision_changed;
+  return deopt;
 }
 
 
