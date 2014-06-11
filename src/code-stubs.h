@@ -594,9 +594,6 @@ class FastNewContextStub V8_FINAL : public HydrogenCodeStub {
 
 class FastCloneShallowArrayStub : public HydrogenCodeStub {
  public:
-  // Maximum length of copied elements array.
-  static const int kMaximumInlinedCloneLength = 8;
-
   FastCloneShallowArrayStub(Isolate* isolate,
                             AllocationSiteMode allocation_site_mode)
       : HydrogenCodeStub(isolate),
@@ -826,7 +823,7 @@ class CallICStub: public PlatformCodeStub {
 
  protected:
   virtual int MinorKey() { return GetExtraICState(); }
-  virtual void PrintState(StringStream* stream) V8_FINAL V8_OVERRIDE;
+  virtual void PrintState(StringStream* stream) V8_OVERRIDE;
 
   virtual CodeStub::Major MajorKey() { return CallIC; }
 
@@ -845,7 +842,7 @@ class CallIC_ArrayStub: public CallICStub {
   virtual void Generate(MacroAssembler* masm);
 
  protected:
-  virtual void PrintState(StringStream* stream) V8_FINAL V8_OVERRIDE;
+  virtual void PrintState(StringStream* stream) V8_OVERRIDE;
 
   virtual CodeStub::Major MajorKey() { return CallIC_Array; }
 };
