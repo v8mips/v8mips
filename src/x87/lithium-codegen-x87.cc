@@ -221,10 +221,13 @@ bool LCodeGen::GeneratePrologue() {
   int heap_slots = info_->num_heap_slots() - Context::MIN_CONTEXT_SLOTS;
   if (heap_slots > 0) {
     Comment(";;; Allocate local context");
+    bool need_write_barrier = true;
     // Argument to NewContext is the function, which is still in edi.
     if (heap_slots <= FastNewContextStub::kMaximumSlots) {
       FastNewContextStub stub(isolate(), heap_slots);
       __ CallStub(&stub);
+      // Result of FastNewContextStub is always in new space.
+      need_write_barrier = false;
     } else {
       __ push(edi);
       __ CallRuntime(Runtime::kHiddenNewFunctionContext, 1);
@@ -248,10 +251,17 @@ bool LCodeGen::GeneratePrologue() {
         int context_offset = Context::SlotOffset(var->index());
         __ mov(Operand(esi, context_offset), eax);
         // Update the write barrier. This clobbers eax and ebx.
-        __ RecordWriteContextSlot(esi,
-                                  context_offset,
-                                  eax,
-                                  ebx);
+        if (need_write_barrier) {
+          __ RecordWriteContextSlot(esi,
+                                    context_offset,
+                                    eax,
+                                    ebx);
+        } else if (FLAG_debug_code) {
+          Label done;
+          __ JumpIfInNewSpace(esi, eax, &done, Label::kNear);
+          __ Abort(kExpectedNewSpaceObject);
+          __ bind(&done);
+        }
       }
     }
     Comment(";;; End allocate local context");
@@ -3878,30 +3888,11 @@ void LCodeGen::DoStoreNamedField(LStoreNamedField* instr) {
   }
 
   Register object = ToRegister(instr->object());
-  SmiCheck check_needed =
-      instr->hydrogen()->value()->IsHeapObject()
-          ? OMIT_SMI_CHECK : INLINE_SMI_CHECK;
-
-  ASSERT(!(representation.IsSmi() &&
-           instr->value()->IsConstantOperand() &&
-           !IsSmi(LConstantOperand::cast(instr->value()))));
-  if (representation.IsHeapObject()) {
-    if (instr->value()->IsConstantOperand()) {
-      LConstantOperand* operand_value = LConstantOperand::cast(instr->value());
-      if (chunk_->LookupConstant(operand_value)->HasSmiValue()) {
-        DeoptimizeIf(no_condition, instr->environment());
-      }
-    } else {
-      if (!instr->hydrogen()->value()->type().IsHeapObject()) {
-        Register value = ToRegister(instr->value());
-        __ test(value, Immediate(kSmiTagMask));
-        DeoptimizeIf(zero, instr->environment());
-
-        // We know now that value is not a smi, so we can omit the check below.
-        check_needed = OMIT_SMI_CHECK;
-      }
-    }
-  } else if (representation.IsDouble()) {
+  __ AssertNotSmi(object);
+  ASSERT(!representation.IsSmi() ||
+         !instr->value()->IsConstantOperand() ||
+         IsSmi(LConstantOperand::cast(instr->value())));
+  if (representation.IsDouble()) {
     ASSERT(access.IsInobject());
     ASSERT(!instr->hydrogen()->has_transition());
     ASSERT(!instr->hydrogen()->NeedsWriteBarrier());
@@ -3966,7 +3957,7 @@ void LCodeGen::DoStoreNamedField(LStoreNamedField* instr) {
                         value,
                         temp,
                         EMIT_REMEMBERED_SET,
-                        check_needed);
+                        instr->hydrogen()->SmiCheckForWriteBarrier());
   }
 }
 

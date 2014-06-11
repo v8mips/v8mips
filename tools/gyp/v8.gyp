@@ -1095,6 +1095,7 @@
         '../../src',
       ],
       'sources': [
+        '../../src/base/build_config.h',
         '../../src/base/macros.h',
       ],
       'conditions': [

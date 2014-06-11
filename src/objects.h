@@ -1479,10 +1479,26 @@ class Object {
       Handle<Name> key,
       PropertyAttributes* attributes);
 
+  MUST_USE_RESULT static MaybeHandle<Object> GetPropertyWithCallback(
+      Handle<Object> receiver,
+      Handle<Name> name,
+      Handle<JSObject> holder,
+      Handle<Object> structure);
+  MUST_USE_RESULT static MaybeHandle<Object> SetPropertyWithCallback(
+      Handle<Object> receiver,
+      Handle<Name> name,
+      Handle<Object> value,
+      Handle<JSObject> holder,
+      Handle<Object> structure,
+      StrictMode strict_mode);
+
   MUST_USE_RESULT static MaybeHandle<Object> GetPropertyWithDefinedGetter(
-      Handle<Object> object,
       Handle<Object> receiver,
       Handle<JSReceiver> getter);
+  MUST_USE_RESULT static MaybeHandle<Object> SetPropertyWithDefinedSetter(
+      Handle<Object> receiver,
+      Handle<JSReceiver> setter,
+      Handle<Object> value);
 
   MUST_USE_RESULT static inline MaybeHandle<Object> GetElement(
       Isolate* isolate,
@@ -1996,12 +2012,6 @@ class JSReceiver: public HeapObject {
       Handle<JSReceiver> object,
       KeyCollectionType type);
 
- protected:
-  MUST_USE_RESULT static MaybeHandle<Object> SetPropertyWithDefinedSetter(
-      Handle<JSReceiver> object,
-      Handle<JSReceiver> setter,
-      Handle<Object> value);
-
  private:
   static PropertyAttributes GetPropertyAttributeForResult(
       Handle<JSReceiver> object,
@@ -2130,20 +2140,6 @@ class JSObject: public JSReceiver {
   static Handle<Object> PrepareSlowElementsForSort(Handle<JSObject> object,
                                                    uint32_t limit);
 
-  MUST_USE_RESULT static MaybeHandle<Object> GetPropertyWithCallback(
-      Handle<JSObject> object,
-      Handle<Object> receiver,
-      Handle<Object> structure,
-      Handle<Name> name);
-
-  MUST_USE_RESULT static MaybeHandle<Object> SetPropertyWithCallback(
-      Handle<JSObject> object,
-      Handle<Object> structure,
-      Handle<Name> name,
-      Handle<Object> value,
-      Handle<JSObject> holder,
-      StrictMode strict_mode);
-
   MUST_USE_RESULT static MaybeHandle<Object> SetPropertyWithInterceptor(
       Handle<JSObject> object,
       Handle<Name> name,
@@ -2160,6 +2156,13 @@ class JSObject: public JSReceiver {
       StrictMode strict_mode,
       StoreFromKeyed store_mode = MAY_BE_STORE_FROM_KEYED);
 
+  // SetLocalPropertyIgnoreAttributes converts callbacks to fields. We need to
+  // grant an exemption to ExecutableAccessor callbacks in some cases.
+  enum ExecutableAccessorInfoHandling {
+    DEFAULT_HANDLING,
+    DONT_FORCE_FIELD
+  };
+
   MUST_USE_RESULT static MaybeHandle<Object> SetOwnPropertyIgnoreAttributes(
       Handle<JSObject> object,
       Handle<Name> key,
@@ -2168,7 +2171,8 @@ class JSObject: public JSReceiver {
       ValueType value_type = OPTIMAL_REPRESENTATION,
       StoreMode mode = ALLOW_AS_CONSTANT,
       ExtensibilityCheck extensibility_check = PERFORM_EXTENSIBILITY_CHECK,
-      StoreFromKeyed store_mode = MAY_BE_STORE_FROM_KEYED);
+      StoreFromKeyed store_mode = MAY_BE_STORE_FROM_KEYED,
+      ExecutableAccessorInfoHandling handling = DEFAULT_HANDLING);
 
   static inline Handle<String> ExpectedTransitionKey(Handle<Map> map);
   static inline Handle<Map> ExpectedTransitionTarget(Handle<Map> map);
@@ -10541,6 +10545,8 @@ class ExecutableAccessorInfo: public AccessorInfo {
   static const int kSetterOffset = kGetterOffset + kPointerSize;
   static const int kDataOffset = kSetterOffset + kPointerSize;
   static const int kSize = kDataOffset + kPointerSize;
+
+  inline void clear_setter();
 
  private:
   DISALLOW_IMPLICIT_CONSTRUCTORS(ExecutableAccessorInfo);

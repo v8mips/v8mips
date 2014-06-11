@@ -2532,6 +2532,9 @@ TEST(OptimizedPretenuringConstructorCalls) {
   v8::HandleScope scope(CcTest::isolate());
 
   i::ScopedVector<char> source(1024);
+  // Call new is doing slack tracking for the first
+  // JSFunction::kGenerousAllocationCount allocations, and we can't find
+  // mementos during that time.
   i::OS::SNPrintF(
       source,
       "var number_elements = %d;"
@@ -2550,7 +2553,8 @@ TEST(OptimizedPretenuringConstructorCalls) {
       "f(); f();"
       "%%OptimizeFunctionOnNextCall(f);"
       "f();",
-      AllocationSite::kPretenureMinimumCreated);
+      AllocationSite::kPretenureMinimumCreated +
+      JSFunction::kGenerousAllocationCount);
 
   v8::Local<v8::Value> res = CompileRun(source.start());
 
@@ -2574,9 +2578,12 @@ TEST(OptimizedPretenuringCallNew) {
   v8::HandleScope scope(CcTest::isolate());
 
   i::ScopedVector<char> source(1024);
+  // Call new is doing slack tracking for the first
+  // JSFunction::kGenerousAllocationCount allocations, and we can't find
+  // mementos during that time.
   i::OS::SNPrintF(
       source,
-      "var number_elements = 100;"
+      "var number_elements = %d;"
       "var elements = new Array(number_elements);"
       "function g() { this.a = 0; }"
       "function f() {"
@@ -2589,7 +2596,8 @@ TEST(OptimizedPretenuringCallNew) {
       "f(); f();"
       "%%OptimizeFunctionOnNextCall(f);"
       "f();",
-      AllocationSite::kPretenureMinimumCreated);
+      AllocationSite::kPretenureMinimumCreated +
+      JSFunction::kGenerousAllocationCount);
 
   v8::Local<v8::Value> res = CompileRun(source.start());
 
@@ -3804,7 +3812,7 @@ TEST(EnsureAllocationSiteDependentCodesProcessed) {
   // Now make sure that a gc should get rid of the function, even though we
   // still have the allocation site alive.
   for (int i = 0; i < 4; i++) {
-    heap->CollectAllGarbage(false);
+    heap->CollectAllGarbage(Heap::kNoGCFlags);
   }
 
   // The site still exists because of our global handle, but the code is no
@@ -4267,6 +4275,8 @@ TEST(ArrayShiftSweeping) {
 
 #ifdef DEBUG
 TEST(PathTracer) {
+  // Type cast checks fail because the path tracer abuses the map for marking.
+  if (i::FLAG_enable_slow_asserts) return;
   CcTest::InitializeVM();
   v8::HandleScope scope(CcTest::isolate());
 

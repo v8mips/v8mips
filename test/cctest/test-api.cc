@@ -2004,6 +2004,27 @@ THREADED_TEST(EmptyInterceptorDoesNotShadowAccessors) {
 }
 
 
+THREADED_TEST(ExecutableAccessorIsPreservedOnAttributeChange) {
+  v8::Isolate* isolate = CcTest::isolate();
+  v8::HandleScope scope(isolate);
+  LocalContext env;
+  v8::Local<v8::Value> res = CompileRun("var a = []; a;");
+  i::Handle<i::JSObject> a(v8::Utils::OpenHandle(v8::Object::Cast(*res)));
+  CHECK(a->map()->instance_descriptors()->IsFixedArray());
+  CHECK_GT(i::FixedArray::cast(a->map()->instance_descriptors())->length(), 0);
+  CompileRun("Object.defineProperty(a, 'length', { writable: false });");
+  CHECK_EQ(i::FixedArray::cast(a->map()->instance_descriptors())->length(), 0);
+  // But we should still have an ExecutableAccessorInfo.
+  i::Isolate* i_isolate = reinterpret_cast<i::Isolate*>(isolate);
+  i::LookupResult lookup(i_isolate);
+  i::Handle<i::String> name(v8::Utils::OpenHandle(*v8_str("length")));
+  a->LookupOwnRealNamedProperty(name, &lookup);
+  CHECK(lookup.IsPropertyCallbacks());
+  i::Handle<i::Object> callback(lookup.GetCallbackObject(), i_isolate);
+  CHECK(callback->IsExecutableAccessorInfo());
+}
+
+
 THREADED_TEST(EmptyInterceptorBreakTransitions) {
   v8::HandleScope scope(CcTest::isolate());
   Handle<FunctionTemplate> templ = FunctionTemplate::New(CcTest::isolate());
@@ -6668,9 +6689,6 @@ TEST(UndetectableOptimized) {
       "\"PASS\"",
       "PASS");
 }
-
-
-template <typename T> static void USE(T) { }
 
 
 // The point of this test is type checking. We run it only so compilers
@@ -15831,19 +15849,19 @@ THREADED_TEST(PixelArray) {
   no_failure = i::JSObject::SetElement(
       jsobj, 1, value, NONE, i::SLOPPY).ToHandleChecked();
   ASSERT(!no_failure.is_null());
-  i::USE(no_failure);
+  USE(no_failure);
   CheckElementValue(isolate, 2, jsobj, 1);
   *value.location() = i::Smi::FromInt(256);
   no_failure = i::JSObject::SetElement(
       jsobj, 1, value, NONE, i::SLOPPY).ToHandleChecked();
   ASSERT(!no_failure.is_null());
-  i::USE(no_failure);
+  USE(no_failure);
   CheckElementValue(isolate, 255, jsobj, 1);
   *value.location() = i::Smi::FromInt(-1);
   no_failure = i::JSObject::SetElement(
       jsobj, 1, value, NONE, i::SLOPPY).ToHandleChecked();
   ASSERT(!no_failure.is_null());
-  i::USE(no_failure);
+  USE(no_failure);
   CheckElementValue(isolate, 0, jsobj, 1);
 
   result = CompileRun("for (var i = 0; i < 8; i++) {"
