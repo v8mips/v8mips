@@ -95,8 +95,6 @@ void BreakLocationIterator::ClearDebugBreakAtSlot() {
                      Assembler::kDebugBreakSlotInstructions);
 }
 
-const bool Debug::FramePaddingLayout::kIsSupported = false;
-
 
 #define __ ACCESS_MASM(masm)
 
@@ -311,7 +309,7 @@ void DebugCodegen::GenerateFrameDropperLiveEdit(MacroAssembler* masm) {
 }
 
 
-const bool Debug::kFrameDropperSupported = false;
+const bool LiveEdit::kFrameDropperSupported = false;
 
 #undef __
 
