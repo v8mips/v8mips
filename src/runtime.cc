@@ -3026,7 +3026,7 @@ RUNTIME_FUNCTION(Runtime_FunctionSetPrototype) {
 
   CONVERT_ARG_HANDLE_CHECKED(JSFunction, fun, 0);
   CONVERT_ARG_HANDLE_CHECKED(Object, value, 1);
-  ASSERT(fun->should_have_prototype());
+  RUNTIME_ASSERT(fun->should_have_prototype());
   Accessors::FunctionSetPrototype(fun, value);
   return args[0];  // return TOS
 }
@@ -14677,7 +14677,8 @@ RUNTIME_FUNCTION(Runtime_ListNatives) {
   int entry_count = 0
       RUNTIME_FUNCTION_LIST(COUNT_ENTRY)
       RUNTIME_HIDDEN_FUNCTION_LIST(COUNT_ENTRY)
-      INLINE_FUNCTION_LIST(COUNT_ENTRY);
+      INLINE_FUNCTION_LIST(COUNT_ENTRY)
+      INLINE_OPTIMIZED_FUNCTION_LIST(COUNT_ENTRY);
 #undef COUNT_ENTRY
   Factory* factory = isolate->factory();
   Handle<FixedArray> elements = factory->NewFixedArray(entry_count);
@@ -14701,6 +14702,7 @@ RUNTIME_FUNCTION(Runtime_ListNatives) {
   }
   inline_runtime_functions = false;
   RUNTIME_FUNCTION_LIST(ADD_ENTRY)
+  INLINE_OPTIMIZED_FUNCTION_LIST(ADD_ENTRY)
   // Calling hidden runtime functions should just throw.
   RUNTIME_HIDDEN_FUNCTION_LIST(ADD_ENTRY)
   inline_runtime_functions = true;
@@ -15075,6 +15077,7 @@ RUNTIME_FUNCTION(Runtime_MaxSmi) {
 
 static const Runtime::Function kIntrinsicFunctions[] = {
   RUNTIME_FUNCTION_LIST(F)
+  INLINE_OPTIMIZED_FUNCTION_LIST(F)
   RUNTIME_HIDDEN_FUNCTION_LIST(FH)
   INLINE_FUNCTION_LIST(I)
   INLINE_OPTIMIZED_FUNCTION_LIST(IO)
