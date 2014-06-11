@@ -9,6 +9,7 @@
 #include "src/assert-scope.h"
 #include "src/builtins.h"
 #include "src/elements-kind.h"
+#include "src/field-index.h"
 #include "src/flags.h"
 #include "src/list.h"
 #include "src/property-details.h"
@@ -1514,7 +1515,6 @@ class Object {
   // Return the object's prototype (might be Heap::null_value()).
   Object* GetPrototype(Isolate* isolate);
   static Handle<Object> GetPrototype(Isolate* isolate, Handle<Object> object);
-  Map* GetMarkerMap(Isolate* isolate);
 
   // Returns the permanent hash code associated with this object. May return
   // undefined if not yet created.
@@ -2502,9 +2502,9 @@ class JSObject: public JSReceiver {
   // Access fast-case object properties at index.
   static Handle<Object> FastPropertyAt(Handle<JSObject> object,
                                        Representation representation,
-                                       int index);
-  inline Object* RawFastPropertyAt(int index);
-  inline void FastPropertyAtPut(int index, Object* value);
+                                       FieldIndex index);
+  inline Object* RawFastPropertyAt(FieldIndex index);
+  inline void FastPropertyAtPut(FieldIndex index, Object* value);
   void WriteToField(int descriptor, Object* value);
 
   // Access to in object properties.
