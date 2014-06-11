@@ -849,6 +849,13 @@ class Heap {
 
   Object* weak_object_to_code_table() { return weak_object_to_code_table_; }
 
+  void set_encountered_weak_collections(Object* weak_collection) {
+    encountered_weak_collections_ = weak_collection;
+  }
+  Object* encountered_weak_collections() const {
+    return encountered_weak_collections_;
+  }
+
   // Number of mark-sweeps.
   unsigned int ms_count() { return ms_count_; }
 
@@ -1613,6 +1620,11 @@ class Heap {
   // start.
   Object* weak_object_to_code_table_;
 
+  // List of encountered weak collections (JSWeakMap and JSWeakSet) during
+  // marking. It is initialized during marking, destroyed after marking and
+  // contains Smi(0) while marking is not active.
+  Object* encountered_weak_collections_;
+
   StoreBufferRebuilder store_buffer_rebuilder_;
 
   struct StringTypeTable {
@@ -1873,10 +1885,11 @@ class Heap {
       ConstantPoolArray* src, Map* map);
 
   MUST_USE_RESULT AllocationResult AllocateConstantPoolArray(
-      int number_of_int64_entries,
-      int number_of_code_ptr_entries,
-      int number_of_heap_ptr_entries,
-      int number_of_int32_entries);
+      const ConstantPoolArray::NumberOfEntries& small);
+
+  MUST_USE_RESULT AllocationResult AllocateExtendedConstantPoolArray(
+      const ConstantPoolArray::NumberOfEntries& small,
+      const ConstantPoolArray::NumberOfEntries& extended);
 
   // Allocates an external array of the specified length and type.
   MUST_USE_RESULT AllocationResult AllocateExternalArray(
