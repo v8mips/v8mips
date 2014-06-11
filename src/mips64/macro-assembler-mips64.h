@@ -5,9 +5,9 @@
 #ifndef V8_MIPS_MACRO_ASSEMBLER_MIPS_H_
 #define V8_MIPS_MACRO_ASSEMBLER_MIPS_H_
 
-#include "assembler.h"
-#include "mips64/assembler-mips64.h"
-#include "globals.h"
+#include "src/assembler.h"
+#include "src/mips64/assembler-mips64.h"
+#include "src/globals.h"
 
 namespace v8 {
 namespace internal {

@@ -33,12 +33,12 @@
 // Copyright 2012 the V8 project authors. All rights reserved.
 
 
-#include "v8.h"
+#include "src/v8.h"
 
 #if V8_TARGET_ARCH_MIPS64
 
-#include "mips64/assembler-mips64-inl.h"
-#include "serialize.h"
+#include "src/mips64/assembler-mips64-inl.h"
+#include "src/serialize.h"
 
 namespace v8 {
 namespace internal {

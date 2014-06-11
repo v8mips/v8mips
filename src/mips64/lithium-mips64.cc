@@ -2,12 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "v8.h"
+#include "src/v8.h"
 
-#include "lithium-allocator-inl.h"
-#include "mips64/lithium-mips64.h"
-#include "mips64/lithium-codegen-mips64.h"
-#include "hydrogen-osr.h"
+#include "src/lithium-allocator-inl.h"
+#include "src/mips64/lithium-mips64.h"
+#include "src/mips64/lithium-codegen-mips64.h"
+#include "src/hydrogen-osr.h"
 
 namespace v8 {
 namespace internal {

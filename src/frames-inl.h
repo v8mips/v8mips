@@ -20,7 +20,7 @@
 #elif V8_TARGET_ARCH_MIPS
 #include "src/mips/frames-mips.h"
 #elif V8_TARGET_ARCH_MIPS64
-#include "mips64/frames-mips64.h"
+#include "src/mips64/frames-mips64.h"
 #elif V8_TARGET_ARCH_X87
 #include "src/x87/frames-x87.h"
 #else

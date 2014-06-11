@@ -21,7 +21,7 @@
 #elif V8_TARGET_ARCH_MIPS
 #include "src/mips/constants-mips.h"
 #elif V8_TARGET_ARCH_MIPS64
-#include "mips64/constants-mips64.h"
+#include "src/mips64/constants-mips64.h"
 #endif
 #include "src/v8checks.h"
 #include "src/zone.h"

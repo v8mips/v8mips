@@ -453,7 +453,7 @@ class RuntimeCallHelper {
 #elif V8_TARGET_ARCH_MIPS
 #include "src/mips/code-stubs-mips.h"
 #elif V8_TARGET_ARCH_MIPS64
-#include "mips64/code-stubs-mips64.h"
+#include "src/mips64/code-stubs-mips64.h"
 #elif V8_TARGET_ARCH_X87
 #include "src/x87/code-stubs-x87.h"
 #else

@@ -37,9 +37,9 @@
 #define V8_MIPS_ASSEMBLER_MIPS_H_
 
 #include <stdio.h>
-#include "assembler.h"
-#include "constants-mips64.h"
-#include "serialize.h"
+#include "src/assembler.h"
+#include "src/mips64/constants-mips64.h"
+#include "src/serialize.h"
 
 namespace v8 {
 namespace internal {

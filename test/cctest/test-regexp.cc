@@ -59,9 +59,9 @@
 #include "src/mips/regexp-macro-assembler-mips.h"
 #endif
 #if V8_TARGET_ARCH_MIPS64
-#include "mips64/assembler-mips64.h"
-#include "mips64/macro-assembler-mips64.h"
-#include "mips64/regexp-macro-assembler-mips64.h"
+#include "src/mips64/assembler-mips64.h"
+#include "src/mips64/macro-assembler-mips64.h"
+#include "src/mips64/regexp-macro-assembler-mips64.h"
 #endif
 #if V8_TARGET_ARCH_X64
 #include "src/x64/assembler-x64.h"
