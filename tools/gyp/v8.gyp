@@ -1100,6 +1100,7 @@
         '../../src/base/atomicops_internals_atomicword_compat.h',
         '../../src/base/atomicops_internals_mac.h',
         '../../src/base/atomicops_internals_mips_gcc.h',
+        '../../src/base/atomicops_internals_mips64_gcc.h',
         '../../src/base/atomicops_internals_tsan.h',
         '../../src/base/atomicops_internals_x86_gcc.cc',
         '../../src/base/atomicops_internals_x86_gcc.h',

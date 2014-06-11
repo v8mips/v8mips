@@ -27,11 +27,11 @@
 
 // This file is an internal atomic implementation, use atomicops.h instead.
 
-#ifndef V8_ATOMICOPS_INTERNALS_MIPS_GCC_H_
-#define V8_ATOMICOPS_INTERNALS_MIPS_GCC_H_
+#ifndef V8_BASE_ATOMICOPS_INTERNALS_MIPS_GCC_H_
+#define V8_BASE_ATOMICOPS_INTERNALS_MIPS_GCC_H_
 
 namespace v8 {
-namespace internal {
+namespace base {
 
 // Atomically execute:
 //      result = *ptr;
@@ -302,6 +302,6 @@ inline Atomic64 Release_Load(volatile const Atomic64* ptr) {
   return *ptr;
 }
 
-} }  // namespace v8::internal
+} }  // namespace v8::base
 
-#endif  // V8_ATOMICOPS_INTERNALS_MIPS_GCC_H_
+#endif  // V8_BASE_ATOMICOPS_INTERNALS_MIPS_GCC_H_
