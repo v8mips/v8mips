@@ -1,4 +1,4 @@
-// Copyright 2013 the V8 project authors. All rights reserved.
+// Copyright 2014 the V8 project authors. All rights reserved.
 // Redistribution and use in source and binary forms, with or without
 // modification, are permitted provided that the following conditions are
 // met:
@@ -25,24 +25,16 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// Check that "name"'s property descriptor for non-strict and strict
-// functions correspond.
+// Flags: --expose-debug-as debug
 
-function f(x) {
-  return x;
-}
+var handle1 = debug.MakeMirror(123).handle();
+assertEquals("number", debug.LookupMirror(handle1).type());
 
-function g(x) {
-  "use strict";
-  return x;
-}
+debug.ToggleMirrorCache(false);
+var handle2 = debug.MakeMirror(123).handle();
+assertEquals(undefined, handle2);
+assertThrows(function() { debug.LookupMirror(handle2) });
 
-function checkNameDescriptor(f) {
-  var descriptor = Object.getOwnPropertyDescriptor(f, "name");
-  assertFalse(descriptor.configurable);
-  assertFalse(descriptor.enumerable);
-  assertFalse(descriptor.writable);
-}
-
-checkNameDescriptor(f);
-checkNameDescriptor(g);
+debug.ToggleMirrorCache(true);
+var handle3 = debug.MakeMirror(123).handle();
+assertEquals("number", debug.LookupMirror(handle3).type());

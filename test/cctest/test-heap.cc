@@ -4326,8 +4326,6 @@ TEST(ArrayShiftSweeping) {
 
 #ifdef DEBUG
 TEST(PathTracer) {
-  // Type cast checks fail because the path tracer abuses the map for marking.
-  if (i::FLAG_enable_slow_asserts) return;
   CcTest::InitializeVM();
   v8::HandleScope scope(CcTest::isolate());
 

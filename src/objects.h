@@ -584,12 +584,12 @@ enum StringRepresentationTag {
 };
 const uint32_t kIsIndirectStringMask = 0x1;
 const uint32_t kIsIndirectStringTag = 0x1;
-STATIC_ASSERT((kSeqStringTag & kIsIndirectStringMask) == 0);
-STATIC_ASSERT((kExternalStringTag & kIsIndirectStringMask) == 0);
-STATIC_ASSERT(
-    (kConsStringTag & kIsIndirectStringMask) == kIsIndirectStringTag);
-STATIC_ASSERT(
-    (kSlicedStringTag & kIsIndirectStringMask) == kIsIndirectStringTag);
+STATIC_ASSERT((kSeqStringTag & kIsIndirectStringMask) == 0);  // NOLINT
+STATIC_ASSERT((kExternalStringTag & kIsIndirectStringMask) == 0);  // NOLINT
+STATIC_ASSERT((kConsStringTag &
+               kIsIndirectStringMask) == kIsIndirectStringTag);  // NOLINT
+STATIC_ASSERT((kSlicedStringTag &
+               kIsIndirectStringMask) == kIsIndirectStringTag);  // NOLINT
 
 // Use this mask to distinguish between cons and slice only after making
 // sure that the string is one of the two (an indirect string).
@@ -8503,6 +8503,10 @@ class AllocationSite: public Struct {
   // to this AllocationSite.
   bool IsZombie() {
     return pretenure_decision() == kZombie;
+  }
+
+  bool IsMaybeTenure() {
+    return pretenure_decision() == kMaybeTenure;
   }
 
   inline void MarkZombie();
