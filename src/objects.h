@@ -4135,11 +4135,15 @@ class ObjectHashTable: public HashTable<ObjectHashTable,
   // returned in case the key is not present.
   Object* Lookup(Handle<Object> key);
 
-  // Adds (or overwrites) the value associated with the given key. Mapping a
-  // key to the hole value causes removal of the whole entry.
+  // Adds (or overwrites) the value associated with the given key.
   static Handle<ObjectHashTable> Put(Handle<ObjectHashTable> table,
                                      Handle<Object> key,
                                      Handle<Object> value);
+
+  // Returns an ObjectHashTable (possibly |table|) where |key| has been removed.
+  static Handle<ObjectHashTable> Remove(Handle<ObjectHashTable> table,
+                                        Handle<Object> key,
+                                        bool* was_present);
 
  private:
   friend class MarkCompactCollector;
@@ -4205,9 +4209,14 @@ class OrderedHashTable: public FixedArray {
   // if possible.
   static Handle<Derived> Shrink(Handle<Derived> table);
 
-  // Returns a new empty OrderedHashTable and updates all the iterators to
-  // point to the new table.
+  // Returns a new empty OrderedHashTable and records the clearing so that
+  // exisiting iterators can be updated.
   static Handle<Derived> Clear(Handle<Derived> table);
+
+  // Returns an OrderedHashTable (possibly |table|) where |key| has been
+  // removed.
+  static Handle<Derived> Remove(Handle<Derived> table, Handle<Object> key,
+      bool* was_present);
 
   // Returns kNotFound if the key isn't present.
   int FindEntry(Handle<Object> key);
@@ -4332,8 +4341,6 @@ class OrderedHashSet: public OrderedHashTable<
   bool Contains(Handle<Object> key);
   static Handle<OrderedHashSet> Add(
       Handle<OrderedHashSet> table, Handle<Object> key);
-  static Handle<OrderedHashSet> Remove(
-      Handle<OrderedHashSet> table, Handle<Object> key, bool* was_present);
 };
 
 
@@ -6853,24 +6860,26 @@ class Script: public Struct {
 //
 // Installation of ids for the selected builtin functions is handled
 // by the bootstrapper.
-#define FUNCTIONS_WITH_ID_LIST(V)                   \
-  V(Array.prototype, push, ArrayPush)               \
-  V(Array.prototype, pop, ArrayPop)                 \
-  V(Array.prototype, shift, ArrayShift)             \
-  V(Function.prototype, apply, FunctionApply)       \
-  V(String.prototype, charCodeAt, StringCharCodeAt) \
-  V(String.prototype, charAt, StringCharAt)         \
-  V(String, fromCharCode, StringFromCharCode)       \
-  V(Math, floor, MathFloor)                         \
-  V(Math, round, MathRound)                         \
-  V(Math, ceil, MathCeil)                           \
-  V(Math, abs, MathAbs)                             \
-  V(Math, log, MathLog)                             \
-  V(Math, exp, MathExp)                             \
-  V(Math, sqrt, MathSqrt)                           \
-  V(Math, pow, MathPow)                             \
-  V(Math, max, MathMax)                             \
-  V(Math, min, MathMin)                             \
+#define FUNCTIONS_WITH_ID_LIST(V)                     \
+  V(Array.prototype, indexOf, ArrayIndexOf)           \
+  V(Array.prototype, lastIndexOf, ArrayLastIndexOf)   \
+  V(Array.prototype, push, ArrayPush)                 \
+  V(Array.prototype, pop, ArrayPop)                   \
+  V(Array.prototype, shift, ArrayShift)               \
+  V(Function.prototype, apply, FunctionApply)         \
+  V(String.prototype, charCodeAt, StringCharCodeAt)   \
+  V(String.prototype, charAt, StringCharAt)           \
+  V(String, fromCharCode, StringFromCharCode)         \
+  V(Math, floor, MathFloor)                           \
+  V(Math, round, MathRound)                           \
+  V(Math, ceil, MathCeil)                             \
+  V(Math, abs, MathAbs)                               \
+  V(Math, log, MathLog)                               \
+  V(Math, exp, MathExp)                               \
+  V(Math, sqrt, MathSqrt)                             \
+  V(Math, pow, MathPow)                               \
+  V(Math, max, MathMax)                               \
+  V(Math, min, MathMin)                               \
   V(Math, imul, MathImul)
 
 enum BuiltinFunctionId {
@@ -9987,10 +9996,6 @@ class OrderedHashTableIterator: public JSObject {
   // end.
   static Handle<JSObject> Next(Handle<Derived> iterator);
 
- protected:
-  static Handle<Derived> CreateInternal(
-      Handle<Map> map, Handle<TableType> table, int kind);
-
  private:
   // Transitions the iterator to the non obsolote backing store. This is a NOP
   // if the [table] is not obsolete.
@@ -10003,11 +10008,6 @@ class OrderedHashTableIterator: public JSObject {
 class JSSetIterator: public OrderedHashTableIterator<JSSetIterator,
                                                      OrderedHashSet> {
  public:
-  // Creates a new iterator associated with [table].
-  // [kind] needs to be one of the OrderedHashTableIterator Kind enum values.
-  static inline Handle<JSSetIterator> Create(
-      Handle<OrderedHashSet> table, int kind);
-
   // Dispatched behavior.
   DECLARE_PRINTER(JSSetIterator)
   DECLARE_VERIFIER(JSSetIterator)
@@ -10027,11 +10027,6 @@ class JSSetIterator: public OrderedHashTableIterator<JSSetIterator,
 class JSMapIterator: public OrderedHashTableIterator<JSMapIterator,
                                                      OrderedHashMap> {
  public:
-  // Creates a new iterator associated with [table].
-  // [kind] needs to be one of the OrderedHashTableIterator Kind enum values.
-  static inline Handle<JSMapIterator> Create(
-      Handle<OrderedHashMap> table, int kind);
-
   // Dispatched behavior.
   DECLARE_PRINTER(JSMapIterator)
   DECLARE_VERIFIER(JSMapIterator)
