@@ -431,7 +431,6 @@ void FullCodeGenerator::EmitReturnSequence() {
       masm_->MultiPop(static_cast<RegList>(fp.bit() | ra.bit()));
       masm_->Daddu(sp, sp, Operand(sp_delta));
       masm_->Jump(ra);
-      masm_->nop();  // Pad the sequence to 8 bytes to support debugger.
       info_->AddNoFrameRange(no_frame_start, masm_->pc_offset());
     }
 
@@ -4904,7 +4903,7 @@ void BackEdgeTable::PatchAt(Code* unoptimized_code,
                             BackEdgeState target_state,
                             Code* replacement_code) {
   static const int kInstrSize = Assembler::kInstrSize;
-  Address branch_address = pc - 10 * kInstrSize;
+  Address branch_address = pc - 8 * kInstrSize;
   CodePatcher patcher(branch_address, 1);
 
   switch (target_state) {
@@ -4913,8 +4912,6 @@ void BackEdgeTable::PatchAt(Code* unoptimized_code,
       // beq  at, zero_reg, ok
       // lui  t9, <interrupt stub address> upper
       // ori  t9, <interrupt stub address> u-middle
-      // dsll t9, t9, 16
-      // ori  t9, <interrupt stub address> l-middle
       // dsll t9, t9, 16
       // ori  t9, <interrupt stub address> lower
       // jalr t9
@@ -4927,9 +4924,7 @@ void BackEdgeTable::PatchAt(Code* unoptimized_code,
       // addiu at, zero_reg, 1
       // beq  at, zero_reg, ok  ;; Not changed
       // lui  t9, <on-stack replacement address> upper
-      // ori  t9, <on-stack replacement address> u-middle
-      // dsll t9, t9, 16
-      // ori  t9, <on-stack replacement address> l-middle
+      // ori  t9, <on-stack replacement address> middle
       // dsll t9, t9, 16
       // ori  t9, <on-stack replacement address> lower
       // jalr t9  ;; Not changed
@@ -4938,7 +4933,7 @@ void BackEdgeTable::PatchAt(Code* unoptimized_code,
       patcher.masm()->daddiu(at, zero_reg, 1);
       break;
   }
-  Address pc_immediate_load_address = pc - 8 * kInstrSize;
+  Address pc_immediate_load_address = pc - 6 * kInstrSize;
   // Replace the stack check address in the load-immediate (6-instr sequence)
   // with the entry address of the replacement code.
   Assembler::set_target_address_at(pc_immediate_load_address,
@@ -4954,10 +4949,10 @@ BackEdgeTable::BackEdgeState BackEdgeTable::GetBackEdgeState(
     Code* unoptimized_code,
     Address pc) {
   static const int kInstrSize = Assembler::kInstrSize;
-  Address branch_address = pc - 10 * kInstrSize;
-  Address pc_immediate_load_address = pc - 8 * kInstrSize;
+  Address branch_address = pc - 8 * kInstrSize;
+  Address pc_immediate_load_address = pc - 6 * kInstrSize;
 
-  ASSERT(Assembler::IsBeq(Assembler::instr_at(pc - 9 * kInstrSize)));
+  ASSERT(Assembler::IsBeq(Assembler::instr_at(pc - 7 * kInstrSize)));
   if (!Assembler::IsAddImmediate(Assembler::instr_at(branch_address))) {
     ASSERT(reinterpret_cast<uint64_t>(
         Assembler::target_address_at(pc_immediate_load_address)) ==

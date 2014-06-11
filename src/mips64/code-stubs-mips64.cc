@@ -1963,8 +1963,7 @@ void InstanceofStub::Generate(MacroAssembler* masm) {
   const Register inline_site = t5;
   const Register scratch = a2;
 
-  // TODO(plind): 9 instr on mips64, 5 on mips32.
-  const int32_t kDeltaToLoadBoolResult = 9 * Assembler::kInstrSize;
+  const int32_t kDeltaToLoadBoolResult = 7 * Assembler::kInstrSize;
 
   Label slow, loop, is_instance, is_not_instance, not_js_object;
 

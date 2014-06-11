@@ -84,11 +84,17 @@ enum BranchDelaySlot {
 // Flags used for the li macro-assembler function.
 enum LiFlags {
   // If the constant value can be represented in just 16 bits, then
-  // optimize the li to use a single instruction, rather than lui/ori pair.
+  // optimize the li to use a single instruction, rather than lui/ori/dsll
+  // sequence.
   OPTIMIZE_SIZE = 0,
-  // Always use 2 instructions (lui/ori pair), even if the constant could
-  // be loaded with just one, so that this value is patchable later.
-  CONSTANT_SIZE = 1
+  // Always use 6 instructions (lui/ori/dsll sequence), even if the constant
+  // could be loaded with just one, so that this value is patchable later.
+  CONSTANT_SIZE = 1,
+  // For address loads only 4 instruction are required. Used to mark
+  // constant load that will be used as address without relocation
+  // information. It ensures predictable code size, so specific sites
+  // in code are patchable.
+  ADDRESS_LOAD  = 2
 };
 
 

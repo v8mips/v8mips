@@ -2696,7 +2696,7 @@ void LCodeGen::DoInstanceOfKnownGlobal(LInstanceOfKnownGlobal* instr) {
   // We use Factory::the_hole_value() on purpose instead of loading from the
   // root array to force relocation to be able to later patch
   // with true or false.
-  __ li(result, Operand(factory()->the_hole_value()), CONSTANT_SIZE);
+  __ li(result, Operand(factory()->the_hole_value()));
   __ Branch(&done);
 
   // The inlined call site cache did not match. Check null and string before
@@ -2746,7 +2746,7 @@ void LCodeGen::DoDeferredInstanceOfKnownGlobal(LInstanceOfKnownGlobal* instr,
   Register temp = ToRegister(instr->temp());
   ASSERT(temp.is(t0));
   __ li(InstanceofStub::right(), instr->function());
-  static const int kAdditionalDelta = 15;
+  static const int kAdditionalDelta = 13;
   int delta = masm_->InstructionsGeneratedSince(map_check) + kAdditionalDelta;
   Label before_push_delta;
   __ bind(&before_push_delta);
@@ -4728,6 +4728,7 @@ void LCodeGen::DoInteger32ToSmi(LInteger32ToSmi* instr) {
   } else {
     __ SmiTag(ToRegister(output), ToRegister(input));
   }
+
 }
 
 

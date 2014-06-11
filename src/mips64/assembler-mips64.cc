@@ -665,10 +665,9 @@ int64_t Assembler::target_at(int64_t pos) {
   // Check we have a branch or jump instruction.
   ASSERT(IsBranch(instr) || IsJ(instr) || IsLui(instr));
   // Do NOT change this to <<2. We rely on arithmetic shifts here, assuming
-  // the compiler uses arithmectic shifts for signed integers.
+  // the compiler uses arithmetic shifts for signed integers.
   if (IsBranch(instr)) {
     int32_t imm18 = ((instr & static_cast<int32_t>(kImm16Mask)) << 16) >> 14;
-
     if (imm18 == kEndOfChain) {
       // EndOfChain sentinel is returned directly, not relative to pc or pos.
       return kEndOfChain;
@@ -679,16 +678,15 @@ int64_t Assembler::target_at(int64_t pos) {
     Instr instr_lui = instr_at(pos + 0 * Assembler::kInstrSize);
     Instr instr_ori = instr_at(pos + 1 * Assembler::kInstrSize);
     Instr instr_ori2 = instr_at(pos + 3 * Assembler::kInstrSize);
-    Instr instr_ori3 = instr_at(pos + 5 * Assembler::kInstrSize);
     ASSERT(IsOri(instr_ori));
     ASSERT(IsOri(instr_ori2));
-    ASSERT(IsOri(instr_ori3));
 
     // TODO(plind) create named constants for shift values.
     int64_t imm = static_cast<int64_t>(instr_lui & kImm16Mask) << 48;
     imm |= static_cast<int64_t>(instr_ori & kImm16Mask) << 32;
     imm |= static_cast<int64_t>(instr_ori2 & kImm16Mask) << 16;
-    imm |= (instr_ori3 & kImm16Mask);
+    // Sign extend address;
+    imm >>= 16;
 
     if (imm == kEndOfJumpChain) {
       // EndOfChain sentinel is returned directly, not relative to pc or pos.
@@ -739,26 +737,22 @@ void Assembler::target_at_put(int64_t pos, int64_t target_pos) {
     Instr instr_lui = instr_at(pos + 0 * Assembler::kInstrSize);
     Instr instr_ori = instr_at(pos + 1 * Assembler::kInstrSize);
     Instr instr_ori2 = instr_at(pos + 3 * Assembler::kInstrSize);
-    Instr instr_ori3 = instr_at(pos + 5 * Assembler::kInstrSize);
     ASSERT(IsOri(instr_ori));
     ASSERT(IsOri(instr_ori2));
-    ASSERT(IsOri(instr_ori3));
+
     uint64_t imm = reinterpret_cast<uint64_t>(buffer_) + target_pos;
     ASSERT((imm & 3) == 0);
 
     instr_lui &= ~kImm16Mask;
     instr_ori &= ~kImm16Mask;
     instr_ori2 &= ~kImm16Mask;
-    instr_ori3 &= ~kImm16Mask;
 
     instr_at_put(pos + 0 * Assembler::kInstrSize,
-                 instr_lui | ((imm >> 48) & kImm16Mask));
+                 instr_lui | ((imm >> 32) & kImm16Mask));
     instr_at_put(pos + 1 * Assembler::kInstrSize,
-                 instr_ori | ((imm >> 32) & kImm16Mask));
+                 instr_ori | ((imm >> 16) & kImm16Mask));
     instr_at_put(pos + 3 * Assembler::kInstrSize,
-                 instr_ori2 | ((imm >> 16) & kImm16Mask));
-    instr_at_put(pos + 5 * Assembler::kInstrSize,
-                 instr_ori3 | (imm & kImm16Mask));
+                 instr_ori2 | (imm & kImm16Mask));
   } else {
     uint64_t imm28 = reinterpret_cast<uint64_t>(buffer_) + target_pos;
     imm28 &= kImm28Mask;
@@ -2127,15 +2121,15 @@ int Assembler::RelocateInternalReference(byte* pc, intptr_t pc_delta) {
     Instr instr_lui = instr_at(pc + 0 * Assembler::kInstrSize);
     Instr instr_ori = instr_at(pc + 1 * Assembler::kInstrSize);
     Instr instr_ori2 = instr_at(pc + 3 * Assembler::kInstrSize);
-    Instr instr_ori3 = instr_at(pc + 5 * Assembler::kInstrSize);
     ASSERT(IsOri(instr_ori));
     ASSERT(IsOri(instr_ori2));
-    ASSERT(IsOri(instr_ori3));
     // TODO(plind): symbolic names for the shifts.
     int64_t imm = (instr_lui & static_cast<int64_t>(kImm16Mask)) << 48;
     imm |= (instr_ori & static_cast<int64_t>(kImm16Mask)) << 32;
     imm |= (instr_ori2 & static_cast<int64_t>(kImm16Mask)) << 16;
-    imm |= (instr_ori3 & static_cast<int64_t>(kImm16Mask));
+    //Sign extend address.
+    imm >>= 16;
+
     if (imm == kEndOfJumpChain) {
       return 0;  // Number of instructions patched.
     }
@@ -2145,32 +2139,29 @@ int Assembler::RelocateInternalReference(byte* pc, intptr_t pc_delta) {
     instr_lui &= ~kImm16Mask;
     instr_ori &= ~kImm16Mask;
     instr_ori2 &= ~kImm16Mask;
-    instr_ori3 &= ~kImm16Mask;
 
     instr_at_put(pc + 0 * Assembler::kInstrSize,
-                 instr_lui | ((imm >> 48) & kImm16Mask));
+                 instr_lui | ((imm >> 32) & kImm16Mask));
     instr_at_put(pc + 1 * Assembler::kInstrSize,
-                 instr_ori | (imm >> 32 & kImm16Mask));
+                 instr_ori | (imm >> 16 & kImm16Mask));
     instr_at_put(pc + 3 * Assembler::kInstrSize,
-                 instr_ori2 | ((imm >> 16) & kImm16Mask));
-    instr_at_put(pc + 5 * Assembler::kInstrSize,
-                 instr_ori3 | (imm & kImm16Mask));
-    return 6;  // Number of instructions patched.
+                 instr_ori2 | (imm & kImm16Mask));
+    return 4;  // Number of instructions patched.
   } else {
-    CHECK(0);  // TODO(plind): validate & fix this code path.
-    // uint32_t imm28 = (instr & static_cast<int32_t>(kImm26Mask)) << 2;
-    // if (static_cast<int32_t>(imm28) == kEndOfJumpChain) {
-    //   return 0;  // Number of instructions patched.
-    // }
-    // imm28 += pc_delta;
-    // imm28 &= kImm28Mask;
-    // ASSERT((imm28 & 3) == 0);
+    uint32_t imm28 = (instr & static_cast<int32_t>(kImm26Mask)) << 2;
+    if (static_cast<int32_t>(imm28) == kEndOfJumpChain) {
+      return 0;  // Number of instructions patched.
+    }
 
-    // instr &= ~kImm26Mask;
-    // uint32_t imm26 = imm28 >> 2;
-    // ASSERT(is_uint26(imm26));
+    imm28 += pc_delta;
+    imm28 &= kImm28Mask;
+    ASSERT((imm28 & 3) == 0);
 
-    // instr_at_put(pc, instr | (imm26 & kImm26Mask));
+    instr &= ~kImm26Mask;
+    uint32_t imm26 = imm28 >> 2;
+    ASSERT(is_uint26(imm26));
+
+    instr_at_put(pc, instr | (imm26 & kImm26Mask));
     return 1;  // Number of instructions patched.
   }
 }
@@ -2326,9 +2317,7 @@ void Assembler::CheckTrampolinePool() {
           // to be patched.
           RecordRelocInfo(RelocInfo::INTERNAL_REFERENCE);
           // TODO(plind): Verify this, presume I cannot use macro-assembler here.
-          lui(at, (imm64 >> 48) & kImm16Mask);
-          ori(at, at, (imm64 >> 32) & kImm16Mask);
-          dsll(at, at, 16);
+          lui(at, (imm64 >> 32) & kImm16Mask);
           ori(at, at, (imm64 >> 16) & kImm16Mask);
           dsll(at, at, 16);
           ori(at, at, imm64 & kImm16Mask);
@@ -2356,25 +2345,22 @@ void Assembler::CheckTrampolinePool() {
 
 Address Assembler::target_address_at(Address pc) {
   Instr instr0 = instr_at(pc);
-  Instr instr1 = instr_at(pc + kInstrSize);
-  Instr instr3 = instr_at(pc + kInstrSize * 3);
-  Instr instr5 = instr_at(pc + kInstrSize * 5);
+  Instr instr1 = instr_at(pc + 1 * kInstrSize);
+  Instr instr3 = instr_at(pc + 3 * kInstrSize);
 
-//  Instr instr5 = instr_at(pc + kInstrSize * 2);
-//  Instr instr6 = instr_at(pc + kInstrSize * 5);
-//  printf("1 : 0x%x 2 : 0x%x 3 : 0x%x 4 : 0x%x 5 : 0x%x 6 : 0x%x\n",GetOpcodeField(instr1), GetOpcodeField(instr2),GetOpcodeField(instr3),GetOpcodeField(instr4),GetOpcodeField(instr5),GetOpcodeField(instr6));
-  // Interpret 6 instructions generated by li: See listing in
+  // Interpret 4 instructions for address generated by li: See listing in
   // Assembler::set_target_address_at() just below.
   if ((GetOpcodeField(instr0) == LUI) && (GetOpcodeField(instr1) == ORI) &&
-      (GetOpcodeField(instr3) == ORI) && (GetOpcodeField(instr5) == ORI)) {
-    // Assemble the 64 bit value.
-    //  printf("ss %llx\n", reinterpret_cast<Address>(
-    //          (GetImmediate16(instr1) << 48) | GetImmediate16(instr2) << 32 |
-    //          (GetImmediate16(instr3) << 16) | GetImmediate16(instr4)));
-    return reinterpret_cast<Address>(
-        ((uint64_t)(GetImmediate16(instr0)) << 48) |
-        ((uint64_t)(GetImmediate16(instr1)) << 32) |
-        ((uint64_t)(GetImmediate16(instr3)) << 16) | GetImmediate16(instr5));
+      (GetOpcodeField(instr3) == ORI)) {
+    // Assemble the 48 bit value.
+     int64_t addr  = static_cast<int64_t>(
+          ((uint64_t)(GetImmediate16(instr0)) << 32) |
+          ((uint64_t)(GetImmediate16(instr1)) << 16) |
+          ((uint64_t)(GetImmediate16(instr3))));
+
+    // Sign extend to get canonical address.
+    addr = (addr << 16 ) >> 16;
+    return reinterpret_cast<Address>(addr);
   }
   // We should never get here, force a bad address if we do.
   UNREACHABLE();
@@ -2391,124 +2377,46 @@ void Assembler::QuietNaN(HeapObject* object) {
 }
 
 
-// On Mips64, a target address is stored in a 6-instruction sequence:
-//    0: lui(rd, (j.imm64_ >> 48) & kImm16Mask);
-//    1: ori(rd, rd, (j.imm64_ >> 32) & kImm16Mask);
+// On Mips64, a target address is stored in a 4-instruction sequence:
+//    0: lui(rd, (j.imm64_ >> 32) & kImm16Mask);
+//    1: ori(rd, rd, (j.imm64_ >> 16) & kImm16Mask);
 //    2: dsll(rd, rd, 16);
-//    3: ori(rd, rd, (j.imm64_ >> 16) & kImm16Mask);
-//    4: dsll(rd, rd, 16);
-//    5: ori(rd, rd, j.imm32_ & kImm16Mask);
+//    3: ori(rd, rd, j.imm32_ & kImm16Mask);
 //
 // Patching the address must replace all the lui & ori instructions,
 // and flush the i-cache.
 //
-// There is an optimization below, which emits a nop when the address
-// fits in just 16 bits. This is unlikely to help, and should be benchmarked,
-// and possibly removed.
+// There is an optimization where only 4 instructions are used to load address
+// in code on MIP64 because only 48-bits of address is effectively used.
+// It relies on fact the upper [63:48] bits are not used for virtual address
+// translation and they have to be set according to value of bit 47 in order
+// get canonical address.
 void Assembler::set_target_address_at(Address pc, Address target) {
   Instr instr1 = instr_at(pc + kInstrSize);
-  uint32_t rt_code = GetRtField(instr1);
+  uint32_t rt_code = GetRt(instr1);
   uint32_t* p = reinterpret_cast<uint32_t*>(pc);
   uint64_t itarget = reinterpret_cast<uint64_t>(target);
 
-  // PrintF("patching pc addr: %p with target addr: %p\n", pc, target);
-
 #ifdef DEBUG
-  // Check we have the result from a 64-bit li macro-instruction.
-  // TODO(plind): add CHECK for instructions 2 & 4.
+  // Check we have the result from a li macro-instruction.
   Instr instr0 = instr_at(pc);
   Instr instr3 = instr_at(pc + kInstrSize * 3);
-  Instr instr5 = instr_at(pc + kInstrSize * 5);
   CHECK((GetOpcodeField(instr0) == LUI && GetOpcodeField(instr1) == ORI &&
-         GetOpcodeField(instr3) == ORI && GetOpcodeField(instr5) == ORI));
+         GetOpcodeField(instr3) == ORI));
 #endif
 
-  // Must use 2 instructions to insure patchable code => just use lui and ori.
+  // Must use 4 instructions to insure patchable code.
   // lui rt, upper-16.
+  // ori rt, rt, lower-16.
+  // dsll rt, rt, 16.
   // ori rt rt, lower-16.
-  *p = LUI | rt_code | ((itarget >> 48) & kImm16Mask);
-  *(p+1) = ORI | rt_code | (rt_code << 5) | ((itarget >> 32) & kImm16Mask);
-  *(p+3) = ORI | rt_code | (rt_code << 5) | ((itarget >> 16) & kImm16Mask);
-  *(p+5) = ORI | rt_code | (rt_code << 5) | (itarget & kImm16Mask);
+  *p = LUI | (rt_code << kRtShift) | ((itarget >> 32) & kImm16Mask);
+  *(p + 1) = ORI | (rt_code << kRtShift) | (rt_code << kRsShift)
+      | ((itarget >> 16) & kImm16Mask);
+  *(p + 3) = ORI | (rt_code << kRsShift) | (rt_code << kRtShift)
+      | (itarget & kImm16Mask);
 
-
-  // The following code is an optimization for the common case of Call()
-  // or Jump() which is load to register, and jump through register:
-  //     li(t9, address); jalr(t9)    (or jr(t9)).
-  // If the destination address is in the same 256 MB page as the call, it
-  // is faster to do a direct jal, or j, rather than jump thru register, since
-  // that lets the cpu pipeline prefetch the target address. However each
-  // time the address above is patched, we have to patch the direct jal/j
-  // instruction, as well as possibly revert to jalr/jr if we now cross a
-  // 256 MB page. Note that with the jal/j instructions, we do not need to
-  // load the register, but that code is left, since it makes it easy to
-  // revert this process. A further optimization could try replacing the
-  // li sequence with nops.
-  // This optimization can only be applied if the rt-code from instr2 is the
-  // register used for the jalr/jr. Finally, we have to skip 'jr ra', which is
-  // mips return. Occasionally this lands after an li().
-
-  // Instr instr5 = instr_at(pc + 6 * kInstrSize);
-  // uint64_t ipc = reinterpret_cast<uint64_t>(pc + 7 * kInstrSize);
-  // bool in_range = ((ipc ^ itarget) >> (kImm26Bits + kImmFieldShift)) == 0;
-  // uint64_t target_field =
-  //     static_cast<uint64_t>(itarget & kJumpAddrMask) >> kImmFieldShift;
-  bool patched_jump = false;
-/* TODO
-#ifndef ALLOW_JAL_IN_BOUNDARY_REGION
-  // This is a workaround to the 24k core E156 bug (affect some 34k cores also).
-  // Since the excluded space is only 64KB out of 256MB (0.02 %), we will just
-  // apply this workaround for all cores so we don't have to identify the core.
-  if (in_range) {
-    // The 24k core E156 bug has some very specific requirements, we only check
-    // the most simple one: if the address of the delay slot instruction is in
-    // the first or last 32 KB of the 256 MB segment.
-    uint32_t segment_mask = ((256 * MB) - 1) ^ ((32 * KB) - 1);
-    uint32_t ipc_segment_addr = ipc & segment_mask;
-    if (ipc_segment_addr == 0 || ipc_segment_addr == segment_mask)
-      in_range = false;
-  }
-#endif
-
-  if (IsJalr(instr5)) {
-    // Try to convert JALR to JAL.
-    if (in_range && GetRt(instr2) == GetRs(instr5)) {
-      *(p+6) = JAL | target_field;
-      patched_jump = true;
-    }
-  } else if (IsJr(instr5)) {
-    // Try to convert JR to J, skip returns (jr ra).
-    bool is_ret = static_cast<int>(GetRs(instr5)) == ra.code();
-    if (in_range && !is_ret && GetRt(instr2) == GetRs(instr5)) {
-      *(p+6) = J | target_field;
-      patched_jump = true;
-    }
-  } else if (IsJal(instr5)) {
-    if (in_range) {
-      // We are patching an already converted JAL.
-      *(p+6) = JAL | target_field;
-    } else {
-      // Patch JAL, but out of range, revert to JALR.
-      // JALR rs reg is the rt reg specified in the ORI instruction.
-      uint32_t rs_field = GetRt(instr2) << kRsShift;
-      uint32_t rd_field = ra.code() << kRdShift;  // Return-address (ra) reg.
-      *(p+6) = SPECIAL | rs_field | rd_field | JALR;
-    }
-    patched_jump = true;
-  } else if (IsJ(instr5)) {
-    if (in_range) {
-      // We are patching an already converted J (jump).
-      *(p+6) = J | target_field;
-    } else {
-      // Trying patch J, but out of range, just go back to JR.
-      // JR 'rs' reg is the 'rt' reg specified in the ORI instruction (instr2).
-      uint32_t rs_field = GetRt(instr2) << kRsShift;
-      *(p+6) = SPECIAL | rs_field | JR;
-    }
-    patched_jump = true;
-  }
-*/
-  CPU::FlushICache(pc, (patched_jump ? 7 : 6) * sizeof(int32_t));
+  CPU::FlushICache(pc, 4 * Assembler::kInstrSize);
 }
 
 

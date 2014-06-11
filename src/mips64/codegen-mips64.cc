@@ -1033,8 +1033,6 @@ static byte* GetNoCodeAgeSequence(uint32_t* length) {
     patcher.masm()->nop(Assembler::CODE_AGE_SEQUENCE_NOP);
     patcher.masm()->nop(Assembler::CODE_AGE_SEQUENCE_NOP);
     patcher.masm()->nop(Assembler::CODE_AGE_SEQUENCE_NOP);
-    patcher.masm()->nop(Assembler::CODE_AGE_SEQUENCE_NOP);
-    patcher.masm()->nop(Assembler::CODE_AGE_SEQUENCE_NOP);
     patcher.masm()->Daddu(fp, sp,
         Operand(StandardFrameConstants::kFixedFrameSizeFromFp));
     initialized = true;
@@ -1086,7 +1084,7 @@ void Code::PatchPlatformCodeAge(Isolate* isolate,
     patcher.masm()->li(
         t9,
         Operand(reinterpret_cast<uint64_t>(stub->instruction_start())),
-        CONSTANT_SIZE);
+        ADDRESS_LOAD);
     patcher.masm()->nop();  // Prevent jalr to jal optimization.
     patcher.masm()->jalr(t9, a0);
     patcher.masm()->nop();  // Branch delay slot nop.
