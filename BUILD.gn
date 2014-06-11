@@ -31,10 +31,22 @@ config("internal_config") {
 
   if (component_mode == "shared_library") {
     defines = [
-      "BUILDING_V8_SHARED",
       "V8_SHARED",
+      "BUILDING_V8_SHARED",
     ]
   }
+}
+
+# This config should only be applied to code using V8 and not any V8 code
+# itself.
+config("external_config") {
+  if (is_component_build) {
+    defines = [
+      "V8_SHARED",
+      "USING_V8_SHARED",
+    ]
+  }
+  include_dirs = [ "include" ]
 }
 
 config("features") {
@@ -355,8 +367,6 @@ source_set("v8_base") {
     "src/assert-scope.cc",
     "src/ast.cc",
     "src/ast.h",
-    "src/atomicops.h",
-    "src/atomicops_internals_x86_gcc.cc",
     "src/bignum-dtoa.cc",
     "src/bignum-dtoa.h",
     "src/bignum.cc",
@@ -538,7 +548,6 @@ source_set("v8_base") {
     "src/jsregexp-inl.h",
     "src/jsregexp.cc",
     "src/jsregexp.h",
-    "src/lazy-instance.h",
     # TODO(jochen): move libplatform/ files to their own target.
     "src/libplatform/default-platform.cc",
     "src/libplatform/default-platform.h",
@@ -576,8 +585,6 @@ source_set("v8_base") {
     "src/objects-visiting.h",
     "src/objects.cc",
     "src/objects.h",
-    "src/once.cc",
-    "src/once.h",
     "src/optimizing-compiler-thread.h",
     "src/optimizing-compiler-thread.cc",
     "src/parser.cc",
@@ -947,8 +954,22 @@ source_set("v8_libbase") {
   visibility = ":*"  # Only targets in this file can depend on this.
 
   sources = [
+    "src/base/atomicops.h",
+    "src/base/atomicops_internals_arm64_gcc.h",
+    "src/base/atomicops_internals_arm_gcc.h",
+    "src/base/atomicops_internals_atomicword_compat.h",
+    "src/base/atomicops_internals_mac.h",
+    "src/base/atomicops_internals_mips_gcc.h",
+    "src/base/atomicops_internals_tsan.h",
+    "src/base/atomicops_internals_x86_gcc.cc",
+    "src/base/atomicops_internals_x86_gcc.h",
+    "src/base/atomicops_internals_x86_msvc.h",
     "src/base/build_config.h",
+    "src/base/lazy-instance.h",
     "src/base/macros.h",
+    "src/base/once.cc",
+    "src/base/once.h",
+    "src/base/win32-headers.h",
   ]
 
   configs -= [ "//build/config/compiler:chromium_code" ]
@@ -960,30 +981,26 @@ source_set("v8_libbase") {
 # Executables
 #
 
-executable("mksnapshot") {
-  visibility = ":*"  # Only targets in this file can depend on this.
+if (current_toolchain == host_toolchain) {
+  executable("mksnapshot") {
+    visibility = ":*"  # Only targets in this file can depend on this.
 
-  sources = [
-    "src/mksnapshot.cc",
-  ]
+    sources = [
+      "src/mksnapshot.cc",
+    ]
 
-  configs -= [ "//build/config/compiler:chromium_code" ]
-  configs += [ "//build/config/compiler:no_chromium_code" ]
-  configs += [ ":internal_config", ":features", ":toolchain" ]
+    configs -= [ "//build/config/compiler:chromium_code" ]
+    configs += [ "//build/config/compiler:no_chromium_code" ]
+    configs += [ ":internal_config", ":features", ":toolchain" ]
 
-  deps = [
-    ":v8_base",
-    ":v8_nosnapshot",
-  ]
+    deps = [
+      ":v8_base",
+      ":v8_nosnapshot",
+    ]
 
-  libs = []
-
-  if (v8_compress_startup_data == "bz2") {
-    libs += [ "bz2" ]
-  }
-
-  if (is_android && current_toolchain != host_toolchain) {
-    libs += [ "log" ]
+    if (v8_compress_startup_data == "bz2") {
+      libs = [ "bz2" ]
+    }
   }
 }
 
@@ -1014,7 +1031,11 @@ component("v8") {
   configs += [ "//build/config/compiler:no_chromium_code" ]
   configs += [ ":internal_config", ":features", ":toolchain" ]
 
-  # TODO(jochen): Support direct dependent configs.
+  direct_dependent_configs = [ ":external_config" ]
+
+  if (is_android && current_toolchain != host_toolchain) {
+    libs += [ "log" ]
+  }
 }
 
 } else {
@@ -1031,7 +1052,8 @@ group("v8") {
       ":v8_nosnapshot",
     ]
   }
-  # TODO(jochen): Support direct dependent configs.
+
+  direct_dependent_configs = [ ":external_config" ]
 }
 
 }
