@@ -1527,14 +1527,25 @@ const Operand& rt = Operand(zero_reg), BranchDelaySlot bd = PROTECT
 
   template<typename Field>
   void DecodeField(Register dst, Register src) {
-    static const int shift = Field::kShift;
-    static const int mask = Field::kMask >> shift;
-    dsrl(dst, src, shift);
-    And(dst, dst, Operand(mask));
+    Ext(dst, src, Field::kShift, Field::kSize);
   }
 
   template<typename Field>
   void DecodeField(Register reg) {
+    DecodeField<Field>(reg, reg);
+  }
+
+  template<typename Field>
+  void DecodeFieldToSmi(Register dst, Register src) {
+    static const int shift = Field::kShift;
+    static const int mask = Field::kMask >> shift;
+    dsrl(dst, src, shift);
+    And(dst, dst, Operand(mask));
+    dsll32(dst, dst, 0);
+  }
+
+  template<typename Field>
+  void DecodeFieldToSmi(Register reg) {
     DecodeField<Field>(reg, reg);
   }
   // Generates function and stub prologue code.
