@@ -316,14 +316,14 @@ class Simulator {
 
   // Helper function for DecodeTypeRegister.
   void ConfigureTypeRegister(Instruction* instr,
-                             int64_t& alu_out,
-                             int64_t& i64hilo,
-                             uint64_t& u64hilo,
-                             int64_t& next_pc,
-                             int64_t& return_addr_reg,
-                             bool& do_interrupt,
-                             int64_t& result128H,
-                             int64_t& result128L);
+                             int64_t* alu_out,
+                             int64_t* i64hilo,
+                             uint64_t* u64hilo,
+                             int64_t* next_pc,
+                             int64_t* return_addr_reg,
+                             bool* do_interrupt,
+                             int64_t* result128H,
+                             int64_t* result128L);
 
   void DecodeTypeImmediate(Instruction* instr);
   void DecodeTypeJump(Instruction* instr);

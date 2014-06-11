@@ -251,28 +251,30 @@ static const int kNegOffset = 0x00008000;
 // daddiu(sp, sp, 4) aka Pop() operation or part of Pop(r)
 // operations as post-increment of sp.
 const Instr kPopInstruction = DADDIU | (kRegister_sp_Code << kRsShift)
-      | (kRegister_sp_Code << kRtShift) | (kPointerSize & kImm16Mask);
+      | (kRegister_sp_Code << kRtShift)
+      | (kPointerSize & kImm16Mask);  // NOLINT
 // daddiu(sp, sp, -4) part of Push(r) operation as pre-decrement of sp.
 const Instr kPushInstruction = DADDIU | (kRegister_sp_Code << kRsShift)
-      | (kRegister_sp_Code << kRtShift) | (-kPointerSize & kImm16Mask);
+      | (kRegister_sp_Code << kRtShift)
+      | (-kPointerSize & kImm16Mask);  // NOLINT
 // sd(r, MemOperand(sp, 0))
 const Instr kPushRegPattern = SD | (kRegister_sp_Code << kRsShift)
-      |  (0 & kImm16Mask);
+      |  (0 & kImm16Mask);  // NOLINT
 //  ld(r, MemOperand(sp, 0))
 const Instr kPopRegPattern = LD | (kRegister_sp_Code << kRsShift)
-      |  (0 & kImm16Mask);
+      |  (0 & kImm16Mask);  // NOLINT
 
 const Instr kLwRegFpOffsetPattern = LW | (kRegister_fp_Code << kRsShift)
-      |  (0 & kImm16Mask);
+      |  (0 & kImm16Mask);  // NOLINT
 
 const Instr kSwRegFpOffsetPattern = SW | (kRegister_fp_Code << kRsShift)
-      |  (0 & kImm16Mask);
+      |  (0 & kImm16Mask);  // NOLINT
 
 const Instr kLwRegFpNegOffsetPattern = LW | (kRegister_fp_Code << kRsShift)
-      |  (kNegOffset & kImm16Mask);
+      |  (kNegOffset & kImm16Mask);  // NOLINT
 
 const Instr kSwRegFpNegOffsetPattern = SW | (kRegister_fp_Code << kRsShift)
-      |  (kNegOffset & kImm16Mask);
+      |  (kNegOffset & kImm16Mask);  // NOLINT
 // A mask for the Rt register for push, pop, lw, sw instructions.
 const Instr kRtMask = kRtFieldMask;
 const Instr kLwSwInstrTypeMask = 0xffe00000;
