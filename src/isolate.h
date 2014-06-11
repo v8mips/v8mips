@@ -1082,7 +1082,7 @@ class Isolate {
   void RemoveCallCompletedCallback(CallCompletedCallback callback);
   void FireCallCompletedCallback();
 
-  void EnqueueMicrotask(Handle<JSFunction> microtask);
+  void EnqueueMicrotask(Handle<Object> microtask);
   void RunMicrotasks();
 
  private:

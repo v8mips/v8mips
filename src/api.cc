@@ -28,7 +28,9 @@
 #include "src/icu_util.h"
 #include "src/json-parser.h"
 #include "src/messages.h"
+#ifdef COMPRESS_STARTUP_DATA_BZ2
 #include "src/natives.h"
+#endif
 #include "src/parser.h"
 #include "src/platform.h"
 #include "src/platform/time.h"
@@ -347,24 +349,6 @@ void V8::SetDecompressedStartupData(StartupData* decompressed_data) {
       decompressed_data[kExperimentalLibraries].data,
       decompressed_data[kExperimentalLibraries].raw_size);
   i::ExperimentalNatives::SetRawScriptsSource(exp_libraries_source);
-#endif
-}
-
-
-void V8::SetNativesDataBlob(StartupData* natives_blob) {
-#ifdef V8_USE_EXTERNAL_STARTUP_DATA
-  i::SetNativesFromFile(natives_blob);
-#else
-  CHECK(false);
-#endif
-}
-
-
-void V8::SetSnapshotDataBlob(StartupData* snapshot_blob) {
-#ifdef V8_USE_EXTERNAL_STARTUP_DATA
-  i::SetSnapshotFromFile(snapshot_blob);
-#else
-  CHECK(false);
 #endif
 }
 
@@ -6676,6 +6660,18 @@ void Isolate::RunMicrotasks() {
 void Isolate::EnqueueMicrotask(Handle<Function> microtask) {
   i::Isolate* isolate = reinterpret_cast<i::Isolate*>(this);
   isolate->EnqueueMicrotask(Utils::OpenHandle(*microtask));
+}
+
+
+void Isolate::EnqueueMicrotask(MicrotaskCallback microtask, void* data) {
+  i::Isolate* isolate = reinterpret_cast<i::Isolate*>(this);
+  i::HandleScope scope(isolate);
+  i::Handle<i::CallHandlerInfo> callback_info =
+      i::Handle<i::CallHandlerInfo>::cast(
+          isolate->factory()->NewStruct(i::CALL_HANDLER_INFO_TYPE));
+  SET_FIELD_WRAPPED(callback_info, set_callback, microtask);
+  SET_FIELD_WRAPPED(callback_info, set_data, data);
+  isolate->EnqueueMicrotask(callback_info);
 }
 
 
