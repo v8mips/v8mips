@@ -3357,12 +3357,15 @@ static void EmitLoadTypeFeedbackVector(MacroAssembler* masm, Register vector) {
 }
 
 
-void CallICStub::Generate_MonomorphicArray(MacroAssembler* masm, Label* miss) {
+void CallIC_ArrayStub::Generate(MacroAssembler* masm) {
   // a1 - function
-  // a2 - feedback vector
   // a3 - slot id
+  Label miss;
+
+  EmitLoadTypeFeedbackVector(masm, a2);
+
   __ LoadGlobalFunction(Context::ARRAY_FUNCTION_INDEX, at);
-  __ Branch(miss, ne, a1, Operand(at));
+  __ Branch(&miss, ne, a1, Operand(at));
 
   __ li(a0, Operand(arg_count()));
   __ dsrl(at, a3, 32 - kPointerSizeLog2);
@@ -3372,24 +3375,9 @@ void CallICStub::Generate_MonomorphicArray(MacroAssembler* masm, Label* miss) {
   __ AssertUndefinedOrAllocationSite(a2, at);
   ArrayConstructorStub stub(masm->isolate(), arg_count());
   __ TailCallStub(&stub);
-}
 
-
-void CallICStub::Generate_CustomFeedbackCall(MacroAssembler* masm) {
-  // a1 - function
-  // a2 - feedback vector
-  // a3 - slot id
-  Label miss;
-
-  if (state_.stub_type() == CallIC::MONOMORPHIC_ARRAY) {
-    Generate_MonomorphicArray(masm, &miss);
-  } else {
-    // So far there is only one customer for our custom feedback scheme.
-    UNREACHABLE();
-  }
- 
   __ bind(&miss);
-  GenerateMiss(masm);
+  GenerateMiss(masm, IC::kCallIC_Customization_Miss);
   
   // The slow case, we need this no matter what to complete a call after a miss.
   CallFunctionNoFeedback(masm,
@@ -3412,11 +3400,6 @@ void CallICStub::Generate(MacroAssembler* masm) {
   ParameterCount actual(argc);
 
   EmitLoadTypeFeedbackVector(masm, a2);
-  
-  if (state_.stub_type() != CallIC::DEFAULT) {
-     Generate_CustomFeedbackCall(masm);
-     return;
-  }
 
   // The checks. First, does r1 match the recorded monomorphic target?
   __ dsrl(t0, a3, 32 - kPointerSizeLog2);
@@ -3466,7 +3449,7 @@ void CallICStub::Generate(MacroAssembler* masm) {
 
   // We are here because tracing is on or we are going monomorphic.
   __ bind(&miss);
-  GenerateMiss(masm);
+  GenerateMiss(masm, IC::kCallIC_Miss);
 
   // the slow case
   __ bind(&slow_start);
@@ -3481,7 +3464,7 @@ void CallICStub::Generate(MacroAssembler* masm) {
 }
 
 
-void CallICStub::GenerateMiss(MacroAssembler* masm) {
+void CallICStub::GenerateMiss(MacroAssembler* masm, IC::UtilityId id) {
   // Get the receiver of the function from the stack; 1 ~ return address.
   __ ld(t0, MemOperand(sp, (state_.arg_count() + 1) * kPointerSize));
 
@@ -3492,7 +3475,7 @@ void CallICStub::GenerateMiss(MacroAssembler* masm) {
     __ Push(t0, a1, a2, a3);
 
     // Call the entry.
-    ExternalReference miss = ExternalReference(IC_Utility(IC::kCallIC_Miss),
+    ExternalReference miss = ExternalReference(IC_Utility(id),
                                                masm->isolate());
     __ CallExternalReference(miss, 4);
 
