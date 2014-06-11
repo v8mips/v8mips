@@ -3357,6 +3357,51 @@ static void EmitLoadTypeFeedbackVector(MacroAssembler* masm, Register vector) {
 }
 
 
+void CallICStub::Generate_MonomorphicArray(MacroAssembler* masm, Label* miss) {
+  // a1 - function
+  // a2 - feedback vector
+  // a3 - slot id
+  __ LoadGlobalFunction(Context::ARRAY_FUNCTION_INDEX, at);
+  __ Branch(miss, ne, a1, Operand(at));
+
+  __ li(a0, Operand(arg_count()));
+  __ dsrl(at, a3, 32 - kPointerSizeLog2);
+  __ Daddu(at, a2, Operand(at));
+  __ ld(a2, FieldMemOperand(at, FixedArray::kHeaderSize));
+  // Verify that a2 contains an AllocationSite
+  __ AssertUndefinedOrAllocationSite(a2, at);
+  ArrayConstructorStub stub(masm->isolate(), arg_count());
+  __ TailCallStub(&stub);
+}
+
+
+void CallICStub::Generate_CustomFeedbackCall(MacroAssembler* masm) {
+  // a1 - function
+  // a2 - feedback vector
+  // a3 - slot id
+  Label miss;
+
+  if (state_.stub_type() == CallIC::MONOMORPHIC_ARRAY) {
+    Generate_MonomorphicArray(masm, &miss);
+  } else {
+    // So far there is only one customer for our custom feedback scheme.
+    UNREACHABLE();
+  }
+ 
+  __ bind(&miss);
+  GenerateMiss(masm);
+  
+  // The slow case, we need this no matter what to complete a call after a miss.
+  CallFunctionNoFeedback(masm,
+                        arg_count(),
+                        true,
+                        CallAsMethod());
+
+  // Unreachable.
+  __ stop("Unexpected code address");
+}
+
+
 void CallICStub::Generate(MacroAssembler* masm) {
   // a1 - function
   // a3 - slot id (Smi)
@@ -3367,6 +3412,11 @@ void CallICStub::Generate(MacroAssembler* masm) {
   ParameterCount actual(argc);
 
   EmitLoadTypeFeedbackVector(masm, a2);
+  
+  if (state_.stub_type() != CallIC::DEFAULT) {
+     Generate_CustomFeedbackCall(masm);
+     return;
+  }
 
   // The checks. First, does r1 match the recorded monomorphic target?
   __ dsrl(t0, a3, 32 - kPointerSizeLog2);
