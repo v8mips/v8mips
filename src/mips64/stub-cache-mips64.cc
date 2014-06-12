@@ -1138,7 +1138,7 @@ void LoadStubCompiler::GenerateLoadInterceptor(
                              this->name(), interceptor_holder);
 
     ExternalReference ref = ExternalReference(
-        IC_Utility(IC::kLoadPropertyWithInterceptorForLoad), isolate());
+        IC_Utility(IC::kLoadPropertyWithInterceptor), isolate());
     __ TailCallExternalReference(ref, StubCache::kInterceptorArgsLength, 1);
   }
 }
