@@ -2012,7 +2012,6 @@ bool Isolate::Init(Deserializer* des) {
     NumberToStringStub::InstallDescriptors(this);
     StringAddStub::InstallDescriptors(this);
     RegExpConstructResultStub::InstallDescriptors(this);
-    KeyedLoadGenericElementStub::InstallDescriptors(this);
   }
 
   CallDescriptors::InitializeForIsolate(this);
