@@ -1294,8 +1294,8 @@ void LCodeGen::DoFlooringDivByPowerOf2I(LFlooringDivByPowerOf2I* instr) {
   Register dividend = ToRegister(instr->dividend());
   Register result = ToRegister(instr->result());
   int32_t divisor = instr->divisor();
-  Register scratch = scratch0();
-  ASSERT(!scratch.is(dividend));
+  Register scratch = result.is(dividend) ? scratch0() : dividend;
+  ASSERT(!result.is(dividend) || !scratch.is(dividend));
 
   // If the divisor is 1, return the dividend.
   if (divisor == 1) {
@@ -1313,6 +1313,8 @@ void LCodeGen::DoFlooringDivByPowerOf2I(LFlooringDivByPowerOf2I* instr) {
 
   // If the divisor is negative, we have to negate and handle edge cases.
   if (instr->hydrogen()->CheckFlag(HValue::kLeftCanBeMinInt)) {
+    // divident can be the same register as result so save the value of it
+    // for checking overflow.
     __ Move(scratch, dividend);
   }
   __ Dsubu(result, zero_reg, dividend);
@@ -1320,16 +1322,18 @@ void LCodeGen::DoFlooringDivByPowerOf2I(LFlooringDivByPowerOf2I* instr) {
     DeoptimizeIf(eq, instr->environment(), result, Operand(zero_reg));
   }
 
-  // If the negation could not overflow, simply shifting is OK.
-  if (!instr->hydrogen()->CheckFlag(HValue::kLeftCanBeMinInt)) {
-    __ dsra(result, dividend, shift);
-    return;
-  }
-
   __ Xor(at, scratch, result);
   // Dividing by -1 is basically negation, unless we overflow.
   if (divisor == -1) {
-    DeoptimizeIf(gt, instr->environment(), result, Operand(kMaxInt));
+    if (instr->hydrogen()->CheckFlag(HValue::kLeftCanBeMinInt)) {
+      DeoptimizeIf(gt, instr->environment(), result, Operand(kMaxInt));
+    }
+    return;
+  }
+
+  // If the negation could not overflow, simply shifting is OK.
+  if (!instr->hydrogen()->CheckFlag(HValue::kLeftCanBeMinInt)) {
+    __ dsra(result, result, shift);
     return;
   }
 
@@ -1338,7 +1342,7 @@ void LCodeGen::DoFlooringDivByPowerOf2I(LFlooringDivByPowerOf2I* instr) {
   __ li(result, Operand(kMinInt / divisor), CONSTANT_SIZE);
   __ Branch(&done);
   __ bind(&no_overflow);
-  __ dsra(result, dividend, shift);
+  __ dsra(result, result, shift);
   __ bind(&done);
 }
 
