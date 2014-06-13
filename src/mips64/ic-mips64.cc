@@ -275,8 +275,7 @@ static void GenerateFastArrayLoad(MacroAssembler* masm,
           Operand(FixedArray::kHeaderSize - kHeapObjectTag));
   // The key is a smi.
   STATIC_ASSERT(kSmiTag == 0 && kSmiTagSize < kPointerSizeLog2);
-  // __ dsll(at, key, kPointerSizeLog2 - kSmiTagSize);
-  __ dsrl(at, key, 32 - kPointerSizeLog2);
+  __ SmiScale(at, key, kPointerSizeLog2);
   __ daddu(at, at, scratch1);
   __ ld(scratch2, MemOperand(at));
 
@@ -410,7 +409,6 @@ static MemOperand GenerateMappedArgumentsLookup(MacroAssembler* masm,
   __ Branch(slow_case, lt, scratch2, Operand(FIRST_JS_RECEIVER_TYPE));
 
   // Check that the key is a positive smi.
-  // __ And(scratch1, key, Operand(0x80000001));
   __ NonNegativeSmiTst(key, scratch1);
   __ Branch(slow_case, ne, scratch1, Operand(zero_reg));
 
@@ -432,9 +430,10 @@ static MemOperand GenerateMappedArgumentsLookup(MacroAssembler* masm,
   const int kOffset =
       FixedArray::kHeaderSize + 2 * kPointerSize - kHeapObjectTag;
 
+  // TODO(plind): validate and cleanup here, we don't need Dmul.
   // __ li(scratch3, Operand(kPointerSize >> 1));
   // __ Dmul(scratch3, key, scratch3);
-  __ dsrl32(scratch3, key, 0);
+  __ SmiUntag(scratch3, key);
   __ Dmul(scratch3, scratch3, Operand(kPointerSize));
   __ Daddu(scratch3, scratch3, Operand(kOffset));
 
@@ -449,7 +448,7 @@ static MemOperand GenerateMappedArgumentsLookup(MacroAssembler* masm,
   __ ld(scratch1, FieldMemOperand(scratch1, FixedArray::kHeaderSize));
   // __ li(scratch3, Operand(kPointerSize >> 1));
   // __ Dmul(scratch3, scratch2, scratch3);
-  __ dsrl32(scratch3, scratch2, 0);
+  __ SmiUntag(scratch3, scratch2);
   __ Dmul(scratch3, scratch3, Operand(kPointerSize));
   __ Daddu(scratch3, scratch3, Operand(Context::kHeaderSize - kHeapObjectTag));
   __ Daddu(scratch2, scratch1, scratch3);
@@ -476,9 +475,10 @@ static MemOperand GenerateUnmappedArgumentsLookup(MacroAssembler* masm,
               DONT_DO_SMI_CHECK);
   __ ld(scratch, FieldMemOperand(backing_store, FixedArray::kLengthOffset));
   __ Branch(slow_case, Ugreater_equal, key, Operand(scratch));
+  // TODO(plind): clean this up, don't need Dmul().
   // __ li(scratch, Operand(kPointerSize >> 1));
   // __ Dmul(scratch, key, scratch);
-  __ dsrl32(scratch, key, 0);
+  __ SmiUntag(scratch, key);
   __ Dmul(scratch, scratch, Operand(kPointerSize));
   __ Daddu(scratch,
           scratch,
@@ -848,8 +848,7 @@ static void KeyedStoreGenerateGenericHelper(
   // there may be a callback on the element.
   Label holecheck_passed1;
   __ Daddu(address, elements, FixedArray::kHeaderSize - kHeapObjectTag);
-  // __ dsll(at, key, kPointerSizeLog2 - kSmiTagSize);
-  __ dsrl(at, key, 32 - kPointerSizeLog2);
+  __ SmiScale(at, key, kPointerSizeLog2);
   __ daddu(address, address, at);
   __ ld(scratch_value, MemOperand(address));
 
@@ -871,8 +870,7 @@ static void KeyedStoreGenerateGenericHelper(
   }
   // It's irrelevant whether array is smi-only or not when writing a smi.
   __ Daddu(address, elements, Operand(FixedArray::kHeaderSize - kHeapObjectTag));
-  // __ dsll(scratch_value, key, kPointerSizeLog2 - kSmiTagSize);
-  __ dsrl(scratch_value, key, 32 - kPointerSizeLog2);
+  __ SmiScale(scratch_value, key, kPointerSizeLog2);
   __ Daddu(address, address, scratch_value);
   __ sd(value, MemOperand(address));
   __ Ret();
@@ -890,8 +888,7 @@ static void KeyedStoreGenerateGenericHelper(
     __ sd(scratch_value, FieldMemOperand(receiver, JSArray::kLengthOffset));
   }
   __ Daddu(address, elements, Operand(FixedArray::kHeaderSize - kHeapObjectTag));
-  // __ dsll(scratch_value, key, kPointerSizeLog2 - kSmiTagSize);
-  __ dsrl(scratch_value, key, 32 - kPointerSizeLog2);
+  __ SmiScale(scratch_value, key, kPointerSizeLog2);
   __ Daddu(address, address, scratch_value);
   __ sd(value, MemOperand(address));
   // Update write barrier for the elements array address.
@@ -919,9 +916,7 @@ static void KeyedStoreGenerateGenericHelper(
   __ Daddu(address, elements,
           Operand(FixedDoubleArray::kHeaderSize + sizeof(kHoleNanLower32)
                   - kHeapObjectTag));
-  // TODO(yy) Key is Smi, why mips32 use it not as Smi? 
-  // __ dsll(at, key, kPointerSizeLog2);
-  __ dsrl(at, key, 32 - kPointerSizeLog2);
+  __ SmiScale(at, key, kPointerSizeLog2);
   __ daddu(address, address, at);
   __ lw(scratch_value, MemOperand(address));
   __ Branch(&fast_double_without_map_check, ne, scratch_value,

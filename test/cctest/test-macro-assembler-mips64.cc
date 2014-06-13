@@ -171,4 +171,44 @@ TEST(LoadConstants) {
 
 }
 
+TEST(LoadAddress) {
+  CcTest::InitializeVM();
+  Isolate* isolate = Isolate::Current();
+  HandleScope handles(isolate);
+
+  MacroAssembler assembler(isolate, NULL, 0);
+  MacroAssembler* masm = &assembler;
+  Label to_jump, skip;
+  __ mov(t0, a0);
+
+  __ Branch(&skip);
+  __ bind(&to_jump);
+  __ nop();
+  __ nop();
+  __ jr(ra);
+  __ nop();
+  __ bind(&skip);
+  __ li(t0, Operand(masm->jump_address(&to_jump)), ADDRESS_LOAD);
+  int check_size = masm->InstructionsGeneratedSince(&skip);
+  CHECK(check_size == 4);
+  __ jr(t0);
+  __ nop();
+  __ stop("invalid");
+  __ stop("invalid");
+  __ stop("invalid");
+  __ stop("invalid");
+  __ stop("invalid");
+
+
+  CodeDesc desc;
+  masm->GetCode(&desc);
+  Handle<Code> code = isolate->factory()->NewCode(
+      desc, Code::ComputeFlags(Code::STUB), Handle<Code>());
+
+  ::F f = FUNCTION_CAST< ::F>(code->entry());
+     (void) CALL_GENERATED_CODE(f, 0, 0, 0, 0, 0);
+  // Check results.
+
+}
+
 #undef __

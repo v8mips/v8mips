@@ -647,8 +647,7 @@ static void Generate_JSConstructStubHelper(MacroAssembler* masm,
     __ Daddu(a2, fp, Operand(StandardFrameConstants::kCallerSPOffset));
 
     // Set up number of arguments for function call below.
-    // __ srl(a0, a3, kSmiTagSize);
-    __ dsrl32(a0, a3, 0);
+    __ SmiUntag(a0, a3);
 
     // Copy arguments and receiver to the expression stack.
     // a0: number of arguments
@@ -660,7 +659,7 @@ static void Generate_JSConstructStubHelper(MacroAssembler* masm,
     // sp[2]: constructor function
     // sp[3]: number of arguments (smi-tagged)
     Label loop, entry;
-    __ dsrl32(a3, a3, 0);
+    __ SmiUntag(a3);
     __ jmp(&entry);
     __ bind(&loop);
     // __ sll(t0, a3, kPointerSizeLog2 - kSmiTagSize);
@@ -727,8 +726,7 @@ static void Generate_JSConstructStubHelper(MacroAssembler* masm,
     // Leave construct frame.
   }
 
-  // __ sll(t0, a1, kPointerSizeLog2 - 1);
-  __ dsrl(t0, a1, 32 - kPointerSizeLog2);
+  __ SmiScale(t0, a1, kPointerSizeLog2);
   __ Daddu(sp, sp, t0);
   __ Daddu(sp, sp, kPointerSize);
   __ IncrementCounter(isolate->counters()->constructed_objects(), 1, a1, a2);
@@ -780,6 +778,7 @@ static void Generate_JSEntryTrampolineHelper(MacroAssembler* masm,
     // a3: argc
     // s0: argv, i.e. points to first arg
     Label loop, entry;
+    // TODO(plind): Verify this sign extension is needed.
     __ dsll32(a3, a3, 0); // int32_t -> int64_t.
     __ dsrl32(a3, a3, 0);
     __ dsll(t0, a3, kPointerSizeLog2);
@@ -1286,8 +1285,7 @@ void Builtins::Generate_FunctionApply(MacroAssembler* masm) {
     // here which will cause a2 to become negative.
     __ dsubu(a2, sp, a2);
     // Check if the arguments will overflow the stack.
-    // __ dsll(t3, v0, kPointerSizeLog2 - kSmiTagSize);
-    __ dsrl(t3, v0, 32 - kPointerSizeLog2);
+    __ SmiScale(t3, v0, kPointerSizeLog2);
     __ Branch(&okay, gt, a2, Operand(t3));  // Signed comparison.
 
     // Out of stack space.
@@ -1459,8 +1457,7 @@ static void LeaveArgumentsAdaptorFrame(MacroAssembler* masm) {
                              kPointerSize)));
   __ mov(sp, fp);
   __ MultiPop(fp.bit() | ra.bit());
-  // __ sll(t0, a1, kPointerSizeLog2 - kSmiTagSize);
-  __ dsrl(t0, a1, 32 - kPointerSizeLog2);
+  __ SmiScale(t0, a1, kPointerSizeLog2);
   __ Daddu(sp, sp, t0);
   // Adjust for the receiver.
   __ Daddu(sp, sp, Operand(kPointerSize));
@@ -1495,8 +1492,7 @@ void Builtins::Generate_ArgumentsAdaptorTrampoline(MacroAssembler* masm) {
     EnterArgumentsAdaptorFrame(masm);
 
     // Calculate copy start address into a0 and copy end address into a2.
-    // __ sll(a0, a0, kPointerSizeLog2 - kSmiTagSize);
-    __ dsrl(a0, a0, 32 - kPointerSizeLog2);
+    __ SmiScale(a0, a0, kPointerSizeLog2);
     __ Daddu(a0, fp, a0);
     // Adjust for return address and receiver.
     __ Daddu(a0, a0, Operand(2 * kPointerSize));
@@ -1529,8 +1525,7 @@ void Builtins::Generate_ArgumentsAdaptorTrampoline(MacroAssembler* masm) {
     // a1: function
     // a2: expected number of arguments
     // a3: code entry to call
-    // __ sll(a0, a0, kPointerSizeLog2 - kSmiTagSize);
-    __ dsrl(a0, a0, 32 - kPointerSizeLog2);
+    __ SmiScale(a0, a0, kPointerSizeLog2);
     __ Daddu(a0, fp, a0);
     // Adjust for return address and receiver.
     __ Daddu(a0, a0, Operand(2 * kPointerSize));

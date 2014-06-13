@@ -539,9 +539,7 @@ void ConvertToDoubleStub::Generate(MacroAssembler* masm) {
 #endif
   Label not_special;
   // Convert from Smi to integer.
-  // __ sra(source_, source_, kSmiTagSize);
-  ASSERT(kSmiShiftSize + kSmiTagSize == 32);
-  __ dsra32(source_, source_, 0);
+  __ SmiUntag(source_);
   // Move sign bit from source to destination.  This works because the sign bit
   // in the exponent word of the double has the same position and polarity as
   // the 2's complement sign bit in a Smi.
@@ -915,8 +913,7 @@ static void EmitSmiNonsmiComparison(MacroAssembler* masm,
   }
   // Rhs is a smi, lhs is a number.
   // Convert smi rhs to double.
-  // __ sra(at, rhs, kSmiTagSize);
-  __ dsra32(at, rhs, 0);
+  __ SmiUntag(at, rhs);
   __ mtc1(at, f14);
   __ cvt_d_w(f14, f14);
   __ ldc1(f12, FieldMemOperand(lhs, HeapNumber::kValueOffset));
@@ -940,8 +937,7 @@ static void EmitSmiNonsmiComparison(MacroAssembler* masm,
 
   // Lhs is a smi, rhs is a number.
   // Convert smi lhs to double.
-  // __ sra(at, lhs, kSmiTagSize);
-  __ dsra32(at, lhs, 0);
+  __ SmiUntag(at, lhs);
   __ mtc1(at, f12);
   __ cvt_d_w(f12, f12);
   __ ldc1(f14, FieldMemOperand(rhs, HeapNumber::kValueOffset));
@@ -1089,10 +1085,9 @@ void ICCompareStub::GenerateGeneric(MacroAssembler* masm) {
   Label not_two_smis, smi_done;
   __ Or(a2, a1, a0);
   __ JumpIfNotSmi(a2, &not_two_smis);
-  // __ sra(a1, a1, 1);
-  // __ sra(a0, a0, 1);
-  __ dsra32(a1, a1, 0);
-  __ dsra32(a0, a0, 0);
+  __ SmiUntag(a1);
+  __ SmiUntag(a0);
+
   __ Ret(USE_DELAY_SLOT);
   __ dsubu(v0, a1, a0);
   __ bind(&not_two_smis);
@@ -1920,8 +1915,7 @@ void InstanceofStub::Generate(MacroAssembler* masm) {
   const Register inline_site = t5;
   const Register scratch = a2;
 
-  // TODO(plind): 9 instr on mips64, 5 on mips32.
-  const int32_t kDeltaToLoadBoolResult = 9 * Assembler::kInstrSize;
+  const int32_t kDeltaToLoadBoolResult = 7 * Assembler::kInstrSize;
 
   Label slow, loop, is_instance, is_not_instance, not_js_object;
 
@@ -2139,8 +2133,7 @@ void ArgumentsAccessStub::GenerateReadElement(MacroAssembler* masm) {
 
   // Read the argument from the stack and return it.
   __ dsubu(a3, a0, a1);
-  // __ sll(t3, a3, kPointerSizeLog2 - kSmiTagSize);
-  __ dsrl(t3, a3, 32 - kPointerSizeLog2);
+  __ SmiScale(t3, a3, kPointerSizeLog2);
   __ Daddu(a3, fp, Operand(t3));
   __ Ret(USE_DELAY_SLOT);
   __ ld(v0, MemOperand(a3, kDisplacement));
@@ -2154,8 +2147,7 @@ void ArgumentsAccessStub::GenerateReadElement(MacroAssembler* masm) {
 
   // Read the argument from the adaptor frame and return it.
   __ dsubu(a3, a0, a1);
-  // __ sll(t3, a3, kPointerSizeLog2 - kSmiTagSize);
-  __ dsrl(t3, a3, 32 - kPointerSizeLog2);
+  __ SmiScale(t3, a3, kPointerSizeLog2);
   __ Daddu(a3, a2, Operand(t3));
   __ Ret(USE_DELAY_SLOT);
   __ ld(v0, MemOperand(a3, kDisplacement));
@@ -2184,9 +2176,7 @@ void ArgumentsAccessStub::GenerateNewSloppySlow(MacroAssembler* masm) {
   // Patch the arguments.length and the parameters pointer in the current frame.
   __ ld(a2, MemOperand(a3, ArgumentsAdaptorFrameConstants::kLengthOffset));
   __ sd(a2, MemOperand(sp, 0 * kPointerSize));
-  // __ sll(t3, a2, 1);
-  // TODO right?
-  __ dsrl(t3, a2, 32 - kPointerSizeLog2);
+  __ SmiScale(t3, a2, kPointerSizeLog2);
   __ Daddu(a3, a3, Operand(t3));
   __ daddiu(a3, a3, StandardFrameConstants::kCallerSPOffset);
   __ sd(a3, MemOperand(sp, 1 * kPointerSize));
@@ -2220,15 +2210,12 @@ void ArgumentsAccessStub::GenerateNewSloppyFast(MacroAssembler* masm) {
 
   // No adaptor, parameter count = argument count.
   __ mov(a2, a1);
-  __ b(&try_allocate);
-  __ nop();   // Branch delay slot nop.
+  __ Branch(&try_allocate);
 
   // We have an adaptor frame. Patch the parameters pointer.
   __ bind(&adaptor_frame);
   __ ld(a2, MemOperand(a3, ArgumentsAdaptorFrameConstants::kLengthOffset));
-  // __ sll(t6, a2, 1);
-  // TODO right?
-  __ dsrl(t6, a2, 32 - kPointerSizeLog2);
+  __ SmiScale(t6, a2, kPointerSizeLog2);
   __ Daddu(a3, a3, Operand(t6));
   __ Daddu(a3, a3, Operand(StandardFrameConstants::kCallerSPOffset));
   __ sd(a3, MemOperand(sp, 1 * kPointerSize));
@@ -2252,16 +2239,12 @@ void ArgumentsAccessStub::GenerateNewSloppyFast(MacroAssembler* masm) {
   ASSERT_EQ(0, Smi::FromInt(0));
   __ Branch(USE_DELAY_SLOT, &param_map_size, eq, a1, Operand(zero_reg));
   __ mov(t5, zero_reg);  // In delay slot: param map size = 0 when a1 == 0.
-  // __ sll(t5, a1, 1);
-  // TODO right?
-  __ dsrl(t5, a1, 32 - kPointerSizeLog2);
+  __ SmiScale(t5, a1, kPointerSizeLog2);
   __ daddiu(t5, t5, kParameterMapHeaderSize);
   __ bind(&param_map_size);
 
   // 2. Backing store.
-  // __ sll(t6, a2, 1);
-  // TODO right?
-  __ dsrl(t6, a2, 32 - kPointerSizeLog2);
+  __ SmiScale(t6, a2, kPointerSizeLog2);
   __ Daddu(t5, t5, Operand(t6));
   __ Daddu(t5, t5, Operand(FixedArray::kHeaderSize));
 
@@ -2339,9 +2322,7 @@ void ArgumentsAccessStub::GenerateNewSloppyFast(MacroAssembler* masm) {
   __ Daddu(t2, a1, Operand(Smi::FromInt(2)));
   __ sd(t2, FieldMemOperand(t0, FixedArray::kLengthOffset));
   __ sd(cp, FieldMemOperand(t0, FixedArray::kHeaderSize + 0 * kPointerSize));
-  // __ sll(t6, a1, 1);
-  // TODO right?
-  __ dsrl(t6, a1, 32 - kPointerSizeLog2);
+  __ SmiScale(t6, a1, kPointerSizeLog2);
   __ Daddu(t2, t0, Operand(t6));
   __ Daddu(t2, t2, Operand(kParameterMapHeaderSize));
   __ sd(t2, FieldMemOperand(t0, FixedArray::kHeaderSize + 1 * kPointerSize));
@@ -2360,9 +2341,7 @@ void ArgumentsAccessStub::GenerateNewSloppyFast(MacroAssembler* masm) {
   __ Daddu(t5, t5, Operand(Smi::FromInt(Context::MIN_CONTEXT_SLOTS)));
   __ Dsubu(t5, t5, Operand(a1));
   __ LoadRoot(t3, Heap::kTheHoleValueRootIndex);
-  // __ sll(t6, t2, 1);
-  // TODO right?
-  __ dsrl(t6, t2, 32 - kPointerSizeLog2);
+  __ SmiScale(t6, t2, kPointerSizeLog2);
   __ Daddu(a3, t0, Operand(t6));
   __ Daddu(a3, a3, Operand(kParameterMapHeaderSize));
 
@@ -2375,12 +2354,11 @@ void ArgumentsAccessStub::GenerateNewSloppyFast(MacroAssembler* masm) {
   __ jmp(&parameters_test);
 
   __ bind(&parameters_loop);
+  // TODO(plind): Fix smi load within operand (suspect this works already).
   // __ Dsubu(t2, t2, Operand(Smi::FromInt(1)));
   __ li(t1, Operand(Smi::FromInt(1)));
   __ Dsubu(t2, t2, Operand(t1));
-  // __ sll(t1, t2, 1);
-  // TODO right?
-  __ dsrl(t1, t2, 32 - kPointerSizeLog2);
+  __ SmiScale(t1, t2, kPointerSizeLog2);
   __ Daddu(t1, t1, Operand(kParameterMapHeaderSize - kHeapObjectTag));
   __ Daddu(t6, t0, t1);
   __ sd(t5, MemOperand(t6));
@@ -2403,18 +2381,17 @@ void ArgumentsAccessStub::GenerateNewSloppyFast(MacroAssembler* masm) {
   Label arguments_loop, arguments_test;
   __ mov(t5, a1);
   __ ld(t0, MemOperand(sp, 1 * kPointerSize));
-  // __ sll(t6, t5, 1);
-  __ dsrl(t6, t5, 32 - kPointerSizeLog2);
+  __ SmiScale(t6, t5, kPointerSizeLog2);
   __ Dsubu(t0, t0, Operand(t6));
   __ jmp(&arguments_test);
 
   __ bind(&arguments_loop);
   __ Dsubu(t0, t0, Operand(kPointerSize));
   __ ld(t2, MemOperand(t0, 0));
-  // __ sll(t6, t5, 1);
-  __ dsrl(t6, t5, 32 - kPointerSizeLog2);
+  __ SmiScale(t6, t5, kPointerSizeLog2);
   __ Daddu(t1, a3, Operand(t6));
   __ sd(t2, FieldMemOperand(t1, FixedArray::kHeaderSize));
+  // TODO(plind): Fix smi loaded in Operand (suspect this works already).
   // __ Daddu(t5, t5, Operand(Smi::FromInt(1)));
   __ li(t2, Operand(Smi::FromInt(1)));
   __ Daddu(t5, t5, Operand(t2));
@@ -2454,8 +2431,8 @@ void ArgumentsAccessStub::GenerateNewStrict(MacroAssembler* masm) {
   __ bind(&adaptor_frame);
   __ ld(a1, MemOperand(a2, ArgumentsAdaptorFrameConstants::kLengthOffset));
   __ sd(a1, MemOperand(sp, 0));
-  // __ sll(at, a1, kPointerSizeLog2 - kSmiTagSize);
-  __ dsrl(at, a1, 32 - kPointerSizeLog2);
+  __ SmiScale(at, a1, kPointerSizeLog2);
+
   __ Daddu(a3, a2, Operand(at));
 
   __ Daddu(a3, a3, Operand(StandardFrameConstants::kCallerSPOffset));
@@ -2466,8 +2443,7 @@ void ArgumentsAccessStub::GenerateNewStrict(MacroAssembler* masm) {
   Label add_arguments_object;
   __ bind(&try_allocate);
   __ Branch(&add_arguments_object, eq, a1, Operand(zero_reg));
-  // __ srl(a1, a1, kSmiTagSize);
-  __ dsrl32(a1, a1, 0);
+  __ SmiUntag(a1);
 
   __ Daddu(a1, a1, Operand(FixedArray::kHeaderSize / kPointerSize));
   __ bind(&add_arguments_object);
@@ -2506,8 +2482,8 @@ void ArgumentsAccessStub::GenerateNewStrict(MacroAssembler* masm) {
   __ sd(a3, FieldMemOperand(t0, FixedArray::kMapOffset));
   __ sd(a1, FieldMemOperand(t0, FixedArray::kLengthOffset));
   // Untag the length for the loop.
-  // __ srl(a1, a1, kSmiTagSize);
-  __ dsrl32(a1, a1, 0);
+  __ SmiUntag(a1);
+
 
   // Copy the fixed array slots.
   Label loop;
@@ -2883,6 +2859,7 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
 
   // Process the result from the native regexp code.
   __ bind(&success);
+  // TODO(plind): Refactor to use LoadSmiUntag here.
   __ ld(a1,
          FieldMemOperand(regexp_data, JSRegExp::kIrregexpCaptureCountOffset));
   // Calculate number of capture registers (number_of_captures + 1) * 2.
@@ -3577,8 +3554,7 @@ void StringCharFromCodeGenerator::GenerateFast(MacroAssembler* masm) {
   __ LoadRoot(result_, Heap::kSingleCharacterStringCacheRootIndex);
   // At this point code register contains smi tagged ASCII char code.
   STATIC_ASSERT(kSmiTag == 0);
-  // __ sll(t0, code_, kPointerSizeLog2 - kSmiTagSize);
-  __ dsrl(t0, code_, 32 - kPointerSizeLog2);
+  __ SmiScale(t0, code_, kPointerSizeLog2);
   __ Daddu(result_, result_, t0);
   __ ld(result_, FieldMemOperand(result_, FixedArray::kHeaderSize));
   __ LoadRoot(t0, Heap::kUndefinedValueRootIndex);
@@ -4581,24 +4557,23 @@ void NameDictionaryLookupStub::GenerateNegativeLookup(MacroAssembler* masm,
     // Compute the masked index: (hash + i + i * i) & mask.
     Register index = scratch0;
     // Capacity is smi 2^n.
-    __ ld(index, FieldMemOperand(properties, kCapacityOffset));
+    __ SmiLoadUntag(index, FieldMemOperand(properties, kCapacityOffset));
     __ Dsubu(index, index, Operand(1));
-    __ And(index, index, Operand(
-        Smi::FromInt(name->Hash() + NameDictionary::GetProbeOffset(i))));
+    __ And(index, index,
+           Operand(name->Hash() + NameDictionary::GetProbeOffset(i)));
 
     // TODO this function
     // Scale the index by multiplying by the entry size.
     ASSERT(NameDictionary::kEntrySize == 3);
     __ dsll(at, index, 1);
-    __ Daddu(index, index, at);
+    __ Daddu(index, index, at);  // index *= 3.
 
     Register entity_name = scratch0;
     // Having undefined at this place means the name is not contained.
     ASSERT_EQ(kSmiTagSize, 1);
     Register tmp = properties;
-    // __ sll(scratch0, index, 1);
-    // TODO(yy) Use Macro.
-    __ dsrl(scratch0, index, 32 - kPointerSizeLog2);
+
+    __ dsll(scratch0, index, kPointerSizeLog2);
     __ Daddu(tmp, properties, scratch0);
     __ ld(entity_name, FieldMemOperand(tmp, kElementsStartOffset));
 
@@ -5059,8 +5034,7 @@ void StoreArrayLiteralElementStub::Generate(MacroAssembler* masm) {
   // Array literal has ElementsKind of FAST_*_ELEMENTS and value is an object.
   __ bind(&fast_elements);
   __ ld(t1, FieldMemOperand(a1, JSObject::kElementsOffset));
-  // __ sll(t2, a3, kPointerSizeLog2 - kSmiTagSize);
-  __ dsrl(t2, a3, 32 - kPointerSizeLog2);
+  __ SmiScale(t2, a3, kPointerSizeLog2);
   __ Daddu(t2, t1, t2);
   __ Daddu(t2, t2, Operand(FixedArray::kHeaderSize - kHeapObjectTag));
   __ sd(a0, MemOperand(t2, 0));
@@ -5074,8 +5048,7 @@ void StoreArrayLiteralElementStub::Generate(MacroAssembler* masm) {
   // and value is Smi.
   __ bind(&smi_element);
   __ ld(t1, FieldMemOperand(a1, JSObject::kElementsOffset));
-  // __ sll(t2, a3, kPointerSizeLog2 - kSmiTagSize);
-  __ dsrl(t2, a3, 32 - kPointerSizeLog2);
+  __ SmiScale(t2, a3, kPointerSizeLog2);
   __ Daddu(t2, t1, t2);
   __ sd(a0, FieldMemOperand(t2, FixedArray::kHeaderSize));
   __ Ret(USE_DELAY_SLOT);

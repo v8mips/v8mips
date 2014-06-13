@@ -113,7 +113,7 @@ static void EmitStackCheck(MacroAssembler* masm_,
   }
   __ LoadRoot(stack_limit_scratch, index);
   __ Branch(&ok, hs, scratch, Operand(stack_limit_scratch));
-  PredictableCodeSizeScope predictable(masm_, 8 * Assembler::kInstrSize);
+  PredictableCodeSizeScope predictable(masm_, 6 * Assembler::kInstrSize);
   __ Call(isolate->builtins()->StackCheck(), RelocInfo::CODE_TARGET);
   __ bind(&ok);
 }
@@ -442,7 +442,6 @@ void FullCodeGenerator::EmitReturnSequence() {
       masm_->MultiPop(static_cast<RegList>(fp.bit() | ra.bit()));
       masm_->Daddu(sp, sp, Operand(sp_delta));
       masm_->Jump(ra);
-      masm_->nop();  // Pad the sequence to 8 bytes to support debugger.
       info_->AddNoFrameRange(no_frame_start, masm_->pc_offset());
     }
 
@@ -1200,8 +1199,7 @@ void FullCodeGenerator::VisitForInStatement(ForInStatement* stmt) {
   // Get the current entry of the array into register a3.
   __ ld(a2, MemOperand(sp, 2 * kPointerSize));
   __ Daddu(a2, a2, Operand(FixedArray::kHeaderSize - kHeapObjectTag));
-  // __ sll(t0, a0, kPointerSizeLog2 - kSmiTagSize);
-  __ dsrl(t0, a0, 32 - kPointerSizeLog2);
+  __ SmiScale(t0, a0, kPointerSizeLog2);
   __ daddu(t0, a2, t0);  // Array base + scaled (smi) index.
   __ ld(a3, MemOperand(t0));  // Current entry.
 
@@ -3771,8 +3769,7 @@ void FullCodeGenerator::EmitGetFromCache(CallRuntime* expr) {
   // a2 now holds finger offset as a smi.
   __ Daddu(a3, cache, Operand(FixedArray::kHeaderSize - kHeapObjectTag));
   // a3 now points to the start of fixed array elements.
-  // __ sll(at, a2, kPointerSizeLog2 - kSmiTagSize);
-  __ dsrl(at, a2, 32 - kPointerSizeLog2);
+  __ SmiScale(at, a2, kPointerSizeLog2);
   __ daddu(a3, a3, at);
   // a3 now points to key of indexed element of cache.
   __ ld(a2, MemOperand(a3));
@@ -3934,11 +3931,12 @@ void FullCodeGenerator::EmitFastAsciiArrayJoin(CallRuntime* expr) {
   __ Dmult(array_length, scratch1);
   // Check for smi overflow. No overflow if higher 33 bits of 64-bit result are
   // zero.
+  // TODO(plind): Can be simplified by untagging the Smi here.
   __ mfhi(scratch2);
   __ Branch(&bailout, ne, scratch2, Operand(zero_reg));
   __ mflo(scratch2);
   // TODO(yy) check the highest bit.
-  __ dsrl32(scratch3, scratch2, 0);
+  // __ dsrl32(scratch3, scratch2, 0);
   __ And(scratch3, scratch2, Operand(0x80000000));
   __ Branch(&bailout, ne, scratch3, Operand(zero_reg));
   __ AdduAndCheckForOverflow(string_length, string_length, scratch2, scratch3);
@@ -4789,7 +4787,7 @@ void BackEdgeTable::PatchAt(Code* unoptimized_code,
                             BackEdgeState target_state,
                             Code* replacement_code) {
   static const int kInstrSize = Assembler::kInstrSize;
-  Address branch_address = pc - 10 * kInstrSize;
+  Address branch_address = pc - 8 * kInstrSize;
   CodePatcher patcher(branch_address, 1);
 
   switch (target_state) {
@@ -4798,8 +4796,6 @@ void BackEdgeTable::PatchAt(Code* unoptimized_code,
       // beq  at, zero_reg, ok
       // lui  t9, <interrupt stub address> upper
       // ori  t9, <interrupt stub address> u-middle
-      // dsll t9, t9, 16
-      // ori  t9, <interrupt stub address> l-middle
       // dsll t9, t9, 16
       // ori  t9, <interrupt stub address> lower
       // jalr t9
@@ -4812,9 +4808,7 @@ void BackEdgeTable::PatchAt(Code* unoptimized_code,
       // addiu at, zero_reg, 1
       // beq  at, zero_reg, ok  ;; Not changed
       // lui  t9, <on-stack replacement address> upper
-      // ori  t9, <on-stack replacement address> u-middle
-      // dsll t9, t9, 16
-      // ori  t9, <on-stack replacement address> l-middle
+      // ori  t9, <on-stack replacement address> middle
       // dsll t9, t9, 16
       // ori  t9, <on-stack replacement address> lower
       // jalr t9  ;; Not changed
@@ -4823,7 +4817,7 @@ void BackEdgeTable::PatchAt(Code* unoptimized_code,
       patcher.masm()->daddiu(at, zero_reg, 1);
       break;
   }
-  Address pc_immediate_load_address = pc - 8 * kInstrSize;
+  Address pc_immediate_load_address = pc - 6 * kInstrSize;
   // Replace the stack check address in the load-immediate (6-instr sequence)
   // with the entry address of the replacement code.
   Assembler::set_target_address_at(pc_immediate_load_address,
@@ -4839,10 +4833,10 @@ BackEdgeTable::BackEdgeState BackEdgeTable::GetBackEdgeState(
     Code* unoptimized_code,
     Address pc) {
   static const int kInstrSize = Assembler::kInstrSize;
-  Address branch_address = pc - 10 * kInstrSize;
-  Address pc_immediate_load_address = pc - 8 * kInstrSize;
+  Address branch_address = pc - 8 * kInstrSize;
+  Address pc_immediate_load_address = pc - 6 * kInstrSize;
 
-  ASSERT(Assembler::IsBeq(Assembler::instr_at(pc - 9 * kInstrSize)));
+  ASSERT(Assembler::IsBeq(Assembler::instr_at(pc - 7 * kInstrSize)));
   if (!Assembler::IsAddImmediate(Assembler::instr_at(branch_address))) {
     ASSERT(reinterpret_cast<uint64_t>(
         Assembler::target_address_at(pc_immediate_load_address)) ==

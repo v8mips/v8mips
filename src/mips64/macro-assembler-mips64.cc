@@ -496,8 +496,7 @@ void MacroAssembler::LoadFromNumberDictionary(Label* miss,
 
   // Compute the capacity mask.
   ld(reg1, FieldMemOperand(elements, SeededNumberDictionary::kCapacityOffset));
-  // sra(reg1, reg1, kSmiTagSize);
-  dsrl32(reg1, reg1, 0);
+  SmiUntag(reg1, reg1);
   Dsubu(reg1, reg1, Operand(1));
 
   // Generate an unrolled loop that performs a few probes before giving up.
@@ -963,10 +962,6 @@ void MacroAssembler::li(Register rd, Operand j, LiFlags mode) {
   ASSERT(!j.is_reg());
   BlockTrampolinePoolScope block_trampoline_pool(this);
   if (!MustUseReg(j.rmode_) && mode == OPTIMIZE_SIZE) {
-    // TODO(plind): there are bugs in these short-cut versions. In one case,
-    //  a 64-bit address operand, was incorrectly interpreted as a 32-bit
-    //  signed negative integer. This must be reviewed / fixed.
-
     // Normal load of an immediate value which does not need Relocation Info.
     if (is_int64_32(j.imm64_)) {
       if (is_int64_16(j.imm64_)) {
@@ -989,12 +984,20 @@ void MacroAssembler::li(Register rd, Operand j, LiFlags mode) {
       dsll(rd, rd, 16);
       ori(rd, rd, j.imm64_ & kImm16Mask);
     }
-  } else {
-    if (MustUseReg(j.rmode_)) {
-      RecordRelocInfo(j.rmode_, j.imm64_);
-    }
+  } else if (MustUseReg(j.rmode_)) {
+    RecordRelocInfo(j.rmode_, j.imm64_);
+    lui(rd, (j.imm64_ >> 32) & kImm16Mask);
+    ori(rd, rd, (j.imm64_ >> 16) & kImm16Mask);
+    dsll(rd, rd, 16);
+    ori(rd, rd, j.imm64_ & kImm16Mask);
+  } else if (mode == ADDRESS_LOAD)  {
     // We always need the same number of instructions as we may need to patch
-    // this code to load another value which may need all 6 instructions.
+    // this code to load another value which may need all 4 instructions.
+    lui(rd, (j.imm64_ >> 32) & kImm16Mask);
+    ori(rd, rd, (j.imm64_ >> 16) & kImm16Mask);
+    dsll(rd, rd, 16);
+    ori(rd, rd, j.imm64_ & kImm16Mask);
+  } else {
     lui(rd, (j.imm64_ >> 48) & kImm16Mask);
     ori(rd, rd, (j.imm64_ >> 32) & kImm16Mask);
     dsll(rd, rd, 16);
@@ -2556,7 +2559,7 @@ int MacroAssembler::CallSize(Address target,
                              const Operand& rt,
                              BranchDelaySlot bd) {
   int size = CallSize(t9, cond, rs, rt, bd);
-  return size + 6 * kInstrSize;
+  return size + 4 * kInstrSize;
 }
 
 
@@ -2573,7 +2576,7 @@ void MacroAssembler::Call(Address target,
   // Must record previous source positions before the
   // li() generates a new code target.
   positions_recorder()->WriteRecordedPositions();
-  li(t9, Operand(target_int, rmode), CONSTANT_SIZE);
+  li(t9, Operand(target_int, rmode), ADDRESS_LOAD);
   Call(t9, cond, rs, rt, bd);
   ASSERT_EQ(CallSize(target, rmode, cond, rs, rt, bd),
             SizeOfCodeGeneratedSince(&start));
@@ -2650,10 +2653,7 @@ void MacroAssembler::Jr(Label* L, BranchDelaySlot bdslot) {
     // Buffer growth (and relocation) must be blocked for internal references
     // until associated instructions are emitted and available to be patched.
     RecordRelocInfo(RelocInfo::INTERNAL_REFERENCE);
-    // lui(at, (imm32 & kHiMask) >> kLuiShift);
-    // ori(at, at, (imm32 & kImm16Mask));
-    // TODO(plind): avoid li()?, due to internal_ref?
-    li(at, Operand(imm64), CONSTANT_SIZE);
+    li(at, Operand(imm64), ADDRESS_LOAD);
   }
   jr(at);
 
@@ -2672,10 +2672,7 @@ void MacroAssembler::Jalr(Label* L, BranchDelaySlot bdslot) {
     // Buffer growth (and relocation) must be blocked for internal references
     // until associated instructions are emitted and available to be patched.
     RecordRelocInfo(RelocInfo::INTERNAL_REFERENCE);
-    // lui(at, (imm32 & kHiMask) >> kLuiShift);
-    // ori(at, at, (imm32 & kImm16Mask));
-    // TODO(plind): avoid li()?, due to internal_ref?
-    li(at, Operand(imm64), CONSTANT_SIZE);
+    li(at, Operand(imm64), ADDRESS_LOAD);
   }
   jalr(at);
 
@@ -4556,15 +4553,13 @@ void MacroAssembler::Prologue(bool code_pre_aging) {
     // GetCodeAgeAndParity() extracts the stub address from this instruction.
     li(t9,
        Operand(reinterpret_cast<uint64_t>(stub->instruction_start())),
-       CONSTANT_SIZE);
+       ADDRESS_LOAD);
     nop();  // Prevent jalr to jal optimization.
     jalr(t9, a0);
     nop();  // Branch delay slot nop.
     nop();  // Pad the empty space.
   } else {
     Push(ra, fp, cp, a1);
-    nop(Assembler::CODE_AGE_SEQUENCE_NOP);
-    nop(Assembler::CODE_AGE_SEQUENCE_NOP);
     nop(Assembler::CODE_AGE_SEQUENCE_NOP);
     nop(Assembler::CODE_AGE_SEQUENCE_NOP);
     nop(Assembler::CODE_AGE_SEQUENCE_NOP);
@@ -4796,6 +4791,62 @@ void MacroAssembler::SmiTagCheckOverflow(Register dst,
     ASSERT(!src.is(overflow));
     SmiTag(dst, src);
     xor_(overflow, dst, src);  // Overflow if (value ^ 2 * value) < 0.
+  }
+}
+
+
+void MacroAssembler::SmiLoadUntag(Register dst, MemOperand src) {
+  if (SmiValuesAre32Bits()) {
+    lw(dst, UntagSmiMemOperand(src.rm(), src.offset()));
+  } else {
+    lw(dst, src);
+    SmiUntag(dst);
+  }
+}
+
+
+void MacroAssembler::SmiLoadScale(Register dst, MemOperand src, int scale) {
+  if (SmiValuesAre32Bits()) {
+    // TODO(plind): not clear if lw or ld faster here, need micro-benchmark.
+    lw(dst, UntagSmiMemOperand(src.rm(), src.offset()));
+    dsll(dst, dst, scale);
+  } else {
+    lw(dst, src);
+    ASSERT(scale >= kSmiTagSize);
+    sll(dst, dst, scale - kSmiTagSize);
+  }
+}
+
+
+// Returns 2 values: the Smi and a scaled version of the int within the Smi.
+void MacroAssembler::SmiLoadWithScale(Register d_smi,
+                                      Register d_scaled,
+                                      MemOperand src,
+                                      int scale) {
+  if (SmiValuesAre32Bits()) {
+    ld(d_smi, src);
+    dsra(d_scaled, d_smi, kSmiShift - scale);
+  } else {
+    lw(d_smi, src);
+    ASSERT(scale >= kSmiTagSize);
+    sll(d_scaled, d_smi, scale - kSmiTagSize);
+  }
+}
+
+
+// Returns 2 values: the untagged Smi (int32) and scaled version of that int.
+void MacroAssembler::SmiLoadUntagWithScale(Register d_int,
+                                           Register d_scaled,
+                                           MemOperand src,
+                                           int scale) {
+  if (SmiValuesAre32Bits()) {
+    lw(d_int, UntagSmiMemOperand(src.rm(), src.offset()));
+    dsll(d_scaled, d_int, scale);
+  } else {
+    lw(d_int, src);
+    // Need both the int and the scaled in, so use two instructions.
+    SmiUntag(d_int);
+    sll(d_scaled, d_int, scale);
   }
 }
 
@@ -5130,6 +5181,8 @@ void MacroAssembler::EmitSeqStringSetCharCheck(Register string,
   li(scratch, Operand(encoding_mask));
   Check(eq, kUnexpectedStringType, at, Operand(scratch));
 
+  // TODO(plind): requires Smi size check code for mips32.
+
   ld(at, FieldMemOperand(string, String::kLengthOffset));
   Check(lt, kIndexIsTooLarge, index, Operand(at));
 
@@ -5262,7 +5315,7 @@ void MacroAssembler::PatchRelocatedValue(Register li_location,
         scratch, Operand(LUI));
     lwu(scratch, MemOperand(li_location));
   }
-  dsrl32(t9, new_value, kImm16Bits);
+  dsrl32(t9, new_value, 0);
   Ins(scratch, t9, 0, kImm16Bits);
   sw(scratch, MemOperand(li_location));
 
@@ -5274,7 +5327,7 @@ void MacroAssembler::PatchRelocatedValue(Register li_location,
         scratch, Operand(ORI));
     lwu(scratch, MemOperand(li_location, kInstrSize));
   }
-  dsrl32(t9, new_value, 0);
+  dsrl(t9, new_value, kImm16Bits);
   Ins(scratch, t9, 0, kImm16Bits);
   sw(scratch, MemOperand(li_location, kInstrSize));
 
@@ -5286,23 +5339,12 @@ void MacroAssembler::PatchRelocatedValue(Register li_location,
         scratch, Operand(ORI));
     lwu(scratch, MemOperand(li_location, kInstrSize * 3));
   }
-  dsrl(t9, new_value, kImm16Bits);
-  Ins(scratch, t9, 0, kImm16Bits);
+
+  Ins(scratch, new_value, 0, kImm16Bits);
   sw(scratch, MemOperand(li_location, kInstrSize * 3));
 
-
-  lwu(scratch, MemOperand(li_location, kInstrSize * 5));
-  // scratch is now ori(at, ...).
-  if (emit_debug_code()) {
-    And(scratch, scratch, kOpcodeMask);
-    Check(eq, kTheInstructionToPatchShouldBeAnOri,
-        scratch, Operand(ORI));
-    lwu(scratch, MemOperand(li_location, kInstrSize * 5));
-  }
-  Ins(scratch, new_value, 0, kImm16Bits);
-  sw(scratch, MemOperand(li_location, kInstrSize * 5));
   // Update the I-cache so the new lui and ori can be executed.
-  FlushICache(li_location, 6);
+  FlushICache(li_location, 4);
 }
 
 void MacroAssembler::GetRelocatedValue(Register li_location,
@@ -5317,6 +5359,7 @@ void MacroAssembler::GetRelocatedValue(Register li_location,
   }
 
   // value now holds a lui instruction. Extract the immediate.
+  andi(value, value, kImm16Mask);
   dsll32(value, value, kImm16Bits);
 
   lwu(scratch, MemOperand(li_location, kInstrSize));
@@ -5330,7 +5373,7 @@ void MacroAssembler::GetRelocatedValue(Register li_location,
   andi(scratch, scratch, kImm16Mask);
   dsll32(scratch, scratch, 0);
 
-  daddu(value, value, scratch);
+  or_(value, value, scratch);
 
   lwu(scratch, MemOperand(li_location, kInstrSize * 3));
   if (emit_debug_code()) {
@@ -5343,19 +5386,9 @@ void MacroAssembler::GetRelocatedValue(Register li_location,
   andi(scratch, scratch, kImm16Mask);
   dsll(scratch, scratch, kImm16Bits);
 
-  daddu(value, value, scratch);
-
-  lwu(scratch, MemOperand(li_location, kInstrSize * 5));
-  if (emit_debug_code()) {
-    And(scratch, scratch, kOpcodeMask);
-    Check(eq, kTheInstructionShouldBeAnOri,
-        scratch, Operand(ORI));
-    lwu(scratch, MemOperand(li_location, kInstrSize * 5));
-  }
-  // "scratch" now holds an ori instruction. Extract the immediate.
-  andi(scratch, scratch, kImm16Mask);
-
-  daddu(value, value, scratch);
+  or_(value, value, scratch);
+  // Sign extend extracted address.
+  dsra(value, value, kImm16Bits);
 }
 
 

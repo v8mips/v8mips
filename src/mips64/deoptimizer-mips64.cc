@@ -14,8 +14,7 @@ namespace internal {
 
 
 int Deoptimizer::patch_size() {
-  // const int kCallInstructionSizeInWords = 4;
-  const int kCallInstructionSizeInWords = 8;
+  const int kCallInstructionSizeInWords = 6;
   return kCallInstructionSizeInWords * Assembler::kInstrSize;
 }
 
