@@ -2209,7 +2209,7 @@ TEST(OptimizedPretenuringAllocationFolding) {
   }
 
   i::ScopedVector<char> source(1024);
-  i::OS::SNPrintF(
+  i::SNPrintF(
       source,
       "var number_elements = %d;"
       "var elements = new Array();"
@@ -2258,7 +2258,7 @@ TEST(OptimizedPretenuringObjectArrayLiterals) {
   }
 
   i::ScopedVector<char> source(1024);
-  i::OS::SNPrintF(
+  i::SNPrintF(
       source,
       "var number_elements = %d;"
       "var elements = new Array(number_elements);"
@@ -2299,7 +2299,7 @@ TEST(OptimizedPretenuringMixedInObjectProperties) {
 
 
   i::ScopedVector<char> source(1024);
-  i::OS::SNPrintF(
+  i::SNPrintF(
       source,
       "var number_elements = %d;"
       "var elements = new Array(number_elements);"
@@ -2349,7 +2349,7 @@ TEST(OptimizedPretenuringDoubleArrayProperties) {
   }
 
   i::ScopedVector<char> source(1024);
-  i::OS::SNPrintF(
+  i::SNPrintF(
       source,
       "var number_elements = %d;"
       "var elements = new Array(number_elements);"
@@ -2389,7 +2389,7 @@ TEST(OptimizedPretenuringdoubleArrayLiterals) {
   }
 
   i::ScopedVector<char> source(1024);
-  i::OS::SNPrintF(
+  i::SNPrintF(
       source,
       "var number_elements = %d;"
       "var elements = new Array(number_elements);"
@@ -2429,7 +2429,7 @@ TEST(OptimizedPretenuringNestedMixedArrayLiterals) {
   }
 
   i::ScopedVector<char> source(1024);
-  i::OS::SNPrintF(
+  i::SNPrintF(
       source,
       "var number_elements = 100;"
       "var elements = new Array(number_elements);"
@@ -2442,8 +2442,7 @@ TEST(OptimizedPretenuringNestedMixedArrayLiterals) {
       "f(); gc();"
       "f(); f();"
       "%%OptimizeFunctionOnNextCall(f);"
-      "f();",
-      AllocationSite::kPretenureMinimumCreated);
+      "f();");
 
   v8::Local<v8::Value> res = CompileRun(source.start());
 
@@ -2478,7 +2477,7 @@ TEST(OptimizedPretenuringNestedObjectLiterals) {
   }
 
   i::ScopedVector<char> source(1024);
-  i::OS::SNPrintF(
+  i::SNPrintF(
       source,
       "var number_elements = %d;"
       "var elements = new Array(number_elements);"
@@ -2527,7 +2526,7 @@ TEST(OptimizedPretenuringNestedDoubleLiterals) {
   }
 
   i::ScopedVector<char> source(1024);
-  i::OS::SNPrintF(
+  i::SNPrintF(
       source,
       "var number_elements = %d;"
       "var elements = new Array(number_elements);"
@@ -2587,7 +2586,7 @@ TEST(OptimizedPretenuringConstructorCalls) {
   // Call new is doing slack tracking for the first
   // JSFunction::kGenerousAllocationCount allocations, and we can't find
   // mementos during that time.
-  i::OS::SNPrintF(
+  i::SNPrintF(
       source,
       "var number_elements = %d;"
       "var elements = new Array(number_elements);"
@@ -2638,7 +2637,7 @@ TEST(OptimizedPretenuringCallNew) {
   // Call new is doing slack tracking for the first
   // JSFunction::kGenerousAllocationCount allocations, and we can't find
   // mementos during that time.
-  i::OS::SNPrintF(
+  i::SNPrintF(
       source,
       "var number_elements = %d;"
       "var elements = new Array(number_elements);"
@@ -2711,7 +2710,7 @@ TEST(Regress1465) {
     AlwaysAllocateScope always_allocate(CcTest::i_isolate());
     for (int i = 0; i < transitions_count; i++) {
       EmbeddedVector<char, 64> buffer;
-      OS::SNPrintF(buffer, "var o = new F; o.prop%d = %d;", i, i);
+      SNPrintF(buffer, "var o = new F; o.prop%d = %d;", i, i);
       CompileRun(buffer.start());
     }
     CompileRun("var root = new F;");
@@ -2743,7 +2742,7 @@ static void AddTransitions(int transitions_count) {
   AlwaysAllocateScope always_allocate(CcTest::i_isolate());
   for (int i = 0; i < transitions_count; i++) {
     EmbeddedVector<char, 64> buffer;
-    OS::SNPrintF(buffer, "var o = new F; o.prop%d = %d;", i, i);
+    SNPrintF(buffer, "var o = new F; o.prop%d = %d;", i, i);
     CompileRun(buffer.start());
   }
 }
@@ -3982,16 +3981,16 @@ TEST(NoWeakHashTableLeakWithIncrementalMarking) {
       LocalContext context;
       HandleScope scope(heap->isolate());
       EmbeddedVector<char, 256> source;
-      OS::SNPrintF(source,
-                   "function bar%d() {"
-                   "  return foo%d(1);"
-                   "};"
-                   "function foo%d(x) { with (x) { return 1 + x; } };"
-                   "bar%d();"
-                   "bar%d();"
-                   "bar%d();"
-                   "%OptimizeFunctionOnNextCall(bar%d);"
-                   "bar%d();", i, i, i, i, i, i, i, i);
+      SNPrintF(source,
+               "function bar%d() {"
+               "  return foo%d(1);"
+               "};"
+               "function foo%d(x) { with (x) { return 1 + x; } };"
+               "bar%d();"
+               "bar%d();"
+               "bar%d();"
+               "%%OptimizeFunctionOnNextCall(bar%d);"
+               "bar%d();", i, i, i, i, i, i, i, i);
       CompileRun(source.start());
     }
     heap->CollectAllGarbage(i::Heap::kNoGCFlags);
@@ -4007,11 +4006,11 @@ TEST(NoWeakHashTableLeakWithIncrementalMarking) {
 
 static Handle<JSFunction> OptimizeDummyFunction(const char* name) {
   EmbeddedVector<char, 256> source;
-  OS::SNPrintF(source,
-              "function %s() { return 0; }"
-              "%s(); %s();"
-              "%%OptimizeFunctionOnNextCall(%s);"
-              "%s();", name, name, name, name, name);
+  SNPrintF(source,
+          "function %s() { return 0; }"
+          "%s(); %s();"
+          "%%OptimizeFunctionOnNextCall(%s);"
+          "%s();", name, name, name, name, name);
   CompileRun(source.start());
   Handle<JSFunction> fun =
       v8::Utils::OpenHandle(

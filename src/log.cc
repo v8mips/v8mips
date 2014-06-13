@@ -122,7 +122,7 @@ class CodeEventLogger::NameBuffer {
   void AppendInt(int n) {
     Vector<char> buffer(utf8_buffer_ + utf8_pos_,
                         kUtf8BufferSize - utf8_pos_);
-    int size = OS::SNPrintF(buffer, "%d", n);
+    int size = SNPrintF(buffer, "%d", n);
     if (size > 0 && utf8_pos_ + size <= kUtf8BufferSize) {
       utf8_pos_ += size;
     }
@@ -131,7 +131,7 @@ class CodeEventLogger::NameBuffer {
   void AppendHex(uint32_t n) {
     Vector<char> buffer(utf8_buffer_ + utf8_pos_,
                         kUtf8BufferSize - utf8_pos_);
-    int size = OS::SNPrintF(buffer, "%x", n);
+    int size = SNPrintF(buffer, "%x", n);
     if (size > 0 && utf8_pos_ + size <= kUtf8BufferSize) {
       utf8_pos_ += size;
     }
@@ -259,7 +259,7 @@ PerfBasicLogger::PerfBasicLogger()
   // Open the perf JIT dump file.
   int bufferSize = sizeof(kFilenameFormatString) + kFilenameBufferPadding;
   ScopedVector<char> perf_dump_name(bufferSize);
-  int size = OS::SNPrintF(
+  int size = SNPrintF(
       perf_dump_name,
       kFilenameFormatString,
       OS::GetCurrentProcessId());
@@ -385,7 +385,7 @@ PerfJitLogger::PerfJitLogger()
   // Open the perf JIT dump file.
   int bufferSize = sizeof(kFilenameFormatString) + kFilenameBufferPadding;
   ScopedVector<char> perf_dump_name(bufferSize);
-  int size = OS::SNPrintF(
+  int size = SNPrintF(
       perf_dump_name,
       kFilenameFormatString,
       OS::GetCurrentProcessId());
@@ -1074,6 +1074,16 @@ void Logger::CodeDeoptEvent(Code* code) {
   Log::MessageBuilder msg(log_);
   int since_epoch = static_cast<int>(timer_.Elapsed().InMicroseconds());
   msg.Append("code-deopt,%ld,%d\n", since_epoch, code->CodeSize());
+  msg.WriteToLogFile();
+}
+
+
+void Logger::CurrentTimeEvent() {
+  if (!log_->IsEnabled()) return;
+  ASSERT(FLAG_log_internal_timer_events);
+  Log::MessageBuilder msg(log_);
+  int since_epoch = static_cast<int>(timer_.Elapsed().InMicroseconds());
+  msg.Append("current-time,%ld\n", since_epoch);
   msg.WriteToLogFile();
 }
 

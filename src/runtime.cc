@@ -245,13 +245,14 @@ MUST_USE_RESULT static MaybeHandle<Object> CreateObjectLiteralBoilerplate(
   int length = constant_properties->length();
   bool should_transform =
       !is_result_from_cache && boilerplate->HasFastProperties();
-  if (should_transform || has_function_literal) {
-    // Normalize the properties of object to avoid n^2 behavior
-    // when extending the object multiple properties. Indicate the number of
-    // properties to be added.
+  bool should_normalize = should_transform || has_function_literal;
+  if (should_normalize) {
+    // TODO(verwaest): We might not want to ever normalize here.
     JSObject::NormalizeProperties(
         boilerplate, KEEP_INOBJECT_PROPERTIES, length / 2);
   }
+  Object::ValueType value_type = should_normalize
+      ? Object::FORCE_TAGGED : Object::OPTIMAL_REPRESENTATION;
 
   // TODO(verwaest): Support tracking representations in the boilerplate.
   for (int index = 0; index < length; index +=2) {
@@ -279,7 +280,7 @@ MUST_USE_RESULT static MaybeHandle<Object> CreateObjectLiteralBoilerplate(
         ASSERT(!name->AsArrayIndex(&element_index));
         maybe_result = JSObject::SetOwnPropertyIgnoreAttributes(
             boilerplate, name, value, NONE,
-            Object::OPTIMAL_REPRESENTATION, mode);
+            value_type, mode);
       }
     } else if (key->ToArrayIndex(&element_index)) {
       // Array index (uint32).
@@ -295,7 +296,7 @@ MUST_USE_RESULT static MaybeHandle<Object> CreateObjectLiteralBoilerplate(
       Handle<String> name = isolate->factory()->NewStringFromAsciiChecked(str);
       maybe_result = JSObject::SetOwnPropertyIgnoreAttributes(
           boilerplate, name, value, NONE,
-          Object::OPTIMAL_REPRESENTATION, mode);
+          value_type, mode);
     }
     // If setting the property on the boilerplate throws an
     // exception, the exception is converted to an empty handle in
@@ -8190,8 +8191,9 @@ RUNTIME_FUNCTION(Runtime_FunctionBindArguments) {
   HandleScope scope(isolate);
   ASSERT(args.length() == 4);
   CONVERT_ARG_HANDLE_CHECKED(JSFunction, bound_function, 0);
-  RUNTIME_ASSERT(args[3]->IsNumber());
-  Handle<Object> bindee = args.at<Object>(1);
+  CONVERT_ARG_HANDLE_CHECKED(Object, bindee, 1);
+  CONVERT_ARG_HANDLE_CHECKED(Object, this_object, 2);
+  CONVERT_NUMBER_ARG_HANDLE_CHECKED(new_length, 3);
 
   // TODO(lrn): Create bound function in C++ code from premade shared info.
   bound_function->shared()->set_bound(true);
@@ -8201,10 +8203,10 @@ RUNTIME_FUNCTION(Runtime_FunctionBindArguments) {
       GetCallerArguments(isolate, 0, &argc);
   // Don't count the this-arg.
   if (argc > 0) {
-    RUNTIME_ASSERT(*arguments[0] == args[2]);
+    RUNTIME_ASSERT(arguments[0].is_identical_to(this_object));
     argc--;
   } else {
-    RUNTIME_ASSERT(args[2]->IsUndefined());
+    RUNTIME_ASSERT(this_object->IsUndefined());
   }
   // Initialize array of bindings (function, this, and any existing arguments
   // if the function was already bound).
@@ -8226,7 +8228,7 @@ RUNTIME_FUNCTION(Runtime_FunctionBindArguments) {
     int array_size = JSFunction::kBoundArgumentsStartIndex + argc;
     new_bindings = isolate->factory()->NewFixedArray(array_size);
     new_bindings->set(JSFunction::kBoundFunctionIndex, *bindee);
-    new_bindings->set(JSFunction::kBoundThisIndex, args[2]);
+    new_bindings->set(JSFunction::kBoundThisIndex, *this_object);
     i = 2;
   }
   // Copy arguments, skipping the first which is "this_arg".
@@ -8237,13 +8239,19 @@ RUNTIME_FUNCTION(Runtime_FunctionBindArguments) {
       isolate->heap()->fixed_cow_array_map());
   bound_function->set_function_bindings(*new_bindings);
 
-  // Update length.
+  // Update length. Have to remove the prototype first so that map migration
+  // is happy about the number of fields.
+  RUNTIME_ASSERT(bound_function->RemovePrototype());
+  Handle<Map> bound_function_map(
+      isolate->native_context()->bound_function_map());
+  JSObject::MigrateToMap(bound_function, bound_function_map);
   Handle<String> length_string = isolate->factory()->length_string();
-  Handle<Object> new_length(args.at<Object>(3));
   PropertyAttributes attr =
       static_cast<PropertyAttributes>(DONT_DELETE | DONT_ENUM | READ_ONLY);
-  Runtime::ForceSetObjectProperty(
-      bound_function, length_string, new_length, attr).Assert();
+  RETURN_FAILURE_ON_EXCEPTION(
+      isolate,
+      JSObject::SetOwnPropertyIgnoreAttributes(bound_function, length_string,
+                                               new_length, attr));
   return *bound_function;
 }
 
@@ -9635,6 +9643,7 @@ RUNTIME_FUNCTION(Runtime_DebugTrace) {
 RUNTIME_FUNCTION(Runtime_DateCurrentTime) {
   HandleScope scope(isolate);
   ASSERT(args.length() == 0);
+  if (FLAG_log_timer_events) LOG(isolate, CurrentTimeEvent());
 
   // According to ECMA-262, section 15.9.1, page 117, the precision of
   // the number in a Date object representing a particular instant in
