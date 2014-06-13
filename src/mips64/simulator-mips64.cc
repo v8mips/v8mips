@@ -1261,7 +1261,7 @@ void Simulator::DieOrDebug() {
 
 void Simulator::TraceRegWr(int64_t value) {
   if (::v8::internal::FLAG_trace_sim) {
-    OS::SNPrintF(trace_buf_, "%016lx", value);
+    SNPrintF(trace_buf_, "%016lx", value);
   }
 }
 
@@ -1269,8 +1269,8 @@ void Simulator::TraceRegWr(int64_t value) {
 // TODO(plind): consider making icount_ printing a flag option.
 void Simulator::TraceMemRd(int64_t addr, int64_t value) {
   if (::v8::internal::FLAG_trace_sim) {
-    OS::SNPrintF(trace_buf_, "%016lx <-- [%016lx]    (%ld)",
-                 value, addr, icount_);
+    SNPrintF(trace_buf_, "%016lx <-- [%016lx]    (%ld)",
+             value, addr, icount_);
   }
 }
 
@@ -1279,20 +1279,20 @@ void Simulator::TraceMemWr(int64_t addr, int64_t value, TraceType t) {
   if (::v8::internal::FLAG_trace_sim) {
     switch (t) {
       case BYTE:
-        OS::SNPrintF(trace_buf_, "%              02lx --> [%016lx]",
-                     static_cast<int8_t>(value), addr);
+        SNPrintF(trace_buf_, "%              02lx --> [%016lx]",
+                 static_cast<int8_t>(value), addr);
         break;
       case HALF:
-        OS::SNPrintF(trace_buf_, "            %04lx --> [%016lx]",
-                     static_cast<int16_t>(value), addr);
+        SNPrintF(trace_buf_, "            %04lx --> [%016lx]",
+                 static_cast<int16_t>(value), addr);
         break;
       case WORD:
-        OS::SNPrintF(trace_buf_, "        %08lx --> [%016lx]",
-                     static_cast<int32_t>(value), addr);
+        SNPrintF(trace_buf_, "        %08lx --> [%016lx]",
+                 static_cast<int32_t>(value), addr);
         break;
       case DWORD:
-        OS::SNPrintF(trace_buf_, "%016lx --> [%016lx]    (%ld)",
-                     value, addr, icount_);
+        SNPrintF(trace_buf_, "%016lx --> [%016lx]    (%ld)",
+                 value, addr, icount_);
         break;
     }
   }
@@ -3010,7 +3010,7 @@ void Simulator::InstructionDecode(Instruction* instr) {
   v8::internal::EmbeddedVector<char, 256> buffer;
 
   if (::v8::internal::FLAG_trace_sim) {
-    OS::SNPrintF(trace_buf_, "");
+    SNPrintF(trace_buf_, "");
     disasm::NameConverter converter;
     disasm::Disassembler dasm(converter);
     // Use a reasonably large buffer.
