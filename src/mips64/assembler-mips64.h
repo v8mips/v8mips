@@ -347,7 +347,8 @@ const FPUControlRegister FCSR = { kFCSRRegister };
 
 // -----------------------------------------------------------------------------
 // Machine instruction Operands.
-
+const int kSmiShift = kSmiTagSize + kSmiShiftSize;
+const uint64_t kSmiShiftMask = (1UL << kSmiShift) - 1;
 // Class Operand represents a shifter operand in data processing instructions.
 class Operand BASE_EMBEDDED {
  public:
@@ -539,12 +540,12 @@ class Assembler : public AssemblerBase {
   // follows LUI/ORI pair is substituted with J/JAL, this constant equals
   // to 3 instructions (LUI+ORI+J/JAL/JR/JALR).
   static const int kInstructionsFor32BitConstant = 3;
-  static const int kInstructionsFor64BitConstant = 7;
+  static const int kInstructionsFor64BitConstant = 5;
 
   // Distance between the instruction referring to the address of the call
   // target and the return address.
   // static const int kCallTargetAddressOffset = 4 * kInstrSize;
-  static const int kCallTargetAddressOffset = 8 * kInstrSize;
+  static const int kCallTargetAddressOffset = 6 * kInstrSize;
 
   // Distance between start of patched return sequence and the emitted address
   // to jump to.
@@ -558,13 +559,13 @@ class Assembler : public AssemblerBase {
   // register.
   static const int kPcLoadDelta = 4;
 
-  static const int kPatchDebugBreakSlotReturnOffset = 8 * kInstrSize;
+  static const int kPatchDebugBreakSlotReturnOffset = 6 * kInstrSize;
 
   // Number of instructions used for the JS return sequence. The constant is
   // used by the debugger to patch the JS return sequence.
-  static const int kJSReturnSequenceInstructions = 8;
+  static const int kJSReturnSequenceInstructions = 7;
   // static const int kDebugBreakSlotInstructions = 4;
-  static const int kDebugBreakSlotInstructions = 8;
+  static const int kDebugBreakSlotInstructions = 6;
   static const int kDebugBreakSlotLength =
       kDebugBreakSlotInstructions * kInstrSize;
 
@@ -1238,7 +1239,7 @@ class Assembler : public AssemblerBase {
   // branch instruction generation, where we use jump instructions rather
   // than regular branch instructions.
   bool trampoline_emitted_;
-  static const int kTrampolineSlotsSize = 8 * kInstrSize;
+  static const int kTrampolineSlotsSize = 6 * kInstrSize;
   static const int kMaxBranchOffset = (1 << (18 - 1)) - 1;
   static const int kInvalidSlotPos = -1;
 

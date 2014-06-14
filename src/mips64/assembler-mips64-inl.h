@@ -113,14 +113,6 @@ int FPURegister::ToAllocationIndex(FPURegister reg) {
 // RelocInfo.
 
 void RelocInfo::apply(intptr_t delta, ICacheFlushMode icache_flush_mode) {
-  if (IsCodeTarget(rmode_)) {
-    uint32_t scope1 = (uint64_t) target_address() & ~kImm28Mask;
-    uint32_t scope2 = reinterpret_cast<uint64_t>(pc_) & ~kImm28Mask;
-
-    if (scope1 != scope2) {
-      Assembler::JumpLabelToJumpRegister(pc_);
-    }
-  }
   if (IsInternalReference(rmode_)) {
     // Absolute code pointer inside code object moves with the code object.
     byte* p = reinterpret_cast<byte*>(pc_);
@@ -271,7 +263,7 @@ void RelocInfo::set_target_cell(Cell* cell,
 }
 
 
-static const int kNoCodeAgeSequenceLength = 11 * Assembler::kInstrSize;
+static const int kNoCodeAgeSequenceLength = 9 * Assembler::kInstrSize;
 
 
 Handle<Object> RelocInfo::code_age_stub_handle(Assembler* origin) {
@@ -352,18 +344,13 @@ bool RelocInfo::IsPatchedReturnSequence() {
   Instr instr1 = Assembler::instr_at(pc_ + 1 * Assembler::kInstrSize);  // ori.
   Instr instr2 = Assembler::instr_at(pc_ + 2 * Assembler::kInstrSize);  // dsll.
   Instr instr3 = Assembler::instr_at(pc_ + 3 * Assembler::kInstrSize);  // ori.
-  Instr instr4 = Assembler::instr_at(pc_ + 4 * Assembler::kInstrSize);  // dsll.
-  Instr instr5 = Assembler::instr_at(pc_ + 5 * Assembler::kInstrSize);  // ori.
-  Instr instr6 = Assembler::instr_at(pc_ + 6 * Assembler::kInstrSize);  // jalr.
-  // Instr instr7 = Assembler::instr_at(pc_ + 7 * Assembler::kInstrSize);  // nop.
+  Instr instr4 = Assembler::instr_at(pc_ + 4 * Assembler::kInstrSize);  // jalr.
 
   bool patched_return = ((instr0 & kOpcodeMask) == LUI &&
                          (instr1 & kOpcodeMask) == ORI &&
                          (instr2 & kFunctionFieldMask) == DSLL &&
                          (instr3 & kOpcodeMask) == ORI &&
-                         (instr4 & kFunctionFieldMask) == DSLL &&
-                         (instr5 & kOpcodeMask) == ORI &&
-                         (instr6 & kFunctionFieldMask) == JALR);
+                         (instr4 & kFunctionFieldMask) == JALR);
   return patched_return;
 }
 

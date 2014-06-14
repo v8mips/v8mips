@@ -2374,7 +2374,7 @@ void LCodeGen::DoCompareMinusZeroAndBranch(LCompareMinusZeroAndBranch* instr) {
     DoubleRegister value = ToDoubleRegister(instr->value());
     EmitFalseBranchF(instr, ne, value, kDoubleRegZero);
     __ FmoveHigh(scratch, value);
-    // TODO(yy): only use low 32-bit value.
+    // Only use low 32-bits of value.
     __ dsll32(scratch, scratch, 0);
     __ dsrl32(scratch, scratch, 0);
     __ li(at, 0x80000000);
@@ -2733,7 +2733,7 @@ void LCodeGen::DoInstanceOfKnownGlobal(LInstanceOfKnownGlobal* instr) {
   // We use Factory::the_hole_value() on purpose instead of loading from the
   // root array to force relocation to be able to later patch
   // with true or false. The distance from map check has to be constant.
-  __ li(result, Operand(factory()->the_hole_value()), CONSTANT_SIZE);
+  __ li(result, Operand(factory()->the_hole_value()));
   __ Branch(&done);
 
   // The inlined call site cache did not match. Check null and string before
@@ -2783,7 +2783,7 @@ void LCodeGen::DoDeferredInstanceOfKnownGlobal(LInstanceOfKnownGlobal* instr,
   Register temp = ToRegister(instr->temp());
   ASSERT(temp.is(t0));
   __ li(InstanceofStub::right(), instr->function());
-  static const int kAdditionalDelta = 15;
+  static const int kAdditionalDelta = 13;
   int delta = masm_->InstructionsGeneratedSince(map_check) + kAdditionalDelta;
   Label before_push_delta;
   __ bind(&before_push_delta);
@@ -3819,7 +3819,7 @@ void LCodeGen::DoMathRound(LMathRound* instr) {
   // Check sign of the result: if the sign changed, the input
   // value was in ]0.5, 0[ and the result should be -0.
   __ mfhc1(result, double_scratch0());
-  // TODO(yy): mfhc1 sign-extends, clear the upper bits.
+  // mfhc1 sign-extends, clear the upper bits.
   __ dsll32(result, result, 0);
   __ dsrl32(result, result, 0);
   __ Xor(result, result, Operand(scratch));
