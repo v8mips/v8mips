@@ -1562,12 +1562,12 @@ typedef double (*SimulatorRuntimeFPIntCall)(double darg0, int32_t arg0);
 // This signature supports direct call in to API function native callback
 // (refer to InvocationCallback in v8.h).
 typedef void (*SimulatorRuntimeDirectApiCall)(int64_t arg0);
-typedef void (*SimulatorRuntimeProfilingApiCall)(int32_t arg0, void* arg1);
+typedef void (*SimulatorRuntimeProfilingApiCall)(int64_t arg0, void* arg1);
 
 // This signature supports direct call to accessor getter callback.
 typedef void (*SimulatorRuntimeDirectGetterCall)(int64_t arg0, int64_t arg1);
 typedef void (*SimulatorRuntimeProfilingGetterCall)(
-    int32_t arg0, int32_t arg1, void* arg2);
+    int64_t arg0, int64_t arg1, void* arg2);
 
 // Software interrupt instructions are used by the simulator to call into the
 // C-based V8 runtime. They are also used for debugging with simulator.
