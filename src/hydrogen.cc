@@ -7627,6 +7627,9 @@ bool HOptimizedGraphBuilder::TryInline(Handle<JSFunction> target,
 
   // Parse and allocate variables.
   CompilationInfo target_info(target, zone());
+  // Use the same AstValueFactory for creating strings in the sub-compilation
+  // step, but don't transfer ownership to target_info.
+  target_info.SetAstValueFactory(top_info()->ast_value_factory(), false);
   Handle<SharedFunctionInfo> target_shared(target->shared());
   if (!Parser::Parse(&target_info) || !Scope::Analyze(&target_info)) {
     if (target_info.isolate()->has_pending_exception()) {
@@ -11012,7 +11015,7 @@ void HOptimizedGraphBuilder::BuildEmitInObjectProperties(
         // 1) it's a child object of another object with a valid allocation site
         // 2) we can just use the mode of the parent object for pretenuring
         HInstruction* double_box =
-            Add<HAllocate>(heap_number_constant, HType::HeapNumber(),
+            Add<HAllocate>(heap_number_constant, HType::HeapObject(),
                 pretenure_flag, HEAP_NUMBER_TYPE);
         AddStoreMapConstant(double_box,
             isolate()->factory()->heap_number_map());

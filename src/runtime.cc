@@ -9523,7 +9523,8 @@ RUNTIME_FUNCTION(RuntimeHidden_StackGuard) {
   ASSERT(args.length() == 0);
 
   // First check if this is a real stack overflow.
-  if (isolate->stack_guard()->IsStackOverflow()) {
+  StackLimitCheck check(isolate);
+  if (check.JsHasOverflowed()) {
     return isolate->StackOverflow();
   }
 
@@ -9537,7 +9538,8 @@ RUNTIME_FUNCTION(RuntimeHidden_TryInstallOptimizedCode) {
   CONVERT_ARG_HANDLE_CHECKED(JSFunction, function, 0);
 
   // First check if this is a real stack overflow.
-  if (isolate->stack_guard()->IsStackOverflow()) {
+  StackLimitCheck check(isolate);
+  if (check.JsHasOverflowed()) {
     SealHandleScope shs(isolate);
     return isolate->StackOverflow();
   }

@@ -746,10 +746,12 @@ FunctionLiteral* ParserTraits::ParseFunctionLiteral(
     bool is_generator,
     int function_token_position,
     FunctionLiteral::FunctionType type,
+    FunctionLiteral::ArityRestriction arity_restriction,
     bool* ok) {
   return parser_->ParseFunctionLiteral(name, function_name_location,
                                        name_is_strict_reserved, is_generator,
-                                       function_token_position, type, ok);
+                                       function_token_position, type,
+                                       arity_restriction, ok);
 }
 
 
@@ -909,6 +911,7 @@ FunctionLiteral* Parser::DoParseProgram(CompilationInfo* info,
       }
     }
 
+    ast_value_factory_->Internalize(isolate());
     if (ok) {
       result = factory()->NewFunctionLiteral(
           ast_value_factory_->empty_string(),
@@ -1020,6 +1023,7 @@ FunctionLiteral* Parser::ParseLazy(Utf16CharacterStream* source) {
                                   shared_info->is_generator(),
                                   RelocInfo::kNoPosition,
                                   function_type,
+                                  FunctionLiteral::NORMAL_ARITY,
                                   &ok);
     // Make sure the results agree.
     ASSERT(ok == (result != NULL));
@@ -1028,6 +1032,7 @@ FunctionLiteral* Parser::ParseLazy(Utf16CharacterStream* source) {
   // Make sure the target stack is empty.
   ASSERT(target_stack_ == NULL);
 
+  ast_value_factory_->Internalize(isolate());
   if (result == NULL) {
     if (stack_overflow()) {
       isolate()->StackOverflow();
@@ -1871,6 +1876,7 @@ Statement* Parser::ParseFunctionDeclaration(ZoneList<const AstString*>* names,
                                               is_generator,
                                               pos,
                                               FunctionLiteral::DECLARATION,
+                                              FunctionLiteral::NORMAL_ARITY,
                                               CHECK_OK);
   // Even if we're not at the top-level of the global or a function
   // scope, we treat it as such and introduce the function with its
@@ -3303,9 +3309,16 @@ FunctionLiteral* Parser::ParseFunctionLiteral(
     bool is_generator,
     int function_token_pos,
     FunctionLiteral::FunctionType function_type,
+    FunctionLiteral::ArityRestriction arity_restriction,
     bool* ok) {
   // Function ::
   //   '(' FormalParameterList? ')' '{' FunctionBody '}'
+  //
+  // Getter ::
+  //   '(' ')' '{' FunctionBody '}'
+  //
+  // Setter ::
+  //   '(' PropertySetParameterList ')' '{' FunctionBody '}'
 
   int pos = function_token_pos == RelocInfo::kNoPosition
       ? peek_position() : function_token_pos;
@@ -3400,7 +3413,9 @@ FunctionLiteral* Parser::ParseFunctionLiteral(
     Scanner::Location dupe_error_loc = Scanner::Location::invalid();
     Scanner::Location reserved_loc = Scanner::Location::invalid();
 
-    bool done = (peek() == Token::RPAREN);
+    bool done = arity_restriction == FunctionLiteral::GETTER_ARITY ||
+        (peek() == Token::RPAREN &&
+         arity_restriction != FunctionLiteral::SETTER_ARITY);
     while (!done) {
       bool is_strict_reserved = false;
       const AstString* param_name =
@@ -3425,6 +3440,7 @@ FunctionLiteral* Parser::ParseFunctionLiteral(
         *ok = false;
         return NULL;
       }
+      if (arity_restriction == FunctionLiteral::SETTER_ARITY) break;
       done = (peek() == Token::RPAREN);
       if (!done) Expect(Token::COMMA, CHECK_OK);
     }
@@ -3870,6 +3886,7 @@ void Parser::RegisterTargetUse(Label* target, Target* stop) {
 
 
 void Parser::ThrowPendingError() {
+  ASSERT(ast_value_factory_->IsInternalized());
   if (has_pending_error_) {
     MessageLocation location(script_,
                              pending_error_location_.beg_pos,
@@ -4793,9 +4810,11 @@ bool RegExpParser::ParseRegExp(FlatStringReader* input,
 
 bool Parser::Parse() {
   ASSERT(info()->function() == NULL);
-  ASSERT(info()->ast_value_factory() == NULL);
   FunctionLiteral* result = NULL;
-  ast_value_factory_ = new AstValueFactory(zone());
+  ast_value_factory_ = info()->ast_value_factory();
+  if (ast_value_factory_ == NULL) {
+    ast_value_factory_ = new AstValueFactory(zone());
+  }
   if (allow_natives_syntax() || extension_ != NULL) {
     // If intrinsics are allowed, the Parser cannot operate independent of the
     // V8 heap because of Rumtime. Tell the string table to internalize strings
@@ -4828,9 +4847,11 @@ bool Parser::Parse() {
     }
   }
   info()->SetFunction(result);
-  ast_value_factory_->Internalize(isolate());
+  ASSERT(ast_value_factory_->IsInternalized());
   // info takes ownership of ast_value_factory_.
-  info()->SetAstValueFactory(ast_value_factory_);
+  if (info()->ast_value_factory() == NULL) {
+    info()->SetAstValueFactory(ast_value_factory_);
+  }
   ast_value_factory_ = NULL;
   return (result != NULL);
 }
