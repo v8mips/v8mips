@@ -350,7 +350,7 @@ static void Generate_JSConstructStubHelper(MacroAssembler* masm,
     }
 
     // Preserve the two incoming parameters on the stack.
-    // __ sll(a0, a0, kSmiTagSize);  // Tag arguments count.
+    // Tag arguments count.
     __ dsll32(a0, a0, 0);
     __ MultiPushReversed(a0.bit() | a1.bit());
 
@@ -384,14 +384,14 @@ static void Generate_JSConstructStubHelper(MacroAssembler* masm,
         Label allocate;
         MemOperand bit_field3 = FieldMemOperand(a2, Map::kBitField3Offset);
         // Check if slack tracking is enabled.
-        __ lbu(t0, bit_field3);
+        __ lwu(t0, bit_field3);
         __ DecodeField<Map::ConstructionCount>(t2, t0);
         __ Branch(&allocate, eq, t2, Operand(static_cast<int64_t>(JSFunction::kNoSlackTracking)));
         // Decrease generous allocation count.
         __ Dsubu(t0, t0, Operand(1 << Map::ConstructionCount::kShift));
         __ Branch(USE_DELAY_SLOT,
             &allocate, ne, t2, Operand(JSFunction::kFinishSlackTracking));
-        __ sb(t0, bit_field3);  // In delay slot.
+        __ sw(t0, bit_field3);  // In delay slot.
 
         __ Push(a1, a2, a1);  // a1 = Constructor.
         __ CallRuntime(Runtime::kHiddenFinalizeInstanceSize, 1);
@@ -450,7 +450,7 @@ static void Generate_JSConstructStubHelper(MacroAssembler* masm,
             eq, t2, Operand(static_cast<int64_t>(JSFunction::kNoSlackTracking)));
 
         // Allocate object with a slack.
-        __ lw(a0, FieldMemOperand(a2, Map::kInstanceSizesOffset));
+        __ lwu(a0, FieldMemOperand(a2, Map::kInstanceSizesOffset));
         __ Ext(a0, a0, Map::kPreAllocatedPropertyFieldsByte * kBitsPerByte,
                 kBitsPerByte);
         __ dsll(at, a0, kPointerSizeLog2);
@@ -543,7 +543,7 @@ static void Generate_JSConstructStubHelper(MacroAssembler* masm,
       __ LoadRoot(t6, Heap::kFixedArrayMapRootIndex);
       __ mov(a2, t5);
       __ sd(t6, MemOperand(a2, JSObject::kMapOffset));
-      // __ sll(a0, a3, kSmiTagSize);
+      // Tag number of elements.
       __ dsll32(a0, a3, 0);
       __ sd(a0, MemOperand(a2, FixedArray::kLengthOffset));
       __ Daddu(a2, a2, Operand(2 * kPointerSize));
@@ -668,7 +668,6 @@ static void Generate_JSConstructStubHelper(MacroAssembler* masm,
     __ SmiUntag(a3);
     __ jmp(&entry);
     __ bind(&loop);
-    // __ sll(t0, a3, kPointerSizeLog2 - kSmiTagSize);
     __ dsll(t0, a3, kPointerSizeLog2);
     __ Daddu(t0, a2, Operand(t0));
     __ ld(t1, MemOperand(t0));
