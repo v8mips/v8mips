@@ -308,8 +308,10 @@ void FullCodeGenerator::Generate() {
       Label ok;
       __ LoadRoot(at, Heap::kStackLimitRootIndex);
       __ Branch(&ok, hs, sp, Operand(at));
-      PredictableCodeSizeScope predictable(masm_, 6 * Assembler::kInstrSize);
-      __ Call(isolate()->builtins()->StackCheck(), RelocInfo::CODE_TARGET);
+      Handle<Code> stack_check = isolate()->builtins()->StackCheck();
+      PredictableCodeSizeScope predictable(masm_,
+          masm_->CallSize(stack_check, RelocInfo::CODE_TARGET));
+      __ Call(stack_check, RelocInfo::CODE_TARGET);
       __ bind(&ok);
     }
 
