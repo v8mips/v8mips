@@ -4863,7 +4863,7 @@ void LCodeGen::DoSmiTag(LSmiTag* instr) {
   Register output = ToRegister(instr->result());
   if (hchange->CheckFlag(HValue::kCanOverflow) &&
       hchange->value()->CheckFlag(HValue::kUint32)) {
-    __ And(at, input, Operand(0xc0000000));
+    __ And(at, input, Operand(0x80000000));
     DeoptimizeIf(ne, instr->environment(), at, Operand(zero_reg));
   }
   if (hchange->CheckFlag(HValue::kCanOverflow) &&

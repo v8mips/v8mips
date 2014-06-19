@@ -2327,7 +2327,7 @@ void FullCodeGenerator::EmitInlineSmiBinaryOp(BinaryOperation* expr,
       __ SmiUntag(scratch1, left);
       __ GetLeastBitsFromSmi(scratch2, right, 5);
       __ dsrlv(scratch1, scratch1, scratch2);
-      __ And(scratch2, scratch1, 0xc0000000);
+      __ And(scratch2, scratch1, 0x80000000);
       __ Branch(&stub_call, ne, scratch2, Operand(zero_reg));
       __ SmiTag(v0, scratch1);
       break;
