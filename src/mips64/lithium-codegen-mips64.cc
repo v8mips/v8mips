@@ -4117,7 +4117,8 @@ void LCodeGen::DoStoreNamedField(LStoreNamedField* instr) {
   Representation representation = instr->representation();
 
   Register object = ToRegister(instr->object());
-  Register scratch = scratch0();
+  Register scratch2 = scratch1();
+  Register scratch1 = scratch0();
   HObjectAccess access = instr->hydrogen()->access();
   int offset = access.offset();
   if (access.IsExternalMemory()) {
@@ -4144,13 +4145,13 @@ void LCodeGen::DoStoreNamedField(LStoreNamedField* instr) {
   if (instr->hydrogen()->has_transition()) {
     Handle<Map> transition = instr->hydrogen()->transition_map();
     AddDeprecationDependency(transition);
-    __ li(scratch, Operand(transition));
-    __ sd(scratch, FieldMemOperand(object, HeapObject::kMapOffset));
+    __ li(scratch1, Operand(transition));
+    __ sd(scratch1, FieldMemOperand(object, HeapObject::kMapOffset));
     if (instr->hydrogen()->NeedsWriteBarrierForMap()) {
       Register temp = ToRegister(instr->temp());
       // Update the write barrier for the map field.
       __ RecordWriteForMap(object,
-                           scratch,
+                           scratch1,
                            temp,
                            GetRAState(),
                            kSaveFPRegs);
@@ -4158,13 +4159,18 @@ void LCodeGen::DoStoreNamedField(LStoreNamedField* instr) {
   }
 
   // Do the store.
+  Register destination = object;
+  if (!access.IsInobject()) {
+       destination = scratch1;
+    __ ld(destination, FieldMemOperand(object, JSObject::kPropertiesOffset));
+  }
   Register value = ToRegister(instr->value());
   if (representation.IsSmi() && SmiValuesAre32Bits() &&
       instr->hydrogen()->value()->representation().IsInteger32()) {
     ASSERT(instr->hydrogen()->store_mode() == STORE_TO_INITIALIZED_ENTRY);
     if (FLAG_debug_code) {
-      __ Load(scratch, FieldMemOperand(object, offset), representation);
-      __ AssertSmi(scratch);
+      __ Load(scratch2, FieldMemOperand(destination, offset), representation);
+      __ AssertSmi(scratch2);
     }
 
     // Store int value directly to upper half of the smi.
@@ -4172,39 +4178,21 @@ void LCodeGen::DoStoreNamedField(LStoreNamedField* instr) {
     representation = Representation::Integer32();
   }
 
-  if (access.IsInobject()) {
-    MemOperand operand = FieldMemOperand(object, offset);
-    __ Store(value, operand, representation);
-    if (instr->hydrogen()->NeedsWriteBarrier()) {
-      // Update the write barrier for the object for in-object properties.
-      __ RecordWriteField(object,
-                          offset,
-                          value,
-                          scratch,
-                          GetRAState(),
-                          kSaveFPRegs,
-                          EMIT_REMEMBERED_SET,
-                          instr->hydrogen()->SmiCheckForWriteBarrier(),
-                          instr->hydrogen()->PointersToHereCheckForValue());
-    }
-  } else {
-    __ ld(scratch, FieldMemOperand(object, JSObject::kPropertiesOffset));
-    MemOperand operand = FieldMemOperand(scratch, offset);
-    __ Store(value, operand, representation);
-    if (instr->hydrogen()->NeedsWriteBarrier()) {
-      // Update the write barrier for the properties array.
-      // object is used as a scratch register.
-      __ RecordWriteField(scratch,
-                          offset,
-                          value,
-                          object,
-                          GetRAState(),
-                          kSaveFPRegs,
-                          EMIT_REMEMBERED_SET,
-                          instr->hydrogen()->SmiCheckForWriteBarrier(),
-                          instr->hydrogen()->PointersToHereCheckForValue());
-    }
+  MemOperand operand = FieldMemOperand(destination, offset);
+  __ Store(value, operand, representation);
+  if (instr->hydrogen()->NeedsWriteBarrier()) {
+    // Update the write barrier for the object for in-object properties.
+    __ RecordWriteField(destination,
+                        offset,
+                        value,
+                        scratch2,
+                        GetRAState(),
+                        kSaveFPRegs,
+                        EMIT_REMEMBERED_SET,
+                        instr->hydrogen()->SmiCheckForWriteBarrier(),
+                        instr->hydrogen()->PointersToHereCheckForValue());
   }
+
 }
 
 
@@ -4438,6 +4426,7 @@ void LCodeGen::DoStoreKeyedFixedArray(LStoreKeyed* instr) {
     STATIC_ASSERT(kSmiTag == 0);
     STATIC_ASSERT(kSmiTagSize + kSmiShiftSize == 32);
     offset += kPointerSize / 2;
+    representation = Representation::Integer32();
   }
 
   __ Store(value, MemOperand(store_base, offset), representation);
