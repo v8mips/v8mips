@@ -28,10 +28,11 @@
 #include <stdlib.h>
 
 #include "src/v8.h"
+#include "test/cctest/cctest.h"
+
 #include "src/macro-assembler.h"
 #include "src/mips64/macro-assembler-mips64.h"
 #include "src/mips64/simulator-mips64.h"
-#include "test/cctest/cctest.h"
 
 
 using namespace v8::internal;

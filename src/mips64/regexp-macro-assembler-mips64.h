@@ -6,10 +6,9 @@
 #ifndef V8_MIPS_REGEXP_MACRO_ASSEMBLER_MIPS_H_
 #define V8_MIPS_REGEXP_MACRO_ASSEMBLER_MIPS_H_
 
-#include "src/mips64/assembler-mips64.h"
-#include "src/mips64/assembler-mips64-inl.h"
 #include "src/macro-assembler.h"
-#include "src/code.h"
+#include "src/mips64/assembler-mips64-inl.h"
+#include "src/mips64/assembler-mips64.h"
 #include "src/mips64/macro-assembler-mips64.h"
 
 namespace v8 {

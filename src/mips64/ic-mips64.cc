@@ -8,8 +8,8 @@
 
 #if V8_TARGET_ARCH_MIPS64
 
-#include "src/codegen.h"
 #include "src/code-stubs.h"
+#include "src/codegen.h"
 #include "src/ic-inl.h"
 #include "src/runtime.h"
 #include "src/stub-cache.h"
