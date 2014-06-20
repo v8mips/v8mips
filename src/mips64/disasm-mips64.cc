@@ -440,7 +440,7 @@ void Decoder::Unknown(Instruction* instr) {
 
 int Decoder::DecodeBreakInstr(Instruction* instr) {
   // This is already known to be BREAK instr, just extract the code.
-  if (instr->Bits(25,6) == kMaxStopCode) {  // This is stop(msg)
+  if (instr->Bits(25, 6) == kMaxStopCode) {  // This is stop(msg)
     Format(instr, "break, code: 'code");
     out_buffer_pos_ += SNPrintF(out_buffer_ + out_buffer_pos_,
                                 "\n%p       %08lx       stop msg: %s",
@@ -1012,7 +1012,7 @@ void Decoder::DecodeTypeImmediate(Instruction* instr) {
       Format(instr, "sdc1    'ft, 'imm16s('rs)");
       break;
     default:
-      printf("a 0x%x \n",instr->OpcodeFieldRaw());
+      printf("a 0x%x \n", instr->OpcodeFieldRaw());
     UNREACHABLE();
       break;
   }

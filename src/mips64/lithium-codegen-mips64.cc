@@ -3288,7 +3288,7 @@ void LCodeGen::DoLoadKeyedFixedArray(LLoadKeyed* instr) {
     // check, which can be tagged, so that case must be handled here, too.
     if (instr->hydrogen()->key()->representation().IsSmi()) {
       // __ sll(scratch, key, kPointerSizeLog2 - kSmiTagSize);
-    // TODO right?
+    // TODO(plind): right?
     __ dsra(scratch, key, 32 - kPointerSizeLog2);
     __ daddu(scratch, elements, scratch);
     } else {
@@ -4104,7 +4104,7 @@ void LCodeGen::DoInnerAllocatedObject(LInnerAllocatedObject* instr) {
   Register base = ToRegister(instr->base_object());
   if (instr->offset()->IsConstantOperand()) {
     LConstantOperand* offset = LConstantOperand::cast(instr->offset());
-    // TODO right?
+    // TODO(plind): right?
     __ Daddu(result, base, Operand(ToInteger32(offset)));
   } else {
     Register offset = ToRegister(instr->offset());

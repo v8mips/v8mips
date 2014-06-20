@@ -130,6 +130,7 @@ TEST(CopyBytes) {
   }
 }
 
+
 TEST(LoadConstants) {
   CcTest::InitializeVM();
   Isolate* isolate = Isolate::Current();
@@ -171,6 +172,7 @@ TEST(LoadConstants) {
   }
 
 }
+
 
 TEST(LoadAddress) {
   CcTest::InitializeVM();

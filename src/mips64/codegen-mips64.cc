@@ -833,7 +833,7 @@ void StringCharLoadGenerator::Generate(MacroAssembler* masm,
                                        Register index,
                                        Register result,
                                        Label* call_runtime) {
- // Fetch the instance type of the receiver into result register.
+  // Fetch the instance type of the receiver into result register.
   __ ld(result, FieldMemOperand(string, HeapObject::kMapOffset));
   __ lbu(result, FieldMemOperand(result, Map::kInstanceTypeOffset));
 

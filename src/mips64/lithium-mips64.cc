@@ -1277,8 +1277,8 @@ LInstruction* LChunkBuilder::DoDivByPowerOf2I(HDiv* instr) {
       (instr->CheckFlag(HValue::kCanOverflow) && divisor == -1) ||
       (!instr->CheckFlag(HInstruction::kAllUsesTruncatingToInt32) &&
       divisor != 1 && divisor != -1)) {
-   result = AssignEnvironment(result);
- }
+    result = AssignEnvironment(result);
+  }
   return result;
 }
 

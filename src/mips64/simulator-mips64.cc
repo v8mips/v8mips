@@ -26,14 +26,10 @@ namespace v8 {
 namespace internal {
 
 // Utils functions.
-//bool HaveSameSign(int32_t a, int32_t b) {
-//  return ((a ^ b) >= 0);
-//}
-
-
 bool HaveSameSign(int64_t a, int64_t b) {
   return ((a ^ b) >= 0);
 }
+
 
 uint32_t get_fcsr_condition_bit(uint32_t cc) {
   if (cc == 0) {
@@ -145,7 +141,7 @@ void MipsDebugger::Stop(Instruction* instr) {
     instr->SetInstructionBits(kNopInstr);
     reinterpret_cast<Instr*>(msg_address)->SetInstructionBits(kNopInstr);
   }
-  // TODO yuyin 2 -> 3?
+  // TODO(yuyin): 2 -> 3?
   sim_->set_pc(sim_->get_pc() + 3 * Instruction::kInstructionSize);
 }
 
@@ -168,7 +164,7 @@ void MipsDebugger::Stop(Instruction* instr) {
     sim_->watched_stops_[code].desc = msg;
   }
   PrintF("Simulator hit %s (%u)\n", msg, code);
-  // TODO yuyin 2 -> 3?
+  // TODO(yuyin): 2 -> 3?
   sim_->set_pc(sim_->get_pc() + 3 * Instruction::kInstrSize);
   Debug();
 }
@@ -528,7 +524,7 @@ void MipsDebugger::Debug() {
           if (((value & 1) == 0) || current_heap->Contains(obj)) {
             PrintF(" (");
             if ((value & 1) == 0) {
-              PrintF("smi %d", (int)(value >> 32));
+              PrintF("smi %d", static_cast<int>(value >> 32));
             } else {
               obj->ShortPrint();
             }
@@ -1338,7 +1334,7 @@ int32_t Simulator::ReadW(int64_t addr, Instruction* instr) {
            addr, reinterpret_cast<intptr_t>(instr));
     DieOrDebug();
   }
- if ((addr & 0x3) == 0) {
+  if ((addr & 0x3) == 0) {
     int32_t* ptr = reinterpret_cast<int32_t*>(addr);
     TraceMemRd(addr, static_cast<int64_t>(*ptr));
     return *ptr;
@@ -1358,7 +1354,7 @@ uint32_t Simulator::ReadWU(int64_t addr, Instruction* instr) {
            addr, reinterpret_cast<intptr_t>(instr));
     DieOrDebug();
   }
- if ((addr & 0x3) == 0) {
+  if ((addr & 0x3) == 0) {
     uint32_t* ptr = reinterpret_cast<uint32_t*>(addr);
     TraceMemRd(addr, static_cast<int64_t>(*ptr));
     return *ptr;
@@ -1969,7 +1965,7 @@ void Simulator::ConfigureTypeRegister(Instruction* instr,
           *alu_out = FCSR_;
           break;
         case MFC1:
-          *alu_out = static_cast<int64_t>( get_fpu_register_word(fs_reg) );
+          *alu_out = static_cast<int64_t>(get_fpu_register_word(fs_reg));
           break;
         case DMFC1:
           *alu_out = get_fpu_register(fs_reg);
@@ -2481,7 +2477,7 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
               }
               break;
             }
-            case FLOOR_L_D: { // Mips64r2 instruction.
+            case FLOOR_L_D: {  // Mips64r2 instruction.
               double rounded = floor(fs);
               int64_t result = static_cast<int64_t>(rounded);
               set_fpu_register(fd_reg, result);
@@ -2490,7 +2486,7 @@ void Simulator::DecodeTypeRegister(Instruction* instr) {
               }
               break;
             }
-            case CEIL_L_D: { // Mips64r2 instruction.
+            case CEIL_L_D: {  // Mips64r2 instruction.
               double rounded = ceil(fs);
               int64_t result = static_cast<int64_t>(rounded);
               set_fpu_register(fd_reg, result);
@@ -2765,7 +2761,7 @@ void Simulator::DecodeTypeImmediate(Instruction* instr) {
           break;
         default:
           UNREACHABLE();
-      };
+      }
       switch (instr->RtFieldRaw()) {
         case BLTZ:
         case BLTZAL:

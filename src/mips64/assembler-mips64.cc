@@ -1376,7 +1376,7 @@ void Assembler::rotrv(Register rd, Register rt, Register rs) {
 
 
 void Assembler::dsll(Register rd, Register rt, uint16_t sa) {
-  GenInstrRegister(SPECIAL, zero_reg, rt, rd, sa,DSLL);
+  GenInstrRegister(SPECIAL, zero_reg, rt, rd, sa, DSLL);
 }
 
 
@@ -1422,7 +1422,7 @@ void Assembler::dsrav(Register rd, Register rt, Register rs) {
 
 
 void Assembler::dsll32(Register rd, Register rt, uint16_t sa) {
-  GenInstrRegister(SPECIAL, zero_reg, rt, rd, sa,DSLL32);
+  GenInstrRegister(SPECIAL, zero_reg, rt, rd, sa, DSLL32);
 }
 
 
@@ -2107,7 +2107,7 @@ int Assembler::RelocateInternalReference(byte* pc, intptr_t pc_delta) {
     int64_t imm = (instr_lui & static_cast<int64_t>(kImm16Mask)) << 48;
     imm |= (instr_ori & static_cast<int64_t>(kImm16Mask)) << 32;
     imm |= (instr_ori2 & static_cast<int64_t>(kImm16Mask)) << 16;
-    //Sign extend address.
+    // Sign extend address.
     imm >>= 16;
 
     if (imm == kEndOfJumpChain) {
@@ -2333,7 +2333,7 @@ Address Assembler::target_address_at(Address pc) {
           ((uint64_t)(GetImmediate16(instr3))));
 
     // Sign extend to get canonical address.
-    addr = (addr << 16 ) >> 16;
+    addr = (addr << 16) >> 16;
     return reinterpret_cast<Address>(addr);
   }
   // We should never get here, force a bad address if we do.

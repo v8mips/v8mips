@@ -1244,6 +1244,7 @@ void ICCompareStub::GenerateGeneric(MacroAssembler* masm) {
   GenerateMiss(masm);
 }
 
+
 void StoreRegistersStateStub::Generate(MacroAssembler* masm) {
   __ mov(t9, ra);
   __ pop(ra);
@@ -1267,6 +1268,7 @@ void RestoreRegistersStateStub::Generate(MacroAssembler* masm) {
   }
   __ Jump(t9);
 }
+
 
 void StoreBufferOverflowStub::Generate(MacroAssembler* masm) {
   // We don't allow a GC during a store buffer overflow so there is no need to
@@ -2585,7 +2587,7 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
   // Or          number_of_captures * 2 <= offsets vector size - 2
   // Multiplying by 2 comes for free since a2 is smi-tagged.
   STATIC_ASSERT(kSmiTag == 0);
-  // TODO yuyin
+  // TODO(yuyin):
   // STATIC_ASSERT(kSmiTagSize + kSmiShiftSize == 1);
   STATIC_ASSERT(Isolate::kJSRegexpStaticOffsetsVectorSize >= 2);
   // __ Branch(
@@ -2723,7 +2725,7 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
   //   [sp + 1] - Argument 5
   //   [sp + 0] - saved ra
 
-  if ( kMipsAbi == kN64) {
+  if (kMipsAbi == kN64) {
     // Argument 9: Pass current isolate address.
     __ li(a0, Operand(ExternalReference::isolate_address(isolate())));
     __ sd(a0, MemOperand(sp, 1 * kPointerSize));
@@ -3355,7 +3357,7 @@ void CallIC_ArrayStub::Generate(MacroAssembler* masm) {
 
   __ bind(&miss);
   GenerateMiss(masm, IC::kCallIC_Customization_Miss);
-  
+
   // The slow case, we need this no matter what to complete a call after a miss.
   CallFunctionNoFeedback(masm,
                         arg_count(),
@@ -4478,7 +4480,7 @@ void NameDictionaryLookupStub::GenerateNegativeLookup(MacroAssembler* masm,
     __ And(index, index,
            Operand(name->Hash() + NameDictionary::GetProbeOffset(i)));
 
-    // TODO this function
+    // TODO(plind): this function
     // Scale the index by multiplying by the entry size.
     ASSERT(NameDictionary::kEntrySize == 3);
     __ dsll(at, index, 1);
@@ -4674,7 +4676,7 @@ void NameDictionaryLookupStub::Generate(MacroAssembler* masm) {
 
 
     ASSERT_EQ(kSmiTagSize, 1);
-    // TODO what 2 mean?
+    // TODO(plind): what 2 mean?
     __ dsll(index, index, kPointerSizeLog2);
     __ Daddu(index, index, dictionary);
     __ ld(entry_key, FieldMemOperand(index, kElementsStartOffset));

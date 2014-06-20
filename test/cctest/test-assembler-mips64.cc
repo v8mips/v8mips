@@ -367,7 +367,7 @@ TEST(MIPS4) {
   // mXhc1 is mips32/64-r2 only, not r1,
   // but we will not support r1 in practice.
   __ mfc1(t0, f4);
-  __ mfhc1(t1,f4);
+  __ mfhc1(t1, f4);
   __ dmfc1(t2, f5);
 
   __ mtc1(t0, f5);

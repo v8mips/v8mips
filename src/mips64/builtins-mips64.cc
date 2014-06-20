@@ -386,7 +386,8 @@ static void Generate_JSConstructStubHelper(MacroAssembler* masm,
         // Check if slack tracking is enabled.
         __ lwu(t0, bit_field3);
         __ DecodeField<Map::ConstructionCount>(t2, t0);
-        __ Branch(&allocate, eq, t2, Operand(static_cast<int64_t>(JSFunction::kNoSlackTracking)));
+        __ Branch(&allocate,
+                  eq, t2, Operand(static_cast<int64_t>(JSFunction::kNoSlackTracking)));
         // Decrease generous allocation count.
         __ Dsubu(t0, t0, Operand(1 << Map::ConstructionCount::kShift));
         __ Branch(USE_DELAY_SLOT,
@@ -779,7 +780,7 @@ static void Generate_JSEntryTrampolineHelper(MacroAssembler* masm,
     // s0: argv, i.e. points to first arg
     Label loop, entry;
     // TODO(plind): Verify this sign extension is needed.
-    __ dsll32(a3, a3, 0); // int32_t -> int64_t.
+    __ dsll32(a3, a3, 0);  // int32_t -> int64_t.
     __ dsrl32(a3, a3, 0);
     __ dsll(t0, a3, kPointerSizeLog2);
     __ daddu(t2, s0, t0);

@@ -57,7 +57,7 @@ void MacroAssembler::Store(Register src,
     sb(src, dst);
   } else if (r.IsInteger16() || r.IsUInteger16()) {
     sh(src, dst);
-  } else if (r.IsInteger32()){
+  } else if (r.IsInteger32()) {
     sw(src, dst);
   } else {
     if (r.IsHeapObject()) {
@@ -728,7 +728,7 @@ void MacroAssembler::Dmul(Register rd, Register rs, const Operand& rt) {
       dmult(rs, rt.rm());
       mflo(rd);
     } else {
-      // TODO yuyin
+      // TODO(yuyin):
       // dmul(rd, rs, rt.rm());
       dmult(rs, rt.rm());
       mflo(rd);
@@ -741,7 +741,7 @@ void MacroAssembler::Dmul(Register rd, Register rs, const Operand& rt) {
       dmult(rs, at);
       mflo(rd);
     } else {
-      // TODO yuyin
+      // TODO(yuyin):
       // dmul(rd, rs, at);
       dmult(rs, at);
       mflo(rd);
@@ -1319,7 +1319,7 @@ void MacroAssembler::Trunc_l_ud(FPURegister fd,
   dmfc1(t8, fs);
   // Reset sign bit.
   li(at, 0x7fffffffffffffff);
-  and_(t8, t8, at );
+  and_(t8, t8, at);
   dmtc1(t8, fs);
   trunc_l_d(fd, fs);
 }
@@ -3066,7 +3066,7 @@ void MacroAssembler::Allocate(int object_size,
   if ((flags & SIZE_IN_WORDS) != 0) {
     object_size *= kPointerSize;
   }
-  // TODO yuyin
+  // TODO(yuyin):
   // ASSERT_EQ(0, object_size & kObjectAlignmentMask);
 
   // Check relative positions of allocation top and limit addresses.
@@ -3108,8 +3108,8 @@ void MacroAssembler::Allocate(int object_size,
     // Align the next allocation. Storing the filler map without checking top is
     // safe in new-space because the limit of the heap is aligned there.
     ASSERT((flags & PRETENURE_OLD_POINTER_SPACE) == 0);
-    // TODO yuyin
-  // ASSERT(kPointerAlignment * 2 == kDoubleAlignment);
+    // TODO(yuyin):
+    // ASSERT(kPointerAlignment * 2 == kDoubleAlignment);
     And(scratch2, result, Operand(kDoubleAlignmentMask));
     Label aligned;
     Branch(&aligned, eq, scratch2, Operand(zero_reg));
@@ -3196,7 +3196,7 @@ void MacroAssembler::Allocate(Register object_size,
     // Align the next allocation. Storing the filler map without checking top is
     // safe in new-space because the limit of the heap is aligned there.
     ASSERT((flags & PRETENURE_OLD_POINTER_SPACE) == 0);
-    // TODO yuyin
+    // TODO(yuyin):
     // ASSERT(kPointerAlignment * 2 == kDoubleAlignment);
     And(scratch2, result, Operand(kDoubleAlignmentMask));
     Label aligned;
@@ -5699,7 +5699,7 @@ void MacroAssembler::EnsureNotWhite(
   // And(length, length, Operand(~kObjectAlignmentMask));
   ASSERT(!length.is(t8));
   li(t8, Operand(~kObjectAlignmentMask));
-  And(length,length, t8);
+  And(length, length, t8);
 
   bind(&is_data_object);
   // Value is a data object, and it is white.  Mark it black.  Since we know
@@ -5938,7 +5938,7 @@ void CodePatcher::Emit(Instr instr) {
 
 
 void CodePatcher::Emit(Address addr) {
- // masm()->emit(reinterpret_cast<Instr>(addr));
+  // masm()->emit(reinterpret_cast<Instr>(addr));
 }
 
 

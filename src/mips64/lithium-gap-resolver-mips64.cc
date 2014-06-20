@@ -236,11 +236,11 @@ void LGapResolver::EmitMove(int index) {
         __ li(dst, cgen_->ToHandle(constant_source));
       }*/
       if (cgen_->IsSmi(constant_source)) {
-         __ li(dst, Operand(cgen_->ToSmi(constant_source)));  
-      } else if(cgen_->IsInteger32(constant_source)) { // OK SMI is handled.
+         __ li(dst, Operand(cgen_->ToSmi(constant_source)));
+      } else if (cgen_->IsInteger32(constant_source)) {  // OK SMI is handled.
          __ li(dst, Operand(cgen_->ToInteger32(constant_source)));
       } else {
-        __ li(dst, cgen_->ToHandle(constant_source));
+         __ li(dst, cgen_->ToHandle(constant_source));
       }
     } else if (destination->IsDoubleRegister()) {
       DoubleRegister result = cgen_->ToDoubleRegister(destination);
@@ -260,7 +260,7 @@ void LGapResolver::EmitMove(int index) {
       if (cgen_->IsSmi(constant_source)) {
          __ li(kLithiumScratchReg, Operand(cgen_->ToSmi(constant_source)));
          __ sd(kLithiumScratchReg, cgen_->ToMemOperand(destination));
-      } else if(cgen_->IsInteger32(constant_source)) { // OK SMI is handled.
+      } else if (cgen_->IsInteger32(constant_source)) {  // OK SMI is handled.
         __ li(kLithiumScratchReg, Operand(cgen_->ToInteger32(constant_source)));
         __ sw(kLithiumScratchReg, cgen_->ToMemOperand(destination));
       } else {

@@ -116,11 +116,11 @@ static void Generate_DebugBreakCallHelper(MacroAssembler* masm,
         Register reg = { r };
         if ((non_object_regs & (1 << r)) != 0) {
           if (FLAG_debug_code) {
-           // TODO 0x80000000?
+           // TODO(yuyin) 0x80000000?
             __ And(at, reg, 0xc0000000);
             __ Assert(eq, kUnableToEncodeValueAsSmi, at, Operand(zero_reg));
           }
-          // TODO
+          // TODO(yuyin)
           // __ sll(reg, reg, kSmiTagSize);
           __ dsll32(reg, reg, 0);
         }

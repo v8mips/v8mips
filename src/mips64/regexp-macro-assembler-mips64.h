@@ -96,7 +96,6 @@ class RegExpMacroAssemblerMIPS: public NativeRegExpMacroAssembler {
   void print_regexp_frame_constants();
 
  private:
-
 #if defined(MIPS_ABI_N64)
   // Offsets from frame_pointer() of function parameters and stored registers.
   static const int kFramePointer = 0;

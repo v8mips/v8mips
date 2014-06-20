@@ -1516,7 +1516,9 @@ const Operand& rt = Operand(zero_reg), BranchDelaySlot bd = PROTECT
   // ---------------------------------------------------------------------------
   // Integer utilities
 
-  void SignExtensionInt32(Register result, Register value, Register scratch = at) {
+  void SignExtensionInt32(Register result,
+                          Register value,
+                          Register scratch = at) {
      // TODO(yy): assert high 32-bit of value is 0x00000000.
      Label in_int_range;
      if (!value.is(result)) {
