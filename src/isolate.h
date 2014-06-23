@@ -1086,6 +1086,9 @@ class Isolate {
   void EnqueueMicrotask(Handle<Object> microtask);
   void RunMicrotasks();
 
+  void SetUseCounterCallback(v8::Isolate::UseCounterCallback callback);
+  void CountUsage(v8::Isolate::UseCounterFeature feature);
+
  private:
   Isolate();
 
@@ -1304,6 +1307,8 @@ class Isolate {
 
   // List of callbacks when a Call completes.
   List<CallCompletedCallback> call_completed_callbacks_;
+
+  v8::Isolate::UseCounterCallback use_counter_callback_;
 
   friend class ExecutionAccess;
   friend class HandleScopeImplementer;

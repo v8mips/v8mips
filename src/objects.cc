@@ -575,8 +575,6 @@ static bool FindAllCanReadHolder(LookupIterator* it) {
       Handle<Object> accessors = it->GetAccessors();
       if (accessors->IsAccessorInfo()) {
         if (AccessorInfo::cast(*accessors)->all_can_read()) return true;
-      } else if (accessors->IsAccessorPair()) {
-        if (AccessorPair::cast(*accessors)->all_can_read()) return true;
       }
     }
   }
@@ -619,8 +617,6 @@ static bool FindAllCanWriteHolder(LookupResult* result,
       Object* callback_obj = result->GetCallbackObject();
       if (callback_obj->IsAccessorInfo()) {
         if (AccessorInfo::cast(callback_obj)->all_can_write()) return true;
-      } else if (callback_obj->IsAccessorPair()) {
-        if (AccessorPair::cast(callback_obj)->all_can_write()) return true;
       }
     }
     if (!check_prototype) break;
@@ -813,26 +809,15 @@ MaybeHandle<Object> Object::GetElementWithReceiver(Isolate* isolate,
        !holder->IsNull();
        holder = Handle<Object>(holder->GetPrototype(isolate), isolate)) {
     if (!holder->IsJSObject()) {
-      Context* native_context = isolate->context()->native_context();
-      if (holder->IsNumber()) {
-        holder = Handle<Object>(
-            native_context->number_function()->instance_prototype(), isolate);
-      } else if (holder->IsString()) {
-        holder = Handle<Object>(
-            native_context->string_function()->instance_prototype(), isolate);
-      } else if (holder->IsSymbol()) {
-        holder = Handle<Object>(
-            native_context->symbol_function()->instance_prototype(), isolate);
-      } else if (holder->IsBoolean()) {
-        holder = Handle<Object>(
-            native_context->boolean_function()->instance_prototype(), isolate);
-      } else if (holder->IsJSProxy()) {
+      if (holder->IsJSProxy()) {
         return JSProxy::GetElementWithHandler(
             Handle<JSProxy>::cast(holder), receiver, index);
-      } else {
-        // Undefined and null have no indexed properties.
-        ASSERT(holder->IsUndefined() || holder->IsNull());
+      } else if (holder->IsUndefined()) {
+        // Undefined has no indexed properties.
         return isolate->factory()->undefined_value();
+      } else {
+        holder = Handle<Object>(holder->GetPrototype(isolate), isolate);
+        ASSERT(holder->IsJSObject());
       }
     }
 
@@ -6440,8 +6425,7 @@ void JSObject::DefineElementAccessor(Handle<JSObject> object,
                                      uint32_t index,
                                      Handle<Object> getter,
                                      Handle<Object> setter,
-                                     PropertyAttributes attributes,
-                                     v8::AccessControl access_control) {
+                                     PropertyAttributes attributes) {
   switch (object->GetElementsKind()) {
     case FAST_SMI_ELEMENTS:
     case FAST_ELEMENTS:
@@ -6498,7 +6482,6 @@ void JSObject::DefineElementAccessor(Handle<JSObject> object,
   Isolate* isolate = object->GetIsolate();
   Handle<AccessorPair> accessors = isolate->factory()->NewAccessorPair();
   accessors->SetComponents(*getter, *setter);
-  accessors->set_access_flags(access_control);
 
   SetElementCallback(object, index, accessors, attributes);
 }
@@ -6529,13 +6512,11 @@ void JSObject::DefinePropertyAccessor(Handle<JSObject> object,
                                       Handle<Name> name,
                                       Handle<Object> getter,
                                       Handle<Object> setter,
-                                      PropertyAttributes attributes,
-                                      v8::AccessControl access_control) {
+                                      PropertyAttributes attributes) {
   // We could assert that the property is configurable here, but we would need
   // to do a lookup, which seems to be a bit of overkill.
   bool only_attribute_changes = getter->IsNull() && setter->IsNull();
   if (object->HasFastProperties() && !only_attribute_changes &&
-      access_control == v8::DEFAULT &&
       (object->map()->NumberOfOwnDescriptors() <= kMaxNumberOfDescriptors)) {
     bool getterOk = getter->IsNull() ||
         DefineFastAccessor(object, name, ACCESSOR_GETTER, getter, attributes);
@@ -6546,7 +6527,6 @@ void JSObject::DefinePropertyAccessor(Handle<JSObject> object,
 
   Handle<AccessorPair> accessors = CreateAccessorPairFor(object, name);
   accessors->SetComponents(*getter, *setter);
-  accessors->set_access_flags(access_control);
 
   SetPropertyCallback(object, name, accessors, attributes);
 }
@@ -6647,8 +6627,7 @@ void JSObject::DefineAccessor(Handle<JSObject> object,
                               Handle<Name> name,
                               Handle<Object> getter,
                               Handle<Object> setter,
-                              PropertyAttributes attributes,
-                              v8::AccessControl access_control) {
+                              PropertyAttributes attributes) {
   Isolate* isolate = object->GetIsolate();
   // Check access rights if needed.
   if (object->IsAccessCheckNeeded() &&
@@ -6666,8 +6645,7 @@ void JSObject::DefineAccessor(Handle<JSObject> object,
                    name,
                    getter,
                    setter,
-                   attributes,
-                   access_control);
+                   attributes);
     return;
   }
 
@@ -6704,11 +6682,9 @@ void JSObject::DefineAccessor(Handle<JSObject> object,
   }
 
   if (is_element) {
-    DefineElementAccessor(
-        object, index, getter, setter, attributes, access_control);
+    DefineElementAccessor(object, index, getter, setter, attributes);
   } else {
-    DefinePropertyAccessor(
-        object, name, getter, setter, attributes, access_control);
+    DefinePropertyAccessor(object, name, getter, setter, attributes);
   }
 
   if (is_observed) {
@@ -6784,8 +6760,10 @@ bool JSObject::DefineFastAccessor(Handle<JSObject> object,
       ASSERT(target->NumberOfOwnDescriptors() ==
              object->map()->NumberOfOwnDescriptors());
       // This works since descriptors are sorted in order of addition.
-      ASSERT(object->map()->instance_descriptors()->
-             GetKey(descriptor_number) == *name);
+      ASSERT(Name::Equals(
+          handle(object->map()->instance_descriptors()->GetKey(
+              descriptor_number)),
+          name));
       return TryAccessorTransition(object, target, descriptor_number,
                                    component, accessor, attributes);
     }
@@ -12220,26 +12198,6 @@ void JSObject::EnsureCanContainElements(Handle<JSObject> object,
   // direction.
   return EnsureCanContainElements(
       object, args->arguments() - first_arg - (arg_count - 1), arg_count, mode);
-}
-
-
-MaybeHandle<AccessorPair> JSObject::GetOwnPropertyAccessorPair(
-    Handle<JSObject> object,
-    Handle<Name> name) {
-  uint32_t index = 0;
-  if (name->AsArrayIndex(&index)) {
-    return GetOwnElementAccessorPair(object, index);
-  }
-
-  Isolate* isolate = object->GetIsolate();
-  LookupResult lookup(isolate);
-  object->LookupOwnRealNamedProperty(name, &lookup);
-
-  if (lookup.IsPropertyCallbacks() &&
-      lookup.GetCallbackObject()->IsAccessorPair()) {
-    return handle(AccessorPair::cast(lookup.GetCallbackObject()), isolate);
-  }
-  return MaybeHandle<AccessorPair>();
 }
 
 

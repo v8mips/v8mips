@@ -27,6 +27,8 @@
 #error Unsupported target architecture.
 #endif
 
+#include "src/base/safe_math.h"
+
 namespace v8 {
 namespace internal {
 
@@ -3486,6 +3488,22 @@ void HLoadKeyed::PrintDataTo(StringStream* stream) {
 }
 
 
+bool HLoadKeyed::TryIncreaseBaseOffset(uint32_t increase_by_value) {
+  // The base offset is usually simply the size of the array header, except
+  // with dehoisting adds an addition offset due to a array index key
+  // manipulation, in which case it becomes (array header size +
+  // constant-offset-from-key * kPointerSize)
+  uint32_t base_offset = BaseOffsetField::decode(bit_field_);
+  v8::base::internal::CheckedNumeric<uint32_t> addition_result = base_offset;
+  addition_result += increase_by_value;
+  if (!addition_result.IsValid()) return false;
+  base_offset = addition_result.ValueOrDie();
+  if (!BaseOffsetField::is_valid(base_offset)) return false;
+  bit_field_ = BaseOffsetField::update(bit_field_, base_offset);
+  return true;
+}
+
+
 bool HLoadKeyed::UsesMustHandleHole() const {
   if (IsFastPackedElementsKind(elements_kind())) {
     return false;
@@ -4061,6 +4079,19 @@ void HAllocate::PrintDataTo(StringStream* stream) {
   if (MustAllocateDoubleAligned()) stream->Add("A");
   if (MustPrefillWithFiller()) stream->Add("F");
   stream->Add(")");
+}
+
+
+bool HStoreKeyed::TryIncreaseBaseOffset(uint32_t increase_by_value) {
+  // The base offset is usually simply the size of the array header, except
+  // with dehoisting adds an addition offset due to a array index key
+  // manipulation, in which case it becomes (array header size +
+  // constant-offset-from-key * kPointerSize)
+  v8::base::internal::CheckedNumeric<uint32_t> addition_result = base_offset_;
+  addition_result += increase_by_value;
+  if (!addition_result.IsValid()) return false;
+  base_offset_ = addition_result.ValueOrDie();
+  return true;
 }
 
 

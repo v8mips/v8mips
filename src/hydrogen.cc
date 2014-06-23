@@ -8566,10 +8566,12 @@ bool HOptimizedGraphBuilder::TryCallApply(Call* expr) {
   HValue* function = Pop();  // f
   Drop(1);  // apply
 
+  HValue* checked_function = AddCheckMap(function, function_map);
+
   if (function_state()->outer() == NULL) {
     HInstruction* elements = Add<HArgumentsElements>(false);
     HInstruction* length = Add<HArgumentsLength>(elements);
-    HValue* wrapped_receiver = BuildWrapReceiver(receiver, function);
+    HValue* wrapped_receiver = BuildWrapReceiver(receiver, checked_function);
     HInstruction* result = New<HApplyArguments>(function,
                                                 wrapped_receiver,
                                                 length,
@@ -8585,7 +8587,7 @@ bool HOptimizedGraphBuilder::TryCallApply(Call* expr) {
     const ZoneList<HValue*>* arguments_values = args->arguments_values();
     int arguments_count = arguments_values->length();
     Push(function);
-    Push(BuildWrapReceiver(receiver, function));
+    Push(BuildWrapReceiver(receiver, checked_function));
     for (int i = 1; i < arguments_count; i++) {
       Push(arguments_values->at(i));
     }
@@ -11711,11 +11713,13 @@ void HOptimizedGraphBuilder::GenerateDebugBreakInOptimizedCode(
 }
 
 
-void HOptimizedGraphBuilder::GenerateDebugCallbackSupportsStepping(
-    CallRuntime* call) {
-  ASSERT(call->arguments()->length() == 1);
-  // Debugging is not supported in optimized code.
-  return ast_context()->ReturnValue(graph()->GetConstantFalse());
+void HOptimizedGraphBuilder::GenerateDebugIsActive(CallRuntime* call) {
+  ASSERT(call->arguments()->length() == 0);
+  HValue* ref =
+      Add<HConstant>(ExternalReference::debug_is_active_address(isolate()));
+  HValue* value = Add<HLoadNamedField>(
+      ref, static_cast<HValue*>(NULL), HObjectAccess::ForExternalUInteger8());
+  return ast_context()->ReturnValue(value);
 }
 
 
