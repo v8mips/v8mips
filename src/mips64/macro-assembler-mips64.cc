@@ -4727,18 +4727,13 @@ void MacroAssembler::EnterExitFrame(bool save_doubles,
 
   const int frame_alignment = MacroAssembler::ActivationFrameAlignment();
   if (save_doubles) {
-    // The stack  must be allign to 0 modulo 8 for stores with sdc1.
-    ASSERT(kDoubleSize == frame_alignment);
-    if (frame_alignment > 0) {
-      ASSERT(IsPowerOf2(frame_alignment));
-      li(t8, Operand(-frame_alignment));
-      And(sp, sp, Operand(t8));  // Align stack.
-    }
-    int space = FPURegister::kMaxNumRegisters * kDoubleSize;
+    // The stack is already aligned to 0 modulo 8 for stores with sdc1.
+    int kNumOfSavedRegisters = FPURegister::kMaxNumRegisters / 2;
+    int space = kNumOfSavedRegisters * kDoubleSize ;
     Dsubu(sp, sp, Operand(space));
     // Remember: we only need to save every 2nd double FPU value.
-    for (int i = 0; i < FPURegister::kMaxNumRegisters; i+=2) {
-      FPURegister reg = FPURegister::from_code(i);
+    for (int i = 0; i < kNumOfSavedRegisters; i++) {
+      FPURegister reg = FPURegister::from_code(2 * i);
       sdc1(reg, MemOperand(sp, i * kDoubleSize));
     }
   }
@@ -4767,10 +4762,12 @@ void MacroAssembler::LeaveExitFrame(bool save_doubles,
   // Optionally restore all double registers.
   if (save_doubles) {
     // Remember: we only need to restore every 2nd double FPU value.
-    ld(t8, MemOperand(fp, ExitFrameConstants::kSPOffset));
-    for (int i = 0; i < FPURegister::kMaxNumRegisters; i+=2) {
-      FPURegister reg = FPURegister::from_code(i);
-      ldc1(reg, MemOperand(t8, i  * kDoubleSize + kPointerSize));
+    int kNumOfSavedRegisters = FPURegister::kMaxNumRegisters / 2;
+    Dsubu(t8, fp, Operand(ExitFrameConstants::kFrameSize +
+        kNumOfSavedRegisters * kDoubleSize));
+    for (int i = 0; i < kNumOfSavedRegisters; i++) {
+      FPURegister reg = FPURegister::from_code(2 * i);
+      ldc1(reg, MemOperand(t8, i  * kDoubleSize));
     }
   }
 
