@@ -53,6 +53,8 @@ def DoMain(_):
     host_arch = 'arm64'
   elif host_arch.startswith('mips'):
     host_arch = 'mipsel'
+  elif host_arch == 'mips64':
+    host_arch = 'mips64el'
 
   # platform.machine is based on running kernel. It's possible to use 64-bit
   # kernel with 32-bit userland, e.g. to give linker slightly more memory.
