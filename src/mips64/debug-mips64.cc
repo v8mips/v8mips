@@ -334,7 +334,7 @@ void DebugCodegen::GenerateFrameDropperLiveEdit(MacroAssembler* masm) {
   __ ld(at, FieldMemOperand(at, SharedFunctionInfo::kCodeOffset));
   __ Daddu(t9, at, Operand(Code::kHeaderSize - kHeapObjectTag));
 
-  // Re-run JSFunction, r1 is function, cp is context.
+  // Re-run JSFunction, a1 is function, cp is context.
   __ Jump(t9);
 }
 
