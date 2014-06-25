@@ -5390,33 +5390,26 @@ void LCodeGen::DoAllocate(LAllocate* instr) {
     }
   } else {
     Register size = ToRegister(instr->size());
-    __ Allocate(size,
-                result,
-                scratch,
-                scratch2,
-                deferred->entry(),
-                flags);
+    __ Allocate(size, result, scratch, scratch2, deferred->entry(), flags);
   }
 
   __ bind(deferred->exit());
 
   if (instr->hydrogen()->MustPrefillWithFiller()) {
+    STATIC_ASSERT(kHeapObjectTag == 1);
     if (instr->size()->IsConstantOperand()) {
       int32_t size = ToInteger32(LConstantOperand::cast(instr->size()));
-      __ li(scratch, Operand(size));
+      __ li(scratch, Operand(size - kHeapObjectTag));
     } else {
-      scratch = ToRegister(instr->size());
+      __ Dsubu(scratch, ToRegister(instr->size()), Operand(kHeapObjectTag));
     }
-    __ Dsubu(scratch, scratch, Operand(kPointerSize));
-    __ Dsubu(result, result, Operand(kHeapObjectTag));
+    __ li(scratch2, Operand(isolate()->factory()->one_pointer_filler_map()));
     Label loop;
     __ bind(&loop);
-    __ li(scratch2, Operand(isolate()->factory()->one_pointer_filler_map()));
+    __ Dsubu(scratch, scratch, Operand(kPointerSize));
     __ Daddu(at, result, Operand(scratch));
     __ sd(scratch2, MemOperand(at));
-    __ Dsubu(scratch, scratch, Operand(kPointerSize));
     __ Branch(&loop, ge, scratch, Operand(zero_reg));
-    __ Daddu(result, result, Operand(kHeapObjectTag));
   }
 }
 
