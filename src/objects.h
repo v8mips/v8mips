@@ -1159,8 +1159,6 @@ template <class C> inline bool Is(Object* obj);
   V(kLetBindingReInitialization, "Let binding re-initialization")             \
   V(kLhsHasBeenClobbered, "lhs has been clobbered")                           \
   V(kLiveBytesCountOverflowChunkSize, "Live Bytes Count overflow chunk size") \
-  V(kLiveEditFrameDroppingIsNotSupportedOnARM64,                              \
-    "LiveEdit frame dropping is not supported on arm64")                      \
   V(kLiveEdit, "LiveEdit")                                                    \
   V(kLookupVariableInCountOperation,                                          \
     "Lookup variable in count operation")                                     \
@@ -1238,10 +1236,8 @@ template <class C> inline bool Is(Object* obj);
     "The current stack pointer is below csp")                                 \
   V(kTheInstructionShouldBeALui, "The instruction should be a lui")           \
   V(kTheInstructionShouldBeAnOri, "The instruction should be an ori")         \
-  V(kTheInstructionToPatchShouldBeALoadFromPc,                                \
-    "The instruction to patch should be a load from pc")                      \
-  V(kTheInstructionToPatchShouldBeALoadFromPp,                                \
-    "The instruction to patch should be a load from pp")                      \
+  V(kTheInstructionToPatchShouldBeALoadFromConstantPool,                      \
+    "The instruction to patch should be a load from the constant pool")       \
   V(kTheInstructionToPatchShouldBeAnLdrLiteral,                               \
     "The instruction to patch should be a ldr literal")                       \
   V(kTheInstructionToPatchShouldBeALui,                                       \
@@ -2158,14 +2154,6 @@ class JSObject: public JSReceiver {
       StoreFromKeyed store_mode = MAY_BE_STORE_FROM_KEYED,
       ExecutableAccessorInfoHandling handling = DEFAULT_HANDLING);
 
-  static inline Handle<String> ExpectedTransitionKey(Handle<Map> map);
-  static inline Handle<Map> ExpectedTransitionTarget(Handle<Map> map);
-
-  // Try to follow an existing transition to a field with attributes NONE. The
-  // return value indicates whether the transition was successful.
-  static inline Handle<Map> FindTransitionToField(Handle<Map> map,
-                                                  Handle<Name> key);
-
   // Extend the receiver with a single fast property appeared first in the
   // passed map. This also extends the property backing store if necessary.
   static void AllocateStorageForMap(Handle<JSObject> object, Handle<Map> map);
@@ -2637,6 +2625,10 @@ class JSObject: public JSReceiver {
                                   Handle<Name> name,
                                   Handle<Object> old_value);
 
+  static void MigrateToNewProperty(Handle<JSObject> object,
+                                   Handle<Map> transition,
+                                   Handle<Object> value);
+
  private:
   friend class DictionaryElementsAccessor;
   friend class JSReceiver;
@@ -2763,10 +2755,6 @@ class JSObject: public JSReceiver {
                               StoreFromKeyed store_mode,
                               ValueType value_type,
                               TransitionFlag flag);
-
-  static void MigrateToNewProperty(Handle<JSObject> object,
-                                   Handle<Map> transition,
-                                   Handle<Object> value);
 
   // Add a property to a slow-case object.
   static void AddSlowProperty(Handle<JSObject> object,
@@ -6240,13 +6228,20 @@ class Map: public HeapObject {
   inline bool HasTransitionArray() const;
   inline bool HasElementsTransition();
   inline Map* elements_transition_map();
-  static Handle<TransitionArray> SetElementsTransitionMap(
-      Handle<Map> map, Handle<Map> transitioned_map);
+
   inline Map* GetTransition(int transition_index);
   inline int SearchTransition(Name* name);
   inline FixedArrayBase* GetInitialElements();
 
   DECL_ACCESSORS(transitions, TransitionArray)
+
+  static inline Handle<String> ExpectedTransitionKey(Handle<Map> map);
+  static inline Handle<Map> ExpectedTransitionTarget(Handle<Map> map);
+
+  // Try to follow an existing transition to a field with attributes NONE. The
+  // return value indicates whether the transition was successful.
+  static inline Handle<Map> FindTransitionToField(Handle<Map> map,
+                                                  Handle<Name> key);
 
   Map* FindRootMap();
   Map* FindFieldOwner(int descriptor);
@@ -6255,15 +6250,17 @@ class Map: public HeapObject {
 
   int NumberOfFields();
 
+  // TODO(ishell): candidate with JSObject::MigrateToMap().
   bool InstancesNeedRewriting(Map* target,
                               int target_number_of_fields,
                               int target_inobject,
                               int target_unused);
+  // TODO(ishell): moveit!
   static Handle<Map> GeneralizeAllFieldRepresentations(Handle<Map> map);
-  static Handle<HeapType> GeneralizeFieldType(Handle<HeapType> type1,
-                                              Handle<HeapType> type2,
-                                              Isolate* isolate)
-      V8_WARN_UNUSED_RESULT;
+  MUST_USE_RESULT static Handle<HeapType> GeneralizeFieldType(
+      Handle<HeapType> type1,
+      Handle<HeapType> type2,
+      Isolate* isolate);
   static void GeneralizeFieldType(Handle<Map> map,
                                   int modify_index,
                                   Handle<HeapType> new_field_type);
@@ -6548,7 +6545,6 @@ class Map: public HeapObject {
   // elements_kind that's found in |candidates|, or null handle if no match is
   // found at all.
   Handle<Map> FindTransitionedMap(MapHandleList* candidates);
-  Map* FindTransitionedMap(MapList* candidates);
 
   bool CanTransition() {
     // Only JSObject and subtypes have map transitions and back pointers.
@@ -6710,6 +6706,9 @@ class Map: public HeapObject {
   bool EquivalentToForNormalization(Map* other, PropertyNormalizationMode mode);
 
  private:
+  static Handle<TransitionArray> SetElementsTransitionMap(
+      Handle<Map> map, Handle<Map> transitioned_map);
+
   bool EquivalentToForTransition(Map* other);
   static Handle<Map> RawCopy(Handle<Map> map, int instance_size);
   static Handle<Map> ShareDescriptor(Handle<Map> map,
