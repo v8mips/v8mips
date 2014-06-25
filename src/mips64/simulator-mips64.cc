@@ -3237,6 +3237,15 @@ int64_t Simulator::Call(byte* entry, int argument_count, ...) {
     if (argument_count >= 8) set_register(t3, va_arg(parameters, int64_t));
   }
 
+  if (::v8::internal::FLAG_trace_sim) {
+    PrintF("Call to generated function at addr: %016lx\n",
+        reinterpret_cast<int64_t>(entry));
+    PrintF("args a0: %016lx, a1: %016lx, a2: %016lx, a3: %016lx\n",
+        get_register(a0), get_register(a1), get_register(a2), get_register(a3));
+    PrintF("args a4: %016lx, a5: %016lx, a6: %016lx, a7: %016lx\n",
+        get_register(t0), get_register(t1), get_register(t2), get_register(t3));
+  }
+
   // Remaining arguments passed on stack.
   int64_t original_stack = get_register(sp);
   // Compute position of stack on entry to generated code.
