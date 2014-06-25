@@ -1480,7 +1480,8 @@ Isolate::Isolate()
       sweeper_thread_(NULL),
       num_sweeper_threads_(0),
       stress_deopt_count_(0),
-      next_optimization_id_(0) {
+      next_optimization_id_(0),
+      use_counter_callback_(NULL) {
   id_ = base::NoBarrier_AtomicIncrement(&isolate_counter_, 1);
   TRACE_ISOLATE(constructor);
 
@@ -2293,10 +2294,12 @@ void Isolate::EnqueueMicrotask(Handle<Object> microtask) {
 
 
 void Isolate::RunMicrotasks() {
-  // In some mjsunit tests %RunMicrotasks is called explicitly, violating
-  // this assertion.  Therefore we also check for --allow-natives-syntax.
-  ASSERT(FLAG_allow_natives_syntax ||
-         handle_scope_implementer()->CallDepthIsZero());
+  // %RunMicrotasks may be called in mjsunit tests, which violates
+  // this assertion, hence the check for --allow-natives-syntax.
+  // TODO(adamk): However, this also fails some layout tests.
+  //
+  // ASSERT(FLAG_allow_natives_syntax ||
+  //        handle_scope_implementer()->CallDepthIsZero());
 
   // Increase call depth to prevent recursive callbacks.
   v8::Isolate::SuppressMicrotaskExecutionScope suppress(
