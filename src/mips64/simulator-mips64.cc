@@ -1564,12 +1564,6 @@ void Simulator::Format(Instruction* instr, const char* format) {
 // 64-bit value. With the code below we assume that all runtime calls return
 // 64 bits of result. If they don't, the v1 result register contains a bogus
 // value, which is fine because it is caller-saved.
-/* typedef int64_t (*SimulatorRuntimeCall)(int64_t arg0,
-                                        int64_t arg1,
-                                        int64_t arg2,
-                                        int64_t arg3,
-                                        int64_t arg4,
-                                        int64_t arg5);*/
 
 struct ObjectPair {
   Object* x;

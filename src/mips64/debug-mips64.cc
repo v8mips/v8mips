@@ -114,6 +114,10 @@ static void Generate_DebugBreakCallHelper(MacroAssembler* masm,
     __ li(at, Operand(Smi::FromInt(LiveEdit::kFramePaddingInitialSize)));
     __ push(at);
 
+
+    // TODO(plind): This needs to be revised to store pairs of smi's per
+    //    the other 64-bit arch's.
+
     // Store the registers containing live values on the expression stack to
     // make sure that these are correctly updated during GC. Non object values
     // are stored as a smi causing it to be untouched by GC.
@@ -130,8 +134,6 @@ static void Generate_DebugBreakCallHelper(MacroAssembler* masm,
             __ And(at, reg, 0xc0000000);
             __ Assert(eq, kUnableToEncodeValueAsSmi, at, Operand(zero_reg));
           }
-          // TODO(yuyin)
-          // __ sll(reg, reg, kSmiTagSize);
           __ dsll32(reg, reg, 0);
         }
       }

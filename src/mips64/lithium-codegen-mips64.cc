@@ -2789,7 +2789,7 @@ void LCodeGen::DoDeferredInstanceOfKnownGlobal(LInstanceOfKnownGlobal* instr,
   __ bind(&before_push_delta);
   {
     Assembler::BlockTrampolinePoolScope block_trampoline_pool(masm_);
-    __ li(temp, Operand(delta * /*kPointerSize*/ kIntSize), CONSTANT_SIZE);
+    __ li(temp, Operand(delta * kIntSize), CONSTANT_SIZE);
     __ StoreToSafepointRegisterSlot(temp, temp);
   }
   CallCodeGeneric(stub.GetCode(),
@@ -3287,9 +3287,7 @@ void LCodeGen::DoLoadKeyedFixedArray(LLoadKeyed* instr) {
     // during bound check elimination with the index argument to the bounds
     // check, which can be tagged, so that case must be handled here, too.
     if (instr->hydrogen()->key()->representation().IsSmi()) {
-      // __ sll(scratch, key, kPointerSizeLog2 - kSmiTagSize);
-    // TODO(plind): right?
-    __ dsra(scratch, key, 32 - kPointerSizeLog2);
+    __ SmiScale(scratch, key, kPointerSizeLog2);
     __ daddu(scratch, elements, scratch);
     } else {
       __ dsll(scratch, key, kPointerSizeLog2);
@@ -4104,7 +4102,6 @@ void LCodeGen::DoInnerAllocatedObject(LInnerAllocatedObject* instr) {
   Register base = ToRegister(instr->base_object());
   if (instr->offset()->IsConstantOperand()) {
     LConstantOperand* offset = LConstantOperand::cast(instr->offset());
-    // TODO(plind): right?
     __ Daddu(result, base, Operand(ToInteger32(offset)));
   } else {
     Register offset = ToRegister(instr->offset());

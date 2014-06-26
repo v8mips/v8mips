@@ -1863,15 +1863,10 @@ void JSEntryStub::GenerateBody(MacroAssembler* masm, bool is_construct) {
   // Check if the current stack frame is marked as the outermost JS frame.
   Label non_outermost_js_2;
   __ pop(t1);
-/*  __ Branch(&non_outermost_js_2,
-            ne,
-            t1,
-            Operand(Smi::FromInt(StackFrame::OUTERMOST_JSENTRY_FRAME)));*/
-  __ li(t2,reinterpret_cast<intptr_t>(Smi::FromInt(StackFrame::OUTERMOST_JSENTRY_FRAME)));
   __ Branch(&non_outermost_js_2,
             ne,
             t1,
-            Operand(t2));
+            Operand(Smi::FromInt(StackFrame::OUTERMOST_JSENTRY_FRAME)));
   __ li(t1, Operand(ExternalReference(js_entry_sp)));
   __ sd(zero_reg, MemOperand(t1));
   __ bind(&non_outermost_js_2);
@@ -2586,9 +2581,8 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
   // Check (number_of_captures + 1) * 2 <= offsets vector size
   // Or          number_of_captures * 2 <= offsets vector size - 2
   // Multiplying by 2 comes for free since a2 is smi-tagged.
-  STATIC_ASSERT(kSmiTag == 0);
-  // TODO(yuyin):
-  // STATIC_ASSERT(kSmiTagSize + kSmiShiftSize == 1);
+
+  // TODO(plind): Cleanup, and check the -1 below in 'temp'. Looks wrong.
   STATIC_ASSERT(Isolate::kJSRegexpStaticOffsetsVectorSize >= 2);
   // __ Branch(
   //     &runtime, hi, a2, Operand(Isolate::kJSRegexpStaticOffsetsVectorSize - 2));
@@ -2624,9 +2618,11 @@ void RegExpExecStub::Generate(MacroAssembler* masm) {
   // (8) Short external string or not a string?  If yes, bail out to runtime.
   // (9) Sliced string.  Replace subject with parent.  Go to (4).
 
-  Label seq_string /* 5 */, external_string /* 7 */,
-        check_underlying /* 4 */, not_seq_nor_cons /* 6 */,
-        not_long_external /* 8 */;
+  Label check_underlying;   // (4)
+  Label seq_string;         // (5)
+  Label not_seq_nor_cons;   // (6)
+  Label external_string;    // (7)
+  Label not_long_external;  // (8)
 
   // (1) Sequential string?  If yes, go to (5).
   __ And(a1,
@@ -3531,7 +3527,6 @@ void StringCharFromCodeGenerator::GenerateFast(MacroAssembler* masm) {
   ASSERT(!t0.is(code_));
 
   STATIC_ASSERT(kSmiTag == 0);
-/*  STATIC_ASSERT(kSmiShiftSize == 0);*/
   ASSERT(IsPowerOf2(String::kMaxOneByteCharCode + 1));
   __ And(t0,
          code_,
@@ -4480,7 +4475,6 @@ void NameDictionaryLookupStub::GenerateNegativeLookup(MacroAssembler* masm,
     __ And(index, index,
            Operand(name->Hash() + NameDictionary::GetProbeOffset(i)));
 
-    // TODO(plind): this function
     // Scale the index by multiplying by the entry size.
     ASSERT(NameDictionary::kEntrySize == 3);
     __ dsll(at, index, 1);
@@ -4676,7 +4670,6 @@ void NameDictionaryLookupStub::Generate(MacroAssembler* masm) {
 
 
     ASSERT_EQ(kSmiTagSize, 1);
-    // TODO(plind): what 2 mean?
     __ dsll(index, index, kPointerSizeLog2);
     __ Daddu(index, index, dictionary);
     __ ld(entry_key, FieldMemOperand(index, kElementsStartOffset));
