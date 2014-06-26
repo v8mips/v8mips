@@ -1361,34 +1361,6 @@ void RegExpMacroAssemblerMIPS::LoadCurrentCharacterUnchecked(int cp_offset,
   }
 }
 
-
-// TODO(plind): remove this debug function.
-
-#define PR_FRAME_CONST(K) printf("Frame constant %s: %d\n", #K, K)
-
-void RegExpMacroAssemblerMIPS::print_regexp_frame_constants() {
-  PrintF("regexp frame constants for %d\n", (kMipsAbi == kN64) ? "n64" : "O32");
-  PR_FRAME_CONST(kFramePointer);
-  PR_FRAME_CONST(kStoredRegisters);
-  PR_FRAME_CONST(kReturnAddress);
-  PR_FRAME_CONST(kSecondaryReturnAddress);
-  PR_FRAME_CONST(kStackFrameHeader);
-  PR_FRAME_CONST(kRegisterOutput);
-  PR_FRAME_CONST(kNumOutputRegisters);
-  PR_FRAME_CONST(kStackHighEnd);
-  PR_FRAME_CONST(kDirectCall);
-  PR_FRAME_CONST(kIsolate);
-  PR_FRAME_CONST(kInputEnd);
-  PR_FRAME_CONST(kInputStart);
-  PR_FRAME_CONST(kStartIndex);
-  PR_FRAME_CONST(kInputString);
-  PR_FRAME_CONST(kSuccessfulCaptures);
-  PR_FRAME_CONST(kInputStartMinusOne);
-  PR_FRAME_CONST(kRegisterZero);
-}
-
-#undef PR_FRAME_CONST
-
 #undef __
 
 #endif  // V8_INTERPRETED_REGEXP
