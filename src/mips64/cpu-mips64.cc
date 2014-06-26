@@ -31,7 +31,7 @@ void CPU::FlushICache(void* start, size_t size) {
   }
 
 #if !defined (USE_SIMULATOR)
-#if defined(ANDROID)
+#if defined(ANDROID) && !defined(__LP64__)
   // Bionic cacheflush can typically run in userland, avoiding kernel call.
   char *end = reinterpret_cast<char *>(start) + size;
   cacheflush(
