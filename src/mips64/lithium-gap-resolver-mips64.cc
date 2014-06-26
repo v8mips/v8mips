@@ -247,7 +247,7 @@ void LGapResolver::EmitMove(int index) {
          __ sd(kLithiumScratchReg, cgen_->ToMemOperand(destination));
       } else if (cgen_->IsInteger32(constant_source)) {
         __ li(kLithiumScratchReg, Operand(cgen_->ToInteger32(constant_source)));
-        __ sw(kLithiumScratchReg, cgen_->ToMemOperand(destination));
+        __ sd(kLithiumScratchReg, cgen_->ToMemOperand(destination));
       } else {
         __ li(kLithiumScratchReg, cgen_->ToHandle(constant_source));
         __ sd(kLithiumScratchReg, cgen_->ToMemOperand(destination));
