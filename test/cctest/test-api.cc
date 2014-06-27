@@ -21721,8 +21721,8 @@ TEST(AccessCheckThrows) {
   CheckCorrectThrow("JSON.stringify(other)");
   CheckCorrectThrow("has_own_property(other, 'x')");
   CheckCorrectThrow("%GetProperty(other, 'x')");
-  CheckCorrectThrow("%SetProperty(other, 'x', 'foo', 1, 0)");
-  CheckCorrectThrow("%IgnoreAttributesAndSetProperty(other, 'x', 'foo')");
+  CheckCorrectThrow("%SetProperty(other, 'x', 'foo', 0)");
+  CheckCorrectThrow("%AddProperty(other, 'x', 'foo', 1)");
   CheckCorrectThrow("%DeleteProperty(other, 'x', 0)");
   CheckCorrectThrow("%DeleteProperty(other, '1', 0)");
   CheckCorrectThrow("%HasOwnProperty(other, 'x')");
@@ -21732,7 +21732,7 @@ TEST(AccessCheckThrows) {
   CheckCorrectThrow("%GetPropertyNames(other)");
   // PROPERTY_ATTRIBUTES_NONE = 0
   CheckCorrectThrow("%GetOwnPropertyNames(other, 0)");
-  CheckCorrectThrow("%DefineOrRedefineAccessorProperty("
+  CheckCorrectThrow("%DefineAccessorPropertyUnchecked("
                         "other, 'x', null, null, 1)");
 
   // Reset the failed access check callback so it does not influence
