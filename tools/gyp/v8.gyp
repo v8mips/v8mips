@@ -1296,6 +1296,7 @@
           '../../src/collection-iterator.js',
           '../../src/generator.js',
           '../../src/array-iterator.js',
+          '../../src/string-iterator.js',
           '../../src/harmony-string.js',
           '../../src/harmony-array.js',
           '../../src/harmony-math.js'

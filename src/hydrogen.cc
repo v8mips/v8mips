@@ -1935,7 +1935,7 @@ HValue* HGraphBuilder::BuildNumberToString(HValue* object, Type* type) {
     Add<HPushArguments>(object);
     Push(Add<HCallRuntime>(
             isolate()->factory()->empty_string(),
-            Runtime::FunctionForId(Runtime::kHiddenNumberToStringSkipCache),
+            Runtime::FunctionForId(Runtime::kNumberToStringSkipCache),
             1));
   }
   if_found.End();
@@ -2259,7 +2259,7 @@ HValue* HGraphBuilder::BuildUncheckedStringAdd(
       Add<HPushArguments>(left, right);
       Push(Add<HCallRuntime>(
             isolate()->factory()->empty_string(),
-            Runtime::FunctionForId(Runtime::kHiddenStringAdd),
+            Runtime::FunctionForId(Runtime::kStringAdd),
             2));
     }
     if_sameencodingandsequential.End();
@@ -5485,7 +5485,7 @@ void HOptimizedGraphBuilder::VisitObjectLiteral(ObjectLiteral* expr) {
     // TODO(mvstanton): Add a flag to turn off creation of any
     // AllocationMementos for this call: we are in crankshaft and should have
     // learned enough about transition behavior to stop emitting mementos.
-    Runtime::FunctionId function_id = Runtime::kHiddenCreateObjectLiteral;
+    Runtime::FunctionId function_id = Runtime::kCreateObjectLiteral;
     literal = Add<HCallRuntime>(isolate()->factory()->empty_string(),
                                 Runtime::FunctionForId(function_id),
                                 4);
@@ -5643,7 +5643,7 @@ void HOptimizedGraphBuilder::VisitArrayLiteral(ArrayLiteral* expr) {
     // TODO(mvstanton): Consider a flag to turn off creation of any
     // AllocationMementos for this call: we are in crankshaft and should have
     // learned enough about transition behavior to stop emitting mementos.
-    Runtime::FunctionId function_id = Runtime::kHiddenCreateArrayLiteral;
+    Runtime::FunctionId function_id = Runtime::kCreateArrayLiteral;
     literal = Add<HCallRuntime>(isolate()->factory()->empty_string(),
                                 Runtime::FunctionForId(function_id),
                                 4);
@@ -6655,7 +6655,7 @@ void HOptimizedGraphBuilder::VisitThrow(Throw* expr) {
   if (!FLAG_hydrogen_track_positions) SetSourcePosition(expr->position());
   Add<HPushArguments>(value);
   Add<HCallRuntime>(isolate()->factory()->empty_string(),
-                    Runtime::FunctionForId(Runtime::kHiddenThrow), 1);
+                    Runtime::FunctionForId(Runtime::kThrow), 1);
   Add<HSimulate>(expr->id());
 
   // If the throw definitely exits the function, we can finish with a dummy
@@ -7568,7 +7568,7 @@ int HOptimizedGraphBuilder::InliningAstSize(Handle<JSFunction> target) {
     TraceInline(target, caller, "target not inlineable");
     return kNotInlinable;
   }
-  if (target_shared->dont_inline() || target_shared->dont_optimize()) {
+  if (target_shared->dont_inline()) {
     TraceInline(target, caller, "target contains unsupported syntax [early]");
     return kNotInlinable;
   }

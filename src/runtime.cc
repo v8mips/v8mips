@@ -460,7 +460,7 @@ MUST_USE_RESULT static MaybeHandle<Object> CreateLiteralBoilerplate(
 }
 
 
-RUNTIME_FUNCTION(RuntimeHidden_CreateObjectLiteral) {
+RUNTIME_FUNCTION(Runtime_CreateObjectLiteral) {
   HandleScope scope(isolate);
   ASSERT(args.length() == 4);
   CONVERT_ARG_HANDLE_CHECKED(FixedArray, literals, 0);
@@ -574,7 +574,7 @@ static MaybeHandle<JSObject> CreateArrayLiteralImpl(Isolate* isolate,
 }
 
 
-RUNTIME_FUNCTION(RuntimeHidden_CreateArrayLiteral) {
+RUNTIME_FUNCTION(Runtime_CreateArrayLiteral) {
   HandleScope scope(isolate);
   ASSERT(args.length() == 4);
   CONVERT_ARG_HANDLE_CHECKED(FixedArray, literals, 0);
@@ -590,7 +590,7 @@ RUNTIME_FUNCTION(RuntimeHidden_CreateArrayLiteral) {
 }
 
 
-RUNTIME_FUNCTION(RuntimeHidden_CreateArrayLiteralStubBailout) {
+RUNTIME_FUNCTION(Runtime_CreateArrayLiteralStubBailout) {
   HandleScope scope(isolate);
   ASSERT(args.length() == 3);
   CONVERT_ARG_HANDLE_CHECKED(FixedArray, literals, 0);
@@ -2135,7 +2135,7 @@ static Object* ThrowRedeclarationError(Isolate* isolate, Handle<String> name) {
 }
 
 
-RUNTIME_FUNCTION(RuntimeHidden_DeclareGlobals) {
+RUNTIME_FUNCTION(Runtime_DeclareGlobals) {
   HandleScope scope(isolate);
   ASSERT(args.length() == 3);
   Handle<GlobalObject> global = Handle<GlobalObject>(
@@ -2230,7 +2230,7 @@ RUNTIME_FUNCTION(RuntimeHidden_DeclareGlobals) {
 }
 
 
-RUNTIME_FUNCTION(RuntimeHidden_DeclareContextSlot) {
+RUNTIME_FUNCTION(Runtime_DeclareContextSlot) {
   HandleScope scope(isolate);
   ASSERT(args.length() == 4);
 
@@ -2390,7 +2390,7 @@ RUNTIME_FUNCTION(Runtime_InitializeVarGlobal) {
 }
 
 
-RUNTIME_FUNCTION(RuntimeHidden_InitializeConstGlobal) {
+RUNTIME_FUNCTION(Runtime_InitializeConstGlobal) {
   SealHandleScope shs(isolate);
   // All constants are declared with an initial value. The name
   // of the constant is the first argument and the initial value
@@ -2466,7 +2466,7 @@ RUNTIME_FUNCTION(RuntimeHidden_InitializeConstGlobal) {
 }
 
 
-RUNTIME_FUNCTION(RuntimeHidden_InitializeConstContextSlot) {
+RUNTIME_FUNCTION(Runtime_InitializeConstContextSlot) {
   HandleScope scope(isolate);
   ASSERT(args.length() == 3);
 
@@ -2577,7 +2577,7 @@ RUNTIME_FUNCTION(Runtime_OptimizeObjectForAddingMultipleProperties) {
 }
 
 
-RUNTIME_FUNCTION(RuntimeHidden_RegExpExec) {
+RUNTIME_FUNCTION(Runtime_RegExpExecRT) {
   HandleScope scope(isolate);
   ASSERT(args.length() == 4);
   CONVERT_ARG_HANDLE_CHECKED(JSRegExp, regexp, 0);
@@ -2597,7 +2597,7 @@ RUNTIME_FUNCTION(RuntimeHidden_RegExpExec) {
 }
 
 
-RUNTIME_FUNCTION(RuntimeHidden_RegExpConstructResult) {
+RUNTIME_FUNCTION(Runtime_RegExpConstructResult) {
   HandleScope handle_scope(isolate);
   ASSERT(args.length() == 3);
   CONVERT_SMI_ARG_CHECKED(size, 0);
@@ -2769,7 +2769,7 @@ RUNTIME_FUNCTION(Runtime_GetDefaultReceiver) {
 }
 
 
-RUNTIME_FUNCTION(RuntimeHidden_MaterializeRegExpLiteral) {
+RUNTIME_FUNCTION(Runtime_MaterializeRegExpLiteral) {
   HandleScope scope(isolate);
   ASSERT(args.length() == 4);
   CONVERT_ARG_HANDLE_CHECKED(FixedArray, literals, 0);
@@ -3018,7 +3018,7 @@ RUNTIME_FUNCTION(Runtime_SetCode) {
 }
 
 
-RUNTIME_FUNCTION(RuntimeHidden_CreateJSGeneratorObject) {
+RUNTIME_FUNCTION(Runtime_CreateJSGeneratorObject) {
   HandleScope scope(isolate);
   ASSERT(args.length() == 0);
 
@@ -3044,7 +3044,7 @@ RUNTIME_FUNCTION(RuntimeHidden_CreateJSGeneratorObject) {
 }
 
 
-RUNTIME_FUNCTION(RuntimeHidden_SuspendJSGeneratorObject) {
+RUNTIME_FUNCTION(Runtime_SuspendJSGeneratorObject) {
   HandleScope handle_scope(isolate);
   ASSERT(args.length() == 1);
   CONVERT_ARG_HANDLE_CHECKED(JSGeneratorObject, generator_object, 0);
@@ -3094,7 +3094,7 @@ RUNTIME_FUNCTION(RuntimeHidden_SuspendJSGeneratorObject) {
 // inlined into GeneratorNext and GeneratorThrow.  EmitGeneratorResumeResume is
 // called in any case, as it needs to reconstruct the stack frame and make space
 // for arguments and operands.
-RUNTIME_FUNCTION(RuntimeHidden_ResumeJSGeneratorObject) {
+RUNTIME_FUNCTION(Runtime_ResumeJSGeneratorObject) {
   SealHandleScope shs(isolate);
   ASSERT(args.length() == 3);
   CONVERT_ARG_CHECKED(JSGeneratorObject, generator_object, 0);
@@ -3142,7 +3142,7 @@ RUNTIME_FUNCTION(RuntimeHidden_ResumeJSGeneratorObject) {
 }
 
 
-RUNTIME_FUNCTION(RuntimeHidden_ThrowGeneratorStateError) {
+RUNTIME_FUNCTION(Runtime_ThrowGeneratorStateError) {
   HandleScope scope(isolate);
   ASSERT(args.length() == 1);
   CONVERT_ARG_HANDLE_CHECKED(JSGeneratorObject, generator, 0);
@@ -3171,7 +3171,7 @@ RUNTIME_FUNCTION(Runtime_ObjectFreeze) {
 }
 
 
-RUNTIME_FUNCTION(RuntimeHidden_StringCharCodeAt) {
+RUNTIME_FUNCTION(Runtime_StringCharCodeAtRT) {
   HandleScope handle_scope(isolate);
   ASSERT(args.length() == 2);
 
@@ -4447,7 +4447,7 @@ RUNTIME_FUNCTION(Runtime_StringLocaleCompare) {
 }
 
 
-RUNTIME_FUNCTION(RuntimeHidden_SubString) {
+RUNTIME_FUNCTION(Runtime_SubString) {
   HandleScope scope(isolate);
   ASSERT(args.length() == 3);
 
@@ -6832,7 +6832,7 @@ bool Runtime::IsUpperCaseChar(RuntimeState* runtime_state, uint16_t ch) {
 }
 
 
-RUNTIME_FUNCTION(RuntimeHidden_NumberToString) {
+RUNTIME_FUNCTION(Runtime_NumberToStringRT) {
   HandleScope scope(isolate);
   ASSERT(args.length() == 1);
   CONVERT_NUMBER_ARG_HANDLE_CHECKED(number, 0);
@@ -6841,7 +6841,7 @@ RUNTIME_FUNCTION(RuntimeHidden_NumberToString) {
 }
 
 
-RUNTIME_FUNCTION(RuntimeHidden_NumberToStringSkipCache) {
+RUNTIME_FUNCTION(Runtime_NumberToStringSkipCache) {
   HandleScope scope(isolate);
   ASSERT(args.length() == 1);
   CONVERT_NUMBER_ARG_HANDLE_CHECKED(number, 0);
@@ -6892,7 +6892,7 @@ RUNTIME_FUNCTION(Runtime_NumberToJSInt32) {
 
 // Converts a Number to a Smi, if possible. Returns NaN if the number is not
 // a small integer.
-RUNTIME_FUNCTION(RuntimeHidden_NumberToSmi) {
+RUNTIME_FUNCTION(Runtime_NumberToSmi) {
   SealHandleScope shs(isolate);
   ASSERT(args.length() == 1);
   CONVERT_ARG_CHECKED(Object, obj, 0);
@@ -6910,7 +6910,7 @@ RUNTIME_FUNCTION(RuntimeHidden_NumberToSmi) {
 }
 
 
-RUNTIME_FUNCTION(RuntimeHidden_AllocateHeapNumber) {
+RUNTIME_FUNCTION(Runtime_AllocateHeapNumber) {
   HandleScope scope(isolate);
   ASSERT(args.length() == 0);
   return *isolate->factory()->NewHeapNumber(0);
@@ -6986,7 +6986,7 @@ RUNTIME_FUNCTION(Runtime_NumberImul) {
 }
 
 
-RUNTIME_FUNCTION(RuntimeHidden_StringAdd) {
+RUNTIME_FUNCTION(Runtime_StringAdd) {
   HandleScope scope(isolate);
   ASSERT(args.length() == 2);
   CONVERT_ARG_HANDLE_CHECKED(String, str1, 0);
@@ -7571,7 +7571,7 @@ RUNTIME_FUNCTION(Runtime_SmiLexicographicCompare) {
 }
 
 
-RUNTIME_FUNCTION(RuntimeHidden_StringCompare) {
+RUNTIME_FUNCTION(Runtime_StringCompare) {
   HandleScope handle_scope(isolate);
   ASSERT(args.length() == 2);
 
@@ -7732,7 +7732,7 @@ RUNTIME_FUNCTION(Runtime_MathFloorRT) {
 
 // Slow version of Math.pow.  We check for fast paths for special cases.
 // Used if VFP3 is not available.
-RUNTIME_FUNCTION(RuntimeHidden_MathPowSlow) {
+RUNTIME_FUNCTION(Runtime_MathPowSlow) {
   HandleScope scope(isolate);
   ASSERT(args.length() == 2);
   isolate->counters()->math_pow()->Increment();
@@ -7755,7 +7755,7 @@ RUNTIME_FUNCTION(RuntimeHidden_MathPowSlow) {
 
 // Fast version of Math.pow if we know that y is not an integer and y is not
 // -0.5 or 0.5.  Used as slow case from full codegen.
-RUNTIME_FUNCTION(RuntimeHidden_MathPow) {
+RUNTIME_FUNCTION(Runtime_MathPowRT) {
   HandleScope scope(isolate);
   ASSERT(args.length() == 2);
   isolate->counters()->math_pow()->Increment();
@@ -7883,7 +7883,7 @@ RUNTIME_FUNCTION(Runtime_DateSetValue) {
 }
 
 
-RUNTIME_FUNCTION(RuntimeHidden_NewSloppyArguments) {
+RUNTIME_FUNCTION(Runtime_NewSloppyArguments) {
   HandleScope scope(isolate);
   ASSERT(args.length() == 3);
 
@@ -7977,7 +7977,7 @@ RUNTIME_FUNCTION(RuntimeHidden_NewSloppyArguments) {
 }
 
 
-RUNTIME_FUNCTION(RuntimeHidden_NewStrictArguments) {
+RUNTIME_FUNCTION(Runtime_NewStrictArguments) {
   HandleScope scope(isolate);
   ASSERT(args.length() == 3);
   CONVERT_ARG_HANDLE_CHECKED(JSFunction, callee, 0)
@@ -8001,7 +8001,7 @@ RUNTIME_FUNCTION(RuntimeHidden_NewStrictArguments) {
 }
 
 
-RUNTIME_FUNCTION(RuntimeHidden_NewClosureFromStubFailure) {
+RUNTIME_FUNCTION(Runtime_NewClosureFromStubFailure) {
   HandleScope scope(isolate);
   ASSERT(args.length() == 1);
   CONVERT_ARG_HANDLE_CHECKED(SharedFunctionInfo, shared, 0);
@@ -8012,7 +8012,7 @@ RUNTIME_FUNCTION(RuntimeHidden_NewClosureFromStubFailure) {
 }
 
 
-RUNTIME_FUNCTION(RuntimeHidden_NewClosure) {
+RUNTIME_FUNCTION(Runtime_NewClosure) {
   HandleScope scope(isolate);
   ASSERT(args.length() == 3);
   CONVERT_ARG_HANDLE_CHECKED(Context, context, 0);
@@ -8267,7 +8267,7 @@ static Object* Runtime_NewObjectHelper(Isolate* isolate,
 }
 
 
-RUNTIME_FUNCTION(RuntimeHidden_NewObject) {
+RUNTIME_FUNCTION(Runtime_NewObject) {
   HandleScope scope(isolate);
   ASSERT(args.length() == 1);
   CONVERT_ARG_HANDLE_CHECKED(Object, constructor, 0);
@@ -8277,7 +8277,7 @@ RUNTIME_FUNCTION(RuntimeHidden_NewObject) {
 }
 
 
-RUNTIME_FUNCTION(RuntimeHidden_NewObjectWithAllocationSite) {
+RUNTIME_FUNCTION(Runtime_NewObjectWithAllocationSite) {
   HandleScope scope(isolate);
   ASSERT(args.length() == 2);
   CONVERT_ARG_HANDLE_CHECKED(Object, constructor, 1);
@@ -8291,7 +8291,7 @@ RUNTIME_FUNCTION(RuntimeHidden_NewObjectWithAllocationSite) {
 }
 
 
-RUNTIME_FUNCTION(RuntimeHidden_FinalizeInstanceSize) {
+RUNTIME_FUNCTION(Runtime_FinalizeInstanceSize) {
   HandleScope scope(isolate);
   ASSERT(args.length() == 1);
 
@@ -8302,7 +8302,7 @@ RUNTIME_FUNCTION(RuntimeHidden_FinalizeInstanceSize) {
 }
 
 
-RUNTIME_FUNCTION(RuntimeHidden_CompileUnoptimized) {
+RUNTIME_FUNCTION(Runtime_CompileUnoptimized) {
   HandleScope scope(isolate);
   ASSERT(args.length() == 1);
   CONVERT_ARG_HANDLE_CHECKED(JSFunction, function, 0);
@@ -8331,7 +8331,7 @@ RUNTIME_FUNCTION(RuntimeHidden_CompileUnoptimized) {
 }
 
 
-RUNTIME_FUNCTION(RuntimeHidden_CompileOptimized) {
+RUNTIME_FUNCTION(Runtime_CompileOptimized) {
   HandleScope scope(isolate);
   ASSERT(args.length() == 2);
   CONVERT_ARG_HANDLE_CHECKED(JSFunction, function, 0);
@@ -8399,7 +8399,7 @@ class ActivationsFinder : public ThreadVisitor {
 };
 
 
-RUNTIME_FUNCTION(RuntimeHidden_NotifyStubFailure) {
+RUNTIME_FUNCTION(Runtime_NotifyStubFailure) {
   HandleScope scope(isolate);
   ASSERT(args.length() == 0);
   Deoptimizer* deoptimizer = Deoptimizer::Grab(isolate);
@@ -8409,7 +8409,7 @@ RUNTIME_FUNCTION(RuntimeHidden_NotifyStubFailure) {
 }
 
 
-RUNTIME_FUNCTION(RuntimeHidden_NotifyDeoptimized) {
+RUNTIME_FUNCTION(Runtime_NotifyDeoptimized) {
   HandleScope scope(isolate);
   ASSERT(args.length() == 1);
   CONVERT_SMI_ARG_CHECKED(type_arg, 0);
@@ -8869,7 +8869,7 @@ RUNTIME_FUNCTION(Runtime_GetConstructorDelegate) {
 }
 
 
-RUNTIME_FUNCTION(RuntimeHidden_NewGlobalContext) {
+RUNTIME_FUNCTION(Runtime_NewGlobalContext) {
   HandleScope scope(isolate);
   ASSERT(args.length() == 2);
 
@@ -8885,7 +8885,7 @@ RUNTIME_FUNCTION(RuntimeHidden_NewGlobalContext) {
 }
 
 
-RUNTIME_FUNCTION(RuntimeHidden_NewFunctionContext) {
+RUNTIME_FUNCTION(Runtime_NewFunctionContext) {
   HandleScope scope(isolate);
   ASSERT(args.length() == 1);
 
@@ -8895,7 +8895,7 @@ RUNTIME_FUNCTION(RuntimeHidden_NewFunctionContext) {
 }
 
 
-RUNTIME_FUNCTION(RuntimeHidden_PushWithContext) {
+RUNTIME_FUNCTION(Runtime_PushWithContext) {
   HandleScope scope(isolate);
   ASSERT(args.length() == 2);
   Handle<JSReceiver> extension_object;
@@ -8932,7 +8932,7 @@ RUNTIME_FUNCTION(RuntimeHidden_PushWithContext) {
 }
 
 
-RUNTIME_FUNCTION(RuntimeHidden_PushCatchContext) {
+RUNTIME_FUNCTION(Runtime_PushCatchContext) {
   HandleScope scope(isolate);
   ASSERT(args.length() == 3);
   CONVERT_ARG_HANDLE_CHECKED(String, name, 0);
@@ -8954,7 +8954,7 @@ RUNTIME_FUNCTION(RuntimeHidden_PushCatchContext) {
 }
 
 
-RUNTIME_FUNCTION(RuntimeHidden_PushBlockContext) {
+RUNTIME_FUNCTION(Runtime_PushBlockContext) {
   HandleScope scope(isolate);
   ASSERT(args.length() == 2);
   CONVERT_ARG_HANDLE_CHECKED(ScopeInfo, scope_info, 0);
@@ -8983,7 +8983,7 @@ RUNTIME_FUNCTION(Runtime_IsJSModule) {
 }
 
 
-RUNTIME_FUNCTION(RuntimeHidden_PushModuleContext) {
+RUNTIME_FUNCTION(Runtime_PushModuleContext) {
   SealHandleScope shs(isolate);
   ASSERT(args.length() == 2);
   CONVERT_SMI_ARG_CHECKED(index, 0);
@@ -9018,7 +9018,7 @@ RUNTIME_FUNCTION(RuntimeHidden_PushModuleContext) {
 }
 
 
-RUNTIME_FUNCTION(RuntimeHidden_DeclareModules) {
+RUNTIME_FUNCTION(Runtime_DeclareModules) {
   HandleScope scope(isolate);
   ASSERT(args.length() == 1);
   CONVERT_ARG_HANDLE_CHECKED(FixedArray, descriptions, 0);
@@ -9072,7 +9072,7 @@ RUNTIME_FUNCTION(RuntimeHidden_DeclareModules) {
 }
 
 
-RUNTIME_FUNCTION(RuntimeHidden_DeleteContextSlot) {
+RUNTIME_FUNCTION(Runtime_DeleteContextSlot) {
   HandleScope scope(isolate);
   ASSERT(args.length() == 2);
 
@@ -9283,17 +9283,17 @@ static ObjectPair LoadContextSlotHelper(Arguments args,
 }
 
 
-RUNTIME_FUNCTION_RETURN_PAIR(RuntimeHidden_LoadContextSlot) {
+RUNTIME_FUNCTION_RETURN_PAIR(Runtime_LoadContextSlot) {
   return LoadContextSlotHelper(args, isolate, true);
 }
 
 
-RUNTIME_FUNCTION_RETURN_PAIR(RuntimeHidden_LoadContextSlotNoReferenceError) {
+RUNTIME_FUNCTION_RETURN_PAIR(Runtime_LoadContextSlotNoReferenceError) {
   return LoadContextSlotHelper(args, isolate, false);
 }
 
 
-RUNTIME_FUNCTION(RuntimeHidden_StoreContextSlot) {
+RUNTIME_FUNCTION(Runtime_StoreContextSlot) {
   HandleScope scope(isolate);
   ASSERT(args.length() == 4);
 
@@ -9378,7 +9378,7 @@ RUNTIME_FUNCTION(RuntimeHidden_StoreContextSlot) {
 }
 
 
-RUNTIME_FUNCTION(RuntimeHidden_Throw) {
+RUNTIME_FUNCTION(Runtime_Throw) {
   HandleScope scope(isolate);
   ASSERT(args.length() == 1);
 
@@ -9386,7 +9386,7 @@ RUNTIME_FUNCTION(RuntimeHidden_Throw) {
 }
 
 
-RUNTIME_FUNCTION(RuntimeHidden_ReThrow) {
+RUNTIME_FUNCTION(Runtime_ReThrow) {
   HandleScope scope(isolate);
   ASSERT(args.length() == 1);
 
@@ -9394,14 +9394,14 @@ RUNTIME_FUNCTION(RuntimeHidden_ReThrow) {
 }
 
 
-RUNTIME_FUNCTION(RuntimeHidden_PromoteScheduledException) {
+RUNTIME_FUNCTION(Runtime_PromoteScheduledException) {
   SealHandleScope shs(isolate);
   ASSERT(args.length() == 0);
   return isolate->PromoteScheduledException();
 }
 
 
-RUNTIME_FUNCTION(RuntimeHidden_ThrowReferenceError) {
+RUNTIME_FUNCTION(Runtime_ThrowReferenceError) {
   HandleScope scope(isolate);
   ASSERT(args.length() == 1);
   CONVERT_ARG_HANDLE_CHECKED(Object, name, 0);
@@ -9412,7 +9412,7 @@ RUNTIME_FUNCTION(RuntimeHidden_ThrowReferenceError) {
 }
 
 
-RUNTIME_FUNCTION(RuntimeHidden_ThrowNotDateError) {
+RUNTIME_FUNCTION(Runtime_ThrowNotDateError) {
   HandleScope scope(isolate);
   ASSERT(args.length() == 0);
   return isolate->Throw(*isolate->factory()->NewTypeError(
@@ -9420,7 +9420,7 @@ RUNTIME_FUNCTION(RuntimeHidden_ThrowNotDateError) {
 }
 
 
-RUNTIME_FUNCTION(RuntimeHidden_StackGuard) {
+RUNTIME_FUNCTION(Runtime_StackGuard) {
   SealHandleScope shs(isolate);
   ASSERT(args.length() == 0);
 
@@ -9434,7 +9434,7 @@ RUNTIME_FUNCTION(RuntimeHidden_StackGuard) {
 }
 
 
-RUNTIME_FUNCTION(RuntimeHidden_TryInstallOptimizedCode) {
+RUNTIME_FUNCTION(Runtime_TryInstallOptimizedCode) {
   HandleScope scope(isolate);
   ASSERT(args.length() == 1);
   CONVERT_ARG_HANDLE_CHECKED(JSFunction, function, 0);
@@ -9452,7 +9452,7 @@ RUNTIME_FUNCTION(RuntimeHidden_TryInstallOptimizedCode) {
 }
 
 
-RUNTIME_FUNCTION(RuntimeHidden_Interrupt) {
+RUNTIME_FUNCTION(Runtime_Interrupt) {
   SealHandleScope shs(isolate);
   ASSERT(args.length() == 0);
   return isolate->stack_guard()->HandleInterrupts();
@@ -9822,7 +9822,7 @@ static ObjectPair CompileGlobalEval(Isolate* isolate,
 }
 
 
-RUNTIME_FUNCTION_RETURN_PAIR(RuntimeHidden_ResolvePossiblyDirectEval) {
+RUNTIME_FUNCTION_RETURN_PAIR(Runtime_ResolvePossiblyDirectEval) {
   HandleScope scope(isolate);
   ASSERT(args.length() == 5);
 
@@ -9850,7 +9850,7 @@ RUNTIME_FUNCTION_RETURN_PAIR(RuntimeHidden_ResolvePossiblyDirectEval) {
 }
 
 
-RUNTIME_FUNCTION(RuntimeHidden_AllocateInNewSpace) {
+RUNTIME_FUNCTION(Runtime_AllocateInNewSpace) {
   HandleScope scope(isolate);
   ASSERT(args.length() == 1);
   CONVERT_SMI_ARG_CHECKED(size, 0);
@@ -9861,7 +9861,7 @@ RUNTIME_FUNCTION(RuntimeHidden_AllocateInNewSpace) {
 }
 
 
-RUNTIME_FUNCTION(RuntimeHidden_AllocateInTargetSpace) {
+RUNTIME_FUNCTION(Runtime_AllocateInTargetSpace) {
   HandleScope scope(isolate);
   ASSERT(args.length() == 2);
   CONVERT_SMI_ARG_CHECKED(size, 0);
@@ -14556,7 +14556,7 @@ RUNTIME_FUNCTION(Runtime_TryMigrateInstance) {
 }
 
 
-RUNTIME_FUNCTION(RuntimeHidden_GetFromCache) {
+RUNTIME_FUNCTION(Runtime_GetFromCache) {
   SealHandleScope shs(isolate);
   // This is only called from codegen, so checks might be more lax.
   CONVERT_ARG_CHECKED(JSFunctionResultCache, cache, 0);
@@ -14679,7 +14679,6 @@ RUNTIME_FUNCTION(Runtime_ListNatives) {
 #define COUNT_ENTRY(Name, argc, ressize) + 1
   int entry_count = 0
       RUNTIME_FUNCTION_LIST(COUNT_ENTRY)
-      RUNTIME_HIDDEN_FUNCTION_LIST(COUNT_ENTRY)
       INLINE_FUNCTION_LIST(COUNT_ENTRY)
       INLINE_OPTIMIZED_FUNCTION_LIST(COUNT_ENTRY);
 #undef COUNT_ENTRY
@@ -14706,8 +14705,6 @@ RUNTIME_FUNCTION(Runtime_ListNatives) {
   inline_runtime_functions = false;
   RUNTIME_FUNCTION_LIST(ADD_ENTRY)
   INLINE_OPTIMIZED_FUNCTION_LIST(ADD_ENTRY)
-  // Calling hidden runtime functions should just throw.
-  RUNTIME_HIDDEN_FUNCTION_LIST(ADD_ENTRY)
   inline_runtime_functions = true;
   INLINE_FUNCTION_LIST(ADD_ENTRY)
 #undef ADD_ENTRY
@@ -14989,7 +14986,7 @@ static Object* ArrayConstructorCommon(Isolate* isolate,
 }
 
 
-RUNTIME_FUNCTION(RuntimeHidden_ArrayConstructor) {
+RUNTIME_FUNCTION(Runtime_ArrayConstructor) {
   HandleScope scope(isolate);
   // If we get 2 arguments then they are the stub parameters (constructor, type
   // info).  If we get 4, then the first one is a pointer to the arguments
@@ -15026,7 +15023,7 @@ RUNTIME_FUNCTION(RuntimeHidden_ArrayConstructor) {
 }
 
 
-RUNTIME_FUNCTION(RuntimeHidden_InternalArrayConstructor) {
+RUNTIME_FUNCTION(Runtime_InternalArrayConstructor) {
   HandleScope scope(isolate);
   Arguments empty_args(0, NULL);
   bool no_caller_args = args.length() == 1;
@@ -15063,11 +15060,6 @@ RUNTIME_FUNCTION(Runtime_MaxSmi) {
     FUNCTION_ADDR(Runtime_##name), number_of_args, result_size },
 
 
-#define FH(name, number_of_args, result_size)                             \
-  { Runtime::kHidden##name, Runtime::RUNTIME_HIDDEN, NULL,   \
-    FUNCTION_ADDR(RuntimeHidden_##name), number_of_args, result_size },
-
-
 #define I(name, number_of_args, result_size)                             \
   { Runtime::kInline##name, Runtime::INLINE,     \
     "_" #name, NULL, number_of_args, result_size },
@@ -15081,14 +15073,12 @@ RUNTIME_FUNCTION(Runtime_MaxSmi) {
 static const Runtime::Function kIntrinsicFunctions[] = {
   RUNTIME_FUNCTION_LIST(F)
   INLINE_OPTIMIZED_FUNCTION_LIST(F)
-  RUNTIME_HIDDEN_FUNCTION_LIST(FH)
   INLINE_FUNCTION_LIST(I)
   INLINE_OPTIMIZED_FUNCTION_LIST(IO)
 };
 
 #undef IO
 #undef I
-#undef FH
 #undef F
 
 

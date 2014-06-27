@@ -7225,9 +7225,6 @@ class SharedFunctionInfo: public HeapObject {
   // Is this a function or top-level/eval code.
   DECL_BOOLEAN_ACCESSORS(is_function)
 
-  // Indicates that the function cannot be optimized.
-  DECL_BOOLEAN_ACCESSORS(dont_optimize)
-
   // Indicates that the function cannot be inlined.
   DECL_BOOLEAN_ACCESSORS(dont_inline)
 
@@ -7294,7 +7291,7 @@ class SharedFunctionInfo: public HeapObject {
 
   void set_dont_optimize_reason(BailoutReason reason) {
     set_bailout_reason(reason);
-    set_dont_optimize(reason != kNoReason);
+    set_dont_inline(reason != kNoReason);
   }
 
   // Check whether or not this function is inlineable.
@@ -7439,7 +7436,6 @@ class SharedFunctionInfo: public HeapObject {
     kIsAnonymous,
     kNameShouldPrintAsAnonymous,
     kIsFunction,
-    kDontOptimize,
     kDontInline,
     kDontCache,
     kDontFlush,
