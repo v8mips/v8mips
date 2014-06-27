@@ -2879,6 +2879,28 @@ void MacroAssembler::Push(Handle<Object> handle) {
 }
 
 
+void MacroAssembler::PushRegisterAsTwoSmis(Register src, Register scratch) {
+  ASSERT(!src.is(scratch));
+  mov(scratch, src);
+  dsrl32(src, src, 0);
+  dsll32(src, src, 0);
+  push(src);
+  dsll32(scratch, scratch, 0);
+  push(scratch);
+}
+
+
+void MacroAssembler::PopRegisterAsTwoSmis(Register dst, Register scratch) {
+  ASSERT(!dst.is(scratch));
+  pop(scratch);
+  dsrl32(scratch, scratch, 0);
+  pop(dst);
+  dsrl32(dst, dst, 0);
+  dsll32(dst, dst, 0);
+  or_(dst, dst, scratch);
+}
+
+
 void MacroAssembler::DebugBreak() {
   PrepareCEntryArgs(0);
   PrepareCEntryFunction(ExternalReference(Runtime::kDebugBreak, isolate()));

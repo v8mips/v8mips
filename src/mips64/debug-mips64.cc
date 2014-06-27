@@ -124,20 +124,15 @@ static void Generate_DebugBreakCallHelper(MacroAssembler* masm,
     ASSERT((object_regs & ~kJSCallerSaved) == 0);
     ASSERT((non_object_regs & ~kJSCallerSaved) == 0);
     ASSERT((object_regs & non_object_regs) == 0);
-    if ((object_regs | non_object_regs) != 0) {
-      for (int i = 0; i < kNumJSCallerSaved; i++) {
-        int r = JSCallerSavedCode(i);
-        Register reg = { r };
-        if ((non_object_regs & (1 << r)) != 0) {
-          if (FLAG_debug_code) {
-           // TODO(yuyin) 0x80000000?
-            __ And(at, reg, 0xc0000000);
-            __ Assert(eq, kUnableToEncodeValueAsSmi, at, Operand(zero_reg));
-          }
-          __ dsll32(reg, reg, 0);
-        }
+    for (int i = 0; i < kNumJSCallerSaved; i++) {
+      int r = JSCallerSavedCode(i);
+      Register reg = { r };
+      if ((object_regs & (1 << r)) != 0) {
+        __ push(reg);
       }
-      __ MultiPush(object_regs | non_object_regs);
+      if ((non_object_regs & (1 << r)) != 0) {
+        __ PushRegisterAsTwoSmis(reg);
+      }
     }
 
 #ifdef DEBUG
@@ -150,18 +145,18 @@ static void Generate_DebugBreakCallHelper(MacroAssembler* masm,
     __ CallStub(&ceb);
 
     // Restore the register values from the expression stack.
-    if ((object_regs | non_object_regs) != 0) {
-      __ MultiPop(object_regs | non_object_regs);
-      for (int i = 0; i < kNumJSCallerSaved; i++) {
-        int r = JSCallerSavedCode(i);
-        Register reg = { r };
-        if ((non_object_regs & (1 << r)) != 0) {
-          __ SmiUntag(reg);
-        }
-        if (FLAG_debug_code &&
-            (((object_regs |non_object_regs) & (1 << r)) == 0)) {
-          __ li(reg, kDebugZapValue);
-        }
+    for (int i = kNumJSCallerSaved - 1; i >= 0; i--) {
+      int r = JSCallerSavedCode(i);
+      Register reg = { r };
+      if ((non_object_regs & (1 << r)) != 0) {
+        __ PopRegisterAsTwoSmis(reg, at);
+      }
+      if ((object_regs & (1 << r)) != 0) {
+        __ pop(reg);
+      }        
+      if (FLAG_debug_code &&
+          (((object_regs |non_object_regs) & (1 << r)) == 0)) {
+        __ li(reg, kDebugZapValue);
       }
     }
 

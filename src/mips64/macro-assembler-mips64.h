@@ -696,6 +696,9 @@ class MacroAssembler: public Assembler {
     sd(src, MemOperand(sp, 0));
   }
 
+  void PushRegisterAsTwoSmis(Register src, Register scratch = at);
+  void PopRegisterAsTwoSmis(Register dst, Register scratch = at);
+
   // Pops multiple values from the stack and load them in the
   // registers specified in regs. Pop order is the opposite as in MultiPush.
   void MultiPop(RegList regs);
