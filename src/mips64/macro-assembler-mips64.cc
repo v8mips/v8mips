@@ -5556,24 +5556,16 @@ void MacroAssembler::HasColor(Register object,
 
   GetMarkBits(object, bitmap_scratch, mask_scratch);
 
-  Label other_color, word_boundary;
-  // TODO(plind): add reasonable comments to this function.
-  lwu(t9, MemOperand(bitmap_scratch, MemoryChunk::kHeaderSize));
+  Label other_color;
+  // Note that we are using a 4-byte aligned 8-byte load.
+  Uld(t9, MemOperand(bitmap_scratch, MemoryChunk::kHeaderSize));
   And(t8, t9, Operand(mask_scratch));
   Branch(&other_color, first_bit == 1 ? eq : ne, t8, Operand(zero_reg));
   // Shift left 1 by adding.
-  Addu(mask_scratch, mask_scratch, Operand(mask_scratch));
-  Branch(&word_boundary, eq, mask_scratch, Operand(zero_reg));
+  Daddu(mask_scratch, mask_scratch, Operand(mask_scratch));
   And(t8, t9, Operand(mask_scratch));
   Branch(has_color, second_bit == 1 ? ne : eq, t8, Operand(zero_reg));
-  jmp(&other_color);
 
-  bind(&word_boundary);
-  // TODO(plind): add reasonable comments to this function.
-    // from x64:  Note that we are using a 4-byte aligned 8-byte load.
-  lwu(t9, MemOperand(bitmap_scratch, MemoryChunk::kHeaderSize + kPointerSize));
-  And(t9, t9, Operand(1));
-  Branch(has_color, second_bit == 1 ? ne : eq, t9, Operand(zero_reg));
   bind(&other_color);
 }
 
@@ -5604,15 +5596,14 @@ void MacroAssembler::GetMarkBits(Register addr_reg,
                                  Register bitmap_reg,
                                  Register mask_reg) {
   ASSERT(!AreAliased(addr_reg, bitmap_reg, mask_reg, no_reg));
-  // TODO(plind): Fix li() so we can use constant embedded inside And().
-  // And(bitmap_reg, addr_reg, Operand(~Page::kPageAlignmentMask));
-  li(at, Operand(~Page::kPageAlignmentMask), CONSTANT_SIZE);
-  And(bitmap_reg, addr_reg, at);
+  // addr_reg is divided into fields:
+  // |63        page base        20|19    high      8|7   shift   3|2  0|
+  // 'high' gives the index of the cell holding color bits for the object.
+  // 'shift' gives the offset in the cell for this object's color.
+  And(bitmap_reg, addr_reg, Operand(~Page::kPageAlignmentMask));
   Ext(mask_reg, addr_reg, kPointerSizeLog2, Bitmap::kBitsPerCellLog2);
   const int kLowBits = kPointerSizeLog2 + Bitmap::kBitsPerCellLog2;
   Ext(t8, addr_reg, kLowBits, kPageSizeBits - kLowBits);
-  // TODO(plind): Add reasonable comments to this entire function.
-  // dsll(t8, t8, kPointerSizeLog2);
   dsll(t8, t8, Bitmap::kBytesPerCellLog2);
   Daddu(bitmap_reg, bitmap_reg, t8);
   li(t8, Operand(1));
@@ -5639,8 +5630,8 @@ void MacroAssembler::EnsureNotWhite(
 
   // Since both black and grey have a 1 in the first position and white does
   // not have a 1 there we only need to check one bit.
-  // TODO(plind): add reasonable comments to this function.
-  lwu(load_scratch, MemOperand(bitmap_scratch, MemoryChunk::kHeaderSize));
+  // Note that we are using a 4-byte aligned 8-byte load.
+  Uld(load_scratch, MemOperand(bitmap_scratch, MemoryChunk::kHeaderSize));
   And(t8, mask_scratch, load_scratch);
   Branch(&done, ne, t8, Operand(zero_reg));
 
@@ -5703,22 +5694,19 @@ void MacroAssembler::EnsureNotWhite(
   // getting the length multiplied by 2.
   ASSERT(kOneByteStringTag == 4 && kStringEncodingMask == 4);
   ASSERT(kSmiTag == 0 && kSmiTagSize == 1);
-  ld(t9, FieldMemOperand(value, String::kLengthOffset));
+  lw(t9, UntagSmiFieldMemOperand(value, String::kLengthOffset));
   And(t8, instance_type, Operand(kStringEncodingMask));
   {
     Label skip;
-    Branch(&skip, eq, t8, Operand(zero_reg));
-    // dsrl(t9, t9, 1);
-    dsra32(t9, t9, 0);
+    Branch(&skip, ne, t8, Operand(zero_reg));
+    // Adjust length for UC16.
+    dsll(t9, t9, 1);
     bind(&skip);
-    // TODO(plind): Fix these magic numbers to some descriptive constants.
-    dsra(t9, t9, 32 - 1);
+
   }
   Daddu(length, t9, Operand(SeqString::kHeaderSize + kObjectAlignmentMask));
-  // And(length, length, Operand(~kObjectAlignmentMask));
   ASSERT(!length.is(t8));
-  li(t8, Operand(~kObjectAlignmentMask));
-  And(length, length, t8);
+  And(length, length, Operand(~kObjectAlignmentMask));
 
   bind(&is_data_object);
   // Value is a data object, and it is white.  Mark it black.  Since we know
@@ -5727,10 +5715,7 @@ void MacroAssembler::EnsureNotWhite(
   Or(t8, t8, Operand(mask_scratch));
   Usd(t8, MemOperand(bitmap_scratch, MemoryChunk::kHeaderSize));
 
-  // TODO(plind): Fix li() so we can use constant embedded inside And().
-  // And(bitmap_scratch, bitmap_scratch, Operand(~Page::kPageAlignmentMask));
-  li(t8, Operand(~Page::kPageAlignmentMask), CONSTANT_SIZE);
-  And(bitmap_scratch, bitmap_scratch, t8);
+  And(bitmap_scratch, bitmap_scratch, Operand(~Page::kPageAlignmentMask));
   Uld(t8, MemOperand(bitmap_scratch, MemoryChunk::kLiveBytesOffset));
   Daddu(t8, t8, Operand(length));
   Usd(t8, MemOperand(bitmap_scratch, MemoryChunk::kLiveBytesOffset));
