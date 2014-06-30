@@ -1515,13 +1515,23 @@ void HGraphBuilder::BuildKeyedIndexCheck(HValue* key,
               Token::BIT_AND,
               instance_type,
               Add<HConstant>(static_cast<int>(kIsNotInternalizedMask)));
-          DeoptimizeIf<HCompareNumericAndBranch>(
-              not_internalized_bit,
-              graph()->GetConstant0(),
-              Token::NE,
-              "BuildKeyedIndexCheck: string isn't internalized");
-          // Key guaranteed to be a unqiue string
+
+          IfBuilder internalized(this);
+          internalized.If<HCompareNumericAndBranch>(not_internalized_bit,
+                                                    graph()->GetConstant0(),
+                                                    Token::EQ);
+          internalized.Then();
           Push(key);
+
+          internalized.Else();
+          Add<HPushArguments>(key);
+          HValue* intern_key = Add<HCallRuntime>(
+              isolate()->factory()->empty_string(),
+              Runtime::FunctionForId(Runtime::kInternalizeString), 1);
+          Push(intern_key);
+
+          internalized.End();
+          // Key guaranteed to be a unique string
         }
         string_index_if.JoinContinuation(join_continuation);
       }
@@ -5773,8 +5783,9 @@ HInstruction* HOptimizedGraphBuilder::BuildStoreNamedField(
       HInstruction* heap_number = Add<HAllocate>(heap_number_size,
           HType::HeapObject(),
           NOT_TENURED,
-          HEAP_NUMBER_TYPE);
-      AddStoreMapConstant(heap_number, isolate()->factory()->heap_number_map());
+          MUTABLE_HEAP_NUMBER_TYPE);
+      AddStoreMapConstant(
+          heap_number, isolate()->factory()->mutable_heap_number_map());
       Add<HStoreNamedField>(heap_number, HObjectAccess::ForHeapNumberValue(),
                             value);
       instr = New<HStoreNamedField>(checked_object->ActualValue(),
@@ -7568,7 +7579,7 @@ int HOptimizedGraphBuilder::InliningAstSize(Handle<JSFunction> target) {
     TraceInline(target, caller, "target not inlineable");
     return kNotInlinable;
   }
-  if (target_shared->dont_inline()) {
+  if (target_shared->DisableOptimizationReason() != kNoReason) {
     TraceInline(target, caller, "target contains unsupported syntax [early]");
     return kNotInlinable;
   }
@@ -7655,8 +7666,7 @@ bool HOptimizedGraphBuilder::TryInline(Handle<JSFunction> target,
     TraceInline(target, caller, "target AST is too large [late]");
     return false;
   }
-  AstProperties::Flags* flags(function->flags());
-  if (flags->Contains(kDontInline) || function->dont_optimize()) {
+  if (function->dont_optimize()) {
     TraceInline(target, caller, "target contains unsupported syntax [late]");
     return false;
   }
@@ -10946,11 +10956,14 @@ void HOptimizedGraphBuilder::BuildEmitInObjectProperties(
         // 2) we can just use the mode of the parent object for pretenuring
         HInstruction* double_box =
             Add<HAllocate>(heap_number_constant, HType::HeapObject(),
-                pretenure_flag, HEAP_NUMBER_TYPE);
+                pretenure_flag, MUTABLE_HEAP_NUMBER_TYPE);
         AddStoreMapConstant(double_box,
-            isolate()->factory()->heap_number_map());
-        Add<HStoreNamedField>(double_box, HObjectAccess::ForHeapNumberValue(),
-                              Add<HConstant>(value));
+            isolate()->factory()->mutable_heap_number_map());
+        // Unwrap the mutable heap number from the boilerplate.
+        HValue* double_value =
+            Add<HConstant>(Handle<HeapNumber>::cast(value)->value());
+        Add<HStoreNamedField>(
+            double_box, HObjectAccess::ForHeapNumberValue(), double_value);
         value_instruction = double_box;
       } else if (representation.IsSmi()) {
         value_instruction = value->IsUninitialized()

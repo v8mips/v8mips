@@ -165,6 +165,7 @@ bool Object::IsHeapObject() const {
 
 
 TYPE_CHECKER(HeapNumber, HEAP_NUMBER_TYPE)
+TYPE_CHECKER(MutableHeapNumber, MUTABLE_HEAP_NUMBER_TYPE)
 TYPE_CHECKER(Symbol, SYMBOL_TYPE)
 
 
@@ -277,10 +278,27 @@ Handle<Object> Object::NewStorageFor(Isolate* isolate,
     return handle(Smi::FromInt(0), isolate);
   }
   if (!representation.IsDouble()) return object;
+  double value;
   if (object->IsUninitialized()) {
-    return isolate->factory()->NewHeapNumber(0);
+    value = 0;
+  } else if (object->IsMutableHeapNumber()) {
+    value = HeapNumber::cast(*object)->value();
+  } else {
+    value = object->Number();
   }
-  return isolate->factory()->NewHeapNumber(object->Number());
+  return isolate->factory()->NewHeapNumber(value, MUTABLE);
+}
+
+
+Handle<Object> Object::WrapForRead(Isolate* isolate,
+                                   Handle<Object> object,
+                                   Representation representation) {
+  ASSERT(!object->IsUninitialized());
+  if (!representation.IsDouble()) {
+    ASSERT(object->FitsRepresentation(representation));
+    return object;
+  }
+  return isolate->factory()->NewHeapNumber(HeapNumber::cast(*object)->value());
 }
 
 
@@ -3079,7 +3097,6 @@ CAST_ACCESSOR(FixedTypedArrayBase)
 CAST_ACCESSOR(Foreign)
 CAST_ACCESSOR(FreeSpace)
 CAST_ACCESSOR(GlobalObject)
-CAST_ACCESSOR(HeapNumber)
 CAST_ACCESSOR(HeapObject)
 CAST_ACCESSOR(JSArray)
 CAST_ACCESSOR(JSArrayBuffer)
@@ -5447,7 +5464,6 @@ BOOL_ACCESSORS(SharedFunctionInfo, compiler_hints,
 BOOL_ACCESSORS(SharedFunctionInfo, compiler_hints, bound, kBoundFunction)
 BOOL_ACCESSORS(SharedFunctionInfo, compiler_hints, is_anonymous, kIsAnonymous)
 BOOL_ACCESSORS(SharedFunctionInfo, compiler_hints, is_function, kIsFunction)
-BOOL_ACCESSORS(SharedFunctionInfo, compiler_hints, dont_inline, kDontInline)
 BOOL_ACCESSORS(SharedFunctionInfo, compiler_hints, dont_cache, kDontCache)
 BOOL_ACCESSORS(SharedFunctionInfo, compiler_hints, dont_flush, kDontFlush)
 BOOL_ACCESSORS(SharedFunctionInfo, compiler_hints, is_generator, kIsGenerator)
@@ -5943,6 +5959,18 @@ ACCESSORS(JSModule, scope_info, ScopeInfo, kScopeInfoOffset)
 
 
 ACCESSORS(JSValue, value, Object, kValueOffset)
+
+
+HeapNumber* HeapNumber::cast(Object* object) {
+  SLOW_ASSERT(object->IsHeapNumber() || object->IsMutableHeapNumber());
+  return reinterpret_cast<HeapNumber*>(object);
+}
+
+
+const HeapNumber* HeapNumber::cast(const Object* object) {
+  SLOW_ASSERT(object->IsHeapNumber() || object->IsMutableHeapNumber());
+  return reinterpret_cast<const HeapNumber*>(object);
+}
 
 
 ACCESSORS(JSDate, value, Object, kValueOffset)

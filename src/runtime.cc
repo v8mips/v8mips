@@ -4454,6 +4454,14 @@ RUNTIME_FUNCTION(Runtime_SubString) {
 }
 
 
+RUNTIME_FUNCTION(Runtime_InternalizeString) {
+  HandleScope handles(isolate);
+  RUNTIME_ASSERT(args.length() == 1);
+  CONVERT_ARG_HANDLE_CHECKED(String, string, 0);
+  return *isolate->factory()->InternalizeString(string);
+}
+
+
 RUNTIME_FUNCTION(Runtime_StringMatch) {
   HandleScope handles(isolate);
   ASSERT(args.length() == 3);
@@ -5336,7 +5344,7 @@ RUNTIME_FUNCTION(Runtime_AddProperty) {
 #ifdef DEBUG
   if (key->IsName()) {
     LookupIterator it(object, Handle<Name>::cast(key),
-                      LookupIterator::CHECK_OWN);
+                      LookupIterator::CHECK_OWN_REAL);
     JSReceiver::GetPropertyAttributes(&it);
     RUNTIME_ASSERT(!it.IsFound());
   } else {
@@ -14506,8 +14514,8 @@ RUNTIME_FUNCTION(Runtime_LoadMutableDouble) {
                    object->properties()->length());
   }
   Handle<Object> raw_value(object->RawFastPropertyAt(field_index), isolate);
-  RUNTIME_ASSERT(raw_value->IsNumber() || raw_value->IsUninitialized());
-  return *Object::NewStorageFor(isolate, raw_value, Representation::Double());
+  RUNTIME_ASSERT(raw_value->IsMutableHeapNumber());
+  return *Object::WrapForRead(isolate, raw_value, Representation::Double());
 }
 
 
