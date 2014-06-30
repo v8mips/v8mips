@@ -11,12 +11,13 @@
 #include "src/allocation-site-scopes.h"
 #include "src/api.h"
 #include "src/arguments.h"
+#include "src/base/cpu.h"
+#include "src/base/platform/platform.h"
 #include "src/bootstrapper.h"
 #include "src/codegen.h"
 #include "src/compilation-cache.h"
 #include "src/compiler.h"
 #include "src/conversions.h"
-#include "src/cpu.h"
 #include "src/cpu-profiler.h"
 #include "src/date.h"
 #include "src/dateparser-inl.h"
@@ -33,7 +34,6 @@
 #include "src/liveedit.h"
 #include "src/misc-intrinsics.h"
 #include "src/parser.h"
-#include "src/platform.h"
 #include "src/runtime.h"
 #include "src/runtime-profiler.h"
 #include "src/scopeinfo.h"
@@ -5529,6 +5529,15 @@ RUNTIME_FUNCTION(Runtime_DebugPromiseHandleEpilogue) {
 }
 
 
+RUNTIME_FUNCTION(Runtime_DebugPromiseEvent) {
+  ASSERT(args.length() == 1);
+  HandleScope scope(isolate);
+  CONVERT_ARG_HANDLE_CHECKED(JSObject, data, 0);
+  isolate->debug()->OnPromiseEvent(data);
+  return isolate->heap()->undefined_value();
+}
+
+
 RUNTIME_FUNCTION(Runtime_DeleteProperty) {
   HandleScope scope(isolate);
   ASSERT(args.length() == 3);
@@ -6278,8 +6287,8 @@ RUNTIME_FUNCTION(Runtime_StringParseFloat) {
   CONVERT_ARG_HANDLE_CHECKED(String, subject, 0);
 
   subject = String::Flatten(subject);
-  double value = StringToDouble(
-      isolate->unicode_cache(), *subject, ALLOW_TRAILING_JUNK, OS::nan_value());
+  double value = StringToDouble(isolate->unicode_cache(), *subject,
+                                ALLOW_TRAILING_JUNK, base::OS::nan_value());
 
   return *isolate->factory()->NewNumber(value);
 }
@@ -8554,7 +8563,7 @@ RUNTIME_FUNCTION(Runtime_GetOptimizationStatus) {
       sync_with_compiler_thread) {
     while (function->IsInOptimizationQueue()) {
       isolate->optimizing_compiler_thread()->InstallOptimizedFunctions();
-      OS::Sleep(50);
+      base::OS::Sleep(50);
     }
   }
   if (FLAG_always_opt) {
@@ -9541,7 +9550,7 @@ RUNTIME_FUNCTION(Runtime_DateCurrentTime) {
     millis = 1388534400000.0;  // Jan 1 2014 00:00:00 GMT+0000
     millis += std::floor(isolate->heap()->synthetic_time());
   } else {
-    millis = std::floor(OS::TimeCurrentMillis());
+    millis = std::floor(base::OS::TimeCurrentMillis());
   }
   return *isolate->factory()->NewNumber(millis);
 }
@@ -13197,7 +13206,7 @@ RUNTIME_FUNCTION(Runtime_DebugSetScriptSource) {
 RUNTIME_FUNCTION(Runtime_SystemBreak) {
   SealHandleScope shs(isolate);
   ASSERT(args.length() == 0);
-  OS::DebugBreak();
+  base::OS::DebugBreak();
   return isolate->heap()->undefined_value();
 }
 
@@ -14462,9 +14471,9 @@ RUNTIME_FUNCTION(Runtime_Abort) {
   CONVERT_SMI_ARG_CHECKED(message_id, 0);
   const char* message = GetBailoutReason(
       static_cast<BailoutReason>(message_id));
-  OS::PrintError("abort: %s\n", message);
+  base::OS::PrintError("abort: %s\n", message);
   isolate->PrintStack(stderr);
-  OS::Abort();
+  base::OS::Abort();
   UNREACHABLE();
   return NULL;
 }
@@ -14474,9 +14483,9 @@ RUNTIME_FUNCTION(Runtime_AbortJS) {
   HandleScope scope(isolate);
   ASSERT(args.length() == 1);
   CONVERT_ARG_HANDLE_CHECKED(String, message, 0);
-  OS::PrintError("abort: %s\n", message->ToCString().get());
+  base::OS::PrintError("abort: %s\n", message->ToCString().get());
   isolate->PrintStack(stderr);
-  OS::Abort();
+  base::OS::Abort();
   UNREACHABLE();
   return NULL;
 }
@@ -14514,8 +14523,8 @@ RUNTIME_FUNCTION(Runtime_LoadMutableDouble) {
                    object->properties()->length());
   }
   Handle<Object> raw_value(object->RawFastPropertyAt(field_index), isolate);
-  RUNTIME_ASSERT(raw_value->IsMutableHeapNumber());
-  return *Object::WrapForRead(isolate, raw_value, Representation::Double());
+  RUNTIME_ASSERT(raw_value->IsNumber() || raw_value->IsUninitialized());
+  return *Object::NewStorageFor(isolate, raw_value, Representation::Double());
 }
 
 

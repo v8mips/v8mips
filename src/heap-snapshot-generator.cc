@@ -83,21 +83,21 @@ void HeapEntry::SetIndexedReference(HeapGraphEdge::Type type,
 void HeapEntry::Print(
     const char* prefix, const char* edge_name, int max_depth, int indent) {
   STATIC_ASSERT(sizeof(unsigned) == sizeof(id()));
-  OS::Print("%6" V8PRIuPTR " @%6u %*c %s%s: ",
-            self_size(), id(), indent, ' ', prefix, edge_name);
+  base::OS::Print("%6" V8PRIuPTR " @%6u %*c %s%s: ", self_size(), id(), indent,
+                  ' ', prefix, edge_name);
   if (type() != kString) {
-    OS::Print("%s %.40s\n", TypeAsString(), name_);
+    base::OS::Print("%s %.40s\n", TypeAsString(), name_);
   } else {
-    OS::Print("\"");
+    base::OS::Print("\"");
     const char* c = name_;
     while (*c && (c - name_) <= 40) {
       if (*c != '\n')
-        OS::Print("%c", *c);
+        base::OS::Print("%c", *c);
       else
-        OS::Print("\\n");
+        base::OS::Print("\\n");
       ++c;
     }
-    OS::Print("\"\n");
+    base::OS::Print("\"\n");
   }
   if (--max_depth == 0) return;
   Vector<HeapGraphEdge*> ch = children();
@@ -1641,8 +1641,6 @@ void V8HeapExplorer::ExtractPropertyReferences(JSObject* js_obj, int entry) {
     for (int i = 0; i < real_size; i++) {
       switch (descs->GetType(i)) {
         case FIELD: {
-          Representation r = descs->GetDetails(i).representation();
-          if (r.IsSmi() || r.IsDouble()) break;
           int index = descs->GetFieldIndex(i);
 
           Name* k = descs->GetKey(i);

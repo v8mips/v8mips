@@ -778,8 +778,7 @@ class MacroAssembler: public Assembler {
                           Register scratch2,
                           Register heap_number_map,
                           Label* gc_required,
-                          TaggingMode tagging_mode = TAG_RESULT,
-                          MutableMode mode = IMMUTABLE);
+                          TaggingMode tagging_mode = TAG_RESULT);
   void AllocateHeapNumberWithValue(Register result,
                                    DwVfpRegister value,
                                    Register scratch1,
@@ -1181,7 +1180,7 @@ class MacroAssembler: public Assembler {
   // EABI variant for double arguments in use.
   bool use_eabi_hardfloat() {
 #ifdef __arm__
-    return OS::ArmUsingHardFloat();
+    return base::OS::ArmUsingHardFloat();
 #elif USE_EABI_HARDFLOAT
     return true;
 #else

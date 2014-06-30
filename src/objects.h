@@ -8,6 +8,7 @@
 #include "src/allocation.h"
 #include "src/assert-scope.h"
 #include "src/builtins.h"
+#include "src/checks.h"
 #include "src/elements-kind.h"
 #include "src/field-index.h"
 #include "src/flags.h"
@@ -15,7 +16,6 @@
 #include "src/property-details.h"
 #include "src/smart-pointers.h"
 #include "src/unicode-inl.h"
-#include "src/v8checks.h"
 #include "src/zone.h"
 
 #if V8_TARGET_ARCH_ARM
@@ -167,12 +167,6 @@ enum KeyedAccessStoreMode {
 enum ContextualMode {
   NOT_CONTEXTUAL,
   CONTEXTUAL
-};
-
-
-enum MutableMode {
-  MUTABLE,
-  IMMUTABLE
 };
 
 
@@ -360,7 +354,6 @@ const int kStubMinorKeyBits = kBitsPerInt - kSmiTagSize - kStubMajorKeyBits;
   V(PROPERTY_CELL_TYPE)                                                        \
                                                                                \
   V(HEAP_NUMBER_TYPE)                                                          \
-  V(MUTABLE_HEAP_NUMBER_TYPE)                                                  \
   V(FOREIGN_TYPE)                                                              \
   V(BYTE_ARRAY_TYPE)                                                           \
   V(FREE_SPACE_TYPE)                                                           \
@@ -689,7 +682,6 @@ enum InstanceType {
   // "Data", objects that cannot contain non-map-word pointers to heap
   // objects.
   HEAP_NUMBER_TYPE,
-  MUTABLE_HEAP_NUMBER_TYPE,
   FOREIGN_TYPE,
   BYTE_ARRAY_TYPE,
   FREE_SPACE_TYPE,
@@ -910,7 +902,6 @@ template <class C> inline bool Is(Object* obj);
 
 #define HEAP_OBJECT_TYPE_LIST(V)               \
   V(HeapNumber)                                \
-  V(MutableHeapNumber)                         \
   V(Name)                                      \
   V(UniqueName)                                \
   V(String)                                    \
@@ -1438,7 +1429,7 @@ class Object {
     } else if (FLAG_track_fields && representation.IsSmi()) {
       return IsSmi();
     } else if (FLAG_track_double_fields && representation.IsDouble()) {
-      return IsMutableHeapNumber() || IsNumber();
+      return IsNumber();
     } else if (FLAG_track_heap_object_fields && representation.IsHeapObject()) {
       return IsHeapObject();
     }
@@ -1450,10 +1441,6 @@ class Object {
   inline static Handle<Object> NewStorageFor(Isolate* isolate,
                                              Handle<Object> object,
                                              Representation representation);
-
-  inline static Handle<Object> WrapForRead(Isolate* isolate,
-                                           Handle<Object> object,
-                                           Representation representation);
 
   // Returns true if the object is of the correct type to be used as a
   // implementation of a JSObject's elements.

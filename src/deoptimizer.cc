@@ -19,7 +19,7 @@ namespace internal {
 
 static MemoryChunk* AllocateCodeChunk(MemoryAllocator* allocator) {
   return allocator->AllocateChunk(Deoptimizer::GetMaxDeoptTableSize(),
-                                  OS::CommitPageSize(),
+                                  base::OS::CommitPageSize(),
 #if defined(__native_client__)
   // The Native Client port of V8 uses an interpreter,
   // so code pages don't need PROT_EXEC.
@@ -101,7 +101,7 @@ static const int kDeoptTableMaxEpilogueCodeSize = 2 * KB;
 size_t Deoptimizer::GetMaxDeoptTableSize() {
   int entries_size =
       Deoptimizer::kMaxNumberOfEntries * Deoptimizer::table_entry_size_;
-  int commit_page_size = static_cast<int>(OS::CommitPageSize());
+  int commit_page_size = static_cast<int>(base::OS::CommitPageSize());
   int page_count = ((kDeoptTableMaxEpilogueCodeSize + entries_size - 1) /
                     commit_page_size) + 1;
   return static_cast<size_t>(commit_page_size * page_count);
@@ -739,7 +739,7 @@ void Deoptimizer::DoComputeOutputFrames() {
       compiled_code_->kind() == Code::OPTIMIZED_FUNCTION) {
     LOG(isolate(), CodeDeoptEvent(compiled_code_));
   }
-  ElapsedTimer timer;
+  base::ElapsedTimer timer;
 
   // Determine basic deoptimization information.  The optimized frame is
   // described by the input data.
@@ -1813,11 +1813,9 @@ Handle<Object> Deoptimizer::MaterializeNextHeapObject() {
     Handle<Map> map = Map::GeneralizeAllFieldRepresentations(
         Handle<Map>::cast(MaterializeNextValue()));
     switch (map->instance_type()) {
-      case MUTABLE_HEAP_NUMBER_TYPE:
       case HEAP_NUMBER_TYPE: {
         // Reuse the HeapNumber value directly as it is already properly
-        // tagged and skip materializing the HeapNumber explicitly. Turn mutable
-        // heap numbers immutable.
+        // tagged and skip materializing the HeapNumber explicitly.
         Handle<Object> object = MaterializeNextValue();
         if (object_index < prev_materialized_count_) {
           materialized_objects_->Add(Handle<Object>(
@@ -1879,9 +1877,6 @@ Handle<Object> Deoptimizer::MaterializeNextHeapObject() {
 Handle<Object> Deoptimizer::MaterializeNextValue() {
   int value_index = materialization_value_index_++;
   Handle<Object> value = materialized_values_->at(value_index);
-  if (value->IsMutableHeapNumber()) {
-    HeapNumber::cast(*value)->set_map(isolate_->heap()->heap_number_map());
-  }
   if (*value == isolate_->heap()->arguments_marker()) {
     value = MaterializeNextHeapObject();
   }
@@ -2785,7 +2780,7 @@ void Deoptimizer::EnsureCodeForDeoptimizationEntry(Isolate* isolate,
   chunk->CommitArea(desc.instr_size);
   CopyBytes(chunk->area_start(), desc.buffer,
       static_cast<size_t>(desc.instr_size));
-  CPU::FlushICache(chunk->area_start(), desc.instr_size);
+  CpuFeatures::FlushICache(chunk->area_start(), desc.instr_size);
 
   data->deopt_entry_code_entries_[type] = entry_count;
 }
@@ -3388,7 +3383,6 @@ Handle<Object> SlotRefValueBuilder::GetNext(Isolate* isolate, int lvl) {
       // TODO(jarin) this should be unified with the code in
       // Deoptimizer::MaterializeNextHeapObject()
       switch (map->instance_type()) {
-        case MUTABLE_HEAP_NUMBER_TYPE:
         case HEAP_NUMBER_TYPE: {
           // Reuse the HeapNumber value directly as it is already properly
           // tagged and skip materializing the HeapNumber explicitly.
