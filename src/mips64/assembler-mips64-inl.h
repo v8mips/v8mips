@@ -39,7 +39,7 @@
 
 #include "src/mips64/assembler-mips64.h"
 
-#include "src/cpu.h"
+#include "src/assembler.h"
 #include "src/debug.h"
 
 
@@ -117,7 +117,7 @@ void RelocInfo::apply(intptr_t delta, ICacheFlushMode icache_flush_mode) {
     // Absolute code pointer inside code object moves with the code object.
     byte* p = reinterpret_cast<byte*>(pc_);
     int count = Assembler::RelocateInternalReference(p, delta);
-    CPU::FlushICache(p, count * sizeof(uint32_t));
+    CpuFeatures::FlushICache(p, count * sizeof(uint32_t));
   }
 }
 

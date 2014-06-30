@@ -32,10 +32,10 @@
 
 #if V8_TARGET_ARCH_MIPS64
 
+#include "src/base/platform/platform.h"
 #include "src/disasm.h"
 #include "src/macro-assembler.h"
 #include "src/mips64/constants-mips64.h"
-#include "src/platform.h"
 
 namespace v8 {
 namespace internal {

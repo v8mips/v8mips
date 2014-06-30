@@ -4846,7 +4846,7 @@ int MacroAssembler::ActivationFrameAlignment() {
   // environment.
   // Note: This will break if we ever start generating snapshots on one Mips
   // platform for another Mips platform with a different alignment.
-  return OS::ActivationFrameAlignment();
+  return base::OS::ActivationFrameAlignment();
 #else  // V8_HOST_ARCH_MIPS
   // If we are using the simulator then we should always align to the expected
   // alignment. As the simulator is used to generate snapshots we do not know
@@ -5380,7 +5380,7 @@ void MacroAssembler::CallCFunctionHelper(Register function,
 
 #if V8_HOST_ARCH_MIPS || V8_HOST_ARCH_MIPS64
   if (emit_debug_code()) {
-    int frame_alignment = OS::ActivationFrameAlignment();
+    int frame_alignment = base::OS::ActivationFrameAlignment();
     int frame_alignment_mask = frame_alignment - 1;
     if (frame_alignment > kPointerSize) {
       ASSERT(IsPowerOf2(frame_alignment));
@@ -5409,7 +5409,7 @@ void MacroAssembler::CallCFunctionHelper(Register function,
   int stack_passed_arguments = CalculateStackPassedWords(
       num_reg_arguments, num_double_arguments);
 
-  if (OS::ActivationFrameAlignment() > kPointerSize) {
+  if (base::OS::ActivationFrameAlignment() > kPointerSize) {
     ld(sp, MemOperand(sp, stack_passed_arguments * kPointerSize));
   } else {
     Daddu(sp, sp, Operand(stack_passed_arguments * kPointerSize));
@@ -5943,7 +5943,7 @@ CodePatcher::CodePatcher(byte* address,
 CodePatcher::~CodePatcher() {
   // Indicate that code has changed.
   if (flush_cache_ == FLUSH) {
-    CPU::FlushICache(address_, size_);
+    CpuFeatures::FlushICache(address_, size_);
   }
   // Check that the code was patched as expected.
   ASSERT(masm_.pc_ == address_ + size_);

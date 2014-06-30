@@ -12,7 +12,6 @@
 #if V8_TARGET_ARCH_MIPS64
 
 #include "src/assembler.h"
-#include "src/cpu.h"
 #include "src/disasm.h"
 #include "src/globals.h"    // Need the BitCast.
 #include "src/mips64/constants-mips64.h"
@@ -584,7 +583,7 @@ void MipsDebugger::Debug() {
         }
       } else if (strcmp(cmd, "gdb") == 0) {
         PrintF("relinquishing control to gdb\n");
-        v8::internal::OS::DebugBreak();
+        v8::base::OS::DebugBreak();
         PrintF("regaining control from gdb\n");
       } else if (strcmp(cmd, "break") == 0) {
         if (argc == 2) {
@@ -1285,7 +1284,7 @@ void Simulator::DieOrDebug() {
     MipsDebugger dbg(this);
     dbg.Debug();
   } else {
-    OS::Abort();
+    base::OS::Abort();
   }
 }
 
@@ -1440,7 +1439,7 @@ double Simulator::ReadD(int64_t addr, Instruction* instr) {
   PrintF("Unaligned (double) read at 0x%08lx, pc=0x%08" V8PRIxPTR "\n",
          addr,
          reinterpret_cast<intptr_t>(instr));
-  OS::Abort();
+  base::OS::Abort();
   return 0;
 }
 
@@ -3239,8 +3238,8 @@ int64_t Simulator::Call(byte* entry, int argument_count, ...) {
   int stack_args_size = stack_args_count * sizeof(int64_t) + kCArgsSlotsSize;
   int64_t entry_stack = original_stack - stack_args_size;
 
-  if (OS::ActivationFrameAlignment() != 0) {
-    entry_stack &= -OS::ActivationFrameAlignment();
+  if (base::OS::ActivationFrameAlignment() != 0) {
+    entry_stack &= -base::OS::ActivationFrameAlignment();
   }
   // Store remaining arguments on stack, from low to high memory.
   intptr_t* stack_argument = reinterpret_cast<intptr_t*>(entry_stack);
