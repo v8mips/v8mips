@@ -1359,7 +1359,7 @@ void Assembler::srav(Register rd, Register rt, Register rs) {
 void Assembler::rotr(Register rd, Register rt, uint16_t sa) {
   // Should be called via MacroAssembler::Ror.
   ASSERT(rd.is_valid() && rt.is_valid() && is_uint5(sa));
-  ASSERT(kArchVariant == kMips32r2);
+  ASSERT(kArchVariant == kMips64r2);
   Instr instr = SPECIAL | (1 << kRsShift) | (rt.code() << kRtShift)
       | (rd.code() << kRdShift) | (sa << kSaShift) | SRL;
   emit(instr);
@@ -1369,7 +1369,7 @@ void Assembler::rotr(Register rd, Register rt, uint16_t sa) {
 void Assembler::rotrv(Register rd, Register rt, Register rs) {
   // Should be called via MacroAssembler::Ror.
   ASSERT(rd.is_valid() && rt.is_valid() && rs.is_valid() );
-  ASSERT(kArchVariant == kMips32r2);
+  ASSERT(kArchVariant == kMips64r2);
   Instr instr = SPECIAL | (rs.code() << kRsShift) | (rt.code() << kRtShift)
      | (rd.code() << kRdShift) | (1 << kSaShift) | SRLV;
   emit(instr);
@@ -1757,7 +1757,7 @@ void Assembler::clz(Register rd, Register rs) {
 void Assembler::ins_(Register rt, Register rs, uint16_t pos, uint16_t size) {
   // Should be called via MacroAssembler::Ins.
   // Ins instr has 'rt' field as dest, and two uint5: msb, lsb.
-  ASSERT(kArchVariant == kMips32r2);
+  ASSERT(kArchVariant == kMips64r2);
   GenInstrRegister(SPECIAL3, rs, rt, pos + size - 1, pos, INS);
 }
 
@@ -1765,7 +1765,7 @@ void Assembler::ins_(Register rt, Register rs, uint16_t pos, uint16_t size) {
 void Assembler::ext_(Register rt, Register rs, uint16_t pos, uint16_t size) {
   // Should be called via MacroAssembler::Ext.
   // Ext instr has 'rt' field as dest, and two uint5: msb, lsb.
-  ASSERT(kArchVariant == kMips32r2);
+  ASSERT(kArchVariant == kMips64r2);
   GenInstrRegister(SPECIAL3, rs, rt, size - 1, pos, EXT);
 }
 
@@ -1953,25 +1953,25 @@ void Assembler::ceil_w_d(FPURegister fd, FPURegister fs) {
 
 
 void Assembler::cvt_l_s(FPURegister fd, FPURegister fs) {
-  ASSERT(kArchVariant == kMips32r2);
+  ASSERT(kArchVariant == kMips64r2);
   GenInstrRegister(COP1, S, f0, fs, fd, CVT_L_S);
 }
 
 
 void Assembler::cvt_l_d(FPURegister fd, FPURegister fs) {
-  ASSERT(kArchVariant == kMips32r2);
+  ASSERT(kArchVariant == kMips64r2);
   GenInstrRegister(COP1, D, f0, fs, fd, CVT_L_D);
 }
 
 
 void Assembler::trunc_l_s(FPURegister fd, FPURegister fs) {
-  ASSERT(kArchVariant == kMips32r2);
+  ASSERT(kArchVariant == kMips64r2);
   GenInstrRegister(COP1, S, f0, fs, fd, TRUNC_L_S);
 }
 
 
 void Assembler::trunc_l_d(FPURegister fd, FPURegister fs) {
-  ASSERT(kArchVariant == kMips32r2);
+  ASSERT(kArchVariant == kMips64r2);
   GenInstrRegister(COP1, D, f0, fs, fd, TRUNC_L_D);
 }
 
@@ -2012,7 +2012,7 @@ void Assembler::cvt_s_w(FPURegister fd, FPURegister fs) {
 
 
 void Assembler::cvt_s_l(FPURegister fd, FPURegister fs) {
-  ASSERT(kArchVariant == kMips32r2);
+  ASSERT(kArchVariant == kMips64r2);
   GenInstrRegister(COP1, L, f0, fs, fd, CVT_S_L);
 }
 
@@ -2028,7 +2028,7 @@ void Assembler::cvt_d_w(FPURegister fd, FPURegister fs) {
 
 
 void Assembler::cvt_d_l(FPURegister fd, FPURegister fs) {
-  ASSERT(kArchVariant == kMips32r2);
+  ASSERT(kArchVariant == kMips64r2);
   GenInstrRegister(COP1, L, f0, fs, fd, CVT_D_L);
 }
 

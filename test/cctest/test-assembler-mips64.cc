@@ -305,7 +305,7 @@ TEST(MIPS3) {
   __ sdc1(f14, MemOperand(a0, OFFSET_OF(T, g)) );
   // g = sqrt(f) = 10.97451593465515908537
 
-  if (kArchVariant == kMips32r2) {
+  if (kArchVariant == kMips64r2) {
     __ ldc1(f4, MemOperand(a0, OFFSET_OF(T, h)) );
     __ ldc1(f6, MemOperand(a0, OFFSET_OF(T, i)) );
     __ madd_d(f14, f6, f4, f6);
@@ -337,7 +337,7 @@ TEST(MIPS3) {
   CHECK_EQ(1.8066e16, t.e);
   CHECK_EQ(120.44, t.f);
   CHECK_EQ(10.97451593465515908537, t.g);
-  if (kArchVariant == kMips32r2) {
+  if (kArchVariant == kMips64r2) {
     CHECK_EQ(6.875, t.h);
   }
 }
@@ -761,7 +761,7 @@ TEST(MIPS10) {
   Assembler assm(isolate, NULL, 0);
   Label L, C;
 
-  if (kArchVariant == kMips32r2) {
+  if (kArchVariant == kMips64r2) {
     // Rewritten for FR=1 FPU mode:
     //  -  32 FP regs of 64-bits each, no odd/even pairs.
     //  -  Note that cvt_l_d/cvt_d_l ARE legal in FR=1 mode.

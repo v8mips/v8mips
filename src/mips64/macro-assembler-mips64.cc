@@ -948,7 +948,7 @@ void MacroAssembler::Sltu(Register rd, Register rs, const Operand& rt) {
 
 
 void MacroAssembler::Ror(Register rd, Register rs, const Operand& rt) {
-  if (kArchVariant == kMips32r2) {
+  if (kArchVariant == kMips64r2) {
     if (rt.is_reg()) {
       rotrv(rd, rs, rt.rm());
     } else {

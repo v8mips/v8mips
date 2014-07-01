@@ -358,7 +358,7 @@ TEST(Type0) {
   COMPARE(dsrav(v0, v1, fp),
           "03c31017       dsrav   v0, v1, fp");
 
-  if (kArchVariant == kMips32r2) {
+  if (kArchVariant == kMips64r2) {
     COMPARE(rotr(a0, a1, 0),
             "00252002       rotr    a0, a1, 0");
     COMPARE(rotr(s0, s1, 8),
@@ -520,7 +520,7 @@ TEST(Type0) {
             "70621020       clz     v0, v1");
   }
 
-  if (kArchVariant == kMips32r2) {
+  if (kArchVariant == kMips64r2) {
     COMPARE(ins_(a0, a1, 31, 1),
             "7ca4ffc4       ins     a0, a1, 31, 1");
     COMPARE(ins_(s6, s7, 30, 2),

@@ -646,7 +646,7 @@ int Decoder::DecodeTypeRegister(Instruction* instr) {
           if (instr->RsValue() == 0) {
             Format(instr, "srl     'rd, 'rt, 'sa");
           } else {
-            if (kArchVariant == kMips32r2) {
+            if (kArchVariant == kMips64r2) {
               Format(instr, "rotr    'rd, 'rt, 'sa");
             } else {
               Unknown(instr);
@@ -657,7 +657,7 @@ int Decoder::DecodeTypeRegister(Instruction* instr) {
           if (instr->RsValue() == 0) {
             Format(instr, "dsrl    'rd, 'rt, 'sa");
           } else {
-            if (kArchVariant == kMips32r2) {
+            if (kArchVariant == kMips64r2) {
               Format(instr, "drotr   'rd, 'rt, 'sa");
             } else {
               Unknown(instr);
@@ -686,7 +686,7 @@ int Decoder::DecodeTypeRegister(Instruction* instr) {
           if (instr->SaValue() == 0) {
             Format(instr, "srlv    'rd, 'rt, 'rs");
           } else {
-            if (kArchVariant == kMips32r2) {
+            if (kArchVariant == kMips64r2) {
               Format(instr, "rotrv   'rd, 'rt, 'rs");
             } else {
               Unknown(instr);
@@ -697,7 +697,7 @@ int Decoder::DecodeTypeRegister(Instruction* instr) {
           if (instr->SaValue() == 0) {
             Format(instr, "dsrlv   'rd, 'rt, 'rs");
           } else {
-            if (kArchVariant == kMips32r2) {
+            if (kArchVariant == kMips64r2) {
               Format(instr, "drotrv  'rd, 'rt, 'rs");
             } else {
               Unknown(instr);
@@ -840,7 +840,7 @@ int Decoder::DecodeTypeRegister(Instruction* instr) {
     case SPECIAL3:
       switch (instr->FunctionFieldRaw()) {
         case INS: {
-          if (kArchVariant == kMips32r2) {
+          if (kArchVariant == kMips64r2) {
             Format(instr, "ins     'rt, 'rs, 'sa, 'ss2");
           } else {
             Unknown(instr);
@@ -848,7 +848,7 @@ int Decoder::DecodeTypeRegister(Instruction* instr) {
           break;
         }
         case EXT: {
-          if (kArchVariant == kMips32r2) {
+          if (kArchVariant == kMips64r2) {
             Format(instr, "ext     'rt, 'rs, 'sa, 'ss1");
           } else {
             Unknown(instr);

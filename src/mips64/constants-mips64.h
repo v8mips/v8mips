@@ -24,14 +24,14 @@ enum ArchVariants {
 };
 
 
-#ifdef _MIPS_ARCH_MIPS32R2
-  static const ArchVariants kArchVariant = kMips32r2;
+#ifdef _MIPS_ARCH_MIPS64R2
+  static const ArchVariants kArchVariant = kMips64r2;
 #elif _MIPS_ARCH_LOONGSON
 // The loongson flag refers to the LOONGSON architectures based on MIPS-III,
 // which predates (and is a subset of) the mips32r2 and r1 architectures.
   static const ArchVariants kArchVariant = kLoongson;
 #else
-  static const ArchVariants kArchVariant = kMips32r1;
+  static const ArchVariants kArchVariant = kMips64r1;
 #endif
 
 

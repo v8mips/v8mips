@@ -56,7 +56,7 @@
     'v8_use_mips_abi_hardfloat%': 'true',
 
     # Default arch variant for MIPS.
-    'mips_arch_variant%': 'mips64r2',
+    'mips_arch_variant%': 'r2',
 
     'v8_enable_backtrace%': 0,
 
@@ -247,10 +247,10 @@
                     'cflags': ['-msoft-float'],
                     'ldflags': ['-msoft-float'],
                   }],
-                  ['mips_arch_variant=="mips32r2"', {
+                  ['mips_arch_variant=="r2"', {
                     'cflags': ['-mips32r2', '-Wa,-mips32r2'],
                   }],
-                  ['mips_arch_variant=="mips32r1"', {
+                  ['mips_arch_variant=="r1"', {
                     'cflags': ['-mips32', '-Wa,-mips32'],
                   }],
                 ],
@@ -272,7 +272,7 @@
               '__mips_soft_float=1'
             ],
           }],
-          ['mips_arch_variant=="mips32r2"', {
+          ['mips_arch_variant=="r2"', {
             'defines': ['_MIPS_ARCH_MIPS32R2',],
           }],
         ],
@@ -298,10 +298,10 @@
                     'cflags': ['-msoft-float'],
                     'ldflags': ['-msoft-float'],
                   }],
-                  ['mips_arch_variant=="mips32r2"', {
+                  ['mips_arch_variant=="r2"', {
                     'cflags': ['-mips32r2', '-Wa,-mips32r2'],
                   }],
-                  ['mips_arch_variant=="mips32r1"', {
+                  ['mips_arch_variant=="r1"', {
                     'cflags': ['-mips32', '-Wa,-mips32'],
                  }],
                   ['mips_arch_variant=="loongson"', {
@@ -326,7 +326,7 @@
               '__mips_soft_float=1'
             ],
           }],
-          ['mips_arch_variant=="mips32r2"', {
+          ['mips_arch_variant=="r2"', {
             'defines': ['_MIPS_ARCH_MIPS32R2',],
           }],
           ['mips_arch_variant=="loongson"', {
@@ -338,10 +338,6 @@
         'defines': [
           'V8_TARGET_ARCH_MIPS64',
         ],
-		'xcode_settings': {
-		  'ARCHS': [ 'x86_64' ],
-		},
-
         'variables': {
           'mipscompiler': '<!($(echo <(CXX)) -v 2>&1 | grep -q "^Target: mips" && echo "yes" || echo "no")',
         },
@@ -359,7 +355,7 @@
                     'cflags': ['-msoft-float'],
                     'ldflags': ['-msoft-float'],
                   }],
-                  ['mips_arch_variant=="mips64r2"', {
+                  ['mips_arch_variant=="r2"', {
                     'cflags': ['-mips64r2', '-mabi=64', '-Wa,-mips64r2'],
                     'ldflags': [
                       '-mips64r2', '-mabi=64',
@@ -389,8 +385,8 @@
               '__mips_soft_float=1'
             ],
           }],
-          ['mips_arch_variant=="mips64r2"', {
-            'defines': ['_MIPS_ARCH_MIPS32R2',],
+          ['mips_arch_variant=="r2"', {
+            'defines': ['_MIPS_ARCH_MIPS64R2',],
           }],
           ['mips_arch_variant=="loongson"', {
             'defines': ['_MIPS_ARCH_LOONGSON',],
