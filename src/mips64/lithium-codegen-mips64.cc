@@ -1125,7 +1125,6 @@ void LCodeGen::DoModI(LModI* instr) {
   const Register right_reg = ToRegister(instr->right());
   const Register result_reg = ToRegister(instr->result());
 
-  __ SignExtensionInt32(left_reg, left_reg);
   // div runs in the background while we check for special cases.
   __ ddiv(left_reg, right_reg);
 
@@ -1241,7 +1240,6 @@ void LCodeGen::DoDivI(LDivI* instr) {
   Register divisor = ToRegister(instr->divisor());
   const Register result = ToRegister(instr->result());
 
-  __ SignExtensionInt32(dividend, dividend);
   // On MIPS div is asynchronous - it will run in the background while we
   // check for special cases.
   __ ddiv(dividend, divisor);
@@ -1352,7 +1350,6 @@ void LCodeGen::DoFlooringDivByConstI(LFlooringDivByConstI* instr) {
   Register result = ToRegister(instr->result());
   ASSERT(!dividend.is(result));
 
-  __ SignExtensionInt32(dividend, dividend);
   if (divisor == 0) {
     DeoptimizeIf(al, instr->environment());
     return;
@@ -1399,7 +1396,6 @@ void LCodeGen::DoFlooringDivI(LFlooringDivI* instr) {
   Register divisor = ToRegister(instr->divisor());
   const Register result = ToRegister(instr->result());
 
-  __ SignExtensionInt32(dividend, dividend);
   // On MIPS div is asynchronous - it will run in the background while we
   // check for special cases.
   __ ddiv(dividend, divisor);
@@ -1451,7 +1447,6 @@ void LCodeGen::DoMulI(LMulI* instr) {
   bool overflow = instr->hydrogen()->CheckFlag(HValue::kCanOverflow);
 
   if (right_op->IsConstantOperand()) {
-    __ SignExtensionInt32(left, left);
     int32_t constant = ToInteger32(LConstantOperand::cast(right_op));
 
     if (bailout_on_minus_zero && (constant < 0)) {
@@ -1524,8 +1519,6 @@ void LCodeGen::DoMulI(LMulI* instr) {
         __ mfhi(scratch);
         __ mflo(result);
       } else {
-        __ SignExtensionInt32(left, left);
-        __ SignExtensionInt32(right, right);
         __ dmult(left, right);
         __ mfhi(scratch);
         __ mflo(result);
@@ -1541,8 +1534,6 @@ void LCodeGen::DoMulI(LMulI* instr) {
         __ SmiUntag(result, left);
         __ Dmul(result, result, right);
       } else {
-        __ SignExtensionInt32(left, left);
-        __ SignExtensionInt32(right, right);
         __ Dmul(result, left, right);
       }
     }

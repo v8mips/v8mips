@@ -1309,15 +1309,15 @@ void Simulator::TraceMemWr(int64_t addr, int64_t value, TraceType t) {
   if (::v8::internal::FLAG_trace_sim) {
     switch (t) {
       case BYTE:
-        SNPrintF(trace_buf_, "%              02lx --> [%016lx]",
+        SNPrintF(trace_buf_, "               %02x --> [%016lx]",
                  static_cast<int8_t>(value), addr);
         break;
       case HALF:
-        SNPrintF(trace_buf_, "            %04lx --> [%016lx]",
+        SNPrintF(trace_buf_, "            %04x --> [%016lx]",
                  static_cast<int16_t>(value), addr);
         break;
       case WORD:
-        SNPrintF(trace_buf_, "        %08lx --> [%016lx]",
+        SNPrintF(trace_buf_, "        %08x --> [%016lx]",
                  static_cast<int32_t>(value), addr);
         break;
       case DWORD:

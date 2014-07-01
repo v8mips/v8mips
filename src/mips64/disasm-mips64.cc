@@ -443,9 +443,10 @@ int Decoder::DecodeBreakInstr(Instruction* instr) {
   if (instr->Bits(25, 6) == kMaxStopCode) {  // This is stop(msg)
     Format(instr, "break, code: 'code");
     out_buffer_pos_ += SNPrintF(out_buffer_ + out_buffer_pos_,
-                                "\n%p       %08lx       stop msg: %s",
-                                reinterpret_cast<int32_t*>(instr
-                                              + Instruction::kInstrSize),
+                                "\n%p       %08x       stop msg: %s",
+                                static_cast<void*>
+                                      (reinterpret_cast<int32_t*>(instr
+                                              + Instruction::kInstrSize)),
                                 *reinterpret_cast<char**>(instr
                                               + Instruction::kInstrSize),
                                 *reinterpret_cast<char**>(instr
