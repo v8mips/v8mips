@@ -3817,7 +3817,7 @@ void StringCompareStub::GenerateFlatAsciiStringEquals(MacroAssembler* masm,
   __ bind(&check_zero_length);
   STATIC_ASSERT(kSmiTag == 0);
   __ Branch(&compare_chars, ne, length, Operand(zero_reg));
-  ASSERT(is_int64_16((intptr_t)Smi::FromInt(EQUAL)));
+  ASSERT(is_int16((intptr_t)Smi::FromInt(EQUAL)));
   __ Ret(USE_DELAY_SLOT);
   __ li(v0, Operand(Smi::FromInt(EQUAL)));
 
