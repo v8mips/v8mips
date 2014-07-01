@@ -3138,8 +3138,6 @@ void LCodeGen::DoLoadKeyedExternalArray(LLoadKeyed* instr) {
     key = ToRegister(instr->key());
   }
   int element_size_shift = ElementsKindToShiftSize(elements_kind);
-  // int shift_size = (instr->hydrogen()->key()->representation().IsSmi())
-  //    ? (element_size_shift - kSmiTagSize) : element_size_shift;
   int shift_size = (instr->hydrogen()->key()->representation().IsSmi())
       ? (element_size_shift - (kSmiTagSize + kSmiShiftSize)) : element_size_shift;
   int base_offset = instr->base_offset();
@@ -3354,7 +3352,6 @@ MemOperand LCodeGen::PrepareKeyedOperand(Register key,
       __ Daddu(scratch0(), base, scratch0());
       return MemOperand(scratch0());
     } else {
-      // ASSERT_EQ(-1, shift_size);
       if (shift_size == -32) {
         __ dsra32(scratch0(), key, 0);
       } else {
@@ -3370,7 +3367,6 @@ MemOperand LCodeGen::PrepareKeyedOperand(Register key,
     __ Daddu(scratch0(), base, scratch0());
     return MemOperand(scratch0(), base_offset);
   } else {
-    // ASSERT_EQ(-1, shift_size);
     if (shift_size == -32) {
        __ dsra32(scratch0(), key, 0);
     } else {
@@ -4243,8 +4239,6 @@ void LCodeGen::DoStoreKeyedExternalArray(LStoreKeyed* instr) {
     key = ToRegister(instr->key());
   }
   int element_size_shift = ElementsKindToShiftSize(elements_kind);
-  // int shift_size = (instr->hydrogen()->key()->representation().IsSmi())
-  //    ? (element_size_shift - kSmiTagSize) : element_size_shift;
   int shift_size = (instr->hydrogen()->key()->representation().IsSmi())
       ? (element_size_shift - (kSmiTagSize + kSmiShiftSize)) : element_size_shift;
   int base_offset = instr->base_offset();
@@ -4401,7 +4395,7 @@ void LCodeGen::DoStoreKeyedFixedArray(LStoreKeyed* instr) {
     // during bound check elimination with the index argument to the bounds
     // check, which can be tagged, so that case must be handled here, too.
     if (instr->hydrogen()->key()->representation().IsSmi()) {
-      __ dsra(scratch, key, 32 - kPointerSizeLog2);
+      __ SmiScale(scratch, key, kPointerSizeLog2);
       __ daddu(store_base, elements, scratch);
     } else {
       __ dsll(scratch, key, kPointerSizeLog2);
@@ -4662,34 +4656,6 @@ void LCodeGen::DoUint32ToDouble(LUint32ToDouble* instr) {
   FPURegister dbl_scratch = double_scratch0();
   __ mtc1(ToRegister(input), dbl_scratch);
   __ Cvt_d_uw(ToDoubleRegister(output), dbl_scratch, f22);  // TODO(plind): f22?
-}
-
-
-void LCodeGen::DoNumberTagI(LNumberTagI* instr) {
-  class DeferredNumberTagI V8_FINAL : public LDeferredCode {
-   public:
-    DeferredNumberTagI(LCodeGen* codegen, LNumberTagI* instr)
-        : LDeferredCode(codegen), instr_(instr) { }
-    virtual void Generate() V8_OVERRIDE {
-      codegen()->DoDeferredNumberTagIU(instr_,
-                                       instr_->value(),
-                                       instr_->temp1(),
-                                       instr_->temp2(),
-                                       SIGNED_INT32);
-    }
-    virtual LInstruction* instr() V8_OVERRIDE { return instr_; }
-   private:
-    LNumberTagI* instr_;
-  };
-
-  Register src = ToRegister(instr->value());
-  Register dst = ToRegister(instr->result());
-  Register overflow = scratch0();
-
-  DeferredNumberTagI* deferred = new(zone()) DeferredNumberTagI(this, instr);
-  // __ SmiTagCheckOverflow(dst, src, overflow);
-  // __ BranchOnOverflow(deferred->entry(), overflow);
-  __ bind(deferred->exit());
 }
 
 
@@ -5127,8 +5093,7 @@ void LCodeGen::DoDoubleToSmi(LDoubleToSmi* instr) {
       __ bind(&done);
     }
   }
-  // __ SmiTagCheckOverflow(result_reg, result_reg, scratch1);
-  // DeoptimizeIf(lt, instr->environment(), scratch1, Operand(zero_reg));
+  __ SmiTag(result_reg, result_reg);
 }
 
 
@@ -5952,9 +5917,7 @@ void LCodeGen::DoLoadFieldByIndex(LLoadFieldByIndex* instr) {
   __ dsra(index, index, 1);
 
   __ Branch(USE_DELAY_SLOT, &out_of_object, lt, index, Operand(zero_reg));
-  // __ sll(scratch, index, kPointerSizeLog2 - kSmiTagSize);  // In delay slot.
-  __ dsra(scratch, index, 32 - kPointerSizeLog2);
-  STATIC_ASSERT(kPointerSizeLog2 > kSmiTagSize);
+  __ SmiScale(scratch, index, kPointerSizeLog2);  // In delay slot.
   __ Daddu(scratch, object, scratch);
   __ ld(result, FieldMemOperand(scratch, JSObject::kHeaderSize));
 

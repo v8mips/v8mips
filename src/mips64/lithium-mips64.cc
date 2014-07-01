@@ -1881,21 +1881,17 @@ LInstruction* LChunkBuilder::DoChange(HChange* instr) {
   } else if (from.IsInteger32()) {
     info()->MarkAsDeferredCalling();
     if (to.IsTagged()) {
-      if (!instr->CheckFlag(HValue::kCanOverflow)) {
-        LOperand* value = UseRegisterAtStart(val);
-        return DefineAsRegister(new(zone()) LSmiTag(value));
-      } else if (val->CheckFlag(HInstruction::kUint32)) {
+      if (val->CheckFlag(HInstruction::kUint32)) {
         LOperand* value = UseRegisterAtStart(val);
         LOperand* temp1 = TempRegister();
         LOperand* temp2 = TempRegister();
         LNumberTagU* result = new(zone()) LNumberTagU(value, temp1, temp2);
         return AssignPointerMap(DefineAsRegister(result));
       } else {
+        STATIC_ASSERT((kMinInt == Smi::kMinValue) &&
+                      (kMaxInt == Smi::kMaxValue));
         LOperand* value = UseRegisterAtStart(val);
-        LOperand* temp1 = TempRegister();
-        LOperand* temp2 = TempRegister();
-        LNumberTagI* result = new(zone()) LNumberTagI(value, temp1, temp2);
-        return AssignPointerMap(DefineAsRegister(result));
+        return DefineAsRegister(new(zone()) LSmiTag(value));
       }
     } else if (to.IsSmi()) {
       LOperand* value = UseRegister(val);
