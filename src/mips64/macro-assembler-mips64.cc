@@ -656,7 +656,7 @@ void MacroAssembler::Daddu(Register rd, Register rs, const Operand& rt) {
   if (rt.is_reg()) {
     daddu(rd, rs, rt.rm());
   } else {
-    if (is_int64_16(rt.imm64_) && !MustUseReg(rt.rmode_)) {
+    if (is_int16(rt.imm64_) && !MustUseReg(rt.rmode_)) {
       daddiu(rd, rs, rt.imm64_);
     } else {
       // li handles the relocation.
@@ -688,7 +688,7 @@ void MacroAssembler::Dsubu(Register rd, Register rs, const Operand& rt) {
   if (rt.is_reg()) {
     dsubu(rd, rs, rt.rm());
   } else {
-    if (is_int64_16(rt.imm64_) && !MustUseReg(rt.rmode_)) {
+    if (is_int16(rt.imm64_) && !MustUseReg(rt.rmode_)) {
       daddiu(rd, rs, -rt.imm64_);  // No subiu instr, use addiu(x, y, -imm).
     } else {
       // li handles the relocation.
@@ -850,7 +850,7 @@ void MacroAssembler::And(Register rd, Register rs, const Operand& rt) {
   if (rt.is_reg()) {
     and_(rd, rs, rt.rm());
   } else {
-    if (is_uint64_16(rt.imm64_) && !MustUseReg(rt.rmode_)) {
+    if (is_uint16(rt.imm64_) && !MustUseReg(rt.rmode_)) {
       andi(rd, rs, rt.imm64_);
     } else {
       // li handles the relocation.
@@ -866,7 +866,7 @@ void MacroAssembler::Or(Register rd, Register rs, const Operand& rt) {
   if (rt.is_reg()) {
     or_(rd, rs, rt.rm());
   } else {
-    if (is_uint64_16(rt.imm64_) && !MustUseReg(rt.rmode_)) {
+    if (is_uint16(rt.imm64_) && !MustUseReg(rt.rmode_)) {
       ori(rd, rs, rt.imm64_);
     } else {
       // li handles the relocation.
@@ -882,7 +882,7 @@ void MacroAssembler::Xor(Register rd, Register rs, const Operand& rt) {
   if (rt.is_reg()) {
     xor_(rd, rs, rt.rm());
   } else {
-    if (is_uint64_16(rt.imm64_) && !MustUseReg(rt.rmode_)) {
+    if (is_uint16(rt.imm64_) && !MustUseReg(rt.rmode_)) {
       xori(rd, rs, rt.imm64_);
     } else {
       // li handles the relocation.
@@ -935,7 +935,7 @@ void MacroAssembler::Sltu(Register rd, Register rs, const Operand& rt) {
   if (rt.is_reg()) {
     sltu(rd, rs, rt.rm());
   } else {
-    if (is_uint64_16(rt.imm64_) && !MustUseReg(rt.rmode_)) {
+    if (is_int16(rt.imm64_) && !MustUseReg(rt.rmode_)) {
       sltiu(rd, rs, rt.imm64_);
     } else {
       // li handles the relocation.
@@ -1054,8 +1054,8 @@ void MacroAssembler::li(Register rd, Operand j, LiFlags mode) {
   BlockTrampolinePoolScope block_trampoline_pool(this);
   if (!MustUseReg(j.rmode_) && mode == OPTIMIZE_SIZE) {
     // Normal load of an immediate value which does not need Relocation Info.
-    if (is_int64_32(j.imm64_)) {
-      if (is_int64_16(j.imm64_)) {
+    if (is_int32(j.imm64_)) {
+      if (is_int16(j.imm64_)) {
         daddiu(rd, zero_reg, (j.imm64_ & kImm16Mask));
       } else if (!(j.imm64_ & kHiMask)) {
         ori(rd, zero_reg, (j.imm64_ & kImm16Mask));
@@ -1935,7 +1935,7 @@ void MacroAssembler::BranchShort(int16_t offset, Condition cond, Register rs,
       case greater_equal:
         if (rt.imm64_ == 0) {
           bgez(rs, offset);
-        } else if (is_int64_16(rt.imm64_)) {
+        } else if (is_int16(rt.imm64_)) {
           slti(scratch, rs, rt.imm64_);
           beq(scratch, zero_reg, offset);
         } else {
@@ -1948,7 +1948,7 @@ void MacroAssembler::BranchShort(int16_t offset, Condition cond, Register rs,
       case less:
         if (rt.imm64_ == 0) {
           bltz(rs, offset);
-        } else if (is_int64_16(rt.imm64_)) {
+        } else if (is_int16(rt.imm64_)) {
           slti(scratch, rs, rt.imm64_);
           bne(scratch, zero_reg, offset);
         } else {
@@ -1982,7 +1982,7 @@ void MacroAssembler::BranchShort(int16_t offset, Condition cond, Register rs,
       case Ugreater_equal:
         if (rt.imm64_ == 0) {
           bgez(rs, offset);
-        } else if (is_int64_16(rt.imm64_)) {
+        } else if (is_int16(rt.imm64_)) {
           sltiu(scratch, rs, rt.imm64_);
           beq(scratch, zero_reg, offset);
         } else {
@@ -1996,7 +1996,7 @@ void MacroAssembler::BranchShort(int16_t offset, Condition cond, Register rs,
         if (rt.imm64_ == 0) {
           // No code needs to be emitted.
           return;
-        } else if (is_int64_16(rt.imm64_)) {
+        } else if (is_int16(rt.imm64_)) {
           sltiu(scratch, rs, rt.imm64_);
           bne(scratch, zero_reg, offset);
         } else {
@@ -2192,7 +2192,7 @@ void MacroAssembler::BranchShort(Label* L, Condition cond, Register rs,
         if (rt.imm64_ == 0) {
           offset = shifted_branch_offset(L, false);
           bgez(rs, offset);
-        } else if (is_int64_16(rt.imm64_)) {
+        } else if (is_int16(rt.imm64_)) {
           slti(scratch, rs, rt.imm64_);
           offset = shifted_branch_offset(L, false);
           beq(scratch, zero_reg, offset);
@@ -2209,7 +2209,7 @@ void MacroAssembler::BranchShort(Label* L, Condition cond, Register rs,
         if (rt.imm64_ == 0) {
           offset = shifted_branch_offset(L, false);
           bltz(rs, offset);
-        } else if (is_int64_16(rt.imm64_)) {
+        } else if (is_int16(rt.imm64_)) {
           slti(scratch, rs, rt.imm64_);
           offset = shifted_branch_offset(L, false);
           bne(scratch, zero_reg, offset);
@@ -2253,7 +2253,7 @@ void MacroAssembler::BranchShort(Label* L, Condition cond, Register rs,
         if (rt.imm64_ == 0) {
           offset = shifted_branch_offset(L, false);
           bgez(rs, offset);
-        } else if (is_int64_16(rt.imm64_)) {
+        } else if (is_int16(rt.imm64_)) {
           sltiu(scratch, rs, rt.imm64_);
           offset = shifted_branch_offset(L, false);
           beq(scratch, zero_reg, offset);
@@ -2270,7 +2270,7 @@ void MacroAssembler::BranchShort(Label* L, Condition cond, Register rs,
         if (rt.imm64_ == 0) {
           // No code needs to be emitted.
           return;
-        } else if (is_int64_16(rt.imm64_)) {
+        } else if (is_int16(rt.imm64_)) {
           sltiu(scratch, rs, rt.imm64_);
           offset = shifted_branch_offset(L, false);
           bne(scratch, zero_reg, offset);
@@ -2301,7 +2301,7 @@ void MacroAssembler::BranchShort(Label* L, Condition cond, Register rs,
     }
   }
   // Check that offset could actually hold on an int16_t.
-  ASSERT(is_int64_16(offset));
+  ASSERT(is_int16(offset));
   // Emit a nop in the branch delay slot if required.
   if (bdslot == PROTECT)
     nop();
@@ -2563,7 +2563,7 @@ void MacroAssembler::BranchAndLinkShort(Label* L, Condition cond, Register rs,
     }
   }
   // Check that offset could actually hold on an int16_t.
-  ASSERT(is_int64_16(offset));
+  ASSERT(is_int16(offset));
 
   // Emit a nop in the branch delay slot if required.
   if (bdslot == PROTECT)
