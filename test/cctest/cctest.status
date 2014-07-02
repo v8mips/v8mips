@@ -214,6 +214,9 @@
   # BUG(2657): Test sometimes times out on MIPS simulator.
   'test-thread-termination/TerminateMultipleV8ThreadsDefaultIsolate': [PASS, TIMEOUT],
 
+  # BUG(v8:3154).
+  'test-heap/ReleaseOverReservedPages': [PASS, FAIL],
+
   # BUG(1075): Unresolved crashes on MIPS also.
   'test-serialize/Deserialize': [SKIP],
   'test-serialize/DeserializeFromSecondSerializationAndRunScript2': [SKIP],
