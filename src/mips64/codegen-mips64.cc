@@ -608,7 +608,7 @@ void ElementsTransitionGenerator::GenerateSmiToDouble(
   // t1: number of elements (smi-tagged)
 
   // Allocate new FixedDoubleArray.
-  __ dsrl(scratch, t1, 32 - kDoubleSizeLog2);  // TODO(yy) macro-assemble.
+  __ SmiScale(scratch, t1, kDoubleSizeLog2);
   __ Daddu(scratch, scratch, FixedDoubleArray::kHeaderSize);
   __ Allocate(scratch, t2, t3, t5, &gc_required, DOUBLE_ALIGNMENT);
   // t2: destination FixedDoubleArray, not tagged as heap object
@@ -644,7 +644,7 @@ void ElementsTransitionGenerator::GenerateSmiToDouble(
   // Prepare for conversion loop.
   __ Daddu(a3, t0, Operand(FixedArray::kHeaderSize - kHeapObjectTag));
   __ Daddu(t3, t2, Operand(FixedDoubleArray::kHeaderSize));
-  __ dsll(t2, t1, 32 - kDoubleSizeLog2);  // TODO(yy) macro-assemble.
+  __ SmiScale(t2, t1, kDoubleSizeLog2);
   __ Daddu(t2, t2, t3);
   __ li(t0, Operand(kHoleNanLower32));
   __ li(t1, Operand(kHoleNanUpper32));
@@ -677,7 +677,6 @@ void ElementsTransitionGenerator::GenerateSmiToDouble(
   __ ld(t5, MemOperand(a3));
   __ Daddu(a3, a3, kIntSize);
   // t5: current element
-  // __ UntagAndJumpIfNotSmi(t5, t5, &convert_hole);
   __ JumpIfNotSmi(t5, &convert_hole);
   __ SmiUntag(t5);
 
@@ -784,7 +783,6 @@ void ElementsTransitionGenerator::GenerateDoubleToObject(
   __ sw(a1, FieldMemOperand(a2, HeapNumber::kExponentOffset));
   __ mov(a0, a3);
   __ sd(a2, MemOperand(a3));
-  // __ Addu(a3, a3, kIntSize);
   __ Daddu(a3, a3, kPointerSize);
   __ RecordWrite(t2,
                  a0,
@@ -798,7 +796,6 @@ void ElementsTransitionGenerator::GenerateDoubleToObject(
   // Replace the-hole NaN with the-hole pointer.
   __ bind(&convert_hole);
   __ sd(t3, MemOperand(a3));
-  // __ Addu(a3, a3, kIntSize);
   __ Daddu(a3, a3, kPointerSize);
 
   __ bind(&entry);
@@ -854,7 +851,6 @@ void StringCharLoadGenerator::Generate(MacroAssembler* masm,
   Label indirect_string_loaded;
   __ ld(result, FieldMemOperand(string, SlicedString::kOffsetOffset));
   __ ld(string, FieldMemOperand(string, SlicedString::kParentOffset));
-  // __ sra(at, result, kSmiTagSize);
   __ dsra32(at, result, 0);
   __ Daddu(index, index, at);
   __ jmp(&indirect_string_loaded);
