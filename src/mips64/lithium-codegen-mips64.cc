@@ -129,7 +129,7 @@ bool LCodeGen::GeneratePrologue() {
       __ Branch(&ok, ne, a2, Operand(at));
 
       __ ld(a2, GlobalObjectOperand());
-      __ ld(a2, FieldMemOperand(a2, GlobalObject::kGlobalReceiverOffset));
+      __ ld(a2, FieldMemOperand(a2, GlobalObject::kGlobalProxyOffset));
 
       __ sd(a2, MemOperand(sp, receiver_offset));
 
@@ -3473,7 +3473,7 @@ void LCodeGen::DoWrapReceiver(LWrapReceiver* instr) {
   __ ld(result,
         ContextOperand(result, Context::GLOBAL_OBJECT_INDEX));
   __ ld(result,
-        FieldMemOperand(result, GlobalObject::kGlobalReceiverOffset));
+        FieldMemOperand(result, GlobalObject::kGlobalProxyOffset));
 
   if (result.is(receiver)) {
     __ bind(&result_in_receiver);

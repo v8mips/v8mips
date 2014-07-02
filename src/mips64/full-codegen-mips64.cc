@@ -141,7 +141,7 @@ void FullCodeGenerator::Generate() {
     __ Branch(&ok, ne, a2, Operand(at));
 
     __ ld(a2, GlobalObjectOperand());
-    __ ld(a2, FieldMemOperand(a2, GlobalObject::kGlobalReceiverOffset));
+    __ ld(a2, FieldMemOperand(a2, GlobalObject::kGlobalProxyOffset));
 
     __ sd(a2, MemOperand(sp, receiver_offset));
     __ bind(&ok);
