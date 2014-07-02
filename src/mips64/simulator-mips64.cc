@@ -3070,7 +3070,7 @@ void Simulator::InstructionDecode(Instruction* instr) {
   v8::internal::EmbeddedVector<char, 256> buffer;
 
   if (::v8::internal::FLAG_trace_sim) {
-    SNPrintF(trace_buf_, "");
+    SNPrintF(trace_buf_, " ");
     disasm::NameConverter converter;
     disasm::Disassembler dasm(converter);
     // Use a reasonably large buffer.
