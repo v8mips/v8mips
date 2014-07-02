@@ -2019,6 +2019,8 @@ void FullCodeGenerator::VisitYield(Yield* expr) {
 
       Label l_catch, l_try, l_suspend, l_continuation, l_resume;
       Label l_next, l_call;
+      Register load_receiver = LoadIC::ReceiverRegister();
+      Register load_name = LoadIC::NameRegister();
       // Initial send value is undefined.
       __ LoadRoot(a0, Heap::kUndefinedValueRootIndex);
       __ Branch(&l_next);
@@ -2066,7 +2068,7 @@ void FullCodeGenerator::VisitYield(Yield* expr) {
       // receiver = iter; f = 'next'; arg = received;
       __ bind(&l_next);
       __ LoadRoot(load_name, Heap::knext_stringRootIndex);  // "next"
-      __ lD(a3, MemOperand(sp, 1 * kPointerSize));          // iter
+      __ ld(a3, MemOperand(sp, 1 * kPointerSize));          // iter
       __ Push(load_name, a3, a0);                      // "next", iter, received
 
       // result = receiver[f](arg);

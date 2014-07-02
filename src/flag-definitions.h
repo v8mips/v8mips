@@ -569,25 +569,25 @@ DEFINE_BOOL(allow_natives_syntax, false, "allow natives syntax")
 DEFINE_BOOL(trace_parse, false, "trace parsing and preparsing")
 
 // simulator-arm.cc, simulator-arm64.cc and simulator-mips.cc
-DEFINE_bool(trace_sim, false, "Trace simulator execution")
-DEFINE_int(trace_sim_at, 0,
+DEFINE_BOOL(trace_sim, false, "Trace simulator execution")
+DEFINE_INT(trace_sim_at, 0,
            "Simulator start tracing after x number of instructions")
-DEFINE_bool(debug_sim, false, "Enable debugging the simulator")
-DEFINE_bool(check_icache, false,
+DEFINE_BOOL(debug_sim, false, "Enable debugging the simulator")
+DEFINE_BOOL(check_icache, false,
             "Check icache flushes in ARM and MIPS simulator")
-DEFINE_int(stop_sim_at, 0, "Simulator stop after x number of instructions")
+DEFINE_INT(stop_sim_at, 0, "Simulator stop after x number of instructions")
 #if defined(V8_TARGET_ARCH_ARM64) || defined(V8_TARGET_ARCH_MIPS64)
-DEFINE_int(sim_stack_alignment, 16,
+DEFINE_INT(sim_stack_alignment, 16,
            "Stack alignment in bytes in simulator. This must be a power of two "
            "and it must be at least 16. 16 is default.")
 #else
 DEFINE_INT(sim_stack_alignment, 8,
            "Stack alingment in bytes in simulator (4 or 8, 8 is default)")
 #endif
-DEFINE_int(sim_stack_size, 2 * MB / KB,
+DEFINE_INT(sim_stack_size, 2 * MB / KB,
            "Stack size of the ARM64 and MIPS64 simulator "
            "in kBytes (default is 2 MB)")
-DEFINE_bool(log_regs_modified, true,
+DEFINE_BOOL(log_regs_modified, true,
             "When logging register values, only print modified registers.")
 DEFINE_BOOL(log_colour, true, "When logging, try to use coloured output.")
 DEFINE_BOOL(ignore_asm_unimplemented_break, false,
