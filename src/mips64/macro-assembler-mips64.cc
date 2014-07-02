@@ -1060,11 +1060,9 @@ void MacroAssembler::li(Register rd, Operand j, LiFlags mode) {
       } else if (!(j.imm64_ & kHiMask)) {
         ori(rd, zero_reg, (j.imm64_ & kImm16Mask));
       } else if (!(j.imm64_ & kImm16Mask)) {
-        daddiu(rd, zero_reg, (j.imm64_ >> kLuiShift) & kImm16Mask);
-        dsll(rd, rd, 16);
+        lui(rd, (j.imm64_ >> kLuiShift) & kImm16Mask);
       } else {
-        daddiu(rd, zero_reg, (j.imm64_ >> kLuiShift) & kImm16Mask);
-        dsll(rd, rd, 16);
+        lui(rd, (j.imm64_ >> kLuiShift) & kImm16Mask);
         ori(rd, rd, (j.imm64_ & kImm16Mask));
       }
     } else {
@@ -1226,7 +1224,6 @@ void MacroAssembler::Ext(Register rt,
                          Register rs,
                          uint16_t pos,
                          uint16_t size) {
-  // TODO(plind): Do we need pre-mips64r2 arch-variant support here?
   ASSERT(pos < 32);
   ASSERT(pos + size < 33);
   ext_(rt, rs, pos, size);
@@ -1237,7 +1234,6 @@ void MacroAssembler::Ins(Register rt,
                          Register rs,
                          uint16_t pos,
                          uint16_t size) {
-  // TODO(plind): Do we need pre-mips64r2 arch-variant support here?
   ASSERT(pos < 32);
   ASSERT(pos + size <= 32);
   ASSERT(size != 0);
@@ -1482,22 +1478,15 @@ void MacroAssembler::Move(FPURegister dst, double imm) {
     // Move the low part of the double into the lower bits of the corresponding
     // FPU register.
     if (lo != 0) {
-      // TODO(plind): Fix this broken li() usage.
-      // li(at, Operand(lo));
-      lui(at, (lo >> kLuiShift) & kImm16Mask);
-      ori(at, at, lo & kImm16Mask);
+      li(at, Operand(lo));
       mtc1(at, dst);
     } else {
       mtc1(zero_reg, dst);
     }
     // Move the high part of the double into the high bits of the corresponding
     // FPU register.
-    // TODO(plind): Support FR=0 mode also, as an option.
     if (hi != 0) {
-      // TODO(plind): Fix this broken li() usage.
-      // li(at, Operand(hi));
-      lui(at, (hi >> kLuiShift) & kImm16Mask);
-      ori(at, at, hi & kImm16Mask);
+      li(at, Operand(hi));
       mthc1(at, dst);
     } else {
       mthc1(zero_reg, dst);
@@ -2969,12 +2958,10 @@ void MacroAssembler::JumpToHandlerEntry() {
   Uld(a3, FieldMemOperand(a1, Code::kHandlerTableOffset));
   Daddu(a3, a3, Operand(FixedArray::kHeaderSize - kHeapObjectTag));
   dsrl(a2, a2, StackHandler::kKindWidth);  // Handler index.
-  dsll(a2, a2, kPointerSizeLog2);  // TODO(plind) - combine to 1 instruction?
+  dsll(a2, a2, kPointerSizeLog2);
   Daddu(a2, a3, a2);
   ld(a2, MemOperand(a2));  // Smi-tagged offset.
   Daddu(a1, a1, Operand(Code::kHeaderSize - kHeapObjectTag));  // Code start.
-  // dsra(t9, a2, kSmiTagSize);
-  // TODO(plind) - better Smi handling here.
   dsra32(t9, a2, 0);
   Daddu(t9, t9, a1);
   Jump(t9);  // Jump.
@@ -3088,8 +3075,7 @@ void MacroAssembler::Allocate(int object_size,
   if ((flags & SIZE_IN_WORDS) != 0) {
     object_size *= kPointerSize;
   }
-  // TODO(yuyin):
-  // ASSERT_EQ(0, object_size & kObjectAlignmentMask);
+  ASSERT(0 == (object_size & kObjectAlignmentMask));
 
   // Check relative positions of allocation top and limit addresses.
   // ARM adds additional checks to make sure the ldm instruction can be
@@ -3126,22 +3112,10 @@ void MacroAssembler::Allocate(int object_size,
     ld(t9, MemOperand(topaddr, limit - top));
   }
 
-  if ((flags & DOUBLE_ALIGNMENT) != 0) {
-    // Align the next allocation. Storing the filler map without checking top is
-    // safe in new-space because the limit of the heap is aligned there.
-    ASSERT((flags & PRETENURE_OLD_POINTER_SPACE) == 0);
-    // TODO(yuyin):
-    // ASSERT(kPointerAlignment * 2 == kDoubleAlignment);
-    And(scratch2, result, Operand(kDoubleAlignmentMask));
-    Label aligned;
-    Branch(&aligned, eq, scratch2, Operand(zero_reg));
-    if ((flags & PRETENURE_OLD_DATA_SPACE) != 0) {
-      Branch(gc_required, Ugreater_equal, result, Operand(t9));
-    }
-    li(scratch2, Operand(isolate()->factory()->one_pointer_filler_map()));
-    sd(scratch2, MemOperand(result));
-    Daddu(result, result, Operand(kDoubleSize / 2));
-    bind(&aligned);
+  ASSERT(kPointerSize == kDoubleSize);
+  if (emit_debug_code()) {
+    And(at, result, Operand(kDoubleAlignmentMask));
+    Check(eq, kAllocationIsNotDoubleAligned, at, Operand(zero_reg));
   }
 
   // Calculate new top and bail out if new space is exhausted. Use result
@@ -3214,22 +3188,10 @@ void MacroAssembler::Allocate(Register object_size,
     ld(t9, MemOperand(topaddr, limit - top));
   }
 
-  if ((flags & DOUBLE_ALIGNMENT) != 0) {
-    // Align the next allocation. Storing the filler map without checking top is
-    // safe in new-space because the limit of the heap is aligned there.
-    ASSERT((flags & PRETENURE_OLD_POINTER_SPACE) == 0);
-    // TODO(yuyin):
-    // ASSERT(kPointerAlignment * 2 == kDoubleAlignment);
-    And(scratch2, result, Operand(kDoubleAlignmentMask));
-    Label aligned;
-    Branch(&aligned, eq, scratch2, Operand(zero_reg));
-    if ((flags & PRETENURE_OLD_DATA_SPACE) != 0) {
-      Branch(gc_required, Ugreater_equal, result, Operand(t9));
-    }
-    li(scratch2, Operand(isolate()->factory()->one_pointer_filler_map()));
-    sd(scratch2, MemOperand(result));
-    Daddu(result, result, Operand(kDoubleSize / 2));
-    bind(&aligned);
+  ASSERT(kPointerSize == kDoubleSize);
+  if (emit_debug_code()) {
+    And(at, result, Operand(kDoubleAlignmentMask));
+    Check(eq, kAllocationIsNotDoubleAligned, at, Operand(zero_reg));
   }
 
   // Calculate new top and bail out if new space is exhausted. Use result

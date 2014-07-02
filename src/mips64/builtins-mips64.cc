@@ -490,7 +490,7 @@ static void Generate_JSConstructStubHelper(MacroAssembler* masm,
         __ Daddu(t5, t5, kPointerSize);
       } else {
         __ dsll(at, a3, kPointerSizeLog2);
-        __ Addu(a0, t4, Operand(at));  // End of object.
+        __ Daddu(a0, t4, Operand(at));  // End of object.
         __ InitializeFieldsWithFiller(t5, a0, t7);
       }
 
